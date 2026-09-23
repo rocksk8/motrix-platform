@@ -322,6 +322,10 @@ def test_em3_the_scanner_still_catches_a_synthetic_leak():
     ⚙️ 用**自己合成的誘餌**（不是真缺陷改好那天就失效的那種）：一段
     會漏的 `except Exception`、一段是我們自己例外的 `except`（不該被
     當成 A 組）、一段正確寫法（不該被誤判成漏）。
+
+    ✅ **牙齒已驗證（方式：資料建構／常設）**——這一題本身就是牙齒的
+    證明，不是另外驗它：斷言直接打在合成輸入的已知正確答案上，每次
+    跑這個檔案都會重新驗證一次，不是跑過一次就收掉的臨時突變。
     """
     synthetic = '''
 from fastapi import HTTPException
@@ -415,6 +419,11 @@ def test_em3_the_one_named_exception_still_raises_its_own_message():
 
     ☠️ 少了這一題，②那一題紅了之後，下一個看到紅燈的人最省力的反應是
     「把第 18 處也改掉讓它變綠」——而那正好是判斷「不該改」的那一處。
+
+    ✅ **牙齒已驗證（方式：資料建構／常設）**——這一題每次都對**真的
+    產品碼**斷言，不是合成輸入：寫完當場對 B 已提交的版本跑過，確認
+    `assert still_leaking == list(want)` 通過（那一處確實還在 raise
+    `str(e)`），不是只讀過程式碼就假設它對。
     """
     entries = _scan_all_normalized()
     by_id = _by_identity(entries)

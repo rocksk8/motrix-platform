@@ -227,7 +227,8 @@ def test_bn15_a_null_customer_name_does_not_render_as_the_string_none(
     `NOT NULL DEFAULT ''`**——真的可能是 SQL NULL，不只是空字串。這是
     〈null 不等於 0〉的字串版：`f"{None}"` 會印出字面的 `"None"`。
 
-    ✅ **牙齒已驗證**——第一版替身讓 `_case_names_for` 回空 dict 驗不出
+    ✅ **牙齒已驗證（方式：突變驗證／live，非常設）**——第一版替身讓
+    `_case_names_for` 回空 dict 驗不出
     來（那個替身包在已經修好的輸出外層，等於沒動到任何東西）。換成
     直接重現真實的錯誤（`_case_names_for` 內部拿掉 `or ''` 防護、對
     `SELECT` 回來的 `None` 直接 `str()`）：這一題**真的會紅**
