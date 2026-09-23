@@ -91,6 +91,21 @@
         <div class="bn-err" x-text="loadError"></div>
       </template>
 
+      <!-- 🔴 獎金項目的錯誤訊息**放在這裡**，不是放在下面那個區塊裡面。
+           ☠️ 放進去的話它會被那個區塊自己的顯示條件關掉：
+           ```
+           <section x-show="isManager && itemsLoaded">   <= itemsLoaded 只在**成功時**才設
+             <template x-if="itemErr">                   <= 錯誤訊息在裡面
+           ```
+           ⇒ 403 的時候 itemsLoaded 永遠是 false ⇒ 區塊不顯示
+             ⇒ **連那句錯誤訊息一起被關掉** ⇒ 整頁一片空白。
+           🔑 **比空表更糟：空表至少說了一句話（雖然是假的），這裡一句話都沒有。**
+           📌 修法是把錯誤文字**移出**那個 x-show，不是加一個旗標 ——
+              加旗標只是讓同一個結構再多一個要記得維護的條件。 -->
+      <template x-if="itemErr">
+        <div class="bn-err" x-text="itemErr"></div>
+      </template>
+
       <!-- ══ 獎金項目（SPEC-BN1-PLAN §2）════════════════════════════
            🔴 這一區只有**管理者**看得到：它列的是公司的發放政策。
 
@@ -112,9 +127,6 @@
           <span class="bn-sec__s">每個項目綁一個人員來源，決定這筆獎金發給誰。</span>
         </div>
 
-        <template x-if="itemErr">
-          <div class="bn-err" x-text="itemErr"></div>
-        </template>
         <template x-if="itemMsg">
           <div class="bn-ok" x-text="itemMsg"></div>
         </template>

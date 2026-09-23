@@ -572,6 +572,22 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
                           而簽過的人不知道他簽的已經被改過了
     單號升版      少了它 => 同一張被退兩次**看不出來**（§103e：財務不可接受）
     ```
+
+    ## ⚠️ 而「清除簽核」從 `AS2` 開始是**兩份資料**，不是一份
+
+    ```
+    checked_* / manager_*   內建兩格（沒有設定過簽核流程的公司走這條）
+    approval_json           `AS2` 的簽核鏈（有設定流程時走這條）
+    ```
+    ☠️ 只清前者的後果：`signatures_of()` **優先讀鏈** ⇒ 六欄清得乾乾淨淨，
+       而畫面與 PDF 上照樣印著上一輪簽過的名字。
+    📌 〈守門守的對象被搬走〉：**清除的動作沒變、字面值沒變，
+       而決定行為的已經不是它了** —— 上面那句「少了它 =>」仍然是真的，
+       它守的東西卻被搬到另一個欄位去了。
+    🔑 ⇒ 驗收要釘 `signatures_of()` 的**輸出**（每一格的 `by` 都是空的），
+       不要釘 `checked_by == ''` —— 欄位是哪幾個還會再變，輸出不會。
+    📌 用 `'{}'` 不用 `''`：與 `v101` 的 `DEFAULT '{}'` 一致
+       （兩者 `_chain_tiers` 都回 `[]` —— `not raw` 對空字串也成立，查過了）。
     ⚠️ 升版走 `next_revision_no()` —— **不可以**借用報價單那一支：
        它把 `MQ-` 前綴寫死，對不上就無腦 `+ '-R1'` ⇒ 第二次會變 `-R1-R1`，
        而 `UNIQUE INDEX` 擋不住（不同字串）⇒ **不報錯，只是產生一個錯的單號**。
@@ -591,7 +607,8 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
         conn.execute(
             "UPDATE vouchers_all SET status='草稿', voucher_no=?,"
             " submitted_by='', submitted_at='', checked_by='', checked_at='',"
-            " manager_by='', manager_at='', updated_at=? WHERE id=?",
+            " manager_by='', manager_at='', approval_json='{}',"
+            " updated_at=? WHERE id=?",
             (new_no, now, voucher_id))
         conn.commit()
     finally:

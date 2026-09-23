@@ -119,9 +119,32 @@
     }
     /* Scope menu (2026-08-28) */
     .scope-row {
-      display: flex; align-items: center; gap: 10px;
+      display: flex; flex-direction: column; align-items: stretch; gap: 8px;
       padding: 10px 14px; border: 1px solid var(--border-light);
       border-radius: 8px; background: #F8F7F4;
+    }
+    .scope-row__head { display: flex; align-items: center; gap: 10px; }
+    /* AS1：兩邊各一列 —— 現在生效的那一邊，與切過去會變成的那一邊 */
+    .scope-sides { display: flex; flex-direction: column; gap: 6px; }
+    .scope-side {
+      display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+      padding: 6px 10px; border: 1px solid var(--border-light);
+      border-radius: 6px; background: #fff; font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .scope-side.live { border-color: #BBF7D0; background: #F0FDF4; }
+    .scope-side.next { border-color: #FDE68A; background: #FFFBEB; }
+    .scope-side__tag {
+      font-size: 10px; font-weight: 700; flex-shrink: 0;
+      font-family: 'LINE Seed TW_OTF', sans-serif; min-width: 74px;
+    }
+    .scope-side.live .scope-side__tag { color: #166534; }
+    .scope-side.next .scope-side__tag { color: #92400E; }
+    .scope-side__name { font-weight: 600; color: var(--text-primary); flex-shrink: 0; }
+    .scope-side__who  { flex: 1; min-width: 180px; }
+    .scope-side__key {
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 10px; color: var(--text-dim); flex-shrink: 0;
     }
     .scope-badge {
       display: inline-block; padding: 2px 9px; border-radius: 10px;
@@ -169,17 +192,35 @@
       </div>
       <div class="as-card-body">
         <div class="as-desc">
-          勾選＝該文件類型走下方「統一簽核流程設定」；取消勾選＝改用該類型自己的獨立設定（會在下方各自展開一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層。
+          勾選＝該文件類型走下方「統一簽核流程設定」；取消勾選＝改用該類型自己的獨立設定（會在下方各自展開一個編輯區塊）。剛從統一流程勾掉的類型，獨立設定會先複製一份目前統一流程的內容作為起點，不會突然變成沒有任何簽核層。<br><b>每一類下方兩列，左邊那一列是現在生效的設定、另一列是切過去之後會變成的設定</b>——切換之前就看得到「誰核准」會怎麼變，不必先存下去才知道。
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
           <template x-for="dt in docTypeOrder" :key="dt">
             <div class="scope-row">
-              <label class="status-toggle" style="margin:0;flex-shrink:0">
-                <input type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
-                <span class="slider"></span>
-              </label>
-              <span style="font-size:13px;font-weight:600;flex:1" x-text="docTypeMeta[dt]"></span>
-              <span class="scope-badge" :class="scope[dt] ? 'on' : 'off'" x-text="scope[dt] ? '統一流程' : '獨立設定'"></span>
+              <div class="scope-row__head">
+                <label class="status-toggle" style="margin:0;flex-shrink:0">
+                  <input type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
+                  <span class="slider"></span>
+                </label>
+                <span style="font-size:13px;font-weight:600;flex:1" x-text="docTypeMeta[dt]"></span>
+                <span class="scope-badge" :class="scope[dt] ? 'on' : 'off'" x-text="scope[dt] ? '統一流程' : '獨立設定'"></span>
+              </div>
+
+              <!-- AS1：切換之前先說得出**現在是誰**與**切過去會變成什麼**
+                   (使用者 §5②)。
+                   一個寫著「確定要切換嗎？」的對話框什麼都沒說 —— 它問的是
+                   「你確定嗎」，而使用者要知道的是「會變成什麼」。 -->
+              <div class="scope-sides">
+                <template x-for="side in ['unified', 'independent']" :key="side">
+                  <div class="scope-side" :class="{ live: isLiveSide(dt, side), next: isNextSide(dt, side) }">
+                    <span class="scope-side__tag"
+                          x-text="isLiveSide(dt, side) ? '現在生效' : (isNextSide(dt, side) ? '儲存後變這個' : '')"></span>
+                    <span class="scope-side__name" x-text="side === 'unified' ? '統一流程' : '獨立設定'"></span>
+                    <span class="scope-side__who" x-text="flowDigest(side === 'unified' ? 'unified' : dt)"></span>
+                    <code class="scope-side__key" x-text="flowSettingKeys[dt] ? flowSettingKeys[dt][side] : ''"></code>
+                  </div>
+                </template>
+              </div>
             </div>
           </template>
         </div>
@@ -408,7 +449,33 @@
           contractor_voucher: '承攬商匯款申請',
           extra_expense:      '案件額外支出',
         },
-        scope:       {},      // {quotation:bool, shipping:bool, ...}
+
+        // 🔑 每一類在 `system_settings` 裡的**兩把 key**，與後端
+        //    `helpers/tiered_approval.py::approval_flow_setting_key()` 同一組名字。
+        //
+        // ☠️ 為什麼列成**字面值**而不是用 `${dt}_approval_flow` 拼出來：
+        //    拼出來的字串在全文檢索與盤點工具眼裡**是不存在的** ——
+        //    而「這一頁看不看得到兩邊」正是 AS1 要保證的那件事。
+        // ⚠️ 這裡**不是**在前端重算「哪一把生效」（那是後端的判斷，
+        //    前端只拿 scope 標示哪一列是現在生效的那一列）。
+        // 📌 `voucher` 列在這裡但**不在 `docTypeOrder`**：它在後端
+        //    `APPROVAL_DOC_TYPES` 裡、GET scope 會回它，而這一頁還沒有它的
+        //    設定區塊 —— 列著是為了讓「少了誰」一眼看得出來。
+        flowSettingKeys: {
+          quotation:          { unified: 'unified_approval_flow', independent: 'quotation_approval_flow' },
+          shipping:           { unified: 'unified_approval_flow', independent: 'shipping_approval_flow' },
+          completion:         { unified: 'unified_approval_flow', independent: 'completion_approval_flow' },
+          invoice_voucher:    { unified: 'unified_approval_flow', independent: 'invoice_voucher_approval_flow' },
+          payment_request:    { unified: 'unified_approval_flow', independent: 'payment_request_approval_flow' },
+          contractor_voucher: { unified: 'unified_approval_flow', independent: 'contractor_voucher_approval_flow' },
+          extra_expense:      { unified: 'unified_approval_flow', independent: 'extra_expense_approval_flow' },
+          voucher:            { unified: 'unified_approval_flow', independent: 'voucher_approval_flow' },
+        },
+        scope:       {},      // {quotation:bool, shipping:bool, ...} ← 使用者手上這一份（可能已被撥動、還沒存）
+        // 🔴 後端回來的那一份，**使用者動不到它**。
+        //    ☠️ 只有一份 `scope` 的話，撥動開關的那一刻「現在生效」就跟著變了
+        //       ⇒ 畫面會說「現在是統一流程」，而**伺服器上還是獨立設定**。
+        _savedScope: {},
         scopeSaving: false,
         _scopeLoaded: false,  // true 只有在成功從後端載入過一次 scope 之後才會是 true
         // flows.unified 永遠存在；flows[docType] 只在該類型被設成獨立設定時才會建立
@@ -547,6 +614,7 @@
             const scope = await r.json()
             this._ensureFlowSlots(scope)
             this.scope = scope
+            this._savedScope = { ...scope }
             // 2026-08-28 code review：只有成功從後端載入過一次，才允許儲存——
             // 避免載入失敗（scope 還是初始的空物件）時使用者按下儲存，把 PUT
             // body 送出一份殘缺資料，讓後端把沒帶到的欄位悄悄套用預設值，
@@ -559,7 +627,58 @@
         },
 
         async loadAllFlows() {
-          await Promise.all(this.flowSectionKeys.map(k => this.loadFlow(k)))
+          // 🔴 **每一類自己的設定都要載，不管它現在走不走統一流程**（AS1）。
+          //
+          // 原本只載 `flowSectionKeys`（統一流程＋目前是獨立設定的那幾類）
+          // ⇒ 一個現在走統一流程的類型，它**自己那一份**從來沒被讀出來
+          // ⇒ 畫面**說不出切過去會變成什麼**，而切過去的那一刻
+          //    「誰核准」就被換掉了 —— 沒有錯誤訊息，因為沒有錯誤。
+          // ⚠️ 多載進 `flows` **不會**多長出編輯區塊：區塊是 `flowSectionKeys`
+          //    決定的，這裡只是多備了另一邊的資料。
+          const keys = ['unified', ...this.docTypeOrder]
+          await Promise.all(keys.map(k => this.loadFlow(k)))
+        },
+
+        // ── AS1：兩邊各是誰 ────────────────────────────────────────
+        _isUnified(src, dt) {
+          // ⚠️ 用 `!== false` 不是用真假值：後端沒回那一鍵時代表**走預設分組**，
+          //    而 `undefined` 與 `false` 在這裡是兩件事。
+          return (src || {})[dt] !== false
+        },
+
+        isLiveSide(dt, side) {
+          if (!this._scopeLoaded) return false   // 還沒載到，不要先說一個
+          return (this._isUnified(this._savedScope, dt) ? 'unified' : 'independent') === side
+        },
+
+        isNextSide(dt, side) {
+          if (!this._scopeLoaded) return false
+          const saved   = this._isUnified(this._savedScope, dt)
+          const pending = this._isUnified(this.scope, dt)
+          if (saved === pending) return false    // 沒撥動就沒有「會變成」
+          return (pending ? 'unified' : 'independent') === side
+        },
+
+        flowDigest(key) {
+          const f = this.flows[key]
+          if (!f) return '載入中…'
+          const parts = []
+          // ⚠️ 內建那一層預設是**開著**的（後端 setting_to_active_tiers()
+          //    對缺鍵視為 true）⇒ 沒有任何自訂步驟時它仍然是一層。
+          if (f.includeSubmitterManagerTier) parts.push('申請人的部門主管（自動）')
+          for (const st of (f.steps || [])) {
+            const who = (st.approvers || []).map(ap => this.approverDigestName(ap)).filter(Boolean)
+            parts.push(who.length ? who.join('／') : '（這一層沒有指定簽核人）')
+          }
+          if (!parts.length) return '預設模式：任一超級管理員簽核即可'
+          return parts.join(' → ')
+        },
+
+        approverDigestName(ap) {
+          if (!ap) return ''
+          if (ap.kind === 'department_manager') return this.departmentLabel(ap.departmentId) + ' 主管'
+          if (ap.kind === 'division_manager')   return this.divisionLabel(ap.divisionId) + ' 處主管'
+          return ap.displayName || ap.username || ''
         },
 
         async loadFlow(key) {
@@ -740,6 +859,7 @@
               return
             }
             const d = await r.json()
+            this._savedScope = { ...this.scope }
             this._ensureFlowSlots(this.scope)
             await this.loadAllFlows()
             const seeded = d.seededFromUnified || []

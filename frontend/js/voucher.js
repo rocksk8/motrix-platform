@@ -25,6 +25,10 @@ function voucherPage() {
     lines: [],
     signs: { maker: '', checker: '', manager: '' },
     voidedAt: '',
+    //: `JV8`：**有明確意圖才顯示編輯畫面** —— 按「新增傳票」或從清單點開一張。
+    //: ☠️ 一進來就是空白表單的話，使用者以為自己在建一張單，打了一半離開，
+    //:    **而什麼都沒有被建出來**。
+    editing: false,
 
     // ── 清單 ──
     list: [],
@@ -358,6 +362,7 @@ function voucherPage() {
     },
 
     _apply(d) {
+      this.editing = true
       this.id = d.id || 0
       this.voucherNo = d.voucher_no || ''
       this.voucherDate = d.voucher_date || this.voucherDate
@@ -407,6 +412,7 @@ function voucherPage() {
 
     newVoucher() {
       this._clearMsg()
+      this.editing = true
       this.id = 0
       this.voucherNo = ''
       this.voucherDate = new Date().toLocaleDateString('sv-SE')

@@ -95,6 +95,7 @@
     .vc-att__del{border:none;background:transparent;color:#B91C1C;cursor:pointer;font-size:12px;font-family:var(--font-zh);padding:0 4px}
     .vc-att__empty{padding:12px 4px;color:var(--text-secondary);font-size:12px}
     .vc-att__acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+    .vc-empty{flex:1;min-width:320px;padding:70px 24px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px;line-height:1.9;border:1px dashed var(--border-light);border-radius:var(--radius)}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -154,8 +155,24 @@
           </div>
         </aside>
 
-        <!-- ══ 單據 ═══════════════════════════════════════════════════ -->
-        <div class="vc-sheet">
+        <!-- ══ 單據 ═══════════════════════════════════════════════════
+             🔴 `JV8`：**新增之後才出現編輯畫面**（使用者 2026-09-23 裁：
+                「傳票應該是新增傳票後才出現傳票的頁面」）。
+
+             ☠️ 一進來就是空白表單的後果不是「多一個畫面」：
+                使用者以為自己在建一張單，打了一半離開，
+                **而什麼都沒有被建出來** —— 那張單從來不存在，
+                而他記得自己打過。
+             📌 `editing` 由兩件事開啟：按「新增傳票」，或從清單點開一張。
+                ⇒ 兩者都是**明確的意圖**。 -->
+        <div class="vc-empty" x-show="!editing">
+          <div style="font-size:34px;margin-bottom:10px">📄</div>
+          <div style="font-size:15px;font-weight:600;margin-bottom:6px">選一張傳票，或新增一張</div>
+          <div>左邊是已經建立的傳票，點一張就能檢視或繼續編輯；<br>
+               要開新的請按左上角的「＋ 新增傳票」。</div>
+        </div>
+
+        <div class="vc-sheet" x-show="editing">
           <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
                寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
           <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>

@@ -90,7 +90,24 @@ def _pct_text(bp):
 # ── 獎金項目（最高管理者維護）──────────────────────────────────────
 @router.get("/items")
 def list_bonus_items(authorization: str = Header(None)):
-    user = _require_user(authorization)
+    """獎金項目清單。**只有最高管理者讀得到**（`BN2`，使用者 2026-09-23 裁）。
+
+    ## 🔴 寫已經擋住了，而**讀沒有** —— 那是兩道不同的閘
+
+    ```
+    POST /items  require_superadmin=True   <= 一直都擋著
+    GET  /items  _require_user()           <= **任何登入者**都讀得到
+    ```
+    ☠️ 而這份清單上有 `person_source`：「**誰有資格領這一類獎金**」——
+       那是**薪酬結構**，不是一個中性的設定值。
+    🔑 ⇒ 一個看得到寫入閘門的人，**不代表**他該看得到那張表。
+
+    ## ⚠️ 403 與「空清單」**不可以長得一樣**
+
+    兩者都回 200 的話，前端沒有任何依據說出不同的話 ⇒ 它只能說「沒有資料」，
+    **而那是假的**。⇒ 擋住就回 403，讓畫面說得出「你沒有權限看」。
+    """
+    user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
         rows = [dict(r) for r in conn.execute(

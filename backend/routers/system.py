@@ -144,11 +144,46 @@ class ApprovalFlowScopeSettings(BaseModel):
     # Pydantic 會靜默把每個缺漏欄位填回這裡的預設值，等於在使用者毫無所覺的
     # 情況下把已自訂的 scope 洗回預設分組。改成必填後，這種殘缺 body 會直接
     # 422，而不是靜默套用預設值。
+    #
+    # 🔴 2026-09-23：這裡**少了三欄**，而少的那三類**存不進去**。
+    #
+    # ```
+    # GET   回 APPROVAL_DOC_TYPES 全部（8 類）
+    # 前端  docTypeOrder 列 7 類（2026-09-11 加了 completion／extra_expense）
+    # PUT   這個模型只有 5 欄 => pydantic 預設 extra='ignore'
+    #       ⇒ completion／extra_expense／voucher **被靜默丟掉**
+    # ```
+    # ☠️ 症狀不是報錯：使用者把「完工單」切成獨立設定、按儲存，
+    #    畫面說「✓ 已儲存套用範圍」，**而重新整理之後它自己變回統一流程**。
+    # 📌 〈判準的寬窄都會騙人〉的反面：這裡的模型**比對象窄**，
+    #    而窄掉的那一段沒有人會收到訊息。
     quotation:          bool
     shipping:           bool
     invoice_voucher:    bool
     payment_request:    bool
     contractor_voucher: bool
+    completion:         bool
+    extra_expense:      bool
+    # ⚠️ `voucher`（會計傳票）也要有一欄 —— 它在 `APPROVAL_DOC_TYPES` 裡，
+    #    而 GET 會回它 ⇒ 前端原封不動送回來時，少一欄就是少一個決定。
+    #    📌 它不在 `DEFAULT_UNIFIED_DOC_TYPES`（A `§234` 裁）—— 那是**預設值**，
+    #       與「可不可以設定」是兩件事。
+    voucher:            bool
+
+
+# 🔑 **驗「有沒有人做過決定」，不是驗「決定得對不對」。**
+#
+# ☠️ 上面那個缺三欄的狀態活了十二天，因為它的失敗方式是**少一段輸出**，
+#    不是一個錯誤 —— 沒有任何一次請求會紅。
+# ⇒ 下一次有人往 `APPROVAL_DOC_TYPES` 加一類而忘了這裡，**import 當場炸**，
+#   而不是等到某個使用者發現他的設定存不起來。
+_scope_fields = set(ApprovalFlowScopeSettings.model_fields)
+assert _scope_fields == set(APPROVAL_DOC_TYPES), (
+    "ApprovalFlowScopeSettings 的欄位與 APPROVAL_DOC_TYPES 對不上："
+    "少了 %s／多了 %s —— 少的那幾類 PUT 會被 pydantic 靜默丟掉，"
+    "而畫面照樣說「已儲存」。"
+    % (sorted(set(APPROVAL_DOC_TYPES) - _scope_fields) or "（無）",
+       sorted(_scope_fields - set(APPROVAL_DOC_TYPES)) or "（無）"))
 
 
 @router.get("/api/settings/approval-flow-scope")

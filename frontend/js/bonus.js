@@ -82,7 +82,13 @@ function bonusPage() {
       if (this._initDone) return
       this._initDone = true
       await this.loadAwards()
-      await this.loadItems()
+      // 🔴 `BN2`：`GET /items` 現在只有最高管理者讀得到 ⇒ 不是管理者就**不要打**。
+      //    ⚠️ 而判斷用**後端回的 `is_manager`**（`loadAwards()` 拿到的），
+      //       不是在這裡判 `role` —— 那會是規則的第二份。
+      //    📌 而還是有可能拿到 403（`is_manager` 與 `require_superadmin` 是
+      //       兩道閘，`BN9` 之前 admin 兩者不一致）⇒ 錯誤訊息要說得出是權限，
+      //       而且它**放在區塊外**（見 `bonus.html` 那一段）。
+      if (this.isManager) await this.loadItems()
     },
 
     async loadAwards() {
@@ -115,7 +121,11 @@ function bonusPage() {
         this.canManageItems = !!d.can_edit
         this.itemsLoaded = true
       } catch (e) {
-        this.itemErr = '獎金項目載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
+        // 🔑 403 要說得出是**權限**，不要混進「載入失敗」那一句 ——
+        //    ☠️ 「載入失敗，請重新整理」會讓一個沒有權限的人**一直重新整理**。
+        this.itemErr = (String(e.message).indexOf('403') >= 0)
+          ? '獎金項目只有最高管理員看得到。您仍然可以在下方看到與自己有關的獎金單。'
+          : '獎金項目載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
       }
     },
 
