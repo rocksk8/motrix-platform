@@ -19,7 +19,9 @@
 | T7 | `NEXT-SESSION.md` 停在 2026-09-12（寫的是 v76→v77 部署），**已過期但檔頭寫著「開工第一份要讀」** | 第 1 行 | 該檔 | A：改寫或標註過期並指向 HANDOVER |
 | T8 | `MOTRIX-ERP-QUICK.md` 檔頭「文件版本 2026-09-16」過期 | 第 4 行 | — | A，併 T5 一起做 |
 
-建議順序：**T4 → T1 → T2**（T4 一分鐘，且讓全套測試少一支已知紅燈；T2 依賴 T1）；T5～T8 可以跟 T1 並行。
+| T9 | 🔴 **產品缺陷**：`POST /api/contractor-dispatches/{did}/import-to-quote`（`backend/routers/vendor_contractors.py:768`）①`:837` 呼叫 `save_quotation_json()` 後**沒有 `conn.commit()`** 就 `conn.close()` ⇒ UPDATE 被回滾、端點回成功而**資料庫沒寫入**；②同一行第 4 個位置參數傳 `user["username"]`，而簽名第 4 個是 `status`（`helpers/quotations.py:427-433`）⇒ **只修①會讓報價單狀態變成使用者名稱** | `get_db()` 是預設 isolation 的 `sqlite3.connect`（`db.py:163-176`）；與 `routers/material_orders.py:66-70` 09-10 修過的①②**同一型** | 2026-09-23 平台化盤點時撿到（後端 Explore agent），本視窗已讀原始碼確認 | 修＝B（①②**必須一起修**）；回歸題＝C，觀測點打在資料庫的 `data_json.items` 與 `status` 欄，先證明它會紅 |
+
+建議順序：**T9（實際缺陷）→ T4 → T1 → T2**（T4 一分鐘，且讓全套測試少一支已知紅燈；T2 依賴 T1）；T5～T8 可以跟 T1 並行。
 
 ## 乙、要使用者裁示（視窗不可代裁，只能整理選項）
 
