@@ -57,20 +57,27 @@ def can_export(award):
         % (award.get("status") or ""))
 
 
-def void_watermark_html(award):
-    """`BN13`（依據使用者 2026-09-23 裁示）：已作廢的獎金分潤單匯出要蓋
-    浮水印，同 `voucher_pdf.py::watermark_html()` 的視覺（3x4 格線平鋪、
-    `rotate(-28deg)`、顏色極淡不影響閱讀）——**只做「已作廢」這一半**：
-    `can_export()` 已經把草稿／待審核／簽核中擋在匯出端點之外，「未簽核
-    完成」這個狀態到不了這支函式，印那句話是防一個不可能出現的狀態
-    （同 `JV23` 的理由）。獎金分潤單今天也沒有「已過帳」這個終態可以放行
-    （`can_export()` 的 docstring 已經標過），一放行只有「已核准」與
-    「已作廢」兩種，已核准不蓋，這裡只判 `voided_at`。
+def award_watermark_html(award):
+    """要不要蓋浮水印、蓋哪一句。視覺同 `voucher_pdf.py::watermark_html()`
+    （3x4 格線平鋪、`rotate(-28deg)`、顏色極淡不影響閱讀）。
+
+    ## 🔴 作廢優先於未簽核（`BN12 §4`，照搬 `JV11` 的使用者裁示）
+
+    一張**還沒簽核就被作廢**的單要印「已作廢」不是「尚未簽核」——
+    ☠️ 印「尚未簽核」的話，有人會去把它簽完。
+
+    📌 更正留著（`BN13` 當時的版本只做「已作廢」這一半）：那時的理由是
+    「`can_export()` 已經把未簽核的擋在匯出之外，那一句到不了這裡」——
+    **對匯出路徑仍然成立**（匯出只放行已核准／已作廢，結果與舊版相同）；
+    而 `BN12` 加了**預覽**這條路，預覽不看簽核狀態，「未簽核」從此到得了。
     """
-    if not award.get("voided_at"):
-        return ""
     e = _esc
-    title, sub = "本獎金分潤單已作廢", "僅供稽核存查"
+    if award.get("voided_at"):
+        title, sub = "本獎金分潤單已作廢", "僅供稽核存查"
+    elif award.get("status") != "已核准":
+        title, sub = "獎金分潤單尚未簽核完成", "預覽稿・尚未正式生效"
+    else:
+        return ""
     items = "".join(
         "<div class='wm-item'><b>%s</b><small>%s</small></div>" % (e(title), e(sub))
         for _ in range(12))
@@ -195,7 +202,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at,
     格同一條規則（`§6②` 逐字：內部帳號印在對外／對稽核的憑證上，
     使用者要看到的是姓名），只是套用在收款人清單而不是簽核格上。
 
-    🔴 `BN13`：浮水印一律由 `void_watermark_html(award)` 算，這裡不自己
+    🔴 `BN13`／`BN12`：浮水印一律由 `award_watermark_html(award)` 算，這裡不自己
     判斷 `voided_at`——已作廢時印，其餘一律空字串（同 `JV23` 的分工）。
 
     🔴 `BN11`：`settle` 是案件的精算存值（`_settlement_of()` 的回傳，
@@ -207,7 +214,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at,
     印不出值也要讓人看到「這裡本來該有 11 個數字」。
     """
     e = _esc
-    watermark = void_watermark_html(award)
+    watermark = award_watermark_html(award)
     total = sum(int(ln.get("amount") or 0) for ln in lines or ())
     settle_rows_html = _settlement_rows_html(settle)
 
@@ -326,13 +333,10 @@ def display_names_for(conn, usernames):
     return {r["username"]: (r["display_name"] or r["username"]) for r in rows}
 
 
-def export_award_pdf(award_id):
-    """回 `(award, pdf_bytes)`；找不到這張單回 `(None, None)`。
-
-    ⚠️ 呼叫端（`routers/bonus.py`）自己先呼叫 `can_export()` 判斷放不放
-    行——這支只負責**組出 PDF**，不做閘門判斷（同 `export_voucher_pdf()`
-    與 `download_voucher_pdf()` 的分工：閘門在 router，內容產生在
-    helpers）。
+def _award_html(award_id):
+    """回 `(award, html)`；找不到回 `(None, None)`。**預覽與匯出共用這一支**
+    —— 版面只有一份（`SPEC-BN11-BN12 §4 ②`：兩份版面的失敗模式是
+    「預覽對、印出來不對」，而那要印出來才發現）。
     """
     import datetime as _dt
     conn = get_db()
@@ -351,8 +355,26 @@ def export_award_pdf(award_id):
         settle = _settlement_of(conn, award.get("quote_no"))
     finally:
         conn.close()
-
     exported_at = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
-    html_text = build_award_html(award, lines, signatures, display_names,
-                                 exported_at, settle=settle)
+    return award, build_award_html(award, lines, signatures, display_names,
+                                   exported_at, settle=settle)
+
+
+def preview_award_html(award_id):
+    """`BN12`：預覽稿 HTML（**不看簽核狀態**；閘門在匯出端點，不在這裡）。"""
+    _award, html_text = _award_html(award_id)
+    return html_text
+
+
+def export_award_pdf(award_id):
+    """回 `(award, pdf_bytes)`；找不到這張單回 `(None, None)`。
+
+    ⚠️ 呼叫端（`routers/bonus.py`）自己先呼叫 `can_export()` 判斷放不放
+    行——這支只負責**組出 PDF**，不做閘門判斷（同 `export_voucher_pdf()`
+    與 `download_voucher_pdf()` 的分工：閘門在 router，內容產生在
+    helpers）。
+    """
+    award, html_text = _award_html(award_id)
+    if award is None:
+        return None, None
     return award, _render(html_text)

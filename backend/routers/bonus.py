@@ -27,7 +27,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 
 from db import get_db
 from helpers import _require_user, _audit, _tok, _get_setting
@@ -41,7 +41,7 @@ from helpers.bonus import (
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
-from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for
+from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for, preview_award_html
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 logger = logging.getLogger(__name__)
@@ -825,6 +825,7 @@ def get_award(award_id: int, authorization: str = Header(None)):
     award["signatures"] = bonus_signatures_of(award)
     award["settlement"] = _settlement_fields(settle)
     award["last_reject"] = last_reject
+    award["can_recall"] = _can_recall(award, me)
     return award
 
 
@@ -1405,6 +1406,75 @@ def void_award(award_id: int, body: dict = Body(default={}),
     _audit(_tok(authorization), "bonus.award.void", "bonus_awards",
            str(award_id), "作廢獎金分潤單：%s" % reason)
     return {"ok": True}
+
+
+def _can_recall(award, username):
+    """`BN12 §1①`：只有**原送審申請人**、且在待審核／簽核中才收得回來。
+    比照 `quotations.py::recall_quotation()`（「只有原送審申請人可以收回」）。"""
+    if award.get("status") not in ("待審核", "簽核中"):
+        return False
+    try:
+        appr = json.loads(award.get("approval_json") or "{}")
+    except ValueError:
+        return False
+    return bool(username) and appr.get("requestedBy") == username
+
+
+@router.get("/awards/{award_id}/preview")
+def preview_award(award_id: int, authorization: str = Header(None)):
+    """`BN12`：預覽稿 HTML。**隨時可看，不看簽核狀態**；匯出（`pdf-download`）才擋。
+
+    🔑 閘門綁在端點上，不綁在參數上（同 `JV11`）：兩支各自寫死自己的規則，
+    沒有一個「條件」可以寫錯。權限與匯出同一道（`_is_manager`）。
+    📌 與 PDF 來自同一支 `helpers/bonus_pdf.py::_award_html()`，版面只有一份。
+    """
+    user = _require_user(authorization)
+    if not _is_manager(user):
+        raise HTTPException(403, "僅管理員以上可預覽獎金分潤單。")
+    body = preview_award_html(award_id)
+    if body is None:
+        raise HTTPException(404, "找不到這張獎金分潤單。")
+    return HTMLResponse(content=body)
+
+
+@router.post("/awards/{award_id}/recall")
+def recall_award(award_id: int, authorization: str = Header(None)):
+    """`BN12 §1①`：申請人把送審中的獎金分潤單**收回草稿**，清簽核。
+
+    🔑 A 的理由：缺席的代價是「申請人送錯只能請簽核人退回」——那是每天會遇到的麻煩。
+    ⚠️ 留編寫紀錄（permanent），與退回同一張表：收回也是這張單的歷史。
+    """
+    user = _require_user(authorization)
+    me = user.get("username") or ""
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        award = dict(row)
+        status = award.get("status")
+        if status not in ("待審核", "簽核中"):
+            raise HTTPException(
+                400, "只有待審核或簽核中的獎金分潤單可以收回（目前是「%s」）。" % status)
+        if not _can_recall(award, me):
+            raise HTTPException(403, "只有原送審申請人可以收回這張獎金分潤單。")
+        old_approval_json = award.get("approval_json") or "{}"
+        conn.execute(
+            "UPDATE bonus_awards SET status='草稿', approval_json='{}',"
+            " updated_at=? WHERE id=?", (now, award_id))
+        append_edit_log(conn, award_id, _user_name(user), [
+            {"field": "status", "from": status, "to": "草稿"},
+            {"field": "approval_json", "from": old_approval_json, "to": "{}"},
+            {"field": "收回", "from": "", "to": "申請人收回草稿"},
+        ], table="bonus_award_edit_log", retention="permanent", changed_at=now)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.award.recall", "bonus_awards",
+           str(award_id), "獎金分潤單由申請人收回草稿")
+    return {"ok": True, "status": "草稿"}
 
 
 @router.get("/awards/{award_id}/pdf-download")
