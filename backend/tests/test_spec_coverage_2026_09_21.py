@@ -222,6 +222,12 @@ _IMPLEMENTED_ONE = re.compile(r"([a-z]{1,2}\d{1,2}[a-z]?)_")
 #: ⚙️ 反向控制：下面那一題要求這裡的函式名**真的存在**（否則這張表會爛掉）。
 NAMED_ELSEWHERE = {
     "UI8": "test_every_section_condition_is_the_union_of_its_items",
+    # 🔴 `JV27`（2026-09-23，A-2 查出、A 核可）：題**存在**，只是掛在
+    #    別人名下 —— `4aef7fc` 補的 6 支題函式名全是 `test_em5_*`，而
+    #    `_implemented()` 從**題名**抽編號 ⇒ `JV27` 拿不到信用。
+    # ⚙️ 挑這一支的理由：它驗的正是 `JV27` 那一半（簽核動作 fail-closed），
+    #    而 `:227`／`:256` 是一對正負對照。
+    "JV27": "test_em5_approving_is_blocked_when_the_chain_is_unreadable",
 }
 
 #: 🔴 **明文豁免：這一條的驗證方式不是 pytest。**
