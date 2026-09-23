@@ -137,6 +137,19 @@ docs/system-home-mockup.html export-ignore
 /CHANGELOG.md export-ignore
 /PASSKEY-CA-ROLLOUT.md export-ignore
 
+# docs/reference/：開發期的外部原始資料，不是客戶會用到的東西 ——
+# 🔴 商業會計項目表.pdf／.sha256 只是 backend/tools/parse_account_items.py
+#    的一次性輸入，真正的執行期依賴是已經產生好的 backend/data/account_items_112.json
+#    （不受這條規則影響，照常出貨）
+# 🔴🔴 傳票-實例-20260330-006.pdf 是**一張真實的公司會計傳票**（D 已確認），
+#    只在 helpers/voucher.py／voucher_pdf.py 的註解裡被當成單號格式的設計依據
+#    引用，程式碼沒有讀取這個檔案 —— 這是本次 PK1 裡最嚴重的一項，優先排除
+docs/reference/** export-ignore
+docs/reference export-ignore
+
+# 內部諮詢草稿，不是客戶文件
+docs/ASK-ACCOUNTANT.md export-ignore
+
 # ⚠️ 尚未排除（刻意）：backend/tools/ 的個別檔案分類、letsencrypt_renew.ps1
 # 預設值、sync_pending_data_20260817.py、create_claude_account.py 仍待 A/D
 # 裁決（見 SCOPE.md「E 類三檔在 43 項清單外」與「backend/tools/ 逐檔分類」節），
