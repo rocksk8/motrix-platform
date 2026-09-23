@@ -41773,3 +41773,66 @@ A-2 指出錯在哪，而他的措辭比 A 的精確：
 > 它是**既有安裝的行為**。動它等於改所有人的單據。」
 
 > ### ☠️ **一個正確的顧慮，擋住了一個必要的修改** —— 而那段註解自己說出了它為什麼還在。
+
+---
+
+## §359 ☠️☠️ **那一行存在，而它什麼都沒做 —— 而守門與它共用同一個錯誤假設**
+
+> `PK1` 的第一階段：B 加了 `.gitattributes` 的 `export-ignore`，並為「排除清單 ∩ `MUST_EXIST` = ∅」
+> 寫了不變量與 mutation test，全部通過。**而排除本身沒有發生。**
+
+### ⚙️ D 量的（`git check-attr export-ignore`，A 已複驗）
+```
+docs/windows/STATE.md       export-ignore: **unspecified**   <= 應該 set
+docs/windows/SCOPE.md       export-ignore: **unspecified**
+docs/windows/tools/px1_scan.py（兩層深）  **unspecified**
+backend/tests/conftest.py   export-ignore: **unspecified**
+--- 對照 ---
+MULTIWIN-PROTOCOL.md        export-ignore: **set** ✅（單檔規則正常）
+docs/UI-BACKLOG.md          export-ignore: **set** ✅
+DEPLOY.md ／ backend/main.py  unspecified ✅（負對照乾淨，沒有誤排除）
+```
+```
+.gitattributes:87   docs/windows/ export-ignore     <= **尾巴加 / 不會遞迴**
+.gitattributes:92   backend/tests/ export-ignore    <= 同上
+```
+> ### ☠️ ⇒ **`PK1` 排除清單裡最大的兩塊（`docs/windows/` 81 檔、`backend/tests/` 195 檔）
+> ### 完全沒有被排除。** 而 `.gitattributes` 裡那兩行看起來完全正常。
+
+### 🔑 而 D 的第三層對照，把「報 bug」變成「給修法」
+```
+① 正題：check-attr 逐檔問
+② 正對照：單檔規則 set ✅ => **證明 export-ignore 本身是通的**
+③ 🔴 **機制對照**：同一份檔裡本來就有 `frontend/static/vendor/leaflet/** -text`
+   => 一層與兩層都正確套用 => **證明差別在 `**`，不在別的東西**
+```
+📌 ⇒ **只有 ①② 的話結論是「那兩條沒生效」；加上 ③ 才知道要改成 `**`。**
+
+---
+
+### ☠️☠️ 而最重的一格是：**我們的守門不可能抓到它**
+```
+verify_package.py 的 `_pattern_covers()` 用的是 **gitignore 式**的目錄語意
+（尾巴 `/` 當作涵蓋整個子樹）=> 與 git 實際的比對邏輯**不一致**
+=> 🔴 **那道守門的判斷基礎，就是錯的那一套語意**
+```
+> ### 🔑 〈探針與被測對象糾纏〉的最深一種：
+> ### **守門與被守的東西，共用了同一個錯誤假設。**
+☠️ 而 B 為它寫的 mutation test **是真的**（D 獨立換三個不同字串驗過，都正確 FAIL／負對照不 FAIL）——
+  **那支尺驗的是真交集，而它建立在一個錯的語意上。**
+⇒ 修法不是把語意寫對，是**不要自己實作它**：
+> ### **呼叫 `git check-attr export-ignore -- <path>`，問 git 本人。**
+🔑 那同時修掉病根：**我們重新實作了一份 git 的規則，而那份永遠會落後。**
+
+### 🔑 而 D 最後那句是這一則的判準
+> 「它目前**巧合地**沒事，是因為 `MUST_EXIST` 剛好都不在被排除的目錄底下 ——
+>  跟這支尺本身的邏輯是否正確**無關**。」
+> ### 📌 **一個因為輸入剛好安全而通過的檢查，不是一個通過的檢查。**
+
+### ⚠️ 而 A 早先那一條裁示**對了，而理由是次要的那一個**
+```
+A 裁：「驗收要釘**包裡不存在 STATE.md**，不要釘 `.gitattributes` 裡有那一行」
+A 給的理由：「export-ignore 只影響 git archive，換一種打包方式它會靜默失效」
+🔴 而真正的理由更基本：**那一行存在，而它什麼都沒做。**
+```
+🔑 ⇒ **判準對而理由不對，下一次它會被用錯地方** —— 因為引用的人記住的是理由。

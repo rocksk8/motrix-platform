@@ -1302,3 +1302,35 @@ db.py:708                    _seed_setting      <= **全新安裝的出廠值**
    ⚙️ 做完之後 QL6 那個顧慮**自動消失**（第三層接住，走不到第四層）
 ```
 ⚠️ 而守門的檔案清單從 5 支加到 **6** 支（含 `letsencrypt_renew.ps1`），字串集加 `erp.miactw.com`。
+
+---
+
+## 🔴🔴 `PK1` 更正：**`.gitattributes` 那兩條目錄規則完全沒有生效**
+```
+⚙️ git check-attr export-ignore（D 量、A 複驗）
+docs/windows/STATE.md ／ SCOPE.md ／ tools/px1_scan.py ／ backend/tests/conftest.py
+   => 全部 **unspecified**（應該 set）
+MULTIWIN-PROTOCOL.md ／ docs/UI-BACKLOG.md  => **set** ✅（單檔規則正常）
+DEPLOY.md ／ backend/main.py                => unspecified ✅（負對照乾淨）
+```
+```
+.gitattributes:87  `docs/windows/ export-ignore`    <= **尾巴加 / 不遞迴**
+.gitattributes:92  `backend/tests/ export-ignore`   <= 同上
+✅ 而同一份檔裡 `frontend/static/vendor/leaflet/** -text` **兩層都正確套用**
+=> 🔑 差別在 `**`
+```
+> ### ☠️ **排除清單裡最大的兩塊（81 檔 ＋ 195 檔）現在完全沒被排除。**
+
+### ⇒ 三件（已派 B）
+```
+1. 改成 `docs/windows/** export-ignore` 與 `backend/tests/** export-ignore`
+   ⚠️ 而**用 check-attr 三組複驗**（應排除的兩層深／不該排除的負對照／目錄本身）
+2. 🔴 verify_package.py 的 `_pattern_covers()` 改成**呼叫 git check-attr**，
+   ☠️ 不要自己實作 git 的比對語意 —— 它現在用 gitignore 式語意，
+   **那道守門的判斷基礎就是錯的那一套 ⇒ 它不可能抓到這個問題**
+   ⚠️ 修完要證明它會紅：**把 `**` 拿掉，那道檢查必須 FAIL**
+3. D 重新盤點：.gitattributes 每一條 export-ignore **宣稱涵蓋幾個檔 vs 實際 set 幾個**，
+   兩個數字不相等的逐條列名
+```
+📌 而驗收條件**不變**（釘產出物）—— 🔑 **而這一次證明了為什麼**：
+  **設定存在、守門通過、而事情沒有發生。**
