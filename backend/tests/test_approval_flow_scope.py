@@ -176,10 +176,18 @@ def test_scope_put_requires_all_fields(client, make_user):
 
 
 #: 一份**完整**的 body。模型欄位全部必填（`routers/system.py:140`）。
+#:
+#: 🔴 **2026-09-23：`bonus`（第九個 doc type，`BN8`）落地，這裡純機械地
+#:    跟著補一欄** —— 這兩題（權限、200 正對照）只在乎 body 完整不完整，
+#:    不在乎每一欄的值是什麼。
+#: ⚠️ **這裡的 `False` 不是業務裁定**，只是湊出一份能通過驗證的完整 body。
+#:    `bonus` 真正的預設分組要登記在下面 `EXPECTED_SCOPE`，
+#:    而那一格**不是我能自己決定的** —— A 會問使用者，這裡先留著紅。
 FULL_SCOPE_BODY = {
     "quotation": False, "shipping": True, "invoice_voucher": True,
     "payment_request": True, "contractor_voucher": False,
     "completion": True, "extra_expense": True, "voucher": False,
+    "bonus": False,
 }
 
 
