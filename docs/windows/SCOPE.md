@@ -1178,3 +1178,80 @@ D 早先已確認：**這三個都是已追蹤檔案 => 都會進每一包**
 => 39 + 2 + 1 + 1 = **43** ✅（自己加過一次）
 => **沒有 .json／.bat／.ps1 落在「要排除」這一側**
 ```
+
+---
+
+## ✅ `PK1` 定性：**是新發現，不是一筆被漏掉的舊裁示** ＋ `backend/tools/` 分類
+
+### ⚙️ `git log -S "INTERNAL_DOC"`（D 查）
+```
+只有一個 commit 觸碰過它：**ab8e700**（2026-09-22 20:32）
+commit message 逐項交代了 verify_package.py 的六項修正，
+**通篇沒有一句提到「哪些文件該不該出貨給客戶」**
+INTERNAL_DOC 那 5 個名字只是被歸進「(3b) 內部流程文件」這個**資訊性報告區塊**
+（find/print，不影響 PASS/FAIL），與同一支 commit 裡會 R.fail 的 MUST_EXIST 是刻意分開的兩張表
+```
+> ### 🔑 ⇒ **`PK1` 照「新發現」報給使用者**，不是「一筆沒被執行的裁示」。
+
+### ✅ 而 `DR-SOP.md` 的「矛盾」不是矛盾（D 的定性，逐字保留）
+> 「工具作者做的是『**這是內部流程類文件**』（**文件分類**），
+>  而我做的是『**客戶自架時用不用得到**』（**出貨判斷**）——
+>  **兩種判準本來就會對同一份文件給不同答案。**」
+
+🔑 ⇒ 那不是「有一邊錯了」，是**兩把尺量不同的東西**。
+☠️ 而 A 在派工時把它稱作「矛盾」—— **那個措辭會讓收訊的人去找誰對誰錯**，
+  📌 〈診斷的層級決定覆蓋率〉的措辭面：**收訊的人會照措辭決定要做什麼。**
+
+---
+
+### ⚙️ `backend/tools/` 逐檔分類（28 個已追蹤檔案）
+```
+🔴 甲・排除（17）
+   _dashboard_remote.ps1 ／ audit_account_permissions.py ／
+   backfill_location_identity_snapshot.py ／ build_deploy_package.ps1 ／
+   check_approval_queue_coverage.py ／ check_double_init.py ／
+   check_endpoint_entrypoints.py ／ check_guide_sync.py ／ check_prod_drift.ps1 ／
+   check_version_sync.py ／ code_health.py ／
+   deploy_dashboard.html ／ deploy_dashboard.py ／ deploy_dashboard_ctl.pyw ／
+   local_research_pipeline.py ／ parse_account_items.py ／ sync_pending_data_20260817.py
+
+✅ 保留（6）—— 客戶自架必要
+   _healthcheck_ping.py ／ apply_update.ps1 ／ https_setup.ps1 ／
+   rollback_update.ps1 ／ setup_passkey_client.ps1 ／
+   ⚠️ letsencrypt_renew.ps1（保留**而要改內容**：$Domain 預設值 erp.miactw.com）
+
+🔴 需人裁決（4）—— D 明說「我判斷不出商業意圖」
+   issue_license.py（docstring 自稱「產品裡放發證機」—— **客戶自己會需要簽發授權金鑰嗎**）
+   fetch_root_ca.ps1（措辭是「在開發機執行」，而客戶自架 passkey 可能也需要）
+   check_dependencies.py（pip-audit，對客戶維運有價值，但提到客戶機器上不存在的 requirements-dev.txt）
+   list_payment_anomalies.py（純唯讀財務診斷，而引用了內部的 MOTRIX-ERP-QUICK.md §5.12）
+
+🔴 **未歸類（1）：verify_package.py** —— 17 + 6 + 4 = **27**，而 tools/ 有 **28**
+```
+> ### 🔑 **做分類的那支工具，自己掉出了分類。**
+☠️ 而它不是隨便一個漏網的檔：**`MUST_EXIST` 與 `INTERNAL_DOC` 就在它裡面。**
+```
+=> 就算那 5 份文件被排除，**它們的檔名仍然寫在 verify_package.py 裡隨包出去**
+   而客戶執行它，畫面會逐行印「MULTIWIN-PROTOCOL.md（不在包裡）」
+```
+🔑 ⇒ **排除一份文件，不等於它的存在被藏起來。** 已派 D 判它的歸屬。
+
+### ⚠️ 而加總這件事今天第二次，方向相反
+```
+上一次：明確排除 34 vs 43   => **清單對、總數錯**
+這一次：28 = 18 + 6 + 4      => **總數對、清單少一項**
+```
+⇒ 判準：**加總自檢要真的把每個桶的長度數出來**（`len(甲)+len(保留)+len(裁決)`），
+  ☠️ 不要用「我記得甲有 18 個」去對 28 —— **那是用結論去驗證結論**。
+📌 而**兩次的清單本身都經得起核對** —— 錯的一直是那個數字，**而數字是別人會引用的那一個**。
+
+---
+
+### 🔴 `SPEC-PK1` 驗收新增一條不變量
+```
+**包裡不存在任何 `*_private_key*.pem`**
+⚙️ 正對照：_license_private_key_dev.pem **在磁碟上**，而 git ls-files 零筆
+   （check-ignore -v 命中 `.gitignore:13  **/*_private_key*.pem`，D 實測）
+🔑 而它現在有了新的重量：**git archive 匯出的是已追蹤內容**
+   => 那條 .gitignore 是擋住私鑰進包的**唯一一道**
+```
