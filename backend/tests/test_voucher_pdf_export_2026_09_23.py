@@ -221,6 +221,88 @@ def test_jv5_a_voided_voucher_can_still_be_printed(client, make_user):
 # ② 合併：數頁數
 # ══════════════════════════════════════════════════════════════════════
 
+#: 最小的合法 1×1 PNG（用來當「圖片附件」）。
+_ONE_PX_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6360000002000100ffff03000006000557bfabd400"
+    "00000049454e44ae426082")
+
+#: 🔴 **一張圖印成幾頁，我不猜。**
+#:
+#: A-2 自己標的沒查：**Edge headless 對圖片 EXIF 旋轉／CSS page-break
+#: 的實際行為他沒實測過**；而規格建議「本體＋圖片同一份 HTML，
+#: 用 CSS page-break 分頁」⇒ **一張圖是不是剛好一頁，要看那個 CSS 怎麼寫**。
+#: ⇒ 這裡先留 `None`：下面那一題只釘**弱不變量**（有變多），
+#:   等 B 回報實際行為再把它收緊成 `== 圖片數`。
+#: ☠️ 現在寫死 `== 1` 的話，它可能紅在一個正確的實作上 ——
+#:   而那正是我今天已經攔過兩次的形狀（`§161` 的時間戳、`BN1` 的差 100 倍）。
+_IMAGE_PAGES_PER_FILE = None
+
+
+def test_jv5_merging_an_image_attachment_adds_pages(client, make_user):
+    """🔴 **`§7②`：圖片附件要真的進到輸出裡。**
+
+    ⚙️ 這一題現在只釘**弱不變量**：帶附件的頁數要**比不帶多**。
+    ```
+    強  總頁數 == 1 + 圖片數      <= **等 B 回報 Edge 的實際行為再收緊**
+    弱  帶附件 > 不帶附件         <= 今天釘這個
+    ```
+    ⚠️ 為什麼不直接寫 `== 1 + 圖片數`：
+    ```
+    規格建議「本體 ＋ 圖片同一份 HTML，用 CSS page-break 分頁」
+    而 A-2 自己標了 **Edge headless 對 page-break 的實際行為他沒實測過**
+    ⇒ 一張圖是不是剛好一頁，**沒有人知道**
+    ```
+    ☠️ 猜一個數字寫死的話，它可能**紅在一個正確的實作上** ——
+       而那是我今天已經攔過兩次的形狀（`§161` 的時間戳、`BN1` 的「差 100 倍」）。
+    🔑 弱不變量抓得到真正要抓的那件事：**合併根本沒發生**
+      （輸出只有本體那一頁，而它是一份完全正常的 PDF）。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_img")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "收據.png", _ONE_PX_PNG)
+
+    plain = _export(client, hdr, vid)
+    assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
+    merged = _export(client, hdr, vid, with_attachments=True)
+    assert merged.status_code == 200, (
+        "帶圖片附件匯出失敗：%s %s"
+        % (merged.status_code, merged.content[:160]))
+
+    a, b = _page_count(plain.content), _page_count(merged.content)
+    assert b > a, (
+        "帶圖片附件的輸出頁數 %d，沒有比只印本體的 %d 多 ——\n" % (b, a)
+        + "☠️ 圖片**沒有進到輸出裡**，而輸出是一份完全正常的 PDF。\n"
+        + "📌 規格的做法是「本體 ＋ 圖片同一份 HTML，CSS page-break」——\n"
+          "   ⇒ 圖片不需要 `pypdf`，而它也要真的被印出來。")
+
+    if _IMAGE_PAGES_PER_FILE is not None:
+        assert b - a == _IMAGE_PAGES_PER_FILE, (
+            "一張圖片讓頁數多了 %d，而期望是 %d。"
+            % (b - a, _IMAGE_PAGES_PER_FILE))
+
+
+def test_jv5_the_image_page_expectation_is_still_open():
+    """⚙️ **這一格是**待定**，而它要看得見。**
+
+    ```
+    _IMAGE_PAGES_PER_FILE = None   <= 一張圖印幾頁，**沒有人實測過**
+    ```
+    🔑 我刻意**不猜** —— 而「不猜」如果只寫在註解裡，下一個人不會看到它。
+    ⇒ 這一題是那個待辦的**載體**：它今天綠，而 `B` 回報實際行為之後，
+      把 `_IMAGE_PAGES_PER_FILE` 設好、把上一題的弱不變量收緊，
+      **然後刪掉這一題**。
+    ⚠️ 它不是 `skip` —— skip 會被略過而沒有人看到
+      （`GC6` 那個形狀：一個從來不跑的東西等於沒有）。
+    """
+    assert _IMAGE_PAGES_PER_FILE is None, (
+        "`_IMAGE_PAGES_PER_FILE` 已經被設成 %r ——\n" % (_IMAGE_PAGES_PER_FILE,)
+        + "✅ 那表示有人量到實際行為了，很好。\n"
+        + "🔑 **請把這一題刪掉** —— 它的工作（讓「待定」看得見）已經完成。\n"
+        + "⚠️ 不要把它改成 `assert _IMAGE_PAGES_PER_FILE == 1`：\n"
+          "   那一格屬於上一題，這一題只是一張便利貼。")
+
+
 def test_jv5_merging_a_pdf_attachment_adds_its_pages(client, make_user):
     """🔴 **`§7③`：總頁數 == 1 ＋ 各 PDF 附件的頁數合計。**
 
