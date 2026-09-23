@@ -29,6 +29,30 @@ A 已告知 B：不要在 `bonus_awards` 存一份客戶名快照——那會變
 
 📌 前端欄位是 snake_case（`bonus.html:255-257` 既有的 `c.customer_name`
 ／`c.quote_no`），本檔沿用同一種命名，不猜 camelCase。
+
+# 🔴 補證：這 5 題寫完的當下就是綠的（B 在同一份工作樹上幾乎同時做完），
+# 〈新回歸測試一定要先證明它會紅〉這一步沒有機會發生——用**替身**補一次
+
+不 stash／不碰 B 的未提交異動：monkeypatch `routers.bonus._case_names_for`
+讓它一律回空 dict，重跑這 5 題，結果：
+
+```
+①②  RED —— 斷言真的打在 customer_name／project_name 的值上，
+            有牙齒（今天就驗得到「這個修法把值蓋掉」這件事）
+③   RED，而是在**前置斷言**（「先看①」）紅掉，不是在它自己要驗的
+    「改 quotations 之後獎金單要跟著變」那一段——這個替身讓 case_names
+    永遠是空的，連①的前置都過不了，**沒有真的走到快照那一段邏輯**。
+    ⇒ ③ 對「快照式的錯誤修法」是**防未來**，不是防現況：那種修法今天
+    不存在，沒有東西可以讓它在今天亮紅燈。
+④⑤  仍然是綠的（"no teeth against this mutation"）——這兩題驗的是
+    「值缺席時不可以印成字面 'None'」，而 `case_names_for` 回空 dict時
+    現有程式碼本來就會落到 `cn.get(..., "")` 的空字串分支，跟正常時
+    的空值處理路徑相同，這個替身**改不出**它們要防的那種錯（把 `None`
+    直接 `str()` 印出來）——要證明④⑤有牙齒，得換一種替身
+    （讓 `_case_names_for` 回傳 `{"customer_name": None}` 之類），
+    本檔暫不做第二輪替身，這裡誠實記下**這兩題目前的牙齒沒有被驗證過**。
+```
+⇒ 下面把每一題標成**今天驗得到**還是**防未來的修法**，不要看成同一種綠。
 """
 import sys
 from pathlib import Path
@@ -96,7 +120,11 @@ def _award_detail(client, hdr, aid):
 
 def test_bn15_the_award_list_includes_the_customer_and_project_name(
         client, make_user):
-    """🔴🔴 **核心：`GET /awards` 每一筆要帶得出客戶名與案件名。**"""
+    """🔴🔴 **核心：`GET /awards` 每一筆要帶得出客戶名與案件名。**
+
+    ✅ **今天驗得到**——替身驗證過（`_case_names_for` 回空 dict 時這一題
+    真的紅），不是一句立即通過的空話。
+    """
     quote_no = QUOTE_NO_PREFIX + "-LIST"
     _seed_quotation(quote_no, "正達科技股份有限公司", "廠區安控案")
     aid = _seed_award(quote_no, ["someone"])
@@ -119,6 +147,8 @@ def test_bn15_the_award_detail_includes_the_customer_and_project_name(
         client, make_user):
     """🔴🔴 **`GET /awards/{id}` 也要帶得出來——彈窗標題與清單列，
     使用者說的涵蓋兩處，只修清單會漏掉彈窗。**
+
+    ✅ **今天驗得到**（替身驗證過，`_case_names_for` 回空 dict 時這一題會紅）。
     """
     quote_no = QUOTE_NO_PREFIX + "-DETAIL"
     _seed_quotation(quote_no, "京城凱悅飯店", "監控系統更新案")
@@ -144,6 +174,12 @@ def test_bn15_customer_name_tracks_the_live_quotation_not_a_frozen_copy(
     第二份會漂移的資料。少了這一題，「建立獎金單時把客戶名複製一份
     存進 `bonus_awards`」這種修法也會讓 `①②` 變綠，而稽核時兩邊會
     對不上（案件資料改了，獎金單上還是舊的）。
+
+    ⚠️ **防未來，不是防現況**——替身測過：讓 `_case_names_for` 回空
+    dict，這一題確實會紅，**但紅在它自己的前置斷言**（第一次讀就該有
+    的客戶名沒出現），沒有真的走到「改完 `quotations` 之後有沒有跟著
+    變」那一段。快照式的錯誤修法今天不存在，這一題現在守的是**日後
+    有人這樣改**時會被抓到，不是現況裡已經驗證過這個機制。
     """
     quote_no = QUOTE_NO_PREFIX + "-DRIFT"
     _seed_quotation(quote_no, "舊客戶名稱", "案件名")
@@ -180,6 +216,14 @@ def test_bn15_a_null_customer_name_does_not_render_as_the_string_none(
     `quotations.customer_name`（`db.py:411`）宣告是 `TEXT`，**沒有
     `NOT NULL DEFAULT ''`**——真的可能是 SQL NULL，不只是空字串。這是
     〈null 不等於 0〉的字串版：`f"{None}"` 會印出字面的 `"None"`。
+
+    ⚠️ **牙齒尚未驗證**——替身測過讓 `_case_names_for` 回空 dict，這一題
+    仍然是綠的：今天的程式碼本來就會落到 `cn.get(..., "")` 的空字串
+    分支，跟正常時的空值處理路徑相同，這個替身改不出它要防的那種錯
+    （把 `None` 直接 `str()` 印出來變成字面 `"None"`）。要證明這一題
+    真的紅得起來，需要換一種替身（例如讓 `_case_names_for` 回傳
+    `{quote_no: {"customer_name": None, ...}}` 而不是空字串），本檔
+    暫不做第二輪替身，先誠實記下這個限制。
     """
     quote_no = QUOTE_NO_PREFIX + "-NULLNAME"
     _seed_quotation(quote_no, None, None)
@@ -204,6 +248,12 @@ def test_bn15_an_award_with_no_matching_quotation_does_not_crash_or_leak_none(
     ⚙️ 這是比「客戶名是空字串」更邊緣的狀況——整張案件都不存在（例如
     測試資料、或案件被清除過），JOIN 對不到任何一列。落地形狀若用
     `LEFT JOIN`，這種情況下取到的是 SQL NULL，同 `④` 的處置。
+
+    ⚠️ **牙齒尚未驗證**（與 `④` 同一個限制）——替身測過讓
+    `_case_names_for` 回空 dict，這一題仍是綠的：本檔這個情境（查無
+    `quotations` 那一列）今天本來就會落在 `case_names.get(quote_no)
+    or {}` 的空字典分支，跟替身模擬的狀態一樣，這個替身**驗不出**這一
+    題真正要防的字面 `"None"` 錯誤，只是恰好與它現在測的分支重疊。
     """
     quote_no = QUOTE_NO_PREFIX + "-ORPHAN-NOQUOTE"
     aid = _seed_award(quote_no, ["someone"])  # 故意不種 quotations 那一列
