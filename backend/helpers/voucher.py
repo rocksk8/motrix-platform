@@ -319,8 +319,47 @@ def get_voucher(conn, voucher_id):
             ln["account_name"] = names.get(ln["account_code"], "")
 
     voucher["lines"] = lines
-    voucher["signatures"] = signatures_of(voucher)
+    voucher["signatures"] = _resolve_display_names(conn, signatures_of(voucher))
     return voucher
+
+
+def _resolve_display_names(conn, slots):
+    """`JV13`：`signatures_of()` 的 `by` 存的是 **username**（穩定識別、
+    `_user_name()` 寫入的就是它），而印在紙上／畫面上的要是**顯示名稱**。
+
+    ## 🔴 修的是輸出這一層，不改存的值
+
+    ```
+    signatures_of()          仍然回 username —— 那是它的職責（讀簽核紀錄）
+    get_voucher() 的回傳值    包一層，把 by 換成顯示名稱
+    ```
+    ⚠️ 兩者混在一起會兩頭不討好：`signatures_of()` 若直接回顯示名稱，
+       它就不再是「簽核紀錄的原始值」，而變成一個**跟查詢時機綁定**的東西
+       （使用者改名之後，舊的 `approval_json` 裡沒有任何欄位需要跟著動，
+       這裡永遠查的是**現在**的顯示名稱）。
+
+    ⚠️ **查不到顯示名稱時落回 username，不要印空白**（`STATE.md §257`
+       JV13 逐字）—— 空白比印一個帳號更難查（帳號至少查得到是誰）。
+
+    📌 這裡才用得到 `conn`，`signatures_of()` 本身仍然不碰資料庫
+       （模組開頭的原則：純邏輯，可以直接餵值問它，不必先造一個 DB）。
+    """
+    usernames = {(v or {}).get("by") for v in slots.values()} - {"", None}
+    if not usernames:
+        return slots
+    placeholders = ",".join("?" for _ in usernames)
+    rows = conn.execute(
+        "SELECT username, display_name FROM users WHERE username IN (%s)"
+        % placeholders, tuple(usernames)).fetchall()
+    names = {r["username"]: (r["display_name"] or r["username"]) for r in rows}
+    out = {}
+    for label, cell in slots.items():
+        cell = dict(cell or {})
+        by = cell.get("by") or ""
+        if by:
+            cell["by"] = names.get(by, by)
+        out[label] = cell
+    return out
 
 
 #: 版面上的三個簽名格（使用者的實例逐字：製票／覆核／主管）。
