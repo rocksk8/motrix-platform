@@ -73,6 +73,11 @@
               <b x-text="bySource[s] || 0"></b> 筆
             </span>
           </template>
+          <!-- `CA1 §6`：自建總數要顯示在頁面上，且由後端算（不要前端自己數）。 -->
+          <span x-show="customCount">
+            ・自建 <b x-text="customCount"></b> 筆
+            <span x-show="customInactiveCount">（含停用 <b x-text="customInactiveCount"></b> 筆）</span>
+          </span>
         </div>
       </div>
 
@@ -92,6 +97,10 @@
                placeholder="搜尋代號或名稱…">
         <div class="ai-hint" x-show="q.trim()" x-text="matchHint"></div>
       </div>
+
+      <div class="ai-toggle-err" x-show="toggleError" x-text="toggleError"
+           style="color:var(--danger);font-size:12px;margin-bottom:10px"
+           @click="toggleError = ''"></div>
 
       <div class="ai-tree" x-show="loaded">
         <!-- 🔴 展開／收合掛在**整列**上，不是只掛在那個小三角上。
@@ -116,10 +125,35 @@
             <span style="flex:1"></span>
             <span class="ai-tag" :class="row.source"
                   x-text="sourceLabel[row.source] || row.source"></span>
+            <!-- `CA1 §2③`：自建的要在畫面上看得出是自建的——上面那個 `.ai-tag`
+                 已經做到「自訂」；這裡另外標「已停用」，**不要只靠顏色**
+                 （色盲／黑白列印讀不到），字本身就是訊號。 -->
+            <span class="ai-tag" x-show="!row.is_active"
+                  style="background:#F3F4F6;color:var(--text-dim,#6B6B6B);border:1px solid var(--border-light)"
+                  >已停用</span>
             <!-- 🔴 「不可編輯」必須在**按下去之前**就說出來。
                  ☠️ 少了它，使用者按下編輯才被資料層擋，
                     而他看到的是 RAISE(ABORT) 那句話。 -->
             <span class="ai-lock" x-show="row.source === 'statutory'" title="法定項目：不可修改、不可刪除">🔒 唯讀</span>
+
+            <!-- `CA1 §5`：延伸建立與停用／啟用都是 superadmin 專屬端點，
+                 前端一致地只給 superadmin 看得到這兩個動作。
+                 每個按鈕自己 `.stop`，不是包一層外殼——外殼沒有處理常式時
+                 Alpine 的 `.stop` 修飾詞不會生效。 -->
+            <span style="display:flex;gap:6px;flex:none" x-show="isSuperadmin">
+              <button class="btn btn-ghost btn-sm" @click.stop="openExtend(row)">＋延伸</button>
+              <button class="btn btn-sm" :class="row.is_active ? 'btn-danger' : 'btn-success'"
+                      x-show="row.source !== 'statutory' && pendingToggle !== row.code"
+                      @click.stop="askToggleActive(row)"
+                      x-text="row.is_active ? '停用' : '啟用'"></button>
+              <span style="display:flex;gap:4px;align-items:center;font-size:12px"
+                    x-show="row.source !== 'statutory' && pendingToggle === row.code">
+                <span x-text="row.is_active ? '確定停用？' : '確定啟用？'"></span>
+                <button class="btn btn-sm btn-danger" :disabled="toggleBusy === row.code"
+                        @click.stop="confirmToggleActive(row)">是</button>
+                <button class="btn btn-sm btn-ghost" @click.stop="cancelToggle()">取消</button>
+              </span>
+            </span>
           </div>
         </template>
         <div class="ai-empty" x-show="!visibleRows.length"
@@ -127,6 +161,34 @@
       </div>
 
       <div class="ai-empty" x-show="!loaded" x-text="loadError || '載入中…'"></div>
+
+      <!-- `CA1 §5`：延伸建立的彈窗。`code` 不給前端填——由後端算
+           （同 `voucher_no` 的理由：前端不發號），這裡只收科目名稱。 -->
+      <div class="modal-overlay" x-show="extendOpen" x-cloak @click.self="closeExtend()">
+        <div class="modal-box" style="max-width:420px">
+          <div class="modal-head">
+            <div style="font-weight:700" x-text="'延伸建立 · ' + extendParentLabel"></div>
+            <button class="btn btn-ghost btn-sm" @click="closeExtend()">✕</button>
+          </div>
+          <div class="modal-body">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">
+              新代號將是 <b x-text="extendParent + '-N'"></b>（流水號由系統決定，不由這裡填）。
+            </div>
+            <input class="ai-search" style="width:100%;box-sizing:border-box" type="text"
+                   x-model="extendName" placeholder="科目名稱" x-ref="extendNameInput"
+                   x-effect="extendOpen && $nextTick(() => $refs.extendNameInput.focus())"
+                   @keydown.enter="submitExtend()">
+            <div style="color:var(--danger);font-size:12px;margin-top:8px"
+                 x-show="extendError" x-text="extendError"></div>
+          </div>
+          <div class="modal-foot">
+            <button class="btn btn-ghost" @click="closeExtend()">取消</button>
+            <button class="btn btn-primary" :disabled="extendBusy" @click="submitExtend()">
+              <span x-text="extendBusy ? '建立中…' : '建立'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
