@@ -278,16 +278,71 @@ def copy_into(voucher_id, src_abs, filename, subfolder="voucher_attachments"):
     return uuid.uuid4().hex[:8], rel, os.path.getsize(os.path.join(dest_dir, fname))
 
 
-#: 一個案件底下**找得到附件的那幾類**，以及怎麼從案件編號推出 `doc_no`。
+#: 一個案件底下，每一類的 `doc_no` **怎麼從案件編號查出來**。
 #:
-#: 🔑 這份表存在的理由：畫面要「選一個案件 -> 看到它所有可帶入的憑證」，
-#:    而那九類散在四張表、三種 `doc_no` 形狀裡。
-#: ⚠️ 兩類**不在這裡**：`invoice_voucher` 與 `contractor_*` 的 `doc_no` 是
-#:    它們自己的單號／派工 id，**不是案件編號** ⇒ 要另一條路徑選（本輪不做）。
-#:    📌 標著而不是靜默略過：少了它們的症狀是「這個案件的承攬商發票帶不進來」，
-#:       而畫面上看起來只是「沒有那一類」。
-_CASE_SCOPED = ("quotation_signed", "case_update",
-                "payment_item", "material", "material_invoice")
+#: 🔴 四類的 `doc_no` **不是案件編號**，而這四類原本整個選不到：
+#: ```
+#: extra_expense        自己的 id
+#: invoice_voucher      開票申請單號
+#: contractor_dispatch  派工 id
+#: contractor_invoice   派工 id   <= **與上一個完全相同**
+#: ```
+#: ☠️ 選不到的症狀是「這個案件的**承攬商發票**帶不進來」，
+#:    而畫面上看起來只是「沒有那一類」—— **不像一個缺陷**。
+#: ✅ 而修法很便宜：那四類的表**都有 `quote_no` 欄** ⇒ 一句 SELECT 就涵蓋得到，
+#:    **不需要新的選取介面**。
+#:
+#: ⚠️ 最後兩類共用**同一個 `doc_no`**（同一張派工單的兩個欄位）
+#:    ⇒ 清單的鍵必須是 **`(type, docNo)`**，只用 `docNo` 去重會把兩組併成一組
+#:    ☠️ 而少的那一組不會報錯：那張派工單還在，**只是少了一半**。
+_CASE_DOC_NO_SQL = {
+    "extra_expense":
+        "SELECT id AS k FROM case_extra_expenses WHERE quote_no = ? ORDER BY id",
+    "invoice_voucher":
+        "SELECT voucher_no AS k FROM invoice_vouchers WHERE quote_no = ? ORDER BY id",
+    "contractor_dispatch":
+        "SELECT id AS k FROM contractor_dispatches WHERE quote_no = ? ORDER BY id",
+    "contractor_invoice":
+        "SELECT id AS k FROM contractor_dispatches WHERE quote_no = ? ORDER BY id",
+}
+
+#: `doc_no` **就是案件編號**的那幾類。
+_CASE_DOC_NO_IS_QUOTE = ("quotation_signed", "case_update")
+
+#: `doc_no` 是 `{案件編號}_{索引}` 的那幾類（項目在 `data_json` 的陣列裡）。
+_CASE_DOC_NO_INDEXED = {
+    "payment_item": ("payment", "items"),
+    "material": (None, "materials"),
+    "material_invoice": (None, "materials"),
+}
+
+#: 一個案件底下**找得到附件的那幾類** —— 現在是**全部九類**。
+#: ⚙️ 它是算出來的，而下面那個 assert 在 import 時就會吵：
+#:    三份對照表的聯集必須剛好等於 `SOURCE_TYPES`。
+#: 🔑 少一類的症狀是「那一類永遠是空的清單，**而它不會報錯**」
+#:    ⇒ 讓它在**載入模組**的時候就壞，不要等到使用者發現。
+_CASE_SCOPED = tuple(SOURCE_TYPES)
+assert set(_CASE_SCOPED) == (set(_CASE_DOC_NO_IS_QUOTE)
+                             | set(_CASE_DOC_NO_INDEXED)
+                             | set(_CASE_DOC_NO_SQL)), (
+    "三份 doc_no 對照表的聯集與 SOURCE_TYPES 對不上。")
+
+
+def _case_doc_nos(conn, source_type, quote_no):
+    """這一類在這個案件底下有哪些 `doc_no`。
+
+    ⚠️ 三種形狀各走各的路，**而它們不可以合成一條** ——
+       合起來的話，加一類新來源時要先猜它屬於哪一種。
+    """
+    if source_type in _CASE_DOC_NO_IS_QUOTE:
+        return [quote_no]
+    if source_type in _CASE_DOC_NO_INDEXED:
+        outer, key = _CASE_DOC_NO_INDEXED[source_type]
+        cr = _case_record(conn, quote_no)
+        arr = (cr.get(outer) or {}).get(key) if outer else cr.get(key)
+        return ["%s_%d" % (quote_no, i) for i in range(len(arr or []))]
+    sql = _CASE_DOC_NO_SQL[source_type]
+    return [str(r["k"]) for r in conn.execute(sql, (quote_no,))]
 
 
 def case_attachments(conn, quote_no):
@@ -301,13 +356,7 @@ def case_attachments(conn, quote_no):
     """
     out = []
     for st in _CASE_SCOPED:
-        doc_nos = [quote_no]
-        if st in ("payment_item", "material", "material_invoice"):
-            cr = _case_record(conn, quote_no)
-            arr = ((cr.get("payment") or {}).get("items") or []) \
-                if st == "payment_item" else (cr.get("materials") or [])
-            doc_nos = ["%s_%d" % (quote_no, i) for i in range(len(arr))]
-        for doc_no in doc_nos:
+        for doc_no in _case_doc_nos(conn, st, quote_no):
             for meta in source_files(conn, st, doc_no) or ():
                 name = (meta or {}).get("filename") or (meta or {}).get("name") or ""
                 try:
