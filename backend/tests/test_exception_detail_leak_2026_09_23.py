@@ -46,13 +46,21 @@ call site 現在還漏不漏」是另一道獨立的斷言（`②`／反向控�
 ```
 ✅ ① 母體三層都對過（A/B/C 各自的檔案＋類型＋次數）
 ✅ ② 反向控制：B 組 17 處的 detail **仍然**引用例外物件（斷言不動它）
-✅ ③ 核心：A 組 18 處的 detail **不可以再**引用例外物件（結構層，全 18 處）
+✅ ③ 核心：A 組 18 處扣掉 1 個具名例外＝17 處，detail **不可以再**引用
+     例外物件（結構層，逐一釘住）
+✅ ③b 反向控制：那 1 個具名例外（`quotations.py::create_quotation`）
+     仍然要 `raise HTTPException(400, str(e))`——B 開工時判斷「這一處
+     是我們自己的業務例外，不是要防的東西」，見
+     `_BASELINE_A_NAMED_EXCEPTION` 的完整說明。**這是規格 §6c 授權
+     B 決定之後才出現的分類，不是本檔原本就知道的**（原始版本釘的是
+     「A 組 18 處全部不可以洩漏」，B 交件後這一處紅了，查證後確認是
+     判準與實際型別分岔，不是缺陷，才拆出這個第四類）。
 ✅ ④ 用 `completion_notes.py` 的 PDF 匯出端點做**一次**完整行為驗收
      （§7③ⓐⓑⓒ：畫面顯示代碼、log 找得到代碼＋全文、連續兩次代碼不同）
-❌ 不對其餘 17 個 A 組端點各自重複④——那需要各自準備前置資料觸發真的
+❌ 不對其餘 16 個 A 組端點各自重複④——那需要各自準備前置資料觸發真的
    失敗，成本很高而驗證的是同一段共用邏輯（`helpers/errors.py::
    trace_id()` ＋「先組訊息／log 再 raise」的順序），③已經用結構層
-   的方式**同時**釘住全部 18 處「不可以還在洩漏」，④證明「這一種寫法
+   的方式**同時**釘住這 17 處「不可以還在洩漏」，④證明「這一種寫法
    真的做得到 §7 要求的完整行為」，兩者合起來覆蓋規格要求。
 ❌ 不對 C 組（18 處）下任何驗收——規格明講「待查不是已判定安全」，
    〈不可以在驗收裡寫『C 組 = 0』〉：寫了會把它們推向「一起改掉」。
@@ -219,6 +227,28 @@ _BASELINE_A = {
     ("backend\\routers\\system.py", "test_email_notify"),
 }
 
+#: 🔴 A 組裡的**具名例外**：這一處 B 開工時判斷「不改」，且判斷本身是對
+#: 的（`SPEC-EM3.md §6c` 授權「B 開工時決定，規格不猜」）。
+#:
+#: ```
+#: routers/quotations.py::create_quotation
+#:   except Exception as e:
+#:       ...
+#:       if isinstance(e, UnresolvedManagerError):
+#:           raise HTTPException(400, str(e))
+#:       raise
+#: ```
+#: AST 判準看的是「`except` 子句寫什麼」（靜態形狀：外層寫
+#: `except Exception`，所以歸進 A 組）；而**執行到 `raise HTTPException`
+#: 那一行時**，前面的 `isinstance` 守衛已經把 `e` 鎖定成
+#: `UnresolvedManagerError`——內容與 B 組那 17 處一樣是我們自己寫的訊息
+#: （例如「找不到 X 的主管」），不是未過濾的例外內容。判準與實際型別在
+#: 這一處分岔：**不要為了這一處把判準寫得更細**（再細只會更難懂、更
+#: 容易誤報），正確處置是承認例外並具名。
+_BASELINE_A_NAMED_EXCEPTION = {
+    ("backend\\routers\\quotations.py", "create_quotation"),
+}
+
 #: B 組基準（**不要動**的 17 處）。
 _BASELINE_B = {
     ("backend\\routers\\bonus.py", "submit_award"),
@@ -286,19 +316,27 @@ def test_em3_the_known_18_and_17_call_sites_still_exist_with_the_same_type():
 # ══════════════════════════════════════════════════════════════════════
 
 def test_em3_group_a_detail_must_not_reference_the_raw_exception():
-    """🔴🔴 **核心：A 組 18 處，`HTTPException` 的 `detail` 不可以再引用
-    `except … as e` 綁的那個例外物件本身。**
+    """🔴🔴 **核心：A 組 17 處（18 處扣掉一個具名例外），`HTTPException`
+    的 `detail` 不可以再引用 `except … as e` 綁的那個例外物件本身。**
 
     ⚙️ 這是結構層的判準（AST 看得出「這個運算式裡有沒有引用那個名字」），
     不管 B 最後把 `f'PDF 產生失敗：{e}'` 改成 `f'PDF 產生失敗（代碼 {tid}）'`
     的哪一種寫法，只要 `detail` 運算式裡不再出現 `e`（改成引用一個新的
     追蹤碼變數），這一項就會過——不綁死追蹤碼變數要叫什麼名字。
 
-    ☠️ 今天全部 18 處都還在洩漏，這一題今天是紅的。
+    🔴 **`quotations.py::create_quotation` 排除在外**——見
+    `_BASELINE_A_NAMED_EXCEPTION` 的說明與下面的
+    `test_em3_the_one_named_exception_still_raises_its_own_message`。
+    ☠️ **不要因為這一題紅了就把它也改掉**：那正是判斷「不該改」的那一處，
+    改了會把一個使用者讀得懂、可行動的錯誤（「找不到 X 的主管」）變成
+    一串看不懂的代碼，洩漏風險零減少。
+
+    ☠️ 今天其餘 17 處都還在洩漏，這一題今天是紅的。
     """
     entries = _scan_all_normalized()
     by_id = _by_identity(entries)
-    want_a = {_norm(k) for k in _BASELINE_A}
+    want_a = {_norm(k) for k in _BASELINE_A} - {
+        _norm(k) for k in _BASELINE_A_NAMED_EXCEPTION}
 
     leaking = [k for k in want_a if k in by_id and by_id[k]["leaks"]]
     assert not leaking, (
@@ -307,6 +345,35 @@ def test_em3_group_a_detail_must_not_reference_the_raw_exception():
         + "\n".join("  %s :: %s" % k for k in sorted(leaking))
         + "\n☠️ 這些訊息會把資料表名／欄位名／暫存檔路徑／SQL 片段／"
           "函式庫版本這類我們沒有寫過的字直接送到使用者畫面上。")
+
+
+def test_em3_the_one_named_exception_still_raises_its_own_message():
+    """⚙️🔴 **反向控制：`quotations.py::create_quotation` 那一處具名例外
+    仍然要 `raise HTTPException(400, str(e))`，不可以被「順手」改掉。**
+
+    🔑 依據 `_BASELINE_A_NAMED_EXCEPTION` 的說明：AST 判準看的是
+    `except` 子句寫什麼（靜態形狀），而執行到 `raise HTTPException`
+    那一行時，前面的 `isinstance(e, UnresolvedManagerError)` 守衛已經
+    把 `e` 的實際型別鎖定成我們自己的業務例外——內容與 B 組那 17 處
+    一樣是我們自己寫的訊息，不是要防的東西。
+
+    ☠️ 少了這一題，②那一題紅了之後，下一個看到紅燈的人最省力的反應是
+    「把第 18 處也改掉讓它變綠」——而那正好是判斷「不該改」的那一處。
+    """
+    entries = _scan_all_normalized()
+    by_id = _by_identity(entries)
+    want = {_norm(k) for k in _BASELINE_A_NAMED_EXCEPTION}
+
+    still_leaking = [k for k in want if k in by_id and by_id[k]["leaks"]]
+    assert still_leaking == list(want), (
+        "`quotations.py::create_quotation` 的 `detail` 不再引用例外物件"
+        "了——%r\n" % (set(want) - set(still_leaking))
+        + "☠️ 這一處是刻意保留的具名例外（`isinstance` 守衛保證內容是我們"
+          "自己寫的訊息），若被改成追蹤碼，會把一個使用者讀得懂、可行動"
+          "的錯誤（例如「找不到 X 的主管」）變得看不懂，而洩漏風險零減少。"
+          "\n若這是刻意的重新判斷（例如那個 `isinstance` 守衛被拿掉了），"
+          "請更新 `_BASELINE_A_NAMED_EXCEPTION` 並寫下新的理由，不要"
+          "只是讓這一題安靜地變紅又被忽略。")
 
 
 def test_em3_group_b_detail_still_references_the_custom_exception_message():
