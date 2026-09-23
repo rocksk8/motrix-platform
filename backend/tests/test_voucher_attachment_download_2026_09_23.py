@@ -185,6 +185,18 @@ def test_jv16_a_token_in_the_query_string_is_not_accepted(client, make_user):
     根本還不存在。🔑 而這仍然是一個**值得留著的迴歸測試**：它擋的是
     未來有人比照 `/api/uploads/` 的 `?pt=` 做法，替這個路徑也加一個
     query-string 例外（那正是使用者原話擔心的事會重新打開的唯一方式）。
+
+    ## 🔑 A 追加：這兩題不可以是這一格唯一的保護 —— 端點自己也要擋
+
+    ☠️ 若哪天 `auth_middleware` 的例外清單長出第 N 條，這兩題會**仍然
+    全綠**（因為它們量的是清單，不是端點）。⇒ 這裡不需要再補一題：
+    `test_jv16_a_user_without_voucher_access_is_refused` 已經是那一題
+    ——它用**合法的** `Authorization` header（滿足 middleware，middleware
+    只驗「有沒有有效 session」，不驗「這個 session 看得到這張傳票嗎」）
+    配一個**沒有** `cashier`／`finance` 模組的使用者，逼的是**端點自己
+    呼叫的 `_require_voucher_access()`**——那支不是 middleware 的一部分，
+    middleware 的例外清單長多長都影響不到它。**兩題分工**：
+    這裡守「清單沒有破口」，那一題守「端點自己會擋」。
     """
     _u, hdr, tok = _hdr(client, make_user, "jv16_qstoken")
     vid = _create(client, hdr)
@@ -247,6 +259,19 @@ def test_jv16_a_file_id_from_a_different_voucher_is_refused(client, make_user):
     ☠️ 若查詢只憑 `file_id`（不核對它是不是**這一張**傳票的附件），
        任何看得到自己傳票的人，只要**猜得到**別人的 `file_id`，
        就能下載到不屬於自己那張單的附件 —— 那是一種枚舉。
+
+    🔑 D 查 `UP1` 的發現讓這一格更重要：`voucher_attachments/` 的實體檔
+    放在 `/api/uploads/` 底下，那一層的保護**完全站在「檔名猜不到」**
+    （`uuid4().hex[:16]`，64 bit），**不是站在授權上**——目錄名可猜、
+    任何登入者都進得了。⇒ 這裡（核對 `file_id` 屬於哪一張 `voucher_id`）
+    是這條路上**唯一一道真正的授權檢查**。
+
+    ⚠️ 這一題與 `test_jv16_an_unknown_file_id_is_404` **不是同一件事**：
+    這裡的 `file_id` 是**真實存在**的（只是屬於別張傳票），拿它換一個
+    `voucher_id` 打；那一題是 `file_id` 本身**根本不存在**。前者比後者
+    更容易被誤判成「反正都是 404」而漏掉——一個只檢查「查得到這筆
+    file_id 嗎」而沒有檢查「這筆 file_id 是不是屬於這個 voucher_id」的
+    實作，會讓後者（不存在）綠，卻讓前者（存在但屬於別人）也一起綠。
     """
     _u, hdr, _t = _hdr(client, make_user, "jv16_cross")
     v1 = _create(client, hdr)
