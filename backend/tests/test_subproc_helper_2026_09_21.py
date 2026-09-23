@@ -105,6 +105,35 @@ def test_utf8_env_can_delete_a_variable():
     )
 
 
+def missing_helper_imports(src, helpers):
+    """這個檔用了哪些共用 helper 卻沒有 import。回**名字**的排序清單。
+
+    ⚙️ 抽成吃「原始碼字串」的函式，是為了讓正對照
+    （`test_the_missing_import_check_really_fires`）走**同一條量測路徑** ——
+    另外寫一份判斷式的話，量測裝置壞掉時誘餌照樣會亮
+    （〈盤點工具的正對照〉：正對照要與受測對象是同一種寫法）。
+    """
+    import ast
+
+    tree = ast.parse(src)
+    imported = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            imported.update(a.asname or a.name for a in node.names)
+        elif isinstance(node, ast.Import):
+            imported.update((a.asname or a.name).split(".")[0]
+                            for a in node.names)
+    own = {n.name for n in ast.walk(tree)
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    # 🔴 **裸名呼叫**才算用到：`I.identity_lines(...)` 是屬性存取，
+    #    它的 import 是 `import _pdf_identity as I`，沒有漏任何東西。
+    #    ⚠️ 而 docstring／註解裡的 `helper()` 根本不是 `ast.Call` ⇒ 自然不會命中。
+    called = {n.func.id for n in ast.walk(tree)
+              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    return sorted(n for n in called & set(helpers)
+                  if n not in imported and n not in own)
+
+
 def test_every_file_that_uses_a_shared_helper_also_imports_it():
     """🔴 用到 `tests/_*.py` 的東西，就必須在**同一個檔**裡 import 它。
 
@@ -138,19 +167,26 @@ def test_every_file_that_uses_a_shared_helper_also_imports_it():
     ⇒ 改成用 `ast` 取 import 名單（那件事 AST 做得精確），
     只有「有沒有被呼叫」還留著用文字找。
     🔑 **兩個子問題不必用同一種工具解** —— 硬要統一的那一邊就是誤報的來源。
+
+    ## 🔴 2026-09-23 更正：**上面那句話是錯的，而誤報就出在留給文字的那一半**
+
+    ```
+    regex 掃原始碼 => 命中 test_quote_location_2026_09_22.py:255／:274
+                      docstring 裡的 `identity_lines()`
+    而真正的呼叫是  I.identity_lines(...)（:259），import 在 :81
+    => 報「用了卻沒 import」，而那個檔第 81 行就有 import，單獨跑 30 passed
+    ```
+    ☠️ 反引號既不是 word char 也不是點 ⇒ `(?<![\w.])` 擋不住它；
+    而真正的屬性呼叫反而被正確排除掉了 —— **它把兩邊都判反了**。
+    🔑 而最省力的反應是**刪掉那兩行解釋**或補一個用不到的 import ——
+      兩種都讓檔案變差，而 `git log` 上看不出來
+      （同一天第二次：另一道守門亮在「解釋為什麼不可以藏祖先」的註解上）。
+    ⇒ **「程式會做什麼」一律用 `ast`**：呼叫那一半改成數 `ast.Call` 的裸名，
+      而不是掃字串。判斷抽成 `missing_helper_imports()`，
+      正對照 `test_the_missing_import_check_really_fires` 走**同一條路徑**。
     """
-    import ast
     import re
     from pathlib import Path
-
-    def _imported_names(tree):
-        names = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                names.update(a.asname or a.name for a in node.names)
-            elif isinstance(node, ast.Import):
-                names.update((a.asname or a.name).split(".")[0] for a in node.names)
-        return names
 
     tests_dir = Path(__file__).resolve().parent
     helpers = {}
@@ -164,18 +200,49 @@ def test_every_file_that_uses_a_shared_helper_also_imports_it():
 
     problems = []
     for path in sorted(tests_dir.glob("test_*.py")):
-        src = path.read_text(encoding="utf-8")
-        tree = ast.parse(src)
-        imported = _imported_names(tree)
-        own = {n.name for n in ast.walk(tree)
-               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
-        for name, home in helpers.items():
-            if not re.search(r"(?<![\w.])%s\s*\(" % re.escape(name), src):
-                continue
-            if name in imported or name in own:
-                continue
-            problems.append(f"{path.name} 用了 {name}()（來自 {home}）卻沒有 import")
+        for name in missing_helper_imports(
+                path.read_text(encoding="utf-8"), helpers):
+            problems.append(
+                f"{path.name} 用了 {name}()（來自 {helpers[name]}）卻沒有 import")
     assert not problems, "\n  ".join([""] + problems)
+
+
+def test_the_missing_import_check_really_fires():
+    """⚙️ **正對照：拿一段故意漏 import 的合成來源，它必須亮。**
+
+    🔑 〈盤點工具的正對照〉：要先讓「已知的那一個」亮起來，才有資格說
+    「其他檔都沒問題」—— 而上面那一題現在回報 **0 個**。
+    ⚠️ 誘餌用**自己寫的合成來源**，不拿別人碼裡的真實案例：
+      真實案例修好的那天，正對照就失效了，而**沒有人會發現**。
+
+    ## ☠️ 而第三段是那個誤報的**死亡條件**
+
+    它釘住「只在 docstring／註解裡被提到」**不可以**算成用到 ——
+    有人把呼叫偵測換回 regex 掃字串的那一刻，這一題會當場紅。
+    🔑 所以它擋的不是今天那一個檔，是**那個寫法**。
+    """
+    helpers = {"spawn_thing": "_fake.py"}
+
+    # ① 真的漏了 => 要亮
+    assert missing_helper_imports(
+        "def t():\n    spawn_thing()\n", helpers) == ["spawn_thing"]
+
+    # ② 有 import => 不可以亮
+    assert missing_helper_imports(
+        "from tests._fake import spawn_thing\n"
+        "def t():\n    spawn_thing()\n", helpers) == []
+
+    # ③ 只在 docstring／註解裡被提到 => **不可以亮**（誤報的死亡條件）
+    assert missing_helper_imports(
+        '"""說明：`spawn_thing()` 掃的是子行程。"""\n'
+        "# 另一種寫法是 spawn_thing()\n"
+        "def t():\n    pass\n", helpers) == []
+
+    # ④ 透過模組屬性呼叫（`import _fake as F` / `F.spawn_thing()`）=> 不可以亮
+    #    這正是 test_quote_location 的形狀。
+    assert missing_helper_imports(
+        "import _fake as F\n"
+        "def t():\n    F.spawn_thing()\n", helpers) == []
 
 
 def test_utf8_env_overrides_a_hostile_parent(monkeypatch):
