@@ -175,15 +175,60 @@ def test_scope_put_requires_all_fields(client, make_user):
     assert r.status_code == 422, r.text
 
 
+#: 一份**完整**的 body。模型欄位全部必填（`routers/system.py:140`）。
+FULL_SCOPE_BODY = {
+    "quotation": False, "shipping": True, "invoice_voucher": True,
+    "payment_request": True, "contractor_voucher": False,
+    "completion": True, "extra_expense": True, "voucher": False,
+}
+
+
 def test_scope_requires_superadmin(client, make_user):
+    """非 superadmin 不可以改套用範圍。
+
+    ## 🔴 2026-09-23：這一題本來可能拿到一個**假的 403**
+
+    ```
+    body 驗證跑在 _require_user(require_superadmin=True) **之前**
+    ⇒ body 不完整時永遠是 422，永遠問不到權限那一層
+    ```
+    舊寫法只送 5 欄，而模型補成 8 欄那一天它就紅了 ——
+    ⚠️ 而更危險的是**反方向**：假如題目寫的是
+       `assert r.status_code != 200`，那麼權限守門**被拿掉也還是綠的**
+       —— 422 自己就把這一題餧飽了。
+    ⇒ 送一份**完整的** body，才問得到權限。
+    """
     username, password = make_user(role="admin")
     token = _login(client, username, password)
     r = client.put(
         "/api/settings/approval-flow-scope", headers=_auth(token),
-        json={"quotation": False, "shipping": True, "invoice_voucher": True,
-              "payment_request": True, "contractor_voucher": False},
+        json=dict(FULL_SCOPE_BODY),
     )
-    assert r.status_code == 403, r.text
+    assert r.status_code == 403, (
+        "期望 403，實際 %s：%s\n" % (r.status_code, r.text[:200])
+        + "🔑 422 代表 body 被擋在權限檢查**之前** ——\n"
+          "   那時這一題量到的不是權限，是欄位數。")
+
+
+def test_scope_the_same_body_really_goes_through_for_a_superadmin(
+        client, make_user):
+    """⚙️ **正對照：上一題的 403 要來自身分，不是來自 body。**
+
+    ☠️ 少了它，`FULL_SCOPE_BODY` 哪天又落後一欄，
+       上一題會從 403 變 422 而**訊息讀起來像權限壞掉了**。
+    🔑 同一份 body、同一個端點，**只換身分** ⇒ 差別只能是身分。
+    """
+    username, password = make_user(role="superadmin")
+    token = _login(client, username, password)
+    r = client.put(
+        "/api/settings/approval-flow-scope", headers=_auth(token),
+        json=dict(FULL_SCOPE_BODY),
+    )
+    assert r.status_code == 200, (
+        "最高管理者送同一份 body 也過不了（%s）：%s\n"
+        % (r.status_code, r.text[:300])
+        + "📌 這份 body 少了欄位的話，上一題的 403 是**假的** ——\n"
+          "   請先把 `FULL_SCOPE_BODY` 補齊再看上一題。")
 
 
 def test_unknown_doc_type_rejected(client, make_user):
