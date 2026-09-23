@@ -253,6 +253,27 @@ def scan_shared():
     return out
 
 
+
+def _guarded_if_shared_counted():
+    """**舊判準**下會被算成「已修」的頁數 —— 只拿來當自檢的對照組。
+
+    ☠️ 舊判準把**共用 js** 也併進 blob ⇒ `_initDone` 寫進任何一支共用檔，
+       引用它的頁面會**一次全翻成「已修」**，而報表只是變好看、不會報錯。
+    🔑 ⇒ 自檢要量的是「**兩種判準差幾頁**」，不是「共用檔裡有沒有那個字串」——
+       後者在 `(c)` 做完之後永遠為真（守衛本來就寫在 `notif.js` 裡）。
+    ⚙️ 這裡用 `"".join` 而不是換行接 —— 它只拿去做子字串比對，接什麼都一樣。
+    """
+    n = 0
+    for p in sorted(glob.glob(PAGES_GLOB)):
+        src = _read(p)
+        if not _DECL_RE.search(src):
+            continue
+        blob = src + "".join(_read(j) for j in _linked_js(src, p))
+        if "_initDone" in blob:
+            n += 1
+    return n
+
+
 def scan():
     rows = []
     shared = shared_js()
@@ -309,14 +330,22 @@ def main():
              "%s -> %s" % (r["where"], r["defined_in"])))
 
     # ── 自檢：共用檔裡不該有 `_initDone` ──────────────────────────
-    # ☠️ 有的話，上面那 53 頁的數字就不可信了 —— 一個共用檔就能讓全部翻綠。
-    # 🔑 而它不會報錯：報表會變好看，**而那正是它危險的地方**。
+    #
+    # 🔴 這一格原本釘的是「共用檔裡不可以有 `_initDone`」—— 那是一個**代理**，
+    #    而它在 `(c)` 做完那天**過期了**：兩個注入型 store 的守衛就寫在
+    #    `notif.js` 裡，那是**規格要求的正確狀態**。
+    # ☠️ 過期的代理不會安靜：它印一句「上面的數字不可信」，
+    #    **而那句話本身才是不可信的** —— 一個很有道理的訊息擋住一個正確的實作。
+    # ⇒ 改成**直接量那個不變量**：把共用檔放回 blob 會不會讓「已修」變多。
+    #    🔑 那才是當初要防的事，而它不依賴「共用檔裡有沒有那個字串」。
     dirty = sorted(os.path.basename(j) for j in shared_js()
                    if "_initDone" in _read(j))
     say("\n⚙️ 自檢：%d 支共用 js 裡帶 `_initDone` 的 => %s"
           % (len(shared_js()), dirty or "（無）✅"))
-    if dirty:
-        say("   🔴 上面的「已修」數字**不可信** —— 一個共用檔會讓引用它的頁全部翻綠。")
+    leaked = _guarded_if_shared_counted() - len([r for r in rows if r["guarded"]])
+    say("   把共用檔放回 blob 會讓「已修」多算 %d 頁 => %s"
+          % (leaked, "✅ 判定沒有被共用檔影響" if leaked == 0
+             else "🔴 **上面的數字不可信**"))
     say("修法見本檔 docstring。驗證：用瀏覽器開該頁、數它的載入 API 被打幾次，"
           "必須是 1（比照 test_e2e_system_settings_ui_2026_09_11.py::"
           "test_init_runs_exactly_once，那是確定性斷言，不必等競態重現）。")

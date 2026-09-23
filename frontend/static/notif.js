@@ -38,7 +38,16 @@ function notifStore() {
     _sess: null,
     _popupShown: false,
 
+    // 🔴 這兩支 store 是 `sidebar.js` **注入**的 ⇒ **每一頁都跑兩遍**，
+    //    而 53 頁那份待修清單裡**沒有它們**（工具只掃 pages/*.html）。
+    // ⚠️ 宣告點在 `sidebar.js`，**定義點在這裡** —— 數的檔與改的檔不是同一個。
+    // ☠️ notifStore 的 init() 是 `Promise.all` 六支 fetch
+    //    ⇒ 沒有守衛時**每次開頁 12 個請求不是 6**。
+    _initDone: false,
+
     async init() {
+      if (this._initDone) return
+      this._initDone = true
       this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
@@ -411,7 +420,16 @@ function globalSearchStore() {
     _sess:   null,
     _timer:  null,
 
+    // 🔴 這兩支 store 是 `sidebar.js` **注入**的 ⇒ **每一頁都跑兩遍**，
+    //    而 53 頁那份待修清單裡**沒有它們**（工具只掃 pages/*.html）。
+    // ⚠️ 宣告點在 `sidebar.js`，**定義點在這裡** —— 數的檔與改的檔不是同一個。
+    // ☠️ notifStore 的 init() 是 `Promise.all` 六支 fetch
+    //    ⇒ 沒有守衛時**每次開頁 12 個請求不是 6**。
+    _initDone: false,
+
     init() {
+      if (this._initDone) return
+      this._initDone = true
       this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
     },
 

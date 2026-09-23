@@ -72,7 +72,15 @@ function bonusPage() {
       return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() }
     },
 
+    // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
+    //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
+    // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
+    //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
+    _initDone: false,
+
     async init() {
+      if (this._initDone) return
+      this._initDone = true
       await this.loadAwards()
       await this.loadItems()
     },
