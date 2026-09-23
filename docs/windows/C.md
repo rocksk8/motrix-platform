@@ -62,7 +62,7 @@ python -m pytest … --basetemp=<路徑>-adhoc  # ⚠️ conftest **強制**要 
 
 ### 🔴 `BN8` 落地那一刻會發生什麼（C 停工前交代，**換模型後最容易誤判的一格**）
 ```
-test_approval_flow_scope.py 會紅**兩**題，而其中一題的訊息**會騙人**：
+test_approval_flow_scope.py 會紅**三**題（☠️ A 原本寫「兩題」—— **而下面就列了三個**），而其中一題的訊息**會騙人**：
   test_scope_defaults_and_editing         <= **預期內**：EXPECTED_SCOPE 少一行「獎金單」
   test_scope_requires_superadmin          <= **不預期**：FULL_SCOPE_BODY 少一欄
                                              -> 422 -> **拿不到 403**
