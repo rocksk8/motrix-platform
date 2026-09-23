@@ -51,6 +51,8 @@ BI(1): BI1
 QS(1): QS1a
 IA(1): IA1
 WL(1): WL1
+IA(1): IA2
+JV(1): JV27
 ```
 
 > 📌 `RP`（restore path）是 2026-09-22 21:4x 由 A 明著搬進 `THIS` 的。
@@ -853,3 +855,49 @@ G 良性（弱密碼黑名單）       1 處   <= helpers/auth.py:37 "miac@60575
 ```
 🔴 ⇒ **要 = 0 的分母是 A + B = 6 個檔案**，不是全庫。
 📌 〈寫「每一個／不可以有」之前先去數有幾個例外〉—— **這次先數了，所以守門寫得下去。**
+
+---
+
+## 🔴🔴 2026-09-23 晚間：`IA2`（demo 帳號）＋ `JV27`（重複實作擋住 fail-open）進 `THIS`
+
+### 🔴 `IA2`｜`init_demo_account()` —— **一個客戶不知道的 superadmin，密碼是一個公開數字**
+```python
+# backend/helpers/startup.py:138  —— main.py:528 **無條件呼叫，沒有任何開關**
+VALUES ('demo', ?, '展示帳號', 'superadmin', ?, 1, ?, 0)   # role=superadmin, must_change_password=0
+_hash_pw("60575481")                                       # 密碼 = **公司統一編號**
+logger.info("已建立展示帳號（demo），密碼 60575481")         # 🔴 **明文寫進 logs/server.log**
+```
+```
+⚙️ 三件都查過，三件都空：① 有開關嗎 => 沒有  ② 登入頁看得到嗎 => 看不到  ③ 授權底座處理了嗎 => 沒有
+🔑 而那個密碼**印在客戶自己匯出的 PDF 頁尾上**（reports.py:74／network_plan_export.py）
+```
+> ### ✅ 而**資料隔離是真的**，嚴重度要據實下修（A-2 實讀 `auth.py:394`）：
+> ### `reset_demo_db()` ＋ `DEMO_TOKEN_PREFIX` ⇒ middleware 把後續請求路由到隔離的 demo DB
+> ### ⇒ ❌ **不是「客戶資料會外洩」**
+> ### ✅ 是「**客戶的系統裡有一個他不知道的 superadmin，而它的密碼是一個公開數字**」
+🔑 ⇒ **真正的問題不是它能做什麼，是它不該在那裡。**
+⚠️ 而 `4130d28` 修過一次「demo 模式背景執行緒隔離漏洞」⇒ **那道隔離已經破過一次**。
+⇒ 處置與 `IA1` **不同**（所以另開編號）：`init_default_admin` 改通用身分／`init_demo_account` **預設不跑**。
+
+### 🔴 `JV27`｜`_appr_of()` 讓 `signatures_of()` 的 fail-open 設計**不可達**
+```
+routers/vouchers.py:153  _appr_of()  <= **獨立於 _chain_tiers() 的第二份簽核鏈解析**
+   它在 read_voucher() 裡**搶在 signatures_of() 之前** raise HTTPException(400)
+=> approval_json 壞掉時，GET /api/vouchers/{id} **連分錄都讀不到**
+```
+🔑 而 `signatures_of()` 的 docstring 寫著「**版面壞掉不該讓整張單讀不出來**」——
+  ☠️ **那個設計今天不可達，而沒有任何東西會說。**
+📌 ⇒ 〈守門守的對象被搬走〉的一種：**退路還在，而有人在它前面加了一道會 raise 的門。**
+⚠️ C 已寫題並用 `xfail(strict=True)` 追蹤（`test_em5_voucher_chain_unreadable_2026_09_23.py`）——
+> ### 🔴 **而 `xfail(strict=True)` 在缺陷存在時是「通過」** ⇒ 打包關門會說綠。
+> ### 🔑 **所以它必須有編號，否則它會以「一切正常」的樣子被出貨。**
+⇒ 修法由 B 決定：`_appr_of()` 改用共用的 `_chain_tiers()`，或**直接拿掉這支重複實作**。
+
+### ⚠️ 而 `IA1` 的不變量範圍要縮
+```
+'miactw' 全庫 **15 處**：身分 3 ／ 公司抬頭 7 ／ placeholder 與註解 4 ／ migration 與工具 3
+☠️ 直接釘「產品碼裡不存在 miactw.com」=> 後三種全紅
+   => 而最省力的反應是**把它們全部加進排除清單** => **等於沒守**
+```
+✅ ⇒ `IA1` 的不變量**範圍縮到 `backend/helpers/startup.py` 那一支檔**（改完應該是 0）。
+📌 而公司抬頭那一族歸 `WL1`，**分母另算**（A-2 用完整字串集量到 **13 檔／34 行**）。
