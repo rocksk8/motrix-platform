@@ -122,6 +122,38 @@ def _page_count(body):
     return len(re.findall(rb"/Type\s*/Page[^s]", body))
 
 
+def _pdf_text(body):
+    """PDF 上**印出來的文字**，經過 `NFKC` 正規化。
+
+    ## ☠️ 為什麼要正規化：Edge 把漢字寫成了**康熙部首**
+
+    B 實測，我複查：
+    ```
+    紙上抽出來  '不⾒的憑證.pdf'    U+2F92 **KANGXI RADICAL SEE**
+    我期望的    '不見的憑證.pdf'    U+898B CJK UNIFIED IDEOGRAPH-898B
+    視覺上一模一樣，**碼位不同** => 逐字比對是 False
+    ```
+    🔑 ⇒ 我會看到「檔名不在輸出裡」，**而它明明印在紙上** ——
+      然後去找一個不存在的產品缺陷。
+    📌 `NFKC` 正是**把康熙部首正規化回統一漢字**的那一步 ——
+      **不是為了寬鬆，是為了抵銷渲染器做的替換**。
+
+    ## ⚠️ 而這裡用 `pypdf`，與 `_page_count()` 不用它**方向相反，兩者都對**
+
+    ```
+    數頁數  **不要**用 pypdf —— 它是受測物的相依；`/Type /Page` 自己數得出來
+    抽文字  **只能**用 pypdf —— 自己寫一個 FlateDecode 解壓器才是真的危險
+    ```
+    🔑 判準不是「能不能用」，是「**量錯了會把我送去哪裡**」：
+      數頁數量錯 ⇒ 我去看合併邏輯（錯的地方）；抽文字**沒有第二條路**。
+    """
+    import unicodedata
+    pypdf = pytest.importorskip("pypdf", reason="抽 PDF 文字只能靠它")
+    reader = pypdf.PdfReader(io.BytesIO(body))
+    text = "\n".join((p.extract_text() or "") for p in reader.pages)
+    return unicodedata.normalize("NFKC", text)
+
+
 def _attach(client, hdr, vid, name, content):
     r = client.post("/api/vouchers/%s/attachments" % vid, headers=hdr,
                     files={"files": (name, io.BytesIO(content),
@@ -322,6 +354,96 @@ def test_jv5_the_image_page_expectation_is_still_open():
           "   那一格屬於上一題，這一題只是一張便利貼。")
 
 
+def _encrypted_pdf():
+    """一份**加密**的單頁 PDF。"""
+    pypdf = pytest.importorskip("pypdf")
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=595, height=842)
+    w.encrypt("pw")
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def _zero_page_pdf():
+    """一份**零頁**的 PDF —— 四個步驟全部成功，而頁數沒有變。"""
+    pypdf = pytest.importorskip("pypdf")
+    w = pypdf.PdfWriter()
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def test_jv5_an_encrypted_attachment_does_not_blow_up_the_export(client,
+                                                                 make_user):
+    """🔴 **加密的 PDF 附件 ⇒ 匯出仍回 200，而它出現在「未能併入」那一頁。**
+
+    ## ☠️ 它抓的是「`try` 包得不夠寬」，而那是**最自然的寫法**
+
+    B 實測，我照收：
+    ```
+    壞檔（0 byte／純文字／PNG／截斷…）  PdfReader() **當下**就丟
+    **加密的 PDF**                    PdfReader() **成功**
+                                     `len(pages)`／`append()` 才丟
+                                     FileNotDecryptedError
+    ```
+    ⇒ **只包住讀檔那一行的 `try` 接不到它** ⇒ 整支匯出炸掉 ⇒ 500。
+    🔑 而附件是**使用者上傳的** —— 他可以傳一份有密碼的 PDF，
+      那不是攻擊，是一份**銀行寄來的對帳單**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_enc")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "有密碼的對帳單.pdf", _encrypted_pdf())
+
+    r = _export(client, hdr, vid, with_attachments=True)
+    assert r.status_code == 200, (
+        "加密的 PDF 附件讓匯出回 %s ——\n" % r.status_code
+        + "☠️ 多半是 `try` 只包住 `PdfReader()` 那一行，\n"
+          "   而加密的 PDF 是在 `len(pages)`／`append()` 才丟 "
+          "`FileNotDecryptedError`。\n"
+        + "📌 那不是攻擊 —— 使用者傳了一份**銀行寄來的對帳單**。")
+    printed = _pdf_text(r.content)
+    assert "有密碼的對帳單.pdf" in printed, (
+        "沒有炸，而那份附件也**沒有出現在「未能併入」那一頁** ——\n"
+        + "☠️ 那是**靜默略過**：使用者拿到一份看起來完整的 PDF。\n"
+        + "紙上是：\n  %s" % printed[:200])
+
+
+def test_jv5_a_zero_page_attachment_is_reported_not_silently_dropped(
+        client, make_user):
+    """🔴 **零頁的 PDF：四個步驟全部成功，而頁數沒有變。**
+
+    ```
+    PdfReader() OK ／ len(pages) == 0 ／ append() OK ／ write() OK
+    ⇒ **一個例外都不丟**
+    ```
+    ☠️ ⇒ 用「有沒有丟例外」去判「這一份有沒有併進去」的實作，
+       會把它算成**成功**，而紙上什麼都沒多。
+    🔑 這是 `§7②③`「要數頁數不要只驗非空」的**單一附件版**：
+      判一個附件有沒有真的進去，**只能數頁數，不能靠有沒有丟例外**。
+    ⚙️ 而它要出現在「未能併入」那一頁 —— 使用者傳了一份東西上來，
+      他有權知道它沒有被印出來。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_zero")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "空白的.pdf", _zero_page_pdf())
+
+    plain = _export(client, hdr, vid)
+    merged = _export(client, hdr, vid, with_attachments=True)
+    assert merged.status_code == 200, (
+        "零頁的 PDF 讓匯出回 %s：%s"
+        % (merged.status_code, merged.content[:160]))
+
+    printed = _pdf_text(merged.content)
+    assert "空白的.pdf" in printed, (
+        "零頁的附件被**靜默略過**了（頁數 %d -> %d，而紙上沒提到它）——\n"
+        % (_page_count(plain.content), _page_count(merged.content))
+        + "☠️ 它的四個步驟**全部成功** ⇒ 用「有沒有丟例外」去判的實作\n"
+          "   會把它算成成功，而紙上什麼都沒多。\n"
+        + "🔑 判一個附件有沒有真的進去，**只能數頁數**。\n"
+        + "紙上是：\n  %s" % printed[:200])
+
+
 def test_jv5_merging_a_pdf_attachment_adds_its_pages(client, make_user):
     """🔴 **`§7③`：總頁數 == 1 ＋ 各 PDF 附件的頁數合計。**
 
@@ -404,22 +526,27 @@ def test_jv5_a_missing_attachment_file_does_not_block_the_export(client,
 
     name = victim.get("filename") or ""
     assert name, "附件那一列沒有 `filename`：%r" % victim
-    body = r.content
-    printed = name.encode("utf-8") in body or name.encode("utf-16-be") in body
-    assert printed, (
+    printed = _pdf_text(r.content)
+    assert name in printed, (
         "輸出裡找不到那個缺檔的檔名 %r ——\n" % name
         + "☠️ **靜默略過**：使用者拿到一份看起來完整的 PDF，\n"
           "   而少了一張憑證 —— 那比印不出來更糟。\n"
-        + "⚠️ PDF 的文字可能被編碼（我試過 utf-8 與 utf-16-be）——\n"
-          "   若你用別的編碼，**退回給我**改這個觀測點。")
+        + "紙上抽出來的文字（前 200 字）：\n  %s" % printed[:200])
+    assert "未能併入" in printed or "未併入" in printed, (
+        "檔名印出來了，而**沒有說它是「未能併入」的** ——\n"
+        + "☠️ 那一頁要讀得出「這幾份沒有進來」，不是只列一串檔名。")
 
-    said = any("未併入" in str(v) or "未能併入" in str(v) or "missing" in str(k).lower()
+    said = any("未併入" in str(v) or "未能併入" in str(v)
+               or "missing" in str(k).lower()
                for k, v in r.headers.items())
     assert said, (
         "紙上說了，**而回應沒說**。現有 header：%s\n" % sorted(r.headers)
         + "☠️ 呼叫端（前端／自動化）分不出「完整」與「缺了東西」——\n"
           "   而前端要靠它才能在畫面上提醒（`§7⑩`）。\n"
-        + "⚠️ 用 header 或改回 JSON 都可以，**用別的形狀退回給我**。")
+        + "⚠️ 用 header 或改回 JSON 都可以，**用別的形狀退回給我**。\n"
+        + "📌 header 的值只能是 latin-1 ⇒ 中文檔名必須編碼；\n"
+          "   直接塞中文會讓整個回應在**送出那一刻**炸掉 ——\n"
+          "   而那會變成「匯出壞了」，比缺一個附件嚴重得多。")
 
 
 # ══════════════════════════════════════════════════════════════════════
