@@ -956,3 +956,40 @@ done
 ✅ git archive <sha> 解到自己的 scratchpad 再跑
    ⇒ 不寫 repo，而要自己處理相依與 conftest 路徑
 ```
+
+
+## §5u · 🔴 git 指令一律 `git -C <絕對路徑>`，不要靠 `cd`
+
+> 2026-09-23 實際踩到（A）。**沒有造成損害，而它成立只是因為運氣。**
+
+```
+python <腳本>  斷言失敗 -> `&&` 鏈斷掉 -> `cd <專案>` **沒有執行**
+而 heredoc 之後的 `echo … && git push` 是**獨立的一行**，不受 && 短路影響
+=> 它在 scratchpad（C:\Users\hichan\AppData\Local\Temp\…）跑
+=> 往上找 repo -> **找到家目錄 repo**
+   （C:\Users\hichan 本身就是一個 repo，remote = github.com/rocksk8/hichan.git）
+=> **推了那個 repo 的兩個舊 commit**
+```
+
+🔑 **一次都沒有 `git add`** —— 推上去的是 repo 裡本來就有的 commit。
+⇒ **「不要 `git add -A`」這條規則擋不住「在錯的地方 push」。**
+☠️ 而 scratchpad 在家目錄底下 ⇒ **任何 `cd` 沒跑成的情況，git 指令都會落到那個 repo 上。**
+
+⚙️ **同一個失敗在十分鐘後又發生了一次，而這次 `git -C` 擋住了**：
+腳本再度失敗、`cd` 再度沒跑、`git push` 再度照跑 —— 而因為那一行寫了
+`git -C <MOTRIX-ERP 絕對路徑>`，它推的是**正確的 repo**。
+📌 **那是這條規則的實證，不是假設。**
+
+**四條：**
+```
+① 所有 git 指令一律 `git -C <絕對路徑> …`
+   —— 那是唯一在「cd 沒跑成」時仍然正確的寫法
+② ⚠️ **`&&` 鏈不保護換行後的下一行**
+   heredoc（<<'EOF' … EOF）會結束當前語句，之後的指令是**新的語句**
+   => 前面失敗它照跑
+   要嘛整串用 && 不換行，要嘛每一段自己帶 -C
+③ push 前先 `git -C <路徑> remote -v` 確認推的是哪一個 remote
+④ `git add` 一律列到檔案（既有規則）
+```
+⚠️ **這一條對四個視窗都適用** —— 我們共用工作目錄，而 scratchpad 路徑各自不同，
+但**全部都在 `C:\Users\hichan` 底下**。
