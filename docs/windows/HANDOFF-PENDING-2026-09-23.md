@@ -273,3 +273,19 @@ calc(100vh-20px) 側欄     748      972
 | 13 | 右上字級切到「特」，打開簽核佇列的彈窗 | 彈窗完整在畫面內（案件管理、出納、報價單三頁尚未修） |
 
 已知限制：頁碼需要 Edge 131 以上；報價與金流（hichan-8d）的成果還在本地，等 N15 決定後才會進開發機與升級包。
+
+## ✅ 夜間最終包（2026-09-24 07:31，hichan-0a）—— 備妥，**未部署**
+
+```
+路徑    deploy_packages\20260924_073129_d4e82ba   231 檔
+樹雜湊  4938c4fc5e45b410ea2901d4a59b419bae2c842f738d70502301bd004201aa52
+內容    master d4e82ba：傳票 JV28～35、字級「特」、JV33 載入中修正（正式機 46dc6ae 之後的全部 hichan-61 成果）
+測試    非 e2e 2609 passed / 3 xfailed(WD1) / 0 failed；e2e 104 passed / 0 failed
+驗包    內部文件（docs/windows、docs/quick、docs/reference、backend/tests、QUICK、兩份平台化文件）皆 0；
+        backend/main.py、apply_update.ps1 在（對照）；apply_update 乾跑判斷已是修正版
+DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資料庫升級
+```
+- ⚠ 驗包第一次跑時我擷取包名的指令壞掉、路徑為空 ⇒ 那一輪的「0 筆」量的是不存在的路徑，**不採信**；以明確包名重跑的結果如上。
+- `20260924_065113_218d810` 為中途驗證包，不用。
+- **不含** hichan-8d 的金流＋報價案件（N15）。N15 放行後需重建。
+- 部署：`powershell -ExecutionPolicy Bypass -File <包>\backend\tools\apply_update.ps1 -PackagePath <包>`；正式機現有的 apply_update 已是修正版，也可用正式機那支。
