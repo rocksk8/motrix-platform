@@ -52,7 +52,7 @@
     /* PDF Preview Modal */
     .pv-overlay{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:300;
                 display:flex;align-items:center;justify-content:center;padding:16px}
-    .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:90vh;
+    .pv-modal{background:#fff;border-radius:12px;width:min(900px,96vw);height:calc(90vh / var(--fz,1));
               display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)}
     .pv-head{display:flex;justify-content:space-between;align-items:center;
              padding:14px 20px;border-bottom:1px solid var(--border-light);flex-shrink:0}

@@ -68,6 +68,9 @@ if (typeof module !== 'undefined' && module.exports) {
   ]
   var _initZoom = parseFloat(localStorage.getItem(FZ_KEY)) || 1.0
   document.documentElement.style.zoom = _initZoom
+  // 字級「特」：根元素 zoom 會把 vh／dvh 一起放大 ⇒ 以視窗高度限高的元素超出畫面。
+  // 各頁的 `Nvh` 已改寫成 `calc(Nvh / var(--fz,1))`，這裡把目前倍率交給 CSS。
+  document.documentElement.style.setProperty('--fz', String(_initZoom))
 
   // ── Dark mode（立即套用，避免頁面閃爍；各頁 <head> 亦有相同邏輯的同步腳本先跑過一次）──
   var THEME_KEY = 'motrix_theme'
@@ -114,6 +117,7 @@ if (typeof module !== 'undefined' && module.exports) {
   window.motrixSetZoom = function (z) {
     localStorage.setItem(FZ_KEY, String(z))
     document.documentElement.style.zoom = z
+    document.documentElement.style.setProperty('--fz', String(z))
     FZ_STEPS.forEach(function (step, i) {
       var btn = document.getElementById('fz-' + i)
       if (!btn) return

@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
-    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));overflow:hidden;background:var(--white)}
     /* 2026-09-14：工具列最左加一條直立紅色標記（官網 28×3 的緊湊變體）。
    這頁的 body 高度是 calc(100vh - topbar - 48px) 算死的，插完整標頭會破掉。 */
     .ov-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
@@ -20,7 +20,7 @@
     .ov-toolbar .tb-head{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
     .ov-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
     .ov-toolbar .sub{font-size:11px;color:var(--text-dim)}
-    .ov-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
+    .ov-body{height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
 
     .ov-legend{display:flex;align-items:center;gap:14px;margin-bottom:16px;font-size:11.5px;color:var(--text-dim)}
     .ov-legend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px}

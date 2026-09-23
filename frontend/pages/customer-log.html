@@ -16,7 +16,7 @@
     .log-wrap {
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
-      height: calc(100vh - var(--topbar-h));
+      height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
       display: flex;
       overflow: hidden;
     }
@@ -205,7 +205,7 @@
     }
     .modal-box {
       background: #fff; border-radius: var(--radius-lg);
-      width: 100%; max-width: 660px; max-height: 90vh;
+      width: 100%; max-width: 660px; max-height: calc(90vh / var(--fz,1));
       overflow-y: auto; box-shadow: var(--shadow-lg); flex-shrink: 0;
     }
     .modal-head {

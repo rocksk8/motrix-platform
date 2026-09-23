@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
-    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
 
     .period-bar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
     .period-type-btn{padding:5px 14px;border-radius:var(--radius);border:1px solid var(--border-light);font-size:12px;font-family:var(--font-zh);cursor:pointer;background:#fff;color:var(--text-secondary);transition:all .1s}
@@ -233,7 +233,7 @@
     .error-bar{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:var(--radius-lg);padding:12px 16px;color:#DC2626;font-family:var(--font-zh);font-size:13px;margin-bottom:16px}
 
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px}
-    .modal-box{background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+    .modal-box{background:#fff;border-radius:12px;width:100%;max-width:620px;max-height:calc(90vh / var(--fz,1));overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
     .modal-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border-light)}
     .modal-title{font-size:15px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
     .modal-body{padding:20px 24px}

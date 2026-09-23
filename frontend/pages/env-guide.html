@@ -12,11 +12,11 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
-    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));overflow:hidden;background:var(--white)}
 
     /* ── 管理模式 Modal：獨立於 .envg 之外，改用 MOTRIX 系統配色 ── */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
-    .modal-box{background:#fff;border:1px solid var(--border-light);color:var(--text-primary);border-radius:var(--radius-lg);padding:1.4rem 1.6rem;width:560px;max-width:95vw;max-height:88vh;overflow:auto;box-shadow:var(--shadow-lg);font-family:var(--font-zh)}
+    .modal-box{background:#fff;border:1px solid var(--border-light);color:var(--text-primary);border-radius:var(--radius-lg);padding:1.4rem 1.6rem;width:560px;max-width:95vw;max-height:calc(88vh / var(--fz,1));overflow:auto;box-shadow:var(--shadow-lg);font-family:var(--font-zh)}
     .modal-title{font-size:1rem;font-weight:700;margin-bottom:1rem}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.7rem}
     .field-row{margin-bottom:0}
@@ -27,7 +27,7 @@
     .modal-footer{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem}
 
     /* ── 簡易瀏覽：場域方塊＋分層卡片，跟網路架構選型導覽同一套（MOTRIX 系統配色，不受 ◐ 深色切換影響） ── */
-    .sv-body{height:calc(100vh - var(--topbar-h) - 3.6rem);overflow:auto;padding:1rem 1.2rem;background:var(--white)}
+    .sv-body{height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 3.6rem);overflow:auto;padding:1rem 1.2rem;background:var(--white)}
     .sv-group{margin-bottom:1.4rem}
     .sv-group-title{font-size:.78rem;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.6rem}
     .fam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
@@ -73,7 +73,7 @@
       --acc:#4aa3ff; --t1:#8b98a8; --t2:#3fd07f; --t3:#b98cff;
       --warn:#e8b13a; --warnbg:#2a2011; --crit:#ff6b5e; --critbg:#2b1512; --gap:#ff8a3d;
       --g-a:#4aa3ff; --g-b:#31d0d8; --g-c:#3fd07f; --g-d:#ff8a3d; --g-e:#b98cff; --g-x:#7d8896;
-      display:block;height:calc(100vh - var(--topbar-h));overflow:auto;
+      display:block;height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));overflow:auto;
       margin:0;background:var(--bg);color:var(--tx);
       font-family:var(--font-zh);
       font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;
@@ -121,7 +121,7 @@
     .envg .chip.lbl{border:0;background:none;color:var(--tx3);cursor:default;padding-left:0;font-size:.72rem}
 
     .envg .app{display:grid;grid-template-columns:14.5rem 1fr;gap:0;align-items:start}
-    .envg .envg-aside{position:sticky;top:0;align-self:start;max-height:calc(100vh - var(--topbar-h));overflow:auto;border-right:1px solid var(--line);padding:.85rem .7rem 3rem;background:var(--bg2)}
+    .envg .envg-aside{position:sticky;top:0;align-self:start;max-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));overflow:auto;border-right:1px solid var(--line);padding:.85rem .7rem 3rem;background:var(--bg2)}
     .envg .envg-aside.hide{display:none}
     .envg .envg-main{padding:.85rem 1rem 5rem;min-width:0;overflow:hidden}
     .envg .fg{margin-bottom:1rem}
@@ -150,7 +150,7 @@
     .envg .t1c{color:var(--t1)}.envg .t2c{color:var(--t2);font-weight:600}.envg .t3c{color:var(--t3)}
     .envg .dash{color:var(--tx3)}
 
-    .envg .mwrap{overflow:auto;border:1px solid var(--line);border-radius:.5rem;background:var(--bg2);max-height:calc(100vh - var(--topbar-h) - 12rem)}
+    .envg .mwrap{overflow:auto;border:1px solid var(--line);border-radius:.5rem;background:var(--bg2);max-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 12rem)}
     .envg table.mx{border-collapse:separate;border-spacing:0;font-size:.78rem;width:100%}
     .envg table.mx th,.envg table.mx td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:.3rem .45rem;vertical-align:top}
     .envg table.mx thead th{position:sticky;top:0;z-index:3;background:var(--bg3);color:var(--tx2);font-size:.7rem;font-weight:700;letter-spacing:.04em;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
@@ -183,7 +183,7 @@
     .envg .nt em{display:block;margin-top:.25rem;font-style:normal;color:var(--warn)}
     .envg .nt em.c{color:var(--crit);font-weight:600}
 
-    .envg .twrap{overflow:auto;border:1px solid var(--line);border-radius:.5rem;background:var(--bg2);max-height:calc(100vh - var(--topbar-h) - 12rem)}
+    .envg .twrap{overflow:auto;border:1px solid var(--line);border-radius:.5rem;background:var(--bg2);max-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 12rem)}
     .envg table.fl{border-collapse:separate;border-spacing:0;width:100%;font-size:.76rem}
     .envg table.fl th{position:sticky;top:0;z-index:2;background:var(--bg3);color:var(--tx2);font-size:.68rem;font-weight:700;letter-spacing:.04em;text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
     .envg table.fl th:hover{color:var(--tx)}
@@ -214,7 +214,7 @@
     .envg .envg-footer{padding:1rem;color:var(--tx3);font-size:.74rem}
 
     /* ── 管理模式（沿用瀏覽模式同一套深色調，僅換成表單/表格排版）── */
-    .envg .manage-wrap{padding:.85rem 1rem 5rem;height:calc(100vh - var(--topbar-h) - 3.6rem);overflow:auto}
+    .envg .manage-wrap{padding:.85rem 1rem 5rem;height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 3.6rem);overflow:auto}
     .envg .mpanel{border:1px solid var(--line);border-radius:.5rem;background:var(--bg2);margin-bottom:1rem;overflow:hidden}
     .envg .mpanel .mhead{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;background:var(--bg3);border-bottom:1px solid var(--line)}
     .envg .mpanel .mhead b{font-size:.92rem}

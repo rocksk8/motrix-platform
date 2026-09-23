@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
-    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(100vh - var(--topbar-h));overflow:hidden;background:var(--white)}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:0;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));overflow:hidden;background:var(--white)}
     /* 2026-09-14：工具列最左加一條直立紅色標記（官網 28×3 的緊湊變體）。
    這頁的 body 高度是 calc(100vh - topbar - 48px) 算死的，插完整標頭會破掉。 */
     .ag-toolbar{height:48px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--border-light);background:#fff}
@@ -20,7 +20,7 @@
     .ag-toolbar .tb-head{display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0}
     .ag-toolbar .ttl{font-size:14px;font-weight:700;color:var(--text-primary)}
     .ag-toolbar .sub{font-size:11px;color:var(--text-dim)}
-    .ag-body{height:calc(100vh - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
+    .ag-body{height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 48px);overflow:auto;padding:20px 24px}
 
     /* 情境選擇方塊 */
     .fam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:20px}
@@ -92,7 +92,7 @@
     .compare-hint{font-size:11.5px;color:var(--text-dim)}
     .compare-legend{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim)}
     .compare-legend .swatch{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--success-light,#E6F4EA);border:1px solid var(--success)}
-    .compare-box{max-height:92vh;overflow:hidden;display:flex;flex-direction:column}
+    .compare-box{max-height:calc(92vh / var(--fz,1));overflow:hidden;display:flex;flex-direction:column}
     .compare-wrap{overflow:auto;flex:1;min-height:0;border:1px solid var(--border-light);border-radius:var(--radius-lg)}
     table.compare{border-collapse:separate;border-spacing:0;font-size:12.5px;width:100%}
     table.compare th, table.compare td{padding:9px 12px;text-align:left;vertical-align:top;white-space:nowrap;border-bottom:1px solid #F0EEE9;border-right:1px solid #F5F4F0}
@@ -142,7 +142,7 @@
 
     /* Modal（沿用 MOTRIX 標準樣式） */
     .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:flex;align-items:center;justify-content:center}
-    .modal-box{background:#fff;border:1px solid var(--border-light);color:var(--text-primary);border-radius:var(--radius-lg);padding:22px 26px;width:560px;max-width:95vw;max-height:88vh;overflow:auto;box-shadow:var(--shadow-lg)}
+    .modal-box{background:#fff;border:1px solid var(--border-light);color:var(--text-primary);border-radius:var(--radius-lg);padding:22px 26px;width:560px;max-width:95vw;max-height:calc(88vh / var(--fz,1));overflow:auto;box-shadow:var(--shadow-lg)}
     .modal-title{font-size:15px;font-weight:700;margin-bottom:16px}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
     .field-row{margin-bottom:0}

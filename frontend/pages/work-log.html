@@ -16,7 +16,7 @@
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
       padding: 28px 32px;
-      min-height: calc(100vh - var(--topbar-h));
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
       background: var(--white);
     }
 
@@ -143,7 +143,7 @@
     @media (max-width: 767px) {
       .wl-main { margin-left: 0; padding: 14px 12px; }
       .wl-modal-overlay { align-items: flex-end; padding: 0; }
-      .wl-modal { border-radius: 16px 16px 0 0; max-height: 92vh; overflow-y: auto; }
+      .wl-modal { border-radius: 16px 16px 0 0; max-height: calc(92vh / var(--fz,1)); overflow-y: auto; }
       .wl-field-row { grid-template-columns: 1fr; }
       .wl-table th:nth-child(4), .wl-table td:nth-child(4) { display: none; }
     }

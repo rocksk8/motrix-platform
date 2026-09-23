@@ -437,7 +437,7 @@ body {
 .main {
   margin-left: var(--sidebar-w);
   margin-top: var(--topbar-h);
-  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
   padding: 28px 32px;
   background: var(--white);
 }
@@ -480,6 +480,8 @@ body {
   opacity: 0; visibility: hidden; transform: translateY(4px);
   transition: opacity .18s var(--v4-ease), transform .18s var(--v4-ease);
   z-index: 95;
+  /* 字級「特」：面板長過視窗時內部捲動，不要長出畫面外（fixed 的頂欄拖不到）。 */
+  max-height: calc(100dvh / var(--fz,1) - var(--topbar-h)); overflow-y: auto;
 }
 .mnav__grp:hover .mnav__panel,
 .mnav__grp:focus-within .mnav__panel { opacity: 1; visibility: visible; transform: none; }
@@ -1208,7 +1210,7 @@ body {
 .page-wrap {
   margin-left: var(--sidebar-w);
   margin-top: var(--topbar-h);
-  min-height: calc(100vh - var(--topbar-h));
+  min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
 }
 
 /* ─── TABLE SCROLL WRAPPER ─── */
@@ -1378,9 +1380,9 @@ body.sidebar-lock { overflow: hidden; }
     max-width: 100% !important;
     width: 100% !important;
     border-radius: 16px 16px 0 0 !important;
-    max-height: 92vh;
+    max-height: calc(92vh / var(--fz,1));
   }
-  .modal-body { max-height: 70vh; overflow-y: auto; }
+  .modal-body { max-height: calc(70vh / var(--fz,1)); overflow-y: auto; }
   .modal-head { padding: 12px 14px; }
   .modal-foot { padding: 10px 14px; }
 
@@ -1412,7 +1414,7 @@ body.sidebar-lock { overflow: hidden; }
   .page-header { gap: 8px; margin-bottom: 12px; padding-bottom: 10px; }
 
   .data-table { min-width: 400px; }
-  .modal-body { max-height: 78vh; }
+  .modal-body { max-height: calc(78vh / var(--fz,1)); }
 }
 
 /* ─── TOUCH TARGETS  ≤1023px ─── */
@@ -1444,7 +1446,7 @@ body.sidebar-lock { overflow: hidden; }
      away when user zooms or enlarges font.
    ═══════════════════════════════════════ */
 .main--queue {
-  height: calc(100dvh - var(--topbar-h));
+  height: calc(calc(100dvh / var(--fz,1)) - var(--topbar-h));
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1485,7 +1487,7 @@ body.sidebar-lock { overflow: hidden; }
   border-radius: var(--radius-lg);
   box-shadow: 0 20px 60px rgba(0,0,0,.20);
   width: 100%; max-width: 680px;
-  max-height: calc(100dvh - 2rem);
+  max-height: calc(calc(100dvh / var(--fz,1)) - 2rem);
   display: flex; flex-direction: column;
 }
 .modal-head {

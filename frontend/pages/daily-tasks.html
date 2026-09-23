@@ -16,7 +16,7 @@
     .dt-wrap {
       display: flex;
       flex-direction: column;
-      height: calc(100vh - var(--topbar-h));
+      height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
       margin-left: var(--sidebar-w);
       margin-top: var(--topbar-h);
     }
@@ -703,7 +703,7 @@
 
     /* ── 看板（Asana 風格看板）── */
     .dt-board-wrap { display: flex; gap: 12px; padding: 12px 14px 16px; overflow-x: auto; align-items: flex-start; }
-    .dt-board-col { flex: 0 0 240px; background: #FAFAF8; border: 1px solid #ECEAE5; border-radius: 8px; display: flex; flex-direction: column; max-height: calc(100vh - 220px); }
+    .dt-board-col { flex: 0 0 240px; background: #FAFAF8; border: 1px solid #ECEAE5; border-radius: 8px; display: flex; flex-direction: column; max-height: calc(calc(100vh / var(--fz,1)) - 220px); }
     .dt-board-col-hd { display: flex; align-items: center; gap: 6px; padding: 9px 11px; border-bottom: 1px solid #ECEAE5; flex-shrink: 0; }
     .dt-board-col-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .dt-board-col-title { font-size: 12px; font-weight: 700; color: var(--text-primary); flex: 1; font-family: 'LINE Seed TW_OTF', sans-serif; }

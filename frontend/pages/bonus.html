@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
     [x-cloak]{display:none!important}
-    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(100vh - var(--topbar-h));background:var(--white)}
+    .page-main{margin-left:var(--sidebar-w);margin-top:var(--topbar-h);padding:28px 32px;min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h));background:var(--white)}
 
     .bn-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
     .bn-title{font-size:20px;font-weight:700;font-family:var(--font-zh);color:var(--text-primary)}
@@ -822,7 +822,7 @@
       <div x-show="detailMode === 'award' && (awardPreviewHtml || awardPreviewErr)" style="padding:0 16px 12px">
         <div class="bn-err" x-show="awardPreviewErr" x-text="awardPreviewErr"></div>
         <iframe x-show="awardPreviewHtml" :srcdoc="awardPreviewHtml" data-testid="bonus-award-preview-frame"
-                title="獎金分潤單 PDF 版面預覽" style="width:100%;height:70vh;border:1px solid var(--border-light);background:#fff"></iframe>
+                title="獎金分潤單 PDF 版面預覽" style="width:100%;height:calc(70vh / var(--fz,1));border:1px solid var(--border-light);background:#fff"></iframe>
       </div>
     </div>
   </div>
