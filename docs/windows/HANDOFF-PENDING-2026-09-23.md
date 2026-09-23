@@ -125,6 +125,13 @@
 DB      v91（正式機 c5b1e84 系）→ v109；T9 與 T11 修正皆在包內
 ```
 
+### 🔴 套用失敗 → 重建（2026-09-24 02:44）
+- 使用者在正式機套用 `20260924_021932_5f04d04`：`status=migration_dryrun_failed`，正式庫未觸碰。
+- 成因：乾跑其實成功（輸出有 `DRYRUN_OK`），但 m103 的 `logger.warning` 走 stderr，被 PS 5.1 包成 NativeCommandError ⇒ `$dryRunOutput` 成為 2 元素陣列；`apply_update.ps1` 以 `$dryRunOutput -notmatch "DRYRUN_OK"` 判斷，對陣列回傳「不符合的元素」＝非空＝真 ⇒ 誤判。db 備份的 `BACKUP_OK` 判斷同形。
+- 修正 `46dc6ae`（hichan-61，PS 5.1 真跑 a/b/c 三情境）；重建 ⇒ **`deploy_packages\20260924_024414_46dc6ae`**（231 檔，樹雜湊 `9063f7b3…c0ea`；非 e2e 2571／e2e 79 全過；與上一包差異只有 `apply_update.ps1`、`.build_commit`、`deploy_manifest.json`）。
+- ⚠️ 正式機 V9.0 上的 `apply_update.ps1` 仍是舊版 ⇒ **這一次必須執行包內那支**（`$ProdRoot` 寫死 V9.0，從包內執行一樣作用於正式機）。
+- `20260924_021932_5f04d04` 作廢。
+
 ### 🟠 T12（下一輪）：PK1 精簡 manifest 造成「系統更新紀錄」頁安靜降級
 - `build_deploy_package.ps1` Step 5.6（`2f1e4a3`）把 `version_manifest.json` 精簡成單筆 `{version,date}`。
 - PK1 規格（`SCOPE.md:1091`）只查了 `GET /api/system/version` 這個讀者；**漏了 `helpers/startup.py:_sync_module_versions()`**——它開機時把 manifest 寫進 `module_versions`，給 `module-versions.html` 顯示。無 `module` 的條目被 `:487` 略過 ⇒ 正式機收不到任何新說明，**不報錯**。
