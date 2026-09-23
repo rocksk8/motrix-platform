@@ -157,25 +157,106 @@ def test_ca1_a_disabled_code_still_holds_its_number(client, make_user):
     取最大值 + 1   1111-3 是最大 => 下一個 1111-4   ✅
     數筆數 + 1     停用之後「還有 2 筆」=> 算出 1111-3  ☠️ **撞號**
     ```
-    ☠️ 撞號的後果不是報錯：新的那一筆會**覆蓋掉**已停用的那一筆，
-       而那一筆**可能已經被傳票引用過** ⇒ 舊傳票上的科目名稱**變成別的東西**。
-    🔑 停用不是刪除 —— **號碼要跟著留著**。
+    ## 🔴 撞號有**三種下場**，而它們取決於 `INSERT` 的寫法（A-2 更正）
+
+    `account_items.code` 是 **TEXT PRIMARY KEY**（我複查 `PRAGMA` 的 `pk=1`
+    ＋ `CREATE TABLE` 原文）⇒
+    ```
+    INSERT              -> IntegrityError   很吵，會被發現            ✅
+    INSERT OR IGNORE    -> **靜默無事發生**  按了「建立」而什麼都沒有  ☠️
+    INSERT OR REPLACE   -> **覆蓋**          舊傳票上的科目名變成別的  ☠️☠️
+    ```
+    🔴 而 repo 裡現成的那一句**就是 `OR IGNORE`**（`db.py:4297`，同一張表、
+       欄位幾乎一樣、就在要改的那個檔案裡）⇒ **那是最可能被照抄的一句**。
+    🔑 ⇒ 我第一版寫「會覆蓋」是**三種之一**，不是通則。
+      這一題釘的應該是「**號碼不可以被重用**」——
+      而三種下場**都會讓下面的筆數與名字對不上**，所以一組斷言擋得住全部三種。
     """
     _u, hdr = _hdr(client, make_user, "ca1_hold")
-    for _ in range(3):
-        assert _extend(client, hdr).status_code == 200
+    for i in range(3):
+        assert _extend(client, hdr, name="原本的第 %d 個" % (i + 1)).status_code == 200
     assert _set_active(client, hdr, "%s-2" % PARENT, False).status_code == 200
     assert int(_row("%s-2" % PARENT)["is_active"]) == 0, "停用沒有落地。"
 
-    assert _extend(client, hdr).status_code == 200
+    assert _extend(client, hdr, name="新加的").status_code == 200
     got = _codes_under()
     assert "%s-4" % PARENT in got, (
         "停用 `%s-2` 之後再建，拿到的是 %r —— 應該有 `%s-4`。\n"
         % (PARENT, got, PARENT)
         + "☠️ 多半是**數筆數**而不是**取最大值**：停用的那一筆仍然佔號。\n"
-        + "🔑 撞號不會報錯 —— 新的那一筆會覆蓋掉已停用的，\n"
+        + "🔑 而撞號有三種下場（取決於 `INSERT` 的寫法），"
+          "**三種都不會給你一個看得懂的錯誤**。")
+    assert len([c for c in got if c.startswith(PARENT + "-")]) == 4, (
+        "`%s` 底下有 %d 個自建科目，應該是 4：%r\n"
+        % (PARENT, len([c for c in got if c.startswith(PARENT + "-")]), got)
+        + "☠️ 少一個 ⇒ `INSERT OR IGNORE`（**靜默無事發生**）"
+          "或 `OR REPLACE`（**覆蓋**）。")
+    # ⚙️ 而「名字」是分辨 `OR REPLACE` 的那一格：它會把 `-3` 的名字換成新的。
+    assert _row("%s-3" % PARENT)["name"] == "原本的第 3 個", (
+        "`%s-3` 的名字變成 %r 了 ——\n" % (PARENT, _row("%s-3" % PARENT)["name"])
+        + "☠️ 那是 `INSERT OR REPLACE`：新的那一筆**覆蓋掉舊的**，\n"
           "   而它**可能已經被傳票引用過** ⇒ 舊傳票上的科目名稱變成別的東西。")
-    assert len([c for c in got if c.startswith(PARENT + "-")]) == 4
+
+
+def test_ca1_the_insert_must_not_paper_over_a_collision():
+    """🔴 **取號那一段不可以用 `OR IGNORE`／`OR REPLACE`／`ON CONFLICT DO UPDATE`。**
+
+    ```
+    code 是 TEXT PRIMARY KEY（我複查 pk=1）⇒ 撞號的下場**取決於寫法**：
+      INSERT              -> UNIQUE constraint failed  很吵，會被發現       ✅
+      INSERT OR IGNORE    -> **靜默無事發生**  按了建立而什麼都沒有          ☠️
+      INSERT OR REPLACE   -> **覆蓋**          舊傳票上的科目名變成別的東西  ☠️☠️
+    ```
+    🔴 而 repo 裡現成的那一句**就是 `OR IGNORE`**（`db.py:4297`，載入法定科目用的）
+    ⇒ **同一張表、欄位幾乎一樣** ⇒ 那是最可能被照抄的一句。
+    🔑 ⇒ 這一題守的是**後果**，不是取號的正確性：
+      取號寫錯時，我要它**吵**，不要它安靜。
+    ⚠️ 只掃 `routers/account_items.py` —— `db.py` 那一句是**對的**
+       （載入 547 筆法定科目時，重跑 migration 不該炸）。
+    """
+    import pathlib
+    import re
+
+    p = (pathlib.Path(__file__).resolve().parents[1]
+         / "routers" / "account_items.py")
+    assert p.is_file(), "`routers/account_items.py` 不見了 —— **退回給我**。"
+    src = p.read_text(encoding="utf-8", errors="replace")
+
+    # ⚙️ 先剝註解與字串外的說明？—— 不剝：SQL **本來就寫在字串裡**。
+    #    ⇒ 改成只認「INSERT … INTO account_items」那一段的寫法。
+    bad = re.findall(
+        r"INSERT\s+OR\s+(IGNORE|REPLACE)\s+INTO\s+account_items", src, re.I)
+    assert not bad, (
+        "`routers/account_items.py` 用了 `INSERT OR %s`：\n" % bad[0]
+        + "☠️ `OR IGNORE` ⇒ 使用者按了「建立」而**什麼都沒發生**；\n"
+          "   `OR REPLACE` ⇒ **覆蓋掉舊的那一列**，而它可能已被傳票引用。\n"
+        + "🔑 取號寫錯時我要它**吵** —— 撞號要炸出來，不要被抹平。\n"
+        + "📌 `db.py:4297` 那一句 `OR IGNORE` 是**對的**（載入法定科目、"
+          "重跑 migration 不該炸）⇒ 不要照抄到這裡。")
+    assert not re.search(r"ON\s+CONFLICT[\s\S]{0,60}DO\s+UPDATE", src, re.I), (
+        "用了 `ON CONFLICT … DO UPDATE` —— 那是 `OR REPLACE` 的另一種寫法。")
+
+
+def test_ca1_the_collision_detector_would_notice_the_bad_shape():
+    """⚙️ **正對照：上面那把尺認得出那三種寫法嗎？**
+
+    ☠️ 認不出來的話，上一題是**一句永遠成立的空話** ——
+       而它看起來像一道守門。
+    """
+    import re
+
+    good = 'conn.execute("INSERT INTO account_items (code, level) VALUES (?,?)")'
+    for bad in ('INSERT OR IGNORE INTO account_items (code) VALUES (?)',
+                'insert or replace into account_items(code) values (?)',
+                'INSERT INTO account_items ... ON CONFLICT(code) DO UPDATE SET'):
+        hit = re.search(
+            r"INSERT\s+OR\s+(IGNORE|REPLACE)\s+INTO\s+account_items", bad,
+            re.I) or re.search(r"ON\s+CONFLICT[\s\S]{0,60}DO\s+UPDATE", bad,
+                               re.I)
+        assert hit, "沒認出壞寫法：%r —— **太窄**。" % bad
+    assert not re.search(
+        r"INSERT\s+OR\s+(IGNORE|REPLACE)\s+INTO\s+account_items", good,
+        re.I), "乾淨的 INSERT 被判成壞的 —— **太寬**。"
 
 
 def test_ca1_the_tenth_one_is_followed_by_eleven_not_ten(client, make_user):
