@@ -5051,6 +5051,20 @@ def download_project_execution_report_pdf(quote_no: str, authorization: str = He
 # **依 type 分流**的端點。不把這些塞進清單的理由：清單一次可能上百筆，每筆都去讀
 # items_json／files_json／payload_json 會讓開啟簽核佇列變慢，而使用者一次只看一筆。
 
+def _tagged_file_entries(raw, tag) -> list:
+    """`AT1`：`_file_entries()` 的結果幫每一筆加一個來源前綴。
+
+    ⚠️ 不新加一個 `source` 鍵——前端的檔案卡片只顯示 `f.name`（
+    `approval-queue.html:812`），加鍵而不改前端範本的話，來源標記進了
+    API 回應卻沒有人看得到。直接把標記寫進 `name` 本身，前端 0 行也
+    看得到「哪一筆是哪一段的憑證」。
+    """
+    out = _file_entries(raw)
+    for f in out:
+        f["name"] = "【%s】%s" % (tag, f.get("name") or "")
+    return out
+
+
 def _file_entries(raw) -> list:
     """把各表存的檔案 JSON 正規化成前端可預覽的格式。
 
@@ -5552,7 +5566,33 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                 {"label": "付款條件", "value": d.get("paymentTerms") or "—"},
             ]
             out["items"] = d.get("items") or []
-            out["files"] = _file_entries(r["signed_files_json"])
+            # 🔴 `AT1`：原本只讀 `signed_files_json`——那是**客戶回簽檔**，
+            #    待審核階段必然是空的。送件人上傳的附件在 `caseRecord`
+            #    裡三處，這支端點從來沒讀過：materials[i].files／
+            #    materials[i].invoiceFiles／payment.items[i].invoiceFiles。
+            #    ☠️ 而這不只是送件人看不到自己上傳的東西——**簽核人也看
+            #    不到**，等於在沒看到憑證的情況下按核准，畫面上又沒有任何
+            #    跡象說「有附件但沒顯示」。
+            # ⚠️ 修的是讀取端，不碰任何寫入權限——「已核准的額外支出附件
+            #    已上鎖」那句話在別的端點，這裡完全不會動到。
+            # ⚠️ 檔案不存在時 _file_entries() 本身就不會讓整支端點掛掉
+            #    （json 解析失敗回空清單），同 JV5／SP1 的既有做法。
+            files = list(_file_entries(r["signed_files_json"]))
+            cr = d.get("caseRecord") or {}
+            for i, m in enumerate(cr.get("materials") or [], 1):
+                if not isinstance(m, dict):
+                    continue
+                files += _tagged_file_entries(
+                    json.dumps(m.get("files") or []), "材料 %d" % i)
+                files += _tagged_file_entries(
+                    json.dumps(m.get("invoiceFiles") or []), "材料 %d 發票" % i)
+            pay_items = (cr.get("payment") or {}).get("items") or []
+            for i, p in enumerate(pay_items, 1):
+                if not isinstance(p, dict):
+                    continue
+                files += _tagged_file_entries(
+                    json.dumps(p.get("invoiceFiles") or []), "請款 %d" % i)
+            out["files"] = files
             # 解鎖編輯後的再簽核：簽核人要知道「這次改了什麼」才簽得下去
             hist = d.get("editHistory") or []
             if isinstance(hist, list) and hist:
