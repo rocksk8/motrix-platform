@@ -68,6 +68,9 @@ function voucherPage() {
     // ⚠️ 而前端**只送 `(type, docNo, fileId)`，不送路徑** ——
     //    送路徑等於開一個任意檔案讀取。
     attachments: [],
+    // `JV22`：退回與編修的長期紀錄（唯讀；來源是 GET /api/vouchers/{id}/edit-log）
+    editLog: [],
+    editLogErr: '',
     attErr: '',
     attMsg: '',
     uploading: false,
@@ -501,6 +504,9 @@ function voucherPage() {
       }
       this.attachments = d.attachments || []
       this.summaryTarget = 0
+      this.editLog = []
+      this.editLogErr = ''
+      if (this.id) this.loadEditLog()
       // 🔑 網址帶上 `?id=`，**重新整理會回到同一張單**。
       //    ☠️ 少了它：使用者改完摘要、存檔、按 F5 ⇒ 回到一張空白新單
       //       ⇒ 他會以為「剛剛存的不見了」。
@@ -511,6 +517,72 @@ function voucherPage() {
           window.history.replaceState({}, '', 'voucher.html?id=' + this.id)
         }
       } catch (e) { /* 網址更新失敗不影響任何功能 */ }
+    },
+
+    // ── `JV22`：退回與編修（唯讀） ──────────────────────────────────
+    //
+    // 使用者原話：「傳票如果有退回，需顯示上次退回跟這次編修的內容，長期記憶，
+    // 這個不能刪除」⇒ 成對顯示（一次退回 ＋ 其後的編修），不是流水帳。
+    // ⚠️ 這一區**沒有任何編輯或刪除控制項**：一個看起來像備註欄的東西，
+    //    下一個人會很自然地加上編輯功能（`SPEC-JV22 §6`）。
+
+    async loadEditLog() {
+      const vid = this.id
+      try {
+        const r = await fetch('/api/vouchers/' + vid + '/edit-log', { headers: this._auth() })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        // 🔑 回來時若已經換了一張單，整包丟掉（先渲染再非同步載入的競態）。
+        if (vid !== this.id) return
+        this.editLog = d.entries || []
+      } catch (e) {
+        if (vid !== this.id) return
+        this.editLogErr = '退回與編修紀錄載入失敗（' + e.message + '）。'
+      }
+    },
+
+    _isSendBack(e) {
+      return (e.changes || []).some(function (c) {
+        return c.field === 'status' && c.to === '草稿'
+      })
+    },
+
+    // 由新到舊：每一組＝一次退回 ＋ 它之後、下一次退回之前的所有編修。
+    editGroups() {
+      const out = []
+      let cur = null
+      for (const e of this.editLog || []) {
+        if (this._isSendBack(e)) {
+          cur = { back: e, edits: [] }
+          out.push(cur)
+        } else if (cur) {
+          for (const c of e.changes || []) cur.edits.push({ at: e.at, by: e.byName || e.by, c: c })
+        }
+      }
+      return out.reverse()
+    },
+
+    backField(e, name) {
+      const c = (e.changes || []).find(function (x) { return x.field === name })
+      return c || { from: '', to: '' }
+    },
+
+    editFieldLabel(f) {
+      const m = { summary: '摘要', voucher_date: '傳票日期', category: '傳票別',
+                  attachment: '附件', status: '狀態', voucher_no: '單號', lines: '分錄' }
+      if (m[f]) return m[f]
+      const mm = /^lines\[(\d+)\](?:\.(\w+))?$/.exec(f || '')
+      if (mm) {
+        const col = { account_code: '科目', summary: '摘要', debit: '借方', credit: '貸方' }[mm[2]] || ''
+        return '第 ' + (Number(mm[1]) + 1) + ' 行分錄' + (col ? ' ' + col : '')
+      }
+      return f
+    },
+
+    editValue(v) {
+      if (v === null || v === undefined || v === '') return '（空）'
+      if (typeof v === 'object') return JSON.stringify(v)
+      return String(v)
     },
 
     // ── 建立／儲存 ──────────────────────────────────────────────────

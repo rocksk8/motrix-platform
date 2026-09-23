@@ -422,6 +422,37 @@
                      ⇒ 硬刪等於不可復原。
                🔴 離開草稿就**完全不可刪** —— 送審後可刪 ＝ 簽核人看過的東西
                   可以在他不知情時消失。要移除 ⇒ 作廢整張傳票重開。 -->
+          <!-- `JV22`：退回與編修（長期記憶，**唯讀**）。
+               🔴 這一區不可以有 input／textarea／contenteditable／刪除鈕 ——
+                  使用者說「這個不能刪除」；題會釘住這一區的 DOM。
+               預設只展開**最近一組**（上次退回＋其後的編修），更早的收合可展開。 -->
+          <div class="vc-att" x-show="isSaved && editGroups().length" data-testid="voucher-edit-history">
+            <div class="vc-att__hd">
+              <span>退回與編修</span>
+              <span class="vc-att__hint">每一次退回的原因與之後改了什麼，長期保存、不可刪除。</span>
+            </div>
+            <template x-if="editLogErr"><div class="vc-att__hint" x-text="editLogErr"></div></template>
+            <template x-for="(g, gi) in editGroups()" :key="g.back.at + gi">
+              <details :open="gi === 0" style="margin:6px 0">
+                <summary>
+                  <span x-text="(gi === 0 ? '上次退回　' : '更早的退回　') + fmtDateTime(g.back.at) + '　由 ' + (g.back.byName || g.back.by) + ' 退回'"></span>
+                </summary>
+                <div style="padding:4px 0 4px 14px">
+                  <div>原因：<span x-text="backField(g.back, '退回原因').to || '（未填原因）'"></span></div>
+                  <div>單號：<span x-text="backField(g.back, 'voucher_no').from + ' → ' + backField(g.back, 'voucher_no').to"></span></div>
+                  <div style="margin-top:4px;font-weight:600">這次編修</div>
+                  <template x-if="!g.edits.length"><div class="vc-att__hint">退回之後還沒有修改。</div></template>
+                  <template x-for="(ed, ei) in g.edits" :key="ei">
+                    <div>
+                      <span x-text="editFieldLabel(ed.c.field)"></span>：
+                      <span x-text="editValue(ed.c.from) + ' → ' + editValue(ed.c.to)"></span>
+                    </div>
+                  </template>
+                </div>
+              </details>
+            </template>
+          </div>
+
           <div class="vc-att" x-show="isSaved">
             <div class="vc-att__hd">
               <span>附件</span>

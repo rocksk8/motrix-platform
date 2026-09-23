@@ -43,7 +43,7 @@ AT(1): AT1
 WD(1): WD1
 BR(4): BR1 BR2 BR3 BR4
 BN(17): BN2 BN3 BN4 BN5 BN6 BN7 BN8 BN9 BN10 BN11 BN12 BN13 BN14 BN15 BN16 BN17 BN18
-EM(12): EM1 EM2 EM3 EM5 EM6 EM7 EM8 EM9 EM10 EM11 EM12 EM13
+EM(9): EM1 EM3 EM5 EM6 EM8 EM9 EM10 EM11 EM12
 PX(1): PX1
 JV(1): JV8
 AL(1): AL1
@@ -128,8 +128,15 @@ BN(1):  BN19
 PK(2):  PK1 PK2
 QE(1):  QE1
 JV(1):  JV6
+EM(3):  EM2 EM7 EM13
 
 ```
+
+> 📌 `EM2`／`EM7`／`EM13` 從 `THIS` 移到 `NEXT`（hichan-61 2026-09-24，A 裁）。
+> 使用者 2026-09-24 表單作答原文（由 hichan-0a 轉達；表單本身不在 repo）：「JV22 做，其餘下一輪」
+> ——「其餘」指當時列給使用者的 L 級四項（EM2／EM7／EM13／JV22）去掉 JV22。
+> 🔑 三項都沒有題可以搬（`backend/tests/` 以 `(?<![0-9A-Za-z])(EM2|EM7|EM13)(?![0-9])` 掃 0 筆；
+>    同一支掃描器對 `EM11` 命中 10 筆當正對照）⇒ 只搬規格的範圍，規格本文不動。
 
 > 📌 `JV6` 從 `THIS` 移到 `NEXT`（hichan-61 2026-09-24，A 裁「照 `ab5ba88` 移到 NEXT，出處附使用者原話」）。
 > 使用者原話**只在 commit 訊息裡**，docs/ 內 0 筆（`grep -rn 剩最後跑驗收 docs/` 回 0）：

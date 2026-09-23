@@ -612,6 +612,41 @@ def _load(conn, voucher_id):
     return v
 
 
+@router.get("/{voucher_id}/edit-log")
+def voucher_edit_log(voucher_id: int, authorization: str = Header(None)):
+    """`JV22`：這張傳票的編寫紀錄（退回、欄位／分錄編修、附件增刪），**舊到新**。
+
+    閘門與其餘傳票端點相同（`_require_voucher_access`）。**只讀**：這一支之外
+    也沒有任何端點能改或刪這張表（資料庫層另有 TRIGGER，v109）。
+    ⚠️ 作廢的傳票照樣讀得到 —— 作廢是「不生效」不是「不存在」，而它的編修史
+       正是事後稽核要看的那一份（`SPEC-JV22 §3`）。
+    """
+    _require_voucher_access(_require_user(authorization))
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM vouchers_all WHERE id = ?",
+                        (voucher_id,)).fetchone() is None:
+            raise HTTPException(404, "找不到這張傳票。")
+        rows = [dict(r) for r in conn.execute(
+            "SELECT changed_by, changed_at, changes_json FROM voucher_edit_log"
+            " WHERE voucher_id = ? ORDER BY changed_at, id", (voucher_id,))]
+        names = {r["username"]: (r["display_name"] or r["username"]) for r in conn.execute(
+            "SELECT username, display_name FROM users")}
+    finally:
+        conn.close()
+    entries = []
+    for r in rows:
+        try:
+            changes = json.loads(r["changes_json"] or "[]")
+        except ValueError:
+            # ⚠️ 讀不出來要**說出來**，不要吞成空的一列（那看起來像「沒改什麼」）。
+            changes = [{"field": "（紀錄格式無法讀取）", "from": "", "to": ""}]
+        entries.append({"at": r["changed_at"], "by": r["changed_by"],
+                        "byName": names.get(r["changed_by"], r["changed_by"]),
+                        "changes": changes})
+    return {"entries": entries}
+
+
 @router.post("/{voucher_id}/submit")
 def submit_voucher(voucher_id: int, body: dict = Body(default={}),
                    authorization: str = Header(None)):
@@ -806,12 +841,25 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
                         "已過帳只能作廢重開。" if v.get("status") == "已過帳" else ""))
         new_no = next_revision_no(v.get("voucher_no"))
         now = _dt.datetime.now().isoformat()
+        reason = str((body or {}).get("reason") or "").strip()
         conn.execute(
             "UPDATE vouchers_all SET status='草稿', voucher_no=?,"
             " submitted_by='', submitted_at='', checked_by='', checked_at='',"
             " manager_by='', manager_at='', approval_json='{}',"
             " updated_at=? WHERE id=?",
             (new_no, now, voucher_id))
+        # 🔴 `JV22`：「上次退回」要是**結構化**紀錄，不能只有 audit_log 那一句字串
+        #    —— audit_log 有 730 天清理（`archive.py::_prune_audit_log`），
+        #    而使用者要的是「長期記憶」⇒ 落點是 voucher_edit_log（資料庫層刪不掉，v109），
+        #    並**明著標 permanent**，不靠預設值 term（`SPEC-JV22 §2b`）。
+        # ⚠️ 「退回原因」的 from 是空字串：它是新增不是修改，而 `validate_changes()`
+        #    只要求 from 這個鍵存在（「原本是空的」是合法答案）。
+        append_edit_log(
+            conn, voucher_id, _user_name(user),
+            [{"field": "status", "from": v.get("status") or "", "to": "草稿"},
+             {"field": "退回原因", "from": "", "to": reason},
+             {"field": "voucher_no", "from": v.get("voucher_no") or "", "to": new_no}],
+            table="voucher_edit_log", retention="permanent", changed_at=now)
         conn.commit()
     finally:
         conn.close()
@@ -1127,6 +1175,7 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
         ctype = (request.headers.get("content-type") or "").lower()
         incomplete = []
         added = 0
+        added_names = []
         if ctype.startswith("multipart/"):
             form = await request.form()
             files = [f for f in form.getlist("files") if getattr(f, "filename", None)]
@@ -1141,6 +1190,7 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
                     conn, voucher_id, meta["id"], meta["filename"], meta["path"],
                     meta.get("size"), meta.get("mime"), "", "", "", who, now)
                 added += 1
+                added_names.append(meta["filename"])
         else:
             try:
                 body = await request.json()
@@ -1161,9 +1211,17 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
                     item["source_type"], item["source_doc_no"],
                     item["source_file_id"], who, now)
                 added += 1
+                added_names.append(name)
                 if item["missing"]:
                     incomplete.append({"filename": name,
                                        "missing": item["missing"]})
+        # `JV22 §4` 缺口一：新增也要留「動過什麼」——先前只有 audit_log 的「+N」，
+        # 連檔名都沒有（刪除那一側早就有檔名）。
+        if added_names:
+            append_edit_log(conn, voucher_id, who,
+                            [{"field": "attachment", "from": "", "to": n}
+                             for n in added_names],
+                            table="voucher_edit_log", changed_at=now)
         conn.commit()
         attachments = _attachments_of(conn, voucher_id)
     finally:
