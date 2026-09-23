@@ -45,6 +45,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -557,42 +558,33 @@ def check_autostart(pkg):
              len(AUTOSTART_SWITCHES), cds[-1] if cds else None))
 
 
-def _export_ignore_patterns(gitattributes_path):
-    """解析 `.gitattributes` 裡的 `export-ignore` 規則，回傳 pattern 字串清單。
+def _export_ignore_state(root, rel_path):
+    """問 **git 本人** `rel_path`（`root` 為準、`/` 分隔的相對路徑）的
+    `export-ignore` 屬性是不是 `set`。
 
-    只認得「`<pattern> export-ignore`」這個形狀（同一行還可能有其他屬性，
-    只要 `export-ignore` 是其中一個 token 就算）；不解析 gitignore 萬用字元的
-    完整語意 —— 呼叫端只需要「這條 pattern 蓋不蓋得到某個具體檔案」，
-    見 `_pattern_covers`。
+    ☠️ 上一版自己重新實作了一套「尾巴 `/` 算不算涵蓋子樹」的比對
+    語意（`_pattern_covers`，已刪），而它與 git 實際的比對邏輯不一致
+    ——`docs/windows/ export-ignore` 這種尾巴 `/` 但沒有 `**` 的寫法，
+    git **不會**遞迴套用到子目錄，而那套自製語意判定「會」，於是這道不變量
+    驗的是一套錯的假設，兩條目錄規則完全沒生效卻沒有被抓到。
+    🔑 修法不是把自製語意寫對，是**不要有自製語意**——直接呼叫
+    `git check-attr` 問 git 本人怎麼判，判斷基礎與 `git archive` 執行時
+    用的是同一套。
+    回傳 `(value, error)`；`value` 是 `git check-attr` 印出的值
+    （`"set"`／`"unset"`／`"unspecified"`／自訂字串），失敗時 `error` 非 None。
     """
-    patterns = []
-    with io.open(gitattributes_path, "r", encoding="utf-8", errors="replace") as fh:
-        for ln in fh:
-            ln = ln.strip()
-            if not ln or ln.startswith("#"):
-                continue
-            parts = ln.split()
-            if len(parts) >= 2 and "export-ignore" in parts[1:]:
-                patterns.append(parts[0])
-    return patterns
-
-
-def _pattern_covers(pattern, rel_path):
-    """`pattern`（`.gitattributes` 裡的一條）蓋不蓋得到 `rel_path`（repo 根為準的
-    相對路徑，`/` 分隔）。
-
-    ⚠️ 只處理本檔 `.gitattributes` 裡實際會出現的兩種錨定形狀 ——
-    目錄（尾巴 `/`，如 `docs/windows/`）與單一檔案（帶或不帶開頭 `/`，
-    一定含目錄路徑，如 `/CHANGELOG.md`／`docs/UI-BACKLOG.md`）。
-    **不支援** `*.ext` 這種裸萬用字元或不帶路徑的裸檔名 pattern
-    ——本檔目前沒有這種寫法，真的出現時寧可比對不到也不要猜。
-    """
-    p = pattern.lstrip("/")
-    rel = rel_path.replace("\\", "/").lstrip("/")
-    if p.endswith("/"):
-        p = p.rstrip("/")
-        return rel == p or rel.startswith(p + "/")
-    return rel == p
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", root, "check-attr", "export-ignore", "--", rel_path],
+            universal_newlines=True, errors="replace")
+    except Exception as exc:
+        return None, str(exc)
+    out = out.strip()
+    if not out:
+        return None, "git check-attr 沒有輸出"
+    # 輸出固定是「<path>: export-ignore: <value>」——從**尾巴**切，
+    # 不管 path 裡有沒有冒號都取得到正確的 value。
+    return out.rsplit(": ", 1)[-1], None
 
 
 def _find_in_tree(root, name, skip):
@@ -615,15 +607,9 @@ def check_exclusion_vs_must_exist():
     包會**永遠過不了驗包**，而症狀只會是這裡的 FAIL，不會是別的地方。
 
     ⚠️ `MUST_EXIST` 會長，這裡**不把今天的兩個值抄下來**——直接讀
-    `verify_package.py` 自己的 `MUST_EXIST` 清單與工作樹當下的
-    `.gitattributes`，交集永遠是**現算的**。
+    `verify_package.py` 自己的 `MUST_EXIST` 清單，逐一問 `git check-attr`，
+    交集永遠是**現算的**，而且問的是 git 本人，不是我們自己猜的語意。
     """
-    ga_path = os.path.join(WT, ".gitattributes")
-    if not os.path.isfile(ga_path):
-        R.fail("排除清單 vs MUST_EXIST", ".gitattributes 不存在（%s）⇒ 無法驗證交集" % ga_path)
-        return
-    patterns = _export_ignore_patterns(ga_path)
-    print("  .gitattributes 裡 export-ignore 規則共 %d 條" % len(patterns))
     for name in MUST_EXIST:
         paths = _find_in_tree(WT, name, WT_SKIP)
         if not paths:
@@ -631,13 +617,17 @@ def check_exclusion_vs_must_exist():
                    "%s 在工作樹裡找不到，無法驗證它會不會被排除掉" % name)
             continue
         for rel in paths:
-            hit = [p for p in patterns if _pattern_covers(p, rel)]
-            if hit:
+            value, err = _export_ignore_state(WT, rel)
+            if err is not None:
+                R.fail("排除清單 vs MUST_EXIST",
+                       "git check-attr 查 %s 失敗（%s）⇒ 無法驗證" % (rel, err))
+                continue
+            if value not in ("unspecified", "unset", "false"):
                 R.fail("排除清單 ∩ MUST_EXIST",
-                       "%s（%s）同時是 MUST_EXIST 又被 export-ignore 蓋到：%s"
-                       % (name, rel, "、".join(hit)))
+                       "%s（%s）同時是 MUST_EXIST 又被 export-ignore 蓋到"
+                       "（git check-attr 回傳 %s）" % (name, rel, value))
             else:
-                print("    %-20s %-40s 沒有被任何 export-ignore 蓋到 ✅" % (name, rel))
+                print("    %-20s %-40s git check-attr => %s ✅" % (name, rel, value))
 
 
 def check_provenance(pkg, lower):

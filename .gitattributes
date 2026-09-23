@@ -84,12 +84,14 @@ frontend/static/vendor/leaflet/** -text
 
 # 整個多視窗協作目錄：派工、狀態、稽核、交付紀錄、施工規格、輔助腳本，
 # 全部是「我們怎麼做」而不是客戶自架會用到的東西（含子目錄 tools/）
-docs/windows/ export-ignore
+docs/windows/** export-ignore
+docs/windows export-ignore
 
 # backend/tests/：195 個測試檔名逐一描述已知缺陷；requirements-dev.txt 排除後
 # pytest/playwright 本來就不在包裡，測試在客戶機器上本來就跑不動（不損失任何
 # 東西，已查證 verify_package.py 與 DEPLOY.md 都不依賴這兩者）
-backend/tests/ export-ignore
+backend/tests/** export-ignore
+backend/tests export-ignore
 backend/requirements-dev.txt export-ignore
 backend/db_migration_plan.md export-ignore
 
