@@ -1151,10 +1151,35 @@ if (typeof module !== 'undefined' && module.exports) {
       .catch(function () {})
   }
 
+  // ── 獎金分潤：出貨暫停使用（`BONUS_MODULE_ENABLED`，`SPEC-BN21.md`）──────
+  //
+  // 🔴 旗標要後端給，不能寫死在這裡（改天修好了、開關打開，這裡不用跟著改）。
+  // ⚠️ 不把它織進 `ni()`／`buildSidebar()` 的同步流程——那個流程是同步的，
+  //    而這支旗標要打一次後端才知道。改成事後找到已經渲染好的連結直接藏起來，
+  //    不動 build() 本身的邏輯，風險最小（今晚其餘 60+ 支既有測試都靠它穩定）。
+  function _hideBonusEntryIfModuleDisabled() {
+    if (!s || !s.token) return
+    fetch('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (d) {
+        if (!d || d.enabled) return
+        // ⚠️ 只藏這個 `<a>` 本身——不可以藏它的 `.mnav__grp` 祖先：
+        //    那個 div 是整個下拉面板（財務那一組），連出納／傳票／會計科目
+        //    都在裡面，藏了祖先會把整組一起藏掉。
+        document.querySelectorAll('a[href$="bonus.html"]').forEach(function (a) {
+          a.style.display = 'none'
+        })
+      })
+      .catch(function () {})
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { build(); _refreshSession() })
+    document.addEventListener('DOMContentLoaded', function () {
+      build(); _refreshSession(); _hideBonusEntryIfModuleDisabled()
+    })
   } else {
     build()
     _refreshSession()
+    _hideBonusEntryIfModuleDisabled()
   }
 })()

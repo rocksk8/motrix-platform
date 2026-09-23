@@ -113,6 +113,16 @@
   <div>
     <main class="page-main">
 
+      <!-- `BONUS_MODULE_ENABLED`（`SPEC-BN21.md`）：獎金池算法目前會算錯錢
+           （三組各自獨立算比例，沒有加總檢查），出貨暫停使用。直接開網址
+           也要看得到這句話，不是只藏側邊欄入口——藏入口擋不住知道網址的人。 -->
+      <template x-if="moduleDisabled">
+        <div class="bn-note" style="border-color:#B91C1C;color:#B91C1C;font-weight:600">
+          此模組暫停使用。獎金池的算法目前有已知的計算問題，正在修正中，修好之前先關閉。
+        </div>
+      </template>
+
+      <div x-show="!moduleDisabled">
       <div class="bn-head">
         <div class="bn-title">獎金分潤</div>
         <!-- 🔴 使用者必須知道**他看到的是哪一種範圍** ——
@@ -448,6 +458,7 @@
              ⚠️ 而它與上面「尚未建立任何獎金項目」是**兩件不同的事**。 -->
         <div class="bn-empty" x-show="awardEmptyMessage()" x-text="awardEmptyMessage()"></div>
       </section>
+      </div>
 
       <div class="bn-empty" x-show="!loaded && !loadError">載入中…</div>
     </main>

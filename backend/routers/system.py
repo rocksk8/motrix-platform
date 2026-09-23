@@ -709,6 +709,29 @@ def get_runtime_switches(authorization: str = Header(None)):
     }
 
 
+@router.get("/api/system/bonus-module-status")
+def get_bonus_module_status(authorization: str = Header(None)):
+    """獎金分潤模組現在開著沒（`BONUS_MODULE_ENABLED`，出貨預設關）。
+
+    ## 🔴 為什麼要有這一支：前端旗標要後端給，不能寫死在 JS 裡
+
+    獎金池的算法目前有一個會算錯錢的缺陷（`SPEC-BN21.md`：三組各自獨立
+    算「佔淨利的比例」，沒有任何地方檢查加起來是多少），在改成「三組
+    共同分攤同一個池」之前，側邊欄要隱藏這個入口、`bonus.html` 直接
+    開網址也要顯示「暫停使用」——兩處都要問同一個地方，不要各自寫一份
+    判斷式（那正是〈守門守的對象被搬走〉的成因：兩份各自維護，其中一份
+    改了，另一份沒有人記得跟著改）。
+
+    ## ⚠️ 只要求登入，不要求特定模組
+
+    這不是機密（不透露會不會對外連線那種等級），任何登入者都要能問到
+    「這個入口該不該出現」，不然一般使用者連側邊欄都建不對。
+    """
+    _require_user(authorization)
+    from helpers import bonus as _bonus
+    return {"enabled": _bonus.bonus_module_on()}
+
+
 # ── Company profile（甲方設定，勞報單使用）────────────────────────────────────
 
 class CompanyProfile(BaseModel):

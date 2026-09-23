@@ -31,6 +31,11 @@ function bonusPage() {
     loaded: false,
     loadError: '',
     awards: [],
+    //: `BONUS_MODULE_ENABLED`（`SPEC-BN21.md`）：獎金池算法目前會算錯錢
+    //: （三組各自獨立算比例，沒有加總檢查），出貨暫停使用。`init()` 第一件
+    //: 事就問後端，關著的話**不載入任何資料**——不是「載入了但擋著看」，
+    //: 是根本不打那些會回 403／算錯數字的端點。
+    moduleDisabled: false,
     //: **看得到別人那幾列嗎**（後端 `GET /awards` 的 `is_manager`
     //: ＝ `role === 'superadmin'`，`BN9` 之後不含 `admin`）。
     isManager: false,
@@ -130,6 +135,11 @@ function bonusPage() {
     async init() {
       if (this._initDone) return
       this._initDone = true
+      try {
+        const r = await fetch('/api/system/bonus-module-status', { headers: this._auth() })
+        const d = r.ok ? await r.json() : null
+        if (d && !d.enabled) { this.moduleDisabled = true; this.loaded = true; return }
+      } catch (e) { /* 查不到就照常載入——不要因為這支旗標打不到而把整個模組擋掉 */ }
       await this.loadAwards()
       // 🔴 `BN2`：`GET /items` 現在只有最高管理者讀得到 ⇒ 不是管理者就**不要打**。
       //    ⚠️ 而判斷用**後端回的 `is_manager`**（`loadAwards()` 拿到的），
