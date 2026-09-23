@@ -200,7 +200,39 @@ function voucherPage() {
       }
     },
 
-    focusLine(i) { this.summaryTarget = i },
+    // `JV33`：點（focus）哪一行摘要，帶入面板就對著那一行。
+    focusLine(i) { this.summaryTarget = i; this.panelLine = i },
+
+    // ── `JV33` 帶入面板 ─────────────────────────────────────────────
+    //
+    // 使用者逐字：「我點傳票的摘要他也能自動帶入已上傳檔案跟支出項，不用每次來回點閱」。
+    // ⇒ 摘要格 focus 時，**同時**列出「本傳票已上傳檔案」與「支出項」，不用切頁籤。
+    // 🔴 面板的帶入是**接續**：摘要空白 ⇒ 填入；非空 ⇒ 以「；」接在後面。
+    //    ⚠️ 只限面板——上面的頁籤區 `applySource()` 維持覆蓋（A 裁示，JV7／JV21 不翻面）。
+    // ⚠️ 面板不在 blur 時關：點面板本身就會讓摘要格 blur，那樣永遠點不到。
+    // 📌 「連金額一起帶入」這一輪不做（決定填借方還是貸方＝金額，待確認 N12）。
+    panelLine: -1,
+
+    panelExpenses() {
+      const out = []
+      for (const it of ((this.sources || {})['支出項'] || [])) {
+        out.push({ summary: it.summary || '', child: false })
+        for (const ch of (it.items || [])) out.push({ summary: ch.summary || '', child: true })
+      }
+      return out.filter(function (e) { return e.summary })
+    },
+
+    panelExpenseNote() { return (this.sourceNotes || {})['支出項'] || '' },
+
+    panelAppend(text) {
+      if (!this.canEdit || this.panelLine < 0) return
+      const l = this.lines[this.panelLine]
+      if (!l || !text) return
+      const cur = (l.summary || '').trim()
+      l.summary = cur ? cur + '；' + text : text
+    },
+
+    closePanel() { this.panelLine = -1 },
 
     // ── 附件（`JV3`）──────────────────────────────────────────────
 

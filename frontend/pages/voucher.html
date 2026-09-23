@@ -338,6 +338,46 @@
                ☠️ 切頁籤**不會**重新帶入：那種實作看起來像功能正常
                   （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼
                   附件清單、切回來，**他打的字沒了**。 -->
+          <!-- `JV33`：帶入面板。摘要格 focus 時出現，**兩區同時列出**（不用切頁籤）：
+               本傳票已上傳檔案（文字 ⇒ 檔名接進摘要；縮圖 ⇒ JV28 頁內預覽）＋支出項。
+               🔴 空白 ⇒ 填入；非空 ⇒ 以「；」接續（只限這個面板）。 -->
+          <div class="vc-src" data-testid="summary-panel" x-show="canEdit && panelLine >= 0"
+               style="display:none">
+            <div class="vc-src__hd">
+              <span x-text="'帶入到第 ' + (panelLine + 1) + ' 行摘要'"></span>
+              <span class="vc-src__hint">點一項：摘要空白就填入，已有文字就用「；」接在後面。</span>
+              <button class="vc-src__tab" style="margin-left:auto" @click="closePanel()">關閉</button>
+            </div>
+            <div data-testid="summary-panel-files">
+              <div class="vc-src__hint" style="margin:4px 0">本傳票已上傳檔案</div>
+              <template x-for="a in attachments" :key="a.file_id">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <template x-if="attThumbs[a.file_id]">
+                    <img data-testid="summary-panel-thumb" :src="attThumbs[a.file_id]" alt=""
+                         width="32" height="32" style="width:32px;height:32px;object-fit:cover;border-radius:4px;cursor:pointer"
+                         @click="openAttPreview(a)">
+                  </template>
+                  <button class="vc-src__item" data-testid="summary-panel-file"
+                          @click="panelAppend(a.filename)">
+                    <span class="vc-src__txt" x-text="a.filename"></span>
+                  </button>
+                </div>
+              </template>
+              <div class="vc-src__empty" x-show="!attachments.length">這張傳票還沒有上傳檔案。</div>
+            </div>
+            <div data-testid="summary-panel-expenses" style="margin-top:8px">
+              <div class="vc-src__hint" style="margin:4px 0">支出項</div>
+              <template x-for="(e, ei) in panelExpenses()" :key="ei">
+                <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
+                        data-testid="summary-panel-expense" @click="panelAppend(e.summary)">
+                  <span class="vc-src__txt" x-text="e.summary"></span>
+                </button>
+              </template>
+              <div class="vc-src__empty" x-show="!panelExpenses().length"
+                   x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
+            </div>
+          </div>
+
           <div class="vc-src" x-show="sourcesLoaded">
             <div class="vc-src__hd">
               <span>摘要來源</span>
