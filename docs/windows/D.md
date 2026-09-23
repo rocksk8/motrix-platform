@@ -54,52 +54,72 @@ B 的漂移尺今天基準 **0** —— 而 **0 的意思是「還沒有東西�
 ⇒ 那 16 組**逐組是否刻意，沒有人查過**（A-2 只打開了 2 組）
 ```
 
-### ⚙️ 你上一輪的工具**已經被複製進 repo**（scratchpad 會隨 session 消失）
+### ⚙️ 你的工具**已經被複製進 repo**（scratchpad 會隨 session 消失）
 ```
-docs/windows/tools/   port_provenance.ps1 ／ em4_scan2.py ／ em4_scan4.py
-                      em7_review.py ／ em7_negctrl.py ／ br3_scan.py ／ json_layer_scan2.py
-docs/windows/tools/README.md  <= 五個已知限制、三個「怎麼判的」、試過沒命中的 pattern
+docs/windows/tools/   port_provenance.ps1 ／ em4_scan2.py ／ em4_scan4.py ／
+                      em7_review.py ／ em7_negctrl.py ／ br3_scan.py ／
+                      json_layer_scan2.py ／ em8_scan.py ／ em8_reverse.py ／
+                      em1_mismatch.py ／ em8_gap.py ／ px1_scan.py
+docs/windows/tools/README.md  <= 每支工具的已知限制（L1、L2…）、怎麼判的、
+                                 試過沒命中的 pattern，**全部在這裡，不要靠記憶**
 ```
 ⚠️ `em4_scan2.py` **被 v4 當模組 import，不要單獨改它**。
-⚠️ `EM4` 的正對照本體**沒有複製**，而它取得回來：
-`git show a9e1119^:backend/helpers/voucher_pdf.py` —— **那條指令永遠取得到同一份**。
 
-### ☠️ 上一輪自報的一個假數字：**silent-four**
+**丙：正對照怎麼建（各工具不一樣，README 裡各自的小節有完整寫法）**
 ```
-回報「有 4 個 ctrl_app 行程殘留」=> 那條 PowerShell 是**經 bash 轉義**的
-直接查回 **0** => **我對空集合跑了 Stop-Process**
+EM4   git show a9e1119^:backend/helpers/voucher_pdf.py
+      🔑 **那條指令永遠取得到同一份**，而檔案（ctrl_voucher_pdf_old.py）會過期
+      —— 沒複製這個檔案是刻意的
+EM1   正對照本身是巢狀空殼 div 抓文字的正則陷阱（Edge 執行檔路徑 vs Edge 瀏覽器路徑）
+      —— 裸 `<` 收尾要改 `(?=<)` 零寬預查，README 有完整案例
+EM8①  正對照 = A-2 撞到的兩條真實案例（gcis_daily_limit／edit_note）
+EM8②  正對照 = 自己起一個對照組行程（cmd->.bat->uvicorn --reload 形狀），
+      綁 free_safe_port 不要碰 666/6667
+PX1   兩輪都**沒有正對照**，明著寫在 README，沒有湊一個
 ```
-🔑 **`silent-zero` 的反面**：不是「查不到而以為沒有」，是「**查到一個假的而以為有**」。
-⇒ 兩個方向都要防：**空輸出要跑對照，非空輸出要印出內容看一眼。**
 
-### 你剛交的
+### ☠️ 這輪自報的假數字/假陽性（各自的完整推理在 README／訊息紀錄裡）
+```
+silent-four   回報「4 個 ctrl_app 殘留」，那條 PowerShell 經 bash 轉義直接查回 0
+              => 我對空集合跑了 Stop-Process。silent-zero 的反面：查到假的以為有
+176 處假陽性  PX1 第一版判準只看條件式字串裡有沒有出現 "superadmin"
+              => `role not in ('superadmin','admin')` 跟 `role != 'superadmin'`
+                 被當成同一類 => **176 處全部誤判，而每一項證據都是真的，結論是假的**
+              => 改走 AST 取實際比較的字串集合才修好
+```
+🔑 兩者都是**先印/先跑出結果，被自己的下一步驗證抓到**，不是憑空想到——
+這個順序本身要保持。
+
+### 你剛交的（全部已回報，無進行中的查證）
 ```
 EM4 盤點（552 handler → 取值型 37）／EM7（迴圈靜默跳過，**≥20**，上界未知）
 EM7 六處的修法形狀（③ 契約不變就地 raise／② N==0 輸出逐字不變／②-b 放寬 strptime）
 BR2 port_provenance.ps1（唯讀反查：誰啟的／載入哪個 commit／落後幾個）
+EM8 ①②（訊息指路查不到／前端有入口後端沒端點，② 最終 0，兩次自己的判準洞都修過）
+EM1（第三種形狀：地方存在但名字對不上，1 個真的：Edge 執行檔路徑 vs Edge 瀏覽器路徑）
+em8_gap（觸發詞收斂清單，額外撈到**第四種形狀**：名字對但指的是錯的區塊，
+        reports.py:874「系統設定」vs 真正入口在 reports.html 自己的按鈕）
+PX1 兩輪（字面角色比較 75 處 ＋ 跨函式共用守衛約 15 支，**兩輪合計 0 個確認的
+        訊息-邏輯不一致**，兩輪都明著寫「沒有正對照」不湊）
 ```
 
-### ⇒ 你的下一件：`EM8` 的擴大查證（**新派，唯讀**）
+### 甲：PX1 還沒查的那一類（**只有這裡記著，自己標的**）
 ```
-A-2 在查文案時撞到兩條「**訊息指向畫面上不存在的東西**」：
-  dashboard.py:108  叫使用者去改 `gcis_daily_limit` —— `grep gcis frontend/` 命中 **0**
-  inventory.py:614  的 `edit_note` —— `grep edit_note frontend/` 命中 **0**
-                    而 void／return_to_stock **都有對應按鈕**
-🔑 這比「讀者錯了」嚴重：**他看懂了、照做了，而那個地方不存在**
-   => 他會以為是自己找不到
+「業務邏輯條件式包住權限判斷」（stage==1／old_tag=='已結案' 這種）
+—— 狀態機與權限混在同一個 if 裡，字面角色比較與跨函式守衛兩種判準都拆不開它，
+**要另一種判準才拆得開**（判準本身還沒想出來）
+🔑 這是「唯一還沒被這兩輪方法論覆蓋到的類別」——下一輪要繼續查 PX1 從這裡開始
 ```
-要你查的：
+
+### 乙：還沒人工看過的量（各自限制見 README 對應小節，不要靠記憶）
 ```
-① **同族還有幾個**：訊息裡叫使用者「去某處做某事」，而那個「某處」前端不存在
-   ⇒ 形狀：detail／畫面文字裡出現「請至」「請在」「請到」＋一個地點或設定名
-   ⚙️ 正對照：上面那兩條**必須亮**
-   ⚙️ 負對照：一條「請至『使用者管理』…」而**使用者管理真的存在** => 不可以亮
-② 反向也查一次：**前端有入口而後端沒有對應端點**的（按下去 404）
-   ⚠️ 這一格是〈新畫面打舊 API〉的靜態版本
-③ 照舊：限制寫在輸出裡，並明著寫「這道尺抓不到什麼」
+EM4  172 個「需要人看」（552 − 251 說得出來 − 15 帶理由 − 37 取值型 − 8 謂詞型 − 23 清理型 − 46 已判掉）
+     └ em4_scan2.py／em4_scan4.py 的 L1-L6
+PX1  101 個「守衛條件不明」（⚠️ A 派工訊息裡誤標成「EM7 的 101」，其實是 PX1 的數字，
+     EM7 是迴圈靜默跳過那一批 ≥20，兩者無關，已在此更正）
+     └ px1_scan.py 的 L1-L4，本輪已讀約 15 支高風險共用/重複函式，其餘未讀
 ```
-⚠️ **不碰**：666／6667 兩個 port、雲端硬碟 G:、正式機、`backend/license.key`。
-⚠️ db 要看就**複製到 scratchpad 再開**（你今天就是這樣做的，繼續）。
+⏱ 停工，交接段已更新完。
 
 ---
 
