@@ -730,8 +730,8 @@ D 要驗：全新安裝時 _m008 每一句 UPDATE/INSERT 各影響幾列
 ```python
 # backend/helpers/startup.py  init_default_admin()   ← **每次啟動都跑，不是 migration**
 if not conn.execute("SELECT id FROM users WHERE username='jeff'").fetchone():
-    INSERT INTO users (username, display_name, role, email, ...)
-    VALUES ('jeff', '黃玉龍', 'superadmin', 'jeff@miactw.com', ...)
+    INSERT INTO users (username, password_hash, display_name, role, email, modules, active, created_at, must_change_password)
+    VALUES ('jeff', ?, '黃玉龍', 'superadmin', 'jeff@miactw.com', ?, 1, ?, 1)   -- ? = _hash_pw(temp_pw) / json.dumps(_SUPERADMIN_MODULES) / datetime.now().isoformat()
 ```
 > ### ☠️ **每一個賣出去的安裝，第一個 superadmin 帳號都是我們自己員工的帳號、姓名與信箱。**
 
@@ -812,7 +812,7 @@ must_change_password=1
 ### 🔴 `WL7`｜兩份報表印我們的公司抬頭與**統一編號**，而它們**完全不讀 `company_profile`**
 ```
 backend/routers/reports.py:34   _COMPANY  = "允碩整合集創"
-backend/routers/reports.py:74   _COMPANY2 = "統一編號 60575481 ｜ Tel: … ｜ info@miactw.com"
+backend/routers/reports.py:74   _COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
    => 營運報表 Excel 標題/表頭、營運報表 PDF <h1>/sub/footer、銷項發票清單 Excel 標題
 backend/network_plan_export.py:19,20  同名兩個常數
    => 網路架構規劃書 Excel A1/A2、PDF header/footer
@@ -1358,7 +1358,7 @@ D 用真實的舊包跑整支 verify_package.py，附帶看到
 ```
 D 先量整支：**每一項檢查量的是「包」還是「工作樹」**
    判準（機械的）：路徑是從 pkg_root／參數拼出來的（✅ 量包），
-                   還是從相對路徑／os.getcwd()／寫死的 `backend/…`（🔴 量工作樹）
+                   還是從相對路徑／os.getcwd()／寫死的 `backend/ 開頭的路徑`（🔴 量工作樹）
    ⇒ 三欄表：檢查項 ／ 實際量什麼 ／ **它宣稱量什麼**（從訊息與 docstring 讀，不要從函式名推）
 B 再修，而修法**不是把路徑改對**：
    🔑 **讓「包的根目錄」成為唯一的入口** ——
@@ -1611,9 +1611,9 @@ JV6   同一筆支出 -> 產出**分錄列**（voucher_lines，金額 ＋ 科目
 
 ### ⚙️ 現況（A 從 `frontend/pages/bonus.html` 讀的，不是推的）
 ```
-:740  status === '草稿'                          => 只有「送審」
-:745  status === '待審核' || status === '簽核中'  => 「簽核通過」＋「**退回**」
-:755  status === '已核准' && !isAwardPaid(...)    => 只有「標記已發放」
+:751  status === '草稿'                          => 只有「送審」
+:756  status === '待審核' || status === '簽核中'  => 「簽核通過」＋「**退回**」
+:766  awardDetail.status === '已核准' && !isAwardPaid(awardDetail)    => 只有「標記已發放」
 ```
 > ### 🔴 ⇒ **已核准的單子目前退不回來。**
 ⚙️ 發號前跑了 `sort -u`：`BN1`–`BN19` 已用 ⇒ **`BN20` free**。
