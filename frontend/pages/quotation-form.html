@@ -3198,18 +3198,18 @@ window.addEventListener('load',function(){
       exportPDF(mode) {
         const isInternal = mode === 'internal'
         if (!isInternal) {
-          this.q.exportLog = [...(this.q.exportLog || []), { at: new Date().toISOString(), mode }]
-          // 🔴 `EM11`：原本在發出請求**之前**就先 +1（比 directExport() 更早、
-          //    更無條件的樂觀更新），失敗時完全不會被更正——畫面上的數字
-          //    比後端真的記到的多 1，重新整理後跌回去，看起來像資料遺失。
-          //    ⇒ 改成收到成功回應才 +1；離線／沒有單號時本來就打不到後端，
-          //    維持原本的本地累加（不然離線時這顆功能整個不能用）。
+          // 🔴 `EM11`：原本在發出請求之前，兩個計數器都無條件更新；
+          //    上一輪只把 exportCount 改成功才 +1，exportLog 忘了改，
+          //    失敗時兩者對不上（殘留，A-2 複查撿到）。⇒ 兩者每條路徑
+          //    都成對：成功才一起 +1，失敗兩個都不動，離線一起累加。
+          const logEntry = { at: new Date().toISOString(), mode }
           if (this.backendOnline && this.q.quoteNo) {
             fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=${mode}`, {
               method: 'POST',
               headers: { Authorization: 'Bearer ' + this.session.token }
             }).then(r => {
               if (r.ok) {
+                this.q.exportLog = [...(this.q.exportLog || []), logEntry]
                 this.q.exportCount = (this.q.exportCount || 0) + 1
               } else {
                 this.toast('已列印，但匯出次數這次沒有記錄成功。')
@@ -3218,6 +3218,7 @@ window.addEventListener('load',function(){
               this.toast('已列印，但匯出次數這次沒有記錄成功（網路錯誤）。')
             })
           } else {
+            this.q.exportLog = [...(this.q.exportLog || []), logEntry]
             this.q.exportCount = (this.q.exportCount || 0) + 1
           }
         }
