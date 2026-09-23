@@ -416,7 +416,7 @@ def main():
     print()
 
     print("### (4a) 排除清單 ∩ MUST_EXIST（🔴 擋關，見 SCOPE.md PK1 節）")
-    check_exclusion_vs_must_exist()
+    check_exclusion_vs_must_exist(pkg)
     print()
 
     # 🔴 `VP6`：autostart.bat 的**內容**要被驗，不是只驗存在。
@@ -598,7 +598,7 @@ def _find_in_tree(root, name, skip):
     return hits
 
 
-def check_exclusion_vs_must_exist():
+def check_exclusion_vs_must_exist(pkg):
     """🔴 不變量：`export-ignore` 排除清單 ∩ `MUST_EXIST` = 空集合。
 
     背景見 `docs/windows/SCOPE.md`「PK1」節：`MUST_EXIST` 是**打包產出物的
@@ -609,12 +609,27 @@ def check_exclusion_vs_must_exist():
     ⚠️ `MUST_EXIST` 會長，這裡**不把今天的兩個值抄下來**——直接讀
     `verify_package.py` 自己的 `MUST_EXIST` 清單，逐一問 `git check-attr`，
     交集永遠是**現算的**，而且問的是 git 本人，不是我們自己猜的語意。
+
+    ## 🔴 `VP8`：找檔案要在**包**裡找，不是在工作樹裡找
+
+    上一版傳的是 `(WT, name, WT_SKIP)`——`MUST_EXIST` 的語意是「**包裡**
+    一定要有這個檔」，而工作樹裡到處都是包裡沒有的東西（`backend/
+    rollback_snapshots/` 底下的舊快照就有 5 份 `autostart.bat`，全部
+    未追蹤、`git archive` 根本不會匯出）。掃工作樹會把這些噪音也算進來，
+    而**噪音剛好都通過**，讓人以為量的是包，其實量的是工作樹——
+    〈工作樹≠repo〉的同一個坑，這支工具自己也踩了一次。
+    ⇒ 改掃 `pkg`（已經打包出來、真的會出貨的那個目錄），`skip` 也跟著換成
+    `PKG_SKIP`（包側不排除任何東西——判準本來就是「檔案在不在包裡」）。
+    ⚠️ 找到路徑之後**仍然**用 `WT` 問 `git check-attr`——那一步問的是規則
+    （`.gitattributes` 蓋不蓋得到這個相對路徑），規則只存在於工作樹的
+    git 中繼資料裡，`pkg` 目錄本身沒有 `.git`；而 `git archive` 保留原始
+    目錄結構，`pkg` 裡量到的相對路徑與工作樹是同一套，兩步驟銜接得起來。
     """
     for name in MUST_EXIST:
-        paths = _find_in_tree(WT, name, WT_SKIP)
+        paths = _find_in_tree(pkg, name, PKG_SKIP)
         if not paths:
             R.fail("MUST_EXIST 找不到來源",
-                   "%s 在工作樹裡找不到，無法驗證它會不會被排除掉" % name)
+                   "%s 在包裡找不到，無法驗證它會不會被排除掉" % name)
             continue
         for rel in paths:
             value, err = _export_ignore_state(WT, rel)
