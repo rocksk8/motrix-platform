@@ -31,6 +31,7 @@ from fastapi.responses import Response
 
 from db import get_db
 from helpers import _require_user, _audit, _tok, _get_setting
+from helpers.edit_log import append_edit_log
 from helpers.bonus import (
     base_amount_for, people_for_item, split_award, pool_for, remainder_of,
     visible_lines, PERSON_SOURCES, BASIS_POINTS,
@@ -750,6 +751,9 @@ def get_award(award_id: int, authorization: str = Header(None)):
             award["quote_no"]) or {}
         # `QS1-a §3③`：同 list_awards()，username 存帳號、畫面印顯示名稱。
         names = display_names_for(conn, (ln["username"] for ln in lines))
+        # `BN17`：上次退回的記錄——沿用 `JV22 §6` 的顯示精神，只是這裡
+        # 沒有「這次編修」那一半（退回後改不了內容，見 §3b／使用者裁乙）。
+        last_reject = _last_reject_of(conn, award_id, award)
     finally:
         conn.close()
 
@@ -769,7 +773,51 @@ def get_award(award_id: int, authorization: str = Header(None)):
         award.pop("base_amount", None)
     award["signatures"] = bonus_signatures_of(award)
     award["settlement"] = _settlement_fields(settle)
+    award["last_reject"] = last_reject
     return award
+
+
+def _last_reject_of(conn, award_id, award):
+    """最近一次退回的記錄（`BN17`）。回 `None` 或
+    `{at, by, reason, prior_signatures}`。
+
+    `reject_award()` 把「狀態轉換／舊簽核鏈／退回原因」三筆寫進**同一列**
+    `bonus_award_edit_log`（同一次退回，同一個 changed_at）——這裡找的是
+    `field == "status" and to == "草稿"` 那一列，其餘兩個 field 就在
+    同一列的 `changes_json` 裡，不必再對到別的列。
+
+    `prior_signatures` 重用 `bonus_signatures_of()`——那支只讀
+    `award["approval_json"]`，餵一個裝著**舊**鏈的假 `award` 進去就能拿到
+    退回當下「誰簽過」的同一種格式，不必為了「這是舊資料」重寫一次
+    解析規則。
+    """
+    for r in conn.execute(
+            "SELECT changed_by, changed_at, changes_json"
+            " FROM bonus_award_edit_log WHERE award_id = ? ORDER BY id DESC",
+            (award_id,)):
+        changes = json.loads(r["changes_json"] or "[]")
+        status_change = next(
+            (c for c in changes
+             if c.get("field") == "status" and c.get("to") == "草稿"), None)
+        if status_change is None:
+            continue
+        reason_change = next(
+            (c for c in changes if c.get("field") == "退回原因"), None)
+        approval_change = next(
+            (c for c in changes if c.get("field") == "approval_json"), None)
+        old_json = (approval_change or {}).get("from") or "{}"
+        prior_signatures = bonus_signatures_of({
+            "approval_json": old_json,
+            "created_by": award.get("created_by") or "",
+            "created_at": award.get("created_at") or "",
+        })
+        return {
+            "at": r["changed_at"],
+            "by": r["changed_by"],
+            "reason": (reason_change or {}).get("to") or "",
+            "prior_signatures": prior_signatures,
+        }
+    return None
 
 
 def _plan_allocations(conn, quote_no, allocations):
@@ -1107,8 +1155,21 @@ def reject_award(award_id: int, body: dict = Body(default={}),
     ⚙️ 驗收釘的是 `bonus_signatures_of()` 的**輸出**：簽核那幾格（覆核／
     主管／第 N 層）`by` 都是空的，**不是「每一格」**——「製表」是
     `created_by`（建檔人，不是簽核），退回不該動它。
+
+    ## 🔴 `BN17`：擋空原因＋寫 `bonus_award_edit_log`（`retention='permanent'`）
+
+    與 `mark_award_paid()`／`vouchers.py::void_voucher()` 同一條規則——
+    「日後沒有人回得出這張單為什麼被退回」。`_audit()` 留著不拿掉：
+    `audit_log` 是操作軌跡（730 天會被清），`bonus_award_edit_log` 是
+    憑證的一部分（永久保留），兩者職責不同。
+
+    ⚠️ **`approval_json` 的舊值要在 `UPDATE` 之前讀出來**——晚讀的話那一列
+    會寫成 `{} -> {}`，看起來是一筆正常的紀錄，而它什麼都沒記住。
     """
     user = _require_user(authorization, require_superadmin=True)
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫退回原因。")
     now = datetime.now().isoformat()
     conn = get_db()
     try:
@@ -1116,18 +1177,24 @@ def reject_award(award_id: int, body: dict = Body(default={}),
                            (award_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "找不到這張獎金分潤單。")
-        status = dict(row).get("status")
+        award = dict(row)
+        status = award.get("status")
         if status not in ("待審核", "簽核中"):
             raise HTTPException(400, "「%s」的獎金分潤單不能退回。" % status)
+        old_approval_json = award.get("approval_json") or "{}"
         conn.execute(
             "UPDATE bonus_awards SET status='草稿', approval_json='{}',"
             " updated_at=? WHERE id=?", (now, award_id))
+        append_edit_log(conn, award_id, _user_name(user), [
+            {"field": "status", "from": status, "to": "草稿"},
+            {"field": "approval_json", "from": old_approval_json, "to": "{}"},
+            {"field": "退回原因", "from": "", "to": reason},
+        ], table="bonus_award_edit_log", retention="permanent", changed_at=now)
         conn.commit()
     finally:
         conn.close()
-    reason = (body.get("reason") or "").strip()
     _audit(_tok(authorization), "bonus.award.reject", "bonus_awards",
-           str(award_id), "獎金分潤單退回：%s" % (reason or "未填原因"))
+           str(award_id), "獎金分潤單退回：%s" % reason)
     return {"ok": True, "status": "草稿"}
 
 

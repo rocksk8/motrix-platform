@@ -590,6 +590,13 @@ function bonusPage() {
       return ((Number(bp) || 0) / 100).toFixed(2).replace(/\.00$/, '') + '%'
     },
 
+    // `BN17`：退回記錄的時間顯示，只取到分鐘（同 `voucher.js` 的
+    // `fmtDateTime()`，這裡沒有共用模組所以各自一份——同一條格式化規則，
+    // 不是重複的業務規則）。
+    fmtDateTime(s) {
+      return String(s || '').replace('T', ' ').slice(0, 16)
+    },
+
     // `QS1-a §3③`：`bonus_award_lines.username`／`people_for_item()` 現在
     // 回帳號，畫面要印顯示名稱——後端已經查好給的 `display_names` map
     // （`plan`／`previewResult` 各自帶一份，不在前端自己查 users 清單去

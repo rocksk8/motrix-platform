@@ -585,6 +585,39 @@
               </template>
             </div>
 
+            <!-- `BN17`：上次退回的記錄——沿用 `JV22 §6` 的顯示精神（長期
+                 記憶、不可編輯／刪除）。獎金單退回後只能作廢重建（不能
+                 像 JV22 那樣改內容），所以這裡沒有「這次編修」那一半，
+                 只顯示「上一輪是誰簽的、誰退的、為什麼」＋一句出路提示。
+                 負對照（§6⑤ⓔ）：從沒被退回過的單，`last_reject` 是
+                 `null`，這一區整個不出現。 -->
+            <template x-if="awardDetail.last_reject">
+              <div class="bn-card" data-testid="bn-last-reject"
+                   style="margin:0 0 12px;padding:10px 12px;background:#FEF2F2;border-color:#FCA5A5">
+                <div class="bn-settle__t" style="color:#7F1D1D">退回記錄</div>
+                <div style="font-size:12px;line-height:1.9">
+                  <div>
+                    <span x-text="fmtDateTime(awardDetail.last_reject.at)"></span>
+                    　由　<b x-text="awardDetail.last_reject.by"></b>　退回
+                  </div>
+                  <div>原因：<span x-text="awardDetail.last_reject.reason"></span></div>
+                  <template x-if="Object.values(awardDetail.last_reject.prior_signatures || {}).some(function(v){return v.by})">
+                    <div>
+                      退回前已簽：
+                      <template x-for="(v, k) in (awardDetail.last_reject.prior_signatures || {})" :key="k">
+                        <span x-show="v.by" style="margin-right:10px">
+                          <b x-text="k"></b>：<span x-text="v.by"></span>
+                        </span>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <div class="bn-unit" style="margin-top:6px">
+                  這張單已退回，要修正請作廢後重新產生。
+                </div>
+              </div>
+            </template>
+
             <template x-for="(l, li) in awardDetail.lines" :key="li">
               <div class="bn-line">
                 <span class="bn-who" x-text="l.displayName"></span>
