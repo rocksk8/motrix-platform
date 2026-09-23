@@ -438,8 +438,15 @@
         // 五種文件類型可各自選擇走統一流程（true）或獨立設定（false）
         // 2026-09-11 新增 extra_expense（案件額外支出）。後端 APPROVAL_DOC_TYPES 已註冊，
         // 這裡是讓它出現在「套用範圍」多選與獨立設定區塊。
+        // 🔴 2026-09-23 加入 `voucher`（會計傳票）—— 使用者 `§201` 逐字：
+        //    「匯款申請簽核設定整合進去簽核設定，**傳票的簽核需要在簽核設定中出現**」。
+        // ☠️ 在這之前：後端 `APPROVAL_DOC_TYPES` 有它、送審端點照設定的層跑，
+        //    **而 `voucher_approval_flow` 這把 key 沒有任何畫面寫得進去**
+        //    ⇒ 傳票永遠 0 層、永遠走內建兩格。兩端各自都對，而中間那條路不存在。
+        // 📌 它不在後端的 `DEFAULT_UNIFIED_DOC_TYPES` ⇒ 預設就是「獨立設定」，
+        //    所以下方會自己展開一個「傳票（會計）獨立簽核設定」區塊。
         docTypeOrder: ['quotation', 'shipping', 'completion', 'invoice_voucher', 'payment_request',
-                       'contractor_voucher', 'extra_expense'],
+                       'contractor_voucher', 'extra_expense', 'voucher'],
         docTypeMeta: {
           quotation:          '報價單',
           shipping:           '出貨單',
@@ -448,6 +455,10 @@
           payment_request:    '請款單',
           contractor_voucher: '承攬商匯款申請',
           extra_expense:      '案件額外支出',
+          // ⚠️ 不是「傳票」—— 這個系統裡有三個東西都叫 voucher
+          //    （發票開立簽核單／承攬商匯款申請／會計傳票），設定頁上分得出來
+          //    才不會改錯。名字與後端 `APPROVAL_DOC_TYPE_LABELS` 一致。
+          voucher:            '傳票（會計）',
         },
 
         // 🔑 每一類在 `system_settings` 裡的**兩把 key**，與後端
@@ -502,19 +513,31 @@
         },
 
         sectionDesc(key) {
+          // 🔴 2026-09-23：這一句以前在 `steps.length === 0` 時**一律**寫
+          //    「由任何超級管理員簽核即可通過」，而 `includeSubmitterManagerTier`
+          //    缺鍵視為 true ⇒ 後端 `setting_to_active_tiers()` 實際上會先插一層
+          //    **申請人的部門主管**。
+          // ☠️ ⇒ 畫面對「誰要簽核」說了一句不是真的話 —— 而那是最不能說謊的一格。
+          //    使用者照它去設定，單子卻卡在一個他不知道存在的人身上。
+          // ⚠️ 改的是**照實算**，不是重寫文案：句型與版面都沒有動，
+          //    只是把「誰」這一段換成 `flowDigest()` 算出來的實際順序。
           const flow = this.flows[key]
-          const hasCustom = flow && flow.steps.length > 0
-          if (key === 'unified') {
-            const names = this.unifiedTypes.map(dt => this.docTypeMeta[dt])
-            const label = names.length ? names.join('／') : '（目前沒有任何文件類型套用統一流程）'
-            return hasCustom
-              ? `目前為自訂順序模式：${label} 送出後，須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。`
-              : `目前為預設模式：${label} 送出後，由任何超級管理員簽核即可通過。`
+          if (!flow) return '載入中…'
+          const hasCustom = flow.steps.length > 0
+          const who = this.flowDigest(key)
+          const label = key === 'unified'
+            ? ((this.unifiedTypes.map(dt => this.docTypeMeta[dt]).join('／'))
+               || '（目前沒有任何文件類型套用統一流程）')
+            : this.docTypeMeta[key]
+          // 統一流程那一句的主詞是一串類型名，中間要一個空格才讀得開
+          const sep = key === 'unified' ? ' ' : ''
+          if (hasCustom) {
+            return `目前為自訂順序模式：${label}${sep}送出後依序簽核（${who}），全部通過後才送出。`
           }
-          const label = this.docTypeMeta[key]
-          return hasCustom
-            ? `目前為自訂順序模式：${label}送出後，須依下方設定的順序，由各指定人員依序簽核，全部通過後才送出。`
-            : `目前為預設模式：${label}送出後，由任何超級管理員簽核即可通過。`
+          if (flow.includeSubmitterManagerTier) {
+            return `目前為預設模式：${label}${sep}送出後，由${who}簽核。`
+          }
+          return `目前為預設模式：${label}${sep}送出後，由任何超級管理員簽核即可通過。`
         },
 
         flowUrl(key) {
