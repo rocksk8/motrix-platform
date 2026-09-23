@@ -195,12 +195,37 @@ function bonusPage() {
       return Math.round(n * 100)
     },
 
+    // `SPEC-BN6-BN7.md §2`：預覽結果（`POST /awards/plan/{quote_no}`），
+    // 送出的分配與 `POST /awards` 完全相同，差別只有有沒有寫進資料庫。
+    previewResult: null,
+    previewErr: '',
+    previewing: false,
+
+    // `plan.settlement` 的安全讀取。
+    // 🔴 `.bn-settle` 的子節點用 `x-show` 蓋在外層 div 上——`x-show` 只是
+    //    `display:none`，元素仍然在 DOM 裡，Alpine 每個 tick 照樣求值裡面
+    //    每一個 `x-text`（同 `test_ac1_write_actions` 那條「x-show 不等於
+    //    x-if」的道理）。`plan` 剛被設回 `null`（`loadPlan()` 開頭）那一瞬間，
+    //    裡面的 `x-text="fmt(plan.settlement.quotedPretax)"` 會直接對 `null`
+    //    取屬性炸掉——實際用 Playwright 跑過一次抓到的（`pageerror`：
+    //    `Cannot read properties of null (reading 'settlement')`）。
+    //    ⇒ 這支一律回一個物件（沒有值時是 `{}`），子節點改讀
+    //    `settle.quotedPretax`：`fmt(undefined)` 本來就印「—」，
+    //    順便滿足「缺欄位印—」那條規則，不必另外判斷。
+    get settle() {
+      return (this.plan && this.plan.settlement) || {}
+    },
+
     async loadPlan() {
       this.planErr = ''
       this.createMsg = ''
       this.createErr = ''
       this.plan = null
       this.alloc = {}
+      // 換案件（或重新查詢同一案）時，舊的試算結果不再對得上新的畫面，
+      // 不清掉的話使用者會以為那個數字是這個案件現在的預覽。
+      this.previewResult = null
+      this.previewErr = ''
       const q = (this.planQuote || '').trim()
       if (!q) { this.planErr = '請先輸入案件編號。'; return }
       if (this.planning) return
@@ -282,6 +307,52 @@ function bonusPage() {
       return ''
     },
 
+    // `POST /awards` 與 `POST /awards/plan/{quote_no}`（預覽）送的是
+    // 同一個 body 形狀（`SPEC-BN6-BN7.md §2`）——兩支呼叫都從這裡組，
+    // 不各寫一份：少了這個，「預覽跟實際不一樣」的風險就分散在兩處。
+    _buildAllocations() {
+      const allocations = []
+      for (const it of this.chosen()) {
+        const a = this.alloc[it.bonus_item_id]
+        const person_pct = {}
+        // 📌 只送 `plan` 回的那些人，不送畫面上殘留的任何名字。
+        for (const p of it.people) person_pct[p] = this.toBp(a.people[p])
+        allocations.push({
+          bonus_item_id: it.bonus_item_id,
+          total_pct: this.toBp(a.total),
+          person_pct: person_pct,
+        })
+      }
+      return allocations
+    },
+
+    // `§6⑩`：獎金頁的「預覽」動作——只算不寫，回的 lines／remainder
+    // 與之後真的按「產生獎金單」寫進資料庫的值逐筆相等（後端同一支
+    // `_plan_allocations()` 算，這裡不重複驗證，錯誤訊息就是後端那句）。
+    async previewAward() {
+      this.previewErr = ''
+      const issue = this.planIssue()
+      if (issue) { this.previewErr = issue; return }
+      if (this.previewing) return
+      this.previewing = true
+      try {
+        const r = await fetch(
+          '/api/bonus/awards/plan/' + encodeURIComponent(this.plan.quote_no), {
+            method: 'POST',
+            headers: this._jsonAuth(),
+            body: JSON.stringify({ allocations: this._buildAllocations() }),
+          })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.previewResult = d
+      } catch (e) {
+        this.previewErr = e.message
+        this.previewResult = null
+      } finally {
+        this.previewing = false
+      }
+    },
+
     async createAward() {
       this.createMsg = ''
       this.createErr = ''
@@ -290,26 +361,19 @@ function bonusPage() {
       if (this.creating) return
       this.creating = true
       try {
-        const allocations = []
-        for (const it of this.chosen()) {
-          const a = this.alloc[it.bonus_item_id]
-          const person_pct = {}
-          // 📌 只送 `plan` 回的那些人，不送畫面上殘留的任何名字。
-          for (const p of it.people) person_pct[p] = this.toBp(a.people[p])
-          allocations.push({
-            bonus_item_id: it.bonus_item_id,
-            total_pct: this.toBp(a.total),
-            person_pct: person_pct,
-          })
-        }
         const r = await fetch('/api/bonus/awards', {
           method: 'POST',
           headers: this._jsonAuth(),
-          body: JSON.stringify({ quote_no: this.plan.quote_no, allocations: allocations }),
+          body: JSON.stringify({
+            quote_no: this.plan.quote_no,
+            allocations: this._buildAllocations(),
+          }),
         })
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
         this.createMsg = '已產生獎金單（單號 #' + d.id + '，基數 ' + this.fmt(d.base_amount) + '）。'
+        // 單已經真的產生了，舊的試算結果不再是「還沒送出的預覽」。
+        this.previewResult = null
         await this.loadAwards()
         await this.loadPlan()
       } catch (e) {
@@ -332,6 +396,13 @@ function bonusPage() {
       // 比例存的是**基點**（1/10000）。畫面顯示成百分比，而算術一律在後端用整數做。
       // ☠️ 前端自己拿百分比再乘一次的話，就會出現「畫面上的數字加起來不等於總額」。
       return ((Number(bp) || 0) / 100).toFixed(2).replace(/\.00$/, '') + '%'
+    },
+
+    // `SPEC-BN6-BN7.md §6②`：精算明細裡的百分比欄位（毛利率／淨利率）
+    // 缺欄位一樣要印「—」，不是 0——理由與 fmt() 相同。
+    fmtPct(n) {
+      if (n === undefined || n === null) return '—'
+      return Number(n).toFixed(1) + '%'
     },
 
     // ── `BN8`：送審／簽核／退回／標記已發放 ────────────────────────

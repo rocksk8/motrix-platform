@@ -73,6 +73,17 @@
     .bn-reason{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
     .bn-reason input{padding:6px 9px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;font-family:var(--font-zh);min-width:220px}
     .bn-paid{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
+
+    /* `BN6`：精算明細＋預覽結果 */
+    .bn-settle{border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;font-family:var(--font-zh);background:#FCFBF8}
+    .bn-settle__t{font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px}
+    .bn-settle__tbl{width:100%;font-size:12px;border-collapse:collapse}
+    .bn-settle__tbl td{padding:4px 0;color:var(--text-primary)}
+    .bn-settle__tbl td:first-child{color:var(--text-secondary);width:50%}
+    .bn-settle__tbl td:last-child{text-align:right;font-family:var(--font-mono,monospace)}
+    .bn-settle__sub td{border-top:1px solid var(--border-light);font-weight:700;padding-top:6px}
+    .bn-settle__note{font-size:11px;color:var(--text-dim,#6B6B6B);margin-left:4px}
+    .bn-preview{border:1px solid var(--border-light);border-radius:var(--radius);margin-top:12px;padding:10px 14px}
   </style>
 </head>
 <body x-data="bonusPage()" x-init="init()" x-cloak>
@@ -246,6 +257,37 @@
             <span class="bn-status bn-voided" x-show="plan && plan.has_active_award">已有有效獎金單</span>
           </div>
 
+          <!-- `SPEC-BN6-BN7.md §1`：案件精算明細，標籤與順序逐字比照
+               settlement.html「實際成本精算」欄（直接讀原始碼核對過，
+               不是規格文件猜的那份——quotedPretax 在那頁的列標籤是
+               「報價稅前收入」，不是「原始報價預估」，那是另一欄
+               `origTotalCost` 那組數字的標題，兩組欄位不可以混）。
+               缺欄位（例如沒派發過承攬商的案件）印「—」，不是 0
+               （`§6②`：印 0 看起來像「派了而金額為零」，兩件事）。 -->
+          <div class="bn-settle" x-show="plan && plan.settlement">
+            <div class="bn-settle__t">案件精算明細（比照精算頁面）</div>
+            <table class="bn-settle__tbl">
+              <tr>
+                <td>報價稅前收入</td>
+                <td>
+                  <span x-text="fmt(settle.quotedPretax)"></span>
+                  <span class="bn-settle__note" x-show="settle.quotedTotal !== null"
+                        x-text="'（含稅 ' + fmt(settle.quotedTotal) + '）'"></span>
+                </td>
+              </tr>
+              <tr><td>品項實際成本</td><td x-text="fmt(settle.itemActualTotal)"></td></tr>
+              <tr><td>額外支出</td><td x-text="fmt(settle.extraTotal)"></td></tr>
+              <tr><td>承攬商派發成本</td><td x-text="fmt(settle.dispatchTotal)"></td></tr>
+              <tr class="bn-settle__sub"><td>實際總成本</td><td x-text="fmt(settle.totalActualCost)"></td></tr>
+              <tr><td>真實毛利</td><td x-text="fmt(settle.grossProfit)"></td></tr>
+              <tr><td>真實毛利率</td><td x-text="fmtPct(settle.grossMarginPct)"></td></tr>
+              <tr><td>管銷分攤（10%）</td><td x-text="fmt(settle.adminCost)"></td></tr>
+              <tr><td>公益捐款（1%）</td><td x-text="fmt(settle.charityDonation)"></td></tr>
+              <tr class="bn-settle__sub"><td>真實淨利</td><td x-text="fmt(settle.netProfit)"></td></tr>
+              <tr><td>真實淨利率</td><td x-text="fmtPct(settle.netMarginPct)"></td></tr>
+            </table>
+          </div>
+
           <template x-for="it in (plan && plan.items) || []" :key="it.bonus_item_id">
             <div class="bn-alloc">
               <div class="bn-alloc__hd">
@@ -282,10 +324,39 @@
           </template>
 
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <!-- `§6⑩`：「預覽」與「匯出 PDF」是獎金頁要有的兩個動作
+                 （匯出 PDF 是 `BN7`，等用印欄那三條路裁定後再接）。
+                 這裡先接「預覽」：只算不寫，回的金額與按下「產生獎金單」
+                 之後真正入帳的**逐筆相等**（後端同一支函式算兩邊）。 -->
+            <button class="bn-btn bn-btn--ghost" @click="previewAward()"
+                    :disabled="previewing || !!planIssue()"
+                    x-text="previewing ? '預覽中…' : '預覽'"></button>
             <button class="bn-btn" @click="createAward()"
                     :disabled="creating || !!planIssue()"
                     x-text="creating ? '產生中…' : '產生獎金單'"></button>
             <span class="bn-sec__s" x-text="planIssue()"></span>
+          </div>
+
+          <template x-if="previewErr">
+            <div class="bn-err" x-text="previewErr"></div>
+          </template>
+
+          <div class="bn-preview" x-show="previewResult">
+            <div class="bn-settle__t">預覽結果（尚未送出，只是試算）</div>
+            <template x-for="(ln, li) in (previewResult && previewResult.lines) || []" :key="li">
+              <div class="bn-line">
+                <span class="bn-who" x-text="ln.username"></span>
+                <span class="bn-item" x-text="srcLabel(ln.person_source_snapshot)"></span>
+                <span class="bn-pct" x-text="pct(ln.total_pct) + ' × ' + pct(ln.person_pct)"></span>
+                <span class="bn-amt" x-text="fmt(ln.amount)"></span>
+              </div>
+            </template>
+            <!-- `§6⑤`：尾差要印在表上——不印的話使用者自己加總會發現
+                 「對不起來」，而他不知道那是設計（歸公司，不補給任何人）。 -->
+            <div class="bn-sum" x-text="'尾差（歸公司留存，不分給任何人）：' + fmt(previewResult && previewResult.remainder)"></div>
+            <div class="bn-sec__s" style="margin-top:6px">
+              以上是按下「預覽」當下的試算結果，若之後又調整了上面的比例，請重新按一次「預覽」再核對。
+            </div>
           </div>
         </div>
       </section>

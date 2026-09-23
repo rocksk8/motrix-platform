@@ -199,6 +199,26 @@ def _settlement_of(conn, quote_no):
     return json.loads(raw) if isinstance(raw, str) else raw
 
 
+#: `SPEC-BN6-BN7.md §1`：逐字抄 `settlement.html` 的十二格鍵名與順序。
+#: 🔴 `BN6` 一個數字都不重算——10%／1% 只寫在 `settlement.html`，
+#: 這裡只把 `summary` 已存的值原樣帶出來。改動任何一個字要回那份規格。
+_SETTLEMENT_FIELDS = (
+    "quotedPretax", "quotedTotal",
+    "itemActualTotal", "extraTotal", "dispatchTotal", "totalActualCost",
+    "grossProfit", "grossMarginPct", "adminCost", "charityDonation",
+    "netProfit", "netMarginPct",
+)
+
+
+def _settlement_fields(settle):
+    """把 `settlement.summary` 的十二格原樣帶出，**缺的回 `None`，不是 `0`**
+    （`§6②`）——`summary` 本身是空的（`§6③`，`MQ-EXPFILE-001` 那種）與
+    `summary` 缺某一欄，兩種情況這裡自然地都回 `None`，不必分兩支寫。
+    """
+    summary = (settle or {}).get("summary") or {}
+    return {k: summary.get(k) for k in _SETTLEMENT_FIELDS}
+
+
 @router.get("/base/{quote_no}")
 def get_bonus_base(quote_no: str, authorization: str = Header(None)):
     """這個案件現在算不算得出獎金基數。
@@ -306,6 +326,9 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
         })
     return {
         "quote_no": quote_no,
+        # `SPEC-BN6-BN7.md §2`：整張精算明細，逐字抄 settlement.html 的鍵名，
+        # 原樣帶出、不重算（見 `_settlement_fields()` docstring）。
+        "settlement": _settlement_fields(settle),
         # ⚠️ 與 GET /base 同一個計算來源（base_amount_for）
         #    ☠️ 各算一次而算法漂移的話，畫面顯示的基數與實際入帳的基數會不同，
         #       **而兩個數字都看起來合理**。
@@ -380,6 +403,86 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
     }
 
 
+def _plan_allocations(conn, quote_no, allocations):
+    """`allocations` -> `(settle, base, planned)`，`planned` 是
+    `[(item, total_pct, lines)]`。擋不過就直接 `raise HTTPException`。
+
+    ## 🔴 `POST /awards`（真的產生）與 `POST /awards/plan/{quote_no}`
+       （只預覽）**共用這一支**，不各寫一份
+
+    `SPEC-BN6-BN7.md §6④`（核心）：預覽回的 `lines` 必須與產生後寫進
+    `bonus_award_lines` 的值**逐筆相等**。兩支端點各自重寫一次同樣的
+    驗證＋`split_award()` 呼叫的話，「一致」只是碰巧兩份實作現在長得
+    一樣，改一邊而忘了改另一邊那天就會分岔，而**分岔了也不會有任何
+    測試失敗**（因為兩邊各自對自己的邏輯一致）。⇒ 讓它們在結構上
+    不可能分岔：只有一份算法，兩支端點都呼叫它。
+    """
+    settle = _settlement_of(conn, quote_no)
+    if settle is None:
+        raise HTTPException(404, "找不到案件「%s」。" % quote_no)
+    ok, base, err = base_amount_for(settle)
+    if not ok:
+        # 🔑 這句話是使用者唯一看得到的東西，而它**講得出出路**。
+        raise HTTPException(400, err)
+
+    case = _case_people(conn, quote_no)
+    items = {r["id"]: dict(r) for r in conn.execute(
+        "SELECT * FROM bonus_items WHERE is_active = 1")}
+
+    planned = []
+    for alloc in allocations:
+        item = items.get(int(alloc.get("bonus_item_id") or 0))
+        if item is None:
+            raise HTTPException(400, "獎金項目不存在或已停用。")
+        good, people, note = people_for_item(item, case)
+        if not good:
+            raise HTTPException(400, "「%s」%s。" % (item["name"], note))
+        total_pct = int(alloc.get("total_pct") or 0)
+        shares = alloc.get("person_pct") or {}
+        pairs = [(p, int(shares.get(p, 0))) for p in people]
+        # 🔴 上界**釘在 `base` 上，不釘在 `pool` 上**。
+        #
+        # ☠️ 兩種超額的症狀相反，而第二種看不見：
+        # ```
+        # Σperson_pct > 10000   兩人各 100%
+        #   pool=61728  Σamount=123456  remainder_of() = **-61728**  看得見
+        # total_pct   > 10000   20000（200%）
+        #   pool=**246912**（=base×2）    remainder_of() = **0**     看不見
+        # ```
+        # 而 `split_award()` docstring 的兩條不變量在後者**也都成立**
+        # （`246912 <= 246912`、餘 `0 < 1`）——
+        # 🔑 **因為 pool 本身已經被撐大了，而不變量拿 pool 當基準。**
+        #    *一個以受污染的值為基準的檢查，永遠不會發現污染。*
+        # ⇒ 所以這道關卡不可以改寫成「檢查 remainder_of() 是不是負的」。
+        #
+        # ⚠️ 邊界是 `<=` 不是 `<`：少發（例如只發 80%）是**合法的公司政策**，
+        #    剛好 100% 也要放行。寫成 `>= BASIS_POINTS` 就擋掉了整數的 100%。
+        # ⚠️ 而**不可以只在前端擋** —— `bonus.js` 自己的註解逐字：
+        #    「前端過濾是假的：值仍然在 API 回應裡」，同一個道理套在輸入上。
+        if total_pct < 0:
+            # 📌 `base` 那一側已經擋了（base_amount_for 對負淨利回 False），
+            #    缺的只有 `pct` 這一側：pool_for(123456, -5000) = -61728
+            #    ⇒ 負的獎金池在傳票上是一筆反向分錄，**帳是平的**。
+            raise HTTPException(
+                400, "「%s」的發放比例不可以是負數。" % item["name"])
+        if total_pct > BASIS_POINTS:
+            raise HTTPException(
+                400, "「%s」的發放比例 %s%% 超過 100%%，"
+                     "獎金池會大於案件淨利。"
+                     % (item["name"], _pct_text(total_pct)))
+        person_sum = sum(p[1] for p in pairs)
+        if person_sum <= 0:
+            raise HTTPException(
+                400, "「%s」的人員比例全部是 0，無法發放。" % item["name"])
+        if person_sum > BASIS_POINTS:
+            raise HTTPException(
+                400, "「%s」的人員比例合計 %s%% 超過 100%%，"
+                     "公司留存會變成負數。"
+                     % (item["name"], _pct_text(person_sum)))
+        planned.append((item, total_pct, split_award(base, total_pct, pairs)))
+    return settle, base, planned
+
+
 @router.post("/awards")
 def create_award(body: dict = Body(...), authorization: str = Header(None)):
     """依案件產生一張獎金單（**套用當下凍結**）。
@@ -409,69 +512,7 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
 
     conn = get_db()
     try:
-        settle = _settlement_of(conn, quote_no)
-        if settle is None:
-            raise HTTPException(404, "找不到案件「%s」。" % quote_no)
-        ok, base, err = base_amount_for(settle)
-        if not ok:
-            # 🔑 這句話是使用者唯一看得到的東西，而它**講得出出路**。
-            raise HTTPException(400, err)
-
-        case = _case_people(conn, quote_no)
-        items = {r["id"]: dict(r) for r in conn.execute(
-            "SELECT * FROM bonus_items WHERE is_active = 1")}
-
-        planned = []
-        for alloc in allocations:
-            item = items.get(int(alloc.get("bonus_item_id") or 0))
-            if item is None:
-                raise HTTPException(400, "獎金項目不存在或已停用。")
-            good, people, note = people_for_item(item, case)
-            if not good:
-                raise HTTPException(400, "「%s」%s。" % (item["name"], note))
-            total_pct = int(alloc.get("total_pct") or 0)
-            shares = alloc.get("person_pct") or {}
-            pairs = [(p, int(shares.get(p, 0))) for p in people]
-            # 🔴 上界**釘在 `base` 上，不釘在 `pool` 上**。
-            #
-            # ☠️ 兩種超額的症狀相反，而第二種看不見：
-            # ```
-            # Σperson_pct > 10000   兩人各 100%
-            #   pool=61728  Σamount=123456  remainder_of() = **-61728**  看得見
-            # total_pct   > 10000   20000（200%）
-            #   pool=**246912**（=base×2）    remainder_of() = **0**     看不見
-            # ```
-            # 而 `split_award()` docstring 的兩條不變量在後者**也都成立**
-            # （`246912 <= 246912`、餘 `0 < 1`）——
-            # 🔑 **因為 pool 本身已經被撐大了，而不變量拿 pool 當基準。**
-            #    *一個以受污染的值為基準的檢查，永遠不會發現污染。*
-            # ⇒ 所以這道關卡不可以改寫成「檢查 remainder_of() 是不是負的」。
-            #
-            # ⚠️ 邊界是 `<=` 不是 `<`：少發（例如只發 80%）是**合法的公司政策**，
-            #    剛好 100% 也要放行。寫成 `>= BASIS_POINTS` 就擋掉了整數的 100%。
-            # ⚠️ 而**不可以只在前端擋** —— `bonus.js` 自己的註解逐字：
-            #    「前端過濾是假的：值仍然在 API 回應裡」，同一個道理套在輸入上。
-            if total_pct < 0:
-                # 📌 `base` 那一側已經擋了（base_amount_for 對負淨利回 False），
-                #    缺的只有 `pct` 這一側：pool_for(123456, -5000) = -61728
-                #    ⇒ 負的獎金池在傳票上是一筆反向分錄，**帳是平的**。
-                raise HTTPException(
-                    400, "「%s」的發放比例不可以是負數。" % item["name"])
-            if total_pct > BASIS_POINTS:
-                raise HTTPException(
-                    400, "「%s」的發放比例 %s%% 超過 100%%，"
-                         "獎金池會大於案件淨利。"
-                         % (item["name"], _pct_text(total_pct)))
-            person_sum = sum(p[1] for p in pairs)
-            if person_sum <= 0:
-                raise HTTPException(
-                    400, "「%s」的人員比例全部是 0，無法發放。" % item["name"])
-            if person_sum > BASIS_POINTS:
-                raise HTTPException(
-                    400, "「%s」的人員比例合計 %s%% 超過 100%%，"
-                         "公司留存會變成負數。"
-                         % (item["name"], _pct_text(person_sum)))
-            planned.append((item, total_pct, split_award(base, total_pct, pairs)))
+        _settle, base, planned = _plan_allocations(conn, quote_no, allocations)
 
         now = datetime.now().isoformat()
         try:
@@ -505,6 +546,58 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
     _audit(_tok(authorization), "bonus.award.create", "bonus_awards",
            str(award_id), "產生獎金單：%s（基數 %s）" % (quote_no, f"{base:,}"))
     return {"ok": True, "id": award_id, "base_amount": base}
+
+
+@router.post("/awards/plan/{quote_no}")
+def preview_award(quote_no: str, body: dict = Body(default={}),
+                  authorization: str = Header(None)):
+    """`SPEC-BN6-BN7.md §2`：**既有路徑多一個動詞**，只算不寫。
+
+    `body` 與 `POST /awards` 的 `allocations` 完全相同——這裡回的
+    `lines` 與 `POST /awards` 產生後寫進 `bonus_award_lines` 的值
+    **逐筆相等**，因為兩支端點共用同一支 `_plan_allocations()`
+    （`§6④`：這一題紅而其他全綠 = 預覽會騙人，而那比沒有預覽更糟）。
+
+    ⚠️ 這裡**不寫任何一列進資料庫**——不開 `INSERT`、不 `commit`，
+    只讀（`_settlement_of`／`bonus_items`／`_case_people`）再回傳算好的
+    結果。
+    """
+    user = _require_user(authorization)
+    if not _is_manager(user):
+        raise HTTPException(403, "僅管理員以上可預覽獎金分潤。")
+    allocations = body.get("allocations") or []
+    if not allocations:
+        raise HTTPException(400, "請至少設定一個獎金項目的比例。")
+
+    conn = get_db()
+    try:
+        settle, base, planned = _plan_allocations(conn, quote_no, allocations)
+    finally:
+        conn.close()
+
+    lines_out = []
+    remainder = 0
+    for item, total_pct, lines in planned:
+        remainder += remainder_of(base, total_pct, lines)
+        for ln in lines:
+            lines_out.append({
+                "bonus_item_id": item["id"],
+                "username": ln["username"],
+                "person_source_snapshot": item["person_source"],
+                "total_pct": total_pct,
+                "person_pct": ln["person_pct"],
+                "amount": ln["amount"],
+            })
+
+    return {
+        "quote_no": quote_no,
+        "settlement": _settlement_fields(settle),
+        "base": {"ok": True, "amount": base, "error": ""},
+        "lines": lines_out,
+        # `§6⑤`：尾差要印在表上——不印的話使用者自己加總會發現「對不起來」，
+        # 而他不知道那是設計（歸公司，不補給任何人）。
+        "remainder": remainder,
+    }
 
 
 @router.post("/awards/{award_id}/submit")
