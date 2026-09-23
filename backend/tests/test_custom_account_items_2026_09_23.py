@@ -288,6 +288,51 @@ def test_ca1_the_tenth_one_is_followed_by_eleven_not_ten(client, make_user):
         % len([c for c in after if c.startswith(PARENT + "-")]))
 
 
+def test_ca1_extending_a_parent_with_range_siblings_starts_at_one(client,
+                                                                  make_user):
+    """🔴🔴 **`§7③` 的第二種撞法：`11-12` 是範圍代號，`1111-1` 是延伸代號 ——
+    兩者形狀相同（`XXXX-N`）而意義不同，取號不可以把前者算進去。**
+
+    ## 🔴 這不是假設，是實測到的資料形狀（2026-09-23）
+
+    ```
+    parent_code='1' 底下既有兩筆**官方範圍代號**：'11-12'／'13-15'
+    ⇒ 若「取號」天真地對 parent 底下每一筆子項都做
+      code.split('-')[-1] 去抓「既有延伸號」，
+      會把 '11-12' 的 '12'、'13-15' 的 '15' 當成延伸號，
+      算出 max=15 ⇒ 下一個延伸變成 **'1-16'**，
+      而正確答案是 **'1-1'**（一筆自訂延伸都還沒有）。
+    ```
+    ☠️ 這一族的坑（`§7③④`）在**用了一陣子之後才爆**；這一種更早——
+       **第一次**對一個帶有範圍代號子項的節點按「延伸」就會錯，
+       而 `PARENT="1111"` 沒有範圍代號子項，測不出這個形狀。
+    🔑 兩題（`PARENT` 版與這一題）合起來才擋得住兩種取號寫法：
+       「數/解析全部子項」與「只看 `source='custom'` 的子項」。
+    """
+    _u, hdr = _hdr(client, make_user, "ca1_range_collision")
+
+    # ⚙️ 前置：先證明這個陷阱今天真的存在，不是我編出來的資料。
+    before = _codes_under(parent="1")
+    assert set(before) >= {"11-12", "13-15"}, (
+        "前置不對：`parent_code='1'` 底下沒有既有的範圍代號子項，"
+        "這一題撞不到那個陷阱：%r" % before)
+
+    r = _extend(client, hdr, parent="1", name="測試範圍延伸")
+    assert r.status_code == 200, "建不起來：%s %s" % (r.status_code, r.text[:200])
+
+    new_codes = [c for c in _codes_under(parent="1")
+                if c not in ("11-12", "13-15")]
+    assert new_codes == ["1-1"], (
+        "延伸 `parent='1'` 拿到 %r，預期只有 `1-1`。\n" % new_codes
+        + "☠️ 若拿到的是別的數字（例如 `1-16`）——\n"
+          "   取號邏輯把既有的**範圍代號**（`11-12`／`13-15`）的尾碼\n"
+          "   誤認成既有的**延伸代號**尾碼去算 max，兩者形狀一樣、意義不同。")
+    row = _row("1-1")
+    assert row is not None and int(row["level"]) == 2, (
+        "`1-1` 的 level 是 %r，`1` 是 L1 ⇒ 延伸出來的應該是 L2。"
+        % (row["level"] if row else None))
+
+
 def test_ca1_the_tree_sorts_ten_after_nine(client, make_user):
     """🔴 **`§7④` 的另一半：畫面上 `-10` 要排在 `-9` **後面**。**
 
@@ -484,9 +529,17 @@ def test_ca1_the_list_says_how_many_are_custom(client, make_user):
         for k in ("custom_count", "customCount", "custom_total"):
             if isinstance(p, dict) and k in p:
                 return p[k]
+        # 🔴 我複查 CA1 時發現：既有回應**已經有** `by_source`
+        #    （`routers/account_items.py:138-144`，`{source: 筆數}`），
+        #    今天就長 `{"statutory": 547}`。少了 `custom` 那把 key 的話，
+        #    `by_source.get("custom", 0)` 天然就是 0 —— 與「一個都還沒建」
+        #    分不出來，所以要收在這裡而不是直接判 200。
+        by_source = p.get("by_source") if isinstance(p, dict) else None
+        if isinstance(by_source, dict):
+            return by_source.get("custom", 0)
         pytest.fail(
             "`GET %s` 的回應沒有自建總數（找過 `custom_count`／"
-            "`customCount`／`custom_total`）。現有鍵：%s\n"
+            "`customCount`／`custom_total`／`by_source.custom`）。現有鍵：%s\n"
             % (API, sorted(p) if isinstance(p, dict) else type(p))
             + "📌 `§6`：使用者原話要求「頁面須說明自建總數有多少」。")
 
