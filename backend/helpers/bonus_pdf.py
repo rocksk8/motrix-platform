@@ -301,7 +301,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at,
         foot=e("匯出時間 %s" % exported_at))
 
 
-def _display_names_for(conn, usernames):
+def display_names_for(conn, usernames):
     """`{username}` 集合 -> `{username: 顯示名稱}`，查不到就落回 username 本身。
 
     與 `helpers/voucher.py::resolve_display_names()` 是**同一條規則**
@@ -309,6 +309,12 @@ def _display_names_for(conn, usernames):
     `{格名: {by, at}}` 的簽核格，這裡處理的是收款人清單，形狀不同所以
     沒有直接呼叫它，但查詢與落回邏輯不重寫第二次判斷式，只是換一種
     輸入輸出包裝。
+
+    `QS1-a §3③`：`routers/bonus.py` 的 `list_awards()`／`get_award()`
+    也用它給每一列分潤明細補 `displayName`——原本沒有底線是因為只有
+    `bonus_pdf.py` 自己用，現在是共用工具，底線拿掉（同 `resolve_display_
+    names()` 當初從 `_` 改成公開名字的理由：保留底線會誤導成「模組內部
+    專用，不可外部 import」）。
     """
     names = {u for u in (usernames or ()) if u}
     if not names:
@@ -340,7 +346,7 @@ def export_award_pdf(award_id):
             "SELECT * FROM bonus_award_lines WHERE award_id = ? ORDER BY id",
             (award_id,))]
         signatures = resolve_display_names(conn, bonus_signatures_of(award))
-        display_names = _display_names_for(
+        display_names = display_names_for(
             conn, (ln.get("username") for ln in lines))
         settle = _settlement_of(conn, award.get("quote_no"))
     finally:

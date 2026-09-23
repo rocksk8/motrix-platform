@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 102
+CURRENT_VERSION = 103
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4302,6 +4302,98 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m103_bonus_award_lines_username(conn):
+    """v103（2026-09-23 `QS1-a`）：`bonus_award_lines.username` 回填成帳號。
+
+    ## 🔴 成因：`people_for_item()` 兩個來源回傳兩種識別
+
+    `case_stages.assigned_to` 本來就存帳號；`quotations.sales_person`
+    存的是**顯示名**（'黃玉龍'／'高晟耀'），而兩者一律被當成 username
+    寫進 `bonus_award_lines.username`——只有 `sales_person` 那一支是壞的
+    （詳見 `docs/windows/SPEC-QS1-a.md §1`）。
+
+    ## 🔑 只處理 `person_source_snapshot == 'sales_person'` 的列
+
+    `case_stages.assigned_to` 那些**不動**——本來就是帳號，去比對
+    `display_name` 只會查不到（或更糟，剛好撞到別人）。
+
+    ## ⚠️ 不依賴「全是測試資料」（A 裁）：解不出就原值保留＋記一筆
+
+    解析順序：
+    ```
+    ① 這一列所屬案件的 quotations.sales_person_id -> users.username（FK，可靠）
+    ② 解不出：users.display_name == username AND active=1（退路，會留 log）
+    ③ 兩條都解不出：原值保留，id 與原值一起記進 log
+    ```
+    ☠️ 猜一個值比留一個未知更難發現——這一欄的下游是「誰領到錢」。
+
+    ## ⚙️ 冪等：**已經是帳號的列直接跳過**
+
+    判斷「是不是已經是帳號」用 `username IN (SELECT username FROM users)`——
+    這支 migration 若被重跑第二次（`test_u10_every_migration_can_be_run_twice`），
+    第一次已經回填過的列會被這個判斷跳過，不會二次處理、也不會因為
+    這時候的 `username` 已經不是顯示名而誤判成「解不出」。
+    """
+    if not _table_exists(conn, "bonus_award_lines"):
+        return
+    rows = conn.execute(
+        "SELECT id, username, person_source_snapshot, award_id"
+        " FROM bonus_award_lines").fetchall()
+
+    fk_count = 0
+    name_count = 0
+    kept = []
+    for r in rows:
+        rid, uname, src, award_id = (
+            r["id"], r["username"], r["person_source_snapshot"], r["award_id"])
+        if src != "sales_person":
+            continue
+        already = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (uname,)).fetchone()
+        if already:
+            continue
+
+        award_row = conn.execute(
+            "SELECT quote_no FROM bonus_awards WHERE id = ?", (award_id,)
+        ).fetchone()
+        resolved = None
+        if award_row is not None:
+            q_row = conn.execute(
+                "SELECT sales_person_id FROM quotations WHERE quote_no = ?",
+                (award_row["quote_no"],)).fetchone()
+            if q_row is not None and q_row["sales_person_id"]:
+                u_row = conn.execute(
+                    "SELECT username FROM users WHERE id = ?",
+                    (q_row["sales_person_id"],)).fetchone()
+                if u_row is not None and u_row["username"]:
+                    resolved = u_row["username"]
+                    fk_count += 1
+            if resolved is None:
+                u_row2 = conn.execute(
+                    "SELECT username FROM users"
+                    " WHERE display_name = ? AND active = 1", (uname,)).fetchone()
+                if u_row2 is not None and u_row2["username"]:
+                    resolved = u_row2["username"]
+                    name_count += 1
+                    logger.warning(
+                        "m103: bonus_award_lines id=%s 帳號經 display_name 退路"
+                        "解析 %r -> %r", rid, uname, resolved)
+
+        if resolved:
+            conn.execute("UPDATE bonus_award_lines SET username = ? WHERE id = ?",
+                        (resolved, rid))
+        else:
+            kept.append((rid, uname))
+
+    logger.warning(
+        "m103 bonus_award_lines 回填：經 FK %d 筆／經顯示名 %d 筆／未變更 %d 筆",
+        fk_count, name_count, len(kept))
+    for rid, orig in kept:
+        logger.warning("m103 未變更：id=%s username=%r（無法解析成帳號，原值保留）",
+                       rid, orig)
+    conn.commit()
+
+
 def _m102_bonus_award_approval(conn):
     """v102（2026-09-23 `BN8`）：獎金分潤單成為第九個 doc type。
 
@@ -5063,6 +5155,7 @@ _MIGRATIONS = [
     _m100_voucher_attachments,                      # v100
     _m101_voucher_approval,                         # v101
     _m102_bonus_award_approval,                     # v102
+    _m103_bonus_award_lines_username,               # v103
 ]
 
 

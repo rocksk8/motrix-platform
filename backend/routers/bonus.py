@@ -23,6 +23,7 @@
 再寫一份就是第三份實作，而三份一定會分岔。
 """
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
@@ -39,9 +40,10 @@ from helpers.bonus import (
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
-from helpers.bonus_pdf import can_export, export_award_pdf
+from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
+logger = logging.getLogger(__name__)
 
 
 def _is_manager(user):
@@ -321,25 +323,32 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
         live = conn.execute(
             "SELECT id FROM bonus_awards WHERE quote_no = ? AND voided_at = ''",
             (quote_no,)).fetchone()
+
+        out = []
+        for item in items:
+            good, people, note = people_for_item(item, case)
+            out.append({
+                "bonus_item_id": item["id"],
+                "name": item["name"],
+                "person_source": item["person_source"],
+                # 🔑 `ok` 與 `people` 從**同一次呼叫**取，不各算一次
+                #    ⇒ 「可以發放，但沒有人」在結構上就不可能出現。
+                "ok": bool(good),
+                "people": list(people or ()),
+                # 📌 `note` 直接用後端回的字串，前端不重寫文案 ⇒ 規則只有一份。
+                "note": note or "",
+            })
+        # `QS1-a §3③`：`people` 現在是帳號（`_case_people()` 已解析），畫面
+        # 要印顯示名稱——比照 `list_awards()`／`get_award()`，一次查完全部
+        # 不逐筆查，不在前端自己對照（那會變成第二份「帳號->顯示名」邏輯）。
+        display_names = display_names_for(
+            conn, (p for it in out for p in it["people"]))
     finally:
         conn.close()
 
-    out = []
-    for item in items:
-        good, people, note = people_for_item(item, case)
-        out.append({
-            "bonus_item_id": item["id"],
-            "name": item["name"],
-            "person_source": item["person_source"],
-            # 🔑 `ok` 與 `people` 從**同一次呼叫**取，不各算一次
-            #    ⇒ 「可以發放，但沒有人」在結構上就不可能出現。
-            "ok": bool(good),
-            "people": list(people or ()),
-            # 📌 `note` 直接用後端回的字串，前端不重寫文案 ⇒ 規則只有一份。
-            "note": note or "",
-        })
     return {
         "quote_no": quote_no,
+        "display_names": display_names,
         # `SPEC-BN6-BN7.md §2`：整張精算明細，逐字抄 settlement.html 的鍵名，
         # 原樣帶出、不重算（見 `_settlement_fields()` docstring）。
         "settlement": _settlement_fields(settle),
@@ -473,6 +482,10 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
             by_award.setdefault(r["award_id"], []).append(dict(r))
         # `BN15`：清單只有案件編號，使用者原話「沒有案件名稱」。
         case_names = _case_names_for(conn, (a["quote_no"] for a in awards))
+        # `QS1-a §3③`：`username` 現在存帳號，畫面要印顯示名稱——
+        # 一次查完全部，不逐列查（同 `BN15` 的 `_case_names_for` 那條規則）。
+        names = display_names_for(
+            conn, (ln["username"] for lines in by_award.values() for ln in lines))
     finally:
         conn.close()
 
@@ -482,6 +495,8 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         if not manager and not lines:
             # 🔴 與自己無關的單**完全不出現** —— `§七`「其他人看不到」。
             continue
+        for ln in lines:
+            ln["displayName"] = names.get(ln["username"], ln["username"])
         a["lines"] = lines
         # ⚠️ 非管理者看不到整張單的總額（那等於看得到別人領多少的總和）。
         a["visible_total"] = sum(l["amount"] for l in lines)
@@ -538,6 +553,8 @@ def get_award(award_id: int, authorization: str = Header(None)):
         # `BN15`：彈窗標題也要有案件名稱，不只清單列。
         cn = _case_names_for(conn, (award["quote_no"],)).get(
             award["quote_no"]) or {}
+        # `QS1-a §3③`：同 list_awards()，username 存帳號、畫面印顯示名稱。
+        names = display_names_for(conn, (ln["username"] for ln in lines))
     finally:
         conn.close()
 
@@ -549,6 +566,8 @@ def get_award(award_id: int, authorization: str = Header(None)):
         #    404 不是 403，不要洩漏「這張單存在，只是你看不到」。
         raise HTTPException(404, "找不到這張獎金分潤單。")
 
+    for ln in visible:
+        ln["displayName"] = names.get(ln["username"], ln["username"])
     award["lines"] = visible
     award["visible_total"] = sum(l["amount"] for l in visible)
     if not manager:
@@ -727,25 +746,30 @@ def preview_award(quote_no: str, body: dict = Body(default={}),
     conn = get_db()
     try:
         settle, base, planned = _plan_allocations(conn, quote_no, allocations)
+
+        lines_out = []
+        remainder = 0
+        for item, total_pct, lines in planned:
+            remainder += remainder_of(base, total_pct, lines)
+            for ln in lines:
+                lines_out.append({
+                    "bonus_item_id": item["id"],
+                    "username": ln["username"],
+                    "person_source_snapshot": item["person_source"],
+                    "total_pct": total_pct,
+                    "person_pct": ln["person_pct"],
+                    "amount": ln["amount"],
+                })
+        # `QS1-a §3③`：同 `plan_award()`（GET）——username 存帳號，畫面印
+        # 顯示名稱，一次查完全部。
+        display_names = display_names_for(
+            conn, (ln["username"] for ln in lines_out))
     finally:
         conn.close()
 
-    lines_out = []
-    remainder = 0
-    for item, total_pct, lines in planned:
-        remainder += remainder_of(base, total_pct, lines)
-        for ln in lines:
-            lines_out.append({
-                "bonus_item_id": item["id"],
-                "username": ln["username"],
-                "person_source_snapshot": item["person_source"],
-                "total_pct": total_pct,
-                "person_pct": ln["person_pct"],
-                "amount": ln["amount"],
-            })
-
     return {
         "quote_no": quote_no,
+        "display_names": display_names,
         "settlement": _settlement_fields(settle),
         "base": {"ok": True, "amount": base, "error": ""},
         "lines": lines_out,
@@ -1035,6 +1059,36 @@ def download_award_pdf(award_id: int, authorization: str = Header(None)):
                 "attachment; filename=bonus-award-%s.pdf" % award_id})
 
 
+def _username_of_sales_person(conn, sales_person_id, sales_person_name):
+    """業務的顯示名 -> 帳號（`SPEC-QS1-a §3①`）。**先 FK 再退路**：
+
+    ```
+    ① sales_person_id -> users.username     可靠（FK）
+    ② 解不出：users.display_name == sales_person_name AND active=1   退路
+       ⚠️ 走到這裡留一筆 log，不要靜默——同名或改過名會查不到，
+          而它不會報錯，那正是 `_m010` 踩過的坑（`QS1 §2`）。
+    ```
+    兩條都解不出回 `None`——呼叫端（`_case_people`）不落回顯示名，
+    比照 `people_for_item()` 自己「查不到人就是沒有人，不是靜默退回一個
+    不能拿去比對 username 的字串」那條規則。
+    """
+    if sales_person_id:
+        row = conn.execute("SELECT username FROM users WHERE id = ?",
+                           (sales_person_id,)).fetchone()
+        if row and row["username"]:
+            return row["username"]
+    if sales_person_name:
+        row = conn.execute(
+            "SELECT username FROM users WHERE display_name = ? AND active = 1",
+            (sales_person_name,)).fetchone()
+        if row and row["username"]:
+            logger.warning(
+                "sales_person 帳號解析走退路（display_name 比對）：%r -> %r",
+                sales_person_name, row["username"])
+            return row["username"]
+    return None
+
+
 def _case_people(conn, quote_no):
     """把案件上的人彙整成 `people_for_item()` 吃得下的形狀。
 
@@ -1057,14 +1111,26 @@ def _case_people(conn, quote_no):
        `people_for_item()` 回「無可發放對象」——**明著拒絕，不是靜默算 0**。
     📌 而「那兩個來源的獎金項目永遠發不出去」是一個**規格與現實的落差**，
        不是這一支要解的：已回報 A。
+
+    ## 🔴 `QS1-a`：`sales_person` 這一格在這裡就解析成帳號
+
+    `people_for_item()` 保持純函式（不吃 `conn`）——解析放在呼叫端
+    （`SPEC-QS1-a §3①` 的「甲」案），`case["sales_person"]` 被**覆寫**
+    成帳號，不是另外新增一個鍵：這支函式的兩個呼叫端都只把 `case` 餵給
+    `people_for_item()`，沒有別的地方要顯示名。解不出時覆寫成 `None`——
+    比照 `people_for_item()` 自己「沒有值 ⇒ 沒有人」的規則，不留一個
+    查不到帳號的顯示名在裡面（那正是這支規格要修的洞）。
     """
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(quotations)")}
-    wanted = [c for c in ("quote_no", "sales_person", "owner", "engineer")
-              if c in cols]
+    wanted = [c for c in ("quote_no", "sales_person", "sales_person_id",
+                          "owner", "engineer") if c in cols]
     row = conn.execute(
         "SELECT %s FROM quotations WHERE quote_no = ?" % ", ".join(wanted),
         (quote_no,)).fetchone()
     case = dict(row) if row else {"quote_no": quote_no}
     case["stages"] = [dict(r) for r in conn.execute(
         "SELECT assigned_to FROM case_stages WHERE quote_no = ?", (quote_no,))]
+    if "sales_person" in case:
+        case["sales_person"] = _username_of_sales_person(
+            conn, case.get("sales_person_id"), case.get("sales_person"))
     return case

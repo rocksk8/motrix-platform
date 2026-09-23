@@ -434,7 +434,7 @@
 
                 <template x-for="p in it.people" :key="p">
                   <div class="bn-person">
-                    <span style="min-width:110px" x-text="p"></span>
+                    <span style="min-width:110px" x-text="displayNameOf(p)"></span>
                     <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
                     <span class="bn-unit">% 的本項獎金池</span>
                   </div>
@@ -458,7 +458,7 @@
               <div class="bn-settle__t">預覽結果（尚未送出，只是試算）</div>
               <template x-for="(ln, li) in (previewResult && previewResult.lines) || []" :key="li">
                 <div class="bn-line">
-                  <span class="bn-who" x-text="ln.username"></span>
+                  <span class="bn-who" x-text="displayNameOf(ln.username)"></span>
                   <span class="bn-item" x-text="srcLabel(ln.person_source_snapshot)"></span>
                   <span class="bn-pct" x-text="pct(ln.total_pct) + ' × ' + pct(ln.person_pct)"></span>
                   <span class="bn-amt" x-text="fmt(ln.amount)"></span>
@@ -490,7 +490,7 @@
 
             <template x-for="(l, li) in awardDetail.lines" :key="li">
               <div class="bn-line">
-                <span class="bn-who" x-text="l.username"></span>
+                <span class="bn-who" x-text="l.displayName"></span>
                 <span class="bn-item" x-text="l.item_name_snapshot"></span>
                 <span class="bn-pct" x-text="pct(l.total_pct) + ' × ' + pct(l.person_pct)"></span>
                 <span class="bn-amt" x-text="fmt(l.amount)"></span>

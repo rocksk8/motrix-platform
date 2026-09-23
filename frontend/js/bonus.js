@@ -471,6 +471,19 @@ function bonusPage() {
       return ((Number(bp) || 0) / 100).toFixed(2).replace(/\.00$/, '') + '%'
     },
 
+    // `QS1-a §3③`：`bonus_award_lines.username`／`people_for_item()` 現在
+    // 回帳號，畫面要印顯示名稱——後端已經查好給的 `display_names` map
+    // （`plan`／`previewResult` 各自帶一份，不在前端自己查 users 清單去
+    // 對照，那會變成第二份「帳號->顯示名」邏輯）。兩份都查一次，查不到
+    // 落回帳號本身（同後端 `display_names_for()` 的規則）。
+    displayNameOf(username) {
+      const fromPreview = this.previewResult && this.previewResult.display_names
+      const fromPlan = this.plan && this.plan.display_names
+      return (fromPreview && fromPreview[username])
+        || (fromPlan && fromPlan[username])
+        || username
+    },
+
     // `SPEC-BN6-BN7.md §6②`：精算明細裡的百分比欄位（毛利率／淨利率）
     // 缺欄位一樣要印「—」，不是 0——理由與 fmt() 相同。
     fmtPct(n) {
