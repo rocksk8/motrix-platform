@@ -196,14 +196,33 @@ def test_jv25_the_ratio_does_not_degrade_as_attachment_count_grows(
 @pytest.mark.e2e
 def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appears(
         live_server, make_user):
-    """⚙️ **負對照：匯出訊息出現前後，iframe 高度不可以跳動。**
+    """🔴🔴 **匯出訊息出現前後，iframe 高度不可以變——釘「不變」，不是「差 ≤5px」。**
 
-    🔑 實測今天這一格**沒有問題**（訊息出現前後 `ratio` 幾乎沒變，見檔頭
-    第 4 組數字）——iframe 在兩種情況下都已經卡在 `min-height` 底線，
-    沒有額外空間可以再縮。這一題留著當**修法本身的負對照**：修 ①②
-    時若改成「有訊息才把 iframe 砍小讓訊息一定露出來」這種條件式高度，
-    畫面會在使用者按下匯出的瞬間跳動——那是〈防護的副作用落在盲側〉
-    的另一個新坑，這一題先佔住這個位置。
+    # 🔴 2026-09-23 改判準：門檻是會被調的數字，「不變」是不變量
+
+    這題原本寫成 `diff <= 5`（負對照，當時實測沒問題）。全量重跑後
+    量到 10 附件情境下 `374.2 → 380.0`（差 5.8px），若只是把門檻鬆到
+    6，下一次換一個稍高一點的訊息還是會撞，而且沒有人會記得今天這輪
+    ——使用者原話是「傳票預覽的顯示高度過小」，任何讓 iframe 跳動或
+    縮小的修法都是在反向修正他抱怨過的那件事，所以正確的判準是**高度
+    根本不該因為這則訊息而改變**，不是「改變量要小一點」。
+
+    ## ⚙️ 機制（已定位，寫給修的人看）
+
+    ```
+    attErr 是 x-if（不是 x-show）⇒ 匯出失敗時**新插入**一個 .vc-err 節點
+    到 .vc-preview-atts 裡；10 個附件已經把 .__rows 撐到 max-height:130px
+    .vc-preview-atts{flex:0 0 auto}    照單全收新增高度（+63px）
+    .vc-preview-frame{flex:1 1 auto;min-height:380px}  是唯一的彈性項
+      ⇒ 正常 flex 分配下它該縮，但縮不過 min-height:380px 這條線，
+        於是被頂住往上長到剛好 380（本例是 374.2 → 380.0）
+    ```
+    ⚠️ 而按下去之前的 374.2 本身已經低於 iframe 自己的 `min-height:380px`
+    ——這件事目前沒有追下去，**修完之後若它還在，代表修的不是同一件事**。
+
+    🔑 這題現在**應該是紅的**，直到訊息被移出這個 flex 競爭（例如疊在
+    iframe 上方不占版位）或 `.vc-preview-atts` 也被限制高度為止——負對照
+    的角色已經被下面 `test_jv25_...` 這支正式接手，本題轉正成**核心題**。
     """
     username, password = make_user(username="jv25_jump", role="superadmin",
                                    modules=["cashier"])
@@ -230,10 +249,17 @@ def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appear
             assert after.get("found"), "量不到（按匯出後）——退回改選擇器。"
 
             diff = abs(after["frameHeight"] - before["frameHeight"])
-            assert diff <= 5, (
+            # ⚠️ 不用 0：容忍次像素的浮點捲動誤差（<1px），但不放寬到
+            #    足以蓋掉這次量到的 5.8px 真實跳動。
+            assert diff < 1, (
                 "按下匯出、失敗訊息出現前後，iframe 高度從 %.1f 變成 %.1f"
                 "（差 %.1f px）：\n" % (before["frameHeight"],
                                      after["frameHeight"], diff)
-                + "☠️ 使用者正在看那張紙，畫面在按下去的瞬間跳動。")
+                + "☠️ 使用者正在看那張紙，畫面在按下去的瞬間跳動——\n"
+                + "   這正是他原話「顯示高度過小」的反面案例：\n"
+                + "   `.vc-preview-atts`（flex:0 0 auto，照單全收訊息高度）\n"
+                + "   與 `.vc-preview-frame`（flex:1 1 auto;min-height:380px）\n"
+                + "   搶同一份 `.modal-body` 配額，訊息一出現配額就被擠壓，\n"
+                + "   而 iframe 撞到自己的 min-height 只能被頂著長大。")
         finally:
             browser.close()
