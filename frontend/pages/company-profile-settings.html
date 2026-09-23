@@ -1125,8 +1125,9 @@
             }, {}),
           }
           for (const k of this.LOC_IDENTITY_FIELDS) row[k] = l[k] || ''
-          // 已經填過的那幾筆預設展開 —— 不然使用者看不到自己填過什麼。
-          row._open = this.LOC_IDENTITY_FIELDS.some(k => row[k])
+          // `QL24`：使用者裁「一律預設展開」——原本只有已填過的才展開，
+          // 沒填過的收起來，正在找這個入口的人反而看不到它存在。
+          row._open = true
           return row
         },
 
