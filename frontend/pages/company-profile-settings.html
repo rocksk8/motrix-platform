@@ -287,6 +287,25 @@
                 </div>
               </div>
             </div>
+
+            <!-- 🔴 `QL26`：使用者原話：「追加公司基本資料的更改後沒有儲存
+                 設定的按鈕」——實查：save() 送的是整包 cfg（含這張卡與下面
+                 那張「收款帳戶資訊」），而按鈕只長在下面那張卡裡。使用者在
+                 這張卡改完（據點清單、每個據點可展開的抬頭／帳號區塊，可能
+                 隔著一整螢幕以上）看到的是下一張卡的標題，不知道要往下滑
+                 才找得到存檔的地方。
+                 ⚠️ 兩顆按鈕呼叫同一支 save()，不可以送不同的東西——那會
+                 變成兩種儲存行為。兩顆都明著說存的是兩張卡，不要讓人以為
+                 這顆只存這一張。 -->
+            <div class="ns-actions">
+              <button class="btn btn-primary" @click="save()" :disabled="saving">
+                <span x-show="!saving">儲存設定（公司基本資料與收款帳戶）</span>
+                <span x-show="saving">儲存中…</span>
+              </button>
+            </div>
+            <div x-show="msg" x-text="msg" x-transition
+                 :style="isError ? 'color:#DC2626' : 'color:#16A34A'"
+                 style="font-size:13px;margin-top:12px;font-weight:600"></div>
           </div>
         </div>
 
@@ -323,7 +342,7 @@
 
             <div class="ns-actions">
               <button class="btn btn-primary" @click="save()" :disabled="saving">
-                <span x-show="!saving">儲存設定</span>
+                <span x-show="!saving">儲存設定（公司基本資料與收款帳戶）</span>
                 <span x-show="saving">儲存中…</span>
               </button>
             </div>
