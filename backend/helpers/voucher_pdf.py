@@ -41,6 +41,8 @@ JV5 匯出   **唯讀** —— 它不改變任何主張，只是把既有的主�
 """
 import datetime as _dt
 import html
+import json
+import logging
 import os
 import tempfile
 
@@ -48,6 +50,8 @@ from db import get_db
 from helpers import _get_edge_path, _get_setting, run_edge_pdf
 from helpers.voucher import get_voucher
 from helpers.voucher_attachments import abs_path
+
+logger = logging.getLogger(__name__)
 
 #: 圖片副檔名 —— 這幾種走 `<img>`，不經 `pypdf`。
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png")
@@ -73,16 +77,44 @@ def _fmt_money(n):
 def _company_name():
     """公司抬頭。**不可以寫死** —— 這個 repo 已經寫死在 14 個檔、56 行。
 
-    📌 `pdf_gen.py:510` 逐字：「`pdf_gen.py` 不可以知道 `company_profile` 的
-       地址結構」⇒ 沿用那個邊界，這裡只取名字，不解析結構。
+    ## ☠️ `JV9`：這一支原本回空字串，而紙上印「（尚未設定公司抬頭）」
+
+    ```
+    helpers/settings.py::_get_setting()  ->  json.loads(...)  **已經是物件**
+    而這裡又 json.loads() 了一次          ->  TypeError
+    再被 `except Exception: return ""` 吞掉
+    ```
+    ⇒ 使用者的設定**有值**（實查 12 個字），而畫面告訴他「尚未設定」。
+    🔑 **一行 bug ＋ 一個太寬的 except ＝ 一句會誤導使用者的話。**
+       而那個 except 的理由是對的（抬頭讀不到不該讓整份 PDF 產不出來）——
+       ☠️ 錯的是它**沒有分開兩件事**：
+    ```
+    設定讀不到／沒設定   => 靜默退路是對的（使用者自己會看到「尚未設定」）
+    **我們的程式錯了**   => 必須留下線索，否則它會偽裝成前者
+    ```
+
+    ## 📌 只取 `name`，不要整包
+
+    `company_profile` 裡有 `bank_account_number`／`google_maps_api_key` 等
+    ⇒ 這一支只回一個字串，**不讓那包東西流進 PDF 的任何一層**。
+    而 `pdf_gen.py:510` 逐字：「`pdf_gen.py` 不可以知道 `company_profile` 的
+    地址結構」⇒ 沿用那個邊界。
     """
-    try:
-        import json
-        raw = _get_setting("company_profile", "")
-        return (json.loads(raw or "{}") or {}).get("name") or ""
-    except Exception:                                        # noqa: BLE001
-        # 🔑 抬頭讀不到**不該讓整份 PDF 產不出來** —— 它只是版面上的一行字。
+    prof = _get_setting("company_profile", {})
+    # ⚠️ 舊資料可能是**字串**（某些版本把整包 JSON 當字串存）⇒ 兩種都吃。
+    #    🔑 而 `isinstance` 判斷寫在這裡，不是靠 try 去撞 —— 用例外做流程控制
+    #       正是上面那個 bug 能藏起來的原因。
+    if isinstance(prof, str):
+        try:
+            prof = json.loads(prof or "{}")
+        except ValueError:
+            logger.warning("company_profile 的值不是合法 JSON，抬頭留空")
+            return ""
+    if not isinstance(prof, dict):
+        logger.warning("company_profile 的型別是 %s（預期 dict），抬頭留空",
+                       type(prof).__name__)
         return ""
+    return prof.get("name") or ""
 
 
 def split_attachments(rows):
