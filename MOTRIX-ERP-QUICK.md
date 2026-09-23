@@ -85,8 +85,9 @@
 | §9 | 前端規範 | [`docs/quick/architecture.md`](docs/quick/architecture.md) |
 | §10 | 成本公式（報價） | [`docs/quick/mod-quotation.md`](docs/quick/mod-quotation.md) |
 | §11 | 已知限制與後續建議 | [`docs/quick/known-limits.md`](docs/quick/known-limits.md) |
-| §12 | 變更摘要（最新兩版） | [`docs/quick/changelog.md`](docs/quick/changelog.md) |
-| §12（舊） | 2026-09-06～09-13 條目 | [`docs/quick/changelog-2026-09-06_13.md`](docs/quick/changelog-2026-09-06_13.md) |
+| §12 | 變更摘要（與原 `CHANGELOG.md` 合併，唯一來源；2026-09-14 起） | [`docs/quick/changelog.md`](docs/quick/changelog.md) |
+| §12（封存） | 2026-09-08～09-14 | [`docs/quick/changelog-2026-09-08_2026-09-14.md`](docs/quick/changelog-2026-09-08_2026-09-14.md) |
+| §12（封存） | 2026-07-18～09-08 | [`docs/quick/changelog-2026-07-18_2026-09-08.md`](docs/quick/changelog-2026-07-18_2026-09-08.md) |
 | §13 | 目錄結構（精簡，2026-09-01 依實際程式碼盤點更正） | [`docs/quick/architecture.md`](docs/quick/architecture.md) |
 | §14 | 跨機核對與拉檔流程 | [`docs/quick/ops-deploy.md`](docs/quick/ops-deploy.md) |
 | §14.1 | 核對優先順序 | [`docs/quick/ops-deploy.md`](docs/quick/ops-deploy.md) |
