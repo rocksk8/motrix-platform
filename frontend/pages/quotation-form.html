@@ -844,6 +844,7 @@
           </span>
         </template>
         <template x-if="q.dealTag !== '已成案' && q.dealTag !== '已結案'">
+          <span style="display:inline-flex;flex-direction:column;gap:2px">
           <select :value="q.dealTag"
                   @change="onDealTagChange($event.target.value)"
                   style="padding:4px 6px;font-size:11px;border:1px solid var(--border-light);border-radius:4px;background:#fff;color:var(--text-primary);font-family:var(--font-zh);cursor:pointer;outline:none;max-width:96px"
@@ -855,10 +856,14 @@
             <option value="已成案" :disabled="q.status !== '已送出'"
                     :title="q.status !== '已送出' ? '需先完成簽核（狀態為已送出）才能標記為已成案' : ''">已成案</option>
           </select>
+          <!-- 2026-09-24：瀏覽器不顯示 option 的 title，灰掉的「已成案」看不出原因 -->
+          <span x-show="q.status !== '已送出'"
+                style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh);white-space:nowrap">需完成簽核（已送出）才能標記「已成案」</span>
+          </span>
         </template>
       </div>
       <template x-if="q.dealTag==='已成案'||q.dealTag==='已結案'">
-        <a href="case-management.html" style="font-size:11px;color:#15803D;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #86EFAC;border-radius:4px;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif">
+        <a :href="'case-management.html' + (q.quoteNo ? '?q=' + encodeURIComponent(q.quoteNo) : '')" style="font-size:11px;color:#15803D;text-decoration:none;display:flex;align-items:center;gap:4px;padding:4px 8px;border:1px solid #86EFAC;border-radius:4px;white-space:nowrap;font-family:LINE Seed TW_OTF, sans-serif">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
           案件管理
         </a>
@@ -1390,7 +1395,10 @@
             </thead>
             <tbody x-ref="itemsTbody">
               <template x-for="(item, idx) in q.items" :key="item.id">
-                <tr :class="item.type === 'header' ? 'item-header-row' : ''">
+                <tr :class="item.type === 'header' ? 'item-header-row' : ''"
+                    @keydown.ctrl.enter.prevent="insertItemAfter(idx)"
+                    @keydown.alt.up.prevent="moveItemBy(idx, -1, $event)"
+                    @keydown.alt.down.prevent="moveItemBy(idx, 1, $event)">
                   <td style="text-align:center;color:var(--text-dim);font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:0 4px">
                     <div style="display:flex;align-items:center;justify-content:center;gap:1px">
                       <span class="drag-handle" title="拖曳排序">
@@ -1427,9 +1435,8 @@
                            @blur="$el.value = numShown(item.qty, $el, 'qty-' + item.id, true)">
                   </td>
                   <td>
+                    <!-- 2026-09-24：focus 時不再清空（用 Tab 經過會以為內容被刪了）；下拉選項照舊由 datalist 提供 -->
                     <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
-                           @focus="$el.dataset.prevUnit = item.unit; item.unit = ''"
-                           @blur="if(!item.unit) item.unit = $el.dataset.prevUnit || ''"
                            x-show="item.type !== 'header'" list="quote-unit-options" placeholder="單位">
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
@@ -1501,7 +1508,7 @@
           <option value="SET"></option><option value="立"></option>
         </datalist>
         <div style="display:flex;gap:8px;margin-top:6px">
-          <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()">
+          <button class="btn btn-ghost btn-sm add-item-btn" @click="addItem()" title="鍵盤：在品項列中按 Ctrl+Enter 於下方插入一列，Alt+↑／↓ 移動該列">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v16m8-8H4"/></svg>
             新增品項
           </button>
@@ -2466,6 +2473,39 @@
         this.q.items.push({ id, description:'', brand:'', qty:1, unit:'台',
           cost:null, margin:0.30, unitPrice:null, unitPriceOverride:false, amount:0, notes:'' })
         this.setDirty()
+      },
+
+      // 2026-09-24：鍵盤操作品項——Ctrl+Enter 在下方插入一列、Alt+↑／↓ 移動。
+      // 鎖定規則比照拖拉排序（initSortable() 的 isLocked）。
+      _itemsLocked() { return this.q.status === '已送出' && !this.unlocked },
+      _itemRow(i) { return this.$refs.itemsTbody ? this.$refs.itemsTbody.querySelectorAll(':scope > tr')[i] : null },
+      insertItemAfter(idx) {
+        if (this._itemsLocked()) return
+        const id = this.genId()
+        this.q.items.splice(idx + 1, 0, { id, description:'', brand:'', qty:1, unit:'台',
+          cost:null, margin:0.30, unitPrice:null, unitPriceOverride:false, amount:0, notes:'' })
+        this.setDirty()
+        // x-for 在 $nextTick 當下還沒渲染出新列，再等一輪事件迴圈
+        this.$nextTick(() => setTimeout(() => { const r = this._itemRow(idx + 1); r && r.querySelector('textarea') && r.querySelector('textarea').focus() }, 0))
+      },
+      moveItemBy(idx, d, ev) {
+        if (this._itemsLocked()) return
+        const j = idx + d
+        if (j < 0 || j >= this.q.items.length) return
+        const row = this._itemRow(idx)
+        const fields = row ? [...row.querySelectorAll('input, textarea, select')] : []
+        const col = ev && ev.target ? fields.indexOf(ev.target) : -1
+        const items = [...this.q.items]
+        const [m] = items.splice(idx, 1)
+        items.splice(j, 0, m)
+        this.q.items = items
+        this.calcTotals()
+        this.setDirty()
+        this.$nextTick(() => setTimeout(() => {
+          const r = this._itemRow(j)
+          const f = r ? [...r.querySelectorAll('input, textarea, select')] : []
+          if (f[col >= 0 ? col : 0]) f[col >= 0 ? col : 0].focus()
+        }, 0))
       },
 
       addHeader() {

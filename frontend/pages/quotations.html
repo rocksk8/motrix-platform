@@ -125,7 +125,7 @@
         <div class="summary-item__val" x-text="summaryData.thisMonth + ' 張'"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
-        <div class="summary-item__label">本月金額（已成案）</div>
+        <div class="summary-item__label" title="依成案標記計算：本月報價中標記為「已成案」或「已結案」的合計金額">本月金額（已成案）</div>
         <div class="summary-item__val" x-text="'NT$ ' + summaryData.thisMonthTotal.toLocaleString()"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
@@ -133,7 +133,7 @@
         <div class="summary-item__val" :style="summaryData.pending > 0 ? 'color:var(--warning)' : ''" x-text="summaryData.pending + ' 張'"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
-        <div class="summary-item__label">已確認</div>
+        <div class="summary-item__label" title="依報價單狀態計算：狀態為「已確認」的張數（與成案標記無關）">已確認</div>
         <div class="summary-item__val" style="color:var(--success)" x-text="summaryData.confirmed + ' 張'"></div>
       </div>
       <div class="summary-item" style="border-left:1px solid var(--border-light);padding-left:24px">
@@ -209,7 +209,7 @@
 
     <div class="filter-tabs">
       <template x-for="tab in tabs" :key="tab.key">
-        <button class="filter-tab" :class="{active: activeTab === tab.key}" @click="activeTab = tab.key; phaseFilter = ''">
+        <button class="filter-tab" :class="{active: activeTab === tab.key}" :title="tab.title || ''" @click="activeTab = tab.key; phaseFilter = ''">
           <span x-text="tab.label"></span>
           <span x-show="tabCount(tab.key) > 0" style="margin-left:4px;font-size:10px;color:var(--text-dim)" x-text="'(' + tabCount(tab.key) + ')'"></span>
         </button>
@@ -520,7 +520,9 @@
       },
 
       tabs: [
-        { key: 'all',    label: '全部(不含未成案)'  },
+        // 2026-09-24：原名「全部(不含未成案)」，但它同時也藏了「已結案」——名稱與內容不符
+        { key: 'all',    label: '進行中',
+          title: '不含「未成案」與「已結案」。\n分頁上的草稿～已確認是報價單的簽核狀態；\n已結案、未成案是案件的成案標記，兩者是不同的欄位。' },
         { key: '草稿',   label: '草稿'  },
         { key: '待審核', label: '待審核' },
         { key: '已核准', label: '已核准' },
@@ -584,7 +586,7 @@
               : q.status === this.activeTab
           }
           const s            = this.search.trim().toLowerCase()
-          const matchSearch  = !s || (q.quote_no||'').includes(s) || (q.customer_name||'').toLowerCase().includes(s) || (q.project_name||'').toLowerCase().includes(s)
+          const matchSearch  = !s || (q.quote_no||'').toLowerCase().includes(s) || (q.customer_name||'').toLowerCase().includes(s) || (q.project_name||'').toLowerCase().includes(s)
           const matchSales   = !this.filterSales || q.sales_person === this.filterSales
           const matchMonth   = !this.filterMonth || (q.quote_date || q.created_at || '').startsWith(this.filterMonth)
           const matchDealTag = !this.filterDealTag || (q.deal_tag || '') === this.filterDealTag
@@ -828,6 +830,25 @@
         if (window.location.search) history.replaceState(null, '', window.location.pathname)
 
         this.sortPref = await loadListPref(this.session.token, 'quotations')
+
+        // 2026-09-24：篩選條件存 sessionStorage（同一個瀏覽器分頁內有效），
+        // 從報價單返回清單時還原，不必重選。讀寫失敗（私密視窗等）就當作沒有。
+        const _FK = 'motrix_quote_list_filters'
+        const _FIELDS = ['activeTab', 'search', 'filterSales', 'filterMonth', 'filterDealTag', 'phaseFilter']
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(_FK) || 'null')
+          if (saved && typeof saved === 'object') {
+            _FIELDS.forEach(k => { if (typeof saved[k] === 'string') this[k] = saved[k] })
+            if (!this.tabs.some(t => t.key === this.activeTab)) this.activeTab = 'all'
+          }
+        } catch (e) {}
+        const _saveFilters = () => {
+          try {
+            const o = {}; _FIELDS.forEach(k => { o[k] = this[k] })
+            sessionStorage.setItem(_FK, JSON.stringify(o))
+          } catch (e) {}
+        }
+        _FIELDS.forEach(k => this.$watch(k, _saveFilters))
 
         const ok = await this.loadQuotes()
         if (!ok || this.quotes.length === 0) {
