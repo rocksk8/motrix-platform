@@ -50,13 +50,32 @@ OK_CODES = (200, 400, 403)
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
-#: 最小的合法單頁 PDF（用來當「PDF 附件」）。
-_ONE_PAGE_PDF = (
-    b"%PDF-1.4\n"
-    b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-    b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\n"
-    b"trailer<</Root 1 0 R>>\n%%EOF\n")
+def _one_page_pdf():
+    """一份**真的讀得了**的單頁 PDF。
+
+    ## 🔴 我第一版是手寫的 bytes，而 `pypdf` 讀不了它（B 退回，我複跑確認）
+
+    ```
+    b"startxref" in 我那份  => **False**（沒有 xref 表）
+    pypdf.PdfReader(...)    => PdfReadError: **startxref not found**
+    ```
+    ☠️ 後果**不是**「測試紅」：那份附件會被判成**讀不了** ⇒ 走「未能併入」
+       那條路 ⇒ 頁數不增加 ⇒ **B 做對也不會綠**。
+    🔑 而它長得像一份 PDF：`%PDF-` 開頭、有 `/Type /Page`、我自己的
+       `_page_count()` 也數得到 1 頁 —— **只有真正的解析器分得出來**。
+    ⇒ 改成用 `pypdf` 產生。它是 `JV5` 的相依（`ff3328b` 已進 `requirements`）。
+
+    ⚠️ 而 `_page_count()` **仍然不用 pypdf** —— 那是**量結果**的尺，
+       不可以相依於受測物的相依；這裡是**造輸入**，用產品自己的函式庫才對。
+    🔑 兩者的差別：量錯了我會去看錯的地方；造錯了我會得到一個假的紅燈。
+    """
+    pypdf = pytest.importorskip(
+        "pypdf", reason="`JV5` 的相依（`requirements.txt`），造 PDF 附件要用它")
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=595, height=842)
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
 
 
 def _hdr(client, make_user, username, role="superadmin", modules=("cashier",)):
@@ -314,7 +333,7 @@ def test_jv5_merging_a_pdf_attachment_adds_its_pages(client, make_user):
     """
     _u, hdr = _hdr(client, make_user, "jv5_merge")
     vid = _create(client, hdr)
-    _attach(client, hdr, vid, "憑證.pdf", _ONE_PAGE_PDF)
+    _attach(client, hdr, vid, "憑證.pdf", _one_page_pdf())
 
     plain = _export(client, hdr, vid)
     assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
@@ -362,8 +381,8 @@ def test_jv5_a_missing_attachment_file_does_not_block_the_export(client,
     """
     _u, hdr = _hdr(client, make_user, "jv5_gone")
     vid = _create(client, hdr)
-    _attach(client, hdr, vid, "不見的憑證.pdf", _ONE_PAGE_PDF)
-    _attach(client, hdr, vid, "還在的憑證.pdf", _ONE_PAGE_PDF)
+    _attach(client, hdr, vid, "不見的憑證.pdf", _one_page_pdf())
+    _attach(client, hdr, vid, "還在的憑證.pdf", _one_page_pdf())
 
     rows = _rows(vid)
     assert len(rows) == 2, "前置不對：附件有 %d 筆。" % len(rows)

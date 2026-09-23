@@ -117,10 +117,17 @@ def _rows(vid=None):
             args = (vid,)
         return [dict(r) for r in conn.execute(sql + " ORDER BY id", args)]
     except Exception as e:                       # noqa: BLE001
+        # 🔴 **這一句到期過一次**，是我自己的 `QA3` 抓到的。
+        #    原文：「`§2` 的 migration 還沒做」—— 而它 `v100`（`a5a41eb`）做完了
+        #    ⇒ 那句話會把排查的人送到**錯的地方**。
+        # ⇒ 照我自己那一題給的修法：改成**涵蓋兩個時期**。
         pytest.fail(
             "查 `voucher_attachments` 失敗：%s\n" % e
-            + "📌 `§2` 的 migration 還沒做。⚠️ 版本號**不要照規格寫死** ——\n"
-              "   規格刻意不寫號碼，動手當下取（`grep -n '^CURRENT_VERSION' db.py`）。")
+            + "📌 這張表由 `v100` 建立（`a5a41eb`）——\n"
+              "   **沒跑到那一版**：這個環境的 `schema_version` 落後了；\n"
+              "   **跑過了還是失敗**：那是別的問題，先看上面那行例外。\n"
+            + "⚠️ 日後要加 migration 的話，版本號**不要照文件抄** ——\n"
+              "   動手當下取（`grep -n '^CURRENT_VERSION' db.py`）。")
     finally:
         conn.close()
 

@@ -196,32 +196,66 @@ def test_al1_the_scanner_survives_an_ascii_only_console():
 # ① `(a-2)`：兩個集合，不要合成一個
 # ══════════════════════════════════════════════════════════════════════
 
-def test_al1_the_shared_files_have_no_guard_today():
-    """⚙️ **`(a-2)` 那個對照組成立的前提，要自己量不要問工具。**
+def test_al1_excluding_the_shared_files_actually_changes_the_answer():
+    """⚙️ **排除清單要**真的生效** —— 舊判準與新判準的差額量得出來。**
+
+    ## 🔴 這一題**換過一次**，而換的理由要留著
 
     ```
-    今天七支共用檔的 `_initDone` 命中數 = **0**
-    ⇒ 把它們從 blob 排掉，「待修 51／已修 2」必須一個數字都不動
+    舊版  斷言「七支共用檔的 `_initDone` 命中數 = 0」
+          —— 那是 `(a-2)` 行為保持窗口的**前提**，我自己標了它有保存期限
+    而 (c) 一開跑，守衛**就寫在 notif.js 裡** => 那個前提不再成立 => 它紅了
     ```
-    ⚠️ 而這個前提**有保存期限**：`(c)` 一開跑，或有人去修那兩個 store，
-       它就不再成立 ⇒ 那時這一題會紅，**而那是正確的紅**，
-       它在說「行為保持的窗口關了」。
-    🔑 我不去問工具，因為工具正是受測物。
+    🔑 **那是正確的紅**：它在說「窗口關了」。
+    ⇒ 而窗口關了之後，該釘的不再是前提，是**排除本身有沒有作用**。
+
+    ## ⚙️ 新的觀測點：舊判準會多算幾頁
+
+    ```
+    舊判準  guarded = "_initDone" in （頁面 ＋ **所有** linked js）
+    新判準  只看這一頁自己的 js
+    差額 = 舊判準會把幾頁**誤判成已修**
+    ```
+    ☠️ 差額是 0 的時候有兩種可能，而它們差很多：
+    ```
+    ① 共用檔裡沒有 `_initDone`  => 排不排除**沒差** => 這一題證明不了任何事
+    ② 每一頁本來就都修好了      => 排除有沒有作用**這一題看不出來**
+    ```
+    ⇒ 所以這一題**同時**斷言：共用檔裡**有**守衛（前提成立）
+      ＋ 每一頁自己也**有**守衛（新判準通過）。
+    🔑 兩者一起，差額 0 才是「排除生效且每一頁都真的修了」。
     """
-    hits = {}
+    shared_has = {}
     for name in SHARED_FILES:
         p = ROOT / "frontend" / "static" / name
-        if not p.is_file():
-            continue
-        n = p.read_text(encoding="utf-8", errors="replace").count("_initDone")
-        if n:
-            hits[name] = n
-    assert not hits, (
-        "共用檔裡已經有 `_initDone` 了：%s\n" % hits
-        + "📌 那表示 `(a-2)` 的**行為保持窗口關了** ——\n"
-          "   `guarded = \"_initDone\" in blob` 會讓引用它的頁面全部翻成「已修」。\n"
-        + "⚠️ 若這是 `(a-2)` **做完之後**的狀態（判準已經不看 blob 了），\n"
-          "   **退回給我**把這一題換成「排除清單有沒有生效」。")
+        if p.is_file() and "_initDone" in p.read_text(
+                encoding="utf-8", errors="replace"):
+            shared_has[name] = True
+    assert shared_has, (
+        "七支共用檔裡**一個 `_initDone` 都沒有** ——\n"
+        + "☠️ 那表示「排除共用檔」這個動作**現在沒有作用** ⇒\n"
+          "   這一題與那道守門都證明不了任何事。\n"
+        + "⚠️ 若 `(c)` 還沒做，這一題**本來就該紅**（它在等那件事）。")
+
+    mod = _tool()
+    fn = getattr(mod, "_guarded_if_shared_counted", None)
+    assert callable(fn), (
+        "工具沒有 `_guarded_if_shared_counted()` ——\n"
+        + "📌 它是「舊判準下會算出幾頁已修」的量法，\n"
+          "   而我要用它與新判準相減。**換了名字退回給我**。")
+
+    rows = mod.scan()
+    new_guarded = sum(1 for r in rows if r["guarded"])
+    old_guarded = fn()
+    assert old_guarded >= new_guarded, (
+        "舊判準算出的已修（%d）比新判準（%d）**還少** —— 量法反了。"
+        % (old_guarded, new_guarded))
+    assert old_guarded - new_guarded == 0, (
+        "舊判準會多把 %d 頁算成「已修」（舊 %d ／ 新 %d）——\n"
+        % (old_guarded - new_guarded, old_guarded, new_guarded)
+        + "☠️ 那幾頁**一行守衛都沒有**，而共用檔裡的 `_initDone`\n"
+          "   讓它們看起來修好了。\n"
+        + "🔑 差額非 0 = 有人新增了一頁而忘了加守衛。")
 
 
 def test_al1_the_two_populations_are_disjoint_and_named():
@@ -269,9 +303,18 @@ def test_al1_the_a2_rewrite_is_behaviour_preserving():
     做完後  **這三個數字不可以變** —— 它只改判定的歸屬，不改事實
     ☠️ 「已修」變多了 = 判定又變寬了，**不是修好了**
     ```
-    ⚠️ 而 `已修 == 2` 這一格**會在 `(c)` 開跑的第一天紅**，那時要把它
-       改成「只增不減」。📌 現在釘死值是刻意的：`(a-2)` 與 `(c)` 之間
-       它是唯一擋得住「判定變寬」的東西。
+    ## 🔴 而 `已修 == 2` 那一格**到期了，我改成只增不減**
+
+    ```
+    (a-2) 與 (c) 之間  釘死 2  <= 唯一擋得住「判定變寬」的東西
+    (c) 做完之後       已修 **53** => 釘死值紅了，**而那是正確的紅**
+    ```
+    ⇒ 改成 `>= ALREADY_GUARDED`：**只增不減**。
+    ☠️ 它擋不到的那一側要講明白：**只增不減擋不住「判定又變寬」** ——
+       `(a-2)` 之後那件事由
+       `test_al1_excluding_the_shared_files_actually_changes_the_answer`
+       與 `..._wrong_file_does_not_turn_it_green` 兩題接手。
+    🔑 一個數字從「釘死」放寬成「只增不減」時，**要說出原本是誰在擋那一側**。
     """
     mod = _tool()
     rows = mod.scan()
@@ -282,12 +325,10 @@ def test_al1_the_a2_rewrite_is_behaviour_preserving():
         + "⚠️ 多了：有人新增了會跑兩遍的頁（更新 `PAGE_POPULATION`）。\n"
         + "☠️ 少了：多半是排除清單把**頁面自己的 js** 也排掉了 ——\n"
           "   `case-management.html` 的守衛就寫在它自己的 js 裡。")
-    assert len(guarded) == ALREADY_GUARDED, (
-        "報「已修」%d 頁（%s），`(a-2)` 之前是 %d 頁。\n"
+    assert len(guarded) >= ALREADY_GUARDED, (
+        "報「已修」%d 頁（%s），而 `(a-2)` 當時已經有 %d 頁 ——\n"
         % (len(guarded), [r["page"] for r in guarded], ALREADY_GUARDED)
-        + "☠️ **變多了 = 判定又變寬了**，不是修好了 ——\n"
-          "   多半是共用檔沒有被排出 blob（`_initDone` 一寫就全翻）。\n"
-        + "✅ 若是 `(c)` 真的在逐頁加守衛，**退回給我**把這一格改成只增不減。")
+        + "☠️ **變少了**：有人把已經加好的守衛拿掉了。")
 
 
 #: `STATIC_GLOB` 現在是 `frontend/**/*.js`（遞迴、排除 `vendor`）⇒ 我的替身
@@ -416,19 +457,42 @@ def test_al1_writing_the_guard_into_the_wrong_file_does_not_turn_it_green(
     # ① 寫進**宣告檔** —— 不可以翻綠
     wrong = _fake_frontend(tmp_path / "a", {
         "sidebar.js": lambda t: t + "\nconst _initDone = false  // 寫錯檔\n"})
+
+    # 🔴 **這一題到期過一次，而我沒有預見它**（`AL1 (c)` 之後）
+    #
+    # 舊寫法：`assert not flipped`（斷言那個集合**為空**）
+    # 而 `(c)` 做完之後兩個 store **本來就是綠的** ⇒ `flipped` 恆非空
+    # ⇒ 它紅了，而紅的不是缺陷。
+    #
+    # 🔑 〈假綠燈〉的鄰居：**斷言某個集合為空的題，
+    #    會在那個集合「合法地」變非空的那天失效。**
+    # ☠️ 而我為 ①② 都寫了保存期限，**唯獨這一題沒有** ——
+    #    三題是同一件事造成的，我只看到其中兩題。
+    # ⇒ 改成**比較前後**：寫錯檔不可以讓「已修」的數量**變多**。
+    base_green = len([r for r in mod.scan_shared() if r.get("guarded")])
     monkeypatch.setattr(mod, SHARED_HOOK, str(wrong / "**" / "*.js"))
-    rows = mod.scan_shared()
-    flipped = [r for r in rows if r.get("guarded")]
-    assert not flipped, (
-        "`_initDone` 寫進**宣告檔** `sidebar.js` 就翻綠了：%r\n" % flipped
+    after_wrong = len([r for r in mod.scan_shared() if r.get("guarded")])
+    assert after_wrong <= base_green, (
+        "`_initDone` 寫進**宣告檔** `sidebar.js` 之後，已修從 %d 變成 %d ——\n"
+        % (base_green, after_wrong)
         + "☠️ 那是 `§174c` 的引信：`guarded` 在讀宣告檔全文 ⇒ **改錯檔也算修好**。\n"
         + "🔑 `guarded` 要讀**定義點**（`defined_in` 那個檔的函式本體）。")
 
     # ② 反向：寫進**定義檔** —— 只有那一個要翻綠
-    right = _fake_frontend(tmp_path / "b", {
-        "notif.js": lambda t: t.replace(
+    #
+    # ⚠️ `(c)` 之後 `notif.js` 裡**兩個 store 都已經有守衛** ⇒ 直接加會全綠，
+    #    那證明不了「只有被改的那一個會翻」。
+    # ⇒ 先把整檔的 `_initDone` **拿掉**，再只加回 `notifStore()` 那一個。
+    # ☠️ 換掉的名字**不可以含 `_initDone`**：工具查的是子字串，
+    #    我第一版寫 `_initDoneREMOVED` ⇒ 它**仍然含有** `_initDone` ⇒ 兩個都還是綠的。
+    #    🔑 又一次「判準是子字串比對」的坑，而這次踩的是我自己的替換。
+    def _only_notif_store(t):
+        t = t.replace("_initDone", "_guardWasHere")
+        return t.replace(
             "function notifStore() {",
-            "function notifStore() {\n  const _initDone = false", 1)})
+            "function notifStore() {\n  const _initDone = false", 1)
+
+    right = _fake_frontend(tmp_path / "b", {"notif.js": _only_notif_store})
     monkeypatch.setattr(mod, SHARED_HOOK, str(right / "**" / "*.js"))
     rows2 = mod.scan_shared()
     green = {r.get("store") for r in rows2 if r.get("guarded")}
