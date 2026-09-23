@@ -132,6 +132,15 @@ DB      v91（正式機 c5b1e84 系）→ v109；T9 與 T11 修正皆在包內
 - ⚠️ 正式機 V9.0 上的 `apply_update.ps1` 仍是舊版 ⇒ **這一次必須執行包內那支**（`$ProdRoot` 寫死 V9.0，從包內執行一樣作用於正式機）。
 - `20260924_021932_5f04d04` 作廢。
 
+### ✅ 乙 已上正式機（2026-09-24 02:46:15，使用者部署並確認「功能也有」）
+```
+deployed-version  46dc6ae（branch 欄顯示 HEAD＝detached 建包，內容即 master 46dc6ae）
+/api/system/version  2026-09-24c
+每日備份 09-24 .done  01:32（第二修補包後恢復）
+```
+- 待使用者決定是否刪除：`deploy_packages\20260922_184908_c5b1e84`、`20260922_200604_7bc1fb8`（含內部文件）、`20260924_021932_5f04d04`（作廢）。
+- 下一輪：T12（更新紀錄頁）、T10（版本端點取 entries[0]）、EM2／EM7／EM13、WD1（併入平台化）、KNOWN-GAPS ③（admin 產不出分潤單無說明）、平台化 §0 三件重裁。
+
 ### 🟠 T12（下一輪）：PK1 精簡 manifest 造成「系統更新紀錄」頁安靜降級
 - `build_deploy_package.ps1` Step 5.6（`2f1e4a3`）把 `version_manifest.json` 精簡成單筆 `{version,date}`。
 - PK1 規格（`SCOPE.md:1091`）只查了 `GET /api/system/version` 這個讀者；**漏了 `helpers/startup.py:_sync_module_versions()`**——它開機時把 manifest 寫進 `module_versions`，給 `module-versions.html` 顯示。無 `module` 的條目被 `:487` 略過 ⇒ 正式機收不到任何新說明，**不報錯**。
