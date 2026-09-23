@@ -313,12 +313,16 @@ def test_as2_three_tiers_can_actually_be_signed_all_the_way(client,
     slots = _slots(v)
     assert slots is not None, (
         "讀不到簽核格（找過四種鍵名）。現有鍵：%s" % sorted(v))
-    assert len(slots) == 1 + 3, (
+    # 📌 更正留著：原本是 `1 + 3`（製票＋三層）。`JV31`（商業會計法 §35）在最後
+    #    加了一格「記帳」（過帳的人）⇒ 不變量改成「1 ＋ 層數 ＋ 1」，並釘最後一格。
+    assert len(slots) == 1 + 3 + 1, (
         "設定三層，而簽核格有 %d 格：%r\n" % (len(slots), slots)
         + "☠️ 版面**沒有從資料算列數** —— 第三層的人簽了，\n"
           "   而**紙上沒有他的格子**。\n"
         + "🔑 不變量是「**格數 == 1 ＋ 層數**」（製票不算層），\n"
           "   而不是任何一個字面標籤。")
+    assert list(slots)[-1] == "記帳", (
+        "最後一格應該是「記帳」（`JV31`），實際是 %r" % list(slots))
 
     # ⚙️ 反向控制：第四次要被擋，而且**不可以是 500**
     extra = client.post("/api/vouchers/%s/approve" % vid, json={},

@@ -23,7 +23,8 @@ function voucherPage() {
     status: '草稿',
     note: '',
     lines: [],
-    signs: { maker: '', checker: '', manager: '' },
+    // `JV31`：[{label, by}]，順序照後端 `signatures`（製票 → 各層 → 記帳）。
+    signs: [],
     voidedAt: '',
     //: `JV8`：**有明確意圖才顯示編輯畫面** —— 按「新增傳票」或從清單點開一張。
     //: ☠️ 一進來就是空白表單的話，使用者以為自己在建一張單，打了一半離開，
@@ -611,11 +612,7 @@ function voucherPage() {
       //    —— 2026-09-23 修過一次：舊碼存的是 `_tok(auth)` 的**原始 bearer token**，
       //    而這一格會把那串 64 字元印在「製票」上。
       const s = d.signatures || {}
-      this.signs = {
-        maker: (s['製票'] || {}).by || '',
-        checker: (s['覆核'] || {}).by || '',
-        manager: (s['主管'] || {}).by || '',
-      }
+      this.signs = Object.keys(s).map(function (k) { return { label: k, by: (s[k] || {}).by || '' } })
       this.attachments = d.attachments || []
       this.summaryTarget = 0
       this.editLog = []
@@ -713,7 +710,8 @@ function voucherPage() {
       this.voidedAt = ''
       this.lines = []
       for (let i = 0; i < 3; i++) this.addLine()
-      this.signs = { maker: '', checker: '', manager: '' }
+      // 新單還沒有簽核資料 ⇒ 先畫內建兩層的版面（製票／覆核／主管／記帳），都是空的。
+      this.signs = ['製票', '覆核', '主管', '記帳'].map(function (k) { return { label: k, by: '' } })
       this.summaryTarget = 0
       // ⚠️ 網址上的 `?id=` 要一起拿掉，否則按 F5 會跳回剛才那一張，
       //    而使用者以為自己在開新單。

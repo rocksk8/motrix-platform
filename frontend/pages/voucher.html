@@ -522,10 +522,12 @@
                **不是同一組東西**（§103c⑤）⇒ 這裡只呈現，不由前端推導流程。
                ⚠️ 印的是**人名**：後端曾經把原始 bearer token 存進這些欄位，
                   而這一格會把那串 64 字元印在「製票」上（2026-09-23 已修）。 -->
+          <!-- 🔴 `JV31`：**照後端 `signatures` 的順序與格數畫**（製票 → 各層 → 記帳），
+               不寫死三格——設定四層時，寫死的版本畫面上看不到第三、四層的簽名。 -->
           <div class="vc-sign" data-testid="voucher-signs">
-            <div><span>製票</span><b x-text="signs.maker || ''"></b></div>
-            <div><span>覆核</span><b x-text="signs.checker || ''"></b></div>
-            <div><span>主管</span><b x-text="signs.manager || ''"></b></div>
+            <template x-for="c in signs" :key="c.label">
+              <div><span x-text="c.label"></span><b x-text="c.by || ''"></b></div>
+            </template>
           </div>
 
           <template x-if="actionErr">

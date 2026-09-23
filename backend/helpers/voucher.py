@@ -563,8 +563,19 @@ def _chain_tiers(voucher):
     return parse_approval_json(voucher).get("tiers") or []
 
 
+def _with_bookkeeper(out, voucher):
+    """`JV31`：最後補一格「記帳」（過帳的人）。還沒過帳 ⇒ 空字串（流程還沒走到）。"""
+    out["記帳"] = {"by": voucher.get("posted_by") or "", "at": voucher.get("posted_at") or ""}
+    return out
+
+
 def signatures_of(voucher):
-    """三格簽核：`{格名: {by, at}}`，格名是「製票／覆核／主管」。
+    """簽核格：`{格名: {by, at}}`，順序＝製票 → 各層（內建兩層是「覆核／主管」）→ **記帳**。
+
+    🔴 `JV31`（商業會計法 §35：記帳憑證要有主辦及經辦會計人員簽章）：最後一格
+       「記帳」＝過帳的人（`posted_by`／`posted_at`，`post_voucher()` 寫入）。
+       **三條 return 路徑都要加**——只加在一條的話，那條以外的傳票紙上少一格，
+       而它看起來就是一張正常的傳票。
 
     ⚠️ 還沒簽的那一格 `by`／`at` 是**空字串**（欄位的 DEFAULT），
        而呼叫端要分得出「還沒簽」與「簽了而沒有時間」——
@@ -589,20 +600,20 @@ def signatures_of(voucher):
         tiers = _chain_tiers(voucher)
     except VoucherChainUnreadable:
         out["簽核資料無法讀取"] = {"by": "", "at": ""}
-        return out
+        return _with_bookkeeper(out, voucher)
     if tiers:
         for i, tier in enumerate(tiers):
             label = _TIER_LABELS[i] if i < len(_TIER_LABELS) else "第 %d 層" % (i + 1)
             out[label] = {"by": (tier or {}).get("approvedBy") or "",
                           "at": (tier or {}).get("approvedAt") or ""}
-        return out
+        return _with_bookkeeper(out, voucher)
 
     for label, by_col, at_col in _SIGNATURE_SLOTS[1:]:
         out[label] = {
             "by": voucher.get(by_col) or "",
             "at": voucher.get(at_col) or "",
         }
-    return out
+    return _with_bookkeeper(out, voucher)
 
 
 def approval_done(voucher):

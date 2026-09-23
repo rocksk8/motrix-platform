@@ -42214,3 +42214,4 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **JV32.** 傳票金額輸入：接受千分位／全形／空白／.00；小數、負數、同一行借貸都填 ⇒ 422 並指出第幾行（前後端都擋，後端 int() 截斷路徑拿掉）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV32；題 `test_jv32_*`。
 - **JV35.** 傳票加入轉簽：`_REASSIGN_TABLES` 加 voucher，讀寫 `vouchers_all.approval_json`（走 `parse_approval_json`）；規則沿用既有轉簽；與 JV30 銜接（轉簽前新人 403／後新人 200／後原簽核人 403）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV35；題 `test_jv35_*`。
 - **JV29.** 傳票類別依分錄自動判斷（現金類＝parent_code 走得到 111；淨額借＝收、貸＝支、0＝轉），存檔時重算只限草稿、既有資料不回頭；畫面唯讀顯示「收入／支出／轉帳傳票」不給選單（JV20 原話仍成立，手動改待確認 N6）；PDF 標題印傳票名稱。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV29＋A 夜間裁示；題 `test_jv29_*`。
+- **JV31.** 傳票簽章加「記帳」（過帳人 posted_by／posted_at，§35），signatures_of 三條路徑都補；畫面簽章格照後端順序與格數畫（不固定 3 格）；unify 不變量改為「1＋層數＋1」。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV31；題 `test_jv31_*`。
