@@ -1,7 +1,7 @@
 # 待辦移交清單（2026-09-23 晚，hichan-0a 彙整）
 
 > 用途：把「原本待完成的事項」交給另一個視窗接手；本視窗改做平台化盤點。
-> 量測時 HEAD＝`6e09acc`。每一項的權威細節在「來源」欄那份檔，**以那份為準**，本檔只做索引與分派。
+> 量測時 HEAD＝`6e09acc`。**正式機＝`c5b1e84`（2026-09-22 18:56:07 套用，使用者確認）**；09-23 的 654 個 commit 皆未上正式機，當日沒有建過包。每一項的權威細節在「來源」欄那份檔，**以那份為準**，本檔只做索引與分派。
 > 協定照 `MULTIWIN-PROTOCOL.md`：§3 檔案歸屬、§6b 停手回報、§5u `git -C <絕對路徑>`。
 
 ---
@@ -14,11 +14,12 @@
 | T2 | T1 解除後重跑 `build_deploy_package.ps1`，**只到匯出升級檔為止，不部署** | 最後一次成功建包之後又有大量 commit | `HANDOVER-2026-09-23.md` §0 ① | A 派、D 量 |
 | T3 | `test_navigation_destination_2026_09_23.py` 4 支紅（EM10） | HEAD 上就紅（基準見 `TEST-BASELINE-2026-09-23.md:66`）；母體 144 vs 規格 46 的洞還沒驗 | `STATE.md` 搜 `EM10`、`SPEC-EM10` | 實作＝B；驗母體＝C |
 | T4 | `test_homoglyphs_in_docs` 紅：`docs/windows/KNOWN-GAPS.md:173`、`:176` 的「剥」應為「剝」 | 2 處，HEAD 上就紅 | 測試輸出 | A（文件） |
-| T5 | **變更摘要斷檔**：`docs/quick/changelog.md` 最新一則是 09-16，`version_manifest.json` 最新一筆是 09-14；09-17 起有 1,319 個 commit 沒進任何一份 | `git log --since=2026-09-17 --oneline \| wc -l` | QUICK 維護規則 | A（changelog）；manifest＝B（`backend/`） |
+| T5 | **變更摘要斷檔**：`docs/quick/changelog.md` 最新一則是 09-16，而 09-17 起有 1,319 個 commit | `git log --since=2026-09-17 --oneline \| wc -l` | QUICK 維護規則 | A（changelog） |
+| ~~T5 原文~~ | ~~`version_manifest.json` 最新一筆是 09-14；… 沒進任何一份~~ ⇒ **更正（同日）：錯**。manifest 是新→舊排列，我讀的是檔尾（最舊）。實測第一筆 `2026-09-23e`、376 筆 ⇒ manifest **沒有斷檔**，只有 changelog 斷 | `json.load` 後印 `e[0]` 與 `max()` | — | manifest 那半刪除 |
 | T6 | `HANDOVER-2026-09-23.md` 標著「編寫中」，有「待補」節 | 第 8 行 | 該檔 | A |
 | T7 | `NEXT-SESSION.md` 停在 2026-09-12（寫的是 v76→v77 部署），**已過期但檔頭寫著「開工第一份要讀」** | 第 1 行 | 該檔 | A：改寫或標註過期並指向 HANDOVER |
 | T8 | `MOTRIX-ERP-QUICK.md` 檔頭「文件版本 2026-09-16」過期 | 第 4 行 | — | A，併 T5 一起做 |
-
+| T10 | **登入頁版本號錯**：`GET /api/system/version`（`backend/routers/auth.py:288-308`）取 `entries[0]` 當「最新」，而 `version_manifest.json` **沒有排序保證** ⇒ 正式機 `c5b1e84` 回 `2026-09-22c`，同檔實際最新是 `2026-09-22g`（第 46 行）。HEAD 第一筆剛好是最大值 `2026-09-23e`＝**碰巧對**，下一次插入順序不同就會再錯 | `curl https://172.16.10.177:666/api/system/version` ⇒ `2026-09-22c`；`git show c5b1e84:backend/version_manifest.json` 第 4 行 22c、第 46 行 22g；HEAD `sorted desc? False` | 使用者確認正式機＝`c5b1e84`（09-22 18:56:07） | 修＝B（取 `max(version)` 或讀取時排序，不要依賴檔案順序）；題＝C，**用一份刻意亂序的 manifest** 當輸入 |
 | T9 | 🔴 **產品缺陷**：`POST /api/contractor-dispatches/{did}/import-to-quote`（`backend/routers/vendor_contractors.py:768`）①`:837` 呼叫 `save_quotation_json()` 後**沒有 `conn.commit()`** 就 `conn.close()` ⇒ UPDATE 被回滾、端點回成功而**資料庫沒寫入**；②同一行第 4 個位置參數傳 `user["username"]`，而簽名第 4 個是 `status`（`helpers/quotations.py:427-433`）⇒ **只修①會讓報價單狀態變成使用者名稱** | `get_db()` 是預設 isolation 的 `sqlite3.connect`（`db.py:163-176`）；與 `routers/material_orders.py:66-70` 09-10 修過的①②**同一型** | 2026-09-23 平台化盤點時撿到（後端 Explore agent），本視窗已讀原始碼確認 | 修＝B（①②**必須一起修**）；回歸題＝C，觀測點打在資料庫的 `data_json.items` 與 `status` 欄，先證明它會紅 |
 
 建議順序：**T9（實際缺陷）→ T4 → T1 → T2**（T4 一分鐘，且讓全套測試少一支已知紅燈；T2 依賴 T1）；T5～T8 可以跟 T1 並行。
