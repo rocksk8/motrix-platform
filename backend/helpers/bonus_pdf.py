@@ -31,7 +31,7 @@ status == "已核准"      -> 放
 import logging
 
 from db import get_db
-from helpers.bonus import bonus_signatures_of
+from helpers.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_fields
 from helpers.voucher import resolve_display_names
 from helpers.voucher_pdf import _company_name, _render, _fmt_money
 
@@ -121,7 +121,74 @@ def _esc(s):
     return html.escape(str(s if s is not None else ""))
 
 
-def build_award_html(award, lines, signatures, display_names, exported_at):
+def _settle_money(n):
+    """精算明細表的金額格式。**`None` 印「—」，`0` 印「NT$ 0」**——與
+    `_fmt_money()`（傳票用，0 印空白）不是同一條規則，不可以共用：精算
+    欄位的 0 是有意義的值（例如某案的額外支出真的是 0，`SPEC-BN11-BN12.md
+    §5 ⓑ` 就是拿一張額外支出非 0、一張是 0 的案子互相對照），〈null 不
+    等於 0〉——缺欄位（`None`）與「真的是 0」不可以印成同一種樣子。
+    """
+    if n is None:
+        return "—"
+    return "NT$ %s" % "{:,}".format(round(n))
+
+
+def _settle_pct(n):
+    """精算明細表的百分比格式，同 `bonus.html::fmtPct()` 的規則（1 位小數，
+    缺值印「—」）——PDF 這裡沒有 JS，格式化規則不能共用程式碼，只能兩邊
+    對齊寫法。
+    """
+    if n is None:
+        return "—"
+    return "%.1f%%" % float(n)
+
+
+def _settlement_of(conn, quote_no):
+    """案件精算存值。與 `routers/bonus.py::_settlement_of()` 同形狀的一次
+    查詢——`helpers/bonus.py` 的 `settlement_fields()` 已經是唯一一份
+    「挑哪些鍵、缺值回 `None`」的規則，會分岔的風險在那裡，已經只有一份；
+    這裡只是換一種資料存取路徑把值撈出來，不算重刻規則本身。
+    """
+    row = conn.execute(
+        "SELECT json_extract(data_json, '$.settlement') AS s"
+        " FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    if row is None:
+        return None
+    raw = row["s"]
+    if not raw:
+        return {}
+    import json
+    return json.loads(raw) if isinstance(raw, str) else raw
+
+
+def _settlement_rows_html(settle):
+    """精算明細表的 11 列 `<tr>`（`BN11`）。**唯一列定義是 `SETTLEMENT_ROWS`**
+    （`helpers/bonus.py`）——順序、標籤逐字照它，值來自 `settlement_fields()`
+    （原樣帶出，這裡不重算任何係數）。
+
+    `quotedTotal`（含稅總額）不是獨立一列，是 `quotedPretax` 那一列的
+    註記——同 `bonus.html` 的 `bn-settle__note` 那一格。
+    """
+    e = _esc
+    fields = settlement_fields(settle)
+    rows = []
+    for key, label, kind, note in SETTLEMENT_ROWS:
+        val = fields.get(key)
+        text = _settle_pct(val) if kind == "pct1" else _settle_money(val)
+        lbl = e(label)
+        if note:
+            lbl += "<small>%s</small>" % e(note)
+        if key == "quotedPretax":
+            qt = fields.get("quotedTotal")
+            if qt is not None:
+                text += "<small>（含稅 %s）</small>" % _settle_money(qt)
+        rows.append("<tr><td>%s</td><td class='num'>%s</td></tr>"
+                    % (lbl, text))
+    return "".join(rows)
+
+
+def build_award_html(award, lines, signatures, display_names, exported_at,
+                     settle=None):
     """組出要餵給 Edge 的 HTML。**只有一張表，沒有附件頁。**
 
     `display_names`：`{username: 顯示名稱}`，收款人那一欄用它——與簽核
@@ -130,10 +197,19 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
 
     🔴 `BN13`：浮水印一律由 `void_watermark_html(award)` 算，這裡不自己
     判斷 `voided_at`——已作廢時印，其餘一律空字串（同 `JV23` 的分工）。
+
+    🔴 `BN11`：`settle` 是案件的精算存值（`_settlement_of()` 的回傳，
+    passthrough 給 `settlement_fields()`）——**這裡不重算任何係數**，
+    值與 `bonus.html` 的 `bn-settle`、`GET /awards/{id}` 回應裡的
+    `settlement` 是同一份資料。`settle=None`（呼叫端沒帶）時整張精算表
+    仍然印出來，11 列全部是「—」，不是整段消失——使用者原話「最後算出
+    真實淨利，才能用真實淨利去算獎金」，這張表在說明基數怎麼來的，
+    印不出值也要讓人看到「這裡本來該有 11 個數字」。
     """
     e = _esc
     watermark = void_watermark_html(award)
     total = sum(int(ln.get("amount") or 0) for ln in lines or ())
+    settle_rows_html = _settlement_rows_html(settle)
 
     rows = _line_rows(lines, display_names)
     rows.append(
@@ -177,6 +253,16 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
   .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
   .total td {{ font-weight: 700; }}
   .total .lbl {{ text-align: center; letter-spacing: 6pt; }}
+  /* `BN11`：精算明細表——與 `bonus.html` 的 `.bn-settle__tbl` 同一種
+     長相（label／value 兩欄，小字註記跟在後面），紙上版本沒有邊框
+     （沿用這支檔案原本「表格才有格線」的視覺，`.settle` 是說明性質的
+     兩欄清單，不是要對齊填寫的表格）。 */
+  .settle-t {{ font-size: 9.8pt; font-weight: 700; margin: 2pt 0 4pt; }}
+  .settle {{ width: 100%; border-collapse: collapse; font-size: 9.3pt;
+             margin-bottom: 10pt; }}
+  .settle td {{ border: none; height: 15.8pt; padding: 1pt 2pt; }}
+  .settle td:first-child {{ color: #333; width: 55%; }}
+  .settle small {{ color: #666; font-size: 7.6pt; margin-left: 4pt; }}
   .signs {{ display: flex; margin-top: 12pt; border: 0.6pt solid #000; }}
   .sig {{ flex: 1; border-right: 0.6pt solid #000; padding: 5pt 6pt;
           font-size: 9.2pt; min-height: 26pt; }}
@@ -191,6 +277,10 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
   <div class="doc">獎金分潤單</div>
   <div class="head"><div>案件編號　{quote}</div><div>基數　{base}</div>
     <div>狀態　{status}</div></div>
+  <div class="settle-t">案件精算明細（比照精算頁面）</div>
+  <table class="settle">
+    {settle_rows}
+  </table>
   <table>
     <tr><th>獎金項目</th><th>領款人</th><th class="num">發放比例</th>
         <th class="num">個人比例</th><th class="num">金額</th></tr>
@@ -206,6 +296,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
         base=_fmt_money(award.get("base_amount")),
         status=e("已作廢" if award.get("voided_at") else (award.get("status") or "")),
         watermark=watermark,
+        settle_rows=settle_rows_html,
         rows="".join(rows), signs=sign_html,
         foot=e("匯出時間 %s" % exported_at))
 
@@ -251,10 +342,11 @@ def export_award_pdf(award_id):
         signatures = resolve_display_names(conn, bonus_signatures_of(award))
         display_names = _display_names_for(
             conn, (ln.get("username") for ln in lines))
+        settle = _settlement_of(conn, award.get("quote_no"))
     finally:
         conn.close()
 
     exported_at = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     html_text = build_award_html(award, lines, signatures, display_names,
-                                 exported_at)
+                                 exported_at, settle=settle)
     return award, _render(html_text)

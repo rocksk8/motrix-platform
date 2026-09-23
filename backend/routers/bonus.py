@@ -34,6 +34,7 @@ from helpers.bonus import (
     base_amount_for, people_for_item, split_award, pool_for, remainder_of,
     visible_lines, PERSON_SOURCES, BASIS_POINTS,
     bonus_signatures_of, is_paid, BonusChainUnreadable, MAKER_SLOT,
+    SETTLEMENT_FIELDS, settlement_fields,
 )
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
@@ -225,24 +226,11 @@ def _case_names_for(conn, quote_nos):
             for r in rows}
 
 
-#: `SPEC-BN6-BN7.md §1`：逐字抄 `settlement.html` 的十二格鍵名與順序。
-#: 🔴 `BN6` 一個數字都不重算——10%／1% 只寫在 `settlement.html`，
-#: 這裡只把 `summary` 已存的值原樣帶出來。改動任何一個字要回那份規格。
-_SETTLEMENT_FIELDS = (
-    "quotedPretax", "quotedTotal",
-    "itemActualTotal", "extraTotal", "dispatchTotal", "totalActualCost",
-    "grossProfit", "grossMarginPct", "adminCost", "charityDonation",
-    "netProfit", "netMarginPct",
-)
-
-
-def _settlement_fields(settle):
-    """把 `settlement.summary` 的十二格原樣帶出，**缺的回 `None`，不是 `0`**
-    （`§6②`）——`summary` 本身是空的（`§6③`，`MQ-EXPFILE-001` 那種）與
-    `summary` 缺某一欄，兩種情況這裡自然地都回 `None`，不必分兩支寫。
-    """
-    summary = (settle or {}).get("summary") or {}
-    return {k: summary.get(k) for k in _SETTLEMENT_FIELDS}
+#: `BN11` 搬到 `helpers/bonus.py`（`SETTLEMENT_FIELDS`／`settlement_fields`）
+#: ——`bonus_pdf.py` 也要用同一份，helper 不能 import router，只能反過來。
+#: 這兩個名字留著、行為不變，call site 全部不用改。
+_SETTLEMENT_FIELDS = SETTLEMENT_FIELDS
+_settlement_fields = settlement_fields
 
 
 @router.get("/base/{quote_no}")

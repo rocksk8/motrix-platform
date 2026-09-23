@@ -83,6 +83,57 @@ def base_amount_for(settlement):
     return True, value, None
 
 
+#: `SPEC-BN6-BN7.md §1`：逐字抄 `settlement.html` 的十二格鍵名與順序。
+#: 🔴 `BN6` 一個數字都不重算——10%／1% 只寫在 `settlement.html`，
+#: 這裡只把 `summary` 已存的值原樣帶出來。改動任何一個字要回那份規格。
+#: 📌 `SPEC-BN11-BN12.md §2`：原本定義在 `routers/bonus.py`，`BN11` 搬到
+#: 這裡——`bonus_pdf.py`（helper）不可以 import router，搬過來才有單一
+#: 來源可以共用，不是為了搬而搬。
+SETTLEMENT_FIELDS = (
+    "quotedPretax", "quotedTotal",
+    "itemActualTotal", "extraTotal", "dispatchTotal", "totalActualCost",
+    "grossProfit", "grossMarginPct", "adminCost", "charityDonation",
+    "netProfit", "netMarginPct",
+)
+
+
+def settlement_fields(settle):
+    """把 `settlement.summary` 的十二格原樣帶出，**缺的回 `None`，不是 `0`**
+    （〈null 不等於 0〉）——`summary` 本身是空的（`MQ-EXPFILE-001` 那種）與
+    `summary` 缺某一欄，兩種情況這裡自然地都回 `None`，不必分兩支寫。
+    """
+    summary = (settle or {}).get("summary") or {}
+    return {k: summary.get(k) for k in SETTLEMENT_FIELDS}
+
+
+#: `SPEC-BN11-BN12.md §2`：精算明細表的**列定義**（鍵、標籤、格式），
+#: 順序即顯示順序。**這是唯一一份**——`bonus_pdf.py` 的 PDF 與
+#: `bonus.html` 的 `bn-settle`（現有 HTML，文字逐字抄自這裡）都以它為準，
+#: `settlement.html` 那份**本輪不動**（前端寫死的表格，改寫不在 BN11
+#: 範圍內），靠守門釘兩邊文字一致，不是靠兩邊都讀同一份程式碼。
+#:
+#: 🔴 第 10 列（`netProfit`）的 `note` 是使用者 2026-09-23 裁示要印的
+#: 「（＝獎金分潤基數）」——**不是與 `settlement.html` 的漂移**，那句話
+#: 正是使用者這次強調的因果（「必須有詳細金額最後算出真實淨利，才能用
+#: 真實淨利去算獎金」）。
+#: ⚠️ `quotedTotal`（含稅總額）不在列定義裡——它是 `quotedPretax` 那一列
+#: 的**註記**，不是獨立的一列（`bonus.html` 的 `bn-settle__note` 已經是
+#: 這樣做的）。
+SETTLEMENT_ROWS = (
+    ("quotedPretax",    "報價稅前收入",     "money", ""),
+    ("itemActualTotal", "品項實際成本",     "money", ""),
+    ("extraTotal",      "額外支出",         "money", ""),
+    ("dispatchTotal",   "承攬商派發成本",   "money", ""),
+    ("totalActualCost", "實際總成本",       "money", ""),
+    ("grossProfit",     "真實毛利",         "money", ""),
+    ("grossMarginPct",  "真實毛利率",       "pct1",  ""),
+    ("adminCost",       "管銷分攤（10%）",  "money", ""),
+    ("charityDonation", "公益捐款（1%）",   "money", ""),
+    ("netProfit",       "真實淨利",         "money", "（＝獎金分潤基數）"),
+    ("netMarginPct",    "真實淨利率",       "pct1",  ""),
+)
+
+
 def pool_for(base, total_pct):
     """總獎金池 ＝ `base × total_pct / 10000`（整數，無條件捨去）。"""
     return int(base) * int(total_pct) // BASIS_POINTS
