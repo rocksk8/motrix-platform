@@ -34,6 +34,12 @@
     .bn-status{font-size:11px;padding:1px 8px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
     .bn-voided{background:#FEF2F2;color:#B91C1C;border:1px solid #FCA5A5}
 
+    /* `BN16`：狀態篩選頁籤，互斥（一次只有一個 `.on`）。 */
+    .bn-filter{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px;font-family:var(--font-zh)}
+    .bn-filter__tab{padding:6px 12px;border:1px solid var(--border-light);border-radius:999px;background:#fff;font-size:12.5px;font-family:var(--font-zh);cursor:pointer;color:var(--text-secondary)}
+    .bn-filter__tab.on{background:var(--text-primary);color:var(--white);border-color:var(--text-primary)}
+    .bn-filter__void{margin-left:auto;font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;cursor:pointer}
+
     .bn-line{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px}
     .bn-line:last-child{border-bottom:none}
     .bn-who{min-width:110px;font-weight:600;color:var(--text-primary)}
@@ -381,15 +387,46 @@
              項目，不用重新寫」）。 -->
       </section>
 
-      <!-- ══ 已產生的獎金單 ═════════════════════════════════════════ -->
+      <!-- ══ 已產生的獎金單 ═════════════════════════════════════════
+           `BN16`：使用者原話「獎金單可區分草稿、送審中、已審核、未撥付、
+           已撥付多種狀態，可切換顯示」。「已審核」使用者裁＝已核准且
+           未撥付（他的待辦清單：該付錢的那幾張）；「送審中」是集合的
+           名字（待審核／簽核中兩個字串仍然逐字顯示在列上，不發明新詞）。
+           作廢是第三個維度，併進頁籤而不是獨立一區（交集不是另開一區），
+           列上已經用「已作廢」取代狀態文字，不靠顏色。 -->
       <section class="bn-sec" x-show="loaded">
         <div class="bn-sec__hd">
           <span class="bn-sec__t">獎金單</span>
         </div>
+
+        <!-- ⚠️ 計數與列表用同一個 `awards` 陣列算（`awardCounts()`／
+             `filteredAwards()` 都讀 `this.awards`），不是各自打一支 API
+             ——那讓「數字與列出來的筆數對不起來」在結構上不可能發生。 -->
+        <div class="bn-filter" role="tablist">
+          <button class="bn-filter__tab" :class="awardFilter === 'all' ? 'on' : ''"
+                  @click="awardFilter = 'all'"
+                  x-text="'全部（' + awards.filter(function(a){return includeVoided || !a.voided_at}).length + '）'"></button>
+          <button class="bn-filter__tab" :class="awardFilter === 'draft' ? 'on' : ''"
+                  @click="awardFilter = 'draft'"
+                  x-text="'草稿（' + awardCounts().draft + '）'"></button>
+          <button class="bn-filter__tab" :class="awardFilter === 'pending' ? 'on' : ''"
+                  @click="awardFilter = 'pending'"
+                  x-text="'送審中（' + awardCounts().pending + '）'"></button>
+          <button class="bn-filter__tab" :class="awardFilter === 'approved_unpaid' ? 'on' : ''"
+                  @click="awardFilter = 'approved_unpaid'"
+                  x-text="'已核准・未撥付（' + awardCounts().approved_unpaid + '）'"></button>
+          <button class="bn-filter__tab" :class="awardFilter === 'paid' ? 'on' : ''"
+                  @click="awardFilter = 'paid'"
+                  x-text="'已撥付（' + awardCounts().paid + '）'"></button>
+          <label class="bn-filter__void">
+            <input type="checkbox" x-model="includeVoided">顯示已作廢
+          </label>
+        </div>
+
         <!-- `BN10`：使用者原話「目前的顯示方式當獎金單一多就會亂」——
              清單改成一列一張的精簡列，完整內容（精算明細＋分錄＋簽核＋
              動作）點進去看，不在清單裡就地展開。 -->
-        <template x-for="a in awards" :key="a.id">
+        <template x-for="a in filteredAwards()" :key="a.id">
           <div class="bn-row" @click="openAwardDetail(a.id)">
             <span class="bn-case" x-text="a.quote_no"></span>
             <!-- `BN15`：使用者原話「獎金單的只有編號，沒有案件名稱」——
@@ -404,16 +441,12 @@
           </div>
         </template>
 
-        <!-- 🔑 空清單對兩種人意義不同，所以要分開講：
-             管理者看到空的 ＝ 還沒有人產生過獎金單；
-             一般同仁看到空的 ＝ **目前沒有發給您的獎金**，而不是系統壞了。
-             ⚠️ 而它與上面「尚未建立任何獎金項目」是**兩件不同的事**：
+        <!-- 🔑 空清單有三種原因，只說得出前兩種（第三種是「非管理者看不到
+             別人的單」，那個數字本身是 `BN9` 要擋的資訊，不可以暗示）：
                 沒有獎金單  = 還沒有人產生過（可以自己去產生）
-                沒有獎金項目 = **產不出來**（而且只有 superadmin 修得了） -->
-        <div class="bn-empty" x-show="!awards.length"
-             x-text="isManager
-               ? '目前還沒有任何獎金單。獎金單依案件產生，案件需要先完成精算。'
-               : '目前沒有發放給您的獎金。'"></div>
+                沒有獎金項目 = **產不出來**（而且只有 superadmin 修得了）
+             ⚠️ 而它與上面「尚未建立任何獎金項目」是**兩件不同的事**。 -->
+        <div class="bn-empty" x-show="awardEmptyMessage()" x-text="awardEmptyMessage()"></div>
       </section>
 
       <div class="bn-empty" x-show="!loaded && !loadError">載入中…</div>

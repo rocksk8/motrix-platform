@@ -43,6 +43,14 @@ function bonusPage() {
     //:    那一條：看得到按鈕、按下去收 403）。
     canCreateAward: false,
 
+    // ── `BN16`：獎金單狀態篩選 ──
+    //: 'all' ／ 'draft' ／ 'pending'（送審中：待審核＋簽核中）／
+    //: 'approved_unpaid'（已核准・未撥付）／ 'paid'。
+    awardFilter: 'all',
+    //: 「顯示已作廢」——沿用既有 `GET /awards?include_voided=` 的資料，
+    //: 這裡純粹是前端要不要把已作廢的列進可見集合，不重新打 API。
+    includeVoided: false,
+
     // ── 獎金項目（`SPEC-BN1-PLAN §2`）──
     items: [],
     itemsLoaded: false,
@@ -180,7 +188,13 @@ function bonusPage() {
 
     async loadAwards() {
       try {
-        const r = await fetch('/api/bonus/awards', { headers: this._auth() })
+        // `BN16`：一律帶 `include_voided=1` 拿到**完整集合**——「顯示已
+        // 作廢」核取方塊與四個狀態頁籤都在前端對同一份 `this.awards`
+        // 過濾，不因為勾選而重新打 API。這樣「作廢單是不是被藏起來了」
+        // 這件事前端永遠算得出來（§6 的空狀態措辭需要這個前提），也讓
+        // 「計數不可以有自己的資料來源」（§5）在結構上更難被破壞——
+        // 連「換一個查詢參數重打」都不會發生。
+        const r = await fetch('/api/bonus/awards?include_voided=1', { headers: this._auth() })
         if (r.status === 403) {
           this.loadError = '您沒有檢視獎金分潤的權限。若需要存取，請聯絡系統管理員。'
           return
@@ -195,6 +209,76 @@ function bonusPage() {
         // 🔑 說出是哪一支壞了：使用者回報時那句話是唯一的線索。
         this.loadError = '獎金資料載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
       }
+    },
+
+    // ── `BN16`：獎金單狀態篩選 ───────────────────────────────────
+    //
+    // 使用者原話：「獎金單可區分草稿、送審中、已審核、未撥付、已撥付
+    // 多種狀態，可切換顯示」。使用者另裁：「已審核」＝已核准且未撥付
+    // ——那是他的待辦清單（該付錢的那幾張），不是單純的狀態顯示。
+    //
+    // 🔴 「送審中」是**集合的名字**，不是第五個 status 值——待審核／
+    // 簽核中兩個字串在列上仍然逐字顯示，不發明新詞（`§2`）。
+
+    // 三個維度：簽核狀態、撥付、是否作廢——後兩者都是**推導**，不是
+    // 新欄位，跟 `isAwardPaid()` 同一條規則（讀既有欄位，不猜）。
+    awardCategory(a) {
+      if (a.status === '草稿') return 'draft'
+      if (a.status === '待審核' || a.status === '簽核中') return 'pending'
+      if (a.status === '已核准' && !this.isAwardPaid(a)) return 'approved_unpaid'
+      if (this.isAwardPaid(a)) return 'paid'
+      return ''
+    },
+
+    // `§7①`：作廢是第三個維度，併進頁籤（交集）不是獨立一區——一張
+    // 已核准後作廢的單，仍然出現在「已核准・未撥付」裡，靠列上明著
+    // 標「已作廢」分辨（不能只靠灰色／刪除線，那些在列印、截圖、色弱
+    // 時全部失效——`bonus.html` 的 `.bn-voided` 已經是逐字顯示）。
+    filteredAwards() {
+      const byVoid = (this.awards || []).filter(
+        function (a) { return this.includeVoided || !a.voided_at }.bind(this))
+      if (this.awardFilter === 'all') return byVoid
+      const cat = this.awardFilter
+      return byVoid.filter(function (a) { return this.awardCategory(a) === cat }.bind(this))
+    },
+
+    // `§5`：計數與列表用**同一個** `this.awards` 陣列算，不另打 API——
+    // 那讓「數字與列出來的筆數不一致」在結構上不可能發生。
+    // ⚠️ 計數跟著「顯示已作廢」那個核取方塊走（與 `filteredAwards()`
+    // 同一份可見集合），不是永遠算全部。
+    awardCounts() {
+      const byVoid = (this.awards || []).filter(
+        function (a) { return this.includeVoided || !a.voided_at }.bind(this))
+      const c = { draft: 0, pending: 0, approved_unpaid: 0, paid: 0 }
+      for (const a of byVoid) {
+        const cat = this.awardCategory(a)
+        if (cat in c) c[cat]++
+      }
+      return c
+    },
+
+    // `§6`：空狀態的三種原因，只說得出前兩種——第三種（非管理者看不到
+    // 別人的單）**不可以講**，那個數字本身就是資訊（`BN9` 要擋的東西）。
+    // 這裡完全不去猜「外面是不是還有」，只回答「我手上這份資料看不看
+    // 得到東西」，第三種原因因此自然地不會被講出來，不必特別排除。
+    awardEmptyMessage() {
+      if (this.awardFilter === 'all') {
+        if ((this.awards || []).length) return ''
+        return this.isManager
+          ? '目前還沒有任何獎金單。獎金單依案件產生，案件需要先完成精算。'
+          : '目前沒有發放給您的獎金。'
+      }
+      const label = { draft: '草稿', pending: '送審中',
+                     approved_unpaid: '已核准・未撥付', paid: '已撥付' }[this.awardFilter] || ''
+      const inCategory = (this.awards || []).filter(
+        function (a) { return this.awardCategory(a) === this.awardFilter }.bind(this))
+      if (!inCategory.length) return '目前沒有' + label + '狀態的獎金單。'
+      const visible = inCategory.filter(
+        function (a) { return this.includeVoided || !a.voided_at }.bind(this))
+      if (!visible.length) {
+        return '目前沒有' + label + '狀態的獎金單。（已作廢的單未顯示，可勾選上方切換）'
+      }
+      return ''
     },
 
     // ── `BN14`：群組 ─────────────────────────────────────────────
