@@ -30,7 +30,17 @@ function bonusPage() {
     loaded: false,
     loadError: '',
     awards: [],
+    //: **看得到別人那幾列嗎**（後端 `GET /awards` 的 `is_manager`
+    //: ＝ `role === 'superadmin'`，`BN9` 之後不含 `admin`）。
     isManager: false,
+    //: **按得到「產生獎金單」嗎**（後端的 `can_create_award`
+    //: ＝ superadmin 或 admin）。
+    //: 🔴 與 `isManager` 分開，因為 `admin` 這兩格答案**不一樣**：
+    //:    他產生得了獎金單，而他看不到別人領多少。
+    //: ☠️ 用 `isManager` 擋入口的話，`admin` 會看不到一個他按得動的按鈕
+    //:    —— 而那是一個沒有人要求的權限變更（反過來就是 `bonus.html:158`
+    //:    那一條：看得到按鈕、按下去收 403）。
+    canCreateAward: false,
 
     // ── 獎金項目（`SPEC-BN1-PLAN §2`）──
     items: [],
@@ -102,6 +112,7 @@ function bonusPage() {
         const d = await r.json()
         this.awards = d.awards || []
         this.isManager = !!d.is_manager
+        this.canCreateAward = !!d.can_create_award
         this.loaded = true
       } catch (e) {
         // 🔑 說出是哪一支壞了：使用者回報時那句話是唯一的線索。

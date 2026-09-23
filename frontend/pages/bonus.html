@@ -190,8 +190,13 @@
       <!-- ══ 產生獎金單 ═════════════════════════════════════════════
            🔑 先問再做：畫面在按下產生之前就該知道答案，
               而不是按下去才收到一句拒絕。
-           🔴 發放對象**一律由 plan 端點決定**，這一頁不自己算 —— 規則只有一份。 -->
-      <section class="bn-sec" x-show="isManager">
+           🔴 發放對象**一律由 plan 端點決定**，這一頁不自己算 —— 規則只有一份。
+           🔑 `BN9`：入口看 `canCreateAward`（後端 `can_create_award`）
+              **不看 `isManager`** —— `BN9` 把 `isManager` 收緊成 superadmin，
+              而產生獎金單那道閘門沒有動（superadmin ＋ admin）。
+              ☠️ 繼續用 `isManager` 的話，收緊可見範圍會**順手拿掉 admin 的
+                 產生權限入口**，而沒有人要求過那件事。 -->
+      <section class="bn-sec" x-show="canCreateAward">
         <div class="bn-sec__hd">
           <span class="bn-sec__t">產生獎金單</span>
           <span class="bn-sec__s">輸入已完成精算的案件編號，系統會先算出可發放的項目與對象。</span>

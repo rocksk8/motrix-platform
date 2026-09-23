@@ -38,15 +38,37 @@ router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 
 
 def _is_manager(user):
-    """「管理者」＝ 看得到全部的人。
+    """**寫**得動獎金的人（產生／作廢／查基數與發放對象）。
 
-    ⚠️ 施工圖 `§十` 把「最高管理者是否沿用 superadmin」標為**未查**
-       （A 🟡 預設沿用，未經使用者確認）⇒ 這裡把 `admin` 一起納入**讀**的範圍，
-       而**維護項目**仍然只給 superadmin（見下）。
-    🔑 讀與寫分開，是因為猜錯的代價不對稱：
-       讀放寬一點 ⇒ 多一個人看得到；寫放寬 ⇒ 多一個人改得動獎金。
+    ⚠️ 這一把**不再兼任「看得到全部」** —— 讀的那一把是 `_sees_all_lines()`。
+    📌 原本一把兼兩用，理由是施工圖 `§十` 把「最高管理者是否沿用 superadmin」
+       標為未查 ⇒ 讀先放寬。2026-09-23 `BN9` 裁定之後那個理由沒有了，
+       ☠️ 而**留著一把兼兩用的旗標，收緊其中一側時另一側會跟著動，
+          而跟著動的那一側沒有人在看**。
+    🔑 讀與寫的代價仍然不對稱，所以仍然分開：
+       讀放寬 ⇒ 多一個人**看得到別人領多少**；寫放寬 ⇒ 多一個人改得動獎金。
     """
     return user.get("role") in ("superadmin", "admin")
+
+
+def _sees_all_lines(user):
+    """看得到**別人那幾列**的人 —— 只有 `superadmin`（`BN9`）。
+
+    ## 🔴 這是「誰領多少」的可見範圍，不是「誰改得動」
+
+    ```
+    superadmin  整張單、所有人的金額
+    admin       **只有自己那一列**（與一般同仁相同）—— 他仍然產生得了獎金單
+    其他人       只有自己那一列
+    ```
+    ⚠️ `admin` 在這一頁是**一般使用者**，而他在別的頁不是 ——
+       ☠️ 所以畫面不可以用同一個旗標同時決定「看得到什麼」與「按得到什麼」：
+       他按得到「產生獎金單」，而他看不到別人的金額。
+    📌 ⇒ 回應裡送**兩個**旗標（`is_manager`／`can_create_award`），
+       前端各用各的。少送一個的話，收緊可見範圍會連入口一起收掉，
+       **而那是一個沒有人要求的權限變更**。
+    """
+    return user.get("role") == "superadmin"
 
 def _user_name(user):
     """寫進 `*_by` 欄位的值：**`username`，不是 token，也不是 id**。
@@ -301,10 +323,18 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
     ⚠️ 非管理者也看得到**單**（否則他不知道自己那一筆屬於哪一案），
        而他只看得到**自己那一列**金額。
     ☠️ 反過來（整張單都不給看）的話，他收到一筆錢而查不到來源。
+
+    🔴 `BN9`（2026-09-23）：「看得到全部」收緊成 **superadmin**。
+       ⇒ `admin` 在這一頁與一般同仁相同（只看得到自己那一列），
+         而他仍然**產生得了**獎金單 —— 見 `can_create_award`。
+       ⚠️ 副作用要講出來：`admin` 產生了一張自己不在裡面的獎金單之後，
+          **那張單不會出現在他的清單上**（他沒有任何一列）。
+          那是這個裁定的直接後果，不是缺陷。
     """
     user = _require_user(authorization)
     me = user.get("username") or ""
-    manager = _is_manager(user)
+    # 🔴 `BN9`：**讀**的範圍是 superadmin，不是 `_is_manager`。
+    manager = _sees_all_lines(user)
     conn = get_db()
     try:
         # 🔑 預設只看有效的：作廢單仍查得到（稽核），而要明著要。
@@ -331,7 +361,16 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         if not manager:
             a.pop("base_amount", None)
         out.append(a)
-    return {"awards": out, "is_manager": manager}
+    return {
+        "awards": out,
+        # 🔑 **可見範圍**（看得到別人那幾列嗎）
+        "is_manager": manager,
+        # 🔑 **入口**（按得到「產生獎金單」嗎）——`admin` 這兩格答案不同。
+        #    ⚠️ 與 `bonus.html:158` 那一條同一個道理：入口要看真正的那道閘門，
+        #       用可見範圍去擋的話，有權限的人會看不到按鈕（反過來就是
+        #       看得到按鈕、按下去收 403）。
+        "can_create_award": _is_manager(user),
+    }
 
 
 @router.post("/awards")
