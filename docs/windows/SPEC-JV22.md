@@ -66,6 +66,43 @@ archive.py:1639  逐字：「**編寫紀錄是憑證的一部分，不是軌跡*
 
 ---
 
+## §2b 🔴🔴 **「長期記憶」與既有的 730 天清理直接衝突**（D 查到）
+
+```python
+# archive.py:1086  —— **已排程**（:1937 呼叫）
+def _prune_audit_log(keep_days: int = 730) -> None:
+    cutoff = (datetime.now() - timedelta(days=730)).isoformat()
+    cur = conn.execute("DELETE FROM audit_log WHERE at < ?", (cutoff,))   # <= **真的 DELETE**
+```
+
+```
+而**退回原因目前只存在 audit_log** => **兩年後它會被刪掉**
+```
+
+> ### ☠️ 使用者說「**長期記憶，這個不能刪除**」，而它兩年後會被刪掉。
+
+### ⚠️ 而那支函式的 docstring 有一句要處理
+
+> 「Daily backup exports first, **so nothing is lost**.」
+
+```
+✅ 對「資料有沒有消失」而言那句話是對的 —— 每日備份先匯出
+🔴 而對使用者要的那件事**不成立**：
+   **備份檔裡有 ≠ 他在畫面上查得到**
+🔑 「長期記憶」是一個**查得到**的承諾，不是一個**存在過**的承諾
+```
+
+### ✅ ⇒ 裁定（A）：**退回原因必須也寫進 `voucher_edit_log`**
+
+```
+❌ 不可以只靠 audit_log
+✅ 落點 = voucher_edit_log（**沒有任何清理程式碰它**）
+```
+📌 〈計數器要有落點〉的變形：
+> **一個「永久保存」的承諾，要指出它保存在哪一張不會被清的表。**
+
+---
+
 ## §3 ① 「不能刪除」——**三個層次，而現況已經滿足兩個**
 
 ```
@@ -88,8 +125,27 @@ pdf_gen.py 那一段（JV5）逐字：
 ### 🔴 而「不能刪除」要寫成**守門**，不是寫成一句話
 
 ```
+### 🔴 而 A 裁：**要加資料庫層的 TRIGGER**，不只靠「沒有人寫」
+
+D 的原話：
+> 「這是『**沒有人寫**』的保護，不是資料庫層擋下來的保護 ——
+> 全庫只有 5 個 TRIGGER，**全部只保護 `account_items`**（`RAISE(ABORT)`）。
+> 若之後有人比照 `_prune_audit_log()` 幫 `voucher_edit_log` 寫一支保留期清理，
+> **今天沒有任何機制擋得住**。」
+
+```
+⇒ 照 `account_items` 那 5 個的形狀加 TRIGGER（BEFORE DELETE -> RAISE(ABORT)）
+   📌 **今天第十次「這個系統裡已經有人解過這個問題」**
+🔑 理由：使用者說「不能刪除」，而「**沒有人寫刪除**」與「**刪不掉**」是兩件事
+   📌 〈守門被拿掉≠規則被解除〉的鏡像：**規則存在 ≠ 有東西在擋**
+🔴 而這會動 `db.py`（**鎖定檔**）⇒ **動前要宣告**
+⚠️ 而 TRIGGER 要**同時保護 `bonus_award_edit_log`** —— 同形狀的另一張
+```
+
 ⚙️ 釘：`backend/**` 裡沒有任何 `DELETE FROM voucher_edit_log`／
       `DELETE FROM bonus_award_edit_log`
+      🔑 而這一道與 TRIGGER **兩個都要**：
+         掃原始碼擋「有人寫」，TRIGGER 擋「寫了會成功」
    ⚠️ 判準要含 `bonus_award_edit_log` —— **它是同形狀的另一張**，
       而「只擋傳票那張」會在獎金單那邊留一個洞
 🎣 誘餌 自己留一句合成的 DELETE（註解掉的不算 —— 要能被掃到）
@@ -121,7 +177,7 @@ archive.py:1598 的註解逐字：「`voucher_edit_log` 看起來像『紀錄類
 ```
 既有格式  [{"field": …, "from": …, "to": …}, …]
 PUT 已經在寫「欄位級 ＋ 分錄級」（`changes + line_changes`）
-附件      :1069 只寫 `{"field": "attachment", "from": 檔名, "to": ""}`
+附件刪除  :1069 寫 `{"field": "attachment", "from": 檔名, "to": ""}`
           ✅ **不帶二進位** —— A 擔心的那一格現況已經避開了
 ```
 
@@ -132,6 +188,27 @@ PUT 已經在寫「欄位級 ＋ 分錄級」（`changes + line_changes`）
 🔑 而 `edit_log.py` 的規則（缺改前值就寫不進去）在整包快照上**沒有意義**
    —— 它要的是「這個欄位原本是什麼」，不是「整張單原本長什麼樣」
 ```
+
+### 🔴 缺口一（D 查到）：**附件「新增」留不住動過什麼**
+
+```
+附件**刪除**  voucher_edit_log（field="attachment", from=檔名, to=""）＋ audit_log（含檔名）
+附件**新增**  vouchers.py:1001  _audit(…, "傳票附件 **+%d**" % added)
+              => **只有數量，連檔名都沒有**，而 voucher_edit_log **一列都沒寫**
+```
+
+> ### ☠️ **刪得掉的留得住，加上去的留不住。**
+> ### 而使用者要的正是「這次編修的內容」。
+
+⇒ 新增端點比照刪除端點補：
+```python
+append_edit_log(conn, voucher_id, _user_name(user),
+                [{"field": "attachment", "from": "", "to": meta["filename"]}
+                 for meta in 新增的每一筆],
+                table="voucher_edit_log", changed_at=now)
+```
+⚠️ **多筆併成一批寫一列** —— 維持「一次操作一列」（與 PUT 的
+`changes + line_changes` 合併寫一列是同一條慣例）。
 
 ---
 
@@ -152,6 +229,18 @@ PUT 已經在寫「欄位級 ＋ 分錄級」（`changes + line_changes`）
 
 📌 ⇒ `JV22` 這一格**什麼都不用做**，而**理由要寫下來**：
 ☠️ 否則下一個人看到「退回會換號」會以為這裡也有 `QN1` 那個問題，去「修」一個不存在的東西。
+
+### ✅ 而 D 補的一句要原文寫進來
+
+```
+send_back ／ update ／ 附件刪除 全部 _audit(…, str(**voucher_id**), …)
+voucher_edit_log 外鍵也是 voucher_id REFERENCES vouchers_all(id)
+⇒ 不管升版幾次，`WHERE voucher_id=X ORDER BY at` 就串得起來
+```
+
+> ### **記錄掛在穩定 ID 上，不隨升版漂移。**
+
+🔑 A 的理由：**否則下一個人會重新擔心一次，而重新擔心的成本比寫一句話高。**
 
 ### ⚠️ 而有一格要補：`send_back` **現在不寫 edit_log**
 
@@ -237,7 +326,10 @@ PUT 已經在寫「欄位級 ＋ 分錄級」（`changes + line_changes`）
    ⚠️ 我判斷 send_back 補寫之後就不需要，**而沒有逐欄比對兩邊記了什麼**
 ③ 舊資料：現有的 `voucher_edit_log` 只有 **1 列** ——
    ⇒ ⓑ 那題要**自己造**多次退回的資料，現有資料驗不到
-④ `bonus_award_edit_log` 有沒有同樣的「有寫無讀」——**沒查**
+④ `vouchers_all.custom_fields` **有 schema、零寫入點、連建立時都沒寫**（D 查）
+   📌 D 標「**不算會被編修，是尚未串接**」⇒ **本規格不涵蓋它**
+   🔴 而這一句要留著 —— 否則下一個人會以為是漏做的
+⑤ `bonus_award_edit_log` 有沒有同樣的「有寫無讀」——**沒查**
    🔑 而它與 `voucher_edit_log` 是同形狀 ⇒ **很可能一樣**
    ⇒ 若是，那是 `BN` 那一側的同一件事，建議另開編號
 ⑤ `retention` 欄位現在寫進去的是什麼值（`term` 還是 `permanent`），
