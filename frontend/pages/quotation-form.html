@@ -3198,10 +3198,17 @@ window.addEventListener('load',function(){
       exportPDF(mode) {
         const isInternal = mode === 'internal'
         if (!isInternal) {
-          // 🔴 `EM11`：原本在發出請求之前，兩個計數器都無條件更新；
-          //    上一輪只把 exportCount 改成功才 +1，exportLog 忘了改，
-          //    失敗時兩者對不上（殘留，A-2 複查撿到）。⇒ 兩者每條路徑
-          //    都成對：成功才一起 +1，失敗兩個都不動，離線一起累加。
+          // 🔴 `EM11`：原本在發出請求之前，exportCount 與 exportLog 都
+          //    無條件樂觀更新；上一輪只把 exportCount 改成功才 +1，
+          //    exportLog 卻還留在原地無條件 push——兩個計數器因此分岔：
+          //    失敗時「共匯出 N 次」（exportCount 沒加）與下面列出的筆數
+          //    （exportLog 已經加了）對不上，且兩個數字並排在同一個畫面
+          //    上，比整個都樂觀更顯眼（殘留，A-2 複查撿到）。
+          //    ⇒ 判準不是「兩者都搬進 r.ok」，是**兩者在每一條路徑上成對**：
+          //    成功才一起 +1；失敗／網路錯誤兩個都不動（只是提醒使用者
+          //    這次沒記到，畫面數字保持原樣，不是反過來變成「兩者都不管
+          //    失敗」）；離線／沒有單號本來就打不到後端，維持兩個一起
+          //    累加的本地近似值（不然離線時這顆功能整個不能用）。
           const logEntry = { at: new Date().toISOString(), mode }
           if (this.backendOnline && this.q.quoteNo) {
             fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=${mode}`, {
