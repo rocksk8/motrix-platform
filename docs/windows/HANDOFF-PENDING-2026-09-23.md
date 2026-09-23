@@ -166,3 +166,20 @@ deployed-version  46dc6ae（branch 欄顯示 HEAD＝detached 建包，內容即 
 - 丙類 9 個、甲類 8 個的逐項真偽：沒查，照 GATE-BLOCK 的分類轉列。
 - `PENDING-RULINGS` 18 條的內容：沒讀，只轉列數量。
 - T5 的 1,319 個 commit 中有多少是功能變更（相對於文件）：沒分。
+
+## 🟡 傳票 JV29～34 之後的排程（2026-09-24 使用者表單：「傳票做完再說」）
+
+來源：hichan-0a 三路唯讀檢視（簽核權限／金流／報價與案件），重點項皆讀碼確認。
+
+| 組 | 使用者勾選 | 內容（file:line 為 HEAD 3370d74 附近） |
+|---|---|---|
+| 簽核 | 額外支出退回權限 | `case_extra_expenses.py:499`、`:1019` 呼叫 `check_reject_permission` 但丟掉結果（approve 側 09-15 已修同型） |
+| 金流 | 收款資料驗證 | `cashier.js:331` 送 `receivedAt:''`、`quotations.py:3113` 不驗 ⇒ 已收款但無日期，所有收入報表漏算；`actualAmount`／`feeAmount` 不驗型別（清空 ⇒ 報表 500）；`receivedBy` 由伺服器記 |
+| 金流 | 防業務改已收款期別 | `quotations.py:2209-2226` 批次存檔只比對部分欄位（可刪除／改日期已收款期別、改 taxExempt）；`mark_payment` 以陣列位置 `idx` 定位（`:3075`）無併發鎖 |
+| 金流 | 稅額算法與收支基準統一 | 稅額三種算法（`reports.py:2619`、`helpers/quotations.py:199`、`payment_requests.py:265`）；收入按收款日、支出按派工日。⚠️ **基準要會計決定**，動工前用表單問使用者 |
+| 報價案件 | 資料遺失類 | `case-management.js:1324` `selectCase()` 取消待存計時器後直接 `dirty=false`（已確認）；`window.motrixIsDirty` 未接；刪除無確認 |
+| 報價案件 | 輸入解析 | 金額 `type=number` 貼「12,000」成 0；毛利率清空 ⇒ NaN 該行當 0 且跳過需審核 |
+| 報價案件 | 清單與標籤 | 單號搜尋大小寫（`quotations.html:587`）、篩選不保留、狀態標籤矛盾、案件連結沒帶單號、鍵盤新增品項 |
+| 報價案件 | 預覽與 PDF 統一 | 9 處可見差異（預覽寫死公司抬頭、項次編號不同…）⇒ 預覽改用伺服器版面 |
+
+未勾選（記錄在此，不做）：全單據禁止自己核准、獎金分潤單走共用檢查、稅額沖銷自核、T100 匯出三項（其中「每月 1 號承攬商付款漏匯」**已讀碼確認**：`accounting_export.py:233-237` 以 `>= 'YYYY-MM-DDT00:00:00'` 比對純日期 `paid_at`）。
