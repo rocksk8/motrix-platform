@@ -193,36 +193,24 @@ def test_em9_contractors_toggle_active_from_pane_must_report_failure():
 # ══════════════════════════════════════════════════════════════════════
 
 def test_em9_quotation_deal_tag_change_has_failure_handling():
-    """⚙️ **正對照：`quotation-form.html` 的 `dealTag` 樂觀更新，`EM11` 已修。**
+    """⚙️ **正對照：`quotation-form.html::onDealTagChange`，`EM11` 已修。**
 
     ☠️ 少了這一題，`①` 那幾題的判準（`_has_failure_handling`）若壞成
     「永遠回 True」，`①` 會全部**假綠**——這一題確認判準對「已知確定
     有保護」的程式碼會正確回報「有」。
+
+    🔴 **第一版釘在 `EM11` 那段註解的字面片語上**（`src.find("EM11：
+    dealTag 是")`）——B 回報：他重寫註解時字面片語跟著換掉，這一題就紅
+    了，而程式碼本身沒有壞。已改成釘**函式名稱** `onDealTagChange`
+    （行為／結構層，不是散文）——函式名字比註解措辭穩定，改名字是
+    刻意的重構，不會是「順手潤飾文件」的副作用。
     """
     src = _read("frontend/pages/quotation-form.html")
-    # 🔑 動工時我沒有完整確認這支方法叫什麼名字（規格只給了行號，行號已
-    #    過期）——直接用 EM11 的註解錨點往前找函式開頭，比猜函式名可靠。
-    marker = src.find("`EM11`：dealTag 是")
-    assert marker != -1, (
-        "找不到 `EM11` 對 dealTag 的那段註解——它可能被搬走或改寫了，\n"
-        "退回改本檔的錨點。")
-    func_start = src.rfind("async ", 0, marker)
-    assert func_start != -1, "註解前面找不到函式開頭。"
-    depth = 0
-    i = src.index("{", func_start)
-    start_brace = i
-    depth = 1
-    i += 1
-    n = len(src)
-    while i < n and depth > 0:
-        if src[i] == "{":
-            depth += 1
-        elif src[i] == "}":
-            depth -= 1
-        i += 1
-    snippet = src[func_start:i]
+    snippet = _extract_method(src, "onDealTagChange")
+    assert snippet is not None, (
+        "找不到 `onDealTagChange`——退回改本檔的擷取法。")
     assert _has_failure_handling(snippet), (
-        "`EM11` 標記的 dealTag 函式**沒有**被判定成有失敗分支——\n"
+        "`quotation-form.html::onDealTagChange` **沒有**被判定成有失敗分支——\n"
         + "要嘛探針的判準太窄，要嘛這段保護被拿掉了。片段：\n%s"
           % snippet[:500])
 
@@ -230,47 +218,40 @@ def test_em9_quotation_deal_tag_change_has_failure_handling():
 def test_em9_quotation_export_count_has_failure_handling():
     """⚙️ 正對照：`quotation-form.html` 的 `exportPDF`／`directExport`，
     兩處 `exportCount` 樂觀更新都在 `EM11` 修過，兩處都要有失敗分支。
+
+    🔴 **第一版用固定視窗（900 字元）從註解錨點往後切，兩個問題疊在一起**：
+    ```
+    ① 錨點釘在註解字面片語上（同上一題的問題）
+    ② 固定字元視窗會被「墊長註解」推出視窗——B 重寫註解時新註解變長，
+       把真正的 `.catch(` 推到 900 字元之外，判準回報「沒有失敗分支」
+       而實際上有。**這比①更嚴重**：它不是錨點失效報不到人，
+       是**距離型的尺對長度敏感**，換一段更長的解釋文字就會假陽性。
+    ```
+    ⇒ 改成：用函式名稱定位（`exportPDF`／`directExport`），
+    再用**括號平衡**取到函式的真正結尾——不管中間夾了多長的註解、
+    多長的 `.then()/.catch()` 鏈，只要還在同一個函式的大括號範圍內，
+    括號平衡都找得到，不像固定視窗那樣受註解長度影響。
     """
     src = _read("frontend/pages/quotation-form.html")
-    markers = [m.start() for m in re.finditer(
-        r"`EM11`：(?:失敗時原本仍然樂觀|原本在發出請求)", src)]
-    assert len(markers) == 2, (
-        "找到 %d 個 `EM11` 對 exportCount 的註解錨點，預期 2 個——\n"
-        "數量對不上代表其中一處被改寫或搬走了，先看是哪一個少了。"
-        % len(markers))
-    # 🔴 **我第一版在這裡用括號比對切片，切早了**：這兩處是
-    #    `fetch(...).then(r => {...}).catch(...)` 鏈，從註解位置數大括號
-    #    平衡，數到 `fetch()` 選項物件那個 `{...}` 結束就提早收尾，
-    #    切不到後面真正含有失敗分支的 `.then()`／`.catch()`。
-    #    ⇒ 改成固定視窗（900 字元，實測 `.catch(` 出現在 694／716 字元處，
-    #    900 字元綽綽有餘），不對這種鏈式呼叫做括號平衡。
-    for marker in markers:
-        snippet = src[marker:marker + 900]
+    for name in ("exportPDF", "directExport"):
+        snippet = _extract_method(src, name)
+        assert snippet is not None, (
+            "找不到 `%s`——退回改本檔的擷取法。" % name)
         assert _has_failure_handling(snippet), (
-            "`EM11` 標記的其中一處 exportCount 更新**沒有**失敗分支：\n%s"
-            % snippet[:500])
+            "`quotation-form.html::%s` 的 exportCount 更新**沒有**"
+            "失敗分支：\n%s" % (name, snippet[:500]))
 
 
 def test_em9_vendor_passbook_put_has_failure_handling():
     """⚙️ 正對照：`vendor-contractors.html` 的存摺 PUT，`EM12` 已修
     （本會話今天稍早的產出，commit `b349ee7`）——鎖住它不會退回去。
+
+    🔴 第一版釘 `src.find("EM12")` 註解錨點——同一族問題，已改成釘
+    函式名稱 `save`，並用 `_extract_method()` 取代 ad-hoc 括號比對。
     """
     src = _read("frontend/pages/vendor-contractors.html")
-    marker = src.find("`EM12`")
-    assert marker != -1, "找不到 `EM12` 的註解錨點——退回改本檔的錨點。"
-    func_start = src.rfind("async save", 0, marker)
-    assert func_start != -1, "註解前面找不到 `save()` 函式開頭。"
-    brace = src.index("{", func_start)
-    depth = 1
-    i = brace + 1
-    n = len(src)
-    while i < n and depth > 0:
-        if src[i] == "{":
-            depth += 1
-        elif src[i] == "}":
-            depth -= 1
-        i += 1
-    snippet = src[func_start:i]
+    snippet = _extract_method(src, "save")
+    assert snippet is not None, "找不到 `save`——退回改本檔的擷取法。"
     assert "bankPassbookPreview" in snippet, (
         "取出的片段裡沒有 `bankPassbookPreview`——擷取範圍可能不對。")
     # 🔑 這裡不能直接套用 `_has_failure_handling()`：`save()` 整支函式
@@ -315,3 +296,36 @@ def test_em9_the_probe_does_not_flag_a_synthetic_handled_write():
     assert _has_failure_handling(synthetic), (
         "判準對一支明顯有處理失敗的合成函式回報『沒有失敗分支』——太窄，\n"
         "會誤把正確的實作判成缺陷。")
+
+
+def test_em9_a_long_comment_before_catch_does_not_cause_a_false_negative():
+    """⚙️ **迴歸誘餌：`.catch(` 前面墊一段極長的註解，判準不可以誤報「沒有」。**
+
+    這一題直接對應 A 回報的那個真實 bug——舊版判準用**固定字元視窗**
+    （從錨點往後切 900 字元）找失敗分支，B 重寫附近的註解把它變長，
+    真正的 `.catch(` 被推出 900 字元之外，判準因此誤報「沒有失敗分支」。
+
+    ⚙️ 合成一段結構相同的輸入：函式體裡先塞一段刻意超過 900 字元的
+    註解，隔了很久才出現 `.catch(...)`——若判準（`_has_failure_handling`
+    ＋ `_extract_method` 的括號平衡擷取）走的是**結構**而不是距離，
+    這一題必須是綠的；若哪天有人把判準改回距離型視窗，這一題會先紅，
+    不必等到真正的產品碼被墊長註解才發現。
+    """
+    long_comment = "// " + ("這是一段刻意拉長的註解用來把後面的程式碼推遠　" * 40)
+    assert len(long_comment) > 900, (
+        "誘餌註解只有 %d 字元，沒有超過舊版判準的 900 字元視窗，\n"
+        "這一題就驗不到當初那個 bug。" % len(long_comment))
+    synthetic = (
+        "async doTheThing() {\n"
+        + long_comment + "\n"
+        + "  fetch('/api/whatever', { method: 'POST' })\n"
+        + "    .then(r => { if (r.ok) { this.load() } })\n"
+        + "    .catch(() => { this.toast('失敗了') })\n"
+        + "}"
+    )
+    snippet = _extract_method(synthetic, "doTheThing")
+    assert snippet is not None, (
+        "連合成輸入都取不到函式片段——`_extract_method` 本身壞了。")
+    assert _has_failure_handling(snippet), (
+        "`.catch(...)` 前面墊了 %d 字元的註解，判準卻回報『沒有失敗分支』"
+        "——退回成距離型視窗了。" % len(long_comment))
