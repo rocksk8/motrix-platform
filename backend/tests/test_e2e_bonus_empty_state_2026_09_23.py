@@ -173,28 +173,36 @@ def _assert_three_things(text, who):
 @pytest.mark.e2e
 def test_ac1_an_admin_is_told_who_can_fix_it_and_gets_no_button(
         live_server, make_user):
-    """🔴 **`admin` 看得到那三句話，而**沒有**新增入口。**
+    """🔴 **`admin` 看不到獎金項目區，也沒有新增入口。**（2026-09-24 改判準）
 
-    ☠️ 這是 `SPEC-BN1-PLAN §2` 真正要決定的那一格：
-    ```
-    admin 可以產生獎金單（_is_manager 過）
-          **不能新增獎金項目**（require_superadmin 擋）
-    ⇒ 公司裡只有 admin 在用的那天，他打開頁面看到空清單，**而他修不好它**
-    ```
-    ⚠️ 給他按鈕的後果不是「多一個按鈕」：他按下去收到 **403**，
-       而這個模組已經確立「**按下去之前就該知道答案**」。
+    ## 📌 更正留著：這一題原本要求 admin 看得到獎金項目的空狀態三句話
+
+    原判準（AC1，2026-09-23 清晨）：admin 打開獎金頁，看得到「為什麼空／誰能解決／
+    去哪裡解決」三句話，而沒有新增入口。
+    ☠️ 之後 `BN2`（獎金項目只有最高管理者可見）與 `BN9`（`is_manager` 收成只有
+       superadmin）上線 ⇒ admin 的 `isManager` 為 false ⇒ `loadItems()` 不會打、
+       獎金項目整區不顯示 ⇒ 原判準與後來的裁示牴觸，這一題從那時起一直是紅的
+       （本輪之前的 `20a11de` 就紅）。
+    ✅ 裁定（使用者 2026-09-24 表單原文，hichan-0a 轉達）：「**題對齊 BN9，產品不動**」。
+       ⇒ 三句話那一格由 superadmin 那一題承擔（它仍然驗三句話）。
+    ⚠️ 「admin 按得到『產生獎金分潤單』，卻不知道為什麼產不出來」那一格
+       **本輪不做**，記在 `docs/windows/KNOWN-GAPS.md`（2026-09-24 ③）。
+
+    ⚙️ 觀測點是**看得到的文字**（`inner_text` 不含隱藏元素），不是 DOM 裡有沒有那個節點——
+       x-show 只是藏起來，節點還在，數節點會把「藏著」算成「看得到」。
     """
     u, p = make_user(username="e2e_bn_admin", role="admin",
                      modules=[BONUS_MODULE])
     text, create, empty, errors = _open_bonus(live_server, u, p)
 
     assert not errors, "頁面丟了例外：%s —— 先修這個。" % errors[:3]
-    assert empty >= 1, (
-        "`admin` 打開獎金頁，找不到獎金項目的空狀態區塊（`%s`）。\n"
-        % HOOKS["empty"]
-        + "畫面上是：\n  %s\n" % text[:300]
-        + "📌 掛鉤名是我單方面定的，**要換退回給我**。")
-    _assert_three_things(text, "admin")
+    assert "產生獎金分潤單" in text, (
+        "量尺：admin 連「產生獎金分潤單」都看不到 —— 頁面沒載入成功，下面的斷言量不到東西。\n"
+        "畫面上是：\n  %s" % text[:300])
+    for visible_marker in ("尚未建立任何獎金項目", "每個項目綁一個人員來源"):
+        assert visible_marker not in text, (
+            "`admin` 看得到獎金項目區（畫面上有「%s」）——\n" % visible_marker
+            + "BN2／BN9：獎金項目只有最高管理者可見。")
     assert create == 0, (
         "`admin` 看得到新增入口（`%s`，%d 個）——\n" % (HOOKS["create"], create)
         + "☠️ 他按下去會收到 **403**，而這一頁應該在他按下去之前就告訴他。")
