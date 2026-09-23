@@ -63,6 +63,19 @@ SLOT_FIELDS = {
 }
 SIGN_SLOTS = tuple(SLOT_FIELDS)
 
+#: 🔴 **退回要清的只有簽核那幾格** —— `製票` 不算。
+#:
+#: ```
+#: 製票  created_by  <= **建檔人**，不是簽核；退回之後他還是建檔人
+#: 覆核  checked_by  <= 要清
+#: 主管  manager_by  <= 要清
+#: ```
+#: ⚠️ 寫成「每一格 `by` 都是空的」會**紅在一個正確的實作上**：
+#:    `製票` 那一格留的是 `created_by`，而它本來就不該被清。
+#: 🔑 這是〈判準的寬窮都會騙人〉的寬那一側：
+#:    超集（三格）比對象（兩格）寬 ⇒ 它會去指控別人的碼。
+CLEARED_ON_SEND_BACK = ("覆核", "主管")
+
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
@@ -234,6 +247,23 @@ def test_jv2_send_back_returns_to_draft_and_bumps_the_revision(client,
     no0 = created.get("voucher_no") or created.get("voucherNo")
 
     assert _act(client, hdr, vid, "submit").status_code == 200
+
+    # 🔴 **一定要先真的簽一格下去，否則第三格的斷言是空的。**
+    #
+    # ```
+    # 只 submit 就 send-back => 覆核那一格本來就是 ''
+    #                        => `assert not by` 清不清都會綠
+    # ```
+    # ☠️ 我第一版就是這樣，而它**在一片綠裡看不出來** ——
+    #    〈假綠燈：斷言驗到自己設的值〉的「清單為空」那一支。
+    # 🔑 所以下面先斷言「退回之前它是有值的」：**那一格才是量測基準**。
+    assert _act(client, hdr, vid, "approve").status_code == 200
+    signed = _slots(_get(client, hdr, vid)) or {}
+    assert (signed.get("覆核") or {}).get("by"), (
+        "簽核之後「覆核」那一格還是空的：%r\n" % signed
+        + "⚠️ **這一題量不到東西了** —— 下面的「退回要清掉簽核」\n"
+          "   會變成一個清不清都綠的斷言。先修這裡。")
+
     r = _act(client, hdr, vid, "send-back", {"reason": "科目挑錯了"})
     assert r.status_code == 200, "退回失敗：%s %s" % (r.status_code, r.text[:160])
 
@@ -250,6 +280,26 @@ def test_jv2_send_back_returns_to_draft_and_bumps_the_revision(client,
     assert re.search(r"-R\d+$", no1 or ""), (
         "升版之後的單號是 %r，而 `§一` 的形狀是 `…-Rn`。\n" % no1
         + "🔑 格式不對 ⇒ 下一次退回會變 `-R1-R1`（`quotations` 那一支的症狀）。")
+
+    # 🔴 **第三格：清除簽核** —— docstring 寫了三格，
+    #    而我原本**只斷言了兩格** ⇒ 第三格從來沒被驗過。
+    # ☠️ 那是〈散文對工具是隱形的〉的另一種載體：
+    #    意圖寫在 docstring 裡，**而紅綠不看 docstring**。
+    sigs = _slots(after) or {}
+    for slot in CLEARED_ON_SEND_BACK:
+        cell = sigs.get(slot) or {}
+        assert not (cell.get("by") or ""), (
+            "退回之後「%s」那一格還留著 %r。\n" % (slot, cell.get("by"))
+            + "☠️ 單子上有簽名，**而那個人沒有看過這一版** ——\n"
+              "   退回是要改內容的，改完還帶著上一版的簽名就是冒簽。")
+
+    # ⚙️ **反向控制：`製票` 那一格不可以被清掉。**
+    #    少了它，一個「三格全清」的實作也會讓上面那個迴圈綠 ——
+    #    而那時**退回之後沒人知道這張單是誰建的**。
+    maker = (sigs.get("製票") or {}).get("by")
+    assert maker, (
+        "退回之後「製票」那一格也被清掉了（%r）。\n" % maker
+        + "🔑 `created_by` 是**建檔人**不是簽核 ⇒ 退回不該動它。")
 
 
 # ══════════════════════════════════════════════════════════════════════
