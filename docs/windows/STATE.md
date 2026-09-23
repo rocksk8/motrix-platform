@@ -42167,3 +42167,35 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 ⚠️ 而 `§145` 還要求一件我還沒做：
 > **派 1～2 個視窗用「反面思考」找「哪邊少了」** —— 不是驗做得對不對，是**找沒人想到的那一張**。
 🔑 那一步要排在 ② 之前。
+
+---
+
+## §366 補登記：兩個做完了而沒有人宣告過的（A-2，2026-09-23 夜）
+
+> ⚙️ `test_spec_coverage` 的 `THIS` 裡有兩個編號**不在任何規格裡** ——
+> 🔑 不是「形狀不被認得」，是**真的沒有人宣告過**：它們是當天臨時修掉的，只記在 commit 上。
+> ⚠️ 而處置是**補宣告，不是移出 `THIS`** —— 兩個都真的做完且有題，
+> ☠️ 移出去會讓守門變綠而事實變假。
+
+### ⚙️ 而條文寫的是**當時實際做了什麼**，不是事後重寫的規格
+
+```
+📌〈證據不能事後從 commit message 重建〉——
+   所以下面兩條只寫查得到的：改了哪幾支檔、題在哪裡。
+   ⚠️ 當時的推理過程**查不到**（沒有寫成規格），這裡不補。
+```
+
+- **JV27.** 壞掉的簽核資料不可以擋住整張傳票，**而簽核動作本身要 fail-closed**。
+  ⚙️ 實作 `a40504e`：`helpers/voucher.py`（+42/-13）／`routers/vouchers.py`（+44/-8）——
+  `read_voucher()` 讀到壞掉的 `approval_json` 時不再整張擋掉。
+  ⚙️ 題 `4aef7fc`：`test_em5_voucher_chain_unreadable_2026_09_23.py`（+96/-43），
+  **把 `xfail` 拿掉**並補「簽核動作 fail-closed」的守門。
+  🔑 兩者方向相反而必須並存：**讀取要寬（看得到），寫入要嚴（擋得住）**。
+
+- **QS1a.** `bonus_award_lines.username` 存的要是**帳號**，不是顯示名。
+  ⚙️ 題 `test_bonus_sales_person_uses_username_2026_09_23.py`。
+  🔑 成因：`people_for_item()` 兩個來源回**兩種識別**——
+  `sales_person` 是顯示名、`case_stages.assigned_to` 是帳號 ⇒
+  ☠️ `visible_lines()` 拿 `'高晟耀' == 'corbin'` 去比 ⇒ **非最高管理者看到零張單**。
+  ⚙️ 而它 `3c979c2` 從 `NEXT` 明著搬進 `THIS`，理由是**它已經動到 production 而母題還在 `NEXT`**。
+  ⚠️ 規格在 `SPEC-QS1-a.md`（編號寫法 `QS1-a`，而守門正規化成 `QS1A`）。
