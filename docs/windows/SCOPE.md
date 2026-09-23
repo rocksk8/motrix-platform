@@ -117,7 +117,6 @@ MD(1):  MD1
 QN(1):  QN1
 UP(1):  UP1
 SL(1):  SL1
-QE(1):  QE1
 EM(1):  EM4
 
 ```
