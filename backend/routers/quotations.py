@@ -1359,6 +1359,13 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
             except Exception:
                 # 連回收都失敗才是真的留下孤兒，這種情況要看得到
                 logger.exception("create_quotation 送審失敗且回收 %s 也失敗", qno)
+            # `EM3` 已知例外（04749f0）：外層 `except Exception as e` 讓 AST
+            # 掃描把這行歸進「要改成 trace_id」的 18 處之一，但實際執行到
+            # 這裡時，上面的 `isinstance` 已經把 e 鎖定成 UnresolvedManagerError
+            # ——str(e) 拿到的保證是我們自己寫的訊息（同 B 組那 17 處），不是
+            # 未過濾的例外內容。包成 opaque 代碼只會讓一個使用者讀得懂、可
+            # 行動的錯誤（例如「找不到 X 的主管」）變得看不懂，沒有降低任何
+            # 洩漏風險，所以刻意不改。EM3 的驗收清單已把這一行登記為具名例外。
             if isinstance(e, UnresolvedManagerError):
                 raise HTTPException(400, str(e))
             raise
