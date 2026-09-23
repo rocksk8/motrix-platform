@@ -448,6 +448,16 @@
               </div>
             </div>
 
+            <!-- `BN7`：匯出 PDF。權限是 canCreateAward（_is_manager，
+                 superadmin＋admin），比上面那組 isManager（superadmin
+                 限定）寬——與後端 GET /pdf-download 的閘門一致，不因為
+                 這一頁其他動作收得更緊就跟著收緊這一顆。 -->
+            <div class="bn-actions" x-show="canCreateAward && (a.status === '已核准' || a.voided_at)">
+              <button class="bn-btn bn-btn--ghost" :disabled="awardBusy === String(a.id)"
+                      @click="downloadAwardPdf(a)"
+                      x-text="awardBusy === String(a.id) ? '匯出中…' : '匯出 PDF'"></button>
+            </div>
+
             <template x-if="awardMsg[a.id]">
               <div class="bn-ok" x-text="awardMsg[a.id]"></div>
             </template>

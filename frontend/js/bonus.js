@@ -481,6 +481,40 @@ function bonusPage() {
         || String(a.paid_manually_at || '').trim())
     },
 
+    // `BN7`：匯出 PDF。後端 GET /pdf-download 已經做好用印欄動態長度
+    // ／顯示名稱／抬頭／閘門（草稿．待審核．簽核中擋，已核准．已作廢放）
+    // ——這裡只負責把 blob 存成檔案，不重覆判斷放不放行（按下去按不按得
+    // 動由後端的 400 說了算，同 voucher.js::exportPdf() 的分工）。
+    async downloadAwardPdf(a) {
+      if (this.awardBusy) return
+      const id = a.id
+      this.awardBusy = String(id)
+      this.awardErr[id] = ''
+      try {
+        const r = await fetch('/api/bonus/awards/' + id + '/pdf-download', {
+          headers: this._auth(),
+        })
+        if (!r.ok) {
+          let msg = 'HTTP ' + r.status
+          try { msg = (await r.json()).detail || msg } catch (e) { /* 不是 JSON */ }
+          throw new Error(msg)
+        }
+        const blob = await r.blob()
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = 'bonus-award-' + (a.quote_no || id) + '.pdf'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      } catch (e) {
+        this.awardErr[id] = '匯出失敗（' + e.message + '）。'
+      } finally {
+        this.awardBusy = ''
+      }
+    },
+
     // `§6⑪⑫`：印欄依鏈的層數畫，鏈讀不出來時印在紙上。
     // `a.signatures` 是後端 `bonus_signatures_of()` 算好的
     // `{格名: {by, at}}`，順序就是要畫的順序（製表在前，鏈讀不出來時
