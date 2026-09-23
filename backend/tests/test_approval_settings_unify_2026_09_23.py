@@ -235,6 +235,98 @@ def test_as2_submitting_a_voucher_follows_the_configured_tiers(client,
           "   寫死與讀設定的結果一模一樣 ⇒ 那一題永遠綠。")
 
 
+def _slots(v):
+    """簽核格。⚠️ 四種鍵名都收 —— 那個投影層日後可能再改。"""
+    got = (v.get("signatures") or v.get("signoffs")
+           or v.get("approvals") or v.get("sign_slots"))
+    if isinstance(got, dict):
+        return list(got)
+    if isinstance(got, list):
+        return [x.get("slot") or x.get("name") for x in got
+                if isinstance(x, dict)]
+    return None
+
+
+def test_as2_three_tiers_can_actually_be_signed_all_the_way(client,
+                                                            make_user):
+    """🔴🔴 **三層要**走得完**，而版面的格數要跟著層數長。**
+
+    ## 🔑 為什麼這一題比「鏈是三層」值錢
+
+    > **「鏈是三層」只證明我把設定抄進去了，不證明有人走得完它。**
+
+    而 A-2 實讀四把 key：**現存的全部都是 2 層或 0 層**
+    ⇒ `tiered_approval` 的推進邏輯對三層以上**從來沒有被跑過**。
+
+    ## ⚙️ 釘的是**不變量**，不是那一次的值
+
+    ```
+    ❌ 狀態序列 ['簽核中','簽核中','已核准']  <= 層數一改就跟著變
+    ❌ 字面值 '第 3 層'                      <= 那是 B 挑的標籤
+    ✅ **簽核格數 == 1 ＋ 層數**（製票不算層）<= 版面**從資料算列數**
+    ```
+    📌 前兩層沿用「覆核／主管」是刻意的 —— **讓沒設定過的公司版面一個字都不變**。
+
+    ## ⚙️ 而第四次 `approve` 是一個便宜的反向控制
+
+    ☠️ 少了它，一個「`currentTier` 無上限往前加」的實作也會讓三次那一題綠，
+       而**第四次會把 `tiers[3]` 撞成 `IndexError`** ⇒ 500。
+    """
+    ta = _ta()
+    if VOUCHER_DOC_TYPE not in ta.APPROVAL_DOC_TYPES:
+        pytest.fail("`voucher` 還不是 doc type —— 先看上面那一題。")
+
+    _u, hdr = _hdr(client, make_user, "as2_walk")
+    approvers = []
+    for name in ("as2_w1", "as2_w2", "as2_w3"):
+        u, _h = _hdr(client, make_user, name)
+        approvers.append({"userId": _user_id(u), "username": u,
+                          "displayName": u})
+    r = client.put(FLOW % VOUCHER_DOC_TYPE, headers=hdr, json={
+        "includeSubmitterManagerTier": False,
+        "tiers": [{"approvers": [a]} for a in approvers]})
+    assert r.status_code == 200, "存設定失敗：%s %s" % (r.status_code, r.text[:200])
+
+    vr = client.post("/api/vouchers", headers=hdr, json={
+        "summary": "走完三層",
+        "lines": [{"account_code": "1113", "debit": 1000, "credit": 0},
+                  {"account_code": "4111", "debit": 0, "credit": 1000}]})
+    assert vr.status_code == 200, "建不起來：%s" % vr.text[:200]
+    vid = vr.json()["id"]
+    assert client.post("/api/vouchers/%s/submit" % vid, json={},
+                       headers=hdr).status_code == 200, "送審失敗"
+
+    for n in range(3):
+        ar = client.post("/api/vouchers/%s/approve" % vid, json={},
+                         headers=hdr)
+        assert ar.status_code == 200, (
+            "第 %d 次簽核失敗：%s %s\n" % (n + 1, ar.status_code, ar.text[:200])
+            + "☠️ 三層以上的**推進邏輯從來沒有被跑過** ——\n"
+              "   紅在這裡多半是**既有的推進邏輯**，不是 `AS2` 的新碼。")
+
+    v = client.get("/api/vouchers/%s" % vid, headers=hdr).json()
+    assert v.get("status") == "已核准", (
+        "簽了三次而狀態是 %r —— 三層沒有走完。" % v.get("status"))
+
+    slots = _slots(v)
+    assert slots is not None, (
+        "讀不到簽核格（找過四種鍵名）。現有鍵：%s" % sorted(v))
+    assert len(slots) == 1 + 3, (
+        "設定三層，而簽核格有 %d 格：%r\n" % (len(slots), slots)
+        + "☠️ 版面**沒有從資料算列數** —— 第三層的人簽了，\n"
+          "   而**紙上沒有他的格子**。\n"
+        + "🔑 不變量是「**格數 == 1 ＋ 層數**」（製票不算層），\n"
+          "   而不是任何一個字面標籤。")
+
+    # ⚙️ 反向控制：第四次要被擋，而且**不可以是 500**
+    extra = client.post("/api/vouchers/%s/approve" % vid, json={},
+                        headers=hdr)
+    assert extra.status_code in (400, 403), (
+        "**第四次**簽核回 %s：%s\n" % (extra.status_code, extra.text[:200])
+        + "☠️ 500 的話多半是 `currentTier` 無上限往前加 ⇒ `tiers[3]`\n"
+          "   撞成 `IndexError` —— 而**三次那一題照樣綠**。")
+
+
 def test_as2_a_company_that_never_configured_a_flow_is_unaffected(client,
                                                                   make_user):
     """⚙️🔴 **反向控制：**沒有設定過**簽核流程時，現況不可以改變。**
