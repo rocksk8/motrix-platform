@@ -483,3 +483,93 @@ def test_vp6_a_real_autostart_still_passes(tmp_path):
     assert not gates, (
         "一份**真的** `autostart.bat` 被判 FAIL：%s\n" % gates
         + "☠️ 那樣每一次打包都紅 ⇒ 這道守門會在兩天內被關掉。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# PK1 · `_export_ignore_state()`：B 把自製語意換成直接問 git 本人
+# （`_pattern_covers()` 已刪，改呼叫 `git check-attr`）——這支換法只以
+# commit message 的散文形式存在，沒有題會重跑，補上。
+# ══════════════════════════════════════════════════════════════════════
+
+def test_pk1_a_docs_windows_file_is_reported_excluded():
+    """🔴🔴 **`docs/windows/STATE.md` 要回報「被排除」。**
+
+    ☠️ 若哪天有人把 `.gitattributes` 裡 `docs/windows/**` 那一行的 `**`
+    拿掉，這題會立刻紅——那正是**自動的反向驗證**，不必另外造一次突變。
+    """
+    mod = _vp()
+    value, err = mod._export_ignore_state(mod.WT, "docs/windows/STATE.md")
+    assert err is None, "git check-attr 失敗：%s" % err
+    assert value == "set", (
+        "`docs/windows/STATE.md` 的 export-ignore 是 %r，不是 `set`——\n"
+        % value
+        + "☠️ 這張表本來就會被排除在出貨包外，若不是 `set`，代表"
+          "`.gitattributes` 的規則已經不涵蓋它了。")
+
+
+def test_pk1_deploy_md_is_reported_not_excluded():
+    """🔴🔴 **`DEPLOY.md`（`MUST_EXIST` 之一）要回報「沒被排除」。**
+
+    ☠️ 它是打包產出物的消費端要求一定要在的檔案——若被排除清單意外
+    蓋到，包會永遠過不了驗包，而症狀只會在驗包這裡出現。
+    """
+    mod = _vp()
+    value, err = mod._export_ignore_state(mod.WT, "DEPLOY.md")
+    assert err is None, "git check-attr 失敗：%s" % err
+    assert value in ("unspecified", "unset", "false"), (
+        "`DEPLOY.md` 的 export-ignore 是 %r，應該是「沒被排除」的其中一種。"
+        % value)
+
+
+def test_pk1_a_file_outside_any_rule_is_also_reported_not_excluded():
+    """⚙️ **正對照：不在任何規則裡的檔案，答案要與 `DEPLOY.md` 一致。**
+
+    `backend/main.py` 沒有出現在 `.gitattributes` 任何一條規則裡——同一條
+    路徑（`_export_ignore_state()`）、同一個答案，證明「沒被排除」不是
+    `DEPLOY.md` 這個特例才有的結果。
+    """
+    mod = _vp()
+    value, err = mod._export_ignore_state(mod.WT, "backend/main.py")
+    assert err is None, "git check-attr 失敗：%s" % err
+    assert value in ("unspecified", "unset", "false"), (
+        "`backend/main.py` 的 export-ignore 是 %r，應該是「沒被排除」的"
+        "其中一種——它不在任何一條規則裡。" % value)
+
+
+def test_pk1_a_trailing_slash_pattern_without_double_star_does_not_cover_the_subtree(
+        tmp_path):
+    """🔴🔴 **誘餌（合成 `.gitattributes`）：`docs/windows/`（尾巴斜線、沒有
+    `**`）不會被 git 讀成「涵蓋子樹」——`_export_ignore_state()` 必須忠實
+    回報 git 的真實答案，不是重新發明一套語意。**
+
+    這正是 `_pattern_covers()` 被刪掉的那個原始 bug：舊的自製語意判定
+    「尾巴 `/` 沒有 `**` 也算涵蓋子樹」，而 git 實際不會遞迴套用到子目錄
+    ——**連同一層的直接子檔案都不算**（已用真的 `git check-attr` 實測
+    確認：`docs/windows/direct_file.md` 也是 `unspecified`，不是只有更深
+    層的檔案才是）。用**合成**的 `.gitattributes` 與獨立的臨時 git repo，
+    不釘在本專案真實的 `.gitattributes` 上——那份會被修好，誘餌不應該
+    因此失效。
+
+    ✅ 牙齒已驗證（方式：歷史真碼／常設）：直接從 `git show e70527e`
+    取出被刪掉前的 `_pattern_covers("docs/windows/", rel)` 執行在這兩個
+    誘餌路徑上，兩個都回 `True`（=「覆蓋到」）——與這裡斷言的
+    `!= "set"` 方向相反，證明這題對著舊實作真的會紅。
+    """
+    mod = _vp()
+    repo = tmp_path / "bait_repo"
+    (repo / "docs" / "windows" / "sub").mkdir(parents=True)
+    (repo / ".gitattributes").write_text(
+        "docs/windows/ export-ignore\n", encoding="utf-8")
+    (repo / "docs" / "windows" / "direct_file.md").write_text("x", encoding="utf-8")
+    (repo / "docs" / "windows" / "sub" / "deep_file.md").write_text("x", encoding="utf-8")
+
+    import subprocess
+    subprocess.run(["git", "init", "-q"], cwd=str(repo), check=True)
+
+    for rel in ("docs/windows/direct_file.md", "docs/windows/sub/deep_file.md"):
+        value, err = mod._export_ignore_state(str(repo), rel)
+        assert err is None, "git check-attr 失敗（%s）：%s" % (rel, err)
+        assert value != "set", (
+            "`%s` 的 export-ignore 被讀成 %r——\n" % (rel, value)
+            + "☠️ 這正是舊的 `_pattern_covers()` 那個 bug：把「尾巴 `/` "
+              "沒有 `**`」誤判成涵蓋子樹，而 git 本人不會這樣判。")
