@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 100
+CURRENT_VERSION = 101
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4302,6 +4302,45 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m101_voucher_approval(conn):
+    """v101（2026-09-23 `AS2`）：傳票的簽核鏈存哪裡。
+
+    ## 🔴 使用者裁示推翻了 `§161`
+
+    「**傳票的簽核需要在簽核設定中出現**」⇒ 「兩層」是**預設值不是常數**，
+    要改的是**它從哪裡來**。
+
+    ## ⚠️ 形狀選 `approval_json` 欄，而理由是**實查出來的**
+
+    ```
+    規格建議新建一張 voucher_approvals 明細表，前提是
+      「既有六個單據類型都已經走 tiered_approval 的明細形狀」
+    而實查（PRAGMA 掃全庫）：
+      有 approval_json 欄的表 **只有 1 張**（case_extra_expenses）
+      其餘存在 **data_json.$.approval**（quotations.py:3745 等）
+    ⇒ 既有**已經是兩種形狀**，不是一種 ⇒ 新建明細表會是**第三種**
+    ```
+    ⇒ 與**最近一個**加進來的 doc type（`extra_expense`，2026-09-11）完全同形，
+      `tiered_approval` 那一整套原樣可用，一行都不用改。
+
+    ## 🔑 v99 那六個欄位**不動**，它們退成「版面上的簽名格」
+
+    ```
+    submitted_by/at ／ checked_by/at ／ manager_by/at
+    ```
+    它們現在是 `signatures_of()` **唯一的來源**，而 `JV5` 的版面正在讀它
+    ⇒ 改成相容層的代價比加一個欄位高得多。
+    📌 ⇒ 簽核鏈是**真相**，那六欄是**投影**；超過兩層的部分只存在鏈裡，
+       而版面本來就是「回幾格畫幾列」（`JV5` 已落地）。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(vouchers_all)")}
+    if "approval_json" not in cols:
+        # ⚠️ `DEFAULT '{}'` 而不是 NULL：讀取端一律 `json.loads(... or "{}")`，
+        #    NULL 與 '{}' 在那裡等價，而 NOT NULL 讓「沒有鏈」只有一種寫法。
+        conn.execute("ALTER TABLE vouchers_all ADD COLUMN"
+                     " approval_json TEXT NOT NULL DEFAULT '{}'")
+
+
 def _m100_voucher_attachments(conn):
     """v100（2026-09-23 `JV3`）：傳票附件。**這個 repo 第一張附件資料表。**
 
@@ -4983,6 +5022,7 @@ _MIGRATIONS = [
     _m098_edit_log_retention,                       # v98
     _m099_voucher_signatures,                       # v99
     _m100_voucher_attachments,                      # v100
+    _m101_voucher_approval,                         # v101
 ]
 
 

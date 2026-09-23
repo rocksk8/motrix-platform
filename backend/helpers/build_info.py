@@ -108,18 +108,35 @@ def resolve_commit():
 
 
 def _reload_flag():
-    """這個行程是不是用 `--reload` 起來的。
+    """這個行程是不是用 `--reload` 起來的。回 `True`／`False`／`None`（不可得）。
 
-    ⚠️ 這是**讀我們自己的 argv**，不是問 uvicorn —— 它沒有公開的旗標。
-    📌 而那對這個 repo 夠用：兩支啟動腳本的差別就寫在 argv 裡
-       （`start_server.ps1` 有、`restart.bat` 沒有），而今天的事故正是那個差別。
-    🔑 拿不準的時候回 `None` 而不是 `False` —— 〈null 不等於 0〉：
-       「沒有 reload」與「我不知道有沒有」是兩件事。
+    ## 🔴 `None` 是一個**真的答案**，不是「查不到就算了」
+
+    這裡讀的是**我們自己的 argv**，而 argv **不一定提到這件事**：
+    ```
+    uvicorn CLI 起的（restart.bat／start_server.ps1／nohup+bash）
+        argv 有 "uvicorn" 與那些旗標  => argv **是**答案
+    程式裡 uvicorn.run() 起的
+        argv **完全不提 reload**      => 回 False 是**編的**
+    ```
+    ☠️ ⇒ 一個觀測來源，要先問「**它在什麼情況下根本不會提到這件事**」——
+       那種情況下的「沒提到」會被讀成「否」。
+    🔑 與 `stale` 那一格同一條規則：**不知道的時候不可以給人保證。**
     """
     try:
-        return "--reload" in (sys.argv or [])
+        argv = list(sys.argv or [])
     except Exception:                                        # noqa: BLE001
         return None
+    # ⚙️ 只有當 **uvicorn 本身就是被執行的那個程式**時，argv 才有資格回 False。
+    #    ⚠️ 判「argv 裡有沒有 uvicorn 這個字」**太寬**：
+    #       `python -c "import uvicorn; uvicorn.run(...)"` 也含那個字，
+    #       而那正是 argv **不提 reload** 的那一種 ⇒ 會回一個編的 False。
+    #    ⇒ 比對的是**程式名**（`uvicorn` ／ `uvicorn.exe` ／ `-m uvicorn`）。
+    prog = os.path.basename(str(argv[0])).lower() if argv else ""
+    dash_m = len(argv) >= 3 and str(argv[1]) == "-m" and str(argv[2]) == "uvicorn"
+    if prog not in ("uvicorn", "uvicorn.exe") and not dash_m:
+        return None
+    return "--reload" in [str(a) for a in argv]
 
 
 # ── 行程啟動當下定住 ─────────────────────────────────────────────────

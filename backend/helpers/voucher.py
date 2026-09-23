@@ -17,6 +17,8 @@
 📌 〈模組化：L2 功能模組彼此不可依賴〉：所以它也**不 import 任何 router**。
 """
 import datetime as _dt
+import json
+import logging
 import re
 
 #: 施工圖 `§一`「狀態值」那一行，**逐字五個**。
@@ -330,11 +332,63 @@ def get_voucher(conn, voucher_id):
 #:    而那一列**看起來完全正常**：有人、有時間，只是時間是錯的。
 #: ⚠️ 鍵用**中文格名**，與版面上印的三個字一致（使用者的實例逐字）。
 #:    英文鍵會讓畫面與 API 各有一套名字，而那一層翻譯沒有人維護。
+logger = logging.getLogger(__name__)
+
 _SIGNATURE_SLOTS = (
     ("製票", "created_by", "created_at"),
     ("覆核", "checked_by", "checked_at"),
     ("主管", "manager_by", "manager_at"),
 )
+
+
+#: 前兩層的名字沿用實例 PDF 上的字；第三層起用「第 N 層」。
+#: 🔑 這樣**沒有設定過簽核流程的公司，版面一個字都不會變**。
+_TIER_LABELS = ("覆核", "主管")
+
+
+class VoucherChainUnreadable(Exception):
+    """簽核鏈存在而**讀不出來**。與「沒有簽核鏈」是兩件事。
+
+    ☠️ 這兩者折疊在一起的後果不是版面錯，是**閘門靜默放行**：
+    ```
+    讀取失敗 -> 回 [] -> 讀起來就是「這張單不需要簽核」
+             -> 閘門判「沒有需要簽核的關卡」-> **判定已完成** -> 放行
+    ```
+    🔑 一個未簽核的傳票因此匯得出去，**而畫面上完全正常**。
+    ⇒ 所以這裡**丟**，不回 `[]`、也不回 `None`（回 None 只是把同一個問題
+      往下移一層：呼叫端一個 `or []` 就又折回去了）。
+    """
+
+
+def _chain_tiers(voucher):
+    """這張單的簽核鏈（`AS2` 的 `approval_json`）。
+
+    ```
+    沒有 approval_json   => **回 []**（明確的「沒有設定簽核流程」）
+    有而解析失敗          => **raise VoucherChainUnreadable**
+    ```
+
+    ## ☠️ 我上一版在這裡回 `[]`，而那個取捨**只對當時的呼叫端成立**
+
+    當時只有 `signatures_of()`（版面）讀它，而版面壞掉不該讓整張單讀不出來
+    ⇒ 「壞了就當沒有」是對的。
+    🔴 **而 `JV11` 的匯出閘門要讀同一份資料，它的錯誤方向相反。**
+    ⇒ 那不是守門變了、也不是對象變了，是**多了一個用途，而原本的取捨只對舊用途成立**。
+    ⚠️ 判準：**為一份既有資料加一個新消費端時，去讀它的失敗行為是為誰設計的。**
+    """
+    raw = voucher.get("approval_json")
+    if not raw:
+        return []
+    try:
+        return (json.loads(raw) or {}).get("tiers") or []
+    except (TypeError, ValueError) as exc:
+        # 📌 訊息裡寫出**哪一個動作**失敗，以及**fail-closed 這個選擇本身**
+        #    （比照 `archive.py:288` 那個寫法 —— 它連選擇都寫進訊息）。
+        logger.warning(
+            "傳票 %s 的簽核鏈解析失敗（fail-closed：一律視為**未簽核完成**）：%s",
+            voucher.get("id"), exc)
+        raise VoucherChainUnreadable(
+            "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核。") from exc
 
 
 def signatures_of(voucher):
@@ -346,8 +400,32 @@ def signatures_of(voucher):
     📌 `§106c`：三格**從簽核紀錄取，不可以從 `status` 欄推** ——
        ☠️ 從 status 推的話，一張退回重送的單會顯示「覆核已簽」而其實被清掉了。
     """
-    out = {}
-    for label, by_col, at_col in _SIGNATURE_SLOTS:
+    out = {"製票": {"by": voucher.get("created_by") or "",
+                   "at": voucher.get("created_at") or ""}}
+
+    # 🔴 `AS2`：**有簽核鏈就照鏈畫，一層一格。**
+    #
+    # 使用者 2026-09-23 裁：「**超過兩層就把版面往下加列**」
+    # ⇒ 三格是**目前的層數**，不是版面規則。
+    # ☠️ 寫死三格的話，第三層那天**會靜默掉一格** —— 紙上少一個簽名，
+    #    而它看起來就是一張正常的傳票。
+    # ⚠️ 前兩層沿用「覆核／主管」這兩個名字：沒有設定簽核流程的公司
+    #    （內建兩層）看到的版面**一個字都不會變**。
+    # ⚠️ 讀不出來時**印在紙上**，不要安靜退回內建三格 ——
+    #    同 `JV5` 的「把缺口輸出出來」：紙上要看得出「這一張的簽核狀態不明」。
+    try:
+        tiers = _chain_tiers(voucher)
+    except VoucherChainUnreadable:
+        out["簽核資料無法讀取"] = {"by": "", "at": ""}
+        return out
+    if tiers:
+        for i, tier in enumerate(tiers):
+            label = _TIER_LABELS[i] if i < len(_TIER_LABELS) else "第 %d 層" % (i + 1)
+            out[label] = {"by": (tier or {}).get("approvedBy") or "",
+                          "at": (tier or {}).get("approvedAt") or ""}
+        return out
+
+    for label, by_col, at_col in _SIGNATURE_SLOTS[1:]:
         out[label] = {
             "by": voucher.get(by_col) or "",
             "at": voucher.get(at_col) or "",

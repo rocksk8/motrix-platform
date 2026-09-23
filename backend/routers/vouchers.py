@@ -18,6 +18,7 @@ routers/vouchers.py  **不存在** => 沒有任何人在「改」的時候叫它
 而它們的端點**沒有派工** ⇒ 不在這裡順手加。
 """
 import datetime as _dt
+import json
 import os
 from datetime import datetime
 
@@ -31,6 +32,11 @@ from db import get_db
 from routers.accounting_export import validate_account_code
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
+from helpers.tiered_approval import (
+    approval_flow_setting_key, setting_to_active_tiers,
+    UnresolvedManagerError,
+)
+from helpers import _get_setting
 from helpers.uploads import save_document_files
 from helpers.voucher_pdf import export_voucher_pdf
 from helpers.voucher_attachments import (
@@ -139,6 +145,18 @@ def _check_account_codes(conn, lines):
             problems.append("第 %d 行：%s" % (i, err))
     if problems:
         raise HTTPException(400, "；".join(problems))
+
+
+
+def _appr_of(row):
+    """傳票的簽核鏈。**壞掉的 JSON 不要吞成空鏈** —— 那與「沒有設定」一模一樣。"""
+    raw = (dict(row) if not isinstance(row, dict) else row).get("approval_json")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except ValueError:
+        raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法繼續簽核。")
 
 
 @router.post("")
@@ -387,11 +405,17 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
         # 📌 附件掛在這裡而不是獨立端點：畫面開一張單就要看到它的憑證，
         #    多一次往返只會讓「單子出來了而附件還沒」變成一段可見的空窗。
         atts = _attachments_of(conn, voucher_id) if data is not None else []
+        # 🔑 `AS2`：簽核鏈要回出去 —— 版面靠它決定畫幾列，
+        #    而「還差誰簽、現在第幾關」也只有它答得出來。
+        row = conn.execute("SELECT approval_json FROM vouchers_all"
+                           " WHERE id = ?", (voucher_id,)).fetchone()
+        appr = _appr_of(row) if row is not None else {}
     finally:
         conn.close()
     if data is None:
         raise HTTPException(404, "找不到這張傳票。")
     data["attachments"] = atts
+    data["approval"] = appr
     return data
 
 
@@ -430,11 +454,38 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
         if v.get("status") != "草稿":
             raise HTTPException(
                 400, "只有草稿可以送審，這一張現在是「%s」。" % v.get("status"))
+        # 🔴 `AS2`：簽核鏈**從設定來**，而「兩層」是預設值不是常數。
+        #
+        # 使用者原話：「傳票的簽核需要在簽核設定中出現」。
+        # ⚠️ 而**沒有設定時走內建兩層** —— 那是 `§161` 的既有行為，
+        #    不是一個新的特例：一個還沒設定過簽核流程的公司，
+        #    ☠️ 若因此變成「送審即核准」或「送不出去」，都是我們替他做了決定。
+        # 🔑 ⇒ 設定存在就照設定，不存在就維持現況。
+        # ⚠️ **「沒有設定過」與「設定成空的」是兩件事**，而
+        #    `resolve_active_flow_setting()` 分不出來：它對缺鍵回
+        #    `{"tiers": []}`，與一份存成空的設定**一模一樣**。
+        # ☠️ 而那個差別在這裡是有後果的：`setting_to_active_tiers()` 在
+        #    `includeSubmitterManagerTier` 缺鍵時**視為 True**
+        #    ⇒ 對一個沒有部門的送審人直接 raise
+        #    ⇒ 沒有人設定過簽核流程的公司**連送審都送不出去**。
+        #    🔑 而我第一版就是這樣寫的，它一次弄紅四支既有測試。
+        # ⇒ 用 `_get_setting(key, None)` 判**鍵在不在**（〈null 不等於 0〉）。
+        scope = _get_setting("approval_flow_scope", {}) or {}
+        flow = _get_setting(approval_flow_setting_key("voucher", scope), None)
+        tiers = []
+        if flow is not None:
+            try:
+                tiers = setting_to_active_tiers(flow, conn, user["username"])
+            except UnresolvedManagerError as exc:
+                # 📌 主管解析不出來要**說得出是哪一層**，那一支已經寫好訊息了。
+                raise HTTPException(400, str(exc))
         now = _dt.datetime.now().isoformat()
+        appr = json.dumps({"tiers": tiers, "currentTier": 0},
+                          ensure_ascii=False) if tiers else "{}"
         conn.execute(
             "UPDATE vouchers_all SET status='待審核', submitted_by=?,"
-            " submitted_at=?, updated_at=? WHERE id=?",
-            (_user_name(user), now, now, voucher_id))
+            " submitted_at=?, updated_at=?, approval_json=? WHERE id=?",
+            (_user_name(user), now, now, appr, voucher_id))
         conn.commit()
     finally:
         conn.close()
@@ -462,19 +513,44 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
     try:
         v = _load(conn, voucher_id)
         status = v.get("status")
-        if status == "待審核":
-            slot, nxt = "checked", "簽核中"
-        elif status == "簽核中":
-            slot, nxt = "manager", "已核准"
-        else:
+        if status not in ("待審核", "簽核中"):
             raise HTTPException(
                 400, "「%s」的傳票不在簽核流程裡。" % status)
         now = _dt.datetime.now().isoformat()
-        # 🔑 只寫**這一格**的兩欄 —— 另一格的時間戳完全不碰。
-        conn.execute(
-            "UPDATE vouchers_all SET status=?, %s_by=?, %s_at=?, updated_at=?"
-            " WHERE id=?" % (slot, slot),
-            (nxt, _user_name(user), now, now, voucher_id))
+        appr = _appr_of(v)
+        tiers = appr.get("tiers") or []
+        if tiers:
+            # 🔴 **照鏈走**：簽完第 idx 層就往前一格，全部簽完才是已核准。
+            idx = int(appr.get("currentTier") or 0)
+            if idx >= len(tiers):
+                raise HTTPException(400, "這張傳票的簽核已經完成。")
+            tier = tiers[idx] or {}
+            tier["approvedBy"] = _user_name(user)
+            tier["approvedAt"] = now
+            tier["status"] = "已核准"
+            tiers[idx] = tier
+            idx += 1
+            appr["tiers"], appr["currentTier"] = tiers, idx
+            nxt = "已核准" if idx >= len(tiers) else "簽核中"
+            # 📌 v99 那六欄退成**版面上的簽名格**：前兩層照舊投影過去，
+            #    第三層以後**只存在鏈裡** —— 而版面本來就是「回幾格畫幾列」。
+            #    ☠️ 反過來（把鏈塞進三個欄位）會在第三層那天靜默掉一格。
+            sets, args = ["status=?", "updated_at=?", "approval_json=?"], []
+            args += [nxt, now, json.dumps(appr, ensure_ascii=False)]
+            slot = {0: "checked", 1: "manager"}.get(idx - 1)
+            if slot:
+                sets += ["%s_by=?" % slot, "%s_at=?" % slot]
+                args += [_user_name(user), now]
+            conn.execute("UPDATE vouchers_all SET %s WHERE id=?"
+                         % ", ".join(sets), args + [voucher_id])
+        else:
+            # ⚠️ 沒有設定簽核流程 ⇒ 維持 `§161` 的內建兩層。
+            slot, nxt = ("checked", "簽核中") if status == "待審核"                 else ("manager", "已核准")
+            # 🔑 只寫**這一格**的兩欄 —— 另一格的時間戳完全不碰。
+            conn.execute(
+                "UPDATE vouchers_all SET status=?, %s_by=?, %s_at=?, updated_at=?"
+                " WHERE id=?" % (slot, slot),
+                (nxt, _user_name(user), now, now, voucher_id))
         conn.commit()
     finally:
         conn.close()

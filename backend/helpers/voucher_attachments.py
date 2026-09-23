@@ -359,16 +359,24 @@ def case_attachments(conn, quote_no):
         for doc_no in _case_doc_nos(conn, st, quote_no):
             for meta in source_files(conn, st, doc_no) or ():
                 name = (meta or {}).get("filename") or (meta or {}).get("name") or ""
+                # ⚠️ 兩種「不能用」**不是同一件事**，訊息要分得出來：
+                #    路徑不合法（abs_path 擋下）／檔案不在磁碟上。
+                # ☠️ 一律說「檔案已遺失」的話，使用者會去找一個**從來沒有遺失**
+                #    的檔 —— 那是一句通順而錯的話（同 `JV9` 那一族）。
+                reason = ""
                 try:
                     exists = os.path.isfile(abs_path((meta or {}).get("path")))
+                    if not exists:
+                        reason = "檔案已遺失"
                 except HTTPException:
-                    exists = False
+                    exists, reason = False, "附件路徑不合法"
                 out.append({
                     "type": st,
                     "docNo": doc_no,
                     "fileId": str((meta or {}).get("id") or ""),
                     "filename": name,
                     "exists": exists,
+                    "reason": reason,
                     "missing": describe_missing(meta),
                 })
     return out

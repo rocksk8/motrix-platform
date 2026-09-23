@@ -279,7 +279,7 @@
                   <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
                        濾掉的話使用者會覺得「那張發票我明明傳過」而畫面上什麼都沒有。 -->
                   <span class="vc-src__meta"
-                        x-text="it.exists === false ? '檔案已遺失'
+                        x-text="it.exists === false ? (it.reason || '檔案已遺失')
                                 : (it.project_name || it.status || it.type || '')"></span>
                 </button>
               </template>
