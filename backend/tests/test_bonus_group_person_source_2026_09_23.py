@@ -232,13 +232,40 @@ def test_bn14_person_sources_includes_group():
         "`PERSON_SOURCES` 現在是 %r，沒有 `\"group\"`。" % (PERSON_SOURCES,))
 
 
-def test_bn14_group_membership_rejects_an_unknown_username():
+def test_bn14_group_membership_rejects_an_unknown_username(client):
     """🔴 **群組成員只能是真實帳號——資料層要擋得住，不是只靠應用層記得檢查。**
 
     ☠️ 打錯一個字那個人就領不到，而畫面上一切正常——這是 `BN3` 保留下來
     那條界線（〈綁帳號不存自由文字〉）在群組成員上的版本。這裡直接測
     **資料層**：試著塞一個不存在的帳號當成員，預期被擋（`FOREIGN KEY`
     或等價的資料層約束），不是等到「產生獎金單」那一刻才在應用層發現。
+
+    # 🔴 補記（2026-09-23）：本題原本沒 request `client`，打的是共用開發庫
+
+    `_seed_group()` 直接呼叫 `db.get_db()`，沒有 `client` fixture 就沒有
+    任何東西把 `db.DB_PATH` 導去隔離的 tmp DB（見 `conftest.py:402`）——
+    這支會**真的寫進共用開發庫**。而 `bonus_groups.name` 是
+    `NOT NULL UNIQUE`（`db.py:4339`），本題每次都種同一個名字
+    `"BN14-測試群組-髒資料"`，**第二次重跑就會在 `_seed_group()` 那一行
+    （在 `pytest.raises` 區塊外）撞 `IntegrityError`**——不是「假綠燈」，
+    是**直接 ERROR 且弄髒共用庫**，B 重跑時真的撞到，手動清過殘留列。
+
+    ⚠️ 這是**一支的修法**——〈診斷的層級決定覆蓋率〉：答「一支」就只修
+    一支，不動 `conftest.py`。**母體已量**：D（2026-09-23，AST 遞迴展開
+    fixture 依賴鏈，含跨檔 `import`）掃過全部 2,227 支 test 函式，「碰
+    DB 且展開不到隔離根」= 0 支（加總自檢 0+1127+1100=2227 ✓）——本題
+    是修好之前那唯一一支。⚠️ D 自己標了射程：他的尺靠解析 `import` 接
+    跨檔 fixture，**子目錄自己的 `conftest.py`（不需要 `import` 就生效）
+    那種形狀他看不見**，這件已另外派他去查。
+
+    # ✅ 牙齒已驗證（方式：突變驗證／live，非常設）
+
+    用同一個 tmp db 路徑連續呼叫兩次「未 request `client`」版本的邏輯
+    （真實失效模式：沒有隔離 fixture 導致殘留跨執行緒留存），第二次在
+    `_seed_group()` 就 raise `IntegrityError`（撞 `name` UNIQUE），與 B
+    回報的現象一致；改回本題現在的寫法（request `client`）後，同一段
+    邏輯連續呼叫兩次都拿到全新空庫，兩次都在預期的那一行（成員 FK）
+    raise，不會在 `_seed_group()` 那一行提早炸開。
     """
     import sqlite3
     import db
