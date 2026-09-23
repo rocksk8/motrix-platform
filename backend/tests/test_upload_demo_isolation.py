@@ -19,6 +19,21 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def _set_demo_password(password="60575481"):
+    """`IA2` 之後 `init_demo_account()` 產生的是**隨機密碼**，不再是這裡
+    沿用的舊字面值——直接把 `demo` 這一列的 `password_hash` 改成已知值，
+    同 `make_user()` fixture 那條「不依賴隨機密碼寫檔那條路」的理由。"""
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET password_hash = ? WHERE username = 'demo'",
+                    (_hash_pw(password),))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _png_file(name="test.png"):
     data = bytes.fromhex(
         "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
@@ -50,6 +65,7 @@ def test_demo_account_signed_file_upload_is_isolated(client):
     import db
     import helpers.uploads as uploads_helper
 
+    _set_demo_password()
     demo_token = _login(client, "demo", "60575481")
     _make_quotation_in_demo_db()
 

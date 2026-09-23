@@ -17,6 +17,23 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+def _set_demo_password(password="60575481"):
+    """`IA2` 之後 `init_demo_account()` 產生的是**隨機密碼**（`secrets.
+    token_urlsafe`），不再是這裡沿用的舊字面值——直接把 `demo` 這一列的
+    `password_hash` 改成已知值，同 `make_user()` fixture 那條「不依賴
+    隨機密碼寫檔那條路」的理由（見 `conftest.py::make_user` docstring）。
+    """
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET password_hash = ? WHERE username = 'demo'",
+                    (_hash_pw(password),))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # ── Auth middleware ─────────────────────────────────────────────────────────
 
 def test_ping_is_public(client):
@@ -51,6 +68,7 @@ def test_wrong_password_rejected(client, make_user):
 # ── Demo account DB isolation ───────────────────────────────────────────────
 
 def test_demo_login_data_never_touches_real_db(client):
+    _set_demo_password()
     demo_token = _login(client, "demo", "60575481")
 
     r = client.post(
@@ -80,6 +98,7 @@ def test_demo_login_data_never_touches_real_db(client):
 def test_demo_login_resets_previous_demo_session_data(client):
     """§3.5: every demo login wipes the demo DB back to empty — two demo
     logins must not accumulate data from a previous 'customer'."""
+    _set_demo_password()
     token1 = _login(client, "demo", "60575481")
     client.post(
         "/api/customers", headers=_auth(token1),

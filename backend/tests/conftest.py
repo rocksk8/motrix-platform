@@ -412,6 +412,13 @@ def client(_app, tmp_path, monkeypatch):
 
     db.init_db(real_path)
     db.init_db(demo_path)
+    # `IA2`：`init_demo_account()` 現在靠 `demo_account_on()` 把關
+    # （預設關，同 `helpers/tender_source.py::radar_on()` 的理由），
+    # 測試環境要明著打開，同既有 `monkeypatch.setattr(ts,
+    # "TENDER_RADAR_ENABLED", True)` 的用法——這不是產品碼要改，
+    # 是測試環境的開關沒有跟著 IA2 一起打開。
+    import helpers.startup as startup_helper
+    monkeypatch.setattr(startup_helper, "DEMO_ACCOUNT_ENABLED", True)
     helpers.init_demo_account()  # seed the real-DB 'demo' gatekeeper row (see db.py comments)
 
     # helpers/uploads.py (signed-file attachments for quotations/shipping_notes/
