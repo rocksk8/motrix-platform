@@ -369,6 +369,7 @@
     .aq-type-tag.aq-type-sn        { background: #CFFAFE; color: #155E75; }
     .aq-type-tag.aq-type-pr        { background: #FFEDD5; color: #9A3412; }
     .aq-type-tag.aq-type-cc        { background: #EDE9FE; color: #6D28D9; }
+    .aq-type-tag.aq-type-vo        { background: #DBEAFE; color: #1E40AF; }  /* AS3：會計傳票 */
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
@@ -572,10 +573,18 @@
             <div class="aq-detail-customer" x-text="(selected?.customer || '') + (selected?.projectName ? '　' + selected.projectName : '')"></div>
           </div>
           <div class="aq-detail-actions">
-            <a :href="isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||'')) : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
+            <!-- 🔴 `AS3`：傳票不掛在任何案件底下（一般分類帳憑證），
+                 `linkedQuoteNo` 沒有東西可填 —— 沿用 case-management.html 那條
+                 分支的話會是一個空號碼的破連結。傳票自己有完整的詳情／核准／
+                 退回頁面（`voucher.html`），佇列這裡直接連過去，不必在通用
+                 抽屜裡重做一次（`/api/approval-queue/detail` 也還沒有它的分支，
+                 那個守門是 `_guard_case()`，是「案件」的存取模型，傳票不是）。 -->
+            <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+                    : isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||''))
+                    : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="isVoucher(selected) ? '開啟案件管理' : '開啟報價單'"></span>
+              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
             <button class="btn btn-sm" x-show="selected?.type !== 'case_change'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
@@ -1164,7 +1173,7 @@
         get typeCounts() {
           const color = {
             quotation: '#4338CA', cv: '#92400E', iv: '#065F46',
-            sn: '#155E75', pr: '#9A3412', cc: '#6D28D9',
+            sn: '#155E75', pr: '#9A3412', cc: '#6D28D9', vo: '#1E40AF',
           }
           const map = new Map()
           this.flatItems.forEach(i => {
@@ -1198,6 +1207,10 @@
           // 已核准的額外支出要改內容走這條（DB v76）。標題要跟原單分得開，
           // 否則簽核人不知道自己簽的是「新增一筆」還是「改一筆已核准的」
           if (item.type === 'extra_expense_change') return '額外支出變更'
+          // AS3：voucher 是「傳票」在別處已經用掉的名字（承攬商匯款申請／
+          // 開票申請憑據都叫「傳票」的舊稱），這裡要跟後端 APPROVAL_DOC_TYPE_LABELS
+          // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
+          if (item.type === 'voucher') return '傳票（會計）'
           return '報價單'
         },
 
@@ -1208,6 +1221,7 @@
           if (item?.type === 'completion_note') return 'sn'
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
+          if (item?.type === 'voucher') return 'vo'
           return 'quotation'
         },
 
@@ -1217,7 +1231,16 @@
           if (item?.type === 'shipping_note') return '/api/shipping-notes'
           if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
+          if (item?.type === 'voucher') return '/api/vouchers'
           return '/api/quotations'
+        },
+
+        // 🔴 `AS3`：其餘型別的動作端點吃的是**人看的單號**（`item.quoteNo`），
+        //    而 `/api/vouchers/{voucher_id}/...` 吃的是**數字 id**——兩者是
+        //    不同的識別碼，不能沿用 `apiBase(item) + '/' + item.quoteNo` 那一套。
+        //    ⚠️ 這裡只解決「用哪個當路徑參數」，不是新開一套動作邏輯。
+        itemPathId(item) {
+          return item?.type === 'voucher' ? item.voucherId : item?.quoteNo
         },
 
         isVoucher(item) {
@@ -1251,6 +1274,7 @@
           if (item?.type === 'shipping_note') return '出貨品項'
           if (item?.type === 'payment_request') return '請款金額（含稅）'
           if (item?.type === 'case_change') return '變更內容'
+          if (item?.type === 'voucher') return '傳票金額'
           return '報價金額'
         },
 
@@ -1270,7 +1294,7 @@
               || item.type === 'extra_expense_change') return
           this.previewFetching = true
           try {
-            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/pdf-download`, {
+            const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/pdf-download`, {
               headers: { Authorization: 'Bearer ' + this.session.token }
             })
             if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.previewFetching = false; return }
@@ -1565,7 +1589,7 @@
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/approve`
             : item.type === 'extra_expense_change'
             ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/approve`
-            : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/approve`
+            : `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/approve`
           const tiers = item.tiers || []
           const isMultiTier = tiers.length > 0
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
@@ -1683,15 +1707,21 @@
             // 欄位名是 reason 不是 note
             const isXEC = item.type === 'extra_expense_change'
             const isXE  = item.type === 'extra_expense' || isXEC
+            // 🔴 `AS3`：傳票沒有「拒絕」端點，「退回」對它就是 send-back
+            //    （`vouchers.py:562`：狀態回草稿＋清除簽核＋單號升版），
+            //    不是 `/reject`。body 的欄位名也是 `reason`，跟額外支出同形狀。
+            const isVoucherType = item.type === 'voucher'
             const rejectUrl = isXEC
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/reject`
-              : `${API}${this.apiBase(item)}/${encodeURIComponent(item.quoteNo)}/reject`
+              : isVoucherType
+              ? `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/send-back`
+              : `${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/reject`
             const r = await fetch(rejectUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify(isXE ? { reason: this.rejectNote } : { note: this.rejectNote })
+              body: JSON.stringify((isXE || isVoucherType) ? { reason: this.rejectNote } : { note: this.rejectNote })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))

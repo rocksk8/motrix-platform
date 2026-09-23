@@ -480,8 +480,22 @@ def submit_voucher(voucher_id: int, body: dict = Body(default={}),
                 # 📌 主管解析不出來要**說得出是哪一層**，那一支已經寫好訊息了。
                 raise HTTPException(400, str(exc))
         now = _dt.datetime.now().isoformat()
-        appr = json.dumps({"tiers": tiers, "currentTier": 0},
-                          ensure_ascii=False) if tiers else "{}"
+        # 🔴 `AS3`：其餘七種文件類型的 approval JSON 都嵌著
+        #    `requestedBy`／`requestedByDisplay`／`requestedAt`（簽核佇列
+        #    `_queue_tier_fields()` 靠這三個欄位畫出「誰送的、什麼時候送的」）。
+        #    ⚠️ 這裡原本只存 `{tiers, currentTier}` ⇒ 傳票進佇列之後那一欄會是空的。
+        #    佇列端點對舊資料另外退回讀 `submitted_by`／`submitted_at` 兩欄，
+        #    這裡補上是讓新送審的資料跟其他七種文件類型走同一個形狀，
+        #    不必每個消費端都對傳票另外寫一次 fallback。
+        # ⚠️ **不要**用 `if tiers else "{}"` —— 沒有設定流程時 `tiers` 是 `[]`，
+        #    而 requestedBy 這三欄跟「有沒有設定流程」無關，兩種情況都要寫。
+        #    （`_chain_tiers()` 對 `{}` 與 `{"tiers":[],...}` 回的都是 `[]`，
+        #    功能上沒有差別，只是後者多帶了佇列要用的三欄。）
+        appr = json.dumps({"tiers": tiers, "currentTier": 0,
+                           "requestedBy": user["username"],
+                           "requestedByDisplay": user.get("display_name") or user["username"],
+                           "requestedAt": now},
+                          ensure_ascii=False)
         conn.execute(
             "UPDATE vouchers_all SET status='待審核', submitted_by=?,"
             " submitted_at=?, updated_at=?, approval_json=? WHERE id=?",
@@ -556,7 +570,12 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
         conn.close()
     _audit(_tok(authorization), "voucher.approve", "vouchers", str(voucher_id),
            "傳票簽核：%s" % nxt)
-    return {"ok": True, "status": nxt}
+    # 🔴 `AS3`：`allDone` 是**通用簽核佇列頁**（`approval-queue.html`）拿來判斷
+    #    「這一層簽完了還是全部簽完了」的欄位，其餘七種文件類型的 `/approve`
+    #    都會回這個鍵。少了它的後果不是報錯，是**訊息說錯**：
+    #    ☠️ `resp.allDone` 讀到 `undefined`（假值）⇒ 明明已經簽到「已核准」，
+    #       畫面卻顯示「等待下一層簽核人」——而使用者看不出這句話是錯的。
+    return {"ok": True, "status": nxt, "allDone": nxt == "已核准"}
 
 
 @router.post("/{voucher_id}/send-back")

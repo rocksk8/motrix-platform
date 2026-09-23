@@ -3910,6 +3910,54 @@ def get_approval_queue(authorization: str = Header(None)):
             "linkedQuoteNo":       r["quote_no"],
         })
 
+    # 會計傳票（`AS3`，`docs/windows/STATE.md` §236）：`vouchers.py:486` 送審、
+    # `APPROVAL_DOC_TYPES` 第八個就是 voucher（`AS2` 已落地），而這支端點原本
+    # 一直沒有它 —— 送審端點對、簽核端點對，而沒有人知道有單在等。
+    # ⚠️ 跟其餘七種不一樣：`approval_json` 是 `vouchers_all` 自己的**欄位**，
+    #    不是 `data_json.$.approval`（傳票沒有 `data_json`），所以是直接
+    #    `SELECT approval_json`，不必 `json_extract`。
+    # ⚠️ 傳票不掛在任何案件底下（一般分類帳憑證，不是報價流程的附屬文件），
+    #    `customer`／`projectName` 沒有東西可填，跟 `case_change` 一樣留空/留摘要。
+    v_rows = conn.execute("""
+        SELECT id, voucher_no, voucher_date, summary, submitted_by, submitted_at,
+               approval_json,
+               COALESCE((SELECT SUM(debit) FROM voucher_lines
+                         WHERE voucher_id = vouchers_all.id), 0) as total_debit
+        FROM vouchers_all
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in v_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        # 🔑 `submit_voucher()` 沒有設定過流程時 `tiers` 是空的，approval_json
+        #    仍然嵌著 requestedBy 三欄（`AS3` 一併補上）——但舊資料（這支上線
+        #    之前就送審的傳票）沒有，這裡退回讀 `submitted_by`／`submitted_at`
+        #    兩欄，不讓舊單在佇列上掛名空白。
+        requested_by = f["requestedBy"] or r["submitted_by"] or ""
+        items.append({
+            "type":                "voucher",
+            "quoteNo":             r["voucher_no"],
+            "customer":            "",
+            "projectName":         r["summary"] or "",
+            "total":               r["total_debit"] or 0,
+            "quoteDate":           r["voucher_date"] or "",
+            "salesPerson":         "",
+            "requestedBy":         requested_by,
+            "requestedByDisplay":  f["requestedByDisplay"] or requested_by,
+            "requestedAt":         f["requestedAt"] or r["submitted_at"] or "",
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            # 🔴 `apiBase(item)` 對其他型別是接 `item.quoteNo`（那些端點的路徑
+            #    參數吃的是人看的單號），但 `/api/vouchers/{voucher_id}/...`
+            #    吃的是**數字 id**——兩者是不同的識別碼，這裡兩個都給，
+            #    前端用哪一個視型別而定（見 approval-queue.html `itemPathId()`）。
+            "voucherId":           r["id"],
+        })
+
     ccr_rows = conn.execute("""
         SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
         FROM case_change_requests
@@ -4128,6 +4176,12 @@ def get_approval_queue_count(authorization: str = Header(None)):
     ).fetchall()]
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 會計傳票（`AS3`）：跟案件額外支出一樣，approval_json 是 vouchers_all
+    # 自己的欄位（沒有 data_json），直接取欄位。角標數字要跟佇列列表一致，
+    # 漏掉就是「列得出來但 topbar 是 0」——兩邊矛盾比兩邊都沒有更難查。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM vouchers_all WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
     # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
