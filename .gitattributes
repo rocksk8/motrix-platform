@@ -68,3 +68,74 @@ backend/tests/fixtures/**    -text
 # 🔑 憑證的用途正是「將來有人問這個檔有沒有被動過」，
 #    所以保存的必須是**原始位元組**，不是「我們這邊看起來比較整齊的版本」。
 frontend/static/vendor/leaflet/** -text
+
+# ══════════════════════════════════════════════════════════════════
+# PK1（2026-09-23）：出貨包（git archive）export-ignore
+#
+# 決策依據見 docs/windows/SCOPE.md「PK1 排除清單」節。判準（D 訂）：
+#   明確排除：內容是「我們怎麼做這個系統」（規劃／協作紀錄／audit／測試名稱）
+#   明確保留：客戶自架或維運真的用得到的操作文件／腳本／執行期依賴
+# ⚠️ 每一項排除前都已個別驗證「執行期沒有人讀它」——.md 只在別的檔案的
+#    docstring／註解裡被引用當作規格出處，沒有一處 open()/read_text()/Path()。
+# 🔑 這份清單只會變長：新增項目直接加行，**不要在別處（程式碼、註解、測試）
+#    把這份清單的項目數字寫死** —— 它是今天的資料，不是機制的性質
+#    （backend/tools/verify_package.py 的交集檢查是直接讀這個檔，不是抄清單）。
+# ══════════════════════════════════════════════════════════════════
+
+# 整個多視窗協作目錄：派工、狀態、稽核、交付紀錄、施工規格、輔助腳本，
+# 全部是「我們怎麼做」而不是客戶自架會用到的東西（含子目錄 tools/）
+docs/windows/ export-ignore
+
+# backend/tests/：195 個測試檔名逐一描述已知缺陷；requirements-dev.txt 排除後
+# pytest/playwright 本來就不在包裡，測試在客戶機器上本來就跑不動（不損失任何
+# 東西，已查證 verify_package.py 與 DEPLOY.md 都不依賴這兩者）
+backend/tests/ export-ignore
+backend/requirements-dev.txt export-ignore
+backend/db_migration_plan.md export-ignore
+
+# .claude/：本機開發工具設定，與客戶端無關
+.claude/hookify.shell-quoting-python-dq.local.md export-ignore
+
+# docs/ 下的內部規劃文件與 UI mockup（不是客戶操作文件；DEPLOY.md／DR-SOP.md／
+# HTTPS-DEPLOY-CHECKLIST.md 是客戶自架文件，明確保留，不在這裡）
+docs/MOTRIX_ERP_System_Plan.md export-ignore
+docs/UI-BACKLOG.md export-ignore
+docs/UI-REDESIGN-PLAN.md export-ignore
+docs/module-viz-mockup.html export-ignore
+docs/system-home-mockup.html export-ignore
+
+# 根目錄：內部協作／規劃文件
+/AGENT-HANDOFF-TEMPLATE.md export-ignore
+/AUTOLOGON-FIX.md export-ignore
+/GITFLOW.md export-ignore
+/MODULE-AUDIT-2026-09-13.md export-ignore
+/MOTRIX-ERP-ARCHITECTURE-MAP.md export-ignore
+/MOTRIX-ERP-QUICK.md export-ignore
+/MULTI-BRANCH-AUTO-UPDATE-DESIGN.md export-ignore
+/MULTIWIN-PROTOCOL.md export-ignore
+/NETWORK-PLAN-MODULE-DESIGN.md export-ignore
+/NEXT-SESSION.md export-ignore
+/SELLABLE-AND-MOBILE-SPEC.md export-ignore
+/WEEKLY-AUDIT-2026-09-07_2026-09-10.md export-ignore
+/LETSENCRYPT-PUBLIC-CERT-PLAN.md export-ignore
+
+# 根目錄：選型研究材料（已查證不被任何 runtime 程式碼讀取，
+# 種子資料是對應 *_seed.py 裡的 Python 字面值，.md 只是當初的研究參考）
+/ACCESS-GUIDE-CONTENT.md export-ignore
+/AUTOMATION-GUIDE-CONTENT.md export-ignore
+/ENV-GUIDE-CONTENT.md export-ignore
+/GATEWAY-GUIDE-CONTENT.md export-ignore
+/MONITOR-GUIDE-CONTENT.md export-ignore
+/NETARCH-GUIDE-CONTENT.md export-ignore
+/SWITCH-GUIDE-CONTENT.md export-ignore
+/SWITCH-BRAND-REFERENCE.md export-ignore
+/SELECTION-DB-INDEX.md export-ignore
+
+# 三件裁決（SCOPE.md「三件裁決」節）
+/CHANGELOG.md export-ignore
+/PASSKEY-CA-ROLLOUT.md export-ignore
+
+# ⚠️ 尚未排除（刻意）：backend/tools/ 的個別檔案分類、letsencrypt_renew.ps1
+# 預設值、sync_pending_data_20260817.py、create_claude_account.py 仍待 A/D
+# 裁決（見 SCOPE.md「E 類三檔在 43 項清單外」與「backend/tools/ 逐檔分類」節），
+# 本輪先不動 backend/tools/ 底下任何一個檔案。

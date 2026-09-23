@@ -414,6 +414,10 @@ def main():
         print("  %-20s OK     %s" % (name, found[0]))
     print()
 
+    print("### (4a) 排除清單 ∩ MUST_EXIST（🔴 擋關，見 SCOPE.md PK1 節）")
+    check_exclusion_vs_must_exist()
+    print()
+
     # 🔴 `VP6`：autostart.bat 的**內容**要被驗，不是只驗存在。
     #    ⚠️ 抽成函式而不是留在上面那個迴圈裡 —— 內嵌的話
     #       **只有整支跑起來才驗得到**，而那正是 `VP1` 那次的形狀。
@@ -551,6 +555,89 @@ def check_autostart(pkg):
           % (sum(1 for sw in AUTOSTART_SWITCHES
                  if re.search(r"^\s*set\s+%s\s*=" % sw, text, re.I | re.M)),
              len(AUTOSTART_SWITCHES), cds[-1] if cds else None))
+
+
+def _export_ignore_patterns(gitattributes_path):
+    """解析 `.gitattributes` 裡的 `export-ignore` 規則，回傳 pattern 字串清單。
+
+    只認得「`<pattern> export-ignore`」這個形狀（同一行還可能有其他屬性，
+    只要 `export-ignore` 是其中一個 token 就算）；不解析 gitignore 萬用字元的
+    完整語意 —— 呼叫端只需要「這條 pattern 蓋不蓋得到某個具體檔案」，
+    見 `_pattern_covers`。
+    """
+    patterns = []
+    with io.open(gitattributes_path, "r", encoding="utf-8", errors="replace") as fh:
+        for ln in fh:
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            parts = ln.split()
+            if len(parts) >= 2 and "export-ignore" in parts[1:]:
+                patterns.append(parts[0])
+    return patterns
+
+
+def _pattern_covers(pattern, rel_path):
+    """`pattern`（`.gitattributes` 裡的一條）蓋不蓋得到 `rel_path`（repo 根為準的
+    相對路徑，`/` 分隔）。
+
+    ⚠️ 只處理本檔 `.gitattributes` 裡實際會出現的兩種錨定形狀 ——
+    目錄（尾巴 `/`，如 `docs/windows/`）與單一檔案（帶或不帶開頭 `/`，
+    一定含目錄路徑，如 `/CHANGELOG.md`／`docs/UI-BACKLOG.md`）。
+    **不支援** `*.ext` 這種裸萬用字元或不帶路徑的裸檔名 pattern
+    ——本檔目前沒有這種寫法，真的出現時寧可比對不到也不要猜。
+    """
+    p = pattern.lstrip("/")
+    rel = rel_path.replace("\\", "/").lstrip("/")
+    if p.endswith("/"):
+        p = p.rstrip("/")
+        return rel == p or rel.startswith(p + "/")
+    return rel == p
+
+
+def _find_in_tree(root, name, skip):
+    """在 `root` 下找檔名為 `name` 的所有檔案，回傳相對 `root` 的路徑（`/` 分隔）。"""
+    hits = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in skip]
+        if name in filenames:
+            rel = os.path.relpath(os.path.join(dirpath, name), root)
+            hits.append(rel.replace("\\", "/"))
+    return hits
+
+
+def check_exclusion_vs_must_exist():
+    """🔴 不變量：`export-ignore` 排除清單 ∩ `MUST_EXIST` = 空集合。
+
+    背景見 `docs/windows/SCOPE.md`「PK1」節：`MUST_EXIST` 是**打包產出物的
+    消費端**（本工具自己要求包裡一定要有），與「執行期會讀它」是同一類危險，
+    只是消費者換成我們自己的驗包工具 —— 排除清單若不小心蓋到它，
+    包會**永遠過不了驗包**，而症狀只會是這裡的 FAIL，不會是別的地方。
+
+    ⚠️ `MUST_EXIST` 會長，這裡**不把今天的兩個值抄下來**——直接讀
+    `verify_package.py` 自己的 `MUST_EXIST` 清單與工作樹當下的
+    `.gitattributes`，交集永遠是**現算的**。
+    """
+    ga_path = os.path.join(WT, ".gitattributes")
+    if not os.path.isfile(ga_path):
+        R.fail("排除清單 vs MUST_EXIST", ".gitattributes 不存在（%s）⇒ 無法驗證交集" % ga_path)
+        return
+    patterns = _export_ignore_patterns(ga_path)
+    print("  .gitattributes 裡 export-ignore 規則共 %d 條" % len(patterns))
+    for name in MUST_EXIST:
+        paths = _find_in_tree(WT, name, WT_SKIP)
+        if not paths:
+            R.fail("MUST_EXIST 找不到來源",
+                   "%s 在工作樹裡找不到，無法驗證它會不會被排除掉" % name)
+            continue
+        for rel in paths:
+            hit = [p for p in patterns if _pattern_covers(p, rel)]
+            if hit:
+                R.fail("排除清單 ∩ MUST_EXIST",
+                       "%s（%s）同時是 MUST_EXIST 又被 export-ignore 蓋到：%s"
+                       % (name, rel, "、".join(hit)))
+            else:
+                print("    %-20s %-40s 沒有被任何 export-ignore 蓋到 ✅" % (name, rel))
 
 
 def check_provenance(pkg, lower):
