@@ -274,8 +274,13 @@ print('BACKUP_OK')
         $ErrorActionPreference = $prevEap
     }
     Remove-Item $backupPy -Force -ErrorAction SilentlyContinue
-    if ($backupExit -ne 0 -or ($backupOutput -notmatch "BACKUP_OK")) {
-        Write-Host ($backupOutput | Out-String)
+    # 🔴 2026-09-24（正式機套用乙時誤判）：`& python x 2>&1` 在 PS 5.1 下，只要 python 往 stderr
+    #    印任何一行（例：db.py 的 logger.warning），輸出就是**陣列**（ErrorRecord ＋ 字串）。
+    #    對陣列用 -notmatch 回傳的是「不符合的元素」—— 非空即為 true ⇒ 成功也被判失敗。
+    #    ⇒ 先合成一個字串再比對。以前輸出只有一行，所以一直沒被發現。
+    $backupText = ($backupOutput | Out-String)
+    if ($backupExit -ne 0 -or ($backupText -notmatch "BACKUP_OK")) {
+        Write-Host $backupText
         Fail "升級前 db 備份失敗，中止套用（正式庫尚未被觸碰）。" "backup_failed"
     }
     Ok "  db 快照（SQLite Online Backup API）：$dbBackupPath"
@@ -318,12 +323,17 @@ print('DRYRUN_OK')
     }
     Remove-Item $dryRunDb, $dryRunPy -Force -ErrorAction SilentlyContinue
 
-    if ($dryRunExit -ne 0 -or ($dryRunOutput -notmatch "DRYRUN_OK")) {
+    # 🔴 2026-09-24（正式機套用乙時誤判）：`& python x 2>&1` 在 PS 5.1 下，只要 python 往 stderr
+    #    印任何一行（例：db.py 的 logger.warning），輸出就是**陣列**（ErrorRecord ＋ 字串）。
+    #    對陣列用 -notmatch 回傳的是「不符合的元素」—— 非空即為 true ⇒ 成功也被判失敗。
+    #    ⇒ 先合成一個字串再比對。以前輸出只有一行，所以一直沒被發現。
+    $dryRunText = ($dryRunOutput | Out-String)
+    if ($dryRunExit -ne 0 -or ($dryRunText -notmatch "DRYRUN_OK")) {
         Write-Host ""
         Write-Host "======================================" -ForegroundColor Red
         Write-Host "  Migration 乾跑驗證失敗，中止套用（正式庫完全未被觸碰）" -ForegroundColor Red
         Write-Host "======================================" -ForegroundColor Red
-        Write-Host ($dryRunOutput | Out-String)
+        Write-Host $dryRunText
         Fail "新版本的 migration 在 db 快照副本上乾跑失敗，套用到正式庫時很可能也會出錯。請檢查上面的錯誤訊息、修好新版 db.py 的 migration 後重新打包，再重新套用。" "migration_dryrun_failed"
     }
     Ok "  Migration 乾跑驗證通過（新版 db.py 對照正式庫目前的 schema 乾跑一輪，未發現錯誤）。"
