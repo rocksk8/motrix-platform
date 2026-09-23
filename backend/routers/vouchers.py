@@ -542,6 +542,19 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
             tier["approvedBy"] = _user_name(user)
             tier["approvedAt"] = now
             tier["status"] = "已核准"
+            # 🔴 A `§253`：**加不是換**——上面那個中文欄位留著（畫面可能讀），
+            #    另外標**每一個簽核人**自己的 `status`。
+            #    ⚠️ 通用簽核佇列頁的「同人連續簽核一次簽完」功能
+            #    （`approval-cascade.js::selfCascadeTiers()`）比對的是
+            #    `approvers[i].status === 'approved'`（英文字面值，
+            #    `approve_quotation()` 那支寫的格式）——只標層級的中文欄位，
+            #    cascade 永遠讀不到「這層已經簽完」，便利功能對傳票永遠不觸發。
+            #    📌 這裡沒有「當層哪一個人簽的」這個概念（`§161` 內建兩層是
+            #    一層一動作，不像報價單可能一層多人輪流簽），簽完這層代表
+            #    這層**全部**人都算數，所以是標「這一層的每一個」不是標一個。
+            for _ap in (tier.get("approvers") or []):
+                _ap["status"] = "approved"
+                _ap["approvedAt"] = now
             tiers[idx] = tier
             idx += 1
             appr["tiers"], appr["currentTier"] = tiers, idx
