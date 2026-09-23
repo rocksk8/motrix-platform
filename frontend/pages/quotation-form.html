@@ -212,6 +212,8 @@
     .items-table tr:last-child td { border-bottom: none; }
     .items-table tr:hover td { background: #FDFCFA; }
     .items-table td.internal { background: #FFFBF5; }
+    /* 2026-09-24：數字欄位解析不了（見 parseNumInput()）時標紅，數值不更新、不存檔 */
+    .num-bad { border-color: var(--danger) !important; background: #FEF2F2 !important; }
     .cell-input {
       width: 100%;
       padding: 5px 7px;
@@ -1418,9 +1420,11 @@
                               x-init="$nextTick(()=>{ $el.style.height='auto'; $el.style.height=$el.scrollHeight+'px' })"></textarea>
                   </td>
                   <td style="text-align:center">
-                    <input class="cell-input num qty-input" type="number" min="0" x-model.number="item.qty"
+                    <input class="cell-input num qty-input" type="text" inputmode="decimal"
+                           :value="numShown(item.qty, $el, 'qty-' + item.id)" :class="{'num-bad': badNum['qty-' + item.id]}"
                            x-show="item.type !== 'header'"
-                           @input="calcItem(item); setDirty()">
+                           @input="if (setNumField(item, 'qty', 'qty-' + item.id, $event.target.value)) { calcItem(item); setDirty() }"
+                           @blur="$el.value = numShown(item.qty, $el, 'qty-' + item.id, true)">
                   </td>
                   <td>
                     <input class="cell-input" type="text" x-model="item.unit" @change="setDirty"
@@ -1430,9 +1434,10 @@
                   </td>
                   <template x-if="showCostCols && item.type !== 'header'">
                     <td class="internal">
-                      <input class="cell-input num internal" type="number" min="0"
-                             x-model.number="item.cost" placeholder="0"
-                             @input="if(item.unitPriceOverride && item.unitPrice > 0 && item.cost > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()">
+                      <input class="cell-input num internal" type="text" inputmode="decimal"
+                             :value="numShown(item.cost, $el, 'cost-' + item.id)" :class="{'num-bad': badNum['cost-' + item.id]}" placeholder="0"
+                             @blur="$el.value = numShown(item.cost, $el, 'cost-' + item.id, true)"
+                             @input="if (!setNumField(item, 'cost', 'cost-' + item.id, $event.target.value)) return; if(item.unitPriceOverride && item.unitPrice > 0 && item.cost > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()">
                     </td>
                   </template>
                   <template x-if="showCostCols && item.type !== 'header'">
@@ -1440,7 +1445,8 @@
                       <div style="display:flex;align-items:center;justify-content:center;gap:2px">
                         <input class="cell-input num internal" type="number" min="0" max="99.99" step="0.01"
                                :value="parseFloat((item.margin * 100).toFixed(2))"
-                               @input="item.margin = parseFloat($event.target.value) / 100; item.unitPriceOverride = false; calcItem(item); setDirty(); checkApproval()"
+                               @input="if ($event.target.value === '') return; item.margin = parseFloat($event.target.value) / 100; item.unitPriceOverride = false; calcItem(item); setDirty(); checkApproval()"
+                               @blur="$event.target.value = parseFloat((item.margin * 100).toFixed(2))"
                                style="width:62px">
                         <span style="font-size:11px;color:var(--text-dim)">%</span>
                       </div>
@@ -1449,10 +1455,11 @@
                     </td>
                   </template>
                   <td>
-                    <input class="cell-input num" type="number" min="0"
+                    <input class="cell-input num" type="text" inputmode="decimal"
                            x-show="item.type !== 'header'"
-                           x-model.number="item.unitPrice"
-                           @input="item.unitPriceOverride = true; if(item.cost > 0 && item.unitPrice > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()"
+                           :value="numShown(item.unitPrice, $el, 'price-' + item.id)" :class="{'num-bad': badNum['price-' + item.id]}"
+                           @blur="$el.value = numShown(item.unitPrice, $el, 'price-' + item.id, true)"
+                           @input="if (!setNumField(item, 'unitPrice', 'price-' + item.id, $event.target.value)) return; item.unitPriceOverride = true; if(item.cost > 0 && item.unitPrice > 0) item.margin = parseFloat((1 - item.cost * 1.05 / item.unitPrice).toFixed(4)); calcItem(item); setDirty(); checkApproval()"
                            :title="item.unitPriceOverride ? '手動覆寫（毛利率已反推）' : '自動計算'">
                   </td>
                   <td>
@@ -1517,8 +1524,10 @@
                 <label class="form-label">運費</label>
                 <div class="nt-input-group">
                   <span class="nt-prefix">NT$</span>
-                  <input class="form-input" type="number" min="0" x-model.number="q.freight"
-                         @input="calcTotals(); setDirty()">
+                  <input class="form-input" type="text" inputmode="decimal"
+                         :value="numShown(q.freight, $el, 'freight')" :class="{'num-bad': badNum.freight}"
+                         @blur="$el.value = numShown(q.freight, $el, 'freight', true)"
+                         @input="if (setNumField(q, 'freight', 'freight', $event.target.value)) { calcTotals(); setDirty() }">
                 </div>
               </div>
               <div class="form-group">
@@ -1532,9 +1541,11 @@
                 </label>
                 <div class="nt-input-group" :style="!q.showDiscount ? 'opacity:.4;cursor:not-allowed' : ''">
                   <span class="nt-prefix">NT$</span>
-                  <input class="form-input" type="number" min="0" x-model.number="q.discount"
+                  <input class="form-input" type="text" inputmode="decimal"
+                         :value="numShown(q.discount, $el, 'discount')" :class="{'num-bad': badNum.discount}"
                          :disabled="!q.showDiscount"
-                         @input="calcTotals(); setDirty(); checkApproval()">
+                         @blur="$el.value = numShown(q.discount, $el, 'discount', true)"
+                         @input="if (setNumField(q, 'discount', 'discount', $event.target.value)) { calcTotals(); setDirty(); checkApproval() }">
                 </div>
                 <div class="form-hint warn" x-show="q.showDiscount">折讓需主管審核</div>
               </div>
@@ -2247,6 +2258,7 @@
       _saveConflict: false,  // apiSave() 收到 409 時設 true，saveDraft() 據此提示使用者
       previewMode: null,
       needsApproval: false,
+      badNum: {},             // 解析不了的數字欄位（key → true），有任何一格就不存檔
       approvalReasons: [],
       autoSaveTimer: null,
       isNewRecord: true,
@@ -2366,6 +2378,35 @@
       },
 
       /* ── 定義公式 ── */
+      // 2026-09-24：金額／數量欄位改用文字框。type=number 貼上「12,000」時瀏覽器給空值，
+      // x-model.number 就把它變成 0。這裡接受千分位與全形數字；空白維持原本的空值語意。
+      parseNumInput(raw) {
+        const s = String(raw == null ? '' : raw)
+          .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+          .replace(/．/g, '.').replace(/[,，\s]/g, '')
+        if (s === '') return ''
+        if (!/^\d+(\.\d*)?$/.test(s)) return null
+        return parseFloat(s)
+      },
+      setNumField(obj, key, badKey, raw) {
+        const v = this.parseNumInput(raw)
+        if (v === null) { this.badNum = { ...this.badNum, [badKey]: true }; return false }
+        if (this.badNum[badKey]) { const b = { ...this.badNum }; delete b[badKey]; this.badNum = b }
+        obj[key] = v
+        return true
+      },
+      // 聚焦中（使用者正在打「12.」「1,2」）或標紅時保留原字，不被數值改寫；失焦（blur=true）才改回數值
+      numShown(v, el, badKey, blur) {
+        if (el && this.badNum[badKey]) return el.value
+        if (!blur && el && document.activeElement === el) return el.value
+        return v == null ? '' : v
+      },
+      _badNumBlocksSave() {
+        if (!Object.keys(this.badNum).length) return false
+        alert('有數字欄位無法辨識（標紅處），請修正後再存檔')
+        return true
+      },
+
       calcUnitPrice(cost, margin) {
         if (!cost || cost <= 0 || margin >= 1) return 0
         const base = Math.ceil(cost * 1.05 / (1 - margin) / 5) * 5
@@ -2434,6 +2475,12 @@
       },
 
       removeItem(idx) {
+        const _rid = this.q.items[idx] && this.q.items[idx].id
+        if (_rid != null) {
+          const b = { ...this.badNum }
+          ;['qty-', 'cost-', 'price-'].forEach(p => delete b[p + _rid])
+          this.badNum = b
+        }
         const item = this.q.items[idx]
         if (item.type !== 'header' && this.q.items.filter(i => i.type !== 'header').length <= 1) {
           alert('至少保留一項品項'); return
@@ -2554,6 +2601,7 @@
       },
 
       async apiSave(isNew) {
+        if (Object.keys(this.badNum).length) return false   // 解析不了的數字不送（自動存檔靜默略過）
         // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
         // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
         // 只看「目前有沒有號碼」是不夠的——使用者在取號還沒回來時就按送審的話，
@@ -2934,6 +2982,7 @@
       },
 
       async saveDraft() {
+        if (this._badNumBlocksSave()) return
         // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
         // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
         // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
@@ -3320,6 +3369,7 @@ window.addEventListener('load',function(){
       },
 
       async submitQuote() {
+        if (this._badNumBlocksSave()) return
         if (!this.q.customerName) { alert('請填寫客戶名稱'); return }
         if (!this.q.projectName)  { alert('請填寫案件名稱'); return }
         this.submitNote = ''
