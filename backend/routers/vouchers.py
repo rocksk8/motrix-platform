@@ -22,6 +22,8 @@ import os
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
+from fastapi.responses import Response
+from urllib.parse import quote
 
 from db import get_db
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
@@ -30,6 +32,7 @@ from routers.accounting_export import validate_account_code
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.uploads import save_document_files
+from helpers.voucher_pdf import export_voucher_pdf
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
     COPY_SOURCE_TYPE,
@@ -976,3 +979,59 @@ def _copy_attachments_to(conn, old_id, new_id, who, now):
                            str(old_id), att["file_id"], who, now)
         n += 1
     return n
+
+
+@router.get("/{voucher_id}/pdf-download")
+def download_voucher_pdf(voucher_id: int, with_attachments: bool = False,
+                         authorization: str = Header(None)):
+    """匯出傳票 PDF。`?with_attachments=1` 連附件一起。
+
+    ## ⚠️ 路由順序：**這一支不受上面那條限制**
+
+    上面那條說的是「**路徑只有一段、而那一段是整數參數**」的 GET 會吃掉
+    後面宣告的**靜態**路徑。本支是 `/{voucher_id}/pdf-download`
+    —— 動態在前、字面值在後，**段數不同** ⇒ 不會互相攔截。
+    🔑 寫在這裡是因為下一個人會照抄那條規則搬家，**而搬了反而製造問題**。
+
+    ## 🔴 附件壞掉／不見 ⇒ **照印**，把缺口印在輸出裡
+
+    `JV3` 的帶入遇到同樣情況是整批拒絕 400，**而那個類比在這裡不成立**：
+    ```
+    JV3 帶入   **寫入** —— 部分成功會留下一句謊
+    JV5 匯出   **唯讀** —— 不改變任何主張，只是把既有的主張印出來
+    ```
+    ⇒ 一份法定要保存五年的憑證，不可以因為一個附件而印不出來。
+    ☠️ 而靜默略過更糟：使用者拿到一份**看起來完整**的 PDF。
+
+    ## ⚠️ 而它必須同時反映在**回應**上
+
+    只印在紙上的話，呼叫端（前端／自動化）分不出「完整」與「缺了東西」。
+    ⇒ 回 `X-Voucher-Missing-Attachments`（筆數）與 `...-Names`（檔名）。
+    🔑 **header 的值只能是 latin-1** ⇒ 檔名用 URL 編碼，
+       ☠️ 直接塞中文檔名會讓整個回應在送出的那一刻炸掉，
+          而那會變成「匯出壞了」——比缺一個附件嚴重得多。
+    """
+    _require_voucher_access(_require_user(authorization))
+    data, missing = export_voucher_pdf(voucher_id, with_attachments)
+    if data is None:
+        raise HTTPException(404, "找不到這張傳票。")
+
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT voucher_no FROM vouchers_all WHERE id = ?",
+                           (voucher_id,)).fetchone()
+    finally:
+        conn.close()
+    name = (dict(row).get("voucher_no") if row else "") or str(voucher_id)
+
+    headers = {
+        # ⚠️ 檔名走 ASCII：單號是 `YYYYMMDD-NNN[-Rn]`，本來就不含非 ASCII。
+        "Content-Disposition": 'attachment; filename="voucher-%s.pdf"' % name,
+    }
+    if missing:
+        headers["X-Voucher-Missing-Attachments"] = str(len(missing))
+        headers["X-Voucher-Missing-Attachment-Names"] = quote(
+            "、".join((m.get("filename") or "") for m in missing))
+    _audit(_tok(authorization), "voucher.pdf", "vouchers", str(voucher_id),
+           "匯出傳票 PDF：%s%s" % (name, "（含附件）" if with_attachments else ""))
+    return Response(content=data, media_type="application/pdf", headers=headers)

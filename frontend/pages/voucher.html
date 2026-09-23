@@ -405,6 +405,24 @@
                     @click="openReason('void')">作廢</button>
           </div>
 
+          <!-- ══ 匯出（JV5）════════════════════════════════════════════
+               🔴 **兩個動作不是一個**：只印本體／含附件。
+                  ☠️ 只給一個的話，使用者以為印出來的就是全部。
+               ⚠️ 已作廢的傳票**也印得出來** —— 一份憑證法定保存 5 年，
+                  而作廢單正是稽核最需要看到的那一種
+                  ⇒ 所以這一區**不在** `x-show="!voidedAt"` 裡面。 -->
+          <div class="vc-acts" x-show="isSaved">
+            <button class="vc-btn" data-testid="voucher-pdf"
+                    :disabled="exporting" @click="exportPdf(false)"
+                    x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
+            <button class="vc-btn" data-testid="voucher-pdf-attachments"
+                    :disabled="exporting" @click="exportPdf(true)">匯出 PDF（含附件）</button>
+            <span class="vc-att__hint">
+              「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；
+              併不進去的會列在最後一頁，畫面上也會說。
+            </span>
+          </div>
+
           <template x-if="askReason">
             <div class="vc-reason">
               <span x-text="askReason === 'void' ? '作廢原因' : '退回原因'"></span>

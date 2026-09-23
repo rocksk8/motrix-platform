@@ -60,6 +60,7 @@ function voucherPage() {
     attErr: '',
     attMsg: '',
     uploading: false,
+    exporting: false,
     //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
     summaryTarget: 0,
 
@@ -233,6 +234,62 @@ function voucherPage() {
         this.attMsg = '已移除「' + (a.filename || '') + '」。檔案本身仍保留在系統裡。'
       } catch (e) {
         this.attErr = e.message
+      }
+    },
+
+    // ── 匯出 PDF（`JV5`）────────────────────────────────────────────
+    //
+    // 🔴 兩個動作，不是一個：「只印本體」與「含附件」。
+    //    ☠️ 只接一個的話，使用者以為印出來的就是全部。
+    // ⚠️ 而**未併入的附件畫面也要說**，不能只有 PDF 裡有 ——
+    //    呼叫端要靠回應的 header 才分得出「完整」與「缺了東西」。
+
+    async exportPdf(withAttachments) {
+      this.attErr = ''
+      this.attMsg = ''
+      if (!this.id || this.exporting) return
+      this.exporting = true
+      try {
+        const q = withAttachments ? '?with_attachments=1' : ''
+        const r = await fetch('/api/vouchers/' + this.id + '/pdf-download' + q, {
+          headers: this._auth(),
+        })
+        if (!r.ok) {
+          // 🔑 失敗時後端回的是 JSON 不是 PDF ⇒ 讀得出那句話就用它。
+          let msg = 'HTTP ' + r.status
+          try { msg = (await r.json()).detail || msg } catch (e) { /* 不是 JSON */ }
+          throw new Error(msg)
+        }
+        const blob = await r.blob()
+        // ⚠️ `download` 屬性要配 blob URL；用完**一定要 revoke**，
+        //    否則每匯出一次就在記憶體裡留一份整包 PDF。
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'voucher-' + (this.voucherNo || this.id) + '.pdf'
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        const n = Number(r.headers.get('X-Voucher-Missing-Attachments') || 0)
+        if (n > 0) {
+          // 🔴 **畫面也要說**：只印在紙上的話，使用者要翻到最後一頁才知道。
+          let names = ''
+          try {
+            names = decodeURIComponent(
+              r.headers.get('X-Voucher-Missing-Attachment-Names') || '')
+          } catch (e) { /* 解不開就只報筆數 */ }
+          this.attErr = '已匯出，而有 ' + n + ' 個附件沒有併進去'
+            + (names ? ('：' + names) : '')
+            + '。PDF 最後一頁列出了它們；這些附件仍然登記在這張傳票上。'
+        } else {
+          this.attMsg = withAttachments ? '已匯出（含附件）。' : '已匯出。'
+        }
+      } catch (e) {
+        this.attErr = '匯出失敗（' + e.message + '）。'
+      } finally {
+        this.exporting = false
       }
     },
 
