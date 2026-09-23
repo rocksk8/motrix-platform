@@ -496,7 +496,11 @@ def reject_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default={
         appr = json.loads(row["approval_json"] or "{}")
         tiers = _active_tiers(appr)
         ct = _current_tier_idx(appr)
-        check_reject_permission(tiers, ct, user, conn)
+        # 2026-09-24：回傳值原本被丟掉（approve 側 09-15 已修同型），任何過得了
+        # _guard_case() 的人都駁回得了任何一層。
+        ok, status_code, err_msg = check_reject_permission(tiers, ct, user, conn)
+        if not ok:
+            raise HTTPException(status_code, err_msg)
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
@@ -1016,7 +1020,11 @@ def reject_change_request(quote_no: str, exp_id: int, body: dict = Body(default=
         appr = _jcol(row, "change_approval_json")
         tiers = _active_tiers(appr)
         ct = _current_tier_idx(appr)
-        check_reject_permission(tiers, ct, user, conn)
+        # 2026-09-24：回傳值原本被丟掉（approve 側 09-15 已修同型），任何過得了
+        # _guard_case() 的人都駁回得了任何一層。
+        ok, status_code, err_msg = check_reject_permission(tiers, ct, user, conn)
+        if not ok:
+            raise HTTPException(status_code, err_msg)
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
