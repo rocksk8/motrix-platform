@@ -73,6 +73,15 @@ def _setup(page, live_server, make_user, seed_extra_expense, uname):
     return exp[0]
 
 
+def _wait_expenses(page, exp):
+    """等支出項清單**載入完成**（那一筆出現），不用固定秒數。
+    📌 更正留著（2026-09-24，hichan-8d 讀碼＋壓力比對）：原本只等 `sourceQuote === q`——
+       那是點案件時**同步**設的，`loadSources()` 的 fetch 還沒回來就成立了 ⇒ 負載高時
+       支出項區還是空的，`is_visible` 讀到 False（基準 b41f748 壓力下 2/2 紅）。"""
+    page.locator('[data-testid="summary-panel-expense"]:has-text("%s")' % exp[:6]).wait_for(
+        state="visible", timeout=15000)
+
+
 def _line2(page):
     return page.locator(SUMMARY).nth(1)
 
@@ -91,6 +100,7 @@ def test_jv33_focusing_a_summary_shows_files_and_expenses_together(
             exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_a")
             _line2(page).click()
             page.wait_for_selector(PANEL, state="visible", timeout=5000)
+            _wait_expenses(page, exp)
             files_vis = page.is_visible(FILES + ' :text("吊車發票.png")')
             exp_vis = page.is_visible(EXPENSES + ' :text("%s")' % exp[:6])
             print("JV33 頁面實測：focus 第 2 行摘要 ⇒ 附件區可見", files_vis, "／支出項區可見", exp_vis)
@@ -109,6 +119,7 @@ def test_jv33_clicking_items_fills_then_appends_with_a_fullwidth_semicolon(
             exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_b")
             _line2(page).click()
             page.wait_for_selector(PANEL, state="visible", timeout=5000)
+            _wait_expenses(page, exp)
             assert _summary2(page) == "", "量尺：第 2 行一開始就不是空的：%r" % _summary2(page)
             page.click('[data-testid="summary-panel-expense"]:has-text("%s")' % exp[:6])
             first = _summary2(page)
@@ -137,5 +148,38 @@ def test_jv33_the_thumbnail_previews_without_touching_the_summary(
             page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible",
                                    timeout=10000)
             assert _summary2(page) == "", "點縮圖不應該動摘要：%r" % _summary2(page)
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_jv33_the_expense_section_says_loading_while_sources_are_in_flight(
+        live_server, make_user, seed_extra_expense):
+    """支出項還在載入時，面板要說「載入中…」，不是一片空白或「沒有支出項」（慢網路時的樣子）。
+    ⚙️ 用 `page.route` **扣住**帶案件的 summary-sources 請求，量完「載入中」才放行——
+       不用 `time.sleep`：sync Playwright 的 route handler 裡睡覺會卡住整條事件迴圈，
+       延遲不會真的發生在瀏覽器那一側。"""
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        held = []
+        try:
+            page.route("**/api/vouchers/summary-sources?quote_no=*", lambda route: held.append(route))
+            exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_d")
+            _line2(page).click()
+            page.wait_for_selector(PANEL, state="visible", timeout=5000)
+            for _ in range(50):
+                if held:
+                    break
+                page.wait_for_timeout(100)
+            assert held, "量尺：帶案件的 summary-sources 請求沒有被扣住——量不到載入期間"
+            during = page.locator(EXPENSES).inner_text()
+            for r in held:
+                r.continue_()
+            _wait_expenses(page, exp)
+            after = page.locator(EXPENSES).inner_text()
+            print("JV33 頁面實測：載入中 ⇒", repr(during[:40]), "；載入後 ⇒", repr(after[:40]))
+            assert "載入中" in during, "支出項載入期間沒有說「載入中」：%r" % during
+            assert "載入中" not in after, "載入完了還寫著載入中：%r" % after
         finally:
             browser.close()

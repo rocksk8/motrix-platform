@@ -400,13 +400,15 @@
             </div>
             <div data-testid="summary-panel-expenses" style="margin-top:8px">
               <div class="vc-src__hint" style="margin:4px 0">支出項</div>
-              <template x-for="(e, ei) in panelExpenses()" :key="ei">
+              <!-- 載入中（選了案件之後的那一趟還沒回來）⇒ 說「載入中…」，不沿用上一趟的提示。 -->
+              <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
+              <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
                 <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
                         data-testid="summary-panel-expense" @click="panelAppend(e.summary)">
                   <span class="vc-src__txt" x-text="e.summary"></span>
                 </button>
               </template>
-              <div class="vc-src__empty" x-show="!panelExpenses().length"
+              <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
                    x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
             </div>
           </div>

@@ -51,6 +51,8 @@ function voucherPage() {
     sources: {},
     sourceNotes: {},
     sourcesLoaded: false,
+    //: 摘要來源**正在載入**（每一次，含選了案件之後那一次）。`sourcesLoaded` 只代表「載過一次」。
+    sourcesLoading: false,
     sourceErr: '',
     //: 頁籤②「已上傳檔案」要先知道**是哪一個案件** —— 憑證掛在案件底下。
     sourceQuote: '',
@@ -144,18 +146,27 @@ function voucherPage() {
 
     async loadSources() {
       // ⚙️ **只在載入時拿一次** —— 切頁籤不重新打，也不重新帶入。
+      // 🔴 選了案件之後會再打一次：那一趟回來之前，帶入面板的支出項區要說「載入中…」，
+      //    不可以沿用上一趟的「請先選一個案件」（案件明明已經選了）。
+      // ⚠️ 先渲染再非同步載入＝競態：發請求當下記住是哪一個案件，回來不符就整包丟掉
+      //    （使用者在回應回來之前又換了案件）。
+      const quote = this.sourceQuote
+      this.sourcesLoading = true
       try {
-        const q = this.sourceQuote
-          ? '?quote_no=' + encodeURIComponent(this.sourceQuote) : ''
+        const q = quote ? '?quote_no=' + encodeURIComponent(quote) : ''
         const r = await fetch('/api/vouchers/summary-sources' + q,
                               { headers: this._auth() })
         if (!r.ok) throw new Error('HTTP ' + r.status)
         const d = await r.json()
+        if (quote !== this.sourceQuote) return
         this.sources = d.tabs || {}
         this.sourceNotes = d.notes || {}
         this.sourcesLoaded = true
       } catch (e) {
+        if (quote !== this.sourceQuote) return
         this.sourceErr = '摘要來源載入失敗（' + e.message + '）。摘要仍然可以手動填寫。'
+      } finally {
+        if (quote === this.sourceQuote) this.sourcesLoading = false
       }
     },
 
