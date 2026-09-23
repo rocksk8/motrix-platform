@@ -45,13 +45,50 @@ payment_requests        ✅ 存在  金額✅ amount       發票❌
 | 來源 | 金額在哪 | 「有發票」怎麼判 |
 |---|---|---|
 | **承攬商派工**<br>`contractor_dispatches` | `total_amount`（＋`items_json`／`personnel_json`，見 ⚠️） | `invoice_no` **欄位** ／ `invoice_files_json` **附件** |
-| **叫料**<br>`quotations.data_json.materials[i]` | `qty × unitCost` | `invoiceFiles` **陣列**（JSON） |
+| ~~**叫料**~~<br>🔴 **見 §2b：它沒有金額** | ~~`qty × unitCost`~~ | `invoiceFiles` 陣列（**而 0 筆資料在用**）|
 | **案件額外支出**<br>`case_extra_expenses` | `total_cost` **欄位** | `files_json` **附件** ＋ `doc_no`（憑證單號） |
 
-⚠️ **叫料不是一張表** —— 它在 `quotations.data_json.materials`，
+⚠️ **叫料不是一張表** —— 它在 `quotations.data_json.**caseRecord**.materials`
+（⚠️ **不是 `data_json.materials`** —— 我上一版寫錯了層），
 而它的發票走 `POST /api/quotations/{no}/materials/{idx}/invoice-files`。
-📌 ⇒ A 說的「用結構圈母體不要用名字猜」在這裡的結果是：
-**三個來源裡只有一個是「表」，另外兩個一個在 JSON、一個發票在附件。**
+
+---
+
+## §2b 🔴🔴 **更正：叫料「沒有支出金額」** —— 這一列是我推的，不是查的
+
+### 實測（`caseRecord.materials`，13 張單、6 個品項）
+
+```
+出現過的鍵：id ／ name ／ model ／ qty ／ unit ／ ordered ／ arrived ／
+            devices ／ note ／ supplier
+🔴 **`cost`／`price`／`amount`／`total` 一個都沒有**
+```
+
+> ### ⇒ **叫料是「物流追蹤」（訂了沒、到了沒、序號），不是支出記錄。**
+
+☠️ 而我上一版寫「叫料的金額 = `qty × unitCost`」——
+**那是從端點路徑推的，沒有任何資料佐證，而它是錯的。**
+🔑 〈先問欄位在不在，再問可不可以用〉：**我跳過了「那個欄位在不在」。**
+
+### 而「材料的支出」實際上記在**兩個別的地方**
+
+```
+case_extra_expenses.category   「材料」3 筆 6,525 ／「運費」2 筆 2,750
+                                「工時」1 筆 1,200 ／「其他」1 筆 15
+settlement.items[].actualTotalCost   原始報價品項的**實際成本**
+```
+
+### 🔴 ⇒ 使用者那句「**叫料有發票有支出**」有兩種讀法，**要問**
+
+```
+甲 他指的是 `case_extra_expenses` 裡 category='材料' 的那些
+   ✅ 那些**有金額、有附件** => JV21 已經涵蓋（就是「額外支出」那一支）
+乙 他認為**叫料本身就該有金額**
+   🔴 那是**一個新需求**（叫料要加成本欄位），**不是 JV21**
+```
+
+📌 ⚠️ 而 `/materials/{idx}/invoice-files` 這支端點**存在而 0 筆資料在用** ——
+⇒ 「叫料可以掛發票」這個功能**做了而沒有人用過**，那本身也是一個訊號。
 
 ### ⚠️ 而 `contractor_dispatches.total_amount` **不是那一筆的總額**
 
@@ -138,6 +175,75 @@ quotations 共 **31 個欄位**
 
 ⚠️ **這一段（第三層）的細節尚未寫完** —— A 指示「做完 `cashier` 再回來補」。
 📌 ⇒ 本規格目前**只涵蓋前兩層**，第三層的資料形狀要另外一輪。
+
+---
+
+## §3b 第三層的資料形狀 —— **三個來源分三段，不要假設一致**
+
+### ① 承攬商派工：**第三層有兩種，而它們的鍵完全不同**
+
+```
+contractor_dispatches.items_json[]
+    {id, description, qty, unit, unitPrice, amount, note}
+contractor_dispatches.personnel_json[]
+    {id, name, amount, note}
+```
+
+```
+🔑 兩種在畫面上都是「這張派工底下的一筆」，而：
+   品項有 description／qty／unit／unitPrice   人員只有 name／amount
+⇒ **不可以用同一個渲染器** —— 用了就得在其中一種上留空欄位
+```
+
+#### ☠️ 兩個實測到的陷阱
+
+```
+① `unitPrice` 的**型別不一致**：`6800`（數字）與 `"12000"`（字串）都有
+   => 算金額前要 `float()`，⚠️ 而**空字串會丟例外**
+② `items[].id` 是**前端產生的 float timestamp**（`1784650316777.8818`）
+   `personnel[].id` 是**小整數**（2、3）
+   ☠️ **兩邊的 id 語意不同，不可以混用** ——
+      一個 `id=2` 在 items 裡幾乎不可能存在，而在 personnel 裡是常態
+   ⇒ 帶入時的識別要用 `(dispatch_id, "item"|"personnel", index)`，**不要只用 id**
+```
+
+### ② 案件額外支出：**它自己就是第三層**
+
+```
+case_extra_expenses 的欄位：
+    category ／ description ／ qty ／ unit ／ unit_cost ／ total_cost ／
+    note ／ expense_date ／ doc_no ／ files_json
+```
+
+```
+🔑 它**有 description／qty／unit／unit_cost** —— 品項該有的欄位都在
+⇒ 「一筆額外支出」就是「一個品項」，**沒有再下一層**
+```
+
+> ### ✅ A 問的甲／乙 —— **選甲：展開後只有一層，不假裝有第三層**
+
+```
+甲 展開後只有一層（**畫面說實話**）              <= ✅ 選這個
+乙 統一都展兩層，這一層只有一筆                   <= ❌
+☠️ 乙的代價：使用者點開一個箭頭，看到**一筆與上一層一模一樣的東西**
+   —— 他會以為自己點錯了，或以為系統壞了
+🔑 **不要為了一致而製造一個空層。**
+```
+
+📌 ⚠️ 而**我上一版把這一格安在「叫料」頭上是錯的** ——
+真正「第二層與第三層是同一層」的是**額外支出**，不是叫料
+（叫料的問題是**根本沒有金額**，見 §2b）。
+
+### ③ 叫料：🔴 **這一支現在寫不了**
+
+```
+`caseRecord.materials[]` 沒有任何金額欄位（§2b 實測）
+⇒ 它進不了「支出項」這個清單 —— **不是形狀問題，是它不是支出**
+⚠️ 而它**有第四層**（`devices[]`：序號／MAC）
+   => 若日後補了金額，它會是**四層**不是三層
+```
+
+⇒ **等 §2b 那一題問完再決定**。本規格的第三層**只涵蓋 ①**。
 
 ---
 
