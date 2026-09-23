@@ -49,6 +49,12 @@ def test_scope_defaults_and_editing(client, make_user):
         #    而反過來（預設合併之後要拆開）**要先有人發現它們被合在一起了**。
         #    🔑 猜錯的代價不對稱時，**先做可逆的那一邊**。
         "voucher": False,
+        # 🔴 `BN8` 的第九個（獎金分潤單）。同一條理由再用一次：
+        #    `tiered_approval.py` 的 `DEFAULT_UNIFIED_DOC_TYPES` **刻意不放
+        #    `bonus`** —— 進了統一流程會與報價單／出貨單共用同一條簽核鏈，
+        #    改那一條的人不會知道自己也改了獎金；不進 => 自己一條
+        #    `bonus_approval_flow`，可逆（勾一下就合併）。
+        "bonus": False,
     }
     for key, want in EXPECTED_SCOPE.items():
         assert key in scope, f"既有的文件類型 {key} 從 scope 裡消失了：{scope}"
