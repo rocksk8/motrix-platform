@@ -170,8 +170,10 @@ def split_attachments(rows):
 
 
 def watermark_html(voucher):
-    """`JV11`：預覽稿要不要蓋浮水印、蓋哪一句。只有 `preview_voucher_pdf()`
-    呼叫這支——匯出路徑一律是空字串（見 `build_html()` 的 docstring）。
+    """要不要蓋浮水印、蓋哪一句。回傳值本身沒有變過——`JV23`（依據使用者
+    2026-09-23 裁示）改的是**呼叫端**：`preview_voucher_pdf()` 與
+    `export_voucher_pdf()` 現在都會呼叫這支，不是只有預覽路徑。這支的
+    判斷邏輯不用跟著改，壞的一直是匯出路徑沒有接上這個參數。
 
     ## 🔴 作廢優先於未簽核（使用者裁示②）
 
@@ -213,10 +215,20 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
        —— 來源 PDF 沒有文字層。對不上時若是座標是實作問題，
        若是字型**沒有人有權威答案**，要回去問使用者。
 
-    `watermark`：`JV11` 的預覽稿浮水印 HTML（`watermark_html()` 產的），
-    **匯出路徑一律傳空字串**——那正是 `§228` 的分工：預覽用這個參數蓋一層
-    「尚未簽核完成」，匯出走簽核通過才放行，兩者不共用同一個「有沒有簽完」
-    的旗標，穿不過去。
+    `watermark`：`watermark_html()` 產的 HTML。
+
+    🔴 **這一段的「匯出路徑一律傳空字串」是舊的，已經不對了**（依據
+    `JV23`，使用者 2026-09-23 回報「重大缺失」）——`JV11` 當時的前提是
+    「未簽核完成根本匯不出來，所以匯出的一定是有效單」，那時只有預覽稿
+    需要蓋「尚未簽核完成」；但 `JV15` 之後「已過帳／已作廢一律放行
+    匯出」，前提被推翻了，而這裡沒有跟著翻面——已作廢的傳票被匯出成一份
+    看起來完全有效的會計憑證。
+    ⇒ **匯出路徑現在也要傳 `watermark_html(v)`**（見 `export_voucher_pdf()`）。
+    `watermark_html()` 本身對「作廢優先於未簽核」的判斷沒有變、也不需要
+    變（`voided_at` 優先，已核准／已過帳回空字串）——**壞的一直是呼叫端
+    沒有把這個參數接上，不是這支函式的邏輯**。`§228` 的分工原則
+    （預覽與匯出是兩支不同端點、兩套不同閘門）仍然成立，變的只是「匯出
+    是不是也可能印出非空的 watermark」這一格。
     """
     e = html.escape
     lines = voucher.get("lines") or []
@@ -269,11 +281,13 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
   body {{ margin: 0; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
           color: #000; }}
   .sheet {{ padding: {m}pt {m}pt 0 {m}pt; position: relative; }}
-  /* `JV11`：預覽稿浮水印 —— 沿用 quotation-form.html 的 3x4 格線平鋪，
+  /* `JV11`：浮水印 —— 沿用 quotation-form.html 的 3x4 格線平鋪，
      rotate(-28deg)，顏色極淡（rgba(185,28,28,0.09)／小字 0.07）不影響閱讀。
-     只有 preview_voucher_pdf() 會餵非空的 {watermark}——匯出（pdf-download）
-     一律是空字串：匯出本來就要簽核通過才放行，作廢單的狀態已經印在
-     .head 那一列，不需要再蓋一層浮水印。 */
+     🔴 `JV23`（依據使用者 2026-09-23 裁示，翻掉下面這段舊註解）：
+     不是只有 preview_voucher_pdf() 會餵非空的 {watermark}——已作廢的
+     傳票被 export_voucher_pdf() 匯出時**也要**蓋這一層，因為 .head
+     那一列的「已作廢」是 9.3pt 小字狀態列，使用者容易看漏，而這是一張
+     要拿去對帳／報稅的憑證。已核准／已過帳的正常匯出仍然是空字串。 */
   .wm {{ position: absolute; inset: 0; pointer-events: none; z-index: 5;
          overflow: hidden; display: grid; grid-template-columns: repeat(3, 1fr);
          grid-template-rows: repeat(4, 1fr); align-items: center;
@@ -440,6 +454,12 @@ def export_voucher_pdf(voucher_id, with_attachments=False):
     ⚠️ 已作廢的傳票**也要印得出來** —— `get_voucher()` 讀的是實表 `vouchers_all`
        不是 `vouchers` 那個 VIEW（`WHERE voided_at = ''`）。
     ☠️ 讀 VIEW 的症狀是 404，**而它讀起來像資料被刪了**。
+
+    🔴 `JV23`（依據使用者 2026-09-23 裁示）：算**一次** `watermark_html(v)`
+    存成變數，下面兩次 `build_html()` 呼叫都要傳——不是各自呼叫一次。
+    `voided_at`／`approval_done()` 的結果不會在這兩次呼叫之間改變（同一
+    次匯出，中途沒有人會去簽核或作廢它），算兩次只是浪費，而**各自傳參數
+    的寫法容易漏掉第二次那一個**（那正是這次踩到的缺陷形狀）。
     """
     conn = get_db()
     try:
@@ -458,12 +478,13 @@ def export_voucher_pdf(voucher_id, with_attachments=False):
 
     images, pdfs, missing = split_attachments(rows)
     exported_at = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    wm = watermark_html(v)
 
     # ⚙️ 先用「預期會併進去的筆數」組一次，合併之後若有 PDF 併不進去，
     #    那個數字與清單都會變 ⇒ **重印一次本體**（Edge 跑第二次）。
     #    🔑 寧可多跑一次，也不要讓紙上的數字與實際不符。
     v["_merged"] = len(images) + len(pdfs)
-    body = _render(build_html(v, images, missing, exported_at))
+    body = _render(build_html(v, images, missing, exported_at, watermark=wm))
     if not pdfs:
         return body, missing
 
@@ -471,7 +492,7 @@ def export_voucher_pdf(voucher_id, with_attachments=False):
     if skipped:
         missing = missing + skipped
         v["_merged"] = len(images) + len(pdfs) - len(skipped)
-        body = _render(build_html(v, images, missing, exported_at))
+        body = _render(build_html(v, images, missing, exported_at, watermark=wm))
         merged, _again = _merge_pdfs(body, [p for p in pdfs if p not in skipped])
     return merged, missing
 
