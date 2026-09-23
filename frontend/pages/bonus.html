@@ -298,7 +298,7 @@
             <!-- `BN15`：使用者原話「獎金單的只有編號，沒有案件名稱」——
                  即時查（不存快照），案件改名不會讓清單跟著漂移。 -->
             <span class="bn-case__name"
-                  x-text="a.customer_name + (a.project_name ? '／' + a.project_name : '')"></span>
+                  x-text="(a.customer_name || '') + (a.project_name ? '／' + a.project_name : '')"></span>
             <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
                   x-text="a.voided_at ? '已作廢' : a.status"></span>
             <span class="bn-status bn-paid" x-show="isAwardPaid(a)">已發放</span>
