@@ -319,6 +319,8 @@ function cashierApp() {
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
           body: JSON.stringify({
             received: true, receivedAt: this.receiveDate, receivedBy: this._displayName(),
+            // 2026-09-24：idx 是陣列位置，帶 itemId 讓後端確認這一格還是同一期
+            ...(it.itemId != null ? { itemId: it.itemId } : {}),
             actualAmount: this.receiveActualAmount, feeAmount: this.receiveFeeAmount || 0, note: this.receiveNote,
             bankAccountCode: this.receiveBankAcctCode, bankAccountName: this._t100BankName(this.receiveBankAcctCode),
           })
@@ -337,7 +339,7 @@ function cashierApp() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(item.quoteNo)}/payment/${item.idx}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
-          body: JSON.stringify({ received, receivedAt: '', receivedBy: '' })
+          body: JSON.stringify({ received, receivedAt: '', receivedBy: '', ...(item.itemId != null ? { itemId: item.itemId } : {}) })
         })
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
         await this.loadReceivable()

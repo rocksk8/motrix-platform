@@ -1881,8 +1881,10 @@ function app() {
           // 應收應付總覽必須跟著重算，否則會停在存檔前的舊數字
           this.loadFinanceSummary(this.selected?.quote_no)
         } else {
+          // 2026-09-24：顯示後端給的原因（例如已收款期別不可刪除），不再只寫「儲存失敗」
+          const err = await r.json().catch(() => ({}))
           this.saveStatus = 'error'
-          this.saveMsg = '儲存失敗'
+          this.saveMsg = typeof err.detail === 'string' && err.detail ? '儲存失敗：' + err.detail : '儲存失敗'
         }
       } catch {
         this.saveStatus = 'error'

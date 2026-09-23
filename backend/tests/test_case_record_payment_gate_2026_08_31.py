@@ -145,6 +145,8 @@ def test_admin_can_save_payment_received_via_case_record(client, make_user):
     cr = _case_record("MQ-CRGATE-003")
     cr["payment"]["items"][0]["received"] = True
     cr["payment"]["items"][0]["actualAmount"] = 30000
+    # 2026-09-24 起已收款必須帶收款日期（所有角色，見 _validate_changed_receipts()）
+    cr["payment"]["items"][0]["receivedAt"] = "2026-08-31"
 
     r = client.patch("/api/quotations/MQ-CRGATE-003/case-record", headers=_auth(token), json={"case_record": cr})
     assert r.status_code == 200, r.text

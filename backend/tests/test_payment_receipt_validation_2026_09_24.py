@@ -218,3 +218,45 @@ def test_replay_rejects_legacy_invalid_payload(client, make_user):
     r = client.post(f"/api/case-changes/{cid}/approve", headers=_auth(_login(client, sa, sp)))
     assert r.status_code == 400, r.text
     assert _item(no)["received"] is False
+
+
+# ── 期別定位（itemId）─────────────────────────────────────────────────────
+
+def _make_with_ids(quote_no):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, "
+            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
+            (quote_no, "已送出", "測試客戶", "測試專案",
+             json.dumps({"caseRecord": {"payment": {"items": [
+                 {"id": 11, "type": "訂金款", "pct": 30, "amount": 30000, "received": False},
+                 {"id": 12, "type": "尾款", "pct": 70, "amount": 70000, "received": False},
+             ]}}}),
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_item_id_mismatch_is_rejected(client, cashier):
+    """畫面以為 idx=0 是 id 11，而那一格已經被換成別期——不可以標到別期去。"""
+    no = "MQ-RCV-ID1"
+    _make_with_ids(no)
+    r = client.patch(f"/api/quotations/{no}/payment/0", headers=_auth(cashier),
+                     json=_ok_body(itemId=12))
+    assert r.status_code == 409, r.text
+    assert _item(no, 0)["received"] is False and _item(no, 1)["received"] is False
+
+
+def test_item_id_match_and_absent_both_work(client, cashier):
+    no = "MQ-RCV-ID2"
+    _make_with_ids(no)
+    assert client.patch(f"/api/quotations/{no}/payment/0", headers=_auth(cashier),
+                        json=_ok_body(itemId=11)).status_code == 200
+    assert client.patch(f"/api/quotations/{no}/payment/1", headers=_auth(cashier),
+                        json=_ok_body()).status_code == 200
+    assert _item(no, 0)["received"] is True and _item(no, 1)["received"] is True
+    assert "itemId" not in _item(no, 0), "itemId 只用來比對，不可以寫進期別"

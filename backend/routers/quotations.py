@@ -2173,6 +2173,75 @@ def lock_case(quote_no: str, authorization: str = Header(None)):
     return {"ok": True, "caseSemiUnlocked": False}
 
 
+# 已收款期別上，非管理／非出納仍可改的欄位：發票登錄（mark_payment 的 invoiceNo
+# 同樣開放任何登入者），以及沖銷申請的附帶紀錄（申請端點由伺服器寫入，前端本地另寫
+# 一份時間戳，兩邊必然不同；真正有效果的 taxExempt／writeOffStatus 另外嚴格比對）。
+_RECEIVED_ITEM_EDITABLE = {
+    "invoiceNo", "invoiceDate", "invoiceFiles",
+    "writeOffReason", "writeOffRequestedBy", "writeOffRequestedAt",
+    "writeOffApprovedBy", "writeOffApprovedAt", "writeOffRejectReason",
+}
+_WRITE_OFF_EFFECT_FIELDS = ("taxExempt", "writeOffStatus")
+
+
+def _payment_item_label(it: dict, i: int) -> str:
+    return it.get("type") or it.get("label") or f"第{i + 1}期"
+
+
+def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[str]:
+    """非 admin、非出納的整包存檔：回傳違規說明，None 表示放行。
+
+    2026-08-31 起擋 received／actualAmount／feeAmount 變動與「新增即已收款」；
+    2026-09-24 補（裁示 E1／E3，待使用者確認）：
+    - 已收款期別整期凍結：不可刪除，除 _RECEIVED_ITEM_EDITABLE 外任何欄位不可改
+    - taxExempt／writeOffStatus 在任何期別都不可改（沖銷要走申請＋簽核）
+    沒有 id 的舊期別維持既有行為（配不到舊資料 ⇒ 視同新增，已收款即擋；
+    放行它相對現況是放寬，留給使用者裁示）。"""
+    old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
+    new_by_id = {it.get("id"): it for it in new_items if it.get("id") is not None}
+    for i, new_it in enumerate(new_items):
+        old_it = old_by_id.get(new_it.get("id"))
+        if old_it is None:
+            if new_it.get("received"):
+                return "款項收款狀態需由管理員或出納標記"
+            if any(new_it.get(f) for f in _WRITE_OFF_EFFECT_FIELDS):
+                return f"「{_payment_item_label(new_it, i)}」的稅額沖銷需經沖銷申請與簽核"
+            continue
+        if any(old_it.get(f) != new_it.get(f) for f in ("received", "actualAmount", "feeAmount")):
+            return "款項收款狀態需由管理員或出納標記"
+        if any(old_it.get(f) != new_it.get(f) for f in _WRITE_OFF_EFFECT_FIELDS):
+            return f"「{_payment_item_label(old_it, i)}」的稅額沖銷需經沖銷申請與簽核"
+    for i, old_it in enumerate(old_items):
+        if not old_it.get("received") or old_it.get("id") is None:
+            continue
+        label = _payment_item_label(old_it, i)
+        new_it = new_by_id.get(old_it["id"])
+        if new_it is None:
+            return f"「{label}」已收款，不可刪除，請由管理員或出納處理"
+        keys = (set(old_it) | set(new_it)) - _RECEIVED_ITEM_EDITABLE
+        if any(old_it.get(k) != new_it.get(k) for k in keys):
+            return f"「{label}」已收款，除發票資料外不可修改，請由管理員或出納處理"
+    return None
+
+
+def _validate_changed_receipts(old_items: list, new_items: list) -> None:
+    """整包存檔裡「新增或收款欄位有變動」的已收款期別，套 _validate_receipt_body()。"""
+    old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
+    old_no_id = [it for it in old_items if it.get("id") is None]
+    for new_it in new_items:
+        if not new_it.get("received"):
+            continue
+        if new_it.get("id") is None and new_it in old_no_id:
+            continue    # 沒有 id 的舊期別原封不動
+        old_it = old_by_id.get(new_it.get("id")) if new_it.get("id") is not None else None
+        if old_it is not None and all(
+            old_it.get(f) == new_it.get(f)
+            for f in ("received", "receivedAt", "actualAmount", "feeAmount")
+        ):
+            continue
+        _validate_receipt_body(new_it)
+
+
 @router.patch("/api/quotations/{quote_no}/case-record")
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
@@ -2207,24 +2276,20 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     # 已收款」是完全不同的動作），若用位置比對，光是筆數改變（新增一期
     # 款項）就會被整支擋下，變成非 admin/出納完全不能編輯款項明細，不是
     # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
+    old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+    new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
     if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-        new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
-        old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
-        payment_changed = False
-        for new_it in new_items:
-            old_it = old_by_id.get(new_it.get("id"))
-            if old_it is None:
-                if new_it.get("received"):
-                    payment_changed = True
-                    break
-                continue
-            if any(old_it.get(f) != new_it.get(f) for f in ("received", "actualAmount", "feeAmount")):
-                payment_changed = True
-                break
-        if payment_changed:
+        err = _payment_items_lock_violation(old_items, new_items)
+        if err:
             conn.close()
-            raise HTTPException(403, "款項收款狀態需由管理員或出納標記")
+            raise HTTPException(403, err)
+    # 2026-09-24：所有角色——這次新增或有改動的已收款期別要過 mark_payment 同一組驗證。
+    # 資料庫裡原本就有的「已收無日期」不擋，否則整張案件會存不下去。
+    try:
+        _validate_changed_receipts(old_items, new_items)
+    except HTTPException:
+        conn.close()
+        raise
 
     # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
     # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
@@ -3133,6 +3198,9 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         raise HTTPException(403, "僅管理員或出納可標記收款狀態")
     conn = get_db()
     try:
+        # 2026-09-24：讀-改-寫整份 data_json，兩個人同時標記不同期會互相蓋掉
+        # （後寫的那份不含先寫的那期）。BEGIN IMMEDIATE 讓第二個請求等第一個寫完再讀。
+        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
         if not row:
             raise HTTPException(404, "報價單不存在")
@@ -3145,6 +3213,11 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
+        # idx 是陣列位置：畫面載入之後有人刪除或重排期別，同一個 idx 會指到別期。
+        # 呼叫端帶 itemId 時要與該位置的期別 id 相符（不帶則維持舊行為）。
+        item_id = body.pop("itemId", None)
+        if item_id is not None and pits[idx].get("id") != item_id:
+            raise HTTPException(409, "這一期已被修改或重新排序，請重新整理後再標記")
         # 2026-09-24：先驗再送審——不合法的內容不可以先排進審核佇列。
         _validate_receipt_body(body)
         # 收款人一律由伺服器記（不吃 body 傳的值）；半解鎖時一併寫進 payload，

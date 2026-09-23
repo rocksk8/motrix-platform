@@ -87,6 +87,7 @@ def _receivable_queue(conn, status: str = "unreceived") -> list:
             items.append({
                 "quoteNo":             row["quote_no"],
                 "idx":                 idx,
+                "itemId":              pi.get("id"),
                 "customer":            row["customer_name"] or "",
                 "project":             row["project_name"] or "",
                 "salesPerson":         row["sales_person"] or "",
