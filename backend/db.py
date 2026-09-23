@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 101
+CURRENT_VERSION = 102
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4302,6 +4302,45 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m102_bonus_award_approval(conn):
+    """v102（2026-09-23 `BN8`）：獎金分潤單成為第九個 doc type。
+
+    ## 🔴 照抄 `v101`，不另創形狀（`SPEC-BN8.md §1` 逐字）
+
+    `approval_json` 與傳票一模一樣：`DEFAULT '{}'`，讀取端一律
+    `json.loads(... or "{}")`，NULL 與 `'{}'` 在那裡等價。
+
+    ## ✅ 而獎金單比傳票乾淨一格：**沒有投影欄位要維護**
+
+    ```
+    傳票    v99 已有 submitted_by/at、checked_by/at、manager_by/at
+            => signatures_of() 有鏈時照鏈畫，沒鏈時退回那六欄
+    獎金單  一格都沒有（bonus_awards 只有 created_by／created_at）
+            => bonus_signatures_of() 只讀 approval_json，沒有 fallback 分支
+    ```
+    ⚠️ 「製表」那一格（對應傳票的「製票」）仍然是 `created_by`／`created_at`
+    —— 那兩欄本來就在，這裡不必加。
+
+    ## `paid_manually_*` 三欄：`§5c` 的「已發放」退路
+
+    「已發放」有兩條路：出納開發放傳票回填 `voucher_no_payment`（既有欄位，
+    `v97` 已建），或最高管理者手動標記（走系統外管道，例如臨時現金）。
+    ⚠️ 手動標記**不可以偽造一個傳票號**——`voucher_no_payment` 留空，
+    另外記**誰標的／何時／為什麼**，兩條路才分得清楚。
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(bonus_awards)")}
+    if "approval_json" not in cols:
+        # ⚠️ 同 `v101`：`DEFAULT '{}'` 不是 NULL，讓「沒有鏈」只有一種寫法。
+        conn.execute(
+            "ALTER TABLE bonus_awards ADD COLUMN approval_json TEXT NOT NULL DEFAULT '{}'")
+    # ⚠️ 冪等：ALTER 前先看欄位在不在（migration 引擎失敗重跑時不會炸）。
+    for name in ("paid_manually_by", "paid_manually_at", "paid_manually_reason"):
+        if name not in cols:
+            conn.execute(
+                "ALTER TABLE bonus_awards ADD COLUMN %s TEXT NOT NULL DEFAULT ''"
+                % name)
+
+
 def _m101_voucher_approval(conn):
     """v101（2026-09-23 `AS2`）：傳票的簽核鏈存哪裡。
 
@@ -5023,6 +5062,7 @@ _MIGRATIONS = [
     _m099_voucher_signatures,                       # v99
     _m100_voucher_attachments,                      # v100
     _m101_voucher_approval,                         # v101
+    _m102_bonus_award_approval,                     # v102
 ]
 
 

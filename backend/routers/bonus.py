@@ -28,10 +28,14 @@ from datetime import datetime
 from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
-from helpers import _require_user, _audit, _tok
+from helpers import _require_user, _audit, _tok, _get_setting
 from helpers.bonus import (
     base_amount_for, people_for_item, split_award, pool_for, remainder_of,
     visible_lines, PERSON_SOURCES, BASIS_POINTS,
+    bonus_signatures_of, is_paid, BonusChainUnreadable, MAKER_SLOT,
+)
+from helpers.tiered_approval import (
+    approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
@@ -360,6 +364,9 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         a["visible_total"] = sum(l["amount"] for l in lines)
         if not manager:
             a.pop("base_amount", None)
+        # 🔴 `BN8`：簽核格。誰簽了、簽了沒都不是金額，不用跟著可見範圍收緊
+        #    ——與 `get_voucher()` 把 signatures 一起帶出去同一個道理。
+        a["signatures"] = bonus_signatures_of(a)
         out.append(a)
     return {
         "awards": out,
@@ -500,6 +507,204 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
     return {"ok": True, "id": award_id, "base_amount": base}
 
 
+@router.post("/awards/{award_id}/submit")
+def submit_award(award_id: int, body: dict = Body(default={}),
+                 authorization: str = Header(None)):
+    """送審：草稿 -> 待審核。`SPEC-BN8.md §3`：三支端點一律 superadmin。
+
+    建鏈照 `submit_voucher()` 的做法：設定存在就照設定，不存在就維持現況
+    （這裡的「現況」是鏈為空，`approve_award()` 的 no-tiers 分支接手，
+    見那支的 docstring）。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        award = dict(row)
+        if award.get("status") != "草稿":
+            raise HTTPException(
+                400, "只有草稿可以送審，這一張現在是「%s」。" % award.get("status"))
+        # ⚠️ 「沒有設定過」與「設定成空的」是兩件事（〈null 不等於 0〉）：
+        #    用 `_get_setting(key, None)` 判鍵在不在，不要用
+        #    `resolve_active_flow_setting()`（它對缺鍵回 `{"tiers": []}`，
+        #    與存成空的設定一模一樣）。
+        scope = _get_setting("approval_flow_scope", {}) or {}
+        flow = _get_setting(approval_flow_setting_key("bonus", scope), None)
+        tiers = []
+        if flow is not None:
+            try:
+                tiers = setting_to_active_tiers(flow, conn, user["username"])
+            except UnresolvedManagerError as exc:
+                raise HTTPException(400, str(exc))
+        now = datetime.now().isoformat()
+        # 🔴 `requestedBy` 要嵌進來（同 `submit_voucher()`）——簽核佇列的
+        #    count 端點（`quotations.py::get_approval_queue_count()`）沒有
+        #    鏈時靠 `appr.get("requestedBy") != my_username` 判「自己送的
+        #    不算」；漏了這欄的話，送審的那個 superadmin 自己的角標數字
+        #    也會 +1（因為空字串永遠不等於任何使用者名稱）。
+        appr = json.dumps(
+            {"tiers": tiers, "currentTier": 0, "requestedBy": user["username"]},
+            ensure_ascii=False)
+        conn.execute(
+            "UPDATE bonus_awards SET status='待審核', approval_json=?,"
+            " updated_at=? WHERE id=?", (appr, now, award_id))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.award.submit", "bonus_awards",
+           str(award_id), "獎金分潤單送審")
+    return {"ok": True, "status": "待審核"}
+
+
+@router.post("/awards/{award_id}/approve")
+def approve_award(award_id: int, body: dict = Body(default={}),
+                  authorization: str = Header(None)):
+    """簽核通過。逐層推進；簽完最後一層 -> 已核准。
+
+    ## ⚠️ 沒有設定過簽核流程時，**沒有像傳票 `§161` 那樣的內建兩格 fallback**
+
+    `SPEC-BN8.md §1`：獎金單一格投影欄位都沒有，比傳票乾淨。而三支端點
+    本來就只有 superadmin 打得到（`§3`），沒有「一般員工」這種角色需要
+    內建兩格去代表——鏈是空的時候，任一 superadmin 一次核准即完成，
+    不必假造一層只為了跟傳票同形。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        award = dict(row)
+        status = award.get("status")
+        if status not in ("待審核", "簽核中"):
+            raise HTTPException(400, "「%s」的獎金分潤單不在簽核流程裡。" % status)
+        now = datetime.now().isoformat()
+        try:
+            appr = json.loads(award.get("approval_json") or "{}") or {}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "這張獎金分潤單的簽核資料格式不正確，無法繼續簽核。")
+        tiers = appr.get("tiers") or []
+        if tiers:
+            idx = int(appr.get("currentTier") or 0)
+            if idx >= len(tiers):
+                raise HTTPException(400, "這張獎金分潤單的簽核已經完成。")
+            tier = tiers[idx] or {}
+            tier["approvedBy"] = _user_name(user)
+            tier["approvedAt"] = now
+            tiers[idx] = tier
+            idx += 1
+            appr["tiers"], appr["currentTier"] = tiers, idx
+            nxt = "已核准" if idx >= len(tiers) else "簽核中"
+            conn.execute(
+                "UPDATE bonus_awards SET status=?, approval_json=?,"
+                " updated_at=? WHERE id=?",
+                (nxt, json.dumps(appr, ensure_ascii=False), now, award_id))
+        else:
+            nxt = "已核准"
+            conn.execute(
+                "UPDATE bonus_awards SET status=?, updated_at=? WHERE id=?",
+                (nxt, now, award_id))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.award.approve", "bonus_awards",
+           str(award_id), "獎金分潤單簽核：%s" % nxt)
+    return {"ok": True, "status": nxt}
+
+
+@router.post("/awards/{award_id}/reject")
+def reject_award(award_id: int, body: dict = Body(default={}),
+                 authorization: str = Header(None)):
+    """退回：回草稿，**清除簽核**。
+
+    `SPEC-BN8.md §5d`：**不要照抄傳票現在那段 SQL**——`send_back_voucher`
+    當時清了 v99 那六欄卻沒碰 `approval_json`，AS2 之後鏈才是真相，
+    只清六欄的話一張退回的草稿仍然照鏈畫出上一輪已簽的名字。這裡只有
+    一份來源（`approval_json`），一起清：用 `'{}'` 不是 `''`（與 `v102`
+    的 `DEFAULT` 一致，`_bonus_chain_tiers()` 對兩者都回 `[]`，查過）。
+
+    ⚙️ 驗收釘的是 `bonus_signatures_of()` 的**輸出**：簽核那幾格（覆核／
+    主管／第 N 層）`by` 都是空的，**不是「每一格」**——「製表」是
+    `created_by`（建檔人，不是簽核），退回不該動它。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        status = dict(row).get("status")
+        if status not in ("待審核", "簽核中"):
+            raise HTTPException(400, "「%s」的獎金分潤單不能退回。" % status)
+        conn.execute(
+            "UPDATE bonus_awards SET status='草稿', approval_json='{}',"
+            " updated_at=? WHERE id=?", (now, award_id))
+        conn.commit()
+    finally:
+        conn.close()
+    reason = (body.get("reason") or "").strip()
+    _audit(_tok(authorization), "bonus.award.reject", "bonus_awards",
+           str(award_id), "獎金分潤單退回：%s" % (reason or "未填原因"))
+    return {"ok": True, "status": "草稿"}
+
+
+@router.post("/awards/{award_id}/mark-paid")
+def mark_award_paid(award_id: int, body: dict = Body(default={}),
+                    authorization: str = Header(None)):
+    """手動標記已發放（`SPEC-BN8.md §5c` 的退路）：錢走系統外管道
+    （例如臨時現金），沒有真的傳票號可以回填。
+
+    ## 🔴 不可以偽造一個傳票號
+
+    ```
+    自動回填（主路，本規格未做）  voucher_no_payment = 'V-xxxx'  <= 有傳票號，可追
+    手動標記（這支）              voucher_no_payment = **不碰**   <= 沒有傳票號，另外記
+    ```
+    ☠️ 兩條路若寫進同一個欄位而分不出來，這支就變成一個繞過帳務的合法
+    入口（〈降級之後它還是會動〉）。另外記**誰標的／何時／為什麼**，
+    ⚠️ 原因不可為空：空字串存得下去的話，日後沒有人回得出這筆錢為什麼
+    走系統外。
+
+    三個擋：`reason` 空 -> 400；已經 `is_paid()` -> 400（不可重複標記，
+    不管是走哪一條路已發放的）；`status` 非「已核准」-> 400（錢還沒核定
+    金額就先說發出去了，順序反了）。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    reason = (body.get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫標記已發放的原因。")
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張獎金分潤單。")
+        award = dict(row)
+        if award.get("status") != "已核准":
+            raise HTTPException(
+                400, "只有已核准的獎金分潤單可以標記已發放，這一張現在是「%s」。"
+                     % award.get("status"))
+        if is_paid(award):
+            raise HTTPException(400, "這張獎金分潤單已經標記為發放過了。")
+        conn.execute(
+            "UPDATE bonus_awards SET paid_manually_by=?, paid_manually_at=?,"
+            " paid_manually_reason=?, updated_at=? WHERE id=?",
+            (_user_name(user), now, reason, now, award_id))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.award.mark_paid", "bonus_awards",
+           str(award_id), "獎金分潤單手動標記已發放：%s" % reason)
+    return {"ok": True}
+
+
 @router.post("/awards/{award_id}/void")
 def void_award(award_id: int, body: dict = Body(default={}),
                authorization: str = Header(None)):
@@ -507,10 +712,17 @@ def void_award(award_id: int, body: dict = Body(default={}),
 
     ☠️ 直接 DELETE 的話，帳上看不到那一次作廢 ——
        而使用者裁的是**作廢重開**，不是刪掉重來。
+
+    🔴 `SPEC-BN8.md §6⑦⑧`（A 裁）：
+    ```
+    ⑦ 任何狀態都可以作廢，含已核准——不留出路的後果是「開錯了而改不掉」，
+       權限同步改成 superadmin（與三支端點一致）
+    ⑧ 已發放（is_paid()）的單，作廢不是一個旗標——錢已經出去了，
+       只寫 voided_at 的後果是帳上那筆錢還在，而獎金單說它作廢了。
+       本輪擋下來（400，訊息提到沖銷），沖銷流程本規格不做。
+    ```
     """
-    user = _require_user(authorization)
-    if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可作廢獎金單。")
+    user = _require_user(authorization, require_superadmin=True)
     reason = (body.get("reason") or "").strip()
     if not reason:
         # 🔑 沒有理由的作廢等於沒有留痕：事後沒有人回得出為什麼。
@@ -522,8 +734,13 @@ def void_award(award_id: int, body: dict = Body(default={}),
                            (award_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "找不到這張獎金單。")
-        if row["voided_at"]:
+        award = dict(row)
+        if award["voided_at"]:
             raise HTTPException(400, "這張獎金單已經作廢過了。")
+        if is_paid(award):
+            raise HTTPException(
+                400, "這張獎金單已經發放，不能直接作廢——錢已經出去了，"
+                     "請先開立沖銷傳票，沖銷完成後再處理這張單。")
         conn.execute(
             "UPDATE bonus_awards SET voided_at = ?, voided_by = ?,"
             " void_reason = ?, updated_at = ? WHERE id = ?",

@@ -3958,6 +3958,44 @@ def get_approval_queue(authorization: str = Header(None)):
             "voucherId":           r["id"],
         })
 
+    # 獎金分潤單（`BN8`）：跟傳票同一種形狀——approval_json 是
+    # bonus_awards 自己的欄位，不是 data_json.$.approval。獎金分潤單也
+    # 不掛在任何案件底下（`quote_no` 是關聯案件，不是佇列要導向的對象），
+    # customer/projectName 留空/留關聯案件字串，跟 voucher 一致。
+    # ⚠️ 沒有 submitted_by/at 這種獨立欄位（`SPEC-BN8.md §1`：一格投影
+    # 欄位都沒有）——requestedBy 直接用 created_by/created_at，不必像
+    # 傳票那樣在 JSON 裡另外嵌一份再退回欄位。
+    ba_rows = conn.execute("""
+        SELECT id, quote_no, base_amount, created_by, created_at, approval_json
+        FROM bonus_awards
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    for r in ba_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        items.append({
+            "type":                "bonus_award",
+            "quoteNo":             "獎金-%s" % r["id"],
+            "customer":            "",
+            "projectName":         "關聯案件 %s" % (r["quote_no"] or ""),
+            "total":               r["base_amount"] or 0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         r["created_by"] or "",
+            "requestedByDisplay":  r["created_by"] or "",
+            "requestedAt":         r["created_at"] or "",
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+            # 🔴 與 voucher 同一個道理：`/api/bonus/awards/{award_id}/...`
+            #    吃數字 id，不是人看的單號（這裡連人看的單號都沒有）。
+            "awardId":             r["id"],
+        })
+
     ccr_rows = conn.execute("""
         SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
         FROM case_change_requests
@@ -4182,6 +4220,12 @@ def get_approval_queue_count(authorization: str = Header(None)):
     # 漏掉就是「列得出來但 topbar 是 0」——兩邊矛盾比兩邊都沒有更難查。
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT approval_json FROM vouchers_all WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 獎金分潤單（`BN8`）：跟傳票同一種形狀，approval_json 是 bonus_awards
+    # 自己的欄位。submit_award() 有嵌 requestedBy，沒有鏈時「自己送的
+    # 不算」判準才成立。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM bonus_awards WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
     # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
     # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層

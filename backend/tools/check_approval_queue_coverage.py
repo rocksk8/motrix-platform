@@ -67,6 +67,7 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
     "extra_expense":      ("extra_expense",      "case_extra_expenses"),
     "completion":         ("completion_note",    "completion_notes"),
     "voucher":            ("voucher",            "vouchers_all"),
+    "bonus":              ("bonus_award",        "bonus_awards"),
 }
 
 

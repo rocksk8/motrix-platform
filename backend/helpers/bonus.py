@@ -239,6 +239,88 @@ PAYABLE_ACCOUNT_SETTING_KEY = "bonus_payable_account_code"
 DEFAULT_PAYABLE_ACCOUNT = "2191"
 
 
+#: `BN8`：前兩層沿用傳票的既有慣例（覆核／主管），第三層起才用「第 N 層」——
+#: 沒有設定過簽核流程時（見 bonus_signatures_of() 的呼叫端）鏈是空的，
+#: 這裡不會被用到；一旦設定了，版面文字與傳票一致，使用者不必學兩套說法。
+_TIER_LABELS = ("覆核", "主管")
+
+#: `SPEC-BN8.md §1`：「製表」是建立者，不是簽核，與傳票「製票」同一個做法
+#: ——刻意用不同的字（A-2 複核）：傳票的製單人在會計上就叫「製票」，
+#: 獎金分潤單不是傳票，叫「製表」。若有人想統一成同一個字，答案是刻意
+#: 不同，統一之後其中一邊會紅在正確實作上。
+MAKER_SLOT = "製表"
+
+
+class BonusChainUnreadable(Exception):
+    """簽核鏈存在而讀不出來。與「沒有簽核鏈」是兩件事，不可以折疊在一起
+    （道理與 `helpers/voucher.py::VoucherChainUnreadable` 相同）。"""
+
+
+def _bonus_chain_tiers(award):
+    """`award["approval_json"]` 裡的 `tiers`。
+
+    ```
+    沒有 approval_json（或 '{}'）  => 回 []（明確的「沒有鏈」）
+    有而解析失敗                  => raise BonusChainUnreadable
+    ```
+    """
+    raw = award.get("approval_json")
+    if not raw:
+        return []
+    import json
+    try:
+        return (json.loads(raw) or {}).get("tiers") or []
+    except (TypeError, ValueError) as exc:
+        raise BonusChainUnreadable(
+            "這張獎金分潤單的簽核資料讀不出來，無法判斷是否已完成簽核。"
+        ) from exc
+
+
+def bonus_signatures_of(award):
+    """獎金分潤單的簽核格：`{格名: {by, at}}`，格名是「製表／覆核／主管／
+    第 N 層」。
+
+    ## 🔴 `SPEC-BN8.md §1`：**只讀 `approval_json`，沒有投影欄位可以退回**
+
+    ```
+    傳票    v99 已有 submitted_by/at、checked_by/at、manager_by/at
+            => signatures_of() 有鏈時照鏈畫，沒鏈時退回那六欄
+    獎金單  bonus_awards **一格都沒有**（只有 created_by／created_at）
+            => 這裡只讀鏈，沒有 fallback 分支
+    ```
+    ⚠️ 沒有設定過簽核流程時鏈是空的 ⇒ 這裡只回「製表」一格——是不是要再
+    退回一個內建的預設層，是送審端點（`routers/bonus.py`）的決定，不是
+    這支版面函式的事。
+    """
+    out = {MAKER_SLOT: {"by": award.get("created_by") or "",
+                        "at": award.get("created_at") or ""}}
+    try:
+        tiers = _bonus_chain_tiers(award)
+    except BonusChainUnreadable:
+        out["簽核資料無法讀取"] = {"by": "", "at": ""}
+        return out
+    for i, tier in enumerate(tiers):
+        label = _TIER_LABELS[i] if i < len(_TIER_LABELS) else "第 %d 層" % (i + 1)
+        out[label] = {"by": (tier or {}).get("approvedBy") or "",
+                      "at": (tier or {}).get("approvedAt") or ""}
+    return out
+
+
+def is_paid(award) -> bool:
+    """這張獎金分潤單的錢出去了沒有。**兩條路都走這一支**
+    （`SPEC-BN8.md §5c` 界線③）。
+
+    ```
+    主路  出納開發放傳票 -> 回填 voucher_no_payment
+    退路  最高管理者手動標記 -> 寫 paid_manually_at（不可偽造 voucher_no_payment）
+    ```
+    ☠️ 查詢「已發放的單」時只認其中一條路，另一條會**消失**——這支是唯一
+    的判準來源，查詢端與端點都要用它，不要在別處各寫一次條件。
+    """
+    return bool((award.get("voucher_no_payment") or "").strip()
+                or (award.get("paid_manually_at") or "").strip())
+
+
 def payable_account_code(get_setting):
     """讀「應付獎金」的科目代號。`get_setting` 是取設定的那支函式。
 

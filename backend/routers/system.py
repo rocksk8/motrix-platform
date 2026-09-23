@@ -169,6 +169,10 @@ class ApprovalFlowScopeSettings(BaseModel):
     #    📌 它不在 `DEFAULT_UNIFIED_DOC_TYPES`（A `§234` 裁）—— 那是**預設值**，
     #       與「可不可以設定」是兩件事。
     voucher:            bool
+    # ⚠️ `BN8`：`bonus`（獎金分潤單）同理，也不在 `DEFAULT_UNIFIED_DOC_TYPES`。
+    #    這裡少加的話，下面的 import-time 守門會**當場炸**——
+    #    那正是它的用途：忘了同步變成啟動就炸，不是十二天後才被使用者發現。
+    bonus:               bool
 
 
 # 🔑 **驗「有沒有人做過決定」，不是驗「決定得對不對」。**
