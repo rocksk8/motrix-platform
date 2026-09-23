@@ -182,14 +182,57 @@ GET /api/bonus/awards/{award_id}/pdf-download
 
 ---
 
-## §5 兩件未裁（**做到那一格再問 A，不要自己決定**）
+## §5 ✅ 已裁：要抬頭，也要用印欄 —— 🔴 **而用印欄算不出來**
+
+使用者 2026-09-23（`STATE.md §229`）：**要抬頭，也要用印欄**，
+**用印欄列數從簽核設定算**（同 `JV5` 的做法）。
 
 ```
-① 獎金分潤單 PDF 要不要**公司抬頭**
-② 要不要**用印欄**（簽核格）
+抬頭  ✅ 從 company_profile 讀，**不可以寫死**
+      （這個 repo 已經寫死在 14 個檔／56 行）
+      ⚠️ 而 JV9 剛修掉一個同族的坑：_get_setting() 已經 json.loads 過，
+         voucher_pdf.py:82 又 loads 一次 => TypeError 被 except 吞掉
+         => 本項讀設定時**不要再 loads 一次**
 ```
-⚠️ 而若要抬頭：**從 `company_profile` 讀，不可以寫死**
-（這個 repo 已經寫死在 14 個檔／56 行）。
+
+### ☠️ 而「用印欄列數從簽核設定算」**今天算不出來** —— 獎金單沒有簽核流程
+
+實查（`8e68088`）：
+```
+bonus_awards 欄位   id / quote_no / base_amount / base_source / template_id /
+                    template_version / status / voucher_no_accrual /
+                    voucher_no_payment / voided_* / supersedes_id / created_*
+                    ⇒ **沒有 approval_json，沒有任何簽核欄位**
+APPROVAL_DOC_TYPES  八種（quotation … completion ＋ **voucher**）
+                    ⇒ **`bonus` 不是其中之一**
+bonus router 七支   items×2 ／ base ／ plan ／ awards GET,POST ／ void
+                    ⇒ **沒有 submit／approve／reject**
+UPDATE bonus_awards 全 repo 只有一處，而它只寫 voided_*
+                    ⇒ **status 建立之後從來不會改**
+實際資料            1 筆，status = **草稿**
+```
+
+🔴 ⇒ **獎金分潤單建立之後永遠是「草稿」，沒有簽核、沒有過帳。**
+☠️ **使用者的裁示預設了一個不存在的前提**：它說「從簽核設定算」，
+而獎金單**沒有簽核設定可以算**。
+
+### ⇒ 三條路，**要 A／使用者裁，本規格不決定**
+
+```
+(a) 獎金單也走 tiered_approval  => 成為**第九個** doc type
+    ✅ 用印欄列數自然算得出來；與傳票（第八個）同一條路
+    ⚠️ 而它是一個**新流程**：要 submit／approve／reject 三支端點 ＋ 狀態機
+       => 那是一個獨立編號的量，不是 BN7 的一格
+(b) 用印欄印**固定格**（例如 製表／核准 兩格）
+    ✅ 今天就做得完
+    ⚠️ 而它與使用者那句「從簽核設定算」**不一致** => 要他點頭
+(c) BN7 先不做用印欄，只做抬頭
+    ✅ 不會做出一個之後要拆掉的東西
+    ⚠️ 而使用者明著要了用印欄
+```
+📌 A-2 建議 **(b) ＋ 明著告訴使用者「獎金單目前沒有簽核流程」** ——
+讓他決定要不要為它開一條（那是 (a)，而它值得一個自己的編號）。
+🔑 **不要自己選 (a) 去做** —— 那會在他只要一張紙的時候長出一整條流程。
 
 ---
 
@@ -228,7 +271,9 @@ GET /api/bonus/awards/{award_id}/pdf-download
   ⚠️ 若版面上有我沒抓到的欄位（例如條件顯示的），**會漏掉**
 ✗ 沒查 settlement.html 那十二格在**畫面上的分組線**（我照原始碼順序分成三段，
   而那是我分的，不是它的 DOM 結構）
-✗ 沒查已作廢獎金單的 PDF 需不需要標「已作廢」浮水印 —— **未裁，也未查既有慣例**
+✅ 已作廢的浮水印：`JV10/JV11 §5` 已查 —— **這個 repo 沒有「作廢」浮水印的慣例**
+  （`pdf_gen.py` 對「作廢」命中 0 次）⇒ 獎金單沿用傳票那邊裁定的優先序
+  （**作廢優先於未簽核**，使用者已裁）
 ✗ 沒量 PDF 產生的耗時（Edge 有 semaphore，而獎金單可能被連續匯出）
 ✗ `§214` 康熙部首我只查了「產品碼有沒有正規化」（0 處），
   **沒有查既有資料裡有沒有康熙部首字元**
