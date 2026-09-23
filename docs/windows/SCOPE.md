@@ -40,8 +40,8 @@ AI(1): AI1  <= **併進 CA1**
 CA(1): CA1
 AS(2): AS1 AS2
 WD(1): WD1
-BR(1): BR1
-BN(4): BN2 BN3 BN4 BN5
+BR(3): BR1 BR2 BR3
+BN(6): BN2 BN3 BN4 BN5 BN6 BN7
 EM(3): EM1 EM2 EM3
 JV(1): JV8
 AL(1): AL1
@@ -481,3 +481,47 @@ EM3  **19 處 detail 直接放例外物件** => 使用者畫面會出現
      「UNIQUE constraint failed: customers.code」（**實跑出來的，不是推的**）
      => 固定文案 ＋ **追蹤碼**；🔴 不可以只把 {e} 拿掉（診斷能力會一起消失）
 ```
+
+---
+
+## 🔴 2026-09-23 更正（`STATE.md` §220）—— **§215 的成因是錯的**
+
+```
+❌ 我寫的    「restart.bat 沒有 --reload，而使用者按的是 restart」
+✅ D 實查的  行程祖先是 **Git-Bash 的 nohup.exe**（從 bash shell 背景啟動）
+             => **那個入口不存在於任何檔案裡**
+             => 掃檔案的盤點找不到它，補 restart.bat 也修不到它
+```
+```
+❌ 我寫的    「25 個 commit 使用者一個都沒看到」
+✅ 正確界線  新的 **.html／.js 看得見**（StaticFiles 每次讀磁碟＋no-cache）
+             新的 **API 端點看不見**（路由在 import 當下註冊）
+             => 那正好解釋：獎金頁面在，而「新增獎金項目」500
+```
+```
+❌ 我寫的    EM3「實跑出來的（不是推的）」
+✅ 實際      A-2 用的是**同形狀的記憶體表**，**不是產品路徑**；
+             C 實查四條產品路徑**全部到不了**（code 由 next_entity_code 產生／建立前先查過）
+             => EM3 嚴重度下修為「一旦發生非預期例外才會洩漏」，**但仍要修**
+```
+🔑 **觀測的那個世界不是受測的那個世界** —— 而「正在跑的 process」那一層最遠：
+前兩層差在版本，這一層差在**時間 ＋ 有沒有人按下重啟**。
+
+---
+
+## 🔵 2026-09-23 追加：`BN6`／`BN7`（`STATE.md` §221）
+
+使用者逐字：「獎金單需要詳細有張表格，像是精算頁面一樣，報價多少、成本多少、
+衍生成本、比例最後總利潤多少，再用這個利潤去拆發比例，可預覽、可匯出pdf」
+
+```
+✅ 實查：要的每一項**都已經存在 settlement.summary 裡**（開發機 13 筆）
+   quotedPretax／totalActualCost／extraTotal／dispatchTotal／adminCost／
+   charityDonation／grossProfit／**netProfit**／各 Pct
+🔴 => BN6 **一個數字都不要算** —— 10%／1% 兩個係數只寫在 settlement.html，
+      再寫一份就是第三份實作（helpers/bonus.py 模組 docstring 已寫死）
+☠️ dispatchTotal 只有 **6／12** 筆有 => **缺欄位標「無」不是印 0**
+☠️ 13 筆有 summary 而欄位計數 12 => **有一筆 summary 是空的 {}**
+```
+🔑 ④利潤 到 ⑤拆發 之間那一行是這張表的重點：
+使用者要「**淨利怎麼來的**」與「**它怎麼被拆掉的**」接在同一張紙上。
