@@ -454,6 +454,33 @@ def _record_doc_version(quote_no: str, action_type: str, actor: str,
         logger.exception("_record_doc_version failed for %s", quote_no)
 
 
+def _quote_watermark_kwargs(status: str, deal_tag: str) -> dict:
+    """報價單浮水印／提示的規則（2026-09-24 抽出）：PDF 與畫面預覽共用同一份，
+    兩邊才不會各自判斷而長得不一樣。"""
+    show_wm      = (deal_tag == "未成案") or (status != "已送出")
+    is_unsettled = deal_tag == "未成案"
+    return dict(
+        show_watermark=show_wm,
+        watermark_text="本案報價未成立　僅供存查備存" if is_unsettled else "報價單預覽稿　尚未正式生效",
+        watermark_font_size=18 if is_unsettled else 28,
+        show_notice=is_unsettled,
+        notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用",
+    )
+
+
+def build_quote_preview_html(q: dict, status: str, deal_tag: str, internal: bool = False) -> str:
+    """畫面預覽用：與 generate_pdf_bytes() 產生 PDF 的 HTML 是同一支 builder、同一組浮水印規則。
+    （2026-09-24：原本預覽是前端另畫一份版面，與 PDF 有 9 處可見差異。）"""
+    html = _build_quote_html(q, q.get("tot", {}) or {}, internal=internal,
+                             **_quote_watermark_kwargs(status or "", deal_tag or ""))
+    # 預覽顯示在 sandbox iframe（不同源），主頁量不到內容高度 ⇒ 由內容回報。
+    # 只加在預覽，PDF 那份 HTML 不含這段；它不改變版面。
+    report = ('<script>window.addEventListener("load",function(){setTimeout(function(){'
+              'var r=document.documentElement;var z=parseFloat(document.body.style.zoom||"1")||1;'
+              'parent.postMessage({motrixPreviewHeight:r.scrollHeight*z},"*")},0)});</script>')
+    return html.replace("</body>", report + "</body>", 1) if "</body>" in html else html + report
+
+
 def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     """Edge Headless 產生 PDF 並以 bytes 回傳（供 API 下載使用）。"""
     edge = _get_edge_path()
@@ -472,14 +499,8 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
     q["locationId"] = row["location_id"] or ""
     deal_tag     = row["deal_tag"] or q.get("dealTag") or ""
     status       = row["status"] or ""
-    show_wm      = (deal_tag == "未成案") or (status != "已送出")
-    wm_text      = "本案報價未成立　僅供存查備存" if deal_tag == "未成案" else "報價單預覽稿　尚未正式生效"
-    is_unsettled = deal_tag == "未成案"
     html_content = _build_quote_html(q, q.get("tot", {}), internal=internal,
-                                     show_watermark=show_wm, watermark_text=wm_text,
-                                     watermark_font_size=18 if is_unsettled else 28,
-                                     show_notice=is_unsettled,
-                                     notice_text="本案報價未成立，此份文件僅供存查備存使用，請勿對外提供或引用")
+                                     **_quote_watermark_kwargs(status, deal_tag))
     tmp_html = tmp_pdf = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:

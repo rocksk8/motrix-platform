@@ -33,7 +33,7 @@ from helpers import (
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice,
     save_document_files, delete_document_file,
     notify_case_close_blocked, notify_case_change_requested,
-    norm_at, active_delegators_for, user_has_module, can_see_financial,
+    norm_at, active_delegators_for, user_has_module, can_see_financial, require_any_module,
     validate_invoice_no,
     summarize_payment_items,
 )
@@ -43,7 +43,7 @@ from helpers.uploads import _effective_subfolder
 from helpers.errors import trace_id
 from archive import _backup_quotation
 from pdf_gen import (
-    _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base,
+    _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base, build_quote_preview_html,
     _generate_case_closing_pdf, generate_case_closing_pdf_bytes,
     generate_project_execution_report_pdf_bytes,
 )
@@ -5000,6 +5000,47 @@ def delete_case_update_file(quote_no: str, uid: int, file_id: str,
     _audit(_tok(authorization), "case_update.delete_file", "quotation", quote_no,
            f"{quote_no} 留言 #{uid} 刪除附件")
     return {"ok": True, "files": remaining}
+
+
+@router.post("/api/quotations/preview-html")
+def preview_quotation_html(body: dict = Body(...), authorization: str = Header(None)):
+    """畫面預覽改用伺服器版面（2026-09-24，裁示 P1）：回傳與 PDF 同一支 builder 產生的 HTML。
+
+    body：`{"quoteNo": 可空, "data": 目前表單內容（含未存檔修改）, "internal": bool}`
+
+    權限比照 download_quotation_pdf()（這份 HTML 在 internal=true 時含成本）：
+    - 單號已存在 ⇒ `_guard_case(..., allow_approver=True)`，內部版與 pdf-download 同一條規則
+    - 新單（沒有單號或還沒存）⇒ 要有 quotation 模組
+    狀態、成案標記、據點以資料庫為準（與 PDF 一致）；新單用表單上的值。"""
+    user = _require_user(authorization)
+    q = dict((body or {}).get("data") or {})
+    internal = bool((body or {}).get("internal"))
+    quote_no = ((body or {}).get("quoteNo") or "").strip()
+    conn = get_db()
+    try:
+        row = None
+        if quote_no:
+            row = conn.execute(
+                "SELECT status, deal_tag, location_id FROM quotations WHERE quote_no=?",
+                (quote_no,)).fetchone()
+        if row:
+            _guard_case(conn, quote_no, user, allow_approver=True)
+            status = row["status"] or ""
+            deal_tag = row["deal_tag"] or q.get("dealTag") or ""
+            q["locationId"] = row["location_id"] or ""
+        else:
+            require_any_module(user, ["quotation"], "報價單")
+            status = q.get("status") or "草稿"
+            deal_tag = q.get("dealTag") or ""
+    finally:
+        conn.close()
+    try:
+        html = build_quote_preview_html(q, status, deal_tag, internal=internal)
+    except Exception:
+        tid = trace_id()
+        logger.exception("quotation preview failed trace=%s", tid)
+        raise HTTPException(500, f"預覽產生失敗（代碼 {tid}）")
+    return {"html": html}
 
 
 @router.get("/api/quotations/{quote_no}/pdf-download")
