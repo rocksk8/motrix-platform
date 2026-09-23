@@ -112,6 +112,8 @@ function voucherPage() {
     },
 
     async init() {
+      // `JV28`：附件清單一換（開單、上傳、刪除）就重建縮圖。
+      this.$watch('attachments', () => this.loadThumbs())
       // 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁）。
       //    舊裁示「建檔當天且不可編輯」已被推翻 —— 月結補登是會計的日常。
       this.voucherDate = new Date().toLocaleDateString('sv-SE')   // YYYY-MM-DD（本地時區）
@@ -390,23 +392,135 @@ function voucherPage() {
     // `JV16②`：`<img src>`／`<a href>` 帶不了 `Authorization` header，
     // 最省力的錯法是把 token 塞進 query string——**不可以**，那條網址
     // 會被 uvicorn access log 永久記錄在 `logs/server.log`。
-    // ⇒ fetch 帶 header 拿 blob，指給一個新分頁；60 秒後才 revoke——
-    //   立刻 revoke 的話新分頁會拿到空白（症狀是「按了沒反應」）。
-    async openAttachment(a) {
-      this.attErr = ''
-      if (!this.id || !a) return
+    // ⇒ fetch 帶 header 拿 blob。
+    // 📌 更正留著：`JV16` 原本把 blob 指給 `window.open` 開新分頁；`JV28` 改成頁內預覽窗
+    //    （`window.open` 在 await 之後已不是使用者手勢，且會離開傳票畫面）。
+    // ── `JV28`：附件頁內預覽（取代 window.open） ─────────────────────
+    //
+    // 使用者逐字：「在傳票上，已上傳檔案要能夠預覽，只有名稱無法辨別」。
+    // 🔴 安全界線（`SPEC-JV28 §3`）：**只有**下面兩張表列出的類型可以內嵌，
+    //    而且伺服器存的 mime **與**副檔名兩者都要符合；只看一個就不內嵌。
+    //    ☠️ SVG／HTML 內嵌 ＝ 在我們的網域執行上傳者的腳本 ⇒ 一律只給下載。
+    //    ⚠️ mime 取自上傳者宣稱的 content-type（`helpers/uploads.py`）⇒ 它可以是假的，
+    //       所以副檔名是另一半，缺一不可。
+    // 🔑 blob 建立時**明確指定 type**（用我們判定的那個，不用回應標頭的），不讓瀏覽器猜。
+    _ATT_IMAGE: { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+                  '.gif': 'image/gif', '.webp': 'image/webp' },
+    _ATT_PDF: { '.pdf': 'application/pdf' },
+
+    attKind(a) {
+      const name = String((a && a.filename) || '').toLowerCase()
+      const dot = name.lastIndexOf('.')
+      const ext = dot >= 0 ? name.slice(dot) : ''
+      const mime = String((a && a.mime) || '').toLowerCase().split(';')[0].trim()
+      if (this._ATT_IMAGE[ext] && this._ATT_IMAGE[ext] === mime) return 'image'
+      if (this._ATT_PDF[ext] && this._ATT_PDF[ext] === mime) return 'pdf'
+      return 'download'
+    },
+
+    async _fetchAttBlob(a, type) {
+      const r = await fetch(
+        '/api/vouchers/' + this.id + '/attachments/' + encodeURIComponent(a.file_id),
+        { headers: this._auth() })
+      if (!r.ok) throw new Error('HTTP ' + r.status)
+      return new Blob([await r.arrayBuffer()], { type: type })
+    },
+
+    // 預覽 modal 的狀態。`url` 只在 image／pdf 時才有；關閉或切換時 revoke。
+    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false },
+
+    openAttachment(a) {
+      // `JV16` 那份清單（預覽窗內）與編輯頁清單**共用同一個頁內預覽窗**，不再 window.open。
+      return this.openAttPreview(a)
+    },
+
+    async openAttPreview(a) {
+      const idx = this.attachments.indexOf(a)
+      if (idx < 0) return
+      this.attPv.open = true
+      await this._loadAttPv(idx)
+    },
+
+    _revokeAttPv() {
+      if (this.attPv.url) URL.revokeObjectURL(this.attPv.url)
+      this.attPv.url = ''
+    },
+
+    async _loadAttPv(idx) {
+      this._revokeAttPv()
+      const a = this.attachments[idx]
+      this.attPv.idx = idx
+      this.attPv.err = ''
+      this.attPv.kind = this.attKind(a)
+      if (this.attPv.kind === 'download') return
+      this.attPv.loading = true
       try {
-        const r = await fetch(
-          '/api/vouchers/' + this.id + '/attachments/' + encodeURIComponent(a.file_id),
-          { headers: this._auth() })
-        if (!r.ok) throw new Error('HTTP ' + r.status)
-        const url = URL.createObjectURL(await r.blob())
-        window.open(url, '_blank')
-        setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+        const type = this.attPv.kind === 'image'
+          ? this._ATT_IMAGE[a.filename.toLowerCase().slice(a.filename.lastIndexOf('.'))]
+          : 'application/pdf'
+        const blob = await this._fetchAttBlob(a, type)
+        // 回來時若已經切到別的附件或關掉了，丟掉這一份（先渲染再非同步載入的競態）。
+        if (!this.attPv.open || this.attPv.idx !== idx) return
+        this.attPv.url = URL.createObjectURL(blob)
       } catch (e) {
-        this.attErr = '取得附件失敗（' + e.message + '）。'
+        this.attPv.err = '取得附件失敗（' + e.message + '）。'
+      } finally {
+        this.attPv.loading = false
       }
     },
+
+    attPvItem() { return this.attachments[this.attPv.idx] || null },
+
+    stepAttPv(d) {
+      const n = this.attachments.length
+      if (!n) return
+      return this._loadAttPv((this.attPv.idx + d + n) % n)
+    },
+
+    closeAttPv() {
+      this._revokeAttPv()
+      this.attPv.open = false
+      this.attPv.idx = -1
+      this.attPv.kind = ''
+    },
+
+    async downloadAttachment(a) {
+      if (!a) return
+      try {
+        // 下載一律用 octet-stream：就算伺服器存的是 image/svg+xml，瀏覽器也不會把它當網頁打開。
+        const blob = await this._fetchAttBlob(a, 'application/octet-stream')
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = a.filename || 'attachment'
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        setTimeout(function () { URL.revokeObjectURL(url) }, 1000)
+      } catch (e) {
+        this.attPv.err = '下載失敗（' + e.message + '）。'
+      }
+    },
+
+    // 縮圖（約 48px）：只給內嵌得了的圖片；每次附件清單換了就重建，舊的 revoke。
+    attThumbs: {},
+
+    async loadThumbs() {
+      const old = this.attThumbs
+      Object.keys(old).forEach(function (k) { URL.revokeObjectURL(old[k]) })
+      this.attThumbs = {}
+      const vid = this.id
+      for (const a of this.attachments || []) {
+        if (this.attKind(a) !== 'image') continue
+        try {
+          const type = this._ATT_IMAGE[a.filename.toLowerCase().slice(a.filename.lastIndexOf('.'))]
+          const blob = await this._fetchAttBlob(a, type)
+          if (vid !== this.id) return
+          this.attThumbs = Object.assign({}, this.attThumbs, { [a.file_id]: URL.createObjectURL(blob) })
+        } catch (e) { /* 縮圖失敗不擋清單：檔名仍可點開預覽，那裡會說出錯誤 */ }
+      }
+    },
+
 
     fileSize(n) {
       const v = Number(n) || 0

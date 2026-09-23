@@ -462,7 +462,14 @@
             <template x-for="a in attachments" :key="a.file_id">
               <div class="vc-att__row">
                 <span class="vc-att__tag" x-text="attFrom(a)"></span>
-                <span class="vc-att__name" x-text="a.filename"></span>
+                <!-- `JV28`：圖片附件的縮圖（只有內嵌得了的圖片才有）＋可點的檔名 -->
+                <template x-if="attThumbs[a.file_id]">
+                  <img class="vc-att__thumb" data-testid="voucher-att-thumb" :src="attThumbs[a.file_id]"
+                       alt="" width="48" height="48" style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer"
+                       @click="openAttPreview(a)">
+                </template>
+                <a href="#" class="vc-att__name" data-testid="voucher-att-open"
+                   @click.prevent="openAttPreview(a)" x-text="a.filename"></a>
                 <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
                 <!-- 🔴 **`x-if` 不是 `x-show`／`disabled`**：非草稿時這顆鈕要
                      **不存在**，不是存在而按不下去。
@@ -668,6 +675,44 @@
            這句留在原地會變成一句沒有主詞的說明。 -->
       <div class="vc-att__hint" style="padding:0 16px 12px;text-align:right">
         「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；併不進去的會列在最後一頁，畫面上也會說。
+      </div>
+    </div>
+  </div>
+
+  <!-- `JV28`：附件頁內預覽窗。疊在傳票預覽窗之上（z-index 高一層），兩個清單共用。
+       📌 放在傳票預覽窗**之後**：既有題用 querySelector('.modal-box') 取第一個，放前面會取到這個（隱藏的）。
+       🔴 只有 attKind() 判定為 image／pdf 的才內嵌；其餘（含 SVG／HTML）只給下載。 -->
+  <div class="modal-overlay" x-show="attPv.open" style="display:none;z-index:300"
+       data-testid="voucher-att-preview" @click.self="closeAttPv()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title"
+              x-text="(attPvItem() ? attPvItem().filename : '') + '　（' + (attPv.idx + 1) + ' / ' + attachments.length + '）'"></span>
+        <button class="modal-close" data-testid="voucher-att-close" @click="closeAttPv()">×</button>
+      </div>
+      <div class="modal-body" style="text-align:center">
+        <div class="vc-att__hint" x-show="attPv.loading">載入中…</div>
+        <template x-if="attPv.err"><div class="vc-err" x-text="attPv.err"></div></template>
+        <template x-if="attPv.kind === 'image' && attPv.url">
+          <img data-testid="voucher-att-preview-img" :src="attPv.url" alt=""
+               style="max-width:100%;max-height:70vh;object-fit:contain">
+        </template>
+        <template x-if="attPv.kind === 'pdf' && attPv.url">
+          <iframe data-testid="voucher-att-preview-pdf" :src="attPv.url" title="附件預覽"
+                  style="width:100%;height:70vh;border:1px solid var(--border-light)"></iframe>
+        </template>
+        <template x-if="attPv.kind === 'download' && attPvItem()">
+          <div style="padding:24px">
+            <div x-text="attPvItem().filename"></div>
+            <div class="vc-att__hint" x-text="fileSize(attPvItem().size) + '　' + (attPvItem().mime || '未知類型')"></div>
+            <div class="vc-att__hint">這個類型不在頁面上直接顯示，請下載後開啟。</div>
+          </div>
+        </template>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" :disabled="attachments.length < 2" @click="stepAttPv(-1)">上一個</button>
+        <button class="btn btn-ghost btn-sm" :disabled="attachments.length < 2" @click="stepAttPv(1)">下一個</button>
+        <button class="btn btn-sm" data-testid="voucher-att-download" @click="downloadAttachment(attPvItem())">下載</button>
       </div>
     </div>
   </div>
