@@ -1026,12 +1026,16 @@ if (typeof module !== 'undefined' && module.exports) {
     document.addEventListener('change', _maybeSetDirty, true)
 
     // Auto-clear dirty after any successful mutating API call
+    // 2026-09-24：同時編輯提示的心跳不算——edit-presence.js 每 8～15 秒 POST 一次，
+    // 跟表單有沒有存無關，原本會讓離頁警告在打字後最多 15 秒就失效。
     var _origFetch = window.fetch
     window.fetch = function (url, opts) {
       return _origFetch.apply(this, arguments).then(function (resp) {
         if (resp.ok && opts) {
           var method = (opts.method || '').toUpperCase()
-          if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+          var path = typeof url === 'string' ? url : ((url && url.url) || '')
+          var isPresence = path.indexOf('/api/edit-presence') === 0
+          if (!isPresence && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
             window.motrixIsDirty = false
           }
         }

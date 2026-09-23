@@ -1073,6 +1073,9 @@ function app() {
     },
 
     async init() {
+      // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
+      // 存檔成功（dirty 轉 false）時清掉。
+      this.$watch('dirty', v => { window.motrixIsDirty = !!v })
       this._initTabFromUrl()
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
@@ -1321,7 +1324,16 @@ function app() {
     },
 
     async selectCase(quoteNo) {
+      // 2026-09-24：有未存的變更時先存完再切換。原本這裡直接取消待存計時器、
+      // 下面再 dirty=false ⇒ 打完字 1.5 秒內切換案件，剛打的內容就消失。
       clearTimeout(this._autoSaveTimer)
+      if (this.dirty && this.selected) {
+        while (this.saving) await new Promise(res => setTimeout(res, 50))
+        if (this.dirty) await this.saveCaseRecord()
+        if (this.dirty && !confirm(`上一張案件（${this.selected.quote_no}）沒有存成功：${this.saveMsg || '未儲存'}\n\n仍要切換並放棄這些變更？`)) {
+          return
+        }
+      }
       try {
         const r = await fetch('/api/quotations/' + quoteNo, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -1796,6 +1808,8 @@ function app() {
     },
     removePaymentItem(idx) {
       if (this.cr.caseRecord.payment.items.length <= 1) return
+      const pi = this.cr.caseRecord.payment.items[idx]
+      if (!confirm(`確定要刪除款項期別「${pi?.type || '第' + (idx + 1) + '期'}」？\n\n刪除後會自動存檔，無法復原。`)) return
       this.cr.caseRecord.payment.items.splice(idx, 1)
       if (this.cr.caseRecord.payment.items.length === 1) {
         this.cr.caseRecord.payment.items[0].pct = 100
@@ -1805,6 +1819,7 @@ function app() {
 
     setDirty() {
       this.dirty = true
+      window.motrixIsDirty = true
       this.saveStatus = 'dirty'
       this.saveMsg = '未儲存'
       clearTimeout(this._autoSaveTimer)
@@ -2089,6 +2104,7 @@ function app() {
       const stages = this.cr.caseRecord.stages
       const st = stages[idx]
       if (!st) return
+      if (!confirm(`確定要刪除執行階段「${st.label || '未命名'}」？\n\n階段內的拜訪紀錄會一併刪除，無法復原。`)) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, { method: 'DELETE', headers: this._authHeaders() })
         if (!r.ok) { alert('刪除失敗'); return }
@@ -2444,6 +2460,7 @@ function app() {
       const st = this.cr.caseRecord.stages[stageIdx]
       const visit = st?.visits?.[visitIdx]
       if (!st || !visit) return
+      if (!confirm(`確定要刪除這筆拜訪紀錄${visit.visitDate ? '（' + visit.visitDate + '）' : ''}？\n\n刪除後無法復原。`)) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
           method: 'DELETE', headers: this._authHeaders()
@@ -2490,7 +2507,11 @@ function app() {
       this.cr.caseRecord.materials.push({ id: Date.now(), name: '', model: '', qty: 1, unit: '台', ordered: false, arrived: false, devices: [], note: '' })
       this.setDirty()
     },
-    removeMaterial(idx) { this.cr.caseRecord.materials.splice(idx, 1); this.setDirty() },
+    removeMaterial(idx) {
+      const m = this.cr.caseRecord.materials[idx]
+      if (!confirm(`確定要刪除材料「${m?.name || '未命名'}」？\n\n刪除後會自動存檔，無法復原。`)) return
+      this.cr.caseRecord.materials.splice(idx, 1); this.setDirty()
+    },
     addMaterialFromQuote(qi) {
       this.ensureCaseRecord()
       this.cr.caseRecord.materials.push({
@@ -2602,11 +2623,19 @@ function app() {
       this.cr.caseRecord.devices.push({ id: Date.now(), name: '', sn: '', mac: '', location: '', warrantyStart: '', warrantyMonths: 12, note: '' })
       this.setDirty()
     },
-    removeDevice(idx) { this.cr.caseRecord.devices.splice(idx, 1); this.setDirty() },
+    // 刪除設備會在自動存檔時同步序號庫存（_sync_device_stock），存完無法復原
+    _confirmRemoveDevice(dev) {
+      return confirm(`確定要刪除設備「${dev?.name || '未命名'}${dev?.sn ? '／' + dev.sn : ''}」？\n\n刪除後會自動存檔並同步序號庫存，無法復原。`)
+    },
+    removeDevice(idx) {
+      if (!this._confirmRemoveDevice(this.cr.caseRecord.devices[idx])) return
+      this.cr.caseRecord.devices.splice(idx, 1); this.setDirty()
+    },
     removeDeviceByObj(dev) {
       const devs = this.cr.caseRecord.devices
       const idx = devs.findIndex(d => d.id === dev.id)
-      if (idx !== -1) { devs.splice(idx, 1); this.setDirty() }
+      if (idx === -1 || !this._confirmRemoveDevice(dev)) return
+      devs.splice(idx, 1); this.setDirty()
     },
     removeDeviceGroup(groupId) {
       if (!confirm('確定要刪除整個設備群組？')) return
