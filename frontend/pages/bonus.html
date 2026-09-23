@@ -451,9 +451,18 @@
             <!-- `BN7`：匯出 PDF。權限是 canCreateAward（_is_manager，
                  superadmin＋admin），比上面那組 isManager（superadmin
                  限定）寬——與後端 GET /pdf-download 的閘門一致，不因為
-                 這一頁其他動作收得更緊就跟著收緊這一顆。 -->
-            <div class="bn-actions" x-show="canCreateAward && (a.status === '已核准' || a.voided_at)">
-              <button class="bn-btn bn-btn--ghost" :disabled="awardBusy === String(a.id)"
+                 這一頁其他動作收得更緊就跟著收緊這一顆。
+                 🔴 同 `JV10` 的先例：未到可匯出狀態時這顆要**停用而看得見**，
+                 並說得出為什麼——不是藏起來（藏起來的話，使用者不知道
+                 這裡有一個匯出功能；上一版寫成 x-show 是照抄旁邊送審/
+                 簽核那組「依狀態顯不顯示」的樣子，沒有另外想過這顆是不是
+                 該用同一種顯隱方式，A 問起來才發現是順手不是決定）。 -->
+            <div class="bn-actions" x-show="canCreateAward">
+              <button class="bn-btn bn-btn--ghost"
+                      :disabled="awardBusy === String(a.id)
+                        || !(a.status === '已核准' || a.voided_at)"
+                      :title="(a.status === '已核准' || a.voided_at)
+                        ? '' : '只有已核准或已作廢的獎金分潤單可以匯出 PDF'"
                       @click="downloadAwardPdf(a)"
                       x-text="awardBusy === String(a.id) ? '匯出中…' : '匯出 PDF'"></button>
             </div>
