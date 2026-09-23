@@ -72,6 +72,20 @@ label    = 「**傳票（會計）**」**不是**「傳票」
          ＋ 順帶②：send_back_voucher 漏清 approval_json
 ```
 
+### 🔴 `BN8` 三格待裁，A 已裁（C 停工前留下的）
+```
+⑪ 送審後不可改比例  => **不寫題**：獎金單**根本沒有修改端點**
+   （7 支端點裡沒有 PUT／PATCH；UPDATE bonus_awards 全 repo 只有 void 那一處）
+   🔑 **一條規則防的是一個不存在的動作** => 寫了會永遠綠
+   ⇒ 把這句話寫在 **POST /awards 的 docstring 旁邊**，不是寫進規格
+      （日後真的加了修改端點，那一天沒有人會想起這一格）
+⑬ 手動標記已發放    => **路徑由你定**，而 **定完要回報路徑**
+   （C 的題用 openapi.json 找「有沒有端點做得到」，不釘路徑字串
+     ⇒ 你定了之後他的題不必改，**但他找不到它就等於沒做**）
+⑭ is_paid()         => 住 **helpers/bonus.py**
+   依據：同族函式都在那裡（base_amount_for／people_for_item／split_award／visible_lines）
+```
+
 ### 🔴 A 已裁、**等你做**的兩件（`STATE.md` §242）
 ```
 （一）**voucher 加進簽核設定頁**（docTypeOrder ＋ docTypeMeta 各一行）
