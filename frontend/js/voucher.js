@@ -57,6 +57,9 @@ function voucherPage() {
     //: `-1` = 都沒展開。⚠️ 用索引不用布林——同時只能展開一筆，展開下一筆
     //: 要先把上一筆收起來，不然清單會越展越長。
     usedInfoOpen: -1,
+    //: `JV21`：支出項頁籤裡展開中的品項／人員明細是哪一筆，`-1` = 都沒展開。
+    //: 同 `usedInfoOpen` 的理由，各自獨立（切頁籤時兩個都重置，見 `pickTab()`）。
+    expandedExpense: -1,
 
     // ── 附件（`JV3`）──
     //
@@ -151,6 +154,14 @@ function voucherPage() {
       this.usedInfoOpen = (this.usedInfoOpen === si) ? -1 : si
     },
 
+    // `JV21`：支出項頁籤裡，承攬商派工那一筆展開成品項／人員兩種子列
+    // （額外支出沒有子列，`items` 是空陣列，展不開）。
+    // 同一套「用索引記哪一筆展開」的做法，理由同 `toggleUsedInfo()`：
+    // 同時只能展開一筆，展開下一筆前先把上一筆收起來。
+    toggleExpenseExpand(si) {
+      this.expandedExpense = (this.expandedExpense === si) ? -1 : si
+    },
+
     // `usedAt`／`uploaded_at` 是 ISO 字串，這裡只取到分鐘，不需要秒。
     fmtDateTime(s) {
       return String(s || '').replace('T', ' ').slice(0, 16)
@@ -159,7 +170,11 @@ function voucherPage() {
     // 🔴 **只換頁籤，什麼都不寫回分錄。**
     //    ☠️ 在這裡順手帶入的話，使用者切走再切回來，**他打的字會被蓋掉**，
     //       而畫面上一切正常 —— 他只會覺得「我剛剛好像打過」。
-    pickTab(name) { this.sourceTab = name },
+    pickTab(name) {
+      this.sourceTab = name
+      this.usedInfoOpen = -1
+      this.expandedExpense = -1
+    },
 
     //: 帶入到 `summaryTarget` 那一行。**唯一會寫進 `l.summary` 的地方。**
     applySource(it) {

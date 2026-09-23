@@ -30,6 +30,11 @@ from db import get_db
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
 #    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
 from routers.accounting_export import validate_account_code
+# `JV21`：承攬商派工的 grandTotal（含稅費用＋外包人員）算法**只有一份**——
+# `vendor_contractors._dispatch_row()`，`dashboard.py`／`reports.py` 已經在借用
+# 同一支（同樣的 cross-router import 慣例）。⚠️ **不要自己重算**：
+# `total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
+from routers.vendor_contractors import _dispatch_row
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.tiered_approval import (
@@ -265,10 +270,11 @@ def list_vouchers(include_voided: bool = False,
     return {"vouchers": rows, "count": len(rows)}
 
 
-#: 摘要來源的兩個頁籤（`§159b` (7) 使用者原話：「摘要部分也要有分頁選單
-#: 帶入案件跟哪些已上傳檔案」）。**可數完備**：少一個使用者會報修，
-#: 而多一個**不會有人報修** —— 那表示有人加了來源而沒有人決定它的格式。
-SUMMARY_TABS = ("案件", "已上傳檔案")
+#: 摘要來源的頁籤（`§159b` (7) 使用者原話：「摘要部分也要有分頁選單
+#: 帶入案件跟哪些已上傳檔案」；第三格是 `JV21`）。**可數完備**：少一個
+#: 使用者會報修，而多一個**不會有人報修** —— 那表示有人加了來源而沒有人
+#: 決定它的格式。
+SUMMARY_TABS = ("案件", "已上傳檔案", "支出項")
 
 #: 清單長度上限。案件會一直長，而這是一個**選單**不是報表。
 _SOURCE_LIMIT = 50
@@ -312,6 +318,123 @@ def case_summary(customer_name, quote_no):
     if no:
         parts.append("報價單" + no)
     return "".join(parts)
+
+
+def _fmt_money(n):
+    """`NT$` 後面接的數字：整數就不印小數點（傳票版面其餘金額欄一律整數）。"""
+    n = float(n or 0)
+    if n == int(n):
+        return "%d" % int(n)
+    return ("%.2f" % n).rstrip("0").rstrip(".")
+
+
+def _dispatch_expense_entry(row):
+    """`JV21` §3b①：一筆承攬商派工——第二層（派工本身）＋ 第三層（品項／人員）。
+
+    ⚠️ 金額**借用 `_dispatch_row()` 的 `grandTotal`**（含稅承攬商費用＋外包
+    人員個別計費），不用 `total_amount`——那一欄少了稅、也少了人員費用
+    （`§2b`：`ACC-BN6 §3` 已經踩過這個坑）。
+
+    ## 🔴 品項與人員是**兩種不同的第三層**，鍵完全不同
+
+    `items_json[]` 用 `description／qty／unit／unitPrice／amount`；
+    `personnel_json[]` 只有 `name／amount`——不可以用同一個判斷式處理兩者，
+    也不可以把兩邊的 `id` 混用（`items[].id` 是前端產生的浮點時間戳，
+    `personnel[].id` 是小整數，語意不同）。⇒ 這裡改用 `(kind, index)` 識別
+    子列，不碰它們各自的 `id`。
+
+    ⚠️ 金額直接讀每一筆自己的 `amount`（`_dispatch_row()` 算 `grandTotal`
+    用的也是同一個欄位），**不用 `unitPrice` 重算**——那一欄型別不一致
+    （`6800` 與 `"12000"` 都出現過），會算的話要先擋空字串，這裡沒有這個
+    必要就不引入這個風險。
+    """
+    d = _dispatch_row(row)
+    vendor = (d.get("vendorName") or "").strip()
+    scope = (d.get("scope") or "").strip()
+    head = "－".join(p for p in (vendor, scope) if p)
+    summary = "%s　NT$ %s" % (head or "承攬商派工", _fmt_money(d.get("grandTotal")))
+    if d.get("invoiceNo"):
+        summary += "　發票：%s" % d["invoiceNo"]
+
+    prefix = (vendor + "－") if vendor else ""
+    children = []
+    for idx, it in enumerate(d.get("items") or []):
+        desc = str(it.get("description") or "").strip()
+        if not desc:
+            continue
+        children.append({
+            "kind": "dispatch_item", "index": idx,
+            "description": desc, "amount": it.get("amount") or 0,
+            "summary": "%s%s　NT$ %s" % (prefix, desc, _fmt_money(it.get("amount"))),
+        })
+    for idx, p in enumerate(d.get("personnel") or []):
+        name = str(p.get("name") or "").strip()
+        if not name:
+            continue
+        children.append({
+            "kind": "dispatch_personnel", "index": idx,
+            "name": name, "amount": p.get("amount") or 0,
+            "summary": "%s%s　NT$ %s" % (prefix, name, _fmt_money(p.get("amount"))),
+        })
+
+    return {
+        "kind": "contractor_dispatch",
+        "id": d["id"],
+        "vendorName": vendor,
+        "scope": scope,
+        "amount": d.get("grandTotal") or 0,
+        "invoiceNo": d.get("invoiceNo") or "",
+        "summary": summary,
+        "items": children,
+    }
+
+
+def _extra_expense_entry(row):
+    """`JV21` §3b②：一筆案件額外支出——**沒有第三層**。
+
+    A 問甲／乙後選甲（展開後只有一層，畫面說實話）：這張表自己就有
+    `description／qty／unit／unit_cost` 這些「品項該有的欄位」，一筆資料
+    就是一個品項，不假裝再多一層——多一層的代價是使用者點開箭頭看到一筆
+    與上一層一模一樣的東西，會以為自己點錯了。
+    """
+    r = dict(row)
+    text = str(r.get("description") or "").strip() or str(r.get("note") or "").strip()
+    summary = "%s　NT$ %s" % (text or "額外支出", _fmt_money(r.get("total_cost")))
+    if r.get("doc_no"):
+        summary += "　憑證：%s" % r["doc_no"]
+    return {
+        "kind": "extra_expense",
+        "id": r["id"],
+        "category": r.get("category") or "",
+        "description": r.get("description") or "",
+        "amount": r.get("total_cost") or 0,
+        "docNo": r.get("doc_no") or "",
+        "summary": summary,
+        "items": [],
+    }
+
+
+def _case_expense_sources(conn, quote_no):
+    """`JV21` §2/§3：案件底下「有金額有發票」的支出項——目前兩種來源。
+
+    ⚠️ **不是** `SOURCE_TYPES` 的逐種列舉：那份清單回答的是「附件能不能被
+    帶入」，這裡回答的是「這是不是一筆有金額的支出」——兩個問題不同。
+    叫料（`material`）在附件清單裡存在，在這裡**進不來**：`§2b` 實測
+    `caseRecord.materials[]` 沒有任何金額欄位，是物流追蹤不是支出記錄，
+    不是形狀問題，是它不是支出。`invoice_voucher`（開票申請）也不在
+    這裡——那是開給客戶的票，不是我們的支出。
+    """
+    out = []
+    for row in conn.execute(
+            "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
+            "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
+            "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)):
+        out.append(_dispatch_expense_entry(row))
+    for row in conn.execute(
+            "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id",
+            (quote_no,)):
+        out.append(_extra_expense_entry(row))
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -376,6 +499,18 @@ def summary_sources(q: str = "", quote_no: str = "",
             note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
         else:
             note2 = ""
+
+    # ── 頁籤③：這個案件底下的支出項（`JV21`）──
+    expenses = []
+    note3 = "請先選一個案件，才看得到它底下的支出項。"
+    if picked:
+        conn3 = get_db()
+        try:
+            expenses = _case_expense_sources(conn3, picked)
+        finally:
+            conn3.close()
+        note3 = "" if expenses else "案件「%s」底下目前沒有支出項。" % picked
+
     cases = []
     for r in rows:
         cases.append({
@@ -392,9 +527,11 @@ def summary_sources(q: str = "", quote_no: str = "",
             #    ⚠️ 要列東西得先知道**是哪一個案件**（`quote_no`）：
             #       憑證是掛在案件底下的，沒有案件就沒有範圍。
             SUMMARY_TABS[1]: files,
+            SUMMARY_TABS[2]: expenses,
         },
         "notes": {
             SUMMARY_TABS[1]: note2,
+            SUMMARY_TABS[2]: note3,
         },
     }
 

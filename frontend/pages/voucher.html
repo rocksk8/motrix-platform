@@ -95,6 +95,13 @@
     .vc-src__used{font-size:11px;color:#B91C1C;flex:none;padding:1px 7px;border-radius:9px;background:#FEF2F2;border:1px solid #FCA5A5;cursor:pointer}
     .vc-src__used:hover{background:#FEE2E2}
     .vc-src__usedinfo{padding:4px 8px 8px 30px;font-size:11px;color:var(--text-secondary);line-height:1.7}
+    /* `JV21`：支出項頁籤的展開箭頭與子列——子列縮排＋淡底色，讀起來
+       是「屬於上一筆」而不是同一層的另一筆。 */
+    .vc-src__expand{font-size:11px;color:var(--text-secondary);flex:none;padding:1px 7px;border-radius:9px;cursor:pointer}
+    .vc-src__expand:hover{color:var(--text-primary)}
+    .vc-src__children{padding-left:20px;background:#FAF9F6;border-radius:6px}
+    .vc-src__item--child{font-size:11px}
+    .vc-src__item--child .vc-src__txt{font-weight:400}
 
     .vc-att{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
     .vc-att__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
@@ -363,10 +370,31 @@
                          這顆一樣按得下去，@click.stop 只是不要連帶觸發帶入。 -->
                     <span class="vc-src__used" x-show="sourceTab === '已上傳檔案' && it.used"
                           @click.stop="toggleUsedInfo(si)" title="點看被哪張傳票用過">已計算</span>
+                    <!-- `JV21`：支出項頁籤，承攬商派工可以展開成品項／人員兩種
+                         子列（額外支出沒有子列，`items` 是空陣列，箭頭不出現—
+                         §3b②：不假裝有第三層，展不開就不畫展開的箭頭）。 -->
+                    <span class="vc-src__expand"
+                          x-show="sourceTab === '支出項' && (it.items || []).length"
+                          @click.stop="toggleExpenseExpand(si)"
+                          x-text="expandedExpense === si ? '收起品項 ▲' : '展開品項 ▼'"></span>
                   </button>
                   <div class="vc-src__usedinfo" x-show="usedInfoOpen === si">
                     <template x-for="(u, ui) in (it.usedBy || [])" :key="ui">
                       <div x-text="u.voucherNo + '　' + fmtDateTime(u.usedAt)"></div>
+                    </template>
+                  </div>
+                  <!-- `JV21` 第三層：品項／人員，各自獨立可點，直接
+                       `applySource()`（與第二層同一支函式，子列本來就有
+                       自己的 `summary`）。 -->
+                  <div class="vc-src__children"
+                       x-show="sourceTab === '支出項' && expandedExpense === si">
+                    <template x-for="(ch, ci) in (it.items || [])" :key="ci">
+                      <button class="vc-src__item vc-src__item--child"
+                              data-testid="summary-source-child"
+                              :disabled="!canEdit"
+                              @click="applySource(ch)">
+                        <span class="vc-src__txt" x-text="ch.summary"></span>
+                      </button>
                     </template>
                   </div>
                 </div>
