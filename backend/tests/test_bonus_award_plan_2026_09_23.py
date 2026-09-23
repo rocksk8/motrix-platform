@@ -545,7 +545,15 @@ def test_bn1_a_total_over_one_hundred_percent_is_refused(client, make_user):
        ⇒ 寫下來了，**而沒有任何一行程式在檢查它**。
     ⚠️ **不可以只在前端擋** —— `bonus.js` 自己的註解逐字：
        「前端過濾是假的：值仍然在 API 回應裡」，同一個道理套在輸入上。
+
+    🔴 `QS1-a` 落地後這裡要補兩件：① `make_user()` 建真的 `alice`
+    帳號（否則會先撞到「無可發放對象」，而那不是這一題要驗的事）
+    ② 斷言訊息裡**不可以**出現「無可發放對象」——單靠 `status_code
+    == 400` 這個超集會分不出「因為超過 100% 被擋」與「因為人員解析
+    不出來被擋」，兩者剛好都是 400，而這一題原本就是靠後者矇混過關
+    （在 `alice` 沒有真帳號的那段時間）。
     """
+    make_user(username="alice", role="user")
     _seed_case("MQ-BN1-OVER", sales_person="alice")
     item_id = _seed_item("業務獎金", "sales_person")
     _u, hdr = _hdr(client, make_user, "bn1_mgr7")
@@ -557,6 +565,13 @@ def test_bn1_a_total_over_one_hundred_percent_is_refused(client, make_user):
     assert r.status_code == 400, (
         "`total_pct = %d`（>100%%）被接受了（回 %s）。\n" % (BP + 1, r.status_code)
         + "☠️ 獎金池比整個案子的淨利還大。")
+    assert "無可發放對象" not in r.text, (
+        "回了 400，而理由是「無可發放對象」，不是超過 100%% 的檢查：%s\n"
+        % r.text[:200]
+        + "☠️ 前置不對——`alice` 沒有解析成真帳號，這一題量到的是另一件事。")
+    assert "100" in r.text, (
+        "回了 400，而訊息裡沒有提到 100%%，量不出這是不是我要的那個檢查：%s"
+        % r.text[:200])
 
 
 def test_bn1_person_shares_over_one_hundred_percent_are_refused(client,
