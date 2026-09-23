@@ -93,8 +93,12 @@ def _seed_award(quote_no, people, **cols):
     🔴 `bonus_award_lines.bonus_item_id` 有**外鍵** ⇒ 先種真的 `bonus_items`
        （`BN9` 踩過：直接餵 `1` 會 `FOREIGN KEY constraint failed`，
         而訊息指向資料層，看起來像產品壞了）。
+
+    ⚙️ `status=` 可覆蓋（預設 `"草稿"`）—— `⑬⑭` 要種「已核准」的單才測得到
+       `mark-paid` 的正常路徑，而其餘欄位（`voucher_no_payment` 等）走 `**cols`。
     """
     import db
+    status = cols.pop("status", "草稿")
     conn = db.get_db()
     try:
         cur = conn.execute(
@@ -109,7 +113,7 @@ def _seed_award(quote_no, people, **cols):
             "INSERT INTO bonus_awards (quote_no, base_amount, status,"
             " created_by, created_at, updated_at, voided_at%s)"
             " VALUES (?,?,?,?,?,?,''%s)" % (extra_cols, extra_qs),
-            (quote_no, 100000, "草稿", "seed", "2026-09-01", "2026-09-01")
+            (quote_no, 100000, status, "seed", "2026-09-01", "2026-09-01")
             + tuple(cols.values()))
         aid = cur.lastrowid
         for who in people:
@@ -653,3 +657,227 @@ def test_bn8_voiding_a_paid_award_is_refused_and_says_how(client, make_user):
     assert "沖銷" in detail, (
         "擋下來了，而訊息沒有講出出路：%r\n" % detail[:200]
         + "🔑 一句「不可作廢」讓使用者**卡在那裡** —— 要講「請先開立沖銷傳票」。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⑬⑭ 「已發放」的退路：手動標記（`§235`／`SPEC-BN8.md §5c`）
+# ══════════════════════════════════════════════════════════════════════
+#
+# A-2 `6a84536` ＋ A `STATE.md §246` 定案：
+# ```
+# ⑬ POST /api/bonus/awards/{award_id}/mark-paid
+#    superadmin／body {reason} 不可空
+#    🔴 不碰 voucher_no_payment（不可偽造傳票號）
+#    三個擋：reason 空／已 is_paid／status 非「已核准」
+# ⑭ is_paid() 住 helpers/bonus.py（純邏輯，查詢端與端點都要用）
+# ```
+# 🔴 動工前已查 `void_award`（同檔、同權限級別、同一種「理由不可空」形狀）——
+#    `A-2` 與我都標過「沒查」，那一句已落進 B 的派工（`STATE.md §247`）。
+#
+# ⚙️ **路徑用 `openapi.json` 找**，不釘字串（A 明著要求）：
+#    B 若換了路徑，這裡的題不必跟著改，只是找不到時訊息要講清楚
+#    「這是還沒實作」不是「探針壞了」。
+
+#: 三條路徑的「動作代號」候選 —— `mark-paid` 是規格定案的名字，
+#: 其餘是防止 B 用了慣用的變體（連字號／底線）而讓探針誤判成「沒做」。
+MARK_PAID_CANDIDATES = ("mark-paid", "mark_paid", "paid")
+
+
+def _find_award_action_path(client, candidates):
+    """從 `openapi.json` 找 `/awards/{award_id}/<action>` 那一支 POST 路徑。
+
+    找不到就**明著說是規格哪一節定的**，不要讓 404/405/422 變成一個要猜的謎題。
+    """
+    r = client.get("/openapi.json")
+    assert r.status_code == 200, "讀不到 openapi.json：%s" % r.text[:200]
+    spec = r.json()
+    paths = spec.get("paths") or {}
+    for cand in candidates:
+        hits = [p for p, methods in paths.items()
+                if "/bonus/awards/" in p
+                and p.rstrip("/").endswith("/" + cand)
+                and "post" in methods]
+        if hits:
+            assert len(hits) == 1, "找到多支符合的路徑，分不出來打哪一支：%r" % hits
+            return hits[0]
+    # 🔑 找不到精確匹配時，印出所有含 "paid" 的路徑當線索 —— 不要空手回報。
+    near = sorted(p for p in paths if "paid" in p.lower())
+    pytest.fail(
+        "`openapi.json` 裡找不到 `/awards/{id}/%s` 這一支 POST 端點"
+        "（候選名 %r 都沒中）。\n" % (candidates[0], list(candidates))
+        + "📌 路徑由 `SPEC-BN8.md §5c` 定案為 `mark-paid`，B 換路徑要回報。\n"
+        + ("🔎 含 \"paid\" 的既有路徑：%r（若這是它，退回改本檔的候選清單）"
+           % near if near else "🔎 目前沒有任何路徑含 \"paid\"。"))
+
+
+def _mark_paid_url(path, aid):
+    """把 openapi 的樣板路徑（`{award_id}` 或任何名字的 `{...}`）代入實際 id。"""
+    return re.sub(r"\{[^}]+\}", str(aid), path)
+
+
+def test_bn8_mark_paid_endpoint_requires_superadmin(client, make_user):
+    """🔴 **`§5c`／`⑬`：手動標記已發放，只有最高管理者。**
+
+    ⚙️ 與三支簽核端點（`§6⑤`）同一條權限級別 —— 錢的事，非管理者不可以碰。
+    """
+    path = _find_award_action_path(client, MARK_PAID_CANDIDATES)
+    _u, hdr = _hdr(client, make_user, "bn8_paid_perm", role="admin")
+    aid = _seed_award("MQ-BN8-PAIDPERM", ["someone"], status="已核准")
+    r = client.post(_mark_paid_url(path, aid), headers=hdr,
+                    json={"reason": "臨時現金"})
+    assert r.status_code in OK_CODES, (
+        "`mark-paid` 回 %s（預期 403）：%s" % (r.status_code, r.text[:200]))
+    assert r.status_code == 403, (
+        "`admin` 打 `mark-paid` 拿到 %s，而 `§5c` 是**superadmin 專屬**。\n"
+        % r.status_code
+        + "☠️ 錢的事一旦非管理者也能標記，「已發放」這個狀態就不可信了。")
+
+
+def test_bn8_mark_paid_requires_a_non_empty_reason(client, make_user):
+    """🔴 **`§5c` 界線②：原因不可為空。**（同 `BN1` person_source 為空不准儲存）
+
+    ☠️ 空字串存得下去 ⇒ 日後沒有人回得出那筆錢為什麼走系統外。
+    ⚙️ 前置：單要先是「已核准」，否則會紅在錯誤的那一個擋（狀態，不是原因）。
+    """
+    path = _find_award_action_path(client, MARK_PAID_CANDIDATES)
+    _u, hdr = _hdr(client, make_user, "bn8_paid_reason")
+    aid = _seed_award("MQ-BN8-PAIDREASON", ["someone"], status="已核准")
+    r = client.post(_mark_paid_url(path, aid), headers=hdr, json={"reason": ""})
+    assert r.status_code in OK_CODES, (
+        "空原因回 %s（預期 400）：%s" % (r.status_code, r.text[:200]))
+    assert r.status_code == 400, (
+        "空原因拿到 %s，而 `§5c` 界線②是**必填**。\n" % r.status_code
+        + "☠️ 空字串存得下去的話，日後沒有人回得出那筆錢為什麼走系統外。")
+
+
+def test_bn8_mark_paid_is_refused_before_approval(client, make_user):
+    """🔴 **狀態擋：還沒「已核准」的單不可以標記已發放。**
+
+    ⚙️ 前置：`reason` 給好給滿，孤立出**只有狀態不對**這一個變因 ——
+       否則紅了分不出是狀態擋還是原因擋。
+    """
+    path = _find_award_action_path(client, MARK_PAID_CANDIDATES)
+    _u, hdr = _hdr(client, make_user, "bn8_paid_status")
+    aid = _seed_award("MQ-BN8-PAIDSTATUS", ["someone"])  # 預設「草稿」
+    r = client.post(_mark_paid_url(path, aid), headers=hdr,
+                    json={"reason": "臨時現金"})
+    assert r.status_code in OK_CODES, (
+        "草稿狀態下標記已發放回 %s（預期 400）：%s"
+        % (r.status_code, r.text[:200]))
+    assert r.status_code == 400, (
+        "還沒核准的單被標記成已發放，回 %s。\n" % r.status_code
+        + "☠️ 錢還沒核定金額就先說發出去了 —— 順序反了。")
+
+
+def test_bn8_mark_paid_is_refused_when_already_paid_via_the_main_path(
+        client, make_user):
+    """🔴🔴 **`§5c` 界線③的另一半：已經走主路發放的單，不可以再手動標記。**
+
+    ## ⚙️ 用主路（`voucher_no_payment`）種「已發放」，不是用手動欄位
+
+    ```
+    手動欄位（paid_manually_*）今天還不存在 => 種不出「手動已發放」的前置
+    voucher_no_payment 今天就有             => 拿它種「已發放」測「已 is_paid」這個擋
+    ```
+    🔑 這**同時**驗到了 `⑭` 的一半：`is_paid()` **必須認得主路**，
+       不是只認自己剛加的那個手動欄位 —— 否則主路發放過的單還能被手動標記，
+       一張單就有兩條「已發放」的記錄互相打架。
+    """
+    path = _find_award_action_path(client, MARK_PAID_CANDIDATES)
+    _u, hdr = _hdr(client, make_user, "bn8_paid_twice")
+    aid = _seed_award("MQ-BN8-PAIDTWICE", ["someone"], status="已核准",
+                      voucher_no_payment="V-2026-0099")
+    r = client.post(_mark_paid_url(path, aid), headers=hdr,
+                    json={"reason": "臨時現金"})
+    assert r.status_code in OK_CODES, (
+        "已透過傳票發放的單再標記，回 %s（預期 400）：%s"
+        % (r.status_code, r.text[:200]))
+    assert r.status_code == 400, (
+        "已經走主路發放的單，手動標記還是回 %s。\n" % r.status_code
+        + "☠️ 一張單同時有傳票號**又**手動標記 ⇒ 兩條「已發放」互相打架，\n"
+          "   而 `is_paid()` 若只認自己的欄位就會漏掉這一格。")
+
+    # ⚙️ 若 `is_paid()` 已存在，順手驗它對這張單本身也回 True ——
+    #    這一格失敗代表 `⑭` 沒接上主路，是另一個成因，不要跟上面混在一起。
+    try:
+        from helpers.bonus import is_paid
+    except ImportError:
+        pytest.fail("`helpers.bonus` 裡沒有 `is_paid`，先看 `⑭` 那一題。")
+    a = _award(client, hdr, aid)
+    assert is_paid(a) is True, (
+        "`is_paid()` 對一張 `voucher_no_payment` 非空的單回 %r。\n"
+        % is_paid(a)
+        + "☠️ 主路發放的單被判定成「還沒發放」——\n"
+          "   查詢「已發放的單」時這一張會消失（`§5c` 界線③）。")
+
+
+def test_bn8_marking_paid_succeeds_and_never_fabricates_a_voucher_number(
+        client, make_user):
+    """🔴🔴 **正常路徑：標記成功，而 `voucher_no_payment` 仍然是空的。**
+
+    ## 🔴 `§5c` 逐字：**不可以偽造一個傳票號**
+
+    ```
+    自動回填  voucher_no_payment = 'V-xxxx'   <= 有傳票號，可追
+    手動標記  voucher_no_payment = **''**      <= 沒有傳票號，另外記
+    ```
+    ☠️ 兩條路若寫進同一個欄位而分不出來，手動那條就變成
+       一個**繞過帳務的合法入口**（〈降級之後它還是會動〉）。
+    ⚙️ 而「記在哪」用 `_award()`（走 `GET /awards`，`list_awards` 是
+       `SELECT *` 投影 ⇒ 新欄位一落地就看得到，不必直接讀資料庫）。
+    """
+    path = _find_award_action_path(client, MARK_PAID_CANDIDATES)
+    _u, hdr = _hdr(client, make_user, "bn8_paid_ok")
+    aid = _seed_award("MQ-BN8-PAIDOK", ["someone"], status="已核准")
+
+    reason = "客戶現場臨時以現金支付"
+    r = client.post(_mark_paid_url(path, aid), headers=hdr,
+                    json={"reason": reason})
+    assert r.status_code == 200, "標記失敗：%s %s" % (r.status_code,
+                                                    r.text[:200])
+
+    a = _award(client, hdr, aid)
+    assert not (a.get("voucher_no_payment") or ""), (
+        "標記成功之後 `voucher_no_payment` 是 %r。\n"
+        % a.get("voucher_no_payment")
+        + "☠️ **偽造了一個傳票號** —— 手動標記的這一筆錢從此看起來像有真的\n"
+          "   傳票，而查帳的人追不到那張不存在的憑證。")
+
+    by_ = a.get("paid_manually_by")
+    at_ = a.get("paid_manually_at")
+    stored_reason = a.get("paid_manually_reason")
+    assert by_ and at_, (
+        "標記成功而讀不到「誰標的／何時」（by=%r, at=%r）。\n" % (by_, at_)
+        + "🔑 `§5c` 的設計重點不是「允許」，是「**看得出它走的是退路**」——\n"
+          "   沒有這兩格，這筆錢的來源事後查不出來。")
+    assert stored_reason == reason, (
+        "存下來的原因是 %r，我送的是 %r。\n" % (stored_reason, reason)
+        + "☠️ 原因對不上，`§5c` 界線②要求的「事後回得出為什麼」就落空了。")
+
+    from helpers.bonus import is_paid
+    assert is_paid(a) is True, (
+        "手動標記成功之後，`is_paid()` 對這張單回 %r。\n" % is_paid(a)
+        + "☠️ 標記路徑與 `is_paid()` 對不上 —— 查詢「已發放的單」時\n"
+          "   **這一張手動標記的會消失**（`§5c` 界線③逐字警告的就是這個）。")
+
+
+def test_bn8_is_paid_is_false_for_a_genuinely_unpaid_award():
+    """⚙️ **正對照：`is_paid()` 對一張真的還沒發放的單要回 `False`。**
+
+    ☠️ 少了它，一個「永遠回 `True`」的實作也會讓上面幾題全綠
+       （它們都在驗「已發放時擋下來／記得住」，沒有一題驗「沒發放時不擋」）。
+    🔑 純邏輯測試，不碰資料庫 —— 與 `people_for_item`／`split_award` 同一種寫法。
+    """
+    try:
+        from helpers.bonus import is_paid
+    except ImportError:
+        pytest.fail(
+            "`helpers.bonus` 裡沒有 `is_paid`。\n"
+            + "📌 `SPEC-BN8.md §5c`／`STATE.md §246`：`is_paid()` 要住在\n"
+              "   `helpers/bonus.py`（純邏輯），不要放進 router。")
+    unpaid = {"voucher_no_payment": "", "paid_manually_at": ""}
+    assert is_paid(unpaid) is False, (
+        "一張兩個欄位都是空字串的單，`is_paid()` 回 %r（預期 `False`）。\n"
+        % is_paid(unpaid)
+        + "☠️ 一個永遠回 `True` 的實作會讓「擋下已發放的單」那幾題全部通過，\n"
+          "   而它們一次都沒有驗過「沒發放時不擋」。")
