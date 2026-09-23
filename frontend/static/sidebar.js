@@ -862,8 +862,28 @@ if (typeof module !== 'undefined' && module.exports) {
     catch (e) { sess = {} }
     fetch('/api/build-info', {
       headers: { Authorization: 'Bearer ' + (sess.token || '') },
-    }).then(function (r) { return r.ok ? r.json() : null }).then(function (d) {
+    }).then(function (r) {
+      // 🔴 **404／405 本身就是答案。**
+      //
+      //    路由是在 **import 當下**註冊的 ⇒ 一個在 BR1 之前啟動的行程
+      //    **沒有這支端點** ⇒ 它回 404（或 405）。
+      // 🔑 ⇒ 那不是「查不到版本」，那是「**這個行程比 BR1 還舊**」——
+      //    而那正是使用者需要知道的那一句。
+      // ☠️ 而原本的寫法是 `bar.remove()` ⇒ **一句話都不說**。
+      //    那與 `§219` 同一種病：錯誤被藏在一個顯示不出來的地方，
+      //    而**空白比一句假話更難查**。
+      if (r.status === 404 || r.status === 405) return { _tooOld: true }
+      return r.ok ? r.json() : null
+    }).then(function (d) {
       if (!d) { bar.remove(); return }
+      if (d._tooOld) {
+        bar.style.cssText += ';background:#FEF2F2;color:#B91C1C;font-weight:700;'
+          + 'pointer-events:auto;cursor:help'
+        bar.textContent = '⚠️ 伺服器載入的是舊版（沒有版本資訊端點）—— 請重新啟動'
+        bar.title = '這個行程是在「顯示執行中版本」這個功能之前啟動的。'
+          + '重新啟動伺服器之後這裡才會顯示版本。'
+        return
+      }
       var started = (d.started_at || '').replace('T', ' ').slice(0, 16)
       bar.textContent = (d.commit_short || '不可得') + ' · 啟動 ' + started
       if (d.stale === true) {
