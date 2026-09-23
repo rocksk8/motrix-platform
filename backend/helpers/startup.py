@@ -135,27 +135,70 @@ def init_default_admin() -> None:
         conn.close()
 
 
+#: `IA2` §3①：展示帳號**出貨預設不建立**。
+#:
+#: 🔴 改版前 `init_demo_account()` 無條件呼叫、密碼寫死是公司統一編號
+#: （公司統一編號，同一個數字印在我們自己匯出的 PDF 頁尾上）、
+#: `must_change_password=0`、且明文密碼進 `logs/server.log`——
+#: 每一個賣出去的安裝都有一個密碼公開、不能關掉的 superadmin。
+#: ✅ 資料隔離本身是真的（`reset_demo_db()` ＋ `DEMO_TOKEN_PREFIX`，
+#: middleware 把 demo 的每個請求路由到隔離庫）——問題不是它能做什麼，
+#: 是**它不該在那裡**：一個不存在的帳號不需要任何隔離。
+#: ⚠️ 字面值留著（守門釘「出貨預設關」無條件綠），環境變數放在
+#: `demo_account_on()` 裡讀——同 `helpers/tender_source.py::radar_on()`
+#: 的理由：寫進這裡的初始值會讓守門的結果取決於周圍環境。
+DEMO_ACCOUNT_ENABLED = False
+
+#: demo 帳號的臨時密碼寫到**自己的檔案**，不跟 jeff 共用
+#: `_CREDENTIALS_FILE`——那個檔是覆寫不是附加，兩支 init 在同一次啟動
+#: 都會跑，共用檔案的話後寫的會把先寫的蓋掉。
+_DEMO_CREDENTIALS_FILE = os.path.join(
+    os.path.dirname(__file__), "..", ".initial_demo_credentials.txt")
+
+
+def demo_account_on():
+    """展示帳號的建立開關現在開著沒。**只有 `MOTRIX_DEMO_ACCOUNT=1` 才開。**
+
+    ⚠️ 判準是 `== "1"` 不是真假值：`"0"` 是非空字串，用真假值判會變成開著。
+    """
+    return DEMO_ACCOUNT_ENABLED or os.getenv("MOTRIX_DEMO_ACCOUNT") == "1"
+
+
 def init_demo_account() -> None:
     """Ensure the 'demo' showcase account exists in the real DB (gatekeeper row
     used only to authenticate the login POST). All actual browsing after login
     happens against the isolated demo DB — see db.reset_demo_db() /
-    routers/auth.py auth_login()."""
+    routers/auth.py auth_login().
+
+    `IA2` §3①：**只管「要不要建立」**，只在這一列還不存在、而且
+    `demo_account_on()` 開著時才建。既有安裝已經有這一列的話**這支不動
+    它**——那一列的 `active` 狀態由 `db.py` 的一次性 migration
+    （`IA2` §3③）決定，不是每次開機都在這裡重判一次
+    （不然有人想手動重新開啟展示模式，會被這裡每次開機打回 0）。
+    """
+    if not demo_account_on():
+        return
     conn = get_db()
     try:
         if not conn.execute("SELECT id FROM users WHERE username='demo'").fetchone():
+            temp_pw = secrets.token_urlsafe(14)
             conn.execute(
                 "INSERT INTO users "
                 "(username, password_hash, display_name, role, modules, active, "
                 "created_at, must_change_password) "
-                "VALUES ('demo', ?, '展示帳號', 'superadmin', ?, 1, ?, 0)",
+                "VALUES ('demo', ?, '展示帳號', 'superadmin', ?, 1, ?, 1)",
                 (
-                    _hash_pw("60575481"),
+                    _hash_pw(temp_pw),
                     json.dumps(_SUPERADMIN_MODULES),
                     datetime.now().isoformat(),
                 ),
             )
             conn.commit()
-            logger.info("已建立展示帳號（demo），密碼 60575481")
+            path = _write_initial_credentials(
+                "demo", temp_pw, path=_DEMO_CREDENTIALS_FILE)
+            logger.warning(
+                "已建立展示帳號（demo）。臨時密碼已寫入 %s — 請立即登入並修改密碼。", path
+            )
     finally:
         conn.close()
 

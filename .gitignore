@@ -1,5 +1,6 @@
 # Secrets & local credentials
 backend/.initial_admin_credentials.txt
+backend/.initial_demo_credentials.txt
 **/.env
 **/.env.*
 

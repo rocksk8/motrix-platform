@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 106
+CURRENT_VERSION = 107
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4308,6 +4308,72 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m107_deactivate_legacy_demo_account(conn):
+    """v107（2026-09-23 `IA2` §3③）：既有安裝的 `demo` 展示帳號停用，不刪除。
+
+    ## 🔴 為什麼要有這支
+
+    `helpers/startup.py::init_demo_account()` 改版前無條件建立 `demo`
+    superadmin，密碼固定是公司統一編號、`must_change_password=0`，且明文
+    寫進 `logs/server.log`。這一輪改成 `MOTRIX_DEMO_ACCOUNT=1` 才建立
+    （`demo_account_on()`），但**既有安裝已經有這一列了**——開關只管
+    「以後要不要建」，管不到「已經建好的」，而 `init_demo_account()`
+    看到那一列已存在就不會再動它（見它自己的 docstring）。
+
+    ## ⚠️ 停用，不刪列
+
+    `audit_log` 裡有指向它的登入歷史（demo 登入會寫一筆 `auth.login`）；
+    而停用是可逆的——要重新啟用展示模式，把這一列的 `active` 改回 1 就好，
+    不必重建帳號、也不會遺失它的歷史紀錄。
+
+    ## ✅ 冪等，且不取決於這次開機當下的環境變數
+
+    只在目前 `active=1` 時才改，可重跑兩次
+    （`test_u10_every_migration_can_be_run_twice`）。**不看
+    `MOTRIX_DEMO_ACCOUNT` 的值**——這是一次性把「無條件建立時代」留下的
+    既有列收斂成新規則的起始狀態，之後要不要重新啟用是另一個、獨立的
+    人工動作，不是每次開機都用當下的環境變數重判一次
+    （那樣的話開著這個環境變數開機一次，帳號會被這裡設回 1，
+    而下一次沒設就又被設回 0——行為會跟著誰最後開機是誰而變，
+    不是一個穩定的狀態）。
+
+    ## 🔴 這支會關掉使用者自己正在用的東西，要留一列**他查得到**的紀錄
+
+    `SPEC-IA2.md §6①` 的依據是「展示模式對我們的業務展示有用」——這支
+    migration 一跑，既有安裝上的 demo 帳號就會被停用，而使用者只有在
+    下次想展示時才會發現，那時他不會知道是這次升級關的。**`server.log`
+    沒有人在看**（`EM7 §6` 查過它零消費端），`audit_log` 才是他查得到的
+    地方（`audit-log.html` 讀的是這張表）——所以**只在真的把一列
+    `active` 從 1 改成 0 時**才寫一筆，讓「這件事發生過」是可查的，而不是
+    只留在我們的 commit message 裡。
+
+    ⚠️ **不 import `helpers/audit.py` 的 `_audit()`**：那支會自己
+    `get_db()` 開一條新連線，migration 已經有 `conn` 了，兩條連線各自
+    commit 沒有必要；直接在同一個 `conn`、同一個交易裡寫，跟 `UPDATE`
+    綁在一起，要嘛兩件事都發生要嘛都不發生。`token` 留空、`user_id`
+    留空的寫法沿用既有慣例（`routers/auth.py:1245`
+    `_audit("", "auth.webauthn_replay_detected", ...)`：系統自己觸發、
+    沒有操作者的稽核列本來就這樣記）。
+    """
+    row = conn.execute(
+        "SELECT id FROM users WHERE username='demo' AND active=1").fetchone()
+    if row is None:
+        return  # 沒有既有的 active demo 帳號——沒有東西要停用，也不寫 audit_log
+    conn.execute("UPDATE users SET active=0 WHERE username='demo' AND active=1")
+    conn.execute(
+        "INSERT INTO audit_log "
+        "(at,user_id,username,display_name,action,target_type,target_id,"
+        " target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
+        (datetime.now().isoformat(), None, "", "",
+         "system.demo_account.deactivated", "user", str(row["id"]),
+         "展示帳號（demo）",
+         json.dumps(
+             {"reason": "IA2：出貨阻擋處置，既有安裝的展示帳號收斂成停用，"
+                        "可逆——要恢復請把這一列的 active 改回 1"},
+             ensure_ascii=False)))
+    conn.commit()
+
+
 def _m106_company_profile_identity_backfill(conn):
     """v106（2026-09-23 `WL7` §5⓪②）：`DEFAULT_IDENTITY` 清空前，先把「已經在
     跑的這一份」的值原封不動搬進 `company_profile`。
@@ -5349,6 +5415,7 @@ _MIGRATIONS = [
     _m104_bonus_groups,                              # v104
     _m105_bonus_award_lines_manual_basis,           # v105
     _m106_company_profile_identity_backfill,        # v106
+    _m107_deactivate_legacy_demo_account,           # v107
 ]
 
 

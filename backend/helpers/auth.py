@@ -109,9 +109,17 @@ def is_weak_password(password: str) -> bool:
     return False
 
 
-def _write_initial_credentials(username: str, password: str) -> str:
-    """Write one-time bootstrap credentials to the backend directory."""
-    path = _CREDENTIALS_FILE
+def _write_initial_credentials(username: str, password: str, path: str = None) -> str:
+    """Write one-time bootstrap credentials to the backend directory.
+
+    `path` defaults to `_CREDENTIALS_FILE`（既有 jeff 呼叫端零改動）。
+    ⚠️ `IA2`：demo 帳號的隨機密碼**不可以**也寫進 `_CREDENTIALS_FILE`——
+    `init_default_admin()` 與 `init_demo_account()` 在全新安裝的同一次
+    啟動裡都會跑，若共用同一個檔案，後跑的那個會把先跑的那個直接覆蓋掉
+    （這支是 `"w"` 覆寫，不是附加），jeff 的臨時密碼就再也拿不回來了。
+    """
+    if path is None:
+        path = _CREDENTIALS_FILE
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(
