@@ -33677,3 +33677,55 @@ notify_tender_found
 ⇒ D 盤範圍（**只報不改**）、A-2 寫改寫原則、B 照原則改、C 出守門題。
 ⚠️ 守門題的形狀要小心：**不可以用關鍵字黑名單**（那會誤判引用使用者原話的地方），
   而它的判準**待 A-2 的原則定案**。
+
+---
+
+## §210 🔴 `pypdf` 的三件查證 —— **最危險的那一種不丟例外**
+
+> B 查完步驟 ③ 先回報不寫實作（照裁示）。全量（基準 `cc437e4`）
+> **20 failed ／ 2271 passed ／ 55 skipped**，20 紅全部歸得了位，沒有一支是意外。
+
+### ① 丟的時機**有兩種，而第二種在建構之後**
+```
+壞檔（0 byte／純文字／PNG／只有檔頭／被截斷／trailer 壞）
+    => **PdfReader() 當下就丟**（EmptyFileError／PdfStreamError／PdfReadError）
+**加密的 PDF**
+    => PdfReader() **OK，不丟**
+    => len(reader.pages) 與 append() **才丟** FileNotDecryptedError
+```
+⇒ `try` **不能只包讀檔那一行，要包到 `append()`**。
+🔑 全部是 `PyPdfError` 的子類 ⇒ 接那一個就夠，**不要接 `Exception`**（會把自己的 bug 也吞掉）。
+⚙️ `strict=True/False` 對這些情況**沒有差別**。
+
+### ☠️ ② **零頁 PDF 不丟例外**
+```
+PdfReader() OK、len(pages) == 0、append() OK、write() OK
+=> **合併「成功」而頁數沒有變**
+```
+⇒ 判「這個附件有沒有真的併進去」**只能數頁數，不能靠有沒有丟例外**。
+📌 與 C 在 `§7②③` 寫的「要數頁數不要只驗非空」是同一件事，
+  **而他講的是合併整體，這是單一附件那一層**。
+
+### 🔴 ③ C 的 fixture `pypdf` 讀不了 —— **而它同時是一個產品問題**
+```
+_ONE_PAGE_PDF => PdfReadError: **startxref not found**
+實查：那份 bytes 裡**沒有 startxref**，也沒有 xref 表
+=> 他的 test_jv5_merging_a_pdf_attachment_adds_its_pages **做對也不會綠**
+✅ 可用的最小合法 PDF：PdfWriter().add_blank_page(595, 842) => **431 bytes**
+   讀回 1 頁、兩份合併 2 頁、608 bytes（B 四步都驗過）
+```
+🔑 **而那種「看起來像 PDF 而 pypdf 讀不了」的檔真的會被使用者上傳**
+  —— **白名單只擋副檔名** ⇒ 正是 `§5` 要處理的那一類。
+⇒ 它走「**未能併入**」那條路，**不是讓匯出失敗**（與 `§195` 的唯讀判定一致）。
+
+### ✅ 三個實作決定批准
+```
+① 接 pypdf.errors.PyPdfError，**不接 Exception**
+② try 的範圍**包到 append()**
+③ 「有沒有併進去」用**頁數差**判定，不是用「沒有丟例外」
+```
+
+### 📌 `DEPLOY.md` 已加一節
+**「下一包才要做的事」** —— 明著標它描述的是**還沒出貨的那一版**，
+其餘章節講的是已出貨的這一版（版本 89）。
+⚠️ 不那樣分的話，那一句會被讀成「現在這一版要做」。
