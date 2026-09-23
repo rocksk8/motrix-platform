@@ -92,6 +92,27 @@ def _create(client, hdr):
     return r.json()["id"]
 
 
+def _sign_off(client, hdr, vid):
+    """走完內建兩層（覆核＋主管），讓傳票進到「已核准」才匯得出來。
+
+    ## 🔴 2026-09-23：`JV11` 上線後，本檔多數題撞到這個閘門
+
+    本檔絕大多數題寫在 `JV11` 之前：那時「建立草稿就直接打匯出端點」是
+    合法的前置，而 `JV11` 正確地擋下了未簽核的匯出。**閘門沒有錯**，
+    是這幾題的前置沒有跟上（B 探針驗過：草稿匯出擋／簽核後匯出成功
+    且抬頭正確／作廢單匯出成功 —— 三種行為都對）。
+
+    ⚠️ **`test_jv5_a_posted_voucher_prints_the_account_name_it_froze`
+    不用這支** —— 那一題已經自己走完 submit/approve/approve/post，
+    而它紅在別的成因（見該題新增的說明），不是前置缺漏。
+    """
+    r = client.post("/api/vouchers/%s/submit" % vid, json={}, headers=hdr)
+    assert r.status_code == 200, "送審失敗：%s %s" % (r.status_code, r.text[:160])
+    for _ in range(2):
+        r = client.post("/api/vouchers/%s/approve" % vid, json={}, headers=hdr)
+        assert r.status_code == 200, "簽核失敗：%s %s" % (r.status_code, r.text[:160])
+
+
 def _reached(r, what):
     if r.status_code in (404, 405, 422):
         pytest.fail(
@@ -201,6 +222,7 @@ def test_jv5_exporting_the_body_gives_a_non_empty_pdf(client, make_user):
     """
     _u, hdr = _hdr(client, make_user, "jv5_body")
     vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
     r = _export(client, hdr, vid)
 
     assert r.status_code == 200, "匯出失敗：%s %s" % (r.status_code, r.content[:160])
@@ -226,6 +248,7 @@ def test_jv5_it_is_behind_the_voucher_modules(client, make_user):
     """
     _u0, owner = _hdr(client, make_user, "jv5_owner")
     vid = _create(client, owner)
+    _sign_off(client, owner, vid)
 
     _u1, nomod = _hdr(client, make_user, "jv5_nomod", role="user", modules=())
     r = client.get(PDF % vid, headers=nomod)
@@ -312,6 +335,7 @@ def test_jv5_merging_an_image_attachment_adds_pages(client, make_user):
     _u, hdr = _hdr(client, make_user, "jv5_img")
     vid = _create(client, hdr)
     _attach(client, hdr, vid, "收據.png", _ONE_PX_PNG)
+    _sign_off(client, hdr, vid)
 
     plain = _export(client, hdr, vid)
     assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
@@ -394,6 +418,7 @@ def test_jv5_an_encrypted_attachment_does_not_blow_up_the_export(client,
     _u, hdr = _hdr(client, make_user, "jv5_enc")
     vid = _create(client, hdr)
     _attach(client, hdr, vid, "有密碼的對帳單.pdf", _encrypted_pdf())
+    _sign_off(client, hdr, vid)
 
     r = _export(client, hdr, vid, with_attachments=True)
     assert r.status_code == 200, (
@@ -427,6 +452,7 @@ def test_jv5_a_zero_page_attachment_is_reported_not_silently_dropped(
     _u, hdr = _hdr(client, make_user, "jv5_zero")
     vid = _create(client, hdr)
     _attach(client, hdr, vid, "空白的.pdf", _zero_page_pdf())
+    _sign_off(client, hdr, vid)
 
     plain = _export(client, hdr, vid)
     merged = _export(client, hdr, vid, with_attachments=True)
@@ -456,6 +482,7 @@ def test_jv5_merging_a_pdf_attachment_adds_its_pages(client, make_user):
     _u, hdr = _hdr(client, make_user, "jv5_merge")
     vid = _create(client, hdr)
     _attach(client, hdr, vid, "憑證.pdf", _one_page_pdf())
+    _sign_off(client, hdr, vid)
 
     plain = _export(client, hdr, vid)
     assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
@@ -505,6 +532,7 @@ def test_jv5_a_missing_attachment_file_does_not_block_the_export(client,
     vid = _create(client, hdr)
     _attach(client, hdr, vid, "不見的憑證.pdf", _one_page_pdf())
     _attach(client, hdr, vid, "還在的憑證.pdf", _one_page_pdf())
+    _sign_off(client, hdr, vid)
 
     rows = _rows(vid)
     assert len(rows) == 2, "前置不對：附件有 %d 筆。" % len(rows)
@@ -577,6 +605,30 @@ def test_jv5_a_posted_voucher_prints_the_account_name_it_froze(client,
        改 `name` 不受它管 ⇒ 自訂科目改名是合法的。
     🔑 今天第二次同族：先前是拿 ⑤ TRIGGER 探針自己種的 `9901` 當法定科目用，
        這次是反過來拿法定科目去改 —— **兩次都是我的前置撞到資料層的守門**。
+
+    ## 🔴🔴 2026-09-23：這一題現在紅，而**不是**前置缺漏 —— 是真缺陷
+
+    這一題本來就自己走完 `submit/approve/approve/post`（不需要補
+    `_sign_off`），而它今天仍然紅。**直接執行 `approval_done()` 驗證過**
+    （不是從原始碼推論）：
+
+    ```
+    post 之後  status = "已過帳"（_FROZEN_STATUS）、checked_by／manager_by 都有值
+    approval_done(voucher) -> (False, "…還差主管簽核…")
+    ```
+    ```
+    helpers/voucher.py:497-518
+      if voucher.get("voided_at"): return True, ""
+      if voucher.get("status") == "已核准": return True, ""   <= 只認這個狀態
+      ...（沒有任何分支認得 "已過帳"）
+    ```
+    ☠️ **一張已經過帳的傳票，今天匯不出來** —— 而過帳的傳票正是
+       《商業會計法》§38 五年保存最需要印出來的那一種，也是這一題
+       自己要驗的「已過帳印凍結科目名」的前提。`§7⑥` 這整個功能
+       透過真正的匯出端點**從未被走到過**：8 題裡只有這一題會撞到，
+       因為只有它讓傳票真的走完 `post`。
+    ⇒ **這一題保持原樣、不加 `_sign_off`、不放寬斷言** —— 它現在的紅
+       是真的，已回報 A／B，`approval_done()` 需要補上「已過帳」這個分支。
     """
     _u, hdr = _hdr(client, make_user, "jv5_snap")
 

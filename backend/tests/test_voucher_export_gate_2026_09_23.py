@@ -65,6 +65,27 @@ def _create(client, hdr):
     return r.json()["id"]
 
 
+def _sign_off(client, hdr, vid):
+    """走完內建兩層（覆核＋主管），讓傳票進到「已核准」。
+
+    ## 🔴 2026-09-23：`JV11` 上線後，本檔的 `JV9`／`JV10` 幾題全部撞到這個閘門
+
+    `JV9`／`JV10` 寫在 `JV11` 之前：那時「建立草稿就直接打匯出端點」是
+    合法的前置。`JV11` 的閘門正確地擋下了未簽核的匯出（`test_jv11_an_
+    unapproved_voucher_cannot_be_exported_from_the_api` 就是釘這件事，
+    而它本來就是綠的）——**閘門沒有錯，是這幾題的前置沒有跟上**。
+
+    ⚠️ 這裡只簽到「已核准」，不呼叫 `post`。**已核准與已過帳是兩個狀態**，
+       它們對 `JV9`／`JV10` 要驗的事（抬頭讀不到／附件併不進去）沒有差別，
+       用較淺的那個狀態，少一步失敗點。
+    """
+    r = client.post("/api/vouchers/%s/submit" % vid, json={}, headers=hdr)
+    assert r.status_code == 200, "送審失敗：%s %s" % (r.status_code, r.text[:160])
+    for _ in range(2):
+        r = client.post("/api/vouchers/%s/approve" % vid, json={}, headers=hdr)
+        assert r.status_code == 200, "簽核失敗：%s %s" % (r.status_code, r.text[:160])
+
+
 def _set_company_raw(raw):
     """直接寫進 `system_settings.value_json` —— **欄位名只寫在這裡一處**。
 
@@ -129,6 +150,7 @@ def test_jv9_a_configured_company_name_reaches_the_pdf(client, make_user):
     _set_company("摩崔思股份有限公司")
     _u, hdr = _hdr(client, make_user, "jv9_org")
     vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
 
     r = client.get(PDF % vid, headers=hdr)
     if r.status_code in (404, 405, 422):
@@ -156,6 +178,7 @@ def test_jv9_a_missing_company_name_still_says_so(client, make_user):
     _set_company("")          # ⚠️ 預設有 seed ⇒ 「沒設定」要**自己造**
     _u, hdr = _hdr(client, make_user, "jv9_noorg")
     vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
     r = client.get(PDF % vid, headers=hdr)
     assert r.status_code == 200, "匯出失敗：%s" % r.content[:160]
     assert NO_ORG in _pdf_text(r.content), (
@@ -188,6 +211,7 @@ def test_jv9_the_swallowed_error_leaves_a_trace(client, make_user, caplog):
 
     _u, hdr = _hdr(client, make_user, "jv9_log")
     vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
     with caplog.at_level(logging.WARNING):
         r = client.get(PDF % vid, headers=hdr)
     assert r.status_code == 200, (
@@ -327,7 +351,20 @@ def test_jv10_an_export_that_merged_nothing_does_not_claim_it_did(client,
     🔑 **使用者分不出「附件沒被併進去」與「本來就沒有附件」——
       兩件事，同一個結果。**
     ☠️ 而「沒附件時那顆停用」那一題**擋不到這一條**：
-       這裡**有**附件，只是一個都併不進去（例如兩個 `.docx`）。
+       這裡**有**附件，只是一個都併不進去。
+
+    ## 🔴 2026-09-23：載體從 `.docx` 換成假內容的 `.pdf`（B 查到，A 裁換載體）
+
+    ```
+    helpers/uploads.py:22  _ALLOWED_EXTS = {'.jpg','.jpeg','.png','.pdf'}
+    ⇒ `.docx` 在上傳那一關就被擋（本檔原本那句「退回給我」的話已經兌現）
+    ```
+    ⚠️ **換的是載體，不是要驗的事** —— 原本要的是「附件在，而它不是一份
+       可合併的 PDF」；`.docx` 只是我第一版挑的那個不可合併的例子，
+       換成**副檔名合法而內容是垃圾**的 `.pdf`（沿用 `_zero_page_pdf()`／
+       `_encrypted_pdf()` 那一族「通過上傳關卡、在合併那一步才現形」的做法）
+       一樣能讓它「一個都併不進去」，而且**真的走到了合併那一步**（`.docx`
+       版本從來沒走到過，`pytest.fail` 在上傳那關就攔下來了）。
 
     ⚙️ 觀測點：輸出裡要**說得出有東西沒進來** —— 那正是 `§5` 那一頁。
     📌 而使用者裁示 ④（預覽要標出哪些併得進 PDF）是給使用者的另一半。
@@ -336,23 +373,22 @@ def test_jv10_an_export_that_merged_nothing_does_not_claim_it_did(client,
     vid = _create(client, hdr)
 
     r = client.post("/api/vouchers/%s/attachments" % vid, headers=hdr,
-                    files={"files": ("報價.docx", io.BytesIO(
-                        b"PK\x03\x04 not a pdf"),
-                        "application/vnd.openxmlformats-officedocument."
-                        "wordprocessingml.document")})
+                    files={"files": ("報價.pdf", io.BytesIO(
+                        b"PK\x03\x04 not a pdf"), "application/pdf")})
     if r.status_code in (404, 405, 422):
         pytest.fail("附件端點走不到（回 %s）—— `JV3` 先。" % r.status_code)
     if r.status_code != 200:
         pytest.fail(
-            "`.docx` 附件上傳被擋（回 %s）：%s\n" % (r.status_code, r.text[:200])
+            "`.pdf` 附件上傳被擋（回 %s）：%s\n" % (r.status_code, r.text[:200])
             + "📌 `helpers/uploads.py` 只收 `.jpg/.jpeg/.png/.pdf` ——\n"
-              "   若附件型別在上傳那一關就被擋住，這一條路**不存在**，\n"
-              "   **退回給我**：那時這一題要刪掉，不是改成別的。")
+              "   `.pdf` 副檔名應該過得了這一關，若連它都被擋，\n"
+              "   **退回給我**：可能是內容嗅探被加上去了。")
 
+    _sign_off(client, hdr, vid)
     exp = client.get(PDF % vid + "?with_attachments=1", headers=hdr)
     assert exp.status_code == 200, "匯出失敗：%s" % exp.content[:160]
     text = _pdf_text(exp.content)
-    assert "報價.docx" in text, (
+    assert "報價.pdf" in text, (
         "有一個附件**一個都沒併進去**，而輸出裡沒有提到它 ——\n"
         + "☠️ 使用者拿到一份與「不含附件」一模一樣的 PDF，\n"
           "   **而訊息說「已匯出（含附件）」** ⇒ 他分不出\n"
