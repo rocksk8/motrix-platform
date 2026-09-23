@@ -49,13 +49,23 @@ pdf_gen.py:801   d = json.loads(row["data_json"] or "{}")
 它的「戶　　名」來自 `company_profile` 的銀行欄位（QL9 要改的那一處）。
 ⇒ `company_profile` 為空時那一行**不出現** ⇒ 下面的基準是在**空設定**下取的。
 
-## ⓒ 基準（`GOLDEN`）是 2026-09-22 用**還沒改過的** `pdf_gen.py` 跑出來的
+## ⓒ 🔴 2026-09-23 裁定翻面：`WL7` 停掉「與改版前逐字相同」這個判準本身
 
-🔑 `QL6` 的驗收條件是**逐字相同**，而「改版前」這個基準
-**只有在 B 動手之前取得才算數**。
-⚠️ 〈把今天的實作釘成不變量〉我踩過五次 —— 這一次它是對的，
-理由很窄：**規格明著把「與改版前逐字相同」寫成驗收條件。**
-📌 而釘的範圍**剛好是身分那幾行**，不是整份文件（日期、金額本來就該變）。
+`QL6` 原本的驗收條件是「留空 ⇒ 與改版前逐字相同」，而**改版前的逐字
+內容就是我們自己的公司抬頭**（允碩整合集創／60575481／info@miactw.com
+……）——`WL7`（`SPEC-WL7.md`）明著裁定這是要停掉的行為：客戶拿到一份
+抬頭是別家公司的單據，而他自己什麼都沒填錯。使用者原話對照見
+`SPEC-WL7.md`「印空白 => 他會發現，而他會去填」。
+
+```
+❌ 舊判準  留空時逐字等於改版前（= 逐字等於我們的公司資料）
+✅ 新判準  留空時**沒有任何一句舊的硬編碼身分**，而**版面不塌**
+          （`<div class="co-name">` 這類版位仍然在，只是內容是空的）
+```
+🔑 這是〈守門守的對象被搬走〉的鏡像：守門的斷言與字面值都沒變過，
+是它守的那個行為本身被裁定是錯的——不是實作被搬走，是**裁示翻面**。
+📌 舊的 `GOLDEN` 快照因此**不再是驗收基準**，改當「這些字串不可以再
+出現」的歷史紀錄，見下面 `OLD_HARDCODED_IDENTITY` 的說明。
 """
 import json
 import sys
@@ -70,9 +80,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _pdf_identity as I  # noqa: E402
 
-#: 🔴 2026-09-22 的基準 —— **B 改 `pdf_gen.py` 之前**跑出來的身分行。
-#: 📌 在 `company_profile` 為空（既有安裝什麼都沒填）的條件下取得。
-GOLDEN = {
+#: 🔴 2026-09-22 用**改版前**的 `pdf_gen.py` 取得，當時是 `QL6` 的驗收
+#: 基準（「留空 ⇒ 逐字相同」）。**2026-09-23 `WL7` 裁定翻面**：這組值本身
+#: 就是被停掉的行為（我們自己的公司抬頭），不再是任何一題的期望值，
+#: **也沒有任何測試再讀這份 dict**——純粹留著讓下一個人看得到「以前
+#: 長什麼樣子」。真正管「這些字不可以再出現」的是
+#: `_pdf_identity.IDENTITY_MARKERS`（下面 `test_ql6_a_blank_profile_
+#: prints_no_hardcoded_identity` 用的就是它）。改名避免有人以為這裡
+#: 還是基準去抄。
+OLD_HARDCODED_IDENTITY = {
     "_build_quote_html": (
         "<div class=\"co-name\">允碩整合集創股份有限公司</div>",
         "<div class=\"co-sub\">MOTRIX Synergy Integration Corp.</div>",
@@ -222,45 +238,80 @@ def blank_profile(monkeypatch):
 QL6_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
 
 
+#: `co-name`／`co-sub` 是**版位**（結構），不是身分（內容）——`WL7` 之後
+#: 這兩個 class 仍然要印出來，只是裡面沒有字。判準刻意跟
+#: `_pdf_identity.IDENTITY_MARKERS`（值）分開：那一組管「印出來的字裡
+#: 有沒有舊身分」，這一組管「版位有沒有被連著 DOM 一起拿掉」。
+LAYOUT_SLOT_MARKERS = ('class="co-name"', 'class="co-sub"')
+
+
 @pytest.mark.parametrize("builder", QL6_BUILDERS)
-def test_ql6_a_blank_profile_prints_exactly_what_it_prints_today(
+def test_ql6_a_blank_profile_prints_no_hardcoded_identity(
         builder, blank_profile):
-    """QL6：所有據點的抬頭欄位留空 ⇒ **與改版前逐字相同**。
+    """🔴🔴 `QL6`（`WL7` 翻面後的新判準①）：留空 ⇒ **不可以印出任何一句
+    舊的硬編碼公司身分**。
 
-    這是「既有安裝不會壞」的保證：使用者什麼都不填，PDF 跟今天一模一樣。
-    沒有它，B 一改那 32 行，所有既有使用者的單據都可能變樣而沒有人發現。
-
-    基準是 2026-09-22 用還沒改過的 `pdf_gen.py` 跑出來的（見檔頭 ⓒ）。
-    比對前把連續半形空白壓成一個 —— 排版改動不該讓這一題紅，
-    而全形空白不壓（它是那行內容的一部分）。
-
-    ⚠️ **2026-09-23 改過一次**：比對範圍由 9 支縮成 8 支，
-    `_build_payslip_html` 退出（理由見上面 `QL6_BUILDERS` 那一段）。
+    ☠️ 這是 `WL7` 要停掉的行為：客戶拿到一份抬頭是別家公司（我們自己）
+    的單據，而他自己什麼都沒填錯。`identity_lines()` 掃的是
+    `IDENTITY_MARKERS`（允碩整合集創／60575481／...）這幾個**值**，
+    不是版位——版位在不在由下面那一題另外驗。
     """
-    got = I.normalise(I.identity_lines(I.render(builder)))
-    want = list(GOLDEN[builder])
-    assert got == want, (
-        f"`{builder}` 印出來的公司身分跟改版前不一樣：\n"
-        f"  現在：{got}\n"
-        f"  改版前：{want}\n"
-        "既有安裝什麼都沒填時，PDF 必須逐字不變。"
+    got = I.identity_lines(I.render(builder))
+    assert got == [], (
+        f"`{builder}` 留空時仍然印出舊的硬編碼公司身分：\n"
+        f"  {got}\n"
+        "☠️ `WL7` 裁定：什麼都沒填就印空白，不可以印我們自己的公司"
+        "（客戶會拿到一份抬頭是別家公司的單據）。"
     )
 
 
-def test_ql6_the_baseline_is_not_empty():
-    """量尺：基準本身要有東西，否則上面那 8 題是在比對兩個空清單。
+@pytest.mark.parametrize("builder", QL6_BUILDERS)
+def test_ql6_a_blank_profile_keeps_the_layout_slots(builder, blank_profile):
+    """🔴 `QL6`（新判準②）：留空 ⇒ **版面不塌**——`co-name`／`co-sub` 這些
+    版位仍然要在，只是內容是空的。
 
-    `_build_payslip_html` 是唯一合法的空的一支 —— 它一行公司身分都沒有寫死
-    （抬頭來自呼叫端傳進來的 dict，見檔頭 ⓐ）。
+    ☠️ 少了這一題，「乾脆把整段 `<div class="co-name">…</div>` 拿掉」
+    也會讓上一題綠（`identity_lines()` 找不到任何一句身分，因為整段
+    都不見了）——而那不是「印空白」，是把版面挖掉一塊，CSS 排版可能
+    因此跑掉（下面的內容會往上貼）。
     """
-    empty = [k for k, v in GOLDEN.items() if not v]
-    assert empty == ["_build_payslip_html"], (
-        f"基準裡有非預期的空項目：{empty}\n"
-        "一個比對兩個空清單的斷言，永遠是綠的。"
+    html = I.render(builder)
+    for marker in LAYOUT_SLOT_MARKERS:
+        assert marker in html, (
+            f"`{builder}` 留空時連版位 `{marker}` 都不見了——\n"
+            "☠️ 「印空白」指的是內容是空的，不是把整段版位拿掉。"
+        )
+
+
+@pytest.mark.parametrize("builder", QL6_BUILDERS)
+def test_ql6_filled_identity_values_actually_appear(builder, identity):
+    """⚙️ **正對照：填了值時，那些值真的印得出來。**
+
+    ☠️ 少了這一題，「這支 builder 乾脆不印任何身分（不管有沒有填）」
+    這種實作，會讓上面①②兩題全綠——空的就是空的，兩題都通過，而它
+    對「填了值」這件事完全沒有反應。這裡直接把 `location_identity()`
+    換成回傳固定填好值的替身（沿用本檔既有的 `identity` 接縫），驗證
+    值真的被印進 HTML 裡。
+    """
+    filled = {
+        "company_name": "QL6測試填值公司",
+        "company_name_en": "QL6 Filled Co.",
+        "tax_id": "11122233",
+        "phone": "00-0000-0000",
+        "email": "ql6filled@example.invalid",
+        "bank_name": "", "bank_branch": "",
+        "bank_account_name": "", "bank_account_number": "",
+    }
+    identity[None] = filled
+    html = I.render(builder)
+    assert "QL6測試填值公司" in html, (
+        f"`{builder}` 填了 `company_name` 卻沒有印出來——\n"
+        "☠️ 若這裡不紅，代表①②兩題可能是靠『builder 對身分完全沒反應』"
+        "通過的，不是真的『留空印空白、填了印填的』。"
     )
-    assert sum(len(v) for v in GOLDEN.values()) >= 30, (
-        f"基準只有 {sum(len(v) for v in GOLDEN.values())} 行 —— 抓取八成失效了"
-    )
+    assert "11122233" in html, f"`{builder}` 填了 `tax_id` 卻沒有印出來。"
+
+
 
 
 def test_ql6_the_exclusion_list_has_exactly_one_name_on_it():
