@@ -176,9 +176,90 @@ used_by = used_map.get((st, doc_no, file_id)) or []   # :423，st/doc_no 來自*
                 posted_*／voided_*／submitted_*／checked_*／manager_*／approval_json
 🔑 判準：**「這一欄描述的是憑證內容，還是那一張單的處理過程？」**
    內容 => 帶；過程 => 不帶（新單要重走一次流程）
-☠️ 而 `account_name_snapshot` 看起來像「過程」（它是過帳時凍結的）——
-   **它是內容**：它記的是「當時這個科目叫什麼」，那不會因為換一張單而改變
+🔴 而 `account_name_snapshot` 我**分錯邊了** —— 見 §4c
 ```
+
+---
+
+## §4c 🔴🔴 更正：`account_name_snapshot` 是**過程欄**，不該複製
+
+> 2026-09-23 A 裁定時據我 §4b 那句話再往上加了一層
+> （「科目名會跟著現在的科目表走 ⇒ 已核准的憑證科目名會自己變」）。
+> ### ☠️ **兩層都不成立，而根在我這一層。**
+
+### ⚙️ 我原本寫（**錯的，留著**）
+
+> ☠️ 而 `account_name_snapshot` 看起來像「過程」（它是過帳時凍結的）——
+> **它是內容**：它記的是「當時這個科目叫什麼」，那不會因為換一張單而改變
+
+### 🔴 實查三件，三件都推翻它
+
+```
+① 新單的 status 是 **'草稿'**（`vouchers.py:697` 逐字 `VALUES (?,?,?,?, '草稿', ?,?,?)`）
+② `_FROZEN_STATUS = "已過帳"`（`helpers/voucher.py:254`）
+   而 `get_voucher()` :313 只有**已過帳**才讀 snapshot，其餘走 `account_items` 現值
+   => 🔴 草稿單**根本不會讀 `account_name_snapshot`**
+③ `post_voucher()` :599-603 過帳時**重新凍結**：
+   `UPDATE voucher_lines SET account_name_snapshot = ? WHERE id = ?`
+   => 新單重新過帳時**本來就會自己寫一份**
+```
+
+> ### ⇒ **它是過程欄。新單要重走過帳流程，凍結值屬於「那一次過帳」，不屬於憑證。**
+
+### ☠️ 而 A 加的那一層為什麼也不成立
+
+```
+A 寫：「丟掉它 => 新傳票的科目名會跟著現在的科目表走
+      => 一張已核准的會計憑證，科目名稱會在日後自己變」
+🔴 而草稿顯示現值**本來就是規格**，不是漂移
+🔑 而 `get_voucher()` 的 docstring **逐字擋掉了他擔心的那件事**：
+   「☠️ 而已過帳時**不做「snapshot 是空的就退回查現值」那種退路**：
+     那會讓一個真正的缺陷變成看起來正常」
+=> 已過帳那一側**沒有 fallback** ⇒ 漂移這條路不存在
+```
+
+### 🔴 而複製它**才是**製造問題
+
+```
+複製 => 產生一張「**草稿，而帶著上一張的凍結值**」的單
+=> 那是規格沒有定義的狀態（`test_voucher_freeze_2026_09_23.py` 釘的是
+   「已過帳 <-> 有 snapshot」這組對應）
+☠️ 而它今天不會有可見症狀（草稿不讀那一欄）
+   => 🔑 **一個安靜的、等著日後某次讀取邏輯改動才發作的東西**
+```
+
+### 📌 我錯的方式值得記
+
+```
+我寫的是：「它看起來像過程 …… **它是內容**」
+=> 🔑 **我認出了正確答案，然後推翻它**
+而推翻的理由（「當時這個科目叫什麼是歷史事實」）**本身成立** ——
+☠️ 它漏掉的是「**新單要重走一次過帳**」，而那一步會自己產生凍結值
+📌 〈推翻的證據不會自動支持替代方案〉：
+   **一個成立的觀察，換一個沒有被檢驗的處置。**
+⚠️ 而 A 照這句話再加一層 => **錯誤被放大了一倍**
+   🔑 〈你的輸出是別人的輸入〉—— 而這一次它被當成前提用了
+```
+
+### ✅ 更正後的分類：丟掉的 9 欄裡，**8 欄是缺陷，1 欄是對的**
+
+```
+🔴 要帶（內容 / 追溯）= **7 欄**
+   dept_code                  部門
+   counterparty               往來對象
+   source_type                分錄層來源型別
+   source_id                  分錄層來源 id
+   source_amount_snapshot     來源金額快照
+   summary_template_id        ⚙️ `voucher_template.py:130`：與 version 一起存進 voucher_lines
+   summary_template_version   ⚙️ `archive.py:1602`：「指向的那一版不見了就**追不回來**」
+✅ **不要帶**（過程）= **1 欄**
+   account_name_snapshot      過帳時由 post_voucher() 自己重寫
+（id 不算 —— 本來就該重新產生）
+```
+
+> ### 🔑 而這**證明了 §4b 的判準是對的**（內容 vs 過程），
+> ### ☠️ **只是我套用它時把其中一欄分錯了邊。**
+> ### ⇒ 判準對，不代表每一次套用都對 —— **分類要逐欄列出證據，不可以整批宣告**。
 
 ---
 
@@ -211,15 +292,18 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
 ### ①b 🔴 分錄複製要帶**全部內容欄位**（§4b）
 
 ```python
-# vouchers.py:707  改成把 15 欄裡的「內容欄」全帶
-"INSERT INTO voucher_lines (voucher_id, line_no, account_code,"
-" account_name_snapshot, summary, summary_template_id,"
-" summary_template_version, debit, credit, dept_code,"
-" source_type, source_id, source_amount_snapshot, counterparty)"
-" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+# vouchers.py:707  帶 12 欄（**不含 account_name_snapshot**，見 §4c）
+"INSERT INTO voucher_lines (voucher_id, line_no, account_code, summary,"
+" summary_template_id, summary_template_version, debit, credit,"
+" dept_code, source_type, source_id, source_amount_snapshot, counterparty)"
+" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
 ```
 ```
-✅ 只有 `id` 與 `voucher_id` 是新的，其餘 13 欄原樣
+✅ `id`／`voucher_id` 是新的、`account_name_snapshot` **刻意留空**，其餘 12 欄原樣
+🔴 而「刻意留空」要**寫成註解**，否則下一個人會把它「補上」
+   ☠️ 〈守門會改變人的寫法〉：一個「欄數 = 表欄數 − 2」的守門
+      會**逼他把它加回來** => 所以守門要寫成 **− 3**，並在排除清單裡
+      逐字寫「account_name_snapshot：過帳時由 post_voucher() 重寫」
 🔑 而**不要寫成 `SELECT *` 再改兩欄** ——
    ☠️ 那樣日後加欄位會自動帶過去，聽起來很好，
       而它**同時會把不該帶的（若哪天加了 posted 類欄位）也帶過去**
@@ -228,7 +312,8 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
 
 ⚠️ 而 `voucher_lines` 的欄位清單**會長**：
 ```
-🔴 守門要釘「**這支 INSERT 的欄數 ＝ 表的欄數 − 2**」（扣 id／voucher_id）
+🔴 守門要釘「**這支 INSERT 的欄數 ＝ 表的欄數 − 3**」
+   （扣 `id`／`voucher_id`／`account_name_snapshot`，見 §4c）
    ⇒ 加欄位而沒有在這裡做決定時，**它會紅**
 📌 〈守門要驗「有沒有人做過決定」〉—— 不是驗決定得對不對
 ☠️ 而若某一欄**刻意不帶**，就要登記在一個明碼的排除清單裡，
@@ -256,7 +341,19 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
    => `supersedes_no` 是一個「**意圖存在、實作缺席**」的欄位
 ```
 
-#### ⇒ 兩條路（要 A 裁）
+#### ✅ A 裁：**甲**（2026-09-23）
+
+```
+✅ 新單的 `supersedes_no` 寫舊單的 `voucher_no`
+🔑 A 加的理由：乙留下一個「**意圖存在、實作缺席**」的欄位，
+   **而那正是今天已經出過兩次事的形狀**
+🔴 **同一輪**要把 `helpers/voucher.py:24-26` 那句 docstring 改掉
+   （它說作廢落在四個欄位上，而第四個從來沒被寫入過）
+📌 A 的分類：那是〈一句當年正確的話在範圍長大之後變錯〉的**另一個方向**——
+   **它從來就沒對過，只是沒有人去對。**
+```
+
+#### ⇒ 原本的兩條路（保留）
 
 ```
 甲 **用 `supersedes_no`**（新單寫舊單的 voucher_no）
@@ -272,10 +369,36 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
       ☠️ 那句 docstring 也就**繼續是假的**，而下一個人還是會相信它
 ```
 
-📌 **我傾向甲**，理由不是成本：
+📌 （以下是裁定前的建議，保留）**我傾向甲**，理由不是成本：
 🔑 **乙留下一個「意圖存在、實作缺席」的欄位，而那正是今天已經出過兩次事的形狀。**
 ⚠️ 而若 A 裁乙，那**同一輪要把那句 docstring 改掉**（寫成三個欄位＋註明第四個未實作），
 ☠️ 否則這一件修完之後，那句假話**還在原地**。
+
+---
+
+## §5b 🔴 B 動工的**第一件事**：先證實，再修
+
+> A 的裁示逐字：「**B 動工第一件事是造一次作廢重開，看新單的 `voucher_lines`
+> 少了什麼** —— **先證實再修**」
+
+```
+⚙️ 步驟
+① 造一張傳票：分錄填滿 dept_code／counterparty／source_type／source_id／
+   source_amount_snapshot（至少五欄有值），帶一張業務來源的附件，過帳
+② 記下：該案件的候選憑證清單上那一筆是「**已計算**」
+③ 作廢重開
+④ 逐欄比對新舊兩張的 `voucher_lines`，**印出差異**
+⑤ 回頭看候選憑證清單 => 它應該變回「**未使用**」
+```
+
+> ### 🔑 ④⑤ 兩個輸出就是這份規格的證據 —— 對不上就回報，**不要照規格改下去**。
+
+```
+☠️ 理由：§3 與 §4b 都是**從讀到的事實推的**（`source_type='voucher'` 的列 = 0）
+📌 〈新回歸測試一定要先證明它會紅〉
+🔴 而今天已經有一次把推論當成觀察、隔一輪撤銷（見 §4c）
+   => 這一條不是流程潔癖，是**同一天的教訓**
+```
 
 ---
 
@@ -299,7 +422,10 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
            （至少 dept_code／counterparty／account_name_snapshot／
              source_type／source_id／source_amount_snapshot 六個）
            -> 作廢重開 -> 逐欄比對新舊兩張的分錄
-           => **13 個內容欄一字不差**
+           => **12 個內容欄一字不差**
+           🔴 而 `account_name_snapshot` 在新單上**必須是空字串**（§4c）
+              ☠️ 少了這一格，「全部照抄」的修法會綠，而它製造
+                 一張「草稿而帶著上一張凍結值」的單
            ☠️ 少了「先把值填出來」這一步，測試會在**全部是空字串**上比對成功
               => 那是假綠燈（空 == 空）
            🔑 ⇒ 驗收的第一步是**造資料**，不是跑流程
@@ -322,6 +448,23 @@ _insert_attachment(conn, new_id, file_id, att["filename"], rel,
    ☠️ 留著的話下一個人會以為它是現行設計
    ⚠️ 而它今天在 `SOURCE_TYPES` 之外自成一格，**刪它不影響那 9 種**
 ```
+
+---
+
+## §7b 🔴 這一件的後果要**同時寫進 `SPEC-JV18`**（A 裁）
+
+```
+作廢重開後：舊列被 `v.voided_at = ''` 排除、新列的鍵被改寫
+=> **兩列都對不上** => 憑證顯示「未使用」=> 使用者再帶入一次 => **重複入帳**
+🔴 而 `resolve_picks()` **不擋重複帶入**（`voucher_attachments.py:201`，已查）
+   => **`JV18` 的紅字是唯一防線**
+```
+
+> ### 🔑 寫進兩份的理由：`JV18` **已經出貨**（`504e14a`）——
+> ### ☠️ 只寫在 `JV24` 裡的話，讀 `JV18` 的人會以為那個功能是完整的。
+
+⚠️ 而我原本在 §8③ 寫「若 `resolve_picks` 會擋，後果更重」——
+🔴 **方向反了**：正因為它**不擋**，後果才更重。那一列留著（§8③）。
 
 ---
 
