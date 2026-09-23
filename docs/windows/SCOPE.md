@@ -992,3 +992,82 @@ deploy_packages/20260922_200604_7bc1fb8/docs/windows/STATE.md   ✅ 在
 ```
 ✅ 而 `build_history.jsonl` 連**測試通過／跳過數字**都留著 ——
   🔑 交件報告的測試基準應該引它，**比 A 的記憶可靠**。
+
+---
+
+## 🔴 `PK1` 排除清單（D 量，A 裁）—— **寫在這裡是因為它原本只存在於訊息裡**
+
+> ⚠️ **前提（D 逐字）**：「`.gitattributes` 目前**完全沒有** `export-ignore` 規則
+> （只有換行／二進位規則）⇒ **包裡現在的一切都不是被過濾剩下的，是預設全收。**」
+> 🔑 這句放在最前面，後面每一項就不必再問「這個是不是誰刻意留的」。
+
+### ⚙️ 判準（D 訂）
+```
+明確排除：內容是「**我們怎麼做這個系統**」（規劃／協作紀錄／audit／測試名稱）
+明確保留：客戶自架或維運**真的用得到**的操作文件／腳本／執行期依賴
+需人裁決：同一份裡混雜兩種內容，或判斷不出受眾
+```
+
+### ❌ 明確排除（**43 項**，逐類列名）
+```
+docs/windows/ 12 檔   A-2.md／AUDIT-2026-09-22.md／B.md／BACKLOG.md／C.md／D.md／
+                      DELIVERY-NOTE-DRAFT.md／HEALTH-2026-09-22.md／
+                      PIP-AUDIT-2026-09-22.md／PIPELINE.md／SCOPE.md／STATE.md
+docs/ 其餘 5 檔       MOTRIX_ERP_System_Plan.md／UI-BACKLOG.md／UI-REDESIGN-PLAN.md／
+                      module-viz-mockup.html／system-home-mockup.html
+.claude/ 1 檔         hookify.shell-quoting-python-dq.local.md
+backend/tests/        195 個測試檔（算 1 類）
+backend/db_migration_plan.md ／ backend/requirements-dev.txt
+根目錄 13 檔          AGENT-HANDOFF-TEMPLATE／AUTOLOGON-FIX／GITFLOW／
+                      MODULE-AUDIT-2026-09-13／MOTRIX-ERP-ARCHITECTURE-MAP／
+                      MOTRIX-ERP-QUICK／MULTI-BRANCH-AUTO-UPDATE-DESIGN／
+                      MULTIWIN-PROTOCOL／NETWORK-PLAN-MODULE-DESIGN／NEXT-SESSION／
+                      SELLABLE-AND-MOBILE-SPEC／WEEKLY-AUDIT-2026-09-07_2026-09-10／
+                      LETSENCRYPT-PUBLIC-CERT-PLAN
+根目錄 9 檔（選型研究材料）ACCESS／AUTOMATION／ENV／GATEWAY／MONITOR／NETARCH／
+                      SWITCH-GUIDE-CONTENT／SWITCH-BRAND-REFERENCE／SELECTION-DB-INDEX
+                      ⚙️ **已查證不被任何 runtime 程式碼讀取**（種子資料是 *_seed.py 裡的字面值）
+```
+⚠️ **D 回報的總數是 34，正確是 43**（最後那 9 沒加進去）。
+> ### ✅ 而**清單是完整的**：另一把尺驗過 —— 包的根目錄有 **27 份 .md**，
+> ### 排除 13 + 9 = 22、保留 5 ⇒ **22 + 5 = 27** ✅
+> ### 🔑 加總抓到了錯的那一邊，**而它抓得到是因為 27 是另一次量測得來的**（`§344`）。
+
+### ✅ 明確保留
+```
+DEPLOY.md ／ DR-SOP.md ／ HTTPS-DEPLOY-CHECKLIST.md   客戶自架的實際操作文件
+firewall_setup.bat ／ start_server.ps1                執行腳本
+backend/requirements.txt                              執行期依賴（不是 -dev 那份）
+backend/tools/                                        ⚠️ **不可一律排除**，正式機維運要用
+```
+✅ 而 `backend/rollback_snapshots/` 確認**沒進包**（`find` 零結果，與 `git ls-files` 未追蹤一致）。
+
+### 🔴 三件裁決
+```
+① CHANGELOG.md ⇒ **排除**
+   抬頭是我們公司、指向內部 MOTRIX-ERP-QUICK.md ⇒ 它現在是內部的
+   ⏳ 待確認：要給客戶 release notes ⇒ **另生成一份**（從 SCOPE 已結案編號產），
+      🔑 不是把內部那份挑一挑 —— 與 docs/ 那一族同一個處置
+② PASSKEY-CA-ROLLOUT.md ⇒ **整份排除**（同一份裡混了操作步驟與我們的執行紀錄）
+   🔑 正確處置是拆檔，而那是工作不是決定 ⇒ 本輪取**安全側**：
+      **排除的失敗會被報修**（客戶少一份文件會來問），
+      ☠️ **保留的失敗不會**（我們的執行紀錄躺在客戶機器上，沒有人會告訴我們）
+   ⏳ 待確認：客戶自架 passkey 要步驟書 ⇒ 另寫一份乾淨的
+③ backend/version_manifest.json ⇒ **不裁，已派 D 查**
+   比對它與 /api/system/version 實際回給客戶端的內容
+```
+
+### 🔴 而 `backend/tests/` 的理由換掉了（結論相同）
+```
+D 的理由：測試名稱逐一描述已知缺陷   <= 成立，而它是「保密」型
+🔑 更硬的理由：**同一份清單裡 requirements-dev.txt 也被排除**
+   => pytest／playwright 不在包裡 => **測試在客戶機器上本來就跑不動**
+=> ✅ 排除它**不損失任何東西**，這個理由不需要任何人同意「保密比較重要」
+```
+📌 A 原本要把它列成 ⏳（顧慮是「現場出問題時跑不了測試」）——
+  **那個顧慮被 D 自己的清單推翻了**，而**推翻它的那件事要去驗**：
+```
+🔴 已派 D：backend/tools/verify_package.py 會不會用到 backend/tests/ 或 requirements-dev.txt
+   ☠️ 若會 => 排除它們會讓「裝完驗包」在客戶端壞掉，而那是**安裝流程的一部分**
+   ⚙️ 一併看 DEPLOY.md 裡有沒有叫人跑它
+```
