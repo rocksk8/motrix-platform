@@ -77,7 +77,8 @@ def _from_git():
         r = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
-            capture_output=True, text=True, timeout=_GIT_TIMEOUT)
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_GIT_TIMEOUT)
     except FileNotFoundError:
         return None, "git 不在 PATH 上"
     except subprocess.TimeoutExpired:
@@ -88,6 +89,75 @@ def _from_git():
     if r.returncode != 0 or len(sha) < 7:
         return None, "git 回 %s" % r.returncode
     return sha, "git"
+
+
+#: `BR4`（2026-09-23）：`stale` 原本比對兩個 SHA 是否相等，而這個 repo
+#: **四個視窗持續在提交**（今天多數是純 `.md`）⇒ 重啟後幾分鐘內 SHA 必然
+#: 又不相等 ⇒ 那個判準在這個環境裡**永遠是紅的**，而使用者因此不敢驗證：
+#: 「執行中的版本落後」讀起來像「你要驗的東西不在裡面」，
+#: 而事實往往是落後的**只有文件**，程式碼跟使用者要驗的一模一樣。
+#: ⇒ 判準改成「有沒有 commit **動到 backend/ 或 frontend/**」——
+#: 純文件／規格的提交不算落後（前端本來就每次讀磁碟，不受影響）。
+#: ⚠️ **`:/` 前綴不可省** —— `cwd` 是 `backend/helpers/`，沒有它的話
+#:    `git log` 把路徑當成**相對於 cwd**（`backend/helpers/backend`），
+#:    不存在的路徑 ⇒ 靜默回空清單（不是錯誤，是 0 命中），
+#:    ☠️ 而那個 0 與「真的沒有異動」看起來一模一樣（實測踩過）。
+#:    `:/backend` 是 git pathspec 的「錨在 repo 根目錄」寫法，
+#:    不管 cwd 在哪一層都指向同一個地方。
+_TRACKED_PATHS = (":/backend", ":/frontend")
+
+#: `git log` 一次最多列幾個標題。**列出來是為了讓使用者自己判斷**
+#: 「我要驗的那件事在不在裡面」，不是要他讀完整份異動記錄。
+_MAX_TITLES = 8
+
+
+def _behind_code(old_sha, new_sha):
+    """`old_sha..new_sha` 之間，有幾個 commit 動到 `backend/`／`frontend/`，
+    以及它們的標題（新到舊）。回 `(count, titles, why_unavailable)`。
+
+    ⚠️ **只回「不可得」不回「假裝算得出來」**——兩個 SHA 有任何一個空、
+       或 `git log` 本身失敗（正式機沒有 `.git`、兩者無共同祖先等），
+       一律 `(None, [], 原因)`，不要讓呼叫端把 `None` 誤讀成 0。
+
+    ⚠️ **兩個實測踩過的坑，都在寫這一支的當下抓到**：
+    ```
+    ① pathspec 不加 `:/` 前綴  cwd 在 backend/helpers/，git 把
+                              "backend"／"frontend" 當成**相對 cwd**的路徑
+                              ⇒ 不存在 ⇒ **靜默回 0 命中**，不是錯誤
+                              （見 `_TRACKED_PATHS` 的註解）
+    ② subprocess 不給 encoding  Windows 預設用系統 locale（cp932）解碼，
+                              commit 標題含中文 ⇒ `UnicodeDecodeError`
+                              **在讀取執行緒裡丟出**，不會被這裡的
+                              `except Exception` 接住 —— 症狀是 count 回 0
+                              而 stderr 印一段執行緒例外，看起來像別的地方壞了
+    ```
+    兩者都是「回應正常、內容是空的」——與〈會截斷的指令不可以當事實來源〉
+    同一個家族：失敗不會報錯，只會讓觀測到的東西比真的少。
+    """
+    if not old_sha or not new_sha:
+        return None, [], "SHA 不可得"
+    if old_sha == new_sha:
+        return 0, [], None
+    try:
+        r = subprocess.run(
+            ["git", "log", "--format=%s", "%s..%s" % (old_sha, new_sha),
+             "--", *_TRACKED_PATHS],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=_GIT_TIMEOUT)
+    except FileNotFoundError:
+        return None, [], "git 不在 PATH 上"
+    except subprocess.TimeoutExpired:
+        return None, [], "git 逾時"
+    except Exception as exc:                                 # noqa: BLE001
+        return None, [], "git 失敗：%s" % type(exc).__name__
+    if r.returncode != 0:
+        # ⚠️ 常見成因：兩個 SHA 不在同一條歷史線上（例如強制推送、或 SHA
+        #    其中一個來自 `.build_commit`、不是這個 repo 的祖先）。
+        return None, [], "git log 回 %s：%s" % (
+            r.returncode, (r.stderr or "").strip()[:120])
+    titles = [ln for ln in (r.stdout or "").splitlines() if ln.strip()]
+    return len(titles), titles[:_MAX_TITLES], None
 
 
 def resolve_commit():
@@ -150,11 +220,23 @@ _RELOAD = _reload_flag()
 
 
 def build_info():
-    """給端點與啟動 log 用的一包。**任何一步失敗都不丟例外。**"""
+    """給端點與啟動 log 用的一包。**任何一步失敗都不丟例外。**
+
+    ## 🔴 `BR4`（2026-09-23）：`stale` 的語意改了
+
+    ```
+    原本   commit != disk_commit（HEAD 不相等）
+    現在   behind_count > 0（disk_commit 比 commit 多出**動到程式碼**的 commit）
+    ```
+    這個 repo 四個視窗持續在提交（多數是純 `.md`）⇒ 「HEAD 不相等」在這裡
+    幾乎永遠成立，而使用者要問的其實是「**我要驗的那件事在不在我這一版裡**」，
+    不是「HEAD 有沒有動過」。純文件／規格的提交不影響這個問題。
+    ⚠️ 呼叫端若還在照舊語意讀 `stale`（HEAD 是否相等），**要重讀這一段**——
+       兩個 SHA 不同、而 `stale` 是 `False`，是這一版之後**合法且常見**的狀態。
+    """
     disk, disk_src = resolve_commit()
-    stale = None
-    if _START_COMMIT and disk:
-        stale = (_START_COMMIT != disk)
+    behind_count, behind_titles, behind_why = _behind_code(_START_COMMIT, disk)
+    stale = None if behind_count is None else (behind_count > 0)
     return {
         "commit": _START_COMMIT or "",
         "commit_short": (_START_COMMIT or "")[:7],
@@ -162,9 +244,16 @@ def build_info():
         "disk_commit": disk or "",
         "disk_commit_short": (disk or "")[:7],
         "disk_commit_source": disk_src,
-        # 🔴 `None` ＝ **兩個 SHA 裡至少一個不可得**，不是「沒有過期」。
+        # 🔴 `None` ＝ **算不出來**（兩個 SHA 有一個不可得、或不在同一條
+        #    歷史線上），不是「沒有過期」。
         #    ☠️ 把它當成 False 的話，畫面會在「不知道」的時候說「是最新的」。
         "stale": stale,
+        # 🔑 有幾個 commit 動到 `backend/`／`frontend/`（不含純文件／規格），
+        #    以及它們的標題（新到舊，最多 8 條）——讓使用者**自己判斷**
+        #    「我要驗的東西在不在裡面」，不必來問任何人。
+        "behindCount": behind_count,
+        "behindTitles": behind_titles,
+        "behindUnavailableReason": behind_why,
         "started_at": _STARTED_AT.isoformat(timespec="seconds"),
         "reload": _RELOAD,
     }
@@ -177,9 +266,12 @@ def startup_line():
        給出一個看起來合理的錯答案 —— 而那比沒有這一行更糟。
     """
     info = build_info()
+    tail = ""
+    if info["stale"]:
+        tail = ("　⚠️ 磁碟上是 %s，落後 %d 個動到程式碼的 commit"
+                % (info["disk_commit_short"], info["behindCount"] or 0))
     return ("MOTRIX 啟動：commit %s（來源 %s）／時間 %s／reload %s%s"
             % (info["commit_short"] or "不可得", info["commit_source"],
                info["started_at"],
                {True: "開", False: "關", None: "不可得"}[info["reload"]],
-               ("　⚠️ 磁碟上是 %s —— **這個行程載入的是舊的**"
-                % info["disk_commit_short"]) if info["stale"] else ""))
+               tail))

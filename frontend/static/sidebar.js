@@ -886,19 +886,38 @@ if (typeof module !== 'undefined' && module.exports) {
       }
       var started = (d.started_at || '').replace('T', ' ').slice(0, 16)
       bar.textContent = (d.commit_short || '不可得') + ' · 啟動 ' + started
+      // 🔴 `BR4`（2026-09-23）：`stale` 的語意改了 —— 現在是「有沒有 commit
+      //    **動到程式碼**」，不是「HEAD 是否相等」。這個 repo 四個視窗持續
+      //    在提交（多數是純 .md），HEAD 不相等在這裡幾乎永遠成立；而使用者
+      //    要問的是「我要驗的東西在不在我這一版裡」，不是「HEAD 動過沒」。
+      //    ☠️ 舊版每次重啟幾分鐘內橫幅必定變紅，使用者因此不敢驗證——
+      //    他要驗的東西其實一直都在他跑的那一版裡。
       if (d.stale === true) {
         // 🔴 過期是**要被看見的**：小字沒有人會讀。
         bar.style.cssText += ';background:#FEF2F2;color:#B91C1C;font-weight:700;'
           + 'pointer-events:auto;cursor:help'
+        var n = d.behindCount || 0
         bar.textContent = '⚠️ 執行中 ' + (d.commit_short || '?')
-          + '　磁碟上 ' + (d.disk_commit_short || '?')
-          + '　—— 伺服器載入的是舊版，請重新啟動'
-        bar.title = '這個行程是 ' + started + ' 啟動的，之後程式碼更新過。'
-          + '重新啟動伺服器才會套用。'
+          + '　落後 ' + n + ' 個後端／前端異動'
+          + '　—— 建議重新啟動'
+        // 🔑 列出標題，讓使用者自己判斷「我要驗的東西在不在裡面」，
+        //    不必來問任何人（`BR4` 的核心訴求）。
+        var titles = d.behindTitles || []
+        bar.title = '這個行程是 ' + started + ' 啟動的。磁碟上 '
+          + (d.disk_commit_short || '?') + ' 之後多了 ' + n
+          + ' 個動到程式碼的異動：\n' + titles.map(function (t) {
+              return '• ' + t
+            }).join('\n')
+          + (n > titles.length ? '\n…（只列前 ' + titles.length + ' 條）' : '')
+      } else if (d.stale === false) {
+        // ✅ HEAD 可能不同，但沒有任何一個動到程式碼 —— 正常顯示，不是紅的。
+        //    使用者要驗的東西就在這一版裡。
       } else if (d.stale === null) {
-        // ⚠️ `null` ＝ 至少一個 SHA 不可得，**不是「沒有過期」**。
+        // ⚠️ `null` ＝ 落後的程式碼異動數算不出來（SHA 不可得、或兩者不在
+        //    同一條歷史線上），**不是「沒有過期」**。
         //    ☠️ 當成「最新」的話，畫面會在不知道的時候給人保證。
         bar.textContent += ' · 版本比對不可得'
+        if (d.behindUnavailableReason) bar.title = d.behindUnavailableReason
       }
     }).catch(function () { bar.remove() })
   }
