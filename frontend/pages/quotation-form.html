@@ -2904,15 +2904,32 @@
         this.q.dealTag = newTag
         this._prevDealTag = newTag
         this.isDirty = true
+        // 🔴 `EM11`：dealTag 是**樂觀更新**——上面已經先改了畫面，而原本不管
+        //    saveDraft() 或後面那支 PATCH 成不成功，都不會把它改回去。
+        //    ☠️ 後端沒真的記到，重新整理／下次開頁面看到的是舊值，
+        //    使用者會以為系統把他剛改的狀態弄丟了。
+        //    ⇒ 兩個失敗點都要退回 oldTag：
+        //       ① saveDraft() 失敗（它自己已經跳出 alert 說明原因，
+        //          這裡用 isDirty 還是 true 判斷——saveDraft() 成功會把它
+        //          設回 false，失敗則提早 return，isDirty 留著）
+        //       ② PATCH 本身失敗（草稿存成功了，但這支記錄變更歷史的
+        //          請求沒有成功）
         if (this.q.status === '已送出') {
-          this.saveDraft().then(() => {
-            const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
-            fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (this.session?.token || '') },
-              body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
-            }).catch(() => {})
-          })
+          await this.saveDraft()
+          if (this.isDirty) {
+            this.$nextTick(() => { this.q.dealTag = oldTag; this._prevDealTag = oldTag })
+            return
+          }
+          const entry = { at: new Date().toISOString(), user: this.session?.displayName || '', from: oldTag, to: newTag }
+          const pr = await fetch(`/api/quotations/${this.q.quoteNo}/deal-tag`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (this.session?.token || '') },
+            body: JSON.stringify({ deal_tag: newTag, log_entry: entry })
+          }).catch(() => null)
+          if (!pr || !pr.ok) {
+            this.$nextTick(() => { this.q.dealTag = oldTag; this._prevDealTag = oldTag })
+            this.toast('狀態變更沒有記錄成功，已退回原本的狀態，請重新操作一次。')
+          }
         }
       },
 
@@ -3077,6 +3094,11 @@ window.addEventListener('load',function(){
         this.exporting = true
         try {
           // 記錄匯出（fire-and-update，不阻塞 PDF 下載）
+          // 🔴 `EM11`：失敗時原本仍然樂觀 +1——畫面先改、後端沒真的記到，
+          //    重新整理後這個數字會自己變回去，那時候看起來像系統把他的
+          //    匯出紀錄弄丟了。⇒ 成功才用後端回的真值（或退回 +1，後端有
+          //    記到只是沒回 export_count 時才用這個近似值）；失敗**不**
+          //    樂觀累加，只告訴使用者這次沒記到，數字保持原樣。
           fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=external`, {
             method: 'POST',
             headers: { Authorization: 'Bearer ' + this.session.token },
@@ -3085,9 +3107,11 @@ window.addEventListener('load',function(){
               this.q.exportCount = d.export_count ?? (this.q.exportCount || 0) + 1
               if (d.log) this.q.exportLog = d.log
             } else {
-              this.q.exportCount = (this.q.exportCount || 0) + 1
+              this.toast('PDF 已下載，但匯出次數這次沒有記錄成功。')
             }
-          }).catch(() => { this.q.exportCount = (this.q.exportCount || 0) + 1 })
+          }).catch(() => {
+            this.toast('PDF 已下載，但匯出次數這次沒有記錄成功（網路錯誤）。')
+          })
 
           // 從後端取得 PDF（Edge Headless 產生，自動符合 A4、超頁自動分頁加頁碼）
           const r = await fetch(`${this.API}/quotations/${this.q.quoteNo}/pdf-download`, {
@@ -3174,13 +3198,27 @@ window.addEventListener('load',function(){
       exportPDF(mode) {
         const isInternal = mode === 'internal'
         if (!isInternal) {
-          this.q.exportCount = (this.q.exportCount || 0) + 1
           this.q.exportLog = [...(this.q.exportLog || []), { at: new Date().toISOString(), mode }]
+          // 🔴 `EM11`：原本在發出請求**之前**就先 +1（比 directExport() 更早、
+          //    更無條件的樂觀更新），失敗時完全不會被更正——畫面上的數字
+          //    比後端真的記到的多 1，重新整理後跌回去，看起來像資料遺失。
+          //    ⇒ 改成收到成功回應才 +1；離線／沒有單號時本來就打不到後端，
+          //    維持原本的本地累加（不然離線時這顆功能整個不能用）。
           if (this.backendOnline && this.q.quoteNo) {
             fetch(`${this.API}/quotations/${this.q.quoteNo}/export?mode=${mode}`, {
               method: 'POST',
               headers: { Authorization: 'Bearer ' + this.session.token }
-            }).catch(() => {})
+            }).then(r => {
+              if (r.ok) {
+                this.q.exportCount = (this.q.exportCount || 0) + 1
+              } else {
+                this.toast('已列印，但匯出次數這次沒有記錄成功。')
+              }
+            }).catch(() => {
+              this.toast('已列印，但匯出次數這次沒有記錄成功（網路錯誤）。')
+            })
+          } else {
+            this.q.exportCount = (this.q.exportCount || 0) + 1
           }
         }
         this._buildPrintWin(mode)
