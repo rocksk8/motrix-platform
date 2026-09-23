@@ -101,6 +101,19 @@ def _prune_audit_log(keep_days: int = 730) -> None:
 📌 〈計數器要有落點〉的變形：
 > **一個「永久保存」的承諾，要指出它保存在哪一張不會被清的表。**
 
+### ✅ 而 `retention` 欄位讓這一件更乾淨（A 指出）
+
+```
+RETENTION_VALUES = ("permanent", "term")   <= **保留期已經是一個概念**
+⇒ 退回原因那一列寫 `retention="permanent"`
+🔑 **不是新增一個規則，是把它標成 `permanent`**
+```
+⚠️ 而 `edit_log.py:89` 目前預設傳 `retention="term"`
+⇒ 這一列要**明著指定 `permanent`**，不要靠預設值。
+☠️ 而「term 到期之後呢」**今天沒有答案**（`edit_log.py` 的註解逐字：
+「法條的起算點是『年度決算辦理終了後』，而系統**沒有記錄那個時點**
+⇒ 任何寫進來的天數都是猜的」）—— ⇒ 標 `permanent` 正好繞開那個未決。
+
 ---
 
 ## §3 ① 「不能刪除」——**三個層次，而現況已經滿足兩個**
@@ -124,8 +137,7 @@ pdf_gen.py 那一段（JV5）逐字：
 
 ### 🔴 而「不能刪除」要寫成**守門**，不是寫成一句話
 
-```
-### 🔴 而 A 裁：**要加資料庫層的 TRIGGER**，不只靠「沒有人寫」
+#### 🔴 A 裁：**要加資料庫層的 TRIGGER**，不只靠「沒有人寫」
 
 D 的原話：
 > 「這是『**沒有人寫**』的保護，不是資料庫層擋下來的保護 ——
@@ -142,6 +154,9 @@ D 的原話：
 ⚠️ 而 TRIGGER 要**同時保護 `bonus_award_edit_log`** —— 同形狀的另一張
 ```
 
+#### ⚙️ 而掃原始碼那一道**也要**
+
+```
 ⚙️ 釘：`backend/**` 裡沒有任何 `DELETE FROM voucher_edit_log`／
       `DELETE FROM bonus_award_edit_log`
       🔑 而這一道與 TRIGGER **兩個都要**：
