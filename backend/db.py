@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 105
+CURRENT_VERSION = 106
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -705,10 +705,16 @@ def init_db(path: str = None):
     """)
     _run_migrations(conn)
     _seed_setting(conn, "edge_path", "")
+    # `WL7` §5⓪①：全新安裝的出廠值改成空字串，不是我們的公司資料。
+    # ⚠️ `_seed_setting` 是 `DO NOTHING`（key 已存在就不覆寫），
+    # 所以這個改動對既有安裝零影響——已經存在的那一列不會被這裡動到，
+    # 而它解決的是往後每一個新客戶：全新安裝不會再印出我們的公司抬頭。
+    # （既有安裝的回填是 `_m106_company_profile_identity_backfill`，
+    # 只認 `tax_id == "60575481"` 這一個信號，不是這裡。）
     _seed_setting(conn, "company_profile", {
-        "name": "允碩整合集創股份有限公司",
-        "tax_id": "60575481",
-        "contact_info": "Tel: 04-3610-6566｜info@miactw.com",
+        "name": "",
+        "tax_id": "",
+        "contact_info": "",
         "bank_name": "", "bank_branch": "", "bank_account_name": "", "bank_account_number": "",
     })
     _seed_setting(conn, "tax_rules", {
@@ -4302,6 +4308,103 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m106_company_profile_identity_backfill(conn):
+    """v106（2026-09-23 `WL7` §5⓪②）：`DEFAULT_IDENTITY` 清空前，先把「已經在
+    跑的這一份」的值原封不動搬進 `company_profile`。
+
+    ## 🔴 為什麼要有這支：`DEFAULT_IDENTITY` 本來是每一份單據的第四層 fallback
+
+    `helpers/company_identity.py` 的解析鏈：據點欄 → 主要據點欄 →
+    `company_profile` 頂層欄 → `DEFAULT_IDENTITY`。`DEFAULT_IDENTITY` 目前
+    **就是我們的公司資料**（改版前這組值寫死在 32 行 PDF 產生碼裡，搬進
+    常數時原封不動搬了過來）——這一輪 `DEFAULT_IDENTITY` 的五欄要清空
+    （`WL7` §5⓪），若不先把值搬到第三層，**這台機器自己產的單據會立刻
+    印出空白公司抬頭**（`pdf_gen.py` 的 8 支 builder 都讀這條鏈）。
+
+    ## 🔴 而它絕對不可以在客戶的全新安裝上寫入我們的資料
+
+    ⇒ **只認一個信號**：`company_profile.tax_id == "60575481"`
+    （我們自己的統一編號，`SPEC-WL7.md §1` D 也拿它當交叉驗證用的獨立尺）。
+    ```
+    全新安裝        company_profile 這一列在這支 migration 跑的當下還不存在
+                   （`_seed_setting` 排在 `_run_migrations` 之後，且 §5① 已把
+                   種子值改成空字串）=> tax_id 讀出來是 "" != "60575481"
+                   => 直接跳過，不寫入任何東西
+    別人的既有安裝   tax_id 是他自己的統編，一樣 != "60575481" => 跳過
+    我們自己這台     tax_id 本來就是 "60575481" => 才會走進去回填
+    ```
+    ⚠️ 不是「只做一次」或「只挑特定機器跑」這種需要人工操作的旗標——
+    這個統編字面值本身就是唯一需要的判準，**判準寫死在程式碼裡，不是操作規程**。
+
+    ## ⚠️ `company_name`／`tax_id`／`phone`／`email` 從這台自己現有的資料回填
+
+    〈凍住的歷史不要呼叫活的程式碼〉——這支 migration**不 import**
+    `company_identity.DEFAULT_IDENTITY`（那個常數這一輪就要被清空，
+    migration 引用會演進的常數＝歷史被回溯改寫）。這四欄直接從這一列
+    `company_profile` 自己已經有的 `name`／`tax_id`／`contact_info`
+    （`"Tel: 04-3610-6566｜info@miactw.com"` 這種形狀）現算，不是抄一份
+    寫死在別處的字串。
+
+    ## ⚠️ 唯一的例外：`company_name_en`
+
+    `company_profile` 的既有 shape（`_COMPANY_PROFILE_DEFAULT`）從來沒有
+    英文公司名欄位，這一列**沒有任何地方**可以現算出它——只能是一個凍結的
+    字面值。✅ 而這裡是安全的：能走到這一步，前面已經先驗過
+    `tax_id == "60575481"`，這一步只可能在**我們自己**的資料列上執行。
+
+    ## ✅ 逐欄不覆蓋，可重跑兩次（`test_u10_every_migration_can_be_run_twice`）
+
+    每一欄只在目前是空的時候才寫，不論是「使用者已經自己填了」還是
+    「這支 migration 上次已經跑過」，第二次跑都是 no-op。
+    """
+    row = conn.execute(
+        "SELECT value_json FROM system_settings WHERE key='company_profile'"
+    ).fetchone()
+    try:
+        profile = json.loads(row["value_json"]) if row and row["value_json"] else {}
+    except (TypeError, ValueError):
+        profile = {}
+    if not isinstance(profile, dict):
+        profile = {}
+
+    if str(profile.get("tax_id") or "").strip() != "60575481":
+        return  # 不是我們自己這台——不寫入任何東西
+
+    changed = [False]
+
+    def _backfill(key, value):
+        value = str(value or "").strip()
+        if not value:
+            return
+        if str(profile.get(key) or "").strip():
+            return
+        profile[key] = value
+        changed[0] = True
+
+    _backfill("company_name", profile.get("name"))
+    _backfill("tax_id", profile.get("tax_id"))
+
+    contact = str(profile.get("contact_info") or "")
+    email_m = re.search(r"[^\s｜|]+@[^\s｜|]+", contact)
+    email = email_m.group(0) if email_m else ""
+    phone = contact[:email_m.start()] if email_m else contact
+    phone = re.sub(r"(?i)^\s*tel[:：]\s*", "", phone).strip(" ｜|")
+    _backfill("phone", phone)
+    _backfill("email", email)
+
+    # 凍結字面值——唯一沒有現有欄位可以回填的一項，見上方 docstring。
+    _backfill("company_name_en", "MOTRIX Synergy Integration Corp.")
+
+    if changed[0]:
+        conn.execute(
+            "INSERT INTO system_settings (key, value_json, updated_at) "
+            "VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET "
+            "value_json=excluded.value_json, updated_at=excluded.updated_at",
+            ("company_profile", json.dumps(profile, ensure_ascii=False),
+             datetime.now().isoformat()))
+    conn.commit()
+
+
 def _m105_bonus_award_lines_manual_basis(conn):
     """v105（2026-09-23 `BN18`）：手動指定人員時，記一筆「本來是哪個來源」。
 
@@ -5245,6 +5348,7 @@ _MIGRATIONS = [
     _m103_bonus_award_lines_username,               # v103
     _m104_bonus_groups,                              # v104
     _m105_bonus_award_lines_manual_basis,           # v105
+    _m106_company_profile_identity_backfill,        # v106
 ]
 
 

@@ -34,13 +34,22 @@ from helpers.settings import _get_setting
 # ⚠️ **全部留空時要與改版前逐字相同**（QL6）——`DEFAULT_IDENTITY` 就是那組值，
 #    它不是「範例資料」，它是**既有安裝的行為**。動它等於改所有人的單據。
 
-#: 什麼都沒填時印的那一組 —— **改版前寫死在 32 行裡的值**。
+#: 什麼都沒填時印的那一組。
+#:
+#: 🔴 `WL7` §5⓪：改版前這裡是**我們自己的公司資料**（寫死在 32 行 PDF 產生碼
+#: 裡的值，搬進常數時原封不動搬了過來）——四層解析鏈落到這裡代表**客戶
+#: 什麼都沒填**，而印出我們的公司會讓客戶拿著一份抬頭是別家公司的單據
+#: 給他的客戶。改成空字串：什麼都沒填就印空白，**客戶會發現，而他會去填**
+#: （〈一個看得見的失敗，比一個看不見的成功好〉）。
+#: ⚠️ 我們自己這台的既有資料由 `db.py` 的
+#: `_m106_company_profile_identity_backfill` 遷移搬進 `company_profile`
+#: 的第三層——解析鏈在那裡就接住了，不會落到這裡的空字串。
 DEFAULT_IDENTITY = {
-    "company_name": "允碩整合集創股份有限公司",
-    "company_name_en": "MOTRIX Synergy Integration Corp.",
-    "tax_id": "60575481",
-    "phone": "04-3610-6566",
-    "email": "info@miactw.com",
+    "company_name": "",
+    "company_name_en": "",
+    "tax_id": "",
+    "phone": "",
+    "email": "",
     "bank_name": "",
     "bank_branch": "",
     "bank_account_name": "",
