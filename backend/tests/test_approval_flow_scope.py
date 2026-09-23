@@ -44,6 +44,11 @@ def test_scope_defaults_and_editing(client, make_user):
         "quotation": True, "shipping": True, "invoice_voucher": True,
         "payment_request": True, "contractor_voucher": False,
         "extra_expense": True, "completion": True,
+        # 🔴 `AS2` 的第八個。**`False` ＝ 自己一條流程**（A `§234` 裁）。
+        #    依據：**這個預設值是可逆的** —— 勾一下就合併；
+        #    而反過來（預設合併之後要拆開）**要先有人發現它們被合在一起了**。
+        #    🔑 猜錯的代價不對稱時，**先做可逆的那一邊**。
+        "voucher": False,
     }
     for key, want in EXPECTED_SCOPE.items():
         assert key in scope, f"既有的文件類型 {key} 從 scope 裡消失了：{scope}"
