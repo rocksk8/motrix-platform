@@ -315,6 +315,52 @@ UPDATE bonus_awards SET status='草稿', approval_json='{}', updated_at=? WHERE 
 
 ---
 
+## §5e 三條裁定的**路徑**（C 2026-09-23 指出：裁定宣告了而路徑沒有）
+
+🔴 **我的錯，而它正是〈兩個都對而路不存在〉** —— 我寫了規則而沒有指出誰是第一個呼叫者。
+
+### ① 「送審後不可改比例」：**今天沒有主體**
+
+實查（`6a569af`）：`bonus.py` 七支端點裡
+```
+allocations 只出現在 **POST /awards**（建立時）
+⇒ **沒有任何一支端點可以改比例**
+```
+🔑 ⇒ 「送審後不可改」**今天是空真** —— 它沒有可以擋的動作。
+☠️ **不要為了讓這條規則有題可寫而發明一個端點。**
+⇒ 本項寫成**對未來的約束**，而 **C 不要為它寫題**（沒有受測對象）：
+```
+📌 日後若新增「改比例」的端點（例如 PUT /awards/{id}/allocations），
+   它必須 if status != '草稿': 400
+   ⇒ 而那一支出現的那一天，這一句就是它的規格
+```
+
+### ② 手動標記已發放：**端點在這裡宣告**
+
+```
+POST /api/bonus/awards/{award_id}/mark-paid
+     權限  require_superadmin=True（與三支簽核端點同一級）
+     body  { "reason": "..." }   ← **不可為空**（§5c ②）
+     行為  寫 paid_manually_by / paid_manually_at / paid_manually_reason
+           🔴 **不碰 voucher_no_payment**（§5c ①：不可偽造傳票號）
+     擋    ① reason 空 -> 400
+           ② 已經 is_paid() 的單 -> 400（不可重複標記）
+           ③ status != '已核准' -> 400（還沒核准就不會有錢出去）
+```
+
+### ③ `is_paid()`：**住 `helpers/bonus.py`**
+
+```python
+def is_paid(award) -> bool:
+    """這張單的錢出去了沒有。**兩條路都走這一支。**"""
+    return bool((award.get("voucher_no_payment") or "").strip()
+                or (award.get("paid_manually_at") or "").strip())
+```
+⚠️ 與 `people_for_item`／`split_award` 同一支模組（純邏輯、不碰 DB、不碰 request），
+**而不要放進 router** —— 查詢端與端點都要用它。
+
+---
+
 ## §6 驗收（`AC1`：後端＋前端＋頁面三者皆備）
 
 ```
@@ -341,7 +387,8 @@ UPDATE bonus_awards SET status='草稿', approval_json='{}', updated_at=? WHERE 
         兩支佇列端點都要涵蓋
         ⚙️ 正對照：拿掉其中一個 type，那一題必須紅
         ⚠️ 它今天就會抓到 **voucher**（見 §5b）—— 那是預期的，不是誤報
-     ⑪ 送審後改比例 -> **400**；退回之後才改得動
+     ⑪ ⚠️ **本輪不寫題** —— 「改比例」今天沒有任何端點（§5e ①）
+        ⇒ 它是對未來那一支的約束，**沒有受測對象**
      ⑫ 🔴 退回之後 `bonus_signatures_of()` 的**簽核那幾格**（覆核／主管／第 N 層）
         `by` 都是空的
         ⚠️ **不是「每一格」** —— 「製表」那一格留的是 `created_by`（建檔人，不是簽核），
