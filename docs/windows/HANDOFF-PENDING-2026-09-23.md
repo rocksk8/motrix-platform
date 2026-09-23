@@ -114,6 +114,24 @@
 ```
 - 第一次建包被覆蓋率守門擋：題名 `test_t11_*` 把工作編號當成規格編號 ⇒ 改名（hotfix `d1acd33`、master `1c3e9bd`）。
 
+## ✅ 乙 產出（2026-09-24 02:19，hichan-0a）—— 使用者裁「現在這包先上」
+
+```
+路徑    deploy_packages\20260924_021932_5f04d04   231 檔
+樹雜湊  1cc11bccbd03880767f9519a30d1b954d16993f0ee03afccd540eb2d1ef035bf
+基底    master 5f04d04（detached worktree 建包 ⇒ deploy_manifest 的 branch 顯示 "HEAD"，commit 正確）
+測試    非 e2e 2571 passed / 53 skipped / 3 xfailed(WD1) / 0 failed；e2e 79 passed / 0 failed
+驗包    docs/windows、docs/quick、docs/reference、backend/tests、QUICK、PROTOCOL、平台化盤點、ASK-ACCOUNTANT 皆 0；main.py／apply_update 在
+DB      v91（正式機 c5b1e84 系）→ v109；T9 與 T11 修正皆在包內
+```
+
+### 🟠 T12（下一輪）：PK1 精簡 manifest 造成「系統更新紀錄」頁安靜降級
+- `build_deploy_package.ps1` Step 5.6（`2f1e4a3`）把 `version_manifest.json` 精簡成單筆 `{version,date}`。
+- PK1 規格（`SCOPE.md:1091`）只查了 `GET /api/system/version` 這個讀者；**漏了 `helpers/startup.py:_sync_module_versions()`**——它開機時把 manifest 寫進 `module_versions`，給 `module-versions.html` 顯示。無 `module` 的條目被 `:487` 略過 ⇒ 正式機收不到任何新說明，**不報錯**。
+- 可回復：日後帶完整 manifest 的包一上，`INSERT OR IGNORE` 會把缺的全部補進去。
+- 修法方向：精簡時保留使用者可見欄位（`module/version/date/time/content`），說明文字本來就是寫給使用者的；並在 `verify_package` 加一條「manifest 每筆都有 `module`」。
+- 使用者 2026-09-24 表單原文：「現在這包先上」。
+
 ## 乙、要使用者裁示（視窗不可代裁，只能整理選項）
 
 | 事項 | 數量 | 來源 |
