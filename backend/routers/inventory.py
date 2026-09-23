@@ -611,7 +611,7 @@ def adjust_stock_item(item_id: int, body: dict = Body(...), authorization: str =
     _require_admin(user)
     action = (body.get("action") or "").strip()
     if action not in ("void", "return_to_stock", "edit_note"):
-        raise HTTPException(400, "action 需為 void / return_to_stock / edit_note")
+        raise HTTPException(400, "不支援的庫存操作「%s」。" % action)
 
     conn = get_db()
     row = conn.execute("SELECT * FROM stock_items WHERE id=?", (item_id,)).fetchone()

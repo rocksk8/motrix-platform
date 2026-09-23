@@ -31,7 +31,7 @@ VP(1):  VP1
 UI(4):  UI6 UI8 UI9 UI10
 DM(1):  DM1
 MG(1):  MG1
-JV(25): JV1 JV2 JV3 JV4 JV5 JV6 JV7 JV9 JV10 JV11 JV12 JV13 JV14 JV15 JV16 JV17 JV18 JV19 JV20 JV21 JV22 JV23 JV24 JV25 JV26
+JV(24): JV1 JV2 JV3 JV4 JV5 JV7 JV9 JV10 JV11 JV12 JV13 JV14 JV15 JV16 JV17 JV18 JV19 JV20 JV21 JV22 JV23 JV24 JV25 JV26
 BN(1): BN1
 AC(2): AC1 AC2
 AR(1): AR1
@@ -127,8 +127,15 @@ RT(1):  RT1
 BN(1):  BN19
 PK(2):  PK1 PK2
 QE(1):  QE1
+JV(1):  JV6
 
 ```
+
+> 📌 `JV6` 從 `THIS` 移到 `NEXT`（hichan-61 2026-09-24，A 裁「照 `ab5ba88` 移到 NEXT，出處附使用者原話」）。
+> 使用者原話**只在 commit 訊息裡**，docs/ 內 0 筆（`grep -rn 剩最後跑驗收 docs/` 回 0）：
+> `e8108b7` 訊息逐字：「token有限…如視窗已結束就讓他休息，剩下最後跑驗收跟輸出的」
+> （引號內的「…」是原訊息就有的省略，不是我截的）；同一則訊息寫的處置是「JV6 / JV26 / UP1 / EM13 / BN20 全部不做」。
+> ⚠️ 這句裁示在 2026-09-23 20:35，早於 2026-09-24 使用者「甲類全部做完」的表單作答 —— 兩者範圍重疊（JV26／EM13），**待 A 對齊**。
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
 > 內容由 D 量測、**編號由 A 發**（`STATE.md §50c`）。

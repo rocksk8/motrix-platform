@@ -57,7 +57,13 @@ def live_server(client):
 
 
 @pytest.mark.e2e
-def test_bn4_the_bonus_page_says_the_new_name(live_server, make_user):
+def test_the_bonus_page_says_the_new_name(live_server, make_user):
+    """`BN4` 頁面那一半。
+
+    ⚠️ 題名**刻意不以 `test_bn4_` 開頭**：覆蓋率守門把「同一個編號出現在兩個題檔」判成撞名
+    （`AMBIGUOUS`）而不給信用 —— `BN4` 的信用由靜態那一題
+    （`test_bonus_manual_and_picker_2026_09_23.py::test_bn4_*`）承擔，這一題是它的頁面佐證。
+    """
     u, p = make_user("bn4_sa", role="superadmin", modules=[BONUS_MODULE])
     with sync_playwright() as pw:
         browser = pw.chromium.launch()

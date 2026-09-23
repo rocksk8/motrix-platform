@@ -109,7 +109,7 @@ def _gcis_take_quota() -> None:
             429,
             f"今天的公司資料查詢次數已達上限（{limit} 次）。"
             "這個上限是為了保護我們對政府開放資料平台的用量，"
-            "明天會自動恢復；需要調整請在系統設定修改 gcis_daily_limit。")
+            "明天會自動恢復；若需要調整每日上限，請聯絡系統管理員。")
     state["used"] = used + 1
     _set_setting(GCIS_USAGE_SETTING, state)
 

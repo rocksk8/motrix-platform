@@ -238,6 +238,10 @@ NAMED_ELSEWHERE = {
     # ⚙️ `EM11`（2 處）：這一支守 `onDealTagChange`；另一處 exportCount 由同檔
     #    `test_em9_quotation_export_count_has_failure_handling` 守（表只收一支函式名）。
     "EM11": "test_em9_quotation_deal_tag_change_has_failure_handling",
+    # ⚙️ `BI1`（GATE-BLOCK 乙類，已查實產品修了：`routers/bonus.py` 的 `user = _require_user(...)`）：
+    #    題檔 `test_bonus_item_create_2026_09_23.py` 整支就是為它寫的（檔頭逐字引 NameError→500），
+    #    這一支走 POST 產品路徑、觀測點是 `bonus_items` 多一列。
+    "BI1":  "test_a_superadmin_can_actually_create_a_bonus_item",
 }
 
 #: 🔴 **明文豁免：這一條的驗證方式不是 pytest。**
