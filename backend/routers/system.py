@@ -491,7 +491,7 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     case_no  = (body.get("case_no") or "").strip()
     contact_type = (body.get("contact_type") or "").strip()
     if not log_date or not user_id or not content:
-        raise HTTPException(400, "log_date / user_id / content 必填")
+        raise HTTPException(400, "請填寫日期、記錄對象與工作內容。")
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     conn = get_db()
     cur = conn.execute(
@@ -1812,7 +1812,7 @@ def get_cloud_backup_target_setting(authorization: str = Header(None)):
 def set_cloud_backup_target_setting(body: CloudBackupTargetBody, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
     if body.backend not in ("local_drive", "s3"):
-        raise HTTPException(400, "backend 需為 local_drive 或 s3")
+        raise HTTPException(400, "備份目標請選「本機磁碟機」或「S3 相容物件儲存」。")
     if body.backend == "s3" and not body.s3.bucket:
         raise HTTPException(400, "選擇 s3 時 bucket 為必填")
     value = {"backend": body.backend, "s3": body.s3.model_dump()}

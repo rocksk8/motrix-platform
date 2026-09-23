@@ -203,12 +203,12 @@ def approve_case_action_item(quote_no: str, item_id: int, body: dict = Body(...)
         if ('project_approve_eng' not in modules and user['role'] != 'superadmin'
                 and user['id'] != dept_mgr_id):
             conn.close()
-            raise HTTPException(403, "需要工程主管確認（project_approve_eng 權限，或為該案件業務員所屬部門主管）")
+            raise HTTPException(403, "需要工程主管確認：請由具「案件代辦－工程主管確認」權限的人，或這個案件業務員所屬部門的主管確認。")
     else:
         if ('project_approve_biz' not in modules and user['role'] != 'superadmin'
                 and user['id'] != div_mgr_id):
             conn.close()
-            raise HTTPException(403, "需要業務確認（project_approve_biz 權限，或為該案件業務員所屬處主管）")
+            raise HTTPException(403, "需要業務確認：請由具「案件代辦－業務確認」權限的人，或這個案件業務員所屬處的主管確認。")
 
     row = conn.execute(
         "SELECT * FROM case_action_items WHERE id=? AND quote_no=?", (item_id, quote_no)

@@ -731,7 +731,7 @@ def accept_dispatch(did: int, body: dict, authorization: str = Header(None)):
         raise HTTPException(403, "需要管理員權限")
     action = body.get("action", "")
     if action not in _ACCEPT_ALLOWED_FROM:
-        raise HTTPException(400, "action 必須為 pending_acceptance 或 accepted")
+        raise HTTPException(400, "不支援的驗收操作：請使用派工列上的「待驗收」或「確認驗收」按鈕。")
     conn = get_db()
     row = conn.execute(
         "SELECT quote_no, status FROM contractor_dispatches WHERE id=?", (did,)

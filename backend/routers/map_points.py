@@ -426,11 +426,13 @@ def map_points(sources: str = "tenders",
             "/api/map/points 收到 query string 形式的座標並已拒絕。"
             "（那串網址已經被 uvicorn 的 access log 寫進 logs/server.log）"
         )   # ⚠️ 這行**不印座標**——印出來就等於自己做了同一件事。
+        # 🔑 為什麼座標不可以放在網址上（`EM1 §3⑤`：這段理由原本寫在給使用者看的訊息裡，
+        #    搬到這裡——它是這個決定唯一的記錄，不可以刪）：
+        #    uvicorn 的 access log 會把整串 query string 寫進 logs/server.log
+        #    （一個永久追加的檔案）⇒ 使用者的位置會被永久記在伺服器日誌裡。
         raise HTTPException(
             422,
-            "座標不可以放在網址上：uvicorn 的 access log 會把整串 query string "
-            "寫進 logs/server.log（一個永久追加的檔案）。"
-            "請改用 `X-Map-Position: <lat>,<lon>,<accuracy>` header。"
+            "請改用 X-Map-Position 標頭傳送座標（格式：緯度,經度,誤差公尺），不要放在網址上。"
         )
     user_coord, user_accuracy = _user_position(lat, lon, accuracy)
 
