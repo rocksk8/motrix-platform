@@ -135,7 +135,7 @@
 
       <div class="bn-note">
         獎金依各案件<strong>精算後的淨利</strong>按比例分配，每個案件獨立發放。<br>
-        金額在產生獎金單的當下就固定下來，之後修改比例或範本都不會影響已經發出的單。
+        金額在產生獎金分潤單的當下就固定下來，之後修改比例或範本都不會影響已經發出的單。
       </div>
 
       <template x-if="loadError">
@@ -276,10 +276,10 @@
              表達的 —— superadmin 直接看到輸入框，admin 只看到這段話。 -->
         <div class="bn-blank" data-testid="bonus-items-empty" x-show="!items.length">
           <strong>尚未建立任何獎金項目。</strong><br>
-          沒有項目就產不出獎金單，所以這一頁目前什麼都發不了。<br>
+          沒有項目就產不出獎金分潤單，所以這一頁目前什麼都發不了。<br>
           <span x-show="!canManageItems">
             新增獎金項目只有<strong>最高管理員（superadmin）</strong>做得到。
-            請他到本頁的「獎金項目」區塊新增，您就可以開始產生獎金單。
+            請他到本頁的「獎金項目」區塊新增，您就可以開始產生獎金分潤單。
           </span>
           <span x-show="canManageItems">
             您是<strong>最高管理員（superadmin）</strong>，可以直接在下方新增第一個獎金項目。
@@ -334,24 +334,24 @@
         </template>
       </section>
 
-      <!-- ══ 產生獎金單 ═════════════════════════════════════════════
+      <!-- ══ 產生獎金分潤單 ═════════════════════════════════════════════
            🔑 先問再做：畫面在按下產生之前就該知道答案，
               而不是按下去才收到一句拒絕。
            🔴 發放對象**一律由 plan 端點決定**，這一頁不自己算 —— 規則只有一份。
            🔑 `BN9`：入口看 `canCreateAward`（後端 `can_create_award`）
               **不看 `isManager`** —— `BN9` 把 `isManager` 收緊成 superadmin，
-              而產生獎金單那道閘門沒有動（superadmin ＋ admin）。
+              而產生獎金分潤單那道閘門沒有動（superadmin ＋ admin）。
               ☠️ 繼續用 `isManager` 的話，收緊可見範圍會**順手拿掉 admin 的
                  產生權限入口**，而沒有人要求過那件事。 -->
       <section class="bn-sec" x-show="canCreateAward">
         <div class="bn-sec__hd">
-          <span class="bn-sec__t">產生獎金單</span>
+          <span class="bn-sec__t">產生獎金分潤單</span>
           <span class="bn-sec__s">選擇已結案且已完成精算的案件，系統會先算出可發放的項目與對象。</span>
         </div>
 
         <!-- `BN5`：案件編號改下拉式選單——**列什麼是這一項的全部內容**，
              不是把 input 換成 select。母體是 deal_tag='已結案'（不是
-             status），且淨利<=0／精算是舊格式／已有有效獎金單的案件
+             status），且淨利<=0／精算是舊格式／已有有效獎金分潤單的案件
              都要**列出來、標原因、不可選**，不能濾掉（濾掉的話使用者
              只看到選單裡沒有它，不知道為什麼）。 -->
         <template x-if="candidatesErr">
@@ -397,7 +397,7 @@
              項目，不用重新寫」）。 -->
       </section>
 
-      <!-- ══ 已產生的獎金單 ═════════════════════════════════════════
+      <!-- ══ 已產生的獎金分潤單 ═════════════════════════════════════════
            `BN16`：使用者原話「獎金單可區分草稿、送審中、已審核、未撥付、
            已撥付多種狀態，可切換顯示」。「已審核」使用者裁＝已核准且
            未撥付（他的待辦清單：該付錢的那幾張）；「送審中」是集合的
@@ -406,7 +406,7 @@
            列上已經用「已作廢」取代狀態文字，不靠顏色。 -->
       <section class="bn-sec" x-show="loaded">
         <div class="bn-sec__hd">
-          <span class="bn-sec__t">獎金單</span>
+          <span class="bn-sec__t">獎金分潤單</span>
         </div>
 
         <!-- ⚠️ 計數與列表用同一個 `awards` 陣列算（`awardCounts()`／
@@ -453,7 +453,7 @@
 
         <!-- 🔑 空清單有三種原因，只說得出前兩種（第三種是「非管理者看不到
              別人的單」，那個數字本身是 `BN9` 要擋的資訊，不可以暗示）：
-                沒有獎金單  = 還沒有人產生過（可以自己去產生）
+                沒有獎金分潤單  = 還沒有人產生過（可以自己去產生）
                 沒有獎金項目 = **產不出來**（而且只有 superadmin 修得了）
              ⚠️ 而它與上面「尚未建立任何獎金項目」是**兩件不同的事**。 -->
         <div class="bn-empty" x-show="awardEmptyMessage()" x-text="awardEmptyMessage()"></div>
@@ -469,7 +469,7 @@
        跟明細」「送出前後都要能看到完整明細」「已經有現成的項目，不用
        重新寫」。
        ⚠️ `detailMode` 決定內容從哪裡來，**版面只有一份**：
-         'plan'   還沒有 award（產生獎金單那個階段，BN6／BN12ⓐ）
+         'plan'   還沒有 award（產生獎金分潤單那個階段，BN6／BN12ⓐ）
          'award'  已經有 award（點開清單裡一張已存在的單，BN10／BN12ⓑ）
        精算明細表（`.bn-settle`）在兩種模式下都讀同一個 `settle` getter
        （已改成依 `detailMode` 切換來源），不是各畫一份——settlement.html
@@ -506,7 +506,7 @@
                   x-text="plan.base && plan.base.ok
                     ? '案件淨利 ' + fmt(plan.base.amount) + '（＝下表「真實淨利」，本次獎金分潤基數）'
                     : (plan.base && plan.base.error) || ''"></span>
-            <span class="bn-status bn-voided" x-show="plan.has_active_award">已有有效獎金單</span>
+            <span class="bn-status bn-voided" x-show="plan.has_active_award">已有有效獎金分潤單</span>
           </div>
         </template>
         <template x-if="detailMode === 'award' && awardDetail">
@@ -673,7 +673,7 @@
             </div>
 
             <!-- `BN17`：上次退回的記錄——沿用 `JV22 §6` 的顯示精神（長期
-                 記憶、不可編輯／刪除）。獎金單退回後只能作廢重建（不能
+                 記憶、不可編輯／刪除）。獎金分潤單退回後只能作廢重建（不能
                  像 JV22 那樣改內容），所以這裡沒有「這次編修」那一半，
                  只顯示「上一輪是誰簽的、誰退的、為什麼」＋一句出路提示。
                  負對照（§6⑤ⓔ）：從沒被退回過的單，`last_reject` 是
@@ -727,7 +727,7 @@
         </template>
       </div>
       <div class="modal-foot">
-        <!-- plan 模式的動作：預覽／產生獎金單。 -->
+        <!-- plan 模式的動作：預覽／產生獎金分潤單。 -->
         <template x-if="detailMode === 'plan'">
           <span style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="bn-btn bn-btn--ghost" @click="previewAward()"
@@ -735,7 +735,7 @@
                     x-text="previewing ? '預覽中…' : '預覽'"></button>
             <button class="bn-btn" @click="createAward()"
                     :disabled="creating || !!planIssue()"
-                    x-text="creating ? '產生中…' : '產生獎金單'"></button>
+                    x-text="creating ? '產生中…' : '產生獎金分潤單'"></button>
             <span class="bn-sec__s" x-text="planIssue()"></span>
           </span>
         </template>

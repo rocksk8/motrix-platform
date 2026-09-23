@@ -70,7 +70,7 @@ BASE_FIELD = "netProfit"
 #:    ⇒ 重新儲存一次就會補上。
 #: 📌 與 `RAISE(ABORT)` 那一條同源：**那句話是使用者唯一看得到的東西。**
 LEGACY_SETTLEMENT_MESSAGE = (
-    "這個案件的精算是舊格式（沒有淨利欄位），無法產生獎金單。\n"
+    "這個案件的精算是舊格式（沒有淨利欄位），無法產生獎金分潤單。\n"
     "請重新開啟並儲存一次該案的精算，系統會自動補算淨利後即可發放。")
 
 
@@ -100,7 +100,7 @@ def base_amount_for(settlement):
     if value <= 0:
         # 使用者裁：負數當 0 不發。
         # ☠️ 硬發的話，負的獎金在傳票上是一筆反向分錄，**帳是平的**，
-        #    沒有人會報修 —— 而某個人的獎金單上是一個負數。
+        #    沒有人會報修 —— 而某個人的獎金分潤單上是一個負數。
         return False, 0, (
             "這個案件的淨利是 %s，沒有可分配的獎金基數。" % f"{value:,}")
     return True, value, None
@@ -241,7 +241,7 @@ def people_for_item(item, case):
     ⇒ **空是常態不是例外**。
     ☠️ 靜默算 0 的兩個後果，第二個更糟：
     ```
-    ① 那個項目從來沒出現在任何一張獎金單上 —— 而**沒有人會發現一個
+    ① 那個項目從來沒出現在任何一張獎金分潤單上 —— 而**沒有人會發現一個
        從來不出現的東西**
     ② **把金額併給別的項目** => 別人領多了，**而總額對得起來**
     ```
@@ -377,7 +377,7 @@ def bonus_signatures_of(award):
     ```
     傳票    v99 已有 submitted_by/at、checked_by/at、manager_by/at
             => signatures_of() 有鏈時照鏈畫，沒鏈時退回那六欄
-    獎金單  bonus_awards **一格都沒有**（只有 created_by／created_at）
+    獎金分潤單  bonus_awards **一格都沒有**（只有 created_by／created_at）
             => 這裡只讀鏈，沒有 fallback 分支
     ```
     ⚠️ 沒有設定過簽核流程時鏈是空的 ⇒ 這裡只回「製表」一格——是不是要再

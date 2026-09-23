@@ -4,7 +4,7 @@
 施工圖 `§六①`。適用兩張同形狀的表：
 ```
 voucher_edit_log        傳票     外鍵 voucher_id
-bonus_award_edit_log    獎金單   外鍵 award_id
+bonus_award_edit_log    獎金分潤單   外鍵 award_id
 ```
 
 # 🔴 為什麼這條規則要抽出來，而不是寫在每支 endpoint 裡

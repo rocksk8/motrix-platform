@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""獎金分潤（`FN2`）—— 項目維護、產生獎金單、可見性。
+"""獎金分潤（`FN2`）—— 項目維護、產生獎金分潤單、可見性。
 
 施工圖：`docs/windows/SPEC-BONUS.md`。
 使用者原話：「新開發案件精算完結後，會有獎金分潤的衍生，一樣加在營運報表那個模組獨立」
@@ -68,12 +68,12 @@ def _sees_all_lines(user):
 
     ```
     superadmin  整張單、所有人的金額
-    admin       **只有自己那一列**（與一般同仁相同）—— 他仍然產生得了獎金單
+    admin       **只有自己那一列**（與一般同仁相同）—— 他仍然產生得了獎金分潤單
     其他人       只有自己那一列
     ```
     ⚠️ `admin` 在這一頁是**一般使用者**，而他在別的頁不是 ——
        ☠️ 所以畫面不可以用同一個旗標同時決定「看得到什麼」與「按得到什麼」：
-       他按得到「產生獎金單」，而他看不到別人的金額。
+       他按得到「產生獎金分潤單」，而他看不到別人的金額。
     📌 ⇒ 回應裡送**兩個**旗標（`is_manager`／`can_create_award`），
        前端各用各的。少送一個的話，收緊可見範圍會連入口一起收掉，
        **而那是一個沒有人要求的權限變更**。
@@ -156,7 +156,7 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
 
     🔴 `person_source` **為空不准儲存** —— 不是存了再算出 0 人。
     ☠️ 存得下去的話，那個項目**每次都算出 0 個人**，而畫面上它只是
-       **從來沒有出現在任何一張獎金單上** —— 沒有人會發現一個從來不出現的東西。
+       **從來沒有出現在任何一張獎金分潤單上** —— 沒有人會發現一個從來不出現的東西。
     ⚠️ 資料層的 `NOT NULL` 擋不住空字串，所以這一關是必要的另一半。
     """
     # 🔴 `BI1`：**回傳值要接住**。這一支原本只把 `_require_user` 當檢查用，
@@ -331,7 +331,7 @@ def add_bonus_group_member(group_id: int, body: dict = Body(...),
 @router.delete("/groups/{group_id}/members/{username}")
 def remove_bonus_group_member(group_id: int, username: str,
                               authorization: str = Header(None)):
-    """移出一個成員。**不影響已經產生的獎金單**（`§5` 凍結——那些單存的是
+    """移出一個成員。**不影響已經產生的獎金分潤單**（`§5` 凍結——那些單存的是
     快照，不會即時展開群組）。
     """
     _require_user(authorization, require_superadmin=True)
@@ -403,7 +403,7 @@ def _case_names_for(conn, quote_nos):
     """`{quote_no}` 集合 -> `{quote_no: {customer_name, project_name}}`（`BN15`）。
 
     使用者原話：「獎金單的只有編號，沒有案件名稱」——`bonus_awards` 這張表
-    本來就只存 `quote_no`（`db.py:4662`），而「產生獎金單」那個下拉選單早就
+    本來就只存 `quote_no`（`db.py:4662`），而「產生獎金分潤單」那個下拉選單早就
     在查 `quotations`（`award_candidates()` 上面那支）。
 
     🔴 **不把 customer_name／project_name 存進 `bonus_awards`**——那會變成
@@ -434,7 +434,7 @@ _settlement_fields = settlement_fields
 def get_bonus_base(quote_no: str, authorization: str = Header(None)):
     """這個案件現在算不算得出獎金基數。
 
-    🔑 **先問再做**：畫面在按下「產生獎金單」之前就該知道答案，
+    🔑 **先問再做**：畫面在按下「產生獎金分潤單」之前就該知道答案，
        而不是按下去才收到一句拒絕。
     """
     user = _require_user(authorization)
@@ -451,7 +451,7 @@ def get_bonus_base(quote_no: str, authorization: str = Header(None)):
     return {"quote_no": quote_no, "ok": ok, "base_amount": base, "error": err}
 
 
-# ── 獎金單 ────────────────────────────────────────────────────────
+# ── 獎金分潤單 ────────────────────────────────────────────────────────
 
 # ── 獎金產生單：先問再做 ──────────────────────────────────────────
 # 🔴 **這一支必須宣告在任何 `/awards/{award_id}` 之前。**
@@ -569,7 +569,7 @@ _CLOSED_DEAL_TAG = "已結案"
 
 
 # 🔴 這一支必須宣告在任何 `GET /awards/{award_id}` 之前（今天還沒有這種
-# 單一片語的路由，但 `BN10`——點開一張獎金單看完整內容——已經在排隊了）。
+# 單一片語的路由，但 `BN10`——點開一張獎金分潤單看完整內容——已經在排隊了）。
 # `/awards/candidates` 與 `/awards/{award_id}` 是**同一種形狀**（`/awards/`
 # 後面都只有一段）：`{award_id}` 若宣告在前，`/awards/candidates` 會被
 # 它接走，`"candidates"` 當 `award_id` 做 int 轉換失敗 -> 422。
@@ -628,7 +628,7 @@ def award_candidates(authorization: str = Header(None)):
 
         aid = live_by_quote.get(r["quote_no"])
         if aid is not None:
-            # ④ 已有有效獎金單：優先於淨利判斷——就算這個案子現在淨利
+            # ④ 已有有效獎金分潤單：優先於淨利判斷——就算這個案子現在淨利
             #    算不出來，「已經有一張單」仍然是使用者最需要知道的事。
             selectable, reason = False, "已產生（#%s）" % aid
         else:
@@ -648,7 +648,7 @@ def award_candidates(authorization: str = Header(None)):
 
 @router.get("/awards")
 def list_awards(include_voided: bool = False, authorization: str = Header(None)):
-    """獎金單清單。**分錄列依可見性過濾。**
+    """獎金分潤單清單。**分錄列依可見性過濾。**
 
     ⚠️ 非管理者也看得到**單**（否則他不知道自己那一筆屬於哪一案），
        而他只看得到**自己那一列**金額。
@@ -656,8 +656,8 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
 
     🔴 `BN9`（2026-09-23）：「看得到全部」收緊成 **superadmin**。
        ⇒ `admin` 在這一頁與一般同仁相同（只看得到自己那一列），
-         而他仍然**產生得了**獎金單 —— 見 `can_create_award`。
-       ⚠️ 副作用要講出來：`admin` 產生了一張自己不在裡面的獎金單之後，
+         而他仍然**產生得了**獎金分潤單 —— 見 `can_create_award`。
+       ⚠️ 副作用要講出來：`admin` 產生了一張自己不在裡面的獎金分潤單之後，
           **那張單不會出現在他的清單上**（他沒有任何一列）。
           那是這個裁定的直接後果，不是缺陷。
     """
@@ -710,7 +710,7 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         "awards": out,
         # 🔑 **可見範圍**（看得到別人那幾列嗎）
         "is_manager": manager,
-        # 🔑 **入口**（按得到「產生獎金單」嗎）——`admin` 這兩格答案不同。
+        # 🔑 **入口**（按得到「產生獎金分潤單」嗎）——`admin` 這兩格答案不同。
         #    ⚠️ 與 `bonus.html:158` 那一條同一個道理：入口要看真正的那道閘門，
         #       用可見範圍去擋的話，有權限的人會看不到按鈕（反過來就是
         #       看得到按鈕、按下去收 403）。
@@ -968,7 +968,7 @@ def _plan_allocations(conn, quote_no, allocations):
 
 @router.post("/awards")
 def create_award(body: dict = Body(...), authorization: str = Header(None)):
-    """依案件產生一張獎金單（**套用當下凍結**）。
+    """依案件產生一張獎金分潤單（**套用當下凍結**）。
 
     ## 🔴 一個案件同時只能有一筆**有效**獎金
 
@@ -979,13 +979,13 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
 
     ☠️ 跳過的兩個後果，第二個更糟：
     ```
-    ① 那個項目從來沒出現在任何一張獎金單上（沒有人會發現）
+    ① 那個項目從來沒出現在任何一張獎金分潤單上（沒有人會發現）
     ② **把金額併給別的項目** => 別人領多了，而總額對得起來
     ```
     """
     user = _require_user(authorization)
     if not _is_manager(user):
-        raise HTTPException(403, "僅管理員以上可產生獎金單。")
+        raise HTTPException(403, "僅管理員以上可產生獎金分潤單。")
     quote_no = (body.get("quote_no") or "").strip()
     if not quote_no:
         raise HTTPException(400, "請指定案件編號。")
@@ -1009,7 +1009,7 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
         except Exception as exc:                            # noqa: BLE001
             if "UNIQUE" in str(exc).upper():
                 raise HTTPException(
-                    409, "案件「%s」已經有一張有效的獎金單。"
+                    409, "案件「%s」已經有一張有效的獎金分潤單。"
                          "若要重發，請先作廢原本那一張。" % quote_no)
             raise
         award_id = cur.lastrowid
@@ -1028,7 +1028,7 @@ def create_award(body: dict = Body(...), authorization: str = Header(None)):
         conn.close()
 
     _audit(_tok(authorization), "bonus.award.create", "bonus_awards",
-           str(award_id), "產生獎金單：%s（基數 %s）" % (quote_no, f"{base:,}"))
+           str(award_id), "產生獎金分潤單：%s（基數 %s）" % (quote_no, f"{base:,}"))
     return {"ok": True, "id": award_id, "base_amount": base}
 
 
@@ -1149,7 +1149,7 @@ def approve_award(award_id: int, body: dict = Body(default={}),
 
     ## ⚠️ 沒有設定過簽核流程時，**沒有像傳票 `§161` 那樣的內建兩格 fallback**
 
-    `SPEC-BN8.md §1`：獎金單一格投影欄位都沒有，比傳票乾淨。而三支端點
+    `SPEC-BN8.md §1`：獎金分潤單一格投影欄位都沒有，比傳票乾淨。而三支端點
     本來就只有 superadmin 打得到（`§3`），沒有「一般員工」這種角色需要
     內建兩格去代表——鏈是空的時候，任一 superadmin 一次核准即完成，
     不必假造一層只為了跟傳票同形。
@@ -1310,7 +1310,7 @@ def mark_award_paid(award_id: int, body: dict = Body(default={}),
 @router.post("/awards/{award_id}/void")
 def void_award(award_id: int, body: dict = Body(default={}),
                authorization: str = Header(None)):
-    """作廢一張獎金單。**原單留著**（與傳票同一條原則）。
+    """作廢一張獎金分潤單。**原單留著**（與傳票同一條原則）。
 
     ☠️ 直接 DELETE 的話，帳上看不到那一次作廢 ——
        而使用者裁的是**作廢重開**，不是刪掉重來。
@@ -1320,7 +1320,7 @@ def void_award(award_id: int, body: dict = Body(default={}),
     ⑦ 任何狀態都可以作廢，含已核准——不留出路的後果是「開錯了而改不掉」，
        權限同步改成 superadmin（與三支端點一致）
     ⑧ 已發放（is_paid()）的單，作廢不是一個旗標——錢已經出去了，
-       只寫 voided_at 的後果是帳上那筆錢還在，而獎金單說它作廢了。
+       只寫 voided_at 的後果是帳上那筆錢還在，而獎金分潤單說它作廢了。
        本輪擋下來（400，訊息提到沖銷），沖銷流程本規格不做。
     ```
     """
@@ -1335,13 +1335,13 @@ def void_award(award_id: int, body: dict = Body(default={}),
         row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
                            (award_id,)).fetchone()
         if row is None:
-            raise HTTPException(404, "找不到這張獎金單。")
+            raise HTTPException(404, "找不到這張獎金分潤單。")
         award = dict(row)
         if award["voided_at"]:
-            raise HTTPException(400, "這張獎金單已經作廢過了。")
+            raise HTTPException(400, "這張獎金分潤單已經作廢過了。")
         if is_paid(award):
             raise HTTPException(
-                400, "這張獎金單已經發放，不能直接作廢——錢已經出去了，"
+                400, "這張獎金分潤單已經發放，不能直接作廢——錢已經出去了，"
                      "請先開立沖銷傳票，沖銷完成後再處理這張單。")
         conn.execute(
             "UPDATE bonus_awards SET voided_at = ?, voided_by = ?,"
@@ -1351,7 +1351,7 @@ def void_award(award_id: int, body: dict = Body(default={}),
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.award.void", "bonus_awards",
-           str(award_id), "作廢獎金單：%s" % reason)
+           str(award_id), "作廢獎金分潤單：%s" % reason)
     return {"ok": True}
 
 

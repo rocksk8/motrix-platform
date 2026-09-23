@@ -55,7 +55,7 @@ APPROVAL_DOC_TYPES = ["quotation", "shipping", "invoice_voucher", "payment_reque
                       "contractor_voucher", "extra_expense", "completion",
                       "voucher", "bonus"]
 # 🔴 `BN8`：`bonus`（獎金分潤單）**不進來** —— A `§234` 裁：猜錯的代價不對稱時
-#    先做可逆的那一邊。進了統一流程 => 獎金單與報價單／出貨單共用同一條簽核鏈，
+#    先做可逆的那一邊。進了統一流程 => 獎金分潤單與報價單／出貨單共用同一條簽核鏈，
 #    而改那一條的人不會知道自己也改了獎金；不進 => 自己一條
 #    `bonus_approval_flow`。勾一下就能合併，而反過來（預設合併之後要拆開）
 #    要先有人發現它們被合在一起了 —— 所以先不合併。

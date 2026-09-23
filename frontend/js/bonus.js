@@ -39,16 +39,16 @@ function bonusPage() {
     //: **看得到別人那幾列嗎**（後端 `GET /awards` 的 `is_manager`
     //: ＝ `role === 'superadmin'`，`BN9` 之後不含 `admin`）。
     isManager: false,
-    //: **按得到「產生獎金單」嗎**（後端的 `can_create_award`
+    //: **按得到「產生獎金分潤單」嗎**（後端的 `can_create_award`
     //: ＝ superadmin 或 admin）。
     //: 🔴 與 `isManager` 分開，因為 `admin` 這兩格答案**不一樣**：
-    //:    他產生得了獎金單，而他看不到別人領多少。
+    //:    他產生得了獎金分潤單，而他看不到別人領多少。
     //: ☠️ 用 `isManager` 擋入口的話，`admin` 會看不到一個他按得動的按鈕
     //:    —— 而那是一個沒有人要求的權限變更（反過來就是 `bonus.html:158`
     //:    那一條：看得到按鈕、按下去收 403）。
     canCreateAward: false,
 
-    // ── `BN16`：獎金單狀態篩選 ──
+    // ── `BN16`：獎金分潤單狀態篩選 ──
     //: 'all' ／ 'draft' ／ 'pending'（送審中：待審核＋簽核中）／
     //: 'approved_unpaid'（已核准・未撥付）／ 'paid'。
     awardFilter: 'all',
@@ -79,7 +79,7 @@ function bonusPage() {
     newMemberInput: {},
     savingMember: {},
 
-    // ── `BN18`：產生獎金單時手動指定人員 ──
+    // ── `BN18`：產生獎金分潤單時手動指定人員 ──
     //: 使用者原話「產生獎金單時能手動指定人」——`case_stages.assigned_to`
     //: 今天 100% 是空的，這條路是目前唯一走得通的方式（見規格 §5b）。
     //: 挑人**只能從清單選**（`§3` 硬性要求），不是打字輸入。
@@ -88,19 +88,19 @@ function bonusPage() {
     //: 能不能在本頁新增獎金項目。**來自後端**（`GET /items` 的 `can_edit`
     //: ＝ `role === 'superadmin'`），不是在這裡判 `role` 算出來的。
     //: 📌 名字不照抄 `can_edit`：那個名字說不出「edit 什麼」，
-    //:    而這一頁同時還有「產生獎金單」那一種寫入。
+    //:    而這一頁同時還有「產生獎金分潤單」那一種寫入。
     canManageItems: false,
 
     // ── 案件下拉（`BN5`）──
     //: `GET /awards/candidates` 給的候選清單，每筆 `{quote_no,
     //: customer_name, project_name, netProfit, selectable, reason}`。
-    //: ⚠️ 淨利<=0／精算舊格式／已有有效獎金單的案件**都在裡面**，不是
+    //: ⚠️ 淨利<=0／精算舊格式／已有有效獎金分潤單的案件**都在裡面**，不是
     //: 只有可選的——後端不濾，這裡也不濾，只是 `<option disabled>`。
     candidates: [],
     candidatesLoaded: false,
     candidatesErr: '',
 
-    // ── 產生獎金單（`BN1`）──
+    // ── 產生獎金分潤單（`BN1`）──
     planQuote: '',
     plan: null,
     planErr: '',
@@ -152,7 +152,7 @@ function bonusPage() {
       // （順序不影響畫面，但語意上這裡先寫）。
       if (this.isManager) await this.loadGroups()
       if (this.isManager) await this.loadItems()
-      // `BN5`：候選清單與「產生獎金單」同一道閘（canCreateAward =
+      // `BN5`：候選清單與「產生獎金分潤單」同一道閘（canCreateAward =
       // _is_manager），不是 isManager——admin 按得到「產生」，
       // 他也要看得到下拉可以選什麼。
       if (this.canCreateAward) await this.loadCandidates()
@@ -221,7 +221,7 @@ function bonusPage() {
       }
     },
 
-    // ── `BN16`：獎金單狀態篩選 ───────────────────────────────────
+    // ── `BN16`：獎金分潤單狀態篩選 ───────────────────────────────────
     //
     // 使用者原話：「獎金單可區分草稿、送審中、已審核、未撥付、已撥付
     // 多種狀態，可切換顯示」。使用者另裁：「已審核」＝已核准且未撥付
@@ -275,18 +275,18 @@ function bonusPage() {
       if (this.awardFilter === 'all') {
         if ((this.awards || []).length) return ''
         return this.isManager
-          ? '目前還沒有任何獎金單。獎金單依案件產生，案件需要先完成精算。'
+          ? '目前還沒有任何獎金分潤單。獎金分潤單依案件產生，案件需要先完成精算。'
           : '目前沒有發放給您的獎金。'
       }
       const label = { draft: '草稿', pending: '送審中',
                      approved_unpaid: '已核准・未撥付', paid: '已撥付' }[this.awardFilter] || ''
       const inCategory = (this.awards || []).filter(
         function (a) { return this.awardCategory(a) === this.awardFilter }.bind(this))
-      if (!inCategory.length) return '目前沒有' + label + '狀態的獎金單。'
+      if (!inCategory.length) return '目前沒有' + label + '狀態的獎金分潤單。'
       const visible = inCategory.filter(
         function (a) { return this.includeVoided || !a.voided_at }.bind(this))
       if (!visible.length) {
-        return '目前沒有' + label + '狀態的獎金單。（已作廢的單未顯示，可勾選上方切換）'
+        return '目前沒有' + label + '狀態的獎金分潤單。（已作廢的單未顯示，可勾選上方切換）'
       }
       return ''
     },
@@ -406,7 +406,7 @@ function bonusPage() {
         // 🔑 403 要說得出是**權限**，不要混進「載入失敗」那一句 ——
         //    ☠️ 「載入失敗，請重新整理」會讓一個沒有權限的人**一直重新整理**。
         this.itemErr = (String(e.message).indexOf('403') >= 0)
-          ? '獎金項目只有最高管理員看得到。您仍然可以在下方看到與自己有關的獎金單。'
+          ? '獎金項目只有最高管理員看得到。您仍然可以在下方看到與自己有關的獎金分潤單。'
           : '獎金項目載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
       }
     },
@@ -444,7 +444,7 @@ function bonusPage() {
       }
     },
 
-    // ── 產生獎金單 ────────────────────────────────────────────────
+    // ── 產生獎金分潤單 ────────────────────────────────────────────────
     //
     // 🔴 **人員名單由後端決定，這一支不自己組。**
     //    `POST /awards` 要 `allocations[].person_pct = { username: pct }`，
@@ -621,7 +621,7 @@ function bonusPage() {
     planIssue() {
       if (!this.plan) return ''
       if (this.plan.has_active_award) {
-        return '這個案件已經有一張有效的獎金單，若要重發請先作廢原本那一張。'
+        return '這個案件已經有一張有效的獎金分潤單，若要重發請先作廢原本那一張。'
       }
       if (!this.plan.base || !this.plan.base.ok) {
         return (this.plan.base && this.plan.base.error) || '這個案件目前算不出獎金基數。'
@@ -681,7 +681,7 @@ function bonusPage() {
     },
 
     // `§6⑩`：獎金頁的「預覽」動作——只算不寫，回的 lines／remainder
-    // 與之後真的按「產生獎金單」寫進資料庫的值逐筆相等（後端同一支
+    // 與之後真的按「產生獎金分潤單」寫進資料庫的值逐筆相等（後端同一支
     // `_plan_allocations()` 算，這裡不重複驗證，錯誤訊息就是後端那句）。
     async previewAward() {
       this.previewErr = ''
@@ -725,7 +725,7 @@ function bonusPage() {
         })
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
-        this.createMsg = '已產生獎金單（單號 #' + d.id + '，基數 ' + this.fmt(d.base_amount) + '）。'
+        this.createMsg = '已產生獎金分潤單（單號 #' + d.id + '，基數 ' + this.fmt(d.base_amount) + '）。'
         // 單已經真的產生了，舊的試算結果不再是「還沒送出的預覽」。
         this.previewResult = null
         await this.loadAwards()

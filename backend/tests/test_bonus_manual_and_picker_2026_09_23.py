@@ -436,36 +436,80 @@ def test_bn3_the_existing_sources_do_not_change_behaviour(client, make_user):
 # BN4：改名
 # ══════════════════════════════════════════════════════════════════════
 
-def test_bn4_the_user_facing_name_changed_everywhere(client, make_user):
-    """🔴 **`BN4`：使用者看得到的地方要改成「獎金分潤單」。**
+#: `BN4` 的白名單（hichan-61 2026-09-24，使用者裁「現在做完；白名單逐檔改」）。
+#: 該改的：獎金模組五檔 ＋ 兩支共用 helper 裡**只在註解**提到它的兩檔。
+_BN4_TARGETS = (
+    "backend/helpers/bonus.py", "backend/routers/bonus.py", "backend/helpers/bonus_pdf.py",
+    "frontend/js/bonus.js", "frontend/pages/bonus.html",
+    "backend/helpers/edit_log.py", "backend/helpers/tiered_approval.py",
+)
+#: 🔴 不該改的（釘住「沒動」，一次機械取代會讓這幾格紅）：
+#:   `archive.py` 的 `"獎金單":` 是每日 JSON 匯出的**表標籤鍵**（資料格式，不是畫面文字）
+#:   `db.py` 是鎖定檔，那 6 處全在 migration 的 docstring／註解（凍住的歷史）
+_BN4_UNTOUCHED = {"backend/archive.py": 2, "backend/db.py": 6}
+#: 🔴 使用者原話裡的「獎金單」**不改**：那是逐字引用，改了就不是原話了。
+#:   ⇒ 這幾處要**數得出來而且不變**：取代時若連原話一起改，這個數字會掉。
+_BN4_VERBATIM_QUOTES = 11
 
-    ⚠️ 而 `routers/bonus.py:443` 那一處**寫進 `audit_log`** ⇒
-       **既有紀錄不回頭改** —— 這一題只看**原始碼**，不看歷史資料。
-    ☠️ 要求歷史資料也變的話，那是**改寫稽核紀錄**。
+
+def _bn4_in_user_quote(src, pos):
+    """`pos` 是否落在「使用者原話」的引號裡（可跨行；連續的「…」「…」視為同一段原話）。"""
+    op = src.rfind("「", 0, pos)
+    if op < 0 or src.rfind("」", 0, pos) > op:
+        return False
+    first = op
+    while True:
+        back = src[:first].rstrip()
+        if not back.endswith("」"):
+            break
+        prev = src.rfind("「", 0, len(back) - 1)
+        if prev < 0:
+            break
+        first = prev
+    return "原話" in src[max(0, first - 12):first]
+
+
+def _bn4_scan(root, rel):
+    import re
+    src = (root / rel).read_text(encoding="utf-8", errors="replace")
+    stale, quoted = [], []
+    for m in re.finditer(re.escape(OLD_NAME), src):
+        where = "%s:%d" % (rel, src[:m.start()].count("\n") + 1)
+        (quoted if _bn4_in_user_quote(src, m.start()) else stale).append(where)
+    return stale, quoted
+
+
+def test_bn4_the_user_facing_name_changed_everywhere(client, make_user):
+    """🔴 **`BN4`：「獎金單」→「獎金分潤單」，白名單逐檔改。**
+
+    驗收（使用者裁）：**該改的 0 處、不該改的沒動**。
+    ```
+    該改的     `_BN4_TARGETS` 裡、使用者原話以外的「獎金單」 => 0
+    不該改的   ① 使用者原話裡的             => 恰好 `_BN4_VERBATIM_QUOTES` 處
+               ② archive.py（資料鍵）／db.py（鎖定檔、凍住的歷史）=> 次數不變
+    ```
+    ⚠️ `routers/bonus.py` 的稽核訊息寫進 `audit_log` ⇒ **既有紀錄不回頭改**
+       （那是改寫稽核紀錄）—— 這一題只看原始碼。
     """
     import pathlib
-    import re
-
     root = pathlib.Path(__file__).resolve().parents[2]
-    targets = [
-        root / "backend" / "helpers" / "bonus.py",
-        root / "backend" / "routers" / "bonus.py",
-        root / "frontend" / "js" / "bonus.js",
-        root / "frontend" / "pages" / "bonus.html",
-    ]
-    stale = []
-    for p in targets:
-        assert p.is_file(), "`%s` 不見了 —— **退回給我**。" % p.name
-        src = p.read_text(encoding="utf-8", errors="replace")
-        src = re.sub(r"<!--.*?-->", " ", src, flags=re.S)
-        for m in re.finditer(re.escape(OLD_NAME), src):
-            head = src[max(0, m.start() - 3):m.start()]
-            if head.endswith("分潤"):        # 「獎金分潤單」本身
-                continue
-            stale.append("%s:%d" % (p.name, src[:m.start()].count("\n") + 1))
+    stale, quoted = [], []
+    for rel in _BN4_TARGETS:
+        assert (root / rel).is_file(), "`%s` 不見了 —— **退回給我**。" % rel
+        s_, q_ = _bn4_scan(root, rel)
+        stale += s_
+        quoted += q_
     assert not stale, (
-        "還有 %d 處寫著「%s」：%r\n" % (len(stale), OLD_NAME, stale[:10])
-        + "📌 `BN4`：使用者看得到的字要改成「%s」。\n" % NEW_NAME
-        + "⚠️ 而 `routers/bonus.py:443` 寫進 `audit_log` ⇒\n"
-          "   **既有紀錄不回頭改**（那是改寫稽核紀錄）——\n"
-          "   這一題只看原始碼。")
+        "還有 %d 處寫著「%s」：%r\n" % (len(stale), OLD_NAME, stale[:12])
+        + "📌 `BN4`：使用者看得到的字與註解都要改成「%s」" % NEW_NAME
+        + "（留著舊名，下一個人 grep 只找得到一半）。")
+    assert len(quoted) == _BN4_VERBATIM_QUOTES, (
+        "使用者原話裡的「%s」有 %d 處，預期 %d：%r\n"
+        % (OLD_NAME, len(quoted), _BN4_VERBATIM_QUOTES, quoted)
+        + "☠️ 變少 ⇒ 取代把**原話**也改了（那就不是原話了）；"
+          "變多 ⇒ 有人新增了引用，確認後更新常數並寫理由。")
+    for rel, n in _BN4_UNTOUCHED.items():
+        got = (root / rel).read_text(encoding="utf-8").count(OLD_NAME)
+        assert got == n, (
+            "`%s` 的「%s」從 %d 處變成 %d 處 —— 這一檔**不在白名單**。\n" % (rel, OLD_NAME, n, got)
+            + "archive.py 的是 JSON 匯出的表標籤鍵；db.py 是鎖定檔與 migration 歷史。")
