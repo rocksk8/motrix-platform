@@ -6,6 +6,7 @@
 簡化：無改版號的退回機制。
 """
 import json
+import logging
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
@@ -29,8 +30,10 @@ from helpers import (
     guard_case_access, require_any_module,
 )
 from pdf_gen import generate_shipping_pdf_bytes, _generate_shipping_pdf
+from helpers.errors import trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -594,7 +597,9 @@ def download_shipping_pdf(note_no: str, authorization: str = Header(None)):
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("shipping_note pdf failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     encoded = urlquote(f"{note_no}.pdf")
     return Response(
         content=pdf_bytes,

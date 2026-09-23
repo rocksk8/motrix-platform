@@ -20,6 +20,7 @@ push 一筆新紀錄（例如使用者按下「記錄本次修訂」），後端
 檢視為任何登入者皆可。刪除限定 superadmin，且只有「規劃中」狀態可刪。
 """
 import json
+import logging
 import sqlite3
 from datetime import datetime
 from typing import Optional
@@ -38,8 +39,10 @@ from helpers import (_require_user, _tok, _audit, notify_module_activity, guard_
 _VIEW_MODULES = ('netplan', 'netplan_edit', 'case_manage')
 from network_plan_export import build_plan_excel, build_plan_pdf_bytes, parse_plan_excel
 from network_plan_topology import build_topology_svg
+from helpers.errors import trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _EDIT_MODULE = "netplan_edit"
 _STATUSES = ("規劃中", "已確認", "已交付")
@@ -267,7 +270,9 @@ def preview_network_plan_topology(plan_id: int, body: dict = Body(...), authoriz
     try:
         result = build_topology_svg(data)
     except Exception as e:
-        raise HTTPException(400, f"拓樸圖產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("network_plan topology failed trace=%s", tid)
+        raise HTTPException(400, f"拓樸圖產生失敗（代碼 {tid}）")
     return {"svg": result.get("html"), "warnings": result.get("warnings") or []}
 
 
@@ -337,7 +342,10 @@ async def import_network_plan_excel(plan_id: int, file: UploadFile = File(...),
         result = parse_plan_excel(content)
     except Exception as e:
         conn.close()
-        raise HTTPException(400, f"檔案解析失敗，請確認上傳的是本系統匯出的 Excel 範本：{e}")
+        tid = trace_id()
+        logger.exception("network_plan excel parse failed trace=%s", tid)
+        raise HTTPException(
+            400, f"檔案解析失敗，請確認上傳的是本系統匯出的 Excel 範本（代碼 {tid}）")
 
     sections = result["sections"]
     if not sections:

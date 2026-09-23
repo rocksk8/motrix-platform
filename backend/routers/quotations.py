@@ -39,6 +39,7 @@ from helpers import (
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
+from helpers.errors import trace_id
 from archive import _backup_quotation
 from pdf_gen import (
     _generate_quotation_pdf, generate_pdf_bytes, _get_pdf_base,
@@ -4901,7 +4902,9 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("quotation pdf failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     mode_label = "內部版" if internal else "對外版"
     # 🔴🔴 QL10：**讀即時值不做快照**（A 裁定）—— 匯款帳號要回答的是
     #    「**現在**該匯到哪」，舊單據印出舊帳號的話，對方會照著匯到一個
@@ -5064,7 +5067,9 @@ def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"結案報表 PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("quotation case-closing pdf failed trace=%s", tid)
+        raise HTTPException(500, f"結案報表 PDF 產生失敗（代碼 {tid}）")
     _audit(_tok(authorization), "quotation.export_closing_report", "quotation", quote_no,
            f"{quote_no} 結案報表 PDF 下載", {"via": "server"})
     fname = f"{quote_no}_結案報表.pdf"
@@ -5093,7 +5098,9 @@ def download_project_execution_report_pdf(quote_no: str, authorization: str = He
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"專案執行報告 PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("quotation project-execution-report pdf failed trace=%s", tid)
+        raise HTTPException(500, f"專案執行報告 PDF 產生失敗（代碼 {tid}）")
     _audit(_tok(authorization), "quotation.export_project_report", "quotation", quote_no,
            f"{quote_no} 專案執行報告 PDF 下載", {"via": "server"})
     fname = f"{quote_no}_專案執行報告.pdf"

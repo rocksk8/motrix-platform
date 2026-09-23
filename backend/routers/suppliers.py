@@ -1,5 +1,6 @@
 """Supplier CRUD and visit log endpoints."""
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -9,9 +10,11 @@ from pydantic import BaseModel
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from helpers.procurement import clean_lead_time
+from helpers.errors import trace_id
 from archive import _backup_suppliers
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class SupplierIn(BaseModel):
@@ -79,7 +82,9 @@ def create_supplier(body: SupplierIn, authorization: str = Header(None)):
         conn.commit()
     except Exception as e:
         conn.close()
-        raise HTTPException(409, f"建立失敗：{e}")
+        tid = trace_id()
+        logger.exception("supplier create failed trace=%s", tid)
+        raise HTTPException(409, f"建立失敗（代碼 {tid}）")
     conn.close()
     spawn_bg_thread(_backup_suppliers)
     _audit(_tok(authorization), 'supplier.create', 'supplier', body.name, body.name)

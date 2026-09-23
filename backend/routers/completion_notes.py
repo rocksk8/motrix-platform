@@ -18,6 +18,7 @@
 欄位設計與理由見 `db.py::_m077_completion_notes()` 的 docstring。
 """
 import json
+import logging
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
@@ -27,6 +28,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code
+from helpers.errors import trace_id
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity,
@@ -41,6 +43,7 @@ from helpers import (
 from pdf_gen import generate_completion_pdf_bytes
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 完工項目的完成狀態。**刻意允許「部分完成」與「未施作」**——完工單如果只能
 # 填「完成」，現場就會被迫把沒做完的東西也勾完成，遺留事項那欄就永遠是空的。
@@ -633,7 +636,9 @@ def download_completion_pdf(note_no: str, authorization: str = Header(None)):
     except ValueError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("completion_note pdf failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     encoded = urlquote(f"{note_no}.pdf")
     return Response(content=pdf_bytes, media_type="application/pdf",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded}"})

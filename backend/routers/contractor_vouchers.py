@@ -11,6 +11,7 @@
 vendor_contractors 或 contractor_dispatches 本身異動不會回頭改到已產生的申請。
 """
 import json
+import logging
 from datetime import date, datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
@@ -34,8 +35,10 @@ from helpers import (
     can_see_financial, is_document_approver,
 )
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
+from helpers.errors import trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def _guard_voucher(conn, row, user):
     """單據層級守門（2026-09-13 模組權限稽核第四輪）。
@@ -649,7 +652,9 @@ def download_contractor_voucher_pdf(voucher_no: str, authorization: str = Header
     except (ValueError, RuntimeError) as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("contractor_voucher pdf failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     encoded = urlquote(f"{voucher_no}.pdf")
     return Response(
         content=pdf_bytes, media_type="application/pdf",

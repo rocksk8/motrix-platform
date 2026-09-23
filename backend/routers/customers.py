@@ -1,5 +1,6 @@
 """Customer CRUD and visit log endpoints."""
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -8,9 +9,11 @@ from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+from helpers.errors import trace_id
 from archive import _backup_customers
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class CustomerIn(BaseModel):
@@ -79,7 +82,9 @@ def create_customer(body: CustomerIn, authorization: str = Header(None)):
         conn.commit()
     except Exception as e:
         conn.close()
-        raise HTTPException(409, f"建立失敗：{e}")
+        tid = trace_id()
+        logger.exception("customer create failed trace=%s", tid)
+        raise HTTPException(409, f"建立失敗（代碼 {tid}）")
     conn.close()
     spawn_bg_thread(_backup_customers)
     _audit(_tok(authorization), 'customer.create', 'customer', body.name, body.name)

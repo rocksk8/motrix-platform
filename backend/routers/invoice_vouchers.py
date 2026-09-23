@@ -16,6 +16,7 @@ routers/contractor_vouchers.py：已送出財務的憑據不應該因為之後�
 款項明細而回頭改變內容。
 """
 import json
+import logging
 from datetime import datetime
 from typing import List, Optional
 from urllib.parse import quote as urlquote
@@ -41,8 +42,10 @@ from helpers import (
     can_see_financial, is_document_approver,
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
+from helpers.errors import trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 def _guard_voucher(conn, row, user):
     """單據層級守門（2026-09-13 模組權限稽核第四輪）。
@@ -683,7 +686,9 @@ def download_invoice_voucher_pdf(voucher_no: str, authorization: str = Header(No
     except (ValueError, RuntimeError) as e:
         raise HTTPException(503, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("invoice_voucher pdf failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     encoded = urlquote(f"{voucher_no}.pdf")
     return Response(
         content=pdf_bytes, media_type="application/pdf",

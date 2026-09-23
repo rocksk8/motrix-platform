@@ -10,16 +10,19 @@
 路徑刻意用獨立的 /api/network-plans-quick 前綴（不是 /api/network-plans/xxx），
 避免跟 network_plans.py 既有的 /api/network-plans/{plan_id} 參數化路由撞在一起。
 """
+import logging
 from urllib.parse import quote as urlquote
 
 from fastapi import APIRouter, Body, HTTPException, Header
 from fastapi.responses import Response
 
 from helpers import _require_user
+from helpers.errors import trace_id
 from network_plan_export import build_topology_only_pdf_bytes
 from network_plan_topology import build_topology_svg
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 2026-09-13（模組權限稽核第二輪）：這支 router 的兩個端點**刻意不套模組檢查**。
 # 它們是無狀態的繪圖工具（吃前端傳來的 JSON、回 SVG/PDF，不讀也不寫任何資料表），
@@ -34,7 +37,9 @@ def preview_quick_topology(body: dict = Body(...), authorization: str = Header(N
     try:
         result = build_topology_svg(data)
     except Exception as e:
-        raise HTTPException(400, f"拓樸圖產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("network_plan_quick topology failed trace=%s", tid)
+        raise HTTPException(400, f"拓樸圖產生失敗（代碼 {tid}）")
     return {"svg": result.get("html"), "warnings": result.get("warnings") or []}
 
 

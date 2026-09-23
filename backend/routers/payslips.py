@@ -1,5 +1,6 @@
 """勞報單 CRUD、稅務計算、序號、PDF 下載 — superadmin only."""
 import json
+import logging
 import math
 import os
 import re
@@ -12,8 +13,10 @@ from pydantic import BaseModel
 
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity
+from helpers.errors import trace_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # 匯出存檔目錄（backend/export_archive/）
 #
@@ -427,7 +430,9 @@ def get_archive_pdf(slip_no: str, idx: int, authorization: str = Header(None)):
         except ValueError as e:
             raise HTTPException(400, str(e))
         except Exception as e:
-            raise HTTPException(500, f"PDF 產生失敗：{e}")
+            tid = trace_id()
+            logger.exception("payslip pdf (inline) failed trace=%s", tid)
+            raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -444,7 +449,9 @@ def pdf_download(slip_no: str, authorization: str = Header(None)):
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, f"PDF 產生失敗：{e}")
+        tid = trace_id()
+        logger.exception("payslip pdf (download) failed trace=%s", tid)
+        raise HTTPException(500, f"PDF 產生失敗（代碼 {tid}）")
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

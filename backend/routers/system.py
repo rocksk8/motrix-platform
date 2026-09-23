@@ -1,6 +1,7 @@
 """System: approval-flow settings, notifications, audit log, work logs."""
 import inspect
 import json
+import logging
 import os
 import re
 import secrets
@@ -17,10 +18,12 @@ from helpers import (
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
     APPROVAL_DOC_TYPE_LABELS, require_any_module)
 from helpers.quotations import _steps_to_tiers
+from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 import trail
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -1895,7 +1898,9 @@ def test_google_calendar(authorization: str = Header(None)):
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(500, f"建立測試事件失敗：{e}")
+        tid = trace_id()
+        logger.exception("google_calendar test event failed trace=%s", tid)
+        raise HTTPException(500, f"建立測試事件失敗（代碼 {tid}）")
     return {"ok": True, "event_id": event_id}
 
 
@@ -1918,7 +1923,9 @@ def test_email_notify(authorization: str = Header(None)):
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
-        raise HTTPException(502, f"SMTP 連線失敗：{e}")
+        tid = trace_id()
+        logger.exception("email_notify test failed trace=%s", tid)
+        raise HTTPException(502, f"SMTP 連線失敗（代碼 {tid}）")
     return {"ok": True, "sent_to": to}
 
 
