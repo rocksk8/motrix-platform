@@ -891,11 +891,19 @@ def _plan_allocations(conn, quote_no, allocations):
         if alloc.get("person_source_override"):
             people = _validate_manual_people(conn, alloc.get("people"))
             source_snapshot = "manual"
-            # `§4c`：完全取代，不是在來源之上加減——`manual_basis` 只記
-            # 「這個項目原本宣告的來源型別」這一筆事實，不記「原本解析
-            # 出誰」（案件沒有執行人才需要手動指定，那份資訊很多時候
-            # 根本算不出來）。一筆紀錄，不是可查詢／可篩選的結構。
-            manual_basis = item.get("person_source") or ""
+            # `§4c`：完全取代，不是在來源之上加減——`manual_basis` 記的是
+            # 「覆寫前解析出來的來源是什麼」，這裡要包含**型別＋解析結果**
+            # 兩件事，不能只記型別：那一欄的用途是事後看得出這張單本來
+            # 會發給誰，只記型別的話，半年後案件資料變了，「本來解析得出
+            # 是誰」就永遠查不到了。⚠️ 一筆紀錄（純文字），不是新增可
+            # 查詢／可篩選的欄位——不落地成結構化資料，只是把
+            # `people_for_item()` 這次順手也算出來的結果寫成一句話存起來。
+            basis_good, basis_people, basis_note = people_for_item(item, case)
+            basis_result = (
+                "、".join(basis_people) if basis_good
+                else (basis_note or "無可發放對象"))
+            manual_basis = "%s：%s" % (item.get("person_source") or "",
+                                      basis_result)
         else:
             good, people, note = people_for_item(item, case)
             if not good:
