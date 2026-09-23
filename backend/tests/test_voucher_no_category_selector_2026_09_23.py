@@ -135,6 +135,10 @@ def test_jv20_an_explanatory_comment_mentioning_the_word_is_not_a_false_positive
     ☠️ 少了這一題，「先剝掉註解再比對」這個修法本身若哪天被誤刪，
     B 又會被逼著改寫一次自己的說明文字——而那個修改在 `git log` 上
     看起來只是「順手整理文件」，沒有人會發現守門本身壞掉了。
+
+    ✅ **牙齒已驗證**：monkeypatch `_strip_html_comments` 成 no-op
+    （模擬「剝註解那一步被誤刪」），這一題**真的會紅**
+    （`'類別' in stripped` 找得到，斷言失敗）。
     """
     synthetic = (
         "<!-- 這裡刻意不加類別欄位，使用者說不需要有類別的選項 -->\n"
