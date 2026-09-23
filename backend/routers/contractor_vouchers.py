@@ -766,12 +766,24 @@ def toggle_paid(voucher_no: str, body: dict = Body(...), authorization: str = He
 
 @router.get("/api/contractor-vouchers/settings/approval-flow")
 def get_contractor_voucher_approval_flow(authorization: str = Header(None)):
+    """🔴 `AS4`（2026-09-23）：**這支端點已經沒有 UI 入口。**
+
+    `system_settings` 的 `contractor_voucher_approval_flow` 這把 key 與
+    `GET/PUT /api/settings/approval-flow/contractor_voucher`（簽核設定頁，
+    `contractor_voucher` 設成獨立設定時）**共用同一把**。舊頁
+    `contractor-voucher-approval-settings.html` 已改成導向新頁，側欄入口
+    也拿掉了 —— **不要以為這支沒人用而改它的行為或拿掉它**：既有測試與
+    可能存在的舊書籤／腳本還打得到它，而它讀寫的仍然是簽核設定頁在用的
+    那把 key。要改「承攬商匯款申請」的簽核流程，請走簽核設定頁，不要
+    從這裡改。
+    """
     _require_user(authorization)
     return _get_setting("contractor_voucher_approval_flow", {"tiers": []}) or {"tiers": []}
 
 
 @router.put("/api/contractor-vouchers/settings/approval-flow")
 def set_contractor_voucher_approval_flow(body: ApprovalFlowSettings, authorization: str = Header(None)):
+    """同上：**這支端點已經沒有 UI 入口**，寫的是簽核設定頁共用的那把 key。"""
     _require_user(authorization, require_superadmin=True)
     total_approvers = sum(len(t.approvers) for t in body.tiers)
     value = {

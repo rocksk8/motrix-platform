@@ -802,8 +802,15 @@ if (typeof module !== 'undefined' && module.exports) {
       sec('系統', sa || cAudit || cShipLog || cVer),
       ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
       ni(pg('org-structure.html'),     'org',   '組織架構設定', ['org-structure.html'],   sa),
+      // 🔴 `AS4`（2026-09-23）：「匯款申請簽核設定」這個獨立入口拿掉了——
+      //    使用者原話：「匯款申請會簽整合進簽核設定，但系統內仍然有一個
+      //    匯款申請簽核設定的選項」。舊頁與新的「簽核設定」寫的是**同一把
+      //    key**（contractor_voucher_approval_flow），而舊頁不知道
+      //    「統一／獨立」那個開關存在 ⇒ 範圍是統一流程時，舊頁存的設定
+      //    永遠不會被用到，而舊頁的說明承諾了一件它做不到的事。
+      //    舊頁本身**沒有刪**（書籤／收藏的連結還在，見該頁的導向說明），
+      //    只是拿掉側欄入口，不讓人再從這裡點進去設一個不會生效的東西。
       ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
-      ni(pg('contractor-voucher-approval-settings.html'), 'sett', '匯款申請簽核設定', ['contractor-voucher-approval-settings.html'], sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
       ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
