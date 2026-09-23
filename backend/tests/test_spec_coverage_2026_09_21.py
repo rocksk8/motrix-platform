@@ -125,19 +125,32 @@ def _scope_sections():
     （`BK9`／`G2`–`G11`／`T2`–`T7`）——
     📌 **一份清單混了「項目」與「談論項目的話」，解析器分不出來。**
     ⇒ 圍欄是那條界線，而它本來就在那裡，我只是沒有用它。
+
+    ## ⚠️ 每個 key 只認**第一個**出現的標題（A-2 2026-09-23 抓到）
+
+    ☠️ 原本「標題字面含 key 就判給那個 key」——而 A 的筆記段標題常常
+    同時提到兩個字（例如「把 5 個從 `THIS` 搬到 `NEXT`」），取第一個
+    命中 ⇒ 一篇「把 X 移出 THIS」的筆記反而把 X 判回了 `THIS`
+    （見 `test_scope_sections_are_mutually_exclusive`，修好前
+    `THIS ∩ NEXT` 有 11 個、`NEXT ∩ EXEMPT` 還有 1 個）。
+    ⇒ 每個 key 一旦被用過就從候選裡拿掉：真正的三個區塊標題
+    （`THIS`／`NEXT`／`EXEMPT` 各一次）之後，其餘所有 `## ` 一律判
+    `current = None`，筆記段的內容不再被算進任何區塊。
     """
     text = SCOPE.read_text(encoding="utf-8")
     sections = {"THIS": set(), "NEXT": set(), "EXEMPT": set()}
     current = None
     in_block = False
+    seen = set()
     for line in text.splitlines():
         stripped = line.strip()
         if stripped.startswith("## "):
             current = None
             in_block = False
             for key in sections:
-                if key in stripped:
+                if key not in seen and key in stripped:
                     current = key
+                    seen.add(key)
                     break
             continue
         if stripped.startswith("```"):
@@ -1297,6 +1310,69 @@ def test_no_prefix_in_scope_has_a_hole_that_the_spec_declares():
         + "\n☠️ 幾乎一定是被省略形式（`…`）吃掉的。\n"
           "⇒ 要嘛列進 `THIS`，要嘛明著放進 `NEXT`／`EXEMPT` —— "
           "**兩種都是一個決定，而現在沒有人做過。**"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# `THIS`／`NEXT`／`EXEMPT` 互斥（A-2 2026-09-23，`_scope_sections()` 誤判事件）
+# ══════════════════════════════════════════════════════════════════════
+#
+# 🔴 成因：`_scope_sections()` 用「`## ` 標題字面含不含 THIS/NEXT/EXEMPT」
+# 判段落開頭，而 A 在 `SCOPE.md` 裡寫筆記段時，標題常常同時提到兩個字
+# （例如「把 5 個從 `THIS` 搬到 `NEXT`」）—— 取**第一個**命中的 key，
+# 於是一篇「把 X 移出 THIS」的筆記，反而把 X 判回了 `THIS`。
+#
+# ☠️ 這道不必讀懂任何標題就抓得到：**三個區塊兩兩必須不相交**，
+# 這是 `SCOPE.md` 自己的定義（一個編號同時間只會待在一個區塊）。
+# 🔑 它比「段落判定對不對」更硬一層——判定邏輯換了寫法，這道還是有效。
+#
+# ⚠️ 這道測試是先確認會紅、再修 `_scope_sections()`（`〈新回歸測試一定要
+# 先證明它會紅〉`）：修好前 `THIS ∩ NEXT` 曾經是 11 個
+# （`AC1 BN17 IA1 IA2 MG5 PK1 PK2 QS1 RT1 VP8 WL7`），
+# 修好後這裡應該是空的——**空集合不能證明修對了，只能證明「現在沒有」**，
+# 真正的證明是這支測試在修之前跑起來是紅的。
+
+def test_scope_sections_are_mutually_exclusive():
+    """🔴🔴 `THIS`／`NEXT`／`EXEMPT` 兩兩交集必須是空集合。
+
+    一個編號在同一時間只能待在 `SCOPE.md` 三個區塊之一——這是區塊本身
+    的定義，不是靠某一版 `_scope_sections()` 解析邏輯保證的性質。
+
+    ## 🔑 這道不讀標題，只讀 `_scope_sections()` 已經解析出來的結果
+
+    ⇒ 就算段落判定的寫法以後又換了一種形狀，這道守門照樣有效——
+    它抓的是**輸出的不變量**，不是實作細節。
+
+    ## ⚠️ 這道曾經是紅的（2026-09-23，`_scope_sections()` 誤判事件）
+
+    修好前 `THIS ∩ NEXT` 是 11 個：一篇「把 5 個從 `THIS` 搬到 `NEXT`」
+    的筆記段標題同時含兩個字，取第一個命中 ⇒ 判成 `THIS` 的開頭，
+    於是那個標題底下圍欄裡列的編號全部被算進 `THIS`。
+
+    ## ⚠️ 修好①之後，這裡還會亮一個——那是另一件事，不是同一個成因
+
+    `NEXT ∩ EXEMPT = {'P1'}`：`P1` 這個字首本身就是一個合法的編號形狀
+    （1 字母＋1 數字），而 `NEXT`／`EXEMPT` 各自都有一段 `P1(1): P1-1`／
+    `P1(1): P1-2` 的計數表頭——**表頭裡的 `P1(1)` 自己先被判成一個資料項**
+    （`VR(10)`／`BK(13)` 不會，因為前綴本身不是合法編號形狀，「數字」前面
+    還隔著一個 `(`）。`P1-1`／`P1-2` 是使用者已經做過裁示的兩個不同子項
+    （`P1-1` 在 `NEXT`、`P1-2` 已推翻進 `EXEMPT`），**不是重複登記**——
+    重疊完全來自表頭巧合，不是資料錯誤，也不是這次修的段落判定成因。
+    ⇒ 沒有一起修，因為 `_SCOPE_NUM` 這顆正則被四支其他題共用，
+    範圍比這次被指派的兩行大，已回報 A 另外裁示。
+    """
+    scope = _scope_sections()
+    pairs = (("THIS", "NEXT"), ("THIS", "EXEMPT"), ("NEXT", "EXEMPT"))
+    offenders = []
+    for a, b in pairs:
+        overlap = scope[a] & scope[b]
+        if overlap:
+            offenders.append(f"{a} ∩ {b} = {sorted(overlap)}")
+    assert not offenders, (
+        "`SCOPE.md` 的區塊不該互相重疊，而現在：\n  "
+        + "\n  ".join(offenders)
+        + "\n☠️ 一個編號同時待在兩個區塊 ⇒ 段落判定把某個標題判給了"
+          "錯的區塊（常見成因：筆記段標題字面同時含兩個關鍵字）。"
     )
 
 
