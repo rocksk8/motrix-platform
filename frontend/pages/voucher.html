@@ -35,6 +35,13 @@
     table.vc-lines input{width:100%;border:none;background:transparent;font-size:13px;font-family:inherit;padding:0}
     table.vc-lines input.num{text-align:right;font-family:var(--font-mono,monospace)}
     table.vc-lines input:focus{outline:1px solid var(--accent,#888)}
+    /* `JV12`：摘要欄改用 textarea，高度隨文字長度長高（見 x-effect 的
+       自動調高邏輯）。resize:none 不給手動拖曳把手——那個把手在這種
+       表格版面裡會把整欄行高拖亂，而自動長高已經解決「內容放不下」了。 */
+    table.vc-lines textarea{width:100%;min-height:1.4em;border:none;background:transparent;
+      font-size:13px;font-family:inherit;padding:0;resize:none;overflow:hidden;
+      display:block;line-height:1.4;vertical-align:top}
+    table.vc-lines textarea:focus{outline:1px solid var(--accent,#888)}
     .vc-total td{font-weight:700;background:#FAF9F6}
     .vc-total .label{text-align:center;letter-spacing:6px}
     .vc-diff{color:#B91C1C;font-weight:700}
@@ -233,9 +240,18 @@
                           ⇒ 帶入之後**不可以把這一格鎖起來**。
                        ☠️ 鎖起來的頁面看起來完全正常，使用者只會覺得
                           「這格打不了字」，而不會知道那是設計。 -->
-                  <td><input x-model="l.summary" :disabled="!canEdit"
-                             @focus="focusLine(i)"
-                             placeholder="3/30 向量圓專 XV15543058"></td>
+                  <!-- 🔴 `JV12`：摘要欄長度不定（帶入的字串長短不一），
+                       原本的 `<input>` 是單行文字框，本質上就長不高——
+                       改成 `textarea` 才有「高度隨文字長度調整」的空間。
+                       ⚠️ `x-effect` 讀 `l.summary` 當依賴：**不管值是打字
+                       改的還是「帶入」按鈕程式改的都會觸發**，`@input` 單獨
+                       接不到後者（程式設 `.value` 不會發 input 事件）。
+                       `$nextTick` 是因為要等 Alpine 把 x-model 寫進 DOM
+                       之後才量得到正確的 `scrollHeight`。 -->
+                  <td><textarea x-model="l.summary" :disabled="!canEdit"
+                             @focus="focusLine(i)" rows="1"
+                             x-effect="l.summary; $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px' })"
+                             placeholder="3/30 向量圓專 XV15543058"></textarea></td>
                   <td class="num"><input class="num" x-model="l.debit"
                              :disabled="!canEdit" inputmode="numeric"></td>
                   <td class="num"><input class="num" x-model="l.credit"
