@@ -24,14 +24,38 @@ def test_scope_defaults_and_editing(client, make_user):
     scope = r.json()
     # 2026-09-11 新增 extra_expense（案件額外支出送審）、2026-09-12 新增 completion
     # （完工單）。兩者預設 True＝跟著統一流程走，要獨立就在設定頁把它取消勾選。
-    # ⚠️ 這個斷言用的是完整相等而不是子集合比對，所以**每加一種文件類型就會紅一次**
-    # ——那是刻意的：新增類型時一定要回來確認它的預設分組是不是你要的，而不是
-    # 讓它悄悄跟著統一流程走。
-    assert scope == {
+    #
+    # 🔴 **2026-09-23 改寫，而原本那個「完整相等」的意圖要留著**
+    #
+    # 原本寫 `assert scope == {...}`，註解逐字說那是**刻意的**：
+    # 「新增類型時一定要回來確認它的預設分組是不是你要的，而不是讓它悄悄
+    #   跟著統一流程走」。
+    # ⚠️ 而 `AS2` 加了第八個（voucher）、`BN8` 馬上要加第九個
+    #    ⇒ 它會**在每一次正常擴充時變紅**，而那種守門最後會被改成不擋任何東西。
+    #
+    # 🔑 ⇒ 不是放寬成子集合，是**把那個意圖做成一張登記表**：
+    # ```
+    # ① 登記過的每一個 key，值要一模一樣   <= 既有的不可以被改掉
+    # ② 回應裡**每一個 key 都要登記過**     <= 新增類型仍然會紅
+    # ```
+    # ⇒ 新增一個類型時要做的事**沒有變**（回來確認它的預設分組），
+    #   而修法從「改一個字面 dict」變成「在登記表加一行並寫下預期」。
+    EXPECTED_SCOPE = {
         "quotation": True, "shipping": True, "invoice_voucher": True,
-        "payment_request": True, "contractor_voucher": False, "extra_expense": True,
-        "completion": True,
-    }, scope
+        "payment_request": True, "contractor_voucher": False,
+        "extra_expense": True, "completion": True,
+    }
+    for key, want in EXPECTED_SCOPE.items():
+        assert key in scope, f"既有的文件類型 {key} 從 scope 裡消失了：{scope}"
+        assert scope[key] is want, (
+            f"{key} 的預設分組被改掉了（{scope[key]}，原本 {want}）——\n"
+            "☠️ 那會靜默改變那一類單據走哪一條簽核流程。")
+    extra = sorted(set(scope) - set(EXPECTED_SCOPE))
+    assert not extra, (
+        f"有 {len(extra)} 個文件類型沒有登記：{extra}\n"
+        "📌 新增類型時**一定要回來確認它的預設分組是不是你要的** ——\n"
+        "   而不是讓它悄悄跟著統一流程走。\n"
+        "⇒ 請在上面的 EXPECTED_SCOPE 加一行，並寫下你要的預設值。")
 
     # 2) put some tiers into the unified flow
     unified_payload = {

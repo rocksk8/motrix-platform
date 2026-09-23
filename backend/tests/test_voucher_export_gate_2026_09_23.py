@@ -65,6 +65,23 @@ def _create(client, hdr):
     return r.json()["id"]
 
 
+def _set_company_raw(raw):
+    """直接寫進 `system_settings.value_json` —— **欄位名只寫在這裡一處**。
+
+    🔑 上一輪我修了一個實例而漏了另一個 ⇒ 現在讓它只有**一個**來源。
+    """
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO system_settings (key, value_json,"
+            " updated_at) VALUES ('company_profile', ?, '2026-09-23')",
+            (raw,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _set_company(name):
     """設定（或清空）公司抬頭。
 
@@ -81,17 +98,8 @@ def _set_company(name):
     🔑 ② 特別值得記：我以為我在量「沒設定時的行為」，
       **而那個狀態要自己造出來**。
     """
-    import db
     import json as _json
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT OR REPLACE INTO system_settings (key, value_json,"
-            " updated_at) VALUES ('company_profile', ?, '2026-09-23')",
-            (_json.dumps({"name": name}),))
-        conn.commit()
-    finally:
-        conn.close()
+    _set_company_raw(_json.dumps({"name": name}))
 
 
 def _pdf_text(body):
@@ -166,15 +174,17 @@ def test_jv9_the_swallowed_error_leaves_a_trace(client, make_user, caplog):
     """
     import logging
 
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT OR REPLACE INTO system_settings (key, value)"
-            " VALUES ('company_profile', ?)", ("{不是合法的 JSON",))
-        conn.commit()
-    finally:
-        conn.close()
+    # 🔴 **同一個錯誤模型的第二個實例**（B 抓到，A 落 `§232`）
+    #
+    # 我上一輪修了 `_set_company()` 的欄位名（`value` -> `value_json`），
+    # **而這裡還帶著同一個誤解** ⇒ 整檔五題停在 `OperationalError`，
+    # **量不到任何東西**。
+    # 🔑 〈修錯字／清資料前先問「產生它的那個動作還在不在」〉的**鏡像**：
+    #    **修了一個實例，而產生它的那個誤解還在。**
+    # ⇒ 我當時把它當成「我踩到的一次」，而它其實是**一個會重複出現的錯誤模型**
+    #   （`system_settings` 的欄位名）。
+    # ⚙️ ⇒ 統一走 `_set_company()`，這裡不再自己寫 SQL。
+    _set_company_raw("{不是合法的 JSON")
 
     _u, hdr = _hdr(client, make_user, "jv9_log")
     vid = _create(client, hdr)
