@@ -36,6 +36,7 @@ from helpers import (
     validate_invoice_no,
     summarize_payment_items,
 )
+from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
 from archive import _backup_quotation
@@ -1244,6 +1245,14 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
         _client_no = ""
     qno = _client_no or _peek_next_no(conn, month)
 
+    # `QL25`（依據使用者 2026-09-23 裁示）入口①：直接建立即送審（沒有草稿
+    # 步驟），離開草稿那一刻＝這裡。草稿階段仍跟著設定走，只有真的要
+    # 送審才凍結——`body.status` 停在「草稿」的路不寫快照。判準用
+    # `!= "草稿"`（不是只認字面「待審核」）：同入口②③的理由，這支也
+    # 收得到 client 直接送非「待審核」的非草稿狀態。
+    if body.status != "草稿":
+        q[SNAPSHOT_KEY] = snapshot_for((body.location_id or "").strip())
+
     def _do_insert(no: str):
         q["quoteNo"] = no
         conn.execute("""
@@ -1456,8 +1465,10 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     existing = conn.execute(
         # data_json 是 2026-09-14 加進來的：一般編輯要寫「改了什麼」的變更摘要，
         # 需要拿得到存檔前的內容（見 _summarize_quote_changes()）。
+        # location_id：`QL25` 算「離開草稿」的有效據點要用（見下方 COALESCE
+        # 同一條規則：沒送 locationId 就沿用既有欄位值）。
         "SELECT id, status, deal_tag, settle_status, updated_at, sales_person_id, "
-        "sales_person, data_json "
+        "sales_person, data_json, location_id "
         "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not existing:
@@ -1508,6 +1519,21 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         _changes = _summarize_quote_changes(_old_data, q)
         if _changes:
             _append_edit_history(q, user, now, "quote_update", _changes)
+
+    # `QL25`（依據使用者 2026-09-23 裁示）入口②：PUT 送審（含解鎖編輯強制
+    # 重簽）。判準是**離開草稿這個轉換**（同入口③的理由：client 端理論上
+    # 送得出非「待審核」的 new_status，不能只認字面值），不是「只寫一次」：
+    # 解鎖重簽再次進到這裡一樣會覆蓋，用的是當下的據點設定。有效據點的
+    # 解法同下方 UPDATE 的 `COALESCE(?, location_id)`：沒送 `locationId`
+    # 就沿用既有欄位值，不可以在快照這裡退回主要據點——那會與實際存進
+    # `location_id` 欄位的值不一致。
+    if existing["status"] == "草稿" and new_status != "草稿":
+        _eff_location_id = ((body.location_id or "").strip()
+                            or (existing["location_id"] or ""))
+        q[SNAPSHOT_KEY] = snapshot_for(_eff_location_id)
+    elif new_status == "草稿":
+        q.pop(SNAPSHOT_KEY, None)
+
     conn.execute("""
         UPDATE quotations SET
           status=?, customer_name=?, project_name=?,
@@ -1573,7 +1599,8 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
         raise HTTPException(400, f"不支援的狀態值：{body.status}")
     conn = get_db()
     row = conn.execute(
-        "SELECT customer_name, status, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+        "SELECT customer_name, status, data_json, location_id "
+        "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not row:
         conn.close()
@@ -1593,8 +1620,36 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
                     "請透過正式簽核流程完成審核，不可直接強制送出"
                 )
     cname = row['customer_name'] or ''
-    conn.execute("UPDATE quotations SET status=?, updated_at=? WHERE quote_no=?",
-                 (body.status, datetime.now().isoformat(), quote_no))
+    # `QL25`（依據使用者 2026-09-23 裁示）入口③：superadmin 直接改狀態，
+    # 不叫 submit、不經過 save_quotation_json()，是一句獨立的
+    # `UPDATE quotations SET status=?`——規格逐字點名這是最容易漏的入口。
+    # 🔴 判準是**離開草稿這個轉換**，不是「目的地剛好是待審核」——這支
+    # 端點的白名單容許 superadmin 直接從「草稿」跳到「已送出」（繞過分層
+    # 簽核），那樣也要凍結，不能因為沒有經過「待審核」就漏掉。
+    # ⚠️ 這支的白名單也含「草稿」：superadmin 也可能直接把狀態**改回**
+    # 草稿（`_STATUS_PATCH_WHITELIST` 裡就有），那是規格 §4 列的兩條回
+    # 草稿路徑（recall／reject）之外**第三條沒有被列出來的路**——同一條
+    # 原則（「任何把 status 寫成草稿的地方都要清快照」）套在這裡：離開
+    # 草稿覆蓋，回到草稿清掉；待審核／簽核中之間互轉（已經離開過草稿）
+    # 不重新凍結，維持離開草稿那一刻凍住的值。
+    _leaving_draft = row["status"] == "草稿" and body.status != "草稿"
+    _entering_draft = body.status == "草稿"
+    if _leaving_draft or _entering_draft:
+        try:
+            _sd = json.loads(row["data_json"] or "{}")
+        except (TypeError, ValueError):
+            _sd = {}
+        if _leaving_draft:
+            _sd[SNAPSHOT_KEY] = snapshot_for(row["location_id"] or "")
+        else:
+            _sd.pop(SNAPSHOT_KEY, None)
+        conn.execute(
+            "UPDATE quotations SET status=?, data_json=?, updated_at=? WHERE quote_no=?",
+            (body.status, json.dumps(_sd, ensure_ascii=False),
+             datetime.now().isoformat(), quote_no))
+    else:
+        conn.execute("UPDATE quotations SET status=?, updated_at=? WHERE quote_no=?",
+                     (body.status, datetime.now().isoformat(), quote_no))
     conn.commit()
     conn.close()
     action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
@@ -1634,6 +1689,10 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     cname = row["customer_name"] or q.get("customerName") or ""
     q.pop("approval", None)
     q["status"] = "草稿"
+    # `QL25`（依據使用者 2026-09-23 裁示）：回到草稿要清掉據點快照——
+    # 草稿階段仍跟著設定即時走，快照還在的話，收回之後、還沒再送審之前
+    # 這段時間會印出舊抬頭（而那與「凍結生效中」長得一樣，沒有人會報修）。
+    q.pop(SNAPSHOT_KEY, None)
     now = datetime.now().isoformat()
     deal_tag, settle_status = quote_hot_fields(q)
     conn.execute(
@@ -4460,6 +4519,10 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     d["quoteNo"] = new_no
     d["status"]  = "草稿"
     d.pop("approval", None)
+    # `QL25`（依據使用者 2026-09-23 裁示）：退回也是回草稿的一條路，
+    # 同 recall_quotation() 清掉據點快照——理由一樣：草稿階段要跟著
+    # 設定即時走，不是印退回當下凍結的那份舊抬頭。
+    d.pop(SNAPSHOT_KEY, None)
 
     conn.execute(
         "UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=? WHERE quote_no=?",

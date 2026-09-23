@@ -8,6 +8,9 @@
 所有單據**，而那種相依看不出來。
 ⇒ PDF 層問的是「**這份單的抬頭是什麼**」，不是「`company_profile` 裡有什麼鍵」。
 """
+import json
+from datetime import datetime
+
 from db import get_db
 from helpers.settings import _get_setting
 
@@ -128,3 +131,132 @@ def _location_of(payload) -> str:
     except Exception:       # noqa: BLE001 —— 查不到就退回主要據點
         return ""
     return str((row["location_id"] if row else "") or "").strip()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# `QL25` · 報價單的據點身分要在「送出」那一刻凍結
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# 使用者逐字：「預設據點的部分，會強制帶到已經成立或是未成立的報價單，
+# 應該以報價單成立當下的據點為主」。A 裁：① 凍結時機＝按「送出」那一刻
+# （草稿階段仍跟著設定走）② 舊單等使用者填完設定後一次補 ③ 存內容不只 id
+# ④ 沒有快照的舊單落回即時查。
+#
+# 🔴 這不牴觸 `QL10`（請款單等付款類單據讀即時值，回答的是「現在該匯到
+# 哪」）——判準是「這份文件回答的是哪一個問題」：報價單回答的是「當初
+# 報的是什麼」，與已交給員工的薪資單（`QL16`）同一類，凍結。
+#
+# ⚠️ 只凍結**抬頭五欄**，銀行四欄永遠即時值——`QL10` 沒有被翻掉，它管的
+# 是不同的欄位（報價單版型本來就沒有銀行帳號欄位，只有請款單有）。
+
+#: 會被快照覆蓋的欄位。**銀行四欄刻意不在裡面**（`QL10`：帳號要回答
+#: 「現在該匯到哪」，不可以是凍結的舊值）。
+_SNAPSHOT_FIELDS = ("company_name", "company_name_en", "tax_id", "phone", "email")
+
+#: `data_json` 裡放快照的鍵。**不開新資料庫欄位**——`location_id` 已經是
+#: 欄位（`QL2`），快照是「內容」，與薪資單（`QL16`）的做法一致，放
+#: `data_json`。
+SNAPSHOT_KEY = "locationIdentity"
+
+
+def snapshot_for(location_id) -> dict:
+    """送出那一刻要存進 `data_json["locationIdentity"]` 的內容。
+
+    ⚠️ 只存抬頭五欄——**不要整包存 `location_identity()` 的回傳**（它含
+    四個銀行欄位）：存了就會有人去讀，那正是 `QL10` 要避免的。
+    `_locationId`／`_frozenAt` 只為稽核，**不拿來重查**（重查就違反了
+    「凍結」的意思）。
+    """
+    ident = location_identity(location_id)
+    out = {f: ident.get(f, "") for f in _SNAPSHOT_FIELDS}
+    out["_locationId"] = str(location_id or "").strip()
+    out["_frozenAt"] = datetime.now().isoformat()
+    return out
+
+
+def _resolve(payload):
+    """`(據點 id, 快照 dict)`。**一次查詢**，兩條路分別處理。
+
+    ```
+    甲 payload 自己有 locationId   報價單表單直送、測試直塞 => 不查 DB
+    乙 payload 只有 quoteNo        下游 7 支 builder => 查 quotations
+    ```
+    """
+    payload = payload or {}
+    direct = str(payload.get("locationId") or "").strip()
+    if direct:
+        return direct, (payload.get(SNAPSHOT_KEY) or {})
+    quote_no = str(payload.get("quoteNo") or payload.get("quote_no") or "").strip()
+    if not quote_no:
+        return "", (payload.get(SNAPSHOT_KEY) or {})
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT location_id, data_json FROM quotations WHERE quote_no=?",
+                (quote_no,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:       # noqa: BLE001 —— 查不到就退回主要據點＋無快照
+        return "", {}
+    if not row:
+        return "", {}
+    try:
+        d = json.loads(row["data_json"] or "{}")
+    except (TypeError, ValueError):
+        d = {}
+    return (str(row["location_id"] or "").strip(), d.get(SNAPSHOT_KEY) or {})
+
+
+def apply_snapshot(ident: dict, payload) -> dict:
+    """把 `payload` 的快照（若有）逐欄覆蓋到**已經算好的** `ident` 上。
+
+    🔴 這支**不呼叫 `location_identity()`**——即時值由呼叫端自己先算好
+    傳進來，這裡只做「快照覆蓋」這一步。
+
+    ## 為什麼要拆成兩步，不像 §3b① 原案直接包成一支 `identity_for()`
+
+    `pdf_gen.py` 的 8 支 builder 目前是 `location_identity(_location_of(x))`
+    這個**看得見的呼叫**——既有的 `identity` 測試接縫
+    （`test_quote_location_2026_09_22.py` 的 `identity` fixture）monkeypatch
+    的正是 `pdf_gen.location_identity` 這個名字，用來驗「8 支 builder 有
+    沒有真的去取值」。若把整段包進 `company_identity.py` 的一支函式，
+    這支函式呼叫的 `location_identity` 是**它自己模組裡的原始名字**，
+    monkeypatch 到 `pdf_gen.location_identity` 的假值完全攔不到——
+    那道既有守門會變成一個誤報的假警報（它會說『8 支 builder 沒有真的去
+    取值』，而它們其實有，只是繞過了測試盯著的那個名字）。
+    ⇒ `pdf_gen.py` 的呼叫端仍然寫兩行：`location_identity(_location_of(x))`
+    接 `apply_snapshot(_ident, x)`，即時值那一步留在**呼叫端自己的
+    命名空間**裡可以被監控，快照覆蓋是**額外疊加**的第二步。
+    `identity_for()`（下面）保留給 `pdf_gen.py` 以外、不受那道監控約束
+    的呼叫端使用——兩支底層邏輯相同（都是 `apply_snapshot` 的疊法），
+    不是兩條规则。
+
+    ⚠️ **逐欄覆蓋，不是整組**（同 `QL22`「退階要逐欄」）——快照裡某欄
+    是空的，就落回即時值那一欄，不要讓一個空的快照欄位把即時值蓋成空白。
+    """
+    snap = _snapshot_of(payload)
+    out = dict(ident)
+    for f in _SNAPSHOT_FIELDS:
+        v = str(snap.get(f) or "").strip()
+        if v:
+            out[f] = v
+    return out
+
+
+def _snapshot_of(payload):
+    """`payload` 的快照 dict——只回快照本身，不查即時值。"""
+    _loc_id, snap = _resolve(payload)
+    return snap
+
+
+def identity_for(payload) -> dict:
+    """一份單據要印的公司身分——**即時值當底，抬頭五欄被快照逐欄覆蓋**。
+
+    🔴 銀行四欄永遠是即時值（`QL10` 沒有被翻掉，它管的是別的欄位）。
+    ⚠️ 給 `pdf_gen.py` 以外的呼叫端用；`pdf_gen.py` 自己的 8 支 builder
+    用 `location_identity(_location_of(x))` + `apply_snapshot(...)` 兩步
+    （理由見 `apply_snapshot()` 的 docstring）。
+    """
+    loc_id, _snap = _resolve(payload)
+    return apply_snapshot(location_identity(loc_id), payload)

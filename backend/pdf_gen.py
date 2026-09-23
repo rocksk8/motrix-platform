@@ -100,11 +100,13 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(q))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示，翻掉這一段原本的 `QL10`
+    #    註解——**只對報價單**，`QL10` 本身沒有被推翻，見下）：
+    #    報價單回答的是「**當初報的是什麼**」，與薪資單（`QL16`）同一類，
+    #    要在送出那一刻凍結，不是每次重印都變。`apply_snapshot()` 疊在
+    #    即時值上，只覆蓋抬頭五欄——銀行四欄**這裡本來就沒有**（報價單
+    #    版型沒有匯款帳號欄位，`QL10` 管的是請款單那幾支，原封不動）。
+    _ident = apply_snapshot(location_identity(_location_of(q)), q)
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     ps = q.get('pdfShow') or {}
@@ -513,7 +515,7 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
 # 命名空間裡，C 的題用 `monkeypatch.setattr(pdf_gen, "location_identity", …)`
 # 換掉它們來驗「8 支 builder 有沒有真的去取值」。
 from helpers.company_identity import (      # noqa: E402
-    DEFAULT_IDENTITY, location_identity, _location_of,
+    DEFAULT_IDENTITY, location_identity, _location_of, apply_snapshot,
 )
 
 
@@ -1032,11 +1034,11 @@ def _build_shipping_html(n: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(n))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(n)), n)
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -1392,11 +1394,11 @@ def _build_contractor_voucher_html(v: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(v))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -1750,11 +1752,11 @@ def _build_invoice_voucher_html(v: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(v))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -2058,11 +2060,11 @@ def _build_payment_request_html(v: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(v))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(v)), v)
     def esc(s):
         return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
     def money(n):
@@ -2558,11 +2560,11 @@ def _build_case_closing_html(data: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(data))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -3070,11 +3072,11 @@ def _build_project_execution_report_html(data: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(data))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(data)), data)
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
@@ -3263,11 +3265,11 @@ def _build_completion_html(n: dict) -> str:
     # 🔑 QL7：抬頭從**這一筆單據所屬的據點**取值，一支函式取一次。
     # ⚠️ 取不到 `locationId` ⇒ `location_identity(None)` 落在主要據點，
     #    那是既有安裝（只有一個據點、或根本沒設過）的正確行為。
-    # 📌 **讀即時值不做快照**（QL10，A 裁定）：匯款帳號要回答的是
-    #    「**現在**該匯到哪」——舊單據印出舊帳號，對方會照著匯到一個
-    #    已經關掉的帳戶。代價（改一次設定，歷史 PDF 重印都會變）
-    #    由列印時的稽核紀錄承擔，見 routers 那一側。
-    _ident = location_identity(_location_of(n))
+    # 🔴 `QL25`（依據使用者 2026-09-23 裁示）：這份單據的抬頭要跟著
+    #    報價單送出那一刻凍結的快照走（若有）——`apply_snapshot()` 疊
+    #    在即時值上，只覆蓋抬頭五欄。銀行欄位不受影響：`QL10` 沒有被
+    #    翻掉，它管的是別的欄位，此處若有銀行欄位仍然一律即時值。
+    _ident = apply_snapshot(location_identity(_location_of(n)), n)
     def esc(s):
         return (str(s) if s is not None else '').replace('&', '&amp;').replace('<', '&lt;') \
             .replace('>', '&gt;').replace('\n', '<br>')
