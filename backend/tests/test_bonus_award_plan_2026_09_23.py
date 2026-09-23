@@ -66,15 +66,34 @@ def _hdr(client, make_user, username, role="superadmin", modules=None):
 
 def _seed_case(quote_no, net_profit=1000000, sales_person="alice",
                stage_people=None):
-    """種一個有精算淨利的案件。`stage_people=None` ⇒ **一個階段負責人都沒有**。"""
+    """種一個有精算淨利的案件。`stage_people=None` ⇒ **一個階段負責人都沒有**。
+
+    🔴 `QS1-a` 落地後（`208f0d2`）：`sales_person` 這個來源要靠
+    `sales_person_id` 解出真的 `users.username`，`quotations.sales_person`
+    那個顯示名欄位不再是 `people_for_item()` 的解析依據。⇒ 這裡**同時**
+    查一次 `users`，若 `sales_person` 剛好是一個真實存在的
+    `username`，就順手把 `sales_person_id` 也設起來——呼叫端只要傳的是
+    一個真帳號（多數呼叫端本來就是靠 `make_user()` 建的），不必額外
+    改呼叫方式就能自動接上新行為；傳一個**不存在**的字串（例如驗證
+    「解析不出來要被擋」那一題）則刻意保持 `sales_person_id` 是 NULL，
+    這正是那一題要的前提。
+    """
     import db
     conn = db.get_db()
     try:
+        sales_person_id = None
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ? AND active = 1",
+            (sales_person,)).fetchone()
+        if row is not None:
+            sales_person_id = int(row["id"])
         conn.execute(
             "INSERT INTO quotations (quote_no, status, customer_name, "
-            "project_name, total, pretax, sales_person, data_json, "
-            "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "project_name, total, pretax, sales_person, sales_person_id,"
+            " data_json, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (quote_no, "已結案", "測試客戶", "測試案", 0, 0, sales_person,
+             sales_person_id,
              json.dumps({"settlement": {"summary": {"netProfit": net_profit}}}),
              "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
         if stage_people is not None:
@@ -437,7 +456,12 @@ def test_bn1_it_says_whether_a_live_award_already_exists(client, make_user):
     ```
     ⚙️ 兩個方向都釘：沒有單 ⇒ `False`；建了一張 ⇒ `True`。
     ☠️ 只釘一個方向的話，一個「永遠回 False」的實作也會綠。
+
+    🔴 `QS1-a` 落地後，`sales_person` 要能解析成真的帳號才會有人可以
+    發放（見 `_seed_case()` 的說明）——這裡先用 `make_user()` 建一個
+    真的 `alice` 帳號，不是放寬「解析不出來也算」這個斷言。
     """
+    make_user(username="alice", role="user")
     _seed_case("MQ-BN1-DUP", sales_person="alice")
     item_id = _seed_item("業務獎金", "sales_person")
     _u, hdr = _hdr(client, make_user, "bn1_mgr6")
@@ -457,6 +481,51 @@ def test_bn1_it_says_whether_a_live_award_already_exists(client, make_user):
         "已經有一張有效獎金單了，而 `plan` 說沒有：%r\n" % after
         + "☠️ 使用者會再按一次產生，然後收到 **409** ——\n"
           "   而這個模組已經確立「按下去之前就該知道答案」。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ③b `QS1-a`：sales_person 解析不出真帳號要被擋
+# ══════════════════════════════════════════════════════════════════════
+
+def test_bn1_an_unresolvable_sales_person_is_refused_not_silently_paid(
+        client, make_user):
+    """🔴🔴 **`QS1-a` 的新行為：`sales_person` 是一個解析不出真帳號的
+    字串時，這個項目要被擋下來，不是靜默算 0 人也不是照樣發放。**
+
+    🔑 這一題原本不存在——`_seed_case()` 的預設 `sales_person="alice"`
+    在 `QS1-a` 之前是一個**任意字串**，沒有人檢查它是不是真帳號，
+    `test_bn1_it_says_whether_a_live_award_already_exists` 與
+    `test_bn1_paying_less_than_the_whole_pool_is_still_allowed` 兩題
+    能綠**正是靠這個缺陷**（任意字串直接當 `username` 用）。`QS1-a`
+    修好之後那兩題改成先用 `make_user()` 建一個真的 `alice` 帳號——而
+    它們原本掩蓋掉的「解析不出來會怎樣」這件事，需要獨立補一題，不能
+    讓它隨著 fixture 一起被悄悄修掉。
+    """
+    quote_no = "MQ-BN1-UNRESOLVABLE"
+    # 🔑 刻意不呼叫 `make_user()`——`sales_person` 是一個資料庫裡
+    # 沒有對應真帳號的字串，`sales_person_id` 因此會是 NULL
+    # （見 `_seed_case()` 的說明）。
+    _seed_case(quote_no, sales_person="definitely_not_a_real_user_9912")
+    item_id = _seed_item("業務獎金", "sales_person")
+    _u, hdr = _hdr(client, make_user, "bn1_unresolvable_sup")
+
+    plan = _plan(client, hdr, quote_no).json()
+    entry = next((it for it in plan.get("items") or ()
+                 if it.get("bonus_item_id") == item_id), None)
+    assert entry is not None, "先問端點的清單裡找不到這個項目。"
+    assert entry.get("ok") is False, (
+        "`sales_person` 解析不出真帳號，項目卻被判定成 `ok=True`：%r\n"
+        % entry
+        + "☠️ 那會讓後面的 `POST /awards` 發給一個不存在的帳號，或是"
+          "靜默算成 0 人吃掉整個項目的份額。")
+
+    r = client.post("/api/bonus/awards", headers=hdr, json={
+        "quote_no": quote_no,
+        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
+                         "person_pct": {"definitely_not_a_real_user_9912": BP}}]})
+    assert r.status_code == 400, (
+        "`sales_person` 解析不出真帳號，建單卻成功了（回 %s）：%s"
+        % (r.status_code, r.text[:200]))
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -606,7 +675,12 @@ def test_bn1_paying_less_than_the_whole_pool_is_still_allowed(client,
     ```
     ☠️ 少了這一題，上面兩題可以靠「一律擋 `>= 10000`」變綠 ——
        而那會讓使用者**連整數的 100% 都送不出去**。
+
+    🔴 `QS1-a` 落地後，`sales_person` 要能解析成真的帳號（見
+    `_seed_case()` 的說明）——這裡先用 `make_user()` 建一個真的
+    `alice` 帳號，不是放寬斷言。
     """
+    make_user(username="alice", role="user")
     _seed_case("MQ-BN1-UNDER", sales_person="alice")
     item_id = _seed_item("業務獎金", "sales_person")
     _u, hdr = _hdr(client, make_user, "bn1_mgr9")
