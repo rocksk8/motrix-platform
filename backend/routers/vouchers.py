@@ -48,7 +48,7 @@ from helpers.voucher_attachments import (
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
-    diff_lines, approval_done,
+    diff_lines, approval_done, parse_approval_json, VoucherChainUnreadable,
 )
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
@@ -151,14 +151,33 @@ def _check_account_codes(conn, lines):
 
 
 def _appr_of(row):
-    """傳票的簽核鏈。**壞掉的 JSON 不要吞成空鏈** —— 那與「沒有設定」一模一樣。"""
-    raw = (dict(row) if not isinstance(row, dict) else row).get("approval_json")
-    if not raw:
-        return {}
+    """傳票的簽核鏈——拿來**修改狀態**用（簽核動作）。**壞掉的 JSON 不要吞成
+    空鏈**，那與「沒有設定」一模一樣；讀不出鏈時簽核動作必須擋下來，不能
+    猜著簽，fail-closed（同 `approval_done()` 的方向）。
+
+    🔴 `JV27`：解析本身疊在共用的 `parse_approval_json()` 上——上一版這裡
+    自己重新 `json.loads` 一次，是一套獨立維護、會漂移的實作。
+    ⚠️ **只給需要 fail-closed 的呼叫端用**（簽核動作）。`read_voucher()`
+    是顯示用途，不能借這支去擋住整張傳票的讀取——分錄／附件都已經讀出來
+    了，一筆壞掉的簽核資料不該連帶讓那些也讀不到，見那裡自己的處理。
+    """
+    voucher = dict(row) if not isinstance(row, dict) else row
     try:
-        return json.loads(raw) or {}
-    except ValueError:
+        return parse_approval_json(voucher)
+    except VoucherChainUnreadable:
         raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法繼續簽核。")
+
+
+#: `read_voucher()` 讀不出簽核鏈時的替代值——**fail-open**，同
+#: `signatures_of()` 對 `VoucherChainUnreadable` 的方向：顯示用途，
+#: 壞掉的簽核資料不能連帶讓分錄／附件也讀不出來。
+#: 形狀維持 `{tiers, currentTier}`（`_appr_of()` 正常回傳的同一組鍵），
+#: 讓還沒讀過 `unreadable` 旗標的呼叫端也不會因為缺鍵而壞掉，
+#: 額外的 `unreadable`／`message` 給知道要看它的呼叫端用。
+_UNREADABLE_APPR = {
+    "tiers": [], "currentTier": 0, "unreadable": True,
+    "message": "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核。",
+}
 
 
 @router.post("")
@@ -415,7 +434,16 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
         #    而「還差誰簽、現在第幾關」也只有它答得出來。
         row = conn.execute("SELECT approval_json FROM vouchers_all"
                            " WHERE id = ?", (voucher_id,)).fetchone()
-        appr = _appr_of(row) if row is not None else {}
+        # 🔴 `JV27`：**不**借 `_appr_of()`（那支是 fail-closed，給簽核動作
+        # 用）——讀取是顯示用途，一筆壞掉的 approval_json 不該讓分錄／附件
+        # 也連帶讀不到（`data`／`atts` 這一刻都已經成功讀出來了）。
+        if row is None:
+            appr = {}
+        else:
+            try:
+                appr = parse_approval_json(dict(row))
+            except VoucherChainUnreadable:
+                appr = _UNREADABLE_APPR
     finally:
         conn.close()
     if data is None:

@@ -405,12 +405,40 @@ class VoucherChainUnreadable(Exception):
     """
 
 
+def parse_approval_json(voucher):
+    """`approval_json` 的原始解析（整包 dict，含 `tiers`／`currentTier`）。
+
+    **共用件**——`JV27`：`routers/vouchers.py` 原本自己重新 `json.loads`
+    了一次（`_appr_of()`），兩套解析各自維護、行為各自漂移。這裡是唯一
+    的解析入口，`_chain_tiers()` 疊在它上面；`routers/vouchers.py` 也
+    改叫這支，不再自己 parse。
+
+    ```
+    沒有 approval_json   => **回 {}**（明確的「沒有設定簽核流程」）
+    有而解析失敗          => **raise VoucherChainUnreadable**
+    ```
+    """
+    raw = voucher.get("approval_json")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except (TypeError, ValueError) as exc:
+        # 📌 訊息裡寫出**哪一個動作**失敗，以及**fail-closed 這個選擇本身**
+        #    （比照 `archive.py:288` 那個寫法 —— 它連選擇都寫進訊息）。
+        logger.warning(
+            "傳票 %s 的簽核鏈解析失敗（fail-closed：一律視為**未簽核完成**）：%s",
+            voucher.get("id"), exc)
+        raise VoucherChainUnreadable(
+            "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核。") from exc
+
+
 def _chain_tiers(voucher):
-    """這張單的簽核鏈（`AS2` 的 `approval_json`）。
+    """這張單的簽核鏈（`AS2` 的 `approval_json`），只取 `tiers` 那一段。
 
     ```
     沒有 approval_json   => **回 []**（明確的「沒有設定簽核流程」）
-    有而解析失敗          => **raise VoucherChainUnreadable**
+    有而解析失敗          => **raise VoucherChainUnreadable**（疊在 `parse_approval_json` 上）
     ```
 
     ## ☠️ 我上一版在這裡回 `[]`，而那個取捨**只對當時的呼叫端成立**
@@ -421,19 +449,7 @@ def _chain_tiers(voucher):
     ⇒ 那不是守門變了、也不是對象變了，是**多了一個用途，而原本的取捨只對舊用途成立**。
     ⚠️ 判準：**為一份既有資料加一個新消費端時，去讀它的失敗行為是為誰設計的。**
     """
-    raw = voucher.get("approval_json")
-    if not raw:
-        return []
-    try:
-        return (json.loads(raw) or {}).get("tiers") or []
-    except (TypeError, ValueError) as exc:
-        # 📌 訊息裡寫出**哪一個動作**失敗，以及**fail-closed 這個選擇本身**
-        #    （比照 `archive.py:288` 那個寫法 —— 它連選擇都寫進訊息）。
-        logger.warning(
-            "傳票 %s 的簽核鏈解析失敗（fail-closed：一律視為**未簽核完成**）：%s",
-            voucher.get("id"), exc)
-        raise VoucherChainUnreadable(
-            "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核。") from exc
+    return parse_approval_json(voucher).get("tiers") or []
 
 
 def signatures_of(voucher):
