@@ -662,8 +662,15 @@ function contractorsPage() {
         const frontChanged    = this.idCardFrontPreview    !== null
         const backChanged     = this.idCardBackPreview     !== null
         const passbookChanged = this.bankPassbookPreview   !== null
+        // 🔴 `EM12`：這支 PUT 原本沒接回應——失敗時視窗照樣關、清單照樣
+        //    刷新，使用者上傳的身分證／存摺影本（個資）就這樣不見了，
+        //    而畫面上看起來一切正常，他不會知道要重傳。
+        //    ⚠️ 失敗**不關視窗**：承攬商本體已經存成功了，關掉的話
+        //       使用者要重新整個編輯流程才找得回這個表單，留著視窗讓他
+        //       能立刻重試影本這一項就好（同 `vendor-contractors.html`
+        //       `b349ee7` 那份，兩處是逐字同構的缺陷，修法照抄）。
         if ((frontChanged || backChanged || passbookChanged) && targetId) {
-          await fetch(`${API}/contractors/${targetId}/id-card`, {
+          const pr = await fetch(`${API}/contractors/${targetId}/id-card`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({
@@ -672,6 +679,15 @@ function contractorsPage() {
               bank_passbook: passbookChanged ? this.bankPassbookPreview  : this.bankPassbook
             })
           })
+          if (!pr.ok) {
+            let detail = '儲存失敗'
+            try { detail = (await pr.json()).detail || detail } catch (e) { /* 不是 JSON */ }
+            this.errMsg = '承攬商資料已儲存，但身分證／存摺影本上傳失敗（' + detail + '）。'
+              + '請重新選擇檔案再試一次。'
+            this.saving = false
+            await this.load()
+            return
+          }
         }
         this.showModal = false
         await this.load()
