@@ -39,6 +39,39 @@
 ⑤ **先量價格再給建議**：今天你量到「現在改代價 0，晚改代價會上升」，那改變了排序
 ```
 
+### ⚙️ 量基準的工具（B 今天用了四次，而它不在任何文件裡）
+```
+git worktree add --detach <路徑> <SHA>     # 量的是 **commit** 不是工作樹
+                                           # => 不必等別人停下來、不必宣告凍結
+python -m pytest … --basetemp=<路徑>-adhoc  # ⚠️ conftest **強制**要 --basetemp
+```
+🔑 你常常需要「**對某一個 SHA** 量」而工作樹正在被三個人寫 —— 這就是那個工具。
+
+### ⚠️ 一個**不要報成缺陷**的已知狀態
+```
+A-2 的 16 組重複清單（faf8df7）＝ **母體不是缺陷數**
+B 的漂移尺今天基準 **0** —— 而 **0 的意思是「還沒有東西漂掉」，不是「不會再漂」**
+⇒ 那 16 組**逐組是否刻意，沒有人查過**（A-2 只打開了 2 組）
+```
+
+### ⚙️ 你上一輪的工具**已經被複製進 repo**（scratchpad 會隨 session 消失）
+```
+docs/windows/tools/   port_provenance.ps1 ／ em4_scan2.py ／ em4_scan4.py
+                      em7_review.py ／ em7_negctrl.py ／ br3_scan.py ／ json_layer_scan2.py
+docs/windows/tools/README.md  <= 五個已知限制、三個「怎麼判的」、試過沒命中的 pattern
+```
+⚠️ `em4_scan2.py` **被 v4 當模組 import，不要單獨改它**。
+⚠️ `EM4` 的正對照本體**沒有複製**，而它取得回來：
+`git show a9e1119^:backend/helpers/voucher_pdf.py` —— **那條指令永遠取得到同一份**。
+
+### ☠️ 上一輪自報的一個假數字：**silent-four**
+```
+回報「有 4 個 ctrl_app 行程殘留」=> 那條 PowerShell 是**經 bash 轉義**的
+直接查回 **0** => **我對空集合跑了 Stop-Process**
+```
+🔑 **`silent-zero` 的反面**：不是「查不到而以為沒有」，是「**查到一個假的而以為有**」。
+⇒ 兩個方向都要防：**空輸出要跑對照，非空輸出要印出內容看一眼。**
+
 ### 你剛交的
 ```
 EM4 盤點（552 handler → 取值型 37）／EM7（迴圈靜默跳過，**≥20**，上界未知）

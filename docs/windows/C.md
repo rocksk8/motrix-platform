@@ -32,6 +32,79 @@
 ⑤ **不自己替使用者做決定**：新 doc type 的預設分組要 A 裁，你只讓登記表變紅
 ```
 
+### 🔴 換模型後**第一件要知道的事**：那 10 個紅燈**不是回歸**
+```
+全部 bonus 測試現在 **63 passed / 10 failed**
+而那 10 支**全部是「尚未實作」**：BN3×3 ／ BN4×1 ／ BN5×5 ／ AC1×1
+```
+☠️ 不知道這一條的話，你會以為有東西壞了。
+
+### 🔴 你的 `BN9` 驗收**漏了一格**，而那一格現在沒有任何題在守
+```
+B 把 is_manager 拆成兩個旗標：
+  is_manager        可見範圍
+  can_create_award  「產生獎金分潤單」那個**入口**
+而你的反向控制釘的是**獎金項目**那個入口（can_manage_items）
+=> 「**admin 看得到「產生獎金分潤單」**」這件事 **沒有任何題在守**
+```
+⇒ **補一題**（下一輪第一件）：
+```
+① admin 打 GET /awards => 回應的 can_create_award 為 false
+② superadmin => true（正對照）
+③ 前端那個入口的 x-show **綁 can_create_award 而不是 is_manager**（反向控制）
+```
+
+### ⚙️ 量基準的工具（B 今天用了四次，而它不在任何文件裡）
+```
+git worktree add --detach <路徑> <SHA>     # 量的是 commit 不是工作樹，**不必宣告凍結**
+python -m pytest … --basetemp=<路徑>-adhoc  # ⚠️ conftest **強制**要 --basetemp
+```
+
+### 🔴 `BN8` 落地那一刻會發生什麼（C 停工前交代，**換模型後最容易誤判的一格**）
+```
+test_approval_flow_scope.py 會紅**兩**題，而其中一題的訊息**會騙人**：
+  test_scope_defaults_and_editing         <= **預期內**：EXPECTED_SCOPE 少一行「獎金單」
+  test_scope_requires_superadmin          <= **不預期**：FULL_SCOPE_BODY 少一欄
+                                             -> 422 -> **拿不到 403**
+  test_scope_the_same_body_..._superadmin <= 同上，會一起紅
+```
+☠️ 後兩題紅的時候**訊息讀起來像權限壞掉了**，而壞的是 **body 欄位數**。
+📌 `EXPECTED_SCOPE` 那一行**仍然不要自己登記**（A 會問使用者）；
+  而 `FULL_SCOPE_BODY` 那一欄**是純粹跟著模型走的**，補就好，**不是決定**。
+
+### 🔑 `BN8` 的 `_slots()` **刻意沒有** fallback
+```
+JV2  傳票有 v99 六欄 => _slots() 收「攤平」與「包成一包」兩種
+BN8  獎金單**一格都沒有**（SPEC §1 逐字：簽核鏈是唯一來源，沒有投影欄位）
+     => **只收四種 nested 鍵名**
+```
+⇒ 若 B 交出來是**攤平欄位**，`_slots()` 回 `None`、好幾題紅在「讀不到簽核格」。
+🔴 **那時正確的動作是退回問 B，不是替探針加 fallback** ——
+  加了就等於默認獎金單也要維護投影欄位，**而規格說那正是它比傳票乾淨的地方**。
+
+### ⚠️ 一題今天**綠得空洞**，`BN8` 落地後要再看一次
+```
+test_bn8_bonus_does_not_join_the_unified_default
+`bonus` 現在**哪裡都不在** => 「不在 DEFAULT_UNIFIED」自動成立
+加的 quotation 正對照擋得住「集合被清空」，**擋不住「bonus 還不存在」**
+=> B 落地之後**它才開始量東西**
+```
+
+### 📌 `_seed_award(..., **cols)` 可以塞任意欄位
+欄位不存在時會**炸在 SQL 上、訊息指向資料層** —— 那是**探針壞了不是產品壞了**。
+
+### 🔑 而今天那三格之上還有**第四格**（它是前三格的上位）
+> **紅燈訊息若是框架／SQL／Python 寫的而不是我寫的，那通常是探針壞了。**
+
+今天四次全部符合，**而四次沒有一次是產品碼的問題**：
+```
+FOREIGN KEY constraint failed          （BN9 前置）
+Locator.click: Timeout                 （JV7 跟上 x-show）
+422 Field required                     （scope 的 body 欄位數）
+SyntaxError: unterminated string literal（我自己的 heredoc）
+```
+☠️ **而四次的第一反應都差點是去看別人的碼。**
+
 ### 你剛交的（已 push）
 ```
 2c995cd  BN9 可見性 5 題（2 紅 3 綠，預期完全相符）
