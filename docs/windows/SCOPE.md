@@ -1071,3 +1071,53 @@ D 的理由：測試名稱逐一描述已知缺陷   <= 成立，而它是「保
    ☠️ 若會 => 排除它們會讓「裝完驗包」在客戶端壞掉，而那是**安裝流程的一部分**
    ⚙️ 一併看 DEPLOY.md 裡有沒有叫人跑它
 ```
+
+---
+
+## 🔴 `PK1` 補充：**`version_manifest.json` 不是「排除」，是「精簡」—— 單獨列，第 44 項**
+
+> D 查證後回報，而**他明著說「這跟其他 33 項的處置方式不一樣，請單獨列」**。
+
+```python
+# routers/auth.py:288-308  GET /api/system/version
+entries = json.load(open(version_manifest.json))     # 🔴 **每次請求都重新讀磁碟**
+latest = entries[0]
+return {"version": latest.get("version",""), "date": latest.get("date","")}
+```
+```
+✅ 端點只回**最新一筆的 version + date** —— 完整異動細節從來沒有回給客戶端
+🔴 而整份檔案從包裡拿掉 => 端點進 except 分支回空字串
+   => **登入頁的版本號會安靜消失**
+   ⚠️ 那個失敗模式**docstring 自己寫著**，還引用了一次真的發生過的案例（`1c8f2e8`）
+```
+> ### ⇒ 處置：**打包時產生一份精簡版**（只留最新一筆的 `version`/`date`）取代整份出貨。
+> ### 🔑 那是**建置流程要新增的一步**，不是 `.gitattributes` 排除清單能處理的。
+
+### 🔑 而它給出一條所有排除項都要過的判準
+> ### **排除任何一個檔案之前，先問：「執行期有沒有人讀它？」**
+```
+☠️ 對「執行期會讀它」的檔案，「排除」會產生一個**安靜的降級**
+   —— 東西還在跑，只是少了一塊，而沒有人會報修（〈降級之後它還是會動〉）
+✅ 而 D 已經對最危險的那一組做過這件事：
+   9 份選型研究材料「**已查證不被任何 runtime 程式碼讀取**」
+   （種子資料是 *_seed.py 裡的 Python 字面值，.md 只是當初的研究參考）
+```
+
+### ✅ 而 `backend/tests/`／`requirements-dev.txt` 的排除**已驗證安全**
+```
+verify_package.py:399-401  只把 backend/tests/ 檔案數印出來當**資訊性報告行**
+                           （"（不在包裡）" 是被印出來的正常狀態之一，不觸發 R.fail）
+verify_package.py:139      MUST_EXIST = ["autostart.bat", "DEPLOY.md"] —— 兩者都不在排除清單裡
+verify_package.py 全檔     沒有 import pytest、沒有 subprocess 叫 pytest（純靜態檔案檢查）
+DEPLOY.md                  全文搜 verify_package／pytest／requirements-dev **都是 0 命中**
+```
+🔑 ⇒ A 原本的顧慮（「現場出問題時跑不了測試」）**是對的擔心，而它與「這兩者是不是安裝流程的必要部分」是兩個問題** ——
+  而答案是：**它們現在不是。**
+
+### 🔴 ⇒ `SPEC-PK1` 的驗收要多釘一條不變量
+```
+**排除清單 ∩ verify_package.py 的 MUST_EXIST = 空集合**
+🔑 因為 MUST_EXIST 是「打包產出物的消費端」——
+☠️ 而它與「執行期會讀它」是同一類危險，只是消費者是我們自己的驗包工具
+⚠️ 而 MUST_EXIST 會長 => 釘交集為空，**不要**把今天的兩個值抄下來
+```
