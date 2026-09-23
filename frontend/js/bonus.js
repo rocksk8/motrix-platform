@@ -333,5 +333,92 @@ function bonusPage() {
       // ☠️ 前端自己拿百分比再乘一次的話，就會出現「畫面上的數字加起來不等於總額」。
       return ((Number(bp) || 0) / 100).toFixed(2).replace(/\.00$/, '') + '%'
     },
+
+    // ── `BN8`：送審／簽核／退回／標記已發放 ────────────────────────
+    //
+    // 🔴 這四支全部**不在前端判可不可以做** —— 只依後端回的 `a.status`
+    //    決定按鈕顯不顯示，而按下去能不能成立由後端說（同 voucher.js
+    //    `_act()` 那段註解的道理，這裡搬過來用在**清單裡的每一張單**）。
+    // ⚠️ 不用 `confirm()`：退回與標記已發放都要一段理由，原生對話框
+    //    擋住整頁事件，改用行內輸入框（同 voucher.js）。
+    awardBusy: '',
+    awardMsg: {},
+    awardErr: {},
+    askAwardReason: '',   // `'reject:12'` 或 `'markpaid:12'`；`''` = 都沒開
+    awardReasonText: '',
+
+    openAwardReason(kind, id) {
+      this.askAwardReason = kind + ':' + id
+      this.awardReasonText = ''
+      this.awardErr[id] = ''
+    },
+
+    cancelAwardReason() {
+      this.askAwardReason = ''
+      this.awardReasonText = ''
+    },
+
+    async _awardAct(id, path, body, okMsg) {
+      if (this.awardBusy) return
+      this.awardBusy = String(id)
+      this.awardErr[id] = ''
+      try {
+        const r = await fetch('/api/bonus/awards/' + id + path, {
+          method: 'POST',
+          headers: this._jsonAuth(),
+          body: JSON.stringify(body || {}),
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.awardMsg[id] = okMsg(d)
+        this.askAwardReason = ''
+        this.awardReasonText = ''
+        await this.loadAwards()
+      } catch (e) {
+        this.awardErr[id] = e.message
+      } finally {
+        this.awardBusy = ''
+      }
+    },
+
+    submitAward(id) {
+      return this._awardAct(id, '/submit', {}, function () { return '已送審。' })
+    },
+
+    approveAward(id) {
+      // ⚠️ 下一格是誰、簽完沒由後端算，這裡只把它回報的新狀態印出來。
+      return this._awardAct(id, '/approve', {},
+        function (d) { return '已簽核，目前狀態：' + d.status + '。' })
+    },
+
+    rejectAward(id) {
+      return this._awardAct(id, '/reject', { reason: this.awardReasonText },
+        function () { return '已退回草稿。' })
+    },
+
+    markAwardPaid(id) {
+      return this._awardAct(id, '/mark-paid', { reason: this.awardReasonText },
+        function () { return '已標記為發放。' })
+    },
+
+    // `SPEC-BN8.md §93③`：「已發放」是**推導**，不是新狀態——與後端
+    // `helpers/bonus.py::is_paid()` 同一條，兩條路都算（自動回填傳票號
+    // ／手動標記），這裡不重寫一次規則，只是把同一個判準搬到前端讀
+    // `GET /awards` 已經给的那兩個欄位（兩者對所有人都可見，不是金額）。
+    isAwardPaid(a) {
+      return !!(String(a.voucher_no_payment || '').trim()
+        || String(a.paid_manually_at || '').trim())
+    },
+
+    // `§6⑪⑫`：印欄依鏈的層數畫，鏈讀不出來時印在紙上。
+    // `a.signatures` 是後端 `bonus_signatures_of()` 算好的
+    // `{格名: {by, at}}`，順序就是要畫的順序（製表在前，鏈讀不出來時
+    // 只有「簽核資料無法讀取」一格）——這裡不重新排序、不重新判斷。
+    signatureSlots(a) {
+      const sig = a.signatures || {}
+      return Object.keys(sig).map(function (label) {
+        return { label: label, by: sig[label].by || '', at: sig[label].at || '' }
+      })
+    },
   }
 }

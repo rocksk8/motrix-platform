@@ -61,6 +61,18 @@
     .bn-person{display:flex;align-items:center;gap:8px;padding:4px 0 4px 22px;font-size:12px}
     .bn-person input{width:88px;padding:4px 7px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;text-align:right}
     .bn-sum{padding-left:22px;font-size:11px;color:var(--text-dim,#6B6B6B)}
+
+    /* `BN8`：簽核印欄 ＋ 送審／簽核／退回／標記已發放 */
+    .bn-sig-row{display:flex;gap:16px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);background:#FCFBF8}
+    .bn-sig{display:flex;flex-direction:column;gap:2px;min-width:64px}
+    .bn-sig b{font-size:11px;color:var(--text-dim,#6B6B6B);font-weight:600}
+    .bn-sig span{font-size:12px;color:var(--text-primary)}
+    /* 鏈讀不出來時要看得出來是**錯誤**，不是「這一層還沒簽」——同色系但不同視覺重量。 */
+    .bn-sig.unread b,.bn-sig.unread span{color:#B91C1C}
+    .bn-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--border-light);background:#FCFBF8;font-family:var(--font-zh)}
+    .bn-reason{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .bn-reason input{padding:6px 9px;border:1px solid var(--border-light);border-radius:6px;font-size:12px;font-family:var(--font-zh);min-width:220px}
+    .bn-paid{background:#F0FDF4;color:#15803D;border:1px solid #BBF7D0}
   </style>
 </head>
 <body x-data="bonusPage()" x-init="init()" x-cloak>
@@ -289,12 +301,29 @@
               <span class="bn-case" x-text="a.quote_no"></span>
               <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
                     x-text="a.voided_at ? '已作廢' : a.status"></span>
+              <!-- `SPEC-BN8.md §93③`：「已發放」是**推導**，不是第五個狀態
+                   —— 這裡只是把 isAwardPaid() 算出來的結果標出來。 -->
+              <span class="bn-status bn-paid" x-show="isAwardPaid(a)">已發放</span>
               <!-- ⚠️ 基數只有管理者看得到：它等於全案淨利。
                    後端沒回這個欄位時**不要顯示 0** —— 那會讓人以為淨利是零。 -->
               <span class="bn-base" x-show="a.base_amount !== undefined"
                     x-text="'案件淨利 ' + fmt(a.base_amount)"></span>
               <span class="bn-amt" x-text="(isManager ? '合計 ' : '您的獎金 ') + fmt(a.visible_total)"></span>
             </div>
+
+            <!-- `§6⑪⑫`：印欄依鏈的層數畫（製表 ＋ N 層），未簽的層印空格；
+                 鏈讀不出來時印在紙上，不安靜退回固定格——兩種情形都是
+                 `a.signatures`（後端 bonus_signatures_of()）給的格名決定，
+                 這裡不猜、不重排。 -->
+            <div class="bn-sig-row">
+              <template x-for="s in signatureSlots(a)" :key="s.label">
+                <span class="bn-sig" :class="{unread: s.label === '簽核資料無法讀取'}">
+                  <b x-text="s.label"></b>
+                  <span x-text="s.by || '　'"></span>
+                </span>
+              </template>
+            </div>
+
             <template x-for="(l, li) in a.lines" :key="li">
               <div class="bn-line">
                 <span class="bn-who" x-text="l.username"></span>
@@ -305,6 +334,54 @@
             </template>
             <template x-if="!a.lines.length">
               <div class="bn-line" style="color:var(--text-secondary)">這張單沒有您可以檢視的明細。</div>
+            </template>
+
+            <!-- `§6⑩`：送審／簽核／退回／標記已發放，只有 superadmin 看得到
+                 （`isManager` 在這一頁就是 `role === 'superadmin'`，BN9）。
+                 🔑 按鈕顯不顯示只看 `a.status`／`isAwardPaid(a)`，
+                 按不按得下去由後端說——同 voucher.js 那組動作的道理。 -->
+            <div class="bn-actions" x-show="isManager && !a.voided_at">
+              <template x-if="a.status === '草稿'">
+                <button class="bn-btn bn-btn--ghost" :disabled="awardBusy === String(a.id)"
+                        @click="submitAward(a.id)"
+                        x-text="awardBusy === String(a.id) ? '送審中…' : '送審'"></button>
+              </template>
+
+              <template x-if="a.status === '待審核' || a.status === '簽核中'">
+                <span style="display:inline-flex;gap:8px;flex-wrap:wrap">
+                  <button class="bn-btn" :disabled="awardBusy === String(a.id)"
+                          @click="approveAward(a.id)"
+                          x-text="awardBusy === String(a.id) ? '處理中…' : '簽核通過'"></button>
+                  <button class="bn-btn bn-btn--ghost"
+                          x-show="askAwardReason !== ('reject:' + a.id)"
+                          @click="openAwardReason('reject', a.id)">退回</button>
+                </span>
+              </template>
+
+              <template x-if="a.status === '已核准' && !isAwardPaid(a)">
+                <button class="bn-btn bn-btn--ghost"
+                        x-show="askAwardReason !== ('markpaid:' + a.id)"
+                        @click="openAwardReason('markpaid', a.id)">標記已發放</button>
+              </template>
+
+              <!-- 退回／標記已發放都要一段理由（後端沒有理由直接回 400）——
+                   不用 confirm()：原生對話框擋住整頁事件，改用行內輸入框。 -->
+              <div class="bn-reason"
+                   x-show="askAwardReason === ('reject:' + a.id) || askAwardReason === ('markpaid:' + a.id)">
+                <input type="text" x-model="awardReasonText"
+                       :placeholder="askAwardReason.indexOf('reject:') === 0 ? '退回原因' : '標記已發放的原因'">
+                <button class="bn-btn" :disabled="awardBusy === String(a.id) || !awardReasonText.trim()"
+                        @click="askAwardReason.indexOf('reject:') === 0 ? rejectAward(a.id) : markAwardPaid(a.id)"
+                        x-text="awardBusy === String(a.id) ? '送出中…' : '確定'"></button>
+                <button class="bn-btn bn-btn--ghost" @click="cancelAwardReason()">取消</button>
+              </div>
+            </div>
+
+            <template x-if="awardMsg[a.id]">
+              <div class="bn-ok" x-text="awardMsg[a.id]"></div>
+            </template>
+            <template x-if="awardErr[a.id]">
+              <div class="bn-err" x-text="awardErr[a.id]"></div>
             </template>
           </div>
         </template>
