@@ -44,13 +44,23 @@ A 已告知 B：不要在 `bonus_awards` 存一份客戶名快照——那會變
     永遠是空的，連①的前置都過不了，**沒有真的走到快照那一段邏輯**。
     ⇒ ③ 對「快照式的錯誤修法」是**防未來**，不是防現況：那種修法今天
     不存在，沒有東西可以讓它在今天亮紅燈。
-④⑤  仍然是綠的（"no teeth against this mutation"）——這兩題驗的是
-    「值缺席時不可以印成字面 'None'」，而 `case_names_for` 回空 dict時
-    現有程式碼本來就會落到 `cn.get(..., "")` 的空字串分支，跟正常時
-    的空值處理路徑相同，這個替身**改不出**它們要防的那種錯（把 `None`
-    直接 `str()` 印出來）——要證明④⑤有牙齒，得換一種替身
-    （讓 `_case_names_for` 回傳 `{"customer_name": None}` 之類），
-    本檔暫不做第二輪替身，這裡誠實記下**這兩題目前的牙齒沒有被驗證過**。
+④⑤  第一版仍然是綠的——這兩題驗的是「值缺席時不可以印成字面
+    'None'」，而 `case_names_for` 回空 dict 時現有程式碼本來就會落到
+    `cn.get(..., "")` 的空字串分支，跟正常時的空值處理路徑相同，這個
+    替身**改不出**它們要防的那種錯。
+    ⇒ **第二輪改用資料不用空殼替身**：直接讓 `_case_names_for` 內部
+    重現真實錯誤（拿掉 `or ''`、對 SQL 回來的 `None` 直接 `str()`），
+    而不是整支換成回空 dict——
+    ```
+    ④  ✅ 牙齒已證實——這題會紅（'None' 出現在回應裡）
+    ⑤  ⚠️ 仍未證實，而且原因不是「還沒換替身」：⑤ 的情境是查無
+        `quotations` 那一列，`_case_names_for` 的回傳字典裡**根本沒有
+        這個 key**，④ 的那個替身動的是「有 key 而值是 None」，完全碰
+        不到「key 不存在」這條路。⑤ 真正的防線是呼叫端
+        `case_names.get(quote_no) or {}` 的 `or {}`，要驗證得改那一行
+        的替身，本檔暫不做第三輪，先記下「④⑤ 共用同一句『不印字面
+        None』的描述，而它們其實是兩條不同的防線，各自要各自的證明」。
+    ```
 ```
 ⇒ 下面把每一題標成**今天驗得到**還是**防未來的修法**，不要看成同一種綠。
 """
@@ -217,13 +227,13 @@ def test_bn15_a_null_customer_name_does_not_render_as_the_string_none(
     `NOT NULL DEFAULT ''`**——真的可能是 SQL NULL，不只是空字串。這是
     〈null 不等於 0〉的字串版：`f"{None}"` 會印出字面的 `"None"`。
 
-    ⚠️ **牙齒尚未驗證**——替身測過讓 `_case_names_for` 回空 dict，這一題
-    仍然是綠的：今天的程式碼本來就會落到 `cn.get(..., "")` 的空字串
-    分支，跟正常時的空值處理路徑相同，這個替身改不出它要防的那種錯
-    （把 `None` 直接 `str()` 印出來變成字面 `"None"`）。要證明這一題
-    真的紅得起來，需要換一種替身（例如讓 `_case_names_for` 回傳
-    `{quote_no: {"customer_name": None, ...}}` 而不是空字串），本檔
-    暫不做第二輪替身，先誠實記下這個限制。
+    ✅ **牙齒已驗證**——第一版替身讓 `_case_names_for` 回空 dict 驗不出
+    來（那個替身包在已經修好的輸出外層，等於沒動到任何東西）。換成
+    直接重現真實的錯誤（`_case_names_for` 內部拿掉 `or ''` 防護、對
+    `SELECT` 回來的 `None` 直接 `str()`）：這一題**真的會紅**
+    （`assert 'None' in (None, '')` 失敗）。用資料不用空殼替身：
+    種一筆 `customer_name IS NULL` 的案件，那條路本來就是這一題要防
+    的那一條，不必額外構造。
     """
     quote_no = QUOTE_NO_PREFIX + "-NULLNAME"
     _seed_quotation(quote_no, None, None)
@@ -249,11 +259,16 @@ def test_bn15_an_award_with_no_matching_quotation_does_not_crash_or_leak_none(
     測試資料、或案件被清除過），JOIN 對不到任何一列。落地形狀若用
     `LEFT JOIN`，這種情況下取到的是 SQL NULL，同 `④` 的處置。
 
-    ⚠️ **牙齒尚未驗證**（與 `④` 同一個限制）——替身測過讓
-    `_case_names_for` 回空 dict，這一題仍是綠的：本檔這個情境（查無
-    `quotations` 那一列）今天本來就會落在 `case_names.get(quote_no)
-    or {}` 的空字典分支，跟替身模擬的狀態一樣，這個替身**驗不出**這一
-    題真正要防的字面 `"None"` 錯誤，只是恰好與它現在測的分支重疊。
+    ⚠️ **牙齒仍未證實，而且與 `④` 不是同一條防線**——`④` 修好之後的
+    替身（讓 `_case_names_for` 對 NULL 直接 `str()`）對這一題**依然是
+    綠的**：查無案件時 SQL 根本查不到那一列，`_case_names_for` 的
+    回傳字典裡**沒有這個 key**，重現 `④` 那個 bug 的替身動的是「有
+    這個 key 而值是 None」那條路，完全碰不到「key 不存在」這條路——
+    這題真正的防線是呼叫端 `case_names.get(quote_no) or {}` 那個
+    `or {}`，要證明牙齒得改動那一行的替身（拿掉 `or {}`，預期會變成
+    `AttributeError` 而不是印出字面 `"None"`——那其實是另一種失效，
+    這題目前對「不崩潰」那一半有牙齒，對「不印字面 None」那一半在這個
+    情境下**驗不到，因為兩者共用同一個防線，防線本身沒有被證明過**）。
     """
     quote_no = QUOTE_NO_PREFIX + "-ORPHAN-NOQUOTE"
     aid = _seed_award(quote_no, ["someone"])  # 故意不種 quotations 那一列
