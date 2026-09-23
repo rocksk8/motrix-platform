@@ -101,6 +101,62 @@ _hash_pw("**60575481**")
 
 ---
 
+## §2b 🔴🔴 範圍比 `startup.py` 大：**`'jeff'` 這個字串被當成一道保護**（A 補，我複驗）
+
+```python
+# routers/auth.py:1548  delete_user()
+if row["username"] == "jeff":
+    raise HTTPException(400, "**不可刪除超級管理員帳號**")
+# routers/auth.py:1582  toggle_user_active()
+if row["username"] == "jeff":
+    raise HTTPException(400, "**不可停用超級管理員帳號**")
+```
+```
+⚙️ 前端 5 處配合隱藏按鈕：`users.html` :392 :396 :417 :1267 :1276
+   形狀都是 `row.user.username !== 'jeff'`
+```
+
+### ☠️ 而**訊息說的是角色，程式碼比對的是一個字串**
+
+> 「不可刪除**超級管理員帳號**」　←　`if row["username"] == "jeff"`
+
+```
+⚙️ 而我把兩支函式的守衛全部列出來（`ast` 之外再逐行讀）：
+   `_require_user(authorization, require_superadmin=True)`   <= 只驗**操作者**
+   `if not row: 404`
+   `if row["username"] == "jeff": 400`
+   🔴 **沒有任何 `role == 'superadmin'` 或「最後一個 superadmin」的檢查**
+```
+
+### 🔴 ⇒ 後果有**兩面**，而 A 只講了第一面
+
+```
+① A 講的：客戶會有一個**永遠刪不掉、停不掉、叫 `jeff`** 的帳號
+② 🔴 而反面更嚴重：**客戶自己建的 superadmin，刪得掉也停得掉**
+   —— 而畫面上的訊息會讓他以為那是被保護的
+```
+
+> ### ☠️ **最壞情況**：客戶建了自己的 superadmin、把出廠的 `jeff` 當成沒用的東西，
+> ### 然後某天停用了**自己那一個** —— 而剩下的是一個**他不知道密碼**的 `jeff`。
+
+```
+🔑 ⇒ 正確形狀是保護「**第一個／最後一個 superadmin 這個角色**」，不是保護一個字串
+   ⚙️ 判準：`SELECT COUNT(*) FROM users WHERE role='superadmin' AND active=1` > 1
+      才准刪／停用
+   ✅ 而那**同時**解決兩面：`jeff` 變得可刪（只要還有別的 superadmin），
+      而客戶的最後一個 superadmin 變得刪不掉
+📌 〈守門守的對象被搬走〉：**這一次不是被搬走，是從一開始就釘錯了對象** ——
+   而**訊息一直都寫著正確的那個**，所以沒有人發現。
+```
+
+⚠️ 而前端那 5 處**要跟著改**，否則按鈕的顯示條件與後端的判準會分岔：
+```
+☠️ 前端仍用 `username !== 'jeff'` ⇒ 客戶看得到自己 superadmin 的刪除鈕，
+   按下去後端才擋 ⇒ 〈入口要看真正的那道閘門〉
+```
+
+---
+
 ## §3 ⚠️ 而「產品碼裡不存在 `miactw.com`」這個不變量**會誤傷** —— 母體要先切開
 
 ⚙️ 實數（排除 `tests/`／`rollback_snapshots/`／`deploy_packages/`／`db_backups/`）：
@@ -186,7 +242,12 @@ VALUES ('admin', ?, '系統管理員', 'superadmin', '', …)
         init_demo_account 預設不跑；既有的由 migration 停用
         demo 開關開啟時用隨機密碼
 ② 前端  無異動
-③ 頁面  ⓐ **全新安裝** -> `users` 表裡：
+③ 頁面  🔴 ⓪ 建兩個 superadmin -> 刪掉其中一個 => **成功**；
+             再刪最後一個 => **400「系統至少要保留一個超級管理員」**
+             而**出廠帳號在還有別的 superadmin 時刪得掉**（§2b）
+             ☠️ 少了 ⓪ 的後半，「把 'jeff' 換成 'admin' 硬寫」也會綠 ——
+                那只是把同一個字串換一個
+        ⓐ **全新安裝** -> `users` 表裡：
            `admin` 一個（`must_change_password=1`）、**沒有 `demo`**
            🔑 ⓐ 是核心
         ⓑ 把 `admin` 的顯示名與 email **清空** -> 重新啟動
