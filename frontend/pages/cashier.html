@@ -832,6 +832,8 @@
         <input type="number" min="0" class="field-input" x-model.number="receiveActualAmount">
         <label class="field-label">手續費 / 扣款</label>
         <input type="number" min="0" class="field-input" x-model.number="receiveFeeAmount">
+        <div x-show="receiveAmountError()" x-text="receiveAmountError()"
+             style="margin:-4px 0 8px;font-size:12px;color:#B91C1C;font-family:var(--font-zh)"></div>
         <label class="field-label">收款銀行帳戶（選填，供 T100 傳票匯出使用）</label>
         <select class="field-input" x-model="receiveBankAcctCode">
           <option value="">— 未指定 —</option>
@@ -842,7 +844,7 @@
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button @click="receiveModal=false" :disabled="receiveSaving"
                   style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
-          <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate"
+          <button @click="confirmReceive()" :disabled="receiveSaving || !receiveDate || !!receiveAmountError()"
                   style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                   x-text="receiveSaving ? '處理中…' : '確認標記已收款'"></button>
         </div>

@@ -300,9 +300,18 @@ function cashierApp() {
       this.receiveBankAcctCode = await this._resolveDefaultBankAccount(url)
     },
 
+    // 2026-09-24：後端對實收金額／手續費做型別驗證，這裡先擋並說明原因。
+    // 實收金額清空不代表「以應收計」（那是金額語意，不替使用者決定），所以要求填寫。
+    receiveAmountError() {
+      const bad = v => typeof v !== 'number' || !Number.isFinite(v) || v < 0
+      if (bad(this.receiveActualAmount)) return '請填寫實收金額（不小於 0 的數字）'
+      if (this.receiveFeeAmount !== '' && this.receiveFeeAmount != null && bad(this.receiveFeeAmount)) return '手續費必須是不小於 0 的數字'
+      return ''
+    },
+
     async confirmReceive() {
       const it = this.receiveTarget
-      if (!it || !this.receiveDate) return
+      if (!it || !this.receiveDate || this.receiveAmountError()) return
       this.receiveSaving = true
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(it.quoteNo)}/payment/${it.idx}`, {

@@ -1,6 +1,7 @@
 """Quotation CRUD, approval workflow, deal-tag, export endpoints."""
 import json
 import logging
+import math
 import re
 import os
 import shutil
@@ -2386,24 +2387,11 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         pits = cr.setdefault("payment", {}).setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
-        if "received" in body:
-            is_rcv = bool(body["received"])
-            pits[idx]["received"]   = is_rcv
-            pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
-            pits[idx]["receivedBy"] = body.get("receivedBy", "") if is_rcv else ""
-            if is_rcv:
-                pits[idx]["actualAmount"] = body.get("actualAmount")
-                pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
-                pits[idx]["feeNote"]      = body.get("feeNote", "")
-                pits[idx]["note"]         = body.get("note", "")
-                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
-                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
-                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
-                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
-                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
-            else:
-                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
-                    pits[idx].pop(k, None)
+        # 2026-09-24：驗證與套用改走 mark_payment() 同一組函式。修正前排進佇列的
+        # 壞資料（已收無日期、金額非數字）在這裡擋下，不落地；收款人記提出申請的人。
+        _validate_receipt_body(body)
+        _apply_payment_mark(pits, idx, body,
+                            req["requested_by_display"] or req["requested_by"] or "")
         if "invoiceNo" in body:
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=quote_no, exclude_idx=idx)
             pits[idx]["invoiceNo"] = body["invoiceNo"]
@@ -3071,6 +3059,66 @@ def record_export(quote_no: str, mode: str = "external", authorization: str = He
 
 # ── Payment ───────────────────────────────────────────────────────────────────
 
+def _is_amount(v) -> bool:
+    """非負、有限的數字。bool 是 int 的子類別，要另外排除。"""
+    return (isinstance(v, (int, float)) and not isinstance(v, bool)
+            and math.isfinite(v) and v >= 0)
+
+
+def _validate_receipt_body(body: dict) -> None:
+    """標記收款的內容驗證（2026-09-24）。只在 received=true 時檢查。
+
+    修正前照收：已收無日期 ⇒ 不屬於任何月份，所有收入報表漏算；
+    actualAmount／feeAmount 存進 "" 或 "abc" ⇒ 報表以 `aa - fee` 加總時型別錯誤。
+
+    - receivedAt：必填、合法 YYYY-MM-DD（未來日期不擋）
+    - actualAmount：不帶／null＝以應收金額計（既有語意）；其餘必須是非負數字。
+      刻意不把 "" 當 null——那會把「清空」變成「以應收計」，屬於金額語意
+    - feeAmount：""／null 維持視為 0；其餘必須是非負數字
+    """
+    if not body.get("received"):
+        return
+    rat = body.get("receivedAt")
+    ok_date = isinstance(rat, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", rat) is not None
+    if ok_date:
+        try:
+            datetime.strptime(rat, "%Y-%m-%d")
+        except ValueError:
+            ok_date = False
+    if not ok_date:
+        raise HTTPException(400, "已收款必須填入收款日期（YYYY-MM-DD）")
+    aa = body.get("actualAmount")
+    if aa is not None and not _is_amount(aa):
+        raise HTTPException(400, "實收金額必須是不小於 0 的數字")
+    fee = body.get("feeAmount")
+    if fee not in (None, "") and not _is_amount(fee):
+        raise HTTPException(400, "手續費必須是不小於 0 的數字")
+
+
+def _apply_payment_mark(pits: list, idx: int, body: dict, received_by: str) -> None:
+    """把一次「標記收款／取消收款」套到 pits[idx]。mark_payment() 與半解鎖審核
+    通過後的重播共用（原本兩處各寫一份）。呼叫前要先 _validate_receipt_body()。"""
+    if "received" not in body:
+        return
+    is_rcv = bool(body["received"])
+    pits[idx]["received"]   = is_rcv
+    pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
+    pits[idx]["receivedBy"] = received_by if is_rcv else ""
+    if is_rcv:
+        pits[idx]["actualAmount"] = body.get("actualAmount")
+        pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
+        pits[idx]["feeNote"]      = body.get("feeNote", "")
+        pits[idx]["note"]         = body.get("note", "")
+        # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
+        # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
+        # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
+        pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
+        pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
+    else:
+        for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
+            pits[idx].pop(k, None)
+
+
 @router.patch("/api/quotations/{no}/payment/{idx}")
 def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None)):
     """2026-08-31（安全稽核發現）：標記款項收款/取消收款是本檔案裡少數完全沒有
@@ -3097,6 +3145,13 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         pits = pay.setdefault("items", [])
         if idx < 0 or idx >= len(pits):
             raise HTTPException(400, "款項索引超出範圍")
+        # 2026-09-24：先驗再送審——不合法的內容不可以先排進審核佇列。
+        _validate_receipt_body(body)
+        # 收款人一律由伺服器記（不吃 body 傳的值）；半解鎖時一併寫進 payload，
+        # 重播端改用 case_change_requests.requested_by_display，兩邊是同一個人。
+        received_by = user.get("display_name") or user["username"]
+        if "received" in body:
+            body["receivedBy"] = received_by
         if "invoiceNo" in body:
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
         gated, change_id = _gate_case_edit(
@@ -3107,24 +3162,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         if gated:
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
-        if "received" in body:
-            is_rcv = bool(body["received"])
-            pits[idx]["received"]   = is_rcv
-            pits[idx]["receivedAt"] = body.get("receivedAt", "") if is_rcv else ""
-            pits[idx]["receivedBy"] = body.get("receivedBy", "") if is_rcv else ""
-            if is_rcv:
-                pits[idx]["actualAmount"] = body.get("actualAmount")
-                pits[idx]["feeAmount"]    = body.get("feeAmount") or 0
-                pits[idx]["feeNote"]      = body.get("feeNote", "")
-                pits[idx]["note"]         = body.get("note", "")
-                # 收款進了 MOTRIX 自己哪個銀行帳戶（選填，2026-09-01 新增，供 T100
-                # 傳票匯出依銀行帳戶分開設定科目代號用；跟其他欄位一樣直接存
-                # data_json，不需要 migration，見 db.py::_m071_paid_bank_account docstring）
-                pits[idx]["bankAccountName"] = body.get("bankAccountName", "")
-                pits[idx]["bankAccountCode"] = body.get("bankAccountCode", "")
-            else:
-                for k in ("actualAmount", "feeAmount", "feeNote", "note", "bankAccountName", "bankAccountCode"):
-                    pits[idx].pop(k, None)
+        _apply_payment_mark(pits, idx, body, received_by)
         if "invoiceNo" in body:
             pits[idx]["invoiceNo"] = body["invoiceNo"]
         if "invoiceDate" in body:
