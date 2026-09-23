@@ -57,6 +57,26 @@ def can_export(award):
         % (award.get("status") or ""))
 
 
+def void_watermark_html(award):
+    """`BN13`（依據使用者 2026-09-23 裁示）：已作廢的獎金分潤單匯出要蓋
+    浮水印，同 `voucher_pdf.py::watermark_html()` 的視覺（3x4 格線平鋪、
+    `rotate(-28deg)`、顏色極淡不影響閱讀）——**只做「已作廢」這一半**：
+    `can_export()` 已經把草稿／待審核／簽核中擋在匯出端點之外，「未簽核
+    完成」這個狀態到不了這支函式，印那句話是防一個不可能出現的狀態
+    （同 `JV23` 的理由）。獎金單今天也沒有「已過帳」這個終態可以放行
+    （`can_export()` 的 docstring 已經標過），一放行只有「已核准」與
+    「已作廢」兩種，已核准不蓋，這裡只判 `voided_at`。
+    """
+    if not award.get("voided_at"):
+        return ""
+    e = _esc
+    title, sub = "本獎金分潤單已作廢", "僅供稽核存查"
+    items = "".join(
+        "<div class='wm-item'><b>%s</b><small>%s</small></div>" % (e(title), e(sub))
+        for _ in range(12))
+    return "<div class='wm'>%s</div>" % items
+
+
 def _sign_cells(signatures):
     """簽核格。**從資料算幾格，不是寫死**——同 `voucher_pdf.py::_sign_cells()`
     的道理，這裡不 import 那一支（它綁在 `voucher` 這個名字上，僅僅是
@@ -107,8 +127,12 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
     `display_names`：`{username: 顯示名稱}`，收款人那一欄用它——與簽核
     格同一條規則（`§6②` 逐字：內部帳號印在對外／對稽核的憑證上，
     使用者要看到的是姓名），只是套用在收款人清單而不是簽核格上。
+
+    🔴 `BN13`：浮水印一律由 `void_watermark_html(award)` 算，這裡不自己
+    判斷 `voided_at`——已作廢時印，其餘一律空字串（同 `JV23` 的分工）。
     """
     e = _esc
+    watermark = void_watermark_html(award)
     total = sum(int(ln.get("amount") or 0) for ln in lines or ())
 
     rows = _line_rows(lines, display_names)
@@ -125,7 +149,19 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
   @page {{ size: {pw}pt {ph}pt; margin: 0; }}
   body {{ margin: 0; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
           color: #000; }}
-  .sheet {{ padding: {m}pt {m}pt 0 {m}pt; }}
+  .sheet {{ padding: {m}pt {m}pt 0 {m}pt; position: relative; }}
+  /* `BN13`：已作廢的浮水印——與 voucher_pdf.py 的 .wm/.wm-item 同一套
+     視覺（3x4 格線平鋪、rotate(-28deg)、顏色極淡不影響閱讀）。 */
+  .wm {{ position: absolute; inset: 0; pointer-events: none; z-index: 5;
+         overflow: hidden; display: grid; grid-template-columns: repeat(3, 1fr);
+         grid-template-rows: repeat(4, 1fr); align-items: center;
+         justify-items: center; box-sizing: border-box; }}
+  .wm-item {{ transform: rotate(-28deg); white-space: nowrap; text-align: center;
+              line-height: 1.5; }}
+  .wm-item b {{ display: block; font-size: 15pt; font-weight: 900;
+               letter-spacing: 0.1em; color: rgba(185,28,28,0.09); }}
+  .wm-item small {{ display: block; font-size: 7.5pt; font-weight: 700;
+                    letter-spacing: 0.05em; color: rgba(185,28,28,0.07); }}
   .org {{ text-align: center; font-size: 13pt; }}
   .doc {{ text-align: center; font-size: 18.4pt; font-weight: 700;
           letter-spacing: 8pt; margin: 10pt 0 12pt; }}
@@ -150,6 +186,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
   .foot {{ margin-top: 10pt; font-size: 7.5pt; color: #444; }}
 </style></head><body>
 <div class="sheet">
+  {watermark}
   <div class="org">{org}</div>
   <div class="doc">獎金分潤單</div>
   <div class="head"><div>案件編號　{quote}</div><div>基數　{base}</div>
@@ -168,6 +205,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at):
         quote=e(award.get("quote_no") or ""),
         base=_fmt_money(award.get("base_amount")),
         status=e("已作廢" if award.get("voided_at") else (award.get("status") or "")),
+        watermark=watermark,
         rows="".join(rows), signs=sign_html,
         foot=e("匯出時間 %s" % exported_at))
 
