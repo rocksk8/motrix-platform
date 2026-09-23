@@ -472,6 +472,52 @@ def signatures_of(voucher):
     return out
 
 
+def approval_done(voucher):
+    """匯出（不是預覽）能不能放行。回 `(ok, message)`，`ok` 為真時 `message` 是 `""`。
+
+    ## 🔴 `JV11`：條件是「未簽核完成」，不是「狀態不等於已核准」
+
+    `voucher_pdf.py:363` 已有裁定：**已作廢的傳票也要印得出來**——一份
+    法定保存五年的憑證，作廢單正是稽核最需要看到的那一種。而使用者另外
+    裁示**作廢優先於未簽核**：一張還沒簽核就被作廢的單，仍然放行，不管
+    簽到第幾層。
+    ☠️ 寫成「狀態不等於已核准就擋」的話，這支會**牴觸一條已經存在的裁定**
+       ——那是 B 最省力的實作，而它會全綠，因為沒有任何一題會同時檢查
+       「作廢」與「未簽核」兩個條件疊在一起。
+
+    ## ⚠️ fail-closed：讀不出簽核鏈時**擋下來**，不是放行
+
+    與 `signatures_of()` 對 `VoucherChainUnreadable` 的處理方向相反——那支
+    是版面，讀不出來就在紙上印一格「簽核資料無法讀取」，版面本身不能垮。
+    這裡是**匯出閘門**，讀不出來代表判斷不出「有沒有簽完」，寧可多擋一次
+    也不要放行一張可能還沒簽完的傳票。
+    📌 〈守門守的對象被搬走〉：同一份 `approval_json`，多了一個新消費端
+       （匯出閘門）之後，原本那支的失敗行為（放行）只對舊用途（版面）成立。
+    """
+    if voucher.get("voided_at"):
+        return True, ""
+    if voucher.get("status") == "已核准":
+        return True, ""
+    try:
+        tiers = _chain_tiers(voucher)
+    except VoucherChainUnreadable:
+        return False, "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核，暫不能匯出。"
+    if tiers:
+        try:
+            appr = json.loads(voucher.get("approval_json") or "{}") or {}
+        except (TypeError, ValueError):
+            appr = {}
+        idx = int(appr.get("currentTier") or 0)
+        idx = max(0, min(idx, len(tiers) - 1))
+        label = _TIER_LABELS[idx] if idx < len(_TIER_LABELS) else "第 %d 層" % (idx + 1)
+        return False, ("這張傳票尚未簽核完成，還差「%s」（第 %d／%d 層）簽核，暫不能匯出。"
+                       % (label, idx + 1, len(tiers)))
+    # ⚠️ 沒有設定過流程：維持 §161 的內建兩格。
+    if not (voucher.get("checked_by") or ""):
+        return False, "這張傳票尚未簽核完成，還差覆核簽核，暫不能匯出。"
+    return False, "這張傳票尚未簽核完成，還差主管簽核，暫不能匯出。"
+
+
 def post_voucher(conn, voucher_id, user):
     """過帳。回 `(ok, err)` —— `err` 是**給使用者看的字串**，成功時 `None`。
 

@@ -48,7 +48,7 @@ import tempfile
 
 from db import get_db
 from helpers import _get_edge_path, _get_setting, run_edge_pdf
-from helpers.voucher import get_voucher
+from helpers.voucher import approval_done, get_voucher
 from helpers.voucher_attachments import abs_path
 
 logger = logging.getLogger(__name__)
@@ -138,6 +138,31 @@ def split_attachments(rows):
     return images, pdfs, missing
 
 
+def watermark_html(voucher):
+    """`JV11`：預覽稿要不要蓋浮水印、蓋哪一句。只有 `preview_voucher_pdf()`
+    呼叫這支——匯出路徑一律是空字串（見 `build_html()` 的 docstring）。
+
+    ## 🔴 作廢優先於未簽核（使用者裁示②）
+
+    一張**還沒簽核就被作廢**的單，紙上要印「已作廢」不是「尚未簽核」——
+    ☠️ 印「尚未簽核」的話，有人會去把它簽完。與 `approval_done()`
+    「作廢一律放行」是同一條裁定的兩面：那支管**能不能匯出**，這支管
+    **蓋哪一句話**，判斷順序必須一致（都是先看 `voided_at`）。
+    """
+    e = html.escape
+    if voucher.get("voided_at"):
+        title, sub = "本傳票已作廢", "僅供稽核存查"
+    else:
+        ok, _msg = approval_done(voucher)
+        if ok:
+            return ""
+        title, sub = "傳票尚未簽核完成", "預覽稿・尚未正式生效"
+    items = "".join(
+        "<div class='wm-item'><b>%s</b><small>%s</small></div>" % (e(title), e(sub))
+        for _ in range(12))
+    return "<div class='wm'>%s</div>" % items
+
+
 def _sign_cells(voucher):
     """簽核格。**從資料算幾格，不是寫死三個**。
 
@@ -150,12 +175,17 @@ def _sign_cells(voucher):
             for k, v in sigs.items()]
 
 
-def build_html(voucher, images, missing, exported_at):
+def build_html(voucher, images, missing, exported_at, watermark=""):
     """組出要餵給 Edge 的那一份 HTML（本體 ＋ 圖片附件 ＋ 未併入清單）。
 
     ⚠️ 版面座標是**量出來的**（`§2`），而字型／粗細／字距**量不到**
        —— 來源 PDF 沒有文字層。對不上時若是座標是實作問題，
        若是字型**沒有人有權威答案**，要回去問使用者。
+
+    `watermark`：`JV11` 的預覽稿浮水印 HTML（`watermark_html()` 產的），
+    **匯出路徑一律傳空字串**——那正是 `§228` 的分工：預覽用這個參數蓋一層
+    「尚未簽核完成」，匯出走簽核通過才放行，兩者不共用同一個「有沒有簽完」
+    的旗標，穿不過去。
     """
     e = html.escape
     lines = voucher.get("lines") or []
@@ -207,7 +237,22 @@ def build_html(voucher, images, missing, exported_at):
   @page {{ size: {pw}pt {ph}pt; margin: 0; }}
   body {{ margin: 0; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
           color: #000; }}
-  .sheet {{ padding: {m}pt {m}pt 0 {m}pt; }}
+  .sheet {{ padding: {m}pt {m}pt 0 {m}pt; position: relative; }}
+  /* `JV11`：預覽稿浮水印 —— 沿用 quotation-form.html 的 3x4 格線平鋪，
+     rotate(-28deg)，顏色極淡（rgba(185,28,28,0.09)／小字 0.07）不影響閱讀。
+     只有 preview_voucher_pdf() 會餵非空的 {watermark}——匯出（pdf-download）
+     一律是空字串：匯出本來就要簽核通過才放行，作廢單的狀態已經印在
+     .head 那一列，不需要再蓋一層浮水印。 */
+  .wm {{ position: absolute; inset: 0; pointer-events: none; z-index: 5;
+         overflow: hidden; display: grid; grid-template-columns: repeat(3, 1fr);
+         grid-template-rows: repeat(4, 1fr); align-items: center;
+         justify-items: center; box-sizing: border-box; }}
+  .wm-item {{ transform: rotate(-28deg); white-space: nowrap; text-align: center;
+              line-height: 1.5; }}
+  .wm-item b {{ display: block; font-size: 15pt; font-weight: 900;
+               letter-spacing: 0.1em; color: rgba(185,28,28,0.09); }}
+  .wm-item small {{ display: block; font-size: 7.5pt; font-weight: 700;
+                    letter-spacing: 0.05em; color: rgba(185,28,28,0.07); }}
   .org {{ text-align: center; font-size: 13pt; }}
   .doc {{ text-align: center; font-size: 18.4pt; font-weight: 700;
           letter-spacing: 8pt; margin: 10pt 0 12pt; }}
@@ -241,6 +286,7 @@ def build_html(voucher, images, missing, exported_at):
   .miss p {{ font-size: 8.5pt; color: #444; margin-top: 12pt; }}
 </style></head><body>
 <div class="sheet">
+  {watermark}
   <div class="org">{org}</div>
   <div class="doc">傳　票</div>
   <div class="head"><div>傳票號碼　{no}</div><div>傳票日期　{date}</div>
@@ -262,7 +308,7 @@ def build_html(voucher, images, missing, exported_at):
         date=e(voucher.get("voucher_date") or ""),
         status=e("已作廢" if voucher.get("voided_at") else (voucher.get("status") or "")),
         cols=cols, rows="".join(rows), note=e(voucher.get("summary") or ""),
-        signs=sign_html, imgs=img_pages, miss=miss_page,
+        signs=sign_html, imgs=img_pages, miss=miss_page, watermark=watermark,
         # 🔴 匯出的 PDF 是**快照**，要自己說出它是什麼時候的：
         #    附件可以在匯出之後再新增 ⇒ 兩份同一張傳票的 PDF 內容可以不同。
         #    ☠️ 沒有這一行的話，兩份不同的 PDF 拿在手上**分不出哪一份比較新**。
@@ -397,3 +443,34 @@ def export_voucher_pdf(voucher_id, with_attachments=False):
         body = _render(build_html(v, images, missing, exported_at))
         merged, _again = _merge_pdfs(body, [p for p in pdfs if p not in skipped])
     return merged, missing
+
+
+def preview_html(voucher_id):
+    """`JV11`：預覽稿 HTML。回 `None` 表示這張傳票不存在。
+
+    ## 🔴 `§228`：**這是唯一產生「傳票長什麼樣」這份 HTML 的地方**
+
+    預覽塞進前端 modal 的那一份，跟匯出成 PDF 前 Edge 印的那一份，
+    是**同一個 `build_html()` 呼叫**（只差 `watermark` 參數）——版面只有
+    一份，不會分岔。與 `BN6` 驗收④（預覽的 `lines` 必須與產生後逐筆相等）
+    是同一條原則：**預覽與正式輸出必須來自同一個來源，否則預覽會騙人。**
+
+    ## ⚠️ 刻意不帶附件圖片
+
+    `build_html()` 的圖片走 `<img src="file:///...">`——那是給 Edge **在
+    伺服器本機**印 PDF 用的絕對路徑，瀏覽器（使用者的用戶端）連不到伺服器
+    的檔案系統，塞進 `<iframe>`／`innerHTML` 只會是一堆破圖。預覽只需要
+    傳票本體、分錄、簽核格與浮水印，附件本來就有自己的檢視入口
+    （傳票頁的附件區）。
+    """
+    conn = get_db()
+    try:
+        v = get_voucher(conn, voucher_id)
+        if v is None:
+            return None
+        v["_company"] = _company_name()
+    finally:
+        conn.close()
+    exported_at = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    v["_merged"] = 0
+    return build_html(v, [], [], exported_at, watermark=watermark_html(v))

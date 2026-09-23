@@ -65,6 +65,11 @@ function voucherPage() {
     attMsg: '',
     uploading: false,
     exporting: false,
+    //: `JV10`：原視窗預覽（`§228`）。previewHtml 是後端 `/preview` 端點
+    //: 回的**整份 HTML 文件**，塞進 `<iframe srcdoc>`，不是 innerHTML。
+    previewOpen: false,
+    previewLoading: false,
+    previewHtml: '',
     //: 帶入要寫到**哪一行**。預設第一行；使用者點過哪一格的摘要就換到那一行。
     summaryTarget: 0,
 
@@ -247,6 +252,43 @@ function voucherPage() {
     //    ☠️ 只接一個的話，使用者以為印出來的就是全部。
     // ⚠️ 而**未併入的附件畫面也要說**，不能只有 PDF 裡有 ——
     //    呼叫端要靠回應的 header 才分得出「完整」與「缺了東西」。
+
+    // 🔴 `JV11`：預覽**隨時可看**（不看簽核狀態），沒有閘門要擋——那支端點
+    //    本來就是後端唯一沒有簽核檢查的那一個（`§228`：與匯出分成兩支端點，
+    //    穿不過去也不必穿，它本來就對所有狀態開放）。
+    async openPreview() {
+      if (!this.id || this.previewLoading) return
+      this.previewOpen = true
+      this.previewLoading = true
+      this.previewHtml = ''
+      try {
+        const r = await fetch('/api/vouchers/' + this.id + '/preview', {
+          headers: this._auth(),
+        })
+        if (!r.ok) {
+          let msg = 'HTTP ' + r.status
+          try { msg = (await r.json()).detail || msg } catch (e) { /* 不是 JSON */ }
+          throw new Error(msg)
+        }
+        this.previewHtml = await r.text()
+      } catch (e) {
+        // 🔑 iframe 沒有內容時使用者只會看到一片空白 —— 把錯誤訊息
+        //    直接做成一份最小的 HTML 塞進 srcdoc，讓它也在 iframe 裡顯示，
+        //    而不是讓 previewLoading 卡住或整個 modal 空白看不出原因。
+        this.previewHtml = '<body style="font-family:sans-serif;padding:24px;'
+          + 'color:#B91C1C">預覽失敗：' + this._esc(e.message) + '</body>'
+      } finally {
+        this.previewLoading = false
+      }
+    },
+
+    //: `srcdoc` 塞進去的錯誤訊息只能是純文字，避免使用者輸入或後端訊息
+    //: 裡剛好帶 HTML 特殊字元時被當成標籤解析。
+    _esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      })
+    },
 
     async exportPdf(withAttachments) {
       this.attErr = ''

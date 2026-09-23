@@ -96,6 +96,13 @@
     .vc-att__empty{padding:12px 4px;color:var(--text-secondary);font-size:12px}
     .vc-att__acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
     .vc-empty{flex:1;min-width:320px;padding:70px 24px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px;line-height:1.9;border:1px dashed var(--border-light);border-radius:var(--radius)}
+
+    /* ── `JV10`：原視窗預覽 modal（沿用 quotation-form.html 的既有樣式，
+         只放寬 .modal-box —— 傳票是 A4 版面，680px 太窄會被壓縮）── */
+    .modal-box{width:100%;max-width:860px}
+    .vc-preview-wrap{padding:16px;background:#F5F4F0;min-height:400px}
+    .vc-preview-frame{width:100%;height:72vh;border:1px solid var(--border-light);border-radius:6px;background:#fff}
+    .vc-preview-loading{padding:60px 20px;text-align:center;color:var(--text-secondary);font-size:13px}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -429,11 +436,25 @@
                   而作廢單正是稽核最需要看到的那一種
                   ⇒ 所以這一區**不在** `x-show="!voidedAt"` 裡面。 -->
           <div class="vc-acts" x-show="isSaved">
+            <!-- 🔴 `JV11`：預覽**隨時可看**（不看簽核狀態），沿用報價單那個
+                 原視窗 modal（不開新視窗、不下載完才看得到）。而**匯出**
+                 兩顆走 `pdf-download`，簽核未完成會被後端擋下並說明還差誰簽
+                 —— 兩者刻意是不同端點（`§228`：閘門綁端點，穿不過去）。 -->
+            <button class="vc-btn" data-testid="voucher-preview"
+                    :disabled="previewLoading" @click="openPreview()"
+                    x-text="previewLoading ? '載入中…' : '預覽'"></button>
             <button class="vc-btn" data-testid="voucher-pdf"
                     :disabled="exporting" @click="exportPdf(false)"
                     x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
+            <!-- 🔴 `JV10`：沒有附件時這顆要**停用而看得見**，並說得出為什麼——
+                 與 `JV3` 的刪除鈕（非草稿時整個不存在，`x-if`）方向相反：
+                 那個動作在那個狀態下不該被想起；而這一顆停用是提醒使用者
+                 「這裡可以放附件」，不是把它藏起來。
+                 ☠️ 只停用不說的話，使用者會一直點它，而畫面不會回應。 -->
             <button class="vc-btn" data-testid="voucher-pdf-attachments"
-                    :disabled="exporting" @click="exportPdf(true)">匯出 PDF（含附件）</button>
+                    :disabled="exporting || !attachments.length"
+                    :title="attachments.length ? '' : '這張傳票還沒有附件，沒有東西可以併進去'"
+                    @click="exportPdf(true)">匯出 PDF（含附件）</button>
             <span class="vc-att__hint">
               「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；
               併不進去的會列在最後一頁，畫面上也會說。
@@ -464,6 +485,42 @@
       </div>
 
     </main>
+  </div>
+
+  <!-- ══ `JV10`：原視窗預覽 modal ══════════════════════════════════════
+       🔴 `§228`：這裡塞的 HTML **必須是後端 `GET /{id}/preview` 產的那一份**
+          —— 與匯出前 Edge 印的是同一個 `build_html()` 呼叫，版面只有一份，
+          不會分岔。⚠️ 用 `<iframe srcdoc>` 不用 `innerHTML`：後端回的是一份
+          **完整的 HTML 文件**（含自己的 `<style>`），塞進 innerHTML 的話
+          `<style>` 會不會生效、會不會外漏到宿主頁面**因瀏覽器而異**；
+          iframe 是獨立的瀏覽情境，樣式保證不外漏也不被外面的 CSS 蓋掉。 -->
+  <div class="modal-overlay" x-show="previewOpen" x-transition
+       @click.self="previewOpen=false" style="display:none">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="modal-head__title" x-text="'傳票預覽　' + (voucherNo || '（尚未產生單號）')"></span>
+        <button class="modal-close" @click="previewOpen=false">×</button>
+      </div>
+      <div class="modal-body" style="padding:0">
+        <div class="vc-preview-wrap">
+          <div class="vc-preview-loading" x-show="previewLoading">載入中…</div>
+          <iframe class="vc-preview-frame" x-show="!previewLoading"
+                  data-testid="voucher-preview-frame"
+                  :srcdoc="previewHtml" title="傳票預覽"></iframe>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" @click="previewOpen=false">關閉</button>
+        <!-- 「預覽後匯出」：不必關掉 modal 再回去找按鈕，這裡直接匯出。
+             ⚠️ 匯出仍然走 exportPdf()，簽核未完成一樣會被後端擋下——
+             預覽窗不繞過閘門，它只是把同一顆按鈕挪到這裡再放一次。 -->
+        <button class="btn btn-sm" :disabled="exporting" @click="exportPdf(false)"
+                x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
+        <button class="btn btn-sm" :disabled="exporting || !attachments.length"
+                :title="attachments.length ? '' : '這張傳票還沒有附件，沒有東西可以併進去'"
+                @click="exportPdf(true)">匯出 PDF（含附件）</button>
+      </div>
+    </div>
   </div>
 
   <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出

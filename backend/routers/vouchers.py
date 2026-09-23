@@ -23,7 +23,7 @@ import os
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, Response
 from urllib.parse import quote
 
 from db import get_db
@@ -38,7 +38,7 @@ from helpers.tiered_approval import (
 )
 from helpers import _get_setting
 from helpers.uploads import save_document_files
-from helpers.voucher_pdf import export_voucher_pdf
+from helpers.voucher_pdf import export_voucher_pdf, preview_html
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
     COPY_SOURCE_TYPE,
@@ -46,7 +46,7 @@ from helpers.voucher_attachments import (
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
-    diff_lines,
+    diff_lines, approval_done,
 )
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
@@ -1137,6 +1137,23 @@ def download_voucher_pdf(voucher_id: int, with_attachments: bool = False,
           而那會變成「匯出壞了」——比缺一個附件嚴重得多。
     """
     _require_voucher_access(_require_user(authorization))
+
+    # 🔴 `JV11`：閘門在後端——只藏前端按鈕的話，直接打這支端點照樣拿得到
+    #    未簽核的傳票 PDF，那份 PDF 上有三個空的簽名格，看起來像正式單據。
+    #    條件是 approval_done() 的「未簽核完成」，不是「狀態不等於已核准」
+    #    ——後者會擋掉作廢單，牴觸 voucher_pdf.py 既有裁定（已作廢的傳票
+    #    也要印得出來）。訊息說得出還差誰簽，不是一句「不可匯出」。
+    conn = get_db()
+    try:
+        v = get_voucher(conn, voucher_id)
+    finally:
+        conn.close()
+    if v is None:
+        raise HTTPException(404, "找不到這張傳票。")
+    ok, msg = approval_done(v)
+    if not ok:
+        raise HTTPException(400, msg)
+
     data, missing = export_voucher_pdf(voucher_id, with_attachments)
     if data is None:
         raise HTTPException(404, "找不到這張傳票。")
@@ -1160,3 +1177,27 @@ def download_voucher_pdf(voucher_id: int, with_attachments: bool = False,
     _audit(_tok(authorization), "voucher.pdf", "vouchers", str(voucher_id),
            "匯出傳票 PDF：%s%s" % (name, "（含附件）" if with_attachments else ""))
     return Response(content=data, media_type="application/pdf", headers=headers)
+
+
+@router.get("/{voucher_id}/preview")
+def preview_voucher(voucher_id: int, authorization: str = Header(None)):
+    """`JV11`：預覽稿。回 **HTML**，**隨時可看**，不看簽核狀態。
+
+    ## 🔴 `§228` 裁定：獨立端點，不是 `pdf-download?preview=1`
+
+    **閘門綁在參數上，漏傳就穿透；綁在端點上，穿不過去。** 少寫一個
+    `not`、參數名打錯、預設值被改——三種都讓 `?preview=1` 那種寫法的
+    閘門靜默失效，而回應看起來完全正常。這支端點**沒有簽核閘門**，
+    `download_voucher_pdf()`（`pdf-download`）**才有**——兩支各自寫死
+    自己的規則，沒有一個「條件」可以寫錯。
+
+    ⚠️ 而**混在一起的後果比穿透更糟**：還沒簽核的單連看都看不到，
+       而看是為了檢查——簽核的人要先看過才知道要不要簽。
+    📌 回的 HTML 與匯出前 Edge 印的是**同一個 `build_html()` 呼叫**
+       （`preview_html()` 的 docstring），版面只有一份，不會分岔。
+    """
+    _require_voucher_access(_require_user(authorization))
+    body = preview_html(voucher_id)
+    if body is None:
+        raise HTTPException(404, "找不到這張傳票。")
+    return HTMLResponse(content=body)
