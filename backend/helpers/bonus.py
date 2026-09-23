@@ -179,8 +179,9 @@ def remainder_of(base, total_pct, lines):
 
 #: 每個獎金項目各自綁一個人員來源。
 #:
-#: 🔴 **只有兩個**，而那是使用者原話逐字定的：
-#:    「業務獎金→`sales_person`／專案執行獎金→`case_stages.assigned_to`」。
+#: 🔴 原本**只有兩個**，是使用者原話逐字定的：
+#:    「業務獎金→`sales_person`／專案執行獎金→`case_stages.assigned_to`」，
+#:    `BN14`（2026-09-23）加了第三個 `"group"`（見下）。
 #:
 #: ## ☠️ 這裡原本有 `owner` 與 `engineer`，已拿掉（A 裁，2026-09-23）
 #:
@@ -194,9 +195,14 @@ def remainder_of(base, total_pct, lines):
 #: 那個欄位**真的存在**（A 實查；我原本與 A-2 都沒列到它）。
 #: ⚠️ 而它**這一輪刻意不接** —— 沒有紅燈、沒有裁示。
 #:    寫在這裡是為了讓下一個人**不必重新去找**，不是為了暗示它該被加進來。
+#: `BN14`（2026-09-23）：獎金模組自己建的群組（例如「後勤單位」）——
+#: 使用者裁「不接組織架構，這裡獨立設定」，與 `divisions`／`departments`
+#: 沒有任何關聯。「哪一個群組」存在 `bonus_items.person_source_ref`
+#: （型別與實例分開，見 `db.py::_m104_bonus_groups()` 的理由）。
 PERSON_SOURCES = (
     "sales_person",             # 業務
     "case_stages.assigned_to",  # 各執行階段負責人（JSON 陣列）
+    "group",                    # 獎金模組自建群組（例：後勤單位）
 )
 
 #: 來源解析不出任何人時的標記。**不可以靜默算成 0 筆。**
@@ -246,6 +252,18 @@ def people_for_item(item, case):
             for name in raw or ():
                 if name and name not in people:
                     people.append(name)
+    elif source == "group":
+        # `BN14`：這支函式保持純函式（不吃 `conn`）——群組是否存在／
+        # 停用／成員名單，全部由呼叫端先查好塞進 `item`（同 `QS1-a`
+        # `_case_people()` 那條「解析放在呼叫端」的規則）。
+        # `_group_error` 只在群組不存在或已停用時才會被塞——
+        # `not people` 那個共用檢查已經接住「群組存在但沒有成員」。
+        err = (item or {}).get("_group_error")
+        if err:
+            return False, [], err
+        for name in (item or {}).get("_group_members") or ():
+            if name and name not in people:
+                people.append(name)
     else:
         name = case.get(source)
         if name and name not in people:

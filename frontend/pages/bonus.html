@@ -54,6 +54,7 @@
     .bn-btn{padding:7px 16px;border:none;border-radius:6px;background:var(--text-primary);color:var(--white);font-size:13px;font-family:var(--font-zh);cursor:pointer}
     .bn-btn:disabled{opacity:.5;cursor:not-allowed}
     .bn-btn--ghost{background:transparent;color:var(--text-primary);border:1px solid var(--border-light)}
+    .bn-del{border:none;background:transparent;color:#B91C1C;cursor:pointer;font-size:13px;padding:0 2px;line-height:1}
 
     .bn-unit{font-size:11px;color:var(--text-dim,#6B6B6B);margin-left:4px}
     .bn-alloc{border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px;font-family:var(--font-zh);font-size:13px}
@@ -140,6 +141,86 @@
         <div class="bn-err" x-text="itemErr"></div>
       </template>
 
+      <!-- `BN14`：同一條規則（`§219`）——錯誤訊息放在 x-show 閘門外面，
+           403 時區塊不顯示也不會連錯誤訊息一起被吞掉。 -->
+      <template x-if="groupErr">
+        <div class="bn-err" x-text="groupErr"></div>
+      </template>
+
+      <!-- ══ 獎金群組（BN14）══════════════════════════════════════════
+           使用者原話：「人員來源要有群組的區分，可以把後勤單位的人列入
+           人員來源」。不接組織架構（使用者裁：「這邊獨立設定，不需要
+           共用」），獎金模組自己建群組。
+
+           🔴 位置在「獎金項目」**之前**（`SPEC-BN14.md §7b`）：動線是
+           「先有群組 -> 才能在項目上選它」，放後面的話使用者會先看到
+           一個空的群組下拉，不知道要去哪裡建。
+           🔴 閘門與「獎金項目」同一道（`isManager`）——群組是獎金項目的
+           附屬設定，權限判斷只留一處。 -->
+      <section class="bn-sec" x-show="isManager && groupsLoaded">
+        <div class="bn-sec__hd">
+          <span class="bn-sec__t">獎金群組</span>
+          <span class="bn-sec__s">給「業務」「各執行階段負責人」以外的複數人員用，例如後勤單位；有複數成員時系統自動均分。</span>
+        </div>
+
+        <template x-if="groupMsg">
+          <div class="bn-ok" x-text="groupMsg"></div>
+        </template>
+
+        <div class="bn-card" x-show="groups.length">
+          <template x-for="g in groups" :key="g.id">
+            <div class="bn-line" style="flex-wrap:wrap;align-items:flex-start">
+              <span class="bn-who" x-text="g.name"></span>
+              <span class="bn-status" x-show="!g.is_active">已停用</span>
+              <span class="bn-item" x-text="(g.members || []).length + ' 人'"></span>
+              <button class="bn-btn bn-btn--ghost" style="margin-left:auto"
+                      @click="toggleGroupActive(g)"
+                      x-text="g.is_active ? '停用' : '啟用'"></button>
+
+              <div style="flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:4px">
+                <template x-for="m in (g.members || [])" :key="m">
+                  <span class="bn-item" style="display:flex;align-items:center;gap:4px">
+                    <span x-text="m"></span>
+                    <button class="bn-del" title="移出這個群組"
+                            @click="removeGroupMember(g, m)">×</button>
+                  </span>
+                </template>
+                <span class="bn-item" x-show="!(g.members || []).length" style="color:var(--text-secondary)">
+                  （還沒有成員）
+                </span>
+              </div>
+
+              <div style="flex-basis:100%;display:flex;gap:8px;margin-top:6px">
+                <input type="text" placeholder="輸入帳號（username）加入成員"
+                       style="flex:1;min-width:160px"
+                       x-model="newMemberInput[g.id]"
+                       @keyup.enter="addGroupMember(g)">
+                <button class="bn-btn bn-btn--ghost"
+                        :disabled="savingMember[g.id] || !newMemberInput[g.id]"
+                        @click="addGroupMember(g)"
+                        x-text="savingMember[g.id] ? '加入中…' : '加入'"></button>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="bn-blank" x-show="!groups.length">
+          <strong>尚未建立任何獎金群組。</strong><br>
+          在下方輸入名稱即可建立，例如「後勤單位」。
+        </div>
+
+        <div class="bn-form" style="margin-top:10px">
+          <div class="bn-fld">
+            <label for="bn-new-group">群組名稱</label>
+            <input id="bn-new-group" type="text" x-model="newGroupName"
+                   placeholder="例如：後勤單位" @keyup.enter="createGroup()">
+          </div>
+          <button class="bn-btn" @click="createGroup()"
+                  :disabled="savingGroup || !newGroupName"
+                  x-text="savingGroup ? '新增中…' : '新增群組'"></button>
+        </div>
+      </section>
+
       <!-- ══ 獎金項目（SPEC-BN1-PLAN §2）════════════════════════════
            🔴 這一區只有**管理者**看得到：它列的是公司的發放政策。
 
@@ -207,15 +288,31 @@
               <label for="bn-new-src">人員來源</label>
               <!-- 🔴 來源清單由**後端**給（PERSON_SOURCES），不在這裡寫死：
                    寫死的話，後端加一個來源而這裡不會跟。 -->
-              <select id="bn-new-src" x-model="newItem.person_source">
+              <select id="bn-new-src" x-model="newItem.person_source"
+                      @change="newItem.person_source_ref = null">
                 <option value="">請選擇…</option>
                 <template x-for="s in personSources" :key="s">
                   <option :value="s" x-text="srcLabel(s)"></option>
                 </template>
               </select>
             </div>
+            <!-- `BN14`：來源選「群組」時才需要選哪一個群組——只列**啟用中**
+                 的群組（`§7②`），停用的群組不出現在這個下拉。 -->
+            <div class="bn-fld" x-show="newItem.person_source === 'group'">
+              <label for="bn-new-group-ref">哪一個群組</label>
+              <select id="bn-new-group-ref" x-model.number="newItem.person_source_ref">
+                <option :value="null">請選擇…</option>
+                <template x-for="g in activeGroups()" :key="g.id">
+                  <option :value="g.id" x-text="g.name + '（' + (g.members || []).length + ' 人）'"></option>
+                </template>
+              </select>
+              <span class="bn-unit" x-show="!activeGroups().length">
+                目前沒有啟用中的群組，請先在上方「獎金群組」建立。
+              </span>
+            </div>
             <button class="bn-btn" @click="createItem()"
-                    :disabled="savingItem || !newItem.name || !newItem.person_source"
+                    :disabled="savingItem || !newItem.name || !newItem.person_source
+                      || (newItem.person_source === 'group' && !newItem.person_source_ref)"
                     x-text="savingItem ? '新增中…' : '新增獎金項目'"></button>
           </div>
         </template>

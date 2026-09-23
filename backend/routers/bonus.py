@@ -174,13 +174,21 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
         raise HTTPException(400, "請選擇人員來源：沒有來源的項目永遠算不出發放對象。")
     if source not in PERSON_SOURCES:
         raise HTTPException(400, "不支援的人員來源「%s」。" % source)
+    # `BN14`：型別（`person_source`）與實例（哪一個群組）分開存——
+    # 不編碼成 `"group:2"`，見 `db.py::_m104_bonus_groups()` 的理由。
+    # 這裡不逐一判斷是哪個來源才收這個值：其他來源送了也只是存一個
+    # 用不到的 NULL 以外的值，`people_for_item()` 只有 `"group"` 那支
+    # 分支會讀它，不會誤用到別的來源上。
+    raw_ref = body.get("person_source_ref")
+    ref = int(raw_ref) if raw_ref not in (None, "") else None
     now = datetime.now().isoformat()
     conn = get_db()
     try:
         cur = conn.execute(
-            "INSERT INTO bonus_items (name, person_source, sort_order, is_active,"
-            " created_by, created_at, updated_at) VALUES (?,?,?,1,?,?,?)",
-            (name, source, int(body.get("sort_order") or 0),
+            "INSERT INTO bonus_items (name, person_source, person_source_ref,"
+            " sort_order, is_active, created_by, created_at, updated_at)"
+            " VALUES (?,?,?,?,1,?,?,?)",
+            (name, source, ref, int(body.get("sort_order") or 0),
              _user_name(user), now, now))
         conn.commit()
         new_id = cur.lastrowid
@@ -189,6 +197,192 @@ def create_bonus_item(body: dict = Body(...), authorization: str = Header(None))
     _audit(_tok(authorization), "bonus.item.create", "bonus_items",
            str(new_id), "新增獎金項目：%s" % name)
     return {"ok": True, "id": new_id}
+
+
+# ── `BN14`：獎金模組自己建的群組 ──────────────────────────────────
+# 🔴 閘門與獎金項目同一道（`require_superadmin=True`）——群組是獎金項目
+#    的附屬設定（`SPEC-BN14.md §7b`，A 裁），權限判斷只留一處，不要讓
+#    「誰能維護群組」與「誰看得到獎金項目」在兩處各自判斷、遲早漂移
+#    （`EM13` 那一族就是這樣長出來的）。
+
+@router.get("/groups")
+def list_bonus_groups(authorization: str = Header(None)):
+    """群組清單，**含成員帳號**——維護畫面與項目建立的群組下拉共用這一支。
+
+    ⚠️ 停用的群組**照樣列出**（`is_active` 標出來，不是濾掉）：維護畫面
+    要看到它才能重新啟用；前端自己決定「建新項目的下拉」要不要濾掉
+    停用的（`§7②`），這裡不揣測用途先幫忙濾。
+    """
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        groups = [dict(r) for r in conn.execute(
+            "SELECT * FROM bonus_groups ORDER BY name")]
+        members_by_group = {}
+        for r in conn.execute(
+                "SELECT group_id, username FROM bonus_group_members"
+                " ORDER BY username"):
+            members_by_group.setdefault(r["group_id"], []).append(r["username"])
+    finally:
+        conn.close()
+    for g in groups:
+        g["members"] = members_by_group.get(g["id"], [])
+    return {"groups": groups}
+
+
+@router.post("/groups")
+def create_bonus_group(body: dict = Body(...), authorization: str = Header(None)):
+    """新增群組（例：「後勤單位」）。**只建群組本身，不帶成員**——
+    加成員是另一支端點，避免「建立」與「加人」哪一步失敗要分開重試時
+    糾纏在一起。
+    """
+    user = _require_user(authorization, require_superadmin=True)
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "請填寫群組名稱。")
+    now = datetime.now().isoformat()
+    conn = get_db()
+    try:
+        try:
+            cur = conn.execute(
+                "INSERT INTO bonus_groups (name, is_active, created_by,"
+                " created_at, updated_at) VALUES (?,1,?,?,?)",
+                (name, _user_name(user), now, now))
+        except Exception as exc:                            # noqa: BLE001
+            if "UNIQUE" in str(exc).upper():
+                raise HTTPException(409, "群組「%s」已經存在。" % name)
+            raise
+        conn.commit()
+        new_id = cur.lastrowid
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.group.create", "bonus_groups",
+           str(new_id), "新增獎金群組：%s" % name)
+    return {"ok": True, "id": new_id}
+
+
+@router.patch("/groups/{group_id}/active")
+def set_bonus_group_active(group_id: int, body: dict = Body(...),
+                           authorization: str = Header(None)):
+    """停用／重新啟用群組。**只改 `is_active`，成員清單不動**
+
+    ☠️ `SPEC-BN14.md §7`：停用時清空成員的話，重新啟用會是一個空群組，
+    而畫面上看起來完全正常——使用者不會發現整批成員不見了，直到有人
+    抱怨自己沒領到錢。⇒ 這支**不碰** `bonus_group_members`。
+    """
+    _require_user(authorization, require_superadmin=True)
+    is_active = 1 if body.get("is_active") else 0
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id, name FROM bonus_groups WHERE id = ?",
+                           (group_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這個群組。")
+        conn.execute(
+            "UPDATE bonus_groups SET is_active = ?, updated_at = ? WHERE id = ?",
+            (is_active, datetime.now().isoformat(), group_id))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.group.set_active", "bonus_groups",
+           str(group_id), "%s群組：%s" % ("啟用" if is_active else "停用", row["name"]))
+    return {"ok": True}
+
+
+@router.post("/groups/{group_id}/members")
+def add_bonus_group_member(group_id: int, body: dict = Body(...),
+                           authorization: str = Header(None)):
+    """加一個成員。**只能是真實帳號**（〈綁帳號不存自由文字〉，`BN3` 留下來
+    的界線）——資料層用 FK 擋（`bonus_group_members.username` 參照
+    `users(username)`），這裡把資料層的拒絕翻成看得懂的話，不是應用層
+    自己重新判斷一次「這個帳號存不存在」（那會變成第二份判斷，兩份會
+    漂移）。
+    """
+    _require_user(authorization, require_superadmin=True)
+    username = (body.get("username") or "").strip()
+    if not username:
+        raise HTTPException(400, "請指定要加入的帳號。")
+    conn = get_db()
+    try:
+        group = conn.execute("SELECT id FROM bonus_groups WHERE id = ?",
+                             (group_id,)).fetchone()
+        if group is None:
+            raise HTTPException(404, "找不到這個群組。")
+        try:
+            conn.execute(
+                "INSERT INTO bonus_group_members (group_id, username)"
+                " VALUES (?,?)", (group_id, username))
+        except Exception as exc:                            # noqa: BLE001
+            msg = str(exc).upper()
+            if "UNIQUE" in msg:
+                raise HTTPException(409, "「%s」已經在這個群組裡了。" % username)
+            if "FOREIGN KEY" in msg:
+                raise HTTPException(400, "帳號「%s」不存在。" % username)
+            raise
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.group.add_member", "bonus_groups",
+           str(group_id), "加入成員：%s" % username)
+    return {"ok": True}
+
+
+@router.delete("/groups/{group_id}/members/{username}")
+def remove_bonus_group_member(group_id: int, username: str,
+                              authorization: str = Header(None)):
+    """移出一個成員。**不影響已經產生的獎金單**（`§5` 凍結——那些單存的是
+    快照，不會即時展開群組）。
+    """
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        conn.execute(
+            "DELETE FROM bonus_group_members WHERE group_id = ? AND username = ?",
+            (group_id, username))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.group.remove_member", "bonus_groups",
+           str(group_id), "移出成員：%s" % username)
+    return {"ok": True}
+
+
+def _attach_group_people(conn, items):
+    """`BN14`：幫每個 `person_source == "group"` 的項目補上
+    `_group_members`／`_group_error`，`people_for_item()` 只讀這兩個鍵，
+    自己不查資料庫（維持純函式，`helpers/bonus.py` 的既有規則——同
+    `QS1-a` `_case_people()` 那條「解析放在呼叫端」）。
+
+    一次查完全部群組，不逐項目各查一次（同 `BN15`／`QS1-a` 那幾支的
+    批次查詢規則）。沒有 `person_source_ref` 的群組項目**不設任何一個
+    鍵**——`people_for_item()` 自然落到「沒有成員」那個共用檢查，訊息
+    不夠精準但不算錯（新增項目時前端會擋，不會真的送出這種資料）。
+    """
+    group_items = [it for it in items if it.get("person_source") == "group"]
+    gids = {it["person_source_ref"] for it in group_items
+            if it.get("person_source_ref")}
+    if not gids:
+        return
+    placeholders = ",".join("?" for _ in gids)
+    groups = {r["id"]: dict(r) for r in conn.execute(
+        "SELECT id, name, is_active FROM bonus_groups WHERE id IN (%s)"
+        % placeholders, tuple(gids))}
+    members_by_group = {}
+    for r in conn.execute(
+            "SELECT group_id, username FROM bonus_group_members"
+            " WHERE group_id IN (%s)" % placeholders, tuple(gids)):
+        members_by_group.setdefault(r["group_id"], []).append(r["username"])
+
+    for it in group_items:
+        gid = it.get("person_source_ref")
+        g = groups.get(gid)
+        if g is None:
+            it["_group_error"] = "設定的群組不存在，請重新選擇人員來源。"
+        elif not g["is_active"]:
+            it["_group_error"] = (
+                "群組「%s」已停用，無法用來產生新的獎金分潤。" % g["name"])
+        else:
+            it["_group_members"] = members_by_group.get(gid, [])
 
 
 # ── 案件的獎金基數（唯讀，給畫面先看）────────────────────────────
@@ -320,6 +514,7 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
         items = [dict(r) for r in conn.execute(
             "SELECT * FROM bonus_items WHERE is_active = 1"
             " ORDER BY sort_order, id")]
+        _attach_group_people(conn, items)
         live = conn.execute(
             "SELECT id FROM bonus_awards WHERE quote_no = ? AND voided_at = ''",
             (quote_no,)).fetchone()
@@ -602,6 +797,7 @@ def _plan_allocations(conn, quote_no, allocations):
     case = _case_people(conn, quote_no)
     items = {r["id"]: dict(r) for r in conn.execute(
         "SELECT * FROM bonus_items WHERE is_active = 1")}
+    _attach_group_people(conn, items.values())
 
     planned = []
     for alloc in allocations:
@@ -613,6 +809,15 @@ def _plan_allocations(conn, quote_no, allocations):
             raise HTTPException(400, "「%s」%s。" % (item["name"], note))
         total_pct = int(alloc.get("total_pct") or 0)
         shares = alloc.get("person_pct") or {}
+        # `BN14`：使用者原話「如有複數人員自動計算比例」——群組來源且
+        # 呼叫端沒有送 person_pct 時，系統自動均分，不是叫使用者自己
+        # 心算 `10000 // 人數`。均分後分不盡的餘數**留白不分給任何
+        # 人**（不進 `shares`），會自然併入 `remainder_of()` 算出來的
+        # 尾差——與 `split_award()` 既有「尾差歸公司」同一條規則，不用
+        # 另外處理一次。
+        if item.get("person_source") == "group" and not shares:
+            share = BASIS_POINTS // len(people)
+            shares = {p: share for p in people}
         pairs = [(p, int(shares.get(p, 0))) for p in people]
         # 🔴 上界**釘在 `base` 上，不釘在 `pool` 上**。
         #

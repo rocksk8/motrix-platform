@@ -123,7 +123,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 #      bonus_awards＋**部分**唯一索引／bonus_award_lines）
 # v98: FN4 編寫紀錄 —— bonus_award_edit_log ＋ 兩張共同的 retention 欄
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
-CURRENT_VERSION = 103
+CURRENT_VERSION = 104
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4302,6 +4302,68 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m104_bonus_groups(conn):
+    """v104（2026-09-23 `BN14`）：獎金人員來源加「群組」。
+
+    使用者原話：「獎金分潤的人員來源要有群組的區分，可以把後勤單位的人
+    列入人員來源，如有複數人員自動計算比例」。
+
+    ## 🔴 不接組織架構（`divisions`／`departments`），獎金模組自己建群組
+
+    使用者裁：「後勤單位只在這邊獨立設定，不需要共用」——`bonus_groups`
+    與既有的組織架構表**沒有任何關聯**，是刻意的。
+
+    ## ✅ 新表不用 `system_settings` 的 JSON（`SPEC-BN14.md §2b`）
+
+    要稽核「誰把某人加進群組」、要能回答「這個人在哪些群組」、要讓
+    「同一個人加兩次」在資料層被擋——JSON 三件都做不到。
+
+    ## 🔴 `bonus_group_members.username` 有 FK 約束到 `users(username)`
+
+    〈綁帳號不存自由文字〉這條界線（`BN3` 留下來的）在這裡靠資料層擋，
+    不是只靠應用層記得檢查——打錯一個字會直接 `IntegrityError`，不是
+    等到「產生獎金單」那一刻才在應用層發現。
+
+    ## 🔴 `bonus_items.person_source_ref`：型別與實例分開存
+
+    `PERSON_SOURCES` 的值是**型別**（`"group"`）不是**實例**（哪一個
+    群組）。不編碼成 `"group:2"` 這種字串——那樣 `person_source_snapshot`
+    存進 `bonus_award_lines` 之後，群組被刪掉時那個字串仍然在，看起來
+    像一個合法的來源；分開存讓 `assert source in PERSON_SOURCES` 仍然
+    對「型別」成立。
+    """
+    if not _table_exists(conn, "bonus_groups"):
+        conn.execute(
+            "CREATE TABLE bonus_groups ("
+            "  id         INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  name       TEXT    NOT NULL UNIQUE,"
+            "  is_active  INTEGER NOT NULL DEFAULT 1,"
+            "  created_by TEXT    NOT NULL,"
+            "  created_at TEXT    NOT NULL,"
+            "  updated_at TEXT    NOT NULL"
+            ")")
+    if not _table_exists(conn, "bonus_group_members"):
+        conn.execute(
+            "CREATE TABLE bonus_group_members ("
+            "  id       INTEGER PRIMARY KEY AUTOINCREMENT,"
+            "  group_id INTEGER NOT NULL REFERENCES bonus_groups(id),"
+            "  username TEXT    NOT NULL REFERENCES users(username),"
+            "  UNIQUE(group_id, username)"
+            ")")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bonus_group_members_group"
+            " ON bonus_group_members(group_id)")
+        # 🔑 `SPEC-BN14.md §2b②`：要能回答「這個人在哪些群組裡」。
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bonus_group_members_user"
+            " ON bonus_group_members(username)")
+    if not _col_exists(conn, "bonus_items", "person_source_ref"):
+        conn.execute(
+            "ALTER TABLE bonus_items ADD COLUMN"
+            " person_source_ref INTEGER REFERENCES bonus_groups(id)")
+    conn.commit()
+
+
 def _m103_bonus_award_lines_username(conn):
     """v103（2026-09-23 `QS1-a`）：`bonus_award_lines.username` 回填成帳號。
 
@@ -5156,6 +5218,7 @@ _MIGRATIONS = [
     _m101_voucher_approval,                         # v101
     _m102_bonus_award_approval,                     # v102
     _m103_bonus_award_lines_username,               # v103
+    _m104_bonus_groups,                              # v104
 ]
 
 

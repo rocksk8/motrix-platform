@@ -23,6 +23,7 @@
 var BN_SOURCE_LABEL = {
   'sales_person': '業務（案件負責業務）',
   'case_stages.assigned_to': '各執行階段負責人',
+  'group': '群組（後勤等複數人員）',
 }
 
 function bonusPage() {
@@ -46,10 +47,24 @@ function bonusPage() {
     items: [],
     itemsLoaded: false,
     personSources: [],
-    newItem: { name: '', person_source: '' },
+    newItem: { name: '', person_source: '', person_source_ref: null },
     itemMsg: '',
     itemErr: '',
     savingItem: false,
+
+    // ── `BN14`：獎金模組自己建的群組（例：後勤單位）──
+    //: 閘門與獎金項目同一道（後端 require_superadmin），畫面上也共用
+    //: 同一個 `isManager` 判斷，不在這裡另外判 role。
+    groups: [],
+    groupsLoaded: false,
+    groupErr: '',
+    groupMsg: '',
+    newGroupName: '',
+    savingGroup: false,
+    //: 每個群組自己的「加成員」輸入框，用 group id 當 key——
+    //: 共用一個字串的話，展開第二個群組會蓋掉第一個正在打的字。
+    newMemberInput: {},
+    savingMember: {},
     //: 能不能在本頁新增獎金項目。**來自後端**（`GET /items` 的 `can_edit`
     //: ＝ `role === 'superadmin'`），不是在這裡判 `role` 算出來的。
     //: 📌 名字不照抄 `can_edit`：那個名字說不出「edit 什麼」，
@@ -107,6 +122,10 @@ function bonusPage() {
       //    📌 而還是有可能拿到 403（`is_manager` 與 `require_superadmin` 是
       //       兩道閘，`BN9` 之前 admin 兩者不一致）⇒ 錯誤訊息要說得出是權限，
       //       而且它**放在區塊外**（見 `bonus.html` 那一段）。
+      // `BN14`：群組管理與獎金項目**同一道閘**（`isManager`）——
+      // 動線是「先有群組才能在項目上選它」，所以群組要在項目之前載入
+      // （順序不影響畫面，但語意上這裡先寫）。
+      if (this.isManager) await this.loadGroups()
       if (this.isManager) await this.loadItems()
       // `BN5`：候選清單與「產生獎金單」同一道閘（canCreateAward =
       // _is_manager），不是 isManager——admin 按得到「產生」，
@@ -148,6 +167,106 @@ function bonusPage() {
       } catch (e) {
         // 🔑 說出是哪一支壞了：使用者回報時那句話是唯一的線索。
         this.loadError = '獎金資料載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
+      }
+    },
+
+    // ── `BN14`：群組 ─────────────────────────────────────────────
+
+    async loadGroups() {
+      try {
+        const r = await fetch('/api/bonus/groups', { headers: this._auth() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const d = await r.json()
+        this.groups = d.groups || []
+        this.groupsLoaded = true
+      } catch (e) {
+        this.groupErr = '群組載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
+      }
+    },
+
+    // 建新項目的下拉**只給啟用中的群組**（`§7②`）——維護區塊本身
+    // 仍然列出全部（含已停用），要看到它才能重新啟用。
+    activeGroups() {
+      return (this.groups || []).filter(function (g) { return g.is_active })
+    },
+
+    async createGroup() {
+      this.groupMsg = ''
+      this.groupErr = ''
+      const name = (this.newGroupName || '').trim()
+      if (!name || this.savingGroup) return
+      this.savingGroup = true
+      try {
+        const r = await fetch('/api/bonus/groups', {
+          method: 'POST',
+          headers: this._jsonAuth(),
+          body: JSON.stringify({ name: name }),
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.newGroupName = ''
+        this.groupMsg = '已新增群組「' + name + '」。'
+        await this.loadGroups()
+      } catch (e) {
+        this.groupErr = e.message
+      } finally {
+        this.savingGroup = false
+      }
+    },
+
+    async toggleGroupActive(g) {
+      this.groupErr = ''
+      try {
+        const r = await fetch('/api/bonus/groups/' + g.id + '/active', {
+          method: 'PATCH',
+          headers: this._jsonAuth(),
+          body: JSON.stringify({ is_active: !g.is_active }),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(function () { return {} })
+          throw new Error(d.detail || ('HTTP ' + r.status))
+        }
+        await this.loadGroups()
+      } catch (e) {
+        this.groupErr = e.message
+      }
+    },
+
+    async addGroupMember(g) {
+      this.groupErr = ''
+      const username = (this.newMemberInput[g.id] || '').trim()
+      if (!username) return
+      this.savingMember = Object.assign({}, this.savingMember, { [g.id]: true })
+      try {
+        const r = await fetch('/api/bonus/groups/' + g.id + '/members', {
+          method: 'POST',
+          headers: this._jsonAuth(),
+          body: JSON.stringify({ username: username }),
+        })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.newMemberInput = Object.assign({}, this.newMemberInput, { [g.id]: '' })
+        await this.loadGroups()
+      } catch (e) {
+        this.groupErr = e.message
+      } finally {
+        this.savingMember = Object.assign({}, this.savingMember, { [g.id]: false })
+      }
+    },
+
+    async removeGroupMember(g, username) {
+      this.groupErr = ''
+      try {
+        const r = await fetch(
+          '/api/bonus/groups/' + g.id + '/members/' + encodeURIComponent(username),
+          { method: 'DELETE', headers: this._auth() })
+        if (!r.ok) {
+          const d = await r.json().catch(function () { return {} })
+          throw new Error(d.detail || ('HTTP ' + r.status))
+        }
+        await this.loadGroups()
+      } catch (e) {
+        this.groupErr = e.message
       }
     },
 
@@ -193,7 +312,7 @@ function bonusPage() {
         })
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
-        this.newItem = { name: '', person_source: '' }
+        this.newItem = { name: '', person_source: '', person_source_ref: null }
         this.itemMsg = '已新增獎金項目。'
         await this.loadItems()
       } catch (e) {
