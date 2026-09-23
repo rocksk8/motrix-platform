@@ -513,6 +513,8 @@ function bonusPage() {
       this.detailMode = 'award'
       this.awardDetail = null
       this.awardDetailErr = ''
+      this.awardPreviewHtml = ''
+      this.awardPreviewErr = ''
       this.awardDetailLoading = true
       try {
         const r = await fetch('/api/bonus/awards/' + awardId, { headers: this._auth() })
@@ -868,6 +870,38 @@ function bonusPage() {
     // ／顯示名稱／抬頭／閘門（草稿．待審核．簽核中擋，已核准．已作廢放）
     // ——這裡只負責把 blob 存成檔案，不重覆判斷放不放行（按下去按不按得
     // 動由後端的 400 說了算，同 voucher.js::exportPdf() 的分工）。
+    // ── `BN12`：PDF 版面預覽與申請人收回 ─────────────────────────────
+    //
+    // 🔑 預覽打的是**另一支端點**（`/preview`），不看簽核狀態、未簽核時蓋浮水印；
+    //    匯出（`/pdf-download`）才擋 —— 閘門綁在端點上，不綁在參數上（同 `JV11`）。
+    // 📌 預覽與匯出來自同一支 `build_award_html()`，看到的就是會印出來的那一份。
+    awardPreviewHtml: '',
+    awardPreviewErr: '',
+
+    async previewAwardPdf(a) {
+      const id = a.id
+      this.awardPreviewErr = ''
+      try {
+        const r = await fetch('/api/bonus/awards/' + id + '/preview', { headers: this._auth() })
+        if (!r.ok) {
+          let msg = 'HTTP ' + r.status
+          try { msg = (await r.json()).detail || msg } catch (e) { /* 不是 JSON */ }
+          throw new Error(msg)
+        }
+        const html = await r.text()
+        // 回來時若已經換了一張單，丟掉（先渲染再非同步載入的競態）。
+        if (!this.awardDetail || String(this.awardDetail.id) !== String(id)) return
+        this.awardPreviewHtml = html
+      } catch (e) {
+        this.awardPreviewErr = '預覽載入失敗（' + e.message + '）。'
+      }
+    },
+
+    recallAward(id) {
+      // 能不能收回由後端說（`can_recall`：原送審申請人＋待審核／簽核中），這裡不自己判。
+      return this._awardAct(id, '/recall', {}, function () { return '已收回草稿。' })
+    },
+
     async downloadAwardPdf(a) {
       if (this.awardBusy) return
       const id = a.id

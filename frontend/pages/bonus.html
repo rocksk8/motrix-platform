@@ -795,6 +795,17 @@
                 </div>
               </span>
             </template>
+            <!-- `BN12`：收回（只有原送審申請人看得到；後端算 can_recall） -->
+            <template x-if="awardDetail.can_recall">
+              <button class="bn-btn bn-btn--ghost" data-testid="bonus-award-recall"
+                      :disabled="awardBusy === String(awardDetail.id)"
+                      @click="recallAward(awardDetail.id)">收回草稿</button>
+            </template>
+            <!-- `BN12`：PDF 版面預覽——隨時看得到，未簽核時有浮水印；匯出才擋。 -->
+            <template x-if="canCreateAward">
+              <button class="bn-btn bn-btn--ghost" data-testid="bonus-award-preview"
+                      @click="previewAwardPdf(awardDetail)">預覽 PDF 版面</button>
+            </template>
             <template x-if="canCreateAward">
               <button class="bn-btn bn-btn--ghost"
                       :disabled="awardBusy === String(awardDetail.id)
@@ -807,6 +818,11 @@
           </span>
         </template>
         <button class="btn btn-ghost btn-sm" @click="closeDetail()">關閉</button>
+      </div>
+      <div x-show="detailMode === 'award' && (awardPreviewHtml || awardPreviewErr)" style="padding:0 16px 12px">
+        <div class="bn-err" x-show="awardPreviewErr" x-text="awardPreviewErr"></div>
+        <iframe x-show="awardPreviewHtml" :srcdoc="awardPreviewHtml" data-testid="bonus-award-preview-frame"
+                title="獎金分潤單 PDF 版面預覽" style="width:100%;height:70vh;border:1px solid var(--border-light);background:#fff"></iframe>
       </div>
     </div>
   </div>
