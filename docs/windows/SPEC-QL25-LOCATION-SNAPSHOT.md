@@ -41,8 +41,22 @@ _ident 的銀行欄位（bank_name／bank_branch／bank_account_number）
 > `QL10` 的理由（「匯款帳號要回答**現在**該匯到哪」）是對的，
 > **而它被寫成一條比自己的理由寬的規則。**
 
-📌 ⇒ 本規格**只動報價單**。請款單維持 `QL10`（讀即時值），**不要順手改它**。
-⚠️ 這一段要寫進 `pdf_gen.py` 的註解，否則下一個人會把兩支一起改。
+### 🔴 2026-09-23 A 裁定之後，這一段的結論**更強了**
+
+使用者裁「**下游也讀報價單的快照**」⇒ 8 支 builder 全部涉及，含請款單。
+而因為快照**只含五個抬頭欄位**（§3 收窄），規則自然分成兩半：
+
+```
+抬頭五欄  有快照用快照、沒有才即時查
+銀行四欄  **一律即時值** —— `QL10` 原封不動
+```
+
+> ### 🔑 `QL10` 與 `QL25` **不必互相讓步 —— 它們管的是不同的欄位。**
+
+☠️ 而這是 §3 那個收窄換來的：**若當初整包存 `location_identity()` 的回傳**，
+現在就得在「下游讀快照」與「請款單不可以印舊帳號」之間**二選一**。
+
+⚠️ 這一段要寫進 `pdf_gen.py` 的註解，否則下一個人會把兩半一起改。
 
 ---
 
@@ -90,6 +104,126 @@ quotations.data_json["locationIdentity"] = {
 
 ---
 
+## §3b 落地形狀 —— **一支 helper 取代 8 個呼叫點**
+
+### 🔴 更正：不是「五支」，是 **8 支**（7 支非報價單）
+
+```
+❌ 我上一版寫「其他五支 builder（出貨單／完工單／三種憑單／結案報告）」
+   —— 那個括號自己就是 **6 類**（1+1+3+1），**數字與它自己的清單對不起來**
+   ☠️ 而我手上就有 awk 的輸出（8 個 def），**我沒有去數它**
+✅ A 獨立數過（`§5v`），`backend/pdf_gen.py` 呼叫
+   `location_identity(_location_of(...))` 的有 **8 處**：
+    107 _build_quote_html                     <= QL25 本體
+   1039 _build_shipping_html                  出貨單
+   1399 _build_contractor_voucher_html        承攬商憑單
+   1757 _build_invoice_voucher_html           發票憑單
+   2065 _build_payment_request_html           請款單（**唯一印銀行欄位的**）
+   2565 _build_case_closing_html              結案報告
+   3077 _build_project_execution_report_html  **專案執行報告**  <= 我漏掉的那一支
+   3270 _build_completion_html                完工單
+```
+
+🔑 而 `helpers/company_identity.py:107` 的 docstring **逐字寫著「8 支 builder」** ——
+> **那個數字一直都在，而我引用過那段 docstring、還是寫了一個沒數過的數字。**
+
+📌 ⚠️ 檔案是 `backend/pdf_gen.py`，**不是** `backend/helpers/pdf_gen.py`。
+
+### ① 一支 helper
+
+```python
+# helpers/company_identity.py
+#: 會被快照覆蓋的欄位。**銀行四欄刻意不在裡面**（QL10：帳號要回答「現在」）。
+_SNAPSHOT_FIELDS = ("company_name", "company_name_en", "tax_id", "phone", "email")
+
+
+def identity_for(payload) -> dict:
+    """一份單據要印的公司身分。
+
+    即時值當底，**五個抬頭欄位被快照逐欄覆蓋**。
+    🔴 銀行四欄**永遠是即時值** —— QL10 沒有被翻掉，它管的是別的欄位。
+    """
+    loc_id, snap = _resolve(payload)          # ⚠️ **一次查詢**拿到兩樣東西
+    out = dict(location_identity(loc_id))
+    for f in _SNAPSHOT_FIELDS:
+        v = str(snap.get(f) or "").strip()
+        if v:
+            out[f] = v                        # ⚠️ **逐欄**覆蓋
+    return out
+```
+
+⚠️ **逐欄不是整組** —— 與 `QL22`（退階要逐欄）同一條規則。
+☠️ 整組覆蓋的話：快照裡 `phone` 是空的 ⇒ 印出來的電話也是空的，
+   而即時值那邊明明有。
+
+### ② 快照從哪裡來 —— **兩條路，要分別寫清楚**
+
+```
+甲 報價單自己      payload 裡就有 => `payload["locationIdentity"]`，**不查 DB**
+乙 下游 7 支       payload 只有 quoteNo => 查 quotations
+                   🔑 `_location_of()` **已經在查了**（company_identity.py:124）
+                   ⇒ 把那一句 `SELECT location_id` 改成
+                     `SELECT location_id, data_json`
+                   ⚠️ **不要新增第二次查詢**
+```
+
+🔴 兩條路都要寫，否則會出現**反面的不一致**：
+> **下游凍結了、而報價單自己沒凍結。**
+
+```python
+def _resolve(payload):
+    """(據點 id, 快照 dict)。**一次查詢**，兩條路分別處理。"""
+    payload = payload or {}
+    direct = str(payload.get("locationId") or "").strip()
+    if direct:
+        # 甲：報價單表單直送、測試直塞 => 快照就在同一個 payload 裡
+        return direct, (payload.get("locationIdentity") or {})
+    quote_no = str(payload.get("quoteNo") or payload.get("quote_no") or "").strip()
+    if not quote_no:
+        return "", (payload.get("locationIdentity") or {})
+    try:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT location_id, data_json FROM quotations WHERE quote_no=?",
+                (quote_no,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:       # noqa: BLE001 —— 查不到就退回主要據點＋無快照
+        return "", {}
+    if not row:
+        return "", {}
+    try:
+        d = json.loads(row["data_json"] or "{}")
+    except Exception:       # noqa: BLE001
+        d = {}
+    return (str(row["location_id"] or "").strip(),
+            d.get("locationIdentity") or {})
+```
+
+⚠️ **甲那條路的 payload 沒有 `locationIdentity` 時要退回即時值**，不是報錯 ——
+既有測試就是直接塞 `locationId` 而不塞快照的（`company_identity.py:100` 的 docstring）。
+
+### ③ 守門：請款單的銀行四欄**不可以來自快照**
+
+```
+⚙️ 正對照（**釘行為不是釘結構**）
+   拿一筆「據點**改過銀行帳號**」的資料 => 斷言請款單印出來的是**新帳號**
+   ❌ 不可以只斷言「快照裡沒有銀行欄位」—— 那是釘資料結構
+      ☠️ 有人日後把銀行欄位加進 _SNAPSHOT_FIELDS，結構那題會紅，
+         **而如果他同時改了那題的清單，行為那題才是唯一擋得住的**
+```
+
+### ④ 退路：**沒有快照就整份走即時值**
+
+```
+26 張舊單在補快照之前都走它
+⚠️ 而「整份」是指五個抬頭欄位都落空 => out 就是 location_identity() 的原樣
+   🔑 這與 §5 ③ 是同一條，不是新規則
+```
+
+---
+
 ## §4 寫入時機 —— 「按送出那一刻」**在程式裡是三個入口**
 
 ### ⚠️ 先釐清一個詞：這個 repo 裡「送出」有兩個意思
@@ -123,23 +257,57 @@ quotations.data_json["locationIdentity"] = {
 routers/quotations.py:1616  recall_quotation   申請人收回
 routers/quotations.py:4402  reject_quotation   簽核退回（⚠️ **它會換單號**）
 ```
-⇒ 規則：**每次離開草稿都覆蓋快照**（不是「只寫一次」）。
-🔑 這樣「草稿階段跟著設定走」自動成立，**不需要在回草稿時清快照**。
+⇒ 規則**兩半**（本版修訂，見 §5「草稿要跟著設定走」那一段）：
+
+```
+離開草稿（3 個入口）  => **覆蓋**快照（不是「只寫一次」）
+回到草稿（2 條路）    => **清掉**快照
+```
+
+🔴 ⚠️ 上一版寫「不需要在回草稿時清快照」，**那是錯的** —— 這一列留著。
+```
+當時的推理：每次離開草稿都覆蓋 => 再送審時自然是新值
+☠️ 而它漏掉「**收回成草稿之後、還沒再送審**」那一段時間：
+   快照還在 => 印草稿時印的是舊抬頭
+   而 A 裁的是「**草稿階段仍跟著設定走，改得動**」
+🔑 漏掉的不是一條規則，是一個**狀態**。
+```
 
 ---
 
 ## §5 讀取順序
 
-```python
-# pdf_gen.py:107 附近
-snap = (q.get("locationIdentity") or {}) if q.get("status") != "草稿" else {}
-_ident = snap if snap.get("company_name") else location_identity(_location_of(q))
+```
+8 支 builder 一律改成   _ident = identity_for(payload)      （§3b ①）
+① 有快照的欄位            => 用快照（**逐欄**）
+② 沒快照的欄位            => 即時值
+③ 完全沒快照（26 張舊單） => 整份即時值  ← **這條退路要留著**
 ```
 
+### 🔴 「草稿要跟著設定走」改成**在寫入端處理**（本版修訂）
+
+上一版寫成讀取時檢查 `status != "草稿"`。**改掉，理由是成本**：
+
 ```
-① status == "草稿"        => **忽略快照**，用即時值（A 裁：草稿跟著設定走）
-② 有快照                  => 用快照
-③ 沒快照（26 張舊單）     => 即時值  ← **這條退路要留著**
+甲（上一版）讀取時看 status
+   => 8 支 builder 的 payload 都要帶得到報價單的 status
+      而下游 7 支的 payload 是**它們自己的單據**，status 是它們自己的
+   ⇒ 要在 _resolve() 的查詢再多取 quotations.status，並想清楚
+     「出貨單已出、而報價單被收回成草稿」時算誰的
+   ☠️ 那是一個**不需要存在的狀態組合**
+
+乙（本版）**回草稿時清掉快照**
+   => 讀取端只問「有沒有」，8 支一致
+   落點只有兩處：recall_quotation:1616 ／ reject_quotation:4402
+```
+
+**乙的副作用**（分開寫，不是優點）：
+```
+⚠️ 日後若新增第三條回草稿的路，**它不會自己清快照**
+   => 症狀是「一張草稿印出舊抬頭」，而**那與正常運作長得很像**
+⇒ 守門要釘：**任何把 quotations.status 寫成 '草稿' 的地方，
+   都要一併清掉 data_json["locationIdentity"]**
+   ⚙️ 正對照＝那兩處；誘餌＝自己留一個合成的第三處
 ```
 
 🔴 **不要動 `location_identity()` 本身**（`QL5`／`QL8` 裁過落空順序）。
@@ -194,6 +362,14 @@ if not d.get("locationIdentity"):    # ❌ 快照存在而內容全空時會被�
         ⓒ 收回成草稿 -> 再送審 -> 改名 -> 重印 => **抬頭是第二次送審時的值**
 ```
 
+### 🔴🔴 給 C：**這一件的迴歸保護是零**
+
+```
+既有 21 題**沒有一題**會因為做錯而紅（§8 已查）
+=> 那不是「安全」，那是「**做錯了沒有人會說**」
+⇒ 題要從頭寫，而且**寫完要先證明它會紅**
+```
+
 ### 🔴 驗收要分得出「**有快照**」與「**快照是空的**」
 
 ```
@@ -214,10 +390,21 @@ if not d.get("locationIdentity"):    # ❌ 快照存在而內容全空時會被�
 ✅ 釘：離開草稿的**每一條路**都留下快照
    ⚙️ 正對照 三個入口各一題
    ⚠️ **不要只測 PUT 那一支** —— ③ 走的是獨立 UPDATE，最容易被漏
-✅ 釘：請款單**仍然讀即時值**（QL10 沒有被翻掉）
-   🔑 這一題是防「順手把兩支一起改」
-✅ 釘：快照裡**不出現銀行欄位**
-   ☠️ 存了就會有人去讀
+✅ 釘：**回到草稿的每一條路都清掉快照**（§4 修訂）
+   ⚙️ 正對照 recall:1616 ／ reject:4402 各一題
+   🎣 誘餌   自己留一個合成的第三條路，確認守門抓得到「新增的那一條」
+   ☠️ 症狀是「一張草稿印出舊抬頭」，**而那與正常運作長得很像**
+✅ 釘：請款單的**銀行四欄仍然是即時值**（QL10 沒有被翻掉）
+   ⚙️ 正對照 **釘行為**：據點改過銀行帳號 => 斷言印出來的是**新帳號**
+   ❌ 不可以只斷言「快照裡沒有銀行欄位」—— 那是釘資料結構
+      ☠️ 有人日後把銀行欄位加進 `_SNAPSHOT_FIELDS`，結構那題會紅，
+         **而他同時改掉那題的清單就綠了** —— 行為那題才是唯一擋得住的
+✅ 釘：快照裡**不出現銀行欄位**（結構，與上一條**兩題都要**）
+   🔑 兩題分辨的是不同的失效：結構題擋「存進去」，行為題擋「讀出來」
+✅ 釘：**8 支 builder 全部走 `identity_for()`**
+   ⚙️ 正對照 掃 `pdf_gen.py` 裡 `location_identity(_location_of(` 的殘留 = **0**
+   ⚠️ 而它要配**反向控制**：`identity_for(` 的呼叫點 = **8**
+      ☠️ 否則有人把某一支改成不印抬頭，殘留數一樣是 0 而那一支壞了
 ```
 
 ---
