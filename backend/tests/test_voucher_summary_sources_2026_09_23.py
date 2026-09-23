@@ -387,9 +387,14 @@ def test_jv7_the_summary_field_is_not_locked_after_a_source_is_applied():
     html_p, _js = _voucher_page()
     html = html_p.read_text(encoding="utf-8")
 
-    m = re.search(r"<input[^>]*x-model=\"l\.summary\"[^>]*>", html, re.S)
+    # 🔴 `JV12`（`9ec2c2d`）把這個欄位從 `<input>` 換成 `<textarea>`
+    #    （高度隨文字調整），這裡原本釘死 `<input …>` 從那個 commit 之後
+    #    就一直是紅的——〈守門守的對象被搬走〉：斷言沒變、字面值沒變，
+    #    指的元素換了型別。改成同時接受兩種標籤。
+    m = re.search(r"<(?:input|textarea)[^>]*x-model=\"l\.summary\"[^>]*>",
+                 html, re.S)
     assert m, (
-        "`voucher.html` 裡找不到 `x-model=\"l.summary\"` 的 input ——\n"
+        "`voucher.html` 裡找不到 `x-model=\"l.summary\"` 的欄位 ——\n"
         + "⚠️ 摘要欄被搬走了，**退回給我**改這一題的觀測點。")
     tag = m.group(0)
 
