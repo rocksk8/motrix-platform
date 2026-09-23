@@ -199,3 +199,22 @@ calc(100vh-20px) 側欄     748      972
 改成 calc(Nvh / var(--fz,1)) 後：0.85/1/1.15/1.3 ⇒ 724/730/735/741、742～751、768 —— 全在畫面內
 ```
 **修法**：①`motrixSetZoom` 與初始化同時設 `--fz`；②前端 52 檔 132 處 `Nvh`／`Ndvh` ⇒ `calc(Nvh / var(--fz,1))`（白名單逐檔、驗收「該改的 0／不該改的沒動」，vendor 除外）；③`.mnav__panel`（`style.css` 約 :475）加 `max-height:calc(100dvh / var(--fz,1) - var(--topbar-h))`＋`overflow-y:auto`；④e2e：四段字級 × 1366×768，量選單面板、簽核彈窗、側邊清單底邊 ≤ innerHeight，HEAD 在「特」先紅。
+
+## 🟢 並行派工（2026-09-24 使用者表單：「加開，用獨立 worktree 並行」）
+
+| 視窗 | 範圍 | 檔案領域 |
+|---|---|---|
+| hichan-61 | 傳票 JV32→JV35→JV29→JV31→JV33→JV34（`SPEC-JV28-ATTACHMENT-PREVIEW.md`） | `vouchers.py`、`helpers/voucher*.py`、`voucher.html`、`voucher.js`、`approval-queue.html` 傳票列、`quotations.py` 的 `_REASSIGN_TABLES`／reassign（JV35） |
+| **新視窗** | 本檔「🟡 傳票 JV29～34 之後的排程」中：①額外支出退回權限 ②收款資料驗證 ③防業務改已收款期別 ④報價案件：資料遺失類 → 輸入解析 → 清單與標籤 → 預覽與 PDF 統一 | `case_extra_expenses.py`、`quotations.py`（收款／批次存檔段，**不含** reassign 段）、`cashier.js`／`cashier.html`、`case-management.*`、`quotation-form.html`、`quotations.html`、`pdf_gen.py` 報價段 |
+| hichan-0a | 派工、核對、建包驗包；只寫 `.md` | — |
+
+仍排後：字級「特」（會動 52 檔含 `voucher.html`，等傳票完成）、稅額與收支基準（待會計決定，動工前表單問使用者）。
+
+**並行規則**（違反任一條即停手回報）：
+1. 新視窗一律在**自己的 git worktree＋分支**工作（例：`feat/money-quote-2026-09-24`），不在共用工作樹寫檔；完成一項就 rebase 到最新 master、全量綠、再 fast-forward 合回並 push。
+2. `quotations.py` 兩邊都會碰：hichan-61 只動 reassign 段（約 :5717-5830），新視窗不碰那段；合回時衝突一律回報，不自行取捨對方的改動。
+3. 鎖定檔（`db.py`、`main.py`、`sidebar.js`、`helpers/__init__.py`）動前向 hichan-0a 宣告。
+4. 題名**不帶工作編號**（今晚 `test_t11_*` 撞名的教訓）；每支新題先在 master 上證明會紅。
+5. 突變一律在 worktree 內做；使用者可見的改動附頁面實測。
+6. 版本紀錄：同模組同期間併入既有條目（VR3），新模組才新增；合回前確認不與 master 撞號。
+7. 不建包；建包由 hichan-0a 在兩邊都合回後統一做，上線與否由使用者決定。
