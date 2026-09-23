@@ -35,10 +35,16 @@ frontend/**/*.{html,js}（排除 rollback）  fetch( 呼叫點 **608** 個，81 
 
 v4 命中（寫入類 × 整支函式無失敗分支）        = **69**
   − logout() 同一份複製碼                     = 20   （§4a 排除，有理由）
-  − 函式邊界沒抓到、需人工判讀                = 10   （§4b，已知其中 1 是誤報）
+  − 函式邊界沒抓到 10 處 => **已逐一讀完**（§4b）
+        ❌ 誤報 3 ／ ✅ 有理由排除 4 ／ 🔴 真命中 **3**
   ────────────────────────────────────────────────
-  判準明確的命中                              = **39**
+  要處理的                                    = 39 + 3 = **42**
 ```
+
+🔑 §4b 那 10 處**三種結果都出現了** —— 誤報、該排除、真缺陷。
+⇒ 「工具判不出來的那一批」**不可以整批排除，也不可以整批當缺陷**。
+☠️ 其中 `vendor-contractors.html:779`（銀行存摺 PUT 沒驗 `r.ok`）
+   是**被外層的 `!r.ok` 誤判成安全**的 —— 那一句是**前一支 fetch** 的。
 
 ### §2a 39 處的分布
 
@@ -145,22 +151,73 @@ logout() {
 ✅ **設計上就該這樣**：本機一定要登出，後端通知失敗不該擋住使用者離開。
 ⚠️ 而它是**同一份複製碼散在 20 個檔**——不是 20 個決定，是 1 個決定抄了 20 次。
 
-### §4b 函式邊界沒抓到 = 10 處 —— **需人工判讀，不要直接當缺陷**
+### §4b 函式邊界沒抓到的 10 處 —— ✅ **已逐一讀完**（A-2，`75a9737` 之後）
+
+工具外擴會停在 `if`／`for`／`.then` 上，所以這 10 處它沒有能力判定。
+🔴 **不可以整批排除，也不可以整批當缺陷** —— 三種結果都出現了：
+
+#### ❌ 誤報 3 處（失敗分支在**外層**，工具切太早）
 
 ```
-case-management.js:1652      for (const label of labels)
-dev-crm.html:1923            if (this.editingLogId)
-login-qr-approve.html:255    if (sessionToken)
-payment-request-form.html:591 if (this.isNew)
-quotation-form.html:2910     this.saveDraft().then(() =>
-quotation-form.html:3180     if (this.backendOnline && this.q.quoteNo)
-quotation-form.html:3587     for (const label of labels)
-sidebar.js:161               if (sess.token)
-users.html:1228              if (this.editingId)        <= **已實測是誤報**
-vendor-contractors.html:779  if (this.bankPassbookPreview !== null ...)
+dev-crm.html:1923             `let r` + if/else 兩支 fetch，
+                              下面有 if (!r.ok) { this._toast(d.detail || '儲存失敗') }
+payment-request-form.html:591 同一形狀，下面有 this.errMsg = ...detail || '儲存失敗'
+users.html:1228               同一形狀（第二輪抽查時已驗過）
 ```
-🔴 這 10 處工具**沒有能力判定**（外擴停在 `if`／`for`／`.then` 上）。
-⇒ **B 要逐一打開看**，不可以照抄清單。
+🔑 三處是**同一個寫法**：`let r` 先宣告、`if/else` 兩支 fetch、共用一段 `!r.ok`。
+⇒ 守門日後要認得這一形狀，否則它會一直報這三處。
+
+#### ✅ 排除 4 處（有理由）
+
+```
+case-management.js:1652   _seedDefaultStagesIfEmpty   背景補建預設階段
+quotation-form.html:3587  _seedDefaultStagesIfEmpty   同一份複製碼
+                          => 使用者沒按按鈕；補建失敗的話看板是空的，**他看得到**
+sidebar.js:161            motrixLogout                同 §4a（射後不理是對的）
+login-qr-approve.html:255 QR 自動登入
+                          🔑 **刻意的，而且碼裡有逐字註解**：
+                          「靜靜退回手動輸入密碼表單，不特別顯示成『錯誤』，
+                            因為『這支手機沒登入過這個帳號』是完全正常、
+                            預期中的情況，不是使用者的操作失誤。」
+                          => 有人做過決定，不是漏掉的
+```
+
+#### 🔴 真命中 3 處 —— 而且是**一個新類別**
+
+```
+quotation-form.html:2910  改成交標籤   this.q.dealTag = newTag  先改畫面
+                                       再 PATCH ... .catch(() => {})
+quotation-form.html:3180  匯出 PDF     this.q.exportCount++ 先加
+                                       再 POST /export  .catch(() => {})
+vendor-contractors.html:779  存摺 PUT  ☠️ 見下
+```
+
+> ## ☠️ 新類別：**樂觀更新 ＋ 靜默失敗**
+>
+> 一般的靜默失敗是「**他不知道失敗了**」。
+> 這一類是「**他看到了一個假的成功狀態**」——畫面已經改了，而後端沒有。
+> 🔑 下次開啟頁面它會變回去，**而那時候看起來像系統把他的資料弄丟了**。
+
+##### 🔴 `vendor-contractors.html:779` 要單獨講
+
+```js
+const r = await fetch(url, {...})
+if (!r.ok) { this.errMsg = (...).detail || '儲存失敗'; this.saving = false; return }   // 這是**前一支**的
+const d = await r.json()
+const targetId = this.editId || d.id
+if (this.bankPassbookPreview !== null && targetId) {
+  await fetch(`${API}/vendor-contractors/${targetId}/passbook`, { method: 'PUT', ... })  // <= **完全沒驗 r.ok**
+}
+this.showModal = false      // <= 視窗關掉
+await this.load()           // <= 看起來存好了
+```
+
+☠️ 使用者上傳**銀行存摺影本**，視窗關了、清單刷新了，**而存摺沒有存進去**。
+🔑 它是這 10 處裡**唯一一個被外層的 `!r.ok` 誤判成安全**的——
+外層那一句是**前一支 fetch** 的，而人眼掃過去會以為這一段有保護。
+📌 而它落在個資那條線上（`STATE.md §3t`：存摺／銀行帳號）。
+
+⇒ **這一處建議獨立編號、優先於其餘 39 條。**
 
 ### §4c 背景自動呼叫 3 處 —— **降級，不排除**
 
@@ -249,7 +306,7 @@ logout ×20 與背景 2 支是**明著排除**的
 ## §8 我沒查什麼
 
 ```
-① §4b 那 10 處我**沒有逐一打開**（只驗了 users.html:1228 一處是誤報）
+① ~~§4b 那 10 處沒逐一打開~~ => **已補做**（見 §4b），但那是**讀**不是**跑**
 ② 「有失敗分支」不等於「訊息說得清楚」—— 本規格**只驗分支存在**，
    訊息措辭是 `EM1` 的題目
 ③ 回饋寫在**呼叫者那一層**的情形（本函式 return false，外面才 alert）
