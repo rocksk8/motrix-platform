@@ -87,6 +87,27 @@ def _upload_n(page, live_server, token, vid, n):
         assert r.ok, r.text()
 
 
+def _settled(page, timeout_ms=3000):
+    """等到 iframe 高度**連續兩次量到一樣**才回傳那一次的量測。
+
+    🔴 2026-09-24（hichan-61）：`.modal-overlay` 有 `x-transition`（開啟時縮放動畫），
+       而 `getBoundingClientRect()` **算進 transform** ⇒ 開啟後立刻量，量到的是
+       動畫中途縮小的框（實測 374.2 ≈ 380 × 0.985）。「按下匯出前後差 5.8px」
+       其實是「動畫前後」，不是「訊息前後」—— 探針與被測對象糾纏。
+    ⚠️ 不用固定 sleep：固定等待在慢機器上照樣會量到動畫中途。
+    """
+    last = None
+    waited = 0
+    while waited <= timeout_ms:
+        cur = _measure(page)
+        if last and cur.get("found") and abs(cur["frameHeight"] - last["frameHeight"]) < 0.1:
+            return cur
+        last = cur
+        page.wait_for_timeout(150)
+        waited += 150
+    return last
+
+
 def _measure(page):
     """`.modal-body`／iframe 的實際幾何高度。`found=False` 代表選擇器不對，
     不是「比例不夠」——呼叫端要先斷言 `found`，免得比例斷言紅在錯的原因上。
@@ -238,15 +259,19 @@ def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appear
             _upload_n(page, live_server, token, vid, 10)
             _open_preview(page, live_server, token, vid)
 
-            before = _measure(page)
+            before = _settled(page)
             assert before.get("found"), "量不到（按匯出前）——退回改選擇器。"
 
             page.click('.modal-foot button:has-text("匯出 PDF")'
                       ':not(:has-text("含附件"))')
             page.wait_for_timeout(800)
 
-            after = _measure(page)
+            after = _settled(page)
             assert after.get("found"), "量不到（按匯出後）——退回改選擇器。"
+            # ⚙️ 量尺：訊息**真的出現了**。少了這一行，匯出若沒有產生任何訊息，
+            #    「高度不變」就是在比較兩個一模一樣的畫面（空綠）。
+            n_msg = page.locator(".vc-preview-atts .vc-err, .vc-preview-atts .vc-ok").count()
+            assert n_msg >= 1, "按下匯出之後 modal 裡沒有出現任何訊息 —— 這一題量不到它要量的東西"
 
             diff = abs(after["frameHeight"] - before["frameHeight"])
             # ⚠️ 不用 0：容忍次像素的浮點捲動誤差（<1px），但不放寬到
