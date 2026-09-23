@@ -236,3 +236,5 @@ calc(100vh-20px) 側欄     748      972
 | N4 | 手續費 | 空白視為 0（維持現行）；非數字、負數擋下 | — |
 | N5 | 收款人 | 一律由系統記錄操作者，不接受畫面傳入；半解鎖送審路徑記「提出申請的人」 | 若要記審核人要改 |
 | N6 | 傳票類別能否手動改 | 09-23 JV20 使用者原話「傳票不需要有類別的選項」與 09-24 表單「自動判斷，可手動改」衝突 ⇒ 先做**自動判斷＋只顯示「收入／支出／轉帳傳票」＋PDF 印名稱**（符合準則 §6），**不放選單、不動 db.py** | 要手動改 ⇒ 加 `category_manual` 欄位（db.py migration）＋翻面 JV20 守門題 |
+| N7 | 平台化「不改原碼」的界線 | hichan-bf 的 `docs/PLATFORM-FOUNDATION.md` §5.0 指出：任何新模組都要在既有登記表加一列（main.py 掛載、db.py 展示清單、archive 備份、users.html、sidebar、manifest），完全不碰原碼連掛載都做不到 ⇒ **建議**：「附加登記」（A 類）視為允許；「修改既有行為」（B 類）逐點問使用者。**夜間不代裁**（屬於重新詮釋使用者的硬約束） | 由使用者選 |
+| N8 | 附帶發現（hichan-bf，未處理） | ①獎金分潤單的簽核流程在設定頁設不到（`bonus.py:1171` 讀 `bonus_approval_flow`，`approval-settings.html:448` 清單沒有 bonus）②沒有測試守「寫入端點要呼叫 `_audit`」③`helpers/uploads.py:63` 未檢查 doc_no 目錄穿越（可利用性未確認：呼叫端多半先查單據存在）④無覆蓋率門檻 ⑤`tools/check_approval_queue_coverage.py` 無人呼叫 | 要不要排程 |
