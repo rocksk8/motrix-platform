@@ -90,6 +90,10 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
+            # 刪除款項期別會先 confirm（test_e2e_case_data_loss_2026_09_24）；這裡要走到後端那一關，
+            # 所以按「確定」。Playwright 預設會按取消，那樣根本不會送出存檔。
+            dialogs = []
+            page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
             _login(page, live_server, username, password)
             page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}")
             delete_received = page.locator(
@@ -103,6 +107,7 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
             page.wait_for_function(
                 "() => { const e = document.querySelector('span.save-label');"
                 " return e && /已收款|已儲存/.test(e.textContent) }", timeout=15000)
+            assert dialogs and "訂金款" in dialogs[-1], dialogs
             text = label.inner_text()
             assert "已收款，不可刪除" in text, text
             assert "訂金款" in text, text
