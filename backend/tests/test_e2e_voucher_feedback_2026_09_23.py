@@ -131,8 +131,11 @@ def _fill_first_line(page, code="1113", debit="1000"):
     r0 = rows.nth(0)
     ins = r0.locator("input")
     assert ins.count() >= 2, "第一列的輸入框少於兩個（%d）。" % ins.count()
-    ins.nth(0).fill(code)
-    ins.nth(1).fill(debit)
+    # 📌 更正留著（2026-09-24，`JV34`）：原本是 `ins.nth(1).fill(debit)`——第 2 個 input
+    #    其實是**科目名稱**，不是借方 ⇒ 這一題一直把 "1000" 填進名稱欄、借方是空的。
+    #    `JV34①` 把名稱欄改成唯讀之後這個錯位才浮出來（fill 逾時）。改用 x-model 指名。
+    r0.locator("input[x-model='l.account_code']").fill(code)
+    r0.locator("input[x-model='l.debit']").fill(debit)
 
 
 @pytest.mark.e2e

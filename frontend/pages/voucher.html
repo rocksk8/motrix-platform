@@ -195,7 +195,26 @@
           <button class="vc-btn vc-btn--go" style="width:100%;margin-bottom:10px"
                   data-testid="voucher-new" @click="newVoucher()">＋ 新增傳票</button>
 
-          <template x-for="v in list" :key="v.id">
+          <!-- `JV34④`：清單篩選（前端篩；清單端點本來就一次回全部，不帶分錄）。 -->
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:12px">
+            <input class="vc-input" data-testid="voucher-filter-kw" x-model="filterKw"
+                   placeholder="搜尋號碼或摘要">
+            <div style="display:flex;gap:4px;align-items:center">
+              <input type="date" class="vc-input" data-testid="voucher-filter-from" x-model="filterFrom"
+                     style="flex:1;min-width:0" title="起日">
+              <span>～</span>
+              <input type="date" class="vc-input" data-testid="voucher-filter-to" x-model="filterTo"
+                     style="flex:1;min-width:0" title="迄日">
+            </div>
+            <select class="vc-input" data-testid="voucher-filter-status" x-model="filterStatus">
+              <option value="">全部狀態</option>
+              <template x-for="st in ['草稿', '待審核', '簽核中', '已核准', '已過帳', '已作廢']" :key="st">
+                <option :value="st" x-text="st"></option>
+              </template>
+            </select>
+          </div>
+
+          <template x-for="v in filteredList" :key="v.id">
             <div class="vc-row" :class="{ on: v.id === id }" @click="open(v.id)">
               <span class="vc-row__no" x-text="v.voucher_no"></span>
               <span class="vc-status"
@@ -205,6 +224,9 @@
             </div>
           </template>
 
+          <div class="vc-side__empty" x-show="listLoaded && list.length && !filteredList.length">
+            沒有符合篩選條件的傳票。
+          </div>
           <div class="vc-side__empty" x-show="listLoaded && !list.length">
             還沒有任何傳票。<br>按上面的「新增傳票」開第一張。
           </div>
@@ -261,6 +283,11 @@
                  x-text="voidedAt ? '已作廢' : status"></span></div>
           </div>
 
+          <datalist id="vc-accounts">
+            <template x-for="a in accountOptions" :key="a.code">
+              <option :value="a.code" :label="a.label" x-text="a.label"></option>
+            </template>
+          </datalist>
           <table class="vc-lines">
             <thead>
               <tr>
@@ -275,12 +302,15 @@
             <tbody>
               <!-- 🔴 每一行有自己的「摘要」（§103c③）——
                    那是從使用者的實例讀出來的，不是單據層備註的複本。 -->
+              <!-- `JV34①②`：科目代號接可搜尋選單（代號或名稱，停用的標「（停用）」）；
+                   科目名稱唯讀（由代號帶出）。focus 在哪一行 ⇒ `curLine`（補平差額用）；
+                   最後一行按 Enter ⇒ 新增一行。 -->
               <template x-for="(l, i) in lines" :key="i">
-                <tr>
-                  <td><input x-model="l.account_code" :disabled="!canEdit"
-                             placeholder="1268" @change="fillName(i)"></td>
-                  <td><input x-model="l.account_name" :disabled="!canEdit"
-                             placeholder="（輸入代號後自動帶入）"></td>
+                <tr @focusin="curLine = i" @keydown.enter="onEnter($event, i)">
+                  <td><input x-model="l.account_code" :disabled="!canEdit" list="vc-accounts"
+                             placeholder="代號或名稱" @change="fillName(i)"></td>
+                  <td><input x-model="l.account_name" :disabled="!canEdit" readonly tabindex="-1"
+                             placeholder="（選科目後自動帶入）"></td>
                   <!-- ⚠️ 停用條件**只有 `!canEdit` 這一個理由**（草稿以外不可改）。
                        🔴 `§164`：「事由」那一段沒有來源可以帶 ⇒ **一定要手打**
                           ⇒ 帶入之後**不可以把這一格鎖起來**。
@@ -308,7 +338,10 @@
               </template>
               <!-- 合計列：使用者的實例上**印出來的**，借貸兩邊各一個數字。 -->
               <tr class="vc-total">
-                <td></td><td></td>
+                <!-- `JV34②`：補平差額——目前這一行借貸都空白、差額 ≠ 0 才可按（A 裁示的保守條件）。 -->
+                <td colspan="2"><button class="vc-btn" data-testid="voucher-balance" x-show="canEdit"
+                            :disabled="!canBalance" @click="fillBalance()"
+                            :title="'把差額填進第 ' + (curLine + 1) + ' 行'">補平差額</button></td>
                 <td class="label">合　計</td>
                 <td class="num" data-testid="voucher-total-debit" x-text="fmt(totalDebit)"></td>
                 <td class="num" data-testid="voucher-total-credit" x-text="fmt(totalCredit)"></td>
@@ -625,6 +658,10 @@
           <template x-if="askReason">
             <div class="vc-reason">
               <span x-text="askReason === 'void' ? '作廢原因' : '退回原因'"></span>
+              <!-- `JV34⑤`：作廢並重開（後端 `reopen` 早已支援；成功後直接打開新單）。 -->
+              <label x-show="askReason === 'void'" style="display:flex;align-items:center;gap:4px;white-space:nowrap">
+                <input type="checkbox" data-testid="voucher-void-reopen" x-model="reopenOnVoid"
+                       style="flex:none;min-width:0">作廢並重開</label>
               <input type="text" x-model="reason" data-testid="voucher-reason"
                      placeholder="請寫清楚原因，事後只有這一句回答得了『為什麼』">
               <button class="vc-btn vc-btn--warn" :disabled="busy || !reason.trim()"

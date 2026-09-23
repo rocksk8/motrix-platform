@@ -277,7 +277,14 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
     cols = "".join("<col style='width:%.1fpt'>" % w for w in _COL_W)
     return """<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="utf-8">
 <style>
-  @page {{ size: {pw}pt {ph}pt; margin: 0; }}
+  /* `JV34③`：頁碼「第 x／y 頁」用 @page 頁邊框（Chromium／Edge 131 以上；
+     舊版只是不顯示，不會報錯）。只編傳票本體——併入的 PDF 附件是別人的文件，
+     `_merge_pdfs()` 接在後面，不經過這一段。底邊留 {m}pt 給頁碼。 */
+  @page {{ size: {pw}pt {ph}pt; margin: 0 0 {m}pt 0;
+          @bottom-center {{ content: "第 " counter(page) "／" counter(pages) " 頁";
+                            font-size: 8.5pt; font-family: "Microsoft JhengHei", sans-serif; }} }}
+  /* `JV34③`：分錄跨頁時每一頁重印表頭 */
+  thead {{ display: table-header-group; }}
   body {{ margin: 0; font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
           color: #000; }}
   .sheet {{ padding: {m}pt {m}pt 0 {m}pt; position: relative; }}
@@ -335,11 +342,11 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
   <div class="org">{org}</div>
   <div class="doc">{doc_title}</div>
   <div class="head"><div>傳票號碼　{no}</div><div>傳票日期　{date}</div>
-    <div>狀態　{status}</div></div>
+    <div>附件 {att_count} 張</div><div>狀態　{status}</div></div>
   <table><colgroup>{cols}</colgroup>
-    <tr><th>會計科目</th><th>科目名稱</th><th>摘要</th>
-        <th class="num">借方金額</th><th class="num">貸方金額</th></tr>
-    {rows}
+    <thead><tr><th>會計科目</th><th>科目名稱</th><th>摘要</th>
+        <th class="num">借方金額</th><th class="num">貸方金額</th></tr></thead>
+    <tbody>{rows}</tbody>
   </table>
   <div class="note">備註：{note}</div>
   <div class="signs">{signs}</div>
@@ -353,6 +360,7 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
         doc_title=e(CATEGORY_TITLES.get(voucher.get("category") or "", "傳　票")),
         no=e(voucher.get("voucher_no") or ""),
         date=e(voucher.get("voucher_date") or ""),
+        att_count=int(voucher.get("attachment_count") or 0),
         status=e("已作廢" if voucher.get("voided_at") else (voucher.get("status") or "")),
         cols=cols, rows="".join(rows), note=e(voucher.get("summary") or ""),
         signs=sign_html, imgs=img_pages, miss=miss_page, watermark=watermark,

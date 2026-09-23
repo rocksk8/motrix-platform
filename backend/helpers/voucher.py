@@ -431,6 +431,12 @@ def get_voucher(conn, voucher_id):
 
     voucher["lines"] = lines
     voucher["signatures"] = resolve_display_names(conn, signatures_of(voucher))
+    # `JV34③`：表頭列「附件 N 張」（準則 §6 的原始憑證張數）——**未刪除的**附件數。
+    #    算在這裡而不是 `preview_html()`／`export_voucher_pdf()` 各算一次：
+    #    兩條輸出路徑共用這一個數字，不會一邊有一邊沒有。
+    voucher["attachment_count"] = conn.execute(
+        "SELECT COUNT(*) FROM voucher_attachments WHERE voucher_id = ? AND deleted_at = ''",
+        (voucher_id,)).fetchone()[0]
     return voucher
 
 

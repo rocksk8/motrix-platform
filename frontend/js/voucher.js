@@ -92,6 +92,18 @@ function voucherPage() {
     //: 退回／作廢的理由輸入框（`''` ＝ 沒有展開）。
     askReason: '',
     reason: '',
+    //: `JV34⑤`：作廢時勾「作廢並重開」。
+    reopenOnVoid: false,
+    //: `JV34①`：科目選單（含停用，標「（停用）」）。
+    accountOptions: [],
+    _accountsLoaded: false,
+    //: `JV34②`：目前 focus 在哪一行（補平差額填這一行）。
+    curLine: 0,
+    //: `JV34④`：清單篩選。
+    filterKw: '',
+    filterFrom: '',
+    filterTo: '',
+    filterStatus: '',
 
     // 只有草稿可編輯（`SPEC-VOUCHER.md §一`）。
     // ⚠️ 這裡是**畫面的方便**，不是防線：真正的擋關在後端 `can_edit(status)`。
@@ -120,6 +132,7 @@ function voucherPage() {
       this.voucherDate = new Date().toLocaleDateString('sv-SE')   // YYYY-MM-DD（本地時區）
       for (let i = 0; i < 3; i++) this.addLine()
       await this.loadCompany()
+      this.loadAccounts()
       await this.loadList()
       await this.loadSources()
       // 深連結：`voucher.html?id=12` 直接開那一張。
@@ -903,6 +916,7 @@ function voucherPage() {
         this.reason = ''
         await this.open(this.id, true)
         await this.loadList()
+        return d
       } catch (e) {
         this.actionErr = e.message
       } finally {
@@ -931,10 +945,17 @@ function voucherPage() {
         function (d) { return '已退回修改，新單號 ' + (d.voucher_no || '') + '。' })
     },
 
-    voidIt() {
+    async voidIt() {
       // 🔑 沒有理由的作廢等於沒有留痕：事後沒有人回得出為什麼（後端直接回 400）。
-      return this._act('/void', { reason: this.reason },
-        function () { return '已作廢。原單仍留在系統裡，可在清單勾選「含已作廢」查看。' })
+      // `JV34⑤`：勾了「作廢並重開」⇒ 後端另開一張草稿（照抄分錄與附件），成功後直接打開新單。
+      const reopen = !!this.reopenOnVoid
+      const d = await this._act('/void', { reason: this.reason, reopen: reopen }, function (r) {
+        return reopen && r.new_voucher_no
+          ? '已作廢，並重開為 ' + r.new_voucher_no + '（草稿）。'
+          : '已作廢。原單仍留在系統裡，可在清單勾選「含已作廢」查看。'
+      })
+      this.reopenOnVoid = false
+      if (d && d.new_id) await this.open(d.new_id, true)
     },
 
     openReason(kind) {
@@ -969,28 +990,62 @@ function voucherPage() {
       //    代號對不對由後端在儲存時判（`validate_account_code`）。
       const code = (this.lines[i].account_code || '').trim()
       if (!code) { this.lines[i].account_name = ''; return }
+      // `JV34①`：名稱欄唯讀 ⇒ 一律由代號帶出（選單已載入就查選單，不再每次打一趟）。
+      if (!this._accountsLoaded) await this.loadAccounts()
+      const hit = this.accountOptions.find(function (a) { return a.code === code })
+      this.lines[i].account_name = hit ? (hit.name + (hit.active ? '' : '（停用）')) : ''
+    },
+
+    // `JV34①`：科目選單（含停用）。選項的 value 是代號、label 是「代號 名稱」，
+    // 瀏覽器的 datalist 對兩者都做子字串比對 ⇒ 打代號或名稱都搜得到。
+    async loadAccounts() {
       try {
-        const r = await fetch('/api/account-items', { headers: this._auth() })
+        const r = await fetch('/api/account-items?include_inactive=true', { headers: this._auth() })
         if (!r.ok) return
         const d = await r.json()
-        const hit = this._find(d.tree || [], code)
-        if (hit) this.lines[i].account_name = hit.name
-      } catch (e) { /* 帶不出來就讓使用者自己填 */ }
+        const out = []
+        const walk = function (nodes) {
+          for (const n of nodes || []) {
+            const active = n.is_active === undefined ? true : !!n.is_active
+            out.push({ code: n.code, name: n.name, active: active,
+                       label: n.code + ' ' + n.name + (active ? '' : '（停用）') })
+            walk(n.children)
+          }
+        }
+        walk(d.tree || [])
+        this.accountOptions = out
+        this._accountsLoaded = true
+      } catch (e) { /* 選單載不到仍可手打代號，存檔時後端會驗 */ }
     },
 
-    _find(nodes, code) {
-      for (const n of nodes) {
-        if (n.code === code) return n
-        const r = this._find(n.children || [], code)
-        if (r) return r
-      }
-      return null
+    // `JV34②`：最後一行按 Enter ⇒ 新增一行並跳到新行的科目欄。
+    onEnter(ev, i) {
+      if (!this.canEdit || i !== this.lines.length - 1) return
+      ev.preventDefault()
+      this.addLine()
+      this.$nextTick(() => {
+        const rows = this.$root.querySelectorAll("tbody tr input[list='vc-accounts']")
+        const el = rows[rows.length - 1]
+        if (el) el.focus()
+      })
     },
 
-    // 🔑 合計在前端即時算，**而它只是顯示** ——
-    //    能不能過帳由後端 `check_balance()` 決定（A 明著交代）。
-    //    ☠️ 前端自己判的話就是第二份判準，而它會在某天與後端不一致 ⇒
-    //       使用者看到「畫面說可以，按下去被拒絕」。
+    // `JV34②`：補平差額——只在目前這一行借貸都空白、而差額 ≠ 0 時可按；差額填在合計較少的那一側。
+    get canBalance() {
+      const l = this.lines[this.curLine]
+      if (!this.canEdit || !l) return false
+      if (String(l.debit || '').trim() || String(l.credit || '').trim()) return false
+      return this.totalDebit !== this.totalCredit
+    },
+
+    fillBalance() {
+      if (!this.canBalance) return
+      const l = this.lines[this.curLine]
+      const diff = this.totalDebit - this.totalCredit
+      if (diff > 0) l.credit = String(diff)
+      else l.debit = String(-diff)
+    },
+
     // `JV29`：與 `helpers/voucher.py::CATEGORY_TITLES` 同一組名稱。
     // 還沒存過的新單沒有判斷結果 ⇒ 說清楚什麼時候會有，不要先印一個「轉帳傳票」。
     get kindTitle() {
@@ -998,6 +1053,25 @@ function voucherPage() {
       return { '收': '收入傳票', '支': '支出傳票', '轉': '轉帳傳票' }[this.category] || '傳票'
     },
 
+    // `JV34④`：清單篩選（關鍵字比對號碼或摘要；日期區間含頭尾；狀態含「已作廢」）。
+    get filteredList() {
+      const kw = (this.filterKw || '').trim()
+      const from = this.filterFrom, to = this.filterTo, st = this.filterStatus
+      return (this.list || []).filter(function (v) {
+        if (kw && !((v.voucher_no || '').includes(kw) || (v.summary || '').includes(kw))) return false
+        const d = (v.voucher_date || '').slice(0, 10)
+        if (from && d < from) return false
+        if (to && d > to) return false
+        const vs = v.voided_at ? '已作廢' : v.status
+        if (st && vs !== st) return false
+        return true
+      })
+    },
+
+    // 🔑 合計在前端即時算，**而它只是顯示** ——
+    //    能不能過帳由後端 `check_balance()` 決定（A 明著交代）。
+    //    ☠️ 前端自己判的話就是第二份判準，而它會在某天與後端不一致 ⇒
+    //       使用者看到「畫面說可以，按下去被拒絕」。
     get totalDebit() { return this.lines.reduce((s, l) => s + this._amt(l.debit), 0) },
     get totalCredit() { return this.lines.reduce((s, l) => s + this._amt(l.credit), 0) },
 
