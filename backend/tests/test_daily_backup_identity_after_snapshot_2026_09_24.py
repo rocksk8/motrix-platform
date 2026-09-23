@@ -67,7 +67,7 @@ def _seed_live(n_audit=20, n_quote=3, n_cust=3, ts="2026-01-01T00:00:00"):
         conn.close()
 
 
-def test_t11_a_normal_day_is_marked_done_even_though_the_backup_audits_itself(arch):
+def test_daily_backup_a_normal_day_is_marked_done_even_though_the_backup_audits_itself(arch):
     """①④：正常的一天。快照之後備份程式自己寫的稽核，不可以讓這一天判不合格。"""
     _seed_live()
     arch._daily_backup()
@@ -76,7 +76,7 @@ def test_t11_a_normal_day_is_marked_done_even_though_the_backup_audits_itself(ar
         " backup.sqlite_snapshot）讓身分對照判成「快照比彙總少」。" % _today())
 
 
-def test_t11_a_same_day_rerun_reusing_the_morning_snapshot_is_not_rejected(arch):
+def test_daily_backup_a_same_day_rerun_reusing_the_morning_snapshot_is_not_rejected(arch):
     """③：早上的快照被沿用；中間有人新增報價、寫了稽核 ⇒ 不可以判不合格。"""
     _seed_live()
     arch._snapshot_sqlite(also_to_cloud=False)          # 早上那一份（本機 .done 會寫）
@@ -105,7 +105,7 @@ def test_t11_a_same_day_rerun_reusing_the_morning_snapshot_is_not_rejected(arch)
         "那些列是快照之後才寫的，不是快照漏掉的。")
 
 
-def test_t11_a_stale_empty_snapshot_is_still_rejected(arch):
+def test_daily_backup_a_stale_empty_snapshot_is_still_rejected(arch):
     """②：08-30 型 —— 快照的表都在、資料沒有（別的庫／空庫），而正式庫是滿的 ⇒ 仍不合格。
 
     ⚙️ 造法：當日本機快照位置放一份「結構完整、資料是空的」庫，並放本機 .done
@@ -130,7 +130,7 @@ def test_t11_a_stale_empty_snapshot_is_still_rejected(arch):
         "一份空的快照（表都在、0 列）被標記成完成 —— 那正是 2026-08-30／08-31／09-03 的樣子。")
 
 
-def test_t11_the_real_09_24_numbers():
+def test_daily_backup_the_real_09_24_numbers():
     """純函式：09-24 實際數字（hichan-0a 從雲端副本量）。
     快照 3088 ／彙總 3091，差的 3 筆都是快照之後寫的 ⇒ 給 3 的寬容要過；不給要擋。"""
     import archive
