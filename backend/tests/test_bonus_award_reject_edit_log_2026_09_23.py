@@ -3,6 +3,16 @@
 
 使用者原話：「獎金單也要退回的按鈕並且記錄」。
 
+# 🔴 2026-09-23 改名（原檔名 test_bonus_award_reject_record）
+
+**這一支紅著是 `JV22 §3` 的 TRIGGER 沒有人做，不是 `BN17` 沒做完。**
+`SPEC-BN17.md §6 AC1` 逐點驗收的主檔是 `test_bn17_award_reject_record_
+2026_09_23.py`（12 題全綠）。本檔現在的定位是**追蹤 `JV22 §3` 那道
+「TRIGGER 要同時保護 voucher_edit_log 與 bonus_award_edit_log」的裁定
+還沒有人落地**——`db.py` 全庫 `grep CREATE TRIGGER` 目前仍是 0 筆命中
+`edit_log`。改名理由：兩個 BN17 檔案名字只差一個字（`bonus_award` vs
+`bn17_award`），B 交件時看錯檔，誤以為「C 的 12 題全綠」涵蓋了這一支。
+
 # 🔴 動工前查證：①「按鈕」前提不成立，已回報 A
 
 ```
