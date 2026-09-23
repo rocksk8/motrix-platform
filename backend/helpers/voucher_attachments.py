@@ -345,6 +345,46 @@ def _case_doc_nos(conn, source_type, quote_no):
     return [str(r["k"]) for r in conn.execute(sql, (quote_no,))]
 
 
+def _used_map(conn):
+    """`{(source_type, source_doc_no, source_file_id): [{voucherNo, voucherId,
+    usedAt}, …]}`——**一次查詢**，不逐筆查（一個案件可能有幾十個候選憑證）。
+
+    `JV18`（依據使用者 2026-09-23 裁示）：
+
+    ```
+    va.deleted_at = ''        軟刪的帶入不算「已使用」（同既有的附件讀取慣例）
+    v.voided_at   = ''        已作廢的傳票不算「已使用」——作廢重開是合法
+                               流程，複製到新單的那一列 source_* 若也算，
+                               每次作廢重開都會讓憑證被標記兩次，其中一次
+                               指向一張不存在的帳
+    source_* != ''            **三個欄位一起排除空字串**（§2c 後果一）：
+                               直接上傳的那幾列 source_* 全是空字串，
+                               互相之間三個欄位逐一比對都會相等，若不是
+                               用三元組一起比對，會讓一個從未被帶入的候選
+                               憑證被誤標成已使用——這是假的紅字，比沒做
+                               還糟（使用者會開始不相信這個標記）
+    ```
+    """
+    out = {}
+    for row in conn.execute(
+            "SELECT va.source_type, va.source_doc_no, va.source_file_id,"
+            " va.uploaded_at, v.id AS voucher_id, v.voucher_no"
+            " FROM voucher_attachments va"
+            " JOIN vouchers_all v ON v.id = va.voucher_id"
+            " WHERE va.deleted_at = '' AND v.voided_at = ''"
+            "   AND va.source_type != '' AND va.source_doc_no != ''"
+            "   AND va.source_file_id != ''"):
+        key = (row["source_type"], row["source_doc_no"], row["source_file_id"])
+        out.setdefault(key, []).append({
+            "voucherNo": row["voucher_no"],
+            "voucherId": row["voucher_id"],
+            "usedAt": row["uploaded_at"] or "",
+        })
+    for entries in out.values():
+        entries.sort(key=lambda e: e["usedAt"], reverse=True)
+    return out
+
+
 def case_attachments(conn, quote_no):
     """一個案件底下所有**可帶入**的憑證。回 `[{type, docNo, fileId, filename, …}]`。
 
@@ -353,7 +393,16 @@ def case_attachments(conn, quote_no):
        列出來並標「檔案已遺失」，他至少知道要去哪裡重傳。
     📌 而真的按下帶入時**會被擋**（`resolve_picks()` 整批 400）——
        兩層的職責不同：這一層**說實話**，那一層**擋住錯誤的結果**。
+
+    🔴 `JV18`（依據使用者 2026-09-23 裁示）：每一筆再帶三個欄位——
+    `used`／`usedAt`／`usedBy`，說出這個候選憑證有沒有被別張傳票帶入過、
+    什麼時候、被哪幾張。**`usedBy` 列出全部，不是只列最近一張**——只列
+    最近一張會把重複入帳的那一筆藏起來，而重複入帳正是這個功能要防的事。
+    **已使用的排在清單最後**，依 `usedAt` 新到舊；未使用的維持原有順序。
+    ⚠️ 這裡**只標記，不擋**——已計算的憑證仍然可以再被帶入（使用者原話
+    是「備註」不是「擋住」，擋住會把作廢重開那條合法路踩死）。
     """
+    used_map = _used_map(conn)
     out = []
     for st in _CASE_SCOPED:
         for doc_no in _case_doc_nos(conn, st, quote_no):
@@ -370,13 +419,22 @@ def case_attachments(conn, quote_no):
                         reason = "檔案已遺失"
                 except HTTPException:
                     exists, reason = False, "附件路徑不合法"
+                file_id = str((meta or {}).get("id") or "")
+                used_by = used_map.get((st, doc_no, file_id)) or []
                 out.append({
                     "type": st,
                     "docNo": doc_no,
-                    "fileId": str((meta or {}).get("id") or ""),
+                    "fileId": file_id,
                     "filename": name,
                     "exists": exists,
                     "reason": reason,
                     "missing": describe_missing(meta),
+                    "used": bool(used_by),
+                    "usedAt": used_by[0]["usedAt"] if used_by else "",
+                    "usedBy": used_by,
                 })
-    return out
+
+    unused = [x for x in out if not x["used"]]
+    used = [x for x in out if x["used"]]
+    used.sort(key=lambda x: x["usedAt"], reverse=True)
+    return unused + used

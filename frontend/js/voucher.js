@@ -53,6 +53,10 @@ function voucherPage() {
     sourceErr: '',
     //: 頁籤②「已上傳檔案」要先知道**是哪一個案件** —— 憑證掛在案件底下。
     sourceQuote: '',
+    //: `JV18`：展開中的「已計算」明細是哪一筆（`tabItems()` 的索引），
+    //: `-1` = 都沒展開。⚠️ 用索引不用布林——同時只能展開一筆，展開下一筆
+    //: 要先把上一筆收起來，不然清單會越展越長。
+    usedInfoOpen: -1,
 
     // ── 附件（`JV3`）──
     //
@@ -138,6 +142,19 @@ function voucherPage() {
     tabItems() { return (this.sources || {})[this.sourceTab] || [] },
 
     tabNote() { return (this.sourceNotes || {})[this.sourceTab] || '' },
+
+    // `JV18`：使用者原話「計算過的內容須…」= 已被別張傳票帶入過。
+    // 只標記，不擋——已計算的候選一樣按得下去（後端也沒有加新的拒絕，
+    // 同一條規則：擋住會把作廢重開那條合法路踩死）。
+    // ⚠️ 紅字要**點得開**，不做成 tooltip（手機版是另一份頁面，會漏掉）。
+    toggleUsedInfo(si) {
+      this.usedInfoOpen = (this.usedInfoOpen === si) ? -1 : si
+    },
+
+    // `usedAt`／`uploaded_at` 是 ISO 字串，這裡只取到分鐘，不需要秒。
+    fmtDateTime(s) {
+      return String(s || '').replace('T', ' ').slice(0, 16)
+    },
 
     // 🔴 **只換頁籤，什麼都不寫回分錄。**
     //    ☠️ 在這裡順手帶入的話，使用者切走再切回來，**他打的字會被蓋掉**，
