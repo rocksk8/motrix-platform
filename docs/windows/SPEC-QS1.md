@@ -105,7 +105,8 @@ UPDATE quotations SET sales_person_id = (
 WHERE sales_person_id IS NULL AND sales_person <> '';
 ```
 
-⚠️ **而要印出結果，不可以靜默**：
+⚠️ **而要印出結果，不可以靜默** ——
+🔴 而「印到哪裡」由 `SPEC-MG4` 定義（**不是 `logger`**，它的消費端是 0）：
 ```
 跑完要印：第一層命中 N 筆／第二層命中 M 筆／**仍然 NULL 的 K 筆逐筆列名**
 🔴 K > 0 時**不要失敗**，但要留一筆 logger.warning 含那 K 個單號
