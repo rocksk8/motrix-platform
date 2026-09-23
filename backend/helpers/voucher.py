@@ -319,11 +319,11 @@ def get_voucher(conn, voucher_id):
             ln["account_name"] = names.get(ln["account_code"], "")
 
     voucher["lines"] = lines
-    voucher["signatures"] = _resolve_display_names(conn, signatures_of(voucher))
+    voucher["signatures"] = resolve_display_names(conn, signatures_of(voucher))
     return voucher
 
 
-def _resolve_display_names(conn, slots):
+def resolve_display_names(conn, slots):
     """`JV13`：`signatures_of()` 的 `by` 存的是 **username**（穩定識別、
     `_user_name()` 寫入的就是它），而印在紙上／畫面上的要是**顯示名稱**。
 
@@ -343,6 +343,12 @@ def _resolve_display_names(conn, slots):
 
     📌 這裡才用得到 `conn`，`signatures_of()` 本身仍然不碰資料庫
        （模組開頭的原則：純邏輯，可以直接餵值問它，不必先造一個 DB）。
+
+    🔴 `BN7` 沿用：這支對 `slots` 的形狀（`{格名: {by, at}}`）沒有任何
+    傳票專屬的假設，`helpers/bonus_pdf.py` 直接 import 這一支處理
+    `bonus_signatures_of()` 的輸出，不重寫一份——原本的底線 `_` 已拿掉
+    （原本只有一個呼叫端，現在是共用工具，保留底線會誤導成「模組內部
+    專用，不可外部 import」）。
     """
     usernames = {(v or {}).get("by") for v in slots.values()} - {"", None}
     if not usernames:

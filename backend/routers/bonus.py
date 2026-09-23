@@ -26,6 +26,7 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException
+from fastapi.responses import Response
 
 from db import get_db
 from helpers import _require_user, _audit, _tok, _get_setting
@@ -37,6 +38,7 @@ from helpers.bonus import (
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
+from helpers.bonus_pdf import can_export, export_award_pdf
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 
@@ -844,6 +846,40 @@ def void_award(award_id: int, body: dict = Body(default={}),
     _audit(_tok(authorization), "bonus.award.void", "bonus_awards",
            str(award_id), "作廢獎金單：%s" % reason)
     return {"ok": True}
+
+
+@router.get("/awards/{award_id}/pdf-download")
+def download_award_pdf(award_id: int, authorization: str = Header(None)):
+    """匯出獎金分潤單 PDF（`BN7`）。`SPEC-BN6-BN7.md §4` 定案的路徑，沿用
+    既有 16 個呼叫端同一形狀。**權限與 `POST /awards` 同一道閘**
+    （`_is_manager`）。
+
+    閘門：`helpers/bonus_pdf.py::can_export()`——`voided_at` 優先於
+    `status`（已作廢的單不管簽到哪裡都放行；`JV11`／`JV15` 同一條裁定）。
+    """
+    user = _require_user(authorization)
+    if not _is_manager(user):
+        raise HTTPException(403, "僅管理員以上可匯出獎金分潤單。")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM bonus_awards WHERE id = ?",
+                           (award_id,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(404, "找不到這張獎金分潤單。")
+    # 🔑 先擋再算：草稿／待審核／簽核中直接拒絕，不必先跑一次 Edge
+    #    headless 印出一份注定被丟掉的 PDF——那是稀缺資源（EDGE_PDF_SEMAPHORE）。
+    ok, msg = can_export(dict(row))
+    if not ok:
+        raise HTTPException(400, msg)
+    _award, pdf_bytes = export_award_pdf(award_id)
+    _audit(_tok(authorization), "bonus.award.pdf_download", "bonus_awards",
+           str(award_id), "匯出獎金分潤單 PDF")
+    return Response(
+        content=pdf_bytes, media_type="application/pdf",
+        headers={"Content-Disposition":
+                "attachment; filename=bonus-award-%s.pdf" % award_id})
 
 
 def _case_people(conn, quote_no):
