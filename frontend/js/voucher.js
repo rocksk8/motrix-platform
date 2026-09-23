@@ -724,18 +724,57 @@ function voucherPage() {
       } catch (e) { /* 忽略 */ }
     },
 
+    // `JV32`：一格金額 ⇒ { v: 整數 } 或 { err: 原因 }。規則與後端
+    // `helpers/voucher.py::parse_amount()` 相同（後端是權威，前端先擋是為了當場說清楚）。
+    // ☠️ 原本是 `Number(x) || 0`：`Number("1,000")` 是 NaN ⇒ 存成 0，畫面還說「已儲存」。
+    parseAmount(raw) {
+      if (raw === null || raw === undefined) return { v: 0 }
+      const text = String(raw)
+        .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0) })
+        .replace(/，/g, ',').replace(/．/g, '.').replace(/－/g, '-')
+        .trim().replace(/[,\s]/g, '')
+      if (text === '') return { v: 0 }
+      const m = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text)
+      if (!m) return { err: '金額格式看不懂（「' + String(raw).trim() + '」）' }
+      if (m[3] && /[1-9]/.test(m[3])) return { err: '金額以新台幣元為單位，不可有小數' }
+      if (m[1]) return { err: '金額不可以是負數' }
+      return { v: parseInt(m[2], 10) }
+    },
+
+    _amt(raw) { const r = this.parseAmount(raw); return r.err ? 0 : r.v },
+
     //: 送給後端的分錄。**過濾掉整行空白的**，否則一張三行的單會存進三筆空分錄。
-    _payloadLines() {
+    // ⚠️ 行號要跟後端訊息對得上 ⇒ 問題清單用**過濾後**的行號（後端看到的就是這一組）。
+    _payloadRows() {
       return this.lines.filter(function (l) {
         return (l.account_code || '').trim() || (l.summary || '').trim()
-          || Number(l.debit) || Number(l.credit)
-      }).map(function (l) {
+          || String(l.debit || '').trim() || String(l.credit || '').trim()
+      })
+    },
+
+    _amountProblems() {
+      const self = this
+      const out = []
+      this._payloadRows().forEach(function (l, i) {
+        const errs = []
+        const d = self.parseAmount(l.debit), c = self.parseAmount(l.credit)
+        if (d.err) errs.push('借方' + d.err)
+        if (c.err) errs.push('貸方' + c.err)
+        if (!errs.length && d.v && c.v) errs.push('借方與貸方只能填其中一邊')
+        if (errs.length) out.push('第 ' + (i + 1) + ' 行：' + errs.join('；'))
+      })
+      return out.length ? out.join('。') + '。' : ''
+    },
+
+    _payloadLines() {
+      const self = this
+      return this._payloadRows().map(function (l) {
         return {
           account_code: (l.account_code || '').trim(),
           summary: (l.summary || '').trim(),
-          // ⚠️ 空字串要送 0（後端 `int(... or 0)`），而畫面上仍然留白。
-          debit: Number(l.debit) || 0,
-          credit: Number(l.credit) || 0,
+          // ⚠️ 空字串送 0，而畫面上仍然留白。
+          debit: self._amt(l.debit),
+          credit: self._amt(l.credit),
         }
       })
     },
@@ -743,6 +782,9 @@ function voucherPage() {
     async save() {
       this._clearMsg()
       if (this.busy) return
+      // `JV32`：金額有問題 ⇒ 當場說出第幾行、不送出（後端也會擋，這裡是讓使用者不必等一趟）。
+      const bad = this._amountProblems()
+      if (bad) { this.actionErr = bad; return }
       if (this.isSaved) {
         await this._saveExisting()
         return
@@ -919,8 +961,8 @@ function voucherPage() {
     //    能不能過帳由後端 `check_balance()` 決定（A 明著交代）。
     //    ☠️ 前端自己判的話就是第二份判準，而它會在某天與後端不一致 ⇒
     //       使用者看到「畫面說可以，按下去被拒絕」。
-    get totalDebit() { return this.lines.reduce((s, l) => s + (Number(l.debit) || 0), 0) },
-    get totalCredit() { return this.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0) },
+    get totalDebit() { return this.lines.reduce((s, l) => s + this._amt(l.debit), 0) },
+    get totalCredit() { return this.lines.reduce((s, l) => s + this._amt(l.credit), 0) },
 
     fmt(n) {
       if (n === undefined || n === null) return ''

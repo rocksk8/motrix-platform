@@ -53,6 +53,7 @@ from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
     diff_lines, approval_done, parse_approval_json, VoucherChainUnreadable,
+    normalize_amount_lines,
 )
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
@@ -106,6 +107,14 @@ def _user_name(user):
 #: ⚠️ `voucher_no` **不在裡面**：它由退回升版產生，不是使用者填的。
 EDITABLE_FIELDS = ("voucher_date", "category", "summary")
 
+
+
+def _amount_lines(lines):
+    """`JV32`：金額正規化；有問題 ⇒ 422 並指出第幾行（`helpers.voucher.normalize_amount_lines`）。"""
+    out, problems = normalize_amount_lines(lines)
+    if problems:
+        raise HTTPException(422, "。".join(problems) + "。")
+    return out
 
 
 def _check_account_codes(conn, lines):
@@ -240,7 +249,7 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
     # 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁）——
     #    舊裁示「建檔當天且不可改」已被推翻，理由是月結補登是會計的日常。
     voucher_date = (body.get("voucher_date") or "").strip() or _dt.date.today().isoformat()
-    lines = body.get("lines") or []
+    lines = _amount_lines(body.get("lines") or [])
     now = _dt.datetime.now().isoformat()
 
     conn = get_db()
@@ -269,7 +278,8 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
                 " summary, debit, credit) VALUES (?,?,?,?,?,?)",
                 (vid, i, (ln.get("account_code") or ""),
                  (ln.get("summary") or ""),
-                 int(ln.get("debit") or 0), int(ln.get("credit") or 0)))
+                 # `JV32`：已由 `_amount_lines()` 正規化成 int；不再 `int()`（它會把 12.5 截成 12）
+                 ln["debit"], ln["credit"]))
         conn.commit()
     finally:
         conn.close()
@@ -1081,7 +1091,7 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
         line_changes = []
         new_lines = None
         if "lines" in body:
-            new_lines = body.get("lines") or []
+            new_lines = _amount_lines(body.get("lines") or [])
             old_lines = [dict(r) for r in conn.execute(
                 "SELECT * FROM voucher_lines WHERE voucher_id = ?"
                 " ORDER BY line_no", (voucher_id,))]
@@ -1121,7 +1131,7 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
                     " VALUES (?,?,?,?,?,?)",
                     (voucher_id, n, (ln.get("account_code") or ""),
                      (ln.get("summary") or ""),
-                     int(ln.get("debit") or 0), int(ln.get("credit") or 0)))
+                     ln["debit"], ln["credit"]))
         try:
             append_edit_log(conn, voucher_id, _user_name(user),
                             changes + line_changes,

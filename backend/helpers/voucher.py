@@ -103,6 +103,71 @@ def can_send_back(status):
     return status in ("待審核", "簽核中", "已核准")
 
 
+#: `JV32`：全形數字與全形逗號／句點 ⇒ 半形（貼上的金額常常是全形）。
+_FULLWIDTH = str.maketrans("０１２３４５６７８９，．－＋", "0123456789,.-+")
+_AMOUNT_RE = re.compile(r"^(-?)(\d+)(?:\.(\d+))?$")
+_DECIMAL_MSG = "金額以新台幣元為單位，不可有小數"
+
+
+def parse_amount(raw):
+    """`JV32`：一格金額 ⇒ `(int, None)` 或 `(None, 錯誤訊息)`。
+
+    ```
+    接受  1000／"1,000"／"１，０００"／"  1000 "／"1000.00"（小數部分全是 0）／空 ⇒ 0
+    擋下  "12.5"、12.5（不可有小數）／負數／看不懂的字
+    ```
+    ☠️ 取代原本的 `int(x or 0)`：它對 `"1,000"` 丟 ValueError（500），
+       對 `12.5` **靜默截斷成 12**——存進去的數字與使用者打的不同，而沒有人被告知。
+    ⚠️ `bool` 是 `int` 的子類別 ⇒ 要先擋掉（`True` 不是 1 元）。
+    """
+    if raw is None or raw == "":
+        return 0, None
+    if isinstance(raw, bool):
+        return None, "金額格式看不懂（%r）" % raw
+    if isinstance(raw, int):
+        return (raw, None) if raw >= 0 else (None, "金額不可以是負數")
+    if isinstance(raw, float):
+        if raw != raw or raw in (float("inf"), float("-inf")):
+            return None, "金額格式看不懂（%r）" % raw
+        if raw != int(raw):
+            return None, _DECIMAL_MSG
+        return (int(raw), None) if raw >= 0 else (None, "金額不可以是負數")
+    text = str(raw).translate(_FULLWIDTH).strip().replace(",", "").replace(" ", "")
+    if text == "":
+        return 0, None
+    m = _AMOUNT_RE.match(text)
+    if not m:
+        return None, "金額格式看不懂（「%s」）" % str(raw).strip()
+    if m.group(3) and m.group(3).strip("0"):
+        return None, _DECIMAL_MSG
+    if m.group(1):
+        return None, "金額不可以是負數"
+    return int(m.group(2)), None
+
+
+def normalize_amount_lines(lines):
+    """`JV32`：整組分錄的借貸金額正規化成 int；有問題的**全部列出**（指出第幾行）。
+
+    回 `(normalized, problems)`：`problems` 非空時呼叫端整筆拒絕，**一行都不寫入**。
+    📌 同一行借貸都填 ⇒ 擋下：一行分錄只能是借方或貸方其中之一。
+    """
+    out, problems = [], []
+    for i, ln in enumerate(lines or (), start=1):
+        ln = dict(ln or {})
+        errs = []
+        for key, label in (("debit", "借方"), ("credit", "貸方")):
+            v, err = parse_amount(ln.get(key))
+            if err:
+                errs.append("%s%s" % (label, err))
+            ln[key] = v if v is not None else 0
+        if not errs and ln["debit"] and ln["credit"]:
+            errs.append("借方與貸方只能填其中一邊")
+        if errs:
+            problems.append("第 %d 行：%s" % (i, "；".join(errs)))
+        out.append(ln)
+    return out, problems
+
+
 def check_balance(lines, status="草稿"):
     """借貸平衡。回 `(ok, diff)`，`diff` 是**借貸差的絕對值**。
 

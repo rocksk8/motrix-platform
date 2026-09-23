@@ -42211,3 +42211,4 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **PK1.** 出貨包不可含內部工程文件（`git archive` 匯出整個已追蹤 repo；排除清單見 `SCOPE.md`「`PK1` 排除清單」）。題 `test_verify_package_2026_09_23.py::test_pk1_*`。
 - **JV28.** 傳票附件頁內預覽＋縮圖；SVG／HTML 不內嵌。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md`；題 `test_jv28_*`。
 - **JV30.** 傳票簽核權限：有設定流程時 approve／send_back 限當層簽核人或其有效代理人（superadmin 不例外）；製票人在名單內可自簽（原②已撤銷）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV30＋更正節；題 `test_jv30_*`。
+- **JV32.** 傳票金額輸入：接受千分位／全形／空白／.00；小數、負數、同一行借貸都填 ⇒ 422 並指出第幾行（前後端都擋，後端 int() 截斷路徑拿掉）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV32；題 `test_jv32_*`。
