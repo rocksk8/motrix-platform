@@ -334,6 +334,42 @@ def test_jv11_a_voided_voucher_can_still_be_exported(client, make_user):
           "   印「尚未簽核」的話，**有人會去把它簽完**。")
 
 
+def test_jv15_a_posted_voucher_can_be_exported_independently_of_approved(
+        client, make_user):
+    """🔴 `JV15`：**已過帳**的傳票要匯得出來——不是「跟已核准同一分支所以
+    順便通過」，是**獨立驗證過**。
+
+    ## 🔴 為什麼要補這題
+
+    `approval_done()` 的判準逐字列了六種狀態，「已過帳」與「已核准」是
+    分開的兩列（`已過帳 ✅ 已核准的下游，帳已經動了`），程式碼裡也是
+    `voucher.get("status") in ("已核准", "已過帳")` 兩個值並列判斷——
+    而全庫**沒有一支測試獨立打過「已過帳」狀態的匯出端點**，只在註解裡
+    斷言「這條分支跟已核准一樣」，從沒被自己的請求證明過。
+
+    ☠️ 判準若被改寫成只認 `"已核准"`（例如有人「精簡」成
+    `== "已核准"`），這裡是唯一擋得住的地方——`test_jv11_an_unapproved_
+    voucher_cannot_be_exported_from_the_api` 驗的是草稿被擋，不會因為
+    已過帳被誤擋而變紅。
+    """
+    _u, hdr = _hdr(client, make_user, "jv15_posted")
+    vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
+
+    r = client.post("/api/vouchers/%s/post" % vid, json={}, headers=hdr)
+    assert r.status_code == 200, (
+        "過帳失敗，前置不成立：%s %s" % (r.status_code, r.text[:200]))
+    assert r.json().get("status") == "已過帳", (
+        "過帳後狀態是 %r，不是「已過帳」——前置不成立。" % r.json().get("status"))
+
+    r = client.get(PDF % vid, headers=hdr)
+    if r.status_code in (404, 405, 422):
+        pytest.fail("匯出端點走不到（回 %s）。" % r.status_code)
+    assert r.status_code == 200, (
+        "**已過帳**的傳票匯不出來（回 %s）：%s\n" % (r.status_code, r.text[:200])
+        + "☠️ 已過帳是已核准的下游，帳已經動了，比已核准更沒有理由擋。")
+
+
 # ══════════════════════════════════════════════════════════════════════
 # JV10：沒有附件時那顆按鈕
 # ══════════════════════════════════════════════════════════════════════
