@@ -118,6 +118,7 @@ QN(1):  QN1
 UP(1):  UP1
 SL(1):  SL1
 QS(1):  QS1
+MG(2):  MG3 MG4
 EM(1):  EM4
 
 ```
