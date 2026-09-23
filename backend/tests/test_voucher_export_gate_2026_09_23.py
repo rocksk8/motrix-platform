@@ -32,12 +32,17 @@ helpers/voucher_pdf.py:82 又 loads 一次 => TypeError
 ```
 🔑 混在一起的後果是「還沒簽核的單連看都看不到」—— 而**看是為了檢查**。
 """
+import io
 import pathlib
 import re
 
 import pytest
 
 PDF = "/api/vouchers/%s/pdf-download"
+
+#: `§228` 裁定：預覽是**獨立端點**（回 HTML），不是 `pdf-download?preview=1`。
+#: 🔑 **閘門綁在參數上，漏傳就穿透；綁在端點上，穿不過去。**
+PREVIEW = "/api/vouchers/%s/preview"
 
 #: `JV9` 的那句話 —— 它是**沒有設定時**的正確輸出。
 NO_ORG = "尚未設定公司抬頭"
@@ -61,13 +66,28 @@ def _create(client, hdr):
 
 
 def _set_company(name):
+    """設定（或清空）公司抬頭。
+
+    ## 🔴 兩件我第一版都寫錯了，而它們讓題目紅在錯的地方
+
+    ```
+    ① 欄位叫 **value_json** 不是 value（`db.py:4035` 讀的就是它）
+       => 我寫進一個**沒有人讀的欄位** => 看起來像「設定了而沒生效」
+    ② `company_profile` 是 **db.py:708 預設就 seed 的**
+       （name = 允碩整合集創股份有限公司）
+       => 「沒有設定」這個狀態在乾淨的測試庫裡**不存在**
+       => 我那個正對照的前提從一開始就不成立
+    ```
+    🔑 ② 特別值得記：我以為我在量「沒設定時的行為」，
+      **而那個狀態要自己造出來**。
+    """
     import db
     import json as _json
     conn = db.get_db()
     try:
         conn.execute(
-            "INSERT OR REPLACE INTO system_settings (key, value)"
-            " VALUES ('company_profile', ?)",
+            "INSERT OR REPLACE INTO system_settings (key, value_json,"
+            " updated_at) VALUES ('company_profile', ?, '2026-09-23')",
             (_json.dumps({"name": name}),))
         conn.commit()
     finally:
@@ -125,6 +145,7 @@ def test_jv9_a_missing_company_name_still_says_so(client, make_user):
     ☠️ 少了它，「把那句話整個拿掉」也會讓上一題綠 ——
        而那時使用者印出一張**沒有抬頭**的傳票，**而畫面沒說為什麼**。
     """
+    _set_company("")          # ⚠️ 預設有 seed ⇒ 「沒設定」要**自己造**
     _u, hdr = _hdr(client, make_user, "jv9_noorg")
     vid = _create(client, hdr)
     r = client.get(PDF % vid, headers=hdr)
@@ -204,33 +225,130 @@ def test_jv11_an_unapproved_voucher_cannot_be_exported_from_the_api(
 def test_jv11_preview_is_always_available_with_a_watermark(client, make_user):
     """🔴 **預覽**隨時可看**（帶浮水印），而匯出才要簽核通過。**
 
+    ## 🔴 端點是 `GET /{id}/preview`，**不是** `pdf-download?preview=1`
+
+    A 裁（`§228`），理由比我原本那個好：
+    ```
+    **閘門綁在參數上，漏傳就穿透；綁在端點上，穿不過去。**
+    ```
+    ☠️ 少寫一個 `not`、參數名打錯、預設值被改 —— 三種都讓閘門**靜默失效**，
+       **而回應看起來完全正常**。
+    ⚠️ 還有一層：一個參數同時改變**輸出格式**與**權限**是兩件事綁在一起
+       ⇒ 日後有人要「預覽的 PDF」時，他會去**鬆那個閘門**。
+    📌 而預覽回的是 **HTML** 不是 PDF ⇒ 這一題不抽 PDF 文字。
+
     ☠️ 兩者混在一起的後果：**還沒簽核的單連看都看不到** ——
        而**看是為了檢查**：簽核的人要先看過才知道要不要簽。
-    ⚙️ 而預覽要**看得出它不是正式的** ⇒ 紙上要有浮水印字樣。
-    🔑 少了浮水印，預覽檔被存下來、印出來，**就變成一張假的正式單據**。
+    🔑 少了浮水印，預覽被存下來、印出來，**就變成一張假的正式單據**。
     """
     _u, hdr = _hdr(client, make_user, "jv11_preview")
     vid = _create(client, hdr)
 
-    r = client.get(PDF % vid + "?preview=1", headers=hdr)
+    r = client.get(PREVIEW % vid, headers=hdr)
     if r.status_code in (404, 405, 422):
         pytest.fail(
-            "預覽走不到（回 %s）——\n" % r.status_code
-            + "⚠️ 參數名我單方面定成 `?preview=1`，**要換退回給我**。")
+            "`GET %s` 走不到（回 %s）——\n" % (PREVIEW % "{id}", r.status_code)
+            + "📌 `§228` 裁定：預覽是**獨立端點**，不是 `?preview=1`。")
     assert r.status_code == 200, (
         "**預覽**也被擋掉了（回 %s）：%s\n" % (r.status_code, r.text[:200])
         + "☠️ 那讓「還沒簽核的單連看都看不到」——\n"
           "   **而看是為了檢查**：簽核的人要先看過才知道要不要簽。")
-    text = _pdf_text(r.content)
-    assert re.search(r"預覽|草稿|未簽核|尚未生效", text), (
-        "預覽印得出來，**而紙上看不出它不是正式的**——\n"
+    assert re.search(r"預覽|草稿|未簽核|尚未生效", r.text), (
+        "預覽出得來，**而看不出它不是正式的**——\n"
         + "☠️ 它被存下來、印出來，**就變成一張假的正式單據**。\n"
-        + "紙上是：\n  %s" % text[:200])
+        + "畫面上是：\n  %s" % r.text[:200])
+
+
+def test_jv11_a_voided_voucher_can_still_be_exported(client, make_user):
+    """⚙️🔴 **正對照：作廢單匯出要**成功** —— 那是一條既有裁定。**
+
+    ```
+    voucher_pdf.py:363 docstring 逐字：**「已作廢的傳票也要印得出來」**
+    ```
+    ⇒ 閘門的條件是「**未簽核完成**」，**不是**「狀態不等於已核准」。
+    ☠️ 少了這一格，B 最省力的實作（**擋掉所有非已核准**）會**全綠而牴觸
+       一條已經存在的裁定** —— 而作廢單是稽核一定要看的東西。
+    🔑 那是〈守門守的對象被搬走〉的**鏡像**：**裁示已經存在，而新的題不知道它。**
+
+    ## ⚠️ 而浮水印上「作廢優先於未簽核」（使用者裁示 ②）
+
+    一張**還沒簽核就被作廢**的單，紙上要印「**已作廢**」不是「尚未簽核」——
+    ☠️ 印「尚未簽核」的話，有人會去把它簽完。
+    """
+    _u, hdr = _hdr(client, make_user, "jv11_void")
+    vid = _create(client, hdr)
+    v = client.post("/api/vouchers/%s/void" % vid,
+                    json={"reason": "打錯了"}, headers=hdr)
+    assert v.status_code == 200, "作廢失敗：%s %s" % (v.status_code, v.text[:200])
+
+    r = client.get(PDF % vid, headers=hdr)
+    if r.status_code in (404, 405, 422):
+        pytest.fail("匯出端點走不到（回 %s）。" % r.status_code)
+    assert r.status_code == 200, (
+        "**已作廢**的傳票匯不出來（回 %s）：%s\n" % (r.status_code, r.text[:200])
+        + "☠️ 多半是閘門寫成「狀態不等於已核准就擋」——\n"
+          "   而 `voucher_pdf.py:363` 的 docstring 逐字說\n"
+          "   **「已作廢的傳票也要印得出來」**。\n"
+        + "🔑 閘門的條件是「**未簽核完成**」，不是「不是已核准」。")
+
+    text = _pdf_text(r.content)
+    assert "已作廢" in text, (
+        "作廢單印出來了，而紙上沒有「已作廢」：\n  %s" % text[:200])
+    assert "尚未簽核" not in text, (
+        "作廢單上印的是「尚未簽核」——\n"
+        + "☠️ **作廢優先於未簽核**（使用者裁示 ②）：\n"
+          "   印「尚未簽核」的話，**有人會去把它簽完**。")
 
 
 # ══════════════════════════════════════════════════════════════════════
 # JV10：沒有附件時那顆按鈕
 # ══════════════════════════════════════════════════════════════════════
+
+def test_jv10_an_export_that_merged_nothing_does_not_claim_it_did(client,
+                                                                  make_user):
+    """🔴🔴 **有附件而**一個都併不進去** ⇒ 訊息不可以說「已匯出（含附件）」。**
+
+    ## ☠️ 今天就會出錯，而它比「沒附件時停用」深一層（A-2 實查）
+
+    ```
+    voucher_pdf.py:374  with_attachments 而 0 筆 => rows=[] => 產出**與不含附件一模一樣**
+    voucher.js:287      訊息說「**已匯出（含附件）。**」
+    ```
+    🔑 **使用者分不出「附件沒被併進去」與「本來就沒有附件」——
+      兩件事，同一個結果。**
+    ☠️ 而「沒附件時那顆停用」那一題**擋不到這一條**：
+       這裡**有**附件，只是一個都併不進去（例如兩個 `.docx`）。
+
+    ⚙️ 觀測點：輸出裡要**說得出有東西沒進來** —— 那正是 `§5` 那一頁。
+    📌 而使用者裁示 ④（預覽要標出哪些併得進 PDF）是給使用者的另一半。
+    """
+    _u, hdr = _hdr(client, make_user, "jv10_nomerge")
+    vid = _create(client, hdr)
+
+    r = client.post("/api/vouchers/%s/attachments" % vid, headers=hdr,
+                    files={"files": ("報價.docx", io.BytesIO(
+                        b"PK\x03\x04 not a pdf"),
+                        "application/vnd.openxmlformats-officedocument."
+                        "wordprocessingml.document")})
+    if r.status_code in (404, 405, 422):
+        pytest.fail("附件端點走不到（回 %s）—— `JV3` 先。" % r.status_code)
+    if r.status_code != 200:
+        pytest.fail(
+            "`.docx` 附件上傳被擋（回 %s）：%s\n" % (r.status_code, r.text[:200])
+            + "📌 `helpers/uploads.py` 只收 `.jpg/.jpeg/.png/.pdf` ——\n"
+              "   若附件型別在上傳那一關就被擋住，這一條路**不存在**，\n"
+              "   **退回給我**：那時這一題要刪掉，不是改成別的。")
+
+    exp = client.get(PDF % vid + "?with_attachments=1", headers=hdr)
+    assert exp.status_code == 200, "匯出失敗：%s" % exp.content[:160]
+    text = _pdf_text(exp.content)
+    assert "報價.docx" in text, (
+        "有一個附件**一個都沒併進去**，而輸出裡沒有提到它 ——\n"
+        + "☠️ 使用者拿到一份與「不含附件」一模一樣的 PDF，\n"
+          "   **而訊息說「已匯出（含附件）」** ⇒ 他分不出\n"
+          "   「附件沒被併進去」與「本來就沒有附件」。\n"
+        + "紙上是：\n  %s" % text[:200])
+
 
 def test_jv10_the_with_attachments_button_says_why_it_is_disabled():
     """🔴 **`JV10`：沒有附件時「含附件」那顆要停用**並說得出話**。**
