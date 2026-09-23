@@ -289,3 +289,11 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 - `20260924_065113_218d810` 為中途驗證包，不用。
 - **不含** hichan-8d 的金流＋報價案件（N15）。N15 放行後需重建。
 - 部署：`powershell -ExecutionPolicy Bypass -File <包>\backend\tools\apply_update.ps1 -PackagePath <包>`；正式機現有的 apply_update 已是修正版，也可用正式機那支。
+
+## ☀️ 使用者晨間裁示（2026-09-24，第 1 批表單）
+| 項目 | 裁示 |
+|---|---|
+| N15 | **指示 hichan-0a 推送** hichan-8d 的鏈（使用者明示，非代為繞過） |
+| 最終包 | **等 N15 合進 master 後一起上**（重建一包、一次部署） |
+| N6 | **要能手動改**傳票類別 ⇒ 推翻 09-23 JV20「傳票不需要有類別的選項」；加 `category_manual` 欄位（db.py migration）＋選單＋翻面 JV20 選單守門題（docstring 記兩次原話與日期） |
+| N12 | **要**：摘要面板點支出項「連金額一起帶入」，限該行借貸都空白、帶入借方 |
