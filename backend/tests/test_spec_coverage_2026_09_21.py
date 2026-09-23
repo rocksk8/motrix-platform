@@ -668,6 +668,10 @@ PENDING = {
     "YF1":  "🔵 C 的下一項：「新增的 except 不得無痕跡」守門（只擋新增，存量明示清單）",
     "YF2":  "🔵 同上：判準是新增的 except 區塊裡要有 logger.* 或 raise 之一",
     "YF3":  "🔵 同上：反向控制 —— 故意加一個裸 except: pass 必須紅",
+    # ── `WD1`：使用者 2026-09-24 裁示「WD1 先 xfail，併入平台化」（本輪唯一例外）──
+    # 誰驗＝平台化「內容層」設計那一輪／什麼時候＝那一輪／寫在哪＝HANDOFF-PENDING「🟢 路線裁示」
+    # ⚠️ 題本身還在（`test_wording_guards_2026_09_23.py` 的 GW1／GW2 三支，xfail strict）。
+    "WD1":  "🔵 使用者 2026-09-24 裁：先 xfail，併入平台化「內容層」設計（helpers/wording.py 未建）",
     "XA6":  "未裁，已列給使用者。⚠️ 危險點不是「還沒決定」而是"
             "「拿掉自動開圖會同時拿掉那個碰巧對的時序」——"
             "mapSizeWasZero=false 代表 _syncMapSize() 執行時尺寸已經是對的，"

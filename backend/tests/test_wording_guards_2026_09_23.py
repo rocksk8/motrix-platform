@@ -106,6 +106,19 @@ def _inline_text_kwargs(path):
 # GW1：呼叫端不可以有行內文案
 # ══════════════════════════════════════════════════════════════════════
 
+#: 🔴 `WD1`（`GW1`／`GW2`）：**使用者 2026-09-24 裁示的唯一例外**——
+#:    「WD1 先 xfail，併入平台化」（表單作答，hichan-0a 轉達；見
+#:    `docs/windows/HANDOFF-PENDING-2026-09-23.md`「🟢 路線裁示」）。
+#: ⚠️ strict=True：`helpers/wording.py` 做好、這三題轉綠的那一刻會**紅**（XPASS），
+#:    提醒把這個標記拿掉 —— 不是讓它永遠安靜。
+#: ⚠️ 只標這三支；本檔其餘的題（正對照、量尺）照常必須綠。
+_WD1_DEFERRED = pytest.mark.xfail(
+    strict=True,
+    reason="WD1（GW1/GW2）：使用者 2026-09-24 裁示先 xfail，併入平台化「內容層」設計；"
+           "helpers/wording.py 尚未建立")
+
+
+@_WD1_DEFERRED
 def test_gw1_no_caller_carries_its_own_wording():
     """🔴 **`GW1`：`intro=`／`note=`／`title=` 的值不可以是字面字串。**
 
@@ -191,6 +204,7 @@ def test_gw1_the_scanner_cannot_see_docstrings_or_comments(tmp_path):
 # GW2：異常類四格齊全
 # ══════════════════════════════════════════════════════════════════════
 
+@_WD1_DEFERRED
 def test_gw2_the_error_wordings_are_listed_not_guessed():
     """🔴 **`GW2` 的前提：哪些算「異常類」要有一張明確清單。**
 
@@ -211,6 +225,7 @@ def test_gw2_the_error_wordings_are_listed_not_guessed():
         "清單上有 %d 個 key 不在 `WORDING` 裡：%r" % (len(missing), missing))
 
 
+@_WD1_DEFERRED
 def test_gw2_every_error_wording_answers_all_four_questions():
     """🔴 **`GW2`：異常類的四格 `what`／`impact`／`system`／`action` 都要非空。**
 
