@@ -1121,3 +1121,60 @@ DEPLOY.md                  全文搜 verify_package／pytest／requirements-dev 
 ☠️ 而它與「執行期會讀它」是同一類危險，只是消費者是我們自己的驗包工具
 ⚠️ 而 MUST_EXIST 會長 => 釘交集為空，**不要**把今天的兩個值抄下來
 ```
+
+---
+
+## ✅ `PK1`：43 項**全數通過**「執行期有沒有人讀它」—— 而清單外有一格沒有歸屬
+
+### ⚙️ D 怎麼驗「`.md` 不會被 runtime 讀」（**不是用想的**）
+```
+① 正對照先跑：搜 version_manifest.json（已知會被讀）=> 4 個檔案命中 ✅ 搜尋法有效
+② 正題：`.md` 不加任何限制全 backend 搜一次 => **104 筆**，**逐筆看**
+   => 全部 104 筆都是 docstring／註解裡的引用（「見 XXX.md §11」這種格式）
+   => **沒有一筆是 open()／read_text()／Path() 實際讀檔**
+③ docs/ 下 2 個 .html mockup 同樣做法：只在 quotations.py 與 approval-queue.html
+   的**註解**裡被提到，不是被 fetch 或 serve
+```
+🔑 〈`grep` 零筆是最常見的假答案〉的正確做法：**先讓一個明顯會命中的詞亮起來。**
+📌 而「104 筆逐筆看」不是形式 —— ☠️ **只看幾筆就下結論，與看完得到同一個數字。**
+
+### 🔑 而他撿到一件：`verify_package.py` **早就預期這些會被排除**
+```python
+MUST_EXIST   = ["autostart.bat", "DEPLOY.md"]                 # 缺了 R.fail
+INTERNAL_DOC = ["MULTIWIN-PROTOCOL.md", "AGENT-HANDOFF-TEMPLATE.md", "GITFLOW.md",
+                "DR-SOP.md", "MOTRIX-ERP-ARCHITECTURE-MAP.md"]  # **只是 print，沒有 R.fail**
+```
+> ### ☠️ 那五個**全部在排除清單裡** —— 寫那支工具的人**早就把「內部文件」分出來了**。
+🔴 ⇒ 那改變了 `PK1` 要怎麼對使用者講：
+```
+「沒有人想到」  與  「**有人想到了而沒做**」是兩件事
+⚠️ 而 DR-SOP.md 同時出現在 INTERNAL_DOC **與** D 的「明確保留」裡 => **兩邊判斷不一致**
+```
+⇒ 已派 D 查 `git log -S "INTERNAL_DOC"`：**是誰、什麼時候、為什麼**。
+
+### 🔴 而 `E` 類三檔在 43 項清單**外**，而它們含公司資料
+```
+backend/tools/letsencrypt_renew.ps1        $Domain 預設值 erp.miactw.com
+backend/tools/sync_pending_data_20260817.py 檔名帶日期的一次性同步腳本
+backend/create_claude_account.py            註解提及 corbin
+```
+```
+D 早先已確認：**這三個都是已追蹤檔案 => 都會進每一包**
+而 backend/tools/ 被列在「明確保留」（理由：正式機維運要用）
+=> 🔴 **它們既不在排除清單裡，也不在 IA1/WL1 的要改清單裡 —— 沒有歸屬**
+```
+🔑 ⇒ 〈用目錄劃範圍時，**範圍的邊緣就是盲點**〉：
+  **`backend/tools/` 整個被判成「保留」，而它裡面有三個不該出去的檔。**
+⇒ 兩條路，已派 D 判並回報依據：
+```
+甲 從 backend/tools/ 挑出這三個單獨排除（⚠️ 而 letsencrypt_renew.ps1 若是正式機
+   憑證更新要用的，排除它會讓客戶少一支維運腳本 => 那要改成「改掉預設值」不是排除）
+乙 改內容（歸 IA1/WL1 的分母）
+```
+
+### ✅ 而 43 項的副檔名組成確認過，沒有漏網的第二個 `version_manifest`
+```
+.md 39（12 + 3 + 1 + 1 + 13 + 9）／.html mockup 2／.py 測試檔 195（算 1 類）／.txt 1
+=> 39 + 2 + 1 + 1 = **43** ✅（自己加過一次）
+=> **沒有 .json／.bat／.ps1 落在「要排除」這一側**
+```
