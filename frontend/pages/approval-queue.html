@@ -1385,8 +1385,10 @@
         canReassign(item) {
           if (!item) return false
           if (this.session.role !== 'superadmin') return false
+          // `JV35`：傳票也可以轉簽（後端 `_REASSIGN_TABLES` 同步加了 voucher）。
           return ['quotation', 'contractor_voucher', 'invoice_voucher',
-                  'payment_request', 'shipping_note', 'completion_note'].includes(item.type)
+                  'payment_request', 'shipping_note', 'completion_note',
+                  'voucher'].includes(item.type)
         },
 
         async openReassign() {

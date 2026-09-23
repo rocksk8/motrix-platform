@@ -42212,3 +42212,4 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **JV28.** 傳票附件頁內預覽＋縮圖；SVG／HTML 不內嵌。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md`；題 `test_jv28_*`。
 - **JV30.** 傳票簽核權限：有設定流程時 approve／send_back 限當層簽核人或其有效代理人（superadmin 不例外）；製票人在名單內可自簽（原②已撤銷）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV30＋更正節；題 `test_jv30_*`。
 - **JV32.** 傳票金額輸入：接受千分位／全形／空白／.00；小數、負數、同一行借貸都填 ⇒ 422 並指出第幾行（前後端都擋，後端 int() 截斷路徑拿掉）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV32；題 `test_jv32_*`。
+- **JV35.** 傳票加入轉簽：`_REASSIGN_TABLES` 加 voucher，讀寫 `vouchers_all.approval_json`（走 `parse_approval_json`）；規則沿用既有轉簽；與 JV30 銜接（轉簽前新人 403／後新人 200／後原簽核人 403）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV35；題 `test_jv35_*`。

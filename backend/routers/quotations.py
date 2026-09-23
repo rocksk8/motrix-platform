@@ -5721,6 +5721,9 @@ _REASSIGN_TABLES = {
     "payment_request":    ("payment_requests", "request_no"),
     "shipping_note":      ("shipping_notes", "note_no"),
     "completion_note":    ("completion_notes", "note_no"),
+    # `JV35`：傳票的簽核存在 `vouchers_all.approval_json`（不是 data_json.approval）
+    # ⇒ 讀寫走傳票自己的解析，見 `reassign_approval()` 裡 `is_voucher` 那兩段。
+    "voucher":            ("vouchers_all", "voucher_no"),
 }
 
 
@@ -5754,16 +5757,36 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         if not target:
             raise HTTPException(404, "找不到該使用者或帳號已停用")
 
-        row = conn.execute(
-            "SELECT " + key + " AS doc_no, quote_no, status, data_json FROM " + table +
-            " WHERE " + key + "=?", (body.id,)).fetchone()
+        is_voucher = body.type == "voucher"
+        if is_voucher:
+            # 📌 `quote_no` 欄位傳票沒有 ⇒ 以單號代入（通知的 ref_label 用它）。
+            #    作廢的傳票不算（它的狀態欄可能還停在簽核中）。
+            row = conn.execute(
+                "SELECT voucher_no AS doc_no, voucher_no AS quote_no, status, approval_json"
+                " FROM vouchers_all WHERE voucher_no=? AND COALESCE(voided_at, '')=''",
+                (body.id,)).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT " + key + " AS doc_no, quote_no, status, data_json FROM " + table +
+                " WHERE " + key + "=?", (body.id,)).fetchone()
         if not row:
             raise HTTPException(404, "單據不存在")
         if (row["status"] or "") not in ("待審核", "簽核中"):
             raise HTTPException(409, "只有待審核／簽核中的單據可以轉簽（目前：" + (row["status"] or "") + "）")
 
-        data = json.loads(row["data_json"] or "{}")
-        appr = data.get("approval") or {}
+        if is_voucher:
+            # 🔴 讀不出來要擋（fail-closed，同 `routers/vouchers.py::_appr_of`），
+            #    不可以吞成空鏈——那與「沒有設定流程」一模一樣。
+            # 📌 就地 import：本段之外的 import 區不動（並行派工的檔案分界）。
+            from helpers.voucher import parse_approval_json, VoucherChainUnreadable
+            try:
+                appr = parse_approval_json(dict(row))
+            except VoucherChainUnreadable:
+                raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法轉簽。")
+            data = None
+        else:
+            data = json.loads(row["data_json"] or "{}")
+            appr = data.get("approval") or {}
         tiers = _active_tiers(appr)
         if not tiers:
             raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
@@ -5813,11 +5836,15 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
                     "reason": reason})
         appr["reassignLog"] = log
         appr["tiers"] = tiers
-        data["approval"] = appr
 
-        if table == "quotations":
+        if is_voucher:
+            conn.execute("UPDATE vouchers_all SET approval_json=?, updated_at=? WHERE voucher_no=?",
+                         (json.dumps(appr, ensure_ascii=False), now, body.id))
+        elif table == "quotations":
+            data["approval"] = appr
             save_quotation_json(conn, row["doc_no"], data)
         else:
+            data["approval"] = appr
             conn.execute("UPDATE " + table + " SET data_json=?, updated_at=? WHERE " + key + "=?",
                          (json.dumps(data, ensure_ascii=False), now, body.id))
         conn.commit()
