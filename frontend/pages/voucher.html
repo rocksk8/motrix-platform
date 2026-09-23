@@ -238,12 +238,13 @@
             <div><label>傳票日期</label>
               <input type="date" class="vc-input" x-model="voucherDate"
                      :disabled="!canEdit"></div>
-            <div><label>類別</label>
-              <select class="vc-input" x-model="category" :disabled="!canEdit">
-                <option value="轉">轉帳</option>
-                <option value="收">收入</option>
-                <option value="付">支出</option>
-              </select></div>
+            <!-- `JV20`：使用者原話「傳票不需要有 category 的選項」——
+                 拿掉的是這個畫面選項本身，不是 `vouchers_all.category`
+                 那個欄位（它仍然照舊寫入 `'轉'`，`voucher.js` 的
+                 `category` 狀態維持不變，不必也不要換成唯讀文字框）。
+                 查證過：這個欄位與 T100 匯出檔印出來的「傳票別」是兩個
+                 不相干的來源，T100 那邊今天固定讀 T100 設定的
+                 `voucherCategory`，不讀這裡。 -->
             <div><label>狀態</label><span class="vc-status" data-testid="voucher-status"
                  :class="voidedAt ? 'voided' : (status === '已過帳' ? 'posted' : '')"
                  x-text="voidedAt ? '已作廢' : status"></span></div>
