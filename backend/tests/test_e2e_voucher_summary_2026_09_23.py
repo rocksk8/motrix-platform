@@ -50,6 +50,13 @@ HOOKS = {
     "tab": '[data-testid="summary-source-tab"]',
     "item": '[data-testid="summary-source-item"]',
     "summary": 'input[x-model="l.summary"]',
+    # 🔴 `JV8`（使用者 `§201`）把編輯畫面改成**要明著要**：
+    #    `voucher.html:175  <div class="vc-sheet" x-show="editing">`
+    #    `voucher.js  :31   editing: false`
+    #    ⇒ 直接 `goto voucher.html` 之後摘要欄**在 DOM 裡而看不見**。
+    # ⚙️ 這兩個不是我宣告的掛鉤，是 B 已經出貨的（`voucher.html:141`）。
+    "new": '[data-testid="voucher-new"]',
+    "row": '.vc-row',
 }
 
 #: `§159b` 的兩個頁籤。
@@ -106,7 +113,19 @@ def _seed_case(quote_no="MQ-202608-009", customer="京城凱悅"):
 
 
 def _need(page, selector, what):
-    """看不到就**明著說是哪一個掛鉤不見了**，不要讓 timeout 變成謎題。"""
+    """看不到就**明著說是哪一個掛鉤不見了**，不要讓 timeout 變成謎題。
+
+    ## 🔴 **原本只數 `count()` —— 而 `x-show` 的元素留在 DOM 裡**
+
+    ```
+    JV8 把 `.vc-sheet` 包成 x-show="editing"，editing 進頁是 false
+    ⇒ count() 照樣過，紅在後面的 .click() 逾時 30s
+    ⇒ 錯誤訊息長得像「頁面沒渲染」，其實是「元素在但看不見」
+    ```
+    ☠️ 這是我自己的觀測裝置把**契約改變**譯成了**頁面壞掉**，
+       而兩種的處置完全相反（一個改測試、一個去追缺陷）。
+    ⇒ 在 DOM 裡而不可見要**當場講出來**，不要留給 `.click()` 去逾時。
+    """
     loc = page.locator(selector)
     if loc.count() == 0:
         body = page.locator("body").inner_text()[:300]
@@ -114,7 +133,25 @@ def _need(page, selector, what):
             "頁面上找不到%s（`%s`）。\n" % (what, selector)
             + "📌 掛鉤名是我在 `HOOKS` 裡單方面定的，**要換退回給我**。\n"
             + "畫面上是：\n  %s" % body)
+    if not loc.first.is_visible():
+        pytest.fail(
+            "%s（`%s`）**在 DOM 裡而看不見**。\n" % (what, selector)
+            + "🔑 `x-show` 的元素不會被拿掉 ⇒ 數 `count()` 沒用。\n"
+            + "📌 最常見的原因：進編輯畫面的那一步沒做（`JV8`：\n"
+              "   要先按「＋新增傳票」或從清單點開一張）。")
     return loc
+
+
+def _open_editor(page):
+    """進編輯畫面 —— `JV8` 之後這一步是**必要的**。
+
+    使用者 `§201` 逐字：「傳票應該是新增傳票後才出現傳票的頁面」
+    ⇒ 直接 `goto` 之後沒有編輯畫面可以點。
+    ⚙️ 這**不是繞過什麼** —— 它就是使用者真正走的那一步。
+    """
+    _need(page, HOOKS["new"], "「＋新增傳票」按鈕").first.click()
+    page.wait_for_timeout(600)
+    _need(page, HOOKS["summary"], "分錄行的摘要欄")
 
 
 @pytest.mark.e2e
@@ -142,6 +179,8 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
         _login(page, live_server, username, password)
         page.goto("%s/pages/voucher.html" % live_server)
         page.wait_for_timeout(2000)
+        # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
+        _open_editor(page)
 
         _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
         tab_case = _need(page,
@@ -212,6 +251,8 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
         _login(page, live_server, username, password)
         page.goto("%s/pages/voucher.html" % live_server)
         page.wait_for_timeout(2000)
+        # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
+        _open_editor(page)
 
         _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
         _need(page, '%s:has-text("案件")' % HOOKS["tab"],
@@ -247,6 +288,16 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
 
         page.reload()
         page.wait_for_timeout(2000)
+        # 🔴 `JV8`：重整之後 `editing` 又回到 false
+        #    ⇒ 要**從左側清單點開刚存的那張**才看得到摘要。
+        # ⚙️ 而這比舊寫法**更貼近這一題要驗的事**：
+        #    docstring 逐字寫的就是「使用者改完、存檔、關掉；
+        #    **下次打開才變回來**」—— 而「下次打開」就是點清單。
+        # ⚠️ 不能改按「＋新增傳票」：那是**另一張空的**，
+        #    摘要欄會是空字串 ⇒ 這一題會紅得像「被蓋回去」，
+        #    而那是**我量錯了**，不是產品錯了。
+        _need(page, HOOKS["row"], "左側傳票清單的列").first.click()
+        page.wait_for_timeout(1000)
         after = _need(page, HOOKS["summary"], "分錄行的摘要欄").first.input_value()
         browser.close()
 
