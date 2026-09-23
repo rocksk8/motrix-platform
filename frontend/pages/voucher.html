@@ -106,7 +106,7 @@
 
     /* `JV16②`：預覽 modal 內、iframe 外側的附件清單——沿用 .vc-att__* 那一組
        樣式（同一種列的長相），只加外層容器的間距與頂部分隔線。 */
-    .vc-preview-atts{padding:12px 16px 4px;border-top:1px solid var(--border-light);font-family:var(--font-zh)}
+    .vc-preview-atts{padding:12px 16px 4px;border-top:1px solid var(--border-light);font-family:var(--font-zh);flex:0 0 auto}
     .vc-preview-atts__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-size:13px;font-weight:600;color:var(--text-primary)}
     .vc-att__name[href]{cursor:pointer;text-decoration:none}
     .vc-att__name[href]:hover{text-decoration:underline}
@@ -114,9 +114,19 @@
     /* ── `JV10`：原視窗預覽 modal（沿用 quotation-form.html 的既有樣式，
          只放寬 .modal-box —— 傳票是 A4 版面，680px 太窄會被壓縮）── */
     .modal-box{width:100%;max-width:860px}
-    .vc-preview-wrap{padding:16px;background:#F5F4F0;min-height:400px}
-    .vc-preview-frame{width:100%;height:72vh;border:1px solid var(--border-light);border-radius:6px;background:#fff}
-    .vc-preview-loading{padding:60px 20px;text-align:center;color:var(--text-secondary);font-size:13px}
+    /* `JV19`：使用者原話「錯誤通知在背景，沒有在視窗上」——已用 Playwright
+       量出具體座標重現：`.vc-preview-frame{height:72vh}` 是**固定值**，
+       不管 modal-body 實際可用高度多少都佔滿 72vh，1280×800 時就吃掉
+       616px 可用高度裡的 576px，只剩 40px 給後面的附件清單與訊息，
+       一超過就被推到可視範圍外——不是「捲不到」的問題，是版面設計上
+       它本來就不會留位置給後面的內容。
+       ⇒ 改成 flex：iframe 隨可用空間縮（保留 220px 底線，仍然看得清楚），
+       附件清單＋訊息用 flex:0 0 auto 拿它需要的高度，兩者搶同一塊空間
+       時後者優先拿滿——這樣訊息永遠拿得到自己的位置，不必事後捲過去。 */
+    .vc-preview-body{display:flex;flex-direction:column}
+    .vc-preview-wrap{padding:16px;background:#F5F4F0;flex:1 1 auto;min-height:220px;display:flex}
+    .vc-preview-frame{width:100%;height:auto;flex:1 1 auto;min-height:220px;border:1px solid var(--border-light);border-radius:6px;background:#fff}
+    .vc-preview-loading{padding:60px 20px;text-align:center;color:var(--text-secondary);font-size:13px;flex:1 1 auto}
   </style>
 </head>
 <!-- ⚠️ 這個 body **刻意只有 `x-data`，沒有那個明著呼叫初始化的屬性**。
@@ -509,7 +519,7 @@
         <span class="modal-head__title" x-text="'傳票預覽　' + (voucherNo || '（尚未產生單號）')"></span>
         <button class="modal-close" @click="previewOpen=false">×</button>
       </div>
-      <div class="modal-body" style="padding:0">
+      <div class="modal-body vc-preview-body" style="padding:0">
         <div class="vc-preview-wrap">
           <div class="vc-preview-loading" x-show="previewLoading">載入中…</div>
           <iframe class="vc-preview-frame" x-show="!previewLoading"
@@ -537,8 +547,16 @@
             </div>
           </template>
           <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+          <!-- `JV19②`：主頁面（395-401 附近）attErr／attMsg 兩個都有
+               對應節點，這個 modal 之前只搬了 attErr 那一半——匯出成功時
+               `attMsg` 被設定，而視窗裡沒有地方顯示它，比訊息捲不到
+               更徹底：壓根沒印出來。這裡補上對應的節點，不要只修失敗
+               那一側。 -->
           <template x-if="attErr">
             <div class="vc-err" x-text="attErr"></div>
+          </template>
+          <template x-if="attMsg">
+            <div class="vc-ok" x-text="attMsg"></div>
           </template>
         </div>
       </div>
