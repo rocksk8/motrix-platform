@@ -102,6 +102,18 @@
 - 修補分支在 hichan-0a 的 worktree（scratchpad `wt_hotfix`）；交給 hichan-61 期間我不動它。完成後由 hichan-0a 建包驗包。
 - 界線：只改判準，不改匯出順序以外的備份流程；不動正式機；不刪雲端任何檔。
 
+## ✅ T11 第二修補包產出（2026-09-24 01:28，hichan-0a）
+
+```
+路徑    deploy_packages\20260924_012847_d1acd33   209 檔
+樹雜湊  3ddc405ef75c51579e4b8fc642109335e3fed39d5132ce5e6583f196044af25d
+分支    hotfix/2026-09-24-t9 = 第一修補包 ab0d5de + 51ca45a(T11 判準) + d1acd33(題改名去掉 T11)
+測試    非 e2e 1825 passed / 0 failed；e2e 52 passed / 1 failed（同第一包，09-22 起就紅）
+驗包    內部文件 0；與 20260924_002556_ab0d5de 比：新增 0、刪除 0、內容變動＝archive.py、version_manifest.json、deploy_manifest.json
+版本    /api/system/version 仍回 2026-09-24a（說明併入既有 21a，VR3）⇒ 部署後以 deployed-version 的 commit d1acd33 驗證
+```
+- 第一次建包被覆蓋率守門擋：題名 `test_t11_*` 把工作編號當成規格編號 ⇒ 改名（hotfix `d1acd33`、master `1c3e9bd`）。
+
 ## 乙、要使用者裁示（視窗不可代裁，只能整理選項）
 
 | 事項 | 數量 | 來源 |
