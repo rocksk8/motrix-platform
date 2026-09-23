@@ -277,9 +277,10 @@ def test_as2_three_tiers_can_actually_be_signed_all_the_way(client,
         pytest.fail("`voucher` 還不是 doc type —— 先看上面那一題。")
 
     _u, hdr = _hdr(client, make_user, "as2_walk")
-    approvers = []
+    approvers, signer_hdrs = [], []
     for name in ("as2_w1", "as2_w2", "as2_w3"):
         u, _h = _hdr(client, make_user, name)
+        signer_hdrs.append(_h)
         approvers.append({"userId": _user_id(u), "username": u,
                           "displayName": u})
     r = client.put(FLOW % VOUCHER_DOC_TYPE, headers=hdr, json={
@@ -297,8 +298,9 @@ def test_as2_three_tiers_can_actually_be_signed_all_the_way(client,
                        headers=hdr).status_code == 200, "送審失敗"
 
     for n in range(3):
+        # `JV30`：有設定流程時每一層要由**那一層的簽核人**按（非當層簽核人 ⇒ 403）
         ar = client.post("/api/vouchers/%s/approve" % vid, json={},
-                         headers=hdr)
+                         headers=signer_hdrs[n])
         assert ar.status_code == 200, (
             "第 %d 次簽核失敗：%s %s\n" % (n + 1, ar.status_code, ar.text[:200])
             + "☠️ 三層以上的**推進邏輯從來沒有被跑過** ——\n"

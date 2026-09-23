@@ -42210,3 +42210,4 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **GW2.** 異常類 WORDING 四格齊全（`kind="incident"` 的 what／impact／system／action 皆非空）。原文同上；題 `test_gw2_*`。
 - **PK1.** 出貨包不可含內部工程文件（`git archive` 匯出整個已追蹤 repo；排除清單見 `SCOPE.md`「`PK1` 排除清單」）。題 `test_verify_package_2026_09_23.py::test_pk1_*`。
 - **JV28.** 傳票附件頁內預覽＋縮圖；SVG／HTML 不內嵌。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md`；題 `test_jv28_*`。
+- **JV30.** 傳票簽核權限：有設定流程時 approve／send_back 限當層簽核人或其有效代理人（superadmin 不例外）；製票人在名單內可自簽（原②已撤銷）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV30＋更正節；題 `test_jv30_*`。

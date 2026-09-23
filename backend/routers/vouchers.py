@@ -39,7 +39,7 @@ from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers,
-    UnresolvedManagerError,
+    UnresolvedManagerError, active_delegators_for,
 )
 from helpers import _get_setting
 from helpers.uploads import save_document_files
@@ -170,6 +170,39 @@ def _appr_of(row):
         return parse_approval_json(voucher)
     except VoucherChainUnreadable:
         raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法繼續簽核。")
+
+
+def _require_voucher_actor(conn, appr, user, action):
+    """`JV30`：誰可以對這張傳票按核准／退回（商業會計法 §35、電子辦法 §5）。
+
+    ```
+    有簽核鏈 ⇒ 操作人必須是**當前層**的簽核人，或其中某人目前有效的代理人
+              （已核准＝每層都簽完 ⇒ 退回看**最後一層**）
+    superadmin **不例外**（照組織流程，比照 09-15 第八輪）
+    ```
+    ⚠️ 比的是「在當層 approvers 裡」，**不是** `check_approve_permission()`
+       的「排第一個的未簽核人」：傳票是一層一動作（核准時整層都標 approved），
+       用那支的話同一層多人時只有第一個人按得動。
+    ⚠️ 沒有設定簽核流程（內建兩層 `§161`）時**沒有簽核人名單可以比** ⇒ 不加限制，
+       維持模組權限（A 裁示）。
+    📌 更正留著：規格原本還有「② 製票人不可核准自己的傳票」，
+       **已撤銷**——使用者 2026-09-24 逐字：「更正製票人要能自己簽，目前人數不夠」。
+       ⇒ 製票人在當層名單內就可以自簽；不在名單內照樣擋（他沒有比別人多的權限）。
+    """
+    tiers = appr.get("tiers") or []
+    if not tiers:
+        return
+    idx = min(int(appr.get("currentTier") or 0), len(tiers) - 1)
+    approvers = (tiers[idx] or {}).get("approvers") or []
+    delegated = active_delegators_for(conn, user["username"])
+    if any(a.get("username") == user["username"] or a.get("username") in delegated
+           for a in approvers):
+        return
+    names = "、".join(a.get("displayName") or a.get("username") or "?"
+                     for a in approvers) or "（這一層沒有設定簽核人）"
+    raise HTTPException(
+        403, "這一層的簽核人是 %s；您不是這一層的簽核人或其代理人，不能%s。"
+             % (names, "核准" if action == "approve" else "退回"))
 
 
 #: `read_voucher()` 讀不出簽核鏈時的替代值——**fail-open**，同
@@ -737,6 +770,7 @@ def approve_voucher(voucher_id: int, body: dict = Body(default={}),
                 400, "「%s」的傳票不在簽核流程裡。" % status)
         now = _dt.datetime.now().isoformat()
         appr = _appr_of(v)
+        _require_voucher_actor(conn, appr, user, "approve")
         tiers = appr.get("tiers") or []
         if tiers:
             # 🔴 **照鏈走**：簽完第 idx 層就往前一格，全部簽完才是已核准。
@@ -839,6 +873,7 @@ def send_back_voucher(voucher_id: int, body: dict = Body(default={}),
                 400, "「%s」的傳票不能退回。%s"
                      % (v.get("status"),
                         "已過帳只能作廢重開。" if v.get("status") == "已過帳" else ""))
+        _require_voucher_actor(conn, _appr_of(v), user, "send_back")
         new_no = next_revision_no(v.get("voucher_no"))
         now = _dt.datetime.now().isoformat()
         reason = str((body or {}).get("reason") or "").strip()
