@@ -56,6 +56,15 @@ function bonusPage() {
     //:    而這一頁同時還有「產生獎金單」那一種寫入。
     canManageItems: false,
 
+    // ── 案件下拉（`BN5`）──
+    //: `GET /awards/candidates` 給的候選清單，每筆 `{quote_no,
+    //: customer_name, project_name, netProfit, selectable, reason}`。
+    //: ⚠️ 淨利<=0／精算舊格式／已有有效獎金單的案件**都在裡面**，不是
+    //: 只有可選的——後端不濾，這裡也不濾，只是 `<option disabled>`。
+    candidates: [],
+    candidatesLoaded: false,
+    candidatesErr: '',
+
     // ── 產生獎金單（`BN1`）──
     planQuote: '',
     plan: null,
@@ -99,6 +108,28 @@ function bonusPage() {
       //       兩道閘，`BN9` 之前 admin 兩者不一致）⇒ 錯誤訊息要說得出是權限，
       //       而且它**放在區塊外**（見 `bonus.html` 那一段）。
       if (this.isManager) await this.loadItems()
+      // `BN5`：候選清單與「產生獎金單」同一道閘（canCreateAward =
+      // _is_manager），不是 isManager——admin 按得到「產生」，
+      // 他也要看得到下拉可以選什麼。
+      if (this.canCreateAward) await this.loadCandidates()
+    },
+
+    async loadCandidates() {
+      try {
+        const r = await fetch('/api/bonus/awards/candidates', { headers: this._auth() })
+        if (r.status === 403) {
+          // 🔴 「沒有可選的案件」與「你沒有權限」不可以合成一句——
+          //    合成的話，沒有權限的人會去找案件，而問題不在那裡。
+          this.candidatesErr = '您沒有產生獎金分潤單的權限。'
+          return
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const d = await r.json()
+        this.candidates = d.items || []
+        this.candidatesLoaded = true
+      } catch (e) {
+        this.candidatesErr = '案件清單載入失敗（' + e.message + '）。請重新整理，若持續發生請回報。'
+      }
     },
 
     async loadAwards() {

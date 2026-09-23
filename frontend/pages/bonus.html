@@ -222,16 +222,36 @@
       <section class="bn-sec" x-show="canCreateAward">
         <div class="bn-sec__hd">
           <span class="bn-sec__t">產生獎金單</span>
-          <span class="bn-sec__s">輸入已完成精算的案件編號，系統會先算出可發放的項目與對象。</span>
+          <span class="bn-sec__s">選擇已結案且已完成精算的案件，系統會先算出可發放的項目與對象。</span>
         </div>
 
-        <div class="bn-form">
+        <!-- `BN5`：案件編號改下拉式選單——**列什麼是這一項的全部內容**，
+             不是把 input 換成 select。母體是 deal_tag='已結案'（不是
+             status），且淨利<=0／精算是舊格式／已有有效獎金單的案件
+             都要**列出來、標原因、不可選**，不能濾掉（濾掉的話使用者
+             只看到選單裡沒有它，不知道為什麼）。 -->
+        <template x-if="candidatesErr">
+          <div class="bn-err" x-text="candidatesErr"></div>
+        </template>
+        <template x-if="candidatesLoaded && !candidatesErr && !candidates.length">
+          <div class="bn-blank">目前沒有已結案且已完成精算的案件。</div>
+        </template>
+
+        <div class="bn-form" x-show="!candidatesErr && candidates.length">
           <div class="bn-fld">
-            <label for="bn-quote">案件編號</label>
-            <input id="bn-quote" type="text" x-model="planQuote" placeholder="例如：MQ-202608-009"
-                   @keydown.enter="loadPlan()">
+            <label for="bn-quote">案件</label>
+            <select id="bn-quote" x-model="planQuote" style="min-width:320px">
+              <option value="">請選擇案件…</option>
+              <template x-for="c in candidates" :key="c.quote_no">
+                <option :value="c.quote_no" :disabled="!c.selectable"
+                        x-text="c.quote_no + '　' + (c.customer_name || '')
+                          + (c.project_name ? '／' + c.project_name : '')
+                          + (c.selectable ? '' : '　〔' + c.reason + '〕')"></option>
+              </template>
+            </select>
           </div>
-          <button class="bn-btn bn-btn--ghost" @click="loadPlan()" :disabled="planning"
+          <button class="bn-btn bn-btn--ghost" @click="loadPlan()"
+                  :disabled="planning || !planQuote"
                   x-text="planning ? '查詢中…' : '查詢可發放項目'"></button>
         </div>
 
@@ -249,10 +269,14 @@
           <div class="bn-card__hd" style="border:1px solid var(--border-light);border-radius:var(--radius)">
             <span class="bn-case" x-text="plan && plan.quote_no"></span>
             <!-- ⚠️ base 算不出來時顯示**後端給的那句話**，不要自己寫一句
-                 —— 它講得出出路，而重寫一份就是文案有兩份。 -->
+                 —— 它講得出出路，而重寫一份就是文案有兩份。
+                 🔴 使用者原話：「必須有詳細金額最後算出真實淨利，才能用
+                 真實淨利去算獎金」——這一格與下面精算明細表最後一列
+                 「真實淨利」是**同一個數字**，畫面上要說出來是同一個，
+                 不能靠使用者自己把兩處數字對起來。 -->
             <span class="bn-base"
                   x-text="plan && plan.base && plan.base.ok
-                    ? '案件淨利 ' + fmt(plan.base.amount)
+                    ? '案件淨利 ' + fmt(plan.base.amount) + '（＝下表「真實淨利」，本次獎金分潤基數）'
                     : (plan && plan.base && plan.base.error) || ''"></span>
             <span class="bn-status bn-voided" x-show="plan && plan.has_active_award">已有有效獎金單</span>
           </div>
@@ -283,7 +307,10 @@
               <tr><td>真實毛利率</td><td x-text="fmtPct(settle.grossMarginPct)"></td></tr>
               <tr><td>管銷分攤（10%）</td><td x-text="fmt(settle.adminCost)"></td></tr>
               <tr><td>公益捐款（1%）</td><td x-text="fmt(settle.charityDonation)"></td></tr>
-              <tr class="bn-settle__sub"><td>真實淨利</td><td x-text="fmt(settle.netProfit)"></td></tr>
+              <tr class="bn-settle__sub">
+                <td>真實淨利<span class="bn-settle__note">（＝獎金分潤基數）</span></td>
+                <td x-text="fmt(settle.netProfit)"></td>
+              </tr>
               <tr><td>真實淨利率</td><td x-text="fmtPct(settle.netMarginPct)"></td></tr>
             </table>
           </div>

@@ -345,6 +345,90 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
         "pct_full": BASIS_POINTS,
     }
 
+#: `BN5`：「已結案」不在 `status` 欄位裡——那裡只有「已送出／已拒絕」。
+#: `deal_tag` 才是（實查：`quotations.py:271` 已經用它判斷「已結案」，
+#: 這裡沿用同一個字面值，不是另外定義一次「已結案」是什麼）。
+_CLOSED_DEAL_TAG = "已結案"
+
+
+# 🔴 這一支必須宣告在任何 `GET /awards/{award_id}` 之前（今天還沒有這種
+# 單一片語的路由，但 `BN10`——點開一張獎金單看完整內容——已經在排隊了）。
+# `/awards/candidates` 與 `/awards/{award_id}` 是**同一種形狀**（`/awards/`
+# 後面都只有一段）：`{award_id}` 若宣告在前，`/awards/candidates` 會被
+# 它接走，`"candidates"` 當 `award_id` 做 int 轉換失敗 -> 422。
+# 📌 依據見 `routers/bonus.py` 頂端 `GET /awards/plan/{quote_no}` 的同款
+# 註解——同一個坑，這裡先把話留給下一個加端點的人。
+@router.get("/awards/candidates")
+def award_candidates(authorization: str = Header(None)):
+    """獎金分潤單「案件編號」下拉的候選清單（`BN5`）。
+
+    ## 🔴 母體是 `deal_tag = '已結案'`，不是 `status`
+
+    `quotations.status` 只有「已送出／已拒絕」，沒有「已結案」這個值——
+    照 `status` 查會查到 0 筆，而那與「沒有可選的案件」長得一模一樣。
+
+    ## 🔴 兩件不可以被濾掉的事（`SPEC-BN2-BN5.md §4`）
+
+    ```
+    ① 淨利 <= 0／精算是舊格式的案件  -> 列出來、標原因、不可選
+    ② 已經有有效獎金分潤單的案件    -> 標示「已產生（#id）」、不可選
+       ⚠️ 判斷用 voided_at = ''，不是「有沒有紀錄」——作廢重開是正常
+          流程，作廢之後同一個案件要能再選一次。
+    ```
+    ☠️ 濾掉的症狀是使用者只看到選單裡沒有它，而他不知道為什麼——
+       與 `BN1` 的「`ok=false` 的項目不可以濾掉」同一條規則。
+
+    ## 🔑 「淨利<=0」與「精算是舊格式」是兩件不同的事，訊息不可以合併
+
+    直接重用 `base_amount_for()` 的 `err`——那一支對這兩種情況本來就回
+    不同的訊息（前者「沒有可分配的獎金基數」，後者
+    `LEGACY_SETTLEMENT_MESSAGE` 那句「請重新開啟並儲存」），這裡不用
+    自己判斷是哪一種再各寫一句，直接原樣搬過來就是兩句不同的話。
+    """
+    user = _require_user(authorization)
+    if not _is_manager(user):
+        raise HTTPException(403, "您沒有產生獎金分潤單的權限。")
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT quote_no, customer_name, project_name, data_json"
+            " FROM quotations WHERE deal_tag = ?"
+            " AND json_extract(data_json, '$.settlement.status') = 'finalized'"
+            " ORDER BY quote_no DESC", (_CLOSED_DEAL_TAG,))]
+        live_by_quote = {r["quote_no"]: r["id"] for r in conn.execute(
+            "SELECT id, quote_no FROM bonus_awards WHERE voided_at = ''")}
+    finally:
+        conn.close()
+
+    items = []
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except (TypeError, ValueError):
+            data = {}
+        settle = data.get("settlement") or {}
+        net_profit = (settle.get("summary") or {}).get("netProfit")
+
+        aid = live_by_quote.get(r["quote_no"])
+        if aid is not None:
+            # ④ 已有有效獎金單：優先於淨利判斷——就算這個案子現在淨利
+            #    算不出來，「已經有一張單」仍然是使用者最需要知道的事。
+            selectable, reason = False, "已產生（#%s）" % aid
+        else:
+            ok, _base, err = base_amount_for(settle)
+            selectable, reason = bool(ok), (err or "")
+
+        items.append({
+            "quote_no": r["quote_no"],
+            "customer_name": r.get("customer_name") or "",
+            "project_name": r.get("project_name") or "",
+            "netProfit": net_profit,
+            "selectable": selectable,
+            "reason": reason,
+        })
+    return {"items": items}
+
+
 @router.get("/awards")
 def list_awards(include_voided: bool = False, authorization: str = Header(None)):
     """獎金單清單。**分錄列依可見性過濾。**
