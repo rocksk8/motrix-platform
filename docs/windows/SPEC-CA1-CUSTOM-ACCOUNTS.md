@@ -97,6 +97,34 @@ TRIGGER 四支   statutory_no_update／statutory_no_delete
 📌 與 `helpers/voucher.py::next_voucher_no` 同一個理由（那裡的 docstring 有完整說明）。
 ⚠️ 而本項用**停用不刪除**（`§4`）⇒ 停用的仍然佔號 ⇒ 取最大值時**不可以濾掉停用的**。
 
+### ☠️ 撞號時的行為，**取決於 `INSERT` 的寫法** —— 三種都不可以
+
+`account_items.code` 是 `TEXT PRIMARY KEY`：
+
+```
+INSERT              -> IntegrityError    很吵，會被發現            ✅ 但訊息不可看
+INSERT OR IGNORE    -> **靜默無事發生**  使用者按了建立而什麼都沒有 ☠️
+INSERT OR REPLACE   -> **覆蓋**          舊列被改掉，而它可能已被傳票引用 ☠️☠️
+```
+
+🔴 **而 repo 裡現成的那一句正是 `OR IGNORE`**：
+```
+db.py:4298  "INSERT OR IGNORE INTO account_items (code, level, name, name_en, parent_code, source)"
+```
+⇒ **同一張表、欄位幾乎一樣、就在要改的那個檔案裡** ⇒ 它是最可能被照抄的一句。
+⚠️ **本項一律用純 `INSERT`，並在應用層先查重、回一句看得懂的話。**
+
+⚙️ 驗收釘的是**可觀察的差異**，不是實作用了哪一種：
+```
+讓一個已存在的 code 再被建立一次
+  ✅ 必須回 400／409 **且訊息說出是哪一個代號**
+  ☠️ 不可以 200 而什麼都沒發生（OR IGNORE）
+  ☠️ 不可以 200 而舊列被改掉（OR REPLACE）
+  ☠️ 不可以讓 IntegrityError 直接冒到使用者面前
+```
+📌 一題同時擋住三種寫法。而這也是〈停用不是刪除〉的真正機制：
+**號碼不可以被重用** —— 重用的下場是三種裡的哪一種，由寫法決定，而三種都不可接受。
+
 ### 新列的欄位
 
 ```
