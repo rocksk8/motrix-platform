@@ -244,10 +244,29 @@ def _tiers_of(a):
 
 
 def _set_flow(client, hdr, make_user, names):
-    """把 `bonus` 的簽核流程設成 `len(names)` 層，每層一個人。回那些帳號。"""
+    """把 `bonus` 的簽核流程設成 `len(names)` 層，每層一個人。
+
+    回 `{username: 該使用者的 headers}` —— **呼叫端要用哪一層簽核，
+    直接拿這裡的 headers，不要再叫一次 `_hdr()` 對同一個名字重建帳號**。
+
+    ## 🔴 我第一版回的是 `[username, ...]`，而三個呼叫端都拿它去重建帳號
+
+    ```
+    _set_flow() 裡面已經 _hdr(...) 建過這個使用者
+    呼叫端又 _hdr(client, make_user, signers[0])
+    => make_user() 再 INSERT 一次同一個 username
+    => sqlite3.IntegrityError: UNIQUE constraint failed: users.username
+    ```
+    🔑 B 已用獨立探針驗證過三個場景背後的產品邏輯全部正確 ——
+       **紅燈訊息是 SQL 寫的，是我的裝置壞了，不是產品**（同我自己寫的
+       那一條：紅燈訊息若是框架／SQL 寫的，通常是探針壞了）。
+       改成回傳已經登入好的 headers，呼叫端直接複用即可。
+    """
     approvers = []
+    headers_by_name = {}
     for name in names:
-        u, _h = _hdr(client, make_user, name)
+        u, h = _hdr(client, make_user, name)
+        headers_by_name[u] = h
         approvers.append({"userId": _user_id(u), "username": u,
                           "displayName": u})
     r = client.put(FLOW % BONUS_DOC_TYPE, headers=hdr, json={
@@ -260,7 +279,7 @@ def _set_flow(client, hdr, make_user, names):
             + "📌 先看 `test_bn8_bonus_is_a_declared_doc_type`。")
     assert r.status_code == 200, "存簽核設定失敗：%s %s" % (r.status_code,
                                                           r.text[:200])
-    return [a["username"] for a in approvers]
+    return headers_by_name
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -400,8 +419,7 @@ def test_bn8_three_different_people_can_sign_all_the_way(client, make_user):
     aid = _seed_award("MQ-BN8-WALK", ["someone"])
     assert _act(client, hdr, aid, "submit").status_code == 200, "送審失敗"
 
-    for n, who in enumerate(signers):
-        _u2, shdr = _hdr(client, make_user, who)
+    for n, (who, shdr) in enumerate(signers.items()):
         ar = _act(client, shdr, aid, "approve")
         assert ar.status_code == 200, (
             "第 %d 層由 %r 簽核失敗：%s %s\n"
@@ -462,7 +480,7 @@ def test_bn8_reject_clears_the_signing_slots_but_not_the_maker(client,
     aid = _seed_award("MQ-BN8-REJ", ["someone"])
     assert _act(client, hdr, aid, "submit").status_code == 200, "送審失敗"
 
-    _u2, s1 = _hdr(client, make_user, signers[0])
+    s1 = signers["bn8_r1"]
     assert _act(client, s1, aid, "approve").status_code == 200, "第一層簽核失敗"
 
     signed = _slots(_award(client, hdr, aid))
@@ -616,7 +634,7 @@ def test_bn8_an_approved_award_can_still_be_voided(client, make_user):
     signers = _set_flow(client, hdr, make_user, ("bn8_v1",))
     aid = _seed_award("MQ-BN8-VOID", ["someone"])
     assert _act(client, hdr, aid, "submit").status_code == 200, "送審失敗"
-    _u2, s1 = _hdr(client, make_user, signers[0])
+    s1 = signers["bn8_v1"]
     assert _act(client, s1, aid, "approve").status_code == 200, "簽核失敗"
     assert _award(client, hdr, aid).get("status") == "已核准", (
         "前置不對：簽完一層而狀態不是已核准。")
