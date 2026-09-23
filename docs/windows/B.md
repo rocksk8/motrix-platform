@@ -3,6 +3,76 @@
 > 開工順序：`MULTIWIN-PROTOCOL.md` → `docs/windows/STATE.md` → 這份。
 > **你的角色：寫產品程式碼。你不寫任何測試。**
 
+
+## 🔴 2026-09-23 交接 —— 換模型後先讀這一段
+
+> 你是 **B（寫手）**：寫產品程式碼，**不寫任何測試**。測試是 C 的。
+
+### 開工三步（換模型後照這個順序）
+```
+1. MULTIWIN-PROTOCOL.md  —— 協定（**§5u git -C／§5s 提問給預設值／§5t 三分鐘重送**）
+2. docs/windows/SCOPE.md —— 本期範圍與最新追加（**最下面幾節是今天的**）
+3. 這一份的〈交接〉段（就是下面這一段）
+```
+### 今天全域必守的三條
+```
+① **git 指令一律 `git -C <絕對路徑>`**，不要靠 cd（§5u；&& 鏈不保護 heredoc 後的下一行）
+② 回報要附**座標 SHA ＋ 工作樹是否乾淨**（§5r）
+③ 提問要給**預設值與死線**（§5s）—— 「沒收到回覆我就照這個做，⏱ N 分鐘後開工」
+```
+🔴 **666 目前可能沒在跑**（沒有 `--reload`，使用者手動啟停）。
+測試一律走 tmp DB／`free_safe_port`，**不要碰 666 與 6667**。
+
+### 你剛交的（已 push）
+```
+3acaa08  BN2（獎金項目只有最高管理者可見）＋ JV8（新增傳票後才出現頁面）＋ AS1（匯款申請整合進簽核設定）
+         ＋ 順帶①：ApprovalFlowScopeSettings 5 欄 -> 8 欄（completion／extra_expense／voucher
+            的套用範圍**存不進去**，畫面說「✓ 已儲存」而重整變回去，活了十二天）＋ import-time 守門
+         ＋ 順帶②：send_back_voucher 漏清 approval_json
+```
+
+### 🔴 A 已裁、**等你做**的兩件（`STATE.md` §242）
+```
+（一）**voucher 加進簽核設定頁**（docTypeOrder ＋ docTypeMeta 各一行）
+      依據：使用者原話「傳票的簽核需要在簽核設定中出現」（§201）——**這件早就裁過了**
+      ⚠️ 現況：APPROVAL_DOC_TYPES 有 voucher、GET scope 回 voucher，
+         **而設定頁沒有那一格** => voucher_approval_flow 沒有任何 UI 寫得進去
+         => 傳票永遠 0 層、永遠走內建兩格
+（二）**sectionDesc() 只讓它說實話**（照 flowDigest() 實算）
+      現在 steps.length===0 一律寫「預設模式（任一超級管理員簽核）」，
+      而 includeSubmitterManagerTier 缺鍵視為 True => 實際還會插一層**申請人的部門主管**
+      ❌ 不重寫文案、不動版面
+```
+
+### ⇒ 你的順序
+```
+1. BN9   bonus.py:290 `list_awards` 的 **manager 旗標收成只有 superadmin** ＋ 前端四處
+         （bonus.html:81-82／182／279／302）
+         ⚠️ 寫入閘門 :167/:231/:338/:456 **維持不動**（本來就只給 superadmin）
+         ⚠️ **不要給 GET /awards 加 superadmin 閘門** —— 那會讓員工看不到自己領多少
+         ⚠️ **不碰 bonus.html:146-147** 的 can_edit／canManageItems 那條既有判斷
+         ⇒ C 的紅燈已就位：test_bonus_award_visibility_2026_09_23.py（2 紅 3 綠）
+2. 上面（一）（二）
+3. AS3   傳票／獎金單**進簽核佇列**（兩支端點各九段手寫 SQL，vouchers_all 命中 0）
+         ＋ 一道**完整性**守門：有 submit 端點的每個 type 兩支都要涵蓋
+4. BN8   獎金分潤單成為**第九個** doc type（規格 docs/windows/SPEC-BN8.md）
+5. BN4（8 處字串改名）→ BN5（案件下拉）→ BN3（manual 人員來源）
+6. JV10／JV11（傳票預覽＋兩顆匯出鈕＋未簽核不可匯出＋紅字浮水印）
+7. BN6／BN7（獎金明細表＋PDF）
+```
+
+### ⚠️ 做到那幾件時的硬界線
+```
+JV11  **閘門在後端**；條件是「**未簽核完成**」不是「狀態不等於已核准」
+      （後者會擋掉作廢單，而 voucher_pdf.py:363 已裁「已作廢的傳票也要印得出來」）
+      預覽走**獨立端點** GET /{id}/preview（回 HTML，隨時可看，帶浮水印）
+      🔑 閘門綁參數漏傳就穿透；綁端點穿不過去
+JV10  「含附件」在**沒有附件時**要停用並說得出話；附件數**從後端來**（attachment_count）
+BN6   表上每個數字**都讀 settlement.summary 已存值，一個都不要算**
+      ⚠️ dispatchTotal 只有 6/12 筆有 => **缺欄位標「無」不是印 0**
+EM7   ② 那四處每日檢查：**N==0 時輸出逐字不變**，N>0 才加「（略過 N 筆）」
+```
+
 ---
 
 ## 你能動的
