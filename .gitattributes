@@ -109,6 +109,7 @@ docs/system-home-mockup.html export-ignore
 docs/quick/** export-ignore
 docs/quick export-ignore
 docs/PLATFORM-CUSTOMIZATION-INVENTORY.md export-ignore
+docs/PLATFORM-FOUNDATION.md export-ignore
 
 # 根目錄：內部協作／規劃文件
 /AGENT-HANDOFF-TEMPLATE.md export-ignore
