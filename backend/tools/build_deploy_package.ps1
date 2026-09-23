@@ -750,6 +750,44 @@ if (-not (Test-Path $buildCommitPath)) {
 }
 Write-Host "      .build_commit: $commitShort"
 
+# --- Step 5.6: 精簡 backend/version_manifest.json（PK1）---
+#
+# 🔴 GET /api/system/version（routers/auth.py）每次請求都重新讀磁碟，只回
+# **最新一筆**的 version/date；但 git archive 匯出的是整份 version_manifest.json
+# （含每一筆的 module/time/content 全文——內部異動細節逐字寫在裡面）。
+# docs/windows/SCOPE.md「PK1」節的處置：打包時產生一份精簡版（只留最新一筆的
+# version/date）取代整份出貨——**這是建置流程要新增的一步，不是 .gitattributes
+# 排除清單能處理的**（那個端點每次請求都重新讀磁碟，整份排除掉的話，`git
+# archive` 匯出的是空氣，端點會進 except 分支回空字串，登入頁版本號安靜消失，
+# `1c8f2e8` 就是這個失敗模式真的發生過一次）。
+#
+# ⚠️ $versionLatest 是 Step 4 已經讀過的同一份資料（陣列第一筆），這裡不重讀
+# 檔案——重讀只是多一次 I/O，資料在 Step 4 跑完那一刻就已經凍結了。
+$pkgVersionManifestPath = Join-Path $pkgDir "backend\version_manifest.json"
+if ($versionLatest) {
+    $trimmedVersionManifest = @(
+        [ordered]@{
+            version = $versionLatest.version
+            date    = $versionLatest.date
+        }
+    )
+    # ⚠️ **不要用管線**：單一元素的陣列丟進管線會被 PowerShell 攤平，
+    # ConvertTo-Json 收到的就不是陣列而是裸物件，產出 `{...}` 而不是
+    # `[{...}]`——端點是 `entries[0]`，對裸物件做整數索引會直接壞掉，
+    # 那正是這一步要避免的「版本號安靜消失」，換一種寫法又踩回去。
+    # 用 `-InputObject` 明著傳，陣列不會被攤平。
+    ConvertTo-Json -InputObject $trimmedVersionManifest -Depth 3 |
+        Set-Content -Path $pkgVersionManifestPath -Encoding UTF8
+    Write-Host "      version_manifest.json 已精簡為只留最新一筆（$($versionLatest.version)）"
+} elseif (Test-Path $pkgVersionManifestPath) {
+    # Step 4 沒讀到可信的最新一筆（檔案不存在／空陣列／解析失敗，當時已經
+    # 印過警告）——沒有東西可以精簡，而**完整版一樣不能出貨**（會外洩每一筆
+    # 的 module/content 全文）。兩害相權：把這個檔從包裡拿掉，讓登入頁版本號
+    # 安靜留空（Step 4 已經對同一件事警告過一次），好過讓完整異動記錄流出去。
+    Remove-Item -LiteralPath $pkgVersionManifestPath -Force
+    Write-Host "[WARN] version_manifest.json 沒有可信的最新一筆，已從包裡移除（登入頁版本號將留空）。" -ForegroundColor Yellow
+}
+
 # --- Step 6: 寫 deploy_manifest.json ---
 Mark-Elapsed "archive" $_tArchive
 $BuildT["total_so_far"] = [math]::Round(((Get-Date) - $BuildStart).TotalSeconds, 2)
