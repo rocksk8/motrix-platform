@@ -90,6 +90,11 @@
     .vc-src__txt{font-weight:600}
     .vc-src__meta{color:var(--text-secondary);font-size:11px;margin-left:auto}
     .vc-src__empty{padding:16px 8px;color:var(--text-secondary);font-size:12px;line-height:1.8}
+    /* `JV18`：紅字「已計算」＋點開的明細——不用顏色以外的訊號會分不出來，
+       但這裡只是輔助標記（旁邊還有文字「已計算」本身），保留紅色沒問題。 */
+    .vc-src__used{font-size:11px;color:#B91C1C;flex:none;padding:1px 7px;border-radius:9px;background:#FEF2F2;border:1px solid #FCA5A5;cursor:pointer}
+    .vc-src__used:hover{background:#FEE2E2}
+    .vc-src__usedinfo{padding:4px 8px 8px 30px;font-size:11px;color:var(--text-secondary);line-height:1.7}
 
     .vc-att{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh)}
     .vc-att__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--text-primary)}
@@ -106,8 +111,13 @@
 
     /* `JV16②`：預覽 modal 內、iframe 外側的附件清單——沿用 .vc-att__* 那一組
        樣式（同一種列的長相），只加外層容器的間距與頂部分隔線。 */
-    .vc-preview-atts{padding:12px 16px 4px;border-top:1px solid var(--border-light);font-family:var(--font-zh);flex:0 0 auto}
+    .vc-preview-atts{padding:12px 16px 4px;border-top:1px solid var(--border-light);font-family:var(--font-zh);flex:0 0 auto;display:flex;flex-direction:column}
     .vc-preview-atts__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-size:13px;font-weight:600;color:var(--text-primary)}
+    /* `JV25`：附件多的時候，這份清單本身不可以再無限長高把 iframe 往下擠
+       （見下面 `.vc-preview-wrap` 註解）——清單自己有上限、超過內部捲動，
+       `attErr`／`attMsg` 兩個訊息節點**留在這個捲動框外面**，不管清單捲到
+       哪都一定看得到，不重蹈 JV19 的「訊息被擠到可視範圍外」。 */
+    .vc-preview-atts__rows{overflow-y:auto;max-height:130px}
     .vc-att__name[href]{cursor:pointer;text-decoration:none}
     .vc-att__name[href]:hover{text-decoration:underline}
 
@@ -123,9 +133,16 @@
        ⇒ 改成 flex：iframe 隨可用空間縮（保留 220px 底線，仍然看得清楚），
        附件清單＋訊息用 flex:0 0 auto 拿它需要的高度，兩者搶同一塊空間
        時後者優先拿滿——這樣訊息永遠拿得到自己的位置，不必事後捲過去。 */
+    /* `JV25`：`flex:1 1 auto` 只有 `.modal-body` 被 `.modal-box` 的
+       `max-height` 頂住、被迫吃到固定高度時才真的有多的空間可以「長」——
+       內容不多時 `.modal-box` 是隨內容縮的，`flex-grow` 沒有東西可搶，
+       iframe 會停在 `min-height` 那條底線，不管附件多寡。⇒ 把底線本身
+       拉高到一個站得住的視覺高度，不要指望 flex-grow 會自己長上去；
+       附件清單另外用 `.vc-preview-atts__rows` 的上限頂住，不讓它把
+       `.modal-box` 頂到撞牆、把 iframe 擠回底線。 */
     .vc-preview-body{display:flex;flex-direction:column}
-    .vc-preview-wrap{padding:16px;background:#F5F4F0;flex:1 1 auto;min-height:220px;display:flex}
-    .vc-preview-frame{width:100%;height:auto;flex:1 1 auto;min-height:220px;border:1px solid var(--border-light);border-radius:6px;background:#fff}
+    .vc-preview-wrap{padding:16px;background:#F5F4F0;flex:1 1 auto;min-height:380px;display:flex}
+    .vc-preview-frame{width:100%;height:auto;flex:1 1 auto;min-height:380px;border:1px solid var(--border-light);border-radius:6px;background:#fff}
     .vc-preview-loading{padding:60px 20px;text-align:center;color:var(--text-secondary);font-size:13px;flex:1 1 auto}
   </style>
 </head>
@@ -328,17 +345,30 @@
                    ⚠️ 所以分支寫在這裡而不是寫在一支「什麼都做」的函式裡 ——
                       那支函式的每一個呼叫端都要先猜它這次會做哪一件。 -->
               <template x-for="(it, si) in tabItems()" :key="si">
-                <button class="vc-src__item" data-testid="summary-source-item"
-                        :disabled="!canEdit || (it.exists === false)"
-                        @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it)">
-                  <span class="vc-src__txt"
-                        x-text="it.summary || it.text || it.filename"></span>
-                  <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
-                       濾掉的話使用者會覺得「那張發票我明明傳過」而畫面上什麼都沒有。 -->
-                  <span class="vc-src__meta"
-                        x-text="it.exists === false ? (it.reason || '檔案已遺失')
-                                : (it.project_name || it.status || it.type || '')"></span>
-                </button>
+                <div>
+                  <button class="vc-src__item" data-testid="summary-source-item"
+                          :disabled="!canEdit || (it.exists === false)"
+                          @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it)">
+                    <span class="vc-src__txt"
+                          x-text="it.summary || it.text || it.filename"></span>
+                    <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
+                         濾掉的話使用者會覺得「那張發票我明明傳過」而畫面上什麼都沒有。 -->
+                    <span class="vc-src__meta"
+                          x-text="it.exists === false ? (it.reason || '檔案已遺失')
+                                  : (it.project_name || it.status || it.type || '')"></span>
+                    <!-- `JV18`：使用者原話「計算過是已經被其他傳票使用的意思」，
+                         只標「摘要來源→已上傳檔案」這個候選清單（A 裁定甲），
+                         不擴到傳票自己的附件清單或傳票清單頁。只標記不擋——
+                         這顆一樣按得下去，@click.stop 只是不要連帶觸發帶入。 -->
+                    <span class="vc-src__used" x-show="sourceTab === '已上傳檔案' && it.used"
+                          @click.stop="toggleUsedInfo(si)" title="點看被哪張傳票用過">已計算</span>
+                  </button>
+                  <div class="vc-src__usedinfo" x-show="usedInfoOpen === si">
+                    <template x-for="(u, ui) in (it.usedBy || [])" :key="ui">
+                      <div x-text="u.voucherNo + '　' + fmtDateTime(u.usedAt)"></div>
+                    </template>
+                  </div>
+                </div>
               </template>
               <!-- 🔑 空清單要說出**為什麼**空的（後端給的那句話，不在這裡重寫）：
                    「已上傳檔案」的附件表屬於 JV3、還沒建。
@@ -537,16 +567,18 @@
             附件（<span x-text="attachments.length"></span> 筆）
             <span class="vc-att__hint">點擊可開啟；「預計併入」依副檔名判斷，實際能不能併入以匯出結果為準。</span>
           </div>
-          <template x-for="a in attachments" :key="a.file_id">
-            <div class="vc-att__row">
-              <span class="vc-att__tag" x-text="attFrom(a)"></span>
-              <a href="#" class="vc-att__name" @click.prevent="openAttachment(a)"
-                 x-text="a.filename"></a>
-              <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
-              <span class="vc-att__tag" x-text="mergeKindLabel(a.mergeKind)"></span>
-            </div>
-          </template>
-          <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+          <div class="vc-preview-atts__rows">
+            <template x-for="a in attachments" :key="a.file_id">
+              <div class="vc-att__row">
+                <span class="vc-att__tag" x-text="attFrom(a)"></span>
+                <a href="#" class="vc-att__name" @click.prevent="openAttachment(a)"
+                   x-text="a.filename"></a>
+                <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
+                <span class="vc-att__tag" x-text="mergeKindLabel(a.mergeKind)"></span>
+              </div>
+            </template>
+            <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+          </div>
           <!-- `JV19②`：主頁面（395-401 附近）attErr／attMsg 兩個都有
                對應節點，這個 modal 之前只搬了 attErr 那一半——匯出成功時
                `attMsg` 被設定，而視窗裡沒有地方顯示它，比訊息捲不到
