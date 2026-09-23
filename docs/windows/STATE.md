@@ -42199,3 +42199,13 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
   ☠️ `visible_lines()` 拿 `'高晟耀' == 'corbin'` 去比 ⇒ **非最高管理者看到零張單**。
   ⚙️ 而它 `3c979c2` 從 `NEXT` 明著搬進 `THIS`，理由是**它已經動到 production 而母題還在 `NEXT`**。
   ⚠️ 規格在 `SPEC-QS1-a.md`（編號寫法 `QS1-a`，而守門正規化成 `QS1A`）。
+
+---
+
+## 覆蓋率守門補宣告（hichan-61，2026-09-24，A 授權 §6d）：原本只宣告在別份規格、守門讀不到的三個編號
+
+> 守門（`test_spec_coverage_2026_09_21.py`）只讀本檔；以下三條的權威原文在別份規格，這裡只補一行讓它讀得到。
+
+- **GW1.** 呼叫端不可以有行內文案（`intro=`／`note=`／`title=` 的值是字串常數 ⇒ 紅）。原文 `SPEC-WD1-WORDING.md` §5；題 `test_wording_guards_2026_09_23.py::test_gw1_*`。
+- **GW2.** 異常類 WORDING 四格齊全（`kind="incident"` 的 what／impact／system／action 皆非空）。原文同上；題 `test_gw2_*`。
+- **PK1.** 出貨包不可含內部工程文件（`git archive` 匯出整個已追蹤 repo；排除清單見 `SCOPE.md`「`PK1` 排除清單」）。題 `test_verify_package_2026_09_23.py::test_pk1_*`。

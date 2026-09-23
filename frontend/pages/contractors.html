@@ -700,14 +700,16 @@ function contractorsPage() {
       const name = this.form.name
       const action = this.activeTarget ? '停用' : '啟用'
       if (!confirm(`確定要${action}「${name}」？`)) return
-      const r = await fetch(`${API}/contractors/${this.editId}/active`, {
-        method: 'PATCH',
-        headers: { Authorization: 'Bearer ' + this.session.token }
-      })
-      if (r.ok) {
-        this.showModal = false
-        await this.load()
-      }
+      try {
+        const r = await fetch(`${API}/contractors/${this.editId}/active`, {
+          method: 'PATCH',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) {
+          this.showModal = false
+          await this.load()
+        } else { const e = await r.json().catch(() => ({})); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
     },
 
     async toggleActiveFromPane() {
@@ -715,11 +717,14 @@ function contractorsPage() {
       const c = this.selectedContractor
       const action = c.active ? '停用' : '啟用'
       if (!confirm(`確定要${action}「${c.name}」？`)) return
-      const r = await fetch(`${API}/contractors/${this.selectedId}/active`, {
-        method: 'PATCH',
-        headers: { Authorization: 'Bearer ' + this.session.token }
-      })
-      if (r.ok) await this.load()
+      try {
+        const r = await fetch(`${API}/contractors/${this.selectedId}/active`, {
+          method: 'PATCH',
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok) await this.load()
+        else { const e = await r.json().catch(() => ({})); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
     }
   }
 }

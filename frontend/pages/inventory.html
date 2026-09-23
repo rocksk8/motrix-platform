@@ -746,7 +746,8 @@ function app() {
       try {
         const r = await fetch(`${API}/inventory/stock-items/${it.id}/adjust`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token }, body: JSON.stringify({ action }) })
         if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
-      } catch {}
+        else { const e = await r.json().catch(() => ({})); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
     },
 
     async deleteItem(it) {
@@ -754,7 +755,8 @@ function app() {
       try {
         const r = await fetch(`${API}/inventory/stock-items/${it.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
         if (r.ok) { await this.openDetail({ part_no: this.detail.partNo }); await this.load() }
-      } catch {}
+        else { const e = await r.json().catch(() => ({})); alert(e.detail || '操作失敗') }
+      } catch { alert('網路錯誤') }
     },
 
     logout() {

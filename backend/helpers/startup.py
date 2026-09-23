@@ -40,7 +40,7 @@ def _get_edge_path() -> str:
             return candidate
     raise RuntimeError(
         "找不到 Microsoft Edge 執行檔。"
-        "請至「系統設定 → Edge 執行檔路徑」手動指定完整路徑。"
+        "請至「系統設定 → Edge 瀏覽器路徑」手動指定完整路徑。"
     )
 
 

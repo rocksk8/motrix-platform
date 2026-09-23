@@ -378,7 +378,9 @@ DEMO_CLEARED_TABLES = frozenset((
     # ⚠️ `bonus_items`／`bonus_templates` 看起來像「系統預設」那一類，
     #    **而它們不是**：施工圖 `§一` 逐字「項目可由**最高管理者**定義」
     #    ⇒ 那是**使用者建的**，不是我們預載的。
-    "bonus_award_edit_log", "bonus_award_lines", "bonus_awards", "bonus_items",
+    "bonus_award_edit_log", "bonus_award_lines", "bonus_awards",
+    # `BN14` 的群組與成員由最高管理者建立（不是預載）⇒ 使用者資料，整張清（DM1）。
+    "bonus_group_members", "bonus_groups", "bonus_items",
     "bonus_template_versions", "bonus_templates",
     # 🔑 `voucher_attachments` 整張清：附件是**使用者上傳的憑證**，
     #    demo 重置要讓每個客戶從乾淨開始。

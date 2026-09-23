@@ -60,7 +60,12 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
                 "approval-cascade.js", "list-sort.js", "gov-lookup.js")
 
 #: `§174` 的四個「行為保持」數字。⚠️ `(a-2)` 做完**一個都不可以變**。
-PAGE_POPULATION = 53
+#: 🔴 2026-09-24（hichan-61）53 -> 52：`e2b774d`（AS4）把
+#:    `contractor-voucher-approval-settings.html` 改成純說明＋導向頁，拿掉了 Alpine
+#:    ⇒ 它不再是會跑 `init()` 的頁。實測：`e2b774d^` 掃出 53、HEAD 掃出 52，
+#:    差集恰好只有這一頁（`check_double_init.scan()` 前後各跑一次比對頁名）。
+#:    ⚠️ 頁數變少不是「有頁被排除清單吃掉」—— 是那一頁真的不再是 Alpine 頁。
+PAGE_POPULATION = 52
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

@@ -871,7 +871,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     if not acv.get("hasTargets"):
         ws_acv.merge_cells("A4:F4")
         msg = ws_acv["A4"]
-        msg.value = "請於系統設定中配置年度目標後，本頁將自動顯示各指標達成率分析。"
+        msg.value = "請於營運報表頁按「立即設定年度目標」配置年度目標後，本頁將自動顯示各指標達成率分析。"
         msg.font  = mk(size=10, color=C_GRAY, italic=True)
         msg.alignment = al("center")
     else:
@@ -2106,7 +2106,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     else:
         acv_html = (
             f"<div class='section-title' style='background:#7C3AED'>{_acv_year} 年度目標達成率</div>"
-            f"<p style='color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic'>尚未設定 {_acv_year} 年度目標，請於系統設定中配置。</p>"
+            f"<p style='color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic'>尚未設定 {_acv_year} 年度目標，請於營運報表頁按「立即設定年度目標」配置。</p>"
         )
 
     html = f"""<!DOCTYPE html>

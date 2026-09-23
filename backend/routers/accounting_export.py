@@ -419,7 +419,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     note = f"產製時間：{gen_at}　現金基礎（僅含實際已收款/已匯款事件）　傳票別預設「{cfg['voucherCategory']}」"
     if missing_codes:
-        note += "　⚠️ 尚未設定科目代號：" + "、".join(missing_codes) + "（請至系統設定填入後再匯入 T100）"
+        note += "　⚠️ 尚未設定科目代號：" + "、".join(missing_codes) + "（請至出納頁「T100匯出」子頁籤按「展開科目代號設定」填入後再匯入 T100）"
     ws.merge_cells("A2:K2")
     c = ws["A2"]
     c.value = note

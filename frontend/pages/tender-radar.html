@@ -104,6 +104,8 @@
     <div class="tr-health" :class="healthClass" x-show="status">
       <span x-text="healthIcon" style="font-size:15px;line-height:1.2"></span>
       <div>
+        <!-- `EM10②`（A 裁乙）：固定小標，讓通知信裡「雷達健康狀態」這個目的地在畫面上找得到 -->
+        <div style="font-size:12px;opacity:.75">雷達健康狀態</div>
         <div x-text="healthText" style="font-weight:600"></div>
         <div style="margin-top:2px;opacity:.85">
           <template x-if="status && status.lastFetchedAt">

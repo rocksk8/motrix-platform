@@ -228,6 +228,16 @@ NAMED_ELSEWHERE = {
     # ⚙️ 挑這一支的理由：它驗的正是 `JV27` 那一半（簽核動作 fail-closed），
     #    而 `:227`／`:256` 是一對正負對照。
     "JV27": "test_em5_approving_is_blocked_when_the_chain_is_unreadable",
+    # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丙類**逐支打開**後
+    #    只有這三個是真的在驗它（題也是綠的）；其餘丙類的命中只是註解引用，沒有登記。
+    # ⚙️ `AI1`：題的 docstring 逐字「`§7⑧`（`AI1`）：停用之後 validate_account_code()
+    #    要說它已停用」，走 PATCH 產品路徑。
+    "AI1":  "test_ca1_disabling_a_custom_code_makes_it_unusable",
+    # ⚙️ `JV21`：斷言「恰好三個頁籤」，第三個就是 `JV21` 的「支出項」。
+    "JV21": "test_jv7_it_offers_exactly_the_three_declared_tabs",
+    # ⚙️ `EM11`（2 處）：這一支守 `onDealTagChange`；另一處 exportCount 由同檔
+    #    `test_em9_quotation_export_count_has_failure_handling` 守（表只收一支函式名）。
+    "EM11": "test_em9_quotation_deal_tag_change_has_failure_handling",
 }
 
 #: 🔴 **明文豁免：這一條的驗證方式不是 pytest。**
@@ -242,6 +252,10 @@ EXEMPT = {
     #    **那不是一條豁免，那是一列多餘的資料。** 規格從未宣告它
     #    ⇒ 沒有任何東西需要被豁免，而它卻佔著一個「已處理」的位置。
     # 🔑 新加的過期檢查抓到的。**一張表的雜訊也會被讀成決定。**
+    # T1（2026-09-24）：GATE-BLOCK 把它列在丙類，而命中行逐字是「已結案：使用者目視確認紙本」
+    #    ⇒ 它是豁免的形狀，不是「題名不帶編號」。
+    "JV14": "目視：使用者 2026-09-23 確認紙本長摘要印得出來；pypdf 抽不到是抽取工具限制"
+            "（test_voucher_summary_length_2026_09_23.py:18／:103）",
     "M10":  "OSM 圖磚需要外網，是已知限制不是行為",
     "M11":  "距離只到縣市中心點 —— 畫面上的說明文字，人工驗收",
     "M15":  "Google Console 的來源限制提醒 —— 畫面文字，人工驗收",
@@ -703,6 +717,15 @@ AMBIGUOUS_ACK = {
     #    ⇒ 這不是歷史包袱，是**同一個問題在裁決之後又發生了一次**。
     #    📌 §3r 的 R3/R4/R5 對上舊的 R3/R4/R5（行 2197/2198/2201）。
     "R3", "R4", "R5",
+    # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丁類。成因分兩種，理由分開寫：
+    #    ① 題檔撞名（規格只宣告一次，而題在兩個以上的檔）：
+    #       AC1（3 檔）／BN17／EM5／JV16／JV7（各 2 檔）
+    "AC1", "BN17", "EM5", "JV16", "JV7",
+    #    ② 規格宣告兩行（同一個編號被兩節各自使用）：
+    #       BR1–BR4  STATE:356–366（§5 據點）vs 29079–29135（總表，「跑的是哪一版」）
+    #       SL1      STATE:1659（排程同時段只抓一次）vs 29106（精算頁毛利差異過期）
+    #    ⚠️ 真正的修法是規格改成全域唯一編號（A 的地盤）；這裡只讓「分辨不出來」不安靜。
+    "BR1", "BR2", "BR3", "BR4", "SL1",
 }
 
 #: 🔴 **被不相干的測試「認領」的編號 —— 撞名偵測抓不到這一類。**
