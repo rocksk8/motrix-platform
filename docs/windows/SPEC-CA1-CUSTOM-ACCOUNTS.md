@@ -88,6 +88,20 @@ TRIGGER 四支   statutory_no_update／statutory_no_delete
 ⚠️ ② 那一行現在是對的 —— 因為**今天一個自訂科目都沒有**。
 ☠️ 它會在**第 10 個自建科目**那天才出錯，而症狀是「順序怪怪的」，沒有人會報修。
 
+### 🔴 **前綴不是階層** —— 延伸用前綴，階層一律用 `parent_code`
+
+D 實查（2026-09-23）：有 `parent_code` 的 539 筆裡，**232 筆（43%）的 `code`
+不以它的 `parent_code` 為前綴**。
+⇒ 本項的「延伸」**產生**的是有前綴關係的代號，**而那是本項的產物，不是全表的性質**。
+☠️ 任何地方要找「某科目的子科目」一律 `WHERE parent_code = ?`，
+**不可以用 `code LIKE '前綴%'`** —— 那會漏掉 43%。
+
+⚠️ 同一條套在 `§6` 的「自建總數」上：
+```
+✅ 數 source='custom'
+☠️ **不要數含 `-` 的代號** —— 會把 13 筆法定範圍代號算進去
+```
+
 ### ⚠️ 取最大值，不是數筆數
 
 ```
@@ -263,9 +277,10 @@ GET /api/account-items 的回應加一格： { "custom_count": N }
 ### 我沒做的
 ```
 ✗ 沒有實作、沒有跑任何測試
-✗ 沒查 statutory TRIGGER 的 WHEN 條件是否會誤擋 custom 的 UPDATE
-  ⚠️ 它是 `BEFORE UPDATE ON account_items FOR EACH ROW WHEN …`，
-     **我只看了第一行**，實作前要把 WHEN 讀完
+✅ statutory TRIGGER 的 `WHEN` **已補查**（C 2026-09-23，讀 `sqlite_master` 的 `sql`）：
+  `statutory_no_update` 的條件是 **`WHEN OLD.source = 'statutory'`**；
+  `referenced_code_no_update` 是 **`BEFORE UPDATE OF code`**
+  ⇒ **兩支都不會擋 custom 的 `is_active` UPDATE** ⇒ `§7⑧` 資料層是通的，不必改 TRIGGER
 ✗ 沒查前端 account-items.js 的樹狀組裝對 L5 的實際行為（只讀了縮排與 class 兩行）
 ✗ 沒查「自建總數」要不要含已停用的（📌 建議含，並分開顯示「其中 N 個已停用」）
 ```
