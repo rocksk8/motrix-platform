@@ -53,7 +53,7 @@ from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
     diff_lines, approval_done, parse_approval_json, VoucherChainUnreadable,
-    normalize_amount_lines,
+    normalize_amount_lines, classify_category,
 )
 
 router = APIRouter(prefix="/api/vouchers", tags=["vouchers"])
@@ -105,7 +105,10 @@ def _user_name(user):
 #: ☠️ 黑名單的話，日後 DDL 加一欄就自動變成「可以改」——
 #:    而沒有人會發現 `posted_by` 突然變得可以從前端改掉。
 #: ⚠️ `voucher_no` **不在裡面**：它由退回升版產生，不是使用者填的。
-EDITABLE_FIELDS = ("voucher_date", "category", "summary")
+#: 📌 `JV29`：`category` 拿掉——改由伺服器依分錄判斷（存檔時重算，只限草稿）；
+#:    請求裡帶的 `category` 被忽略（舊前端照送也不會壞，見 `JV20⑤`）。
+#:    「手動改」延後（待確認 N6）。
+EDITABLE_FIELDS = ("voucher_date", "summary")
 
 
 
@@ -264,7 +267,7 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
                 "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
                 " summary, status, created_by, created_at, updated_at)"
                 " VALUES (?,?,?,?, '草稿', ?,?,?)",
-                (no, voucher_date, (body.get("category") or "轉"),
+                (no, voucher_date, classify_category(conn, lines),
                  (body.get("summary") or ""), _user_name(user), now, now))
         except Exception as exc:                            # noqa: BLE001
             if "UNIQUE" in str(exc).upper():
@@ -1101,6 +1104,12 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             #    新建擋得住而修改會炸成 500。
             _check_account_codes(conn, new_lines)
             line_changes = diff_lines(old_lines, new_lines)
+            # `JV29`：分錄改了 ⇒ 類別依新分錄重算（PUT 只接受草稿，所以只限草稿）。
+            new_cat = classify_category(conn, new_lines)
+            if line_changes and new_cat != (current.get("category") or ""):
+                changes.append({"field": "category", "from": current.get("category") or "",
+                                "to": new_cat})
+                updates["category"] = new_cat
 
         # ⚙️ 反向控制的那一格：沒有改動就什麼都不做，**包括不寫紀錄**。
         #    ⚠️ 而「沒有改動」現在要把分錄一起算進來 ——

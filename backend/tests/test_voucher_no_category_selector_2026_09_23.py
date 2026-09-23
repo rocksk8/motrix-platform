@@ -149,7 +149,7 @@ def test_jv20_an_explanatory_comment_mentioning_the_word_is_not_a_false_positive
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ② 新建傳票仍然寫入 '轉'（鎖住現有預設值行為）
+# ② 新建傳票的類別不是空值（`JV29` 起依分錄判斷，原本鎖的是 '轉'）
 # ══════════════════════════════════════════════════════════════════════
 
 def test_jv20_creating_without_category_still_stores_the_default(client,
@@ -159,6 +159,11 @@ def test_jv20_creating_without_category_still_stores_the_default(client,
     ⚠️ 這一題**今天就是綠的**（`vouchers.py:202` 的預設值本來就是這樣）
     ——它的價值在**畫面拿掉選項之後**：前端不會再送這個欄位，這一題
     確保「不送」這個新常態不會意外讓資料庫存進空字串或 `None`。
+
+    📌 更正留著（2026-09-24，`JV29`，A 夜間裁示「category 由伺服器在存檔時依分錄
+    自動寫入」）：「一律存 `'轉'`」這個預設值行為**已被取代**——`_LINES` 是
+    1113 銀行存款借方 ⇒ 收入傳票 `'收'`。這一題原本要防的「不送就存成空值」仍然成立，
+    所以翻面成「存的是依分錄判斷的值」，沒有刪掉。JV20 的使用者原話（不要選單）不受影響。
     """
     _u, hdr = _hdr(client, make_user, "jv20_create")
     r = client.post("/api/vouchers", headers=hdr,
@@ -167,8 +172,8 @@ def test_jv20_creating_without_category_still_stores_the_default(client,
     vid = r.json()["id"]
     row = _row(vid)
     assert row is not None, "建立成功卻讀不到那一列。"
-    assert row["category"] == "轉", (
-        "新建的傳票 `category` 是 %r，預期 `'轉'`。" % row["category"])
+    assert row["category"] == "收", (
+        "新建的傳票 `category` 是 %r，預期依分錄判斷的 `'收'`（`JV29`）。" % row["category"])
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -179,6 +184,9 @@ def test_jv20_void_and_reopen_still_stores_the_default(client, make_user):
     """🔴 **作廢重開（`vouchers.py:698`）是另一條寫入路徑，也要有值。**
 
     ⚙️ 觀測點：作廢原單，走 `reopen=True`，讀**新單**的 `category`。
+
+    📌 更正留著（`JV29`）：原本斷言 `'轉'`；類別改由分錄判斷之後，重開的新單
+    **照抄原單的類別**（分錄也是照抄的），所以斷言改成「與原單相同且非空」。
     """
     _u, hdr = _hdr(client, make_user, "jv20_reopen")
     r = client.post("/api/vouchers", headers=hdr,
@@ -195,8 +203,8 @@ def test_jv20_void_and_reopen_still_stores_the_default(client, make_user):
 
     row = _row(new_id)
     assert row is not None, "重開的新單讀不到。"
-    assert row["category"] == "轉", (
-        "重開的新單 `category` 是 %r，預期 `'轉'`。" % row["category"])
+    assert row["category"] and row["category"] == _row(vid)["category"], (
+        "重開的新單 `category` 是 %r，原單是 %r。" % (row["category"], _row(vid)["category"]))
 
 
 # ══════════════════════════════════════════════════════════════════════

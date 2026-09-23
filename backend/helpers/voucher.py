@@ -168,6 +168,50 @@ def normalize_amount_lines(lines):
     return out, problems
 
 
+#: `JV29`：傳票名稱（商業會計法 §17；準則 §6 記帳憑證要載明傳票名稱）。
+#: ⚠️ 查不到的值（理論上不會有）⇒ 呼叫端退回舊的「傳　票」，不要猜一個名稱。
+CATEGORY_TITLES = {"收": "收入傳票", "支": "支出傳票", "轉": "轉帳傳票"}
+
+#: 現金及約當現金（官方《商業會計項目表》三級）。
+_CASH_ROOT = "111"
+
+
+def cash_account_codes(conn):
+    """`JV29`：現金類科目＝沿 `parent_code` 往上走得到 `111` 的那些（含 111 本身）。
+
+    ☠️ **不用代號前綴**（`db.py` `_m093` 的警告：二級是範圍代號，前綴不可信），
+       而且使用者自訂科目掛在 111 底下時用前綴判會漏掉。
+    ⚠️ 迴圈防護：資料若有環（理論上不會），走 20 層就停，不當成現金類。
+    """
+    parent = {r["code"]: r["parent_code"] for r in conn.execute(
+        "SELECT code, parent_code FROM account_items")}
+    out = set()
+    for code in parent:
+        c, n = code, 0
+        while c and n < 20:
+            if c == _CASH_ROOT:
+                out.add(code)
+                break
+            c, n = parent.get(c), n + 1
+    return out
+
+
+def classify_category(conn, lines):
+    """`JV29`：依分錄判斷傳票類別。
+
+    ```
+    現金類科目的淨額（借 − 貸）> 0  ⇒ 收（收入傳票）
+                                < 0  ⇒ 支（支出傳票）
+                                = 0  ⇒ 轉（轉帳傳票；含沒有現金類、與銀行轉存）
+    ```
+    📌 `lines` 的金額要先經 `normalize_amount_lines()`（int）。
+    """
+    cash = cash_account_codes(conn)
+    net = sum(int(ln.get("debit") or 0) - int(ln.get("credit") or 0)
+              for ln in (lines or ()) if (ln.get("account_code") or "").strip() in cash)
+    return "收" if net > 0 else ("支" if net < 0 else "轉")
+
+
 def check_balance(lines, status="草稿"):
     """借貸平衡。回 `(ok, diff)`，`diff` 是**借貸差的絕對值**。
 

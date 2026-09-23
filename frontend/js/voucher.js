@@ -961,6 +961,13 @@ function voucherPage() {
     //    能不能過帳由後端 `check_balance()` 決定（A 明著交代）。
     //    ☠️ 前端自己判的話就是第二份判準，而它會在某天與後端不一致 ⇒
     //       使用者看到「畫面說可以，按下去被拒絕」。
+    // `JV29`：與 `helpers/voucher.py::CATEGORY_TITLES` 同一組名稱。
+    // 還沒存過的新單沒有判斷結果 ⇒ 說清楚什麼時候會有，不要先印一個「轉帳傳票」。
+    get kindTitle() {
+      if (!this.id) return '（存檔後依分錄判斷）'
+      return { '收': '收入傳票', '支': '支出傳票', '轉': '轉帳傳票' }[this.category] || '傳票'
+    },
+
     get totalDebit() { return this.lines.reduce((s, l) => s + this._amt(l.debit), 0) },
     get totalCredit() { return this.lines.reduce((s, l) => s + this._amt(l.credit), 0) },
 

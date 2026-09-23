@@ -252,6 +252,10 @@
                  查證過：這個欄位與 T100 匯出檔印出來的「傳票別」是兩個
                  不相干的來源，T100 那邊今天固定讀 T100 設定的
                  `voucherCategory`，不讀這裡。 -->
+            <!-- `JV29`：傳票名稱（收入／支出／轉帳，商業會計法 §17）由伺服器依分錄判斷，
+                 **唯讀顯示**——不是選單（`JV20` 使用者原話仍成立；手動改待確認 N6）。 -->
+            <div><label>傳票名稱</label><span class="vc-status" data-testid="voucher-kind"
+                 x-text="kindTitle"></span></div>
             <div><label>狀態</label><span class="vc-status" data-testid="voucher-status"
                  :class="voidedAt ? 'voided' : (status === '已過帳' ? 'posted' : '')"
                  x-text="voidedAt ? '已作廢' : status"></span></div>

@@ -48,7 +48,7 @@ import tempfile
 
 from db import get_db
 from helpers import _get_edge_path, _get_setting, run_edge_pdf
-from helpers.voucher import approval_done, get_voucher
+from helpers.voucher import CATEGORY_TITLES, approval_done, get_voucher
 from helpers.voucher_attachments import abs_path
 
 logger = logging.getLogger(__name__)
@@ -333,7 +333,7 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
 <div class="sheet">
   {watermark}
   <div class="org">{org}</div>
-  <div class="doc">傳　票</div>
+  <div class="doc">{doc_title}</div>
   <div class="head"><div>傳票號碼　{no}</div><div>傳票日期　{date}</div>
     <div>狀態　{status}</div></div>
   <table><colgroup>{cols}</colgroup>
@@ -349,6 +349,8 @@ def build_html(voucher, images, missing, exported_at, watermark=""):
 </body></html>""".format(
         pw=_PAGE_W, ph=_PAGE_H, m=_MARGIN, imgh=_PAGE_H - 2 * _MARGIN - 30,
         org=e(voucher.get("_company") or "（尚未設定公司抬頭）"),
+        # `JV29`：標題印傳票名稱（準則 §6）；查不到的類別退回舊標題，不猜名稱。
+        doc_title=e(CATEGORY_TITLES.get(voucher.get("category") or "", "傳　票")),
         no=e(voucher.get("voucher_no") or ""),
         date=e(voucher.get("voucher_date") or ""),
         status=e("已作廢" if voucher.get("voided_at") else (voucher.get("status") or "")),
