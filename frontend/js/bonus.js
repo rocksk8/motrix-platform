@@ -232,21 +232,62 @@ function bonusPage() {
     previewErr: '',
     previewing: false,
 
-    // `plan.settlement` 的安全讀取。
+    // ── `BN10`／`BN12`：獎金分潤單詳情——一個 modal，兩種資料來源 ──────
+    // 使用者原話：「獎金單要跟報價單的頁面一樣……點選後可載入完整資料跟
+    // 明細」「送出前後都要能看到完整明細」「一多就會亂」。
+    // `detailMode`：'' 沒開／'plan' 產生階段（用 this.plan）／'award'
+    // 已存在的單（用 this.awardDetail，GET /awards/{id} 來的）。
+    detailMode: '',
+    awardDetail: null,
+    awardDetailErr: '',
+    awardDetailLoading: false,
+
+    // `settle` getter 依 `detailMode` 切換讀哪一份 settlement——**版面
+    // 只有一份**（`.bn-settle` 在頁面上只出現一次），兩種模式共用它。
     // 🔴 `.bn-settle` 的子節點用 `x-show` 蓋在外層 div 上——`x-show` 只是
     //    `display:none`，元素仍然在 DOM 裡，Alpine 每個 tick 照樣求值裡面
     //    每一個 `x-text`（同 `test_ac1_write_actions` 那條「x-show 不等於
-    //    x-if」的道理）。`plan` 剛被設回 `null`（`loadPlan()` 開頭）那一瞬間，
-    //    裡面的 `x-text="fmt(plan.settlement.quotedPretax)"` 會直接對 `null`
-    //    取屬性炸掉——實際用 Playwright 跑過一次抓到的（`pageerror`：
+    //    x-if」的道理）。來源剛被設回 `null` 那一瞬間，裡面的
+    //    `x-text="fmt(settle.quotedPretax)"` 若讀到 `null.quotedPretax`
+    //    會直接炸掉——實際用 Playwright 跑過一次抓到的（`pageerror`：
     //    `Cannot read properties of null (reading 'settlement')`）。
-    //    ⇒ 這支一律回一個物件（沒有值時是 `{}`），子節點改讀
-    //    `settle.quotedPretax`：`fmt(undefined)` 本來就印「—」，
-    //    順便滿足「缺欄位印—」那條規則，不必另外判斷。
+    //    ⇒ 這支一律回一個物件（沒有值時是 `{}`），`fmt(undefined)` 本來
+    //    就印「—」，順便滿足「缺欄位印—」那條規則，不必另外判斷。
     get settle() {
+      if (this.detailMode === 'award') {
+        return (this.awardDetail && this.awardDetail.settlement) || {}
+      }
       return (this.plan && this.plan.settlement) || {}
     },
 
+    closeDetail() {
+      this.detailMode = ''
+      this.awardDetail = null
+      this.awardDetailErr = ''
+      this.askAwardReason = ''
+    },
+
+    async openAwardDetail(awardId) {
+      this.detailMode = 'award'
+      this.awardDetail = null
+      this.awardDetailErr = ''
+      this.awardDetailLoading = true
+      try {
+        const r = await fetch('/api/bonus/awards/' + awardId, { headers: this._auth() })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.awardDetail = d
+      } catch (e) {
+        this.awardDetailErr = '獎金分潤單明細載入失敗（' + e.message + '）。'
+      } finally {
+        this.awardDetailLoading = false
+      }
+    },
+
+    // `BN12ⓐ`：「送出前後都要能看到完整明細」——查詢一成功就直接開這個
+    // modal，不必再多按一次「查看」；`§6⑩` 的「預覽」按鈕仍然保留（在
+    // modal 裡），因為 modal 打開時看到的是**輸入表單**（勾選項目、填
+    // 比例），「預覽」按下去才是**試算結果**，兩者不是同一件事。
     async loadPlan() {
       this.planErr = ''
       this.createMsg = ''
@@ -286,6 +327,7 @@ function bonusPage() {
         }
         this.alloc = a
         this.plan = d
+        this.detailMode = 'plan'
       } catch (e) {
         this.planErr = e.message
       } finally {
@@ -476,6 +518,13 @@ function bonusPage() {
         this.askAwardReason = ''
         this.awardReasonText = ''
         await this.loadAwards()
+        // `BN10`：若這張單的詳情正開著，動作完成後**就地更新**，不必
+        // 使用者自己關掉再打開——否則簽核完的畫面還停在舊狀態，
+        // 看起來像按了沒反應。
+        if (this.detailMode === 'award' && this.awardDetail
+            && String(this.awardDetail.id) === String(id)) {
+          await this.openAwardDetail(id)
+        }
       } catch (e) {
         this.awardErr[id] = e.message
       } finally {

@@ -84,6 +84,16 @@
     .bn-settle__sub td{border-top:1px solid var(--border-light);font-weight:700;padding-top:6px}
     .bn-settle__note{font-size:11px;color:var(--text-dim,#6B6B6B);margin-left:4px}
     .bn-preview{border:1px solid var(--border-light);border-radius:var(--radius);margin-top:12px;padding:10px 14px}
+
+    /* `BN10`／`BN12`：使用者原話「跟報價單的頁面一樣……點選後可載入完整
+       資料跟明細」「目前的顯示方式當獎金單一多就會亂」——清單改成一列
+       一張的精簡列，完整內容（精算明細＋分錄＋簽核＋動作）搬進一個
+       共用的詳情 modal，兩種資料來源（plan／award）共用同一份版面，
+       不是各畫一份。 */
+    .bn-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:8px;font-family:var(--font-zh);font-size:13px;cursor:pointer;background:#fff}
+    .bn-row:hover{background:#FAF9F6;border-color:var(--accent,#C8102E)}
+    .bn-row__more{margin-left:auto;font-size:12px;color:var(--text-secondary)}
+    .bn-detail-hd{border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:12px}
   </style>
 </head>
 <body x-data="bonusPage()" x-init="init()" x-cloak>
@@ -265,127 +275,12 @@
           <div class="bn-ok" x-text="createMsg"></div>
         </template>
 
-        <div x-show="plan" style="margin-top:12px">
-          <div class="bn-card__hd" style="border:1px solid var(--border-light);border-radius:var(--radius)">
-            <span class="bn-case" x-text="plan && plan.quote_no"></span>
-            <!-- ⚠️ base 算不出來時顯示**後端給的那句話**，不要自己寫一句
-                 —— 它講得出出路，而重寫一份就是文案有兩份。
-                 🔴 使用者原話：「必須有詳細金額最後算出真實淨利，才能用
-                 真實淨利去算獎金」——這一格與下面精算明細表最後一列
-                 「真實淨利」是**同一個數字**，畫面上要說出來是同一個，
-                 不能靠使用者自己把兩處數字對起來。 -->
-            <span class="bn-base"
-                  x-text="plan && plan.base && plan.base.ok
-                    ? '案件淨利 ' + fmt(plan.base.amount) + '（＝下表「真實淨利」，本次獎金分潤基數）'
-                    : (plan && plan.base && plan.base.error) || ''"></span>
-            <span class="bn-status bn-voided" x-show="plan && plan.has_active_award">已有有效獎金單</span>
-          </div>
-
-          <!-- `SPEC-BN6-BN7.md §1`：案件精算明細，標籤與順序逐字比照
-               settlement.html「實際成本精算」欄（直接讀原始碼核對過，
-               不是規格文件猜的那份——quotedPretax 在那頁的列標籤是
-               「報價稅前收入」，不是「原始報價預估」，那是另一欄
-               `origTotalCost` 那組數字的標題，兩組欄位不可以混）。
-               缺欄位（例如沒派發過承攬商的案件）印「—」，不是 0
-               （`§6②`：印 0 看起來像「派了而金額為零」，兩件事）。 -->
-          <div class="bn-settle" x-show="plan && plan.settlement">
-            <div class="bn-settle__t">案件精算明細（比照精算頁面）</div>
-            <table class="bn-settle__tbl">
-              <tr>
-                <td>報價稅前收入</td>
-                <td>
-                  <span x-text="fmt(settle.quotedPretax)"></span>
-                  <span class="bn-settle__note" x-show="settle.quotedTotal !== null"
-                        x-text="'（含稅 ' + fmt(settle.quotedTotal) + '）'"></span>
-                </td>
-              </tr>
-              <tr><td>品項實際成本</td><td x-text="fmt(settle.itemActualTotal)"></td></tr>
-              <tr><td>額外支出</td><td x-text="fmt(settle.extraTotal)"></td></tr>
-              <tr><td>承攬商派發成本</td><td x-text="fmt(settle.dispatchTotal)"></td></tr>
-              <tr class="bn-settle__sub"><td>實際總成本</td><td x-text="fmt(settle.totalActualCost)"></td></tr>
-              <tr><td>真實毛利</td><td x-text="fmt(settle.grossProfit)"></td></tr>
-              <tr><td>真實毛利率</td><td x-text="fmtPct(settle.grossMarginPct)"></td></tr>
-              <tr><td>管銷分攤（10%）</td><td x-text="fmt(settle.adminCost)"></td></tr>
-              <tr><td>公益捐款（1%）</td><td x-text="fmt(settle.charityDonation)"></td></tr>
-              <tr class="bn-settle__sub">
-                <td>真實淨利<span class="bn-settle__note">（＝獎金分潤基數）</span></td>
-                <td x-text="fmt(settle.netProfit)"></td>
-              </tr>
-              <tr><td>真實淨利率</td><td x-text="fmtPct(settle.netMarginPct)"></td></tr>
-            </table>
-          </div>
-
-          <template x-for="it in (plan && plan.items) || []" :key="it.bonus_item_id">
-            <div class="bn-alloc">
-              <div class="bn-alloc__hd">
-                <!-- 🔴 ok=false 的項目**留在清單裡並說出為什麼**，不可以濾掉：
-                     濾掉的話它從來不出現，而**沒有人會發現一個從來不出現的東西**。 -->
-                <input type="checkbox" :id="'bn-use-' + it.bonus_item_id"
-                       x-model="alloc[it.bonus_item_id].use" :disabled="!it.ok">
-                <label :for="'bn-use-' + it.bonus_item_id" x-text="it.name" style="font-weight:600"></label>
-                <span class="bn-item" x-text="srcLabel(it.person_source)"></span>
-                <span class="bn-alloc__no" x-show="!it.ok" x-text="it.note"></span>
-                <template x-if="it.ok">
-                  <span style="margin-left:auto">
-                    發放比例
-                    <input type="number" min="0" max="100" step="0.01" style="width:88px;text-align:right"
-                           x-model="alloc[it.bonus_item_id].total">
-                    <!-- ☠️ 單位是基點（1/10000）而欄位名字叫 pct：50% 要送 5000。
-                         送 50 的後果是獎金變成應得的 1/100，**而它是一個格式正確的金額**
-                         ⇒ 沒有人會看成錯誤。⇒ 輸入框給百分比，換算只在 toBp() 一處。 -->
-                    <span class="bn-unit">% 的案件淨利</span>
-                  </span>
-                </template>
-              </div>
-
-              <template x-for="p in it.people" :key="p">
-                <div class="bn-person">
-                  <span style="min-width:110px" x-text="p"></span>
-                  <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
-                  <span class="bn-unit">% 的本項獎金池</span>
-                </div>
-              </template>
-              <div class="bn-sum" x-show="it.ok"
-                   x-text="'人員比例合計 ' + personSum(it.bonus_item_id) + '%（未滿 100% 的部分歸公司留存）'"></div>
-            </div>
-          </template>
-
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <!-- `§6⑩`：「預覽」與「匯出 PDF」是獎金頁要有的兩個動作
-                 （匯出 PDF 是 `BN7`，等用印欄那三條路裁定後再接）。
-                 這裡先接「預覽」：只算不寫，回的金額與按下「產生獎金單」
-                 之後真正入帳的**逐筆相等**（後端同一支函式算兩邊）。 -->
-            <button class="bn-btn bn-btn--ghost" @click="previewAward()"
-                    :disabled="previewing || !!planIssue()"
-                    x-text="previewing ? '預覽中…' : '預覽'"></button>
-            <button class="bn-btn" @click="createAward()"
-                    :disabled="creating || !!planIssue()"
-                    x-text="creating ? '產生中…' : '產生獎金單'"></button>
-            <span class="bn-sec__s" x-text="planIssue()"></span>
-          </div>
-
-          <template x-if="previewErr">
-            <div class="bn-err" x-text="previewErr"></div>
-          </template>
-
-          <div class="bn-preview" x-show="previewResult">
-            <div class="bn-settle__t">預覽結果（尚未送出，只是試算）</div>
-            <template x-for="(ln, li) in (previewResult && previewResult.lines) || []" :key="li">
-              <div class="bn-line">
-                <span class="bn-who" x-text="ln.username"></span>
-                <span class="bn-item" x-text="srcLabel(ln.person_source_snapshot)"></span>
-                <span class="bn-pct" x-text="pct(ln.total_pct) + ' × ' + pct(ln.person_pct)"></span>
-                <span class="bn-amt" x-text="fmt(ln.amount)"></span>
-              </div>
-            </template>
-            <!-- `§6⑤`：尾差要印在表上——不印的話使用者自己加總會發現
-                 「對不起來」，而他不知道那是設計（歸公司，不補給任何人）。 -->
-            <div class="bn-sum" x-text="'尾差（歸公司留存，不分給任何人）：' + fmt(previewResult && previewResult.remainder)"></div>
-            <div class="bn-sec__s" style="margin-top:6px">
-              以上是按下「預覽」當下的試算結果，若之後又調整了上面的比例，請重新按一次「預覽」再核對。
-            </div>
-          </div>
-        </div>
+        <!-- `BN12ⓐ`：使用者原話「送出前後都要能看到完整明細」——查詢一
+             成功就直接開下面那個共用的詳情 modal（見 `loadPlan()`），
+             不必再多按一次「查看」。這裡不再重複畫一份精算明細／分配
+             表——那份版面**只存在一次**，在共用 modal 裡，plan 與 award
+             兩種資料來源都讀它，不是各畫各的（使用者原話「已經有現成的
+             項目，不用重新寫」）。 -->
       </section>
 
       <!-- ══ 已產生的獎金單 ═════════════════════════════════════════ -->
@@ -393,113 +288,17 @@
         <div class="bn-sec__hd">
           <span class="bn-sec__t">獎金單</span>
         </div>
+        <!-- `BN10`：使用者原話「目前的顯示方式當獎金單一多就會亂」——
+             清單改成一列一張的精簡列，完整內容（精算明細＋分錄＋簽核＋
+             動作）點進去看，不在清單裡就地展開。 -->
         <template x-for="a in awards" :key="a.id">
-          <div class="bn-card">
-            <div class="bn-card__hd">
-              <span class="bn-case" x-text="a.quote_no"></span>
-              <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
-                    x-text="a.voided_at ? '已作廢' : a.status"></span>
-              <!-- `SPEC-BN8.md §93③`：「已發放」是**推導**，不是第五個狀態
-                   —— 這裡只是把 isAwardPaid() 算出來的結果標出來。 -->
-              <span class="bn-status bn-paid" x-show="isAwardPaid(a)">已發放</span>
-              <!-- ⚠️ 基數只有管理者看得到：它等於全案淨利。
-                   後端沒回這個欄位時**不要顯示 0** —— 那會讓人以為淨利是零。 -->
-              <span class="bn-base" x-show="a.base_amount !== undefined"
-                    x-text="'案件淨利 ' + fmt(a.base_amount)"></span>
-              <span class="bn-amt" x-text="(isManager ? '合計 ' : '您的獎金 ') + fmt(a.visible_total)"></span>
-            </div>
-
-            <!-- `§6⑪⑫`：印欄依鏈的層數畫（製表 ＋ N 層），未簽的層印空格；
-                 鏈讀不出來時印在紙上，不安靜退回固定格——兩種情形都是
-                 `a.signatures`（後端 bonus_signatures_of()）給的格名決定，
-                 這裡不猜、不重排。 -->
-            <div class="bn-sig-row">
-              <template x-for="s in signatureSlots(a)" :key="s.label">
-                <span class="bn-sig" :class="{unread: s.label === '簽核資料無法讀取'}">
-                  <b x-text="s.label"></b>
-                  <span x-text="s.by || '　'"></span>
-                </span>
-              </template>
-            </div>
-
-            <template x-for="(l, li) in a.lines" :key="li">
-              <div class="bn-line">
-                <span class="bn-who" x-text="l.username"></span>
-                <span class="bn-item" x-text="l.item_name_snapshot"></span>
-                <span class="bn-pct" x-text="pct(l.total_pct) + ' × ' + pct(l.person_pct)"></span>
-                <span class="bn-amt" x-text="fmt(l.amount)"></span>
-              </div>
-            </template>
-            <template x-if="!a.lines.length">
-              <div class="bn-line" style="color:var(--text-secondary)">這張單沒有您可以檢視的明細。</div>
-            </template>
-
-            <!-- `§6⑩`：送審／簽核／退回／標記已發放，只有 superadmin 看得到
-                 （`isManager` 在這一頁就是 `role === 'superadmin'`，BN9）。
-                 🔑 按鈕顯不顯示只看 `a.status`／`isAwardPaid(a)`，
-                 按不按得下去由後端說——同 voucher.js 那組動作的道理。 -->
-            <div class="bn-actions" x-show="isManager && !a.voided_at">
-              <template x-if="a.status === '草稿'">
-                <button class="bn-btn bn-btn--ghost" :disabled="awardBusy === String(a.id)"
-                        @click="submitAward(a.id)"
-                        x-text="awardBusy === String(a.id) ? '送審中…' : '送審'"></button>
-              </template>
-
-              <template x-if="a.status === '待審核' || a.status === '簽核中'">
-                <span style="display:inline-flex;gap:8px;flex-wrap:wrap">
-                  <button class="bn-btn" :disabled="awardBusy === String(a.id)"
-                          @click="approveAward(a.id)"
-                          x-text="awardBusy === String(a.id) ? '處理中…' : '簽核通過'"></button>
-                  <button class="bn-btn bn-btn--ghost"
-                          x-show="askAwardReason !== ('reject:' + a.id)"
-                          @click="openAwardReason('reject', a.id)">退回</button>
-                </span>
-              </template>
-
-              <template x-if="a.status === '已核准' && !isAwardPaid(a)">
-                <button class="bn-btn bn-btn--ghost"
-                        x-show="askAwardReason !== ('markpaid:' + a.id)"
-                        @click="openAwardReason('markpaid', a.id)">標記已發放</button>
-              </template>
-
-              <!-- 退回／標記已發放都要一段理由（後端沒有理由直接回 400）——
-                   不用 confirm()：原生對話框擋住整頁事件，改用行內輸入框。 -->
-              <div class="bn-reason"
-                   x-show="askAwardReason === ('reject:' + a.id) || askAwardReason === ('markpaid:' + a.id)">
-                <input type="text" x-model="awardReasonText"
-                       :placeholder="askAwardReason.indexOf('reject:') === 0 ? '退回原因' : '標記已發放的原因'">
-                <button class="bn-btn" :disabled="awardBusy === String(a.id) || !awardReasonText.trim()"
-                        @click="askAwardReason.indexOf('reject:') === 0 ? rejectAward(a.id) : markAwardPaid(a.id)"
-                        x-text="awardBusy === String(a.id) ? '送出中…' : '確定'"></button>
-                <button class="bn-btn bn-btn--ghost" @click="cancelAwardReason()">取消</button>
-              </div>
-            </div>
-
-            <!-- `BN7`：匯出 PDF。權限是 canCreateAward（_is_manager，
-                 superadmin＋admin），比上面那組 isManager（superadmin
-                 限定）寬——與後端 GET /pdf-download 的閘門一致，不因為
-                 這一頁其他動作收得更緊就跟著收緊這一顆。
-                 🔴 同 `JV10` 的先例：未到可匯出狀態時這顆要**停用而看得見**，
-                 並說得出為什麼——不是藏起來（藏起來的話，使用者不知道
-                 這裡有一個匯出功能；上一版寫成 x-show 是照抄旁邊送審/
-                 簽核那組「依狀態顯不顯示」的樣子，沒有另外想過這顆是不是
-                 該用同一種顯隱方式，A 問起來才發現是順手不是決定）。 -->
-            <div class="bn-actions" x-show="canCreateAward">
-              <button class="bn-btn bn-btn--ghost"
-                      :disabled="awardBusy === String(a.id)
-                        || !(a.status === '已核准' || a.voided_at)"
-                      :title="(a.status === '已核准' || a.voided_at)
-                        ? '' : '只有已核准或已作廢的獎金分潤單可以匯出 PDF'"
-                      @click="downloadAwardPdf(a)"
-                      x-text="awardBusy === String(a.id) ? '匯出中…' : '匯出 PDF'"></button>
-            </div>
-
-            <template x-if="awardMsg[a.id]">
-              <div class="bn-ok" x-text="awardMsg[a.id]"></div>
-            </template>
-            <template x-if="awardErr[a.id]">
-              <div class="bn-err" x-text="awardErr[a.id]"></div>
-            </template>
+          <div class="bn-row" @click="openAwardDetail(a.id)">
+            <span class="bn-case" x-text="a.quote_no"></span>
+            <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
+                  x-text="a.voided_at ? '已作廢' : a.status"></span>
+            <span class="bn-status bn-paid" x-show="isAwardPaid(a)">已發放</span>
+            <span class="bn-amt" x-text="(isManager ? '合計 ' : '您的獎金 ') + fmt(a.visible_total)"></span>
+            <span class="bn-row__more">查看明細 ›</span>
           </div>
         </template>
 
@@ -517,6 +316,259 @@
 
       <div class="bn-empty" x-show="!loaded && !loadError">載入中…</div>
     </main>
+  </div>
+
+  <!-- ══ `BN10`／`BN12`：獎金分潤單詳情——一個 modal，兩種資料來源 ══════
+       使用者原話：「獎金單要跟報價單的頁面一樣……點選後可載入完整資料
+       跟明細」「送出前後都要能看到完整明細」「已經有現成的項目，不用
+       重新寫」。
+       ⚠️ `detailMode` 決定內容從哪裡來，**版面只有一份**：
+         'plan'   還沒有 award（產生獎金單那個階段，BN6／BN12ⓐ）
+         'award'  已經有 award（點開清單裡一張已存在的單，BN10／BN12ⓑ）
+       精算明細表（`.bn-settle`）在兩種模式下都讀同一個 `settle` getter
+       （已改成依 `detailMode` 切換來源），不是各畫一份——settlement.html
+       的「11 列標籤」在這裡只出現這一次。 -->
+  <div class="modal-overlay" x-show="detailMode" x-cloak @click.self="closeDetail()">
+    <div class="modal-box" style="max-width:760px">
+      <div class="modal-head">
+        <span class="modal-head__title"
+              x-text="detailMode === 'plan'
+                ? '產生獎金分潤單　' + (plan && plan.quote_no || '')
+                : '獎金分潤單明細　' + (awardDetail && awardDetail.quote_no || '')"></span>
+        <button class="modal-close" @click="closeDetail()">×</button>
+      </div>
+      <div class="modal-body">
+        <template x-if="detailMode === 'award' && awardDetailLoading">
+          <div class="bn-empty">載入中…</div>
+        </template>
+        <template x-if="detailMode === 'award' && awardDetailErr">
+          <div class="bn-err" x-text="awardDetailErr"></div>
+        </template>
+
+        <!-- 標頭：兩種模式的抬頭列，各自的資料來源不同，版面同一種長相。 -->
+        <template x-if="detailMode === 'plan' && plan">
+          <div class="bn-detail-hd bn-card__hd">
+            <span class="bn-case" x-text="plan.quote_no"></span>
+            <!-- ⚠️ base 算不出來時顯示**後端給的那句話**，不要自己寫一句
+                 —— 它講得出出路，而重寫一份就是文案有兩份。
+                 🔴 使用者原話：「必須有詳細金額最後算出真實淨利，才能用
+                 真實淨利去算獎金」——這一格與下面精算明細表最後一列
+                 「真實淨利」是**同一個數字**，畫面上要說出來是同一個。 -->
+            <span class="bn-base"
+                  x-text="plan.base && plan.base.ok
+                    ? '案件淨利 ' + fmt(plan.base.amount) + '（＝下表「真實淨利」，本次獎金分潤基數）'
+                    : (plan.base && plan.base.error) || ''"></span>
+            <span class="bn-status bn-voided" x-show="plan.has_active_award">已有有效獎金單</span>
+          </div>
+        </template>
+        <template x-if="detailMode === 'award' && awardDetail">
+          <div class="bn-detail-hd bn-card__hd">
+            <span class="bn-status" :class="awardDetail.voided_at ? 'bn-voided' : ''"
+                  x-text="awardDetail.voided_at ? '已作廢' : awardDetail.status"></span>
+            <span class="bn-status bn-paid" x-show="isAwardPaid(awardDetail)">已發放</span>
+            <span class="bn-base" x-show="awardDetail.base_amount !== undefined"
+                  x-text="'案件淨利 ' + fmt(awardDetail.base_amount) + '（＝下表「真實淨利」，本次獎金分潤基數）'"></span>
+            <span class="bn-amt" x-text="(isManager ? '合計 ' : '您的獎金 ') + fmt(awardDetail.visible_total)"></span>
+          </div>
+        </template>
+
+        <!-- `SPEC-BN6-BN7.md §1`／`BN11`：案件精算明細，標籤與順序逐字
+             比照 settlement.html「實際成本精算」欄。缺欄位印「—」不是
+             0（`§6②`）。**這是全頁唯一一份**，`settle` getter 依
+             `detailMode` 切換讀 plan 還是 award 的 settlement。 -->
+        <div class="bn-settle" x-show="Object.keys(settle).length > 0">
+          <div class="bn-settle__t">案件精算明細（比照精算頁面）</div>
+          <table class="bn-settle__tbl">
+            <tr>
+              <td>報價稅前收入</td>
+              <td>
+                <span x-text="fmt(settle.quotedPretax)"></span>
+                <span class="bn-settle__note" x-show="settle.quotedTotal !== null && settle.quotedTotal !== undefined"
+                      x-text="'（含稅 ' + fmt(settle.quotedTotal) + '）'"></span>
+              </td>
+            </tr>
+            <tr><td>品項實際成本</td><td x-text="fmt(settle.itemActualTotal)"></td></tr>
+            <tr><td>額外支出</td><td x-text="fmt(settle.extraTotal)"></td></tr>
+            <tr><td>承攬商派發成本</td><td x-text="fmt(settle.dispatchTotal)"></td></tr>
+            <tr class="bn-settle__sub"><td>實際總成本</td><td x-text="fmt(settle.totalActualCost)"></td></tr>
+            <tr><td>真實毛利</td><td x-text="fmt(settle.grossProfit)"></td></tr>
+            <tr><td>真實毛利率</td><td x-text="fmtPct(settle.grossMarginPct)"></td></tr>
+            <tr><td>管銷分攤（10%）</td><td x-text="fmt(settle.adminCost)"></td></tr>
+            <tr><td>公益捐款（1%）</td><td x-text="fmt(settle.charityDonation)"></td></tr>
+            <tr class="bn-settle__sub">
+              <td>真實淨利<span class="bn-settle__note">（＝獎金分潤基數）</span></td>
+              <td x-text="fmt(settle.netProfit)"></td>
+            </tr>
+            <tr><td>真實淨利率</td><td x-text="fmtPct(settle.netMarginPct)"></td></tr>
+          </table>
+        </div>
+
+        <!-- plan 模式：分配編輯區（勾選項目＋填比例）＋預覽／產生。 -->
+        <template x-if="detailMode === 'plan'">
+          <div>
+            <template x-for="it in (plan && plan.items) || []" :key="it.bonus_item_id">
+              <div class="bn-alloc">
+                <div class="bn-alloc__hd">
+                  <!-- 🔴 ok=false 的項目**留在清單裡並說出為什麼**，不可以濾掉。 -->
+                  <input type="checkbox" :id="'bn-use-' + it.bonus_item_id"
+                         x-model="alloc[it.bonus_item_id].use" :disabled="!it.ok">
+                  <label :for="'bn-use-' + it.bonus_item_id" x-text="it.name" style="font-weight:600"></label>
+                  <span class="bn-item" x-text="srcLabel(it.person_source)"></span>
+                  <span class="bn-alloc__no" x-show="!it.ok" x-text="it.note"></span>
+                  <template x-if="it.ok">
+                    <span style="margin-left:auto">
+                      發放比例
+                      <input type="number" min="0" max="100" step="0.01" style="width:88px;text-align:right"
+                             x-model="alloc[it.bonus_item_id].total">
+                      <span class="bn-unit">% 的案件淨利</span>
+                    </span>
+                  </template>
+                </div>
+
+                <template x-for="p in it.people" :key="p">
+                  <div class="bn-person">
+                    <span style="min-width:110px" x-text="p"></span>
+                    <input type="number" min="0" max="100" step="0.01" x-model="alloc[it.bonus_item_id].people[p]">
+                    <span class="bn-unit">% 的本項獎金池</span>
+                  </div>
+                </template>
+                <div class="bn-sum" x-show="it.ok"
+                     x-text="'人員比例合計 ' + personSum(it.bonus_item_id) + '%（未滿 100% 的部分歸公司留存）'"></div>
+              </div>
+            </template>
+
+            <template x-if="previewErr">
+              <div class="bn-err" x-text="previewErr"></div>
+            </template>
+            <template x-if="createErr">
+              <div class="bn-err" x-text="createErr"></div>
+            </template>
+            <template x-if="createMsg">
+              <div class="bn-ok" x-text="createMsg"></div>
+            </template>
+
+            <div class="bn-preview" x-show="previewResult">
+              <div class="bn-settle__t">預覽結果（尚未送出，只是試算）</div>
+              <template x-for="(ln, li) in (previewResult && previewResult.lines) || []" :key="li">
+                <div class="bn-line">
+                  <span class="bn-who" x-text="ln.username"></span>
+                  <span class="bn-item" x-text="srcLabel(ln.person_source_snapshot)"></span>
+                  <span class="bn-pct" x-text="pct(ln.total_pct) + ' × ' + pct(ln.person_pct)"></span>
+                  <span class="bn-amt" x-text="fmt(ln.amount)"></span>
+                </div>
+              </template>
+              <!-- `§6⑤`：尾差要印在表上——不印的話使用者自己加總會發現
+                   「對不起來」，而他不知道那是設計（歸公司，不補給任何人）。 -->
+              <div class="bn-sum" x-text="'尾差（歸公司留存，不分給任何人）：' + fmt(previewResult && previewResult.remainder)"></div>
+              <div class="bn-sec__s" style="margin-top:6px">
+                以上是按下「預覽」當下的試算結果，若之後又調整了上面的比例，請重新按一次「預覽」再核對。
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- award 模式：簽核印欄＋分錄明細（讀，不改）。 -->
+        <template x-if="detailMode === 'award' && awardDetail">
+          <div>
+            <!-- `§6⑪⑫`：印欄依鏈的層數畫（製表 ＋ N 層），未簽的層印
+                 空格；鏈讀不出來時印在紙上，不安靜退回固定格。 -->
+            <div class="bn-sig-row">
+              <template x-for="s in signatureSlots(awardDetail)" :key="s.label">
+                <span class="bn-sig" :class="{unread: s.label === '簽核資料無法讀取'}">
+                  <b x-text="s.label"></b>
+                  <span x-text="s.by || '　'"></span>
+                </span>
+              </template>
+            </div>
+
+            <template x-for="(l, li) in awardDetail.lines" :key="li">
+              <div class="bn-line">
+                <span class="bn-who" x-text="l.username"></span>
+                <span class="bn-item" x-text="l.item_name_snapshot"></span>
+                <span class="bn-pct" x-text="pct(l.total_pct) + ' × ' + pct(l.person_pct)"></span>
+                <span class="bn-amt" x-text="fmt(l.amount)"></span>
+              </div>
+            </template>
+            <template x-if="!awardDetail.lines.length">
+              <div class="bn-line" style="color:var(--text-secondary)">這張單沒有您可以檢視的明細。</div>
+            </template>
+
+            <template x-if="awardMsg[awardDetail.id]">
+              <div class="bn-ok" x-text="awardMsg[awardDetail.id]"></div>
+            </template>
+            <template x-if="awardErr[awardDetail.id]">
+              <div class="bn-err" x-text="awardErr[awardDetail.id]"></div>
+            </template>
+          </div>
+        </template>
+      </div>
+      <div class="modal-foot">
+        <!-- plan 模式的動作：預覽／產生獎金單。 -->
+        <template x-if="detailMode === 'plan'">
+          <span style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="bn-btn bn-btn--ghost" @click="previewAward()"
+                    :disabled="previewing || !!planIssue()"
+                    x-text="previewing ? '預覽中…' : '預覽'"></button>
+            <button class="bn-btn" @click="createAward()"
+                    :disabled="creating || !!planIssue()"
+                    x-text="creating ? '產生中…' : '產生獎金單'"></button>
+            <span class="bn-sec__s" x-text="planIssue()"></span>
+          </span>
+        </template>
+
+        <!-- award 模式的動作：送審／簽核／退回／標記已發放／匯出 PDF——
+             `§6⑩`：只有 superadmin 看得到送審那組（`isManager`，BN9）；
+             匯出鈕權限是 canCreateAward（`_is_manager`），比送審那組寬，
+             不因為這一頁其他動作收得更緊就跟著收緊這一顆。 -->
+        <template x-if="detailMode === 'award' && awardDetail">
+          <span style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <template x-if="isManager && !awardDetail.voided_at">
+              <span style="display:inline-flex;gap:8px;flex-wrap:wrap">
+                <template x-if="awardDetail.status === '草稿'">
+                  <button class="bn-btn bn-btn--ghost" :disabled="awardBusy === String(awardDetail.id)"
+                          @click="submitAward(awardDetail.id)"
+                          x-text="awardBusy === String(awardDetail.id) ? '送審中…' : '送審'"></button>
+                </template>
+                <template x-if="awardDetail.status === '待審核' || awardDetail.status === '簽核中'">
+                  <span style="display:inline-flex;gap:8px;flex-wrap:wrap">
+                    <button class="bn-btn" :disabled="awardBusy === String(awardDetail.id)"
+                            @click="approveAward(awardDetail.id)"
+                            x-text="awardBusy === String(awardDetail.id) ? '處理中…' : '簽核通過'"></button>
+                    <button class="bn-btn bn-btn--ghost"
+                            x-show="askAwardReason !== ('reject:' + awardDetail.id)"
+                            @click="openAwardReason('reject', awardDetail.id)">退回</button>
+                  </span>
+                </template>
+                <template x-if="awardDetail.status === '已核准' && !isAwardPaid(awardDetail)">
+                  <button class="bn-btn bn-btn--ghost"
+                          x-show="askAwardReason !== ('markpaid:' + awardDetail.id)"
+                          @click="openAwardReason('markpaid', awardDetail.id)">標記已發放</button>
+                </template>
+                <div class="bn-reason"
+                     x-show="askAwardReason === ('reject:' + awardDetail.id) || askAwardReason === ('markpaid:' + awardDetail.id)">
+                  <input type="text" x-model="awardReasonText"
+                         :placeholder="askAwardReason.indexOf('reject:') === 0 ? '退回原因' : '標記已發放的原因'">
+                  <button class="bn-btn" :disabled="awardBusy === String(awardDetail.id) || !awardReasonText.trim()"
+                          @click="askAwardReason.indexOf('reject:') === 0 ? rejectAward(awardDetail.id) : markAwardPaid(awardDetail.id)"
+                          x-text="awardBusy === String(awardDetail.id) ? '送出中…' : '確定'"></button>
+                  <button class="bn-btn bn-btn--ghost" @click="cancelAwardReason()">取消</button>
+                </div>
+              </span>
+            </template>
+            <template x-if="canCreateAward">
+              <button class="bn-btn bn-btn--ghost"
+                      :disabled="awardBusy === String(awardDetail.id)
+                        || !(awardDetail.status === '已核准' || awardDetail.voided_at)"
+                      :title="(awardDetail.status === '已核准' || awardDetail.voided_at)
+                        ? '' : '只有已核准或已作廢的獎金分潤單可以匯出 PDF'"
+                      @click="downloadAwardPdf(awardDetail)"
+                      x-text="awardBusy === String(awardDetail.id) ? '匯出中…' : '匯出 PDF'"></button>
+            </template>
+          </span>
+        </template>
+        <button class="btn btn-ghost btn-sm" @click="closeDetail()">關閉</button>
+      </div>
+    </div>
   </div>
 
   <!-- ⚠️ `notif.js` 必須與 `sidebar.js` 成對出現：`sidebar.js` 無條件輸出
