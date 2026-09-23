@@ -60,6 +60,50 @@ THREE_THINGS = {
 }
 
 
+#: `bonus.html` 在模組關著時顯示的字（`BONUS_MODULE_ENABLED`，B `d03bf7d`）。
+SUSPENDED = "暫停使用"
+
+
+@pytest.fixture(autouse=True)
+def _bonus_module_on(monkeypatch):
+    """🔴 **本檔每一題都要在「模組開著」的前提下跑。**
+
+    2026-09-23 使用者裁示把獎金模組拉掉（`BONUS_MODULE_ENABLED` 預設關）
+    ⇒ `bonus.html` 變成「此模組暫停使用」⇒ 本檔三題全部量不到 `AC1`。
+
+    ## ☠️ 而三題裡只有兩題會紅，第三題**變成真空的綠**
+
+    ```
+    admin／superadmin  要「看得到」某個東西 => 模組關著 => 紅（看得見的壞法）
+    一般員工           要「看不到」新增入口 => 模組關著 => **必然通過**
+    ```
+    🔑 而第三題正是 `superadmin` 那題的反向控制 ——
+      它無聲地失效之後，「一律不給按鈕」那種實作就沒有人擋得住了。
+    ⇒ 所以三題**一起**打開旗標，不是只修紅的那兩支。
+
+    ## ⚠️ 不用 `skip`
+
+    skip 之後「`AC1` 有沒有壞」就沒有人知道了，而模組開回來的那天
+    也不會有人記得把它打開 —— 覆蓋率要留著。
+
+    ⚙️ 伺服器是**同行程**起的（`uvicorn.Config(main.app)`），而
+    `bonus_module_on()` 每次呼叫才讀模組全域 ⇒ `monkeypatch.setattr`
+    對 HTTP 請求那一側同樣生效。
+    ⚠️ 環境變數要先清掉：它是另一條開關路徑，留著的話這裡就分不出
+    「旗標真的被打開了」與「環境剛好設著」。
+    """
+    import helpers.bonus as hb
+
+    monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
+    monkeypatch.setattr(hb, "BONUS_MODULE_ENABLED", True)
+    # 🔑 隔離裝好要**當場驗它生效**（〈探針與被測對象糾纏〉）——
+    #    少了這一行，旗標機制換了寫法時，本檔會紅在「三句話不見了」上，
+    #    而訊息會把人送去修一個沒壞的畫面。
+    assert hb.bonus_module_on(), (
+        "打開旗標之後 `bonus_module_on()` 還是關的 —— **開關機制換了寫法**，\n"
+        "本檔的前提失效了，先修這裡，不要去看下面那些斷言。")
+
+
 @pytest.fixture()
 def live_server(client):
     """比照 `test_e2e_account_tree_2026_09_23.py` 的同名 fixture。"""
@@ -105,6 +149,13 @@ def _open_bonus(live_server, username, password):
         create = page.locator(HOOKS["create"]).count()
         empty = page.locator(HOOKS["empty"]).count()
         browser.close()
+    # 🔴 前提先亮出來：模組被關著的話，下面每一個斷言量到的都不是 `AC1`。
+    #    ☠️ 少了這一行，失敗訊息會是「空狀態沒說出那三句話」——
+    #       而真正的原因是頁面根本沒載入獎金模組。
+    assert SUSPENDED not in text, (
+        "獎金頁顯示「%s」—— **模組是關著的**（`BONUS_MODULE_ENABLED`）。\n"
+        % SUSPENDED
+        + "⇒ 這一題量到的不是 `AC1`，先看 `_bonus_module_on` 那個 fixture。")
     return text, create, empty, errors
 
 
