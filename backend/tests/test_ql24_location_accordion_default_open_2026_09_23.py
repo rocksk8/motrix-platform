@@ -174,6 +174,16 @@ def test_ql24_manually_collapsing_it_still_works(live_server, make_user):
                 "&& typeof Alpine.$data(document.querySelector('[x-data]'))"
                 "._toRow === 'function'",
                 timeout=15000)
+            # 🔴 2026-09-24 更正（hichan-8d 讀碼）：`expect_response` 等到的是「回應抵達」，
+            #    而 `init()` 還要 `await r.json()` 之後才寫 `this.locations` ——
+            #    在這個空檔覆寫 `locations` 會被蓋回去（全量時偶發紅、逾時在找標題）。
+            #    ⇒ 等 `init()` 真的把回應寫進去：`cfg` 初始沒有 `locations` 鍵，
+            #      與 `this.locations` 在**同一段同步程式**裡被寫入（`{...this.cfg, ...data}`）
+            #      ⇒ `cfg.locations !== undefined` 成立時 `this.locations` 已經是伺服器的值。
+            #    不用固定秒數。
+            page.wait_for_function(
+                "() => Alpine.$data(document.querySelector('[x-data]')).cfg.locations !== undefined",
+                timeout=15000)
 
             # 🔴 **前一版在這裡有一個真正的 race**：`init()` 是 `async`，
             #    先 fetch 再賦值 `this.locations`。若我在那個 fetch 完成
