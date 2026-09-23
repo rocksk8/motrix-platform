@@ -213,6 +213,72 @@ def test_bn5_a_case_with_a_live_award_is_marked_not_hidden(client, make_user):
           "   ⇒ **作廢之後再也產不出第二張**，而作廢重開是正常流程。")
 
 
+def test_bn5_no_profit_and_no_settlement_are_two_different_reasons(client,
+                                                                   make_user):
+    """🔴🔴 **「沒賺錢」與「精算是舊格式」是兩件事 —— 一個沒出路，一個有。**
+
+    ## 🔴 A-2 推翻了他自己的數字，而那個成因正是這一題要釘的
+
+    ```
+    ❌ 落檔兩次   「9 筆已結案裡有 1 筆 netProfit <= 0」
+    ✅ 逐筆打開   **8 筆全是正的**；差的那筆 netProfit = **None**
+                 （summary 是空的 `{}`，而 status=finalized）
+    成因  CAST(netProfit AS REAL) > 0 數的，而 **CAST(NULL AS REAL) > 0 是 NULL**
+    ```
+    🔑 **「沒有值」被讀成了「值是 0 或負數」** —— 而它被落檔兩次都沒有人發現。
+    📌 那正是〈null 不等於 0〉，而這一次它發生在**統計查詢**裡。
+
+    ## ⇒ 兩態的下一步完全不同
+
+    ```
+    netProfit <= 0   **沒有出路** —— 就是沒賺錢，標「無可分配基數」
+    summary 空／缺欄位 **有出路** —— `base_amount_for()` 已經有那句可操作的話：
+        「…請重新開啟並儲存一次該案的精算，系統會自動補算淨利後即可發放。」
+    ```
+    ☠️ 合成一句的話，**有出路的那個人不知道自己有出路** ——
+       他會以為那個案子就是不能發，而其實他只要去按一次儲存。
+    ⚙️ 而訊息要**用既有那一句**，不可以自己寫一句新的（規則只有一份）。
+    """
+    from helpers.bonus import LEGACY_SETTLEMENT_MESSAGE
+
+    _seed_case("MQ-BN5-LOSS", 0)
+    _seed_case("MQ-BN5-NOSUM", 0)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "UPDATE quotations SET data_json = ? WHERE quote_no = ?",
+            (json.dumps({"settlement": {"status": "finalized",
+                                        "summary": {}}}), "MQ-BN5-NOSUM"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    _u, hdr = _hdr(client, make_user, "bn5_two")
+    items = _candidates(client, hdr).json()
+    items = items.get("items") if isinstance(items, dict) else items
+    by_no = {(x.get("quote_no") or x.get("quoteNo")): x for x in items}
+
+    loss, nosum = by_no.get("MQ-BN5-LOSS"), by_no.get("MQ-BN5-NOSUM")
+    assert loss is not None and nosum is not None, (
+        "兩種案件至少一種被濾掉了（現有：%r）——\n" % sorted(by_no)
+        + "☠️ 濾掉的那一種，使用者只會看到選單裡沒有它。")
+
+    r_loss = str(loss.get("reason") or loss.get("note") or "")
+    r_nosum = str(nosum.get("reason") or nosum.get("note") or "")
+    assert r_loss and r_nosum, "兩種都要說出原因：%r ／ %r" % (loss, nosum)
+    assert r_loss != r_nosum, (
+        "「沒賺錢」與「精算是舊格式」用了**同一句話**：%r\n" % r_loss
+        + "☠️ 一個**沒有出路**，一個**有出路** ——\n"
+          "   合成一句的話，有出路的那個人不知道自己有出路，\n"
+          "   他會以為那個案子就是不能發，**而其實他只要去按一次儲存**。")
+    assert "重新開啟並儲存" in r_nosum, (
+        "「精算是舊格式」那一筆沒有給出路：%r\n" % r_nosum
+        + "📌 `base_amount_for()` 已經有那句可操作的話 ——\n"
+          "   **用既有那一句，不要自己寫一句新的**（規則只有一份）：\n"
+          "   %r" % LEGACY_SETTLEMENT_MESSAGE)
+
+
 def test_bn5_the_two_empty_reasons_are_not_merged(client, make_user):
     """🔴 **「沒有可選的案件」與「你沒有權限」不可以合成一句。**
 
