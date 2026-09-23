@@ -401,11 +401,130 @@ if not d.get("locationIdentity"):    # ❌ 快照存在而內容全空時會被�
          **而他同時改掉那題的清單就綠了** —— 行為那題才是唯一擋得住的
 ✅ 釘：快照裡**不出現銀行欄位**（結構，與上一條**兩題都要**）
    🔑 兩題分辨的是不同的失效：結構題擋「存進去」，行為題擋「讀出來」
-✅ 釘：**8 支 builder 全部走 `identity_for()`**
-   ⚙️ 正對照 掃 `pdf_gen.py` 裡 `location_identity(_location_of(` 的殘留 = **0**
-   ⚠️ 而它要配**反向控制**：`identity_for(` 的呼叫點 = **8**
-      ☠️ 否則有人把某一支改成不印抬頭，殘留數一樣是 0 而那一支壞了
+✅ 釘：**這 8 支具名的 builder 全部走 `identity_for()`**
 ```
+
+### 🔴 釘**名單**，不要釘數字（A 2026-09-23）
+
+```python
+#: QL25 的射程。**逐字列名，不要用數量。**
+_QL25_BUILDERS = (
+    "_build_quote_html",
+    "_build_shipping_html",
+    "_build_contractor_voucher_html",
+    "_build_invoice_voucher_html",
+    "_build_payment_request_html",
+    "_build_case_closing_html",
+    "_build_project_execution_report_html",
+    "_build_completion_html",
+)
+```
+
+```
+☠️ 釘「呼叫點 = 8」的失效模式：
+   有人新增第九支 builder => 這題紅
+   而**最省力的反應是把 8 改成 9**，沒有人去檢查那一支有沒有接上
+   => 守門從「檢查」退化成「**記帳**」，而那一步不會留痕跡
+```
+
+⇒ 新增 builder 要**明著加進這份名單**，並在加的時候**說出它為什麼要／不要抬頭**。
+
+### ⚠️ 而 `pdf_gen.py` 裡的 builder 是 **9 支**，不是 8 支
+
+```
+實掃（每一支 `_build_*_html` 各自看有沒有呼叫 location_identity）：
+  ✅ _build_quote_html                     (96)    <= QL25
+  ✅ **_build_payslip_html**               (565)   <= 🔴 **例外，見下**
+  ✅ _build_shipping_html                  (1031)
+  ✅ _build_contractor_voucher_html        (1391)
+  ✅ _build_invoice_voucher_html           (1749)
+  ✅ _build_payment_request_html           (2057)
+  ✅ _build_case_closing_html              (2557)
+  ✅ _build_project_execution_report_html  (3069)
+  ✅ _build_completion_html                (3262)
+=> **9 支全部**呼叫 location_identity
+```
+
+### 🔴 例外只有一支，而它的理由**不是「薪資單沒有抬頭」**
+
+```
+❌ 錯的理由：「_build_payslip_html 本來就不該有抬頭」
+   => 照這個理由做，會**把薪資單的抬頭拿掉**
+✅ 實際：薪資單**有抬頭，而且它已經有自己的快照**（QL16）
+   pdf_gen.py:578-580   company = d.get('companyName')  ← 讀自己的
+   pdf_gen.py:593       location_identity(**None**)      ← 只在沒快照時落空用
+
+🔑 兩者的**呼叫形狀就不同**：
+   QL25 的 8 支   location_identity(_location_of(x))   <= 要換成 identity_for(x)
+   薪資單那 1 支  location_identity(**None**)           <= **不要動**
+```
+
+⇒ 守門的掃描判準用 **`location_identity(_location_of(`** 這個字串，
+   `location_identity(None)` 自然不在射程內 —— **不必寫例外清單**。
+📌 〈判準的寬窄都會騙人〉：**例外數得出來（1 支），就釘已知集合**；
+   而這裡更好的是**判準本身就分得開**，連清單都不需要。
+
+```
+⚙️ 正對照   `location_identity(_location_of(` 的殘留 = **0**
+⚙️ 反向控制 `_QL25_BUILDERS` 裡每一個名字，在 pdf_gen.py 裡都找得到
+             且**它的函式體內有 `identity_for(`**
+   ☠️ 光數呼叫點擋不到「某一支被改成不印抬頭」——
+      而**逐名檢查函式體**擋得到
+⚙️ 負對照   `_build_payslip_html` **不可以**出現 `identity_for(`
+             🔑 它動了就是 QL16 被踩掉
+```
+
+---
+
+## §8b 🔴 退回會換單號 —— 而**沒有任何東西跟著改**（A 2026-09-23 追問）
+
+### 實查
+
+```
+routers/quotations.py:4465（reject_quotation 的**唯一一次寫入**）
+   UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=?
+   WHERE quote_no=?
+   => MQ-202609-001  ->  MQ-202609-001-R1（_next_revision_no:164）
+   🔴 **原地改名，舊單號從此不存在於 quotations 表**
+
+db.py 裡有 `quote_no` 欄位的表 = **18 張**
+全 backend 的 `SET quote_no=` = **1 句**（就是上面那一句）
+=> **沒有任何連動。**
+```
+
+### ⇒ 對 `QL25` 的直接後果
+
+```
+下游 7 支存的是**舊單號** => _location_of() 查不到 => 回 ""
+=> 據點落到**主要據點**，且**沒有快照** => 整份走即時值
+☠️ 一張原本印分公司抬頭的出貨單，在它的報價單被退回之後，
+   重印會變成**總公司抬頭** —— 而沒有任何訊息說為什麼
+```
+
+🔑 而這是**既有缺陷，不是 `QL25` 造成的** ——
+`QL25` 只是讓它**多壞一格**（原本只有據點會掉，現在快照也跟著掉）。
+
+### ⚠️ 可達性：`case_stages` 在退回**之前**就存在
+
+```
+quotations.py:1302  建立報價單時就 _sync_json_stages_to_table(conn, qno, …)
+=> 每一張有階段的報價單被退回時，case_stages 都還指著舊單號
+```
+
+### 🔴 而這一題**本規格不修**，理由與範圍
+
+```
+它跨 18 張表，而 QL25 的射程是「抬頭要不要凍結」
+⇒ **另開編號**，並且要先回答一個沒有人裁過的問題：
+   **退回改單號之後，舊單號的紙還在外面流通嗎？**
+   ⓐ 在  => 舊單號必須還查得到（改名是錯的做法，應該是新增一列）
+   ⓑ 不在 => 那 18 張表要連動改名
+   🔑 **兩個答案的修法完全相反**，所以不能猜
+```
+
+⚠️ 我**沒有實際跑一次 reject 去看 `case_stages` 變成什麼** ——
+上面說的是讀碼推出來的，而**要確認只能跑**。
+⇒ 回報時標成「讀碼所得，未跑」。
 
 ---
 
