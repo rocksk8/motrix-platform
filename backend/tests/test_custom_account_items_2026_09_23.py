@@ -98,6 +98,23 @@ def _row(code):
         conn.close()
 
 
+def _find_node(nodes, code):
+    """在 `GET` 回應的巢狀 `tree` 裡找某個節點（深度優先）。
+
+    🔴 **我第一版猜錯回應形狀**：以為是扁平的 `items` 清單，
+       B 交出來的是巢狀 `tree`（`{"tree": [...], "custom_count": N, …}`）。
+       ⇒ 找子項順序**不是重新排序後比對**，是直接讀那個節點的 `children`——
+          那才是畫面實際會照著畫的順序，比自己排一次更貼近要驗的事。
+    """
+    for n in nodes or ():
+        if n.get("code") == code:
+            return n
+        found = _find_node(n.get("children") or (), code)
+        if found is not None:
+            return found
+    return None
+
+
 def _codes_under(parent=PARENT):
     import db
     conn = db.get_db()
@@ -353,12 +370,15 @@ def test_ca1_the_tree_sorts_ten_after_nine(client, make_user):
     r = _reached(client.get(API, headers=hdr), "GET /api/account-items")
     assert r.status_code == 200, r.text[:200]
     payload = r.json()
-    items = payload.get("items") if isinstance(payload, dict) else payload
-    assert items, "`GET %s` 沒有回清單：%r" % (API, payload)
+    tree = payload.get("tree") if isinstance(payload, dict) else None
+    assert tree, "`GET %s` 沒有回 `tree`：現有鍵 %r" % (
+        API, sorted(payload) if isinstance(payload, dict) else type(payload))
 
-    order = [x.get("code") for x in items
-             if str(x.get("code") or "").startswith(PARENT + "-")]
-    assert len(order) == 10, "清單裡只有 %d 個自建科目：%r" % (len(order), order)
+    node = _find_node(tree, PARENT)
+    assert node is not None, "`tree` 裡找不到 `%s` 這個節點。" % PARENT
+    order = [c.get("code") for c in node.get("children") or ()]
+    assert len(order) == 10, "`%s` 底下只有 %d 個子項：%r" % (
+        PARENT, len(order), order)
     assert order.index("%s-10" % PARENT) > order.index("%s-9" % PARENT), (
         "`%s-10` 排在 `%s-9` **前面**：%r\n" % (PARENT, PARENT, order)
         + "☠️ `account_items.py:76` 用 `code` 字串排序 ——\n"
@@ -512,6 +532,73 @@ def test_ca1_disabling_a_custom_code_makes_it_unusable(client, make_user):
         "訊息說不出是「已停用」：%r\n" % (msg,)
         + "⚠️ 它要與「找不到」分得開 —— **兩者的下一步不同**："
           "一個是去啟用，一個是去新增。")
+
+
+def test_ca1_re_enabling_makes_it_usable_again_without_reusing_its_number(
+        client, make_user):
+    """🔴🔴 **`§276` 同族：`PATCH is_active` 雙向都收 ⇒「停用後再啟用」是一個
+    可達狀態，而 12 題原本沒有一題走到它。**
+
+    ```
+    PATCH /api/account-items/{code} {"is_active": bool}   <= 不是專用的 /disable
+    ⇒ 傳 true 把它翻回來，是這支端點自己的形狀允許的
+    ```
+    ⚙️ 兩件要一起釘（A 裁：補的時候順便決定「重新啟用之後，它原本佔的號
+    還在嗎」）：
+    ```
+    (a) 重新啟用之後 `validate_account_code()` 要說它可以用了
+        —— 不是「停用是單向的」，是**啟用要真的把它接回來**
+    (b) 號碼**不會被重用**：啟用之後再延伸，拿到的是下一個新號，
+        不是把 `1111-2` 這個號碼再發一次給別的科目
+        🔑 「停用仍佔號」與「啟用仍佔號」是同一個承諾的兩面 ——
+           號碼一旦發出去就不重用，跟這個科目現在是不是能用無關。
+    """
+    _u, hdr = _hdr(client, make_user, "ca1_reenable")
+    for i in range(3):
+        assert _extend(client, hdr, name="第 %d 個" % (i + 1)).status_code == 200
+    target = "%s-2" % PARENT
+
+    from routers.accounting_export import validate_account_code
+    import db
+
+    assert _set_active(client, hdr, target, False).status_code == 200
+    conn = db.get_db()
+    try:
+        disabled = validate_account_code(conn, target)
+    finally:
+        conn.close()
+    ok_disabled = disabled[0] if isinstance(disabled, tuple) else disabled
+    assert not ok_disabled, (
+        "前置不對：停用之後 `validate_account_code()` 仍說可以用 —— "
+        "先看 `test_ca1_disabling_a_custom_code_makes_it_unusable`。")
+
+    assert _set_active(client, hdr, target, True).status_code == 200
+    assert int(_row(target)["is_active"]) == 1, "重新啟用沒有落地。"
+
+    conn = db.get_db()
+    try:
+        reenabled = validate_account_code(conn, target)
+    finally:
+        conn.close()
+    ok, msg = reenabled if isinstance(reenabled, tuple) else (reenabled, "")
+    assert ok, (
+        "重新啟用之後，`validate_account_code()` 仍然說它不能用：%r\n"
+        % (reenabled,)
+        + "☠️ **啟用只改了一個欄位而沒有任何人在看它** ——\n"
+          "   使用者以為重新開放了，傳票上還是選不到它，\n"
+          "   而畫面上『已啟用』看起來一切正常。")
+
+    assert _extend(client, hdr, name="第四個").status_code == 200
+    got = _codes_under()
+    assert "%s-4" % PARENT in got, (
+        "啟用 `%s` 之後再延伸，拿到的是 %r —— 應該有 `%s-4`。\n"
+        % (target, got, PARENT)
+        + "☠️ 若拿到的是 `%s`（號碼被重用），\n" % target
+        + "   兩個不同的科目共用同一個代號，"
+          "傳票上的科目名稱會**看是哪一次查詢**而不同。")
+    assert len([c for c in got if c.startswith(PARENT + "-")]) == 4, (
+        "`%s` 底下有 %d 個自建科目，應該是 4：%r"
+        % (PARENT, len([c for c in got if c.startswith(PARENT + "-")]), got))
 
 
 def test_ca1_the_list_says_how_many_are_custom(client, make_user):
