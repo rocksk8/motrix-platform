@@ -119,6 +119,47 @@ WHERE sales_person_id IS NULL AND sales_person <> '';
    🔴 我**沒有逐處讀那 26 個呼叫端**（§5 ①）
 ```
 
+### ②b 🔴 A 問「這個形狀在 `db.py` 還有幾處」—— **答案是一類，而只有 2 個**
+
+```
+⚙️ AST 掃 `db.py`：寫入型 SQL 被 try 包住、handler **不 raise 且只記 log／無動作**
+   = **11 處**
+
+而它們是**三種東西**：
+   ALTER × **8**   `try: ALTER TABLE ADD COLUMN; except: pass`
+                   ✅ **冪等慣用法**（欄位已存在就略過）—— **不是缺陷**
+   `_m008_fix_legacy_owner_names`（:961）
+                   try 在 **for 迴圈裡**，逐筆跳過
+                   ⇒ 那是 **`EM7` 的形狀**（迴圈裡跳過一筆而沒有人在數），不是這一族
+   ──
+   同形狀（**整批回填靜默 no-op**）= **2 處**
+      `_m006_hot_columns`（:912）    WHERE deal_tag = '' AND settle_status = ''
+      `_m010_sales_person_id`（:1033） WHERE display_name = sales_person
+```
+
+> ### ⇒ **是一類，而它只有兩個成員。**
+
+```
+🔑 兩個都是**回填**，兩個都是「**條件不成立所以沒動**」——
+   而那在 SQL 上**沒有任何痕跡**（不是例外、不是錯誤，是 0 rows affected）
+☠️ `_m006` 的條件同樣有風險：`WHERE deal_tag='' AND settle_status=''`
+   => 一列若 deal_tag 有值而 settle_status 空，**它整列被跳過**
+```
+
+📌 ⇒ 建議處置**兩個一起**（而那是 A 要裁的）：
+```
+回填類的 migration 一律 `cur = conn.execute(...)` 並 log `cur.rowcount`
+⚠️ 而 **ALTER 那 8 個不要動** —— `except: pass` 在那裡是**對的**
+   ☠️ 一個「把所有 try/except 都加上 log」的修法會把它們一起改掉，
+      而那會在每次啟動時印 8 行「欄位已存在」的雜訊
+```
+
+🔑 而 A 指出的那一格成立：
+> **那是 `EM9`（寫入失敗不可以是靜默的）在 migration 上的版本，
+> 而 `EM9` 的母體只掃了前端與 router，沒有掃 migration。**
+
+---
+
 ### ③ 🔴 `bonus` 那一條是**已知要改的**（`BN14` 相依）
 
 ```python
@@ -130,6 +171,16 @@ WHERE sales_person_id IS NULL AND sales_person <> '';
    => bonus_award_lines.username 才裝得到真的 username（`BN14 §6`）
 🔑 而那正是 A 裁「bonus_award_lines 現在修」的落點 ——
    **它的上游修法在這裡，而兩者要一起看**
+```
+
+#### ✅ 而這讓 `BN14` 的那條界線**自動成立**（A 指出）
+
+```
+BN14 §2 的界線：「**綁帳號，不存自由文字**」
+=> 若 people_for_item() 改成走 sales_person_id -> users.username，
+   那條界線在**來源**就成立了，**不必在獎金那邊各自防**
+🔑 〈共用能力下沉〉：**在來源解決，不要在每個消費端解決**
+☠️ 而在消費端各自防的代價是：**下一個消費端不會知道要防**
 ```
 
 ---
