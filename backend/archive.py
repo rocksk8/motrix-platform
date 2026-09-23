@@ -1639,6 +1639,18 @@ def _daily_backup_tables() -> dict:
         # 🔑 編寫紀錄是**憑證的一部分**，不是軌跡（同 voucher_edit_log 的理由）：
         #    少了它，一張獎金單看起來完全正常，而沒有人回得出它被改過什麼。
         "獎金異動":         "SELECT * FROM bonus_award_edit_log ORDER BY id",
+        # 🔴 **獎金模組這一包是關著的（`BONUS_MODULE_ENABLED` 預設關），
+        #    而這兩張表仍然會被建立**（`v104` 照跑）——
+        # 🔑 備份它們是為了「**開回來那一天資料是完整的**」，
+        #    不是因為現在有資料。
+        # ☠️ 少了這句話，下一個人會看到「一個關著的模組在做備份」而想拿掉它，
+        #    而拿掉的代價要到**開回來那一天**才看得見（那時已經沒得救）。
+        # ⚠️ 敏感度：這兩張表只有 username 與群組名稱（沒有身分證號／住址／
+        #    帳號／金額）——而同一個 dict 裡的「獎金明細」本來就含
+        #    **username ＋ 每個人領多少**，所以加它們**沒有改變這份備份的
+        #    敏感度類別**（不是「比較不敏感」，是類別本身沒變）。
+        "獎金群組":         "SELECT * FROM bonus_groups ORDER BY id",
+        "獎金群組成員":     "SELECT * FROM bonus_group_members ORDER BY id",
     }
 
 
