@@ -201,6 +201,30 @@ def _settlement_of(conn, quote_no):
     return json.loads(raw) if isinstance(raw, str) else raw
 
 
+def _case_names_for(conn, quote_nos):
+    """`{quote_no}` 集合 -> `{quote_no: {customer_name, project_name}}`（`BN15`）。
+
+    使用者原話：「獎金單的只有編號，沒有案件名稱」——`bonus_awards` 這張表
+    本來就只存 `quote_no`（`db.py:4662`），而「產生獎金單」那個下拉選單早就
+    在查 `quotations`（`award_candidates()` 上面那支）。
+
+    🔴 **不把 customer_name／project_name 存進 `bonus_awards`**——那會變成
+    第二份快照，案件改名之後這裡不會跟著動，兩邊會漂移。⇒ 每次讀的時候
+    查一次 `quotations`，與 `award_candidates()` 同一條規則（那支也是
+    每次即時查，不是存起來的）。查不到就落回空字串，不擋清單顯示。
+    """
+    names = {q for q in (quote_nos or ()) if q}
+    if not names:
+        return {}
+    placeholders = ",".join("?" for _ in names)
+    rows = conn.execute(
+        "SELECT quote_no, customer_name, project_name FROM quotations"
+        " WHERE quote_no IN (%s)" % placeholders, tuple(names))
+    return {r["quote_no"]: {"customer_name": r["customer_name"] or "",
+                            "project_name": r["project_name"] or ""}
+            for r in rows}
+
+
 #: `SPEC-BN6-BN7.md §1`：逐字抄 `settlement.html` 的十二格鍵名與順序。
 #: 🔴 `BN6` 一個數字都不重算——10%／1% 只寫在 `settlement.html`，
 #: 這裡只把 `summary` 已存的值原樣帶出來。改動任何一個字要回那份規格。
@@ -459,6 +483,8 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         for r in conn.execute(
                 "SELECT * FROM bonus_award_lines ORDER BY id"):
             by_award.setdefault(r["award_id"], []).append(dict(r))
+        # `BN15`：清單只有案件編號，使用者原話「沒有案件名稱」。
+        case_names = _case_names_for(conn, (a["quote_no"] for a in awards))
     finally:
         conn.close()
 
@@ -471,6 +497,10 @@ def list_awards(include_voided: bool = False, authorization: str = Header(None))
         a["lines"] = lines
         # ⚠️ 非管理者看不到整張單的總額（那等於看得到別人領多少的總和）。
         a["visible_total"] = sum(l["amount"] for l in lines)
+        # `BN15`：即時查，不存快照——案件改名不會讓這裡跟著漂移。
+        cn = case_names.get(a["quote_no"]) or {}
+        a["customer_name"] = cn.get("customer_name", "")
+        a["project_name"] = cn.get("project_name", "")
         if not manager:
             a.pop("base_amount", None)
         # 🔴 `BN8`：簽核格。誰簽了、簽了沒都不是金額，不用跟著可見範圍收緊
@@ -517,9 +547,14 @@ def get_award(award_id: int, authorization: str = Header(None)):
             "SELECT * FROM bonus_award_lines WHERE award_id = ? ORDER BY id",
             (award_id,))]
         settle = _settlement_of(conn, award["quote_no"])
+        # `BN15`：彈窗標題也要有案件名稱，不只清單列。
+        cn = _case_names_for(conn, (award["quote_no"],)).get(
+            award["quote_no"]) or {}
     finally:
         conn.close()
 
+    award["customer_name"] = cn.get("customer_name", "")
+    award["project_name"] = cn.get("project_name", "")
     visible = visible_lines(lines, me, is_admin=manager)
     if not manager and not visible:
         # 🔴 與清單同一條：跟這個人無關的單，連整張單的存在都不透露——

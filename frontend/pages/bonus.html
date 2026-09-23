@@ -29,6 +29,7 @@
     .bn-card{border:1px solid var(--border-light);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
     .bn-card__hd{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#FAF9F6;border-bottom:1px solid var(--border-light);font-family:var(--font-zh);font-size:13px;flex-wrap:wrap}
     .bn-case{font-weight:700;color:var(--text-primary)}
+    .bn-case__name{color:var(--text-secondary);font-size:12px}
     .bn-base{font-size:12px;color:var(--text-secondary)}
     .bn-status{font-size:11px;padding:1px 8px;border-radius:9px;background:#F0EEE9;color:var(--text-secondary)}
     .bn-voided{background:#FEF2F2;color:#B91C1C;border:1px solid #FCA5A5}
@@ -294,6 +295,10 @@
         <template x-for="a in awards" :key="a.id">
           <div class="bn-row" @click="openAwardDetail(a.id)">
             <span class="bn-case" x-text="a.quote_no"></span>
+            <!-- `BN15`：使用者原話「獎金單的只有編號，沒有案件名稱」——
+                 即時查（不存快照），案件改名不會讓清單跟著漂移。 -->
+            <span class="bn-case__name"
+                  x-text="a.customer_name + (a.project_name ? '／' + a.project_name : '')"></span>
             <span class="bn-status" :class="a.voided_at ? 'bn-voided' : ''"
                   x-text="a.voided_at ? '已作廢' : a.status"></span>
             <span class="bn-status bn-paid" x-show="isAwardPaid(a)">已發放</span>
@@ -334,7 +339,9 @@
         <span class="modal-head__title"
               x-text="detailMode === 'plan'
                 ? '產生獎金分潤單　' + (plan && plan.quote_no || '')
-                : '獎金分潤單明細　' + (awardDetail && awardDetail.quote_no || '')"></span>
+                : '獎金分潤單明細　' + (awardDetail && awardDetail.quote_no || '')
+                    + (awardDetail && awardDetail.customer_name
+                        ? '　' + awardDetail.customer_name : '')"></span>
         <button class="modal-close" @click="closeDetail()">×</button>
       </div>
       <div class="modal-body">
