@@ -4335,8 +4335,8 @@ def _m109_edit_log_no_delete(conn):
 
     ⚠️ SQL 全部寫成字面值、不呼叫任何 helper（凍住的歷史不呼叫活的程式碼）。
     ⚠️ `reset_demo_db()` 會整張清這兩張表（展示資料庫）⇒ 它自己先 DROP、清完再建
-       同一段 SQL；`test_edit_log_no_delete_trigger_2026_09_24.py` 驗重置後仍在、
-       且與正式庫的定義逐字相同。
+       `sqlite_master` 裡那一份定義；`test_edit_log_no_delete_trigger_2026_09_24.py`
+       驗重置後仍在、且與重置前（本 migration 建的那一份）逐字相同。
     """
     conn.execute(
         "CREATE TRIGGER IF NOT EXISTS voucher_edit_log_no_delete"

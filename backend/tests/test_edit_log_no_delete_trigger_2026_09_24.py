@@ -33,6 +33,12 @@ def _triggers(conn):
         "SELECT name FROM sqlite_master WHERE type='trigger'")}
 
 
+def _trigger_sql(conn):
+    return {r[0]: r[1] for r in conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name IN (%s)"
+        % ",".join("'%s'" % t for t in sorted(TRIGGERS)))}
+
+
 def _seed_logs(conn):
     conn.execute("PRAGMA foreign_keys=OFF")
     conn.execute("INSERT INTO voucher_edit_log (voucher_id, changed_by, changed_at, changes_json)"
@@ -47,6 +53,7 @@ def test_the_demo_reset_still_clears_the_edit_logs_and_keeps_the_triggers(demo_s
     conn = db._connect(db.DEMO_DB_PATH)
     try:
         assert TRIGGERS <= _triggers(conn), "展示庫建好之後沒有 TRIGGER：%r" % _triggers(conn)
+        before = _trigger_sql(conn)
         _seed_logs(conn)
     finally:
         conn.close()
@@ -59,6 +66,9 @@ def test_the_demo_reset_still_clears_the_edit_logs_and_keeps_the_triggers(demo_s
         assert n == [0, 0], "展示重置沒有清空編寫紀錄：%r" % n
         assert TRIGGERS <= _triggers(conn), (
             "重置之後 TRIGGER 不見了：%r —— 展示庫從此沒有保護。" % _triggers(conn))
+        assert _trigger_sql(conn) == before, (
+            "重置之後 TRIGGER 的定義變了 —— 展示庫的保護與 migration 建的那一份不一樣：%r → %r"
+            % (before, _trigger_sql(conn)))
     finally:
         conn.close()
 
