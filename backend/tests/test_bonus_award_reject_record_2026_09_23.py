@@ -48,6 +48,23 @@ bonus.js:545        rejectAward() 已經把 reason 送進 POST /reject
 `SPEC-JV22 §3` 的裁定原話：「TRIGGER 要**同時保護** `bonus_award_edit_log`」
 ——若做 `JV22` 的人已經把兩張表一起蓋了，本檔的 `④` 會提早變綠，那是
 好事，不是重複勞動：兩邊各自的紅測試互為對方的正對照。
+
+# 🔴 2026-09-23 更正（本檔寫完之後才發生）：③「新端點」這個前提是我猜錯的
+
+`SPEC-BN17.md` 後來落地，A-2 明著裁定**不加新端點**——讀取端折進既有的
+`GET /awards/{id}`，多一個 `last_reject` 欄位（§4③：「讀取端：只有一半
+成得立」，因為獎金單退回後改不動內容，沒有 `JV22` 那種「這次編修」可以
+配對）。當時我用 `SPEC-JV22`（傳票）的形狀直接套過來，猜了一個
+`GET /awards/{id}/edit-log`，而**那支端點從來不存在**——不是 B 漏做，是
+規格後來決定用不同的落點。下面兩題已經改成打真的端點（過程中還抓到
+第二個錯：改完第一版直接沿用本檔 import 進來的 `_award()`，而那支打的
+是 `GET /awards`**清單**端點，`last_reject` 只算在明細端點裡，清單裡
+永遠沒有這個鍵——已改成直接呼叫 `GET /awards/{id}`）。`db.py` 全庫
+`grep CREATE TRIGGER` 目前也還是 0 筆命中 `edit_log`（`account_items`
+以外沒有任何一張表有防刪 TRIGGER），④ 的**資料庫層 TRIGGER 那一題仍然
+是真的紅**（靜態掃描那一題本來就綠，兩道防線只有一道到位）——那是
+`JV22 §3` 自己的裁定還沒有人落地，不是這次順便造出來的新缺口，不歸
+本檔或 `BN17` 的範圍修，維持原樣讓它繼續紅。
 """
 import sys
 from pathlib import Path
@@ -59,8 +76,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_bonus_award_approval_2026_09_23 import (  # noqa: E402
     AWARDS, _act, _hdr, _seed_award, _set_flow,
 )
-
-EDIT_LOG = AWARDS + "/%s/edit-log"
 
 
 def _to_pending(client, make_user, quote_no, tier_names, people=("someone",)):
@@ -220,41 +235,51 @@ def test_bn17_two_rejections_keep_both_reasons_not_just_the_latest(
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ③ 讀取端：GET 端點要讀得到
+# ③ 讀取端：折進既有的 GET /awards/{id}，不是新端點（見上方 2026-09-23 更正）
 # ══════════════════════════════════════════════════════════════════════
 
-def test_bn17_the_edit_log_is_readable_through_a_new_endpoint(client,
-                                                               make_user):
-    """🔴🔴 **新端點要能讀到退回記錄——訊號在，不能只寫不讀。**
+def test_bn17_the_edit_log_is_readable_through_the_existing_detail_endpoint(
+        client, make_user):
+    """🔴🔴 **退回記錄要能透過既有的 `GET /awards/{id}` 讀到——訊號在，
+    不能只寫不讀。**
 
     📌 〈缺欄位≠缺訊號〉的反面：這裡兩邊都要有，寫了沒有讀的入口，
-    使用者一樣看不到。
+    使用者一樣看不到。落點是 `last_reject` 欄位，不是我原本猜的新端點
+    （見上方 2026-09-23 更正）。
+
+    ⚠️ **不可以用本檔 import 進來的 `_award()`**——那支打的是
+    `GET /awards`（清單），不是 `GET /awards/{id}`（明細）；`last_reject`
+    只算在明細端點裡，清單端點沒有這個欄位。這裡直接打明細端點，
+    第一次寫這題時用錯了 `_award()`，撞出 `last_reject` 永遠是 `None`
+    （鍵根本不存在，不是值剛好是 `None`），已改直接呼叫正確的端點。
     """
     hdr, aid = _to_pending(client, make_user, "MQ-BN17-READ", ("bn17_r_a",))
     reason = "讀取端測試原因"
     r = _act(client, hdr, aid, "reject", {"reason": reason})
     assert r.status_code == 200, r.text[:200]
 
-    got = _edit_log(client, hdr, aid)
-    assert got.status_code == 200, (
-        "讀退回記錄失敗：%s %s" % (got.status_code, got.text[:200]))
-    assert reason in got.text, (
-        "端點回應裡找不到退回原因「%s」：%s" % (reason, got.text[:300]))
+    r = client.get("%s/%s" % (AWARDS, aid), headers=hdr)
+    assert r.status_code == 200, r.text[:200]
+    a = r.json()
+    lr = a.get("last_reject")
+    assert lr is not None, "退回之後 `last_reject` 是 %r，應該有內容。" % lr
+    assert lr.get("reason") == reason, (
+        "端點回應裡的 `last_reject.reason` 是 %r，不是「%s」。"
+        % (lr.get("reason"), reason))
 
 
-def test_bn17_the_edit_log_endpoint_requires_voucher_style_access_control(
-        client, make_user):
-    """🔴 **讀取端要有權限閘門，不是誰登入都能看到誰退回了什麼。**
+def test_bn17_the_detail_endpoint_still_requires_login(client, make_user):
+    """🔴 **讀退回記錄要走既有的登入閘門，不是誰都能看到誰退回了什麼。**
 
     ⚙️ 不要求特定的閘門實作，只驗「完全沒登入打不進去」——這是最低限度、
-    幾乎不可能被合理地反駁的一條線。
+    幾乎不可能被合理地反駁的一條線。與既有的 `GET /awards/{id}` 共用
+    同一道閘門，不必另外設計一套。
     """
-    aid_hdr = _hdr(client, make_user, "bn17_authz_owner")
-    _u, hdr = aid_hdr
     aid = _seed_award("MQ-BN17-AUTHZ", ["someone"])
-    r = client.get(EDIT_LOG % aid)  # 沒帶 Authorization
+    r = client.get("%s/%s" % (AWARDS, aid))  # 沒帶 Authorization
     assert r.status_code in (401, 403), (
-        "沒有登入也能讀到退回記錄（回 %s）：%s" % (r.status_code, r.text[:200]))
+        "沒有登入也能讀到獎金單明細（含退回記錄）（回 %s）：%s"
+        % (r.status_code, r.text[:200]))
 
 
 # ══════════════════════════════════════════════════════════════════════
