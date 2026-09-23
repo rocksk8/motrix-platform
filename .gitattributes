@@ -150,7 +150,33 @@ docs/reference export-ignore
 # 內部諮詢草稿，不是客戶文件
 docs/ASK-ACCOUNTANT.md export-ignore
 
-# ⚠️ 尚未排除（刻意）：backend/tools/ 的個別檔案分類、letsencrypt_renew.ps1
-# 預設值、sync_pending_data_20260817.py、create_claude_account.py 仍待 A/D
-# 裁決（見 SCOPE.md「E 類三檔在 43 項清單外」與「backend/tools/ 逐檔分類」節），
-# 本輪先不動 backend/tools/ 底下任何一個檔案。
+# backend/tools/ 逐檔分類（SCOPE.md「backend/tools/ 逐檔分類」節，D 判、17 個
+# 排除／6 個保留／4 個需人裁決／1 個未歸類，17+6+4+1=28=git ls-files backend/tools/
+# 的總數，兩兩互斥且已核對過）——這裡只落地明確的「甲・排除」17 個：
+# 開發/打包/稽核工具，客戶自架不需要
+backend/tools/_dashboard_remote.ps1 export-ignore
+backend/tools/audit_account_permissions.py export-ignore
+backend/tools/backfill_location_identity_snapshot.py export-ignore
+backend/tools/build_deploy_package.ps1 export-ignore
+backend/tools/check_approval_queue_coverage.py export-ignore
+backend/tools/check_double_init.py export-ignore
+backend/tools/check_endpoint_entrypoints.py export-ignore
+backend/tools/check_guide_sync.py export-ignore
+backend/tools/check_prod_drift.ps1 export-ignore
+backend/tools/check_version_sync.py export-ignore
+backend/tools/code_health.py export-ignore
+backend/tools/deploy_dashboard.html export-ignore
+backend/tools/deploy_dashboard.py export-ignore
+backend/tools/deploy_dashboard_ctl.pyw export-ignore
+backend/tools/local_research_pipeline.py export-ignore
+backend/tools/parse_account_items.py export-ignore
+backend/tools/sync_pending_data_20260817.py export-ignore
+
+# ⚠️ 尚未排除（刻意）：
+# · letsencrypt_renew.ps1 —— 保留但要改內容（$Domain 預設值 erp.miactw.com），
+#   歸 WL7（見 SPEC-WL7.md §8②b），本輪不動這個檔案
+# · issue_license.py／fetch_root_ca.ps1／check_dependencies.py／
+#   list_payment_anomalies.py —— 需人裁決（4），D 明說判斷不出商業意圖
+# · verify_package.py 本身 —— 未歸類，SCOPE.md 書面紀錄仍是「未歸類」
+#   （即使有訊息提過要歸類，權威紀錄沒有落地前不當作已裁決）
+# · backend/create_claude_account.py（不在 backend/tools/ 下）—— 仍待歸屬
