@@ -775,12 +775,27 @@ function vendorContractorsPage() {
         if (!r.ok) { this.errMsg = (await r.json()).detail || '儲存失敗'; this.saving = false; return }
         const d = await r.json()
         const targetId = this.editId || d.id
+        // 🔴 `EM12`：這支 PUT 原本沒驗 r.ok——失敗時視窗照樣關、清單照樣刷新，
+        //    使用者上傳的存摺影本（銀行帳戶資料，個資）就這樣不見了，
+        //    而畫面上看起來一切正常，他不會知道要重傳。
+        //    ⚠️ 失敗**不關視窗**：其他欄位（廠商本體）已經存成功了，
+        //       關掉的話使用者要重新整個編輯流程才找得回這個表單，
+        //       留著視窗讓他能立刻重試存摺這一項就好。
         if (this.bankPassbookPreview !== null && targetId) {
-          await fetch(`${API}/vendor-contractors/${targetId}/passbook`, {
+          const pr = await fetch(`${API}/vendor-contractors/${targetId}/passbook`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({ bank_passbook: this.bankPassbookPreview })
           })
+          if (!pr.ok) {
+            let detail = '儲存失敗'
+            try { detail = (await pr.json()).detail || detail } catch (e) { /* 不是 JSON */ }
+            this.errMsg = '廠商資料已儲存，但存摺影本上傳失敗（' + detail + '）。'
+              + '請重新選擇檔案再試一次。'
+            this.saving = false
+            await this.load()
+            return
+          }
         }
         this.showModal = false
         await this.load()
