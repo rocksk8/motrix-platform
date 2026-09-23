@@ -49,8 +49,12 @@ import pytest
 #: `§160` 定案的路徑。⚠️ 改了 **退回給我**。
 ENDPOINT = "/api/vouchers/summary-sources"
 
-#: `§159b` 的兩個頁籤。⚠️ 這是**可數完備**的集合：少一個、多一個都要紅。
-TABS = ("案件", "已上傳檔案")
+#: `§159b` 的頁籤。⚠️ 這是**可數完備**的集合：少一個、多一個都要紅。
+#: 🔴 2026-09-23：`JV21` 沿用同一支端點多回第三個頁籤「支出項」
+#: （`routers/vouchers.py::SUMMARY_TABS`），原本「恰好兩個」的斷言
+#: 因此**過期**——☠️ 拿掉「恰好」只留「兩個都要有」會把判準變寬
+#: （第四個頁籤加進來也不會紅），⇒ 改成恰好三個，把新的那個名字釘進來。
+TABS = ("案件", "已上傳檔案", "支出項")
 
 #: `§166`：走到端點才會出現的狀態碼。**405 不在裡面**（那是 StaticFiles 回的）。
 OK_CODES = (200, 400, 403)
@@ -162,12 +166,13 @@ def test_jv7_the_summary_sources_endpoint_is_reachable(client, make_user):
         + "⚠️ 帶著 `cashier` 模組的 superadmin 應該讀得到。")
 
 
-def test_jv7_it_offers_exactly_the_two_declared_tabs(client, make_user):
-    """🔴 **兩個頁籤，一個都不能少、也不可以多。**（`§159b`）
+def test_jv7_it_offers_exactly_the_three_declared_tabs(client, make_user):
+    """🔴 **三個頁籤，一個都不能少、也不可以多。**（`§159b`＋`JV21`）
 
     ```
     頁籤 ① 案件
     頁籤 ② 已上傳檔案
+    頁籤 ③ 支出項（JV21，2026-09-23 加，沿用同一支端點）
     ```
     ⚙️ 這是**可數完備**的斷言：
     ```
@@ -176,6 +181,10 @@ def test_jv7_it_offers_exactly_the_two_declared_tabs(client, make_user):
     ```
     🔑 多出來的那一側才是這一題真正在守的 —— 少一個使用者會報修，
        多一個**不會有人報修**。
+
+    ⚠️ 這支原本斷言「恰好兩個」，`JV21` 正確地多回第三個頁籤後
+    變成一支**擋著已經做對的實作**的假紅——不是拿掉「恰好」
+    （那樣以後第四個頁籤加進來也不會紅），是把數字與名單一起改成三個。
     """
     _u, hdr = _hdr(client, make_user, "jv7_tabs")
     payload = _get(client, hdr).json()
@@ -188,8 +197,8 @@ def test_jv7_it_offers_exactly_the_two_declared_tabs(client, make_user):
         + "📌 外殼形狀**由 B 決定** —— 用別的形狀請**退回給我**改 `_tab_names()`。")
 
     assert got == sorted(TABS), (
-        "頁籤是 %s，而 `§159b` 定的是 %s\n" % (got, sorted(TABS))
-        + "☠️ 多出來的那一個**沒有人決定過它的格式**（`§164` 只裁了兩種）。")
+        "頁籤是 %s，而 `§159b`＋`JV21` 定的是 %s\n" % (got, sorted(TABS))
+        + "☠️ 多出來的那一個**沒有人決定過它的格式**。")
 
 
 def test_jv7_the_tab_list_i_pinned_is_the_one_i_actually_check(client,
@@ -200,7 +209,7 @@ def test_jv7_the_tab_list_i_pinned_is_the_one_i_actually_check(client,
        如果我在 `_items()` 裡只查得動「案件」，那「已上傳檔案」
        就算整個不見了也量不到，**而上面那一題照樣綠**。
     """
-    assert len(set(TABS)) == 2, "`TABS` 有重複或數目不對：%r" % (TABS,)
+    assert len(set(TABS)) == 3, "`TABS` 有重複或數目不對：%r" % (TABS,)
     for t in TABS:
         probe = {"tabs": {t: []}}
         assert _tab_names(probe) == [t], (
@@ -344,8 +353,8 @@ def _voucher_page():
             root / "frontend" / "js" / "voucher.js")
 
 
-def test_jv7_the_page_has_a_two_tab_source_picker(client, make_user):
-    """🔴 **頁面上要看得到那兩個頁籤。**（`AC1`／`§159b` (8)）
+def test_jv7_the_page_has_a_three_tab_source_picker(client, make_user):
+    """🔴 **頁面上要看得到那三個頁籤。**（`AC1`／`§159b` (8)／`JV21`）
 
     ```
     使用者逐字  「確認前後端跟頁面都有完成才算完整」
