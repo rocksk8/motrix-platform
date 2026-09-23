@@ -170,6 +170,60 @@ def test_em3_no_router_puts_an_exception_object_into_a_detail():
           "   那一種請登記進 `ALLOWED`，並寫下為什麼。")
 
 
+def test_em3_an_injected_exception_does_not_reach_the_user(client, make_user,
+                                                           monkeypatch):
+    """🔴 **注入一個帶敏感字串的例外 ⇒ 使用者看不到它，而看得到追蹤碼。**
+
+    ## ⚙️ 這一題怎麼繞過「產品路徑到不了」那件事
+
+    ```
+    A 的界線  不可以 **mock 一個例外丟進 HTTPException**
+    而這裡    讓被 try 包住的那一支**自己丟** => 走的是**真的** except 那一條路
+    ```
+    🔑 差別在**注入點**：我沒有繞過那個 handler，我**餵給它**一個輸入。
+    📌 A-2 建議的做法，而它解掉我先前那一格
+      （四條產品路徑都到不了 —— 因為那 18 處是**非預期例外的退路**）。
+
+    ⚙️ 注入點挑 `customers.py` 的 `next_entity_code()`：
+    它**在那個 `try` 裡面**，而它丟出來的東西會原封不動進 `detail`。
+    """
+    import routers.customers as rc
+
+    secret = "UNIQUE constraint failed: customers.code"
+
+    def _boom(*_a, **_k):
+        raise RuntimeError(secret)
+
+    assert hasattr(rc, "next_entity_code"), (
+        "`routers/customers.py` 沒有 `next_entity_code` —— **退回給我**改注入點。")
+    monkeypatch.setattr(rc, "next_entity_code", _boom)
+
+    u, p = make_user(username="em3_inj", role="superadmin",
+                     modules=["customer"])
+    tok = client.post("/api/auth/login",
+                      json={"username": u, "password": p}).json()["token"]
+    hdr = {"Authorization": "Bearer " + tok}
+
+    r = client.post("/api/customers", headers=hdr,
+                    json={"name": "測試客戶", "tax_id": "", "phone": ""})
+    assert r.status_code >= 400, (
+        "注入了例外而端點回 %s —— **注入沒有生效**，這一題量不到東西。"
+        % r.status_code)
+
+    assert secret not in r.text, (
+        "使用者看到了例外原文：%s\n" % r.text[:200]
+        + "☠️ 那一句話裡有**資料表名與欄位名**。\n"
+        + "🔑 而修法不是把 `{e}` 拿掉 —— 要的是**追蹤碼**：\n"
+          "   畫面給代碼，log／audit 那個代碼旁邊留完整的例外。")
+    assert "constraint" not in r.text.lower(), (
+        "回應裡還有 `constraint`：%s" % r.text[:200])
+    assert TRACE_RE.search(r.text), (
+        "擋住了原文，**而沒有給追蹤碼**：%s\n" % r.text[:200]
+        + "☠️ 那是「把 `{e}` 拿掉」的樣子 —— 使用者看到一句「建立失敗」，\n"
+          "   而**沒有人查得出那一次到底發生了什麼**。\n"
+        + "📌 `WD1` 的同一條：**正式不等於含糊**。")
+
+
 def test_em3_a_trace_code_exists_and_is_not_guessable():
     """🔴 **追蹤碼要存在、要查得到、而且**不可猜**。**
 
