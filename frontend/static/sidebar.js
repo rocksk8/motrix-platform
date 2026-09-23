@@ -828,6 +828,59 @@ if (typeof module !== 'undefined' && module.exports) {
     // 只處理側欄真的列過的頁面（`_deniedPages` 來自 ni() 的顯示條件），
     // 沒列過的頁面一律放行：寧可漏擋也不要把人鎖在門外，資料那層 API 會擋。
     if (_deniedPages.indexOf(file) >= 0) _showNoPermission()
+
+    // 🔴 `BR1` 第三格：**把「這個行程載入的是哪一版」放到每一頁的頁尾。**
+    //
+    // ☠️ 2026-09-23：666 的行程 05:56 起來、載入 dd50d2e，而磁碟上已經
+    //    往前 25 個 commit ⇒ **使用者在瀏覽器上一個都沒看到**，
+    //    而 git 是對的、全量是綠的、他的畫面是舊的 —— 三邊都不會報錯。
+    // 🔑 只做啟動 log 與 API 的話，是把它放進**一個沒有人會去看的地方**，
+    //    而現在的問題正是沒有人去看。
+    renderBuildFooter()
+  }
+
+  //: 頁尾：執行中的版本。**而真正要講的是「它與磁碟上一不一樣」。**
+  //
+  // ⚠️ 只印一個 SHA 的話，看到的人還是得自己去比對 —— 而那正是沒有人做的那一步。
+  // 🔑 所以 `stale` 為真時它**不是一行小字，是一條要被看見的橫幅**。
+  function renderBuildFooter() {
+    // login／轉址頁刻意沒有頂欄（`<body data-no-topbar>`）⇒ 頁尾也不要硬塞。
+    if (document.body && document.body.hasAttribute('data-no-topbar')) return
+    if (document.getElementById('build-footer')) return
+    var bar = document.createElement('div')
+    bar.id = 'build-footer'
+    bar.setAttribute('data-testid', 'build-footer')
+    bar.style.cssText = 'position:fixed;right:10px;bottom:6px;z-index:40;'
+      + 'font-size:11px;color:var(--text-dim,#6B6B6B);font-family:monospace;'
+      + 'background:rgba(255,255,255,.82);padding:2px 8px;border-radius:9px;'
+      + 'pointer-events:none;max-width:60vw;white-space:nowrap;overflow:hidden;'
+      + 'text-overflow:ellipsis'
+    document.body.appendChild(bar)
+
+    var sess = {}
+    try { sess = JSON.parse(localStorage.getItem('motrix_session') || '{}') }
+    catch (e) { sess = {} }
+    fetch('/api/build-info', {
+      headers: { Authorization: 'Bearer ' + (sess.token || '') },
+    }).then(function (r) { return r.ok ? r.json() : null }).then(function (d) {
+      if (!d) { bar.remove(); return }
+      var started = (d.started_at || '').replace('T', ' ').slice(0, 16)
+      bar.textContent = (d.commit_short || '不可得') + ' · 啟動 ' + started
+      if (d.stale === true) {
+        // 🔴 過期是**要被看見的**：小字沒有人會讀。
+        bar.style.cssText += ';background:#FEF2F2;color:#B91C1C;font-weight:700;'
+          + 'pointer-events:auto;cursor:help'
+        bar.textContent = '⚠️ 執行中 ' + (d.commit_short || '?')
+          + '　磁碟上 ' + (d.disk_commit_short || '?')
+          + '　—— 伺服器載入的是舊版，請重新啟動'
+        bar.title = '這個行程是 ' + started + ' 啟動的，之後程式碼更新過。'
+          + '重新啟動伺服器才會套用。'
+      } else if (d.stale === null) {
+        // ⚠️ `null` ＝ 至少一個 SHA 不可得，**不是「沒有過期」**。
+        //    ☠️ 當成「最新」的話，畫面會在不知道的時候給人保證。
+        bar.textContent += ' · 版本比對不可得'
+      }
+    }).catch(function () { bar.remove() })
   }
 
   function _showNoPermission() {

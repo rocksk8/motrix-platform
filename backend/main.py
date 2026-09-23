@@ -67,6 +67,21 @@ def _resolve_cors_origins(env_value: str = None) -> list:
     return parsed or list(_DEFAULT_CORS_ORIGINS)
 
 
+# 🔴 `BR1`：**這個行程載入的是哪一份程式碼**，在啟動時就說出來。
+#
+# ☠️ 2026-09-23 的事故：666 的行程 05:56 起來、載入 dd50d2e，
+#    而磁碟上已經往前 25 個 commit ⇒ **使用者在瀏覽器上一個都沒看到**。
+#    git 是對的、全量是綠的、他的畫面是舊的，而**三邊都不會報錯**。
+# 🔑 「我改好了」與「他看得到」之間有一個沒有人在看的間隔。
+# ⚠️ 而 log 只是三格裡的第一格 —— 真正被看到的是頁尾那一格
+#    （只做 log ＝ 把它放進一個沒有人會去看的地方，而現在的問題正是沒有人去看）。
+try:
+    from helpers.build_info import startup_line as _build_startup_line
+    logger.info("%s", _build_startup_line())
+except Exception as _e:                                  # noqa: BLE001
+    # 取版本是**診斷**不是功能 —— 它不可以變成伺服器起不來的理由。
+    logger.warning("BR1 啟動版本資訊不可得：%s", type(_e).__name__)
+
 _cors_origins = _resolve_cors_origins()
 logger.info(
     "CORS allow_origins（%s）：%s",

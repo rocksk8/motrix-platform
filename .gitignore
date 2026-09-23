@@ -102,3 +102,9 @@ backend/_demo_*
 #    它會直接出現在 `git status` 裡，而下一步就是被 commit 進去。
 # ⚠️ 擋整個目錄不是只擋 `cert.pem` —— **私鑰會叫別的名字**。
 certs/
+
+# 2026-09-23 (BR1): written by build_deploy_package.ps1 into the shipped
+# package so the running process can report which commit it loaded.
+# On a dev machine git is the source of truth, so this file must not be
+# committed -- a stale copy would answer for git when git is unavailable.
+backend/.build_commit

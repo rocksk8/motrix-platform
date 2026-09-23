@@ -331,6 +331,37 @@ def system_deployed_version():
         return {}
 
 
+@router.get("/api/build-info")
+def build_info_endpoint(authorization: str = Header(None)):
+    """**這個行程**載入的是哪一份程式碼（`BR1`）。
+
+    ## 🔴 與上面那支 `deployed-version` **不是同一個問題**
+
+    ```
+    deployed-version  **磁碟上**被套用成哪一版（apply_update.ps1 寫的）
+    本支              **這個行程啟動當下**載入的是哪一版
+    ```
+    ☠️ 2026-09-23 的事故正是這兩者不一致：磁碟新、行程舊，
+       而 `deployed-version` 回的是**新的那個** ⇒ 它看起來一切正常。
+
+    ## 🔑 真正有用的是 `stale`
+
+    `commit`（啟動時定住）與 `disk_commit`（這次請求再抓）不同
+    ⇒ **磁碟上比較新，要重新啟動**。
+    ⚠️ `stale` 是 `null` 代表「至少一個 SHA 不可得」，**不是「沒有過期」** ——
+       當成 `false` 的話，畫面會在「不知道」的時候說「是最新的」。
+
+    ## ⚠️ 要登入才看得到，而**不需要任何模組**
+
+    它不是某個功能的一部分，是**整個系統**的狀態 ⇒ 任何登入者都該看得到。
+    📌 而沒有放進 `_PUBLIC_API_PATHS`：commit SHA 指得到確切的原始碼，
+       沒有理由在登入前就給出去。
+    """
+    _require_user(authorization)
+    from helpers.build_info import build_info
+    return build_info()
+
+
 @router.post("/api/auth/login")
 def auth_login(body: LoginIn, request: Request):
     ip = _client_ip(request)

@@ -727,6 +727,29 @@ if (-not (Test-Path (Join-Path $pkgDir "backend")) -or -not (Test-Path (Join-Pat
 # 部署包只需要 backend/ + frontend/ + 根目錄文件，其餘（如 .github/、測試用暫存檔等）
 # git archive 本來就只會匯出 git 追蹤的內容，這裡不需要額外過濾。
 
+# --- Step 5.5: 寫 backend/.build_commit（BR1）---
+#
+# 🔴 出貨包裡**沒有 .git** ⇒ 正式機的行程問不到「我載入的是哪一版」。
+#    而 2026-09-23 的事故正是這個問題的後果：666 的行程 05:56 起來、
+#    載入 dd50d2e，磁碟上已經往前 25 個 commit，**使用者一個都沒看到**，
+#    而 git 是對的、全量是綠的、他的畫面是舊的 —— 三邊都不會報錯。
+#
+# ⚠️ 這一份與 .deployed_commit.json **不是同一件事**：
+#      .deployed_commit.json  apply_update.ps1 寫的「磁碟上被套用成什麼」
+#      .build_commit          「這份程式碼是從哪個 commit 打包出來的」
+#    兩者不一致正是 BR1 要抓的那一格。
+#
+# ⚠️ 用 $commit（Step 2 釘住的那一個），不要在這裡重抓 HEAD ——
+#    pytest 跑了好幾分鐘，期間 HEAD 可能已經動過（那個競態 Step 2 的註解寫過）。
+# ⚠️ 內容是純 ASCII 的 40 字 SHA；明著指定 -Encoding ascii，
+#    因為 Set-Content 在 PS 5.1 預設走系統 ANSI codepage。
+$buildCommitPath = Join-Path $pkgDir "backend\.build_commit"
+Set-Content -Path $buildCommitPath -Value $commit -Encoding ascii -NoNewline
+if (-not (Test-Path $buildCommitPath)) {
+    Fail "寫入 backend/.build_commit 失敗，正式機將無法回報執行中的版本，已中止。"
+}
+Write-Host "      .build_commit: $commitShort"
+
 # --- Step 6: 寫 deploy_manifest.json ---
 Mark-Elapsed "archive" $_tArchive
 $BuildT["total_so_far"] = [math]::Round(((Get-Date) - $BuildStart).TotalSeconds, 2)
