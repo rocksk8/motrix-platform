@@ -63,9 +63,6 @@ SOURCE_TYPES = (
     "contractor_invoice",   # 承攬商發票
 )
 
-#: 作廢重開複製時填的來源型別。
-COPY_SOURCE_TYPE = "voucher"
-
 #: 🔴 **明著排除的**，不是漏掉的。
 #:
 #: ```

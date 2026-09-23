@@ -24,7 +24,9 @@ import re
 #: 施工圖 `§一`「狀態值」那一行，**逐字五個**。
 #:
 #: ⚠️ 「作廢」**不是狀態**，是動作 —— 它落在 `voided_at`／`voided_by`／
-#:    `void_reason`／`supersedes_no` 四個欄位上。
+#:    `void_reason`／`supersedes_no` 四個欄位上（`supersedes_no` 由
+#:    `routers/vouchers.py::void_voucher()` 的重開路徑寫入，`JV24 §5②`；
+#:    在那之前這一欄從來沒被寫過，這句話有四分之一是空話）。
 #: ☠️ 把它加成第六個狀態的後果很安靜：作廢之後 status 變成「作廢」⇒
 #:    「已過帳的傳票」這個查詢**查不到它** ⇒ 而帳上那一筆還在。
 #: 🔑 集合要**可以被數**：散在 `if/elif` 裡的狀態數不出來，

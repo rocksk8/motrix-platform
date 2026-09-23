@@ -43,7 +43,6 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    COPY_SOURCE_TYPE,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -719,12 +718,19 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
             #    ⇒ 所以附件要**複製**，不複製的話新單是空的。
             src = dict(cur)
             new_no = next_voucher_no(conn, src.get("voucher_date") or "")
+            # 🔴 `JV24 §5②`（A 裁甲）：`supersedes_no` 寫舊單的 `voucher_no`——
+            # 新舊兩張單之間本來完全沒有任何欄位把它們連起來（沒有附件的
+            # 傳票作廢重開之後在資料庫裡找不到任何關聯）。這個欄位存在已久
+            # （`db.py` 的 schema 註解逐字「本張取代了哪一張」）卻從來沒被
+            # 寫入過，`helpers/voucher.py` 的 docstring 也一直說「作廢落在
+            # 四個欄位上」——現在讓那句話變成真的。
             c2 = conn.execute(
                 "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
-                " summary, status, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?, '草稿', ?,?,?)",
+                " summary, status, supersedes_no, created_by, created_at,"
+                " updated_at) VALUES (?,?,?,?, '草稿', ?,?,?,?)",
                 (new_no, src.get("voucher_date"), src.get("category") or "轉",
-                 src.get("summary") or "", who, now, now))
+                 src.get("summary") or "", src.get("voucher_no") or "",
+                 who, now, now))
             new_id = c2.lastrowid
             for ln in conn.execute(
                     "SELECT * FROM voucher_lines WHERE voucher_id = ?"
@@ -1191,9 +1197,20 @@ def _copy_attachments_to(conn, old_id, new_id, who, now):
             #    那會讓新單看起來有憑證而點不開。
             continue
         file_id, rel, size = copy_into(new_id, src, att["filename"])
+        # 🔴 `JV24`：原樣帶過去 `source_*`，不要改寫成指向舊傳票——
+        # `used_map` 的鍵是 `(source_type, source_doc_no, source_file_id)`，
+        # 那三個欄位回答的是「這份憑證從哪個業務文件來的」，這個答案不會
+        # 因為傳票作廢重開而改變。改寫成指向舊傳票會讓新舊兩列的鍵都對不上
+        # 業務文件查詢，候選憑證清單上會顯示「未使用」，使用者因此可能
+        # 再帶入一次——這正是 JV18 那個紅字標記要防的事。
+        # 直接上傳的附件 `source_*` 全是空字串，原樣帶過去仍是空字串，
+        # 一樣被 used_map 的 `!= ''` 排除——那是對的，不要為了讓它「有值」
+        # 而填別的東西（`voucher_attachments.py` 警告過：三個欄位要一起
+        # 比對，填錯會把一份從未被帶入的憑證誤標成已使用）。
         _insert_attachment(conn, new_id, file_id, att["filename"], rel,
-                           size, att["mime"], COPY_SOURCE_TYPE,
-                           str(old_id), att["file_id"], who, now)
+                           size, att["mime"],
+                           att["source_type"], att["source_doc_no"],
+                           att["source_file_id"], who, now)
         n += 1
     return n
 
