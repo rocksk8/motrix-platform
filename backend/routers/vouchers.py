@@ -23,7 +23,7 @@ import os
 from datetime import datetime
 
 from fastapi import APIRouter, Body, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from urllib.parse import quote
 
 from db import get_db
@@ -38,7 +38,9 @@ from helpers.tiered_approval import (
 )
 from helpers import _get_setting
 from helpers.uploads import save_document_files
-from helpers.voucher_pdf import export_voucher_pdf, preview_html
+from helpers.voucher_pdf import (
+    export_voucher_pdf, preview_html, classify_attachment_kind,
+)
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
     COPY_SOURCE_TYPE,
@@ -405,6 +407,10 @@ def read_voucher(voucher_id: int, authorization: str = Header(None)):
         # 📌 附件掛在這裡而不是獨立端點：畫面開一張單就要看到它的憑證，
         #    多一次往返只會讓「單子出來了而附件還沒」變成一段可見的空窗。
         atts = _attachments_of(conn, voucher_id) if data is not None else []
+        # `JV16③`：每一筆附件標「預計併入」的種類——由 voucher_pdf.py
+        # 唯一那支分類函式算，這裡不重寫一次副檔名判斷式。
+        for a in atts:
+            a["mergeKind"] = classify_attachment_kind(a.get("filename"))
         # 🔑 `AS2`：簽核鏈要回出去 —— 版面靠它決定畫幾列，
         #    而「還差誰簽、現在第幾關」也只有它答得出來。
         row = conn.execute("SELECT approval_json FROM vouchers_all"
@@ -1070,6 +1076,64 @@ def delete_voucher_attachment(voucher_id: int, file_id: str,
     _audit(_tok(authorization), "voucher.attachment.delete", "vouchers",
            str(voucher_id), "移除傳票附件：%s" % (att.get("filename") or file_id))
     return {"ok": True}
+
+
+@router.get("/{voucher_id}/attachments/{file_id}")
+def download_voucher_attachment(voucher_id: int, file_id: str,
+                                authorization: str = Header(None)):
+    """取出單一附件本身（`JV16`）。與 `POST`／`DELETE` 同一個資源路徑，
+    只是換方法——不是新資源。
+
+    ## 🔴 閘門與其他 14 支一致，**不因為「只是一張圖」降級**
+
+    `_require_voucher_access(_require_user(authorization))`——沒有 `cashier`
+    ／`finance` 模組的人一律 403，即使他知道 `voucher_id`／`file_id`。
+
+    ## 🔴 `file_id` 必須核對屬於**這一張** `voucher_id`
+
+    `voucher_attachments` 的實體檔放在 `/api/uploads/` 底下，那一層的
+    保護完全站在「檔名猜不到」（`uuid4().hex[:16]`，64 bit）——**不是
+    站在授權上**：目錄名可猜、任何登入者都進得了。⇒ 這裡（核對
+    `file_id` 是不是屬於這個 `voucher_id`）是這條路上**唯一一道真正的
+    授權檢查**：查詢直接把 `voucher_id` 和 `file_id` 一起當條件，換一張
+    傳票的 id 配另一張的 `file_id` 查不到，回 404（不是拿到別人的附件
+    再事後判斷）。
+
+    ## ⚠️ 不接受任何形式的 query-string 憑證
+
+    這支端點**沒有加過** `?token=`／`?pt=` 這類口子——比「拿掉」更便宜的
+    是「沒加過」。前端一律 `fetch` 帶 `Authorization` header 取 blob。
+
+    擋：① 傳票不存在 -> 404　② 附件不屬於這張傳票／已刪／查無此
+    `file_id` -> 統一 404（不是 403，不要洩漏「有這個 file_id，只是你看
+    不到」）　③ 實體檔路徑不合法或已遺失 -> 404。
+    """
+    _require_voucher_access(_require_user(authorization))
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT id FROM vouchers_all WHERE id = ?",
+                           (voucher_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "找不到這張傳票。")
+        att = conn.execute(
+            "SELECT * FROM voucher_attachments"
+            " WHERE voucher_id = ? AND file_id = ? AND deleted_at = ''",
+            (voucher_id, file_id)).fetchone()
+    finally:
+        conn.close()
+    if att is None:
+        raise HTTPException(404, "找不到這個附件。")
+    att = dict(att)
+    try:
+        p = abs_path(att.get("path"))
+    except Exception:                                        # noqa: BLE001
+        # 同 `split_attachments()` 的做法：路徑不合法與檔案不見，
+        # 對使用者是同一件事——「這個附件現在拿不到」。
+        raise HTTPException(404, "這個附件的檔案已經遺失。")
+    if not os.path.isfile(p):
+        raise HTTPException(404, "這個附件的檔案已經遺失。")
+    return FileResponse(p, media_type=att.get("mime") or None,
+                        filename=att.get("filename") or None)
 
 
 def _copy_attachments_to(conn, old_id, new_id, who, now):

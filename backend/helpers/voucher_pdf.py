@@ -56,6 +56,32 @@ logger = logging.getLogger(__name__)
 #: 圖片副檔名 —— 這幾種走 `<img>`，不經 `pypdf`。
 _IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 
+
+def classify_attachment_kind(filename):
+    """`JV16③`：這個檔名副檔名看起來屬於哪一類——`"image"／"pdf"／"unsupported"`。
+
+    🔴 這是**唯一一支**做副檔名分類的函式：`split_attachments()`（下面）
+    與 `routers/vouchers.py` 的 `GET /{voucher_id}`（畫面標「預計併入」用）
+    都呼叫這一支，不各寫一份條件式——理由見 `SPEC-JV16-JV17.md §4`：
+    「哪些併得進去」的規則現在寫在後端，前端不可以重寫一份。
+
+    ⚠️ 只看副檔名，**不代表實際併得進去**：零頁 PDF／加密 PDF 要到
+    `_merge_pdfs()` 真的呼叫 `pypdf` 才知道（見模組 docstring 的三件
+    實查）。這裡回的是「預計」，不是「保證」——畫面措辭也要照這個分寸
+    寫（「預計併入」不是「會併入」）。
+    """
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext in _IMAGE_EXTS:
+        return "image"
+    if ext == ".pdf":
+        return "pdf"
+    # 🔑 今天上傳端點（`helpers/uploads.py::_ALLOWED_EXTS`）只准
+    #    jpg/jpeg/png/pdf 四種，這一支不會遇到；但「帶入」（`copy_into()`）
+    #    複製的是**其他來源**（案件更新／請款附件…）的既有檔案，
+    #    那幾條路沒有這道副檔名白名單，帶進來的可能是 .docx／.xlsx 之類——
+    #    這裡明著標「不支援」，讓使用者在預覽階段就知道，不必等匯出失敗。
+    return "unsupported"
+
 #: A4 直式，單位 pt（`§2` 量出來的）。
 _PAGE_W, _PAGE_H = 595.32, 841.92
 #: 左右邊距 42.6 / 41.5 pt（≈15mm，左右對稱）。
@@ -133,8 +159,13 @@ def split_attachments(rows):
         if not os.path.isfile(p):
             missing.append(dict(a, reason="原始檔案已遺失"))
             continue
-        ext = os.path.splitext(a.get("filename") or "")[1].lower()
-        (images if ext in _IMAGE_EXTS else pdfs).append(dict(a, _abs=p))
+        # 🔑 `unsupported`（例如帶入的 .docx）**照舊丟給 pdfs 那一堆**——
+        #    這裡不改變既有的合併行為，只是把「是不是圖片」這個判斷改用
+        #    共用的 classify_attachment_kind()，避免同一條副檔名判斷式
+        #    出現第二份。它會在 pypdf 讀不出來時被 _merge_pdfs()
+        #    自己的例外處理接住（「檔案不是可讀的 PDF」），與今天一樣。
+        kind = classify_attachment_kind(a.get("filename"))
+        (images if kind == "image" else pdfs).append(dict(a, _abs=p))
     return images, pdfs, missing
 
 

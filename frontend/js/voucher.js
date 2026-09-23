@@ -342,6 +342,37 @@ function voucherPage() {
     //: 這一筆附件是**帶入的**還是**當場上傳的**。畫面上要分得出來。
     attFrom(a) { return (a && a.source_type) ? '帶入' : '上傳' },
 
+    //: `JV16③`：`mergeKind` 由後端算（`voucher_pdf.py::classify_attachment_kind()`），
+    //: 這裡只是換成看得懂的字，不重寫副檔名判斷。
+    mergeKindLabel(kind) {
+      return {
+        image: '預計併入（圖片）',
+        pdf: '預計併入（PDF）',
+        unsupported: '不支援的格式，不會併入',
+      }[kind] || ''
+    },
+
+    // `JV16②`：`<img src>`／`<a href>` 帶不了 `Authorization` header，
+    // 最省力的錯法是把 token 塞進 query string——**不可以**，那條網址
+    // 會被 uvicorn access log 永久記錄在 `logs/server.log`。
+    // ⇒ fetch 帶 header 拿 blob，指給一個新分頁；60 秒後才 revoke——
+    //   立刻 revoke 的話新分頁會拿到空白（症狀是「按了沒反應」）。
+    async openAttachment(a) {
+      this.attErr = ''
+      if (!this.id || !a) return
+      try {
+        const r = await fetch(
+          '/api/vouchers/' + this.id + '/attachments/' + encodeURIComponent(a.file_id),
+          { headers: this._auth() })
+        if (!r.ok) throw new Error('HTTP ' + r.status)
+        const url = URL.createObjectURL(await r.blob())
+        window.open(url, '_blank')
+        setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+      } catch (e) {
+        this.attErr = '取得附件失敗（' + e.message + '）。'
+      }
+    },
+
     fileSize(n) {
       const v = Number(n) || 0
       if (!v) return ''

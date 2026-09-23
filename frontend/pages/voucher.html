@@ -104,6 +104,13 @@
     .vc-att__acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
     .vc-empty{flex:1;min-width:320px;padding:70px 24px;text-align:center;color:var(--text-secondary);font-family:var(--font-zh);font-size:13px;line-height:1.9;border:1px dashed var(--border-light);border-radius:var(--radius)}
 
+    /* `JV16②`：預覽 modal 內、iframe 外側的附件清單——沿用 .vc-att__* 那一組
+       樣式（同一種列的長相），只加外層容器的間距與頂部分隔線。 */
+    .vc-preview-atts{padding:12px 16px 4px;border-top:1px solid var(--border-light);font-family:var(--font-zh)}
+    .vc-preview-atts__hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px;font-size:13px;font-weight:600;color:var(--text-primary)}
+    .vc-att__name[href]{cursor:pointer;text-decoration:none}
+    .vc-att__name[href]:hover{text-decoration:underline}
+
     /* ── `JV10`：原視窗預覽 modal（沿用 quotation-form.html 的既有樣式，
          只放寬 .modal-box —— 傳票是 A4 版面，680px 太窄會被壓縮）── */
     .modal-box{width:100%;max-width:860px}
@@ -452,29 +459,14 @@
                   而作廢單正是稽核最需要看到的那一種
                   ⇒ 所以這一區**不在** `x-show="!voidedAt"` 裡面。 -->
           <div class="vc-acts" x-show="isSaved">
-            <!-- 🔴 `JV11`：預覽**隨時可看**（不看簽核狀態），沿用報價單那個
-                 原視窗 modal（不開新視窗、不下載完才看得到）。而**匯出**
-                 兩顆走 `pdf-download`，簽核未完成會被後端擋下並說明還差誰簽
-                 —— 兩者刻意是不同端點（`§228`：閘門綁端點，穿不過去）。 -->
+            <!-- `JV17`：使用者裁「避免人員不確認就直接按匯出」——匯出鈕
+                 只留在預覽窗內（見下方 modal-foot），主頁面只留「預覽」
+                 這個入口。⚠️ **拿掉的是入口，不是檢查**：`pdf-download`
+                 端點本身的閘門一行都沒有動，直接打端點／改前端／書籤仍然
+                 打得到，這裡只是介面上的減速帶（`SPEC-JV16-JV17.md §5`）。 -->
             <button class="vc-btn" data-testid="voucher-preview"
                     :disabled="previewLoading" @click="openPreview()"
                     x-text="previewLoading ? '載入中…' : '預覽'"></button>
-            <button class="vc-btn" data-testid="voucher-pdf"
-                    :disabled="exporting" @click="exportPdf(false)"
-                    x-text="exporting ? '匯出中…' : '匯出 PDF'"></button>
-            <!-- 🔴 `JV10`：沒有附件時這顆要**停用而看得見**，並說得出為什麼——
-                 與 `JV3` 的刪除鈕（非草稿時整個不存在，`x-if`）方向相反：
-                 那個動作在那個狀態下不該被想起；而這一顆停用是提醒使用者
-                 「這裡可以放附件」，不是把它藏起來。
-                 ☠️ 只停用不說的話，使用者會一直點它，而畫面不會回應。 -->
-            <button class="vc-btn" data-testid="voucher-pdf-attachments"
-                    :disabled="exporting || !attachments.length"
-                    :title="attachments.length ? '' : '這張傳票還沒有附件，沒有東西可以併進去'"
-                    @click="exportPdf(true)">匯出 PDF（含附件）</button>
-            <span class="vc-att__hint">
-              「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；
-              併不進去的會列在最後一頁，畫面上也會說。
-            </span>
           </div>
 
           <template x-if="askReason">
@@ -524,6 +516,31 @@
                   data-testid="voucher-preview-frame"
                   :srcdoc="previewHtml" title="傳票預覽"></iframe>
         </div>
+
+        <!-- `JV16②③`：附件清單放在 modal 內、**iframe 外側**——
+             `previewHtml` 是 `preview_html()` 產的，`<img src="file:///...">`
+             是給伺服器上的 Edge 印 PDF 用的絕對路徑，瀏覽器連不到，
+             塞進 iframe 只會是一堆破圖（不能改 `previewHtml`，也不能把
+             附件塞進去）。這裡另外列一份可以點開的清單。 -->
+        <div class="vc-preview-atts">
+          <div class="vc-preview-atts__hd">
+            附件（<span x-text="attachments.length"></span> 筆）
+            <span class="vc-att__hint">點擊可開啟；「預計併入」依副檔名判斷，實際能不能併入以匯出結果為準。</span>
+          </div>
+          <template x-for="a in attachments" :key="a.file_id">
+            <div class="vc-att__row">
+              <span class="vc-att__tag" x-text="attFrom(a)"></span>
+              <a href="#" class="vc-att__name" @click.prevent="openAttachment(a)"
+                 x-text="a.filename"></a>
+              <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
+              <span class="vc-att__tag" x-text="mergeKindLabel(a.mergeKind)"></span>
+            </div>
+          </template>
+          <div class="vc-att__empty" x-show="!attachments.length">這張傳票還沒有附件。</div>
+          <template x-if="attErr">
+            <div class="vc-err" x-text="attErr"></div>
+          </template>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost btn-sm" @click="previewOpen=false">關閉</button>
@@ -535,6 +552,12 @@
         <button class="btn btn-sm" :disabled="exporting || !attachments.length"
                 :title="attachments.length ? '' : '這張傳票還沒有附件，沒有東西可以併進去'"
                 @click="exportPdf(true)">匯出 PDF（含附件）</button>
+      </div>
+      <!-- `JV17`：這句原本貼在主頁面兩顆匯出鈕旁邊，鈕搬進 modal 之後
+           一起搬過來——它在解釋「含附件」那顆鈕做什麼，鈕不在原地了，
+           這句留在原地會變成一句沒有主詞的說明。 -->
+      <div class="vc-att__hint" style="padding:0 16px 12px;text-align:right">
+        「含附件」會把圖片與 PDF 憑證接在傳票後面一起輸出；併不進去的會列在最後一頁，畫面上也會說。
       </div>
     </div>
   </div>
