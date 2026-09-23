@@ -774,21 +774,37 @@ def bytes_per_audit_row(db_bytes, audit_rows):
 
 def snapshot_content_ok(counts: dict, summary: dict, db_bytes: int = 0,
                         day: str = None, ratio_samples=None,
-                        ratio_enabled: bool = False) -> bool:
+                        ratio_enabled: bool = False, allowance: dict = None) -> bool:
     """這份快照的內容合不合格。
 
-    `counts`  快照檔裡實際數到的筆數（鍵同 `SNAPSHOT_IDENTITY_TABLES`）
-    `summary` 同一天 `彙總.json` 的筆數 —— **另一條程式路徑寫的**，
-              🔑 而那正是它有效的原因：`BK11` 那三天 JSON 全部正確。
+    `counts`    快照檔裡實際數到的筆數（鍵同 `SNAPSHOT_IDENTITY_TABLES`）
+    `summary`   同一天 `彙總.json` 的筆數 —— **另一條程式路徑寫的**，
+                🔑 而那正是它有效的原因：`BK11` 那三天 JSON 全部正確。
+    `allowance` 快照**之後**才寫進正式庫的筆數（`rows_written_since()` 算的），
+                彙總比快照多出這麼多是正常的。
+
+    ## 🔴 T11（2026-09-24）：沒有 `allowance` 的版本，每天必定不合格
+
+    ```
+    _snapshot_sqlite()  拍快照 -> 立刻寫一筆 backup.sqlite_snapshot 稽核
+    _daily_backup()     之後才匯出 JSON
+    ⇒ 彙總的稽核紀錄永遠 ≥ 快照＋1 ⇒ `got < want` 永遠成立 ⇒ 不寫 `.done`
+    ```
+    09-22 起正式機每天都卡在這裡（09-24：快照 3088／彙總 3091，多出的三筆全是備份自己寫的）。
+    ⚠️ 修的是**判準**，不是匯出順序：「快照比彙總少」本身不是異常，
+       **少的超過「快照之後寫的」**才是（空庫／他庫：少的是幾千列，而之後只寫了幾列）。
+    ☠️ 不可以改成「允許差 N 筆」的常數：同日重跑沿用早上的快照時，中間寫多少是資料決定的，
+       而一個夠大的常數會把 08-30 型（小庫）也放過去。
 
     ⚠️ `ratio_enabled` 預設 `False`（`BK26`）。
     """
+    allowance = allowance or {}
     for label in SNAPSHOT_IDENTITY_TABLES:
         want = summary.get(label)
         if want is None:
             continue
         got = counts.get(label)
-        if got is None or got < want:
+        if got is None or got + int(allowance.get(label) or 0) < want:
             return False
 
     if not ratio_enabled:
@@ -801,6 +817,54 @@ def snapshot_content_ok(counts: dict, summary: dict, db_bytes: int = 0,
         return True
     lo, hi = snapshot_ratio_bounds(ratio_samples)
     return lo <= ratio <= hi
+
+
+#: 身分對照三張表各自的「寫入時間」欄（`rows_written_since()` 用）。
+_SNAPSHOT_IDENTITY_TS = {
+    "稽核紀錄": ("audit_log", "at"),
+    "報價單":   ("quotations", "created_at"),
+    "客戶":     ("customers", "created_at"),
+}
+
+#: 「快照之後」的起算點往前推的秒數。
+#: ⚠️ 快照檔的 mtime 是**拍完**的時間；拍的過程中寫入的列可能在、也可能不在快照裡
+#:    ⇒ 往前推一段，把那一段一律算成「可能不在」—— 寬的是幾列，不是幾千列。
+_SNAPSHOT_AFTER_CUSHION_SECONDS = 300
+
+
+def rows_written_since(conn, since_iso: str) -> dict:
+    """正式庫裡 `since_iso` 之後寫入的筆數（身分對照三張表）。
+
+    ⚠️ 時間欄有兩種寫法（`T` 與空白分隔）⇒ 比較前統一成 `T`，
+       否則同一天的空白格式會被字串比較排在前面而漏算。
+    ⚠️ 某張表查不了就回 0（**不寬容**）—— 算不出寬容量時要比較嚴，不是比較鬆。
+    """
+    out = {}
+    for label, (table, col) in _SNAPSHOT_IDENTITY_TS.items():
+        try:
+            out[label] = conn.execute(
+                "SELECT COUNT(*) FROM %s WHERE replace(%s, ' ', 'T') >= ?"
+                % (table, col), (since_iso,)).fetchone()[0]
+        except sqlite3.Error:
+            out[label] = 0
+    return out
+
+
+def _rows_written_after_snapshot(path: str) -> dict:
+    """這份快照拍完之後（往前推 `_SNAPSHOT_AFTER_CUSHION_SECONDS`）正式庫又寫了幾列。
+
+    🔑 起算點用**快照檔本身的 mtime**：同日重跑沿用早上那一份時，它記得的是早上。
+    """
+    try:
+        since = datetime.fromtimestamp(
+            os.path.getmtime(path) - _SNAPSHOT_AFTER_CUSHION_SECONDS).isoformat()
+        conn = get_db()
+    except Exception:                                   # noqa: BLE001
+        return {}
+    try:
+        return rows_written_since(conn, since)
+    finally:
+        conn.close()
 
 
 def _snapshot_row_counts(path: str) -> tuple:
@@ -879,7 +943,8 @@ def _summary_is_comparable() -> bool:
     return False
 
 
-def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
+def _snapshot_health(path: str, summary: dict = None, day: str = None,
+                     allowance: dict = None) -> tuple:
     """`(合格嗎, 原因清單, 筆數)`。`summary` 給了才跑得了身分對照。"""
     if not os.path.isfile(path):
         return False, ["快照檔不存在：%s" % path], {}
@@ -908,12 +973,15 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None) -> tuple:
                SNAPSHOT_SIZE_RATIO_HI)], counts
 
     if summary is not None and not snapshot_content_ok(
-            counts, summary, db_bytes=os.path.getsize(path), day=day):
+            counts, summary, db_bytes=os.path.getsize(path), day=day,
+            allowance=allowance):
         return False, [
-            "快照的資料筆數少於同一天的彙總紀錄（快照 %s ／彙總 %s）——"
+            "快照的資料筆數少於同一天的彙總紀錄，且差距超過快照之後才寫入的筆數"
+            "（快照 %s ／彙總 %s ／快照之後寫入 %s）——"
             "這份快照很可能不是正式資料庫" % (
                 {k: counts.get(k) for k in SNAPSHOT_IDENTITY_TABLES},
-                {k: summary.get(k) for k in SNAPSHOT_IDENTITY_TABLES})], counts
+                {k: summary.get(k) for k in SNAPSHOT_IDENTITY_TABLES},
+                {k: (allowance or {}).get(k, 0) for k in SNAPSHOT_IDENTITY_TABLES})], counts
 
     return True, [], counts
 
@@ -1900,8 +1968,11 @@ def _daily_backup():
         _snap_ok, _snap_reasons, _snap_counts = (True, [], {})
         # 🔴 前提見 `_summary_is_comparable()`：兩邊要來自同一個資料庫。
         if _summary_is_comparable() and os.path.isfile(_snap_today):
+            # 🔴 T11：彙總是在快照**之後**匯出的 ⇒ 快照之後寫的列（至少有備份自己那筆
+            #    backup.sqlite_snapshot）會讓彙總比快照多。那一段要算出來再比。
+            _snap_allow = _rows_written_after_snapshot(_snap_today)
             _snap_ok, _snap_reasons, _snap_counts = _snapshot_health(
-                _snap_today, summary=summary, day=today_label)
+                _snap_today, summary=summary, day=today_label, allowance=_snap_allow)
         if not _snap_ok:
             _system_audit("backup.daily_snapshot_mismatch", today_label,
                           {"reasons": _snap_reasons, "counts": _snap_counts})
