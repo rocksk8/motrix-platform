@@ -311,6 +311,62 @@ def test_em3_the_known_18_and_17_call_sites_still_exist_with_the_same_type():
         "%r" % (len(missing_b), missing_b))
 
 
+def test_em3_the_scanner_still_catches_a_synthetic_leak():
+    """⚙️ **正對照：合成一段會漏的原始碼，掃描器要抓得到——`②` 修完之後
+    17 處都是綠的，這一題證明「掃描器自己會不會叫」沒有跟著消失。**
+
+    ☠️ `②` 從紅變綠之後，它自己的紅燈曾經是「掃描器抓得到真缺陷」的
+    證據；那個證據現在不在了（17 處都乾淨）。少了這一題，掃描器本身
+    若哪天被改壞（例如 `_references_name()` 誤判），`②` 會安靜地
+    一直綠下去，而沒有人知道那是因為「真的沒有漏」還是「量不到了」。
+    ⚙️ 用**自己合成的誘餌**（不是真缺陷改好那天就失效的那種）：一段
+    會漏的 `except Exception`、一段是我們自己例外的 `except`（不該被
+    當成 A 組）、一段正確寫法（不該被誤判成漏）。
+    """
+    synthetic = '''
+from fastapi import HTTPException
+
+def _decoy_leaks():
+    try:
+        do_something()
+    except Exception as e:
+        raise HTTPException(500, f"操作失敗：{e}")
+
+def _decoy_custom_exception_not_group_a():
+    try:
+        do_something()
+    except SomeCustomError as e:
+        raise HTTPException(400, str(e))
+
+def _decoy_correct_after_fix():
+    try:
+        do_something()
+    except Exception as e:
+        tid = trace_id()
+        logger.exception("failed trace=%s", tid)
+        raise HTTPException(500, f"操作失敗（代碼 {tid}）")
+'''
+    # 🔑 `_scan_router_file()` 對每一筆結果都算 `path.relative_to(ROOT)`
+    #    ——temp 目錄不在 `ROOT` 底下會直接 `ValueError`，所以誘餌檔案
+    #    要放在 `ROOT` 底下（`backend/tests/` 自己這裡，真正的 `_scan_
+    #    all()` 已經排除 `tests/`，不會把這個誘餌檔算進真實母體）。
+    p = pathlib.Path(__file__).resolve().parent / "_em3_decoy_TEMP.py"
+    try:
+        p.write_text(synthetic, encoding="utf-8")
+        got = {(e["function"], e["group"], e["leaks"]) for e in _scan_router_file(p)}
+    finally:
+        p.unlink(missing_ok=True)
+
+    assert ("_decoy_leaks", "A", True) in got, (
+        "掃描器抓不到合成的 A 組洩漏——退回檢查 `_scan_router_file()`"
+        " 本身壞了，不是產品碼變乾淨了：%r" % got)
+    assert ("_decoy_custom_exception_not_group_a", "B", True) in got, (
+        "合成的自訂例外沒有被歸進 B 組：%r" % got)
+    assert ("_decoy_correct_after_fix", "A", False) in got, (
+        "掃描器把已經修好（引用 `tid` 不引用 `e`）的合成函式仍然判成"
+        "洩漏——退回檢查 `_references_name()`：%r" % got)
+
+
 # ══════════════════════════════════════════════════════════════════════
 # ② 核心：A 組 18 處，detail 不可以再引用原始例外物件
 # ══════════════════════════════════════════════════════════════════════
