@@ -17,6 +17,16 @@
 
 ---
 
+### 2026-09-24 — 正式機修補包：派工匯入報價單沒有存檔（T9，DB 無異動）
+
+> ⚠️ 09-17～09-23 的條目尚未補（移交清單 T5），本則先記。
+
+- **缺陷**：`POST /api/contractor-dispatches/{did}/import-to-quote` 回報成功但資料庫沒寫入——呼叫 `save_quotation_json()` 後沒有 `conn.commit()`；同一行把 `username` 當第 4 個位置參數傳入，而那是 `status` ⇒ 只補 commit 會把報價單狀態改成使用者名稱。與 09-10 叫料（`material_orders.py`）同一型。
+- **修正**：`20a11de`（master）；回歸題 `test_dispatch_import_to_quote_persists_2026_09_23.py`，修前 2 紅、只補 commit 1 紅、兩處都修全綠。
+- **修補包**：以正式機 `c5b1e84` 為底另開 `hotfix/2026-09-24-t9`，只帶 T9＋新出貨排除清單＋版本 `2026-09-24a` ⇒ `deploy_packages/20260924_002556_ab0d5de`。細節與驗包見 `docs/windows/HANDOFF-PENDING-2026-09-23.md`「✅ 甲」。
+
+---
+
 ### 2026-09-16 — 通行金鑰每天備份失敗（BLOB 進不了 JSON）＋ Passkey 功能暫緩（DB 無異動）
 
 使用者回報「每日 JSON 匯出有 1 張表失敗：通行金鑰」。雲端存檔那份彙總佐證：

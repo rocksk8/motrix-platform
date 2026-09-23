@@ -54,6 +54,25 @@
 | WD1／GW1／GW2（`wording.py`） | **唯一例外：`xfail(strict=True)`，併入平台化「內容層」設計**，註明規格編號 |
 | 覆蓋率守門甲類（約 15 個） | 依「全部做完」；先逐項列出工作量回報，太大的再回來問 |
 
+## ✅ 甲 修補包產出（2026-09-24 00:25，hichan-0a）
+
+```
+路徑    deploy_packages\20260924_002556_ab0d5de   209 檔／33MB
+樹雜湊  5763da77f9e55f5b49b19d87867440f1df8c23120dd58870caf185fb679f6ba5（find|sort|sha256sum 再 sha256）
+分支    hotfix/2026-09-24-t9 = c5b1e84 + 4d3872a(T9) + dfccb9b(.gitattributes) + ab0d5de(manifest 2026-09-24a)
+測試    非 e2e 1821 passed / 53 skipped / 0 failed
+        e2e 52 passed / 1 failed：test_admin_without_module_loses_both_item_and_group_name
+            ⇒ 09-22 以 c5b1e84 建包時同一支就紅（STATE.md:16205），非本次修補引入
+驗包    docs/windows、docs/quick、backend/tests、QUICK/PROTOCOL/CHANGELOG 皆 0；backend/main.py 1（對照）
+        與 20260922_184908_c5b1e84 逐檔比對：內容不同的只有 .gitattributes、vendor_contractors.py、
+        version_manifest.json、deploy_manifest.json；新增 0 檔；少掉的＝內部文件＋14 支開發工具
+        apply_update.ps1 Step 3「只加不刪，絕不 /MIR」⇒ 正式機上既有的開發工具不會被刪
+直譯器  hermes-agent venv 3.11.15（建包腳本自選）
+```
+- 版本反方向檢查依使用者裁示，用 worktree 內資料庫副本刪 4 筆（23a～d）後通過。
+- **部署是使用者的動作**：`apply_update.ps1 -PackagePath <複製過去的路徑>`。
+- 舊的兩個包（`20260922_*`）含內部文件，仍**不可使用**。
+
 ## 乙、要使用者裁示（視窗不可代裁，只能整理選項）
 
 | 事項 | 數量 | 來源 |
