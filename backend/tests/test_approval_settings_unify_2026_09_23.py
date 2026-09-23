@@ -49,6 +49,9 @@ import pytest
 
 SETTINGS = "/api/settings/%s"
 
+#: `system.py:189/:200` —— 獨立設定專用的那兩支。
+FLOW = "/api/settings/approval-flow/%s"
+
 #: `§166`：走到端點才會出現的狀態碼。
 OK_CODES = (200, 400, 403)
 
@@ -67,6 +70,19 @@ def _hdr(client, make_user, username, role="superadmin", modules=None):
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     assert r.status_code == 200, r.text
     return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _user_id(username):
+    """`approvers` 要 `userId` —— 從測試 DB 撈回來。"""
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)).fetchone()
+        assert row is not None, "找不到使用者 %r" % username
+        return int(row["id"])
+    finally:
+        conn.close()
 
 
 def _ta():
@@ -154,18 +170,37 @@ def test_as2_submitting_a_voucher_follows_the_configured_tiers(client,
               "（`GC6` 那個形狀）。")
 
     _u, hdr = _hdr(client, make_user, "as2_flow")
-    a, _ = _hdr(client, make_user, "as2_t1")
-    b, _ = _hdr(client, make_user, "as2_t2")
-    c, _ = _hdr(client, make_user, "as2_t3")
 
-    key = ta.approval_flow_setting_key(VOUCHER_DOC_TYPE, {})
-    three = {"tiers": [{"approvers": [a]}, {"approvers": [b]},
-                       {"approvers": [c]}]}
-    r = client.put(SETTINGS % key, headers=hdr, json=three)
+    # 🔴 **三個坑，三個我都踩過或被 B 退回**（他實跑，我複查 `system.py:28-42`）
+    #
+    # ① 端點不是 `PUT /api/settings/{key}` —— 是
+    #    **`PUT /api/settings/approval-flow/{doc_type}`**（`system.py:200`）
+    #    ⇒ 我第一版打的那支不存在 => **405**（`§166` 的第二種臉）
+    # ② `approvers` 的項目**不是字串是物件**，而手動挑人要
+    #    **`userId`／`username`／`displayName` 三個都給**
+    #    （`ApprovalFlowApprover._check_shape`）
+    # ③ `includeSubmitterManagerTier` **缺鍵時視為 True**
+    #    ⇒ 它會在最前面插一層「送審人的部門主管」⇒ 測試帳號沒有部門
+    #    ⇒ 送審 400「申請人尚未歸屬任何部門」，**而實際是四層不是三層**
+    #    🔑 ⇒ 要釘「三層」就**必須明著給 False** —— 否則我量的不是我以為的東西。
+    approvers = []
+    for name in ("as2_t1", "as2_t2", "as2_t3"):
+        u, _h = _hdr(client, make_user, name)
+        approvers.append({"userId": _user_id(u), "username": u,
+                          "displayName": u})
+
+    three = {"includeSubmitterManagerTier": False,
+             "tiers": [{"approvers": [approvers[0]]},
+                       {"approvers": [approvers[1]]},
+                       {"approvers": [approvers[2]]}]}
+    r = client.put(FLOW % VOUCHER_DOC_TYPE, headers=hdr, json=three)
     if r.status_code in (404, 405, 422):
         pytest.fail(
-            "存不了 `%s` 這把設定（回 %s）——\n" % (key, r.status_code)
-            + "⚠️ 端點形狀與我想的不一樣，**退回給我**。")
+            "存不了傳票的簽核流程（回 %s）：%s\n" % (r.status_code, r.text[:200])
+            + "📌 端點是 `PUT /api/settings/approval-flow/{doc_type}`"
+              "（`system.py:200`）。\n"
+            + "⚠️ 422 的話多半是 `approvers` 的形狀 —— 手動挑人要\n"
+              "   `userId`／`username`／`displayName` **三個都給**。")
     assert r.status_code == 200, "存設定失敗：%s %s" % (r.status_code, r.text[:200])
 
     got = ta.resolve_active_flow_setting(VOUCHER_DOC_TYPE)
@@ -198,6 +233,64 @@ def test_as2_submitting_a_voucher_follows_the_configured_tiers(client,
         "設定是三層，而這張單的簽核鏈有 %d 層：%r\n" % (len(tiers), tiers)
         + "☠️ **寫死的兩層**。而只驗「兩層時能過」的話，\n"
           "   寫死與讀設定的結果一模一樣 ⇒ 那一題永遠綠。")
+
+
+def test_as2_a_company_that_never_configured_a_flow_is_unaffected(client,
+                                                                  make_user):
+    """⚙️🔴 **反向控制：**沒有設定過**簽核流程時，現況不可以改變。**
+
+    ## ☠️ 這一題抓到 B 一個真的 bug，而它一次弄紅四支既有測試
+
+    ```
+    B 第一版  無條件呼叫 setting_to_active_tiers()
+    而 includeSubmitterManagerTier **缺鍵時視為 True**
+    ⇒ 它在最前面插一層「送審人的部門主管」
+    ⇒ **一個沒有設定過簽核流程的公司連送審都送不出去**
+      （400「申請人尚未歸屬任何部門」）
+    ```
+    🔑 成因是〈null 不等於 0〉：`resolve_active_flow_setting()` 對**缺鍵**
+      回 `{"tiers": []}`，**與一份存成空的設定一模一樣**
+      ⇒ 要判的是**鍵在不在**（`_get_setting(key, None)`），不是值是不是空的。
+
+    ## 📌 而這一題釘的不是「兩層」，是**不可以替使用者做決定**
+
+    ```
+    自動核准    我們替他決定「這張不必簽」
+    送不出去    我們替他決定「這張一定要簽」
+    ⇒ **兩種都是替他決定了**
+    ```
+    ⇒ 沒設定 ⇒ 維持既有行為（送審 -> 待審核，簽兩次 -> 已核准）。
+    ⚠️ 本題**刻意不存任何設定** —— 它跑在一個乾淨的 DB 上。
+    """
+    _u, hdr = _hdr(client, make_user, "as2_nocfg")
+
+    vr = client.post("/api/vouchers", headers=hdr, json={
+        "summary": "沒設定流程",
+        "lines": [{"account_code": "1113", "debit": 1000, "credit": 0},
+                  {"account_code": "4111", "debit": 0, "credit": 1000}]})
+    assert vr.status_code == 200, "建不起來：%s %s" % (vr.status_code, vr.text[:200])
+    vid = vr.json()["id"]
+
+    sr = client.post("/api/vouchers/%s/submit" % vid, json={}, headers=hdr)
+    assert sr.status_code == 200, (
+        "**沒有設定過**簽核流程，而送審被擋掉了（%s）：%s\n"
+        % (sr.status_code, sr.text[:200])
+        + "☠️ 那是「缺鍵被當成一份空設定」的樣子 ——\n"
+          "   `includeSubmitterManagerTier` 缺鍵視為 `True` ⇒ 插一層部門主管\n"
+          "   ⇒ **一個沒有設定過簽核流程的公司連送審都送不出去**。\n"
+        + "🔑 要判的是**鍵在不在**，不是值是不是空的。")
+
+    for _ in range(2):
+        ar = client.post("/api/vouchers/%s/approve" % vid, json={},
+                         headers=hdr)
+        assert ar.status_code == 200, (
+            "簽核失敗：%s %s" % (ar.status_code, ar.text[:200]))
+    status = client.get("/api/vouchers/%s" % vid, headers=hdr).json().get(
+        "status")
+    assert status == "已核准", (
+        "沒有設定過流程而簽兩次之後是 %r，既有行為是「已核准」——\n" % status
+        + "☠️ 我們替使用者做了決定：**不管是自動核准還是送不出去，"
+          "兩種都是替他決定了**。")
 
 
 # ══════════════════════════════════════════════════════════════════════
