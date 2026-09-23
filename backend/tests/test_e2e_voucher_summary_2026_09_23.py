@@ -49,7 +49,9 @@ HOOKS = {
     "tabs": '[data-testid="summary-source-tabs"]',
     "tab": '[data-testid="summary-source-tab"]',
     "item": '[data-testid="summary-source-item"]',
-    "summary": 'input[x-model="l.summary"]',
+    # 🔴 `JV12` 把這個欄位從 `<input>` 換成 `<textarea>`（讓高度隨文字
+    #    調整），選擇器不綁標籤名，改綁的元件型別再換一次也不必回來改。
+    "summary": '[x-model="l.summary"]',
     # 🔴 `JV8`（使用者 `§201`）把編輯畫面改成**要明著要**：
     #    `voucher.html:175  <div class="vc-sheet" x-show="editing">`
     #    `voucher.js  :31   editing: false`
