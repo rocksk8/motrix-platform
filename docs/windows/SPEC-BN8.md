@@ -196,6 +196,56 @@ POST /awards/{id}/void   _is_manager ＋ 要 reason，**完全不看 status**
 
 ---
 
+## §5b 🔴 簽核佇列 —— A 裁「要做，列進 `BN8`」，**而我查到一件已經上線的缺口**
+
+### 佇列有兩支端點，而它們是**兩段各自獨立的查詢**
+
+```
+GET /api/approval-queue         quotations.py:3716   九個 type，各一段手寫 SQL
+GET /api/approval-queue/count   quotations.py:4096   **另外九段手寫 SQL**
+現有九種 type：
+  quotation／contractor_voucher／invoice_voucher／shipping_note／
+  payment_request／completion_note／case_change／extra_expense／extra_expense_change
+```
+
+### ☠️ 而 `voucher`（會計傳票）**兩邊都沒有** —— 那是今天就存在的缺口
+
+```
+vouchers.py:486   送審會 UPDATE vouchers_all SET status='待審核'
+APPROVAL_DOC_TYPES 第八個就是 voucher（AS2 已落地）
+而兩支佇列端點裡 `vouchers_all` 命中 **0**
+⇒ **一張送審的傳票，簽核人在佇列上看不到它。**
+```
+🔑 〈兩個都對而路不存在〉：送審端點對、簽核端點對、而**沒有人知道有單在等**。
+📌 **這不是 `BN8` 造成的，而 `BN8` 會用同一種方式再犯一次** ⇒ 一起補。
+
+### ⚠️ 而既有那道守門**抓不到這一種**
+
+```
+test_approval_queue_badge_consistency_2026_09_15.py
+  docstring 逐字：使用者回報「我跟另一位是最高管理者，需要我簽核但簽核佇列未顯示」
+  它驗的是：對**它自己種的那組資料**，count == 佇列裡 canApprove 為真的項目數
+```
+☠️ **一個型別若兩邊都沒有，兩邊都回 0 ⇒ `0 == 0` ⇒ 綠。**
+🔑 **它是「一致性」守門，不是「完整性」守門** —— 而它的寬度等於它種的 fixture。
+⇒ 所以 `voucher` 缺了這麼久沒有人發現。
+
+### ⇒ `BN8` 要做三件
+
+```
+① bonus_awards 進 **兩支**端點（type = "bonus_award"）
+② **順手把 voucher 也補進去**（它今天就缺，而成本是同一段程式碼旁邊多一段）
+   ⚠️ 若 A 認為那是另一個編號的事，**請回覆** —— 而它不該留著
+③ 🔴 加一道**完整性**守門（新的，不是改既有那支）：
+   APPROVAL_DOC_TYPES 裡**有 submit 端點**的每一個 type，
+   都必須在 `/api/approval-queue` 與 `/api/approval-queue/count` **兩邊**出現
+   ⚙️ 判定用 ast／字串比對兩支函式的來源表，而**基準要寫死今天的清單**
+   ☠️ 沒有這一道，下一個 doc type 會用完全一樣的方式消失
+```
+📌 ③ 才是這一格真正的產出：**②只修今天那一個，③讓第三次不可能發生。**
+
+---
+
 ## §6 驗收（`AC1`：後端＋前端＋頁面三者皆備）
 
 ```
@@ -214,7 +264,15 @@ POST /awards/{id}/void   _is_manager ＋ 要 reason，**完全不看 status**
      ⑦ 已核准的單**仍然可以作廢**
      ⑧ voucher_no_payment 非空的單 -> 作廢回 **400** 且訊息提到沖銷
         ⚠️ 今天要**自己種**那個欄位才測得到（零寫入端）
-     ⑨ 先斷言 status_code in (200, 400, 403) 再看內容（`§166` 三種臉）
+     ⑨ 送審後的獎金單**出現在 `/api/approval-queue`**，
+        且 `/api/approval-queue/count` 的數字**同步 +1**
+        ☠️ 只加一邊 = 「列得出來而 topbar 是 0」或反過來，
+           而既有註解逐字：**兩邊矛盾比兩邊都沒有更難查**
+     ⑩ 🔴 **完整性守門**：APPROVAL_DOC_TYPES 裡有 submit 端點的 type，
+        兩支佇列端點都要涵蓋
+        ⚙️ 正對照：拿掉其中一個 type，那一題必須紅
+        ⚠️ 它今天就會抓到 **voucher**（見 §5b）—— 那是預期的，不是誤報
+     ⑪ 先斷言 status_code in (200, 400, 403) 再看內容（`§166` 三種臉）
 前端 ⑩ 獎金頁有送審／簽核／退回三個會送出的動作（superadmin 才看得到）
 頁面 ⑪ 用印欄**依鏈的層數畫**（製表 ＋ N 層），未簽的層印空格
      ⑫ 鏈讀不出來時**印在紙上**（「簽核資料無法讀取」），不要安靜退回固定格
@@ -227,14 +285,26 @@ POST /awards/{id}/void   _is_manager ＋ 要 reason，**完全不看 status**
 
 ## §7 待裁（**不要自己決定**）與我沒做的
 
-### 待裁
+### ✅ 已裁（A 2026-09-23，`STATE.md §234`）
 ```
-① 狀態機四個 ＋「已發放」用欄位推導（§2）—— A-2 建議，未裁
-② 誰按下「已發放」：出納開傳票自動回填，還是最高管理者手動標記（§2）
-   📌 A-2 傾向自動回填，而那是一條**新的相依**
-③ "bonus" 要不要進 DEFAULT_UNIFIED_DOC_TYPES（§3）
-④ 任何狀態都可作廢（§5①）
-⑤ 已發放的單作廢要開沖銷傳票（§5②）—— 沖銷流程本規格不做
+① 狀態機四個（草稿／待審核／簽核中／已核准），
+   已入帳 = voucher_no_accrual != ''、已發放 = voucher_no_payment != ''
+③ "bonus" **不進** DEFAULT_UNIFIED_DOC_TYPES（同 voucher，先做可逆的那一邊）
+④ 任何狀態都可作廢
+⑤ 已發放的單作廢**本輪回 400** 擋下；沖銷流程本規格不做
+```
+
+### ⏳ 待使用者裁
+```
+② 誰按下「已發放」：出納開發放傳票**自動回填**，還是最高管理者**手動標記**
+   📌 A-2 傾向自動回填（那筆傳票就是證據）
+   ⚠️ 而它需要傳票那一側回寫獎金單 —— **那是一條新的相依**，A 已把代價寫進選項
+```
+
+### 待回覆
+```
+🔴 `voucher` 今天就不在簽核佇列裡（§5b）—— 我建議在 `BN8` 一起補
+   ⚠️ 若 A 認為那是另一個編號的事，請回覆；**而它不該留著**
 ```
 
 ### 我沒做的
