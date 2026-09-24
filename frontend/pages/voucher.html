@@ -197,16 +197,16 @@
 
           <!-- `JV34④`：清單篩選（前端篩；清單端點本來就一次回全部，不帶分錄）。 -->
           <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;font-size:12px">
-            <input class="vc-input" data-testid="voucher-filter-kw" x-model="filterKw"
+            <input class="vc-input vc-filter" data-testid="voucher-filter-kw" x-model="filterKw"
                    placeholder="搜尋號碼或摘要">
             <div style="display:flex;gap:4px;align-items:center">
-              <input type="date" class="vc-input" data-testid="voucher-filter-from" x-model="filterFrom"
+              <input type="date" class="vc-input vc-filter" data-testid="voucher-filter-from" x-model="filterFrom"
                      style="flex:1;min-width:0" title="起日">
               <span>～</span>
-              <input type="date" class="vc-input" data-testid="voucher-filter-to" x-model="filterTo"
+              <input type="date" class="vc-input vc-filter" data-testid="voucher-filter-to" x-model="filterTo"
                      style="flex:1;min-width:0" title="迄日">
             </div>
-            <select class="vc-input" data-testid="voucher-filter-status" x-model="filterStatus">
+            <select class="vc-input vc-filter" data-testid="voucher-filter-status" x-model="filterStatus">
               <option value="">全部狀態</option>
               <template x-for="st in ['草稿', '待審核', '簽核中', '已核准', '已過帳', '已作廢']" :key="st">
                 <option :value="st" x-text="st"></option>

@@ -66,3 +66,51 @@ def test_typing_in_global_search_does_not_mark_page_dirty(live_server, make_user
             assert page.evaluate("() => window.motrixIsDirty") is True, "偵測被整個關掉了（正對照失敗）"
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_voucher_list_filters_do_not_mark_page_dirty(live_server, make_user):
+    """W-8：傳票清單左側的關鍵字／起迄日期／狀態篩選是檢視條件，不是未存修改。"""
+    u = make_user(username="gsd_e2", role="superadmin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_context().new_page()
+            page.goto(f"{live_server}/pages/login.html")
+            page.fill('input[x-model="username"]', u[0])
+            page.fill('input[x-model="password"]', u[1])
+            page.click('button:has-text("登入")')
+            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+            page.goto(f"{live_server}/pages/voucher.html")
+            page.wait_for_selector("[data-testid=voucher-filter-kw]", timeout=15000)
+            page.evaluate("() => { window.motrixIsDirty = false }")
+            page.locator("[data-testid=voucher-filter-kw]").type("abc")
+            page.locator("[data-testid=voucher-filter-from]").fill("2026-09-01")
+            page.locator("[data-testid=voucher-filter-to]").fill("2026-09-30")
+            assert page.evaluate("() => window.motrixIsDirty") is not True, \
+                "傳票清單的篩選欄被當成未存修改 ⇒ 換頁會跳離頁警告"
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_user_list_search_does_not_mark_page_dirty(live_server, make_user):
+    """D8-3：使用者管理頁的搜尋框是檢視條件，不是未存修改。"""
+    u = make_user(username="gsd_e3", role="superadmin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_context().new_page()
+            page.goto(f"{live_server}/pages/login.html")
+            page.fill('input[x-model="username"]', u[0])
+            page.fill('input[x-model="password"]', u[1])
+            page.click('button:has-text("登入")')
+            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+            page.goto(f"{live_server}/pages/users.html")
+            page.wait_for_selector("input[x-model=userSearch]", timeout=15000)
+            page.evaluate("() => { window.motrixIsDirty = false }")
+            page.locator("input[x-model=userSearch]").type("abc")
+            assert page.evaluate("() => window.motrixIsDirty") is not True, \
+                "使用者搜尋框被當成未存修改 ⇒ 換頁會跳離頁警告"
+        finally:
+            browser.close()
