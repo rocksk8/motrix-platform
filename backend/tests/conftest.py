@@ -1368,3 +1368,256 @@ def _browser_netguard(request, monkeypatch):
     yield
     if not request.node.get_closest_marker(_ALLOW_OUTBOUND):
         _assert_no_browser_outbound(attempts)
+
+
+# ══ e2e 共用瀏覽器與伺服器（PLAN-TEST-PERF #5，2026-09-25）═══════════════════════
+#
+# 每題各自起 uvicorn（0.23s）、各自 launch chromium（0.34s）改成**每個 worker 一套**：
+# session scope 在 pytest-xdist 底下就是「每個 worker 行程一份」⇒ -n 4 時 4 套伺服器＋瀏覽器，
+# 互不共用。**DB 仍然每題一份**：`client` 每題換 db.DB_PATH，伺服器在 request 當下才讀
+# （main.py 沒有 startup／lifespan），共用伺服器看到的就是這一題的庫。
+#
+# ## 寫法（改寫前 → 改寫後）
+#
+#     # 前：每題自己起伺服器、自己開瀏覽器、走登入頁
+#     from playwright.sync_api import sync_playwright
+#     @pytest.fixture()
+#     def live_server(client): ...uvicorn...
+#     def test_x(live_server, make_user):
+#         u = make_user(username="x", role="admin")
+#         with sync_playwright() as p:
+#             browser = p.chromium.launch()
+#             try:
+#                 page = browser.new_page(viewport={"width": 1440, "height": 900})
+#                 page.goto(f"{live_server}/pages/login.html"); ...填帳密、按登入、等 index...
+#                 page.goto(f"{live_server}/pages/case-management.html")
+#             finally:
+#                 browser.close()
+#
+#     # 後：不 import sync_playwright、不定義 live_server
+#     def test_x(live_server, make_user, new_page, login_as):
+#         u = make_user(username="x", role="admin")
+#         page = new_page(viewport={"width": 1440, "height": 900})
+#         login_as(page, u)                       # API 取 token 注入 localStorage（不經登入頁）
+#         page.goto(f"{live_server}/pages/case-management.html")
+#
+# - 要多個頁面／分頁：`new_page()` 叫兩次（各自一個 context ⇒ 互不共用 localStorage），
+#   或 `ctx = new_context(); p1 = ctx.new_page(); p2 = ctx.new_page()`（同一個 context ⇒ 共用）。
+# - 要驗登入頁本身的題**保留走登入頁**（test_e2e_login_enter_submits 等），不要改成 login_as。
+# - 收尾不用自己 close：題目結束時 fixture 關掉這一題開的所有 context。
+#
+# ## 與「還沒轉」的檔並存
+#
+# ⚠️ session 級的 sync_playwright 開著時，題內再 `with sync_playwright()` 會報
+# 「using Playwright Sync API inside the asyncio loop」（實測）。
+# ⇒ `_pw_coexist`：跑到**模組裡還 import 著 sync_playwright** 的題之前，先把共用的停掉，
+#   下一個轉過的題要用時再重啟。所以轉換可以分批落地；全部轉完後這一段只剩守門作用。
+#   🔴 轉過的檔**不可以**再 import sync_playwright，否則每一題都會被當成「還沒轉」而重啟瀏覽器。
+#
+# ## 給其他項目的掛點
+#
+# `E2E_CONTEXT_HOOKS`：每個 context 建好後依序呼叫 `hook(context, request)`
+# （#6 擋圖片／媒體掛在這裡；用 marker 讓需要的題退出）。
+#
+# ## A／B 對照開關
+#
+# `MOTRIX_E2E_FRESH_BROWSER=1` ⇒ 退回改動前的成本模型：**每題**自己 launch 瀏覽器、自己起 uvicorn
+# （題目寫法不用改）。給全量 A／B 量測用；平常不要設。
+
+E2E_CONTEXT_HOOKS = []
+
+_PW = {"pw": None, "browser": None}
+
+
+def _shared_browser():
+    if _PW["browser"] is None:
+        from playwright.sync_api import sync_playwright
+        _PW["pw"] = sync_playwright().start()
+        _PW["browser"] = _PW["pw"].chromium.launch()
+    return _PW["browser"]
+
+
+def _stop_shared_browser():
+    if _PW["pw"] is None:
+        return
+    try:
+        _PW["browser"].close()
+    finally:
+        _PW["pw"].stop()
+        _PW["pw"] = _PW["browser"] = None
+
+
+def _module_opens_its_own_playwright(module):
+    """還沒轉的模組：模組層仍 import 著 sync_playwright。"""
+    return getattr(module, "sync_playwright", None) is not None
+
+
+@pytest.fixture(autouse=True)
+def _pw_coexist(request):
+    """還沒轉的模組自己開 sync_playwright ⇒ 先停掉共用的（見上方「並存」）。"""
+    if _module_opens_its_own_playwright(getattr(request, "module", None)):
+        _stop_shared_browser()
+    yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _pw_shared_shutdown():
+    """session 結束時關掉共用瀏覽器（不另寫 pytest_sessionfinish：那會蓋掉上面清 basetemp 的那一個）。"""
+    yield
+    try:
+        _stop_shared_browser()
+    except Exception:
+        pass
+
+
+def _e2e_fresh():
+    """A／B 對照開關：設了就每題自開瀏覽器與伺服器（見上方說明）。"""
+    return os.environ.get("MOTRIX_E2E_FRESH_BROWSER") == "1"
+
+
+class _InflightCountingApp:
+    """ASGI 外殼：數伺服器上**正在處理**的 HTTP 請求。
+
+    🔴 共用伺服器的收尾要「排空」：前一題頁面發出、還在處理中的請求，若拖到前一題的 monkeypatch
+    還原之後（甚至 `client` 已把 db.DB_PATH 換成**下一題的庫**）才執行 ⇒ 漏進下一題
+    （2026-09-25 實測：tender-radar 前一題的 /api/map/points 在還原 no_tile_probe 之後才跑，
+    真的探測了圖磚，被下一題的 NETGUARD 記到）。
+    每題自起伺服器時，關伺服器本身會等處理中的請求 ⇒ 等於有排空；共用之後要自己做。
+    """
+    def __init__(self, app):
+        import threading as _th
+        self.app, self.n, self._lock = app, 0, _th.Lock()
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            return await self.app(scope, receive, send)
+        with self._lock:
+            self.n += 1
+        try:
+            return await self.app(scope, receive, send)
+        finally:
+            with self._lock:
+                self.n -= 1
+
+
+_SERVER_APPS = []      # 這個行程起過的 _InflightCountingApp（共用＋A／B 開關下每題的）
+
+
+def _drain_servers(timeout=10.0):
+    """等所有測試伺服器上處理中的請求都結束；逾時就讓這一題紅（不可以靜默漏到下一題）。"""
+    import time as _time
+    deadline = _time.monotonic() + timeout
+    while True:
+        busy = sum(a.n for a in _SERVER_APPS)
+        if busy == 0:
+            return
+        if _time.monotonic() > deadline:
+            pytest.fail("測試伺服器收尾時仍有 %d 個請求在處理（%.0fs 內沒結束）——"
+                        "它們會落到下一題的庫與 monkeypatch 狀態裡" % (busy, timeout))
+        _time.sleep(0.02)
+
+
+def _start_uvicorn(app):
+    import threading as _th
+    import time as _time
+    import uvicorn
+    from tests._ports import free_safe_port
+    app = _InflightCountingApp(app)
+    _SERVER_APPS.append(app)
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=free_safe_port(), log_level="warning"))
+    t = _th.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(200):
+        if server.started:
+            break
+        _time.sleep(0.05)
+    else:
+        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
+
+    def _stop():
+        server.should_exit = True
+        t.join(timeout=5)
+    return "http://127.0.0.1:%d" % server.servers[0].sockets[0].getsockname()[1], _stop
+
+
+@pytest.fixture(scope="session")
+def _shared_server(_app):
+    """每個 worker 一個 uvicorn（loopback、隨機安全埠），整個 session 共用。"""
+    base, stop = _start_uvicorn(_app)
+    yield base
+    stop()
+
+
+@pytest.fixture()
+def live_server(client, _app, request):
+    """function scope：先經過 `client`（這一題的新庫已就位），再給共用伺服器的網址。
+    模組自己定義的 live_server 會蓋過這一個（還沒轉的檔照舊）。"""
+    if _e2e_fresh():
+        base, stop = _start_uvicorn(_app)
+        request.addfinalizer(stop)
+        return base
+    request.addfinalizer(_drain_servers)    # 題目沒用 new_context（例如還沒轉、自開瀏覽器）也要排空
+    return request.getfixturevalue("_shared_server")
+
+
+@pytest.fixture()
+def new_context(request):
+    """開一個新的 browser context（每題隔離：localStorage／cookie 不跨題）；題目結束時全部關掉。"""
+    opened = []
+    own = {}                                   # A／B 開關：這一題自己的 playwright＋browser
+
+    def _browser():
+        if not _e2e_fresh():
+            return _shared_browser()
+        if "browser" not in own:
+            _stop_shared_browser()             # 不與共用的並存（同一執行緒只能有一個 sync_playwright）
+            from playwright.sync_api import sync_playwright
+            own["pw"] = sync_playwright().start()
+            own["browser"] = own["pw"].chromium.launch()
+        return own["browser"]
+
+    def _make(**kw):
+        ctx = _browser().new_context(**kw)
+        for hook in E2E_CONTEXT_HOOKS:
+            hook(ctx, request)
+        opened.append(ctx)
+        return ctx
+
+    yield _make
+    for ctx in opened:
+        try:
+            ctx.close()
+        except Exception:
+            pass
+    if own:
+        try:
+            own["browser"].close()
+        finally:
+            own["pw"].stop()
+    # 頁面都關了 ⇒ 不會再有新請求；等處理中的跑完，才輪到 monkeypatch 還原與下一題換庫
+    _drain_servers()
+
+
+@pytest.fixture()
+def new_page(new_context):
+    """`new_page(**context_kwargs)` ⇒ 一個新 context 裡的新頁面。"""
+    return lambda **kw: new_context(**kw).new_page()
+
+
+@pytest.fixture()
+def login_as(client):
+    """`login_as(page_or_context, (username, password))`：API 取 token，注入 localStorage（格式同 login.html
+    `_storeSessionAndRedirect`），之後 goto 任何頁面都是登入狀態。要驗登入頁本身的題不要用這個。"""
+    import json as _json
+
+    def _login(target, user):
+        r = client.post("/api/auth/login", json={"username": user[0], "password": user[1]})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert not d.get("totpRequired"), "這個帳號要 TOTP：login_as 不處理，請走登入頁"
+        sess = {k: d.get(k) for k in ("token", "userId", "username", "displayName", "role", "modules", "loginAt")}
+        ctx = getattr(target, "context", target)
+        ctx.add_init_script("try { localStorage.setItem('motrix_session', %s) } catch (e) {}"
+                            % _json.dumps(_json.dumps(sess)))
+        return sess
+    return _login
