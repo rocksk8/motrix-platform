@@ -57,6 +57,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from helpers import geo  # noqa: E402
+from tests._map_cache_warm import serve_from_fake  # noqa: E402
 from helpers.settings import _get_setting, _set_setting  # noqa: E402
 
 PROFILE_PATH = "/api/settings/company-profile"
@@ -92,6 +93,7 @@ def _isolate_geo(monkeypatch):
                              source=geo.SOURCE_NOMINATIM, address=key)
 
     monkeypatch.setattr(geo, "locate_cached", _fake)
+    serve_from_fake(monkeypatch, _fake)  # MP8：快取＝查表（背景預熱已完成）
 
 
 def _auth(client, make_user):

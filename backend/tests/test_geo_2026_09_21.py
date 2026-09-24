@@ -431,6 +431,16 @@ def test_m8b_geocode_goes_through_the_module_attribute():
 # M3～M6 · 地圖端點
 # ══════════════════════════════════════════════════════════════════════
 
+def _warm_like_background():
+    """`MP8`：開地圖的請求只讀快取 ⇒ 要看到點，先照背景預熱的做法跑一輪
+    （`_map_geocode_backlog()` 的每一個地址走 `locate_cached()`）。"""
+    from routers import map_points
+    from tests._map_cache_warm import clear_map_response_cache
+    for addr in map_points._map_geocode_backlog():
+        _geo().locate_cached(addr)
+    clear_map_response_cache()
+
+
 def _map(client, hdr):
     r = client.get(MAP_PATH, headers=hdr)
     assert r.status_code == 200, f"{MAP_PATH} 回 {r.status_code}：{r.text[:300]}"
@@ -533,8 +543,12 @@ def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user):
         conn.close()
 
     hdr = _auth(client, make_user)
+    _warm_like_background()   # MP8：開地圖只讀快取
     body = _map(client, hdr)
-    assert body["withoutLocation"] >= 1, (
+    # 📌 更正留著（2026-09-24，`MP8`）：原本只看 `withoutLocation`。MP8 之後開地圖不當場查，
+    #    這一題又沒有打開地理查詢（背景預熱查不了）⇒ 這筆機關名稱算「待定位」（pendingGeocode）。
+    #    🔑 要守的不變量不變：**不可以靜默消失**——兩個計數都是看得見的訊號，合計至少 1。
+    assert body["withoutLocation"] + body["pendingGeocode"] >= 1, (
         "有標案的 location 是 NULL，而地圖端點回報「沒有地點的有 0 筆」—— "
         "那些標案會從畫面上消失，而消失跟「不存在」長得一模一樣"
     )
@@ -610,10 +624,16 @@ def test_m4_geocode_result_is_cached(client, make_user, monkeypatch):
                  {**LEGACY_PROFILE, "address": "台中市西屯區文心路二段201號"})
     calls = _geocode_spy(monkeypatch)
     hdr = _auth(client, make_user)
+    # 📌 更正留著（2026-09-24，`MP8`）：原本「第一次開地圖會查一次、第二次不再查」。
+    #    MP8 之後**開地圖一律不對外查**（交給背景預熱）⇒ 開地圖 0 次；
+    #    查的那一次在背景預熱；之後再開、再預熱都不再查（結果有存下來）。
     _map(client, hdr)
+    assert len(calls) == 0, "開地圖的請求對外查了 %d 次（MP8：應該 0 次）" % len(calls)
+    _warm_like_background()
     first = len(calls)
-    assert first >= 1, "第一次就沒有查 —— 這題的前提不成立"
+    assert first >= 1, "背景預熱一次都沒有查 —— 這題的前提不成立"
     _map(client, hdr)
+    _warm_like_background()
     assert len(calls) == first, (
         f"第二次又查了 {len(calls) - first} 次 —— 結果沒有存下來。"
         "每開一次畫面就打一次 Nominatim，會被對方封鎖，"
@@ -648,6 +668,7 @@ def test_m5_one_failure_does_not_empty_the_whole_map(client, make_user, monkeypa
 
     monkeypatch.setattr(_geo(), "geocode", _rec)
     hdr = _auth(client, make_user)
+    _warm_like_background()   # MP8：開地圖只讀快取
     body = _map(client, hdr)
     assert len(body["points"]) >= 2, (
         f"一筆失敗就只剩 {len(body['points'])} 個點 —— "

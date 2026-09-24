@@ -162,7 +162,7 @@
         <div>有 <strong x-text="info.unresolvableGeocode"></strong> 筆
           <strong>查不到這個地址</strong>（不是來不及）。
           系統已經查過了，七天內不會再重複查詢 ——
-          <strong>再按「繼續定位」也不會變少。</strong>
+          <strong>重新整理也不會變少。</strong>
           <br>常見原因是只有機關名稱、沒有門牌，或是地址有誤。
           請將地址補齊或更正，系統會自動重新查詢（不需要清除快取）。
         </div>
@@ -172,11 +172,10 @@
           <strong>這次來不及定位</strong>（不是查不到）。
           地址轉換座標需要向 OpenStreetMap 查詢，該服務每秒只接受一次查詢，
           所以一次只能處理一部分。
-          <strong>查過的結果會永久保存，背景也會持續補完</strong> ——
-          不需要反覆點選。如需立即更新，請按下方按鈕。
-          <button class="btn btn-ghost btn-sm" style="margin-left:6px"
-                  @click="refresh()" :disabled="loading"
-                  x-text="loading ? '定位中…' : '繼續定位'"></button>
+          <strong>查過的結果會永久保存，背景會持續補完</strong> ——
+          不需要任何操作，稍後重新開啟地圖即可看到。
+          <!-- `MP8`：「繼續定位」鈕拿掉了——開地圖的請求不再對外查定位（使用者：
+               「地圖模組每次使用者都要載入一次，讓流量很快卡死」），一律交給背景預熱。 -->
         </div>
       </div>
       <!-- 🔴🔴 定位不到的據點**不可以安靜地被排除**。
@@ -207,7 +206,7 @@
         <div x-text="warmNote()"></div>
       </div>
 
-      <template x-for="s in (info ? info.sources : [])" :key="s.source">
+      <template x-for="s in (info ? view.sources : [])" :key="s.source">
         <div class="mp-note info" x-show="s.skipped">
           <span>ℹ️</span>
           <div><span x-text="s.note"></span></div>
@@ -256,7 +255,7 @@
         <span style="font-size:12px;color:var(--text-secondary)">顯示</span>
         <template x-for="src in sources" :key="src.key">
           <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
-            <input type="checkbox" :value="src.key" x-model="picked" @change="refresh()">
+            <input type="checkbox" :value="src.key" x-model="picked" @change="_redraw()">
             <span x-text="src.label"></span>
           </label>
         </template>
@@ -283,7 +282,7 @@
         <div>
           <div style="font-size:11px;color:var(--text-secondary)">可定位</div>
           <div style="font-size:18px;font-weight:600"
-               x-text="info ? info.points.length : '—'"></div>
+               x-text="info ? view.points.length : '—'"></div>
         </div>
         <div>
           <div style="font-size:11px;color:var(--text-secondary)">沒有地點資訊</div>
@@ -367,7 +366,7 @@
                （每一筆都是 `nominatim`）、`caseNo` 只有標案才有
                ⇒ 廠商那幾筆的 key 會**全部相同**，Alpine 只會留一列。
                📌 加上 index 之後保證唯一。 -->
-          <template x-for="(p, i) in (info ? info.points : [])"
+          <template x-for="(p, i) in (info ? view.points : [])"
                     :key="(p.dataset || '?') + '|' + (p.caseNo || p.name || '') + '|' + i">
             <tr>
               <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
@@ -428,7 +427,7 @@
               <td style="font-size:12px" x-text="p.deadline || '—'"></td>
             </tr>
           </template>
-          <tr x-show="info && info.points.length === 0">
+          <tr x-show="info && view.points.length === 0">
             <td :colspan="hasUserPos ? 7 : 6"
                 style="text-align:center;color:var(--text-secondary);padding:18px">
               目前沒有可定位的資料。<strong>上面的提示說明了為什麼</strong>。
@@ -501,6 +500,20 @@ function mapPage() {
     // 留白會讓人以為那是最精確的那一種（因為沒有任何警告）。
     //: 這個點屬於哪一個資料集。**找不到時回一個具名的「未知」**，
     //  不要回 undefined —— 那會讓畫面整塊消失，而原因看不出來。
+    // `MP8`：畫面用的那一份——`info` 是一次抓回來的全部，這裡依勾選篩。
+    //   ⚠️ 點沒有 `sourceKey`（舊後端）時不篩掉：寧可多畫，不要靜默少畫。
+    get view() {
+      const info = this.info || {}
+      const on = new Set(this.picked)
+      return {
+        // ⚠️ 先確認是陣列：格式不對時畫面要照樣畫得出來，不可以讓整個重畫拋錯（MP0 題抓到）。
+        points: (Array.isArray(info.points) ? info.points : [])
+          .filter(p => !p.sourceKey || on.has(p.sourceKey)),
+        sources: (Array.isArray(info.sources) ? info.sources : [])
+          .filter(s => on.has(s.source)),
+      }
+    },
+
     datasetOf(p) {
       return this.datasets.find(d => d.key === (p && p.dataset))
              || { key: '?', label: '未知來源', mark: '?', color: '#6B7280' }
@@ -580,7 +593,6 @@ function mapPage() {
       if (why === 'daily_limit') {
         return '背景定位今日的額度已用畢（' + (w.usedToday || 0) + '／'
              + (w.dailyLimit || 0) + '），明日會自動繼續。'
-             + '如需立即補完，請按「繼續定位」。'
       }
       if (why === 'failures') {
         return '背景定位因連續失敗而暫停 —— 地圖服務可能暫時拒絕了本機的查詢。'
@@ -650,7 +662,9 @@ function mapPage() {
       try {
         // ⚠️ 一個都沒勾時送 `none`，**不要送空字串** ——
         // 空字串會被後端當成「沒有指定」，而那跟「我不要任何來源」是兩件事。
-        const want = this.picked.length ? this.picked.join(',') : 'none'
+        // 🔴 `MP8`：**一次抓完全部來源**，勾選／取消只在前端篩（`view`），不再每切一次就重抓。
+        //    伺服器只回這個人**有權限**的來源（沒有權限的在 `sources` 裡標 skipped）。
+        const want = this.sources.map(s => s.key).join(',')
         // 🔴 **座標走 header，不走 query string。**
         // 實測（2026-09-22）uvicorn 的 access log 會把整串網址寫進
         // `logs/server.log`：
@@ -727,7 +741,7 @@ function mapPage() {
       // 推導現在剛好是對的，而「剛好是對的」會在有人搬動檔案那天失效，
       // 失效的樣子是 marker 圖去 CDN 抓 —— 一條沒有人注意到的對外連線。
       window.L.Icon.Default.imagePath = '../static/vendor/leaflet/images/'
-      const pts = (this.info && this.info.points) || []
+      const pts = this.view.points
       const office = this.info && this.info.office
       const centre = office ? [office.lat, office.lon]
                             : (pts.length ? [pts[0].lat, pts[0].lon] : [23.9, 121.0])
@@ -832,7 +846,7 @@ function mapPage() {
       // ☠️ 看起來像「資料只有一筆」，而不是「尺寸量錯了」。
       const size = this._map.getSize()
       if (!(size && size.x > 0 && size.y > 0)) this._syncMapSize()
-      const pts = (this.info && this.info.points) || []
+      const pts = this.view.points
       const office = this.info && this.info.office
       const box = pts.map(p => [p.lat, p.lon])
       // ⚠️ **所有據點**都要進來，不是只有第一個 ——
@@ -884,7 +898,7 @@ function mapPage() {
       if (this._layer) { this._map.removeLayer(this._layer) }
       this._layer = window.L.layerGroup().addTo(this._map)
 
-      const pts = (this.info && this.info.points) || []
+      const pts = this.view.points
       // 🔴 **每一個據點都畫出來，而名稱要在標記上看得到**（不必點開）。
       // ☠️ 只畫「辦公室」一個點的話，多據點的使用者看到的是
       // 「離公司 12 km」而圖上只有一個公司 —— 🔑 那句話指的是哪一個？

@@ -50,6 +50,7 @@
 import pytest
 
 from helpers import geo
+from tests._map_cache_warm import serve_from_fake
 from helpers import tender_match
 
 TENDERS_PATH = "/api/tender-radar/tenders"
@@ -87,6 +88,7 @@ def _isolate_geo(monkeypatch):
                              source=geo.SOURCE_NOMINATIM, address=key)
 
     monkeypatch.setattr(geo, "locate_cached", _fake)
+    serve_from_fake(monkeypatch, _fake)  # MP8：快取＝查表（背景預熱已完成）
 
 
 def _auth(client, make_user, **kw):

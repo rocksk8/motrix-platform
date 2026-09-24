@@ -339,6 +339,9 @@ def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
         lambda addr, manual_coord=None: geo.GeoResult(
             coord=(24.1477, 120.6736), precision="district",
             source="nominatim_district", address=addr))
+    # `MP8`：開地圖只讀快取 ⇒ 快取＝同一個替身（等同背景預熱已完成）
+    from tests._map_cache_warm import serve_from_fake
+    serve_from_fake(monkeypatch, geo.locate_cached)
 
     username, password = make_user(username="gc6_admin", role="superadmin")
     r = client.post("/api/auth/login",

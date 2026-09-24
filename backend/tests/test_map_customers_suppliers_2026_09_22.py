@@ -44,6 +44,7 @@ import json
 import pytest
 
 from helpers import geo
+from tests._map_cache_warm import serve_from_fake
 
 #: 從路由 grep 出來的模組權限。**R7 明講不要猜。**
 SOURCE_MODULES = {
@@ -83,6 +84,7 @@ def _isolate_geo(monkeypatch):
                              source=geo.SOURCE_NOMINATIM, address=key)
 
     monkeypatch.setattr(geo, "locate_cached", _fake)
+    serve_from_fake(monkeypatch, _fake)  # MP8：快取＝查表（背景預熱已完成）
 
 
 def _auth(client, make_user, **kw):

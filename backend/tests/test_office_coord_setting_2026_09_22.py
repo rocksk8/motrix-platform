@@ -210,6 +210,9 @@ def test_ua5d_clearing_the_coordinates_falls_back_to_the_address(
             geo.GeoResult(coord=(24.2549, 120.5316),
                           precision=geo.PRECISION_DISTRICT,
                           source=geo.SOURCE_NOMINATIM, address=address)))
+    # `MP8`：開地圖只讀快取 ⇒ 快取＝同一個替身（等同背景預熱已完成）
+    from tests._map_cache_warm import serve_from_fake
+    serve_from_fake(monkeypatch, geo.locate_cached)
 
     hdr = _auth(client, make_user)
     _put(client, hdr, {"office_lat": OFFICE_LAT, "office_lon": OFFICE_LON})

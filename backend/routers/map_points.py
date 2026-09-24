@@ -21,11 +21,14 @@
 ☠️ 「你沒有權限看標案」與「今天沒有標案」在畫面上都是一張沒有點的地圖，
 而那是今天第五個長成那個樣子的成因。
 """
+import copy
+import hashlib
 import json
 import logging
+import threading
 import time
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Response
 
 from db import db_conn
 from helpers import _require_user
@@ -373,7 +376,7 @@ def _user_position(lat, lon, accuracy):
 
 
 @router.get("/api/map/points")
-def map_points(sources: str = "tenders",
+def map_points(response: Response, sources: str = "tenders",
                lat: str = None, lon: str = None, accuracy: str = None,
                x_map_position: str = Header(None),
                authorization: str = Header(None)):
@@ -436,6 +439,71 @@ def map_points(sources: str = "tenders",
         )
     user_coord, user_accuracy = _user_position(lat, lon, accuracy)
 
+    # 🔴 `MP8`：回應快取。鍵＝「要了哪些來源 × **這個人看得到哪些**」——權限算進鍵裡，
+    #    A 看得到的點不會回給 B（A 裁示）。與使用者位置有關的欄位不進快取，每次另算。
+    visible = tuple(sorted(
+        n for n in set(wanted)
+        if (n == "tenders" and _may_see_tenders(user))
+        or (n in _DATASETS and _may_see_dataset(user, n))))
+    # ⚠️ 地理查詢開關也算進鍵：關著時算出來的「沒有點」不可以在打開之後繼續被回
+    #    （G7 抓到的——第一版的鍵沒有它，開關切換後 60 秒內回的都是舊結果）。
+    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()))
+    fp = _data_fingerprint()
+    now = time.monotonic()
+    with _RESP_LOCK:
+        hit = _RESP_CACHE.get(key)
+        base = hit["body"] if (hit and hit["fp"] == fp
+                               and now - hit["at"] < MAP_RESPONSE_TTL_SECONDS) else None
+    response.headers["X-Map-Cache"] = "hit" if base is not None else "miss"
+    if base is None:
+        base = _build_points(user, wanted)
+        with _RESP_LOCK:
+            _RESP_CACHE[key] = {"at": now, "fp": fp, "body": base}
+    out = copy.deepcopy(base)
+    for pt in out["points"]:
+        pt["distanceFromUserKm"] = (
+            round(geo.haversine_km(user_coord, (pt["lat"], pt["lon"])), 1)
+            if user_coord else None)
+    out.update({
+        "geoEnabled": geo.geo_on(),
+        "quota": geo.quota_status(),
+        "userAccuracyM": user_accuracy,
+        "tilesBlocked": geo.tiles_blocked(),
+        "geocodeWarm": geo.warm_status(),
+    })
+    return out
+
+
+#: `MP8`：回應快取的有效秒數（資料一變就失效，這是保底）。
+MAP_RESPONSE_TTL_SECONDS = 60
+_RESP_CACHE = {}
+_RESP_LOCK = threading.Lock()
+
+
+def _data_fingerprint():
+    """`MP8`：地圖資料的指紋——任何一個來源表、定位快取或公司據點變了，指紋就變 ⇒ 快取失效。
+
+    📌 讀整張來源表算雜湊（每表一條 SQL）：比「每個地址查一次快取」便宜得多，
+       而不必在每一個寫入點掛失效掛鉤（會漏）。
+    """
+    h = hashlib.sha256()
+    with db_conn() as conn:
+        tables = ["tenders"] + sorted({spec["table"] for spec in _DATASETS.values()})
+        for t in tables:
+            try:
+                for row in conn.execute("SELECT * FROM %s ORDER BY rowid" % t):
+                    h.update(repr(tuple(row)).encode("utf-8", "replace"))
+            except Exception:                                   # noqa: BLE001
+                h.update(("missing:" + t).encode())
+        row = conn.execute("SELECT COUNT(*), MAX(id), MAX(created_at) FROM geocode_cache").fetchone()
+        h.update(repr(tuple(row)).encode())
+    h.update(json.dumps(_company_profile(), sort_keys=True, ensure_ascii=False,
+                        default=str).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _build_points(user, wanted):
+    """`MP8`：不含使用者位置的那一部分（進快取的就是這一份）。"""
     profile = _company_profile()
     office_address = (profile.get("address") or "").strip()
     api_key = (profile.get("google_maps_api_key") or "").strip()
@@ -463,7 +531,9 @@ def map_points(sources: str = "tenders",
                                 "count": 0,
                                 "note": "沒有標案雷達模組權限，地圖上不會顯示標案"})
         else:
-            pts, missing = _tender_points(located, user_coord, budget)
+            pts, missing = _tender_points(located, None, budget)
+            for pt in pts:
+                pt["sourceKey"] = "tenders"
             points += pts
             without_location += missing
             source_info.append({
@@ -495,7 +565,9 @@ def map_points(sources: str = "tenders",
                 "note": f"沒有「{spec['label']}」的權限，地圖上不會顯示這一類",
             })
             continue
-        pts, missing = _own_points(name, located, user_coord, budget)
+        pts, missing = _own_points(name, located, None, budget)
+        for pt in pts:
+            pt["sourceKey"] = name
         points += pts
         without_location += missing
         source_info.append({
@@ -525,8 +597,8 @@ def map_points(sources: str = "tenders",
         #    **而沒有人查得出來** —— 金鑰正常、設定正常、程式沒有例外。
         # 🔑 這裡回的是**狀態**不是文案：畫面決定怎麼說，後端只負責說得出來。
         "quota": geo.quota_status(),
-        # ⚠️ 沒有定位時是 `None` 不是 `0`——0 公尺是「完美精準」。
-        "userAccuracyM": user_accuracy,
+        # `MP8`：userAccuracyM／geoEnabled／quota／tilesBlocked／geocodeWarm 與位置、時間有關，
+        # 由 `map_points()` 每次另算（見那裡的 `out.update`），不進快取。
         # 🔴 第七個訊號，而它跟前六個不同級：前六個是「沒有東西」，
         # 這個是「**有東西而且是錯的**」——OSM 封鎖的回應是 HTTP 200 ＋
         # 一張寫著 Access blocked 的圖 ⇒ 瀏覽器不觸發 error、JS 讀不到標頭
@@ -580,7 +652,8 @@ def _locate_locations(profile):
     # 🔴 GC7：預算保護在 `geo._locate_locations()` 裡 ——
     # 🔑 **判準只有一份**：這裡再寫一次「算不算已知」的話，兩份會分岔，
     #    而分岔之後「畫面說的」與「實際查的」就不是同一件事。
-    resolved = geo._locate_locations(_profile_locations(profile))
+    # `MP8`：開地圖不對外查——據點沒查過的交給背景（預算 0 ＝ 只讀快取）。
+    resolved = geo._locate_locations(_profile_locations(profile), budget=0)
     for loc in _profile_locations(profile):
         address = str(loc.get("address") or "").strip()
         found = resolved.get(loc.get("id"))
@@ -683,15 +756,12 @@ class _GeocodeBudget:
             # 📌 不佔時間預算：它根本不會發出請求。
             self.unresolvable += 1
             return geo.GeoResult(error="查無此地址", address=address)
-        if time.monotonic() >= self.deadline:
-            self.pending += 1
-            return None
-        found = geo.locate_cached(address)
-        if found is None or not found.coord:
-            # 剛剛查過而且查不到 ⇒ 這一筆歸「查不到」，不歸「來不及」。
-            self.unresolvable += 1
-            return found or geo.GeoResult(error="查無此地址", address=address)
-        return found
+        # 🔴 `MP8`（使用者：「地圖模組每次使用者都要載入一次，讓流量很快卡死」）：
+        #    **開地圖的請求路徑不對外查定位**——沒查過的一律交給背景預熱，這一輪算「待定位」。
+        #    ☠️ 原本這裡在時間預算內同步呼叫 `geo.locate_cached()`：每個人每次開圖
+        #       都可能對外連線，而且把請求拖到 6 秒。
+        self.pending += 1
+        return None
 
 
 def _distances(coord, located, user_coord):

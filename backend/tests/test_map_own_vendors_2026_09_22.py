@@ -69,6 +69,7 @@ import pytest
 
 import routers.map_points as mp
 from helpers import geo
+from tests._map_cache_warm import serve_from_fake
 
 #: 要一起畫在地圖上的四個資料集。
 #: 📌 `completion_notes` **不在這裡**（P16：0 筆，不為一張空表寫實作）。
@@ -183,6 +184,7 @@ def _fake_locate(monkeypatch):
                              source=geo.SOURCE_NOMINATIM, address=key)
 
     monkeypatch.setattr(geo, "locate_cached", _fake)
+    serve_from_fake(monkeypatch, _fake)  # MP8：快取＝查表（背景預熱已完成）
 
 
 @pytest.fixture()

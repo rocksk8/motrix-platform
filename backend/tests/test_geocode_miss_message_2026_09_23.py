@@ -236,11 +236,17 @@ def test_gc8_a_known_miss_does_not_eat_the_time_budget(
     assert not no_outbound, (
         f"已知查不到的地址還是連出去了：{no_outbound}")
 
-    # 📏 **預算還在**：一個沒查過的地址仍然要排得進去。
-    assert budget.locate("一個沒查過的地址 GC8c") is not None or True
+    # 📌 更正留著（2026-09-24，`MP8`）：原本這裡驗「預算還在——一個沒查過的地址仍然
+    #    排得進去（pending == 0）」。MP8 之後**開地圖的請求不當場查**，沒查過的一律交給
+    #    背景預熱 ⇒ 它算「待定位」（pending 1），而且**不連出去**。
+    #    已知查不到的 20 個：各自算「查不到」，不佔待定位、不連出去（這一題原本守的不變量）。
+    assert budget.unresolvable == 20, budget.unresolvable
     assert budget.pending == 0, (
-        f"預算被那 20 個已知查不到的地址耗光了（pending={budget.pending}）——\n"
-        "🔑 真正該查的那幾個因此永遠排不到，而使用者按幾次都一樣。")
+        f"已知查不到的地址被算成「待定位」（pending={budget.pending}）——它們已經有答案了。")
+    budget.locate("一個沒查過的地址 GC8c")
+    assert budget.pending == 1 and not no_outbound, (
+        f"沒查過的地址：pending={budget.pending}、對外連線 {no_outbound}"
+        "（MP8：應該待定位、不連出去）")
 
 
 def test_gc8_a_positive_cache_hit_wins_over_the_negative_one(

@@ -42,6 +42,7 @@ import sqlite3
 import pytest
 
 from helpers import geo
+from tests._map_cache_warm import serve_from_fake
 
 #: 兩組**明顯不同**的使用者座標（台北 / 高雄，直線約 300 公里）。
 #: 🔑 G8 用它們證明 `distanceFromUserKm` 真的隨座標改變 ——
@@ -86,6 +87,7 @@ def _isolate_geo(monkeypatch):
                              source=geo.SOURCE_NOMINATIM, address=address)
 
     monkeypatch.setattr(geo, "locate_cached", _fake)
+    serve_from_fake(monkeypatch, _fake)  # MP8：快取＝查表（背景預熱已完成）
 
 
 @pytest.fixture()
