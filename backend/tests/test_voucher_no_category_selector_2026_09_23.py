@@ -105,28 +105,23 @@ def _strip_html_comments(html):
 
 
 def test_jv20_the_category_selector_is_removed_from_the_page():
-    """🔴🔴 **核心：`voucher.html` 不可以再有類別的 `<select>`。**
+    """📌 **翻面**（2026-09-24，`N6`）——兩句使用者原話都留著：
 
-    ⚠️ 也不可以換成唯讀文字框——使用者說的是「不需要有類別的選項」，
-    不是「不能讓使用者改」，換成唯讀等於把使用者沒要求的東西留在畫面上。
-
-    🔴 **第一版對整份原始碼（含 HTML 註解）做字面比對**，B 回報：他寫的
-    說明註解裡含「類別」兩字被抓成假紅，只好改寫註解才過關——這是
-    〈守門會改變人的寫法，而那個改變不留痕跡〉今天第二次同一個機制。
-    ⇒ 改成**先剝掉 `<!--…-->` 註解再比對**：使用者要的是「畫面上沒有
-    這個選項」，不是「原始碼裡不准出現這兩個字」，說明性的註解不該被
-    這道守門管到。下面的誘餌題鎖住這個修法本身。
+    ```
+    2026-09-23  「傳票不需要有類別的選項」     ⇒ 原本這一題斷言畫面上沒有類別選單
+    2026-09-24  晨間表單：類別「要能手動改」   ⇒ 草稿要有選單（收入／支出／轉帳＋恢復自動判斷）
+    ```
+    後一句推翻前一句 ⇒ 這一題改成斷言**選單存在且選項完整**。題名沿用（保留歷史）。
+    ⚠️ 仍然先剝掉 `<!--…-->` 註解再比對（下面的誘餌題鎖住那個修法）。
     """
     html = _strip_html_comments(
         (ROOT / "frontend" / "pages" / "voucher.html").read_text(
             encoding="utf-8", errors="replace"))
-    assert 'x-model="category"' not in html, (
-        "`voucher.html` 裡還找得到 `x-model=\"category\"` —— "
-        "類別欄位還在畫面上。")
-    assert "類別" not in html, (
-        "`voucher.html` 裡（剝掉註解之後）還找得到「類別」這兩個字——\n"
-        "☠️ 若只拿掉 `<select>` 而把標籤文字換成別的形式（例如唯讀文字），\n"
-          "   那不是使用者要的：他說的是不需要這個選項，不是不能改。")
+    m = re.search(r'<select[^>]*data-testid="voucher-kind-select"[^>]*>(.*?)</select>', html, re.S)
+    assert m, "`voucher.html` 裡找不到傳票類別選單（`voucher-kind-select`）——N6 要能手動改。"
+    values = re.findall(r'<option value="([^"]*)"', m.group(1))
+    assert values == ["auto", "收", "支", "轉"], (
+        "類別選單的選項是 %r，應該是 自動判斷＋收／支／轉。" % values)
 
 
 def test_jv20_an_explanatory_comment_mentioning_the_word_is_not_a_false_positive():

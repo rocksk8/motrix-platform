@@ -125,7 +125,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
 # v108: BN3 bonus_item_people（manual 人員來源指定的帳號清單）
 # v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
-CURRENT_VERSION = 109
+CURRENT_VERSION = 110
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4325,6 +4325,20 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m110_voucher_category_manual(conn):
+    """v110（2026-09-24 `N6`）：傳票類別「手動改過」旗標。
+
+    使用者 2026-09-24 晨間表單：傳票類別「要能手動改」（推翻 09-23 `JV20`
+    「傳票不需要有類別的選項」）。`JV29` 起類別由分錄自動判斷；手動改過的
+    記 1，之後改分錄**不再自動覆蓋**。既有資料一律 0（視為自動），不回頭重算。
+
+    ⚠️ 只有 `_col_exists` 與一句 DDL，不呼叫任何會演進的 helper。
+    """
+    if not _col_exists(conn, "vouchers_all", "category_manual"):
+        conn.execute("ALTER TABLE vouchers_all ADD COLUMN"
+                     " category_manual INTEGER NOT NULL DEFAULT 0")
+
+
 def _m109_edit_log_no_delete(conn):
     """v109（2026-09-24 `JV22 §3`／`BN17`）：兩張編寫紀錄表在**資料庫層**刪不掉。
 
@@ -5478,6 +5492,7 @@ _MIGRATIONS = [
     _m107_deactivate_legacy_demo_account,           # v107
     _m108_bonus_item_people,                        # v108
     _m109_edit_log_no_delete,                       # v109
+    _m110_voucher_category_manual,                  # v110
 ]
 
 

@@ -274,10 +274,19 @@
                  查證過：這個欄位與 T100 匯出檔印出來的「傳票別」是兩個
                  不相干的來源，T100 那邊今天固定讀 T100 設定的
                  `voucherCategory`，不讀這裡。 -->
-            <!-- `JV29`：傳票名稱（收入／支出／轉帳，商業會計法 §17）由伺服器依分錄判斷，
-                 **唯讀顯示**——不是選單（`JV20` 使用者原話仍成立；手動改待確認 N6）。 -->
+            <!-- `JV29`：傳票名稱（收入／支出／轉帳，商業會計法 §17）預設由伺服器依分錄判斷。
+                 📌 `N6`：使用者 09-23 說「傳票不需要有類別的選項」（JV20），
+                    09-24 晨間表單改為「要能手動改」⇒ 草稿時給選單，含「恢復自動判斷」；
+                    手動選過的，之後改分錄不再自動覆蓋。 -->
             <div><label>傳票名稱</label><span class="vc-status" data-testid="voucher-kind"
-                 x-text="kindTitle"></span></div>
+                 x-text="kindTitle"></span>
+              <select class="vc-input" data-testid="voucher-kind-select" x-show="canEdit"
+                      x-model="kindChoice" style="margin-left:6px">
+                <option value="auto">依分錄自動判斷</option>
+                <option value="收">收入傳票</option>
+                <option value="支">支出傳票</option>
+                <option value="轉">轉帳傳票</option>
+              </select></div>
             <div><label>狀態</label><span class="vc-status" data-testid="voucher-status"
                  :class="voidedAt ? 'voided' : (status === '已過帳' ? 'posted' : '')"
                  x-text="voidedAt ? '已作廢' : status"></span></div>

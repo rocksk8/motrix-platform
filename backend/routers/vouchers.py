@@ -105,10 +105,47 @@ def _user_name(user):
 #: ☠️ 黑名單的話，日後 DDL 加一欄就自動變成「可以改」——
 #:    而沒有人會發現 `posted_by` 突然變得可以從前端改掉。
 #: ⚠️ `voucher_no` **不在裡面**：它由退回升版產生，不是使用者填的。
-#: 📌 `JV29`：`category` 拿掉——改由伺服器依分錄判斷（存檔時重算，只限草稿）；
-#:    請求裡帶的 `category` 被忽略（舊前端照送也不會壞，見 `JV20⑤`）。
-#:    「手動改」延後（待確認 N6）。
+#: 📌 `JV29`：類別改由伺服器依分錄判斷（存檔時重算，只限草稿）。
+#: 📌 `N6`（2026-09-24 使用者晨間表單「要能手動改」）：類別**也接受**，但不走這裡的
+#:    通用迴圈——它牽涉「手動／自動」旗標與重算，由 `_category_update()` 處理
+#:    （只在草稿：PUT 本來就只收草稿）。
 EDITABLE_FIELDS = ("voucher_date", "summary")
+
+#: `N6`：傳票類別的合法值（商業會計法 §17）。
+_CATEGORIES = ("收", "支", "轉")
+_MODE_LABEL = {0: "自動判斷", 1: "手動指定"}
+
+
+def _category_update(conn, voucher_id, current, body, new_lines, line_changes):
+    """`N6`：這次 PUT 之後的 `(category, category_manual)`。
+
+    ```
+    body.category_manual == True   ⇒ 手動：採用 body.category（須為 收／支／轉）
+    body.category_manual == False  ⇒ 恢復自動：依分錄重算（有帶分錄用新的，否則用現有的）
+    沒帶 category_manual（舊前端）  ⇒ body.category 與現值不同 ⇒ 視為手動改
+                                     否則：自動模式且分錄有改 ⇒ 重算；手動模式 ⇒ 不動
+    ```
+    """
+    cur_cat = current.get("category") or ""
+    cur_manual = int(current.get("category_manual") or 0)
+    if "category_manual" in body:
+        if body.get("category_manual"):
+            cat = body.get("category")
+            if cat not in _CATEGORIES:
+                raise HTTPException(422, "傳票類別只能是收入、支出或轉帳。")
+            return cat, 1
+        lines = new_lines if new_lines is not None else [dict(r) for r in conn.execute(
+            "SELECT account_code, debit, credit FROM voucher_lines WHERE voucher_id = ?",
+            (voucher_id,))]
+        return classify_category(conn, lines), 0
+    cat = body.get("category")
+    if cat is not None and cat != cur_cat:
+        if cat not in _CATEGORIES:
+            raise HTTPException(422, "傳票類別只能是收入、支出或轉帳。")
+        return cat, 1
+    if cur_manual == 0 and new_lines is not None and line_changes:
+        return classify_category(conn, new_lines), 0
+    return cur_cat, cur_manual
 
 
 
@@ -261,13 +298,20 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
         #    當天最大值 +1 —— 先發號再失敗的話那個號碼不會被用掉，
         #    但**下一張單會從它後面接**，帳上就少一個號碼而沒有人解釋得了。
         _check_account_codes(conn, lines)
+        # `N6`：明確說要手動（`category_manual`）才採用請求的類別；否則依分錄判斷。
+        if body.get("category_manual"):
+            if body.get("category") not in _CATEGORIES:
+                raise HTTPException(422, "傳票類別只能是收入、支出或轉帳。")
+            cat, manual = body.get("category"), 1
+        else:
+            cat, manual = classify_category(conn, lines), 0
         no = next_voucher_no(conn, voucher_date)
         try:
             cur = conn.execute(
-                "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
+                "INSERT INTO vouchers_all (voucher_no, voucher_date, category, category_manual,"
                 " summary, status, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?, '草稿', ?,?,?)",
-                (no, voucher_date, classify_category(conn, lines),
+                " VALUES (?,?,?,?,?, '草稿', ?,?,?)",
+                (no, voucher_date, cat, manual,
                  (body.get("summary") or ""), _user_name(user), now, now))
         except Exception as exc:                            # noqa: BLE001
             if "UNIQUE" in str(exc).upper():
@@ -958,10 +1002,11 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
             # 寫入過，`helpers/voucher.py` 的 docstring 也一直說「作廢落在
             # 四個欄位上」——現在讓那句話變成真的。
             c2 = conn.execute(
-                "INSERT INTO vouchers_all (voucher_no, voucher_date, category,"
+                "INSERT INTO vouchers_all (voucher_no, voucher_date, category, category_manual,"
                 " summary, status, supersedes_no, created_by, created_at,"
-                " updated_at) VALUES (?,?,?,?, '草稿', ?,?,?,?)",
+                " updated_at) VALUES (?,?,?,?,?, '草稿', ?,?,?,?)",
                 (new_no, src.get("voucher_date"), src.get("category") or "轉",
+                 int(src.get("category_manual") or 0),
                  src.get("summary") or "", src.get("voucher_no") or "",
                  who, now, now))
             new_id = c2.lastrowid
@@ -1104,12 +1149,19 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             #    新建擋得住而修改會炸成 500。
             _check_account_codes(conn, new_lines)
             line_changes = diff_lines(old_lines, new_lines)
-            # `JV29`：分錄改了 ⇒ 類別依新分錄重算（PUT 只接受草稿，所以只限草稿）。
-            new_cat = classify_category(conn, new_lines)
-            if line_changes and new_cat != (current.get("category") or ""):
-                changes.append({"field": "category", "from": current.get("category") or "",
-                                "to": new_cat})
-                updates["category"] = new_cat
+
+        # `JV29`＋`N6`：類別——自動模式下分錄改了就重算；手動改過的不再自動覆蓋。
+        new_cat, new_manual = _category_update(
+            conn, voucher_id, current, body, new_lines, line_changes)
+        if new_cat != (current.get("category") or ""):
+            changes.append({"field": "category", "from": current.get("category") or "",
+                            "to": new_cat})
+            updates["category"] = new_cat
+        cur_manual = int(current.get("category_manual") or 0)
+        if new_manual != cur_manual:
+            changes.append({"field": "category_manual", "from": _MODE_LABEL[cur_manual],
+                            "to": _MODE_LABEL[new_manual]})
+            updates["category_manual"] = new_manual
 
         # ⚙️ 反向控制的那一格：沒有改動就什麼都不做，**包括不寫紀錄**。
         #    ⚠️ 而「沒有改動」現在要把分錄一起算進來 ——

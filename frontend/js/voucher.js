@@ -20,6 +20,8 @@ function voucherPage() {
     voucherNo: '',        // 🔴 由後端產生，前端不發號
     voucherDate: '',
     category: '轉',
+    //: `N6`：類別是否手動指定過（手動過的，改分錄不再自動覆蓋）。
+    categoryManual: false,
     status: '草稿',
     note: '',
     lines: [],
@@ -646,6 +648,7 @@ function voucherPage() {
       this.voucherNo = d.voucher_no || ''
       this.voucherDate = d.voucher_date || this.voucherDate
       this.category = d.category || '轉'
+      this.categoryManual = !!d.category_manual
       this.status = d.status || '草稿'
       this.note = d.summary || ''
       this.voidedAt = d.voided_at || ''
@@ -736,6 +739,7 @@ function voucherPage() {
 
     editFieldLabel(f) {
       const m = { summary: '摘要', voucher_date: '傳票日期', category: '傳票別',
+                  category_manual: '傳票別判斷方式',
                   attachment: '附件', status: '狀態', voucher_no: '單號', lines: '分錄' }
       if (m[f]) return m[f]
       const mm = /^lines\[(\d+)\](?:\.(\w+))?$/.exec(f || '')
@@ -761,6 +765,7 @@ function voucherPage() {
       this.voucherNo = ''
       this.voucherDate = new Date().toLocaleDateString('sv-SE')
       this.category = '轉'
+      this.categoryManual = false
       this.status = '草稿'
       this.note = ''
       this.voidedAt = ''
@@ -851,6 +856,7 @@ function voucherPage() {
           body: JSON.stringify({
             voucher_date: this.voucherDate,
             category: this.category,
+            category_manual: this.categoryManual,
             summary: this.note,
             lines: this._payloadLines(),
           }),
@@ -885,6 +891,7 @@ function voucherPage() {
           body: JSON.stringify({
             voucher_date: this.voucherDate,
             category: this.category,
+            category_manual: this.categoryManual,
             summary: this.note,
             lines: this._payloadLines(),
           }),
@@ -1060,8 +1067,17 @@ function voucherPage() {
     // `JV29`：與 `helpers/voucher.py::CATEGORY_TITLES` 同一組名稱。
     // 還沒存過的新單沒有判斷結果 ⇒ 說清楚什麼時候會有，不要先印一個「轉帳傳票」。
     get kindTitle() {
-      if (!this.id) return '（存檔後依分錄判斷）'
+      if (!this.id && !this.categoryManual) return '（存檔後依分錄判斷）'
       return { '收': '收入傳票', '支': '支出傳票', '轉': '轉帳傳票' }[this.category] || '傳票'
+    },
+
+    // `N6`：類別選單的值——自動模式是 'auto'，手動模式是那個類別。
+    //    選「恢復自動判斷」⇒ 存檔時伺服器依分錄重算；選一個類別 ⇒ 手動，之後改分錄不覆蓋。
+    get kindChoice() { return this.categoryManual ? this.category : 'auto' },
+    set kindChoice(v) {
+      if (v === 'auto') { this.categoryManual = false; return }
+      this.category = v
+      this.categoryManual = true
     },
 
     // `JV34④`：清單篩選（關鍵字比對號碼或摘要；日期區間含頭尾；狀態含「已作廢」）。

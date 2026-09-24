@@ -10,6 +10,8 @@
 淨額在借方＝收入、在貸方＝支出、0（含沒有現金類）＝轉帳
 「手動改」延後（待確認 N6）
 ```
+📌 更正留著：`N6` 已由使用者 2026-09-24 晨間表單裁定「要能手動改」⇒ 草稿有類別選單
+（含「恢復自動判斷」），手動過的不再被分錄覆蓋；題在本檔最後一段。
 依據：商業會計法 §17（收入／支出／轉帳傳票）、商業會計處理準則 §6（記帳憑證要有傳票名稱）。
 
 # ⚙️ 種子資料裡判定為現金類的完整清單（`data/account_items_112.json`）
@@ -92,7 +94,8 @@ def test_jv29_a_custom_account_under_111_counts_as_cash(client, make_user):
 
 
 def test_jv29_the_client_cannot_override_the_category(client, make_user):
-    """「手動改」延後（N6）⇒ 請求帶的 category 不採用，以分錄判斷為準。"""
+    """沒有明說要手動（`category_manual`）時，請求帶的 category 不採用，以分錄判斷為準。
+    📌 更正留著：原本寫「手動改延後（N6）」；N6 之後手動要明著帶 `category_manual: true`。"""
     hdr = _hdr(client, make_user, "jv29_override")
     vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)], category="支")
     assert _category(vid) == "收"
@@ -170,5 +173,90 @@ def test_jv29_the_page_shows_the_voucher_name_read_only(live_server, client, mak
             print("JV29 頁面實測：傳票名稱 =", repr(text), "／元素", tag)
             assert text == "支出傳票", text
             assert tag not in ("SELECT", "INPUT"), "傳票名稱要唯讀顯示，不是 %s" % tag
+        finally:
+            browser.close()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# `N6`：類別可以手動改（使用者 2026-09-24 晨間表單「要能手動改」，推翻 09-23 JV20
+#       「傳票不需要有類別的選項」）。手動過的，改分錄不再自動覆蓋；可恢復自動判斷。
+# ══════════════════════════════════════════════════════════════════════
+
+def _manual(vid):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT category_manual FROM vouchers_all WHERE id=?", (vid,)).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_jv29_a_manual_category_is_kept_and_survives_line_edits(client, make_user):
+    hdr = _hdr(client, make_user, "jv29_manual")
+    vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)],
+                  category="支", category_manual=True)
+    assert (_category(vid), _manual(vid)) == ("支", 1), "手動指定沒有被採用：%r" % (
+        (_category(vid), _manual(vid)),)
+    r = client.put("%s/%s" % (VOUCHERS, vid), headers=hdr,
+                   json={"lines": [_ln("6111", 800, 0), _ln("2111", 0, 800)]})
+    assert r.status_code == 200, r.text[:200]
+    assert (_category(vid), _manual(vid)) == ("支", 1), "手動過的類別被改分錄覆蓋了：%r" % (
+        (_category(vid), _manual(vid)),)
+
+
+def test_jv29_restoring_auto_recomputes_from_the_lines(client, make_user):
+    hdr = _hdr(client, make_user, "jv29_restore")
+    vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)],
+                  category="轉", category_manual=True)
+    r = client.put("%s/%s" % (VOUCHERS, vid), headers=hdr, json={"category_manual": False})
+    assert r.status_code == 200, r.text[:200]
+    assert (_category(vid), _manual(vid)) == ("收", 0), (_category(vid), _manual(vid))
+
+
+def test_jv29_switching_to_manual_on_an_existing_draft_and_bad_values(client, make_user):
+    hdr = _hdr(client, make_user, "jv29_put_manual")
+    vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)])
+    r = client.put("%s/%s" % (VOUCHERS, vid), headers=hdr,
+                   json={"category": "甲", "category_manual": True})
+    assert r.status_code == 422, "不合法的類別沒有擋：%s %s" % (r.status_code, r.text[:200])
+    r = client.put("%s/%s" % (VOUCHERS, vid), headers=hdr,
+                   json={"category": "轉", "category_manual": True})
+    assert r.status_code == 200, r.text[:200]
+    assert (_category(vid), _manual(vid)) == ("轉", 1)
+    assert client.post("%s/%s/submit" % (VOUCHERS, vid), headers=hdr).status_code == 200
+    r = client.put("%s/%s" % (VOUCHERS, vid), headers=hdr,
+                   json={"category": "支", "category_manual": True})
+    assert r.status_code == 400, "送審後還能改類別：%s" % r.status_code
+    assert _category(vid) == "轉"
+
+
+@pytest.mark.e2e
+def test_jv29_the_page_lets_a_draft_pick_the_category_by_hand(live_server, client, make_user):
+    u, p = make_user(username="jv29_pick", role="superadmin", modules=["cashier"])
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    hdr = {"Authorization": "Bearer " + r.json()["token"]}
+    vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)])
+    with pw.sync_playwright() as p_:
+        browser = p_.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            _login(page, live_server, u, p)
+            page.goto(f"{live_server}/pages/voucher.html?id={vid}")
+            sel = page.locator('[data-testid="voucher-kind-select"]')
+            sel.wait_for(state="visible", timeout=15000)
+            before = sel.input_value()
+            sel.select_option("支")
+            page.click('[data-testid="voucher-save"]')
+            page.wait_for_function(
+                "() => (document.querySelector('[data-testid=\"voucher-kind\"]').innerText || '')"
+                ".includes('支出傳票') && !Alpine.$data(document.querySelector('[x-data]')).busy",
+                timeout=10000)
+            page.reload()
+            sel.wait_for(state="visible", timeout=15000)
+            after = (sel.input_value(), page.locator('[data-testid="voucher-kind"]').inner_text().strip())
+            print("N6 頁面實測：選單原本 %r ⇒ 選支出、存檔、重整 ⇒ %r" % (before, after))
+            assert before == "auto", before
+            assert after == ("支", "支出傳票"), after
+            assert (_category(vid), _manual(vid)) == ("支", 1)
         finally:
             browser.close()
