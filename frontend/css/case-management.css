@@ -659,13 +659,13 @@ transition:background .1s;
    style.css 的深色模式是對 body 的直下子元素套 invert(1) hue-rotate(180deg)。案件頁改讀語意 token
    之後，深色值是「不經反轉」的值，所以本頁內容退出那道反轉（比照 ui.js 的 .mui-root），
    直接吃 :root[data-theme="dark"] 的 token。
-   範圍刻意與 style.css 的反轉選擇器相同（頂欄／側欄等本來就不反轉，不動它們），多一個 body.cm-page：
+   範圍＝style.css 的反轉選擇器再多排除 .mnav（主導覽列是頁框，深色靠全站反轉，維持原樣），多一個 body.cm-page：
    特定度較高，所以蓋得過 style.css 的反轉與紅色前置補償，也不影響其他頁。
 
    ⚠ 舊變數（--white／--text-*／--border*／--accent*／--success* …）原本沒有深色值（深色全靠反轉），
      在本頁內容範圍改對到深色 token；本頁與 style.css 共用元件讀到的就是深色值。
    ⚠ 表單元件：瀏覽器預設文字色是黑，而本頁不設 color-scheme（見 style.css 的說明）⇒ 明訂 color。 */
-:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
+:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.mnav):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) {
   filter: none !important;
   color: var(--ink-strong);
   --white:              #151517;
@@ -696,8 +696,8 @@ transition:background .1s;
   --shadow-lg:          0 8px 24px rgba(0,0,0,.55);
 }
 /* 反轉範圍裡的圖片／影片原本會再反轉一次抵銷；本頁不反轉，圖片也不反轉 */
-:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) img,
-:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) video {
+:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.mnav):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) img,
+:root[data-theme="dark"] body.cm-page > *:not(.topbar):not(.mnav):not(.sidebar):not(.sidebar-overlay):not(.h-hero):not(.h-band) video {
   filter: none !important;
 }
 :root[data-theme="dark"] body.cm-page input,

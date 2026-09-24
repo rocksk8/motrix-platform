@@ -39,7 +39,7 @@ SCAN_JS = r"""() => {
     return 0.2126 * f(p[0]) + 0.7152 * f(p[1]) + 0.0722 * f(p[2])
   }
   const effBg = (el) => { for (let e = el; e; e = e.parentElement) { const l = lum(getComputedStyle(e).backgroundColor); if (l !== null) return l } return 0 }
-  const roots = [...document.body.children].filter(e => !e.matches('.topbar,.sidebar,.sidebar-overlay,script,style,.mui-root'))
+  const roots = [...document.body.children].filter(e => !e.matches('.topbar,.mnav,.sidebar,.sidebar-overlay,script,style,.mui-root'))
   const bad = [], filters = []
   for (const r of roots) {
     const f = getComputedStyle(r).filter
@@ -61,6 +61,9 @@ SCAN_JS = r"""() => {
       }
     }
   }
+  // 頁框（主導覽列）不屬於本頁內容：深色仍靠全站反轉，不可以被本頁的解除規則一起解除
+  const nav = document.querySelector('body > .mnav')
+  if (nav && getComputedStyle(nav).filter === 'none') filters.push('mnav 失去反轉（頁框被本頁規則誤傷）')
   return { bad: [...new Set(bad)], filters }
 }"""
 
