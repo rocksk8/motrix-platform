@@ -395,7 +395,67 @@ def _app(tmp_path_factory):
         setattr(pdf_gen, _const, str(pdf_base / _sub))
 
     main = importlib.import_module("main")  # runs the real startup sequence now, isolated
+    _install_edge_profile_pool(base)
     return main.app
+
+
+def _install_edge_profile_pool(base):
+    """測試時 Edge 產 PDF 重用固定的 profile 目錄（PLAN-TEST-PERF §5.3 方案 A，只改測試端）。
+
+    ☠️ 產品每次 `msedge --headless --print-to-pdf` 都建一份新 profile：抽樣 msedge 寫入 374 MB，
+       PDF 檔本身只有 3.5 MB。
+    🔑 產品碼不動（它沒有 `--user-data-dir`，由 test_edge_profile_2026_09_25 守著）；這裡包一層：
+       - 每個 worker 準備 EDGE_PDF_MAX_CONCURRENCY 份 profile（產品並發上限；單程序跑時真的會同時開 3 個 Edge，
+         **同一份 profile 同時被兩個 Edge 用會被鎖**），用佇列發放，一次一個 Edge 用一份；
+       - 上一個 Edge 逾時被殺、子行程還佔著 profile（`lockfile` 刪不掉）⇒ 換一份新的，
+         否則新的 msedge 會把工作交給殘留的那個而不產出 PDF。
+    ⚠️ 呼叫端是 `from helpers import run_edge_pdf`（依值綁定）⇒ 每個綁到它的名字都要換。
+       第一版寫死 5 處，漏了 `routers/reports.py`（test_pdf_concurrency 抓到）⇒ 改成掃 sys.modules，
+       凡是指向原函式的一律換掉，之後新增的呼叫處也不會漏。
+    ⚠️ `MOTRIX_TEST_EDGE_FRESH_PROFILE=1` ⇒ 不裝（A/B 對照用）。
+    """
+    if os.environ.get("MOTRIX_TEST_EDGE_FRESH_PROFILE") == "1":
+        return
+    import queue
+    import helpers.startup as startup
+
+    original = startup.run_edge_pdf
+    root = base / "edge_profiles"
+    root.mkdir()
+    pool = queue.Queue()
+    serial = [0]
+
+    def _new_dir():
+        serial[0] += 1
+        d = root / ("p%d" % serial[0])
+        d.mkdir()
+        return d
+
+    for _ in range(max(1, int(getattr(startup, "EDGE_PDF_MAX_CONCURRENCY", 3)))):
+        pool.put(_new_dir())
+
+    def run_edge_pdf_with_profile(cmd):
+        if any(str(a).startswith("--user-data-dir") for a in cmd):
+            return original(cmd)
+        d = pool.get()
+        try:
+            lock = d / "lockfile"
+            try:
+                if lock.exists():
+                    lock.unlink()
+            except OSError:
+                d = _new_dir()              # 殘留的 Edge 還佔著 ⇒ 換一份
+            return original([cmd[0], "--user-data-dir=%s" % d] + list(cmd[1:]))
+        finally:
+            pool.put(d)
+
+    run_edge_pdf_with_profile.__wrapped__ = original
+    for mod in list(sys.modules.values()):
+        try:
+            if getattr(mod, "run_edge_pdf", None) is original:
+                setattr(mod, "run_edge_pdf", run_edge_pdf_with_profile)
+        except Exception:  # noqa: BLE001 — 某些模組物件不讓讀／寫屬性，略過不影響其他
+            continue
 
 
 @pytest.fixture(scope="session")
