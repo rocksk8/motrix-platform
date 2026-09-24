@@ -821,6 +821,12 @@
           <div class="cm-list__title-row">
             <span class="cm-list__title">案件管理</span>
             <span class="cm-list__count" x-text="caseTotal + ' 件'"></span>
+            <span class="cm-list__count cm-list__count--danger" data-testid="case-counts-error" role="alert"
+                  x-show="caseCountsError">
+              件數載入失敗
+              <button type="button" class="btn btn-ghost btn-sm" style="margin-left:4px"
+                      @click="loadCaseCounts()">重試</button>
+            </span>
             <span class="cm-list__count cm-list__count--danger" x-show="summaryOverdue() > 0"
                   x-text="'逾期 ' + summaryOverdue()"></span>
             <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">

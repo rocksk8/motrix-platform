@@ -237,12 +237,18 @@ window.CM_PARTS.push(() => ({
     },
 
     // 摘要與頁籤徽章：全部已成案／已結案案件（不受搜尋與分頁影響）
+    // 件數載入失敗要說出來（原本 catch {} 靜默吞掉：caseCounts 永遠 null，摘要與頁籤數字一直空白而沒有說明）
+    caseCountsError: false,
     async loadCaseCounts() {
       try {
         const qs = new URLSearchParams({ deal_tag: '已成案,已結案', counts: '1', limit: '0' })
         const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) this.caseCounts = (await r.json()).counts || null
-      } catch {}
+        if (!r.ok) { this.caseCountsError = true; return }
+        this.caseCounts = (await r.json()).counts || null
+        this.caseCountsError = !this.caseCounts
+      } catch {
+        this.caseCountsError = true
+      }
     },
 
     onCaseSearchInput() {
