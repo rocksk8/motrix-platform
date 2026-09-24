@@ -170,6 +170,8 @@ def test_after_closing_the_case_stays_on_the_case_page(live_server, make_user):
         browser = p.chromium.launch()
         try:
             page = _open(browser, live_server, u)
+            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+            page.click('[data-testid="cm-more"]')
             page.click("button.btn-close-case:not([data-testid])")
             btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
             btn.wait_for(state="visible", timeout=10000)

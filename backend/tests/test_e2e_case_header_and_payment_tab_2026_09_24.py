@@ -49,7 +49,8 @@ def test_header_first_row_is_customer_and_status_and_only_save_is_a_main_button(
             report.wait_for(state="hidden", timeout=5000)
 
             page.click('.cm-tab:has-text("執行管理")')
-            assert page.locator('.cm-tab:text-is("成員")').is_visible()
+            # 點完要等 Alpine 重繪；is_visible() 是當下快照，不會等
+            page.locator('.cm-tab:text-is("成員")').wait_for(state="visible", timeout=10000)
             assert page.locator('.cm-tab:text-is("專案資訊")').count() == 0
         finally:
             browser.close()
