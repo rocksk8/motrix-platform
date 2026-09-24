@@ -188,6 +188,7 @@ def _record_user_activity(user_id: int, now_dt, gap_seconds: float) -> None:
 @app.middleware("http")
 async def slow_request_log(request: Request, call_next):
     _t0 = time.monotonic()
+    request.state.t0 = _t0      # W-6：給 _unhandled_handler 算「開始到出錯」幾秒
     response = await call_next(request)
     _elapsed = time.monotonic() - _t0
     if _elapsed >= _SLOW_REQUEST_SECONDS and request.url.path.startswith("/api/"):
@@ -511,9 +512,15 @@ async def _validation_handler(request: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def _unhandled_handler(request: Request, exc: Exception):
+    # W-6（2026-09-24）：sqlite 例外多記擴充錯誤碼與「請求開始到出錯」的秒數。
+    # 走查時 0.3 秒內 6 筆 database is locked，光看寫出時間分不出「立即失敗（BUSY_SNAPSHOT 等不經
+    # busy handler 的路徑）」與「一起等滿 30 秒 busy_timeout 才逾時（有人握寫鎖 ≥30 秒）」。只加記錄、不改行為。
+    t0 = getattr(request.state, "t0", None)
+    elapsed = ("%.3fs" % (time.monotonic() - t0)) if t0 is not None else None
     logger.error(
-        "Unhandled %s at %s %s",
+        "Unhandled %s at %s %s sqlite_errorname=%s sqlite_errorcode=%s elapsed=%s",
         type(exc).__name__, request.method, request.url.path,
+        getattr(exc, "sqlite_errorname", None), getattr(exc, "sqlite_errorcode", None), elapsed,
         exc_info=True,
     )
     return JSONResponse(
