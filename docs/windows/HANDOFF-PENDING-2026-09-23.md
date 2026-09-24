@@ -525,3 +525,9 @@ hichan-0a 代裁（待確認）：
 - 科目設定另開 `GET/PUT /api/bonus/cases/voucher-accounts`（最高管理者限定；任一科目無效⇒400 全不寫；GET 附 problems 列出事後被停用的科目）。
 - mark-paid 可帶 `bank_account_code`；案件詳細新增 `vouchers`（最高管理者與出納可見）。
 - 前端（改派 **hichan-bf 自己**，排在 AC2 之後；原寫給 hichan-8d 的「獎金科目設定 UI」取消）：設定頁四個科目欄位、出納「已發放」選銀行科目、顯示 notice、詳細頁顯示連結傳票號與狀態。
+
+### CM13 已推（0742164、24ca05b）；CM14／CM15 裁示（2026-09-24 使用者表單）
+- CM14 成員＝admin／superadmin、業務（sales_person_id，舊資料比顯示名稱）、assigned_user_ids、roles 的 filler／sales／executor、**階段負責人（使用者：算）**；非成員 403 不寫入。
+- 已結案半解鎖案件：**非成員也可送變更**（使用者：反正要審核）＝沿用 `_guard_case(skip_if_semi_unlocked)`。
+- 已知限制：roles 以顯示名稱比對，同名帳號互相放行（與獎金自動帶入執行負責同一限制）。
+- CM15：closing-report-pdf、pdf-download?internal=true 加 money_visible 檢查；**本單簽核人例外保留**（使用者：簽核人可以）。
