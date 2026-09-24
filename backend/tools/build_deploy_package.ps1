@@ -670,25 +670,23 @@ Pop-Location
 # ☠️ 分類不出來（收集錯誤、行程被殺、輸出被截斷）⇒ **中止**。
 #    認不得就放行的話，這道判定會在它最該擋的時候消失。
 Release-TestExclusive    # 兩段測試都跑完了，後面的打包不需要佔住別人的測試名額
-$e2eFailLines = @($e2eOut | Where-Object { $_ -match "^FAILED " })
-$e2eTimeoutOnly = $false
-if ($e2eExit -ne 0 -and $e2eFailLines.Count -gt 0) {
-    # 逐行看例外類別；**全部**都是逾時才算逾時。
-    $nonTimeout = @($e2eFailLines | Where-Object { $_ -notmatch "Timeout" })
-    $e2eTimeoutOnly = ($nonTimeout.Count -eq 0)
-}
-if ($e2eExit -eq 0) {
-    Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
-} elseif ($e2eTimeoutOnly) {
-    Write-Host "[WARN] e2e 有 $($e2eFailLines.Count) 題**逾時**（exit $e2eExit）——真實瀏覽器在系統負載高時會渲染逾時，不必然代表程式碼壞掉。繼續打包，建議事後單獨重跑：python -m pytest -m e2e -v" -ForegroundColor Yellow
-} else {
-    $e2eFailLines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
-    Fail "e2e 測試失敗，而失敗的原因**不是逾時**（見上方 FAILED 行）。逾時可以續跑，斷言失敗不行——那代表畫面上真的有東西不對。要確認請單獨跑：python -m pytest -m e2e -v"
-}
-# 記下這一次的測試結果（後面打包失敗再建時可以沿用）。只有**兩段都 exit 0** 才算綠——逾時放行不算。
+# 記下這一次的測試結果（後面打包失敗再建時可以沿用）。**放在 e2e 閘門之前**：閘門紅了會直接 Fail 離開，
+# 要讓紅的這一次也記成非綠，否則同一份 tree 之前的綠紀錄會留著、下次被沿用（2026-09-25）。只有**兩段都 exit 0** 才算綠——逾時放行不算。
 if ($testFp) {
     $greenFlag = if ($testExit -eq 0 -and $e2eExit -eq 0) { "1" } else { "0" }
     try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $greenFlag --commit $commitShort | Out-Null } catch {}
+}
+# 📌 更正（2026-09-25）：上面「只有認得出來的逾時才降級成警告」已撤回——
+#    逾時的題**沒有驗到任何東西**，警告後繼續打包＝靜默少驗（平行化後只會更多）。
+#    現在逾時也擋下打包；逾時與斷言失敗仍分開列，並附每題的單獨重跑指令。
+#    判定抽到 _e2e_gate.ps1::Get-E2eGateResult（可單獨測）。
+. (Join-Path $PSScriptRoot "_e2e_gate.ps1")
+$e2eGate = Get-E2eGateResult -ExitCode $e2eExit -Lines @($e2eOut | ForEach-Object { "$_" }) -PyExe $pyExe
+if ($e2eGate.Ok) {
+    Write-Host "[OK] e2e 測試也全數通過。" -ForegroundColor Green
+} else {
+    $e2eGate.Message | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+    Fail "e2e 未全數通過（斷言失敗 $($e2eGate.Failures.Count) 題、逾時 $($e2eGate.Timeouts.Count) 題）——逾時也算沒驗，不出包。見上方清單與單獨重跑指令。"
 }
 }   # end: if ($reuse) else
 
