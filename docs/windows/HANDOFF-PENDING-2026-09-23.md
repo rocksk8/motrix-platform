@@ -531,3 +531,10 @@ hichan-0a 代裁（待確認）：
 - 已結案半解鎖案件：**非成員也可送變更**（使用者：反正要審核）＝沿用 `_guard_case(skip_if_semi_unlocked)`。
 - 已知限制：roles 以顯示名稱比對，同名帳號互相放行（與獎金自動帶入執行負責同一限制）。
 - CM15：closing-report-pdf、pdf-download?internal=true 加 money_visible 檢查；**本單簽核人例外保留**（使用者：簽核人可以）。
+
+### AC2 細部（hichan-0a 裁，2026-09-24 15:3x；依使用者已裁的規則推導）
+1. 承攬商費用列在**派工**（contractor_dispatches），發票日期欄加在派工；匯款申請只供現金口徑的付款日（避免同一成本計兩次）。
+2. 未設比例的收入認列月＝`MAX(case_stages.done_at)`（全部階段完成）；無完成日 ⇒ 不認列，報表列「未完工」。
+3. 切換放在 `/api/reports/expenses-monthly?basis=accrual|cash`，預設 accrual。現金口徑：收入＝receivedAt；派工＝匯款申請 paid_at；叫料＝paidDate；額外支出無付款日⇒用 expense_date 並標示。⚠ 現行報表支出依 dispatch_date 分月且漏算叫料 ⇒ **上線後數字會變**，列入交付說明。
+4. v115 `case_stages.ratio_bp`（INTEGER NULL）核准；**階段比例 UI 改由 hichan-bf 做**（從 hichan-8d 排程移除）；叫料發票日期放品項 JSON，不 migration。
+- 流程紀錄：AC3（cb9be35）rebase 帶入 CM13 後未重跑即推，事後補跑相關 83 passed。
