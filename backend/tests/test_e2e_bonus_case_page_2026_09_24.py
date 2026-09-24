@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -21,25 +20,6 @@ NO = "MQ-E2EBC-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -102,115 +82,103 @@ def _users(make_user):
 
 
 @pytest.mark.e2e
-def test_superadmin_builds_draft_and_submits_in_page(live_server, make_user):
+def test_superadmin_builds_draft_and_submits_in_page(live_server, make_user, e2e_browser):
     u = _users(make_user)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, *u["pg_sa"])
-            page.goto(f"{live_server}/pages/bonus.html")
-            card = page.locator(f'.bn-case[data-quote-no="{NO}"]')
-            card.wait_for(timeout=20000)
-            assert "已精算" in card.inner_text()
-            card.click()
-            page.locator('[data-testid="bn-create"]').click()
-            page.locator('[data-testid="bn-draft"]').wait_for(timeout=15000)
-            a, lines = _award()
-            assert a["status"] == "草稿"
-            assert {(l["category"], l["username"]) for l in lines} == {("sales", "pg_sales"), ("project", "pg_exec")}
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, *u["pg_sa"])
+    page.goto(f"{live_server}/pages/bonus.html")
+    card = page.locator(f'.bn-case[data-quote-no="{NO}"]')
+    card.wait_for(timeout=20000)
+    assert "已精算" in card.inner_text()
+    card.click()
+    page.locator('[data-testid="bn-create"]').click()
+    page.locator('[data-testid="bn-draft"]').wait_for(timeout=15000)
+    a, lines = _award()
+    assert a["status"] == "草稿"
+    assert {(l["category"], l["username"]) for l in lines} == {("sales", "pg_sales"), ("project", "pg_exec")}
 
-            page.select_option('[data-testid="bn-add-admin"]', "pg_admin")
-            page.locator('[data-testid="bn-add-admin"] + button').click()
-            page.fill('[data-testid="bn-rate"]', "15")
-            page.locator('[data-testid="bn-save"]').click()
-            page.wait_for_function(f"() => {DATA_JS}.msg === '已儲存'", timeout=15000)
-            a, lines = _award()
-            assert a["rate_bp"] == 1500 and a["pool_amount"] == 15000
-            assert {(l["category"], l["username"]): l["amount"] for l in lines} == {
-                ("sales", "pg_sales"): 7500, ("project", "pg_exec"): 4500, ("admin", "pg_admin"): 3000}
-            assert page.inner_text('[data-testid="bn-remainder"]').strip() == "NT$ 0"
+    page.select_option('[data-testid="bn-add-admin"]', "pg_admin")
+    page.locator('[data-testid="bn-add-admin"] + button').click()
+    page.fill('[data-testid="bn-rate"]', "15")
+    page.locator('[data-testid="bn-save"]').click()
+    page.wait_for_function(f"() => {DATA_JS}.msg === '已儲存'", timeout=15000)
+    a, lines = _award()
+    assert a["rate_bp"] == 1500 and a["pool_amount"] == 15000
+    assert {(l["category"], l["username"]): l["amount"] for l in lines} == {
+        ("sales", "pg_sales"): 7500, ("project", "pg_exec"): 4500, ("admin", "pg_admin"): 3000}
+    assert page.inner_text('[data-testid="bn-remainder"]').strip() == "NT$ 0"
 
-            page.locator('[data-testid="bn-submit"]').click()
-            page.wait_for_function(f"() => {DATA_JS}.msg === '已送審'", timeout=15000)
-            assert _award()[0]["status"] == "待審核"
-            assert "待審核" in page.inner_text('[data-testid="bn-status"]')
-        finally:
-            browser.close()
+    page.locator('[data-testid="bn-submit"]').click()
+    page.wait_for_function(f"() => {DATA_JS}.msg === '已送審'", timeout=15000)
+    assert _award()[0]["status"] == "待審核"
+    assert "待審核" in page.inner_text('[data-testid="bn-status"]')
 
 
 @pytest.mark.e2e
-def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user):
+def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user, e2e_browser):
     u = _users(make_user)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            ctx = browser.new_context()
-            page = ctx.new_page()
+    browser = e2e_browser
+    ctx = browser.new_context()
+    page = ctx.new_page()
 
-            def api_login(name):
-                r = page.request.post(f"{live_server}/api/auth/login",
-                                      data={"username": name, "password": u[name][1]})
-                return {"Authorization": "Bearer " + r.json()["token"]}
-            sa, sa2 = api_login("pg_sa"), api_login("pg_sa2")
-            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}", headers=sa,
-                                     data={"members": {"sales": [{"username": "pg_sales"}],
-                                                       "project": [{"username": "pg_exec"}],
-                                                       "admin": [{"username": "pg_admin"}]}}).ok
-            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/submit", headers=sa).ok
-            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/approve", headers=sa2).ok
+    def api_login(name):
+        r = page.request.post(f"{live_server}/api/auth/login",
+                              data={"username": name, "password": u[name][1]})
+        return {"Authorization": "Bearer " + r.json()["token"]}
+    sa, sa2 = api_login("pg_sa"), api_login("pg_sa2")
+    assert page.request.post(f"{live_server}/api/bonus/cases/{NO}", headers=sa,
+                             data={"members": {"sales": [{"username": "pg_sales"}],
+                                               "project": [{"username": "pg_exec"}],
+                                               "admin": [{"username": "pg_admin"}]}}).ok
+    assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/submit", headers=sa).ok
+    assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/approve", headers=sa2).ok
 
-            # 名單上的人
-            _login(page, live_server, *u["pg_exec"])
-            page.goto(f"{live_server}/pages/bonus.html?q={NO}")
-            page.locator('[data-testid="bn-view-project-pg_exec"]').wait_for(timeout=20000)
-            assert "NT$ 3,000" in page.inner_text('[data-testid="bn-view-project-pg_exec"]')
-            assert page.locator('[data-testid="bn-view-sales-pg_sales"]').count() == 0
-            assert page.locator('[data-testid="bn-pool"]').count() == 0
-            assert page.locator('[data-testid="bn-mark-paid"]').count() == 0
+    # 名單上的人
+    _login(page, live_server, *u["pg_exec"])
+    page.goto(f"{live_server}/pages/bonus.html?q={NO}")
+    page.locator('[data-testid="bn-view-project-pg_exec"]').wait_for(timeout=20000)
+    assert "NT$ 3,000" in page.inner_text('[data-testid="bn-view-project-pg_exec"]')
+    assert page.locator('[data-testid="bn-view-sales-pg_sales"]').count() == 0
+    assert page.locator('[data-testid="bn-pool"]').count() == 0
+    assert page.locator('[data-testid="bn-mark-paid"]').count() == 0
 
-            # 出納
-            page2 = browser.new_context().new_page()
-            _login(page2, live_server, *u["pg_cash"])
-            page2.goto(f"{live_server}/pages/bonus.html?q={NO}")
-            page2.locator('[data-testid="bn-view-sales-pg_sales"]').wait_for(timeout=20000)
-            assert page2.inner_text('[data-testid="bn-paid-total"]').strip() == "NT$ 10,000"
-            assert page2.locator('[data-testid="bn-pool"]').is_hidden()
-            page2.locator('[data-testid="bn-mark-paid"]').click()
-            # AC3 起訊息後面會接「已產生傳票草稿 …」⇒ 比開頭
-            page2.wait_for_function(f"() => ({DATA_JS}.msg || '').startsWith('已標記發放')", timeout=15000)
-            a, _ = _award()
-            assert a["status"] == "已發放" and a["paid_by"] == "pg_cash"
-        finally:
-            browser.close()
+    # 出納
+    page2 = browser.new_context().new_page()
+    _login(page2, live_server, *u["pg_cash"])
+    page2.goto(f"{live_server}/pages/bonus.html?q={NO}")
+    page2.locator('[data-testid="bn-view-sales-pg_sales"]').wait_for(timeout=20000)
+    assert page2.inner_text('[data-testid="bn-paid-total"]').strip() == "NT$ 10,000"
+    assert page2.locator('[data-testid="bn-pool"]').is_hidden()
+    page2.locator('[data-testid="bn-mark-paid"]').click()
+    # AC3 起訊息後面會接「已產生傳票草稿 …」⇒ 比開頭
+    page2.wait_for_function(f"() => ({DATA_JS}.msg || '').startsWith('已標記發放')", timeout=15000)
+    a, _ = _award()
+    assert a["status"] == "已發放" and a["paid_by"] == "pg_cash"
 
 
 @pytest.mark.e2e
-def test_outsider_without_finance_rights_sees_menu_entry_and_empty_state(live_server, make_user):
+def test_outsider_without_finance_rights_sees_menu_entry_and_empty_state(live_server, make_user, e2e_browser):
     """M1：沒有任何財務權限、也不在名單上的人 ⇒ 選單「財務」分組只剩「獎金分潤」一項（分組不是空的），
     頁面打得開、顯示空狀態，不是「沒有權限」。"""
     u = _users(make_user)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, *u["pg_out"])
-            page.goto(f"{live_server}/pages/bonus.html")
-            page.locator('[data-testid="bn-empty"]').wait_for(timeout=20000)
-            assert "目前沒有您的獎金分潤資料" in page.inner_text('[data-testid="bn-empty"]')
-            assert "需要對應的模組權限" not in page.inner_text("body")
-            links = page.evaluate("""() => [...document.querySelectorAll('a[href]')]
-                .filter(a => /bonus\.html$/.test(a.getAttribute('href') || '')).length""")
-            assert links >= 1, "選單要有「獎金分潤」入口"
-            finance = page.evaluate("""() => {
-                const out = []
-                document.querySelectorAll('a[href]').forEach(a => {
-                  const h = a.getAttribute('href') || ''
-                  if (/(reports|cashier|voucher|account-items|bonus)\.html$/.test(h)) out.push(h.split('/').pop())
-                })
-                return [...new Set(out)]
-            }""")
-            print("M1 頁面實測：無財務權限者的財務類入口", finance)
-            assert finance == ["bonus.html"], finance
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, *u["pg_out"])
+    page.goto(f"{live_server}/pages/bonus.html")
+    page.locator('[data-testid="bn-empty"]').wait_for(timeout=20000)
+    assert "目前沒有您的獎金分潤資料" in page.inner_text('[data-testid="bn-empty"]')
+    assert "需要對應的模組權限" not in page.inner_text("body")
+    links = page.evaluate("""() => [...document.querySelectorAll('a[href]')]
+        .filter(a => /bonus\.html$/.test(a.getAttribute('href') || '')).length""")
+    assert links >= 1, "選單要有「獎金分潤」入口"
+    finance = page.evaluate("""() => {
+        const out = []
+        document.querySelectorAll('a[href]').forEach(a => {
+          const h = a.getAttribute('href') || ''
+          if (/(reports|cashier|voucher|account-items|bonus)\.html$/.test(h)) out.push(h.split('/').pop())
+        })
+        return [...new Set(out)]
+    }""")
+    print("M1 頁面實測：無財務權限者的財務類入口", finance)
+    assert finance == ["bonus.html"], finance

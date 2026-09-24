@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 A = "MQ-STALE-A"
 B = "MQ-STALE-B"
@@ -65,74 +64,49 @@ def _assigned(no):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 @pytest.mark.e2e
-def test_the_earlier_cases_late_subloads_do_not_land_on_the_current_case(live_server, make_user):
+def test_the_earlier_cases_late_subloads_do_not_land_on_the_current_case(live_server, make_user, e2e_browser):
     u = make_user(username="stale_e1", role="admin")
     make_user(username="stale_member", role="sales")
     member = _user_id("stale_member")
     _seed(A, stages=[], assigned=[member], ship_note="SN-STALE-A")   # 沒有階段 ⇒ 頁面會替 A 建預設階段
     _seed(B, stages=["B施工"], assigned=[])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.on("dialog", lambda d: d.accept())
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html")
-            page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
-                                   timeout=20000)
-            delayed = []
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.on("dialog", lambda d: d.accept())
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
+                           timeout=20000)
+    delayed = []
 
-            def _slow_first_stage_post(route):
-                if route.request.method == "POST" and not delayed:
-                    delayed.append(1)
-                    time.sleep(2.0)
-                route.continue_()
+    def _slow_first_stage_post(route):
+        if route.request.method == "POST" and not delayed:
+            delayed.append(1)
+            time.sleep(2.0)
+        route.continue_()
 
-            page.route(f"**/api/quotations/{A}/stages", _slow_first_stage_post)
-            page.evaluate(f"() => {{ {DATA_JS}.selectCase('{A}') }}")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{A}'",
-                                   timeout=10000)
-            page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{B}') }}")
-            page.wait_for_timeout(4000)      # A 的後段（其餘 4 個預設階段＋子載入）都回來了
-            state = page.evaluate(f"""() => {{ const c = {DATA_JS}; return {{
-                no: c.selected.quote_no,
-                notes: (c.shippingNotes || []).map(n => n.noteNo || n.note_no),
-                assigned: c.assignedUserIds,
-                stages: (c.cr.caseRecord.stages || []).map(s => s.label),
-            }} }}""")
-            assert state["no"] == B, state
-            assert "SN-STALE-A" not in state["notes"], state
-            assert state["assigned"] == [], state
-            assert state["stages"] == ["B施工"], state
-            page.evaluate(f"async () => {{ await {DATA_JS}.saveAssignedUsers() }}")
-            assert _assigned(B) == [], "A 的成員名單被存進 B"
-        finally:
-            browser.close()
+    page.route(f"**/api/quotations/{A}/stages", _slow_first_stage_post)
+    page.evaluate(f"() => {{ {DATA_JS}.selectCase('{A}') }}")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{A}'",
+                           timeout=10000)
+    page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{B}') }}")
+    page.wait_for_timeout(4000)      # A 的後段（其餘 4 個預設階段＋子載入）都回來了
+    state = page.evaluate(f"""() => {{ const c = {DATA_JS}; return {{
+        no: c.selected.quote_no,
+        notes: (c.shippingNotes || []).map(n => n.noteNo || n.note_no),
+        assigned: c.assignedUserIds,
+        stages: (c.cr.caseRecord.stages || []).map(s => s.label),
+    }} }}""")
+    assert state["no"] == B, state
+    assert "SN-STALE-A" not in state["notes"], state
+    assert state["assigned"] == [], state
+    assert state["stages"] == ["B施工"], state
+    page.evaluate(f"async () => {{ await {DATA_JS}.saveAssignedUsers() }}")
+    assert _assigned(B) == [], "A 的成員名單被存進 B"

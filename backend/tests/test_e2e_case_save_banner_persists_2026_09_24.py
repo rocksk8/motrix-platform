@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 NO = "MQ-BANNER-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -38,27 +37,6 @@ def _seed():
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -81,35 +59,27 @@ def _break_and_save(page):
 
 
 @pytest.mark.e2e
-def test_banner_survives_the_previous_successs_clear_timer(live_server, make_user):
+def test_banner_survives_the_previous_successs_clear_timer(live_server, make_user, e2e_browser):
     u = make_user(username="bnr_e1", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = '先成功存一次' }}")
-            page.click(".cm-header .btn-save")
-            page.locator("[data-testid=save-toast]").wait_for(state="visible", timeout=5000)
-            _break_and_save(page)                    # 2 秒內接著失敗
-            page.wait_for_timeout(3000)              # 前一次成功排的清空計時器（2 秒）已觸發
-            assert page.locator(BANNER).is_visible(), "問題還在，錯誤橫幅卻被上一次成功存檔的計時器清掉了"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = '先成功存一次' }}")
+    page.click(".cm-header .btn-save")
+    page.locator("[data-testid=save-toast]").wait_for(state="visible", timeout=5000)
+    _break_and_save(page)                    # 2 秒內接著失敗
+    page.wait_for_timeout(3000)              # 前一次成功排的清空計時器（2 秒）已觸發
+    assert page.locator(BANNER).is_visible(), "問題還在，錯誤橫幅卻被上一次成功存檔的計時器清掉了"
 
 
 @pytest.mark.e2e
-def test_banner_survives_typing_after_an_error(live_server, make_user):
+def test_banner_survives_typing_after_an_error(live_server, make_user, e2e_browser):
     u = make_user(username="bnr_e2", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            _break_and_save(page)
-            note = page.locator("[data-testid=fin-payment] input[placeholder='收款備註...']").first
-            note.fill("打字")                          # @input ⇒ setDirty()
-            page.wait_for_timeout(300)
-            assert page.locator(BANNER).is_visible(), "一打字錯誤橫幅就消失了（問題還在）"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    _break_and_save(page)
+    note = page.locator("[data-testid=fin-payment] input[placeholder='收款備註...']").first
+    note.fill("打字")                          # @input ⇒ setDirty()
+    page.wait_for_timeout(300)
+    assert page.locator(BANNER).is_visible(), "一打字錯誤橫幅就消失了（問題還在）"

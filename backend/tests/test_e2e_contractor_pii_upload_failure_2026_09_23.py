@@ -49,32 +49,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -135,7 +114,7 @@ def _run_save(page, live_server, username, password, page_file, form,
 @pytest.mark.e2e
 @pytest.mark.parametrize("page_file, route_glob, form", PAGES)
 def test_em12_a_failed_pii_upload_keeps_the_modal_open_and_visible(
-        live_server, make_user, page_file, route_glob, form):
+        live_server, make_user, page_file, route_glob, form, e2e_browser):
     """🔴 **個資影本那支 PUT 失敗 ⇒ 視窗不關，錯誤訊息看得見。**
 
     ```
@@ -145,43 +124,39 @@ def test_em12_a_failed_pii_upload_keeps_the_modal_open_and_visible(
     """
     username, password = make_user(username="em12_" + page_file.split(".")[0],
                                    role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            result = _run_save(page, live_server, username, password,
-                              page_file, form, route_glob)
+    browser = e2e_browser
+    page = browser.new_page()
+    result = _run_save(page, live_server, username, password,
+                      page_file, form, route_glob)
 
-            assert result["showModal"] is True, (
-                "%s：個資影本上傳失敗，而視窗關掉了（showModal=%r）。\n"
-                % (page_file, result["showModal"])
-                + "☠️ 使用者看到「存好了」的樣子，實際上那份個資影本\n"
-                  "   （銀行存摺／身分證）**沒有存進去**。")
+    assert result["showModal"] is True, (
+        "%s：個資影本上傳失敗，而視窗關掉了（showModal=%r）。\n"
+        % (page_file, result["showModal"])
+        + "☠️ 使用者看到「存好了」的樣子，實際上那份個資影本\n"
+          "   （銀行存摺／身分證）**沒有存進去**。")
 
-            assert (result.get("errMsg") or "").strip(), (
-                "%s：視窗沒關，而 `errMsg` 是空的 —— 使用者看到一個\n"
-                "什麼都沒說的視窗，不知道剛剛發生了什麼。" % page_file)
+    assert (result.get("errMsg") or "").strip(), (
+        "%s：視窗沒關，而 `errMsg` 是空的 —— 使用者看到一個\n"
+        "什麼都沒說的視窗，不知道剛剛發生了什麼。" % page_file)
 
-            # 🔑 `§219`：狀態有值不等於看得見 —— 錯誤訊息所在的 DOM
-            #    可能被包在一個「出錯時剛好也會隱藏」的容器裡。實際渲染
-            #    出來看一次，不要只信 Alpine 元件內部狀態。
-            err_locator = page.locator('[x-show="errMsg"]')
-            assert err_locator.count() > 0, (
-                "%s：頁面上找不到 `x-show=\"errMsg\"` 這個容器 ——\n"
-                "改了實作方式的話，退回給我改觀測點。" % page_file)
-            assert err_locator.first.is_visible(), (
-                "%s：`errMsg` 有值，而它的容器在畫面上**看不見** ——\n"
-                % page_file
-                + "☠️ 狀態對了，顯示它的容器條件卻與它互斥（`§219` 同一種病：\n"
-                  "   使用者一個字都看不到，比看到一句假話更難查）。")
-        finally:
-            browser.close()
+    # 🔑 `§219`：狀態有值不等於看得見 —— 錯誤訊息所在的 DOM
+    #    可能被包在一個「出錯時剛好也會隱藏」的容器裡。實際渲染
+    #    出來看一次，不要只信 Alpine 元件內部狀態。
+    err_locator = page.locator('[x-show="errMsg"]')
+    assert err_locator.count() > 0, (
+        "%s：頁面上找不到 `x-show=\"errMsg\"` 這個容器 ——\n"
+        "改了實作方式的話，退回給我改觀測點。" % page_file)
+    assert err_locator.first.is_visible(), (
+        "%s：`errMsg` 有值，而它的容器在畫面上**看不見** ——\n"
+        % page_file
+        + "☠️ 狀態對了，顯示它的容器條件卻與它互斥（`§219` 同一種病：\n"
+          "   使用者一個字都看不到，比看到一句假話更難查）。")
 
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("page_file, route_glob, form", PAGES)
 def test_em12_a_successful_pii_upload_still_closes_the_modal(
-        live_server, make_user, page_file, route_glob, form):
+        live_server, make_user, page_file, route_glob, form, e2e_browser):
     """⚙️ **正對照：個資影本上傳成功時，視窗要關。**
 
     ☠️ 少了它，一個「不管成敗一律不關視窗」的實作也會讓上一題綠，
@@ -189,15 +164,11 @@ def test_em12_a_successful_pii_upload_still_closes_the_modal(
     """
     username, password = make_user(
         username="em12ok_" + page_file.split(".")[0], role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            result = _run_save(page, live_server, username, password,
-                              page_file, form, fail_route=None)
-            assert result["showModal"] is False, (
-                "%s：個資影本上傳**成功**，而視窗還開著（showModal=%r）——\n"
-                % (page_file, result["showModal"])
-                + "☠️ 正常存檔的話，使用者每次都要多按一次「取消」才能關掉。")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    result = _run_save(page, live_server, username, password,
+                      page_file, form, fail_route=None)
+    assert result["showModal"] is False, (
+        "%s：個資影本上傳**成功**，而視窗還開著（showModal=%r）——\n"
+        % (page_file, result["showModal"])
+        + "☠️ 正常存檔的話，使用者每次都要多按一次「取消」才能關掉。")

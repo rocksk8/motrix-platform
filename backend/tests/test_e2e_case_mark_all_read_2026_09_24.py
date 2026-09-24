@@ -11,7 +11,6 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 NO = "MQ-MARKALL-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -31,31 +30,10 @@ def _seed():
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 @pytest.mark.e2e
-def test_mark_all_read_does_not_bounce_back(live_server, client, make_user):
+def test_mark_all_read_does_not_bounce_back(live_server, client, make_user, e2e_browser):
     u = make_user(username="mar_e1", role="admin")
     _seed()
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
@@ -69,28 +47,24 @@ def test_mark_all_read_does_not_bounce_back(live_server, client, make_user):
         conn.commit()
     finally:
         conn.close()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html")
-            bar = page.locator(".cm-unread-bar")
-            bar.wait_for(state="visible", timeout=15000)
-            time.sleep(1.1)                          # 已讀時間要嚴格晚於動態時間（到秒）
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html")
+    bar = page.locator(".cm-unread-bar")
+    bar.wait_for(state="visible", timeout=15000)
+    time.sleep(1.1)                          # 已讀時間要嚴格晚於動態時間（到秒）
 
-            def slow(route):
-                if route.request.method == "POST":
-                    time.sleep(1.5)                  # 已讀請求比件數重抓晚回來
-                route.continue_()
-            page.route("**/api/reads", slow)
-            page.locator(".cm-unread-bar button:has-text('一鍵已讀')").click()
-            page.wait_for_timeout(4000)
-            assert page.evaluate(f"() => {DATA_JS}.unreadCount()") == 0, "一鍵已讀後未讀數又回來了"
-            assert not bar.is_visible(), "一鍵已讀後未讀列又出現了"
-        finally:
-            browser.close()
+    def slow(route):
+        if route.request.method == "POST":
+            time.sleep(1.5)                  # 已讀請求比件數重抓晚回來
+        route.continue_()
+    page.route("**/api/reads", slow)
+    page.locator(".cm-unread-bar button:has-text('一鍵已讀')").click()
+    page.wait_for_timeout(4000)
+    assert page.evaluate(f"() => {DATA_JS}.unreadCount()") == 0, "一鍵已讀後未讀數又回來了"
+    assert not bar.is_visible(), "一鍵已讀後未讀列又出現了"

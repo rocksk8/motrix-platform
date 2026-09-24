@@ -13,7 +13,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -21,26 +20,6 @@ from tests._ports import free_safe_port
 QUOTE_NO = "MQ-E2ERCV-001"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_t100_unconfirm_2026_09_10.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -62,7 +41,7 @@ def _item():
 
 
 @pytest.mark.e2e
-def test_receive_modal_blocks_empty_actual_amount(live_server, make_user):
+def test_receive_modal_blocks_empty_actual_amount(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_rcv", role="admin")
 
     import db
@@ -81,40 +60,36 @@ def test_receive_modal_blocks_empty_actual_amount(live_server, make_user):
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/cashier.html")
-            page.click('button.ctab:has-text("待收款")')
-            row = page.locator("tr", has=page.locator("td.mono", has_text=QUOTE_NO))
-            row.locator("button.action-btn.pay").click()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/cashier.html")
+    page.click('button.ctab:has-text("待收款")')
+    row = page.locator("tr", has=page.locator("td.mono", has_text=QUOTE_NO))
+    row.locator("button.action-btn.pay").click()
 
-            amount = page.locator('input[x-model\\.number="receiveActualAmount"]')
-            confirm = page.locator("button", has_text="確認標記已收款")
-            amount.wait_for(state="visible")
-            assert amount.input_value() == "50000", "預設帶應收金額"
-            assert confirm.is_enabled()
+    amount = page.locator('input[x-model\\.number="receiveActualAmount"]')
+    confirm = page.locator("button", has_text="確認標記已收款")
+    amount.wait_for(state="visible")
+    assert amount.input_value() == "50000", "預設帶應收金額"
+    assert confirm.is_enabled()
 
-            amount.fill("")
-            err = page.locator('div[x-text="receiveAmountError()"]')
-            err.wait_for(state="visible")
-            assert "實收金額" in err.inner_text()
-            assert confirm.is_disabled(), "實收金額空白時不可以按確認"
-            assert _item()["received"] is False
+    amount.fill("")
+    err = page.locator('div[x-text="receiveAmountError()"]')
+    err.wait_for(state="visible")
+    assert "實收金額" in err.inner_text()
+    assert confirm.is_disabled(), "實收金額空白時不可以按確認"
+    assert _item()["received"] is False
 
-            amount.fill("49800")
-            assert confirm.is_enabled()
-            confirm.click()
-            for _ in range(100):
-                if _item().get("received"):
-                    break
-                time.sleep(0.1)
-            it = _item()
-            assert it["received"] is True
-            assert it["actualAmount"] == 49800
-            assert it["receivedBy"] == username
-            assert len(it["receivedAt"]) == 10
-        finally:
-            browser.close()
+    amount.fill("49800")
+    assert confirm.is_enabled()
+    confirm.click()
+    for _ in range(100):
+        if _item().get("received"):
+            break
+        time.sleep(0.1)
+    it = _item()
+    assert it["received"] is True
+    assert it["actualAmount"] == 49800
+    assert it["receivedBy"] == username
+    assert len(it["receivedAt"]) == 10

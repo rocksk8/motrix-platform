@@ -8,9 +8,7 @@ sidebar.js 的 _maybeSetDirty 只略過 type=search／range 或 class 含 search
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
-from tests.test_e2e_case_mark_all_read_2026_09_24 import live_server  # noqa: F401  (live_server 是 fixture)
 
 # 頁面 → (篩選欄 x-model 名稱, 反向控制：會存檔的欄位 x-model 名稱)
 PAGES = {
@@ -68,40 +66,36 @@ def _seed_parties():
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("page_name", sorted(PAGES))
-def test_filter_fields_do_not_mark_the_page_dirty(live_server, make_user, monkeypatch, page_name):
+def test_filter_fields_do_not_mark_the_page_dirty(live_server, make_user, monkeypatch, page_name, e2e_browser):
     from helpers import geo
     monkeypatch.setattr(geo, "tiles_blocked", lambda *a, **k: None)   # 標案雷達的地圖會觸發後端探測圖磚（連外）
     u = make_user(username="w8_" + page_name.split("?")[0].replace("-", "_")[:20], role="superadmin")
     filters, saved = PAGES[page_name]
     ids = _seed_parties()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            ctx = browser.new_context()
-            ctx.route("**/tile.openstreetmap.org/**", lambda r: r.abort())   # 地圖圖磚不連外
-            page = ctx.new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            if "{pid}" in page_name:
-                ids["pid"] = page.evaluate("""async () => {
-                  const t = JSON.parse(localStorage.getItem('motrix_session')).token
-                  const r = await fetch('/api/network-plans', { method: 'POST',
-                    headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ siteName: 'W8 規劃' }) })
-                  return (await r.json()).id }""")
-            page.goto(f"{live_server}/pages/" + page_name.replace("?", ".html?", 1).format(**ids) + ("" if "?" in page_name else ".html"))
-            page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')", timeout=15000)
-            page.wait_for_timeout(1500)
-            dirty = {name: page.evaluate(FIRE, [name, None]) for name in filters}
-            missing = [k for k, v in dirty.items() if v == "missing" and k not in OPTIONAL]
-            assert not missing, ("篩選欄不在畫面上（前提不成立）", dirty)
-            dirty = {k: v for k, v in dirty.items() if v != "missing"}
-            assert dirty, "沒有任何篩選欄被實測到"
-            assert not any(dirty.values()), ("改篩選欄就被當成未存修改（會跳離頁警告）", dirty)
-            if saved:
-                assert page.evaluate(FIRE, [saved, None]) is True, "反向控制：會存檔的欄位改值後應該設 dirty"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    ctx = browser.new_context()
+    ctx.route("**/tile.openstreetmap.org/**", lambda r: r.abort())   # 地圖圖磚不連外
+    page = ctx.new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    if "{pid}" in page_name:
+        ids["pid"] = page.evaluate("""async () => {
+          const t = JSON.parse(localStorage.getItem('motrix_session')).token
+          const r = await fetch('/api/network-plans', { method: 'POST',
+            headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ siteName: 'W8 規劃' }) })
+          return (await r.json()).id }""")
+    page.goto(f"{live_server}/pages/" + page_name.replace("?", ".html?", 1).format(**ids) + ("" if "?" in page_name else ".html"))
+    page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')", timeout=15000)
+    page.wait_for_timeout(1500)
+    dirty = {name: page.evaluate(FIRE, [name, None]) for name in filters}
+    missing = [k for k, v in dirty.items() if v == "missing" and k not in OPTIONAL]
+    assert not missing, ("篩選欄不在畫面上（前提不成立）", dirty)
+    dirty = {k: v for k, v in dirty.items() if v != "missing"}
+    assert dirty, "沒有任何篩選欄被實測到"
+    assert not any(dirty.values()), ("改篩選欄就被當成未存修改（會跳離頁警告）", dirty)
+    if saved:
+        assert page.evaluate(FIRE, [saved, None]) is True, "反向控制：會存檔的欄位改值後應該設 dirty"

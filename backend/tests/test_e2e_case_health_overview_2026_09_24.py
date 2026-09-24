@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 NO = "MQ-HEALTH-001"
 NO2 = "MQ-HEALTH-002"
@@ -64,27 +63,6 @@ def _set_display_name(username, name):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user, no=NO):
@@ -101,63 +79,51 @@ def _open(browser, base, user, no=NO):
 
 
 @pytest.mark.e2e
-def test_health_overview_shows_gates_overdue_receivable_and_pending_approvers(live_server, make_user):
+def test_health_overview_shows_gates_overdue_receivable_and_pending_approvers(live_server, make_user, e2e_browser):
     u = make_user(username="hl_e1", role="admin")
     make_user(username="hl_boss", role="admin")
     _set_display_name("hl_boss", "王經理")
     _seed(NO)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            panel = page.locator(PANEL)
-            page.locator(f"{PANEL}[data-health-quote='{NO}']").wait_for(state="visible", timeout=10000)
-            for label in ("進度", "收款", "單據", "精算", "變更"):
-                assert panel.locator(f"[data-health-gate='{label}']").count() == 1, label
-            text = panel.inner_text()
-            assert "應收逾期 1 期" in text, text
-            assert "尾款" in text, text
-            assert "王經理" in text, text
-            assert "出貨單" in text, text
-            panel.locator("[data-health-gate='單據']").click()
-            page.wait_for_function(f"() => {DATA_JS}.activeTab === 'shipping'", timeout=5000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    panel = page.locator(PANEL)
+    page.locator(f"{PANEL}[data-health-quote='{NO}']").wait_for(state="visible", timeout=10000)
+    for label in ("進度", "收款", "單據", "精算", "變更"):
+        assert panel.locator(f"[data-health-gate='{label}']").count() == 1, label
+    text = panel.inner_text()
+    assert "應收逾期 1 期" in text, text
+    assert "尾款" in text, text
+    assert "王經理" in text, text
+    assert "出貨單" in text, text
+    panel.locator("[data-health-gate='單據']").click()
+    page.wait_for_function(f"() => {DATA_JS}.activeTab === 'shipping'", timeout=5000)
 
 
 @pytest.mark.e2e
-def test_health_overview_says_nothing_overdue_when_all_clear(live_server, make_user):
+def test_health_overview_says_nothing_overdue_when_all_clear(live_server, make_user, e2e_browser):
     u = make_user(username="hl_e2", role="admin")
     _seed(NO, overdue_receipt=False, pending_ship=False)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.locator(f"{PANEL}[data-health-quote='{NO}']").wait_for(state="visible", timeout=10000)
-            text = page.locator(PANEL).inner_text()
-            assert "應收逾期" not in text, text
-            assert "待簽核" not in text, text
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.locator(f"{PANEL}[data-health-quote='{NO}']").wait_for(state="visible", timeout=10000)
+    text = page.locator(PANEL).inner_text()
+    assert "應收逾期" not in text, text
+    assert "待簽核" not in text, text
 
 
 @pytest.mark.e2e
-def test_health_overview_follows_the_last_selected_case(live_server, make_user):
+def test_health_overview_follows_the_last_selected_case(live_server, make_user, e2e_browser):
     u = make_user(username="hl_e3", role="admin")
     _seed(NO)
     _seed(NO2, overdue_receipt=False, pending_ship=False, customer="第二客戶")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            # 第一件的總覽回應延後抵達：切到第二件之後才回來，不可蓋掉第二件的總覽
-            page.route(f"**/api/quotations/{NO}/close-gates",
-                       lambda route: (time.sleep(1.5), route.continue_()))
-            page.evaluate(f"() => {{ const c = {DATA_JS}; c.selectCase('{NO}'); }}")
-            page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{NO2}') }}")
-            page.locator(f"{PANEL}[data-health-quote='{NO2}']").wait_for(state="visible", timeout=10000)
-            page.wait_for_timeout(2500)
-            assert page.locator(f"{PANEL}[data-health-quote='{NO2}']").count() == 1
-            assert "應收逾期" not in page.locator(PANEL).inner_text()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    # 第一件的總覽回應延後抵達：切到第二件之後才回來，不可蓋掉第二件的總覽
+    page.route(f"**/api/quotations/{NO}/close-gates",
+               lambda route: (time.sleep(1.5), route.continue_()))
+    page.evaluate(f"() => {{ const c = {DATA_JS}; c.selectCase('{NO}'); }}")
+    page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{NO2}') }}")
+    page.locator(f"{PANEL}[data-health-quote='{NO2}']").wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(2500)
+    assert page.locator(f"{PANEL}[data-health-quote='{NO2}']").count() == 1
+    assert "應收逾期" not in page.locator(PANEL).inner_text()

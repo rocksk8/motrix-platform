@@ -12,7 +12,6 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -33,27 +32,6 @@ def _case(no, *, items=(), customer="客戶"):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -75,34 +53,30 @@ def _card_nos(page):
 
 
 @pytest.mark.e2e
-def test_tab_renamed_and_quick_filter_with_count_and_reason(live_server, make_user):
+def test_tab_renamed_and_quick_filter_with_count_and_reason(live_server, make_user, e2e_browser):
     u = make_user(username="qfe_1", role="admin")
     _case("MQ-QFE-LATE", items=[{"id": 1, "received": False, "expectedReceiptDate": "2020-01-01"}])
     _case("MQ-QFE-NOINV", items=[{"id": 1, "received": True, "invoiceNo": ""}])
     _case("MQ-QFE-OK")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            tab = page.locator(".cm-list__tab").first
-            assert tab.inner_text().strip().startswith("進行中"), tab.inner_text()
-            recv = page.locator("[data-quick=recv_overdue]")
-            assert recv.inner_text().split() == ["應收逾期", "1"], recv.inner_text()
-            recv.click()
-            page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
-                                   " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFE-LATE' }", timeout=10000)
-            recv.click()
-            page.locator("[data-quick=missing_docs]").click()
-            page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
-                                   " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFE-NOINV' }", timeout=10000)
-            card = page.locator(".cm-card[data-quote-no='MQ-QFE-NOINV']")
-            assert card.locator("[data-testid=case-missing-doc]").inner_text() == "缺發票"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    tab = page.locator(".cm-list__tab").first
+    assert tab.inner_text().strip().startswith("進行中"), tab.inner_text()
+    recv = page.locator("[data-quick=recv_overdue]")
+    assert recv.inner_text().split() == ["應收逾期", "1"], recv.inner_text()
+    recv.click()
+    page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
+                           " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFE-LATE' }", timeout=10000)
+    recv.click()
+    page.locator("[data-quick=missing_docs]").click()
+    page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
+                           " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFE-NOINV' }", timeout=10000)
+    card = page.locator(".cm-card[data-quote-no='MQ-QFE-NOINV']")
+    assert card.locator("[data-testid=case-missing-doc]").inner_text() == "缺發票"
 
 
 @pytest.mark.e2e
-def test_unread_only_reaches_cases_outside_the_loaded_page(live_server, client, make_user):
+def test_unread_only_reaches_cases_outside_the_loaded_page(live_server, client, make_user, e2e_browser):
     u = make_user(username="qfe_2", role="admin")
     for i in range(130):
         _case(f"MQ-QFU-{i:04d}")
@@ -119,16 +93,12 @@ def test_unread_only_reaches_cases_outside_the_loaded_page(live_server, client, 
         conn.commit()
     finally:
         conn.close()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            assert "MQ-QFU-0000" not in _card_nos(page), "前提：最舊的一件不在第一頁"
-            bar = page.locator(".cm-unread-bar")
-            bar.wait_for(state="visible", timeout=10000)
-            assert "1 筆案件有新動態" in bar.inner_text(), bar.inner_text()
-            bar.click()
-            page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
-                                   " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFU-0000' }", timeout=10000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    assert "MQ-QFU-0000" not in _card_nos(page), "前提：最舊的一件不在第一頁"
+    bar = page.locator(".cm-unread-bar")
+    bar.wait_for(state="visible", timeout=10000)
+    assert "1 筆案件有新動態" in bar.inner_text(), bar.inner_text()
+    bar.click()
+    page.wait_for_function("() => { const c = [...document.querySelectorAll('.cm-card[data-quote-no]')];"
+                           " return c.length === 1 && c[0].dataset.quoteNo === 'MQ-QFU-0000' }", timeout=10000)

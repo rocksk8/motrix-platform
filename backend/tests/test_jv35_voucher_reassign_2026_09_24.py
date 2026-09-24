@@ -175,8 +175,7 @@ def test_jv35_a_voucher_without_a_configured_flow_cannot_be_reassigned(client, m
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_e2e_approval_reassign_ui_2026_09_14 import (  # noqa: E402
-    live_server, _login as _page_login)                         # noqa: F401
+from tests.test_e2e_approval_reassign_ui_2026_09_14 import _login as _page_login  # noqa: E402
 
 
 @pytest.mark.e2e

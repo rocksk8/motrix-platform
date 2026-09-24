@@ -18,7 +18,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -28,25 +27,6 @@ DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -105,68 +85,56 @@ def _save(page):
 
 
 @pytest.mark.e2e
-def test_two_people_editing_different_tabs_both_survive(live_server, make_user):
+def test_two_people_editing_different_tabs_both_survive(live_server, make_user, e2e_browser):
     a = make_user(username="cc_a", role="admin")
     b = make_user(username="cc_b", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            pa, pb = _open(browser, live_server, a), _open(browser, live_server, b)
-            pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = 'A 改收款' }}")
-            pb.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.materials[0].name = 'B 改材料' }}")
-            assert "已儲存" in _save(pa)
-            assert "已儲存" in _save(pb)
-            cr = _cr()
-            assert cr["payment"]["items"][0]["note"] == "A 改收款", "B 的存檔把 A 的收款改動蓋掉了"
-            assert cr["materials"][0]["name"] == "B 改材料"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    pa, pb = _open(browser, live_server, a), _open(browser, live_server, b)
+    pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = 'A 改收款' }}")
+    pb.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.materials[0].name = 'B 改材料' }}")
+    assert "已儲存" in _save(pa)
+    assert "已儲存" in _save(pb)
+    cr = _cr()
+    assert cr["payment"]["items"][0]["note"] == "A 改收款", "B 的存檔把 A 的收款改動蓋掉了"
+    assert cr["materials"][0]["name"] == "B 改材料"
 
 
 @pytest.mark.e2e
-def test_two_people_editing_same_tab_later_one_gets_conflict(live_server, make_user):
+def test_two_people_editing_same_tab_later_one_gets_conflict(live_server, make_user, e2e_browser):
     a = make_user(username="cc_a2", role="admin")
     b = make_user(username="cc_b2", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            pa, pb = _open(browser, live_server, a), _open(browser, live_server, b)
-            pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = 'A 先存' }}")
-            pb.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[1].note = 'B 後存' }}")
-            assert "已儲存" in _save(pa)
-            msg = _save(pb)
-            assert "已被他人更新" in msg and "收款" in msg, msg
-            cr = _cr()
-            assert cr["payment"]["items"][0]["note"] == "A 先存", "後存者不可以靜默蓋掉先存者"
-            assert cr["payment"]["items"][1]["note"] == ""
-            # 「保留我的變更再試」：以伺服器現值為基準重存（明知並覆蓋那一段）
-            pb.evaluate(f"async () => {{ await {DATA_JS}.resolveConflict('keep') }}")
-            assert _cr()["payment"]["items"][1]["note"] == "B 後存"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    pa, pb = _open(browser, live_server, a), _open(browser, live_server, b)
+    pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = 'A 先存' }}")
+    pb.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[1].note = 'B 後存' }}")
+    assert "已儲存" in _save(pa)
+    msg = _save(pb)
+    assert "已被他人更新" in msg and "收款" in msg, msg
+    cr = _cr()
+    assert cr["payment"]["items"][0]["note"] == "A 先存", "後存者不可以靜默蓋掉先存者"
+    assert cr["payment"]["items"][1]["note"] == ""
+    # 「保留我的變更再試」：以伺服器現值為基準重存（明知並覆蓋那一段）
+    pb.evaluate(f"async () => {{ await {DATA_JS}.resolveConflict('keep') }}")
+    assert _cr()["payment"]["items"][1]["note"] == "B 後存"
 
 
 @pytest.mark.e2e
-def test_own_upload_then_edit_same_tab_does_not_conflict(live_server, make_user):
+def test_own_upload_then_edit_same_tab_does_not_conflict(live_server, make_user, e2e_browser):
     a = make_user(username="cc_a3", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            pa = _open(browser, live_server, a)
-            ok = pa.evaluate(f"""async () => {{
-              const c = {DATA_JS}
-              const f = new File([new Uint8Array([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A])], 'inv.png', {{ type: 'image/png' }})
-              await c.uploadPaymentItemInvoiceFiles(0, {{ target: {{ files: [f], value: '' }} }})
-              return (c.cr.caseRecord.payment.items[0].invoiceFiles || []).length
-            }}""")
-            assert ok == 1
-            pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = '上傳後再改' }}")
-            msg = _save(pa)
-            assert "已儲存" in msg, msg
-            item = _cr()["payment"]["items"][0]
-            assert item["note"] == "上傳後再改" and len(item.get("invoiceFiles") or []) == 1
-        finally:
-            browser.close()
+    browser = e2e_browser
+    pa = _open(browser, live_server, a)
+    ok = pa.evaluate(f"""async () => {{
+      const c = {DATA_JS}
+      const f = new File([new Uint8Array([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A])], 'inv.png', {{ type: 'image/png' }})
+      await c.uploadPaymentItemInvoiceFiles(0, {{ target: {{ files: [f], value: '' }} }})
+      return (c.cr.caseRecord.payment.items[0].invoiceFiles || []).length
+    }}""")
+    assert ok == 1
+    pa.evaluate(f"() => {{ {DATA_JS}.cr.caseRecord.payment.items[0].note = '上傳後再改' }}")
+    msg = _save(pa)
+    assert "已儲存" in msg, msg
+    item = _cr()["payment"]["items"][0]
+    assert item["note"] == "上傳後再改" and len(item.get("invoiceFiles") or []) == 1

@@ -16,31 +16,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -52,7 +32,7 @@ def _login(page, base_url, username, password):
 
 
 @pytest.mark.e2e
-def test_copy_to_new_survives_quote_no_outage(live_server, make_user):
+def test_copy_to_new_survives_quote_no_outage(live_server, make_user, e2e_browser):
     """取號端點掛掉時複製為新單：不得造出 `???` 假號，存檔要成功並拿到合法單號。"""
     username, password = make_user(username="e2e_copy", role="superadmin")
 
@@ -77,43 +57,39 @@ def test_copy_to_new_survives_quote_no_outage(live_server, make_user):
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.on("dialog", lambda d: d.accept())
-        try:
-            _login(page, live_server, username, password)
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("dialog", lambda d: d.accept())
+    _login(page, live_server, username, password)
 
-            # 取號端點一律失敗 → 逼出「取不到號」那條路徑
-            page.route("**/api/next-quote-no*",
-                       lambda route: route.fulfill(status=503, body="{}"))
+    # 取號端點一律失敗 → 逼出「取不到號」那條路徑
+    page.route("**/api/next-quote-no*",
+               lambda route: route.fulfill(status=503, body="{}"))
 
-            page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-050")
-            page.wait_for_function(
-                "() => document.body.innerText.includes('來源客戶')", timeout=20000)
+    page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-050")
+    page.wait_for_function(
+        "() => document.body.innerText.includes('來源客戶')", timeout=20000)
 
-            page.evaluate("Alpine.$data(document.querySelector('[x-data]')).copyToNew()")
-            page.wait_for_function(
-                "() => location.search.includes('copy=1') || location.search.includes('id=')",
-                timeout=20000)
+    page.evaluate("Alpine.$data(document.querySelector('[x-data]')).copyToNew()")
+    page.wait_for_function(
+        "() => location.search.includes('copy=1') || location.search.includes('id=')",
+        timeout=20000)
 
-            # 關鍵：不得出現 ??? 假號
-            assert "%3F" not in page.url and "?" not in page.url.split("?", 1)[1], \
-                f"複製後的網址帶了假單號：{page.url}"
-            assert "???" not in page.inner_text("body"), "畫面出現 ??? 假單號"
+    # 關鍵：不得出現 ??? 假號
+    assert "%3F" not in page.url and "?" not in page.url.split("?", 1)[1], \
+        f"複製後的網址帶了假單號：{page.url}"
+    assert "???" not in page.inner_text("body"), "畫面出現 ??? 假單號"
 
-            # 內容真的被複製過來
-            page.wait_for_function(
-                "() => document.querySelector('input[x-model=\"q.customerName\"]')?.value"
-                " === '來源客戶'", timeout=20000)
+    # 內容真的被複製過來
+    page.wait_for_function(
+        "() => document.querySelector('input[x-model=\"q.customerName\"]')?.value"
+        " === '來源客戶'", timeout=20000)
 
-            page.click('button:has-text("儲存草稿")')
-            page.wait_for_function(
-                "() => document.querySelector('.form-quote-no')?.textContent?.includes('MQ-')",
-                timeout=20000)
-            shown = page.inner_text(".form-quote-no").strip()
-        finally:
-            browser.close()
+    page.click('button:has-text("儲存草稿")')
+    page.wait_for_function(
+        "() => document.querySelector('.form-quote-no')?.textContent?.includes('MQ-')",
+        timeout=20000)
+    shown = page.inner_text(".form-quote-no").strip()
 
     conn = db.get_db()
     try:

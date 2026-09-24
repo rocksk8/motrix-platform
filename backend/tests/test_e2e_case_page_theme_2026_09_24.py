@@ -15,9 +15,8 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
-from tests.test_e2e_case_page_golden_2026_09_24 import NO, _seed, live_server  # noqa: F401  (live_server 是 fixture)
+from tests.test_e2e_case_page_golden_2026_09_24 import NO, _seed  # noqa: F401  (live_server 是 fixture)
 
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_theme_2026_09_24.json")
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -106,66 +105,58 @@ def _each_tab(page, fn):
 
 
 @pytest.mark.e2e
-def test_dark_mode_has_no_light_blocks_or_black_text(live_server, make_user):
+def test_dark_mode_has_no_light_blocks_or_black_text(live_server, make_user, e2e_browser):
     u = make_user(username="golden_su", role="superadmin")
     _seed()
     problems = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, "dark")
-            assert page.evaluate("() => document.documentElement.getAttribute('data-theme')") == "dark"
+    browser = e2e_browser
+    page = _open(browser, live_server, u, "dark")
+    assert page.evaluate("() => document.documentElement.getAttribute('data-theme')") == "dark"
 
-            def scan(label):
-                r = page.evaluate(SCAN_JS)
-                assert not r["filters"], f"案件頁容器仍套著反轉濾鏡：{r['filters']}"
-                if r["bad"]:
-                    problems[label] = r["bad"][:15]
-            scan("清單＋案件資訊")
-            _each_tab(page, scan)
-            # 執行管理的子分頁
-            page.locator(".cm-tabs > .cm-tab").nth(1).click()
-            sub_js = ("(i) => { const b = [...document.querySelectorAll('button.cm-tab')]"
-                      ".filter(e => (e.getAttribute('@click') || '').startsWith('execSubTab'));"
-                      " if (i == null) return b.length; b[i].click() }")
-            for j in range(page.evaluate(sub_js)):
-                page.evaluate(sub_js, j)
-                page.wait_for_timeout(500)
-                scan(f"執行子分頁 {j}")
-            # 看板、矩陣
-            for label in ("看板", "矩陣", "清單"):
-                page.click(f".cm-view-toggle button:text-is('{label}'):visible")
-                page.wait_for_timeout(900)
-                scan(label)
-            # 各種視窗
-            for label, js, sel in (
-                ("結案檢查", f"() => {DATA_JS}.closeCaseAction()", "[data-testid=close-check]"),
-                ("新增派工", f"() => {{ const c = {DATA_JS}; c.activeTab = 'dispatch'; c.openNewDispatch() }}", None),
-                ("新增出貨單", f"() => {{ const c = {DATA_JS}; c.showDispatchModal = false; c.activeTab = 'shipping'; c.openNewShippingNote() }}", None),
-            ):
-                page.evaluate(js)
-                page.wait_for_timeout(900)
-                scan(label)
-                page.keyboard.press("Escape")
-        finally:
-            browser.close()
+    def scan(label):
+        r = page.evaluate(SCAN_JS)
+        assert not r["filters"], f"案件頁容器仍套著反轉濾鏡：{r['filters']}"
+        if r["bad"]:
+            problems[label] = r["bad"][:15]
+    scan("清單＋案件資訊")
+    _each_tab(page, scan)
+    # 執行管理的子分頁
+    page.locator(".cm-tabs > .cm-tab").nth(1).click()
+    sub_js = ("(i) => { const b = [...document.querySelectorAll('button.cm-tab')]"
+              ".filter(e => (e.getAttribute('@click') || '').startsWith('execSubTab'));"
+              " if (i == null) return b.length; b[i].click() }")
+    for j in range(page.evaluate(sub_js)):
+        page.evaluate(sub_js, j)
+        page.wait_for_timeout(500)
+        scan(f"執行子分頁 {j}")
+    # 看板、矩陣
+    for label in ("看板", "矩陣", "清單"):
+        page.click(f".cm-view-toggle button:text-is('{label}'):visible")
+        page.wait_for_timeout(900)
+        scan(label)
+    # 各種視窗
+    for label, js, sel in (
+        ("結案檢查", f"() => {DATA_JS}.closeCaseAction()", "[data-testid=close-check]"),
+        ("新增派工", f"() => {{ const c = {DATA_JS}; c.activeTab = 'dispatch'; c.openNewDispatch() }}", None),
+        ("新增出貨單", f"() => {{ const c = {DATA_JS}; c.showDispatchModal = false; c.activeTab = 'shipping'; c.openNewShippingNote() }}", None),
+    ):
+        page.evaluate(js)
+        page.wait_for_timeout(900)
+        scan(label)
+        page.keyboard.press("Escape")
     assert not problems, "深色模式有淺色塊或深底黑字：\n" + json.dumps(problems, ensure_ascii=False, indent=1)
 
 
 @pytest.mark.e2e
-def test_light_and_dark_computed_style_golden(live_server, make_user):
+def test_light_and_dark_computed_style_golden(live_server, make_user, e2e_browser):
     u = make_user(username="golden_su", role="superadmin")
     _seed()
     got = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            for theme in ("light", "dark"):
-                page = _open(browser, live_server, u, theme)
-                got[theme] = page.evaluate(STYLE_JS, KEY_SELECTORS)
-                page.context.close()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    for theme in ("light", "dark"):
+        page = _open(browser, live_server, u, theme)
+        got[theme] = page.evaluate(STYLE_JS, KEY_SELECTORS)
+        page.context.close()
     for theme in got:
         missing = [s for s, v in got[theme].items() if v is None]
         assert not missing, f"{theme}：找不到可見元素 {missing}"

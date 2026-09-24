@@ -21,7 +21,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -35,26 +34,6 @@ def _png_bytes():
     )
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -66,7 +45,7 @@ def _login(page, base_url, username, password):
 
 
 @pytest.mark.e2e
-def test_dev_log_attachment_thumbnail_actually_loads(live_server, client, make_user):
+def test_dev_log_attachment_thumbnail_actually_loads(live_server, client, make_user, e2e_browser):
     u, p = make_user(username="e2e_att", role="superadmin")
 
     # 先用 API 備好資料，讓瀏覽器那段只負責「看得到嗎」這一件事
@@ -85,30 +64,26 @@ def test_dev_log_attachment_thumbnail_actually_loads(live_server, client, make_u
     assert r.status_code == 201, r.text
 
     upload_responses = []
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.on("response", lambda resp: upload_responses.append(
-            (resp.status, resp.url)) if "/api/uploads/" in resp.url else None)
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/dev-crm.html")
-            page.wait_for_selector(".dc-case-card", timeout=10000)
-            page.click(".dc-case-card:has-text('附件顯示測試案')")
-            img = page.wait_for_selector(".dc-log-card img", timeout=10000)
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("response", lambda resp: upload_responses.append(
+        (resp.status, resp.url)) if "/api/uploads/" in resp.url else None)
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/dev-crm.html")
+    page.wait_for_selector(".dc-case-card", timeout=10000)
+    page.click(".dc-case-card:has-text('附件顯示測試案')")
+    img = page.wait_for_selector(".dc-log-card img", timeout=10000)
 
-            # pt 是非同步換回來的，換到之前 src 是 1x1 佔位圖 → 等真正的附件 URL
-            page.wait_for_function(
-                """() => {
-                    const i = document.querySelector('.dc-log-card img')
-                    return i && i.src.includes('/api/uploads/')
-                }""", timeout=10000)
-            page.wait_for_timeout(500)
+    # pt 是非同步換回來的，換到之前 src 是 1x1 佔位圖 → 等真正的附件 URL
+    page.wait_for_function(
+        """() => {
+            const i = document.querySelector('.dc-log-card img')
+            return i && i.src.includes('/api/uploads/')
+        }""", timeout=10000)
+    page.wait_for_timeout(500)
 
-            natural_width = img.evaluate("i => i.naturalWidth")
-            complete = img.evaluate("i => i.complete")
-        finally:
-            browser.close()
+    natural_width = img.evaluate("i => i.naturalWidth")
+    complete = img.evaluate("i => i.complete")
 
     assert natural_width > 0 and complete, (
         "附件縮圖沒有載出來（破圖）。/api/uploads/ 的回應："
@@ -118,7 +93,7 @@ def test_dev_log_attachment_thumbnail_actually_loads(live_server, client, make_u
 
 
 @pytest.mark.e2e
-def test_case_feed_attachment_thumbnail_actually_loads(live_server, client, make_user):
+def test_case_feed_attachment_thumbnail_actually_loads(live_server, client, make_user, e2e_browser):
     """案件動態那一側同一個錯、同一個修法，也要有自己的觀測點。
 
     兩個頁面各自實作了一份附件顯示（dev-crm.html 與 case-management.js），
@@ -150,26 +125,22 @@ def test_case_feed_attachment_thumbnail_actually_loads(live_server, client, make
     assert r.status_code == 201, r.text
 
     upload_responses = []
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.on("response", lambda resp: upload_responses.append(
-            (resp.status, resp.url)) if "/api/uploads/" in resp.url else None)
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/case-management.html?q={quote_no}")
-            page.wait_for_selector(".cm-tab:has-text('動態')", timeout=20000)
-            page.click(".cm-tab:has-text('動態')")
-            img = page.wait_for_selector(".feed-item img", timeout=15000)
-            page.wait_for_function(
-                """() => {
-                    const i = document.querySelector('.feed-item img')
-                    return i && i.src.includes('/api/uploads/')
-                }""", timeout=15000)
-            page.wait_for_timeout(500)
-            natural_width = img.evaluate("i => i.naturalWidth")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("response", lambda resp: upload_responses.append(
+        (resp.status, resp.url)) if "/api/uploads/" in resp.url else None)
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/case-management.html?q={quote_no}")
+    page.wait_for_selector(".cm-tab:has-text('動態')", timeout=20000)
+    page.click(".cm-tab:has-text('動態')")
+    img = page.wait_for_selector(".feed-item img", timeout=15000)
+    page.wait_for_function(
+        """() => {
+            const i = document.querySelector('.feed-item img')
+            return i && i.src.includes('/api/uploads/')
+        }""", timeout=15000)
+    page.wait_for_timeout(500)
+    natural_width = img.evaluate("i => i.naturalWidth")
 
     assert natural_width > 0, (
         "案件動態的附件縮圖沒有載出來（破圖）。/api/uploads/ 的回應："

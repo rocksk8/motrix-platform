@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_e2e_approval_reassign_ui_2026_09_14 import live_server, _login  # noqa: E402,F401
+from tests.test_e2e_approval_reassign_ui_2026_09_14 import _login  # noqa: E402,F401
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: E402,F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow)
 

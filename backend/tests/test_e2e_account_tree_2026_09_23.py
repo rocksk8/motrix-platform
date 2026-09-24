@@ -36,33 +36,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 `test_e2e_t100_unconfirm_2026_09_10.py` 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -74,7 +52,7 @@ def _login(page, base_url, username, password):
 
 
 @pytest.mark.e2e
-def test_the_account_tree_page_actually_renders_rows(live_server, make_user):
+def test_the_account_tree_page_actually_renders_rows(live_server, make_user, e2e_browser):
     """🔴 **開起來要看得到科目** —— 而且不可以有 401 或 console 錯誤。
 
     ⚙️ 三個觀測點，各自擋不同的失敗：
@@ -88,22 +66,20 @@ def test_the_account_tree_page_actually_renders_rows(live_server, make_user):
     username, password = make_user(username="e2e_acct", role="superadmin")
     bad_responses, page_errors = [], []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.on("response", lambda r: bad_responses.append(
-            (r.status, r.url)) if r.status >= 400 else None)
-        page.on("pageerror", lambda e: page_errors.append(str(e)))
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("response", lambda r: bad_responses.append(
+        (r.status, r.url)) if r.status >= 400 else None)
+    page.on("pageerror", lambda e: page_errors.append(str(e)))
 
-        _login(page, live_server, username, password)
-        bad_responses.clear()          # 只看科目樹那一頁的請求
-        page.goto(f"{live_server}/pages/account-items.html")
-        page.wait_for_timeout(2500)
+    _login(page, live_server, username, password)
+    bad_responses.clear()          # 只看科目樹那一頁的請求
+    page.goto(f"{live_server}/pages/account-items.html")
+    page.wait_for_timeout(2500)
 
-        rows = page.locator(".ai-row")
-        count = rows.count()
-        body = page.locator("body").inner_text()[:200]
-        browser.close()
+    rows = page.locator(".ai-row")
+    count = rows.count()
+    body = page.locator("body").inner_text()[:200]
 
     assert not bad_responses, (
         "開科目樹頁時有請求失敗：%s\n" % bad_responses[:4]
@@ -119,7 +95,7 @@ def test_the_account_tree_page_actually_renders_rows(live_server, make_user):
 
 
 @pytest.mark.e2e
-def test_the_statutory_lock_is_visible_on_the_page(live_server, make_user):
+def test_the_statutory_lock_is_visible_on_the_page(live_server, make_user, e2e_browser):
     """🔴 **法定科目的「唯讀」要在畫面上真的看得到。**
 
     ☠️ 我的 `FN1②` 是**讀 HTML 字串**找 `x-show` 綁定 ——
@@ -131,15 +107,13 @@ def test_the_statutory_lock_is_visible_on_the_page(live_server, make_user):
     🔑 〈缺欄位≠缺訊號〉的反面：**標記在、資料不在，畫面上什麼都沒有。**
     """
     username, password = make_user(username="e2e_acct2", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        _login(page, live_server, username, password)
-        page.goto(f"{live_server}/pages/account-items.html")
-        page.wait_for_timeout(2500)
-        locks = page.locator(".ai-lock").count()
-        rows = page.locator(".ai-row").count()
-        browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/account-items.html")
+    page.wait_for_timeout(2500)
+    locks = page.locator(".ai-lock").count()
+    rows = page.locator(".ai-row").count()
 
     assert rows > 0, "一列科目都沒有 —— 見上一題。"
     assert locks > 0, (

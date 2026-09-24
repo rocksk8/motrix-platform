@@ -19,7 +19,6 @@ from urllib.parse import parse_qsl, urlsplit
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_2026_09_24.json")
 NO = "MQ-GOLD-001"
@@ -123,27 +122,6 @@ def _norm_url(method, url):
     return _norm(f"{method} {u.path}" + (f"?{q}" if q else ""))
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 class _Net:
@@ -207,90 +185,86 @@ _AUTO_DISMISS_MOTRIX_UI = """
 """
 
 
-def _record(live_server, make_user):
+def _record(live_server, make_user, e2e_browser):
     u = make_user(username="golden_su", role="superadmin")
     _seed()
     steps = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context(viewport={"width": 1440, "height": 1000}).new_page()
-            page.on("dialog", lambda d: d.dismiss())
-            # CM12 P4：對話框逐步改為 MotrixUI（非原生）。golden 錄製時的語意是「一律取消」——
-            # 對 MotrixUI 用同一個語意：confirm 立刻回 false、prompt 立刻回 null（與原生 dismiss 相同），
-            # 呼叫記在 window.__goldenDialogs。原生那一行留到 B 包也換完為止。
-            page.add_init_script(_AUTO_DISMISS_MOTRIX_UI)
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            net = _Net(page)
-            page.goto(f"{live_server}/pages/case-management.html")
-            page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token"
-                                   f" && !{DATA_JS}.loading && {DATA_JS}.caseCounts", timeout=20000)
-            net.settle(page)
-            steps["01 清單"] = _text(page, ".cm-list")
-            page.click(".cm-view-toggle button:text-is('看板'):visible")
-            net.settle(page)
-            steps["02 看板"] = _text(page, ".cm-list")
-            page.click(".cm-view-toggle button:text-is('矩陣'):visible")
-            net.settle(page)
-            steps["03 矩陣"] = _text(page, "main")
-            page.click(".cm-view-toggle button:text-is('清單'):visible")
-            net.settle(page)
-            page.click(f".cm-card[data-quote-no='{NO}']")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
-                                   timeout=15000)
-            net.settle(page)
-            steps["04 標頭"] = _text(page, ".cm-header")
-            tabs = page.locator(".cm-tabs > .cm-tab")
-            labels = [t.strip() for t in tabs.all_inner_texts()]
-            steps["05 分頁列"] = "\n".join(labels)
-            for i, label in enumerate(labels):
-                btn = tabs.nth(i)
-                if not btn.is_visible():
-                    continue
-                btn.click()
+    browser = e2e_browser
+    page = browser.new_context(viewport={"width": 1440, "height": 1000}).new_page()
+    page.on("dialog", lambda d: d.dismiss())
+    # CM12 P4：對話框逐步改為 MotrixUI（非原生）。golden 錄製時的語意是「一律取消」——
+    # 對 MotrixUI 用同一個語意：confirm 立刻回 false、prompt 立刻回 null（與原生 dismiss 相同），
+    # 呼叫記在 window.__goldenDialogs。原生那一行留到 B 包也換完為止。
+    page.add_init_script(_AUTO_DISMISS_MOTRIX_UI)
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    net = _Net(page)
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token"
+                           f" && !{DATA_JS}.loading && {DATA_JS}.caseCounts", timeout=20000)
+    net.settle(page)
+    steps["01 清單"] = _text(page, ".cm-list")
+    page.click(".cm-view-toggle button:text-is('看板'):visible")
+    net.settle(page)
+    steps["02 看板"] = _text(page, ".cm-list")
+    page.click(".cm-view-toggle button:text-is('矩陣'):visible")
+    net.settle(page)
+    steps["03 矩陣"] = _text(page, "main")
+    page.click(".cm-view-toggle button:text-is('清單'):visible")
+    net.settle(page)
+    page.click(f".cm-card[data-quote-no='{NO}']")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
+                           timeout=15000)
+    net.settle(page)
+    steps["04 標頭"] = _text(page, ".cm-header")
+    tabs = page.locator(".cm-tabs > .cm-tab")
+    labels = [t.strip() for t in tabs.all_inner_texts()]
+    steps["05 分頁列"] = "\n".join(labels)
+    for i, label in enumerate(labels):
+        btn = tabs.nth(i)
+        if not btn.is_visible():
+            continue
+        btn.click()
+        net.settle(page)
+        key = re.sub(r"\d+$", "", label).strip()
+        steps[f"06 分頁 {i:02d} {key}"] = _text(page, ".cm-body")
+        if page.evaluate(f"() => {DATA_JS}.activeTab") == "exec":
+            sub_js = ("(i) => { const b = [...document.querySelectorAll('button.cm-tab')]"
+                      ".filter(e => (e.getAttribute('@click') || '').startsWith('execSubTab'));"
+                      " if (i == null) return b.map(e => e.innerText.trim()); b[i].click() }")
+            sub_labels = page.evaluate(sub_js)
+            for j, sl in enumerate(sub_labels):
+                page.evaluate(sub_js, j)
                 net.settle(page)
-                key = re.sub(r"\d+$", "", label).strip()
-                steps[f"06 分頁 {i:02d} {key}"] = _text(page, ".cm-body")
-                if page.evaluate(f"() => {DATA_JS}.activeTab") == "exec":
-                    sub_js = ("(i) => { const b = [...document.querySelectorAll('button.cm-tab')]"
-                              ".filter(e => (e.getAttribute('@click') || '').startsWith('execSubTab'));"
-                              " if (i == null) return b.map(e => e.innerText.trim()); b[i].click() }")
-                    sub_labels = page.evaluate(sub_js)
-                    for j, sl in enumerate(sub_labels):
-                        page.evaluate(sub_js, j)
-                        net.settle(page)
-                        steps[f"07 執行子分頁 {j:02d} {sl}"] = _text(page, ".cm-body")
-                    page.evaluate(sub_js, 0)
-                    net.settle(page)
-                    page.locator(".stage-segbar__seg").nth(1).click()
-                    net.settle(page)
-                    steps["08 展開第二階段"] = _text(page, ".cm-body")
-            page.click("[data-testid=cm-more]")
-            page.locator(".cm-more__menu").wait_for(state="visible", timeout=5000)
-            steps["09 更多選單"] = _text(page, ".cm-more__menu")
-            page.keyboard.press("Escape")
-            page.evaluate(f"() => {DATA_JS}.closeCaseAction()")
-            page.locator("[data-testid=close-check]").wait_for(state="visible", timeout=10000)
+                steps[f"07 執行子分頁 {j:02d} {sl}"] = _text(page, ".cm-body")
+            page.evaluate(sub_js, 0)
             net.settle(page)
-            steps["10 結案檢查"] = _text(page, "[data-testid=close-check]")
-            page.keyboard.press("Escape")
-            page.click("[data-testid=batch-toggle]")
-            page.locator(f".cm-card[data-quote-no='{NO}'] [data-testid=batch-check]").click()
-            steps["11 多選"] = _text(page, "[data-testid=batch-bar]")
+            page.locator(".stage-segbar__seg").nth(1).click()
             net.settle(page)
-            steps["99 API 請求"] = "\n".join(f"{k} ×{v}" for k, v in sorted(net.calls.items()))
-        finally:
-            browser.close()
+            steps["08 展開第二階段"] = _text(page, ".cm-body")
+    page.click("[data-testid=cm-more]")
+    page.locator(".cm-more__menu").wait_for(state="visible", timeout=5000)
+    steps["09 更多選單"] = _text(page, ".cm-more__menu")
+    page.keyboard.press("Escape")
+    page.evaluate(f"() => {DATA_JS}.closeCaseAction()")
+    page.locator("[data-testid=close-check]").wait_for(state="visible", timeout=10000)
+    net.settle(page)
+    steps["10 結案檢查"] = _text(page, "[data-testid=close-check]")
+    page.keyboard.press("Escape")
+    page.click("[data-testid=batch-toggle]")
+    page.locator(f".cm-card[data-quote-no='{NO}'] [data-testid=batch-check]").click()
+    steps["11 多選"] = _text(page, "[data-testid=batch-bar]")
+    net.settle(page)
+    steps["99 API 請求"] = "\n".join(f"{k} ×{v}" for k, v in sorted(net.calls.items()))
     return steps
 
 
 @pytest.mark.e2e
-def test_case_page_behaviour_matches_golden(live_server, make_user):
-    got = _record(live_server, make_user)
+def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser):
+    got = _record(live_server, make_user, e2e_browser=e2e_browser)
     if os.environ.get("GOLDEN_WRITE") == "1":
         GOLDEN.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
         pytest.skip(f"已寫入 {GOLDEN.name}（{len(got)} 步）")

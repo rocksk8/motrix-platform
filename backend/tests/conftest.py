@@ -1599,6 +1599,23 @@ def new_context(request):
 
 
 @pytest.fixture()
+def e2e_browser(new_context):
+    """轉換用的薄外殼：長得像 Playwright 的 Browser（new_context／new_page／close），底下是共用瀏覽器＋每題 context。
+    舊寫法把 `browser` 傳進 helper 的，改成 `browser = e2e_browser` 之後 helper 不必改；close() 什麼都不做
+    （這一題開的 context 由 new_context 在題末關）。"""
+    class _Browser:
+        def new_context(self, **kw):
+            return new_context(**kw)
+
+        def new_page(self, **kw):
+            return new_context(**kw).new_page()
+
+        def close(self):
+            pass
+    return _Browser()
+
+
+@pytest.fixture()
 def new_page(new_context):
     """`new_page(**context_kwargs)` ⇒ 一個新 context 裡的新頁面。"""
     return lambda **kw: new_context(**kw).new_page()

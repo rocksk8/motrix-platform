@@ -17,7 +17,6 @@ import pytest
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -25,26 +24,6 @@ from tests._ports import free_safe_port
 NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_t100_unconfirm_2026_09_10.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -100,23 +79,19 @@ def _wait_saved(page):
 
 
 @pytest.mark.e2e
-def test_switching_case_right_after_typing_keeps_the_input(live_server, make_user):
+def test_switching_case_right_after_typing_keeps_the_input(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_loss1", role="admin")
     _seed("MQ-E2ELOSS-A")
     _seed("MQ-E2ELOSS-B")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            _open(page, live_server, "MQ-E2ELOSS-A")
-            page.locator(NOTE_INPUT).first.fill("切換前打的字")
-            # 1.5 秒防抖還沒到就切換
-            page.locator('.cm-card[data-quote-no="MQ-E2ELOSS-B"]').click()
-            page.locator('.cm-card.selected[data-quote-no="MQ-E2ELOSS-B"]').wait_for(timeout=15000)
-            assert _items("MQ-E2ELOSS-A")[0]["note"] == "切換前打的字"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open(page, live_server, "MQ-E2ELOSS-A")
+    page.locator(NOTE_INPUT).first.fill("切換前打的字")
+    # 1.5 秒防抖還沒到就切換
+    page.locator('.cm-card[data-quote-no="MQ-E2ELOSS-B"]').click()
+    page.locator('.cm-card.selected[data-quote-no="MQ-E2ELOSS-B"]').wait_for(timeout=15000)
+    assert _items("MQ-E2ELOSS-A")[0]["note"] == "切換前打的字"
 
 
 # 在頁面裡用 sidebar.js 包過的 fetch 打一次請求（等同頁面自己發出）
@@ -130,158 +105,138 @@ PRESENCE = "/api/edit-presence"
 
 
 @pytest.mark.e2e
-def test_dirty_flag_survives_presence_heartbeat(live_server, make_user):
+def test_dirty_flag_survives_presence_heartbeat(live_server, make_user, e2e_browser):
     """edit-presence.js 每 8～15 秒 POST 一次；sidebar.js 原本「任何成功請求就清掉」，
     打完字最多 15 秒離頁警告就失效。"""
     username, password = make_user(username="e2e_loss2", role="admin")
     _seed("MQ-E2ELOSS-C")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            _open(page, live_server, "MQ-E2ELOSS-C")
-            page.wait_for_load_state("networkidle")
-            page.locator(NOTE_INPUT).first.fill("x")
-            assert page.evaluate("() => window.motrixIsDirty") is True
-            status = page.evaluate(_FETCH_JS, [PRESENCE, "POST",
-                                               {"doc_type": "case", "doc_id": "MQ-E2ELOSS-C"}])
-            assert 200 <= status < 300, status
-            assert page.evaluate("() => window.motrixIsDirty") is True, "心跳不是存檔，不可以清掉"
-            _wait_saved(page)
-            assert page.evaluate("() => window.motrixIsDirty") is False, "存完不應再警告"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open(page, live_server, "MQ-E2ELOSS-C")
+    page.wait_for_load_state("networkidle")
+    page.locator(NOTE_INPUT).first.fill("x")
+    assert page.evaluate("() => window.motrixIsDirty") is True
+    status = page.evaluate(_FETCH_JS, [PRESENCE, "POST",
+                                       {"doc_type": "case", "doc_id": "MQ-E2ELOSS-C"}])
+    assert 200 <= status < 300, status
+    assert page.evaluate("() => window.motrixIsDirty") is True, "心跳不是存檔，不可以清掉"
+    _wait_saved(page)
+    assert page.evaluate("() => window.motrixIsDirty") is False, "存完不應再警告"
 
 
 @pytest.mark.e2e
-def test_other_pages_still_clear_flag_after_successful_save(live_server, make_user):
+def test_other_pages_still_clear_flag_after_successful_save(live_server, make_user, e2e_browser):
     """現行行為不退：不相干的頁面，成功的寫入請求照樣清掉旗標。"""
     username, password = make_user(username="e2e_loss2b", role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/parts.html")
-            page.wait_for_load_state("networkidle")
-            page.evaluate("() => { window.motrixIsDirty = true }")
-            status = page.evaluate(_FETCH_JS, ["/api/list-prefs/e2e_dirty_probe", "PUT",
-                                               {"sortMode": "", "sortDir": "desc", "customOrder": []}])
-            assert 200 <= status < 300, status
-            assert page.evaluate("() => window.motrixIsDirty") is False
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/parts.html")
+    page.wait_for_load_state("networkidle")
+    page.evaluate("() => { window.motrixIsDirty = true }")
+    status = page.evaluate(_FETCH_JS, ["/api/list-prefs/e2e_dirty_probe", "PUT",
+                                       {"sortMode": "", "sortDir": "desc", "customOrder": []}])
+    assert 200 <= status < 300, status
+    assert page.evaluate("() => window.motrixIsDirty") is False
 
 
 @pytest.mark.e2e
-def test_deleting_payment_item_asks_first(live_server, make_user):
+def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_loss3", role="admin")
     _seed("MQ-E2ELOSS-D")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            _open(page, live_server, "MQ-E2ELOSS-D")
-            # CM12 P4：確認框改為 MotrixUI（不再是原生 confirm）⇒ 看到了再回答，並驗訊息
-            natives = forbid_native_dialogs(page)
-            first_del = page.locator(
-                "xpath=(//label[.//span[normalize-space()='未收']]"
-                "/following-sibling::button[contains(@class,'btn-del')])[1]")
-            first_del.click()
-            answer_confirm(page, ok=False, expect="訂金款")
-            time.sleep(2.0)   # 超過 1.5 秒防抖：若沒有確認就刪，這時已經存進去了
-            assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [1, 2], "取消之後不可以刪"
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open(page, live_server, "MQ-E2ELOSS-D")
+    # CM12 P4：確認框改為 MotrixUI（不再是原生 confirm）⇒ 看到了再回答，並驗訊息
+    natives = forbid_native_dialogs(page)
+    first_del = page.locator(
+        "xpath=(//label[.//span[normalize-space()='未收']]"
+        "/following-sibling::button[contains(@class,'btn-del')])[1]")
+    first_del.click()
+    answer_confirm(page, ok=False, expect="訂金款")
+    time.sleep(2.0)   # 超過 1.5 秒防抖：若沒有確認就刪，這時已經存進去了
+    assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [1, 2], "取消之後不可以刪"
 
-            first_del.click()
-            answer_confirm(page, ok=True, expect="訂金款")
-            _wait_saved(page)
-            assert natives == [], natives
-            assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [2]
-        finally:
-            browser.close()
+    first_del.click()
+    answer_confirm(page, ok=True, expect="訂金款")
+    _wait_saved(page)
+    assert natives == [], natives
+    assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [2]
 
 
 @pytest.mark.e2e
-def test_other_deletes_are_gated_by_confirm(live_server, make_user):
+def test_other_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser):
     """階段、拜訪、材料、設備（單台／依物件）四類刪除：使用者按取消就不刪。
     直接呼叫元件方法，把 confirm 換成回傳 false——驗的是「方法本身有問」，
     不依賴各自藏在哪個分頁的按鈕位置。"""
     username, password = make_user(username="e2e_loss4", role="admin")
     _seed("MQ-E2ELOSS-E")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            _open(page, live_server, "MQ-E2ELOSS-E")
-            result = page.evaluate("""async () => {
-              const el = [...document.querySelectorAll('[x-data]')].find(e => e._x_dataStack && e._x_dataStack[0].selectCase)
-              const c = el._x_dataStack[0]
-              const rec = c.cr.caseRecord
-              rec.materials = [{ id: 1, name: '測試料件' }]
-              rec.devices = [{ id: 7, name: '測試設備', sn: 'SN1' }]
-              rec.stages = [{ id: 999999, label: '測試階段', visits: [{ id: 5, visitDate: '2026-09-01' }] }]
-              const asked = []
-              window.confirm = (m) => { asked.push(m); return false }
-              window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
-              const calls = []
-              window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
-              await c.removeMaterial(0)
-              await c.removeDevice(0)
-              await c.removeDeviceByObj(rec.devices[0])
-              await c.removeStage(0)
-              await c.removeVisit(0, 0)
-              return { asked, calls, m: rec.materials.length, d: rec.devices.length,
-                       s: rec.stages.length, v: rec.stages[0].visits.length }
-            }""")
-            assert len(result["asked"]) == 5, result
-            assert "測試料件" in result["asked"][0] and "測試設備" in result["asked"][1]
-            assert "測試階段" in result["asked"][3]
-            assert (result["m"], result["d"], result["s"], result["v"]) == (1, 1, 1, 1), result
-            assert result["calls"] == [], "按取消不可以送出 DELETE"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open(page, live_server, "MQ-E2ELOSS-E")
+    result = page.evaluate("""async () => {
+      const el = [...document.querySelectorAll('[x-data]')].find(e => e._x_dataStack && e._x_dataStack[0].selectCase)
+      const c = el._x_dataStack[0]
+      const rec = c.cr.caseRecord
+      rec.materials = [{ id: 1, name: '測試料件' }]
+      rec.devices = [{ id: 7, name: '測試設備', sn: 'SN1' }]
+      rec.stages = [{ id: 999999, label: '測試階段', visits: [{ id: 5, visitDate: '2026-09-01' }] }]
+      const asked = []
+      window.confirm = (m) => { asked.push(m); return false }
+      window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
+      const calls = []
+      window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
+      await c.removeMaterial(0)
+      await c.removeDevice(0)
+      await c.removeDeviceByObj(rec.devices[0])
+      await c.removeStage(0)
+      await c.removeVisit(0, 0)
+      return { asked, calls, m: rec.materials.length, d: rec.devices.length,
+               s: rec.stages.length, v: rec.stages[0].visits.length }
+    }""")
+    assert len(result["asked"]) == 5, result
+    assert "測試料件" in result["asked"][0] and "測試設備" in result["asked"][1]
+    assert "測試階段" in result["asked"][3]
+    assert (result["m"], result["d"], result["s"], result["v"]) == (1, 1, 1, 1), result
+    assert result["calls"] == [], "按取消不可以送出 DELETE"
 
 
 @pytest.mark.e2e
-def test_remaining_deletes_are_gated_by_confirm(live_server, make_user):
+def test_remaining_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser):
     """N11（使用者 2026-09-24 裁示「刪除確認全部都加」）：叫料品項、派工人員、派工品項、
     出貨品項、階段負責人——按取消就不刪，也不送出 DELETE。確認訊息帶出名稱。"""
     username, password = make_user(username="e2e_loss5", role="admin")
     _seed("MQ-E2ELOSS-F")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            _open(page, live_server, "MQ-E2ELOSS-F")
-            result = page.evaluate("""async () => {
-              const el = [...document.querySelectorAll('[x-data]')].find(e => e._x_dataStack && e._x_dataStack[0].selectCase)
-              const c = el._x_dataStack[0]
-              c.materialOrders = [{ itemName: '測試叫料' }]
-              c.dispatchForm = Object.assign({}, c.dispatchForm || {}, {
-                personnel: [{ name: '派工甲', amount: 1 }], items: [{ description: '派工品項', amount: 1 }] })
-              c.shippingForm = Object.assign({}, c.shippingForm || {}, { items: [{ description: '出貨品項' }] })
-              const st = { id: 999999, label: '測試階段', assignedTo: ['someone'] }
-              const asked = []
-              window.confirm = (m) => { asked.push(m); return false }
-              window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
-              const calls = []
-              window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
-              await c.moRemoveItem(0)
-              await c.removeDispatchPersonnel(0)
-              await c.removeDispatchItem(0)
-              await c.removeShippingItem(0)
-              await c.removeStageAssignee(st, 'someone')
-              return { asked, calls, mo: c.materialOrders.length, dp: c.dispatchForm.personnel.length,
-                       di: c.dispatchForm.items.length, si: c.shippingForm.items.length, sa: st.assignedTo.length }
-            }""")
-            assert len(result["asked"]) == 5, result
-            for name, msg in zip(("測試叫料", "派工甲", "派工品項", "出貨品項", "測試階段"), result["asked"]):
-                assert name in msg, (name, msg)
-            assert (result["mo"], result["dp"], result["di"], result["si"], result["sa"]) == (1, 1, 1, 1, 1), result
-            assert result["calls"] == [], "按取消不可以送出 DELETE"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open(page, live_server, "MQ-E2ELOSS-F")
+    result = page.evaluate("""async () => {
+      const el = [...document.querySelectorAll('[x-data]')].find(e => e._x_dataStack && e._x_dataStack[0].selectCase)
+      const c = el._x_dataStack[0]
+      c.materialOrders = [{ itemName: '測試叫料' }]
+      c.dispatchForm = Object.assign({}, c.dispatchForm || {}, {
+        personnel: [{ name: '派工甲', amount: 1 }], items: [{ description: '派工品項', amount: 1 }] })
+      c.shippingForm = Object.assign({}, c.shippingForm || {}, { items: [{ description: '出貨品項' }] })
+      const st = { id: 999999, label: '測試階段', assignedTo: ['someone'] }
+      const asked = []
+      window.confirm = (m) => { asked.push(m); return false }
+      window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
+      const calls = []
+      window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
+      await c.moRemoveItem(0)
+      await c.removeDispatchPersonnel(0)
+      await c.removeDispatchItem(0)
+      await c.removeShippingItem(0)
+      await c.removeStageAssignee(st, 'someone')
+      return { asked, calls, mo: c.materialOrders.length, dp: c.dispatchForm.personnel.length,
+               di: c.dispatchForm.items.length, si: c.shippingForm.items.length, sa: st.assignedTo.length }
+    }""")
+    assert len(result["asked"]) == 5, result
+    for name, msg in zip(("測試叫料", "派工甲", "派工品項", "出貨品項", "測試階段"), result["asked"]):
+        assert name in msg, (name, msg)
+    assert (result["mo"], result["dp"], result["di"], result["si"], result["sa"]) == (1, 1, 1, 1, 1), result
+    assert result["calls"] == [], "按取消不可以送出 DELETE"

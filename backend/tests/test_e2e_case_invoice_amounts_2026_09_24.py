@@ -7,10 +7,9 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, NOTE_INPUT, _login, live_server,
+    DATA_JS, NOTE_INPUT, _login,
 )
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _seed
 
@@ -34,84 +33,68 @@ def _save(page):
 
 
 @pytest.mark.e2e
-def test_financial_user_enters_invoice_amounts_and_they_land(live_server, make_user):
+def test_financial_user_enters_invoice_amounts_and_they_land(live_server, make_user, e2e_browser):
     u = make_user(username="inv_e2e_sales", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            assert page.locator(PRETAX).nth(0).input_value() == "2940"
-            assert page.locator(TAX).nth(0).input_value() == "147"
-            page.locator(PRETAX).nth(1).fill("6860")
-            page.locator(TAX).nth(1).fill("343")
-            assert page.evaluate(f"() => {{ const c = {DATA_JS}; return c.invoiceMismatch(c.paymentItems()[1], 1) }}") == ""
-            assert not page.locator('[data-testid="invoice-mismatch"]').nth(1).is_visible()
-            assert "已儲存" in _save(page)
-            items = _db_data()["caseRecord"]["payment"]["items"]
-            assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (6860, 343)
-            assert (items[0]["invoicePretax"], items[0]["invoiceTax"]) == (2940, 147)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    assert page.locator(PRETAX).nth(0).input_value() == "2940"
+    assert page.locator(TAX).nth(0).input_value() == "147"
+    page.locator(PRETAX).nth(1).fill("6860")
+    page.locator(TAX).nth(1).fill("343")
+    assert page.evaluate(f"() => {{ const c = {DATA_JS}; return c.invoiceMismatch(c.paymentItems()[1], 1) }}") == ""
+    assert not page.locator('[data-testid="invoice-mismatch"]').nth(1).is_visible()
+    assert "已儲存" in _save(page)
+    items = _db_data()["caseRecord"]["payment"]["items"]
+    assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (6860, 343)
+    assert (items[0]["invoicePretax"], items[0]["invoiceTax"]) == (2940, 147)
 
 
 @pytest.mark.e2e
-def test_half_filled_and_mismatch_hints(live_server, make_user):
+def test_half_filled_and_mismatch_hints(live_server, make_user, e2e_browser):
     u = make_user(username="inv_e2e_sales2", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.locator(PRETAX).nth(1).fill("6000")
-            half = page.locator('[data-testid="invoice-half"]').nth(1)
-            half.wait_for(state="visible", timeout=5000)
-            assert "一起填寫" in half.inner_text()
-            page.locator(TAX).nth(1).fill("300")
-            half.wait_for(state="hidden", timeout=5000)
-            mism = page.locator('[data-testid="invoice-mismatch"]').nth(1)
-            mism.wait_for(state="visible", timeout=5000)
-            assert "6,300" in mism.inner_text() and "7,203" in mism.inner_text()
-            assert "已儲存" in _save(page), "合計不符只提示，不擋存檔"
-            items = _db_data()["caseRecord"]["payment"]["items"]
-            assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (6000, 300)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.locator(PRETAX).nth(1).fill("6000")
+    half = page.locator('[data-testid="invoice-half"]').nth(1)
+    half.wait_for(state="visible", timeout=5000)
+    assert "一起填寫" in half.inner_text()
+    page.locator(TAX).nth(1).fill("300")
+    half.wait_for(state="hidden", timeout=5000)
+    mism = page.locator('[data-testid="invoice-mismatch"]').nth(1)
+    mism.wait_for(state="visible", timeout=5000)
+    assert "6,300" in mism.inner_text() and "7,203" in mism.inner_text()
+    assert "已儲存" in _save(page), "合計不符只提示，不擋存檔"
+    items = _db_data()["caseRecord"]["payment"]["items"]
+    assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (6000, 300)
 
 
 @pytest.mark.e2e
-def test_masked_user_has_no_invoice_amount_inputs_and_values_survive(live_server, make_user):
+def test_masked_user_has_no_invoice_amount_inputs_and_values_survive(live_server, make_user, e2e_browser):
     u = make_user(username="inv_e2e_eng", role="engineer")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
-            assert page.locator(PRETAX).count() == 0 and page.locator(TAX).count() == 0
-            page.locator(NOTE_INPUT).nth(1).fill("工程師備註")
-            assert "已儲存" in _save(page)
-            items = _db_data()["caseRecord"]["payment"]["items"]
-            assert (items[0]["invoicePretax"], items[0]["invoiceTax"]) == (2940, 147)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
+    assert page.locator(PRETAX).count() == 0 and page.locator(TAX).count() == 0
+    page.locator(NOTE_INPUT).nth(1).fill("工程師備註")
+    assert "已儲存" in _save(page)
+    items = _db_data()["caseRecord"]["payment"]["items"]
+    assert (items[0]["invoicePretax"], items[0]["invoiceTax"]) == (2940, 147)
 
 
 @pytest.mark.e2e
-def test_zero_tax_counts_as_filled(live_server, make_user):
+def test_zero_tax_counts_as_filled(live_server, make_user, e2e_browser):
     """零稅率／免稅的發票稅額就是 0：0 是「有填」，不是空（不可以跳出「要一起填寫」）。"""
     u = make_user(username="inv_e2e_sales3", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.locator(PRETAX).nth(1).fill("7203")
-            page.locator(TAX).nth(1).fill("0")
-            assert page.evaluate(
-                f"() => {{ const c = {DATA_JS}; return c.invoiceHalfFilled(c.paymentItems()[1]) }}") is False
-            assert "已儲存" in _save(page)
-            items = _db_data()["caseRecord"]["payment"]["items"]
-            assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (7203, 0)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.locator(PRETAX).nth(1).fill("7203")
+    page.locator(TAX).nth(1).fill("0")
+    assert page.evaluate(
+        f"() => {{ const c = {DATA_JS}; return c.invoiceHalfFilled(c.paymentItems()[1]) }}") is False
+    assert "已儲存" in _save(page)
+    items = _db_data()["caseRecord"]["payment"]["items"]
+    assert (items[1]["invoicePretax"], items[1]["invoiceTax"]) == (7203, 0)

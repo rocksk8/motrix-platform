@@ -17,9 +17,8 @@ from pathlib import Path
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_e2e_reports_period_sync_2026_09_10 import live_server, _login  # noqa: E402,F401
+from tests.test_e2e_reports_period_sync_2026_09_10 import _login  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 單獨跑這個檔時 tests/ 不在 sys.path
 from _mapiso import no_tile_probe  # noqa: E402,F401  （tender-radar 會載地圖 ⇒ 後端探測底圖伺服器）
 
@@ -71,43 +70,35 @@ def _open_suppliers(page, base):
 
 
 @pytest.mark.e2e
-def test_supplier_set_to_inactive_is_saved_as_false(live_server, make_user):
+def test_supplier_set_to_inactive_is_saved_as_false(live_server, make_user, e2e_browser):
     u = make_user(username="bs_sup", role="superadmin")
     sid = _supplier("布林供應商甲", True)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *u)
-            _open_suppliers(page, live_server)
-            page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.suppliers.find(s => s.id === {sid})) }}")
-            page.wait_for_timeout(300)
-            _pick(page, "x-model.boolean", "form.active", "停用") if page.evaluate(
-                "() => !!%s" % (_SELECT % ("x-model.boolean", "form.active"))) else _pick(page, "x-model", "form.active", "停用")
-            with page.expect_response(lambda r: f"/api/suppliers/{sid}" in r.url and r.request.method == "PUT") as resp:
-                page.evaluate(f"() => {ROOT}.saveSupplier()")
-            assert resp.value.status == 200, resp.value.text()
-            assert _supplier_active(sid) is False, "選「停用」存檔後，存下去的是 %r" % (_supplier_active(sid),)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *u)
+    _open_suppliers(page, live_server)
+    page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.suppliers.find(s => s.id === {sid})) }}")
+    page.wait_for_timeout(300)
+    _pick(page, "x-model.boolean", "form.active", "停用") if page.evaluate(
+        "() => !!%s" % (_SELECT % ("x-model.boolean", "form.active"))) else _pick(page, "x-model", "form.active", "停用")
+    with page.expect_response(lambda r: f"/api/suppliers/{sid}" in r.url and r.request.method == "PUT") as resp:
+        page.evaluate(f"() => {ROOT}.saveSupplier()")
+    assert resp.value.status == 200, resp.value.text()
+    assert _supplier_active(sid) is False, "選「停用」存檔後，存下去的是 %r" % (_supplier_active(sid),)
 
 
 @pytest.mark.e2e
-def test_inactive_supplier_opens_showing_inactive(live_server, make_user):
+def test_inactive_supplier_opens_showing_inactive(live_server, make_user, e2e_browser):
     u = make_user(username="bs_sup2", role="superadmin")
     sid = _supplier("布林供應商乙", False)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *u)
-            _open_suppliers(page, live_server)
-            page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.suppliers.find(s => s.id === {sid})) }}")
-            page.wait_for_timeout(300)
-            attr = "x-model.boolean" if page.evaluate("() => !!%s" % (_SELECT % ("x-model.boolean", "form.active"))) else "x-model"
-            assert _shown(page, attr, "form.active") == "停用"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *u)
+    _open_suppliers(page, live_server)
+    page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.suppliers.find(s => s.id === {sid})) }}")
+    page.wait_for_timeout(300)
+    attr = "x-model.boolean" if page.evaluate("() => !!%s" % (_SELECT % ("x-model.boolean", "form.active"))) else "x-model"
+    assert _shown(page, attr, "form.active") == "停用"
 
 
 # ── tender-radar ─────────────────────────────────────────────────────────────
@@ -141,40 +132,32 @@ def _attr(page):
 
 
 @pytest.mark.e2e
-def test_tender_watch_set_to_disabled_is_saved_disabled(live_server, make_user, no_tile_probe):
+def test_tender_watch_set_to_disabled_is_saved_disabled(live_server, make_user, no_tile_probe, e2e_browser):
     u = make_user(username="bs_tr", role="superadmin", modules=["dashboard", "tender_radar"])
     wid = _watch("布林監看甲", True)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *u)
-            _open_radar(page, live_server)
-            page.evaluate(f"() => {{ const d = {RADAR}; d.edit(d.watches.find(w => w.id === {wid})) }}")
-            page.wait_for_timeout(300)
-            _pick(page, _attr(page), "form.enabled", "停用")
-            with page.expect_response(lambda r: f"/api/tender-radar/watches/{wid}" in r.url
-                                      and r.request.method == "PUT") as resp:
-                page.evaluate(f"() => {RADAR}.save()")
-            assert resp.value.status == 200, resp.value.text()   # 存檔被拒時 DB 不變，下面的斷言會誤指向下拉
-            assert _watch_enabled(wid) == 0, "選「停用」存檔後，監看條件仍是啟用（enabled=%r）" % (_watch_enabled(wid),)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *u)
+    _open_radar(page, live_server)
+    page.evaluate(f"() => {{ const d = {RADAR}; d.edit(d.watches.find(w => w.id === {wid})) }}")
+    page.wait_for_timeout(300)
+    _pick(page, _attr(page), "form.enabled", "停用")
+    with page.expect_response(lambda r: f"/api/tender-radar/watches/{wid}" in r.url
+                              and r.request.method == "PUT") as resp:
+        page.evaluate(f"() => {RADAR}.save()")
+    assert resp.value.status == 200, resp.value.text()   # 存檔被拒時 DB 不變，下面的斷言會誤指向下拉
+    assert _watch_enabled(wid) == 0, "選「停用」存檔後，監看條件仍是啟用（enabled=%r）" % (_watch_enabled(wid),)
 
 
 @pytest.mark.e2e
-def test_disabled_tender_watch_opens_showing_disabled(live_server, make_user, no_tile_probe):
+def test_disabled_tender_watch_opens_showing_disabled(live_server, make_user, no_tile_probe, e2e_browser):
     u = make_user(username="bs_tr2", role="superadmin", modules=["dashboard", "tender_radar"])
     wid = _watch("布林監看乙", False)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *u)
-            _open_radar(page, live_server)
-            page.evaluate(f"() => {{ const d = {RADAR}; d.edit(d.watches.find(w => w.id === {wid})) }}")
-            page.wait_for_timeout(300)
-            assert _shown(page, _attr(page), "form.enabled").startswith("停用")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *u)
+    _open_radar(page, live_server)
+    page.evaluate(f"() => {{ const d = {RADAR}; d.edit(d.watches.find(w => w.id === {wid})) }}")
+    page.wait_for_timeout(300)
+    assert _shown(page, _attr(page), "form.enabled").startswith("停用")
 

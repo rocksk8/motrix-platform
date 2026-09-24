@@ -10,9 +10,7 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
-from tests.test_e2e_case_mark_all_read_2026_09_24 import live_server  # noqa: F401  (live_server 是 fixture)
 
 NOS = ("MQ-MARKONE-001", "MQ-MARKONE-002")
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -35,7 +33,7 @@ def _seed():
 
 
 @pytest.mark.e2e
-def test_opening_one_unread_case_decrements_the_count(live_server, client, make_user):
+def test_opening_one_unread_case_decrements_the_count(live_server, client, make_user, e2e_browser):
     u = make_user(username="mor_e1", role="admin")
     _seed()
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
@@ -50,25 +48,21 @@ def test_opening_one_unread_case_decrements_the_count(live_server, client, make_
         conn.commit()
     finally:
         conn.close()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html")
-            bar = page.locator(".cm-unread-bar")
-            bar.wait_for(state="visible", timeout=15000)
-            page.wait_for_function(f"() => {DATA_JS}.unreadCount() === 2", timeout=10000)
-            time.sleep(1.1)                          # 已讀時間要嚴格晚於動態時間（到秒）
-            page.click(f".cm-card[data-quote-no='{NOS[0]}']")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NOS[0]}'", timeout=10000)
-            page.wait_for_timeout(800)
-            assert not page.evaluate(f"() => {DATA_JS}.isUnread({DATA_JS}.selected)"), "點進去的那筆紅點沒清掉（前提不成立）"
-            assert page.evaluate(f"() => {DATA_JS}.unreadCount()") == 1, "點進一筆後未讀件數沒有減少"
-            assert "1 筆案件有新動態" in bar.inner_text(), bar.inner_text()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html")
+    bar = page.locator(".cm-unread-bar")
+    bar.wait_for(state="visible", timeout=15000)
+    page.wait_for_function(f"() => {DATA_JS}.unreadCount() === 2", timeout=10000)
+    time.sleep(1.1)                          # 已讀時間要嚴格晚於動態時間（到秒）
+    page.click(f".cm-card[data-quote-no='{NOS[0]}']")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NOS[0]}'", timeout=10000)
+    page.wait_for_timeout(800)
+    assert not page.evaluate(f"() => {DATA_JS}.isUnread({DATA_JS}.selected)"), "點進去的那筆紅點沒清掉（前提不成立）"
+    assert page.evaluate(f"() => {DATA_JS}.unreadCount()") == 1, "點進一筆後未讀件數沒有減少"
+    assert "1 筆案件有新動態" in bar.inner_text(), bar.inner_text()

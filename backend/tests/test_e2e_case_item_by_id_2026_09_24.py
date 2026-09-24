@@ -8,10 +8,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, NO, _cr, _open, _seed, live_server,
+    DATA_JS, NO, _cr, _open, _seed,
 )
 
 UPLOAD_JS = f"""async (idx) => {{
@@ -34,40 +33,32 @@ def _reverse_payment_items_in_db():
 
 
 @pytest.mark.e2e
-def test_upload_after_server_reorder_lands_on_the_item_on_screen(live_server, make_user):
+def test_upload_after_server_reorder_lands_on_the_item_on_screen(live_server, make_user, e2e_browser):
     a = make_user(username="byid_e1", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            pa = _open(browser, live_server, a)
-            _reverse_payment_items_in_db()          # 畫面上第 0 列是 id=1，伺服器上已是 id=2
-            pa.evaluate(UPLOAD_JS, 0)
-            items = {it["id"]: it for it in _cr()["payment"]["items"]}
-            assert len(items[1].get("invoiceFiles") or []) == 1, "發票掛到別期了"
-            assert not items[2].get("invoiceFiles")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    pa = _open(browser, live_server, a)
+    _reverse_payment_items_in_db()          # 畫面上第 0 列是 id=1，伺服器上已是 id=2
+    pa.evaluate(UPLOAD_JS, 0)
+    items = {it["id"]: it for it in _cr()["payment"]["items"]}
+    assert len(items[1].get("invoiceFiles") or []) == 1, "發票掛到別期了"
+    assert not items[2].get("invoiceFiles")
 
 
 @pytest.mark.e2e
-def test_upload_on_new_unsaved_item_saves_first(live_server, make_user):
+def test_upload_on_new_unsaved_item_saves_first(live_server, make_user, e2e_browser):
     a = make_user(username="byid_e2", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            pa = _open(browser, live_server, a)
-            new_id = pa.evaluate(f"""() => {{
-              const c = {DATA_JS}
-              c.addPaymentItem()
-              const items = c.cr.caseRecord.payment.items
-              return items[items.length - 1].id
-            }}""")
-            idx = pa.evaluate(f"() => {DATA_JS}.cr.caseRecord.payment.items.length - 1")
-            pa.evaluate(UPLOAD_JS, idx)
-            items = {it["id"]: it for it in _cr()["payment"]["items"]}
-            assert new_id in items, "上傳前沒有先存檔"
-            assert len(items[new_id].get("invoiceFiles") or []) == 1
-        finally:
-            browser.close()
+    browser = e2e_browser
+    pa = _open(browser, live_server, a)
+    new_id = pa.evaluate(f"""() => {{
+      const c = {DATA_JS}
+      c.addPaymentItem()
+      const items = c.cr.caseRecord.payment.items
+      return items[items.length - 1].id
+    }}""")
+    idx = pa.evaluate(f"() => {DATA_JS}.cr.caseRecord.payment.items.length - 1")
+    pa.evaluate(UPLOAD_JS, idx)
+    items = {it["id"]: it for it in _cr()["payment"]["items"]}
+    assert new_id in items, "上傳前沒有先存檔"
+    assert len(items[new_id].get("invoiceFiles") or []) == 1

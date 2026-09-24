@@ -9,10 +9,9 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, NOTE_INPUT, _login, live_server,
+    DATA_JS, NOTE_INPUT, _login,
 )
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
 from tests._ui_dialogs import DIALOG, forbid_native_dialogs
@@ -30,72 +29,60 @@ def _open(browser, base, user, tab=""):
 
 
 @pytest.mark.e2e
-def test_header_first_row_is_customer_and_status_and_only_save_is_a_main_button(live_server, make_user):
+def test_header_first_row_is_customer_and_status_and_only_save_is_a_main_button(live_server, make_user, e2e_browser):
     u = make_user(username="cu5_sa", role="superadmin")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            row1 = page.locator(".cm-header__row1")
-            assert row1.locator('[data-testid="cm-header-customer"]').inner_text().strip() != ""
-            assert row1.locator(".deal-tag-badge").count() == 1, "狀態在第一列"
-            assert row1.locator(".cm-header__no").count() == 0, "單號移到第二列"
-            report = page.locator('button:has-text("產生專案報告")')
-            close = page.locator('.cm-header button.btn-close-case')
-            assert not report.is_visible() and not close.is_visible(), "次要動作收進「更多」"
-            assert page.locator(".cm-header .btn-save").is_visible()
-            page.click('[data-testid="cm-more"]')
-            report.wait_for(state="visible", timeout=5000)
-            assert close.is_visible(), "最高管理者在「更多」裡看得到完結案"
-            page.keyboard.press("Escape")
-            report.wait_for(state="hidden", timeout=5000)
-            page.wait_for_timeout(300)
-            assert page.locator(DIALOG).count() == 0, "沒有開著的表單，按 Esc 不可以問「表單尚未儲存」"
-            assert page._natives == []
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    row1 = page.locator(".cm-header__row1")
+    assert row1.locator('[data-testid="cm-header-customer"]').inner_text().strip() != ""
+    assert row1.locator(".deal-tag-badge").count() == 1, "狀態在第一列"
+    assert row1.locator(".cm-header__no").count() == 0, "單號移到第二列"
+    report = page.locator('button:has-text("產生專案報告")')
+    close = page.locator('.cm-header button.btn-close-case')
+    assert not report.is_visible() and not close.is_visible(), "次要動作收進「更多」"
+    assert page.locator(".cm-header .btn-save").is_visible()
+    page.click('[data-testid="cm-more"]')
+    report.wait_for(state="visible", timeout=5000)
+    assert close.is_visible(), "最高管理者在「更多」裡看得到完結案"
+    page.keyboard.press("Escape")
+    report.wait_for(state="hidden", timeout=5000)
+    page.wait_for_timeout(300)
+    assert page.locator(DIALOG).count() == 0, "沒有開著的表單，按 Esc 不可以問「表單尚未儲存」"
+    assert page._natives == []
 
-            page.click('.cm-tab:has-text("執行管理")')
-            # 點完要等 Alpine 重繪；is_visible() 是當下快照，不會等
-            page.locator('.cm-tab:text-is("成員")').wait_for(state="visible", timeout=10000)
-            assert page.locator('.cm-tab:text-is("專案資訊")').count() == 0
-        finally:
-            browser.close()
+    page.click('.cm-tab:has-text("執行管理")')
+    # 點完要等 Alpine 重繪；is_visible() 是當下快照，不會等
+    page.locator('.cm-tab:text-is("成員")').wait_for(state="visible", timeout=10000)
+    assert page.locator('.cm-tab:text-is("專案資訊")').count() == 0
 
 
 @pytest.mark.e2e
-def test_payment_lives_in_the_finance_tab(live_server, make_user):
+def test_payment_lives_in_the_finance_tab(live_server, make_user, e2e_browser):
     u = make_user(username="cu5_sales", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.locator('.cm-tab:has-text("案件資訊")').wait_for(timeout=10000)
-            assert page.locator(NOTE_INPUT).first.is_hidden(), "案件資訊分頁不再有收款"
-            page.click('.cm-tab:has-text("財務")')
-            page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=10000)
-            assert page.locator("#fin-ar-ap-overview").is_visible(), "有財務檢視權的人照樣看得到應收應付總覽"
-            assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'payment'}})") == "fin"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.locator('.cm-tab:has-text("案件資訊")').wait_for(timeout=10000)
+    assert page.locator(NOTE_INPUT).first.is_hidden(), "案件資訊分頁不再有收款"
+    page.click('.cm-tab:has-text("財務")')
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=10000)
+    assert page.locator("#fin-ar-ap-overview").is_visible(), "有財務檢視權的人照樣看得到應收應付總覽"
+    assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'payment'}})") == "fin"
 
 
 @pytest.mark.e2e
-def test_member_without_financial_view_still_reaches_payment_but_not_the_rest(live_server, make_user):
+def test_member_without_financial_view_still_reaches_payment_but_not_the_rest(live_server, make_user, e2e_browser):
     u = make_user(username="cu5_eng", role="engineer")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, tab="fin")
-            page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
-            assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
-            assert page.locator("#fin-ar-ap-overview").count() == 0 or page.locator("#fin-ar-ap-overview").is_hidden()
-            assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'payment'}})") == "fin"
-            assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'settlement'}})") == "biz", \
-                "精算不給沒有財務檢視權的人 ⇒ 退回案件資訊"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, tab="fin")
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    assert page.evaluate(f"() => {DATA_JS}.moneyMasked()") is True
+    assert page.locator("#fin-ar-ap-overview").count() == 0 or page.locator("#fin-ar-ap-overview").is_hidden()
+    assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'payment'}})") == "fin"
+    assert page.evaluate(f"() => {DATA_JS}._gateTab({{key: 'settlement'}})") == "biz", \
+        "精算不給沒有財務檢視權的人 ⇒ 退回案件資訊"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -108,39 +95,31 @@ _OVERFLOW_JS = """(sel) => [...document.querySelectorAll(sel)]
 
 
 @pytest.mark.e2e
-def test_narrow_screen_payment_rows_do_not_overflow_and_tabs_hint_shows(live_server, make_user):
+def test_narrow_screen_payment_rows_do_not_overflow_and_tabs_hint_shows(live_server, make_user, e2e_browser):
     u = make_user(username="cu8_sales", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context(viewport={"width": 390, "height": 844}).new_page()
-            natives = forbid_native_dialogs(page)
-            _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
-            page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
-            grids = page.evaluate(_OVERFLOW_JS, ".pay-grid")
-            assert grids, "款項明細的欄位列要在畫面上"
-            assert all(sw <= cw + 1 for sw, cw in grids), "款項明細欄位列在窄螢幕溢出：%r" % grids
-            cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
-            assert len(cols.split()) == 2, "窄螢幕款項明細改兩欄：%s" % cols
-            assert page.locator('[data-testid="cm-tabs-hint"]').is_visible()
-            assert natives == []
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context(viewport={"width": 390, "height": 844}).new_page()
+    natives = forbid_native_dialogs(page)
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    grids = page.evaluate(_OVERFLOW_JS, ".pay-grid")
+    assert grids, "款項明細的欄位列要在畫面上"
+    assert all(sw <= cw + 1 for sw, cw in grids), "款項明細欄位列在窄螢幕溢出：%r" % grids
+    cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
+    assert len(cols.split()) == 2, "窄螢幕款項明細改兩欄：%s" % cols
+    assert page.locator('[data-testid="cm-tabs-hint"]').is_visible()
+    assert natives == []
 
 
 @pytest.mark.e2e
-def test_wide_screen_keeps_the_original_layout(live_server, make_user):
+def test_wide_screen_keeps_the_original_layout(live_server, make_user, e2e_browser):
     u = make_user(username="cu8_sales2", role="sales")
     _seed(assigned=[u[0]])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, tab="fin")
-            page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
-            cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
-            assert len(cols.split()) == 5, cols
-            assert page.locator('[data-testid="cm-tabs-hint"]').is_hidden()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, tab="fin")
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
+    assert len(cols.split()) == 5, cols
+    assert page.locator('[data-testid="cm-tabs-hint"]').is_hidden()

@@ -6,9 +6,8 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
-from tests.test_e2e_case_page_golden_2026_09_24 import _seed, live_server  # noqa: F401  (live_server 是 fixture)
+from tests.test_e2e_case_page_golden_2026_09_24 import _seed  # noqa: F401  (live_server 是 fixture)
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 STYLE = """(sel) => { const e = document.querySelector(sel); const s = getComputedStyle(e);
@@ -29,29 +28,25 @@ def _contrast(a, b):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("theme", ["light", "dark"])
-def test_toggle_buttons_are_styled_and_readable(live_server, make_user, theme):
+def test_toggle_buttons_are_styled_and_readable(live_server, make_user, theme, e2e_browser):
     u = make_user(username=f"tgl_{theme}", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            ctx = browser.new_context()
-            ctx.add_init_script(f"try {{ localStorage.setItem('motrix_theme', '{theme}') }} catch (e) {{}}")
-            page = ctx.new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html")
-            page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.caseCounts", timeout=20000)
-            off = page.evaluate(STYLE, "[data-quick=mine]")
-            assert off["bg"] != "rgb(240, 240, 240)" and off["radius"] != "0px" and off["border"] != "outset", off
-            assert _contrast(off["fg"], off["bg"]) >= 3, off
-            page.click("[data-quick=mine]")
-            page.wait_for_timeout(500)
-            on = page.evaluate(STYLE, "[data-quick=mine]")
-            assert on["bg"] != off["bg"], ("選中與未選中看起來一樣", on, off)
-            assert _contrast(on["fg"], on["bg"]) >= 4.5, ("選中時字看不清楚", on)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    ctx = browser.new_context()
+    ctx.add_init_script(f"try {{ localStorage.setItem('motrix_theme', '{theme}') }} catch (e) {{}}")
+    page = ctx.new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.caseCounts", timeout=20000)
+    off = page.evaluate(STYLE, "[data-quick=mine]")
+    assert off["bg"] != "rgb(240, 240, 240)" and off["radius"] != "0px" and off["border"] != "outset", off
+    assert _contrast(off["fg"], off["bg"]) >= 3, off
+    page.click("[data-quick=mine]")
+    page.wait_for_timeout(500)
+    on = page.evaluate(STYLE, "[data-quick=mine]")
+    assert on["bg"] != off["bg"], ("選中與未選中看起來一樣", on, off)
+    assert _contrast(on["fg"], on["bg"]) >= 4.5, ("選中時字看不清楚", on)

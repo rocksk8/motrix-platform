@@ -85,10 +85,9 @@ def test_positive_control_scanner_sees_a_package_natives():
 # ── e2e ──────────────────────────────────────────────────────────────────────
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from tests._ui_dialogs import DIALOG, answer_confirm, answer_prompt, forbid_native_dialogs  # noqa: E402
-from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, _login, live_server  # noqa: E402,F401
+from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, _login  # noqa: E402,F401
 
 NO = "MQ-P4B-001"
 
@@ -120,57 +119,49 @@ def _open(browser, base, user):
 
 
 @pytest.mark.e2e
-def test_escape_with_no_form_open_asks_nothing_and_open_form_asks_once(live_server, make_user):
+def test_escape_with_no_form_open_asks_nothing_and_open_form_asks_once(live_server, make_user, e2e_browser):
     u = make_user(username="p4b_admin", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, natives = _open(browser, live_server, u)
-            page.keyboard.press("Escape")
-            page.wait_for_timeout(400)
-            assert page.locator(DIALOG).count() == 0, "沒有開著的表單，按 Esc 不可以問「表單尚未儲存」"
+    browser = e2e_browser
+    page, natives = _open(browser, live_server, u)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(400)
+    assert page.locator(DIALOG).count() == 0, "沒有開著的表單，按 Esc 不可以問「表單尚未儲存」"
 
-            page.evaluate(f"() => {DATA_JS}.openNewDispatch()")
-            page.wait_for_function(f"() => {DATA_JS}.showDispatchModal", timeout=5000)
-            page.keyboard.press("Escape")
-            answer_confirm(page, ok=False, expect="表單尚未儲存")
-            page.wait_for_timeout(300)
-            assert page.locator(DIALOG).count() == 0, "只問一次（其他 5 個隱藏視窗不可以跟著問）"
-            assert page.evaluate(f"() => {DATA_JS}.showDispatchModal") is True, "按取消要留在表單"
-            page.keyboard.press("Escape")
-            answer_confirm(page, ok=True, expect="表單尚未儲存")
-            page.wait_for_function(f"() => !{DATA_JS}.showDispatchModal", timeout=5000)
-            assert natives == []
-        finally:
-            browser.close()
+    page.evaluate(f"() => {DATA_JS}.openNewDispatch()")
+    page.wait_for_function(f"() => {DATA_JS}.showDispatchModal", timeout=5000)
+    page.keyboard.press("Escape")
+    answer_confirm(page, ok=False, expect="表單尚未儲存")
+    page.wait_for_timeout(300)
+    assert page.locator(DIALOG).count() == 0, "只問一次（其他 5 個隱藏視窗不可以跟著問）"
+    assert page.evaluate(f"() => {DATA_JS}.showDispatchModal") is True, "按取消要留在表單"
+    page.keyboard.press("Escape")
+    answer_confirm(page, ok=True, expect="表單尚未儲存")
+    page.wait_for_function(f"() => !{DATA_JS}.showDispatchModal", timeout=5000)
+    assert natives == []
 
 
 @pytest.mark.e2e
-def test_danger_confirm_and_prompt_go_through_motrix_ui(live_server, make_user):
+def test_danger_confirm_and_prompt_go_through_motrix_ui(live_server, make_user, e2e_browser):
     u = make_user(username="p4b_admin2", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, natives = _open(browser, live_server, u)
-            # confirm(danger)：叫料品項刪除——取消不刪、確定才刪
-            page.evaluate(f"() => {{ {DATA_JS}.materialOrders = [{{ itemName: '線材' }}] }}")
-            page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")
-            answer_confirm(page, ok=False, expect="確定要刪除叫料品項「線材」")
-            page.wait_for_timeout(200)
-            assert page.evaluate(f"() => {DATA_JS}.materialOrders.length") == 1
-            page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")
-            answer_confirm(page, ok=True, expect="線材")
-            page.wait_for_function(f"() => {DATA_JS}.materialOrders.length === 0", timeout=5000)
+    browser = e2e_browser
+    page, natives = _open(browser, live_server, u)
+    # confirm(danger)：叫料品項刪除——取消不刪、確定才刪
+    page.evaluate(f"() => {{ {DATA_JS}.materialOrders = [{{ itemName: '線材' }}] }}")
+    page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")
+    answer_confirm(page, ok=False, expect="確定要刪除叫料品項「線材」")
+    page.wait_for_timeout(200)
+    assert page.evaluate(f"() => {DATA_JS}.materialOrders.length") == 1
+    page.evaluate(f"() => {{ {DATA_JS}.moRemoveItem(0) }}")
+    answer_confirm(page, ok=True, expect="線材")
+    page.wait_for_function(f"() => {DATA_JS}.materialOrders.length === 0", timeout=5000)
 
-            # prompt：退回出貨單——取消＝不送出任何請求
-            reqs = []
-            page.on("request", lambda r: reqs.append(r.url) if "/reject" in r.url else None)
-            page.evaluate(f"() => {{ {DATA_JS}.rejectShippingNote({{ noteNo: 'SN-X' }}) }}")
-            answer_prompt(page, value=None, expect="退回出貨單「SN-X」")
-            page.wait_for_timeout(300)
-            assert reqs == [], "取消退回不可以送出請求"
-            assert natives == []
-        finally:
-            browser.close()
+    # prompt：退回出貨單——取消＝不送出任何請求
+    reqs = []
+    page.on("request", lambda r: reqs.append(r.url) if "/reject" in r.url else None)
+    page.evaluate(f"() => {{ {DATA_JS}.rejectShippingNote({{ noteNo: 'SN-X' }}) }}")
+    answer_prompt(page, value=None, expect="退回出貨單「SN-X」")
+    page.wait_for_timeout(300)
+    assert reqs == [], "取消退回不可以送出請求"
+    assert natives == []

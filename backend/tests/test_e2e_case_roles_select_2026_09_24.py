@@ -10,10 +10,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, _login, live_server,
+    DATA_JS, _login,
 )
 
 NO = "MQ-ROLESEL-001"
@@ -65,49 +64,37 @@ def _save(page):
 
 
 @pytest.mark.e2e
-def test_picking_a_person_stores_username_and_legacy_value_is_shown(live_server, make_user):
+def test_picking_a_person_stores_username_and_legacy_value_is_shown(live_server, make_user, e2e_browser):
     adm = make_user(username="rs_admin", role="admin")
     make_user(username="rs_amy", role="sales")
     _seed({"filler": "", "sales": "查無此人", "executor": ""})
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, adm)
-            sel = page.locator(SALES_SELECT)
-            assert "查無此人（未對應帳號）" in sel.evaluate("s => s.options[s.selectedIndex].text")
-            sel.select_option("rs_amy")
-            assert "已儲存" in _save(page)
-            assert _roles()["sales"] == {"username": "rs_amy", "display": "rs_amy"}
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, adm)
+    sel = page.locator(SALES_SELECT)
+    assert "查無此人（未對應帳號）" in sel.evaluate("s => s.options[s.selectedIndex].text")
+    sel.select_option("rs_amy")
+    assert "已儲存" in _save(page)
+    assert _roles()["sales"] == {"username": "rs_amy", "display": "rs_amy"}
 
 
 @pytest.mark.e2e
-def test_stored_object_selects_that_account(live_server, make_user):
+def test_stored_object_selects_that_account(live_server, make_user, e2e_browser):
     adm = make_user(username="rs_admin2", role="admin")
     make_user(username="rs_bob", role="sales")
     _seed({"filler": "", "sales": {"username": "rs_bob", "display": "舊名字"}, "executor": ""})
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, adm)
-            assert page.locator(SALES_SELECT).input_value() == "rs_bob"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, adm)
+    assert page.locator(SALES_SELECT).input_value() == "rs_bob"
 
 
 @pytest.mark.e2e
-def test_users_page_lists_unmapped_case_roles(live_server, make_user):
+def test_users_page_lists_unmapped_case_roles(live_server, make_user, e2e_browser):
     sa = make_user(username="rs_sa", role="superadmin")
     _seed({"filler": "", "sales": "查無此人", "executor": ""})
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *sa)
-            page.goto(f"{live_server}/pages/users.html")
-            box = page.locator("[data-testid=case-roles-unmapped]")
-            box.locator("td", has_text="查無此人").wait_for(timeout=15000)
-            assert "業務負責" in box.inner_text() and NO in box.inner_text()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *sa)
+    page.goto(f"{live_server}/pages/users.html")
+    box = page.locator("[data-testid=case-roles-unmapped]")
+    box.locator("td", has_text="查無此人").wait_for(timeout=15000)
+    assert "業務負責" in box.inner_text() and NO in box.inner_text()

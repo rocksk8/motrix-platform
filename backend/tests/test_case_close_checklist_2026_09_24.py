@@ -115,28 +115,6 @@ def test_close_gates_is_not_visible_to_another_salesperson(client, make_user):
 
 # ── 頁面 ─────────────────────────────────────────────────────────────────
 
-@pytest.fixture()
-def live_server(client):
-    pytest.importorskip("playwright.sync_api")
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user, path=None):
@@ -156,97 +134,77 @@ def _open(browser, base, user, path=None):
 
 
 @pytest.mark.e2e
-def test_close_button_shows_the_gates_first_and_goto_switches_tab(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_close_button_shows_the_gates_first_and_goto_switches_tab(live_server, make_user, e2e_browser):
     u = make_user(username="ck_e1", role="superadmin")
     make_user(username="ck_boss", role="admin")
     _set_display_name("ck_boss", "王經理")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, dialogs = _open(browser, live_server, u)
-            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
-            page.click('[data-testid="cm-more"]')
-            page.click("button.btn-close-case:not([data-testid])")
-            dlg = page.locator("[data-testid=close-check]")
-            dlg.wait_for(state="visible", timeout=10000)
-            assert dialogs == [], f"列出五關之前就跳了確認框：{dialogs}"
-            assert page.locator('[data-testid="ui-dialog"]').count() == 0, "列出五關之前就跳了確認框（MotrixUI）"
-            for label in ("進度", "收款", "單據", "精算", "變更"):
-                assert dlg.locator(f"[data-gate-label='{label}']").count() == 1, label
-            assert "王經理" in dlg.locator("[data-gate-label='單據']").inner_text()
-            assert dlg.locator("[data-testid=close-confirm]").is_disabled(), "五關未過卻可以按確認結案"
-            dlg.locator("[data-gate-label='進度'] [data-testid=gate-goto]").click()
-            page.wait_for_function(f"() => {DATA_JS}.activeTab === 'exec'", timeout=5000)
-            dlg.wait_for(state="hidden", timeout=5000)
-            assert _deal_tag() == "已成案"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, dialogs = _open(browser, live_server, u)
+    # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+    page.click('[data-testid="cm-more"]')
+    page.click("button.btn-close-case:not([data-testid])")
+    dlg = page.locator("[data-testid=close-check]")
+    dlg.wait_for(state="visible", timeout=10000)
+    assert dialogs == [], f"列出五關之前就跳了確認框：{dialogs}"
+    assert page.locator('[data-testid="ui-dialog"]').count() == 0, "列出五關之前就跳了確認框（MotrixUI）"
+    for label in ("進度", "收款", "單據", "精算", "變更"):
+        assert dlg.locator(f"[data-gate-label='{label}']").count() == 1, label
+    assert "王經理" in dlg.locator("[data-gate-label='單據']").inner_text()
+    assert dlg.locator("[data-testid=close-confirm]").is_disabled(), "五關未過卻可以按確認結案"
+    dlg.locator("[data-gate-label='進度'] [data-testid=gate-goto]").click()
+    page.wait_for_function(f"() => {DATA_JS}.activeTab === 'exec'", timeout=5000)
+    dlg.wait_for(state="hidden", timeout=5000)
+    assert _deal_tag() == "已成案"
 
 
 @pytest.mark.e2e
-def test_close_stops_when_save_fails(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_close_stops_when_save_fails(live_server, make_user, e2e_browser):
     u = make_user(username="ck_e2", role="superadmin")
     _seed(received=True, stages_done=True, pending_ship=False)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, dialogs = _open(browser, live_server, u)
-            # 已收款卻沒有收款日期 ⇒ 存檔失敗
-            page.evaluate(f"() => {{ const c = {DATA_JS}; c.cr.caseRecord.payment.items[0].receivedAt = '' }}")
-            page.evaluate(f"() => {DATA_JS}.closeCaseAction()")
-            expect_toast(page, "已停止結案", kind="error")      # CM12 P4：原本是原生 alert
-            assert not page.locator("[data-testid=close-check]").is_visible(), "存檔失敗仍往下走"
-            assert dialogs == [], dialogs
-            assert _deal_tag() == "已成案"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, dialogs = _open(browser, live_server, u)
+    # 已收款卻沒有收款日期 ⇒ 存檔失敗
+    page.evaluate(f"() => {{ const c = {DATA_JS}; c.cr.caseRecord.payment.items[0].receivedAt = '' }}")
+    page.evaluate(f"() => {DATA_JS}.closeCaseAction()")
+    expect_toast(page, "已停止結案", kind="error")      # CM12 P4：原本是原生 alert
+    assert not page.locator("[data-testid=close-check]").is_visible(), "存檔失敗仍往下走"
+    assert dialogs == [], dialogs
+    assert _deal_tag() == "已成案"
 
 
 @pytest.mark.e2e
-def test_all_gates_passed_confirm_closes_the_case(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_all_gates_passed_confirm_closes_the_case(live_server, make_user, e2e_browser):
     u = make_user(username="ck_e3", role="superadmin")
     _seed(received=True, stages_done=True, pending_ship=False)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, _ = _open(browser, live_server, u)
-            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
-            page.click('[data-testid="cm-more"]')
-            page.click("button.btn-close-case:not([data-testid])")
-            btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
-            btn.wait_for(state="visible", timeout=10000)
-            assert btn.is_enabled()
-            btn.click()
-            for _ in range(100):
-                if _deal_tag() == "已結案":
-                    break
-                time.sleep(0.1)
-            assert _deal_tag() == "已結案"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, _ = _open(browser, live_server, u)
+    # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+    page.click('[data-testid="cm-more"]')
+    page.click("button.btn-close-case:not([data-testid])")
+    btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
+    btn.wait_for(state="visible", timeout=10000)
+    assert btn.is_enabled()
+    btn.click()
+    for _ in range(100):
+        if _deal_tag() == "已結案":
+            break
+        time.sleep(0.1)
+    assert _deal_tag() == "已結案"
 
 
 @pytest.mark.e2e
-def test_gate_matrix_cell_opens_the_case_on_that_gates_tab(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_gate_matrix_cell_opens_the_case_on_that_gates_tab(live_server, make_user, e2e_browser):
     u = make_user(username="ck_e4", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, _ = _open(browser, live_server, u, path="")
-            page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
-                                   timeout=20000)
-            page.evaluate(f"() => {DATA_JS}.switchToMatrix()")
-            cell = page.locator(f"tr[data-quote='{NO}'] td.cm-gate[data-gate='documents']")
-            cell.wait_for(state="visible", timeout=10000)
-            cell.click()
-            page.wait_for_function(
-                f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'"
-                f" && {DATA_JS}.activeTab === 'shipping'", timeout=10000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, _ = _open(browser, live_server, u, path="")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
+                           timeout=20000)
+    page.evaluate(f"() => {DATA_JS}.switchToMatrix()")
+    cell = page.locator(f"tr[data-quote='{NO}'] td.cm-gate[data-gate='documents']")
+    cell.wait_for(state="visible", timeout=10000)
+    cell.click()
+    page.wait_for_function(
+        f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'"
+        f" && {DATA_JS}.activeTab === 'shipping'", timeout=10000)

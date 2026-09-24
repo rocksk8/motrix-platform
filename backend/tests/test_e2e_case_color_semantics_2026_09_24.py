@@ -14,7 +14,6 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 NO = "MQ-CLR-001"
@@ -44,27 +43,6 @@ def _case(no, stages):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user, query=""):
@@ -82,34 +60,30 @@ def _open(browser, base, user, query=""):
 
 
 @pytest.mark.e2e
-def test_current_stage_is_not_red_and_segments_work_by_keyboard(live_server, make_user):
+def test_current_stage_is_not_red_and_segments_work_by_keyboard(live_server, make_user, e2e_browser):
     u = make_user(username="clr_e1", role="admin")
     _case(NO, [("完成", True, ""), ("進行中", False, "2099-12-31"), ("之後", False, "2099-12-31")])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, f"?q={NO}&tab=exec")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
-                                   timeout=15000)
-            cur = page.locator(".stage-segbar__seg--current")
-            cur.wait_for(state="visible", timeout=10000)
-            bg = cur.evaluate("e => getComputedStyle(e).backgroundColor")
-            assert bg not in REDS, f"目前階段不可以用紅色：{bg}"
-            card_prog = page.locator(f".cm-card[data-quote-no='{NO}'] .cm-card__stageprog")
-            assert card_prog.evaluate("e => getComputedStyle(e).color") not in REDS
-            # 鍵盤：Tab 到得了、有標籤、Enter 展開
-            assert cur.get_attribute("tabindex") == "0"
-            assert "進行中" in (cur.get_attribute("aria-label") or "")
-            sid = page.evaluate(f"() => {DATA_JS}.cr.caseRecord.stages[1].id")
-            cur.focus()
-            page.keyboard.press("Enter")
-            page.wait_for_function(f"() => {DATA_JS}._openStageDetail[{sid}] === true", timeout=5000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, f"?q={NO}&tab=exec")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
+                           timeout=15000)
+    cur = page.locator(".stage-segbar__seg--current")
+    cur.wait_for(state="visible", timeout=10000)
+    bg = cur.evaluate("e => getComputedStyle(e).backgroundColor")
+    assert bg not in REDS, f"目前階段不可以用紅色：{bg}"
+    card_prog = page.locator(f".cm-card[data-quote-no='{NO}'] .cm-card__stageprog")
+    assert card_prog.evaluate("e => getComputedStyle(e).color") not in REDS
+    # 鍵盤：Tab 到得了、有標籤、Enter 展開
+    assert cur.get_attribute("tabindex") == "0"
+    assert "進行中" in (cur.get_attribute("aria-label") or "")
+    sid = page.evaluate(f"() => {DATA_JS}.cr.caseRecord.stages[1].id")
+    cur.focus()
+    page.keyboard.press("Enter")
+    page.wait_for_function(f"() => {DATA_JS}._openStageDetail[{sid}] === true", timeout=5000)
 
 
 @pytest.mark.e2e
-def test_overdue_is_written_out_and_board_shows_new_activity(live_server, client, make_user):
+def test_overdue_is_written_out_and_board_shows_new_activity(live_server, client, make_user, e2e_browser):
     u = make_user(username="clr_e2", role="admin")
     _case(LATE, [("逾期一", False, "2020-01-01"), ("逾期二", False, "2020-02-01"), ("未到", False, "2099-12-31")])
     r = client.post("/api/auth/login", json={"username": u[0], "password": u[1]})
@@ -124,18 +98,14 @@ def test_overdue_is_written_out_and_board_shows_new_activity(live_server, client
         conn.commit()
     finally:
         conn.close()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            prog = page.locator(f".cm-card[data-quote-no='{LATE}'] .cm-card__stageprog")
-            prog.wait_for(state="visible", timeout=10000)
-            assert "逾期 2" in prog.inner_text(), prog.inner_text()
-            page.evaluate(f"() => {{ {DATA_JS}.caseViewMode = 'board'; {DATA_JS}.loadCases() }}")
-            board_card = page.locator(f".cm-board-group .cm-card[data-board-quote-no='{LATE}']")
-            board_card.wait_for(state="visible", timeout=10000)
-            page.wait_for_function(f"() => {DATA_JS}.caseActivity['{LATE}']", timeout=10000)
-            assert "有新動態" in board_card.inner_text(), board_card.inner_text()
-            assert "逾期 2" in board_card.inner_text(), board_card.inner_text()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    prog = page.locator(f".cm-card[data-quote-no='{LATE}'] .cm-card__stageprog")
+    prog.wait_for(state="visible", timeout=10000)
+    assert "逾期 2" in prog.inner_text(), prog.inner_text()
+    page.evaluate(f"() => {{ {DATA_JS}.caseViewMode = 'board'; {DATA_JS}.loadCases() }}")
+    board_card = page.locator(f".cm-board-group .cm-card[data-board-quote-no='{LATE}']")
+    board_card.wait_for(state="visible", timeout=10000)
+    page.wait_for_function(f"() => {DATA_JS}.caseActivity['{LATE}']", timeout=10000)
+    assert "有新動態" in board_card.inner_text(), board_card.inner_text()
+    assert "逾期 2" in board_card.inner_text(), board_card.inner_text()

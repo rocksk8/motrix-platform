@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 NO = "MQ-ALLDONE-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -38,27 +37,6 @@ def _seed():
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -80,39 +58,31 @@ def _finish_last_stage(page):
 
 
 @pytest.mark.e2e
-def test_superadmin_gets_inline_bar_instead_of_a_popup(live_server, make_user):
+def test_superadmin_gets_inline_bar_instead_of_a_popup(live_server, make_user, e2e_browser):
     u = make_user(username="ad_e1", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, dialogs = _open(browser, live_server, u)
-            assert page.locator(BAR).count() == 0 or not page.locator(BAR).is_visible()
-            _finish_last_stage(page)
-            bar = page.locator(BAR)
-            bar.wait_for(state="visible", timeout=5000)
-            page.wait_for_timeout(800)                     # 舊版在 300ms 後才跳 confirm
-            assert dialogs == [], f"不可以再彈確認視窗：{dialogs}"
-            assert "全部階段已完成" in bar.inner_text()
-            bar.locator("button").click()
-            page.locator("[data-testid=close-check]").wait_for(state="visible", timeout=10000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, dialogs = _open(browser, live_server, u)
+    assert page.locator(BAR).count() == 0 or not page.locator(BAR).is_visible()
+    _finish_last_stage(page)
+    bar = page.locator(BAR)
+    bar.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(800)                     # 舊版在 300ms 後才跳 confirm
+    assert dialogs == [], f"不可以再彈確認視窗：{dialogs}"
+    assert "全部階段已完成" in bar.inner_text()
+    bar.locator("button").click()
+    page.locator("[data-testid=close-check]").wait_for(state="visible", timeout=10000)
 
 
 @pytest.mark.e2e
-def test_others_see_the_bar_without_a_close_button(live_server, make_user):
+def test_others_see_the_bar_without_a_close_button(live_server, make_user, e2e_browser):
     u = make_user(username="ad_e2", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, dialogs = _open(browser, live_server, u)
-            _finish_last_stage(page)
-            bar = page.locator(BAR)
-            bar.wait_for(state="visible", timeout=5000)
-            assert bar.locator("button").count() == 0
-            assert "最高管理者" in bar.inner_text()
-            assert dialogs == []
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, dialogs = _open(browser, live_server, u)
+    _finish_last_stage(page)
+    bar = page.locator(BAR)
+    bar.wait_for(state="visible", timeout=5000)
+    assert bar.locator("button").count() == 0
+    assert "最高管理者" in bar.inner_text()
+    assert dialogs == []

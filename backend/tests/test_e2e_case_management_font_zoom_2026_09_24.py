@@ -13,10 +13,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+    _login)
 
 W, H = 1366, 768
 N_CASES = 40
@@ -55,27 +54,22 @@ _MEASURE = """sel => {
 }"""
 
 
-def _measure(zoom, live_server, make_user, uname):
+def _measure(browser, zoom, live_server, make_user, uname):
     _seed_cases()
     u, p = make_user(username=uname, role="superadmin")
-    with sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": W, "height": H})
-        try:
-            page.add_init_script("localStorage.setItem('motrix_font_zoom', '%s')" % zoom)
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/case-management.html")
-            page.wait_for_function("n => document.querySelectorAll('.cm-card').length >= n",
-                                   arg=N_CASES, timeout=20000)
-            page.wait_for_timeout(300)
-            lst = page.evaluate(_MEASURE, ".cm-list__body")
-            page.locator(".cm-card").first.click()
-            page.locator(".cm-body").first.wait_for(state="visible", timeout=15000)
-            page.wait_for_timeout(500)
-            det = page.evaluate(_MEASURE, ".cm-body")
-            return lst, det
-        finally:
-            browser.close()
+    page = browser.new_page(viewport={"width": W, "height": H})
+    page.add_init_script("localStorage.setItem('motrix_font_zoom', '%s')" % zoom)
+    _login(page, live_server, u, p)
+    page.goto(live_server + "/pages/case-management.html")
+    page.wait_for_function("n => document.querySelectorAll('.cm-card').length >= n",
+                           arg=N_CASES, timeout=20000)
+    page.wait_for_timeout(300)
+    lst = page.evaluate(_MEASURE, ".cm-list__body")
+    page.locator(".cm-card").first.click()
+    page.locator(".cm-body").first.wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(500)
+    det = page.evaluate(_MEASURE, ".cm-body")
+    return lst, det
 
 
 def _check(zoom, lst, det):
@@ -91,13 +85,13 @@ def _check(zoom, lst, det):
 
 @pytest.mark.e2e
 def test_fz_case_management_lists_fit_and_scroll_to_the_end_at_the_largest_size(
-        live_server, make_user):
-    lst, det = _measure(1.3, live_server, make_user, "fzcm_13")
+        live_server, make_user, e2e_browser):
+    lst, det = _measure(e2e_browser, 1.3, live_server, make_user, "fzcm_13")
     _check(1.3, lst, det)
 
 
 @pytest.mark.e2e
-def test_fz_case_management_lists_fit_at_the_standard_size(live_server, make_user):
+def test_fz_case_management_lists_fit_at_the_standard_size(live_server, make_user, e2e_browser):
     """對照組：「標」字級同樣要過（不是只有「特」被特別處理）。"""
-    lst, det = _measure(1.0, live_server, make_user, "fzcm_10")
+    lst, det = _measure(e2e_browser, 1.0, live_server, make_user, "fzcm_10")
     _check(1.0, lst, det)

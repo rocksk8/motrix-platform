@@ -11,7 +11,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 OLDEST = "MQ-PAGE-0000"
@@ -35,27 +34,6 @@ def _bulk(n):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user, query=""):
@@ -77,82 +55,66 @@ def _cards(page):
 
 
 @pytest.mark.e2e
-def test_first_page_then_load_more(live_server, make_user):
+def test_first_page_then_load_more(live_server, make_user, e2e_browser):
     u = make_user(username="pg_e1", role="admin")
     _bulk(130)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
-                                   timeout=10000)
-            page.wait_for_function(f"() => {DATA_JS}.caseCounts", timeout=10000)   # 件數是另一支非同步請求
-            assert page.evaluate(f"() => {DATA_JS}.summaryTotal()") == 130, "摘要要算全部案件"
-            more = page.locator("[data-testid=case-load-more]")
-            assert more.is_visible()
-            more.click()
-            page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 130",
-                                   timeout=10000)
-            page.locator("[data-testid=case-load-more]").wait_for(state="hidden", timeout=5000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
+                           timeout=10000)
+    page.wait_for_function(f"() => {DATA_JS}.caseCounts", timeout=10000)   # 件數是另一支非同步請求
+    assert page.evaluate(f"() => {DATA_JS}.summaryTotal()") == 130, "摘要要算全部案件"
+    more = page.locator("[data-testid=case-load-more]")
+    assert more.is_visible()
+    more.click()
+    page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 130",
+                           timeout=10000)
+    page.locator("[data-testid=case-load-more]").wait_for(state="hidden", timeout=5000)
 
 
 @pytest.mark.e2e
-def test_search_reaches_cases_outside_the_loaded_page(live_server, make_user):
+def test_search_reaches_cases_outside_the_loaded_page(live_server, make_user, e2e_browser):
     u = make_user(username="pg_e2", role="admin")
     _bulk(505)          # 超過舊版一次拉的 500 件：最舊的一件在舊版清單裡根本不存在
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
-                                   timeout=10000)
-            page.fill(".cm-list__search-input[type=text]", "最舊")
-            page.wait_for_function(
-                "() => { const c = document.querySelectorAll('.cm-card[data-quote-no]');"
-                f" return c.length === 1 && c[0].dataset.quoteNo === '{OLDEST}' }}", timeout=10000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
+                           timeout=10000)
+    page.fill(".cm-list__search-input[type=text]", "最舊")
+    page.wait_for_function(
+        "() => { const c = document.querySelectorAll('.cm-card[data-quote-no]');"
+        f" return c.length === 1 && c[0].dataset.quoteNo === '{OLDEST}' }}", timeout=10000)
 
 
 @pytest.mark.e2e
-def test_deep_link_opens_a_case_outside_the_first_page(live_server, make_user):
+def test_deep_link_opens_a_case_outside_the_first_page(live_server, make_user, e2e_browser):
     u = make_user(username="pg_e3", role="admin")
     _bulk(505)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, query=f"?q={OLDEST}")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{OLDEST}'",
-                                   timeout=15000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, query=f"?q={OLDEST}")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{OLDEST}'",
+                           timeout=15000)
 
 
 @pytest.mark.e2e
-def test_summary_never_shows_the_loaded_page_count_as_the_total(live_server, make_user):
+def test_summary_never_shows_the_loaded_page_count_as_the_total(live_server, make_user, e2e_browser):
     """件數（counts）比清單晚到時，摘要不可以先顯示已載入的那一頁件數（100）當總數。"""
     u = make_user(username="pg_e4", role="admin")
     _bulk(130)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.on("dialog", lambda d: d.accept())
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.route("**/api/quotations?*counts=1*", lambda route: (time.sleep(2.0), route.continue_()))
-            page.goto(f"{live_server}/pages/case-management.html")
-            page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
-                                   timeout=15000)
-            sub = page.locator(".cm-placeholder__sub")
-            assert "100" not in sub.inner_text(), sub.inner_text()
-            page.wait_for_function(f"() => {DATA_JS}.caseCounts", timeout=10000)
-            page.wait_for_function("() => document.querySelector('.cm-placeholder__sub').textContent.includes('130')",
-                                   timeout=5000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.on("dialog", lambda d: d.accept())
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.route("**/api/quotations?*counts=1*", lambda route: (time.sleep(2.0), route.continue_()))
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",
+                           timeout=15000)
+    sub = page.locator(".cm-placeholder__sub")
+    assert "100" not in sub.inner_text(), sub.inner_text()
+    page.wait_for_function(f"() => {DATA_JS}.caseCounts", timeout=10000)
+    page.wait_for_function("() => document.querySelector('.cm-placeholder__sub').textContent.includes('130')",
+                           timeout=5000)

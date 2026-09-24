@@ -86,28 +86,6 @@ def test_vouchers_by_case_needs_voucher_access(client, make_user):
 
 # ── 頁面 ─────────────────────────────────────────────────────────────────
 
-@pytest.fixture()
-def live_server(client):
-    pytest.importorskip("playwright.sync_api")
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -124,65 +102,50 @@ def _open(browser, base, user):
 
 
 @pytest.mark.e2e
-def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_user):
-    from playwright.sync_api import sync_playwright
+def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_user, e2e_browser):
     u = make_user(username="xl_e1", role="superadmin")
     hdr = _hdr(client, make_user, "xl_e1_api", modules=["cashier"])
     _seed_case()
     vid = _voucher(client, hdr, "case", NO)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            links = page.locator("[data-testid=case-links]")
-            links.locator("[data-testid=case-link-voucher]").first.wait_for(state="visible", timeout=10000)
-            assert links.locator("[data-testid=case-link-map]").get_attribute("href") \
-                == "map.html?focus=" + "cases%3A" + NO
-            assert links.locator("[data-testid=case-link-bonus]").get_attribute("href") == f"bonus.html?q={NO}"
-            assert links.locator("[data-testid=case-link-voucher]").get_attribute("href") == f"voucher.html?id={vid}"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    links = page.locator("[data-testid=case-links]")
+    links.locator("[data-testid=case-link-voucher]").first.wait_for(state="visible", timeout=10000)
+    assert links.locator("[data-testid=case-link-map]").get_attribute("href") \
+        == "map.html?focus=" + "cases%3A" + NO
+    assert links.locator("[data-testid=case-link-bonus]").get_attribute("href") == f"bonus.html?q={NO}"
+    assert links.locator("[data-testid=case-link-voucher]").get_attribute("href") == f"voucher.html?id={vid}"
 
 
 @pytest.mark.e2e
-def test_case_page_hides_links_the_user_cannot_open(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_case_page_hides_links_the_user_cannot_open(live_server, make_user, e2e_browser):
     u = make_user(username="xl_e2", role="admin", modules=["case_manage"])
     _seed_case()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.wait_for_timeout(1500)
-            for k in ("map", "bonus", "voucher"):
-                assert page.locator(f"[data-testid=case-link-{k}]").count() == 0, k
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.wait_for_timeout(1500)
+    for k in ("map", "bonus", "voucher"):
+        assert page.locator(f"[data-testid=case-link-{k}]").count() == 0, k
 
 
 @pytest.mark.e2e
-def test_after_closing_the_case_stays_on_the_case_page(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_after_closing_the_case_stays_on_the_case_page(live_server, make_user, e2e_browser):
     import db
     u = make_user(username="xl_e3", role="superadmin")
     _seed_case(closable=True)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
-            page.click('[data-testid="cm-more"]')
-            page.click("button.btn-close-case:not([data-testid])")
-            btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
-            btn.wait_for(state="visible", timeout=10000)
-            btn.click()
-            page.wait_for_function(f"() => {DATA_JS}.cr.dealTag === '已結案'", timeout=10000)
-            page.wait_for_timeout(1500)
-            assert "case-management.html" in page.url, page.url
-            conn = db.get_db()
-            try:
-                assert conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (NO,)).fetchone()[0] == "已結案"
-            finally:
-                conn.close()
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+    page.click('[data-testid="cm-more"]')
+    page.click("button.btn-close-case:not([data-testid])")
+    btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
+    btn.wait_for(state="visible", timeout=10000)
+    btn.click()
+    page.wait_for_function(f"() => {DATA_JS}.cr.dealTag === '已結案'", timeout=10000)
+    page.wait_for_timeout(1500)
+    assert "case-management.html" in page.url, page.url
+    conn = db.get_db()
+    try:
+        assert conn.execute("SELECT deal_tag FROM quotations WHERE quote_no=?", (NO,)).fetchone()[0] == "已結案"
+    finally:
+        conn.close()

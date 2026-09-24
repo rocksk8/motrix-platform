@@ -10,10 +10,9 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, _login, live_server,
+    DATA_JS, _login,
 )
 
 NO = "MQ-PAYNUM-001"
@@ -56,43 +55,39 @@ def _save(page):
 
 
 @pytest.mark.e2e
-def test_payment_amounts_accept_separators_and_block_bad_values(live_server, make_user):
+def test_payment_amounts_accept_separators_and_block_bad_values(live_server, make_user, e2e_browser):
     u = make_user(username="pn_admin", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.on("dialog", lambda d: d.accept())
-            _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
-            page.evaluate(f"() => {{ {DATA_JS}.activeTab = 'fin' }}")
-            WT2 = 'input[data-num="wt-2"]'
-            ACT1 = 'input[data-num="act-1"]'
-            FEE1 = 'input[data-num="fee-1"]'
-            page.locator(WT2).wait_for(state="visible", timeout=10000)
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.on("dialog", lambda d: d.accept())
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
+    page.evaluate(f"() => {{ {DATA_JS}.activeTab = 'fin' }}")
+    WT2 = 'input[data-num="wt-2"]'
+    ACT1 = 'input[data-num="act-1"]'
+    FEE1 = 'input[data-num="fee-1"]'
+    page.locator(WT2).wait_for(state="visible", timeout=10000)
 
-            page.fill(WT2, "30,500")
-            page.locator(WT2).blur()
-            page.fill(ACT1, "２９，９８５")
-            page.fill(FEE1, "15")
-            assert "已儲存" in _save(page)
-            it = _items()
-            assert it[2]["amount"] == 30500, "含稅貼上千分位不可以變成 0"
-            assert it[3]["amount"] == 39500, "尾款跟著平衡"
-            assert it[1]["actualAmount"] == 29985 and it[1]["feeAmount"] == 15
+    page.fill(WT2, "30,500")
+    page.locator(WT2).blur()
+    page.fill(ACT1, "２９，９８５")
+    page.fill(FEE1, "15")
+    assert "已儲存" in _save(page)
+    it = _items()
+    assert it[2]["amount"] == 30500, "含稅貼上千分位不可以變成 0"
+    assert it[3]["amount"] == 39500, "尾款跟著平衡"
+    assert it[1]["actualAmount"] == 29985 and it[1]["feeAmount"] == 15
 
-            page.fill(FEE1, "1o")
-            assert "num-bad" in (page.get_attribute(FEE1, "class") or "")
-            msg = _save(page)
-            assert "無法辨識" in msg, msg
-            time.sleep(0.3)
-            assert _items()[1]["feeAmount"] == 15, "標紅時不可以存檔"
+    page.fill(FEE1, "1o")
+    assert "num-bad" in (page.get_attribute(FEE1, "class") or "")
+    msg = _save(page)
+    assert "無法辨識" in msg, msg
+    time.sleep(0.3)
+    assert _items()[1]["feeAmount"] == 15, "標紅時不可以存檔"
 
-            page.fill(FEE1, "20")
-            assert "num-bad" not in (page.get_attribute(FEE1, "class") or "")
-            assert "已儲存" in _save(page)
-            assert _items()[1]["feeAmount"] == 20
-        finally:
-            browser.close()
+    page.fill(FEE1, "20")
+    assert "num-bad" not in (page.get_attribute(FEE1, "class") or "")
+    assert "已儲存" in _save(page)
+    assert _items()[1]["feeAmount"] == 20

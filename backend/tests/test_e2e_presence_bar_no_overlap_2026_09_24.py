@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
-from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, NO, _login, _seed, live_server  # noqa: F401
+from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, NO, _login, _seed  # noqa: F401
 
 HIT_JS = """(sel) => {
   const b = document.querySelector(sel)

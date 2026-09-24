@@ -121,28 +121,6 @@ def _counts():
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    pytest.importorskip("playwright.sync_api")
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 # （說明, 觸發的 JS）；呼叫不 await——確認框開著時 Promise 不會結束
@@ -157,46 +135,41 @@ ACTIONS = [
 
 
 @pytest.mark.e2e
-def test_main_actions_use_no_native_dialogs(live_server, make_user):
-    from playwright.sync_api import sync_playwright
+def test_main_actions_use_no_native_dialogs(live_server, make_user, e2e_browser):
     from tests._ui_dialogs import DIALOG, forbid_native_dialogs
     u = make_user(username="nodlg_admin", role="admin")
     _seed(author="nodlg_admin")
     before = _counts()
     native_by_action = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            seen = forbid_native_dialogs(page)
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html?q={NO}")
-            page.wait_for_function(
-                f"() => {{ const c = {DATA_JS}; return c.selected && c.selected.quote_no === '{NO}'"
-                f" && c.caseUpdates.length && c.shippingNotes.length && c.completionNotes.length }}", timeout=20000)
-            for label, js in ACTIONS:
-                n0 = len(seen)
-                page.evaluate(f"() => {{ const c = {DATA_JS}; {js} }}")
-                # 等「原生對話框被記下」或「MotrixUI 確認框出現」其中一個
-                end = time.time() + 5
-                while time.time() < end:
-                    if len(seen) > n0:
-                        native_by_action[label] = seen[n0:]
-                        break
-                    dlg = page.locator(DIALOG)
-                    if dlg.count() and dlg.first.is_visible():
-                        dlg.first.locator('[data-testid="ui-dialog-cancel"]').click()
-                        dlg.first.wait_for(state="detached", timeout=5000)
-                        break
-                    page.wait_for_timeout(100)
-                else:
-                    pytest.fail(f"「{label}」既沒有原生對話框、也沒有出現確認框——操作沒有先問就執行了？")
-                page.wait_for_timeout(300)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    seen = forbid_native_dialogs(page)
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
+    page.wait_for_function(
+        f"() => {{ const c = {DATA_JS}; return c.selected && c.selected.quote_no === '{NO}'"
+        f" && c.caseUpdates.length && c.shippingNotes.length && c.completionNotes.length }}", timeout=20000)
+    for label, js in ACTIONS:
+        n0 = len(seen)
+        page.evaluate(f"() => {{ const c = {DATA_JS}; {js} }}")
+        # 等「原生對話框被記下」或「MotrixUI 確認框出現」其中一個
+        end = time.time() + 5
+        while time.time() < end:
+            if len(seen) > n0:
+                native_by_action[label] = seen[n0:]
+                break
+            dlg = page.locator(DIALOG)
+            if dlg.count() and dlg.first.is_visible():
+                dlg.first.locator('[data-testid="ui-dialog-cancel"]').click()
+                dlg.first.wait_for(state="detached", timeout=5000)
+                break
+            page.wait_for_timeout(100)
+        else:
+            pytest.fail(f"「{label}」既沒有原生對話框、也沒有出現確認框——操作沒有先問就執行了？")
+        page.wait_for_timeout(300)
     assert _counts() == before, "按了取消，資料卻被刪了"
     assert not native_by_action, "仍有原生對話框：" + json.dumps(native_by_action, ensure_ascii=False)

@@ -11,7 +11,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 A = "MQ-SEL-001"
 B = "MQ-SEL-002"
@@ -37,52 +36,27 @@ def _seed(no, customer):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 @pytest.mark.e2e
-def test_a_late_response_for_the_earlier_click_does_not_switch_back(live_server, make_user):
+def test_a_late_response_for_the_earlier_click_does_not_switch_back(live_server, make_user, e2e_browser):
     u = make_user(username="sel_e1", role="admin")
     _seed(A, "先點客戶")
     _seed(B, "後點客戶")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.on("dialog", lambda d: d.accept())
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/case-management.html")
-            page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
-                                   timeout=20000)
-            # 只延後「取 A 這一件」的回應（精確路徑，不含 /close-gates 等子路徑）
-            page.route(f"**/api/quotations/{A}", lambda route: (time.sleep(1.5), route.continue_()))
-            page.evaluate(f"() => {{ {DATA_JS}.selectCase('{A}') }}")
-            page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{B}') }}")
-            page.wait_for_timeout(2500)
-            assert page.evaluate(f"() => {DATA_JS}.selected.quote_no") == B
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.on("dialog", lambda d: d.accept())
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/case-management.html")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
+                           timeout=20000)
+    # 只延後「取 A 這一件」的回應（精確路徑，不含 /close-gates 等子路徑）
+    page.route(f"**/api/quotations/{A}", lambda route: (time.sleep(1.5), route.continue_()))
+    page.evaluate(f"() => {{ {DATA_JS}.selectCase('{A}') }}")
+    page.evaluate(f"async () => {{ await {DATA_JS}.selectCase('{B}') }}")
+    page.wait_for_timeout(2500)
+    assert page.evaluate(f"() => {DATA_JS}.selected.quote_no") == B

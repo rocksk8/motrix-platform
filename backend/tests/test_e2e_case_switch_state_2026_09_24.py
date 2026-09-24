@@ -12,7 +12,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 A = "MQ-SW-A"
 B = "MQ-SW-B"
@@ -78,27 +77,6 @@ def _seed():
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -122,29 +100,25 @@ def _select(page, no):
 
 
 @pytest.mark.e2e
-def test_state_after_switching_equals_state_after_fresh_open(live_server, make_user):
+def test_state_after_switching_equals_state_after_fresh_open(live_server, make_user, e2e_browser):
     u = make_user(username="sw_admin", role="admin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            fresh = _open(browser, live_server, u)
-            _select(fresh, B)
-            want = fresh.evaluate(SNAP_JS)
+    browser = e2e_browser
+    fresh = _open(browser, live_server, u)
+    _select(fresh, B)
+    want = fresh.evaluate(SNAP_JS)
 
-            page = _open(browser, live_server, u)
-            _select(page, A)
-            # 在 A 上動一些案件層級的檢視狀態
-            for tab in ("exec", "shipping", "feed", "fin", "xexp"):
-                page.evaluate(f"() => {{ const c = {DATA_JS}; c.activeTab = '{tab}'; c.ensureTabData && c.ensureTabData('{tab}') }}")
-                page.wait_for_timeout(300)
-            page.evaluate(f"""() => {{ const c = {DATA_JS}; c.execSubTab = 'devices'; c.stageView = 'timeline';
-                c.showLog = true; c.finShowRecvDetail = true; c.finShowPayDetail = true; c.newComment = '打到一半';
-                c._openDevGroups = {{ x: true }}; c._shippingLogOpen = {{ y: true }} }}""")
-            _select(page, B)
-            got = page.evaluate(SNAP_JS)
-        finally:
-            browser.close()
+    page = _open(browser, live_server, u)
+    _select(page, A)
+    # 在 A 上動一些案件層級的檢視狀態
+    for tab in ("exec", "shipping", "feed", "fin", "xexp"):
+        page.evaluate(f"() => {{ const c = {DATA_JS}; c.activeTab = '{tab}'; c.ensureTabData && c.ensureTabData('{tab}') }}")
+        page.wait_for_timeout(300)
+    page.evaluate(f"""() => {{ const c = {DATA_JS}; c.execSubTab = 'devices'; c.stageView = 'timeline';
+        c.showLog = true; c.finShowRecvDetail = true; c.finShowPayDetail = true; c.newComment = '打到一半';
+        c._openDevGroups = {{ x: true }}; c._shippingLogOpen = {{ y: true }} }}""")
+    _select(page, B)
+    got = page.evaluate(SNAP_JS)
     assert len(want) > 150 and len(got) > 150, (len(want), len(got))   # 快照不可以是空的
     keys = (set(want) | set(got)) - GLOBAL_KEYS
     diff = {k: (got.get(k), want.get(k)) for k in sorted(keys) if got.get(k) != want.get(k)}

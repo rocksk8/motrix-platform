@@ -11,7 +11,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -44,27 +43,6 @@ def _executor(no):
         conn.close()
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 def _open(browser, base, user):
@@ -86,48 +64,40 @@ def _check(page, no):
 
 
 @pytest.mark.e2e
-def test_batch_executor_and_export(live_server, make_user):
+def test_batch_executor_and_export(live_server, make_user, e2e_browser):
     from openpyxl import load_workbook
     u = make_user(username="be_admin", role="admin")
     make_user(username="be_exec", role="engineer")
     for no in ("MQ-BE-1", "MQ-BE-2", "MQ-BE-3"):
         _case(no)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.click("[data-testid=batch-toggle]")
-            _check(page, "MQ-BE-1")
-            _check(page, "MQ-BE-3")
-            assert page.locator("[data-testid=batch-count]").inner_text() == "已選 2 件"
-            assert page.evaluate(f"() => {DATA_JS}.selected") is None, "勾選不可以順便打開案件"
-            page.select_option("[data-testid=batch-exec]", "be_exec")
-            page.click("[data-testid=batch-exec-apply]")
-            page.locator("[data-testid=batch-msg]").wait_for(state="visible", timeout=10000)
-            assert "已變更 2 件" in page.locator("[data-testid=batch-msg]").inner_text()
-            assert (_executor("MQ-BE-1"), _executor("MQ-BE-2"), _executor("MQ-BE-3")) == ("be_exec", "", "be_exec")
-            with page.expect_download() as dl:
-                page.click("[data-testid=batch-export]")
-            path = dl.value.path()
-            with open(path, "rb") as f:           # 下載暫存檔沒有副檔名，openpyxl 依副檔名拒讀
-                ws = load_workbook(io.BytesIO(f.read())).active
-            assert sorted(r[0] for r in ws.iter_rows(min_row=2, values_only=True)) == ["MQ-BE-1", "MQ-BE-3"]
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.click("[data-testid=batch-toggle]")
+    _check(page, "MQ-BE-1")
+    _check(page, "MQ-BE-3")
+    assert page.locator("[data-testid=batch-count]").inner_text() == "已選 2 件"
+    assert page.evaluate(f"() => {DATA_JS}.selected") is None, "勾選不可以順便打開案件"
+    page.select_option("[data-testid=batch-exec]", "be_exec")
+    page.click("[data-testid=batch-exec-apply]")
+    page.locator("[data-testid=batch-msg]").wait_for(state="visible", timeout=10000)
+    assert "已變更 2 件" in page.locator("[data-testid=batch-msg]").inner_text()
+    assert (_executor("MQ-BE-1"), _executor("MQ-BE-2"), _executor("MQ-BE-3")) == ("be_exec", "", "be_exec")
+    with page.expect_download() as dl:
+        page.click("[data-testid=batch-export]")
+    path = dl.value.path()
+    with open(path, "rb") as f:           # 下載暫存檔沒有副檔名，openpyxl 依副檔名拒讀
+        ws = load_workbook(io.BytesIO(f.read())).active
+    assert sorted(r[0] for r in ws.iter_rows(min_row=2, values_only=True)) == ["MQ-BE-1", "MQ-BE-3"]
 
 
 @pytest.mark.e2e
-def test_non_admin_sees_export_only(live_server, make_user):
+def test_non_admin_sees_export_only(live_server, make_user, e2e_browser):
     u = make_user(username="be_sales", role="sales")
     _case("MQ-BE-S", sales="be_sales")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.click("[data-testid=batch-toggle]")
-            _check(page, "MQ-BE-S")
-            page.locator("[data-testid=batch-export]").wait_for(state="visible", timeout=5000)
-            assert page.locator("[data-testid=batch-exec]").count() == 0
-            assert page.locator("[data-testid=batch-member]").count() == 0
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.click("[data-testid=batch-toggle]")
+    _check(page, "MQ-BE-S")
+    page.locator("[data-testid=batch-export]").wait_for(state="visible", timeout=5000)
+    assert page.locator("[data-testid=batch-exec]").count() == 0
+    assert page.locator("[data-testid=batch-member]").count() == 0

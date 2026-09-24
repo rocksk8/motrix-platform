@@ -16,58 +16,53 @@ hichan-0a 查到的產品競態（test_e2e_case_invoice_amounts 在 -n 5 回歸�
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, NOTE_INPUT, NO, _cr, _login, _seed, live_server,
+    DATA_JS, NOTE_INPUT, NO, _cr, _login, _seed,
 )
 
 
 @pytest.mark.e2e
-def test_a_save_while_another_is_in_flight_does_not_conflict_with_itself(live_server, make_user):
+def test_a_save_while_another_is_in_flight_does_not_conflict_with_itself(live_server, make_user, e2e_browser):
     u = make_user(username="ser_sa", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
-            page.on("dialog", lambda d: d.accept())
-            _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
-            page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
-            page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
-                                   timeout=10000)
+    browser = e2e_browser
+    page = browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
+    page.on("dialog", lambda d: d.accept())
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
+    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",
+                           timeout=10000)
 
-            statuses = []
-            page.on("response", lambda r: statuses.append(r.status)
-                    if r.url.endswith("/case-record") and r.request.method == "PATCH" else None)
-            held = []
+    statuses = []
+    page.on("response", lambda r: statuses.append(r.status)
+            if r.url.endswith("/case-record") and r.request.method == "PATCH" else None)
+    held = []
 
-            def hold_first(route):
-                if not held:
-                    held.append(route)       # 第一次：攔住，模擬「還在途中」
-                else:
-                    route.continue_()
-            page.route("**/case-record", hold_first)
+    def hold_first(route):
+        if not held:
+            held.append(route)       # 第一次：攔住，模擬「還在途中」
+        else:
+            route.continue_()
+    page.route("**/case-record", hold_first)
 
-            note = page.locator(NOTE_INPUT).first
-            note.fill("第一版")
-            page.evaluate(f"() => {{ {DATA_JS}.saveCaseRecord() }}")   # 不 await：讓它掛在途中
-            for _ in range(200):
-                if held:
-                    break
-                page.wait_for_timeout(50)
-            assert held, "第一次存檔沒有送出（前提不成立）"
+    note = page.locator(NOTE_INPUT).first
+    note.fill("第一版")
+    page.evaluate(f"() => {{ {DATA_JS}.saveCaseRecord() }}")   # 不 await：讓它掛在途中
+    for _ in range(200):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "第一次存檔沒有送出（前提不成立）"
 
-            note.fill("第二版")
-            page.evaluate(f"() => {{ {DATA_JS}.manualSave() }}")       # 使用者按「儲存」
-            page.wait_for_timeout(300)                                  # 讓第二次有機會送出（若實作沒排隊）
-            held[0].continue_()
+    note.fill("第二版")
+    page.evaluate(f"() => {{ {DATA_JS}.manualSave() }}")       # 使用者按「儲存」
+    page.wait_for_timeout(300)                                  # 讓第二次有機會送出（若實作沒排隊）
+    held[0].continue_()
 
-            page.wait_for_function(f"() => !{DATA_JS}.saving && !{DATA_JS}.dirty", timeout=20000)
-            page.wait_for_timeout(300)
-            assert 409 not in statuses, "同一頁的兩次存檔互相 409：%r" % statuses
-            assert page.evaluate(f"() => {DATA_JS}.segConflict") is None
-            assert _cr()["payment"]["items"][0]["note"] == "第二版", "資料庫要是最後打的那一版"
-        finally:
-            browser.close()
+    page.wait_for_function(f"() => !{DATA_JS}.saving && !{DATA_JS}.dirty", timeout=20000)
+    page.wait_for_timeout(300)
+    assert 409 not in statuses, "同一頁的兩次存檔互相 409：%r" % statuses
+    assert page.evaluate(f"() => {DATA_JS}.segConflict") is None
+    assert _cr()["payment"]["items"][0]["note"] == "第二版", "資料庫要是最後打的那一版"

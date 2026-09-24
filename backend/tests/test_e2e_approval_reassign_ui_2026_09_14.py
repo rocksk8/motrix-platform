@@ -14,32 +14,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -92,7 +71,7 @@ def _approvers_of(quote_no):
 
 
 @pytest.mark.e2e
-def test_superadmin_can_reassign_from_queue(live_server, make_user):
+def test_superadmin_can_reassign_from_queue(live_server, make_user, e2e_browser):
     """最高管理者在佇列裡按轉簽 → 填原因 → 簽核人在 data_json 裡真的換人。"""
     su, sp = make_user(username="aqr_su", role="superadmin")
     make_user(username="aqr_old", role="admin")
@@ -100,73 +79,65 @@ def test_superadmin_can_reassign_from_queue(live_server, make_user):
     quote_no = "MQ-AQR-001"
     _seed_pending_quote(quote_no, "aqr_old")
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, su, sp)
-            page.goto(f"{live_server}/pages/approval-queue.html")
-            page.wait_for_selector(f'text={quote_no}', timeout=15000)
-            page.click(f'text={quote_no}')
-            page.wait_for_selector('#aq-reassign-btn', state="visible", timeout=10000)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, su, sp)
+    page.goto(f"{live_server}/pages/approval-queue.html")
+    page.wait_for_selector(f'text={quote_no}', timeout=15000)
+    page.click(f'text={quote_no}')
+    page.wait_for_selector('#aq-reassign-btn', state="visible", timeout=10000)
 
-            page.click('#aq-reassign-btn')
-            page.wait_for_selector('#aq-reassign-to', state="visible", timeout=5000)
-            # 名單是非同步抓回來的，等選項真的出現再選
-            page.wait_for_function(
-                """() => document.querySelector('#aq-reassign-to')
-                          && document.querySelector('#aq-reassign-to').options.length > 1""",
-                timeout=10000)
+    page.click('#aq-reassign-btn')
+    page.wait_for_selector('#aq-reassign-to', state="visible", timeout=5000)
+    # 名單是非同步抓回來的，等選項真的出現再選
+    page.wait_for_function(
+        """() => document.querySelector('#aq-reassign-to')
+                  && document.querySelector('#aq-reassign-to').options.length > 1""",
+        timeout=10000)
 
-            # 原因必填：先不填按下去，畫面要擋住而不是靜靜失敗
-            page.select_option('#aq-reassign-to', "aqr_new")
-            page.click('#aq-reassign-confirm')
-            page.wait_for_selector('#aq-reassign-error', state="visible", timeout=5000)
-            assert _approvers_of(quote_no)[0]["username"] == "aqr_old", "沒填原因就轉出去了"
+    # 原因必填：先不填按下去，畫面要擋住而不是靜靜失敗
+    page.select_option('#aq-reassign-to', "aqr_new")
+    page.click('#aq-reassign-confirm')
+    page.wait_for_selector('#aq-reassign-error', state="visible", timeout=5000)
+    assert _approvers_of(quote_no)[0]["username"] == "aqr_old", "沒填原因就轉出去了"
 
-            page.fill('#aq-reassign-reason', "原簽核人出差兩週，由副手代簽")
-            page.click('#aq-reassign-confirm')
-            # 觀測點放在資料庫：畫面上的對話框關掉只代表按鈕有反應
-            for _ in range(50):
-                if _approvers_of(quote_no)[0]["username"] == "aqr_new":
-                    break
-                page.wait_for_timeout(200)
-            a = _approvers_of(quote_no)[0]
-            assert a["username"] == "aqr_new", a
-            assert a["reassignedFrom"] == "aqr_old", a
-            assert "出差兩週" in a["reassignReason"], a
+    page.fill('#aq-reassign-reason', "原簽核人出差兩週，由副手代簽")
+    page.click('#aq-reassign-confirm')
+    # 觀測點放在資料庫：畫面上的對話框關掉只代表按鈕有反應
+    for _ in range(50):
+        if _approvers_of(quote_no)[0]["username"] == "aqr_new":
+            break
+        page.wait_for_timeout(200)
+    a = _approvers_of(quote_no)[0]
+    assert a["username"] == "aqr_new", a
+    assert a["reassignedFrom"] == "aqr_old", a
+    assert "出差兩週" in a["reassignReason"], a
 
-            # 畫面也要跟著更新：轉簽成功後佇列要重整（先前寫成 this.load()，
-            # 這個元件其實叫 loadQueue()——資料換了、畫面沒換，人會以為沒生效），
-            # 而且「註明原因」要看得到（使用者要求「註記這筆簽核」）。
-            page.wait_for_function(
-                """() => {
-                     const el = document.querySelector('.aq-steps-timeline') || document.body;
-                     const t = el.innerText || '';
-                     return t.includes('aqr_new') && t.includes('轉簽自');
-                   }""",
-                timeout=10000)
-            assert "出差兩週" in page.inner_text("body"), "轉簽原因沒有顯示在佇列上"
-        finally:
-            browser.close()
+    # 畫面也要跟著更新：轉簽成功後佇列要重整（先前寫成 this.load()，
+    # 這個元件其實叫 loadQueue()——資料換了、畫面沒換，人會以為沒生效），
+    # 而且「註明原因」要看得到（使用者要求「註記這筆簽核」）。
+    page.wait_for_function(
+        """() => {
+             const el = document.querySelector('.aq-steps-timeline') || document.body;
+             const t = el.innerText || '';
+             return t.includes('aqr_new') && t.includes('轉簽自');
+           }""",
+        timeout=10000)
+    assert "出差兩週" in page.inner_text("body"), "轉簽原因沒有顯示在佇列上"
 
 
 @pytest.mark.e2e
-def test_admin_has_no_reassign_button(live_server, make_user):
+def test_admin_has_no_reassign_button(live_server, make_user, e2e_browser):
     """反向控制：一般管理員看不到轉簽（後端也會 403）。"""
     u, p = make_user(username="aqr_admin", role="admin", modules=["quotation"])
     quote_no = "MQ-AQR-002"
     _seed_pending_quote(quote_no, "aqr_admin")
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/approval-queue.html")
-            page.wait_for_selector(f'text={quote_no}', timeout=15000)
-            page.click(f'text={quote_no}')
-            page.wait_for_timeout(600)
-            assert page.locator('#aq-reassign-btn:visible').count() == 0, "管理員也看得到轉簽"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/approval-queue.html")
+    page.wait_for_selector(f'text={quote_no}', timeout=15000)
+    page.click(f'text={quote_no}')
+    page.wait_for_timeout(600)
+    assert page.locator('#aq-reassign-btn:visible').count() == 0, "管理員也看得到轉簽"

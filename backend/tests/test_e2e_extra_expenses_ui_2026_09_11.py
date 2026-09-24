@@ -17,7 +17,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -26,26 +25,6 @@ TAB = ".cm-tab:has-text('額外支出')"
 PANEL = "#xe-panel"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -84,28 +63,24 @@ def _open_tab(page, base_url, quote_no):
 
 
 @pytest.mark.e2e
-def test_tab_exists_and_shows_empty_state(live_server, make_user):
+def test_tab_exists_and_shows_empty_state(live_server, make_user, e2e_browser):
     """分頁要在案件內選單裡（不是塞在財務分頁），空狀態要有引導文字。"""
     username, password = make_user(username="e2e_xe", role="superadmin")
     _seed_case()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-001")
-            body = page.locator(PANEL).inner_text()
-            assert "尚無額外支出" in body
-            assert not errors, f"頁面有 JS 錯誤：{errors}"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-001")
+    body = page.locator(PANEL).inner_text()
+    assert "尚無額外支出" in body
+    assert not errors, f"頁面有 JS 錯誤：{errors}"
 
 
 @pytest.mark.e2e
-def test_create_save_and_author_is_filled_in(live_server, make_user):
+def test_create_save_and_author_is_filled_in(live_server, make_user, e2e_browser):
     """新增 → 儲存 → 填寫人自動帶入（不是空白，也不是前端亂填的）。
 
     舊版的填寫人永遠是空字串（前端取錯 session 路徑），這支測試就是釘住它。
@@ -113,43 +88,39 @@ def test_create_save_and_author_is_filled_in(live_server, make_user):
     username, password = make_user(username="e2e_xe2", role="superadmin")
     _seed_case("MQ-XEUI-002")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-002")
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-002")
 
-            # 選擇器一律限縮在 PANEL 裡：頁面上不只一個「儲存」按鈕
-            # （案件整包存檔、叫料的「儲存叫料」都含這兩個字），
-            # has-text 是子字串比對，不限縮就會點到別人的按鈕
-            page.click(f"{PANEL} button:has-text('＋ 新增支出')")
-            page.fill(f"{PANEL} input[placeholder='品項說明（必填）']", "吊車運費")
-            page.fill(f"{PANEL} input[placeholder='數量']", "2")
-            page.fill(f"{PANEL} input[placeholder='單位成本']", "1500")
-            page.click(f"{PANEL} button:text-is('儲存')")
-            page.wait_for_selector(f"{PANEL} :text('已儲存')", timeout=45000)
+    # 選擇器一律限縮在 PANEL 裡：頁面上不只一個「儲存」按鈕
+    # （案件整包存檔、叫料的「儲存叫料」都含這兩個字），
+    # has-text 是子字串比對，不限縮就會點到別人的按鈕
+    page.click(f"{PANEL} button:has-text('＋ 新增支出')")
+    page.fill(f"{PANEL} input[placeholder='品項說明（必填）']", "吊車運費")
+    page.fill(f"{PANEL} input[placeholder='數量']", "2")
+    page.fill(f"{PANEL} input[placeholder='單位成本']", "1500")
+    page.click(f"{PANEL} button:text-is('儲存')")
+    page.wait_for_selector(f"{PANEL} :text('已儲存')", timeout=45000)
 
-            # 落地檢查：填寫人是登入者，且不是推定值
-            import db
-            conn = db.get_db()
-            try:
-                row = conn.execute(
-                    "SELECT created_by, created_by_name, created_by_inferred, total_cost, status "
-                    "FROM case_extra_expenses WHERE quote_no='MQ-XEUI-002'").fetchone()
-            finally:
-                conn.close()
-            assert row, "應該要寫進 case_extra_expenses"
-            assert row["created_by"] == username, "填寫人要自動帶入登入者"
-            assert row["created_by_inferred"] == 0, "現場填的不是推定值"
-            assert row["total_cost"] == 3000, "小計要由後端算"
-            assert row["status"] == "草稿"
-        finally:
-            browser.close()
+    # 落地檢查：填寫人是登入者，且不是推定值
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute(
+            "SELECT created_by, created_by_name, created_by_inferred, total_cost, status "
+            "FROM case_extra_expenses WHERE quote_no='MQ-XEUI-002'").fetchone()
+    finally:
+        conn.close()
+    assert row, "應該要寫進 case_extra_expenses"
+    assert row["created_by"] == username, "填寫人要自動帶入登入者"
+    assert row["created_by_inferred"] == 0, "現場填的不是推定值"
+    assert row["total_cost"] == 3000, "小計要由後端算"
+    assert row["status"] == "草稿"
 
 
 @pytest.mark.e2e
-def test_inferred_author_is_labelled(live_server, make_user, seed_extra_expense):
+def test_inferred_author_is_labelled(live_server, make_user, seed_extra_expense, e2e_browser):
     """搬移回填的填寫人要標「（推定）」——推定不是還原，不能讓人當成事實。"""
     username, password = make_user(username="e2e_xe3", role="superadmin")
     _seed_case("MQ-XEUI-003")
@@ -163,21 +134,17 @@ def test_inferred_author_is_labelled(live_server, make_user, seed_extra_expense)
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-003")
-            body = page.locator(PANEL).inner_text()
-            assert "黃玉龍" in body
-            assert "（推定）" in body, "推定回填的填寫人一定要標示出來"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-003")
+    body = page.locator(PANEL).inner_text()
+    assert "黃玉龍" in body
+    assert "（推定）" in body, "推定回填的填寫人一定要標示出來"
 
 
 @pytest.mark.e2e
-def test_pending_amount_is_warned_but_still_counted(live_server, make_user, seed_extra_expense):
+def test_pending_amount_is_warned_but_still_counted(live_server, make_user, seed_extra_expense, e2e_browser):
     """送審中的金額照樣算進總額，但畫面要明講「已計入但可能改變」。"""
     username, password = make_user(username="e2e_xe4", role="superadmin")
     _seed_case("MQ-XEUI-004")
@@ -186,23 +153,19 @@ def test_pending_amount_is_warned_but_still_counted(live_server, make_user, seed
     seed_extra_expense("MQ-XEUI-004", total_cost=400, description="送審中的",
                        status="待審核", expense_date="2026-08-02")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-004")
-            body = page.locator(PANEL).inner_text()
-            assert "NT$ 1,400" in body, "總額要含送審中的那筆"
-            assert "尚未核准" in body
-            assert "已經計入上方總額與成本" in body, "要明講它已計入、但可能改變"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-004")
+    body = page.locator(PANEL).inner_text()
+    assert "NT$ 1,400" in body, "總額要含送審中的那筆"
+    assert "尚未核准" in body
+    assert "已經計入上方總額與成本" in body, "要明講它已計入、但可能改變"
 
 
 @pytest.mark.e2e
 def test_approved_row_is_readonly_with_locked_files_and_edit_button(
-        live_server, make_user, seed_extra_expense):
+        live_server, make_user, seed_extra_expense, e2e_browser):
     """已核准的那一列：欄位唯讀、**附件上鎖**、而且要有「編輯（需審核）」入口。
 
     2026-09-11 第二輪交辦。附件上鎖那一條在同一天內被翻過兩次（先開放補傳憑證、
@@ -214,40 +177,36 @@ def test_approved_row_is_readonly_with_locked_files_and_edit_button(
     seed_extra_expense("MQ-XEUI-005", total_cost=800, description="已核准",
                        status="已核准", expense_date="2026-08-03")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-005")
-            assert page.is_disabled(f"{PANEL} input[placeholder='品項說明（必填）']")
-            body = page.locator(PANEL).inner_text()
-            assert "已核准的項目不可直接修改" in body
-            assert "附件已上鎖" in body, "畫面要說得出為什麼不能傳，不能只在後端擋"
-            # ⚠️ 一定要加 `:visible`：Alpine 的 x-show 是 display:none，元素還留在
-            #    DOM 裡，`.count()` 照樣數得到——單看 count 會得到一個假的綠燈。
-            #    另外 has-text 是子字串比對，「＋ 上傳憑證」也會被「＋ 上傳」匹配到，
-            #    所以這裡只問「看得見的上傳入口有幾個」（答案必須是 0）。
-            assert page.locator(f"{PANEL} label:has-text('＋ 上傳'):visible").count() == 0
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-005")
+    assert page.is_disabled(f"{PANEL} input[placeholder='品項說明（必填）']")
+    body = page.locator(PANEL).inner_text()
+    assert "已核准的項目不可直接修改" in body
+    assert "附件已上鎖" in body, "畫面要說得出為什麼不能傳，不能只在後端擋"
+    # ⚠️ 一定要加 `:visible`：Alpine 的 x-show 是 display:none，元素還留在
+    #    DOM 裡，`.count()` 照樣數得到——單看 count 會得到一個假的綠燈。
+    #    另外 has-text 是子字串比對，「＋ 上傳憑證」也會被「＋ 上傳」匹配到，
+    #    所以這裡只問「看得見的上傳入口有幾個」（答案必須是 0）。
+    assert page.locator(f"{PANEL} label:has-text('＋ 上傳'):visible").count() == 0
 
-            # 按下編輯 → 變更申請面板打開，且明講核准前數字不變
-            page.click(f"{PANEL} button:has-text('編輯（需審核）')")
-            page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
-            panel = page.locator(PANEL).inner_text()
-            assert "變更申請" in panel
-            assert "不會變動" in panel, "要明講核准前成本與報表數字不動"
-            # 補憑證的入口改在變更申請裡（待核准附件）
-            assert page.locator(f"{PANEL} label:has-text('＋ 上傳憑證'):visible").count() == 1
-            # 變更申請面板裡的欄位才是可編輯的那一組
-            assert not page.is_disabled(
-                f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1")
-        finally:
-            browser.close()
+    # 按下編輯 → 變更申請面板打開，且明講核准前數字不變
+    page.click(f"{PANEL} button:has-text('編輯（需審核）')")
+    page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
+    panel = page.locator(PANEL).inner_text()
+    assert "變更申請" in panel
+    assert "不會變動" in panel, "要明講核准前成本與報表數字不動"
+    # 補憑證的入口改在變更申請裡（待核准附件）
+    assert page.locator(f"{PANEL} label:has-text('＋ 上傳憑證'):visible").count() == 1
+    # 變更申請面板裡的欄位才是可編輯的那一組
+    assert not page.is_disabled(
+        f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1")
 
 
 @pytest.mark.e2e
 def test_settlement_page_points_to_new_location_and_uses_new_total(
-        live_server, make_user, seed_extra_expense):
+        live_server, make_user, seed_extra_expense, e2e_browser):
     """精算頁：那張可編輯的表要不見、改成導向卡片，而且成本彙總要用**新表**的數字。
 
     兩件事都重要：
@@ -259,35 +218,31 @@ def test_settlement_page_points_to_new_location_and_uses_new_total(
     seed_extra_expense("MQ-XEUI-006", total_cost=5500, description="新表才有的",
                        status="已核准", expense_date="2026-08-04")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/settlement.html?no=MQ-XEUI-006")
-            page.wait_for_selector(":text('二、額外支出')", timeout=20000)
+    browser = e2e_browser
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/settlement.html?no=MQ-XEUI-006")
+    page.wait_for_selector(":text('二、額外支出')", timeout=20000)
 
-            body = page.locator("body").inner_text()
-            assert "已移到" in body and "案件管理" in body, "要有導向新位置的說明"
-            assert page.locator("a:has-text('前往案件管理的額外支出')").count() == 1
+    body = page.locator("body").inner_text()
+    assert "已移到" in body and "案件管理" in body, "要有導向新位置的說明"
+    assert page.locator("a:has-text('前往案件管理的額外支出')").count() == 1
 
-            # 原本那張可編輯的表必須不在了
-            assert page.locator("input[placeholder*='工程師出差工時']").count() == 0, \
-                "精算頁不該再有可編輯的額外支出表單"
+    # 原本那張可編輯的表必須不在了
+    assert page.locator("input[placeholder*='工程師出差工時']").count() == 0, \
+        "精算頁不該再有可編輯的額外支出表單"
 
-            # 成本彙總要看得到新表那筆 5,500
-            page.wait_for_function(
-                "() => document.body.innerText.includes('5,500')", timeout=20000)
+    # 成本彙總要看得到新表那筆 5,500
+    page.wait_for_function(
+        "() => document.body.innerText.includes('5,500')", timeout=20000)
 
-            assert not errors, f"頁面有 JS 錯誤：{errors}"
-        finally:
-            browser.close()
+    assert not errors, f"頁面有 JS 錯誤：{errors}"
 
 
 @pytest.mark.e2e
-def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra_expense):
+def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra_expense, e2e_browser):
     """變更申請的完整來回：編輯 → 儲存 → 送審 → 生效。
 
     純 API 測試蓋不到的地方在**綁定**：變更面板的欄位綁的是 `x.change.*`，而
@@ -304,41 +259,37 @@ def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra
     # 沒有簽核層 → 送審即生效，這條測的是畫面能不能把值送到底，不是簽核分層本身
     _set_empty_approval_flow()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        # 送審那顆按鈕會先確認。CM12 P4 起是 MotrixUI（不是原生 confirm）⇒ 按下後用 helper 回答並驗訊息；
-        # 原生對話框若再出現，最後斷言會抓到（不再盲接）
-        natives = forbid_native_dialogs(page)
-        try:
-            _login(page, live_server, username, password)
-            _open_tab(page, live_server, "MQ-XEUI-007")
+    browser = e2e_browser
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    # 送審那顆按鈕會先確認。CM12 P4 起是 MotrixUI（不是原生 confirm）⇒ 按下後用 helper 回答並驗訊息；
+    # 原生對話框若再出現，最後斷言會抓到（不再盲接）
+    natives = forbid_native_dialogs(page)
+    _login(page, live_server, username, password)
+    _open_tab(page, live_server, "MQ-XEUI-007")
 
-            page.click(f"{PANEL} button:has-text('編輯（需審核）')")
-            page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
+    page.click(f"{PANEL} button:has-text('編輯（需審核）')")
+    page.wait_for_selector(f"{PANEL} button:has-text('送審變更')", timeout=45000)
 
-            # 變更面板是第二組欄位（第一組是唯讀的現行值）
-            page.fill(f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1", "改過的品項")
-            page.fill(f"{PANEL} input[placeholder='單位成本'] >> nth=1", "1250")
-            page.click(f"{PANEL} button:has-text('儲存變更')")
-            page.wait_for_selector(f"{PANEL} :text('已存草稿')", timeout=45000)
+    # 變更面板是第二組欄位（第一組是唯讀的現行值）
+    page.fill(f"{PANEL} input[placeholder='品項說明（必填）'] >> nth=1", "改過的品項")
+    page.fill(f"{PANEL} input[placeholder='單位成本'] >> nth=1", "1250")
+    page.click(f"{PANEL} button:has-text('儲存變更')")
+    page.wait_for_selector(f"{PANEL} :text('已存草稿')", timeout=45000)
 
-            # 存草稿階段：本體完全沒被動到
-            assert _xe_row(exp_id)["total_cost"] == 800, "存草稿不該改到本體金額"
-            assert _xe_row(exp_id)["description"] == "原始品項"
+    # 存草稿階段：本體完全沒被動到
+    assert _xe_row(exp_id)["total_cost"] == 800, "存草稿不該改到本體金額"
+    assert _xe_row(exp_id)["description"] == "原始品項"
 
-            page.click(f"{PANEL} button:has-text('送審變更')")
-            answer_confirm(page, ok=True, expect="確定送審這筆變更申請")
-            assert natives == [], natives
-            # ⚠️ 2026-09-24：原本等 `:text('生效')`——那是子字串比對，而變更面板上本來就有固定文字
-            #    「目前生效：」（case-management.html:2297）⇒ 按下送審的瞬間就成立，送審還沒完成就去讀
-            #    資料庫。負載下送審慢一點就讀到原值（-n 6 全量偶發紅）；伺服器端讓送審慢 3 秒可以確定性
-            #    重現。改等真正的完成訊息（case-management.js:713）。
-            page.wait_for_selector(f"{PANEL} :text('變更已直接生效')", timeout=45000)
-        finally:
-            browser.close()
+    page.click(f"{PANEL} button:has-text('送審變更')")
+    answer_confirm(page, ok=True, expect="確定送審這筆變更申請")
+    assert natives == [], natives
+    # ⚠️ 2026-09-24：原本等 `:text('生效')`——那是子字串比對，而變更面板上本來就有固定文字
+    #    「目前生效：」（case-management.html:2297）⇒ 按下送審的瞬間就成立，送審還沒完成就去讀
+    #    資料庫。負載下送審慢一點就讀到原值（-n 6 全量偶發紅）；伺服器端讓送審慢 3 秒可以確定性
+    #    重現。改等真正的完成訊息（case-management.js:713）。
+    page.wait_for_selector(f"{PANEL} :text('變更已直接生效')", timeout=45000)
 
     assert not errors, f"頁面有 JS 錯誤：{errors}"
     row = _xe_row(exp_id)

@@ -39,7 +39,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -112,27 +111,6 @@ def _bonus_module_on(monkeypatch):
         "本檔的前提失效了，先修這裡，不要去看下面那些斷言。")
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 `test_e2e_account_tree_2026_09_23.py` 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield "http://127.0.0.1:%d" % port
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -143,20 +121,17 @@ def _login(page, base_url, username, password):
     page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
 
 
-def _open_bonus(live_server, username, password):
-    """開獎金頁，回 `(可見文字, 有沒有新增入口, 空狀態區塊數, 頁面例外)`。"""
+def _open_bonus(browser, live_server, username, password):
+    """開獎金頁，回 `(可見文字, 有沒有新增入口, 空狀態區塊數, 頁面例外)`。`browser` 是 e2e_browser。"""
     errors = []
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        _login(page, live_server, username, password)
-        page.goto("%s/pages/bonus.html" % live_server)
-        page.wait_for_timeout(2500)
-        text = page.locator("body").inner_text()
-        create = page.locator(HOOKS["create"]).count()
-        empty = page.locator(HOOKS["empty"]).count()
-        browser.close()
+    page = browser.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, username, password)
+    page.goto("%s/pages/bonus.html" % live_server)
+    page.wait_for_timeout(2500)
+    text = page.locator("body").inner_text()
+    create = page.locator(HOOKS["create"]).count()
+    empty = page.locator(HOOKS["empty"]).count()
     # 🔴 前提先亮出來：模組被關著的話，下面每一個斷言量到的都不是 `AC1`。
     #    ☠️ 少了這一行，失敗訊息會是「空狀態沒說出那三句話」——
     #       而真正的原因是頁面根本沒載入獎金模組。
@@ -180,7 +155,7 @@ def _assert_three_things(text, who):
 
 @pytest.mark.e2e
 def test_ac1_a_plain_employee_does_not_see_the_management_area(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴 **一般員工不該看到管理區塊。**
 
     ☠️ 獎金是薪資資料。`visible_lines()` 的規則是「本人只看得到自己那一列」——
@@ -189,7 +164,7 @@ def test_ac1_a_plain_employee_does_not_see_the_management_area(
        我不釘（他本來就沒有項目可看）。
     """
     u, p = make_user(username="e2e_bn_staff", role="user", modules=[BONUS_MODULE])
-    _text, create, _empty, errors = _open_bonus(live_server, u, p)
+    _text, create, _empty, errors = _open_bonus(e2e_browser, live_server, u, p)
 
     assert not errors, "頁面丟了例外：%s" % errors[:3]
     assert create == 0, (

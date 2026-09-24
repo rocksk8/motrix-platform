@@ -14,7 +14,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -22,25 +21,6 @@ from tests._ports import free_safe_port
 PAGE = "/pages/completion-note-form.html"
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -84,7 +64,7 @@ def _row(quote_no="MQ-CNFORM-001"):
 
 
 @pytest.mark.e2e
-def test_init_runs_exactly_once(live_server, make_user):
+def test_init_runs_exactly_once(live_server, make_user, e2e_browser):
     """開一次頁面，案件 API 只能被打一次。
 
     這一頁刻意**沒有** `x-init="init()"`（Alpine 3 自己就會呼叫 init()）。兩者同時
@@ -94,24 +74,20 @@ def test_init_runs_exactly_once(live_server, make_user):
     """
     username, password = make_user(username="e2e_cnf0", role="superadmin")
     _seed_case()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            hits = []
-            page.on("request", lambda r: hits.append(r.url)
-                    if "/api/quotations/MQ-CNFORM-001" in r.url else None)
-            page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
-            page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
-            page.wait_for_timeout(1200)
-            assert len(hits) == 1, f"init() 應該只跑一次，實際打了 {len(hits)} 次案件 API"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    hits = []
+    page.on("request", lambda r: hits.append(r.url)
+            if "/api/quotations/MQ-CNFORM-001" in r.url else None)
+    page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
+    page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
+    page.wait_for_timeout(1200)
+    assert len(hits) == 1, f"init() 應該只跑一次，實際打了 {len(hits)} 次案件 API"
 
 
 @pytest.mark.e2e
-def test_single_page_shows_everything_and_prefills_from_quotation(live_server, make_user):
+def test_single_page_shows_everything_and_prefills_from_quotation(live_server, make_user, e2e_browser):
     """**沒有分頁**：所有區塊在同一頁同時看得到（使用者要求拿掉分頁）。
     而且新增時客戶、案件名稱、**地址與聯絡人**都要從報價單自動帶進來。
 
@@ -120,66 +96,58 @@ def test_single_page_shows_everything_and_prefills_from_quotation(live_server, m
     """
     username, password = make_user(username="e2e_cnf1", role="superadmin")
     _seed_case()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
-            page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
+    browser = e2e_browser
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
+    page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
 
-            assert page.input_value("input[x-model='form.customer_name']") == "網路測試客戶"
-            assert page.input_value("input[x-model='form.project_name']") == "總部網路架構升級"
-            # 地址與聯絡人（使用者指定要從報價單拉）
-            assert page.input_value("input[x-model='form.site_address']") == "台中市西屯區工業區一路 1 號"
-            assert page.input_value("input[x-model='form.recipient']") == "林經理"
-            assert page.input_value("input[x-model='form.contact_phone']") == "04-2461-0000"
+    assert page.input_value("input[x-model='form.customer_name']") == "網路測試客戶"
+    assert page.input_value("input[x-model='form.project_name']") == "總部網路架構升級"
+    # 地址與聯絡人（使用者指定要從報價單拉）
+    assert page.input_value("input[x-model='form.site_address']") == "台中市西屯區工業區一路 1 號"
+    assert page.input_value("input[x-model='form.recipient']") == "林經理"
+    assert page.input_value("input[x-model='form.contact_phone']") == "04-2461-0000"
 
-            # 四個區塊同時可見，不需要點任何分頁
-            for marker in ("button:has-text('＋ 項目')",
-                           "textarea[x-model='form.work_summary']",
-                           "textarea[x-model='form.pending_items']",
-                           "button:has-text('網路架構／資安')"):
-                page.wait_for_selector(marker, state="visible", timeout=10000)
-            # 分頁按鈕不該再存在
-            assert page.locator("button.cnf-tab").count() == 0, "分頁應該已經拿掉了"
-            assert not errors, f"頁面有 JS 錯誤：{errors}"
-        finally:
-            browser.close()
+    # 四個區塊同時可見，不需要點任何分頁
+    for marker in ("button:has-text('＋ 項目')",
+                   "textarea[x-model='form.work_summary']",
+                   "textarea[x-model='form.pending_items']",
+                   "button:has-text('網路架構／資安')"):
+        page.wait_for_selector(marker, state="visible", timeout=10000)
+    # 分頁按鈕不該再存在
+    assert page.locator("button.cnf-tab").count() == 0, "分頁應該已經拿掉了"
+    assert not errors, f"頁面有 JS 錯誤：{errors}"
 
 
 @pytest.mark.e2e
-def test_preset_and_custom_labels_round_trip(live_server, make_user):
+def test_preset_and_custom_labels_round_trip(live_server, make_user, e2e_browser):
     """套用預設用語 → 儲存 → 值真的寫進 data_json.labels。
 
     這是使用者這一輪的核心需求（完工單太偏向工程），綁錯不會報錯、只會安靜地存不進去。
     """
     username, password = make_user(username="e2e_cnf2", role="superadmin")
     _seed_case()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        errors = []
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
-            page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
+    browser = e2e_browser
+    page = browser.new_page()
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-001")
+    page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
 
-            # 先加一個項目（送審門檻之一，也順便驗項目綁定）
-            page.click("button:has-text('＋ 項目')")
-            page.fill("input[x-model='it.description']", "核心交換器建置")
+    # 先加一個項目（送審門檻之一，也順便驗項目綁定）
+    page.click("button:has-text('＋ 項目')")
+    page.fill("input[x-model='it.description']", "核心交換器建置")
 
-            # 套用「網路架構／資安」那組，再手動微調一欄（同一頁，不用切分頁）
-            page.click("button:has-text('網路架構／資安')")
-            page.fill("input[x-model=\"form.labels[f.key]\"] >> nth=0", "一、客戶與機房環境")
+    # 套用「網路架構／資安」那組，再手動微調一欄（同一頁，不用切分頁）
+    page.click("button:has-text('網路架構／資安')")
+    page.fill("input[x-model=\"form.labels[f.key]\"] >> nth=0", "一、客戶與機房環境")
 
-            page.click("button:has-text('儲存')")
-            page.wait_for_selector(":text('已儲存')", timeout=45000)
-        finally:
-            browser.close()
+    page.click("button:has-text('儲存')")
+    page.wait_for_selector(":text('已儲存')", timeout=45000)
 
     assert not errors, f"頁面有 JS 錯誤：{errors}"
     row = _row()
@@ -191,28 +159,24 @@ def test_preset_and_custom_labels_round_trip(live_server, make_user):
 
 
 @pytest.mark.e2e
-def test_warranty_toggle_controls_whether_it_is_stored(live_server, make_user):
+def test_warranty_toggle_controls_whether_it_is_stored(live_server, make_user, e2e_browser):
     """保固勾掉＝月數存 0＝完工單上不顯示（比照報價單「留空就不印」）。"""
     username, password = make_user(username="e2e_cnf3", role="superadmin")
     _seed_case("MQ-CNFORM-002")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-002")
-            page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}{PAGE}?q=MQ-CNFORM-002")
+    page.wait_for_selector("button:has-text('＋ 項目')", timeout=45000)
 
-            # 預設是勾選的（12 個月），先確認提示文字在
-            assert page.is_checked("input[type='checkbox']")
-            page.uncheck("input[type='checkbox']")
-            page.wait_for_selector(":text('不會出現')", timeout=10000)
+    # 預設是勾選的（12 個月），先確認提示文字在
+    assert page.is_checked("input[type='checkbox']")
+    page.uncheck("input[type='checkbox']")
+    page.wait_for_selector(":text('不會出現')", timeout=10000)
 
-            page.click("button:has-text('＋ 項目')")
-            page.fill("input[x-model='it.description']", "零組件供應")
-            page.click("button:has-text('儲存')")
-            page.wait_for_selector(":text('已儲存')", timeout=45000)
-        finally:
-            browser.close()
+    page.click("button:has-text('＋ 項目')")
+    page.fill("input[x-model='it.description']", "零組件供應")
+    page.click("button:has-text('儲存')")
+    page.wait_for_selector(":text('已儲存')", timeout=45000)
 
     assert _row("MQ-CNFORM-002")["warranty_months"] == 0

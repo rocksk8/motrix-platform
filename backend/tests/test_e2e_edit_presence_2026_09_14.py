@@ -13,32 +13,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -69,46 +48,38 @@ def _seed_quote(quote_no="MQ-E2E-PRES"):
 
 
 @pytest.mark.e2e
-def test_second_editor_sees_warning_bar(live_server, make_user):
+def test_second_editor_sees_warning_bar(live_server, make_user, e2e_browser):
     """A 先開著，B 再開同一張 → B 的畫面上出現「A 目前也在編輯這一份」。"""
     a_u, a_p = make_user(username="e2e_pres_a", role="superadmin")
     b_u, b_p = make_user(username="e2e_pres_b", role="superadmin")
     quote_no = _seed_quote()
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        ctx_a = browser.new_context()
-        ctx_b = browser.new_context()
-        try:
-            page_a = ctx_a.new_page()
-            _login(page_a, live_server, a_u, a_p)
-            page_a.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            page_a.wait_for_timeout(1200)          # 讓 A 的第一次心跳送出去
+    browser = e2e_browser
+    ctx_a = browser.new_context()
+    ctx_b = browser.new_context()
+    page_a = ctx_a.new_page()
+    _login(page_a, live_server, a_u, a_p)
+    page_a.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
+    page_a.wait_for_timeout(1200)          # 讓 A 的第一次心跳送出去
 
-            page_b = ctx_b.new_page()
-            _login(page_b, live_server, b_u, b_p)
-            page_b.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            page_b.wait_for_selector("#motrix-presence-bar", state="visible", timeout=10000)
-            text = page_b.inner_text("#motrix-presence-bar")
-            assert "e2e_pres_a" in text or "也在編輯" in text, text
-        finally:
-            browser.close()
+    page_b = ctx_b.new_page()
+    _login(page_b, live_server, b_u, b_p)
+    page_b.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
+    page_b.wait_for_selector("#motrix-presence-bar", state="visible", timeout=10000)
+    text = page_b.inner_text("#motrix-presence-bar")
+    assert "e2e_pres_a" in text or "也在編輯" in text, text
 
 
 @pytest.mark.e2e
-def test_single_editor_sees_no_warning(live_server, make_user):
+def test_single_editor_sees_no_warning(live_server, make_user, e2e_browser):
     """反向控制：只有一個人時不該跳警示——不然這條會變成永遠都在的裝飾。"""
     u, p = make_user(username="e2e_pres_solo", role="superadmin")
     quote_no = _seed_quote("MQ-E2E-SOLO")
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
-            page.wait_for_timeout(1500)
-            bar = page.locator("#motrix-presence-bar")
-            assert bar.count() == 0 or not bar.is_visible(), page.inner_text("#motrix-presence-bar")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={quote_no}")
+    page.wait_for_timeout(1500)
+    bar = page.locator("#motrix-presence-bar")
+    assert bar.count() == 0 or not bar.is_visible(), page.inner_text("#motrix-presence-bar")
