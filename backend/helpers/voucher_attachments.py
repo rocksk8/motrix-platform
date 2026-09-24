@@ -362,24 +362,60 @@ def _used_map(conn):
                                還糟（使用者會開始不相信這個標記）
     ```
     """
+    return _live_uses(
+        conn,
+        "voucher_attachments va JOIN vouchers_all v ON v.id = va.voucher_id",
+        ("va.source_type", "va.source_doc_no", "va.source_file_id"),
+        "va.uploaded_at",
+        extra_where="va.deleted_at = ''")
+
+
+def _live_uses(conn, from_sql, key_cols, when_col, extra_where=""):
+    """「這個來源被哪幾張傳票用過」的**共用判定**（`JV18` 紅字標記／`JV21` 支出項擋重複）。
+
+    ```
+    v.voided_at = ''      已作廢的傳票不算（作廢重開是合法流程）
+    每一個來源鍵欄 != ''  空字串不算——沒有來源的列彼此不可以被判成「同一個」
+    ```
+    回 `{(鍵…): [{voucherNo, voucherId, usedAt}, …]}`（新到舊）。**一次查詢**。
+    ⚠️ 兩個呼叫端的差別只在「從哪張表、哪幾欄當鍵」；規則只有這一份。
+    """
+    cols = ", ".join("%s AS k%d" % (c, i) for i, c in enumerate(key_cols))
+    where = ["v.voided_at = ''"] + ["%s != ''" % c for c in key_cols]
+    if extra_where:
+        where.append(extra_where)
     out = {}
     for row in conn.execute(
-            "SELECT va.source_type, va.source_doc_no, va.source_file_id,"
-            " va.uploaded_at, v.id AS voucher_id, v.voucher_no"
-            " FROM voucher_attachments va"
-            " JOIN vouchers_all v ON v.id = va.voucher_id"
-            " WHERE va.deleted_at = '' AND v.voided_at = ''"
-            "   AND va.source_type != '' AND va.source_doc_no != ''"
-            "   AND va.source_file_id != ''"):
-        key = (row["source_type"], row["source_doc_no"], row["source_file_id"])
+            "SELECT %s, %s AS used_at, v.id AS voucher_id, v.voucher_no FROM %s WHERE %s"
+            % (cols, when_col, from_sql, " AND ".join(where))):
+        key = tuple(row["k%d" % i] for i in range(len(key_cols)))
         out.setdefault(key, []).append({
             "voucherNo": row["voucher_no"],
             "voucherId": row["voucher_id"],
-            "usedAt": row["uploaded_at"] or "",
+            "usedAt": row["used_at"] or "",
         })
     for entries in out.values():
         entries.sort(key=lambda e: e["usedAt"], reverse=True)
     return out
+
+
+#: `JV21`：分錄帶入後「只能用一次」的支出來源（案件 `case` 不在內：本來就可以被多張傳票引用）。
+EXPENSE_LINE_SOURCES = ("extra_expense", "contractor_dispatch")
+
+
+def expense_line_uses(conn):
+    """`JV21`：`{(source_type, source_key): [{voucherNo, voucherId, usedAt}, …]}`——支出項被哪幾張
+    **未作廢**傳票的分錄帶入過。與附件紅字標記同一套判定（`_live_uses`）。
+
+    ⚠️ 已知限制：`JV36` 之前的分錄沒有記來源（`source_key` 空）⇒ 偵測不到，不回填。
+    """
+    types = ", ".join("'%s'" % t for t in EXPENSE_LINE_SOURCES)
+    return _live_uses(
+        conn,
+        "voucher_lines vl JOIN vouchers_all v ON v.id = vl.voucher_id",
+        ("vl.source_type", "vl.source_key"),
+        "v.created_at",
+        extra_where="vl.source_type IN (%s)" % types)
 
 
 def case_attachments(conn, quote_no):

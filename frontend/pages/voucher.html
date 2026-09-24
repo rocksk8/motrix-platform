@@ -447,8 +447,13 @@
                 <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
                         data-testid="summary-panel-expense" @click="panelPick(e)">
                   <span class="vc-src__txt" x-text="e.summary"></span>
+                  <!-- `JV21`：已被其他未作廢傳票帶入 ⇒ 紅字寫出傳票號（點了會被擋並說明） -->
+                  <span class="vc-src__used" data-testid="expense-used" x-show="(e.usedBy || []).length"
+                        x-text="'已帶入 ' + (e.usedBy || []).map(u => u.voucherNo).join('、')"></span>
                 </button>
               </template>
+              <div class="vc-src__empty" data-testid="summary-panel-msg" style="color:#B91C1C"
+                   x-show="panelMsg" x-text="panelMsg"></div>
               <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
                    x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
             </div>
@@ -490,6 +495,9 @@
                          這顆一樣按得下去，@click.stop 只是不要連帶觸發帶入。 -->
                     <span class="vc-src__used" x-show="sourceTab === '已上傳檔案' && it.used"
                           @click.stop="toggleUsedInfo(si)" title="點看被哪張傳票用過">已計算</span>
+                    <!-- `JV21`：支出項頁籤——被其他未作廢傳票帶入過的標紅字＋傳票號 -->
+                    <span class="vc-src__used" x-show="sourceTab === '支出項' && (it.usedBy || []).some(u => u.voucherId !== id)"
+                          x-text="'已帶入 ' + (it.usedBy || []).filter(u => u.voucherId !== id).map(u => u.voucherNo).join('、')"></span>
                     <!-- `JV21`：支出項頁籤，承攬商派工可以展開成品項／人員兩種
                          子列（額外支出沒有子列，`items` 是空陣列，箭頭不出現—
                          §3b②：不假裝有第三層，展不開就不畫展開的箭頭）。 -->

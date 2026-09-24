@@ -238,6 +238,7 @@ function voucherPage() {
     // ⚠️ 面板不在 blur 時關：點面板本身就會讓摘要格 blur，那樣永遠點不到。
     // 📌 「連金額一起帶入」這一輪不做（決定填借方還是貸方＝金額，待確認 N12）。
     panelLine: -1,
+    panelMsg: '',   // `JV21`：帶入被擋時的說明
 
     // `JV36`：支出項的來源鍵——承攬商派工（含其品項／人員子列）＝派工 id，額外支出＝id。
     panelExpenses() {
@@ -245,11 +246,13 @@ function voucherPage() {
       for (const it of ((this.sources || {})['支出項'] || [])) {
         const st = it.kind === 'contractor_dispatch' ? 'contractor_dispatch' : 'extra_expense'
         const key = String(it.id || '')
+        // `JV21`：被**其他**未作廢傳票帶入過的（本張自己不算）
+        const usedBy = (it.usedBy || []).filter(u => u.voucherId !== this.id)
         out.push({ summary: it.summary || '', child: false, source_type: st, source_key: key,
-                   amount: it.amount })
+                   amount: it.amount, usedBy })
         for (const ch of (it.items || [])) {
           out.push({ summary: ch.summary || '', child: true, source_type: st, source_key: key,
-                     amount: ch.amount })
+                     amount: ch.amount, usedBy })
         }
       }
       return out.filter(function (e) { return e.summary && e.source_key })
@@ -274,6 +277,21 @@ function voucherPage() {
       if (!this.canEdit || this.panelLine < 0 || !e) return
       const l = this.lines[this.panelLine]
       if (!l) return
+      // `JV21`（使用者：「擋下，除非前一張已作廢」）：前端先擋，後端為準（同一套判定）。
+      this.panelMsg = ''
+      if (e.source_type !== 'case') {
+        if ((e.usedBy || []).length) {
+          this.panelMsg = '這筆支出已帶入傳票 ' + e.usedBy.map(u => u.voucherNo).join('、')
+            + '（未作廢）；同一筆支出只能帶入一張傳票，如需重新帶入，請先作廢該張傳票。'
+          return
+        }
+        const dup = this.lines.findIndex((x, i) => i !== this.panelLine
+          && x.source_type === e.source_type && String(x.source_key) === String(e.source_key))
+        if (dup >= 0) {
+          this.panelMsg = '這筆支出已經在第 ' + (dup + 1) + ' 行帶入過，同一筆支出只能記一次。'
+          return
+        }
+      }
       l.summary = e.summary
       l.source_type = e.source_type
       l.source_key = e.source_key

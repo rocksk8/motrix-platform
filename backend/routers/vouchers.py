@@ -48,7 +48,7 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    line_source_files, LINE_SOURCES,
+    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -156,6 +156,34 @@ def _amount_lines(lines):
     if problems:
         raise HTTPException(422, "。".join(problems) + "。")
     return out
+
+
+def _refuse_reused_expenses(conn, lines, voucher_id=None):
+    """`JV21`（使用者裁示：「擋下，除非前一張已作廢」）：同一筆支出只能帶入一張未作廢的傳票。
+
+    判定與附件的紅字標記同一份（`expense_line_uses()` → `_live_uses()`）：作廢的傳票不算。
+    ① 同一張傳票裡帶入同一筆兩次 ⇒ 409，指出第幾行。
+    ② 別張**未作廢**傳票已帶入 ⇒ 409，寫出那一張的傳票號；自己（修改時）不算。
+    ⚠️ 已知限制：`JV36` 之前的分錄沒有記來源 ⇒ 偵測不到。
+    """
+    seen = {}
+    for i, ln in enumerate(lines or (), start=1):
+        st, key = ln.get("source_type") or "", ln.get("source_key") or ""
+        if st not in EXPENSE_LINE_SOURCES or not key:
+            continue
+        if (st, key) in seen:
+            raise HTTPException(409, "第 %d 行與第 %d 行帶入了同一筆支出，同一筆支出只能記一次。"
+                                % (seen[(st, key)], i))
+        seen[(st, key)] = i
+    if not seen:
+        return
+    uses = expense_line_uses(conn)
+    for (st, key), i in seen.items():
+        others = [u for u in uses.get((st, key), []) if u["voucherId"] != voucher_id]
+        if others:
+            nos = "、".join(u["voucherNo"] for u in others)
+            raise HTTPException(409, "第 %d 行的支出已帶入傳票 %s（未作廢）；同一筆支出只能帶入一張傳票，"
+                                     "如需重新帶入，請先作廢該張傳票。" % (i, nos))
 
 
 def _line_sources(lines):
@@ -320,6 +348,7 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
         #    當天最大值 +1 —— 先發號再失敗的話那個號碼不會被用掉，
         #    但**下一張單會從它後面接**，帳上就少一個號碼而沒有人解釋得了。
         _check_account_codes(conn, lines)
+        _refuse_reused_expenses(conn, lines)
         # `N6`：明確說要手動（`category_manual`）才採用請求的類別；否則依分錄判斷。
         if body.get("category_manual"):
             if body.get("category") not in _CATEGORIES:
@@ -622,6 +651,10 @@ def summary_sources(q: str = "", quote_no: str = "",
         conn3 = get_db()
         try:
             expenses = _case_expense_sources(conn3, picked)
+            # `JV21`：前端標紅字要的資料——這一筆被哪幾張未作廢的傳票帶入過
+            uses = expense_line_uses(conn3)
+            for e in expenses:
+                e["usedBy"] = uses.get((e["kind"], str(e["id"])), [])
         finally:
             conn3.close()
         note3 = "" if expenses else "案件「%s」底下目前沒有支出項。" % picked
@@ -1226,6 +1259,7 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             # ⚠️ 與 `create_voucher` **同一道** —— 兩邊不一致的話，
             #    新建擋得住而修改會炸成 500。
             _check_account_codes(conn, new_lines)
+            _refuse_reused_expenses(conn, new_lines, voucher_id=voucher_id)
             line_changes = diff_lines(old_lines, new_lines)
             # `JV36`：只換了來源（摘要／金額都沒變）也要寫回，並留下編寫紀錄——
             #    `diff_lines()` 不比對來源，而編寫紀錄不收空的改動。
