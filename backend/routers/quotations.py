@@ -2195,13 +2195,19 @@ def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[
     2026-09-24 補（裁示 E1／E3，待使用者確認）：
     - 已收款期別整期凍結：不可刪除，除 _RECEIVED_ITEM_EDITABLE 外任何欄位不可改
     - taxExempt／writeOffStatus 在任何期別都不可改（沖銷要走申請＋簽核）
-    沒有 id 的舊期別維持既有行為（配不到舊資料 ⇒ 視同新增，已收款即擋；
-    放行它相對現況是放寬，留給使用者裁示）。"""
+    沒有 id 的已收款舊期別（N10，使用者 2026-09-24 晨間裁示「放行：不動那期就能存」）：
+    新清單裡有一筆內容**完全相同**的就放行（業務可存其他欄位）；那期有任何變動或被刪掉仍擋。
+    在此之前配不到舊資料 ⇒ 視同新增已收款 ⇒ 業務在這類案件上什麼都存不了。"""
     old_by_id = {it.get("id"): it for it in old_items if it.get("id") is not None}
     new_by_id = {it.get("id"): it for it in new_items if it.get("id") is not None}
+    # 沒有 id 的已收款舊期別：每一筆要在新清單裡配到一筆內容相同的（逐筆配對，同內容兩筆要兩筆）
+    unmatched_no_id = [it for it in old_items if it.get("id") is None and it.get("received")]
     for i, new_it in enumerate(new_items):
         old_it = old_by_id.get(new_it.get("id"))
         if old_it is None:
+            if new_it.get("id") is None and new_it in unmatched_no_id:
+                unmatched_no_id.remove(new_it)
+                continue
             if new_it.get("received"):
                 return "款項收款狀態需由管理員或出納標記"
             if any(new_it.get(f) for f in _WRITE_OFF_EFFECT_FIELDS):
@@ -2221,6 +2227,9 @@ def _payment_items_lock_violation(old_items: list, new_items: list) -> Optional[
         keys = (set(old_it) | set(new_it)) - _RECEIVED_ITEM_EDITABLE
         if any(old_it.get(k) != new_it.get(k) for k in keys):
             return f"「{label}」已收款，除發票資料外不可修改，請由管理員或出納處理"
+    if unmatched_no_id:
+        label = _payment_item_label(unmatched_no_id[0], old_items.index(unmatched_no_id[0]))
+        return f"「{label}」已收款，不可修改或刪除，請由管理員或出納處理"
     return None
 
 

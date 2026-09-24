@@ -8,7 +8,7 @@ received／actualAmount／feeAmount 三欄，所以業務仍可以：
 另外（D1 補）：所有角色存檔時，「這次新增或有改動的已收款期別」要驗收款日期與
 金額型別，規則同 mark_payment；資料庫裡原本就有的「已收無日期」不擋。
 
-裁示 E1、E3、E4（E2 維持現況，見 test_received_installment_without_id_blocks_any_sales_save）（hichan-0a 代裁，待使用者確認）。觀測點打在資料庫落地值。
+裁示 E1、E3、E4；E2 由使用者 N10 裁示放行（見 test_received_installment_without_id_unchanged_lets_sales_save）（hichan-0a 代裁，待使用者確認）。觀測點打在資料庫落地值。
 """
 import copy
 import json
@@ -148,7 +148,7 @@ def test_rejection_reason_names_the_installment(client, sales):
 # ── E2：沒有 id 的舊期別 ──────────────────────────────────────────────────
 
 def test_sales_cannot_edit_received_installment_without_id(client, sales):
-    """master 上已經是 403（見下一題的現況說明），這支是回歸防線，不是紅→綠證據。"""
+    """對照組（N10 放行之後仍然要擋）：舊期別內容有變動 ⇒ 403。"""
     no = "MQ-LOCK-NOID"
     legacy = copy.deepcopy(RECEIVED)
     legacy.pop("id")
@@ -160,12 +160,13 @@ def test_sales_cannot_edit_received_installment_without_id(client, sales):
     assert _cr(no)["payment"]["items"][0]["receivedAt"] == "2026-08-01"
 
 
-def test_received_installment_without_id_blocks_any_sales_save(client, sales):
-    """現況（master 既有行為，不是這次加的）：沒有 id 的已收款期別配不到舊資料，
-    被當成「新增一筆已收款」而整筆擋下——業務在這類案件上連改不相關的欄位都存不了。
+def test_received_installment_without_id_unchanged_lets_sales_save(client, sales):
+    """N10 翻面（使用者 2026-09-24 晨間裁示原文：「放行：不動那期就能存」）。
 
-    放行它（內容完全相同就過）相對現況是**放寬**，依夜間規則不代裁，留給使用者。
-    這支題釘住現況，改動它的人要先有裁示。
+    原本（09-24 夜間）這支釘的是現況：沒有 id 的已收款期別配不到舊資料，被當成
+    「新增一筆已收款」而整筆擋下——業務在這類案件上連改不相關的欄位都存不了。
+    放行相對現況是放寬，夜間不代裁；使用者早上裁示放行，所以翻面。
+    對照組：那期內容有任何變動、或被刪掉，仍然 403（見上一支與下一支）。
     """
     no = "MQ-LOCK-NOID2"
     legacy = copy.deepcopy(RECEIVED)
@@ -173,6 +174,33 @@ def test_received_installment_without_id_blocks_any_sales_save(client, sales):
     _make(no, [legacy, copy.deepcopy(PENDING)])
     cr = _cr(no)
     cr["payment"]["items"][1]["pct"] = 65
+    r = _save(client, sales, no, cr)
+    assert r.status_code == 200, r.text
+    items = _cr(no)["payment"]["items"]
+    assert items[0] == legacy, "舊期別原封不動"
+    assert items[1]["pct"] == 65
+
+
+def test_received_installment_without_id_cannot_be_deleted(client, sales):
+    no = "MQ-LOCK-NOID3"
+    legacy = copy.deepcopy(RECEIVED)
+    legacy.pop("id")
+    _make(no, [legacy, copy.deepcopy(PENDING)])
+    cr = _cr(no)
+    cr["payment"]["items"] = [cr["payment"]["items"][1]]
+    r = _save(client, sales, no, cr)
+    assert r.status_code == 403, r.text
+    assert len(_cr(no)["payment"]["items"]) == 2
+
+
+def test_two_identical_received_installments_without_id_need_two_matches(client, sales):
+    """逐筆配對：兩筆內容相同的舊期別，只留一筆＝刪了一筆 ⇒ 擋。"""
+    no = "MQ-LOCK-NOID4"
+    legacy = copy.deepcopy(RECEIVED)
+    legacy.pop("id")
+    _make(no, [legacy, copy.deepcopy(legacy), copy.deepcopy(PENDING)])
+    cr = _cr(no)
+    cr["payment"]["items"] = [cr["payment"]["items"][0], cr["payment"]["items"][2]]
     r = _save(client, sales, no, cr)
     assert r.status_code == 403, r.text
 
