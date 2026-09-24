@@ -171,22 +171,49 @@ def test_vr3_one_entry_per_module_not_one_per_day():
     🔑 畫面是依 `module` 分組的（`list_module_versions()` 用 `grouped[module]`），
     ☠️ 一天一筆的話，同一個模組會在七天裡長出七列，
     **而使用者要看的「這個模組最近改了什麼」會被七列流水帳蓋掉。**
+
+    📌 2026-09-25 裁定（hichan-0a；使用者確認正式機＝46dc6ae，2026-09-24 02:46:15 部署）：
+       「一包」＝**還沒出貨**的條目（不在正式機基準的 manifest 裡）。已出貨的屬於上一包，
+       不算在這一包裡，而且不可以改寫（test_version_manifest_shipped_is_immutable）——
+       舊判準把已出貨的也算進來，兩條守門就不可能同時綠（改寫已出貨的才能過 VR3）。
+       基準見 `tests/_prod_baseline.py`，**每次部署後要更新**。
     """
+    from tests._prod_baseline import BASELINE, baseline_manifest
     entries = [e for e in _entries() if (e.get("date") or "") >= GAP_FROM]
     if not entries:
         pytest.skip("VR3 還沒補 —— 見上一題（它會紅，這一題沒有東西可以驗）")
+    dupes = unshipped_module_dupes(entries, baseline_manifest())
+    assert not dupes, (
+        "這一包（未出貨的條目）裡有模組出現超過一次：\n  " + "\n  ".join(dupes)
+        + "\n⇒ 同一個模組這一包的改動要合併成一筆。"
+        + "\n⚠️ 若其中較舊的那一筆**已經部署到正式機**，不要合併（已出貨的不可改寫）——"
+          "是基準常數過期了：把 tests/_prod_baseline.py 的 BASELINE（目前 %s）改成目前正式機的 commit"
+          "（登入後 /api/prod-status 或部署紀錄可查）。" % BASELINE
+    )
 
-    seen = {}
-    dupes = []
+
+def unshipped_module_dupes(entries, shipped):
+    """同一模組出現一筆以上**未出貨**條目的清單。已出貨＝(module, version) 在正式機基準裡。"""
+    shipped_keys = {(e.get("module"), e.get("version")) for e in shipped}
+    seen, dupes = {}, []
     for e in entries:
+        if (e.get("module"), e.get("version")) in shipped_keys:
+            continue
         key = e.get("module")
         if key in seen:
             dupes.append(f"{key}（{seen[key]} 與 {e.get('version')}）")
         seen[key] = e.get("version")
-    assert not dupes, (
-        "這一批裡有模組出現超過一次：\n  " + "\n  ".join(dupes)
-        + "\n⇒ 同一個模組這幾天的改動要合併成一筆。"
-    )
+    return dupes
+
+
+def test_vr3_counts_only_unshipped_entries():
+    """正對照：未出貨同模組兩筆 ⇒ 違規；反向控制：已出貨一筆＋未出貨一筆 ⇒ 不違規。"""
+    old = {"module": "傳票", "version": "2026-09-23c"}
+    new1 = {"module": "傳票", "version": "2026-09-24h"}
+    new2 = {"module": "傳票", "version": "2026-09-25a"}
+    assert unshipped_module_dupes([new1, new2], shipped=[old]) == ["傳票（2026-09-24h 與 2026-09-25a）"]
+    assert unshipped_module_dupes([new1, old], shipped=[old]) == []
+    assert len(unshipped_module_dupes([new1, old], shipped=[])) == 1, "基準過期時同樣的資料要紅（訊息指向基準）"
 
 
 # ══════════════════════════════════════════════════════════════════════

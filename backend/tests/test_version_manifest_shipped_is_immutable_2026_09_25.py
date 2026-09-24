@@ -9,18 +9,15 @@
 
 🔑 判準：正式機基準 manifest 的每一筆，在目前的 manifest 裡以 (module, version) 找得到，
    而且 date、time、content 逐字相同。新增條目不受限制。
-📌 正式機換版之後把 BASELINE 改成新的正式機 commit（只能往後移，舊的仍是它的祖先）。
+📌 基準常數在 `tests/_prod_baseline.py`，每次部署後要更新成新的正式機 commit。
 """
 import json
-import subprocess
 from pathlib import Path
 
-import pytest
+from tests._prod_baseline import BASELINE, baseline_manifest
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "backend" / "version_manifest.json"
-#: 正式機目前的版本（交付說明 DELIVERY-NOTES 的基準）
-BASELINE = "46dc6ae"
 FIELDS = ("date", "time", "content")
 
 
@@ -40,20 +37,8 @@ def shipped_violations(baseline, current):
     return bad
 
 
-def _baseline():
-    try:
-        out = subprocess.run(["git", "show", "%s:backend/version_manifest.json" % BASELINE],
-                             cwd=ROOT, capture_output=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        pytest.fail("讀不到正式機基準 %s 的 manifest（%s）—— 不可以當成沒有違規" % (BASELINE, exc))
-    if out.returncode != 0:
-        pytest.fail("讀不到正式機基準 %s 的 manifest：%s" % (BASELINE, out.stderr.decode("utf-8", "replace")))
-    return json.loads(out.stdout.decode("utf-8-sig"))
-
-
 def test_every_shipped_entry_is_still_there_unchanged():
-    base = _baseline()
-    assert len(base) > 300, "基準讀出來太少（%d 筆），多半讀錯了東西" % len(base)
+    base = baseline_manifest()
     cur = json.loads(MANIFEST.read_text(encoding="utf-8-sig"))
     bad = shipped_violations(base, cur)
     assert not bad, (
