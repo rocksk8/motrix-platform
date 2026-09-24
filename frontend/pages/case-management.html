@@ -1610,7 +1610,6 @@
                   <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">代辦事項</button>
                   <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">專案資訊</button>
                 </div>
-<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
               <!-- ── 執行進度 ── -->
               <div x-show="execSubTab==='progress'">
@@ -1631,6 +1630,7 @@
                   <button class="stage-view-btn" :class="stageView==='list' ? 'active' : ''" @click="stageView='list'">清單</button>
                   <button class="stage-view-btn" :class="stageView==='timeline' ? 'active' : ''" @click="switchToTimeline()">時間軸</button>
                 </div>
+                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀（清單／時間軸切換鈕留在外面）-->
 
                 <div x-show="stageView==='timeline'" x-cloak>
                   <template x-if="!(cr.caseRecord?.stages || []).some(s => s.startDate || s.dueDate || (s.done && s.doneAt))">
@@ -1806,7 +1806,9 @@
                   新增階段
                 </button>
                 </div>
+                </fieldset><!-- /CM14b -->
               </div>
+              <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
               <!-- ── 叫料管控 ── -->
               <div x-show="execSubTab==='materials'">

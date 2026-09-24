@@ -47,6 +47,10 @@ def test_non_member_cashier_can_only_edit_payment(live_server, make_user):
             assert page.locator("text=以出納身分開啟").first.is_visible()
             assert page.locator(".cm-fgrid--contract input").first.is_disabled(), "合約欄位應唯讀"
             assert page.locator(".cm-fgrid--people select").first.is_disabled(), "角色欄位應唯讀"
+            # 純檢視的切換鈕不可以被一起停用（hichan-0a：清單／時間軸切換移出唯讀範圍）
+            assert page.locator(".stage-view-btn").first.is_enabled()
+            assert page.locator(".stage-view-btn").nth(1).is_enabled()
+            assert page.locator("button:has-text('新增階段')").first.is_disabled(), "執行進度的編輯鈕仍唯讀"
             note = page.locator(NOTE_INPUT).first
             assert note.is_enabled()
             note.fill("出納登錄")
