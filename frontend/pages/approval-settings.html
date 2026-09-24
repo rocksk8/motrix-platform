@@ -239,6 +239,10 @@
         <div class="as-card-head">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
           <div class="as-card-head-title" x-text="sectionTitle(key)"></div>
+          <span x-show="key === 'bonus' || (key === 'unified' && bonusUsesUnified)"
+                data-testid="bonus-superadmin-only"
+                style="font-size:11px;color:var(--danger);font-family:var(--font-zh)">
+            獎金分潤的簽核人只能是最高管理者（其他人或自動主管會讓獎金送審被擋下）</span>
           <span x-show="flows[key] && flows[key].steps.length > 0"
                 style="font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                 x-text="flows[key] ? flows[key].steps.length + ' 個步驟' : ''"></span>
@@ -346,16 +350,16 @@
                     <select x-model="step._addKey" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
                       <option value="">選擇要加入這層的簽核人／自動簽核來源…</option>
                       <optgroup label="人員">
-                        <template x-for="u in availableUsers" :key="'u'+u.id">
+                        <template x-for="u in usersForSection(key)" :key="'u'+u.id">
                           <option :value="'user:' + u.id" x-text="u.displayName + ' (' + u.username + ') — ' + roleLabel(u.role)"></option>
                         </template>
                       </optgroup>
-                      <optgroup label="部門主管（自動）">
+                      <optgroup label="部門主管（自動）" x-show="key !== 'bonus'">
                         <template x-for="d in allDepartments" :key="'d'+d.id">
                           <option :value="'dept:' + d.id" x-text="d.divisionName + ' / ' + d.name + (d.managerName ? '（目前：' + d.managerName + '）' : '（尚未設定主管）')"></option>
                         </template>
                       </optgroup>
-                      <optgroup label="處主管（自動）">
+                      <optgroup label="處主管（自動）" x-show="key !== 'bonus'">
                         <template x-for="v in allDivisions" :key="'v'+v.id">
                           <option :value="'div:' + v.id" x-text="v.name + (v.managerName ? '（目前：' + v.managerName + '）' : '（尚未設定主管）')"></option>
                         </template>
@@ -445,8 +449,10 @@
         //    ⇒ 傳票永遠 0 層、永遠走內建兩格。兩端各自都對，而中間那條路不存在。
         // 📌 它不在後端的 `DEFAULT_UNIFIED_DOC_TYPES` ⇒ 預設就是「獨立設定」，
         //    所以下方會自己展開一個「傳票（會計）獨立簽核設定」區塊。
+        // 2026-09-24（N8①）：加入 `bonus`。後端 bonus.py 一直在讀 `bonus_approval_flow`，
+        //    而這一頁的清單沒有它 ⇒ 獎金分潤的簽核流程在畫面上設不到。
         docTypeOrder: ['quotation', 'shipping', 'completion', 'invoice_voucher', 'payment_request',
-                       'contractor_voucher', 'extra_expense', 'voucher'],
+                       'contractor_voucher', 'extra_expense', 'voucher', 'bonus'],
         docTypeMeta: {
           quotation:          '報價單',
           shipping:           '出貨單',
@@ -459,6 +465,7 @@
           //    （發票開立簽核單／承攬商匯款申請／會計傳票），設定頁上分得出來
           //    才不會改錯。名字與後端 `APPROVAL_DOC_TYPE_LABELS` 一致。
           voucher:            '傳票（會計）',
+          bonus:              '獎金分潤',
         },
 
         // 🔑 每一類在 `system_settings` 裡的**兩把 key**，與後端
@@ -481,6 +488,7 @@
           contractor_voucher: { unified: 'unified_approval_flow', independent: 'contractor_voucher_approval_flow' },
           extra_expense:      { unified: 'unified_approval_flow', independent: 'extra_expense_approval_flow' },
           voucher:            { unified: 'unified_approval_flow', independent: 'voucher_approval_flow' },
+          bonus:              { unified: 'unified_approval_flow', independent: 'bonus_approval_flow' },
         },
         scope:       {},      // {quotation:bool, shipping:bool, ...} ← 使用者手上這一份（可能已被撥動、還沒存）
         // 🔴 後端回來的那一份，**使用者動不到它**。
@@ -588,6 +596,13 @@
           const v = this.allDivisions.find(v => v.id === divId)
           return v ? v.managerName : null
         },
+
+        // 獎金分潤的簽核人只能是最高管理者（使用者 2026-09-24「簽核人只能是最高管理者」，
+        // 後端送審時也會擋）⇒ 那一段的選單只列 superadmin，也不給「部門／處主管（自動）」。
+        usersForSection(key) {
+          return key === 'bonus' ? this.availableUsers.filter(u => u.role === 'superadmin') : this.availableUsers
+        },
+        get bonusUsesUnified() { return this.scope.bonus !== false },
 
         get availableUsers() {
           const roleOrder = { superadmin: 0, admin: 1, sales: 2, viewer: 3 }
