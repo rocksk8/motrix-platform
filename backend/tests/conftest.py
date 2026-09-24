@@ -398,20 +398,62 @@ def _app(tmp_path_factory):
     return main.app
 
 
+@pytest.fixture(scope="session")
+def _template_db(_app, tmp_path_factory):
+    """每個 session（每個 xdist worker）用**同一支 `db.init_db`** 建一份已遷移好的範本庫，
+    `client` 每題從它複製，不再每題重跑 116 個 migration。
+
+    📌 2026-09-25（PLAN-TEST-PERF §5.1，使用者選定）：每題建兩個庫 ＝ 中位數 0.55 s、
+       寫入約 12 MB；2,315 題 ⇒ 每輪約 1,000 秒 CPU、27 GB 寫入。複製檔案 2 ms、1.19 MB。
+    🔑 migration 仍然**每輪真的跑一次**（就在這裡），只是不再每題重跑同一件事。
+       範本與新鮮 init_db 的等價由 test_template_db_2026_09_25 守著。
+    ⚠️ 設 `MOTRIX_TEST_FRESH_DB=1` ⇒ 回到每題 init_db（A/B 對照用）。
+    """
+    import db
+    import sqlite3
+
+    path = str(tmp_path_factory.mktemp("template_db") / "template.db")
+    db.init_db(path)
+    # 把 WAL 併回主檔，複製主檔就是完整的庫（WAL 模式記在檔頭，複製後照樣以 WAL 開啟）
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    finally:
+        conn.close()
+    wal = path + "-wal"
+    assert not (os.path.exists(wal) and os.path.getsize(wal) > 0), "範本庫的 WAL 沒有併回主檔"
+    return path
+
+
 @pytest.fixture()
-def client(_app, tmp_path, monkeypatch):
+def client(_app, _template_db, tmp_path, monkeypatch):
     """Function-scoped: every test gets its own fresh, empty, fully-migrated
-    real+demo DB pair, so tests can't see each other's data."""
+    real+demo DB pair, so tests can't see each other's data.
+
+    每題仍是**自己的一份新庫檔**、仍 monkeypatch `db.DB_PATH`／`DEMO_DB_PATH`
+    （共用伺服器的 e2e 依賴這個介面：伺服器在 request 當下才讀 DB_PATH）；
+    差別只在庫檔是從 `_template_db` 複製來的，不是每題重跑 init_db。"""
     import db
     import helpers
+    import shutil
 
     real_path = str(tmp_path / "motrix_erp.db")
     demo_path = str(tmp_path / "motrix_erp_demo.db")
+
+    # ☠️ 順序：**先把庫放好，再把 DB_PATH 指過去。**
+    #    前一題的背景執行緒（例：結案後 spawn_bg_thread 產 PDF）在那一題結束後仍在跑，
+    #    它每次 get_db() 都讀「當下的」db.DB_PATH。若先 setattr 再複製，中間那一瞬間
+    #    它會在新路徑上建出一個空庫＋WAL；複製過來的主檔會被那份 WAL 蓋掉 ⇒ 本題
+    #    `no such table: users`（2026-09-25 抽樣實際發生 2 次）。
+    #    舊寫法（每題 init_db）也有同一個空窗，只是 init_db 會在那條連線之上把表建完而看不出來。
+    if os.environ.get("MOTRIX_TEST_FRESH_DB") == "1":
+        db.init_db(real_path)
+        db.init_db(demo_path)
+    else:
+        shutil.copyfile(_template_db, real_path)
+        shutil.copyfile(_template_db, demo_path)
     monkeypatch.setattr(db, "DB_PATH", real_path)
     monkeypatch.setattr(db, "DEMO_DB_PATH", demo_path)
-
-    db.init_db(real_path)
-    db.init_db(demo_path)
     # `IA2`：`init_demo_account()` 現在靠 `demo_account_on()` 把關
     # （預設關，同 `helpers/tender_source.py::radar_on()` 的理由），
     # 測試環境要明著打開，同既有 `monkeypatch.setattr(ts,
