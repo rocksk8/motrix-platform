@@ -964,9 +964,9 @@ window.CM_PARTS.push(() => ({
         `width:${card.offsetWidth}px`,
         'opacity:.88','pointer-events:none',
         'transform:rotate(1.5deg) scale(1.04)',
-        'box-shadow:0 12px 32px rgba(0,0,0,.22)',
-        'border-radius:8px','background:#fff',
-        'border:1px solid #C7D2FE','z-index:9999'
+        'box-shadow:var(--shadow-popover)',
+        'border-radius:8px','background:var(--surface)',
+        'border:1px solid var(--tone-info-border)','z-index:9999'
       ].join(';')
       document.body.appendChild(ghost)
       e.dataTransfer.setDragImage(ghost, e.offsetX + 8, e.offsetY + 8)

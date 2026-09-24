@@ -415,9 +415,9 @@ window.CM_PARTS.push(() => ({
         else active.push(c)
       }
       return [
-        { key: '待精算', label: '待精算', dot: '#FCD34D', items: settling },
-        { key: '進行中', label: '進行中', dot: '#4ADE80', items: active },
-        { key: '已結案', label: '已結案', dot: '#C4B5FD', items: closed },
+        { key: '待精算', label: '待精算', dot: 'var(--tone-warning-border)', items: settling },
+        { key: '進行中', label: '進行中', dot: 'var(--tone-success-solid)', items: active },
+        { key: '已結案', label: '已結案', dot: 'var(--tone-violet-border)', items: closed },
       ]
     },
 

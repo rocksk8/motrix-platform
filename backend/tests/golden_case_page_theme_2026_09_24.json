@@ -1,0 +1,234 @@
+{
+ "dark": {
+  ".btn-save": {
+   "background": "rgb(248, 113, 113)",
+   "border": "rgb(28, 28, 30)",
+   "color": "rgb(28, 28, 30)",
+   "fontSize": "12px"
+  },
+  ".cm-body": {
+   "background": "rgb(35, 35, 38)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  },
+  ".cm-card.selected": {
+   "background": "rgb(23, 35, 64)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  },
+  ".cm-card:not(.selected)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  },
+  ".cm-card__stageprog": {
+   "background": "rgb(76, 29, 32)",
+   "border": "rgb(252, 165, 165)",
+   "color": "rgb(252, 165, 165)",
+   "fontSize": "11px"
+  },
+  ".cm-card__tag": {
+   "background": "rgb(20, 54, 31)",
+   "border": "rgb(134, 239, 172)",
+   "color": "rgb(134, 239, 172)",
+   "fontSize": "11px"
+  },
+  ".cm-header": {
+   "background": "rgb(28, 28, 30)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  },
+  ".cm-list": {
+   "background": "rgb(35, 35, 38)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  },
+  ".cm-list__search-input": {
+   "background": "rgb(35, 35, 38)",
+   "border": "rgb(58, 58, 63)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "12px"
+  },
+  ".cm-list__tab.active": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(248, 113, 113)",
+   "color": "rgb(248, 113, 113)",
+   "fontSize": "11px"
+  },
+  ".cm-list__tab:not(.active)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(161, 165, 173)",
+   "color": "rgb(161, 165, 173)",
+   "fontSize": "11px"
+  },
+  ".cm-list__title": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "13px"
+  },
+  ".cm-more__btn": {
+   "background": "rgb(28, 28, 30)",
+   "border": "rgb(58, 58, 63)",
+   "color": "rgb(180, 183, 189)",
+   "fontSize": "12px"
+  },
+  ".cm-section-title": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "12.5px"
+  },
+  ".cm-tab.active": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(248, 113, 113)",
+   "color": "rgb(248, 113, 113)",
+   "fontSize": "12px"
+  },
+  ".cm-tab:not(.active)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(161, 165, 173)",
+   "color": "rgb(161, 165, 173)",
+   "fontSize": "12px"
+  },
+  ".fi": {
+   "background": "rgb(28, 28, 30)",
+   "border": "rgb(58, 58, 63)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "12px"
+  },
+  ".vm-lamp": {
+   "background": "rgb(252, 211, 77)",
+   "border": "rgb(242, 242, 240)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "12px"
+  },
+  "[data-testid=case-health]": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(58, 58, 63)",
+   "color": "rgb(242, 242, 240)",
+   "fontSize": "15px"
+  }
+ },
+ "light": {
+  ".btn-save": {
+   "background": "rgb(200, 16, 46)",
+   "border": "rgb(255, 255, 255)",
+   "color": "rgb(255, 255, 255)",
+   "fontSize": "12px"
+  },
+  ".cm-body": {
+   "background": "rgb(250, 250, 249)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  },
+  ".cm-card.selected": {
+   "background": "rgb(238, 242, 255)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  },
+  ".cm-card:not(.selected)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  },
+  ".cm-card__stageprog": {
+   "background": "rgb(254, 226, 226)",
+   "border": "rgb(185, 28, 28)",
+   "color": "rgb(185, 28, 28)",
+   "fontSize": "11px"
+  },
+  ".cm-card__tag": {
+   "background": "rgb(220, 252, 231)",
+   "border": "rgb(21, 128, 61)",
+   "color": "rgb(21, 128, 61)",
+   "fontSize": "11px"
+  },
+  ".cm-header": {
+   "background": "rgb(255, 255, 255)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  },
+  ".cm-list": {
+   "background": "rgb(250, 250, 249)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  },
+  ".cm-list__search-input": {
+   "background": "rgb(250, 250, 249)",
+   "border": "rgb(229, 227, 222)",
+   "color": "rgb(0, 0, 0)",
+   "fontSize": "12px"
+  },
+  ".cm-list__tab.active": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(200, 16, 46)",
+   "color": "rgb(200, 16, 46)",
+   "fontSize": "11px"
+  },
+  ".cm-list__tab:not(.active)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(118, 118, 118)",
+   "color": "rgb(118, 118, 118)",
+   "fontSize": "11px"
+  },
+  ".cm-list__title": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "13px"
+  },
+  ".cm-more__btn": {
+   "background": "rgb(255, 255, 255)",
+   "border": "rgb(229, 227, 222)",
+   "color": "rgb(107, 107, 107)",
+   "fontSize": "12px"
+  },
+  ".cm-section-title": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(10, 10, 10)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "12.5px"
+  },
+  ".cm-tab.active": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(200, 16, 46)",
+   "color": "rgb(200, 16, 46)",
+   "fontSize": "12px"
+  },
+  ".cm-tab:not(.active)": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(118, 118, 118)",
+   "color": "rgb(118, 118, 118)",
+   "fontSize": "12px"
+  },
+  ".fi": {
+   "background": "rgb(255, 255, 255)",
+   "border": "rgb(229, 227, 222)",
+   "color": "rgb(0, 0, 0)",
+   "fontSize": "12px"
+  },
+  ".vm-lamp": {
+   "background": "rgb(146, 64, 14)",
+   "border": "rgb(0, 0, 0)",
+   "color": "rgb(0, 0, 0)",
+   "fontSize": "12px"
+  },
+  "[data-testid=case-health]": {
+   "background": "rgba(0, 0, 0, 0)",
+   "border": "rgb(229, 227, 222)",
+   "color": "rgb(10, 10, 10)",
+   "fontSize": "15px"
+  }
+ }
+}

@@ -2,8 +2,11 @@
 
 - style.css 最後一段「語意色彩 token」：案件頁寫死的色碼歸納成語意 token，另有 `:root[data-theme="dark"]` 一組。
 - 對照表 docs/windows/CM12-P3-COLOR-TOKENS.md：案件頁用到的每一個色碼都要有對應 token，而且 token 真的存在。
-- 字級：案件頁 font-size < 11px 的現況以 xfail(strict) 釘住（P3 套完轉綠 ⇒ strict 讓它紅 ⇒ 拿掉 xfail），
-  另有棘輪題：處數只能減少。
+- 字級：案件頁 font-size 不得小於 11px。P3 前的現況 114 處以 xfail(strict) 釘住，P3（2026-09-24）套完後拿掉 xfail。
+- P3 起：案件頁（HTML＋case-management.css＋case-management-*.js）除白名單外不得有寫死色碼——
+  深色模式本頁退出全站反轉，寫死的淺色會在深色模式變成白塊。
+⚠ P3 把頁面內 <style> 搬到 frontend/css/case-management.css：掃描一律涵蓋 HTML、CSS 檔與 JS，
+  只掃 HTML 會漏掉搬走的樣式（假綠）。
 """
 import re
 from pathlib import Path
@@ -16,8 +19,13 @@ DOC = ROOT / "docs" / "windows" / "CM12-P3-COLOR-TOKENS.md"
 PAGE = ROOT / "frontend" / "pages" / "case-management.html"
 # CM12 起案件頁 JS 拆成 case-management-*.js
 PAGE_JS_FILES = sorted((ROOT / "frontend" / "js").glob("case-management-*.js"))
+PAGE_CSS = ROOT / "frontend" / "css" / "case-management.css"
+# 不能用 var() 或屬資料色的：甘特／頭像資料色盤、甘特匯出 PNG 的 canvas 用色、甘特進度條半透明黑疊色、
+# 以及 case-management.css 深色區塊裡刻意寫的深色值（那一段就是深色的定義）
+ALLOW_LINE = ("const _GANTT_COLORS", "ctx.fillStyle", ".bar-progress { fill:rgba(0,0,0,.18)",
+              ":root { --cm-on-palette:")   # 頭像資料色盤上的白字（本頁 token 定義）
 COLOR = r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|rgba?\([^)]*\)"
-SMALL_FONT_NOW = 114      # 2026-09-24 的現況（10px 87、9px 15、10.5px 6、9.5px 5、8.5px 1）
+SMALL_FONT_NOW = 0        # P3（2026-09-24）後；P3 前 114 處（10px 87、9px 15、10.5px 6、9.5px 5、8.5px 1）
 
 
 def _norm(c):
@@ -72,18 +80,44 @@ def test_dark_group_defines_every_new_token():
 
 def test_positive_control_the_scanner_sees_known_colors():
     colors = _page_colors()
-    assert "#92400e" in colors and "#ffffff" in colors, "量尺：掃描器應該看得到案件頁的琥珀字與白底"
+    assert "#2563eb" in colors and "#ffffff" in colors, "量尺：掃描器應該看得到白名單內的甘特色盤與匯出圖白底"
+
+
+def _page_sources():
+    """HTML（去註解）＋case-management.css（去註解、去掉檔尾深色區塊）＋分檔 JS"""
+    html = re.sub(r"<!--.*?-->", "", PAGE.read_text(encoding="utf-8"), flags=re.S)
+    css = PAGE_CSS.read_text(encoding="utf-8")
+    css = css[:css.index("深色模式：案件頁退出全站反轉")] if "深色模式：案件頁退出全站反轉" in css else css
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    return [("html", html), ("css", css)] + [(p.name, p.read_text(encoding="utf-8")) for p in PAGE_JS_FILES]
+
+
+def test_no_hardcoded_colors_outside_the_allowlist():
+    bad = []
+    for name, text in _page_sources():
+        for n, line in enumerate(text.split("\n"), 1):
+            if any(a in line for a in ALLOW_LINE) or line.lstrip().startswith("//"):
+                continue
+            for c in re.findall(COLOR, line):
+                bad.append(f"{name}:{n}: {c} ｜ {line.strip()[:80]}")
+    assert not bad, "案件頁有寫死的色碼（改用語意 token）：\n" + "\n".join(bad[:30])
+
+
+def test_scanner_covers_the_extracted_stylesheet():
+    names = [n for n, _ in _page_sources()]
+    assert "css" in names and PAGE_CSS.exists(), "樣式已搬到 case-management.css，掃描必須涵蓋它"
+    css = dict(_page_sources())["css"]
+    assert "font-size" in css and "var(--" in css, "量尺：CSS 檔應該讀得到字級與 token"
 
 
 def _small_fonts():
-    s = PAGE.read_text(encoding="utf-8")
-    s = re.sub(r"<!--.*?-->", "", s, flags=re.S)
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    return [float(v) for v in re.findall(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", s) if float(v) < 11]
+    out = []
+    for _, text in _page_sources():
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        out += [float(v) for v in re.findall(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", text) if float(v) < 11]
+    return out
 
 
-@pytest.mark.xfail(strict=True, reason="CM12 P3 尚未套用：案件頁仍有 font-size < 11px（現況 %d 處）；"
-                                        "P3 套完這題會轉綠，strict 讓它紅 ⇒ 屆時拿掉 xfail" % SMALL_FONT_NOW)
 def test_case_page_has_no_font_smaller_than_11px():
     assert not _small_fonts()
 

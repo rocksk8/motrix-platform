@@ -58,10 +58,10 @@ window.CM_PARTS.push(() => ({
     xeEditable(x) { return !x.id || x.status === '草稿' || x.status === '已駁回' },
 
     xeStatusStyle(status) {
-      if (status === '已核准') return 'background:#DCFCE7;color:#15803D'
-      if (status === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
-      if (status === '草稿')   return 'background:#F3F4F6;color:#6B7280'
-      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+      if (status === '已核准') return 'background:var(--tone-success-bg-strong);color:var(--tone-success-fg)'
+      if (status === '已駁回') return 'background:var(--tone-danger-bg-strong);color:var(--tone-danger-fg)'
+      if (status === '草稿')   return 'background:var(--surface-neutral);color:var(--ink-secondary)'
+      return 'background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)'   // 待審核／簽核中
     },
 
     xeDirty(i) { this.xe.items[i]._dirty = true; this.xe.msg = '' },
@@ -248,9 +248,9 @@ window.CM_PARTS.push(() => ({
     xeChangeFiles(x)     { return (x.change && x.change.addFiles) || [] },
 
     xeChangeStatusStyle(s) {
-      if (s === '已駁回') return 'background:#FEE2E2;color:#B91C1C'
-      if (s === '草稿')   return 'background:#F3F4F6;color:#6B7280'
-      return 'background:#FEF3C7;color:#92400E'   // 待審核／簽核中
+      if (s === '已駁回') return 'background:var(--tone-danger-bg-strong);color:var(--tone-danger-fg)'
+      if (s === '草稿')   return 'background:var(--surface-neutral);color:var(--ink-secondary)'
+      return 'background:var(--tone-warning-bg-strong);color:var(--tone-warning-fg)'   // 待審核／簽核中
     },
 
     xeStartEdit(i) {
