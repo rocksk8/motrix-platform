@@ -33,7 +33,10 @@ param(
     [int]$KeepPackages = 2,
     # 超過幾天的部署包自動刪除（2026-09-25 使用者：「當匯出升級檔超過一周，就自動刪除過時升級檔」）。
     # 0 = 不依天數清理。與 KeepPackages 並用：符合任一條就刪；這一次剛做好的包兩條都不會刪。
-    [int]$MaxAgeDays = 7
+    [int]$MaxAgeDays = 7,
+    # 同一份 tree（含環境）今天 12 小時內已嚴格全綠 ⇒ 預設沿用、不重跑測試（PLAN-TEST-PERF §3.1）。
+    # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。
+    [switch]$ForceTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -562,6 +565,33 @@ try {
 }
 
 $pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+
+# ── 同一份 tree 已全綠就沿用（PLAN-TEST-PERF §3.1）─────────────────────────────
+# 指紋＝整棵 tracked tree＋執行環境（Python、pip freeze、Playwright 與瀏覽器、MOTRIX_* 環境變數）；
+# 工作樹不乾淨就沒有指紋。沿用條件：同指紋的最新一筆嚴格全綠、同一天、12 小時內。
+# 判斷在 tools\build_test_reuse.py（純函式有題：test_build_test_reuse_2026_09_25）。
+$reuseTool = Join-Path $projectRoot "backend\tools\build_test_reuse.py"
+$testRecords = Join-Path $projectRoot "backend\tools\deploy_logs\test_results.jsonl"
+$testFp = $null
+$reuse = $null
+try {
+    $fpOut = & $pyExe $reuseTool fingerprint
+    if ($LASTEXITCODE -eq 0) { $testFp = ($fpOut | ConvertFrom-Json).fingerprint }
+    if ($testFp -and -not $ForceTests) {
+        $lk = & $pyExe $reuseTool lookup --records $testRecords --fp $testFp
+        if ($LASTEXITCODE -eq 0 -and $lk -and $lk -ne "null") { $reuse = $lk | ConvertFrom-Json }
+    }
+} catch {
+    Write-Host "  [WARN] 無法判斷是否可沿用測試結果（$($_.Exception.Message)）—— 照常跑測試" -ForegroundColor Yellow
+    $reuse = $null
+}
+
+if ($reuse) {
+    Write-Host "`n[測試] 沿用 $($reuse.tested_at) 的全綠結果（同一份 tree 與環境，commit $($reuse.commit)）—— 不重跑。要重跑請加 -ForceTests" -ForegroundColor Cyan
+    $testExit = 0
+    $e2eExit = 0
+    $BuildStats["reused_tests_from"] = $reuse.tested_at
+} else {
 Acquire-TestExclusive
 $env:MOTRIX_PYTEST_EXCLUSIVE = "1"
 $env:MOTRIX_PYTEST_EXCLUSIVE_OWNER = "$PID"
@@ -655,6 +685,12 @@ if ($e2eExit -eq 0) {
     $e2eFailLines | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
     Fail "e2e 測試失敗，而失敗的原因**不是逾時**（見上方 FAILED 行）。逾時可以續跑，斷言失敗不行——那代表畫面上真的有東西不對。要確認請單獨跑：python -m pytest -m e2e -v"
 }
+# 記下這一次的測試結果（後面打包失敗再建時可以沿用）。只有**兩段都 exit 0** 才算綠——逾時放行不算。
+if ($testFp) {
+    $greenFlag = if ($testExit -eq 0 -and $e2eExit -eq 0) { "1" } else { "0" }
+    try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $greenFlag --commit $commitShort | Out-Null } catch {}
+}
+}   # end: if ($reuse) else
 
 # 2026-09-15：測試暫存跑完就自己刪。
 #
