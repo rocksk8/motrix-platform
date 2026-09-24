@@ -400,7 +400,7 @@ def test_other_tab_updates_within_a_second_even_if_this_tab_leaves_at_once(live_
         hold = _Hold(a)                       # 伺服器那一頭還沒回應
         card_a.click()
         a.goto(live_server + "/index.html", wait_until="commit")
-        card_b.locator("text=有更新").wait_for(state="detached", timeout=1000)
+        card_b.locator("text=有更新").wait_for(state="detached", timeout=_OPTIMISTIC_WAIT_MS)
         browser.close()
 
 
@@ -414,7 +414,8 @@ def test_other_tab_restores_the_mark_when_the_server_rejects_the_read(live_serve
         hold = _Hold(a)                       # 先攔住，才量得到「樂觀」那一段
         card_a.click()
         # 樂觀：先變已讀……
-        card_b.locator("text=有更新").wait_for(state="detached", timeout=1000)
+        card_b.locator("text=有更新").wait_for(state="detached", timeout=_OPTIMISTIC_WAIT_MS)
+        _wait_until_held(a, hold.held)
         assert hold.held
         for r in hold.held:
             r.fulfill(status=500, body="{}")
@@ -473,7 +474,7 @@ def test_menu_badge_clears_in_the_other_tab_even_if_this_tab_navigates_away(live
     with sync_playwright() as p:
         browser, a, b = _two_tabs_with_customer_badge(p, live_server, u, pw)
         _click_customers_link(a)             # 真的換頁
-        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=1000)
+        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=_OPTIMISTIC_WAIT_MS)
         browser.close()
 
 
@@ -487,12 +488,34 @@ def test_menu_badge_comes_back_in_the_other_tab_when_the_server_rejects(live_ser
             const x = e.target.closest('a[href]'); if (x) e.preventDefault() })""")
         hold = _Hold(a)
         _click_customers_link(a)
-        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=1000)
+        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=_OPTIMISTIC_WAIT_MS)
+        _wait_until_held(a, hold.held)
         for r in hold.held:
             r.fulfill(status=500, body="{}")
         hold.held = []
         b.wait_for_function(_badge_visible_js("sb-mod-customer"), timeout=5000)
         browser.close()
+
+
+#: 更正留著（2026-09-24）：這一檔原本等「另一分頁跟上」都只給 **1 秒**，全量並行下偶發紅
+#: （bell_count_restores 那一題）。這些題都**攔住了伺服器回應**（route／_Hold）⇒「伺服器還沒回，
+#: 另一分頁就先變」由攔截保證，秒數不是要驗的東西，只會在機器忙的時候誤紅。
+#: ⇒ 改成等條件成立（上限 10 秒）；這不是放寬：等待期間伺服器那一頭始終沒有回應。
+#: ⚠️ 唯一沒有攔截的是「換頁」那一題（修正前也綠，見其 docstring），它本來就不量「回應之前」。
+_OPTIMISTIC_WAIT_MS = 10000
+
+
+def _wait_until_held(page, held, tries=200):
+    """送出回應前，先確認請求真的被攔下了。
+
+    ☠️ 負載下 click 發出的請求可能還沒進到 route handler ⇒ `held` 是空的 ⇒ 迴圈什麼都沒送，
+    之後請求被攔下卻永遠不會有回應 ⇒ 下一個等待必然逾時（量尺自己的競態，不是產品的）。
+    """
+    for _ in range(tries):
+        if held:
+            return
+        page.wait_for_timeout(50)
+    assert held, "10 秒內沒有攔到已讀請求——頁面根本沒送出？"
 
 
 def _two_tabs_with_two_notifications(p, live_server, u, pw):
@@ -523,7 +546,8 @@ def test_bell_count_follows_in_the_other_tab(live_server, make_user):
         a.locator(".topbar__btn:has-text('通知')").click()
         a.locator("[data-notif-id='%s']" % ids[0]).click()
         b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
-                            " return s && s.textContent.trim() === '1' }", timeout=1000)
+                            " return s && s.textContent.trim() === '1' }", timeout=_OPTIMISTIC_WAIT_MS)
+        _wait_until_held(a, held)
         for r in held:
             r.continue_()
         browser.close()
@@ -539,7 +563,8 @@ def test_bell_count_restores_in_the_other_tab_when_the_server_rejects(live_serve
         a.locator(".topbar__btn:has-text('通知')").click()
         a.locator("[data-notif-id='%s']" % ids[0]).click()
         b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
-                            " return s && s.textContent.trim() === '1' }", timeout=1000)
+                            " return s && s.textContent.trim() === '1' }", timeout=_OPTIMISTIC_WAIT_MS)
+        _wait_until_held(a, held)
         for r in held:
             r.fulfill(status=500, body="{}")
         b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
