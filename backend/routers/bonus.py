@@ -1586,3 +1586,595 @@ def _case_people(conn, quote_no):
         case["sales_person"] = _username_of_sales_person(
             conn, case.get("sales_person_id"), case.get("sales_person"))
     return case
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 以案件為中心的獎金分潤（SPEC-BONUS §十一／§11.7，2026-09-24）
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# 表：bonus_case_awards／bonus_case_award_lines／bonus_case_award_edit_log（db.py v112）。
+# 算式：helpers/bonus_case.py（純函式）。舊的 bonus_awards 流程不理會（§11.7「直接作廢」
+# ⇒ 新頁面不顯示、不擋；不以 migration 作廢任何資料）。
+#
+#   已精算 ──建立──▶ 草稿 ──送審──▶ 待審核 ──簽核完成──▶ 待發放 ──出納標記──▶ 已發放
+#                    ▲________ 最高管理者退回（已發放前任何時點）／簽核人駁回 ________|
+#
+# 「未精算／已精算」不存，依 settlement.status 推得。
+# 可見性（§11.4 字面）：見 _case_award_view()。
+# 簽核人只能是最高管理者（W1，使用者 2026-09-24「簽核人只能是最高管理者」）：
+# 送審時鏈上（含有效代理人）出現非 superadmin 就擋；核准時再確認一次。
+
+from helpers.bonus_case import (  # noqa: E402
+    BonusCalcError, CATEGORIES, CATEGORY_LABELS, DEFAULT_RATE_BP, DEFAULT_SPLIT_BP, allocate,
+)
+from helpers.bonus import BASE_FIELD, LEGACY_SETTLEMENT_MESSAGE  # noqa: E402
+from helpers.tiered_approval import (  # noqa: E402
+    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
+)
+from helpers.auth import user_has_module  # noqa: E402
+
+_CASE_DEAL_TAGS = ("已成案", "已結案")
+_RATE_KEY = "bonus_case_default_rate_bp"
+_SPLIT_KEY = "bonus_case_default_split_bp"
+_PAYOUT_VISIBLE = ("待發放", "已發放")
+_SOURCES_OK = ("auto_sales", "auto_executor", "manual")
+
+
+def _case_defaults():
+    rate = _get_setting(_RATE_KEY, None)
+    split = _get_setting(_SPLIT_KEY, None)
+    if not isinstance(rate, int) or isinstance(rate, bool):
+        rate = DEFAULT_RATE_BP
+    if not isinstance(split, dict):
+        split = dict(DEFAULT_SPLIT_BP)
+    return rate, {c: split.get(c, 0) for c in CATEGORIES}
+
+
+def _unique_username_by_display(conn, display_name):
+    """顯示名稱 → 帳號。**剛好一個**在職帳號才算；同名或查無回 None（§11.7：不帶、標「請手動指定」）。"""
+    name = (display_name or "").strip()
+    if not name:
+        return None
+    rows = conn.execute(
+        "SELECT username FROM users WHERE display_name = ? AND active = 1", (name,)).fetchall()
+    return rows[0]["username"] if len(rows) == 1 else None
+
+
+def _auto_members(conn, quote_no):
+    """§11.7：業務＝quotations.sales_person；專案＝caseRecord.roles.executor；後勤不自動帶。
+    回 (members, notes)。解不出（同名／查無）⇒ 不帶，notes 說明要手動指定。"""
+    row = conn.execute(
+        "SELECT sales_person, sales_person_id,"
+        " json_extract(data_json, '$.caseRecord.roles.executor') AS executor"
+        " FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    members = {c: [] for c in CATEGORIES}
+    notes = {}
+    if row is None:
+        return members, notes
+    sales_user = None
+    if row["sales_person_id"]:
+        r = conn.execute("SELECT username FROM users WHERE id = ? AND active = 1",
+                         (row["sales_person_id"],)).fetchone()
+        sales_user = r["username"] if r else None
+    if not sales_user:
+        sales_user = _unique_username_by_display(conn, row["sales_person"])
+    if sales_user:
+        members["sales"].append({"username": sales_user, "person_bp": None, "source": "auto_sales"})
+    else:
+        notes["sales"] = ("報價單業務人員「%s」對不到唯一的帳號，請手動指定" % (row["sales_person"] or "")
+                          if row["sales_person"] else "報價單沒有業務人員，請手動指定")
+    exe_user = _unique_username_by_display(conn, row["executor"])
+    if exe_user:
+        members["project"].append({"username": exe_user, "person_bp": None, "source": "auto_executor"})
+    else:
+        notes["project"] = ("案件「執行負責」「%s」對不到唯一的帳號，請手動指定" % row["executor"]
+                            if row["executor"] else "案件沒有設定「執行負責」，請手動指定")
+    notes["admin"] = "後勤不自動帶入，請手動指定人員或群組"
+    return members, notes
+
+
+def _case_row(conn, quote_no):
+    row = conn.execute(
+        "SELECT quote_no, customer_name, project_name, deal_tag FROM quotations WHERE quote_no = ?",
+        (quote_no,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "找不到這個案件。")
+    return dict(row)
+
+
+def _net_profit_or_error(settle):
+    """（ok, net, err）。§二禁令：只用 settlement.summary.netProfit 已存值，不重算、不退回 grossProfit。"""
+    if not settle or settle.get("status") != "finalized":
+        return False, None, "這個案件尚未完成精算，不能建立獎金分潤。"
+    raw = (settle.get("summary") or {}).get(BASE_FIELD)
+    if raw is None:
+        return False, None, LEGACY_SETTLEMENT_MESSAGE
+    return True, raw, None
+
+
+def _load_case_award(conn, quote_no):
+    row = conn.execute("SELECT * FROM bonus_case_awards WHERE quote_no = ?", (quote_no,)).fetchone()
+    if row is None:
+        return None, []
+    award = dict(row)
+    lines = [dict(r) for r in conn.execute(
+        "SELECT * FROM bonus_case_award_lines WHERE award_id = ? ORDER BY id", (award["id"],))]
+    return award, lines
+
+
+def _case_log(conn, award_id, user, action, changes):
+    conn.execute(
+        "INSERT INTO bonus_case_award_edit_log (award_id, changed_by, changed_at, action, changes_json)"
+        " VALUES (?,?,?,?,?)",
+        (award_id, _user_name(user), datetime.now().isoformat(), action,
+         json.dumps(changes, ensure_ascii=False)))
+
+
+_ONLY_SUPERADMIN_MSG = "獎金分潤的簽核人只能是最高管理者，請調整簽核設定。"
+
+
+def _non_superadmin_in_chain(conn, tiers):
+    """鏈上的簽核人，以及他們今天有效的代理人，是否有人不是 superadmin。回違規的帳號清單。"""
+    from datetime import date
+    today = date.today().isoformat()
+    bad = []
+    for t in tiers or []:
+        for a in (t or {}).get("approvers") or []:
+            uname = a.get("username") or ""
+            names = [uname] + [r["delegate_username"] for r in conn.execute(
+                "SELECT delegate_username FROM approval_delegates WHERE delegator_username=? AND active=1"
+                " AND start_date<=? AND end_date>=?", (uname, today, today))]
+            for n in names:
+                r = conn.execute("SELECT role FROM users WHERE username=?", (n,)).fetchone()
+                if r is None or r["role"] != "superadmin":
+                    bad.append(n)
+    return bad
+
+
+def _case_award_view(conn, award, lines, user):
+    """依身分決定回多少（過濾在後端，§七／§11.4 字面）。
+
+    superadmin                         整張
+    待發放／已發放＋名單上的人             **只有自己那幾列**（金額＋比例），不含淨利、獎金池、別人
+    其他                                 None（當作不存在）
+    （簽核人只能是 superadmin，W1 (c)，所以不需要「簽核人可見」這一格。）
+    """
+    if _sees_all_lines(user):
+        return {"award": award, "lines": lines, "scope": "all"}
+    uname = _user_name(user)
+    if award["status"] in _PAYOUT_VISIBLE:
+        mine = [l for l in lines if l["username"] == uname]
+        if mine:
+            slim = {k: award[k] for k in ("id", "quote_no", "status", "paid_at")}
+            return {"award": slim, "lines": mine, "scope": "self"}
+    return None
+
+
+def _derive_status(settle, award):
+    if award:
+        return award["status"]
+    return "已精算" if (settle or {}).get("status") == "finalized" else "未精算"
+
+
+def _members_from_lines(lines):
+    out = {c: [] for c in CATEGORIES}
+    for l in lines:
+        out[l["category"]].append({"username": l["username"], "person_bp": l["person_bp"],
+                                   "source": l["source"]})
+    return out
+
+
+def _normalize_members(conn, raw):
+    """草稿送來的名單 → {cat: [{username, person_bp, source}]}；帳號必須存在且在職。"""
+    if not isinstance(raw, dict):
+        raise HTTPException(400, "名單格式不正確。")
+    out = {c: [] for c in CATEGORIES}
+    for c in CATEGORIES:
+        people = raw.get(c) or []
+        if not isinstance(people, list):
+            raise HTTPException(400, "名單格式不正確。")
+        for p in people:
+            if not isinstance(p, dict) or not isinstance(p.get("username"), str) or not p["username"].strip():
+                raise HTTPException(400, "名單格式不正確。")
+            uname = p["username"].strip()
+            if conn.execute("SELECT 1 FROM users WHERE username = ? AND active = 1", (uname,)).fetchone() is None:
+                raise HTTPException(400, "「%s」不是在職的帳號。" % uname)
+            src = p.get("source") or "manual"
+            if not (src in _SOURCES_OK or (isinstance(src, str) and src.startswith("group:"))):
+                src = "manual"
+            bp = p.get("person_bp")
+            out[c].append({"username": uname, "person_bp": bp, "source": src})
+    return out
+
+
+def _write_lines(conn, award_id, members, result):
+    conn.execute("DELETE FROM bonus_case_award_lines WHERE award_id = ?", (award_id,))
+    names = {r["username"]: r["display_name"] for r in conn.execute(
+        "SELECT username, COALESCE(display_name, '') AS display_name FROM users")}
+    for c in CATEGORIES:
+        for p, l in zip(members[c], result["categories"][c]["lines"]):
+            conn.execute(
+                "INSERT INTO bonus_case_award_lines (award_id, category, username, display_name_snapshot,"
+                " source, person_bp, amount) VALUES (?,?,?,?,?,?,?)",
+                (award_id, c, p["username"], names.get(p["username"], ""), p["source"],
+                 p["person_bp"], l["amount"]))
+
+
+def _calc_or_400(net, rate_bp, split, members):
+    try:
+        return allocate(net, rate_bp, split, members)
+    except BonusCalcError as e:
+        raise HTTPException(400, str(e))
+
+
+def _summary(award, lines):
+    """整張單的衍生數字（只給看得到整張的人）。"""
+    paid = sum(l["amount"] for l in lines)
+    return {"poolAmount": award["pool_amount"], "paidTotal": paid,
+            "remainder": award["pool_amount"] - paid}
+
+
+@router.get("/cases/settings")
+def get_case_bonus_settings(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    rate, split = _case_defaults()
+    return {"rate_bp": rate, "split_bp": split}
+
+
+@router.put("/cases/settings")
+def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(None)):
+    """全域預設（§11.2：比率 10%、三類 50／30／20），只有最高管理者能改；草稿可逐案覆寫。"""
+    user = _require_user(authorization, require_superadmin=True)
+    rate = (body or {}).get("rate_bp")
+    split = (body or {}).get("split_bp") or {}
+    try:
+        allocate(1, rate, split, {})
+    except BonusCalcError as e:
+        if "不大於 0" not in str(e):
+            raise HTTPException(400, str(e))
+    from helpers.settings import _set_setting
+    _set_setting(_RATE_KEY, rate)
+    _set_setting(_SPLIT_KEY, {c: split.get(c, 0) for c in CATEGORIES})
+    _audit(_tok(authorization), "bonus.case.settings", "settings", "bonus_case_defaults",
+           "獎金分潤預設：比率 %s、業務／專案／後勤 %s" % (_pct_text(rate), "／".join(
+               _pct_text(split.get(c, 0)) for c in CATEGORIES)))
+    return {"ok": True}
+
+
+@router.get("/cases")
+def list_case_bonuses(status: str = "", q: str = "", authorization: str = Header(None)):
+    """左側案件清單。最高管理者看全部；其他人只看得到「自己在名單上、而且已到待發放」的案件
+    （以及 W1：待審核且自己在簽核鏈上的案件）。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT quote_no, customer_name, project_name, deal_tag,"
+            " json_extract(data_json, '$.settlement') AS s FROM quotations"
+            " WHERE deal_tag IN (?, ?) ORDER BY quote_no DESC", _CASE_DEAL_TAGS)]
+        awards = {r["quote_no"]: dict(r) for r in conn.execute("SELECT * FROM bonus_case_awards")}
+        lines_by = {}
+        for r in conn.execute("SELECT * FROM bonus_case_award_lines ORDER BY id"):
+            lines_by.setdefault(r["award_id"], []).append(dict(r))
+        items = []
+        needle = (q or "").strip().lower()
+        for r in rows:
+            try:
+                settle = json.loads(r["s"]) if isinstance(r["s"], str) and r["s"] else (r["s"] or {})
+            except (TypeError, ValueError):
+                settle = {}
+            award = awards.get(r["quote_no"])
+            st = _derive_status(settle, award)
+            view = None
+            if award:
+                view = _case_award_view(conn, award, lines_by.get(award["id"], []), user)
+                if view is None and not _sees_all_lines(user):
+                    continue
+            elif not _sees_all_lines(user):
+                continue
+            if status and st != status:
+                continue
+            if needle and not any(needle in (r.get(k) or "").lower()
+                                  for k in ("quote_no", "customer_name", "project_name")):
+                continue
+            ok, net, _err = _net_profit_or_error(settle)
+            item = {"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
+                    "project_name": r["project_name"] or "", "status": st}
+            if _sees_all_lines(user):
+                item["noBonus"] = bool(ok and not award and float(net) <= 0)
+            if view and view["scope"] == "self":
+                item["myAmount"] = sum(l["amount"] for l in view["lines"])
+            items.append(item)
+    finally:
+        conn.close()
+    return {"items": items}
+
+
+@router.get("/cases/{quote_no}")
+def get_case_bonus(quote_no: str, authorization: str = Header(None)):
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        case = _case_row(conn, quote_no)
+        settle = _settlement_of(conn, quote_no) or {}
+        award, lines = _load_case_award(conn, quote_no)
+        full = _sees_all_lines(user)
+        if award is None:
+            if not full:
+                raise HTTPException(404, "找不到這個案件的獎金分潤。")
+            ok, net, err = _net_profit_or_error(settle)
+            members, notes = _auto_members(conn, quote_no)
+            rate, split = _case_defaults()
+            preview = None
+            if ok and float(net) > 0:
+                preview = _calc_or_400(net, rate, split, {c: [{"username": m["username"], "person_bp": None}
+                                                              for m in members[c]] for c in CATEGORIES})
+            return {"case": case, "status": _derive_status(settle, None), "scope": "all",
+                    "netProfit": net, "canCreate": bool(ok and float(net) > 0),
+                    "reason": err or ("" if not ok or float(net) > 0 else "淨利不大於 0，無獎金"),
+                    "defaults": {"rate_bp": rate, "split_bp": split},
+                    "autoMembers": members, "memberNotes": notes, "preview": preview}
+        view = _case_award_view(conn, award, lines, user)
+        if view is None:
+            raise HTTPException(404, "找不到這個案件的獎金分潤。")
+        out = {"case": case, "status": award["status"], "scope": view["scope"], "lines": view["lines"]}
+        if view["scope"] != "self":
+            a = dict(award)
+            a["split_bp"] = json.loads(a.pop("split_json") or "{}")
+            a["approval"] = json.loads(a.pop("approval_json") or "{}")
+            out["award"] = a
+            out["summary"] = _summary(award, lines)
+            if full:
+                out["log"] = [dict(r) for r in conn.execute(
+                    "SELECT changed_by, changed_at, action, changes_json FROM bonus_case_award_edit_log"
+                    " WHERE award_id = ? ORDER BY id", (award["id"],))]
+        else:
+            out["award"] = view["award"]
+    finally:
+        conn.close()
+    out["categoryLabels"] = CATEGORY_LABELS
+    return out
+
+
+@router.post("/cases/{quote_no}")
+def create_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """建立草稿（最高管理者）。名單預設自動帶入（§11.7）；body 可帶 members 覆蓋。"""
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        _case_row(conn, quote_no)
+        if conn.execute("SELECT 1 FROM bonus_case_awards WHERE quote_no = ?", (quote_no,)).fetchone():
+            raise HTTPException(409, "這個案件已經有獎金分潤單。")
+        ok, net, err = _net_profit_or_error(_settlement_of(conn, quote_no) or {})
+        if not ok:
+            raise HTTPException(400, err)
+        rate, split = _case_defaults()
+        body = body or {}
+        rate = body.get("rate_bp", rate)
+        split = body.get("split_bp", split)
+        if "members" in body:
+            members = _normalize_members(conn, body["members"])
+        else:
+            members, _notes = _auto_members(conn, quote_no)
+        result = _calc_or_400(net, rate, split, members)
+        now = datetime.now().isoformat()
+        uname = _user_name(user)
+        cur = conn.execute(
+            "INSERT INTO bonus_case_awards (quote_no, status, net_profit, rate_bp, split_json, pool_amount,"
+            " created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (quote_no, "草稿", str(net), rate, json.dumps(split), result["pool"], uname, now, uname, now))
+        award_id = cur.lastrowid
+        _write_lines(conn, award_id, members, result)
+        _case_log(conn, award_id, user, "create",
+                  {"net_profit": str(net), "rate_bp": rate, "split_bp": split, "pool": result["pool"]})
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.create", "bonus_case_awards", quote_no, "建立獎金分潤草稿")
+    return {"ok": True, "status": "草稿"}
+
+
+@router.put("/cases/{quote_no}")
+def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """編輯草稿：比率、三類比例、名單與個人比例。淨利快照在草稿期間每次存檔重讀。"""
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, lines = _load_case_award(conn, quote_no)
+        if award is None:
+            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+        if award["status"] != "草稿":
+            raise HTTPException(409, "只有草稿可以編輯，這一張現在是「%s」。" % award["status"])
+        ok, net, err = _net_profit_or_error(_settlement_of(conn, quote_no) or {})
+        if not ok:
+            raise HTTPException(400, err)
+        body = body or {}
+        rate = body.get("rate_bp", award["rate_bp"])
+        split = body.get("split_bp", json.loads(award["split_json"] or "{}"))
+        members = _normalize_members(conn, body["members"]) if "members" in body else _members_from_lines(lines)
+        result = _calc_or_400(net, rate, split, members)
+        before = {"net_profit": award["net_profit"], "rate_bp": award["rate_bp"],
+                  "split_bp": json.loads(award["split_json"] or "{}"),
+                  "members": {c: [(p["username"], p["person_bp"]) for p in _members_from_lines(lines)[c]]
+                              for c in CATEGORIES}}
+        after = {"net_profit": str(net), "rate_bp": rate, "split_bp": split,
+                 "members": {c: [(p["username"], p["person_bp"]) for p in members[c]] for c in CATEGORIES}}
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE bonus_case_awards SET net_profit=?, rate_bp=?, split_json=?, pool_amount=?,"
+            " updated_by=?, updated_at=? WHERE id=?",
+            (str(net), rate, json.dumps(split), result["pool"], _user_name(user), now, award["id"]))
+        _write_lines(conn, award["id"], members, result)
+        changes = [{"field": k, "old": before[k], "new": after[k]} for k in before if before[k] != after[k]]
+        if changes:
+            _case_log(conn, award["id"], user, "edit", changes)
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+@router.post("/cases/{quote_no}/submit")
+def submit_case_bonus(quote_no: str, authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, lines = _load_case_award(conn, quote_no)
+        if award is None:
+            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+        if award["status"] != "草稿":
+            raise HTTPException(409, "只有草稿可以送審，這一張現在是「%s」。" % award["status"])
+        if not lines:
+            raise HTTPException(400, "名單是空的，不能送審。")
+        scope = _get_setting("approval_flow_scope", {}) or {}
+        flow = _get_setting(approval_flow_setting_key("bonus", scope), None)
+        tiers = []
+        if flow is not None:
+            try:
+                tiers = setting_to_active_tiers(flow, conn, user["username"])
+            except UnresolvedManagerError as exc:
+                raise HTTPException(400, str(exc))
+        bad = _non_superadmin_in_chain(conn, tiers)
+        if bad:
+            raise HTTPException(400, _ONLY_SUPERADMIN_MSG + "（非最高管理者：%s）" % "、".join(dict.fromkeys(bad)))
+        appr = {"tiers": tiers, "currentTier": 0, "requestedBy": user["username"],
+                "requestedAt": datetime.now().isoformat()}
+        conn.execute("UPDATE bonus_case_awards SET status='待審核', approval_json=?, updated_by=?, updated_at=?"
+                     " WHERE id=?", (json.dumps(appr, ensure_ascii=False), _user_name(user),
+                                     datetime.now().isoformat(), award["id"]))
+        _case_log(conn, award["id"], user, "submit", {"tiers": len(tiers)})
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.submit", "bonus_case_awards", quote_no, "獎金分潤送審")
+    return {"ok": True, "status": "待審核"}
+
+
+@router.post("/cases/{quote_no}/approve")
+def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
+    """走共用簽核引擎：有鏈 ⇒ 當層簽核人（或代理人）；沒鏈 ⇒ superadmin，且不可自簽（唯一最高管理者例外）。
+    簽完最後一層 ⇒ 待發放。簽核人只能是最高管理者（W1）⇒ 操作者本身也必須是 superadmin。"""
+    user = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, _lines = _load_case_award(conn, quote_no)
+        if award is None or award["status"] != "待審核":
+            raise HTTPException(409, "這張獎金分潤不在簽核流程裡。")
+        appr = json.loads(award["approval_json"] or "{}") or {}
+        tiers = appr.get("tiers") or []
+        now = datetime.now().isoformat()
+        if tiers:
+            ct = int(appr.get("currentTier") or 0)
+            ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
+            if not ok:
+                raise HTTPException(code, msg)
+            for a in tiers[ct].get("approvers") or []:
+                if not a.get("approvedAt"):
+                    a["approvedAt"] = now
+                    a["approvedBy"] = _user_name(user)
+                    break
+            appr["currentTier"] = ct + 1
+            nxt = "待發放" if ct + 1 >= len(tiers) else "待審核"
+        else:
+            if user.get("role") != "superadmin":
+                raise HTTPException(403, "僅超級管理員可執行此操作")
+            err = check_no_tier_self_approval(conn, appr, user)
+            if err:
+                raise HTTPException(403, err)
+            appr["approvedBy"], appr["approvedAt"] = _user_name(user), now
+            nxt = "待發放"
+        conn.execute("UPDATE bonus_case_awards SET status=?, approval_json=?, updated_by=?, updated_at=?"
+                     " WHERE id=?", (nxt, json.dumps(appr, ensure_ascii=False), _user_name(user), now,
+                                     award["id"]))
+        _case_log(conn, award["id"], user, "approve", {"status": nxt})
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
+    return {"ok": True, "status": nxt}
+
+
+def _back_to_draft(conn, award, user, action, reason):
+    conn.execute("UPDATE bonus_case_awards SET status='草稿', approval_json='{}', updated_by=?, updated_at=?"
+                 " WHERE id=?", (_user_name(user), datetime.now().isoformat(), award["id"]))
+    _case_log(conn, award["id"], user, action,
+              {"from": award["status"], "reason": reason, "approval_before": award["approval_json"]})
+
+
+@router.post("/cases/{quote_no}/reject")
+def reject_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """簽核人駁回（待審核）⇒ 回草稿。當層簽核人／代理人或 superadmin（check_reject_permission）；
+    簽核人只能是最高管理者（W1）⇒ 操作者本身也必須是 superadmin。"""
+    user = _require_user(authorization, require_superadmin=True)
+    reason = ((body or {}).get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫駁回原因。")
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, _lines = _load_case_award(conn, quote_no)
+        if award is None or award["status"] != "待審核":
+            raise HTTPException(409, "這張獎金分潤不在簽核流程裡。")
+        appr = json.loads(award["approval_json"] or "{}") or {}
+        tiers = appr.get("tiers") or []
+        ok, code, msg = check_reject_permission(tiers, int(appr.get("currentTier") or 0), user, conn)
+        if not ok:
+            raise HTTPException(code, msg)
+        _back_to_draft(conn, award, user, "reject", reason)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.reject", "bonus_case_awards", quote_no, "獎金分潤駁回：%s" % reason)
+    return {"ok": True, "status": "草稿"}
+
+
+@router.post("/cases/{quote_no}/return")
+def return_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """最高管理者退回（已發放前任何時點）⇒ 草稿，留紀錄。已發放後不可退回（§11.4）。"""
+    user = _require_user(authorization, require_superadmin=True)
+    reason = ((body or {}).get("reason") or "").strip()
+    if not reason:
+        raise HTTPException(400, "請填寫退回原因。")
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, _lines = _load_case_award(conn, quote_no)
+        if award is None:
+            raise HTTPException(404, "這個案件還沒有獎金分潤單。")
+        if award["status"] == "已發放":
+            raise HTTPException(409, "已發放的獎金分潤不可以退回。")
+        if award["status"] == "草稿":
+            raise HTTPException(409, "這張已經是草稿。")
+        _back_to_draft(conn, award, user, "return", reason)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.return", "bonus_case_awards", quote_no, "獎金分潤退回：%s" % reason)
+    return {"ok": True, "status": "草稿"}
+
+
+@router.post("/cases/{quote_no}/mark-paid")
+def mark_case_bonus_paid(quote_no: str, authorization: str = Header(None)):
+    """出納標記已發放（出納模組持有者；superadmin 本來就持有全部模組）。記日期與操作者。"""
+    user = _require_user(authorization)
+    if user.get("role") != "superadmin" and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "只有出納可以標記已發放。")
+    conn = get_db()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        award, _lines = _load_case_award(conn, quote_no)
+        if award is None or award["status"] != "待發放":
+            raise HTTPException(409, "只有「待發放」的獎金分潤可以標記已發放。")
+        now = datetime.now().isoformat()
+        conn.execute("UPDATE bonus_case_awards SET status='已發放', paid_by=?, paid_at=?, updated_by=?,"
+                     " updated_at=? WHERE id=?", (_user_name(user), now, _user_name(user), now, award["id"]))
+        _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now})
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "bonus.case.mark_paid", "bonus_case_awards", quote_no, "獎金分潤標記已發放")
+    return {"ok": True, "status": "已發放"}
