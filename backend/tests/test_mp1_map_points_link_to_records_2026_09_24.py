@@ -142,7 +142,10 @@ def _open_map(page, live_server, query):
                            " && d.info.points.length === 2 }", timeout=15000)
     # 自動開圖有斷路器（上次圖磚載不到就不自動開）⇒ 測試環境明著開，量的是焦點不是自動開。
     page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
-    page.wait_for_function("() => document.querySelectorAll('.leaflet-marker-icon .mp-pin').length === 2",
+    # ⚠️ 等「兩個點都畫進圖層」，不是等 DOM 裡有兩個圖釘：MP2 之後資料點在群聚圖層裡，
+    #    群聚只把**視野內**的標記放進 DOM ⇒ 定位到其中一點後，另一點不在 DOM 是正常的。
+    page.wait_for_function("() => { const d = " + _D + ";"
+                           " return d._markerByKey && Object.keys(d._markerByKey).length === 2 }",
                            timeout=15000)
     page.wait_for_timeout(500)
 

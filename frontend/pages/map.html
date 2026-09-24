@@ -54,6 +54,10 @@
               width:20px; height:20px; border-radius:50%; color:#fff;
               font-size:11px; font-weight:700; line-height:1;
               box-shadow:0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.35); }
+    /* `MP2`：粗精度（區級／未知）＝**空心＋淡**。實心圖釘會讓人以為「就在這裡」，
+       而區級的點可能差好幾公里——精度要從圖上看得出來，不是點開彈窗才知道。 */
+    .mp-pin--coarse { background:#fff; color:var(--pin); opacity:.6;
+                      box-shadow:inset 0 0 0 2px var(--pin), 0 0 0 2px #fff, 0 1px 3px rgba(0,0,0,.25); }
     /* 據點（分公司）：**方形牌子＋名稱**，跟圓形的資料點一眼分得開。
        🔑 名稱直接寫在圖上 —— 多據點時「離公司 12 km」那句話要指得出是哪一個。 */
     .mp-site { display:inline-block; padding:2px 7px; border-radius:4px;
@@ -486,7 +490,7 @@ function mapPage() {
     autoOpenSkipped: false, _tileFlag: null,
     // `MP1`：`?focus=<來源>:<記錄>`（單據頁「在地圖上看」帶進來）。處理完就清掉——
     //   ⚠️ 不清的話每一次重畫（勾選資料集、重新整理）都會把視野拉回那一點。
-    _focus: null, _markerByKey: null,
+    _focus: null, _markerByKey: null, _focusMarker: null,
 
     recordUrl(p) { return window.MotrixRecordLink ? window.MotrixRecordLink.recordUrl(p, this.session) : null },
 
@@ -704,6 +708,8 @@ function mapPage() {
       if (this._sizeWatcher) { this._sizeWatcher.disconnect(); this._sizeWatcher = null }
       if (this._map) { this._map.remove(); this._map = null }
       this._layer = null
+      this._cluster = null
+      this._focusMarker = null
       this._userLayer = null
       this.mapOpen = false
     },
@@ -726,6 +732,25 @@ function mapPage() {
         document.head.appendChild(css)
         const js = document.createElement('script')
         js.src = '../static/vendor/leaflet/leaflet.js'
+        // `MP2`：群聚外掛要在 Leaflet **之後**載（它載入當下就讀 `L`）。
+        //   ⚠️ 它載不到時照樣 resolve：群聚是顯示輔助，不可以讓整張圖因此畫不出來（退回一般圖層）。
+        js.onload = () => this._loadCluster().then(resolve, resolve)
+        js.onerror = reject
+        document.head.appendChild(js)
+      })
+    },
+
+    _loadCluster() {
+      if (window.L && window.L.markerClusterGroup) return Promise.resolve()
+      ;['MarkerCluster.css', 'MarkerCluster.Default.css'].forEach(f => {
+        const css = document.createElement('link')
+        css.rel = 'stylesheet'
+        css.href = '../static/vendor/leaflet.markercluster-1.5.3/' + f
+        document.head.appendChild(css)
+      })
+      return new Promise((resolve, reject) => {
+        const js = document.createElement('script')
+        js.src = '../static/vendor/leaflet.markercluster-1.5.3/leaflet.markercluster.js'
         js.onload = resolve
         js.onerror = reject
         document.head.appendChild(js)
@@ -840,7 +865,7 @@ function mapPage() {
     //  使用者在高雄而辦公室在台中的話，那個標記**在畫面外**，
     //  而他會以為「按了沒反應」—— 🔑 **跟「根本沒畫」的症狀一模一樣，
     //  而成因完全不同。**
-    _fitAll() {
+    _fitAll(sigOnly) {
       if (!this._map) return
       // 🔴 **算視野之前先確認 Leaflet 量得對。**
       // 尺寸是 0 時 `fitBounds` 會算出一個退化的 bounds，
@@ -866,6 +891,9 @@ function mapPage() {
                               + '|' + JSON.stringify(box[box.length - 1] || null)
       if (sig === this._fitSig) return
       this._fitSig = sig
+      // `MP1`／`MP2`：有 `?focus=` 時視野由焦點決定——只記下這一組點（之後同一組點不再重框），不動視野
+      //   （先框全部再跳到焦點＝多一段沒有意義的移動）。
+      if (sigOnly) return
       if (box.length > 1) {
         // maxZoom 擋住「只有兩個很近的點」時放大到街道等級 ——
         // 那會讓使用者以為地圖壞了（整片都是同一條路）。
@@ -917,6 +945,14 @@ function mapPage() {
                      + this._esc(loc.address || ''))
       })
       this._markerByKey = {}
+      // `MP2`：資料點進群聚圖層（重疊的點合成一個數字圈）；據點與「你」不群聚——它們是參考點。
+      //   ⚠️ `animate: false`：群聚的拆合動畫是 setTimeout 接力，焦點定位（`_showFocus`）同步去拿
+      //   「現在包著它的是誰」會拿到動畫前那一個 ⇒ 散開打在舊群聚上、彈窗開在不在圖上的標記
+      //   （負載下 6 次 1 次，實測）。不帶動畫 ⇒ 縮放一結束群聚就定了。
+      this._cluster = window.L.markerClusterGroup
+        ? window.L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 40, animate: false })
+        : null
+      const dataLayer = this._cluster || this._layer
       pts.forEach(p => {
         const d = this.datasetOf(p)
         // 🔴 **標記本身就要分得出來。** 用 divIcon 放一個字＋顏色。
@@ -924,14 +960,15 @@ function mapPage() {
         // **地圖就沒有回答「哪幾個是我的廠商」那個問題。**
         const icon = window.L.divIcon({
           className: '',
-          html: '<span class="mp-pin" style="background:' + d.color + '">'
-                + d.mark + '</span>',
+          html: this.precisionIsCoarse(p.precision)
+                ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + d.color + '">' + d.mark + '</span>')
+                : ('<span class="mp-pin" style="background:' + d.color + '">' + d.mark + '</span>'),
           iconSize: [20, 20], iconAnchor: [10, 10],
         })
         // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
         //    （標案來自政府網站），直接拼進 HTML ＝ 在每個開地圖的人瀏覽器裡執行它。
         const url = this.recordUrl(p)
-        const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(this._layer)
+        const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(dataLayer)
         const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
         marker.bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
@@ -945,8 +982,9 @@ function mapPage() {
                      .filter(Boolean).map(t => this._esc(t)).join('<br>')
                    + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : ''))
       })
+      if (this._cluster) this._cluster.addTo(this._layer)
       this._drawUser()
-      this._fitAll()
+      this._fitAll(!!this._focus)
       this._applyFocus()
     },
 
@@ -961,6 +999,26 @@ function mapPage() {
         if (window.MotrixRecordLink) {
           window.MotrixRecordLink.notFound('地圖上沒有這一筆：尚未定位完成、查無此地址，或未填地址。')
         }
+        return
+      }
+      this._focusMarker = marker
+      this._showFocus()
+    },
+
+    //: 把視野放到焦點那一點並開彈窗。**尺寸校正之後要再叫一次**（見 `_watchMapSize`）：
+    //  建圖當下容器常是 0×0，那時算的視野是垃圾，而校正後的重框會把焦點蓋掉（實測停在 8）。
+    _showFocus() {
+      const marker = this._focusMarker
+      if (!marker || !this._map) return
+      // `MP2`：點在群聚裡時它還不在圖上 ⇒ 要讓群聚把它展開（放大或散開）再開彈窗，
+      //   直接 openPopup 會開在一個看不到的標記上。
+      //   ⚠️ 不用 `zoomToShowLayer`：它靠動畫結束事件接力，剛建圖／剛 fitBounds 時接不上
+      //   （實測視野停在原縮放、彈窗沒開）。改成同步：不帶動畫放到最大 ⇒ 仍在群聚（同址）就散開。
+      if (this._cluster && this._cluster.hasLayer(marker)) {
+        this._map.setView(marker.getLatLng(), this._map.getMaxZoom(), { animate: false })
+        const parent = this._cluster.getVisibleParent(marker)
+        if (parent && parent !== marker && parent.spiderfy) parent.spiderfy()
+        marker.openPopup()
         return
       }
       this._map.setView(marker.getLatLng(), 15)
@@ -1020,7 +1078,10 @@ function mapPage() {
         // 會把使用者手動平移／縮放的結果吃掉 —— 那是另一種「它自己動了」。
         // 📌 這一支同時是 XA1 的保險：`$nextTick` 早於瀏覽器的版面計算，
         // 而 ResizeObserver 在**版面算完之後**才觸發。
-        if (this._syncMapSize()) { this._fitSig = ''; this._fitAll() }
+        if (this._syncMapSize()) {
+          if (this._focusMarker) { this._showFocus(); return }
+          this._fitSig = ''; this._fitAll()
+        }
       })
       this._sizeWatcher.observe(el)
     },

@@ -68,6 +68,7 @@ backend/tests/fixtures/**    -text
 # 🔑 憑證的用途正是「將來有人問這個檔有沒有被動過」，
 #    所以保存的必須是**原始位元組**，不是「我們這邊看起來比較整齊的版本」。
 frontend/static/vendor/leaflet/** -text
+frontend/static/vendor/leaflet.markercluster-1.5.3/** -text
 
 # ══════════════════════════════════════════════════════════════════
 # PK1（2026-09-23）：出貨包（git archive）export-ignore
