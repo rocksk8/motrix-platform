@@ -192,6 +192,11 @@ function app() {
     saveStatus: '',
     saveMsg: '',
     _autoSaveTimer: null,
+    // CM1（2026-09-24）：caseRecord 各頂層分段在伺服器上的值（JSON 字串），存檔只送與它
+    // 不同的分段並附上它當基準；segConflict＝上次存檔被擋下的分段名稱。
+    _segBase: {},
+    _segFill: {},
+    segConflict: null,
     writeoffModal: { open: false, idx: null, mode: 'request', reason: '' },
     dragFromIdx: null,
     _openStageDetail: {},
@@ -1394,7 +1399,11 @@ function app() {
         this.moLoading = true
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
+        // 基準取伺服器原值（ensureCaseRecord 補上的預設分段會被當成改動送出）
+        this._segBase = this._snapSegments(data.data?.caseRecord)
+        this.segConflict = null
         await this.ensureCaseRecord()
+        this._segFill = this._fillOnly(this._segBase)
         await this._seedDefaultStagesIfEmpty()
         this.dirty = false
         this.saveStatus = ''
@@ -1873,6 +1882,68 @@ function app() {
       }, 300)
     },
 
+    // ensureCaseRecord 替伺服器上沒有的分段補的預設值（使用者還沒動過）
+    _fillOnly(base) {
+      const out = {}
+      for (const [k, v] of Object.entries(this._snapSegments(this.cr.caseRecord))) {
+        if (base[k] === undefined) out[k] = v
+      }
+      return out
+    },
+
+    _snapSegments(cr) {
+      const out = {}
+      for (const [k, v] of Object.entries(cr || {})) {
+        if (k !== 'stages' && v !== undefined) out[k] = JSON.stringify(v)
+      }
+      return out
+    },
+
+    // 自己在頁面上經由專屬端點改了伺服器上的某一段（附件上傳／刪除、沖銷）：
+    // 同一個改動要同時套在畫面與基準上，否則下一次存檔會把自己擋下（或把附件蓋掉）。
+    _applyToBoth(seg, fn) {
+      if (this.cr.caseRecord) fn(this.cr.caseRecord)
+      if (this._segBase[seg] === undefined) return
+      const b = { [seg]: JSON.parse(this._segBase[seg]) }
+      fn(b)
+      this._segBase[seg] = JSON.stringify(b[seg])
+    },
+
+    _segLabel(k) {
+      return ({ payment: '收款', materials: '材料', devices: '設備', contract: '合約資訊', roles: '角色',
+        projectTimeline: '專案時程', materialOrders: '叫料', warrantyNote: '保固備註', notes: '備註' })[k] || k
+    },
+
+    // 衝突處理：reload＝放棄我的改動、改看伺服器現值；keep＝以伺服器現值為基準重存（明知並覆蓋那幾段）
+    async resolveConflict(mode) {
+      if (!this.selected || !this.segConflict) return
+      const r = await fetch('/api/quotations/' + this.selected.quote_no, {
+        headers: { Authorization: 'Bearer ' + this.session.token }
+      })
+      if (!r.ok) return
+      const srv = (await r.json()).data?.caseRecord || {}
+      const fresh = this._snapSegments(srv)
+      if (mode === 'reload') {
+        const stages = this.cr.caseRecord?.stages || []
+        this.cr.caseRecord = { ...srv, stages }
+        this._segBase = fresh
+        this.ensureCaseRecord()
+        this._segFill = this._fillOnly(fresh)
+        this.segConflict = null
+        this.dirty = false
+        window.motrixIsDirty = false
+        this.saveStatus = ''
+        this.saveMsg = ''
+        return
+      }
+      for (const k of this.segConflict) {
+        if (fresh[k] === undefined) delete this._segBase[k]
+        else this._segBase[k] = fresh[k]
+      }
+      this.segConflict = null
+      await this.saveCaseRecord()
+    },
+
     async saveCaseRecord() {
       if (!this.selected) return
       if (this.cr.dealTag === '已結案' && !this.selected.case_semi_unlocked) {
@@ -1892,15 +1963,30 @@ function app() {
           return
         }
       }
+      // CM1：只送改到的分段；快照在送出前取，存檔途中又改的部分下一次再送
+      const sent = this._snapSegments(this.cr.caseRecord)
+      const segments = {}
+      const base = {}
+      const defaults = {}
+      for (const k of new Set([...Object.keys(sent), ...Object.keys(this._segBase)])) {
+        if (sent[k] === this._segBase[k]) continue
+        if (this._segBase[k] === undefined && sent[k] === this._segFill[k]) {
+          defaults[k] = JSON.parse(sent[k])
+          continue
+        }
+        segments[k] = sent[k] === undefined ? null : JSON.parse(sent[k])
+        base[k] = this._segBase[k] === undefined ? null : JSON.parse(this._segBase[k])
+      }
       this.saving = true
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-          body: JSON.stringify({ case_record: this.cr.caseRecord })
+          body: JSON.stringify({ segments, base, defaults })
         })
         if (r.ok) {
           this.dirty = false
+          this.segConflict = null
           const res = await r.json().catch(() => ({}))
           if (res.pending) {
             // 已結案案件半解鎖期間：此次存檔不會立即生效，已排隊等最高管理員審核
@@ -1909,6 +1995,18 @@ function app() {
             this.saveMsg = '已送出，待最高管理員審核後套用'
             this.saving = false
             return
+          }
+          for (const k of Object.keys(segments)) {
+            if (sent[k] === undefined) delete this._segBase[k]
+            else this._segBase[k] = sent[k]
+          }
+          const adopted = res.adopted || {}
+          for (const k of Object.keys(defaults)) {
+            delete this._segFill[k]
+            if (!(k in adopted)) { this._segBase[k] = sent[k]; continue }
+            // 別人先存了這一段：改用資料庫的值（我這邊只是預設值；存檔途中已被改動就留著當改動）
+            this._segBase[k] = JSON.stringify(adopted[k])
+            if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = adopted[k]
           }
           const conflicts = res.stockConflicts || []
           if (conflicts.length) {
@@ -1928,7 +2026,13 @@ function app() {
           // 2026-09-24：顯示後端給的原因（例如已收款期別不可刪除），不再只寫「儲存失敗」
           const err = await r.json().catch(() => ({}))
           this.saveStatus = 'error'
-          this.saveMsg = typeof err.detail === 'string' && err.detail ? '儲存失敗：' + err.detail : '儲存失敗'
+          if (r.status === 409 && err.detail?.code === 'segment_conflict') {
+            // 不重試、不合併：讓使用者選「重新載入」或「保留我的變更再試」
+            this.segConflict = err.detail.segments || []
+            this.saveMsg = `這個案件的〈${this.segConflict.map(k => this._segLabel(k)).join('、')}〉已被他人更新`
+          } else {
+            this.saveMsg = typeof err.detail === 'string' && err.detail ? '儲存失敗：' + err.detail : '儲存失敗'
+          }
         }
       } catch {
         this.saveStatus = 'error'
@@ -1952,7 +2056,20 @@ function app() {
         const err = await r.json().catch(() => ({}))
         return { ok: false, msg: err.detail || '操作失敗' }
       }
-      return { ok: true }
+      const res = await r.json().catch(() => ({}))
+      if (res.item) {
+        const keys = ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt',
+          'writeOffApprovedBy', 'writeOffApprovedAt', 'writeOffRejectReason', 'taxExempt']
+        this._applyToBoth('payment', cr => {
+          const it = (cr.payment?.items || [])[idx]
+          if (!it) return
+          for (const k of keys) {
+            if (res.item[k] === undefined) delete it[k]
+            else it[k] = res.item[k]
+          }
+        })
+      }
+      return { ok: true, synced: !!res.item }
     },
 
     async submitWriteoffModal() {
@@ -1963,7 +2080,7 @@ function app() {
       let res
       if (mode === 'request') {
         res = await this._postWriteoff(idx, 'request-writeoff', { reason })
-        if (res.ok) {
+        if (res.ok && !res.synced) {
           item.writeOffStatus = 'pending'
           item.writeOffReason = reason
           item.writeOffRequestedBy = me
@@ -1971,7 +2088,7 @@ function app() {
         }
       } else {
         res = await this._postWriteoff(idx, 'approve-writeoff', { approve: false, reject_reason: reason })
-        if (res.ok) {
+        if (res.ok && !res.synced) {
           item.writeOffStatus = 'rejected'
           item.writeOffRejectReason = reason
         }
@@ -1987,7 +2104,7 @@ function app() {
       const item = this.paymentItems()[idx]
       const res = await this._postWriteoff(idx, 'cancel-writeoff')
       if (res.ok) {
-        for (const k of ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt']) delete item[k]
+        if (!res.synced) for (const k of ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt']) delete item[k]
       } else {
         alert(res.msg)
       }
@@ -1997,12 +2114,12 @@ function app() {
       const item = this.paymentItems()[idx]
       const me = this.session.displayName || this.session.username || ''
       const res = await this._postWriteoff(idx, 'approve-writeoff', { approve: true })
-      if (res.ok) {
+      if (res.ok && !res.synced) {
         item.writeOffStatus = 'approved'
         item.taxExempt = true
         item.writeOffApprovedBy = me
         item.writeOffApprovedAt = new Date().toISOString()
-      } else {
+      } else if (!res.ok) {
         alert(res.msg)
       }
     },
@@ -4401,11 +4518,13 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const item = this.paymentItems()[idx]
-        if (item) {
-          if (!item.invoiceFiles) item.invoiceFiles = []
-          item.invoiceFiles.push(...body.files)
-        }
+        this._applyToBoth('payment', cr => {
+          const item = (cr.payment?.items || [])[idx]
+          if (item) {
+            if (!item.invoiceFiles) item.invoiceFiles = []
+            item.invoiceFiles.push(...body.files)
+          }
+        })
       } catch (e) { alert('上傳失敗：' + e.message) }
       evt.target.value = ''
     },
@@ -4420,8 +4539,10 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const item = this.paymentItems()[idx]
-        if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
+        this._applyToBoth('payment', cr => {
+          const item = (cr.payment?.items || [])[idx]
+          if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
+        })
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
 
@@ -4439,11 +4560,13 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const mat = (this.cr.caseRecord.materials || [])[idx]
-        if (mat) {
-          if (!mat.files) mat.files = []
-          mat.files.push(...body.files)
-        }
+        this._applyToBoth('materials', cr => {
+          const mat = (cr.materials || [])[idx]
+          if (mat) {
+            if (!mat.files) mat.files = []
+            mat.files.push(...body.files)
+          }
+        })
       } catch (e) { alert('上傳失敗：' + e.message) }
       evt.target.value = ''
     },
@@ -4458,8 +4581,10 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const mat = (this.cr.caseRecord.materials || [])[idx]
-        if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
+        this._applyToBoth('materials', cr => {
+          const mat = (cr.materials || [])[idx]
+          if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
+        })
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
 
@@ -4477,11 +4602,13 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const mat = (this.cr.caseRecord.materials || [])[idx]
-        if (mat) {
-          if (!mat.invoiceFiles) mat.invoiceFiles = []
-          mat.invoiceFiles.push(...body.files)
-        }
+        this._applyToBoth('materials', cr => {
+          const mat = (cr.materials || [])[idx]
+          if (mat) {
+            if (!mat.invoiceFiles) mat.invoiceFiles = []
+            mat.invoiceFiles.push(...body.files)
+          }
+        })
       } catch (e) { alert('上傳失敗：' + e.message) }
       evt.target.value = ''
     },
@@ -4496,8 +4623,10 @@ function app() {
         if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
         const body = await r.json()
         if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
-        const mat = (this.cr.caseRecord.materials || [])[idx]
-        if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
+        this._applyToBoth('materials', cr => {
+          const mat = (cr.materials || [])[idx]
+          if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
+        })
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
 

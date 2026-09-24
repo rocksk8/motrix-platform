@@ -974,6 +974,12 @@
                 <div class="cm-header__save">
                   <div class="save-dot" :class="saveStatus"></div>
                   <span class="save-label" :class="saveStatus" x-text="saveMsg"></span>
+                  <template x-if="segConflict">
+                    <span style="display:inline-flex;gap:4px;margin-left:6px;">
+                      <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('reload')">重新載入</button>
+                      <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('keep')">保留我的變更再試</button>
+                    </span>
+                  </template>
                 </div>
 
                 <!-- Complete case button (已成案 only)

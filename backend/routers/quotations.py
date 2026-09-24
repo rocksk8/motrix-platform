@@ -629,6 +629,35 @@ class QuotationDealTagUpdate(BaseModel):
 
 class CaseRecordUpdate(BaseModel):
     case_record: dict = {}
+    # 2026-09-24（CM1）：分段存。segments＝這次改到的 caseRecord 頂層鍵與新值；
+    # base＝頁面載入（或上次存檔成功）時那些鍵的值。不帶 segments 維持舊的整包格式。
+    segments: Optional[dict] = None
+    base: Optional[dict] = None
+    # 頁面替缺少的分段補上的預設值（使用者沒動過）：資料庫沒有才寫入，有就以資料庫為準、不算衝突
+    defaults: Optional[dict] = None
+
+
+def _canon_segment(v):
+    """分段比對用的正規形：None 與缺鍵視為相同；整數值的浮點數視為整數
+    （Python 寫進去的 30000.0 經瀏覽器 JSON 來回會變成 30000）。"""
+    if isinstance(v, dict):
+        return {k: _canon_segment(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_canon_segment(x) for x in v]
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    return v
+
+
+def _segment_conflicts(current: dict, segments: dict, base: dict) -> list:
+    """回傳資料庫現值與呼叫端基準不同的分段名稱（有人在這段期間改過那一段）。"""
+    out = []
+    for k in segments:
+        a = json.dumps(_canon_segment(current.get(k)), sort_keys=True, ensure_ascii=False)
+        b = json.dumps(_canon_segment(base.get(k)), sort_keys=True, ensure_ascii=False)
+        if a != b:
+            out.append(k)
+    return out
 
 
 class WriteOffRequestIn(BaseModel):
@@ -2278,6 +2307,11 @@ def _validate_changed_receipts(old_items: list, new_items: list) -> None:
 def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
+    adopted = {}
+    if body.segments is not None:
+        # 分段存：比對到寫入之間不可以有別人插進來（兩人改不同分段時，後寫的那份
+        # 必須是以先寫的結果為底合併），所以從讀取就持有寫鎖。
+        conn.execute("BEGIN IMMEDIATE")
     row = conn.execute(
         "SELECT id, customer_name, project_name, data_json, updated_at FROM quotations WHERE quote_no=?",
         (quote_no,),
@@ -2285,6 +2319,26 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    if body.segments is not None:
+        # 2026-09-24（CM1）：過去整包取代 caseRecord ⇒ 兩人同時編同一件，後存者靜默蓋掉
+        # 前一個人的改動。改成只替換改到的分段；那一段在資料庫的現值與呼叫端的基準
+        # 不同（有人改過）就整筆拒絕，不合併、不寫入。stages 由專屬端點維護，不收。
+        current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
+        segments = {k: v for k, v in body.segments.items() if k != "stages"}
+        conflicts = _segment_conflicts(current_cr, segments, body.base or {})
+        if conflicts:
+            conn.close()
+            raise HTTPException(409, {"code": "segment_conflict", "segments": conflicts,
+                                      "message": "案件資料已被其他人更新：" + "、".join(conflicts)})
+        merged = {**current_cr, **segments}
+        for k, v in (body.defaults or {}).items():
+            if k == "stages" or k in segments:
+                continue
+            if current_cr.get(k) is None:
+                merged[k] = v
+            else:
+                adopted[k] = current_cr[k]
+        body.case_record = merged
     # Optimistic lock: client may send expectedUpdatedAt to avoid silent overwrite
     expected = (body.case_record or {}).pop("_expectedUpdatedAt", None) if isinstance(body.case_record, dict) else None
     if expected and row["updated_at"] and expected != row["updated_at"]:
@@ -2372,7 +2426,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     conn.close()
     spawn_bg_thread(_backup_quotation, args=(quote_no,))
     _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
-    return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts}
+    return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
 
 
 # ── Case change request approve/reject (2026-08-26) ────────────────────────────
@@ -3552,7 +3606,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_request', 'quotation', no, f"{no} {label} 申請沖銷")
     notify_module_activity("報價單", "申請沖銷", requester_display, f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": saved_at}
+    return {"ok": True, "updated_at": saved_at, "item": item}
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/cancel-writeoff")
@@ -3581,7 +3635,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
     label = item.get('label', f'第{idx+1}期')
     _audit(_tok(authorization), 'payment.writeoff_cancel', 'quotation', no, f"{no} {label} 取消沖銷申請")
     notify_module_activity("報價單", "取消沖銷申請", requester_display, f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": saved_at}
+    return {"ok": True, "updated_at": saved_at, "item": item}
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/approve-writeoff")
@@ -3620,7 +3674,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authori
     _audit(_tok(authorization), 'payment.writeoff_approve' if body.approve else 'payment.writeoff_reject',
            'quotation', no, f"{no} {label}（{action_detail}）")
     notify_module_activity("報價單", action_detail, approver_display, f"{no} {label}", "quotations.html")
-    return {"ok": True, "updated_at": saved_at, "approved": body.approve}
+    return {"ok": True, "updated_at": saved_at, "approved": body.approve, "item": item}
 
 
 # ── Settlement ────────────────────────────────────────────────────────────────
