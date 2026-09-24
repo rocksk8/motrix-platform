@@ -1259,8 +1259,16 @@ def _netguard(request, monkeypatch):
     )
 
 
-#: 瀏覽器端視為「本機」的網址前綴（測試伺服器一律是 127.0.0.1 的 loopback）。
+#: 瀏覽器端視為「本機」的網址（測試伺服器一律是 127.0.0.1 的 loopback）。
 _BROWSER_LOCAL_PREFIXES = ("http://127.0.0.1", "http://localhost", "data:", "blob:", "about:")
+#: 守門只攔「不是本機」的網址。🔴 用**正則**而不是 `**/*`：正則在 Playwright 的 node 端比對，
+#: 本機請求**根本不會送到 Python**。
+#: ☠️ 第一版用 `**/*`＋Python 端 fallback ⇒ 每個請求都要等 Python 回話；題目若在自己的
+#:    route handler 裡 `time.sleep()` 製造競態（W-4、UR1 那一族），sync API 的分派被卡住，
+#:    **其他請求一起被延後** ⇒ 競態被序列化、題目永遠綠（2026-09-25 以 W-4 突變實證：
+#:    守門開著突變不紅、關掉就紅）。守門不可以改變被測對象的時序。
+_BROWSER_EXTERNAL_URL = __import__("re").compile(
+    r"^(?!(?:http://127\.0\.0\.1|http://localhost|data:|blob:|about:))")
 
 
 def _assert_no_browser_outbound(attempts):
@@ -1282,8 +1290,8 @@ def _browser_netguard(request, monkeypatch):
     mp0／mp1／mp8 開了 map.html 卻沒攔圖磚，每跑一次就真的連 OSM 一次。
 
     作法：攔 `Browser.new_context`／`Browser.new_page`，對每個 context 裝一個
-    `**/*` 的 route —— 本機的 `fallback()`（交給題目自己的 route 或照常送出），
-    其餘 **abort 並記帳**，收尾時斷言（同 `_netguard`：守門的例外可能被受測對象接住，
+    **只匹配非本機網址**的 route（`_BROWSER_EXTERNAL_URL`，見那裡為什麼一定要用正則），
+    命中的 **abort 並記帳**，收尾時斷言（同 `_netguard`：守門的例外可能被受測對象接住，
     所以記帳、收尾才判）。
 
     ## ⚠️ 限制
@@ -1302,23 +1310,19 @@ def _browser_netguard(request, monkeypatch):
     request.node._browser_outbound = attempts          # 給正對照題讀
 
     def _guard(route):
-        url = route.request.url
-        if url.startswith(_BROWSER_LOCAL_PREFIXES):
-            route.fallback()
-        else:
-            attempts.append(url)
-            route.abort()
+        attempts.append(route.request.url)
+        route.abort()
 
     orig_ctx, orig_page = Browser.new_context, Browser.new_page
 
     def _new_context(self, *a, **kw):
         ctx = orig_ctx(self, *a, **kw)
-        ctx.route("**/*", _guard)
+        ctx.route(_BROWSER_EXTERNAL_URL, _guard)
         return ctx
 
     def _new_page(self, *a, **kw):
         page = orig_page(self, *a, **kw)
-        page.context.route("**/*", _guard)
+        page.context.route(_BROWSER_EXTERNAL_URL, _guard)
         return page
 
     monkeypatch.setattr(Browser, "new_context", _new_context)
