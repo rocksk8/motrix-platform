@@ -101,7 +101,17 @@ _UNTOUCHED = (
 
 
 def _page(name):
-    return (ROOT / "frontend" / name).read_text(encoding="utf-8")
+    """畫面上看得到的文字。
+
+    📌 2026-09-24（B7）：權限畫面（users.html）的模組名稱改由 `/api/modules/catalog`
+       供給（唯一來源 helpers/module_registry.py），不再寫死在頁面裡 ⇒ 那一頁的「畫面詞彙」
+       ＝頁面文字＋registry 的模組名稱。斷言不變。
+    """
+    text = (ROOT / "frontend" / name).read_text(encoding="utf-8")
+    if name == "pages/users.html":
+        from helpers.module_registry import MODULES
+        text += " " + " ".join(label for _k, label, _g in MODULES)
+    return text
 
 
 #: (檔案, 函式, 挑出那一條的關鍵片段, 不可以再出現的程式詞彙, 必須在畫面上找得到的詞, 畫面檔)
