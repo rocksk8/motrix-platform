@@ -564,3 +564,4 @@ hichan-0a 代裁（待確認）：
 - **CU5～CU8 改派 hichan-bf**（AC3 前端推完後）；hichan-a3：CU1～CU4。
 - 已修既有隔離缺陷：test_core TestComputeAchievement（04a3562）。
 - CM3 已推（7a463d3，v116）、CM14b 檢視鈕修正（b30c43d）。hichan-0a 代裁（待確認）：未對應清單放在「使用者管理」頁下方（系統區沒有單一設定頁，新增頁要動 sidebar.js）；唯讀時其餘嵌在列內的純檢視鈕（階段展開、排序）留到 CM12 拆分時處理。hichan-8d 先做 N14，CM8 等 CM6。
+- CM6 已推（bf1c7a6）；CM6b（gate 批次）排 CM10 後。CM7「缺單據」使用者裁：**已收款但未登錄發票號碼，或執行階段全完成但無完工單／出貨單，任一成立**；「只看有新動態」改伺服器端篩選。CU2b（全站用詞）改派 hichan-8d。
