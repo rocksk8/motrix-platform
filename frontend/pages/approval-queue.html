@@ -1626,9 +1626,9 @@
                             : this.isVoucher(item) ? '已核准' : '已送出'
           // 同一人連任多層：一次問清楚、一次簽完（2026-09-15）
           const cascadeNos = window.MotrixApproval.selfCascadeTiers(
-            tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor,
-            { completesOnFirst: item.type === 'extra_expense' || item.type === 'extra_expense_change'
-                                || item.type === 'bonus_case_award' })
+            tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor)
+          // 2026-09-25：拿掉額外支出／獎金分潤的 completesOnFirst（「當層任一人簽即通過」）——
+          // 使用者裁示同層每一位都要依序簽完，連簽不可以替同層的別人簽（與後端 cascade_self_tiers 一致）
           const willFinishAll = willFinish ||
             (cascadeNos.length > 0 && cascadeNos[cascadeNos.length - 1] === tiers.length)
           let confirmMsg  = willFinishAll

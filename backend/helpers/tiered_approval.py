@@ -382,8 +382,7 @@ def check_approve_permission(tiers: list, ct_idx: int, username: str, conn=None)
     return True, None, None
 
 
-def plan_self_cascade(tiers: list, ct_idx: int, username: str, conn=None,
-                      tier_completes_on_first: bool = False) -> list:
+def plan_self_cascade(tiers: list, ct_idx: int, username: str, conn=None) -> list:
     """同一個人連續當好幾層簽核人時，**從 ct_idx 的下一層起**算出他可以一口氣
     一起完成的層索引清單（2026-09-15 使用者要求：「某位主管同時為兩層以上簽核人，
     只要跳通知做確認，可直接簽核兩次以上，避免重複簽核兩次的狀態」）。
@@ -392,8 +391,8 @@ def plan_self_cascade(tiers: list, ct_idx: int, username: str, conn=None,
     - 預設語意（報價單／出貨單／請款單…：當層所有人都簽完才換層）：該層**剩下
       的未簽核人只有他自己**（或他目前代理的人）。若還有別人要簽，往下一層跨過去
       就等於替別人決定，一律停在這裡。
-    - `tier_completes_on_first=True`（案件額外支出：當層任一人簽即通過）：
-      他是該層簽核人之一即可。
+    - 2026-09-25：原本另有 `tier_completes_on_first=True`（案件額外支出「當層任一人簽即通過」：
+      他是該層簽核人之一即可）。使用者裁示同層每一位都要依序簽完 ⇒ 那個語意會替同層的別人簽，已移除。
 
     回傳的是連續的層索引（例：ct_idx=0、回 [1] 代表第 2 層也可以一起簽掉）。"""
     delegated_for = active_delegators_for(conn, username)
@@ -408,10 +407,7 @@ def plan_self_cascade(tiers: list, ct_idx: int, username: str, conn=None,
         pending = [a for a in approvers if a.get("status") != "approved"]
         if not pending:
             break
-        if tier_completes_on_first:
-            if not any(_matches(a) for a in pending):
-                break
-        elif not all(_matches(a) for a in pending):
+        if not all(_matches(a) for a in pending):
             break
         plan.append(idx)
         idx += 1
@@ -424,13 +420,43 @@ def cascade_self_tiers(tiers: list, ct_idx: int, username: str, now: str, conn=N
     呼叫端只要把 currentTier 推進 `1 + len(回傳值)` 層，其餘（通知下一層、
     all_done 判定）沿用原本的寫法即可。"""
     plan = plan_self_cascade(tiers, ct_idx, username, conn=conn)
+    display = _display_name(conn, username)
     for ti in plan:
         for a in (tiers[ti].get("approvers") or []):
             if a.get("status") != "approved":
                 a["status"] = "approved"
                 a["approvedAt"] = now
                 a["cascadedFrom"] = ct_idx
+                # 2026-09-25：只加欄位、不改判斷——紀錄要看得出是誰蓋的（代理時記替誰簽）
+                a["approvedBy"] = username
+                a["approvedByDisplay"] = display
+                if a.get("username") and a.get("username") != username:
+                    a["onBehalfOf"] = a["username"]
     return plan
+
+
+def _display_name(conn, username: str) -> str:
+    if conn is None:
+        return username
+    try:
+        r = conn.execute("SELECT display_name FROM users WHERE username = ?", (username,)).fetchone()
+    except Exception:
+        return username
+    return ((r[0] if r else "") or "").strip() or username
+
+
+def sign_first_pending(tier: dict, user: dict, now: str, conn=None) -> bool:
+    """當層「排序最前面的未簽核人」蓋章（呼叫端已用 check_approve_permission 確認他就是那個人或其代理人），
+    回傳這一層是否已全數簽完。同層多人依序輪流簽、全數 approved 才算完成（共用規則）。"""
+    approvers = tier.get("approvers") or []
+    fp = first_pending_approver(tier)
+    fp["status"] = "approved"
+    fp["approvedAt"] = now
+    fp["approvedBy"] = user["username"]
+    fp["approvedByDisplay"] = user.get("display_name") or _display_name(conn, user["username"])
+    if fp.get("username") != user["username"]:
+        fp["onBehalfOf"] = fp.get("username")
+    return all(a.get("status") == "approved" for a in approvers)
 
 
 def check_reject_permission(tiers: list, ct_idx: int, user: dict, conn=None):

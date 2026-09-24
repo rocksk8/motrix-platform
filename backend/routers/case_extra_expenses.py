@@ -47,10 +47,11 @@ from helpers import (
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
     setting_to_active_tiers as _setting_to_active_tiers,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    plan_self_cascade, notify_org_chain_notice,
+    notify_org_chain_notice,
     UnresolvedManagerError, resolve_active_flow_setting,
     save_document_files, delete_document_file,
 )
+from helpers.tiered_approval import cascade_self_tiers, sign_first_pending  # noqa: E402（helpers/__init__ 鎖定，直接取）
 
 router = APIRouter()
 
@@ -469,28 +470,17 @@ def approve_extra_expense(quote_no: str, exp_id: int, body: dict = Body(default=
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
-        for a in (tiers[ct].get("approvers") or []):
-            if a.get("username") == user["username"] or not a.get("approvedAt"):
-                a["approvedAt"] = now
-                a["approvedByDisplay"] = display
-                break
-        # 同一人連任多層時一次簽完（2026-09-15）：這張單的語意是「當層任一人簽即
-        # 過層」，所以往下只要他也是該層簽核人之一就能一起蓋掉（見 plan_self_cascade()
-        # 的 tier_completes_on_first）。前端確認過才會帶 cascade=true。
-        cascaded = (plan_self_cascade(tiers, ct, user["username"], conn=conn,
-                                      tier_completes_on_first=True)
-                    if (body or {}).get("cascade") else [])
-        for ti in cascaded:
-            for a in (tiers[ti].get("approvers") or []):
-                if a.get("username") == user["username"] or not a.get("approvedAt"):
-                    a["approvedAt"] = now
-                    a["approvedByDisplay"] = display
-                    a["cascadedFrom"] = ct
-                    break
+        # 2026-09-25 使用者裁示：同層每一位都要依序簽完才過層（與共用規則、獎金分潤一致）。
+        # ☠️ 原本寫法只寫 approvedAt、不寫 status，且第一位一簽就換層 ⇒ 同層第二位以後永遠沒機會簽，
+        #    而讀 status 的地方把已簽的格子一律當成未簽。
+        tier_done = sign_first_pending(tiers[ct], user, now, conn=conn) if tiers else True
+        # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade=true；
+        # 只吃「剩下未簽的全是他（或他代理的人）」的連續層，不替同層的別人簽。
+        cascaded = (cascade_self_tiers(tiers, ct, user["username"], now, conn=conn)
+                    if (tiers and tier_done and (body or {}).get("cascade")) else [])
 
-        # 這一層是否已滿足（沿用既有單據的「當層任一人簽即通過」語意）
         appr["tiers"] = tiers
-        appr["currentTier"] = ct + 1 + len(cascaded)
+        appr["currentTier"] = (ct + 1 + len(cascaded)) if tier_done else ct
         done = appr["currentTier"] >= len(tiers)
         status = "已核准" if done else "簽核中"
         appr.setdefault("history", []).append(
@@ -987,27 +977,17 @@ def approve_change_request(quote_no: str, exp_id: int, body: dict = Body(default
 
         now = datetime.now().isoformat(timespec="seconds")
         display = user.get("display_name") or user["username"]
-        for a in (tiers[ct].get("approvers") or []):
-            if a.get("username") == user["username"] or not a.get("approvedAt"):
-                a["approvedAt"] = now
-                a["approvedByDisplay"] = display
-                break
-        # 同一人連任多層時一次簽完（2026-09-15）：這張單的語意是「當層任一人簽即
-        # 過層」，所以往下只要他也是該層簽核人之一就能一起蓋掉（見 plan_self_cascade()
-        # 的 tier_completes_on_first）。前端確認過才會帶 cascade=true。
-        cascaded = (plan_self_cascade(tiers, ct, user["username"], conn=conn,
-                                      tier_completes_on_first=True)
-                    if (body or {}).get("cascade") else [])
-        for ti in cascaded:
-            for a in (tiers[ti].get("approvers") or []):
-                if a.get("username") == user["username"] or not a.get("approvedAt"):
-                    a["approvedAt"] = now
-                    a["approvedByDisplay"] = display
-                    a["cascadedFrom"] = ct
-                    break
+        # 2026-09-25 使用者裁示：同層每一位都要依序簽完才過層（與共用規則、獎金分潤一致）。
+        # ☠️ 原本寫法只寫 approvedAt、不寫 status，且第一位一簽就換層 ⇒ 同層第二位以後永遠沒機會簽，
+        #    而讀 status 的地方把已簽的格子一律當成未簽。
+        tier_done = sign_first_pending(tiers[ct], user, now, conn=conn) if tiers else True
+        # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade=true；
+        # 只吃「剩下未簽的全是他（或他代理的人）」的連續層，不替同層的別人簽。
+        cascaded = (cascade_self_tiers(tiers, ct, user["username"], now, conn=conn)
+                    if (tiers and tier_done and (body or {}).get("cascade")) else [])
 
         appr["tiers"] = tiers
-        appr["currentTier"] = ct + 1 + len(cascaded)
+        appr["currentTier"] = (ct + 1 + len(cascaded)) if tier_done else ct
         done = appr["currentTier"] >= len(tiers)
         appr.setdefault("history", []).append(
             {"at": now, "by": user["username"], "byDisplay": display,
