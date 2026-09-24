@@ -199,7 +199,7 @@
             <div class="scope-row">
               <div class="scope-row__head">
                 <label class="status-toggle" style="margin:0;flex-shrink:0">
-                  <input type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
+                  <input data-saved-field type="checkbox" x-model="scope[dt]" :disabled="session.role!=='superadmin'">
                   <span class="slider"></span>
                 </label>
                 <span style="font-size:13px;font-weight:600;flex:1" x-text="docTypeMeta[dt]"></span>

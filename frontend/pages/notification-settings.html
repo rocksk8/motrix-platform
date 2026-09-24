@@ -252,7 +252,7 @@
         <!-- 開發機測試模式（2026-08-26 新增）：這個設定值存在本機 DB，不隨部署
              流程移動到正式機，只需要在開發機自己開啟即可 -->
         <div class="ns-toggle">
-          <input type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
+          <input data-saved-field type="checkbox" id="chk-dev-mode" x-model="cfg.dev_mode" style="width:16px;height:16px;cursor:pointer">
           <label for="chk-dev-mode">開發機測試模式（寄出信件標題加註「【開發機測試】」）</label>
           <span x-show="cfg.dev_mode" style="font-size:12px;color:#D97706;font-weight:600">(測試模式已開啟)</span>
         </div>

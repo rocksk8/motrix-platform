@@ -133,7 +133,7 @@
         <div class="form-row full" style="margin-bottom:14px">
           <div class="form-group con-drop" @click.outside="showConDrop=false">
             <label>從名冊選取（可搜尋）</label>
-            <input type="text" x-model="conSearch" @focus="filterCon()" @input="filterCon()"
+            <input class="filter" type="text" x-model="conSearch" @focus="filterCon()" @input="filterCon()"
                    placeholder="點擊或輸入姓名搜尋…" autocomplete="off">
             <div class="con-list" x-show="showConDrop && conFiltered.length">
               <template x-for="c in conFiltered" :key="c.id">

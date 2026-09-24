@@ -277,32 +277,32 @@
 
         <template x-if="periodType==='month'">
           <div style="display:flex;gap:6px;align-items:center">
-            <select x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+            <select class="filter" x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
               <template x-for="y in [2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y"></option></template>
             </select>
-            <select x-model.number="month" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+            <select class="filter" x-model.number="month" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
               <template x-for="m in [1,2,3,4,5,6,7,8,9,10,11,12]" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
             </select>
           </div>
         </template>
         <template x-if="periodType==='quarter'">
           <div style="display:flex;gap:6px;align-items:center">
-            <select x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+            <select class="filter" x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
               <template x-for="y in [2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y"></option></template>
             </select>
-            <select x-model.number="quarter" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+            <select class="filter" x-model.number="quarter" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
               <option :value="1">Q1</option><option :value="2">Q2</option>
               <option :value="3">Q3</option><option :value="4">Q4</option>
             </select>
           </div>
         </template>
         <template x-if="periodType==='year'">
-          <select x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+          <select class="filter" x-model.number="year" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
             <template x-for="y in [2023,2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y + ' 年'"></option></template>
           </select>
         </template>
 
-        <select x-model="departmentId" @change="loadData()"
+        <select class="filter" x-model="departmentId" @change="loadData()"
                 style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
           <option value="">全部部門</option>
           <template x-for="d in allDepartments" :key="d.id">
@@ -531,18 +531,18 @@
             <button class="period-type-btn" :class="{on:receivablesScope==='quarter'}" @click="receivablesScope='quarter'; loadReceivables()">本季</button>
             <button class="period-type-btn" :class="{on:receivablesScope==='year'}" @click="receivablesScope='year'; loadReceivables()">今年度</button>
             <template x-if="receivablesScope==='month'">
-              <input type="month" x-model="receivablesMonth" @change="loadReceivables()"
+              <input class="filter" type="month" x-model="receivablesMonth" @change="loadReceivables()"
                      style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
             </template>
             <template x-if="receivablesScope==='quarter'">
               <span style="display:flex;gap:6px">
-                <select x-model.number="receivablesYear" @change="loadReceivables()"
+                <select class="filter" x-model.number="receivablesYear" @change="loadReceivables()"
                         style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                   <template x-for="y in caseListYears" :key="y">
                     <option :value="y" x-text="y"></option>
                   </template>
                 </select>
-                <select x-model.number="receivablesQuarter" @change="loadReceivables()"
+                <select class="filter" x-model.number="receivablesQuarter" @change="loadReceivables()"
                         style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                   <template x-for="q in [1,2,3,4]" :key="q">
                     <option :value="q" x-text="'第 ' + q + ' 季'"></option>
@@ -551,7 +551,7 @@
               </span>
             </template>
             <template x-if="receivablesScope==='year'">
-              <select x-model.number="receivablesYear" @change="loadReceivables()"
+              <select class="filter" x-model.number="receivablesYear" @change="loadReceivables()"
                       style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                 <template x-for="y in caseListYears" :key="y">
                   <option :value="y" x-text="y"></option>
@@ -716,18 +716,18 @@
               <button class="period-type-btn" :class="{on:expensesScope==='year'}" @click="expensesScope='year'; loadExpenses()">今年度</button>
 
               <template x-if="expensesScope==='month'">
-                <input type="month" x-model="expensesMonth" @change="loadExpenses()"
+                <input class="filter" type="month" x-model="expensesMonth" @change="loadExpenses()"
                        style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
               </template>
               <template x-if="expensesScope==='quarter'">
                 <span style="display:flex;gap:6px">
-                  <select x-model.number="expensesYear" @change="loadExpenses()"
+                  <select class="filter" x-model.number="expensesYear" @change="loadExpenses()"
                           style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                     <template x-for="y in caseListYears" :key="y">
                       <option :value="y" x-text="y"></option>
                     </template>
                   </select>
-                  <select x-model.number="expensesQuarter" @change="loadExpenses()"
+                  <select class="filter" x-model.number="expensesQuarter" @change="loadExpenses()"
                           style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                     <template x-for="q in [1,2,3,4]" :key="q">
                       <option :value="q" x-text="'第 ' + q + ' 季'"></option>
@@ -736,7 +736,7 @@
                 </span>
               </template>
               <template x-if="expensesScope==='year'">
-                <select x-model.number="expensesYear" @change="loadExpenses()"
+                <select class="filter" x-model.number="expensesYear" @change="loadExpenses()"
                         style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                   <template x-for="y in caseListYears" :key="y">
                     <option :value="y" x-text="y"></option>
@@ -967,7 +967,7 @@
           <div x-show="activeTab==='cases'" class="panel">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
               <template x-if="caseListGroupByMonth">
-                <select x-model.number="caseListYear"
+                <select class="filter" x-model.number="caseListYear"
                         style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                   <template x-for="y in caseListYears" :key="y">
                     <option :value="y" x-text="y + ' 年'"></option>
@@ -1359,7 +1359,7 @@
                 <div class="cust-list-col">
                   <div class="cust-list-controls">
                     <input class="cust-search" type="text" x-model="custSearch" placeholder="搜尋客戶 / 業務員…">
-                    <select class="cust-sort" x-model="custSort">
+                    <select class="cust-sort filter" x-model="custSort">
                       <option value="revenue">依總金額</option>
                       <option value="cases">依案件數</option>
                       <option value="winrate">依成案率</option>
@@ -1868,10 +1868,10 @@
                     匯出已填發票號碼的收款品項，含統一編號/金額/稅額欄位，供記帳士申報使用。
                   </div>
                   <div style="display:flex;align-items:center;gap:8px">
-                    <select x-model.number="taxExportYear" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <select class="filter" x-model.number="taxExportYear" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                       <template x-for="y in [2023,2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y + ' 年'"></option></template>
                     </select>
-                    <select x-model="taxExportMonth" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
+                    <select class="filter" x-model="taxExportMonth" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
                       <option value="">整年</option>
                       <template x-for="m in 12" :key="m"><option :value="m" x-text="m + ' 月'"></option></template>
                     </select>
@@ -1915,7 +1915,7 @@
         <!-- Year selector -->
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
           <label style="font-size:12px;color:var(--text-secondary);font-family:var(--font-zh);white-space:nowrap">目標年度</label>
-          <select x-model.number="targetForm.year" style="padding:5px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;background:#fff">
+          <select data-saved-field x-model.number="targetForm.year" style="padding:5px 10px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;background:#fff">
             <template x-for="y in [2024,2025,2026,2027,2028]" :key="y"><option :value="y" x-text="y + ' 年'"></option></template>
           </select>
           <span style="font-size:11px;color:var(--text-dim)">當選擇的年度與報表期間年份相符時，系統自動比對達成進度</span>

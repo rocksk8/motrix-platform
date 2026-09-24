@@ -450,7 +450,7 @@
             <div class="ns-row">
               <div class="ns-field">
                 <label>地址定位每月免費額度（次，留空＝不管制）</label>
-                <input type="number" min="0" x-model.number="gq.monthly_free_quota">
+                <input data-saved-field type="number" min="0" x-model.number="gq.monthly_free_quota">
                 <!-- 🔑 程式裡不寫死這個數字（GB26），**而畫面上要給一個起點**：
                      ☠️ 不給的話，使用者不知道要填多少，於是留空 ——
                         而留空＝**不設上限**（功能照常運作），
@@ -599,7 +599,7 @@
             <div class="ns-row">
               <div class="ns-field">
                 <label>雲端月備份（天，0 = 永久保留）</label>
-                <input type="number" min="0" max="3650" x-model.number="retention.cloud_monthly_keep_days">
+                <input data-saved-field type="number" min="0" max="3650" x-model.number="retention.cloud_monthly_keep_days">
                 <div style="font-size:11px;color:#64748B;margin-top:4px">
                   預設 0。這是長期保存的那一層，<strong>填 0 就永遠不會被清掉</strong>。
                 </div>

@@ -457,7 +457,7 @@
             <div style="display:flex;gap:6px;align-items:flex-end">
               <div style="flex:1;max-width:280px">
                 <div style="font-size:10px;color:var(--text-dim);margin-bottom:5px;font-family:LINE Seed TW_OTF, sans-serif">統一編號查詢</div>
-                <input class="form-input" type="text" x-model="taxIdSearch"
+                <input class="form-input filter" type="text" x-model="taxIdSearch"
                        placeholder="輸入 8 碼統編" maxlength="8"
                        style="font-family:LINE Seed TW_OTF, sans-serif;letter-spacing:.08em;width:100%"
                        @keydown.enter.prevent="lookupByTaxId()"

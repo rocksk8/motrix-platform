@@ -103,7 +103,7 @@
     <!-- 篩選列 -->
     <div class="filter-bar">
       <input type="search" placeholder="搜尋關鍵字（目標、使用者…）" x-model.debounce.400ms="q" @input="page=1; load()">
-      <select x-model="filterAction" @change="page=1; load()">
+      <select class="filter" x-model="filterAction" @change="page=1; load()">
         <option value="">所有操作</option>
         <optgroup label="報價單">
           <option value="quotation.create">新增報價單</option>

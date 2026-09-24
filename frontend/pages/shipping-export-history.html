@@ -83,11 +83,11 @@
 
     <div class="filter-bar">
       <input type="search" placeholder="搜尋單號／客戶／專案…" x-model="q">
-      <select x-model="filterYear">
+      <select class="filter" x-model="filterYear">
         <option value="">年份</option>
         <template x-for="y in yearOptions" :key="y"><option :value="y" x-text="y + '年'"></option></template>
       </select>
-      <select x-model="filterMonth">
+      <select class="filter" x-model="filterMonth">
         <option value="">月份</option>
         <template x-for="m in 12" :key="m">
           <option :value="String(m).padStart(2,'0')" x-text="m + '月'"></option>

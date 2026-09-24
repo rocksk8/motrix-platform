@@ -92,7 +92,7 @@
       <input class="search-input" type="text" x-model="searchQ" @input.debounce.300ms="load()" placeholder="搜尋受領人…">
     </div>
     <div>
-      <input style="padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none"
+      <input class="filter" style="padding:8px 11px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);outline:none"
              type="month" x-model="filterMonth" @change="load()" title="月份篩選">
     </div>
     <button class="btn btn-ghost btn-sm" @click="filterMonth='';searchQ='';load()">清除篩選</button>

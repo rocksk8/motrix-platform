@@ -264,7 +264,7 @@
         <span style="font-size:12px;color:var(--text-secondary)">顯示</span>
         <template x-for="src in sources" :key="src.key">
           <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
-            <input type="checkbox" :value="src.key" x-model="picked" @change="_redraw()">
+            <input class="filter" type="checkbox" :value="src.key" x-model="picked" @change="_redraw()">
             <span x-text="src.label"></span>
           </label>
         </template>
@@ -285,7 +285,7 @@
                placeholder="搜尋名稱、機關、地址" style="font-size:12px;padding:3px 6px;width:180px">
         <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px">
           <span style="color:var(--text-secondary)">範圍</span>
-          <select class="mp-near" x-model="nearN" @change="_redraw()" style="font-size:12px;padding:2px 4px">
+          <select class="mp-near filter" x-model="nearN" @change="_redraw()" style="font-size:12px;padding:2px 4px">
             <option value="">全部</option>
             <option value="10">最近 10 筆</option>
             <option value="20">最近 20 筆</option>

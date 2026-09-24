@@ -430,9 +430,9 @@
             <div x-show="cashierSub==='history'">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
                 <label class="field-label" style="margin:0">起</label>
-                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryStart">
+                <input type="date" class="field-input filter" style="width:auto;margin:0" x-model="cashierHistoryStart">
                 <label class="field-label" style="margin:0">迄</label>
-                <input type="date" class="field-input" style="width:auto;margin:0" x-model="cashierHistoryEnd">
+                <input type="date" class="field-input filter" style="width:auto;margin:0" x-model="cashierHistoryEnd">
                 <button class="period-type-btn" @click="loadCashierHistory()">查詢</button>
                 <button class="btn-export excel" style="margin-left:auto" :disabled="cashierExporting" @click="exportCashierHistory()">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -588,9 +588,9 @@
 
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;background:var(--bg-subtle,#FAFAF8);border:1px solid var(--border-light);border-radius:var(--radius-lg);margin-bottom:14px">
             <label class="field-label" style="margin:0 2px 0 0">區間</label>
-            <input type="date" x-model="t100Start" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+            <input class="filter" type="date" x-model="t100Start" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
             <span style="font-size:12px;color:var(--text-dim)">～</span>
-            <input type="date" x-model="t100End" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
+            <input class="filter" type="date" x-model="t100End" style="padding:5px 9px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px">
             <span style="width:1px;align-self:stretch;background:var(--border-light);margin:0 4px"></span>
             <button class="btn-export excel" @click="exportT100Vouchers()" :disabled="t100Exporting">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>

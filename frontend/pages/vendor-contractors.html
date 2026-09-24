@@ -98,7 +98,7 @@
       <input class="search-input" type="text" x-model="searchQ" @input.debounce.300ms="load()" placeholder="搜尋名稱、統編、聯絡人…">
     </div>
     <label style="font-size:13px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:5px">
-      <input type="checkbox" x-model="showInactive" @change="load()"> 顯示停用
+      <input class="filter" type="checkbox" x-model="showInactive" @change="load()"> 顯示停用
     </label>
     <div style="margin-left:auto;display:flex;gap:8px">
       <button class="btn btn-ghost" @click="exportExcel()" :disabled="!vendors.length">匯出 Excel</button>
@@ -313,7 +313,7 @@
         <div style="display:flex;gap:8px;align-items:flex-end">
           <div class="form-group" style="flex:1">
             <label class="form-label">輸入統一編號（8碼）</label>
-            <input class="form-input" type="text" x-model="taxIdSearch" placeholder="如：12345678" maxlength="8"
+            <input class="form-input filter" type="text" x-model="taxIdSearch" placeholder="如：12345678" maxlength="8"
                    @keydown.enter.prevent="lookupByTaxId()"
                    @input="if($event.target.value.replace(/\D/g,'').length===8 && !lookingUp) lookupByTaxId()">
           </div>

@@ -81,8 +81,9 @@ def test_report_export_sends_the_basis_on_screen(live_server, make_user):
 # ── D8-2 客戶彈窗（e2e）───────────────────────────────────────────────────────
 
 @pytest.mark.e2e
-def test_customer_modal_fits_the_viewport_and_scrolls_inside(live_server, make_user):
-    u = make_user(username="wb_cust", role="superadmin")
+@pytest.mark.parametrize("pg", ["customers", "suppliers"])   # suppliers：同型彈窗（0a 派，2026-09-25）
+def test_customer_modal_fits_the_viewport_and_scrolls_inside(live_server, make_user, pg):
+    u = make_user(username="wb_" + pg, role="superadmin")
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
@@ -90,7 +91,7 @@ def test_customer_modal_fits_the_viewport_and_scrolls_inside(live_server, make_u
             ctx.add_init_script("try { localStorage.setItem('motrix_font_zoom', '1.3') } catch (e) {}")
             page = ctx.new_page()
             _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/customers.html")
+            page.goto(f"{live_server}/pages/{pg}.html")
             page.wait_for_function(f"() => {RPT} && typeof {RPT}.openCreate === 'function'", timeout=20000)
             page.evaluate(f"() => {RPT}.openCreate()")
             box = page.locator('.modal-overlay[x-show="showModal"] .modal-box')

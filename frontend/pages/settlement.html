@@ -377,7 +377,7 @@
                              @input="calcItemCost(item); calcSummary()"
                              style="width:80px">
                     </div>
-                    <select class="stl-input" x-model="item.actualCostTaxMode"
+                    <select data-saved-field class="stl-input" x-model="item.actualCostTaxMode"
                             :disabled="settlement.status === 'finalized'"
                             @change="calcItemCost(item); calcSummary()"
                             style="margin-top:3px;font-size:10px;padding:2px 4px;width:100%">

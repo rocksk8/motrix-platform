@@ -150,7 +150,7 @@
               </label>
               <div x-show="form.warranty_months > 0" style="margin-top:10px;max-width:240px">
                 <span class="cnf-lbl">保固月數（自完成日起算）</span>
-                <input class="cnf-in" type="number" min="1" max="600" x-model.number="form.warranty_months"
+                <input data-saved-field class="cnf-in" type="number" min="1" max="600" x-model.number="form.warranty_months"
                        :disabled="!editable()" @input="dirty=true">
                 <div class="cnf-hint" x-show="warrantyEnd()">保固至 <b x-text="warrantyEnd()"></b></div>
               </div>
@@ -189,7 +189,7 @@
                            :disabled="!editable()" @input="dirty=true" :placeholder="labels.itemColumn">
                     <input class="cnf-in" type="number" style="width:80px" x-model="it.qty" :disabled="!editable()" @input="dirty=true" placeholder="數量">
                     <input class="cnf-in" type="text" style="width:64px" x-model="it.unit" :disabled="!editable()" @input="dirty=true" placeholder="單位">
-                    <select class="cnf-in" style="width:112px" x-model="it.status" :disabled="!editable()" @change="dirty=true">
+                    <select data-saved-field class="cnf-in" style="width:112px" x-model="it.status" :disabled="!editable()" @change="dirty=true">
                       <option value="完成">完成</option>
                       <option value="部分完成">部分完成</option>
                       <option value="未施作">未施作</option>
