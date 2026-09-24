@@ -35,6 +35,7 @@ def test_the_shared_server_sees_this_tests_own_db(live_server, make_user, new_pa
 def test_login_as_writes_the_same_session_shape_as_the_login_page(live_server, make_user, new_page, login_as):
     u = make_user(username="shf_shape", role="admin")
     ui = new_page()
+    # keep-ui-login：這一段是「走登入頁」的對照組，換掉這題就失效
     ui.goto(f"{live_server}/pages/login.html")
     ui.fill('input[x-model="username"]', u[0])
     ui.fill('input[x-model="password"]', u[1])
@@ -159,6 +160,7 @@ def test_inject_login_writes_the_same_session_shape_as_the_login_page(live_serve
     from tests._e2e_login import inject_login
     u = make_user(username="shf_inj", role="admin")
     ui = new_page()
+    # keep-ui-login：這一段是「走登入頁」的對照組，換掉這題就失效
     ui.goto(f"{live_server}/pages/login.html")
     ui.fill('input[x-model="username"]', u[0])
     ui.fill('input[x-model="password"]', u[1])

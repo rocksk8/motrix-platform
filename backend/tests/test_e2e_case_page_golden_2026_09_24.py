@@ -197,6 +197,7 @@ def _record(live_server, make_user, e2e_browser):
     # 呼叫記在 window.__goldenDialogs。原生那一行留到 B 包也換完為止。
     page.add_init_script(_AUTO_DISMISS_MOTRIX_UI)
     # golden 是「重構前」用登入頁錄的：登入流程要一致，否則 API 請求清單會多出 index 上才會發的請求
+    # keep-ui-login：golden 比對重構前（走登入頁）錄的 API 請求清單
     page.goto(f"{live_server}/pages/login.html")
     page.fill('input[x-model="username"]', u[0])
     page.fill('input[x-model="password"]', u[1])
