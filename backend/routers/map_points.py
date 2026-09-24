@@ -34,6 +34,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 from db import db_conn
 from helpers import _require_user
 from helpers import geo
+from helpers.quotations import _check_quotation_owner
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,13 @@ def _map_geocode_backlog():
                     f"SELECT {col} AS addr FROM {spec['table']} "
                     f"WHERE {col} IS NOT NULL AND TRIM({col}) <> ''").fetchall()
                 out += [str(r["addr"] or "").strip() for r in rows]
+
+        # `MP6`：案件交貨地點也進背景預熱（規格：走既有地址定位階梯與背景預熱）。
+        #   📌 這裡不看權限——它只決定「先查哪些地址」，讀出來時照樣過 `_case_points` 的篩選。
+        for r in conn.execute("SELECT data_json FROM quotations").fetchall():
+            addr = _case_address(r["data_json"])
+            if addr:
+                out.append(addr)
     return out
 
 
@@ -299,6 +307,97 @@ def _json_points(name, located, user_coord=None, budget=None):
             })
         if not made and not deferred:
             missing += 1
+    return points, missing
+
+
+# ══════════════════════════════════════════════════════════════════════
+# `MP6`：案件地點（報價／案件的交貨地點）
+# ══════════════════════════════════════════════════════════════════════
+
+#: 資料集模組門檻：比照出貨單（規格：「權限比照 shipping（case_manage 或 quotation）」）。
+CASE_MODULES = ("case_manage", "quotation")
+CASE_LABEL = "案件地點"
+
+
+def _case_address(data_json):
+    """一個案件的交貨地點：案件合約的交貨地址優先，其次報價單的交貨地點。**一案一點。**
+
+    📌 合約的交貨地址是成案後填的、比較準；報價時的「交貨地點」可能只是說明文字。
+    ⚠️ 讀不到／壞掉的 JSON ⇒ 回空字串（那一筆算「沒有地點」，不拖垮其他筆）。
+    """
+    try:
+        data = json.loads(data_json or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    contract = ((data.get("caseRecord") or {}).get("contract") or {})         if isinstance(data.get("caseRecord"), dict) else {}
+    addr = str((contract.get("deliveryAddress") if isinstance(contract, dict) else "") or "").strip()
+    return addr or str(data.get("deliveryLocation") or "").strip()
+
+
+def _may_see_cases(user) -> bool:
+    if (user or {}).get("role") == "superadmin":
+        return True
+    mods = (user or {}).get("modules") or []
+    if isinstance(mods, str):
+        try:
+            mods = json.loads(mods)
+        except (TypeError, ValueError):
+            mods = []
+    return any(m in mods for m in CASE_MODULES)
+
+
+def _case_rows_visible_to(user, rows):
+    """🔴 **逐筆**套用案件可見性：非 admin／superadmin 只看得到自己名下或被分配的案件。
+
+    ☠️ 只擋模組的話，有 `case_manage` 的業務會在地圖上看到**別的業務的客戶與工地地址**——
+       而案件管理頁刻意不給他看（`list_quotations` 的 `_visible_case_filter_sql`）。
+    🔑 判準沿用 `helpers.quotations._check_quotation_owner`（單筆存取的那一道），不另寫一套：
+       兩套規則會漂移，而漂移的那一天沒有任何題會紅。
+    """
+    if (user or {}).get("role") in ("superadmin", "admin"):
+        return list(rows)
+    out = []
+    for r in rows:
+        try:
+            _check_quotation_owner(r, user)
+        except HTTPException:
+            continue
+        out.append(r)
+    return out
+
+
+def _case_points(user, located, budget=None):
+    """案件地點。回 `(points, 沒有地點或定位不到的筆數)`——兩者都只算**這個人看得到的**案件。"""
+    with db_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, quote_no, customer_name, project_name, deal_tag, data_json, "
+            "sales_person_id, sales_person, assigned_user_ids FROM quotations ORDER BY id DESC").fetchall()
+    rows = _case_rows_visible_to(user, rows)
+    budget = budget or _GeocodeBudget()
+    points, missing = [], 0
+    for r in rows:
+        addr = _case_address(r["data_json"])
+        if not addr:
+            continue          # 沒填交貨地點的案件很多（報價階段）——不算「定位不到」
+        found = budget.locate(addr)
+        if found is None:
+            continue          # 這次來不及查 ≠ 查不到
+        if not found.coord:
+            missing += 1
+            continue
+        points.append({
+            "dataset": "cases",
+            # `MP1`：連回案件頁（case-management.html?q=<quote_no>）；焦點鍵 `cases:<quote_no>`。
+            "recordId": r["quote_no"], "quoteNo": r["quote_no"],
+            "name": r["project_name"] or r["quote_no"], "org": r["customer_name"],
+            "dealTag": r["deal_tag"] or "",
+            "address": addr,
+            "lat": found.coord[0], "lon": found.coord[1],
+            "precision": found.precision, "source": found.source,
+            **_distances(found.coord, located, None),
+        })
     return points, missing
 
 
@@ -453,10 +552,15 @@ def map_points(response: Response, sources: str = "tenders",
     visible = tuple(sorted(
         n for n in set(wanted)
         if (n == "tenders" and _may_see_tenders(user))
+        or (n == "cases" and _may_see_cases(user))
         or (n in _DATASETS and _may_see_dataset(user, n))))
+    # 🔴 `MP6`：案件是**逐筆**可見（自己名下／被分配）——同樣模組的兩個業務看到的點不同
+    #    ⇒ 非管理員要到案件時，把「是誰」算進鍵；否則 A 的案件會從快取回給 B。
+    who = (user.get("id") if ("cases" in visible
+                             and user.get("role") not in ("superadmin", "admin")) else None)
     # ⚠️ 地理查詢開關也算進鍵：關著時算出來的「沒有點」不可以在打開之後繼續被回
     #    （G7 抓到的——第一版的鍵沒有它，開關切換後 60 秒內回的都是舊結果）。
-    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()))
+    key = (tuple(sorted(set(wanted))), visible, bool(geo.geo_on()), who)
     fp = _data_fingerprint()
     now = time.monotonic()
     with _RESP_LOCK:
@@ -504,6 +608,12 @@ def _data_fingerprint():
                     h.update(repr(tuple(row)).encode("utf-8", "replace"))
             except Exception:                                   # noqa: BLE001
                 h.update(("missing:" + t).encode())
+        # `MP6`：案件只取會影響地圖的欄位（整張 data_json 太大）；可見性欄位也在內（分配變了要失效）。
+        #   ⚠️ 只改 data_json 而沒動 updated_at 的寫入點，最多晚 60 秒（TTL）反映。
+        for row in conn.execute("SELECT quote_no, updated_at, deal_tag, customer_name, project_name, "
+                                "sales_person_id, sales_person, assigned_user_ids "
+                                "FROM quotations ORDER BY id"):
+            h.update(repr(tuple(row)).encode("utf-8", "replace"))
         row = conn.execute("SELECT COUNT(*), MAX(id), MAX(created_at) FROM geocode_cache").fetchone()
         h.update(repr(tuple(row)).encode())
     h.update(json.dumps(_company_profile(), sort_keys=True, ensure_ascii=False,
@@ -562,6 +672,23 @@ def _build_points(user, wanted):
             source_info.append({
                 "source": name, "skipped": "not_supported", "count": 0,
                 "note": _NOT_QUERIED[name],
+            })
+
+    if "cases" in wanted:
+        if not _may_see_cases(user):
+            source_info.append({"source": "cases", "skipped": "no_permission", "count": 0,
+                                "note": f"沒有「{CASE_LABEL}」的權限，地圖上不會顯示這一類"})
+        else:
+            pts, missing = _case_points(user, located, budget)
+            for pt in pts:
+                pt["sourceKey"] = "cases"
+            points += pts
+            without_location += missing
+            source_info.append({
+                "source": "cases", "skipped": None,
+                "count": len(pts), "withoutLocation": missing,
+                "note": (f"{CASE_LABEL} {len(pts)} 筆畫在地圖上"
+                         + (f"，另有 {missing} 筆定位不到" if missing else "")),
             })
 
     for name in _DATASETS:

@@ -46,6 +46,9 @@
       case 'contractors':        return 'contractors.html?id=' + enc
       case 'vendor_contractors': return 'vendor-contractors.html?id=' + enc
       case 'tenders':            return 'tender-radar.html?case=' + enc
+      case 'cases':
+        // `MP6`：案件地點 ⇒ 案件頁（recordId 就是 quote_no）。
+        return 'case-management.html?q=' + enc
       case 'shipping_notes':
         // 出貨單沒有自己的頁 ⇒ 落在所屬案件的「出貨」分頁。
         return p.quoteNo ? ('case-management.html?q=' + encodeURIComponent(p.quoteNo)

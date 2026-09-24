@@ -538,6 +538,8 @@ function mapPage() {
       { key: 'vendor_contractors', label: '協力廠商' },
       { key: 'contractors',        label: '外包名冊' },
       { key: 'shipping_notes',     label: '出貨地址' },
+      // `MP6`：報價／案件的交貨地點。非管理員只看得到自己名下或被分配的案件（後端逐筆篩）。
+      { key: 'cases',              label: '案件地點' },
     ],
     datasets: [
       { key: 'tenders',            label: '標案',     mark: '標', color: '#2563EB' },
@@ -547,11 +549,12 @@ function mapPage() {
       { key: 'vendor_contractors', label: '協力廠商', mark: '廠', color: '#059669' },
       { key: 'contractors',        label: '外包名冊', mark: '包', color: '#D97706' },
       { key: 'shipping_notes',     label: '出貨地址', mark: '貨', color: '#7C3AED' },
+      { key: 'cases',              label: '案件地點', mark: '案', color: '#0F766E' },
     ],
     // ⚠️ 預設**不含 `contractors`**：外包名冊是**住家地址**，
     // 不該在打開頁面的那一秒就全部攤在畫面上。
     // 📌 客戶與供應商預設開著 —— 使用者原話：「看不到其他商家就等於沒有效果」。
-    picked: ['tenders', 'customers', 'suppliers', 'vendor_contractors'],
+    picked: ['tenders', 'customers', 'suppliers', 'vendor_contractors', 'cases'],
     mapOpen: false, mapLoading: false, tileError: false, _map: null,
     // 斷路器：上一次載不到圖磚 ⇒ 這一次不自動開，而**要說出來**。
     // ☠️ 不說的話，「這一頁以前會自動出現地圖」變成「今天沒有」，
