@@ -35,11 +35,14 @@ def _make_quotation(quote_no):
                 ],
             },
         })
+        # 2026-09-24（CM14）：case-record 只收案件成員的存檔——本檔的非 admin 帳號一律是
+        # make_user 的預設帳號 tester，讓它當這張單的業務（舊資料格式：只有顯示名稱）。
+        # 這裡驗的是金流欄位的角色規則，不是成員規則（成員規則見 test_case_record_member_guard）。
         conn.execute(
             "INSERT INTO quotations (quote_no, status, customer_name, project_name, "
-            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
+            "data_json, created_at, updated_at, deal_tag, sales_person) VALUES (?,?,?,?,?,?,?,?,?)",
             (quote_no, "已送出", "測試客戶", "測試專案", data_json,
-             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"),
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "tester"),
         )
         conn.commit()
     finally:

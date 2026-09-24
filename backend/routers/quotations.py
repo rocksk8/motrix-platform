@@ -453,6 +453,35 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
     return q
 
 
+def _is_case_member(conn, quote_no: str, row, user: dict) -> bool:
+    """案件成員（CM14，2026-09-24 使用者裁示）：admin／superadmin、業務、assigned_user_ids、
+    caseRecord.roles 的 filler／sales／executor、階段負責人。
+
+    row 需含 sales_person_id、sales_person、assigned_user_ids、data_json。
+    ⚠ 已知限制：roles 存的是顯示名稱（case-management.html 的選單 value＝display_name），
+    同名的兩個帳號會互相放行——與 bonus.py 自動帶入執行負責同一個限制。
+    """
+    if user["role"] in ("superadmin", "admin"):
+        return True
+    try:
+        _check_quotation_owner(row, user)       # 業務（id／舊資料顯示名稱）＋ assigned_user_ids
+        return True
+    except HTTPException:
+        pass
+    try:
+        roles = ((json.loads(row["data_json"] or "{}").get("caseRecord") or {}).get("roles") or {})
+    except Exception:
+        roles = {}
+    me = user.get("display_name") or ""
+    if me and me in {roles.get(k) for k in ("filler", "sales", "executor") if isinstance(roles, dict)}:
+        return True
+    hit = conn.execute(
+        "SELECT 1 FROM case_stages cs, json_each(cs.assigned_to) a WHERE cs.quote_no=? AND a.value=? LIMIT 1",
+        (quote_no, user["username"]),
+    ).fetchone()
+    return bool(hit)
+
+
 def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None,
                                      op: str = "") -> None:
     """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
@@ -2391,12 +2420,19 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # 必須是以先寫的結果為底合併），所以從讀取就持有寫鎖。
         conn.execute("BEGIN IMMEDIATE")
     row = conn.execute(
-        "SELECT id, customer_name, project_name, data_json, updated_at FROM quotations WHERE quote_no=?",
+        "SELECT id, customer_name, project_name, data_json, updated_at, sales_person_id, sales_person, "
+        "assigned_user_ids, deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?",
         (quote_no,),
     ).fetchone()
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # 2026-09-24（CM14）：這支原本沒有任何擁有者檢查——任何登入者都能寫任何案件（IDOR）。
+    # 例外：已結案且半解鎖——每一筆都排進 superadmin 審核，把關在審核（比照 _guard_case）。
+    semi_unlocked = (row["deal_tag"] or "") == "已結案" and bool(row["case_semi_unlocked"])
+    if not semi_unlocked and not _is_case_member(conn, quote_no, row, user):
+        conn.close()
+        raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
     if body.segments is not None:
         # 2026-09-24（CM1）：過去整包取代 caseRecord ⇒ 兩人同時編同一件，後存者靜默蓋掉
         # 前一個人的改動。改成只替換改到的分段；那一段在資料庫的現值與呼叫端的基準

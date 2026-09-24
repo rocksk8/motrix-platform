@@ -37,12 +37,14 @@ def _make(quote_no, items):
     import db
     conn = db.get_db()
     try:
+        # 2026-09-24（CM14）：case-record 只收案件成員的存檔 ⇒ 讓 lock_sales 當這張單的業務
+        # （這裡驗的是已收款期別的鎖，不是成員規則）。
         conn.execute(
             "INSERT INTO quotations (quote_no, status, customer_name, project_name, "
-            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
+            "data_json, created_at, updated_at, deal_tag, sales_person) VALUES (?,?,?,?,?,?,?,?,?)",
             (quote_no, "已送出", "測試客戶", "測試專案",
              json.dumps({"caseRecord": {"payment": {"items": items}, "materials": []}}, ensure_ascii=False),
-             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"),
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案", "lock_sales"),
         )
         conn.commit()
     finally:
