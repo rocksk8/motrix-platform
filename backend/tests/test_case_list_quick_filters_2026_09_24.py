@@ -5,8 +5,8 @@ GET /api/quotations 選填：
   的帳號是我
 - stage_overdue=1：有未完成且已過到期日的執行階段
 - recv_overdue=1：有未收款且預計收款日（expectedReceiptDate）已過的期別（當日不算）
-- missing_docs=1：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成卻缺完工單／缺出貨單（使用者裁示 ④）；
-  每筆回傳 missing_invoice／missing_completion／missing_shipping 標出原因
+- missing_docs=1：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成而完工單與出貨單兩張都沒有
+  （使用者裁示 ④，同日更正：只有其一不算缺）；每筆回傳 missing_invoice／missing_notes 標出原因
 - unread=1：有別人造成、我還沒看過的動態（與未讀紅點同一套判斷，item_reads）；不受分頁限制
 counts 另回 mine／stageOverdueCases／recvOverdue／missingDocs／unread 的件數。
 """
@@ -104,15 +104,14 @@ def test_missing_docs_invoice_or_notes_after_all_stages_done(client, make_user):
     _case("MQ-QF-NOINV", items=[{"id": 1, "received": True, "invoiceNo": ""}])
     _case("MQ-QF-HASINV", items=[{"id": 1, "received": True, "invoiceNo": "AB12345678"}])
     _case("MQ-QF-UNPAID", items=[{"id": 1, "received": False, "invoiceNo": ""}])
-    _case("MQ-QF-DONE-NOCN", done_stages=2, shipping=True)                  # 缺完工單
-    _case("MQ-QF-DONE-NOSN", done_stages=2, completion=True)                # 缺出貨單
-    _case("MQ-QF-DONE-BOTH", done_stages=2, completion=True, shipping=True)  # 都有 ⇒ 不缺
+    _case("MQ-QF-DONE-ONLYSN", done_stages=2, shipping=True)                # 只有出貨單 ⇒ 不算缺
+    _case("MQ-QF-DONE-ONLYCN", done_stages=2, completion=True)              # 只有完工單 ⇒ 不算缺
+    _case("MQ-QF-DONE-NONE", done_stages=2)                                 # 兩張都沒有 ⇒ 缺
     _case("MQ-QF-RUNNING", done_stages=1, overdue_stage=True)               # 還沒全完成 ⇒ 不算缺
-    assert _nos(client, h, missing_docs=1) == ["MQ-QF-DONE-NOCN", "MQ-QF-DONE-NOSN", "MQ-QF-NOINV"]
+    assert _nos(client, h, missing_docs=1) == ["MQ-QF-DONE-NONE", "MQ-QF-NOINV"]
     rows = {c["quote_no"]: c for c in client.get(URL, headers=h, params={"deal_tag": BOTH, "missing_docs": 1}).json()["items"]}
-    assert (rows["MQ-QF-NOINV"]["missing_invoice"], rows["MQ-QF-NOINV"]["missing_completion"]) == (1, 0)
-    assert (rows["MQ-QF-DONE-NOCN"]["missing_completion"], rows["MQ-QF-DONE-NOCN"]["missing_shipping"]) == (1, 0)
-    assert (rows["MQ-QF-DONE-NOSN"]["missing_completion"], rows["MQ-QF-DONE-NOSN"]["missing_shipping"]) == (0, 1)
+    assert (rows["MQ-QF-NOINV"]["missing_invoice"], rows["MQ-QF-NOINV"]["missing_notes"]) == (1, 0)
+    assert (rows["MQ-QF-DONE-NONE"]["missing_invoice"], rows["MQ-QF-DONE-NONE"]["missing_notes"]) == (0, 1)
 
 
 def test_unread_is_server_side_and_ignores_paging(client, make_user):

@@ -806,9 +806,9 @@ _CASE_RECV_OVERDUE_SQL = (
     " AND COALESCE(json_extract(p.value,'$.expectedReceiptDate'),'') != ''"
     " AND json_extract(p.value,'$.expectedReceiptDate') < ?)"
 )
-# 缺單據（2026-09-24 使用者裁示 ④）：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成卻缺完工單／
-# 缺出貨單，任一成立。三個原因各自一段，清單每筆也回傳原因旗標（missing_invoice／missing_completion／
-# missing_shipping），畫面標出是缺哪一種。
+# 缺單據（2026-09-24 使用者裁示 ④，同日更正）：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成
+# 而完工單與出貨單**兩張都沒有**（有些案件只需其中一張，只缺一張不算，避免誤報）。清單每筆回傳原因旗標
+# （missing_invoice／missing_notes），畫面標出是缺哪一種。
 _CASE_MISSING_INVOICE_SQL = (
     "EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data_json,'$.caseRecord.payment.items'),'[]')) p"
     " WHERE COALESCE(json_extract(p.value,'$.received'),0) = 1"
@@ -818,17 +818,12 @@ _CASE_STAGES_ALL_DONE_SQL = (
     "(EXISTS (SELECT 1 FROM case_stages s WHERE s.quote_no=quotations.quote_no)"
     " AND NOT EXISTS (SELECT 1 FROM case_stages s WHERE s.quote_no=quotations.quote_no AND s.done=0))"
 )
-_CASE_MISSING_COMPLETION_SQL = (
+_CASE_MISSING_NOTES_SQL = (
     f"({_CASE_STAGES_ALL_DONE_SQL}"
-    " AND NOT EXISTS (SELECT 1 FROM completion_notes n WHERE n.quote_no=quotations.quote_no))"
-)
-_CASE_MISSING_SHIPPING_SQL = (
-    f"({_CASE_STAGES_ALL_DONE_SQL}"
+    " AND NOT EXISTS (SELECT 1 FROM completion_notes n WHERE n.quote_no=quotations.quote_no)"
     " AND NOT EXISTS (SELECT 1 FROM shipping_notes n WHERE n.quote_no=quotations.quote_no))"
 )
-_CASE_MISSING_DOCS_SQL = (
-    f"({_CASE_MISSING_INVOICE_SQL} OR {_CASE_MISSING_COMPLETION_SQL} OR {_CASE_MISSING_SHIPPING_SQL})"
-)
+_CASE_MISSING_DOCS_SQL = f"({_CASE_MISSING_INVOICE_SQL} OR {_CASE_MISSING_NOTES_SQL})"
 
 
 @router.get("/api/quotations")
@@ -880,8 +875,7 @@ def list_quotations(
         " AND due_date != '' AND due_date < ?) as stage_overdue, "
         # CM7：缺單據的原因（畫面標出缺哪一種）
         f"{_CASE_MISSING_INVOICE_SQL} as missing_invoice, "
-        f"{_CASE_MISSING_COMPLETION_SQL} as missing_completion, "
-        f"{_CASE_MISSING_SHIPPING_SQL} as missing_shipping"
+        f"{_CASE_MISSING_NOTES_SQL} as missing_notes"
     )
     # select_params 只服務上面 SELECT 子句裡的相關子查詢（stage_overdue 的 today），跟
     # where_sql 的 params 分開放——SELECT 子句在 SQL 字串裡排在 WHERE 之前，它的 ? 佔位

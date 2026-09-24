@@ -1243,7 +1243,7 @@ function app() {
       { key: 'stage_overdue', label: '逾期階段', count: 'stageOverdueCases' },
       { key: 'recv_overdue',  label: '應收逾期', count: 'recvOverdue' },
       { key: 'missing_docs',  label: '缺單據',   count: 'missingDocs',
-        hint: '缺發票（已收款未登錄發票號碼），或執行階段全部完成卻缺完工單／出貨單' },
+        hint: '缺發票（已收款未登錄發票號碼），或執行階段全部完成卻沒有任何完工單與出貨單' },
     ],
     caseTotal: 0,
     caseCounts: null,
@@ -1442,8 +1442,7 @@ function app() {
     missingDocTags(c) {
       const t = []
       if (c.missing_invoice) t.push('缺發票')
-      if (c.missing_completion) t.push('缺完工單')
-      if (c.missing_shipping) t.push('缺出貨單')
+      if (c.missing_notes) t.push('缺完工／出貨單')
       return t
     },
 
