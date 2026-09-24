@@ -312,3 +312,20 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 - **N13-R2**：報價單「低毛利」特殊條件在後端重算時**只看毛利率欄位**（照前端移植）；毛利率欄位可被假造，搭配真實的低單價仍可隱瞞低毛利。使用者 2026-09-24 表單原文「只看毛利率欄位」——**接受此限制**。
 - **N13-R3**：「第 i+1 項」的項次含區段標題位置，和 PDF 項次（不含區段標題）不一致；照移植不改。
 - **FORM_VERSION**：9084c28 系列 3 個 commit 與 N13 改了 `quotation-form.html` 卻沒 bump（違反維護規則）⇒ 由 hichan-8d 補 V2.0 → V3.0（預覽改流程 +1）。
+
+## 🟢 UR1 未讀紅點逐筆已讀、存伺服器（2026-09-24 使用者；執行者 hichan-bf，解除「只寫文件」限制）
+使用者：「目前很多使用者反應，我點選選進某些未讀的，點選後紅色未讀沒有即時消失」；三種都要修（選單紅色數字、右上鈴鐺、清單未讀標記）；表單「逐筆已讀，存在伺服器」「讓 hichan-bf 寫碼」。
+
+**成因（讀碼確認，origin/master）**：
+- 選單數字：「看過」只在**下一頁載入時**寫入（`sidebar.js:1104-1114`）且用**用戶端時鐘**與伺服器 `audit_log.at` 字串比較；無輪詢、無 `pageshow`／`storage` 監聽 ⇒ 上一頁與其他分頁不更新；以模組為單位（`_FILE_MODULE`）；`tender_radar` 不在 `modBadge`／`_MODULE_ACTION_PREFIXES` ⇒ 永不亮。
+- 鈴鐺：只呼叫 `read-all`（`notif.js:219`），打開下拉才全部已讀、await 後才歸零；`PATCH /api/notifications/{id}/read`（`system.py:322`）無呼叫端；下拉項目不可點。
+- 清單標記：dev-crm（`isUnread` 比 `motrix_devcrm_read_at`）、案件管理（`case-management.js:1200-1216`）、每日工作（`prev_seen`）皆**模組層時間**，開單筆不清；自己的修改也算未讀；全存 localStorage。
+
+**做法**：
+1. 新表 `item_reads(username, kind, item_key TEXT, read_at)`，主鍵 (username, kind, item_key)；read_at 用**伺服器時間**。migration **v113**（v111＝JV36、v112＝獎金；以合回時 master 為準、撞號順延、db.py 先宣告）。DM1 分類、每日 JSON 匯出一併登記。
+2. API：`POST /api/reads`（標記單筆，伺服器蓋時間）、`GET /api/reads?kind=`；模組數字端點改用伺服器端「看過」時間（新增 `module_seen` 也存伺服器，或併入 item_reads 的 kind='module'），**排除本人造成的事件**。
+3. 前端：點選單項目／清單項目**當下**先清 UI 再送請求（`keepalive`），不等回應；`pageshow`（persisted）與 `storage` 事件觸發重抓；鈴鐺下拉改列真通知、點一則標那一則；`tender_radar` 補進兩處對照。
+4. 清單標記改為「該筆 updated_at（排除本人）＞ 該筆 read_at」。
+5. 舊 localStorage 鍵：首次載入時一次性上傳遷移（不遺失既有已讀），之後停用。
+
+**界線**：`sidebar.js` 為鎖定檔——動前向 hichan-0a 宣告範圍；hichan-61 另有字級（約 :69、:116）與 hichan-8d 的 dirty 清除（:1023-1034）改動，避開這兩段。在自己的 worktree；題先紅；使用者可見的改動附頁面實測（至少：點一筆 ⇒ 該筆紅點立即消失、上一頁回來仍消失、另一分頁在 pageshow／storage 後同步）。
