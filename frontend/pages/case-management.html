@@ -1324,6 +1324,31 @@
                       </div>
                     </div>
 
+                    <!-- AC1（使用者選 (a)）：發票記載的未稅／稅額，選填。兩欄都填 ⇒ 稅務匯出以它為準；
+                         只填一欄後端拒存（這裡先提示）；合計與該期金額不同只提示不擋。
+                         沒有財務檢視權（CM13）⇒ 不渲染：後端本來就不回這兩鍵、存檔時以資料庫值補回。 -->
+                    <template x-if="!moneyMasked()">
+                      <div style="display:grid;grid-template-columns:136px 136px 1fr;gap:8px;margin-top:8px;align-items:end">
+                        <div>
+                          <span class="fi-label" title="發票上記載的銷售額（未稅）；與稅額一起填寫，稅務匯出以它為準">發票未稅</span>
+                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
+                                 data-testid="invoice-pretax"
+                                 x-model.number="item.invoicePretax" @input="setDirty()">
+                        </div>
+                        <div>
+                          <span class="fi-label">發票稅額</span>
+                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
+                                 data-testid="invoice-tax"
+                                 x-model.number="item.invoiceTax" @input="setDirty()">
+                        </div>
+                        <div style="font-size:11px;font-family:var(--font-zh)">
+                          <span data-testid="invoice-half" style="color:#B91C1C" x-show="invoiceHalfFilled(item)">發票未稅與稅額要一起填寫，只填一欄無法存檔。</span>
+                          <span data-testid="invoice-mismatch" style="color:#B45309" x-show="invoiceMismatch(item, idx)"
+                                x-text="invoiceMismatch(item, idx)"></span>
+                        </div>
+                      </div>
+                    </template>
+
                     <!-- ⚠️ 「錢會從報表上無聲消失」的兩種狀態（2026-09-11）。
                          「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，
                          營運報表的當月收入撈不到（要 received=true 且 receivedAt 在

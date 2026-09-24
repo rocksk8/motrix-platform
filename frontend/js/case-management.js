@@ -1730,6 +1730,20 @@ function app() {
     // 這時 total／amount 都是空的，任何換算都會算出 0 並自動存回去 ⇒ 會改金額的動作一律不做。
     moneyMasked() { return !!this.selected?.moneyMasked },
 
+    // AC1：發票未稅／稅額（選填）。空＝沒填（null／''／undefined）；0 是有填（免稅的稅額就是 0）。
+    _invoiceEmpty(v) { return v === null || v === undefined || v === '' },
+    invoiceHalfFilled(item) {
+      return this._invoiceEmpty(item.invoicePretax) !== this._invoiceEmpty(item.invoiceTax)
+    },
+    /** 兩欄都填而合計 ≠ 該期應收 ⇒ 回提示文字（只提示、不擋：發票可能與約定金額差 ±1）；否則 '' */
+    invoiceMismatch(item, idx) {
+      if (this._invoiceEmpty(item.invoicePretax) || this._invoiceEmpty(item.invoiceTax)) return ''
+      const sum = (+item.invoicePretax || 0) + (+item.invoiceTax || 0)
+      const due = Math.round(this.itemAmountReceivable(idx))
+      return sum === due ? '' : '發票合計 NT$ ' + sum.toLocaleString() + ' 與這一期金額 NT$ '
+        + due.toLocaleString() + ' 不同，請確認（不影響存檔）。'
+    },
+
     totalWithTax()  { return this.selected?.total    || 0 },
     totalPretax()   { return this.selected?.pretax   || 0 },
     totalTax()      { return this.totalWithTax() - this.totalPretax() },
