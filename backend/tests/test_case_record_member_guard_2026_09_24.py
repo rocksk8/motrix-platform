@@ -137,3 +137,71 @@ def test_other_users_role_name_does_not_let_me_in(client, make_user):
     make_user(username="mb_someone", role="engineer")
     _seed(roles={"executor": "mb_someone"}, stage_assignees=["mb_someone"])
     assert _save(client, _login(client, *u)).status_code == 403
+
+
+# ── 追加裁示：持 cashier 模組者可寫所有案件的「收款」分段 ───────────────────
+
+def _pay_seed():
+    import db
+    _seed()
+    conn = db.get_db()
+    try:
+        d = json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()[0])
+        d["caseRecord"]["payment"] = {"items": [{"id": 1, "type": "訂金款", "pct": 100, "amount": 100,
+                                                 "received": False, "note": ""}]}
+        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?", (json.dumps(d, ensure_ascii=False), NO))
+        conn.commit()
+    finally:
+        conn.close()
+    return d["caseRecord"]["payment"]
+
+
+def _cr():
+    import db
+    conn = db.get_db()
+    try:
+        return json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (NO,)).fetchone()[0])["caseRecord"]
+    finally:
+        conn.close()
+
+
+def test_non_member_cashier_can_save_payment_segment(client, make_user):
+    u = make_user(username="mb_cash", role="engineer", modules=["cashier"])
+    base = _pay_seed()
+    new = json.loads(json.dumps(base))
+    new["items"][0]["received"] = True
+    new["items"][0]["receivedAt"] = "2026-09-20"
+    new["items"][0]["actualAmount"] = 100
+    r = client.patch(f"/api/quotations/{NO}/case-record", headers=_login(client, *u), json={
+        "segments": {"payment": new}, "base": {"payment": base},
+        "defaults": {"contract": {"deliveryAddress": ""}}})
+    assert r.status_code == 200, r.text
+    cr = _cr()
+    assert cr["payment"]["items"][0]["received"] is True
+    assert "contract" not in cr, "出納這條路不寫頁面補的預設分段"
+
+
+@pytest.mark.parametrize("body", [
+    {"segments": {"materials": [{"id": 1, "name": "改過", "qty": 1}]},
+     "base": {"materials": [{"id": 1, "name": "原料", "qty": 1}]}},
+    {"segments": {"payment": {"items": []}, "materials": [{"id": 1, "name": "改過", "qty": 1}]},
+     "base": {"payment": None, "materials": [{"id": 1, "name": "原料", "qty": 1}]}},
+    {"case_record": {"materials": [{"id": 1, "name": "改過", "qty": 1}]}},
+], ids=["other-segment", "payment-plus-other", "legacy-whole-record"])
+def test_non_member_cashier_other_segments_still_403(client, make_user, body):
+    u = make_user(username="mb_cash2", role="engineer", modules=["cashier"])
+    _pay_seed()
+    before = _cr()
+    r = client.patch(f"/api/quotations/{NO}/case-record", headers=_login(client, *u), json=body)
+    assert r.status_code == 403, r.text
+    assert _cr() == before
+
+
+def test_non_member_without_cashier_cannot_save_payment_segment(client, make_user):
+    u = make_user(username="mb_nocash", role="engineer")
+    base = _pay_seed()
+    new = json.loads(json.dumps(base))
+    new["items"][0]["note"] = "x"
+    r = client.patch(f"/api/quotations/{NO}/case-record", headers=_login(client, *u),
+                     json={"segments": {"payment": new}, "base": {"payment": base}})
+    assert r.status_code == 403, r.text

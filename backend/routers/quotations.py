@@ -2440,8 +2440,15 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     # 例外：已結案且半解鎖——每一筆都排進 superadmin 審核，把關在審核（比照 _guard_case）。
     semi_unlocked = (row["deal_tag"] or "") == "已結案" and bool(row["case_semi_unlocked"])
     if not semi_unlocked and not _is_case_member(conn, quote_no, row, user):
-        conn.close()
-        raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
+        # 使用者裁示（CM14 追加）：持 cashier 模組者可寫所有案件的「收款」分段——只放行分段格式、
+        # 只含 payment；其他分段與舊整包格式仍須成員。頁面替缺少分段補的預設值（defaults）
+        # 不是出納的改動，這條路上一律不寫。
+        cashier_payment_only = (user_has_module(user, "cashier") and body.segments is not None
+                                and set(body.segments) <= {"payment"})
+        if not cashier_payment_only:
+            conn.close()
+            raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
+        body.defaults = None
     if body.segments is not None:
         # 2026-09-24（CM1）：過去整包取代 caseRecord ⇒ 兩人同時編同一件，後存者靜默蓋掉
         # 前一個人的改動。改成只替換改到的分段；那一段在資料庫的現值與呼叫端的基準
