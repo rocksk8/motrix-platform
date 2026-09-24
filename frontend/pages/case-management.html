@@ -1122,6 +1122,18 @@
                     </div>
                     <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
                          x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
+                    <div data-testid="case-links" style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px;margin-top:8px"
+                         x-show="caseMapUrl() || (caseLinks.quoteNo === selected?.quote_no && (caseLinks.bonusEnabled || caseLinks.vouchers.length))">
+                      <template x-if="caseMapUrl()">
+                        <a data-testid="case-link-map" :href="caseMapUrl()">在地圖上看</a>
+                      </template>
+                      <template x-if="caseLinks.quoteNo === selected?.quote_no && caseLinks.bonusEnabled">
+                        <a data-testid="case-link-bonus" :href="'bonus.html?q=' + encodeURIComponent(selected.quote_no)">獎金分配</a>
+                      </template>
+                      <template x-for="v in (caseLinks.quoteNo === selected?.quote_no ? caseLinks.vouchers : [])" :key="v.id">
+                        <a data-testid="case-link-voucher" :href="'voucher.html?id=' + v.id" x-text="'傳票 ' + v.voucher_no"></a>
+                      </template>
+                    </div>
                     <div x-show="healthDocs()" style="font-size:12px;color:var(--text-secondary);margin-top:6px"
                          x-text="healthDocs() ? '待簽核：' + (healthDocs().pendingDocs || []).map(d => d.label + ' ' + d.count + ' 筆').join('、')
                                  + ((healthDocs().pendingApprovers || []).length ? '（' + healthDocs().pendingApprovers.map(a => a.displayName).join('、') + '）' : '') : ''"></div>

@@ -1438,6 +1438,7 @@ function app() {
         //      那一筆的未讀標記必須還在。
         this._markCaseRead(quoteNo)
         this.loadCaseHealth(quoteNo)
+        this.loadCaseLinks(quoteNo)
         // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
         if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
@@ -2346,9 +2347,48 @@ function app() {
       this.closeCheck.open = false
       const entry = { at: new Date().toISOString(), user: this.session.displayName || '', from: '已成案', to: '已結案' }
       await this.updateDealTag('已結案', entry)
+      // 結案後留在案件頁（原本 800ms 後跳保固頁）
       if (this.cr.dealTag === '已結案') {
-        setTimeout(() => { location.href = 'warranty.html' }, 800)
+        this.saveStatus = 'saved'
+        this.saveMsg = '已結案，保固追蹤已開始'
       }
+    },
+
+    // ── 跨模組連結（2026-09-24）─────────────────────────────────────────
+    // 地圖（MP6 案件圖層）、獎金分配（bonus.js 的 ?q=）、相關傳票（分錄來源指向本案）。
+    // 看不到該頁的人不顯示連結；回應晚到時只收目前選的那一件。
+    caseLinks: { quoteNo: '', vouchers: [], bonusEnabled: false },
+
+    _hasModule(k) {
+      if (this.session.role === 'superadmin') return true
+      let m = this.session.modules || []
+      if (typeof m === 'string') { try { m = JSON.parse(m) } catch { m = [] } }
+      return Array.isArray(m) && m.includes(k)
+    },
+
+    caseMapUrl() {
+      if (!this.selected || !this._hasModule('map')) return ''
+      const addr = this.cr.caseRecord?.contract?.deliveryAddress || this.selected.data?.deliveryLocation || ''
+      if (!addr.trim()) return ''
+      return 'map.html?focus=' + encodeURIComponent('cases:' + this.selected.quote_no)
+    },
+
+    async loadCaseLinks(quoteNo) {
+      if (!quoteNo) return
+      const auth = { Authorization: 'Bearer ' + this.session.token }
+      const out = { quoteNo, vouchers: [], bonusEnabled: false }
+      const jobs = []
+      if (this._hasModule('cashier') || this._hasModule('finance')) {
+        jobs.push(fetch('/api/vouchers/by-case/' + encodeURIComponent(quoteNo), { headers: auth })
+          .then(r => r.ok ? r.json() : null).then(d => { out.vouchers = (d && d.vouchers) || [] }).catch(() => {}))
+      }
+      if (this.session.role === 'superadmin') {
+        jobs.push(fetch('/api/system/bonus-module-status', { headers: auth })
+          .then(r => r.ok ? r.json() : null).then(d => { out.bonusEnabled = !!(d && d.enabled) }).catch(() => {}))
+      }
+      await Promise.all(jobs)
+      if (this.selected?.quote_no !== quoteNo) return
+      this.caseLinks = out
     },
 
     async updateDealTag(tag, logEntry) {

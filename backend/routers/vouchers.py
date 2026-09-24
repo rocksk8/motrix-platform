@@ -601,6 +601,31 @@ def _case_expense_sources(conn, quote_no):
 #    「檢查宣告順序」的掃描器會把這行註解也算成一條路由（我剛踩過）。
 # 🔑 **422 讀起來像「我參數傳錯了」，而實際是「這條路還沒做」** ——
 #    查的人會去翻自己的呼叫端，而問題在這個檔案的行號順序上。
+@router.get("/by-case/{quote_no}")
+def vouchers_by_case(quote_no: str, authorization: str = Header(None)):
+    """這個案件相關的有效傳票（2026-09-24，案件頁跨模組連結）。
+
+    相關＝有分錄的來源（`JV36` source_type／source_key）指向這個案件本身、它的額外支出
+    或承攬派工。作廢單不列（走 VIEW `vouchers`）。權限同傳票清單。"""
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    no = (quote_no or "").strip()
+    conn = get_db()
+    try:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT DISTINCT v.id, v.voucher_no, v.voucher_date, v.status, v.summary"
+            " FROM vouchers v JOIN voucher_lines l ON l.voucher_id = v.id"
+            " WHERE (l.source_type = 'case' AND l.source_key = ?)"
+            "    OR (l.source_type = 'extra_expense' AND l.source_key IN"
+            "        (SELECT CAST(id AS TEXT) FROM case_extra_expenses WHERE quote_no = ?))"
+            "    OR (l.source_type = 'contractor_dispatch' AND l.source_key IN"
+            "        (SELECT CAST(id AS TEXT) FROM contractor_dispatches WHERE quote_no = ?))"
+            " ORDER BY v.id DESC", (no, no, no))]
+    finally:
+        conn.close()
+    return {"vouchers": rows}
+
+
 @router.get("/summary-sources")
 def summary_sources(q: str = "", quote_no: str = "",
                     authorization: str = Header(None)):
