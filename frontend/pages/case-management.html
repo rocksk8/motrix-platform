@@ -838,6 +838,54 @@
           </div>
         </div>
 
+        <!-- CM10：批次操作 -->
+        <div x-show="caseViewMode==='list'" style="display:flex;align-items:center;gap:6px;padding:0 12px 6px">
+          <button type="button" class="aq-sort" data-testid="batch-toggle" :class="{on: batchMode}"
+                  @click="toggleBatchMode()" x-text="batchMode ? '結束多選' : '多選'"></button>
+          <template x-if="batchMode">
+            <span style="font-size:11.5px;color:var(--text-secondary)">
+              <span data-testid="batch-count" x-text="'已選 ' + batchCount() + ' 件'"></span>
+              <button type="button" class="aq-sort" style="margin-left:4px" @click="batchSelectPage()">全選本頁</button>
+            </span>
+          </template>
+        </div>
+        <template x-if="batchMode && batchCount() > 0">
+          <div data-testid="batch-bar"
+               style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 12px 8px;padding:8px;border:1px solid var(--border-light);border-radius:6px;font-size:12px">
+            <template x-if="canBatchAssign()">
+              <span style="display:inline-flex;gap:4px;align-items:center">
+                <select class="fi fi--sm" data-testid="batch-exec" x-model="batchExec" style="width:auto">
+                  <option value="">執行負責…</option>
+                  <option value="__clear__">（清除）</option>
+                  <template x-for="u in selectableUsers" :key="u.username">
+                    <option :value="u.username" x-text="u.display_name || u.username"></option>
+                  </template>
+                </select>
+                <button type="button" class="aq-sort" data-testid="batch-exec-apply" :disabled="batchBusy"
+                        @click="batchAssign('executor')">套用</button>
+              </span>
+            </template>
+            <template x-if="canBatchAssign()">
+              <span style="display:inline-flex;gap:4px;align-items:center">
+                <select class="fi fi--sm" data-testid="batch-member" x-model="batchMember" style="width:auto">
+                  <option value="">成員…</option>
+                  <template x-for="u in selectableUsers" :key="u.id">
+                    <option :value="u.id" x-text="u.display_name || u.username"></option>
+                  </template>
+                </select>
+                <button type="button" class="aq-sort" data-testid="batch-member-add" :disabled="batchBusy"
+                        @click="batchAssign('add')">加入</button>
+                <button type="button" class="aq-sort" data-testid="batch-member-remove" :disabled="batchBusy"
+                        @click="batchAssign('remove')">移除</button>
+              </span>
+            </template>
+            <button type="button" class="aq-sort" data-testid="batch-export" :disabled="batchBusy"
+                    @click="batchExport()">匯出 Excel</button>
+            <span data-testid="batch-msg" x-show="batchMsg" x-text="batchMsg"
+                  style="flex-basis:100%;color:var(--text-secondary)"></span>
+          </div>
+        </template>
+
         <!-- CM7：常用篩選（可疊加；伺服器端，全部案件） -->
         <div class="cm-quick" data-testid="case-quick-filters" x-show="caseViewMode==='list'"
              style="display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px">
@@ -881,6 +929,8 @@
                  :data-quote-no="c.quote_no"
                  @click="selectCase(c.quote_no)">
               <div class="cm-card__head">
+                <input type="checkbox" x-show="batchMode" data-testid="batch-check" :checked="isBatchSel(c)"
+                       :aria-label="'選取 ' + c.quote_no" @click.stop="toggleBatch(c)" style="margin-right:6px">
                 <span class="drag-handle" x-show="caseSortPref.sortMode === 'custom'" style="cursor:grab;margin-right:4px" @click.stop>⠿</span>
                 <span class="cm-card__no" x-text="c.quote_no"></span>
                 <span class="cm-card__tag"

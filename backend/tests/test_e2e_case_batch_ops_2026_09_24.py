@@ -1,0 +1,133 @@
+"""案件清單批次操作：頁面端（2026-09-24 使用者表單）。
+
+「多選」⇒ 卡片出現勾選框；勾兩件、選執行負責、套用 ⇒ 資料庫兩件都改；匯出 ⇒ 下載 xlsx 且只含勾選的。
+非管理員看不到批次改負責人／成員（只剩匯出）。觀測點：資料庫落地值、下載檔內容。
+"""
+import io
+import json
+import threading
+import time
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import sync_playwright
+
+DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
+
+
+def _case(no, sales=""):
+    import db
+    now = "2026-01-01T00:00:00"
+    cr = {"roles": {"filler": "", "sales": "", "executor": ""}, "payment": {"items": []}}
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
+            " created_at, updated_at, deal_tag, quote_date, sales_person) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (no, "已送出", "客戶", "專案", 1000, 952,
+             json.dumps({"dealTag": "已成案", "caseRecord": cr}, ensure_ascii=False),
+             now, now, "已成案", "2026-08-01", sales))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _executor(no):
+    import db
+    conn = db.get_db()
+    try:
+        d = json.loads(conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0])
+        return (d["caseRecord"]["roles"]["executor"] or {}).get("username") if isinstance(
+            d["caseRecord"]["roles"]["executor"], dict) else d["caseRecord"]["roles"]["executor"]
+    finally:
+        conn.close()
+
+
+@pytest.fixture()
+def live_server(client):
+    import uvicorn
+    import main
+    from tests._ports import free_safe_port
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
+    server = uvicorn.Server(config)
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
+    port = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)
+
+
+def _open(browser, base, user):
+    page = browser.new_context(accept_downloads=True).new_page()
+    page.on("dialog", lambda d: d.accept())
+    page.goto(f"{base}/pages/login.html")
+    page.fill('input[x-model="username"]', user[0])
+    page.fill('input[x-model="password"]', user[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{base}/pages/case-management.html")
+    page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token"
+                           f" && !{DATA_JS}.loading && {DATA_JS}.selectableUsers.length", timeout=20000)
+    return page
+
+
+def _check(page, no):
+    page.locator(f".cm-card[data-quote-no='{no}'] [data-testid=batch-check]").click()
+
+
+@pytest.mark.e2e
+def test_batch_executor_and_export(live_server, make_user):
+    from openpyxl import load_workbook
+    u = make_user(username="be_admin", role="admin")
+    make_user(username="be_exec", role="engineer")
+    for no in ("MQ-BE-1", "MQ-BE-2", "MQ-BE-3"):
+        _case(no)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = _open(browser, live_server, u)
+            page.click("[data-testid=batch-toggle]")
+            _check(page, "MQ-BE-1")
+            _check(page, "MQ-BE-3")
+            assert page.locator("[data-testid=batch-count]").inner_text() == "已選 2 件"
+            assert page.evaluate(f"() => {DATA_JS}.selected") is None, "勾選不可以順便打開案件"
+            page.select_option("[data-testid=batch-exec]", "be_exec")
+            page.click("[data-testid=batch-exec-apply]")
+            page.locator("[data-testid=batch-msg]").wait_for(state="visible", timeout=10000)
+            assert "已變更 2 件" in page.locator("[data-testid=batch-msg]").inner_text()
+            assert (_executor("MQ-BE-1"), _executor("MQ-BE-2"), _executor("MQ-BE-3")) == ("be_exec", "", "be_exec")
+            with page.expect_download() as dl:
+                page.click("[data-testid=batch-export]")
+            path = dl.value.path()
+            with open(path, "rb") as f:           # 下載暫存檔沒有副檔名，openpyxl 依副檔名拒讀
+                ws = load_workbook(io.BytesIO(f.read())).active
+            assert sorted(r[0] for r in ws.iter_rows(min_row=2, values_only=True)) == ["MQ-BE-1", "MQ-BE-3"]
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_non_admin_sees_export_only(live_server, make_user):
+    u = make_user(username="be_sales", role="sales")
+    _case("MQ-BE-S", sales="be_sales")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = _open(browser, live_server, u)
+            page.click("[data-testid=batch-toggle]")
+            _check(page, "MQ-BE-S")
+            page.locator("[data-testid=batch-export]").wait_for(state="visible", timeout=5000)
+            assert page.locator("[data-testid=batch-exec]").count() == 0
+            assert page.locator("[data-testid=batch-member]").count() == 0
+        finally:
+            browser.close()

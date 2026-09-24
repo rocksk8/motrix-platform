@@ -1330,6 +1330,104 @@ function app() {
       this.loadCases()
     },
 
+    // ── CM10（2026-09-24）：批次操作 ─────────────────────────────────────────
+    // 多選模式下卡片出現勾選框；批次改執行負責／成員（管理員以上，只改進行中的案件）、批次匯出 Excel。
+    batchMode: false,
+    batchSel: {},
+    batchExec: '',
+    batchMember: '',
+    batchBusy: false,
+    batchMsg: '',
+
+    canBatchAssign() { return ['superadmin', 'admin'].includes(this.session.role) },
+    batchCount() { return Object.keys(this.batchSel).length },
+    batchNos() { return Object.keys(this.batchSel) },
+    isBatchSel(c) { return !!this.batchSel[c.quote_no] },
+
+    toggleBatchMode() {
+      this.batchMode = !this.batchMode
+      this.batchSel = {}
+      this.batchMsg = ''
+    },
+    toggleBatch(c) {
+      const m = { ...this.batchSel }
+      if (m[c.quote_no]) delete m[c.quote_no]
+      else m[c.quote_no] = true
+      this.batchSel = m
+    },
+    batchSelectPage() {
+      const m = { ...this.batchSel }
+      for (const c of this.filteredCases) m[c.quote_no] = true
+      this.batchSel = m
+    },
+
+    async batchAssign(kind) {
+      const nos = this.batchNos()
+      if (!nos.length || this.batchBusy) return
+      const body = { quote_nos: nos }
+      if (kind === 'executor') {
+        if (!this.batchExec) { this.batchMsg = '請先選擇執行負責'; return }
+        body.executor = this.batchExec === '__clear__' ? '' : this.batchExec
+      } else {
+        if (!this.batchMember) { this.batchMsg = '請先選擇成員'; return }
+        body[kind === 'add' ? 'add_members' : 'remove_members'] = [Number(this.batchMember)]
+      }
+      this.batchBusy = true
+      this.batchMsg = ''
+      try {
+        const r = await fetch('/api/case-batch/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(body),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.batchMsg = (typeof d.detail === 'string' && d.detail) || '批次變更失敗'; return }
+        const sk = d.skipped || []
+        this.batchMsg = `已變更 ${(d.updated || []).length} 件` + (sk.length
+          ? `；略過 ${sk.length} 件（${sk.map(s => s.quoteNo + '：' + s.reason).join('、')}）` : '')
+        // 目前開著的案件也在名單裡且沒有未存變更 ⇒ 重新載入，畫面才看得到新的負責人／成員
+        if (this.selected && (d.updated || []).includes(this.selected.quote_no) && !this.dirty) {
+          this.selectCase(this.selected.quote_no)
+        }
+        this.loadCases()
+      } catch {
+        this.batchMsg = '網路錯誤，請稍後再試'
+      } finally {
+        this.batchBusy = false
+      }
+    },
+
+    async batchExport() {
+      const nos = this.batchNos()
+      if (!nos.length || this.batchBusy) return
+      this.batchBusy = true
+      this.batchMsg = ''
+      try {
+        const r = await fetch('/api/case-batch/export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ quote_nos: nos }),
+        })
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}))
+          this.batchMsg = (typeof d.detail === 'string' && d.detail) || '匯出失敗'
+          return
+        }
+        const blob = await r.blob()
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = '案件匯出.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+      } catch {
+        this.batchMsg = '網路錯誤，請稍後再試'
+      } finally {
+        this.batchBusy = false
+      }
+    },
+
     toggleQuick(key) {
       this.caseQuick = { ...this.caseQuick, [key]: !this.caseQuick[key] }
       this.loadCases()

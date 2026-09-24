@@ -6580,3 +6580,153 @@ def approval_history(month: Optional[str] = None, q: Optional[str] = None,
         })
     return {"items": items, "months": months, "scope": scope,
             "hasMore": len(items) == limit}
+
+
+# ── CM10（2026-09-24）：案件清單批次操作 ──────────────────────────────────────
+# 路徑刻意不放在 /api/quotations/ 底下：POST /api/quotations/{quote_no}/export 會把
+# 「batch」當成單號吃掉（FastAPI 依宣告順序比對，同形狀的路徑先宣告的先贏）。
+_BATCH_MAX = 200
+
+
+def _batch_nos(body) -> list:
+    nos = [str(n).strip() for n in ((body or {}).get("quote_nos") or []) if str(n).strip()]
+    nos = list(dict.fromkeys(nos))
+    if not nos:
+        raise HTTPException(400, "請至少選擇一件案件")
+    if len(nos) > _BATCH_MAX:
+        raise HTTPException(400, f"一次最多 {_BATCH_MAX} 件")
+    return nos
+
+
+@router.post("/api/case-batch/assign")
+def case_batch_assign(body: dict = Body(...), authorization: str = Header(None)):
+    """批次改執行負責／成員。門檻同單筆成員分配（管理員以上）。只改進行中（已成案）的案件：
+    已結案要走半解鎖＋審核，不在批次範圍，列在 skipped 並說明原因。
+    executor：帳號（空字串＝清除）；不帶這個鍵＝不動。add_members／remove_members：使用者 id。"""
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "僅管理員可批次設定執行負責與成員")
+    nos = _batch_nos(body)
+    set_exec = "executor" in (body or {})
+    exec_name = str((body or {}).get("executor") or "").strip()
+    add = [int(x) for x in ((body or {}).get("add_members") or []) if str(x).strip()]
+    remove = {int(x) for x in ((body or {}).get("remove_members") or []) if str(x).strip()}
+    if not set_exec and not add and not remove:
+        raise HTTPException(400, "沒有要變更的項目")
+    conn = get_db()
+    try:
+        exec_val = ""
+        if set_exec and exec_name:
+            u = conn.execute("SELECT username, display_name FROM users WHERE username=? AND active=1",
+                             (exec_name,)).fetchone()
+            if not u:
+                raise HTTPException(400, f"找不到可指派的帳號：{exec_name}")
+            exec_val = {"username": u["username"], "display": u["display_name"] or u["username"]}
+        ids = set(add) | remove
+        if ids:
+            ph = ",".join("?" * len(ids))
+            found = {r[0] for r in conn.execute(f"SELECT id FROM users WHERE id IN ({ph})", list(ids))}
+            if found != ids:
+                raise HTTPException(400, "成員名單裡有不存在的帳號")
+        updated, skipped = [], []
+        conn.execute("BEGIN IMMEDIATE")
+        for no in nos:
+            row = conn.execute(
+                f"SELECT data_json, assigned_user_ids, {SQL_DEAL_TAG} AS tag FROM quotations WHERE quote_no=?",
+                (no,)).fetchone()
+            if not row:
+                skipped.append({"quoteNo": no, "reason": "案件不存在"})
+                continue
+            if (row["tag"] or "") != "已成案":
+                skipped.append({"quoteNo": no, "reason": "只能變更進行中的案件（已結案請先解鎖）"})
+                continue
+            d = json.loads(row["data_json"] or "{}")
+            if set_exec:
+                cr = d.setdefault("caseRecord", {})
+                roles = cr.get("roles") if isinstance(cr.get("roles"), dict) else {}
+                roles["executor"] = exec_val
+                cr["roles"] = roles
+            members = [int(x) for x in json.loads(row["assigned_user_ids"] or "[]")]
+            members = [m for m in members if m not in remove]
+            members += [m for m in add if m not in members]
+            conn.execute("UPDATE quotations SET data_json=?, assigned_user_ids=?, updated_at=? WHERE quote_no=?",
+                         (json.dumps(d, ensure_ascii=False), json.dumps(members), datetime.now().isoformat(), no))
+            updated.append(no)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+    tok = _tok(authorization)
+    for no in updated:
+        _audit(tok, "case.batch_assign", "quotation", no, "批次變更執行負責／成員",
+               {"executor": exec_name if set_exec else None, "add": add, "remove": sorted(remove)})
+    return {"updated": updated, "skipped": skipped}
+
+
+@router.post("/api/case-batch/export")
+def case_batch_export(body: dict = Body(...), authorization: str = Header(None)):
+    """批次匯出勾選的案件（xlsx）。只含呼叫者看得到的案件（規則同案件清單）；
+    看不到金額的帳號金額欄留空（CM13）。"""
+    import io
+    from openpyxl import Workbook
+    user = _require_user(authorization)
+    nos = _batch_nos(body)
+    conn = get_db()
+    try:
+        ph = ",".join("?" * len(nos))
+        sql = (f"SELECT quote_no, customer_name, project_name, total, sales_person, assigned_user_ids, data_json, "
+               f"{SQL_DEAL_TAG} AS tag, "
+               f"(SELECT label FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+               f" ORDER BY sort_order LIMIT 1) AS current_stage, "
+               f"(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no) AS stage_total, "
+               f"(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=1) AS stage_done, "
+               f"(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
+               f" AND due_date != '' AND due_date < ?) AS stage_overdue "
+               f"FROM quotations WHERE quote_no IN ({ph})")
+        params = [datetime.now().strftime("%Y-%m-%d")] + nos
+        if user["role"] not in ("superadmin", "admin"):
+            frag, fparams = _visible_case_filter_sql(user)
+            sql += frag
+            params += fparams
+        rows = {r["quote_no"]: r for r in conn.execute(sql, params)}
+        names = {r["id"]: (r["display_name"] or r["username"])
+                 for r in conn.execute("SELECT id, username, display_name FROM users")}
+    finally:
+        conn.close()
+    show_money = money_visible(user)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "案件"
+    ws.append(["單號", "客戶", "專案", "狀態", "目前階段", "階段進度", "逾期階段", "業務", "執行負責", "成員", "金額"])
+
+    def cell(v):
+        # openpyxl 寫空字串會產生不合規的 inlineStr（Excel 開檔要修復）⇒ 空值一律 None
+        return v if v not in ("", None) else None
+
+    for no in nos:
+        r = rows.get(no)
+        if not r:
+            continue
+        d = json.loads(r["data_json"] or "{}")
+        roles = ((d.get("caseRecord") or {}).get("roles") or {})
+        members = "、".join(names.get(int(m), str(m)) for m in json.loads(r["assigned_user_ids"] or "[]"))
+        ws.append([
+            r["quote_no"], cell(r["customer_name"]), cell(r["project_name"]), cell(r["tag"]),
+            cell(r["current_stage"]),
+            f"{r['stage_done']}/{r['stage_total']}" if r["stage_total"] else None,
+            r["stage_overdue"] or None, cell(r["sales_person"]),
+            cell(role_display(roles.get("executor"))), cell(members),
+            (r["total"] if show_money else None),
+        ])
+    buf = io.BytesIO()
+    wb.save(buf)
+    fname = f"案件匯出_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    _audit(_tok(authorization), "case.batch_export", "quotation", ",".join(nos[:20]),
+           f"批次匯出 {len(rows)} 件")
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(fname)}"},
+    )
