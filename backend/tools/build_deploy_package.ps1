@@ -30,7 +30,10 @@ param(
     # 保留幾份部署包（2026-09-15 使用者要求：「當第三個打包檔的時候自動刪除第一個
     # 打包檔，避免重複堆積」）。0 = 不清理。清理在新包**完整產出並通過驗證之後**
     # 才執行，見 Step 7。
-    [int]$KeepPackages = 2
+    [int]$KeepPackages = 2,
+    # 超過幾天的部署包自動刪除（2026-09-25 使用者：「當匯出升級檔超過一周，就自動刪除過時升級檔」）。
+    # 0 = 不依天數清理。與 KeepPackages 並用：符合任一條就刪；這一次剛做好的包兩條都不會刪。
+    [int]$MaxAgeDays = 7
 )
 
 $ErrorActionPreference = "Stop"
@@ -842,27 +845,27 @@ Write-Host "[2/2] 寫入 deploy_manifest.json"
 # 排序用資料夾名稱而不是 LastWriteTime——名字開頭就是時間戳，字串排序即時間排序，
 # 而 LastWriteTime 會被「複製到隨身碟」之類的動作改掉。
 $_tPrune = Get-Date
-if ($KeepPackages -gt 0) {
-    $pkgPattern = '^\d{8}_\d{6}_[0-9a-fA-F]{7,40}$'
-    $allPkgs = Get-ChildItem $OutDir -Directory -ErrorAction SilentlyContinue |
-               Where-Object { $_.Name -match $pkgPattern } |
-               Sort-Object Name
-    $stale = @($allPkgs | Select-Object -SkipLast $KeepPackages)
-    if ($stale.Count -gt 0) {
-        Write-Host "`n[清理] 保留最新 $KeepPackages 份，刪除較舊的 $($stale.Count) 份："
-        foreach ($old in $stale) {
+# 2026-09-25：加上「超過 $MaxAgeDays 天就刪」；挑選規則抽到 _package_prune.ps1（可單獨測）。
+. (Join-Path $PSScriptRoot "_package_prune.ps1")
+if ($KeepPackages -gt 0 -or $MaxAgeDays -gt 0) {
+    $allNames = @(Get-ChildItem $OutDir -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+    $staleNames = @(Get-StalePackageNames -Names $allNames -Keep $KeepPackages -MaxAgeDays $MaxAgeDays `
+                                          -Now (Get-Date) -Current (Split-Path $pkgDir -Leaf))
+    if ($staleNames.Count -gt 0) {
+        Write-Host "`n[清理] 保留最新 $KeepPackages 份、刪除超過 $MaxAgeDays 天的，共刪除 $($staleNames.Count) 份："
+        foreach ($name in $staleNames) {
             # 用 Remove-Item 而不是 Step 3 的 `rd`：那裡處理的是 pytest 暫存（數萬個
             # 小檔，rd 快很多），一份部署包才一千多個檔，差別可以忽略，換來的是不必
             # 處理 cmd 的引號轉義、失敗時拿得到例外訊息。
             try {
-                Remove-Item -LiteralPath $old.FullName -Recurse -Force -ErrorAction Stop
-                Write-Host "  已刪除 $($old.Name)" -ForegroundColor DarkGray
+                Remove-Item -LiteralPath (Join-Path $OutDir $name) -Recurse -Force -ErrorAction Stop
+                Write-Host "  已刪除 $name" -ForegroundColor DarkGray
             } catch {
                 # 刪不掉不該讓整次打包失敗——包已經做好了，這只是清理
-                Write-Host "  [WARN] $($old.Name) 刪除失敗（檔案被占用？）：$($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "  [WARN] $name 刪除失敗（檔案被占用？）：$($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
-        Write-Host "  （要保留更多份：-KeepPackages N；完全不清理：-KeepPackages 0）" -ForegroundColor DarkGray
+        Write-Host "  （調整：-KeepPackages N／-MaxAgeDays N；設 0 關掉該條規則）" -ForegroundColor DarkGray
     }
 }
 

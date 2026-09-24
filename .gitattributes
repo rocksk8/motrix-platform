@@ -164,6 +164,8 @@ backend/tools/_dashboard_remote.ps1 export-ignore
 backend/tools/audit_account_permissions.py export-ignore
 backend/tools/backfill_location_identity_snapshot.py export-ignore
 backend/tools/build_deploy_package.ps1 export-ignore
+# 2026-09-25 新增（不在上面 17 個的原始分類裡）：build_deploy_package.ps1 的清理規則，同屬打包工具
+backend/tools/_package_prune.ps1 export-ignore
 backend/tools/check_approval_queue_coverage.py export-ignore
 backend/tools/check_double_init.py export-ignore
 backend/tools/check_endpoint_entrypoints.py export-ignore
