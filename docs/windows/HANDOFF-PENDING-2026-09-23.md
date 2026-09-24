@@ -470,3 +470,15 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 - AC1 範圍（hichan-0a 裁，依更正）：開票申請 invoice_vouchers 納入（只影響新建）；helpers/quotations.py:199 應收計算不動；請款單維持現況。
 - NEXT：gc8 known_miss 牆鐘門檻（1.0s）在多視窗同時跑全量時會紅 ⇒ 改計數型或相對值；不放寬門檻。
 - AC1「以發票稅額為準」的資料來源（2026-09-24 使用者表單：「收款登錄發票時加填未稅與稅額」）：收款項新增**選填** `invoicePretax`／`invoiceTax`，與發票號碼同處登錄；有填以它為準，沒填用算式。執行 hichan-bf：後端先做；案件款項明細 UI 等 hichan-8d 的 CM13 推上後再動（同一區塊）。⚠ 兩欄屬金額，**必須列入 CM13 遮蔽與回寫補回**（hichan-8d 知悉）；⚠ 只填一欄＝拒存（兩欄都填或都不填）；⚠ 未稅＋稅額 ≠ 該期金額時只提示不擋（發票可能分次開）。
+
+## ☀️ 舊待裁重新處理（2026-09-24 下午，使用者：「現在就開始問」）
+| 項目 | 裁示 |
+|---|---|
+| IA1 出廠帳號由客戶自己輸入 | **繼續暫停**（現況 `helpers/startup.py:106-130` 仍建 jeff；`auth.py:1563/1597` 仍寫死不可刪／停用） |
+| WL7① 登入頁／報表改讀公司資料 | **繼續暫停**（現況 `login.html:203/301` 印允碩；`reports.py`、`network_plan_export.py` 讀 company_profile 次數 0） |
+| WL7② PDF 頁尾產品標記 | **不加** |
+| JV27 傳票簽核資料損壞時整張讀不到 | **修，這輪一起上** ⇒ hichan-bf，排在 T10/T12 之後、AC1 之前；拿掉 `routers/vouchers.py:228 _appr_of()` 的重複解析，改走 `helpers/voucher.py`；`test_em5_voucher_chain_unreadable` 的 xfail(strict) 翻面 |
+| PENDING-RULINGS 資料／檔案 6 條（MG3、QS1①②、UP2、UP3①②） | 表單未作答 ⇒ 依該檔規則「不回＝同意目前的決定」 |
+| BN16／BN17／BN18／QS1-a（舊獎金單流程） | 舊流程已由 §十一 退役 ⇒ 不再問 |
+| KNOWN-GAPS 11 條（只有使用者在正式機查得到） | 未問，下一批 |
+| 待確認（今天代裁 4 項：單筆操作前自動存檔、舊 1～4% 單再編輯須改稅別、發票兩欄規則、網路錯誤不還原） | 表單未作答，維持代裁 |
