@@ -615,8 +615,46 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     for _const, _sub in _pdf_dirs.items():
         monkeypatch.setattr(pdf_gen, _const, str(tmp_path / "pdf_archive" / _sub))
 
+    import threading
+    threads_before = set(threading.enumerate())
+
     from fastapi.testclient import TestClient
-    return TestClient(_app)
+    yield TestClient(_app)
+
+    # ☠️ 背景執行緒隔離（test_bg_thread_isolation_2026_09_25）：產品的背景工作（產 PDF、寄信…）在題目結束後
+    #    仍在跑，它每次 get_db() 讀「當下的」db.DB_PATH ⇒ 下一題換了庫之後就寫進下一題的庫。
+    #    ⇒ 收尾時（monkeypatch 還原 DB_PATH 之前——client 依賴 monkeypatch，所以先收 client）等這一題
+    #    起的、**我們自己程式碼的**背景執行緒結束。第三方函式庫的長壽執行緒不等（否則每題白等到上限）。
+    _join_own_background_threads(threads_before)
+
+
+_BACKEND_DIR = str(_Bk19Path(__file__).resolve().parents[1])
+BG_JOIN_BUDGET_SECONDS = 30
+
+
+def _is_own_background_thread(t) -> bool:
+    import contextvars
+    target = getattr(t, "_target", None)
+    if target is None:
+        return False
+    owner = getattr(target, "__self__", None)
+    if isinstance(owner, contextvars.Context):
+        return True                          # db.spawn_bg_thread（以 ctx.run 起）
+    mod = sys.modules.get(getattr(target, "__module__", "") or "")
+    f = getattr(mod, "__file__", "") or ""
+    return f.startswith(_BACKEND_DIR) and "tests" not in _Bk19Path(f).parts   # 產品碼直接 threading.Thread 起的
+
+
+def _join_own_background_threads(threads_before):
+    import threading
+    deadline = time.time() + BG_JOIN_BUDGET_SECONDS
+    for t in threading.enumerate():
+        if t in threads_before or t is threading.current_thread() or not _is_own_background_thread(t):
+            continue
+        t.join(max(0.0, deadline - time.time()))
+        if t.is_alive():
+            _lock_say("\n[背景執行緒] %s 在 %d 秒內沒有結束 —— 它之後的寫入可能落到下一題的庫"
+                      % (t.name, BG_JOIN_BUDGET_SECONDS))
 
 
 @pytest.fixture()
