@@ -35,6 +35,8 @@ from helpers import (
     notify_case_close_blocked, notify_case_change_requested,
     norm_at, active_delegators_for, user_has_module, can_see_financial, require_any_module,
     validate_invoice_no,
+    validate_invoice_amounts,
+    validate_quote_tax,
     summarize_payment_items,
 )
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
@@ -1260,6 +1262,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
     user = _require_user(authorization)
     q   = body.data
+    validate_quote_tax(q)   # AC1：只能存法定稅別
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -1455,6 +1458,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
     # consume unlock-edit flag before any processing
     is_unlock_edit = bool(q.pop("_isUnlockEdit", False))
     expected_updated_at = q.pop("_expectedUpdatedAt", None)
+    validate_quote_tax(q)   # AC1：只能存法定稅別；舊 1～4% 單要改選
 
     new_status = body.status or q.get("status", "草稿")
 
@@ -2230,10 +2234,21 @@ def lock_case(quote_no: str, authorization: str = Header(None)):
 # 一份時間戳，兩邊必然不同；真正有效果的 taxExempt／writeOffStatus 另外嚴格比對）。
 _RECEIVED_ITEM_EDITABLE = {
     "invoiceNo", "invoiceDate", "invoiceFiles",
+    # AC1（使用者選 (a)）：發票記載的未稅／稅額，與發票號碼同一次登錄
+    "invoicePretax", "invoiceTax",
     "writeOffReason", "writeOffRequestedBy", "writeOffRequestedAt",
     "writeOffApprovedBy", "writeOffApprovedAt", "writeOffRejectReason",
 }
 _WRITE_OFF_EFFECT_FIELDS = ("taxExempt", "writeOffStatus")
+
+#: AC1：收款登錄發票時選填的發票未稅／稅額（稅務匯出以它為準）。
+_INVOICE_AMOUNT_KEYS = ("invoicePretax", "invoiceTax")
+
+
+def _apply_invoice_amounts(item: dict, body: dict) -> None:
+    for k in _INVOICE_AMOUNT_KEYS:
+        if k in body:
+            item[k] = body[k]
 
 
 def _payment_item_label(it: dict, i: int) -> str:
@@ -2387,6 +2402,7 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
     old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
     for new_it in new_items_for_inv:
+        validate_invoice_amounts(new_it)   # AC1：發票未稅／稅額只填一欄 ⇒ 拒存
         new_inv = new_it.get("invoiceNo")
         if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
             continue  # 未變動，不必重新驗證
@@ -2546,6 +2562,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
             pits[idx]["invoiceNo"] = body["invoiceNo"]
         if "invoiceDate" in body:
             pits[idx]["invoiceDate"] = body["invoiceDate"]
+        _apply_invoice_amounts(pits[idx], body)
         save_quotation_json(conn, quote_no, data)
         deferred_audits.append(('payment.mark', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用）", None))
@@ -3319,6 +3336,8 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
             body["receivedBy"] = received_by
         if "invoiceNo" in body:
             validate_invoice_no(conn, body["invoiceNo"], exclude_quote_no=no, exclude_idx=idx)
+        # AC1：驗「套用後」那一期的發票未稅／稅額（只送其中一欄、而另一欄原本也是空的 ⇒ 拒存）
+        validate_invoice_amounts({**pits[idx], **{k: body[k] for k in _INVOICE_AMOUNT_KEYS if k in body}})
         gated, change_id = _gate_case_edit(
             conn, no, user, authorization, "payment_mark",
             f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
@@ -3339,6 +3358,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
             # 要跟銀行實際入帳日一致，不能改用開立日期，否則傳票日期會跟銀行對帳
             # 單對不上）。直接存 data_json，不需要 migration。
             pits[idx]["invoiceDate"] = body["invoiceDate"]
+        _apply_invoice_amounts(pits[idx], body)
         now = save_quotation_json(conn, no, data)
         conn.commit()
     finally:

@@ -140,6 +140,118 @@ def _steps_to_tiers(steps: list) -> list:
     ]
 
 
+# ── 營業稅（AC1，2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行，用現金折讓就好」）──
+#
+# 營業稅法 §14 I（逐字）：「…分別按第七條或第十條規定計算其銷項稅額，尾數不滿通用貨幣
+# 一元者，按四捨五入計算」；§7 零稅率、§8 免稅。
+# ⇒ 稅別只有三種；稅額＝round_half_up(銷售額 × 5%)。報價、開票申請、稅務匯出同一算法。
+# 業務讓價走報價的「折讓」欄位，不再用調低稅率。
+
+#: 報價稅別。`legacy` 不是可選的稅別，是「已停用的 1～4%」舊單的讀取結果。
+TAX_TYPES = ("taxable", "zero", "exempt")
+TAX_TYPE_LABELS = {"taxable": "應稅 5%", "zero": "零稅率", "exempt": "免稅"}
+LEGAL_TAX_RATE = 0.05
+LEGACY_TAX_NOTE = "非法定稅率，請會計確認"
+
+
+def round_half_up(n) -> int:
+    """四捨五入到元（Python 內建 round 是銀行家捨入：round(490.5) == 490）。"""
+    from decimal import Decimal, ROUND_HALF_UP
+    return int(Decimal(str(n)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
+def quote_tax_type(data: dict) -> str:
+    """報價的稅別。沒有 `taxType` 的舊資料（不做 migration）：稅率 0 ⇒ 免稅（原選項標籤就是
+    「0%（免稅）」）、1～4 ⇒ `legacy`（已停用，數字不改、輸出標示）、其餘 ⇒ 應稅。"""
+    data = data or {}
+    t = data.get("taxType")
+    if t in TAX_TYPES:
+        return t
+    rate = data.get("taxRate")
+    if rate is None or rate == "":
+        return "taxable"
+    try:
+        rate = float(rate)
+    except (TypeError, ValueError):
+        return "taxable"
+    if rate == 0:
+        return "exempt"
+    if 0 < rate < 5:
+        return "legacy"
+    return "taxable"
+
+
+def validate_quote_tax(q: dict) -> None:
+    """報價存檔（建立／修改）時的稅別檢查：只能是法定稅別，且稅別與稅率一致。
+
+    舊的 1～4% 單再編輯存檔時必須改選法定稅別（hichan-0a 代裁）；案件記錄、收款等
+    其他存檔路徑不經過這裡 ⇒ 舊單仍可收款、登錄發票。
+    """
+    q = q or {}
+    t = q.get("taxType")
+    if t not in (None, "") and t not in TAX_TYPES:
+        raise HTTPException(400, "稅別不正確（只能是應稅 5%、零稅率或免稅）")
+    kind = quote_tax_type(q)
+    if kind == "legacy":
+        raise HTTPException(400, "此報價使用已停用的稅率 %s%%，請改選法定稅別（應稅 5%%、零稅率或免稅）後再存檔"
+                            % q.get("taxRate"))
+    if t in TAX_TYPES:
+        try:
+            rate = float(q.get("taxRate", 5 if t == "taxable" else 0))
+        except (TypeError, ValueError):
+            rate = -1
+        if rate != (5 if t == "taxable" else 0):
+            raise HTTPException(400, "稅別與稅率不一致（應稅為 5%%，零稅率與免稅為 0%%）")
+
+
+def tax_split(sales, tax_type: str) -> tuple:
+    """(銷售額, 稅額)。應稅 ⇒ 稅額＝round_half_up(銷售額 × 5%)；零稅率／免稅 ⇒ 0。
+
+    ⚠️ `legacy` 不在這裡處理：舊 1～4% 單不改數字，由呼叫端沿用原本的算法並標示。
+    """
+    sales = round_half_up(sales)
+    if tax_type == "taxable":
+        return sales, round_half_up(sales * LEGAL_TAX_RATE)
+    if tax_type in ("zero", "exempt"):
+        return sales, 0
+    raise ValueError("tax_split 不處理稅別 %r（舊 1～4% 單由呼叫端沿用原算法）" % tax_type)
+
+
+def _invoice_amount(v):
+    """發票金額欄位：空＝沒填（None）；否則必須是非負整數（新台幣元）。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, bool):
+        raise HTTPException(400, "發票金額格式不正確")
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "發票金額格式不正確")
+    if f < 0 or f != int(f):
+        raise HTTPException(400, "發票金額以新台幣元為單位，不可有小數或負數")
+    return int(f)
+
+
+def invoice_amounts(item: dict):
+    """收款項上登錄的發票未稅／稅額；兩欄都有才回 (未稅, 稅額)，否則 None。"""
+    p = _invoice_amount((item or {}).get("invoicePretax"))
+    t = _invoice_amount((item or {}).get("invoiceTax"))
+    return (p, t) if p is not None and t is not None else None
+
+
+def validate_invoice_amounts(item: dict) -> None:
+    """AC1（使用者選 (a)）：收款登錄發票時選填「發票未稅／稅額」。
+
+    - 兩欄都填 ⇒ 稅務匯出以它為準；都不填 ⇒ 用算式。
+    - **只填一欄 ⇒ 拒存**：一半的發票金額不能作為申報依據，而它會讓人以為已經登錄了。
+    - 兩欄合計 ≠ 該期金額 ⇒ **只提示、不擋**（提示在畫面；發票本來就可能與約定金額差 ±1）。
+    """
+    p = _invoice_amount((item or {}).get("invoicePretax"))
+    t = _invoice_amount((item or {}).get("invoiceTax"))
+    if (p is None) != (t is None):
+        raise HTTPException(400, "發票未稅與稅額要一起填寫（只填一欄無法作為申報依據）")
+
+
 def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
                           apply_tax_exempt: bool = True) -> list:
     """Return the effective **receivable** amount for each payment item, in order.

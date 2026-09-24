@@ -43,6 +43,7 @@ from helpers import (
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 from helpers.errors import trace_id
+from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -125,6 +126,8 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
         "totalAmount":   amount,          # 別名，沿用前端既有欄位名
         "pretaxAmount":  snap.get("pretaxAmount", 0),
         "taxAmount":     snap.get("taxAmount", 0),
+        "taxType":       snap.get("taxType", ""),      # AC1 之前建立的快照沒有這兩欄
+        "taxNote":       snap.get("taxNote", ""),
         "selectedItems": snap.get("selectedItems") or [],
         "issuedFiles":   json.loads(d.get("issued_files_json") or "[]"),
         "exportCount":   d.get("export_count") or 0,
@@ -353,7 +356,19 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
             })
         request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
 
-    tax_amount = request_amount - pretax_amount
+    # AC1（2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行」）：
+    #   稅額＝round_half_up(銷售額 × 5%)（零稅率／免稅＝0），與報價、稅務匯出同一算法；
+    #   含稅＝銷售額＋稅額（發票三欄自洽；與使用者輸入的申請金額可能差 ±1 元，列交付說明）。
+    #   舊 1～4% 報價：數字不改（沿用原本的比例換算），快照標「非法定稅率，請會計確認」。
+    #   ⚠️ 只影響**新建立**的開票申請；已建立的快照不回頭改。
+    tax_type = quote_tax_type(data)
+    tax_note = ""
+    if tax_type == "legacy":
+        tax_amount = request_amount - pretax_amount
+        tax_note = "舊稅率 %s%%（已停用）：%s" % (data.get("taxRate"), LEGACY_TAX_NOTE)
+    else:
+        pretax_amount, tax_amount = tax_split(pretax_amount, tax_type)
+        request_amount = pretax_amount + tax_amount
 
     if request_amount > remaining_amount + 1e-6:
         conn.close()
@@ -368,6 +383,8 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
         "requestedAmount": request_amount,      # 含稅（＝ voucher.amount）
         "pretaxAmount":    round(pretax_amount),
         "taxAmount":       round(tax_amount),
+        "taxType":         tax_type,
+        "taxNote":         tax_note,
     }
 
     now = datetime.now().isoformat()

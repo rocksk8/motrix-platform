@@ -93,6 +93,17 @@ def _get_case_closing_pdf_base() -> str:
     return configured if configured else _CASE_CLOSING_PDF_BASE_DEFAULT
 
 
+def _tax_line_label(q: dict) -> str:
+    """報價 PDF 稅額那一行的標籤（AC1）：依稅別；舊 1～4% 單照舊寫稅率。"""
+    from helpers.quotations import quote_tax_type
+    kind = quote_tax_type(q)
+    if kind == "zero":
+        return "營業稅（零稅率）"
+    if kind == "exempt":
+        return "免稅"
+    return "營業稅 %s%%" % q.get("taxRate", 5)
+
+
 def _build_quote_html(q: dict, tot: dict, internal: bool = False,
                       show_watermark: bool = False, watermark_text: str = '未成案 · 報價單僅供瀏覽',
                       watermark_font_size: int = 30,
@@ -164,7 +175,6 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
     pretax   = tot.get('pretax', 0)
     tax      = tot.get('tax', 0)
     total    = tot.get('total', 0)
-    tax_rate = q.get('taxRate', 5)
     freight  = q.get('freight', 0) or 0
     discount = q.get('discount', 0) or 0
 
@@ -336,7 +346,7 @@ def _build_quote_html(q: dict, tot: dict, internal: bool = False,
         f'  {freight_row}\n'
         f'  {discount_row}\n'
         f'  <div class="total-row"><span>稅前合計</span><span>NT$ {int(pretax):,}</span></div>\n'
-        f'  <div class="total-row"><span>營業稅 {tax_rate}%</span><span>NT$ {int(tax):,}</span></div>\n'
+        f'  <div class="total-row"><span>{_tax_line_label(q)}</span><span>NT$ {int(tax):,}</span></div>\n'
         f'  <div class="total-row"><span>總　計</span><span>NT$ {int(total):,}</span></div>\n'
         '</div>\n'
         '</div>\n'

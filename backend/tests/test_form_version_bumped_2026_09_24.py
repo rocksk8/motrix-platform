@@ -35,6 +35,8 @@ _VERSION_LINE = re.compile(r"^\s*const FORM_VERSION = '(V\d+\.\d+)'\s*$")
 #: 🔑 bump 版本號時，照紅燈訊息把新的一行加在最後面。
 LEDGER = {
     "V3.2": "298eb2e5e1a8ea8b55f229c7858f233beb745f02390af77bbe9129768f3eed0b",
+    # V3.3（AC1，2026-09-24）：稅別選單取代 1～4% 稅率；舊單須改選法定稅別。
+    "V3.3": "150f2ce783b0ce899ae070e0e145482fe83f7a67be5b017b98611f9f6ff76fe2",
 }
 
 

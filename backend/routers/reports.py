@@ -25,6 +25,7 @@ from helpers import (
     payment_item_amounts, summarize_payment_items, case_extra_expenses, quote_won_month_map,
     user_has_module, run_edge_pdf,
 )
+from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
 from routers.vendor_contractors import _dispatch_row
 
 _log = logging.getLogger(__name__)
@@ -2590,6 +2591,8 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
     rows = conn.execute("""
         SELECT quote_no, customer_name, total, pretax,
                json_extract(data_json,'$.customerTaxId') AS tax_id,
+               json_extract(data_json,'$.taxRate') AS tax_rate,
+               json_extract(data_json,'$.taxType') AS tax_type,
                json_extract(data_json,'$.caseRecord.payment.items') AS pay_json
         FROM quotations
         WHERE json_extract(data_json,'$.caseRecord.payment.items') IS NOT NULL
@@ -2605,6 +2608,13 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
         if not items:
             continue
         amounts = payment_item_amounts(row["total"] or 0, items, row["pretax"], apply_tax_exempt=False)
+        # AC1（2026-09-24）：稅別依法規；應稅＝round(該期銷售額 × 5%)，零稅率／免稅＝0。
+        #   該期銷售額＝round(報價未稅 × 期別比例)（期別比例＝該期含稅／報價含稅）。
+        #   舊 1～4% 單：**不改數字**（沿用原本的 5% 倒推），標「非法定稅率，請會計確認」。
+        #   ⚠️ 與實際發票可能差 ±1 元：收款項沒有記載發票上的稅額，以發票為準（交付說明）。
+        tax_type = quote_tax_type({"taxType": row["tax_type"], "taxRate": row["tax_rate"]})
+        q_total  = float(row["total"] or 0)
+        q_pretax = float(row["pretax"] or 0) or q_total
         for idx, pi in enumerate(items):
             inv_no = (pi.get("invoiceNo") or "").strip()
             if not inv_no:
@@ -2616,8 +2626,20 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
             if month and invoice_date[5:7] != f"{month:02d}":
                 continue
             amt_incl   = amounts[idx]
-            tax_amt    = _round_half_up(amt_incl - amt_incl / 1.05)
-            amt_pretax = amt_incl - tax_amt
+            tax_note   = ""
+            recorded   = invoice_amounts(pi)
+            if recorded:
+                # 收款登錄時填了發票上的未稅／稅額 ⇒ 以發票為準（使用者選 (a)）
+                amt_pretax, tax_amt = recorded
+                amt_incl = amt_pretax + tax_amt
+            elif tax_type == "legacy":
+                tax_amt    = _round_half_up(amt_incl - amt_incl / 1.05)
+                amt_pretax = amt_incl - tax_amt
+                tax_note   = "舊稅率 %s%%（已停用）：%s" % (row["tax_rate"], LEGACY_TAX_NOTE)
+            else:
+                sales = (q_pretax * amt_incl / q_total) if q_total else amt_incl
+                amt_pretax, tax_amt = tax_split(sales, tax_type)
+                amt_incl = amt_pretax + tax_amt
             out.append({
                 "invoiceNo":     inv_no,
                 "date":          received_at,
@@ -2628,6 +2650,8 @@ def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = Non
                 "amountPretax":  amt_pretax,
                 "taxAmount":     tax_amt,
                 "amountTotal":   amt_incl,
+                "taxType":       tax_type,
+                "taxNote":       tax_note,
                 # 收款進帳的 MOTRIX 銀行帳戶（2026-09-01 新增，供 accounting_export.py
                 # 依銀行帳戶分開設定 T100 科目代號用；既有呼叫端如 tax-export 不讀這兩個
                 # 新 key，多帶不影響既有行為）
@@ -2646,41 +2670,44 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
     mk, fill, mk_border, al = _xl_style(wb)
     BD = mk_border()
 
-    widths = [16, 12, 12, 14, 22, 14, 14, 12, 14]
+    widths = [16, 12, 12, 14, 22, 14, 14, 12, 14, 10, 30]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    ws.merge_cells("A1:I1")
+    ws.merge_cells("A1:K1")
     c = ws["A1"]; c.value = f"{_COMPANY} — 銷項發票清單（{period_label}）"
     c.font = mk(bold=True, size=13, color="FFFFFF"); c.fill = fill("111827"); c.alignment = al("center")
     ws.row_dimensions[1].height = 28
 
-    ws.merge_cells("A2:I2")
+    ws.merge_cells("A2:K2")
     c = ws["A2"]; c.value = f"產製時間：{gen_at}　僅列出已填發票號碼之收款品項，未開立發票者不列入；" \
                              "期別依發票開立日期歸屬，缺漏開立日期者以收款日期代替"
     c.font = mk(size=9, color="6B7280"); c.alignment = al("center")
     ws.row_dimensions[2].height = 18
 
     headers = ["發票號碼", "發票開立日期", "收款日期", "案件號", "客戶名稱", "統一編號",
-               "金額（未稅）", "稅額", "金額（含稅）"]
+               "金額（未稅）", "稅額", "金額（含稅）", "稅別", "備註"]
     _set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
     ws.row_dimensions[3].height = 22
 
     r = 4
     total_pretax = total_tax = total_incl = 0
     body_aligns = [al("center"), al("center"), al("center"), al("center"), al("left"),
-                   al("center"), al("right"), al("right"), al("right")]
+                   al("center"), al("right"), al("right"), al("right"), al("center"), al("left")]
+    # AC1：稅別與備註（舊 1～4% 單標「非法定稅率，請會計確認」）
+    type_label = {"taxable": "應稅 5%", "zero": "零稅率", "exempt": "免稅", "legacy": "舊稅率（已停用）"}
     for row in rows:
         _set_row(ws, r, [
             row["invoiceNo"], row["invoiceDate"], row["date"], row["quoteNo"], row["customer"], row["taxId"],
             row["amountPretax"], row["taxAmount"], row["amountTotal"],
+            type_label.get(row.get("taxType"), ""), row.get("taxNote", ""),
         ], font=mk(), border=BD, aligns=body_aligns)
         total_pretax += row["amountPretax"]
         total_tax    += row["taxAmount"]
         total_incl   += row["amountTotal"]
         r += 1
 
-    _set_row(ws, r, ["合計", "", "", "", "", "", total_pretax, total_tax, total_incl],
+    _set_row(ws, r, ["合計", "", "", "", "", "", total_pretax, total_tax, total_incl, "", ""],
              font=mk(bold=True), fill=fill("F9FAFB"), border=BD, aligns=body_aligns)
 
     buf = io.BytesIO()

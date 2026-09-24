@@ -1558,23 +1558,25 @@
               </div>
               <div class="form-group">
                 <label class="form-label">
-                  營業稅額
-                  <template x-if="(q.taxRate??5) < 5 && q.approval?.status === 'approved'">
+                  稅別
+                  <template x-if="taxKind() !== 'taxable' && taxKind() !== '' && q.approval?.status === 'approved'">
                     <span style="margin-left:6px;font-size:9px;color:var(--success);font-weight:600">✓ 已核准</span>
                   </template>
                 </label>
-                <select class="form-select" x-model.number="q.taxRate"
-                        @change="calcTotals(); setDirty(); checkApproval()"
-                        :style="(q.taxRate??5) < 5 ? 'border-color:var(--warning);color:var(--warning)' : ''">
-                  <option value="5">5%（標準）</option>
-                  <option value="4">4%</option>
-                  <option value="3">3%</option>
-                  <option value="2">2%</option>
-                  <option value="1">1%</option>
-                  <option value="0">0%（免稅）</option>
+                <!-- AC1（2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行，用現金折讓就好」）：
+                     稅別只有應稅 5%／零稅率／免稅；業務讓價用上方「折讓」。舊 1～4% 單顯示已停用、存檔前須改選。 -->
+                <select class="form-select" :value="taxKind()" data-tax-type
+                        @change="setTaxType($event.target.value)"
+                        :style="taxKind() !== 'taxable' ? 'border-color:var(--warning);color:var(--warning)' : ''">
+                  <option value="" disabled x-show="taxKind() === ''" x-text="'舊稅率 ' + q.taxRate + '%（已停用），請改選'"></option>
+                  <option value="taxable">應稅 5%</option>
+                  <option value="zero">零稅率</option>
+                  <option value="exempt">免稅</option>
                 </select>
-                <div class="form-hint warn" x-show="(q.taxRate??5) < 5 && q.approval?.status !== 'approved'">稅額調整需主管審核</div>
-                <div class="form-hint" style="color:var(--success)" x-show="(q.taxRate??5) < 5 && q.approval?.status === 'approved'">已核准調整</div>
+                <div class="form-hint warn" x-show="taxKind() === ''" data-legacy-tax
+                     x-text="'此單使用已停用的稅率 ' + q.taxRate + '%，數字維持原樣；存檔前請改選法定稅別'"></div>
+                <div class="form-hint warn" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status !== 'approved'">非應稅需主管審核</div>
+                <div class="form-hint" style="color:var(--success)" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status === 'approved'">已核准</div>
               </div>
             </div>
           </div>
@@ -1603,7 +1605,7 @@
             </div>
             <div class="total-row">
               <span class="total-label"
-                    x-text="'營業稅' + (q.taxRate??5) + '%' + ((q.taxRate??5)<5 ? (q.approval?.status==='approved' ? ' ✓' : ' ⚠') : '')"
+                    x-text="taxLineLabel() + ((q.taxRate??5)<5 ? (q.approval?.status==='approved' ? ' ✓' : ' ⚠') : '')"
                     :style="(q.taxRate??5)<5 ? (q.approval?.status==='approved' ? 'color:var(--success)' : 'color:var(--warning)') : ''"></span>
               <span class="total-currency">NTD</span>
               <span class="total-amount" x-text="tot.tax.toLocaleString()"></span>
@@ -2099,7 +2101,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V3.2'
+  const FORM_VERSION = 'V3.3'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2193,6 +2195,8 @@
 
         discount: 0, showDiscount: false, freight: 0,
         taxRate: 5,
+        // taxType 刻意不給預設值：載入舊單時 Object.assign 不會移除它 ⇒ 舊 1～4% 單會被誤判成應稅
+        //   （e2e 抓到的）。沒有 taxType 時一律由 taxKind() 依稅率推得。
         approval: null,
         isSigned: false, signedBy: '', signedAt: '', signedLog: [], signedFiles: [],
 
@@ -2270,6 +2274,34 @@
       _badNumBlocksSave() {
         if (!Object.keys(this.badNum).length) return false
         alert('有數字欄位無法辨識（標紅處），請修正後再存檔')
+        return true
+      },
+
+      // ── 稅別（AC1）：與 backend/helpers/quotations.py::quote_tax_type() 同一套讀取規則 ──
+      //   沒有 taxType 的舊單：稅率 0 ⇒ 免稅、1～4 ⇒ ''（已停用）、其餘 ⇒ 應稅。
+      taxKind() {
+        const t = this.q.taxType
+        if (t === 'taxable' || t === 'zero' || t === 'exempt') return t
+        const r = this.q.taxRate === undefined || this.q.taxRate === null || this.q.taxRate === '' ? 5 : Number(this.q.taxRate)
+        if (r === 0) return 'exempt'
+        if (r > 0 && r < 5) return ''
+        return 'taxable'
+      },
+      setTaxType(t) {
+        if (t !== 'taxable' && t !== 'zero' && t !== 'exempt') return
+        this.q.taxType = t
+        this.q.taxRate = t === 'taxable' ? 5 : 0
+        this.calcTotals(); this.setDirty(); this.checkApproval()
+      },
+      taxLineLabel() {
+        const k = this.taxKind()
+        if (k === 'zero') return '營業稅（零稅率）'
+        if (k === 'exempt') return '免稅'
+        return '營業稅' + (this.q.taxRate ?? 5) + '%'
+      },
+      _legacyTaxBlocksSave() {
+        if (this.taxKind() !== '') return false
+        alert('此報價使用已停用的稅率 ' + this.q.taxRate + '%，請在「稅別」改選應稅 5%、零稅率或免稅後再存檔')
         return true
       },
 
@@ -2406,8 +2438,13 @@
         if (this.q.showDiscount && this.q.discount > 0)
           reasons.push(`含折讓（NT$${this.q.discount.toLocaleString()}）`)
         const taxRate = this.q.taxRate !== undefined ? this.q.taxRate : 5
-        if (taxRate < 5)
-          reasons.push(`調整營業稅額為 ${taxRate}%（標準 5%）`)
+        if (taxRate < 5) {
+          const kind = this.taxKind()
+          if (kind === 'zero' || kind === 'exempt')
+            reasons.push(`稅別為${kind === 'zero' ? '零稅率' : '免稅'}（非應稅 5%）`)
+          else
+            reasons.push(`調整營業稅額為 ${taxRate}%（標準 5%）`)
+        }
         // 2026-09-14：比對基準改成「目前選中的條款組」，沒選才用系統內建值。
         // 原本一律比 DEFAULT_TERMS——有了條款組之後，切到「純購料」會被整組
         // 判定成「條件被改過」而觸發簽核提示，等於這個功能一用就報警。
@@ -2503,6 +2540,7 @@
 
       async apiSave(isNew) {
         if (Object.keys(this.badNum).length) return false   // 解析不了的數字不送（自動存檔靜默略過）
+        if (this.taxKind() === '') return false             // AC1：已停用稅率要先改選（後端同樣會擋）
         // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
         // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
         // 只看「目前有沒有號碼」是不夠的——使用者在取號還沒回來時就按送審的話，
@@ -2895,7 +2933,7 @@
       },
 
       async saveDraft() {
-        if (this._badNumBlocksSave()) return
+        if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
         // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
         // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
         // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
@@ -3232,7 +3270,7 @@
       },
 
       async submitQuote() {
-        if (this._badNumBlocksSave()) return
+        if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
         if (!this.q.customerName) { alert('請填寫客戶名稱'); return }
         if (!this.q.projectName)  { alert('請填寫案件名稱'); return }
         this.submitNote = ''
