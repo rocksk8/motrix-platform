@@ -1460,7 +1460,8 @@ function app() {
       } catch {}
     },
 
-    summaryTotal()   { return this.caseCounts ? this.caseCounts.all : this.cases.length },
+    // 件數是另一支非同步請求；還沒到之前回 null（不可以退回已載入那一頁的件數冒充總數）
+    summaryTotal()   { return this.caseCounts ? this.caseCounts.all : null },
     summaryActive()  { return this.caseCounts ? this.caseCounts.active : 0 },
     summaryClosed()  { return this.caseCounts ? this.caseCounts.closed : 0 },
     summaryOverdue() { return this.caseCounts ? this.caseCounts.overdueStages : 0 },

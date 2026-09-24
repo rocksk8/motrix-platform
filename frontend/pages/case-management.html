@@ -1017,7 +1017,7 @@
           <div class="cm-placeholder">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:.15"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
             <div class="cm-placeholder__text">從左側選擇案件開始作業</div>
-            <div class="cm-placeholder__sub" x-text="'目前共 ' + summaryTotal() + ' 件已成案 / 已結案'"></div>
+            <div class="cm-placeholder__sub" x-text="summaryTotal() === null ? '' : '目前共 ' + summaryTotal() + ' 件已成案 / 已結案'"></div>
           </div>
         </template>
 
