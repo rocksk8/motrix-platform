@@ -580,3 +580,4 @@ hichan-0a 代裁（待確認）：
 - **P4 B 包**（112 處）：**hichan-8d**（全量預演第二輪回報後接）。
 - 凍結改為：HTML／CSS 只有 a3；`case-management-*.js` 依 A／B 包的方法歸屬各自改，不碰對方的方法；每支 JS 改完跑 `test_case_page_parts`。推前 rebase，以已推者為底。
 - P4 A、B 推完 ⇒ 案件頁 `forbid_native_dialogs` 守門（案件頁不得再有原生 alert／confirm／prompt）。
+- 全量預演（hichan-8d，1b684cc）：第一輪 3 紅（e2e 逾時）與 hichan-a3 的全量完全重疊；第二輪 3244 passed／0 failed。分類＝負載，不改題。⇒ **最終建包規則**：建包全量期間**所有視窗停止跑 -n 測試**（hichan-0a 開跑前宣告，完成後解除），停手回報附 `git status --porcelain` 完整輸出。
