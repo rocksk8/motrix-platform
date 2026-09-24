@@ -355,3 +355,17 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 
 順序：JV36 → **MP0／MP0b／MP8** → 字級 3 頁 → FORM_VERSION 守門 → MP7 → MP1～MP6。
 - **MP0c／MP0d（使用者表單）**：「加每日自動刪除」⇒ 每日刪 `geocode_cache` 中 source='google' 且超過 30 天的列（只刪快取、記 system_audit）；「更正為 30 天」⇒ Google 用量計算器依來源實際有效期估算。
+
+## ☀️ 使用者裁示（2026-09-24 午，第 3～5 批表單）
+| 項目 | 裁示 | 執行者 |
+|---|---|---|
+| 部署 | **全部排程做完再上**（含字級 3 頁、FORM_VERSION 守門、地圖全部） | hichan-0a 最後建包 |
+| B4 | 條件簽核**第一版只給平台自訂單據** | 平台化 |
+| **B7** | 權限模組清單**整併成一份**（目前散在 users.html、auth.py、sidebar.js、db.py v84、system.py…） | hichan-bf，**先交計畫** |
+| B8 | `save_document_files` 的 doc_no 穿越檢查**補在共用函式** | hichan-bf |
+| N8 | ①守門：寫入資料的端點必須呼叫 `_audit`／`_system_audit` ②`tools/check_approval_queue_coverage.py` 接進建包（或改寫成測試） | hichan-bf |
+| N1～N5、N16 | 維持現做法（N16 兩套標籤只加說明） | — |
+| **N11** | 刪除確認**全部都加**（含叫料品項、派工／出貨表單內品項、負責人切換） | hichan-8d（獎金後） |
+| **N14** | 金額輸入解析**擴大到內部成本區與案件款項金額** | hichan-8d（獎金後） |
+| 會計師題 | 「**先按照台灣稅法跟會計法，有需要再修改**」⇒ 稅額算法、收支認列基準、獎金入帳科目依法規預設實作 | hichan-0a 先查法規條文定規格 |
+| 舊待裁（出貨阻擋 4、PENDING 18、KNOWN-GAPS 11） | **先擱著** | — |
