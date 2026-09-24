@@ -354,3 +354,4 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 | **MP7** | 地圖文字改正式精簡 | `map.html`、`tender-radar.html` 地圖相關的使用者可見文字（提示、警告、彈窗、按鈕、空狀態）改為正式、簡潔的用語，去掉口語、驚嘆與冗長說明；註解不動。改完列出新舊對照給 hichan-0a 核對 |
 
 順序：JV36 → **MP0／MP0b／MP8** → 字級 3 頁 → FORM_VERSION 守門 → MP7 → MP1～MP6。
+- **MP0c／MP0d（使用者表單）**：「加每日自動刪除」⇒ 每日刪 `geocode_cache` 中 source='google' 且超過 30 天的列（只刪快取、記 system_audit）；「更正為 30 天」⇒ Google 用量計算器依來源實際有效期估算。
