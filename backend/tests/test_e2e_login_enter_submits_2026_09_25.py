@@ -68,6 +68,15 @@ SCENARIOS = {
 }
 
 
+def _goto_login(page, live_server):
+    """開登入頁並等 init 做完（PERF #6：原本固定等 0.3 秒）。
+    可觀測的終點：init() 打的 webauthn-config-status 回來（它決定 Passkey 鈕要不要出現）＋Alpine 渲染完。"""
+    with page.expect_response(lambda r: "/api/system/webauthn-config-status" in r.url, timeout=15000):
+        page.goto(f"{live_server}/pages/login.html")
+    page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')._x_dataStack")
+    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+
+
 @pytest.mark.e2e
 @pytest.mark.parametrize("webauthn", [False, True], ids=["plain", "webauthn"])
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))
@@ -80,9 +89,7 @@ def test_enter_logs_in(live_server, make_user, scenario, webauthn):
             if webauthn:   # 已設定 Passkey：頁面多一顆「或使用 Passkey 登入」
                 page.route("**/api/system/webauthn-config-status", lambda r: r.fulfill(
                     status=200, content_type="application/json", body='{"configured": true}'))
-            page.goto(f"{live_server}/pages/login.html")
-            page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')._x_dataStack")
-            page.wait_for_timeout(300)
+            _goto_login(page, live_server)
             if webauthn:
                 assert page.locator("button:has-text('Passkey')").is_visible(), "前提：Passkey 鈕要出現"
             SCENARIOS[scenario](page, u, pw)
@@ -102,9 +109,7 @@ def _open_login(browser, live_server):
     page = browser.new_context().new_page()
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/auth/login") else None)
-    page.goto(f"{live_server}/pages/login.html")
-    page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')._x_dataStack")
-    page.wait_for_timeout(300)
+    _goto_login(page, live_server)
     return page, posts
 
 
