@@ -1390,6 +1390,7 @@ function app() {
         // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
         //      那一筆的未讀標記必須還在。
         this._markCaseRead(quoteNo)
+        this.loadCaseHealth(quoteNo)
         // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
         if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
@@ -2060,6 +2061,8 @@ function app() {
             this.saveMsg = '已儲存'
             setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
           }
+          // 收款／階段等改動會影響五關，總覽跟著更新
+          this.loadCaseHealth(this.selected?.quote_no)
           // 款項明細（勾已收款/實收金額/手續費）就是在這支存的，財務 Tab 的
           // 應收應付總覽必須跟著重算，否則會停在存檔前的舊數字
           this.loadFinanceSummary(this.selected?.quote_no)
@@ -2209,12 +2212,45 @@ function app() {
     },
 
     closeCheckGoto(g) {
-      const t = this._gateTab(g)
       this.closeCheck.open = false
+      this.gotoGate(g)
+    },
+
+    gotoGate(g) {
+      const t = this._gateTab(g)
       this.activeTab = t
       if (t === 'exec') this.execSubTab = 'progress'
       if (t === 'shipping') this.loadShippingNotes(this.selected.quote_no)
       if (t === 'completion') this.loadCompletionNotes(this.selected.quote_no)
+    },
+
+    // ── 案件健康總覽（2026-09-24）────────────────────────────────────────
+    // 案件資訊頁上方：五關（/close-gates，與擋結案同一份判定）＋逾期應收＋待簽核。
+    // 回應可能在使用者已切到別的案件後才抵達 ⇒ 只收「目前選的那一件」的回應。
+    caseHealth: { quoteNo: '', gates: [] },
+
+    async loadCaseHealth(quoteNo) {
+      if (!quoteNo) return
+      try {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(quoteNo) + '/close-gates', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (!r.ok) return
+        const d = await r.json()
+        if (this.selected?.quote_no !== quoteNo) return
+        this.caseHealth = { quoteNo, gates: d.gates || [] }
+      } catch {}
+    },
+
+    healthDocs() {
+      if (this.caseHealth.quoteNo !== this.selected?.quote_no) return null
+      return (this.caseHealth.gates || []).find(g => g.key === 'documents' && g.state === 'blocked') || null
+    },
+
+    // 未收款且預計收款日已過（今天到期不算逾期）
+    overdueReceivables() {
+      const today = new Date().toISOString().slice(0, 10)
+      return this.paymentItems().filter(it => !it.received && it.expectedReceiptDate && it.expectedReceiptDate < today)
     },
 
     async confirmCloseCase() {

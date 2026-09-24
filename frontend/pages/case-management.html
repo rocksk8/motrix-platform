@@ -1105,6 +1105,29 @@
               <!-- ══ 案件資訊 Tab ══ -->
               <div x-show="activeTab==='biz'">
 
+                <!-- 案件健康總覽（2026-09-24）：五關＋逾期應收＋待簽核；點關卡切到要處理的分頁 -->
+                <template x-if="caseHealth.quoteNo === selected?.quote_no">
+                  <div data-testid="case-health" :data-health-quote="caseHealth.quoteNo"
+                       style="border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                      <template x-for="g in caseHealth.gates" :key="g.key">
+                        <button type="button" :data-health-gate="g.label" @click="gotoGate(g)"
+                                :title="g.reason || ''"
+                                style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid var(--border-light);border-radius:6px;background:none;cursor:pointer;font-size:12px;font-family:var(--font-zh)">
+                          <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)"></span>
+                          <span x-text="g.label"></span>
+                          <span style="color:var(--text-secondary)" x-text="g.value"></span>
+                        </button>
+                      </template>
+                    </div>
+                    <div x-show="overdueReceivables().length" style="font-size:12px;color:var(--danger);margin-top:8px"
+                         x-text="'應收逾期 ' + overdueReceivables().length + ' 期：' + overdueReceivables().map(it => (it.type || '款項') + '（預計 ' + it.expectedReceiptDate + '）').join('、')"></div>
+                    <div x-show="healthDocs()" style="font-size:12px;color:var(--text-secondary);margin-top:6px"
+                         x-text="healthDocs() ? '待簽核：' + (healthDocs().pendingDocs || []).map(d => d.label + ' ' + d.count + ' 筆').join('、')
+                                 + ((healthDocs().pendingApprovers || []).length ? '（' + healthDocs().pendingApprovers.map(a => a.displayName).join('、') + '）' : '') : ''"></div>
+                  </div>
+                </template>
+
                 <div class="cm-section-title">
                   合約資訊
                   <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
