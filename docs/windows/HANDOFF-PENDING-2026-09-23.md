@@ -609,3 +609,11 @@ hichan-0a 代裁（待確認）：
 | 7-SL | 使用者裁：**業務預設開地圖模組**（只影響新建帳號與角色樣板；registry golden 題依裁示更新並註明） | hichan-8d |
 | D8-1 | 點進有紅點的案件後「N 筆有新動態」不減 | hichan-a3（與 W-2～W-4 同批，P4 A 推後） |
 | W-6 | 量測已上（fb66c93）：log 帶 sqlite_errorname／errcode／elapsed；下次走查 handler 開到 WARNING | 觀察 |
+
+## ✅ 最終包產出（2026-09-25 02:33，hichan-0a）——備妥，**未部署**
+- 包：`deploy_packages/20260925_023333_3a66611`（主工作目錄也已複製一份），commit 3a66611，基準正式機 46dc6ae（2026-09-24 02:46:15）。
+- 測試：非 e2e 3062 passed／54 skipped／3 xfailed；e2e 321 passed／2 skipped；VR7 雙向同步 OK（DB 392、manifest 395）。包內無 *.db、無 docs/windows、無 backend/tests。
+- 過程：①第一次被 VR7 擋（今天 6 筆已出貨條目被改號／追加）⇒ 逐字還原＋「已出貨不可改寫」守門＋VR3 只算未出貨（d201adc／ac6fca7／7db0023）②第二次測試全綠但打包最後一步失敗（-OutDir 相對路徑疊路徑）⇒ 3a66611 修。
+- ⚠ 部署後要更新 `backend/tests/_prod_baseline.py` 的 BASELINE 為新的正式機 commit。
+- 開發機 127.0.0.1:666 已重啟在 3a66611（版本 2026-09-25i）。凍結解除。
+- NEXT：叫料／額外支出稅額欄；fix/pytest-temp-autoclean（當機殘留兜底，需先交設計，不可萬用字元刪別人的）；W-6 等量測數字。
