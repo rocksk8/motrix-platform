@@ -444,8 +444,13 @@ def test_a8_the_master_switch_stops_every_stage(monkeypatch):
 # A9 · 快取要含來源
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a9_the_cache_is_keyed_by_source_too(monkeypatch):
+def test_a9_the_cache_is_keyed_by_source_too(client, monkeypatch):
     """🔴 A9：**同一個地址用不同來源查出不同座標，不可以互相覆蓋。**
+
+    📌 更正留著（2026-09-24）：原本沒有用 `client`（沒有自己的資料庫）⇒ 讀寫的是**當時
+       `db.DB_PATH` 指到的那一個**：全量時是前一題留下的暫存庫（剛好乾淨，綠）；單獨跑時是
+       預設庫，裡面有上一次跑這一題寫進去的 google 列 ⇒ 第一次查就拿到 google（紅），
+       **而且單獨跑會寫進開發用的資料庫**。⇒ 加 `client`，每次都是乾淨的庫，不靠順序。
 
     ⚠️ 只用地址當鍵的話：Nominatim 先查到行政區中心點並寫進快取
     ⇒ 使用者後來填了 Google 金鑰 ⇒ **快取命中，永遠拿不到門牌精度**。
