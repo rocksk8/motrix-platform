@@ -1232,32 +1232,39 @@ def gate_matrix(authorization: str = Header(None)):
     sql += " ORDER BY quote_no DESC"
     rows = conn.execute(sql, params).fetchall()
 
+    # CM6b：五關與到期資訊都批次取（原本每件約 17 句 SQL）
+    nos = [r["quote_no"] for r in rows]
+    all_facts = _close_gate_facts(conn, nos)
+    overdue_by, next_by = {}, {}
+    for i in range(0, len(nos), _GATE_CHUNK):
+        ch = nos[i:i + _GATE_CHUNK]
+        ph = ",".join("?" * len(ch))
+        for s_ in conn.execute(
+                f"SELECT quote_no, SUM(CASE WHEN due_date < ? THEN 1 ELSE 0 END) overdue "
+                f"FROM case_stages WHERE quote_no IN ({ph}) AND done=0 AND due_date != '' GROUP BY quote_no",
+                [today] + ch):
+            overdue_by[s_["quote_no"]] = s_["overdue"] or 0
+        # 下一個到期：最早到期日，同日取 sort_order 最小（與原本 MIN(due_date)＋ORDER BY sort_order LIMIT 1 相同）
+        for s_ in conn.execute(
+                f"SELECT quote_no, label, due_date FROM case_stages WHERE quote_no IN ({ph}) AND done=0 "
+                f"AND due_date != '' ORDER BY quote_no, due_date, sort_order", ch):
+            next_by.setdefault(s_["quote_no"], (s_["due_date"], s_["label"]))
+
     items = []
     for r in rows:
         try:
             d = json.loads(r["data_json"] or "{}")
         except Exception:
             d = {}
-        gates = _case_close_gates(conn, r["quote_no"], d)
+        gates = _gates_from_facts(all_facts[r["quote_no"]], d)
         blocked = [g for g in gates if g["state"] == "blocked"]
 
-        # 階段到期：逾期數與下一個未完成階段的到期日。用同一次查詢取回，
-        # 呼叫端就不必為了右邊兩欄再打一次 stage-board。
-        st = conn.execute(
-            "SELECT "
-            "  SUM(CASE WHEN done=0 AND due_date != '' AND due_date < ? THEN 1 ELSE 0 END) overdue, "
-            "  MIN(CASE WHEN done=0 AND due_date != '' THEN due_date END) next_due "
-            "FROM case_stages WHERE quote_no=?",
-            (today, r["quote_no"])
-        ).fetchone()
-        next_due = st["next_due"] or None
+        # 階段到期：逾期數與下一個未完成階段的到期日（批次取回，見上）
+        st = {"overdue": overdue_by.get(r["quote_no"], 0)}
+        next_due = (next_by.get(r["quote_no"]) or (None, None))[0] or None
         next_label = None
         if next_due:
-            nxt = conn.execute(
-                "SELECT label FROM case_stages WHERE quote_no=? AND done=0 AND due_date=? "
-                "ORDER BY sort_order LIMIT 1", (r["quote_no"], next_due)
-            ).fetchone()
-            next_label = (nxt["label"] if nxt else "") or ""
+            next_label = (next_by[r["quote_no"]][1] or "")
 
         items.append({
             "quoteNo":      r["quote_no"],
@@ -2020,8 +2027,68 @@ _CLOSE_DOC_TABLES = [
 ]
 
 
+_GATE_CHUNK = 300   # IN 清單每批上限（舊版 SQLite 參數上限 999）
+
+
+def _close_gate_facts(conn, quote_nos: list) -> dict:
+    """CM6b（2026-09-24）：五關需要的資料庫事實，一次批次取回（GROUP BY），與案件數無關地
+    只跑固定幾句 SQL。回傳 {quote_no: facts}；判定本身在 _gates_from_facts()（純計算）。
+    關卡矩陣原本每件 ~17 句，40 件就是 681 句。
+
+    facts：stages=(total, done)；docs=[(label, table, total, [approval_json…])]——**表不存在時該表
+    整個不出現**（與原本逐件 try/continue 相同）；xe=(total, pending) 或 None（表不存在）。"""
+    nos = list(dict.fromkeys(quote_nos))
+    facts = {no: {"stages": (0, 0), "docs": [], "xe": (0, 0)} for no in nos}
+    chunks = [nos[i:i + _GATE_CHUNK] for i in range(0, len(nos), _GATE_CHUNK)]
+
+    for ch in chunks:
+        ph = ",".join("?" * len(ch))
+        for r in conn.execute(
+                f"SELECT quote_no, COUNT(*) total, SUM(CASE WHEN done=1 THEN 1 ELSE 0 END) done "
+                f"FROM case_stages WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+            facts[r["quote_no"]]["stages"] = (r["total"] or 0, r["done"] or 0)
+
+    for label, table in _CLOSE_DOC_TABLES:
+        tot = {}
+        pend = {}
+        try:
+            for ch in chunks:
+                ph = ",".join("?" * len(ch))
+                for r in conn.execute(
+                        f"SELECT quote_no, COUNT(*) c FROM {table} WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+                    tot[r["quote_no"]] = r["c"]
+                for r in conn.execute(
+                        f"SELECT quote_no, json_extract(data_json,'$.approval') ap FROM {table} "
+                        f"WHERE quote_no IN ({ph}) AND status IN ('待審核','簽核中') ORDER BY quote_no, rowid", ch):
+                    pend.setdefault(r["quote_no"], []).append(r["ap"])
+        except Exception:
+            continue           # 該模組的表還不存在（migration 尚未跑到）
+        for no in nos:
+            facts[no]["docs"].append((label, table, tot.get(no, 0), pend.get(no, [])))
+
+    try:
+        xe = {}
+        for ch in chunks:
+            ph = ",".join("?" * len(ch))
+            for r in conn.execute(
+                    f"SELECT quote_no, COUNT(*) c, SUM(CASE WHEN status='待審核' THEN 1 ELSE 0 END) p "
+                    f"FROM case_extra_expenses WHERE quote_no IN ({ph}) GROUP BY quote_no", ch):
+                xe[r["quote_no"]] = (r["c"] or 0, r["p"] or 0)
+        for no in nos:
+            facts[no]["xe"] = xe.get(no, (0, 0))
+    except Exception:
+        for no in nos:
+            facts[no]["xe"] = None    # 舊環境還沒有這張表（DB v75 之前）
+    return facts
+
+
 def _case_close_gates(conn, quote_no: str, d: dict) -> list:
-    """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。
+    """單一案件的五關（擋結案、close-gates 用）。與關卡矩陣走同一條：批次取數＋_gates_from_facts()。"""
+    return _gates_from_facts(_close_gate_facts(conn, [quote_no])[quote_no], d)
+
+
+def _gates_from_facts(facts: dict, d: dict) -> list:
+    """完結案前置條件，回傳五個關卡的結構化狀態（順序＝結案檢查順序）。**唯一的判定**。
 
     每個關卡：{key, label, state, value, ratio, reason, pendingUsernames}
       value  給人看的短字串（「7/9」「3/5 期」「已完結」）
@@ -2031,12 +2098,7 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     gates = []
 
     # ① 執行管理進度 100%（沒有任何階段視為「無需檢查」，不算未達成）
-    row = conn.execute(
-        "SELECT COUNT(*) total, SUM(CASE WHEN done=1 THEN 1 ELSE 0 END) done "
-        "FROM case_stages WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    total = row["total"] or 0
-    done = row["done"] or 0
+    total, done = facts["stages"]
     if total == 0:
         gates.append({"key": "progress", "label": "進度", "state": "na",
                       "value": "無階段", "ratio": None, "reason": None,
@@ -2074,26 +2136,15 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     doc_reasons = []
     pending_docs = []
     pending_usernames: list = []
-    for label, table in _CLOSE_DOC_TABLES:
-        try:
-            tot = conn.execute(
-                f"SELECT COUNT(*) c FROM {table} WHERE quote_no=?", (quote_no,)
-            ).fetchone()["c"]
-            rows = conn.execute(
-                f"SELECT json_extract(data_json,'$.approval') ap FROM {table} "
-                f"WHERE quote_no=? AND status IN ('待審核','簽核中')",
-                (quote_no,)
-            ).fetchall()
-        except Exception:
-            continue           # 該模組的表還不存在（migration 尚未跑到）
+    for label, table, tot, rows in facts["docs"]:
         doc_total += tot
         if rows:
             doc_pending += len(rows)
             doc_reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
             pending_docs.append({"table": table, "label": label, "count": len(rows)})
-            for r in rows:
+            for ap in rows:
                 try:
-                    appr = json.loads(r["ap"] or "{}")
+                    appr = json.loads(ap or "{}")
                 except Exception:
                     appr = {}
                 tiers = _active_tiers(appr)
@@ -2141,16 +2192,7 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
 
     # ⑤ 額外支出不可停在送審中（2026-09-13 一併補上）：那是還沒定案的成本，
     # 結案後才核准會讓已結案案件的成本事後改變。
-    try:
-        xe_total = conn.execute(
-            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=?", (quote_no,)
-        ).fetchone()["c"]
-        xe_pending = conn.execute(
-            "SELECT COUNT(*) c FROM case_extra_expenses WHERE quote_no=? AND status='待審核'",
-            (quote_no,)
-        ).fetchone()["c"]
-    except Exception:
-        xe_total = xe_pending = None    # 舊環境還沒有這張表（DB v75 之前）
+    xe_total, xe_pending = facts["xe"] if facts["xe"] is not None else (None, None)
     if xe_total is None or xe_total == 0:
         gates.append({"key": "extraExpense", "label": "變更", "state": "na",
                       "value": "無", "ratio": None, "reason": None,
