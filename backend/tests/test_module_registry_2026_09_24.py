@@ -15,6 +15,8 @@ registry 必須與它們逐項相同 ⇒ 正式機帳號身上的 `modules` JSON
 """
 import pytest
 
+from tests.test_voucher_preview_export_feedback_2026_09_23 import live_server  # noqa: F401,E402
+
 GOLDEN_MODULES = [
     ("dashboard", "儀表板", "基本"),
     ("dev_crm", "業務開發 CRM", "業務"),
@@ -219,3 +221,35 @@ def test_custom_role_refuses_a_new_unknown_key_but_keeps_its_own_legacy_ones(cli
                    json={"name": "舊角色", "baseRole": "sales", "modules": ["dashboard", "bogus_key"]},
                    headers=h)
     assert r.status_code == 400, r.text
+
+
+# ── 頁面實測：權限畫面真的從目錄端點長出來 ─────────────────────────────────
+
+@pytest.mark.e2e
+def test_users_page_builds_its_module_list_from_the_catalog(live_server, make_user):
+    """行為不變守門（誠實記錄：用整併前的 users.html 跑也綠——值本來就相同）。
+    先紅的是 `test_users_page_has_no_hardcoded_module_lists`。"""
+    pytest.importorskip("playwright.sync_api")
+    from playwright.sync_api import sync_playwright
+    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login
+    u, pw = make_user(username="root", role="superadmin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        _login(page, live_server, u, pw)
+        page.goto(live_server + "/pages/users.html")
+        page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')"
+                               " && Alpine.$data(document.querySelector('[x-data]')).allModules.length > 0",
+                               timeout=15000)
+        page.wait_for_selector(".access-chip", timeout=15000)   # 帳號列表載完才有徽章
+        got = page.evaluate("""() => {
+            const d = Alpine.$data(document.querySelector('[x-data]'))
+            d.openCreate()
+            return { n: d.allModules.length, first: d.allModules[0].key,
+                     salesDefault: [...d.form.modules], chips: document.querySelectorAll('.access-chip').length }
+        }""")
+        browser.close()
+    from helpers.module_registry import ROLE_TEMPLATES
+    assert got["n"] == len(GOLDEN_MODULES) and got["first"] == "dashboard"
+    assert got["salesDefault"] == list(ROLE_TEMPLATES["sales"])
+    assert got["chips"] >= len(GOLDEN_MODULES)          # 每個帳號列一排徽章
