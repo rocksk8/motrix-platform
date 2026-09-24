@@ -9,6 +9,7 @@ import sqlite3
 import uuid
 from collections import defaultdict
 from datetime import datetime
+import copy
 from typing import List, Optional
 from urllib.parse import quote as urlquote
 
@@ -40,7 +41,10 @@ from helpers import (
     summarize_payment_items,
 )
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
-from helpers.financial_mask import mask_row as _mask_money_row
+from helpers.financial_mask import (
+    money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record,
+    PaymentStructureChange,
+)
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
 from helpers.errors import trace_id
@@ -794,7 +798,7 @@ def list_quotations(
     ).fetchone()[0]
     conn.close()
     # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
-    masked = not can_see_financial(user)
+    masked = not money_visible(user)
     items = []
     for r in rows:
         row = dict(r)
@@ -1090,7 +1094,7 @@ def gate_matrix(authorization: str = Header(None)):
             "nextDueLabel": next_label,
         })
     conn.close()
-    if not can_see_financial(user):   # CM13
+    if not money_visible(user):   # CM13
         for it in items:
             _mask_money_row(it, ("total",))
     return {"items": items, "today": today}
@@ -1114,6 +1118,10 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     # QL13：前端用 `locationId`，DB 欄位叫 `location_id`。
     # 兩個都回：舊的呼叫端不會因此壞掉，而新的表單讀得到它。
     result["locationId"] = result.get("location_id") or ""
+    if not money_visible(user):
+        # CM13（2026-09-24 使用者裁示）：金額、毛利、單價、成本不回
+        mask_quotation_data(result["data"])
+        _mask_money_row(result)
     return result
 
 
@@ -1460,6 +1468,10 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
 @router.put("/api/quotations/{quote_no}")
 def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Header(None)):
     user = _require_user(authorization)
+    if not money_visible(user):
+        # CM13 D1（2026-09-24 使用者裁示）：看不到金額就不能編報價——這支整份取代 data_json，
+        # 報價品項沒有穩定 id，無法可靠地把被遮蔽的單價與成本補回去。
+        raise HTTPException(403, "此帳號沒有財務檢視權限，不可編輯報價單")
     q   = body.data
     now = datetime.now().isoformat()
 
@@ -2348,7 +2360,8 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         # 不同（有人改過）就整筆拒絕，不合併、不寫入。stages 由專屬端點維護，不收。
         current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
         segments = {k: v for k, v in body.segments.items() if k != "stages"}
-        conflicts = _segment_conflicts(current_cr, segments, body.base or {})
+        cmp_cr = current_cr if money_visible(user) else mask_case_record(copy.deepcopy(current_cr))
+        conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
         if conflicts:
             conn.close()
             raise HTTPException(409, {"code": "segment_conflict", "segments": conflicts,
@@ -2369,6 +2382,14 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
     label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
     data = json.loads(row["data_json"] or "{}")
+    if not money_visible(user):
+        # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
+        # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
+        try:
+            body.case_record = restore_case_record(body.case_record or {}, data.get("caseRecord") or {})
+        except PaymentStructureChange:
+            conn.close()
+            raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
 
     # 2026-08-31（安全稽核發現）：這支整包存檔端點原本完全沒有角色檢查——
     # 案件管理頁面的款項明細（勾選已收款／填實收金額／手續費）就是走這支，

@@ -1190,7 +1190,9 @@
                 <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
                      跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
                      未稅金額與收款進度條。 -->
-                <div class="pay-strip">
+                <!-- CM13（2026-09-24）：沒有財務檢視權的帳號，後端不回金額 ⇒ 金額相關一律不渲染 -->
+                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）；可編輯預計收款日、發票與備註。</div>
+                <div class="pay-strip" x-show="!moneyMasked()">
                   <span class="pay-strip__item">
                     <span class="pay-strip__lbl">未稅金額</span>
                     <span class="pay-strip__val num" x-text="'NT$ ' + totalPretax().toLocaleString()"></span>
@@ -1201,7 +1203,7 @@
                   <span class="pay-strip__pct num" x-text="receivedPct() + '% \u5df2\u6536'"></span>
                 </div>
 
-                <template x-if="feeTotal() > 0">
+                <template x-if="!moneyMasked() && feeTotal() > 0">
                   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-6px;margin-bottom:14px">
                     <div class="pay-kpi">
                       <div class="pay-kpi__lbl">手續費 / 扣款合計</div>
@@ -1216,10 +1218,10 @@
 
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
                   <span class="cm-section-title" style="margin-bottom:0">款項明細</span>
-                  <span style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:2px 8px;border-radius:4px;font-weight:600;flex-shrink:0"
+                  <span x-show="!moneyMasked()" style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:2px 8px;border-radius:4px;font-weight:600;flex-shrink:0"
                         :style="totalEnteredPct()===100 ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
                         x-text="'合計 ' + totalEnteredPct() + '%' + (totalEnteredPct()===100 ? ' ✓' : '（須為 100%）')"></span>
-                  <button x-show="paymentItems().length > 1"
+                  <button x-show="!moneyMasked() && paymentItems().length > 1"
                           @click="balanceLastPayment()"
                           style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;line-height:1.4;white-space:nowrap">
                     平衡尾款
@@ -1247,13 +1249,14 @@
                       <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
                              x-model="item.customLabel" @input="setDirty()"
                              style="width:96px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                      <div style="position:relative;flex-shrink:0;display:inline-flex">
+                      <span x-show="moneyMasked()" class="num" style="flex:1;color:var(--text-dim)">—</span>
+                      <div x-show="!moneyMasked()" style="position:relative;flex-shrink:0;display:inline-flex">
                         <input class="fi fi--pct" type="number" min="0" max="100" step="0.01"
                                x-model.number="item.pct" @input="onPctChange(idx)"
                                style="font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700">
                         <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none">%</span>
                       </div>
-                      <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+                      <div x-show="!moneyMasked()" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
                         <div>
                           <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">含稅</div>
                           <div style="position:relative">
@@ -1290,7 +1293,7 @@
                               :style="item.received ? 'color:var(--success)' : 'color:#9CA3AF'"
                               x-text="item.received ? '已收款' : '未收'"></span>
                       </label>
-                      <button class="btn-del" @click="removePaymentItem(idx)" style="flex-shrink:0"
+                      <button class="btn-del" x-show="!moneyMasked()" @click="removePaymentItem(idx)" style="flex-shrink:0"
                               :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
                     </div>
 
@@ -1350,7 +1353,7 @@
 
                     <template x-if="item.received">
                       <div>
-                      <div style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
+                      <div x-show="!moneyMasked()" style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
                         <div>
                           <span class="fi-label">實收金額（含稅）</span>
                           <div style="position:relative">
@@ -1418,7 +1421,7 @@
                   </div>
                 </template>
 
-                <button class="btn-add" @click="addPaymentItem()">
+                <button class="btn-add" x-show="!moneyMasked()" @click="addPaymentItem()">
                   <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                   新增款項
                 </button>

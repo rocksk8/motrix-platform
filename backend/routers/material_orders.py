@@ -25,6 +25,7 @@ from helpers import (
     _require_user, _tok, _audit, save_quotation_json, user_has_module,
     _check_quotation_owner, SQL_DEAL_TAG,
 )
+from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
 
 router = APIRouter()
 
@@ -93,6 +94,10 @@ def update_material_orders(quote_no: str,
         # 3. 權限檢查：只有 admin+ 或有報價單編輯模組的使用者可以修改叫料
         if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "project_manage"):
             raise HTTPException(403, "權限不足：只有管理員或專案經理可以修改叫料")
+        if not money_visible(user):
+            # CM13（2026-09-24）：這支整份取代叫料清單且單價／小計為必填——看不到金額的人
+            # 送不出正確的值，照收就是用猜的數字蓋掉真正的價格（比照 D1 報價單 403）。
+            raise HTTPException(403, "此帳號沒有財務檢視權限，不可修改叫料清單")
 
         # 4. 檢查案件狀態
         if (q["deal_tag"] or "") == "已結案":
@@ -152,11 +157,9 @@ def update_material_orders(quote_no: str,
 def get_material_orders(quote_no: str, authorization: str = Header(None)):
     """取得案件的叫料清單。
 
-    權限比照同一批資料的既有端點（`GET /api/quotations/{quote_no}` 本來就會把
-    整包 data_json 含 caseRecord.materialOrders 回給同樣的使用者）：只要求登入
-    ＋擁有者檢查，不另外加 `financial_view`——同一份資料透過既有端點本來就
-    拿得到，只擋這一支是假的安全感（比照 `finance-summary` 端點的同款決策）。
-    但擁有者檢查不能省，那是真的會擋掉別的業務的案件。
+    權限：登入＋擁有者檢查。2026-09-24（CM13）起 `GET /api/quotations/{quote_no}` 對沒有
+    財務檢視權的帳號遮蔽金額，這支同步遮蔽（原本「不另外擋」的理由是兩支拿得到同一份
+    資料，只擋一支是假的安全感——現在兩支一起擋）。擁有者檢查不能省。
     """
     user = _require_user(authorization)
     conn = get_db()
@@ -173,6 +176,13 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])
+        if not money_visible(user):
+            # CM13（2026-09-24 使用者裁示）：單價、小計、已付金額不回
+            for o in orders:
+                for k in MATERIAL_ORDER_MONEY_KEYS:
+                    o.pop(k, None)
+            return {"quoteNo": quote_no, "materialOrders": orders,
+                    "totalAmount": None, "paidAmount": None, "moneyMasked": True}
 
         # 用 .get() 取值：這份清單是自由格式 JSON，早期資料或人工修過的
         # data_json 不保證每筆都有 totalPrice/paidAmount，直接 o["totalPrice"]

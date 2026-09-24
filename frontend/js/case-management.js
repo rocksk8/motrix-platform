@@ -1711,6 +1711,10 @@ function app() {
 
     paymentItems() { return this.cr.caseRecord?.payment?.items || [] },
 
+    // CM13（2026-09-24）：後端對沒有財務檢視權的帳號遮蔽金額（selected.moneyMasked）。
+    // 這時 total／amount 都是空的，任何換算都會算出 0 並自動存回去 ⇒ 會改金額的動作一律不做。
+    moneyMasked() { return !!this.selected?.moneyMasked },
+
     totalWithTax()  { return this.selected?.total    || 0 },
     totalPretax()   { return this.selected?.pretax   || 0 },
     totalTax()      { return this.totalWithTax() - this.totalPretax() },
@@ -1747,6 +1751,7 @@ function app() {
     },
 
     _setItemAmount(items, idx, withTax) {
+      if (this.moneyMasked()) return
       // 規範值：直接存含稅整數，pct 作為百分比 input 顯示用
       const total = this.totalWithTax()
       items[idx].amount = Math.round(withTax)
@@ -1754,6 +1759,7 @@ function app() {
     },
 
     _syncLast(items) {
+      if (this.moneyMasked()) return
       // 讓最後一筆含稅 = 合約總額 − Σ其他，確保合計精確
       const total   = this.totalWithTax()
       const lastIdx = items.length - 1
@@ -1762,6 +1768,7 @@ function app() {
     },
 
     onPctChange(idx) {
+      if (this.moneyMasked()) return
       const items   = this.paymentItems()
       const total   = this.totalWithTax()
       const lastIdx = items.length - 1
@@ -1782,6 +1789,7 @@ function app() {
     },
 
     onAmountWithTaxChange(idx, val) {
+      if (this.moneyMasked()) return
       const total = this.totalWithTax()
       if (!total || !isFinite(val) || val < 0) return
       const items   = this.paymentItems()
@@ -1796,6 +1804,7 @@ function app() {
     },
 
     onAmountPretaxChange(idx, val) {
+      if (this.moneyMasked()) return
       const pretax = this.totalPretax()
       const total  = this.totalWithTax()
       if (!pretax || !isFinite(val) || val < 0) return
@@ -1812,6 +1821,7 @@ function app() {
     },
 
     balanceLastPayment() {
+      if (this.moneyMasked()) return
       const items = this.paymentItems()
       if (items.length < 2) return
       this._syncLast(items)
@@ -1840,11 +1850,13 @@ function app() {
     outstandingPct()   { return Math.max(0, 100 - this.receivedPct()) },
 
     addPaymentItem() {
+      if (this.moneyMasked()) return
       const items = this.cr.caseRecord.payment.items
       items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
       this.setDirty()
     },
     removePaymentItem(idx) {
+      if (this.moneyMasked()) return
       if (this.cr.caseRecord.payment.items.length <= 1) return
       const pi = this.cr.caseRecord.payment.items[idx]
       if (!confirm(`確定要刪除款項期別「${pi?.type || '第' + (idx + 1) + '期'}」？\n\n刪除後會自動存檔，無法復原。`)) return
