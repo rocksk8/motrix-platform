@@ -33,8 +33,11 @@
 頁面還不存在，所以選擇器只能由我先定。
 **要換名字請退回給我改這張表，不要動我的檔。**
 """
+import re
 import threading
+import warnings
 import time
+from urllib.parse import urlparse
 
 import pytest
 
@@ -144,6 +147,59 @@ def _need(page, selector, what):
     return loc
 
 
+# ── 等待（PERF #6，2026-09-25：固定 sleep 換成等可觀測事件）────────────────────────
+VC = "Alpine.$data(document.body)"
+
+
+def _soft_wait(page, js, timeout=10000):
+    """等到條件成立或逾時，**不丟例外**——判決留給後面原本那句有說明的斷言
+    （直接等會把「帶入沒接上」這種失敗變成一句看不懂的 Timeout）。"""
+    try:
+        page.wait_for_function(js, timeout=timeout)
+        return True
+    except Exception:
+        # 逾時照樣放行，但要看得到：條件寫錯時它只會默默拖滿逾時（第一版就是這樣，18s 變 42s）
+        warnings.warn("soft wait timed out (%dms): %s" % (timeout, js[:120]))
+        return False
+
+
+def _ready(page):
+    """頁面可以開始操作（原本固定等 2 秒）：「新增傳票」可見＋科目選單與摘要來源都載完。"""
+    page.wait_for_selector(HOOKS["new"], state="visible", timeout=15000)
+    page.wait_for_function("() => window.Alpine && %s && %s._accountsLoaded && !%s.sourcesLoading"
+                           " && Object.keys(%s.sources || {}).length > 0" % (VC, VC, VC, VC), timeout=15000)
+
+
+def _items_shown(page):
+    """點頁籤之後，來源清單渲染出來（原本固定等 0.5 秒）。"""
+    _soft_wait(page, "() => [...document.querySelectorAll('%s')].some(e => e.offsetParent !== null)"
+               % HOOKS["item"].replace("'", "\\'"))
+
+
+def _brought_in(page):
+    """點一筆來源之後，摘要欄被帶入（原本固定等 0.3 秒）。applySource() 是同步的，等的是畫面更新。"""
+    _soft_wait(page, "() => [...document.querySelectorAll('[x-model=\"l.summary\"]')]"
+               ".some(e => e.value.trim())", timeout=5000)
+
+
+def _saved(page, do):
+    """存檔整個做完（原本固定等 1.2 秒）：最後一步是重讀清單 GET /api/vouchers ⇒ 等它回來＋busy 解除。"""
+    with page.expect_response(lambda r: r.request.method == "GET" and urlparse(r.url).path == "/api/vouchers",
+                              timeout=15000):
+        do()
+    page.wait_for_function("() => !%s.busy" % VC, timeout=15000)
+    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+
+
+def _opened(page, do):
+    """從清單點開一張（原本固定等 1 秒）：等 GET /api/vouchers/{id} 回來＋畫面更新。"""
+    one = re.compile(r"^/api/vouchers/\d+$")
+    with page.expect_response(lambda r: r.request.method == "GET" and one.match(urlparse(r.url).path),
+                              timeout=15000):
+        do()
+    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+
+
 def _open_editor(page):
     """進編輯畫面 —— `JV8` 之後這一步是**必要的**。
 
@@ -152,7 +208,8 @@ def _open_editor(page):
     ⚙️ 這**不是繞過什麼** —— 它就是使用者真正走的那一步。
     """
     _need(page, HOOKS["new"], "「＋新增傳票」按鈕").first.click()
-    page.wait_for_timeout(600)
+    _soft_wait(page, "() => [...document.querySelectorAll('[x-model=\"l.summary\"]')]"
+               ".some(e => e.offsetParent !== null)")
     _need(page, HOOKS["summary"], "分錄行的摘要欄")
 
 
@@ -180,7 +237,7 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
         page.on("pageerror", lambda e: page_errors.append(str(e)))
         _login(page, live_server, username, password)
         page.goto("%s/pages/voucher.html" % live_server)
-        page.wait_for_timeout(2000)
+        _ready(page)
         # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
         _open_editor(page)
 
@@ -192,9 +249,9 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
                          "「已上傳檔案」頁籤")
 
         tab_case.first.click()
-        page.wait_for_timeout(500)
+        _items_shown(page)
         _need(page, HOOKS["item"], "案件來源的清單").first.click()
-        page.wait_for_timeout(300)
+        _brought_in(page)
 
         box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
         brought_in = box.input_value()
@@ -205,6 +262,8 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
         edited = box.input_value()
 
         # ③ 切走再切回來
+        # ⚠️ 這兩個固定等待**保留**（PERF #6 的 N 類）：要證明的是「切頁籤**不會**重新帶入」，
+        #    「沒有發生」沒有事件可以等 ⇒ 給錯誤寫法（若有的非同步重新帶入）一段時間發生。
         tab_file.first.click()
         page.wait_for_timeout(300)
         tab_case.first.click()
@@ -252,16 +311,16 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
         page = browser.new_page()
         _login(page, live_server, username, password)
         page.goto("%s/pages/voucher.html" % live_server)
-        page.wait_for_timeout(2000)
+        _ready(page)
         # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
         _open_editor(page)
 
         _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
         _need(page, '%s:has-text("案件")' % HOOKS["tab"],
               "「案件」頁籤").first.click()
-        page.wait_for_timeout(500)
+        _items_shown(page)
         _need(page, HOOKS["item"], "案件來源的清單").first.click()
-        page.wait_for_timeout(300)
+        _brought_in(page)
 
         box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
         box.fill(box.input_value() + TYPED)
@@ -285,11 +344,10 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
         if save.count() == 0:
             browser.close()
             pytest.fail("頁面上找不到「儲存」—— 摘要改了**存不下去**。")
-        save.first.click()
-        page.wait_for_timeout(1200)
+        _saved(page, lambda: save.first.click())
 
         page.reload()
-        page.wait_for_timeout(2000)
+        _ready(page)
         # 🔴 `JV8`：重整之後 `editing` 又回到 false
         #    ⇒ 要**從左側清單點開刚存的那張**才看得到摘要。
         # ⚙️ 而這比舊寫法**更貼近這一題要驗的事**：
@@ -298,8 +356,8 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
         # ⚠️ 不能改按「＋新增傳票」：那是**另一張空的**，
         #    摘要欄會是空字串 ⇒ 這一題會紅得像「被蓋回去」，
         #    而那是**我量錯了**，不是產品錯了。
-        _need(page, HOOKS["row"], "左側傳票清單的列").first.click()
-        page.wait_for_timeout(1000)
+        row = _need(page, HOOKS["row"], "左側傳票清單的列").first
+        _opened(page, lambda: row.click())
         after = _need(page, HOOKS["summary"], "分錄行的摘要欄").first.input_value()
         browser.close()
 
