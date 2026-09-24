@@ -464,12 +464,12 @@ window.CM_PARTS.push(() => ({
             bankAccountCode: this.payVoucherBankAcctCode, bankAccountName: this._payVoucherBankName || '',
           })
         })
-        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); this.payVoucherSaving = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); this.payVoucherSaving = false; return }
         this.payVoucherModal = false
         this.payVoucherTarget = null
         await this.loadContractorVouchers(this.selected?.quote_no)
         this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.payVoucherSaving = false
     },
 
@@ -616,16 +616,16 @@ window.CM_PARTS.push(() => ({
     },
 
     async markPendingAcceptance(d) {
-      if (!confirm(`確定將「${this._dispatchLabel(d)}」標記為待驗收？`)) return
+      if (!(await MotrixUI.confirm(`確定將「${this._dispatchLabel(d)}」標記為待驗收？`))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ action: 'pending_acceptance' })
         })
-        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
         await this.loadDispatches(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async acceptDispatch(d) {

@@ -267,27 +267,27 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ text })
         })
-        if (!r.ok) { alert('新增失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('新增失敗：' + (await r.json()).detail, {kind: 'error'}); return }
         this.newActionItemText = ''
         await this.loadCaseActionItems()
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       } finally {
         this.addingActionItem = false
       }
     },
 
     async deleteActionItem(itemId) {
-      if (!this.selected || !confirm('確定刪除此待辦事項？')) return
+      if (!this.selected || !(await MotrixUI.confirm('確定刪除此待辦事項？', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert('刪除失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('刪除失敗：' + (await r.json()).detail, {kind: 'error'}); return }
         await this.loadCaseActionItems()
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       }
     },
 
@@ -299,10 +299,10 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ stage })
         })
-        if (!r.ok) { alert('確認失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('確認失敗：' + (await r.json()).detail, {kind: 'error'}); return }
         await this.loadCaseActionItems()
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       }
     },
 
@@ -328,9 +328,9 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ user_ids: this.assignedUserIds })
         })
-        if (!r.ok) { alert('儲存失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('儲存失敗：' + (await r.json()).detail, {kind: 'error'}); return }
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       } finally {
         this.assignedUsersSaving = false
       }
@@ -381,21 +381,21 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(this._stagesApiBase(), {
           method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ label: '新階段' })
         })
-        if (!r.ok) { alert('新增階段失敗'); return }
+        if (!r.ok) { MotrixUI.toast('新增階段失敗', {kind: 'error'}); return }
         this.cr.caseRecord.stages.push(await r.json())
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
     async removeStage(idx) {
       const stages = this.cr.caseRecord.stages
       const st = stages[idx]
       if (!st) return
-      if (!confirm(`確定要刪除執行階段「${st.label || '未命名'}」？\n\n階段內的拜訪紀錄會一併刪除，無法復原。`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除執行階段「${st.label || '未命名'}」？\n\n階段內的拜訪紀錄會一併刪除，無法復原。`, {danger: true}))) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, { method: 'DELETE', headers: this._authHeaders() })
-        if (!r.ok) { alert('刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast('刪除失敗', {kind: 'error'}); return }
         stages.splice(idx, 1)
         stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== st.id) })
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
 
     toggleStageDetail(id) { this._openStageDetail[id] = !this._openStageDetail[id] },
@@ -415,7 +415,7 @@ window.CM_PARTS.push(() => ({
     stageRatioPct(st) { return st.ratioBp === null || st.ratioBp === undefined ? '' : st.ratioBp / 100 },
     setStageRatio(st, v) {
       const bp = (v === '' || v === null || v === undefined) ? null : Math.round(Number(v) * 100)
-      if (bp !== null && (!Number.isFinite(bp) || bp < 0 || bp > 10000)) { alert('比例需為 0～100%'); return }
+      if (bp !== null && (!Number.isFinite(bp) || bp < 0 || bp > 10000)) { MotrixUI.toast('比例需為 0～100%', {kind: 'info'}); return }
       this.updateStage(st, { ratioBp: bp })
     },
     stageRatioSummary() {
@@ -434,11 +434,11 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, {
           method: 'PUT', headers: this._authHeaders(true), body: JSON.stringify(fields)
         })
-        if (!r.ok) { alert('儲存失敗'); return }
+        if (!r.ok) { MotrixUI.toast('儲存失敗', {kind: 'error'}); return }
         Object.assign(st, await r.json())
         this.flashSaved('stages')
         this._checkAllStagesDone()
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async addStageAssignee(st, username) {
@@ -452,7 +452,7 @@ window.CM_PARTS.push(() => ({
     },
     async removeStageAssignee(st, username) {
       const u = (this.selectableUsers || []).find(x => x.username === username)
-      if (!confirm(`確定要把「${(u && u.display_name) || username}」從階段「${st.label || '未命名'}」的負責人移除？`)) return
+      if (!(await MotrixUI.confirm(`確定要把「${(u && u.display_name) || username}」從階段「${st.label || '未命名'}」的負責人移除？`, {danger: true}))) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees/${encodeURIComponent(username)}`, {
           method: 'DELETE', headers: this._authHeaders()
@@ -479,7 +479,7 @@ window.CM_PARTS.push(() => ({
     async toggleStageDependency(st, candidateId) {
       const has = (st.dependsOn || []).includes(candidateId)
       if (!has && this.wouldCreateCycle(st.id, candidateId)) {
-        alert('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段')
+        MotrixUI.toast('這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段', {kind: 'info'})
         return
       }
       try {
@@ -488,11 +488,11 @@ window.CM_PARTS.push(() => ({
         })
         if (!r.ok) {
           const err = await r.json().catch(() => ({}))
-          alert(err.detail || '設定失敗')
+          MotrixUI.toast(err.detail || '設定失敗', {kind: 'error'})
           return
         }
         Object.assign(st, await r.json())
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
 
     switchToTimeline() {
@@ -758,22 +758,22 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits`, {
           method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({})
         })
-        if (!r.ok) { alert('新增記錄失敗'); return }
+        if (!r.ok) { MotrixUI.toast('新增記錄失敗', {kind: 'error'}); return }
         Object.assign(st, await r.json())
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
     async removeVisit(stageIdx, visitIdx) {
       const st = this.cr.caseRecord.stages[stageIdx]
       const visit = st?.visits?.[visitIdx]
       if (!st || !visit) return
-      if (!confirm(`確定要刪除這筆拜訪紀錄${visit.visitDate ? '（' + visit.visitDate + '）' : ''}？\n\n刪除後無法復原。`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除這筆拜訪紀錄${visit.visitDate ? '（' + visit.visitDate + '）' : ''}？\n\n刪除後無法復原。`, {danger: true}))) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/visits/${visit.id}`, {
           method: 'DELETE', headers: this._authHeaders()
         })
-        if (!r.ok) { alert('刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast('刪除失敗', {kind: 'error'}); return }
         st.visits.splice(visitIdx, 1)
-      } catch (e) { alert('發生錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
     },
     async updateVisit(st, visit) {
       try {
@@ -1224,23 +1224,23 @@ window.CM_PARTS.push(() => ({
           location.href = `network-plan-form.html?id=${d.id}`
           return
         }
-        if (r.status !== 404) { alert((await r.json().catch(() => ({}))).detail || '查詢失敗'); return }
-      } catch (e) { alert('網路錯誤：' + e.message); return }
+        if (r.status !== 404) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '查詢失敗', {kind: 'error'}); return }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}); return }
 
       const mods = this.session.modules || []
       const canEdit = ['superadmin', 'admin'].includes(this.session.role) || mods.indexOf('netplan_edit') >= 0
-      if (!canEdit) { alert('此案件尚無網路架構規劃書'); return }
-      if (!confirm('此案件尚無網路架構規劃書，是否建立一份？')) return
+      if (!canEdit) { MotrixUI.toast('此案件尚無網路架構規劃書', {kind: 'info'}); return }
+      if (!(await MotrixUI.confirm('此案件尚無網路架構規劃書，是否建立一份？'))) return
       try {
         const cr = await fetch('/api/network-plans', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ quoteNo })
         })
-        if (!cr.ok) { alert((await cr.json().catch(() => ({}))).detail || '建立失敗'); return }
+        if (!cr.ok) { MotrixUI.toast((await cr.json().catch(() => ({}))).detail || '建立失敗', {kind: 'error'}); return }
         const d = await cr.json()
         location.href = `network-plan-form.html?id=${d.id}`
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async uploadMaterialFiles(idx, evt) {

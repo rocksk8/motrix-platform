@@ -9,6 +9,7 @@
 
 需要 `playwright`（見 `test_e2e_playwright_2026_09_07.py` 檔頭說明）。
 """
+from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 import json
 import threading
 import time
@@ -308,9 +309,9 @@ def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra
         page = browser.new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        # 送審那顆按鈕會跳 confirm()，不接的話 Playwright 預設會 dismiss，
-        # 整個流程就會安靜地停在原地（測試看起來只是「沒生效」）
-        page.on("dialog", lambda d: d.accept())
+        # 送審那顆按鈕會先確認。CM12 P4 起是 MotrixUI（不是原生 confirm）⇒ 按下後用 helper 回答並驗訊息；
+        # 原生對話框若再出現，最後斷言會抓到（不再盲接）
+        natives = forbid_native_dialogs(page)
         try:
             _login(page, live_server, username, password)
             _open_tab(page, live_server, "MQ-XEUI-007")
@@ -329,6 +330,8 @@ def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra
             assert _xe_row(exp_id)["description"] == "原始品項"
 
             page.click(f"{PANEL} button:has-text('送審變更')")
+            answer_confirm(page, ok=True, expect="確定送審這筆變更申請")
+            assert natives == [], natives
             # ⚠️ 2026-09-24：原本等 `:text('生效')`——那是子字串比對，而變更面板上本來就有固定文字
             #    「目前生效：」（case-management.html:2297）⇒ 按下送審的瞬間就成立，送審還沒完成就去讀
             #    資料庫。負載下送審慢一點就讀到原值（-n 6 全量偶發紅）；伺服器端讓送審慢 3 秒可以確定性

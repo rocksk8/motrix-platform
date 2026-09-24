@@ -42,7 +42,7 @@ window.CM_PARTS.push(() => ({
       while (this.saving) await new Promise(res => setTimeout(res, 50))
       await this.saveCaseRecord()
       if (this.saveStatus === 'error' || this.segConflict) {
-        alert('案件沒有存成功，已停止結案：' + (this.saveMsg || '儲存失敗'))
+        MotrixUI.toast('案件沒有存成功，已停止結案：' + (this.saveMsg || '儲存失敗'), {kind: 'error'})
         return
       }
       try {
@@ -50,10 +50,10 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         const d = await r.json().catch(() => ({}))
-        if (!r.ok) { alert(d.detail || '無法取得結案條件'); return }
+        if (!r.ok) { MotrixUI.toast(d.detail || '無法取得結案條件', {kind: 'error'}); return }
         this.closeCheck = { open: true, gates: d.gates || [], canClose: !!d.canClose }
       } catch {
-        alert('網路錯誤，請稍後再試')
+        MotrixUI.toast('網路錯誤，請稍後再試', {kind: 'error'})
       }
     },
 
@@ -174,16 +174,16 @@ window.CM_PARTS.push(() => ({
           // 結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置
           // 條件，不能靜默吞掉，不然使用者只會看到「結案」按鈕沒反應。
           const err = await r.json().catch(() => ({}))
-          alert(err.detail || '操作失敗，請稍後再試')
+          MotrixUI.toast(err.detail || '操作失敗，請稍後再試', {kind: 'error'})
         }
       } catch {
-        alert('網路錯誤，請稍後再試')
+        MotrixUI.toast('網路錯誤，請稍後再試', {kind: 'error'})
       }
     },
 
     async unlockCase() {
       if (!this.selected) return
-      if (!confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。')) return
+      if (!(await MotrixUI.confirm('確認解鎖此已結案案件？\n\n解鎖後將進入「半解鎖」狀態，之後對案件記錄的變更/上傳需最高管理員於簽核佇列審核通過後才會套用。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-unlock`, {
           method: 'POST',
@@ -192,14 +192,14 @@ window.CM_PARTS.push(() => ({
         if (r.ok) {
           this.selected.case_semi_unlocked = 1
         } else {
-          alert((await r.json().catch(() => ({}))).detail || '解鎖失敗')
+          MotrixUI.toast((await r.json().catch(() => ({}))).detail || '解鎖失敗', {kind: 'error'})
         }
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async lockCase() {
       if (!this.selected) return
-      if (!confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。')) return
+      if (!(await MotrixUI.confirm('確認重新上鎖此案件？\n\n上鎖後將無法再變更案件記錄，需再次解鎖才能繼續編輯（既有待審核項目不受影響）。', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/case-lock`, {
           method: 'POST',
@@ -208,9 +208,9 @@ window.CM_PARTS.push(() => ({
         if (r.ok) {
           this.selected.case_semi_unlocked = 0
         } else {
-          alert((await r.json().catch(() => ({}))).detail || '上鎖失敗')
+          MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上鎖失敗', {kind: 'error'})
         }
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     closingReportDownloading: false,
@@ -222,7 +222,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${quoteNo}/closing-report-pdf`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '結案報表產生失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '結案報表產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
@@ -232,7 +232,7 @@ window.CM_PARTS.push(() => ({
         a.click()
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } catch (e) { alert('下載失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('下載失敗：' + e.message, {kind: 'error'}) }
       finally { this.closingReportDownloading = false }
     },
 }))

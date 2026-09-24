@@ -275,11 +275,11 @@ window.CM_PARTS.push(() => ({
       items.push({ id: Date.now(), type: '進度款', pct: 0, received: false, receivedAt: '', expectedReceiptDate: '', invoiceNo: '', invoiceDate: '', note: '', actualAmount: null, feeAmount: 0, feeNote: '' })
       this.setDirty()
     },
-    removePaymentItem(idx) {
+    async removePaymentItem(idx) {
       if (this.moneyMasked()) return
       if (this.cr.caseRecord.payment.items.length <= 1) return
       const pi = this.cr.caseRecord.payment.items[idx]
-      if (!confirm(`確定要刪除款項期別「${pi?.type || '第' + (idx + 1) + '期'}」？\n\n刪除後會自動存檔，無法復原。`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除款項期別「${pi?.type || '第' + (idx + 1) + '期'}」？\n\n刪除後會自動存檔，無法復原。`, {danger: true}))) return
       this.cr.caseRecord.payment.items.splice(idx, 1)
       if (this.cr.caseRecord.payment.items.length === 1) {
         this.cr.caseRecord.payment.items[0].pct = 100
@@ -312,7 +312,7 @@ window.CM_PARTS.push(() => ({
       if (!this.dirty) return true
       clearTimeout(this._autoSaveTimer)
       await this.saveCaseRecord()
-      if (this.dirty) { alert('請先存檔成功後再操作（' + (this.saveMsg || '尚未儲存') + '）'); return false }
+      if (this.dirty) { MotrixUI.toast('請先存檔成功後再操作（' + (this.saveMsg || '尚未儲存') + '）', {kind: 'error'}); return false }
       return true
     },
 
@@ -379,7 +379,7 @@ window.CM_PARTS.push(() => ({
       if (res.ok) {
         if (!res.synced) for (const k of ['writeOffStatus', 'writeOffReason', 'writeOffRequestedBy', 'writeOffRequestedAt']) delete item[k]
       } else {
-        alert(res.msg)
+        MotrixUI.toast(res.msg, {kind: 'info'})
       }
     },
 
@@ -393,7 +393,7 @@ window.CM_PARTS.push(() => ({
         item.writeOffApprovedBy = me
         item.writeOffApprovedAt = new Date().toISOString()
       } else if (!res.ok) {
-        alert(res.msg)
+        MotrixUI.toast(res.msg, {kind: 'info'})
       }
     },
 
@@ -420,7 +420,7 @@ window.CM_PARTS.push(() => ({
     },
 
     async openInvoiceVoucherModal() {
-      if (this.dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請開票憑據'); return }
+      if (this.dirty) { MotrixUI.toast('款項明細有未儲存的修改，請先儲存後再申請開票憑據', {kind: 'error'}); return }
       this.ivMode = 'amount'
       this.ivAmountInput = 0
       this.ivItemSelections = {}
@@ -432,8 +432,8 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) this.ivRemaining = await r.json()
-        else { alert((await r.json()).detail || '載入額度失敗'); this.ivCreateModal = false }
-      } catch (e) { alert('網路錯誤：' + e.message); this.ivCreateModal = false }
+        else { MotrixUI.toast((await r.json()).detail || '載入額度失敗', {kind: 'error'}); this.ivCreateModal = false }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}); this.ivCreateModal = false }
       this.ivRemainingLoading = false
     },
 
@@ -490,18 +490,18 @@ window.CM_PARTS.push(() => ({
       if (!this.ivRemaining) return
       let body
       if (this.ivMode === 'amount') {
-        if (!this.ivAmountInput || this.ivAmountInput <= 0) { alert('請輸入申請金額'); return }
-        if (this.ivAmountInput > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        if (!this.ivAmountInput || this.ivAmountInput <= 0) { MotrixUI.toast('請輸入申請金額', {kind: 'error'}); return }
+        if (this.ivAmountInput > this.ivRemaining.remainingAmount) { MotrixUI.toast('超過剩餘可申請金額', {kind: 'error'}); return }
         body = { quote_no: this.selected.quote_no, scope: 'amount', amount: this.ivAmountInput }
       } else {
         const items = Object.entries(this.ivItemSelections).map(([itemId, sel]) => ({
           itemId: Number(itemId), qty: sel.qty, amount: sel.amount
         }))
-        if (items.length === 0) { alert('請至少選擇一項品項'); return }
-        if (this.ivSelectedGrossTotal() > this.ivRemaining.remainingAmount) { alert('超過剩餘可申請金額'); return }
+        if (items.length === 0) { MotrixUI.toast('請至少選擇一項品項', {kind: 'info'}); return }
+        if (this.ivSelectedGrossTotal() > this.ivRemaining.remainingAmount) { MotrixUI.toast('超過剩餘可申請金額', {kind: 'error'}); return }
         body = { quote_no: this.selected.quote_no, scope: 'items', items }
       }
-      if (!confirm('確定送出建立開票申請憑據？')) return
+      if (!(await MotrixUI.confirm('確定送出建立開票申請憑據？'))) return
       this.ivSubmitting = true
       try {
         const r = await fetch('/api/invoice-vouchers', {
@@ -509,35 +509,35 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify(body)
         })
-        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.ivSubmitting = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '建立失敗', {kind: 'error'}); this.ivSubmitting = false; return }
         this.ivCreateModal = false
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.ivSubmitting = false
     },
 
     async deleteInvoiceVoucher(v) {
-      if (!confirm(`確定刪除開票申請憑據「${v.voucherNo}」？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除開票申請憑據「${v.voucherNo}」？`, {danger: true}))) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) await this.loadInvoiceVouchers(this.selected?.quote_no)
-        else alert((await r.json()).detail || '刪除失敗')
-      } catch (e) { alert('網路錯誤：' + e.message) }
+        else MotrixUI.toast((await r.json()).detail || '刪除失敗', {kind: 'error'})
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async submitInvoiceVoucher(v) {
-      if (!confirm(`確定送出開票申請憑據「${v.voucherNo}」進行簽核？`)) return
+      if (!(await MotrixUI.confirm(`確定送出開票申請憑據「${v.voucherNo}」進行簽核？`))) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/submit`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '送出失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async approveInvoiceVoucher(v) {
@@ -546,20 +546,20 @@ window.CM_PARTS.push(() => ({
       const _appr = v.approval || {}
       const _casc = window.MotrixApproval.selfCascadeTiers(
         _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
-      if (!confirm(`確定簽核開票申請憑據「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
+      if (!(await MotrixUI.confirm(`確定簽核開票申請憑據「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc)))) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ cascade: _casc.length > 0 })
         })
-        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '簽核失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async rejectInvoiceVoucher(v) {
-      const note = prompt(`退回開票申請憑據「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      const note = (await MotrixUI.prompt(`退回開票申請憑據「${v.voucherNo}」，可填寫退回原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/reject`, {
@@ -567,13 +567,13 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async revokeInvoiceVoucherApproval(v) {
-      const note = prompt(`撤銷開票申請憑據「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      const note = (await MotrixUI.prompt(`撤銷開票申請憑據「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/revoke-approval`, {
@@ -581,9 +581,9 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async downloadInvoiceVoucherPdf(v) {
@@ -595,7 +595,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
@@ -605,7 +605,7 @@ window.CM_PARTS.push(() => ({
         a.click()
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } catch (e) { alert('下載失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('下載失敗：' + e.message, {kind: 'error'}) }
     },
 
     async previewInvoiceVoucherPdf(v) {
@@ -614,12 +614,12 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.ivPreviewFetching = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); this.ivPreviewFetching = false; return }
         const blob = await r.blob()
         this.ivPreviewBlobUrl = URL.createObjectURL(blob)
         this.ivPreviewVoucher = v
         this.ivPreviewModal = true
-      } catch (e) { alert('預覽失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('預覽失敗：' + e.message, {kind: 'error'}) }
       this.ivPreviewFetching = false
     },
 
@@ -649,9 +649,9 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
@@ -667,9 +667,9 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item) {
@@ -677,38 +677,38 @@ window.CM_PARTS.push(() => ({
             item.invoiceFiles.push(...body.files)
           }
         })
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deletePaymentItemInvoiceFile(idx, fileId) {
-      if (!confirm('確定刪除此附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此附件？', {danger: true}))) return
       if (!(await this._flushBeforeItemOp())) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files/${fileId}${this._itemQs(this.paymentItems()[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('payment', cr => {
           const item = (cr.payment?.items || [])[idx]
           if (item && item.invoiceFiles) item.invoiceFiles = item.invoiceFiles.filter(f => f.id !== fileId)
         })
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     async deleteInvoiceVoucherIssuedFile(v, fileId) {
-      if (!confirm('確定刪除此附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此附件？', {danger: true}))) return
       try {
         const r = await fetch(`/api/invoice-vouchers/${v.voucherNo}/issued-files/${fileId}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         await this.loadInvoiceVouchers(this.selected?.quote_no)
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     // ── 請款單 ──────────────────────────────────────────────────────────────

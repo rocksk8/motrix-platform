@@ -188,6 +188,25 @@ def _text(page, selector):
         ".map(e => e.innerText).join('\\n----\\n')", selector))
 
 
+#: 在 ui.js 設定 window.MotrixUI 的那一刻包起 confirm／prompt：立刻「取消」並記錄
+_AUTO_DISMISS_MOTRIX_UI = """
+(() => {
+  window.__goldenDialogs = []
+  let real
+  Object.defineProperty(window, 'MotrixUI', {
+    configurable: true,
+    get() { return real },
+    set(v) {
+      real = Object.assign({}, v, {
+        confirm: (m) => { window.__goldenDialogs.push(['confirm', String(m)]); return Promise.resolve(false) },
+        prompt: (m) => { window.__goldenDialogs.push(['prompt', String(m)]); return Promise.resolve(null) },
+      })
+    },
+  })
+})()
+"""
+
+
 def _record(live_server, make_user):
     u = make_user(username="golden_su", role="superadmin")
     _seed()
@@ -197,6 +216,10 @@ def _record(live_server, make_user):
         try:
             page = browser.new_context(viewport={"width": 1440, "height": 1000}).new_page()
             page.on("dialog", lambda d: d.dismiss())
+            # CM12 P4：對話框逐步改為 MotrixUI（非原生）。golden 錄製時的語意是「一律取消」——
+            # 對 MotrixUI 用同一個語意：confirm 立刻回 false、prompt 立刻回 null（與原生 dismiss 相同），
+            # 呼叫記在 window.__goldenDialogs。原生那一行留到 B 包也換完為止。
+            page.add_init_script(_AUTO_DISMISS_MOTRIX_UI)
             page.goto(f"{live_server}/pages/login.html")
             page.fill('input[x-model="username"]', u[0])
             page.fill('input[x-model="password"]', u[1])

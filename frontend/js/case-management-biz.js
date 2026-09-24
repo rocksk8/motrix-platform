@@ -27,7 +27,7 @@ window.CM_PARTS.push(() => ({
       if (!c) return
       const src = this._quoteContractFields()
       const filled = Object.keys(src).filter(k => src[k] && !c[k])
-      if (!filled.length) { alert('報價單上沒有可帶入的欄位，或案件這邊都已經有值了。'); return }
+      if (!filled.length) { MotrixUI.toast('報價單上沒有可帶入的欄位，或案件這邊都已經有值了。', {kind: 'info'}); return }
       this._fillContractFromQuote(c)
       this.setDirty && this.setDirty()
       this.dirty = true

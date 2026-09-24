@@ -9,6 +9,7 @@
 - 關卡矩陣的格子可點，開案件並停在該關的分頁
 觀測點：API 回應、資料庫 deal_tag、頁面 activeTab。
 """
+from tests._ui_dialogs import expect_toast, forbid_native_dialogs
 import json
 import threading
 import time
@@ -140,8 +141,8 @@ def live_server(client):
 
 def _open(browser, base, user, path=None):
     page = browser.new_context().new_page()
-    dialogs = []
-    page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+    # CM12 P4：案件頁不再用原生對話框 ⇒ 記下任何原生對話框（題目斷言要是空的）
+    dialogs = forbid_native_dialogs(page)
     page.goto(f"{base}/pages/login.html")
     page.fill('input[x-model="username"]', user[0])
     page.fill('input[x-model="password"]', user[1])
@@ -171,6 +172,7 @@ def test_close_button_shows_the_gates_first_and_goto_switches_tab(live_server, m
             dlg = page.locator("[data-testid=close-check]")
             dlg.wait_for(state="visible", timeout=10000)
             assert dialogs == [], f"列出五關之前就跳了確認框：{dialogs}"
+            assert page.locator('[data-testid="ui-dialog"]').count() == 0, "列出五關之前就跳了確認框（MotrixUI）"
             for label in ("進度", "收款", "單據", "精算", "變更"):
                 assert dlg.locator(f"[data-gate-label='{label}']").count() == 1, label
             assert "王經理" in dlg.locator("[data-gate-label='單據']").inner_text()
@@ -195,8 +197,9 @@ def test_close_stops_when_save_fails(live_server, make_user):
             # 已收款卻沒有收款日期 ⇒ 存檔失敗
             page.evaluate(f"() => {{ const c = {DATA_JS}; c.cr.caseRecord.payment.items[0].receivedAt = '' }}")
             page.evaluate(f"() => {DATA_JS}.closeCaseAction()")
-            page.wait_for_timeout(1500)
+            expect_toast(page, "已停止結案", kind="error")      # CM12 P4：原本是原生 alert
             assert not page.locator("[data-testid=close-check]").is_visible(), "存檔失敗仍往下走"
+            assert dialogs == [], dialogs
             assert _deal_tag() == "已成案"
         finally:
             browser.close()

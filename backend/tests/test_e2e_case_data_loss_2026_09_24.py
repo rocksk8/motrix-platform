@@ -14,6 +14,8 @@ import time
 
 import pytest
 
+from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
+
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
@@ -182,25 +184,20 @@ def test_deleting_payment_item_asks_first(live_server, make_user):
             page = browser.new_page()
             _login(page, live_server, username, password)
             _open(page, live_server, "MQ-E2ELOSS-D")
-            seen = []
-            answer = {"accept": False}
-
-            def _on_dialog(d):
-                seen.append(d.message)
-                d.accept() if answer["accept"] else d.dismiss()
-            page.on("dialog", _on_dialog)
-
+            # CM12 P4：確認框改為 MotrixUI（不再是原生 confirm）⇒ 看到了再回答，並驗訊息
+            natives = forbid_native_dialogs(page)
             first_del = page.locator(
                 "xpath=(//label[.//span[normalize-space()='未收']]"
                 "/following-sibling::button[contains(@class,'btn-del')])[1]")
             first_del.click()
-            assert seen and "訂金款" in seen[0], seen
+            answer_confirm(page, ok=False, expect="訂金款")
             time.sleep(2.0)   # 超過 1.5 秒防抖：若沒有確認就刪，這時已經存進去了
             assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [1, 2], "取消之後不可以刪"
 
-            answer["accept"] = True
             first_del.click()
+            answer_confirm(page, ok=True, expect="訂金款")
             _wait_saved(page)
+            assert natives == [], natives
             assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [2]
         finally:
             browser.close()

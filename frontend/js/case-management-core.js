@@ -266,7 +266,7 @@ window.CM_PARTS.push(() => ({
       if (this.dirty && this.selected) {
         while (this.saving) await new Promise(res => setTimeout(res, 50))
         if (this.dirty) await this.saveCaseRecord()
-        if (this.dirty && !confirm(`上一張案件（${this.selected.quote_no}）沒有存成功：${this.saveMsg || '未儲存'}\n\n仍要切換並放棄這些變更？`)) {
+        if (this.dirty && !(await MotrixUI.confirm(`上一張案件（${this.selected.quote_no}）沒有存成功：${this.saveMsg || '未儲存'}\n\n仍要切換並放棄這些變更？`, {danger: true}))) {
           return
         }
       }
@@ -318,7 +318,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/project-report-pdf`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert('匯出失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('匯出失敗：' + (await r.json()).detail, {kind: 'error'}); return }
         const blob = await r.blob()
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -327,7 +327,7 @@ window.CM_PARTS.push(() => ({
         a.click()
         URL.revokeObjectURL(url)
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       } finally {
         this.exportingProjectReport = false
       }
@@ -729,10 +729,10 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/photo-token?path=${encodeURIComponent(file.path)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert('取得檔案連結失敗'); return }
+        if (!r.ok) { MotrixUI.toast('取得檔案連結失敗', {kind: 'error'}); return }
         const { token } = await r.json()
         window.open(`/api/uploads/${file.path}?pt=${encodeURIComponent(token)}`, '_blank')
-      } catch (e) { alert('開啟檔案失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('開啟檔案失敗：' + e.message, {kind: 'error'}) }
     },
 
     logout() {

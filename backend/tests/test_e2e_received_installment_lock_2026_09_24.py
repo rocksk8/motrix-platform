@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
+
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
@@ -90,10 +92,9 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
         browser = p.chromium.launch()
         try:
             page = browser.new_page()
-            # 刪除款項期別會先 confirm（test_e2e_case_data_loss_2026_09_24）；這裡要走到後端那一關，
-            # 所以按「確定」。Playwright 預設會按取消，那樣根本不會送出存檔。
-            dialogs = []
-            page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+            # 刪除款項期別會先確認（test_e2e_case_data_loss_2026_09_24）；這裡要走到後端那一關，
+            # 所以按「確定」。CM12 P4 起確認框是 MotrixUI（不是原生 confirm）⇒ 用 helper 回答並驗訊息。
+            natives = forbid_native_dialogs(page)
             _login(page, live_server, username, password)
             # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
             page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}&tab=fin")
@@ -103,12 +104,13 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
             delete_received.wait_for(state="visible", timeout=15000)
             assert delete_received.count() == 1
             delete_received.click()
+            answer_confirm(page, ok=True, expect="訂金款")
 
             label = page.locator("span.save-label")
             page.wait_for_function(
                 "() => { const e = document.querySelector('span.save-label');"
                 " return e && /已收款|已儲存/.test(e.textContent) }", timeout=15000)
-            assert dialogs and "訂金款" in dialogs[-1], dialogs
+            assert natives == [], natives
             text = label.inner_text()
             assert "已收款，不可刪除" in text, text
             assert "訂金款" in text, text

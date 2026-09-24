@@ -193,10 +193,10 @@ window.CM_PARTS.push(() => ({
           if (this.$refs.commentPhotoInput) this.$refs.commentPhotoInput.value = ''
         } else {
           const err = await r.json().catch(() => ({}))
-          alert('留言失敗：' + (err.detail || r.status))
+          MotrixUI.toast('留言失敗：' + (err.detail || r.status), {kind: 'error'})
         }
       } catch (e) {
-        alert('網路錯誤：' + e.message)
+        MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'})
       }
       this.postingComment = false
     },
@@ -208,7 +208,7 @@ window.CM_PARTS.push(() => ({
     },
     async deleteCommentFile(update, file) {
       if (!this.canDeleteAttachment()) return
-      if (!confirm(`確定刪除附件「${file.filename}」？此動作無法復原。`)) return
+      if (!(await MotrixUI.confirm(`確定刪除附件「${file.filename}」？此動作無法復原。`, {danger: true}))) return
       try {
         const r = await fetch(
           `/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${update.id}/files/${file.id}`,
@@ -217,9 +217,9 @@ window.CM_PARTS.push(() => ({
           update.files = (await r.json()).files || []
         } else {
           const err = await r.json().catch(() => ({}))
-          alert('刪除失敗：' + (err.detail || r.status))
+          MotrixUI.toast('刪除失敗：' + (err.detail || r.status), {kind: 'error'})
         }
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
     // fileUrl() 已移除（2026-09-15）：它把 **session token** 當成 `pt` 送給
     // /api/uploads/，而 `pt` 是 routers/uploads.py 用 HMAC 簽出來的短效簽章
@@ -246,7 +246,7 @@ window.CM_PARTS.push(() => ({
             contact_type: this.resolvedContactType(),
           })
         })
-        if (!r.ok) { alert('新增工作日誌失敗：' + (await r.json()).detail); return }
+        if (!r.ok) { MotrixUI.toast('新增工作日誌失敗：' + (await r.json()).detail, {kind: 'error'}); return }
         const { id } = await r.json()
         if (this.newCommentPhotos.length > 0) {
           const fd = new FormData()
@@ -256,7 +256,7 @@ window.CM_PARTS.push(() => ({
             headers: { Authorization: 'Bearer ' + this.session.token },
             body: fd
           })
-          if (!rp.ok) alert('照片上傳失敗：' + (await rp.json()).detail)
+          if (!rp.ok) MotrixUI.toast('照片上傳失敗：' + (await rp.json()).detail, {kind: 'error'})
         }
         this.newComment = ''
         this.newCommentImportant = false
@@ -268,14 +268,14 @@ window.CM_PARTS.push(() => ({
         this.newCommentUserId = ''
         await this.loadCaseUpdates(this.selected.quote_no)
       } catch(e) {
-        alert('發生錯誤：' + e.message)
+        MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'})
       } finally {
         this.postingComment = false
       }
     },
 
     async deleteUpdate(uid) {
-      if (!confirm('確定刪除這則更新？')) return
+      if (!(await MotrixUI.confirm('確定刪除這則更新？', {danger: true}))) return
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(this.selected.quote_no)}/updates/${uid}`, {
           method: 'DELETE',
@@ -311,7 +311,7 @@ window.CM_PARTS.push(() => ({
 
     async _caseTaskSubmitReport(taskId) {
       const text = this.caseTaskEditing.text.trim()
-      if (!text) { alert('請填寫回報內容'); return }
+      if (!text) { MotrixUI.toast('請填寫回報內容', {kind: 'error'}); return }
       this.caseTaskEditSubmitting = true
       try {
         const today = new Date().toISOString().slice(0, 10)
@@ -320,10 +320,10 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ completed: true, report: text, occurrence_date: today })
         })
-        if (!r.ok) { const e = await r.json().catch(() => ({})); alert(e.detail || '送出失敗'); return }
+        if (!r.ok) { const e = await r.json().catch(() => ({})); MotrixUI.toast(e.detail || '送出失敗', {kind: 'error'}); return }
         this.caseTaskEditing = { taskId: null, text: '' }
         await this._loadCaseTasks(this.selected?.quote_no)
-      } catch(e) { alert('網路錯誤：' + e.message) }
+      } catch(e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.caseTaskEditSubmitting = false
     },
 

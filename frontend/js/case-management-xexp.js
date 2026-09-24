@@ -154,7 +154,7 @@ window.CM_PARTS.push(() => ({
     async xeSubmit(i) {
       const x = this.xe.items[i]
       if (!x.id) { this._xeFail('請先儲存再送審'); return }
-      if (!confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${Math.round(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`)) return
+      if (!(await MotrixUI.confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${Math.round(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`))) return
       const quoteNo = this.selected?.quote_no
       this.xe.busy = true; this.xe.msg = ''
       try {
@@ -193,7 +193,7 @@ window.CM_PARTS.push(() => ({
 
     async xeDeleteFile(i, fileId) {
       const x = this.xe.items[i]
-      if (!x.id || !confirm('確定刪除這個附件？')) return
+      if (!x.id || !(await MotrixUI.confirm('確定刪除這個附件？', {danger: true}))) return
       this.xe.busy = true; this.xe.msg = ''
       try {
         const r = await fetch(
@@ -211,7 +211,7 @@ window.CM_PARTS.push(() => ({
     async xeDelete(i) {
       const x = this.xe.items[i]
       if (!x.id) { this.xe.items.splice(i, 1); return }   // 還沒存過，直接移除
-      if (!confirm(`確定刪除「${x.description}」？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除「${x.description}」？`, {danger: true}))) return
       const quoteNo = this.selected?.quote_no
       this.xe.busy = true; this.xe.msg = ''
       try {
@@ -324,8 +324,8 @@ window.CM_PARTS.push(() => ({
       if (!x.changeStatus) { this._xeFail('請先儲存變更申請再送審'); return }
       const oldA = Math.round(x.totalCost || 0).toLocaleString()
       const newA = Math.round(c.totalCost || 0).toLocaleString()
-      if (!confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
-                 + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`)) return
+      if (!(await MotrixUI.confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
+                 + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`))) return
       this.xe.busy = true; this.xe.msg = ''
       try {
         const r = await fetch(`${this._xeChangeBase(x)}/submit`, {
@@ -343,7 +343,7 @@ window.CM_PARTS.push(() => ({
       const x = this.xe.items[i]
       // 還沒送到後端的，純粹關掉面板就好
       if (!x.changeStatus) { x._editing = false; x.change = {}; x._changeDirty = false; return }
-      if (!confirm('確定撤銷這筆變更申請？已上傳的待核准附件會一併刪除。')) return
+      if (!(await MotrixUI.confirm('確定撤銷這筆變更申請？已上傳的待核准附件會一併刪除。', {danger: true}))) return
       this.xe.busy = true; this.xe.msg = ''
       try {
         const r = await fetch(this._xeChangeBase(x), {
@@ -380,7 +380,7 @@ window.CM_PARTS.push(() => ({
 
     async xeDeleteChangeFile(i, fileId) {
       const x = this.xe.items[i]
-      if (!confirm('確定刪除這個待核准附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除這個待核准附件？', {danger: true}))) return
       this.xe.busy = true; this.xe.msg = ''
       try {
         const r = await fetch(`${this._xeChangeBase(x)}/files/${fileId}`, {
