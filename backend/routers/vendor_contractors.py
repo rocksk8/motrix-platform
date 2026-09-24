@@ -11,6 +11,7 @@ from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
+from helpers.recognition import normalize_date  # `AC2`
 from routers.contractors import _stamp_passbook
 
 router = APIRouter()
@@ -62,6 +63,9 @@ class DispatchIn(BaseModel):
     notes: Optional[str] = ''
     invoice_no: Optional[str] = ''
     payable_date: Optional[str] = ''
+    # `AC2`：廠商發票日期（''＝未登錄；權責口徑依它歸月）。None＝沒帶這個鍵 ⇒ PUT 保留原值
+    #   （其他頁面的 PUT 沒送這一鍵時不可以把已登錄的發票日清掉）
+    invoice_date: Optional[str] = None
     # 樂觀鎖（選填，見 update_dispatch）——比照 customers.py 等的
     # expectedUpdatedAt 慣例
     expected_updated_at: Optional[str] = Field(None, alias="expectedUpdatedAt")
@@ -150,6 +154,7 @@ def _dispatch_row(row) -> dict:
         "notes": row["notes"] or "",
         "invoiceNo": (row["invoice_no"] if "invoice_no" in keys else "") or "",
         "payableDate": (row["payable_date"] if "payable_date" in keys else "") or "",
+        "invoiceDate": (row["invoice_date"] if "invoice_date" in keys else "") or "",
         "invoiceFiles": invoice_files,
         "createdBy": row["created_by"] or "",
         "createdAt": row["created_at"] or "",
@@ -477,14 +482,14 @@ def create_dispatch(body: DispatchIn, authorization: str = Header(None)):
         vendor_name = vrow["name"]
     cur = conn.execute(
         "INSERT INTO contractor_dispatches "
-        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, payable_date, created_by, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(quote_no, vendor_id, dispatch_date, scope, items_json, personnel_json, total_amount, tax_rate, status, notes, invoice_no, payable_date, invoice_date, created_by, created_at, updated_at) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (body.quote_no, body.vendor_id, body.dispatch_date or '',
          body.scope or '', json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
          body.status or 'draft', body.notes or '', body.invoice_no or '',
-         body.payable_date or '',
+         body.payable_date or '', normalize_date(body.invoice_date, "發票日期"),
          user["username"], now, now)
     )
     did = cur.lastrowid
@@ -519,7 +524,7 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(400, "請至少選擇承攬商或外包名單人員其中一項")
     total = sum(float(it.get("amount", 0) or 0) for it in items)
     conn = get_db()
-    existing = conn.execute("SELECT updated_at FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+    existing = conn.execute("SELECT updated_at, invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
     if not existing:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
@@ -537,13 +542,15 @@ def update_dispatch(did: int, body: DispatchIn, authorization: str = Header(None
         raise HTTPException(404, "承攬商不存在")
     conn.execute(
         "UPDATE contractor_dispatches SET vendor_id=?, dispatch_date=?, scope=?, items_json=?, "
-        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, payable_date=?, updated_at=? WHERE id=?",
+        "personnel_json=?, total_amount=?, tax_rate=?, status=?, notes=?, invoice_no=?, payable_date=?, invoice_date=?, updated_at=? WHERE id=?",
         (body.vendor_id, body.dispatch_date or '', body.scope or '',
          json.dumps(items, ensure_ascii=False),
          json.dumps(personnel, ensure_ascii=False), total,
          body.tax_rate if body.tax_rate is not None else 0.05,
          body.status or 'draft', body.notes or '', body.invoice_no or '',
-         body.payable_date or '', now, did)
+         body.payable_date or '',
+         existing["invoice_date"] if body.invoice_date is None else normalize_date(body.invoice_date, "發票日期"),
+         now, did)
     )
     conn.commit()
     conn.close()
@@ -710,6 +717,32 @@ def delete_dispatch_invoice_file(did: int, file_id: str, authorization: str = He
         conn.close()
     _audit(_tok(authorization), "vendor.dispatch.delete_invoice_file", "contractor_dispatch", str(did), row["quote_no"])
     return {"ok": True, "updated_at": now}
+
+
+@router.patch("/api/contractor-dispatches/{did}/invoice-date")
+def set_dispatch_invoice_date(did: int, body: dict = Body(...), authorization: str = Header(None)):
+    """`AC2`：登錄廠商發票日期（''＝清除）。**產生匯款申請之後也可以登**——
+
+    廠商發票通常是請款時才拿到，而 PUT 在有匯款申請後整筆 409（保護金額）；
+    發票日期不影響任何金額，只決定權責口徑歸哪個月，比照發票附件端點不擋。
+    """
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    _require_admin(user)
+    inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT quote_no, invoice_date FROM contractor_dispatches WHERE id=?", (did,)).fetchone()
+        if not row:
+            raise HTTPException(404, "派發紀錄不存在")
+        now = datetime.now().isoformat()
+        conn.execute("UPDATE contractor_dispatches SET invoice_date=?, updated_at=? WHERE id=?", (inv, now, did))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "vendor.dispatch.invoice_date", "contractor_dispatch", str(did),
+           "%s 發票日期：%s → %s" % (row["quote_no"], row["invoice_date"] or "（未登錄）", inv or "（未登錄）"))
+    return {"ok": True, "invoiceDate": inv, "updated_at": now}
 
 
 # ── 驗收流程節點 ──────────────────────────────────────────────────────────────

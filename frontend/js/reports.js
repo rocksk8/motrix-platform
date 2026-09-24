@@ -77,6 +77,9 @@ function reportsApp() {
     expensesLoading:   false,
     expensesLoadedFor: null,   // 記錄已載入資料對應的範圍+年+月+季，切換時判斷要不要重打 API
     expensesInflight:  null,   // 飛行中請求對應的同款鍵（避免同一期別被重複請求）
+    // `AC2`：認列口徑（accrual＝權責，預設；cash＝現金）與「待補登」清單展開狀態
+    expensesBasis:     'accrual',
+    flagOpen:          {},
     expensesFilter:    'all',  // all/contractor/equipment/material/other，支出明細的類別篩選 chip
 
     // ── 應收報表（recv/out 分頁）。2026-09-09 一度改成完全獨立於 period-bar，
@@ -210,6 +213,18 @@ function reportsApp() {
     // 就是因為「已收款」與「收款日期」只填了一個而不屬於任何月份，再用期別去篩
     // 就又看不見了，那正是這一區要解決的問題本身
     get paymentAnomalies()    { return (this.expensesData || {}).paymentAnomalyItems || [] },
+    // `AC2`：口徑說明、收入稅別字樣（權責＝未稅；現金＝含稅）、待補登清單（只列有數量的種類）
+    get basisNote()        { return (this.expensesData || {}).basisNote || '' },
+    get incomeTaxLabel()   { return (this.expensesData || {}).incomeTaxLabel || '' },
+    get isAccrual()        { return ((this.expensesData || {}).basis || this.expensesBasis) === 'accrual' },
+    get recognitionFlags() {
+      var f = (this.expensesData || {}).recognitionFlags || {}
+      return Object.keys(f).map(function (k) { return Object.assign({ kind: k }, f[k]) })
+        .filter(function (x) { return x.count > 0 })
+    },
+    setBasis(b) { if (this.expensesBasis === b) return; this.expensesBasis = b; this.loadExpenses() },
+    toggleFlag(kind) { this.flagOpen = Object.assign({}, this.flagOpen, { [kind]: !this.flagOpen[kind] }) },
+    fmtMasked(v) { return v === null || v === undefined ? '—' : this.fmt(v) },
     get paymentAnomalyTotal() { return (this.expensesData || {}).paymentAnomalyTotal || 0 },
     get yearIncomeItems()   { return (this.expensesData || {}).yearIncomeItems   || [] },
     get yearIncomeTotal()   { return (this.expensesData || {}).yearIncomeTotal   || 0 },
@@ -419,7 +434,7 @@ function reportsApp() {
     // 各自手拼一次字串，欄位一多就會漂移——收斂成單一來源。
     _expensesKey() {
       return [this.expensesScope, this.expensesYear, this.expensesMonth,
-              this.expensesQuarter, this.departmentId || ''].join(':')
+              this.expensesQuarter, this.departmentId || '', this.expensesBasis].join(':')
     },
     _receivablesKey() {
       return [this.receivablesScope, this.receivablesYear, this.receivablesMonth,
@@ -1227,7 +1242,8 @@ function reportsApp() {
       var key = this._expensesKey()
       var qs = '?year=' + this.expensesYear + '&month=' + this.expensesMonth +
                (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
-               (this.departmentId ? '&department_id=' + this.departmentId : '')
+               (this.departmentId ? '&department_id=' + this.departmentId : '') +
+               '&basis=' + this.expensesBasis
       this.expensesInflight = key
       this.expensesLoading  = true
       try {

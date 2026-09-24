@@ -38,6 +38,8 @@ from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from db import get_db
+from helpers.auth import user_has_module
+from helpers.recognition import normalize_date  # `AC2`
 from helpers import (
     _require_user, _tok, _audit, _notify, _check_quotation_owner,
     can_see_financial, is_document_approver,
@@ -95,6 +97,9 @@ def _row_to_dict(r) -> dict:
         "note":        r["note"],
         "expenseDate": r["expense_date"],
         "docNo":       r["doc_no"],
+        # `AC2`：廠商發票日期／付款日（''＝未登錄）；權責口徑依發票日、現金口徑依付款日
+        "invoiceDate": _col(r, "invoice_date", "") or "",
+        "paidDate":    _col(r, "paid_date", "") or "",
         "files":       files,
         "createdBy":       r["created_by"],
         "createdByName":   r["created_by_name"],
@@ -288,6 +293,46 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
         return {"ok": True, "totalCost": total, "updatedAt": now}
     finally:
         conn.close()
+
+
+@router.patch("/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates")
+def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
+                            authorization: str = Header(None)):
+    """`AC2`：登錄廠商發票日期／付款日（只改有給的鍵；''＝清除）。**任何狀態都可以登**——
+
+    兩個日期都不影響金額，只決定報表歸哪個月；已核准的支出正是最常事後才拿到發票、
+    才付款的那一批，走變更申請會讓財務補登卡在簽核上（hichan-0a 裁示）。
+    權限：填寫人本人、admin+，或出納（付款是出納登的）。
+    """
+    user = _require_user(authorization)
+    body = body or {}
+    changes = {}
+    if "invoiceDate" in body:
+        changes["invoice_date"] = normalize_date(body.get("invoiceDate"), "發票日期")
+    if "paidDate" in body:
+        changes["paid_date"] = normalize_date(body.get("paidDate"), "付款日")
+    if not changes:
+        raise HTTPException(400, "沒有要登錄的日期")
+    conn = get_db()
+    try:
+        _guard_case(conn, quote_no, user)
+        row = _load(conn, quote_no, exp_id)
+        if not (_can_modify(row, user) or user_has_module(user, "cashier")):
+            raise HTTPException(403, "只有填寫人本人、管理員或出納可以登錄這筆額外支出的日期")
+        now = datetime.now().isoformat(timespec="seconds")
+        sets = ", ".join("%s=?" % k for k in changes)
+        conn.execute("UPDATE case_extra_expenses SET " + sets + ", updated_at=?, updated_by_name=?"
+                     " WHERE id=? AND quote_no=?",
+                     list(changes.values()) + [now, user.get("display_name") or user["username"], exp_id, quote_no])
+        conn.commit()
+    finally:
+        conn.close()
+    label = {"invoice_date": "發票日期", "paid_date": "付款日"}
+    _audit(_tok(authorization), "extra_expense.dates", "quotation", quote_no,
+           "%s 額外支出 #%s 登錄%s" % (quote_no, exp_id, "、".join(
+               "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
+    return {"ok": True, "updatedAt": now,
+            **{("invoiceDate" if k == "invoice_date" else "paidDate"): v for k, v in changes.items()}}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}")

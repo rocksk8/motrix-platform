@@ -183,11 +183,12 @@ def test_expenses_quarter_income_equals_sum_of_its_months(client, make_user):
 
     months_total = 0
     for mo in ("2026-07", "2026-08", "2026-09"):
-        r = client.get(f"/api/reports/expenses-monthly?year=2026&month={mo}", headers=_auth(token))
+        # 2026-09-24 AC2：預設改權責口徑；本題驗的是「收入依收款日」＝現金口徑 ⇒ 明確帶 basis=cash
+        r = client.get(f"/api/reports/expenses-monthly?year=2026&month={mo}&basis=cash", headers=_auth(token))
         assert r.status_code == 200, r.text
         months_total += r.json()["monthIncomeTotal"]
 
-    r = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&quarter=3",
+    r = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&quarter=3&basis=cash",
                    headers=_auth(token))
     assert r.status_code == 200, r.text
     data = r.json()
@@ -207,11 +208,12 @@ def test_expenses_quarter_expense_equals_sum_of_its_months(client, make_user):
 
     months_total = 0
     for mo in ("2026-07", "2026-08", "2026-09"):
-        r = client.get(f"/api/reports/expenses-monthly?year=2026&month={mo}", headers=_auth(token))
+        # 2026-09-24 AC2：預設改權責口徑；本題驗的是「收入依收款日」＝現金口徑 ⇒ 明確帶 basis=cash
+        r = client.get(f"/api/reports/expenses-monthly?year=2026&month={mo}&basis=cash", headers=_auth(token))
         assert r.status_code == 200, r.text
         months_total += r.json()["monthExpenseTotal"]
 
-    r = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&quarter=3",
+    r = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&quarter=3&basis=cash",
                    headers=_auth(token))
     assert r.status_code == 200, r.text
     assert r.json()["quarterExpenseTotal"] == months_total
@@ -348,7 +350,8 @@ def test_excel_export_gains_quarter_sheet(client, make_user):
 
     # 帶 quarter
     token = _login(client, with_user, with_pw)
-    r = client.get("/api/reports/financial/excel?period=2026-Q3&expense_month=2026-09&quarter=3",
+    # 2026-09-24 AC2：預設改權責口徑；本題驗的是「收入依收款日」＝現金口徑 ⇒ 明確帶 basis=cash
+    r = client.get("/api/reports/financial/excel?period=2026-Q3&expense_month=2026-09&quarter=3&basis=cash",
                    headers=_auth(token))
     assert r.status_code == 200, r.text
     wb = openpyxl.load_workbook(_io.BytesIO(r.content))

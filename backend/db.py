@@ -128,7 +128,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v112: 逐筆已讀 item_reads（未讀紅點存伺服器；先推先拿，撞號順延）
 # v113: 以案件為中心的獎金分潤三張表（SPEC-BONUS §十一；先推先拿，順延自 v112）
 # v114: AC3 獎金分潤記住它產生的傳票草稿（accrual／payment_voucher_id）
-CURRENT_VERSION = 114
+# v115: AC2 認列口徑——階段比例、派工／額外支出的發票日期、額外支出付款日
+CURRENT_VERSION = 115
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4395,6 +4396,28 @@ def _m110_voucher_category_manual(conn):
                      " category_manual INTEGER NOT NULL DEFAULT 0")
 
 
+def _m115_ac2_recognition_dates(conn):
+    """v115（2026-09-24 `AC2`）：營運報表改權責口徑要用的欄位（hichan-0a 核准）。
+
+    ```
+    case_stages.ratio_bp               階段收入比例（基點，NULL＝未設）
+    contractor_dispatches.invoice_date 廠商發票日期（''＝未登錄）
+    case_extra_expenses.invoice_date   廠商發票日期（''＝未登錄）
+    case_extra_expenses.paid_date      付款日（''＝未登錄；現金口徑用）
+    ```
+    ⚠️ ratio_bp 用 NULL 表示「未設」，**不是 0**：0 是「這個階段不認列收入」。
+    ⚠️ 日期用 '' 表示未登錄：判斷一律 `== ''`，不可以拿來和日期比大小（'' 會變最小值）。
+    既有資料不回填。只有 `_col_exists` 與 DDL 字面值，不呼叫任何會演進的 helper。
+    """
+    for table, col, ddl in (
+            ("case_stages", "ratio_bp", "INTEGER"),
+            ("contractor_dispatches", "invoice_date", "TEXT NOT NULL DEFAULT ''"),
+            ("case_extra_expenses", "invoice_date", "TEXT NOT NULL DEFAULT ''"),
+            ("case_extra_expenses", "paid_date", "TEXT NOT NULL DEFAULT ''")):
+        if not _col_exists(conn, table, col):
+            conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, ddl))
+
+
 def _m114_bonus_case_voucher_links(conn):
     """v114（2026-09-24 `AC3`，SPEC-BONUS §11.8）：獎金分潤記住它產生的傳票草稿。
 
@@ -5637,6 +5660,7 @@ _MIGRATIONS = [
     _m112_item_reads,                               # v112
     _m113_bonus_case_awards,                        # v113
     _m114_bonus_case_voucher_links,                 # v114
+    _m115_ac2_recognition_dates,                    # v115
 ]
 
 

@@ -73,9 +73,11 @@ def test_contractor_dispatch_counted(client, make_user):
     r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     body = r.json()
     march = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-03")
-    assert march["contractor"] == 10500  # 10000 + 5% 稅（_dispatch_row 預設稅率）
-    assert body["expenses"]["totals"]["contractor"] == 10500
-    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10500 for d in body["expenses"]["details"]["contractor"])
+    # 2026-09-24 AC2（使用者裁示）：預設權責口徑＝未稅（原本 10500 含稅）；沒登錄發票日、
+    # 沒有驗收日 ⇒ 暫用派工月（仍是 3 月）。現金口徑的含稅金額見 test_report_recognition_basis。
+    assert march["contractor"] == 10000
+    assert body["expenses"]["totals"]["contractor"] == 10000
+    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10000 for d in body["expenses"]["details"]["contractor"])
 
 
 def test_stock_purchase_bucketed_by_category(client, make_user):

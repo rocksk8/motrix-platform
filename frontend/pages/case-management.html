@@ -1654,6 +1654,11 @@
                 </div>
 
                 <div x-show="stageView==='list'">
+                <!-- `AC2`：階段收入比例（權責口徑依階段完成月認列）。全部未設＝全部完工月一次認列。 -->
+                <div data-testid="stage-ratio-summary" x-show="(cr.caseRecord?.stages || []).length"
+                     style="font-size:11px;font-family:var(--font-zh);margin-bottom:8px"
+                     :style="stageRatioSummary().warn ? 'color:#B45309' : 'color:var(--text-dim)'"
+                     x-text="stageRatioSummary().text"></div>
                 <template x-for="(st, idx) in (cr.caseRecord?.stages || [])" :key="st.id">
                   <div class="stage-card" :class="st.done ? 'stage-card--done' : ''"
                        draggable="true"
@@ -1672,6 +1677,13 @@
                       <input type="text" x-model="st.label" @change="updateStage(st, {label: st.label})"
                              style="flex:1;border:none;outline:none;font-size:13px;font-weight:600;font-family:var(--font-zh);background:transparent"
                              :style="st.done ? 'text-decoration:line-through;color:#9CA3AF' : 'color:var(--text-primary)'">
+                      <span style="position:relative;display:inline-flex;flex-shrink:0" title="收入比例：這個階段完成時認列成交未稅金額的百分之幾（空白＝未設）">
+                        <input type="number" min="0" max="100" step="0.01" placeholder="比例"
+                               data-testid="stage-ratio" :value="stageRatioPct(st)"
+                               @change="setStageRatio(st, $event.target.value)"
+                               style="width:64px;font-size:11px;border:1px solid var(--border-light);border-radius:5px;padding:3px 16px 3px 6px;font-family:LINE Seed TW_OTF, sans-serif">
+                        <span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none">%</span>
+                      </span>
                       <template x-if="st.done">
                         <input type="date" x-model="st.doneAt" @change="updateStage(st, {doneAt: st.doneAt})"
                                style="font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:3px 6px;background:#F0FDF4;color:#15803D;font-family:LINE Seed TW_OTF, sans-serif;outline:none">
@@ -2294,6 +2306,18 @@
                       <input class="fi fi--sm" type="text" placeholder="備註" style="flex:1;min-width:120px"
                              x-model="x.note" :disabled="!xeEditable(x)" @input="xeDirty(xi)">
                     </div>
+                    <!-- `AC2`：廠商發票日期／付款日——任何狀態都可以登（不影響金額，只決定報表歸月）；
+                         存檔走專用端點，不經草稿存檔、不需變更申請 -->
+                    <div x-show="x.id" style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:6px;font-size:11px;font-family:var(--font-zh)">
+                      <span style="color:var(--text-dim)">發票日期</span>
+                      <input class="fi fi--sm" type="date" style="width:142px" data-testid="xe-invoice-date"
+                             :value="x.invoiceDate || ''" @change="xeSetDates(x, { invoiceDate: $event.target.value })">
+                      <span style="color:var(--text-dim)">付款日</span>
+                      <input class="fi fi--sm" type="date" style="width:142px" data-testid="xe-paid-date"
+                             :value="x.paidDate || ''" @change="xeSetDates(x, { paidDate: $event.target.value })">
+                      <span x-show="!x.invoiceDate || !x.paidDate" style="color:#B45309"
+                            x-text="'未登錄：' + [!x.invoiceDate ? '發票日期' : '', !x.paidDate ? '付款日' : ''].filter(Boolean).join('、') + '（報表暫用其他日期）'"></span>
+                    </div>
 
 
                     <!-- 發票／收據附件。⚠️ 2026-09-11 行為變更（使用者交辦）：已核准
@@ -2719,6 +2743,13 @@
                         <input class="fi fi--sm" type="text" placeholder="備註（供應商、單號…）" style="flex:1;min-width:130px"
                                x-model="m.notes" :disabled="!moCanEdit()" @input="moDirty = true">
                       </div>
+                      <!-- `AC2`：廠商發票日期（權責口徑依它歸月；未登錄 ⇒ 報表暫用付款月） -->
+                      <div style="display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-family:var(--font-zh)">
+                        <span style="color:var(--text-dim)">發票日期</span>
+                        <input class="fi fi--sm" type="date" style="width:142px" data-testid="mo-invoice-date"
+                               x-model="m.invoiceDate" :disabled="!moCanEdit()" @input="moDirty = true">
+                        <span x-show="!m.invoiceDate" style="color:#B45309">未登錄（報表暫用付款月）</span>
+                      </div>
                     </div>
                   </template>
 
@@ -3078,6 +3109,14 @@
                     </div>
                     <div x-show="d.invoiceNo" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"
                          x-text="'發票號碼：' + d.invoiceNo"></div>
+                    <!-- `AC2`：廠商發票日期（權責口徑依它歸月）。已有匯款申請也可以登（專用端點，不動金額） -->
+                    <div style="display:flex;align-items:center;gap:6px;padding:6px 16px 0;font-size:11px;font-family:var(--font-zh)">
+                      <span style="color:var(--text-dim)">發票日期</span>
+                      <input type="date" data-testid="dispatch-invoice-date" :value="d.invoiceDate || ''"
+                             @change="setDispatchInvoiceDate(d, $event.target.value)"
+                             style="font-size:11px;border:1px solid var(--border-light);border-radius:5px;padding:2px 6px">
+                      <span x-show="!d.invoiceDate" style="color:#B45309">未登錄（報表暫用驗收／派工月）</span>
+                    </div>
                     <div x-show="d.notes" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim)"
                          x-text="'備注：' + d.notes"></div>
                     <!-- 承攬商報價附件 -->
@@ -3831,6 +3870,11 @@
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">發票號碼</label>
           <input type="text" x-model="dispatchForm.invoice_no" placeholder="AB-12345678"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:'LINE Seed TW_OTF', monospace;outline:none;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">發票日期</label>
+          <input type="date" x-model="dispatchForm.invoice_date" data-testid="dispatch-form-invoice-date"
+                 style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
         </div>
         <div>
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">應付款日期</label>

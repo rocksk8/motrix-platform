@@ -524,6 +524,24 @@ function app() {
 
     _xeFail(msg) { this.xe.msgError = true; this.xe.msg = msg; this.xe.busy = false },
 
+    // `AC2`：額外支出的發票日期／付款日（'' ＝清除），專用端點，任何狀態都可以登
+    async xeSetDates(x, fields) {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || !x.id) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses/${x.id}/dates`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify(fields)
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { this._xeFail(j.detail || '日期儲存失敗'); return }
+        if ('invoiceDate' in j) x.invoiceDate = j.invoiceDate
+        if ('paidDate' in j) x.paidDate = j.paidDate
+        if (j.updatedAt) x.updatedAt = j.updatedAt
+      } catch (e) { this._xeFail('網路錯誤：' + e.message) }
+    },
+
     async xeSave(i) {
       const x = this.xe.items[i]
       if (!(x.description || '').trim()) { this._xeFail('請先填品項說明'); return }
@@ -940,7 +958,8 @@ function app() {
             paidStatus: ['pending', 'partial', 'paid'].includes(o.paidStatus) ? o.paidStatus : 'pending',
             paidAmount: Number(o.paidAmount) || 0,
             paidDate:   o.paidDate || '',
-            notes:      o.notes || ''
+            notes:      o.notes || '',
+            invoiceDate: o.invoiceDate || ''   // `AC2`
           }))
         }
       } catch {}
@@ -974,7 +993,7 @@ function app() {
     moAddItem() {
       this.materialOrders.push({
         itemId: this._moNewId(), itemName: '', quantity: 1, unit: '', unitPrice: 0,
-        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: ''
+        totalPrice: 0, paidStatus: 'pending', paidAmount: 0, paidDate: '', notes: '', invoiceDate: ''
       })
       this.moDirty = true
       this.moMsg = ''
@@ -1047,7 +1066,9 @@ function app() {
           quantity, unit: (m.unit || '').trim(), unitPrice, totalPrice,
           paidStatus: m.paidStatus, paidAmount,
           paidDate: m.paidStatus === 'pending' ? null : paidDate,
-          notes: (m.notes || '').trim()
+          notes: (m.notes || '').trim(),
+          // `AC2`：整份覆寫的端點——少帶這一鍵，已登錄的發票日期就會在下次存檔時被抹掉
+          invoiceDate: m.invoiceDate || ''
         })
       }
 
@@ -2406,6 +2427,24 @@ function app() {
 
     // 通用階段欄位更新（label/done/doneAt/startDate/dueDate），取代原本靠 setDirty() 觸發
     // 的整包存檔；成功後額外呼叫 _checkAllStagesDone()（原本是 setDirty() 順帶觸發的）。
+    // `AC2`：階段收入比例。存基點（1/10000）；空白＝未設（null，不是 0——0 是「這個階段不認列」）
+    stageRatioPct(st) { return st.ratioBp === null || st.ratioBp === undefined ? '' : st.ratioBp / 100 },
+    setStageRatio(st, v) {
+      const bp = (v === '' || v === null || v === undefined) ? null : Math.round(Number(v) * 100)
+      if (bp !== null && (!Number.isFinite(bp) || bp < 0 || bp > 10000)) { alert('比例需為 0～100%'); return }
+      this.updateStage(st, { ratioBp: bp })
+    },
+    stageRatioSummary() {
+      const ss = this.cr.caseRecord?.stages || []
+      const set = ss.filter(s => s.ratioBp !== null && s.ratioBp !== undefined)
+      if (!set.length) return { warn: false, text: '收入比例未設定：權責口徑於全部階段完成的月份一次認列。' }
+      const total = set.reduce((a, s) => a + s.ratioBp, 0)
+      const pct = (total / 100).toLocaleString()
+      return total === 10000
+        ? { warn: false, text: '收入比例合計 100%：各階段於完成月份依比例認列（未稅）。' }
+        : { warn: true, text: '收入比例合計 ' + pct + '%，不等於 100%：報表照比例認列、不補差，並列入待補登。' }
+    },
+
     async updateStage(st, fields) {
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, {
@@ -3493,6 +3532,7 @@ function app() {
         scope: '',
         notes: '',
         invoice_no: '',
+        invoice_date: '',
         payable_date: '',
         status: this._quoteStatusToDispatch(this.selected?.status || ''),
         tax_rate: 0.05,
@@ -3563,6 +3603,7 @@ function app() {
         scope: d.scope || '',
         notes: d.notes || '',
         invoice_no: d.invoiceNo || '',
+        invoice_date: d.invoiceDate || '',
         payable_date: d.payableDate || '',
         status: d.status || 'draft',
         tax_rate: d.taxRate !== undefined ? d.taxRate : 0.05,
@@ -3632,6 +3673,7 @@ function app() {
         scope: this.dispatchForm.scope || '',
         notes: this.dispatchForm.notes || '',
         invoice_no: this.dispatchForm.invoice_no || '',
+        invoice_date: this.dispatchForm.invoice_date || '',
         payable_date: this.dispatchForm.payable_date || '',
         status: this.dispatchForm.status || 'draft',
         tax_rate: parseFloat(this.dispatchForm.tax_rate) || 0,
@@ -3656,6 +3698,21 @@ function app() {
         await this.loadDispatches(this.selected?.quote_no)
       } catch(e) { this.dispatchMsg = '網路錯誤：' + e.message }
       this.dispatchSaving = false
+    },
+
+    // `AC2`：派工的廠商發票日期（'' ＝清除）。專用端點：已有匯款申請（PUT 會 409）也登得進去
+    async setDispatchInvoiceDate(d, value) {
+      try {
+        const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-date`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ invoiceDate: value || '' })
+        })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) { alert(j.detail || '發票日期儲存失敗'); return }
+        d.invoiceDate = j.invoiceDate
+        if (j.updated_at) d.updatedAt = j.updated_at
+      } catch (e) { alert('網路錯誤：' + e.message) }
     },
 
     async deleteDispatch(d) {

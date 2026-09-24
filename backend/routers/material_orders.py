@@ -26,6 +26,7 @@ from helpers import (
     _check_quotation_owner, SQL_DEAL_TAG,
 )
 from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
+from helpers.recognition import normalize_date  # `AC2`
 
 router = APIRouter()
 
@@ -42,6 +43,7 @@ class MaterialOrder(BaseModel):
     paidAmount: float              # 已付金額
     paidDate: Optional[str]        # 已付日期（YYYY-MM-DD，paidStatus≠'pending'時）
     notes: Optional[str] = ""      # 備註
+    invoiceDate: Optional[str] = ""  # `AC2`：廠商發票日期（''＝未登錄；權責口徑依它歸月）
 
 
 class MaterialOrderUpdateIn(BaseModel):
@@ -112,6 +114,9 @@ def update_material_orders(quote_no: str,
             expected_total = mo.quantity * mo.unitPrice
             if abs(mo.totalPrice - expected_total) > 0.01:
                 raise HTTPException(400, f"{mo.itemName} 小計計算錯誤（{mo.quantity}×{mo.unitPrice}≠{mo.totalPrice}）")
+
+            # `AC2`：發票日期 ''＝未登錄；有填就必須是真實日期
+            mo.invoiceDate = normalize_date(mo.invoiceDate, "發票日期（%s）" % mo.itemName)
 
             # paidStatus 驗證
             if mo.paidStatus not in ("pending", "partial", "paid"):

@@ -47,6 +47,7 @@ from helpers.financial_mask import (
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
+from helpers.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
 from archive import _backup_quotation
 from pdf_gen import (
@@ -2863,6 +2864,8 @@ def _serialize_stage(conn, sr) -> dict:
         "doneAt":     sr["done_at"],
         "startDate":  sr["start_date"],
         "dueDate":    sr["due_date"],
+        # `AC2`：收入比例（基點）；None＝未設（全部完工月一次認列），0＝這個階段不認列
+        "ratioBp":    sr["ratio_bp"] if "ratio_bp" in sr.keys() else None,
         "assignedTo": json.loads(sr["assigned_to"] or "[]"),
         "dependsOn":  json.loads(sr["depends_on"] or "[]"),
         "visits": [
@@ -3093,6 +3096,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     if "doneAt" in body:    updates["done_at"]    = body.get("doneAt") or ""
     if "startDate" in body: updates["start_date"] = body.get("startDate") or ""
     if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
+    if "ratioBp" in body:   updates["ratio_bp"]   = normalize_ratio_bp(body.get("ratioBp"))
     was_done = bool(sr["done"])
     if updates:
         updates["updated_at"] = datetime.now().isoformat()

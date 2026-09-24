@@ -27,6 +27,11 @@ from helpers import (
 )
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
 from routers.vendor_contractors import _dispatch_row
+from helpers.financial_mask import money_visible
+from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
+    normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
+    extra_entries, recognition_flags,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -1086,8 +1091,13 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     # 月支出趨勢矩陣＋逐筆明細）。
     exp = data.get("expenses") or {"monthly": [], "totals": {}, "details": {}}
     cat_label = {"contractor": "承攬商派發", "equipment": "設備進貨", "material": "料件進貨", "other": "其他支出"}
-    income_hdrs = ["案件號", "客戶", "專案名稱", "業務員", "款項類型",
-                   "應收金額", "收款日期", "實收金額", "手續費", "實收淨額", "發票號碼"]
+    # `AC2`：欄名依口徑寫清楚「未稅」「含稅」（權責＝階段完成月、未稅；現金＝收款日、含稅）
+    if data.get("basis", "accrual") == "accrual":
+        _inc_cols = ["認列階段", "認列金額（未稅）", "認列日（階段完成）"]
+    else:
+        _inc_cols = ["款項類型", "應收金額（含稅）", "收款日期"]
+    income_hdrs = ["案件號", "客戶", "專案名稱", "業務員", *_inc_cols,
+                   "實收金額", "手續費", "實收淨額", "發票號碼"]
     income_cols = [13, 18, 18, 10, 9, 12, 11, 12, 10, 12, 12]
     expense_hdrs = ["日期", "類別", "關聯案件", "說明", "金額", "發票/收據附件"]
 
@@ -1175,6 +1185,12 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.fill  = fill(C_DARK)
     c.alignment = al("center")
     ws_month.row_dimensions[1].height = 26
+    if data.get("basisNote"):
+        ws_month.merge_cells(f"A2:{get_column_letter(len(income_hdrs))}2")
+        ws_month["A2"].value = data["basisNote"]
+        ws_month["A2"].font = mk(size=9, color=C_DARK)
+        ws_month["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+        ws_month.row_dimensions[2].height = 42
 
     month_income_items = data.get("monthIncomeItems") or []
     month_expense_items = data.get("monthExpenseItems") or []
@@ -1716,6 +1732,9 @@ def _pdf_ar_aging(ar: dict, tbl_hdr, fmt) -> str:
 
 def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
     s = data["summary"]
+    # `AC2`：收支明細的收入欄名依口徑（權責＝未稅、階段完成日；現金＝含稅、收款日）
+    _inc_cols = (("認列階段", "認列金額（未稅）", "認列日") if data.get("basis", "accrual") == "accrual"
+                 else ("款項", "應收金額（含稅）", "收款日"))
 
     import html as _html_mod
     def esc(v): return _html_mod.escape(str(v or ''))
@@ -1870,7 +1889,7 @@ def _build_report_html(data: dict, period_label: str, gen_at: str) -> str:
         q_title   = f'{data.get("expensesYear", "")} 年第 {_q} 季收支明細'
         q_income_html = (
             "<table><thead>"
-            + tbl_hdr("案件號", "客戶", "專案", "業務員", "款項", "應收金額", "收款日",
+            + tbl_hdr("案件號", "客戶", "專案", "業務員", *_inc_cols,
                       "實收金額", "手續費", "實收淨額", "發票號碼")
             + "</thead><tbody>" + income_rows_html(q_income) + income_sum_row(q_income)
             + "</tbody></table>"
@@ -2198,8 +2217,9 @@ tr.in-period{{background:#EFF6FF}}
 <!-- 當月收支（2026-08-30） -->
 <div class="page-break"></div>
 <div class="section-title" style="background:#111827">{data.get("expenseMonth","")} 當月收支明細</div>
+{('<p style="font-size:8.5pt;color:#1E3A8A;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px 10px;margin:6px 0">' + esc(data.get("basisNote")) + '</p>') if data.get("basisNote") else ''}
 <h3 style="margin:8px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">當月收入明細</h3>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","款項","應收金額","收款日","實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(month_income_items) + income_sum_row(month_income_items) + '</tbody></table>' if month_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無收款紀錄。</p>'}
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(month_income_items) + income_sum_row(month_income_items) + '</tbody></table>' if month_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無收款紀錄。</p>'}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">當月支出明細</h3>
 {'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(month_expense_items) + '</tbody></table>' if month_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
@@ -2227,7 +2247,7 @@ tr.in-period{{background:#EFF6FF}}
 </tr>
 </table>
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">今年度收入明細（共 {len(year_income_items)} 筆）</h3>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員","款項","應收金額","收款日","實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無收款紀錄。</p>'}
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無收款紀錄。</p>'}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">今年度支出明細（共 {len(year_expense_items)} 筆）</h3>
 {'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(year_expense_items) + '</tbody></table>' if year_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
@@ -2333,6 +2353,7 @@ def report_excel(
     department_id: Optional[int] = Query(None),
     expense_month: Optional[str] = Query(None),
     quarter: Optional[int] = Query(None),
+    basis: Optional[str] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -2344,7 +2365,8 @@ def report_excel(
     # quarter 有帶才會多出「本季收支」工作表／段落（2026-09-10）；不帶時輸出與
     # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
-        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter
+        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter,
+        normalize_basis(basis), money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     xlsx   = _build_excel(data, label, gen_at)
@@ -2366,6 +2388,7 @@ def report_pdf(
     department_id: Optional[int] = Query(None),
     expense_month: Optional[str] = Query(None),
     quarter: Optional[int] = Query(None),
+    basis: Optional[str] = Query(None),
     authorization: str = Header(None),
 ):
     u = _require_user(authorization)
@@ -2377,7 +2400,8 @@ def report_pdf(
     # quarter 有帶才會多出「本季收支」工作表／段落（2026-09-10）；不帶時輸出與
     # 先前完全一致。畫面上期別切在「季報」時前端才會送這個參數。
     data.update(_build_income_expense_scopes(
-        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter
+        int(d0[:4]), expense_month or date.today().strftime("%Y-%m"), department_id, quarter,
+        normalize_basis(basis), money_visible(u)
     ))
     gen_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     try:
@@ -3479,7 +3503,8 @@ def _validate_quarter(quarter):
 
 
 def _build_income_expense_scopes(year: int, month: str, department_id: Optional[int] = None,
-                                 quarter: Optional[int] = None) -> dict:
+                                 quarter: Optional[int] = None, basis: str = "accrual",
+                                 money_ok: bool = True) -> dict:
     """組出《當月收支》《今年度收支》兩張報表（2026-08-30 新增）要用的資料，
     直接回傳可攤平進 _build_excel()/_build_report_html() 的 data dict 片段，
     避免每個呼叫端（畫面查詢／Excel／PDF／每月結算寄信）各自拼裝一次容易
@@ -3493,11 +3518,22 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     except (ValueError, IndexError):
         raise HTTPException(400, f"month 格式錯誤（{month}），需為 YYYY-MM")
 
-    expenses_annual = _collect_expenses(year, department_id)
+    basis = normalize_basis(basis)
+    # `AC2`：收入依口徑取——權責＝階段完成月（未稅）；現金＝收款日（含稅，既有那一支）
+    if basis == "accrual":
+        def _income(a, b, dept):
+            conn = get_db()
+            try:
+                return accrual_income_items(conn, a, b, dept)
+            finally:
+                conn.close()
+    else:
+        _income = _collect_income_items
+    expenses_annual = _collect_expenses(year, department_id, basis)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)
     else:
-        month_slice = _month_expense_slice(_collect_expenses(int(month[:4]), department_id), month)
+        month_slice = _month_expense_slice(_collect_expenses(int(month[:4]), department_id, basis), month)
 
     mo_num = int(month[5:7])
     m0 = f"{month}-01"
@@ -3505,8 +3541,8 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     y0 = f"{year}-01-01"
     y1 = f"{year}-12-31"
 
-    month_income = _collect_income_items(m0, m1, department_id)
-    year_income  = _collect_income_items(y0, y1, department_id)
+    month_income = _income(m0, m1, department_id)
+    year_income  = _income(y0, y1, department_id)
     month_unreceived = _collect_unreceived_items(m0, m1, department_id)
     payment_anomalies = _collect_payment_anomalies(department_id)
 
@@ -3524,14 +3560,24 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     if quarter:
         q0, q1 = _quarter_range(year, quarter)
         quarter_slice      = _months_expense_slice(expenses_annual, _quarter_months(year, quarter))
-        quarter_income     = _collect_income_items(q0, q1, department_id)
+        quarter_income     = _income(q0, q1, department_id)
         quarter_unreceived = _collect_unreceived_items(q0, q1, department_id)
     else:
         quarter_slice      = {"items": [], "total": 0}
         quarter_income     = []
         quarter_unreceived = []
 
+    conn = get_db()
+    try:
+        flags = recognition_flags(conn, year, department_id, money_ok)
+    finally:
+        conn.close()
     return {
+        # `AC2`：口徑＋頂端說明＋待補登標註（使用者：「數字不同的部分…註明並且標註」）
+        "basis":             basis,
+        "basisNote":         BASIS_NOTES[basis],
+        "incomeTaxLabel":    "未稅" if basis == "accrual" else "含稅",
+        "recognitionFlags":  flags,
         "year":              year,
         "expensesYear":      year,
         "expenses":          expenses_annual,
@@ -3562,7 +3608,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     }
 
 
-def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
+def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = "accrual") -> dict:
     """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
 
     department_id（2026-08-28 新增）：承攬商派發／料件進貨／其他支出三類都只透過
@@ -3592,23 +3638,26 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
             return True
         return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
 
-    # ── 承攬商派發（含稅承攬商費用＋外包人員個別計費，比照 vendor_contractors._dispatch_row）
-    disp_rows = conn.execute("""
-        SELECT cd.*, vc.name AS vendor_name
-        FROM contractor_dispatches cd LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id
-        WHERE cd.status != 'cancelled' AND cd.dispatch_date BETWEEN ? AND ?
-    """, (d0, d1)).fetchall()
-    for r in disp_rows:
-        mo = (r["dispatch_date"] or "")[:7]
-        if mo not in monthly or not _quote_in_department(r["quote_no"]):
+    # ── 承攬商派發（`AC2`：口徑由 helpers.recognition 決定——權責＝發票日、未稅；現金＝已匯款日、含稅）
+    for e in dispatch_entries(conn, basis):
+        mo = (e["date"] or "")[:7]
+        if mo not in monthly or not _quote_in_department(e["quoteNo"]):
             continue
-        amt = _dispatch_row(r)["grandTotal"]
-        if not amt:
-            continue
-        monthly[mo]["contractor"] += amt
+        monthly[mo]["contractor"] += e["amount"]
         details["contractor"].append({
-            "date": r["dispatch_date"] or "", "quoteNo": r["quote_no"] or "",
-            "desc": r["vendor_name"] or "（未指定承攬商）", "amount": round(amt),
+            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+            "taxNote": e["taxNote"], "provisional": e["provisional"],
+        })
+
+    # ── 叫料（`AC2`：原本完全沒算進支出；併入「料件」類，不會寫入 stock_items ⇒ 不重複）
+    for e in material_entries(conn, basis, department_id):
+        mo = (e["date"] or "")[:7]
+        if mo not in monthly:
+            continue
+        monthly[mo]["material"] += e["amount"]
+        details["material"].append({
+            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+            "taxNote": e["taxNote"], "provisional": e["provisional"],
         })
 
     # ── 料件 / 設備進貨成本（stock_items.cost，依 parts.category 分桶；同月同料號
@@ -3642,38 +3691,21 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
             "desc": f"{label} × {agg['qty']}", "amount": round(agg["amount"]),
         })
 
-    # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
-    # 2026-09-09 修：原本這裡只撈 settlement.status='finalized' 的案件，代表
-    # **精算還在草稿階段填的額外支出完全不會出現在月支出裡**。實際作業順序是
-    # 支出當下就先填進精算表單、案件全部結束後才做完結，中間可能隔好幾個月，
-    # 這段期間當月已經花掉的錢在報表上等於不存在。改成只要填了就算，歸月與
-    # pending 旗標的判斷邏輯集中在 helpers.case_extra_expenses()（同一支
-    # 也給 dashboard.py 用，兩邊過去各寫一份、連歸月依據都不一樣）。
-    # 2026-09-11：改從 case_extra_expenses 表取（migration v75 把資料搬出 data_json）。
-    # conn 移到迴圈之後才關——新的 helper 要讀表。
-    quote_rows = conn.execute(
-        "SELECT DISTINCT e.quote_no AS quote_no, q.customer_name AS customer_name "
-        "FROM case_extra_expenses e LEFT JOIN quotations q ON q.quote_no = e.quote_no"
-    ).fetchall()
-    for r in quote_rows:
-        if not _quote_in_department(r["quote_no"]):
+    # ── 其他支出（額外支出逐筆）──────────────────────────────────────────────
+    # 2026-09-09 起「只要填了就算」、送審中照樣計入並標 pending——規則不變。
+    # `AC2`：歸月改由 helpers.recognition 決定（權責＝發票日→核准日→憑證日；現金＝付款日→憑證日）。
+    for e in extra_entries(conn, basis):
+        mo = (e["date"] or "")[:7]
+        if mo not in monthly or not _quote_in_department(e["quoteNo"]):
             continue
-        for ex in case_extra_expenses(conn, r["quote_no"]):
-            if ex["month"] not in monthly:
-                continue
-            monthly[ex["month"]]["other"] += ex["cost"]
-            desc = ex["desc"] or ex["category"]
-            if ex["docNo"]:
-                desc = f"{desc}（單號 {ex['docNo']}）"
-            details["other"].append({
-                "date": ex["date"], "quoteNo": r["quote_no"] or "",
-                "desc": f"{r['customer_name'] or ''}｜{ex['category']}｜{desc}".strip("｜"),
-                "amount": round(ex["cost"]),
-                "files": ex["files"],
-                # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
-                # 誤以為是已定稿的數字
-                "pending": ex["pending"],
-            })
+        monthly[mo]["other"] += e["amount"]
+        details["other"].append({
+            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
+            "amount": round(e["amount"]), "files": e["files"],
+            # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
+            # 誤以為是已定稿的數字
+            "pending": e["pending"], "taxNote": e["taxNote"], "provisional": e["provisional"],
+        })
 
     conn.close()
 
@@ -3702,6 +3734,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None) -> dict:
 def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
                              department_id: Optional[int] = Query(None),
                              quarter: Optional[int] = Query(None),
+                             basis: Optional[str] = Query(None),
                              authorization: str = Header(None)):
     """2026-08-30：除了既有的年度月支出矩陣＋全年逐筆明細（供「今年度收支」
     使用）之外，額外帶出「當月」（month，預設今天所屬月份）的收入／支出
@@ -3713,7 +3746,8 @@ def report_expenses_monthly(year: int = Query(None), month: str = Query(None),
     today = date.today()
     year  = year or today.year
     month = month or today.strftime("%Y-%m")
-    return _build_income_expense_scopes(year, month, department_id, quarter)
+    return _build_income_expense_scopes(year, month, department_id, quarter,
+                                        normalize_basis(basis), money_visible(u))
 
 
 def _collect_receivable_items(department_id: Optional[int] = None) -> list:

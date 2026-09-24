@@ -66,7 +66,8 @@ def test_income_html_shows_zero_net_amount_not_actual_amount(client, make_user):
 
     label, d0, d1 = _parse_period("2026")
     data = _augment_with_targets(_collect(d0, d1, None), d0)
-    data.update(_build_income_expense_scopes(2026, "2026-06", None))
+    # 2026-09-24 AC2：預設改權責口徑；本題驗的是「收入依收款日」＝現金口徑 ⇒ 明確帶 basis=cash
+    data.update(_build_income_expense_scopes(2026, "2026-06", None, basis="cash"))
     assert data["monthIncomeItems"], "測試資料應該要有一筆當月收入項目"
     assert data["monthIncomeItems"][0]["netAmount"] == 0
 

@@ -65,10 +65,11 @@ def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, ma
     assert ws_exp["A1"].value == "2026年度收支總表"
     header_row = [ws_exp.cell(row=4, column=c).value for c in range(1, 7)]
     assert header_row == ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計"]
-    # 3月列（row 5=header, row 5+2=3月列）承攬商派發應含稅 8000*1.05=8400
+    # 3月列（row 5=header, row 5+2=3月列）承攬商派發：2026-09-24 AC2 起預設權責口徑＝未稅 8000
+    # （原本含稅 8000*1.05=8400；沒登錄發票日 ⇒ 暫用派工月，仍在 3 月）
     row_labels = [ws_exp.cell(row=r, column=1).value for r in range(5, 17)]
     march_row = 5 + row_labels.index("3月")
-    assert ws_exp.cell(row=march_row, column=2).value == 8400
+    assert ws_exp.cell(row=march_row, column=2).value == 8000
 
     ws_cases = wb["案件清單"]
     all_col_a = [ws_cases.cell(row=r, column=1).value for r in range(1, ws_cases.max_row + 1)]
@@ -102,5 +103,5 @@ def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     assert "當月支出明細" in html
     assert "今年度支出明細" in html
     assert "2026年5月" in html  # 案件清單依月份區分的月份標題列
-    # 該月的承攬商派發（含稅 8000*1.05=8400）應該同時出現在《當月支出明細》
-    assert "8,400" in html
+    # 該月的承攬商派發（AC2 起預設權責口徑＝未稅 8000；原本含稅 8400）應該同時出現在《當月支出明細》
+    assert "8,000" in html
