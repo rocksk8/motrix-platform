@@ -29,7 +29,7 @@ from db import get_db
 from helpers import _require_user
 from routers.dev_crm import _can_access_case
 from routers.quotations import _visible_case_filter_sql
-from routers.system import _MODULE_ACTION_PREFIXES, audit_module_counts
+from routers.system import _MODULE_ACTION_PREFIXES, _MODULE_EXCLUDE_ACTIONS
 
 router = APIRouter()
 
@@ -275,17 +275,31 @@ def unread_items(body: dict = Body(...), authorization: str = Header(None)):
 def module_counts(authorization: str = Header(None)):
     """選單數字：「看過」時間改讀伺服器（kind='module'）。
 
-    數法沿用 `system.py::audit_module_counts()`（同一支函式，排除本人、排除刪除流程事件）
-    ⇒ 只換「從什麼時候開始數」的來源，不另寫一份數法。
+    數法與 `system.py::audit_module_counts()` 相同（前綴比對、排除本人、排除
+    `_MODULE_EXCLUDE_ACTIONS`、`at > 看過時間`），但**只掃一次 audit_log**：
+    原本每個模組各一句 COUNT（10 次），再經那支端點重驗一次 session。
+    ⇒ 取「所有模組中最早的看過時間」之後、別人的事件，在記憶體依模組分桶。
+    等價由 `test_module_counts_single_scan` 對照原函式守著。
     """
     user = _require_user(authorization)
+    default = (datetime.now() - timedelta(days=_MODULE_LOOKBACK_DAYS)).isoformat()
     conn = get_db()
     try:
         seen = {r["item_key"]: r["read_at"] for r in conn.execute(
             "SELECT item_key, read_at FROM item_reads WHERE username=? AND kind='module'",
             (user["username"],))}
+        since = {m: seen.get(m, default) for m in _MODULE_ACTION_PREFIXES}
+        earliest = min(since.values())
+        rows = conn.execute(
+            "SELECT action, at FROM audit_log WHERE at > ? AND username != ?",
+            (earliest, user["username"])).fetchall()
     finally:
         conn.close()
-    default = (datetime.now() - timedelta(days=_MODULE_LOOKBACK_DAYS)).isoformat()
-    since = {m: seen.get(m, default) for m in _MODULE_ACTION_PREFIXES}
-    return audit_module_counts(body={"modules": since}, authorization=authorization)
+    counts = {m: 0 for m in _MODULE_ACTION_PREFIXES}
+    for r in rows:
+        action, at = r["action"] or "", r["at"] or ""
+        for mod, prefixes in _MODULE_ACTION_PREFIXES.items():
+            if (at > since[mod] and action.startswith(prefixes)
+                    and action not in _MODULE_EXCLUDE_ACTIONS.get(mod, ())):
+                counts[mod] += 1
+    return counts
