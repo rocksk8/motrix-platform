@@ -2045,9 +2045,25 @@ function app() {
       this.writeoffModal = { open: true, idx, mode, reason: '', msg: '' }
     },
 
+    // CM2（2026-09-24）：單筆端點帶項目 id，伺服器以 id 找列（idx 只是舊資料沒有 id 時的後備）
+    _itemQs(item) {
+      return item && item.id != null ? `?itemId=${encodeURIComponent(item.id)}` : ''
+    },
+
+    // 單筆操作前先把未存的改動存掉：剛新增、還沒存的那一列在伺服器上不存在（會被 409）
+    async _flushBeforeItemOp() {
+      if (!this.dirty) return true
+      clearTimeout(this._autoSaveTimer)
+      await this.saveCaseRecord()
+      if (this.dirty) { alert('請先存檔成功後再操作（' + (this.saveMsg || '尚未儲存') + '）'); return false }
+      return true
+    },
+
     async _postWriteoff(idx, path, body) {
       const quoteNo = this.selected.quote_no
-      const r = await fetch(`/api/quotations/${quoteNo}/payment/${idx}/${path}`, {
+      if (!(await this._flushBeforeItemOp())) return { ok: false, msg: '尚未儲存' }
+      const qs = this._itemQs(this.paymentItems()[idx])
+      const r = await fetch(`/api/quotations/${quoteNo}/payment/${idx}/${path}${qs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
         body: JSON.stringify(body || {})
@@ -4509,8 +4525,9 @@ function app() {
       if (!files || files.length === 0) return
       const fd = new FormData()
       for (const f of files) fd.append('files', f)
+      if (!(await this._flushBeforeItemOp())) { evt.target.value = ''; return }
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files${this._itemQs(this.paymentItems()[idx])}`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
@@ -4531,8 +4548,9 @@ function app() {
 
     async deletePaymentItemInvoiceFile(idx, fileId) {
       if (!confirm('確定刪除此附件？')) return
+      if (!(await this._flushBeforeItemOp())) return
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files/${fileId}`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/payment/${idx}/invoice-files/${fileId}${this._itemQs(this.paymentItems()[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
@@ -4551,8 +4569,9 @@ function app() {
       if (!files || files.length === 0) return
       const fd = new FormData()
       for (const f of files) fd.append('files', f)
+      if (!(await this._flushBeforeItemOp())) { evt.target.value = ''; return }
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
@@ -4573,8 +4592,9 @@ function app() {
 
     async deleteMaterialFile(idx, fileId) {
       if (!confirm('確定刪除此附件？')) return
+      if (!(await this._flushBeforeItemOp())) return
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files/${fileId}`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files/${fileId}${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
@@ -4593,8 +4613,9 @@ function app() {
       if (!files || files.length === 0) return
       const fd = new FormData()
       for (const f of files) fd.append('files', f)
+      if (!(await this._flushBeforeItemOp())) { evt.target.value = ''; return }
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
@@ -4615,8 +4636,9 @@ function app() {
 
     async deleteMaterialInvoiceFile(idx, fileId) {
       if (!confirm('確定刪除此發票附件？')) return
+      if (!(await this._flushBeforeItemOp())) return
       try {
-        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files/${fileId}`, {
+        const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files/${fileId}${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })

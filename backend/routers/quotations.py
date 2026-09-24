@@ -2533,11 +2533,9 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
                                 {"stockConflicts": stock_conflicts} if stock_conflicts else None))
 
     elif action_type == "payment_mark":
-        idx = payload["idx"]
         body = payload["body"] or {}
         pits = cr.setdefault("payment", {}).setdefault("items", [])
-        if idx < 0 or idx >= len(pits):
-            raise HTTPException(400, "款項索引超出範圍")
+        idx = _locate_item(pits, payload["idx"], payload.get("itemId"), "款項索引超出範圍")
         # 2026-09-24：驗證與套用改走 mark_payment() 同一組函式。修正前排進佇列的
         # 壞資料（已收無日期、金額非數字）在這裡擋下，不落地；收款人記提出申請的人。
         _validate_receipt_body(body)
@@ -2560,8 +2558,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
             arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
         else:
             arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
-        if idx < 0 or idx >= len(arr):
-            raise HTTPException(400, "索引超出範圍")
+        idx = _locate_item(arr, idx, payload.get("itemId"), "索引超出範圍")
         moved = _move_staged_files(staged_files, subfolder, f"{quote_no}_{idx}")
         arr[idx].setdefault(field, [])
         arr[idx][field].extend(moved)
@@ -2578,8 +2575,7 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
             arr, field, subfolder = cr.setdefault("materials", []), "files", "quotation_materials"
         else:
             arr, field, subfolder = cr.setdefault("materials", []), "invoiceFiles", "quotation_materials_invoices"
-        if idx < 0 or idx >= len(arr):
-            raise HTTPException(400, "索引超出範圍")
+        idx = _locate_item(arr, idx, payload.get("itemId"), "索引超出範圍")
         existing = arr[idx].get(field) or []
         arr[idx][field] = delete_document_file(subfolder, f"{quote_no}_{idx}", existing, file_id)
         save_quotation_json(conn, quote_no, data)
@@ -3326,7 +3322,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
         gated, change_id = _gate_case_edit(
             conn, no, user, authorization, "payment_mark",
             f"{no} 第{idx+1}期款項標記（{'收款' if body.get('received') else '取消收款'}）",
-            {"idx": idx, "body": dict(body)},
+            {"idx": idx, "itemId": item_id, "body": dict(body)},
         )
         if gated:
             return {"ok": True, "pending": True, "changeRequestId": change_id,
@@ -3360,7 +3356,21 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     return {"ok": True, "updated_at": now}
 
 
-def _load_payment_item(conn, no, idx):
+def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:
+    """2026-09-24（CM2）：單筆端點以項目 id 定位。idx 是陣列位置，畫面載入後有人刪除或
+    重排就會指到別列；呼叫端帶 item_id 時一律以 id 找列，找不到（尚未存檔或已被刪除）⇒ 409。
+    不帶 item_id 維持舊行為（早期沒有 id 的資料）。"""
+    if item_id is not None:
+        for i, it in enumerate(arr):
+            if it.get("id") is not None and str(it.get("id")) == str(item_id):
+                return i
+        raise HTTPException(409, "找不到這一項：可能尚未存檔或已被他人刪除，請先存檔或重新整理後再操作")
+    if idx < 0 or idx >= len(arr):
+        raise HTTPException(400, range_msg)
+    return idx
+
+
+def _load_payment_item(conn, no, idx, item_id=None):
     row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
     if not row:
         raise HTTPException(404, "報價單不存在")
@@ -3368,14 +3378,12 @@ def _load_payment_item(conn, no, idx):
     cr   = data.setdefault("caseRecord", {})
     pay  = cr.setdefault("payment", {})
     pits = pay.setdefault("items", [])
-    if idx < 0 or idx >= len(pits):
-        raise HTTPException(400, "款項索引超出範圍")
-    return data, pits
+    return data, pits, _locate_item(pits, idx, item_id, "款項索引超出範圍")
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/invoice-files", status_code=201)
 async def upload_payment_item_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
-                                            authorization: str = Header(None)):
+                                            itemId: Optional[str] = None, authorization: str = Header(None)):
     """款項明細逐期發票掃描檔上傳（2026-08-24 新增，多檔，任何登入使用者皆可
     傳）——跟報價單本身的「客戶回簽」附件是兩回事：那個是整張報價單送出後
     客戶簽回的證明，這裡是每一期款項（訂金款/進度款/驗收款等）各自對應的
@@ -3386,12 +3394,12 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, pits = _load_payment_item(conn, no, idx)
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
         label = pits[idx].get('label', f'第{idx+1}期')
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "payment_invoice_upload",
-                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+                f"{no} {label} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
             )
             new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
                                                   user.get("display_name") or user["username"])
@@ -3414,17 +3422,17 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
 
 
 @router.delete("/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}")
-def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, itemId: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, pits = _load_payment_item(conn, no, idx)
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
         if _check_case_gate(conn, no):
             label = pits[idx].get('label', f'第{idx+1}期')
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "payment_invoice_delete",
-                f"{no} {label} 刪除發票附件", {"idx": idx, "file_id": file_id},
+                f"{no} {label} 刪除發票附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
@@ -3438,7 +3446,7 @@ def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, authorizat
     return {"ok": True, "updated_at": saved_at}
 
 
-def _load_material_item(conn, no, idx):
+def _load_material_item(conn, no, idx, item_id=None):
     """比照 _load_payment_item()，定位叫料管控清單（cr.caseRecord.materials[]，
     跟出貨單 shipping_notes 是完全不同的資料，這裡是報價單 JSON 裡的料件
     到料追蹤）裡的一筆。"""
@@ -3448,26 +3456,24 @@ def _load_material_item(conn, no, idx):
     data = json.loads(row["data_json"] or "{}")
     cr   = data.setdefault("caseRecord", {})
     mats = cr.setdefault("materials", [])
-    if idx < 0 or idx >= len(mats):
-        raise HTTPException(400, "料件索引超出範圍")
-    return data, mats
+    return data, mats, _locate_item(mats, idx, item_id, "料件索引超出範圍")
 
 
 @router.post("/api/quotations/{no}/materials/{idx}/files", status_code=201)
 async def upload_material_files(no: str, idx: int, files: List[UploadFile] = File(...),
-                                authorization: str = Header(None)):
+                                itemId: Optional[str] = None, authorization: str = Header(None)):
     """叫料管控單筆料件附件上傳（2026-08-24 新增，多檔，任何登入使用者皆可
     傳）——例如到貨憑證、包裝清單，供部分出貨是跟料件一起出的情境留存證明。"""
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats = _load_material_item(conn, no, idx)
+        data, mats, idx = _load_material_item(conn, no, idx, itemId)
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "material_file_upload",
-                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx},
+                f"{no} {name} 上傳附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
             )
             new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
                                                   user.get("display_name") or user["username"])
@@ -3490,17 +3496,17 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
 
 
 @router.delete("/api/quotations/{no}/materials/{idx}/files/{file_id}")
-def delete_material_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+def delete_material_file(no: str, idx: int, file_id: str, itemId: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats = _load_material_item(conn, no, idx)
+        data, mats, idx = _load_material_item(conn, no, idx, itemId)
         if _check_case_gate(conn, no):
             name = mats[idx].get("name") or f"第{idx+1}項"
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "material_file_delete",
-                f"{no} {name} 刪除附件", {"idx": idx, "file_id": file_id},
+                f"{no} {name} 刪除附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
@@ -3516,7 +3522,7 @@ def delete_material_file(no: str, idx: int, file_id: str, authorization: str = H
 
 @router.post("/api/quotations/{no}/materials/{idx}/invoice-files", status_code=201)
 async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFile] = File(...),
-                                        authorization: str = Header(None)):
+                                        itemId: Optional[str] = None, authorization: str = Header(None)):
     """叫料管控單筆料件的發票附件上傳（2026-08-25 新增，獨立於既有的到貨憑證/
     包裝清單附件——存在 mats[idx]['invoiceFiles']，跟 mats[idx]['files']
     是兩個各自獨立的清單，比照款項收款項目 item.invoiceFiles 的既有慣例，
@@ -3525,12 +3531,12 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats = _load_material_item(conn, no, idx)
+        data, mats, idx = _load_material_item(conn, no, idx, itemId)
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "material_invoice_upload",
-                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx},
+                f"{no} {name} 上傳發票附件（{len(files)} 個檔案）", {"idx": idx, "itemId": itemId},
             )
             new_files = await save_document_files(f"_pending_case_changes/{change_id}", f"{no}_{idx}", files,
                                                   user.get("display_name") or user["username"])
@@ -3553,17 +3559,17 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
 
 
 @router.delete("/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}")
-def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization: str = Header(None)):
+def delete_material_invoice_file(no: str, idx: int, file_id: str, itemId: Optional[str] = None, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats = _load_material_item(conn, no, idx)
+        data, mats, idx = _load_material_item(conn, no, idx, itemId)
         if _check_case_gate(conn, no):
             name = mats[idx].get("name") or f"第{idx+1}項"
             change_id = _create_case_change_request(
                 conn, no, user, authorization, "material_invoice_delete",
-                f"{no} {name} 刪除發票附件", {"idx": idx, "file_id": file_id},
+                f"{no} {name} 刪除發票附件", {"idx": idx, "itemId": itemId, "file_id": file_id},
             )
             return {"ok": True, "pending": True, "changeRequestId": change_id,
                     "message": "案件已結案並處於半解鎖狀態，此刪除已送出，待最高管理員審核通過後才會套用"}
@@ -3578,7 +3584,7 @@ def delete_material_invoice_file(no: str, idx: int, file_id: str, authorization:
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/request-writeoff")
-def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authorization: str = Header(None)):
+def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, itemId: Optional[str] = None, authorization: str = Header(None)):
     """admin+ 申請將該筆收款的稅額沖銷（歸零），需 superadmin 審核。"""
     user = _require_user(authorization)
     if user["role"] not in ("superadmin", "admin"):
@@ -3586,7 +3592,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
     conn = get_db()
     try:
         _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-申請")
-        data, pits = _load_payment_item(conn, no, idx)
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
         item = pits[idx]
         if item.get("writeOffStatus") == "pending":
             raise HTTPException(409, "此筆款項已有待審核的沖銷申請")
@@ -3610,7 +3616,7 @@ def request_payment_writeoff(no: str, idx: int, body: WriteOffRequestIn, authori
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/cancel-writeoff")
-def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)):
+def cancel_payment_writeoff(no: str, idx: int, itemId: Optional[str] = None, authorization: str = Header(None)):
     """申請人本人或 superadmin 取消待審核的沖銷申請。"""
     user = _require_user(authorization)
     if user["role"] not in ("superadmin", "admin"):
@@ -3618,7 +3624,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
     conn = get_db()
     try:
         _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-撤銷")
-        data, pits = _load_payment_item(conn, no, idx)
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
             raise HTTPException(409, "此筆款項無待審核的沖銷申請")
@@ -3639,7 +3645,7 @@ def cancel_payment_writeoff(no: str, idx: int, authorization: str = Header(None)
 
 
 @router.post("/api/quotations/{no}/payment/{idx}/approve-writeoff")
-def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authorization: str = Header(None)):
+def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, itemId: Optional[str] = None, authorization: str = Header(None)):
     """superadmin 審核沖銷申請 — approve=True 生效（稅額歸零）；False 駁回。"""
     user = _require_user(authorization)
     if user["role"] != "superadmin":
@@ -3647,7 +3653,7 @@ def approve_payment_writeoff(no: str, idx: int, body: WriteOffApproveIn, authori
     conn = get_db()
     try:
         _deny_if_case_locked_unsupported(conn, no, authorization, op="稅額沖銷-核准")
-        data, pits = _load_payment_item(conn, no, idx)
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
         item = pits[idx]
         if item.get("writeOffStatus") != "pending":
             raise HTTPException(409, "此筆款項無待審核的沖銷申請")
