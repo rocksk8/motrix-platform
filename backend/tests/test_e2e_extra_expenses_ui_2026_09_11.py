@@ -329,7 +329,11 @@ def test_change_request_round_trip_in_browser(live_server, make_user, seed_extra
             assert _xe_row(exp_id)["description"] == "原始品項"
 
             page.click(f"{PANEL} button:has-text('送審變更')")
-            page.wait_for_selector(f"{PANEL} :text('生效')", timeout=45000)
+            # ⚠️ 2026-09-24：原本等 `:text('生效')`——那是子字串比對，而變更面板上本來就有固定文字
+            #    「目前生效：」（case-management.html:2297）⇒ 按下送審的瞬間就成立，送審還沒完成就去讀
+            #    資料庫。負載下送審慢一點就讀到原值（-n 6 全量偶發紅）；伺服器端讓送審慢 3 秒可以確定性
+            #    重現。改等真正的完成訊息（case-management.js:713）。
+            page.wait_for_selector(f"{PANEL} :text('變更已直接生效')", timeout=45000)
         finally:
             browser.close()
 
