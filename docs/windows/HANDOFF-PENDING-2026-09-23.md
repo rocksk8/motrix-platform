@@ -329,3 +329,20 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 5. 舊 localStorage 鍵：首次載入時一次性上傳遷移（不遺失既有已讀），之後停用。
 
 **界線**：`sidebar.js` 為鎖定檔——動前向 hichan-0a 宣告範圍；hichan-61 另有字級（約 :69、:116）與 hichan-8d 的 dirty 清除（:1023-1034）改動，避開這兩段。在自己的 worktree；題先紅；使用者可見的改動附頁面實測（至少：點一筆 ⇒ 該筆紅點立即消失、上一頁回來仍消失、另一分頁在 pageshow／storage 後同步）。
+
+## 🟢 MP 地圖優化（2026-09-24 使用者勾選；執行者 hichan-61，MP0 緊接 JV36，其餘排在字級＋FORM_VERSION 守門之後）
+盤點（Explore agent 讀 origin/master，重點項 hichan-0a 複讀）：端點 `GET /api/map/points`（`routers/map_points.py:375`）、`helpers/geo.py`、`frontend/pages/map.html`。
+
+| 編號 | 項目 | 依據／做法 |
+|---|---|---|
+| **MP0 🔴 必修** | 彈出視窗 XSS | `map.html:915` 把 `p.name`／`p.org`／`p.address` 直接拼進 `bindPopup` HTML（hichan-0a 已讀碼確認）；標案資料來自**外部網站** ⇒ 一律 `_esc`（`:900` 據點彈窗已有 `_esc` 可照做）；題：名稱含 `<img src=x onerror=…>` ⇒ 彈窗內為純文字 |
+| **MP0b 🔴 條款** | Google 經緯度快取 ≤ 30 天 | `geo.py:383` `GEOCODE_CACHE_TTL_DAYS=180` 對所有來源一體適用；Google SST §14.3 經緯度最多 30 天 ⇒ `source=google` 的列 30 天過期（其他來源維持 180）；只在有設 Google 金鑰時相關 |
+| MP1 | 點位連到單據 | 回傳帶記錄 id；彈窗與表格可點開客戶／供應商／標案／出貨單；單據頁加「在地圖上看」（`map.html?focus=kind:key`） |
+| MP2 | 粗精度變淡＋群聚 | `precisionIsCoarse` 的點用淡色／空心 pin；重疊點群聚（Leaflet.markercluster 自架於 vendor，照 leaflet 的 PROVENANCE 模式） |
+| MP3 | 標案依截止日上色＋篩選 | 未截止／7 天內截止／已截止三色；篩選預設「未截止」 |
+| MP4 | 清單與地圖連動＋搜尋＋導航 | 點表格列 ⇒ 地圖平移並開彈窗；關鍵字搜尋；「附近 N 筆」；Google 導航**只給 URL 連結**（不存 Google 資料） |
+| MP5 | 全螢幕與手機版 | 高度隨視窗（配合 `--fz`）；全螢幕鈕；手機斷點 |
+| MP6 | 案件地點圖層 | 報價／案件的交貨地點（`deliveryAddress`／`deliveryLocation`）成新 dataset；權限比照 shipping（case_manage 或 quotation）；走既有地址定位階梯與背景預熱 |
+
+不做（條款）：預先下載 OSM 圖磚；儲存 Google 回傳的店名／地址。
+界線：`map_points.py` 的 dataset 權限不放寬；新 dataset 加進背景預熱時注意每日 120 筆上限；每項題先紅、頁面實測。
