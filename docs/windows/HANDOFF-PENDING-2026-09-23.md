@@ -596,3 +596,16 @@ hichan-0a 代裁（待確認）：
 | W-5 | 低 | `.aq-sort` 在案件頁沒定義 ⇒ 排序／多選／常用篩選鈕是原生灰框 | hichan-a3 |
 | W-6 | 待查、優先度高 | 多頁同開偶發 500 `database is locked`（update_case_record、edit_presence），立即失敗未等 timeout | hichan-8d 先查根因 |
 - W-6 中期（hichan-8d）：4 種重現 0 錯；原前提「立即失敗」無證據（log 記的是出錯時間非開始時間）。hichan-0a 准動鎖定檔 main.py：`_unhandled_handler` 加記 sqlite_errorname／errorcode 與請求經過秒數（只記錄不改行為，附題）；寫入路徑在拿到數字前不改。待排除方向：走查伺服器背景任務（備份 backup API、地理預熱、標案掃描）握寫鎖。
+
+### 實走第 3～8 節續（hichan-a3，23:0x～23:4x）——全部進本包
+| # | 內容 | 執行 |
+|---|---|---|
+| W-7 | 頂端全域搜尋框打字觸發離頁警告（a01e628 讓它浮現；正式機無） | ✅ hichan-0a 2dfdaa3 |
+| W-8／D8-3 | 傳票清單篩選、使用者搜尋同類 | ✅ hichan-0a e84536b（逐欄加 class） |
+| W-8 全站 | 同類還有：地圖範圍下拉與圖層勾選（D7-1）、報表年月與收款／支出月（D4-2），靜態掃描另有約 30 個候選 ⇒ **改作法**：逐一分類（檢視條件 vs 真正要存的欄位）、加 class 或 data 屬性，並加靜態守門（篩選型 x-model 必須被標記或列入已審清單） | hichan-8d |
+| D4-1 | 營運報表匯出沒帶 `&basis=` ⇒ 現金口徑匯出仍是權責 | hichan-8d |
+| D8-2 | customers.html 新增客戶彈窗無 max-height（字級特、1366×768 超出，外層可捲） | hichan-8d |
+| 4.3 | 待補登連結改**直接開對應分頁**（使用者裁）：發票／收款類 &tab=fin、階段比例類開執行分頁 | hichan-8d |
+| 7-SL | 使用者裁：**業務預設開地圖模組**（只影響新建帳號與角色樣板；registry golden 題依裁示更新並註明） | hichan-8d |
+| D8-1 | 點進有紅點的案件後「N 筆有新動態」不減 | hichan-a3（與 W-2～W-4 同批，P4 A 推後） |
+| W-6 | 量測已上（fb66c93）：log 帶 sqlite_errorname／errcode／elapsed；下次走查 handler 開到 WARNING | 觀察 |
