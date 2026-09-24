@@ -14,9 +14,8 @@
  * 鍵盤：Esc＝取消、Enter＝確認（prompt 的輸入框內也是）、Tab／Shift+Tab 焦點鎖在對話框內；
  *       關閉後焦點回到開啟前的元素。一次只開一個對話框：後來的排隊。
  *
- * 深色模式：style.css 用反轉濾鏡處理 `body` 的直接子元素（各頁 Modal 同一條路）⇒ 這裡的元素掛在 body 直下、
- *   用淺色 token（--white／--text-primary／--border-light／--accent）繪製，深色模式自動跟著反轉；
- *   不另外判斷 data-theme，否則會被反轉兩次。沒載 style.css 的頁面用 var() 的後備值。
+ * 深色模式：讀 style.css 的語意 token（CM12 P3：--surface／--ink-*／--line*／--tone-*），根元素（.mui-root，
+ *   掛在 body 直下）退出全站的 invert 反轉、直接吃深色 token（見 CSS 註解）。沒載 style.css 的頁面用後備值。
  *
  * 測試掛點：[data-testid=ui-dialog]／ui-dialog-ok／ui-dialog-cancel／ui-dialog-input／ui-toast／ui-banner。
  * e2e 請用 backend/tests/_ui_dialogs.py 的 helper，不要再用 page.on('dialog')。
@@ -25,27 +24,33 @@
   if (window.MotrixUI) return
 
   var STYLE_ID = 'motrix-ui-style'
+  // 色彩一律讀 style.css 的語意 token（CM12 P3，1b684cc）；後備值＝淺色 token 值（沒載 style.css 的頁面）。
+  // 🔴 深色：style.css 目前對 body 直下元素整塊 invert(1) hue-rotate(180deg)，而 P3 的深色 token 是給
+  //    「不經反轉」的元素用的 ⇒ 本元件的根元素（.mui-root）**退出那道反轉**，直接吃深色 token；
+  //    否則深色值會被再反轉一次、變回淺色。退出寫在本檔注入的樣式（!important 蓋過 style.css 那條
+  //    無 !important 的規則），不改 style.css 的共用排除清單（那份清單有結構守門題）。
   var CSS = [
-    '.mui-backdrop{position:fixed;inset:0;background:rgba(10,10,10,.42);display:flex;align-items:center;justify-content:center;z-index:9000;padding:16px}',
-    '.mui-dialog{background:var(--white,#F5F4F0);color:var(--text-primary,#0A0A0A);border:1px solid var(--border-light,#E5E3DE);border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,.18);width:min(420px,100%);padding:18px 18px 14px;font-family:var(--font-zh,system-ui,sans-serif);font-size:14px;line-height:1.6}',
+    ':root[data-theme="dark"] body > .mui-root{filter:none !important}',
+    '.mui-backdrop{position:fixed;inset:0;background:var(--overlay-backdrop,rgba(0,0,0,.45));display:flex;align-items:center;justify-content:center;z-index:9000;padding:16px}',
+    '.mui-dialog{background:var(--surface,#FFFFFF);color:var(--ink-strong,#1A1D21);border:1px solid var(--line,#E5E7EB);border-radius:10px;box-shadow:var(--shadow-popover,0 8px 24px rgba(0,0,0,.22));width:min(420px,100%);padding:18px 18px 14px;font-family:var(--font-zh,system-ui,sans-serif);font-size:14px;line-height:1.6}',
     '.mui-dialog:focus{outline:none}',
-    '.mui-title{font-weight:700;font-size:15px;margin:0 0 6px}',
-    '.mui-msg{white-space:pre-wrap;margin:0 0 12px;color:var(--text-primary,#0A0A0A)}',
-    '.mui-input{width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border-light,#E5E3DE);border-radius:6px;font-size:14px;background:#fff;color:var(--text-primary,#0A0A0A);margin-bottom:6px}',
-    '.mui-err{color:#B91C1C;font-size:12px;min-height:16px;margin-bottom:6px}',
+    '.mui-title{font-weight:700;font-size:15px;margin:0 0 6px;color:var(--ink-strong,#1A1D21)}',
+    '.mui-msg{white-space:pre-wrap;margin:0 0 12px;color:var(--ink-strong,#1A1D21)}',
+    '.mui-input{width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--line-strong,#D1D5DB);border-radius:6px;font-size:14px;background:var(--surface,#FFFFFF);color:var(--ink-strong,#1A1D21);margin-bottom:6px}',
+    '.mui-err{color:var(--tone-danger-fg,#B91C1C);font-size:12px;min-height:16px;margin-bottom:6px}',
     '.mui-actions{display:flex;justify-content:flex-end;gap:8px}',
-    '.mui-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--border-light,#E5E3DE);background:#fff;color:var(--text-primary,#0A0A0A);font-size:13px;cursor:pointer;font-family:inherit}',
+    '.mui-btn{padding:6px 14px;border-radius:6px;border:1px solid var(--line-strong,#D1D5DB);background:var(--surface,#FFFFFF);color:var(--ink-strong,#1A1D21);font-size:13px;cursor:pointer;font-family:inherit}',
     '.mui-btn:focus-visible{outline:2px solid var(--accent,#C8102E);outline-offset:2px}',
-    '.mui-btn--ok{background:var(--text-primary,#0A0A0A);color:var(--white,#F5F4F0);border-color:var(--text-primary,#0A0A0A)}',
+    '.mui-btn--ok{background:var(--ink-strong,#1A1D21);color:var(--surface,#FFFFFF);border-color:var(--ink-strong,#1A1D21)}',
     '.mui-btn--danger{background:var(--accent,#C8102E);border-color:var(--accent,#C8102E);color:#fff}',
     '.mui-toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9100;pointer-events:none}',
-    '.mui-toast{pointer-events:auto;padding:9px 14px;border-radius:8px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);box-shadow:0 6px 18px rgba(0,0,0,.14);background:#fff;color:var(--text-primary,#0A0A0A);border:1px solid var(--border-light,#E5E3DE);max-width:360px}',
-    '.mui-toast--ok{border-color:#A7F3D0;background:#ECFDF5;color:#047857}',
-    '.mui-toast--error{border-color:#FECACA;background:#FEF2F2;color:#B91C1C}',
+    '.mui-toast{pointer-events:auto;padding:9px 14px;border-radius:8px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);box-shadow:var(--shadow-popover,0 8px 24px rgba(0,0,0,.22));background:var(--surface,#FFFFFF);color:var(--ink-strong,#1A1D21);border:1px solid var(--line,#E5E7EB);max-width:360px}',
+    '.mui-toast--ok{border-color:var(--tone-success-border,#86EFAC);background:var(--tone-success-bg,#F0FDF4);color:var(--tone-success-fg,#15803D)}',
+    '.mui-toast--error{border-color:var(--tone-danger-border,#FECACA);background:var(--tone-danger-bg,#FEF2F2);color:var(--tone-danger-fg,#B91C1C)}',
     '.mui-banners{position:fixed;left:0;right:0;top:0;z-index:8900;display:flex;flex-direction:column}',
-    '.mui-banner{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);border-bottom:1px solid #FDE68A;background:#FFFBEB;color:#92400E}',
-    '.mui-banner--error{border-color:#FECACA;background:#FEF2F2;color:#B91C1C}',
-    '.mui-banner--info{border-color:#BFDBFE;background:#EFF6FF;color:#1E3A8A}',
+    '.mui-banner{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;font-family:var(--font-zh,system-ui,sans-serif);border-bottom:1px solid var(--tone-warning-border,#FDE68A);background:var(--tone-warning-bg,#FFFBEB);color:var(--tone-warning-fg,#92400E)}',
+    '.mui-banner--error{border-color:var(--tone-danger-border,#FECACA);background:var(--tone-danger-bg,#FEF2F2);color:var(--tone-danger-fg,#B91C1C)}',
+    '.mui-banner--info{border-color:var(--tone-info-border,#BFDBFE);background:var(--tone-info-bg,#EEF2FF);color:var(--tone-info-fg,#1D4ED8)}',
     '.mui-banner__msg{flex:1}',
     '.mui-banner__x{background:none;border:none;font-size:16px;cursor:pointer;color:inherit;padding:0 4px}',
   ].join('\n')
@@ -76,7 +81,7 @@
         ensureStyle()
         var prevFocus = document.activeElement
         var id = 'mui-d' + (++seq)
-        var back = el('div', 'mui-backdrop')
+        var back = el('div', 'mui-root mui-backdrop')
         var box = el('div', 'mui-dialog')
         box.setAttribute('role', kind === 'confirm' && opts.danger ? 'alertdialog' : 'dialog')
         box.setAttribute('aria-modal', 'true')
@@ -184,7 +189,7 @@
     ensureStyle()
     var wrap = document.querySelector('.mui-toasts')
     if (!wrap) {
-      wrap = el('div', 'mui-toasts')
+      wrap = el('div', 'mui-root mui-toasts')
       wrap.setAttribute('aria-live', 'polite')
       document.body.appendChild(wrap)
     }
@@ -205,7 +210,7 @@
     ensureStyle()
     var wrap = document.querySelector('.mui-banners')
     if (!wrap) {
-      wrap = el('div', 'mui-banners')
+      wrap = el('div', 'mui-root mui-banners')
       document.body.appendChild(wrap)
     }
     if (opts.id && banners[opts.id]) banners[opts.id].close()

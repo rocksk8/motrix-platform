@@ -182,17 +182,24 @@ def test_toast_and_banner(live_server):
 
 
 @pytest.mark.e2e
-def test_dark_mode_goes_through_the_same_inversion_as_page_modals(live_server):
-    """style.css 的深色模式是對 body 直下元素套反轉濾鏡；對話框必須是 body 直下，才會跟各頁 Modal 一樣被反轉。"""
+def test_dark_mode_reads_the_dark_tokens_and_is_not_inverted_twice(live_server):
+    """深色：讀 P3 的深色 token（--surface 等），而根元素要**退出**全站 invert——
+    否則深色值被再反轉一次變回淺色。淺色：淺色 token、本來就沒有 filter。"""
+    js = """() => { const b = document.querySelector('.mui-backdrop'), d = b.querySelector('.mui-dialog');
+      return {direct: b.parentElement === document.body, filter: getComputedStyle(b).filter,
+              bg: getComputedStyle(d).backgroundColor, ink: getComputedStyle(d).color} }"""
     with sync_playwright() as p:
         browser, page = _page(p, live_server, theme="dark")
         try:
             _start(page, "MotrixUI.confirm('深色')")
             wait_dialog(page)
-            info = page.evaluate("""() => { const b = document.querySelector('.mui-backdrop');
-              return {direct: b.parentElement === document.body, filter: getComputedStyle(b).filter} }""")
+            info = page.evaluate(js)
             assert info["direct"] is True
-            assert "invert" in info["filter"], info
+            assert info["filter"] == "none", "深色 token 已經是深色，不可以再被反轉：%r" % info
+            assert info["bg"] == "rgb(28, 28, 30)", "要吃深色 --surface（#1C1C1E）：%r" % info
+            assert info["ink"] == "rgb(242, 242, 240)", info
+            # 正對照：同一頁的一般 body 直下元素仍被反轉（證明這一頁的深色模式規則確實生效）
+            assert "invert" in page.evaluate("() => getComputedStyle(document.querySelector('main')).filter")
             page.keyboard.press("Escape")
         finally:
             browser.close()
@@ -200,6 +207,7 @@ def test_dark_mode_goes_through_the_same_inversion_as_page_modals(live_server):
         try:
             _start(page, "MotrixUI.confirm('淺色')")
             wait_dialog(page)
-            assert page.evaluate("() => getComputedStyle(document.querySelector('.mui-backdrop')).filter") == "none"
+            info = page.evaluate(js)
+            assert info["filter"] == "none" and info["bg"] == "rgb(255, 255, 255)", info
         finally:
             browser.close()

@@ -14,7 +14,10 @@
 - `danger:true` ⇒ 初始焦點在「取消」（誤按 Enter 不會做下去），`role=alertdialog`。
 - 一次一個對話框，後來的排隊。
 - 訊息一律 `textContent`（不當 HTML）。
-- 深色模式：元素掛在 `body` 直下，走 style.css 對 body 直下元素的反轉濾鏡（與各頁 Modal 同路）；不另外判斷 `data-theme`。
+- 深色模式：色彩一律讀 style.css 的 P3 語意 token（`--surface`／`--ink-*`／`--line*`／`--tone-*`／`--overlay-backdrop`）。
+  ~~走全站反轉濾鏡~~ **更正（rebase 帶進 P3 1b684cc 後）**：P3 的深色 token 是給「不經反轉」的元素用的 ⇒ 本元件根元素 `.mui-root`
+  **退出**全站 invert（ui.js 自己注入 `:root[data-theme=dark] body > .mui-root{filter:none !important}`，不改 style.css 共用排除清單），
+  直接吃深色 token；否則深色值會被再反轉一次變回淺色。⇒ 這是第一個照 P3 方向「移出反轉」的元件，案件頁移出時可比照。
 
 ## ⚠️ 替換時的語意差異（套進案件頁時要逐處判斷）
 - 原生 `confirm()`／`prompt()` 是**同步**的，`MotrixUI` 是 `async`：呼叫端要改成 `if (!(await MotrixUI.confirm(...))) return`，**所在函式要變 async**，而呼叫它的地方若依賴回傳值也要跟著 await。
@@ -33,4 +36,4 @@ assert natives == []                            # 頁面若還在用原生對話
 ```
 
 ## 題
-`backend/tests/test_e2e_ui_dialogs_2026_09_24.py`（7 支，`set_content` 最小測試頁，不動產品頁）：確認的鍵盤／點擊／背景、危險確認初始焦點、輸入框的值／取消／必填、焦點鎖與還原、排隊＋helper、toast／banner（含 HTML 注入當文字）、深色模式反轉。突變 8 處皆紅。
+`backend/tests/test_e2e_ui_dialogs_2026_09_24.py`（7 支，`set_content` 最小測試頁，不動產品頁）：確認的鍵盤／點擊／背景、危險確認初始焦點、輸入框的值／取消／必填、焦點鎖與還原、排隊＋helper、toast／banner（含 HTML 注入當文字）、深色模式吃深色 token 且不被反轉（正對照：同頁一般元素仍被反轉）。突變 9 處皆紅（含「拿掉退出反轉」「背景寫死不讀 token」）。
