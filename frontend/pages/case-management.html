@@ -150,6 +150,9 @@
     }
     .cm-gatecell--na .cm-gatecell__v { color: var(--text-dim); font-weight: 400; }
     .cm-gatecell .vm-bar { width: 54px; }
+    /* 關卡格可點：開案件並停在該關的分頁 */
+    td.cm-gate { cursor: pointer; }
+    td.cm-gate:hover .cm-gatecell__v { text-decoration: underline; }
     .cm-mtx__no {
       font-size: 12.5px; font-weight: 700;
       font-family: var(--font-en); font-variant-numeric: tabular-nums;
@@ -698,7 +701,7 @@
           </thead>
           <tbody>
             <template x-for="row in matrixRows" :key="row.quoteNo">
-              <tr @click="openFromMatrix(row.quoteNo)">
+              <tr :data-quote="row.quoteNo" @click="openFromMatrix(row.quoteNo)">
                 <td class="cm-mtx__spine" :style="'background:' + rowSpine(row)"></td>
                 <td>
                   <div class="cm-mtx__no" x-text="row.quoteNo"></div>
@@ -718,7 +721,7 @@
                   <span x-show="!row.salesPerson" style="font-size:11.5px;color:var(--text-dim)">—</span>
                 </td>
                 <template x-for="g in row.gates" :key="g.key">
-                  <td class="cm-gate">
+                  <td class="cm-gate" :data-gate="g.key" @click.stop="openFromMatrix(row.quoteNo, g)">
                     <span class="cm-gatecell" :class="{'cm-gatecell--na': g.state==='na'}" :title="g.reason || ''">
                       <span class="cm-gatecell__v">
                         <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g, row)"></span>
@@ -3656,6 +3659,50 @@
       </div><!-- /cm-detail -->
     </div><!-- /cm-layout -->
   </main>
+</div>
+
+<!-- ── 結案前檢查（2026-09-24）：先列出五關、未過的可前往修正；五關全過才能確認 ── -->
+<div x-show="closeCheck.open" x-cloak data-testid="close-check"
+     style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
+     @click.self="closeCheck.open = false"
+     @keydown.escape.window="closeCheck.open = false">
+  <div role="dialog" aria-modal="true" aria-labelledby="close-check-title"
+       style="margin:auto;background:#fff;border-radius:12px;width:100%;max-width:520px;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
+      <span id="close-check-title" style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)">完結案前檢查</span>
+      <button type="button" aria-label="關閉" @click="closeCheck.open = false"
+              style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:12px 18px">
+      <template x-for="g in closeCheck.gates" :key="g.key">
+        <div :data-gate-label="g.label"
+             style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border-light)">
+          <span class="vm-lamp" :class="'vm-lamp--' + gateTone(g)" style="margin-top:4px"></span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">
+              <span x-text="g.label"></span>
+              <span style="font-weight:400;color:var(--text-secondary);margin-left:6px"
+                    x-text="g.state === 'ok' ? '已通過（' + g.value + '）' : g.state === 'na' ? '不適用（' + g.value + '）' : '未通過（' + g.value + '）'"></span>
+            </div>
+            <div x-show="g.state === 'blocked' && g.reason" style="font-size:12px;color:var(--text-secondary);margin-top:2px" x-text="g.reason"></div>
+            <div x-show="(g.pendingApprovers || []).length" style="font-size:12px;color:var(--text-secondary);margin-top:2px"
+                 x-text="'待簽核人：' + (g.pendingApprovers || []).map(a => a.displayName).join('、')"></div>
+          </div>
+          <button type="button" data-testid="gate-goto" x-show="g.state === 'blocked'" @click="closeCheckGoto(g)"
+                  class="btn btn-ghost btn-sm" style="flex-shrink:0">前往</button>
+        </div>
+      </template>
+      <div style="font-size:12px;margin-top:10px"
+           :style="closeCheck.canClose ? 'color:var(--text-secondary)' : 'color:var(--warning)'"
+           x-text="closeCheck.canClose ? '完結後案件進入「已結案」並開始保固追蹤期，此操作無法復原。' : '尚有未通過的項目，完成後才能結案。'"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid var(--border-light)">
+      <button type="button" class="btn btn-ghost" @click="closeCheck.open = false">取消</button>
+      <button type="button" class="btn-close-case" data-testid="close-confirm"
+              :disabled="!closeCheck.canClose" :style="closeCheck.canClose ? '' : 'opacity:.45;cursor:not-allowed'"
+              @click="confirmCloseCase()">確認結案</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── 承攬商派發 Modal ── -->

@@ -1876,6 +1876,7 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
     doc_total = 0
     doc_pending = 0
     doc_reasons = []
+    pending_docs = []
     pending_usernames: list = []
     for label, table in _CLOSE_DOC_TABLES:
         try:
@@ -1893,6 +1894,7 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
         if rows:
             doc_pending += len(rows)
             doc_reasons.append(f"{label}尚有 {len(rows)} 筆簽核中")
+            pending_docs.append({"table": table, "label": label, "count": len(rows)})
             for r in rows:
                 try:
                     appr = json.loads(r["ap"] or "{}")
@@ -1918,6 +1920,8 @@ def _case_close_gates(conn, quote_no: str, d: dict) -> list:
             # 合成一句會讓使用者不知道要去哪個模組找
             "reason": "；".join(doc_reasons) if doc_reasons else None,
             "pendingUsernames": list(dict.fromkeys(pending_usernames)),
+            # 結案檢查視窗逐類列出、並據此決定「前往」哪個分頁
+            "pendingDocs": pending_docs,
         })
 
     # ④ 成本精算必須已完結（2026-09-13 使用者裁示）。結案之後案件就鎖定了，
@@ -1992,6 +1996,45 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
         reasons.extend((g["reason"] or "").split("；"))
         pending_usernames.extend(g["pendingUsernames"])
     return [r for r in reasons if r], list(dict.fromkeys(pending_usernames))
+
+
+@router.get("/api/quotations/{quote_no}/close-gates")
+def case_close_gates(quote_no: str, authorization: str = Header(None)):
+    """單一案件的完結案五關（2026-09-24）：結案前先列出來、可點過去修。
+
+    判定就是 _case_close_gates()（與 update_deal_tag 擋結案同一份），canClose 為真
+    等於現在按結案不會被 400 擋下。單據關補上待簽核人**目前的**顯示名稱——簽核流程
+    裡存的是建立當下的名字，改名後會對不上人。唯讀、不發通知；可見性比照單筆讀取。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        _check_quotation_owner(row, user)
+        d = json.loads(row["data_json"] or "{}")
+        gates = _case_close_gates(conn, quote_no, d)
+        for g in gates:
+            names = g.get("pendingUsernames") or []
+            if not names:
+                g["pendingApprovers"] = []
+                continue
+            found = {
+                r["username"]: r["display_name"] or r["username"]
+                for r in conn.execute(
+                    f"SELECT username, display_name FROM users WHERE username IN ({','.join('?' * len(names))})",
+                    names,
+                ).fetchall()
+            }
+            g["pendingApprovers"] = [{"username": u, "displayName": found.get(u, u)} for u in names]
+    finally:
+        conn.close()
+    return {
+        "quoteNo": quote_no,
+        "dealTag": d.get("dealTag", "") or (row["deal_tag"] if "deal_tag" in row.keys() else ""),
+        "gates": gates,
+        "canClose": not any(g["state"] == "blocked" for g in gates),
+    }
 
 
 @router.patch("/api/quotations/{quote_no}/deal-tag")

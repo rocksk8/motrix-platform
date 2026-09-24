@@ -174,9 +174,24 @@ function app() {
       } catch (_e) { /* 讀不到就不顯示據點 */ }
     },
 
-    async openFromMatrix(quoteNo) {
+    // 點關卡格 ⇒ 開案件並停在該關的分頁（沿用深連結 ?tab= 的 _pendingUrlTab，選案件重設分頁後才套）
+    async openFromMatrix(quoteNo, gate) {
       this.caseViewMode = 'list'
+      if (gate) this._pendingUrlTab = this._gateTab(gate)
       await this.selectCase(quoteNo)
+    },
+
+    // 關卡 ⇒ 要去修的分頁。單據關依第一類待簽單據決定。
+    _gateTab(g) {
+      const byTable = {
+        shipping_notes: 'shipping', completion_notes: 'completion',
+        contractor_payment_vouchers: 'dispatch', invoice_vouchers: 'fin',
+        payment_requests: 'biz', quotations: 'biz',
+      }
+      let t = { progress: 'exec', payment: 'biz', settlement: 'fin', extraExpense: 'xexp' }[g && g.key]
+      if (g && g.key === 'documents') t = byTable[((g.pendingDocs || [])[0] || {}).table] || 'biz'
+      if ((t === 'fin' || t === 'xexp') && !this.canSeeFinancial()) t = 'biz'
+      return t || 'biz'
     },
     stageBoardItems: [],
     search: '',
@@ -2152,10 +2167,45 @@ function app() {
       }
     },
 
+    // ── 結案前檢查（2026-09-24）─────────────────────────────────────────
+    // 原本先 confirm、再存檔（失敗照樣送結案）、最後才被 400 擋下並列一串理由。
+    // 改成：先存檔，失敗就中止；再列出五關（與擋結案同一份判定），未過的有「前往」；
+    // 五關全過才能按確認。
+    closeCheck: { open: false, gates: [], canClose: false },
+
     async closeCaseAction() {
-      if (!confirm('確認完結案件？\n\n完結後此案件將進入「已結案」狀態並開始保固追蹤期。\n此操作無法復原，請確認所有款項與設備資料已填寫完畢。')) return
+      if (!this.selected) return
       clearTimeout(this._autoSaveTimer)
+      while (this.saving) await new Promise(res => setTimeout(res, 50))
       await this.saveCaseRecord()
+      if (this.saveStatus === 'error' || this.segConflict) {
+        alert('案件沒有存成功，已停止結案：' + (this.saveMsg || '儲存失敗'))
+        return
+      }
+      try {
+        const r = await fetch('/api/quotations/' + this.selected.quote_no + '/close-gates', {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { alert(d.detail || '無法取得結案條件'); return }
+        this.closeCheck = { open: true, gates: d.gates || [], canClose: !!d.canClose }
+      } catch {
+        alert('網路錯誤，請稍後再試')
+      }
+    },
+
+    closeCheckGoto(g) {
+      const t = this._gateTab(g)
+      this.closeCheck.open = false
+      this.activeTab = t
+      if (t === 'exec') this.execSubTab = 'progress'
+      if (t === 'shipping') this.loadShippingNotes(this.selected.quote_no)
+      if (t === 'completion') this.loadCompletionNotes(this.selected.quote_no)
+    },
+
+    async confirmCloseCase() {
+      if (!this.closeCheck.canClose) return
+      this.closeCheck.open = false
       const entry = { at: new Date().toISOString(), user: this.session.displayName || '', from: '已成案', to: '已結案' }
       await this.updateDealTag('已結案', entry)
       if (this.cr.dealTag === '已結案') {
