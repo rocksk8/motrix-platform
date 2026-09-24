@@ -1668,3 +1668,107 @@ body.sidebar-lock { overflow: hidden; }
   .vm-andon__seg { flex: 1 1 40%; }
   .vm-andon__bar { flex: 1 1 100%; padding: 10px 14px; }
 }
+
+
+/* ─── 語意色彩 token（2026-09-24 CM12 P3 預備；只新增，既有規則一條都沒改） ─────────────
+   來源：案件管理頁（case-management.html／js）寫死的 105 種色碼、共 767 處，依用途歸納成下面這組
+   語意 token。對照表：docs/windows/CM12-P3-COLOR-TOKENS.md（每個色碼 → token、出現次數）。
+   命名：--tone-<語意>-<角色>，角色＝fg（文字／圖示）、solid（實心底上的強調色）、bg（淡底）、
+         border（框線）；中性色用 --surface-*／--line-*／--ink-*。
+   ⚠ 深色：下面 :root[data-theme="dark"] 那一組是「頁面**不**經過 DARK MODE 的 filter 反轉」時的值。
+     目前全站深色是 body > * 整塊 invert(1) hue-rotate(180deg)；P3 若在案件頁改用這組 token，
+     必須同時把案件頁移出那道反轉，否則深色值會再被反轉一次、變回淺色。
+   ───────────────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* 中性：底色 */
+  --surface:            #FFFFFF;   /* #fff／#ffffff：卡片、輸入框、表格底 */
+  --surface-muted:      #FAFAF9;   /* #fafaf9 #fcfcfb #fafaf8 #f9fafb #f7f6f3 #f5f5f4：區塊淡底 */
+  --surface-sunken:     #F0EEE9;   /* #f0eee9 #f0efeb #eeecea #f5f4f0：按鈕底、分隔區 */
+  --surface-neutral:    #F3F4F6;   /* #f3f4f6：灰色徽章底、未收款標籤 */
+  /* 中性：框線 */
+  --line:               #E5E7EB;   /* #e5e7eb #e5e3de #e5e3dd #e7e5e4 #eee */
+  --line-strong:        #D1D5DB;   /* #d1d5db #d5d5d5 #d9d7d2 #d1cfc9 #c9c7c1 */
+  /* 中性：文字 */
+  --ink-strong:         #1A1D21;   /* #374151 #1a1d21 #000 */
+  --ink-secondary:      #6B7280;   /* #6b7280 #57534e #64748b */
+  --ink-muted:          #9CA3AF;   /* #9ca3af（placeholder、停用、次要說明；⚠ 對白底 2.5:1，只可用在非必要文字） */
+  /* 遮罩與陰影 */
+  --overlay-backdrop:   rgba(0,0,0,.45);   /* 對話框背板 */
+  --shadow-popover:     0 8px 24px rgba(0,0,0,.22);   /* rgba(0,0,0,.22)／.18：浮層陰影 */
+  --shadow-hairline:    0 1px 3px rgba(0,0,0,.08);    /* rgba(0,0,0,.04～.12)：卡片細陰影 */
+
+  /* 危險／錯誤（紅） */
+  --tone-danger-fg:     #B91C1C;   /* #b91c1c #dc2626（#dc2626 對 --white 只有 4.39:1，統一收成 #b91c1c） */
+  --tone-danger-bg:     #FEF2F2;   /* #fef2f2 #fff1f2 */
+  --tone-danger-bg-strong: #FEE2E2; /* #fee2e2：hover／強調 */
+  --tone-danger-border: #FECACA;   /* #fecaca #fca5a5 */
+  /* 警示／待處理（琥珀） */
+  --tone-warning-fg:    #92400E;   /* #92400e #b45309 #a16207 #854d0e */
+  --tone-warning-solid: #D97706;   /* #d97706：圖示、進度條 */
+  --tone-warning-bg:    #FFFBEB;   /* #fffbeb #fef9c3 */
+  --tone-warning-bg-strong: #FEF3C7; /* #fef3c7 */
+  --tone-warning-border: #FDE68A;  /* #fde68a #fcd34d #fef08a */
+  /* 成功／已完成（綠） */
+  --tone-success-fg:    #15803D;   /* #15803d #047857 #065f46 */
+  --tone-success-solid: #059669;   /* #059669 #16a34a #22c55e #4ade80：實心鈕、勾選、進度條 */
+  --tone-success-bg:    #F0FDF4;   /* #f0fdf4 #ecfdf5 */
+  --tone-success-bg-strong: #DCFCE7; /* #dcfce7 #d1fae5 */
+  --tone-success-border: #86EFAC;  /* #86efac #bbf7d0 #a7f3d0 #6ee7b7 */
+  /* 開票／發票（紫） */
+  --tone-violet-fg:     #6D28D9;   /* #6d28d9 #7c3aed #7e22ce #9333ea #8b5cf6 */
+  --tone-violet-bg:     #F5F3FF;   /* #f5f3ff #ede9fe #f3e8ff */
+  --tone-violet-border: #C4B5FD;   /* #c4b5fd #ddd6fe */
+  /* 資訊／連結（藍、靛） */
+  --tone-info-fg:       #1D4ED8;   /* #2563eb #1d4ed8 #0369a1 #0891b2 #4338ca */
+  --tone-info-bg:       #EEF2FF;   /* #eef2ff #dbeafe #e0f2fe #eef6ff #e0eeff #e0e7ff；rgba(37,99,235,.08/.10) */
+  --tone-info-border:   #BFDBFE;   /* #bfdbfe #93c5fd #c7d2fe #818cf8 */
+  /* 請款／付款（橙） */
+  --tone-orange-fg:     #C2410C;   /* #c2410c #ea580c */
+  --tone-orange-bg:     #FFF7ED;   /* #fff7ed */
+  --tone-orange-border: #FDBA74;   /* #fdba74 */
+  /* 其他 */
+  --tone-pink-fg:       #DB2777;   /* #db2777（重要動態標記） */
+  --tone-accent-bg:     rgba(200,16,46,.10);   /* 品牌紅淡底；品牌紅本身用既有 --accent／--accent-hover（#a60d26） */
+}
+
+/* 深色組：只給「不經 filter 反轉」的頁面用（見上方 ⚠）。對比依 WCAG AA 文字 4.5:1 挑選。 */
+:root[data-theme="dark"] {
+  --surface:            #1C1C1E;
+  --surface-muted:      #232326;
+  --surface-sunken:     #2A2A2D;
+  --surface-neutral:    #2F3034;
+  --line:               #3A3A3F;
+  --line-strong:        #4B4B52;
+  --ink-strong:         #F2F2F0;
+  --ink-secondary:      #B4B7BD;
+  --ink-muted:          #8E929A;
+  --overlay-backdrop:   rgba(0,0,0,.65);
+  --shadow-popover:     0 8px 24px rgba(0,0,0,.55);
+  --shadow-hairline:    0 1px 3px rgba(0,0,0,.40);
+
+  --tone-danger-fg:     #FCA5A5;
+  --tone-danger-bg:     #3B1618;
+  --tone-danger-bg-strong: #4C1D20;
+  --tone-danger-border: #7F1D1D;
+  --tone-warning-fg:    #FCD34D;
+  --tone-warning-solid: #F59E0B;
+  --tone-warning-bg:    #332508;
+  --tone-warning-bg-strong: #422F0A;
+  --tone-warning-border: #78520F;
+  --tone-success-fg:    #86EFAC;
+  --tone-success-solid: #22C55E;
+  --tone-success-bg:    #0F2A1A;
+  --tone-success-bg-strong: #14361F;
+  --tone-success-border: #166534;
+  --tone-violet-fg:     #C4B5FD;
+  --tone-violet-bg:     #251B3D;
+  --tone-violet-border: #5B3FA0;
+  --tone-info-fg:       #93C5FD;
+  --tone-info-bg:       #172340;
+  --tone-info-border:   #1E3A8A;
+  --tone-orange-fg:     #FDBA74;
+  --tone-orange-bg:     #33200F;
+  --tone-orange-border: #9A3412;
+  --tone-pink-fg:       #F9A8D4;
+  --tone-accent-bg:     rgba(248,113,113,.16);
+}
