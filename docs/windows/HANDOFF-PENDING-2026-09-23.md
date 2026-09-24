@@ -557,3 +557,9 @@ hichan-0a 代裁（待確認）：
 - 未對應清單：**系統設定頁一張表**（superadmin 唯讀端點），隨時可查。
 - CM14 轉換後以 username 比對；未對應的舊字串仍以顯示名稱比對（同名限制沿用）——hichan-0a 同意。
 - CM14／CM15 已推（9a9fa3b、608e2ce、85dc492）。**CM14b**（使用者：「讀得到，但只能改收款」）：持 cashier 模組的非成員可 **讀** 任何案件（GET /api/quotations/{no}、案件清單可見性），案件頁對他除「收款」外全部唯讀（前端鎖＋後端 CM14 已擋）；金額照 money_visible（cashier 本來可見）。⚠ 清單可見性一併放寬時，MP6 地圖案件圖層逐筆可見性要同步（共用 helper）。執行 hichan-8d，排在 CM3 之前。
+
+## 🔁 16:40 狀態與改派
+- AC2 已推（66965f7／818f019／a50c21c）；總覽卡片加口徑標示，「淨現流」權責下改名「損益（權責）」。v115＝AC2，**CM3 用 v116**。
+- CM9 e2e `test_health_overview_follows_the_last_selected_case` master 上 -n 5 偶發紅 ⇒ hichan-a3 以產品競態查修（不可重試／拉長等待），-n 5 連 5 次綠再推。
+- **CU5～CU8 改派 hichan-bf**（AC3 前端推完後）；hichan-a3：CU1～CU4。
+- 已修既有隔離缺陷：test_core TestComputeAchievement（04a3562）。
