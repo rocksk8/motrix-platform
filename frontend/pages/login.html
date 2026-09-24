@@ -270,7 +270,8 @@
         <div class="form-group">
           <label class="form-label">兩步驟驗證碼</label>
           <input class="form-input" :class="{error: error}"
-                 type="text" inputmode="numeric" x-model="totpCode"
+                 type="text" inputmode="numeric" x-model="totpCode" x-ref="totpCode"
+                 @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                  placeholder="請輸入驗證 App 顯示的 6 位數字，或救援碼" autocomplete="one-time-code" autofocus>
           <div class="error-msg" x-show="error">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
@@ -347,13 +348,17 @@
         if (e.isComposing || e.keyCode === 229) { this._imeEnter = true; return }
         e.preventDefault()
         this._enterDown = true
-        this.login()
+        this._submitStep()
       },
       onEnterUp(e) {
         const handled = this._enterDown || this._imeEnter || e.isComposing
         this._enterDown = false
         this._imeEnter = false
-        if (!handled) this.login()
+        if (!handled) this._submitStep()
+      },
+      // 同一套 Enter 處理用在帳密步驟與驗證碼步驟（2026-09-25：驗證碼欄原本只靠表單的隱式送出）
+      _submitStep() {
+        return this.totpStep ? this.verifyTotp() : this.login()
       },
 
       async login() {
@@ -395,7 +400,9 @@
       },
 
       async verifyTotp() {
+        if (this.loading) return                                    // 連按 Enter 只送一次
         this.error = ''
+        if (this.$refs.totpCode) this.totpCode = this.$refs.totpCode.value   // 自動填入不一定觸發 input 事件
         if (!this.totpCode) { this.error = '請輸入驗證碼'; return }
         this.loading = true
         try {
