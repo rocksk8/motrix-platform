@@ -2459,7 +2459,9 @@ function app() {
     calEditReport:     '',
     calEditSubmitting: false,
 
-    _prevSeenDT:    null,
+    // UR1：「有更新」改由伺服器判斷（逐筆、排除本人），`{task id: true}`。
+    //   原本比的是 `motrix_module_prev_seen.daily_task`（上一次進這個模組的時間，localStorage）。
+    unreadTasks:    {},
     dtUnlocked:     false,
     showUnlock:     false,
     unlockPw:       '',
@@ -2530,10 +2532,8 @@ function app() {
       const raw = localStorage.getItem('motrix_session')
       this.session = raw ? JSON.parse(raw) : {}
       if (!this.session?.token) { window.location.href = 'login.html'; return }
-      try {
-        const prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
-        this._prevSeenDT = prev['daily_task'] || null
-      } catch (_e) {}
+      // 上一頁回來／其他分頁標了已讀 ⇒ 重抓（事件由 notif.js 發出）。
+      window.addEventListener('motrix:reads-changed', () => this.loadTaskUnread())
 
       if (this.session.role === 'superadmin') {
         if (sessionStorage.getItem('dt_unlocked') === '1') {
@@ -2619,7 +2619,7 @@ function app() {
         const r = await fetch(`${API}/daily-tasks?${p}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.tasks = (await r.json()).items || []
+        if (r.ok) { this.tasks = (await r.json()).items || []; this.loadTaskUnread() }
       } finally { this.loading = false }
 
       if (this.selected) {
@@ -2709,7 +2709,28 @@ function app() {
 
     // ── Selection ─────────────────────────────────────────────────────────────
 
+    async loadTaskUnread() {
+      const role = this.session?.role
+      if (!window.MotrixReads || (role !== 'superadmin' && role !== 'admin')) { this.unreadTasks = {}; return }
+      const keys = [...new Set(this.tasks.map(t => String(t.id)))]
+      const got = await window.MotrixReads.unread('daily_task', keys)
+      const m = {}
+      got.forEach(k => { m[k] = true })
+      this.unreadTasks = m
+    },
+
+    /** 開一筆：當下先清標記，再送出（不等回應）。 */
+    _markTaskRead(t) {
+      const k = t && String(t.id)
+      if (!k || !this.unreadTasks[k]) return
+      const m = { ...this.unreadTasks }
+      delete m[k]
+      this.unreadTasks = m
+      if (window.MotrixReads) window.MotrixReads.mark('daily_task', k)
+    },
+
     selectTask(t) {
+      this._markTaskRead(t)
       this._setSelected(t)
       this.confirmDelete = false
       this.myReport = ''
@@ -2717,6 +2738,7 @@ function app() {
     },
 
     selectWeeklyTask(t) {
+      this._markTaskRead(t)
       this._setSelected(t)
       this.confirmDelete = false
       this.myReport = ''
@@ -2980,11 +3002,7 @@ function app() {
     },
 
     isNewTask(t) {
-      if (!this._prevSeenDT) return false
-      const role = this.session?.role
-      if (role !== 'superadmin' && role !== 'admin') return false
-      const ut = t.updated_at || t.updatedAt || ''
-      return ut > this._prevSeenDT
+      return !!(t && this.unreadTasks[String(t.id)])
     },
 
     pc(p) {

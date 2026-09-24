@@ -1104,15 +1104,9 @@ function app() {
         const ru = await fetch('/api/users/selectable', { headers: { Authorization: 'Bearer ' + s.token } })
         if (ru.ok) this.selectableUsers = await ru.json()
       } catch {}
-      try {
-        const stored = localStorage.getItem('motrix_casemgmt_read_at')
-        if (stored) {
-          this.readAt = stored
-        } else {
-          this.readAt = new Date().toISOString()
-          localStorage.setItem('motrix_casemgmt_read_at', this.readAt)
-        }
-      } catch {}
+      // UR1：已讀改存伺服器（逐筆、排除本人）。上一頁回來／其他分頁標了已讀 ⇒ 重抓。
+      //   舊的 `motrix_casemgmt_read_at` 由 notif.js 一次性遷移成伺服器端的清單基準。
+      window.addEventListener('motrix:reads-changed', () => this.loadCaseActivity())
       this.caseSortPref = await loadListPref(s.token, 'case_list')
       await this.loadCases()
       this.loadVendors()
@@ -1184,25 +1178,29 @@ function app() {
       ]
     },
 
+    // UR1：`caseActivity` 改存「伺服器判斷的未讀案件」`{quote_no: true}`
+    //   （同三個來源：案件動態／工作日誌／每日工作完成，但**依作者排除本人**、逐筆已讀）。
+    //   原本是每筆的最後動態時間 vs 整個清單一個 localStorage 時間戳。
     async loadCaseActivity() {
       const quoteNos = this.cases.map(c => c.quote_no).filter(Boolean)
-      if (!quoteNos.length) { this.caseActivity = {}; return }
-      try {
-        const r = await fetch('/api/quotations/case-activity', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ quote_nos: quoteNos }),
-        })
-        if (r.ok) this.caseActivity = await r.json()
-      } catch {}
+      if (!quoteNos.length || !window.MotrixReads) { this.caseActivity = {}; return }
+      const got = await window.MotrixReads.unread('case', quoteNos)
+      const m = {}
+      got.forEach(k => { m[k] = true })
+      this.caseActivity = m
     },
 
     isUnread(c) {
-      const ts = this.caseActivity[c.quote_no]
-      if (!this.readAt || !ts) return false
-      const u = new Date(ts.replace(' ', 'T'))
-      if (isNaN(u)) return false
-      return u.getTime() > new Date(this.readAt).getTime()
+      return !!(c && this.caseActivity[c.quote_no])
+    },
+
+    /** 真的切換到這一筆之後才呼叫：當下先清標記，再送出（不等回應）。 */
+    _markCaseRead(quoteNo) {
+      if (!quoteNo || !this.caseActivity[quoteNo]) return
+      const m = { ...this.caseActivity }
+      delete m[quoteNo]
+      this.caseActivity = m
+      if (window.MotrixReads) window.MotrixReads.mark('case', quoteNo)
     },
 
     unreadCount() {
@@ -1210,8 +1208,9 @@ function app() {
     },
 
     markAllRead() {
-      this.readAt = new Date().toISOString()
-      try { localStorage.setItem('motrix_casemgmt_read_at', this.readAt) } catch {}
+      const keys = Object.keys(this.caseActivity)
+      this.caseActivity = {}
+      if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('case', k))
       this.unreadOnly = false
       this.filterCases()
     },
@@ -1341,6 +1340,9 @@ function app() {
         if (!r.ok) return
         const data = await r.json()
         this.selected = data
+        // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
+        //      那一筆的未讀標記必須還在。
+        this._markCaseRead(quoteNo)
         // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
         if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：

@@ -349,6 +349,8 @@ def mark_all_notifications_read(authorization: str = Header(None)):
 
 _MODULE_ACTION_PREFIXES: dict = {
     "dev_crm":    ("dev_case.", "dev_log."),
+    # 側欄 `_MOD_BADGES` 早就有它，這裡少一列 ⇒ 元素在、數字從來不來（UR1）。
+    "tender_radar": ("tender_watch.", "tender_radar."),
     "quotation":  ("quotation.",),
     "case_manage": ("deal_tag.",),
     "customer":   ("customer.",),

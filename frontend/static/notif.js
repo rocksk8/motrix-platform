@@ -26,6 +26,87 @@
   }
 })()
 
+// ── 逐筆已讀（UR1）：存伺服器，時間由伺服器蓋 ─────────────────────────────
+// 使用者：「點選後紅色未讀沒有即時消失」。規則：
+//   ① 點下去**當下**先清 UI，再送請求（keepalive：換頁中也送得出去），不等回應
+//   ② 標記之後寫 `motrix_reads_bump` ⇒ 其他分頁的 `storage` 事件會重抓
+//   ③ 上一頁回來（pageshow persisted）也重抓
+//   各頁監聽 `motrix:reads-changed` 事件重抓自己的清單標記。
+window.MotrixReads = (function () {
+  var BUMP_KEY = 'motrix_reads_bump'
+  var MIGRATED_KEY = 'motrix_reads_migrated_v1'
+  function _tok() {
+    try { return (JSON.parse(localStorage.getItem('motrix_session') || '{}') || {}).token || '' } catch (e) { return '' }
+  }
+  function _bump() {
+    try { localStorage.setItem(BUMP_KEY, String(Date.now()) + ':' + Math.random()) } catch (e) {}
+  }
+  function _post(url, body) {
+    var t = _tok()
+    if (!t) return Promise.resolve(null)
+    return fetch(url, {
+      method: 'POST', keepalive: true,
+      headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).catch(function () { return null })
+  }
+
+  // 舊 localStorage「看過」紀錄：第一次載入時一次性上傳，之後停用。
+  // ⚠️ 必須在第一次查未讀之前完成：伺服器的基準只會往後推，
+  //    先建了「現在」的基準，較舊的舊紀錄就蓋不過去了。
+  var _ready = (function migrate() {
+    try {
+      if (localStorage.getItem(MIGRATED_KEY) === '1' || !_tok()) return Promise.resolve()
+      var items = []
+      var seen = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}') || {}
+      Object.keys(seen).forEach(function (m) { items.push({ kind: 'module', key: m, read_at: seen[m] }) })
+      var prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}') || {}
+      if (prev.daily_task) items.push({ kind: 'baseline', key: 'daily_task', read_at: prev.daily_task })
+      var dc = localStorage.getItem('motrix_devcrm_read_at')
+      if (dc) items.push({ kind: 'baseline', key: 'dev_case', read_at: dc })
+      var cm = localStorage.getItem('motrix_casemgmt_read_at')
+      if (cm) items.push({ kind: 'baseline', key: 'case', read_at: cm })
+      if (!items.length) { localStorage.setItem(MIGRATED_KEY, '1'); return Promise.resolve() }
+      return _post('/api/reads/batch', { items: items }).then(function (r) {
+        if (!r || !r.ok) return
+        localStorage.setItem(MIGRATED_KEY, '1')
+        var old = ['motrix_module_seen', 'motrix_module_prev_seen', 'motrix_devcrm_read_at', 'motrix_casemgmt_read_at']
+        old.forEach(function (k) { try { localStorage.removeItem(k) } catch (e) {} })
+      })
+    } catch (e) { return Promise.resolve() }
+  })()
+
+  function _changed() {
+    try { window.dispatchEvent(new CustomEvent('motrix:reads-changed')) } catch (e) {}
+  }
+  window.addEventListener('storage', function (e) { if (e.key === BUMP_KEY) _changed() })
+  window.addEventListener('pageshow', function (e) { if (e.persisted) _changed() })
+
+  return {
+    ready: _ready,
+    /** 標記一筆已讀：呼叫端要**先**清自己的 UI，這裡只負責送出與通知其他分頁。 */
+    mark: function (kind, key) {
+      // ⚠️ 等伺服器收到**之後**才通知其他分頁：先通知的話，對方重抓時伺服器還沒記下，
+      //    拿回來的仍是「未讀」（e2e 抓到的）。本分頁的畫面由呼叫端當下就清掉。
+      return _post('/api/reads', { kind: kind, key: String(key) }).then(function (r) { _bump(); return r })
+    },
+    /** 回 Set：伺服器判斷的未讀鍵（已排除本人、已套可見性）。 */
+    unread: function (kind, keys) {
+      return _ready.then(function () {
+        var t = _tok()
+        if (!t || !keys || !keys.length) return new Set()
+        return fetch('/api/reads/unread', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: kind, keys: keys.map(String) }),
+        }).then(function (r) { return r.ok ? r.json() : { unread: [] } })
+          .then(function (d) { return new Set(d.unread || []) })
+          .catch(function () { return new Set() })
+      })
+    },
+  }
+})()
+
 function notifStore() {
   const isPages = window.location.pathname.includes('/pages/')
   const auditHref = isPages ? 'audit-log.html' : 'pages/audit-log.html'
@@ -51,7 +132,15 @@ function notifStore() {
       this._sess = JSON.parse(localStorage.getItem('motrix_session') || '{}')
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
-      await Promise.all([this._fetchAuditLog(), this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts(), this._fetchTotpReminder()])
+      window.addEventListener('motrix:reads-changed', () => this.refresh())
+      await Promise.all([this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts(), this._fetchTotpReminder()])
+    },
+
+    /** 上一頁回來／其他分頁標了已讀 ⇒ 鈴鐺與選單數字重抓。 */
+    refresh() {
+      if (!this._sess?.token) return
+      this._fetchNotifications()
+      this._fetchModuleCounts()
     },
 
     async _fetchTotpReminder() {
@@ -78,17 +167,6 @@ function notifStore() {
       } catch (e) {}
     },
 
-    async _fetchAuditLog() {
-      try {
-        const r = await fetch('/api/audit-log?limit=30', {
-          headers: { Authorization: 'Bearer ' + this._sess.token }
-        })
-        if (!r.ok) return
-        const d = await r.json()
-        this.items = d.items || []
-      } catch(e) {}
-    },
-
     async _fetchNotifications() {
       try {
         const r = await fetch('/api/notifications/mine', {
@@ -97,8 +175,10 @@ function notifStore() {
         if (!r.ok) return
         const d = await r.json()
         const items = d.items || []
-        // 鈴鐺 badge 只計非簽核類通知（簽核類由 sidebar badge 獨立顯示）
-        this.unread = items.filter(i => !i.is_read && i.type !== 'approval_request').length
+        // 鈴鐺 badge 只計非簽核類通知（簽核類由 sidebar badge 獨立顯示）⇒ 下拉也只列這些，
+        // 否則數字與清單對不起來。
+        this.items = items.filter(i => i.type !== 'approval_request')
+        this.unread = this.items.filter(i => !i.is_read).length
 
         // Banner 每個 browser session（tab）最多顯示一次，避免每換頁都彈出
         const pending = items.filter(i => !i.is_read && i.type === 'approval_request')
@@ -115,18 +195,18 @@ function notifStore() {
       try {
         const _role = this._sess?.role || ''
         if (_role !== 'superadmin' && _role !== 'admin') return
-        var seen = {}
-        try { seen = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}') } catch (_e) {}
-        if (!Object.keys(seen).length) return
-        var r = await fetch('/api/audit-log/module-counts', {
-          method: 'POST',
-          headers: { Authorization: 'Bearer ' + this._sess.token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ modules: seen })
+        // UR1：「看過」時間存伺服器（`/api/reads`），不再讀 localStorage
+        //   ⇒ 換電腦、上一頁回來、其他分頁都看到同一個結果。
+        if (window.MotrixReads) await window.MotrixReads.ready
+        var r = await fetch('/api/reads/module-counts', {
+          headers: { Authorization: 'Bearer ' + this._sess.token }
         })
         if (!r.ok) return
         var d = await r.json()
+        // 🔴 與 sidebar.js `_MOD_BADGES` 同一組 key（test_module_badge_maps_agree 守）。
         var modBadge = {
           dev_crm:    ['sb-mod-dev-crm'],
+          tender_radar: ['sb-mod-tender-radar'],
           quotation:  ['sb-mod-quotation'],
           case_manage:['sb-mod-case'],
           customer:   ['sb-mod-customer'],
@@ -139,7 +219,8 @@ function notifStore() {
         for (var k in d) {
           var bids = modBadge[k]
           if (!bids) continue
-          var cnt = d[k] || 0
+          // 目前這一頁所屬的模組：已經在 sidebar.js 標成看過（請求可能還在路上）⇒ 不要再亮起來。
+          var cnt = (k === window.motrixCurrentModule) ? 0 : (d[k] || 0)
           for (var bi = 0; bi < bids.length; bi++) {
             var el = document.getElementById(bids[bi])
             if (!el) continue
@@ -208,19 +289,35 @@ function notifStore() {
     },
 
     toggle() {
+      // UR1：打開下拉**不再**全部標為已讀——點哪一則標哪一則（`markOne`）。
       this.open = !this.open
-      if (this.open) this._markAllRead()
     },
 
-    async _markAllRead() {
+    /** 點一則：當下先改畫面，再送出（keepalive、不等回應）。 */
+    markOne(item) {
+      if (!item || !this._sess?.token) return
+      if (!item.is_read) {
+        item.is_read = 1
+        this.unread = Math.max(0, this.unread - 1)
+        fetch('/api/notifications/' + encodeURIComponent(item.id) + '/read', {
+          method: 'PATCH', keepalive: true,
+          headers: { Authorization: 'Bearer ' + this._sess.token }
+        }).then(() => {
+          try { localStorage.setItem('motrix_reads_bump', String(Date.now())) } catch (e) {}
+        }).catch(() => {})
+      }
+    },
+
+    markAllNotifications() {
       if (!this._sess?.token) return
-      const latest = this.items.length ? this.items[0].at : ''
-      if (latest) localStorage.setItem('motrix_notif_seen_at', latest)
-      await fetch('/api/notifications/read-all', {
-        method: 'PATCH',
-        headers: { Authorization: 'Bearer ' + this._sess.token }
-      }).catch(() => {})
+      this.items.forEach(i => { i.is_read = 1 })
       this.unread = 0
+      fetch('/api/notifications/read-all', {
+        method: 'PATCH', keepalive: true,
+        headers: { Authorization: 'Bearer ' + this._sess.token }
+      }).then(() => {
+        try { localStorage.setItem('motrix_reads_bump', String(Date.now())) } catch (e) {}
+      }).catch(() => {})
       // 清除 session flag，讓下一批新簽核通知能再次顯示
       sessionStorage.removeItem('motrix_approval_banner_shown')
     },

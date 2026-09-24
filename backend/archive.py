@@ -1645,6 +1645,7 @@ def _daily_backup_tables() -> dict:
         # 📌 它很小（一個週期一個 SKU 一列），進 JSON 幾乎沒有成本。
         "地理查詢用量":     "SELECT * FROM geocode_usage ORDER BY id",
         "通知":             "SELECT * FROM notifications ORDER BY id",
+        "已讀紀錄":         "SELECT * FROM item_reads ORDER BY username, kind, item_key",
         "模組版本":         "SELECT * FROM module_versions ORDER BY id",
         # ── 會計項目（v93，2026-09-23 補）────────────────────────────
         #

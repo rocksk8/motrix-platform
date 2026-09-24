@@ -125,7 +125,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
 # v108: BN3 bonus_item_people（manual 人員來源指定的帳號清單）
 # v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
-CURRENT_VERSION = 111
+# v112: 逐筆已讀 item_reads（未讀紅點存伺服器；先推先拿，撞號順延）
+CURRENT_VERSION = 112
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -352,7 +353,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "env_guide_environments", "env_guide_links",
     "env_guide_recommendations", "gateway_categories", "gateway_fit",
     "gateway_products", "gateway_scenarios", "geocode_cache",
-    "geocode_usage", "invoice_vouchers", "login_rate_limit",
+    "geocode_usage", "invoice_vouchers", "item_reads", "login_rate_limit",
     "module_versions", "monitor_categories", "monitor_fit",
     "monitor_products", "monitor_scenarios", "netarch_families",
     "netarch_generations", "netarch_products", "network_plans",
@@ -4325,6 +4326,32 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m112_item_reads(conn):
+    """v112（2026-09-24）：逐筆已讀，存伺服器。
+
+    使用者：「點選後紅色未讀沒有即時消失」；表單「逐筆已讀，存在伺服器」。
+    在此之前「看過」存在各瀏覽器的 localStorage、以模組或清單為單位、用
+    **用戶端時鐘**與伺服器字串比較 ⇒ 換一台電腦就全亮、上一頁回來不更新。
+
+    ```
+    kind='module'    item_key＝模組 key      選單數字的「看過」時間
+    kind='baseline'  item_key＝清單的 kind   沒有逐筆紀錄時的比較基準
+    其他 kind        item_key＝該筆的鍵（TEXT：單號、id 都裝得下）
+    ```
+    `read_at` 一律伺服器時間（`routers/item_reads.py`）。
+
+    ⚠️ 只有一句 DDL 與索引，不呼叫任何會演進的 helper。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS item_reads ("
+        "  username  TEXT NOT NULL,"
+        "  kind      TEXT NOT NULL,"
+        "  item_key  TEXT NOT NULL,"
+        "  read_at   TEXT NOT NULL,"
+        "  PRIMARY KEY (username, kind, item_key)"
+        ")")
+
+
 def _m111_voucher_line_source_key(conn):
     """v111（2026-09-24 `JV36`）：分錄記住「這一行的摘要來自哪一筆」——文字鍵。
 
@@ -5516,6 +5543,7 @@ _MIGRATIONS = [
     _m109_edit_log_no_delete,                       # v109
     _m110_voucher_category_manual,                  # v110
     _m111_voucher_line_source_key,                  # v111
+    _m112_item_reads,                               # v112
 ]
 
 

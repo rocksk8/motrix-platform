@@ -1302,7 +1302,10 @@ function devCrmPage() {
     session: {},
     token: '',
     isAdmin: false,
-    readAt: null,
+    // UR1：未讀改由伺服器判斷（逐筆、排除本人的修改），`{案件 id: true}`。
+    //   原本是整個清單一個 `motrix_devcrm_read_at`（localStorage）⇒ 開一筆不會清那一筆、
+    //   自己改的也亮。舊值由 notif.js 一次性遷移成伺服器端的清單基準。
+    unreadKeys: {},
 
     cases: [],
     casesLoading: false,
@@ -1328,7 +1331,7 @@ function devCrmPage() {
     //   排序     → user_list_prefs（GET/PUT /api/list-prefs/dev-crm，跨裝置跟著帳號）
     //   人員篩選 → localStorage（那張表的 schema 只有 sortMode/sortDir/customOrder，
     //              沒有放篩選條件的地方；為了記一個下拉選單去動 DB schema 不划算。
-    //              這一頁本來就已經用 localStorage 記 motrix_devcrm_read_at。）
+    //              已讀狀態 2026-09-24 起改存伺服器（UR1），這裡只剩篩選條件。）
     filterPerson: '',
     sortPref: { sortMode: 'updated', sortDir: 'desc', customOrder: [] },
 
@@ -1490,15 +1493,32 @@ function devCrmPage() {
     },
 
     isUnread(c) {
-      if (!this.readAt || !c.updatedAt) return false
-      const u = new Date(c.updatedAt.replace(' ', 'T'))
-      if (isNaN(u)) return false
-      return u.getTime() > new Date(this.readAt).getTime()
+      return !!(c && this.unreadKeys[String(c.id)])
+    },
+
+    async loadUnread() {
+      if (!window.MotrixReads) return
+      const keys = this.cases.map(c => String(c.id))
+      const got = await window.MotrixReads.unread('dev_case', keys)
+      const m = {}
+      got.forEach(k => { m[k] = true })
+      this.unreadKeys = m
+    },
+
+    /** 開一筆：當下先清掉這一筆的標記，再送出（不等回應）。 */
+    _markCaseRead(c) {
+      const k = c && String(c.id)
+      if (!k || !this.unreadKeys[k]) return
+      const m = { ...this.unreadKeys }
+      delete m[k]
+      this.unreadKeys = m
+      if (window.MotrixReads) window.MotrixReads.mark('dev_case', k)
     },
 
     markAllRead() {
-      this.readAt = new Date().toISOString()
-      try { localStorage.setItem('motrix_devcrm_read_at', this.readAt) } catch (_e) {}
+      const keys = Object.keys(this.unreadKeys)
+      this.unreadKeys = {}
+      if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('dev_case', k))
       this.unreadOnly = false
       this._toast('已將目前所有案件標記為已讀')
     },
@@ -1542,15 +1562,8 @@ function devCrmPage() {
       if (!this.isAdmin && !mods.includes('dev_crm')) {
         location.href = '../index.html'; return
       }
-      try {
-        const stored = localStorage.getItem('motrix_devcrm_read_at')
-        if (stored) {
-          this.readAt = stored
-        } else {
-          this.readAt = new Date().toISOString()
-          localStorage.setItem('motrix_devcrm_read_at', this.readAt)
-        }
-      } catch (_e) {}
+      // UR1：上一頁回來／其他分頁標了已讀 ⇒ 重抓未讀（事件由 notif.js 發出）。
+      window.addEventListener('motrix:reads-changed', () => this.loadUnread())
       await this.loadPrefs()
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()
@@ -1610,7 +1623,7 @@ function devCrmPage() {
         const r = await fetch('/api/dev-cases?' + p, { headers: this._h() })
         if (r.ok) {
           const data = await r.json()
-          if (seq === this._loadSeq) this.cases = data
+          if (seq === this._loadSeq) { this.cases = data; this.loadUnread() }
         }
       } finally {
         if (seq === this._loadSeq) this.casesLoading = false
@@ -1637,6 +1650,7 @@ function devCrmPage() {
     },
 
     async selectCase(c) {
+      this._markCaseRead(c)
       this.selectedCase = c
       this.showLogForm = false
       this.editingLogId = null

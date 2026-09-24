@@ -387,21 +387,27 @@ if (typeof module !== 'undefined' && module.exports) {
       + '</button>'
       + '<div x-show="open" @click.outside="open=false"'
       + ' style="display:none;position:absolute;top:calc(100% + 6px);right:0;width:310px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:999;overflow:hidden">'
-      + '<div style="padding:11px 16px;border-bottom:1px solid var(--border-light);font-size:13px;font-weight:600;color:var(--text-main)">近期操作</div>'
+      // UR1：下拉列的是**通知本身**（原本是近期操作紀錄，而紅色數字數的是通知 ⇒ 兩者對不起來）。
+      //      點一則 ⇒ 當下只把那一則標成已讀（`markOne`），打開下拉不再全部清掉。
+      + '<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border-light)">'
+      + '<span style="font-size:13px;font-weight:600;color:var(--text-main)">通知</span>'
+      + '<button type="button" x-show="unread>0" @click="markAllNotifications()" data-notif-all'
+      + ' style="background:none;border:none;color:var(--accent);font-size:11px;cursor:pointer;padding:0">全部標為已讀</button>'
+      + '</div>'
       + '<div style="max-height:320px;overflow-y:auto">'
       + '<template x-for="item in items" :key="item.id">'
-      + '<div style="padding:10px 16px;border-bottom:1px solid var(--border-light)">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center">'
-      + '<span x-text="actionLabel(item.action)" :style="`color:${actionColor(item.action)};font-size:12px;font-weight:600`"></span>'
-      + '<span x-text="formatTime(item.at)" style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif"></span>'
+      + '<div @click="markOne(item)" :data-notif-id="item.id" :data-unread="item.is_read ? 0 : 1"'
+      + ' :style="`padding:10px 16px;border-bottom:1px solid var(--border-light);cursor:pointer;${item.is_read ? \'\' : \'background:#FFF7ED\'}`">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'
+      + '<span x-text="item.ref_label||\'通知\'" :style="`font-size:12px;font-weight:${item.is_read ? 400 : 700};color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap`"></span>'
+      + '<span x-text="formatTime(item.created_at)" style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;flex-shrink:0"></span>'
       + '</div>'
-      + '<div x-text="item.target_label||item.target_id" style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
-      + '<div x-text="item.display_name||item.username" style="font-size:11px;color:var(--text-dim);margin-top:1px"></div>'
+      + '<div x-text="item.message" style="font-size:11px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>'
       + '</div>'
       + '</template>'
-      + '<div x-show="items.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">暫無紀錄</div>'
+      + '<div x-show="items.length===0" style="padding:20px;text-align:center;font-size:12px;color:var(--text-dim)">目前沒有通知</div>'
       + '</div>'
-      + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看完整紀錄 →</a>'
+      + '<a :href="auditHref" style="display:block;padding:9px 16px;text-align:center;font-size:12px;color:var(--accent);border-top:1px solid var(--border-light);text-decoration:none;font-weight:500">查看操作紀錄 →</a>'
       + '</div>'
       + '</div>'
     } // end if (ad)
@@ -1058,16 +1064,6 @@ if (typeof module !== 'undefined' && module.exports) {
     daily_task:  ['sb-mod-daily-task'],
   }
 
-  // 後端 audit_log.at 存的是台灣本地時間（datetime.now().isoformat()，無時區資訊），
-  // module-counts 端點用 SQL 字串 "at > ?" 直接比較；若這裡送 UTC 字串（toISOString()
-  // 帶 'Z'），本地時間字串在字典序上幾乎恆大於 UTC 字串（差 8 小時），角標會永遠判定
-  // 「有更新」。改產生格式一致、無時區尾碼的本地時間字串。
-  function _localISOString(d) {
-    d = d || new Date()
-    var tz = d.getTimezoneOffset() * 60000
-    return new Date(d.getTime() - tz).toISOString().slice(0, -1)
-  }
-
   function _clearModBadge(modKey) {
     var bids = _MOD_BADGES[modKey]
     if (!bids) return
@@ -1077,40 +1073,36 @@ if (typeof module !== 'undefined' && module.exports) {
     }
   }
 
+  // UR1：點選單項目的**當下**就清掉那個模組的紅點並送出「看過」（keepalive），
+  //      不等下一頁載入、不等伺服器回應。「看過」存伺服器，時間由伺服器蓋。
+  function _markModuleSeen(modKey) {
+    if (!modKey) return
+    _clearModBadge(modKey)
+    if (window.MotrixReads) window.MotrixReads.mark('module', modKey)
+  }
+
+  function bindBadgeClear() {
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null
+      if (!a) return
+      var f = (a.getAttribute('href') || '').split('#')[0].split('?')[0].split('/').pop()
+      var mod = _FILE_MODULE[f]
+      if (mod) _markModuleSeen(mod)
+    }, true)
+  }
+
   // ── Entry ──────────────────────────────────────────────────────────────────
   function build() {
     var _curMod = _FILE_MODULE[file]
 
-    // For admin+ users: ensure every known module has an entry in motrix_module_seen
-    // so _fetchModuleCounts() queries badge counts for ALL modules, not just visited ones.
-    // Unvisited modules are seeded with a 7-day lookback timestamp.
-    if (s.token && (role === 'superadmin' || role === 'admin')) {
-      try {
-        var _ms = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}')
-        var _seed = _localISOString(new Date(Date.now() - 7 * 86400 * 1000))
-        var _allModKeys = Object.keys(_MOD_BADGES)
-        var _seeded = false
-        for (var _mi = 0; _mi < _allModKeys.length; _mi++) {
-          if (!_ms[_allModKeys[_mi]]) {
-            _ms[_allModKeys[_mi]] = _seed
-            _seeded = true
-          }
-        }
-        if (_seeded) localStorage.setItem('motrix_module_seen', JSON.stringify(_ms))
-      } catch (_e) {}
-    }
-
-    // Mark current page's module as "seen" so its badge clears on next fetch
-    if (_curMod && s.token) {
-      try {
-        var _ms2 = JSON.parse(localStorage.getItem('motrix_module_seen') || '{}')
-        // Save the PREVIOUS seen time so module pages can highlight items updated since last visit
-        var _prev = JSON.parse(localStorage.getItem('motrix_module_prev_seen') || '{}')
-        if (_ms2[_curMod]) _prev[_curMod] = _ms2[_curMod]
-        localStorage.setItem('motrix_module_prev_seen', JSON.stringify(_prev))
-        _ms2[_curMod] = _localISOString()
-        localStorage.setItem('motrix_module_seen', JSON.stringify(_ms2))
-      } catch (_e) {}
+    // UR1：「看過」改存伺服器（`/api/reads`，kind='module'）。
+    //   原本寫 localStorage、用用戶端時鐘，且「沒看過的模組往回看 7 天」的種子也在這裡；
+    //   兩者都移到後端（`routers/item_reads.py::module_counts`）。舊值由 notif.js 一次性遷移。
+    // `motrixCurrentModule`：notif.js 數字回來時不要把目前這一頁的紅點又點亮
+    //   （這一頁的「看過」請求可能還在路上）。
+    window.motrixCurrentModule = _curMod || ''
+    if (_curMod && s.token && window.MotrixReads) {
+      window.MotrixReads.ready.then(function () { window.MotrixReads.mark('module', _curMod) })
     }
 
     buildTopbar()
@@ -1118,6 +1110,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Defensively clear this module's badge immediately after DOM creation,
     // so it's hidden even if _fetchModuleCounts() hasn't resolved yet.
     if (_curMod) _clearModBadge(_curMod)
+    bindBadgeClear()
     bindMobileToggle()
     bindNavGuard()
   }
