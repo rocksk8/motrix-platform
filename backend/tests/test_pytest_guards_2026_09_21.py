@@ -496,3 +496,21 @@ def test_with_two_slots_a_third_heavy_run_is_held_back(tmp_path):
     proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock, slots=2)
     assert proc.returncode == 4, f"兩格都滿了卻放行：{proc.returncode}\n{proc.stdout[-800:]}"
     assert lock.exists() and slot2.exists(), "被擋的人動了持有者的鎖"
+
+
+def test_queue_message_does_not_crash_when_stdout_is_not_utf8(tmp_path):
+    """🔴 輸出導到檔案、stdout 編碼是 cp932 時，排隊訊息不可以讓整輪 INTERNALERROR。
+
+    ☠️ 2026-09-24 實際發生：`pytest ... > run.txt` 在排隊時印中文 ⇒ UnicodeEncodeError
+    ⇒ 回 3（INTERNALERROR），看起來像鎖壞了。正確是照常排隊，等到上限回 4。
+    """
+    lock = tmp_path / "lock"
+    _write_lock(lock, os.getpid())
+    env = utf8_env(MOTRIX_PYTEST_LOCK=str(lock), MOTRIX_PYTEST_LOCK_WAIT=1,
+                   MOTRIX_PYTEST_LOCK_POLL=0.2, MOTRIX_PYTEST_SLOTS=1,
+                   PYTHONUTF8="0", PYTHONIOENCODING="cp932")
+    proc = run_python(["-m", "pytest", TARGET, "--collect-only", "-q",
+                       f"--basetemp={tmp_path / 'x-full'}"], cwd=BACKEND, env=env, timeout=180)
+    out = proc.stdout + proc.stderr
+    assert "INTERNALERROR" not in out, out[-800:]
+    assert proc.returncode == 4, f"應排隊到上限後擋下（4），實際 {proc.returncode}\n{out[-800:]}"

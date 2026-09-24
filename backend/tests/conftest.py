@@ -846,7 +846,7 @@ def pytest_configure(config):
             except FileExistsError:
                 fd = None
             except OSError as exc:        # 寫不進去不該擋住測試
-                print("\n[測試鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
+                _lock_say("\n[測試鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
                 return
             if fd is not None:
                 with os.fdopen(fd, "w", encoding="utf-8") as fh:
@@ -861,14 +861,14 @@ def pytest_configure(config):
                 age = time.time() - float(info.get("started_at", 0))
                 pid = int(info.get("pid", -1))
             except (AttributeError, TypeError, ValueError):
-                print("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
+                _lock_say("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
                 _unlink_quietly(path)
                 freed = True
                 continue
             alive = _pid_alive(pid)
             if not alive or age > LOCK_MAX_AGE_SECONDS:
                 # 🔑 過期／持有者已死就接手。**一個解不掉的鎖比沒有鎖更糟**
-                print("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
+                _lock_say("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
                       ("已死" if not alive else "過期", info.get("pid"), age // 60))
                 _unlink_quietly(path)
                 freed = True
@@ -898,10 +898,24 @@ def pytest_configure(config):
                    LOCK_MAX_AGE_SECONDS // 60, held.get("pid"))
             )
         if now - announced >= 60:
-            print("\n[測試鎖] 另一套測試正在跑（pid=%s、%s、已跑 %d 分鐘）—— 排隊中，最多再等 %d 分鐘"
+            _lock_say("\n[測試鎖] 另一套測試正在跑（pid=%s、%s、已跑 %d 分鐘）—— 排隊中，最多再等 %d 分鐘"
                   % (held.get("pid"), held.get("basetemp"), age // 60, (deadline - now) // 60), flush=True)
             announced = now
         time.sleep(min(poll, max(0.05, deadline - now)))
+
+
+def _lock_say(msg, **kw):
+    """排隊／接手訊息。**印不出來不可以讓整輪測試崩掉**。
+
+    ☠️ 2026-09-24：輸出導到檔案時 Windows 的 stdout 編碼是系統 locale（cp932／cp950），
+    中文訊息一印就 `UnicodeEncodeError` ⇒ pytest INTERNALERROR ⇒ 排隊中的那一輪直接死掉，
+    而錯誤指向鎖、看起來像鎖壞了。⇒ 編不出來的字元換成替代字元後照印。
+    """
+    try:
+        print(msg, **kw)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(msg.encode(enc, "replace").decode(enc, "replace"), **kw)
 
 
 def _unlink_quietly(path):
