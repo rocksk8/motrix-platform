@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -286,6 +287,22 @@ def ping():
     return {"ok": True, "time": datetime.now().isoformat()}
 
 
+_MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+_VERSION_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})([a-z]*)$")
+
+
+def _version_sort_key(version: str) -> tuple:
+    """`YYYY-MM-DD` ＋ 字母序號的排序鍵（T10）。
+
+    ⚠️ 不可以直接比字串：序號過了 `z` 是 `aa`，而字串比較下 `aa` < `z`。
+    ⇒ (日期, 序號長度, 序號)。認不得的格式排最前面（不會被當成最新）。
+    """
+    m = _VERSION_RE.match(version or "")
+    if not m:
+        return ("", 0, "")
+    return (m.group(1), len(m.group(2)), m.group(2))
+
+
 @router.get("/api/system/version")
 def system_version():
     """Latest overall system version (newest entry in version_manifest.json).
@@ -299,11 +316,11 @@ def system_version():
     how `GET /api/system/deployed-version` broke (commit 1c8f2e8); `utf-8-sig`
     reads both forms, so there is no reason to leave the second copy of the same
     trap in place."""
-    manifest_path = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
     try:
-        with open(manifest_path, encoding="utf-8-sig") as f:
+        with open(_MANIFEST_PATH, encoding="utf-8-sig") as f:
             entries = json.load(f)
-        latest = entries[0] if entries else {}
+        # T10：取**最新**的一筆，不是第一筆——manifest 沒有排序保證（正式機曾回 22c 而最新是 22g）。
+        latest = max(entries, key=lambda e: _version_sort_key(e.get("version", ""))) if entries else {}
     except Exception:
         latest = {}
     return {"version": latest.get("version", ""), "date": latest.get("date", "")}
