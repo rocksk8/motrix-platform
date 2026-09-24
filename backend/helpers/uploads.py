@@ -38,6 +38,40 @@ def _effective_subfolder(subfolder: str) -> str:
     return subfolder
 
 
+_BAD_PATH_CHARS = ('\\', ':', '\x00')
+
+
+def _safe_save_dir(subfolder: str, doc_no: str) -> str:
+    """回 `UPLOADS_ROOT/subfolder/doc_no` 的絕對路徑；會跑出根目錄就 400（B8）。
+
+    使用者裁示（2026-09-24）：穿越檢查**補在共用函式**。原本直接 `os.path.join`
+    ⇒ `doc_no='../../x'` 就寫到根目錄外，能不能被利用取決於呼叫端有沒有先查單據存在，
+    而那不是這支函式能保證的。
+
+    ```
+    doc_no     單一段：不可含 / \\ : NUL，不可是 . 或 ..
+    subfolder  可以有多段（`_pending_case_changes/{id}`、demo 前綴），
+               每一段同上規則，且不可以是絕對路徑
+    最後       realpath 必須在 realpath(UPLOADS_ROOT) 之下（擋掉連結與漏網的寫法）
+    ```
+    🔴 檢查在 `makedirs` **之前**：擋下來的路徑上不可以留下空目錄。
+    """
+    def _seg_ok(seg):
+        return bool(seg) and seg not in ('.', '..') and not any(c in seg for c in _BAD_PATH_CHARS)
+
+    doc = str(doc_no or '')
+    sub = str(subfolder or '')
+    if not _seg_ok(doc) or '/' in doc:
+        raise HTTPException(400, "單號格式不正確，無法存放附件。")
+    if sub.startswith('/') or os.path.isabs(sub) or not all(_seg_ok(s) for s in sub.split('/')):
+        raise HTTPException(400, "附件存放位置不正確。")
+    root = os.path.realpath(UPLOADS_ROOT)
+    target = os.path.realpath(os.path.join(root, *sub.split('/'), doc))
+    if os.path.commonpath([root, target]) != root or target == root:
+        raise HTTPException(400, "附件存放位置不正確。")
+    return target
+
+
 async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFile],
                               uploaded_by: str, watermark_by: str = '') -> list:
     """存檔 files 到 uploads/{subfolder}/{doc_no}/{uuid}{ext}（demo 帳號會被
@@ -60,7 +94,7 @@ async def save_document_files(subfolder: str, doc_no: str, files: List[UploadFil
         raise HTTPException(400, "請至少選擇一個檔案")
 
     subfolder = _effective_subfolder(subfolder)
-    save_dir = os.path.join(UPLOADS_ROOT, subfolder, doc_no)
+    save_dir = _safe_save_dir(subfolder, doc_no)
     os.makedirs(save_dir, exist_ok=True)
 
     saved = []
