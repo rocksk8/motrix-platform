@@ -1863,6 +1863,22 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
     return {"ok": True}
 
 
+def _payout_bank_choices(award):
+    """`AC3`：待發放時給出納選付款銀行（支出傳票草稿的貸方）。
+
+    清單沿用 T100 設定頁維護的 bankAccounts（出納頁同一份）。⚠️ 不叫前端去打
+    `/api/settings/t100-export-config`：那支只給 admin+，非 admin 的出納會 403、選單變空的。
+    這裡只帶名稱與科目代號（不含設定頁其他內容）。
+    """
+    if award.get("status") != "待發放":
+        return {}
+    from routers.accounting_export import _t100_config
+    cfg = _t100_config()
+    return {"bankAccounts": [{"name": b.get("name") or "", "acctCode": b.get("acctCode") or ""}
+                             for b in (cfg.get("bankAccounts") or []) if b.get("acctCode")],
+            "defaultBankAccountCode": cfg.get("defaultBankAccountCode") or ""}
+
+
 @router.get("/cases/voucher-accounts")
 def get_case_bonus_voucher_accounts(authorization: str = Header(None)):
     """`AC3`：獎金分潤產生傳票時用的科目（不寫死；預設 6111／2191／2252／1113）。
@@ -1987,6 +2003,7 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
             out["award"] = view["award"]
             out["summary"] = view["summary"]
             out["vouchers"] = bonus_vouchers.linked_vouchers(conn, award)   # `AC3`
+            out.update(_payout_bank_choices(award))
         elif view["scope"] != "self":
             a = dict(award)
             a["split_bp"] = json.loads(a.pop("split_json") or "{}")
@@ -1994,6 +2011,7 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
             out["award"] = a
             out["summary"] = _summary(award, lines)
             out["vouchers"] = bonus_vouchers.linked_vouchers(conn, award)   # `AC3`
+            out.update(_payout_bank_choices(award))
             if full:
                 out["log"] = [dict(r) for r in conn.execute(
                     "SELECT changed_by, changed_at, action, changes_json FROM bonus_case_award_edit_log"

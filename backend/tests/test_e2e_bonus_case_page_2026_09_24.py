@@ -177,7 +177,8 @@ def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user):
             assert page2.inner_text('[data-testid="bn-paid-total"]').strip() == "NT$ 10,000"
             assert page2.locator('[data-testid="bn-pool"]').is_hidden()
             page2.locator('[data-testid="bn-mark-paid"]').click()
-            page2.wait_for_function(f"() => {DATA_JS}.msg === '已標記發放'", timeout=15000)
+            # AC3 起訊息後面會接「已產生傳票草稿 …」⇒ 比開頭
+            page2.wait_for_function(f"() => ({DATA_JS}.msg || '').startsWith('已標記發放')", timeout=15000)
             a, _ = _award()
             assert a["status"] == "已發放" and a["paid_by"] == "pg_cash"
         finally:

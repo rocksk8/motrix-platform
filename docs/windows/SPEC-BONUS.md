@@ -342,5 +342,8 @@ quotations 另有 **assigned_user_ids**（A 補查）
 金額     發放合計（Σ 名單金額，不含尾差）；合計 0 ⇒ 不產生並提示
 寫入     與 create_voucher 共用 routers/vouchers.insert_draft_voucher()（單號規則只有一份）
          分錄沒有摘要來源（source_type 空）⇒ JV21「同一筆支出只能帶入一張」不適用
-顯示     GET /cases/{quote_no} 的 vouchers（僅 superadmin／出納）；回應的 notice 要顯示（前端 UI：hichan-bf，排在 AC2 之後；hichan-0a 裁示）
+顯示     GET /cases/{quote_no} 的 vouchers（僅 superadmin／出納）；回應的 notice 要顯示
+前端     已落地（2026-09-24）：設定面板四格科目、出納選付款銀行、notice＋傳票號寫進訊息、明細下方列已產生傳票
+         付款銀行清單由 GET /cases/{quote_no} 在待發放時帶出 bankAccounts／defaultBankAccountCode
+         （T100 設定那一份；不叫前端打 t100-export-config——那支只給 admin+，非 admin 出納會 403）
 ```

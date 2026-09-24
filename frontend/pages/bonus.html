@@ -86,6 +86,20 @@
             <div class="bn-row"><span x-text="catLabels[c] + '比例'"></span><input class="bn-in" x-model="settings.split[c]"> %</div>
           </template>
           <div class="bn-actions"><button class="bn-btn" @click="saveSettings()">儲存預設</button></div>
+          <!-- `AC3`：傳票科目（不寫死；不存在或已停用的代號存不進去；事後被停用的列在下方） -->
+          <template x-if="voucherAccounts">
+            <div data-testid="bn-voucher-accounts">
+              <div class="bn-sec" style="margin-top:12px">傳票科目（進入待發放、標記已發放時自動開立傳票草稿用）</div>
+              <template x-for="k in ['expense', 'payable', 'withholding', 'bank']" :key="k">
+                <div class="bn-row">
+                  <span x-text="voucherAccounts.labels[k]"></span>
+                  <input class="bn-in" style="width:90px" x-model="voucherAcctEdit[k]" :data-testid="'bn-acct-' + k">
+                  <span class="bn-err" x-show="voucherAccounts.problems[k]" x-text="voucherAccounts.problems[k]"></span>
+                </div>
+              </template>
+              <div class="bn-actions"><button class="bn-btn" @click="saveVoucherAccounts()" data-testid="bn-acct-save">儲存傳票科目</button></div>
+            </div>
+          </template>
         </div>
         </template>
 
@@ -249,7 +263,16 @@
                       </template>
                       <!-- 出納標記已發放 -->
                       <template x-if="detail.status === '待發放' && (isSuper || detail.scope === 'cashier')">
-                        <button class="bn-btn" :disabled="busy" @click="markPaid()" data-testid="bn-mark-paid">標記已發放</button>
+                        <div class="bn-actions" style="margin-top:0" x-init="loadBankAccounts()">
+                          <!-- `AC3`：付款銀行（支出傳票草稿的貸方科目）；不選 ⇒ 用獎金設定的銀行科目 -->
+                          <select class="bn-sel" x-model="payBank" data-testid="bn-pay-bank">
+                            <option value="">（獎金設定的銀行科目）</option>
+                            <template x-for="b in bankAccounts" :key="b.acctCode">
+                              <option :value="b.acctCode" x-text="b.name + '（' + b.acctCode + '）'"></option>
+                            </template>
+                          </select>
+                          <button class="bn-btn" :disabled="busy" @click="markPaid()" data-testid="bn-mark-paid">標記已發放</button>
+                        </div>
                       </template>
                       <!-- 最高管理者退回（已發放前） -->
                       <template x-if="isSuper && (detail.status === '待審核' || detail.status === '待發放')">
@@ -263,6 +286,20 @@
                 </template>
 
                 <div class="bn-card" x-show="msg"><span :class="/失敗|錯誤|請|不|只有/.test(msg) ? 'bn-err' : 'bn-ok'" x-text="msg" data-testid="bn-msg"></span></div>
+
+                <!-- `AC3`：這張獎金分潤產生的傳票草稿（後端只回給最高管理者／出納） -->
+                <template x-if="(detail.vouchers || []).length">
+                  <div class="bn-card" data-testid="bn-vouchers">
+                    <div class="bn-sec">已產生的傳票</div>
+                    <template x-for="v in detail.vouchers" :key="v.id">
+                      <div class="bn-row">
+                        <span x-text="voucherKindLabel(v.kind)"></span>
+                        <a :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
+                        <span x-text="v.voided ? '已作廢' : v.status"></span>
+                      </div>
+                    </template>
+                  </div>
+                </template>
 
                 <template x-if="detail.log && detail.log.length">
                   <div class="bn-card">

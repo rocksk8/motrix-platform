@@ -45,6 +45,11 @@ function bonusPage() {
     rejectReason: '',
     settings: null,       // { ratePct, split }
     settingsOpen: false,
+    // `AC3`：傳票科目設定（最高管理者）、出納選的銀行科目、T100 設定頁維護的銀行帳戶清單
+    voucherAccounts: null,  // { accounts: {expense, payable, withholding, bank}, problems, labels }
+    voucherAcctEdit: {},
+    bankAccounts: [],
+    payBank: '',
     statuses: BN_STATUSES,
     cats: BN_CATS,
     catLabels: { sales: '業務', project: '專案', admin: '後勤' },
@@ -71,7 +76,7 @@ function bonusPage() {
         if (d && !d.enabled) { this.moduleDisabled = true; this.loaded = true; return }
       } catch (e) { /* 查不到就照常載入——不要因為這支旗標打不到而把整個模組擋掉 */ }
       await this.loadList()
-      if (this.isSuper) { this.loadUsers(); this.loadGroups(); this.loadSettings() }
+      if (this.isSuper) { this.loadUsers(); this.loadGroups(); this.loadSettings(); this.loadVoucherAccounts() }
       const q = new URLSearchParams(location.search).get('q')
       if (q) await this.select(q)
     },
@@ -110,6 +115,40 @@ function bonusPage() {
           BN_CATS.forEach(c => { this.settings.split[c] = bnPct(d.split_bp[c]) })
         }
       } catch (e) {}
+    },
+
+    // `AC3`：獎金分潤產生傳票時用的科目（不寫死；設定值不存在／已停用 ⇒ 後端擋）
+    async loadVoucherAccounts() {
+      try {
+        const r = await fetch('/api/bonus/cases/voucher-accounts', { headers: this._auth() })
+        if (r.ok) {
+          this.voucherAccounts = await r.json()
+          this.voucherAcctEdit = Object.assign({}, this.voucherAccounts.accounts)
+        }
+      } catch (e) {}
+    },
+    async saveVoucherAccounts() {
+      try {
+        const r = await fetch('/api/bonus/cases/voucher-accounts', { method: 'PUT', headers: this._jsonAuth(),
+          body: JSON.stringify(this.voucherAcctEdit) })
+        const d = await r.json().catch(() => ({}))
+        this.msg = r.ok ? '已儲存傳票科目' : ('傳票科目儲存失敗：' + (d.detail || r.status))
+        if (r.ok) await this.loadVoucherAccounts()
+      } catch (e) { this.msg = '網路錯誤：' + e.message }
+    },
+    // 出納標記已發放時選銀行：清單由獎金明細 API 在待發放時帶出（T100 設定頁那一份；
+    // 不直接打 t100-export-config——那支只給 admin+，非 admin 的出納會 403）
+    loadBankAccounts() {
+      this.bankAccounts = (this.detail && this.detail.bankAccounts) || []
+      this.payBank = (this.detail && this.detail.defaultBankAccountCode) || ''
+    },
+    voucherKindLabel(k) { return { accrual: '應付（轉帳）', payment: '發放（支出）' }[k] || k },
+    // 後端回的 notice（科目有問題沒產生、已送審不動…）一定要讓人看到
+    _withNotice(okMsg, d) {
+      const parts = [okMsg]
+      if (d && d.voucher && d.voucher.voucher_no) parts.push('已產生傳票草稿 ' + d.voucher.voucher_no)
+      if (d && d.notice) parts.push(d.notice)
+      return parts.join('。')
     },
 
     userLabel(u) {
@@ -205,7 +244,7 @@ function bonusPage() {
           method: method || 'POST', headers: this._jsonAuth(), body: JSON.stringify(body || {}) })
         const d = await r.json().catch(() => ({}))
         if (!r.ok) { this.msg = d.detail || ('操作失敗（HTTP ' + r.status + '）'); return false }
-        return true
+        return d   // `AC3`：回傳內容（notice／voucher）給呼叫端；物件仍是 truthy，既有判斷不變
       } catch (e) { this.msg = '網路錯誤：' + e.message; return false }
       finally { this.busy = false }
     },
@@ -228,16 +267,23 @@ function bonusPage() {
       if (!(await this._post('', p.body, 'PUT'))) return
       if (await this._post('/submit', {})) await this._refresh('已送審')
     },
-    async approve() { if (await this._post('/approve', {})) await this._refresh('已核准') },
+    async approve() {
+      const d = await this._post('/approve', {})
+      if (d) await this._refresh(this._withNotice('已核准', d))
+    },
     async reject() {
       if (!this.rejectReason.trim()) { this.msg = '請填寫駁回原因'; return }
       if (await this._post('/reject', { reason: this.rejectReason })) await this._refresh('已駁回，回到草稿')
     },
     async returnToDraft() {
       if (!this.returnReason.trim()) { this.msg = '請填寫退回原因'; return }
-      if (await this._post('/return', { reason: this.returnReason })) await this._refresh('已退回草稿')
+      const d = await this._post('/return', { reason: this.returnReason })
+      if (d) await this._refresh(this._withNotice('已退回草稿', d))
     },
-    async markPaid() { if (await this._post('/mark-paid', {})) await this._refresh('已標記發放') },
+    async markPaid() {
+      const d = await this._post('/mark-paid', this.payBank ? { bank_account_code: this.payBank } : {})
+      if (d) await this._refresh(this._withNotice('已標記發放', d))
+    },
 
     async saveSettings() {
       const rate = bnBp(this.settings.ratePct)
