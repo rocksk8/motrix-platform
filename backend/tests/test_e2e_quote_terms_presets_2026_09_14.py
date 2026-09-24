@@ -19,6 +19,12 @@ import uvicorn
 from tests._ports import free_safe_port
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 @pytest.fixture()
 def live_server(client):
     import main
@@ -82,7 +88,10 @@ def test_default_preset_is_applied_to_a_new_quotation(live_server, client, make_
             _login(page, live_server, u, p)
             page.goto(f"{live_server}/pages/quotation-form.html")
             page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            page.wait_for_timeout(400)
+            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                                   timeout=15000)
+            _rendered(page)
             val = page.eval_on_selector(
                 'textarea[x-model="q.paymentTerms"]', "el => el.value")
             assert val == "工程組的付款條件", val
@@ -106,10 +115,13 @@ def test_clicking_a_block_swaps_all_five_fields(live_server, client, make_user):
             _login(page, live_server, u, p)
             page.goto(f"{live_server}/pages/quotation-form.html")
             page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            page.wait_for_timeout(400)
+            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                                   timeout=15000)
+            _rendered(page)
 
             page.click('button:has-text("純購料")')
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
 
             for model, expect in (
                 ("q.paymentTerms",    "購料組的付款條件"),
@@ -142,9 +154,12 @@ def test_switching_preset_does_not_raise_a_false_approval_warning(live_server, c
             _login(page, live_server, u, p)
             page.goto(f"{live_server}/pages/quotation-form.html")
             page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            page.wait_for_timeout(400)
+            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                                   timeout=15000)
+            _rendered(page)
             page.click('button:has-text("純購料")')
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
 
             reasons = page.evaluate(
                 "() => (Alpine.$data(document.querySelector('[x-data]')).approvalReasons || [])")

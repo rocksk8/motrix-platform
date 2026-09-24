@@ -32,6 +32,12 @@ W, H = 1366, 768
 ZOOMS = (0.85, 1.0, 1.15, 1.3)
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _page(p_, live_server, make_user, zoom, uname):
     u, pw_ = make_user(username=uname, role="superadmin", modules=["cashier"])
     _pending_voucher(u)
@@ -68,14 +74,14 @@ def _queue(page, live_server):
     card.wait_for(state="visible", timeout=15000)
     card.click()
     page.wait_for_selector(".aq-drawer", state="visible", timeout=10000)
-    page.wait_for_timeout(300)
+    _rendered(page)   # PERF #6：原本固定等 300ms（抽屜沒有 transition）
 
 
 def _modal_rect(page):
     """簽核彈窗（佇列的 PDF 預覽窗，`height:90vh`）。直接打開 modal 量版面——
     正式的開法要先產生一份 PDF，而這一題量的是版面不是 PDF。"""
     page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).previewModal = true }")
-    page.wait_for_timeout(250)
+    _rendered(page)   # PERF #6：原本固定等 250ms（預覽窗沒有 x-transition）
     return page.evaluate("""() => {
         const ov = document.querySelector('[x-show="previewModal"]');
         const box = ov && ov.firstElementChild;
@@ -104,7 +110,14 @@ def _menu_bottoms(page):
     for i in range(n):
         g = page.locator(".mnav__grp").nth(i)
         g.hover()
-        page.wait_for_timeout(250)
+        # PERF #6：原本固定等 250ms ⇒ 選單面板有 0.18s 的 opacity／transform transition，等它落定再量
+        g.evaluate("""g => new Promise(r => { const p = g.querySelector('.mnav__panel')
+            if (!p) return r()
+            const t0 = performance.now()
+            const f = () => { const cs = getComputedStyle(p)
+              if ((cs.transform === 'none' && cs.opacity === '1') || performance.now() - t0 > 2000) r()
+              else requestAnimationFrame(f) }
+            f() })""")
         b = g.evaluate("g => { const p = g.querySelector('.mnav__panel');"
                        " return p ? p.getBoundingClientRect().bottom : 0 }")
         out.append(b)
@@ -124,7 +137,7 @@ def test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport(live_server,
             m = _modal_rect(page)
             page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
                           " d.previewModal = false; d.drawerOpen = false }")
-            page.wait_for_timeout(250)
+            _rendered(page)   # PERF #6：原本固定等 250ms
             menus = _menu_bottoms(page)
             print("字級 %.2f 實測（%d×%d）：側邊清單底 %.0f／彈窗底 %.0f／選單面板底 max %.0f"
                   % (zoom, W, H, q["bottom"], m["bottom"], max(menus or [0])))
@@ -163,7 +176,7 @@ def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, mak
         try:
             _queue(page, live_server)
             page.evaluate("() => window.motrixSetZoom(1.3)")
-            page.wait_for_timeout(250)
+            _rendered(page)   # PERF #6：原本固定等 250ms
             m = _modal_rect(page)
             print("字級 1.00 → 1.30（按鈕切換）實測：彈窗底 %.0f" % m["bottom"])
             assert m["bottom"] <= H + 1, "按鈕切到「特」後，簽核彈窗底邊 %.0f 超出畫面 %d" % (m["bottom"], H)
