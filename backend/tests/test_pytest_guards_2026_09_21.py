@@ -45,16 +45,19 @@ BACKEND = Path(__file__).resolve().parent.parent
 TARGET = "tests/test_ports_helper_2026_09_21.py"   # 小、快、不碰 DB
 
 
-def _run_pytest(*args, lock=None, timeout=180, wait=0, poll=None):
+def _run_pytest(*args, lock=None, timeout=180, wait=0, poll=None, slots=1):
     """在子行程跑 pytest。**必須是子行程** —— `pytest_configure` 只在啟動時跑一次，
     在同一個行程裡是重現不出來的。
 
     📌 2026-09-24 起搶不到鎖改成排隊（使用者裁示「全機同時只准一套」）。這裡預設 `wait=0`
     ＝不排隊、立刻擋下，讓 T3／T5b／G1 仍然量得到「被擋」這件事；排隊行為見檔尾的排隊題。
+    📌 同日使用者改為「開放兩個同時跑」（預設 2 格）。這裡預設 `slots=1`，讓既有的
+    「被擋／排隊」題照舊量單格語意；2 格的行為見檔尾的兩格題。
     """
     env = utf8_env(MOTRIX_PYTEST_LOCK=str(lock) if lock is not None else None,
                    MOTRIX_PYTEST_LOCK_WAIT=wait,
-                   MOTRIX_PYTEST_LOCK_POLL=poll)
+                   MOTRIX_PYTEST_LOCK_POLL=poll,
+                   MOTRIX_PYTEST_SLOTS=slots)
     return run_python(["-m", "pytest", TARGET, "--collect-only", "-q", *args],
                       cwd=BACKEND, env=env, timeout=timeout)
 
@@ -467,3 +470,29 @@ def test_a_parallel_run_also_queues_even_without_full_in_the_name(tmp_path):
     _write_lock(lock, os.getpid())
     proc = _run_pytest("-n", "2", "-p", "xdist", f"--basetemp={tmp_path / 'plain-adhoc'}", lock=lock, wait=0)
     assert proc.returncode == 4, f"-n 2 的一輪沒有被鎖管到：{proc.returncode}\n{proc.stdout[-800:]}"
+
+
+# ── 兩格：「開放兩個同時跑」（2026-09-24 使用者裁示）────────────────────────────
+
+def test_with_two_slots_a_second_heavy_run_proceeds_while_one_is_held(tmp_path):
+    """🔴 第 1 格被活著的行程佔住 ⇒ 第二套拿第 2 格照常跑，跑完只還第 2 格。
+
+    反向控制在下一題：兩格都佔住 ⇒ 第三套被擋。沒有那一題，「永遠放行」的實作也會讓這題綠。
+    """
+    lock = tmp_path / "lock"
+    _write_lock(lock, os.getpid())
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock, slots=2)
+    assert proc.returncode == 0, f"第 2 格空著卻沒放行：{proc.returncode}\n{proc.stdout[-800:]}"
+    assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == os.getpid(), "第二套動了第 1 格持有者的鎖"
+    assert not lock.with_name(lock.name + ".slot2").exists(), "跑完了第 2 格的鎖還在"
+
+
+def test_with_two_slots_a_third_heavy_run_is_held_back(tmp_path):
+    """兩格都被活著的行程佔住 ⇒ 第三套排不到（wait=0 ⇒ 擋下回 4），兩格都不被動到。"""
+    lock = tmp_path / "lock"
+    slot2 = lock.with_name(lock.name + ".slot2")
+    _write_lock(lock, os.getpid())
+    _write_lock(slot2, os.getpid())
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock, slots=2)
+    assert proc.returncode == 4, f"兩格都滿了卻放行：{proc.returncode}\n{proc.stdout[-800:]}"
+    assert lock.exists() and slot2.exists(), "被擋的人動了持有者的鎖"

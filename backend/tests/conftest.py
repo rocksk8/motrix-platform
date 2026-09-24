@@ -688,6 +688,7 @@ _ERROR_ACCESS_DENIED = 5
 _lock_taken_by_me = False
 
 #: 🔴 2026-09-24 使用者裁示「全機同時只准一套」：搶不到鎖改成**排隊等**，不是直接擋下。
+#: 🔄 同日更正：使用者「開放兩個同時跑」⇒ 預設 2 格（見 `_lock_slots()`），第三套才排隊。
 #:    多視窗同時各跑全量／平行 e2e ⇒ 12 核滿載、靠時序的題偶發紅，而紅的樣子跟真 bug 一樣。
 #: 等多久（秒）；0＝不等、立刻擋下（守門題用，保留「被擋」的語意可測）。
 LOCK_WAIT_SECONDS_DEFAULT = 90 * 60
@@ -727,6 +728,21 @@ def _lock_path() -> Path:
     if override:
         return Path(override)
     return Path(tempfile.gettempdir()) / "motrix-pytest-full-regression.lock"
+
+
+def _lock_slots() -> list:
+    """全機同時可跑幾套重型測試（2026-09-24 使用者：「開放兩個同時跑」）。
+
+    第 1 格沿用原本的鎖檔名（舊版 conftest 只認得它，新舊之間仍互相擋得住），
+    第 2 格起是 `<鎖檔>.slot2`…。格數由 `MOTRIX_PYTEST_SLOTS` 決定，預設 2；
+    守門題以 1 格驗「被擋／排隊」語意，另有一題驗 2 格。
+    """
+    try:
+        n = max(1, int(os.environ.get("MOTRIX_PYTEST_SLOTS", "2")))
+    except ValueError:
+        n = 2
+    base = _lock_path()
+    return [base] + [base.with_name(base.name + ".slot%d" % i) for i in range(2, n + 1)]
 
 
 def _pid_alive(pid: int) -> bool:
@@ -811,51 +827,62 @@ def pytest_configure(config):
     if not _is_heavy_run(config):
         return                       # 單檔臨時跑，不搶鎖
 
-    path = _lock_path()
+    slots = _lock_slots()
     wait = _env_seconds("MOTRIX_PYTEST_LOCK_WAIT", LOCK_WAIT_SECONDS_DEFAULT)
     poll = _env_seconds("MOTRIX_PYTEST_LOCK_POLL", LOCK_POLL_SECONDS_DEFAULT) or 1.0
     deadline = time.time() + wait
     announced = 0.0
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        slots[0].parent.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
     while True:
-        # 🔑 原子建檔（O_EXCL）：兩個排隊的人同時看到「空了」，只有一個建得成
-        try:
-            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            fd = None
-        except OSError as exc:        # 寫不進去不該擋住測試
-            print("\n[測試鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
-            return
-        if fd is not None:
-            with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                fh.write(json.dumps({"pid": os.getpid(), "started_at": time.time(),
-                                     "basetemp": str(basetemp)}))
-            _lock_taken_by_me = True
-            return
+        freed = False
+        held = None
+        for path in slots:
+            # 🔑 原子建檔（O_EXCL）：兩個排隊的人同時看到「空了」，只有一個建得成
+            try:
+                fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                fd = None
+            except OSError as exc:        # 寫不進去不該擋住測試
+                print("\n[測試鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
+                return
+            if fd is not None:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"pid": os.getpid(), "started_at": time.time(),
+                                         "basetemp": str(basetemp)}))
+                _lock_taken_by_me = path
+                return
 
-        held = _read_lock(path)
-        # ⚠️ 取值也要包在 try 裡：一個不可信的鎖要當成「沒有鎖」，不是當成「拒絕所有人」
-        try:
-            age = time.time() - float(held.get("started_at", 0))
-            pid = int(held.get("pid", -1))
-        except (AttributeError, TypeError, ValueError):
-            print("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
-            _unlink_quietly(path)
+            info = _read_lock(path)
+            # ⚠️ 取值也要包在 try 裡：一個不可信的鎖要當成「沒有鎖」，不是當成「拒絕所有人」
+            try:
+                age = time.time() - float(info.get("started_at", 0))
+                pid = int(info.get("pid", -1))
+            except (AttributeError, TypeError, ValueError):
+                print("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
+                _unlink_quietly(path)
+                freed = True
+                continue
+            alive = _pid_alive(pid)
+            if not alive or age > LOCK_MAX_AGE_SECONDS:
+                # 🔑 過期／持有者已死就接手。**一個解不掉的鎖比沒有鎖更糟**
+                print("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
+                      ("已死" if not alive else "過期", info.get("pid"), age // 60))
+                _unlink_quietly(path)
+                freed = True
+                continue
+            if held is None:
+                held, path_held = info, path
+        if freed:
             continue
-        alive = _pid_alive(pid)
-        if not alive or age > LOCK_MAX_AGE_SECONDS:
-            # 🔑 過期／持有者已死就接手。**一個解不掉的鎖比沒有鎖更糟**
-            print("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
-                  ("已死" if not alive else "過期", held.get("pid"), age // 60))
-            _unlink_quietly(path)
-            continue
+        path = path_held
+        age = time.time() - float(held.get("started_at", 0))
         now = time.time()
         if now >= deadline:
             raise pytest.UsageError(
-                "另一套測試正在跑（全機同時只准一套：全量回歸或 -n 平行）%s。\n"
+                "其他測試已佔滿全機名額（全量回歸或 -n 平行，同時上限見 MOTRIX_PYTEST_SLOTS）%s。\n"
                 "  持有者 pid=%s 視窗=%s 已跑 %d 分鐘\n"
                 "  鎖檔 %s\n"
                 "⚠️ CPU 是共用資源：兩套一起跑會把靠時序的斷言搞紅，"
@@ -893,8 +920,8 @@ def pytest_unconfigure(config):
     global _lock_taken_by_me
     if not _lock_taken_by_me:
         return
+    path = _lock_taken_by_me          # 拿到的是哪一格就還哪一格
     _lock_taken_by_me = False
-    path = _lock_path()
     held = _read_lock(path)
     if held and int(held.get("pid", -1)) == os.getpid():
         try:
