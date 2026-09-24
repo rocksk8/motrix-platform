@@ -611,9 +611,11 @@
             </div>
             <div class="form-group">
               <label class="form-label">狀態</label>
-              <select class="form-select" x-model="form.active">
-                <option :value="true">往來中</option>
-                <option :value="false">停用</option>
+              <!-- ⚠ 不可用 :value="false"：Alpine 會移除 value 屬性，選項值退回文字「停用」（truthy）。
+                   寫死字串 value＋x-model.boolean 才會存成真的 false。 -->
+              <select class="form-select" x-model.boolean="form.active">
+                <option value="true">往來中</option>
+                <option value="false">停用</option>
               </select>
             </div>
           </div>

@@ -278,9 +278,10 @@
              ⇒ 表單看起來就是不完整，而使用者說的「需要有儲存」很可能就是這個。 -->
         <div>
           <label class="fi-label">狀態</label>
-          <select class="fi" x-model="form.enabled">
-            <option :value="true">啟用（會納入每日比對）</option>
-            <option :value="false">停用（保留條件但不比對）</option>
+          <!-- ⚠ 不可用 :value="false"：Alpine 會移除 value 屬性，選項值退回文字（truthy）⇒ 後端存成啟用。 -->
+          <select class="fi" x-model.boolean="form.enabled">
+            <option value="true">啟用（會納入每日比對）</option>
+            <option value="false">停用（保留條件但不比對）</option>
           </select>
         </div>
       </div>
