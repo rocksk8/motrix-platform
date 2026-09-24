@@ -449,7 +449,7 @@
             <span style="font-size:14px">⚠️</span>
             <span>
               <strong>精算快照可能已過期：</strong>
-              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已完結案件的承攬商成本在精算完結後又異動，下方毛利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
+              <span x-text="summary.staleSettlementCount + ' 件'"></span> 已結案案件的承攬商成本在精算完結後又異動，下方毛利/業務員/部門績效可能未反映最新數字——請至個別案件的成本精算頁面確認並視需要重新完結
             </span>
           </div>
 
@@ -572,7 +572,7 @@
                   <th>案件號</th><th>客戶</th><th>專案名稱</th><th>業務員</th>
                   <th>款項類型</th><th class="r">應收金額</th><th class="c">收款日</th>
                   <th class="r">實收金額</th><th class="r">手續費</th><th class="r">實收淨額</th>
-                  <th>發票號碼</th><th>備注</th>
+                  <th>發票號碼</th><th>備註</th>
                 </tr></thead>
                 <tbody>
                   <template x-for="it in activeCollectedItems" :key="it.quoteNo + '-' + it.idx">
@@ -2123,7 +2123,7 @@
               <div>
                 <div class="stl-section">成本品項</div>
                 <table class="stl-table">
-                  <thead><tr><th>#</th><th>品名</th><th>廠牌</th><th style="text-align:right">實際成本</th><th>備注</th></tr></thead>
+                  <thead><tr><th>#</th><th>品名</th><th>廠牌</th><th style="text-align:right">實際成本</th><th>備註</th></tr></thead>
                   <tbody>
                     <template x-for="(it, idx) in stlItems()" :key="idx">
                       <tr>
@@ -2150,7 +2150,7 @@
               <div>
                 <div class="stl-section">額外支出</div>
                 <table class="stl-table">
-                  <thead><tr><th>#</th><th>類別</th><th>說明</th><th style="text-align:right">金額</th><th>備注</th></tr></thead>
+                  <thead><tr><th>#</th><th>類別</th><th>說明</th><th style="text-align:right">金額</th><th>備註</th></tr></thead>
                   <tbody>
                     <template x-for="(ex, idx) in stlExtras()" :key="idx">
                       <tr>
@@ -2175,7 +2175,7 @@
             <!-- 備注 -->
             <template x-if="stlMemo()">
               <div>
-                <div class="stl-section">備注</div>
+                <div class="stl-section">備註</div>
                 <p style="font-size:13px;color:var(--text-secondary);font-family:var(--font-zh);white-space:pre-wrap" x-text="stlMemo()"></p>
               </div>
             </template>

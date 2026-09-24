@@ -1268,14 +1268,14 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
     case_page = f"{_base_url()}/pages/case-management.html?q={quote_no}"
     label = f"{customer}{'／' + project if project else ''}" or quote_no
     html = _build_html(
-        "完結案被擋下", "尚未達成前置條件", "#DC2626",
+        "結案被擋下", "尚未達成前置條件", "#DC2626",
         [("報價單號", quote_no), ("客戶名稱", customer), ("專案名稱", project or "（未填寫）"),
          ("未達成項目", "、".join(reasons))],
         "", case_page,
-        intro=f"案件「{label}」嘗試完結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試完結案。",
+        intro=f"案件「{label}」嘗試結案時被系統擋下，因為尚有前置條件未達成，請盡速處理相關項目後再次嘗試結案。",
         button_text="前往查看案件",
     )
-    _async_send(to, f"【MOTRIX】完結案被擋下 — {quote_no}（{customer}）", html)
+    _async_send(to, f"【MOTRIX】結案被擋下 — {quote_no}（{customer}）", html)
 
 
 def notify_case_change_requested(quote_no: str, customer: str, project: str,

@@ -168,7 +168,7 @@
                 <th class="pt-sortable r" :class="sortCls('stock')"      @click="toggleSort('stock')" style="text-align:right">在庫</th>
                 <th class="pt-sortable r" :class="sortCls('cost')"       @click="toggleSort('cost')" style="text-align:right">成本</th>
                 <th class="pt-sortable r" :class="sortCls('list_price')" @click="toggleSort('list_price')" style="text-align:right">定價</th>
-                <th>備注</th>
+                <th>備註</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -300,7 +300,7 @@
         <div style="font-size:11px;color:var(--text-dim);margin-top:4px">在庫低於此數量時，庫存管理頁會顯示紅燈；低於 1.5 倍時顯示黃燈</div>
       </div>
       <div class="field-row" style="grid-column:1/-1">
-        <div class="field-label">備注</div>
+        <div class="field-label">備註</div>
         <input class="field-input" type="text" placeholder="選填" x-model="modal.note">
       </div>
     </div>
@@ -612,7 +612,7 @@ function app() {
           '廠牌': (bn || '').trim(), '型號': rest.join('/').trim(),
           '類別': p.category || '', '單位': p.unit || '台',
           '成本(未稅)': p.cost || 0, '定價(含稅)': p.list_price || 0,
-          '備注': p.note || ''
+          '備註': p.note || ''
         }
       })
       const ws = XLSX.utils.json_to_sheet(rows)
@@ -662,7 +662,7 @@ function app() {
         cost: toNum(n['成本(未稅)']||n['成本']||n['cost']||0),
         listPrice: toNum(n['定價(含稅)']||n['定價']||n['售價']||n['list_price']||0),
         category: n['類別']||n['分類']||n['category']||'',
-        note: n['備注']||n['備註']||n['note']||''
+        note: n['備註']||n['備注']||n['note']||''
       }
     },
 

@@ -697,7 +697,7 @@ def _build_payslip_html(d: dict) -> str:
     remarks_section = ''
     if remarks:
         remarks_section = (
-            '\n<div class="section-title">六、備注</div>'
+            '\n<div class="section-title">六、備註</div>'
             f'\n<table><tr><td style="white-space:pre-wrap">{esc(remarks)}</td></tr></table>'
         )
 
@@ -3160,9 +3160,9 @@ def _build_project_execution_report_html(data: dict) -> str:
         f'<td>{esc(it["stage2Approver"]) or "—"}{"　" + esc(it["stage2At"]) if it["stage2At"] else ""}</td></tr>'
         for it in data["actionItems"]
     )
-    _no_item_row = '<tr><td colspan="4" class="c" style="color:#9CA3AF">無代辦事項資料</td></tr>'
+    _no_item_row = '<tr><td colspan="4" class="c" style="color:#9CA3AF">無待辦事項資料</td></tr>'
     action_items_section = (
-        '<div class="section-label">三、代辦事項（兩階段簽核）</div>'
+        '<div class="section-label">三、待辦事項（兩階段簽核）</div>'
         '<table><thead><tr><th>事項</th><th class="c" style="width:180px">狀態</th>'
         '<th style="width:160px">工程主管確認</th><th style="width:160px">業務主管確認</th></tr></thead>'
         f'<tbody>{item_rows_html or _no_item_row}</tbody></table>'

@@ -2251,7 +2251,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     # 「已結案只有 superadmin 能降級」的既有規則不對稱：一般管理員按得下去、
     # 卻沒有人能把它按回來（只有 superadmin 可以）。統一成兩邊都是 superadmin。
     if body.deal_tag == "已結案" and user["role"] != "superadmin":
-        raise HTTPException(403, "僅最高管理者可完結案件")
+        raise HTTPException(403, "僅最高管理者可結案")
     conn = get_db()
     row = conn.execute(
         "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
@@ -2282,8 +2282,8 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
             conn.close()
             spawn_bg_thread(notify_case_close_blocked, args=(quote_no, cname, pname, reasons, pending_usernames))
             _audit(_tok(authorization), 'case.close_blocked', 'quotation', quote_no,
-                   f"{quote_no}（{cname}）完結案被擋下", {"reasons": reasons})
-            raise HTTPException(400, "尚有前置條件未達成，無法完結案：" + "；".join(reasons))
+                   f"{quote_no}（{cname}）結案被擋下", {"reasons": reasons})
+            raise HTTPException(400, "尚有前置條件未達成，無法結案：" + "；".join(reasons))
     # 已成案 → 降級 限管理員以上
     if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
         conn.close()

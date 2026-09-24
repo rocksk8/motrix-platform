@@ -117,9 +117,9 @@ def _page(name):
 #: (檔案, 函式, 挑出那一條的關鍵片段, 不可以再出現的程式詞彙, 必須在畫面上找得到的詞, 畫面檔)
 CASES = (
     ("routers/case_action_items.py", None, "需要工程主管確認", ("project_approve_eng",),
-     ("案件代辦－工程主管確認",), "pages/users.html"),
+     ("案件待辦－工程主管確認",), "pages/users.html"),     # CU2b 用詞裁示：代辦→待辦
     ("routers/case_action_items.py", None, "需要業務確認", ("project_approve_biz",),
-     ("案件代辦－業務確認",), "pages/users.html"),
+     ("案件待辦－業務確認",), "pages/users.html"),
     ("routers/system.py", None, "記錄對象", ("log_date", "user_id", "content"),
      ("日期", "記錄對象", "工作內容"), "pages/case-management.html"),
     ("routers/system.py", None, "備份目標", ("backend", "local_drive", "s3"),

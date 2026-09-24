@@ -10,6 +10,9 @@ registry 必須與它們逐項相同 ⇒ 正式機帳號身上的 `modules` JSON
 
 📌 之後要**新增**模組：把新 key 同時加進 registry 與這裡的副本（兩處都改是刻意的摩擦：
    它逼人想一下「這是新增，不是改名」）。**改名或刪除**要先有 migration 與裁示。
+📌 2026-09-24（CU2b，使用者裁示的用詞統一「代辦→待辦」）：兩個模組的**顯示名稱**
+   「案件代辦－…」改為「案件待辦－…」。key（project_approve_eng／biz）不動，帳號身上的
+   modules JSON 只存 key ⇒ 零影響。這是這份 golden 唯一一次改 label，理由是用詞裁示。
 ☠️ 產生 registry 時第一版就踩到一次：`("dashboard")` 少一個逗號，viewer 樣板變成
    字串、長度 9 ——這一題會抓到那種錯。
 """
@@ -35,8 +38,8 @@ GOLDEN_MODULES = [
     ("equipment", "設備登載／保固", "設備"),
     ("netplan", "網路架構規劃書－檢視", "網路架構規劃書"),
     ("netplan_edit", "網路架構規劃書－新增修改刪除", "網路架構規劃書"),
-    ("project_approve_eng", "案件代辦－工程主管確認", "專案"),
-    ("project_approve_biz", "案件代辦－業務確認", "專案"),
+    ("project_approve_eng", "案件待辦－工程主管確認", "專案"),   # CU2b 用詞裁示：代辦→待辦
+    ("project_approve_biz", "案件待辦－業務確認", "專案"),
     ("work_log", "工作日誌", "工作"),
     ("daily_task", "每日工作事項", "工作"),
     ("contractor_list", "外包名冊", "勞務"),

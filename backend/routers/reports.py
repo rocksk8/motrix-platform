@@ -988,7 +988,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     ws2.sheet_view.showGridLines = False
 
     hdrs2 = ["案件號","客戶","專案名稱","業務員","款項類型","應收金額","收款日期",
-             "實收金額","手續費","實收淨額","發票號碼","手續費備注","備注"]
+             "實收金額","手續費","實收淨額","發票號碼","手續費備註","備註"]
     cols2 = [13,18,18,10,9,12,11,12,10,12,12,14,14]
     for i, (h, w) in enumerate(zip(hdrs2, cols2), 1):
         ws2.column_dimensions[get_column_letter(i)].width = w
@@ -1442,7 +1442,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws6.merge_cells(f"A1:{get_column_letter(len(hdrs6))}1")
     c = ws6["A1"]
-    c.value = "毛利分析 — 精算利潤對照（已完結案件）"
+    c.value = "毛利分析 — 精算利潤對照（已結案案件）"
     c.font  = mk(bold=True, size=12, color=C_WHITE)
     c.fill  = fill("7C3AED")
     c.alignment = al("center")

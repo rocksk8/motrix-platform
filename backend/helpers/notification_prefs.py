@@ -85,7 +85,7 @@ EVENT_GROUPS = [
         ("tender_source_changed","標案雷達疑似對方改版（解析大量失敗；只在「進入異常」時寄一次）"),
     ]),
     ("已結案案件解鎖", [
-        ("case_close_blocked",   "完結案被防呆機制擋下（未達成前置條件）"),
+        ("case_close_blocked",   "結案被防呆機制擋下（未達成前置條件）"),
         ("case_change_requested","已結案案件半解鎖期間的變更/上傳待審核（僅最高管理員）"),
     ]),
 ]

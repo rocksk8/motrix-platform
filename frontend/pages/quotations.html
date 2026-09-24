@@ -702,7 +702,7 @@
         const quote = q || this.quotes.find(q => q.quote_no === quoteNo)
         const oldTag = quote?.deal_tag || ''
         if (tag === '已成案') {
-          if (!confirm(`確認將報價單 ${quoteNo} 標記為「已成案」？\n\n確認後案件進度將鎖定，僅能透過「案件管理」頁面完結案件。\n此操作將留下操作紀錄。`)) {
+          if (!confirm(`確認將報價單 ${quoteNo} 標記為「已成案」？\n\n確認後案件進度將鎖定，僅能透過「案件管理」頁面結案。\n此操作將留下操作紀錄。`)) {
             if (quote) quote.deal_tag = oldTag
             return
           }

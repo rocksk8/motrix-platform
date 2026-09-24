@@ -111,7 +111,7 @@ def create_case_action_item(quote_no: str, body: dict = Body(...), authorization
     user = _require_user(authorization)
     text = (body.get("text") or "").strip()
     if not text:
-        raise HTTPException(400, "代辦事項內容不得為空")
+        raise HTTPException(400, "待辦事項內容不得為空")
     conn = get_db()
     _guard_action_item_case(conn, quote_no, user)
     if not conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (quote_no,)).fetchone():
@@ -129,7 +129,7 @@ def create_case_action_item(quote_no: str, body: dict = Body(...), authorization
     conn.commit()
     conn.close()
     _audit(_tok(authorization), 'case.action_item.create', 'case_action_item', quote_no, text)
-    notify_module_activity("案件管理", "新增代辦事項", user.get("display_name") or user["username"],
+    notify_module_activity("案件管理", "新增待辦事項", user.get("display_name") or user["username"],
                             f"{quote_no}：{text}", "case-management.html")
     return {"id": new_id, "ok": True}
 
@@ -143,10 +143,10 @@ def update_case_action_item(quote_no: str, item_id: int, body: dict = Body(...),
         "SELECT * FROM case_action_items WHERE id=? AND quote_no=?", (item_id, quote_no)
     ).fetchone()
     if not row:
-        conn.close(); raise HTTPException(404, "代辦事項不存在")
+        conn.close(); raise HTTPException(404, "待辦事項不存在")
     new_text = (body.get("text") or "").strip()
     if "text" not in body or not new_text:
-        conn.close(); raise HTTPException(400, "代辦事項內容不得為空")
+        conn.close(); raise HTTPException(400, "待辦事項內容不得為空")
     now = datetime.now().isoformat()
     # 2026-08-28（模組逐步檢查）：內容異動時，若已進入/完成簽核流程，一併重置
     # stage1/stage2 的核准紀錄，避免「主管已核准」的紀錄留在畫面上，但實際核准
@@ -174,17 +174,17 @@ def update_case_action_item(quote_no: str, item_id: int, body: dict = Body(...),
 def delete_case_action_item(quote_no: str, item_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
     if user["role"] not in ("superadmin", "admin"):
-        raise HTTPException(403, "僅管理員可刪除代辦事項")
+        raise HTTPException(403, "僅管理員可刪除待辦事項")
     conn = get_db()
     row = conn.execute(
         "SELECT id FROM case_action_items WHERE id=? AND quote_no=?", (item_id, quote_no)
     ).fetchone()
     if not row:
-        conn.close(); raise HTTPException(404, "代辦事項不存在")
+        conn.close(); raise HTTPException(404, "待辦事項不存在")
     conn.execute("DELETE FROM case_action_items WHERE id=?", (item_id,))
     conn.commit()
     conn.close()
-    notify_module_activity("案件管理", "刪除代辦事項", user.get("display_name") or user["username"],
+    notify_module_activity("案件管理", "刪除待辦事項", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
     _audit(_tok(authorization), 'case.action_item.delete', 'case_action_item', quote_no, quote_no, {'id': item_id})
     return {"ok": True}
@@ -205,18 +205,18 @@ def approve_case_action_item(quote_no: str, item_id: int, body: dict = Body(...)
         if ('project_approve_eng' not in modules and user['role'] != 'superadmin'
                 and user['id'] != dept_mgr_id):
             conn.close()
-            raise HTTPException(403, "需要工程主管確認：請由具「案件代辦－工程主管確認」權限的人，或這個案件業務員所屬部門的主管確認。")
+            raise HTTPException(403, "需要工程主管確認：請由具「案件待辦－工程主管確認」權限的人，或這個案件業務員所屬部門的主管確認。")
     else:
         if ('project_approve_biz' not in modules and user['role'] != 'superadmin'
                 and user['id'] != div_mgr_id):
             conn.close()
-            raise HTTPException(403, "需要業務確認：請由具「案件代辦－業務確認」權限的人，或這個案件業務員所屬處的主管確認。")
+            raise HTTPException(403, "需要業務確認：請由具「案件待辦－業務確認」權限的人，或這個案件業務員所屬處的主管確認。")
 
     row = conn.execute(
         "SELECT * FROM case_action_items WHERE id=? AND quote_no=?", (item_id, quote_no)
     ).fetchone()
     if not row:
-        conn.close(); raise HTTPException(404, "代辦事項不存在")
+        conn.close(); raise HTTPException(404, "待辦事項不存在")
 
     now_iso = datetime.now().isoformat()
     if stage == 1:
@@ -236,7 +236,7 @@ def approve_case_action_item(quote_no: str, item_id: int, body: dict = Body(...)
     conn.close()
     _audit(_tok(authorization), 'case.action_item.approve', 'case_action_item', quote_no,
            f"#{item_id} 第{stage}階段：{user['display_name']}")
-    notify_module_activity("案件管理", f"代辦事項第 {stage} 階段完成",
+    notify_module_activity("案件管理", f"待辦事項第 {stage} 階段完成",
                             user.get("display_name") or user["username"],
                             f"{quote_no} #{item_id}", "case-management.html")
     return {"ok": True, "item": _serialize(row)}
