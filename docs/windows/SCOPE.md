@@ -42,12 +42,11 @@ AS(4): AS1 AS2 AS3 AS4
 AT(1): AT1
 WD(1): WD1
 BR(4): BR1 BR2 BR3 BR4
-BN(17): BN2 BN3 BN4 BN5 BN6 BN7 BN8 BN9 BN10 BN11 BN12 BN13 BN14 BN15 BN16 BN17 BN18
+BN(15): BN2 BN3 BN4 BN5 BN6 BN7 BN8 BN9 BN10 BN11 BN12 BN14 BN15 BN17 BN18
 EM(9): EM1 EM3 EM5 EM6 EM8 EM9 EM10 EM11 EM12
 PX(1): PX1
 JV(1): JV8
 AL(1): AL1
-BI(1): BI1
 QS(1): QS1a
 JV(1): JV27
 JV(1): JV28
@@ -191,8 +190,12 @@ RG(18): RG1 RG2 RG3 RG4 RG5 RG6 RG7 RG8 RG9 RG10 RG11 RG12 RG13 RG14 RG15 RG16 R
 G(10):  G2 G3 G4 G5 G6 G7 G8 G9 G10 G11
 T(6):   T2 T3 T4 T5 T6 T7
 UI(1):  UI7
+BI(1):  BI1
+BN(2):  BN13 BN16
 ```
 
+> 📌 `BI1`、`BN13`、`BN16`（2026-09-24，hichan-0a 應 hichan-8d 登記）：SPEC-BONUS §十一：舊獎金項目／分潤單流程停用（使用者「重做成新流程」、舊單「直接作廢」），寫入端點 410；題於 2026-09-24 退役（404da7c）。功能被移除，不是換一種驗證方式。
+>
 > 📌 `P1-2`（回滾演練）已移出上面的圍欄（hichan-61 2026-09-24，A 授權）：守門的 `_SCOPE_NUM` 把 `P1-x` 解析成 `P1`（`GT2`），
 > 它與 `NEXT` 的 `P1-1` 撞成同一個 `P1` ⇒ 三區互斥那一題紅。它記的是使用者推翻的決定，不是一個待辦項目。
 >
