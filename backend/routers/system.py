@@ -713,7 +713,10 @@ def get_runtime_switches(authorization: str = Header(None)):
 
 @router.get("/api/system/bonus-module-status")
 def get_bonus_module_status(authorization: str = Header(None)):
-    """獎金分潤模組現在開著沒（`BONUS_MODULE_ENABLED`，出貨預設關）。
+    """獎金分潤模組現在開著沒（`BONUS_MODULE_ENABLED`；2026-09-24 起出貨預設開，
+    使用者「上傳到正式機就自動啟用」；現場可用環境變數 =0 關）。
+    📌 下面「為什麼要有這一支」寫的是當初預設關的理由（舊算法），新設計（SPEC-BONUS §十一）
+       已改成同一個獎金池；這一支仍然是側欄與頁面「該不該顯示」的唯一來源。
 
     ## 🔴 為什麼要有這一支：前端旗標要後端給，不能寫死在 JS 裡
 

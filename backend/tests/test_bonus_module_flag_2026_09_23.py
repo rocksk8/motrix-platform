@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""獎金分潤模組總開關 `BONUS_MODULE_ENABLED`（預設**關**，B `d03bf7d`）。
+"""獎金分潤模組總開關 `BONUS_MODULE_ENABLED`（原預設**關**，B `d03bf7d`；2026-09-24 使用者「上傳到正式機就自動啟用」⇒ 翻成預設**開**）。
 
 使用者裁（逐字）：**「如果問題太多先把獎金分潤的模組拉掉，之後有時間
 再處理，記得備註」**（2026-09-23）。
@@ -87,54 +87,44 @@ def _login(client, make_user, username, role="superadmin", modules=None):
 # ══════════════════════════════════════════════════════════════════════
 
 
-def test_the_bonus_module_is_off_by_default(monkeypatch):
-    """🔴 **出貨預設是關的。**
+def test_the_bonus_module_is_on_by_default(monkeypatch):
+    """🔴 **出貨預設是開的**（2026-09-24 翻面）。
 
-    ⚙️ 釘 `bonus_module_on()` 的**回傳**，不是釘原始碼裡有沒有
-    `= False` 那個字——〈守門守的對象被搬走〉的實例就在這個 repo 裡：
-    `radar_on()` 曾經被寫成 `return True`，而釘字面值的那一題照樣全綠。
+    使用者逐字：「獎金分潤模組上傳到正式機就自動啟用」（SPEC-BONUS §11.7）。
+    原本這一題釘「預設關」，理由是舊算法三組各自佔淨利、沒人檢查加總（SPEC-BN21）；
+    §十一 改成同一個獎金池分三類，那個理由不成立了。
 
-    ⚠️ 要先把環境變數清掉：這一題問的是「**沒有人動過它的時候**」，
-    而開發機上可能設著它（那正是 `bonus_module_on()` 支援的開回來方式）。
+    ⚙️ 釘 `bonus_module_on()` 的**回傳**，不是釘原始碼字面值（〈守門守的對象被搬走〉）。
+    ⚠️ 先把環境變數清掉：這一題問的是「**沒有人動過它的時候**」。
     """
     import helpers.bonus as hb
 
     monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
-    assert hb.bonus_module_on() is False or hb.bonus_module_on() == False, (
-        "`bonus_module_on()` 在沒有任何環境變數時回了真 —— 出貨要**預設關**。")
+    assert hb.bonus_module_on() is True, (
+        "`bonus_module_on()` 在沒有任何環境變數時回了假 —— 使用者要「上線就自動啟用」。")
 
 
-def test_the_bonus_module_can_be_turned_back_on_both_ways(monkeypatch):
-    """🔴🔴 **反向控制：它要開得回來——兩條路都要通。**
-
-    ☠️ 少了這一題，一個 `def bonus_module_on(): return False` 的實作
-    會讓上面那一題全綠，而**這個模組就再也開不回來了**
-    ——而使用者的原話是「**之後有時間再處理**」，不是「刪掉」。
+def test_the_bonus_module_can_still_be_turned_off_on_site(monkeypatch):
+    """🔴🔴 **反向控制：現場要關得掉**（翻面後對應原本「開得回來」那一題）。
 
     ```
-    ① 改常數      BONUS_MODULE_ENABLED = True        （改碼重新出貨）
-    ② 設環境變數  BONUS_MODULE_ENABLED=1             （現場開，不用改碼）
+    ① 環境變數 BONUS_MODULE_ENABLED=0   ⇒ 關（現場關，不用改碼）
+    ② 常數改 False 且沒有環境變數        ⇒ 關（改碼重新出貨）
+    ③ 常數 False＋環境變數 =1           ⇒ 開（原本那條「現場開」的路仍然通）
     ```
-    ⚠️ ② 判準是 `== "1"`：`"0"` 是非空字串，用真假值判會**變成開著**
-    （〈null 不等於 0〉的字串版）——所以這裡也釘 `"0"` 必須是關的。
+    ⚠️ ① 的判準是 `== "0"`：用真假值判的話 `"0"` 是非空字串，會判成開著。
     """
     import helpers.bonus as hb
-
-    monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
-    monkeypatch.setattr(hb, "BONUS_MODULE_ENABLED", True)
-    assert hb.bonus_module_on(), (
-        "把常數改成 `True` 之後它還是關的 —— **這個模組開不回來了**。")
-
-    monkeypatch.setattr(hb, "BONUS_MODULE_ENABLED", False)
-    monkeypatch.setenv("BONUS_MODULE_ENABLED", "1")
-    assert hb.bonus_module_on(), (
-        "設了環境變數 `BONUS_MODULE_ENABLED=1` 之後它還是關的 ——\n"
-        + "⚠️ 那是「現場開、不用改碼」那條路，DEPLOY.md 寫著它。")
 
     monkeypatch.setenv("BONUS_MODULE_ENABLED", "0")
-    assert not hb.bonus_module_on(), (
-        "環境變數是 `\"0\"` 而它判成開著 ——\n"
-        + "☠️ `\"0\"` 是**非空字串**，用真假值判會反過來（〈null 不等於 0〉）。")
+    assert not hb.bonus_module_on(), "環境變數 `=0` 之後它還是開的 —— 現場關不掉了。"
+
+    monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
+    monkeypatch.setattr(hb, "BONUS_MODULE_ENABLED", False)
+    assert not hb.bonus_module_on(), "常數改成 False 之後它還是開的。"
+
+    monkeypatch.setenv("BONUS_MODULE_ENABLED", "1")
+    assert hb.bonus_module_on(), "常數 False＋環境變數 =1 應該是開的。"
 
 
 # ══════════════════════════════════════════════════════════════════════

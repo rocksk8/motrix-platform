@@ -1713,8 +1713,8 @@ def _daily_backup_tables() -> dict:
         "案件獎金單":       "SELECT * FROM bonus_case_awards ORDER BY id",
         "案件獎金明細":     "SELECT * FROM bonus_case_award_lines ORDER BY id",
         "案件獎金異動":     "SELECT * FROM bonus_case_award_edit_log ORDER BY id",
-        # 🔴 **獎金模組這一包是關著的（`BONUS_MODULE_ENABLED` 預設關），
-        #    而這兩張表仍然會被建立**（`v104` 照跑）——
+        # 🔴 （寫於模組預設關的時期；2026-09-24 起預設開）獎金模組關著時，
+        #    這兩張表仍然會被建立（`v104` 照跑）——
         # 🔑 備份它們是為了「**開回來那一天資料是完整的**」，
         #    不是因為現在有資料。
         # ☠️ 少了這句話，下一個人會看到「一個關著的模組在做備份」而想拿掉它，

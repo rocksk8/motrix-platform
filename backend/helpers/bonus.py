@@ -38,26 +38,28 @@ import os
 #:    **沒有錯誤訊息**的缺陷：三個 0.3333 加起來不是 1，而沒有人會看到。
 BASIS_POINTS = 10000
 
-#: 獎金分潤模組**出貨預設關**。
+#: 獎金分潤模組**出貨預設開**（2026-09-24 翻面）。
 #:
-#: 🔴 現況：三組（業務／執行／後勤）各自獨立算「佔淨利的比例」，而**沒有
-#: 任何地方檢查加起來是多少**——業務10%＋執行10%＋後勤10% = 實際發掉淨利
-#: 的30%，系統不會說話。要改成「三組共同分攤同一個獎金池」才能打開
-#: （`SPEC-BN21.md`）；在那之前這個模組**不該讓人用**。
-#: ⚠️ 正式機從來沒有這張表（schema 版本 91 < 建表的 97），拉掉的成本是
-#: 0——沒有任何客戶會失去他現在有的東西。
+#: 使用者逐字：「獎金分潤模組上傳到正式機就自動啟用」（SPEC-BONUS §11.7）。
+#: 📌 原本預設關的理由是舊設計「三組各自佔淨利的比例、沒有人檢查加總」（`SPEC-BN21.md`）；
+#:    §十一 的新設計改成**同一個獎金池**分三類（合計須 100%，helpers/bonus_case.py 擋），
+#:    那個理由已經不成立。
+#: ⚙️ 現場仍可關：環境變數 `BONUS_MODULE_ENABLED=0`。
 #: 🔑 環境變數放在 `bonus_module_on()` 裡讀，不寫進這個常數的初始值——
 #: 理由同 `helpers/tender_source.py::radar_on()`：字面值留給守門釘死
-#: 「出貨預設關」，不要讓結果取決於周圍環境。
-BONUS_MODULE_ENABLED = False
+#: 出貨預設，不要讓結果取決於周圍環境。
+BONUS_MODULE_ENABLED = True
 
 
 def bonus_module_on():
-    """獎金分潤模組現在開著沒。**只有 `BONUS_MODULE_ENABLED=1` 才開。**
+    """獎金分潤模組現在開著沒。預設開；`BONUS_MODULE_ENABLED=0` 關，`=1` 開。
 
-    ⚠️ 判準是 `== "1"` 不是真假值：`"0"` 是非空字串，用真假值判會變成開著。
+    ⚠️ 判準是字串比對不是真假值：`"0"` 是非空字串，用真假值判會變成開著。
     """
-    return BONUS_MODULE_ENABLED or os.getenv("BONUS_MODULE_ENABLED") == "1"
+    env = os.getenv("BONUS_MODULE_ENABLED")
+    if env == "0":
+        return False
+    return bool(BONUS_MODULE_ENABLED) or env == "1"
 
 #: 基數的唯一來源。寫成常數是為了讓「它從哪來」可以被查，
 #: 而 `bonus_awards.base_source` 會把它一起凍進每一筆。
