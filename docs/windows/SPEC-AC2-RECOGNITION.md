@@ -28,7 +28,9 @@ v115        case_stages.ratio_bp／contractor_dispatches.invoice_date／
 補登端點    PUT  /api/quotations/{q}/stages/{id}               ratioBp
             PATCH /api/contractor-dispatches/{id}/invoice-date  （已有匯款申請也可登）
             PATCH /api/quotations/{q}/extra-expenses/{id}/dates  invoiceDate／paidDate（任何狀態可登）
-            PATCH /api/quotations/{q}/material-orders           品項 invoiceDate
+            PATCH /api/quotations/{q}/material-orders           品項 invoiceDate（整份覆寫；已結案 400）
+            PATCH /api/quotations/{q}/material-orders/{itemId}/invoice-date  只登一筆（任何案件狀態，含已結案）
+首頁        GET /api/dashboard/expenses-monthly 改呼叫 reports._collect_expenses(basis="accrual")，回應帶 basis／basisLabel
 畫面        reports.html 收支頁：口徑切換、頂端說明、待補登清單（逐種數量＋展開＋連到案件頁）
             case-management.html：階段比例＋合計提示、派工發票日、額外支出發票日／付款日、叫料發票日
 ```
@@ -38,7 +40,9 @@ v115        case_stages.ratio_bp／contractor_dispatches.invoice_date／
 ## 三、交付時必須告知使用者
 
 1. **營運報表收支頁的數字會變**：預設改權責口徑（收入依階段完成、未稅；支出依發票月；派工改未稅；**叫料原本沒算、現在算進去**）。頁面頂端有說明。
-2. **首頁儀表板的月支出沒有改**（仍依派工日、含稅、不含叫料）⇒ 與報表數字不同。
+2. ~~首頁儀表板的月支出沒有改~~ **更正（hichan-0a 裁示）**：首頁 `/api/dashboard/expenses-monthly` 改呼叫報表同一支計算（權責口徑），同一個月只有一個數字。
+   ⚠️ 實查：首頁目前**沒有任何地方顯示**這個月支出（`index.html` 的 `currentMonthExpenseTotal` 只定義、沒被渲染）⇒ 畫面上沒有可以標「權責口徑」的位置；API 回應已帶 `basisLabel`，日後接上畫面時照用。
 3. 上線當下**所有案件都會列在「階段比例未設定」**、所有派工／叫料／額外支出都會列在「未登錄發票」：欄位是新的，需要財務逐筆補登。
-4. 已結案案件的叫料清單不能編輯（既有規則）⇒ 結案後才拿到的叫料發票**無法登錄**，會一直留在待補登清單。
+4. ~~已結案案件的叫料發票無法登錄~~ **更正（hichan-0a 裁示）**：新增只登一筆發票日期的專用端點，任何案件狀態都可以登、不動金額、寫稽核；頁面上改了就直接存。
 5. 叫料與額外支出沒有稅額欄 ⇒ 權責口徑用全額並標「未拆稅」（稅額欄列 NEXT）。
+6. 順帶修正：案件管理的 `?q=` 深連結原本只在「目前清單」找，預設清單排除已結案 ⇒ **已結案案件的連結打開後什麼都沒選到**（待補登清單會連過來）。改成從全部案件找，已結案就切到「已結案」清單再選取。

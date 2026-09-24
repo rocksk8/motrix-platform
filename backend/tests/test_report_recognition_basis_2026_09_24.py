@@ -437,3 +437,59 @@ def test_exports_label_tax_basis_and_carry_the_note(client, sa, basis, label):
     data.update(_build_income_expense_scopes(2026, "2026-03", None, basis=basis))
     html = _build_report_html(data, lab, "t")
     assert BASIS_NOTES[basis] in html
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 叫料發票日期專用端點（已結案也可登）、首頁月支出與報表同一份計算
+# ══════════════════════════════════════════════════════════════════════
+
+MO_INV = "/api/quotations/%s/material-orders/%s/invoice-date"
+
+
+def test_material_invoice_date_can_be_entered_on_a_closed_case_without_touching_money(client, sa):
+    _case("MQ-RB-022", deal="已結案", data={"caseRecord": {"materialOrders": [_mo()]}})
+    assert client.patch("/api/quotations/MQ-RB-022/material-orders", headers=sa,
+                        json={"materialOrders": [_mo("2026-04-20")]}).status_code == 400, "整份覆寫在已結案仍擋"
+    assert "MQ-RB-022" in _flag_quotes(_report(client, sa), "material_no_invoice")
+    r = client.patch(MO_INV % ("MQ-RB-022", "m1"), headers=sa, json={"invoiceDate": "2026-04-20"})
+    assert r.status_code == 200, r.text
+    mo = json.loads(_one_json("MQ-RB-022"))["caseRecord"]["materialOrders"][0]
+    assert mo["invoiceDate"] == "2026-04-20"
+    assert (mo["totalPrice"], mo["paidAmount"], mo["itemName"]) == (1000, 1000, "線材"), "其他欄位原封不動"
+    assert "MQ-RB-022" not in _flag_quotes(_report(client, sa), "material_no_invoice")
+
+
+def _one_json(no):
+    conn = _db()
+    try:
+        return conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (no,)).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_material_invoice_date_endpoint_guards(client, sa, make_user):
+    _case("MQ-RB-023", data={"caseRecord": {"materialOrders": [_mo()]}})
+    assert client.patch(MO_INV % ("MQ-RB-023", "nope"), headers=sa, json={"invoiceDate": "2026-04-20"}).status_code == 404
+    assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=sa, json={"invoiceDate": "2026-4-2"}).status_code == 400
+    eng = _login(client, *make_user(username="rb_mo_eng", role="engineer"))
+    assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=eng, json={"invoiceDate": "2026-04-20"}).status_code == 403
+    cash = _login(client, *make_user(username="rb_mo_cash", role="admin", modules=["cashier"]))
+    assert client.patch(MO_INV % ("MQ-RB-023", "m1"), headers=cash, json={"invoiceDate": "2026-04-20"}).status_code == 200
+
+
+def test_dashboard_expenses_equal_the_report_accrual_numbers(client, sa, seed_extra_expense):
+    from datetime import date
+    today = date.today()
+    mo = today.strftime("%Y-%m")
+    _case("MQ-RB-080", data={"caseRecord": {"materialOrders": [dict(_mo(), paidDate=today.isoformat())]}})
+    _dispatch("MQ-RB-080", total=10000, dispatch_date=today.isoformat())
+    seed_extra_expense("MQ-RB-080", total_cost=700, category="運費", expense_date=today.isoformat())
+    dash = client.get("/api/dashboard/expenses-monthly", headers=sa).json()
+    assert dash["basis"] == "accrual"
+    d = next(x for x in dash["items"] if x["month"] == mo)
+    rpt = _report(client, sa, year=today.year, month=mo)
+    r = next(x for x in rpt["expenses"]["monthly"] if x["month"] == mo)
+    assert {k: d[k] for k in ("contractor", "equipment", "material", "other", "total")} == \
+           {k: r[k] for k in ("contractor", "equipment", "material", "other", "total")}
+    assert d["contractor"] >= 10000 and d["material"] >= 1000, "未稅派工＋叫料都要在"
+    assert dash["otherBreakdown"][mo].get("運費", 0) >= 700

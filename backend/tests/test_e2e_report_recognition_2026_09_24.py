@@ -157,7 +157,7 @@ def test_material_invoice_date_survives_save_and_reload(live_server, make_user):
             inv = page.locator('[data-testid="mo-invoice-date"]').first
             inv.wait_for(state="visible", timeout=20000)
             inv.fill("2026-04-20")
-            page.click('#fin-material-orders button:has-text("儲存叫料")')
+            inv.dispatch_event("change")   # 發票日期改了就直接存（專用端點），不必按「儲存叫料」
 
             def stored():
                 d = json.loads(_one("SELECT data_json FROM quotations WHERE quote_no='MQ-RBE-030'"))
@@ -176,5 +176,37 @@ def test_material_invoice_date_survives_save_and_reload(live_server, make_user):
                     break
                 page.wait_for_timeout(100)
             assert stored() == "2026-04-20"
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_material_invoice_date_on_a_closed_case_lands_without_pressing_save(live_server, make_user):
+    mo = {"itemId": "m9", "itemName": "線材", "quantity": 1, "unit": "捲", "unitPrice": 100,
+          "totalPrice": 100, "paidStatus": "paid", "paidAmount": 100, "paidDate": "2026-03-09", "notes": ""}
+    _case("MQ-RBE-031", deal="已結案", data={"caseRecord": {"materialOrders": [mo]}})
+    u = make_user(username="rbe_sa5", role="superadmin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = _page(browser, live_server, u)
+            page.goto(f"{live_server}/pages/case-management.html?q=MQ-RBE-031")
+            page.wait_for_selector('.cm-tab:has-text("財務")', timeout=20000)
+            page.click('.cm-tab:has-text("財務")')
+            inv = page.locator('[data-testid="mo-invoice-date"]').first
+            inv.wait_for(state="visible", timeout=20000)
+            assert inv.is_enabled(), "已結案也要能登發票日期"
+            inv.fill("2026-05-05")
+            inv.dispatch_event("change")
+
+            def stored():
+                d = json.loads(_one("SELECT data_json FROM quotations WHERE quote_no='MQ-RBE-031'"))
+                return d["caseRecord"]["materialOrders"][0].get("invoiceDate")
+            for _ in range(50):
+                if stored() == "2026-05-05":
+                    break
+                page.wait_for_timeout(100)
+            assert stored() == "2026-05-05"
+            page.locator('[data-testid="mo-msg-readonly"]').wait_for(state="visible", timeout=5000)
         finally:
             browser.close()

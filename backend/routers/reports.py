@@ -3227,14 +3227,9 @@ def monthly_trend(months: int = 12, authorization: str = Header(None)):
 
 
 # ── 月支出金額及明細（2026-08-26）───────────────────────────────────────────
-# 分類跟 dashboard.py::dashboard_expenses_monthly()（首頁「近12個月支出結構」
-# 圖表）刻意保持一致（承攬商派發／設備進貨／料件進貨／其他支出），但那支是
-# 固定近12個月、只算月度加總（供圖表用，無明細）；這裡改成依報表選取的任意
-# 年度全年 1~12 月計算，且要保留逐筆明細（供「支出明細」表列查核用）。刻意
-# 不重構成共用函式直接複用 dashboard.py 那份——兩邊查詢範圍與回傳形狀差異
-# 大（固定近12月 vs 任意年度、無明細 vs 有明細），硬共用只會讓兩邊都變難讀，
-# 只共用「設備類 parts.category」名單（下方常數，異動時記得跟 dashboard.py
-# 那份一起改）。
+# 2026-08-26 起與首頁「近12個月支出結構」分開各算一份；更正（2026-09-24 `AC2`）：兩份口徑
+# 漂移過（首頁依派工日、含稅、不含叫料），同一個月出現兩個數字 ⇒ 首頁改呼叫這裡的
+# `_collect_expenses(..., basis="accrual")`，計算只剩這一份。設備類 parts.category 名單也只剩這裡。
 _EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺服器/工控"}
 
 
@@ -3608,7 +3603,8 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
     }
 
 
-def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = "accrual") -> dict:
+def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str = "accrual",
+                      conn=None) -> dict:
     """回傳該年度 1~12 月的支出結構（承攬商/設備/料件/其他）＋逐筆明細。
 
     department_id（2026-08-28 新增）：承攬商派發／料件進貨／其他支出三類都只透過
@@ -3623,7 +3619,10 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     monthly = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
     details: dict = {"contractor": [], "equipment": [], "material": [], "other": []}
 
-    conn = get_db()
+    # `AC2`：呼叫端可以帶自己的連線（首頁儀表板用 db_conn()，關閉由它保證）；沒帶才自己開、自己關
+    own_conn = conn is None
+    if own_conn:
+        conn = get_db()
 
     dept_by_quote: dict = {}
     if department_id:
@@ -3705,9 +3704,11 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
             # 誤以為是已定稿的數字
             "pending": e["pending"], "taxNote": e["taxNote"], "provisional": e["provisional"],
+            "category": e["category"],   # `AC2`：首頁儀表板 otherBreakdown 用
         })
 
-    conn.close()
+    if own_conn:
+        conn.close()
 
     monthly_items = []
     totals = {"contractor": 0, "equipment": 0, "material": 0, "other": 0, "total": 0}

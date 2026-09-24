@@ -158,6 +158,45 @@ def update_material_orders(quote_no: str,
         conn.close()
 
 
+@router.patch("/api/quotations/{quote_no}/material-orders/{item_id}/invoice-date")
+def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Body(...),
+                                    authorization: str = Header(None)):
+    """`AC2`：只登一筆叫料的廠商發票日期（''＝清除）。hichan-0a 裁示：
+
+    - **任何案件狀態都可以登（含已結案）**：結案後才拿到的發票是常態，而整份覆寫的
+      PATCH 在已結案時 400——沒有這一支，那張發票會永遠留在待補登清單。
+    - 不動任何金額 ⇒ 不受 CM13 金額遮蔽的限制；只改這一鍵，其他欄位原封不動。
+    權限：擁有者檢查＋（admin+、專案經理、出納、財務）。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin") and not any(
+            user_has_module(user, m) for m in ("project_manage", "cashier", "finance")):
+        raise HTTPException(403, "權限不足：只有管理員、專案經理、出納或財務可以登錄叫料發票日期")
+    inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
+    conn = get_db()
+    try:
+        q = conn.execute(
+            "SELECT data_json, sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?",
+            (quote_no,)).fetchone()
+        if not q:
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        _check_quotation_owner(q, user)
+        data = json.loads(q["data_json"] or "{}")
+        orders = (data.get("caseRecord") or {}).get("materialOrders") or []
+        hit = [mo for mo in orders if isinstance(mo, dict) and str(mo.get("itemId")) == item_id]
+        if not hit:
+            raise HTTPException(404, "找不到這筆叫料（請先儲存叫料清單）")
+        before = hit[0].get("invoiceDate") or ""
+        hit[0]["invoiceDate"] = inv
+        save_quotation_json(conn, quote_no, data)
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "material_orders.invoice_date", "quotation", quote_no,
+           "叫料「%s」發票日期：%s → %s" % (hit[0].get("itemName") or item_id, before or "（未登錄）", inv or "（未登錄）"))
+    return {"ok": True, "invoiceDate": inv}
+
+
 @router.get("/api/quotations/{quote_no}/material-orders")
 def get_material_orders(quote_no: str, authorization: str = Header(None)):
     """取得案件的叫料清單。

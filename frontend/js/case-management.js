@@ -1034,6 +1034,26 @@ function app() {
       this.moDirty = true
     },
 
+    // `AC2`：只登一筆叫料的發票日期（專用端點；任何案件狀態都可以，不動金額）
+    async moSetInvoiceDate(m) {
+      const quoteNo = this.selected?.quote_no
+      if (!quoteNo || !m.itemId) return
+      try {
+        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders/${encodeURIComponent(m.itemId)}/invoice-date`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+          body: JSON.stringify({ invoiceDate: m.invoiceDate || '' })
+        })
+        const d = await r.json().catch(() => ({}))
+        this.moMsgError = !r.ok
+        this.moMsg = r.ok ? '發票日期已儲存' : ('發票日期儲存失敗：' + (d.detail || r.status))
+        if (r.ok) m.invoiceDate = d.invoiceDate
+      } catch (e) {
+        this.moMsgError = true
+        this.moMsg = '網路錯誤：' + e.message
+      }
+    },
+
     async moSave() {
       if (this.moSaving) return
       const quoteNo = this.selected?.quote_no
@@ -1174,7 +1194,13 @@ function app() {
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
       if (_qp) {
-        const _found = this.filteredCases.find(c => c.quote_no === _qp)
+        // `AC2`：從全部案件找——預設清單排除已結案，只在 filteredCases 找的話，
+        // 已結案案件的連結（營運報表「待補登」清單會連過來）打開後什麼都沒選到
+        const _found = (this.cases || []).find(c => c.quote_no === _qp)
+        if (_found && !this.filteredCases.some(c => c.quote_no === _qp) && _found.deal_tag === '已結案') {
+          this.listTab = '已結案'
+          this.filterCases()
+        }
         if (_found) await this.selectCase(_found.quote_no)
       }
     },

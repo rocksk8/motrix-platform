@@ -10,10 +10,9 @@ from fastapi import APIRouter, HTTPException, Header, Query
 
 from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
-                     case_extra_expenses, user_has_module, can_see_financial,
+                     user_has_module, can_see_financial,
                      require_any_module, _get_setting, _set_setting)
 from routers.dev_crm import _can_access_case
-from routers.vendor_contractors import _dispatch_row
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -498,114 +497,64 @@ def dashboard_monthly(department_id: Optional[int] = Query(None), authorization:
         return {"items": items}
 
 
-# 設備類 parts.category（進貨成本歸「設備」；線材配件／其他／無法對應 part_no 一律歸「料件」）
-_EQUIPMENT_PART_CATEGORIES = {"網通設備", "監控設備", "交換器", "伺服器/工控"}
-
-
 @router.get("/api/dashboard/expenses-monthly")
 def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), authorization: str = Header(None)):
-    """近 12 個月支出結構：承攬商派發（比照 vendor_contractors._dispatch_row 的
-    grandTotal＝含稅承攬商費用＋外包人員個別計費）／料件與設備進貨成本（stock_items.cost，
-    依 parts.category 分桶）／其他支出（已精算完結案件的 settlement.extraItems，依
-    editHistory 最後一筆 settlement_finalized 的時間歸月）。"""
+    """近 12 個月支出結構（承攬商派發／設備進貨／料件進貨（含叫料）／其他支出）。
+
+    `AC2`（2026-09-24 hichan-0a：「同一個月兩個數字會被問」）：**不再自己算**，改呼叫營運報表
+    同一支 `reports._collect_expenses(..., basis="accrual")`——權責口徑（依廠商發票月、拆得出稅
+    用未稅、叫料計入）。回應帶 `basis`／`basisLabel` 讓畫面標明口徑。
+    過去這裡自己維護一份（依派工日、含稅、不含叫料），與報表的同一個月對不起來。
+    """
     u = _require_user(authorization)
     role = u["role"]
     mods = json.loads(u.get("modules") or "[]") if isinstance(u.get("modules"), str) else (u.get("modules") or [])
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": [], "otherBreakdown": {}}
 
-    with db_conn() as conn:
-        # 部門篩選邏輯（2026-09-09 新增）
-        dept_by_quote = {}
-        if department_id:
-            dept_by_user = {r["id"]: r["department_id"] for r in conn.execute("SELECT id, department_id FROM users").fetchall()}
-            dept_by_quote = {
-                r["quote_no"]: dept_by_user.get(r["sales_person_id"])
-                for r in conn.execute("SELECT quote_no, sales_person_id FROM quotations").fetchall()
-            }
+    from routers.reports import _collect_expenses
 
-        def _quote_in_department(quote_no: str) -> bool:
-            if not department_id:
-                return True
-            return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
+    today = date.today()
+    month_list = []
+    for i in range(11, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        month_list.append(f"{y:04d}-{m:02d}")
+    month_set = set(month_list)
 
-        today = date.today()
-        month_list = []
-        for i in range(11, -1, -1):
-            m = today.month - i
-            y = today.year
-            while m <= 0:
-                m += 12
-                y -= 1
-            month_list.append(f"{y:04d}-{m:02d}")
-        month_set = set(month_list)
-
-        expenses = {mo: {"contractor": 0.0, "equipment": 0.0, "material": 0.0, "other": 0.0} for mo in month_list}
-        other_breakdown = {mo: {} for mo in month_list}
-
-    with db_conn() as conn:
-
-        # ── 承攬商派發 ───────────────────────────────────────────────────────────
-        disp_rows = conn.execute(
-            "SELECT * FROM contractor_dispatches WHERE status != 'cancelled'"
-        ).fetchall()
-        for r in disp_rows:
-            mo = (r["dispatch_date"] or "")[:7]
-            if mo not in expenses or not _quote_in_department(r["quote_no"]):
-                continue
-            expenses[mo]["contractor"] += _dispatch_row(r)["grandTotal"]
-
-        # ── 料件 / 設備進貨成本 ──────────────────────────────────────────────────
-        stock_rows = conn.execute("""
-            SELECT s.created_at AS created_at, s.cost AS cost, s.quote_no, p.category AS category
-            FROM stock_items s LEFT JOIN parts p ON p.part_no = s.part_no
-            WHERE s.status != 'void'
-        """).fetchall()
-        for r in stock_rows:
-            mo = (r["created_at"] or "")[:7]
-            if mo not in expenses or not _quote_in_department(r["quote_no"]):
-                continue
-            bucket = "equipment" if r["category"] in _EQUIPMENT_PART_CATEGORIES else "material"
-            expenses[mo][bucket] += float(r["cost"] or 0)
-
-        # ── 其他支出（精算「額外支出」逐筆）─────────────────────────────────────
-        # 2026-09-09 修：這裡原本有兩個問題，(a) 只撈 settlement.status='finalized'
-        # 的案件，草稿階段填的額外支出完全不算；(b) 一律用精算完結時間歸月，連
-        # reports.py 2026-09-02 已經改用 expenseDate（憑證日期）的修正都沒同步過來，
-        # 所以首頁「本月支出」跟營運報表的同一個數字本來就對不起來。兩處統一改用
-        # helpers.case_extra_expenses()。
-        # 2026-09-11：額外支出搬到 case_extra_expenses 表（migration v75），改成直接
-        # 從那張表取有資料的案件，不再掃 data_json 的 json_extract。conn 也因此必須
-        # 撐到迴圈結束才關——新的 helper 要讀表。
-        quote_rows = conn.execute(
-            "SELECT DISTINCT quote_no FROM case_extra_expenses"
-        ).fetchall()
-        for r in quote_rows:
-            if not _quote_in_department(r["quote_no"]):
-                continue
-            for ex in case_extra_expenses(conn, r["quote_no"]):
-                if ex["month"] not in expenses:
-                    continue
-                expenses[ex["month"]]["other"] += ex["cost"]
-                other_breakdown[ex["month"]][ex["category"]] = (
-                    other_breakdown[ex["month"]].get(ex["category"], 0) + ex["cost"]
-                )
+    by_month = {}
+    other_breakdown = {mo: {} for mo in month_list}
+    for y in sorted({int(mo[:4]) for mo in month_list}):
+        with db_conn() as conn:
+            ex = _collect_expenses(y, department_id, "accrual", conn=conn)
+        for row in ex["monthly"]:
+            if row["month"] in month_set:
+                by_month[row["month"]] = row
+        for it in ex["details"].get("other") or []:
+            mo = (it.get("date") or "")[:7]
+            if mo in month_set:
+                cat = it.get("category") or "其他"
+                other_breakdown[mo][cat] = other_breakdown[mo].get(cat, 0) + it["amount"]
 
     items = []
     for mo in month_list:
-        e = expenses[mo]
-        total = e["contractor"] + e["equipment"] + e["material"] + e["other"]
+        e = by_month.get(mo) or {}
         items.append({
             "month":      mo,
             "label":      f"{int(mo[5:7])}月",
-            "contractor": round(e["contractor"]),
-            "equipment":  round(e["equipment"]),
-            "material":   round(e["material"]),
-            "other":      round(e["other"]),
-            "total":      round(total),
+            "contractor": e.get("contractor", 0),
+            "equipment":  e.get("equipment", 0),
+            "material":   e.get("material", 0),
+            "other":      e.get("other", 0),
+            "total":      e.get("total", 0),
         })
 
     return {
+        "basis": "accrual",
+        "basisLabel": "權責口徑（依廠商發票月）",
         "items": items,
         "otherBreakdown": {mo: {k: round(v) for k, v in cats.items()} for mo, cats in other_breakdown.items()},
     }

@@ -298,6 +298,7 @@ def extra_entries(conn, basis):
                     "desc": "%s｜%s｜%s" % (r["customer_name"] or "", r["category"] or "其他", desc),
                     "amount": cost, "taxNote": "未拆稅", "provisional": provisional,
                     "pending": r["status"] != "已核准", "files": files, "expenseId": r["id"],
+                    "category": r["category"] or "其他",
                     "invoiceDate": inv, "paidDate": paid})
     return out
 

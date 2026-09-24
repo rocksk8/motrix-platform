@@ -2743,11 +2743,12 @@
                         <input class="fi fi--sm" type="text" placeholder="備註（供應商、單號…）" style="flex:1;min-width:130px"
                                x-model="m.notes" :disabled="!moCanEdit()" @input="moDirty = true">
                       </div>
-                      <!-- `AC2`：廠商發票日期（權責口徑依它歸月；未登錄 ⇒ 報表暫用付款月） -->
+                      <!-- `AC2`：廠商發票日期（權責口徑依它歸月；未登錄 ⇒ 報表暫用付款月）。
+                           改了就直接存（專用端點）：已結案、看不到金額的帳號也能登，不需要按「儲存叫料」 -->
                       <div style="display:flex;align-items:center;gap:7px;margin-top:6px;font-size:11px;font-family:var(--font-zh)">
                         <span style="color:var(--text-dim)">發票日期</span>
                         <input class="fi fi--sm" type="date" style="width:142px" data-testid="mo-invoice-date"
-                               x-model="m.invoiceDate" :disabled="!moCanEdit()" @input="moDirty = true">
+                               x-model="m.invoiceDate" @change="moSetInvoiceDate(m)">
                         <span x-show="!m.invoiceDate" style="color:#B45309">未登錄（報表暫用付款月）</span>
                       </div>
                     </div>
@@ -2764,6 +2765,9 @@
                           :style="moMsgError ? 'color:#B91C1C' : 'color:var(--success)'" x-text="moMsg"></span>
                   </div>
 
+                  <!-- `AC2`：唯讀時（已結案等）仍可登發票日期，儲存結果要看得到 -->
+                  <div x-show="!moCanEdit() && moMsg" data-testid="mo-msg-readonly" style="margin-top:8px;font-size:11px;font-family:var(--font-zh)"
+                       :style="moMsgError ? 'color:#B91C1C' : 'color:var(--success)'" x-text="moMsg"></div>
                   <!-- 唯讀原因要寫出來：只把輸入框反灰、不說為什麼，使用者會以為壞了 -->
                   <div x-show="!moCanEdit() && materialOrders.length > 0" style="margin-top:8px;font-size:11px;color:var(--text-dim);font-family:var(--font-zh)"
                        x-text="cr.dealTag === '已結案' ? '案件已結案，叫料清單為唯讀。' : '你沒有叫料的編輯權限（需要管理員或專案經理）。'"></div>
