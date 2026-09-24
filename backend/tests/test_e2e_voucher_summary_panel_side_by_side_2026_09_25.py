@@ -21,6 +21,12 @@ BOX = """() => { const r = s => { const e = document.querySelector(s); if (!e) r
            sw: document.documentElement.scrollWidth } }"""
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _seed(client, u, n=6):
     import db
     conn = db.get_db()
@@ -53,7 +59,7 @@ def _open(browser, base, u, vid, width, height, zoom=None):
     page.goto(f"{base}/pages/voucher.html?id={vid}")
     page.wait_for_function(f"() => {{ try {{ return {D}.id == {vid} && {D}.lines.length && {D}.canEdit }} catch (e) {{ return false }} }}",
                            timeout=20000)
-    page.wait_for_timeout(500)
+    _rendered(page)   # PERF #6：原本固定等 500ms
     page.locator("textarea[x-model='l.summary']").nth(2).focus()        # 第 3 行摘要 ⇒ 面板出現
     page.locator("[data-testid=summary-panel]").wait_for(state="visible", timeout=5000)
     return page
@@ -75,7 +81,7 @@ def test_wide_screen_puts_the_source_panel_beside_the_lines(live_server, client,
             # 帶入後焦點仍在該行摘要
             page.locator(f"[data-testid=summary-panel-case]:has-text('{QNO}')").click()
             page.wait_for_function(f"() => {D}.lines[2].summary.includes('{QNO}')", timeout=5000)
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms（焦點在 $nextTick 裡回到該行）
             focused = page.evaluate("() => [...document.querySelectorAll(\"textarea[x-model='l.summary']\")].indexOf(document.activeElement)")
             assert focused == 2, ("帶入後焦點應回到第 3 行摘要", focused)
         finally:
@@ -94,7 +100,7 @@ def test_the_panel_stays_in_view_while_scrolling_a_long_voucher(live_server, cli
             b = page.evaluate(BOX)
             assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
             page.evaluate("() => window.scrollBy(0, 600)")
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             top = page.evaluate("() => document.querySelector('[data-testid=summary-panel]').getBoundingClientRect().top")
             header = page.evaluate("() => document.querySelector('.mnav').getBoundingClientRect().bottom")
             assert header <= top < b["vh"], ("捲動後面板要停在導覽列下方", top, header)

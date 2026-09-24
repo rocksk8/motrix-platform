@@ -76,6 +76,12 @@ _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
          {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 @pytest.fixture()
 def live_server(client):
     import main
@@ -171,7 +177,9 @@ def test_jv19_export_failure_message_is_visible_inside_the_preview(
 
             page.click('.modal-foot button:has-text("匯出 PDF")'
                       ':not(:has-text("含附件"))')
-            page.wait_for_timeout(800)
+            # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
+            page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
+            _rendered(page)
 
             result = _element_visible_within_scroll_area(
                 page, ".vc-preview-atts .vc-err", ".modal-body")
@@ -230,7 +238,7 @@ def test_jv19_export_success_message_is_visible_inside_the_preview(
                 "() => !Alpine.$data(document.querySelector('[x-data]'))"
                 ".exporting",
                 timeout=30000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
 
             att_msg = page.evaluate(
                 "() => Alpine.$data(document.querySelector('[x-data]'))"

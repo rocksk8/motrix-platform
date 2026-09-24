@@ -33,6 +33,12 @@ _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _login(client, make_user, username, role="superadmin", modules=("cashier",)):
     u, p = make_user(username=username, role=role, modules=list(modules))
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -198,7 +204,10 @@ def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client
                 "() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
                 " return d.selected && d.selected.type === 'voucher' }", timeout=10000)
             btn = page.locator("#aq-reassign-btn")
-            page.wait_for_timeout(300)
+            try:   # PERF #6：原本固定等 300ms ⇒ 等轉簽鈕出現（沒出現交給下面有說明的斷言）
+                btn.wait_for(state="visible", timeout=5000)
+            except Exception:
+                pass
             assert btn.is_visible(), "簽核佇列選到傳票，而轉簽鈕沒有出現"
             page.click("#aq-reassign-btn")
             page.wait_for_function(

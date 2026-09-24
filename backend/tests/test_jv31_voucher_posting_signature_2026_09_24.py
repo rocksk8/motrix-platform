@@ -22,6 +22,12 @@ _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _login(client, make_user, username, display=None):
     import db
     u, p = make_user(username=username, role="superadmin", modules=["cashier"])
@@ -108,7 +114,7 @@ def _labels_on_page(page, base, vid):
     page.goto(f"{base}/pages/voucher.html?id={vid}")
     page.wait_for_function(
         "() => Alpine.$data(document.querySelector('[x-data]')).id == %d" % vid, timeout=15000)
-    page.wait_for_timeout(300)
+    _rendered(page)   # PERF #6：原本固定等 300ms
     return page.eval_on_selector_all(
         '[data-testid="voucher-signs"] > div > span', "els => els.map(e => e.innerText.trim())")
 

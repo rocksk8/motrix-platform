@@ -30,6 +30,12 @@ _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _hdr(client, make_user, username):
     u, p = make_user(username=username, role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -122,7 +128,7 @@ def _new_voucher(page, base):
     page.goto(base + "/pages/voucher.html")
     page.wait_for_function(_D + ".lines", timeout=15000)
     page.click('[data-testid="voucher-new"]')
-    page.wait_for_timeout(300)
+    _rendered(page)   # PERF #6：原本固定等 300ms
 
 
 def _rows(page):
@@ -217,7 +223,7 @@ def test_jv34_the_list_filters_by_keyword_date_and_status(live_server, client, m
             page.wait_for_function(_D + ".listLoaded", timeout=15000)
 
             def visible():
-                page.wait_for_timeout(200)
+                _rendered(page)   # PERF #6：原本固定等 200ms（清單篩選是同步反應）
                 return sorted(t.strip() for t in page.locator(".vc-row:visible .vc-row__sum").all_inner_texts())
 
             page.fill('[data-testid="voucher-filter-kw"]', "香蕉")

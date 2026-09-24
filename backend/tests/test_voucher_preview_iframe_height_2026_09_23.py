@@ -74,6 +74,12 @@ _MIN_RATIO = 0.6
 _MAX_RATIO_DROP = 0.15
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _upload_n(page, live_server, token, vid, n):
     for i in range(n):
         r = page.request.post(
@@ -264,7 +270,9 @@ def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appear
 
             page.click('.modal-foot button:has-text("匯出 PDF")'
                       ':not(:has-text("含附件"))')
-            page.wait_for_timeout(800)
+            # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
+            page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
+            _rendered(page)
 
             after = _settled(page)
             assert after.get("found"), "量不到（按匯出後）——退回改選擇器。"
