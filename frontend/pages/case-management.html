@@ -674,7 +674,7 @@
         <span class="cm-mtools__lbl">排序</span>
         <button type="button" class="aq-sort" :class="{on: gmSort==='ready'}"  @click="gmSort='ready'">最接近結案</button>
         <button type="button" class="aq-sort" :class="{on: gmSort==='stuck'}"  @click="gmSort='stuck'">卡最久</button>
-        <button type="button" class="aq-sort" :class="{on: gmSort==='amount'}" @click="gmSort='amount'">金額</button>
+        <button type="button" class="aq-sort" x-show="canSeeFinancial()" :class="{on: gmSort==='amount'}" @click="gmSort='amount'">金額</button>
         <span class="cm-mtools__lbl" style="margin-left:10px">只看</span>
         <button type="button" class="aq-sort" :class="{on: gmFilter==='ready'}"    @click="gmFilter = gmFilter==='ready'?'':'ready'">可結案</button>
         <button type="button" class="aq-sort" :class="{on: gmFilter==='settling'}" @click="gmFilter = gmFilter==='settling'?'':'settling'">待精算</button>
@@ -851,7 +851,7 @@
               <div class="cm-card__sales" x-show="c.sales_person" x-text="'業務：' + c.sales_person"></div>
               <div class="cm-card__footer">
                 <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
-                  <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                  <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
                   <span class="cm-card__stageprog" x-show="c.stage_total > 0"
                         :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
                         x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"
@@ -889,7 +889,7 @@
                   <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
                   <div class="cm-card__footer">
                     <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
-                      <span class="cm-card__amount" x-text="'NT$ ' + (c.total||0).toLocaleString()"></span>
+                      <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
                       <span class="cm-card__stageprog" x-show="c.stage_total > 0"
                             :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
                             x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"

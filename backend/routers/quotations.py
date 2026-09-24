@@ -40,6 +40,7 @@ from helpers import (
     summarize_payment_items,
 )
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
+from helpers.financial_mask import mask_row as _mask_money_row
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
 from helpers.errors import trace_id
@@ -792,9 +793,13 @@ def list_quotations(
         "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
     ).fetchone()[0]
     conn.close()
+    # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
+    masked = not can_see_financial(user)
     items = []
     for r in rows:
         row = dict(r)
+        if masked:
+            _mask_money_row(row)
         eh_json     = row.pop("edit_history_json", None)
         edit_last = None
         if eh_json:
@@ -1085,6 +1090,9 @@ def gate_matrix(authorization: str = Header(None)):
             "nextDueLabel": next_label,
         })
     conn.close()
+    if not can_see_financial(user):   # CM13
+        for it in items:
+            _mask_money_row(it, ("total",))
     return {"items": items, "today": today}
 
 
