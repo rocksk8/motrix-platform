@@ -2366,6 +2366,19 @@ function app() {
       await this.saveCaseRecord()
     },
 
+    // CU3：使用者按「儲存」⇒ 成功時跳明顯提示；自動存檔走 saveCaseRecord() 不跳
+    saveToast: '',
+    _saveToastTimer: null,
+    async manualSave() {
+      clearTimeout(this._autoSaveTimer)
+      await this.saveCaseRecord()
+      if (this.saveStatus === 'saved' || (this.saveStatus === 'dirty' && this.saveMsg && !this.dirty)) {
+        this.saveToast = this.saveMsg || '已儲存'
+        clearTimeout(this._saveToastTimer)
+        this._saveToastTimer = setTimeout(() => { this.saveToast = '' }, 2500)
+      }
+    },
+
     async saveCaseRecord() {
       if (!this.selected) return
       if (Object.keys(this.badNum).length) {

@@ -492,6 +492,14 @@
     .save-label.dirty { color:var(--warning); }
     .save-label.saved { color:var(--success); }
     .save-label.error { color:var(--danger); }
+    /* CU3：存檔失敗／衝突的常駐橫幅（CM1 的 409 也在這裡）與手動存檔成功提示 */
+    .cm-save-banner { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 10px; padding:9px 12px;
+      border:1px solid var(--danger-border); background:var(--danger-light); color:var(--danger); border-radius:6px;
+      font-size:12.5px; font-family:var(--font-zh); }
+    .cm-save-banner__msg { flex:1; min-width:180px; font-weight:600; }
+    .cm-save-toast { position:fixed; right:20px; bottom:20px; z-index:500; padding:10px 16px; border-radius:8px;
+      background:var(--success); color:#fff; font-size:13px; font-weight:600; font-family:var(--font-zh);
+      box-shadow:0 8px 24px rgba(0,0,0,.18); }
 
     /* Field inputs */
     .fi { width:100%; padding:6px 10px; font-size:12px; border:1px solid var(--border-light); border-radius:6px; font-family:var(--font-zh); background:#fff; outline:none; transition:border-color .12s; box-sizing:border-box; }
@@ -1066,12 +1074,6 @@
                 <div class="cm-header__save">
                   <div class="save-dot" :class="saveStatus"></div>
                   <span class="save-label" :class="saveStatus" x-text="saveMsg"></span>
-                  <template x-if="segConflict">
-                    <span style="display:inline-flex;gap:4px;margin-left:6px;">
-                      <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('reload')">重新載入</button>
-                      <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('keep')">保留我的變更再試</button>
-                    </span>
-                  </template>
                 </div>
 
                 <!-- 「更多」：次要動作（產生專案報告／解鎖／重新上鎖／結案） -->
@@ -1105,7 +1107,7 @@
                   </div>
                 </div>
 
-                <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
+                <button class="btn-save" @click="manualSave()" :disabled="saving">
                   <span x-show="!saving">儲存</span>
                   <span x-show="saving">儲存中...</span>
                 </button>
@@ -1184,6 +1186,22 @@
                 </div>
               </template>
             </div>
+
+            <!-- CU3：存檔失敗／衝突 ⇒ 常駐橫幅，排除後存檔成功才消失 -->
+            <template x-if="saveStatus === 'error' && saveMsg">
+              <div class="cm-save-banner" role="alert" data-testid="save-banner">
+                <span class="cm-save-banner__msg" x-text="saveMsg"></span>
+                <template x-if="segConflict">
+                  <span style="display:inline-flex;gap:6px">
+                    <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('reload')">重新載入</button>
+                    <button type="button" class="btn btn-ghost btn-sm" @click="resolveConflict('keep')">保留我的變更再試</button>
+                  </span>
+                </template>
+                <template x-if="!segConflict && !(cr.dealTag === '已結案' && !selected?.case_semi_unlocked)">
+                  <button type="button" class="btn btn-ghost btn-sm" @click="manualSave()">再試一次</button>
+                </template>
+              </div>
+            </template>
 
             <!-- Tabs -->
             <!-- CU8：窄螢幕分頁列會超出寬度 ⇒ 右緣淡出＋提示可左右滑動 -->
@@ -1904,7 +1922,7 @@
                 </div>
 
                 <div style="display:flex;justify-content:flex-end;margin-top:4px">
-                  <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
+                  <button class="btn-save" @click="manualSave()" :disabled="saving">
                     <span x-show="!saving">儲存備註</span>
                     <span x-show="saving">儲存中...</span>
                   </button>
@@ -3930,6 +3948,9 @@
     </div><!-- /cm-layout -->
   </main>
 </div>
+
+<!-- CU3：按「儲存」成功的提示（自動存檔不跳，避免每 1.5 秒閃一次） -->
+<div class="cm-save-toast" role="status" data-testid="save-toast" x-show="saveToast" x-cloak x-text="saveToast"></div>
 
 <!-- ── 結案前檢查（2026-09-24）：先列出五關、未過的可前往修正；五關全過才能確認 ── -->
 <div x-show="closeCheck.open" x-cloak data-testid="close-check"
