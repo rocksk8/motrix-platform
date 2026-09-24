@@ -661,6 +661,12 @@ $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 if (-not $OutDir) {
     $OutDir = Join-Path $projectRoot "deploy_packages"
 }
+# 2026-09-25：-OutDir 給相對路徑時，下面 Push-Location 進 $pkgDir 之後 `Remove-Item $tarPath`
+# 會把相對路徑再疊一次（...\deploy_packages\X\deploy_packages\X\snapshot.tar）⇒ 測試全綠、
+# 包卻在最後一步失敗。⇒ 一開始就轉成絕對路徑。
+if (-not [System.IO.Path]::IsPathRooted($OutDir)) {
+    $OutDir = [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutDir))
+}
 $pkgDir = Join-Path $OutDir "${timestamp}_${commitShort}"
 New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
 
