@@ -375,13 +375,18 @@
             <div class="kpi-card green">
               <div class="kpi-card__lbl" x-text="scopeLabel + '收入'"></div>
               <div class="kpi-card__val" x-text="fmt(activeIncomeTotal)"></div>
+              <!-- `AC2`：口徑寫在卡片上（權責＝階段完成、未稅；現金＝收款日、含稅），切換在「收支」分頁 -->
+              <div class="kpi-card__sub" data-testid="kpi-income-basis"
+                   x-text="isAccrual ? '權責口徑・未稅（依階段完成）' : '現金口徑・含稅（依收款日）'"></div>
             </div>
             <div class="kpi-card orange">
               <div class="kpi-card__lbl" x-text="scopeLabel + '支出'"></div>
               <div class="kpi-card__val" x-text="fmt(activeExpenseTotal)"></div>
+              <div class="kpi-card__sub" x-text="isAccrual ? '權責口徑（依廠商發票月）' : '現金口徑（依付款日）'"></div>
             </div>
             <div class="kpi-card" :class="netScopeAmount >= 0 ? 'green' : 'red'">
-              <div class="kpi-card__lbl" x-text="scopeLabel + '淨現流'"></div>
+              <!-- `AC2`：權責口徑下收入減支出不是現金流，「淨現流」這個名稱會說錯 -->
+              <div class="kpi-card__lbl" x-text="scopeLabel + (isAccrual ? '損益（權責）' : '淨現流')"></div>
               <div class="kpi-card__val" x-text="fmt(netScopeAmount)"></div>
             </div>
             <div class="kpi-card" x-show="receivablesData">

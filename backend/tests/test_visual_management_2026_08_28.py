@@ -128,12 +128,13 @@ def test_expenses_monthly_filters_contractor_and_material_by_department(client, 
     r_all = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
     assert r_all.status_code == 200, r_all.text
     march_all = next(m for m in r_all.json()["expenses"]["monthly"] if m["month"] == "2026-03")
-    assert march_all["contractor"] == 10000 * 1.05 + 20000 * 1.05
+    # 2026-09-24 AC2：預設權責口徑＝承攬商未稅（原本含稅 ×1.05）；本題驗的是部門篩選
+    assert march_all["contractor"] == 10000 + 20000
 
     r_a = client.get(f"/api/reports/expenses-monthly?year=2026&department_id={dept_a}", headers=_auth(token))
     assert r_a.status_code == 200, r_a.text
     march_a = next(m for m in r_a.json()["expenses"]["monthly"] if m["month"] == "2026-03")
-    assert march_a["contractor"] == round(10000 * 1.05)
+    assert march_a["contractor"] == 10000
 
 
 # ── 庫存水位燈號 ────────────────────────────────────────────────────────────────

@@ -134,6 +134,9 @@ def test_period_bar_drives_income_expense_block(live_server, make_user):
             page.wait_for_selector(".kpi-card__lbl:text-is('當月收入')", timeout=20000)
 
             # ── 月報 2026-07 ──────────────────────────────────────────────
+            # 2026-09-24 AC2：預設改權責口徑（收入依階段完成）；本題種的是「依收款日」的收入，
+            # 驗的是期別同步不是口徑 ⇒ 明確切到現金口徑（切換本身見 test_e2e_report_recognition）
+            page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).setBasis('cash')")
             page.click('.period-type-btn:has-text("月報")')
             page.select_option('.period-bar select >> nth=0', "2026")
             page.select_option('.period-bar select >> nth=1', "7")
