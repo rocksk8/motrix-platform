@@ -237,6 +237,17 @@ window.CM_PARTS.push(() => ({
       loaders[tab]()
     },
 
+    // CM12 P2（2026-09-24）：案件層級狀態的重設集中在各模組的 _reset_<模組>(phase, data)。
+    // phase：'early'＝第一個 await 之前（分頁列一出現就可能被點，必須先重設完）；
+    //        'late'＝建立預設階段之後（dirty 等要在 ensureCaseRecord 之後才清）。
+    // 新增案件層級的狀態時，把重設寫進自己模組的 _reset_，不要寫回 selectCase。
+    _resetCaseScoped(phase, data) {
+      for (const m of ['core', 'list', 'close', 'biz', 'exec', 'dispatch', 'shipping', 'completion', 'feed', 'fin', 'xexp']) {
+        const f = this['_reset_' + m]
+        if (typeof f === 'function') f.call(this, phase, data)
+      }
+    },
+
     // 連點兩件時，只有最後點的那一件可以落地（先點的回應較晚抵達時丟掉）。
     // _selectLive() 回傳「這次載入還算數嗎」：之後又選了案件就回 false。selectCase 與它
     // 發出的每支子載入在每個 await 之後都先問它，前一件的後段不會寫進目前這一件的畫面與存檔。
@@ -277,84 +288,13 @@ window.CM_PARTS.push(() => ({
         this.loadCaseLinks(quoteNo, parts.vouchers)
         // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
         if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
-        // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
-        // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
-        // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，
-        // 這段期間如果使用者已經切到別的分頁（例如「財務」），原本寫在 await
-        // 之後的 activeTab='biz' 會把人硬彈回「案件資訊」——階段建立越慢、
-        // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
-        this.activeTab = 'biz'
-        // 深連結 ?tab=：只在載入後第一次選案件時套用，之後切案件維持回到「案件資訊」
-        if (this._pendingUrlTab) { this.activeTab = this._pendingUrlTab; this._pendingUrlTab = null }
-        this.execSubTab = 'progress'
-        // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
-        // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
-        // ensureCaseRecord()／_seedDefaultStagesIfEmpty() 是會發網路請求的 await
-        // ——原本 moLoading 要等到那之後才立起來，這段空窗期點進財務分頁就會看到
-        // 「尚無叫料項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
-        // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
-        this.materialOrders = []
-        this.moDirty = false
-        this.moMsg = ''
-        this.moLoading = true
-        // CM8（2026-09-24）：延後載入（點分頁才載）的清單也屬於「必須在 await 之前重設完」那一類——
-        // 下面 _seedDefaultStagesIfEmpty() 期間使用者就可能點開財務／承攬商／動態；重設若放在
-        // await 之後，會把那次已載好的資料清掉、又重載一次（e2e 量到過整組請求發兩次）。
-        this._tabLoaded = {}
-        this.caseTasks = []
-        this.contractorVouchers = []
-        this.invoiceVouchers = []
-        this.paymentRequests = []
-        this.financeSummary = null
-        this.financeSummaryLoading = true
-        this.invoiceVouchersLoading = true
-        this.paymentRequestsLoading = true
-        this.contractorVouchersLoading = true
-        this.caseTasksLoading = true
-        this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
-        this.cr.caseRecord = data.data?.caseRecord || null
-        // 基準取伺服器原值（ensureCaseRecord 補上的預設分段會被當成改動送出）
-        this._segBase = this._snapSegments(data.data?.caseRecord)
-        this.segConflict = null
-        this.badNum = {}
+        this._resetCaseScoped('early', data)
         await this.ensureCaseRecord()
         if (!live()) return
         this._segFill = this._fillOnly(this._segBase)
         await this._seedDefaultStagesIfEmpty()
         if (!live()) return
-        this.dirty = false
-        this.saveStatus = ''
-        this.saveMsg = ''
-        this.showLog = false
-        this.showImportModal = false
-        this._syncWarrantyDate = ''
-        this._syncWarrantyMonths = 12
-        this._openDevGroups = {}
-        this.stageView = 'list'
-        this._devDragId = null
-        this._devDragOverId = null
-        this._devInsertBeforeId = null
-        this._devHoverGroupId = null
-        this._devGroupTarget = null
-        this._devHoverStart = 0
-        this.caseActionItems = []
-        this.assignedUserIds = data.assigned_user_ids || []
-        this.caseUpdates = []
-        this.newComment = ''
-        this.shippingNotes = []
-        this.completionNotes = []
-        this.showShippingModal = false
-        this._shippingLogOpen = {}
-        this.shippingContactOptions = []
-        this.showShippingContactPicker = false
-        this.closeShippingPreview()
-        this.closeContractorVoucherPreview()
-        this.closeInvoiceVoucherPreview()
-        this.finShowRecvDetail = false
-        this.finShowPayDetail = false
-        // 叫料的四個旗標已經在 await 之前重設過了（見上面），這裡不再重複
-        this.xe = { ...this.xe, loading: true, items: [], totalAmount: 0,
-                    totalPending: 0, pendingCount: 0, msg: '', busy: false }
+        this._resetCaseScoped('late', data)
         this.loadDispatches(quoteNo, parts.dispatches)
         // 2026-09-14：這三個原本是「點分頁才載」，但分頁上的數量徽章要在沒點過
         // 之前就正確——沒載入時綁 .length 會顯示 0，看起來像「這案子沒有出貨單」，
@@ -783,5 +723,37 @@ window.CM_PARTS.push(() => ({
     logout() {
       fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: 'Bearer ' + (this.session.token || '') } }).catch(() => {})
       localStorage.removeItem('motrix_session'); location.href = 'login.html'
+    },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_core(phase, data) {
+      if (phase === 'early') {
+        // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
+        // this.selected 一設定，分頁列就立刻渲染給使用者點；但下面
+        // _seedDefaultStagesIfEmpty() 對全新案件會連打 5 次建立階段的 API，
+        // 這段期間如果使用者已經切到別的分頁（例如「財務」），原本寫在 await
+        // 之後的 activeTab='biz' 會把人硬彈回「案件資訊」——階段建立越慢、
+        // 被彈回的機率越高。這幾個都是純檢視狀態，提前重設沒有副作用。
+        this.activeTab = 'biz'
+        // 深連結 ?tab=：只在載入後第一次選案件時套用，之後切案件維持回到「案件資訊」
+        if (this._pendingUrlTab) { this.activeTab = this._pendingUrlTab; this._pendingUrlTab = null }
+        this.execSubTab = 'progress'
+        // CM8（2026-09-24）：延後載入（點分頁才載）的清單也屬於「必須在 await 之前重設完」那一類——
+        // 下面 _seedDefaultStagesIfEmpty() 期間使用者就可能點開財務／承攬商／動態；重設若放在
+        // await 之後，會把那次已載好的資料清掉、又重載一次（e2e 量到過整組請求發兩次）。
+        this._tabLoaded = {}
+        this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
+        this.cr.caseRecord = data.data?.caseRecord || null
+        // 基準取伺服器原值（ensureCaseRecord 補上的預設分段會被當成改動送出）
+        this._segBase = this._snapSegments(data.data?.caseRecord)
+        this.segConflict = null
+        this.badNum = {}
+      }
+      if (phase === 'late') {
+        this.dirty = false
+        this.saveStatus = ''
+        this.saveMsg = ''
+        this.showLog = false
+      }
     },
 }))

@@ -345,4 +345,16 @@ window.CM_PARTS.push(() => ({
         }
       }
     },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_feed(phase, data) {
+      if (phase === 'early') {
+        this.caseTasks = []
+        this.caseTasksLoading = true
+      }
+      if (phase === 'late') {
+        this.caseUpdates = []
+        this.newComment = ''
+      }
+    },
 }))

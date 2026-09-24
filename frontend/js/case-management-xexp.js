@@ -393,4 +393,12 @@ window.CM_PARTS.push(() => ({
       this.xe.busy = false
       await this.loadExtraExpenses(this.selected.quote_no)
     },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_xexp(phase, data) {
+      if (phase === 'late') {
+        this.xe ={ ...this.xe, loading: true, items: [], totalAmount: 0,
+                    totalPending: 0, pendingCount: 0, msg: '', busy: false }
+      }
+    },
 }))

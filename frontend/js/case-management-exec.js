@@ -1330,4 +1330,35 @@ window.CM_PARTS.push(() => ({
         })
       } catch (e) { alert('刪除失敗：' + e.message) }
     },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_exec(phase, data) {
+      if (phase === 'early') {
+        // 叫料的狀態也屬於「必須在 await 之前重設完」那一類（2026-09-14 修）：
+        // selected 一設定分頁列就渲染出來，使用者可以立刻點「財務」，而下面
+        // ensureCaseRecord()／_seedDefaultStagesIfEmpty() 是會發網路請求的 await
+        // ——原本 moLoading 要等到那之後才立起來，這段空窗期點進財務分頁就會看到
+        // 「尚無叫料項目」，接著才跳成「載入中…」。全套測試偶發的紅燈就是它
+        // （test_e2e_material_orders_2026_09_11.py，約 1/5 機率）。
+        this.materialOrders = []
+        this.moDirty = false
+        this.moMsg = ''
+        this.moLoading = true
+      }
+      if (phase === 'late') {
+        this.showImportModal = false
+        this._syncWarrantyDate = ''
+        this._syncWarrantyMonths = 12
+        this._openDevGroups = {}
+        this.stageView = 'list'
+        this._devDragId = null
+        this._devDragOverId = null
+        this._devInsertBeforeId = null
+        this._devHoverGroupId = null
+        this._devGroupTarget = null
+        this._devHoverStart = 0
+        this.caseActionItems = []
+        this.assignedUserIds = data.assigned_user_ids || []
+      }
+    },
 }))

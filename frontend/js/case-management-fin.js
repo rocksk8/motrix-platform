@@ -739,4 +739,21 @@ window.CM_PARTS.push(() => ({
     _prStatusClass(s) {
       return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[s] || ''
     },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_fin(phase, data) {
+      if (phase === 'early') {
+        this.invoiceVouchers = []
+        this.paymentRequests = []
+        this.financeSummary = null
+        this.financeSummaryLoading = true
+        this.invoiceVouchersLoading = true
+        this.paymentRequestsLoading = true
+      }
+      if (phase === 'late') {
+        this.closeInvoiceVoucherPreview()
+        this.finShowRecvDetail = false
+        this.finShowPayDetail = false
+      }
+    },
 }))

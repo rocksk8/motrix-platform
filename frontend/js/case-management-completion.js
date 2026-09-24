@@ -120,4 +120,11 @@ window.CM_PARTS.push(() => ({
       if (s === '待審核' || s === '簽核中') return 'badge-amber'
       return 'badge-gray'
     },
+
+    // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
+    _reset_completion(phase, data) {
+      if (phase === 'late') {
+        this.completionNotes = []
+      }
+    },
 }))
