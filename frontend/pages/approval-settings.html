@@ -217,7 +217,6 @@
                           x-text="isLiveSide(dt, side) ? '現在生效' : (isNextSide(dt, side) ? '儲存後變這個' : '')"></span>
                     <span class="scope-side__name" x-text="side === 'unified' ? '統一流程' : '獨立設定'"></span>
                     <span class="scope-side__who" x-text="flowDigest(side === 'unified' ? 'unified' : dt)"></span>
-                    <code class="scope-side__key" x-text="flowSettingKeys[dt] ? flowSettingKeys[dt][side] : ''"></code>
                   </div>
                 </template>
               </div>
