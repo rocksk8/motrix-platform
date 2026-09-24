@@ -567,3 +567,9 @@ hichan-0a 代裁（待確認）：
 - CM6 已推（bf1c7a6）；CM6b（gate 批次）排 CM10 後。CM7「缺單據」使用者裁：**已收款但未登錄發票號碼，或執行階段全完成但無完工單／出貨單，任一成立**；「只看有新動態」改伺服器端篩選。CU2b（全站用詞）改派 hichan-8d。
 - ✅ 使用者確認（18:0x 表單）：CM3 未對應清單放使用者管理頁——可以；出納唯讀時列內純檢視鈕——CM12 重構時處理（列入 CM12 驗收項）。
 - CM7（8179ba0）、CM10（da3e0fd）、CU2b（c167134，全站 56 處、FORM_VERSION V3.5）已推。使用者更正 CM7：**完工單與出貨單兩張都沒有才算缺**（CM7 以「任一」推上，hichan-a3 修正中）。CM8 計畫核准（case-bundle、延後分頁需載入中狀態、不加快取）。
+
+## 🧊 CM12 開工與凍結（2026-09-24 20:0x）
+- 已上 master：CM6b（c34720d）、CU6＋CU7（f8a286d..aed8598）、存檔排隊（5a03228）、CM8（58836e3，manifest 與 24p 合併為一筆）。
+- 使用者裁：**CM12 四段（P1 拆檔、P2 狀態集中重設、P3 樣式／深色／11px、P4 共用對話框）都做完再建包**（預估 9/25 約 05:30）。計畫 (a) 傳統 script＋mixin、(b) P4 放進 CM12 但獨立最後一個 commit、(c) HTML 不拆 partial 只抽 CSS——hichan-0a 同意。
+- **凍結**：`frontend/js/case-management*`、`frontend/pages/case-management.html`、新目錄 `frontend/js/case-management/`、`frontend/css/case-management.css` —— 只有 hichan-a3 可動，直到 CM12 全部推完。
+- 分工：hichan-a3＝P1→P2（之後依進度分派 P3／P4）；hichan-bf＝P4 預備：`frontend/static/ui.js`（MotrixUI.toast／confirm／prompt／banner，非案件頁檔）＋題＋給 e2e 用的對話框 helper；hichan-8d＝P3 預備：`style.css` 只**新增** token 與 `:root[data-theme=dark]` 組、字級 11px 守門題（先只掃案件頁、以 xfail(strict) 釘現況 113 處）。兩者都不碰凍結檔。
