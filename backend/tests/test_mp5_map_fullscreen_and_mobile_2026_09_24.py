@@ -25,6 +25,11 @@ _POINTS = [{"dataset": "suppliers", "sourceKey": "suppliers", "recordId": i, "na
             "distanceFromOfficeKm": i, "distanceFromUserKm": None} for i in range(1, 4)]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _open(pw_, live_server, u, p, w, h, zoom=None):
     browser = pw_.chromium.launch()
     page = browser.new_page(viewport={"width": w, "height": h})
@@ -40,7 +45,7 @@ def _open(pw_, live_server, u, p, w, h, zoom=None):
                            " && d.info.points.length === 3 }", timeout=15000)
     page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
     page.wait_for_function("() => " + _D + "._map", timeout=15000)
-    page.wait_for_timeout(500)
+    _rendered(page)   # PERF #6：原本固定等 500ms
     return browser, page
 
 
@@ -77,7 +82,7 @@ def test_mp5_fullscreen_fills_the_window_and_esc_or_the_button_leaves_it(live_se
         try:
             before = page.evaluate(_RECT)
             page.locator("button.mp-full-btn").click()
-            page.wait_for_timeout(500)
+            _rendered(page)   # PERF #6：原本固定等 500ms
             full = page.evaluate(_RECT)
             print("MP5 字級 %s 全螢幕：%r" % (zoom, full))
             l, t, rr, b = full["panel"]
@@ -93,14 +98,14 @@ def test_mp5_fullscreen_fills_the_window_and_esc_or_the_button_leaves_it(live_se
                 "Leaflet 尺寸 %r 與容器高 %.1f 不一致（字級 %s）" % (full["leaflet"], full["canvasH"], zoom))
             assert full["overflow"] == "hidden", "全螢幕時底下的頁面不可以跟著捲"
             page.keyboard.press("Escape")
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             out = page.evaluate(_RECT)
             assert abs(out["canvasH"] - before["canvasH"]) < 2 and out["overflow"] == "", out
             page.locator("button.mp-full-btn").click()
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             assert page.locator("button.mp-full-btn").inner_text() == "結束全螢幕"
             page.locator("button.mp-full-btn").click()
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             assert abs(page.evaluate(_RECT)["canvasH"] - before["canvasH"]) < 2
         finally:
             browser.close()

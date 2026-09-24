@@ -22,6 +22,11 @@ from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E40
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _pt(i, name, lat, lon, km, org=None, address="台中市"):
     return {"dataset": "suppliers", "sourceKey": "suppliers", "recordId": i, "name": name,
             "org": org, "address": address, "lat": lat, "lon": lon, "precision": "street",
@@ -46,7 +51,7 @@ def _page(pw_, live_server, u, p, tile_failed=False):
     page.goto(live_server + "/pages/map.html")
     page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
                            " && d.info.points.length === 4 }", timeout=15000)
-    page.wait_for_timeout(300)
+    _rendered(page)   # PERF #6：原本固定等 300ms
     return browser, page
 
 
@@ -73,7 +78,7 @@ def test_mp4_clicking_a_row_moves_the_map_to_that_point_and_opens_it(live_server
         try:
             page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
             page.wait_for_function("() => " + _D + "._markerOf", timeout=15000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             _click_row(page, "丙供應商")
             text = _popup(page).inner_text()
             c = page.evaluate("() => { const c = " + _D + "._map.getCenter(); return [c.lat, c.lng] }")
@@ -113,19 +118,19 @@ def test_mp4_search_and_nearest_n_filter_the_list(live_server, make_user, _geo):
         try:
             assert len(_rows(page)) == 4
             page.locator("input.mp-search").fill("乙")
-            page.wait_for_timeout(400)
+            _rendered(page)   # PERF #6：原本固定等 400ms
             got = _rows(page)
             print("MP4 搜尋「乙」：%r" % got)
             assert sorted(got) == ["丁供應商", "乙供應商"], "名稱與機關都要搜得到：%r" % got
             page.locator("input.mp-search").fill("前鎮")
-            page.wait_for_timeout(400)
+            _rendered(page)   # PERF #6：原本固定等 400ms
             assert _rows(page) == ["丙供應商"], "地址也要搜得到"
             page.locator("input.mp-search").fill("")
-            page.wait_for_timeout(400)
+            _rendered(page)   # PERF #6：原本固定等 400ms
             assert len(_rows(page)) == 4, "清空搜尋全部回來"
 
             page.locator("select.mp-near").select_option("10")
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             got = _rows(page)
             print("MP4 最近 10 筆（依據點）：%r" % got)
             assert got == ["甲供應商", "丙供應商", "乙供應商"], "依距離由近到遠；算不出距離的丁不列入：%r" % got
@@ -134,7 +139,7 @@ def test_mp4_search_and_nearest_n_filter_the_list(live_server, make_user, _geo):
             assert _POINTS_N == 3
             # 只取 N 筆
             page.evaluate("() => { const d = " + _D + "; d.nearN = '1' }")
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms
             assert _rows(page) == ["甲供應商"]
         finally:
             browser.close()

@@ -27,6 +27,11 @@ CASE_ASSIGNED = "MQ-MP6-003"   # 業務乙名下，但分配給甲
 CASE_QUOTE_ONLY = "MQ-MP6-004"  # 只有報價單的交貨地點（沒有案件合約地址），甲名下
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def test_mp6_case_address_prefers_the_contract_address():
     both = json.dumps({"deliveryLocation": "台中市南屯區",
                        "caseRecord": {"contract": {"deliveryAddress": "台中市西屯區"}}})
@@ -179,7 +184,7 @@ def test_mp6_the_case_layer_is_on_by_default_and_links_to_the_case(live_server, 
             page.goto(live_server + "/pages/map.html")
             page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
                                    " && d.info.points.length === 1 }", timeout=15000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             got = page.evaluate("""() => { const tr = document.querySelector('tr.mp-row');
                 return tr ? {src: tr.querySelectorAll('td')[0].innerText.trim(),
                              href: tr.querySelector('a.mp-rec') && tr.querySelector('a.mp-rec').getAttribute('href')} : null }""")

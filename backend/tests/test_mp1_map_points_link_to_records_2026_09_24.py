@@ -30,6 +30,11 @@ _ADDR = {
 }
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 @pytest.fixture()
 def _geo(monkeypatch):
     monkeypatch.setattr(geo, "tiles_blocked", lambda: None)
@@ -252,7 +257,7 @@ def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_serve
                 page.goto(live_server + "/pages/" + url)
                 pane = page.locator(".detail-pane.open")
                 pane.wait_for(state="visible", timeout=15000)
-                page.wait_for_timeout(300)
+                _rendered(page)   # PERF #6：原本固定等 300ms
                 text = pane.inner_text()
                 href = pane.locator("a.mp1-onmap").get_attribute("href")
                 print("MP1 %s：明細 %r／在地圖上看 %r" % (url, text[:30], href))

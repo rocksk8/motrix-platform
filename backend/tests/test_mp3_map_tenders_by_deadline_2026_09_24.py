@@ -23,6 +23,11 @@ from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo, _auth  # 
 TODAY = datetime.date(2026, 9, 24)
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 @pytest.mark.parametrize("deadline,want", [
     ("2026-09-23", "closed"),
     ("2026-09-24", "closing"),      # 當天仍可投
@@ -114,7 +119,7 @@ def test_mp3_tenders_are_coloured_by_deadline_and_closed_ones_hidden_by_default(
             page.goto(live_server + "/pages/map.html")
             page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
                                    " && d.info.points.length === 5 }", timeout=15000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             default = page.locator("select.mp-tender-filter").input_value()
             rows = _table(page)
             print("MP3 預設（%s）表格：%r" % (default, rows))
@@ -128,10 +133,10 @@ def test_mp3_tenders_are_coloured_by_deadline_and_closed_ones_hidden_by_default(
             assert colours["T-SOON"] != colours["T-OPEN"], "即將截止要跟未截止不同色：%r" % colours
 
             page.locator("select.mp-tender-filter").select_option("all")
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms
             assert "T-DONE" in _names(page), "「全部」要看得到已截止"
             page.locator("select.mp-tender-filter").select_option("closed")
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms
             names = _names(page)
             print("MP3 只看已截止：%r" % names)
             assert set(names) == {"T-DONE", "客戶甲"}, "只篩標案，其他資料不受影響：%r" % names

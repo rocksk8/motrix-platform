@@ -25,6 +25,11 @@ _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 EVIL = '<img src=x onerror="window.__mp0=1">'
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
+    page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _points_body():
     return json.dumps({
         "points": [{"dataset": "tenders", "lat": 24.15, "lon": 120.67,
@@ -56,7 +61,7 @@ def test_mp0_a_point_popup_shows_external_text_as_text(live_server, make_user):
             pin.click()
             pop = page.locator(".leaflet-popup-content").first
             pop.wait_for(state="visible", timeout=5000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             imgs = pop.locator("img").count()
             text = pop.inner_text()
             fired = page.evaluate("() => window.__mp0 === 1")
