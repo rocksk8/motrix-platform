@@ -76,7 +76,11 @@ def test_fx6a_netguard_blocks_a_real_smtp_connection(tmp_path):
     （〈突變測試的假陽性〉：結束碼非 0 也可能是突變本身寫壞了）。
     ⇒ 要在輸出裡看到 **NETGUARD 自己的那句話**。
     """
-    probe = BACKEND / "tests" / "test_ng1_probe_tmp.py"
+    # 檔名刻意不符 `test_*.py`：放在 tests/ 底下才吃得到 conftest 的 NETGUARD，
+    # 而 -n 並行時其他題（spec_coverage 等）會 glob tests/test_*.py 再逐檔讀 ——
+    # 列到之後、讀之前被這裡刪掉 ⇒ FileNotFoundError（2026-09-24 全量偶發）。
+    # 命令列明指的檔案 pytest 一律收集，不受 python_files 樣式限制。
+    probe = BACKEND / "tests" / "_ng1_probe_tmp.py"
     probe.write_text(
         "import smtplib\n"
         "def test_probe():\n"
