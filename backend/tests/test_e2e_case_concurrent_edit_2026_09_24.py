@@ -25,7 +25,7 @@ from tests._ports import free_safe_port
 
 NO = "MQ-E2ECC-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
-NOTE_INPUT = 'input[placeholder="收款備注..."]'
+NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
 
 @pytest.fixture()

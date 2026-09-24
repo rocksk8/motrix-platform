@@ -76,12 +76,12 @@
     .cm-view-toggle button { border:none; background:transparent; font-family:var(--font-zh); font-size:11px; font-weight:600; padding:5px 11px; border-radius:5px; color:var(--text-dim); cursor:pointer; }
     .cm-view-toggle button.active { background:#fff; color:var(--text-primary); box-shadow:0 1px 2px rgba(0,0,0,.08); }
     /* ── 關卡矩陣（2026-09-14）──────────────────────────────────────────
-       系統對「完結案」已經定義了五項前置條件（§5.2），但它們散在五個頁籤裡，
-       而且只有在按下「完結案」被 400 擋下來時才看得到。這個檢視把五關攤成
+       系統對「結案」已經定義了五項前置條件（§5.2），但它們散在五個頁籤裡，
+       而且只有在按下「結案」被 400 擋下來時才看得到。這個檢視把五關攤成
        欄位、一案一列，並用「最接近結案」當預設排序——那是既有畫面完全給不出、
        而且最會改變行動順序的資訊。
 
-       判定來自 /api/quotations/gate-matrix，跟擋下完結案是同一份後端程式碼，
+       判定來自 /api/quotations/gate-matrix，跟擋下結案是同一份後端程式碼，
        所以「5/5 可結案」等於「現在按下去不會被擋」。 */
     .cm-matrix {
       height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
@@ -669,7 +669,7 @@
       <div class="cm-matrix__head">
         <span class="cm-matrix__title">案件關卡矩陣</span>
         <span class="cm-matrix__sub"
-              x-text="gmLoaded ? matrixRows.length + ' / ' + gateMatrix.length + ' 件　·　五關全過即可完結案'
+              x-text="gmLoaded ? matrixRows.length + ' / ' + gateMatrix.length + ' 件　·　五關全過即可結案'
                                : '載入中…'"></span>
         <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
           <button :class="{active: caseViewMode==='list'}"   @click="caseViewMode='list'">清單</button>
@@ -991,7 +991,7 @@
                   </template>
                 </div>
 
-                <!-- 「更多」：次要動作（產生專案報告／解鎖／重新上鎖／完結案） -->
+                <!-- 「更多」：次要動作（產生專案報告／解鎖／重新上鎖／結案） -->
                 <div class="cm-more" @click.outside="headerMoreOpen = false" @keydown.escape="headerMoreOpen = false">
                   <button type="button" class="btn-ghost cm-more__btn" data-testid="cm-more"
                           :aria-expanded="headerMoreOpen ? 'true' : 'false'" aria-haspopup="menu"
@@ -1002,7 +1002,7 @@
                     <button class="cm-more__item" role="menuitem"
                       :disabled="exportingProjectReport"
                       @click="exportProjectReport()"
-                      title="匯出本案執行進度／叫料／代辦事項／工作日誌／動態彙整 PDF">
+                      title="匯出本案執行進度／叫料／待辦事項／工作日誌／動態彙整 PDF">
                       <span x-text="exportingProjectReport ? '產出中…' : '產生專案報告'"></span>
                     </button>
                     <template x-if="cr.dealTag === '已結案' && !selected.case_semi_unlocked">
@@ -1017,7 +1017,7 @@
                          還會啟動保固追蹤期），而且原本就只有 superadmin 能把它降級回來
                          ——按得下去的人比按得回來的人多，本來就不對稱。後端同步擋。 -->
                     <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
-                      <button class="cm-more__item btn-close-case" role="menuitem" @click="closeCaseAction()">完結案</button>
+                      <button class="cm-more__item btn-close-case" role="menuitem" @click="closeCaseAction()">結案</button>
                     </template>
                   </div>
                 </div>
@@ -1209,7 +1209,7 @@
                   </div>
                 </div>
                 <div class="fi-group" style="margin-bottom:18px">
-                  <label class="fi-label">合約備注</label>
+                  <label class="fi-label">合約備註</label>
                   <textarea class="fi" rows="2" placeholder="合約特殊條款、注意事項..." x-model="cr.caseRecord.contract.contractNote" @input="setDirty()" style="resize:vertical;line-height:1.6"></textarea>
                 </div>
 
@@ -1279,8 +1279,8 @@
                   <button class="cm-tab" :class="{active: execSubTab==='progress'}"  @click="execSubTab='progress'">執行進度</button>
                   <button class="cm-tab" :class="{active: execSubTab==='materials'}" @click="execSubTab='materials'">叫料管控</button>
                   <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備注</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">代辦事項</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備註</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">待辦事項</button>
                   <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">成員</button>
                 </div>
 
@@ -1442,7 +1442,7 @@
                       <div class="visit-row" style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;padding-bottom:5px;border-bottom:1px solid #F0EFEB;margin-bottom:6px;align-items:center">
                         <span>前往日期</span>
                         <span style="text-align:center">人次</span>
-                        <span>工作內容 / 備注</span>
+                        <span>工作內容 / 備註</span>
                         <span></span>
                       </div>
 
@@ -1452,7 +1452,7 @@
                           <input type="number" min="1" max="99" x-model.number="v.visitPeople" @change="updateVisit(st, v)"
                                  placeholder="人" class="fi fi--sm" style="text-align:center;font-family:LINE Seed TW_OTF, sans-serif">
                           <textarea x-model="v.note" @change="updateVisit(st, v)"
-                                    placeholder="工作內容、施工項目、備注..." class="fi fi--sm" rows="1"
+                                    placeholder="工作內容、施工項目、備註..." class="fi fi--sm" rows="1"
                                     style="resize:vertical;line-height:1.5;min-height:30px"></textarea>
                           <button class="btn-del" @click="removeVisit(idx, vi)" style="margin-top:2px">×</button>
                         </div>
@@ -1550,7 +1550,7 @@
                           </template>
                         </div>
                       </template>
-                      <input class="fi fi--sm" type="text" placeholder="備注" x-model="mat.note" @input="setDirty()" style="width:100%;margin-top:6px">
+                      <input class="fi fi--sm" type="text" placeholder="備註" x-model="mat.note" @input="setDirty()" style="width:100%;margin-top:6px">
 
                       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
                         <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)">附件（到貨憑證/包裝清單...）</span>
@@ -1561,7 +1561,7 @@
                           </span>
                         </template>
                         <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                          + 上傳附件
+                          ＋ 上傳附件
                           <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialFiles(idx, $event)">
                         </label>
                       </div>
@@ -1575,7 +1575,7 @@
                           </span>
                         </template>
                         <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                          + 上傳發票
+                          ＋ 上傳發票
                           <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadMaterialInvoiceFiles(idx, $event)">
                         </label>
                       </div>
@@ -1694,8 +1694,8 @@
                                 </template>
                               </div>
                               <div class="dev-row" style="margin-top:3px">
-                                <span class="dev-row__lbl">備注</span>
-                                <input class="fi fi--sm" type="text" placeholder="設備備注" x-model="dev.note" @input="setDirty()">
+                                <span class="dev-row__lbl">備註</span>
+                                <input class="fi fi--sm" type="text" placeholder="設備備註" x-model="dev.note" @input="setDirty()">
                               </div>
                             </div>
                           </template>
@@ -1754,8 +1754,8 @@
                           </template>
                         </div>
                         <div class="dev-row" style="margin-top:3px">
-                          <span class="dev-row__lbl">備注</span>
-                          <input class="fi fi--sm" type="text" placeholder="設備備注" x-model="entry.dev.note" @input="setDirty()">
+                          <span class="dev-row__lbl">備註</span>
+                          <input class="fi fi--sm" type="text" placeholder="設備備註" x-model="entry.dev.note" @input="setDirty()">
                         </div>
                       </div>
                     </template>
@@ -1784,7 +1784,7 @@
                 </div>
               </div>
 
-              <!-- ── 保固備注 ── -->
+              <!-- ── 保固備註 ── -->
               <div x-show="execSubTab==='warranty'">
                 <template x-if="cr.dealTag === '已結案'">
                   <div style="background:#F5F3FF;border:1px solid #C4B5FD;border-radius:10px;padding:14px 18px;margin-bottom:18px">
@@ -1804,32 +1804,32 @@
                 </template>
 
                 <div class="fi-group">
-                  <label class="fi-label">整體保固條件備注</label>
+                  <label class="fi-label">整體保固條件備註</label>
                   <textarea class="fi" placeholder="整體保固條件說明、特殊約定事項..."
                             x-model="cr.caseRecord.warrantyNote" @input="setDirty()"
                             style="resize:vertical;min-height:80px;line-height:1.6"></textarea>
                 </div>
 
                 <div class="fi-group">
-                  <label class="fi-label">案件執行備注</label>
-                  <textarea class="fi" placeholder="案件執行備注、注意事項、重要紀錄..."
+                  <label class="fi-label">案件執行備註</label>
+                  <textarea class="fi" placeholder="案件執行備註、注意事項、重要紀錄..."
                             x-model="cr.caseRecord.notes" @input="setDirty()"
                             style="resize:vertical;min-height:120px;line-height:1.6"></textarea>
                 </div>
 
                 <div style="display:flex;justify-content:flex-end;margin-top:4px">
                   <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
-                    <span x-show="!saving">儲存備注</span>
+                    <span x-show="!saving">儲存備註</span>
                     <span x-show="saving">儲存中...</span>
                   </button>
                 </div>
               </div><!-- /warranty -->
 
-              <!-- ── 代辦事項（2026-08-26 專案管理併入案件管理）── -->
+              <!-- ── 待辦事項（2026-08-26 專案管理併入案件管理）── -->
               <div x-show="execSubTab==='todos'">
                 <div style="display:flex;gap:8px;margin-bottom:14px">
                   <input type="text" class="fi" style="flex:1"
-                         placeholder="輸入代辦事項內容…"
+                         placeholder="輸入待辦事項內容…"
                          x-model="newActionItemText"
                          @keydown.enter="addActionItem()">
                   <button class="btn-add" @click="addActionItem()" :disabled="!newActionItemText.trim() || addingActionItem">
@@ -1840,7 +1840,7 @@
                   <div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0">載入中…</div>
                 </template>
                 <template x-if="!caseActionItemsLoading && caseActionItems.length === 0">
-                  <div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0">尚無代辦事項</div>
+                  <div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0">尚無待辦事項</div>
                 </template>
                 <template x-for="item in caseActionItems" :key="item.id">
                   <div style="border:1px solid var(--border-light);border-radius:8px;padding:10px 12px;margin-bottom:8px">
@@ -2313,8 +2313,8 @@
                         <input class="fi fi--sm" type="date" x-model="item.invoiceDate" @change="setDirty()">
                       </div>
                       <div>
-                        <span class="fi-label">備注</span>
-                        <input class="fi fi--sm" type="text" placeholder="收款備注..." x-model="item.note" @input="setDirty()">
+                        <span class="fi-label">備註</span>
+                        <input class="fi fi--sm" type="text" placeholder="收款備註..." x-model="item.note" @input="setDirty()">
                       </div>
                     </div>
 
@@ -2368,7 +2368,7 @@
                         </span>
                       </template>
                       <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                        + 上傳發票
+                        ＋ 上傳發票
                         <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadPaymentItemInvoiceFiles(idx, $event)">
                       </label>
                     </div>
@@ -2449,7 +2449,7 @@
                 </button>
 
                 <div class="fi-group" style="margin-top:14px">
-                  <label class="fi-label">付款備注</label>
+                  <label class="fi-label">付款備註</label>
                   <input class="fi" type="text" placeholder="付款條件、特殊約定..."
                          x-model="cr.caseRecord.payment.note" @input="setDirty()">
                 </div>
@@ -2512,7 +2512,7 @@
                           </span>
                         </template>
                         <label style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
-                          + 上傳附件
+                          ＋ 上傳附件
                           <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadInvoiceVoucherIssuedFiles(v, $event)">
                         </label>
                       </div>
@@ -3046,10 +3046,10 @@
                       </div>
                     </template>
 
-                    <!-- 備注 -->
+                    <!-- 備註 -->
                     <template x-if="caseSettleMemo()">
                       <div style="margin-top:14px;background:#F9FAFB;border-radius:8px;padding:12px 14px">
-                        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:6px">備注</div>
+                        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:6px">備註</div>
                         <div style="font-size:13px;font-family:var(--font-zh);line-height:1.6;white-space:pre-wrap" x-text="caseSettleMemo()"></div>
                       </div>
                     </template>
@@ -3156,7 +3156,7 @@
                     </div>
                     <!-- Personnel list -->
                     <div x-show="d.personnel && d.personnel.length > 0" style="padding:10px 16px" :style="(d.items && d.items.length>0) ? 'border-top:1px solid var(--border-light)' : ''">
-                      <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">外包名單人員</div>
+                      <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.04em;margin-bottom:6px">外包人員</div>
                       <table style="width:100%;border-collapse:collapse;font-size:11px">
                         <tbody>
                           <template x-for="(p, pi) in d.personnel" :key="pi">
@@ -3188,7 +3188,7 @@
                       <span x-show="!d.invoiceDate" style="color:#B45309">未登錄（報表暫用驗收／派工月）</span>
                     </div>
                     <div x-show="d.notes" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim)"
-                         x-text="'備注：' + d.notes"></div>
+                         x-text="'備註：' + d.notes"></div>
                     <!-- 承攬商報價附件 -->
                     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px 0">
                       <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)">承攬商報價附件</span>
@@ -3200,7 +3200,7 @@
                       </template>
                       <label x-show="['superadmin','admin'].includes(session.role)"
                              style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                        + 上傳報價
+                        ＋ 上傳報價
                         <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadDispatchFiles(d, $event)">
                       </label>
                     </div>
@@ -3215,7 +3215,7 @@
                       </template>
                       <label x-show="['superadmin','admin'].includes(session.role)"
                              style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                        + 上傳發票
+                        ＋ 上傳發票
                         <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadDispatchInvoiceFiles(d, $event)">
                       </label>
                     </div>
@@ -3385,7 +3385,7 @@
                       </table>
                     </div>
                     <div x-show="n.notes" style="padding:6px 16px 0;font-size:11px;color:var(--text-dim)"
-                         x-text="'備注：' + n.notes"></div>
+                         x-text="'備註：' + n.notes"></div>
 
                     <!-- 回簽附件 -->
                     <div style="padding:8px 16px;border-top:1px solid var(--border-light);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -3397,7 +3397,7 @@
                         </span>
                       </template>
                       <label style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
-                        + 上傳附件
+                        ＋ 上傳附件
                         <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadShippingSignedFiles(n, $event)">
                       </label>
                     </div>
@@ -3843,7 +3843,7 @@
   <div role="dialog" aria-modal="true" aria-labelledby="close-check-title"
        style="margin:auto;background:#fff;border-radius:12px;width:100%;max-width:520px;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
-      <span id="close-check-title" style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)">完結案前檢查</span>
+      <span id="close-check-title" style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)">結案前檢查</span>
       <button type="button" aria-label="關閉" @click="closeCheck.open = false"
               style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
     </div>
@@ -3899,13 +3899,13 @@
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">承攬商</label>
           <select x-model="dispatchForm.vendor_id"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
-            <option value="">— 無承攬商（純外包名單人員點工）—</option>
+            <option value="">— 無承攬商（純外包人員點工）—</option>
             <template x-for="v in vendors" :key="v.id">
               <option :value="v.id" x-text="v.name + (v.contactName ? ' (' + v.contactName + ')' : '')"></option>
             </template>
           </select>
           <div style="font-size:11px;color:var(--text-dim);margin-top:4px">
-            承攬商與外包名單人員至少需擇一，可只填外包人員（點工）不選承攬商
+            承攬商與外包人員至少需擇一，可只填外包人員（點工）不選承攬商
           </div>
           <div x-show="vendors.length===0" style="font-size:11px;color:var(--warning);margin-top:4px">
             尚無承攬商資料，如需派發給承攬商請先至
@@ -4041,8 +4041,8 @@
         </span>
       </div>
 
-      <!-- 外包名單人員 -->
-      <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:4px;margin-top:16px;margin-bottom:10px">外包名單人員（可複選，個別計費）</div>
+      <!-- 外包人員 -->
+      <div style="font-size:11px;font-weight:600;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border-light);padding-bottom:4px;margin-top:16px;margin-bottom:10px">外包人員（可複選，個別計費）</div>
       <div class="attendee-chips" style="margin-bottom:6px;display:block" x-show="(dispatchForm.personnel||[]).length">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <template x-for="(p, pi) in dispatchForm.personnel" :key="p.id">
@@ -4056,7 +4056,7 @@
                 </div>
               </td>
               <td style="padding:5px 6px">
-                <input type="text" x-model="p.note" placeholder="備注（選填）"
+                <input type="text" x-model="p.note" placeholder="備註（選填）"
                        style="width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box">
               </td>
               <td style="width:24px;text-align:center">
@@ -4069,7 +4069,7 @@
       </div>
       <div class="attendee-add">
         <select class="attendee-select" x-model="_newDispatchPersonnelId">
-          <option value="">選擇外包名單人員…</option>
+          <option value="">選擇外包人員…</option>
           <template x-for="c in contractorRoster" :key="c.id">
             <option :value="c.id" x-text="c.name + (c.phone ? ' (' + c.phone + ')' : '')"></option>
           </template>
@@ -4077,7 +4077,7 @@
         <button class="btn btn-ghost btn-sm" @click="addDispatchPersonnel()">加入</button>
       </div>
       <div x-show="contractorRoster.length===0" style="font-size:11px;color:var(--warning);margin-top:4px">
-        尚無外包名單資料。
+        尚無外包名冊資料。
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:8px" x-show="(dispatchForm.personnel||[]).length">
         <span style="font-size:13px;font-weight:600;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary)">
@@ -4092,8 +4092,8 @@
 
       <!-- Notes -->
       <div style="margin-top:14px">
-        <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備注</label>
-        <textarea x-model="dispatchForm.notes" rows="2" placeholder="合作條件、特殊備注…"
+        <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備註</label>
+        <textarea x-model="dispatchForm.notes" rows="2" placeholder="合作條件、特殊備註…"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div x-show="dispatchMsg" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="dispatchMsg"></div>
@@ -4275,8 +4275,8 @@
 
       <!-- Notes -->
       <div style="margin-top:14px">
-        <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備注</label>
-        <textarea x-model="shippingForm.notes" rows="2" placeholder="出貨備注、注意事項…"
+        <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">備註</label>
+        <textarea x-model="shippingForm.notes" rows="2" placeholder="出貨備註、注意事項…"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;resize:vertical;box-sizing:border-box"></textarea>
       </div>
       <div x-show="shippingMsg" style="color:var(--danger);font-size:12px;margin-top:8px" x-text="shippingMsg"></div>

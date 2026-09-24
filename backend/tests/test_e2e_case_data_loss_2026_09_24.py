@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 import uvicorn
 from tests._ports import free_safe_port
 
-NOTE_INPUT = 'input[placeholder="收款備注..."]'
+NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
 
 @pytest.fixture()

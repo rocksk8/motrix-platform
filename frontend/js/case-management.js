@@ -19,9 +19,9 @@ function app() {
     listTab: 'all',
     caseViewMode: 'list',   // 'list' | 'board' | 'matrix'
     // ═══ 關卡矩陣（2026-09-14）══════════════════════════════════════════
-    // 五項完結案前置條件（§5.2）原本散在五個頁籤，而且只有在按下「完結案」
+    // 五項結案前置條件（§5.2）原本散在五個頁籤，而且只有在按下「結案」
     // 被 400 擋下來時才看得到。資料來自 /api/quotations/gate-matrix，那支
-    // 端點跟擋下完結案用的是同一份判定（_case_close_gates），所以矩陣上的
+    // 端點跟擋下結案用的是同一份判定（_case_close_gates），所以矩陣上的
     // 「5/5 可結案」等於「現在按下去不會被擋」。
     gateMatrix: [],
     gmLoaded: false,
@@ -238,7 +238,7 @@ function app() {
     _devGroupTarget: null,   // 'dev_X' confirmed for grouping after 900ms hover
     selectableUsers: [],
 
-    // ── 代辦事項（2026-08-26 專案管理併入案件管理）──
+    // ── 待辦事項（2026-08-26 專案管理併入案件管理）──
     caseActionItems: [],
     caseActionItemsLoading: false,
     newActionItemText: '',
@@ -1575,7 +1575,7 @@ function app() {
       this.caseTasksLoading = false
     },
 
-    // ── 代辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html
+    // ── 待辦事項（2026-08-26 專案管理併入案件管理，取代原本跳去 projects.html
     //    的 goToProject()/createProjectFromCase()）──
     async loadCaseActionItems() {
       if (!this.selected) return
@@ -1610,7 +1610,7 @@ function app() {
     },
 
     async deleteActionItem(itemId) {
-      if (!this.selected || !confirm('確定刪除此代辦事項？')) return
+      if (!this.selected || !confirm('確定刪除此待辦事項？')) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/action-items/${itemId}`, {
           method: 'DELETE',
@@ -2035,7 +2035,7 @@ function app() {
 
     _checkAllStagesDone() {
       if (this.cr.dealTag !== '已成案') return
-      // 2026-09-13：完結案限最高管理者，其他人跳這個提示只會得到 403，
+      // 2026-09-13：結案限最高管理者，其他人跳這個提示只會得到 403，
       // 按了失敗比沒看到提示更令人困惑。
       if ((this.session?.role || '') !== 'superadmin') return
       const stages = this.cr.caseRecord?.stages || []
@@ -2044,7 +2044,7 @@ function app() {
       if (this._allDonePrompted) return
       this._allDonePrompted = true
       setTimeout(() => {
-        if (confirm('所有執行進度已完成！\n\n是否現在完結案件並進入保固追蹤期？\n（可稍後再按右上角「完結案」按鈕）')) {
+        if (confirm('所有執行進度已完成！\n\n是否現在結案並進入保固追蹤期？\n（可稍後在「更多」選單按「結案」）')) {
           this.closeCaseAction()
         }
       }, 300)
@@ -2451,8 +2451,8 @@ function app() {
           if (idx !== -1) this.cases[idx].deal_tag = tag
           this.filterCases()
         } else {
-          // 完結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置
-          // 條件，不能靜默吞掉，不然使用者只會看到「完結案」按鈕沒反應。
+          // 結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置
+          // 條件，不能靜默吞掉，不然使用者只會看到「結案」按鈕沒反應。
           const err = await r.json().catch(() => ({}))
           alert(err.detail || '操作失敗，請稍後再試')
         }
@@ -3655,7 +3655,7 @@ function app() {
     },
 
     dispatchTotalCost() {
-      // 承攬商含稅合計 + 外包名單人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
+      // 承攬商含稅合計 + 外包人員金額（不計稅），與精算頁面「承攬商派發成本」算法一致
       return this.dispatches
         .filter(d => d.status !== 'cancelled')
         .reduce((s, d) => s + (d.grandTotal || 0), 0)
@@ -3812,7 +3812,7 @@ function app() {
 
     async saveDispatch() {
       if (!this.dispatchForm.vendor_id && !(this.dispatchForm.personnel || []).length) {
-        this.dispatchMsg = '請至少選擇承攬商或外包名單人員其中一項'; return
+        this.dispatchMsg = '請至少選擇承攬商或外包人員其中一項'; return
       }
       this.dispatchSaving = true; this.dispatchMsg = ''
       const body = {
