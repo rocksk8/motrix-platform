@@ -573,3 +573,10 @@ hichan-0a 代裁（待確認）：
 - 使用者裁：**CM12 四段（P1 拆檔、P2 狀態集中重設、P3 樣式／深色／11px、P4 共用對話框）都做完再建包**（預估 9/25 約 05:30）。計畫 (a) 傳統 script＋mixin、(b) P4 放進 CM12 但獨立最後一個 commit、(c) HTML 不拆 partial 只抽 CSS——hichan-0a 同意。
 - **凍結**：`frontend/js/case-management*`、`frontend/pages/case-management.html`、新目錄 `frontend/js/case-management/`、`frontend/css/case-management.css` —— 只有 hichan-a3 可動，直到 CM12 全部推完。
 - 分工：hichan-a3＝P1→P2（之後依進度分派 P3／P4）；hichan-bf＝P4 預備：`frontend/static/ui.js`（MotrixUI.toast／confirm／prompt／banner，非案件頁檔）＋題＋給 e2e 用的對話框 helper；hichan-8d＝P3 預備：`style.css` 只**新增** token 與 `:root[data-theme=dark]` 組、字級 11px 守門題（先只掃案件頁、以 xfail(strict) 釘現況 113 處）。兩者都不碰凍結檔。
+
+## 🧊 CM12 P3／P4 分工（2026-09-24 21:3x；P1 e2e5efd、P2 2e6e1f7、件數失敗顯示 ec0d46f 已推）
+- **P3**（樣式／token／深色／11px，改 `case-management.html`＋新 `frontend/css/case-management.css`）：**hichan-a3**。案件頁移出全站 invert（比照 ui.js 的 .mui-root）；字級守門 xfail 翻面；golden 維持綠。
+- **P4 A 包**（120 處，SPEC-CM12-P4-UI 附錄 A）：**hichan-bf**；另負責把 golden 腳本與相關 e2e 的 page.on('dialog') 改用 `_ui_dialogs` helper。
+- **P4 B 包**（112 處）：**hichan-8d**（全量預演第二輪回報後接）。
+- 凍結改為：HTML／CSS 只有 a3；`case-management-*.js` 依 A／B 包的方法歸屬各自改，不碰對方的方法；每支 JS 改完跑 `test_case_page_parts`。推前 rebase，以已推者為底。
+- P4 A、B 推完 ⇒ 案件頁 `forbid_native_dialogs` 守門（案件頁不得再有原生 alert／confirm／prompt）。
