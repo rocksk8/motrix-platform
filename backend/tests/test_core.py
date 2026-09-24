@@ -79,6 +79,9 @@ def _make_case(quote_date="2026-03-01", total=100_000, pretax=None, received=50_
     }
 
 
+# `_compute_achievement` 會開 get_db() 查 users（reports.py 業務員名字→id）⇒ 需要一個已初始化的隔離 DB。
+# 沒有這行時，單獨跑或 -n 分到沒有其他題先建表的 worker 就 `no such table: users`（全量順序剛好掩蓋）。
+@pytest.mark.usefixtures("client")
 class TestComputeAchievement:
     def test_no_targets(self):
         result = _compute_achievement(2026, {}, [])
