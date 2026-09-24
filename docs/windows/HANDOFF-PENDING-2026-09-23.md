@@ -581,3 +581,6 @@ hichan-0a 代裁（待確認）：
 - 凍結改為：HTML／CSS 只有 a3；`case-management-*.js` 依 A／B 包的方法歸屬各自改，不碰對方的方法；每支 JS 改完跑 `test_case_page_parts`。推前 rebase，以已推者為底。
 - P4 A、B 推完 ⇒ 案件頁 `forbid_native_dialogs` 守門（案件頁不得再有原生 alert／confirm／prompt）。
 - 全量預演（hichan-8d，1b684cc）：第一輪 3 紅（e2e 逾時）與 hichan-a3 的全量完全重疊；第二輪 3244 passed／0 failed。分類＝負載，不改題。⇒ **最終建包規則**：建包全量期間**所有視窗停止跑 -n 測試**（hichan-0a 開跑前宣告，完成後解除），停手回報附 `git status --porcelain` 完整輸出。
+
+## 🟢 CT1 外包名冊分行（2026-09-24 22:4x 使用者：「外包名冊增加分行的欄位」；執行 hichan-8d，進本包）
+- 實查：`contractors.bank_branch` 與表單欄位已存在（08-01 e4afc4e）。使用者表單選：**清單欄位、匯款申請／薪資單、匯入／匯出 Excel** 三處補上分行。凍結中的 case-management.* 若需動先回報。
