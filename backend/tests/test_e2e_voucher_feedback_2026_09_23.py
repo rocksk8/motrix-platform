@@ -44,6 +44,7 @@ B 用瀏覽器探針找到的（`§186`）：
    而它看起來像權限設計正確地生效了。
 """
 import threading
+from urllib.parse import urlparse
 import time
 
 import pytest
@@ -101,6 +102,43 @@ def _login(page, base_url, username, password):
     page.fill('input[x-model="password"]', password)
     page.click('button:has-text("登入")')
     page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+
+
+# ── 等待（PERF #6，2026-09-25：固定 sleep 換成等可觀測事件）────────────────────────
+VC = "Alpine.$data(document.body)"
+
+
+def _ready(page):
+    """頁面可以開始操作：「新增傳票」看得到＋科目選單載完（原本固定等 2 秒）。"""
+    page.wait_for_selector(HOOKS["new"], state="visible", timeout=15000)
+    page.wait_for_function("() => window.Alpine && %s && %s._accountsLoaded" % (VC, VC), timeout=15000)
+
+
+def _editor_open(page):
+    """按「新增」之後，第一列的科目欄出現（原本固定等 0.8 秒）。"""
+    page.locator("table tbody tr").nth(0).locator("input[x-model='l.account_code']").wait_for(
+        state="visible", timeout=10000)
+
+
+def _settled(page, do):
+    """做一個寫入動作並等它**整個**做完（原本固定等 2～2.5 秒）。
+    可觀測的終點：這個動作的最後一步是重讀清單（GET /api/vouchers）⇒ 等那一趟回來，
+    再等 busy 解除（save／_act 的 finally 在 `await open(...)`＋`await loadList()` 之後），
+    最後等 Alpine 把畫面更新完。
+    ⚠️ 不可以改成「等成功訊息出現」：這一檔要抓的正是「訊息被隨後的重讀清掉」，
+       等出現會在清掉之前就放行（假綠）；而訊息真的被清掉時，那種等法只會逾時、說不出原因。"""
+    with page.expect_response(lambda r: r.request.method == "GET" and urlparse(r.url).path == "/api/vouchers",
+                              timeout=15000):
+        do()
+    page.wait_for_function("() => !%s.busy" % VC, timeout=15000)
+    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+
+
+def _error_shown(page):
+    """前端擋下、不送請求的失敗（例如沒有分錄）：等錯誤訊息渲染出來（原本固定等 2 秒）。"""
+    page.wait_for_function(
+        "() => [...document.querySelectorAll('%s')].some(e => e.offsetParent !== null && e.innerText.trim())" % ERR_MSG,
+        timeout=10000)
 
 
 def _visible_text(page, selector):
@@ -161,22 +199,21 @@ def test_ac2_pressing_save_says_something_on_screen(live_server, make_user):
         page.on("pageerror", lambda e: errors.append(str(e)))
         _login(page, live_server, u, p)
         page.goto("%s/pages/voucher.html" % live_server)
-        page.wait_for_timeout(2000)
+        _ready(page)
 
         new_btn = page.locator(HOOKS["new"])
         assert new_btn.count() and new_btn.first.is_visible(), (
             "找不到「新增傳票」（`%s`）。畫面上是：\n  %s"
             % (HOOKS["new"], page.locator("body").inner_text()[:300]))
         new_btn.first.click()
-        page.wait_for_timeout(800)
+        _editor_open(page)
         _fill_first_line(page)
 
         before = _visible_text(page, OK_MSG)
         save = page.locator(HOOKS["save"])
         assert save.count() and save.first.is_visible(), (
             "找不到「儲存」（`%s`）。" % HOOKS["save"])
-        save.first.click()
-        page.wait_for_timeout(2500)
+        _settled(page, lambda: save.first.click())
 
         after = _visible_text(page, OK_MSG)
         err = _visible_text(page, ERR_MSG)
@@ -221,13 +258,12 @@ def test_ac2_submitting_also_says_something_on_screen(live_server, make_user):
         page.on("pageerror", lambda e: errors.append(str(e)))
         _login(page, live_server, u, p)
         page.goto("%s/pages/voucher.html" % live_server)
-        page.wait_for_timeout(2000)
+        _ready(page)
 
         page.locator(HOOKS["new"]).first.click()
-        page.wait_for_timeout(800)
+        _editor_open(page)
         _fill_first_line(page)
-        page.locator(HOOKS["save"]).first.click()
-        page.wait_for_timeout(2500)
+        _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
 
         submit = page.locator(HOOKS["submit"])
         if not (submit.count() and submit.first.is_visible()):
@@ -237,8 +273,7 @@ def test_ac2_submitting_also_says_something_on_screen(live_server, make_user):
                 + "⚠️ 按鈕用 `x-show` ⇒ 它在 DOM 裡而看不到，"
                   "我用的是 `is_visible()`。")
         before = _visible_text(page, OK_MSG)
-        submit.first.click()
-        page.wait_for_timeout(2500)
+        _settled(page, lambda: submit.first.click())
 
         after = _visible_text(page, OK_MSG)
         status = _visible_text(page, HOOKS["status"])
@@ -280,19 +315,27 @@ def test_ac2_the_message_is_not_wiped_by_the_reload_that_follows(
         page = browser.new_page()
         _login(page, live_server, u, p)
         page.goto("%s/pages/voucher.html" % live_server)
-        page.wait_for_timeout(2000)
+        _ready(page)
 
-        # ① 先製造一次**失敗**：不填分錄直接存
+        # ① 先製造一次**失敗**：同一行借貸都填（前端當場擋下、不送出）
+        # 📌 更正留著（2026-09-25，PERF #6 換等待時實測）：原本是「不填分錄直接存」——
+        #    空白草稿現在是可以存的 ⇒ 第一次其實**成功**、從來沒有錯誤訊息 ⇒ 下面「上一次的
+        #    錯誤訊息不可以留著」那一半永遠是空的（反向控制是死的），固定等 2 秒把它蓋住了。
         page.locator(HOOKS["new"]).first.click()
-        page.wait_for_timeout(800)
+        _editor_open(page)
+        r0 = page.locator("table tbody tr").nth(0)
+        r0.locator("input[x-model='l.account_code']").fill("1113")
+        r0.locator("input[x-model='l.debit']").fill("500")
+        r0.locator("input[x-model='l.credit']").fill("500")
         page.locator(HOOKS["save"]).first.click()
-        page.wait_for_timeout(2000)
+        _error_shown(page)
         first_err = _visible_text(page, ERR_MSG)
+        assert first_err, "第一次應該失敗並顯示錯誤——前提不成立，下面的反向控制就是空的"
 
         # ② 再把它填好存成功
+        r0.locator("input[x-model='l.credit']").fill("")
         _fill_first_line(page)
-        page.locator(HOOKS["save"]).first.click()
-        page.wait_for_timeout(2500)
+        _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
 
         ok = _visible_text(page, OK_MSG)
         err = _visible_text(page, ERR_MSG)
