@@ -752,6 +752,8 @@ def _is_heavy_run(config) -> bool:
     """
     if str(config.option.basetemp).rstrip("\\/").endswith(FULL_REGRESSION_SUFFIX):
         return True
+    if os.environ.get("MOTRIX_PYTEST_EXCLUSIVE") == "1":
+        return True                  # 建包獨佔：e2e 段序列、名稱也不叫 -full，照樣要佔滿（§3.3）
     n = getattr(config.option, "numprocesses", None)
     try:
         return n is not None and (n == "auto" or n == "logical" or int(n) >= 2)
@@ -878,52 +880,32 @@ def pytest_configure(config):
         slots[0].parent.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
+    # 建包獨佔（PLAN-TEST-PERF §3.3）：登記檔讓之後進來的一般測試不再佔新格子，等目前持有者跑完後一次佔滿。
+    exclusive = os.environ.get("MOTRIX_PYTEST_EXCLUSIVE") == "1"
+    intent = slots[0].with_name(slots[0].name + ".exclusive")
+    mine = []
     while True:
-        freed = False
-        held = None
-        for path in slots:
-            # 🔑 原子建檔（O_EXCL）：兩個排隊的人同時看到「空了」，只有一個建得成
-            try:
-                fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            except FileExistsError:
-                fd = None
-            except OSError as exc:        # 寫不進去不該擋住測試
-                _lock_say("\n[測試鎖] 寫不進 %s（%s）—— 這一輪沒有鎖" % (path, exc))
-                return
-            if fd is not None:
-                with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                    fh.write(json.dumps({"pid": os.getpid(), "started_at": time.time(),
-                                         "basetemp": str(basetemp)}))
-                _lock_taken_by_me = path
-                return
-
-            info = _read_lock(path)
-            # ⚠️ 取值也要包在 try 裡：一個不可信的鎖要當成「沒有鎖」，不是當成「拒絕所有人」
-            try:
-                age = time.time() - float(info.get("started_at", 0))
-                pid = int(info.get("pid", -1))
-            except (AttributeError, TypeError, ValueError):
-                _lock_say("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
-                _unlink_quietly(path)
-                freed = True
-                continue
-            alive = _pid_alive(pid)
-            if not alive or age > LOCK_MAX_AGE_SECONDS:
-                # 🔑 過期／持有者已死就接手。**一個解不掉的鎖比沒有鎖更糟**
-                _lock_say("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
-                      ("已死" if not alive else "過期", info.get("pid"), age // 60))
-                _unlink_quietly(path)
-                freed = True
-                continue
-            if held is None:
-                held, path_held = info, path
-        if freed:
-            continue
-        path = path_held
-        age = time.time() - float(held.get("started_at", 0))
+        try:
+            ok, held, path, why = _lock_attempt(slots, intent, exclusive, basetemp, mine)
+        except OSError as exc:            # 寫不進去不該擋住測試
+            _lock_say("\n[測試鎖] 寫不進鎖檔（%s）—— 這一輪沒有鎖" % exc)
+            for p in mine:
+                _unlink_if_mine(p)
+            return
+        if ok:
+            _lock_taken_by_me = mine
+            return
+        held = held or {}
+        try:
+            age = time.time() - float(held.get("started_at", 0))
+        except (TypeError, ValueError):
+            age = 0.0
         now = time.time()
         if now >= deadline:
+            for p in mine:                # 沒輪到就把已經佔的（含獨佔登記）全部還回去
+                _unlink_if_mine(p)
             raise pytest.UsageError(
+                "【" + why + "】\n"
                 "其他測試已佔滿全機名額（全量回歸或 -n 平行，同時上限見 MOTRIX_PYTEST_SLOTS）%s。\n"
                 "  持有者 pid=%s 視窗=%s 已跑 %d 分鐘\n"
                 "  鎖檔 %s\n"
@@ -940,10 +922,92 @@ def pytest_configure(config):
                    LOCK_MAX_AGE_SECONDS // 60, held.get("pid"))
             )
         if now - announced >= 60:
-            _lock_say("\n[測試鎖] 另一套測試正在跑（pid=%s、%s、已跑 %d 分鐘）—— 排隊中，最多再等 %d 分鐘"
-                  % (held.get("pid"), held.get("basetemp"), age // 60, (deadline - now) // 60), flush=True)
+            _lock_say("\n[測試鎖] %s（pid=%s、%s、已跑 %d 分鐘）—— 排隊中，最多再等 %d 分鐘"
+                  % (why, held.get("pid"), held.get("basetemp"), age // 60, (deadline - now) // 60), flush=True)
             announced = now
         time.sleep(min(poll, max(0.05, deadline - now)))
+
+
+def _create_lock(path, basetemp) -> bool:
+    """🔑 原子建檔（O_EXCL）：兩個排隊的人同時看到「空了」，只有一個建得成。已存在回 False。"""
+    try:
+        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"pid": os.getpid(), "started_at": time.time(), "basetemp": str(basetemp)}))
+    return True
+
+
+#: 建包獨佔登記的年紀上限：建包（兩段＋打包）可能超過格子的 60 分鐘上限；持有者活著就有效，最多 3 小時。
+EXCLUSIVE_MAX_AGE_SECONDS = 3 * 60 * 60
+
+
+def _clear_if_stale(path, max_age=None) -> None:
+    """鎖檔不可信、持有者已死、或過期 ⇒ 刪掉（**一個解不掉的鎖比沒有鎖更糟**）。"""
+    max_age = LOCK_MAX_AGE_SECONDS if max_age is None else max_age
+    if not path.exists():
+        return
+    info = _read_lock(path)
+    # ⚠️ 取值也要包在 try 裡：一個不可信的鎖要當成「沒有鎖」，不是當成「拒絕所有人」
+    try:
+        age = time.time() - float(info.get("started_at", 0))
+        pid = int(info.get("pid", -1))
+    except (AttributeError, TypeError, ValueError):
+        if path.exists():
+            _lock_say("\n[測試鎖] 鎖檔內容不可信（%s）—— 當成沒有鎖" % path)
+            _unlink_quietly(path)
+        return
+    alive = _pid_alive(pid)
+    if not alive or age > max_age:
+        _lock_say("\n[測試鎖] 接手一個%s的鎖：pid=%s、%d 分鐘前" %
+                  ("已死" if not alive else "過期", info.get("pid"), age // 60))
+        _unlink_quietly(path)
+
+
+def _lock_attempt(slots, intent, exclusive, basetemp, mine):
+    """搶一輪。回 (成功?, 擋住我的那份鎖內容, 它的路徑, 原因)。`mine` 累積自己已佔的檔。
+
+    `MOTRIX_PYTEST_EXCLUSIVE_OWNER=<pid>`：登記是建包腳本（該 pid）建的，涵蓋它的兩段 pytest
+    ⇒ 認得它、不建也不刪（否則兩段之間的空檔會被別的視窗插進來）。"""
+    _clear_if_stale(intent, EXCLUSIVE_MAX_AGE_SECONDS)
+    reg = _read_lock(intent)
+    owner = os.environ.get("MOTRIX_PYTEST_EXCLUSIVE_OWNER")
+    reg_is_ours = bool(reg) and str(reg.get("pid")) in {str(os.getpid()), str(owner)}
+    if exclusive:
+        if intent not in mine and not reg_is_ours:
+            if _create_lock(intent, basetemp):
+                mine.append(intent)
+            else:
+                return False, _read_lock(intent), intent, "另一個建包正在獨佔（或登記中）"
+    elif reg and not reg_is_ours:
+        return False, reg, intent, "建包獨佔中：等它跑完，不插隊到它前面"
+    held = None
+    for path in slots:
+        if path in mine:
+            continue
+        _clear_if_stale(path)
+        if _create_lock(path, basetemp):
+            mine.append(path)
+            if not exclusive:
+                return True, None, None, ""
+            continue
+        if held is None:
+            held = (_read_lock(path), path)
+    if exclusive and all(p in mine for p in slots):
+        return True, None, None, ""
+    held = held or (None, slots[0])
+    why = "建包獨佔：等目前的持有者跑完" if exclusive else "另一套測試正在跑"
+    return False, held[0], held[1], why
+
+
+def _unlink_if_mine(path) -> None:
+    held = _read_lock(path)
+    try:
+        if held and int(held.get("pid", -1)) == os.getpid():
+            path.unlink()
+    except (OSError, TypeError, ValueError):
+        pass
 
 
 def _lock_say(msg, **kw):
@@ -1018,14 +1082,10 @@ def pytest_unconfigure(config):
     global _lock_taken_by_me
     if not _lock_taken_by_me:
         return
-    path = _lock_taken_by_me          # 拿到的是哪一格就還哪一格
+    paths = _lock_taken_by_me         # 拿到的是哪幾格（獨佔時含登記檔）就還哪幾格
     _lock_taken_by_me = False
-    held = _read_lock(path)
-    if held and int(held.get("pid", -1)) == os.getpid():
-        try:
-            path.unlink()
-        except OSError:
-            pass
+    for path in paths:
+        _unlink_if_mine(path)
 
 
 # ══════════════════════════════════════════════════════════════════════════

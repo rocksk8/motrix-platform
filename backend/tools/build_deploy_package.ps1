@@ -73,7 +73,63 @@ function Parse-PytestSummary($lines) {
 
 function Fail($msg) {
     Write-Host "`n[FAIL] $msg" -ForegroundColor Red
+    # 早期的 Fail（還沒定義到下面的函式）也會走到這裡 ⇒ 先確認它存在
+    if (Get-Command Release-TestExclusive -ErrorAction SilentlyContinue) { Release-TestExclusive }
     exit 1
+}
+
+# ── 建包獨佔測試鎖（PLAN-TEST-PERF §3.3，2026-09-25）────────────────────────
+# 測試鎖全機 2 格；建包只佔一格時，另一個視窗仍可同時跑一套 -n，建包裡靠時序的題會因 CPU
+# 被搶而紅——而紅的樣子跟真的 bug 一樣。建包期間由**這支腳本**持有「獨佔登記」
+# （<鎖檔>.exclusive，pid＝本行程），涵蓋非 e2e 與 e2e 兩段：
+#   - 其他視窗的重型測試看到存活的登記就排隊，不再佔新格子；
+#   - 本腳本的 pytest 帶 MOTRIX_PYTEST_EXCLUSIVE／_OWNER ⇒ 等現有持有者跑完後一次佔滿所有格子。
+# 規則由 conftest 守（test_pytest_exclusive_lock_2026_09_25）。登記的持有者已死 ⇒ 別人會自動清掉。
+$script:TestExclusivePath = if ($env:MOTRIX_PYTEST_LOCK) { "$($env:MOTRIX_PYTEST_LOCK).exclusive" } `
+    else { Join-Path $env:TEMP "motrix-pytest-full-regression.lock.exclusive" }
+$script:TestExclusiveHeld = $false
+
+function Acquire-TestExclusive {
+    $deadline = (Get-Date).AddMinutes(90)
+    $announced = [datetime]::MinValue
+    while ($true) {
+        try {
+            $fs = [System.IO.File]::Open($script:TestExclusivePath, 'CreateNew', 'Write')
+            $epoch = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() / 1000.0
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes(
+                ('{{"pid": {0}, "started_at": {1}, "basetemp": "build_deploy_package"}}' -f $PID, $epoch))
+            $fs.Write($bytes, 0, $bytes.Length)
+            $fs.Close()
+            $script:TestExclusiveHeld = $true
+            Write-Host "  [測試鎖] 已登記建包獨佔（pid=$PID）" -ForegroundColor DarkGray
+            return
+        } catch [System.IO.IOException] {
+            $info = $null
+            try { $info = Get-Content -Raw -Encoding UTF8 $script:TestExclusivePath | ConvertFrom-Json } catch {}
+            $alive = $false
+            if ($info -and $info.pid) { $alive = [bool](Get-Process -Id ([int]$info.pid) -ErrorAction SilentlyContinue) }
+            if (-not $alive) {
+                Remove-Item -LiteralPath $script:TestExclusivePath -Force -ErrorAction SilentlyContinue
+                continue
+            }
+            if ((Get-Date) -gt $deadline) { Fail "另一個建包（pid=$($info.pid)）持有獨佔測試鎖超過 90 分鐘仍未釋放。" }
+            if (((Get-Date) - $announced).TotalSeconds -ge 60) {
+                Write-Host "  [測試鎖] 另一個建包（pid=$($info.pid)）正在獨佔 —— 排隊中" -ForegroundColor Yellow
+                $announced = Get-Date
+            }
+            Start-Sleep -Seconds 10
+        }
+    }
+}
+
+function Release-TestExclusive {
+    if (-not $script:TestExclusiveHeld) { return }
+    $script:TestExclusiveHeld = $false
+    try {
+        $info = Get-Content -Raw -Encoding UTF8 $script:TestExclusivePath | ConvertFrom-Json
+        if ([int]$info.pid -eq $PID) { Remove-Item -LiteralPath $script:TestExclusivePath -Force }
+    } catch {}
+    Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER -ErrorAction SilentlyContinue
 }
 
 # --- 定位 repo 根目錄與專案子目錄 ---
@@ -506,6 +562,9 @@ try {
 }
 
 $pytestTemp = Join-Path $env:TEMP "motrix-pytest-$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+Acquire-TestExclusive
+$env:MOTRIX_PYTEST_EXCLUSIVE = "1"
+$env:MOTRIX_PYTEST_EXCLUSIVE_OWNER = "$PID"
 Write-Host "`n[測試] 執行 pytest（非 e2e，backend/tests/，含 API 整合測試，pytest-xdist 平行化，$workers 個 worker）..."
 Push-Location (Join-Path $projectRoot "backend")
 # ⚠️ `--durations=20` 是**零額外時間**：那一輪本來就要跑，它只是把 pytest
@@ -580,6 +639,7 @@ Pop-Location
 # ⚠️ **fail closed**：只有**認得出來的逾時**才降級成警告。
 # ☠️ 分類不出來（收集錯誤、行程被殺、輸出被截斷）⇒ **中止**。
 #    認不得就放行的話，這道判定會在它最該擋的時候消失。
+Release-TestExclusive    # 兩段測試都跑完了，後面的打包不需要佔住別人的測試名額
 $e2eFailLines = @($e2eOut | Where-Object { $_ -match "^FAILED " })
 $e2eTimeoutOnly = $false
 if ($e2eExit -ne 0 -and $e2eFailLines.Count -gt 0) {
