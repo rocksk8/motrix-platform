@@ -222,28 +222,44 @@ def test_gc8_an_unknown_address_still_counts_as_ran_out_of_time(
 
 
 def test_gc8_a_known_miss_does_not_eat_the_time_budget(
-        client, clean_miss_cache, no_outbound):
+        client, clean_miss_cache, no_outbound, monkeypatch):
     """⚙️ 反向控制②：**負快取裡的地址不可以吃掉預算。**
 
     🔑 它已經有答案了 ⇒ 它不需要時間，**也不該讓別的地址排不到**。
     ☠️ 少了這一題，一個「先跑完整條梯子再看負快取」的實作會讓
     第一題全綠，而 53 個已知查不到的地址**照樣把預算耗光** ——
     📌 那正是使用者現在的處境：真正該查的那幾個永遠排不到。
+
+    ## 更正留著（2026-09-24，hichan-0a 派）：原本用**牆鐘**量（`spent < 1.0` 秒）
+    ☠️ 多視窗同時跑全量時它會紅，而紅的那天最省力的動作是放寬門檻（規則不准）。
+    🔑 2026-09-22 那次紅燈的成因是**次數**不是速度：四階各開一次連線 ⇒ 20 個地址 80 次
+    `get_db()`（見 `test_geocode_batch_lookup_2026_09_23.py` 檔頭）。
+    ⇒ 改量**開了幾次資料庫連線**：每個地址最多一次（`_cache_get_many` 一次問完四階），
+    與機器忙不忙無關；配正對照證明計數器看得到 geo 的連線（否則「0 次」可能只是沒量到）。
     """
     geo = _geo()
     known = [f"查不到的機關名稱 {i}" for i in range(20)]
     for a in known:
         geo.remember_geocode_miss(a)
 
+    import db as db_module
+    opened = []
+    real_get_db = db_module.get_db
+    monkeypatch.setattr(db_module, "get_db",
+                        lambda *a, **kw: opened.append(1) or real_get_db(*a, **kw))
+
+    # 正對照：geo 的快取查詢確實經過這個計數器
+    geo._cache_get_many("正對照地址 GC8", [geo.SOURCE_GOOGLE])
+    assert opened, "計數器沒看到 geo 開的連線——量尺本身壞了，下面的「次數」沒有意義"
+    opened.clear()
+
     budget = _budget(5.0)
-    start = time.monotonic()
     for a in known:
         budget.locate(a)
-    spent = time.monotonic() - start
 
-    assert spent < 1.0, (
-        f"20 個已知查不到的地址花了 {spent:.2f} 秒 ——\n"
-        "☠️ 它們已經有答案了，不該花任何時間。")
+    assert len(opened) <= len(known), (
+        f"20 個已知查不到的地址開了 {len(opened)} 次資料庫連線（上限：每個地址一次）——\n"
+        "☠️ 它們已經有答案了；2026-09-22 的紅燈就是四階各問一次＝80 次。")
     assert not no_outbound, (
         f"已知查不到的地址還是連出去了：{no_outbound}")
 
