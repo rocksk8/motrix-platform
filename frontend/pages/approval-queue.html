@@ -724,6 +724,24 @@
               <span class="aq-info-value" style="font-family:LINE Seed TW_OTF, sans-serif" x-text="selected?.bankAccountNumber || '—'"></span>
             </div>
           </div>
+          <!-- CT1（2026-09-24 使用者裁示 D2）：外包人員各自的匯款帳戶，每人一列 -->
+          <div style="margin-top:10px" x-show="(selected?.personnelBanks || []).length > 0" data-testid="aq-personnel-banks">
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">外包人員匯款帳戶</div>
+            <table class="data-table" style="font-size:12px">
+              <thead><tr><th>姓名</th><th>銀行</th><th>分行</th><th>戶名</th><th>帳號</th></tr></thead>
+              <tbody>
+                <template x-for="pb in (selected?.personnelBanks || [])" :key="pb.name + pb.bankAccountNumber">
+                  <tr>
+                    <td x-text="pb.name || '—'"></td>
+                    <td x-text="((pb.bankCode || '') + ' ' + (pb.bankName || '')).trim() || '—'"></td>
+                    <td x-text="pb.bankBranch || '—'"></td>
+                    <td x-text="pb.bankAccountName || '—'"></td>
+                    <td style="font-family:LINE Seed TW_OTF, sans-serif" x-text="pb.bankAccountNumber || '—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
           <div style="margin-top:10px" x-show="selected?.bankPassbookImage">
             <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">存簿封面圖檔</div>
             <img :src="selected?.bankPassbookImage" style="max-width:260px;max-height:160px;border:1px solid var(--border-light);border-radius:6px;display:block">

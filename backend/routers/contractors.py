@@ -5,7 +5,8 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Body, HTTPException, Header
+from fastapi import APIRouter, Body, File, HTTPException, Header, UploadFile
+from fastapi.responses import Response
 from PIL import Image, ImageDraw, ImageFont
 from pydantic import BaseModel
 
@@ -207,6 +208,153 @@ def create_contractor(body: ContractorIn, authorization: str = Header(None)):
     notify_module_activity("外包名冊", "建立", user.get("display_name") or user["username"],
                             body.name, "vendor-contractors.html")
     return {"id": cid, "created_at": now}
+
+
+# ── CT1（2026-09-24 使用者裁示 D4）：名冊 Excel 匯入／匯出 ─────────────────────────────
+# 欄位順序即匯出順序；匯入依表頭文字對應（缺的欄＝不動那個欄位，舊檔沒有「分行」照樣可匯入）。
+_XLSX_COLS = [
+    ("姓名", "name"), ("證件號碼", "id_number"), ("國籍", "nationality"), ("職業工會投保", "has_union_insurance"),
+    ("電話", "phone"), ("Email", "email"), ("地址", "address"), ("LINE", "line_id"),
+    ("銀行代碼", "bank_code"), ("銀行名稱", "bank_name"), ("分行", "bank_branch"),
+    ("戶名", "bank_account_name"), ("帳號", "bank_account_number"), ("備註", "notes"), ("狀態", "active"),
+]
+_MASK = "******"
+
+
+def _mask_id(v):
+    """證件號碼只顯示末 4 碼（使用者裁示）。"""
+    v = (v or "").strip()
+    return (_MASK + v[-4:]) if len(v) > 4 else (_MASK if v else "")
+
+
+@router.get("/api/contractors/export")
+def export_contractors(authorization: str = Header(None)):
+    """匯出外包名冊（含停用的人）。證件號碼遮成末 4 碼；分行與帳號照實（出納匯款要用）。寫稽核。"""
+    import openpyxl
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT * FROM contractors ORDER BY name").fetchall()
+    finally:
+        conn.close()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "外包名冊"
+    ws.append([h for h, _ in _XLSX_COLS])
+    for r in rows:
+        out = []
+        for _h, col in _XLSX_COLS:
+            v = r[col]
+            if col == "id_number":
+                v = _mask_id(v)
+            elif col == "has_union_insurance":
+                v = "是" if v else "否"
+            elif col == "active":
+                v = "往來中" if v else "停用"
+            # ⚠ 空字串寫進 openpyxl 會產生不合法的 inlineStr（Excel 開檔報修復）⇒ 空值寫 None
+            out.append(v if v not in ("", None) else None)
+        ws.append(out)
+    buf = io.BytesIO()
+    wb.save(buf)
+    _audit(_tok(authorization), 'contractors.export', 'contractor', '', f"匯出外包名冊（{len(rows)} 人）")
+    return Response(content=buf.getvalue(),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename*=UTF-8''contractors.xlsx"})
+
+
+def _cell(v):
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)                      # Excel 把純數字的電話／帳號讀成數字
+    return str(v).strip()
+
+
+@router.post("/api/contractors/import")
+async def import_contractors(file: UploadFile = File(...), authorization: str = Header(None)):
+    """匯入外包名冊。比對規則（使用者裁示「以姓名＋證件號碼比對」，**對不到唯一一人就不猜**）：
+    - 證件號碼完整 ⇒ 姓名＋證件號碼完全相同者更新；沒有 ⇒ 新增（證件號碼已被別的姓名使用 ⇒ 報錯）
+    - 證件號碼是匯出時的遮罩（******1234）⇒ 姓名＋末 4 碼剛好一人 ⇒ 更新；否則報錯；遮罩值不寫回
+    - 證件號碼空白 ⇒ 同姓名剛好一人 ⇒ 更新；沒有 ⇒ 新增；多人 ⇒ 報錯
+    檔案沒有的欄位不動（舊檔沒有「分行」照樣匯入、不會清掉既有分行）。
+    """
+    import openpyxl
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(await file.read()), data_only=True)
+    except Exception:
+        raise HTTPException(400, "讀不到這個檔案，請上傳 .xlsx")
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "檔案是空的")
+    head = [_cell(h) for h in rows[0]]
+    known = dict(_XLSX_COLS)
+    idx = {known[h]: i for i, h in enumerate(head) if h in known}
+    if "name" not in idx:
+        raise HTTPException(400, "找不到「姓名」欄")
+    now = datetime.now().isoformat()
+    created = updated = 0
+    errors = []
+    conn = get_db()
+    try:
+        existing = [dict(r) for r in conn.execute("SELECT id, name, id_number FROM contractors").fetchall()]
+        for n, raw in enumerate(rows[1:], start=2):
+            vals = {col: _cell(raw[i]) if i < len(raw) else "" for col, i in idx.items()}
+            name = vals.get("name", "")
+            if not name:
+                if any(vals.values()):
+                    errors.append({"row": n, "message": f"第 {n} 列沒有姓名，略過"})
+                continue
+            idn = vals.get("id_number", "")
+            masked = idn.startswith("*")
+            same_name = [e for e in existing if (e["name"] or "") == name]
+            if masked:
+                hits = [e for e in same_name if (e["id_number"] or "").endswith(idn.lstrip("*")) and idn.lstrip("*")]
+            elif idn:
+                hits = [e for e in same_name if (e["id_number"] or "") == idn]
+                if not hits and any((e["id_number"] or "") == idn for e in existing):
+                    errors.append({"row": n, "message": f"第 {n} 列：證件號碼已登記在另一個姓名下，未匯入"})
+                    continue
+            else:
+                hits = same_name
+            if len(hits) > 1:
+                errors.append({"row": n, "message": f"第 {n} 列：「{name}」對到 {len(hits)} 位，無法判斷是哪一位，未匯入"})
+                continue
+            fields = {}
+            for col, v in vals.items():
+                if col in ("name",) or (col == "id_number" and masked):
+                    continue
+                if col == "has_union_insurance":
+                    v = 1 if v in ("是", "1", "Y", "y", "true", "True") else 0
+                elif col == "active":
+                    v = 0 if v == "停用" else 1
+                fields[col] = v
+            if hits:
+                if fields:
+                    sets = ", ".join(f"{c}=?" for c in fields)
+                    conn.execute(f"UPDATE contractors SET {sets}, updated_at=? WHERE id=?",
+                                 list(fields.values()) + [now, hits[0]["id"]])
+                updated += 1
+            elif masked:
+                errors.append({"row": n, "message": f"第 {n} 列：找不到「{name}」（證件號碼末 4 碼 {idn.lstrip('*')}），"
+                                                    "遮罩的證件號碼不能用來新增人員，未匯入"})
+                continue
+            else:
+                cols = ["name"] + list(fields)
+                cur = conn.execute(
+                    f"INSERT INTO contractors ({', '.join(cols)}, created_at, updated_at) VALUES "
+                    f"({', '.join('?' * len(cols))}, ?, ?)", [name] + list(fields.values()) + [now, now])
+                existing.append({"id": cur.lastrowid, "name": name, "id_number": fields.get("id_number", "")})
+                created += 1
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), 'contractors.import', 'contractor', '',
+           f"匯入外包名冊（新增 {created}、更新 {updated}、未匯入 {len(errors)}）")
+    notify_module_activity("外包名冊", "匯入", user.get("display_name") or user["username"],
+                           f"新增 {created}、更新 {updated}", "contractors.html")
+    return {"created": created, "updated": updated, "errors": errors}
 
 
 @router.get("/api/contractors/{cid}")

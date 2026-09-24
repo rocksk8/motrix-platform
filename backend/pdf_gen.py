@@ -721,6 +721,11 @@ def _build_payslip_html(d: dict) -> str:
     </tr>
     <tr>
       <th style="background:#f0f0f0;border:1px solid #555;padding:5px 8px;
+                 font-weight:600;white-space:nowrap">銀行／分行</th>
+      <td colspan="3" style="border:1px solid #555;padding:5px 8px">{esc(' '.join(x for x in (bank_code, bank_name) if x))}{('／' + esc(bank_bran)) if bank_bran else ''}</td>
+    </tr>
+    <tr>
+      <th style="background:#f0f0f0;border:1px solid #555;padding:5px 8px;
                  font-weight:600;white-space:nowrap">所屬勞報單</th>
       <td colspan="3" style="border:1px solid #555;padding:5px 8px;
                               font-family:monospace">{esc(slip_no)}</td>

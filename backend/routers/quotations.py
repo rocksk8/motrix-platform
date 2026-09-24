@@ -4477,6 +4477,15 @@ def get_approval_queue(authorization: str = Header(None)):
             "bankAccountName":     snap.get("bankAccountName") or "",
             "bankAccountNumber":   snap.get("bankAccountNumber") or "",
             "bankPassbookImage":   snap.get("bankPassbookImage") or "",
+            # CT1（2026-09-24 使用者裁示 D2）：外包人員各自的匯款帳戶——簽核人原本只看得到承攬商本身的帳戶。
+            # 來源是建立申請時凍結的 personnel 快照（contractor_vouchers.py），與上面承攬商那段同一份可見性。
+            "personnelBanks": [
+                {"name": p.get("name") or "", "bankCode": p.get("bankCode") or "",
+                 "bankName": p.get("bankName") or "", "bankBranch": p.get("bankBranch") or "",
+                 "bankAccountName": p.get("bankAccountName") or "",
+                 "bankAccountNumber": p.get("bankAccountNumber") or ""}
+                for p in (snap.get("personnel") or []) if isinstance(p, dict)
+            ],
             "invoiceFiles":        snap.get("invoiceFiles") or [],
         })
 
