@@ -394,3 +394,22 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 ⚠ 需會計師判斷、不寫死：長期工程收入認列方法；小規模商業（§82，摘要）是否適用簡易記帳；扣繳門檻當年度金額。
 ⚠ 未逐字核對：施行細則 §32-1、統一發票使用辦法 §18、扣繳相關條文 ⇒ 規格與程式註解標「摘要」。
 執行者：hichan-8d（接在獎金、N11、N14 之後），順序 AC1 → AC3 → AC2。
+
+## 🟢 CM 案件管理調整（2026-09-24 使用者表單：12 項全選）
+檢視（Explore agent 讀 origin/master，#1 hichan-0a 複讀確認）。
+
+| 編號 | 項目 | 依據 | 執行 |
+|---|---|---|---|
+| **CM1 🔴** | 同時編輯不再蓋掉對方 | `case-management.js:1873` 存檔只送 `{case_record}`、**不送 `_expectedUpdatedAt`**；後端支援樂觀鎖（`quotations.py:2289`）但沒收到就整份取代（`:2366`）⇒ 後存者靜默覆蓋前者，上傳的發票檔也會被舊頁面的自動存檔丟掉。做法：送 `_expectedUpdatedAt`，**每個會改 updated_at 的回應都更新它**（含上傳檔、階段呼叫）；409 ⇒ 提示重新載入／合併；第二步改成各分頁分段存（payment／materials／devices／roles）。題：兩個 context 同時改不同分頁 ⇒ 後存者 409、兩人的改動都不遺失 | hichan-8d，**最優先** |
+| **CM2 🔴** | 收款／材料／沖銷改用期別 id 定位 | `/payment/{idx}`（py:3219）、`/payment/{idx}/invoice-files`、`/materials/{idx}/files`、沖銷；期別已有 `id`（js:1808） | hichan-8d |
+| CM3 | 角色改存帳號 | 三個角色存顯示名稱（html:1141-1164）⇒ 改名／同名時獎金帶入、業績歸屬、案件可見性出錯。做法：存 `{username, display}`，一次性依使用者表轉換舊資料；**查不到或同名的不猜、保留原值並列出清單** | hichan-8d |
+| CM6 | 清單不再限 500 件 | `loadCases()` `limit=500`（js:1124）、前端篩選；開清單還拉 stage-board 與 gate-matrix（每案約 15 次查詢）。做法：伺服器端搜尋／篩選／分頁；`edit_last` 用 json_extract；gate 批次計算 | hichan-8d |
+| CM4＋5 | 結案前先列出五關、可點過去修 | `closeCaseAction()`（js:1978）先確認後檢查；gate-matrix 格子不可點。做法：確認前顯示五關與「前往」鈕（`_pendingUrlTab`）；存檔失敗就中止；單據關顯示待簽核人；非 superadmin 不顯示結案鈕 | hichan-61 |
+| CM7 | 清單常用篩選 | 我負責的、逾期階段、應收逾期（`expectedReceiptDate`）、缺單據；「全部」分頁改名「進行中」 | hichan-61（依 CM6 的伺服器篩選） |
+| CM9 | 案件健康總覽 | 案件資訊頁上方：五關狀態＋逾期應收＋待簽核 | hichan-61 |
+| CM11 | 跨模組連結 | 加獎金分配、地圖（MP6）、傳票（JV36 來源）連結；結案後留在案件、不跳保固頁 | hichan-61 |
+| CM8 | 開案件請求合併 | 目前約 16 個請求（js:1415-1428）⇒ `case-bundle` 端點＋分頁延後載入 | hichan-8d（CM6 後） |
+| CM10 | 批次操作 | 多選：批次改執行負責／成員、批次匯出 | hichan-61（CM7 後） |
+| CM12 | 前端拆分重構 | 566KB 單一元件、`selectCase` 手動重設約 100 個狀態。**必須最後做**，且開工時其他視窗暫停碰案件管理，避免衝突；純重構不改行為，全部既有題須維持綠 | 最後排定 |
+
+順序：hichan-8d：**CM1 → CM2** → N11 → extra_expenses 追查 → CM3 → CM6 → CM8 → N14 → AC1 → AC3 → AC2。hichan-61：案件管理字級 e2e → MP7 → MP1～MP6 → CM4＋5 → CM7 → CM9 → CM11 → CM10。CM12 最後。
