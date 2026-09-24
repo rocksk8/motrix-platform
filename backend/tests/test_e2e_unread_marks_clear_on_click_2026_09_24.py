@@ -94,10 +94,13 @@ class _Hold:
 
 def _dev_crm_with_one_unread(page, live_server):
     """進業務開發（第一次進 ⇒ 建立基準）→ 別人改了那一筆 → 重整 ⇒ 那一筆亮「有更新」。"""
-    page.goto(live_server + "/pages/dev-crm.html")
+    # 📌 更正（2026-09-25）：原本固定等 600ms「讓第一次的未讀查詢（建立基準）完成」。
+    #    負載下查詢晚於 600ms ⇒ 下面那筆更新可能早於基準 ⇒ 前提不成立。改成等那一個回應真的回來。
+    with page.expect_response(lambda r: r.url.endswith("/api/reads/unread")
+                              and '"dev_case"' in (r.request.post_data or ""), timeout=15000):
+        page.goto(live_server + "/pages/dev-crm.html")
     _alpine_ready(page)
     page.wait_for_selector(".dc-case-card:has-text('紅點測試')", timeout=15000)
-    page.wait_for_timeout(600)          # 讓第一次的未讀查詢（建立基準）完成
     cid = _rows("SELECT id FROM dev_cases WHERE case_name='紅點測試'")[0]["id"]
     _audit("bob", "dev_case.update", "dev_case", cid)
     page.reload()
