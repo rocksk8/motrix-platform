@@ -127,7 +127,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
 # v112: 逐筆已讀 item_reads（未讀紅點存伺服器；先推先拿，撞號順延）
 # v113: 以案件為中心的獎金分潤三張表（SPEC-BONUS §十一；先推先拿，順延自 v112）
-CURRENT_VERSION = 113
+# v114: AC3 獎金分潤記住它產生的傳票草稿（accrual／payment_voucher_id）
+CURRENT_VERSION = 114
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4394,6 +4395,23 @@ def _m110_voucher_category_manual(conn):
                      " category_manual INTEGER NOT NULL DEFAULT 0")
 
 
+def _m114_bonus_case_voucher_links(conn):
+    """v114（2026-09-24 `AC3`，SPEC-BONUS §11.8）：獎金分潤記住它產生的傳票草稿。
+
+    ```
+    accrual_voucher_id  進入待發放時產生的轉帳傳票（借 薪資支出／貸 應付薪資）
+    payment_voucher_id  標記已發放時產生的支出傳票（借 應付薪資／貸 銀行存款）
+    ```
+    退回時要找得到「那一張」才能判斷作廢或提示 ⇒ 必須存連結，不能靠摘要文字反查。
+    0＝沒有。既有資料一律 0，不回頭補開傳票。
+    ⚠️ 只有 `_col_exists` 與 DDL 字面值，不呼叫任何會演進的 helper。
+    """
+    for col in ("accrual_voucher_id", "payment_voucher_id"):
+        if not _col_exists(conn, "bonus_case_awards", col):
+            conn.execute("ALTER TABLE bonus_case_awards ADD COLUMN"
+                         " %s INTEGER NOT NULL DEFAULT 0" % col)
+
+
 def _m113_bonus_case_awards(conn):
     """v113（2026-09-24，SPEC-BONUS §十一／§11.7）：以案件為中心的獎金分潤，三張新表。
 
@@ -5618,6 +5636,7 @@ _MIGRATIONS = [
     _m111_voucher_line_source_key,                  # v111
     _m112_item_reads,                               # v112
     _m113_bonus_case_awards,                        # v113
+    _m114_bonus_case_voucher_links,                 # v114
 ]
 
 

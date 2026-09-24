@@ -316,6 +316,39 @@ _UNREADABLE_APPR = {
 }
 
 
+def insert_draft_voucher(conn, voucher_date, summary, lines, created_by, now, category, manual=0):
+    """寫入一張草稿傳票＋分錄，回 `(id, voucher_no)`。**不 commit**（交易由呼叫端決定）。
+
+    `lines` 必須已經過 `_line_sources(_amount_lines(...))` 正規化、科目也驗過。
+    📌 `AC3`：獎金分潤產生傳票草稿也走這一支——單號規則與寫入欄位只有一份。
+    """
+    no = next_voucher_no(conn, voucher_date)
+    try:
+        cur = conn.execute(
+            "INSERT INTO vouchers_all (voucher_no, voucher_date, category, category_manual,"
+            " summary, status, created_by, created_at, updated_at)"
+            " VALUES (?,?,?,?,?, '草稿', ?,?,?)",
+            (no, voucher_date, category, manual, summary or "", created_by, now, now))
+    except Exception as exc:                            # noqa: BLE001
+        if "UNIQUE" in str(exc).upper():
+            raise HTTPException(
+                409, "傳票號碼「%s」剛剛被別人用掉了，請再存一次。" % no)
+        raise
+    vid = cur.lastrowid
+    for i, ln in enumerate(lines, start=1):
+        conn.execute(
+            "INSERT INTO voucher_lines (voucher_id, line_no, account_code,"
+            " summary, debit, credit, source_type, source_key)"
+            " VALUES (?,?,?,?,?,?,?,?)",
+            (vid, i, (ln.get("account_code") or ""),
+             (ln.get("summary") or ""),
+             # `JV32`：已由 `_amount_lines()` 正規化成 int；不再 `int()`（它會把 12.5 截成 12）
+             ln["debit"], ln["credit"],
+             # `JV36`：這一行的摘要來自哪一筆（重開時依它重新帶出來源檔案清單）
+             ln["source_type"], ln["source_key"]))
+    return vid, no
+
+
 @router.post("")
 def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
     """建立一張**草稿**傳票（`JV1`）。
@@ -356,31 +389,8 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
             cat, manual = body.get("category"), 1
         else:
             cat, manual = classify_category(conn, lines), 0
-        no = next_voucher_no(conn, voucher_date)
-        try:
-            cur = conn.execute(
-                "INSERT INTO vouchers_all (voucher_no, voucher_date, category, category_manual,"
-                " summary, status, created_by, created_at, updated_at)"
-                " VALUES (?,?,?,?,?, '草稿', ?,?,?)",
-                (no, voucher_date, cat, manual,
-                 (body.get("summary") or ""), _user_name(user), now, now))
-        except Exception as exc:                            # noqa: BLE001
-            if "UNIQUE" in str(exc).upper():
-                raise HTTPException(
-                    409, "傳票號碼「%s」剛剛被別人用掉了，請再存一次。" % no)
-            raise
-        vid = cur.lastrowid
-        for i, ln in enumerate(lines, start=1):
-            conn.execute(
-                "INSERT INTO voucher_lines (voucher_id, line_no, account_code,"
-                " summary, debit, credit, source_type, source_key)"
-                " VALUES (?,?,?,?,?,?,?,?)",
-                (vid, i, (ln.get("account_code") or ""),
-                 (ln.get("summary") or ""),
-                 # `JV32`：已由 `_amount_lines()` 正規化成 int；不再 `int()`（它會把 12.5 截成 12）
-                 ln["debit"], ln["credit"],
-                 # `JV36`：這一行的摘要來自哪一筆（重開時依它重新帶出來源檔案清單）
-                 ln["source_type"], ln["source_key"]))
+        vid, no = insert_draft_voucher(conn, voucher_date, body.get("summary") or "",
+                                       lines, _user_name(user), now, cat, manual)
         conn.commit()
     finally:
         conn.close()

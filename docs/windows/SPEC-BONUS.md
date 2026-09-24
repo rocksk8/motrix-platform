@@ -328,3 +328,19 @@ quotations 另有 **assigned_user_ids**（A 補查）
 - 標記**已發放**時自動產生一張**支出傳票草稿**：借 2191 應付薪資／貸 銀行存款（科目由出納選）；**代扣所得稅不自動計算**（門檻金額未核對），草稿留一行「代扣稅款（如適用）」由出納填，貸方科目預設 2252 代收款、可改。
 - 退回（待發放 → 草稿）時，若轉帳傳票草稿尚未送審 ⇒ 作廢該草稿；已送審 ⇒ 不動並在獎金頁提示「已產生的傳票需另行作廢」。
 - 科目代號以本系統 `account_items`（官方 112 年版）為準；找不到科目時不產生傳票並提示，不猜。
+
+### 11.8.1 實作落點（AC3 已落地，2026-09-24）
+```
+連結     bonus_case_awards.accrual_voucher_id／payment_voucher_id（v114；0＝沒有）
+         ⚠️ 取代 §六 寫的 voucher_no_accrual／voucher_no_payment（那是舊表的設計，未實作）
+科目設定 GET/PUT /api/bonus/cases/voucher-accounts（最高管理者）
+         四格 expense 6111／payable 2191／withholding 2252／bank 1113（預設值）
+         PUT：任何一格不存在或已停用 ⇒ 400，一格都不寫；GET 附 problems（事後被停用的明著列出）
+交易     與狀態轉換**同一個交易**：狀態與連結一起成功、一起失敗
+         科目有問題 ⇒ 不產生傳票、回 notice，**不擋**獎金本身的狀態轉換
+出納     mark-paid 可帶 bank_account_code（選填，預設設定的 bank）；無效 ⇒ 400、狀態不變
+金額     發放合計（Σ 名單金額，不含尾差）；合計 0 ⇒ 不產生並提示
+寫入     與 create_voucher 共用 routers/vouchers.insert_draft_voucher()（單號規則只有一份）
+         分錄沒有摘要來源（source_type 空）⇒ JV21「同一筆支出只能帶入一張」不適用
+顯示     GET /cases/{quote_no} 的 vouchers（僅 superadmin／出納）；回應的 notice 要顯示（前端 UI：hichan-bf，排在 AC2 之後；hichan-0a 裁示）
+```

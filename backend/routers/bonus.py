@@ -1624,6 +1624,7 @@ from helpers.tiered_approval import (  # noqa: E402
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
 )
 from helpers.auth import user_has_module  # noqa: E402
+from helpers import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")
 _RATE_KEY = "bonus_case_default_rate_bp"
@@ -1862,6 +1863,47 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
     return {"ok": True}
 
 
+@router.get("/cases/voucher-accounts")
+def get_case_bonus_voucher_accounts(authorization: str = Header(None)):
+    """`AC3`：獎金分潤產生傳票時用的科目（不寫死；預設 6111／2191／2252／1113）。
+    已存的值若後來被停用 ⇒ `problems` 明著列出，要求重選（不靜默失效）。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        acc = bonus_vouchers.configured_accounts(conn)
+        problems = {k: bonus_vouchers.account_problem(conn, v) for k, v in acc.items()}
+    finally:
+        conn.close()
+    return {"accounts": acc, "problems": {k: v for k, v in problems.items() if v},
+            "labels": {k: v[2] for k, v in bonus_vouchers.ACCOUNT_SLOTS.items()}}
+
+
+@router.put("/cases/voucher-accounts")
+def put_case_bonus_voucher_accounts(body: dict = Body(...), authorization: str = Header(None)):
+    """只改有給的鍵；任何一個不存在或已停用 ⇒ 400，**一個都不寫**。"""
+    _require_user(authorization, require_superadmin=True)
+    body = body or {}
+    changes = {k: (body.get(k) if isinstance(body.get(k), str) else "").strip()
+               for k in bonus_vouchers.ACCOUNT_SLOTS if k in body}
+    if not changes:
+        raise HTTPException(400, "沒有要修改的科目。")
+    conn = get_db()
+    try:
+        problems = ["%s：%s" % (bonus_vouchers.ACCOUNT_SLOTS[k][2], bonus_vouchers.account_problem(conn, v))
+                    for k, v in changes.items() if bonus_vouchers.account_problem(conn, v)]
+    finally:
+        conn.close()
+    if problems:
+        raise HTTPException(400, "；".join(problems))
+    from helpers.settings import _set_setting
+    for k, v in changes.items():
+        _set_setting(bonus_vouchers.ACCOUNT_SLOTS[k][0], v)
+    _audit(_tok(authorization), "bonus.case.voucher_accounts", "settings", "bonus_case_voucher_accounts",
+           "獎金分潤傳票科目：%s" % "、".join("%s=%s" % (bonus_vouchers.ACCOUNT_SLOTS[k][2], v)
+                                        for k, v in changes.items()))
+    return {"ok": True}
+
+
 @router.get("/cases")
 def list_case_bonuses(status: str = "", q: str = "", authorization: str = Header(None)):
     """左側案件清單。最高管理者看全部；其他人只看得到「自己在名單上、而且已到待發放」的案件
@@ -1944,12 +1986,14 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
         if view["scope"] == "cashier":
             out["award"] = view["award"]
             out["summary"] = view["summary"]
+            out["vouchers"] = bonus_vouchers.linked_vouchers(conn, award)   # `AC3`
         elif view["scope"] != "self":
             a = dict(award)
             a["split_bp"] = json.loads(a.pop("split_json") or "{}")
             a["approval"] = json.loads(a.pop("approval_json") or "{}")
             out["award"] = a
             out["summary"] = _summary(award, lines)
+            out["vouchers"] = bonus_vouchers.linked_vouchers(conn, award)   # `AC3`
             if full:
                 out["log"] = [dict(r) for r in conn.execute(
                     "SELECT changed_by, changed_at, action, changes_json FROM bonus_case_award_edit_log"
@@ -2118,11 +2162,18 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
                      " WHERE id=?", (nxt, json.dumps(appr, ensure_ascii=False), _user_name(user), now,
                                      award["id"]))
         _case_log(conn, award["id"], user, "approve", {"status": nxt})
+        voucher, notice = None, ""
+        if nxt == "待發放":
+            # `AC3`（§11.8）：進入待發放 ⇒ 轉帳傳票草稿（借 費用／貸 應付）；科目有問題只提示、不擋簽核
+            voucher, notice = bonus_vouchers.create_accrual(conn, award, _user_name(user), now)
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
-    return {"ok": True, "status": nxt}
+    if voucher:
+        _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
+               "獎金分潤 %s 進入待發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
+    return {"ok": True, "status": nxt, "voucher": voucher, "notice": notice}
 
 
 def _back_to_draft(conn, award, user, action, reason):
@@ -2177,31 +2228,49 @@ def return_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
         if award["status"] == "草稿":
             raise HTTPException(409, "這張已經是草稿。")
         _back_to_draft(conn, award, user, "return", reason)
+        # `AC3`：待發放時產生的轉帳草稿——還沒送審 ⇒ 作廢；已送審 ⇒ 不動、提示
+        voided_no, notice = bonus_vouchers.withdraw_accrual(
+            conn, award, _user_name(user), datetime.now().isoformat(), reason)
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.return", "bonus_case_awards", quote_no, "獎金分潤退回：%s" % reason)
-    return {"ok": True, "status": "草稿"}
+    if voided_no:
+        _audit(_tok(authorization), "voucher.void", "vouchers", voided_no,
+               "獎金分潤 %s 退回，作廢未送審的傳票草稿：%s" % (quote_no, voided_no))
+    return {"ok": True, "status": "草稿", "notice": notice}
 
 
 @router.post("/cases/{quote_no}/mark-paid")
-def mark_case_bonus_paid(quote_no: str, authorization: str = Header(None)):
-    """出納標記已發放（出納模組持有者；superadmin 本來就持有全部模組）。記日期與操作者。"""
+def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """出納標記已發放（出納模組持有者；superadmin 本來就持有全部模組）。記日期與操作者。
+
+    `AC3`：同時產生支出傳票草稿；`bank_account_code` 可選（出納選哪一個銀行），
+    沒給 ⇒ 用獎金設定的銀行科目。給了而無效 ⇒ 400，**狀態不變**。"""
     user = _require_user(authorization)
     if user.get("role") != "superadmin" and not user_has_module(user, "cashier"):
         raise HTTPException(403, "只有出納可以標記已發放。")
+    bank = ((body or {}).get("bank_account_code") or "").strip()
     conn = get_db()
     try:
         conn.execute("BEGIN IMMEDIATE")
         award, _lines = _load_case_award(conn, quote_no)
         if award is None or award["status"] != "待發放":
             raise HTTPException(409, "只有「待發放」的獎金分潤可以標記已發放。")
+        if bank:
+            err = bonus_vouchers.account_problem(conn, bank)
+            if err:
+                raise HTTPException(400, "銀行科目：%s" % err)
         now = datetime.now().isoformat()
         conn.execute("UPDATE bonus_case_awards SET status='已發放', paid_by=?, paid_at=?, updated_by=?,"
                      " updated_at=? WHERE id=?", (_user_name(user), now, _user_name(user), now, award["id"]))
         _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now})
+        voucher, notice = bonus_vouchers.create_payment(conn, award, _user_name(user), now, bank)
         conn.commit()
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.mark_paid", "bonus_case_awards", quote_no, "獎金分潤標記已發放")
-    return {"ok": True, "status": "已發放"}
+    if voucher:
+        _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
+               "獎金分潤 %s 已發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
+    return {"ok": True, "status": "已發放", "voucher": voucher, "notice": notice}
