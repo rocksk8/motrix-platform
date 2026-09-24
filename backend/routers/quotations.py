@@ -482,6 +482,15 @@ def _is_case_member(conn, quote_no: str, row, user: dict) -> bool:
     return bool(hit)
 
 
+def _require_money_or_approver(conn, q, user: dict) -> None:
+    """含成本／毛利的 PDF（CM15，2026-09-24 使用者裁示）：money_visible()（CM13 的遮蔽條件）
+    或本單簽核人（「簽核人可以」——看不到金額就沒辦法判斷該不該簽）。q 為 _guard_case 的回傳。"""
+    if money_visible(user) or _is_case_approver(q["data_json"], user, conn):
+        return
+    _safe_close(conn)
+    raise HTTPException(403, "此帳號沒有財務檢視權限，不可下載含金額的報表")
+
+
 def _deny_if_case_locked_unsupported(conn, quote_no: str, authorization: str = None,
                                      op: str = "") -> None:
     """給不支援排隊審核的細項端點（案件執行階段的新增/編輯/刪除/排序/加入
@@ -5321,7 +5330,9 @@ def download_quotation_pdf(quote_no: str, internal: bool = False, authorization:
     """後端 Edge Headless 產生 PDF 並直接下載（internal=true 含成本），避免 macOS/瀏覽器列印頁首干擾。"""
     user = _require_user(authorization)
     conn = get_db()
-    _guard_case(conn, quote_no, user, allow_approver=True)
+    q = _guard_case(conn, quote_no, user, allow_approver=True)
+    if internal:
+        _require_money_or_approver(conn, q, user)   # 內部版含成本（CM15）
     # 🔑 QL10：把 `location_id` 一起取出來 —— 列印的稽核要記得下這一次用了哪個據點。
     row  = conn.execute(
         "SELECT quote_no, location_id FROM quotations WHERE quote_no=?",
@@ -5484,7 +5495,8 @@ def download_case_closing_report_pdf(quote_no: str, authorization: str = Header(
     僅限已結案案件；含成本與毛利等內部機密資訊，不對外提供。"""
     user = _require_user(authorization)
     conn = get_db()
-    _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
+    q = _guard_case(conn, quote_no, user, allow_approver=True, allow_module="case_manage")
+    _require_money_or_approver(conn, q, user)
     row = conn.execute(
         "SELECT COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') AS deal_tag "
         "FROM quotations WHERE quote_no=?", (quote_no,)
