@@ -447,7 +447,14 @@ window.CM_PARTS.push(() => ({
       delete m[quoteNo]
       this.caseActivity = m
       this._readAtLocal = { ...(this._readAtLocal || {}), [quoteNo]: Date.now() }
+      this._adjustUnreadCount(-1)
       if (window.MotrixReads) window.MotrixReads.mark('case', quoteNo)
+    },
+
+    // D8-1：上方未讀數是伺服器件數，單筆清紅點／還原時跟著加減，不必等下次重抓
+    _adjustUnreadCount(delta) {
+      if (!this.caseCounts) return
+      this.caseCounts = { ...this.caseCounts, unread: Math.max(0, (this.caseCounts.unread || 0) + delta) }
     },
 
     // CM7：未讀件數是全部案件（伺服器），不是已載入的那一頁
@@ -466,9 +473,10 @@ window.CM_PARTS.push(() => ({
       this.caseActivity = {}
       const now = Date.now()
       this._readAtLocal = { ...(this._readAtLocal || {}), ...Object.fromEntries(keys.map(k => [k, now])) }
-      if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('case', k))
       this.unreadOnly = false
       if (this.caseCounts) this.caseCounts = { ...this.caseCounts, unread: 0 }
+      // W-4：伺服器記下已讀之後才重抓；先重抓的話件數會以舊資料回來、未讀列又跳出來
+      if (window.MotrixReads) await Promise.allSettled(keys.map(k => window.MotrixReads.mark('case', k)))
       this.loadCases()
     },
 

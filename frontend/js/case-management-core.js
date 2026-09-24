@@ -131,6 +131,7 @@ window.CM_PARTS.push(() => ({
         delete m[e.detail.key]
         this.caseActivity = m
         this._readAtLocal = { ...(this._readAtLocal || {}), [e.detail.key]: Date.now() }
+        this._adjustUnreadCount(-1)
       })
       window.addEventListener('motrix:item-read-failed', e => {
         if (e.detail.kind !== 'case') return
@@ -139,6 +140,7 @@ window.CM_PARTS.push(() => ({
         const loc = { ...(this._readAtLocal || {}) }
         delete loc[k]
         this._readAtLocal = loc
+        if (!this.caseActivity[k]) this._adjustUnreadCount(1)
         this.caseActivity = { ...this.caseActivity, [k]: true }
       })
       this.caseSortPref = await loadListPref(s.token, 'case_list')
@@ -439,8 +441,11 @@ window.CM_PARTS.push(() => ({
     setDirty() {
       this.dirty = true
       window.motrixIsDirty = true
-      this.saveStatus = 'dirty'
-      this.saveMsg = '未儲存'
+      // W-3：存檔錯誤時打字不蓋掉錯誤（橫幅看 saveStatus==='error'），留到下次存檔成功
+      if (this.saveStatus !== 'error') {
+        this.saveStatus = 'dirty'
+        this.saveMsg = '未儲存'
+      }
       clearTimeout(this._autoSaveTimer)
       this._autoSaveTimer = setTimeout(() => this.saveCaseRecord(), 1500)
       this._checkAllStagesDone()
@@ -634,7 +639,8 @@ window.CM_PARTS.push(() => ({
             this.saveStatus = 'saved'
             this.saveMsg = '已儲存'
             this.flashSaved('case')
-            setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
+            // W-2：只清「已儲存」本身——之後若又失敗，錯誤要留著
+            setTimeout(() => { if (!this.dirty && this.saveStatus === 'saved') { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
           }
           // 收款／階段等改動會影響五關，總覽跟著更新
           this.loadCaseHealth(this.selected?.quote_no)
