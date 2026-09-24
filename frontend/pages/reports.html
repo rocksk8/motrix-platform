@@ -291,8 +291,8 @@
               <template x-for="y in [2024,2025,2026,2027]" :key="y"><option :value="y" x-text="y"></option></template>
             </select>
             <select class="filter" x-model.number="quarter" @change="loadData()" style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:12px;background:#fff">
-              <option :value="1">Q1</option><option :value="2">Q2</option>
-              <option :value="3">Q3</option><option :value="4">Q4</option>
+              <option value="1">Q1</option><option value="2">Q2</option>
+              <option value="3">Q3</option><option value="4">Q4</option>
             </select>
           </div>
         </template>
