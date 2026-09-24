@@ -122,16 +122,30 @@ def _editor_open(page):
 
 def _settled(page, do):
     """做一個寫入動作並等它**整個**做完（原本固定等 2～2.5 秒）。
-    可觀測的終點：這個動作的最後一步是重讀清單（GET /api/vouchers）⇒ 等那一趟回來，
-    再等 busy 解除（save／_act 的 finally 在 `await open(...)`＋`await loadList()` 之後），
-    最後等 Alpine 把畫面更新完。
-    ⚠️ 不可以改成「等成功訊息出現」：這一檔要抓的正是「訊息被隨後的重讀清掉」，
-       等出現會在清掉之前就放行（假綠）；而訊息真的被清掉時，那種等法只會逾時、說不出原因。"""
-    with page.expect_response(lambda r: r.request.method == "GET" and urlparse(r.url).path == "/api/vouchers",
-                              timeout=15000):
+
+    可觀測的終點：busy 由 true 回到 false。save()／_act() 都在**第一個 await 之前**同步設 busy=true，
+    在 finally 才解除——而 finally 在 `await open(...)`＋`await loadList()` **之後** ⇒ busy 一解除，
+    重讀與清單都已經做完；失敗（非 2xx、例外）也一樣走 finally，不會卡住。
+    ⚠️ 不可以改成「等成功訊息出現」：這一檔要抓的正是「訊息被隨後的重讀清掉」，等出現會在清掉之前放行（假綠）。
+    ☠️ 2026-09-25 更正留著：第一版等的是「GET /api/vouchers 回來」。建包序列跑時送審那一題在那裡逾時 15s
+       （單跑綠）——動作的終點是 finally，不是某一趟請求；逾時的時候也說不出卡在哪。改等 busy，
+       逾時就把當下狀態與這段期間的 /api/vouchers 請求印出來。"""
+    seen = []
+
+    def _rec(r):
+        if "/api/vouchers" in r.url:
+            seen.append("%s %s %s" % (r.request.method, r.status, urlparse(r.url).path))
+    page.on("response", _rec)
+    try:
         do()
-    page.wait_for_function("() => !%s.busy" % VC, timeout=15000)
-    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+        try:
+            page.wait_for_function("() => { const d = %s; return d && !d.busy }" % VC, timeout=30000)
+        except Exception:
+            state = page.evaluate("() => { const d = %s; return {busy: d.busy, id: d.id, msg: d.actionMsg, err: d.actionErr} }" % VC)
+            raise AssertionError("動作 30 秒內沒有做完（busy 沒有解除）：%r；期間的 /api/vouchers 回應：%r" % (state, seen))
+        page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+    finally:
+        page.remove_listener("response", _rec)
 
 
 def _error_shown(page):
