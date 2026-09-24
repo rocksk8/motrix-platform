@@ -1747,13 +1747,22 @@ def _case_award_view(conn, award, lines, user):
     """依身分決定回多少（過濾在後端，§七／§11.4 字面）。
 
     superadmin                         整張
+    待發放／已發放＋出納模組持有者（C1）   整張的每人金額、合計、尾差；**不含**淨利、比率、個人比例、獎金池
     待發放／已發放＋名單上的人             **只有自己那幾列**（金額＋比例），不含淨利、獎金池、別人
     其他                                 None（當作不存在）
     （簽核人只能是 superadmin，W1 (c)，所以不需要「簽核人可見」這一格。）
+    C1：使用者「待發放／已發放的整張，不含淨利與比率」——出納要照著發錢，看不到就發不了。
     """
     if _sees_all_lines(user):
         return {"award": award, "lines": lines, "scope": "all"}
     uname = _user_name(user)
+    if award["status"] in _PAYOUT_VISIBLE and user_has_module(user, "cashier"):
+        slim = {k: award[k] for k in ("id", "quote_no", "status", "paid_at", "paid_by")}
+        paid = sum(l["amount"] for l in lines)
+        stripped = [{k: l[k] for k in ("id", "category", "username", "display_name_snapshot", "amount")}
+                    for l in lines]
+        return {"award": slim, "lines": stripped, "scope": "cashier",
+                "summary": {"paidTotal": paid, "remainder": award["pool_amount"] - paid}}
     if award["status"] in _PAYOUT_VISIBLE:
         mine = [l for l in lines if l["username"] == uname]
         if mine:
@@ -1896,6 +1905,8 @@ def list_case_bonuses(status: str = "", q: str = "", authorization: str = Header
                 item["noBonus"] = bool(ok and not award and float(net) <= 0)
             if view and view["scope"] == "self":
                 item["myAmount"] = sum(l["amount"] for l in view["lines"])
+            if view and view["scope"] == "cashier":
+                item["paidTotal"] = view["summary"]["paidTotal"]
             items.append(item)
     finally:
         conn.close()
@@ -1930,7 +1941,10 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
         if view is None:
             raise HTTPException(404, "找不到這個案件的獎金分潤。")
         out = {"case": case, "status": award["status"], "scope": view["scope"], "lines": view["lines"]}
-        if view["scope"] != "self":
+        if view["scope"] == "cashier":
+            out["award"] = view["award"]
+            out["summary"] = view["summary"]
+        elif view["scope"] != "self":
             a = dict(award)
             a["split_bp"] = json.loads(a.pop("split_json") or "{}")
             a["approval"] = json.loads(a.pop("approval_json") or "{}")

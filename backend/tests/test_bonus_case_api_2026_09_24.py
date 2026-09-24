@@ -355,3 +355,37 @@ def test_queue_badge_counts_pending_case_bonus(client, people):
     after = client.get("/api/approval-queue/count", headers=_auth(people["bc_sa2"])).json()
     key = next(k for k, v in after.items() if isinstance(v, int))
     assert after[key] == before.get(key, 0) + 1, (before, after)
+
+
+# ── C1：出納可見範圍 ─────────────────────────────────────────────────────────
+
+def test_cashier_sees_full_amounts_at_payout_without_profit_or_ratios(client, people):
+    """使用者「待發放／已發放的整張，不含淨利與比率」。"""
+    _to_payout(client, people, "MQ-BC-070")
+    client.post("/api/bonus/cases/MQ-BC-070/approve", headers=_auth(people["bc_sa2"]))
+    r = client.get("/api/bonus/cases/MQ-BC-070", headers=_auth(people["bc_cash"]))
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["scope"] == "cashier"
+    assert {(l["category"], l["username"]): l["amount"] for l in d["lines"]} == {
+        ("sales", "bc_s1"): 5, ("project", "bc_p1"): 1, ("project", "bc_p2"): 1,
+        ("admin", "bc_a1"): 0, ("admin", "bc_a2"): 0, ("admin", "bc_a3"): 0}
+    assert d["summary"] == {"paidTotal": 7, "remainder": 3}
+    for leak in ("net_profit", "rate_bp", "split_json", "split_bp", "person_bp", "pool_amount", "poolAmount",
+                 "approval"):
+        assert leak not in r.text, f"出納的回應裡不可以有 {leak}"
+    items = client.get("/api/bonus/cases", headers=_auth(people["bc_cash"])).json()["items"]
+    assert [(i["quote_no"], i.get("paidTotal")) for i in items] == [("MQ-BC-070", 7)]
+
+
+def test_cashier_cannot_see_pending_approval(client, people):
+    _to_payout(client, people, "MQ-BC-071")          # 待審核
+    assert client.get("/api/bonus/cases/MQ-BC-071", headers=_auth(people["bc_cash"])).status_code == 404
+    assert client.get("/api/bonus/cases", headers=_auth(people["bc_cash"])).json()["items"] == []
+
+
+def test_member_still_sees_only_own_line_when_cashier_rule_exists(client, people):
+    _to_payout(client, people, "MQ-BC-072")
+    client.post("/api/bonus/cases/MQ-BC-072/approve", headers=_auth(people["bc_sa2"]))
+    d = client.get("/api/bonus/cases/MQ-BC-072", headers=_auth(people["bc_a2"])).json()
+    assert d["scope"] == "self" and [l["username"] for l in d["lines"]] == ["bc_a2"]

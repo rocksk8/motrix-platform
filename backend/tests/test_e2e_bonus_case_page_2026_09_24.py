@@ -1,0 +1,183 @@
+"""瀏覽器端對端：以案件為中心的獎金分潤頁（SPEC-BONUS §十一，2026-09-24）。
+
+- 最高管理者：選案件 → 建立草稿（自動帶入業務／專案）→ 手動加後勤 → 改比率 → 儲存 → 金額照伺服器算 → 送審
+- 名單上的人：待發放後只看到自己那一列；看不到淨利、獎金池、別人
+- 出納：待發放時看得到整張金額並標記已發放；看不到淨利與比率（C1）
+觀測點打在資料庫落地值與 API 回應，不打在頁面寫死的文字上。
+"""
+import json
+import threading
+import time
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import sync_playwright
+
+import uvicorn
+from tests._ports import free_safe_port
+
+NO = "MQ-E2EBC-001"
+DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
+
+
+@pytest.fixture()
+def live_server(client):
+    import main
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
+    port = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
+
+
+def _login(page, base_url, username, password):
+    page.goto(f"{base_url}/pages/login.html")
+    page.fill('input[x-model="username"]', username)
+    page.fill('input[x-model="password"]', password)
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+
+
+def _seed(uid_sales, executor_display):
+    import db
+    data = {"dealTag": "已結案", "caseRecord": {"roles": {"executor": executor_display}},
+            "settlement": {"status": "finalized", "summary": {"netProfit": 100000}}}
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at,"
+            " updated_at, deal_tag, sales_person, sales_person_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (NO, "已送出", "頁面客戶", "頁面專案", json.dumps(data, ensure_ascii=False),
+             "2026-09-01", "2026-09-01", "已結案", "", uid_sales))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _award():
+    import db
+    conn = db.get_db()
+    try:
+        a = conn.execute("SELECT * FROM bonus_case_awards WHERE quote_no=?", (NO,)).fetchone()
+        lines = [dict(r) for r in conn.execute(
+            "SELECT category, username, amount FROM bonus_case_award_lines WHERE award_id=? ORDER BY id",
+            (a["id"],))] if a else []
+        return (dict(a) if a else None), lines
+    finally:
+        conn.close()
+
+
+def _users(make_user):
+    import db
+    out = {}
+    # ⚠️ 頁面層有模組守門（sidebar.js:769 顯示條件 cRpt＝has('reports')）：
+    #    看得到 bonus.html 要有 'reports' 模組（M1 待裁，預設 (a)）
+    eng = ["dashboard", "case_manage", "work_log", "daily_task", "reports"]
+    for u, role, mods in (("pg_sa", "superadmin", None), ("pg_sa2", "superadmin", None),
+                          ("pg_sales", "sales", None), ("pg_exec", "engineer", eng),
+                          ("pg_admin", "engineer", eng), ("pg_cash", "engineer", ["cashier", "reports"])):
+        out[u] = make_user(username=u, role=role, modules=mods)
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET display_name='執行人員' WHERE username='pg_exec'")
+        uid = conn.execute("SELECT id FROM users WHERE username='pg_sales'").fetchone()["id"]
+        conn.commit()
+    finally:
+        conn.close()
+    _seed(uid, "執行人員")
+    return out
+
+
+@pytest.mark.e2e
+def test_superadmin_builds_draft_and_submits_in_page(live_server, make_user):
+    u = _users(make_user)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, *u["pg_sa"])
+            page.goto(f"{live_server}/pages/bonus.html")
+            card = page.locator(f'.bn-case[data-quote-no="{NO}"]')
+            card.wait_for(timeout=20000)
+            assert "已精算" in card.inner_text()
+            card.click()
+            page.locator('[data-testid="bn-create"]').click()
+            page.locator('[data-testid="bn-draft"]').wait_for(timeout=15000)
+            a, lines = _award()
+            assert a["status"] == "草稿"
+            assert {(l["category"], l["username"]) for l in lines} == {("sales", "pg_sales"), ("project", "pg_exec")}
+
+            page.select_option('[data-testid="bn-add-admin"]', "pg_admin")
+            page.locator('[data-testid="bn-add-admin"] + button').click()
+            page.fill('[data-testid="bn-rate"]', "15")
+            page.locator('[data-testid="bn-save"]').click()
+            page.wait_for_function(f"() => {DATA_JS}.msg === '已儲存'", timeout=15000)
+            a, lines = _award()
+            assert a["rate_bp"] == 1500 and a["pool_amount"] == 15000
+            assert {(l["category"], l["username"]): l["amount"] for l in lines} == {
+                ("sales", "pg_sales"): 7500, ("project", "pg_exec"): 4500, ("admin", "pg_admin"): 3000}
+            assert page.inner_text('[data-testid="bn-remainder"]').strip() == "NT$ 0"
+
+            page.locator('[data-testid="bn-submit"]').click()
+            page.wait_for_function(f"() => {DATA_JS}.msg === '已送審'", timeout=15000)
+            assert _award()[0]["status"] == "待審核"
+            assert "待審核" in page.inner_text('[data-testid="bn-status"]')
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user):
+    u = _users(make_user)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            ctx = browser.new_context()
+            page = ctx.new_page()
+
+            def api_login(name):
+                r = page.request.post(f"{live_server}/api/auth/login",
+                                      data={"username": name, "password": u[name][1]})
+                return {"Authorization": "Bearer " + r.json()["token"]}
+            sa, sa2 = api_login("pg_sa"), api_login("pg_sa2")
+            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}", headers=sa,
+                                     data={"members": {"sales": [{"username": "pg_sales"}],
+                                                       "project": [{"username": "pg_exec"}],
+                                                       "admin": [{"username": "pg_admin"}]}}).ok
+            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/submit", headers=sa).ok
+            assert page.request.post(f"{live_server}/api/bonus/cases/{NO}/approve", headers=sa2).ok
+
+            # 名單上的人
+            _login(page, live_server, *u["pg_exec"])
+            page.goto(f"{live_server}/pages/bonus.html?q={NO}")
+            page.locator('[data-testid="bn-view-project-pg_exec"]').wait_for(timeout=20000)
+            assert "NT$ 3,000" in page.inner_text('[data-testid="bn-view-project-pg_exec"]')
+            assert page.locator('[data-testid="bn-view-sales-pg_sales"]').count() == 0
+            assert page.locator('[data-testid="bn-pool"]').count() == 0
+            assert page.locator('[data-testid="bn-mark-paid"]').count() == 0
+
+            # 出納
+            page2 = browser.new_context().new_page()
+            _login(page2, live_server, *u["pg_cash"])
+            page2.goto(f"{live_server}/pages/bonus.html?q={NO}")
+            page2.locator('[data-testid="bn-view-sales-pg_sales"]').wait_for(timeout=20000)
+            assert page2.inner_text('[data-testid="bn-paid-total"]').strip() == "NT$ 10,000"
+            assert page2.locator('[data-testid="bn-pool"]').is_hidden()
+            page2.locator('[data-testid="bn-mark-paid"]').click()
+            page2.wait_for_function(f"() => {DATA_JS}.msg === '已標記發放'", timeout=15000)
+            a, _ = _award()
+            assert a["status"] == "已發放" and a["paid_by"] == "pg_cash"
+        finally:
+            browser.close()
