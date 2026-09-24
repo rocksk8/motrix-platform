@@ -1604,7 +1604,7 @@ def _case_people(conn, quote_no):
 # 以案件為中心的獎金分潤（SPEC-BONUS §十一／§11.7，2026-09-24）
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# 表：bonus_case_awards／bonus_case_award_lines／bonus_case_award_edit_log（db.py v112）。
+# 表：bonus_case_awards／bonus_case_award_lines／bonus_case_award_edit_log（db.py v113）。
 # 算式：helpers/bonus_case.py（純函式）。舊的 bonus_awards 流程不理會（§11.7「直接作廢」
 # ⇒ 新頁面不顯示、不擋；不以 migration 作廢任何資料）。
 #
