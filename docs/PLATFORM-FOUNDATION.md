@@ -1,6 +1,6 @@
 # 平台化前置規劃：共用接點、版型、功能地圖、模組檢查清單、自訂前置（2026-09-24）
 
-> **量測基準 HEAD `1eaa5d3e673cc9df8feea56e6992f8c33953a0d7`**：本文所有 `file:line` 都以這一版為準。
+> **量測基準**：§1-§4 以 HEAD `1eaa5d3e673cc9df8feea56e6992f8c33953a0d7` 為準；**§5 以 `73099719184e53c8fa951ff3cc9e41e15329e49a` 為準**（第三版，2026-09-24 依使用者定調「平台化是獨立的功能」改寫）。
 > 第一版的基準是 `f7145be`（commit `755c281`）。第二版把 §1-§4 引用到、而在兩版之間有變動的檔案，逐一用 difflib 做行號對照後改寫；有變動的內容（字級修正）另外重讀。§5 在新基準上重新讀碼。
 > 讀取方式：用 `git ls-tree` 加逐檔 `git show` 匯出唯讀快照（不用 `git archive`，因為 `export-ignore` 會漏掉 tests 與 docs/windows）。讀取當下工作樹有 dirty 檔（`db.py`、`routers/vouchers.py`、`voucher.html` 等），不影響以 HEAD 為準的行號。行號會隨時間過期（見 `MULTIWIN-PROTOCOL.md §5w`）。
 > 延伸自 `docs/PLATFORM-CUSTOMIZATION-INVENTORY.md`（基準 `5c44d58`，以下簡稱「盤點」），不重做盤點的內容。盤點引用的行號在本版已經位移，例如 `vouchers_all.custom_fields` 由盤點寫的 :5205 移到 `db.py:5265`。
@@ -273,249 +273,255 @@ reports／bonus／dashboard／accounting_export／vouchers：讀上面全部
 
 ## 5. 模組化與自訂前置（延伸盤點 §3-§5）
 
+> **本節的行號基準是 `7309971`**（§1-§4 仍以 `1eaa5d3` 為準）。兩版之間 `quotations.py`、`sidebar.js`、`pdf_gen.py` 等檔案的行號有位移，本節一律使用新號。
+
 ### 5.0 界線（定案）
 
-> **使用者裁示（N7，2026-09-24 晨間表單，經 hichan-0a 轉達）：「附加登記允許、改行為逐點問」。**
+**兩條使用者裁示（皆為 2026-09-24，經 hichan-0a 轉達）：**
+- **N7**：「附加登記允許、改行為逐點問」。
+- **定調（B1／B2 的回答）**：「平台化是獨立的功能，讓未來可獨立不寫代碼也能帶入相關功能」。
 
-**A 類「附加登記」＝允許**：在既有登記表的尾端加一列，不修改任何既有列，也不改變任何既有邏輯。已知的登記表如下（行號以本版為準）：
+⇒ 平台層是一個**獨立的模組**。它有自己的單據、表單、輸出，**不把欄位塞進既有單據**。對既有模組只做兩件事：
+1. **唯讀引用**既有資料（§5.7）。
+2. 做 **A 類登記**。
 
-| 登記表 | 位置 | 加一列的一致性守門 |
+**A 類「附加登記」＝允許**：在既有登記表的尾端加一列，不改動任何既有列，也不改變任何既有邏輯。
+
+| 登記表 | 位置 | 加一列時守的測試 |
 |---|---|---|
 | router 掛載 | `main.py:28`（import）、:617-662（include） | `test_router_registration:46/73` |
 | migration | `db.py` 新增 `_mNNN`＋`_MIGRATIONS`（:5371-5481）＋`CURRENT_VERSION`（:128） | `test_migration_numbering:54/81/116` |
 | 展示分類 | `db.py:342`（或 :334） | `test_demo_reset:223` |
 | JSON 備份 | `archive.py:1506` | `test_system_audit:127` |
-| 權限目錄 | `users.html:792`（角色樣板 :718） | `test_module_keys_consistency` |
-| 選單靜態項目 | `sidebar.js` `buildSidebar`（:685 起）內的 `ni()` 項目 | `test_sidebar_finance:334/500/550` |
+| 權限目錄 | `users.html:792`（角色樣板在 :718） | `test_module_keys_consistency` |
+| 選單靜態項目 | `sidebar.js` `buildSidebar`（:685 起）的 `ni()` 項目 | `test_sidebar_finance:334/500/550` |
 | 版本紀錄 | `version_manifest.json` | `test_version_manifest:78/168` |
 | 簽核單據類型 | `tiered_approval.py:54`、:64；`approval-settings.html:448` | `test_approval_flow_scope:248` |
 | email 事件 | `notification_prefs.py:17` | `test_notification_prefs_coverage:33` |
 
-**A 類的判定規則**（本文提出，用來處理灰色地帶）：
+**灰色地帶的判定規則**（本文提出，不是裁示）：
 
-| 動作 | 類別 | 理由 |
-|---|---|---|
-| 在 tuple／list／dict 常數加一項 | A | 只是登記一列 |
-| `CURRENT_VERSION` 加一 | A | 屬於新增 migration 的機械步驟，受 `test_migration_numbering` 守 |
-| 用新的 migration 建新表 | A | 不動任何既有表 |
-| 在既有函式或 if 鏈裡加一個分支 | **B** | 即使只是「多支援一種」，它也改了那支函式的行為 |
-| 對既有資料表 `ALTER` 加欄位 | **B** | 改了既有模組的資料形狀 |
-| 修改既有列的值 | **B** | 改的是既有行為，不是新增登記 |
+| 動作 | 類別 |
+|---|---|
+| 在 tuple／list／dict 常數加一項 | A |
+| `CURRENT_VERSION` 加一（新增 migration 的機械步驟） | A |
+| 用新 migration 建新表 | A |
+| 在既有函式或 if 鏈裡加一個分支 | B |
+| 對既有表 `ALTER` 加欄位 | B |
+| 修改既有列的值 | B |
 
-**B 類「改既有行為」＝逐點問**：每一點都列在 **§5.8 待問清單**，各附「影響誰、替代做法、要問使用者的一句話」。
+**B 類「改既有行為」＝逐點問**：每一點都列在 §5.10 待問清單。
 
-**示範主線**：§5.1 到 §5.5 共用同一個示範案例——**報價單加一個自訂欄位 `cf_site_contact`（現場聯絡人），然後存檔 → 讀回 → PDF 印出**。每一節只寫它負責的那一段。
+### 5.1 示範主線：平台上新建一種自訂單據
 
-### 5.1 定義登錄（doc_types／fields／menus）
+**範例**：「現場勘查單」，doc type 為 `pf_site_survey`。
+- 欄位：客戶（引用）、關聯報價單（引用）、勘查日期、現場聯絡人、備註。
+- 流程：定義 → 填寫 → 存檔 → 讀回 → PDF，可選擇送審。
 
-**做法：第一階段不開新表，存在 `system_settings`，使用 `platform.` 命名空間。**
+| 步驟 | 做法 | 用到的既有接點 | 類別 |
+|---|---|---|---|
+| ① 定義 | 在 `platform.doc_types`、`platform.fields.pf_site_survey` 寫入定義（§5.2） | `helpers/settings.py:11/28` | 不需登記 |
+| ② 填寫 | 平台自己的通用表單頁，依欄位定義渲染（`frontend/pages/platform-doc.html`，新檔） | 版型照 §2 | A（新頁＋選單入口，見 §5.10 B6） |
+| ③ 引用 | 在「客戶」欄位選一位客戶、在「報價單」欄位選一張單，把指定欄位帶進來（§5.7） | 既有 GET 端點與權限函式 | 純引用 |
+| ④ 存檔 | `POST/PUT /api/platform/docs/{docType}`，寫入新表 `pf_documents`（§5.3） | `next_entity_code`（`db.py:5486`）、`_audit`（`helpers/audit.py:92`） | A（新 router、新表） |
+| ⑤ 讀回 | `GET /api/platform/docs/{docType}/{id}`，依單據上凍結的樣板版本顯示（§5.4） | — | A |
+| ⑥ 輸出 | 平台自己的 PDF（§5.6） | `run_edge_pdf`（`startup.py:75`）、`company_identity` | 純引用 |
+| ⑦ 送審（可選） | 用簽核引擎展開關卡，項目併進現有簽核佇列（§5.5） | `tiered_approval`；佇列 | 引擎＝純引用；佇列＝**B5（已同意）** |
 
-理由（都是讀碼確認的）：
-- `system_settings` 已經在每日 JSON 備份裡（`archive.py:1583-1587`，祕密欄位會先挖掉）。
-- 展示重置時會整張清掉（`db.py:364`）。
-- 讀寫接點已經存在：`helpers/settings.py:11` `_get_setting`、:28 `_set_setting`。前例是條款組 `quote_terms_presets`（`routers/system.py:1672-1723`）。
+**驗收（先寫題，題要先紅）**：定義一個欄位 → 填寫 → 存檔 → 重新讀回的值相同 → PDF 內含該值 → 改定義之後，舊單仍依舊版顯示。
+這條主線要釘住的是「寫入 → 讀回 → 輸出」三段，**不可以出現「有 schema、零寫入點」**（前例：`vouchers_all.custom_fields`，`db.py:5265`）。
 
-⇒ 這樣做**完全不需要 A 類登記**：沒有 migration、不用改展示清單或備份清單。
+### 5.2 定義登錄（doc_types／fields／menus）
+
+**第一階段存在 `system_settings`，使用 `platform.` 命名空間。**
+- 這張表已經在每日 JSON 備份裡（`archive.py:1583-1587`），展示重置時也會整張清（`db.py:364`）。
+- 讀寫接點已經存在：`helpers/settings.py:11/28`。前例是條款組 `quote_terms_presets`（`routers/system.py:1672-1723`）。
+- 因此定義本身不需要任何登記。
 
 | key | 形狀（草案） |
 |---|---|
-| `platform.doc_types` | `{"<docType>": {label, baseDocType?: "quotation"…, moduleKey, numberPrefix, templateId, approvalDocType}}`。有 `baseDocType`＝延伸一張既有單據；沒有＝全新的單據類型（P5） |
-| `platform.fields.<docType>` | `[{key:"cf_xxx", label, type:"text\|number\|date\|select\|bool", options?, required?, order, section, showOnPdf}]` |
-| `platform.menus` | `[{group, label, href, moduleKey, order}]`，只能追加，不可改寫既有項目 |
+| `platform.doc_types` | `{"pf_<snake>": {label, moduleKey, numberPrefix, templateId, approval: bool}}`；docType 一律以 `pf_` 開頭，確保不會和既有的 `APPROVAL_DOC_TYPES` 撞名 |
+| `platform.fields.<docType>` | `[{key, label, type:"text\|number\|date\|select\|bool\|ref", ref?:{source, pick:[…]}, options?, required?, order, section, showOnPdf}]`；`type:"ref"` 的規則見 §5.7 |
+| `platform.menus` | 本期不用：選單只有一個靜態「自訂功能」入口（B6 定案），入口頁從 `platform.doc_types` 列出所有自訂單據 |
 
-**升級條件**：定義量或查詢需求超過單一 JSON 值能承受時，再改成實表 `pf_doc_types`、`pf_fields`、`pf_menus`。改成實表時要做第 4 節的 1-4 步，都屬於 A 類。
+**升級條件**：定義數量或查詢需求超過單一 JSON 值能承受時，改成實表 `pf_doc_types`、`pf_fields`。改實表時要做第 4 節的 1-4 步，都是 A 類。
 
-**示範案例（定義這一段）**：
-- 在 `platform.fields.quotation` 加一筆 `{key:"cf_site_contact", label:"現場聯絡人", type:"text", showOnPdf:true}`。
-- A 類登記：無。
-- 平台層本身的新 router 要做這些 A 類登記：`main.py`；平台模組 key 要登記到 `users.html:792`、`sidebar.js`、`version_manifest.json`。
-- B 類：無。
+### 5.3 自訂單據的資料存放
 
-### 5.2 customFields 命名空間
+- **新表 `pf_documents`**：`id, doc_type, doc_no UNIQUE, status, data_json, approval_json, template_id, template_version, location_id, created_by, created_at, updated_at`。
+  - 做法是新 migration 建新表，並登記展示分類（屬於使用者資料，整張清）與 JSON 備份，都是 A 類。
+  - `approval_json` 單獨一欄，比照 `vouchers_all`、`bonus_awards`（佇列就是從這一欄讀的，見 `quotations.py:4409-4415`）。
+- **欄位值**：放在 `data_json.fields = {<key>: value}`。系統保留鍵只有 `platformTemplate`、`refs`、`locationIdentity` 三個，欄位 key 不可以用這三個名稱。
+  - 盤點當初設計的 `customFields` 命名空間，是給「延伸既有單據」用的；依定調，本期不做，保留名稱不用。
+- **驗證**：存檔時比對凍結的欄位定義，未知的 key 一律**拒絕**，不可以靜默丟掉。前例是 `voucher_template.validate_template_body` 在存檔當下驗證（`helpers/voucher_template.py:100`）。
+- **單號**：`next_entity_code(conn, "pf_documents", prefix, "doc_no")`（`db.py:5486`），並接住 IntegrityError 重試。
+- **狀態鎖**：送審後拒絕修改，比照報價的 `_LOCKED`（`quotations.py:1500`）。
+- **同時編輯**：比照報價的 `_expectedUpdatedAt`，版本不符時回 409（`quotations.py:1497-1499`）。
 
-- **位置**：`data_json.customFields = {"cf_<snake>": value}`。鍵一律以 `cf_` 開頭，確保不會和核心鍵相撞（核心鍵清單見盤點 §2）。
-- **只存值、不存標籤**：標籤一律從凍結的樣板版本取（§5.3）。
-- **驗證**：只要是平台層自己的寫入路徑，未知的 `cf_*` 一律**拒絕**，不可以靜默丟掉。前例是 `voucher_template.validate_template_body` 在儲存當下驗證（`helpers/voucher_template.py:100`）。
-- **反面教材**：`vouchers_all.custom_fields`（`db.py:5265`）有 schema，但全 backend 沒有任何寫入點。
+### 5.4 樣板版本化與凍結
 
-**示範案例（存檔 → 讀回這一段）**：
-
-讀碼確認：**既有報價存檔與讀回的路徑不用改，就會原樣保留 `customFields`。**
-
-| 環節 | 行為 | 證據 |
-|---|---|---|
-| 後端收件 | 存檔端點的 body 是 `data: dict`，沒有鍵白名單 | `routers/quotations.py:605-608` |
-| 後端寫入 | 整包 `json.dumps` 進 `data_json` | `routers/quotations.py:1273` |
-| 前端讀回 | 用 `Object.assign(this.q, row.data)` 合併，未知鍵會保留在 `q` 上 | `quotation-form.html:3398` |
-| 前端存檔 | 送出 `{ ...this.q, tot }`，未知鍵會原樣送回 | `quotation-form.html:2563` |
-| 改前改後紀錄 | 追蹤清單外的變動記成一筆「其他內容」 | `routers/quotations.py:114-120` |
-
-建議的寫入路徑是 **A 類**：平台層新增 `PUT /api/platform/quotations/{no}/custom-fields`，只改寫 `customFields` 這一個鍵，並透過既有的 `save_quotation_json` 存檔（`helpers/quotations.py:427`）。這支端點要自己照抄兩道既有規則：
-- **狀態鎖**：報價的 `_LOCKED` 狀態（`routers/quotations.py:1499`）底下拒絕寫入，否則送審後還改得動。
-- **同時編輯**：報價表單下一次存檔時，會因為 `_expectedUpdatedAt` 不同而收到 409（`routers/quotations.py:1496-1498`），使用者重新載入後就會拿到新值。這一條不用額外做，既有流程已經擋得住。
-
-會碰到的 B 類：
-- **B1**：報價表單上**看得到、改得到**自訂欄位，需要在表單加掛載點。
-- **B3**：報價原本的存檔路徑要不要也驗證 `cf_*`。
-
-### 5.3 樣板版本化與凍結
-
-- **表結構前例**：兩表制，`<x>_templates` 管穩定的 id，`<x>_template_versions` 管歷史；每次編輯新增一列，不覆蓋（`db.py:5170-5180` 傳票、`db.py:5041` 獎金）。
-- **凍結前例**：`company_identity.snapshot_for` 在送出當下寫入 `data_json["locationIdentity"]`，之後不再重查（`company_identity.py:163-186`）。
+- **表結構前例**：兩表制，`<x>_templates` 管穩定的 id，`<x>_template_versions` 管歷史，每次編輯新增一列、不覆蓋（`db.py:5170-5180` 傳票、`db.py:5041` 獎金）。
+- **凍結前例**：`company_identity.snapshot_for` 在送出當下寫入快照，之後不重查（`company_identity.py:163-186`）。
 - **第一階段存法**：`platform.templates.<docType> = {currentVersion, versions:[{version, fields, output, createdAt, createdBy}]}`，只能 append。
-- **單據上的凍結資訊**：`data_json.platformTemplate = {id, version, frozenAt, fields}`。舊單據永遠用自己的快照顯示。這也補上盤點提到的缺口：`FORM_VERSION` 只有顯示、沒有存下來（`quotation-form.html:2224`）。
+- **凍結時機**：
+  - 單據**建立時**，在 `pf_documents.template_id/template_version` 記下當時的版本。
+  - **送審時**，把該版的欄位定義快照到 `data_json.platformTemplate`。
+  - 送審端點是平台自己的，所以**不需要 B 類**。
+- **舊單顯示**：永遠依自己的快照。這也補上盤點提過的缺口：報價的 `FORM_VERSION` 只有顯示、沒有存下來。
 
-**示範案例（凍結這一段）**：
-- 在「送審當下」凍結，需要掛進報價的送審流程（屬於 B 類）。
-- **替代做法（A 類）**：改在「平台端點寫入 `customFields` 的當下」同時寫入 `platformTemplate`。
-- 這樣做語意上等同送審凍結，因為送審之後單據進入 `_LOCKED`（`quotations.py:1499`），平台端點也照這條規則拒絕寫入，所以最後一次寫入必定發生在送審之前。
-- 結論：**不需要 B 類。**
+### 5.5 簽核
 
-### 5.4 簽核條件
+- **平台單據直接使用引擎**（純引用）：
+  - 取流程：`resolve_active_flow_setting("pf_<x>")`（`tiered_approval.py:88`）。
+  - 展開關卡：`setting_to_active_tiers`（:296）。
+  - 權限：`check_approve_permission`（:354）、`check_reject_permission`（:436）。
+  - 代理：`active_delegators_for`（:339）。
+- **新 doc type 要登記**：加進 `APPROVAL_DOC_TYPES`、`APPROVAL_DOC_TYPE_LABELS`（`tiered_approval.py:54/64`），以及 `approval-settings.html:448` 的 `docTypeOrder`，屬於 A 類。
+  - ⚠ 三處都要加。§1.2 已經有反例：`bonus` 只加了後端，結果設定頁設不到。
+- **條件簽核**：
+  - 平台單據：`platform.approval_rules.<docType> = [{when:{field, op, value}, flowKey}]`，在平台自己的送審端點裡先選好流程，再交給引擎。屬於 A 類，引擎本體不改。
+  - 既有單據：維持待問（**B4**）。
+- **併進現有簽核佇列（B5，使用者已同意「併進現有簽核佇列」）**：要改的地方如下。
 
-- **命名草案**：`platform.approval_rules.<docType> = [{when:{field, op:"gt|gte|eq|in", value}, flowKey}]`。由上往下比對，第一條命中的生效；全部沒命中就回到 `resolve_active_flow_setting`（`tiered_approval.py:88`）。
-- `flowKey` 指向一把 `system_settings` key，內容形狀和既有 flow 相同（`tiered_approval.py:296-324`），交給 `setting_to_active_tiers` 展開。**引擎本體不改。**
-- `field` 只能用核心鍵的唯讀值（例如 `tot.total`）或 `cf_*`。
-- **平台新建的單據類型**：直接引用引擎，屬於 A 類（加 doc type 屬於 A 類登記）。
-- **既有單據**：流程是在各 router 的送審端點選的（例如 `case_extra_expenses.py:336`、`bonus.py:1171`）；報價單還另外保留一份自己的副本（`quotations.py:178`）。⇒ **要套條件就得改那幾行，屬於 B 類（B4）。**
+| # | 位置 | 改法 | 約束 |
+|---|---|---|---|
+| B5-a | `routers/quotations.py:3903` `get_approval_queue` | 加一段讀取 `pf_documents`（`status IN ('待審核','簽核中')`）的程式，組出 `type:"platform_doc"`、`pfDocType`、`id`、`title` 的項目 | 過濾只能有一處，而且要在分組之前：`_queue_visible_to(` 只出現一次（:4349）。守門是 `test_queue_and_feed_scoping:158` |
+| B5-b | `routers/quotations.py:4369` `get_approval_queue_count` | 加一句 `SELECT approval_json FROM pf_documents WHERE status IN (...)` | 每一頁的頂欄都會呼叫它（`notif.js`），要保持輕量 |
+| B5-c | `routers/quotations.py:5604` `approval_queue_detail` | 加 `platform_doc` 分支，改成呼叫平台 router 的明細函式 | 權限維持「登入即可看」（:5608-5611 docstring），動作權限由平台端點自己把關 |
+| B5-d | `frontend/pages/approval-queue.html:1198` `docTypeLabel`、:1228 `apiBase`、:1242 `itemPathId` | 加 `platform_doc` 分支：標籤取 `platform.doc_types` 的 label，API 指向 `/api/platform/docs/{pfDocType}` | 核准的網址組法在 :1590-1594 |
+| （選） | `routers/quotations.py:5878` `_REASSIGN_TABLES` | 轉簽要支援平台單據的話，才需要加 | 不在示範主線內 |
 
-**示範案例（簽核這一段）**：這條示範主線**不需要簽核條件**，所以不碰。如果要「依 `cf_*` 值決定報價的簽核關卡」，那就是 B4。
+- 以上全部屬於 B 類，**已獲使用者同意**，範圍限於這幾處。
+- 做法沿用既有 11 種單據的寫法。每種單據各一段 SELECT 是佇列目前的結構（`type` 值見 :3940-4319），這次不重構。
 
-### 5.5 輸出樣板
+### 5.6 輸出樣板
 
 - **樣板語言**：沿用 `voucher_template.py` 的模式：
   - 封閉的佔位符清單（:37）。
-  - 每個佔位符都要有取值來源，而且兩個方向都守（`PLACEHOLDER_RESOLVERS` :56）。
+  - 每個佔位符都有取值來源，而且兩個方向都守（`PLACEHOLDER_RESOLVERS` :56）。
   - 單層大括號語法（:78）。
-  - **儲存樣板時**就驗證（:100、:112）。
-  - 每種 doc type 各有一份佔位符清單，`cf_*` 由欄位定義自動加入。
+  - **儲存樣板時就驗證**（:100、:112）。
+  - 佔位符清單由欄位定義自動產生；`ref` 欄位用點記法，例如 `{客戶.統編}`，只能取 §5.7 白名單內的欄位。
 - **渲染**：
-  - 平台層自己組 HTML，但必須走 `run_edge_pdf`（`helpers/startup.py:75`，會自動取用 `EDGE_PDF_SEMAPHORE`），並檢查 0 byte。
+  - 平台自己組 HTML，交給 `run_edge_pdf`（`helpers/startup.py:75`，會自動取用 `EDGE_PDF_SEMAPHORE`），並檢查 0 byte。
   - 抬頭用 `apply_snapshot(location_identity(...), payload)`（`company_identity.py:82`、:220）。
-- **一份定義驅動所有出口**：表單、預覽、PDF 都讀 §5.3 的同一份凍結定義。
+  - 抬頭與頁尾的 HTML 可以 import `pdf_gen._identity_head/_foot`（`pdf_gen.py:543/559`，私有函式），也可以平台自己寫一份。
+- **一份定義驅動所有出口**：表單、讀回、PDF 都讀同一份凍結定義。
+- **歸檔**：`archive._pdf_archive_dirs()`（`archive.py:1116-1131`）寫死 6 類。平台 PDF 要進鏡像歸檔，就得在那份清單加一列，屬於 A 類。示範主線可以先不歸檔。
 - **範圍**：依盤點 R1，只做單據 PDF，不做多段式報表。
 
-**示範案例（PDF 印出這一段）**：
-- 正式報價 PDF 由 `_build_quote_html`（`pdf_gen.py:96`）的 f-string 產生，有兩個呼叫點（:478、:973）。要讓 `cf_site_contact` 印在**正式報價單上**，就必須改這支函式，屬於 **B2**。
-- **替代做法（A 類）**：平台層另外產一張「自訂欄位附頁」PDF。代價是變成兩個檔案。
-  - 要合併成一個檔案需要 PDF 函式庫，而 `requirements.txt` 裡沒有（〈我的環境不是產品的環境〉）。
-- ⇒ 這一段**一定要先問使用者**：附頁可不可以接受。
+### 5.7 帶入既有功能的資料（唯讀引用）
 
-**示範主線的總結**：
+**原則**：平台單據只**讀**既有資料，**權限沿用既有守門**，帶入的值**在存檔時凍結**。
 
-| 段落 | 只走 A 類能做到的 | 會碰到的 B 類 |
-|---|---|---|
-| 定義 | 全部 | — |
-| 存檔 | 全部（走平台端點） | B3（原存檔路徑是否也驗證） |
-| 讀回 | 資料層全部 | B1（表單上看得到） |
-| 凍結 | 全部（寫入時凍結） | — |
-| PDF | 附頁 | B2（印在正式報價單上） |
+**權限怎麼沿用（兩條路都不需要改既有碼）**：
 
-⇒ **只用 A 類，就可以做出一條「平台頁面編輯 → 存 → 讀回 → 附頁 PDF」的端到端細線。** 使用者要的「在報價表單上、印在正式 PDF 上」取決於 B1、B2 的裁示。
+1. **前端挑選**：平台表單的挑選器直接用使用者自己的 token 打既有的 GET 端點。既有的 `require_any_module` 與擁有者檢查會原樣生效。
+2. **後端存檔時查核與快照**：平台 router 直接呼叫**同一支既有的路由函式或 helper**，把使用者的 `authorization` 傳進去，讓守門邏輯走同一條路。
+   - 例如 `customers.get_customer(cid, authorization)`，或先查出單筆再呼叫 `_check_quotation_owner(row, user)`。
+   - **不要自己寫 SELECT 繞過守門。**
+   - 前端送來的快照值不可以信任，必須由後端重查。
 
-### 5.6 接點逐一標類
+| 來源（source_type） | 既有端點或函式 | 權限（沿用） | 可帶入的欄位（白名單草案） |
+|---|---|---|---|
+| `customer` | `GET /api/customers`（`customers.py:26`）、`/api/customers/{cid}`（:48） | `customer`/`case_manage`/`dev_crm`/`procurement` 其中之一（:29、:51） | 名稱、統編、電話、`data_json` 內的地址與聯絡人 |
+| `quotation` | `GET /api/quotations`（`quotations.py:699`）；單筆 `/api/quotations/{quote_no}`（:1060） | 清單：非 admin 只看得到自己可見的案件（`_visible_case_filter_sql`，:744-747）；單筆：`_check_quotation_owner`（`helpers/quotations.py:17`） | 單號、專案名稱、客戶名稱、報價日、`tot.total`（唯讀，不可回寫） |
+| `supplier` | `GET /api/suppliers`（`suppliers.py:33`） | `customer`/`procurement`/`inventory`；**非 admin 一律回空清單**（:37-38） | 名稱、統編、電話 |
+| `part` | `GET /api/parts`（`parts.py:51`） | `procurement`/`case_manage`/`inventory`（:54） | 料號、品名、規格 |
+| `vendor_contractor` | `GET /api/vendor-contractors/selectable`（`vendor_contractors.py:192`） | `procurement`/`case_manage`/`contractor_list`（:195） | 名稱、聯絡人、電話 |
+| `user` | `GET /api/users/selectable`（`auth.py:1597`） | 登入即可 | 顯示名稱、帳號 |
+| `org` | `GET /api/org/tree`（`org_structure.py:40`） | 登入即可 | 處與部門名稱 |
+| 既有附件（9 種） | `helpers/voucher_attachments.source_files`（:119，白名單在 :54-64） | ⚠ **這支 helper 本身不檢查權限**，呼叫前要先對它的上層單據做權限檢查（例如先過 `_check_quotation_owner`） | 檔案 metadata；帶入時一律「複製」（:6-15、`copy_into` :250） |
+
+**引用記錄的形狀**：`data_json.refs = [{field, source_type, source_key, label, snapshot:{…}, pickedAt}]`。
+- `source_key` 一律存 **TEXT**，才放得下單號與「案件編號_序號」這類組合鍵（`voucher_attachments.py:84`）。
+- `snapshot` 只存白名單內的欄位，而且**不重查**（比照 `locationIdentity`）。
+- 顯示時可以另外標示「來源已變更」或「來源已刪除」，但 PDF 印的是快照。
+- 需要反查「哪些平台單據引用了報價 X」時，再加索引表 `pf_references(from_id, source_type, source_key)`，屬於 A 類。本期不做。
+
+**擋錯人風險**（參考 `auth.py:176-180` 的教訓）：使用者有平台模組，但沒有來源模組（例如沒有 `customer`）時，挑選器會拿到 403。
+- 挑選器必須顯示「你沒有引用客戶資料的權限」，**不可以顯示成空清單**。
+- 欄位定義頁也要標示每個 `ref` 欄位需要哪個模組。
+
+**JV36 是這個模式的實例**（`docs/windows/SPEC-JV28-ATTACHMENT-PREVIEW.md` 檔尾）：傳票的某一行選到來源 XXX 之後，列出 XXX 的附件，勾選才複製，並記住來源。
+- 它的 `source_type`＋`source_key`（TEXT）與上表的引用記錄同形狀。
+- ⚠ `voucher_lines.source_id` 是 INTEGER，而且三個 INSERT 都沒有寫入它（`vouchers.py:280/973/1138`，以 `1eaa5d3` 為準）。hichan-0a 已轉告 hichan-61 改用 TEXT 語意。
+- 平台層的附件引用可以直接委派給 `source_files`，不改傳票的程式碼。
+
+### 5.8 版型與入口
+
+- **入口**：`sidebar.js` 靜態加一個「自訂功能」項目，指向 `platform-docs.html`（新檔，列出 `platform.doc_types`），屬於 A 類（**B6 定案**）。
+  - 平台模組 key（草案 `platform` 與 `platform_admin`）要照 §4 第 8 步，在三處一起登記。
+- **新頁版型**：
+  - 骨架用 `.pg*`；清單＋明細參照 `payslips.html`；modal 放在 body 直下。
+  - 以視窗高度限高的元素寫成 `calc(Nvh / var(--fz,1))`（§2）。
+  - 要通過 §4 第 10-12b 步的頁面守門。
+
+### 5.9 接點逐一標類
 
 | # | 接點 | 平台層的用法 | 類別 |
 |---|---|---|---|
-| 1 | `run_edge_pdf`（`startup.py:75`） | 直接 import | **A**（純引用） |
-| 2 | `_identity_head/_foot`（`pdf_gen.py:522/538`，私有函式） | 直接 import 私有函式 | **A**（純引用，會綁住私有 API）；搬到 helper＝B9 |
-| 3 | `location_identity/snapshot_for/apply_snapshot` | 直接用 | **A** |
-| 4 | `tiered_approval` 的函式；新增 doc type | 平台新單據直接用；doc type 加進 `:54`/`:64`/`approval-settings.html:448` | **A** |
-| 5 | 既有單據套用簽核條件 | 改各 router 送審的那一行 | **B4** |
-| 6 | 簽核佇列（`quotations.py:3784`，每種單據一段 SQL） | 加一段 | **B5** |
-| 7 | `_notify`／`_audit`（`helpers/audit.py:11/92`） | 直接用 | **A** |
-| 8 | email 事件 | `EVENT_GROUPS`（`notification_prefs.py:17`）加一列 | **A** |
-| 9 | `next_entity_code`（`db.py:5486`） | 直接用，自己接住 IntegrityError | **A** |
-| 10 | `save_document_files`（`uploads.py:41`） | 呼叫前平台層先驗 `doc_no`；在原函式補檢查＝B8 | **A** |
-| 11 | `_get_setting/_set_setting` | 定義登錄的存取層 | **A** |
-| 12 | 模組 key 單一來源 | 平台自己的 key 照 A 類三處登記；要既有 8 處改讀單一來源＝B7 | **A** |
-| 13 | 選單 | 靜態登記一個「自訂功能」入口＝A；讓使用者自建頁面動態併進主選單＝B6 | **A**／B6 |
-| 14 | 報價表單掛載點；正式 PDF hook | 改 `quotation-form.html`；改 `_build_quote_html` | **B1**／**B2** |
-| 15 | 平台 router 掛載 | `main.py` 加一列 | **A** |
-| 16 | caseRecord 存取層 | 新增唯讀 helper＝A；要既有 5 處改走它＝B10 | **A** |
-| 17 | 引用關係（§5.7） | 新表 `pf_references`＋來源解析登錄 | **A**（新表）；改傳票既有欄位的語意＝JV36 自己的範圍，不屬於平台 |
+| 1 | `run_edge_pdf` | 直接 import | A（純引用） |
+| 2 | `_identity_head/_foot`（私有函式） | 直接 import，或平台自己寫一份 | A（純引用）；搬到 helper＝B9 |
+| 3 | `location_identity/snapshot_for/apply_snapshot` | 直接使用 | A |
+| 4 | `tiered_approval` 函式；新增 doc type | 平台單據直接使用；登記三處 | A |
+| 5 | 既有單據套用簽核條件 | — | B4（待問） |
+| 6 | 簽核佇列 | §5.5 的 B5-a～d | **B5（已同意）** |
+| 7 | `_notify`／`_audit` | 直接使用 | A |
+| 8 | email 事件 | `EVENT_GROUPS` 加一列 | A |
+| 9 | `next_entity_code` | 直接使用，並接住 IntegrityError | A |
+| 10 | `save_document_files` | 平台單據上傳附件時使用，呼叫前先驗 `doc_no` | A；在原函式補檢查＝B8（待問） |
+| 11 | `_get_setting/_set_setting` | 定義登錄 | A |
+| 12 | 模組 key | 平台 key 照 A 類三處登記 | A；收斂成單一來源＝B7（待問） |
+| 13 | 選單 | 靜態加「自訂功能」入口 | **A（B6 定案）** |
+| 14 | 平台自己的表單與輸出 | 新頁、新 router、平台自己的 PDF | A（取代原本的 B1／B2） |
+| 15 | 平台 router 掛載 | `main.py` 加一列 | A |
+| 16 | caseRecord 存取 | 只經由 `GET /api/quotations/{no}` 或 `_check_quotation_owner` 後讀取 | A；既有讀取點改走共用存取層＝B10 |
+| 17 | 唯讀引用（§5.7） | 呼叫既有 GET 路由函式與權限 helper | A（純引用） |
+| 18 | `pf_documents` 新表 | migration、展示分類、備份 | A |
 
-### 5.7 引用關係接點：以 JV36 為例
+### 5.10 待問清單（B 類）
 
-**JV36 是什麼**（`docs/windows/SPEC-JV28-ATTACHMENT-PREVIEW.md` 檔尾）：傳票某一行的摘要選到一個來源 XXX（案件或支出項）之後，
-- 該行下方列出 XXX 的已上傳檔案；
-- **勾選才複製**成傳票附件；
-- 該行要記住來源，重新開啟時再帶出來。
+**更正紀錄**：前一版（`7309971`）的 B1～B3 以「把自訂欄位加進報價單」為前提。依定調，這三項取消，保留原列供查。
 
-這是「單據引用另一張單據的附件」的第一個實例。
+| # | 點 | 狀態 | 影響誰 | 替代做法 | 要問使用者的一句話 |
+|---|---|---|---|---|---|
+| ~~B1~~ | ~~報價表單加 customFields 掛載點~~ | **取消**（定調：平台是獨立功能） | — | 改用平台自己的表單（§5.1 ②） | — |
+| ~~B2~~ | ~~正式報價 PDF 印出自訂欄位~~ | **取消** | — | 改用平台自己的 PDF（§5.6） | — |
+| ~~B3~~ | ~~報價原本的存檔路徑驗證 `cf_*`~~ | **取消** | — | 驗證只做在平台存檔端點（§5.3） | — |
+| **B4** | 既有單據依條件選簽核關卡（各 router 送審那一行；報價另有副本 `quotations.py:179`） | **待問** | 該單據的所有送審 | 條件簽核只給平台單據（§5.5，A 類） | 「依金額或欄位決定簽核關卡，第一版只給自訂單據，還是既有的報價單也要？」 |
+| **B5** | 簽核佇列併入平台單據 | **定案：同意**（「併進現有簽核佇列」） | 佇列的所有使用者 | — | —（要改的四處見 §5.5 B5-a～d） |
+| **B6** | 選單 | **定案：A 類**（「先集中在『自訂功能』入口」） | — | — | — |
+| **B7** | 模組 key 收斂成單一來源，既有 8 處改讀它（§1.1） | **待問** | 全部權限檢查；`test_module_keys_consistency` 要改寫 | 平台 key 照舊三處登記 | 「權限模組清單要整併成一份（動到權限程式），還是維持現狀、新模組照舊登記？」 |
+| **B8** | `save_document_files` 補 `doc_no` 穿越檢查（`uploads.py:63`；能否被利用尚未確認，見 N8） | **待問** | 5 個上傳呼叫點 | 平台呼叫前自己檢查 | 「上傳路徑的防護要在共用函式補一次（改既有程式），還是只在新功能自己檢查？」 |
+| B9 | `_identity_head/_foot` 搬到 helper | 不問（主線用不到） | pdf_gen 的 9 支 builder | 直接 import 私有函式 | — |
+| B10 | 既有 caseRecord 讀取改走共用存取層 | 不問（主線用不到） | 出納、報表、獎金、首頁 | 平台只經由既有端點讀取 | — |
 
-**既有機制**（讀碼確認）：
-
-| 元件 | 位置 | 可否給平台共用 |
-|---|---|---|
-| 來源白名單，9 種 | `helpers/voucher_attachments.py:54-64` | 可以直接引用 |
-| 明示排除的來源（完工單、出貨單、業務日誌、待核准的暫存附件） | `:74` | 可以直接引用；排除理由（不可以讓未核准的東西變成憑證）要一併沿用 |
-| 來源解析 `source_files(conn, source_type, doc_no)` | `:119`；遇到未知類型會 raise 400，不回空清單（:172） | **可以直接呼叫**（A，純引用） |
-| 「先全部驗完再複製」的規則 `resolve_picks` | `:198` | 規則沿用 |
-| 帶入採「複製」而非「引用」，檔案路徑用 id 不用單號 | `:6-15`、`copy_into` :250 | 規則沿用 |
-| 附件列上的決定性來源三欄 `source_type/source_doc_no/source_file_id`，都是 **TEXT** | `db.py:4843-4845` | 形狀可以沿用 |
-| 行層級來源 `voucher_lines.source_type/source_id`，其中 `source_id` 是 **INTEGER** | `db.py:5304-5305` | ⚠ 見下方 |
-
-⚠ **型別衝突（要轉給 JV36 的施工者）**：
-- `voucher_lines.source_id` 是 INTEGER，而且**三個 INSERT 都沒有寫入它**（`routers/vouchers.py:280`、:973、:1138），是零寫入點。
-- JV36 要記住的來源有兩種鍵：
-  - 「案件」的鍵是單號（TEXT）。
-  - 收款項目、叫料這類來源的鍵是「案件編號_序號」組合鍵（`voucher_attachments.py:84` `_quote_and_index`）。
-- **這兩種都放不進 INTEGER 欄位。** 能放進去的只有以整數主鍵為鍵的來源，例如額外支出、派工。
-- 這是傳票模組自己的施工決定，不屬於平台層。但如果 JV36 用 `source_id` 硬存，日後平台要讀的時候就得再轉換一次。
-
-**評估結論：可以作為平台「引用關係」接點的規格來源，但不直接共用傳票的資料表。**
-
-建議平台層的形狀：
-- **來源登錄**：平台自己的 `SOURCE_RESOLVERS`（新檔，A 類）。
-  - 既有 9 種直接委派給 `voucher_attachments.source_files`，屬於 A 類純引用，不改傳票碼。
-  - 平台自建的單據類型，在平台檔案裡自己登記解析函式。
-  - 遇到未知類型要照 :172 raise，不可以回空清單。
-- **引用記錄**：新表 `pf_references(from_type, from_id TEXT, from_line, source_type, source_key TEXT, source_file_id, mode 'copy'|'ref', snapshot_json, created_at, created_by)`。
-  - 做法是新 migration 建新表，並登記展示分類與備份，都屬於 A 類。
-  - **鍵一律用 TEXT**，才裝得下單號與組合鍵。
-- **帶入策略**：預設「複製」，沿用 `voucher_attachments.py:6-15` 的理由。「引用」只給非憑證用途。
-
-**建議轉達 hichan-61（JV36）**：行層級來源請用 TEXT 語意的 `source_type`＋`source_key`，例如沿用附件列 `source_doc_no` 的格式。否則日後平台讀取傳票的引用時，需要多一層轉換。
-
-### 5.8 待問清單（B 類）
-
-| # | 點 | 影響誰 | 替代做法（A 類） | 要問使用者的一句話 |
-|---|---|---|---|---|
-| **B1** | 報價表單加 `customFields` 掛載點（`quotation-form.html`，Alpine 手寫） | 所有報價表單使用者；這支檔目前是 hichan-8d 的範圍（commit `218d810` 訊息） | 平台獨立頁「報價自訂欄位」，用平台端點編輯。代價是要切換頁面 | 「自訂欄位要直接出現在報價表單裡（要改表單），還是先在另一個獨立頁面編輯？」 |
-| **B2** | 正式報價 PDF 印出自訂欄位（`pdf_gen.py:96`，呼叫點 :478、:973） | 所有報價 PDF | 另產一張「自訂欄位附頁」PDF，變成兩個檔 | 「自訂欄位要印在正式報價單 PDF 上（要改 PDF 版面程式），還是先另出一張附頁？」 |
-| **B3** | 報價原存檔路徑也驗證 `cf_*`（`quotations.py:1401` 的 PUT） | 所有報價存檔 | 只在平台端點驗證；原路徑照原樣存回 | 「自訂欄位的格式檢查只做在平台頁面，報價單原本的存檔流程不另外檢查，可以嗎？」 |
-| **B4** | 既有單據依條件選簽核關卡（各 router 送審那一行；報價另有一份副本 `quotations.py:178`） | 該單據的所有送審 | 條件簽核只給平台新建的單據類型 | 「依金額或欄位決定簽核關卡，第一版只給新建的自訂單據，還是既有的報價單也要？」 |
-| **B5** | 簽核佇列加入平台單據（`quotations.py:3784`；受 `test_queue_and_feed_scoping:158` 約束） | 簽核佇列的所有使用者 | 平台單據在自己的頁面列出待簽項目 | 「自訂單據的待簽項目要併進現有的簽核佇列（要改佇列程式），還是先放在自己的頁面？」 |
-| **B6** | 使用者自建頁面動態併進主選單（在 `sidebar.js:613` `_navGroups` 渲染前合併；9 支 regex 測試要改寫） | 全站選單 | 靜態登記一個「自訂功能」入口，點進去是平台清單頁 | 「使用者自建的頁面要直接出現在主選單（要改選單程式），還是先集中在一個『自訂功能』入口底下？」 |
-| **B7** | 模組 key 收斂成單一來源，既有 8 處改讀它（§1.1） | 全部權限檢查；`test_module_keys_consistency` 要改寫 | 平台 key 照 A 類在三處登記，既有的不動 | 「權限模組清單要整併成一份（動到權限程式），還是維持現狀、新模組照舊登記？」 |
-| **B8** | `save_document_files` 補 `doc_no` 穿越檢查（`uploads.py:63`；是否能被利用尚未確認，見 N8） | 5 個上傳呼叫點 | 平台層呼叫前自己檢查 | 「上傳路徑的防護要在共用函式補一次（改既有程式），還是只在新功能自己檢查？」 |
-| B9 | `_identity_head/_foot` 搬到 helper | pdf_gen 的 9 支 builder | 直接 import 私有函式 | 現在不問：示範主線用不到 |
-| B10 | 既有的 caseRecord 讀取改走共用存取層（§3.4 的 5 處以上） | 出納、報表、獎金、首頁 | 平台只用新增的唯讀 helper | 現在不問：示範主線用不到 |
-
-**建議優先問**：B2、B1（決定示範主線的最終樣子），其次 B5、B6（決定平台單據怎麼被看見）。B3、B7、B8 可以等到細線站穩之後。
+**結論**：示範主線（§5.1 ①～⑥）**只用 A 類就能做完**。第 ⑦ 步送審要動的 B5 已獲同意。仍待使用者回答的只有 B4、B7、B8，三項都不擋主線。
 
 ---
 
 ## 我沒查什麼
 
-- **行號時效**：本版以 `1eaa5d3` 為準。
-  - §1-§4 裡位於兩版之間有變動的檔案，用 difflib 做行號對照後改寫。對照結果是「該行內容相同」時就直接換號，**沒有逐行重讀語意**；有變動的內容（字級修正、`.modal-box`、`payslips.html:34`）才重讀過。
-  - 沒變動的檔案沿用第一版的行號。
-- **沒有跑任何測試、沒有啟動伺服器。**
-  - 「會紅在哪」是讀測試原始碼推出來的。
-  - §5.2「存檔與讀回原樣保留 `customFields`」是讀碼推論（`Object.assign` 加上 `data: dict`），**沒有實際存一次、讀回一次**。另外，前端還有 `Object.assign(this.q, t)`（`quotation-form.html:3788`，載入範本）等其他合併點，它們會不會帶入或清掉 `customFields`，沒有逐一確認。
-- **第一版的抽查範圍**：由 6 個唯讀 agent 蒐集，我抽查約 40 個行號，1 處有錯並已更正。本版沒有再派 agent，§5 的新引用都是我自己讀的。
-- **§5.7**：
-  - JV36 目前的實作進度（hichan-61 的工作樹 dirty 檔）沒有看，只以 HEAD 上的 schema 與規格為準。
-  - `voucher_lines.source_id` 的「零寫入點」只查了 `routers/vouchers.py` 的三個 INSERT，沒有掃其他檔案。
-- **§5.0 的判定規則表**是本文提出的，不是使用者裁示。使用者的裁示只有「附加登記允許、改行為逐點問」這一句。
-- **沿用第一版、仍未查的項目**：
+- **行號時效**：
+  - §1-§4 以 `1eaa5d3` 為準；§5 以 `7309971` 為準。
+  - `1eaa5d3` 到 `7309971` 之間，`quotations.py`、`pdf_gen.py`、`sidebar.js`、`quotation-form.html` 等有位移，**§1-§4 沒有跟著重對**。例如 §1.2 的 `quotations.py:3784` 在新版是 :3904。
+  - 第二版的 §1-§4 行號對照，只在該行內容相同時換號，沒有逐行重讀語意。
+- **沒有跑任何測試、沒有啟動伺服器。** 「會紅在哪」與 §5.5 B5 的四處改動點都是讀碼推論。
+  - `approval-history.html`（簽核歷史頁）是否也要加 `platform_doc` 分支，**沒有查**。
+- **§5.7 的權限表**：只讀了各端點函式開頭的守門。
+  - 欄位白名單是草案，沒有對照使用者需求。
+  - `/api/quotations` 的 `_visible_case_filter_sql` 細節沒有展開。
+  - 後端「直接呼叫既有路由函式」這個做法沒有實測：那些函式的簽名是 FastAPI 依賴注入的形式，**直接呼叫時參數預設值（例如 `Header(None)`）要記得明確傳入**。
+- **§5.3 `pf_documents` 的欄位**是草案，沒有和 §4 的全部守門逐條推演。例如 `test_system_audit:265` 欄位覆蓋。
+- **第一版的蒐集方式**：由 6 個唯讀 agent 蒐集，我抽查約 40 個行號，1 處有錯已更正。第二、三版沒有再派 agent。
+- **§5.0 的灰色地帶判定規則**是本文提出的，不是裁示。
+- **沿用未查**：
   - 206 個測試檔中，只 grep 了掃描型守門。
-  - vh 處數不一致：commit `218d810` 寫 49 檔 103 處，第一版 agent grep 出 53 檔 134 處。
+  - vh 處數不一致。
   - account-items 的 modal 在深色模式下是否跑版。
   - bonus 不在簽核設定頁是否刻意。
   - `next_entity_code` 撞號時是否回 500。
-  - 完工單與薪資單的 PDF 歸檔路徑。
-  - 其他單據表單的欄位寫死程度、`json_extract` 效能、手機版版型。
+  - 完工單與薪資單的 PDF 歸檔。
+  - `json_extract` 效能、手機版版型。
   - `system_settings` 存定義時的 JSON 大小與同時編輯。
