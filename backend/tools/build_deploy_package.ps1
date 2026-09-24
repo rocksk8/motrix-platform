@@ -586,6 +586,14 @@ try {
     $reuse = $null
 }
 
+function Record-TestResult([bool]$green) {
+    # 記下這一次的測試結果（沿用判斷用）。**紅了要在 Fail 離開之前記**——否則同一份 tree 之前那筆綠
+    # 會被下次沿用（偶發紅之後又沿用舊綠）。守門：test_every_red_exit_from_the_test_stage_is_recorded_before_it_leaves。
+    if (-not $testFp) { return }
+    $flag = if ($green) { "1" } else { "0" }
+    try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $flag --commit $commitShort | Out-Null } catch {}
+}
+
 if ($reuse) {
     Write-Host "`n[測試] 沿用 $($reuse.tested_at) 的全綠結果（同一份 tree 與環境，commit $($reuse.commit)）—— 不重跑。要重跑請加 -ForceTests" -ForegroundColor Cyan
     $testExit = 0
@@ -612,6 +620,7 @@ $BuildStats["not_e2e"] = Parse-PytestSummary $nonE2eOut
 $BuildStats["workers"] = $workers
 if ($testExit -ne 0) {
     Pop-Location
+    Record-TestResult $false
     Fail "測試未全數通過（exit code $testExit），中止打包。請先修好測試再重新執行本腳本。"
 }
 Write-Host "[OK] 非 e2e 測試全數通過。" -ForegroundColor Green
@@ -672,10 +681,7 @@ Pop-Location
 Release-TestExclusive    # 兩段測試都跑完了，後面的打包不需要佔住別人的測試名額
 # 記下這一次的測試結果（後面打包失敗再建時可以沿用）。**放在 e2e 閘門之前**：閘門紅了會直接 Fail 離開，
 # 要讓紅的這一次也記成非綠，否則同一份 tree 之前的綠紀錄會留著、下次被沿用（2026-09-25）。只有**兩段都 exit 0** 才算綠——逾時放行不算。
-if ($testFp) {
-    $greenFlag = if ($testExit -eq 0 -and $e2eExit -eq 0) { "1" } else { "0" }
-    try { & $pyExe $reuseTool record --records $testRecords --fp $testFp --green $greenFlag --commit $commitShort | Out-Null } catch {}
-}
+Record-TestResult ($testExit -eq 0 -and $e2eExit -eq 0)
 # 📌 更正（2026-09-25）：上面「只有認得出來的逾時才降級成警告」已撤回——
 #    逾時的題**沒有驗到任何東西**，警告後繼續打包＝靜默少驗（平行化後只會更多）。
 #    現在逾時也擋下打包；逾時與斷言失敗仍分開列，並附每題的單獨重跑指令。

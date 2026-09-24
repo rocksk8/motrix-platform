@@ -114,6 +114,23 @@ def test_the_cli_round_trip(repo, tmp_path):
 def test_the_build_script_records_green_only_when_both_stages_exit_zero():
     """建包腳本那一側：綠＝兩段都 exit 0（e2e 逾時放行不算綠）；沿用時可用 -ForceTests 關掉。"""
     s = (Path(__file__).resolve().parents[1] / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
-    assert "$greenFlag = if ($testExit -eq 0 -and $e2eExit -eq 0)" in s
+    assert "Record-TestResult ($testExit -eq 0 -and $e2eExit -eq 0)" in s
     assert "[switch]$ForceTests" in s and "-not $ForceTests" in s
     assert "build_test_reuse.py" in s
+
+
+def test_every_red_exit_from_the_test_stage_is_recorded_before_it_leaves():
+    """🔴 紅了就 Fail 離開的路徑，**離開前**要先記「非綠」——否則同一份 tree 之前那筆綠會被下次沿用
+    （同 tree 偶發紅之後又沿用舊綠）。a3 已把 e2e 那一條移到閘門之前（6526c21c）；非 e2e 那一條也要。"""
+    s = (Path(__file__).resolve().parents[1] / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
+    start = s.index("if ($reuse) {")
+    end = s.index("}   # end: if ($reuse) else")
+    section = s[start:end]
+    fails = [i for i in range(len(section)) if section.startswith('Fail "', i)]   # 呼叫，不是註解裡的字
+    assert len(fails) >= 2, "測試段裡的 Fail 數量不對，這一題的切片可能失效了"
+    for i in fails:
+        before = section[:i]
+        # 「最後一次跑 pytest」到這個 Fail 之間，必須先記錄過結果
+        last_run = before.rfind("-m pytest")
+        assert last_run >= 0 and "Record-TestResult" in before[last_run:], \
+            "這個 Fail 之前沒有先記錄非綠：…%s" % section[i:i + 60]
