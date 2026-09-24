@@ -18,7 +18,8 @@ def _open(browser, base, user):
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
     _login(page, base, *user)
-    page.goto(f"{base}/pages/case-management.html?q={NO}")
+    # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
+    page.goto(f"{base}/pages/case-management.html?q={NO}&tab=fin")
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=10000)
     return page

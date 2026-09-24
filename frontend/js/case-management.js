@@ -186,11 +186,15 @@ function app() {
       const byTable = {
         shipping_notes: 'shipping', completion_notes: 'completion',
         contractor_payment_vouchers: 'dispatch', invoice_vouchers: 'fin',
-        payment_requests: 'biz', quotations: 'biz',
+        payment_requests: 'fin', quotations: 'biz',
       }
-      let t = { progress: 'exec', payment: 'biz', settlement: 'fin', extraExpense: 'xexp' }[g && g.key]
+      // CU5：收款（款項明細、請款單、開票申請）搬到「財務」分頁
+      let t = { progress: 'exec', payment: 'fin', settlement: 'fin', extraExpense: 'xexp' }[g && g.key]
       if (g && g.key === 'documents') t = byTable[((g.pendingDocs || [])[0] || {}).table] || 'biz'
-      if ((t === 'fin' || t === 'xexp') && !this.canSeeFinancial()) t = 'biz'
+      // 財務分頁的「收款」人人看得到；其餘財務區塊（精算）與額外支出只給 canSeeFinancial
+      const paymentish = g && (g.key === 'payment' || (g.key === 'documents' && t === 'fin'
+        && ['payment_requests', 'invoice_vouchers'].includes(((g.pendingDocs || [])[0] || {}).table)))
+      if (!this.canSeeFinancial() && (t === 'xexp' || (t === 'fin' && !paymentish))) t = 'biz'
       return t || 'biz'
     },
     stageBoardItems: [],
@@ -244,6 +248,7 @@ function app() {
     assignedUserIds: [],
     assignedUsersSaving: false,
     exportingProjectReport: false,
+    headerMoreOpen: false,   // CU5：標頭「更多」選單
 
     caseTasks: [],
     caseTasksLoading: false,

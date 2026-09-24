@@ -211,6 +211,16 @@
     .cm-header__spacer { flex:1; }
     .cm-header__actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
     .cm-header__save { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+    /* CU5：標頭「更多」選單 */
+    .cm-more { position:relative; flex-shrink:0; }
+    .cm-more__btn { font-size:12px; padding:5px 10px; }
+    .cm-more__menu { position:absolute; right:0; top:calc(100% + 4px); z-index:30; min-width:150px; background:#fff; border:1px solid var(--border-light); border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,.08); padding:4px; display:flex; flex-direction:column; }
+    .cm-more__item { text-align:left; background:none; border:none; padding:7px 10px; font-size:12.5px; font-family:var(--font-zh); color:var(--text-primary); border-radius:5px; cursor:pointer; }
+    .cm-more__item:hover:not(:disabled) { background:#F5F5F4; }
+    .cm-more__item:disabled { opacity:.5; cursor:default; }
+    /* .btn-close-case 的按鈕樣式定義在後面（:467），選單裡要蓋回選單項目的外觀 */
+    .cm-more__menu .cm-more__item.btn-close-case { background:none; border:none; padding:7px 10px; font-size:12.5px; font-weight:600; color:#6D28D9; }
+    .cm-more__menu .cm-more__item.btn-close-case:hover { background:#F5F3FF; }
 
     /* deal-tag badge inline */
     .deal-tag-badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:5px; font-size:11px; font-weight:600; font-family:var(--font-zh); white-space:nowrap; }
@@ -624,6 +634,20 @@
     .cm-detail.mob-hidden { display:none !important; }
     .mob-back-cm { display:inline-flex !important; }
   }
+
+  /* CU8（2026-09-24 使用者表單）：手機／窄螢幕不溢出。
+     款項明細三組欄位是 inline 固定欄寬（136px…）⇒ 窄螢幕改兩欄；拜訪紀錄同。
+     ⚠️ 覆寫 inline style 只能用 !important。 */
+  .cm-tabs-hint { display:none; }
+  @media (max-width:767px) {
+    .pay-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; }
+    .pay-grid > :last-child:nth-child(odd) { grid-column:1 / -1; }
+    .visit-row { grid-template-columns:minmax(0,1fr) 56px !important; }
+    .visit-row > :nth-child(3) { grid-column:1 / 2; }
+    .cm-tabs { -webkit-mask-image:linear-gradient(to right, #000 85%, transparent); mask-image:linear-gradient(to right, #000 85%, transparent); }
+    .cm-tabs-hint { display:block; font-size:11px; color:var(--text-dim); font-family:var(--font-zh); text-align:right; padding:2px 20px 0; background:#fff; }
+    .cm-header__row1 { row-gap:6px; }
+  }
   </style>
 </head>
 
@@ -925,18 +949,14 @@
 
             <!-- Header -->
             <div class="cm-header">
-              <!-- Row 1: quote_no · status badge · spacer · project btn · save · close btn -->
+              <!-- CU5（2026-09-24 使用者表單）：第一列＝客戶名＋狀態；主鈕只留「儲存」，其餘收進「更多」。
+                   單號／報價單連結／專案名移到第二列。「半解鎖中」是狀態，留在第一列。 -->
               <div class="cm-header__row1">
                 <button class="mob-back-cm" @click="selected=null">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>列表
                 </button>
 
-                <a :href="'quotation-form.html?id=' + selected.quote_no" class="cm-header__back" title="開啟原始報價單">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
-                  報價單
-                </a>
-
-                <span class="cm-header__no" x-text="selected.quote_no"></span>
+                <span class="cm-header__customer" data-testid="cm-header-customer" x-text="selected.customer_name || '(未填客戶)'"></span>
 
                 <!-- deal_tag / stage badge -->
                 <template x-if="cr.dealTag === '已成案'">
@@ -951,27 +971,13 @@
                     已結案
                   </span>
                 </template>
-                <template x-if="cr.dealTag === '已結案' && !selected.case_semi_unlocked">
-                  <button class="btn-ghost" style="font-size:12px;padding:4px 10px" title="解鎖後可繼續變更，但每筆變更/上傳都需最高管理員審核" @click="unlockCase()">解鎖</button>
-                </template>
                 <template x-if="cr.dealTag === '已結案' && selected.case_semi_unlocked">
                   <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:3px 8px" title="變更/上傳需最高管理員審核通過後才會套用">
                     半解鎖中
-                    <button class="btn-ghost" style="font-size:12px;padding:2px 8px" @click="lockCase()">重新上鎖</button>
                   </span>
                 </template>
 
                 <div class="cm-header__spacer"></div>
-
-                <!-- 專案執行報告匯出（2026-08-26 專案管理併入案件管理，取代原本
-                     跳去 projects.html 的按鈕） -->
-                <button class="cm-project-btn"
-                  :disabled="exportingProjectReport"
-                  @click="exportProjectReport()"
-                  title="匯出本案執行進度／叫料／代辦事項／工作日誌／動態彙整 PDF">
-                  <svg viewBox="0 0 20 20" fill="currentColor" style="width:12px;height:12px;"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
-                  <span x-text="exportingProjectReport ? '產出中…' : '產生專案報告'"></span>
-                </button>
 
                 <!-- Save indicator -->
                 <div class="cm-header__save">
@@ -985,14 +991,36 @@
                   </template>
                 </div>
 
-                <!-- Complete case button (已成案 only)
-                     2026-09-13（使用者裁示）：**只有最高管理者看得到**。結案是全系統
-                     最不可逆的動作（案件從此鎖定，要再動只能走半解鎖＋逐筆審核，
-                     還會啟動保固追蹤期），而且原本就只有 superadmin 能把它降級回來
-                     ——按得下去的人比按得回來的人多，本來就不對稱。後端同步擋。 -->
-                <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
-                  <button class="btn-close-case" @click="closeCaseAction()">完結案</button>
-                </template>
+                <!-- 「更多」：次要動作（產生專案報告／解鎖／重新上鎖／完結案） -->
+                <div class="cm-more" @click.outside="headerMoreOpen = false" @keydown.escape="headerMoreOpen = false">
+                  <button type="button" class="btn-ghost cm-more__btn" data-testid="cm-more"
+                          :aria-expanded="headerMoreOpen ? 'true' : 'false'" aria-haspopup="menu"
+                          @click="headerMoreOpen = !headerMoreOpen">更多 ▾</button>
+                  <div class="cm-more__menu" role="menu" x-show="headerMoreOpen" x-cloak @click="headerMoreOpen = false">
+                    <!-- 專案執行報告匯出（2026-08-26 專案管理併入案件管理，取代原本
+                         跳去 projects.html 的按鈕） -->
+                    <button class="cm-more__item" role="menuitem"
+                      :disabled="exportingProjectReport"
+                      @click="exportProjectReport()"
+                      title="匯出本案執行進度／叫料／代辦事項／工作日誌／動態彙整 PDF">
+                      <span x-text="exportingProjectReport ? '產出中…' : '產生專案報告'"></span>
+                    </button>
+                    <template x-if="cr.dealTag === '已結案' && !selected.case_semi_unlocked">
+                      <button class="cm-more__item" role="menuitem" title="解鎖後可繼續變更，但每筆變更/上傳都需最高管理員審核" @click="unlockCase()">解鎖</button>
+                    </template>
+                    <template x-if="cr.dealTag === '已結案' && selected.case_semi_unlocked">
+                      <button class="cm-more__item" role="menuitem" @click="lockCase()">重新上鎖</button>
+                    </template>
+                    <!-- Complete case button (已成案 only)
+                         2026-09-13（使用者裁示）：**只有最高管理者看得到**。結案是全系統
+                         最不可逆的動作（案件從此鎖定，要再動只能走半解鎖＋逐筆審核，
+                         還會啟動保固追蹤期），而且原本就只有 superadmin 能把它降級回來
+                         ——按得下去的人比按得回來的人多，本來就不對稱。後端同步擋。 -->
+                    <template x-if="cr.dealTag === '已成案' && session.role === 'superadmin'">
+                      <button class="cm-more__item btn-close-case" role="menuitem" @click="closeCaseAction()">完結案</button>
+                    </template>
+                  </div>
+                </div>
 
                 <button class="btn-save" @click="saveCaseRecord()" :disabled="saving">
                   <span x-show="!saving">儲存</span>
@@ -1000,9 +1028,13 @@
                 </button>
               </div><!-- /row1 -->
 
-              <!-- Row 2: customer name + project sub -->
+              <!-- Row 2: 報價單連結 · 單號 · 專案名 -->
               <div class="cm-header__row2">
-                <span class="cm-header__customer" x-text="selected.customer_name || '(未填客戶)'"></span>
+                <a :href="'quotation-form.html?id=' + selected.quote_no" class="cm-header__back" title="開啟原始報價單">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/></svg>
+                  報價單
+                </a>
+                <span class="cm-header__no" x-text="selected.quote_no"></span>
                 <span class="cm-header__project-sub"
                       x-show="selected.project_name && selected.project_name !== selected.customer_name"
                       x-text="selected.project_name"></span>
@@ -1071,6 +1103,8 @@
             </div>
 
             <!-- Tabs -->
+            <!-- CU8：窄螢幕分頁列會超出寬度 ⇒ 右緣淡出＋提示可左右滑動 -->
+            <div class="cm-tabs-hint" data-testid="cm-tabs-hint">← 左右滑動看更多分頁 →</div>
             <div class="cm-tabs">
               <button class="cm-tab" :class="{active: activeTab==='biz'}"      @click="activeTab='biz'">案件資訊</button>
               <button class="cm-tab" :class="{active: activeTab==='exec'}"     @click="activeTab='exec'">執行管理</button>
@@ -1081,7 +1115,8 @@
               <button class="cm-tab" :class="{active: activeTab==='completion'}"
                       @click="activeTab='completion'; loadCompletionNotes(selected.quote_no)">完工單<span class="cm-tab__n" x-show="completionNotes.length > 0" x-text="completionNotes.length"></span></button>
               <button class="cm-tab" :class="{active: activeTab==='feed'}" @click="activeTab='feed'; loadCaseUpdates(selected.quote_no)">動態<span class="cm-tab__n" x-show="caseUpdates.length > 0" x-text="caseUpdates.length"></span></button>
-              <button class="cm-tab" x-show="canSeeFinancial()" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
+              <!-- CU5：收款搬進財務分頁 ⇒ 分頁本身人人看得到（收款以外的財務區塊仍只給 canSeeFinancial） -->
+              <button class="cm-tab" :class="{active: activeTab==='fin'}" @click="activeTab='fin'">財務</button>
               <!-- 額外支出（2026-09-11）：從精算頁搬過來，獨立成一個分頁而不是塞進財務
                    分頁——使用者說的是「案件管理的案件內選單」，而案件內選單就是這排分頁。 -->
               <!-- 切分頁刻意不重載：selectCase() 選到案件時就已經載過了。兩邊都載會
@@ -1235,381 +1270,7 @@
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:#DC2626;background:#FEF2F2"></span>
                 </div>
                 </fieldset><!-- /CM14b -->
-                <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:#B45309">您不是這個案件的成員，以出納身分開啟：只能登錄收款，其他內容唯讀。</div>
-                <div class="cm-section-title">收款管理</div>
-                <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
-                     跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
-                     未稅金額與收款進度條。 -->
-                <!-- CM13（2026-09-24）：沒有財務檢視權的帳號，後端不回金額 ⇒ 金額相關一律不渲染 -->
-                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）；可編輯預計收款日、發票與備註。</div>
-                <div class="pay-strip" x-show="!moneyMasked()">
-                  <span class="pay-strip__item">
-                    <span class="pay-strip__lbl">未稅金額</span>
-                    <span class="pay-strip__val num" x-text="'NT$ ' + totalPretax().toLocaleString()"></span>
-                  </span>
-                  <span class="pay-strip__bar">
-                    <span class="prog"><span class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></span></span>
-                  </span>
-                  <span class="pay-strip__pct num" x-text="receivedPct() + '% \u5df2\u6536'"></span>
-                </div>
-
-                <template x-if="!moneyMasked() && feeTotal() > 0">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-6px;margin-bottom:14px">
-                    <div class="pay-kpi">
-                      <div class="pay-kpi__lbl">手續費 / 扣款合計</div>
-                      <div class="pay-kpi__val pay-kpi__val--danger" x-text="'NT$ ' + feeTotal().toLocaleString()"></div>
-                    </div>
-                    <div class="pay-kpi">
-                      <div class="pay-kpi__lbl">實際淨收</div>
-                      <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + netReceivedTotal().toLocaleString()"></div>
-                    </div>
-                  </div>
-                </template>
-
-                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                  <span class="cm-section-title" style="margin-bottom:0">款項明細</span>
-                  <span x-show="!moneyMasked()" style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:2px 8px;border-radius:4px;font-weight:600;flex-shrink:0"
-                        :style="totalEnteredPct()===100 ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
-                        x-text="'合計 ' + totalEnteredPct() + '%' + (totalEnteredPct()===100 ? ' ✓' : '（須為 100%）')"></span>
-                  <button x-show="!moneyMasked() && paymentItems().length > 1"
-                          @click="balanceLastPayment()"
-                          style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;line-height:1.4;white-space:nowrap">
-                    平衡尾款
-                  </button>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
-                          @click="if (dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請請款單') } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
-                          style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
-                    申請請款單
-                  </button>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
-                          @click="openInvoiceVoucherModal()"
-                          style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid #C4B5FD;background:#F5F3FF;color:#6D28D9;cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
-                    申請開立發票
-                  </button>
-                </div>
-
-                <template x-for="(item, idx) in (cr.caseRecord?.payment?.items || [])" :key="item.id">
-                  <div class="pay-item" :class="item.received ? 'pay-item--received' : ''">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-                      <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
-                      <select class="fi" x-model="item.type" @change="setDirty()"
-                              style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>完工款</option><option>收款後出貨</option><option>自訂義</option><option>其他</option>
-                      </select>
-                      <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
-                             x-model="item.customLabel" @input="setDirty()"
-                             style="width:96px;flex-shrink:0;padding:5px 6px;font-size:12px">
-                      <span x-show="moneyMasked()" class="num" style="flex:1;color:var(--text-dim)">—</span>
-                      <div x-show="!moneyMasked()" style="position:relative;flex-shrink:0;display:inline-flex">
-                        <input class="fi fi--pct" type="number" min="0" max="100" step="0.01"
-                               x-model.number="item.pct" @input="onPctChange(idx)"
-                               style="font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700">
-                        <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none">%</span>
-                      </div>
-                      <div x-show="!moneyMasked()" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-                        <div>
-                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">含稅</div>
-                          <div style="position:relative">
-                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi" type="number" min="0" step="1"
-                                   :value="itemAmountReceivable(idx)"
-                                   :disabled="item.taxExempt"
-                                   :title="item.taxExempt ? '已沖銷免稅，金額已下修為未稅價，不可再手動編輯' : ''"
-                                   @change="onAmountWithTaxChange(idx, +$event.target.value)"
-                                   style="padding-left:30px;text-align:right;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);width:100%">
-                          </div>
-                        </div>
-                        <div>
-                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">未稅</div>
-                          <div style="position:relative">
-                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi" type="number" min="0" step="1"
-                                   :value="itemAmountPretax(idx)"
-                                   :disabled="item.taxExempt"
-                                   :title="item.taxExempt ? '已沖銷免稅，稅額歸零，未稅價即實收金額' : ''"
-                                   @change="onAmountPretaxChange(idx, +$event.target.value)"
-                                   style="padding-left:30px;text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);width:100%">
-                          </div>
-                        </div>
-                        <div style="text-align:right">
-                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:1px">稅額</div>
-                          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim)" x-text="'NT$ ' + itemAmountTax(idx).toLocaleString()"></div>
-                        </div>
-                      </div>
-                      <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .12s"
-                             :style="item.received ? 'background:#DCFCE7' : 'background:#F3F4F6'">
-                        <input type="checkbox" x-model="item.received" @change="setDirty()" :disabled="!canMarkPayment()" style="accent-color:var(--success)">
-                        <span style="font-size:11px;font-weight:600;font-family:var(--font-zh)"
-                              :style="item.received ? 'color:var(--success)' : 'color:#9CA3AF'"
-                              x-text="item.received ? '已收款' : '未收'"></span>
-                      </label>
-                      <button class="btn-del" x-show="!moneyMasked()" @click="removePaymentItem(idx)" style="flex-shrink:0"
-                              :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
-                    </div>
-
-                    <div style="display:grid;grid-template-columns:136px 136px 140px 136px 1fr;gap:8px">
-                      <div>
-                        <span class="fi-label">預計收款日</span>
-                        <input class="fi fi--sm" type="date" x-model="item.expectedReceiptDate" @change="setDirty()">
-                      </div>
-                      <div>
-                        <span class="fi-label">收款日期</span>
-                        <input class="fi fi--sm" type="date" x-model="item.receivedAt" @change="setDirty()">
-                      </div>
-                      <div>
-                        <span class="fi-label">發票號碼</span>
-                        <input class="fi fi--sm fi--mono" type="text" placeholder="AB12345678"
-                               x-model="item.invoiceNo" @input="setDirty()">
-                      </div>
-                      <div>
-                        <span class="fi-label" title="決定這張發票歸屬哪個營業稅申報期別，跟收款日期是兩回事">發票開立日期</span>
-                        <input class="fi fi--sm" type="date" x-model="item.invoiceDate" @change="setDirty()">
-                      </div>
-                      <div>
-                        <span class="fi-label">備注</span>
-                        <input class="fi fi--sm" type="text" placeholder="收款備注..." x-model="item.note" @input="setDirty()">
-                      </div>
-                    </div>
-
-                    <!-- AC1（使用者選 (a)）：發票記載的未稅／稅額，選填。兩欄都填 ⇒ 稅務匯出以它為準；
-                         只填一欄後端拒存（這裡先提示）；合計與該期金額不同只提示不擋。
-                         沒有財務檢視權（CM13）⇒ 不渲染：後端本來就不回這兩鍵、存檔時以資料庫值補回。 -->
-                    <template x-if="!moneyMasked()">
-                      <div style="display:grid;grid-template-columns:136px 136px 1fr;gap:8px;margin-top:8px;align-items:end">
-                        <div>
-                          <span class="fi-label" title="發票上記載的銷售額（未稅）；與稅額一起填寫，稅務匯出以它為準">發票未稅</span>
-                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
-                                 data-testid="invoice-pretax"
-                                 x-model.number="item.invoicePretax" @input="setDirty()">
-                        </div>
-                        <div>
-                          <span class="fi-label">發票稅額</span>
-                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
-                                 data-testid="invoice-tax"
-                                 x-model.number="item.invoiceTax" @input="setDirty()">
-                        </div>
-                        <div style="font-size:11px;font-family:var(--font-zh)">
-                          <span data-testid="invoice-half" style="color:#B91C1C" x-show="invoiceHalfFilled(item)">發票未稅與稅額要一起填寫，只填一欄無法存檔。</span>
-                          <span data-testid="invoice-mismatch" style="color:#B45309" x-show="invoiceMismatch(item, idx)"
-                                x-text="invoiceMismatch(item, idx)"></span>
-                        </div>
-                      </div>
-                    </template>
-
-                    <!-- ⚠️ 「錢會從報表上無聲消失」的兩種狀態（2026-09-11）。
-                         「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，
-                         營運報表的當月收入撈不到（要 received=true 且 receivedAt 在
-                         區間內），當月未收也撈不到（那邊看的是預計收款日）——兩邊
-                         都不算，而且畫面上原本完全沒有任何提示。這一行就是那個提示。
-                         刻意不自動幫使用者勾或填：收到錢沒有是人的判斷，系統替他決定
-                         比漏算更嚴重。營運報表另有一張總清單（收款資料異常）。 -->
-                    <div x-show="item.receivedAt && !item.received"
-                         style="margin-top:6px;padding:5px 9px;border-radius:5px;background:#FFFBEB;border:1px solid #FDE68A;font-size:11px;color:#92400E;font-family:var(--font-zh)">
-                      ⚠️ 已填收款日期但沒勾「已收款」——這筆<b>不會計入營運報表的當月收入</b>，也不算在未收款項裡。
-                    </div>
-                    <div x-show="item.received && !item.receivedAt"
-                         style="margin-top:6px;padding:5px 9px;border-radius:5px;background:#FEF2F2;border:1px solid #FECACA;font-size:11px;color:#B91C1C;font-family:var(--font-zh)">
-                      ⚠️ 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都撈不到它，請補上日期。
-                    </div>
-
-                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
-                      <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)">發票附件</span>
-                      <template x-for="f in (item.invoiceFiles||[])" :key="f.id">
-                        <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
-                          <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                          <button @click="deletePaymentItemInvoiceFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
-                        </span>
-                      </template>
-                      <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
-                        + 上傳發票
-                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadPaymentItemInvoiceFiles(idx, $event)">
-                      </label>
-                    </div>
-
-                    <template x-if="item.received">
-                      <div>
-                      <div x-show="!moneyMasked()" style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
-                        <div>
-                          <span class="fi-label">實收金額（含稅）</span>
-                          <div style="position:relative">
-                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi fi--sm" type="number" min="0"
-                                   :placeholder="itemAmountReceivable(idx)"
-                                   x-model.number="item.actualAmount"
-                                   @input="setDirty()" :disabled="!canMarkPayment()"
-                                   style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
-                          </div>
-                        </div>
-                        <div>
-                          <span class="fi-label">手續費 / 扣款</span>
-                          <div style="position:relative">
-                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi fi--sm" type="number" min="0" placeholder="0"
-                                   x-model.number="item.feeAmount"
-                                   @input="setDirty()" :disabled="!canMarkPayment()"
-                                   style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
-                          </div>
-                        </div>
-                        <div>
-                          <span class="fi-label">扣款說明</span>
-                          <input class="fi fi--sm" type="text" placeholder="扣款原因..."
-                                 x-model="item.feeNote" @input="setDirty()">
-                        </div>
-                      </div>
-
-                      <!-- 沖銷（稅額歸零）審核 -->
-                      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                        <template x-if="!item.writeOffStatus && !item.taxExempt && ['superadmin','admin'].includes(session.role)">
-                          <button @click="openWriteoffModal(idx,'request')"
-                                  style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
-                            申請沖銷（無發票／免稅）
-                          </button>
-                        </template>
-                        <template x-if="item.writeOffStatus==='pending'">
-                          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#FEF9C3;color:#A16207">沖銷審核中</span>
-                            <span style="font-size:11px;color:var(--text-dim)" x-text="'申請人：' + item.writeOffRequestedBy + '　原因：' + item.writeOffReason"></span>
-                            <button x-show="session.role==='superadmin' || item.writeOffRequestedBy===(session.displayName||session.username)"
-                                    @click="cancelWriteoff(idx)"
-                                    style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border-light);background:#fff;cursor:pointer">取消申請</button>
-                            <span x-show="session.role==='superadmin'" style="display:flex;gap:6px">
-                              <button @click="approveWriteoff(idx)"
-                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #16A34A;background:#F0FDF4;color:#16A34A;cursor:pointer">核准</button>
-                              <button @click="openWriteoffModal(idx,'reject')"
-                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #DC2626;background:#FEF2F2;color:#DC2626;cursor:pointer">駁回</button>
-                            </span>
-                          </span>
-                        </template>
-                        <template x-if="item.taxExempt">
-                          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#EDE9FE;color:#6D28D9">已沖銷（免稅）</span>
-                        </template>
-                        <template x-if="item.writeOffStatus==='rejected'">
-                          <span style="font-size:10px;color:var(--text-dim)" x-text="'沖銷申請已駁回：' + (item.writeOffRejectReason||'')"></span>
-                        </template>
-                      </div>
-                      </div>
-                    </template>
-
-                    <template x-if="idx === 0">
-                      <div style="font-size:10px;color:#C2410C;margin-top:6px;font-family:LINE Seed TW_OTF, sans-serif">↩ 第一筆自動吸收四捨五入差額，確保各期合計 100%</div>
-                    </template>
-                  </div>
-                </template>
-
-                <button class="btn-add" x-show="!moneyMasked()" @click="addPaymentItem()">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
-                  新增款項
-                </button>
-
-                <div class="fi-group" style="margin-top:14px">
-                  <label class="fi-label">付款備注</label>
-                  <input class="fi" type="text" placeholder="付款條件、特殊約定..."
-                         x-model="cr.caseRecord.payment.note" @input="setDirty()">
-                </div>
-
-                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
-                <!-- 開票申請憑據列表 -->
-                <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
-                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-                    <span>開票申請憑據</span>
-                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
-                            :value="ivSortPref.sortMode" @change="setSubListSortMode('iv', $event.target.value)">
-                      <option value="">排序：預設</option>
-                      <option value="createdAt">排序：建立日期</option>
-                      <option value="totalAmount">排序：金額</option>
-                      <option value="custom">排序：自訂（可拖曳）</option>
-                    </select>
-                    <button x-show="ivSortPref.sortMode && ivSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('iv')"
-                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="ivSortPref.sortDir==='asc'?'↑':'↓'"></button>
-                  </div>
-                  <div x-ref="ivListBody">
-                  <template x-for="v in sortedInvoiceVouchers()" :key="v.id">
-                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.voucherNo">
-                      <span class="drag-handle" x-show="ivSortPref.sortMode === 'custom'" @click.stop>⠿</span>
-                      <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.voucherNo"></span>
-                      <span style="font-size:11px;color:var(--text-dim)" x-text="v.scope==='items' ? '自訂品項' : '自訂金額'"></span>
-                      <span :class="'badge ' + _ivStatusClass(v.status)" x-text="_ivStatusLabel(v.status)"
-                            style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
-                      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
-
-                      <div x-show="['superadmin','admin'].includes(session.role)" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
-                        <template x-if="v.status==='草稿'">
-                          <span style="display:flex;gap:6px">
-                            <button @click="submitInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
-                            <button @click="deleteInvoiceVoucher(v)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--danger)">刪</button>
-                          </span>
-                        </template>
-                        <template x-if="v.status==='待審核' || v.status==='簽核中'">
-                          <span style="display:flex;gap:6px">
-                            <button @click="approveInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:#059669;color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">簽核</button>
-                            <button @click="rejectInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:5px;cursor:pointer;white-space:nowrap">退回</button>
-                          </span>
-                        </template>
-                        <template x-if="v.status==='已核准'">
-                          <button @click="revokeInvoiceVoucherApproval(v)" style="padding:3px 10px;font-size:11px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
-                        </template>
-                        <button @click="previewInvoiceVoucherPdf(v)" :disabled="ivPreviewFetching"
-                                style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">預覽</button>
-                        <button x-show="v.status==='已核准'" @click="downloadInvoiceVoucherPdf(v)"
-                                style="padding:3px 10px;font-size:11px;border:1px solid #93C5FD;background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">下載 PDF</button>
-                      </div>
-
-                      <!-- 已開立附件（僅已核准可傳） -->
-                      <div x-show="v.status==='已核准'" style="flex-basis:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-light)">
-                        <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">已開立附件</span>
-                        <template x-for="f in (v.issuedFiles||[])" :key="f.id">
-                          <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
-                            <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
-                            <button @click="deleteInvoiceVoucherIssuedFile(v, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
-                          </span>
-                        </template>
-                        <label style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
-                          + 上傳附件
-                          <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadInvoiceVoucherIssuedFiles(v, $event)">
-                        </label>
-                      </div>
-                    </div>
-                  </template>
-                  </div>
-                </div>
-
-                <!-- 請款單列表 -->
-                <div x-show="paymentRequests.length > 0" style="margin-top:18px">
-                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
-                    <span>請款單</span>
-                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
-                            :value="prListSortPref.sortMode" @change="setSubListSortMode('prList', $event.target.value)">
-                      <option value="">排序：預設</option>
-                      <option value="createdAt">排序：建立日期</option>
-                      <option value="amount">排序：金額</option>
-                      <option value="custom">排序：自訂（可拖曳）</option>
-                    </select>
-                    <button x-show="prListSortPref.sortMode && prListSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('prList')"
-                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="prListSortPref.sortDir==='asc'?'↑':'↓'"></button>
-                  </div>
-                  <div x-ref="prListBody">
-                  <template x-for="v in sortedPaymentRequests()" :key="v.id">
-                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.requestNo">
-                      <span class="drag-handle" x-show="prListSortPref.sortMode === 'custom'" @click.stop>⠿</span>
-                      <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.requestNo"></span>
-                      <span style="font-size:11px;color:var(--text-dim)" x-text="v.stageLabel || '未分類'"></span>
-                      <span :class="'badge ' + _prStatusClass(v.status)" x-text="_prStatusLabel(v.status)"
-                            style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
-                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
-                      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
-
-                      <div x-show="['superadmin','admin'].includes(session.role)" style="margin-left:auto">
-                        <a :href="'payment-request-form.html?id=' + encodeURIComponent(v.requestNo)"
-                           style="padding:3px 10px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:#fff;color:var(--text-secondary);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
-                           x-text="v.status==='草稿' ? '編輯' : '開啟'"></a>
-                      </div>
-                    </div>
-                  </template>
-                  </div>
-                </div>
-
-                </fieldset><!-- /CM14b -->
+                <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:#B45309">您不是這個案件的成員，以出納身分開啟：只能登錄收款（在「財務」分頁），其他內容唯讀。</div>
               </div><!-- /biz -->
 
               <!-- ══ 執行管理 Tab（進度／叫料／設備／保固 子分頁） ══ -->
@@ -1620,7 +1281,7 @@
                   <button class="cm-tab" :class="{active: execSubTab==='devices'}"   @click="execSubTab='devices'">設備登錄</button>
                   <button class="cm-tab" :class="{active: execSubTab==='warranty'}"  @click="execSubTab='warranty'">保固備注</button>
                   <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">代辦事項</button>
-                  <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">專案資訊</button>
+                  <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">成員</button>
                 </div>
 
               <!-- ── 執行進度 ── -->
@@ -2515,6 +2176,388 @@
                 </datalist>
                 </fieldset><!-- /CM14b -->
               </div>
+
+              <!-- ══ 財務 Tab：收款（CU5，2026-09-24 使用者表單「收款移到財務分頁」）══
+                   從「案件資訊」整段搬來，內容與規則不變。⚠️ 可見範圍照搬家前：看得到案件的人都
+                   看得到收款（沒有財務檢視權的帳號照 CM13 遮蔽金額；CM14b 出納唯讀模式也在這裡登錄收款）
+                   ⇒ 這一段**不**套 canSeeFinancial()，下面的應收應付總覽／叫料／精算才套。 -->
+              <div x-show="activeTab==='fin'" data-testid="fin-payment">
+                <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:#B45309">您不是這個案件的成員，以出納身分開啟：只能在這裡登錄收款，其他內容唯讀。</div>
+                <div class="cm-section-title">收款管理</div>
+                <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
+                     跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
+                     未稅金額與收款進度條。 -->
+                <!-- CM13（2026-09-24）：沒有財務檢視權的帳號，後端不回金額 ⇒ 金額相關一律不渲染 -->
+                <div x-show="moneyMasked()" class="fi-label" style="margin-bottom:10px">此帳號沒有財務檢視權限，款項金額不顯示（—）；可編輯預計收款日、發票與備註。</div>
+                <div class="pay-strip" x-show="!moneyMasked()">
+                  <span class="pay-strip__item">
+                    <span class="pay-strip__lbl">未稅金額</span>
+                    <span class="pay-strip__val num" x-text="'NT$ ' + totalPretax().toLocaleString()"></span>
+                  </span>
+                  <span class="pay-strip__bar">
+                    <span class="prog"><span class="prog__fill prog__fill--green" :style="'width:' + Math.min(receivedPct(),100) + '%'"></span></span>
+                  </span>
+                  <span class="pay-strip__pct num" x-text="receivedPct() + '% \u5df2\u6536'"></span>
+                </div>
+
+                <template x-if="!moneyMasked() && feeTotal() > 0">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:-6px;margin-bottom:14px">
+                    <div class="pay-kpi">
+                      <div class="pay-kpi__lbl">手續費 / 扣款合計</div>
+                      <div class="pay-kpi__val pay-kpi__val--danger" x-text="'NT$ ' + feeTotal().toLocaleString()"></div>
+                    </div>
+                    <div class="pay-kpi">
+                      <div class="pay-kpi__lbl">實際淨收</div>
+                      <div class="pay-kpi__val pay-kpi__val--success" x-text="'NT$ ' + netReceivedTotal().toLocaleString()"></div>
+                    </div>
+                  </div>
+                </template>
+
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span class="cm-section-title" style="margin-bottom:0">款項明細</span>
+                  <span x-show="!moneyMasked()" style="font-size:11px;font-family:LINE Seed TW_OTF, sans-serif;padding:2px 8px;border-radius:4px;font-weight:600;flex-shrink:0"
+                        :style="totalEnteredPct()===100 ? 'background:#DCFCE7;color:#15803D' : 'background:#FEF2F2;color:#DC2626'"
+                        x-text="'合計 ' + totalEnteredPct() + '%' + (totalEnteredPct()===100 ? ' ✓' : '（須為 100%）')"></span>
+                  <button x-show="!moneyMasked() && paymentItems().length > 1"
+                          @click="balanceLastPayment()"
+                          style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;line-height:1.4;white-space:nowrap">
+                    平衡尾款
+                  </button>
+                  <button x-show="['superadmin','admin'].includes(session.role)"
+                          @click="if (dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請請款單') } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
+                          style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid #FDBA74;background:#FFF7ED;color:#C2410C;cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
+                    申請請款單
+                  </button>
+                  <button x-show="['superadmin','admin'].includes(session.role)"
+                          @click="openInvoiceVoucherModal()"
+                          style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid #C4B5FD;background:#F5F3FF;color:#6D28D9;cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
+                    申請開立發票
+                  </button>
+                </div>
+
+                <template x-for="(item, idx) in (cr.caseRecord?.payment?.items || [])" :key="item.id">
+                  <div class="pay-item" :class="item.received ? 'pay-item--received' : ''">
+                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                      <span style="font-size:11px;font-weight:700;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;width:16px;flex-shrink:0" x-text="idx+1"></span>
+                      <select class="fi" x-model="item.type" @change="setDirty()"
+                              style="width:90px;flex-shrink:0;padding:5px 6px;font-size:12px">
+                        <option>訂金款</option><option>交貨款</option><option>驗收款</option><option>進度款</option><option>完工款</option><option>收款後出貨</option><option>自訂義</option><option>其他</option>
+                      </select>
+                      <input x-show="item.type==='自訂義'" class="fi" type="text" placeholder="輸入名稱..."
+                             x-model="item.customLabel" @input="setDirty()"
+                             style="width:96px;flex-shrink:0;padding:5px 6px;font-size:12px">
+                      <span x-show="moneyMasked()" class="num" style="flex:1;color:var(--text-dim)">—</span>
+                      <div x-show="!moneyMasked()" style="position:relative;flex-shrink:0;display:inline-flex">
+                        <input class="fi fi--pct" type="number" min="0" max="100" step="0.01"
+                               x-model.number="item.pct" @input="onPctChange(idx)"
+                               style="font-size:13px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700">
+                        <span style="position:absolute;right:7px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none">%</span>
+                      </div>
+                      <div x-show="!moneyMasked()" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+                        <div>
+                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">含稅</div>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
+                            <input class="fi" type="number" min="0" step="1"
+                                   :value="itemAmountReceivable(idx)"
+                                   :disabled="item.taxExempt"
+                                   :title="item.taxExempt ? '已沖銷免稅，金額已下修為未稅價，不可再手動編輯' : ''"
+                                   @change="onAmountWithTaxChange(idx, +$event.target.value)"
+                                   style="padding-left:30px;text-align:right;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);width:100%">
+                          </div>
+                        </div>
+                        <div>
+                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">未稅</div>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
+                            <input class="fi" type="number" min="0" step="1"
+                                   :value="itemAmountPretax(idx)"
+                                   :disabled="item.taxExempt"
+                                   :title="item.taxExempt ? '已沖銷免稅，稅額歸零，未稅價即實收金額' : ''"
+                                   @change="onAmountPretaxChange(idx, +$event.target.value)"
+                                   style="padding-left:30px;text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);width:100%">
+                          </div>
+                        </div>
+                        <div style="text-align:right">
+                          <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:1px">稅額</div>
+                          <div style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-dim)" x-text="'NT$ ' + itemAmountTax(idx).toLocaleString()"></div>
+                        </div>
+                      </div>
+                      <label style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;transition:background .12s"
+                             :style="item.received ? 'background:#DCFCE7' : 'background:#F3F4F6'">
+                        <input type="checkbox" x-model="item.received" @change="setDirty()" :disabled="!canMarkPayment()" style="accent-color:var(--success)">
+                        <span style="font-size:11px;font-weight:600;font-family:var(--font-zh)"
+                              :style="item.received ? 'color:var(--success)' : 'color:#9CA3AF'"
+                              x-text="item.received ? '已收款' : '未收'"></span>
+                      </label>
+                      <button class="btn-del" x-show="!moneyMasked()" @click="removePaymentItem(idx)" style="flex-shrink:0"
+                              :disabled="(cr.caseRecord?.payment?.items?.length||0)<=1">×</button>
+                    </div>
+
+                    <div class="pay-grid" style="display:grid;grid-template-columns:136px 136px 140px 136px 1fr;gap:8px">
+                      <div>
+                        <span class="fi-label">預計收款日</span>
+                        <input class="fi fi--sm" type="date" x-model="item.expectedReceiptDate" @change="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label">收款日期</span>
+                        <input class="fi fi--sm" type="date" x-model="item.receivedAt" @change="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label">發票號碼</span>
+                        <input class="fi fi--sm fi--mono" type="text" placeholder="AB12345678"
+                               x-model="item.invoiceNo" @input="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label" title="決定這張發票歸屬哪個營業稅申報期別，跟收款日期是兩回事">發票開立日期</span>
+                        <input class="fi fi--sm" type="date" x-model="item.invoiceDate" @change="setDirty()">
+                      </div>
+                      <div>
+                        <span class="fi-label">備注</span>
+                        <input class="fi fi--sm" type="text" placeholder="收款備注..." x-model="item.note" @input="setDirty()">
+                      </div>
+                    </div>
+
+                    <!-- AC1（使用者選 (a)）：發票記載的未稅／稅額，選填。兩欄都填 ⇒ 稅務匯出以它為準；
+                         只填一欄後端拒存（這裡先提示）；合計與該期金額不同只提示不擋。
+                         沒有財務檢視權（CM13）⇒ 不渲染：後端本來就不回這兩鍵、存檔時以資料庫值補回。 -->
+                    <template x-if="!moneyMasked()">
+                      <div class="pay-grid" style="display:grid;grid-template-columns:136px 136px 1fr;gap:8px;margin-top:8px;align-items:end">
+                        <div>
+                          <span class="fi-label" title="發票上記載的銷售額（未稅）；與稅額一起填寫，稅務匯出以它為準">發票未稅</span>
+                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
+                                 data-testid="invoice-pretax"
+                                 x-model.number="item.invoicePretax" @input="setDirty()">
+                        </div>
+                        <div>
+                          <span class="fi-label">發票稅額</span>
+                          <input class="fi fi--sm" type="number" min="0" step="1" placeholder="選填"
+                                 data-testid="invoice-tax"
+                                 x-model.number="item.invoiceTax" @input="setDirty()">
+                        </div>
+                        <div style="font-size:11px;font-family:var(--font-zh)">
+                          <span data-testid="invoice-half" style="color:#B91C1C" x-show="invoiceHalfFilled(item)">發票未稅與稅額要一起填寫，只填一欄無法存檔。</span>
+                          <span data-testid="invoice-mismatch" style="color:#B45309" x-show="invoiceMismatch(item, idx)"
+                                x-text="invoiceMismatch(item, idx)"></span>
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- ⚠️ 「錢會從報表上無聲消失」的兩種狀態（2026-09-11）。
+                         「已收款」勾選與「收款日期」是兩個獨立欄位，只填一個的話，
+                         營運報表的當月收入撈不到（要 received=true 且 receivedAt 在
+                         區間內），當月未收也撈不到（那邊看的是預計收款日）——兩邊
+                         都不算，而且畫面上原本完全沒有任何提示。這一行就是那個提示。
+                         刻意不自動幫使用者勾或填：收到錢沒有是人的判斷，系統替他決定
+                         比漏算更嚴重。營運報表另有一張總清單（收款資料異常）。 -->
+                    <div x-show="item.receivedAt && !item.received"
+                         style="margin-top:6px;padding:5px 9px;border-radius:5px;background:#FFFBEB;border:1px solid #FDE68A;font-size:11px;color:#92400E;font-family:var(--font-zh)">
+                      ⚠️ 已填收款日期但沒勾「已收款」——這筆<b>不會計入營運報表的當月收入</b>，也不算在未收款項裡。
+                    </div>
+                    <div x-show="item.received && !item.receivedAt"
+                         style="margin-top:6px;padding:5px 9px;border-radius:5px;background:#FEF2F2;border:1px solid #FECACA;font-size:11px;color:#B91C1C;font-family:var(--font-zh)">
+                      ⚠️ 已勾「已收款」但沒填收款日期——這筆<b>不屬於任何月份</b>，所有月報表都撈不到它，請補上日期。
+                    </div>
+
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px">
+                      <span style="font-size:10px;color:var(--text-dim);font-family:var(--font-zh)">發票附件</span>
+                      <template x-for="f in (item.invoiceFiles||[])" :key="f.id">
+                        <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
+                          <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                          <button @click="deletePaymentItemInvoiceFile(idx, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+                        </span>
+                      </template>
+                      <label style="padding:2px 8px;font-size:10px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:4px;cursor:pointer;white-space:nowrap">
+                        + 上傳發票
+                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadPaymentItemInvoiceFiles(idx, $event)">
+                      </label>
+                    </div>
+
+                    <template x-if="item.received">
+                      <div>
+                      <div x-show="!moneyMasked()" class="pay-grid" style="display:grid;grid-template-columns:140px 140px 1fr;gap:8px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border-light)">
+                        <div>
+                          <span class="fi-label">實收金額（含稅）</span>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
+                            <input class="fi fi--sm" type="number" min="0"
+                                   :placeholder="itemAmountReceivable(idx)"
+                                   x-model.number="item.actualAmount"
+                                   @input="setDirty()" :disabled="!canMarkPayment()"
+                                   style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
+                          </div>
+                        </div>
+                        <div>
+                          <span class="fi-label">手續費 / 扣款</span>
+                          <div style="position:relative">
+                            <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
+                            <input class="fi fi--sm" type="number" min="0" placeholder="0"
+                                   x-model.number="item.feeAmount"
+                                   @input="setDirty()" :disabled="!canMarkPayment()"
+                                   style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
+                          </div>
+                        </div>
+                        <div>
+                          <span class="fi-label">扣款說明</span>
+                          <input class="fi fi--sm" type="text" placeholder="扣款原因..."
+                                 x-model="item.feeNote" @input="setDirty()">
+                        </div>
+                      </div>
+
+                      <!-- 沖銷（稅額歸零）審核 -->
+                      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <template x-if="!item.writeOffStatus && !item.taxExempt && ['superadmin','admin'].includes(session.role)">
+                          <button @click="openWriteoffModal(idx,'request')"
+                                  style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:#fff;color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif">
+                            申請沖銷（無發票／免稅）
+                          </button>
+                        </template>
+                        <template x-if="item.writeOffStatus==='pending'">
+                          <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#FEF9C3;color:#A16207">沖銷審核中</span>
+                            <span style="font-size:11px;color:var(--text-dim)" x-text="'申請人：' + item.writeOffRequestedBy + '　原因：' + item.writeOffReason"></span>
+                            <button x-show="session.role==='superadmin' || item.writeOffRequestedBy===(session.displayName||session.username)"
+                                    @click="cancelWriteoff(idx)"
+                                    style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border-light);background:#fff;cursor:pointer">取消申請</button>
+                            <span x-show="session.role==='superadmin'" style="display:flex;gap:6px">
+                              <button @click="approveWriteoff(idx)"
+                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #16A34A;background:#F0FDF4;color:#16A34A;cursor:pointer">核准</button>
+                              <button @click="openWriteoffModal(idx,'reject')"
+                                      style="font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #DC2626;background:#FEF2F2;color:#DC2626;cursor:pointer">駁回</button>
+                            </span>
+                          </span>
+                        </template>
+                        <template x-if="item.taxExempt">
+                          <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#EDE9FE;color:#6D28D9">已沖銷（免稅）</span>
+                        </template>
+                        <template x-if="item.writeOffStatus==='rejected'">
+                          <span style="font-size:10px;color:var(--text-dim)" x-text="'沖銷申請已駁回：' + (item.writeOffRejectReason||'')"></span>
+                        </template>
+                      </div>
+                      </div>
+                    </template>
+
+                    <template x-if="idx === 0">
+                      <div style="font-size:10px;color:#C2410C;margin-top:6px;font-family:LINE Seed TW_OTF, sans-serif">↩ 第一筆自動吸收四捨五入差額，確保各期合計 100%</div>
+                    </template>
+                  </div>
+                </template>
+
+                <button class="btn-add" x-show="!moneyMasked()" @click="addPaymentItem()">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
+                  新增款項
+                </button>
+
+                <div class="fi-group" style="margin-top:14px">
+                  <label class="fi-label">付款備注</label>
+                  <input class="fi" type="text" placeholder="付款條件、特殊約定..."
+                         x-model="cr.caseRecord.payment.note" @input="setDirty()">
+                </div>
+
+                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
+                <!-- 開票申請憑據列表 -->
+                <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
+                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                    <span>開票申請憑據</span>
+                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
+                            :value="ivSortPref.sortMode" @change="setSubListSortMode('iv', $event.target.value)">
+                      <option value="">排序：預設</option>
+                      <option value="createdAt">排序：建立日期</option>
+                      <option value="totalAmount">排序：金額</option>
+                      <option value="custom">排序：自訂（可拖曳）</option>
+                    </select>
+                    <button x-show="ivSortPref.sortMode && ivSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('iv')"
+                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="ivSortPref.sortDir==='asc'?'↑':'↓'"></button>
+                  </div>
+                  <div x-ref="ivListBody">
+                  <template x-for="v in sortedInvoiceVouchers()" :key="v.id">
+                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.voucherNo">
+                      <span class="drag-handle" x-show="ivSortPref.sortMode === 'custom'" @click.stop>⠿</span>
+                      <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.voucherNo"></span>
+                      <span style="font-size:11px;color:var(--text-dim)" x-text="v.scope==='items' ? '自訂品項' : '自訂金額'"></span>
+                      <span :class="'badge ' + _ivStatusClass(v.status)" x-text="_ivStatusLabel(v.status)"
+                            style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
+                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
+                      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
+
+                      <div x-show="['superadmin','admin'].includes(session.role)" style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto">
+                        <template x-if="v.status==='草稿'">
+                          <span style="display:flex;gap:6px">
+                            <button @click="submitInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:var(--accent);color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">送出審核</button>
+                            <button @click="deleteInvoiceVoucher(v)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:#fff;cursor:pointer;color:var(--danger)">刪</button>
+                          </span>
+                        </template>
+                        <template x-if="v.status==='待審核' || v.status==='簽核中'">
+                          <span style="display:flex;gap:6px">
+                            <button @click="approveInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:none;background:#059669;color:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">簽核</button>
+                            <button @click="rejectInvoiceVoucher(v)" style="padding:3px 10px;font-size:11px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:5px;cursor:pointer;white-space:nowrap">退回</button>
+                          </span>
+                        </template>
+                        <template x-if="v.status==='已核准'">
+                          <button @click="revokeInvoiceVoucherApproval(v)" style="padding:3px 10px;font-size:11px;border:1px solid #FCA5A5;background:#FEF2F2;color:#DC2626;border-radius:5px;cursor:pointer;white-space:nowrap">撤銷核准</button>
+                        </template>
+                        <button @click="previewInvoiceVoucherPdf(v)" :disabled="ivPreviewFetching"
+                                style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">預覽</button>
+                        <button x-show="v.status==='已核准'" @click="downloadInvoiceVoucherPdf(v)"
+                                style="padding:3px 10px;font-size:11px;border:1px solid #93C5FD;background:var(--accent-light);color:var(--accent-hover);border-radius:5px;cursor:pointer;white-space:nowrap">下載 PDF</button>
+                      </div>
+
+                      <!-- 已開立附件（僅已核准可傳） -->
+                      <div x-show="v.status==='已核准'" style="flex-basis:100%;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-light)">
+                        <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">已開立附件</span>
+                        <template x-for="f in (v.issuedFiles||[])" :key="f.id">
+                          <span style="display:flex;align-items:center;gap:4px;font-size:11px;background:#F3F4F6;border-radius:4px;padding:2px 6px">
+                            <a href="javascript:void(0)" @click="previewAttachmentFile(f)" style="color:var(--accent);text-decoration:underline" x-text="f.filename"></a>
+                            <button @click="deleteInvoiceVoucherIssuedFile(v, f.id)" style="border:none;background:none;color:var(--danger);cursor:pointer;font-size:11px;padding:0 2px">×</button>
+                          </span>
+                        </template>
+                        <label style="padding:3px 10px;font-size:11px;border:1px solid var(--border);background:#fff;color:var(--text-secondary);border-radius:5px;cursor:pointer;white-space:nowrap">
+                          + 上傳附件
+                          <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" style="display:none" @change="uploadInvoiceVoucherIssuedFiles(v, $event)">
+                        </label>
+                      </div>
+                    </div>
+                  </template>
+                  </div>
+                </div>
+
+                <!-- 請款單列表 -->
+                <div x-show="paymentRequests.length > 0" style="margin-top:18px">
+                  <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
+                    <span>請款單</span>
+                    <select style="margin-left:auto;font-size:11px;padding:3px 6px;border:1px solid var(--border-light);border-radius:5px;cursor:pointer"
+                            :value="prListSortPref.sortMode" @change="setSubListSortMode('prList', $event.target.value)">
+                      <option value="">排序：預設</option>
+                      <option value="createdAt">排序：建立日期</option>
+                      <option value="amount">排序：金額</option>
+                      <option value="custom">排序：自訂（可拖曳）</option>
+                    </select>
+                    <button x-show="prListSortPref.sortMode && prListSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('prList')"
+                            style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:#fff;cursor:pointer" x-text="prListSortPref.sortDir==='asc'?'↑':'↓'"></button>
+                  </div>
+                  <div x-ref="prListBody">
+                  <template x-for="v in sortedPaymentRequests()" :key="v.id">
+                    <div style="border:1px solid var(--border-light);border-radius:8px;margin-bottom:8px;padding:10px 14px;background:#FAFAF9;display:flex;align-items:center;gap:8px;flex-wrap:wrap" :data-item-id="v.requestNo">
+                      <span class="drag-handle" x-show="prListSortPref.sortMode === 'custom'" @click.stop>⠿</span>
+                      <span style="font-size:12px;font-weight:600;color:var(--text-main)" x-text="v.requestNo"></span>
+                      <span style="font-size:11px;color:var(--text-dim)" x-text="v.stageLabel || '未分類'"></span>
+                      <span :class="'badge ' + _prStatusClass(v.status)" x-text="_prStatusLabel(v.status)"
+                            style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
+                      <span style="font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif" x-text="'NT$ ' + (v.totalAmount||0).toLocaleString() + '（含稅）'"></span>
+                      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="'未稅 NT$ ' + (v.pretaxAmount||0).toLocaleString()"></span>
+
+                      <div x-show="['superadmin','admin'].includes(session.role)" style="margin-left:auto">
+                        <a :href="'payment-request-form.html?id=' + encodeURIComponent(v.requestNo)"
+                           style="padding:3px 10px;font-size:11px;border:1px solid var(--border);border-radius:5px;background:#fff;color:var(--text-secondary);cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-block"
+                           x-text="v.status==='草稿' ? '編輯' : '開啟'"></a>
+                      </div>
+                    </div>
+                  </template>
+                  </div>
+                </div>
+
+                </fieldset><!-- /CM14b -->
+              </div><!-- /fin-payment -->
 
               <!-- ══ 財務 Tab ══ -->
               <div x-show="activeTab==='fin' && canSeeFinancial()">

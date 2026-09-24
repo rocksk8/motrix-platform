@@ -165,6 +165,8 @@ def test_close_button_shows_the_gates_first_and_goto_switches_tab(live_server, m
         browser = p.chromium.launch()
         try:
             page, dialogs = _open(browser, live_server, u)
+            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+            page.click('[data-testid="cm-more"]')
             page.click("button.btn-close-case:not([data-testid])")
             dlg = page.locator("[data-testid=close-check]")
             dlg.wait_for(state="visible", timeout=10000)
@@ -209,6 +211,8 @@ def test_all_gates_passed_confirm_closes_the_case(live_server, make_user):
         browser = p.chromium.launch()
         try:
             page, _ = _open(browser, live_server, u)
+            # CU5（2026-09-24）：「完結案」收進標頭「更多」選單
+            page.click('[data-testid="cm-more"]')
             page.click("button.btn-close-case:not([data-testid])")
             btn = page.locator("[data-testid=close-check] [data-testid=close-confirm]")
             btn.wait_for(state="visible", timeout=10000)

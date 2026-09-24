@@ -612,7 +612,7 @@
                      x-text="'⚠️ 已勾已收款、但沒填收款日期（' + undatedCollectedItems.length + ' 筆，合計 ' + fmt(undatedCollectedTotal) + '）'"></div>
                 <div style="font-size:12px;color:#B91C1C;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
                   這些款項<b>不屬於任何月份</b>，上方任何一個期間都看不到它們。
-                  請到案件管理 → 案件資訊 → 款項明細補上收款日期。
+                  請到案件管理 → 財務 → 款項明細補上收款日期。
                 </div>
                 <table class="data-table">
                   <thead><tr>
@@ -622,7 +622,7 @@
                     <template x-for="it in undatedCollectedItems" :key="it.quoteNo + '-' + it.idx">
                       <tr>
                         <td class="mono">
-                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo) + '&tab=fin'"
                              style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
                         </td>
                         <td x-text="it.customer"></td>
@@ -691,7 +691,7 @@
                     <template x-for="it in undatedOutstandingItems" :key="it.quoteNo + '-' + it.idx">
                       <tr>
                         <td class="mono">
-                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo) + '&tab=fin'"
                              style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
                         </td>
                         <td x-text="it.customer"></td>
@@ -853,7 +853,7 @@
                 </div>
                 <div style="font-size:12px;color:#92400E;font-family:var(--font-zh);line-height:1.7;margin-bottom:10px">
                   下列款項的「已收款」與「收款日期」只填了其中一個，<b>不會出現在任何月份的收入或未收款項裡</b>。
-                  請到案件管理 → 案件資訊 → 款項明細補齊，補齊後金額就會回到報表上。
+                  請到案件管理 → 財務 → 款項明細補齊，補齊後金額就會回到報表上。
                 </div>
                 <table class="data-table">
                   <thead><tr>
@@ -864,7 +864,7 @@
                     <template x-for="it in paymentAnomalies" :key="it.quoteNo + '-' + it.type + '-' + it.kind">
                       <tr>
                         <td class="mono">
-                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo)"
+                          <a :href="'case-management.html?q=' + encodeURIComponent(it.quoteNo) + '&tab=fin'"
                              style="color:var(--accent);text-decoration:underline" x-text="it.quoteNo"></a>
                         </td>
                         <td x-text="it.customer"></td>

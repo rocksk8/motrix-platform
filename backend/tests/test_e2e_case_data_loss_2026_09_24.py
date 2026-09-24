@@ -86,7 +86,8 @@ def _items(quote_no):
 
 
 def _open(page, base, quote_no):
-    page.goto(f"{base}/pages/case-management.html?q={quote_no}")
+    # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
+    page.goto(f"{base}/pages/case-management.html?q={quote_no}&tab=fin")
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=15000)
 
 

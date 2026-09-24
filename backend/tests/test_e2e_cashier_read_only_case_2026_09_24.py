@@ -18,7 +18,8 @@ def _open(browser, base, user):
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
     _login(page, base, *user)
-    page.goto(f"{base}/pages/case-management.html?q={NO}")
+    # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
+    page.goto(f"{base}/pages/case-management.html?q={NO}&tab=fin")
     page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=10000)
     return page
@@ -44,7 +45,8 @@ def test_non_member_cashier_can_only_edit_payment(live_server, make_user):
         try:
             page = _open(browser, live_server, u)
             assert page.evaluate(f"() => {DATA_JS}.caseReadOnly()") is True
-            assert page.locator("text=以出納身分開啟").first.is_visible()
+            # CU5：提示在「案件資訊」與「財務」（收款所在）各一份；目前開的是財務分頁
+            assert page.locator('[data-testid="fin-payment"] >> text=以出納身分開啟').is_visible()
             assert page.locator(".cm-fgrid--contract input").first.is_disabled(), "合約欄位應唯讀"
             assert page.locator(".cm-fgrid--people select").first.is_disabled(), "角色欄位應唯讀"
             # 純檢視的切換鈕不可以被一起停用（hichan-0a：清單／時間軸切換移出唯讀範圍）
