@@ -452,16 +452,35 @@ function notifStore() {
              d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
     },
 
+    // 2026-09-25：兩個提醒橫幅（待簽核、兩步驟驗證）原本固定在右上角（top:72px、z-index:99999），
+    // 分頁的第一頁若不是 index（例如新分頁直接開案件頁）就蓋住標頭的「儲存／更多」。
+    // 改放右下角、跟 MotrixUI toast 同一欄（.mui-toasts，直向排、彼此不疊）：
+    //   ・不選「頂欄下方讓出空間」：橫幅約 1 秒後才出現，那時把整頁往下推會讓按鈕移到游標底下（誤點）；
+    //     也會與 edit-presence.js 的 W-1 同時改 --topbar-h（兩個寫入者互相蓋掉）。
+    //   ・⚠️ 已知且接受的限制（2026-09-25 裁示）：右下角仍可能暫時蓋到頁面右下角的內容——實測報價單列表
+    //     （1440／1024）畫面最底一列的列尾圖示會被蓋住；橫幅 7～9 秒後自動淡出、也可按 × 關掉。
+    //     案件頁在 1440／1024 掃過全部可見操作元件都沒被蓋（test_e2e_notice_banners_2026_09_25）。
+    _noticeStack() {
+      let stack = document.querySelector('.mui-toasts')
+      if (!stack) {
+        stack = document.createElement('div')
+        stack.className = 'mui-root mui-toasts'     // ui.js 的 toast() 會沿用同一欄
+        stack.style.cssText = 'position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:9100;pointer-events:none'
+        document.body.appendChild(stack)
+      }
+      return stack
+    },
+
     _showApprovalBanner(count, href) {
       if (document.getElementById('approval-notif-banner')) return
       const el = document.createElement('div')
       el.id = 'approval-notif-banner'
       el.style.cssText = [
-        'position:fixed;top:72px;right:20px',
+        'pointer-events:auto',
         'background:#EEF2FF;border:1.5px solid #6366F1',
         'border-radius:10px;padding:14px 18px',
         'box-shadow:0 6px 24px rgba(99,102,241,.22)',
-        'z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
+        'font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
         'animation:notif-slide-in .25s ease',
       ].join(';')
       // Build banner DOM without innerHTML to avoid XSS from count/href
@@ -502,10 +521,10 @@ function notifStore() {
       if (!document.querySelector('#notif-kf')) {
         const s = document.createElement('style')
         s.id = 'notif-kf'
-        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
+        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}'
         document.head.appendChild(s)
       }
-      document.body.appendChild(el)
+      this._noticeStack().appendChild(el)
       setTimeout(() => {
         if (el.parentNode) {
           el.style.transition = 'opacity .5s'
@@ -520,11 +539,11 @@ function notifStore() {
       const el = document.createElement('div')
       el.id = 'totp-reminder-banner'
       el.style.cssText = [
-        'position:fixed;top:72px;right:20px',
+        'pointer-events:auto',
         'background:#FFFBEB;border:1.5px solid #D97706',
         'border-radius:10px;padding:14px 18px',
         'box-shadow:0 6px 24px rgba(217,119,6,.22)',
-        'z-index:99999;font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
+        'font-family:LINE Seed TW_OTF, sans-serif;max-width:300px',
         'animation:notif-slide-in .25s ease',
       ].join(';')
       const row = document.createElement('div')
@@ -562,10 +581,10 @@ function notifStore() {
       if (!document.querySelector('#notif-kf')) {
         const s = document.createElement('style')
         s.id = 'notif-kf'
-        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}'
+        s.textContent = '@keyframes notif-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}'
         document.head.appendChild(s)
       }
-      document.body.appendChild(el)
+      this._noticeStack().appendChild(el)
       setTimeout(() => {
         if (el.parentNode) {
           el.style.transition = 'opacity .5s'
