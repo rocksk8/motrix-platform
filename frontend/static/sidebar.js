@@ -720,7 +720,9 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('devices.html'),         'dev',   '設備登載', ['devices.html'],  cEq,  'sb-mod-equipment'),
       ni(pg('warranty.html'),        'warr',  '保固追蹤', ['warranty.html'], cEq,  'sb-mod-warranty'),
       ni(pg('network-plans.html'),   'netplan', '網路架構規劃書', ['network-plans.html', 'network-plan-form.html', 'topology-quick.html'], cNetPlan, 'sb-mod-netplan'),
-      sec('財務', cFi || cRpt || cCash),
+      // 分組條件＝底下各項條件的聯集（test_sidebar_finance 守）：`true` 是獎金分潤那一項
+      // （2026-09-24 任何登入者可開，見下方 bonus.html 那一列）
+      sec('財務', cFi || cRpt || cCash || true),
       // 2026-09-13（模組權限稽核）：補上 badge id。`finance` 模組的紅點原本掛在
       // 'sb-mod-finance' / 'sb-mod-sales-orders' 這兩個 id 上，而它們所屬的
       // 應收帳款／銷售訂單兩個側欄項目在 2026-08-31（87e16cb）退役後就不再渲染
@@ -768,11 +770,11 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('account-items.html'),   'acct',  '會計科目', ['account-items.html'],                     cCash),
       // 🔑 `FN2`：獎金分潤。使用者原話「一樣加在營運報表那個模組獨立」
       //    ⇒ 它與出納、營運報表並列在「財務」這一組，**不是獨立分組**。
-      // ⚠️ 權限沿用 `cRpt`（營運報表）：獎金是依案件獲利發放的，
-      //    而看得到獲利的人才有脈絡看獎金。
-      //    🔴 而**看得到入口 ≠ 看得到金額** —— 後端依 `§七` 過濾分錄列：
-      //       管理者看全部、本人只看自己那一列、其餘看不到。
-      ni(pg('bonus.html'),           'bonus', '獎金分潤', ['bonus.html'],                              cRpt),
+      // 🔴 2026-09-24 使用者裁示：「任何登入者都能打開，內容照規則過濾」（SPEC-BONUS M1）
+      //    ⇒ 不再沿用 `cRpt`（營運報表）：受獎人多半沒有營運報表權限，沿用的話他們看不到自己的獎金。
+      //    🔑 看得到入口 ≠ 看得到金額 —— 後端（/api/bonus/cases）過濾：最高管理者看全部、
+      //       出納看待發放／已發放整張金額、名單上的人只看自己那一列、其餘看到空狀態。
+      ni(pg('bonus.html'),           'bonus', '獎金分潤', ['bonus.html'],                              true),
       sec('勞務管理', cCon || cPay),
       ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
       ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),

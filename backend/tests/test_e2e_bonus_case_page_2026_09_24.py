@@ -82,12 +82,13 @@ def _award():
 def _users(make_user):
     import db
     out = {}
-    # ⚠️ 頁面層有模組守門（sidebar.js:769 顯示條件 cRpt＝has('reports')）：
-    #    看得到 bonus.html 要有 'reports' 模組（M1 待裁，預設 (a)）
-    eng = ["dashboard", "case_manage", "work_log", "daily_task", "reports"]
+    # M1（使用者「任何登入者都能打開，內容照規則過濾」）：刻意**不給** reports／finance 模組——
+    #    受獎人與出納多半沒有營運報表權限，他們也要打得開這一頁。
+    eng = ["dashboard", "case_manage", "work_log", "daily_task"]
     for u, role, mods in (("pg_sa", "superadmin", None), ("pg_sa2", "superadmin", None),
                           ("pg_sales", "sales", None), ("pg_exec", "engineer", eng),
-                          ("pg_admin", "engineer", eng), ("pg_cash", "engineer", ["cashier", "reports"])):
+                          ("pg_admin", "engineer", eng), ("pg_cash", "engineer", ["cashier"]),
+                          ("pg_out", "engineer", eng)):
         out[u] = make_user(username=u, role=role, modules=mods)
     conn = db.get_db()
     try:
@@ -179,5 +180,36 @@ def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user):
             page2.wait_for_function(f"() => {DATA_JS}.msg === '已標記發放'", timeout=15000)
             a, _ = _award()
             assert a["status"] == "已發放" and a["paid_by"] == "pg_cash"
+        finally:
+            browser.close()
+
+
+@pytest.mark.e2e
+def test_outsider_without_finance_rights_sees_menu_entry_and_empty_state(live_server, make_user):
+    """M1：沒有任何財務權限、也不在名單上的人 ⇒ 選單「財務」分組只剩「獎金分潤」一項（分組不是空的），
+    頁面打得開、顯示空狀態，不是「沒有權限」。"""
+    u = _users(make_user)
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, *u["pg_out"])
+            page.goto(f"{live_server}/pages/bonus.html")
+            page.locator('[data-testid="bn-empty"]').wait_for(timeout=20000)
+            assert "目前沒有您的獎金分潤資料" in page.inner_text('[data-testid="bn-empty"]')
+            assert "需要對應的模組權限" not in page.inner_text("body")
+            links = page.evaluate("""() => [...document.querySelectorAll('a[href]')]
+                .filter(a => /bonus\.html$/.test(a.getAttribute('href') || '')).length""")
+            assert links >= 1, "選單要有「獎金分潤」入口"
+            finance = page.evaluate("""() => {
+                const out = []
+                document.querySelectorAll('a[href]').forEach(a => {
+                  const h = a.getAttribute('href') || ''
+                  if (/(reports|cashier|voucher|account-items|bonus)\.html$/.test(h)) out.push(h.split('/').pop())
+                })
+                return [...new Set(out)]
+            }""")
+            print("M1 頁面實測：無財務權限者的財務類入口", finance)
+            assert finance == ["bonus.html"], finance
         finally:
             browser.close()
