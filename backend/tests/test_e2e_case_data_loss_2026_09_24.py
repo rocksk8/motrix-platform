@@ -244,3 +244,44 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user):
             assert result["calls"] == [], "按取消不可以送出 DELETE"
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_n11_remaining_deletes_are_gated_by_confirm(live_server, make_user):
+    """N11（使用者 2026-09-24 裁示「刪除確認全部都加」）：叫料品項、派工人員、派工品項、
+    出貨品項、階段負責人——按取消就不刪，也不送出 DELETE。確認訊息帶出名稱。"""
+    username, password = make_user(username="e2e_loss5", role="admin")
+    _seed("MQ-E2ELOSS-F")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, username, password)
+            _open(page, live_server, "MQ-E2ELOSS-F")
+            result = page.evaluate("""async () => {
+              const el = [...document.querySelectorAll('[x-data]')].find(e => e._x_dataStack && e._x_dataStack[0].selectCase)
+              const c = el._x_dataStack[0]
+              c.materialOrders = [{ itemName: '測試叫料' }]
+              c.dispatchForm = Object.assign({}, c.dispatchForm || {}, {
+                personnel: [{ name: '派工甲', amount: 1 }], items: [{ description: '派工品項', amount: 1 }] })
+              c.shippingForm = Object.assign({}, c.shippingForm || {}, { items: [{ description: '出貨品項' }] })
+              const st = { id: 999999, label: '測試階段', assignedTo: ['someone'] }
+              const asked = []
+              window.confirm = (m) => { asked.push(m); return false }
+              const calls = []
+              window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
+              c.moRemoveItem(0)
+              c.removeDispatchPersonnel(0)
+              c.removeDispatchItem(0)
+              c.removeShippingItem(0)
+              await c.removeStageAssignee(st, 'someone')
+              return { asked, calls, mo: c.materialOrders.length, dp: c.dispatchForm.personnel.length,
+                       di: c.dispatchForm.items.length, si: c.shippingForm.items.length, sa: st.assignedTo.length }
+            }""")
+            assert len(result["asked"]) == 5, result
+            for name, msg in zip(("測試叫料", "派工甲", "派工品項", "出貨品項", "測試階段"), result["asked"]):
+                assert name in msg, (name, msg)
+            assert (result["mo"], result["dp"], result["di"], result["si"], result["sa"]) == (1, 1, 1, 1, 1), result
+            assert result["calls"] == [], "按取消不可以送出 DELETE"
+        finally:
+            browser.close()

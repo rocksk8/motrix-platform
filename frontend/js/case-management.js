@@ -960,7 +960,11 @@ function app() {
       this.moMsg = ''
     },
 
+    // 2026-09-24（N11，使用者裁示「刪除確認全部都加」）：叫料品項、派工／出貨表單品項列、
+    // 負責人移除也要先確認；訊息寫出要刪的名稱。
     moRemoveItem(i) {
+      const m = this.materialOrders[i]
+      if (!confirm(`確定要刪除叫料品項「${(m && m.itemName) || '未命名'}」？\n\n按「儲存」之後才會寫入。`)) return
       this.materialOrders.splice(i, 1)
       this.moDirty = true
       this.moMsg = ''
@@ -2149,6 +2153,8 @@ function app() {
       } catch {}
     },
     async removeStageAssignee(st, username) {
+      const u = (this.selectableUsers || []).find(x => x.username === username)
+      if (!confirm(`確定要把「${(u && u.display_name) || username}」從階段「${st.label || '未命名'}」的負責人移除？`)) return
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees/${encodeURIComponent(username)}`, {
           method: 'DELETE', headers: this._authHeaders()
@@ -3306,6 +3312,8 @@ function app() {
     },
 
     removeDispatchPersonnel(idx) {
+      const p = this.dispatchForm.personnel[idx]
+      if (!confirm(`確定要刪除派工人員「${(p && p.name) || '未命名'}」這一列？`)) return
       this.dispatchForm.personnel.splice(idx, 1)
     },
 
@@ -3321,6 +3329,8 @@ function app() {
     },
 
     removeDispatchItem(idx) {
+      const it = this.dispatchForm.items[idx]
+      if (!confirm(`確定要刪除派工品項「${(it && it.description) || '未命名'}」這一列？`)) return
       this.dispatchForm.items.splice(idx, 1)
       this._recalcDispatchTotal()
     },
@@ -3525,6 +3535,8 @@ function app() {
     },
 
     removeShippingItem(idx) {
+      const it = this.shippingForm.items[idx]
+      if (!confirm(`確定要刪除出貨品項「${(it && it.description) || '未命名'}」這一列？`)) return
       this.shippingForm.items.splice(idx, 1)
     },
 
