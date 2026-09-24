@@ -1211,33 +1211,112 @@ function app() {
       this.loadVendors()
       const _qp = new URLSearchParams(location.search).get('q')
       if (_qp) {
-        // `AC2`：從全部案件找——預設清單排除已結案，只在 filteredCases 找的話，
-        // 已結案案件的連結（營運報表「待補登」清單會連過來）打開後什麼都沒選到
-        const _found = (this.cases || []).find(c => c.quote_no === _qp)
-        if (_found && !this.filteredCases.some(c => c.quote_no === _qp) && _found.deal_tag === '已結案') {
+        // CM6：清單分頁後，目標可能不在第一頁 ⇒ 用同一支清單端點（同一套權限）精確找那一件。
+        // `AC2`：已結案案件的連結（營運報表「待補登」清單會連過來）要切到「已結案」頁籤。
+        const _found = await this._findCase(_qp)
+        if (_found && _found.deal_tag === '已結案' && this.listTab !== '已結案') {
           this.listTab = '已結案'
-          this.filterCases()
+          this.loadCases()
         }
         if (_found) await this.selectCase(_found.quote_no)
       }
     },
 
+    async _findCase(quoteNo) {
+      try {
+        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', q: quoteNo, limit: '20' })
+        const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (!r.ok) return null
+        return ((await r.json()).items || []).find(c => c.quote_no === quoteNo) || null
+      } catch { return null }
+    },
+
+    // ── CM6（2026-09-24）：清單由伺服器搜尋／篩選／排序／分頁 ────────────────
+    // 原本一次拉 limit=500 在前端篩 ⇒ 第 501 件以後看不到也搜不到。現在頁籤、搜尋、排序都送到
+    // 伺服器，一頁 casePageSize 件，「載入更多」往後接；摘要數字另打一次 counts（全部案件）。
+    // 「只看有新動態」與「自訂（拖曳）排序」仍只作用在已載入的案件上。
+    casePageSize: 100,
+    caseTotal: 0,
+    caseCounts: null,
+    caseLoadingMore: false,
+    _casesSeq: 0,
+    _searchTimer: null,
+
+    _caseQuery(offset) {
+      const qs = new URLSearchParams({ limit: String(this.casePageSize), offset: String(offset) })
+      const board = this.caseViewMode === 'board'
+      if (board) qs.set('deal_tag', '已成案,已結案')
+      else if (this.listTab === '已結案') qs.set('deal_tag', '已結案')
+      else if (this.listTab === '待精算') { qs.set('deal_tag', '已成案,已結案'); qs.set('settle', 'draft') }
+      else qs.set('deal_tag', '已成案')        // 「全部」與「已成案」：未結案的案件
+      const q = (this.search || '').trim()
+      if (q) qs.set('q', q)
+      const mode = this.caseSortPref?.sortMode
+      if (mode && mode !== 'custom') { qs.set('sort', mode); qs.set('dir', this.caseSortPref.sortDir || 'desc') }
+      return qs
+    },
+
     async loadCases() {
+      const seq = ++this._casesSeq
       this.loading = true
       try {
-        const s = this.session
-        const r = await fetch('/api/quotations?deal_tag=%E5%B7%B2%E6%88%90%E6%A1%88,%E5%B7%B2%E7%B5%90%E6%A1%88&limit=500', {
-          headers: { Authorization: 'Bearer ' + s.token }
+        const r = await fetch('/api/quotations?' + this._caseQuery(0), {
+          headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (seq !== this._casesSeq) return          // 較新的查詢已送出（連續打字／切頁籤）
         if (r.ok) {
           const data = await r.json()
+          if (seq !== this._casesSeq) return
           this.cases = data.items || []
+          this.caseTotal = data.total || 0
         }
       } catch {}
+      if (seq !== this._casesSeq) return
       this.loading = false
       this.filterCases()
       this.loadCaseActivity()
-      this.loadStageBoardSummary()
+      this.loadCaseCounts()
+    },
+
+    async loadMoreCases() {
+      if (this.caseLoadingMore || this.cases.length >= this.caseTotal) return
+      const seq = this._casesSeq
+      this.caseLoadingMore = true
+      try {
+        const r = await fetch('/api/quotations?' + this._caseQuery(this.cases.length), {
+          headers: { Authorization: 'Bearer ' + this.session.token }
+        })
+        if (r.ok && seq === this._casesSeq) {
+          const data = await r.json()
+          if (seq === this._casesSeq) {
+            const have = new Set(this.cases.map(c => c.quote_no))
+            this.cases = this.cases.concat((data.items || []).filter(c => !have.has(c.quote_no)))
+            this.caseTotal = data.total || 0
+            this.filterCases()
+            this.loadCaseActivity()
+          }
+        }
+      } catch {}
+      this.caseLoadingMore = false
+    },
+
+    // 摘要與頁籤徽章：全部已成案／已結案案件（不受搜尋與分頁影響）
+    async loadCaseCounts() {
+      try {
+        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', counts: '1', limit: '0' })
+        const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) this.caseCounts = (await r.json()).counts || null
+      } catch {}
+    },
+
+    onCaseSearchInput() {
+      clearTimeout(this._searchTimer)
+      this._searchTimer = setTimeout(() => this.loadCases(), 300)
+    },
+
+    setListTab(tab) {
+      this.listTab = tab
+      this.loadCases()
     },
 
     // 視覺化改版（2026-08-23）：摘要總覽卡片的「已逾期階段」數字需要跨案件的
@@ -1253,10 +1332,11 @@ function app() {
       } catch {}
     },
 
-    summaryTotal()   { return this.cases.length },
-    summaryActive()  { return this.cases.filter(c => c.deal_tag === '已成案').length },
-    summaryOverdue() { return this.stageBoardItems.filter(i => i.overdue).length },
-    summarySettling(){ return this.cases.filter(c => c.settle_status === 'draft').length },
+    summaryTotal()   { return this.caseCounts ? this.caseCounts.all : this.cases.length },
+    summaryActive()  { return this.caseCounts ? this.caseCounts.active : 0 },
+    summaryClosed()  { return this.caseCounts ? this.caseCounts.closed : 0 },
+    summaryOverdue() { return this.caseCounts ? this.caseCounts.overdueStages : 0 },
+    summarySettling(){ return this.caseCounts ? this.caseCounts.settling : 0 },
 
     // 看板檢視分欄：跟清單分頁的定義完全一致，只是同時攤開而非切換——待精算優先
     // （呼應既有「待精算」分頁的定義，settle_status 是跟 deal_tag 獨立的另一個軸，
@@ -1356,12 +1436,12 @@ function app() {
 
     async setCaseSortMode(mode) {
       this.caseSortPref.sortMode = mode
-      this.filterCases()
+      this.loadCases()
       await saveListPref(this.session.token, 'case_list', this.caseSortPref)
     },
     async toggleCaseSortDir() {
       this.caseSortPref.sortDir = this.caseSortPref.sortDir === 'asc' ? 'desc' : 'asc'
-      this.filterCases()
+      this.loadCases()
       await saveListPref(this.session.token, 'case_list', this.caseSortPref)
     },
     initCaseSortable() {
@@ -2495,6 +2575,7 @@ function app() {
           if (logEntry) this.selected.data.statusLog.push(logEntry)
           const idx = this.cases.findIndex(c => c.quote_no === this.selected.quote_no)
           if (idx !== -1) this.cases[idx].deal_tag = tag
+          this.loadCaseCounts()
           this.filterCases()
         } else {
           // 結案防呆機制（2026-08-25/26）擋下時會回 400 + 說明未達成的前置

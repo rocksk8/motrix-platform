@@ -794,8 +794,15 @@ def list_quotations(
     deal_tag: Optional[str] = None,
     limit:    int = 100,
     offset:   int = 0,
+    q:        Optional[str] = None,
+    settle:   Optional[str] = None,
+    sort:     Optional[str] = None,
+    dir:      Optional[str] = None,
+    counts:   int = 0,
     authorization: str = Header(None),
 ):
+    """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
+    第 501 件以後看不到也搜不到）。新參數皆選填，舊呼叫端行為不變。"""
     user   = _require_user(authorization)
     conn   = get_db()
     today = datetime.now().strftime("%Y-%m-%d")
@@ -805,7 +812,10 @@ def list_quotations(
         f"{SQL_DEAL_TAG} as deal_tag, "
         "created_at, updated_at, "
         "COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) as edit_count, "
-        "json_extract(data_json, '$.editHistory') as edit_history_json, "
+        # CM6：只取最後一筆，不把整段 editHistory 撈回來（`[#-1]` 需要 SQLite 3.31，改用長度組路徑）
+        "CASE WHEN COALESCE(json_array_length(json_extract(data_json, '$.editHistory')), 0) > 0 "
+        " THEN json_extract(data_json, '$.editHistory[' || "
+        "  (json_array_length(json_extract(data_json, '$.editHistory')) - 1) || ']') END as edit_last_json, "
         f"{SQL_SETTLE_STATUS} as settle_status, "
         # Phase 5（2026-08-23）：改查 case_stages 表取代解析 caseRecord.stages JSON——
         # 正規化橋樑（3a/3b/v52）已保證這張表對每個有執行進度的案件都是權威、完整的
@@ -845,26 +855,57 @@ def list_quotations(
         tags = [t.strip() for t in deal_tag.split(",")]
         where_sql += f" AND {SQL_DEAL_TAG} IN (" + ",".join("?" * len(tags)) + ")"
         params.extend(tags)
-    sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY id DESC LIMIT ? OFFSET ?"
+    # CM6：counts 算的是「目前頁籤底下的母體」——只受權限與 deal_tag 影響，不受搜尋／待精算／分頁影響
+    base_where, base_params = where_sql, list(params)
+    if q and q.strip():
+        kw = f"%{q.strip()}%"
+        where_sql += (" AND (quote_no LIKE ? COLLATE NOCASE OR customer_name LIKE ? COLLATE NOCASE"
+                      " OR project_name LIKE ? COLLATE NOCASE)")
+        params.extend([kw, kw, kw])
+    if settle == "draft":
+        where_sql += f" AND {SQL_SETTLE_STATUS} = 'draft'"
+    # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
+    masked = not money_visible(user)
+    # CM6：排序白名單；看不到金額的帳號不可依金額排序（順序本身會洩漏金額大小）⇒ 忽略
+    sort_cols = {"quote_date": "COALESCE(NULLIF(quote_date,''), created_at)",
+                 "customer_name": "customer_name", "total": "total"}
+    order_sql = "id DESC"
+    if sort in sort_cols and not (sort == "total" and masked):
+        direction = "ASC" if (dir or "").lower() == "asc" else "DESC"
+        order_sql = f"{sort_cols[sort]} {direction}, id DESC"
+    sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?"
     rows  = conn.execute(sql, select_params + params + [limit, offset]).fetchall()
     count = conn.execute(
         "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
     ).fetchone()[0]
+    counts_out = None
+    if counts:
+        c = conn.execute(
+            f"SELECT COUNT(*) n, "
+            f" SUM(CASE WHEN {SQL_DEAL_TAG} = '已成案' THEN 1 ELSE 0 END) active, "
+            f" SUM(CASE WHEN {SQL_DEAL_TAG} = '已結案' THEN 1 ELSE 0 END) closed, "
+            f" SUM(CASE WHEN {SQL_SETTLE_STATUS} = 'draft' THEN 1 ELSE 0 END) settling "
+            f"FROM quotations WHERE 1=1{base_where}", base_params
+        ).fetchone()
+        overdue = conn.execute(
+            "SELECT COUNT(*) FROM case_stages WHERE done=0 AND due_date != '' AND due_date < ? "
+            f"AND quote_no IN (SELECT quote_no FROM quotations WHERE 1=1{base_where})",
+            [today] + base_params
+        ).fetchone()[0]
+        counts_out = {"all": c["n"] or 0, "active": c["active"] or 0, "closed": c["closed"] or 0,
+                      "settling": c["settling"] or 0, "overdueStages": overdue or 0}
     conn.close()
-    # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
-    masked = not money_visible(user)
     items = []
     for r in rows:
         row = dict(r)
         if masked:
             _mask_money_row(row)
-        eh_json     = row.pop("edit_history_json", None)
+        el_json     = row.pop("edit_last_json", None)
         edit_last = None
-        if eh_json:
+        if el_json:
             try:
-                history = json.loads(eh_json)
-                if history and isinstance(history, list):
-                    last = history[-1]
+                last = json.loads(el_json)
+                if isinstance(last, dict):
                     edit_last = {
                         "rev":       last.get("rev"),
                         "at":        last.get("at", ""),
@@ -875,7 +916,10 @@ def list_quotations(
                 pass
         row["edit_last"] = edit_last
         items.append(row)
-    return {"total": count, "items": items}
+    out = {"total": count, "items": items}
+    if counts_out is not None:
+        out["counts"] = counts_out
+    return out
 
 
 @router.get("/api/quotations/stage-board")

@@ -136,8 +136,9 @@ def test_material_orders_panel_round_trip(live_server, make_user):
         page = browser.new_page()
         case_list_calls = []
         mo_calls = []
+        # CM6：清單改分頁後，摘要計數與深連結也會打 /api/quotations?；主清單載入才帶 offset=0
         page.on("request", lambda r: case_list_calls.append(r.url)
-                if "/api/quotations?deal_tag=" in r.url else None)
+                if "/api/quotations?" in r.url and "offset=0" in r.url else None)
         page.on("request", lambda r: mo_calls.append(r.url)
                 if "/material-orders" in r.url and r.method == "GET" else None)
         api_calls = []

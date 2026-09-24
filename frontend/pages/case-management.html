@@ -672,8 +672,8 @@
               x-text="gmLoaded ? matrixRows.length + ' / ' + gateMatrix.length + ' 件　·　五關全過即可結案'
                                : '載入中…'"></span>
         <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
-          <button :class="{active: caseViewMode==='list'}"   @click="caseViewMode='list'">清單</button>
-          <button :class="{active: caseViewMode==='board'}"  @click="caseViewMode='board'">看板</button>
+          <button :class="{active: caseViewMode==='list'}"   @click="caseViewMode='list'; loadCases()">清單</button>
+          <button :class="{active: caseViewMode==='board'}"  @click="caseViewMode='board'; loadCases()">看板</button>
           <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
         </div>
       </div>
@@ -792,19 +792,19 @@
                清單/看板切換併進標題列、排序併進搜尋列。6 列變 3 列。 -->
           <div class="cm-list__title-row">
             <span class="cm-list__title">案件管理</span>
-            <span class="cm-list__count" x-text="filteredCases.length + ' 件'"></span>
+            <span class="cm-list__count" x-text="caseTotal + ' 件'"></span>
             <span class="cm-list__count cm-list__count--danger" x-show="summaryOverdue() > 0"
                   x-text="'逾期 ' + summaryOverdue()"></span>
             <div class="cm-view-toggle" style="margin-bottom:0;margin-left:auto">
-              <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'">清單</button>
-              <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'">看板</button>
+              <button :class="{active: caseViewMode==='list'}" @click="caseViewMode='list'; loadCases()">清單</button>
+              <button :class="{active: caseViewMode==='board'}" @click="caseViewMode='board'; loadCases()">看板</button>
               <button :class="{active: caseViewMode==='matrix'}" @click="switchToMatrix()">矩陣</button>
             </div>
           </div>
           <div class="cm-list__search">
             <svg class="cm-list__search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input class="cm-list__search-input" type="text" placeholder="搜尋單號或客戶..."
-                   x-model="search" @input="filterCases()">
+                   x-model="search" @input="onCaseSearchInput()">
           </div>
           <div style="display:flex;gap:6px;margin-bottom:10px" x-show="caseViewMode==='list'">
             <select class="cm-list__search-input" style="width:auto;flex:1;padding-left:10px;cursor:pointer"
@@ -819,21 +819,21 @@
                     @click="toggleCaseSortDir()" x-text="caseSortPref.sortDir === 'asc' ? '↑' : '↓'"></button>
           </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
-            <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="listTab='all'; filterCases()">
+            <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="setListTab('all')">
               全部
-              <span class="cm-list__tab-badge" x-show="cases.filter(c=>c.deal_tag!=='已結案').length" x-text="cases.filter(c=>c.deal_tag!=='已結案').length"></span>
+              <span class="cm-list__tab-badge" x-show="summaryActive()" x-text="summaryActive()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已成案'}" @click="listTab='已成案'; filterCases()">
+            <button class="cm-list__tab" :class="{active: listTab==='已成案'}" @click="setListTab('已成案')">
               已成案
-              <span class="cm-list__tab-badge" x-show="cases.filter(c=>c.deal_tag==='已成案').length" x-text="cases.filter(c=>c.deal_tag==='已成案').length"></span>
+              <span class="cm-list__tab-badge" x-show="summaryActive()" x-text="summaryActive()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="listTab='已結案'; filterCases()">
+            <button class="cm-list__tab" :class="{active: listTab==='已結案'}" @click="setListTab('已結案')">
               已結案
-              <span class="cm-list__tab-badge" x-show="cases.filter(c=>c.deal_tag==='已結案').length" x-text="cases.filter(c=>c.deal_tag==='已結案').length"></span>
+              <span class="cm-list__tab-badge" x-show="summaryClosed()" x-text="summaryClosed()"></span>
             </button>
-            <button class="cm-list__tab" :class="{active: listTab==='待精算'}" @click="listTab='待精算'; filterCases()">
+            <button class="cm-list__tab" :class="{active: listTab==='待精算'}" @click="setListTab('待精算')">
               待精算
-              <span class="cm-list__tab-badge orange" x-show="cases.filter(c=>c.settle_status==='draft').length" x-text="cases.filter(c=>c.settle_status==='draft').length"></span>
+              <span class="cm-list__tab-badge orange" x-show="summarySettling()" x-text="summarySettling()"></span>
             </button>
           </div>
         </div>
@@ -890,6 +890,14 @@
           </template>
         </div>
 
+        <!-- CM6：清單與看板共用「載入更多」 -->
+        <div x-show="(caseViewMode==='list' || caseViewMode==='board') && !loading && cases.length < caseTotal"
+             style="padding:8px 12px">
+          <button type="button" class="btn-add" data-testid="case-load-more" style="width:100%;justify-content:center"
+                  :disabled="caseLoadingMore" @click="loadMoreCases()"
+                  x-text="caseLoadingMore ? '載入中…' : '載入更多（已顯示 ' + cases.length + ' / ' + caseTotal + ' 件）'"></button>
+        </div>
+
         <!-- 看板檢視（2026-08-23）：依 待精算/進行中/已結案 分組垂直呈現，卡片沿用
              同一份 .cm-card 樣式，點擊行為跟清單模式完全一致 -->
         <div class="cm-list__body" x-show="caseViewMode==='board'">
@@ -939,7 +947,7 @@
           <div class="cm-placeholder">
             <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:.15"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
             <div class="cm-placeholder__text">從左側選擇案件開始作業</div>
-            <div class="cm-placeholder__sub" x-text="'目前共 ' + cases.length + ' 件已成案 / 已結案'"></div>
+            <div class="cm-placeholder__sub" x-text="'目前共 ' + summaryTotal() + ' 件已成案 / 已結案'"></div>
           </div>
         </template>
 
