@@ -2099,7 +2099,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V3.0'
+  const FORM_VERSION = 'V3.1'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2570,6 +2570,18 @@
       // 系統內建的 DEFAULT_TERMS（＋後端的單欄位預設付款條件）。
       // checkApproval() 的「與預設不同」比對就靠這個——否則切到非預設組會
       // 被誤判成「條件被改過」，那正是這個功能最容易踩到的坑。
+      // 2026-09-24（N13 回歸修正）：N13 把預設條款搬到後端之後，data() 裡的條款初始值變成空字串，
+      // 而 `Object.assign(this.q, 資料)` 對資料裡**沒有這個鍵**的欄位保留初始值 ⇒ 沒存過條款的
+      // 舊報價單打開時條款變空白（N13 之前是帶入預設條款）。在這裡補回原本的行為：
+      // 只補「沒有這個鍵」的欄位；存成空字串的是使用者清掉的，不動。
+      // 證據：test_e2e_quote_preview_server_layout 在 N13 之後紅——預覽 HTML 裡沒有條款，內容變短。
+      _fillMissingTerms(src) {
+        if (!this._termsDefaultsLoaded || !src || typeof src !== 'object') return
+        for (const k of Object.keys(DEFAULT_TERMS)) {
+          if (!(k in src)) this.q[k] = DEFAULT_TERMS[k]
+        }
+      },
+
       _termsBaseline() {
         const p = this._presetByKey(this.q.termsPresetKey)
         if (p) return p
@@ -3297,6 +3309,7 @@
         }
         const row = await res.json()
         Object.assign(this.q, row.data)
+        this._fillMissingTerms(row.data)
         this.q.quoteNo = row.data.quoteNo || this.q.quoteNo
         this._lastUpdatedAt = row.updated_at || null
         // 同時編輯警示（2026-09-14）：載到哪一張就回報哪一張，有別人在編會跳警示條
@@ -3698,6 +3711,7 @@
             if (matches) {
               sessionStorage.removeItem('motrix_copy_template')
               Object.assign(this.q, t)
+              this._fillMissingTerms(t)
               this.isNewRecord = true
               this.isDirty = true
               if (!this.q.quoteNo) {
@@ -3722,6 +3736,7 @@
             if (res.ok) {
               const row = await res.json()
               Object.assign(this.q, row.data)
+              this._fillMissingTerms(row.data)
               this.q.quoteNo = editNo
               this._prevDealTag = this.q.dealTag || ''
               // 舊報價單若 salesPerson 是過期硬編碼預設值，改用當前登入者

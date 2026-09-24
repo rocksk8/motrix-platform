@@ -150,3 +150,41 @@ def test_defaults_load_failure_does_not_judge_terms(live_server, make_user):
             assert not any("報價條件" in r for r in reasons), reasons
         finally:
             browser.close()
+
+
+@pytest.mark.e2e
+def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user):
+    """N13 回歸：沒存過條款的舊報價單打開時要帶入預設條款（N13 之前 data() 預設值就是如此）；
+    存成空字串的（使用者清掉的）不動。"""
+    import db
+    from helpers.quote_terms import DEFAULT_TERMS
+    username, password = make_user(username="e2e_n13d", role="superadmin")
+    conn = db.get_db()
+    try:
+        for no, extra in (("MQ-202609-091", {}), ("MQ-202609-092", {"deliveryTerms": ""})):
+            d = {"quoteNo": no, "customerName": "條款客戶", "projectName": "條款專案", "status": "草稿",
+                 "items": [], "tot": {"total": 0, "pretax": 0}}
+            d.update(extra)
+            conn.execute(
+                "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json,"
+                " created_at, updated_at, deal_tag, quote_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (no, "草稿", "條款客戶", "條款專案", 0, 0, json.dumps(d, ensure_ascii=False),
+                 "2026-09-01", "2026-09-01", "", "2026-09-01"))
+        conn.commit()
+    finally:
+        conn.close()
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_page()
+            _login(page, live_server, username, password)
+            page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-091")
+            page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-091' && !!{DATA_JS}.q.deliveryTerms",
+                                   timeout=20000)
+            assert page.evaluate(f"{DATA_JS}.q.acceptanceTerms") == DEFAULT_TERMS["acceptanceTerms"]
+            page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-092")
+            page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-092' && !!{DATA_JS}.q.warrantyTerms",
+                                   timeout=20000)
+            assert page.evaluate(f"{DATA_JS}.q.deliveryTerms") == "", "使用者清掉的條款不可以被補回"
+        finally:
+            browser.close()
