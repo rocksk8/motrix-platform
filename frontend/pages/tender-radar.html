@@ -161,10 +161,7 @@
           <div x-show="mapInfo && mapInfo.pendingGeocode > 0"
                style="color:var(--text-secondary)">
             ⏳ 有 <span x-text="mapInfo ? mapInfo.pendingGeocode : 0"></span>
-            個地址<strong>還沒定位過</strong>（不是查不到）。
-            地址轉座標每秒只能問一次，所以一次只查一部分；
-            <strong>查過的會永久記住</strong>。
-            <a href="map.html">到地圖頁按「繼續定位」</a>就會愈來愈完整。
+            個地址<strong>尚未定位</strong>，系統會在背景陸續完成，無須操作。
           </div>
           <!-- ⚠️ 這句話的成因在 §3r 之後變了，原本寫的是
                「詳細頁每天有抓取上限，其餘會在後續時段補上」——
@@ -179,13 +176,12 @@
                在成因換掉之後會變成誤導**，而它讀起來仍然完全合理。 -->
           <div x-show="mapInfo && mapInfo.withoutLocation > 0" style="color:var(--warning)">
             ⚠️ 有 <span x-text="mapInfo ? mapInfo.withoutLocation : 0"></span>
-            筆標案<strong>定位不到</strong>，它們在下面的清單裡，只是不會出現在地圖上。
-            成因有兩種：<strong>機關名稱在地圖資料裡查不到</strong>（約四分之一的機關是這樣），
-            或詳細頁的地點資訊還沒抓到（詳細頁每天有抓取上限，會在後續時段補上）。
+            筆標案<strong>無法定位</strong>，仍列於下方清單，但不會顯示於地圖。
+            原因為<strong>機關名稱查無地圖資料</strong>，或詳細頁的地點資訊尚未取得（每日有抓取上限，後續時段會補上）。
           </div>
           <div x-show="mapInfo && mapInfo.officeMissing" style="color:var(--warning)">
-            ⚠️ 尚未設定<strong>辦公室地址</strong>，所以算不出距離。
-            <a href="company-profile-settings.html">去公司資料設定填寫</a>
+            ⚠️ 尚未設定<strong>辦公室地址</strong>，無法計算距離。
+            <a href="company-profile-settings.html">前往公司資料設定</a>
           </div>
           <div x-show="mapInfo && !mapInfo.officeMissing && mapInfo.office"
                style="color:var(--text-secondary)">
@@ -193,8 +189,8 @@
           </div>
           <div x-show="mapInfo && !mapInfo.officeMissing && !mapInfo.office"
                style="color:var(--warning)">
-            ⚠️ 已填辦公室地址，但<strong>定位不到</strong>——
-            地址可能需要調整，或地理查詢未啟用（<code>MOTRIX_GEO=1</code>）。
+            ⚠️ 辦公室地址<strong>無法定位</strong>：
+            請確認地址是否正確，或地理查詢是否已啟用（<code>MOTRIX_GEO=1</code>）。
           </div>
           <!-- 「附近廠商」：沒有金鑰時**那一塊不存在**，不是一個按了會壞的按鈕。
                ⚠️ 最容易做錯的兩種：載入 Google 腳本但金鑰是空字串（灰色浮水印＝壞掉的樣子），
@@ -205,9 +201,8 @@
           </div>
           <div x-show="mapInfo && !mapInfo.googleMapsConfigured"
                style="color:var(--text-secondary)">
-            附近廠商：<strong>未啟用</strong>——這是選用功能，
-            需要在公司資料設定填入 Google Maps 金鑰。
-            <strong>底圖與距離不需要金鑰，照常運作。</strong>
+            附近廠商：<strong>未啟用</strong>（選用功能，需於公司資料設定填入 Google Maps 金鑰）。
+            底圖與距離不需要金鑰。
           </div>
         </div>
       </div>
