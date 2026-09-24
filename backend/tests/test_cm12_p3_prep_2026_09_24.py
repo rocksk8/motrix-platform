@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CSS = ROOT / "frontend" / "css" / "style.css"
 DOC = ROOT / "docs" / "windows" / "CM12-P3-COLOR-TOKENS.md"
 PAGE = ROOT / "frontend" / "pages" / "case-management.html"
-PAGE_JS = ROOT / "frontend" / "js" / "case-management.js"
+# CM12 起案件頁 JS 拆成 case-management-*.js
+PAGE_JS_FILES = sorted((ROOT / "frontend" / "js").glob("case-management-*.js"))
 COLOR = r"#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|rgba?\([^)]*\)"
 SMALL_FONT_NOW = 114      # 2026-09-24 的現況（10px 87、9px 15、10.5px 6、9.5px 5、8.5px 1）
 
@@ -37,7 +38,7 @@ def _token_blocks():
 
 
 def _page_colors():
-    text = PAGE.read_text(encoding="utf-8") + PAGE_JS.read_text(encoding="utf-8")
+    text = PAGE.read_text(encoding="utf-8") + "".join(p.read_text(encoding="utf-8") for p in PAGE_JS_FILES)
     return {_norm(c) for c in re.findall(COLOR, text)}
 
 

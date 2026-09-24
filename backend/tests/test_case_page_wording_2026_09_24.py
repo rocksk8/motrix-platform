@@ -9,7 +9,8 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HTML = ROOT / "frontend" / "pages" / "case-management.html"
-JS = ROOT / "frontend" / "js" / "case-management.js"
+# CM12 起案件頁 JS 拆成 case-management-*.js
+JS_FILES = sorted((ROOT / "frontend" / "js").glob("case-management-*.js"))
 
 OLD_WORDS = {"代辦": "待辦", "備注": "備註", "完結案": "結案", "外包名單人員": "外包人員"}
 
@@ -30,7 +31,7 @@ def _visible(path):
 
 def _hits(pred):
     out = []
-    for path in (HTML, JS):
+    for path in (HTML, *JS_FILES):
         for n, line in enumerate(_visible(path), 1):
             if pred(line):
                 out.append(f"{path.name}:{n}: {line.strip()[:100]}")
