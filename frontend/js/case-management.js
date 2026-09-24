@@ -1416,7 +1416,11 @@ function app() {
       })
     },
 
+    // 連點兩件時，只有最後點的那一件可以落地（先點的回應較晚抵達時丟掉）
+    _selectSeq: 0,
+
     async selectCase(quoteNo) {
+      const seq = ++this._selectSeq
       // 2026-09-24：有未存的變更時先存完再切換。原本這裡直接取消待存計時器、
       // 下面再 dirty=false ⇒ 打完字 1.5 秒內切換案件，剛打的內容就消失。
       clearTimeout(this._autoSaveTimer)
@@ -1433,6 +1437,7 @@ function app() {
         })
         if (!r.ok) return
         const data = await r.json()
+        if (seq !== this._selectSeq) return
         this.selected = data
         // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
         //      那一筆的未讀標記必須還在。
