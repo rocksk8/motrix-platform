@@ -48,8 +48,7 @@ def _setup(page, live_server, make_user, seed_extra_expense, uname):
     seed_extra_expense(QUOTE, total_cost=5000, category="運費", description="吊車運費",
                        expense_date="2026-09-10", doc_no="AB12345678")
     u, p = make_user(username=uname, role="superadmin", modules=["cashier"])
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     r = page.request.post(f"{live_server}/api/vouchers",
                           headers={"Authorization": "Bearer " + token},
                           data={"summary": "JV33", "lines": [

@@ -13,17 +13,14 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    return inject_login(page, base_url, username, password)
 
 
 @pytest.mark.e2e
@@ -33,6 +30,7 @@ def test_superadmin_sees_online_widget(live_server, make_user, e2e_browser):
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector("#tb-online-btn", timeout=10000)
     page.click("#tb-online-btn")
     page.wait_for_selector("#tb-online-pop", state="visible", timeout=5000)
@@ -55,6 +53,7 @@ def test_admin_does_not_see_online_widget(live_server, make_user, e2e_browser):
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector("#app-topbar .topbar__right", timeout=10000)
     page.wait_for_timeout(300)
     assert page.locator("#tb-online-btn").count() == 0, "管理員也看得到在線成員按鈕"

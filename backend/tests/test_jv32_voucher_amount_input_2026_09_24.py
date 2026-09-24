@@ -148,8 +148,7 @@ def test_jv32_on_the_page_typing_1_comma_000_saves_1000(live_server, make_user, 
     u, p = make_user(username="jv32_page", role="superadmin", modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 900})
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     _fill_new_voucher(page, live_server, "1,000", "１，０００")
     page.wait_for_function(
         "() => Alpine.$data(document.querySelector('[x-data]')).id"

@@ -195,6 +195,7 @@ def test_bell_marks_only_the_notification_that_was_clicked(live_server, make_use
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, pw)
+    page.goto(live_server + "/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_timeout(800)
     page.locator(".topbar__btn:has-text('通知')").click()
     first = page.locator("[data-notif-id='%s']" % ids[0])
@@ -222,13 +223,12 @@ def test_menu_badge_clears_the_moment_the_item_is_clicked(live_server, make_user
     u, pw = make_user(username="alice", role="superadmin")
     browser = e2e_browser
     page = browser.new_page()
-    _login(page, live_server, u, pw)
-    tok = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    tok = _login(page, live_server, u, pw)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     r = page.request.post(live_server + "/api/reads", headers={"Authorization": "Bearer " + tok},
                           data={"kind": "module", "key": "customer"})
     assert r.ok, r.text()
     _audit("bob", "customer.update", "customer", 1)
-    page.reload()
+    page.goto(live_server + "/index.html")   # PERF #5：原本 reload（走登入頁時停在 index）；注入登入後頁面是空白頁
     badge = page.locator("#sb-mod-customer")
     page.wait_for_function(
         "() => { const b = document.getElementById('sb-mod-customer');"
@@ -485,8 +485,7 @@ def _two_tabs_with_customer_badge(p, live_server, u, pw):
     browser = p   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     ctx = browser.new_context()
     a = ctx.new_page()
-    _login(a, live_server, u, pw)
-    tok = a.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    tok = _login(a, live_server, u, pw)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     r = a.request.post(live_server + "/api/reads", headers={"Authorization": "Bearer " + tok},
                        data={"kind": "module", "key": "customer"})
     assert r.ok
@@ -570,6 +569,7 @@ def _two_tabs_with_two_notifications(p, live_server, u, pw):
     ctx = browser.new_context()
     a = ctx.new_page()
     _login(a, live_server, u, pw)
+    a.goto(live_server + "/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     b = ctx.new_page()
     b.goto(live_server + "/index.html")
     count_b = b.locator(".topbar__btn:has-text('通知') span[x-text]")

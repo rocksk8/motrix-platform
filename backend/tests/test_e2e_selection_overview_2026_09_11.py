@@ -24,6 +24,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 # 六類品牌目錄，順序即頁面上的顯示順序
@@ -40,11 +41,7 @@ EXPECTED_SECTIONS = [
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    return inject_login(page, base_url, username, password)
 
 
 @pytest.mark.e2e

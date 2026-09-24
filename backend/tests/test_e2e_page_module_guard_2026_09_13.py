@@ -18,17 +18,14 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    return inject_login(page, base_url, username, password)
 
 
 #: 一個只有 `dashboard`＋`quotation` 的帳號，**導覽列裡一個都不該出現**的字。
@@ -151,6 +148,7 @@ def test_admin_without_module_loses_both_item_and_group_name(live_server, make_u
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector(".mnav .mnav__top", timeout=10000)
     names = _nav_vocabulary(page)
     # ⚙️ **正對照：這個帳號自己的兩個模組必須看得到。**
@@ -195,6 +193,7 @@ def test_admin_with_module_still_sees_the_group(live_server, make_user, e2e_brow
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector(".mnav .mnav__top", timeout=10000)
     names = _nav_vocabulary(page)
     # 🔑 用兩層詞彙之後，這一條**不再依賴「財務底下只有一項」**：
@@ -210,6 +209,7 @@ def test_superadmin_still_sees_everything(live_server, make_user, e2e_browser):
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector(".mnav .mnav__top", timeout=10000)
     names = _nav_vocabulary(page)
     for expect in ("業務", "案件", "營運報表", "廠商與採購", "選型資料庫", "系統"):

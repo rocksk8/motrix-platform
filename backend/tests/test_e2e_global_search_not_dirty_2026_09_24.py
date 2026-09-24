@@ -13,6 +13,7 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 GLOBAL_SEARCH = "input[placeholder^='搜尋客戶']"
 
@@ -24,11 +25,7 @@ def test_typing_in_global_search_does_not_mark_page_dirty(live_server, make_user
     u = make_user(username="gsd_e1", role="admin")
     browser = e2e_browser
     page = browser.new_context().new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/quotations.html")
     page.wait_for_selector(GLOBAL_SEARCH, timeout=15000)
     page.evaluate("() => { window.motrixIsDirty = false }")
@@ -48,11 +45,7 @@ def test_voucher_list_filters_do_not_mark_page_dirty(live_server, make_user, e2e
     u = make_user(username="gsd_e2", role="superadmin")
     browser = e2e_browser
     page = browser.new_context().new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/voucher.html")
     page.wait_for_selector("[data-testid=voucher-filter-kw]", timeout=15000)
     page.evaluate("() => { window.motrixIsDirty = false }")
@@ -69,11 +62,7 @@ def test_user_list_search_does_not_mark_page_dirty(live_server, make_user, e2e_b
     u = make_user(username="gsd_e3", role="superadmin")
     browser = e2e_browser
     page = browser.new_context().new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/users.html")
     page.wait_for_selector("input[x-model=userSearch]", timeout=15000)
     page.evaluate("() => { window.motrixIsDirty = false }")

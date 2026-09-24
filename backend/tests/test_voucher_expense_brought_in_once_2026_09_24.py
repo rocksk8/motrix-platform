@@ -168,8 +168,7 @@ def test_the_panel_marks_a_taken_expense_and_refuses_to_bring_it_in(
     vid = r.json()["id"]
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 900})
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     _open_with_case(page, live_server, token, vid)
     item = page.locator('[data-testid="summary-panel-expense"]:has-text("吊車運費")').first
     mark = item.locator('[data-testid="expense-used"]')

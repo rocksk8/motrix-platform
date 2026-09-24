@@ -69,6 +69,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
@@ -84,11 +85,7 @@ def _rendered(page):
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    return inject_login(page, base_url, username, password)
 
 
 def _create_voucher(page, live_server, token):
@@ -145,10 +142,7 @@ def test_jv19_export_failure_message_is_visible_inside_the_preview(
                                    modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 800})
-    _login(page, live_server, username, password)
-    token = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('motrix_session'))"
-        ".token")
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     vid = _create_voucher(page, live_server, token)
     _open_preview(page, live_server, token, vid)
 
@@ -186,10 +180,7 @@ def test_jv19_export_success_message_is_visible_inside_the_preview(
                                    modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 800})
-    _login(page, live_server, username, password)
-    token = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('motrix_session'))"
-        ".token")
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     vid = _create_voucher(page, live_server, token)
     for step in ("submit", "approve", "approve"):
         r = page.request.post(

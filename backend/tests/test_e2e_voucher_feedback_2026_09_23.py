@@ -52,6 +52,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 #: `voucher.html` 的把關模組（實查 `sidebar.js:753`／`:476`）。
@@ -75,11 +76,7 @@ ERR_MSG = ".vc-err"
 
 
 def _login(page, base_url, username, password):
-    page.goto("%s/pages/login.html" % base_url)
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    return inject_login(page, base_url, username, password)
 
 
 # ── 等待（PERF #6，2026-09-25：固定 sleep 換成等可觀測事件）────────────────────────

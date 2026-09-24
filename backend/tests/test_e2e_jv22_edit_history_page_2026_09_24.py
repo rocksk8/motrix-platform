@@ -18,6 +18,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 SECTION = '[data-testid="voucher-edit-history"]'
@@ -36,11 +37,7 @@ def _api(client, hdr, method, path, body=None):
 def _section_state(live_server, u, p, vid, e2e_browser):
     browser = e2e_browser
     page = browser.new_page()
-    page.goto("%s/pages/login.html" % live_server)
-    page.fill('input[x-model="username"]', u)
-    page.fill('input[x-model="password"]', p)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u, p)
     page.goto("%s/pages/voucher.html?id=%s" % (live_server, vid))
     page.wait_for_selector(SECTION, state="visible", timeout=15000)
     sec = page.locator(SECTION)

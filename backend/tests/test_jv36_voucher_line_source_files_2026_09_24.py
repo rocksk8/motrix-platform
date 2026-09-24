@@ -193,8 +193,7 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
     vid = r.json()["id"]
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 900})
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     _open_with_case(page, live_server, token, vid)
     page.locator("textarea[x-model='l.summary']").nth(1).fill("原本的摘要")
     page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
@@ -241,8 +240,7 @@ def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
     vid = r.json()["id"]
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 900})
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     _open_with_case(page, live_server, token, vid)
     page.click('[data-testid="summary-panel-expense"]:has-text("雜支")')
     line = page.evaluate("() => %s.lines[1]" % _D)

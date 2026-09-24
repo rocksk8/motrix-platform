@@ -19,6 +19,7 @@ pytest.importorskip("playwright.sync_api")
 
 import pyotp
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 CARD = ".card:has-text('兩步驟驗證')"
@@ -27,11 +28,7 @@ CARD = ".card:has-text('兩步驟驗證')"
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    return inject_login(page, base_url, username, password)
 
 
 def _session_token(page):
@@ -70,8 +67,7 @@ def test_recovery_remaining_and_regenerate_flow(live_server, make_user, e2e_brow
     page = browser.new_page()
     errors = []
     page.on("pageerror", lambda e: errors.append(str(e)))
-    _login(page, live_server, username, password)
-    token = _session_token(page)
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     assert token, "登入後 localStorage 應該有 session"
     _secret, old_codes = _enable_totp_via_api(page, live_server, token)
     # 先用掉一組：實際值變 9，而前端的初始預設值是 10。兩者不同才分得出
@@ -117,8 +113,7 @@ def test_low_remaining_shows_warning(live_server, make_user, e2e_browser):
 
     browser = e2e_browser
     page = browser.new_page()
-    _login(page, live_server, username, password)
-    token = _session_token(page)
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     _secret, codes = _enable_totp_via_api(page, live_server, token)
 
     # 直接把救援碼消到剩 2 組：走真實登入路徑用掉 8 組

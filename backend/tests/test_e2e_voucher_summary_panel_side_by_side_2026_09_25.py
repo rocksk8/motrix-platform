@@ -9,6 +9,7 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 
 QNO = "MQ-VCSPLIT-01"
@@ -49,11 +50,7 @@ def _open(browser, base, u, vid, width, height, zoom=None):
     if zoom:
         ctx.add_init_script(f"try {{ localStorage.setItem('motrix_font_zoom', '{zoom}') }} catch (e) {{}}")
     page = ctx.new_page()
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, u[0], u[1])
     page.goto(f"{base}/pages/voucher.html?id={vid}")
     page.wait_for_function(f"() => {{ try {{ return {D}.id == {vid} && {D}.lines.length && {D}.canEdit }} catch (e) {{ return false }} }}",
                            timeout=20000)

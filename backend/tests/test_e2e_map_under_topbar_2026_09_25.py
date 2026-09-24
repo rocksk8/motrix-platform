@@ -12,6 +12,7 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 
 MD = "Alpine.$data(document.querySelector('.mp-wrap'))"
@@ -75,11 +76,7 @@ def _open(browser, base, u):
     ctx = browser.new_context(viewport={"width": 1440, "height": 520})
     ctx.route("**/tile.openstreetmap.org/**", lambda r: r.fulfill(status=200, content_type="image/png", body=PNG))
     page = ctx.new_page()
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, u[0], u[1])
     page.goto(f"{base}/pages/map.html")
     page.wait_for_function(f"() => {{ try {{ return {MD}._map }} catch (e) {{ return false }} }}", timeout=20000)
     # PERF #6：原本固定等 1.2 秒 ⇒ 等點位載完（loading 解除）＋畫出來（兩個影格）

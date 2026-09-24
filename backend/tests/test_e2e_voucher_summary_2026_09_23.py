@@ -44,6 +44,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 #: ⚠️ 我單方面宣告的掛鉤。改名**退回給我**。
@@ -73,11 +74,7 @@ TYPED = "工資"
 
 
 def _login(page, base_url, username, password):
-    page.goto("%s/pages/login.html" % base_url)
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    return inject_login(page, base_url, username, password)
 
 
 def _seed_case(quote_no="MQ-202608-009", customer="京城凱悅"):

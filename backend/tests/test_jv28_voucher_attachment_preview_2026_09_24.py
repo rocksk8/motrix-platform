@@ -62,8 +62,7 @@ def _png_bytes():
 
 def _setup(page, live_server, make_user, uname):
     u, p = make_user(username=uname, role="superadmin", modules=["cashier"])
-    _login(page, live_server, u, p)
-    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    token = _login(page, live_server, u, p)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     vid = _create_voucher(page, live_server, token)
     return token, vid
 

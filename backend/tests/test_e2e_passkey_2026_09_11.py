@@ -56,6 +56,7 @@ import uvicorn
 # 那一檔**不會**被這個開關 skip——否則整組 Passkey 測試全 skip 時，端點是真的
 # 回 404 還是路由根本壞了，沒有任何一題分得出來。
 from helpers.auth import PASSKEY_ENABLED
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 pytestmark = pytest.mark.skipif(
@@ -183,11 +184,7 @@ def _cred_row(username):
 
 
 def _login_with_password(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base_url, username, password)
 
 
 def _click_register(page):

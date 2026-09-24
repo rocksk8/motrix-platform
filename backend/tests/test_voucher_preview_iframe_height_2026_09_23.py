@@ -147,10 +147,7 @@ def test_jv25_iframe_keeps_a_healthy_share_of_height_with_many_attachments(
                                    modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 800})
-    _login(page, live_server, username, password)
-    token = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('motrix_session'))"
-        ".token")
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     vid = _create_voucher(page, live_server, token)
     _upload_n(page, live_server, token, vid, 10)
     _open_preview(page, live_server, token, vid)
@@ -180,10 +177,7 @@ def test_jv25_the_ratio_does_not_degrade_as_attachment_count_grows(
                                    modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 800})
-    _login(page, live_server, username, password)
-    token = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('motrix_session'))"
-        ".token")
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
 
     v_few = _create_voucher(page, live_server, token)
     _upload_n(page, live_server, token, v_few, 1)
@@ -246,10 +240,7 @@ def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appear
                                    modules=["cashier"])
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 800})
-    _login(page, live_server, username, password)
-    token = page.evaluate(
-        "() => JSON.parse(localStorage.getItem('motrix_session'))"
-        ".token")
+    token = _login(page, live_server, username, password)["token"]   # PERF #5：注入登入後頁面停在空白頁，token 取回傳值
     vid = _create_voucher(page, live_server, token)
     _upload_n(page, live_server, token, vid, 10)
     _open_preview(page, live_server, token, vid)
