@@ -21,6 +21,20 @@ RPT = "Alpine.$data(document.querySelector('[x-data]'))"
 _SAVE_WAIT_MS = 30000
 
 
+def _sends(resp, key, value):
+    """這一個回應對應的請求有沒有送出 key=value。
+
+    ☠️ 只比網址會接錯回應：Playwright 的 fill() 在日期欄上**本身就會觸發 change**，
+    再 dispatch_event("change") ⇒ 同一格送兩次；晚到的那一次會被下一格的等待接走，
+    題目就在下一格的請求還沒完成時去讀資料庫（實測：付款日的等待接到 {"invoiceDate":...}）。
+    """
+    try:
+        body = json.loads(resp.request.post_data or "{}")
+    except (TypeError, ValueError):
+        return False
+    return isinstance(body, dict) and body.get(key) == value
+
+
 def _saved(resp_info, what):
     r = resp_info.value
     body = r.request.post_data or ""
@@ -97,7 +111,7 @@ def test_case_page_stage_ratio_and_dispatch_invoice_date_land(live_server, make_
             ratio = page.locator('[data-testid="stage-ratio"]').first
             ratio.wait_for(state="visible", timeout=20000)
             ratio.fill("60")
-            with page.expect_response(lambda r: "/stages/%s" % sid in r.url and r.request.method == "PUT",
+            with page.expect_response(lambda r: "/stages/%s" % sid in r.url and _sends(r, "ratioBp", 6000),
                                       timeout=_SAVE_WAIT_MS) as resp:
                 ratio.dispatch_event("change")
             _saved(resp, "階段比例")
@@ -112,7 +126,7 @@ def test_case_page_stage_ratio_and_dispatch_invoice_date_land(live_server, make_
             inv = page.locator('[data-testid="dispatch-invoice-date"]').first
             inv.wait_for(state="visible", timeout=20000)
             inv.fill("2026-05-03")
-            with page.expect_response(lambda r: "/invoice-date" in r.url, timeout=_SAVE_WAIT_MS) as resp:
+            with page.expect_response(lambda r: "/invoice-date" in r.url and _sends(r, "invoiceDate", "2026-05-03"), timeout=_SAVE_WAIT_MS) as resp:
                 inv.dispatch_event("change")
             _saved(resp, "派工發票日期")
             assert _one("SELECT invoice_date FROM contractor_dispatches WHERE id=?", (did,)) == "2026-05-03"
@@ -136,17 +150,17 @@ def test_extra_expense_dates_after_approval_land(live_server, make_user, seed_ex
             inv = page.locator('[data-testid="xe-invoice-date"]').first
             inv.wait_for(state="visible", timeout=20000)
             inv.fill("2026-04-04")
-            with page.expect_response(lambda r: r.url.endswith("/dates"), timeout=_SAVE_WAIT_MS) as resp:
+            with page.expect_response(lambda r: r.url.endswith("/dates") and _sends(r, "invoiceDate", "2026-04-04"), timeout=_SAVE_WAIT_MS) as resp:
                 inv.dispatch_event("change")
             _saved(resp, "額外支出發票日期")
             paid = page.locator('[data-testid="xe-paid-date"]').first
             paid.fill("2026-04-10")
-            with page.expect_response(lambda r: r.url.endswith("/dates"), timeout=_SAVE_WAIT_MS) as resp:
+            with page.expect_response(lambda r: r.url.endswith("/dates") and _sends(r, "paidDate", "2026-04-10"), timeout=_SAVE_WAIT_MS) as resp:
                 paid.dispatch_event("change")
-            _saved(resp, "額外支出付款日")
+            _b2 = _saved(resp, "額外支出付款日")
             row = (_one("SELECT invoice_date FROM case_extra_expenses WHERE id=?", (eid,)),
                    _one("SELECT paid_date FROM case_extra_expenses WHERE id=?", (eid,)))
-            assert row == ("2026-04-04", "2026-04-10"), "已核准的支出也要登得進去"
+            assert row == ("2026-04-04", "2026-04-10"), "已核准的支出也要登得進去；付款日送出：%s" % _b2
         finally:
             browser.close()
 
@@ -167,7 +181,7 @@ def test_material_invoice_date_survives_save_and_reload(live_server, make_user):
             inv = page.locator('[data-testid="mo-invoice-date"]').first
             inv.wait_for(state="visible", timeout=20000)
             inv.fill("2026-04-20")
-            with page.expect_response(lambda r: "/invoice-date" in r.url, timeout=_SAVE_WAIT_MS) as resp:
+            with page.expect_response(lambda r: "/invoice-date" in r.url and _sends(r, "invoiceDate", "2026-04-20"), timeout=_SAVE_WAIT_MS) as resp:
                 inv.dispatch_event("change")   # 發票日期改了就直接存（專用端點），不必按「儲存叫料」
             _saved(resp, "叫料發票日期")
 
@@ -205,7 +219,7 @@ def test_material_invoice_date_on_a_closed_case_lands_without_pressing_save(live
             inv.wait_for(state="visible", timeout=20000)
             assert inv.is_enabled(), "已結案也要能登發票日期"
             inv.fill("2026-05-05")
-            with page.expect_response(lambda r: "/invoice-date" in r.url, timeout=_SAVE_WAIT_MS) as resp:
+            with page.expect_response(lambda r: "/invoice-date" in r.url and _sends(r, "invoiceDate", "2026-05-05"), timeout=_SAVE_WAIT_MS) as resp:
                 inv.dispatch_event("change")
             _saved(resp, "已結案叫料發票日期")
 
