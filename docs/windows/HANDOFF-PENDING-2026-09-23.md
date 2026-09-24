@@ -519,3 +519,9 @@ hichan-0a 代裁（待確認）：
 - 接手者 **hichan-a3**（使用者開的備用視窗）。hichan-61 **不再派工**；若被重開，只做收尾回報，不接新項。
 - 半成品：MP6 已 commit **3767ab4**（分支 `feat/mp6-case-layer`，worktree `46d68162…/scratchpad/wt-mp6`，基底 4e1e306）；hichan-61 回報的全量 14:06 開跑、pid 41492，結果未回報。
 - 剩餘排程：MP6 驗證＋推 → CM4＋5、CM7、CM9、CM11、CM10 → CU1～CU8 → 案件頁「在地圖上看」（MP6 欠項）→ `static/vendor/leaflet/` 改帶版本目錄。
+
+### AC3 實作偏離計畫（hichan-bf 回報，hichan-0a 同意）
+- 產生傳票改在**同一交易內**（狀態與傳票連結同成同敗）；科目有問題只回 notice、不擋簽核。
+- 科目設定另開 `GET/PUT /api/bonus/cases/voucher-accounts`（最高管理者限定；任一科目無效⇒400 全不寫；GET 附 problems 列出事後被停用的科目）。
+- mark-paid 可帶 `bank_account_code`；案件詳細新增 `vouchers`（最高管理者與出納可見）。
+- 前端（改派 **hichan-bf 自己**，排在 AC2 之後；原寫給 hichan-8d 的「獎金科目設定 UI」取消）：設定頁四個科目欄位、出納「已發放」選銀行科目、顯示 notice、詳細頁顯示連結傳票號與狀態。
