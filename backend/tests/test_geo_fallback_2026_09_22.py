@@ -141,7 +141,9 @@ def _no_outbound(monkeypatch):
 # A1 · 拿得到座標就一定拿得到精度與來源
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a1_a_located_address_always_carries_precision_and_source(monkeypatch):
+# 📌 2026-09-24：A1～A8 都加了 `client`——沒有它的話讀寫的是當時 `db.DB_PATH` 指到的庫，
+#    單獨跑時就是**開發用資料庫**（A9 就是這樣被上一次的結果弄紅的）。
+def test_a1_a_located_address_always_carries_precision_and_source(client, monkeypatch):
     """🔴 A1：**拿得到座標，就一定拿得到 `precision` 與 `source`。**
 
     ☠️ 「門牌精度」與「行政區精度」在畫面上都是一個圖釘，而距離可能差好幾公里。
@@ -162,7 +164,7 @@ def test_a1_a_located_address_always_carries_precision_and_source(monkeypatch):
     )
 
 
-def test_a1b_the_result_is_a_named_structure_not_a_bare_tuple(monkeypatch):
+def test_a1b_the_result_is_a_named_structure_not_a_bare_tuple(client, monkeypatch):
     """A1 的形狀：**回傳要是具名結構，不是裸 tuple。**
 
     ⚠️ 裸 tuple 可以被 `coord, *_ = locate(...)` 拆掉 ——
@@ -184,7 +186,7 @@ def test_a1b_the_result_is_a_named_structure_not_a_bare_tuple(monkeypatch):
 # A2／A10 · 手動座標
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a2_manual_coordinates_skip_every_lookup(monkeypatch):
+def test_a2_manual_coordinates_skip_every_lookup(client, monkeypatch):
     """🔴 A2：**填了手動座標就完全不對外查詢。**
 
     省錢，也精準 —— 使用者自己填的那一個一定比任何服務猜的準。
@@ -247,7 +249,7 @@ def test_a10_out_of_range_manual_coordinates_are_rejected(
 # A3／A5 · 退階順序
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a3_google_wins_when_it_answers(monkeypatch):
+def test_a3_google_wins_when_it_answers(client, monkeypatch):
     """🔴 A3 第一階：Google 查得到 ⇒ **不再往下走**。"""
     _enable(monkeypatch)
     _set_setting(GOOGLE_KEY_SETTING, "AIza-fake")
@@ -262,7 +264,7 @@ def test_a3_google_wins_when_it_answers(monkeypatch):
     assert not lower, f"Google 已經查到了，還往下走了：{lower}"
 
 
-def test_a3b_falls_through_to_nominatim_when_the_upper_stages_fail(monkeypatch):
+def test_a3b_falls_through_to_nominatim_when_the_upper_stages_fail(client, monkeypatch):
     """🔴 A3 第二階：Google 與 TGOS 都查不到 ⇒ **走到 Nominatim**。
 
     ⚠️ 這一題**不是只驗「最後有座標」**（A 明文說不要那種）——
@@ -278,7 +280,7 @@ def test_a3b_falls_through_to_nominatim_when_the_upper_stages_fail(monkeypatch):
     )
 
 
-def test_a5_precision_changes_with_the_stage_actually_reached(monkeypatch):
+def test_a5_precision_changes_with_the_stage_actually_reached(client, monkeypatch):
     """🔴🔴 A5 反向控制：**`precision` 要真的隨走到的那一階改變。**
 
     ⚠️ 沒有這一題，一個**永遠回 `street`** 的實作會讓 A1／A3 全綠 ——
@@ -307,7 +309,7 @@ def test_a5_precision_changes_with_the_stage_actually_reached(monkeypatch):
 # A4 · 行政區退階
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a4_falls_back_to_the_district_when_the_full_address_fails(monkeypatch):
+def test_a4_falls_back_to_the_district_when_the_full_address_fails(client, monkeypatch):
     """🔴🔴 A4：完整地址查不到 ⇒ **自動只取「縣市＋區」再查一次**。
 
     這就是起因那件事：**查得到「梧棲區」，而現行實作整個回報失敗。**
@@ -341,7 +343,7 @@ def test_a4_falls_back_to_the_district_when_the_full_address_fails(monkeypatch):
     )
 
 
-def test_a4b_the_district_extractor_handles_the_real_address(monkeypatch):
+def test_a4b_the_district_extractor_handles_the_real_address(client, monkeypatch):
     """A4 的前提：`district_of()` 真的從那個地址切得出「縣市＋區」。
 
     ⚠️ 沒有這一題，A4 可能因為**切不出來**而永遠走不到退階，
@@ -353,7 +355,7 @@ def test_a4b_the_district_extractor_handles_the_real_address(monkeypatch):
     )
 
 
-def test_a4c_an_address_with_no_district_does_not_loop(monkeypatch):
+def test_a4c_an_address_with_no_district_does_not_loop(client, monkeypatch):
     """對照組：切不出行政區時**不可以拿原地址再查一次**。
 
     ⚠️ 一個 `district_of()` 回原字串的實作會讓 A4 綠，
@@ -381,7 +383,7 @@ def test_a4c_an_address_with_no_district_does_not_loop(monkeypatch):
 # A6／A7／A8 · 沒有憑證就不發請求
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a6_no_google_key_means_no_google_request(monkeypatch):
+def test_a6_no_google_key_means_no_google_request(client, monkeypatch):
     """🔴 A6：沒有 Google 金鑰 ⇒ **根本不發請求**（不是「發了失敗」）。
 
     ⚠️ 觀測點是「**有沒有發出去**」，不是回傳值 ——
@@ -398,7 +400,7 @@ def test_a6_no_google_key_means_no_google_request(monkeypatch):
     )
 
 
-def test_a7_no_tgos_appid_means_no_tgos_request(monkeypatch):
+def test_a7_no_tgos_appid_means_no_tgos_request(client, monkeypatch):
     """🔴 A7：沒有 TGOS AppID ⇒ 同上。
 
     📌 **這一題不管 TGOS 的條款怎麼寫都成立** ——
@@ -414,7 +416,7 @@ def test_a7_no_tgos_appid_means_no_tgos_request(monkeypatch):
     assert not tgos_calls, f"沒有 AppID 卻還是打了 TGOS：{tgos_calls}"
 
 
-def test_a8_the_master_switch_stops_every_stage(monkeypatch):
+def test_a8_the_master_switch_stops_every_stage(client, monkeypatch):
     """🔴 A8：`geo_on()` 關著時**一階都不走**。
 
     ⚠️ 而它要擋的是**所有**外部來源，不只 Nominatim ——
