@@ -3372,7 +3372,9 @@
                          否則已核准/已匯款的申請會從畫面上消失，找不到地方下載 -->
                     <div x-show="(d.status==='completed' || d.status==='accepted' || _dispatchVoucher(d)) && ['superadmin','admin'].includes(session.role)"
                          style="padding:8px 16px;border-top:1px solid var(--border-light);background:#FFFBEB;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                      <template x-if="!_dispatchVoucher(d)">
+                      <span x-show="contractorVouchersLoading" style="font-size:11px;color:var(--text-dim)">載入中…</span>
+                      <!-- CM8：匯款憑據改成點進這個分頁才載入；載入完之前不可以顯示「產生匯款申請」（會重複建立） -->
+                      <template x-if="!contractorVouchersLoading && !_dispatchVoucher(d)">
                         <button @click="createContractorVoucher(d)"
                                 style="padding:4px 10px;font-size:11px;border:1px solid #FCD34D;background:#FEF3C7;color:#92400E;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:600">
                           產生匯款申請

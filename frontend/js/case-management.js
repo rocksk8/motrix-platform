@@ -442,7 +442,7 @@ function app() {
     finUnpaidVouchers()   { return (this.finPayable()?.vouchers || []).filter(v => v.status === '已核准' && !v.isPaid) },
 
     // ── 額外支出（2026-09-11）────────────────────────────────────────────────
-    async loadExtraExpenses(quoteNo) {
+    async loadExtraExpenses(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       // 比照 loadMaterialOrders()：發請求當下記住是哪張單，回應抵達時再比對。
@@ -451,7 +451,7 @@ function app() {
       this._xeReqFor = quoteNo
       this.xe.loading = true
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`, {
+        const r = pre ? this._preResp(pre) : await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return
@@ -836,7 +836,7 @@ function app() {
     completionNotesLoading: false,
     completionPreviewFetching: false,
 
-    async loadCompletionNotes(quoteNo) {
+    async loadCompletionNotes(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       // 比照 loadExtraExpenses()：記住發請求當下是哪張單，回應抵達時再比對。
@@ -844,7 +844,7 @@ function app() {
       this._cnReqFor = quoteNo
       this.completionNotesLoading = true
       try {
-        const r = await fetch(`/api/completion-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
+        const r = pre ? this._preResp(pre) : await fetch(`/api/completion-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return
@@ -1160,6 +1160,7 @@ function app() {
       // 2026-09-24：離頁警告（sidebar.js）跟著主表單的 dirty 走：setDirty() 設 true，
       // 存檔成功（dirty 轉 false）時清掉。
       this.$watch('dirty', v => { window.motrixIsDirty = !!v })
+      this.$watch('activeTab', v => this.ensureTabData(v))      // CM8：分頁延後載入
       this._initTabFromUrl()
       // QL15：據點清單。不 await —— 它只決定一行小字要不要顯示，
       // 而這一頁的主體（案件矩陣）不應該等它。
@@ -1649,6 +1650,27 @@ function app() {
       })
     },
 
+    // CM8（2026-09-24）：case-bundle 的一段 → 與 fetch 回應同形狀，loader 不必分兩條路
+    _preResp(pre) {
+      return { ok: !!pre.ok, status: pre.ok ? 200 : (pre.status || 500), json: async () => pre.data }
+    },
+
+    // CM8：開案件只打 case-bundle；下面這些改成「點到那個分頁才載入」（同一件只載一次，
+    // 之後照原本各自的 reload）。載入前旗標先設 loading，畫面顯示「載入中」而不是「尚無資料」。
+    _tabLoaded: {},
+    ensureTabData(tab) {
+      const no = this.selected?.quote_no
+      if (!no || this._tabLoaded[tab] === no) return
+      const loaders = {
+        fin: () => { this.loadFinanceSummary(no); this.loadInvoiceVouchers(no); this.loadPaymentRequests(no); this.loadMaterialOrders(no) },
+        dispatch: () => { this.loadContractorVouchers(no) },
+        feed: () => { this._loadCaseTasks(no) },
+      }
+      if (!loaders[tab]) return
+      this._tabLoaded = { ...this._tabLoaded, [tab]: no }
+      loaders[tab]()
+    },
+
     // 連點兩件時，只有最後點的那一件可以落地（先點的回應較晚抵達時丟掉）。
     // _selectLive() 回傳「這次載入還算數嗎」：之後又選了案件就回 false。selectCase 與它
     // 發出的每支子載入在每個 await 之後都先問它，前一件的後段不會寫進目前這一件的畫面與存檔。
@@ -1673,18 +1695,20 @@ function app() {
       ++this._selectSeq
       const live = this._selectLive()
       try {
-        const r = await fetch('/api/quotations/' + quoteNo, {
+        const r = await fetch('/api/quotations/' + encodeURIComponent(quoteNo) + '/case-bundle', {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!r.ok) return
-        const data = await r.json()
+        const bundle = await r.json()
         if (!live()) return
+        const data = bundle.quotation
+        const parts = bundle.parts || {}
         this.selected = data
         // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
         //      那一筆的未讀標記必須還在。
         this._markCaseRead(quoteNo)
-        this.loadCaseHealth(quoteNo)
-        this.loadCaseLinks(quoteNo)
+        this.loadCaseHealth(quoteNo, parts.health)
+        this.loadCaseLinks(quoteNo, parts.vouchers)
         // 同時編輯警示（2026-09-14）：切換案件時自動釋放前一張、回報這一張
         if (window.MotrixPresence) window.MotrixPresence.start('case', quoteNo)
         // 分頁/檢視狀態必須在任何 await 之前就重設完（2026-09-09 修）：
@@ -1707,6 +1731,20 @@ function app() {
         this.moDirty = false
         this.moMsg = ''
         this.moLoading = true
+        // CM8（2026-09-24）：延後載入（點分頁才載）的清單也屬於「必須在 await 之前重設完」那一類——
+        // 下面 _seedDefaultStagesIfEmpty() 期間使用者就可能點開財務／承攬商／動態；重設若放在
+        // await 之後，會把那次已載好的資料清掉、又重載一次（e2e 量到過整組請求發兩次）。
+        this._tabLoaded = {}
+        this.caseTasks = []
+        this.contractorVouchers = []
+        this.invoiceVouchers = []
+        this.paymentRequests = []
+        this.financeSummary = null
+        this.financeSummaryLoading = true
+        this.invoiceVouchersLoading = true
+        this.paymentRequestsLoading = true
+        this.contractorVouchersLoading = true
+        this.caseTasksLoading = true
         this.cr.dealTag = data.data?.dealTag || data.deal_tag || '已成案'
         this.cr.caseRecord = data.data?.caseRecord || null
         // 基準取伺服器原值（ensureCaseRecord 補上的預設分段會被當成改動送出）
@@ -1735,7 +1773,6 @@ function app() {
         this._devHoverStart = 0
         this.caseActionItems = []
         this.assignedUserIds = data.assigned_user_ids || []
-        this.caseTasks = []
         this.caseUpdates = []
         this.newComment = ''
         this.shippingNotes = []
@@ -1745,32 +1782,23 @@ function app() {
         this.shippingContactOptions = []
         this.showShippingContactPicker = false
         this.closeShippingPreview()
-        this.contractorVouchers = []
         this.closeContractorVoucherPreview()
-        this.invoiceVouchers = []
         this.closeInvoiceVoucherPreview()
-        this.paymentRequests = []
-        this.financeSummary = null
         this.finShowRecvDetail = false
         this.finShowPayDetail = false
         // 叫料的四個旗標已經在 await 之前重設過了（見上面），這裡不再重複
         this.xe = { ...this.xe, loading: true, items: [], totalAmount: 0,
                     totalPending: 0, pendingCount: 0, msg: '', busy: false }
-        this._loadCaseTasks(quoteNo)
-        this.loadDispatches(quoteNo)
+        this.loadDispatches(quoteNo, parts.dispatches)
         // 2026-09-14：這三個原本是「點分頁才載」，但分頁上的數量徽章要在沒點過
         // 之前就正確——沒載入時綁 .length 會顯示 0，看起來像「這案子沒有出貨單」，
         // 比沒有徽章更糟。兩個 loader 都是單純 GET、無副作用（不會標記已讀），
         // 這裡本來就已經並行打 8 個端點，多這三個是邊際成本。
-        this.loadShippingNotes(quoteNo)
-        this.loadCompletionNotes(quoteNo)
-        this.loadCaseUpdates(quoteNo)
-        this.loadContractorVouchers(quoteNo)
-        this.loadInvoiceVouchers(quoteNo)
-        this.loadPaymentRequests(quoteNo)
-        this.loadFinanceSummary(quoteNo)
-        this.loadMaterialOrders(quoteNo)
-        this.loadExtraExpenses(quoteNo)
+        this.loadShippingNotes(quoteNo, parts.shippingNotes)
+        this.loadCompletionNotes(quoteNo, parts.completionNotes)
+        this.loadCaseUpdates(quoteNo, parts.updates)
+        this.loadExtraExpenses(quoteNo, parts.extraExpenses)
+        this.ensureTabData(this.activeTab)
       } catch {}
     },
 
@@ -2678,10 +2706,10 @@ function app() {
     // 回應可能在使用者已切到別的案件後才抵達 ⇒ 只收「目前選的那一件」的回應。
     caseHealth: { quoteNo: '', gates: [] },
 
-    async loadCaseHealth(quoteNo) {
+    async loadCaseHealth(quoteNo, pre) {
       if (!quoteNo) return
       try {
-        const r = await fetch('/api/quotations/' + encodeURIComponent(quoteNo) + '/close-gates', {
+        const r = pre ? this._preResp(pre) : await fetch('/api/quotations/' + encodeURIComponent(quoteNo) + '/close-gates', {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!r.ok) return
@@ -2733,12 +2761,14 @@ function app() {
       return 'map.html?focus=' + encodeURIComponent('cases:' + this.selected.quote_no)
     },
 
-    async loadCaseLinks(quoteNo) {
+    async loadCaseLinks(quoteNo, preVouchers) {
       if (!quoteNo) return
       const auth = { Authorization: 'Bearer ' + this.session.token }
       const out = { quoteNo, vouchers: [], bonusEnabled: false }
       const jobs = []
-      if (this._hasModule('cashier') || this._hasModule('finance')) {
+      if (preVouchers && (this._hasModule('cashier') || this._hasModule('finance'))) {
+        out.vouchers = (preVouchers.ok && preVouchers.data && preVouchers.data.vouchers) || []
+      } else if (this._hasModule('cashier') || this._hasModule('finance')) {
         jobs.push(fetch('/api/vouchers/by-case/' + encodeURIComponent(quoteNo), { headers: auth })
           .then(r => r.ok ? r.json() : null).then(d => { out.vouchers = (d && d.vouchers) || [] }).catch(() => {}))
       }
@@ -3695,7 +3725,7 @@ function app() {
 
     // ── 動態 Tab ──────────────────────────────────────────────────────────────
 
-    async loadCaseUpdates(quoteNo) {
+    async loadCaseUpdates(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       this.updatesLoading = true
@@ -3703,7 +3733,7 @@ function app() {
       this.feedCalMode = false
       this.feedCalSelDate = ''
       try {
-        const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
+        const r = pre ? this._preResp(pre) : await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return
@@ -3959,13 +3989,13 @@ function app() {
       } catch {}
     },
 
-    async loadDispatches(quoteNo) {
+    async loadDispatches(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       this.dispatchesLoading = true
       this.dispatches = []
       try {
-        const r = await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
+        const r = pre ? this._preResp(pre) : await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return
@@ -4215,7 +4245,7 @@ function app() {
 
     // ── 出貨單 ────────────────────────────────────────────────────────────────
 
-    async loadShippingNotes(quoteNo) {
+    async loadShippingNotes(quoteNo, pre) {
       if (!quoteNo) return
       const live = this._selectLive()
       this.shippingNotesLoading = true
@@ -4223,7 +4253,7 @@ function app() {
       this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
       if (!live()) return
       try {
-        const r = await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
+        const r = pre ? this._preResp(pre) : await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!live()) return

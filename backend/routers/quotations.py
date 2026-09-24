@@ -2236,6 +2236,48 @@ def _case_close_block_reasons(conn, quote_no: str, d: dict):
     return [r for r in reasons if r], list(dict.fromkeys(pending_usernames))
 
 
+@router.get("/api/quotations/{quote_no}/case-bundle")
+def case_bundle(quote_no: str, authorization: str = Header(None)):
+    """開案件一次取回首屏要用的資料（CM8，2026-09-24）。原本 selectCase 一次發 15 支請求。
+
+    - `quotation`：同 GET /api/quotations/{quote_no}（含 CM13 遮蔽、CM14b cashierReadOnly）。這一段
+      被擋就整支回同樣的錯誤——看不到案件本體，其他段也沒有意義。
+    - `parts`：健康總覽、傳票連結、承攬派工、出貨單、完工單、動態、額外支出。**每一段直接呼叫
+      既有端點函式**，同一份 authorization ⇒ 權限判斷與分開打時逐字相同，不另寫一套。某一段被擋
+      ⇒ `{"ok": false, "status": 403, "detail": …}`，不略過、也不讓整包失敗（前端照原本「那一支
+      回非 2xx」處理）。
+    - 其餘（應收應付、開票／請款／匯款憑據、叫料、今日工作）改由前端點到該分頁時才載入。
+    - 不加快取（hichan-0a 裁 D3）：資料都是即時的，只合併請求。
+    """
+    from routers.vouchers import vouchers_by_case
+    from routers.vendor_contractors import list_dispatches
+    from routers.shipping_notes import list_shipping_notes
+    from routers.completion_notes import list_completion_notes
+    from routers.case_extra_expenses import list_extra_expenses
+
+    _require_user(authorization)          # get_quotation 也會驗；這裡先驗，登入失效時不必進任何一段
+    quotation = get_quotation(quote_no, authorization)
+
+    def part(fn, *args, **kwargs):
+        try:
+            return {"ok": True, "data": fn(*args, **kwargs)}
+        except HTTPException as e:
+            return {"ok": False, "status": e.status_code, "detail": e.detail}
+
+    return {
+        "quotation": quotation,
+        "parts": {
+            "health":          part(case_close_gates, quote_no, authorization=authorization),
+            "vouchers":        part(vouchers_by_case, quote_no, authorization=authorization),
+            "dispatches":      part(list_dispatches, quote_no=quote_no, authorization=authorization),
+            "shippingNotes":   part(list_shipping_notes, quote_no=quote_no, authorization=authorization),
+            "completionNotes": part(list_completion_notes, quote_no=quote_no, authorization=authorization),
+            "updates":         part(list_case_updates, quote_no, authorization=authorization),
+            "extraExpenses":   part(list_extra_expenses, quote_no, authorization=authorization),
+        },
+    }
+
+
 @router.get("/api/quotations/{quote_no}/close-gates")
 def case_close_gates(quote_no: str, authorization: str = Header(None)):
     """單一案件的完結案五關（2026-09-24）：結案前先列出來、可點過去修。
