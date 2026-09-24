@@ -13,7 +13,7 @@ pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
-    DATA_JS, NOTE_INPUT, _login, live_server,
+    DATA_JS, _login, live_server,
 )
 
 NO = "MQ-ROLESEL-001"
@@ -52,7 +52,9 @@ def _open(browser, base, user):
     page.on("dialog", lambda d: d.accept())
     _login(page, base, *user)
     page.goto(f"{base}/pages/case-management.html?q={NO}")
-    page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
+    # CU5（2026-09-24）：收款搬到「財務」分頁，收款備註不再是案件資訊分頁的就緒訊號
+    # ⇒ 改等這一題真正要操作的人員角色選單
+    page.locator(SALES_SELECT).wait_for(state="visible", timeout=20000)
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=10000)
     page.wait_for_function(f"() => ({DATA_JS}.selectableUsers || []).length > 0", timeout=10000)
     return page
