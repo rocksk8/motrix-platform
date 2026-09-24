@@ -356,6 +356,16 @@ function voucherPage() {
 
     closePanel() { this.panelLine = -1 },
 
+    // 點來源帶入後焦點回到那一行的摘要格：並排時使用者不必離開分錄就能接著打字（2026-09-25）。
+    keepSummaryFocus() {
+      const i = this.panelLine >= 0 ? this.panelLine : this.summaryTarget
+      if (i == null || i < 0) return
+      this.$nextTick(() => {
+        const t = document.querySelectorAll('textarea[x-model="l.summary"]')[i]
+        if (t) t.focus({ preventScroll: true })
+      })
+    },
+
     // ── 附件（`JV3`）──────────────────────────────────────────────
 
     async uploadAttachments(ev) {

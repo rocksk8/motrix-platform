@@ -58,7 +58,15 @@
     .vc-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;line-height:1.7}
     .vc-ok{margin:10px 0;padding:9px 11px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:var(--radius);font-size:12px;color:#14532D;line-height:1.7}
 
-    .vc-wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+    .vc-wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;container-type:inline-size}
+    .vc-src-ph{display:none}
+    @container (min-width: 1330px) {
+      .vc-sheet.vc-sheet--split{flex:1 1 0;min-width:0;max-width:none}
+      .vc-body--split{display:grid;grid-template-columns:minmax(640px,1fr) 300px;gap:20px;align-items:start}
+      .vc-body--split .vc-body__side{position:sticky;top:calc(var(--topbar-h,54px) + 12px);max-height:calc(100vh / var(--fz,1) - var(--topbar-h,54px) - 24px);overflow-y:auto}
+      .vc-body--split .vc-body__side > .vc-src:first-of-type{margin-top:0}
+      .vc-body--split .vc-src-ph{display:block;padding:14px;border:1px dashed var(--border-light);border-radius:var(--radius);font-size:12px;line-height:1.8;color:var(--text-secondary);font-family:var(--font-zh)}
+    }
     .vc-side{width:290px;flex-shrink:0;font-family:var(--font-zh)}
     .vc-side__hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text-primary)}
     .vc-side__chk{font-size:11px;color:var(--text-secondary);font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer}
@@ -249,7 +257,7 @@
                要開新的請按左上角的「＋ 新增傳票」。</div>
         </div>
 
-        <div class="vc-sheet" x-show="editing">
+        <div class="vc-sheet" :class="{ 'vc-sheet--split': canEdit }" x-show="editing">
           <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
                寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
           <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>
@@ -297,6 +305,10 @@
               <option :value="a.code" :label="a.label" x-text="a.label"></option>
             </template>
           </datalist>
+          <!-- 分錄與帶入來源：內容欄夠寬時左右並排（右欄 sticky、獨立捲動），不夠寬（含字級「特」）時上下排。
+               用 container query 看 .vc-wrap 的實際寬度：字級是根元素 zoom，media query 看不到（2026-09-25）。 -->
+          <div class="vc-body" :class="{ 'vc-body--split': canEdit }">
+            <div class="vc-body__main">
           <table class="vc-lines">
             <thead>
               <tr>
@@ -393,6 +405,9 @@
                   x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
           </div>
 
+            </div>
+            <div class="vc-body__side">
+              <div class="vc-src-ph" x-show="canEdit && panelLine < 0">點摘要格，就能在這裡帶入案件、支出項與檔案；分錄不用離開畫面。</div>
           <!-- ══ 摘要來源（JV7）═══════════════════════════════════════
                使用者逐字（§159b (7)）：「摘要部分也要有分頁選單帶入案件跟
                哪些已上傳檔案並帶入摘要，也可以手動填寫或修改摘要」。
@@ -433,7 +448,7 @@
             <div data-testid="summary-panel-cases" style="margin-top:8px">
               <div class="vc-src__hint" style="margin:4px 0">案件</div>
               <template x-for="(e, ei) in panelCases()" :key="'c' + ei">
-                <button class="vc-src__item" data-testid="summary-panel-case" @click="panelPick(e)">
+                <button class="vc-src__item" data-testid="summary-panel-case" @click="panelPick(e); keepSummaryFocus()">
                   <span class="vc-src__txt" x-text="e.summary"></span>
                 </button>
               </template>
@@ -445,7 +460,7 @@
               <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
               <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
                 <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
-                        data-testid="summary-panel-expense" @click="panelPick(e)">
+                        data-testid="summary-panel-expense" @click="panelPick(e); keepSummaryFocus()">
                   <span class="vc-src__txt" x-text="e.summary"></span>
                   <!-- `JV21`：已被其他未作廢傳票帶入 ⇒ 紅字寫出傳票號（點了會被擋並說明） -->
                   <span class="vc-src__used" data-testid="expense-used" x-show="(e.usedBy || []).length"
@@ -481,7 +496,7 @@
                 <div>
                   <button class="vc-src__item" data-testid="summary-source-item"
                           :disabled="!canEdit || (it.exists === false)"
-                          @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it)">
+                          @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it); keepSummaryFocus()">
                     <span class="vc-src__txt"
                           x-text="it.summary || it.text || it.filename"></span>
                     <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
@@ -520,7 +535,7 @@
                       <button class="vc-src__item vc-src__item--child"
                               data-testid="summary-source-child"
                               :disabled="!canEdit"
-                              @click="applySource(ch)">
+                              @click="applySource(ch); keepSummaryFocus()">
                         <span class="vc-src__txt" x-text="ch.summary"></span>
                       </button>
                     </template>
@@ -537,6 +552,8 @@
             <template x-if="sourceErr">
               <div class="vc-err" x-text="sourceErr"></div>
             </template>
+          </div>
+            </div>
           </div>
 
           <!-- ══ 附件（JV3）════════════════════════════════════════════
