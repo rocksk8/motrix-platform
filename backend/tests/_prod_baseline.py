@@ -6,6 +6,7 @@
    BASELINE 只能往後移（新的正式機 commit 必須是舊的後代）。
 
 📌 2026-09-25：使用者確認正式機＝46dc6ae（2026-09-24 02:46:15 部署）。
+📌 2026-09-25 02:5x：使用者回報已把 20260925_023333_3a66611 更新到正式機 ⇒ 基準改 3a66611。
 """
 import json
 import subprocess
@@ -14,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-BASELINE = "46dc6ae"
+BASELINE = "3a66611"
 
 
 def baseline_manifest():
