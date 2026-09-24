@@ -514,3 +514,29 @@ def test_queue_message_does_not_crash_when_stdout_is_not_utf8(tmp_path):
     out = proc.stdout + proc.stderr
     assert "INTERNALERROR" not in out, out[-800:]
     assert proc.returncode == 4, f"應排隊到上限後擋下（4），實際 {proc.returncode}\n{out[-800:]}"
+
+
+# ── 暫存資料夾用完即刪（2026-09-24 使用者：核心規則）─────────────────────────────
+
+def test_a_finished_run_deletes_its_own_basetemp(tmp_path):
+    """🔴 一輪跑完就刪掉自己的 basetemp；旁邊別人的目錄不動（不可以用萬用字元整批刪）。"""
+    bt = tmp_path / "motrix-pytest-x-adhoc"
+    neighbour = tmp_path / "motrix-pytest-someone-else"
+    neighbour.mkdir()
+    (neighbour / "in_use.db").write_text("x", encoding="utf-8")
+    env = utf8_env(MOTRIX_PYTEST_LOCK=str(tmp_path / "lock"), MOTRIX_PYTEST_KEEP_BASETEMP=None)
+    proc = run_python(["-m", "pytest", TARGET, "-q", "-p", "no:randomly", f"--basetemp={bt}"],
+                      cwd=BACKEND, env=env, timeout=180)
+    assert proc.returncode == 0, proc.stdout[-600:]
+    assert not bt.exists(), "跑完了 basetemp 還在 ⇒ 每輪留 1~2GB"
+    assert (neighbour / "in_use.db").exists(), "刪到了別人的目錄"
+
+
+def test_keep_flag_leaves_basetemp_for_debugging(tmp_path):
+    """反向控制：設 MOTRIX_PYTEST_KEEP_BASETEMP=1 時保留（查紅燈用）。"""
+    bt = tmp_path / "motrix-pytest-keep-adhoc"
+    env = utf8_env(MOTRIX_PYTEST_LOCK=str(tmp_path / "lock"), MOTRIX_PYTEST_KEEP_BASETEMP="1")
+    proc = run_python(["-m", "pytest", TARGET, "-q", "-p", "no:randomly", f"--basetemp={bt}"],
+                      cwd=BACKEND, env=env, timeout=180)
+    assert proc.returncode == 0, proc.stdout[-600:]
+    assert bt.exists(), "設了保留旗標卻被刪掉"

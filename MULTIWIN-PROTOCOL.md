@@ -342,6 +342,10 @@ python -m pytest tests/ --collect-only -q --basetemp=<固定路徑> | tail -1   
    臨時單檔跑  --basetemp=...\motrix-pytest-<視窗>-adhoc
    ```
    固定 ⇒ 不會指到別人的；分用途 ⇒ **同一個視窗的兩次跑也不會互刪**。
+   🔴 **2026-09-24 使用者核心規則：測試資料夾用完就刪**（09-14 清出 190 GB、09-24 又 228 GB）。
+   conftest 的 `pytest_sessionfinish` 會在一輪結束時自動刪掉**該輪自己的** basetemp；
+   要留下來查紅燈設 `MOTRIX_PYTEST_KEEP_BASETEMP=1`，查完自己刪。
+   ⚠️ 手動清理**只刪自己建的目錄，不可用 `motrix-pytest-*` 萬用字元整批刪**——同日有人這樣做，刪到別的視窗使用中的目錄。
    ⚠️ 2026-09-21 視窗 C 實測：**pytest 會把 `--basetemp` 整個刪掉重建**，觸發時機是**第一次有測試用到 `tmp_path`／`tmp_path_factory`**（不是 session 開始，視窗 C 實測更正）。全量回歸跑到 86% 時另跑一支單檔測試，
    把它正在用的 `motrix_app0/motrix_erp.db` 刪掉了。
    ⚠️ **這一句的精確度有影響**：照舊的「session 開始」說法，下一個人寫一支不碰 `tmp_path` 的測試去驗證，會看到目錄**沒有**被刪，並據此認定這條規則是假的。

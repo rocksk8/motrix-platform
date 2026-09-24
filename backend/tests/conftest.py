@@ -925,6 +925,48 @@ def _unlink_quietly(path):
         pass
 
 
+def _basetemp_safe_to_delete(path) -> bool:
+    """只刪「一輪測試自己的 basetemp」，不可能刪到 TEMP 根、磁碟根或 repo。"""
+    try:
+        p = Path(path).resolve()
+    except OSError:
+        return False
+    if not p.exists() or not p.is_dir():
+        return False
+    temp_root = Path(tempfile.gettempdir()).resolve()
+    repo_root = Path(__file__).resolve().parents[2]
+    if p == temp_root or p == Path(p.anchor) or p in repo_root.parents or p == repo_root:
+        return False
+    if repo_root in p.parents and "tests" not in p.parts:
+        return False                      # repo 底下的一般目錄一律不動
+    return len(p.parts) >= 3
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """🔴 一輪跑完（綠或紅）就刪掉**這一輪自己的** basetemp。
+
+    使用者 2026-09-24 明訂為核心規則：「測試的資料夾用完要記得刪掉，已經多次發生導致硬碟損耗過高」
+    （09-14 清出 190 GB、09-24 又累積 228 GB）。靠人記得已經失敗三次 ⇒ 改成這裡自動做。
+    - 只刪 `--basetemp` 指到的那一個目錄，**不用萬用字元**（09-24 有人用 motrix-pytest-* 整批刪，
+      刪到別的視窗使用中的目錄）。
+    - xdist worker 不刪（它們的目錄在主行程的 basetemp 底下，由主行程一次刪）。
+    - 要留下來查紅燈：設 `MOTRIX_PYTEST_KEEP_BASETEMP=1`，查完自己刪。
+    """
+    config = session.config
+    if hasattr(config, "workerinput"):
+        return
+    if os.environ.get("MOTRIX_PYTEST_KEEP_BASETEMP") == "1":
+        return
+    basetemp = config.option.basetemp
+    if not basetemp or not _basetemp_safe_to_delete(basetemp):
+        return
+    import shutil
+    shutil.rmtree(str(basetemp), ignore_errors=True)
+    if Path(basetemp).exists():
+        _lock_say("\n[暫存] %s 有部分檔案仍被佔用、沒刪乾淨，請稍後手動刪除" % basetemp)
+
+
 def pytest_unconfigure(config):
     """只釋放**自己**拿到的鎖。
 
