@@ -95,7 +95,8 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
             dialogs = []
             page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
             _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}")
+            # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
+            page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}&tab=fin")
             delete_received = page.locator(
                 "xpath=//label[.//span[normalize-space()='已收款']]"
                 "/following-sibling::button[contains(@class,'btn-del')]")
