@@ -503,3 +503,9 @@ hichan-0a 代裁（待確認）：
 - 階段完成後又取消完成 ⇒ 認列隨之撤回（報表即時計算，不落帳）。
 
 分工：hichan-bf＝migration、報表口徑、四種支出單的發票日期欄（後端＋各自頁面）；**階段比例的案件管理 UI** ＝ hichan-8d，排在 N14 之後、CM12 之前。
+
+### CM13 追加裁示（2026-09-24 使用者表單）
+- 持 **cashier 模組**但無 financial_view 的帳號：**不遮蔽**，案件頁可看、可登錄收款金額（與出納頁 cashier.py:37 一致）⇒ 遮蔽條件＝「無 can_see_financial **且** 無 cashier 模組」；既有題 `test_cashier_module_user_can_save_payment_received_via_case_record` 維持原意。
+- 無財務權限的帳號**新建報價單不擋**（編輯仍 403）。
+- D3 更正（hichan-8d 查證）：簽核佇列非 admin 只看得到自己送審或在簽核鏈上的單＝既有簽核人例外 ⇒ **不需改**；原「任何登入者都看得到 total」是探查代理的錯誤。
+- 叫料 PATCH 對無財務權限帳號 403（比照 D1，單價必填送不出正確值）——hichan-0a 同意。
