@@ -263,6 +263,20 @@
             <option value="all">全部</option>
           </select>
         </label>
+        <!-- `MP4`：關鍵字（名稱／機關／地址／地點）與「附近 N 筆」。 -->
+        <input class="mp-search" type="search" x-model="q" @input.debounce.250ms="_redraw()"
+               placeholder="搜尋名稱、機關、地址" style="font-size:12px;padding:3px 6px;width:180px">
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px">
+          <span style="color:var(--text-secondary)">範圍</span>
+          <select class="mp-near" x-model="nearN" @change="_redraw()" style="font-size:12px;padding:2px 4px">
+            <option value="">全部</option>
+            <option value="10">最近 10 筆</option>
+            <option value="20">最近 20 筆</option>
+            <option value="50">最近 50 筆</option>
+          </select>
+          <span x-show="nearN" style="font-size:11px;color:var(--text-dim)"
+                x-text="hasUserPos ? '（依與您的距離）' : '（依與最近據點的距離）'"></span>
+        </label>
       </div>
       <!-- 圖例：**圖釘上的字才是分辨的載體**。
            🔑 顏色只是輔助 —— 色覺差異的人要看得出來，
@@ -380,7 +394,8 @@
                📌 加上 index 之後保證唯一。 -->
           <template x-for="(p, i) in (info ? view.points : [])"
                     :key="(p.dataset || '?') + '|' + (p.caseNo || p.name || '') + '|' + i">
-            <tr>
+            <!-- `MP4`：點一列 ⇒ 地圖移到那一點並開彈窗（點列內的連結照常開連結）。 -->
+            <tr class="mp-row" style="cursor:pointer" @click="rowClicked($event, p)">
               <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
                    不是資料集 —— 對使用者沒有意義。 -->
               <td style="font-size:11px;white-space:nowrap">
@@ -403,6 +418,10 @@
                 <!-- `MP1`：連回單據。看不到那一頁的人不給連結（`recordUrl` 回 null）。 -->
                 <template x-if="recordUrl(p)">
                   <a class="mp-rec" :href="recordUrl(p)" style="font-size:11px;margin-left:6px">開啟單據</a>
+                </template>
+                <template x-if="navUrl(p)">
+                  <a class="mp-nav" :href="navUrl(p)" target="_blank" rel="noopener noreferrer"
+                     style="font-size:11px;margin-left:6px">導航</a>
                 </template>
               </td>
               <td style="font-size:12px" x-text="p.location || '—'"></td>
@@ -522,6 +541,44 @@ function mapPage() {
     // `MP3`：標案截止狀態（後端 `deadlineStatus`）。未知日期用標案原色並寫明「截止日不明」——
     //   ⚠️ 不可以當成已截止：預設篩選會把它藏起來，而它可能正是還能投的。
     tenderFilter: 'notClosed',
+    // `MP4`：關鍵字與「附近 N 筆」（空字串＝全部）。
+    q: '', nearN: '',
+    _markerOf: null, _pendingRow: null,
+    //: Google 導航**只給網址**（使用者點了才由 Google 處理；我們不存任何 Google 回傳的資料）。
+    navUrl(p) {
+      const lat = Number(p && p.lat), lon = Number(p && p.lon)
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null
+      return 'https://www.google.com/maps/dir/?api=1&destination=' + lat + ',' + lon
+    },
+    _matchesQuery(p) {
+      const q = String(this.q || '').trim().toLowerCase()
+      if (!q) return true
+      return [p.name, p.org, p.address, p.location]
+        .some(t => String(t || '').toLowerCase().includes(q))
+    },
+    _nearest(points) {
+      const n = parseInt(this.nearN, 10)
+      if (!n) return points
+      // 有「我的位置」就依與您的距離，否則依與最近據點的距離；**算不出距離的不列入**（無從比較遠近）。
+      const key = this.hasUserPos ? 'distanceFromUserKm' : 'distanceFromOfficeKm'
+      return points.filter(p => typeof p[key] === 'number')
+        .slice().sort((a, b) => a[key] - b[key]).slice(0, n)
+    },
+    _raw(p) { return (window.Alpine && window.Alpine.raw) ? window.Alpine.raw(p) : p },
+    rowClicked(e, p) {
+      if (e && e.target && e.target.closest && e.target.closest('a, button, input, select')) return
+      const raw = this._raw(p)
+      if (!this._map) { this._pendingRow = raw; this.openMap(); return }
+      this._focusPoint(raw)
+    },
+    _focusPoint(raw) {
+      const marker = this._markerOf && this._markerOf.get(raw)
+      if (!marker) return
+      this._focusMarker = marker
+      this._showFocus()
+      const el = document.getElementById('mp-canvas')
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' })
+    },
     deadlineStyles: {
       open:    { color: '#2563EB', label: '未截止' },
       closing: { color: '#E11D48', label: '7 天內截止' },
@@ -560,9 +617,10 @@ function mapPage() {
       const on = new Set(this.picked)
       return {
         // ⚠️ 先確認是陣列：格式不對時畫面要照樣畫得出來，不可以讓整個重畫拋錯（MP0 題抓到）。
-        points: (Array.isArray(info.points) ? info.points : [])
+        points: this._nearest((Array.isArray(info.points) ? info.points : [])
           .filter(p => !p.sourceKey || on.has(p.sourceKey))
-          .filter(p => this._tenderShown(p)),
+          .filter(p => this._tenderShown(p))
+          .filter(p => this._matchesQuery(p))),
         sources: (Array.isArray(info.sources) ? info.sources : [])
           .filter(s => on.has(s.source)),
       }
@@ -999,6 +1057,7 @@ function mapPage() {
                      + this._esc(loc.address || ''))
       })
       this._markerByKey = {}
+      this._markerOf = new WeakMap()
       // `MP2`：資料點進群聚圖層（重疊的點合成一個數字圈）；據點與「你」不群聚——它們是參考點。
       //   ⚠️ `animate: false`：群聚的拆合動畫是 setTimeout 接力，焦點定位（`_showFocus`）同步去拿
       //   「現在包著它的是誰」會拿到動畫前那一個 ⇒ 散開打在舊群聚上、彈窗開在不在圖上的標記
@@ -1025,6 +1084,8 @@ function mapPage() {
         const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(dataLayer)
         const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
+        this._markerOf.set(this._raw(p), marker)
+        const nav = this.navUrl(p)
         const ds = this.deadlineStyleOf(p)
         marker.bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
                       ds ? ('截止：' + (p.deadline || '—') + '（' + ds.label + '）') : '',
@@ -1036,12 +1097,15 @@ function mapPage() {
                                 + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
                      .filter(Boolean).map(t => this._esc(t)).join('<br>')
-                   + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : ''))
+                   + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : '')
+                   + (nav ? (url ? '　' : '<br>') + '<a class="mp-nav" href="' + this._esc(nav)
+                            + '" target="_blank" rel="noopener noreferrer">Google 導航</a>' : ''))
       })
       if (this._cluster) this._cluster.addTo(this._layer)
       this._drawUser()
       this._fitAll(!!this._focus)
       this._applyFocus()
+      if (this._pendingRow) { const r = this._pendingRow; this._pendingRow = null; this._focusPoint(r) }
     },
 
     //: `MP1`：把視野移到 `?focus=` 指的那一點並打開彈窗。**找不到要說出來**——
