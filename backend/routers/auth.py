@@ -689,6 +689,8 @@ def login_qr_approve(body: QrApproveIn, request: Request):
             still = _totp_pending.get(body.challenge_token)
             if still:
                 still["approved"] = True
+        _audit(body.session_token, "auth.login_qr_approve", "user", row["username"], row["username"],
+               {"method": "session", "ip": ip})
         return {"ok": True}
 
     conn.close()
@@ -713,6 +715,9 @@ def login_qr_approve(body: QrApproveIn, request: Request):
         if still:
             still["approved"] = True
     _rl_clear(ip)
+    # 密碼核准：呼叫端沒有 session ⇒ 以被核准的帳號記在 target（username 欄留空）。
+    _audit(None, "auth.login_qr_approve", "user", row["username"], row["username"],
+           {"method": "password", "ip": ip})
     return {"ok": True}
 
 
@@ -792,6 +797,7 @@ def totp_setup(authorization: str = Header(None)):
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     qr_b64 = base64.b64encode(buf.getvalue()).decode()
+    _audit(_tok(authorization), 'auth.totp_setup', 'user', user['username'], user.get('display_name') or user['username'])
     return {"secret": secret, "otpauthUri": uri, "qrCodePng": f"data:image/png;base64,{qr_b64}"}
 
 

@@ -553,6 +553,7 @@ def update_batch_header(batch_no: str, body: dict = Body(...), authorization: st
     )
     conn.commit()
     conn.close()
+    _audit(_tok(authorization), 'inventory.batch_update', 'stock_batch', batch_no, batch_no, {'invoiceNo': invoice_no, 'supplierId': supplier_id})
     return {"ok": True}
 
 

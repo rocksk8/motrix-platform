@@ -2864,6 +2864,7 @@ def create_case_stage(quote_no: str, body: dict = Body(...), authorization: str 
     sr = _get_stage_row(conn, quote_no, new_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.create', 'case_stage', quote_no, quote_no)
     return result
 
 
@@ -2907,6 +2908,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.update', 'case_stage', quote_no, quote_no, {'stageId': stage_id})
     return result
 
 
@@ -2943,6 +2945,7 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
         spawn_bg_thread(push_event_delete_for_case_stage, args=(done_event_id,))
     if stage_task_id:
         spawn_bg_thread(delete_daily_task_for_case_stage, args=(stage_task_id,))
+    _audit(_tok(authorization), 'case_stage.delete', 'case_stage', quote_no, quote_no, {'stageId': stage_id})
     return {"ok": True}
 
 
@@ -2966,6 +2969,7 @@ def reorder_case_stages(quote_no: str, body: dict = Body(...), authorization: st
     conn.commit()
     _sync_stages_to_json(conn, quote_no)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.reorder', 'case_stage', quote_no, quote_no)
     return {"ok": True}
 
 
@@ -2993,6 +2997,7 @@ def add_stage_assignee(quote_no: str, stage_id: int, body: dict = Body(...), aut
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.assignee_add', 'case_stage', quote_no, quote_no, {'stageId': stage_id, 'username': username})
     return result
 
 
@@ -3015,6 +3020,7 @@ def remove_stage_assignee(quote_no: str, stage_id: int, username: str, authoriza
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.assignee_remove', 'case_stage', quote_no, quote_no, {'stageId': stage_id, 'username': username})
     return result
 
 
@@ -3047,6 +3053,7 @@ def toggle_stage_dependency(quote_no: str, stage_id: int, candidate_id: int, aut
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.dependency_toggle', 'case_stage', quote_no, quote_no, {'stageId': stage_id, 'candidateId': candidate_id})
     return result
 
 
@@ -3072,6 +3079,7 @@ def add_stage_visit(quote_no: str, stage_id: int, body: dict = Body(...), author
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.visit_create', 'case_stage', quote_no, quote_no, {'stageId': stage_id})
     return result
 
 
@@ -3102,6 +3110,7 @@ def update_stage_visit(quote_no: str, stage_id: int, visit_id: int, body: dict =
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.visit_update', 'case_stage', quote_no, quote_no, {'stageId': stage_id, 'visitId': visit_id})
     return result
 
 
@@ -3124,6 +3133,7 @@ def delete_stage_visit(quote_no: str, stage_id: int, visit_id: int, authorizatio
     conn.commit()
     _sync_stages_to_json(conn, quote_no)
     conn.close()
+    _audit(_tok(authorization), 'case_stage.visit_delete', 'case_stage', quote_no, quote_no, {'stageId': stage_id, 'visitId': visit_id})
     return {"ok": True}
 
 
@@ -5001,6 +5011,7 @@ async def post_case_update(quote_no: str,
                             "case-management.html", detail=content)
     if important:
         spawn_bg_thread(push_event_for_important_comment, args=(new_id, quote_no, content, author_display))
+    _audit(_tok(authorization), 'case.update_post', 'case_update', quote_no, quote_no, {'id': new_id, 'files': len(saved_files)})
     return {
         "id": new_id,
         "source": "comment",
@@ -5041,6 +5052,7 @@ def delete_case_update(quote_no: str, uid: int, authorization: str = Header(None
     conn.close()
     notify_module_activity("案件留言板", "刪除留言", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
+    _audit(_tok(authorization), 'case.update_delete', 'case_update', quote_no, quote_no, {'id': uid})
     return {"ok": True}
 
 

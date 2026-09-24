@@ -506,6 +506,7 @@ def create_work_log(body: dict = Body(...), authorization: str = Header(None)):
     conn.close()
     notify_module_activity("工作日誌", "建立", u.get("display_name") or u["username"],
                             log_date, "work-log.html", detail=content)
+    _audit(_tok(authorization), 'work_log.create', 'work_log', str(new_id), log_date)
     return {"id": new_id, "ok": True}
 
 
@@ -532,6 +533,7 @@ def update_work_log(wid: int, body: dict = Body(...), authorization: str = Heade
     conn.execute(f"UPDATE work_logs SET {', '.join(sets)} WHERE id=?", params)
     conn.commit()
     conn.close()
+    _audit(_tok(authorization), 'work_log.update', 'work_log', str(wid), str(wid), {'fields': [s.split('=')[0] for s in sets]})
     return {"ok": True}
 
 
@@ -551,6 +553,7 @@ def delete_work_log(wid: int, authorization: str = Header(None)):
     conn.close()
     notify_module_activity("工作日誌", "刪除", u.get("display_name") or u["username"],
                             str(wid), "work-log.html")
+    _audit(_tok(authorization), 'work_log.delete', 'work_log', str(wid), str(wid))
     return {"ok": True}
 
 
@@ -606,6 +609,7 @@ async def upload_work_log_photos(
     conn.close()
     notify_module_activity("工作日誌", "上傳照片", user['display_name'],
                             f"日誌 #{wid}（{len(new_photos)} 張）", "work-log.html")
+    _audit(_tok(authorization), 'work_log.photo_upload', 'work_log', str(wid), str(wid), {'added': len(new_photos)})
     return {"ok": True, "added": len(new_photos), "photos": new_photos}
 
 
@@ -637,6 +641,7 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
     conn.close()
     notify_module_activity("工作日誌", "刪除照片", user.get("display_name") or user["username"],
                             f"日誌 #{wid}", "work-log.html")
+    _audit(_tok(authorization), 'work_log.photo_delete', 'work_log', str(wid), str(wid), {'photoId': photo_id})
     return {"ok": True}
 
 
@@ -1940,6 +1945,7 @@ def test_google_calendar(authorization: str = Header(None)):
         tid = trace_id()
         logger.exception("google_calendar test event failed trace=%s", tid)
         raise HTTPException(500, f"建立測試事件失敗（代碼 {tid}）")
+    _audit(_tok(authorization), 'settings.google_calendar.test', 'settings', 'google_calendar', '測試事件', {'eventId': event_id})
     return {"ok": True, "event_id": event_id}
 
 
@@ -1965,6 +1971,7 @@ def test_email_notify(authorization: str = Header(None)):
         tid = trace_id()
         logger.exception("email_notify test failed trace=%s", tid)
         raise HTTPException(502, f"SMTP 連線失敗（代碼 {tid}）")
+    _audit(_tok(authorization), 'settings.email_notify.test', 'settings', 'email_notify', '測試郵件', {'recipients': len(to)})
     return {"ok": True, "sent_to": to}
 
 

@@ -166,6 +166,7 @@ def update_case_action_item(quote_no: str, item_id: int, body: dict = Body(...),
         )
     conn.commit()
     conn.close()
+    _audit(_tok(authorization), 'case.action_item.update', 'case_action_item', quote_no, new_text, {'id': item_id})
     return {"ok": True}
 
 
@@ -185,6 +186,7 @@ def delete_case_action_item(quote_no: str, item_id: int, authorization: str = He
     conn.close()
     notify_module_activity("案件管理", "刪除代辦事項", user.get("display_name") or user["username"],
                             quote_no, "case-management.html")
+    _audit(_tok(authorization), 'case.action_item.delete', 'case_action_item', quote_no, quote_no, {'id': item_id})
     return {"ok": True}
 
 

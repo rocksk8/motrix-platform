@@ -373,6 +373,7 @@ def record_export(slip_no: str, authorization: str = Header(None)):
                  (new_count, json.dumps(log, ensure_ascii=False), now, slip_no))
     conn.commit()
     conn.close()
+    _audit(_tok(authorization), 'payslip.export', 'payslip', slip_no, slip_no, {'exportCount': new_count, 'archived': archived})
     return {"export_count": new_count}
 
 
@@ -401,6 +402,7 @@ def record_archive_download(slip_no: str, orig_idx: int, authorization: str = He
     conn.close()
     notify_module_activity("勞報單", "調閱存檔", user.get("display_name") or user["username"],
                             slip_no, "payslips.html")
+    _audit(_tok(authorization), 'payslip.archive_redownload', 'payslip', slip_no, slip_no, {'origIdx': orig_idx, 'exportCount': new_count})
     return {"export_count": new_count}
 
 
