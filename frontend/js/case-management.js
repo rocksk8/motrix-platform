@@ -2394,13 +2394,41 @@ function app() {
       }
     },
 
-    async saveCaseRecord() {
-      if (!this.selected) return
+    // 🔴 存檔一律排隊（2026-09-24，hichan-0a 查到的產品競態）：
+    //    自動存檔（1.5 秒防抖）在途時使用者按「儲存」、或切換案件／結案／附件操作前先存 ⇒ 兩次同時在途，
+    //    第二次帶的 base 是第一次送出前的 _segBase（第一次回來才更新）⇒ 伺服器分段比對 409「已被他人更新」，
+    //    而他人就是自己。
+    //    ⇒ 在途時再呼叫**不另外送**，只標記「再存一次」並拿同一個 promise；前一次成功、基準更新之後，
+    //       用最新的基準再送一次。某一次失敗（409／驗證不過）就停，不自動重送（交給使用者處理）。
+    //    呼叫端 `await saveCaseRecord()` 會等到佇列清空。
+    saveCaseRecord() {
+      if (this._saveRun) {
+        this._saveAgain = true
+        return this._saveRun
+      }
+      this._saveRun = (async () => {
+        try {
+          let ok
+          do {
+            this._saveAgain = false
+            ok = await this._saveCaseRecordOnce()
+          } while (ok && this._saveAgain)
+        } finally {
+          this._saveRun = null
+        }
+      })()
+      return this._saveRun
+    },
+    _saveRun: null,
+    _saveAgain: false,
+
+    async _saveCaseRecordOnce() {
+      if (!this.selected) return false
       if (Object.keys(this.badNum).length) {
         // N14：標紅的數字欄位（無法辨識）存在時不送——送出去的是上一個有效值，畫面卻寫著別的字
         this.saveStatus = 'error'
         this.saveMsg = '有數字欄位無法辨識（標紅處），請修正後再存檔'
-        return
+        return false
       }
       if (this.cr.dealTag === '已結案' && !this.selected.case_semi_unlocked) {
         // 已結案且未解鎖：後端會直接 403，這裡先擋下避免每次 @input 觸發的
@@ -2408,7 +2436,7 @@ function app() {
         this.dirty = false
         this.saveStatus = 'error'
         this.saveMsg = '案件已結案並鎖定，請先解鎖'
-        return
+        return false
       }
       // 驗證：已收款項必須填入收款日期
       const payItems = this.cr.caseRecord.payment?.items || []
@@ -2416,7 +2444,7 @@ function app() {
         if (item.received && !item.receivedAt) {
           this.saveStatus = 'error'
           this.saveMsg = `${item.type || '款項'}：已標記收款但未填入收款日期，請補填`
-          return
+          return false
         }
       }
       // CM1：只送改到的分段；快照在送出前取，存檔途中又改的部分下一次再送
@@ -2436,6 +2464,7 @@ function app() {
         segments[k] = sent[k] === undefined ? null : JSON.parse(sent[k])
         base[k] = this._segBase[k] === undefined ? null : JSON.parse(this._segBase[k])
       }
+      let ok = false
       this.saving = true
       try {
         const r = await fetch('/api/quotations/' + this.selected.quote_no + '/case-record', {
@@ -2444,6 +2473,7 @@ function app() {
           body: JSON.stringify({ segments, base, defaults })
         })
         if (r.ok) {
+          ok = true
           this.dirty = false
           this.segConflict = null
           const res = await r.json().catch(() => ({}))
@@ -2453,7 +2483,7 @@ function app() {
             this.saveStatus = 'dirty'
             this.saveMsg = '已送出，待最高管理員審核後套用'
             this.saving = false
-            return
+            return true
           }
           for (const k of Object.keys(segments)) {
             if (sent[k] === undefined) delete this._segBase[k]
@@ -2501,6 +2531,7 @@ function app() {
         this.saveMsg = '網路錯誤'
       }
       this.saving = false
+      return ok
     },
 
     openWriteoffModal(idx, mode) {
