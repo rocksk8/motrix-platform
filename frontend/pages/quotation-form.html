@@ -74,7 +74,7 @@
     .form-right {
       position: sticky;
       top: calc(var(--topbar-h) + 52px + 24px);
-      max-height: calc(100vh - var(--topbar-h) - 52px - 48px);
+      max-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h) - 52px - 48px);
       overflow-y: auto;
       min-width: 0;
     }
@@ -458,7 +458,7 @@
       border-radius: var(--radius-lg);
       width: 100%;
       max-width: 900px;
-      max-height: 92vh;
+      max-height: calc(92vh / var(--fz,1));
       display: flex;
       flex-direction: column;
       box-shadow: var(--shadow-lg);
@@ -1940,7 +1940,7 @@
         <span class="modal-head__title">管理條款組</span>
         <button class="modal-close" @click="termsManageOpen=false">×</button>
       </div>
-      <div style="padding:16px 18px;max-height:70vh;overflow:auto">
+      <div style="padding:16px 18px;max-height:calc(70vh / var(--fz,1));overflow:auto">
         <div style="font-size:11px;color:var(--text-dim);margin-bottom:12px;line-height:1.7">
           每一組包含付款條件、交貨條件、驗收標準、保固條件、售後服務五段文字。
           <b>★ 是新增報價單時自動帶入的那一組。</b><br>
@@ -2061,7 +2061,7 @@
   <div x-show="exportLogModal" x-cloak
        style="position:fixed;inset:0;z-index:9950;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)"
        @click.self="exportLogModal=false">
-    <div style="background:#fff;border-radius:10px;width:440px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.22)">
+    <div style="background:#fff;border-radius:10px;width:440px;max-width:92vw;max-height:calc(80vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(0,0,0,.22)">
       <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border-light);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
         <div>
           <div style="font-size:13px;font-weight:700;color:#111">PDF 匯出記錄</div>
@@ -2099,7 +2099,7 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V3.1'
+  const FORM_VERSION = 'V3.2'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在

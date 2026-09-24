@@ -10,10 +10,11 @@
 根元素 zoom 會把 `vh`／`dvh` 一起乘上倍率 ⇒ 以視窗高度限高的 fixed 元素超出畫面，
 fixed 不隨頁捲動 ⇒ 拖不到。修法：`--fz` ＝ 目前倍率，`Nvh` ⇒ `calc(Nvh / var(--fz,1))`。
 
-# ⚠️ 已知未修（A 裁示）
+# 📌 更正留著：三頁補完（2026-09-24）
 
-`case-management.html`、`cashier.html`、`quotation-form.html` 三頁在並行視窗 hichan-8d 的
-檔案領域內，等它合回 master 後再補 ⇒ 本檔**不量這三頁**。
+原本「`case-management.html`、`cashier.html`、`quotation-form.html` 三頁在並行視窗 hichan-8d 的
+檔案領域內，等它合回 master 後再補」——hichan-8d 合回後已補（19 處；quotation-form FORM_VERSION
+V3.1 → V3.2）。最下面的**靜態守門**釘住「前端沒有裸的 Nvh」，三頁也在範圍內。
 
 # ⚙️ 對照組（A 加）
 
@@ -168,3 +169,50 @@ def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, mak
             assert m["bottom"] <= H + 1, "按鈕切到「特」後，簽核彈窗底邊 %.0f 超出畫面 %d" % (m["bottom"], H)
         finally:
             browser.close()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 靜態守門：前端沒有「裸的」Nvh／Ndvh（註解裡的說明文字不算）
+# ══════════════════════════════════════════════════════════════════════
+
+def _raw_vh_tokens():
+    """回 `(code, comments)`：程式碼裡沒包 `/ var(--fz,1)` 的 Nvh 與註解裡的 Nvh。
+
+    📌 「該改的 ＝ 0；**解釋它的 ＝ 10**」——註解裡那 10 處是說明「為什麼用 calc」的文字，
+       機械修法最省力的做法是連它們一起改掉或刪掉（那會讓下一個人看不懂而改回去），
+       所以把數字釘死：少了也紅，提醒有人動了解釋。
+    """
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parents[2] / "frontend"
+    token = re.compile(r"(?<![\w.\-#])(\d+(?:\.\d+)?)(d?vh)(?![\w])")
+    code, comments = [], []
+    for p in sorted(root.rglob("*")):
+        if p.suffix not in (".html", ".css", ".js") or not p.is_file():
+            continue
+        rel = p.relative_to(root).as_posix()
+        if "vendor" in rel or ".min." in rel:
+            continue
+        text = p.read_text(encoding="utf-8")
+        spans = [(m.start(), m.end()) for m in re.finditer(r"/\*.*?\*/", text, re.S)]
+        if p.suffix == ".html":
+            spans += [(m.start(), m.end()) for m in re.finditer(r"<!--.*?-->", text, re.S)]
+        if p.suffix in (".js", ".html"):
+            spans += [(m.start(), m.end()) for m in re.finditer(r"(?<![:\"'\\])//[^\n]*", text)]
+        for m in token.finditer(text):
+            if any(a <= m.start() < b for a, b in spans):
+                comments.append((rel, m.group(0)))
+            elif not text[m.end():m.end() + 16].startswith(" / var(--fz"):
+                code.append((rel, text.count("\n", 0, m.start()) + 1, m.group(0)))
+    return code, comments
+
+
+def test_fz_no_raw_vh_is_left_in_the_frontend():
+    code, comments = _raw_vh_tokens()
+    print("字級靜態守門：裸 Nvh %d 處（%s）；註解裡 %d 處"
+          % (len(code), sorted({c[0] for c in code}), len(comments)))
+    assert code == [], (
+        "還有沒包 `calc(Nvh / var(--fz,1))` 的 Nvh（字級放大時會超出畫面）：%r" % code[:10])
+    assert len(comments) == 10, (
+        "註解裡說明 vh 的文字從 10 處變成 %d 處——有人動了解釋，確認是不是機械修法順手改掉的：%r"
+        % (len(comments), comments))

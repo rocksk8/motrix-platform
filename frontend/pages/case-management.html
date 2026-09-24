@@ -17,7 +17,7 @@
   <style>
     [x-cloak] { display: none !important; }
 
-    .cm-layout { display:flex; height:calc(100vh - var(--topbar-h)); overflow:hidden; }
+    .cm-layout { display:flex; height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); overflow:hidden; }
 
     /* ── Left panel ── */
     .cm-list { width:300px; min-width:300px; border-right:1px solid var(--border-light); display:flex; flex-direction:column; background:#FAFAF9; overflow:hidden; }
@@ -84,7 +84,7 @@
        判定來自 /api/quotations/gate-matrix，跟擋下完結案是同一份後端程式碼，
        所以「5/5 可結案」等於「現在按下去不會被擋」。 */
     .cm-matrix {
-      height: calc(100vh - var(--topbar-h));
+      height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
       overflow: auto;
       padding: 16px 20px 28px;
       background: var(--white);
@@ -614,9 +614,9 @@
   /* -- Mobile RWD -- */
   .mob-back-cm { display:none; }
   @media (max-width:767px) {
-    .cm-layout { flex-direction:column; height:auto; min-height:calc(100vh - var(--topbar-h)); overflow:visible; }
-    .cm-list { width:100%; min-width:0; max-height:44vh; border-right:none; border-bottom:1px solid var(--border-light); }
-    .cm-detail { min-height:54vh; }
+    .cm-layout { flex-direction:column; height:auto; min-height:calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); overflow:visible; }
+    .cm-list { width:100%; min-width:0; max-height:calc(44vh / var(--fz,1)); border-right:none; border-bottom:1px solid var(--border-light); }
+    .cm-detail { min-height:calc(54vh / var(--fz,1)); }
     .cm-list.mob-hidden  { display:none !important; }
     .cm-detail.mob-hidden { display:none !important; }
     .mob-back-cm { display:inline-flex !important; }
@@ -3651,7 +3651,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeDispatchModalGuarded()"
      @keydown.escape.window="closeDispatchModalGuarded()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
@@ -3907,7 +3907,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeShippingModalGuarded()"
      @keydown.escape.window="closeShippingModalGuarded()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:680px;max-height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
@@ -4059,7 +4059,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="serialPicker.show=false"
      @keydown.escape.window="serialPicker.show=false">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:480px;max-height:calc(80vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border-light);font-size:14px;font-weight:700;font-family:var(--font-zh)">
       選擇庫存料號 / 序號
     </div>
@@ -4109,7 +4109,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeShippingPreview()"
      @keydown.escape.window="closeShippingPreview()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <!-- Header -->
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
@@ -4133,7 +4133,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeContractorVoucherPreview()"
      @keydown.escape.window="closeContractorVoucherPreview()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="'預覽匯款申請' + (cvPreviewVoucher ? '　' + cvPreviewVoucher.voucherNo : '')"></span>
@@ -4218,7 +4218,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:420;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeInvoiceVoucherModalGuarded()"
      @keydown.escape.window="closeInvoiceVoucherModalGuarded()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:640px;max-height:calc(88vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)">申請開立發票</span>
       <button @click="closeInvoiceVoucherModalGuarded()" style="width:28px;height:28px;border:none;background:#F0EEE9;border-radius:5px;cursor:pointer;font-size:16px">×</button>
@@ -4324,7 +4324,7 @@
      style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:410;display:flex;align-items:center;justify-content:center;padding:20px"
      @click.self="closeInvoiceVoucherPreview()"
      @keydown.escape.window="closeInvoiceVoucherPreview()">
-  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+  <div style="background:#fff;border-radius:12px;width:100%;max-width:820px;height:calc(90vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
     <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
       <span style="font-size:14px;font-weight:700;flex:1;font-family:var(--font-zh)"
             x-text="'預覽開票申請憑據' + (ivPreviewVoucher ? '　' + ivPreviewVoucher.voucherNo : '')"></span>
@@ -4345,7 +4345,7 @@
        style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:400;display:flex;align-items:center;justify-content:center;padding:20px"
        @click.self="showImportModal=false"
        @keydown.escape.window="showImportModal=false">
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:500px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:500px;max-height:calc(82vh / var(--fz,1));display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.22)">
       <!-- 標題 -->
       <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border-light);gap:10px">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6B7280" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
