@@ -1185,12 +1185,15 @@ function app() {
     // UR1：`caseActivity` 改存「伺服器判斷的未讀案件」`{quote_no: true}`
     //   （同三個來源：案件動態／工作日誌／每日工作完成，但**依作者排除本人**、逐筆已讀）。
     //   原本是每筆的最後動態時間 vs 整個清單一個 localStorage 時間戳。
+    // ⚠️ 先渲染再非同步載入＝競態：查詢送出之後、回應抵達之前使用者點了某一筆，
+    //    伺服器算這份回應時還沒有那筆已讀 ⇒ 不可以讓它把剛點過的那一筆蓋回未讀。
     async loadCaseActivity() {
       const quoteNos = this.cases.map(c => c.quote_no).filter(Boolean)
       if (!quoteNos.length || !window.MotrixReads) { this.caseActivity = {}; return }
+      const t0 = Date.now()
       const got = await window.MotrixReads.unread('case', quoteNos)
       const m = {}
-      got.forEach(k => { m[k] = true })
+      got.forEach(k => { if (!((this._readAtLocal || {})[k] >= t0)) m[k] = true })
       this.caseActivity = m
     },
 
@@ -1204,6 +1207,7 @@ function app() {
       const m = { ...this.caseActivity }
       delete m[quoteNo]
       this.caseActivity = m
+      this._readAtLocal = { ...(this._readAtLocal || {}), [quoteNo]: Date.now() }
       if (window.MotrixReads) window.MotrixReads.mark('case', quoteNo)
     },
 
@@ -1214,6 +1218,8 @@ function app() {
     markAllRead() {
       const keys = Object.keys(this.caseActivity)
       this.caseActivity = {}
+      const now = Date.now()
+      this._readAtLocal = { ...(this._readAtLocal || {}), ...Object.fromEntries(keys.map(k => [k, now])) }
       if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('case', k))
       this.unreadOnly = false
       this.filterCases()

@@ -2712,10 +2712,13 @@ function app() {
     async loadTaskUnread() {
       const role = this.session?.role
       if (!window.MotrixReads || (role !== 'superadmin' && role !== 'admin')) { this.unreadTasks = {}; return }
+      // ⚠️ 先渲染再非同步載入＝競態：查詢送出之後、回應抵達之前使用者點了某一筆，
+      //    伺服器算這份回應時還沒有那筆已讀 ⇒ 不可以讓它把剛點過的那一筆蓋回未讀。
+      const t0 = Date.now()
       const keys = [...new Set(this.tasks.map(t => String(t.id)))]
       const got = await window.MotrixReads.unread('daily_task', keys)
       const m = {}
-      got.forEach(k => { m[k] = true })
+      got.forEach(k => { if (!((this._readAtLocal || {})[k] >= t0)) m[k] = true })
       this.unreadTasks = m
     },
 
@@ -2726,6 +2729,7 @@ function app() {
       const m = { ...this.unreadTasks }
       delete m[k]
       this.unreadTasks = m
+      this._readAtLocal = { ...(this._readAtLocal || {}), [k]: Date.now() }
       if (window.MotrixReads) window.MotrixReads.mark('daily_task', k)
     },
 

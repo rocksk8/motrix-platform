@@ -1496,12 +1496,15 @@ function devCrmPage() {
       return !!(c && this.unreadKeys[String(c.id)])
     },
 
+    // ⚠️ 先渲染再非同步載入＝競態：查詢送出之後、回應抵達之前使用者點了某一筆，
+    //    伺服器算這份回應時還沒有那筆已讀 ⇒ 不可以讓它把剛點過的那一筆蓋回未讀。
     async loadUnread() {
       if (!window.MotrixReads) return
+      const t0 = Date.now()
       const keys = this.cases.map(c => String(c.id))
       const got = await window.MotrixReads.unread('dev_case', keys)
       const m = {}
-      got.forEach(k => { m[k] = true })
+      got.forEach(k => { if (!((this._readAtLocal || {})[k] >= t0)) m[k] = true })
       this.unreadKeys = m
     },
 
@@ -1512,12 +1515,15 @@ function devCrmPage() {
       const m = { ...this.unreadKeys }
       delete m[k]
       this.unreadKeys = m
+      this._readAtLocal = { ...(this._readAtLocal || {}), [k]: Date.now() }
       if (window.MotrixReads) window.MotrixReads.mark('dev_case', k)
     },
 
     markAllRead() {
       const keys = Object.keys(this.unreadKeys)
       this.unreadKeys = {}
+      const now = Date.now()
+      this._readAtLocal = { ...(this._readAtLocal || {}), ...Object.fromEntries(keys.map(k => [k, now])) }
       if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('dev_case', k))
       this.unreadOnly = false
       this._toast('已將目前所有案件標記為已讀')

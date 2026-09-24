@@ -254,7 +254,12 @@ def test_case_switch_cancelled_keeps_the_unread_mark(live_server, make_user):
         _login(page, live_server, u, pw)
         page.goto(live_server + "/pages/case-management.html")
         _alpine_ready(page)
-        page.wait_for_timeout(1000)
+        # 📌 更正（2026-09-24，hichan-8d 全量裡紅過 1 次）：原本固定等 1 秒。
+        #    負載下初始化的未讀查詢晚於 1 秒回來，會在下面 `await fetch(MQ-B)` 的空隙
+        #    把注入的 caseActivity 整包蓋掉 ⇒ `_markCaseRead` 找不到那一筆、不送已讀。
+        #    那同時是一個產品競態（見 test_case_management_late_unread_answer_...），
+        #    產品已修；這裡改成等初始化的請求真的結束，再注入狀態。
+        page.wait_for_load_state("networkidle")
         sent = []
         page.on("request", lambda r: sent.append(r.post_data) if r.url.endswith("/api/reads")
                 and r.method == "POST" else None)
@@ -275,13 +280,95 @@ def test_case_switch_cancelled_keeps_the_unread_mark(live_server, make_user):
         assert not [s for s in sent if s and "MQ-B" in s], sent
 
         # 正對照：選「是」＝真的切換過去 ⇒ 標記消失、已讀送出
-        switched = page.evaluate("""async () => {
-            const d = Alpine.$data(document.querySelector('[x-data]'))
-            window.confirm = () => true
-            await d.selectCase('MQ-B')
-            return { mark: !!d.caseActivity['MQ-B'], sel: d.selected.quote_no }
-        }""")
-        page.wait_for_timeout(300)
+        # 固定等 300ms 在負載下不夠 ⇒ 改成等那一個請求真的送出。
+        with page.expect_request(lambda r: r.url.endswith("/api/reads") and r.method == "POST"
+                                 and "MQ-B" in (r.post_data or ""), timeout=10000):
+            switched = page.evaluate("""async () => {
+                const d = Alpine.$data(document.querySelector('[x-data]'))
+                window.confirm = () => true
+                await d.selectCase('MQ-B')
+                return { mark: !!d.caseActivity['MQ-B'], sel: d.selected.quote_no }
+            }""")
         assert switched == {"mark": False, "sel": "MQ-B"}, switched
-        assert [s for s in sent if s and "MQ-B" in s], sent
+        browser.close()
+
+
+class _LateUnread:
+    """把「未讀查詢」的回應**先向伺服器取回、晚一點才交給頁面**。
+
+    重現的是負載下的真實時序：查詢在使用者點選**之前**送出（伺服器那時還沒有已讀紀錄），
+    回應在點選**之後**才抵達。
+    """
+
+    def __init__(self, page):
+        self.held = []
+        page.route("**/api/reads/unread", self._on)
+
+    def _on(self, route):
+        self.held.append((route, route.fetch()))
+
+    def release(self):
+        for route, resp in self.held:
+            route.fulfill(response=resp)
+        self.held = []
+
+
+@pytest.mark.e2e
+def test_a_late_unread_answer_does_not_bring_back_a_mark_clicked_meanwhile(live_server, make_user):
+    """先渲染再非同步載入＝競態：點過的那一筆，不可以被一個「點選前就送出」的查詢蓋回未讀。"""
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    _dev_case("bob", "紅點測試")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        _login(page, live_server, u, pw)
+        cid, card = _dev_crm_with_one_unread(page, live_server)
+
+        late = _LateUnread(page)
+        page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
+        for _ in range(50):
+            if late.held:
+                break
+            page.wait_for_timeout(100)
+        assert late.held, "重抓未讀的請求沒有送出"
+        card.click()
+        page.wait_for_timeout(300)
+        assert card.locator("text=有更新").count() == 0
+        late.release()
+        page.wait_for_timeout(500)
+        assert card.locator("text=有更新").count() == 0, "晚到的未讀回應把剛點過的那一筆蓋回未讀"
+        browser.close()
+
+
+@pytest.mark.e2e
+def test_case_management_late_unread_answer_does_not_undo_a_click(live_server, make_user):
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    now = datetime.now().isoformat()
+    _sql("INSERT INTO quotations (quote_no, status, sales_person, sales_person_id, data_json, "
+         "created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?)",
+         ("MQ-B", "已成案", "alice", _uid("alice"), json.dumps({"quoteNo": "MQ-B"}), now, now, "已成案"))
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        _login(page, live_server, u, pw)
+        page.goto(live_server + "/pages/case-management.html")
+        _alpine_ready(page)
+        page.wait_for_load_state("networkidle")
+        time.sleep(1.1)
+        _sql("INSERT INTO case_updates (quote_no, author, content, created_at) VALUES (?,?,?,?)",
+             ("MQ-B", "bob", "x", datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        late = _LateUnread(page)
+        page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).loadCaseActivity() }")
+        for _ in range(50):
+            if late.held:
+                break
+            page.wait_for_timeout(100)
+        assert late.held
+        page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                      " d.caseActivity = { ...d.caseActivity, 'MQ-B': true }; d._markCaseRead('MQ-B') }")
+        late.release()
+        page.wait_for_timeout(500)
+        assert page.evaluate("() => !!Alpine.$data(document.querySelector('[x-data]')).caseActivity['MQ-B']") is False
         browser.close()
