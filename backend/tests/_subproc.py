@@ -57,6 +57,11 @@ def utf8_env(**extra):
     `extra` 裡的值優先（要刪掉某個變數請傳 `None`）。
     """
     env = {**os.environ, **_FORCE_UTF8}
+    # 建包腳本在外層 pytest 設了獨佔旗標；子行程的 pytest（守門題自己起的）不可繼承，
+    # 否則它們也會當成建包、去搶或等待獨佔 ⇒ 只在建包時紅（2026-09-25 實際發生）。
+    # 題目要測獨佔時會在 extra 明著傳入。
+    env.pop("MOTRIX_PYTEST_EXCLUSIVE", None)
+    env.pop("MOTRIX_PYTEST_EXCLUSIVE_OWNER", None)
     for key, value in extra.items():
         if value is None:
             env.pop(key, None)

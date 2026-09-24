@@ -257,3 +257,14 @@ def test_utf8_env_overrides_a_hostile_parent(monkeypatch):
     env = utf8_env()
     assert env["PYTHONIOENCODING"] == "utf-8"
     assert env["PYTHONUTF8"] == "1"
+
+
+def test_child_pytest_does_not_inherit_the_build_exclusive_flag(monkeypatch):
+    """建包在外層設了獨佔旗標；守門題起的子 pytest 不可繼承（否則只在建包時紅，2026-09-25）。
+    題目明著傳入時照樣生效（獨佔鎖的題靠這一點）。"""
+    from tests._subproc import utf8_env
+    monkeypatch.setenv("MOTRIX_PYTEST_EXCLUSIVE", "1")
+    monkeypatch.setenv("MOTRIX_PYTEST_EXCLUSIVE_OWNER", "123")
+    env = utf8_env()
+    assert "MOTRIX_PYTEST_EXCLUSIVE" not in env and "MOTRIX_PYTEST_EXCLUSIVE_OWNER" not in env
+    assert utf8_env(MOTRIX_PYTEST_EXCLUSIVE="1")["MOTRIX_PYTEST_EXCLUSIVE"] == "1"
