@@ -382,6 +382,18 @@ TGOS_APPID_SETTING = "tgos_app_id"
 #: 具名常數，不可以埋進 SQL 字面值——埋進去就沒有人驗得到它變了。
 GEOCODE_CACHE_TTL_DAYS = 180
 
+#: `MP0b`：**Google 回的座標**只能快取 30 天（Google Maps Platform 服務條款 SST §14.3：
+#: 經緯度快取上限 30 天）。其他來源（TGOS／Nominatim）維持上面的 180 天。
+#: 取兩者較小的那個——有人把通用 TTL 調得比 30 還短時，google 列跟著短，不會反而比較長。
+GOOGLE_CACHE_TTL_DAYS = 30
+
+
+def _cache_ttl_days(source):
+    """某個來源的快取天數（`MP0b`）。"""
+    if source == SOURCE_GOOGLE:
+        return min(GOOGLE_CACHE_TTL_DAYS, GEOCODE_CACHE_TTL_DAYS)
+    return GEOCODE_CACHE_TTL_DAYS
+
 _DISTRICT_RE = re.compile(r"^(.{2,3}[縣市])(.{1,4}?[區鄉鎮市])")
 
 
@@ -1041,7 +1053,7 @@ def _row_to_result(row, address, source):
             age = (date.today() - date.fromisoformat(created)).days
         except ValueError:
             age = 0
-        if age >= GEOCODE_CACHE_TTL_DAYS:
+        if age >= _cache_ttl_days(source):
             return None
     return GeoResult(coord=(row["lat"], row["lon"]), precision=row["precision"],
                      source=source, address=address)

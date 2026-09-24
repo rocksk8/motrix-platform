@@ -911,6 +911,8 @@ function mapPage() {
                 + d.mark + '</span>',
           iconSize: [20, 20], iconAnchor: [10, 10],
         })
+        // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
+        //    （標案來自政府網站），直接拼進 HTML ＝ 在每個開地圖的人瀏覽器裡執行它。
         window.L.marker([p.lat, p.lon], { icon }).addTo(this._layer)
           .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
                       (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
@@ -920,7 +922,7 @@ function mapPage() {
                         ? '' : ('離' + (p.nearestLocationName || '據點') + '約 '
                                 + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
-                     .filter(Boolean).join('<br>'))
+                     .filter(Boolean).map(t => this._esc(t)).join('<br>'))
       })
       this._drawUser()
       this._fitAll()
