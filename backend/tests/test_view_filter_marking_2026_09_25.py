@@ -22,13 +22,7 @@ STATIC_CLASS = re.compile(r"(?<![:\w-])class=\"([^\"]*)\"")
 TYPE = re.compile(r"(?<![:\w-])type=\"([^\"]*)\"")
 
 #: hichan-a3 手上的 22 頁（W-8 分工，2026-09-25）。落地一頁就從這裡拿掉一頁；只准變少（下面有斷言）。
-PENDING = {
-    "case-management.html", "access-guide.html", "automation-guide.html", "gateway-guide.html",
-    "monitor-guide.html", "switch-guide.html", "netarch-guide.html", "env-guide.html", "dev-crm.html",
-    "tender-radar.html", "case-stage-board.html", "customer-log.html", "supplier-log.html", "work-log.html",
-    "network-plan-form.html", "network-plans.html", "inventory.html", "parts.html", "devices.html",
-    "online-stats.html", "topology-quick.html", "daily-tasks.html",
-}
+PENDING = set()   # 2026-09-25：a3 的 22 頁已全數落地（20 頁標記、daily-tasks／topology-quick 本無篩選欄）
 _PENDING_AT_START = 22
 
 
