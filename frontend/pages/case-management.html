@@ -1128,6 +1128,7 @@
                   </div>
                 </template>
 
+                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
                 <div class="cm-section-title">
                   合約資訊
                   <!-- 已存在的案件用這顆手動帶（2026-09-14）。新建案件在
@@ -1212,6 +1213,8 @@
                   <span x-show="daysUntilDeadline() > 0" x-text="'剩餘 ' + daysUntilDeadline() + ' 天'"></span>
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:#DC2626;background:#FEF2F2"></span>
                 </div>
+                </fieldset><!-- /CM14b -->
+                <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:#B45309">您不是這個案件的成員，以出納身分開啟：只能登錄收款，其他內容唯讀。</div>
                 <div class="cm-section-title">收款管理</div>
                 <!-- 2026-09-14：原本這裡是 4 格數字（合約總額／已收款／未收款／收款進度），
                      跟右欄標頭的四個數字完全重複。拿掉重複的三格，只留標頭沒有的兩樣：
@@ -1483,6 +1486,7 @@
                          x-model="cr.caseRecord.payment.note" @input="setDirty()">
                 </div>
 
+                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
                 <!-- 開票申請憑據列表 -->
                 <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
                   <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">
@@ -1584,6 +1588,7 @@
                   </div>
                 </div>
 
+                </fieldset><!-- /CM14b -->
               </div><!-- /biz -->
 
               <!-- ══ 執行管理 Tab（進度／叫料／設備／保固 子分頁） ══ -->
@@ -1596,6 +1601,7 @@
                   <button class="cm-tab" :class="{active: execSubTab==='todos'}"     @click="execSubTab='todos'; loadCaseActionItems()">代辦事項</button>
                   <button class="cm-tab" :class="{active: execSubTab==='info'}"      @click="execSubTab='info'">專案資訊</button>
                 </div>
+<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
               <!-- ── 執行進度 ── -->
               <div x-show="execSubTab==='progress'">
@@ -2191,6 +2197,7 @@
                   </div>
                 </div>
               </div><!-- /info -->
+</fieldset><!-- /CM14b -->
               </div><!-- /exec -->
 
 
@@ -2198,6 +2205,7 @@
                    資料在 case_extra_expenses 表（DB v75），不再是精算的 data_json 陣列。
                    規格見 MOTRIX-ERP-QUICK.md §5.10。 -->
               <div id="xe-panel" x-show="activeTab==='xexp' && canSeeFinancial()">
+                <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
                   <span class="cm-section-title" style="margin-bottom:0">額外支出</span>
                   <span x-show="xe.loading" style="font-size:11px;color:var(--text-dim);font-family:var(--font-zh)">載入中…</span>
@@ -2458,10 +2466,12 @@
                     <option :value="u.display_name || u.username"></option>
                   </template>
                 </datalist>
+                </fieldset><!-- /CM14b -->
               </div>
 
               <!-- ══ 財務 Tab ══ -->
               <div x-show="activeTab==='fin' && canSeeFinancial()">
+<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <!-- ══ 應收應付總覽（2026-09-09）══
                      這個案件的錢原本散在四個 Tab：應收在「案件資訊」的款項明細、
@@ -2946,10 +2956,12 @@
                   </div>
                 </template>
 
+</fieldset><!-- /CM14b -->
               </div><!-- /fin -->
 
               <!-- ══ 承攬商派發 Tab ══ -->
               <div x-show="activeTab==='dispatch'">
+<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <!-- KPI bar -->
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
@@ -3148,10 +3160,12 @@
                   </div>
                 </template>
 
+</fieldset><!-- /CM14b -->
               </div><!-- /dispatch -->
 
               <!-- ══ 出貨單 Tab ══ -->
               <div x-show="activeTab==='shipping'">
+<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <!-- KPI bar -->
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
@@ -3306,6 +3320,7 @@
                 </template>
                 </div>
 
+</fieldset><!-- /CM14b -->
               </div><!-- /shipping -->
 
               <!-- ══ 動態 Tab ══ -->
@@ -3313,6 +3328,7 @@
                    資料在 completion_notes 表（DB v77），走與出貨單同一套分層簽核。
                    欄位設計與理由見 backend/db.py::_m077_completion_notes()。 -->
               <div x-show="activeTab==='completion'">
+<fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
 
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
                   <div style="flex:1">
@@ -3405,6 +3421,7 @@
                     </div>
                   </div>
                 </template>
+</fieldset><!-- /CM14b -->
               </div>
 
               <div x-show="activeTab==='feed'" class="feed-wrap">

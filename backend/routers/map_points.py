@@ -32,7 +32,7 @@ import time
 from fastapi import APIRouter, Header, HTTPException, Response
 
 from db import db_conn
-from helpers import _require_user
+from helpers import _require_user, user_has_module
 from helpers import geo
 from helpers.quotations import _check_quotation_owner
 
@@ -357,6 +357,9 @@ def _case_rows_visible_to(user, rows):
        兩套規則會漂移，而漂移的那一天沒有任何題會紅。
     """
     if (user or {}).get("role") in ("superadmin", "admin"):
+        return list(rows)
+    # CM14b（2026-09-24）：持 cashier 模組者看得到全部案件——與 _visible_case_filter_sql 同一條規則
+    if user_has_module(user, "cashier"):
         return list(rows)
     out = []
     for r in rows:

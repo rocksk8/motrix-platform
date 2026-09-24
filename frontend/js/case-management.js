@@ -1731,6 +1731,9 @@ function app() {
     // 這時 total／amount 都是空的，任何換算都會算出 0 並自動存回去 ⇒ 會改金額的動作一律不做。
     moneyMasked() { return !!this.selected?.moneyMasked },
 
+    // CM14b（2026-09-24）：不是案件成員、靠 cashier 模組讀到的 ⇒ 除收款外全唯讀（後端另擋寫入）
+    caseReadOnly() { return !!this.selected?.cashierReadOnly },
+
     // AC1：發票未稅／稅額（選填）。空＝沒填（null／''／undefined）；0 是有填（免稅的稅額就是 0）。
     _invoiceEmpty(v) { return v === null || v === undefined || v === '' },
     invoiceHalfFilled(item) {
@@ -2012,6 +2015,9 @@ function app() {
       const defaults = {}
       for (const k of new Set([...Object.keys(sent), ...Object.keys(this._segBase)])) {
         if (sent[k] === this._segBase[k]) continue
+        // CM14b：唯讀（非成員出納）只送收款——ensureCaseRecord 對既有分段補的欄位不是他的改動，
+        // 送出去整筆會被後端 403
+        if (this.caseReadOnly() && k !== 'payment') continue
         if (this._segBase[k] === undefined && sent[k] === this._segFill[k]) {
           defaults[k] = JSON.parse(sent[k])
           continue

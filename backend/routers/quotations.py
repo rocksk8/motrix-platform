@@ -248,7 +248,12 @@ def _visible_case_filter_sql(user: dict, prefix: str = "") -> tuple:
     拿來過濾可見性的 assigned_user_ids——見 quotations.py::update_case_assigned_users()
     /case-management.html 成員分配 UI）。json_each() 是 SQLite JSON1 擴充函式，
     daily_tasks.py 的 json_each(assigned_to) 已在用同一招。prefix 是 SQL 別名前綴
-    （例如 stage_board() JOIN case_stages 後用 'q.'），unaliased 查詢留空字串即可。"""
+    （例如 stage_board() JOIN case_stages 後用 'q.'），unaliased 查詢留空字串即可。
+
+    2026-09-24（CM14b 使用者裁示「讀得到，但只能改收款」）：持 cashier 模組者看得到全部案件。
+    寫入面另外把關（update_case_record 只放行 payment 分段；其餘端點仍走擁有者檢查）。"""
+    if user_has_module(user, "cashier"):
+        return ("", [])
     return (
         f" AND ({prefix}sales_person_id=? OR ({prefix}sales_person_id IS NULL AND {prefix}sales_person=?)"
         f" OR EXISTS (SELECT 1 FROM json_each({prefix}assigned_user_ids) WHERE value=?))",
@@ -1143,11 +1148,21 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    _check_quotation_owner(row, user)
+    try:
+        _check_quotation_owner(row, user)
+    except HTTPException:
+        # CM14b（2026-09-24 使用者裁示）：持 cashier 模組者讀得到任何案件
+        if not user_has_module(user, "cashier"):
+            conn.close()
+            raise
+    # 不是案件成員、靠 cashier 例外讀到的 ⇒ 案件頁除收款外全唯讀（寫入面後端另擋，見 update_case_record）
+    cashier_read_only = not _is_case_member(conn, quote_no, row, user)
+    conn.close()
     result = dict(row)
+    result["cashierReadOnly"] = cashier_read_only
     result["data"] = json.loads(result.pop("data_json", "{}"))
     result["data"]["status"] = result["status"]   # DB column is authoritative
     result["signed_log"] = json.loads(result.get("signed_log") or "[]")
