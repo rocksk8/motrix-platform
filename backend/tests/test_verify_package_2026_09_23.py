@@ -39,7 +39,9 @@ VP4  自測要驗到結束碼路徑      ⚠️ 同上
 """
 import importlib.util
 import io
+import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -573,3 +575,100 @@ def test_pk1_a_trailing_slash_pattern_without_double_star_does_not_cover_the_sub
             "`%s` 的 export-ignore 被讀成 %r——\n" % (rel, value)
             + "☠️ 這正是舊的 `_pattern_covers()` 那個 bug：把「尾巴 `/` "
               "沒有 `**`」誤判成涵蓋子樹，而 git 本人不會這樣判。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# T12 · 精簡過的 manifest 讓「系統更新紀錄」頁安靜降級
+# ══════════════════════════════════════════════════════════════════════
+#
+# PK1 把包裡的 version_manifest.json 精簡成 [{version, date}]，只考慮了登入頁版本號；
+# 開機時 `helpers/startup.py::_sync_module_versions()` 把 manifest 寫進 module_versions，
+# 沒有 `module` 的條目被略過 ⇒ 正式機的更新紀錄頁**收不到任何新說明，也不報錯**。
+
+def _manifest_gates(mod, pkg):
+    fn = getattr(mod, "check_version_manifest", None)
+    old = mod.R
+    mod.R = mod.Report()
+    try:
+        if not callable(fn):
+            pytest.fail("`verify_package.py` 沒有 `check_version_manifest(pkg)`（T12）")
+        fn(pkg)
+        return [g for g, _ in mod.R.fails]
+    finally:
+        mod.R = old
+
+
+def _write_manifest(root, entries):
+    backend = os.path.join(str(root), "backend")
+    os.makedirs(backend, exist_ok=True)
+    with io.open(os.path.join(backend, "version_manifest.json"), "w", encoding="utf-8") as fh:
+        json.dump(entries, fh, ensure_ascii=False)
+    return str(root)
+
+
+def test_package_manifest_a_slimmed_manifest_without_module_is_a_failure(tmp_path):
+    pkg = _write_manifest(tmp_path, [{"version": "2026-09-24f", "date": "2026-09-24"}])
+    assert _manifest_gates(_vp(), pkg), "只剩 version/date 的 manifest 應該擋下"
+
+
+def test_package_manifest_a_missing_manifest_is_a_failure_not_a_pass(tmp_path):
+    os.makedirs(os.path.join(str(tmp_path), "backend"), exist_ok=True)
+    assert _manifest_gates(_vp(), str(tmp_path))
+
+
+def test_package_manifest_a_user_facing_manifest_passes(tmp_path):
+    pkg = _write_manifest(tmp_path, [
+        {"module": "前端介面", "version": "2026-09-24f", "date": "2026-09-24", "time": "10:00",
+         "content": "說明"},
+        {"module": "報價單", "version": "2026-09-24a", "date": "2026-09-24", "time": "09:00",
+         "content": "說明"},
+    ])
+    assert _manifest_gates(_vp(), pkg) == []
+
+
+def test_package_manifest_the_build_script_keeps_the_user_facing_fields():
+    """建包 Step 5.6 的精簡結果要保留 module/version/date/time/content（說明本來就是寫給使用者的）。"""
+    src = io.open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               "tools", "build_deploy_package.ps1"), encoding="utf-8-sig").read()
+    step = src[src.index("# --- Step 5.6"):src.index("# --- Step 6")]
+    for field in ("module", "version", "date", "time", "content"):
+        assert re.search(r"\b%s\s*=" % field, step), "Step 5.6 沒有保留欄位 %s" % field
+
+
+def _run_step_56(tmp_path, entries):
+    """真的用 PowerShell 5.1 執行建包 Step 5.6 那一段（抽出來單獨跑）。"""
+    import shutil
+    import subprocess
+    ps = shutil.which("powershell.exe") or shutil.which("powershell")
+    if not ps:
+        pytest.skip("沒有 Windows PowerShell（建包只在 Windows 上跑）")
+    src = io.open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                               "tools", "build_deploy_package.ps1"), encoding="utf-8-sig").read()
+    block = src[src.index("# --- Step 5.6"):src.index("# --- Step 6")]
+    mp = tmp_path / "version_manifest.json"
+    mp.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
+    pkg = tmp_path / "pkg"
+    (pkg / "backend").mkdir(parents=True)
+    (pkg / "backend" / "version_manifest.json").write_bytes(mp.read_bytes())
+    script = ("$ErrorActionPreference='Stop'\n$versionManifestPath='%s'\n$pkgDir='%s'\n" % (mp, pkg)) + block
+    run = tmp_path / "run.ps1"
+    run.write_bytes(b"\xef\xbb\xbf" + script.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
+    r = subprocess.run([ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(run)],
+                       capture_output=True, timeout=120)
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")[-500:]
+    return json.loads((pkg / "backend" / "version_manifest.json").read_text(encoding="utf-8-sig"))
+
+
+_FIELDS = ("module", "version", "date", "time", "content")
+
+
+@pytest.mark.parametrize("n", [1, 3], ids=["single-entry", "many"])
+def test_package_manifest_step_56_really_keeps_every_entry_and_field(tmp_path, n):
+    """☠️ 第一版 Step 5.6 用 `@(... | ConvertFrom-Json)`：PS 5.1 把整個陣列當一個物件 ⇒
+    輸出只剩 1 筆、每個欄位都是整欄的陣列。靜態題抓不到，只有真的執行才看得到。"""
+    entries = [{"module": "模組%d" % i, "version": "2026-09-24%s" % "abc"[i], "date": "2026-09-24",
+                "time": "10:0%d" % i, "content": "說明 <%d> \"引號\"" % i, "internal": "不該出貨"}
+               for i in range(n)]
+    out = _run_step_56(tmp_path, entries)
+    assert isinstance(out, list) and len(out) == n
+    assert out == [{f: e[f] for f in _FIELDS} for e in entries]

@@ -431,10 +431,49 @@ def main():
     check_provenance(pkg, lower)
     print()
 
+    print("### (5b) version_manifest.json 的使用者可見欄位（🔴 擋關，T12）")
+    check_version_manifest(pkg)
+    print()
+
     print("### (6) 包內 db.py 的版本（🔴 擋關）")
     check_db_version(pkg, args.expect_db_version)
 
     sys.exit(R.finish())
+
+
+#: 「系統更新紀錄」頁要的欄位（`helpers/startup.py::_sync_module_versions()` 讀它們）。
+MANIFEST_FIELDS = ("module", "version", "date", "content")
+
+
+def check_version_manifest(pkg):
+    """`T12`：包裡的 `backend/version_manifest.json` 每一筆都要帶使用者可見欄位。
+
+    ☠️ PK1 把它精簡成 `[{version, date}]`，只顧到登入頁版本號；開機同步
+       `_sync_module_versions()` 會**略過沒有 `module` 的條目** ⇒ 正式機的更新紀錄頁
+       收不到任何新說明，**而且不報錯**（安靜降級）。
+    ⇒ 缺檔、空陣列、任何一筆缺欄位 ⇒ FAIL（缺檔**不是 PASS**）。
+    """
+    import json as _json
+    path = os.path.join(pkg, "backend", "version_manifest.json")
+    if not os.path.isfile(path):
+        R.fail("版本紀錄", "version_manifest.json 不在包裡 ⇒ 登入頁版本號與更新紀錄頁都會是空的")
+        return
+    try:
+        with io.open(path, encoding="utf-8-sig") as fh:
+            entries = _json.load(fh)
+    except Exception as exc:
+        R.fail("版本紀錄", "version_manifest.json 讀不出來：%s" % exc)
+        return
+    if not isinstance(entries, list) or not entries:
+        R.fail("版本紀錄", "version_manifest.json 不是非空陣列")
+        return
+    bad = [i for i, e in enumerate(entries)
+           if not isinstance(e, dict) or any(not str(e.get(f) or "").strip() for f in MANIFEST_FIELDS)]
+    if bad:
+        R.fail("版本紀錄", "%d 筆缺使用者可見欄位（%s），例如第 %d 筆 ⇒ 更新紀錄頁會安靜略過"
+               % (len(bad), "/".join(MANIFEST_FIELDS), bad[0]))
+        return
+    print("  版本紀錄 OK：%d 筆，皆含 %s" % (len(entries), "/".join(MANIFEST_FIELDS)))
 
 
 #: `autostart.bat` 必須帶的兩個開關。

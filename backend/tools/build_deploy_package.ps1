@@ -750,42 +750,49 @@ if (-not (Test-Path $buildCommitPath)) {
 }
 Write-Host "      .build_commit: $commitShort"
 
-# --- Step 5.6: 精簡 backend/version_manifest.json（PK1）---
+# --- Step 5.6: 精簡 backend/version_manifest.json（PK1 → T12）---
 #
-# 🔴 GET /api/system/version（routers/auth.py）每次請求都重新讀磁碟，只回
-# **最新一筆**的 version/date；但 git archive 匯出的是整份 version_manifest.json
-# （含每一筆的 module/time/content 全文——內部異動細節逐字寫在裡面）。
-# docs/windows/SCOPE.md「PK1」節的處置：打包時產生一份精簡版（只留最新一筆的
-# version/date）取代整份出貨——**這是建置流程要新增的一步，不是 .gitattributes
-# 排除清單能處理的**（那個端點每次請求都重新讀磁碟，整份排除掉的話，`git
-# archive` 匯出的是空氣，端點會進 except 分支回空字串，登入頁版本號安靜消失，
-# `1c8f2e8` 就是這個失敗模式真的發生過一次）。
+# 🔴 這份檔案有兩個讀者：
+#   ① GET /api/system/version（routers/auth.py）—— 登入頁版本號，取**最新**一筆（T10）
+#   ② helpers/startup.py::_sync_module_versions() —— 開機時寫進 module_versions，
+#      給「系統更新紀錄」頁（module-versions.html）顯示；**沒有 module 的條目會被略過**
 #
-# ⚠️ $versionLatest 是 Step 4 已經讀過的同一份資料（陣列第一筆），這裡不重讀
-# 檔案——重讀只是多一次 I/O，資料在 Step 4 跑完那一刻就已經凍結了。
+# PK1 原本只考慮 ①，把它精簡成 [{version,date}] ⇒ ② 收不到任何新說明，**而且不報錯**
+# （T12，安靜降級）。使用者可見的說明文字本來就是寫給使用者的，所以 T12 改成：
+# 每一筆只保留使用者可見欄位 module/version/date/time/content（投影，不是整份原樣照搬——
+# 日後若有人在條目上加內部欄位，也不會因此流出去）。
+# ⚠️ 讀不到／空陣列 ⇒ 從包裡移除（登入頁版本號留空，Step 4 已經警告過），
+#    驗包 verify_package.py 的 (5b) 會把它擋下來（缺檔不是 PASS）。
 $pkgVersionManifestPath = Join-Path $pkgDir "backend\version_manifest.json"
-if ($versionLatest) {
-    $trimmedVersionManifest = @(
-        [ordered]@{
-            version = $versionLatest.version
-            date    = $versionLatest.date
-        }
-    )
-    # ⚠️ **不要用管線**：單一元素的陣列丟進管線會被 PowerShell 攤平，
-    # ConvertTo-Json 收到的就不是陣列而是裸物件，產出 `{...}` 而不是
-    # `[{...}]`——端點是 `entries[0]`，對裸物件做整數索引會直接壞掉，
-    # 那正是這一步要避免的「版本號安靜消失」，換一種寫法又踩回去。
-    # 用 `-InputObject` 明著傳，陣列不會被攤平。
-    ConvertTo-Json -InputObject $trimmedVersionManifest -Depth 3 |
+$projectedVersionManifest = $null
+try {
+    # ⚠️ **不要包 @()**：PowerShell 5.1 的 ConvertFrom-Json 把整個 JSON 陣列當成**一個**物件送出，
+    #    再包 @() 就變成「陣列裡裝一個陣列」⇒ foreach 只跑一次，每個欄位都是整欄的陣列
+    #    （2026-09-24 單獨執行這一段時抓到的；test_verify_package 的 t12 執行題守著）。
+    $allEntries = Get-Content -Path $versionManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($allEntries -and $allEntries.Count -gt 0) {
+        $projectedVersionManifest = @(foreach ($e in $allEntries) {
+            [ordered]@{
+                module  = $e.module
+                version = $e.version
+                date    = $e.date
+                time    = $e.time
+                content = $e.content
+            }
+        })
+    }
+} catch {
+    Write-Host "[WARN] 無法重讀 version_manifest.json 以產生精簡版（$($_.Exception.Message)）。" -ForegroundColor Yellow
+}
+if ($projectedVersionManifest) {
+    # ⚠️ **不要用管線**：單一元素的陣列丟進管線會被 PowerShell 攤平成裸物件，
+    # 產出 `{...}` 而不是 `[{...}]`。用 `-InputObject` 明著傳，陣列不會被攤平。
+    ConvertTo-Json -InputObject $projectedVersionManifest -Depth 3 |
         Set-Content -Path $pkgVersionManifestPath -Encoding UTF8
-    Write-Host "      version_manifest.json 已精簡為只留最新一筆（$($versionLatest.version)）"
+    Write-Host "      version_manifest.json 已投影為使用者可見欄位（$($projectedVersionManifest.Count) 筆）"
 } elseif (Test-Path $pkgVersionManifestPath) {
-    # Step 4 沒讀到可信的最新一筆（檔案不存在／空陣列／解析失敗，當時已經
-    # 印過警告）——沒有東西可以精簡，而**完整版一樣不能出貨**（會外洩每一筆
-    # 的 module/content 全文）。兩害相權：把這個檔從包裡拿掉，讓登入頁版本號
-    # 安靜留空（Step 4 已經對同一件事警告過一次），好過讓完整異動記錄流出去。
     Remove-Item -LiteralPath $pkgVersionManifestPath -Force
-    Write-Host "[WARN] version_manifest.json 沒有可信的最新一筆，已從包裡移除（登入頁版本號將留空）。" -ForegroundColor Yellow
+    Write-Host "[WARN] version_manifest.json 沒有可用的紀錄，已從包裡移除（登入頁版本號將留空；驗包會擋下）。" -ForegroundColor Yellow
 }
 
 # --- Step 6: 寫 deploy_manifest.json ---
