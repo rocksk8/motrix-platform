@@ -2039,6 +2039,7 @@ def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str 
         conn.commit()
     finally:
         conn.close()
+    _audit(_tok(authorization), "bonus.case.update", "bonus_case_awards", quote_no, "獎金分潤編輯")
     return {"ok": True}
 
 
