@@ -126,7 +126,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v108: BN3 bonus_item_people（manual 人員來源指定的帳號清單）
 # v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
 # v112: 逐筆已讀 item_reads（未讀紅點存伺服器；先推先拿，撞號順延）
-CURRENT_VERSION = 112
+# v113: 以案件為中心的獎金分潤三張表（SPEC-BONUS §十一；先推先拿，順延自 v112）
+CURRENT_VERSION = 113
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -270,7 +271,10 @@ def reset_demo_db() -> None:
             saved_triggers = [(r["name"], r["sql"]) for r in conn.execute(
                 "SELECT name, sql FROM sqlite_master WHERE type='trigger'"
                 " AND name IN ('voucher_edit_log_no_delete',"
-                " 'bonus_award_edit_log_no_delete')")]
+                " 'bonus_award_edit_log_no_delete',"
+                # v113：新編寫紀錄表擋 DELETE 也擋 UPDATE，兩道都要拿掉再建回
+                " 'bonus_case_award_edit_log_no_delete',"
+                " 'bonus_case_award_edit_log_no_update')")]
             for name, _sql in saved_triggers:
                 conn.execute(f"DROP TRIGGER IF EXISTS {name}")
             # ⚠️ 跳過不存在的表：這段 DELETE 跑在 `init_db()` **之前**，
@@ -398,6 +402,8 @@ DEMO_CLEARED_TABLES = frozenset((
     # `BN14` 的群組與成員由最高管理者建立（不是預載）⇒ 使用者資料，整張清（DM1）。
     "bonus_group_members", "bonus_groups", "bonus_item_people", "bonus_items",
     "bonus_template_versions", "bonus_templates",
+    # v113（SPEC-BONUS §十一）以案件為中心的獎金分潤：三張都是使用者資料，整張清。
+    "bonus_case_award_edit_log", "bonus_case_award_lines", "bonus_case_awards",
     # 🔑 `voucher_attachments` 整張清：附件是**使用者上傳的憑證**，
     #    demo 重置要讓每個客戶從乾淨開始。
     # ⚠️ 而**實體檔不在這裡處理** —— 這份清單只管資料表。
@@ -4388,6 +4394,73 @@ def _m110_voucher_category_manual(conn):
                      " category_manual INTEGER NOT NULL DEFAULT 0")
 
 
+def _m113_bonus_case_awards(conn):
+    """v113（2026-09-24，SPEC-BONUS §十一／§11.7）：以案件為中心的獎金分潤，三張新表。
+
+    舊的 bonus_awards／bonus_award_lines 以「獎金項目」為必填（bonus_item_id NOT NULL），
+    新設計是「業務／專案／後勤三類 × 個人比例」，沒有項目 ⇒ 另開新表，**舊表與舊資料完全不動**
+    （使用者：舊單「直接作廢」⇒ 由新頁面不理會處理，**不以 migration 作廢任何資料**——
+    migration 會在正式機執行）。
+    ⚠️ 版號依 `_MIGRATIONS` 位置推算：v111 JV36、v112 UR1（item_reads，先推先拿），本支接在後面。
+    ⚠️ SQL 全部寫成字面值、不呼叫任何 helper（凍住的歷史不呼叫活的程式碼）。
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_case_awards ("
+        "  id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  quote_no      TEXT    NOT NULL UNIQUE,"
+        "  status        TEXT    NOT NULL DEFAULT '草稿'"
+        "    CHECK (status IN ('草稿', '待審核', '待發放', '已發放')),"
+        "  net_profit    TEXT    NOT NULL,"           # 精算淨利快照（字串存，保留小數、不經浮點）
+        "  rate_bp       INTEGER NOT NULL,"
+        "  split_json    TEXT    NOT NULL,"           # {"sales":5000,"project":3000,"admin":2000}
+        "  pool_amount   INTEGER NOT NULL,"
+        "  approval_json TEXT    NOT NULL DEFAULT '{}',"
+        "  paid_by       TEXT    NOT NULL DEFAULT '',"
+        "  paid_at       TEXT    NOT NULL DEFAULT '',"
+        "  created_by    TEXT    NOT NULL,"
+        "  created_at    TEXT    NOT NULL,"
+        "  updated_by    TEXT    NOT NULL,"
+        "  updated_at    TEXT    NOT NULL"
+        ")")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_case_award_lines ("
+        "  id                    INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  award_id              INTEGER NOT NULL REFERENCES bonus_case_awards(id),"
+        "  category              TEXT    NOT NULL CHECK (category IN ('sales', 'project', 'admin')),"
+        "  username              TEXT    NOT NULL,"
+        "  display_name_snapshot TEXT    NOT NULL DEFAULT '',"
+        "  source                TEXT    NOT NULL DEFAULT 'manual',"   # auto_sales／auto_executor／manual／group:<id>
+        "  person_bp             INTEGER,"                            # NULL＝平均
+        "  amount                INTEGER NOT NULL,"
+        "  UNIQUE (award_id, category, username)"
+        ")")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bcal_award ON bonus_case_award_lines(award_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bcal_user ON bonus_case_award_lines(username)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS bonus_case_award_edit_log ("
+        "  id           INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  award_id     INTEGER NOT NULL REFERENCES bonus_case_awards(id),"
+        "  changed_by   TEXT    NOT NULL,"
+        "  changed_at   TEXT    NOT NULL,"
+        "  action       TEXT    NOT NULL,"
+        "  changes_json TEXT    NOT NULL DEFAULT '[]'"
+        ")")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_bcael_award"
+        " ON bonus_case_award_edit_log(award_id, changed_at)")
+    # 長期記憶：刪不掉、也改不了（v109 同形狀，多擋 UPDATE）
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS bonus_case_award_edit_log_no_delete"
+        " BEFORE DELETE ON bonus_case_award_edit_log"
+        " BEGIN SELECT RAISE(ABORT, '獎金分潤編寫紀錄是長期記憶，不可刪除'); END")
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS bonus_case_award_edit_log_no_update"
+        " BEFORE UPDATE ON bonus_case_award_edit_log"
+        " BEGIN SELECT RAISE(ABORT, '獎金分潤編寫紀錄是長期記憶，不可修改'); END")
+
+
 def _m109_edit_log_no_delete(conn):
     """v109（2026-09-24 `JV22 §3`／`BN17`）：兩張編寫紀錄表在**資料庫層**刪不掉。
 
@@ -5544,6 +5617,7 @@ _MIGRATIONS = [
     _m110_voucher_category_manual,                  # v110
     _m111_voucher_line_source_key,                  # v111
     _m112_item_reads,                               # v112
+    _m113_bonus_case_awards,                        # v113
 ]
 
 

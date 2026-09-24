@@ -1708,6 +1708,11 @@ def _daily_backup_tables() -> dict:
         # 🔑 編寫紀錄是**憑證的一部分**，不是軌跡（同 voucher_edit_log 的理由）：
         #    少了它，一張獎金單看起來完全正常，而沒有人回得出它被改過什麼。
         "獎金異動":         "SELECT * FROM bonus_award_edit_log ORDER BY id",
+        # ── 獎金分潤・以案件為中心（v112，SPEC-BONUS §十一，2026-09-24）──
+        # 🔑 每人領多少只存在明細表；編寫紀錄是長期記憶（刪不掉、改不了），同樣要備份。
+        "案件獎金單":       "SELECT * FROM bonus_case_awards ORDER BY id",
+        "案件獎金明細":     "SELECT * FROM bonus_case_award_lines ORDER BY id",
+        "案件獎金異動":     "SELECT * FROM bonus_case_award_edit_log ORDER BY id",
         # 🔴 **獎金模組這一包是關著的（`BONUS_MODULE_ENABLED` 預設關），
         #    而這兩張表仍然會被建立**（`v104` 照跑）——
         # 🔑 備份它們是為了「**開回來那一天資料是完整的**」，
