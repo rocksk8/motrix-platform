@@ -1716,7 +1716,7 @@
                     平衡尾款
                   </button>
                   <button x-show="['superadmin','admin'].includes(session.role)"
-                          @click="if (dirty) { alert('款項明細有未儲存的修改，請先儲存後再申請請款單') } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
+                          @click="if (dirty) { MotrixUI.toast('款項明細有未儲存的修改，請先儲存後再申請請款單', {kind: 'error'}) } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
                           style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--tone-orange-border);background:var(--tone-orange-bg);color:var(--tone-orange-fg);cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
                     申請請款單
                   </button>
