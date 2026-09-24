@@ -94,6 +94,17 @@ def _budget(seconds):
     return map_points._GeocodeBudget(seconds)
 
 
+@pytest.fixture(autouse=True)
+def _own_database(client):
+    """📌 2026-09-24：本檔每一題都用自己的資料庫。
+
+    `budget.locate()`／`cached_only()` 每查一個地址就讀一次 `geocode_cache`；沒有 `client` 時
+    讀的是當時 `db.DB_PATH` 指到的庫——`-n 6` 分到先跑時就是開發用資料庫（慢，
+    「20 個已知查不到的地址花了 2.5 秒」就是這樣紅的），而且會讀寫開發庫（同 A9）。
+    """
+    yield
+
+
 @pytest.fixture
 def clean_miss_cache():
     """每一題都從一個空的負快取開始 —— 它是**行程內**的，會跨題殘留。
@@ -211,7 +222,7 @@ def test_gc8_an_unknown_address_still_counts_as_ran_out_of_time(
 
 
 def test_gc8_a_known_miss_does_not_eat_the_time_budget(
-        clean_miss_cache, no_outbound):
+        client, clean_miss_cache, no_outbound):
     """⚙️ 反向控制②：**負快取裡的地址不可以吃掉預算。**
 
     🔑 它已經有答案了 ⇒ 它不需要時間，**也不該讓別的地址排不到**。
