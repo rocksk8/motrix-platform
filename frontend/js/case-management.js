@@ -413,13 +413,17 @@ function app() {
     // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
     async loadFinanceSummary(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.financeSummaryLoading = true
       this.financeSummary = null
       try {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/finance-summary`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.financeSummary = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.financeSummary = body
       } catch {}
       this.financeSummaryLoading = false
     },
@@ -439,6 +443,7 @@ function app() {
     // ── 額外支出（2026-09-11）────────────────────────────────────────────────
     async loadExtraExpenses(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       // 比照 loadMaterialOrders()：發請求當下記住是哪張單，回應抵達時再比對。
       // 沒有這道守門，使用者在回應飛行途中新增的那一列會被蓋掉（同一天內
       // 在叫料與系統設定兩處各踩過一次）
@@ -448,6 +453,7 @@ function app() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/extra-expenses`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (!live()) return
         if (this._xeReqFor !== quoteNo) return
         if (r.ok) {
           const d = await r.json()
@@ -830,6 +836,7 @@ function app() {
 
     async loadCompletionNotes(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       // 比照 loadExtraExpenses()：記住發請求當下是哪張單，回應抵達時再比對。
       // 少了這道守門，切案件切太快就會把 A 案的完工單畫在 B 案底下
       this._cnReqFor = quoteNo
@@ -838,8 +845,11 @@ function app() {
         const r = await fetch(`/api/completion-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (!live()) return
         if (this._cnReqFor !== quoteNo) return
-        if (r.ok) this.completionNotes = (await r.json()).items || []
+        const body = r.ok ? (await r.json()).items || [] : null
+        if (!live()) return
+        if (r.ok) this.completionNotes = body
       } catch {}
       this.completionNotesLoading = false
     },
@@ -931,6 +941,7 @@ function app() {
     // ── 叫料（材料訂購）────────────────────────────────────────────────────
     async loadMaterialOrders(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       // 發出請求的當下就記住是哪張單，回應抵達時再比對一次——比照 reports.js
       // 的 loadExpenses()／loadReceivables() 競態修法（§12 2026-09-10「更晚」）。
       // 這裡實測抓到過同一類問題：財務分頁一打開就發 GET，使用者在回應回來前
@@ -945,6 +956,7 @@ function app() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/material-orders`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (!live()) return
         // 已經切到別的案件：這份回應過期，丟掉（不然會把別張單的叫料貼上來）
         if (this._moReqFor !== quoteNo) return
         // 使用者已經動手編輯：保留他打的東西，不要用伺服器版本覆蓋
@@ -1421,11 +1433,16 @@ function app() {
       })
     },
 
-    // 連點兩件時，只有最後點的那一件可以落地（先點的回應較晚抵達時丟掉）
+    // 連點兩件時，只有最後點的那一件可以落地（先點的回應較晚抵達時丟掉）。
+    // _selectLive() 回傳「這次載入還算數嗎」：之後又選了案件就回 false。selectCase 與它
+    // 發出的每支子載入在每個 await 之後都先問它，前一件的後段不會寫進目前這一件的畫面與存檔。
     _selectSeq: 0,
+    _selectLive() {
+      const seq = this._selectSeq
+      return () => seq === this._selectSeq
+    },
 
     async selectCase(quoteNo) {
-      const seq = ++this._selectSeq
       // 2026-09-24：有未存的變更時先存完再切換。原本這裡直接取消待存計時器、
       // 下面再 dirty=false ⇒ 打完字 1.5 秒內切換案件，剛打的內容就消失。
       clearTimeout(this._autoSaveTimer)
@@ -1436,13 +1453,16 @@ function app() {
           return
         }
       }
+      // 確定要切換才遞增：使用者取消切換時，目前這一件進行中的載入仍算數
+      ++this._selectSeq
+      const live = this._selectLive()
       try {
         const r = await fetch('/api/quotations/' + quoteNo, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (!r.ok) return
         const data = await r.json()
-        if (seq !== this._selectSeq) return
+        if (!live()) return
         this.selected = data
         // UR1：放在「真的切換過去」之後——上面取消切換（存檔失敗選「否」）時 return，
         //      那一筆的未讀標記必須還在。
@@ -1477,8 +1497,10 @@ function app() {
         this._segBase = this._snapSegments(data.data?.caseRecord)
         this.segConflict = null
         await this.ensureCaseRecord()
+        if (!live()) return
         this._segFill = this._fillOnly(this._segBase)
         await this._seedDefaultStagesIfEmpty()
+        if (!live()) return
         this.dirty = false
         this.saveStatus = ''
         this.saveMsg = ''
@@ -1538,13 +1560,17 @@ function app() {
 
     async _loadCaseTasks(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.caseTasksLoading = true
       try {
         const today = new Date().toISOString().slice(0, 10)
         const r = await fetch(`/api/daily-tasks?date=${today}&case_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.caseTasks = (await r.json()).items || []
+        if (!live()) return
+        const body = r.ok ? (await r.json()).items || [] : null
+        if (!live()) return
+        if (r.ok) this.caseTasks = body
       } catch {}
       this.caseTasksLoading = false
     },
@@ -1770,15 +1796,19 @@ function app() {
     async _seedDefaultStagesIfEmpty() {
       if (!this.selected || !this.cr.caseRecord) return
       if ((this.cr.caseRecord.stages || []).length > 0) return
+      const live = this._selectLive()
       const labels = ['訂單確認', '叫料出貨', '施工安裝', '客戶驗收', '尾款結清']
       for (const label of labels) {
+        if (!live()) return
         try {
           const r = await fetch(`/api/quotations/${this.selected.quote_no}/stages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
             body: JSON.stringify({ label })
           })
-          if (r.ok) this.cr.caseRecord.stages.push(await r.json())
+          const st = r.ok ? await r.json() : null
+          if (!live()) return
+          if (st) this.cr.caseRecord.stages.push(st)
         } catch {}
       }
     },
@@ -3345,6 +3375,7 @@ function app() {
 
     async loadCaseUpdates(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.updatesLoading = true
       this.caseUpdates = []
       this.feedCalMode = false
@@ -3353,7 +3384,10 @@ function app() {
         const r = await fetch(`/api/quotations/${encodeURIComponent(quoteNo)}/updates`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.caseUpdates = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.caseUpdates = body
       } catch {}
       this.updatesLoading = false
     },
@@ -3605,13 +3639,17 @@ function app() {
 
     async loadDispatches(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.dispatchesLoading = true
       this.dispatches = []
       try {
         const r = await fetch(`/api/contractor-dispatches?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.dispatches = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.dispatches = body
       } catch {}
       this.dispatchesLoading = false
     },
@@ -3856,14 +3894,19 @@ function app() {
 
     async loadShippingNotes(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.shippingNotesLoading = true
       this.shippingNotes = []
       this.snSortPref = await loadListPref(this.session.token, `sn:${quoteNo}`)
+      if (!live()) return
       try {
         const r = await fetch(`/api/shipping-notes?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.shippingNotes = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.shippingNotes = body
       } catch {}
       this.shippingNotesLoading = false
       this.$nextTick(() => this._initSubListSortable('sn'))
@@ -4232,13 +4275,17 @@ function app() {
 
     async loadContractorVouchers(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.contractorVouchersLoading = true
       this.contractorVouchers = []
       try {
         const r = await fetch(`/api/contractor-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.contractorVouchers = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.contractorVouchers = body
       } catch {}
       this.contractorVouchersLoading = false
     },
@@ -4484,14 +4531,19 @@ function app() {
 
     async loadInvoiceVouchers(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.invoiceVouchersLoading = true
       this.invoiceVouchers = []
       this.ivSortPref = await loadListPref(this.session.token, `iv:${quoteNo}`)
+      if (!live()) return
       try {
         const r = await fetch(`/api/invoice-vouchers?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.invoiceVouchers = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.invoiceVouchers = body
       } catch {}
       this.invoiceVouchersLoading = false
       this.$nextTick(() => this._initSubListSortable('iv'))
@@ -5015,14 +5067,19 @@ function app() {
     // ── 請款單 ──────────────────────────────────────────────────────────────
     async loadPaymentRequests(quoteNo) {
       if (!quoteNo) return
+      const live = this._selectLive()
       this.paymentRequestsLoading = true
       this.paymentRequests = []
       this.prListSortPref = await loadListPref(this.session.token, `prList:${quoteNo}`)
+      if (!live()) return
       try {
         const r = await fetch(`/api/payment-requests?quote_no=${encodeURIComponent(quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (r.ok) this.paymentRequests = await r.json()
+        if (!live()) return
+        const body = r.ok ? await r.json() : null
+        if (!live()) return
+        if (r.ok) this.paymentRequests = body
       } catch {}
       this.paymentRequestsLoading = false
       this.$nextTick(() => this._initSubListSortable('prList'))
