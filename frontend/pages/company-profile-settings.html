@@ -528,8 +528,8 @@
               </div>
               <div><strong>每月經常性用量</strong>
                 約 <span x-text="gqCalc && gqCalc.monthly_recurring_estimate"></span> 次
-                —— 快取有效期 <span x-text="gqCalc && gqCalc.ttl_days"></span> 天，
-                到期後會重查。</div>
+                —— Google 定位結果的快取有效期 <span x-text="gqCalc && gqCalc.ttl_days"></span> 天
+                （服務條款上限），到期後會重查。</div>
               <div x-show="gqCalc && gqCalc.cost_this_period !== null">
                 <strong>本週期金額換算</strong>
                 <span x-text="gqCalc && gqCalc.cost_this_period"></span>

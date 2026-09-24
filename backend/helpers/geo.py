@@ -16,7 +16,7 @@ import logging
 import re
 import inspect as _inspect
 import threading
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import math
 import os
 import time
@@ -702,11 +702,14 @@ def quota_calculator() -> dict:
         "period_start": current_billing_period(
             settings.get("cycle_start_day", 1)),
         # TTL 到期攤提：相異地址 / TTL 天數 * 30 = **每月經常性**用量。
+        # 📌 `MP0d`（使用者：「更正為 30 天」）：這是 **Google** 用量計算器 ⇒ 用 Google 快取的
+        #    實際有效期（`_cache_ttl_days(google)`＝30 天，SST §14.3）。原本用通用的 180 天，
+        #    `MP0b` 之後就少算約 6 倍。
         "monthly_recurring_estimate": (
-            round(cached / float(GEOCODE_CACHE_TTL_DAYS) * 30, 1)
+            round(cached / float(_cache_ttl_days(SOURCE_GOOGLE)) * 30, 1)
             if cached else 0.0),
         "price_per_1000": price,
-        "ttl_days": GEOCODE_CACHE_TTL_DAYS,
+        "ttl_days": _cache_ttl_days(SOURCE_GOOGLE),
     }
     out["cost_this_period"] = (None if price is None
                                else round(used * float(price) / 1000.0, 2))
@@ -1527,12 +1530,51 @@ def _check_quota_warning():
         logger.exception("_check_quota_warning failed")
 
 
+def purge_expired_google_cache(today=None) -> int:
+    """`MP0c`：刪掉超過 30 天的 Google 定位快取（使用者表單：「加每日自動刪除」）。回刪了幾筆。
+
+    依據：Google Maps Platform 服務條款 SST §14.3——經緯度快取上限 30 天。
+    `MP0b` 只做到「讀取時視為過期」，列還留在表裡；這一支把它刪掉。
+    🔴 範圍（A 裁示）：**只** `source='google'` 而且過期（與 `_row_to_result()` 同一條判準：
+       年齡 ≥ `_cache_ttl_days(google)`）；其他來源與任何業務資料都不碰。
+       `created_at` 是空的列不刪（讀取那一側也不當它過期）。
+    📌 刪了東西才寫一筆稽核（`geocode.purge_google`，記刪了幾筆）——每一輪都跑，
+       刪 0 筆不留紀錄，免得稽核表每 6 小時一筆 0。
+    """
+    from db import get_db
+    cutoff = ((today or date.today())
+              - timedelta(days=_cache_ttl_days(SOURCE_GOOGLE))).isoformat()
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "DELETE FROM geocode_cache WHERE source = ? AND created_at != ''"
+            " AND substr(created_at, 1, 10) <= ?", (SOURCE_GOOGLE, cutoff))
+        deleted = cur.rowcount or 0
+        if deleted:
+            conn.execute(
+                "INSERT INTO audit_log (at,user_id,username,display_name,action,"
+                "target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)",
+                (datetime.now().isoformat(), None, "system", "系統", "geocode.purge_google",
+                 "geocode_cache", "", "Google 定位快取超過 30 天",
+                 json.dumps({"deleted": deleted, "cutoff": cutoff}, ensure_ascii=False)))
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
 def warm_geocode_cache() -> dict:
     """跑一趟背景暖快取。回 `warm_status()`。
 
     **可以單獨呼叫** —— 排程與測試共用同一支，
     🔑 那讓「排程呼叫的東西」與「測試驗過的東西」**不可能是兩份**。
     """
+    # `MP0c`：每一輪開頭先清掉過期的 Google 快取——在「地理查詢關著」的判斷**之前**：
+    #    清除不對外連線，開關關著也要清（條款管的是「存了多久」，不是「有沒有在查」）。
+    try:
+        purge_expired_google_cache()
+    except Exception:                     # noqa: BLE001
+        logger.exception("purge_expired_google_cache failed")
     state = _warm_state()
     today = date.today().isoformat()
     if state.get("date") != today:

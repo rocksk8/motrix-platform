@@ -42221,3 +42221,5 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **MP0.** 地圖點位彈窗的名稱／機關／地址逐段跳脫（標案來自外部網站＝外部輸入，XSS）。原文 `HANDOFF-PENDING-2026-09-23.md`「🟢 MP 地圖優化」；題 `test_mp0_*`。
 - **MP0b.** 定位快取：source=google 的列 30 天過期（Google SST §14.3），其他來源維持 180 天。原文同上；題 `test_mp0b_*`。
 - **MP8.** 開地圖不再同步查外部定位（沒查過的交給背景預熱、算待定位）；伺服器回應快取（鍵＝要的來源×可見來源×地理查詢開關，資料指紋變了或 60 秒後失效；使用者距離每次另算）；前端一次抓完、勾選在前端篩；拿掉「繼續定位」鈕。原文 `HANDOFF-PENDING-2026-09-23.md`「MP 追加」；題 `test_mp8_*`。
+- **MP0c.** 每日自動刪除超過 30 天的 Google 定位快取（使用者表單「加每日自動刪除」）：只刪 source=google 且過期的列，掛在背景預熱每一輪開頭（地理查詢關著也清），刪到才寫稽核 geocode.purge_google。原文 `HANDOFF-PENDING-2026-09-23.md` MP＋A 裁示；題 `test_mp0c_*`。
+- **MP0d.** Google 用量計算器改依 Google 快取有效期（30 天）攤提每月經常性用量，畫面說明同步（使用者表單「更正為 30 天」）。原文同上；題 `test_mp0d_*`。
