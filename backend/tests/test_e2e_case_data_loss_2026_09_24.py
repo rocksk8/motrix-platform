@@ -247,7 +247,7 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user):
 
 
 @pytest.mark.e2e
-def test_n11_remaining_deletes_are_gated_by_confirm(live_server, make_user):
+def test_remaining_deletes_are_gated_by_confirm(live_server, make_user):
     """N11（使用者 2026-09-24 裁示「刪除確認全部都加」）：叫料品項、派工人員、派工品項、
     出貨品項、階段負責人——按取消就不刪，也不送出 DELETE。確認訊息帶出名稱。"""
     username, password = make_user(username="e2e_loss5", role="admin")
