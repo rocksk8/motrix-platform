@@ -1236,6 +1236,15 @@ function app() {
     // 伺服器，一頁 casePageSize 件，「載入更多」往後接；摘要數字另打一次 counts（全部案件）。
     // 「只看有新動態」與「自訂（拖曳）排序」仍只作用在已載入的案件上。
     casePageSize: 100,
+    // CM7：常用篩選（可疊加，送伺服器）
+    caseQuick: { mine: false, stage_overdue: false, recv_overdue: false, missing_docs: false },
+    quickFilterDefs: [
+      { key: 'mine',          label: '我負責的', count: 'mine' },
+      { key: 'stage_overdue', label: '逾期階段', count: 'stageOverdueCases' },
+      { key: 'recv_overdue',  label: '應收逾期', count: 'recvOverdue' },
+      { key: 'missing_docs',  label: '缺單據',   count: 'missingDocs',
+        hint: '缺發票（已收款未登錄發票號碼），或執行階段全部完成卻缺完工單／出貨單' },
+    ],
     caseTotal: 0,
     caseCounts: null,
     caseLoadingMore: false,
@@ -1251,6 +1260,8 @@ function app() {
       else qs.set('deal_tag', '已成案')        // 「全部」與「已成案」：未結案的案件
       const q = (this.search || '').trim()
       if (q) qs.set('q', q)
+      for (const [k, on] of Object.entries(this.caseQuick)) if (on) qs.set(k, '1')
+      if (this.unreadOnly) qs.set('unread', '1')
       const mode = this.caseSortPref?.sortMode
       if (mode && mode !== 'custom') { qs.set('sort', mode); qs.set('dir', this.caseSortPref.sortDir || 'desc') }
       return qs
@@ -1319,6 +1330,25 @@ function app() {
       this.loadCases()
     },
 
+    toggleQuick(key) {
+      this.caseQuick = { ...this.caseQuick, [key]: !this.caseQuick[key] }
+      this.loadCases()
+    },
+
+    toggleUnreadOnly() {
+      this.unreadOnly = !this.unreadOnly
+      this.loadCases()
+    },
+
+    // 卡片上標出缺哪一種單據
+    missingDocTags(c) {
+      const t = []
+      if (c.missing_invoice) t.push('缺發票')
+      if (c.missing_completion) t.push('缺完工單')
+      if (c.missing_shipping) t.push('缺出貨單')
+      return t
+    },
+
     // 視覺化改版（2026-08-23）：摘要總覽卡片的「已逾期階段」數字需要跨案件的
     // 階段到期資訊，這份資料 case-stage-board.html 已經在用（stage_board() 回傳
     // 的 items 就含 dueDate/done/overdue），這裡直接重用同一支既有 API，不用
@@ -1349,7 +1379,6 @@ function app() {
         (c.customer_name || '').toLowerCase().includes(q) ||
         (c.project_name  || '').toLowerCase().includes(q)
       )
-      if (this.unreadOnly) pool = pool.filter(c => this.isUnread(c))
       const settling = [], active = [], closed = []
       for (const c of pool) {
         if (c.settle_status === 'draft') settling.push(c)
@@ -1392,18 +1421,26 @@ function app() {
       if (window.MotrixReads) window.MotrixReads.mark('case', quoteNo)
     },
 
+    // CM7：未讀件數是全部案件（伺服器），不是已載入的那一頁
     unreadCount() {
-      return this.cases.filter(c => this.isUnread(c)).length
+      return this.caseCounts ? (this.caseCounts.unread || 0) : this.cases.filter(c => this.isUnread(c)).length
     },
 
-    markAllRead() {
-      const keys = Object.keys(this.caseActivity)
+    async markAllRead() {
+      // 全部未讀（不只已載入的）：先向伺服器要清單再逐筆標記
+      let keys = Object.keys(this.caseActivity)
+      try {
+        const qs = new URLSearchParams({ deal_tag: '已成案,已結案', unread: '1', limit: '500' })
+        const r = await fetch('/api/quotations?' + qs, { headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (r.ok) keys = [...new Set(keys.concat(((await r.json()).items || []).map(c => c.quote_no)))]
+      } catch {}
       this.caseActivity = {}
       const now = Date.now()
       this._readAtLocal = { ...(this._readAtLocal || {}), ...Object.fromEntries(keys.map(k => [k, now])) }
       if (window.MotrixReads) keys.forEach(k => window.MotrixReads.mark('case', k))
       this.unreadOnly = false
-      this.filterCases()
+      if (this.caseCounts) this.caseCounts = { ...this.caseCounts, unread: 0 }
+      this.loadCases()
     },
 
     filterCases() {
@@ -1415,9 +1452,8 @@ function app() {
       } else {
         list = list.filter(c => c.deal_tag === this.listTab)
       }
-      if (this.unreadOnly) {
-        list = list.filter(c => this.isUnread(c))
-      }
+      // CM7：「只看有新動態」由伺服器篩（全部案件）；這裡不再用 caseActivity 過濾——
+      //      它是之後才非同步載入的，先過濾會把伺服器回來的那幾筆濾掉
       if (this.search.trim()) {
         const q = this.search.trim().toLowerCase()
         list = list.filter(c =>

@@ -786,6 +786,51 @@ def next_quote_no(authorization: str = Header(None)):
 
 # ── CRUD ──────────────────────────────────────────────────────────────────────
 
+# ── CM7：案件清單常用篩選（WHERE 片段，皆不帶前綴）────────────────────────────
+# 我負責的：業務歸屬（同可見性規則的前兩項）、被分配、或案件角色（CM3 起存帳號）是我
+_CASE_MINE_SQL = (
+    "(sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?)"
+    " OR EXISTS (SELECT 1 FROM json_each(COALESCE(assigned_user_ids,'[]')) WHERE value=?)"
+    " OR json_extract(data_json,'$.caseRecord.roles.filler.username')=?"
+    " OR json_extract(data_json,'$.caseRecord.roles.sales.username')=?"
+    " OR json_extract(data_json,'$.caseRecord.roles.executor.username')=?)"
+)
+_CASE_STAGE_OVERDUE_SQL = (
+    "EXISTS (SELECT 1 FROM case_stages cs WHERE cs.quote_no=quotations.quote_no"
+    " AND cs.done=0 AND cs.due_date != '' AND cs.due_date < ?)"
+)
+# 款項期別：received 是 JSON 布林（json_extract 取出 1／0）；預計收款日當日不算逾期
+_CASE_RECV_OVERDUE_SQL = (
+    "EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data_json,'$.caseRecord.payment.items'),'[]')) p"
+    " WHERE COALESCE(json_extract(p.value,'$.received'),0) = 0"
+    " AND COALESCE(json_extract(p.value,'$.expectedReceiptDate'),'') != ''"
+    " AND json_extract(p.value,'$.expectedReceiptDate') < ?)"
+)
+# 缺單據（2026-09-24 使用者裁示 ④）：缺發票（已收款卻沒登錄發票號碼），或執行階段全部完成卻缺完工單／
+# 缺出貨單，任一成立。三個原因各自一段，清單每筆也回傳原因旗標（missing_invoice／missing_completion／
+# missing_shipping），畫面標出是缺哪一種。
+_CASE_MISSING_INVOICE_SQL = (
+    "EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data_json,'$.caseRecord.payment.items'),'[]')) p"
+    " WHERE COALESCE(json_extract(p.value,'$.received'),0) = 1"
+    " AND TRIM(COALESCE(json_extract(p.value,'$.invoiceNo'),'')) = '')"
+)
+_CASE_STAGES_ALL_DONE_SQL = (
+    "(EXISTS (SELECT 1 FROM case_stages s WHERE s.quote_no=quotations.quote_no)"
+    " AND NOT EXISTS (SELECT 1 FROM case_stages s WHERE s.quote_no=quotations.quote_no AND s.done=0))"
+)
+_CASE_MISSING_COMPLETION_SQL = (
+    f"({_CASE_STAGES_ALL_DONE_SQL}"
+    " AND NOT EXISTS (SELECT 1 FROM completion_notes n WHERE n.quote_no=quotations.quote_no))"
+)
+_CASE_MISSING_SHIPPING_SQL = (
+    f"({_CASE_STAGES_ALL_DONE_SQL}"
+    " AND NOT EXISTS (SELECT 1 FROM shipping_notes n WHERE n.quote_no=quotations.quote_no))"
+)
+_CASE_MISSING_DOCS_SQL = (
+    f"({_CASE_MISSING_INVOICE_SQL} OR {_CASE_MISSING_COMPLETION_SQL} OR {_CASE_MISSING_SHIPPING_SQL})"
+)
+
+
 @router.get("/api/quotations")
 def list_quotations(
     status:   Optional[str] = None,
@@ -799,6 +844,11 @@ def list_quotations(
     sort:     Optional[str] = None,
     dir:      Optional[str] = None,
     counts:   int = 0,
+    mine:          int = 0,
+    stage_overdue: int = 0,
+    recv_overdue:  int = 0,
+    missing_docs:  int = 0,
+    unread:        int = 0,
     authorization: str = Header(None),
 ):
     """CM6（2026-09-24）：案件頁改由伺服器搜尋／篩選／排序／分頁（原本一次拉 500 件在前端篩，
@@ -827,7 +877,11 @@ def list_quotations(
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no) as stage_total, "
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=1) as stage_done, "
         "(SELECT COUNT(*) FROM case_stages WHERE quote_no=quotations.quote_no AND done=0 "
-        " AND due_date != '' AND due_date < ?) as stage_overdue"
+        " AND due_date != '' AND due_date < ?) as stage_overdue, "
+        # CM7：缺單據的原因（畫面標出缺哪一種）
+        f"{_CASE_MISSING_INVOICE_SQL} as missing_invoice, "
+        f"{_CASE_MISSING_COMPLETION_SQL} as missing_completion, "
+        f"{_CASE_MISSING_SHIPPING_SQL} as missing_shipping"
     )
     # select_params 只服務上面 SELECT 子句裡的相關子查詢（stage_overdue 的 today），跟
     # where_sql 的 params 分開放——SELECT 子句在 SQL 字串裡排在 WHERE 之前，它的 ? 佔位
@@ -864,6 +918,18 @@ def list_quotations(
         params.extend([kw, kw, kw])
     if settle == "draft":
         where_sql += f" AND {SQL_SETTLE_STATUS} = 'draft'"
+    # CM7：常用篩選（可疊加，皆為 AND）
+    quick = {
+        "mine": (_CASE_MINE_SQL, [user["id"], user["display_name"], user["id"]] + [user["username"]] * 3),
+        "stage_overdue": (_CASE_STAGE_OVERDUE_SQL, [today]),
+        "recv_overdue": (_CASE_RECV_OVERDUE_SQL, [today]),
+        "missing_docs": (_CASE_MISSING_DOCS_SQL, []),
+    }
+    for key, on in (("mine", mine), ("stage_overdue", stage_overdue),
+                    ("recv_overdue", recv_overdue), ("missing_docs", missing_docs)):
+        if on:
+            where_sql += " AND " + quick[key][0]
+            params.extend(quick[key][1])
     # CM13（2026-09-24 使用者裁示）：沒有財務檢視權的帳號不回金額與毛利率
     masked = not money_visible(user)
     # CM6：排序白名單；看不到金額的帳號不可依金額排序（順序本身會洩漏金額大小）⇒ 忽略
@@ -873,11 +939,28 @@ def list_quotations(
     if sort in sort_cols and not (sort == "total" and masked):
         direction = "ASC" if (dir or "").lower() == "asc" else "DESC"
         order_sql = f"{sort_cols[sort]} {direction}, id DESC"
-    sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?"
-    rows  = conn.execute(sql, select_params + params + [limit, offset]).fetchall()
-    count = conn.execute(
-        "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
-    ).fetchone()[0]
+    if unread:
+        # CM7：未讀的判斷在 item_reads（與紅點同一套），先取出目前條件下的全部單號再比對，
+        # 分頁在比對之後做 ⇒ 不會只在已載入的那一頁裡找
+        from routers.item_reads import unread_keys
+        cand = [r[0] for r in conn.execute(
+            f"SELECT quote_no FROM quotations WHERE 1=1{where_sql} ORDER BY {order_sql}", params)]
+        hot = set(unread_keys(conn, user, "case", cand))
+        picked = [no for no in cand if no in hot]
+        count = len(picked)
+        page_nos = picked[offset:offset + limit] if limit > 0 else []
+        rows = []
+        if page_nos:
+            ph = ",".join("?" * len(page_nos))
+            got = {r["quote_no"]: r for r in conn.execute(
+                f"SELECT {select_cols} FROM quotations WHERE quote_no IN ({ph})", select_params + page_nos)}
+            rows = [got[no] for no in page_nos if no in got]
+    else:
+        sql = f"SELECT {select_cols} FROM quotations WHERE 1=1{where_sql} ORDER BY {order_sql} LIMIT ? OFFSET ?"
+        rows  = conn.execute(sql, select_params + params + [limit, offset]).fetchall()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM quotations WHERE 1=1" + where_sql, params
+        ).fetchone()[0]
     counts_out = None
     if counts:
         c = conn.execute(
@@ -894,6 +977,17 @@ def list_quotations(
         ).fetchone()[0]
         counts_out = {"all": c["n"] or 0, "active": c["active"] or 0, "closed": c["closed"] or 0,
                       "settling": c["settling"] or 0, "overdueStages": overdue or 0}
+        # CM7：常用篩選的件數（同一個母體）
+        for out_key, key in (("mine", "mine"), ("stageOverdueCases", "stage_overdue"),
+                             ("recvOverdue", "recv_overdue"), ("missingDocs", "missing_docs")):
+            frag, fp = quick[key]
+            counts_out[out_key] = conn.execute(
+                f"SELECT COUNT(*) FROM quotations WHERE 1=1{base_where} AND {frag}", base_params + fp
+            ).fetchone()[0]
+        from routers.item_reads import unread_keys
+        all_nos = [r[0] for r in conn.execute(
+            f"SELECT quote_no FROM quotations WHERE 1=1{base_where}", base_params)]
+        counts_out["unread"] = len(unread_keys(conn, user, "case", all_nos))
     conn.close()
     items = []
     for r in rows:

@@ -136,7 +136,8 @@ def test_counts_ignore_search_and_paging(client, make_user):
     _one("MQ-CNT-C1", deal_tag="已結案")
     _one("MQ-CNT-X", deal_tag="未成案")
     body = client.get(URL, headers=h, params={"deal_tag": BOTH, "counts": 1, "q": "A1", "limit": 1}).json()
-    assert body["counts"] == {"all": 3, "active": 2, "closed": 1, "settling": 1, "overdueStages": 2}
+    got = {k: body["counts"][k] for k in ("all", "active", "closed", "settling", "overdueStages")}
+    assert got == {"all": 3, "active": 2, "closed": 1, "settling": 1, "overdueStages": 2}
 
 
 def test_edit_last_is_the_last_history_entry(client, make_user):

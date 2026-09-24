@@ -241,6 +241,27 @@ def _latest_by_others(conn, user, kind, keys) -> dict:
     return out
 
 
+_CHUNK = 300   # 每批 key 數：_latest_by_others 一批會用到 3 倍參數，舊版 SQLite 上限 999
+
+
+def unread_keys(conn, user, kind, keys) -> list:
+    """呼叫者看得到、且別人在他讀過（或未讀基準）之後動過的那幾筆。分批查，key 數不設上限
+    （案件清單的「只看有新動態」要對全部案件判斷，不只已載入的那一頁，CM7）。"""
+    base = _norm(_baseline(conn, user["username"], kind))
+    out = []
+    for i in range(0, len(keys), _CHUNK):
+        part = _visible_keys(conn, user, kind, list(keys[i:i + _CHUNK]))
+        if not part:
+            continue
+        ph = ",".join("?" * len(part))
+        reads = {r["item_key"]: _norm(r["read_at"]) for r in conn.execute(
+            f"SELECT item_key, read_at FROM item_reads WHERE username=? AND kind=? "
+            f"AND item_key IN ({ph})", [user["username"], kind] + part)}
+        latest = _latest_by_others(conn, user, kind, part)
+        out += [k for k, ts in latest.items() if ts > max(reads.get(k, ""), base)]
+    return sorted(out)
+
+
 @router.post("/api/reads/unread")
 def unread_items(body: dict = Body(...), authorization: str = Header(None)):
     """回 `{unread: [key...]}`：只含呼叫者看得到、且別人在他讀過之後動過的那幾筆。"""
@@ -257,18 +278,10 @@ def unread_items(body: dict = Body(...), authorization: str = Header(None)):
         base = _norm(_baseline(conn, user["username"], kind))
         if not keys:
             return {"unread": [], "baseline": base}
-        keys = _visible_keys(conn, user, kind, keys)
-        if not keys:
-            return {"unread": [], "baseline": base}
-        ph = ",".join("?" * len(keys))
-        reads = {r["item_key"]: _norm(r["read_at"]) for r in conn.execute(
-            f"SELECT item_key, read_at FROM item_reads WHERE username=? AND kind=? "
-            f"AND item_key IN ({ph})", [user["username"], kind] + keys)}
-        latest = _latest_by_others(conn, user, kind, keys)
+        unread = unread_keys(conn, user, kind, keys)
     finally:
         conn.close()
-    unread = [k for k, ts in latest.items() if ts > max(reads.get(k, ""), base)]
-    return {"unread": sorted(unread), "baseline": base}
+    return {"unread": unread, "baseline": base}
 
 
 @router.get("/api/reads/module-counts")

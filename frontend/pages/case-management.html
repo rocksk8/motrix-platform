@@ -820,7 +820,7 @@
           </div>
           <div class="cm-list__tabs" x-show="caseViewMode==='list'">
             <button class="cm-list__tab" :class="{active: listTab==='all'}" @click="setListTab('all')">
-              全部
+              進行中
               <span class="cm-list__tab-badge" x-show="summaryActive()" x-text="summaryActive()"></span>
             </button>
             <button class="cm-list__tab" :class="{active: listTab==='已成案'}" @click="setListTab('已成案')">
@@ -838,7 +838,23 @@
           </div>
         </div>
 
-        <div class="cm-unread-bar" x-show="unreadCount() > 0" @click="unreadOnly = !unreadOnly; filterCases()">
+        <!-- CM7：常用篩選（可疊加；伺服器端，全部案件） -->
+        <div class="cm-quick" data-testid="case-quick-filters" x-show="caseViewMode==='list'"
+             style="display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px">
+          <template x-for="f in quickFilterDefs" :key="f.key">
+            <button type="button" class="aq-sort" :class="{on: caseQuick[f.key]}" :data-quick="f.key"
+                    :aria-pressed="caseQuick[f.key] ? 'true' : 'false'" :title="f.hint || ''"
+                    @click="toggleQuick(f.key)">
+              <span x-text="f.label"></span>
+              <span x-show="caseCounts" style="margin-left:3px;opacity:.75"
+                    x-text="caseCounts ? (caseCounts[f.count] || 0) : ''"></span>
+            </button>
+          </template>
+        </div>
+        <div x-show="caseViewMode==='list' && caseSortPref.sortMode === 'custom' && cases.length < caseTotal"
+             style="font-size:11px;color:var(--text-dim);padding:0 12px 6px">自訂排序只套用在已載入的案件上</div>
+
+        <div class="cm-unread-bar" x-show="unreadCount() > 0 || unreadOnly" @click="toggleUnreadOnly()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
           <span x-text="unreadCount() + ' 筆案件有新動態'"></span>
           <span style="text-decoration:underline" x-text="unreadOnly ? '顯示全部 →' : '只看有新動態 →'"></span>
@@ -873,6 +889,10 @@
               </div>
               <template x-if="isUnread(c)">
                 <span class="cm-card__unread-tag">有新動態</span>
+              </template>
+              <template x-for="t in missingDocTags(c)" :key="t">
+                <span class="cm-card__unread-tag" data-testid="case-missing-doc"
+                      style="background:#FEF3C7;color:#92400E" x-text="t"></span>
               </template>
               <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
               <div class="cm-card__sales" x-show="c.sales_person" x-text="'業務：' + c.sales_person"></div>
