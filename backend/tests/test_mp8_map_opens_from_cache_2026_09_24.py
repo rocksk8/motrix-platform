@@ -140,6 +140,7 @@ def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_u
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
+from tests._map_tiles import block_tiles  # noqa: E402
 from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
     live_server, _login)                                              # noqa: F401
 
@@ -162,6 +163,7 @@ def test_mp8_toggling_a_dataset_filters_locally_without_refetching(live_server, 
     with pw.sync_playwright() as p_:
         browser = p_.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900})
+        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
         try:
             def _serve(route):
                 asked.append(route.request.url)

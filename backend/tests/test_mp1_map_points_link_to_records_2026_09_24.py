@@ -117,6 +117,7 @@ def test_mp1_every_own_point_carries_the_id_of_its_record(client, make_user, _ge
 
 pw = pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
+from tests._map_tiles import block_tiles  # noqa: E402
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
     live_server, _login)
@@ -156,6 +157,7 @@ def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, m
     with sync_playwright() as pw_:
         browser = pw_.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900})
+        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
         try:
             _login(page, live_server, u, p)
             _open_map(page, live_server, "?focus=customers%3A7")
@@ -187,6 +189,7 @@ def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo):
     with sync_playwright() as pw_:
         browser = pw_.chromium.launch()
         page = browser.new_page()
+        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
         try:
             _login(page, live_server, u, p)
             page.goto(live_server + "/pages/map.html")
@@ -242,6 +245,7 @@ def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_serve
     with sync_playwright() as pw_:
         browser = pw_.chromium.launch()
         page = browser.new_page(viewport={"width": 1366, "height": 900})
+        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
         try:
             _login(page, live_server, u, p)
             for url, name, focus in cases:

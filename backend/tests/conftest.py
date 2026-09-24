@@ -1197,3 +1197,72 @@ def _netguard(request, monkeypatch):
         "⚠️ 若這一題確實需要連外，加 `@pytest.mark.%s` 並在 docstring 寫出理由。"
         % (len(attempts), "\n  ".join(attempts[:5]), _ALLOW_OUTBOUND)
     )
+
+
+#: 瀏覽器端視為「本機」的網址前綴（測試伺服器一律是 127.0.0.1 的 loopback）。
+_BROWSER_LOCAL_PREFIXES = ("http://127.0.0.1", "http://localhost", "data:", "blob:", "about:")
+
+
+def _assert_no_browser_outbound(attempts):
+    assert not attempts, (
+        "這一題的**瀏覽器**對外發出了 %d 次請求（已被攔下）：\n  %s\n"
+        "⇒ 八成是地圖圖磚沒有攔：`context.route(\"**/tile.openstreetmap.org/**\", "
+        "lambda r: r.fulfill(status=200, content_type=\"image/png\", body=<1×1 png>))`。\n"
+        "⚠️ 若這一題確實需要連外，加 `@pytest.mark.%s` 並在 docstring 寫出理由。"
+        % (len(attempts), "\n  ".join(attempts[:5]), _ALLOW_OUTBOUND)
+    )
+
+
+@pytest.fixture(autouse=True)
+def _browser_netguard(request, monkeypatch):
+    """瀏覽器對外連線 ⇒ **那一題紅**（2026-09-25）。
+
+    `_netguard` 只看**這個 Python 行程**的 urlopen／SMTP ⇒ Playwright 起的瀏覽器
+    發出的請求（例如地圖圖磚連 tile.openstreetmap.org）**完全看不到**：
+    mp0／mp1／mp8 開了 map.html 卻沒攔圖磚，每跑一次就真的連 OSM 一次。
+
+    作法：攔 `Browser.new_context`／`Browser.new_page`，對每個 context 裝一個
+    `**/*` 的 route —— 本機的 `fallback()`（交給題目自己的 route 或照常送出），
+    其餘 **abort 並記帳**，收尾時斷言（同 `_netguard`：守門的例外可能被受測對象接住，
+    所以記帳、收尾才判）。
+
+    ## ⚠️ 限制
+    - 它裝在**最早**，Playwright 的 route 是**後註冊的先處理** ⇒ 題目自己攔下並
+      `fulfill` 的請求（例如圖磚回一張空白 png）不會走到這裡，這正是要的。
+      但題目自己的 route 若對外部網址呼叫 `continue_()`，會**直接送出、繞過這一道**。
+    - 只管透過 `Browser.new_context／new_page` 建的頁面（這個 codebase 全部是）；
+      `launch_persistent_context` 不在射程內。
+    """
+    try:
+        from playwright.sync_api._generated import Browser
+    except Exception:  # 沒裝 Playwright 的環境：沒有瀏覽器可守
+        yield
+        return
+    attempts = []
+    request.node._browser_outbound = attempts          # 給正對照題讀
+
+    def _guard(route):
+        url = route.request.url
+        if url.startswith(_BROWSER_LOCAL_PREFIXES):
+            route.fallback()
+        else:
+            attempts.append(url)
+            route.abort()
+
+    orig_ctx, orig_page = Browser.new_context, Browser.new_page
+
+    def _new_context(self, *a, **kw):
+        ctx = orig_ctx(self, *a, **kw)
+        ctx.route("**/*", _guard)
+        return ctx
+
+    def _new_page(self, *a, **kw):
+        page = orig_page(self, *a, **kw)
+        page.context.route("**/*", _guard)
+        return page
+
+    monkeypatch.setattr(Browser, "new_context", _new_context)
+    monkeypatch.setattr(Browser, "new_page", _new_page)
+    yield
+    if not request.node.get_closest_marker(_ALLOW_OUTBOUND):
+        _assert_no_browser_outbound(attempts)

@@ -15,6 +15,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
+from tests._map_tiles import block_tiles  # noqa: E402
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
     live_server, _login)
@@ -40,6 +41,7 @@ def test_mp0_a_point_popup_shows_external_text_as_text(live_server, make_user):
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 900})
+        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
         try:
             page.route("**/api/map/points*", lambda route: route.fulfill(
                 status=200, content_type="application/json", body=_points_body()))

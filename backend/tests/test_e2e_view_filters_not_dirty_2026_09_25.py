@@ -16,6 +16,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from playwright.sync_api import sync_playwright  # noqa: E402
+from tests._map_tiles import block_tiles  # noqa: E402
 
 from tests.test_e2e_material_orders_2026_09_11 import live_server, _login  # noqa: F401,E402
 import sys  # noqa: E402
@@ -103,6 +104,7 @@ def test_changing_a_view_filter_does_not_arm_the_leave_warning(live_server, make
         browser = p.chromium.launch()
         try:
             page = browser.new_context().new_page()
+            block_tiles(page)   # map 頁的底圖圖磚不連外（conftest._browser_netguard）
             _login(page, live_server, *u)
             _open(page, live_server, pg)
             seen_missing = set(filters)
