@@ -477,7 +477,7 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 | IA1 出廠帳號由客戶自己輸入 | **繼續暫停**（現況 `helpers/startup.py:106-130` 仍建 jeff；`auth.py:1563/1597` 仍寫死不可刪／停用） |
 | WL7① 登入頁／報表改讀公司資料 | **繼續暫停**（現況 `login.html:203/301` 印允碩；`reports.py`、`network_plan_export.py` 讀 company_profile 次數 0） |
 | WL7② PDF 頁尾產品標記 | **不加** |
-| JV27 傳票簽核資料損壞時整張讀不到 | **修，這輪一起上** ⇒ hichan-bf，排在 T10/T12 之後、AC1 之前；拿掉 `routers/vouchers.py:228 _appr_of()` 的重複解析，改走 `helpers/voucher.py`；`test_em5_voucher_chain_unreadable` 的 xfail(strict) 翻面 |
+| JV27 傳票簽核資料損壞時整張讀不到 | 🔴 **更正：早已完成**（a40504e，hichan-bf 查證：read_voucher 走 parse_approval_json、em5 題 6 passed 無 xfail）。hichan-0a 只 grep 到 `def _appr_of` 存在就當成未修，並據此向使用者報「這輪修」——錯誤原文保留如下：~~**修，這輪一起上** ⇒ hichan-bf，排在 T10/T12 之後、AC1 之前；拿掉 `routers/vouchers.py:228 _appr_of()` 的重複解析，改走 `helpers/voucher.py`；`test_em5_voucher_chain_unreadable` 的 xfail(strict) 翻面~~ |
 | PENDING-RULINGS 資料／檔案 6 條（MG3、QS1①②、UP2、UP3①②） | 表單未作答 ⇒ 依該檔規則「不回＝同意目前的決定」 |
 | BN16／BN17／BN18／QS1-a（舊獎金單流程） | 舊流程已由 §十一 退役 ⇒ 不再問 |
 | KNOWN-GAPS 11 條（只有使用者在正式機查得到） | 未問，下一批 |
