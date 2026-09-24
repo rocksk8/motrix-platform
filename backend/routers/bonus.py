@@ -2171,13 +2171,17 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
             ok, code, msg = check_approve_permission(tiers, ct, user["username"], conn)
             if not ok:
                 raise HTTPException(code, msg)
-            for a in tiers[ct].get("approvers") or []:
-                if not a.get("approvedAt"):
-                    a["approvedAt"] = now
-                    a["approvedBy"] = _user_name(user)
-                    break
-            appr["currentTier"] = ct + 1
-            nxt = "待發放" if ct + 1 >= len(tiers) else "待審核"
+            # 共用規則（tiered_approval）：同一層可放多人、依序輪流簽，**全數 approved 才換層**。
+            # ☠️ 2026-09-25 修正：原本第一人一簽就 currentTier+1、也不寫 status ⇒ 同層第二位以後永遠不用簽，
+            #    而最後一層一過就開核定傳票（AC3）。check_approve_permission 已確認他是當層第一個未簽的人（或其代理人）。
+            approvers = tiers[ct].get("approvers") or []
+            fp = next(a for a in approvers if a.get("status") != "approved")
+            fp["status"] = "approved"
+            fp["approvedAt"] = now
+            fp["approvedBy"] = _user_name(user)
+            if all(a.get("status") == "approved" for a in approvers):
+                appr["currentTier"] = ct + 1
+            nxt = "待發放" if int(appr.get("currentTier") or 0) >= len(tiers) else "待審核"
         else:
             if user.get("role") != "superadmin":
                 raise HTTPException(403, "僅超級管理員可執行此操作")
