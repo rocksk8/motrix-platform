@@ -84,8 +84,16 @@ def _open(browser, base, u):
     page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
     page.goto(f"{base}/pages/map.html")
     page.wait_for_function(f"() => {{ try {{ return {MD}._map }} catch (e) {{ return false }} }}", timeout=20000)
-    page.wait_for_timeout(1200)
+    # PERF #6：原本固定等 1.2 秒 ⇒ 等點位載完（loading 解除）＋畫出來（兩個影格）
+    page.wait_for_function(f"() => !{MD}.loading", timeout=20000)
+    _frames(page)
     return page
+
+
+def _frames(page, n=2):
+    """等瀏覽器實際畫出 n 個影格（版面／捲動／class 變更之後的量測點）。
+    ⚠️ 頁面有 CSS transition 時兩個影格不夠——地圖面板沒有（2026-09-25 實查）。"""
+    page.evaluate("n => new Promise(r => { const f = k => k ? requestAnimationFrame(() => f(k - 1)) : r(); f(n) })", n)
 
 
 @pytest.mark.e2e
@@ -98,7 +106,7 @@ def test_scrolling_the_map_under_the_topbar_does_not_cover_it(live_server, make_
             page = _open(browser, live_server, u)
             # 捲到地圖頂端跑到頂欄正中間（使用者「向下拖曳」之後的樣子）
             page.evaluate("() => { const t = document.getElementById('mp-canvas').getBoundingClientRect().top; window.scrollBy(0, t - 30) }")
-            page.wait_for_timeout(400)
+            _frames(page)
             r = page.evaluate(HITS)
             assert r["mapTop"] < r["hdr"] - 20, ("前提：地圖要捲到頂欄底下", r["mapTop"], r["hdr"])
             bad = [h for h in r["out"] if not h["ok"]]
@@ -117,7 +125,8 @@ def test_fullscreen_map_still_covers_the_whole_page(live_server, make_user, _geo
         try:
             page = _open(browser, live_server, u)
             page.locator("button.mp-full-btn").click()
-            page.wait_for_timeout(500)
+            page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+            _frames(page)
             hit = page.evaluate("() => { const e = document.elementFromPoint(720, 20); return !!(e && e.closest('.mp-map-panel')) }")
             assert hit, "全螢幕時頂欄位置應是地圖面板"
         finally:
