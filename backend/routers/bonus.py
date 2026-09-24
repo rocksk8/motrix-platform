@@ -26,7 +26,7 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Header, HTTPException
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from fastapi.responses import HTMLResponse, Response
 
 from db import get_db
@@ -45,6 +45,18 @@ from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for, p
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 logger = logging.getLogger(__name__)
+
+#: 2026-09-24（SPEC-BONUS §十一／§11.7）：舊的「獎金項目＋分潤單」流程停用。
+#: 使用者：舊單「舊的都是開發機測試用，直接作廢」⇒ 舊的**寫入**端點一律 410，
+#: 讀取端點（清單／明細／PDF／試算）保留。不以 migration 作廢任何資料。
+LEGACY_GONE_MESSAGE = "舊的獎金分潤流程已停用，請改用「獎金分潤」頁面（以案件為中心）。"
+
+
+def _legacy_write_gone():
+    raise HTTPException(410, LEGACY_GONE_MESSAGE)
+
+
+_GONE = [Depends(_legacy_write_gone)]
 
 
 def _is_manager(user):
@@ -150,7 +162,7 @@ def list_bonus_items(authorization: str = Header(None)):
             "can_edit": user.get("role") == "superadmin"}
 
 
-@router.post("/items")
+@router.post("/items", dependencies=_GONE)
 def create_bonus_item(body: dict = Body(...), authorization: str = Header(None)):
     """新增獎金項目。
 
@@ -1019,7 +1031,7 @@ def _plan_allocations(conn, quote_no, allocations):
     return settle, base, planned
 
 
-@router.post("/awards")
+@router.post("/awards", dependencies=_GONE)
 def create_award(body: dict = Body(...), authorization: str = Header(None)):
     """依案件產生一張獎金分潤單（**套用當下凍結**）。
 
@@ -1143,7 +1155,7 @@ def preview_award(quote_no: str, body: dict = Body(default={}),
     }
 
 
-@router.post("/awards/{award_id}/submit")
+@router.post("/awards/{award_id}/submit", dependencies=_GONE)
 def submit_award(award_id: int, body: dict = Body(default={}),
                  authorization: str = Header(None)):
     """送審：草稿 -> 待審核。`SPEC-BN8.md §3`：三支端點一律 superadmin。
@@ -1195,7 +1207,7 @@ def submit_award(award_id: int, body: dict = Body(default={}),
     return {"ok": True, "status": "待審核"}
 
 
-@router.post("/awards/{award_id}/approve")
+@router.post("/awards/{award_id}/approve", dependencies=_GONE)
 def approve_award(award_id: int, body: dict = Body(default={}),
                   authorization: str = Header(None)):
     """簽核通過。逐層推進；簽完最後一層 -> 已核准。
@@ -1252,7 +1264,7 @@ def approve_award(award_id: int, body: dict = Body(default={}),
     return {"ok": True, "status": nxt}
 
 
-@router.post("/awards/{award_id}/reject")
+@router.post("/awards/{award_id}/reject", dependencies=_GONE)
 def reject_award(award_id: int, body: dict = Body(default={}),
                  authorization: str = Header(None)):
     """退回：回草稿，**清除簽核**。
@@ -1309,7 +1321,7 @@ def reject_award(award_id: int, body: dict = Body(default={}),
     return {"ok": True, "status": "草稿"}
 
 
-@router.post("/awards/{award_id}/mark-paid")
+@router.post("/awards/{award_id}/mark-paid", dependencies=_GONE)
 def mark_award_paid(award_id: int, body: dict = Body(default={}),
                     authorization: str = Header(None)):
     """手動標記已發放（`SPEC-BN8.md §5c` 的退路）：錢走系統外管道
@@ -1360,7 +1372,7 @@ def mark_award_paid(award_id: int, body: dict = Body(default={}),
     return {"ok": True}
 
 
-@router.post("/awards/{award_id}/void")
+@router.post("/awards/{award_id}/void", dependencies=_GONE)
 def void_award(award_id: int, body: dict = Body(default={}),
                authorization: str = Header(None)):
     """作廢一張獎金分潤單。**原單留著**（與傳票同一條原則）。
@@ -1437,7 +1449,7 @@ def preview_award(award_id: int, authorization: str = Header(None)):
     return HTMLResponse(content=body)
 
 
-@router.post("/awards/{award_id}/recall")
+@router.post("/awards/{award_id}/recall", dependencies=_GONE)
 def recall_award(award_id: int, authorization: str = Header(None)):
     """`BN12 §1①`：申請人把送審中的獎金分潤單**收回草稿**，清簽核。
 

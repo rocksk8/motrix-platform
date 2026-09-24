@@ -4206,6 +4206,43 @@ def get_approval_queue(authorization: str = Header(None)):
             "awardId":             r["id"],
         })
 
+    # 以案件為中心的獎金分潤（SPEC-BONUS §十一，2026-09-24）：approval_json 是自己的欄位；
+    # 端點吃案件單號（/api/bonus/cases/{quote_no}/approve），所以 quoteNo 直接給單號。
+    # 金額不放進佇列（total=0）：待發放前只有最高管理者看得到金額，而簽核人也只能是最高管理者
+    # （W1），明細到獎金分潤頁看。
+    bca_rows = conn.execute("""
+        SELECT b.quote_no, b.created_by, b.created_at, b.approval_json,
+               q.customer_name, q.project_name
+        FROM bonus_case_awards b LEFT JOIN quotations q ON q.quote_no = b.quote_no
+        WHERE b.status = '待審核'
+        ORDER BY b.id DESC
+    """).fetchall()
+    for r in bca_rows:
+        f = _queue_tier_fields(r["approval_json"])
+        try:
+            _req = (json.loads(r["approval_json"] or "{}") or {}).get("requestedBy") or r["created_by"]
+        except (TypeError, ValueError):
+            _req = r["created_by"]
+        items.append({
+            "type":                "bonus_case_award",
+            "quoteNo":             r["quote_no"],
+            "customer":            r["customer_name"] or "",
+            "projectName":         r["project_name"] or "",
+            "total":               0,
+            "quoteDate":           (r["created_at"] or "")[:10],
+            "salesPerson":         "",
+            "requestedBy":         _req or "",
+            "requestedByDisplay":  _req or "",
+            "requestedAt":         r["created_at"] or "",
+            "isEditApproval":      False,
+            "reasons":             [],
+            "tiers":               f["tiers"],
+            "currentTier":         f["currentTier"],
+            "tierCount":           f["tierCount"],
+            "currentApprovers":    f["currentApprovers"],
+            "linkedQuoteNo":       r["quote_no"],
+        })
+
     ccr_rows = conn.execute("""
         SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
         FROM case_change_requests
@@ -4436,6 +4473,10 @@ def get_approval_queue_count(authorization: str = Header(None)):
     # 不算」判準才成立。
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT approval_json FROM bonus_awards WHERE status IN ('待審核','簽核中')"
+    ).fetchall()]
+    # 以案件為中心的獎金分潤（SPEC-BONUS §十一）：與上面佇列列表同一個條件，角標才對得起來。
+    approval_jsons += [r[0] for r in conn.execute(
+        "SELECT approval_json FROM bonus_case_awards WHERE status = '待審核'"
     ).fetchall()]
     # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
     # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層

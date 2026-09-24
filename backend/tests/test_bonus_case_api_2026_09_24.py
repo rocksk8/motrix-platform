@@ -323,3 +323,35 @@ def test_default_settings_superadmin_only(client, people):
     bad = client.put("/api/bonus/cases/settings", headers=_auth(people["bc_sa"]),
                      json={"rate_bp": 2000, "split_bp": {"sales": 1, "project": 1, "admin": 1}})
     assert bad.status_code == 400
+
+
+# ── 簽核佇列 ─────────────────────────────────────────────────────────────────
+
+def _queue(client, tok):
+    r = client.get("/api/approval-queue", headers=_auth(tok))
+    assert r.status_code == 200, r.text
+    return [it for g in r.json()["queue"] for it in g["items"] if it.get("type") == "bonus_case_award"]
+
+
+def test_pending_case_bonus_shows_in_queue_until_approved(client, people):
+    _seed_case("MQ-BC-060")
+    _create(client, people["bc_sa"], "MQ-BC-060", members=_members_spec())
+    _set_flow(["bc_sa2"])
+    client.post("/api/bonus/cases/MQ-BC-060/submit", headers=_auth(people["bc_sa"]))
+    q = _queue(client, people["bc_sa2"])
+    assert [i["quoteNo"] for i in q] == ["MQ-BC-060"], q
+    assert q[0]["total"] == 0, "佇列不放金額"
+    assert [a["username"] for a in q[0]["currentApprovers"]] == ["bc_sa2"]
+    client.post("/api/bonus/cases/MQ-BC-060/approve", headers=_auth(people["bc_sa2"]))
+    assert _queue(client, people["bc_sa2"]) == []
+
+
+def test_queue_badge_counts_pending_case_bonus(client, people):
+    _seed_case("MQ-BC-061")
+    _create(client, people["bc_sa"], "MQ-BC-061", members=_members_spec())
+    _set_flow(["bc_sa2"])
+    before = client.get("/api/approval-queue/count", headers=_auth(people["bc_sa2"])).json()
+    client.post("/api/bonus/cases/MQ-BC-061/submit", headers=_auth(people["bc_sa"]))
+    after = client.get("/api/approval-queue/count", headers=_auth(people["bc_sa2"])).json()
+    key = next(k for k, v in after.items() if isinstance(v, int))
+    assert after[key] == before.get(key, 0) + 1, (before, after)

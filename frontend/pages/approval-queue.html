@@ -580,13 +580,14 @@
                  抽屜裡重做一次（`/api/approval-queue/detail` 也還沒有它的分支，
                  那個守門是 `_guard_case()`，是「案件」的存取模型，傳票不是）。 -->
             <a :href="selected?.type === 'voucher' ? ('voucher.html?id=' + (selected?.voucherId||''))
+                    : selected?.type === 'bonus_case_award' ? ('bonus.html?q=' + encodeURIComponent(selected?.quoteNo||''))
                     : isVoucher(selected) ? ('case-management.html?no=' + (selected?.linkedQuoteNo||''))
                     : ('quotation-form.html?id=' + (selected?.quoteNo||''))" target="_blank"
                style="font-size:12px;color:var(--accent);text-decoration:none;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);display:inline-flex;align-items:center;gap:5px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
+              <span x-text="selected?.type === 'voucher' ? '開啟傳票' : selected?.type === 'bonus_case_award' ? '開啟獎金分潤' : (isVoucher(selected) ? '開啟案件管理' : '開啟報價單')"></span>
             </a>
-            <button class="btn btn-sm" x-show="selected?.type !== 'case_change'" @click="previewItem(selected)" :disabled="previewFetching"
+            <button class="btn btn-sm" x-show="selected?.type !== 'case_change' && selected?.type !== 'bonus_case_award'" @click="previewItem(selected)" :disabled="previewFetching"
                     style="font-size:12px;color:var(--accent);background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               預覽
@@ -1211,6 +1212,8 @@
           // 開票申請憑據都叫「傳票」的舊稱），這裡要跟後端 APPROVAL_DOC_TYPE_LABELS
           // 一致寫「傳票（會計）」，否則簽核人分不出卡片上是哪一種。
           if (item.type === 'voucher') return '傳票（會計）'
+          // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
+          if (item.type === 'bonus_case_award') return '獎金分潤'
           return '報價單'
         },
 
@@ -1222,6 +1225,7 @@
           if (item?.type === 'payment_request') return 'pr'
           if (item?.type === 'case_change') return 'cc'
           if (item?.type === 'voucher') return 'vo'
+          if (item?.type === 'bonus_case_award') return 'pr'
           return 'quotation'
         },
 
@@ -1232,6 +1236,8 @@
           if (item?.type === 'completion_note') return '/api/completion-notes'
           if (item?.type === 'payment_request') return '/api/payment-requests'
           if (item?.type === 'voucher') return '/api/vouchers'
+          // 吃案件單號：/api/bonus/cases/{quote_no}/approve|reject
+          if (item?.type === 'bonus_case_award') return '/api/bonus/cases'
           return '/api/quotations'
         },
 
@@ -1291,7 +1297,7 @@
         async previewItem(item) {
           // 額外支出跟已結案變更一樣沒有 PDF 可預覽
           if (!item || item.type === 'case_change' || item.type === 'extra_expense'
-              || item.type === 'extra_expense_change') return
+              || item.type === 'extra_expense_change' || item.type === 'bonus_case_award') return
           this.previewFetching = true
           try {
             const r = await fetch(`${API}${this.apiBase(item)}/${encodeURIComponent(this.itemPathId(item))}/pdf-download`, {
@@ -1462,6 +1468,8 @@
           this.detail = null
           this.fileUrls = {}
           if (!item) return
+          // 獎金分潤沒有佇列詳情端點：明細到獎金分潤頁看（抽屜裡有連結）
+          if (item.type === 'bonus_case_award') return
           const id = item.type === 'case_change' ? item.changeRequestId
                    : item.type === 'extra_expense' ? item.extraExpenseId
                    : item.quoteNo
@@ -1596,11 +1604,13 @@
           const isMultiTier = tiers.length > 0
           const isLastTier  = isMultiTier && (item.currentTier ?? 0) === tiers.length - 1
           const willFinish  = !isMultiTier || isLastTier
-          const finalStatus = this.isVoucher(item) ? '已核准' : '已送出'
+          const finalStatus = item.type === 'bonus_case_award' ? '待發放'
+                            : this.isVoucher(item) ? '已核准' : '已送出'
           // 同一人連任多層：一次問清楚、一次簽完（2026-09-15）
           const cascadeNos = window.MotrixApproval.selfCascadeTiers(
             tiers, item.currentTier ?? 0, this.session.username, this.myDelegatedFor,
-            { completesOnFirst: item.type === 'extra_expense' || item.type === 'extra_expense_change' })
+            { completesOnFirst: item.type === 'extra_expense' || item.type === 'extra_expense_change'
+                                || item.type === 'bonus_case_award' })
           const willFinishAll = willFinish ||
             (cascadeNos.length > 0 && cascadeNos[cascadeNos.length - 1] === tiers.length)
           let confirmMsg  = willFinishAll
@@ -1713,6 +1723,8 @@
             //    （`vouchers.py:562`：狀態回草稿＋清除簽核＋單號升版），
             //    不是 `/reject`。body 的欄位名也是 `reason`，跟額外支出同形狀。
             const isVoucherType = item.type === 'voucher'
+            // 獎金分潤的駁回端點是 /reject，body 欄位名是 reason（同額外支出）
+            const isBonusCase = item.type === 'bonus_case_award'
             const rejectUrl = isXEC
               ? `${API}/api/quotations/${encodeURIComponent(item.linkedQuoteNo)}/extra-expenses/${item.extraExpenseId}/change-request/reject`
               : item.type === 'extra_expense'
@@ -1723,7 +1735,7 @@
             const r = await fetch(rejectUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
-              body: JSON.stringify((isXE || isVoucherType) ? { reason: this.rejectNote } : { note: this.rejectNote })
+              body: JSON.stringify((isXE || isVoucherType || isBonusCase) ? { reason: this.rejectNote } : { note: this.rejectNote })
             })
             if (!r.ok) {
               const err = await r.json().catch(() => ({}))
