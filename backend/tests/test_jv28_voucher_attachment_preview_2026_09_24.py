@@ -200,7 +200,12 @@ def test_jv28_the_preview_window_list_opens_the_same_in_page_modal_without_popup
             _upload(page, live_server, token, vid, "收據.png", "image/png", _png_bytes())
             _open_preview(page, live_server, token, vid)
             page.click('.vc-preview-atts a.vc-att__name:has-text("收據.png")', timeout=10000)
-            page.wait_for_timeout(1500)
+            # PERF #6：原本固定等 1.5 秒 ⇒ 等頁內預覽圖出現（正確行為的終點）。
+            # 錯的寫法（開新分頁）時圖不會出現 ⇒ 等滿 10 秒，那段時間內 popup 早就被數到，下面照樣紅。
+            try:
+                page.wait_for_selector(IMG, state="visible", timeout=10000)
+            except Exception:
+                pass
             # ⚙️ 先數 popup（量尺：HEAD 上 window.open 的那一次要被數到），再看頁內 modal。
             assert popups == [], "點附件開了 %d 個新分頁／彈出視窗" % len(popups)
             page.wait_for_selector(IMG, state="visible", timeout=10000)
@@ -227,7 +232,11 @@ def test_jv28_closing_the_modal_revokes_the_blob_url(live_server, make_user):
             assert not page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
                 "量尺：還沒關就被 revoke 了（畫面上的圖會是破的）")
             page.click('[data-testid="voucher-att-close"]')
-            page.wait_for_timeout(300)
+            # PERF #6：原本固定等 0.3 秒 ⇒ 等 revoke 被記到（最多 3 秒；沒記到就交給下面的斷言）
+            try:
+                page.wait_for_function("u => window.__jv28.revoked.includes(u)", arg=src, timeout=3000)
+            except Exception:
+                pass
             assert page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
                 "關閉 modal 之後 blob URL 沒有 revoke —— 每開一次就累積一份")
         finally:

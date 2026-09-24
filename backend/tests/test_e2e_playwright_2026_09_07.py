@@ -369,8 +369,17 @@ def test_login_create_submit_approve_smoke(live_server, make_user):
                 raise
             page2.click('button:has-text("預覽後簽核")')
             page2.wait_for_selector('button:has-text("確認簽核")', timeout=20000)
-            page2.click('button:has-text("確認簽核")')
-            page2.wait_for_timeout(2500)  # apiSave() 非同步，等一下讓狀態更新回來
+            # PERF #6：原本固定等 2.5 秒 ⇒ 等簽核請求回來，再等狀態欄更新（失敗時的第二個 alert 也在回應之後才跳）
+            with page2.expect_response(lambda r: r.request.method == "POST" and r.url.endswith("/approve"),
+                                       timeout=20000):
+                page2.click('button:has-text("確認簽核")')
+            try:
+                page2.wait_for_function(
+                    "() => { const s = document.querySelector('select.status-select-admin'); return s && s.value === '已送出' }",
+                    timeout=10000)
+            except Exception:
+                pass   # 判決留給下面有說明的斷言
+            page2.evaluate("() => new Promise(r => setTimeout(r, 0))")   # 讓回應後同步排入的 alert 先跑
             # 第一個對話框是預期中的「確認簽核通過此報價單？」confirm()；若簽核 API
             # 失敗，approveQuote() 會再跳出第二個 alert('簽核失敗：...')。
             assert len(dialogs) == 1, f"簽核流程跳出未預期的額外對話框：{dialogs}"

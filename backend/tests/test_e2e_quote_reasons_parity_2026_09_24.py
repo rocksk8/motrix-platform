@@ -141,9 +141,14 @@ def test_defaults_load_failure_does_not_judge_terms(live_server, make_user):
             page = browser.new_page()
             _login(page, live_server, username, password)
             page.route("**/api/settings/quote-terms-defaults", lambda r: r.fulfill(status=503, body="{}"))
-            page.goto(f"{live_server}/pages/quotation-form.html")
+            # PERF #6：原本固定等 1.5 秒 ⇒ 等那一趟（被攔成 503 的）預設值請求**整個收完**再讓出一個 task
+            # ⚠️ 用 requestfinished 不用 response：response 在收到標頭時就觸發，頁面還要讀 body 才決定旗標，
+            #    太早檢查會搶在錯誤寫法「失敗仍設成已載入」之前（假綠）
+            with page.expect_event("requestfinished", lambda r: "/api/settings/quote-terms-defaults" in r.url,
+                                   timeout=20000):
+                page.goto(f"{live_server}/pages/quotation-form.html")
             page.wait_for_function(f"() => {DATA_JS}.session && {DATA_JS}.q", timeout=20000)
-            page.wait_for_timeout(1500)
+            page.evaluate("() => new Promise(r => setTimeout(r, 0))")
             assert page.evaluate(f"{DATA_JS}._termsDefaultsLoaded") is False
             reasons = page.evaluate(
                 f"(() => {{ const c = {DATA_JS}; c.q.deliveryTerms = '改過'; c.checkApproval(); return c.approvalReasons }})()")
