@@ -86,12 +86,18 @@ PAGES = [
 REPORT_SCOPES = ["month", "quarter", "year"]
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _open(page, base, pg):
     page.goto(f"{base}/pages/{pg}.html")
     page.wait_for_function("() => typeof window.motrixIsDirty !== 'undefined' || document.readyState === 'complete'",
                            timeout=20000)
     page.wait_for_function(f"() => window.Alpine && {ROOT}", timeout=20000)
-    page.wait_for_timeout(300)
+    _rendered(page)   # PERF #6：原本固定等 300ms
 
 
 @pytest.mark.e2e
@@ -125,7 +131,7 @@ def test_changing_a_view_filter_does_not_arm_the_leave_warning(live_server, make
                     page.wait_for_function(f"() => !{ROOT}.loading && !!{ROOT}.data"
                                            + (f" && !!{ROOT}.cashPos && !{ROOT}.cashPosLoading" if "CashPos" in s else ""),
                                            timeout=20000)
-                    page.wait_for_timeout(150)
+                    _rendered(page)   # PERF #6：原本固定等 150ms
                 r = page.evaluate(_FIRE, [filters, setup])
                 seen_missing &= set(r["missing"])
                 dirtied |= set(r["dirtied"])

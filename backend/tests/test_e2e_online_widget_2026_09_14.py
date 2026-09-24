@@ -59,11 +59,16 @@ def test_superadmin_sees_online_widget(live_server, make_user):
             page.wait_for_selector("#tb-online-btn", timeout=10000)
             page.click("#tb-online-btn")
             page.wait_for_selector("#tb-online-pop", state="visible", timeout=5000)
-            page.wait_for_timeout(400)          # 等 fetch 回來
+            # PERF #6：原本固定等 400ms ⇒ 等清單真的列出人（沒列出來就交給下面有說明的斷言）
+            try:
+                page.wait_for_function("() => (document.getElementById('tb-online-list') || {}).innerText", timeout=5000)
+            except Exception:
+                pass
             # 觀測點放在清單內容：只看數字的話，0 人也會是「看起來正常」
-            assert "ow_super" in page.inner_text("#tb-online-list") or \
-                   page.inner_text("#tb-online-count").strip() not in ("", "–"), \
-                   page.inner_text("#tb-online-pop")
+            # 📌 更正留著（2026-09-25，PERF #6 換等待時突變實測）：原本是「清單有自己 **或** 數字不是空的」——
+            #    清單整個壞掉（空白）時數字照樣有值 ⇒ 後半讓前半永遠不必成立，跟上一行註解說的正好相反。
+            #    /api/online-users 會列出自己（任一 session 5 分鐘內活動）⇒ 清單一定看得到自己。
+            assert "ow_super" in page.inner_text("#tb-online-list"), page.inner_text("#tb-online-pop")
         finally:
             browser.close()
 

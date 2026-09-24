@@ -95,8 +95,9 @@ def test_an_old_legacy_rate_quote_is_shown_as_disabled_and_must_be_changed_befor
 
         messages = []
         page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
-        page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).saveDraft()")
-        page.wait_for_timeout(500)
+        # PERF #6：原本固定等 500ms ⇒ 等那個提示對話框出現（沒出現就逾時紅，說明在下一行）
+        with page.expect_event("dialog", timeout=10000):
+            page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).saveDraft()")
         assert messages and "已停用的稅率" in messages[0], messages
 
         page.locator("select[data-tax-type]").select_option("taxable")

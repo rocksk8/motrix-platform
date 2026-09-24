@@ -221,14 +221,20 @@ def test_ql24_manually_collapsing_it_still_works(live_server, make_user):
                 "   與『預設值算得對不對』是兩件不同的事，先看這一格。")
 
             toggle.click()
-            page.wait_for_timeout(200)
+            try:   # PERF #6：原本固定等 200ms ⇒ 等它真的收起來（沒收起來交給下面的斷言）
+                body.wait_for(state="hidden", timeout=3000)
+            except Exception:
+                pass
             assert not body.is_visible(), (
                 "點了摺疊標題之後，抬頭／帳號那一區**仍然看得見** ——\n"
                 + "☠️ 若 `_open` 被改成字面 `true` 而不是 `some(...)` 算出來的值，\n"
                   "   使用者會永遠收不起這一區。")
 
             toggle.click()
-            page.wait_for_timeout(200)
+            try:   # PERF #6：原本固定等 200ms ⇒ 等它真的展開
+                body.wait_for(state="visible", timeout=3000)
+            except Exception:
+                pass
             assert body.is_visible(), (
                 "再點一次收起來的標題，那一區卻**沒有重新展開** ——\n"
                 "☠️ 摺疊互動本身壞了，不是預設值的問題。")

@@ -19,6 +19,12 @@ QUOTE_NO = "MQ-202609-072"
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 @pytest.fixture()
 def live_server(client):
     """比照 test_e2e_copy_to_new_2026_09_10.py 的同名 fixture。"""
@@ -146,7 +152,7 @@ def test_list_filters_survive_returning_to_list(live_server, make_user):
             page.goto(f"{live_server}/pages/quotations.html")
             page.wait_for_function(f"() => {DATA}.quotes.length > 0", timeout=20000)
             page.evaluate(f"{DATA}.search = 'mq-202609'; {DATA}.activeTab = '已送出'; {DATA}.filterMonth = '2026-09'")
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms（等 $watch 把篩選條件存起來再離開）
             page.goto(f"{live_server}/pages/quotation-form.html?id={QUOTE_NO}")
             page.goto(f"{live_server}/pages/quotations.html")
             page.wait_for_function(f"() => {DATA}.quotes.length > 0", timeout=20000)

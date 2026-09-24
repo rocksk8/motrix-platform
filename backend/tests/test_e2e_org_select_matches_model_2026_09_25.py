@@ -20,6 +20,12 @@ from tests.test_e2e_reports_period_select_matches_model_2026_09_25 import _MISMA
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
+
+def _rendered(page):
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
+    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 def _org_with_member(username):
     import db
     conn = db.get_db()
@@ -66,7 +72,7 @@ def test_editing_a_user_shows_their_real_division_and_department(live_server, ma
                     r.continue_()
             page.wait_for_function(f"() => ({ROOT}.orgTree || []).length >= 2", timeout=10000)
             page.wait_for_function(f"() => {ROOT}.form.departmentId === {dept}", timeout=5000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             got = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[x-data]'))
               const pick = e => [...document.querySelectorAll('select')].find(s => s.getAttribute('x-model.number') === e)
               return { div: pick('form.divisionId').value, dept: pick('form.departmentId').value,
@@ -94,7 +100,7 @@ def test_org_structure_add_member_picker_matches_model(live_server, make_user):
             _login(page, live_server, *admin)
             page.goto(f"{live_server}/pages/org-structure.html")
             page.wait_for_function(f"() => window.Alpine && {ROOT} && ({ROOT}.orgTree || []).length >= 2", timeout=20000)
-            sel_css = "select[x-model\.number='addMemberSelection[dept.id]']"
+            sel_css = r"select[x-model\.number='addMemberSelection[dept.id]']"
             page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")
             sel = page.locator(sel_css)
             sel.wait_for(state="visible", timeout=5000)
@@ -103,13 +109,13 @@ def test_org_structure_add_member_picker_matches_model(live_server, make_user):
             assert init[0] == "0" and not init[1], init
             opt = sel.locator("option").nth(1).get_attribute("value")
             sel.select_option(opt)
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms
             assert page.evaluate(_MISMATCHES_JS) == []          # 使用者選了一個人
             page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 收合（x-if 拆掉下拉）
-            page.wait_for_timeout(200)
+            _rendered(page)   # PERF #6：原本固定等 200ms
             page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 再展開（重建）
             sel.wait_for(state="visible", timeout=5000)
-            page.wait_for_timeout(300)
+            _rendered(page)   # PERF #6：原本固定等 300ms
             got = page.evaluate(f"() => [[...document.querySelectorAll('select')].find(e => e.getAttribute('x-model.number') === 'addMemberSelection[dept.id]').value, String({ROOT}.addMemberSelection[{dept}])]")
             assert got[0] == got[1] == opt, "重新展開後下拉顯示 %s、模型是 %s（選的是 %s）" % (got[0], got[1], opt)
         finally:
