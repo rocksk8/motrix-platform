@@ -2075,7 +2075,13 @@ def create_case_bonus(quote_no: str, body: dict = Body(default={}), authorizatio
 
 @router.put("/cases/{quote_no}")
 def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
-    """編輯草稿：比率、三類比例、名單與個人比例。淨利快照在草稿期間每次存檔重讀。"""
+    """編輯：比率、三類比例、名單與個人比例。淨利快照每次存檔重讀。
+
+    BN22（2026-09-25 使用者「核准前都能改」）：草稿與待審核（簽核中）可改，待發放以後 409。
+    待審核且**有實際變更**：
+    - 已有人簽過 ⇒ 必須帶 `confirmResetApprovals: true`，否則 409（不可以讓舊頁面或 API 靜默作廢別人的簽核）；
+    - 維持待審核、依現行設定重新解析簽核鏈（W1 同送審）、currentTier 歸 0；舊簽核寫進永久 edit_log。
+    傳票（AC3）只在進入待發放時才開 ⇒ 待審核必定沒有；有的話是資料異常 ⇒ 409 不改。"""
     user = _require_user(authorization, require_superadmin=True)
     conn = get_db()
     try:
@@ -2083,8 +2089,11 @@ def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str 
         award, lines = _load_case_award(conn, quote_no)
         if award is None:
             raise HTTPException(404, "這個案件還沒有獎金分潤單。")
-        if award["status"] != "草稿":
-            raise HTTPException(409, "只有草稿可以編輯，這一張現在是「%s」。" % award["status"])
+        if award["status"] not in ("草稿", "待審核"):
+            raise HTTPException(409, "「%s」的獎金分潤單不能再修改（核准後不可改）。" % award["status"])
+        in_review = award["status"] == "待審核"
+        if in_review and (award["accrual_voucher_id"] or 0):
+            raise HTTPException(409, "這張單已經連著核定傳票，不能修改；請先退回。")
         ok, net, err = _net_profit_or_error(_settlement_of(conn, quote_no) or {})
         if not ok:
             raise HTTPException(400, err)
@@ -2099,20 +2108,106 @@ def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str 
                               for c in CATEGORIES}}
         after = {"net_profit": str(net), "rate_bp": rate, "split_bp": split,
                  "members": {c: [(p["username"], p["person_bp"]) for p in members[c]] for c in CATEGORIES}}
+        changes = [{"field": k, "old": before[k], "new": after[k]} for k in before if before[k] != after[k]]
+        voided = []
+        if in_review and not changes:
+            # 沒有實際變更：什麼都不寫（按一下儲存不可以讓別人重簽）
+            conn.commit()
+            return {"ok": True, "status": award["status"], "voidedCount": 0, "voided": []}
         now = datetime.now().isoformat()
+        if in_review:
+            appr_before = json.loads(award["approval_json"] or "{}") or {}
+            voided = _signed_approvers(appr_before)
+            if voided and body.get("confirmResetApprovals") is not True:
+                raise HTTPException(409, "已有 %d 位完成簽核（%s）；儲存這次修改會作廢這些簽核，需重新簽核。"
+                                    % (len(voided), "、".join(voided)))
+            requester = appr_before.get("requestedBy") or user["username"]
+            tiers = _resolve_bonus_tiers(conn, requester)
+            appr_new = {"tiers": tiers, "currentTier": 0, "requestedBy": requester,
+                        "requestedAt": appr_before.get("requestedAt") or now}
+            if voided:
+                appr_new["resetAt"], appr_new["resetBy"] = now, _user_name(user)
+            conn.execute("UPDATE bonus_case_awards SET approval_json=? WHERE id=?",
+                         (json.dumps(appr_new, ensure_ascii=False), award["id"]))
         conn.execute(
             "UPDATE bonus_case_awards SET net_profit=?, rate_bp=?, split_json=?, pool_amount=?,"
             " updated_by=?, updated_at=? WHERE id=?",
             (str(net), rate, json.dumps(split), result["pool"], _user_name(user), now, award["id"]))
         _write_lines(conn, award["id"], members, result)
-        changes = [{"field": k, "old": before[k], "new": after[k]} for k in before if before[k] != after[k]]
         if changes:
             _case_log(conn, award["id"], user, "edit", changes)
+        if voided:
+            _case_log(conn, award["id"], user, "reset_approvals",
+                      {"voided": voided, "approval_before": appr_before})
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "bonus.case.update", "bonus_case_awards", quote_no, "獎金分潤編輯")
-    return {"ok": True}
+    _audit(_tok(authorization), "bonus.case.update", "bonus_case_awards", quote_no,
+           "獎金分潤編輯" + ("（作廢 %d 位簽核、需重簽）" % len(voided) if voided else ""))
+    return {"ok": True, "status": award["status"], "voidedCount": len(voided), "voided": voided}
+
+
+def _resolve_bonus_tiers(conn, requester_username):
+    """依現行設定解析獎金分潤簽核鏈（送審與「簽核中改動 ⇒ 重簽」共用）。
+    鏈上出現非最高管理者（含代理人解析）⇒ 400（W1）。"""
+    scope = _get_setting("approval_flow_scope", {}) or {}
+    flow = _get_setting(approval_flow_setting_key("bonus", scope), None)
+    tiers = []
+    if flow is not None:
+        try:
+            tiers = setting_to_active_tiers(flow, conn, requester_username)
+        except UnresolvedManagerError as exc:
+            raise HTTPException(400, str(exc))
+    bad = _non_superadmin_in_chain(conn, tiers)
+    if bad:
+        raise HTTPException(400, _ONLY_SUPERADMIN_MSG + "（非最高管理者：%s）" % "、".join(dict.fromkeys(bad)))
+    return tiers
+
+
+def _signed_approvers(appr):
+    """待審核中已完成的簽核（顯示名稱清單）。沒有鏈的單在待審核時不可能已簽（一簽就待發放）。"""
+    out = []
+    for t in (appr.get("tiers") or []):
+        for a in (t.get("approvers") or []):
+            if a.get("status") == "approved" or a.get("approvedAt"):
+                out.append(a.get("approvedBy") or a.get("displayName") or a.get("display_name") or a.get("username"))
+    return out
+
+
+@router.post("/cases/{quote_no}/preview")
+def preview_case_bonus(quote_no: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """BN22 即時重算：與存檔**同一個** `allocate()`、同一份淨利，不寫任何東西。
+    body 同 PUT（rate_bp／split_bp／members），沒帶的取這張單的現值（還沒建單取預設與自動名單）。
+    只給能編輯的人（最高管理者）：結果由淨利推得，出納（C1）不可以看到。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        _case_row(conn, quote_no)
+        ok, net, err = _net_profit_or_error(_settlement_of(conn, quote_no) or {})
+        if not ok:
+            raise HTTPException(400, err)
+        award, lines = _load_case_award(conn, quote_no)
+        body = body or {}
+        if award is not None:
+            rate0, split0 = award["rate_bp"], json.loads(award["split_json"] or "{}")
+            members0 = _members_from_lines(lines)
+        else:
+            rate0, split0 = _case_defaults()
+            auto, _notes = _auto_members(conn, quote_no)
+            members0 = {c: [{"username": m["username"], "person_bp": None, "source": m.get("source") or "manual"}
+                            for m in auto[c]] for c in CATEGORIES}
+        rate = body.get("rate_bp", rate0)
+        split = body.get("split_bp", split0)
+        members = _normalize_members(conn, body["members"]) if "members" in body else members0
+        result = _calc_or_400(net, rate, split, members)
+        names = {r["username"]: r["display_name"] for r in conn.execute(
+            "SELECT username, COALESCE(display_name, '') AS display_name FROM users")}
+    finally:
+        conn.close()
+    for c in CATEGORIES:
+        for l in result["categories"][c]["lines"]:
+            l["displayName"] = names.get(l["username"], "") or l["username"]
+    return result
 
 
 @router.post("/cases/{quote_no}/submit")
@@ -2128,17 +2223,7 @@ def submit_case_bonus(quote_no: str, authorization: str = Header(None)):
             raise HTTPException(409, "只有草稿可以送審，這一張現在是「%s」。" % award["status"])
         if not lines:
             raise HTTPException(400, "名單是空的，不能送審。")
-        scope = _get_setting("approval_flow_scope", {}) or {}
-        flow = _get_setting(approval_flow_setting_key("bonus", scope), None)
-        tiers = []
-        if flow is not None:
-            try:
-                tiers = setting_to_active_tiers(flow, conn, user["username"])
-            except UnresolvedManagerError as exc:
-                raise HTTPException(400, str(exc))
-        bad = _non_superadmin_in_chain(conn, tiers)
-        if bad:
-            raise HTTPException(400, _ONLY_SUPERADMIN_MSG + "（非最高管理者：%s）" % "、".join(dict.fromkeys(bad)))
+        tiers = _resolve_bonus_tiers(conn, user["username"])
         appr = {"tiers": tiers, "currentTier": 0, "requestedBy": user["username"],
                 "requestedAt": datetime.now().isoformat()}
         conn.execute("UPDATE bonus_case_awards SET status='待審核', approval_json=?, updated_by=?, updated_at=?"

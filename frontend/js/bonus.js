@@ -4,6 +4,8 @@
 // 左側案件清單（搜尋／狀態篩選），右側該案的獎金明細。
 // 後端：/api/bonus/cases（routers/bonus.py）。算式在後端（helpers/bonus_case.py），這裡只顯示
 // 後端算好的結果，不自己重算金額——算兩份就會有兩個答案。
+// BN22（2026-09-25）：改比例／人員時「即時」重算＝打 POST /preview（同一個 allocate()、不存檔），
+// 不是在這裡複製算式。草稿與待審核（簽核中）可改；待審核已有人簽 ⇒ 存檔會作廢那些簽核、需重簽。
 //
 // ⚠️ 舊的「獎金項目＋分潤單」流程已停用（使用者：舊單「直接作廢」），本頁不顯示舊單。
 
@@ -43,6 +45,13 @@ function bonusPage() {
     addGroup: { sales: '', project: '', admin: '' },
     returnReason: '',
     rejectReason: '',
+    // BN22 即時重算
+    preview: null,        // POST /preview 的結果（與存檔同一個算式）
+    previewError: '',
+    previewPending: false,
+    _previewSeq: 0,
+    _previewTimer: null,
+    replacePick: {},      // { 'cat:i': username } 換人下拉
     settings: null,       // { ratePct, split }
     settingsOpen: false,
     // `AC3`：傳票科目設定（最高管理者）、出納選的銀行科目、T100 設定頁維護的銀行帳戶清單
@@ -77,6 +86,8 @@ function bonusPage() {
       } catch (e) { /* 查不到就照常載入——不要因為這支旗標打不到而把整個模組擋掉 */ }
       await this.loadList()
       if (this.isSuper) { this.loadUsers(); this.loadGroups(); this.loadSettings(); this.loadVoucherAccounts() }
+      // 任何一個編輯欄位變動 ⇒ 重算預覽（Alpine $watch 對物件是深層比對）
+      if (this.$watch) this.$watch('draft', () => this._schedulePreview())
       const q = new URLSearchParams(location.search).get('q')
       if (q) await this.select(q)
     },
@@ -168,6 +179,9 @@ function bonusPage() {
       this.detailError = ''
       this.msg = ''
       this.draft = null
+      this.preview = null
+      this.previewError = ''
+      this._previewSeq++          // 還在路上的舊預覽一律作廢
       this.returnReason = ''
       this.rejectReason = ''
       try {
@@ -192,6 +206,87 @@ function bonusPage() {
         d.members[c] = ls.map(l => ({ username: l.username, pct: bnPct(l.person_bp), source: l.source }))
       })
       this.draft = d
+    },
+    // 待審核（簽核中）也可改：按「修改」才進入編輯，簽核鈕照常在
+    canEdit() { return this.isSuper && this.detail && this.detail.award && this.detail.scope === 'all' &&
+                       (this.detail.status === '草稿' || this.detail.status === '待審核') },
+    startEdit() { if (this.canEdit()) this._startDraft() },
+    cancelEdit() { this.draft = null; this.preview = null; this.previewError = ''; this._previewSeq++ },
+    // 已完成的簽核（顯示名稱）：存檔會作廢它們
+    signedApprovers() {
+      const appr = (this.detail && this.detail.award && this.detail.award.approval) || {}
+      const out = []
+      ;(appr.tiers || []).forEach(t => (t.approvers || []).forEach(a => {
+        if (a.status === 'approved' || a.approvedAt) out.push(a.approvedBy || a.displayName || a.display_name || a.username)
+      }))
+      return out
+    },
+
+    // ── BN22 即時重算：debounce → POST /preview；晚到的舊回應丟掉 ─────────────
+    _schedulePreview() {
+      if (!this.draft) return
+      clearTimeout(this._previewTimer)
+      this._previewTimer = setTimeout(() => this._runPreview(), 300)
+    },
+    async _runPreview() {
+      if (!this.draft) return
+      const seq = ++this._previewSeq
+      const p = this._draftPayload()
+      if (p.err) { this.preview = null; this.previewError = p.err; return }
+      this.previewPending = true
+      try {
+        const r = await fetch('/api/bonus/cases/' + encodeURIComponent(this.selectedNo) + '/preview', {
+          method: 'POST', headers: this._jsonAuth(), body: JSON.stringify(p.body) })
+        const d = await r.json().catch(() => ({}))
+        if (seq !== this._previewSeq) return
+        if (!r.ok) { this.preview = null; this.previewError = d.detail || ('試算失敗（HTTP ' + r.status + '）'); return }
+        this.preview = d
+        this.previewError = ''
+      } catch (e) {
+        if (seq === this._previewSeq) { this.preview = null; this.previewError = '網路錯誤：' + e.message }
+      } finally {
+        if (seq === this._previewSeq) this.previewPending = false
+      }
+    },
+    // 編輯中顯示預覽的金額；不在編輯中顯示存下去的
+    previewAmount(cat, username) {
+      if (!this.preview) return null
+      const l = ((this.preview.categories || {})[cat] || { lines: [] }).lines.find(x => x.username === username)
+      return l ? l.amount : null
+    },
+    previewCatAmount(cat) {
+      if (!this.preview) return null
+      return ((this.preview.categories || {})[cat] || {}).amount
+    },
+    replacePerson(cat, i) {
+      const key = cat + ':' + i
+      const u = this.replacePick[key]
+      this.replacePick[key] = ''
+      if (!u || this.draft.members[cat].some(m => m.username === u)) return
+      const m = this.draft.members[cat][i]
+      this.draft.members[cat].splice(i, 1, { username: u, pct: m.pct, source: 'manual' })
+    },
+    logLabel(a) {
+      return { create: '建立', edit: '修改', submit: '送審', approve: '簽核', reject: '駁回', 'return': '退回',
+               reset_approvals: '簽核作廢（修改後需重簽）', mark_paid: '標記已發放' }[a] || a
+    },
+    // 變更紀錄的內容摘要：前後名單／比率／比例
+    logDetail(g) {
+      let c
+      try { c = JSON.parse(g.changes_json || 'null') } catch (e) { return '' }
+      if (!c) return ''
+      if (g.action === 'reset_approvals') return '作廢：' + (c.voided || []).join('、')
+      if (!Array.isArray(c)) return ''
+      const who = list => (list || []).map(x => this.userLabel(Array.isArray(x) ? x[0] : x)).join('、') || '（無）'
+      return c.map(ch => {
+        if (ch.field === 'members') return BN_CATS.filter(k => JSON.stringify((ch.old || {})[k]) !== JSON.stringify((ch.new || {})[k]))
+          .map(k => this.catLabels[k] + '：' + who((ch.old || {})[k]) + ' → ' + who((ch.new || {})[k])).join('；')
+        if (ch.field === 'rate_bp') return '獎金比率 ' + bnPct(ch.old) + '% → ' + bnPct(ch.new) + '%'
+        if (ch.field === 'split_bp') return '分配 ' + BN_CATS.map(k => bnPct((ch.old || {})[k])).join('/') + ' → ' +
+          BN_CATS.map(k => bnPct((ch.new || {})[k])).join('/')
+        if (ch.field === 'net_profit') return '淨利 ' + ch.old + ' → ' + ch.new
+        return ch.field
+      }).filter(Boolean).join('；')
     },
     linesOf(cat) { return ((this.detail && this.detail.lines) || []).filter(l => l.category === cat) },
     catAmount(cat) { return this.linesOf(cat).reduce((s, l) => s + (l.amount || 0), 0) },
@@ -259,7 +354,19 @@ function bonusPage() {
     async saveDraft() {
       const p = this._draftPayload()
       if (p.err) { this.msg = p.err; return }
-      if (await this._post('', p.body, 'PUT')) await this._refresh('已儲存')
+      const body = p.body
+      if (this.detail.status === '待審核') {
+        const signed = this.signedApprovers()
+        if (signed.length) {
+          const ok = await MotrixUI.confirm(
+            '已有 ' + signed.length + ' 位完成簽核（' + signed.join('、') + '）。\n儲存這次修改會作廢這些簽核，需要重新簽核。',
+            { title: '修改會作廢已完成的簽核', okText: '儲存並作廢簽核', danger: true })
+          if (!ok) return
+          body.confirmResetApprovals = true
+        }
+      }
+      const d = await this._post('', body, 'PUT')
+      if (d) await this._refresh(d.voidedCount ? '已儲存；已作廢 ' + d.voidedCount + ' 位簽核，需重新簽核' : '已儲存')
     },
     async submitDraft() {
       const p = this._draftPayload()

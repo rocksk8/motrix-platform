@@ -40,6 +40,8 @@ EXEMPT = {
         "純預覽：依送來的參數畫拓樸圖，不存檔",
     ("network_plans_quick.py", "POST", "/api/network-plans-quick/preview"):
         "純預覽：快速拓樸的畫面預覽，沒有資料表",
+    ("bonus.py", "POST", "/cases/{quote_no}/preview"):
+        "純試算：獎金分潤改比例／人員時即時重算（BN22），與存檔同一個 allocate()，不寫任何資料表",
     ("network_plans_quick.py", "POST", "/api/network-plans-quick/pdf"):
         "即時產生 PDF 回傳下載，沒有資料表也不歸檔",
     ("system.py", "POST", "/api/audit-log/module-counts"):

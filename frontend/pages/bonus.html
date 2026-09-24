@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>獎金分潤 - MOTRIX 專案管理系統</title>
+  <script src="../static/ui.js"></script>
   <script src="../js/bonus.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -44,6 +45,7 @@
     .bn-note{font-size:11px;color:#92400E;font-family:var(--font-zh)}
     .bn-err{font-size:12px;color:var(--danger);font-family:var(--font-zh)}
     .bn-ok{font-size:12px;color:#15803D;font-family:var(--font-zh)}
+    .bn-warn{font-size:12px;color:var(--warning);background:var(--warning-light);border:1px solid var(--warning);border-radius:6px;padding:8px 10px;margin:8px 0;font-family:var(--font-zh)}
     .bn-btn{padding:6px 14px;border-radius:6px;border:1px solid transparent;font-size:12px;cursor:pointer;font-family:var(--font-zh);background:var(--black,#0A0A0A);color:#fff}
     .bn-btn--ghost{background:#fff;color:var(--text-primary);border-color:var(--border-light)}
     .bn-btn--danger{background:#fff;color:var(--danger);border-color:#FECACA}
@@ -190,7 +192,18 @@
                 <!-- 草稿編輯（最高管理者） -->
                 <template x-if="draft">
                   <div class="bn-card" data-testid="bn-draft">
-                    <div class="bn-sec">草稿（存檔後以伺服器計算的金額為準）</div>
+                    <div class="bn-sec" x-text="detail.status === '待審核' ? '修改（簽核中）' : '草稿'"></div>
+                    <!-- BN22：簽核中修改會作廢已完成的簽核 -->
+                    <div class="bn-warn" x-show="detail.status === '待審核' && signedApprovers().length" data-testid="bn-resign-warn"
+                         x-text="'已有 ' + signedApprovers().length + ' 位完成簽核（' + signedApprovers().join('、') + '）；儲存修改會作廢這些簽核，需要重新簽核。'"></div>
+                    <!-- BN22 即時重算：與存檔同一個算式（後端 /preview），存檔前就看得到 -->
+                    <div class="bn-kv" data-testid="bn-preview">
+                      <div>預覽（未存檔）<b x-text="previewPending ? '計算中…' : (preview ? '已更新' : '—')"></b></div>
+                      <div>獎金池<b x-text="preview ? money(preview.pool) : '—'" data-testid="bn-preview-pool"></b></div>
+                      <div>發放合計<b x-text="preview ? money(preview.paid_total) : '—'" data-testid="bn-preview-paid"></b></div>
+                      <div>尾差（留公司）<b x-text="preview ? money(preview.remainder) : '—'" data-testid="bn-preview-remainder"></b></div>
+                    </div>
+                    <div class="bn-err" x-show="previewError" x-text="previewError" data-testid="bn-preview-error"></div>
                     <div class="bn-row">獎金比率<input class="bn-in" x-model="draft.ratePct" data-testid="bn-rate"> %</div>
                     <template x-for="c in cats" :key="c">
                       <div class="bn-cat">
@@ -198,7 +211,8 @@
                           <span x-text="catLabels[c]"></span>
                           <span>比例 <input class="bn-in" x-model="draft.split[c]" :data-testid="'bn-split-' + c"> %</span>
                           <label style="font-size:11px;font-weight:400"><input type="checkbox" x-model="draft.custom[c]"> 指定個人比例（不勾＝平均）</label>
-                          <span style="margin-left:auto;font-weight:400" x-text="'類金額合計 ' + money(catAmount(c))"></span>
+                          <span style="margin-left:auto;font-weight:400" :data-testid="'bn-cat-amount-' + c"
+                                x-text="'類金額合計 ' + (previewCatAmount(c) === null || previewCatAmount(c) === undefined ? '—' : money(previewCatAmount(c)))"></span>
                         </div>
                         <div class="bn-note" x-show="draft.members[c].length === 0">這一類沒有人：金額不發（留公司）</div>
                         <template x-for="(m, i) in draft.members[c]" :key="c + m.username">
@@ -206,8 +220,14 @@
                             <span class="who" x-text="userLabel(m.username) + (m.source && m.source.startsWith('group:') ? '（群組）' : m.source === 'manual' ? '' : '（自動）')"></span>
                             <span x-show="draft.custom[c]"><input class="bn-in" x-model="m.pct"> %</span>
                             <span x-show="!draft.custom[c]" style="color:var(--text-dim)">平均</span>
-                            <span class="amt" x-text="money((linesOf(c).find(l => l.username === m.username) || {}).amount)"></span>
-                            <button class="bn-btn bn-btn--danger" @click="removePerson(c, i)">移除</button>
+                            <span class="amt" :data-testid="'bn-amt-' + c + '-' + m.username"
+                                  x-text="previewAmount(c, m.username) === null ? '—' : money(previewAmount(c, m.username))"></span>
+                            <select class="bn-sel" x-model="replacePick[c + ':' + i]" @change="replacePerson(c, i)"
+                                    :data-testid="'bn-replace-' + c + '-' + m.username" style="width:110px">
+                              <option value="">換人…</option>
+                              <template x-for="u in users" :key="u.username"><option :value="u.username" x-text="(u.displayName || u.username) + '（' + u.username + '）'"></option></template>
+                            </select>
+                            <button class="bn-btn bn-btn--danger" @click="removePerson(c, i)" :data-testid="'bn-remove-' + c + '-' + m.username">移除</button>
                           </div>
                         </template>
                         <div class="bn-row">
@@ -225,8 +245,9 @@
                       </div>
                     </template>
                     <div class="bn-actions">
-                      <button class="bn-btn bn-btn--ghost" :disabled="busy" @click="saveDraft()" data-testid="bn-save">儲存</button>
-                      <button class="bn-btn" :disabled="busy" @click="submitDraft()" data-testid="bn-submit">送審</button>
+                      <button class="bn-btn bn-btn--ghost" :disabled="!!(busy || previewError)" @click="saveDraft()" data-testid="bn-save">儲存</button>
+                      <button class="bn-btn" x-show="detail.status === '草稿'" :disabled="!!(busy || previewError)" @click="submitDraft()" data-testid="bn-submit">送審</button>
+                      <button class="bn-btn bn-btn--ghost" x-show="detail.status === '待審核'" :disabled="busy" @click="cancelEdit()" data-testid="bn-cancel-edit">取消修改</button>
                     </div>
                   </div>
                 </template>
@@ -256,6 +277,7 @@
                       <!-- 簽核（簽核人只能是最高管理者） -->
                       <template x-if="isSuper && detail.status === '待審核'">
                         <div class="bn-actions" style="margin-top:0">
+                          <button class="bn-btn bn-btn--ghost" x-show="canEdit()" :disabled="busy" @click="startEdit()" data-testid="bn-edit">修改</button>
                           <button class="bn-btn" :disabled="busy" @click="approve()" data-testid="bn-approve">核准</button>
                           <input class="bn-sel" placeholder="駁回原因" x-model="rejectReason" style="width:180px">
                           <button class="bn-btn bn-btn--danger" :disabled="busy" @click="reject()">駁回</button>
@@ -305,7 +327,8 @@
                   <div class="bn-card">
                     <div class="bn-sec">編寫紀錄（長期保存，不可刪改）</div>
                     <template x-for="(g, i) in detail.log" :key="i">
-                      <div class="bn-log" x-text="(g.changed_at || '').replace('T', ' ').slice(0, 16) + '　' + g.changed_by + '　' + g.action"></div>
+                      <div class="bn-log" :data-testid="'bn-log-' + g.action"
+                           x-text="(g.changed_at || '').replace('T', ' ').slice(0, 16) + '　' + g.changed_by + '　' + logLabel(g.action) + (logDetail(g) ? '：' + logDetail(g) : '')"></div>
                     </template>
                   </div>
                 </template>

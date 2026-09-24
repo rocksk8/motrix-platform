@@ -306,9 +306,16 @@ def test_mark_paid_only_from_payout_state(client, people):
     assert client.post("/api/bonus/cases/MQ-BC-052/mark-paid", headers=_auth(people["bc_cash"])).status_code == 409
 
 
-def test_edit_only_in_draft(client, people):
-    _to_payout(client, people, "MQ-BC-053")
-    r = client.put("/api/bonus/cases/MQ-BC-053", headers=_auth(people["bc_sa"]), json={"rate_bp": 2000})
+def test_edit_blocked_once_approved(client, people):
+    """原本是 `test_edit_only_in_draft`（待審核 ⇒ 409）。
+    2026-09-25 使用者裁示（BN22）：「核准前都能改」——草稿與簽核中（待審核）可改、改了要重新簽；
+    待發放以後不可改。⇒ 待審核改為可改（細節見 test_bonus_case_live_recalc_and_resign_2026_09_25.py），
+    這一題改守「核准後不可改」。"""
+    _to_payout(client, people, "MQ-BC-053")          # 這個 helper 只到待審核
+    assert client.put("/api/bonus/cases/MQ-BC-053", headers=_auth(people["bc_sa"]),
+                      json={"rate_bp": 2000}).status_code == 200
+    assert client.post("/api/bonus/cases/MQ-BC-053/approve", headers=_auth(people["bc_sa2"])).status_code == 200
+    r = client.put("/api/bonus/cases/MQ-BC-053", headers=_auth(people["bc_sa"]), json={"rate_bp": 2500})
     assert r.status_code == 409
 
 
