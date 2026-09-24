@@ -272,6 +272,7 @@ def test_case_switch_cancelled_keeps_the_unread_mark(live_server, make_user):
             d.saving = false
             d.saveCaseRecord = async () => {}      // 存檔失敗：dirty 還是 true
             window.confirm = () => false           // 使用者選「否」
+            MotrixUI.confirm = async () => false   // CM12 P4 A 包：selectCase 改問 MotrixUI
             await d.selectCase('MQ-B')
             return { mark: !!d.caseActivity['MQ-B'], sel: d.selected.quote_no }
         }""")
@@ -286,6 +287,7 @@ def test_case_switch_cancelled_keeps_the_unread_mark(live_server, make_user):
             switched = page.evaluate("""async () => {
                 const d = Alpine.$data(document.querySelector('[x-data]'))
                 window.confirm = () => true
+                MotrixUI.confirm = async () => true
                 await d.selectCase('MQ-B')
                 return { mark: !!d.caseActivity['MQ-B'], sel: d.selected.quote_no }
             }""")
