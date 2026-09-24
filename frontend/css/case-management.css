@@ -655,6 +655,18 @@ transition:background .1s;
 .cm-header__row1 { row-gap:6px; }
   }
 
+/* 切換鈕（矩陣排序、多選、常用篩選）：比照簽核佇列頁的 .aq-sort（W-5：本頁原本沒有定義，
+   是瀏覽器原生的灰框按鈕）。選中時的字色用 --surface——淺色是白、深色是深，兩種模式都讀得清楚
+   （簽核佇列頁用的 --text-on-dark 是固定淺色，在本頁深色模式會變成淺底淺字）。 */
+.aq-sort {
+  font-family: var(--font-zh); font-size: 11.5px; font-weight: 500;
+  padding: 3px 9px; border-radius: var(--radius);
+  border: 1px solid var(--border-light); background: var(--surface);
+  color: var(--text-secondary); cursor: pointer;
+}
+.aq-sort:hover { border-color: var(--ghost-hover-border); color: var(--text-primary); }
+.aq-sort.on { background: var(--text-primary); color: var(--surface); border-color: var(--text-primary); }
+
 /* ══ 深色模式：案件頁退出全站反轉（CM12 P3）══════════════════════════════════
    style.css 的深色模式是對 body 的直下子元素套 invert(1) hue-rotate(180deg)。案件頁改讀語意 token
    之後，深色值是「不經反轉」的值，所以本頁內容退出那道反轉（比照 ui.js 的 .mui-root），
@@ -730,3 +742,5 @@ transition:background .1s;
   border-color: var(--line-strong);
 }
 :where(:root[data-theme="dark"] body.cm-page) a { color: var(--tone-info-fg); }
+/* 切換鈕選中狀態：深色模式不用近白的亮底（會成為全頁最亮的一塊），改中灰底＋深字（對比約 8.8） */
+:root[data-theme="dark"] body.cm-page .aq-sort.on { background: var(--ink-secondary); border-color: var(--ink-secondary); }
