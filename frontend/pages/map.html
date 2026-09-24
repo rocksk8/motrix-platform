@@ -73,7 +73,11 @@
     /* `MP5`：高度隨視窗。字級按鈕用根元素 zoom，而 zoom 會把 vh 一起放大 ⇒ 除以 `--fz`
        （同 `test_fz_no_raw_vh_is_left_in_the_frontend` 的規則）。下限 320px：矮視窗仍看得到地圖。 */
     #mp-canvas { height:max(320px, calc(62vh / var(--fz,1))); border-radius:var(--radius);
-                 border:1px solid var(--border-light); }
+                 border:1px solid var(--border-light);
+                 /* 2026-09-25 穿模：Leaflet 的圖磚／標記／控制項自帶 z-index 400～1000，比頂欄（100）高。
+                    這裡自成一個堆疊層，讓那些 z-index 只在地圖裡面比較；往下捲時不會浮到頂欄上。
+                    ⚠️ 不要改成調高頂欄的 z-index（會壓到其他彈窗）；全螢幕靠 .mp-full 自己的 z-index:3000。 */
+                 position:relative; isolation:isolate; }
     .mp-map-tools { display:flex; justify-content:flex-end; gap:8px; margin-bottom:6px; }
     /* 全螢幕＝頁內滿版（不用瀏覽器 Fullscreen API：不需使用者授權、Esc 與按鈕都能退出）。
        ⚠️ 用 `inset:0` 不用視窗高度單位：fixed 元素的 inset 不受根元素 zoom 放大，vh 會。 */
