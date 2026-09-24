@@ -226,7 +226,6 @@ function app() {
     importMode: 'materials',
     importSelectedItems: {},
     showLog: false,
-    _allDonePrompted: false,
     _syncWarrantyDate: '',
     _syncWarrantyMonths: 12,
     _openDevGroups: {},
@@ -1721,7 +1720,6 @@ function app() {
         this.saveMsg = ''
         this.showLog = false
         this.showImportModal = false
-        this._allDonePrompted = false
         this._syncWarrantyDate = ''
         this._syncWarrantyMonths = 12
         this._openDevGroups = {}
@@ -2287,21 +2285,14 @@ function app() {
       this._checkAllStagesDone()
     },
 
-    _checkAllStagesDone() {
-      if (this.cr.dealTag !== '已成案') return
-      // 2026-09-13：結案限最高管理者，其他人跳這個提示只會得到 403，
-      // 按了失敗比沒看到提示更令人困惑。
-      if ((this.session?.role || '') !== 'superadmin') return
+    // CU4（2026-09-24）：全部階段完成不再彈 confirm（會打斷正在做的事），改由執行進度上方的
+    // 提示條（allStagesDone()）反應式顯示。保留這個名字給既有呼叫端。
+    _checkAllStagesDone() {},
+
+    allStagesDone() {
+      if (this.cr.dealTag !== '已成案') return false
       const stages = this.cr.caseRecord?.stages || []
-      if (!stages.length) return
-      if (!stages.every(s => s.done)) { this._allDonePrompted = false; return }
-      if (this._allDonePrompted) return
-      this._allDonePrompted = true
-      setTimeout(() => {
-        if (confirm('所有執行進度已完成！\n\n是否現在結案並進入保固追蹤期？\n（可稍後在「更多」選單按「結案」）')) {
-          this.closeCaseAction()
-        }
-      }, 300)
+      return stages.length > 0 && stages.every(s => s.done)
     },
 
     // ensureCaseRecord 替伺服器上沒有的分段補的預設值（使用者還沒動過）

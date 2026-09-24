@@ -1387,6 +1387,17 @@
 
               <!-- ── 執行進度 ── -->
               <div x-show="execSubTab==='progress'">
+                <!-- CU4：全部階段完成 ⇒ 內嵌提示條（不再彈視窗）；結案只有最高管理者能按 -->
+                <template x-if="allStagesDone()">
+                  <div data-testid="all-done-bar" role="status"
+                       style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:9px 12px;border:1px solid var(--success-border);background:var(--success-light);color:var(--success);border-radius:6px;font-size:12.5px;font-family:var(--font-zh)">
+                    <span style="flex:1;font-weight:600"
+                          x-text="session.role === 'superadmin' ? '全部階段已完成 →' : '全部階段已完成，請通知最高管理者結案'"></span>
+                    <template x-if="session.role === 'superadmin'">
+                      <button type="button" class="btn-close-case" data-testid="all-done-close" @click="closeCaseAction()">結案</button>
+                    </template>
+                  </div>
+                </template>
                 <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
                   <div style="flex:1">
                     <div class="stage-segbar">
