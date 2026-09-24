@@ -206,7 +206,7 @@
         <div class="form-group">
           <label class="form-label">帳號</label>
           <input class="form-input" :class="{error: error}"
-                 type="text" x-model="username"
+                 type="text" x-model="username" x-ref="username"
                  placeholder="輸入帳號" autocomplete="username" autofocus>
         </div>
 
@@ -215,10 +215,11 @@
           <div class="pw-wrap">
             <input class="form-input" :class="{error: error}"
                    :type="showPw ? 'text' : 'password'"
-                   x-model="password"
+                   x-model="password" x-ref="password"
                    placeholder="輸入密碼" autocomplete="current-password"
                    style="padding-right:42px">
-            <button type="button" class="eye-btn" @click="showPw=!showPw">
+            <!-- 按下時不搶焦點、也不在 Tab 順序裡：焦點留在密碼欄，切換後直接按 Enter 就送出（2026-09-25） -->
+            <button type="button" class="eye-btn" tabindex="-1" @mousedown.prevent @click="showPw=!showPw">
               <template x-if="!showPw">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               </template>
@@ -337,6 +338,10 @@
 
       async login() {
         this.error = ''
+        // 瀏覽器自動填入不一定觸發 input 事件 ⇒ x-model 還是空的，按 Enter 會說「請輸入帳號與密碼」。
+        // 送出當下以欄位上實際的值為準（2026-09-25）。
+        if (this.$refs.username) this.username = this.$refs.username.value
+        if (this.$refs.password) this.password = this.$refs.password.value
         if (!this.username || !this.password) {
           this.error = '請輸入帳號與密碼'; return
         }
