@@ -45,11 +45,16 @@ BACKEND = Path(__file__).resolve().parent.parent
 TARGET = "tests/test_ports_helper_2026_09_21.py"   # 小、快、不碰 DB
 
 
-def _run_pytest(*args, lock=None, timeout=180):
+def _run_pytest(*args, lock=None, timeout=180, wait=0, poll=None):
     """在子行程跑 pytest。**必須是子行程** —— `pytest_configure` 只在啟動時跑一次，
     在同一個行程裡是重現不出來的。
+
+    📌 2026-09-24 起搶不到鎖改成排隊（使用者裁示「全機同時只准一套」）。這裡預設 `wait=0`
+    ＝不排隊、立刻擋下，讓 T3／T5b／G1 仍然量得到「被擋」這件事；排隊行為見 Q1～Q3。
     """
-    env = utf8_env(MOTRIX_PYTEST_LOCK=str(lock) if lock is not None else None)
+    env = utf8_env(MOTRIX_PYTEST_LOCK=str(lock) if lock is not None else None,
+                   MOTRIX_PYTEST_LOCK_WAIT=wait,
+                   MOTRIX_PYTEST_LOCK_POLL=poll)
     return run_python(["-m", "pytest", TARGET, "--collect-only", "-q", *args],
                       cwd=BACKEND, env=env, timeout=timeout)
 
@@ -415,3 +420,50 @@ def test_the_politeness_delay_is_zero_in_tests():
         "🔑 而它失效的症狀只有「整個 suite 慢回去」，**沒有任何一題會紅**。")
 
 
+
+
+# ── Q1～Q3：全機同時只准一套（2026-09-24 使用者裁示）——排隊而不是擋下 ────────────
+
+def _holder_for(seconds):
+    """起一個活著 `seconds` 秒的行程當鎖的持有者（它結束 ＝ 持有者跑完）。"""
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(%s)" % seconds])
+
+
+def test_q1_a_queued_run_starts_once_the_holder_finishes(tmp_path):
+    """🔴 Q1：持有者還在跑 ⇒ 排隊；持有者結束 ⇒ 輪到我、接手鎖、照常跑完。
+
+    ⚠️ 這是新規則的核心：以前這裡回 4（擋下），使用者要的是「其他視窗排隊」。
+    """
+    lock = tmp_path / "lock"
+    holder = _holder_for(3)
+    try:
+        _write_lock(lock, holder.pid)
+        t0 = time.time()
+        proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock, wait=60, poll=0.2)
+        waited = time.time() - t0
+    finally:
+        holder.kill()
+        holder.wait()
+    assert proc.returncode == 0, f"持有者結束後沒有輪到我：{proc.returncode}\n{proc.stdout[-800:]}"
+    assert "排隊中" in proc.stdout, "排隊時要說出來（否則看起來像卡住）\n" + proc.stdout[-600:]
+    assert waited >= 2, f"沒有等持有者就跑了（只等了 {waited:.1f} 秒）"
+    assert not lock.exists(), "跑完了鎖還在"
+
+
+def test_q2_the_queue_gives_up_after_the_wait_limit(tmp_path):
+    """Q2：等到上限仍未輪到 ⇒ 擋下（回 4），訊息說明排了多久、誰在跑；不動持有者的鎖。"""
+    lock = tmp_path / "lock"
+    _write_lock(lock, os.getpid())
+    proc = _run_pytest(f"--basetemp={tmp_path / 'x-full'}", lock=lock, wait=1, poll=0.2)
+    assert proc.returncode == 4, f"等到上限應該擋下，實際 {proc.returncode}\n{proc.stdout[-800:]}"
+    assert str(os.getpid()) in (proc.stdout + proc.stderr)
+    assert json.loads(lock.read_text(encoding="utf-8"))["pid"] == os.getpid(), "排隊失敗的人動了持有者的鎖"
+
+
+def test_q3_a_parallel_run_also_queues_even_without_full_in_the_name(tmp_path):
+    """🔴 Q3：`-n` 平行（例如平行跑 e2e）也吃滿 CPU ⇒ 也要搶同一把鎖。
+    反向控制是 T5：不平行、不叫 -full 的單檔臨時跑不搶鎖。"""
+    lock = tmp_path / "lock"
+    _write_lock(lock, os.getpid())
+    proc = _run_pytest("-n", "2", "-p", "xdist", f"--basetemp={tmp_path / 'plain-adhoc'}", lock=lock, wait=0)
+    assert proc.returncode == 4, f"-n 2 的一輪沒有被鎖管到：{proc.returncode}\n{proc.stdout[-800:]}"
