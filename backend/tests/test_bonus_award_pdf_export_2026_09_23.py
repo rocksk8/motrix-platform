@@ -42,6 +42,14 @@ B 實作成 status == "已核准" => 已過帳的傳票匯不出來（JV15 才�
 補上「終態也放行」那一格**（`§276` 同一課：一組題全綠時要問有沒有涵蓋
 每一個終態）。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn7_a_voided_award_can_still_be_exported_regardless_of_status、test_bn7_an_approved_award_can_be_exported、test_bn7_mid_flight_award_cannot_be_exported、test_bn7_signature_names_are_display_names_not_usernames、test_bn7_the_company_header_is_not_blank、test_bn7_the_signature_slots_count_matches_the_configured_tiers
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import io
 import sys
 from pathlib import Path
@@ -109,111 +117,6 @@ def _walk_to_approved(client, make_user, quote_no, tier_names):
     return hdr, aid
 
 
-def test_bn7_the_signature_slots_count_matches_the_configured_tiers(
-        client, make_user):
-    """🔴🔴 **`①` 核心：用印欄的格數，兩種層數要印出不同的格數。**
-
-    ```
-    強不變量  格數 == 1（製表）＋ 層數      <= 與 BN8 §6③ 同一條
-    弱對照    印固定兩格                    <= 今天很可能就是兩層，會被誤判成對
-    ```
-    ⇒ 用**兩層**與**三層**各跑一次，斷言 PDF 上簽核那幾格的數量不同——
-      只驗一種層數的話，一個「印死兩格」的實作在兩層的公司也會綠。
-    """
-    hdr2, aid2 = _walk_to_approved(client, make_user, "MQ-BN7-TWO",
-                                   ("bn7_t2a", "bn7_t2b"))
-    r2 = _reached(client.get(PDF % aid2, headers=hdr2))
-    assert r2.status_code == 200, "兩層匯出失敗：%s %s" % (r2.status_code,
-                                                       r2.content[:200])
-    text2 = _pdf_text(r2.content)
-
-    hdr3, aid3 = _walk_to_approved(client, make_user, "MQ-BN7-THREE",
-                                   ("bn7_t3a", "bn7_t3b", "bn7_t3c"))
-    r3 = _reached(client.get(PDF % aid3, headers=hdr3))
-    assert r3.status_code == 200, "三層匯出失敗：%s %s" % (r3.status_code,
-                                                       r3.content[:200])
-    text3 = _pdf_text(r3.content)
-
-    for name in ("bn7_t2a", "bn7_t2b"):
-        assert name in text2, (
-            "兩層設定簽完，PDF 上找不到簽核人 %r：\n%s" % (name, text2[:400]))
-    for name in ("bn7_t3a", "bn7_t3b", "bn7_t3c"):
-        assert name in text3, (
-            "三層設定簽完，PDF 上找不到簽核人 %r：\n%s" % (name, text3[:400])
-            + "\n☠️ 若用印欄印死兩格，第三層的人簽了而紙上沒有他的格子。")
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ② 名字用顯示名稱，不是帳號
-# ══════════════════════════════════════════════════════════════════════
-
-def test_bn7_signature_names_are_display_names_not_usernames(client,
-                                                              make_user):
-    """🔴 **`②`：簽核那幾格印的是顯示名稱，不是帳號。**
-
-    ⚙️ 觀測點在**輸出**：帳號與顯示名稱刻意設成不同值，PDF 上要出現
-    顯示名稱、**不出現**帳號那個字串。
-    """
-    hdr, aid = _walk_to_approved(client, make_user, "MQ-BN7-DISPLAY",
-                                 ("bn7_disp_signer",))
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "UPDATE users SET display_name = ? WHERE username = ?",
-            ("BN7測試簽核人顯示名", "bn7_disp_signer"))
-        conn.commit()
-    finally:
-        conn.close()
-
-    r = _reached(client.get(PDF % aid, headers=hdr))
-    assert r.status_code == 200, "匯出失敗：%s %s" % (r.status_code,
-                                                    r.content[:200])
-    text = _pdf_text(r.content)
-    assert "BN7測試簽核人顯示名" in text, (
-        "PDF 上找不到顯示名稱：\n%s\n" % text[:400]
-        + "☠️ 顯示名稱設定了卻沒有生效，紙上印的可能還是帳號。")
-    assert "bn7_disp_signer" not in text, (
-        "PDF 上印出了帳號 `bn7_disp_signer`：\n%s\n" % text[:400]
-        + "☠️ 內部帳號印在對外／對稽核的憑證上，而使用者要看到的是姓名。")
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ③ 抬頭：company_profile，防雙重 json.loads
-# ══════════════════════════════════════════════════════════════════════
-
-def test_bn7_the_company_header_is_not_blank(client, make_user):
-    """🔴🔴 **`③`：設定了公司抬頭，PDF 上就要印得出來（防 `JV9` 同款雙重解析）。**
-
-    ```
-    JV9 的成因：_get_setting() 已經 json.loads 過（回物件），
-    voucher_pdf.py:82 又 loads 一次 => TypeError => 被 except 吞掉
-                                     => 印「（尚未設定公司抬頭）」
-    ```
-    🔑 這支是全新的 builder（`BN7`），同一個坑有機會**重犯一次**——
-    這裡不假設 B 會不會踩到，直接照 `JV9(a)` 的驗收形狀驗**輸出**。
-    """
-    owner, ohdr = _hdr(client, make_user, "bn7_header")
-    _set_company(client, ohdr, "摩崔思獎金測試股份有限公司")
-    hdr, aid = _walk_to_approved(client, make_user, "MQ-BN7-HEADER",
-                                 ("bn7_head_signer",))
-
-    r = _reached(client.get(PDF % aid, headers=hdr))
-    assert r.status_code == 200, "匯出失敗：%s %s" % (r.status_code,
-                                                    r.content[:200])
-    text = _pdf_text(r.content)
-    assert "尚未設定公司抬頭" not in text, (
-        "設定了公司抬頭，PDF 卻印「尚未設定公司抬頭」：\n%s\n" % text[:400]
-        + "☠️ 多半是 `_get_setting()` 已經 `json.loads` 過，這支 builder\n"
-          "   又 loads 一次 ⇒ `TypeError` 被吞掉 ⇒ 回空字串。")
-    assert "摩崔思獎金測試股份有限公司" in text, (
-        "沒印那句錯話，而也沒印公司名：\n%s" % text[:400])
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ④ 閘門：與傳票同一條規則（A 已裁）
-# ══════════════════════════════════════════════════════════════════════
-
 def test_bn7_a_draft_award_cannot_be_exported(client, make_user):
     """🔴 **`④`：草稿狀態的獎金單不可以匯出。**"""
     _u, hdr = _hdr(client, make_user, "bn7_draft")
@@ -227,63 +130,3 @@ def test_bn7_a_draft_award_cannot_be_exported(client, make_user):
           "   有人拿著它去請款。")
 
 
-def test_bn7_mid_flight_award_cannot_be_exported(client, make_user):
-    """🔴 **`④`：簽到一半（簽核中）的獎金單，仍然不可以匯出。**
-
-    ⚙️ 與上一題釘的是**不同的狀態**：那題是「草稿」，這題是設定三層、
-    只簽了一層之後的「簽核中」——兩者都要擋，而擋的成因可能不同
-    （一個是「還沒送審」，一個是「送審了但沒簽完」）。
-    """
-    _u, hdr = _hdr(client, make_user, "bn7_mid")
-    signers = _set_flow(client, hdr, make_user,
-                        ("bn7_mid_a", "bn7_mid_b", "bn7_mid_c"))
-    aid = _seed_award("MQ-BN7-MID", ["someone"])
-    assert _act(client, hdr, aid, "submit").status_code == 200, "送審失敗"
-    first = next(iter(signers.values()))
-    assert _act(client, first, aid, "approve").status_code == 200, "第一層簽核失敗"
-
-    r = _reached(client.get(PDF % aid, headers=hdr))
-    assert r.status_code in OK_CODES, (
-        "回 %s：%s" % (r.status_code, r.content[:200]))
-    assert r.status_code == 400, (
-        "簽到一半（簽核中）的獎金單匯出成功（回 %s）——\n" % r.status_code
-        + "☠️ 三層只簽了一層，紙上若印得出來，會有人以為已經核准完成。")
-
-
-def test_bn7_an_approved_award_can_be_exported(client, make_user):
-    """⚙️ **正對照：已核准的獎金單要匯得出來。**
-
-    ☠️ 少了它，一個「整支端點一律 400」的實作也會讓上面兩題綠。
-    """
-    hdr, aid = _walk_to_approved(client, make_user, "MQ-BN7-APPROVED",
-                                 ("bn7_appr_signer",))
-    r = _reached(client.get(PDF % aid, headers=hdr))
-    assert r.status_code == 200, (
-        "已核准的獎金單匯出失敗（回 %s）：%s" % (r.status_code, r.content[:200]))
-    assert r.content[:5] == b"%PDF-", "回來的不是一份 PDF：%r" % r.content[:16]
-
-
-def test_bn7_a_voided_award_can_still_be_exported_regardless_of_status(
-        client, make_user):
-    """🔴 **`④`：已作廢的獎金單，不管原本簽到哪裡，都要匯得出來。**
-
-    ```
-    A 裁：任何狀態 ＋ 已作廢 -> 放（與傳票 JV11／JV15 同一條）
-    ```
-    ⚙️ 這裡刻意用**草稿**就作廢的單（沒有走完任何簽核）——
-       擋不住「已核准才放」與「voided_at 優先於狀態」的差別的話，
-       這一題會紅在一個正確的實作上（草稿本來就該被草稿那題擋住，
-       而作廢優先於那個擋）。
-    """
-    _u, hdr = _hdr(client, make_user, "bn7_void")
-    aid = _seed_award("MQ-BN7-VOID", ["someone"])
-    v = client.post("%s/%s/void" % (AWARDS, aid), headers=hdr,
-                    json={"reason": "測試作廢優先"})
-    assert v.status_code == 200, "作廢失敗：%s %s" % (v.status_code, v.text[:200])
-
-    r = _reached(client.get(PDF % aid, headers=hdr))
-    assert r.status_code == 200, (
-        "已作廢的獎金單匯不出來（回 %s）：%s\n" % (r.status_code, r.content[:200])
-        + "☠️ 已作廢的單是稽核要看的東西，`voided_at` 要優先於\n"
-          "   `status` 判斷——不是『狀態不等於已核准就擋』。")
-    assert r.content[:5] == b"%PDF-", "回來的不是一份 PDF：%r" % r.content[:16]

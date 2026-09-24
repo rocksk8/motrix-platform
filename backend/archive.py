@@ -1710,9 +1710,9 @@ def _daily_backup_tables() -> dict:
         "獎金異動":         "SELECT * FROM bonus_award_edit_log ORDER BY id",
         # ── 獎金分潤・以案件為中心（v113，SPEC-BONUS §十一，2026-09-24）──
         # 🔑 每人領多少只存在明細表；編寫紀錄是長期記憶（刪不掉、改不了），同樣要備份。
-        "案件獎金單":       "SELECT * FROM bonus_case_awards ORDER BY id",
-        "案件獎金明細":     "SELECT * FROM bonus_case_award_lines ORDER BY id",
-        "案件獎金異動":     "SELECT * FROM bonus_case_award_edit_log ORDER BY id",
+        "案件獎金分潤單":   "SELECT * FROM bonus_case_awards ORDER BY id",
+        "案件獎金分潤明細": "SELECT * FROM bonus_case_award_lines ORDER BY id",
+        "案件獎金分潤異動": "SELECT * FROM bonus_case_award_edit_log ORDER BY id",
         # 🔴 （寫於模組預設關的時期；2026-09-24 起預設開）獎金模組關著時，
         #    這兩張表仍然會被建立（`v104` 照跑）——
         # 🔑 備份它們是為了「**開回來那一天資料是完整的**」，

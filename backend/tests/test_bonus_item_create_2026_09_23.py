@@ -30,6 +30,14 @@ bonus_items  正式庫 0 列 ／ demo 庫 0 列
 ```
 📌 規格花一整節設計空狀態的文案，而通往它的門一打就 500。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_a_half_filled_item_is_refused_with_a_reason、test_a_superadmin_can_actually_create_a_bonus_item、test_an_admin_cannot_create_bonus_items、test_the_creator_is_recorded_as_the_person_who_pressed_the_button
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import pytest
 
 ITEMS = "/api/bonus/items"
@@ -76,157 +84,6 @@ def _items():
 
 # ══════════════════════════════════════════════════════════════════════
 
-def test_a_superadmin_can_actually_create_a_bonus_item(client, make_user):
-    """🔴 **最高管理員按下「新增獎金項目」要真的建得起來。**
-
-    ⚙️ 觀測點挑的是 `bonus_items` 那一列（**成功後才會被寫入**的下游），
-       不是回應 —— 回應是它自己說的話。
-    """
-    u, hdr = _hdr(client, make_user, "bi_super")
-    before = len(_items())
-
-    _post(client, hdr, name="業務獎金", person_source=GOOD_SOURCE)
-
-    rows = _items()
-    assert len(rows) == before + 1, (
-        "回應沒有報錯，而 `bonus_items` 沒有多一列（%d -> %d）。\n"
-        % (before, len(rows))
-        + "☠️ 「建立成功」是一句話，而畫面重整之後那個項目不在。")
-    assert rows[-1]["name"] == "業務獎金"
-    assert rows[-1]["person_source"] == GOOD_SOURCE
-    assert rows[-1]["is_active"] == 1, "新建的項目預設要是啟用的。"
-
-
-def test_the_creator_is_recorded_as_the_person_who_pressed_the_button(
-        client, make_user):
-    """🔴 **`created_by` 要是**按下去的那個人**。**
-
-    ⚙️ 這一格是刻意挑的：`routers/bonus.py:119` 的 `_user_name(user)`
-       **正是那個 `NameError` 所在的那一行** ——
-    ```
-    _require_user(…) 的回傳值丟掉  =>  user 未綁  =>  NameError
-    ```
-    ☠️ 而「修好它」有兩種寫法，只有一種是對的：
-    ```
-    ✅ user = _require_user(…)        => created_by 是真的人
-    ❌ _user_name(None) / 寫死 ''     => **500 消失了，而稽核欄位是空的**
-    ```
-    🔑 釘 `created_by` 才分得出這兩種；只釘「回 200」分不出來。
-    """
-    u, hdr = _hdr(client, make_user, "bi_super2")
-    _post(client, hdr, name="工程獎金", person_source=GOOD_SOURCE)
-
-    row = _items()[-1]
-    assert (row["created_by"] or "").strip(), (
-        "`created_by` 是空的：%r\n" % row
-        + "☠️ 500 消失了，而**稽核欄位是空的** —— 那是另一種修錯。")
-    assert u in row["created_by"], (
-        "`created_by` = %r，而按下去的人是 %r。\n" % (row["created_by"], u)
-        + "⚠️ 若你們存的是顯示名稱而不是帳號，**退回給我**改這一題。")
-
-
-def test_an_admin_cannot_create_bonus_items(client, make_user):
-    """🔴 **`admin` 建不了項目** —— 而這正是空狀態要說的那件事。
-
-    ```
-    POST /api/bonus/items   require_superadmin=True   <= 只有 superadmin
-    POST /api/bonus/awards  _is_manager               <= superadmin ＋ admin
-    ```
-    ☠️ ⇒ 公司裡只有 `admin` 在用的那天，他打開獎金頁看到空清單，
-       **而他修不好它** ⇒ 空狀態必須說出「誰能解決」。
-    ⚠️ 判準是「有沒有被擋」：401 與 403 都算。
-
-    ## 🔴 而這一題**今天就是綠的**，那正是它的危險
-
-    ```
-    _require_user(…, require_superadmin=True)  先擋  -> 403
-    _user_name(user)                           在它後面 -> NameError 根本跑不到
-    ⇒ 權限題全綠，**而這支端點 100% 不可用**
-    ```
-    🔑 〈假綠燈〉的一個形狀：**正確的拒絕路徑遮住了壞掉的成功路徑**。
-      403 是真的、`_require_user` 是對的 —— 而只驗 403 會讓人以為這支端點沒問題。
-    ⇒ 所以上面那兩題（superadmin 建得成、`created_by` 是誰）**不可以省**。
-    """
-    _u, hdr = _hdr(client, make_user, "bi_admin", role="admin",
-                   modules=["bonus"])
-    before = len(_items())
-    r = client.post(ITEMS, json={"name": "偷加的", "person_source": GOOD_SOURCE},
-                    headers=hdr)
-    if r.status_code >= 500:
-        pytest.fail("回 %s —— 這一格量不到權限（先修 `NameError`）。" % r.status_code)
-    assert r.status_code in (401, 403), (
-        "`admin` 建得出獎金項目（回 %s）：%s" % (r.status_code, r.text[:200]))
-    assert len(_items()) == before, (
-        "被擋下來了，**而資料已經寫進去了** —— 拒絕的路徑上不可以留副作用。")
-
-
-#: ⚠️ `says` 要**分得開**，不可以互為子字串 ——
-#:    我第一版給「人員來源」，而「不支援的人員來源「」」**也包含它**
-#:    ⇒ 突變 M4 照樣活下來。〈判準的寬窄都會騙人〉。
-@pytest.mark.parametrize("body,why,says", [
-    ({"person_source": GOOD_SOURCE}, "沒有名稱", "請填寫"),
-    ({"name": "沒來源的項目"}, "沒有人員來源", "請選擇"),
-    ({"name": "亂來的", "person_source": "quotations.owner"},
-     "人員來源不在白名單（`owner` 欄位在 `quotations` 裡根本不存在）",
-     "不支援"),
-])
-def test_a_half_filled_item_is_refused_with_a_reason(client, make_user,
-                                                     body, why, says):
-    """🔴 **半填的項目要被擋，而且說得出是哪一格。**（%s）
-
-    ☠️ 沒有人員來源的項目**永遠算不出發放對象** ⇒ 它會
-       「從來沒有出現在任何一張獎金單上」——
-       而〈沒有人會發現一個從來不出現的東西〉。
-    ⚠️ 資料層的 `NOT NULL` 擋不住**空字串**，所以這一關是必要的另一半。
-
-    ## 🔴 ⚠️ **這三題在端點壞掉的時候也是綠的**
-
-    ```
-    三種半填驗證都在 `_user_name(user)` 那一行**之前** return
-    ⇒ NameError 根本跑不到 ⇒ 它們證明不了「這支端點可用」
-    ```
-    🔑 加上 403 那一題，**一支 100% 不可用的端點可以有 6 綠**。
-    ⇒ 會從紅轉綠的只有「superadmin 建得成」與「`created_by` 是誰」那兩題。
-
-    ## 🔴 而我第一版只斷言 400，突變當場抓到（留著這一列）
-
-    ```
-    突變 M4  把 `if not source:` 那道擋拿掉
-    結果    **活下來** —— 三題照樣綠
-    成因    少了它，`source=""` 會掉到下一道 `source not in PERSON_SOURCES`
-            ⇒ **仍然回 400**，只是訊息從「請選擇人員來源…」
-              變成「不支援的人員來源「」」
-    ```
-    ☠️ 而我的 docstring 寫著「**而且說得出是哪一格**」——
-       **斷言的名字說它在驗 A，而它實際只驗了狀態碼**。
-    ⇒ 補上 `says`：訊息要指得出是哪一格。
-    """
-    # ⚠️ 固定名字是安全的：`client` 是 function-scoped，每一個參數化案例
-    #    拿到的是**自己的一份資料庫**。
-    _u, hdr = _hdr(client, make_user, "bi_bad")
-    before = len(_items())
-    r = client.post(ITEMS, json=body, headers=hdr)
-    if r.status_code >= 500:
-        pytest.fail("回 %s —— 這一格量不到驗證（先修 `NameError`）。" % r.status_code)
-    assert r.status_code == 400, (
-        "%s 的項目被接受了（回 %s）：%s" % (why, r.status_code, r.text[:200]))
-    assert says in r.text, (
-        "%s 被擋下來了，**而訊息沒有指出是哪一格**（找 %r）：%s\n"
-        % (why, says, r.text[:200])
-        + "☠️ 使用者只知道「不行」，不知道要改哪裡。\n"
-        + "📌 突變 M4 就是靠這一格才殺得掉：拿掉「缺來源」那道擋之後，\n"
-          "   下一道仍然回 400，**只有訊息會變**。")
-    assert len(_items()) == before, "被擋下來了，而資料已經寫進去了。"
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ④ 守門：同一個修法在 8 處是對的，在第 9 處變成 NameError
-# ══════════════════════════════════════════════════════════════════════
-
-#: 掃描範圍。
-#: 📌 **依據**：A-2 只掃了 `routers/`（他自己標的射程）。我把 `helpers/` 與
-#:    `main.py` 一起量過 —— **兩者今天都是 0** ⇒ 納進來零誤報、零成本，
-#:    而它們同樣可能出現「只呼叫 `_require_user()` 當檢查、不取回傳值」的寫法。
 _SCAN_DIRS = ("backend/routers", "backend/helpers")
 _SCAN_FILES = ("backend/main.py",)
 

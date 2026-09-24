@@ -44,6 +44,14 @@ GET  /api/bonus/awards/{id}          帶出 last_reject
 欄位、也從不讀寫 `bonus_award_edit_log`，這點已由上面「edit_log 前後
 都是 0 列」直接證明，不需要為每一個衍生斷言各自重新執行一次。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn17_detail_shows_who_signed_who_rejected_and_why、test_bn17_empty_reason_is_refused_and_the_award_is_untouched、test_bn17_rejecting_with_a_reason_writes_a_permanent_edit_log_row、test_bn17_the_approval_json_before_value_is_the_real_prior_chain_not_empty、test_bn17_whitespace_only_reason_is_also_refused
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import json
 
 import pytest
@@ -195,129 +203,6 @@ def _submitted_and_one_tier_approved(client, hdr, make_user, quote_no):
 # ══════════════════════════════════════════════════════════════════════
 # ③ⓐ 空原因：400，且狀態不變（拒絕的路徑上沒有副作用）
 # ══════════════════════════════════════════════════════════════════════
-
-def test_bn17_empty_reason_is_refused_and_the_award_is_untouched(client,
-                                                                   make_user):
-    _u, hdr = _hdr(client, make_user, "bn17_empty")
-    aid = _seed_award("MQ-BN17-EMPTY", ["someone"], status="待審核")
-
-    r = _act(client, hdr, aid, "reject", {"reason": ""})
-    assert r.status_code == 400, (
-        "空原因退回沒有被擋：%s %s" % (r.status_code, r.text[:200]))
-    assert "請填寫" in r.text and "原因" in r.text, (
-        "訊息是 %r，措辭要與 mark_award_paid／void_voucher 一致（『請填寫…"
-        "原因。』）。" % r.text[:200])
-
-    assert _status_of(aid) == "待審核", (
-        "拒絕退回之後狀態變成 %r——拒絕的路徑上不可以有副作用（狀態被"
-        "動了、或 edit_log 被寫了）。" % _status_of(aid))
-    assert _edit_log_rows(aid) == [], (
-        "空原因被拒絕，`bonus_award_edit_log` 卻多出東西：%r"
-        % _edit_log_rows(aid))
-
-
-def test_bn17_whitespace_only_reason_is_also_refused(client, make_user):
-    """⚙️ 正對照的鏡像：純空白（trim 後是空字串）一樣要被擋——
-    `reason.strip()` 才是判斷依據，不是 `reason` 這個字串本身非空。"""
-    _u, hdr = _hdr(client, make_user, "bn17_ws")
-    aid = _seed_award("MQ-BN17-WS", ["someone"], status="待審核")
-
-    r = _act(client, hdr, aid, "reject", {"reason": "   "})
-    assert r.status_code == 400, (
-        "純空白原因沒有被擋：%s %s" % (r.status_code, r.text[:200]))
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ③ⓑⓒ 填了原因退回：edit_log 多一列，approval_json.from 是退回前的真實鏈
-# ══════════════════════════════════════════════════════════════════════
-
-def test_bn17_rejecting_with_a_reason_writes_a_permanent_edit_log_row(
-        client, make_user):
-    """🔴🔴 **退回要在 `bonus_award_edit_log` 恰好新增一列，
-    `retention == 'permanent'`。**"""
-    _u, hdr = _hdr(client, make_user, "bn17_log")
-    aid = _submitted_and_one_tier_approved(client, hdr, make_user,
-                                            "MQ-BN17-LOG")
-    before = len(_edit_log_rows(aid))
-
-    r = _act(client, hdr, aid, "reject", {"reason": "BN17測試原因甲"})
-    assert r.status_code == 200, r.text[:200]
-
-    rows = _edit_log_rows(aid)
-    assert len(rows) == before + 1, (
-        "退回前後 `bonus_award_edit_log` 是 %d -> %d 列，不是剛好 +1。"
-        % (before, len(rows)))
-    new_row = rows[-1]
-    assert new_row["retention"] == "permanent", (
-        "新增列的 `retention` 是 %r，不是 `permanent`——那會讓這筆紀錄"
-        "在 730 天後被 `_prune_audit_log` 清掉，與 `audit_log` 一樣短命。"
-        % new_row["retention"])
-
-
-def test_bn17_the_approval_json_before_value_is_the_real_prior_chain_not_empty(
-        client, make_user):
-    """🔴🔴 **`approval_json` 那一筆的 `from` 是退回前的真實鏈，`to` 是
-    `{}`——不是兩者都變成 `{}`。**
-
-    ☠️ 少了「先簽過一關」這個前置，`from` 本來就是 `{}`，這題會在一個
-    錯誤實作（UPDATE 之後才讀）上照樣綠——`_submitted_and_one_tier_
-    approved()` 就是為了排除這個假綠燈存在。
-    """
-    _u, hdr = _hdr(client, make_user, "bn17_appr")
-    aid = _submitted_and_one_tier_approved(client, hdr, make_user,
-                                            "MQ-BN17-APPR")
-
-    r = _act(client, hdr, aid, "reject", {"reason": "BN17測試原因乙"})
-    assert r.status_code == 200, r.text[:200]
-
-    rows = _edit_log_rows(aid)
-    changes = json.loads(rows[-1]["changes_json"])
-    appr_change = next((c for c in changes if c.get("field") == "approval_json"),
-                        None)
-    assert appr_change is not None, (
-        "新增的 edit_log 列裡沒有 `approval_json` 這個 field：%r" % changes)
-    from_val = appr_change.get("from")
-    to_val = appr_change.get("to")
-    assert to_val == "{}", "退回後 `to` 應該是 `'{}'`，實際是 %r" % (to_val,)
-    assert from_val != "{}", (
-        "`from` 是 `'{}'`——這張單已經被核准過一層，退回前的鏈不可能是空的。"
-        "☠️ 這正是規格點名的錯誤實作：approval_json 在 UPDATE **之後**"
-        "才讀，那一列會寫成 `{} -> {}`，看起來正常而什麼都沒記住。")
-    from_json = json.loads(from_val)
-    assert from_json.get("tiers"), (
-        "`from` 解析出來沒有 `tiers`：%r" % from_json)
-    assert any((t.get("approvedBy") or "") for t in from_json["tiers"]), (
-        "`from` 的鏈裡沒有任何一層記著 `approvedBy`：%r——\n"
-        "這張單應該已經被核准過第一層。" % from_json["tiers"])
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ③ⓓⓔ GET 明細帶出 last_reject；沒退回過的單是 null
-# ══════════════════════════════════════════════════════════════════════
-
-def test_bn17_detail_shows_who_signed_who_rejected_and_why(client, make_user):
-    """🔴🔴 **退回後 `GET /awards/{id}` 的 `last_reject` 要說得出「上一輪
-    誰簽過、誰退的、為什麼」。**"""
-    u, hdr = _hdr(client, make_user, "bn17_detail")
-    aid = _submitted_and_one_tier_approved(client, hdr, make_user,
-                                            "MQ-BN17-DETAIL")
-
-    r = _act(client, hdr, aid, "reject", {"reason": "BN17測試原因丙"})
-    assert r.status_code == 200, r.text[:200]
-
-    a = _award(client, hdr, aid)
-    lr = a.get("last_reject")
-    assert lr is not None, "退回之後 `last_reject` 是 %r，應該有內容。" % lr
-    assert lr.get("reason") == "BN17測試原因丙", (
-        "`last_reject.reason` 是 %r。" % lr.get("reason"))
-    assert lr.get("by") == u, "`last_reject.by` 是 %r，應該是退回的人 %r。" % (
-        lr.get("by"), u)
-    assert lr.get("at"), "`last_reject.at` 是空的。"
-    sigs = lr.get("prior_signatures") or {}
-    assert any((v or {}).get("by") for v in sigs.values()), (
-        "`last_reject.prior_signatures` 裡沒有任何一格有 `by`：%r——\n"
-        "退回前應該已經有一層被簽過。" % sigs)
-
 
 def test_bn17_negative_control_an_award_never_rejected_has_no_last_reject(
         client, make_user):

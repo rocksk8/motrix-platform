@@ -8,6 +8,14 @@
 ④ recall（§1①）：只有**原送審申請人**能把待審核／簽核中收回草稿，清簽核，留編寫紀錄
    ⚙️ 對照組：另一位 superadmin（有權限、不是申請人）要被拒 —— 否則「只有申請人」量不到
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn12_a_draft_cannot_be_recalled、test_bn12_another_superadmin_cannot_recall_someone_elses_award、test_bn12_the_requester_can_recall_a_pending_award
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import json
 import sys
 from pathlib import Path
@@ -92,40 +100,3 @@ def _pending_by(client, make_user, quote_no, requester):
     return aid
 
 
-def test_bn12_the_requester_can_recall_a_pending_award(client, make_user):
-    me, hdr = _hdr(client, make_user, "bn12_req")
-    aid = _pending_by(client, make_user, "MQ-BN12-R", me)
-    d = client.get("%s/%s" % (AWARDS, aid), headers=hdr).json()
-    assert d.get("can_recall") is True, "申請人本人看不到可收回：%r" % d.get("can_recall")
-
-    r = client.post("%s/%s/recall" % (AWARDS, aid), headers=hdr, json={})
-    assert r.status_code == 200, r.text[:200]
-    import db
-    conn = db.get_db()
-    try:
-        row = conn.execute("SELECT status, approval_json FROM bonus_awards WHERE id=?", (aid,)).fetchone()
-        logs = [json.loads(x[0]) for x in conn.execute(
-            "SELECT changes_json FROM bonus_award_edit_log WHERE award_id=?", (aid,))]
-    finally:
-        conn.close()
-    assert (row["status"], row["approval_json"]) == ("草稿", "{}"), dict(row)
-    assert any(c["field"] == "status" and c["to"] == "草稿" for l in logs for c in l), (
-        "收回沒有留編寫紀錄：%r" % logs)
-
-
-def test_bn12_another_superadmin_cannot_recall_someone_elses_award(client, make_user):
-    me, _ = _hdr(client, make_user, "bn12_owner")
-    _other, other_hdr = _hdr(client, make_user, "bn12_other")
-    aid = _pending_by(client, make_user, "MQ-BN12-O", me)
-    d = client.get("%s/%s" % (AWARDS, aid), headers=other_hdr).json()
-    assert d.get("can_recall") is False, "非申請人也看到可收回"
-    r = client.post("%s/%s/recall" % (AWARDS, aid), headers=other_hdr, json={})
-    assert r.status_code == 403, "不是申請人卻收回成功（%s）" % r.status_code
-
-
-def test_bn12_a_draft_cannot_be_recalled(client, make_user):
-    me, hdr = _hdr(client, make_user, "bn12_draft")
-    _seed_case("MQ-BN12-D")
-    aid = _seed_award("MQ-BN12-D", [me], status="草稿")
-    r = client.post("%s/%s/recall" % (AWARDS, aid), headers=hdr, json={})
-    assert r.status_code == 400, "草稿收回應該回 400，實得 %s" % r.status_code

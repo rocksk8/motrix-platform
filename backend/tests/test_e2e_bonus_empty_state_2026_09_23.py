@@ -25,6 +25,14 @@ D 今天查到 `claude-in-chrome` 是遠端瀏覽器、**可能連不到 `127.0.
 本檔比照既有 53 支 e2e，在測試行程內起 uvicorn ＋ 本機 chromium ⇒ 不受影響。
 📌 帳號是 `make_user` 建的**測試 fixture 帳號**，不是使用者的密碼。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_ac1_a_superadmin_gets_the_way_out、test_ac1_an_admin_is_told_who_can_fix_it_and_gets_no_button
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import threading
 import time
 
@@ -169,67 +177,6 @@ def _assert_three_things(text, who):
 
 
 # ══════════════════════════════════════════════════════════════════════
-
-@pytest.mark.e2e
-def test_ac1_an_admin_is_told_who_can_fix_it_and_gets_no_button(
-        live_server, make_user):
-    """🔴 **`admin` 看不到獎金項目區，也沒有新增入口。**（2026-09-24 改判準）
-
-    ## 📌 更正留著：這一題原本要求 admin 看得到獎金項目的空狀態三句話
-
-    原判準（AC1，2026-09-23 清晨）：admin 打開獎金頁，看得到「為什麼空／誰能解決／
-    去哪裡解決」三句話，而沒有新增入口。
-    ☠️ 之後 `BN2`（獎金項目只有最高管理者可見）與 `BN9`（`is_manager` 收成只有
-       superadmin）上線 ⇒ admin 的 `isManager` 為 false ⇒ `loadItems()` 不會打、
-       獎金項目整區不顯示 ⇒ 原判準與後來的裁示牴觸，這一題從那時起一直是紅的
-       （本輪之前的 `20a11de` 就紅）。
-    ✅ 裁定（使用者 2026-09-24 表單原文，hichan-0a 轉達）：「**題對齊 BN9，產品不動**」。
-       ⇒ 三句話那一格由 superadmin 那一題承擔（它仍然驗三句話）。
-    ⚠️ 「admin 按得到『產生獎金分潤單』，卻不知道為什麼產不出來」那一格
-       **本輪不做**，記在 `docs/windows/KNOWN-GAPS.md`（2026-09-24 ③）。
-
-    ⚙️ 觀測點是**看得到的文字**（`inner_text` 不含隱藏元素），不是 DOM 裡有沒有那個節點——
-       x-show 只是藏起來，節點還在，數節點會把「藏著」算成「看得到」。
-    """
-    u, p = make_user(username="e2e_bn_admin", role="admin",
-                     modules=[BONUS_MODULE])
-    text, create, empty, errors = _open_bonus(live_server, u, p)
-
-    assert not errors, "頁面丟了例外：%s —— 先修這個。" % errors[:3]
-    assert "產生獎金分潤單" in text, (
-        "量尺：admin 連「產生獎金分潤單」都看不到 —— 頁面沒載入成功，下面的斷言量不到東西。\n"
-        "畫面上是：\n  %s" % text[:300])
-    for visible_marker in ("尚未建立任何獎金項目", "每個項目綁一個人員來源"):
-        assert visible_marker not in text, (
-            "`admin` 看得到獎金項目區（畫面上有「%s」）——\n" % visible_marker
-            + "BN2／BN9：獎金項目只有最高管理者可見。")
-    assert create == 0, (
-        "`admin` 看得到新增入口（`%s`，%d 個）——\n" % (HOOKS["create"], create)
-        + "☠️ 他按下去會收到 **403**，而這一頁應該在他按下去之前就告訴他。")
-
-
-@pytest.mark.e2e
-def test_ac1_a_superadmin_gets_the_way_out(live_server, make_user):
-    """🔴 **`superadmin` 要有新增入口** —— 他是唯一走得完全程的人。
-
-    ⚙️ 這一題是上一題的**反向控制**：少了它，「一律不給按鈕」也會讓上一題綠 ——
-       而那樣**沒有人建得了獎金項目**，整個模組永遠是空的。
-    """
-    u, p = make_user(username="e2e_bn_super", role="superadmin",
-                     modules=[BONUS_MODULE])
-    text, create, empty, errors = _open_bonus(live_server, u, p)
-
-    assert not errors, "頁面丟了例外：%s" % errors[:3]
-    assert empty >= 1, (
-        "`superadmin` 也找不到空狀態區塊 —— 先看上一題，成因可能是同一個。")
-    _assert_three_things(text, "superadmin")
-    assert create >= 1, (
-        "`superadmin` **沒有**新增入口（`%s`）——\n" % HOOKS["create"]
-        + "畫面上是：\n  %s\n" % text[:300]
-        + "☠️ 那表示沒有任何人建得了獎金項目，**整個模組永遠是空的**。\n"
-        + "⚙️ 而這一題是上一題的反向控制：\n"
-          "   少了它，「一律不給按鈕」也會讓 `admin` 那一題變綠。")
-
 
 @pytest.mark.e2e
 def test_ac1_a_plain_employee_does_not_see_the_management_area(

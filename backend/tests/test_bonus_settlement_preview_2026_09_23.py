@@ -39,6 +39,14 @@ remainder    單一項目分配時 == remainder_of(base, total_pct, lines) 的�
 ⚠️ 若 B 選用不同鍵名，**退回給我改本檔的欄位對照表**，
    不要為了配合欄位名去改產品的回應格式（那會把契約倒過來定）。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn6_preview_lines_match_the_award_exactly
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import json
 
 import pytest
@@ -310,60 +318,6 @@ def test_bn6_an_empty_summary_case_gets_all_nulls_and_the_real_error(
 # ══════════════════════════════════════════════════════════════════════
 # ④ 核心：預覽的 lines 與產生後 bonus_award_lines 逐筆相等
 # ══════════════════════════════════════════════════════════════════════
-
-def test_bn6_preview_lines_match_the_award_exactly(client, make_user):
-    """🔴🔴 **`§6④`（核心）：`POST /plan` 的 `lines` 與產生後的
-    `bonus_award_lines` 逐筆相等。**
-
-    ```
-    這一題紅而其他全綠 = 預覽會騙人，而那比沒有預覽更糟
-    ```
-    ⚙️ 同一組 `allocations`：先 `POST /plan` 拿預覽，再 `POST /awards` 真的產生，
-       兩邊的金額逐筆比對（`bonus_item_id` ＋ `username` 當識別鍵）。
-    ⚠️ **必須用 `split_award()` 的實際輸出算預期值**，不是自己另外心算一遍——
-       這裡的「預期值」就是拿產品自己的函式算出來的，驗的是「兩個端點算出
-       同一個答案」，不是「答案本身對不對」（那是 `BN1` 已經驗過的事）。
-    """
-    _u, hdr = _hdr(client, make_user, "bn6_core")
-    _seed_case("MQ-BN6-CORE", FULL_SUMMARY, sales_person="bn6_core")
-    item_id = _seed_item()
-
-    allocations = [{"bonus_item_id": item_id, "total_pct": 5000,
-                    "person_pct": {"bn6_core": 10000}}]
-
-    preview = _plan_post(client, hdr, "MQ-BN6-CORE", allocations)
-    preview_lines = _extract_preview_lines(preview.json())
-    assert preview_lines, (
-        "`POST /plan` 的 `lines` 是空的：%r\n" % preview_lines
-        + "☠️ 有效的分配卻預覽不出東西，畫面上會是一片空白。")
-
-    create = client.post("/api/bonus/awards", headers=hdr,
-                         json={"quote_no": "MQ-BN6-CORE",
-                               "allocations": allocations})
-    assert create.status_code == 200, (
-        "同一組 allocations 拿去 `POST /awards` 卻建不起來：%s %s\n"
-        % (create.status_code, create.text[:200])
-        + "⚠️ 若這裡紅了，先看是不是 `POST /awards` 本身的問題，\n"
-          "   不是 `plan` 的（`BN1` 那 20 題已經釘過 `POST /awards` 這條路）。")
-
-    real_lines = _award_lines_of("MQ-BN6-CORE")
-    real_by_key = {_line_key(r): r for r in real_lines}
-    preview_by_key = {_line_key(p): p for p in preview_lines}
-
-    assert set(preview_by_key) == set(real_by_key), (
-        "預覽與實際產生的（item_id, username）集合對不上。\n"
-        "預覽：%r\n實際：%r\n" % (sorted(preview_by_key), sorted(real_by_key))
-        + "☠️ 少一筆或多一筆 —— 使用者按「預覽」看到的人跟實際發到錢的人不同。")
-
-    for key in real_by_key:
-        pv, rl = preview_by_key[key], real_by_key[key]
-        for field in ("total_pct", "person_pct", "amount"):
-            assert pv.get(field) == rl.get(field), (
-                "%r 這一筆的 `%s`：預覽是 %r，實際存進 `bonus_award_lines` "
-                "的是 %r。\n" % (key, field, pv.get(field), rl.get(field))
-                + "🔑 這一題紅而其他全綠 = **預覽會騙人，而那比沒有預覽更糟** ——\n"
-                  "   使用者照預覽的數字去跟客戶／同事對過，而系統實際發的不同。")
-
 
 def test_bn6_preview_does_not_write_anything(client, make_user):
     """⚙️ **正對照：`POST /plan` 只是算給你看，不寫進資料庫。**

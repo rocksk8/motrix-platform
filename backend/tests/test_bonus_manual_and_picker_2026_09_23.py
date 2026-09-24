@@ -31,6 +31,14 @@ A-2 實跑：`bonus_awards WHERE voided_at = ''` ⇒ **0 筆**。
 ✅ 驗那些人**真的進了 bonus_award_lines**        <= 下游，成功後才會被寫入
 ```
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn3_a_deactivated_person_is_not_paid_on_a_new_award、test_bn3_a_manual_item_pays_the_people_it_lists、test_bn3_a_manual_item_with_nobody_is_refused、test_bn3_an_unknown_username_is_refused_and_named
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import json
 
 import pytest
@@ -306,147 +314,6 @@ def test_bn5_the_two_empty_reasons_are_not_merged(client, make_user):
 # BN3：manual 來源
 # ══════════════════════════════════════════════════════════════════════
 
-def test_bn3_a_manual_item_pays_the_people_it_lists(client, make_user):
-    """🔴🔴 **`BN3`：`manual` 指定的人要**真的進 `bonus_award_lines`**。**
-
-    ⚙️ 觀測點**走下游**：
-    ```
-    ❌ 驗 people_for_item("manual", …) 回了幾個人   <= 中間層
-    ✅ 驗那些人進了 bonus_award_lines               <= **成功後才會被寫入**
-    ```
-    📌 它同時解掉一個既有落差：`quotations.owner`／`engineer`
-       **兩個欄位不存在** ⇒ 用那兩個來源建的項目**永遠發不出去**；
-       `manual` 讓使用者有一條路可以自己指定。
-    """
-    _seed_case("MQ-BN3-M", 1000000)
-    a, _ = _hdr(client, make_user, "bn3_alice")
-    b, _ = _hdr(client, make_user, "bn3_bob")
-    _u, hdr = _hdr(client, make_user, "bn3_sup")
-
-    r = client.post(ITEMS, headers=hdr, json={
-        "name": "特別獎金", "person_source": "manual", "people": [a, b]})
-    if r.status_code in (404, 405, 422):
-        pytest.fail("`POST %s` 走不到（回 %s）。" % (ITEMS, r.status_code))
-    assert r.status_code == 200, (
-        "建不了 `manual` 項目：%s %s\n" % (r.status_code, r.text[:200])
-        + "📌 `§2`：`people_for_item()` 多一支 `manual`，回同樣的三元組。")
-    item_id = (r.json() or {}).get("id")
-    assert item_id, "回應沒有 id：%r" % r.json()
-
-    ar = client.post("/api/bonus/awards", headers=hdr, json={
-        "quote_no": "MQ-BN3-M",
-        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
-                         "person_pct": {a: 5000, b: 5000}}]})
-    assert ar.status_code == 200, (
-        "用 `manual` 的人送出獎金單被拒：%s %s" % (ar.status_code, ar.text[:200]))
-
-    import db
-    conn = db.get_db()
-    try:
-        paid = {r_["username"] for r_ in conn.execute(
-            "SELECT DISTINCT username FROM bonus_award_lines"
-            " WHERE bonus_item_id = ?", (item_id,))}
-    finally:
-        conn.close()
-    assert paid == {a, b}, (
-        "`manual` 指定 %r，而實際寫進 `bonus_award_lines` 的是 %r\n"
-        % ({a, b}, paid)
-        + "☠️ 中間那一層回對了而下游沒寫進去 —— **只驗中間層看不出來**。")
-
-
-def test_bn3_a_manual_item_with_nobody_is_refused(client, make_user):
-    """🔴 **`manual` 而沒有指定任何人 ⇒ 400。**
-
-    ☠️ 允許的話 `people_for_item` 回 `(False, [], "無可發放對象")`
-       ⇒ 那個項目**從來不會出現在任何一張獎金單上**，而沒有人會發現。
-
-    ## ⚠️ 這一題**第一版是假綠燈**，我當場抓到
-
-    ```
-    PERSON_SOURCES = ['sales_person', 'case_stages.assigned_to']
-    ⇒ `manual` **還不在白名單裡** ⇒ 回的是「不支援的人員來源『manual』」
-    ⇒ 我只斷言 400 => **綠，而它驗的是另一件事**
-    ```
-    🔑 〈假綠燈：產品的退路〉—— 一句**合法的拒絕**吃掉了我的斷言。
-    ⇒ 加一句：訊息要說得出是「**沒有指定人**」，不是「不支援這個來源」。
-    """
-    _u, hdr = _hdr(client, make_user, "bn3_empty")
-    r = client.post(ITEMS, headers=hdr, json={
-        "name": "沒人的項目", "person_source": "manual", "people": []})
-    if r.status_code in (404, 405, 422):
-        pytest.fail("端點走不到（回 %s）。" % r.status_code)
-    assert r.status_code == 400, (
-        "`manual` 而沒有指定人被接受了（回 %s）——\n" % r.status_code
-        + "☠️ 那個項目**從來不會出現在任何一張獎金單上**。")
-    assert "不支援" not in r.text, (
-        "它被擋下來了，**而理由是「不支援 `manual` 這個來源」**：%s\n"
-        % r.text[:200]
-        + "☠️ 那是一句**合法的拒絕**吃掉了我的斷言（〈假綠燈：產品的退路〉）——\n"
-          "   這一題要驗的是「`manual` **可用**，而沒指定人要擋」。\n"
-        + "🔑 先把 `manual` 加進 `PERSON_SOURCES`，這一題才量得到東西。")
-
-
-def test_bn3_an_unknown_username_is_refused_and_named(client, make_user):
-    """🔴 **指定的帳號不存在／已停用 ⇒ 400，而且說出是哪一個。**
-
-    ```
-    ❌ 存 display_name／自由輸入  打錯一個字那個人就領不到，**而畫面上一切正常**
-    ✅ 存 username（UNIQUE NOT NULL，且不在可改欄位白名單裡）
-    ```
-    ⚠️ 只回 400 不夠：使用者一次指定好幾個人，**說不出是哪一個等於要他自己試**。
-    """
-    a, _ = _hdr(client, make_user, "bn3_real")
-    _u, hdr = _hdr(client, make_user, "bn3_ghost_sup")
-    r = client.post(ITEMS, headers=hdr, json={
-        "name": "有鬼的項目", "person_source": "manual",
-        "people": [a, "nobody_here_9912"]})
-    if r.status_code in (404, 405, 422):
-        pytest.fail("端點走不到（回 %s）。" % r.status_code)
-    assert r.status_code == 400, (
-        "不存在的帳號被接受了（回 %s）——\n" % r.status_code
-        + "☠️ 打錯一個字那個人就領不到，**而畫面上一切正常**。")
-    assert "nobody_here_9912" in r.text, (
-        "訊息沒說出是哪一個帳號：%s" % r.text[:200])
-
-
-def test_bn3_a_deactivated_person_is_not_paid_on_a_new_award(client, make_user):
-    """🔴 **`SPEC-BN2-BN5 §2` ③：停用的人員，新的獎金分潤單不可以再發給他。**
-
-    ⚙️ 觀測點走下游（`bonus_award_lines`）；⚙️ 對照組是同一個項目裡**仍在職**的那一位
-    —— 他必須還領得到，否則「停用的人沒領到」可能只是整個項目壞了。
-    """
-    _seed_case("MQ-BN3-OFF", 1000000)
-    a, _ = _hdr(client, make_user, "bn3_on")
-    b, _ = _hdr(client, make_user, "bn3_off")
-    _u, hdr = _hdr(client, make_user, "bn3_off_sup")
-    r = client.post(ITEMS, headers=hdr, json={
-        "name": "停用測試", "person_source": "manual", "people": [a, b]})
-    assert r.status_code == 200, r.text[:200]
-    item_id = r.json()["id"]
-
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute("UPDATE users SET active = 0 WHERE username = ?", (b,))
-        conn.commit()
-    finally:
-        conn.close()
-
-    ar = client.post("/api/bonus/awards", headers=hdr, json={
-        "quote_no": "MQ-BN3-OFF",
-        "allocations": [{"bonus_item_id": item_id, "total_pct": 1000,
-                         "person_pct": {a: 10000}}]})
-    assert ar.status_code == 200, ar.text[:200]
-    conn = db.get_db()
-    try:
-        paid = {r_["username"] for r_ in conn.execute(
-            "SELECT DISTINCT username FROM bonus_award_lines WHERE bonus_item_id = ?",
-            (item_id,))}
-    finally:
-        conn.close()
-    assert paid == {a}, "停用之後的新單發給了 %r（預期只有仍在職的 %r）" % (paid, a)
-
-
 def test_bn3_the_existing_sources_do_not_change_behaviour(client, make_user):
     """⚙️ **正對照：既有四個來源不可以因為多了 `manual` 而改變行為。**
 
@@ -487,7 +354,11 @@ _BN4_TARGETS = (
 _BN4_UNTOUCHED = {"backend/archive.py": 2, "backend/db.py": 6}
 #: 🔴 使用者原話裡的「獎金單」**不改**：那是逐字引用，改了就不是原話了。
 #:   ⇒ 這幾處要**數得出來而且不變**：取代時若連原話一起改，這個數字會掉。
-_BN4_VERBATIM_QUOTES = 11
+#: 2026-09-24：11 → 3。減少的 8 處全部來自被改寫的舊 `frontend/js/bonus.js`（3）與
+#: `frontend/pages/bonus.html`（5）——SPEC-BONUS §十一 把頁面整頁換成以案件為中心的新頁面，
+#: 舊頁面裡引用使用者原話的註解隨舊頁面一起移除（不是把原話裡的「獎金單」改掉）。
+#: `routers/bonus.py` 的 3 處不變。以同一個掃描器比對 master（f57740b）與分支得出。
+_BN4_VERBATIM_QUOTES = 3
 
 
 def _bn4_in_user_quote(src, pos):

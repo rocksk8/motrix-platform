@@ -255,16 +255,22 @@ def test_the_bonus_page_is_not_gutted():
 
     ⚙️ 三個彼此獨立的證據（任一個單獨都可能被巧合滿足）。
     📌 這一題現在是綠的，牙齒證明過：把頁面換成一句停用訊息，它會紅。
+
+    📌 2026-09-24（SPEC-BONUS §十一）：頁面**依使用者要求整頁重做**成以案件為中心的新版
+       （使用者：「上一次開發的內容我無法接受」）。第三個證據原本是「> 20000 字元」，
+       新頁面約 1 萬 6 千字元 ⇒ 改成新頁面的結構標記（清單＋明細＋草稿編輯＋發放），
+       仍然擋得住「整頁換成一句停用訊息」。
     """
     html = _bonus_page()
     assert "../js/bonus.js" in html, (
         "`bonus.html` 不再載入 `bonus.js` —— 頁面被掏空了。")
     assert "bn-card" in html, (
         "`bonus.html` 裡既有的版面（`bn-card`）不見了 —— 頁面被掏空了。")
-    assert len(html) > 20000, (
-        "`bonus.html` 只剩 %d 個字元 —— 這不像「加了一句停用訊息」，\n"
-        % len(html)
-        + "☠️ 像是**整頁被換掉**了。開回來的那天，內容已經不在。")
+    for marker in ("bn-list", "bn-case", 'data-testid="bn-draft"', 'data-testid="bn-mark-paid"'):
+        assert marker in html, (
+            "`bonus.html` 找不到 `%s` —— 以案件為中心的清單／明細／草稿／發放不在了，\n" % marker
+            + "☠️ 像是**整頁被換掉**了。開回來的那天，內容已經不在。")
+    assert len(html) > 10000, "`bonus.html` 只剩 %d 個字元 —— 頁面被掏空了。" % len(html)
 
 
 def test_the_bonus_page_says_it_is_suspended():

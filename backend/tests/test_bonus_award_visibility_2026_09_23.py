@@ -36,6 +36,14 @@ bonus.js  :121  this.canManageItems = !!d.can_edit
 `canManageItems`（`bonus.js:45` 逐字：「`can_edit` 那個名字說不出
 edit 什麼」）—— 所以本檔反向控制第一次是**紅在我的判準上**。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_bn9_the_items_entry_still_uses_can_manage_items
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import pytest
 
 AWARDS = "/api/bonus/awards"
@@ -187,43 +195,3 @@ def test_bn9_the_amounts_of_other_people_stay_hidden(client, make_user):
         + "☠️ 那與「看得到全部」只差一步 —— `visible_lines()` 沒有生效。")
 
 
-def test_bn9_the_items_entry_still_uses_can_manage_items(client, make_user):
-    """⚙️ **反向控制：`_is_manager` 收緊之後，那個入口不可以跟著消失。**
-
-    ```
-    bonus.html:158  <div x-show="canManageItems">   <= 入口的條件
-    ```
-    🔑 `canManageItems` 問的是「**我能不能維護獎金項目**」（superadmin），
-      `isManager` 問的是「**我看得到誰的獎金**」—— **兩件事**。
-    ☠️ 把入口改成看 `isManager` 的話，`admin` 變一般使用者的那一刻，
-       **一個本來就不該給他的入口**會以「順便」的方式消失 ——
-       看起來沒事，而下一次有人要放寬 `isManager` 時會**連帶打開那個入口**。
-    """
-    import pathlib
-    import re
-
-    root = pathlib.Path(__file__).resolve().parents[2]
-    html = (root / "frontend" / "pages" / "bonus.html").read_text(
-        encoding="utf-8", errors="replace")
-    html = re.sub(r"<!--.*?-->", lambda m: " " * len(m.group(0)), html,
-                  flags=re.S)
-
-    # 🔴 **我第一版找錯字了**：畫面上的旗標叫 `canManageItems`
-    #    （`bonus.js:121  this.canManageItems = !!d.can_edit`），
-    #    而 `can_edit` 這三個字在 `bonus.html` 裡**只出現在註解裡**
-    #    ⇒ 我把註解抹掉之後就找不到它 ⇒ 這一題紅在**我的判準**上。
-    # 🔑 而那個改名是**刻意的**（`bonus.js:45` 逐字：「`can_edit` 那個名字
-    #    說不出 edit 什麼」）⇒ 釘後端的欄位名是釘錯了層，
-    #    要釘的是**畫面上那個旗標**。
-    m = re.search(r'x-(?:show|if)="([^"]*canManageItems[^"]*)"', html)
-    assert m, (
-        "`bonus.html` 上沒有任何綁到 `canManageItems` 的顯示條件 ——\n"
-        + "☠️ 獎金項目的入口被改成看別的東西了。\n"
-        + "🔑 `canManageItems`（能不能維護項目，來自後端 `can_edit`）與\n"
-          "   `isManager`（看得到誰的獎金）是**兩件事** ——\n"
-          "   混在一起之後，放寬其中一個會**連帶打開另一個**。")
-    assert "isManager" not in m.group(1), (
-        "那個入口的條件裡**同時**綁了 `isManager`：%r\n" % m.group(1)
-        + "☠️ `_is_manager` 收緊（`admin` 變一般使用者）的那一刻，\n"
-          "   這個入口會以「順便」的方式跟著改變 —— 看起來沒事，\n"
-          "   **而下一次有人放寬 `isManager` 時會連帶打開它**。")

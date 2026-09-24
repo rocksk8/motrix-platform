@@ -46,6 +46,14 @@ helpers/bonus.py::people_for_item()：
 少了這一格，「把 `sales_person` 全部改用 `sales_person_id`」這種
 一次改到底的修法會讓上面的核心題綠，而報價單 PDF 上印出 `jeff`。
 """
+
+# ── 2026-09-24 移除（SPEC-BONUS §十一）───────────────────────────────────────
+# 舊「獎金項目＋分潤單」流程停用：寫入端點回 410、bonus.html 改為以案件為中心的新頁面
+# （使用者：「上一次開發的內容我無法接受」「重做成新流程」、舊單「舊的都是開發機測試用，直接作廢」）。
+# 本檔下列題驗的是已停用的流程，已移除；新流程的題見 test_bonus_case_*_2026_09_24.py、
+# test_e2e_bonus_case_page_2026_09_24.py、test_bonus_legacy_retired_2026_09_24.py。
+# 移除：test_qs1a_generating_an_award_stores_the_username_not_the_display_name、test_qs1a_the_case_stages_source_is_unaffected、test_qs1a_the_sales_person_source_resolves_to_the_real_username
+# 同檔其餘題驗的是仍在運作的部分（讀取端點、群組、輔助函式），保留。
 import sys
 from pathlib import Path
 
@@ -131,80 +139,6 @@ def _user_id(username):
 # ① 核心：sales_person 來源要解析出真的 username
 # ══════════════════════════════════════════════════════════════════════
 
-def test_qs1a_the_sales_person_source_resolves_to_the_real_username(
-        client, make_user):
-    """🔴🔴 **核心：`sales_person` 來源解析出來的人，要是真的 `username`，
-    不是 `quotations.sales_person` 那個顯示名字串。**
-
-    ⚙️ 刻意讓 `sales_person`（顯示名欄位）留舊格式的中文名，
-    `sales_person_id` 指向一個 `username` 完全不像中文名的帳號——
-    若解析結果是中文名，代表還在讀舊欄位；若是帳號，代表已經走
-    `sales_person_id`。
-    """
-    seller_username, _ = _hdr(client, make_user, "qs1a_seller1")
-    seller_id = _user_id(seller_username)
-
-    quote_no = "MQ-QS1A-CORE"
-    _seed_case_with_sales_person(quote_no, seller_id, "業務部老王")
-    _u, hdr = _hdr(client, make_user, "qs1a_core_sup")
-
-    r = _create_item(client, hdr, "業務獎金QS1A測試", "sales_person")
-    assert r.status_code == 200, r.text[:300]
-    item_id = r.json()["id"]
-
-    plan = _plan_get(client, hdr, quote_no)
-    assert plan.status_code == 200, plan.text[:300]
-    entry = next((it for it in plan.json().get("items") or ()
-                 if it.get("bonus_item_id") == item_id), None)
-    assert entry is not None, "先問端點的清單裡找不到這個項目。"
-    assert entry.get("ok") is True, "sales_person 來源解析失敗：%r" % entry
-    people = entry.get("people") or []
-    assert people == [seller_username], (
-        "解析出來的人是 %r，預期是真的帳號 [%r]——\n" % (people, seller_username)
-        + "☠️ 若解析出來的是「業務部老王」，代表還在讀 `quotations."
-          "sales_person` 那個顯示名欄位，沒有走 `sales_person_id`。")
-
-
-def test_qs1a_generating_an_award_stores_the_username_not_the_display_name(
-        client, make_user):
-    """🔴🔴 **`§4③ⓒ`：產生獎金單，`bonus_award_lines.username` 存的是
-    真的帳號，不是顯示名字串。**
-    """
-    seller_username, _ = _hdr(client, make_user, "qs1a_seller2")
-    seller_id = _user_id(seller_username)
-
-    quote_no = "MQ-QS1A-AWARD"
-    _seed_case_with_sales_person(quote_no, seller_id, "業務部老李")
-    _u, hdr = _hdr(client, make_user, "qs1a_award_sup")
-
-    r = _create_item(client, hdr, "業務獎金QS1A產單測試", "sales_person")
-    assert r.status_code == 200, r.text[:300]
-    item_id = r.json()["id"]
-
-    ar = _create_award(client, hdr, quote_no,
-                       [{"bonus_item_id": item_id, "total_pct": 10000,
-                         "person_pct": {seller_username: 10000}}])
-    assert ar.status_code == 200, (
-        "產生獎金單失敗：%s %s\n" % (ar.status_code, ar.text[:300])
-        + "⚠️ 若訊息是「人員比例全部是 0」：這是同一個 bug 的連鎖症狀——\n"
-          "   `person_pct` 用真的帳號當 key，而 `people_for_item()` 解析出\n"
-          "   來的人是顯示名字串，兩者對不上，`shares.get(帳號, 0)` 全部\n"
-          "   落到預設值 0。上游修好之後這裡會一起變綠，不必分開處理。")
-    award_id = ar.json()["id"]
-
-    lines = _lines_of(award_id)
-    usernames = {l["username"] for l in lines if l["bonus_item_id"] == item_id}
-    assert usernames == {seller_username}, (
-        "`bonus_award_lines.username` 存的是 %r，預期是帳號 {%r}——\n"
-        % (usernames, seller_username)
-        + "☠️ 若存的是顯示名字串，使用者改名之後這張獎金單就指向一個\n"
-          "   可能消失的名字，而且兩個人同名時分不出來誰是誰。")
-
-
-# ══════════════════════════════════════════════════════════════════════
-# ② 負對照：顯示用的地方不可以被一起改成 username
-# ══════════════════════════════════════════════════════════════════════
-
 def test_qs1a_the_quotation_pdf_still_shows_the_display_name_not_username():
     """⚙️🔴 **負對照：報價單 PDF「業務」欄仍然讀 `quotations.sales_person`
     這個顯示名欄位，不可以被一起改成 `sales_person_id` 解出來的
@@ -237,47 +171,3 @@ def test_qs1a_the_quotation_pdf_still_shows_the_display_name_not_username():
             + "退回改本題的觀測點，確認它是不是仍然讀顯示名欄位。")
 
 
-def test_qs1a_the_case_stages_source_is_unaffected(client, make_user):
-    """⚙️ **正對照：`case_stages.assigned_to` 這個既有多人來源不受影響。**
-
-    ☠️ 最容易踩的是「把 `_case_people()` 改成一律解析 `_id` 欄位」——
-    `case_stages.assigned_to` 存的本來就是帳號（JSON 陣列），不涉及
-    這個修法，不應該被牽動。
-    """
-    quote_no = "MQ-QS1A-STAGES"
-    import json
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO quotations (quote_no, status, customer_name, "
-            "project_name, total, pretax, deal_tag, data_json, "
-            "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (quote_no, "已送出", "測試客戶", "測試案", 0, 0, "已結案",
-             json.dumps({"settlement": {"status": "finalized",
-                                        "summary": {"netProfit": 1000000}}}),
-             "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
-        conn.execute(
-            "INSERT INTO case_stages (quote_no, assigned_to, created_at,"
-            " updated_at) VALUES (?,?,?,?)",
-            (quote_no, json.dumps(["qs1a_stage_bob"]),
-             "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
-        conn.commit()
-    finally:
-        conn.close()
-
-    _u, hdr = _hdr(client, make_user, "qs1a_stages_sup")
-    r = _create_item(client, hdr, "階段獎金QS1A測試", "case_stages.assigned_to")
-    assert r.status_code == 200, r.text[:300]
-    item_id = r.json()["id"]
-
-    plan = _plan_get(client, hdr, quote_no)
-    assert plan.status_code == 200, plan.text[:300]
-    entry = next((it for it in plan.json().get("items") or ()
-                 if it.get("bonus_item_id") == item_id), None)
-    assert entry is not None
-    assert entry.get("ok") is True, (
-        "`case_stages.assigned_to` 來源在修 `sales_person` 之後壞掉了：%r"
-        % entry)
-    assert entry.get("people") == ["qs1a_stage_bob"], (
-        "解析出 %r，預期 [\"qs1a_stage_bob\"]" % entry.get("people"))
