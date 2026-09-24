@@ -6,7 +6,7 @@ P4 把案件頁 232 處 alert／confirm／prompt 換成 static/ui.js 的 MotrixU
    （MotrixUI.confirm( 這類「成員呼叫」不算；window.confirm( 算）。附合成樣本正對照。
 ② e2e：走一趟 A、B 兩包各 3 個「會先問」的操作（刪款項期別、刪執行階段、刪動態／刪材料、刪出貨單、
    刪完工單），全部按取消：不得出現任何原生對話框，而且資料一筆都沒被刪。
-P4 A／B 兩包都推上 master 之前以 xfail(strict) 標記；兩包推完這兩題會轉綠 ⇒ strict 讓它紅 ⇒ 拿掉 xfail。
+P4 A／B 兩包已於 2026-09-24 全部推上 master，xfail 已拿掉。
 """
 import json
 import pathlib
@@ -19,8 +19,6 @@ import pytest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGE = ROOT / "frontend" / "pages" / "case-management.html"
 JS_FILES = sorted((ROOT / "frontend" / "js").glob("case-management-*.js"))
-PENDING = pytest.mark.xfail(strict=True, reason="CM12 P4 A／B 包尚未全部推上：案件頁仍有原生對話框；"
-                                                 "兩包推完這題會轉綠，strict 讓它紅 ⇒ 屆時拿掉 xfail")
 
 # 前面不是「.」或識別字元的 alert／confirm／prompt 呼叫；window.xxx( 另外算
 NATIVE = re.compile(r"(?:(?<![\w.$])|(?<=window\.))(alert|confirm|prompt)\s*\(")
@@ -60,7 +58,6 @@ def test_scanner_positive_control():
     assert [k for _, k, _ in _native_calls(html, html=True)] == ["alert"]
 
 
-@PENDING
 def test_case_page_source_has_no_native_dialogs():
     bad = []
     for p in [PAGE] + JS_FILES:
@@ -159,7 +156,6 @@ ACTIONS = [
 ]
 
 
-@PENDING
 @pytest.mark.e2e
 def test_main_actions_use_no_native_dialogs(live_server, make_user):
     from playwright.sync_api import sync_playwright
