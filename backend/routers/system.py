@@ -347,29 +347,10 @@ def mark_all_notifications_read(authorization: str = Header(None)):
 
 # ── Audit log ─────────────────────────────────────────────────────────────────
 
-_MODULE_ACTION_PREFIXES: dict = {
-    "dev_crm":    ("dev_case.", "dev_log."),
-    # 側欄 `_MOD_BADGES` 早就有它，這裡少一列 ⇒ 元素在、數字從來不來（UR1）。
-    "tender_radar": ("tender_watch.", "tender_radar."),
-    "quotation":  ("quotation.",),
-    "case_manage": ("deal_tag.",),
-    "customer":   ("customer.",),
-    "procurement": ("supplier.", "part.", "vendor."),
-    "equipment":  ("device.", "warranty."),
-    "finance":    ("payment.", "sales_order.", "settlement."),
-    "work_log":   ("work_log.",),
-    "daily_task": ("daily_task.",),
-}
-
-# Actions that should NOT contribute to the module badge (e.g. deletion meta-events)
-_MODULE_EXCLUDE_ACTIONS: dict = {
-    "dev_crm": (
-        "dev_case.delete",
-        "dev_case.delete_request",
-        "dev_case.delete_cancel",
-        "dev_case.delete_reject",
-    ),
-}
+# 2026-09-24（B7）：兩張表移到 `helpers/module_registry.py`（唯一來源），名稱保留給既有呼叫端。
+from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES  # noqa: E402
+from helpers.module_registry import refuse_unknown_new_keys  # noqa: E402
+from helpers.module_registry import BADGE_EXCLUDE as _MODULE_EXCLUDE_ACTIONS  # noqa: E402
 
 
 @router.post("/api/audit-log/module-counts")
@@ -1995,6 +1976,7 @@ def create_custom_role(body: dict = Body(...), authorization: str = Header(None)
     base_role = body.get("baseRole", "viewer")
     if base_role not in _VALID_BASE_ROLES:
         raise HTTPException(400, "無效的基礎角色")
+    refuse_unknown_new_keys(body.get("modules", []))
     roles = _get_setting("custom_roles", []) or []
     if any(r["name"] == name for r in roles):
         raise HTTPException(409, "角色名稱已存在")
@@ -2029,6 +2011,7 @@ def update_custom_role(rid: str, body: dict = Body(...), authorization: str = He
         raise HTTPException(409, "角色名稱已存在")
     roles[idx]["name"]     = name
     roles[idx]["baseRole"] = base_role
+    refuse_unknown_new_keys(body.get("modules", []), roles[idx].get("modules") or [])
     roles[idx]["modules"]  = body.get("modules", [])
     _set_setting("custom_roles", roles)
     _audit(_tok(authorization), "settings.custom_role.update", "settings", rid, name)

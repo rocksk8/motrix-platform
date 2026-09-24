@@ -19,18 +19,10 @@ logger = logging.getLogger(__name__)
 # 卻多一個全系統沒有任何地方會讀的死 key `sales`。superadmin 在側欄與後端幾乎都走
 # 角色直通，所以看不出症狀，但「第一個管理員帳號的模組清單」本來就該是那份樣板的
 # 鏡像，不同步只是等著誤導下一個人。兩邊要一起改。
-_SUPERADMIN_MODULES = [
-    "dashboard", "quotation", "case_manage", "customer",
-    "procurement", "inventory", "equipment", "finance", "reports", "cashier",
-    "settings", "project_approve_eng", "project_approve_biz", "financial_view",
-    "work_log", "daily_task",
-    "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
-    "access_guide", "gateway_guide", "automation_guide",
-    # 2026-09-14：原本沒有 key、只能靠角色寫死的項目——四個稽核／維運頁，
-    # 以及網路架構規劃書的「檢視」（原本只有 netplan_edit）
-    "netplan",
-    "audit_log", "shipping_export_log", "module_versions", "selection_overview",
-]
+# 2026-09-24（B7）：清單本身移到 `helpers/module_registry.py`（唯一來源），這裡只留名稱
+# 給既有呼叫端；值與順序不變（test_module_registry 的 golden 題守著）。
+from helpers.module_registry import SUPERADMIN_DEFAULT as _SUPERADMIN_DEFAULT
+_SUPERADMIN_MODULES = list(_SUPERADMIN_DEFAULT)
 
 _LEGACY_WEAK_PASSWORDS = (
     "rock1125",

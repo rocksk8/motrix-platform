@@ -101,11 +101,9 @@ def test_newly_created_keys_are_grantable_in_the_catalogue():
     import os
     import re
 
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    html = io.open(os.path.join(root, "frontend", "pages", "users.html"),
-                   encoding="utf-8").read()
-    seg = html[html.index("allModules: ["):html.index("allNotifyTypes")]
-    catalogue = set(re.findall(r"\{key:\s*'([a-z_]+)'", seg))
+    # 2026-09-24（B7）：權限目錄的唯一來源是 helpers/module_registry.py
+    #   （users.html 由 /api/modules/catalog 取得同一份）。斷言不變。
+    from helpers.module_registry import MODULE_KEYS as catalogue
 
     for k in ("netplan", "audit_log", "shipping_export_log",
               "module_versions", "selection_overview"):

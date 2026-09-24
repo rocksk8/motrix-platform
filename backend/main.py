@@ -27,6 +27,7 @@ from helpers import tender_source as tender_radar_source
 from helpers import geo as geo_core
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, tender_radar, map_points, account_items, bonus, vouchers
 from routers import item_reads
+from routers import modules
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -662,6 +663,7 @@ app.include_router(account_items.router)
 app.include_router(bonus.router)
 app.include_router(vouchers.router)
 app.include_router(item_reads.router)
+app.include_router(modules.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

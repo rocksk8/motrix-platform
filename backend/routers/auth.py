@@ -24,6 +24,7 @@ from webauthn import (
 )
 
 from db import get_db, get_demo_db, reset_demo_db, demo_reset_lock
+from helpers.module_registry import refuse_unknown_new_keys
 from helpers import (
     _hash_pw, _verify_pw, _require_user, _tok, _audit, is_weak_password, MIN_PASSWORD_LEN, DEMO_TOKEN_PREFIX,
     notify_module_activity)
@@ -1474,6 +1475,7 @@ def create_user(body: UserIn, authorization: str = Header(None)):
     if is_weak_password(body.password):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
+    refuse_unknown_new_keys(body.modules)
     conn = get_db()
     try:
         conn.execute("""
@@ -1511,6 +1513,13 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if not conn.execute("SELECT id FROM users WHERE id=?", (user_id,)).fetchone():
         conn.close()
         raise HTTPException(404, "使用者不存在")
+    if body.modules is not None:
+        _old = conn.execute("SELECT modules FROM users WHERE id=?", (user_id,)).fetchone()
+        try:
+            refuse_unknown_new_keys(body.modules, json.loads((_old["modules"] if _old else None) or "[]"))
+        except HTTPException:
+            conn.close()
+            raise
     sets, params = [], []
     if body.display_name is not None: sets.append("display_name=?"); params.append(body.display_name)
     if body.role         is not None: sets.append("role=?");         params.append(body.role)

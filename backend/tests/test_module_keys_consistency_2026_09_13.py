@@ -44,19 +44,20 @@ def _read(path):
 
 
 def catalogue_keys():
-    """users.html 權限目錄（不含同一頁下方那份通知偏好清單）。"""
-    src = _read(USERS_HTML)
-    start = src.index("{key:'dashboard'")
-    end = src.index("{key:'approval_request'")   # 通知偏好清單的第一筆
-    return [m.group(1) for m in re.finditer(r"\{key:'([a-z_]+)'", src[start:end])]
+    """權限目錄。
+
+    📌 2026-09-24（B7）：來源從「用 regex 解析 users.html 的 allModules」改成唯一來源
+       `helpers/module_registry.py`（users.html 現在由 /api/modules/catalog 取得同一份）。
+       下面各題的斷言不變，只換資料來源。
+    """
+    from helpers.module_registry import MODULES
+    return [k for k, _label, _group in MODULES]
 
 
 def role_templates():
-    src = _read(USERS_HTML)
-    block = src[src.index("const ROLE_MODULES"):src.index("function buildOrgRows")]
-    return {m.group(1): re.findall(r"'([a-z_]+)'", m.group(2))
-            for m in re.finditer(r"^\s*(superadmin|admin|sales|engineer|viewer):\s*\[([^\]]*)\]",
-                                 block, re.M)}
+    """角色樣板（同上，2026-09-24 起讀 registry）。"""
+    from helpers.module_registry import ROLE_TEMPLATES
+    return {role: list(keys) for role, keys in ROLE_TEMPLATES.items()}
 
 
 def sidebar_keys():
@@ -110,10 +111,13 @@ def backend_keys():
 
 
 def superadmin_modules_py():
-    src = _read(AUTH_PY)
-    block = src[src.index("_SUPERADMIN_MODULES = ["):]
-    block = block[:block.index("]")]
-    return set(re.findall(r'"([a-z_]+)"', block))
+    """`helpers/auth.py::_SUPERADMIN_MODULES` 的**執行期值**。
+
+    📌 2026-09-24（B7）：原本用 regex 解析 auth.py 裡的字面清單；清單移到 registry 之後
+       auth.py 只剩 `list(SUPERADMIN_DEFAULT)` ⇒ 改讀實際值（regex 會讀到空集合而假綠／假紅）。
+    """
+    from helpers.auth import _SUPERADMIN_MODULES
+    return set(_SUPERADMIN_MODULES)
 
 
 def test_backend_enforced_keys_are_grantable():
