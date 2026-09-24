@@ -344,6 +344,43 @@ def test_a_late_unread_answer_does_not_bring_back_a_mark_clicked_meanwhile(live_
 
 
 @pytest.mark.e2e
+def test_a_query_sent_after_the_click_but_answered_before_the_server_records_it_keeps_the_mark_cleared(
+        live_server, make_user):
+    """先渲染再非同步載入的另一半：查詢在點選**之後**才送出，而伺服器算它的時候還沒收到那筆已讀
+    （兩條連線，先後不保證）⇒ 回應說「未讀」。只擋「點選前送出的查詢」的話，標記會被蓋回來。
+
+    量法：把 POST /api/reads 攔住不放行（伺服器確定還沒記下），點選之後觸發一次重抓並讓它照常回來。
+    """
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    _dev_case("bob", "紅點測試")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        _login(page, live_server, u, pw)
+        cid, card = _dev_crm_with_one_unread(page, live_server)
+        hold = _Hold(page)
+        card.click()
+        _wait_until_held(page, hold.held)
+        assert card.locator("text=有更新").count() == 0
+        with page.expect_response(lambda r: r.url.endswith("/api/reads/unread"), timeout=10000) as ans:
+            page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
+        assert str(cid) in ans.value.json().get("unread", []), "前提不成立：伺服器這時應該還沒記下已讀"
+        page.wait_for_timeout(300)
+        assert card.locator("text=有更新").count() == 0, "伺服器記下已讀之前的回應把剛點過的那一筆蓋回未讀"
+        # 伺服器記下之後，同一筆真的有新更新 ⇒ 標記要能回來（本地已讀不可以永久壓住它）
+        with page.expect_response(lambda r: r.url.endswith("/api/reads") and r.request.method == "POST",
+                                  timeout=10000):
+            hold.release()
+        _audit("bob", "dev_case.update", "dev_case", cid)
+        time.sleep(1.1)
+        _audit("bob", "dev_case.update", "dev_case", cid)
+        page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
+        card.locator("text=有更新").wait_for(state="visible", timeout=10000)
+        browser.close()
+
+
+@pytest.mark.e2e
 def test_case_management_late_unread_answer_does_not_undo_a_click(live_server, make_user):
     make_user(username="bob", role="admin")
     u, pw = make_user(username="alice", role="superadmin")

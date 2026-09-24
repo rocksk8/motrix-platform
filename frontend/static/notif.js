@@ -102,6 +102,18 @@ window.MotrixReads = (function () {
       else localStorage.setItem(OPT_KEY, JSON.stringify({ type: msg.type, kind: msg.kind, key: msg.key, n: Math.random() }))
     } catch (e) {}
   }
+  // ── 伺服器還沒記下的已讀：查詢結果不可以把它蓋回未讀 ──────────────────────
+  //   各頁只擋「點選前就送出的查詢」（t0 比較）。而點選**之後**才送出、卻比 POST /api/reads
+  //   先被伺服器算完的查詢（兩條連線，先後不保證）一樣會回「未讀」⇒ 標記被蓋回來。
+  //   ⇒ 在這裡記下：哪些已讀還在路上、什麼時候被伺服器確認；`unread()` 據此濾掉。
+  //   伺服器拒絕（HTTP 錯誤）⇒ 不算確認，之後的查詢照伺服器的說法。
+  var _pending = {}       // 'kind:key' -> 在途的 POST 數
+  var _confirmedAt = {}   // 'kind:key' -> 伺服器確認的時間（ms）
+  function _stillUnconfirmedAt(kind, key, t0) {
+    var id = kind + ':' + key
+    return !!_pending[id] || (_confirmedAt[id] || 0) >= t0
+  }
+
   if (_ch) _ch.onmessage = function (e) { _emit(e.data) }
   window.addEventListener('storage', function (e) {
     if (e.key === OPT_KEY && e.newValue) { try { _emit(JSON.parse(e.newValue)) } catch (x) {} }
@@ -120,9 +132,13 @@ window.MotrixReads = (function () {
     /** 標記一筆已讀：呼叫端要**先**清自己的 UI，這裡只負責送出與通知其他分頁。 */
     mark: function (kind, key) {
       key = String(key)
+      var id = kind + ':' + key
+      _pending[id] = (_pending[id] || 0) + 1
       _announce({ type: 'read', kind: kind, key: key })
       // ⚠️ 伺服器收到**之後**才發「整包重抓」的通知：先發的話，對方重抓時伺服器還沒記下。
       return _post('/api/reads', { kind: kind, key: key }).then(function (r) {
+        if (--_pending[id] <= 0) delete _pending[id]
+        if (r && r.ok) _confirmedAt[id] = Date.now()
         if (r && !r.ok) {
           var m = { type: 'failed', kind: kind, key: key }
           _announce(m)
@@ -135,6 +151,7 @@ window.MotrixReads = (function () {
     },
     /** 回 Set：伺服器判斷的未讀鍵（已排除本人、已套可見性）。 */
     unread: function (kind, keys) {
+      var t0 = Date.now()
       return _ready.then(function () {
         var t = _tok()
         if (!t || !keys || !keys.length) return new Set()
@@ -143,7 +160,9 @@ window.MotrixReads = (function () {
           headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
           body: JSON.stringify({ kind: kind, keys: keys.map(String) }),
         }).then(function (r) { return r.ok ? r.json() : { unread: [] } })
-          .then(function (d) { return new Set(d.unread || []) })
+          .then(function (d) {
+            return new Set((d.unread || []).filter(function (k) { return !_stillUnconfirmedAt(kind, k, t0) }))
+          })
           .catch(function () { return new Set() })
       })
     },
