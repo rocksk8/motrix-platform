@@ -24,7 +24,7 @@ a7837102824184820dfa198d1ebcd109ff6d0ff9a2672a074b9a1b4d147d04c6  leaflet.css   
 
 ## ⚠️ `.gitattributes` 有一條規則是為了這份雜湊而存在
 
-`frontend/static/vendor/leaflet/** -text`
+`frontend/static/vendor/leaflet-1.9.4/** -text`
 
 本 repo `core.autocrlf=true`，而 `.gitattributes` 預設把文字檔正規化成 LF。
 `leaflet.css` 發布時是 **CRLF** ⇒ 若讓它被正規化，**checkout 出來的位元組就不是廠商發布的那一份**，
@@ -51,3 +51,15 @@ Leaflet 預設會**從 `leaflet.css` 的位置推導** marker icon 的路徑。
 底圖圖磚來自 `tile.openstreetmap.org`，**那是執行期的對外連線，vendor 不了**。
 所以地圖預設**不載入**：使用者按「開啟地圖」才載。
 🔑 那個按鈕本身就是那條連線的開關——**把選擇權放在會承受後果的人手上**。
+
+## 目錄名帶版本號（2026-09-24 改名：`leaflet/` → `leaflet-1.9.4/`）
+
+`/static/vendor/` 一律回 `Cache-Control: immutable`（一年，`main.py` `no_cache_static`），前提是「升版一定換檔名」。
+原本目錄叫 `leaflet/`（不帶版本）⇒ 升版後瀏覽器會繼續用舊檔一年，而沒有任何錯誤訊息。
+改名只搬目錄，**檔案位元組不變**（上面的雜湊照樣驗得過；`test_vendor_paths_are_versioned` 每次跑都驗）。
+守門：`backend/tests/test_vendor_paths_are_versioned_2026_09_24.py`——vendor 底下每一項名稱都要帶版本、前端引用的路徑都要存在。
+
+## 載入方式
+
+`map.html` 的 `_loadLeaflet()` 在使用者按「開啟地圖」時才載入 `leaflet.css`／`leaflet.js`，並明設
+`L.Icon.Default.imagePath = '../static/vendor/leaflet-1.9.4/images/'`；markercluster 在它之後載入。

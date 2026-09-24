@@ -873,10 +873,10 @@ function mapPage() {
       return new Promise((resolve, reject) => {
         const css = document.createElement('link')
         css.rel = 'stylesheet'
-        css.href = '../static/vendor/leaflet/leaflet.css'
+        css.href = '../static/vendor/leaflet-1.9.4/leaflet.css'
         document.head.appendChild(css)
         const js = document.createElement('script')
-        js.src = '../static/vendor/leaflet/leaflet.js'
+        js.src = '../static/vendor/leaflet-1.9.4/leaflet.js'
         // `MP2`：群聚外掛要在 Leaflet **之後**載（它載入當下就讀 `L`）。
         //   ⚠️ 它載不到時照樣 resolve：群聚是顯示輔助，不可以讓整張圖因此畫不出來（退回一般圖層）。
         js.onload = () => this._loadCluster().then(resolve, resolve)
@@ -912,7 +912,7 @@ function mapPage() {
       // 🔴 **明著設 imagePath，不依賴 Leaflet 從 CSS 位置推導。**
       // 推導現在剛好是對的，而「剛好是對的」會在有人搬動檔案那天失效，
       // 失效的樣子是 marker 圖去 CDN 抓 —— 一條沒有人注意到的對外連線。
-      window.L.Icon.Default.imagePath = '../static/vendor/leaflet/images/'
+      window.L.Icon.Default.imagePath = '../static/vendor/leaflet-1.9.4/images/'
       const pts = this.view.points
       const office = this.info && this.info.office
       const centre = office ? [office.lat, office.lon]
