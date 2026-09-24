@@ -563,3 +563,4 @@ hichan-0a 代裁（待確認）：
 - CM9 e2e `test_health_overview_follows_the_last_selected_case` master 上 -n 5 偶發紅 ⇒ hichan-a3 以產品競態查修（不可重試／拉長等待），-n 5 連 5 次綠再推。
 - **CU5～CU8 改派 hichan-bf**（AC3 前端推完後）；hichan-a3：CU1～CU4。
 - 已修既有隔離缺陷：test_core TestComputeAchievement（04a3562）。
+- CM3 已推（7a463d3，v116）、CM14b 檢視鈕修正（b30c43d）。hichan-0a 代裁（待確認）：未對應清單放在「使用者管理」頁下方（系統區沒有單一設定頁，新增頁要動 sidebar.js）；唯讀時其餘嵌在列內的純檢視鈕（階段展開、排序）留到 CM12 拆分時處理。hichan-8d 先做 N14，CM8 等 CM6。
