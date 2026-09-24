@@ -13,11 +13,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: E402,F401
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
@@ -39,7 +37,7 @@ _POINTS = [_pt(1, "甲供應商", 24.10, 120.60, 3.0), _pt(2, "乙供應商", 23
 
 
 def _page(pw_, live_server, u, p, tile_failed=False):
-    browser = pw_.chromium.launch()
+    browser = pw_   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     page = browser.new_page(viewport={"width": 1280, "height": 900})
     page.route("**/api/map/points*", lambda route: route.fulfill(
         status=200, content_type="application/json",
@@ -71,75 +69,75 @@ def _popup(page):
 
 
 @pytest.mark.e2e
-def test_mp4_clicking_a_row_moves_the_map_to_that_point_and_opens_it(live_server, make_user, _geo):
+def test_mp4_clicking_a_row_moves_the_map_to_that_point_and_opens_it(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp4_row", role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _page(pw_, live_server, u, p)
-        try:
-            page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
-            page.wait_for_function("() => " + _D + "._markerOf", timeout=15000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            _click_row(page, "丙供應商")
-            text = _popup(page).inner_text()
-            c = page.evaluate("() => { const c = " + _D + "._map.getCenter(); return [c.lat, c.lng] }")
-            print("MP4 點列實測：彈窗 %r／中心 %r" % (text[:30], c))
-            assert "丙供應商" in text, text
-            assert abs(c[0] - 22.60) < 0.01 and abs(c[1] - 120.30) < 0.01, c
-            # 導航：只給網址。
-            nav = _popup(page).locator("a.mp-nav").get_attribute("href")
-            assert nav == "https://www.google.com/maps/dir/?api=1&destination=22.6,120.3", nav
-            _click_row(page, "甲供應商")
-            page.wait_for_function("() => document.querySelector('.leaflet-popup-content')"
-                                   " && document.querySelector('.leaflet-popup-content').innerText.includes('甲供應商')",
-                                   timeout=8000)
-        finally:
-            browser.close()
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(pw_, live_server, u, p)
+    try:
+        page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
+        page.wait_for_function("() => " + _D + "._markerOf", timeout=15000)
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        _click_row(page, "丙供應商")
+        text = _popup(page).inner_text()
+        c = page.evaluate("() => { const c = " + _D + "._map.getCenter(); return [c.lat, c.lng] }")
+        print("MP4 點列實測：彈窗 %r／中心 %r" % (text[:30], c))
+        assert "丙供應商" in text, text
+        assert abs(c[0] - 22.60) < 0.01 and abs(c[1] - 120.30) < 0.01, c
+        # 導航：只給網址。
+        nav = _popup(page).locator("a.mp-nav").get_attribute("href")
+        assert nav == "https://www.google.com/maps/dir/?api=1&destination=22.6,120.3", nav
+        _click_row(page, "甲供應商")
+        page.wait_for_function("() => document.querySelector('.leaflet-popup-content')"
+                               " && document.querySelector('.leaflet-popup-content').innerText.includes('甲供應商')",
+                               timeout=8000)
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_mp4_clicking_a_row_before_the_map_is_open_opens_it_first(live_server, make_user, _geo):
+def test_mp4_clicking_a_row_before_the_map_is_open_opens_it_first(live_server, make_user, _geo, e2e_browser):
     """對照組：上次圖磚失敗 ⇒ 不自動開圖；點列要先開圖再定位，不可以什麼都不發生。"""
     u, p = make_user(username="mp4_closed", role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _page(pw_, live_server, u, p, tile_failed=True)
-        try:
-            assert page.evaluate("() => " + _D + ".mapOpen") is False, "量尺：地圖應該還沒開"
-            _click_row(page, "乙供應商")
-            assert "乙供應商" in _popup(page).inner_text()
-        finally:
-            browser.close()
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(pw_, live_server, u, p, tile_failed=True)
+    try:
+        assert page.evaluate("() => " + _D + ".mapOpen") is False, "量尺：地圖應該還沒開"
+        _click_row(page, "乙供應商")
+        assert "乙供應商" in _popup(page).inner_text()
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_mp4_search_and_nearest_n_filter_the_list(live_server, make_user, _geo):
+def test_mp4_search_and_nearest_n_filter_the_list(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp4_filter", role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _page(pw_, live_server, u, p)
-        try:
-            assert len(_rows(page)) == 4
-            page.locator("input.mp-search").fill("乙")
-            _rendered(page)   # PERF #6：原本固定等 400ms
-            got = _rows(page)
-            print("MP4 搜尋「乙」：%r" % got)
-            assert sorted(got) == ["丁供應商", "乙供應商"], "名稱與機關都要搜得到：%r" % got
-            page.locator("input.mp-search").fill("前鎮")
-            _rendered(page)   # PERF #6：原本固定等 400ms
-            assert _rows(page) == ["丙供應商"], "地址也要搜得到"
-            page.locator("input.mp-search").fill("")
-            _rendered(page)   # PERF #6：原本固定等 400ms
-            assert len(_rows(page)) == 4, "清空搜尋全部回來"
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(pw_, live_server, u, p)
+    try:
+        assert len(_rows(page)) == 4
+        page.locator("input.mp-search").fill("乙")
+        _rendered(page)   # PERF #6：原本固定等 400ms
+        got = _rows(page)
+        print("MP4 搜尋「乙」：%r" % got)
+        assert sorted(got) == ["丁供應商", "乙供應商"], "名稱與機關都要搜得到：%r" % got
+        page.locator("input.mp-search").fill("前鎮")
+        _rendered(page)   # PERF #6：原本固定等 400ms
+        assert _rows(page) == ["丙供應商"], "地址也要搜得到"
+        page.locator("input.mp-search").fill("")
+        _rendered(page)   # PERF #6：原本固定等 400ms
+        assert len(_rows(page)) == 4, "清空搜尋全部回來"
 
-            page.locator("select.mp-near").select_option("10")
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            got = _rows(page)
-            print("MP4 最近 10 筆（依據點）：%r" % got)
-            assert got == ["甲供應商", "丙供應商", "乙供應商"], "依距離由近到遠；算不出距離的丁不列入：%r" % got
-            page.evaluate("() => { " + _D + ".nearN = '20' }")
-            _POINTS_N = page.evaluate("() => " + _D + ".view.points.length")
-            assert _POINTS_N == 3
-            # 只取 N 筆
-            page.evaluate("() => { const d = " + _D + "; d.nearN = '1' }")
-            _rendered(page)   # PERF #6：原本固定等 200ms
-            assert _rows(page) == ["甲供應商"]
-        finally:
-            browser.close()
+        page.locator("select.mp-near").select_option("10")
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        got = _rows(page)
+        print("MP4 最近 10 筆（依據點）：%r" % got)
+        assert got == ["甲供應商", "丙供應商", "乙供應商"], "依距離由近到遠；算不出距離的丁不列入：%r" % got
+        page.evaluate("() => { " + _D + ".nearN = '20' }")
+        _POINTS_N = page.evaluate("() => " + _D + ".view.points.length")
+        assert _POINTS_N == 3
+        # 只取 N 筆
+        page.evaluate("() => { const d = " + _D + "; d.nearN = '1' }")
+        _rendered(page)   # PERF #6：原本固定等 200ms
+        assert _rows(page) == ["甲供應商"]
+    finally:
+        browser.close()

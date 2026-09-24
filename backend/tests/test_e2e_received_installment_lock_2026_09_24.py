@@ -12,7 +12,6 @@ import pytest
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -20,26 +19,6 @@ from tests._ports import free_safe_port
 QUOTE_NO = "MQ-E2ELOCK-001"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_t100_unconfirm_2026_09_10.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -61,7 +40,7 @@ def _item_ids():
 
 
 @pytest.mark.e2e
-def test_sales_sees_reason_when_deleting_received_installment(live_server, make_user):
+def test_sales_sees_reason_when_deleting_received_installment(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_lock_sales", role="sales")
 
     import db
@@ -88,32 +67,28 @@ def test_sales_sees_reason_when_deleting_received_installment(live_server, make_
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            # 刪除款項期別會先確認（test_e2e_case_data_loss_2026_09_24）；這裡要走到後端那一關，
-            # 所以按「確定」。CM12 P4 起確認框是 MotrixUI（不是原生 confirm）⇒ 用 helper 回答並驗訊息。
-            natives = forbid_native_dialogs(page)
-            _login(page, live_server, username, password)
-            # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
-            page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}&tab=fin")
-            delete_received = page.locator(
-                "xpath=//label[.//span[normalize-space()='已收款']]"
-                "/following-sibling::button[contains(@class,'btn-del')]")
-            delete_received.wait_for(state="visible", timeout=15000)
-            assert delete_received.count() == 1
-            delete_received.click()
-            answer_confirm(page, ok=True, expect="訂金款")
+    browser = e2e_browser
+    page = browser.new_page()
+    # 刪除款項期別會先確認（test_e2e_case_data_loss_2026_09_24）；這裡要走到後端那一關，
+    # 所以按「確定」。CM12 P4 起確認框是 MotrixUI（不是原生 confirm）⇒ 用 helper 回答並驗訊息。
+    natives = forbid_native_dialogs(page)
+    _login(page, live_server, username, password)
+    # CU5（2026-09-24）：收款搬到「財務」分頁 ⇒ 以 ?tab=fin 直接開到那一頁
+    page.goto(f"{live_server}/pages/case-management.html?q={QUOTE_NO}&tab=fin")
+    delete_received = page.locator(
+        "xpath=//label[.//span[normalize-space()='已收款']]"
+        "/following-sibling::button[contains(@class,'btn-del')]")
+    delete_received.wait_for(state="visible", timeout=15000)
+    assert delete_received.count() == 1
+    delete_received.click()
+    answer_confirm(page, ok=True, expect="訂金款")
 
-            label = page.locator("span.save-label")
-            page.wait_for_function(
-                "() => { const e = document.querySelector('span.save-label');"
-                " return e && /已收款|已儲存/.test(e.textContent) }", timeout=15000)
-            assert natives == [], natives
-            text = label.inner_text()
-            assert "已收款，不可刪除" in text, text
-            assert "訂金款" in text, text
-            assert _item_ids() == [1, 2, 3], "已收款期別不可以被刪掉"
-        finally:
-            browser.close()
+    label = page.locator("span.save-label")
+    page.wait_for_function(
+        "() => { const e = document.querySelector('span.save-label');"
+        " return e && /已收款|已儲存/.test(e.textContent) }", timeout=15000)
+    assert natives == [], natives
+    text = label.inner_text()
+    assert "已收款，不可刪除" in text, text
+    assert "訂金款" in text, text
+    assert _item_ids() == [1, 2, 3], "已收款期別不可以被刪掉"

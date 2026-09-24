@@ -17,32 +17,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -54,7 +33,7 @@ def _login(page, base_url, username, password):
 
 
 @pytest.mark.e2e
-def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user):
+def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user, e2e_browser):
     """確認 → 已確認清單看得到 → 反確認 → 回到待確認清單，全程只用畫面操作。"""
     username, password = make_user(username="e2e_t100", role="superadmin")
 
@@ -82,64 +61,60 @@ def test_t100_confirm_then_unconfirm_from_ui(live_server, make_user):
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.on("dialog", lambda d: d.accept())      # confirm() 一律按確定
-        try:
-            _login(page, live_server, username, password)
-            # 🔴 2026-09-23 `FN3`：T100 匯出 UI 從**營運報表的頁籤**
-            #    搬成**出納頁的子頁籤**（`cashierSub==='t100'`）。
-            # ⚠️ 改的是**去哪裡、點什麼**，斷言一個字都沒動 ——
-            #    這一題驗的是「反確認那個入口存不存在、按了有沒有效」，
-            #    而那件事沒有跟著搬家改變。
-            # 🔑 〈搬家要驗兩邊〉：舊位置沒有了由 `test_cashier_split_*`
-            #    那一組守，這裡只負責**新位置仍然能走完整條路**。
-            page.goto(f"{live_server}/pages/cashier.html")
-            page.wait_for_selector(".ctab", timeout=20000)
-            page.click('.ctab:has-text("T100匯出")')
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("dialog", lambda d: d.accept())      # confirm() 一律按確定
+    _login(page, live_server, username, password)
+    # 🔴 2026-09-23 `FN3`：T100 匯出 UI 從**營運報表的頁籤**
+    #    搬成**出納頁的子頁籤**（`cashierSub==='t100'`）。
+    # ⚠️ 改的是**去哪裡、點什麼**，斷言一個字都沒動 ——
+    #    這一題驗的是「反確認那個入口存不存在、按了有沒有效」，
+    #    而那件事沒有跟著搬家改變。
+    # 🔑 〈搬家要驗兩邊〉：舊位置沒有了由 `test_cashier_split_*`
+    #    那一組守，這裡只負責**新位置仍然能走完整條路**。
+    page.goto(f"{live_server}/pages/cashier.html")
+    page.wait_for_selector(".ctab", timeout=20000)
+    page.click('.ctab:has-text("T100匯出")')
 
-            # 日期區間涵蓋這筆收款
-            page.fill('input[x-model="t100Start"]', "2026-06-01")
-            page.fill('input[x-model="t100End"]', "2026-06-30")
-            page.click('button:has-text("重新整理預覽")')
-            page.wait_for_function(
-                "() => document.body.innerText.includes('MQ-T100E2E-001')"
-                " || document.body.innerText.includes('T100測客')",
-                timeout=20000)
+    # 日期區間涵蓋這筆收款
+    page.fill('input[x-model="t100Start"]', "2026-06-01")
+    page.fill('input[x-model="t100End"]', "2026-06-30")
+    page.click('button:has-text("重新整理預覽")')
+    page.wait_for_function(
+        "() => document.body.innerText.includes('MQ-T100E2E-001')"
+        " || document.body.innerText.includes('T100測客')",
+        timeout=20000)
 
-            # 這個入口在修補之前根本不存在
-            entry = page.locator('button:has-text("展開檢視／反確認")')
-            entry.wait_for(state="visible", timeout=20000)
+    # 這個入口在修補之前根本不存在
+    entry = page.locator('button:has-text("展開檢視／反確認")')
+    entry.wait_for(state="visible", timeout=20000)
 
-            # 確認已匯入
-            page.click('button:has-text("確認已匯入 T100")')
-            page.wait_for_function(
-                "() => { const b = [...document.querySelectorAll('button')]"
-                ".find(e => e.innerText.includes('展開檢視／反確認'));"
-                "return !!b; }", timeout=20000)
+    # 確認已匯入
+    page.click('button:has-text("確認已匯入 T100")')
+    page.wait_for_function(
+        "() => { const b = [...document.querySelectorAll('button')]"
+        ".find(e => e.innerText.includes('展開檢視／反確認'));"
+        "return !!b; }", timeout=20000)
 
-            # 展開已確認清單，應該看得到剛剛那筆。等「值真的出現」而不是只等元素
-            # 存在——按鈕會先於資料列渲染，只等按鈕會讀到空表格（2026-09-10 實測）。
-            entry.click()
-            page.wait_for_selector('button:has-text("反確認")', timeout=20000)
-            page.wait_for_function(
-                "() => document.body.innerText.includes('MQ-T100E2E-001')"
-                " || document.body.innerText.includes('T100測客')",
-                timeout=20000)
-            confirmed_txt = page.locator("table.data-table").last.inner_text()
-            assert "T100測客" in confirmed_txt or "MQ-T100E2E-001" in confirmed_txt, \
-                f"已確認清單看不到剛確認的事件：{confirmed_txt[:300]}"
+    # 展開已確認清單，應該看得到剛剛那筆。等「值真的出現」而不是只等元素
+    # 存在——按鈕會先於資料列渲染，只等按鈕會讀到空表格（2026-09-10 實測）。
+    entry.click()
+    page.wait_for_selector('button:has-text("反確認")', timeout=20000)
+    page.wait_for_function(
+        "() => document.body.innerText.includes('MQ-T100E2E-001')"
+        " || document.body.innerText.includes('T100測客')",
+        timeout=20000)
+    confirmed_txt = page.locator("table.data-table").last.inner_text()
+    assert "T100測客" in confirmed_txt or "MQ-T100E2E-001" in confirmed_txt, \
+        f"已確認清單看不到剛確認的事件：{confirmed_txt[:300]}"
 
-            # 反確認
-            page.click('button:has-text("反確認")')
-            page.wait_for_function(
-                "() => !document.body.innerText.includes('撤銷中…')", timeout=20000)
-            page.wait_for_function(
-                "() => document.body.innerText.includes('這個日期區間內沒有已確認的事件')",
-                timeout=20000)
-        finally:
-            browser.close()
+    # 反確認
+    page.click('button:has-text("反確認")')
+    page.wait_for_function(
+        "() => !document.body.innerText.includes('撤銷中…')", timeout=20000)
+    page.wait_for_function(
+        "() => document.body.innerText.includes('這個日期區間內沒有已確認的事件')",
+        timeout=20000)
 
     # 反確認之後，後端也真的不再有這筆標記
     conn = db.get_db()

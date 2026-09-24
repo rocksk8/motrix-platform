@@ -8,9 +8,8 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_e2e_material_orders_2026_09_11 import live_server, _login  # noqa: F401,E402
+from tests.test_e2e_material_orders_2026_09_11 import _login  # noqa: F401,E402
 
 RPT = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -60,54 +59,46 @@ def test_sales_role_template_includes_map():
 # ── D4-1 匯出帶口徑（e2e）─────────────────────────────────────────────────────
 
 @pytest.mark.e2e
-def test_report_export_sends_the_basis_on_screen(live_server, make_user):
+def test_report_export_sends_the_basis_on_screen(live_server, make_user, e2e_browser):
     u = make_user(username="wb_rpt", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/reports.html")
-            page.wait_for_function(f"() => {RPT} && typeof {RPT}.exportFile === 'function'", timeout=20000)
-            urls = []
-            page.on("request", lambda r: urls.append(r.url) if "/api/reports/financial/" in r.url else None)
-            page.evaluate(f"() => {{ {RPT}.expensesBasis = 'cash' }}")
-            page.evaluate(f"async () => {{ await {RPT}.exportFile('excel') }}")
-            assert urls and "basis=cash" in urls[-1], urls
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/reports.html")
+    page.wait_for_function(f"() => {RPT} && typeof {RPT}.exportFile === 'function'", timeout=20000)
+    urls = []
+    page.on("request", lambda r: urls.append(r.url) if "/api/reports/financial/" in r.url else None)
+    page.evaluate(f"() => {{ {RPT}.expensesBasis = 'cash' }}")
+    page.evaluate(f"async () => {{ await {RPT}.exportFile('excel') }}")
+    assert urls and "basis=cash" in urls[-1], urls
 
 
 # ── D8-2 客戶彈窗（e2e）───────────────────────────────────────────────────────
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("pg", ["customers", "suppliers"])   # suppliers：同型彈窗（0a 派，2026-09-25）
-def test_customer_modal_fits_the_viewport_and_scrolls_inside(live_server, make_user, pg):
+def test_customer_modal_fits_the_viewport_and_scrolls_inside(live_server, make_user, pg, e2e_browser):
     u = make_user(username="wb_" + pg, role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            ctx = browser.new_context(viewport={"width": 1366, "height": 768})
-            ctx.add_init_script("try { localStorage.setItem('motrix_font_zoom', '1.3') } catch (e) {}")
-            page = ctx.new_page()
-            _login(page, live_server, *u)
-            page.goto(f"{live_server}/pages/{pg}.html")
-            page.wait_for_function(f"() => {RPT} && typeof {RPT}.openCreate === 'function'", timeout=20000)
-            page.evaluate(f"() => {RPT}.openCreate()")
-            box = page.locator('.modal-overlay[x-show="showModal"] .modal-box')
-            box.wait_for(state="visible", timeout=5000)
-            # ⚠ 要等 x-transition 進場結束再量：進場途中外層 scale(0.95) 會把彈窗縮小，
-            #   第一版量在途中 ⇒ master 上假綠（穩定後底邊 781 > 768）。
-            page.wait_for_function("""() => { const o = document.querySelector('.modal-overlay[x-show="showModal"]')
-              const cs = getComputedStyle(o); return cs.transform === 'none' && cs.opacity === '1' }""", timeout=5000)
-            m = page.evaluate("""() => {
-              const b = document.querySelector('.modal-overlay[x-show="showModal"] .modal-box')
-              const body = b.querySelector('.modal-body')
-              const r = b.getBoundingClientRect()
-              return { bottom: r.bottom, vh: window.innerHeight, bodyScrolls: body.scrollHeight > body.clientHeight,
-                       overflow: getComputedStyle(body).overflowY }
-            }""")
-            assert m["bottom"] <= m["vh"] + 1, m
-            assert m["overflow"] in ("auto", "scroll"), m
-        finally:
-            browser.close()
+    browser = e2e_browser
+    ctx = browser.new_context(viewport={"width": 1366, "height": 768})
+    ctx.add_init_script("try { localStorage.setItem('motrix_font_zoom', '1.3') } catch (e) {}")
+    page = ctx.new_page()
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/{pg}.html")
+    page.wait_for_function(f"() => {RPT} && typeof {RPT}.openCreate === 'function'", timeout=20000)
+    page.evaluate(f"() => {RPT}.openCreate()")
+    box = page.locator('.modal-overlay[x-show="showModal"] .modal-box')
+    box.wait_for(state="visible", timeout=5000)
+    # ⚠ 要等 x-transition 進場結束再量：進場途中外層 scale(0.95) 會把彈窗縮小，
+    #   第一版量在途中 ⇒ master 上假綠（穩定後底邊 781 > 768）。
+    page.wait_for_function("""() => { const o = document.querySelector('.modal-overlay[x-show="showModal"]')
+      const cs = getComputedStyle(o); return cs.transform === 'none' && cs.opacity === '1' }""", timeout=5000)
+    m = page.evaluate("""() => {
+      const b = document.querySelector('.modal-overlay[x-show="showModal"] .modal-box')
+      const body = b.querySelector('.modal-body')
+      const r = b.getBoundingClientRect()
+      return { bottom: r.bottom, vh: window.innerHeight, bodyScrolls: body.scrollHeight > body.clientHeight,
+               overflow: getComputedStyle(body).overflowY }
+    }""")
+    assert m["bottom"] <= m["vh"] + 1, m
+    assert m["overflow"] in ("auto", "scroll"), m

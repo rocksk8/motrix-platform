@@ -16,32 +16,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -117,7 +96,7 @@ def _nav_vocabulary(page):
 
 
 @pytest.mark.e2e
-def test_page_without_module_shows_no_permission(live_server, make_user):
+def test_page_without_module_shows_no_permission(live_server, make_user, e2e_browser):
     """沒有「供應商／料號／採購」模組的工程師手打 parts.html → 顯示沒有權限。
 
     **刻意不導轉**：`index.html` 自己也有一道守門（非 admin 且沒有 finance／
@@ -126,40 +105,32 @@ def test_page_without_module_shows_no_permission(live_server, make_user):
     """
     u, p = make_user(username="pg_eng", role="engineer",
                      modules=["dashboard", "case_manage"])
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/parts.html")
-            page.wait_for_selector("#no-module-notice", timeout=10000)
-            # 頁面內容要真的被換掉，不是只疊一個提示上去
-            assert page.locator(".toolbar").count() == 0, "料號頁的內容還在"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/parts.html")
+    page.wait_for_selector("#no-module-notice", timeout=10000)
+    # 頁面內容要真的被換掉，不是只疊一個提示上去
+    assert page.locator(".toolbar").count() == 0, "料號頁的內容還在"
 
 
 @pytest.mark.e2e
-def test_page_with_module_is_not_redirected(live_server, make_user):
+def test_page_with_module_is_not_redirected(live_server, make_user, e2e_browser):
     """反向控制：有那個模組的人留在頁面上。
 
     少了這一題，上面那題有可能只是因為「每個人都被導回首頁」而綠。
     """
     u, p = make_user(username="pg_proc", role="engineer",
                      modules=["dashboard", "procurement"])
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/parts.html")
-            # 2026-09-14：側欄退役（display:none），改等上方導覽列的分組標題
-            page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            page.wait_for_timeout(300)   # 給守門一個真的會動作的機會
-            assert page.url.endswith("parts.html"), f"有模組卻被導走了：{page.url}"
-            assert page.locator("#no-module-notice").count() == 0, "有模組卻被擋"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/parts.html")
+    # 2026-09-14：側欄退役（display:none），改等上方導覽列的分組標題
+    page.wait_for_selector(".mnav .mnav__top", timeout=10000)
+    page.wait_for_timeout(300)   # 給守門一個真的會動作的機會
+    assert page.url.endswith("parts.html"), f"有模組卻被導走了：{page.url}"
+    assert page.locator("#no-module-notice").count() == 0, "有模組卻被擋"
 
 
 # ── 2026-09-14：取消 admin 直通之後，管理員也依模組顯示 ────────────────────────
@@ -170,105 +141,93 @@ def test_page_with_module_is_not_redirected(live_server, make_user):
 # 特別點出來的那一句。
 
 @pytest.mark.e2e
-def test_admin_without_module_loses_both_item_and_group_name(live_server, make_user):
+def test_admin_without_module_loses_both_item_and_group_name(live_server, make_user, e2e_browser):
     """只有報價模組的管理員：上方導覽不該出現「財務」這個分組名稱。
 
     改動前 admin 直通所有模組判斷，這個帳號會看到完整的導覽列。
     """
     u, p = make_user(username="nav_adm_min", role="admin",
                      modules=["dashboard", "quotation"])
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            names = _nav_vocabulary(page)
-            # ⚙️ **正對照：這個帳號自己的兩個模組必須看得到。**
-            #
-            # 🔴 舊版斷言的是 `"業務" in names`，而 2026-09-22 實測那個帳號的
-            #    導覽詞彙是：
-            #    `['儀表板', '報價單', '我的工作', '簽核佇列', '簽核代理人', '簽核歷史']`
-            #    ⇒ **「業務」不在裡面** —— 因為它底下只剩「報價單」一項，
-            #      而單項分組渲染成**那一項的名字**（`sidebar.js:620-623`）。
-            # ☠️ ⇒ 舊版釘的是**分組名**，而分組名會隨「底下剩幾項」變動 ——
-            #    那個數字由**這個帳號有哪些模組**決定，**正是這一題在改的變數**。
-            # 🔑 ⇒ 改釘**項目名**：`dashboard` ⇒ 儀表板、`quotation` ⇒ 報價單。
-            #    它們與分組怎麼渲染無關。
-            # ⚠️ **而這一條不可以省**（A-2 明著不背書「只刪掉它」）：
-            #    整題只剩 `not in` 的話，**導覽列整個空掉也會綠**。
-            for must in ("儀表板", "報價單"):
-                assert must in names, (
-                    f"這個帳號有那個模組，而導覽列裡找不到「{must}」：{names}\n"
-                    "☠️ 少了這一條，導覽列整個空掉也會讓下面的 `not in` 全過。")
-            # 🔴 **只釘分組名是抓不到漏權限的**（2026-09-22，A-2 指出 ＋ C 實測）
-            #
-            # ```
-            # 「廠商與採購」哪天真的漏出來，而它當時只剩一項
-            #   ⇒ 渲染成**那一項的名字**（客戶管理／供應商管理／…）
-            #   ⇒ 分組名根本不會出現 ⇒ `assert "廠商與採購" not in names` **通過**
-            # ```
-            # ☠️ 而那正是這一題要抓的那件事 —— **它是一個結構上抓不到目標的判準。**
-            # 🔑 ⇒ 連**項目名**一起釘：漏出來的東西無論渲染成哪一層，都會被抓到。
-            leaked = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES if n in names)
-            assert not leaked, (
-                f"沒有那些模組，而導覽列裡出現了：{leaked}\n"
-                f"  完整詞彙：{names}\n"
-                "☠️ 漏權限顯示 ⇒ 使用者點進去才發現沒有權限，"
-                "而他會以為是系統壞了。")
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.wait_for_selector(".mnav .mnav__top", timeout=10000)
+    names = _nav_vocabulary(page)
+    # ⚙️ **正對照：這個帳號自己的兩個模組必須看得到。**
+    #
+    # 🔴 舊版斷言的是 `"業務" in names`，而 2026-09-22 實測那個帳號的
+    #    導覽詞彙是：
+    #    `['儀表板', '報價單', '我的工作', '簽核佇列', '簽核代理人', '簽核歷史']`
+    #    ⇒ **「業務」不在裡面** —— 因為它底下只剩「報價單」一項，
+    #      而單項分組渲染成**那一項的名字**（`sidebar.js:620-623`）。
+    # ☠️ ⇒ 舊版釘的是**分組名**，而分組名會隨「底下剩幾項」變動 ——
+    #    那個數字由**這個帳號有哪些模組**決定，**正是這一題在改的變數**。
+    # 🔑 ⇒ 改釘**項目名**：`dashboard` ⇒ 儀表板、`quotation` ⇒ 報價單。
+    #    它們與分組怎麼渲染無關。
+    # ⚠️ **而這一條不可以省**（A-2 明著不背書「只刪掉它」）：
+    #    整題只剩 `not in` 的話，**導覽列整個空掉也會綠**。
+    for must in ("儀表板", "報價單"):
+        assert must in names, (
+            f"這個帳號有那個模組，而導覽列裡找不到「{must}」：{names}\n"
+            "☠️ 少了這一條，導覽列整個空掉也會讓下面的 `not in` 全過。")
+    # 🔴 **只釘分組名是抓不到漏權限的**（2026-09-22，A-2 指出 ＋ C 實測）
+    #
+    # ```
+    # 「廠商與採購」哪天真的漏出來，而它當時只剩一項
+    #   ⇒ 渲染成**那一項的名字**（客戶管理／供應商管理／…）
+    #   ⇒ 分組名根本不會出現 ⇒ `assert "廠商與採購" not in names` **通過**
+    # ```
+    # ☠️ 而那正是這一題要抓的那件事 —— **它是一個結構上抓不到目標的判準。**
+    # 🔑 ⇒ 連**項目名**一起釘：漏出來的東西無論渲染成哪一層，都會被抓到。
+    leaked = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES if n in names)
+    assert not leaked, (
+        f"沒有那些模組，而導覽列裡出現了：{leaked}\n"
+        f"  完整詞彙：{names}\n"
+        "☠️ 漏權限顯示 ⇒ 使用者點進去才發現沒有權限，"
+        "而他會以為是系統壞了。")
 
 
 @pytest.mark.e2e
-def test_admin_with_module_still_sees_the_group(live_server, make_user):
+def test_admin_with_module_still_sees_the_group(live_server, make_user, e2e_browser):
     """反向控制。少了這一題，上面那題可以靠「導覽列整個壞掉／空的」變綠。"""
     u, p = make_user(username="nav_adm_fin", role="admin",
                      modules=["dashboard", "quotation", "reports"])
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            names = _nav_vocabulary(page)
-            # 🔑 用兩層詞彙之後，這一條**不再依賴「財務底下只有一項」**：
-            #    哪天有人往財務加第二項 ⇒ 營運報表改渲染成 `.mnav__item`，
-            #    而 `_nav_vocabulary()` 照樣找得到它 ⇒ **這一題不會紅在一個假的理由上**。
-            assert "營運報表" in names, f"有 reports 模組卻看不到營運報表：{names}"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.wait_for_selector(".mnav .mnav__top", timeout=10000)
+    names = _nav_vocabulary(page)
+    # 🔑 用兩層詞彙之後，這一條**不再依賴「財務底下只有一項」**：
+    #    哪天有人往財務加第二項 ⇒ 營運報表改渲染成 `.mnav__item`，
+    #    而 `_nav_vocabulary()` 照樣找得到它 ⇒ **這一題不會紅在一個假的理由上**。
+    assert "營運報表" in names, f"有 reports 模組卻看不到營運報表：{names}"
 
 
 @pytest.mark.e2e
-def test_superadmin_still_sees_everything(live_server, make_user):
+def test_superadmin_still_sees_everything(live_server, make_user, e2e_browser):
     """「超級管理者預設全開」——一個模組都沒勾也要看得到完整導覽。"""
     u, p = make_user(username="nav_sa", role="superadmin", modules=[])
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.wait_for_selector(".mnav .mnav__top", timeout=10000)
-            names = _nav_vocabulary(page)
-            for expect in ("業務", "案件", "營運報表", "廠商與採購", "選型資料庫", "系統"):
-                assert expect in names, f"superadmin 看不到「{expect}」：{names}"
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.wait_for_selector(".mnav .mnav__top", timeout=10000)
+    names = _nav_vocabulary(page)
+    for expect in ("業務", "案件", "營運報表", "廠商與採購", "選型資料庫", "系統"):
+        assert expect in names, f"superadmin 看不到「{expect}」：{names}"
 
-            # 📏 **這是 `_FORBIDDEN_WITHOUT_MODULES` 的正對照，兩題必須成對。**
-            #
-            # ☠️ 那份清單全部是 `not in` 斷言 ——
-            # **一個打錯字的字串，`not in` 永遠成立** ⇒ 那一格會安靜地永遠綠。
-            # 🔑 而 superadmin 看得到全部 ⇒ **每一個字都必須在這裡出現得到**。
-            # 📌 ⇒ 哪天有人改了選單文案（例如「料號主檔」改名），
-            #    紅的是**這一題**，訊息直接說出是哪一個字對不上，
-            #    而不是讓禁列裡那一條安靜失效。
-            missing = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES
-                             if n not in names)
-            assert not missing, (
-                f"`_FORBIDDEN_WITHOUT_MODULES` 裡這些字 superadmin 也看不到："
-                f"{missing}\n"
-                f"  superadmin 的完整詞彙：{names}\n"
-                "☠️ 那代表那幾個字**根本不存在於導覽列**（改名了？打錯了？）——\n"
-                "🔑 而它們在另一題裡是 `not in` 斷言 ⇒ **永遠成立 ⇒ 永遠綠**。")
-        finally:
-            browser.close()
+    # 📏 **這是 `_FORBIDDEN_WITHOUT_MODULES` 的正對照，兩題必須成對。**
+    #
+    # ☠️ 那份清單全部是 `not in` 斷言 ——
+    # **一個打錯字的字串，`not in` 永遠成立** ⇒ 那一格會安靜地永遠綠。
+    # 🔑 而 superadmin 看得到全部 ⇒ **每一個字都必須在這裡出現得到**。
+    # 📌 ⇒ 哪天有人改了選單文案（例如「料號主檔」改名），
+    #    紅的是**這一題**，訊息直接說出是哪一個字對不上，
+    #    而不是讓禁列裡那一條安靜失效。
+    missing = sorted(n for n in _FORBIDDEN_WITHOUT_MODULES
+                     if n not in names)
+    assert not missing, (
+        f"`_FORBIDDEN_WITHOUT_MODULES` 裡這些字 superadmin 也看不到："
+        f"{missing}\n"
+        f"  superadmin 的完整詞彙：{names}\n"
+        "☠️ 那代表那幾個字**根本不存在於導覽列**（改名了？打錯了？）——\n"
+        "🔑 而它們在另一題裡是 `not in` 斷言 ⇒ **永遠成立 ⇒ 永遠綠**。")

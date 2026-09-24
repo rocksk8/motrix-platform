@@ -60,10 +60,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login, _create_voucher, _open_preview,
+    _login, _create_voucher, _open_preview,
 )
 
 #: A 給的例子——今天量到的最壞情況只有 0.357，離這個門檻還差一截。
@@ -137,7 +136,7 @@ def _measure(page):
 
 @pytest.mark.e2e
 def test_jv25_iframe_keeps_a_healthy_share_of_height_with_many_attachments(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴🔴 **核心：10 筆附件時，iframe 高度仍要佔 `.modal-body` 六成以上。**
 
     ⚙️ 已實測重現（見檔頭）：10 筆附件時 `ratio=0.357`，遠低於這個門檻——
@@ -146,26 +145,22 @@ def test_jv25_iframe_keeps_a_healthy_share_of_height_with_many_attachments(
     """
     username, password = make_user(username="jv25_many", role="superadmin",
                                    modules=["cashier"])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            _login(page, live_server, username, password)
-            token = page.evaluate(
-                "() => JSON.parse(localStorage.getItem('motrix_session'))"
-                ".token")
-            vid = _create_voucher(page, live_server, token)
-            _upload_n(page, live_server, token, vid, 10)
-            _open_preview(page, live_server, token, vid)
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    _login(page, live_server, username, password)
+    token = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('motrix_session'))"
+        ".token")
+    vid = _create_voucher(page, live_server, token)
+    _upload_n(page, live_server, token, vid, 10)
+    _open_preview(page, live_server, token, vid)
 
-            m = _measure(page)
-            assert m.get("found"), "量不到 `.modal-body` 或預覽 iframe——退回改選擇器。"
-            assert m["ratio"] >= _MIN_RATIO, (
-                "10 筆附件時，iframe 只佔 `.modal-body` 高度的 %.1f%%"
-                "（門檻 %.0f%%）：%r\n" % (m["ratio"] * 100, _MIN_RATIO * 100, m)
-                + "☠️ 使用者要預覽一張傳票，畫面上留給它的空間只剩一條窄縫。")
-        finally:
-            browser.close()
+    m = _measure(page)
+    assert m.get("found"), "量不到 `.modal-body` 或預覽 iframe——退回改選擇器。"
+    assert m["ratio"] >= _MIN_RATIO, (
+        "10 筆附件時，iframe 只佔 `.modal-body` 高度的 %.1f%%"
+        "（門檻 %.0f%%）：%r\n" % (m["ratio"] * 100, _MIN_RATIO * 100, m)
+        + "☠️ 使用者要預覽一張傳票，畫面上留給它的空間只剩一條窄縫。")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -174,7 +169,7 @@ def test_jv25_iframe_keeps_a_healthy_share_of_height_with_many_attachments(
 
 @pytest.mark.e2e
 def test_jv25_the_ratio_does_not_degrade_as_attachment_count_grows(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴🔴 **附件從 1 筆長到 10 筆，iframe 佔比不可以掉超過 %.0f 個百分點。**
 
     🔑 這一題比上一題更耐用——不管修法把絕對比例調到多高，都不可以是
@@ -183,37 +178,33 @@ def test_jv25_the_ratio_does_not_degrade_as_attachment_count_grows(
     """ % (_MAX_RATIO_DROP * 100)
     username, password = make_user(username="jv25_stable", role="superadmin",
                                    modules=["cashier"])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            _login(page, live_server, username, password)
-            token = page.evaluate(
-                "() => JSON.parse(localStorage.getItem('motrix_session'))"
-                ".token")
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    _login(page, live_server, username, password)
+    token = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('motrix_session'))"
+        ".token")
 
-            v_few = _create_voucher(page, live_server, token)
-            _upload_n(page, live_server, token, v_few, 1)
-            _open_preview(page, live_server, token, v_few)
-            few = _measure(page)
-            assert few.get("found"), "量不到（少附件那組）——退回改選擇器。"
+    v_few = _create_voucher(page, live_server, token)
+    _upload_n(page, live_server, token, v_few, 1)
+    _open_preview(page, live_server, token, v_few)
+    few = _measure(page)
+    assert few.get("found"), "量不到（少附件那組）——退回改選擇器。"
 
-            v_many = _create_voucher(page, live_server, token)
-            _upload_n(page, live_server, token, v_many, 10)
-            _open_preview(page, live_server, token, v_many)
-            many = _measure(page)
-            assert many.get("found"), "量不到（多附件那組）——退回改選擇器。"
+    v_many = _create_voucher(page, live_server, token)
+    _upload_n(page, live_server, token, v_many, 10)
+    _open_preview(page, live_server, token, v_many)
+    many = _measure(page)
+    assert many.get("found"), "量不到（多附件那組）——退回改選擇器。"
 
-            drop = few["ratio"] - many["ratio"]
-            assert drop <= _MAX_RATIO_DROP, (
-                "附件從 1 筆長到 10 筆，iframe 佔比從 %.1f%% 掉到 %.1f%%"
-                "（掉了 %.1f 個百分點，門檻 %.0f）：\n少附件=%r\n多附件=%r\n"
-                % (few["ratio"] * 100, many["ratio"] * 100, drop * 100,
-                   _MAX_RATIO_DROP * 100, few, many)
-                + "☠️ 這代表 iframe 的可視大小取決於**這張傳票剛好有幾筆附件**，\n"
-                  "   不是一個穩定的版面。")
-        finally:
-            browser.close()
+    drop = few["ratio"] - many["ratio"]
+    assert drop <= _MAX_RATIO_DROP, (
+        "附件從 1 筆長到 10 筆，iframe 佔比從 %.1f%% 掉到 %.1f%%"
+        "（掉了 %.1f 個百分點，門檻 %.0f）：\n少附件=%r\n多附件=%r\n"
+        % (few["ratio"] * 100, many["ratio"] * 100, drop * 100,
+           _MAX_RATIO_DROP * 100, few, many)
+        + "☠️ 這代表 iframe 的可視大小取決於**這張傳票剛好有幾筆附件**，\n"
+          "   不是一個穩定的版面。")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -222,7 +213,7 @@ def test_jv25_the_ratio_does_not_degrade_as_attachment_count_grows(
 
 @pytest.mark.e2e
 def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appears(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴🔴 **匯出訊息出現前後，iframe 高度不可以變——釘「不變」，不是「差 ≤5px」。**
 
     # 🔴 2026-09-23 改判準：門檻是會被調的數字，「不變」是不變量
@@ -253,46 +244,42 @@ def test_jv25_iframe_height_is_stable_before_and_after_the_export_message_appear
     """
     username, password = make_user(username="jv25_jump", role="superadmin",
                                    modules=["cashier"])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            _login(page, live_server, username, password)
-            token = page.evaluate(
-                "() => JSON.parse(localStorage.getItem('motrix_session'))"
-                ".token")
-            vid = _create_voucher(page, live_server, token)
-            _upload_n(page, live_server, token, vid, 10)
-            _open_preview(page, live_server, token, vid)
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    _login(page, live_server, username, password)
+    token = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('motrix_session'))"
+        ".token")
+    vid = _create_voucher(page, live_server, token)
+    _upload_n(page, live_server, token, vid, 10)
+    _open_preview(page, live_server, token, vid)
 
-            before = _settled(page)
-            assert before.get("found"), "量不到（按匯出前）——退回改選擇器。"
+    before = _settled(page)
+    assert before.get("found"), "量不到（按匯出前）——退回改選擇器。"
 
-            page.click('.modal-foot button:has-text("匯出 PDF")'
-                      ':not(:has-text("含附件"))')
-            # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
-            page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
-            _rendered(page)
+    page.click('.modal-foot button:has-text("匯出 PDF")'
+              ':not(:has-text("含附件"))')
+    # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
+    page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
+    _rendered(page)
 
-            after = _settled(page)
-            assert after.get("found"), "量不到（按匯出後）——退回改選擇器。"
-            # ⚙️ 量尺：訊息**真的出現了**。少了這一行，匯出若沒有產生任何訊息，
-            #    「高度不變」就是在比較兩個一模一樣的畫面（空綠）。
-            n_msg = page.locator(".vc-preview-atts .vc-err, .vc-preview-atts .vc-ok").count()
-            assert n_msg >= 1, "按下匯出之後 modal 裡沒有出現任何訊息 —— 這一題量不到它要量的東西"
+    after = _settled(page)
+    assert after.get("found"), "量不到（按匯出後）——退回改選擇器。"
+    # ⚙️ 量尺：訊息**真的出現了**。少了這一行，匯出若沒有產生任何訊息，
+    #    「高度不變」就是在比較兩個一模一樣的畫面（空綠）。
+    n_msg = page.locator(".vc-preview-atts .vc-err, .vc-preview-atts .vc-ok").count()
+    assert n_msg >= 1, "按下匯出之後 modal 裡沒有出現任何訊息 —— 這一題量不到它要量的東西"
 
-            diff = abs(after["frameHeight"] - before["frameHeight"])
-            # ⚠️ 不用 0：容忍次像素的浮點捲動誤差（<1px），但不放寬到
-            #    足以蓋掉這次量到的 5.8px 真實跳動。
-            assert diff < 1, (
-                "按下匯出、失敗訊息出現前後，iframe 高度從 %.1f 變成 %.1f"
-                "（差 %.1f px）：\n" % (before["frameHeight"],
-                                     after["frameHeight"], diff)
-                + "☠️ 使用者正在看那張紙，畫面在按下去的瞬間跳動——\n"
-                + "   這正是他原話「顯示高度過小」的反面案例：\n"
-                + "   `.vc-preview-atts`（flex:0 0 auto，照單全收訊息高度）\n"
-                + "   與 `.vc-preview-frame`（flex:1 1 auto;min-height:380px）\n"
-                + "   搶同一份 `.modal-body` 配額，訊息一出現配額就被擠壓，\n"
-                + "   而 iframe 撞到自己的 min-height 只能被頂著長大。")
-        finally:
-            browser.close()
+    diff = abs(after["frameHeight"] - before["frameHeight"])
+    # ⚠️ 不用 0：容忍次像素的浮點捲動誤差（<1px），但不放寬到
+    #    足以蓋掉這次量到的 5.8px 真實跳動。
+    assert diff < 1, (
+        "按下匯出、失敗訊息出現前後，iframe 高度從 %.1f 變成 %.1f"
+        "（差 %.1f px）：\n" % (before["frameHeight"],
+                             after["frameHeight"], diff)
+        + "☠️ 使用者正在看那張紙，畫面在按下去的瞬間跳動——\n"
+        + "   這正是他原話「顯示高度過小」的反面案例：\n"
+        + "   `.vc-preview-atts`（flex:0 0 auto，照單全收訊息高度）\n"
+        + "   與 `.vc-preview-frame`（flex:1 1 auto;min-height:380px）\n"
+        + "   搶同一份 `.modal-body` 配額，訊息一出現配額就被擠壓，\n"
+        + "   而 iframe 撞到自己的 min-height 只能被頂著長大。")

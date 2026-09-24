@@ -9,7 +9,6 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 
 QNO = "MQ-VCSPLIT-01"
@@ -65,59 +64,47 @@ def _open(browser, base, u, vid, width, height, zoom=None):
 
 
 @pytest.mark.e2e
-def test_wide_screen_puts_the_source_panel_beside_the_lines(live_server, client, make_user):
+def test_wide_screen_puts_the_source_panel_beside_the_lines(live_server, client, make_user, e2e_browser):
     u = make_user(username="vcs_wide", role="superadmin")
     vid = _seed(client, u)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, vid, 1440, 900)
-            b = page.evaluate(BOX)
-            assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
-            assert b["panel"]["t"] < b["lines"]["b"], ("面板要與分錄同一列，不是在下面", b)
-            assert b["lines"]["t"] < b["vh"] and b["panel"]["t"] < b["vh"], ("兩區都要在第一屏內", b)
-            assert b["sw"] <= b["vw"], ("不可橫向溢出", b)
-            # 帶入後焦點仍在該行摘要
-            page.locator(f"[data-testid=summary-panel-case]:has-text('{QNO}')").click()
-            page.wait_for_function(f"() => {D}.lines[2].summary.includes('{QNO}')", timeout=5000)
-            _rendered(page)   # PERF #6：原本固定等 200ms（焦點在 $nextTick 裡回到該行）
-            focused = page.evaluate("() => [...document.querySelectorAll(\"textarea[x-model='l.summary']\")].indexOf(document.activeElement)")
-            assert focused == 2, ("帶入後焦點應回到第 3 行摘要", focused)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, vid, 1440, 900)
+    b = page.evaluate(BOX)
+    assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
+    assert b["panel"]["t"] < b["lines"]["b"], ("面板要與分錄同一列，不是在下面", b)
+    assert b["lines"]["t"] < b["vh"] and b["panel"]["t"] < b["vh"], ("兩區都要在第一屏內", b)
+    assert b["sw"] <= b["vw"], ("不可橫向溢出", b)
+    # 帶入後焦點仍在該行摘要
+    page.locator(f"[data-testid=summary-panel-case]:has-text('{QNO}')").click()
+    page.wait_for_function(f"() => {D}.lines[2].summary.includes('{QNO}')", timeout=5000)
+    _rendered(page)   # PERF #6：原本固定等 200ms（焦點在 $nextTick 裡回到該行）
+    focused = page.evaluate("() => [...document.querySelectorAll(\"textarea[x-model='l.summary']\")].indexOf(document.activeElement)")
+    assert focused == 2, ("帶入後焦點應回到第 3 行摘要", focused)
 
 
 @pytest.mark.e2e
-def test_the_panel_stays_in_view_while_scrolling_a_long_voucher(live_server, client, make_user):
+def test_the_panel_stays_in_view_while_scrolling_a_long_voucher(live_server, client, make_user, e2e_browser):
     """分錄很多行時往下捲：右欄 sticky，停在導覽列下方、仍在畫面內（不必捲回上面才看得到來源）。"""
     u = make_user(username="vcs_long", role="superadmin")
     vid = _seed(client, u, n=30)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, vid, 1440, 900)
-            b = page.evaluate(BOX)
-            assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
-            page.evaluate("() => window.scrollBy(0, 600)")
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            top = page.evaluate("() => document.querySelector('[data-testid=summary-panel]').getBoundingClientRect().top")
-            header = page.evaluate("() => document.querySelector('.mnav').getBoundingClientRect().bottom")
-            assert header <= top < b["vh"], ("捲動後面板要停在導覽列下方", top, header)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, vid, 1440, 900)
+    b = page.evaluate(BOX)
+    assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
+    page.evaluate("() => window.scrollBy(0, 600)")
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    top = page.evaluate("() => document.querySelector('[data-testid=summary-panel]').getBoundingClientRect().top")
+    header = page.evaluate("() => document.querySelector('.mnav').getBoundingClientRect().bottom")
+    assert header <= top < b["vh"], ("捲動後面板要停在導覽列下方", top, header)
 
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("width,height,zoom", [(1024, 768, None), (1440, 900, "1.3")], ids=["1024", "font-xl"])
-def test_narrow_or_large_font_falls_back_to_stacked(live_server, client, make_user, width, height, zoom):
+def test_narrow_or_large_font_falls_back_to_stacked(live_server, client, make_user, width, height, zoom, e2e_browser):
     u = make_user(username="vcs_" + ("xl" if zoom else str(width)), role="superadmin")
     vid = _seed(client, u)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u, vid, width, height, zoom)
-            b = page.evaluate(BOX)
-            assert b["panel"]["t"] >= b["lines"]["b"], ("應退回上下排", b)
-            assert b["sw"] <= b["vw"], ("不可橫向溢出", b)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u, vid, width, height, zoom)
+    b = page.evaluate(BOX)
+    assert b["panel"]["t"] >= b["lines"]["b"], ("應退回上下排", b)
+    assert b["sw"] <= b["vw"], ("不可橫向溢出", b)

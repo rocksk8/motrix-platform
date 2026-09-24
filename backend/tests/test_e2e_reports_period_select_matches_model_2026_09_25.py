@@ -17,9 +17,8 @@ import re
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_e2e_reports_period_sync_2026_09_10 import live_server, _login  # noqa: E402,F401
+from tests.test_e2e_reports_period_sync_2026_09_10 import _login  # noqa: E402,F401
 
 _MISMATCHES_JS = """() => [...document.querySelectorAll('select[x-model], select[x-model\\\\.number]')]
   .filter(s => s.offsetParent !== null)
@@ -62,61 +61,53 @@ def _shown_period(page):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("label,kind", [("月報", "month"), ("季報", "quarter"), ("年報", "year")])
-def test_period_selects_show_what_the_report_is_computing(live_server, make_user, label, kind):
+def test_period_selects_show_what_the_report_is_computing(live_server, make_user, label, kind, e2e_browser):
     u, pw = make_user(username="rq_admin", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, u, pw)
-            _open(page, live_server)
-            url = _switch(page, label, kind)
-            period = url.split("period=")[1].split("&")[0]
-            shown = _shown_period(page)
-            assert page.evaluate(_MISMATCHES_JS) == [], (
-                "下拉顯示的值與模型不同（畫面看到的不是報表算的）", shown, period)
-            if kind == "quarter":
-                year, q = period.split("-Q")
-                assert shown[:2] == [year, "Q" + q], ("季報：下拉顯示", shown, "報表算的", period)
-            elif kind == "month":
-                year, m = period.split("-")
-                assert shown[:2] == [year, "%d 月" % int(m)], ("月報：下拉顯示", shown, "報表算的", period)
-            else:
-                assert shown[:1] == [period + " 年"], ("年報：下拉顯示", shown, "報表算的", period)
-            # 一動部門下拉（觸發 loadData）⇒ 期別不可以被下拉的錯值改掉
-            with page.expect_response(lambda r: "/api/reports/financial?" in r.url, timeout=15000) as again:
-                page.dispatch_event(".period-bar select[x-model='departmentId']", "change")
-            assert again.value.url.split("period=")[1].split("&")[0] == period
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, pw)
+    _open(page, live_server)
+    url = _switch(page, label, kind)
+    period = url.split("period=")[1].split("&")[0]
+    shown = _shown_period(page)
+    assert page.evaluate(_MISMATCHES_JS) == [], (
+        "下拉顯示的值與模型不同（畫面看到的不是報表算的）", shown, period)
+    if kind == "quarter":
+        year, q = period.split("-Q")
+        assert shown[:2] == [year, "Q" + q], ("季報：下拉顯示", shown, "報表算的", period)
+    elif kind == "month":
+        year, m = period.split("-")
+        assert shown[:2] == [year, "%d 月" % int(m)], ("月報：下拉顯示", shown, "報表算的", period)
+    else:
+        assert shown[:1] == [period + " 年"], ("年報：下拉顯示", shown, "報表算的", period)
+    # 一動部門下拉（觸發 loadData）⇒ 期別不可以被下拉的錯值改掉
+    with page.expect_response(lambda r: "/api/reports/financial?" in r.url, timeout=15000) as again:
+        page.dispatch_event(".period-bar select[x-model='departmentId']", "change")
+    assert again.value.url.split("period=")[1].split("&")[0] == period
 
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("label,kind", [("月報", "month"), ("季報", "quarter"), ("年報", "year")])
-def test_every_tab_shows_select_values_equal_to_the_model(live_server, make_user, label, kind):
+def test_every_tab_shows_select_values_equal_to_the_model(live_server, make_user, label, kind, e2e_browser):
     """同型掃描：每一個分頁裡看得到的 `select[x-model]`，DOM 選中的值都要等於模型值
     （應收／應付／支出的年、季下拉會跟著頂部期別同步，選項來自非同步載入的年份清單）。"""
     u, pw = make_user(username="rq_admin2", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, u, pw)
-            _open(page, live_server)
-            _switch(page, label, kind)
-            bad = {}
-            n = page.locator(".tab").count()
-            assert n >= 5, "分頁按鈕找不到（選擇器失效就什麼都沒掃到）"
-            for i in range(n):
-                tab = page.locator(".tab").nth(i)
-                if not tab.is_visible():
-                    continue
-                name = tab.inner_text().strip()
-                tab.click()
-                page.wait_for_load_state("networkidle")
-                got = page.evaluate(_MISMATCHES_JS)
-                if got:
-                    bad[name] = got
-            assert bad == {}, bad
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, pw)
+    _open(page, live_server)
+    _switch(page, label, kind)
+    bad = {}
+    n = page.locator(".tab").count()
+    assert n >= 5, "分頁按鈕找不到（選擇器失效就什麼都沒掃到）"
+    for i in range(n):
+        tab = page.locator(".tab").nth(i)
+        if not tab.is_visible():
+            continue
+        name = tab.inner_text().strip()
+        tab.click()
+        page.wait_for_load_state("networkidle")
+        got = page.evaluate(_MISMATCHES_JS)
+        if got:
+            bad[name] = got
+    assert bad == {}, bad

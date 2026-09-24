@@ -156,42 +156,36 @@ def test_mp6_case_addresses_join_the_background_geocode_backlog(client, people):
 # ══════════════════════════════════════════════════════════════════════
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login as _page_login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
 
 @pytest.mark.e2e
-def test_mp6_the_case_layer_is_on_by_default_and_links_to_the_case(live_server, make_user, _geo):
+def test_mp6_the_case_layer_is_on_by_default_and_links_to_the_case(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp6_page", role="superadmin")
     body = {"points": [{"dataset": "cases", "sourceKey": "cases", "recordId": "MQ-202609-007",
                         "quoteNo": "MQ-202609-007", "name": "某工地專案", "org": "某客戶",
                         "address": "台中市西屯區", "lat": 24.18, "lon": 120.64, "precision": "street",
                         "distanceFromOfficeKm": 3.2, "distanceFromUserKm": None}],
             "locations": [], "sources": []}
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            seen = []
-            page.route("**/api/map/points*", lambda route: (seen.append(route.request.url), route.fulfill(
-                status=200, content_type="application/json", body=json.dumps(body)))[1])
-            page.route("**/tile.openstreetmap.org/**", lambda route: route.abort())
-            _page_login(page, live_server, u, p)
-            page.goto(live_server + "/pages/map.html")
-            page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
-                                   " && d.info.points.length === 1 }", timeout=15000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            got = page.evaluate("""() => { const tr = document.querySelector('tr.mp-row');
-                return tr ? {src: tr.querySelectorAll('td')[0].innerText.trim(),
-                             href: tr.querySelector('a.mp-rec') && tr.querySelector('a.mp-rec').getAttribute('href')} : null }""")
-            print("MP6 頁面實測：%r／請求 %r" % (got, seen[:1]))
-            assert any("cases" in u_ for u_ in seen), "要跟後端要案件地點：%r" % seen
-            # 前端一次抓全部來源（MP8）⇒ 「預設開著」看的是清單裡真的有這一列（勾選篩選沒把它篩掉）。
-            assert got and got["src"].endswith("案件地點"), got
-            assert got["href"] == "case-management.html?q=MQ-202609-007", got
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    seen = []
+    page.route("**/api/map/points*", lambda route: (seen.append(route.request.url), route.fulfill(
+        status=200, content_type="application/json", body=json.dumps(body)))[1])
+    page.route("**/tile.openstreetmap.org/**", lambda route: route.abort())
+    _page_login(page, live_server, u, p)
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
+                           " && d.info.points.length === 1 }", timeout=15000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    got = page.evaluate("""() => { const tr = document.querySelector('tr.mp-row');
+        return tr ? {src: tr.querySelectorAll('td')[0].innerText.trim(),
+                     href: tr.querySelector('a.mp-rec') && tr.querySelector('a.mp-rec').getAttribute('href')} : null }""")
+    print("MP6 頁面實測：%r／請求 %r" % (got, seen[:1]))
+    assert any("cases" in u_ for u_ in seen), "要跟後端要案件地點：%r" % seen
+    # 前端一次抓全部來源（MP8）⇒ 「預設開著」看的是清單裡真的有這一列（勾選篩選沒把它篩掉）。
+    assert got and got["src"].endswith("案件地點"), got
+    assert got["href"] == "case-management.html?q=MQ-202609-007", got

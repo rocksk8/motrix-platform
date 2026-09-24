@@ -13,104 +13,70 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 GLOBAL_SEARCH = "input[placeholder^='搜尋客戶']"
 
 
-@pytest.fixture()
-def live_server(client):
-    import uvicorn
-    import main
-    from tests._ports import free_safe_port
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    t = threading.Thread(target=server.run, daemon=True)
-    t.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        t.join(timeout=5)
 
 
 @pytest.mark.e2e
-def test_typing_in_global_search_does_not_mark_page_dirty(live_server, make_user):
+def test_typing_in_global_search_does_not_mark_page_dirty(live_server, make_user, e2e_browser):
     u = make_user(username="gsd_e1", role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/quotations.html")
-            page.wait_for_selector(GLOBAL_SEARCH, timeout=15000)
-            page.evaluate("() => { window.motrixIsDirty = false }")
-            page.locator(GLOBAL_SEARCH).first.type("abc")
-            assert page.evaluate("() => window.motrixIsDirty") is not True, \
-                "全域搜尋框打字被當成未存修改 ⇒ 之後點任何連結都會跳離頁警告"
-            # 正對照：一般（非搜尋）文字欄位打字仍會設 dirty
-            page.evaluate("""() => { const i = document.createElement('input'); i.type = 'text';
-                                     i.id = 'gsd-probe'; document.body.appendChild(i); }""")
-            page.locator("#gsd-probe").type("x")
-            assert page.evaluate("() => window.motrixIsDirty") is True, "偵測被整個關掉了（正對照失敗）"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/quotations.html")
+    page.wait_for_selector(GLOBAL_SEARCH, timeout=15000)
+    page.evaluate("() => { window.motrixIsDirty = false }")
+    page.locator(GLOBAL_SEARCH).first.type("abc")
+    assert page.evaluate("() => window.motrixIsDirty") is not True, \
+        "全域搜尋框打字被當成未存修改 ⇒ 之後點任何連結都會跳離頁警告"
+    # 正對照：一般（非搜尋）文字欄位打字仍會設 dirty
+    page.evaluate("""() => { const i = document.createElement('input'); i.type = 'text';
+                             i.id = 'gsd-probe'; document.body.appendChild(i); }""")
+    page.locator("#gsd-probe").type("x")
+    assert page.evaluate("() => window.motrixIsDirty") is True, "偵測被整個關掉了（正對照失敗）"
 
 
 @pytest.mark.e2e
-def test_voucher_list_filters_do_not_mark_page_dirty(live_server, make_user):
+def test_voucher_list_filters_do_not_mark_page_dirty(live_server, make_user, e2e_browser):
     """W-8：傳票清單左側的關鍵字／起迄日期／狀態篩選是檢視條件，不是未存修改。"""
     u = make_user(username="gsd_e2", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/voucher.html")
-            page.wait_for_selector("[data-testid=voucher-filter-kw]", timeout=15000)
-            page.evaluate("() => { window.motrixIsDirty = false }")
-            page.locator("[data-testid=voucher-filter-kw]").type("abc")
-            page.locator("[data-testid=voucher-filter-from]").fill("2026-09-01")
-            page.locator("[data-testid=voucher-filter-to]").fill("2026-09-30")
-            assert page.evaluate("() => window.motrixIsDirty") is not True, \
-                "傳票清單的篩選欄被當成未存修改 ⇒ 換頁會跳離頁警告"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/voucher.html")
+    page.wait_for_selector("[data-testid=voucher-filter-kw]", timeout=15000)
+    page.evaluate("() => { window.motrixIsDirty = false }")
+    page.locator("[data-testid=voucher-filter-kw]").type("abc")
+    page.locator("[data-testid=voucher-filter-from]").fill("2026-09-01")
+    page.locator("[data-testid=voucher-filter-to]").fill("2026-09-30")
+    assert page.evaluate("() => window.motrixIsDirty") is not True, \
+        "傳票清單的篩選欄被當成未存修改 ⇒ 換頁會跳離頁警告"
 
 
 @pytest.mark.e2e
-def test_user_list_search_does_not_mark_page_dirty(live_server, make_user):
+def test_user_list_search_does_not_mark_page_dirty(live_server, make_user, e2e_browser):
     """D8-3：使用者管理頁的搜尋框是檢視條件，不是未存修改。"""
     u = make_user(username="gsd_e3", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            page.goto(f"{live_server}/pages/login.html")
-            page.fill('input[x-model="username"]', u[0])
-            page.fill('input[x-model="password"]', u[1])
-            page.click('button:has-text("登入")')
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-            page.goto(f"{live_server}/pages/users.html")
-            page.wait_for_selector("input[x-model=userSearch]", timeout=15000)
-            page.evaluate("() => { window.motrixIsDirty = false }")
-            page.locator("input[x-model=userSearch]").type("abc")
-            assert page.evaluate("() => window.motrixIsDirty") is not True, \
-                "使用者搜尋框被當成未存修改 ⇒ 換頁會跳離頁警告"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    page.goto(f"{live_server}/pages/login.html")
+    page.fill('input[x-model="username"]', u[0])
+    page.fill('input[x-model="password"]', u[1])
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto(f"{live_server}/pages/users.html")
+    page.wait_for_selector("input[x-model=userSearch]", timeout=15000)
+    page.evaluate("() => { window.motrixIsDirty = false }")
+    page.locator("input[x-model=userSearch]").type("abc")
+    assert page.evaluate("() => window.motrixIsDirty") is not True, \
+        "使用者搜尋框被當成未存修改 ⇒ 換頁會跳離頁警告"

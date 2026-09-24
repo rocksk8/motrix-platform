@@ -13,11 +13,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: E402,F401
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 _POINTS = [{"dataset": "suppliers", "sourceKey": "suppliers", "recordId": i, "name": "供應商%d" % i,
@@ -31,7 +29,7 @@ def _rendered(page):
     page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
 
 def _open(pw_, live_server, u, p, w, h, zoom=None):
-    browser = pw_.chromium.launch()
+    browser = pw_   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     page = browser.new_page(viewport={"width": w, "height": h})
     page.route("**/api/map/points*", lambda route: route.fulfill(
         status=200, content_type="application/json",
@@ -61,66 +59,66 @@ _RECT = """() => { const c = document.getElementById('mp-canvas').getBoundingCli
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("zoom", ["1", "1.3"], ids=["標", "特"])
-def test_mp5_the_map_height_follows_the_window_at_every_font_size(live_server, make_user, _geo, zoom):
+def test_mp5_the_map_height_follows_the_window_at_every_font_size(live_server, make_user, _geo, zoom, e2e_browser):
     u, p = make_user(username="mp5_h%s" % zoom.replace(".", ""), role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _open(pw_, live_server, u, p, 1366, 768, zoom)
-        try:
-            r = page.evaluate(_RECT)
-            print("MP5 字級 %s 地圖高 %.1f（視窗 %d 的 62%% ＝ %.1f）" % (zoom, r["canvasH"], r["ih"], 0.62 * r["ih"]))
-            assert abs(r["canvasH"] - 0.62 * r["ih"]) < 3, r
-        finally:
-            browser.close()
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _open(pw_, live_server, u, p, 1366, 768, zoom)
+    try:
+        r = page.evaluate(_RECT)
+        print("MP5 字級 %s 地圖高 %.1f（視窗 %d 的 62%% ＝ %.1f）" % (zoom, r["canvasH"], r["ih"], 0.62 * r["ih"]))
+        assert abs(r["canvasH"] - 0.62 * r["ih"]) < 3, r
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("zoom", ["1", "1.3"], ids=["標", "特"])
-def test_mp5_fullscreen_fills_the_window_and_esc_or_the_button_leaves_it(live_server, make_user, _geo, zoom):
+def test_mp5_fullscreen_fills_the_window_and_esc_or_the_button_leaves_it(live_server, make_user, _geo, zoom, e2e_browser):
     u, p = make_user(username="mp5_f%s" % zoom.replace(".", ""), role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _open(pw_, live_server, u, p, 1366, 768, zoom)
-        try:
-            before = page.evaluate(_RECT)
-            page.locator("button.mp-full-btn").click()
-            _rendered(page)   # PERF #6：原本固定等 500ms
-            full = page.evaluate(_RECT)
-            print("MP5 字級 %s 全螢幕：%r" % (zoom, full))
-            l, t, rr, b = full["panel"]
-            assert abs(l) < 1.5 and abs(t) < 1.5 and abs(rr - 1366) < 1.5 and abs(b - 768) < 1.5, full
-            # 地圖本身要撐到底（不是只有外框變大）：地圖下方只剩 OSM 出處那一行（條款要求，保留），
-            # 那一行的底邊到視窗底只剩面板內距（12px×字級）。
-            assert 768 - full["lastBottom"] < 12 * float(zoom) + 4, "地圖沒有撐滿：%r" % full
-            assert full["lastBottom"] - full["canvasBottom"] < 40 * float(zoom), "地圖與出處行之間不該有空白：%r" % full
-            assert full["canvasH"] > before["canvasH"], (before, full)
-            # Leaflet 量到的尺寸要跟著變（否則圖磚只畫原本那一塊）：與容器一致（容器含 1px 框）。
-            ratio = full["canvasH"] / full["leaflet"][1]
-            assert abs(ratio - float(zoom)) < 0.02, (
-                "Leaflet 尺寸 %r 與容器高 %.1f 不一致（字級 %s）" % (full["leaflet"], full["canvasH"], zoom))
-            assert full["overflow"] == "hidden", "全螢幕時底下的頁面不可以跟著捲"
-            page.keyboard.press("Escape")
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            out = page.evaluate(_RECT)
-            assert abs(out["canvasH"] - before["canvasH"]) < 2 and out["overflow"] == "", out
-            page.locator("button.mp-full-btn").click()
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            assert page.locator("button.mp-full-btn").inner_text() == "結束全螢幕"
-            page.locator("button.mp-full-btn").click()
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            assert abs(page.evaluate(_RECT)["canvasH"] - before["canvasH"]) < 2
-        finally:
-            browser.close()
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _open(pw_, live_server, u, p, 1366, 768, zoom)
+    try:
+        before = page.evaluate(_RECT)
+        page.locator("button.mp-full-btn").click()
+        _rendered(page)   # PERF #6：原本固定等 500ms
+        full = page.evaluate(_RECT)
+        print("MP5 字級 %s 全螢幕：%r" % (zoom, full))
+        l, t, rr, b = full["panel"]
+        assert abs(l) < 1.5 and abs(t) < 1.5 and abs(rr - 1366) < 1.5 and abs(b - 768) < 1.5, full
+        # 地圖本身要撐到底（不是只有外框變大）：地圖下方只剩 OSM 出處那一行（條款要求，保留），
+        # 那一行的底邊到視窗底只剩面板內距（12px×字級）。
+        assert 768 - full["lastBottom"] < 12 * float(zoom) + 4, "地圖沒有撐滿：%r" % full
+        assert full["lastBottom"] - full["canvasBottom"] < 40 * float(zoom), "地圖與出處行之間不該有空白：%r" % full
+        assert full["canvasH"] > before["canvasH"], (before, full)
+        # Leaflet 量到的尺寸要跟著變（否則圖磚只畫原本那一塊）：與容器一致（容器含 1px 框）。
+        ratio = full["canvasH"] / full["leaflet"][1]
+        assert abs(ratio - float(zoom)) < 0.02, (
+            "Leaflet 尺寸 %r 與容器高 %.1f 不一致（字級 %s）" % (full["leaflet"], full["canvasH"], zoom))
+        assert full["overflow"] == "hidden", "全螢幕時底下的頁面不可以跟著捲"
+        page.keyboard.press("Escape")
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        out = page.evaluate(_RECT)
+        assert abs(out["canvasH"] - before["canvasH"]) < 2 and out["overflow"] == "", out
+        page.locator("button.mp-full-btn").click()
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        assert page.locator("button.mp-full-btn").inner_text() == "結束全螢幕"
+        page.locator("button.mp-full-btn").click()
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        assert abs(page.evaluate(_RECT)["canvasH"] - before["canvasH"]) < 2
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_mp5_on_a_phone_the_page_does_not_scroll_sideways(live_server, make_user, _geo):
+def test_mp5_on_a_phone_the_page_does_not_scroll_sideways(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp5_phone", role="superadmin")
-    with sync_playwright() as pw_:
-        browser, page = _open(pw_, live_server, u, p, 390, 844)
-        try:
-            r = page.evaluate(_RECT)
-            print("MP5 手機 390×844：%r" % r)
-            assert r["scrollW"] <= r["iw"] + 1, "頁面不可以橫向捲動：scrollWidth %d > %d" % (r["scrollW"], r["iw"])
-            assert abs(r["canvasH"] - 0.5 * r["ih"]) < 3, r
-            assert r["canvasW"] <= r["iw"], r
-        finally:
-            browser.close()
+    pw_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _open(pw_, live_server, u, p, 390, 844)
+    try:
+        r = page.evaluate(_RECT)
+        print("MP5 手機 390×844：%r" % r)
+        assert r["scrollW"] <= r["iw"] + 1, "頁面不可以橫向捲動：scrollWidth %d > %d" % (r["scrollW"], r["iw"])
+        assert abs(r["canvasH"] - 0.5 * r["ih"]) < 3, r
+        assert r["canvasW"] <= r["iw"], r
+    finally:
+        browser.close()

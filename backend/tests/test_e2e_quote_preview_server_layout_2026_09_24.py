@@ -11,7 +11,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -20,26 +19,6 @@ QUOTE_NO = "MQ-202609-082"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_copy_to_new_2026_09_10.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -87,47 +66,43 @@ def _preview_frame(page):
 
 
 @pytest.mark.e2e
-def test_preview_shows_server_layout_and_zoom_script_runs(live_server, make_user):
+def test_preview_shows_server_layout_and_zoom_script_runs(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_pv1", role="superadmin")
     # 長度要落在「超過一頁 A4、但縮放比例仍 >= 0.70」之間，內建 script 才會縮
     # （2026-09-24 實測，iframe 寬 759px：3 項 1506px ⇒ 比例 0.67 不縮；1 項落在可縮範圍）
     _seed(1)
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/quotation-form.html?id={QUOTE_NO}")
-            page.wait_for_function("() => document.body.innerText.includes('預覽客戶')", timeout=20000)
-            assert page.locator("#pdf-preview-content").count() == 0, "前端自畫的預覽版面應已移除"
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id={QUOTE_NO}")
+    page.wait_for_function("() => document.body.innerText.includes('預覽客戶')", timeout=20000)
+    assert page.locator("#pdf-preview-content").count() == 0, "前端自畫的預覽版面應已移除"
 
-            page.evaluate("() => { window.motrixIsDirty = true }")
-            page.evaluate(f"{DATA_JS}.openPreview('external')")
-            fr = _preview_frame(page)
-            assert page.get_attribute("#quote-preview-frame", "sandbox") == "allow-scripts"
+    page.evaluate("() => { window.motrixIsDirty = true }")
+    page.evaluate(f"{DATA_JS}.openPreview('external')")
+    fr = _preview_frame(page)
+    assert page.get_attribute("#quote-preview-frame", "sandbox") == "allow-scripts"
 
-            srcdoc = page.evaluate(f"{DATA_JS}.previewHtml")
-            assert srcdoc and "品項 1" in srcdoc and "報價" in srcdoc
-            assert page.evaluate("() => window.motrixIsDirty") is True, "開預覽不是存檔，不可以清掉離頁警告"
+    srcdoc = page.evaluate(f"{DATA_JS}.previewHtml")
+    assert srcdoc and "品項 1" in srcdoc and "報價" in srcdoc
+    assert page.evaluate("() => window.motrixIsDirty") is True, "開預覽不是存檔，不可以清掉離頁警告"
 
-            # 縮放 script 真的跑了（不是只看到 iframe）
-            try:
-                fr.wait_for_function("() => /zoom:/.test(document.body.getAttribute('style') || '')", timeout=5000)
-            except Exception:
-                pass    # 下面的斷言會帶出量到的值
-            # ⚠️ 讀 style 屬性，不讀 style.zoom：2026-09-24 實測 Chromium 的 style.zoom 讀出空字串，
-            #    而屬性是 "zoom: 0.7328;"（script 有跑）。
-            m = fr.evaluate("() => [document.getElementById('root').scrollHeight,"
-                            " (document.body.getAttribute('style') || '').match(/zoom:\s*([0-9.]+)/)]")
-            # 內建 script：內容高 h > A4 可列印高（1009px）且 1009/h >= 0.70 才縮放
-            # m[0] 是縮放「之後」量到的高度，不能拿來反推比例；只驗縮放落在內建規則的範圍
-            assert m[1] and 0.70 <= float(m[1][1]) < 1, m
-            # 主頁拿到內容回報的高度
-            h = page.evaluate(f"{DATA_JS}.previewFrameHeight")
-            assert h != 1130 and h > 300, h
+    # 縮放 script 真的跑了（不是只看到 iframe）
+    try:
+        fr.wait_for_function("() => /zoom:/.test(document.body.getAttribute('style') || '')", timeout=5000)
+    except Exception:
+        pass    # 下面的斷言會帶出量到的值
+    # ⚠️ 讀 style 屬性，不讀 style.zoom：2026-09-24 實測 Chromium 的 style.zoom 讀出空字串，
+    #    而屬性是 "zoom: 0.7328;"（script 有跑）。
+    m = fr.evaluate("() => [document.getElementById('root').scrollHeight,"
+                    " (document.body.getAttribute('style') || '').match(/zoom:\s*([0-9.]+)/)]")
+    # 內建 script：內容高 h > A4 可列印高（1009px）且 1009/h >= 0.70 才縮放
+    # m[0] 是縮放「之後」量到的高度，不能拿來反推比例；只驗縮放落在內建規則的範圍
+    assert m[1] and 0.70 <= float(m[1][1]) < 1, m
+    # 主頁拿到內容回報的高度
+    h = page.evaluate(f"{DATA_JS}.previewFrameHeight")
+    assert h != 1130 and h > 300, h
 
-            # 切換內部版 ⇒ 重取，內容含成本欄
-            page.evaluate(f"{DATA_JS}.previewMode = 'internal'")
-            page.wait_for_function(f"() => {DATA_JS}.previewHtml.includes('35.0%')", timeout=20000)
-        finally:
-            browser.close()
+    # 切換內部版 ⇒ 重取，內容含成本欄
+    page.evaluate(f"{DATA_JS}.previewMode = 'internal'")
+    page.wait_for_function(f"() => {DATA_JS}.previewHtml.includes('35.0%')", timeout=20000)

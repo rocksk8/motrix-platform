@@ -13,7 +13,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -21,26 +20,6 @@ from tests._ports import free_safe_port
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_copy_to_new_2026_09_10.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -88,77 +67,65 @@ def _cases():
 
 
 @pytest.mark.e2e
-def test_frontend_and_backend_reasons_are_identical(live_server, make_user):
+def test_frontend_and_backend_reasons_are_identical(live_server, make_user, e2e_browser):
     from helpers.quote_terms import DEFAULT_TERMS, compute_approval_reasons
     username, password = make_user(username="e2e_n13a", role="superadmin")
     presets = _seed_presets()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_function(f"() => {DATA_JS}._termsDefaultsLoaded === true "
-                                   f"&& {DATA_JS}.termsPresets.length === 1", timeout=20000)
-            for i, case in enumerate(_cases()):
-                fe = page.evaluate(
-                    """(d) => { const c = Alpine.$data(document.querySelector('[x-data]'))
-                               c.q = Object.assign({}, c.q, d, { approval: null })
-                               c.checkApproval(); return [...c.approvalReasons] }""", case)
-                be = compute_approval_reasons(case, presets, DEFAULT_TERMS["paymentTerms"])
-                assert fe == be, f"第 {i} 組不一致\n前端 {fe}\n後端 {be}"
-                assert i != 0 or len(be) == 5, be   # 量尺：第 0 組要真的量到東西
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_function(f"() => {DATA_JS}._termsDefaultsLoaded === true "
+                           f"&& {DATA_JS}.termsPresets.length === 1", timeout=20000)
+    for i, case in enumerate(_cases()):
+        fe = page.evaluate(
+            """(d) => { const c = Alpine.$data(document.querySelector('[x-data]'))
+                       c.q = Object.assign({}, c.q, d, { approval: null })
+                       c.checkApproval(); return [...c.approvalReasons] }""", case)
+        be = compute_approval_reasons(case, presets, DEFAULT_TERMS["paymentTerms"])
+        assert fe == be, f"第 {i} 組不一致\n前端 {fe}\n後端 {be}"
+        assert i != 0 or len(be) == 5, be   # 量尺：第 0 組要真的量到東西
 
 
 @pytest.mark.e2e
-def test_new_quote_terms_come_from_backend(live_server, make_user):
+def test_new_quote_terms_come_from_backend(live_server, make_user, e2e_browser):
     from helpers.quote_terms import DEFAULT_TERMS
     username, password = make_user(username="e2e_n13b", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_function(f"() => {DATA_JS}._termsDefaultsLoaded === true", timeout=20000)
-            page.wait_for_function(f"() => !!{DATA_JS}.q.deliveryTerms", timeout=10000)
-            got = page.evaluate(f"(() => {{ const q = {DATA_JS}.q; return [q.deliveryTerms, q.acceptanceTerms,"
-                                f" q.warrantyTerms, q.afterSales] }})()")
-            assert got == [DEFAULT_TERMS[k] for k in ("deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales")]
-            assert page.evaluate(f"{DATA_JS}.approvalReasons") == [], "新單照預設條款不該觸發「報價條件已修改」"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_function(f"() => {DATA_JS}._termsDefaultsLoaded === true", timeout=20000)
+    page.wait_for_function(f"() => !!{DATA_JS}.q.deliveryTerms", timeout=10000)
+    got = page.evaluate(f"(() => {{ const q = {DATA_JS}.q; return [q.deliveryTerms, q.acceptanceTerms,"
+                        f" q.warrantyTerms, q.afterSales] }})()")
+    assert got == [DEFAULT_TERMS[k] for k in ("deliveryTerms", "acceptanceTerms", "warrantyTerms", "afterSales")]
+    assert page.evaluate(f"{DATA_JS}.approvalReasons") == [], "新單照預設條款不該觸發「報價條件已修改」"
 
 
 @pytest.mark.e2e
-def test_defaults_load_failure_does_not_judge_terms(live_server, make_user):
+def test_defaults_load_failure_does_not_judge_terms(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_n13c", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.route("**/api/settings/quote-terms-defaults", lambda r: r.fulfill(status=503, body="{}"))
-            # PERF #6：原本固定等 1.5 秒 ⇒ 等那一趟（被攔成 503 的）預設值請求**整個收完**再讓出一個 task
-            # ⚠️ 用 requestfinished 不用 response：response 在收到標頭時就觸發，頁面還要讀 body 才決定旗標，
-            #    太早檢查會搶在錯誤寫法「失敗仍設成已載入」之前（假綠）
-            with page.expect_event("requestfinished", lambda r: "/api/settings/quote-terms-defaults" in r.url,
-                                   timeout=20000):
-                page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_function(f"() => {DATA_JS}.session && {DATA_JS}.q", timeout=20000)
-            page.evaluate("() => new Promise(r => setTimeout(r, 0))")
-            assert page.evaluate(f"{DATA_JS}._termsDefaultsLoaded") is False
-            reasons = page.evaluate(
-                f"(() => {{ const c = {DATA_JS}; c.q.deliveryTerms = '改過'; c.checkApproval(); return c.approvalReasons }})()")
-            assert not any("報價條件" in r for r in reasons), reasons
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.route("**/api/settings/quote-terms-defaults", lambda r: r.fulfill(status=503, body="{}"))
+    # PERF #6：原本固定等 1.5 秒 ⇒ 等那一趟（被攔成 503 的）預設值請求**整個收完**再讓出一個 task
+    # ⚠️ 用 requestfinished 不用 response：response 在收到標頭時就觸發，頁面還要讀 body 才決定旗標，
+    #    太早檢查會搶在錯誤寫法「失敗仍設成已載入」之前（假綠）
+    with page.expect_event("requestfinished", lambda r: "/api/settings/quote-terms-defaults" in r.url,
+                           timeout=20000):
+        page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_function(f"() => {DATA_JS}.session && {DATA_JS}.q", timeout=20000)
+    page.evaluate("() => new Promise(r => setTimeout(r, 0))")
+    assert page.evaluate(f"{DATA_JS}._termsDefaultsLoaded") is False
+    reasons = page.evaluate(
+        f"(() => {{ const c = {DATA_JS}; c.q.deliveryTerms = '改過'; c.checkApproval(); return c.approvalReasons }})()")
+    assert not any("報價條件" in r for r in reasons), reasons
 
 
 @pytest.mark.e2e
-def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user):
+def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user, e2e_browser):
     """N13 回歸：沒存過條款的舊報價單打開時要帶入預設條款（N13 之前 data() 預設值就是如此）；
     存成空字串的（使用者清掉的）不動。"""
     import db
@@ -178,18 +145,14 @@ def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user)
         conn.commit()
     finally:
         conn.close()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_page()
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-091")
-            page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-091' && !!{DATA_JS}.q.deliveryTerms",
-                                   timeout=20000)
-            assert page.evaluate(f"{DATA_JS}.q.acceptanceTerms") == DEFAULT_TERMS["acceptanceTerms"]
-            page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-092")
-            page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-092' && !!{DATA_JS}.q.warrantyTerms",
-                                   timeout=20000)
-            assert page.evaluate(f"{DATA_JS}.q.deliveryTerms") == "", "使用者清掉的條款不可以被補回"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-091")
+    page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-091' && !!{DATA_JS}.q.deliveryTerms",
+                           timeout=20000)
+    assert page.evaluate(f"{DATA_JS}.q.acceptanceTerms") == DEFAULT_TERMS["acceptanceTerms"]
+    page.goto(f"{live_server}/pages/quotation-form.html?id=MQ-202609-092")
+    page.wait_for_function(f"() => {DATA_JS}.q.quoteNo === 'MQ-202609-092' && !!{DATA_JS}.q.warrantyTerms",
+                           timeout=20000)
+    assert page.evaluate(f"{DATA_JS}.q.deliveryTerms") == "", "使用者清掉的條款不可以被補回"

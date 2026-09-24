@@ -113,14 +113,13 @@ def test_jv34_a_multi_page_pdf_numbers_its_pages_and_repeats_the_header(client, 
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login)                                              # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
 
 _D = "() => Alpine.$data(document.querySelector('[x-data]'))"
 
 
 def _browser(p_):
-    browser = p_.chromium.launch()
+    browser = p_   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     return browser, browser.new_page(viewport={"width": 1280, "height": 900})
 
 
@@ -137,7 +136,7 @@ def _rows(page):
 
 @pytest.mark.e2e
 def test_jv34_the_account_picker_searches_code_and_name_and_marks_inactive(
-        live_server, client, make_user):
+        live_server, client, make_user, e2e_browser):
     import db
     conn = db.get_db()
     try:
@@ -147,65 +146,65 @@ def test_jv34_the_account_picker_searches_code_and_name_and_marks_inactive(
     finally:
         conn.close()
     u, p = make_user(username="jv34_pick", role="superadmin", modules=["cashier"])
-    with pw.sync_playwright() as p_:
-        browser, page = _browser(p_)
-        try:
-            _login(page, live_server, u, p)
-            _new_voucher(page, live_server)
-            code = _rows(page).nth(0).locator("input[x-model='l.account_code']")
-            lid = code.get_attribute("list")
-            assert lid, "科目代號欄沒有接可搜尋的選單（list 屬性）"
-            page.wait_for_function("id => document.querySelectorAll('#' + id + ' option').length > 100",
-                                   arg=lid, timeout=10000)
-            opts = page.eval_on_selector_all("#%s option" % lid,
-                                             "os => os.map(o => [o.value, o.label || o.textContent])")
-            by = {v: lab for v, lab in opts}
-            print("JV34 頁面實測：選單 %d 項；1113 ⇒ %r；9934 ⇒ %r" % (len(opts), by.get("1113"), by.get("9934")))
-            assert "銀行存款" in (by.get("1113") or ""), "選項沒有名稱可搜尋：%r" % by.get("1113")
-            assert "停用" in (by.get("9934") or ""), "停用科目沒有標示：%r" % by.get("9934")
-            name = _rows(page).nth(0).locator("input[x-model='l.account_name']")
-            assert name.get_attribute("readonly") is not None, "科目名稱欄應該唯讀"
-            code.fill("1113")
-            code.dispatch_event("change")
-            page.wait_for_function(_D + ".lines[0].account_name === '銀行存款'", timeout=5000)
-        finally:
-            browser.close()
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _browser(p_)
+    try:
+        _login(page, live_server, u, p)
+        _new_voucher(page, live_server)
+        code = _rows(page).nth(0).locator("input[x-model='l.account_code']")
+        lid = code.get_attribute("list")
+        assert lid, "科目代號欄沒有接可搜尋的選單（list 屬性）"
+        page.wait_for_function("id => document.querySelectorAll('#' + id + ' option').length > 100",
+                               arg=lid, timeout=10000)
+        opts = page.eval_on_selector_all("#%s option" % lid,
+                                         "os => os.map(o => [o.value, o.label || o.textContent])")
+        by = {v: lab for v, lab in opts}
+        print("JV34 頁面實測：選單 %d 項；1113 ⇒ %r；9934 ⇒ %r" % (len(opts), by.get("1113"), by.get("9934")))
+        assert "銀行存款" in (by.get("1113") or ""), "選項沒有名稱可搜尋：%r" % by.get("1113")
+        assert "停用" in (by.get("9934") or ""), "停用科目沒有標示：%r" % by.get("9934")
+        name = _rows(page).nth(0).locator("input[x-model='l.account_name']")
+        assert name.get_attribute("readonly") is not None, "科目名稱欄應該唯讀"
+        code.fill("1113")
+        code.dispatch_event("change")
+        page.wait_for_function(_D + ".lines[0].account_name === '銀行存款'", timeout=5000)
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
 def test_jv34_enter_on_the_last_line_adds_a_line_and_balance_fills_the_gap(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     u, p = make_user(username="jv34_enter", role="superadmin", modules=["cashier"])
-    with pw.sync_playwright() as p_:
-        browser, page = _browser(p_)
-        try:
-            _login(page, live_server, u, p)
-            _new_voucher(page, live_server)
-            n0 = page.evaluate(_D + ".lines.length")
-            last = _rows(page).nth(n0 - 1).locator("input[x-model='l.credit']")
-            last.click()
-            last.press("Enter")
-            n1 = page.evaluate(_D + ".lines.length")
-            assert n1 == n0 + 1, "最後一行按 Enter 沒有新增一行（%d ⇒ %d）" % (n0, n1)
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _browser(p_)
+    try:
+        _login(page, live_server, u, p)
+        _new_voucher(page, live_server)
+        n0 = page.evaluate(_D + ".lines.length")
+        last = _rows(page).nth(n0 - 1).locator("input[x-model='l.credit']")
+        last.click()
+        last.press("Enter")
+        n1 = page.evaluate(_D + ".lines.length")
+        assert n1 == n0 + 1, "最後一行按 Enter 沒有新增一行（%d ⇒ %d）" % (n0, n1)
 
-            _rows(page).nth(0).locator("input[x-model='l.debit']").fill("1,500")
-            btn = page.locator('[data-testid="voucher-balance"]')
-            _rows(page).nth(0).locator("input[x-model='l.debit']").click()
-            assert btn.is_disabled(), "目前這一行已有金額，補平差額應該不可按"
-            _rows(page).nth(1).locator("input[x-model='l.credit']").click()
-            assert btn.is_enabled(), "第 2 行借貸都空白、差額 1500，補平差額應該可按"
-            btn.click()
-            got = page.evaluate(_D + ".lines[1]")
-            print("JV34 頁面實測：補平差額 ⇒ 第 2 行 借 %r 貸 %r" % (got["debit"], got["credit"]))
-            assert str(got["credit"]).replace(",", "") == "1500" and not got["debit"], got
-            _rows(page).nth(2).locator("input[x-model='l.credit']").click()
-            assert btn.is_disabled(), "已平衡（差額 0），補平差額應該不可按"
-        finally:
-            browser.close()
+        _rows(page).nth(0).locator("input[x-model='l.debit']").fill("1,500")
+        btn = page.locator('[data-testid="voucher-balance"]')
+        _rows(page).nth(0).locator("input[x-model='l.debit']").click()
+        assert btn.is_disabled(), "目前這一行已有金額，補平差額應該不可按"
+        _rows(page).nth(1).locator("input[x-model='l.credit']").click()
+        assert btn.is_enabled(), "第 2 行借貸都空白、差額 1500，補平差額應該可按"
+        btn.click()
+        got = page.evaluate(_D + ".lines[1]")
+        print("JV34 頁面實測：補平差額 ⇒ 第 2 行 借 %r 貸 %r" % (got["debit"], got["credit"]))
+        assert str(got["credit"]).replace(",", "") == "1500" and not got["debit"], got
+        _rows(page).nth(2).locator("input[x-model='l.credit']").click()
+        assert btn.is_disabled(), "已平衡（差額 0），補平差額應該不可按"
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_jv34_the_list_filters_by_keyword_date_and_status(live_server, client, make_user):
+def test_jv34_the_list_filters_by_keyword_date_and_status(live_server, client, make_user, e2e_browser):
     u, p = make_user(username="jv34_list", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
@@ -215,66 +214,66 @@ def test_jv34_the_list_filters_by_keyword_date_and_status(live_server, client, m
                                                      "voucher_date": date})
         ids[key] = r.json()["id"]
     assert client.post("%s/%s/submit" % (VOUCHERS, ids["丙櫻桃"]), headers=hdr).status_code == 200
-    with pw.sync_playwright() as p_:
-        browser, page = _browser(p_)
-        try:
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/voucher.html")
-            page.wait_for_function(_D + ".listLoaded", timeout=15000)
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _browser(p_)
+    try:
+        _login(page, live_server, u, p)
+        page.goto(live_server + "/pages/voucher.html")
+        page.wait_for_function(_D + ".listLoaded", timeout=15000)
 
-            def visible():
-                _rendered(page)   # PERF #6：原本固定等 200ms（清單篩選是同步反應）
-                return sorted(t.strip() for t in page.locator(".vc-row:visible .vc-row__sum").all_inner_texts())
+        def visible():
+            _rendered(page)   # PERF #6：原本固定等 200ms（清單篩選是同步反應）
+            return sorted(t.strip() for t in page.locator(".vc-row:visible .vc-row__sum").all_inner_texts())
 
-            page.fill('[data-testid="voucher-filter-kw"]', "香蕉")
-            kw = visible()
-            page.fill('[data-testid="voucher-filter-kw"]', "")
-            page.fill('[data-testid="voucher-filter-from"]', "2026-09-05")
-            page.fill('[data-testid="voucher-filter-to"]', "2026-09-15")
-            dr = visible()
-            page.fill('[data-testid="voucher-filter-from"]', "")
-            page.fill('[data-testid="voucher-filter-to"]', "")
-            page.select_option('[data-testid="voucher-filter-status"]', "待審核")
-            st = visible()
-            print("JV34 頁面實測：關鍵字 ⇒", kw, "／日期 ⇒", dr, "／狀態 ⇒", st)
-            assert kw == ["乙香蕉"], kw
-            assert dr == ["乙香蕉"], dr
-            assert st == ["丙櫻桃"], st
-        finally:
-            browser.close()
+        page.fill('[data-testid="voucher-filter-kw"]', "香蕉")
+        kw = visible()
+        page.fill('[data-testid="voucher-filter-kw"]', "")
+        page.fill('[data-testid="voucher-filter-from"]', "2026-09-05")
+        page.fill('[data-testid="voucher-filter-to"]', "2026-09-15")
+        dr = visible()
+        page.fill('[data-testid="voucher-filter-from"]', "")
+        page.fill('[data-testid="voucher-filter-to"]', "")
+        page.select_option('[data-testid="voucher-filter-status"]', "待審核")
+        st = visible()
+        print("JV34 頁面實測：關鍵字 ⇒", kw, "／日期 ⇒", dr, "／狀態 ⇒", st)
+        assert kw == ["乙香蕉"], kw
+        assert dr == ["乙香蕉"], dr
+        assert st == ["丙櫻桃"], st
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_jv34_void_and_reopen_from_the_page_opens_the_new_draft(live_server, client, make_user):
+def test_jv34_void_and_reopen_from_the_page_opens_the_new_draft(live_server, client, make_user, e2e_browser):
     u, p = make_user(username="jv34_void", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
     r = client.post(VOUCHERS, headers=hdr, json={"summary": "要重開的", "lines": _LINES})
     vid, old_no = r.json()["id"], r.json()["voucher_no"]
-    with pw.sync_playwright() as p_:
-        browser, page = _browser(p_)
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _browser(p_)
+    try:
+        _login(page, live_server, u, p)
+        page.goto(f"{live_server}/pages/voucher.html?id={vid}")
+        page.wait_for_function(_D + ".id == %d" % vid, timeout=15000)
+        page.click('button:has-text("作廢")')
+        page.fill('[data-testid="voucher-reason"]', "科目整張挑錯")
+        page.check('[data-testid="voucher-void-reopen"]')
+        page.click('[data-testid="voucher-reason-ok"]')
+        page.wait_for_function(
+            "v => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+            " return d.id && d.id != v && d.status === '草稿' }", arg=vid, timeout=10000)
+        st = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                           " return {id: d.id, no: d.voucherNo, status: d.status, voided: d.voidedAt} }")
+        print("JV34 頁面實測：作廢並重開 ⇒", st, "（原單", vid, old_no, "）")
+        assert st["status"] == "草稿" and not st["voided"], st
+        import db
+        conn = db.get_db()
         try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/voucher.html?id={vid}")
-            page.wait_for_function(_D + ".id == %d" % vid, timeout=15000)
-            page.click('button:has-text("作廢")')
-            page.fill('[data-testid="voucher-reason"]', "科目整張挑錯")
-            page.check('[data-testid="voucher-void-reopen"]')
-            page.click('[data-testid="voucher-reason-ok"]')
-            page.wait_for_function(
-                "v => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                " return d.id && d.id != v && d.status === '草稿' }", arg=vid, timeout=10000)
-            st = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                               " return {id: d.id, no: d.voucherNo, status: d.status, voided: d.voidedAt} }")
-            print("JV34 頁面實測：作廢並重開 ⇒", st, "（原單", vid, old_no, "）")
-            assert st["status"] == "草稿" and not st["voided"], st
-            import db
-            conn = db.get_db()
-            try:
-                row = conn.execute("SELECT supersedes_no FROM vouchers_all WHERE id=?",
-                                   (st["id"],)).fetchone()
-            finally:
-                conn.close()
-            assert row["supersedes_no"] == old_no, row["supersedes_no"]
+            row = conn.execute("SELECT supersedes_no FROM vouchers_all WHERE id=?",
+                               (st["id"],)).fetchone()
         finally:
-            browser.close()
+            conn.close()
+        assert row["supersedes_no"] == old_no, row["supersedes_no"]
+    finally:
+        browser.close()

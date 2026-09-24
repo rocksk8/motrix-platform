@@ -124,8 +124,7 @@ def test_jv32_editing_an_existing_draft_applies_the_same_rules(client, make_user
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login)                                              # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
 
 
 def _fill_new_voucher(page, base, d1, c2):
@@ -145,49 +144,41 @@ def _fill_new_voucher(page, base, d1, c2):
 
 
 @pytest.mark.e2e
-def test_jv32_on_the_page_typing_1_comma_000_saves_1000(live_server, make_user):
+def test_jv32_on_the_page_typing_1_comma_000_saves_1000(live_server, make_user, e2e_browser):
     u, p = make_user(username="jv32_page", role="superadmin", modules=["cashier"])
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
-            _fill_new_voucher(page, live_server, "1,000", "１，０００")
-            page.wait_for_function(
-                "() => Alpine.$data(document.querySelector('[x-data]')).id"
-                " || Alpine.$data(document.querySelector('[x-data]')).actionErr",
-                timeout=15000)
-            st = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                               " return {id: d.id, err: d.actionErr} }")
-            assert st["id"], "畫面沒有存成功：%r" % st
-            r = page.request.get("%s/api/vouchers/%s" % (live_server, st["id"]),
-                                 headers={"Authorization": "Bearer " + token})
-            got = [(ln["debit"], ln["credit"]) for ln in r.json()["lines"]]
-            print("JV32 頁面實測：輸入 '1,000'／'１，０００' ⇒ 存入", got)
-            assert got == [(1000, 0), (0, 1000)], (
-                "畫面上打 1,000，資料庫存的是 %r（HEAD：Number('1,000') = NaN ⇒ 0）" % got)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    _fill_new_voucher(page, live_server, "1,000", "１，０００")
+    page.wait_for_function(
+        "() => Alpine.$data(document.querySelector('[x-data]')).id"
+        " || Alpine.$data(document.querySelector('[x-data]')).actionErr",
+        timeout=15000)
+    st = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                       " return {id: d.id, err: d.actionErr} }")
+    assert st["id"], "畫面沒有存成功：%r" % st
+    r = page.request.get("%s/api/vouchers/%s" % (live_server, st["id"]),
+                         headers={"Authorization": "Bearer " + token})
+    got = [(ln["debit"], ln["credit"]) for ln in r.json()["lines"]]
+    print("JV32 頁面實測：輸入 '1,000'／'１，０００' ⇒ 存入", got)
+    assert got == [(1000, 0), (0, 1000)], (
+        "畫面上打 1,000，資料庫存的是 %r（HEAD：Number('1,000') = NaN ⇒ 0）" % got)
 
 
 @pytest.mark.e2e
-def test_jv32_on_the_page_a_decimal_is_explained_and_nothing_is_saved(live_server, make_user):
+def test_jv32_on_the_page_a_decimal_is_explained_and_nothing_is_saved(live_server, make_user, e2e_browser):
     u, p = make_user(username="jv32_page_dec", role="superadmin", modules=["cashier"])
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        posts = []
-        page.on("request", lambda req: posts.append(req.url)
-                if req.method == "POST" and req.url.endswith("/api/vouchers") else None)
-        try:
-            _login(page, live_server, u, p)
-            _fill_new_voucher(page, live_server, "12.5", "12.5")
-            err = page.locator(".vc-err").first
-            err.wait_for(state="visible", timeout=10000)
-            text = err.inner_text()
-            print("JV32 頁面實測：輸入 '12.5' ⇒ 畫面訊息", repr(text), "；POST 次數", len(posts))
-            assert "不可有小數" in text and "第 1 行" in text, text
-            assert posts == [], "前端應該先擋下，不送出：%r" % posts
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    posts = []
+    page.on("request", lambda req: posts.append(req.url)
+            if req.method == "POST" and req.url.endswith("/api/vouchers") else None)
+    _login(page, live_server, u, p)
+    _fill_new_voucher(page, live_server, "12.5", "12.5")
+    err = page.locator(".vc-err").first
+    err.wait_for(state="visible", timeout=10000)
+    text = err.inner_text()
+    print("JV32 頁面實測：輸入 '12.5' ⇒ 畫面訊息", repr(text), "；POST 次數", len(posts))
+    assert "不可有小數" in text and "第 1 行" in text, text
+    assert posts == [], "前端應該先擋下，不送出：%r" % posts

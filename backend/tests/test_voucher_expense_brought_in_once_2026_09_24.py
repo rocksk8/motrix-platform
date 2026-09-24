@@ -151,13 +151,13 @@ def test_attachment_red_mark_output_is_unchanged(client):
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import live_server, _login  # noqa: E402,F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 from tests.test_jv36_voucher_line_source_files_2026_09_24 import _open_with_case, _D  # noqa: E402
 
 
 @pytest.mark.e2e
 def test_the_panel_marks_a_taken_expense_and_refuses_to_bring_it_in(
-        live_server, client, make_user, seed_extra_expense):
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
     e1, _e2 = _seed(seed_extra_expense)
     u, p = make_user(username="jv21_page", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -166,22 +166,18 @@ def test_the_panel_marks_a_taken_expense_and_refuses_to_bring_it_in(
     r = client.post(VOUCHERS, headers=hdr, json={"summary": "第二張", "lines": [
         {"account_code": "1113", "debit": 0, "credit": 5000}, {"account_code": "6111"}]})
     vid = r.json()["id"]
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
-            _open_with_case(page, live_server, token, vid)
-            item = page.locator('[data-testid="summary-panel-expense"]:has-text("吊車運費")').first
-            mark = item.locator('[data-testid="expense-used"]')
-            mark.wait_for(state="visible", timeout=10000)
-            assert first["voucher_no"] in mark.inner_text()
-            item.click()
-            msg = page.locator('[data-testid="summary-panel-msg"]')
-            msg.wait_for(state="visible", timeout=5000)
-            assert first["voucher_no"] in msg.inner_text()
-            line = page.evaluate("() => %s.lines[1]" % _D)
-            assert (line.get("source_type") or "") == "", "被擋下來的支出不可以寫進分錄：%r" % line
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    _open_with_case(page, live_server, token, vid)
+    item = page.locator('[data-testid="summary-panel-expense"]:has-text("吊車運費")').first
+    mark = item.locator('[data-testid="expense-used"]')
+    mark.wait_for(state="visible", timeout=10000)
+    assert first["voucher_no"] in mark.inner_text()
+    item.click()
+    msg = page.locator('[data-testid="summary-panel-msg"]')
+    msg.wait_for(state="visible", timeout=5000)
+    assert first["voucher_no"] in msg.inner_text()
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert (line.get("source_type") or "") == "", "被擋下來的支出不可以寫進分錄：%r" % line

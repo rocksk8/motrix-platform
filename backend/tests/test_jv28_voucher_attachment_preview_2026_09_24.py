@@ -23,10 +23,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
 from test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login, _create_voucher, _open_preview,
+    _login, _create_voucher, _open_preview,
 )
 
 MODAL = '[data-testid="voucher-att-preview"]'
@@ -85,62 +84,50 @@ def _open_page(page, live_server, vid):
 
 
 @pytest.mark.e2e
-def test_jv28_clicking_an_image_opens_an_in_page_preview(live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            token, vid = _setup(page, live_server, make_user, "jv28_img")
-            _upload(page, live_server, token, vid, "發票.png", "image/png", _png_bytes())
-            _open_page(page, live_server, vid)
-            page.click(OPEN + ':has-text("發票.png")', timeout=10000)
-            page.wait_for_selector(IMG, state="visible", timeout=10000)
-            w = page.eval_on_selector(IMG, "el => el.complete ? el.naturalWidth : new Promise("
-                                           "r => el.onload = () => r(el.naturalWidth))")
-            assert w > 0, "預覽 modal 裡的圖片沒有載入（naturalWidth=%r）" % w
-        finally:
-            browser.close()
+def test_jv28_clicking_an_image_opens_an_in_page_preview(live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    token, vid = _setup(page, live_server, make_user, "jv28_img")
+    _upload(page, live_server, token, vid, "發票.png", "image/png", _png_bytes())
+    _open_page(page, live_server, vid)
+    page.click(OPEN + ':has-text("發票.png")', timeout=10000)
+    page.wait_for_selector(IMG, state="visible", timeout=10000)
+    w = page.eval_on_selector(IMG, "el => el.complete ? el.naturalWidth : new Promise("
+                                   "r => el.onload = () => r(el.naturalWidth))")
+    assert w > 0, "預覽 modal 裡的圖片沒有載入（naturalWidth=%r）" % w
 
 
 @pytest.mark.e2e
-def test_jv28_clicking_a_pdf_embeds_it_as_a_pdf_blob(live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            page.add_init_script(_BLOB_PROBE)
-            token, vid = _setup(page, live_server, make_user, "jv28_pdf")
-            _upload(page, live_server, token, vid, "請款單.pdf", "application/pdf",
-                    b"%PDF-1.4\n%jv28\n")
-            _open_page(page, live_server, vid)
-            page.click(OPEN + ':has-text("請款單.pdf")', timeout=10000)
-            page.wait_for_selector(PDF, state="visible", timeout=10000)
-            src = page.get_attribute(PDF, "src") or ""
-            assert src.startswith("blob:"), "PDF 預覽的 src 不是 blob：%r" % src
-            btype = page.evaluate("u => window.__jv28.types[u]", src)
-            assert btype == "application/pdf", "blob 的 type 是 %r，不是 application/pdf" % btype
-        finally:
-            browser.close()
+def test_jv28_clicking_a_pdf_embeds_it_as_a_pdf_blob(live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    page.add_init_script(_BLOB_PROBE)
+    token, vid = _setup(page, live_server, make_user, "jv28_pdf")
+    _upload(page, live_server, token, vid, "請款單.pdf", "application/pdf",
+            b"%PDF-1.4\n%jv28\n")
+    _open_page(page, live_server, vid)
+    page.click(OPEN + ':has-text("請款單.pdf")', timeout=10000)
+    page.wait_for_selector(PDF, state="visible", timeout=10000)
+    src = page.get_attribute(PDF, "src") or ""
+    assert src.startswith("blob:"), "PDF 預覽的 src 不是 blob：%r" % src
+    btype = page.evaluate("u => window.__jv28.types[u]", src)
+    assert btype == "application/pdf", "blob 的 type 是 %r，不是 application/pdf" % btype
 
 
 @pytest.mark.e2e
-def test_jv28_image_attachments_show_a_thumbnail_in_the_list(live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            token, vid = _setup(page, live_server, make_user, "jv28_thumb")
-            _upload(page, live_server, token, vid, "現場照.png", "image/png", _png_bytes())
-            _upload(page, live_server, token, vid, "合約.pdf", "application/pdf", b"%PDF-1.4\n")
-            _open_page(page, live_server, vid)
-            page.wait_for_selector(THUMB, state="visible", timeout=10000)
-            widths = page.eval_on_selector_all(
-                THUMB, "els => Promise.all(els.map(el => el.complete ? el.naturalWidth : "
-                       "new Promise(r => el.onload = () => r(el.naturalWidth))))")
-            assert widths and all(w > 0 for w in widths), "縮圖沒有載入：%r" % widths
-            assert len(widths) == 1, "只有圖片該有縮圖（PDF 不該有），實得 %d 個" % len(widths)
-        finally:
-            browser.close()
+def test_jv28_image_attachments_show_a_thumbnail_in_the_list(live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    token, vid = _setup(page, live_server, make_user, "jv28_thumb")
+    _upload(page, live_server, token, vid, "現場照.png", "image/png", _png_bytes())
+    _upload(page, live_server, token, vid, "合約.pdf", "application/pdf", b"%PDF-1.4\n")
+    _open_page(page, live_server, vid)
+    page.wait_for_selector(THUMB, state="visible", timeout=10000)
+    widths = page.eval_on_selector_all(
+        THUMB, "els => Promise.all(els.map(el => el.complete ? el.naturalWidth : "
+               "new Promise(r => el.onload = () => r(el.naturalWidth))))")
+    assert widths and all(w > 0 for w in widths), "縮圖沒有載入：%r" % widths
+    assert len(widths) == 1, "只有圖片該有縮圖（PDF 不該有），實得 %d 個" % len(widths)
 
 
 def _seed_real_svg(vid):
@@ -166,81 +153,69 @@ def _seed_real_svg(vid):
 
 
 @pytest.mark.e2e
-def test_jv28_svg_is_never_embedded_only_offered_for_download(live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            token, vid = _setup(page, live_server, make_user, "jv28_svg")
-            # 偽裝：副檔名 .png、而伺服器存的 mime 是 image/svg+xml（mime 取自上傳者宣稱的 content-type）
-            _upload(page, live_server, token, vid, "偽裝.png", "image/svg+xml", _SVG)
-            _seed_real_svg(vid)
-            _open_page(page, live_server, vid)
-            for name in ("偽裝.png", "圖示.svg"):
-                page.click(OPEN + ':has-text("%s")' % name, timeout=10000)
-                page.wait_for_selector(DOWNLOAD, state="visible", timeout=10000)
-                assert not page.is_visible(IMG), "%s 被當成圖片內嵌了" % name
-                assert not page.is_visible(PDF), "%s 被內嵌進 iframe 了" % name
-                page.click('[data-testid="voucher-att-close"]')
-            assert page.evaluate("() => window.__jv28_pwned") is None, "SVG 裡的腳本被執行了"
-        finally:
-            browser.close()
+def test_jv28_svg_is_never_embedded_only_offered_for_download(live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    token, vid = _setup(page, live_server, make_user, "jv28_svg")
+    # 偽裝：副檔名 .png、而伺服器存的 mime 是 image/svg+xml（mime 取自上傳者宣稱的 content-type）
+    _upload(page, live_server, token, vid, "偽裝.png", "image/svg+xml", _SVG)
+    _seed_real_svg(vid)
+    _open_page(page, live_server, vid)
+    for name in ("偽裝.png", "圖示.svg"):
+        page.click(OPEN + ':has-text("%s")' % name, timeout=10000)
+        page.wait_for_selector(DOWNLOAD, state="visible", timeout=10000)
+        assert not page.is_visible(IMG), "%s 被當成圖片內嵌了" % name
+        assert not page.is_visible(PDF), "%s 被內嵌進 iframe 了" % name
+        page.click('[data-testid="voucher-att-close"]')
+    assert page.evaluate("() => window.__jv28_pwned") is None, "SVG 裡的腳本被執行了"
 
 
 @pytest.mark.e2e
 def test_jv28_the_preview_window_list_opens_the_same_in_page_modal_without_popups(
-        live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        popups = []
-        page.on("popup", lambda p: popups.append(p))
-        try:
-            token, vid = _setup(page, live_server, make_user, "jv28_popup")
-            _upload(page, live_server, token, vid, "收據.png", "image/png", _png_bytes())
-            _open_preview(page, live_server, token, vid)
-            page.click('.vc-preview-atts a.vc-att__name:has-text("收據.png")', timeout=10000)
-            # PERF #6：原本固定等 1.5 秒 ⇒ 等頁內預覽圖出現（正確行為的終點）。
-            # 錯的寫法（開新分頁）時圖不會出現 ⇒ 等滿 10 秒，那段時間內 popup 早就被數到，下面照樣紅。
-            try:
-                page.wait_for_selector(IMG, state="visible", timeout=10000)
-            except Exception:
-                pass
-            # ⚙️ 先數 popup（量尺：HEAD 上 window.open 的那一次要被數到），再看頁內 modal。
-            assert popups == [], "點附件開了 %d 個新分頁／彈出視窗" % len(popups)
-            page.wait_for_selector(IMG, state="visible", timeout=10000)
-        finally:
-            browser.close()
+        live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    popups = []
+    page.on("popup", lambda p: popups.append(p))
+    token, vid = _setup(page, live_server, make_user, "jv28_popup")
+    _upload(page, live_server, token, vid, "收據.png", "image/png", _png_bytes())
+    _open_preview(page, live_server, token, vid)
+    page.click('.vc-preview-atts a.vc-att__name:has-text("收據.png")', timeout=10000)
+    # PERF #6：原本固定等 1.5 秒 ⇒ 等頁內預覽圖出現（正確行為的終點）。
+    # 錯的寫法（開新分頁）時圖不會出現 ⇒ 等滿 10 秒，那段時間內 popup 早就被數到，下面照樣紅。
+    try:
+        page.wait_for_selector(IMG, state="visible", timeout=10000)
+    except Exception:
+        pass
+    # ⚙️ 先數 popup（量尺：HEAD 上 window.open 的那一次要被數到），再看頁內 modal。
+    assert popups == [], "點附件開了 %d 個新分頁／彈出視窗" % len(popups)
+    page.wait_for_selector(IMG, state="visible", timeout=10000)
 
 
 @pytest.mark.e2e
-def test_jv28_closing_the_modal_revokes_the_blob_url(live_server, make_user):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            page.add_init_script(_BLOB_PROBE)
-            token, vid = _setup(page, live_server, make_user, "jv28_revoke")
-            _upload(page, live_server, token, vid, "單據.png", "image/png", _png_bytes())
-            _open_page(page, live_server, vid)
-            page.click(OPEN + ':has-text("單據.png")', timeout=10000)
-            page.wait_for_selector(IMG, state="visible", timeout=10000)
-            src = page.get_attribute(IMG, "src")
-            assert src and src.startswith("blob:"), src
-            assert page.evaluate("u => u in window.__jv28.types", src), (
-                "量尺：探針沒記到這個 blob —— 下面的斷言量不到東西")
-            assert not page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
-                "量尺：還沒關就被 revoke 了（畫面上的圖會是破的）")
-            page.click('[data-testid="voucher-att-close"]')
-            # PERF #6：原本固定等 0.3 秒 ⇒ 等 revoke 被記到（最多 3 秒；沒記到就交給下面的斷言）
-            try:
-                page.wait_for_function("u => window.__jv28.revoked.includes(u)", arg=src, timeout=3000)
-            except Exception:
-                pass
-            assert page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
-                "關閉 modal 之後 blob URL 沒有 revoke —— 每開一次就累積一份")
-        finally:
-            browser.close()
+def test_jv28_closing_the_modal_revokes_the_blob_url(live_server, make_user, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    page.add_init_script(_BLOB_PROBE)
+    token, vid = _setup(page, live_server, make_user, "jv28_revoke")
+    _upload(page, live_server, token, vid, "單據.png", "image/png", _png_bytes())
+    _open_page(page, live_server, vid)
+    page.click(OPEN + ':has-text("單據.png")', timeout=10000)
+    page.wait_for_selector(IMG, state="visible", timeout=10000)
+    src = page.get_attribute(IMG, "src")
+    assert src and src.startswith("blob:"), src
+    assert page.evaluate("u => u in window.__jv28.types", src), (
+        "量尺：探針沒記到這個 blob —— 下面的斷言量不到東西")
+    assert not page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
+        "量尺：還沒關就被 revoke 了（畫面上的圖會是破的）")
+    page.click('[data-testid="voucher-att-close"]')
+    # PERF #6：原本固定等 0.3 秒 ⇒ 等 revoke 被記到（最多 3 秒；沒記到就交給下面的斷言）
+    try:
+        page.wait_for_function("u => window.__jv28.revoked.includes(u)", arg=src, timeout=3000)
+    except Exception:
+        pass
+    assert page.evaluate("u => window.__jv28.revoked.includes(u)", src), (
+        "關閉 modal 之後 blob URL 沒有 revoke —— 每開一次就累積一份")
 
 
 def test_jv28_an_account_without_voucher_access_cannot_fetch_an_attachment(client, make_user):

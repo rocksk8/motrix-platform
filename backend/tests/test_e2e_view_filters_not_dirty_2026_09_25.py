@@ -15,10 +15,9 @@ type=search／range 與 class 含 search／filter 的欄位。走查（D4-2 repo
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 from tests._map_tiles import block_tiles  # noqa: E402
 
-from tests.test_e2e_material_orders_2026_09_11 import live_server, _login  # noqa: F401,E402
+from tests.test_e2e_material_orders_2026_09_11 import _login  # noqa: F401,E402
 import sys  # noqa: E402
 from pathlib import Path  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 單獨跑這個檔時 tests/ 不在 sys.path
@@ -102,41 +101,37 @@ def _open(page, base, pg):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("pg,filters,saved,setup", PAGES, ids=[p[0] for p in PAGES])
-def test_changing_a_view_filter_does_not_arm_the_leave_warning(live_server, make_user, request, pg, filters, saved, setup):
+def test_changing_a_view_filter_does_not_arm_the_leave_warning(live_server, make_user, request, pg, filters, saved, setup, e2e_browser):
     if pg == "map":
         request.getfixturevalue("no_tile_probe")
     u = make_user(username="w8_" + pg.replace("-", "_"), role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            block_tiles(page)   # map 頁的底圖圖磚不連外（conftest._browser_netguard）
-            _login(page, live_server, *u)
-            _open(page, live_server, pg)
-            seen_missing = set(filters)
-            dirtied = set()
-            runs = [None] if pg != "reports" else [
-                # ⚠ 走頁面自己的切換入口（switchType／按鈕的 scope＋load）。第一版直接寫 periodType：
-                #   飛行中的回應全被 loadData 的過期丟棄機制丟掉、沒有人重新載入 ⇒ loading 永遠 true，
-                #   看起來像產品競態，其實是探針繞過了入口。
-                "(d => { d.switchType('%s'); d.receivablesScope = '%s'; d.loadReceivables();"
-                " d.expensesScope = '%s'; d.loadExpenses(); d.caseListGroupByMonth = true })(%s)"
-                % (s, s, s, ROOT) for s in REPORT_SCOPES] + [
-                # 稅務匯出的年／月下拉在「資金水位」分頁的 x-if="cashPos && !cashPosLoading" 裡
-                "%s.showCashPosTab()" % ROOT]
-            for s in runs:
-                if s:
-                    page.evaluate("(s) => eval(s)", s)
-                    # 收支／應收那幾組包在 x-if="!loading && data" 裡
-                    page.wait_for_function(f"() => !{ROOT}.loading && !!{ROOT}.data"
-                                           + (f" && !!{ROOT}.cashPos && !{ROOT}.cashPosLoading" if "CashPos" in s else ""),
-                                           timeout=20000)
-                    _rendered(page)   # PERF #6：原本固定等 150ms
-                r = page.evaluate(_FIRE, [filters, setup])
-                seen_missing &= set(r["missing"])
-                dirtied |= set(r["dirtied"])
-            assert not seen_missing, "頁面上找不到這些篩選欄（名稱改了？）：%s" % sorted(seen_missing)
-            assert not dirtied, "改這些篩選欄會觸發離頁警告：%s" % sorted(dirtied)
-            assert page.evaluate(_CONTROL, saved) is True, "反向控制：存檔欄位改值應該要觸發離頁警告"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    block_tiles(page)   # map 頁的底圖圖磚不連外（conftest._browser_netguard）
+    _login(page, live_server, *u)
+    _open(page, live_server, pg)
+    seen_missing = set(filters)
+    dirtied = set()
+    runs = [None] if pg != "reports" else [
+        # ⚠ 走頁面自己的切換入口（switchType／按鈕的 scope＋load）。第一版直接寫 periodType：
+        #   飛行中的回應全被 loadData 的過期丟棄機制丟掉、沒有人重新載入 ⇒ loading 永遠 true，
+        #   看起來像產品競態，其實是探針繞過了入口。
+        "(d => { d.switchType('%s'); d.receivablesScope = '%s'; d.loadReceivables();"
+        " d.expensesScope = '%s'; d.loadExpenses(); d.caseListGroupByMonth = true })(%s)"
+        % (s, s, s, ROOT) for s in REPORT_SCOPES] + [
+        # 稅務匯出的年／月下拉在「資金水位」分頁的 x-if="cashPos && !cashPosLoading" 裡
+        "%s.showCashPosTab()" % ROOT]
+    for s in runs:
+        if s:
+            page.evaluate("(s) => eval(s)", s)
+            # 收支／應收那幾組包在 x-if="!loading && data" 裡
+            page.wait_for_function(f"() => !{ROOT}.loading && !!{ROOT}.data"
+                                   + (f" && !!{ROOT}.cashPos && !{ROOT}.cashPosLoading" if "CashPos" in s else ""),
+                                   timeout=20000)
+            _rendered(page)   # PERF #6：原本固定等 150ms
+        r = page.evaluate(_FIRE, [filters, setup])
+        seen_missing &= set(r["missing"])
+        dirtied |= set(r["dirtied"])
+    assert not seen_missing, "頁面上找不到這些篩選欄（名稱改了？）：%s" % sorted(seen_missing)
+    assert not dirtied, "改這些篩選欄會觸發離頁警告：%s" % sorted(dirtied)
+    assert page.evaluate(_CONTROL, saved) is True, "反向控制：存檔欄位改值應該要觸發離頁警告"

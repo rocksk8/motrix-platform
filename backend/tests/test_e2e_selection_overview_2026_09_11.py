@@ -22,7 +22,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -38,26 +37,6 @@ EXPECTED_SECTIONS = [
 ]
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -69,7 +48,7 @@ def _login(page, base_url, username, password):
 
 
 @pytest.mark.e2e
-def test_overview_covers_all_six_catalog_guides(live_server, make_user):
+def test_overview_covers_all_six_catalog_guides(live_server, make_user, e2e_browser):
     """六個區塊都要在，且自動化那一區要真的顯示撈回來的分類與產品數。"""
     username, password = make_user(username="e2e_ovw", role="superadmin")
 
@@ -91,24 +70,20 @@ def test_overview_covers_all_six_catalog_guides(live_server, make_user):
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/selection-db-overview.html")
-            page.wait_for_selector(".ov-section", timeout=20000)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/selection-db-overview.html")
+    page.wait_for_selector(".ov-section", timeout=20000)
 
-            titles = [t.strip() for t in page.locator(".ov-section .oh b").all_inner_texts()]
-            assert titles == EXPECTED_SECTIONS, (
-                f"涵蓋度總覽的區塊與預期不符。\n實際：{titles}\n預期：{EXPECTED_SECTIONS}\n"
-                "新增選型類別時，記得同時補 selection-db-overview.html::loadAll()")
+    titles = [t.strip() for t in page.locator(".ov-section .oh b").all_inner_texts()]
+    assert titles == EXPECTED_SECTIONS, (
+        f"涵蓋度總覽的區塊與預期不符。\n實際：{titles}\n預期：{EXPECTED_SECTIONS}\n"
+        "新增選型類別時，記得同時補 selection-db-overview.html::loadAll()")
 
-            # 自動化那一區要真的有資料，不是空殼
-            auto = page.locator(".ov-section", has=page.locator(".oh b:text-is('自動化系統選型導覽')"))
-            auto_text = auto.inner_text()
-            assert "PLC 控制器" in auto_text, "自動化分類沒有被撈進來"
-            assert "Siemens" in auto_text and "Mitsubishi" in auto_text, "自動化產品品牌沒有被撈進來"
-            assert "共 2 筆產品" in auto_text, f"自動化產品筆數不對：{auto_text[:200]}"
-        finally:
-            browser.close()
+    # 自動化那一區要真的有資料，不是空殼
+    auto = page.locator(".ov-section", has=page.locator(".oh b:text-is('自動化系統選型導覽')"))
+    auto_text = auto.inner_text()
+    assert "PLC 控制器" in auto_text, "自動化分類沒有被撈進來"
+    assert "Siemens" in auto_text and "Mitsubishi" in auto_text, "自動化產品品牌沒有被撈進來"
+    assert "共 2 筆產品" in auto_text, f"自動化產品筆數不對：{auto_text[:200]}"

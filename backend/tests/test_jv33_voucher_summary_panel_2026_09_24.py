@@ -17,10 +17,8 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 from tests.test_jv28_voucher_attachment_preview_2026_09_24 import (  # noqa: E402
     _png_bytes, _upload, _open_page)
 
@@ -94,26 +92,22 @@ def _summary2(page):
 
 @pytest.mark.e2e
 def test_jv33_focusing_a_summary_shows_files_and_expenses_together(
-        live_server, make_user, seed_extra_expense):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_a")
-            _line2(page).click()
-            page.wait_for_selector(PANEL, state="visible", timeout=5000)
-            _wait_expenses(page, exp)
-            files_vis = page.is_visible(FILES + ' :text("吊車發票.png")')
-            exp_vis = page.is_visible(EXPENSES + ' :text("%s")' % exp[:6])
-            print("JV33 頁面實測：focus 第 2 行摘要 ⇒ 附件區可見", files_vis, "／支出項區可見", exp_vis)
-            assert files_vis and exp_vis, "兩區沒有同時出現（附件 %s／支出項 %s）" % (files_vis, exp_vis)
-        finally:
-            browser.close()
+        live_server, make_user, seed_extra_expense, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_a")
+    _line2(page).click()
+    page.wait_for_selector(PANEL, state="visible", timeout=5000)
+    _wait_expenses(page, exp)
+    files_vis = page.is_visible(FILES + ' :text("吊車發票.png")')
+    exp_vis = page.is_visible(EXPENSES + ' :text("%s")' % exp[:6])
+    print("JV33 頁面實測：focus 第 2 行摘要 ⇒ 附件區可見", files_vis, "／支出項區可見", exp_vis)
+    assert files_vis and exp_vis, "兩區沒有同時出現（附件 %s／支出項 %s）" % (files_vis, exp_vis)
 
 
 @pytest.mark.e2e
 def test_jv33_clicking_a_source_overwrites_the_summary_instead_of_appending(
-        live_server, make_user, seed_extra_expense):
+        live_server, make_user, seed_extra_expense, e2e_browser):
     """📌 **翻面**（2026-09-24，`JV36`）——原本這一題是「空白填入、非空以『；』接在後面」。
 
     使用者逐字更正：「我說的摘要要能帶動已上傳檔案，是別的意思，不是『帶入到第 1 行摘要，
@@ -121,80 +115,72 @@ def test_jv33_clicking_a_source_overwrites_the_summary_instead_of_appending(
     已上傳檔案內容，例如我的摘要是 XXX，我點選 XXX 的時候它下方能自動連帶 XXX 內有的上傳檔案」
     ⇒ 點支出項／案件：該行摘要**覆蓋**成那一筆的名稱；點本傳票附件的檔名：只預覽，不動摘要。
     """
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_b")
-            _line2(page).click()
-            page.wait_for_selector(PANEL, state="visible", timeout=5000)
-            _wait_expenses(page, exp)
-            page.click('[data-testid="summary-panel-expense"]:has-text("%s")' % exp[:6])
-            first = _summary2(page)
-            page.click('[data-testid="summary-panel-file"]:has-text("吊車發票.png")')
-            page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible", timeout=10000)
-            page.click('[data-testid="voucher-att-close"]')
-            after_file = _summary2(page)
-            page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
-            second = _summary2(page)
-            print("JV33 頁面實測：點支出項 ⇒", repr(first), "；點附件檔名 ⇒", repr(after_file),
-                  "；再點案件 ⇒", repr(second))
-            assert first == exp, "點支出項，摘要應該是它的名稱：%r" % first
-            assert after_file == exp, "點本傳票附件的檔名只預覽，不應該動摘要：%r" % after_file
-            assert "；" not in second and exp not in second and QUOTE in second, (
-                "再點案件應該**覆蓋**成案件名稱，不是接續：%r" % second)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_b")
+    _line2(page).click()
+    page.wait_for_selector(PANEL, state="visible", timeout=5000)
+    _wait_expenses(page, exp)
+    page.click('[data-testid="summary-panel-expense"]:has-text("%s")' % exp[:6])
+    first = _summary2(page)
+    page.click('[data-testid="summary-panel-file"]:has-text("吊車發票.png")')
+    page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible", timeout=10000)
+    page.click('[data-testid="voucher-att-close"]')
+    after_file = _summary2(page)
+    page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
+    second = _summary2(page)
+    print("JV33 頁面實測：點支出項 ⇒", repr(first), "；點附件檔名 ⇒", repr(after_file),
+          "；再點案件 ⇒", repr(second))
+    assert first == exp, "點支出項，摘要應該是它的名稱：%r" % first
+    assert after_file == exp, "點本傳票附件的檔名只預覽，不應該動摘要：%r" % after_file
+    assert "；" not in second and exp not in second and QUOTE in second, (
+        "再點案件應該**覆蓋**成案件名稱，不是接續：%r" % second)
 
 
 @pytest.mark.e2e
 def test_jv33_the_thumbnail_previews_without_touching_the_summary(
-        live_server, make_user, seed_extra_expense):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _setup(page, live_server, make_user, seed_extra_expense, "jv33_c")
-            _line2(page).click()
-            page.wait_for_selector(PANEL, state="visible", timeout=5000)
-            thumb = page.locator('[data-testid="summary-panel-thumb"]').first
-            thumb.wait_for(state="visible", timeout=10000)
-            thumb.click()
-            page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible",
-                                   timeout=10000)
-            assert _summary2(page) == "", "點縮圖不應該動摘要：%r" % _summary2(page)
-        finally:
-            browser.close()
+        live_server, make_user, seed_extra_expense, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _setup(page, live_server, make_user, seed_extra_expense, "jv33_c")
+    _line2(page).click()
+    page.wait_for_selector(PANEL, state="visible", timeout=5000)
+    thumb = page.locator('[data-testid="summary-panel-thumb"]').first
+    thumb.wait_for(state="visible", timeout=10000)
+    thumb.click()
+    page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible",
+                           timeout=10000)
+    assert _summary2(page) == "", "點縮圖不應該動摘要：%r" % _summary2(page)
 
 
 @pytest.mark.e2e
 def test_jv33_the_expense_section_says_loading_while_sources_are_in_flight(
-        live_server, make_user, seed_extra_expense):
+        live_server, make_user, seed_extra_expense, e2e_browser):
     """支出項還在載入時，面板要說「載入中…」，不是一片空白或「沒有支出項」（慢網路時的樣子）。
     ⚙️ 用 `page.route` **扣住**帶案件的 summary-sources 請求，量完「載入中」才放行——
        不用 `time.sleep`：sync Playwright 的 route handler 裡睡覺會卡住整條事件迴圈，
        延遲不會真的發生在瀏覽器那一側。"""
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        held = []
-        try:
-            page.route("**/api/vouchers/summary-sources?quote_no=*", lambda route: held.append(route))
-            exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_d")
-            _line2(page).click()
-            page.wait_for_selector(PANEL, state="visible", timeout=5000)
-            for _ in range(50):
-                if held:
-                    break
-                page.wait_for_timeout(100)
-            assert held, "量尺：帶案件的 summary-sources 請求沒有被扣住——量不到載入期間"
-            during = page.locator(EXPENSES).inner_text()
-            for r in held:
-                r.continue_()
-            _wait_expenses(page, exp)
-            after = page.locator(EXPENSES).inner_text()
-            print("JV33 頁面實測：載入中 ⇒", repr(during[:40]), "；載入後 ⇒", repr(after[:40]))
-            assert "載入中" in during, "支出項載入期間沒有說「載入中」：%r" % during
-            assert "載入中" not in after, "載入完了還寫著載入中：%r" % after
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    held = []
+    page.route("**/api/vouchers/summary-sources?quote_no=*", lambda route: held.append(route))
+    exp = _setup(page, live_server, make_user, seed_extra_expense, "jv33_d")
+    _line2(page).click()
+    page.wait_for_selector(PANEL, state="visible", timeout=5000)
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    assert held, "量尺：帶案件的 summary-sources 請求沒有被扣住——量不到載入期間"
+    # PERF #5：放行寫在 finally——量「載入期間」那一步若出錯，被扣住的請求也要放掉
+    #   （共用伺服器在題末會排空處理中的請求；卡著不放會讓紅燈原因變成排空逾時）
+    try:
+        during = page.locator(EXPENSES).inner_text()
+    finally:
+        for r in held:
+            r.continue_()
+    _wait_expenses(page, exp)
+    after = page.locator(EXPENSES).inner_text()
+    print("JV33 頁面實測：載入中 ⇒", repr(during[:40]), "；載入後 ⇒", repr(after[:40]))
+    assert "載入中" in during, "支出項載入期間沒有說「載入中」：%r" % during
+    assert "載入中" not in after, "載入完了還寫著載入中：%r" % after

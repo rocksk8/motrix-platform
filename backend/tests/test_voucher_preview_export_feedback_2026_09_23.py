@@ -67,7 +67,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -82,26 +81,6 @@ def _rendered(page):
     ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
     page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -155,7 +134,7 @@ def _element_visible_within_scroll_area(page, el_selector, container_selector):
 
 @pytest.mark.e2e
 def test_jv19_export_failure_message_is_visible_inside_the_preview(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴🔴 **核心：草稿傳票在預覽視窗按匯出，失敗訊息要在可視範圍內。**
 
     ⚙️ 已實測重現（見檔頭）：1280×800 視窗下，訊息落在可捲動區域外
@@ -164,40 +143,36 @@ def test_jv19_export_failure_message_is_visible_inside_the_preview(
     """
     username, password = make_user(username="jv19_fail", role="superadmin",
                                    modules=["cashier"])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            _login(page, live_server, username, password)
-            token = page.evaluate(
-                "() => JSON.parse(localStorage.getItem('motrix_session'))"
-                ".token")
-            vid = _create_voucher(page, live_server, token)
-            _open_preview(page, live_server, token, vid)
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    _login(page, live_server, username, password)
+    token = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('motrix_session'))"
+        ".token")
+    vid = _create_voucher(page, live_server, token)
+    _open_preview(page, live_server, token, vid)
 
-            page.click('.modal-foot button:has-text("匯出 PDF")'
-                      ':not(:has-text("含附件"))')
-            # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
-            page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
-            _rendered(page)
+    page.click('.modal-foot button:has-text("匯出 PDF")'
+              ':not(:has-text("含附件"))')
+    # PERF #6：原本固定等 800ms ⇒ 等匯出開始又結束（exporting 由 true 回到 false）
+    page.wait_for_function("() => !Alpine.$data(document.querySelector('[x-data]')).exporting", timeout=30000)
+    _rendered(page)
 
-            result = _element_visible_within_scroll_area(
-                page, ".vc-preview-atts .vc-err", ".modal-body")
-            assert result.get("found"), (
-                "modal 裡找不到 `.vc-preview-atts .vc-err` 這個節點——\n"
-                "退回改本檔的選擇器。")
-            assert result.get("visible"), (
-                "失敗訊息**存在於 DOM，而使用者目前看不到**：%r\n" % result
-                + "☠️ 使用者按下匯出、系統擋下來並說明原因，\n"
-                  "   而那句話落在需要往下捲的區域——對使用者而言，\n"
-                  "   這與『什麼都沒發生』是同一件事。")
-        finally:
-            browser.close()
+    result = _element_visible_within_scroll_area(
+        page, ".vc-preview-atts .vc-err", ".modal-body")
+    assert result.get("found"), (
+        "modal 裡找不到 `.vc-preview-atts .vc-err` 這個節點——\n"
+        "退回改本檔的選擇器。")
+    assert result.get("visible"), (
+        "失敗訊息**存在於 DOM，而使用者目前看不到**：%r\n" % result
+        + "☠️ 使用者按下匯出、系統擋下來並說明原因，\n"
+          "   而那句話落在需要往下捲的區域——對使用者而言，\n"
+          "   這與『什麼都沒發生』是同一件事。")
 
 
 @pytest.mark.e2e
 def test_jv19_export_success_message_is_visible_inside_the_preview(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """🔴🔴 **`②`：成功那一側也要看得到，不只驗失敗。**
 
     ```
@@ -209,61 +184,57 @@ def test_jv19_export_success_message_is_visible_inside_the_preview(
     """
     username, password = make_user(username="jv19_ok", role="superadmin",
                                    modules=["cashier"])
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        try:
-            _login(page, live_server, username, password)
-            token = page.evaluate(
-                "() => JSON.parse(localStorage.getItem('motrix_session'))"
-                ".token")
-            vid = _create_voucher(page, live_server, token)
-            for step in ("submit", "approve", "approve"):
-                r = page.request.post(
-                    f"{live_server}/api/vouchers/{vid}/{step}",
-                    headers={"Authorization": "Bearer " + token,
-                            "Content-Type": "application/json"},
-                    data="{}")
-                assert r.ok, (step, r.text())
-            _open_preview(page, live_server, token, vid)
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    _login(page, live_server, username, password)
+    token = page.evaluate(
+        "() => JSON.parse(localStorage.getItem('motrix_session'))"
+        ".token")
+    vid = _create_voucher(page, live_server, token)
+    for step in ("submit", "approve", "approve"):
+        r = page.request.post(
+            f"{live_server}/api/vouchers/{vid}/{step}",
+            headers={"Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"},
+            data="{}")
+        assert r.ok, (step, r.text())
+    _open_preview(page, live_server, token, vid)
 
-            page.click('.modal-foot button:has-text("匯出 PDF")'
-                      ':not(:has-text("含附件"))')
-            # 🔴 **與失敗案例不同的等待時間**：草稿被擋在 approval_done()
-            #    的閘門，PDF 產生根本沒開始，幾乎立刻回應；已核准的單
-            #    真的會走 Edge headless 產 PDF（本會話其他題實測過
-            #    single-digit 秒等級），固定 800ms 量不到，要等
-            #    `exporting` 變回 `false`。
-            page.wait_for_function(
-                "() => !Alpine.$data(document.querySelector('[x-data]'))"
-                ".exporting",
-                timeout=30000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
+    page.click('.modal-foot button:has-text("匯出 PDF")'
+              ':not(:has-text("含附件"))')
+    # 🔴 **與失敗案例不同的等待時間**：草稿被擋在 approval_done()
+    #    的閘門，PDF 產生根本沒開始，幾乎立刻回應；已核准的單
+    #    真的會走 Edge headless 產 PDF（本會話其他題實測過
+    #    single-digit 秒等級），固定 800ms 量不到，要等
+    #    `exporting` 變回 `false`。
+    page.wait_for_function(
+        "() => !Alpine.$data(document.querySelector('[x-data]'))"
+        ".exporting",
+        timeout=30000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
 
-            att_msg = page.evaluate(
-                "() => Alpine.$data(document.querySelector('[x-data]'))"
-                ".attMsg")
-            assert att_msg, (
-                "匯出成功了，而 `attMsg` 是空的——前置不對，先看這一格。")
+    att_msg = page.evaluate(
+        "() => Alpine.$data(document.querySelector('[x-data]'))"
+        ".attMsg")
+    assert att_msg, (
+        "匯出成功了，而 `attMsg` 是空的——前置不對，先看這一格。")
 
-            found_in_modal = page.evaluate(
-                """() => {
-                    const box = document.querySelector('.modal-box')
-                    if (!box) return false
-                    return Array.from(box.querySelectorAll('*')).some(
-                        el => el.textContent && el.textContent.trim() !== ''
-                        && el.children.length === 0
-                        && el.textContent.includes('已匯出'))
-                }""")
-            assert found_in_modal, (
-                "`attMsg`（%r）已核准的傳票匯出成功，"
-                "而 modal 裡完全找不到顯示它的地方——\n" % att_msg
-                + "☠️ `voucher.html` 的 modal 片段只有 `attErr` 的 "
-                  "`<template x-if>`，沒有對應 `attMsg` 的節點：\n"
-                  "   使用者按下匯出、系統成功了，而視窗裡**什麼都沒有**，\n"
-                  "   比失敗訊息『捲不到』更徹底——是『壓根沒印出來』。")
-        finally:
-            browser.close()
+    found_in_modal = page.evaluate(
+        """() => {
+            const box = document.querySelector('.modal-box')
+            if (!box) return false
+            return Array.from(box.querySelectorAll('*')).some(
+                el => el.textContent && el.textContent.trim() !== ''
+                && el.children.length === 0
+                && el.textContent.includes('已匯出'))
+        }""")
+    assert found_in_modal, (
+        "`attMsg`（%r）已核准的傳票匯出成功，"
+        "而 modal 裡完全找不到顯示它的地方——\n" % att_msg
+        + "☠️ `voucher.html` 的 modal 片段只有 `attErr` 的 "
+          "`<template x-if>`，沒有對應 `attMsg` 的節點：\n"
+          "   使用者按下匯出、系統成功了，而視窗裡**什麼都沒有**，\n"
+          "   比失敗訊息『捲不到』更徹底——是『壓根沒印出來』。")
 
 
 def test_jv19_the_main_page_feedback_slots_are_not_removed():

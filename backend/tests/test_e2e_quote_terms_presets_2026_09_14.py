@@ -13,7 +13,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -25,25 +24,6 @@ def _rendered(page):
     ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
     page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -76,31 +56,27 @@ def _seed_presets(client, username, password):
 
 
 @pytest.mark.e2e
-def test_default_preset_is_applied_to_a_new_quotation(live_server, client, make_user):
+def test_default_preset_is_applied_to_a_new_quotation(live_server, client, make_user, e2e_browser):
     """新增報價單時自動帶入被設為預設（★）的那一組。"""
     u, p = make_user(username="tp_sa1", role="superadmin")
     _seed_presets(client, u, p)
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
-                                   timeout=15000)
-            _rendered(page)
-            val = page.eval_on_selector(
-                'textarea[x-model="q.paymentTerms"]', "el => el.value")
-            assert val == "工程組的付款條件", val
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_selector('button:has-text("純購料")', timeout=15000)
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                           timeout=15000)
+    _rendered(page)
+    val = page.eval_on_selector(
+        'textarea[x-model="q.paymentTerms"]', "el => el.value")
+    assert val == "工程組的付款條件", val
 
 
 @pytest.mark.e2e
-def test_clicking_a_block_swaps_all_five_fields(live_server, client, make_user):
+def test_clicking_a_block_swaps_all_five_fields(live_server, client, make_user, e2e_browser):
     """點「純購料」→ 付款條件／交貨條件／驗收標準／保固條件／售後服務整組換掉。
 
     這是使用者裁示裡「可由報價人手動點選方塊做切換」那一句的實際驗證。
@@ -108,37 +84,33 @@ def test_clicking_a_block_swaps_all_five_fields(live_server, client, make_user):
     u, p = make_user(username="tp_sa2", role="superadmin")
     _seed_presets(client, u, p)
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
-                                   timeout=15000)
-            _rendered(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_selector('button:has-text("純購料")', timeout=15000)
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                           timeout=15000)
+    _rendered(page)
 
-            page.click('button:has-text("純購料")')
-            _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
+    page.click('button:has-text("純購料")')
+    _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
 
-            for model, expect in (
-                ("q.paymentTerms",    "購料組的付款條件"),
-                ("q.deliveryTerms",   "購料組的交貨條件"),
-                ("q.acceptanceTerms", "購料組的驗收標準"),
-                ("q.warrantyTerms",   "購料組的保固條件"),
-                ("q.afterSales",      "購料組的售後服務"),
-            ):
-                val = page.eval_on_selector(
-                    f'textarea[x-model="{model}"]', "el => el.value")
-                assert val == expect, f"{model} 沒有跟著換：{val!r}"
-        finally:
-            browser.close()
+    for model, expect in (
+        ("q.paymentTerms",    "購料組的付款條件"),
+        ("q.deliveryTerms",   "購料組的交貨條件"),
+        ("q.acceptanceTerms", "購料組的驗收標準"),
+        ("q.warrantyTerms",   "購料組的保固條件"),
+        ("q.afterSales",      "購料組的售後服務"),
+    ):
+        val = page.eval_on_selector(
+            f'textarea[x-model="{model}"]', "el => el.value")
+        assert val == expect, f"{model} 沒有跟著換：{val!r}"
 
 
 @pytest.mark.e2e
-def test_switching_preset_does_not_raise_a_false_approval_warning(live_server, client, make_user):
+def test_switching_preset_does_not_raise_a_false_approval_warning(live_server, client, make_user, e2e_browser):
     """切到非預設的那一組**不該**被判定成「報價條件已修改」。
 
     原本的 `checkApproval()` 一律拿 DEFAULT_TERMS 比對——有了條款組之後，
@@ -147,23 +119,19 @@ def test_switching_preset_does_not_raise_a_false_approval_warning(live_server, c
     u, p = make_user(username="tp_sa3", role="superadmin")
     _seed_presets(client, u, p)
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/quotation-form.html")
-            page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-            # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-            page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
-                                   timeout=15000)
-            _rendered(page)
-            page.click('button:has-text("純購料")')
-            _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/quotation-form.html")
+    page.wait_for_selector('button:has-text("純購料")', timeout=15000)
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
+    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+                           timeout=15000)
+    _rendered(page)
+    page.click('button:has-text("純購料")')
+    _rendered(page)   # PERF #6：原本固定等 300ms（套用範本是同步的）
 
-            reasons = page.evaluate(
-                "() => (Alpine.$data(document.querySelector('[x-data]')).approvalReasons || [])")
-            hits = [r for r in reasons if "報價條件" in r]
-            assert not hits, f"切換條款組被誤判成條件被改過：{hits}"
-        finally:
-            browser.close()
+    reasons = page.evaluate(
+        "() => (Alpine.$data(document.querySelector('[x-data]')).approvalReasons || [])")
+    hits = [r for r in reasons if "報價條件" in r]
+    assert not hits, f"切換條款組被誤判成條件被改過：{hits}"

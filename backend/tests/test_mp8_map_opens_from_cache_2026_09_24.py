@@ -141,14 +141,13 @@ def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_u
 
 pw = pytest.importorskip("playwright.sync_api")
 from tests._map_tiles import block_tiles  # noqa: E402
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login)                                              # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
 
 @pytest.mark.e2e
-def test_mp8_toggling_a_dataset_filters_locally_without_refetching(live_server, make_user):
+def test_mp8_toggling_a_dataset_filters_locally_without_refetching(live_server, make_user, e2e_browser):
     import json as _json
     u, p = make_user(username="mp8_page", role="superadmin")
     body = _json.dumps({"points": [
@@ -160,28 +159,24 @@ def test_mp8_toggling_a_dataset_filters_locally_without_refetching(live_server, 
                     {"source": "customers", "skipped": None, "count": 1, "note": "客戶 1 筆"}],
         "locations": [], "pendingGeocode": 0, "unresolvableGeocode": 0})
     asked = []
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
-        try:
-            def _serve(route):
-                asked.append(route.request.url)
-                route.fulfill(status=200, content_type="application/json", body=body)
-            page.route("**/api/map/points*", _serve)
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/map.html")
-            page.wait_for_function("() => %s.info && %s.info.points.length === 2" % (_D, _D),
-                                   timeout=15000)
-            n0 = len(asked)
-            page.uncheck('input[type="checkbox"][value="tenders"]')
-            page.wait_for_timeout(300)
-            shown = page.evaluate("() => %s.view.points.map(p => p.name)" % _D)
-            print("MP8 頁面實測：取消「標案」後請求數 %d → %d、畫面點 %r；請求網址 %r"
-                  % (n0, len(asked), shown, asked[:1]))
-            assert len(asked) == n0, "切換勾選又向伺服器重抓了"
-            assert shown == ["客戶乙"], shown
-            assert "sources=tenders,customers,suppliers" in asked[0], "第一次就要一次抓完全部來源"
-            assert page.locator('button:has-text("繼續定位")').count() == 0, "「繼續定位」鈕應該拿掉"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    def _serve(route):
+        asked.append(route.request.url)
+        route.fulfill(status=200, content_type="application/json", body=body)
+    page.route("**/api/map/points*", _serve)
+    _login(page, live_server, u, p)
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function("() => %s.info && %s.info.points.length === 2" % (_D, _D),
+                           timeout=15000)
+    n0 = len(asked)
+    page.uncheck('input[type="checkbox"][value="tenders"]')
+    page.wait_for_timeout(300)
+    shown = page.evaluate("() => %s.view.points.map(p => p.name)" % _D)
+    print("MP8 頁面實測：取消「標案」後請求數 %d → %d、畫面點 %r；請求網址 %r"
+          % (n0, len(asked), shown, asked[:1]))
+    assert len(asked) == n0, "切換勾選又向伺服器重抓了"
+    assert shown == ["客戶乙"], shown
+    assert "sources=tenders,customers,suppliers" in asked[0], "第一次就要一次抓完全部來源"
+    assert page.locator('button:has-text("繼續定位")').count() == 0, "「繼續定位」鈕應該拿掉"

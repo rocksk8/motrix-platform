@@ -43,7 +43,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 
@@ -75,24 +74,13 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture()
-def live_server(client):
+def live_server(live_server):
     """WebAuthn 規格只允許 localhost 走 http，其餘一律要 https。測試伺服器是
     純 http，所以 RP ID 用 localhost、瀏覽器也從 localhost 進——這條路徑
-    `_validate_webauthn_pair()` 本來就明文放行（見該函式最後一段）。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(),
-                            log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-
+    `_validate_webauthn_pair()` 本來就明文放行（見該函式最後一段）。
+    PERF #5：覆寫延伸 conftest 的共用伺服器——埠取自它的網址，設定寫進這一題的庫。"""
+    from urllib.parse import urlparse
+    port = urlparse(live_server).port
     import db
     conn = db.get_db()
     try:
@@ -105,12 +93,7 @@ def live_server(client):
         conn.commit()
     finally:
         conn.close()
-
-    try:
-        yield f"http://localhost:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
+    return f"http://localhost:{port}"
 
 
 def _add_virtual_authenticator(context, page):
@@ -328,71 +311,69 @@ def _passkey_login(page, base_url, username, sink):
 
 
 @pytest.mark.e2e
-def test_passkey_register_duplicate_rejected_then_login(live_server, make_user):
+def test_passkey_register_duplicate_rejected_then_login(live_server, make_user, e2e_browser):
     """註冊 → 同一個認證器重複註冊必須被擋 → 用 Passkey 登入。"""
     username, password = make_user(username="e2e_pk", role="admin")
     assert _passkey_count() == 0, "測試前提：一開始不該有任何 Passkey"
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context()
-        page = context.new_page()
-        sink = _collect_console(page)
-        _add_virtual_authenticator(context, page)
-        try:
-            _login_with_password(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/change-password.html")
-            page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
+    browser = e2e_browser
+    context = browser.new_context()
+    page = context.new_page()
+    sink = _collect_console(page)
+    _add_virtual_authenticator(context, page)
+    try:
+        _login_with_password(page, live_server, username, password)
+        page.goto(f"{live_server}/pages/change-password.html")
+        page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
 
-            # 第一張：踩得到 base64url padding 與 credential 缺 type 兩個坑
-            _register_one(page, 1)
-            assert _passkey_count(username) == 1, "第一張 Passkey 沒有寫進資料庫"
+        # 第一張：踩得到 base64url padding 與 credential 缺 type 兩個坑
+        _register_one(page, 1)
+        assert _passkey_count(username) == 1, "第一張 Passkey 沒有寫進資料庫"
 
-            # 第二次：excludeCredentials 這時才非空。前端漏轉 id 的話，
-            # navigator.credentials.create() 會在解析 options 時就丟 TypeError，
-            # 連認證器都還沒叫到；轉對了則會走到認證器、被它以「這張已經註冊過」
-            # 拒絕——後者才是正確結果。
-            page.reload()
-            page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
-            state = _click_register(page)
-            _assert_not_a_marshalling_bug(state, 2)
-            assert isinstance(state, dict), f"第 2 次註冊：{state}"
-            assert state["err"], (
-                "同一個認證器重複註冊竟然成功了——excludeCredentials 沒有生效，"
-                f"狀態：{state}")
-            assert _passkey_count(username) == 1, "被擋下的註冊不該留下資料庫紀錄"
+        # 第二次：excludeCredentials 這時才非空。前端漏轉 id 的話，
+        # navigator.credentials.create() 會在解析 options 時就丟 TypeError，
+        # 連認證器都還沒叫到；轉對了則會走到認證器、被它以「這張已經註冊過」
+        # 拒絕——後者才是正確結果。
+        page.reload()
+        page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
+        state = _click_register(page)
+        _assert_not_a_marshalling_bug(state, 2)
+        assert isinstance(state, dict), f"第 2 次註冊：{state}"
+        assert state["err"], (
+            "同一個認證器重複註冊竟然成功了——excludeCredentials 沒有生效，"
+            f"狀態：{state}")
+        assert _passkey_count(username) == 1, "被擋下的註冊不該留下資料庫紀錄"
 
-            _passkey_login(page, live_server, username, sink)
-        finally:
-            context.close()
-            browser.close()
+        _passkey_login(page, live_server, username, sink)
+    finally:
+        context.close()
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_passkey_login_updates_sign_count(live_server, make_user):
+def test_passkey_login_updates_sign_count(live_server, make_user, e2e_browser):
     """登入成功要更新 sign_count／last_used_at——那是重放攻擊偵測的依據，
     只要它沒被寫回去，防護就等於不存在，而且不會有任何錯誤跡象。"""
     username, password = make_user(username="e2e_pk2", role="admin")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        context = browser.new_context()
-        page = context.new_page()
-        sink = _collect_console(page)
-        _add_virtual_authenticator(context, page)
-        try:
-            _login_with_password(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/change-password.html")
-            page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
-            _register_one(page, 1)
+    browser = e2e_browser
+    context = browser.new_context()
+    page = context.new_page()
+    sink = _collect_console(page)
+    _add_virtual_authenticator(context, page)
+    try:
+        _login_with_password(page, live_server, username, password)
+        page.goto(f"{live_server}/pages/change-password.html")
+        page.wait_for_selector('button:has-text("新增 Passkey")', timeout=20000)
+        _register_one(page, 1)
 
-            before = _cred_row(username)
-            assert before["last_used_at"] is None, "才剛註冊，last_used_at 應該還是空的"
+        before = _cred_row(username)
+        assert before["last_used_at"] is None, "才剛註冊，last_used_at 應該還是空的"
 
-            _passkey_login(page, live_server, username, sink)
-        finally:
-            context.close()
-            browser.close()
+        _passkey_login(page, live_server, username, sink)
+    finally:
+        context.close()
+        browser.close()
 
     after = _cred_row(username)
     assert after["last_used_at"] is not None, (

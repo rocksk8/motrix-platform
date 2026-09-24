@@ -18,7 +18,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -32,9 +31,9 @@ FAKE_GCIS = [
 
 
 @pytest.fixture()
-def live_server(client, monkeypatch):
-    """把 GCIS 外部查詢換成固定資料後，再開一個真實 loopback 監聽給瀏覽器打。"""
-    import main
+def live_server(live_server, monkeypatch):
+    """把 GCIS 外部查詢換成固定資料（PERF #5：覆寫延伸 conftest 的共用伺服器；
+    伺服器與題目在同一個行程，dashboard._gcis_get 在呼叫時才查，換掉就生效）。"""
     from routers import dashboard
 
     def _fake_gcis_get(url):
@@ -42,23 +41,7 @@ def live_server(client, monkeypatch):
             or "Company_Name" in url else ([], "ok")
 
     monkeypatch.setattr(dashboard, "_gcis_get", _fake_gcis_get)
-
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
+    return live_server
 
 
 def _login(page, base_url, username, password):
@@ -78,7 +61,7 @@ PAGES = [
 
 
 @pytest.mark.e2e
-def test_gov_name_search_fills_form(live_server, make_user):
+def test_gov_name_search_fills_form(live_server, make_user, e2e_browser):
     """三頁都要：輸入名稱 → 查詢 → 點結果 → 統編與名稱帶進表單。
 
     三頁刻意在**同一個 browser／同一個 live_server** 裡跑完，不用 parametrize：
@@ -89,41 +72,37 @@ def test_gov_name_search_fills_form(live_server, make_user):
     """
     username, password = make_user(username="e2e_gov", role="superadmin")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
+    browser = e2e_browser
+    for page_file, new_btn, tax_model in PAGES:
+        ctx = browser.new_context()
+        page = ctx.new_page()
         try:
-            for page_file, new_btn, tax_model in PAGES:
-                ctx = browser.new_context()
-                page = ctx.new_page()
-                try:
-                    _login(page, live_server, username, password)
-                    page.goto(f"{live_server}/pages/{page_file}")
-                    page.wait_for_load_state("networkidle")
+            _login(page, live_server, username, password)
+            page.goto(f"{live_server}/pages/{page_file}")
+            page.wait_for_load_state("networkidle")
 
-                    page.click(f'button:has-text("{new_btn}")')
-                    search_box = page.locator('input[x-model="govNameQ"]')
-                    search_box.wait_for(state="visible", timeout=20000)
+            page.click(f'button:has-text("{new_btn}")')
+            search_box = page.locator('input[x-model="govNameQ"]')
+            search_box.wait_for(state="visible", timeout=20000)
 
-                    search_box.fill("允碩")
-                    page.locator('button:has-text("查詢")').last.click()
+            search_box.fill("允碩")
+            page.locator('button:has-text("查詢")').last.click()
 
-                    page.wait_for_function(
-                        "() => document.body.innerText.includes('允碩整合集創股份有限公司')",
-                        timeout=20000)
+            page.wait_for_function(
+                "() => document.body.innerText.includes('允碩整合集創股份有限公司')",
+                timeout=20000)
 
-                    page.locator("text=允碩整合集創股份有限公司").last.click()
+            page.locator("text=允碩整合集創股份有限公司").last.click()
 
-                    # 統編帶進表單——三頁最容易接錯的地方（taxId vs tax_id）
-                    page.wait_for_function(
-                        """(sel) => {
-                             const el = document.querySelector(`input[x-model="${sel}"]`);
-                             return el && el.value === '60575481';
-                           }""",
-                        arg=tax_model, timeout=20000)
-                except Exception as e:
-                    raise AssertionError(
-                        f"{page_file} 的公司名稱查詢沒有把統編帶進 {tax_model}：{e}") from e
-                finally:
-                    ctx.close()
+            # 統編帶進表單——三頁最容易接錯的地方（taxId vs tax_id）
+            page.wait_for_function(
+                """(sel) => {
+                     const el = document.querySelector(`input[x-model="${sel}"]`);
+                     return el && el.value === '60575481';
+                   }""",
+                arg=tax_model, timeout=20000)
+        except Exception as e:
+            raise AssertionError(
+                f"{page_file} 的公司名稱查詢沒有把統編帶進 {tax_model}：{e}") from e
         finally:
-            browser.close()
+            ctx.close()

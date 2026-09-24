@@ -163,8 +163,7 @@ def test_jv36_lines_remember_their_source_and_bad_sources_are_refused(client, ma
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login)                                              # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
 
 _D = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -184,7 +183,7 @@ def _att_count(page):
 
 @pytest.mark.e2e
 def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
-        live_server, client, make_user, seed_extra_expense):
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
     e1, _e2 = _seed(seed_extra_expense)
     u, p = make_user(username="jv36_page", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -192,73 +191,65 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
     r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV36", "lines": [
         {"account_code": "1113", "debit": 0, "credit": 5000}, {"account_code": "6111"}]})
     vid = r.json()["id"]
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
-            _open_with_case(page, live_server, token, vid)
-            page.locator("textarea[x-model='l.summary']").nth(1).fill("原本的摘要")
-            page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
-            line = page.evaluate("() => %s.lines[1]" % _D)
-            files = page.locator('[data-testid="line-source-files"]').first
-            files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').wait_for(
-                state="visible", timeout=10000)
-            before = _att_count(page)
-            print("JV36 頁面實測：選支出項 ⇒ 摘要 %r、來源 %r/%r、借方 %r；清單出現、附件數 %d"
-                  % (line["summary"], line["source_type"], line["source_key"], line["debit"], before))
-            assert line["summary"].startswith("吊車運費") and "原本的摘要" not in line["summary"], (
-                "摘要應該被覆蓋成支出項名稱（不再接續）：%r" % line["summary"])
-            assert (line["source_type"], line["source_key"]) == ("extra_expense", str(e1)), line
-            assert line["debit"] == "5000", "N12：借貸空白的行，金額應該帶入借方：%r" % line["debit"]
-            assert before == 0, "只列出、沒勾選，附件數就變了：%d" % before
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    _open_with_case(page, live_server, token, vid)
+    page.locator("textarea[x-model='l.summary']").nth(1).fill("原本的摘要")
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    files = page.locator('[data-testid="line-source-files"]').first
+    files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').wait_for(
+        state="visible", timeout=10000)
+    before = _att_count(page)
+    print("JV36 頁面實測：選支出項 ⇒ 摘要 %r、來源 %r/%r、借方 %r；清單出現、附件數 %d"
+          % (line["summary"], line["source_type"], line["source_key"], line["debit"], before))
+    assert line["summary"].startswith("吊車運費") and "原本的摘要" not in line["summary"], (
+        "摘要應該被覆蓋成支出項名稱（不再接續）：%r" % line["summary"])
+    assert (line["source_type"], line["source_key"]) == ("extra_expense", str(e1)), line
+    assert line["debit"] == "5000", "N12：借貸空白的行，金額應該帶入借方：%r" % line["debit"]
+    assert before == 0, "只列出、沒勾選，附件數就變了：%d" % before
 
-            files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').click()
-            page.wait_for_selector('[data-testid="voucher-att-preview-img"]', state="visible", timeout=10000)
-            page.click('[data-testid="voucher-att-close"]')
+    files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').click()
+    page.wait_for_selector('[data-testid="voucher-att-preview-img"]', state="visible", timeout=10000)
+    page.click('[data-testid="voucher-att-close"]')
 
-            files.locator('[data-testid="line-source-file-check"]').first.check()
-            page.wait_for_function("() => %s.attachments.length === 1" % _D, timeout=10000)
-            assert files.locator('[data-testid="line-source-file-brought"]:visible').count() == 1
+    files.locator('[data-testid="line-source-file-check"]').first.check()
+    page.wait_for_function("() => %s.attachments.length === 1" % _D, timeout=10000)
+    assert files.locator('[data-testid="line-source-file-brought"]:visible').count() == 1
 
-            page.click('[data-testid="voucher-save"]')
-            page.wait_for_function("() => !%s.busy" % _D, timeout=10000)
-            page.reload()
-            page.wait_for_function("() => %s.id == %d" % (_D, vid), timeout=15000)
-            again = page.locator('[data-testid="line-source-files"] [data-testid="line-source-file-open"]')
-            again.first.wait_for(state="visible", timeout=10000)
-            print("JV36 頁面實測：存檔重開 ⇒ 清單 %r、附件數 %d" % (again.all_inner_texts(), _att_count(page)))
-            assert again.all_inner_texts() == ["吊車單據.png"]
-            assert _att_count(page) == 1
-        finally:
-            browser.close()
+    page.click('[data-testid="voucher-save"]')
+    page.wait_for_function("() => !%s.busy" % _D, timeout=10000)
+    page.reload()
+    page.wait_for_function("() => %s.id == %d" % (_D, vid), timeout=15000)
+    again = page.locator('[data-testid="line-source-files"] [data-testid="line-source-file-open"]')
+    again.first.wait_for(state="visible", timeout=10000)
+    print("JV36 頁面實測：存檔重開 ⇒ 清單 %r、附件數 %d" % (again.all_inner_texts(), _att_count(page)))
+    assert again.all_inner_texts() == ["吊車單據.png"]
+    assert _att_count(page) == 1
 
 
 @pytest.mark.e2e
 def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
-        live_server, client, make_user, seed_extra_expense):
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
     _seed(seed_extra_expense)
     u, p = make_user(username="jv36_case", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
     r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV36", "lines": _LINES})
     vid = r.json()["id"]
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
-            _open_with_case(page, live_server, token, vid)
-            page.click('[data-testid="summary-panel-expense"]:has-text("雜支")')
-            line = page.evaluate("() => %s.lines[1]" % _D)
-            assert line["credit"] == "5000" and not line["debit"], (
-                "N12：這一行已有金額，不可以再帶入：%r" % line)
-            page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
-            line = page.evaluate("() => %s.lines[1]" % _D)
-            assert (line["source_type"], line["source_key"]) == ("case", QUOTE), line
-            page.locator('[data-testid="line-source-file-open"]:has-text("回簽.png")').wait_for(
-                state="visible", timeout=10000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    token = page.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    _open_with_case(page, live_server, token, vid)
+    page.click('[data-testid="summary-panel-expense"]:has-text("雜支")')
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["credit"] == "5000" and not line["debit"], (
+        "N12：這一行已有金額，不可以再帶入：%r" % line)
+    page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert (line["source_type"], line["source_key"]) == ("case", QUOTE), line
+    page.locator('[data-testid="line-source-file-open"]:has-text("回簽.png")').wait_for(
+        state="visible", timeout=10000)

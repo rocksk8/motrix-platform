@@ -147,34 +147,29 @@ def test_jv29_the_pdf_layout_prints_the_voucher_name(client, make_user, lines, t
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login)                                              # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
 
 
 @pytest.mark.e2e
-def test_jv29_the_page_shows_the_voucher_name_read_only(live_server, client, make_user):
+def test_jv29_the_page_shows_the_voucher_name_read_only(live_server, client, make_user, e2e_browser):
     u, p = make_user(username="jv29_page", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
     vid = _create(client, hdr, [_ln("6111", 1000, 0), _ln("1113", 0, 1000)])
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/voucher.html?id={vid}")
-            el = page.locator('[data-testid="voucher-kind"]')
-            el.wait_for(state="visible", timeout=15000)
-            page.wait_for_function(
-                "() => (document.querySelector('[data-testid=\"voucher-kind\"]').innerText || '')"
-                ".includes('傳票')", timeout=10000)
-            text = el.inner_text().strip()
-            tag = el.evaluate("e => e.tagName")
-            print("JV29 頁面實測：傳票名稱 =", repr(text), "／元素", tag)
-            assert text == "支出傳票", text
-            assert tag not in ("SELECT", "INPUT"), "傳票名稱要唯讀顯示，不是 %s" % tag
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/voucher.html?id={vid}")
+    el = page.locator('[data-testid="voucher-kind"]')
+    el.wait_for(state="visible", timeout=15000)
+    page.wait_for_function(
+        "() => (document.querySelector('[data-testid=\"voucher-kind\"]').innerText || '')"
+        ".includes('傳票')", timeout=10000)
+    text = el.inner_text().strip()
+    tag = el.evaluate("e => e.tagName")
+    print("JV29 頁面實測：傳票名稱 =", repr(text), "／元素", tag)
+    assert text == "支出傳票", text
+    assert tag not in ("SELECT", "INPUT"), "傳票名稱要唯讀顯示，不是 %s" % tag
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -231,32 +226,28 @@ def test_jv29_switching_to_manual_on_an_existing_draft_and_bad_values(client, ma
 
 
 @pytest.mark.e2e
-def test_jv29_the_page_lets_a_draft_pick_the_category_by_hand(live_server, client, make_user):
+def test_jv29_the_page_lets_a_draft_pick_the_category_by_hand(live_server, client, make_user, e2e_browser):
     u, p = make_user(username="jv29_pick", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": u, "password": p})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
     vid = _create(client, hdr, [_ln("1113", 1000, 0), _ln("4111", 0, 1000)])
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            page.goto(f"{live_server}/pages/voucher.html?id={vid}")
-            sel = page.locator('[data-testid="voucher-kind-select"]')
-            sel.wait_for(state="visible", timeout=15000)
-            before = sel.input_value()
-            sel.select_option("支")
-            page.click('[data-testid="voucher-save"]')
-            page.wait_for_function(
-                "() => (document.querySelector('[data-testid=\"voucher-kind\"]').innerText || '')"
-                ".includes('支出傳票') && !Alpine.$data(document.querySelector('[x-data]')).busy",
-                timeout=10000)
-            page.reload()
-            sel.wait_for(state="visible", timeout=15000)
-            after = (sel.input_value(), page.locator('[data-testid="voucher-kind"]').inner_text().strip())
-            print("N6 頁面實測：選單原本 %r ⇒ 選支出、存檔、重整 ⇒ %r" % (before, after))
-            assert before == "auto", before
-            assert after == ("支", "支出傳票"), after
-            assert (_category(vid), _manual(vid)) == ("支", 1)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    page.goto(f"{live_server}/pages/voucher.html?id={vid}")
+    sel = page.locator('[data-testid="voucher-kind-select"]')
+    sel.wait_for(state="visible", timeout=15000)
+    before = sel.input_value()
+    sel.select_option("支")
+    page.click('[data-testid="voucher-save"]')
+    page.wait_for_function(
+        "() => (document.querySelector('[data-testid=\"voucher-kind\"]').innerText || '')"
+        ".includes('支出傳票') && !Alpine.$data(document.querySelector('[x-data]')).busy",
+        timeout=10000)
+    page.reload()
+    sel.wait_for(state="visible", timeout=15000)
+    after = (sel.input_value(), page.locator('[data-testid="voucher-kind"]').inner_text().strip())
+    print("N6 頁面實測：選單原本 %r ⇒ 選支出、存檔、重整 ⇒ %r" % (before, after))
+    assert before == "auto", before
+    assert after == ("支", "支出傳票"), after
+    assert (_category(vid), _manual(vid)) == ("支", 1)

@@ -67,10 +67,8 @@ def test_mp3_tender_points_carry_their_deadline_status(client, make_user, _geo, 
 # ══════════════════════════════════════════════════════════════════════
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
@@ -105,49 +103,45 @@ def _table(page):
 
 
 @pytest.mark.e2e
-def test_mp3_tenders_are_coloured_by_deadline_and_closed_ones_hidden_by_default(live_server, make_user, _geo):
+def test_mp3_tenders_are_coloured_by_deadline_and_closed_ones_hidden_by_default(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp3_page", role="superadmin")
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            page.route("**/api/map/points*", lambda route: route.fulfill(
-                status=200, content_type="application/json",
-                body=json.dumps({"points": _POINTS, "locations": [], "sources": []})))
-            page.route("**/tile.openstreetmap.org/**", lambda route: route.abort())
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/map.html")
-            page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
-                                   " && d.info.points.length === 5 }", timeout=15000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            default = page.locator("select.mp-tender-filter").input_value()
-            rows = _table(page)
-            print("MP3 預設（%s）表格：%r" % (default, rows))
-            assert default == "notClosed"
-            shown = [r[0] for r in rows]
-            assert "T-DONE" not in shown, "預設不顯示已截止：%r" % rows
-            assert {"T-OPEN", "T-SOON", "T-UNK", "客戶甲"} <= set(shown), "未截止／不明／非標案都要在：%r" % rows
-            label = {r[0]: r[1] for r in rows}
-            assert label["T-SOON"] == "7 天內截止" and label["T-UNK"] == "截止日不明", rows
-            colours = {r[0]: r[2] for r in rows if r[2]}
-            assert colours["T-SOON"] != colours["T-OPEN"], "即將截止要跟未截止不同色：%r" % colours
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    page.route("**/api/map/points*", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body=json.dumps({"points": _POINTS, "locations": [], "sources": []})))
+    page.route("**/tile.openstreetmap.org/**", lambda route: route.abort())
+    _login(page, live_server, u, p)
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function("() => { const d = " + _D + "; return d.info && d.info.points"
+                           " && d.info.points.length === 5 }", timeout=15000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    default = page.locator("select.mp-tender-filter").input_value()
+    rows = _table(page)
+    print("MP3 預設（%s）表格：%r" % (default, rows))
+    assert default == "notClosed"
+    shown = [r[0] for r in rows]
+    assert "T-DONE" not in shown, "預設不顯示已截止：%r" % rows
+    assert {"T-OPEN", "T-SOON", "T-UNK", "客戶甲"} <= set(shown), "未截止／不明／非標案都要在：%r" % rows
+    label = {r[0]: r[1] for r in rows}
+    assert label["T-SOON"] == "7 天內截止" and label["T-UNK"] == "截止日不明", rows
+    colours = {r[0]: r[2] for r in rows if r[2]}
+    assert colours["T-SOON"] != colours["T-OPEN"], "即將截止要跟未截止不同色：%r" % colours
 
-            page.locator("select.mp-tender-filter").select_option("all")
-            _rendered(page)   # PERF #6：原本固定等 200ms
-            assert "T-DONE" in _names(page), "「全部」要看得到已截止"
-            page.locator("select.mp-tender-filter").select_option("closed")
-            _rendered(page)   # PERF #6：原本固定等 200ms
-            names = _names(page)
-            print("MP3 只看已截止：%r" % names)
-            assert set(names) == {"T-DONE", "客戶甲"}, "只篩標案，其他資料不受影響：%r" % names
+    page.locator("select.mp-tender-filter").select_option("all")
+    _rendered(page)   # PERF #6：原本固定等 200ms
+    assert "T-DONE" in _names(page), "「全部」要看得到已截止"
+    page.locator("select.mp-tender-filter").select_option("closed")
+    _rendered(page)   # PERF #6：原本固定等 200ms
+    names = _names(page)
+    print("MP3 只看已截止：%r" % names)
+    assert set(names) == {"T-DONE", "客戶甲"}, "只篩標案，其他資料不受影響：%r" % names
 
-            # 地圖上的圖釘：已截止那一顆是灰色。
-            page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
-            page.wait_for_function("() => document.querySelectorAll('.leaflet-marker-icon .mp-pin').length === 2",
-                                   timeout=15000)
-            bg = page.evaluate("""() => Array.from(document.querySelectorAll('.leaflet-marker-icon .mp-pin'))
-                                    .map(e => [e.textContent, getComputedStyle(e).backgroundColor])""")
-            print("MP3 地圖圖釘：%r" % bg)
-            assert ["標", "rgb(156, 163, 175)"] in bg, bg
-        finally:
-            browser.close()
+    # 地圖上的圖釘：已截止那一顆是灰色。
+    page.evaluate("() => { const d = " + _D + "; if (!d.mapOpen) d.openMap() }")
+    page.wait_for_function("() => document.querySelectorAll('.leaflet-marker-icon .mp-pin').length === 2",
+                           timeout=15000)
+    bg = page.evaluate("""() => Array.from(document.querySelectorAll('.leaflet-marker-icon .mp-pin'))
+                            .map(e => [e.textContent, getComputedStyle(e).backgroundColor])""")
+    print("MP3 地圖圖釘：%r" % bg)
+    assert ["標", "rgb(156, 163, 175)"] in bg, bg

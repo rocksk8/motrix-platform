@@ -42,7 +42,6 @@ from urllib.parse import urlparse
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -71,27 +70,6 @@ TABS = ("案件", "已上傳檔案")
 TYPED = "工資"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 `test_e2e_account_tree_2026_09_23.py` 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield "http://127.0.0.1:%d" % port
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -214,7 +192,7 @@ def _open_editor(page):
 
 
 @pytest.mark.e2e
-def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
+def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user, e2e_browser):
     """🔴 **改過的摘要，切頁籤回來不可以被蓋回去。**（`§164` 的不變量）
 
     ```
@@ -231,46 +209,44 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
     _seed_case()
     page_errors = []
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        page.on("pageerror", lambda e: page_errors.append(str(e)))
-        _login(page, live_server, username, password)
-        page.goto("%s/pages/voucher.html" % live_server)
-        _ready(page)
-        # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
-        _open_editor(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("pageerror", lambda e: page_errors.append(str(e)))
+    _login(page, live_server, username, password)
+    page.goto("%s/pages/voucher.html" % live_server)
+    _ready(page)
+    # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
+    _open_editor(page)
 
-        _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
-        tab_case = _need(page,
-                         '%s:has-text("案件")' % HOOKS["tab"], "「案件」頁籤")
-        tab_file = _need(page,
-                         '%s:has-text("已上傳檔案")' % HOOKS["tab"],
-                         "「已上傳檔案」頁籤")
+    _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
+    tab_case = _need(page,
+                     '%s:has-text("案件")' % HOOKS["tab"], "「案件」頁籤")
+    tab_file = _need(page,
+                     '%s:has-text("已上傳檔案")' % HOOKS["tab"],
+                     "「已上傳檔案」頁籤")
 
-        tab_case.first.click()
-        _items_shown(page)
-        _need(page, HOOKS["item"], "案件來源的清單").first.click()
-        _brought_in(page)
+    tab_case.first.click()
+    _items_shown(page)
+    _need(page, HOOKS["item"], "案件來源的清單").first.click()
+    _brought_in(page)
 
-        box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
-        brought_in = box.input_value()
+    box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
+    brought_in = box.input_value()
 
-        # ② 使用者自己續打（`§164`：事由沒有來源可以帶）
-        box.click()
-        box.fill(brought_in + TYPED)
-        edited = box.input_value()
+    # ② 使用者自己續打（`§164`：事由沒有來源可以帶）
+    box.click()
+    box.fill(brought_in + TYPED)
+    edited = box.input_value()
 
-        # ③ 切走再切回來
-        # ⚠️ 這兩個固定等待**保留**（PERF #6 的 N 類）：要證明的是「切頁籤**不會**重新帶入」，
-        #    「沒有發生」沒有事件可以等 ⇒ 給錯誤寫法（若有的非同步重新帶入）一段時間發生。
-        tab_file.first.click()
-        page.wait_for_timeout(300)
-        tab_case.first.click()
-        page.wait_for_timeout(500)
+    # ③ 切走再切回來
+    # ⚠️ 這兩個固定等待**保留**（PERF #6 的 N 類）：要證明的是「切頁籤**不會**重新帶入」，
+    #    「沒有發生」沒有事件可以等 ⇒ 給錯誤寫法（若有的非同步重新帶入）一段時間發生。
+    tab_file.first.click()
+    page.wait_for_timeout(300)
+    tab_case.first.click()
+    page.wait_for_timeout(500)
 
-        after = box.input_value()
-        browser.close()
+    after = box.input_value()
 
     assert not page_errors, (
         "頁面丟了例外：%s\n" % page_errors[:3]
@@ -291,7 +267,7 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user):
 
 
 @pytest.mark.e2e
-def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
+def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_browser):
     """🔴 **改過的摘要，存檔後重新整理不可以被蓋回去。**
 
     ⚠️ 與上一題是**兩種不同的失效**，不可以只做一個：
@@ -306,60 +282,58 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user):
                                    modules=["cashier"])
     _seed_case(quote_no="MQ-202608-010", customer="向量圓專")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        _login(page, live_server, username, password)
-        page.goto("%s/pages/voucher.html" % live_server)
-        _ready(page)
-        # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
-        _open_editor(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto("%s/pages/voucher.html" % live_server)
+    _ready(page)
+    # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
+    _open_editor(page)
 
-        _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
-        _need(page, '%s:has-text("案件")' % HOOKS["tab"],
-              "「案件」頁籤").first.click()
-        _items_shown(page)
-        _need(page, HOOKS["item"], "案件來源的清單").first.click()
-        _brought_in(page)
+    _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
+    _need(page, '%s:has-text("案件")' % HOOKS["tab"],
+          "「案件」頁籤").first.click()
+    _items_shown(page)
+    _need(page, HOOKS["item"], "案件來源的清單").first.click()
+    _brought_in(page)
 
-        box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
-        box.fill(box.input_value() + TYPED)
-        edited = box.input_value()
+    box = _need(page, HOOKS["summary"], "分錄行的摘要欄").first
+    box.fill(box.input_value() + TYPED)
+    edited = box.input_value()
 
-        # 🔴 存檔前一定要有**會計科目** —— B 退回的那一格。
-        #    db.py:4735 `account_code TEXT NOT NULL REFERENCES account_items(code)`
-        #    ⇒ 空字串或不存在的代號會撞 FOREIGN KEY；B 已把它翻成 400
-        #      「第 1 行還沒有選會計科目」。
-        # ☠️ 我第一版點完來源就按儲存，**一個科目都沒填** ⇒ 這一題紅在
-        #    「存不下去」而不是「摘要被蓋回去」—— 紅的理由不是我要驗的那一件。
-        code = page.locator('input[x-model="l.account_code"]')
-        if code.count() == 0:
-            browser.close()
-            pytest.fail(
-                "找不到會計科目的輸入框（`input[x-model=\"l.account_code\"]`）"
-                "—— **退回給我**改這個觀測點。")
-        code.first.fill("1113")
-
-        save = page.locator('button:has-text("儲存")')
-        if save.count() == 0:
-            browser.close()
-            pytest.fail("頁面上找不到「儲存」—— 摘要改了**存不下去**。")
-        _saved(page, lambda: save.first.click())
-
-        page.reload()
-        _ready(page)
-        # 🔴 `JV8`：重整之後 `editing` 又回到 false
-        #    ⇒ 要**從左側清單點開刚存的那張**才看得到摘要。
-        # ⚙️ 而這比舊寫法**更貼近這一題要驗的事**：
-        #    docstring 逐字寫的就是「使用者改完、存檔、關掉；
-        #    **下次打開才變回來**」—— 而「下次打開」就是點清單。
-        # ⚠️ 不能改按「＋新增傳票」：那是**另一張空的**，
-        #    摘要欄會是空字串 ⇒ 這一題會紅得像「被蓋回去」，
-        #    而那是**我量錯了**，不是產品錯了。
-        row = _need(page, HOOKS["row"], "左側傳票清單的列").first
-        _opened(page, lambda: row.click())
-        after = _need(page, HOOKS["summary"], "分錄行的摘要欄").first.input_value()
+    # 🔴 存檔前一定要有**會計科目** —— B 退回的那一格。
+    #    db.py:4735 `account_code TEXT NOT NULL REFERENCES account_items(code)`
+    #    ⇒ 空字串或不存在的代號會撞 FOREIGN KEY；B 已把它翻成 400
+    #      「第 1 行還沒有選會計科目」。
+    # ☠️ 我第一版點完來源就按儲存，**一個科目都沒填** ⇒ 這一題紅在
+    #    「存不下去」而不是「摘要被蓋回去」—— 紅的理由不是我要驗的那一件。
+    code = page.locator('input[x-model="l.account_code"]')
+    if code.count() == 0:
         browser.close()
+        pytest.fail(
+            "找不到會計科目的輸入框（`input[x-model=\"l.account_code\"]`）"
+            "—— **退回給我**改這個觀測點。")
+    code.first.fill("1113")
+
+    save = page.locator('button:has-text("儲存")')
+    if save.count() == 0:
+        browser.close()
+        pytest.fail("頁面上找不到「儲存」—— 摘要改了**存不下去**。")
+    _saved(page, lambda: save.first.click())
+
+    page.reload()
+    _ready(page)
+    # 🔴 `JV8`：重整之後 `editing` 又回到 false
+    #    ⇒ 要**從左側清單點開刚存的那張**才看得到摘要。
+    # ⚙️ 而這比舊寫法**更貼近這一題要驗的事**：
+    #    docstring 逐字寫的就是「使用者改完、存檔、關掉；
+    #    **下次打開才變回來**」—— 而「下次打開」就是點清單。
+    # ⚠️ 不能改按「＋新增傳票」：那是**另一張空的**，
+    #    摘要欄會是空字串 ⇒ 這一題會紅得像「被蓋回去」，
+    #    而那是**我量錯了**，不是產品錯了。
+    row = _need(page, HOOKS["row"], "左側傳票清單的列").first
+    _opened(page, lambda: row.click())
+    after = _need(page, HOOKS["summary"], "分錄行的摘要欄").first.input_value()
 
     assert after == edited, (
         "重新整理之後摘要變回帶入時的樣子：\n"

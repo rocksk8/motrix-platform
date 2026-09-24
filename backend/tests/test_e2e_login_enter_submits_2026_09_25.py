@@ -6,7 +6,6 @@
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 
 U = "input[x-model='username']"
@@ -79,22 +78,18 @@ def _goto_login(page, live_server):
 @pytest.mark.e2e
 @pytest.mark.parametrize("webauthn", [False, True], ids=["plain", "webauthn"])
 @pytest.mark.parametrize("scenario", sorted(SCENARIOS))
-def test_enter_logs_in(live_server, make_user, scenario, webauthn):
+def test_enter_logs_in(live_server, make_user, scenario, webauthn, e2e_browser):
     u, pw = make_user(username=("le_" + scenario)[:20] + ("_w" if webauthn else ""), role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            if webauthn:   # 已設定 Passkey：頁面多一顆「或使用 Passkey 登入」
-                page.route("**/api/system/webauthn-config-status", lambda r: r.fulfill(
-                    status=200, content_type="application/json", body='{"configured": true}'))
-            _goto_login(page, live_server)
-            if webauthn:
-                assert page.locator("button:has-text('Passkey')").is_visible(), "前提：Passkey 鈕要出現"
-            SCENARIOS[scenario](page, u, pw)
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    if webauthn:   # 已設定 Passkey：頁面多一顆「或使用 Passkey 登入」
+        page.route("**/api/system/webauthn-config-status", lambda r: r.fulfill(
+            status=200, content_type="application/json", body='{"configured": true}'))
+    _goto_login(page, live_server)
+    if webauthn:
+        assert page.locator("button:has-text('Passkey')").is_visible(), "前提：Passkey 鈕要出現"
+    SCENARIOS[scenario](page, u, pw)
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
 
 
 # ── 顯式 Enter 處理（使用者 2026-09-25：自己打字後按 Enter「完全沒反應」，正式機與開發機都一樣）──
@@ -114,66 +109,50 @@ def _open_login(browser, live_server):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("field", [U, P], ids=["username", "password"])
-def test_a_page_level_enter_keydown_submits(live_server, make_user, field):
+def test_a_page_level_enter_keydown_submits(live_server, make_user, field, e2e_browser):
     u, pw = make_user(username="lk_" + ("u" if field == U else "p"), role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, posts = _open_login(browser, live_server)
-            page.fill(U, u); page.fill(P, pw)
-            page.evaluate(KEY, [field, "keydown", False])
-            page.evaluate(KEY, [field, "keyup", False])
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
-            assert len(posts) == 1, posts
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, posts = _open_login(browser, live_server)
+    page.fill(U, u); page.fill(P, pw)
+    page.evaluate(KEY, [field, "keydown", False])
+    page.evaluate(KEY, [field, "keyup", False])
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    assert len(posts) == 1, posts
 
 
 @pytest.mark.e2e
-def test_enter_that_only_reaches_the_page_as_keyup_still_submits(live_server, make_user):
+def test_enter_that_only_reaches_the_page_as_keyup_still_submits(live_server, make_user, e2e_browser):
     """帳號建議下拉吃掉 keydown 時，頁面只收到 keyup。"""
     u, pw = make_user(username="lk_up", role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, posts = _open_login(browser, live_server)
-            page.fill(U, u); page.fill(P, pw)
-            page.evaluate(KEY, [U, "keyup", False])
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
-            assert len(posts) == 1, posts
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, posts = _open_login(browser, live_server)
+    page.fill(U, u); page.fill(P, pw)
+    page.evaluate(KEY, [U, "keyup", False])
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    assert len(posts) == 1, posts
 
 
 @pytest.mark.e2e
-def test_pressing_enter_repeatedly_sends_one_login(live_server, make_user):
+def test_pressing_enter_repeatedly_sends_one_login(live_server, make_user, e2e_browser):
     u, pw = make_user(username="lk_rep", role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, posts = _open_login(browser, live_server)
-            page.route("**/api/auth/login", lambda r: (page.wait_for_timeout(800), r.continue_()))   # 回應慢一點
-            page.fill(U, u); page.click(P); page.keyboard.type(pw)
-            for _ in range(3):
-                page.keyboard.press("Enter")
-            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
-            assert len(posts) == 1, posts
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, posts = _open_login(browser, live_server)
+    page.route("**/api/auth/login", lambda r: (page.wait_for_timeout(800), r.continue_()))   # 回應慢一點
+    page.fill(U, u); page.click(P); page.keyboard.type(pw)
+    for _ in range(3):
+        page.keyboard.press("Enter")
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    assert len(posts) == 1, posts
 
 
 @pytest.mark.e2e
-def test_enter_while_composing_does_not_submit(live_server, make_user):
+def test_enter_while_composing_does_not_submit(live_server, make_user, e2e_browser):
     """輸入法選字的 Enter（isComposing）不送出，它的 keyup 也不送。"""
     u, pw = make_user(username="lk_ime", role="admin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page, posts = _open_login(browser, live_server)
-            page.fill(U, u); page.fill(P, pw)
-            page.evaluate(KEY, [U, "keydown", True])
-            page.evaluate(KEY, [U, "keyup", False])
-            page.wait_for_timeout(1500)
-            assert posts == [] and page.url.endswith("/login.html"), (posts, page.url)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page, posts = _open_login(browser, live_server)
+    page.fill(U, u); page.fill(P, pw)
+    page.evaluate(KEY, [U, "keydown", True])
+    page.evaluate(KEY, [U, "keyup", False])
+    page.wait_for_timeout(1500)
+    assert posts == [] and page.url.endswith("/login.html"), (posts, page.url)

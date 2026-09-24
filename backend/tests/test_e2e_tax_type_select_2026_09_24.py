@@ -9,10 +9,8 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 
 def _ready(page):
@@ -48,59 +46,55 @@ def _uid(username):
 
 
 @pytest.mark.e2e
-def test_a_new_quote_offers_only_the_three_legal_tax_types(live_server, make_user):
+def test_a_new_quote_offers_only_the_three_legal_tax_types(live_server, make_user, e2e_browser):
     u, pw = make_user(username="alice", role="superadmin")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        _login(page, live_server, u, pw)
-        page.goto(live_server + "/pages/quotation-form.html")
-        _ready(page)
-        sel = page.locator("select[data-tax-type]")
-        values = sel.evaluate("s => [...s.options].filter(o => o.style.display !== 'none' && !o.disabled)"
-                              ".map(o => o.value)")
-        assert values == ["taxable", "zero", "exempt"]
-        assert sel.input_value() == "taxable"
-        # 免稅 ⇒ 稅額 0、合計標籤寫「免稅」
-        page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                      " d.q.items = [{id: 1, type: 'item', description: 'x', qty: 1, cost: 0, unitPrice: 1000,"
-                      " amount: 1000, margin: 1}]; d.calcTotals() }")
-        sel.select_option("exempt")
-        got = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                            " return {tax: d.tot.tax, rate: d.q.taxRate, type: d.q.taxType, label: d.taxLineLabel()} }")
-        assert got == {"tax": 0, "rate": 0, "type": "exempt", "label": "免稅"}
-        sel.select_option("taxable")
-        assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 50
-        browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, pw)
+    page.goto(live_server + "/pages/quotation-form.html")
+    _ready(page)
+    sel = page.locator("select[data-tax-type]")
+    values = sel.evaluate("s => [...s.options].filter(o => o.style.display !== 'none' && !o.disabled)"
+                          ".map(o => o.value)")
+    assert values == ["taxable", "zero", "exempt"]
+    assert sel.input_value() == "taxable"
+    # 免稅 ⇒ 稅額 0、合計標籤寫「免稅」
+    page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                  " d.q.items = [{id: 1, type: 'item', description: 'x', qty: 1, cost: 0, unitPrice: 1000,"
+                  " amount: 1000, margin: 1}]; d.calcTotals() }")
+    sel.select_option("exempt")
+    got = page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                        " return {tax: d.tot.tax, rate: d.q.taxRate, type: d.q.taxType, label: d.taxLineLabel()} }")
+    assert got == {"tax": 0, "rate": 0, "type": "exempt", "label": "免稅"}
+    sel.select_option("taxable")
+    assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 50
 
 
 @pytest.mark.e2e
 def test_an_old_legacy_rate_quote_is_shown_as_disabled_and_must_be_changed_before_saving(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     u, pw = make_user(username="alice", role="superadmin")
     _legacy_quote("MQ-LEG3", _uid("alice"))
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        _login(page, live_server, u, pw)
-        page.goto(live_server + "/pages/quotation-form.html?id=MQ-LEG3")
-        page.wait_for_function("() => { const d = window.Alpine && document.querySelector('[x-data]')"
-                               " && Alpine.$data(document.querySelector('[x-data]')); return d && d.q.quoteNo === 'MQ-LEG3' }",
-                               timeout=15000)
-        note = page.locator("[data-legacy-tax]")
-        note.wait_for(state="visible", timeout=5000)
-        assert "3%" in note.inner_text()
-        # 數字維持原樣（不因為打開就被改算）
-        assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 300
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, pw)
+    page.goto(live_server + "/pages/quotation-form.html?id=MQ-LEG3")
+    page.wait_for_function("() => { const d = window.Alpine && document.querySelector('[x-data]')"
+                           " && Alpine.$data(document.querySelector('[x-data]')); return d && d.q.quoteNo === 'MQ-LEG3' }",
+                           timeout=15000)
+    note = page.locator("[data-legacy-tax]")
+    note.wait_for(state="visible", timeout=5000)
+    assert "3%" in note.inner_text()
+    # 數字維持原樣（不因為打開就被改算）
+    assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 300
 
-        messages = []
-        page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
-        # PERF #6：原本固定等 500ms ⇒ 等那個提示對話框出現（沒出現就逾時紅，說明在下一行）
-        with page.expect_event("dialog", timeout=10000):
-            page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).saveDraft()")
-        assert messages and "已停用的稅率" in messages[0], messages
+    messages = []
+    page.on("dialog", lambda d: (messages.append(d.message), d.dismiss()))
+    # PERF #6：原本固定等 500ms ⇒ 等那個提示對話框出現（沒出現就逾時紅，說明在下一行）
+    with page.expect_event("dialog", timeout=10000):
+        page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).saveDraft()")
+    assert messages and "已停用的稅率" in messages[0], messages
 
-        page.locator("select[data-tax-type]").select_option("taxable")
-        note.wait_for(state="hidden", timeout=3000)
-        assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 500
-        browser.close()
+    page.locator("select[data-tax-type]").select_option("taxable")
+    note.wait_for(state="hidden", timeout=3000)
+    assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 500

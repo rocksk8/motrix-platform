@@ -19,33 +19,11 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 test_e2e_playwright_2026_09_07.py 的同名 fixture：`client` 已把
-    db/uploads 導向隔離暫存路徑，這裡再開一個真實 loopback 監聽給瀏覽器打。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -104,7 +82,7 @@ def _wait_kpi(page, label_text, expected):
 
 
 @pytest.mark.e2e
-def test_period_bar_drives_income_expense_block(live_server, make_user):
+def test_period_bar_drives_income_expense_block(live_server, make_user, e2e_browser):
     """核心回歸：period-bar 切到不同月份／不同季，「本期收支」的收入數字要跟著變。
 
     種三筆已收款：2026-07 收 110000、2026-08 收 220000、2026-10 收 990000。
@@ -124,41 +102,37 @@ def test_period_bar_drives_income_expense_block(live_server, make_user):
     finally:
         conn.close()
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
-        try:
-            _login(page, live_server, username, password)
-            page.goto(f"{live_server}/pages/reports.html")
-            page.wait_for_selector(".period-bar", timeout=20000)
-            page.wait_for_selector(".kpi-card__lbl:text-is('當月收入')", timeout=20000)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, username, password)
+    page.goto(f"{live_server}/pages/reports.html")
+    page.wait_for_selector(".period-bar", timeout=20000)
+    page.wait_for_selector(".kpi-card__lbl:text-is('當月收入')", timeout=20000)
 
-            # ── 月報 2026-07 ──────────────────────────────────────────────
-            # 2026-09-24 AC2：預設改權責口徑（收入依階段完成）；本題種的是「依收款日」的收入，
-            # 驗的是期別同步不是口徑 ⇒ 明確切到現金口徑（切換本身見 test_e2e_report_recognition）
-            page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).setBasis('cash')")
-            page.click('.period-type-btn:has-text("月報")')
-            page.select_option('.period-bar select >> nth=0', "2026")
-            page.select_option('.period-bar select >> nth=1', "7")
-            _wait_kpi(page, "當月收入", 110000)
-            assert _kpi_value(page, "當月收入") == 110000
+    # ── 月報 2026-07 ──────────────────────────────────────────────
+    # 2026-09-24 AC2：預設改權責口徑（收入依階段完成）；本題種的是「依收款日」的收入，
+    # 驗的是期別同步不是口徑 ⇒ 明確切到現金口徑（切換本身見 test_e2e_report_recognition）
+    page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).setBasis('cash')")
+    page.click('.period-type-btn:has-text("月報")')
+    page.select_option('.period-bar select >> nth=0', "2026")
+    page.select_option('.period-bar select >> nth=1', "7")
+    _wait_kpi(page, "當月收入", 110000)
+    assert _kpi_value(page, "當月收入") == 110000
 
-            # ── 月報 2026-08：這一步在修好之前完全不會變 ──────────────────
-            page.select_option('.period-bar select >> nth=1', "8")
-            _wait_kpi(page, "當月收入", 220000)
-            assert _kpi_value(page, "當月收入") == 220000
+    # ── 月報 2026-08：這一步在修好之前完全不會變 ──────────────────
+    page.select_option('.period-bar select >> nth=1', "8")
+    _wait_kpi(page, "當月收入", 220000)
+    assert _kpi_value(page, "當月收入") == 220000
 
-            # ── 季報 Q3：標籤變「本季」，金額是七＋八 ─────────────────────
-            page.click('.period-type-btn:has-text("季報")')
-            page.select_option('.period-bar select >> nth=1', "3")
-            page.wait_for_selector(".kpi-card__lbl:text-is('本季收入')", timeout=20000)
-            _wait_kpi(page, "本季收入", 330000)
-            assert _kpi_value(page, "本季收入") == 330000
+    # ── 季報 Q3：標籤變「本季」，金額是七＋八 ─────────────────────
+    page.click('.period-type-btn:has-text("季報")')
+    page.select_option('.period-bar select >> nth=1', "3")
+    page.wait_for_selector(".kpi-card__lbl:text-is('本季收入')", timeout=20000)
+    _wait_kpi(page, "本季收入", 330000)
+    assert _kpi_value(page, "本季收入") == 330000
 
-            # ── 年報：標籤變「今年度」，金額含十月那筆 ────────────────────
-            page.click('.period-type-btn:has-text("年報")')
-            page.wait_for_selector(".kpi-card__lbl:text-is('今年度收入')", timeout=20000)
-            _wait_kpi(page, "今年度收入", 1320000)
-            assert _kpi_value(page, "今年度收入") == 1320000
-        finally:
-            browser.close()
+    # ── 年報：標籤變「今年度」，金額含十月那筆 ────────────────────
+    page.click('.period-type-btn:has-text("年報")')
+    page.wait_for_selector(".kpi-card__lbl:text-is('今年度收入')", timeout=20000)
+    _wait_kpi(page, "今年度收入", 1320000)
+    assert _kpi_value(page, "今年度收入") == 1320000

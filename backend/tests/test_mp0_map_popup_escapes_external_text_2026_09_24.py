@@ -14,11 +14,9 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 from tests._map_tiles import block_tiles  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 #: ⚠️ 用 `[x-data="mapPage()"]`：頁上最前面的 `[x-data]` 是頂欄的，不是地圖頁的。
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
@@ -41,32 +39,28 @@ def _points_body():
 
 
 @pytest.mark.e2e
-def test_mp0_a_point_popup_shows_external_text_as_text(live_server, make_user):
+def test_mp0_a_point_popup_shows_external_text_as_text(live_server, make_user, e2e_browser):
     u, p = make_user(username="mp0_xss", role="superadmin")
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
-        try:
-            page.route("**/api/map/points*", lambda route: route.fulfill(
-                status=200, content_type="application/json", body=_points_body()))
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/map.html")
-            page.wait_for_function(
-                "() => { const d = " + _D + ";"
-                " return d.info && d.info.points && d.info.points.length === 1 }", timeout=15000)
-            page.evaluate("() => " + _D + ".openMap()")
-            pin = page.locator(".leaflet-marker-icon .mp-pin").first
-            pin.wait_for(state="visible", timeout=15000)
-            pin.click()
-            pop = page.locator(".leaflet-popup-content").first
-            pop.wait_for(state="visible", timeout=5000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            imgs = pop.locator("img").count()
-            text = pop.inner_text()
-            fired = page.evaluate("() => window.__mp0 === 1")
-            print("MP0 頁面實測：彈窗 img 數 %d／onerror 執行 %s／文字 %r" % (imgs, fired, text[:80]))
-            assert imgs == 0 and not fired, "外部文字被當成 HTML：img %d 個、onerror 執行 %s" % (imgs, fired)
-            assert EVIL in text, "文字要原樣顯示（跳脫後看得到），不是被吃掉：%r" % text
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    page.route("**/api/map/points*", lambda route: route.fulfill(
+        status=200, content_type="application/json", body=_points_body()))
+    _login(page, live_server, u, p)
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function(
+        "() => { const d = " + _D + ";"
+        " return d.info && d.info.points && d.info.points.length === 1 }", timeout=15000)
+    page.evaluate("() => " + _D + ".openMap()")
+    pin = page.locator(".leaflet-marker-icon .mp-pin").first
+    pin.wait_for(state="visible", timeout=15000)
+    pin.click()
+    pop = page.locator(".leaflet-popup-content").first
+    pop.wait_for(state="visible", timeout=5000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    imgs = pop.locator("img").count()
+    text = pop.inner_text()
+    fired = page.evaluate("() => window.__mp0 === 1")
+    print("MP0 頁面實測：彈窗 img 數 %d／onerror 執行 %s／文字 %r" % (imgs, fired, text[:80]))
+    assert imgs == 0 and not fired, "外部文字被當成 HTML：img %d 個、onerror 執行 %s" % (imgs, fired)
+    assert EVIL in text, "文字要原樣顯示（跳脫後看得到），不是被吃掉：%r" % text

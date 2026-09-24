@@ -96,8 +96,7 @@ def test_jv31_a_posted_voucher_carries_the_bookkeeper_signature(client, make_use
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402
-    live_server, _login as _page_login)                               # noqa: F401
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login  # noqa: E402
 
 
 def _user_id(username):
@@ -121,7 +120,7 @@ def _labels_on_page(page, base, vid):
 
 @pytest.mark.e2e
 def test_jv31_the_page_shows_one_sign_cell_per_tier_plus_maker_and_bookkeeper(
-        live_server, client, make_user):
+        live_server, client, make_user, e2e_browser):
     su, sp = make_user(username="jv31_page", role="superadmin", modules=["cashier"])
     r = client.post("/api/auth/login", json={"username": su, "password": sp})
     hdr = {"Authorization": "Bearer " + r.json()["token"]}
@@ -140,15 +139,11 @@ def test_jv31_the_page_shows_one_sign_cell_per_tier_plus_maker_and_bookkeeper(
     r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV31", "lines": _LINES})
     builtin = r.json()["id"]
 
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _page_login(page, live_server, su, sp)
-            got4 = _labels_on_page(page, live_server, four)
-            got2 = _labels_on_page(page, live_server, builtin)
-            print("JV31 頁面實測：四層 ⇒", got4, "／內建兩層 ⇒", got2)
-            assert len(got4) == 6 and got4[0] == "製票" and got4[-1] == "記帳", got4
-            assert got2 == ["製票", "覆核", "主管", "記帳"], got2
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _page_login(page, live_server, su, sp)
+    got4 = _labels_on_page(page, live_server, four)
+    got2 = _labels_on_page(page, live_server, builtin)
+    print("JV31 頁面實測：四層 ⇒", got4, "／內建兩層 ⇒", got2)
+    assert len(got4) == 6 and got4[0] == "製票" and got4[-1] == "記帳", got4
+    assert got2 == ["製票", "覆核", "主管", "記帳"], got2

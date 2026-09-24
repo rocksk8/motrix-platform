@@ -12,7 +12,6 @@ import json
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 
 MD = "Alpine.$data(document.querySelector('.mp-wrap'))"
@@ -96,37 +95,29 @@ def _frames(page, n=2):
 
 
 @pytest.mark.e2e
-def test_scrolling_the_map_under_the_topbar_does_not_cover_it(live_server, make_user, _geo):
+def test_scrolling_the_map_under_the_topbar_does_not_cover_it(live_server, make_user, _geo, e2e_browser):
     u = make_user(username="mut_e1", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            # 捲到地圖頂端跑到頂欄正中間（使用者「向下拖曳」之後的樣子）
-            page.evaluate("() => { const t = document.getElementById('mp-canvas').getBoundingClientRect().top; window.scrollBy(0, t - 30) }")
-            _frames(page)
-            r = page.evaluate(HITS)
-            assert r["mapTop"] < r["hdr"] - 20, ("前提：地圖要捲到頂欄底下", r["mapTop"], r["hdr"])
-            bad = [h for h in r["out"] if not h["ok"]]
-            assert not bad, ("頂欄範圍內被地圖蓋住（穿模）", bad)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    # 捲到地圖頂端跑到頂欄正中間（使用者「向下拖曳」之後的樣子）
+    page.evaluate("() => { const t = document.getElementById('mp-canvas').getBoundingClientRect().top; window.scrollBy(0, t - 30) }")
+    _frames(page)
+    r = page.evaluate(HITS)
+    assert r["mapTop"] < r["hdr"] - 20, ("前提：地圖要捲到頂欄底下", r["mapTop"], r["hdr"])
+    bad = [h for h in r["out"] if not h["ok"]]
+    assert not bad, ("頂欄範圍內被地圖蓋住（穿模）", bad)
 
 
 @pytest.mark.e2e
-def test_fullscreen_map_still_covers_the_whole_page(live_server, make_user, _geo):
+def test_fullscreen_map_still_covers_the_whole_page(live_server, make_user, _geo, e2e_browser):
     """反向控制：全螢幕是刻意蓋住頂欄的，修穿模不可以連它一起壓下去。"""
     u = make_user(username="mut_e2", role="superadmin")
     _seed()
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = _open(browser, live_server, u)
-            page.locator("button.mp-full-btn").click()
-            page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
-            _frames(page)
-            hit = page.evaluate("() => { const e = document.elementFromPoint(720, 20); return !!(e && e.closest('.mp-map-panel')) }")
-            assert hit, "全螢幕時頂欄位置應是地圖面板"
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = _open(browser, live_server, u)
+    page.locator("button.mp-full-btn").click()
+    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+    _frames(page)
+    hit = page.evaluate("() => { const e = document.elementFromPoint(720, 20); return !!(e && e.closest('.mp-map-panel')) }")
+    assert hit, "全螢幕時頂欄位置應是地圖面板"

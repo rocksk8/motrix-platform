@@ -23,10 +23,8 @@ V3.1 → V3.2）。最下面的**靜態守門**釘住「前端沒有裸的 Nvh�
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 W, H = 1366, 768
 ZOOMS = (0.85, 1.0, 1.15, 1.3)
@@ -41,7 +39,7 @@ def _rendered(page):
 def _page(p_, live_server, make_user, zoom, uname):
     u, pw_ = make_user(username=uname, role="superadmin", modules=["cashier"])
     _pending_voucher(u)
-    browser = p_.chromium.launch()
+    browser = p_   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     page = browser.new_page(viewport={"width": W, "height": H})
     page.add_init_script("localStorage.setItem('motrix_font_zoom', '%s')" % zoom)
     _login(page, live_server, u, pw_)
@@ -127,61 +125,61 @@ def _menu_bottoms(page):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("zoom", ZOOMS, ids=["小", "標", "大", "特"])
-def test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport(live_server, make_user, zoom):
-    with sync_playwright() as p_:
-        browser, page = _page(p_, live_server, make_user, zoom, "fz_%d" % int(zoom * 100))
-        try:
-            _queue(page, live_server)
-            q = _queue_rect(page)
-            assert q["height"] > 100, "量尺：側邊清單沒有量到東西：%r" % q
-            m = _modal_rect(page)
-            page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                          " d.previewModal = false; d.drawerOpen = false }")
-            _rendered(page)   # PERF #6：原本固定等 250ms
-            menus = _menu_bottoms(page)
-            print("字級 %.2f 實測（%d×%d）：側邊清單底 %.0f／彈窗底 %.0f／選單面板底 max %.0f"
-                  % (zoom, W, H, q["bottom"], m["bottom"], max(menus or [0])))
-            assert q["bottom"] <= H + 1, "字級 %.2f：佇列側邊清單底邊 %.0f 超出畫面 %d" % (zoom, q["bottom"], H)
-            assert m["bottom"] <= H + 1, "字級 %.2f：簽核彈窗底邊 %.0f 超出畫面 %d" % (zoom, m["bottom"], H)
-            assert max(menus or [0]) <= H + 1, (
-                "字級 %.2f：選單面板底邊 %r 超出畫面 %d" % (zoom, [round(b) for b in menus], H))
-        finally:
-            browser.close()
+def test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport(live_server, make_user, zoom, e2e_browser):
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(p_, live_server, make_user, zoom, "fz_%d" % int(zoom * 100))
+    try:
+        _queue(page, live_server)
+        q = _queue_rect(page)
+        assert q["height"] > 100, "量尺：側邊清單沒有量到東西：%r" % q
+        m = _modal_rect(page)
+        page.evaluate("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                      " d.previewModal = false; d.drawerOpen = false }")
+        _rendered(page)   # PERF #6：原本固定等 250ms
+        menus = _menu_bottoms(page)
+        print("字級 %.2f 實測（%d×%d）：側邊清單底 %.0f／彈窗底 %.0f／選單面板底 max %.0f"
+              % (zoom, W, H, q["bottom"], m["bottom"], max(menus or [0])))
+        assert q["bottom"] <= H + 1, "字級 %.2f：佇列側邊清單底邊 %.0f 超出畫面 %d" % (zoom, q["bottom"], H)
+        assert m["bottom"] <= H + 1, "字級 %.2f：簽核彈窗底邊 %.0f 超出畫面 %d" % (zoom, m["bottom"], H)
+        assert max(menus or [0]) <= H + 1, (
+            "字級 %.2f：選單面板底邊 %r 超出畫面 %d" % (zoom, [round(b) for b in menus], H))
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_fz_the_standard_size_layout_is_unchanged(live_server, make_user):
+def test_fz_the_standard_size_layout_is_unchanged(live_server, make_user, e2e_browser):
     """對照組：「標」字級下，彈窗高＝0.9×視窗高、側邊清單（詳情抽屜）高＝視窗高（修法前後都一樣）。"""
-    with sync_playwright() as p_:
-        browser, page = _page(p_, live_server, make_user, 1.0, "fz_std")
-        try:
-            _queue(page, live_server)
-            q = _queue_rect(page)
-            assert q["height"] > 100, "量尺：側邊清單沒有量到東西：%r" % q
-            m = _modal_rect(page)
-            print("字級 1.00 對照：彈窗高 %.1f（0.9×%d＝%.1f）／側邊清單高 %.1f（視窗 %d）"
-                  % (m["height"], H, 0.9 * H, q["height"], H))
-            assert abs(m["height"] - 0.9 * H) < 1.5, m
-            assert abs(q["height"] - H) < 1.5, q
-        finally:
-            browser.close()
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(p_, live_server, make_user, 1.0, "fz_std")
+    try:
+        _queue(page, live_server)
+        q = _queue_rect(page)
+        assert q["height"] > 100, "量尺：側邊清單沒有量到東西：%r" % q
+        m = _modal_rect(page)
+        print("字級 1.00 對照：彈窗高 %.1f（0.9×%d＝%.1f）／側邊清單高 %.1f（視窗 %d）"
+              % (m["height"], H, 0.9 * H, q["height"], H))
+        assert abs(m["height"] - 0.9 * H) < 1.5, m
+        assert abs(q["height"] - H) < 1.5, q
+    finally:
+        browser.close()
 
 
 @pytest.mark.e2e
-def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, make_user):
+def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, make_user, e2e_browser):
     """按字級按鈕（`motrixSetZoom`）當場切到「特」——不是重新載入——彈窗一樣要在畫面內。
     ⚠️ 上面那題是載入前就設好字級（走 sidebar.js 初始化那一條），量不到這一條。"""
-    with sync_playwright() as p_:
-        browser, page = _page(p_, live_server, make_user, 1.0, "fz_switch")
-        try:
-            _queue(page, live_server)
-            page.evaluate("() => window.motrixSetZoom(1.3)")
-            _rendered(page)   # PERF #6：原本固定等 250ms
-            m = _modal_rect(page)
-            print("字級 1.00 → 1.30（按鈕切換）實測：彈窗底 %.0f" % m["bottom"])
-            assert m["bottom"] <= H + 1, "按鈕切到「特」後，簽核彈窗底邊 %.0f 超出畫面 %d" % (m["bottom"], H)
-        finally:
-            browser.close()
+    p_ = e2e_browser   # PERF #5：共用瀏覽器
+    browser, page = _page(p_, live_server, make_user, 1.0, "fz_switch")
+    try:
+        _queue(page, live_server)
+        page.evaluate("() => window.motrixSetZoom(1.3)")
+        _rendered(page)   # PERF #6：原本固定等 250ms
+        m = _modal_rect(page)
+        print("字級 1.00 → 1.30（按鈕切換）實測：彈窗底 %.0f" % m["bottom"])
+        assert m["bottom"] <= H + 1, "按鈕切到「特」後，簽核彈窗底邊 %.0f 超出畫面 %d" % (m["bottom"], H)
+    finally:
+        browser.close()
 
 
 # ══════════════════════════════════════════════════════════════════════

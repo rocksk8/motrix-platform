@@ -121,11 +121,9 @@ def test_mp1_every_own_point_carries_the_id_of_its_record(client, make_user, _ge
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 from tests._map_tiles import block_tiles  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
@@ -157,75 +155,67 @@ def _open_map(page, live_server, query):
 
 
 @pytest.mark.e2e
-def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, make_user, _geo):
+def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, make_user, _geo, e2e_browser):
     u, p = make_user(username="mp1_focus", role="superadmin")
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
-        try:
-            _login(page, live_server, u, p)
-            _open_map(page, live_server, "?focus=customers%3A7")
-            pops = page.locator(".leaflet-popup-content")
-            pops.first.wait_for(state="visible", timeout=5000)
-            text = pops.first.inner_text()
-            href = pops.first.locator("a.mp-rec").get_attribute("href")
-            rows = page.locator("a.mp-rec:visible").evaluate_all("els => els.map(e => e.getAttribute('href'))")
-            print("MP1 地圖實測：彈窗 %r／連結 %r／表格連結 %r" % (text[:40], href, rows))
-            assert "焦點客戶" in text, "?focus= 要打開**那一點**的彈窗，不是別的：%r" % text
-            assert href == "customers.html?id=7", href
-            assert "customers.html?id=8" in rows and "customers.html?id=7" in rows, rows
-            # 對照組：沒有 focus ⇒ 不自己開彈窗。
-            _open_map(page, live_server, "")
-            assert page.locator(".leaflet-popup-content").count() == 0
-            # 找不到 ⇒ 說出來。
-            _open_map(page, live_server, "?focus=customers%3A999")
-            miss = page.locator(".motrix-deeplink-miss")
-            miss.wait_for(state="visible", timeout=5000)
-            assert page.locator(".leaflet-popup-content").count() == 0
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    _login(page, live_server, u, p)
+    _open_map(page, live_server, "?focus=customers%3A7")
+    pops = page.locator(".leaflet-popup-content")
+    pops.first.wait_for(state="visible", timeout=5000)
+    text = pops.first.inner_text()
+    href = pops.first.locator("a.mp-rec").get_attribute("href")
+    rows = page.locator("a.mp-rec:visible").evaluate_all("els => els.map(e => e.getAttribute('href'))")
+    print("MP1 地圖實測：彈窗 %r／連結 %r／表格連結 %r" % (text[:40], href, rows))
+    assert "焦點客戶" in text, "?focus= 要打開**那一點**的彈窗，不是別的：%r" % text
+    assert href == "customers.html?id=7", href
+    assert "customers.html?id=8" in rows and "customers.html?id=7" in rows, rows
+    # 對照組：沒有 focus ⇒ 不自己開彈窗。
+    _open_map(page, live_server, "")
+    assert page.locator(".leaflet-popup-content").count() == 0
+    # 找不到 ⇒ 說出來。
+    _open_map(page, live_server, "?focus=customers%3A999")
+    miss = page.locator(".motrix-deeplink-miss")
+    miss.wait_for(state="visible", timeout=5000)
+    assert page.locator(".leaflet-popup-content").count() == 0
 
 
 @pytest.mark.e2e
-def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo):
+def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo, e2e_browser):
     """看不到那一頁的人不給連結（協力廠商頁限管理員；外包名冊頁要模組；標案雷達要 dev_crm）。"""
     u, p = make_user(username="mp1_gate", role="superadmin")
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page()
-        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
-        try:
-            _login(page, live_server, u, p)
-            page.goto(live_server + "/pages/map.html")
-            page.wait_for_function("() => window.MotrixRecordLink", timeout=15000)
-            got = page.evaluate("""() => {
-                const L = window.MotrixRecordLink
-                const v = {sourceKey: 'vendor_contractors', recordId: 3}
-                const c = {sourceKey: 'contractors', recordId: 4}
-                const t = {sourceKey: 'tenders', caseNo: 'A/1'}
-                const s = {sourceKey: 'shipping_notes', recordId: 5, quoteNo: 'MQ-1'}
-                const user = {role: 'user', modules: ['procurement']}
-                const admin = {role: 'admin', modules: []}
-                return {
-                  vUser: L.recordUrl(v, user), vAdmin: L.recordUrl(v, admin),
-                  cUser: L.recordUrl(c, user), cMod: L.recordUrl(c, {role: 'user', modules: ['contractor_list']}),
-                  tUser: L.recordUrl(t, user), tDev: L.recordUrl(t, {role: 'user', modules: ['dev_crm']}),
-                  sUser: L.recordUrl(s, user), fk: L.focusKey(t),
-                }
-            }""")
-            print("MP1 權限對照：%r" % got)
-            assert got["vUser"] is None and got["vAdmin"] == "vendor-contractors.html?id=3", got
-            assert got["cUser"] is None and got["cMod"] == "contractors.html?id=4", got
-            assert got["tUser"] is None and got["tDev"] == "tender-radar.html?case=A%2F1", got
-            assert got["sUser"] == "case-management.html?q=MQ-1&tab=shipping", got
-            assert got["fk"] == "tenders:A/1", got
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    _login(page, live_server, u, p)
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function("() => window.MotrixRecordLink", timeout=15000)
+    got = page.evaluate("""() => {
+        const L = window.MotrixRecordLink
+        const v = {sourceKey: 'vendor_contractors', recordId: 3}
+        const c = {sourceKey: 'contractors', recordId: 4}
+        const t = {sourceKey: 'tenders', caseNo: 'A/1'}
+        const s = {sourceKey: 'shipping_notes', recordId: 5, quoteNo: 'MQ-1'}
+        const user = {role: 'user', modules: ['procurement']}
+        const admin = {role: 'admin', modules: []}
+        return {
+          vUser: L.recordUrl(v, user), vAdmin: L.recordUrl(v, admin),
+          cUser: L.recordUrl(c, user), cMod: L.recordUrl(c, {role: 'user', modules: ['contractor_list']}),
+          tUser: L.recordUrl(t, user), tDev: L.recordUrl(t, {role: 'user', modules: ['dev_crm']}),
+          sUser: L.recordUrl(s, user), fk: L.focusKey(t),
+        }
+    }""")
+    print("MP1 權限對照：%r" % got)
+    assert got["vUser"] is None and got["vAdmin"] == "vendor-contractors.html?id=3", got
+    assert got["cUser"] is None and got["cMod"] == "contractors.html?id=4", got
+    assert got["tUser"] is None and got["tDev"] == "tender-radar.html?case=A%2F1", got
+    assert got["sUser"] == "case-management.html?q=MQ-1&tab=shipping", got
+    assert got["fk"] == "tenders:A/1", got
 
 
 @pytest.mark.e2e
-def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_server, make_user, _geo):
+def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_server, make_user, _geo, e2e_browser):
     # `_geo`：標案雷達頁會畫自己的小地圖，後端會探測圖磚——換掉，不對外連線（NETGUARD）。
     ids = _seed()
     import db
@@ -247,39 +237,35 @@ def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_serve
         ("vendor-contractors.html?id=%d" % ids["vendor_contractors"], "MP1承攬商",
          "vendor_contractors%%3A%d" % ids["vendor_contractors"]),
     ]
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1366, "height": 900})
-        block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
-        try:
-            _login(page, live_server, u, p)
-            for url, name, focus in cases:
-                page.goto(live_server + "/pages/" + url)
-                pane = page.locator(".detail-pane.open")
-                pane.wait_for(state="visible", timeout=15000)
-                _rendered(page)   # PERF #6：原本固定等 300ms
-                text = pane.inner_text()
-                href = pane.locator("a.mp1-onmap").get_attribute("href")
-                print("MP1 %s：明細 %r／在地圖上看 %r" % (url, text[:30], href))
-                assert name in text, "%s 要直接打開那一筆：%r" % (url, text[:80])
-                assert href == "map.html?focus=" + focus, (url, href)
-            # 找不到 ⇒ 說出來。
-            page.goto(live_server + "/pages/customers.html?id=99999")
-            page.locator(".motrix-deeplink-miss").wait_for(state="visible", timeout=15000)
-            assert page.locator(".detail-pane.open").count() == 0
-            # 標案雷達：`?case=` ⇒ 那一列被標示並有回地圖的連結。
-            page.goto(live_server + "/pages/tender-radar.html?case=MP1-T-9")
-            page.wait_for_function(
-                "() => { const r = document.querySelector('tr[data-case-no=\"MP1-T-9\"]');"
-                " return r && r.style.outline.indexOf('2px') >= 0 }", timeout=15000)
-            href = page.locator('tr[data-case-no="MP1-T-9"] a.mp1-onmap').get_attribute("href")
-            assert href == "map.html?focus=tenders%3AMP1-T-9", href
-            other = page.locator("tr[data-case-no]").evaluate_all(
-                "els => els.filter(e => e.style.outline).map(e => e.dataset.caseNo)")
-            rows_n = page.locator("tr[data-case-no]").count()
-            assert rows_n >= 2 and other == ["MP1-T-9"], "只有那一列被標示（共 %d 列）：%r" % (rows_n, other)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1366, "height": 900})
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    _login(page, live_server, u, p)
+    for url, name, focus in cases:
+        page.goto(live_server + "/pages/" + url)
+        pane = page.locator(".detail-pane.open")
+        pane.wait_for(state="visible", timeout=15000)
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        text = pane.inner_text()
+        href = pane.locator("a.mp1-onmap").get_attribute("href")
+        print("MP1 %s：明細 %r／在地圖上看 %r" % (url, text[:30], href))
+        assert name in text, "%s 要直接打開那一筆：%r" % (url, text[:80])
+        assert href == "map.html?focus=" + focus, (url, href)
+    # 找不到 ⇒ 說出來。
+    page.goto(live_server + "/pages/customers.html?id=99999")
+    page.locator(".motrix-deeplink-miss").wait_for(state="visible", timeout=15000)
+    assert page.locator(".detail-pane.open").count() == 0
+    # 標案雷達：`?case=` ⇒ 那一列被標示並有回地圖的連結。
+    page.goto(live_server + "/pages/tender-radar.html?case=MP1-T-9")
+    page.wait_for_function(
+        "() => { const r = document.querySelector('tr[data-case-no=\"MP1-T-9\"]');"
+        " return r && r.style.outline.indexOf('2px') >= 0 }", timeout=15000)
+    href = page.locator('tr[data-case-no="MP1-T-9"] a.mp1-onmap').get_attribute("href")
+    assert href == "map.html?focus=tenders%3AMP1-T-9", href
+    other = page.locator("tr[data-case-no]").evaluate_all(
+        "els => els.filter(e => e.style.outline).map(e => e.dataset.caseNo)")
+    rows_n = page.locator("tr[data-case-no]").count()
+    assert rows_n >= 2 and other == ["MP1-T-9"], "只有那一列被標示（共 %d 列）：%r" % (rows_n, other)
 
 
 def test_mp1_the_shipping_note_links_to_its_point_on_the_map():

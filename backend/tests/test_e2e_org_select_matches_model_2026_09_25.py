@@ -12,9 +12,8 @@ hichan-bf 修季下拉時列出三個同型寫法：`<option :value="0">` ＋ `x
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_e2e_reports_period_sync_2026_09_10 import live_server, _login  # noqa: E402,F401
+from tests.test_e2e_reports_period_sync_2026_09_10 import _login  # noqa: E402,F401
 from tests.test_e2e_reports_period_select_matches_model_2026_09_25 import _MISMATCHES_JS  # noqa: E402
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -46,77 +45,69 @@ def _org_with_member(username):
 
 @pytest.mark.e2e
 @pytest.mark.parametrize("tree_late", [False, True], ids=["tree-first", "tree-late"])
-def test_editing_a_user_shows_their_real_division_and_department(live_server, make_user, tree_late):
+def test_editing_a_user_shows_their_real_division_and_department(live_server, make_user, tree_late, e2e_browser):
     """tree-late：init 以 Promise.all 同時載帳號與組織樹 ⇒ 帳號列可能先出現；在組織樹回來前按編輯，
     選項是之後才長出來的——正是季下拉錯位的時序。"""
     admin = make_user(username="osm_sa", role="superadmin")
     make_user(username="osm_member", role="sales")
     div_b, dept = _org_with_member("osm_member")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *admin)
-            held = []
-            if tree_late:
-                page.route("**/api/org/tree*", lambda r: held.append(r))
-            page.goto(f"{live_server}/pages/users.html")
-            page.wait_for_function(f"() => window.Alpine && {ROOT} && ({ROOT}.users || []).some(u => u.username === 'osm_member')",
-                                   timeout=20000)
-            if tree_late:
-                assert held and not page.evaluate(f"() => ({ROOT}.orgTree || []).length"), "組織樹應該還沒回來"
-            page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.users.find(u => u.username === 'osm_member')) }}")
-            if tree_late:
-                page.wait_for_timeout(300)
-                for r in held:
-                    r.continue_()
-            page.wait_for_function(f"() => ({ROOT}.orgTree || []).length >= 2", timeout=10000)
-            page.wait_for_function(f"() => {ROOT}.form.departmentId === {dept}", timeout=5000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            got = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[x-data]'))
-              const pick = e => [...document.querySelectorAll('select')].find(s => s.getAttribute('x-model.number') === e)
-              return { div: pick('form.divisionId').value, dept: pick('form.departmentId').value,
-                       modelDiv: String(d.form.divisionId), modelDept: String(d.form.departmentId) } }""")
-            assert got["modelDiv"] == str(div_b) and got["modelDept"] == str(dept), got
-            assert got["div"] == got["modelDiv"], "處下拉顯示的不是帳號實際的處：%s" % got
-            assert got["dept"] == got["modelDept"], "部門下拉顯示的不是帳號實際的部門：%s" % got
-            assert page.evaluate(_MISMATCHES_JS) == []
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *admin)
+    held = []
+    if tree_late:
+        page.route("**/api/org/tree*", lambda r: held.append(r))
+    page.goto(f"{live_server}/pages/users.html")
+    page.wait_for_function(f"() => window.Alpine && {ROOT} && ({ROOT}.users || []).some(u => u.username === 'osm_member')",
+                           timeout=20000)
+    if tree_late:
+        assert held and not page.evaluate(f"() => ({ROOT}.orgTree || []).length"), "組織樹應該還沒回來"
+    page.evaluate(f"() => {{ const d = {ROOT}; d.openEdit(d.users.find(u => u.username === 'osm_member')) }}")
+    if tree_late:
+        page.wait_for_timeout(300)
+        for r in held:
+            r.continue_()
+    page.wait_for_function(f"() => ({ROOT}.orgTree || []).length >= 2", timeout=10000)
+    page.wait_for_function(f"() => {ROOT}.form.departmentId === {dept}", timeout=5000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    got = page.evaluate("""() => { const d = Alpine.$data(document.querySelector('[x-data]'))
+      const pick = e => [...document.querySelectorAll('select')].find(s => s.getAttribute('x-model.number') === e)
+      return { div: pick('form.divisionId').value, dept: pick('form.departmentId').value,
+               modelDiv: String(d.form.divisionId), modelDept: String(d.form.departmentId) } }""")
+    assert got["modelDiv"] == str(div_b) and got["modelDept"] == str(dept), got
+    assert got["div"] == got["modelDiv"], "處下拉顯示的不是帳號實際的處：%s" % got
+    assert got["dept"] == got["modelDept"], "部門下拉顯示的不是帳號實際的部門：%s" % got
+    assert page.evaluate(_MISMATCHES_JS) == []
 
 
 @pytest.mark.e2e
-def test_org_structure_add_member_picker_matches_model(live_server, make_user):
+def test_org_structure_add_member_picker_matches_model(live_server, make_user, e2e_browser):
     """選人下拉在 x-if="isDeptMembersOpen(dept.id)" 裡（與季下拉同型）。
     ☠️ 情境：選了一個人 → 收合部門 → 再展開：模型仍是那個人，若下拉顯示「選擇要加入的使用者…」，
        按「加入部門」會加進一個畫面上沒選的人。"""
     admin = make_user(username="osm_sa2", role="superadmin")
     make_user(username="osm_new", role="sales")
     _div, dept = _org_with_member("osm_sa2")
-    with sync_playwright() as p:
-        browser = p.chromium.launch()
-        try:
-            page = browser.new_context().new_page()
-            _login(page, live_server, *admin)
-            page.goto(f"{live_server}/pages/org-structure.html")
-            page.wait_for_function(f"() => window.Alpine && {ROOT} && ({ROOT}.orgTree || []).length >= 2", timeout=20000)
-            sel_css = r"select[x-model\.number='addMemberSelection[dept.id]']"
-            page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")
-            sel = page.locator(sel_css)
-            sel.wait_for(state="visible", timeout=5000)
-            # 初始：模型 undefined、DOM 為 "0"——兩者都是「未選」（addMember 以 !uid 擋），不算錯位
-            init = page.evaluate(f"() => [[...document.querySelectorAll('select')].find(e => e.getAttribute('x-model.number') === 'addMemberSelection[dept.id]').value, {ROOT}.addMemberSelection[{dept}]]")
-            assert init[0] == "0" and not init[1], init
-            opt = sel.locator("option").nth(1).get_attribute("value")
-            sel.select_option(opt)
-            _rendered(page)   # PERF #6：原本固定等 200ms
-            assert page.evaluate(_MISMATCHES_JS) == []          # 使用者選了一個人
-            page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 收合（x-if 拆掉下拉）
-            _rendered(page)   # PERF #6：原本固定等 200ms
-            page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 再展開（重建）
-            sel.wait_for(state="visible", timeout=5000)
-            _rendered(page)   # PERF #6：原本固定等 300ms
-            got = page.evaluate(f"() => [[...document.querySelectorAll('select')].find(e => e.getAttribute('x-model.number') === 'addMemberSelection[dept.id]').value, String({ROOT}.addMemberSelection[{dept}])]")
-            assert got[0] == got[1] == opt, "重新展開後下拉顯示 %s、模型是 %s（選的是 %s）" % (got[0], got[1], opt)
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_context().new_page()
+    _login(page, live_server, *admin)
+    page.goto(f"{live_server}/pages/org-structure.html")
+    page.wait_for_function(f"() => window.Alpine && {ROOT} && ({ROOT}.orgTree || []).length >= 2", timeout=20000)
+    sel_css = r"select[x-model\.number='addMemberSelection[dept.id]']"
+    page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")
+    sel = page.locator(sel_css)
+    sel.wait_for(state="visible", timeout=5000)
+    # 初始：模型 undefined、DOM 為 "0"——兩者都是「未選」（addMember 以 !uid 擋），不算錯位
+    init = page.evaluate(f"() => [[...document.querySelectorAll('select')].find(e => e.getAttribute('x-model.number') === 'addMemberSelection[dept.id]').value, {ROOT}.addMemberSelection[{dept}]]")
+    assert init[0] == "0" and not init[1], init
+    opt = sel.locator("option").nth(1).get_attribute("value")
+    sel.select_option(opt)
+    _rendered(page)   # PERF #6：原本固定等 200ms
+    assert page.evaluate(_MISMATCHES_JS) == []          # 使用者選了一個人
+    page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 收合（x-if 拆掉下拉）
+    _rendered(page)   # PERF #6：原本固定等 200ms
+    page.evaluate(f"() => {ROOT}.toggleDeptMembers({dept})")   # 再展開（重建）
+    sel.wait_for(state="visible", timeout=5000)
+    _rendered(page)   # PERF #6：原本固定等 300ms
+    got = page.evaluate(f"() => [[...document.querySelectorAll('select')].find(e => e.getAttribute('x-model.number') === 'addMemberSelection[dept.id]').value, String({ROOT}.addMemberSelection[{dept}])]")
+    assert got[0] == got[1] == opt, "重新展開後下拉顯示 %s、模型是 %s（選的是 %s）" % (got[0], got[1], opt)

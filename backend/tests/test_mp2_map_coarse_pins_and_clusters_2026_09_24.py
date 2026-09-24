@@ -37,10 +37,8 @@ def test_mp2_the_cluster_dir_is_kept_byte_for_byte():
 
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright  # noqa: E402
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
-    live_server, _login)
+from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
@@ -92,44 +90,36 @@ def _state(page):
 
 @pytest.mark.e2e
 def test_mp2_coarse_points_are_hollow_and_faded_and_overlapping_points_cluster(
-        live_server, make_user, _no_tiles):
+        live_server, make_user, _no_tiles, e2e_browser):
     u, p = make_user(username="mp2_main", role="superadmin")
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            _open(page, live_server)
-            st = _state(page)
-            print("MP2 實測：%r" % st)
-            assert len(st["coarse"]) == 1, "區級那一點要是空心圖釘：%r" % st
-            assert float(st["coarse"][0]["op"]) < 1 and st["coarse"][0]["bg"] == "rgb(255, 255, 255)", st
-            assert st["solid"] and all(float(o) == 1 for o in st["solid"]), "對照組：細精度照舊實心不透明：%r" % st
-            assert st["clusters"] == ["5"], "擠在一起的五個點要合成一個「5」：%r" % st
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    _open(page, live_server)
+    st = _state(page)
+    print("MP2 實測：%r" % st)
+    assert len(st["coarse"]) == 1, "區級那一點要是空心圖釘：%r" % st
+    assert float(st["coarse"][0]["op"]) < 1 and st["coarse"][0]["bg"] == "rgb(255, 255, 255)", st
+    assert st["solid"] and all(float(o) == 1 for o in st["solid"]), "對照組：細精度照舊實心不透明：%r" % st
+    assert st["clusters"] == ["5"], "擠在一起的五個點要合成一個「5」：%r" % st
 
-            # 焦點在群聚裡的那一點 ⇒ 群聚展開、彈窗打開（MP1 的 ?focus= 不因群聚失效）。
-            _open(page, live_server, "?focus=customers%3A4")
-            pop = page.locator(".leaflet-popup-content")
-            pop.first.wait_for(state="visible", timeout=8000)
-            assert "點4" in pop.first.inner_text(), pop.first.inner_text()
-        finally:
-            browser.close()
+    # 焦點在群聚裡的那一點 ⇒ 群聚展開、彈窗打開（MP1 的 ?focus= 不因群聚失效）。
+    _open(page, live_server, "?focus=customers%3A4")
+    pop = page.locator(".leaflet-popup-content")
+    pop.first.wait_for(state="visible", timeout=8000)
+    assert "點4" in pop.first.inner_text(), pop.first.inner_text()
 
 
 @pytest.mark.e2e
-def test_mp2_without_the_cluster_plugin_every_point_is_still_drawn(live_server, make_user, _no_tiles):
+def test_mp2_without_the_cluster_plugin_every_point_is_still_drawn(live_server, make_user, _no_tiles, e2e_browser):
     """群聚外掛載不到（被擋／檔案不在）⇒ 退回一般圖層，七個點全部畫出來，不可以整張圖空白。"""
     u, p = make_user(username="mp2_noclu", role="superadmin")
-    with sync_playwright() as pw_:
-        browser = pw_.chromium.launch()
-        page = browser.new_page(viewport={"width": 1280, "height": 900})
-        try:
-            _login(page, live_server, u, p)
-            _open(page, live_server, block_cluster=True)
-            st = _state(page)
-            err = page.evaluate("() => " + _D + ".loadError")
-            print("MP2 無群聚外掛實測：%r／loadError %r" % (st, err))
-            assert st["pins"] == 7 and st["clusters"] == [], st
-            assert not err, err
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    _login(page, live_server, u, p)
+    _open(page, live_server, block_cluster=True)
+    st = _state(page)
+    err = page.evaluate("() => " + _D + ".loadError")
+    print("MP2 無群聚外掛實測：%r／loadError %r" % (st, err))
+    assert st["pins"] == 7 and st["clusters"] == [], st
+    assert not err, err

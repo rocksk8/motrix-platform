@@ -50,7 +50,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -73,27 +72,6 @@ OK_MSG = ".vc-ok"
 ERR_MSG = ".vc-err"
 
 
-@pytest.fixture()
-def live_server(client):
-    """比照 `test_e2e_account_tree_2026_09_23.py` 的同名 fixture。"""
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield "http://127.0.0.1:%d" % port
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _login(page, base_url, username, password):
@@ -191,7 +169,7 @@ def _fill_first_line(page, code="1113", debit="1000"):
 
 
 @pytest.mark.e2e
-def test_ac2_pressing_save_says_something_on_screen(live_server, make_user):
+def test_ac2_pressing_save_says_something_on_screen(live_server, make_user, e2e_browser):
     """🔴 **按下儲存之後，畫面上要出現一段成功訊息。**
 
     ⚙️ 前後各量一次 —— **那就是這一題的反向控制**：
@@ -207,31 +185,29 @@ def test_ac2_pressing_save_says_something_on_screen(live_server, make_user):
                      modules=[VOUCHER_MODULE])
     errors = []
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        _login(page, live_server, u, p)
-        page.goto("%s/pages/voucher.html" % live_server)
-        _ready(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, u, p)
+    page.goto("%s/pages/voucher.html" % live_server)
+    _ready(page)
 
-        new_btn = page.locator(HOOKS["new"])
-        assert new_btn.count() and new_btn.first.is_visible(), (
-            "找不到「新增傳票」（`%s`）。畫面上是：\n  %s"
-            % (HOOKS["new"], page.locator("body").inner_text()[:300]))
-        new_btn.first.click()
-        _editor_open(page)
-        _fill_first_line(page)
+    new_btn = page.locator(HOOKS["new"])
+    assert new_btn.count() and new_btn.first.is_visible(), (
+        "找不到「新增傳票」（`%s`）。畫面上是：\n  %s"
+        % (HOOKS["new"], page.locator("body").inner_text()[:300]))
+    new_btn.first.click()
+    _editor_open(page)
+    _fill_first_line(page)
 
-        before = _visible_text(page, OK_MSG)
-        save = page.locator(HOOKS["save"])
-        assert save.count() and save.first.is_visible(), (
-            "找不到「儲存」（`%s`）。" % HOOKS["save"])
-        _settled(page, lambda: save.first.click())
+    before = _visible_text(page, OK_MSG)
+    save = page.locator(HOOKS["save"])
+    assert save.count() and save.first.is_visible(), (
+        "找不到「儲存」（`%s`）。" % HOOKS["save"])
+    _settled(page, lambda: save.first.click())
 
-        after = _visible_text(page, OK_MSG)
-        err = _visible_text(page, ERR_MSG)
-        browser.close()
+    after = _visible_text(page, OK_MSG)
+    err = _visible_text(page, ERR_MSG)
 
     assert not errors, "頁面丟了例外：%s —— 先修這個。" % errors[:3]
     assert not err, (
@@ -249,7 +225,7 @@ def test_ac2_pressing_save_says_something_on_screen(live_server, make_user):
 
 
 @pytest.mark.e2e
-def test_ac2_submitting_also_says_something_on_screen(live_server, make_user):
+def test_ac2_submitting_also_says_something_on_screen(live_server, make_user, e2e_browser):
     """🔴 **送審也要有回饋** —— `AC2` 的範圍是**每一個會寫入的動作**。
 
     ⚙️ 這一題是上一題的**第二個樣本**，而它不是重複：
@@ -266,32 +242,30 @@ def test_ac2_submitting_also_says_something_on_screen(live_server, make_user):
                      modules=[VOUCHER_MODULE])
     errors = []
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.on("pageerror", lambda e: errors.append(str(e)))
-        _login(page, live_server, u, p)
-        page.goto("%s/pages/voucher.html" % live_server)
-        _ready(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _login(page, live_server, u, p)
+    page.goto("%s/pages/voucher.html" % live_server)
+    _ready(page)
 
-        page.locator(HOOKS["new"]).first.click()
-        _editor_open(page)
-        _fill_first_line(page)
-        _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
+    page.locator(HOOKS["new"]).first.click()
+    _editor_open(page)
+    _fill_first_line(page)
+    _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
 
-        submit = page.locator(HOOKS["submit"])
-        if not (submit.count() and submit.first.is_visible()):
-            browser.close()
-            pytest.fail(
-                "存好之後看不到「送審」（`%s`）——\n" % HOOKS["submit"]
-                + "⚠️ 按鈕用 `x-show` ⇒ 它在 DOM 裡而看不到，"
-                  "我用的是 `is_visible()`。")
-        before = _visible_text(page, OK_MSG)
-        _settled(page, lambda: submit.first.click())
-
-        after = _visible_text(page, OK_MSG)
-        status = _visible_text(page, HOOKS["status"])
+    submit = page.locator(HOOKS["submit"])
+    if not (submit.count() and submit.first.is_visible()):
         browser.close()
+        pytest.fail(
+            "存好之後看不到「送審」（`%s`）——\n" % HOOKS["submit"]
+            + "⚠️ 按鈕用 `x-show` ⇒ 它在 DOM 裡而看不到，"
+              "我用的是 `is_visible()`。")
+    before = _visible_text(page, OK_MSG)
+    _settled(page, lambda: submit.first.click())
+
+    after = _visible_text(page, OK_MSG)
+    status = _visible_text(page, HOOKS["status"])
 
     assert not errors, "頁面丟了例外：%s" % errors[:3]
     assert status and "草稿" not in status, (
@@ -306,7 +280,7 @@ def test_ac2_submitting_also_says_something_on_screen(live_server, make_user):
 
 @pytest.mark.e2e
 def test_ac2_the_message_is_not_wiped_by_the_reload_that_follows(
-        live_server, make_user):
+        live_server, make_user, e2e_browser):
     """⚙️ **反向控制：訊息要撐過那一次重讀。**
 
     ```
@@ -324,36 +298,34 @@ def test_ac2_the_message_is_not_wiped_by_the_reload_that_follows(
     u, p = make_user(username="e2e_ac2_wipe", role="superadmin",
                      modules=[VOUCHER_MODULE])
 
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        _login(page, live_server, u, p)
-        page.goto("%s/pages/voucher.html" % live_server)
-        _ready(page)
+    browser = e2e_browser
+    page = browser.new_page()
+    _login(page, live_server, u, p)
+    page.goto("%s/pages/voucher.html" % live_server)
+    _ready(page)
 
-        # ① 先製造一次**失敗**：同一行借貸都填（前端當場擋下、不送出）
-        # 📌 更正留著（2026-09-25，PERF #6 換等待時實測）：原本是「不填分錄直接存」——
-        #    空白草稿現在是可以存的 ⇒ 第一次其實**成功**、從來沒有錯誤訊息 ⇒ 下面「上一次的
-        #    錯誤訊息不可以留著」那一半永遠是空的（反向控制是死的），固定等 2 秒把它蓋住了。
-        page.locator(HOOKS["new"]).first.click()
-        _editor_open(page)
-        r0 = page.locator("table tbody tr").nth(0)
-        r0.locator("input[x-model='l.account_code']").fill("1113")
-        r0.locator("input[x-model='l.debit']").fill("500")
-        r0.locator("input[x-model='l.credit']").fill("500")
-        page.locator(HOOKS["save"]).first.click()
-        _error_shown(page)
-        first_err = _visible_text(page, ERR_MSG)
-        assert first_err, "第一次應該失敗並顯示錯誤——前提不成立，下面的反向控制就是空的"
+    # ① 先製造一次**失敗**：同一行借貸都填（前端當場擋下、不送出）
+    # 📌 更正留著（2026-09-25，PERF #6 換等待時實測）：原本是「不填分錄直接存」——
+    #    空白草稿現在是可以存的 ⇒ 第一次其實**成功**、從來沒有錯誤訊息 ⇒ 下面「上一次的
+    #    錯誤訊息不可以留著」那一半永遠是空的（反向控制是死的），固定等 2 秒把它蓋住了。
+    page.locator(HOOKS["new"]).first.click()
+    _editor_open(page)
+    r0 = page.locator("table tbody tr").nth(0)
+    r0.locator("input[x-model='l.account_code']").fill("1113")
+    r0.locator("input[x-model='l.debit']").fill("500")
+    r0.locator("input[x-model='l.credit']").fill("500")
+    page.locator(HOOKS["save"]).first.click()
+    _error_shown(page)
+    first_err = _visible_text(page, ERR_MSG)
+    assert first_err, "第一次應該失敗並顯示錯誤——前提不成立，下面的反向控制就是空的"
 
-        # ② 再把它填好存成功
-        r0.locator("input[x-model='l.credit']").fill("")
-        _fill_first_line(page)
-        _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
+    # ② 再把它填好存成功
+    r0.locator("input[x-model='l.credit']").fill("")
+    _fill_first_line(page)
+    _settled(page, lambda: page.locator(HOOKS["save"]).first.click())
 
-        ok = _visible_text(page, OK_MSG)
-        err = _visible_text(page, ERR_MSG)
-        browser.close()
+    ok = _visible_text(page, OK_MSG)
+    err = _visible_text(page, ERR_MSG)
 
     assert ok, (
         "存成功之後畫面上沒有成功訊息 —— 見上面那兩題，成因是同一個。")

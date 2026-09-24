@@ -16,7 +16,6 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
-from playwright.sync_api import sync_playwright
 
 import uvicorn
 from tests._ports import free_safe_port
@@ -26,26 +25,6 @@ _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
           {"account_code": "4111", "debit": 0, "credit": 1000}]
 
 
-@pytest.fixture()
-def live_server(client):
-    import main
-    config = uvicorn.Config(main.app, host="127.0.0.1",
-                            port=free_safe_port(), log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    for _ in range(200):
-        if server.started:
-            break
-        time.sleep(0.05)
-    else:
-        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    try:
-        yield "http://127.0.0.1:%d" % port
-    finally:
-        server.should_exit = True
-        thread.join(timeout=5)
 
 
 def _api(client, hdr, method, path, body=None):
@@ -54,28 +33,26 @@ def _api(client, hdr, method, path, body=None):
     return r.json()
 
 
-def _section_state(live_server, u, p, vid):
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page = browser.new_page()
-        page.goto("%s/pages/login.html" % live_server)
-        page.fill('input[x-model="username"]', u)
-        page.fill('input[x-model="password"]', p)
-        page.click('button:has-text("登入")')
-        page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
-        page.goto("%s/pages/voucher.html?id=%s" % (live_server, vid))
-        page.wait_for_selector(SECTION, state="visible", timeout=15000)
-        sec = page.locator(SECTION)
-        visible_text = sec.inner_text()
-        controls = sec.locator("input, textarea, [contenteditable]").count()
-        opened = sec.locator("details[open]").count()
-        total = sec.locator("details").count()
-        browser.close()
+def _section_state(live_server, u, p, vid, e2e_browser):
+    browser = e2e_browser
+    page = browser.new_page()
+    page.goto("%s/pages/login.html" % live_server)
+    page.fill('input[x-model="username"]', u)
+    page.fill('input[x-model="password"]', p)
+    page.click('button:has-text("登入")')
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    page.goto("%s/pages/voucher.html?id=%s" % (live_server, vid))
+    page.wait_for_selector(SECTION, state="visible", timeout=15000)
+    sec = page.locator(SECTION)
+    visible_text = sec.inner_text()
+    controls = sec.locator("input, textarea, [contenteditable]").count()
+    opened = sec.locator("details[open]").count()
+    total = sec.locator("details").count()
     return visible_text, controls, opened, total
 
 
 @pytest.mark.e2e
-def test_the_voucher_page_shows_send_back_and_edits_read_only(live_server, client, make_user):
+def test_the_voucher_page_shows_send_back_and_edits_read_only(live_server, client, make_user, e2e_browser):
     u, p = make_user("jv22p_sa", role="superadmin", modules=["cashier"])
     tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
     hdr = {"Authorization": "Bearer " + tok}
@@ -88,12 +65,12 @@ def test_the_voucher_page_shows_send_back_and_edits_read_only(live_server, clien
     _api(client, hdr, "post", "/api/vouchers/%s/send-back" % vid, {"reason": "第二次：摘要要寫清楚"})
     _api(client, hdr, "put", "/api/vouchers/%s" % vid, {"summary": "辦公用品（九月）"})
 
-    text, controls, opened, total = _section_state(live_server, u, p, vid)
+    text, controls, opened, total = _section_state(live_server, u, p, vid, e2e_browser=e2e_browser)
     assert "第二次：摘要要寫清楚" in text, "最近一次退回的原因不在畫面上：%r" % text[:300]
     assert "辦公用品 → 辦公用品（九月）" in text, "最近一次之後的編修沒有 from→to：%r" % text[:300]
     assert (opened, total) == (1, 2), "預期兩組、只展開最近一組；實得 展開 %d／共 %d" % (opened, total)
     assert controls == 0, "「退回與編修」區裡有 %d 個可編輯控制項 —— 這一區必須唯讀" % controls
 
     _api(client, hdr, "post", "/api/vouchers/%s/void" % vid, {"reason": "重開"})
-    text2, _c, _o, total2 = _section_state(live_server, u, p, vid)
+    text2, _c, _o, total2 = _section_state(live_server, u, p, vid, e2e_browser=e2e_browser)
     assert "第二次：摘要要寫清楚" in text2 and total2 == 2, "作廢之後紀錄不見了：%r" % text2[:300]

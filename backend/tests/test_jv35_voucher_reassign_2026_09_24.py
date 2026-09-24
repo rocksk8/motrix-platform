@@ -179,7 +179,7 @@ from tests.test_e2e_approval_reassign_ui_2026_09_14 import _login as _page_login
 
 
 @pytest.mark.e2e
-def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client, make_user):
+def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client, make_user, e2e_browser):
     su, sp = make_user(username="jv35e_su", role="superadmin", modules=["cashier"])
     make_user(username="jv35e_old", role="superadmin", modules=["cashier"])
     make_user(username="jv35e_new", role="superadmin", modules=["cashier"])
@@ -187,41 +187,37 @@ def test_jv35_the_queue_shows_a_reassign_button_on_a_voucher(live_server, client
     sh = {"Authorization": "Bearer " + r.json()["token"]}
     vid, no = _pending_voucher(client, sh, "jv35e_old")
 
-    with pw.sync_playwright() as p_:
-        browser = p_.chromium.launch()
-        page = browser.new_page()
-        try:
-            _page_login(page, live_server, su, sp)
-            page.goto(f"{live_server}/pages/approval-queue.html")
-            # ⚠️ 不用 `text={no}`：同一個單號也出現在動態牆（「建立傳票草稿：…」），
-            #    第一個命中的是隱藏的那一個 ⇒ 逾時，紅在探針上不是產品上。
-            card = page.locator(f".aq-card:visible:has-text('{no}'),"
-                                f" .aq-qrow:visible:has-text('{no}')").first
-            card.wait_for(state="visible", timeout=15000)
-            card.click()
-            page.wait_for_function(
-                "() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
-                " return d.selected && d.selected.type === 'voucher' }", timeout=10000)
-            btn = page.locator("#aq-reassign-btn")
-            try:   # PERF #6：原本固定等 300ms ⇒ 等轉簽鈕出現（沒出現交給下面有說明的斷言）
-                btn.wait_for(state="visible", timeout=5000)
-            except Exception:
-                pass
-            assert btn.is_visible(), "簽核佇列選到傳票，而轉簽鈕沒有出現"
-            page.click("#aq-reassign-btn")
-            page.wait_for_function(
-                "() => document.querySelector('#aq-reassign-to')"
-                " && document.querySelector('#aq-reassign-to').options.length > 1",
-                timeout=10000)
-            page.select_option("#aq-reassign-to", "jv35e_new")
-            page.fill("#aq-reassign-reason", "原簽核人出差，傳票改由他人簽")
-            page.click("#aq-reassign-confirm")
-            for _ in range(50):
-                a = (_appr(vid)[1].get("tiers") or [{}])[0].get("approvers")[0]
-                if a["username"] == "jv35e_new":
-                    break
-                page.wait_for_timeout(200)
-            print("JV35 頁面實測：轉簽後當層簽核人 =", a["username"], "／轉簽自", a.get("reassignedFrom"))
-            assert a["username"] == "jv35e_new" and a["reassignedFrom"] == "jv35e_old", a
-        finally:
-            browser.close()
+    browser = e2e_browser
+    page = browser.new_page()
+    _page_login(page, live_server, su, sp)
+    page.goto(f"{live_server}/pages/approval-queue.html")
+    # ⚠️ 不用 `text={no}`：同一個單號也出現在動態牆（「建立傳票草稿：…」），
+    #    第一個命中的是隱藏的那一個 ⇒ 逾時，紅在探針上不是產品上。
+    card = page.locator(f".aq-card:visible:has-text('{no}'),"
+                        f" .aq-qrow:visible:has-text('{no}')").first
+    card.wait_for(state="visible", timeout=15000)
+    card.click()
+    page.wait_for_function(
+        "() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+        " return d.selected && d.selected.type === 'voucher' }", timeout=10000)
+    btn = page.locator("#aq-reassign-btn")
+    try:   # PERF #6：原本固定等 300ms ⇒ 等轉簽鈕出現（沒出現交給下面有說明的斷言）
+        btn.wait_for(state="visible", timeout=5000)
+    except Exception:
+        pass
+    assert btn.is_visible(), "簽核佇列選到傳票，而轉簽鈕沒有出現"
+    page.click("#aq-reassign-btn")
+    page.wait_for_function(
+        "() => document.querySelector('#aq-reassign-to')"
+        " && document.querySelector('#aq-reassign-to').options.length > 1",
+        timeout=10000)
+    page.select_option("#aq-reassign-to", "jv35e_new")
+    page.fill("#aq-reassign-reason", "原簽核人出差，傳票改由他人簽")
+    page.click("#aq-reassign-confirm")
+    for _ in range(50):
+        a = (_appr(vid)[1].get("tiers") or [{}])[0].get("approvers")[0]
+        if a["username"] == "jv35e_new":
+            break
+        page.wait_for_timeout(200)
+    print("JV35 頁面實測：轉簽後當層簽核人 =", a["username"], "／轉簽自", a.get("reassignedFrom"))
+    assert a["username"] == "jv35e_new" and a["reassignedFrom"] == "jv35e_old", a
