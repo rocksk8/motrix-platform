@@ -2258,11 +2258,13 @@
                           <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">含稅</div>
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi" type="number" min="0" step="1"
-                                   :value="itemAmountReceivable(idx)"
-                                   :disabled="item.taxExempt"
+                            <input class="fi" type="text" inputmode="decimal" :data-num="'wt-' + item.id"
+                                   :value="numShown(itemAmountReceivable(idx), $el, 'wt-' + item.id)"
+                                   :class="{'num-bad': badNum['wt-' + item.id]}"
+                                   :disabled="!!item.taxExempt"
                                    :title="item.taxExempt ? '已沖銷免稅，金額已下修為未稅價，不可再手動編輯' : ''"
-                                   @change="onAmountWithTaxChange(idx, +$event.target.value)"
+                                   @blur="$el.value = numShown(itemAmountReceivable(idx), $el, 'wt-' + item.id, true)"
+                                   @change="onAmountTextChange(idx, 'wt', $event.target.value)"
                                    style="padding-left:30px;text-align:right;font-size:12px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);width:100%">
                           </div>
                         </div>
@@ -2270,11 +2272,13 @@
                           <div style="font-size:9px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif;margin-bottom:2px">未稅</div>
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);pointer-events:none;font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi" type="number" min="0" step="1"
-                                   :value="itemAmountPretax(idx)"
-                                   :disabled="item.taxExempt"
+                            <input class="fi" type="text" inputmode="decimal" :data-num="'pt-' + item.id"
+                                   :value="numShown(itemAmountPretax(idx), $el, 'pt-' + item.id)"
+                                   :class="{'num-bad': badNum['pt-' + item.id]}"
+                                   :disabled="!!item.taxExempt"
                                    :title="item.taxExempt ? '已沖銷免稅，稅額歸零，未稅價即實收金額' : ''"
-                                   @change="onAmountPretaxChange(idx, +$event.target.value)"
+                                   @blur="$el.value = numShown(itemAmountPretax(idx), $el, 'pt-' + item.id, true)"
+                                   @change="onAmountTextChange(idx, 'pt', $event.target.value)"
                                    style="padding-left:30px;text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-secondary);width:100%">
                           </div>
                         </div>
@@ -2380,10 +2384,13 @@
                           <span class="fi-label">實收金額（含稅）</span>
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi fi--sm" type="number" min="0"
+                            <input class="fi fi--sm" type="text" inputmode="decimal" :data-num="'act-' + item.id"
                                    :placeholder="itemAmountReceivable(idx)"
-                                   x-model.number="item.actualAmount"
-                                   @input="setDirty()" :disabled="!canMarkPayment()"
+                                   :value="numShown(item.actualAmount, $el, 'act-' + item.id)"
+                                   :class="{'num-bad': badNum['act-' + item.id]}"
+                                   @blur="$el.value = numShown(item.actualAmount, $el, 'act-' + item.id, true)"
+                                   @input="if (setNumField(item, 'actualAmount', 'act-' + item.id, $event.target.value)) setDirty()"
+                                   :disabled="!canMarkPayment()"
                                    style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
                           </div>
                         </div>
@@ -2391,9 +2398,12 @@
                           <span class="fi-label">手續費 / 扣款</span>
                           <div style="position:relative">
                             <span style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">NT$</span>
-                            <input class="fi fi--sm" type="number" min="0" placeholder="0"
-                                   x-model.number="item.feeAmount"
-                                   @input="setDirty()" :disabled="!canMarkPayment()"
+                            <input class="fi fi--sm" type="text" inputmode="decimal" placeholder="0" :data-num="'fee-' + item.id"
+                                   :value="numShown(item.feeAmount, $el, 'fee-' + item.id)"
+                                   :class="{'num-bad': badNum['fee-' + item.id]}"
+                                   @blur="$el.value = numShown(item.feeAmount, $el, 'fee-' + item.id, true)"
+                                   @input="if (setNumField(item, 'feeAmount', 'fee-' + item.id, $event.target.value)) setDirty()"
+                                   :disabled="!canMarkPayment()"
                                    style="padding-left:30px;font-family:LINE Seed TW_OTF, sans-serif">
                           </div>
                         </div>

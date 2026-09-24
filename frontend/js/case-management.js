@@ -1496,6 +1496,7 @@ function app() {
         // 基準取伺服器原值（ensureCaseRecord 補上的預設分段會被當成改動送出）
         this._segBase = this._snapSegments(data.data?.caseRecord)
         this.segConflict = null
+        this.badNum = {}
         await this.ensureCaseRecord()
         if (!live()) return
         this._segFill = this._fillOnly(this._segBase)
@@ -1819,6 +1820,45 @@ function app() {
     // 這時 total／amount 都是空的，任何換算都會算出 0 並自動存回去 ⇒ 會改金額的動作一律不做。
     moneyMasked() { return !!this.selected?.moneyMasked },
 
+    // N14（2026-09-24）：款項金額改用文字框——type=number 貼上「12,000」時瀏覽器給空值，
+    // 含稅／未稅的 +value 就變成 0。解析規則與 quotation-form.html::parseNumInput() 相同：
+    // 接受千分位與全形數字；空白＝空值；解析不了 ⇒ 標紅（badNum），數值不更新、不存檔。
+    badNum: {},
+    parseNumInput(raw) {
+      const s = String(raw == null ? '' : raw)
+        .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+        .replace(/．/g, '.').replace(/[,，\s]/g, '')
+      if (s === '') return ''
+      if (!/^\d+(\.\d*)?$/.test(s)) return null
+      return parseFloat(s)
+    },
+    _markNum(badKey, bad) {
+      if (bad) { this.badNum = { ...this.badNum, [badKey]: true }; return }
+      if (this.badNum[badKey]) { const b = { ...this.badNum }; delete b[badKey]; this.badNum = b }
+    },
+    setNumField(obj, key, badKey, raw) {
+      const v = this.parseNumInput(raw)
+      this._markNum(badKey, v === null)
+      if (v === null) return false
+      obj[key] = v
+      return true
+    },
+    // 聚焦中或標紅時保留使用者打的字，不被數值改寫；失焦（blur=true）才改回數值
+    numShown(v, el, badKey, blur) {
+      if (el && this.badNum[badKey]) return el.value
+      if (!blur && el && document.activeElement === el) return el.value
+      return v == null ? '' : v
+    },
+    onAmountTextChange(idx, kind, raw) {
+      const item = this.paymentItems()[idx]
+      if (!item) return
+      const v = this.parseNumInput(raw)
+      this._markNum(kind + '-' + item.id, v === null)
+      if (v === null) return
+      if (kind === 'wt') this.onAmountWithTaxChange(idx, v === '' ? 0 : v)
+      else this.onAmountPretaxChange(idx, v === '' ? 0 : v)
+    },
+
     // CM3（2026-09-24）：案件角色存 {username, display}；未轉換的舊資料是顯示名稱字串（升級時查不到或
     // 同名的不猜，見 db.py::_m116_case_roles_username）。選單的 value 一律是帳號。
     roleUser(k) {
@@ -2114,6 +2154,12 @@ function app() {
 
     async saveCaseRecord() {
       if (!this.selected) return
+      if (Object.keys(this.badNum).length) {
+        // N14：標紅的數字欄位（無法辨識）存在時不送——送出去的是上一個有效值，畫面卻寫著別的字
+        this.saveStatus = 'error'
+        this.saveMsg = '有數字欄位無法辨識（標紅處），請修正後再存檔'
+        return
+      }
       if (this.cr.dealTag === '已結案' && !this.selected.case_semi_unlocked) {
         // 已結案且未解鎖：後端會直接 403，這裡先擋下避免每次 @input 觸發的
         // 防抖自動存檔都跑一趟網路請求、又跳出令人困惑的「儲存失敗」。
