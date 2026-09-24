@@ -206,7 +206,7 @@
         <div class="form-group">
           <label class="form-label">帳號</label>
           <input class="form-input" :class="{error: error}"
-                 type="text" x-model="username" x-ref="username"
+                 type="text" x-model="username" x-ref="username" @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                  placeholder="輸入帳號" autocomplete="username" autofocus>
         </div>
 
@@ -215,7 +215,7 @@
           <div class="pw-wrap">
             <input class="form-input" :class="{error: error}"
                    :type="showPw ? 'text' : 'password'"
-                   x-model="password" x-ref="password"
+                   x-model="password" x-ref="password" @keydown.enter="onEnterDown($event)" @keyup.enter="onEnterUp($event)"
                    placeholder="輸入密碼" autocomplete="current-password"
                    style="padding-right:42px">
             <!-- 按下時不搶焦點、也不在 Tab 順序裡：焦點留在密碼欄，切換後直接按 Enter 就送出（2026-09-25） -->
@@ -336,7 +336,28 @@
         } catch {}
       },
 
+      // Enter 明確送出，不只依賴表單的隱式送出（2026-09-25，使用者：自己打字後按 Enter 完全沒反應）。
+      // ・keydown：輸入法組字中的 Enter 是「選字」，不送出；其餘攔下預設行為、自己呼叫 login()
+      // ・keyup 後備：瀏覽器的帳號建議下拉開著時，keydown 會被瀏覽器拿去選建議、頁面收不到 ⇒
+      //   只收到 keyup 的那一次由 keyup 送出；keydown 已處理過或組字中的 Enter 則不重複送
+      // ・重複按 Enter：login() 在 loading 中直接返回，只送一次
+      _enterDown: false,
+      _imeEnter: false,
+      onEnterDown(e) {
+        if (e.isComposing || e.keyCode === 229) { this._imeEnter = true; return }
+        e.preventDefault()
+        this._enterDown = true
+        this.login()
+      },
+      onEnterUp(e) {
+        const handled = this._enterDown || this._imeEnter || e.isComposing
+        this._enterDown = false
+        this._imeEnter = false
+        if (!handled) this.login()
+      },
+
       async login() {
+        if (this.loading) return
         this.error = ''
         // 瀏覽器自動填入不一定觸發 input 事件 ⇒ x-model 還是空的，按 Enter 會說「請輸入帳號與密碼」。
         // 送出當下以欄位上實際的值為準（2026-09-25）。
