@@ -125,7 +125,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v99: JV2 簽核三格各自的「誰」與「什麼時候」（送審／覆核／主管）
 # v108: BN3 bonus_item_people（manual 人員來源指定的帳號清單）
 # v109: JV22 §3／BN17 兩張編寫紀錄表的 BEFORE DELETE TRIGGER（資料庫層不可刪）
-CURRENT_VERSION = 110
+CURRENT_VERSION = 111
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4325,6 +4325,28 @@ def _m094_load_account_items(conn):
              it.get("name_en", ""), it["parent_code"]))
 
 
+def _m111_voucher_line_source_key(conn):
+    """v111（2026-09-24 `JV36`）：分錄記住「這一行的摘要來自哪一筆」——文字鍵。
+
+    使用者：「我的摘要是 XXX，我點選 XXX 的時候它下方能自動連帶 XXX 內有的上傳檔案」
+    ⇒ 分錄要記住 XXX 是誰，重開傳票時依它重新帶出清單。
+
+    ⚠️ 既有的 `source_id` 是 INTEGER，**存不下**案件單號這種文字鍵 ⇒ 另加
+       `source_key TEXT`；`source_id` 不刪、不改型別（A 裁示）。鍵的選擇：
+    ```
+    source_type='case'                 source_key = quotations.quote_no（TEXT UNIQUE；
+                                       source_files()／case_attachments() 全用這個鍵）
+    source_type='extra_expense'        source_key = str(case_extra_expenses.id)
+                                       （doc_no 可空、可重複，不穩定）
+    source_type='contractor_dispatch'  source_key = str(contractor_dispatches.id)
+    ```
+    ⚠️ 只有 `_col_exists` 與一句 DDL，不呼叫任何會演進的 helper。
+    """
+    if not _col_exists(conn, "voucher_lines", "source_key"):
+        conn.execute("ALTER TABLE voucher_lines ADD COLUMN"
+                     " source_key TEXT NOT NULL DEFAULT ''")
+
+
 def _m110_voucher_category_manual(conn):
     """v110（2026-09-24 `N6`）：傳票類別「手動改過」旗標。
 
@@ -5493,6 +5515,7 @@ _MIGRATIONS = [
     _m108_bonus_item_people,                        # v108
     _m109_edit_log_no_delete,                       # v109
     _m110_voucher_category_manual,                  # v110
+    _m111_voucher_line_source_key,                  # v111
 ]
 
 

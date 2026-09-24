@@ -336,7 +336,30 @@
                   <td><textarea x-model="l.summary" :disabled="!canEdit"
                              @focus="focusLine(i)" rows="1"
                              x-effect="l.summary; $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px' })"
-                             placeholder="3/30 向量圓專 XV15543058"></textarea></td>
+                             placeholder="3/30 向量圓專 XV15543058"></textarea>
+                    <!-- `JV36`：這一行摘要的來源 XXX 本身的已上傳檔案——只列出，**勾選才帶入**。 -->
+                    <template x-if="l.source_type">
+                      <div class="vc-linefiles" data-testid="line-source-files"
+                           style="font-size:11px;margin-top:4px;text-align:left">
+                        <div x-show="lineFiles(l).loading">載入中…</div>
+                        <div class="vc-err" x-show="lineFiles(l).err" x-text="lineFiles(l).err"></div>
+                        <template x-for="f in lineFiles(l).files" :key="f.type + f.docNo + f.fileId">
+                          <div style="display:flex;align-items:center;gap:6px">
+                            <input type="checkbox" data-testid="line-source-file-check"
+                                   :checked="isBrought(f)"
+                                   :disabled="isBrought(f) || !isSaved || !canEdit || f.exists === false"
+                                   @change="bringInLine(f, $event)">
+                            <a href="#" data-testid="line-source-file-open"
+                               @click.prevent="previewSourceFile(l, f)" x-text="f.filename"></a>
+                            <span data-testid="line-source-file-brought" x-show="isBrought(f)">已帶入</span>
+                            <span x-show="f.exists === false" x-text="f.reason"></span>
+                          </div>
+                        </template>
+                        <div x-show="!lineFiles(l).loading && !lineFiles(l).err && !lineFiles(l).files.length">
+                          這個來源沒有已上傳檔案。</div>
+                        <div x-show="!isSaved && lineFiles(l).files.length">存檔後才能勾選帶入。</div>
+                      </div>
+                    </template></td>
                   <td class="num"><input class="num" x-model="l.debit"
                              :disabled="!canEdit" inputmode="numeric"></td>
                   <td class="num"><input class="num" x-model="l.credit"
@@ -387,7 +410,7 @@
                style="display:none">
             <div class="vc-src__hd">
               <span x-text="'帶入到第 ' + (panelLine + 1) + ' 行摘要'"></span>
-              <span class="vc-src__hint">點一項：摘要空白就填入，已有文字就用「；」接在後面。</span>
+              <span class="vc-src__hint">點選案件或支出項：這一行摘要改成它的名稱，下方列出它的已上傳檔案（勾選才帶入）。</span>
               <button class="vc-src__tab" style="margin-left:auto" @click="closePanel()">關閉</button>
             </div>
             <div data-testid="summary-panel-files">
@@ -400,12 +423,21 @@
                          @click="openAttPreview(a)">
                   </template>
                   <button class="vc-src__item" data-testid="summary-panel-file"
-                          @click="panelAppend(a.filename)">
+                          @click="openAttPreview(a)">
                     <span class="vc-src__txt" x-text="a.filename"></span>
                   </button>
                 </div>
               </template>
               <div class="vc-src__empty" x-show="!attachments.length">這張傳票還沒有上傳檔案。</div>
+            </div>
+            <div data-testid="summary-panel-cases" style="margin-top:8px">
+              <div class="vc-src__hint" style="margin:4px 0">案件</div>
+              <template x-for="(e, ei) in panelCases()" :key="'c' + ei">
+                <button class="vc-src__item" data-testid="summary-panel-case" @click="panelPick(e)">
+                  <span class="vc-src__txt" x-text="e.summary"></span>
+                </button>
+              </template>
+              <div class="vc-src__empty" x-show="!panelCases().length">目前沒有可選的案件。</div>
             </div>
             <div data-testid="summary-panel-expenses" style="margin-top:8px">
               <div class="vc-src__hint" style="margin:4px 0">支出項</div>
@@ -413,7 +445,7 @@
               <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
               <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
                 <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
-                        data-testid="summary-panel-expense" @click="panelAppend(e.summary)">
+                        data-testid="summary-panel-expense" @click="panelPick(e)">
                   <span class="vc-src__txt" x-text="e.summary"></span>
                 </button>
               </template>

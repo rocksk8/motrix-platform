@@ -48,6 +48,7 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
+    line_source_files, LINE_SOURCES,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -152,6 +153,27 @@ def _category_update(conn, voucher_id, current, body, new_lines, line_changes):
 def _amount_lines(lines):
     """`JV32`：金額正規化；有問題 ⇒ 422 並指出第幾行（`helpers.voucher.normalize_amount_lines`）。"""
     out, problems = normalize_amount_lines(lines)
+    if problems:
+        raise HTTPException(422, "。".join(problems) + "。")
+    return out
+
+
+def _line_sources(lines):
+    """`JV36`：每一行的摘要來源（`source_type`／`source_key`）。空＝沒有來源。
+
+    只接受 `LINE_SOURCES` 三種；其他 ⇒ 422 並指出第幾行。回正規化後的 lines。
+    """
+    out, problems = [], []
+    for i, ln in enumerate(lines or (), start=1):
+        ln = dict(ln)
+        st = str(ln.get("source_type") or "").strip()
+        key = str(ln.get("source_key") or "").strip()
+        if st and st not in LINE_SOURCES:
+            problems.append("第 %d 行的摘要來源「%s」不支援" % (i, st))
+        if st and not key:
+            problems.append("第 %d 行的摘要來源缺少編號" % i)
+        ln["source_type"], ln["source_key"] = (st, key) if st else ("", "")
+        out.append(ln)
     if problems:
         raise HTTPException(422, "。".join(problems) + "。")
     return out
@@ -289,7 +311,7 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
     # 🔁 日期**可選，預設今天**（使用者 2026-09-23 改裁）——
     #    舊裁示「建檔當天且不可改」已被推翻，理由是月結補登是會計的日常。
     voucher_date = (body.get("voucher_date") or "").strip() or _dt.date.today().isoformat()
-    lines = _amount_lines(body.get("lines") or [])
+    lines = _line_sources(_amount_lines(body.get("lines") or []))
     now = _dt.datetime.now().isoformat()
 
     conn = get_db()
@@ -322,11 +344,14 @@ def create_voucher(body: dict = Body(...), authorization: str = Header(None)):
         for i, ln in enumerate(lines, start=1):
             conn.execute(
                 "INSERT INTO voucher_lines (voucher_id, line_no, account_code,"
-                " summary, debit, credit) VALUES (?,?,?,?,?,?)",
+                " summary, debit, credit, source_type, source_key)"
+                " VALUES (?,?,?,?,?,?,?,?)",
                 (vid, i, (ln.get("account_code") or ""),
                  (ln.get("summary") or ""),
                  # `JV32`：已由 `_amount_lines()` 正規化成 int；不再 `int()`（它會把 12.5 截成 12）
-                 ln["debit"], ln["credit"]))
+                 ln["debit"], ln["credit"],
+                 # `JV36`：這一行的摘要來自哪一筆（重開時依它重新帶出來源檔案清單）
+                 ln["source_type"], ln["source_key"]))
         conn.commit()
     finally:
         conn.close()
@@ -642,6 +667,57 @@ def summary_sources(q: str = "", quote_no: str = "",
 #    查的人會去翻自己的呼叫端，而問題在這個檔案的行號順序上。
 # 📌 這一段寫在這裡而不是寫進規格：**下一個加端點的人不會去讀規格，
 #    而他一定會看到這一行。**（C 2026-09-23 實測 `summary-sources` 回 422。）
+@router.get("/line-source-files")
+def line_source_files_endpoint(source_type: str = "", ref: str = "",
+                               authorization: str = Header(None)):
+    """`JV36`：某一行摘要的來源 XXX「本身的已上傳檔案」（只列出，勾選才帶入）。
+
+    📌 查詢參數叫 `ref`（＝`voucher_lines.source_key`）不叫 `source_key`：`FX23a` 守門擋
+       名稱含 `key`／`token`… 的 GET 查詢參數（它們會進 access log）——這個值不是憑證，
+       但不為了它放寬守門，改名即可。
+
+    範圍逐字等於 `resolve_picks()` 帶得進來的範圍（`line_source_files()` 的 docstring）。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    conn = get_db()
+    try:
+        return {"files": line_source_files(conn, source_type, ref)}
+    finally:
+        conn.close()
+
+
+@router.get("/line-source-file")
+def line_source_file_endpoint(source_type: str = "", ref: str = "",
+                              file_id: str = "", authorization: str = Header(None)):
+    """`JV36`：勾選帶入**之前**預覽來源檔（A 裁示准做，條件如下）。
+
+    ```
+    type   只接受 LINE_SOURCES 三種（其他 400）
+    範圍   只在「這個來源」的檔案清單裡找 file_id —— 屬於別的案件／支出項 ⇒ 404
+    路徑   再走一次 resolve_picks()（白名單＋abs_path＋實體檔存在），與帶入同一道
+    權限   _require_voucher_access（今天就能透過帶入複製同樣的檔，可讀範圍沒有擴大）
+    ```
+    🔴 一律回 `application/octet-stream` ＋ attachment：前端自己決定能不能內嵌（`JV28` 的
+       mime＋副檔名雙重判斷），不讓瀏覽器照伺服器給的類型直接渲染（SVG／HTML）。
+    """
+    user = _require_user(authorization)
+    _require_voucher_access(user)
+    fid = str(file_id or "").strip()
+    conn = get_db()
+    try:
+        files = line_source_files(conn, source_type, ref)
+        hit = next((f for f in files if f["fileId"] == fid), None) if fid else None
+        if hit is None:
+            raise HTTPException(404, "在這個來源裡找不到這個檔案。")
+        item = resolve_picks(conn, [{"type": hit["type"], "docNo": hit["docNo"],
+                                     "fileId": hit["fileId"]}])[0]
+    finally:
+        conn.close()
+    return FileResponse(item["src"], media_type="application/octet-stream",
+                        filename=hit["filename"] or "attachment")
+
+
 @router.get("/{voucher_id}")
 def read_voucher(voucher_id: int, authorization: str = Header(None)):
     """讀一張傳票（含分錄）。科目名稱依 `status` 決定取凍結值或現值。"""
@@ -1016,10 +1092,11 @@ def void_voucher(voucher_id: int, body: dict = Body(default={}),
                 ln = dict(ln)
                 conn.execute(
                     "INSERT INTO voucher_lines (voucher_id, line_no,"
-                    " account_code, summary, debit, credit)"
-                    " VALUES (?,?,?,?,?,?)",
+                    " account_code, summary, debit, credit, source_type, source_key)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
                     (new_id, ln["line_no"], ln["account_code"],
-                     ln["summary"], ln["debit"], ln["credit"]))
+                     ln["summary"], ln["debit"], ln["credit"],
+                     ln.get("source_type") or "", ln.get("source_key") or ""))
             copied = _copy_attachments_to(conn, voucher_id, new_id, who, now)
         conn.commit()
     finally:
@@ -1138,8 +1215,9 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
         #    送 `lines: []` 是「把分錄清空」，與「沒提到分錄」是兩件事。
         line_changes = []
         new_lines = None
+        src_changed = False
         if "lines" in body:
-            new_lines = _amount_lines(body.get("lines") or [])
+            new_lines = _line_sources(_amount_lines(body.get("lines") or []))
             old_lines = [dict(r) for r in conn.execute(
                 "SELECT * FROM voucher_lines WHERE voucher_id = ?"
                 " ORDER BY line_no", (voucher_id,))]
@@ -1149,6 +1227,20 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             #    新建擋得住而修改會炸成 500。
             _check_account_codes(conn, new_lines)
             line_changes = diff_lines(old_lines, new_lines)
+            # `JV36`：只換了來源（摘要／金額都沒變）也要寫回，並留下編寫紀錄——
+            #    `diff_lines()` 不比對來源，而編寫紀錄不收空的改動。
+            _lbl = {"case": "案件", "extra_expense": "額外支出", "contractor_dispatch": "承攬商派工"}
+
+            def _src(ln):
+                st = ln.get("source_type") or ""
+                return ("%s %s" % (_lbl.get(st, st), ln.get("source_key") or "")) if st else ""
+            for n in range(min(len(old_lines), len(new_lines))):
+                if _src(old_lines[n]) != _src(new_lines[n]):
+                    src_changed = True
+                    line_changes.append({"field": "lines[%d].source" % (n + 1),
+                                         "from": _src(old_lines[n]), "to": _src(new_lines[n])})
+            if len(old_lines) != len(new_lines):
+                src_changed = True
 
         # `JV29`＋`N6`：類別——自動模式下分錄改了就重算；手動改過的不再自動覆蓋。
         new_cat, new_manual = _category_update(
@@ -1167,7 +1259,7 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
         #    ⚠️ 而「沒有改動」現在要把分錄一起算進來 ——
         #    ☠️ 只看 `changes` 的話，一次「只改了分錄」的儲存會在這裡
         #       提早 return，而分錄**根本沒被寫進去**。
-        if not changes and not line_changes:
+        if not changes and not line_changes and not src_changed:
             return {"ok": True, "changed": 0}
 
         now = datetime.now().isoformat()
@@ -1188,11 +1280,11 @@ def update_voucher(voucher_id: int, body: dict = Body(...),
             for n, ln in enumerate(new_lines, start=1):
                 conn.execute(
                     "INSERT INTO voucher_lines (voucher_id, line_no,"
-                    " account_code, summary, debit, credit)"
-                    " VALUES (?,?,?,?,?,?)",
+                    " account_code, summary, debit, credit, source_type, source_key)"
+                    " VALUES (?,?,?,?,?,?,?,?)",
                     (voucher_id, n, (ln.get("account_code") or ""),
                      (ln.get("summary") or ""),
-                     ln["debit"], ln["credit"]))
+                     ln["debit"], ln["credit"], ln["source_type"], ln["source_key"]))
         try:
             append_edit_log(conn, voucher_id, _user_name(user),
                             changes + line_changes,

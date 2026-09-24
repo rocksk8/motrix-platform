@@ -404,34 +404,73 @@ def case_attachments(conn, quote_no):
     for st in _CASE_SCOPED:
         for doc_no in _case_doc_nos(conn, st, quote_no):
             for meta in source_files(conn, st, doc_no) or ():
-                name = (meta or {}).get("filename") or (meta or {}).get("name") or ""
-                # ⚠️ 兩種「不能用」**不是同一件事**，訊息要分得出來：
-                #    路徑不合法（abs_path 擋下）／檔案不在磁碟上。
-                # ☠️ 一律說「檔案已遺失」的話，使用者會去找一個**從來沒有遺失**
-                #    的檔 —— 那是一句通順而錯的話（同 `JV9` 那一族）。
-                reason = ""
-                try:
-                    exists = os.path.isfile(abs_path((meta or {}).get("path")))
-                    if not exists:
-                        reason = "檔案已遺失"
-                except HTTPException:
-                    exists, reason = False, "附件路徑不合法"
-                file_id = str((meta or {}).get("id") or "")
-                used_by = used_map.get((st, doc_no, file_id)) or []
-                out.append({
-                    "type": st,
-                    "docNo": doc_no,
-                    "fileId": file_id,
-                    "filename": name,
-                    "exists": exists,
-                    "reason": reason,
-                    "missing": describe_missing(meta),
-                    "used": bool(used_by),
-                    "usedAt": used_by[0]["usedAt"] if used_by else "",
-                    "usedBy": used_by,
-                })
+                out.append(_candidate(st, doc_no, meta, used_map))
+    return _unused_first(out)
 
+
+def _candidate(st, doc_no, meta, used_map):
+    """一個可帶入的候選檔（`case_attachments()` 與 `line_source_files()` 共用同一份形狀）。"""
+    name = (meta or {}).get("filename") or (meta or {}).get("name") or ""
+    # ⚠️ 兩種「不能用」**不是同一件事**，訊息要分得出來：
+    #    路徑不合法（abs_path 擋下）／檔案不在磁碟上。
+    # ☠️ 一律說「檔案已遺失」的話，使用者會去找一個**從來沒有遺失**
+    #    的檔 —— 那是一句通順而錯的話（同 `JV9` 那一族）。
+    reason = ""
+    try:
+        exists = os.path.isfile(abs_path((meta or {}).get("path")))
+        if not exists:
+            reason = "檔案已遺失"
+    except HTTPException:
+        exists, reason = False, "附件路徑不合法"
+    file_id = str((meta or {}).get("id") or "")
+    used_by = used_map.get((st, doc_no, file_id)) or []
+    return {
+        "type": st,
+        "docNo": doc_no,
+        "fileId": file_id,
+        "filename": name,
+        "mime": (meta or {}).get("mime") or "",
+        "exists": exists,
+        "reason": reason,
+        "missing": describe_missing(meta),
+        "used": bool(used_by),
+        "usedAt": used_by[0]["usedAt"] if used_by else "",
+        "usedBy": used_by,
+    }
+
+
+def _unused_first(out):
     unused = [x for x in out if not x["used"]]
     used = [x for x in out if x["used"]]
     used.sort(key=lambda x: x["usedAt"], reverse=True)
     return unused + used
+
+
+#: `JV36`：分錄可以連帶的三種來源（A 裁示：預覽端點也只接受這三種）。
+LINE_SOURCES = ("case", "extra_expense", "contractor_dispatch")
+
+
+def line_source_files(conn, source_type, source_key):
+    """`JV36`：某一行摘要的來源 XXX「本身的已上傳檔案」。
+
+    🔴 範圍**逐字等於** `resolve_picks()` 帶得進來的範圍（A 裁示：不可以更寬）——
+       每一筆的 `type` 都在 `SOURCE_TYPES` 內，`docNo` 就是 `source_files()` 的鍵：
+    ```
+    case                 case_attachments(quote_no)（頁籤區「已上傳檔案」同一份）
+    extra_expense        source_files('extra_expense', id)
+    contractor_dispatch  source_files('contractor_dispatch', id) ＋ ('contractor_invoice', id)
+    ```
+    """
+    if source_type not in LINE_SOURCES:
+        raise HTTPException(400, "不支援的摘要來源「%s」。" % source_type)
+    key = str(source_key or "").strip()
+    if not key:
+        raise HTTPException(400, "缺少摘要來源的編號。")
+    if source_type == "case":
+        return case_attachments(conn, key)
+    pairs = ([("extra_expense", key)] if source_type == "extra_expense"
+             else [("contractor_dispatch", key), ("contractor_invoice", key)])
+    used_map = _used_map(conn)
+    return _unused_first([_candidate(st, doc_no, meta, used_map)
+                          for st, doc_no in pairs
+                          for meta in (source_files(conn, st, doc_no) or ())])

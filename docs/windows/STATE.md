@@ -42217,3 +42217,4 @@ python verify_package.py ... | tee file; echo $?   => EXIT_CODE=0
 - **JV31.** 傳票簽章加「記帳」（過帳人 posted_by／posted_at，§35），signatures_of 三條路徑都補；畫面簽章格照後端順序與格數畫（不固定 3 格）；unify 不變量改為「1＋層數＋1」。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV31；題 `test_jv31_*`。
 - **JV33.** 傳票帶入面板：摘要格 focus 時同時列出本傳票已上傳檔案（文字接檔名、縮圖走 JV28 預覽）與支出項；空白填入、非空以「；」接續（只限面板，頁籤區維持覆蓋）；「連金額一起帶入」不做（待確認 N12）。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV33＋A 裁示；題 `test_jv33_*`。
 - **JV34.** 傳票輸入與列印：科目可搜尋選單（含停用標示）＋名稱唯讀；最後一行 Enter 新增；補平差額（目前行借貸空白、差額≠0 才可按，填較少側）；PDF 表頭「附件 N 張」、頁碼「第 x／y 頁」（@page 頁邊框，需 Edge 131+，只編本體）、跨頁重印表頭；清單關鍵字／日期／狀態篩選；作廢並重開。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV34＋A 裁示；題 `test_jv34_*`。
+- **JV36.** 傳票摘要連帶來源的已上傳檔案（取代 JV33 的；接續）：面板選案件／支出項 ⇒ 該行摘要覆蓋＋記住來源（voucher_lines.source_type／source_key，v111）；該行下方列出來源檔案，可預覽、勾選才帶入；重開依來源重新帶出；N12 空白行金額帶入借方；預覽端點限三種來源、只在該來源清單找檔。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV36＋A 裁示；題 `test_jv36_*`。

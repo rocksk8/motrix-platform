@@ -239,23 +239,101 @@ function voucherPage() {
     // 📌 「連金額一起帶入」這一輪不做（決定填借方還是貸方＝金額，待確認 N12）。
     panelLine: -1,
 
+    // `JV36`：支出項的來源鍵——承攬商派工（含其品項／人員子列）＝派工 id，額外支出＝id。
     panelExpenses() {
       const out = []
       for (const it of ((this.sources || {})['支出項'] || [])) {
-        out.push({ summary: it.summary || '', child: false })
-        for (const ch of (it.items || [])) out.push({ summary: ch.summary || '', child: true })
+        const st = it.kind === 'contractor_dispatch' ? 'contractor_dispatch' : 'extra_expense'
+        const key = String(it.id || '')
+        out.push({ summary: it.summary || '', child: false, source_type: st, source_key: key,
+                   amount: it.amount })
+        for (const ch of (it.items || [])) {
+          out.push({ summary: ch.summary || '', child: true, source_type: st, source_key: key,
+                     amount: ch.amount })
+        }
       }
-      return out.filter(function (e) { return e.summary })
+      return out.filter(function (e) { return e.summary && e.source_key })
+    },
+
+    panelCases() {
+      return ((this.sources || {})['案件'] || []).map(function (it) {
+        return { summary: it.summary || it.quote_no, source_type: 'case',
+                 source_key: it.quote_no || '' }
+      }).filter(function (e) { return e.source_key })
     },
 
     panelExpenseNote() { return (this.sourceNotes || {})['支出項'] || '' },
 
-    panelAppend(text) {
-      if (!this.canEdit || this.panelLine < 0) return
+    // `JV36`：選 XXX ⇒ 那一行摘要**覆蓋**成 XXX 的名稱，並記住來源；下方帶出 XXX 的已上傳檔案。
+    //   📌 更正留著：`JV33` 原本是「空白填入、非空以；接續」——使用者 2026-09-24 更正
+    //      「我說的摘要要能帶動已上傳檔案，是別的意思……我點選 XXX 的時候它下方能自動連帶
+    //      XXX 內有的上傳檔案」⇒ 拿掉接續。
+    //   `N12`（使用者：「要，限空白行帶入借方」）：選支出項時，那一行借貸都空白 ⇒ 金額帶入**借方**；
+    //      金額不是正整數元 ⇒ 不帶（不自行進位）。
+    panelPick(e) {
+      if (!this.canEdit || this.panelLine < 0 || !e) return
       const l = this.lines[this.panelLine]
-      if (!l || !text) return
-      const cur = (l.summary || '').trim()
-      l.summary = cur ? cur + '；' + text : text
+      if (!l) return
+      l.summary = e.summary
+      l.source_type = e.source_type
+      l.source_key = e.source_key
+      if (e.source_type !== 'case' && !String(l.debit || '').trim() && !String(l.credit || '').trim()) {
+        const a = this.parseAmount(e.amount)
+        if (!a.err && a.v > 0) l.debit = String(a.v)
+      }
+      if (e.source_type === 'case' && e.source_key !== this.sourceQuote) {
+        this.sourceQuote = e.source_key
+        this.loadSources()
+      }
+      this.loadLineFiles(e.source_type, e.source_key)
+    },
+
+    // ── `JV36`：各行來源的已上傳檔案（只列出；勾選才帶入）─────────────
+    lineSrc: {},
+
+    _srcKey(st, key) { return st + ':' + key },
+
+    lineFiles(l) {
+      return this.lineSrc[this._srcKey(l.source_type, l.source_key)]
+        || { loading: false, files: [], err: '' }
+    },
+
+    async loadLineFiles(st, key) {
+      if (!st || !key) return
+      const k = this._srcKey(st, key)
+      this.lineSrc = Object.assign({}, this.lineSrc, { [k]: { loading: true, files: [], err: '' } })
+      try {
+        const r = await fetch('/api/vouchers/line-source-files?source_type=' + encodeURIComponent(st)
+                              + '&ref=' + encodeURIComponent(key), { headers: this._auth() })
+        const d = await r.json().catch(function () { return {} })
+        if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
+        this.lineSrc = Object.assign({}, this.lineSrc, { [k]: { loading: false, files: d.files || [], err: '' } })
+      } catch (e) {
+        this.lineSrc = Object.assign({}, this.lineSrc,
+          { [k]: { loading: false, files: [], err: '來源檔案載入失敗（' + e.message + '）。' } })
+      }
+    },
+
+    isBrought(f) {
+      return (this.attachments || []).some(function (a) {
+        return a.source_type === f.type && a.source_doc_no === f.docNo && a.source_file_id === f.fileId
+      })
+    },
+
+    // 勾選 ⇒ 複製成傳票附件（沿用 `bringIn`，原檔被刪傳票仍保留）；失敗就把勾拿掉。
+    async bringInLine(f, ev) {
+      if (!ev.target.checked || this.isBrought(f)) return
+      await this.bringIn(f)
+      if (!this.isBrought(f)) ev.target.checked = false
+    },
+
+    previewSourceFile(l, f) {
+      return this.openExtPreview({
+        filename: f.filename, mime: f.mime,
+        _url: '/api/vouchers/line-source-file?source_type=' + encodeURIComponent(l.source_type)
+              + '&ref=' + encodeURIComponent(l.source_key)
+              + '&file_id=' + encodeURIComponent(f.fileId),
+      })
     },
 
     closePanel() { this.panelLine = -1 },
@@ -478,15 +556,16 @@ function voucherPage() {
     },
 
     async _fetchAttBlob(a, type) {
-      const r = await fetch(
-        '/api/vouchers/' + this.id + '/attachments/' + encodeURIComponent(a.file_id),
-        { headers: this._auth() })
+      // `JV36`：來源檔（還沒帶入）帶著自己的 `_url`。
+      const url = a._url
+        || '/api/vouchers/' + this.id + '/attachments/' + encodeURIComponent(a.file_id)
+      const r = await fetch(url, { headers: this._auth() })
       if (!r.ok) throw new Error('HTTP ' + r.status)
       return new Blob([await r.arrayBuffer()], { type: type })
     },
 
     // 預覽 modal 的狀態。`url` 只在 image／pdf 時才有；關閉或切換時 revoke。
-    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false },
+    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false, ext: null },
 
     openAttachment(a) {
       // `JV16` 那份清單（預覽窗內）與編輯頁清單**共用同一個頁內預覽窗**，不再 window.open。
@@ -496,8 +575,16 @@ function voucherPage() {
     async openAttPreview(a) {
       const idx = this.attachments.indexOf(a)
       if (idx < 0) return
+      this.attPv.ext = null
       this.attPv.open = true
       await this._loadAttPv(idx)
+    },
+
+    // `JV36`：預覽一個還沒帶入的來源檔（同一個預覽窗、同一套內嵌規則）。
+    async openExtPreview(item) {
+      this.attPv.ext = item
+      this.attPv.open = true
+      await this._loadAttPv(-1)
     },
 
     _revokeAttPv() {
@@ -507,7 +594,7 @@ function voucherPage() {
 
     async _loadAttPv(idx) {
       this._revokeAttPv()
-      const a = this.attachments[idx]
+      const a = this.attPv.ext || this.attachments[idx]
       this.attPv.idx = idx
       this.attPv.err = ''
       this.attPv.kind = this.attKind(a)
@@ -528,17 +615,18 @@ function voucherPage() {
       }
     },
 
-    attPvItem() { return this.attachments[this.attPv.idx] || null },
+    attPvItem() { return this.attPv.ext || this.attachments[this.attPv.idx] || null },
 
     stepAttPv(d) {
       const n = this.attachments.length
-      if (!n) return
+      if (!n || this.attPv.ext) return
       return this._loadAttPv((this.attPv.idx + d + n) % n)
     },
 
     closeAttPv() {
       this._revokeAttPv()
       this.attPv.open = false
+      this.attPv.ext = null
       this.attPv.idx = -1
       this.attPv.kind = ''
     },
@@ -663,9 +751,12 @@ function voucherPage() {
           //    貸方那一格是留白的。而 `0` 在會計上是一個有意義的數字。
           debit: l.debit ? String(l.debit) : '',
           credit: l.credit ? String(l.credit) : '',
+          // `JV36`：這一行的摘要來自哪一筆（重開時依它重新帶出來源檔案清單）
+          source_type: l.source_type || '',
+          source_key: l.source_key || '',
         }
       })
-      this.lines = ls.length ? ls : [{ account_code: '', account_name: '', summary: '', debit: '', credit: '' }]
+      this.lines = ls.length ? ls : [{ account_code: '', account_name: '', summary: '', debit: '', credit: '', source_type: '', source_key: '' }]
       // 🔴 三格印的是**人名**，不是 token。
       //    後端 `signatures_of()` 回 `{格名: {by, at}}`，而 `by` 是 `username`
       //    —— 2026-09-23 修過一次：舊碼存的是 `_tok(auth)` 的**原始 bearer token**，
@@ -673,6 +764,8 @@ function voucherPage() {
       const s = d.signatures || {}
       this.signs = Object.keys(s).map(function (k) { return { label: k, by: (s[k] || {}).by || '' } })
       this.attachments = d.attachments || []
+      // `JV36`：依已存的來源重新帶出各行的來源檔案清單。
+      for (const l of this.lines) if (l.source_type) this.loadLineFiles(l.source_type, l.source_key)
       this.summaryTarget = 0
       this.editLog = []
       this.editLogErr = ''
@@ -744,7 +837,7 @@ function voucherPage() {
       if (m[f]) return m[f]
       const mm = /^lines\[(\d+)\](?:\.(\w+))?$/.exec(f || '')
       if (mm) {
-        const col = { account_code: '科目', summary: '摘要', debit: '借方', credit: '貸方' }[mm[2]] || ''
+        const col = { account_code: '科目', summary: '摘要', debit: '借方', credit: '貸方', source: '摘要來源' }[mm[2]] || ''
         return '第 ' + (Number(mm[1]) + 1) + ' 行分錄' + (col ? ' ' + col : '')
       }
       return f
@@ -834,6 +927,8 @@ function voucherPage() {
           // ⚠️ 空字串送 0，而畫面上仍然留白。
           debit: self._amt(l.debit),
           credit: self._amt(l.credit),
+          source_type: l.source_type || '',
+          source_key: l.source_key || '',
         }
       })
     },
@@ -993,7 +1088,7 @@ function voucherPage() {
       //    貸方那一格是**留白**的，不是印一個 0。
       //    ☠️ 印 0 的話，一張只有三行的傳票看起來像有六個金額；
       //       而「0」在會計上是一個**有意義的數字**，不等於「沒有填」。
-      this.lines.push({ account_code: '', account_name: '', summary: '', debit: '', credit: '' })
+      this.lines.push({ account_code: '', account_name: '', summary: '', debit: '', credit: '', source_type: '', source_key: '' })
     },
 
     removeLine(i) {
