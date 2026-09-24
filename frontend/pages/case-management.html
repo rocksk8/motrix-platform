@@ -59,7 +59,7 @@
        加深顏色、日期維持小字淡色，強化主次層級（原本兩者字級/顏色幾乎沒有區隔）。 */
     .cm-card__amount { font-size:12.5px; font-family:LINE Seed TW_OTF, sans-serif; font-weight:700; color:var(--text-primary); }
     .cm-card__date { font-size:9.5px; color:var(--text-dim); font-family:LINE Seed TW_OTF, sans-serif; }
-    .cm-card__stageprog { font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:10px; background:#EEF2FF; color:var(--accent); font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; }
+    .cm-card__stageprog { font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:10px; background:#EEF2FF; color:#1D4ED8; font-family:LINE Seed TW_OTF, sans-serif; flex-shrink:0; }
     .cm-card__stageprog--danger { background:#FEE2E2; color:var(--danger); }
     .cm-empty { padding:40px 20px; text-align:center; color:var(--text-dim); font-size:13px; font-family:var(--font-zh); display:flex; flex-direction:column; align-items:center; gap:6px; }
     .cm-empty__sub { font-size:11px; font-family:var(--font-zh); color:var(--text-dim); opacity:.65; }
@@ -332,7 +332,8 @@
     .stage-segbar__seg { flex:1; height:100%; cursor:pointer; transition:opacity .15s; }
     .stage-segbar__seg:hover { opacity:.75; }
     .stage-segbar__seg--done { background:var(--success); }
-    .stage-segbar__seg--current { background:var(--accent); }
+    .stage-segbar__seg--current { background:#2563EB; }   /* CU1：紅色只給逾期 */
+    .stage-segbar__seg:focus-visible { outline:2px solid var(--text-primary); outline-offset:1px; }
     .stage-segbar__seg--future { background:#D9D7D2; }
     .stage-segbar__seg--overdue { background:var(--danger); }
     .stage-segbar__seg--empty { background:#EEECEA; flex:1; }
@@ -951,7 +952,7 @@
                   <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
                   <span class="cm-card__stageprog" x-show="c.stage_total > 0"
                         :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
-                        x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"
+                        x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%' + (c.stage_overdue > 0 ? ' · 逾期 ' + c.stage_overdue : '')"
                         :title="(c.stage_done||0) + '/' + (c.stage_total||0) + ' 階段完成' + (c.stage_overdue>0 ? '，' + c.stage_overdue + ' 項逾期' : '')"></span>
                 </span>
                 <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
@@ -984,6 +985,7 @@
               <template x-for="c in col.items" :key="c.quote_no">
                 <div class="cm-card" :class="{selected: selected && selected.quote_no === c.quote_no}"
                      :style="isUnread(c) ? 'border-left-color:#D97706' : ''"
+                     :data-board-quote-no="c.quote_no"
                      @click="selectCase(c.quote_no)">
                   <div class="cm-card__head">
                     <span class="cm-card__no" x-text="c.quote_no"></span>
@@ -991,13 +993,16 @@
                           :class="c.deal_tag==='已結案' ? 'cm-card__tag--closed' : (c.deal_tag==='已成案' && c.current_stage ? 'cm-card__tag--stage' : 'cm-card__tag--active')"
                           x-text="c.deal_tag==='已成案' && c.current_stage ? '待 ' + c.current_stage : c.deal_tag"></span>
                   </div>
+                  <template x-if="isUnread(c)">
+                    <span class="cm-card__unread-tag">有新動態</span>
+                  </template>
                   <div class="cm-card__customer" x-text="c.customer_name || '(未填客戶)'"></div>
                   <div class="cm-card__footer">
                     <span style="display:flex;align-items:center;gap:6px;overflow:hidden">
                       <span class="cm-card__amount" x-text="c.moneyMasked ? '—' : 'NT$ ' + (c.total||0).toLocaleString()"></span>
                       <span class="cm-card__stageprog" x-show="c.stage_total > 0"
                             :class="{'cm-card__stageprog--danger': c.stage_overdue > 0}"
-                            x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%'"
+                            x-text="Math.round((c.stage_done||0) / (c.stage_total||1) * 100) + '%' + (c.stage_overdue > 0 ? ' · 逾期 ' + c.stage_overdue : '')"
                             :title="(c.stage_done||0) + '/' + (c.stage_total||0) + ' 階段完成' + (c.stage_overdue>0 ? '，' + c.stage_overdue + ' 項逾期' : '')"></span>
                     </span>
                     <span class="cm-card__date" x-text="(c.quote_date || c.created_at || '').slice(0,10)"></span>
@@ -1369,12 +1374,15 @@
                     <div class="stage-segbar">
                       <template x-for="st in (cr.caseRecord?.stages || [])" :key="'seg-' + st.id">
                         <div class="stage-segbar__seg" :class="stageSegClass(st)" :title="stageSegTooltip(st)"
-                             @click="toggleStageDetail(st.id)"></div>
+                             role="button" tabindex="0" :aria-label="stageSegTooltip(st)"
+                             @click="toggleStageDetail(st.id)"
+                             @keydown.enter.prevent="toggleStageDetail(st.id)"
+                             @keydown.space.prevent="toggleStageDetail(st.id)"></div>
                       </template>
                       <div class="stage-segbar__seg stage-segbar__seg--empty" x-show="!(cr.caseRecord?.stages || []).length"></div>
                     </div>
                   </div>
-                  <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--accent);min-width:42px;text-align:right" x-text="caseProgressPct() + '%'"></span>
+                  <span style="font-size:14px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;color:var(--text-primary);min-width:42px;text-align:right" x-text="caseProgressPct() + '%'"></span>
                 </div>
 
                 <div style="display:flex;gap:6px;margin-bottom:14px">
