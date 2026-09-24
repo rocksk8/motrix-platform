@@ -595,3 +595,4 @@ hichan-0a 代裁（待確認）：
 | W-4 | 低（CM7） | 一鍵已讀沒等回應就重抓件數 ⇒ 未讀列又出現 | hichan-a3 |
 | W-5 | 低 | `.aq-sort` 在案件頁沒定義 ⇒ 排序／多選／常用篩選鈕是原生灰框 | hichan-a3 |
 | W-6 | 待查、優先度高 | 多頁同開偶發 500 `database is locked`（update_case_record、edit_presence），立即失敗未等 timeout | hichan-8d 先查根因 |
+- W-6 中期（hichan-8d）：4 種重現 0 錯；原前提「立即失敗」無證據（log 記的是出錯時間非開始時間）。hichan-0a 准動鎖定檔 main.py：`_unhandled_handler` 加記 sqlite_errorname／errorcode 與請求經過秒數（只記錄不改行為，附題）；寫入路徑在拿到數字前不改。待排除方向：走查伺服器背景任務（備份 backup API、地理預熱、標案掃描）握寫鎖。
