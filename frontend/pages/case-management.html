@@ -3138,6 +3138,9 @@
                           <span x-text="n.itemCount + ' 項品項'"></span>
                         </div>
                       </div>
+                      <!-- `MP1`：出貨地址在地圖上的位置（地圖點位的 `?focus=shipping_notes:<id>`）。 -->
+                      <a class="mp1-onmap" x-show="n.deliveryAddress" style="font-size:11px"
+                         :href="'map.html?focus=' + encodeURIComponent('shipping_notes:' + n.id)">在地圖上看</a>
                       <span :class="'badge ' + _shippingStatusClass(n.status)" x-text="_shippingStatusLabel(n.status)"
                             style="font-size:10px;padding:2px 8px;border-radius:4px;font-weight:600"></span>
                       <span x-show="(n.status==='待審核'||n.status==='簽核中') && (n.approval && n.approval.tiers || []).length>0"

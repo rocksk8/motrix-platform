@@ -172,6 +172,8 @@
                   style="font-size:10px;background:#ECFDF5;color:#059669;padding:1px 7px;border-radius:3px;font-weight:600">ID ✓</span>
           </div>
         </div>
+        <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedContractor.address"
+             :href="MotrixRecordLink.mapUrl('contractors', selectedContractor.id)">在地圖上看</a>
         <button class="detail-close" @click="selectedId=null;selectedContractor=null">×</button>
       </div>
       <div class="detail-body">
@@ -477,6 +479,7 @@
   </div>
 </div>
 
+<script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -522,6 +525,13 @@ function contractorsPage() {
         alert('此頁面僅限最高權限使用者或具有「外包名冊」模組授權的使用者存取'); window.history.back(); return
       }
       await this.load()
+      // `MP1`：地圖「開啟單據」帶 `?id=` 進來 ⇒ 直接打開那一筆；找不到要說出來。
+      const linkId = window.MotrixRecordLink && MotrixRecordLink.param('id')
+      if (linkId) {
+        const hit = (this.contractors || []).find(x => String(x.id) === linkId)
+        if (hit) this.selectContractor(hit)
+        else MotrixRecordLink.notFound('找不到這一筆外包資料（可能已停用或刪除）。')
+      }
     },
 
     async load() {

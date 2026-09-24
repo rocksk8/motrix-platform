@@ -201,9 +201,12 @@ def _own_points(name, located, user_coord=None, budget=None):
     # 所以測試把間諜裝在 `db.get_db` 上看得到；
     # `from db import get_db` 拿的是副本，**間諜裝了也打不到**。
     name_col = "customer_name" if spec["table"] == "shipping_notes" else "name"
+    # `MP1`：出貨單沒有自己的頁，連結要落在它所屬的案件上 ⇒ 一併取 quote_no。
+    is_ship = spec["table"] == "shipping_notes"
     with db_conn() as conn:
         rows = conn.execute(
-            f"SELECT id, {name_col} AS name, {col} AS addr FROM {spec['table']} "
+            f"SELECT id, {name_col} AS name, {col} AS addr"
+            f"{', quote_no' if is_ship else ''} FROM {spec['table']} "
             f"WHERE {col} IS NOT NULL AND TRIM({col}) <> ''"
         ).fetchall()
 
@@ -220,6 +223,9 @@ def _own_points(name, located, user_coord=None, budget=None):
             continue
         points.append({
             "dataset": name,
+            # 🔴 `MP1`：點位要連得回它的單據 ⇒ 帶記錄 id（前端據此組連結與 `?focus=`）。
+            "recordId": r["id"],
+            **({"quoteNo": r["quote_no"]} if is_ship else {}),
             "name": r["name"], "address": r["addr"],
             "lat": found.coord[0], "lon": found.coord[1],
             "precision": found.precision, "source": found.source,
@@ -283,6 +289,8 @@ def _json_points(name, located, user_coord=None, budget=None):
             made += 1
             points.append({
                 "dataset": dataset, "datasetLabel": label,
+                # `MP1`：同一筆客戶的送貨／發票兩個點帶**同一個** id（連到同一張客戶卡）。
+                "recordId": r["id"],
                 "name": r["name"], "address": addr,
                 "lat": found.coord[0], "lon": found.coord[1],
                 "precision": found.precision, "source": found.source,

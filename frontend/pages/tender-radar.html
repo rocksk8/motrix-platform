@@ -388,7 +388,8 @@
         </tr></thead>
         <tbody>
           <template x-for="t in visibleTenders" :key="t.id">
-            <tr :class="t.marked ? 'tr-marked' : ''">
+            <tr :class="t.marked ? 'tr-marked' : ''" :data-case-no="t.caseNo"
+                :style="focusCase === t.caseNo ? 'outline:2px solid var(--accent);outline-offset:-2px' : ''">
               <!-- 🔴 **切換鈕**（未標註／已標註）。
                    ⚠️ `title` 帶「誰標的、什麼時候」—— 規格允許 tooltip 或小字，
                    而這裡**兩個都給**：tooltip 在手機上點不出來，
@@ -434,7 +435,11 @@
                 </template>
                 <template x-if="!t.url"><span x-text="t.org"></span></template>
               </td>
-              <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif" x-text="t.caseNo"></td>
+              <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif">
+                <span x-text="t.caseNo"></span>
+                <a class="mp1-onmap" style="font-size:11px;margin-left:4px"
+                   :href="MotrixRecordLink.mapUrl('tenders', t.caseNo)">在地圖上看</a>
+              </td>
               <td style="font-size:12px">
                 <template x-if="t.url">
                   <a :href="t.url" target="_blank" rel="noopener noreferrer"
@@ -498,6 +503,7 @@
   </main>
 </div>
 
+<script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -620,6 +626,7 @@ function tenderRadarPage() {
     // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
     //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
     _initDone: false,
+    focusCase: null,
 
     async init() {
       if (this._initDone) return
@@ -634,6 +641,20 @@ function tenderRadarPage() {
         location.href = '../index.html'; return
       }
       await this.refresh()
+      // `MP1`：地圖「開啟單據」帶 `?case=` 進來 ⇒ 清掉篩選、捲到那一列並標示；找不到要說出來。
+      const linkCase = window.MotrixRecordLink && MotrixRecordLink.param('case')
+      if (linkCase) {
+        this.watchFilter = ''
+        if (this.tenders.some(t => t.caseNo === linkCase)) {
+          this.focusCase = linkCase
+          this.$nextTick(() => {
+            const row = document.querySelector('tr[data-case-no="' + CSS.escape(linkCase) + '"]')
+            if (row) row.scrollIntoView({ block: 'center' })
+          })
+        } else {
+          MotrixRecordLink.notFound('找不到這一筆標案（可能已超過保存期限）。')
+        }
+      }
     },
 
     async refresh() {

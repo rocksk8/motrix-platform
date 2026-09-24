@@ -375,6 +375,10 @@
                      x-text="p.name || '—'"></a>
                 </template>
                 <template x-if="!p.url"><span x-text="p.name || '—'"></span></template>
+                <!-- `MP1`：連回單據。看不到那一頁的人不給連結（`recordUrl` 回 null）。 -->
+                <template x-if="recordUrl(p)">
+                  <a class="mp-rec" :href="recordUrl(p)" style="font-size:11px;margin-left:6px">開啟單據</a>
+                </template>
               </td>
               <td style="font-size:12px" x-text="p.location || '—'"></td>
               <!-- ⚠️ 距離是 null 時顯示「—」不是 0。
@@ -431,6 +435,7 @@
   </main>
 </div>
 
+<script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
@@ -479,6 +484,11 @@ function mapPage() {
     // ☠️ 不說的話，「這一頁以前會自動出現地圖」變成「今天沒有」，
     // 而使用者會以為功能壞了。
     autoOpenSkipped: false, _tileFlag: null,
+    // `MP1`：`?focus=<來源>:<記錄>`（單據頁「在地圖上看」帶進來）。處理完就清掉——
+    //   ⚠️ 不清的話每一次重畫（勾選資料集、重新整理）都會把視野拉回那一點。
+    _focus: null, _markerByKey: null,
+
+    recordUrl(p) { return window.MotrixRecordLink ? window.MotrixRecordLink.recordUrl(p, this.session) : null },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 
@@ -535,6 +545,12 @@ function mapPage() {
       if (!raw) { location.href = 'login.html'; return }
       this.session = JSON.parse(raw)
       this.token = this.session.token || ''
+      this._focus = window.MotrixRecordLink ? window.MotrixRecordLink.param('focus') : null
+      if (this._focus) {
+        // 指名要看的那一類若沒勾（例：外包名冊預設不開）⇒ 勾上——這是使用者明確要求的那一筆。
+        const src = this._focus.split(':')[0]
+        if (this.sources.some(s => s.key === src) && !this.picked.includes(src)) this.picked.push(src)
+      }
       await this.refresh()
       // 🔴 XA4：**自動開圖**（使用者裁示：「正式機都長期開著，
       // 為什麼不能預載好地圖發給使用者，還要使用者點選開啟地圖」）。
@@ -900,6 +916,7 @@ function mapPage() {
           .bindPopup('<strong>' + this._esc(loc.name || '據點') + '</strong><br>'
                      + this._esc(loc.address || ''))
       })
+      this._markerByKey = {}
       pts.forEach(p => {
         const d = this.datasetOf(p)
         // 🔴 **標記本身就要分得出來。** 用 divIcon 放一個字＋顏色。
@@ -913,8 +930,11 @@ function mapPage() {
         })
         // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
         //    （標案來自政府網站），直接拼進 HTML ＝ 在每個開地圖的人瀏覽器裡執行它。
-        window.L.marker([p.lat, p.lon], { icon }).addTo(this._layer)
-          .bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
+        const url = this.recordUrl(p)
+        const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(this._layer)
+        const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
+        if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
+        marker.bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
                       (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
                         ? '' : ('距您約 ' + p.distanceFromUserKm + ' km'
                                 + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),
@@ -922,10 +942,29 @@ function mapPage() {
                         ? '' : ('離' + (p.nearestLocationName || '據點') + '約 '
                                 + p.distanceFromOfficeKm + ' km（'
                                 + this.precisionLabel(p.precision) + '）')]
-                     .filter(Boolean).map(t => this._esc(t)).join('<br>'))
+                     .filter(Boolean).map(t => this._esc(t)).join('<br>')
+                   + (url ? '<br><a class="mp-rec" href="' + this._esc(url) + '">開啟單據</a>' : ''))
       })
       this._drawUser()
       this._fitAll()
+      this._applyFocus()
+    },
+
+    //: `MP1`：把視野移到 `?focus=` 指的那一點並打開彈窗。**找不到要說出來**——
+    //  靜靜顯示整張圖的話，使用者會以為連結壞了。
+    _applyFocus() {
+      if (!this._focus || !this._map || !this.info) return
+      const want = this._focus
+      this._focus = null
+      const marker = this._markerByKey && this._markerByKey[want]
+      if (!marker) {
+        if (window.MotrixRecordLink) {
+          window.MotrixRecordLink.notFound('地圖上沒有這一筆：尚未定位完成、查無此地址，或未填地址。')
+        }
+        return
+      }
+      this._map.setView(marker.getLatLng(), 15)
+      marker.openPopup()
     },
     //: 上一次載圖磚失敗了嗎。**讀不到就當成沒失敗**（自動開）。
     //  ⚠️ `localStorage` 在無痕視窗／被封鎖時會丟例外 ——

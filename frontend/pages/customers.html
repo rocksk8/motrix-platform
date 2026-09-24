@@ -354,6 +354,8 @@
                     x-text="'統編 ' + selectedCustomer.taxId"></span>
             </div>
           </div>
+          <a class="btn btn-ghost btn-sm mp1-onmap" x-show="selectedCustomer.deliveryAddress || selectedCustomer.invoiceAddress"
+             :href="MotrixRecordLink.mapUrl('customers', selectedCustomer.id)">在地圖上看</a>
           <button class="detail-close" @click="selectedId=null">×</button>
         </div>
         <div class="detail-body">
@@ -1287,6 +1289,13 @@
           if (res.status === 401) { this.logout(); return }
           if (res.ok) this.customers = await res.json()
         } catch(e) {}
+        // `MP1`：地圖「開啟單據」帶 `?id=` 進來 ⇒ 直接打開那一筆；找不到要說出來。
+        const linkId = window.MotrixRecordLink && MotrixRecordLink.param('id')
+        if (linkId) {
+          const hit = (this.customers || []).find(x => String(x.id) === linkId)
+          if (hit) this.selectCustomer(hit)
+          else MotrixRecordLink.notFound('找不到這一筆客戶資料（可能已停用或刪除）。')
+        }
 
         // 離開頁面前警告（未儲存資料保護）
         window.addEventListener('beforeunload', e => {
@@ -1304,6 +1313,7 @@
     }
   }
   </script>
+  <script src="../static/record-link.js"></script>
   <script src="../static/notif.js"></script>
   <script src="../static/sidebar.js"></script>
 </body>
