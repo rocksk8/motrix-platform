@@ -228,11 +228,12 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user):
               rec.stages = [{ id: 999999, label: '測試階段', visits: [{ id: 5, visitDate: '2026-09-01' }] }]
               const asked = []
               window.confirm = (m) => { asked.push(m); return false }
+              window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
               const calls = []
               window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
-              c.removeMaterial(0)
-              c.removeDevice(0)
-              c.removeDeviceByObj(rec.devices[0])
+              await c.removeMaterial(0)
+              await c.removeDevice(0)
+              await c.removeDeviceByObj(rec.devices[0])
               await c.removeStage(0)
               await c.removeVisit(0, 0)
               return { asked, calls, m: rec.materials.length, d: rec.devices.length,
@@ -269,12 +270,13 @@ def test_remaining_deletes_are_gated_by_confirm(live_server, make_user):
               const st = { id: 999999, label: '測試階段', assignedTo: ['someone'] }
               const asked = []
               window.confirm = (m) => { asked.push(m); return false }
+              window.MotrixUI.confirm = async (m) => { asked.push(m); return false }   // CM12 P4 B 包
               const calls = []
               window.fetch = (...a) => { calls.push(a[0]); return Promise.resolve(new Response('{}')) }
-              c.moRemoveItem(0)
-              c.removeDispatchPersonnel(0)
-              c.removeDispatchItem(0)
-              c.removeShippingItem(0)
+              await c.moRemoveItem(0)
+              await c.removeDispatchPersonnel(0)
+              await c.removeDispatchItem(0)
+              await c.removeShippingItem(0)
               await c.removeStageAssignee(st, 'someone')
               return { asked, calls, mo: c.materialOrders.length, dp: c.dispatchForm.personnel.length,
                        di: c.dispatchForm.items.length, si: c.shippingForm.items.length, sa: st.assignedTo.length }

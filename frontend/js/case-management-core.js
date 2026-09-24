@@ -684,26 +684,35 @@ window.CM_PARTS.push(() => ({
     // 「容易誤觸」的關閉路徑，改成先跳原生 confirm() 警示，取消就留在原本
     // 填寫到一半的頁面，不會直接歸零關閉；表單底部明確標示「取消」的按鈕
     // 維持原樣不用二次確認（那本來就是使用者主動放棄的明確意圖）。
-    _confirmDiscardForm() {
-      return confirm('表單尚未儲存，確定要關閉嗎？目前輸入的內容將會遺失。')
+    // 2026-09-24（CM12 P4）：這 6 個視窗是 x-show，隱藏時 @keydown.escape.window 仍在監聽 ⇒ 在頁面
+    // 任何地方按 Esc 都會連問最多 6 次「表單尚未儲存」。原生 confirm 被 e2e 自動按掉所以沒被看見；
+    // 下面每個 close*ModalGuarded 先確認自己的視窗真的開著才問。
+    async _confirmDiscardForm() {
+      return MotrixUI.confirm('表單尚未儲存，確定要關閉嗎？目前輸入的內容將會遺失。')
     },
-    closeDispatchModalGuarded() {
-      if (this._confirmDiscardForm()) this.showDispatchModal = false
+    async closeDispatchModalGuarded() {
+      if (!this.showDispatchModal) return
+      if ((await this._confirmDiscardForm())) this.showDispatchModal = false
     },
-    closeWriteoffModalGuarded() {
-      if (this._confirmDiscardForm()) this.writeoffModal.open = false
+    async closeWriteoffModalGuarded() {
+      if (!this.writeoffModal.open) return
+      if ((await this._confirmDiscardForm())) this.writeoffModal.open = false
     },
-    closeShippingModalGuarded() {
-      if (this._confirmDiscardForm()) this.showShippingModal = false
+    async closeShippingModalGuarded() {
+      if (!this.showShippingModal) return
+      if ((await this._confirmDiscardForm())) this.showShippingModal = false
     },
-    closePayVoucherModalGuarded() {
-      if (this._confirmDiscardForm()) this.payVoucherModal = false
+    async closePayVoucherModalGuarded() {
+      if (!this.payVoucherModal) return
+      if ((await this._confirmDiscardForm())) this.payVoucherModal = false
     },
-    closeCreateVoucherModalGuarded() {
-      if (this._confirmDiscardForm()) this.createVoucherModal = false
+    async closeCreateVoucherModalGuarded() {
+      if (!this.createVoucherModal) return
+      if ((await this._confirmDiscardForm())) this.createVoucherModal = false
     },
-    closeInvoiceVoucherModalGuarded() {
-      if (this._confirmDiscardForm()) this.closeInvoiceVoucherModal()
+    async closeInvoiceVoucherModalGuarded() {
+      if (!this.ivCreateModal) return
+      if ((await this._confirmDiscardForm())) this.closeInvoiceVoucherModal()
     },
 
     // ── 附件（回簽/已開立檔案）共用 helper ──────────────────────────────────

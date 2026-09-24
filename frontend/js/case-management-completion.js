@@ -38,7 +38,7 @@ window.CM_PARTS.push(() => ({
     },
 
     async deleteCompletionNote(n) {
-      if (!confirm(`確定刪除完工單「${n.noteNo}」？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除完工單「${n.noteNo}」？`, {danger: true}))) return
       await this._cnAction(n, '', 'DELETE', '刪除失敗')
     },
 
@@ -47,7 +47,7 @@ window.CM_PARTS.push(() => ({
       const warn = unfinished
         ? `\n\n⚠️ 這張單有 ${unfinished} 項未完成，請確認「遺留事項」已寫清楚。`
         : ''
-      if (!confirm(`確定送出完工單「${n.noteNo}」申請完工？${warn}`)) return
+      if (!(await MotrixUI.confirm(`確定送出完工單「${n.noteNo}」申請完工？${warn}`))) return
       await this._cnAction(n, '/submit', 'POST', '送出失敗')
     },
 
@@ -57,18 +57,18 @@ window.CM_PARTS.push(() => ({
       const _appr = n.approval || {}
       const _casc = window.MotrixApproval.selfCascadeTiers(
         _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
-      if (!confirm(`確定簽核完工單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
+      if (!(await MotrixUI.confirm(`確定簽核完工單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc)))) return
       await this._cnAction(n, '/approve', 'POST', '簽核失敗', { cascade: _casc.length > 0 })
     },
 
     async rejectCompletionNote(n) {
-      const note = prompt(`退回完工單「${n.noteNo}」，可填寫退回原因（選填）：`)
+      const note = (await MotrixUI.prompt(`退回完工單「${n.noteNo}」，可填寫退回原因（選填）：`))
       if (note === null) return
       await this._cnAction(n, '/reject', 'POST', '退回失敗', { note })
     },
 
     async revokeCompletionApproval(n) {
-      const note = prompt(`撤銷完工單「${n.noteNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      const note = (await MotrixUI.prompt(`撤銷完工單「${n.noteNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
       if (note === null) return
       await this._cnAction(n, '/revoke-approval', 'POST', '撤銷失敗', { note })
     },
@@ -77,8 +77,8 @@ window.CM_PARTS.push(() => ({
       const msg = action === 'sign'
         ? `確定標記完工單「${n.noteNo}」客戶已驗收簽回？`
         : `確定取消完工單「${n.noteNo}」的驗收標記？`
-      if (!confirm(msg)) return
-      const note = action === 'sign' ? (prompt('備註（選填，例如驗收人姓名或方式）：') || '') : ''
+      if (!(await MotrixUI.confirm(msg))) return
+      const note = action === 'sign' ? ((await MotrixUI.prompt('備註（選填，例如驗收人姓名或方式）：')) || '') : ''
       await this._cnAction(n, '/signed-toggle', 'POST', '操作失敗', { action, note })
     },
 
@@ -91,9 +91,9 @@ window.CM_PARTS.push(() => ({
           opts.body = JSON.stringify(body)
         }
         const r = await fetch(`/api/completion-notes/${n.noteNo}${path}`, opts)
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || failMsg); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || failMsg, {kind: 'error'}); return }
         await this.loadCompletionNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async previewCompletionPdf(n) {
@@ -102,7 +102,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/completion-notes/${n.noteNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
         const url = URL.createObjectURL(blob)
         window.open(url, '_blank')
@@ -110,7 +110,7 @@ window.CM_PARTS.push(() => ({
         fetch(`/api/completion-notes/${n.noteNo}/export?mode=preview`, {
           method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token }
         }).catch(() => {})
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.completionPreviewFetching = false
     },
 

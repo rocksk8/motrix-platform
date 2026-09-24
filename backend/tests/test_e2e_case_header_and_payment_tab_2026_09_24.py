@@ -15,11 +15,14 @@ from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (liv
     DATA_JS, NOTE_INPUT, _login, live_server,
 )
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
+from tests._ui_dialogs import DIALOG, forbid_native_dialogs
 
 
 def _open(browser, base, user, tab=""):
     page = browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()
-    page.on("dialog", lambda d: d.accept())
+    # CM12 P4：不再盲接原生對話框。原本 Esc 關「更多」時，隱藏中的 6 個表單視窗會連問「表單尚未儲存」，
+    # 被這裡的 d.accept() 靜默按掉；現在頁面若再跳原生對話框，下面的斷言會抓到。
+    page._natives = forbid_native_dialogs(page)
     _login(page, base, *user)
     page.goto(f"{base}/pages/case-management.html?q={NO}" + (f"&tab={tab}" if tab else ""))
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
@@ -47,6 +50,9 @@ def test_header_first_row_is_customer_and_status_and_only_save_is_a_main_button(
             assert close.is_visible(), "最高管理者在「更多」裡看得到完結案"
             page.keyboard.press("Escape")
             report.wait_for(state="hidden", timeout=5000)
+            page.wait_for_timeout(300)
+            assert page.locator(DIALOG).count() == 0, "沒有開著的表單，按 Esc 不可以問「表單尚未儲存」"
+            assert page._natives == []
 
             page.click('.cm-tab:has-text("執行管理")')
             # 點完要等 Alpine 重繪；is_visible() 是當下快照，不會等
@@ -109,7 +115,7 @@ def test_narrow_screen_payment_rows_do_not_overflow_and_tabs_hint_shows(live_ser
         browser = p.chromium.launch()
         try:
             page = browser.new_context(viewport={"width": 390, "height": 844}).new_page()
-            page.on("dialog", lambda d: d.accept())
+            natives = forbid_native_dialogs(page)
             _login(page, live_server, *u)
             page.goto(f"{live_server}/pages/case-management.html?q={NO}&tab=fin")
             page.locator(NOTE_INPUT).first.wait_for(state="visible", timeout=20000)
@@ -119,6 +125,7 @@ def test_narrow_screen_payment_rows_do_not_overflow_and_tabs_hint_shows(live_ser
             cols = page.evaluate("() => getComputedStyle(document.querySelector('.pay-grid')).gridTemplateColumns")
             assert len(cols.split()) == 2, "窄螢幕款項明細改兩欄：%s" % cols
             assert page.locator('[data-testid="cm-tabs-hint"]').is_visible()
+            assert natives == []
         finally:
             browser.close()
 

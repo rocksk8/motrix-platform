@@ -127,9 +127,9 @@ window.CM_PARTS.push(() => ({
 
     // 2026-09-24（N11，使用者裁示「刪除確認全部都加」）：叫料品項、派工／出貨表單品項列、
     // 負責人移除也要先確認；訊息寫出要刪的名稱。
-    moRemoveItem(i) {
+    async moRemoveItem(i) {
       const m = this.materialOrders[i]
-      if (!confirm(`確定要刪除叫料品項「${(m && m.itemName) || '未命名'}」？\n\n按「儲存」之後才會寫入。`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除叫料品項「${(m && m.itemName) || '未命名'}」？\n\n按「儲存」之後才會寫入。`, {danger: true}))) return
       this.materialOrders.splice(i, 1)
       this.moDirty = true
       this.moMsg = ''
@@ -813,9 +813,9 @@ window.CM_PARTS.push(() => ({
       this.cr.caseRecord.materials.push({ id: Date.now(), name: '', model: '', qty: 1, unit: '台', ordered: false, arrived: false, devices: [], note: '' })
       this.setDirty()
     },
-    removeMaterial(idx) {
+    async removeMaterial(idx) {
       const m = this.cr.caseRecord.materials[idx]
-      if (!confirm(`確定要刪除材料「${m?.name || '未命名'}」？\n\n刪除後會自動存檔，無法復原。`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除材料「${m?.name || '未命名'}」？\n\n刪除後會自動存檔，無法復原。`, {danger: true}))) return
       this.cr.caseRecord.materials.splice(idx, 1); this.setDirty()
     },
     addMaterialFromQuote(qi) {
@@ -836,7 +836,7 @@ window.CM_PARTS.push(() => ({
     openImportModal(mode) {
       this.importMode = mode
       const items = this.quoteItemsForImport()
-      if (!items.length) { alert('報價單無可匯入的品項'); return }
+      if (!items.length) { MotrixUI.toast('報價單無可匯入的品項', {kind: 'info'}); return }
       const sel = {}
       items.forEach(function(_, i) { sel[i] = true })
       this.importSelectedItems = sel
@@ -853,7 +853,7 @@ window.CM_PARTS.push(() => ({
     doImport() {
       const items = this.quoteItemsForImport()
       const selected = items.filter(function(_, i) { return this.importSelectedItems[i] }, this)
-      if (!selected.length) { alert('請至少選擇一個品項'); return }
+      if (!selected.length) { MotrixUI.toast('請至少選擇一個品項', {kind: 'info'}); return }
       if (this.importMode === 'materials') {
         selected.forEach(qi => this.addMaterialFromQuote(qi))
       } else {
@@ -930,21 +930,21 @@ window.CM_PARTS.push(() => ({
       this.setDirty()
     },
     // 刪除設備會在自動存檔時同步序號庫存（_sync_device_stock），存完無法復原
-    _confirmRemoveDevice(dev) {
-      return confirm(`確定要刪除設備「${dev?.name || '未命名'}${dev?.sn ? '／' + dev.sn : ''}」？\n\n刪除後會自動存檔並同步序號庫存，無法復原。`)
+    async _confirmRemoveDevice(dev) {
+      return MotrixUI.confirm(`確定要刪除設備「${dev?.name || '未命名'}${dev?.sn ? '／' + dev.sn : ''}」？\n\n刪除後會自動存檔並同步序號庫存，無法復原。`, {danger: true})
     },
-    removeDevice(idx) {
-      if (!this._confirmRemoveDevice(this.cr.caseRecord.devices[idx])) return
+    async removeDevice(idx) {
+      if (!(await this._confirmRemoveDevice(this.cr.caseRecord.devices[idx]))) return
       this.cr.caseRecord.devices.splice(idx, 1); this.setDirty()
     },
-    removeDeviceByObj(dev) {
+    async removeDeviceByObj(dev) {
       const devs = this.cr.caseRecord.devices
       const idx = devs.findIndex(d => d.id === dev.id)
-      if (idx === -1 || !this._confirmRemoveDevice(dev)) return
+      if (idx === -1 || !(await this._confirmRemoveDevice(dev))) return
       devs.splice(idx, 1); this.setDirty()
     },
-    removeDeviceGroup(groupId) {
-      if (!confirm('確定要刪除整個設備群組？')) return
+    async removeDeviceGroup(groupId) {
+      if (!(await MotrixUI.confirm('確定要刪除整個設備群組？', {danger: true}))) return
       this.cr.caseRecord.devices = this.cr.caseRecord.devices.filter(d => d._groupId !== groupId)
       this.setDirty()
     },
@@ -1255,9 +1255,9 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat) {
@@ -1265,26 +1265,26 @@ window.CM_PARTS.push(() => ({
             mat.files.push(...body.files)
           }
         })
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deleteMaterialFile(idx, fileId) {
-      if (!confirm('確定刪除此附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此附件？', {danger: true}))) return
       if (!(await this._flushBeforeItemOp())) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/files/${fileId}${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat && mat.files) mat.files = mat.files.filter(f => f.id !== fileId)
         })
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     async uploadMaterialInvoiceFiles(idx, evt) {
@@ -1299,9 +1299,9 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat) {
@@ -1309,26 +1309,26 @@ window.CM_PARTS.push(() => ({
             mat.invoiceFiles.push(...body.files)
           }
         })
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deleteMaterialInvoiceFile(idx, fileId) {
-      if (!confirm('確定刪除此發票附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此發票附件？', {danger: true}))) return
       if (!(await this._flushBeforeItemOp())) return
       try {
         const r = await fetch(`/api/quotations/${this.selected.quote_no}/materials/${idx}/invoice-files/${fileId}${this._itemQs((this.cr.caseRecord.materials || [])[idx])}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         const body = await r.json()
-        if (body.pending) { alert(body.message || '已送出，待最高管理員審核後套用'); return }
+        if (body.pending) { MotrixUI.toast(body.message || '已送出，待最高管理員審核後套用', {kind: 'ok'}); return }
         this._applyToBoth('materials', cr => {
           const mat = (cr.materials || [])[idx]
           if (mat && mat.invoiceFiles) mat.invoiceFiles = mat.invoiceFiles.filter(f => f.id !== fileId)
         })
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）

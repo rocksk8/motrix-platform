@@ -153,9 +153,9 @@ window.CM_PARTS.push(() => ({
       this._newDispatchPersonnelId = ''
     },
 
-    removeDispatchPersonnel(idx) {
+    async removeDispatchPersonnel(idx) {
       const p = this.dispatchForm.personnel[idx]
-      if (!confirm(`確定要刪除派工人員「${(p && p.name) || '未命名'}」這一列？`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除派工人員「${(p && p.name) || '未命名'}」這一列？`, {danger: true}))) return
       this.dispatchForm.personnel.splice(idx, 1)
     },
 
@@ -170,9 +170,9 @@ window.CM_PARTS.push(() => ({
       })
     },
 
-    removeDispatchItem(idx) {
+    async removeDispatchItem(idx) {
       const it = this.dispatchForm.items[idx]
-      if (!confirm(`確定要刪除派工品項「${(it && it.description) || '未命名'}」這一列？`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除派工品項「${(it && it.description) || '未命名'}」這一列？`, {danger: true}))) return
       this.dispatchForm.items.splice(idx, 1)
       this._recalcDispatchTotal()
     },
@@ -236,37 +236,37 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify({ invoiceDate: value || '' })
         })
         const j = await r.json().catch(() => ({}))
-        if (!r.ok) { alert(j.detail || '發票日期儲存失敗'); return }
+        if (!r.ok) { MotrixUI.toast(j.detail || '發票日期儲存失敗', {kind: 'error'}); return }
         d.invoiceDate = j.invoiceDate
         this.flashSaved('dispatch-' + d.id)
         if (j.updated_at) d.updatedAt = j.updated_at
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async deleteDispatch(d) {
-      if (!confirm(`確定刪除派發給「${this._dispatchLabel(d)}」的紀錄？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除派發給「${this._dispatchLabel(d)}」的紀錄？`, {danger: true}))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) await this.loadDispatches(this.selected?.quote_no)
-        else alert((await r.json()).detail || '刪除失敗')
+        else MotrixUI.toast((await r.json()).detail || '刪除失敗', {kind: 'error'})
       } catch {}
     },
 
     async importDispatchToQuote(d) {
-      if (!d.items || d.items.length === 0) { alert('此派發紀錄沒有報價品項'); return }
-      if (!confirm(`確定將「${this._dispatchLabel(d)}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`)) return
+      if (!d.items || d.items.length === 0) { MotrixUI.toast('此派發紀錄沒有報價品項', {kind: 'info'}); return }
+      if (!(await MotrixUI.confirm(`確定將「${this._dispatchLabel(d)}」共 ${d.items.length} 筆品項匯入至報價單？\n（報價單必須處於草稿狀態）`))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/import-to-quote`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         const data = await r.json()
-        if (r.ok) alert(`✓ 已成功匯入 ${data.imported} 筆品項至報價單`)
-        else alert(data.detail || '匯入失敗')
-      } catch(e) { alert('網路錯誤：' + e.message) }
+        if (r.ok) MotrixUI.toast(`✓ 已成功匯入 ${data.imported} 筆品項至報價單`, {kind: 'ok'})
+        else MotrixUI.toast(data.detail || '匯入失敗', {kind: 'error'})
+      } catch(e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     // ── 承攬商匯款申請 ──────────────────────────────────────────────────────────
@@ -308,37 +308,37 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ dispatch_id: d.id, payable_date: this.createVoucherPayableDate || null })
         })
-        if (!r.ok) { alert((await r.json()).detail || '建立失敗'); this.createVoucherSaving = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '建立失敗', {kind: 'error'}); this.createVoucherSaving = false; return }
         this.createVoucherModal = false
         this.createVoucherDispatch = null
         await this.loadDispatches(this.selected?.quote_no)
         await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.createVoucherSaving = false
     },
 
     async deleteContractorVoucher(v) {
-      if (!confirm(`確定刪除匯款申請「${v.voucherNo}」？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除匯款申請「${v.voucherNo}」？`, {danger: true}))) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) await this.loadContractorVouchers(this.selected?.quote_no)
-        else alert((await r.json()).detail || '刪除失敗')
-      } catch (e) { alert('網路錯誤：' + e.message) }
+        else MotrixUI.toast((await r.json()).detail || '刪除失敗', {kind: 'error'})
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async submitContractorVoucher(v) {
-      if (!confirm(`確定送出匯款申請「${v.voucherNo}」進行簽核？`)) return
+      if (!(await MotrixUI.confirm(`確定送出匯款申請「${v.voucherNo}」進行簽核？`))) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/submit`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '送出失敗', {kind: 'error'}); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async approveContractorVoucher(v) {
@@ -347,20 +347,20 @@ window.CM_PARTS.push(() => ({
       const _appr = v.approval || {}
       const _casc = window.MotrixApproval.selfCascadeTiers(
         _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
-      if (!confirm(`確定簽核匯款申請「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
+      if (!(await MotrixUI.confirm(`確定簽核匯款申請「${v.voucherNo}」？` + window.MotrixApproval.cascadeNote(_casc)))) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ cascade: _casc.length > 0 })
         })
-        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '簽核失敗', {kind: 'error'}); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async rejectContractorVoucher(v) {
-      const note = prompt(`退回匯款申請「${v.voucherNo}」，可填寫退回原因（選填）：`)
+      const note = (await MotrixUI.prompt(`退回匯款申請「${v.voucherNo}」，可填寫退回原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/reject`, {
@@ -368,13 +368,13 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async revokeContractorVoucherApproval(v) {
-      const note = prompt(`撤銷匯款申請「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`)
+      const note = (await MotrixUI.prompt(`撤銷匯款申請「${v.voucherNo}」的核准？將退回草稿。\n\n可填寫撤銷原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/revoke-approval`, {
@@ -382,9 +382,9 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async loadT100BankAccounts() {
@@ -438,17 +438,17 @@ window.CM_PARTS.push(() => ({
         this.onPayVoucherBankChange()
         return
       }
-      if (!confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`)) return
+      if (!(await MotrixUI.confirm(`確定取消匯款申請「${v.voucherNo}」的已匯款標記？`, {danger: true}))) return
       try {
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/paid-toggle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ action: 'unpay', note: '' })
         })
-        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
         await this.loadContractorVouchers(this.selected?.quote_no)
         this.loadFinanceSummary(this.selected?.quote_no)   // 已付/未付數字會變
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async confirmPayVoucher() {
@@ -482,7 +482,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
@@ -492,7 +492,7 @@ window.CM_PARTS.push(() => ({
         a.click()
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } catch (e) { alert('下載失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('下載失敗：' + e.message, {kind: 'error'}) }
     },
 
     async previewContractorVoucherPdf(v) {
@@ -501,12 +501,12 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/contractor-vouchers/${v.voucherNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.cvPreviewFetching = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); this.cvPreviewFetching = false; return }
         const blob = await r.blob()
         this.cvPreviewBlobUrl = URL.createObjectURL(blob)
         this.cvPreviewVoucher = v
         this.cvPreviewModal = true
-      } catch (e) { alert('預覽失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('預覽失敗：' + e.message, {kind: 'error'}) }
       this.cvPreviewFetching = false
     },
 
@@ -536,24 +536,24 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
         if (!d.files) d.files = []
         d.files.push(...body.files)
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deleteDispatchFile(d, fileId) {
-      if (!confirm('確定刪除此報價附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此報價附件？', {danger: true}))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/files/${fileId}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         if (d.files) d.files = d.files.filter(f => f.id !== fileId)
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     async uploadDispatchInvoiceFiles(d, evt) {
@@ -567,24 +567,24 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         const body = await r.json()
         if (!d.invoiceFiles) d.invoiceFiles = []
         d.invoiceFiles.push(...body.files)
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deleteDispatchInvoiceFile(d, fileId) {
-      if (!confirm('確定刪除此廠商發票？')) return
+      if (!(await MotrixUI.confirm('確定刪除此廠商發票？', {danger: true}))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/invoice-files/${fileId}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         if (d.invoiceFiles) d.invoiceFiles = d.invoiceFiles.filter(f => f.id !== fileId)
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     _quoteStatusToDispatch(s) {
@@ -629,16 +629,16 @@ window.CM_PARTS.push(() => ({
     },
 
     async acceptDispatch(d) {
-      if (!confirm(`確定驗收「${this._dispatchLabel(d)}」的工程？\n驗收後將記錄您的姓名與時間。`)) return
+      if (!(await MotrixUI.confirm(`確定驗收「${this._dispatchLabel(d)}」的工程？\n驗收後將記錄您的姓名與時間。`))) return
       try {
         const r = await fetch(`/api/contractor-dispatches/${d.id}/accept`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ action: 'accepted' })
         })
-        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
         await this.loadDispatches(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）

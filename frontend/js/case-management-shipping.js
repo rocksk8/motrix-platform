@@ -103,7 +103,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/shipping-notes/${n.noteNo}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert('讀取出貨單失敗'); return }
+        if (!r.ok) { MotrixUI.toast('讀取出貨單失敗', {kind: 'error'}); return }
         const d = await r.json()
         this.editShippingNoteNo = d.noteNo
         this.shippingForm = {
@@ -118,12 +118,12 @@ window.CM_PARTS.push(() => ({
         this.showShippingContactPicker = false
         this._loadShippingContactOptions()
         this.showShippingModal = true
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     importItemsFromQuote() {
       const srcItems = this.selected?.data?.items || []
-      if (srcItems.length === 0) { alert('此案件的報價單沒有品項可匯入'); return }
+      if (srcItems.length === 0) { MotrixUI.toast('此案件的報價單沒有品項可匯入', {kind: 'info'}); return }
       for (const it of srcItems) {
         if (it.type === 'header') {
           this.shippingForm.items.push({
@@ -151,9 +151,9 @@ window.CM_PARTS.push(() => ({
       })
     },
 
-    removeShippingItem(idx) {
+    async removeShippingItem(idx) {
       const it = this.shippingForm.items[idx]
-      if (!confirm(`確定要刪除出貨品項「${(it && it.description) || '未命名'}」這一列？`)) return
+      if (!(await MotrixUI.confirm(`確定要刪除出貨品項「${(it && it.description) || '未命名'}」這一列？`, {danger: true}))) return
       this.shippingForm.items.splice(idx, 1)
     },
 
@@ -240,27 +240,27 @@ window.CM_PARTS.push(() => ({
     },
 
     async deleteShippingNote(n) {
-      if (!confirm(`確定刪除出貨單「${n.noteNo}」？`)) return
+      if (!(await MotrixUI.confirm(`確定刪除出貨單「${n.noteNo}」？`, {danger: true}))) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
         if (r.ok) await this.loadShippingNotes(this.selected?.quote_no)
-        else alert((await r.json()).detail || '刪除失敗')
-      } catch (e) { alert('網路錯誤：' + e.message) }
+        else MotrixUI.toast((await r.json()).detail || '刪除失敗', {kind: 'error'})
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async submitShippingNote(n) {
-      if (!confirm(`確定送出出貨單「${n.noteNo}」進行簽核？`)) return
+      if (!(await MotrixUI.confirm(`確定送出出貨單「${n.noteNo}」進行簽核？`))) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/submit`, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json()).detail || '送出失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '送出失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async approveShippingNote(n) {
@@ -269,20 +269,20 @@ window.CM_PARTS.push(() => ({
       const _appr = n.approval || {}
       const _casc = window.MotrixApproval.selfCascadeTiers(
         _appr.tiers || [], _appr.currentTier ?? 0, this.session.username, [])
-      if (!confirm(`確定簽核出貨單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc))) return
+      if (!(await MotrixUI.confirm(`確定簽核出貨單「${n.noteNo}」？` + window.MotrixApproval.cascadeNote(_casc)))) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/approve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ cascade: _casc.length > 0 })
         })
-        if (!r.ok) { alert((await r.json()).detail || '簽核失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '簽核失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async rejectShippingNote(n) {
-      const note = prompt(`退回出貨單「${n.noteNo}」，可填寫退回原因（選填）：`)
+      const note = (await MotrixUI.prompt(`退回出貨單「${n.noteNo}」，可填寫退回原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/reject`, {
@@ -290,13 +290,13 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '退回失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '退回失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async revokeShippingApproval(n) {
-      const note = prompt(`撤銷出貨單「${n.noteNo}」的核准？將退回草稿，且已扣的庫存序號會自動歸還可出貨狀態。\n\n可填寫撤銷原因（選填）：`)
+      const note = (await MotrixUI.prompt(`撤銷出貨單「${n.noteNo}」的核准？將退回草稿，且已扣的庫存序號會自動歸還可出貨狀態。\n\n可填寫撤銷原因（選填）：`))
       if (note === null) return
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/revoke-approval`, {
@@ -304,26 +304,26 @@ window.CM_PARTS.push(() => ({
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '撤銷失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '撤銷失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async toggleSigned(n, action) {
       const msg = action === 'sign'
         ? `確定標記出貨單「${n.noteNo}」已回簽？`
         : `確定取消出貨單「${n.noteNo}」的已回簽標記？`
-      if (!confirm(msg)) return
-      const note = action === 'sign' ? (prompt('備註（選填，例如簽收人姓名或方式）：') || '') : ''
+      if (!(await MotrixUI.confirm(msg))) return
+      const note = action === 'sign' ? ((await MotrixUI.prompt('備註（選填，例如簽收人姓名或方式）：')) || '') : ''
       try {
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/signed-toggle`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify({ action, note })
         })
-        if (!r.ok) { alert((await r.json()).detail || '操作失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json()).detail || '操作失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('網路錯誤：' + e.message) }
+      } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
     },
 
     async downloadShippingPdf(n) {
@@ -337,7 +337,7 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); return }
         const blob = await r.blob()
         const url  = URL.createObjectURL(blob)
         const a    = document.createElement('a')
@@ -347,7 +347,7 @@ window.CM_PARTS.push(() => ({
         a.click()
         document.body.removeChild(a)
         setTimeout(() => URL.revokeObjectURL(url), 1000)
-      } catch (e) { alert('下載失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('下載失敗：' + e.message, {kind: 'error'}) }
     },
 
     async previewShippingPdf(n) {
@@ -356,12 +356,12 @@ window.CM_PARTS.push(() => ({
         const r = await fetch(`/api/shipping-notes/${n.noteNo}/pdf-download`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗'); this.shippingPreviewFetching = false; return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || 'PDF 產生失敗', {kind: 'error'}); this.shippingPreviewFetching = false; return }
         const blob = await r.blob()
         this.shippingPreviewBlobUrl = URL.createObjectURL(blob)
         this.shippingPreviewNote = n
         this.shippingPreviewModal = true
-      } catch (e) { alert('預覽失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('預覽失敗：' + e.message, {kind: 'error'}) }
       this.shippingPreviewFetching = false
     },
 
@@ -391,22 +391,22 @@ window.CM_PARTS.push(() => ({
           headers: { Authorization: 'Bearer ' + this.session.token },
           body: fd
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '上傳失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '上傳失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('上傳失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('上傳失敗：' + e.message, {kind: 'error'}) }
       evt.target.value = ''
     },
 
     async deleteShippingSignedFile(note, fileId) {
-      if (!confirm('確定刪除此附件？')) return
+      if (!(await MotrixUI.confirm('確定刪除此附件？', {danger: true}))) return
       try {
         const r = await fetch(`/api/shipping-notes/${note.noteNo}/signed-files/${fileId}`, {
           method: 'DELETE',
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '刪除失敗'); return }
+        if (!r.ok) { MotrixUI.toast((await r.json().catch(() => ({}))).detail || '刪除失敗', {kind: 'error'}); return }
         await this.loadShippingNotes(this.selected?.quote_no)
-      } catch (e) { alert('刪除失敗：' + e.message) }
+      } catch (e) { MotrixUI.toast('刪除失敗：' + e.message, {kind: 'error'}) }
     },
 
     // CM12 P2：切換案件時重設本模組的案件層級狀態（時點見 core 的 _resetCaseScoped）
