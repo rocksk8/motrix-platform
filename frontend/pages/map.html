@@ -251,6 +251,18 @@
             <span x-text="src.label"></span>
           </label>
         </template>
+        <!-- `MP3`：標案依截止狀態篩選，預設「未截止」（已截止的標案不再能投，不該佔滿地圖）。 -->
+        <label x-show="picked.includes('tenders')"
+               style="display:inline-flex;align-items:center;gap:5px;font-size:12px">
+          <span style="color:var(--text-secondary)">標案</span>
+          <select class="mp-tender-filter" x-model="tenderFilter" @change="_redraw()"
+                  style="font-size:12px;padding:2px 4px">
+            <option value="notClosed">未截止</option>
+            <option value="closing">7 天內截止</option>
+            <option value="closed">已截止</option>
+            <option value="all">全部</option>
+          </select>
+        </label>
       </div>
       <!-- 圖例：**圖釘上的字才是分辨的載體**。
            🔑 顏色只是輔助 —— 色覺差異的人要看得出來，
@@ -263,6 +275,15 @@
                        color:var(--text-secondary)">
             <span class="mp-pin" :style="'background:' + d.color" x-text="d.mark"></span>
             <span x-text="d.label"></span>
+          </span>
+        </template>
+        <!-- `MP3`：標案圖釘的顏色＝截止狀態（字仍是「標」）。 -->
+        <span style="font-size:11px;color:var(--text-dim);margin-left:8px">標案截止</span>
+        <template x-for="st in ['open', 'closing', 'closed']" :key="st">
+          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;
+                       color:var(--text-secondary)">
+            <span class="mp-pin" :style="'background:' + deadlineStyles[st].color">標</span>
+            <span x-text="deadlineStyles[st].label"></span>
           </span>
         </template>
       </div>
@@ -363,7 +384,7 @@
               <!-- ⚠️ 這一欄原本顯示 `p.source`，而那是**定位服務**（nominatim）
                    不是資料集 —— 對使用者沒有意義。 -->
               <td style="font-size:11px;white-space:nowrap">
-                <span class="mp-pin" :style="'background:' + datasetOf(p).color"
+                <span class="mp-pin" :style="'background:' + pinColor(p)"
                       x-text="datasetOf(p).mark"></span>
                 <span x-text="datasetOf(p).label"></span>
               </td>
@@ -419,7 +440,13 @@
                       x-text="(precisionIsCoarse(p.precision) ? '～' : '')
                               + p.distanceFromUserKm + ' km'"></span>
               </td>
-              <td style="font-size:12px" x-text="p.deadline || '—'"></td>
+              <td style="font-size:12px">
+                <span x-text="p.deadline || '—'"></span>
+                <template x-if="deadlineStyleOf(p)">
+                  <span class="mp-deadline" :style="'display:block;font-size:10px;color:' + deadlineStyleOf(p).color"
+                        x-text="deadlineStyleOf(p).label"></span>
+                </template>
+              </td>
             </tr>
           </template>
           <tr x-show="info && view.points.length === 0">
@@ -492,6 +519,32 @@ function mapPage() {
     //   ⚠️ 不清的話每一次重畫（勾選資料集、重新整理）都會把視野拉回那一點。
     _focus: null, _markerByKey: null, _focusMarker: null,
 
+    // `MP3`：標案截止狀態（後端 `deadlineStatus`）。未知日期用標案原色並寫明「截止日不明」——
+    //   ⚠️ 不可以當成已截止：預設篩選會把它藏起來，而它可能正是還能投的。
+    tenderFilter: 'notClosed',
+    deadlineStyles: {
+      open:    { color: '#2563EB', label: '未截止' },
+      closing: { color: '#E11D48', label: '7 天內截止' },
+      closed:  { color: '#9CA3AF', label: '已截止' },
+      unknown: { color: '#2563EB', label: '截止日不明' },
+    },
+    deadlineStyleOf(p) {
+      if (!p || p.dataset !== 'tenders' || !p.deadlineStatus) return null
+      return this.deadlineStyles[p.deadlineStatus] || this.deadlineStyles.unknown
+    },
+    pinColor(p) {
+      const st = this.deadlineStyleOf(p)
+      return st ? st.color : this.datasetOf(p).color
+    },
+    _tenderShown(p) {
+      // 舊後端沒有 `deadlineStatus` ⇒ 不篩（寧可多畫，不要靜默少畫）。
+      if (!p || p.dataset !== 'tenders' || !p.deadlineStatus) return true
+      const f = this.tenderFilter
+      if (f === 'all') return true
+      if (f === 'notClosed') return p.deadlineStatus !== 'closed'
+      return p.deadlineStatus === f
+    },
+
     recordUrl(p) { return window.MotrixRecordLink ? window.MotrixRecordLink.recordUrl(p, this.session) : null },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
@@ -508,7 +561,8 @@ function mapPage() {
       return {
         // ⚠️ 先確認是陣列：格式不對時畫面要照樣畫得出來，不可以讓整個重畫拋錯（MP0 題抓到）。
         points: (Array.isArray(info.points) ? info.points : [])
-          .filter(p => !p.sourceKey || on.has(p.sourceKey)),
+          .filter(p => !p.sourceKey || on.has(p.sourceKey))
+          .filter(p => this._tenderShown(p)),
         sources: (Array.isArray(info.sources) ? info.sources : [])
           .filter(s => on.has(s.source)),
       }
@@ -961,8 +1015,8 @@ function mapPage() {
         const icon = window.L.divIcon({
           className: '',
           html: this.precisionIsCoarse(p.precision)
-                ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + d.color + '">' + d.mark + '</span>')
-                : ('<span class="mp-pin" style="background:' + d.color + '">' + d.mark + '</span>'),
+                ? ('<span class="mp-pin mp-pin--coarse" style="--pin:' + this.pinColor(p) + '">' + d.mark + '</span>')
+                : ('<span class="mp-pin" style="background:' + this.pinColor(p) + '">' + d.mark + '</span>'),
           iconSize: [20, 20], iconAnchor: [10, 10],
         })
         // 🔴 `MP0`：彈窗內容**逐段跳脫**再用 <br> 接——名稱／機關／地址是外部資料
@@ -971,7 +1025,9 @@ function mapPage() {
         const marker = window.L.marker([p.lat, p.lon], { icon }).addTo(dataLayer)
         const fk = window.MotrixRecordLink ? window.MotrixRecordLink.focusKey(p) : null
         if (fk && !this._markerByKey[fk]) this._markerByKey[fk] = marker
+        const ds = this.deadlineStyleOf(p)
         marker.bindPopup([d.label + '｜' + (p.name || ''), p.org, p.address || p.location,
+                      ds ? ('截止：' + (p.deadline || '—') + '（' + ds.label + '）') : '',
                       (p.distanceFromUserKm === null || p.distanceFromUserKm === undefined)
                         ? '' : ('距您約 ' + p.distanceFromUserKm + ' km'
                                 + (this.accuracyLabel() ? '（' + this.accuracyLabel() + '）' : '')),

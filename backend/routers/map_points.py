@@ -22,6 +22,7 @@
 而那是今天第五個長成那個樣子的成因。
 """
 import copy
+import datetime
 import hashlib
 import json
 import logging
@@ -845,6 +846,39 @@ def _locate_tender(org, place, budget):
     return None, None, deferred
 
 
+#: `MP3`：「即將截止」的天數（含當天）。
+CLOSING_SOON_DAYS = 7
+
+
+def _today():
+    """獨立成函式：測試可以換掉「今天」，不必跟著真實日期改資料。"""
+    return datetime.date.today()
+
+
+def _deadline_status(deadline, today):
+    """`MP3`：標案截止狀態。
+
+    | 值 | 意思 |
+    |---|---|
+    | `closed`  | 截止日 < 今天（截止日當天仍可投標） |
+    | `closing` | 今天 ≤ 截止日 ≤ 今天＋7 |
+    | `open`    | 截止日 > 今天＋7 |
+    | `unknown` | 沒有截止日或讀不懂 |
+
+    ⚠️ `unknown` 不可以併進 `closed`：前端預設只看「未截止」，併進去的話
+    讀不懂日期的那幾筆會**靜靜從地圖上消失**，而它們可能正是還能投的。
+    """
+    try:
+        d = datetime.date.fromisoformat(str(deadline or "").strip()[:10])
+    except ValueError:
+        return "unknown"
+    if d < today:
+        return "closed"
+    if (d - today).days <= CLOSING_SOON_DAYS:
+        return "closing"
+    return "open"
+
+
 def _tender_points(located, user_coord=None, budget=None):
     """標案來源。回 `(points, 沒有地點的筆數)`。
 
@@ -858,6 +892,7 @@ def _tender_points(located, user_coord=None, budget=None):
 
     budget = budget or _GeocodeBudget()
     points, missing = [], 0
+    today = _today()
     for r in rows:
         place = (r["location"] or "").strip()
         found, used, deferred = _locate_tender(r["org"], place, budget)
@@ -885,6 +920,7 @@ def _tender_points(located, user_coord=None, budget=None):
             "address": used,
             "precision": found.precision, "source": found.source,
             "budget": r["budget"], "deadline": r["deadline"],
+            "deadlineStatus": _deadline_status(r["deadline"], today),
             # 空網址回 `None` **不是 `""`**——理由與 `tender_radar._clean_url`
             # 相同（`href=""` 是一個看起來可以點、點了沒反應的東西）。
             # 📌 刻意**不跨 router 匯入**那個函式：L2 功能模組彼此不可依賴。
