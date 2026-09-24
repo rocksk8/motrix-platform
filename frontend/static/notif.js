@@ -109,6 +109,14 @@ window.MotrixReads = (function () {
 
   return {
     ready: _ready,
+    /** 只廣播（不送請求）：給自己送請求的呼叫端（例如鈴鐺的 PATCH）。 */
+    announce: function (kind, key) { _announce({ type: 'read', kind: kind, key: String(key) }) },
+    /** 伺服器拒絕：廣播給其他分頁，本分頁也收到。 */
+    announceFailed: function (kind, key) {
+      var m = { type: 'failed', kind: kind, key: String(key) }
+      _announce(m)
+      _emit(m)
+    },
     /** 標記一筆已讀：呼叫端要**先**清自己的 UI，這裡只負責送出與通知其他分頁。 */
     mark: function (kind, key) {
       key = String(key)
@@ -168,6 +176,17 @@ function notifStore() {
       if (!this._sess.token) return
       if (this._sess.mustChangePassword) return
       window.addEventListener('motrix:reads-changed', () => this.refresh())
+      // 跨分頁即時（使用者：「選單紅點數字與鈴鐺也跨分頁即時更新」）：
+      //   已讀 ⇒ 只改那一個模組／那一則通知；伺服器拒絕 ⇒ 重抓伺服器的數字。
+      window.addEventListener('motrix:item-read', e => {
+        const { kind, key } = e.detail
+        if (kind === 'module') this._hideModBadge(key)
+        if (kind === 'notification') this._markLocal(key)
+      })
+      window.addEventListener('motrix:item-read-failed', e => {
+        if (e.detail.kind === 'module') this._fetchModuleCounts()
+        if (e.detail.kind === 'notification') this._fetchNotifications()
+      })
       await Promise.all([this._fetchNotifications(), this._fetchApprovalCount(), this._fetchDailyTaskCount(), this._fetchModuleCounts(), this._fetchTotpReminder()])
     },
 
@@ -238,19 +257,8 @@ function notifStore() {
         })
         if (!r.ok) return
         var d = await r.json()
-        // 🔴 與 sidebar.js `_MOD_BADGES` 同一組 key（test_module_badge_maps_agree 守）。
-        var modBadge = {
-          dev_crm:    ['sb-mod-dev-crm'],
-          tender_radar: ['sb-mod-tender-radar'],
-          quotation:  ['sb-mod-quotation'],
-          case_manage:['sb-mod-case'],
-          customer:   ['sb-mod-customer'],
-          procurement:['sb-mod-suppliers', 'sb-mod-vendor', 'sb-mod-parts', 'sb-mod-procurement'],
-          equipment:  ['sb-mod-equipment', 'sb-mod-warranty'],
-          finance:    ['sb-mod-finance'],   // 2026-09-13：見 sidebar.js 同一張表
-          work_log:   ['sb-mod-worklog'],
-          daily_task: ['sb-mod-daily-task'],
-        }
+        // 🔴 對照表只有一份：sidebar.js `_MOD_BADGES`（`window.MOTRIX_MOD_BADGES`）。
+        var modBadge = window.MOTRIX_MOD_BADGES || {}
         for (var k in d) {
           var bids = modBadge[k]
           if (!bids) continue
@@ -328,16 +336,29 @@ function notifStore() {
       this.open = !this.open
     },
 
+    _hideModBadge(mod) {
+      const bids = (window.MOTRIX_MOD_BADGES || {})[mod] || []
+      bids.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none' })
+    },
+
+    /** 其他分頁點了某一則（`*`＝全部）⇒ 本分頁只改那一則。 */
+    _markLocal(key) {
+      this.items.forEach(i => { if (key === '*' || String(i.id) === String(key)) i.is_read = 1 })
+      this.unread = this.items.filter(i => !i.is_read).length
+    },
+
     /** 點一則：當下先改畫面，再送出（keepalive、不等回應）。 */
     markOne(item) {
       if (!item || !this._sess?.token) return
       if (!item.is_read) {
         item.is_read = 1
         this.unread = Math.max(0, this.unread - 1)
+        if (window.MotrixReads) window.MotrixReads.announce('notification', item.id)
         fetch('/api/notifications/' + encodeURIComponent(item.id) + '/read', {
           method: 'PATCH', keepalive: true,
           headers: { Authorization: 'Bearer ' + this._sess.token }
-        }).then(() => {
+        }).then(r => {
+          if (!r.ok) { if (window.MotrixReads) window.MotrixReads.announceFailed('notification', item.id); return }
           try { localStorage.setItem('motrix_reads_bump', String(Date.now())) } catch (e) {}
         }).catch(() => {})
       }
@@ -347,10 +368,12 @@ function notifStore() {
       if (!this._sess?.token) return
       this.items.forEach(i => { i.is_read = 1 })
       this.unread = 0
+      if (window.MotrixReads) window.MotrixReads.announce('notification', '*')
       fetch('/api/notifications/read-all', {
         method: 'PATCH', keepalive: true,
         headers: { Authorization: 'Bearer ' + this._sess.token }
-      }).then(() => {
+      }).then(r => {
+        if (!r.ok) { if (window.MotrixReads) window.MotrixReads.announceFailed('notification', '*'); return }
         try { localStorage.setItem('motrix_reads_bump', String(Date.now())) } catch (e) {}
       }).catch(() => {})
       // 清除 session flag，讓下一批新簽核通知能再次顯示

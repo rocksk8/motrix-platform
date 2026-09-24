@@ -1065,6 +1065,7 @@ if (typeof module !== 'undefined' && module.exports) {
     work_log:    ['sb-mod-worklog'],
     daily_task:  ['sb-mod-daily-task'],
   }
+  window.MOTRIX_MOD_BADGES = _MOD_BADGES   // notif.js 讀這一份（不再各抄一份）
 
   function _clearModBadge(modKey) {
     var bids = _MOD_BADGES[modKey]

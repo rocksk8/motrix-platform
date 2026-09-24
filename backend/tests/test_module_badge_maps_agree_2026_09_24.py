@@ -21,12 +21,18 @@ def _js_object_keys(src, name):
     return set(re.findall(r"^\s*([a-z_]+)\s*:", m.group(1), re.M))
 
 
-def test_sidebar_and_notif_badge_maps_have_the_same_modules():
-    side = _js_object_keys((ROOT / "frontend/static/sidebar.js").read_text(encoding="utf-8"), r"var _MOD_BADGES")
-    notif = _js_object_keys((ROOT / "frontend/static/notif.js").read_text(encoding="utf-8"), r"var modBadge")
+def test_notif_reads_the_single_badge_map_from_the_sidebar():
+    """2026-09-24（B7）：原本 notif.js 自己抄一份 `modBadge`（`tender_radar` 就是少在那一份）。
+    ⇒ 改成只有 sidebar.js 一份、以 `window.MOTRIX_MOD_BADGES` 公開，notif.js 讀它。
+    📌 更正留著：這一題原本驗「兩份相同」；兩份變一份之後，改驗「不可以又抄回一份」。"""
+    side_src = (ROOT / "frontend/static/sidebar.js").read_text(encoding="utf-8")
+    notif_src = (ROOT / "frontend/static/notif.js").read_text(encoding="utf-8")
+    side = _js_object_keys(side_src, r"var _MOD_BADGES")
     assert side, "sidebar.js 的 _MOD_BADGES 解析出空集合（正對照）"
     assert "tender_radar" in side
-    assert side == notif, {"只在 sidebar": side - notif, "只在 notif": notif - side}
+    assert "window.MOTRIX_MOD_BADGES = _MOD_BADGES" in side_src
+    assert "window.MOTRIX_MOD_BADGES" in notif_src
+    assert not re.search(r"var\s+modBadge\s*=\s*\{", notif_src), "notif.js 又抄回了一份徽章對照表"
 
 
 def test_every_badged_module_is_counted_by_the_backend():

@@ -423,3 +423,125 @@ def test_other_tab_restores_the_mark_when_the_server_rejects_the_read(live_serve
         card_b.locator("text=有更新").wait_for(state="visible", timeout=5000)
         card_a.locator("text=有更新").wait_for(state="visible", timeout=5000)
         browser.close()
+
+
+# ── 選單紅點數字與鈴鐺：也要跨分頁即時（使用者追加）─────────────────────────
+
+def _badge_visible_js(bid):
+    return ("() => { const b = document.getElementById('%s');"
+            " return !!b && getComputedStyle(b).display !== 'none' }" % bid)
+
+
+def _badge_hidden_js(bid):
+    return ("() => { const b = document.getElementById('%s');"
+            " return !!b && getComputedStyle(b).display === 'none' }" % bid)
+
+
+def _two_tabs_with_customer_badge(p, live_server, u, pw):
+    browser = p.chromium.launch()
+    ctx = browser.new_context()
+    a = ctx.new_page()
+    _login(a, live_server, u, pw)
+    tok = a.evaluate("() => JSON.parse(localStorage.getItem('motrix_session')).token")
+    r = a.request.post(live_server + "/api/reads", headers={"Authorization": "Bearer " + tok},
+                       data={"kind": "module", "key": "customer"})
+    assert r.ok
+    _audit("bob", "customer.update", "customer", 1)
+    a.goto(live_server + "/index.html")
+    b = ctx.new_page()
+    b.goto(live_server + "/index.html")
+    for pg in (a, b):
+        pg.wait_for_function(_badge_visible_js("sb-mod-customer"), timeout=15000)
+    return browser, a, b
+
+
+def _click_customers_link(page):
+    link = page.locator("a[href$='customers.html']:visible").first
+    if link.count() == 0:
+        page.locator(".mnav__grp:has(a[href$='customers.html'])").first.hover()
+        link = page.locator("a[href$='customers.html']:visible").first
+    link.click()
+
+
+@pytest.mark.e2e
+def test_menu_badge_clears_in_the_other_tab_even_if_this_tab_navigates_away(live_server, make_user):
+    """回歸守門（誠實記錄：修正前**也是綠的**）——換到的目的頁本身會再標一次「看過」，
+    完成後通知其他分頁，所以 1 秒內就同步了。先紅的是下一題的第一步：
+    伺服器**還沒回應**時另一分頁就要消失。"""
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    with sync_playwright() as p:
+        browser, a, b = _two_tabs_with_customer_badge(p, live_server, u, pw)
+        _click_customers_link(a)             # 真的換頁
+        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=1000)
+        browser.close()
+
+
+@pytest.mark.e2e
+def test_menu_badge_comes_back_in_the_other_tab_when_the_server_rejects(live_server, make_user):
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    with sync_playwright() as p:
+        browser, a, b = _two_tabs_with_customer_badge(p, live_server, u, pw)
+        a.evaluate("""() => document.addEventListener('click', e => {
+            const x = e.target.closest('a[href]'); if (x) e.preventDefault() })""")
+        hold = _Hold(a)
+        _click_customers_link(a)
+        b.wait_for_function(_badge_hidden_js("sb-mod-customer"), timeout=1000)
+        for r in hold.held:
+            r.fulfill(status=500, body="{}")
+        hold.held = []
+        b.wait_for_function(_badge_visible_js("sb-mod-customer"), timeout=5000)
+        browser.close()
+
+
+def _two_tabs_with_two_notifications(p, live_server, u, pw):
+    now = datetime.now().isoformat()
+    ids = [_sql("INSERT INTO notifications (username, type, ref_id, ref_label, message, is_read, "
+                "created_at) VALUES (?,?,?,?,?,0,?)",
+                ("alice", "info", "", "通知%s" % i, "內容%s" % i, now)).lastrowid for i in (1, 2)]
+    browser = p.chromium.launch()
+    ctx = browser.new_context()
+    a = ctx.new_page()
+    _login(a, live_server, u, pw)
+    b = ctx.new_page()
+    b.goto(live_server + "/index.html")
+    count_b = b.locator(".topbar__btn:has-text('通知') span[x-text]")
+    for pg in (a, b):
+        pg.locator(".topbar__btn:has-text('通知') span[x-text]").wait_for(state="visible", timeout=15000)
+    return browser, a, b, ids, count_b
+
+
+@pytest.mark.e2e
+def test_bell_count_follows_in_the_other_tab(live_server, make_user):
+    u, pw = make_user(username="alice", role="superadmin")
+    with sync_playwright() as p:
+        browser, a, b, ids, count_b = _two_tabs_with_two_notifications(p, live_server, u, pw)
+        assert count_b.inner_text().strip() == "2"
+        held = []                              # 伺服器還沒回應 ⇒ 另一分頁仍要先跟上
+        a.route("**/api/notifications/*/read", lambda r: held.append(r))
+        a.locator(".topbar__btn:has-text('通知')").click()
+        a.locator("[data-notif-id='%s']" % ids[0]).click()
+        b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
+                            " return s && s.textContent.trim() === '1' }", timeout=1000)
+        for r in held:
+            r.continue_()
+        browser.close()
+
+
+@pytest.mark.e2e
+def test_bell_count_restores_in_the_other_tab_when_the_server_rejects(live_server, make_user):
+    u, pw = make_user(username="alice", role="superadmin")
+    with sync_playwright() as p:
+        browser, a, b, ids, count_b = _two_tabs_with_two_notifications(p, live_server, u, pw)
+        held = []
+        a.route("**/api/notifications/*/read", lambda r: held.append(r))
+        a.locator(".topbar__btn:has-text('通知')").click()
+        a.locator("[data-notif-id='%s']" % ids[0]).click()
+        b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
+                            " return s && s.textContent.trim() === '1' }", timeout=1000)
+        for r in held:
+            r.fulfill(status=500, body="{}")
+        b.wait_for_function("() => { const s = document.querySelector(\".topbar__btn span[x-text]\");"
+                            " return s && s.textContent.trim() === '2' }", timeout=5000)
+        browser.close()
