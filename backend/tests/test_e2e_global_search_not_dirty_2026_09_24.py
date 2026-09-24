@@ -1,0 +1,68 @@
+"""頂端全域搜尋框打字不可以觸發「尚未儲存」離頁警告（開發機實走 W-7，2026-09-24）。
+
+sidebar.js 的 _maybeSetDirty 只略過 type=search 或 class 含 search／filter 的欄位；
+全域搜尋框是 type=text 且沒有 class ⇒ 打字就設 motrixIsDirty=true，之後點任何連結都問
+「確定要離開嗎？」。心跳不再清 dirty（同日 a01e628）之後這個問題才一直留著。
+
+觀測點：在報價單清單頁的全域搜尋框打字後 window.motrixIsDirty 仍為 false；
+正對照：同頁一般表單欄位（非搜尋）打字仍會設成 true，證明偵測本身沒有被整個關掉。
+"""
+import threading
+import time
+
+import pytest
+
+pytest.importorskip("playwright.sync_api")
+from playwright.sync_api import sync_playwright
+
+GLOBAL_SEARCH = "input[placeholder^='搜尋客戶']"
+
+
+@pytest.fixture()
+def live_server(client):
+    import uvicorn
+    import main
+    from tests._ports import free_safe_port
+    config = uvicorn.Config(main.app, host="127.0.0.1", port=free_safe_port(), log_level="warning")
+    server = uvicorn.Server(config)
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    for _ in range(200):
+        if server.started:
+            break
+        time.sleep(0.05)
+    else:
+        pytest.fail("uvicorn 測試伺服器在時限內沒有啟動")
+    port = server.servers[0].sockets[0].getsockname()[1]
+    try:
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        t.join(timeout=5)
+
+
+@pytest.mark.e2e
+def test_typing_in_global_search_does_not_mark_page_dirty(live_server, make_user):
+    u = make_user(username="gsd_e1", role="admin")
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        try:
+            page = browser.new_context().new_page()
+            page.goto(f"{live_server}/pages/login.html")
+            page.fill('input[x-model="username"]', u[0])
+            page.fill('input[x-model="password"]', u[1])
+            page.click('button:has-text("登入")')
+            page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+            page.goto(f"{live_server}/pages/quotations.html")
+            page.wait_for_selector(GLOBAL_SEARCH, timeout=15000)
+            page.evaluate("() => { window.motrixIsDirty = false }")
+            page.locator(GLOBAL_SEARCH).first.type("abc")
+            assert page.evaluate("() => window.motrixIsDirty") is not True, \
+                "全域搜尋框打字被當成未存修改 ⇒ 之後點任何連結都會跳離頁警告"
+            # 正對照：一般（非搜尋）文字欄位打字仍會設 dirty
+            page.evaluate("""() => { const i = document.createElement('input'); i.type = 'text';
+                                     i.id = 'gsd-probe'; document.body.appendChild(i); }""")
+            page.locator("#gsd-probe").type("x")
+            assert page.evaluate("() => window.motrixIsDirty") is True, "偵測被整個關掉了（正對照失敗）"
+        finally:
+            browser.close()

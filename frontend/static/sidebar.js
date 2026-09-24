@@ -200,7 +200,7 @@ if (typeof module !== 'undefined' && module.exports) {
       <div x-data="globalSearchStore()" x-init="init()" style="position:relative;flex:1;max-width:320px;margin:0 14px">
         <div style="position:relative">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#888" stroke-width="2" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);pointer-events:none"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input type="text" x-model="q" @input="onInput()" @focus="q && (open = true)" @keydown.escape="close()"
+          <input type="text" class="global-search-input" x-model="q" @input="onInput()" @focus="q && (open = true)" @keydown.escape="close()"
                  placeholder="搜尋客戶／報價單／案件／料號…"
                  style="width:100%;padding:6px 10px 6px 28px;border:1px solid #333;border-radius:5px;background:#1a1a1a;color:#eee;font-size:12px;outline:none;box-sizing:border-box">
         </div>
