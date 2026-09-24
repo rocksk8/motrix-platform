@@ -82,13 +82,48 @@ window.MotrixReads = (function () {
   window.addEventListener('storage', function (e) { if (e.key === BUMP_KEY) _changed() })
   window.addEventListener('pageshow', function (e) { if (e.persisted) _changed() })
 
+  // ── 跨分頁「樂觀已讀」（使用者：「要再優化」）──────────────────────────
+  //   標記的**當下**就告訴其他分頁是哪一筆（不等伺服器）：點了之後立刻換頁，
+  //   本分頁後續的程式不會再跑，而其他分頁仍會在當下同步。
+  //   其他分頁只**合併那一筆**（`motrix:item-read`），不整包重抓。
+  //   伺服器**明確拒絕**（HTTP 錯誤）⇒ 廣播 failed，各分頁還原那一筆。
+  //   ⚠️ 網路錯誤**不**還原：換頁時 keepalive 的請求仍可能送達，還原會與伺服器相反。
+  var OPT_KEY = 'motrix_reads_optimistic'
+  var _ch = null
+  try { if ('BroadcastChannel' in window) _ch = new BroadcastChannel('motrix-reads') } catch (e) {}
+  function _emit(msg) {
+    if (!msg || !msg.kind) return
+    var name = msg.type === 'failed' ? 'motrix:item-read-failed' : 'motrix:item-read'
+    try { window.dispatchEvent(new CustomEvent(name, { detail: { kind: msg.kind, key: String(msg.key) } })) } catch (e) {}
+  }
+  function _announce(msg) {
+    try {
+      if (_ch) _ch.postMessage(msg)
+      else localStorage.setItem(OPT_KEY, JSON.stringify({ type: msg.type, kind: msg.kind, key: msg.key, n: Math.random() }))
+    } catch (e) {}
+  }
+  if (_ch) _ch.onmessage = function (e) { _emit(e.data) }
+  window.addEventListener('storage', function (e) {
+    if (e.key === OPT_KEY && e.newValue) { try { _emit(JSON.parse(e.newValue)) } catch (x) {} }
+  })
+
   return {
     ready: _ready,
     /** 標記一筆已讀：呼叫端要**先**清自己的 UI，這裡只負責送出與通知其他分頁。 */
     mark: function (kind, key) {
-      // ⚠️ 等伺服器收到**之後**才通知其他分頁：先通知的話，對方重抓時伺服器還沒記下，
-      //    拿回來的仍是「未讀」（e2e 抓到的）。本分頁的畫面由呼叫端當下就清掉。
-      return _post('/api/reads', { kind: kind, key: String(key) }).then(function (r) { _bump(); return r })
+      key = String(key)
+      _announce({ type: 'read', kind: kind, key: key })
+      // ⚠️ 伺服器收到**之後**才發「整包重抓」的通知：先發的話，對方重抓時伺服器還沒記下。
+      return _post('/api/reads', { kind: kind, key: key }).then(function (r) {
+        if (r && !r.ok) {
+          var m = { type: 'failed', kind: kind, key: key }
+          _announce(m)
+          _emit(m)              // 本分頁也還原（BroadcastChannel 不會送回給自己）
+        } else if (r) {
+          _bump()
+        }
+        return r
+      })
     },
     /** 回 Set：伺服器判斷的未讀鍵（已排除本人、已套可見性）。 */
     unread: function (kind, keys) {

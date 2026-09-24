@@ -2534,6 +2534,23 @@ function app() {
       if (!this.session?.token) { window.location.href = 'login.html'; return }
       // 上一頁回來／其他分頁標了已讀 ⇒ 重抓（事件由 notif.js 發出）。
       window.addEventListener('motrix:reads-changed', () => this.loadTaskUnread())
+      // 跨分頁樂觀已讀：只合併那一筆，不整包重抓；伺服器拒絕時還原。
+      window.addEventListener('motrix:item-read', e => {
+        if (e.detail.kind !== 'daily_task' || !this.unreadTasks[e.detail.key]) return
+        const m = { ...this.unreadTasks }
+        delete m[e.detail.key]
+        this.unreadTasks = m
+        this._readAtLocal = { ...(this._readAtLocal || {}), [e.detail.key]: Date.now() }
+      })
+      window.addEventListener('motrix:item-read-failed', e => {
+        if (e.detail.kind !== 'daily_task') return
+        const k = e.detail.key
+        if (!(this.tasks.some(t => String(t.id) === k))) return
+        const loc = { ...(this._readAtLocal || {}) }
+        delete loc[k]
+        this._readAtLocal = loc
+        this.unreadTasks = { ...this.unreadTasks, [k]: true }
+      })
 
       if (this.session.role === 'superadmin') {
         if (sessionStorage.getItem('dt_unlocked') === '1') {

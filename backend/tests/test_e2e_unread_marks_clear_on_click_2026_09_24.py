@@ -372,3 +372,54 @@ def test_case_management_late_unread_answer_does_not_undo_a_click(live_server, m
         page.wait_for_timeout(500)
         assert page.evaluate("() => !!Alpine.$data(document.querySelector('[x-data]')).caseActivity['MQ-B']") is False
         browser.close()
+
+
+def _two_tabs_with_one_unread(p, live_server, u, pw):
+    browser = p.chromium.launch()
+    ctx = browser.new_context()
+    a = ctx.new_page()
+    _login(a, live_server, u, pw)
+    cid, card_a = _dev_crm_with_one_unread(a, live_server)
+    b = ctx.new_page()
+    b.goto(live_server + "/pages/dev-crm.html")
+    _alpine_ready(b)
+    card_b = b.locator(".dc-case-card:has-text('紅點測試')")
+    card_b.locator("text=有更新").wait_for(state="visible", timeout=15000)
+    return browser, a, b, card_a, card_b
+
+
+@pytest.mark.e2e
+def test_other_tab_updates_within_a_second_even_if_this_tab_leaves_at_once(live_server, make_user):
+    """使用者裁示「要再優化」：點了之後**立刻換頁**（請求還沒完成、本分頁的後續程式不會再跑），
+    另一分頁仍要在 1 秒內把那一筆標成已讀。"""
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    _dev_case("bob", "紅點測試")
+    with sync_playwright() as p:
+        browser, a, b, card_a, card_b = _two_tabs_with_one_unread(p, live_server, u, pw)
+        hold = _Hold(a)                       # 伺服器那一頭還沒回應
+        card_a.click()
+        a.goto(live_server + "/index.html", wait_until="commit")
+        card_b.locator("text=有更新").wait_for(state="detached", timeout=1000)
+        browser.close()
+
+
+@pytest.mark.e2e
+def test_other_tab_restores_the_mark_when_the_server_rejects_the_read(live_server, make_user):
+    make_user(username="bob", role="admin")
+    u, pw = make_user(username="alice", role="superadmin")
+    _dev_case("bob", "紅點測試")
+    with sync_playwright() as p:
+        browser, a, b, card_a, card_b = _two_tabs_with_one_unread(p, live_server, u, pw)
+        hold = _Hold(a)                       # 先攔住，才量得到「樂觀」那一段
+        card_a.click()
+        # 樂觀：先變已讀……
+        card_b.locator("text=有更新").wait_for(state="detached", timeout=1000)
+        assert hold.held
+        for r in hold.held:
+            r.fulfill(status=500, body="{}")
+        hold.held = []
+        # ……伺服器拒絕 ⇒ 兩個分頁都還原
+        card_b.locator("text=有更新").wait_for(state="visible", timeout=5000)
+        card_a.locator("text=有更新").wait_for(state="visible", timeout=5000)
+        browser.close()

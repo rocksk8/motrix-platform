@@ -1111,6 +1111,23 @@ function app() {
       // UR1：已讀改存伺服器（逐筆、排除本人）。上一頁回來／其他分頁標了已讀 ⇒ 重抓。
       //   舊的 `motrix_casemgmt_read_at` 由 notif.js 一次性遷移成伺服器端的清單基準。
       window.addEventListener('motrix:reads-changed', () => this.loadCaseActivity())
+      // 跨分頁樂觀已讀：只合併那一筆，不整包重抓；伺服器拒絕時還原。
+      window.addEventListener('motrix:item-read', e => {
+        if (e.detail.kind !== 'case' || !this.caseActivity[e.detail.key]) return
+        const m = { ...this.caseActivity }
+        delete m[e.detail.key]
+        this.caseActivity = m
+        this._readAtLocal = { ...(this._readAtLocal || {}), [e.detail.key]: Date.now() }
+      })
+      window.addEventListener('motrix:item-read-failed', e => {
+        if (e.detail.kind !== 'case') return
+        const k = e.detail.key
+        if (!(this.cases.some(c => c.quote_no === k))) return
+        const loc = { ...(this._readAtLocal || {}) }
+        delete loc[k]
+        this._readAtLocal = loc
+        this.caseActivity = { ...this.caseActivity, [k]: true }
+      })
       this.caseSortPref = await loadListPref(s.token, 'case_list')
       await this.loadCases()
       this.loadVendors()

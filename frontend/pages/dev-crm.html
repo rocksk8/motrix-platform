@@ -1570,6 +1570,23 @@ function devCrmPage() {
       }
       // UR1：上一頁回來／其他分頁標了已讀 ⇒ 重抓未讀（事件由 notif.js 發出）。
       window.addEventListener('motrix:reads-changed', () => this.loadUnread())
+      // 跨分頁樂觀已讀：只合併那一筆，不整包重抓；伺服器拒絕時還原。
+      window.addEventListener('motrix:item-read', e => {
+        if (e.detail.kind !== 'dev_case' || !this.unreadKeys[e.detail.key]) return
+        const m = { ...this.unreadKeys }
+        delete m[e.detail.key]
+        this.unreadKeys = m
+        this._readAtLocal = { ...(this._readAtLocal || {}), [e.detail.key]: Date.now() }
+      })
+      window.addEventListener('motrix:item-read-failed', e => {
+        if (e.detail.kind !== 'dev_case') return
+        const k = e.detail.key
+        if (!(this.cases.some(c => String(c.id) === k))) return
+        const loc = { ...(this._readAtLocal || {}) }
+        delete loc[k]
+        this._readAtLocal = loc
+        this.unreadKeys = { ...this.unreadKeys, [k]: true }
+      })
       await this.loadPrefs()
       await Promise.all([this.loadCases(), this.loadUsers(), this.loadCustomers()])
       if (this.isAdmin) this.loadPendingCount()
