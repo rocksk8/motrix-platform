@@ -196,7 +196,7 @@ def _lines_of(award_id):
 # ① 結構：新表／新欄位／新來源值存在
 # ══════════════════════════════════════════════════════════════════════
 
-def test_bn14_the_group_tables_and_column_exist():
+def test_bn14_the_group_tables_and_column_exist(client):
     """🔴🔴 **`bonus_groups`／`bonus_group_members` 兩張新表、
     `bonus_items.person_source_ref` 新欄位都要存在。**
 

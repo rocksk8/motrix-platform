@@ -236,7 +236,7 @@ def test_gc9_the_negative_cache_is_not_in_the_geocode_table(client, monkeypatch)
         "與「沒查成功」，而兩者的處置相反。")
 
 
-def test_gc10_fixing_a_typo_in_the_address_retries_immediately(monkeypatch):
+def test_gc10_fixing_a_typo_in_the_address_retries_immediately(client, monkeypatch):
     """🔴 GC10 反向控制：**改一個字的地址要立刻重查。**
 
     ⭐ 負快取的鍵是**地址字串** ⇒ 使用者把打錯的地址改對＝換一個鍵

@@ -250,7 +250,7 @@ def test_gc8_a_known_miss_does_not_eat_the_time_budget(
 
 
 def test_gc8_a_positive_cache_hit_wins_over_the_negative_one(
-        clean_miss_cache, no_outbound):
+        client, clean_miss_cache, no_outbound):
     """⚙️ 反向控制③：**先查不到、後來知道了 ⇒ 要回那個座標。**
 
     ☠️ 少了這一題，一個「負快取優先」的實作會讓上面三題全綠 ——
@@ -382,7 +382,7 @@ def test_gc8_the_response_carries_both_numbers_separately(client, make_user,
 #    **省下請求**（這一題）與**講對話**（上面那幾題）。
 # 🔑 兩半放在同一個檔裡，「GC8 綠了」這句話才不會被單獨引用其中一半。
 
-def test_gc8_a_repeated_miss_does_not_ask_google_again(monkeypatch):
+def test_gc8_a_repeated_miss_does_not_ask_google_again(client, monkeypatch):
     """🔴🔴 GC8：**一個打不到的地址，不可以每次開地圖就問一次。**
 
     ☠️ 疊上 `GC5`（google 階無節流）＝ **無上限**。
