@@ -2102,18 +2102,12 @@
   const FORM_VERSION = 'V2.0'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
-  const DEFAULT_TERMS = {
-    paymentTerms: `本專案總價款分三期給付，本報價不含運費與關稅，前述相關衍生費用由買方另行負擔。
-第一期：定金款（總價款50%），買方給付本期款項後，本專案即確認執行，賣方應開立憑證予買方。
-第二期：交貨款（總價款30%），設備運抵買方指定地點並完成硬體點交後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。
-第三期：驗收款（總價款20%），設備安裝、系統設定及缺失改善完成，並經買方驗收合格後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。`,
-    deliveryTerms: '送達買方指定地點；特殊地點或時段另計。',
-    acceptanceTerms: `設備硬體自運抵交貨當日起即進行外觀與數量之點交；系統與安裝之最終驗收，依報價單雙方確認之規格與缺改清單辦理。
-若因非可歸責於賣方之現場因素（如買方場地未備妥、裝潢延宕、原廠及代理商物件/設備到貨延宕等），致部分項目未能即時完成設定或測試，不影響已交付設備及已完成安裝部分之驗收效力。針對不影響系統主要運作功能之輕微瑕疵、文件補正或教育訓練補充，買方不得拒絕簽認驗收單。買賣標的物之利益及危險，自交付時起，均由買受人承受負擔。
-賣方完成設備安裝與基礎設定並通知買方後，買受人應按物之性質，依通常程序從速檢查其所受領之物。如買方對完成內容有疑義，應於賣方通知之日起七日內以書面具體提出；逾期未辦理驗收或怠於為通知者，視為承認其所受領之物並驗收合格。此外，設備或系統若未經正式驗收程序，但買方已逕行投入實際業務營運或使用者，亦視同驗收完成。`,
-    warrantyTerms: '設備依原廠保固公告內容為主。保固期間內之硬體故障，賣方將協助買方聯繫原廠進行處理；惟若屬非設備本身硬體瑕疵（如人為損壞、天災、不當使用、買方自行變更設定、架構等）或需賣方派員至現場排解之技術服務，賣方得另行收取檢修與出勤服務費用。',
-    afterSales: '上班時段電話/E-mail技術支援；到場服務依當時報價計費。',
-  }
+  // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
+  // backend/helpers/quote_terms.py::DEFAULT_TERMS，init() 經 GET /api/settings/quote-terms-defaults
+  // 填進來（原地改這個物件，不換參照）。載入失敗時維持空字串，checkApproval() 不判定條款、
+  // 也不擋送審；送審時後端會用同一份來源重算。
+  const DEFAULT_TERMS = { paymentTerms: '', deliveryTerms: '', acceptanceTerms: '', warrantyTerms: '', afterSales: '' }
+
 
   function quotationForm() {
     return {
@@ -2225,6 +2219,7 @@
       // `termsPresets` 是設定裡的清單；**報價單本身存的是複製過去的文字**，
       // 不是指向這裡的 key——改了設定不會動到已開出去的單（見後端 docstring）。
       termsPresets: [],
+      _termsDefaultsLoaded: false,   // N13：預設條款是否已從後端取得
       termsDefaultKey: '',
       termsManageOpen: false,
       termsSaving: false,
@@ -2417,7 +2412,9 @@
         // 原本一律比 DEFAULT_TERMS——有了條款組之後，切到「純購料」會被整組
         // 判定成「條件被改過」而觸發簽核提示，等於這個功能一用就報警。
         const _base = this._termsBaseline()
-        const termsChanged = this.termsFieldDefs
+        // N13：預設條款沒載入（而且沒選條款組）就沒有比對基準 ⇒ 不判定，不擋送審
+        const _canJudgeTerms = !!this._presetByKey(this.q.termsPresetKey) || this._termsDefaultsLoaded
+        const termsChanged = !_canJudgeTerms ? [] : this.termsFieldDefs
           .filter(f => (this.q[f.key] || '').trim() !== (_base[f.key] || '').trim())
           .map(f => f.label)
         if (termsChanged.length > 0) {
@@ -3662,6 +3659,17 @@
           if (rs.ok) this.suppliers = await rs.json()
         } catch(e) {}
 
+        // ── 系統內建預設條款（唯一來源在後端，N13）──
+        try {
+          const rd = await fetch(`${this.API}/settings/quote-terms-defaults`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (rd.ok) {
+            const d = await rd.json()
+            for (const k of Object.keys(DEFAULT_TERMS)) if (typeof d[k] === 'string') DEFAULT_TERMS[k] = d[k]
+            this._termsDefaultsLoaded = true
+            if (!this._defaultPaymentTerms) this._defaultPaymentTerms = DEFAULT_TERMS.paymentTerms
+          }
+        } catch(e) {}
+
         // ── 目前後端設定的預設付款條件（不論新增/編輯都要先取得，供「報價條件與預設不同」比對基準）──
         try {
           const rp = await fetch(`${this.API}/settings/payment-terms`, { headers: { Authorization: 'Bearer ' + this.session.token } })
@@ -3757,6 +3765,11 @@
           } else {
             // 沒有任何條款組時維持改動前的行為（單欄位預設付款條件）
             this.q.paymentTerms = this._defaultPaymentTerms
+            // N13：其餘四欄原本在 data() 就由前端常數帶入；常數搬到後端之後改在這裡帶
+            if (this._termsDefaultsLoaded) {
+              for (const k of ['deliveryTerms', 'acceptanceTerms', 'warrantyTerms', 'afterSales'])
+                this.q[k] = DEFAULT_TERMS[k]
+            }
           }
         }
 

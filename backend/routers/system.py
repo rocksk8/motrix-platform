@@ -1290,10 +1290,10 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
 
 # ── Quotation default payment terms ───────────────────────────────────────────
 
-DEFAULT_PAYMENT_TERMS = """本專案總價款分三期給付，本報價不含運費與關稅，前述相關衍生費用由買方另行負擔。
-第一期：定金款（總價款50%），買方給付本期款項後，本專案即確認執行，賣方應開立憑證予買方。
-第二期：交貨款（總價款30%），設備運抵買方指定地點並完成硬體點交後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。
-第三期：驗收款（總價款20%），設備安裝、系統設定及缺失改善完成，並經買方驗收合格後，賣方得開立憑證請款，付款方式為賣方提交憑證之次月份25日支付。"""
+# 2026-09-24（N13）：內容搬到 helpers/quote_terms.py::DEFAULT_TERMS（唯一來源），
+# 這裡只引用——逐字相同，已在搬移時比對過。
+from helpers.quote_terms import DEFAULT_TERMS as _QUOTE_DEFAULT_TERMS   # noqa: E402
+DEFAULT_PAYMENT_TERMS = _QUOTE_DEFAULT_TERMS["paymentTerms"]
 
 
 class PaymentTermsBody(BaseModel):
@@ -1701,11 +1701,14 @@ class QuoteTermsPresetsBody(BaseModel):
 
 
 def _quote_terms_presets() -> dict:
-    """目前設定；沒設定過時回傳空清單（前端會退回它內建的 DEFAULT_TERMS）。
+    """目前設定；沒設定過時回傳空清單（前端會退回預設條款 DEFAULT_TERMS）。
 
-    **不在這裡自動種一組預設**：前端 `quotation-form.html` 本來就有一份
-    `DEFAULT_TERMS` 當作「沒有任何設定時」的內容，後端再種一份就變成兩個
-    事實來源，而且兩邊一旦分岔沒有任何地方會報錯。沒設定＝維持改動前的行為。
+    **不在這裡自動種一組預設**：「沒有任何設定時」的內容只有一份，兩份一旦分岔
+    沒有任何地方會報錯。沒設定＝維持改動前的行為。
+    📌 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：那一份原本是
+    前端 `quotation-form.html` 的常數，現在的唯一來源是
+    **`helpers/quote_terms.py::DEFAULT_TERMS`**，前端經 `GET /api/settings/quote-terms-defaults`
+    取得；送審時後端也用它重算「報價條件已修改」。
     """
     raw = _get_setting("quote_terms_presets", {}) or {}
     if not isinstance(raw, dict):
@@ -1714,6 +1717,14 @@ def _quote_terms_presets() -> dict:
     if not isinstance(presets, list):
         presets = []
     return {"presets": presets, "defaultKey": raw.get("defaultKey") or ""}
+
+
+@router.get("/api/settings/quote-terms-defaults")
+def get_quote_terms_defaults(authorization: str = Header(None)):
+    """系統內建的五欄預設條款（唯一來源 helpers/quote_terms.py，N13）。
+    與條款組同級：公司對外條款，登入即可讀。付款條件的「目前預設」另見 /api/settings/payment-terms。"""
+    _require_user(authorization)
+    return dict(_QUOTE_DEFAULT_TERMS)
 
 
 @router.get("/api/settings/quote-terms-presets")

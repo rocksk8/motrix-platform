@@ -1205,6 +1205,22 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
     return {"ok": True}
 
 
+def _apply_server_submit_reasons(q: dict, user: dict) -> None:
+    """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
+    helpers/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
+    不能由送件人決定（原本直接打 API 不帶 reasons 就能讓簽核人看不到低毛利）。"""
+    from helpers.quote_terms import DEFAULT_TERMS, submit_reasons
+    from helpers.settings import _get_setting
+    raw = _get_setting("quote_terms_presets", {}) or {}
+    presets = raw.get("presets") if isinstance(raw, dict) else None
+    presets = presets if isinstance(presets, list) else []
+    default_pt = _get_setting("default_payment_terms", DEFAULT_TERMS["paymentTerms"]) or ""
+    appr = q.get("approval") if isinstance(q.get("approval"), dict) else {}
+    q["approval"] = appr
+    appr["reasons"] = submit_reasons(q, user.get("display_name") or user["username"],
+                                     presets, default_pt)
+
+
 @router.post("/api/quotations", status_code=201)
 def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # 2026-09-10 稽核發現：本檔 45 支寫入端點裡，只有這一支沒有 _require_user()，
@@ -1215,6 +1231,8 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     # body.created_by 欄位保留不刪（前端仍會送），但一律以 session 為準。
     user = _require_user(authorization)
     q   = body.data
+    if body.status == "待審核":
+        _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     tot  = q.get("tot", {})
@@ -1456,6 +1474,11 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             _chk.close()
             _old_status = (_old["status"] if _old else "草稿")
             is_new_submission = _old_status not in ("待審核", "簽核中")
+            # N13：只在「轉為待審核」的那一次重算（前端也只在送審時算）；
+            # 解鎖編輯的「解鎖後修改，需重新簽核」維持原樣，不在移植範圍
+            if is_new_submission:
+                _apply_server_submit_reasons(q, user)
+                appr = q["approval"]
         try:
             appr = _build_approval_tiers_and_notify(q, appr, quote_no, is_new_submission)
         except UnresolvedManagerError as e:
