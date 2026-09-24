@@ -550,3 +550,9 @@ hichan-0a 代裁（待確認）：
 - hichan-a3：CM9 → CM11 → **CM6** → CM7（依 CM6 伺服器篩選）→ CM10 → CU1～CU8 → 案件頁「在地圖上看」→ leaflet 目錄帶版本。
 - hichan-8d：CM14 → CM15 → CM3 → CM8（CM6 上 master 後）→ N14。
 - CM6 動 `GET /api/quotations` 清單（CM13① 已加遮蔽）⇒ 保留 money_visible 行為，既有 CM13 題須維持綠。
+
+### CM14 追加／CM3 裁示（2026-09-24 使用者表單）
+- CM14：**持 cashier 模組者可寫所有案件的「收款」分段**（payment segment），其他分段仍須是成員（使用者：「出納可寫所有案件的收款分段」）。
+- CM3 角色改存帳號：**升級時自動轉**（db.py migration；依〈凍住的歷史不要呼叫活的程式碼〉migration 自帶查表，不呼叫 resolve_role 等會演進的 helper）；查無帳號或同名**不猜，保留原字串**。
+- 未對應清單：**系統設定頁一張表**（superadmin 唯讀端點），隨時可查。
+- CM14 轉換後以 username 比對；未對應的舊字串仍以顯示名稱比對（同名限制沿用）——hichan-0a 同意。
