@@ -129,7 +129,8 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
 # v113: 以案件為中心的獎金分潤三張表（SPEC-BONUS §十一；先推先拿，順延自 v112）
 # v114: AC3 獎金分潤記住它產生的傳票草稿（accrual／payment_voucher_id）
 # v115: AC2 認列口徑——階段比例、派工／額外支出的發票日期、額外支出付款日
-CURRENT_VERSION = 115
+# v116: CM3 案件角色改存帳號（caseRecord.roles → {username, display}；先推先拿，順延自 v115）
+CURRENT_VERSION = 116
 
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
@@ -4418,6 +4419,51 @@ def _m115_ac2_recognition_dates(conn):
             conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, ddl))
 
 
+def _m116_case_roles_username(conn):
+    """v116（2026-09-24 `CM3`；先推先拿，順延自 v115）：案件角色從顯示名稱改存帳號。
+
+    caseRecord.roles 的 filler／sales／executor 過去存顯示名稱字串（案件頁選單的 value＝display_name）
+    ⇒ 改名或同名時獎金自動帶入、業績歸屬、案件成員判斷出錯。改存 {"username", "display"}。
+
+    轉換規則（使用者裁示「查不到或同名的不猜、保留原值並列出清單」）：
+    - 顯示名稱在 users 表**剛好一個**帳號（含停用帳號一起算，停用的人仍是當時的那個人）⇒ 轉成物件
+    - 查不到、或同名兩個以上 ⇒ 原字串不動（清單：GET /api/system/case-roles-unmapped）
+    - 空字串、已經是物件 ⇒ 不動（冪等，重跑無害）
+    - 不改 updated_at：這不是使用者的修改，改了會讓開著頁面的人存檔時被樂觀鎖擋下
+
+    ⚠️ 凍住的歷史不呼叫活的程式碼：查表與判斷全部寫在這裡，不 import helpers/case_roles.py。
+    """
+    by_display = {}
+    for u in conn.execute("SELECT username, display_name FROM users").fetchall():
+        name = (u["display_name"] or "").strip()
+        if name:
+            by_display.setdefault(name, []).append(u["username"])
+    rows = conn.execute(
+        "SELECT quote_no, data_json FROM quotations "
+        "WHERE json_type(data_json, '$.caseRecord.roles') = 'object'").fetchall()
+    for r in rows:
+        try:
+            data = json.loads(r["data_json"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        roles = (data.get("caseRecord") or {}).get("roles")
+        if not isinstance(roles, dict):
+            continue
+        changed = False
+        for key in ("filler", "sales", "executor"):
+            v = roles.get(key)
+            if not isinstance(v, str) or not v.strip():
+                continue
+            hits = by_display.get(v.strip()) or []
+            if len(hits) == 1:
+                roles[key] = {"username": hits[0], "display": v.strip()}
+                changed = True
+        if changed:
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(data, ensure_ascii=False), r["quote_no"]))
+
+
+
 def _m114_bonus_case_voucher_links(conn):
     """v114（2026-09-24 `AC3`，SPEC-BONUS §11.8）：獎金分潤記住它產生的傳票草稿。
 
@@ -5661,6 +5707,7 @@ _MIGRATIONS = [
     _m113_bonus_case_awards,                        # v113
     _m114_bonus_case_voucher_links,                 # v114
     _m115_ac2_recognition_dates,                    # v115
+    _m116_case_roles_username,                      # v116
 ]
 
 

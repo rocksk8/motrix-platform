@@ -1171,28 +1171,37 @@
                 <div class="cm-fgrid cm-fgrid--people">
                   <div class="fi-group">
                     <label class="fi-label">填單人</label>
-                    <select class="fi" x-model="cr.caseRecord.roles.filler" @change="setDirty()">
+                    <select class="fi" x-model="roleSel.filler">
                       <option value="">— 選擇 —</option>
+                      <template x-if="roleExtra('filler')">
+                        <option :value="roleExtra('filler').value" x-text="roleExtra('filler').label"></option>
+                      </template>
                       <template x-for="u in selectableUsers" :key="u.username">
-                        <option :value="u.display_name" x-text="u.display_name"></option>
+                        <option :value="u.username" x-text="u.display_name || u.username"></option>
                       </template>
                     </select>
                   </div>
                   <div class="fi-group">
                     <label class="fi-label">業務負責</label>
-                    <select class="fi" x-model="cr.caseRecord.roles.sales" @change="setDirty()">
+                    <select class="fi" x-model="roleSel.sales">
                       <option value="">— 選擇 —</option>
+                      <template x-if="roleExtra('sales')">
+                        <option :value="roleExtra('sales').value" x-text="roleExtra('sales').label"></option>
+                      </template>
                       <template x-for="u in selectableUsers" :key="u.username">
-                        <option :value="u.display_name" x-text="u.display_name"></option>
+                        <option :value="u.username" x-text="u.display_name || u.username"></option>
                       </template>
                     </select>
                   </div>
                   <div class="fi-group">
                     <label class="fi-label">執行負責</label>
-                    <select class="fi" x-model="cr.caseRecord.roles.executor" @change="setDirty()">
+                    <select class="fi" x-model="roleSel.executor">
                       <option value="">— 選擇 —</option>
+                      <template x-if="roleExtra('executor')">
+                        <option :value="roleExtra('executor').value" x-text="roleExtra('executor').label"></option>
+                      </template>
                       <template x-for="u in selectableUsers" :key="u.username">
-                        <option :value="u.display_name" x-text="u.display_name"></option>
+                        <option :value="u.username" x-text="u.display_name || u.username"></option>
                       </template>
                     </select>
                   </div>

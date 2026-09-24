@@ -2433,3 +2433,44 @@ def edit_presence_release(body: EditPresenceIn, authorization: str = Header(None
     finally:
         conn.close()
     return {"ok": True}
+
+
+@router.get("/api/system/case-roles-unmapped")
+def case_roles_unmapped(authorization: str = Header(None)):
+    """案件角色還沒對應到帳號的清單（CM3，2026-09-24 使用者裁示「查不到或同名的不猜、列出清單」）。
+
+    升級轉換（db.py::_m116_case_roles_username）只轉「顯示名稱剛好對到一個帳號」的；其餘保留原字串，
+    在這裡列出，由 superadmin 到案件頁重新選一次。唯讀；顯示在「使用者管理」頁。
+    """
+    from helpers.case_roles import ROLE_KEYS, ROLE_LABELS
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        counts = {}
+        for u in conn.execute("SELECT display_name FROM users").fetchall():
+            name = (u["display_name"] or "").strip()
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+        rows = conn.execute(
+            "SELECT quote_no, customer_name, project_name, data_json FROM quotations "
+            "WHERE json_type(data_json, '$.caseRecord.roles') = 'object' ORDER BY id DESC").fetchall()
+    finally:
+        conn.close()
+    items = []
+    for r in rows:
+        try:
+            roles = (json.loads(r["data_json"] or "{}").get("caseRecord") or {}).get("roles") or {}
+        except (TypeError, ValueError):
+            continue
+        for key in ROLE_KEYS:
+            v = roles.get(key) if isinstance(roles, dict) else None
+            if not isinstance(v, str) or not v.strip():
+                continue
+            n = counts.get(v.strip(), 0)
+            reason = ("查無此名稱的帳號" if n == 0 else
+                      "同名 %d 個帳號，無法判斷是哪一位" % n if n > 1 else
+                      "尚未轉換（對得到唯一帳號，到案件頁重新選一次即可）")
+            items.append({"quoteNo": r["quote_no"], "customer": r["customer_name"] or "",
+                          "project": r["project_name"] or "", "role": key, "roleLabel": ROLE_LABELS[key],
+                          "value": v, "reason": reason})
+    return {"items": items}

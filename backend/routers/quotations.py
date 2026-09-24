@@ -41,6 +41,7 @@ from helpers import (
     summarize_payment_items,
 )
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
+from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
     money_visible, mask_row as _mask_money_row, mask_quotation_data, mask_case_record, restore_case_record,
     PaymentStructureChange,
@@ -114,6 +115,8 @@ def _fmt_change_value(v) -> str:
     索引，不是完整快照（完整快照是同一批做的 PDF 版本存檔）。"""
     if v is None:
         return ""
+    if isinstance(v, dict) and ("display" in v or "username" in v):
+        return role_display(v)          # CM3：案件角色物件
     if isinstance(v, (list, dict)):
         return f"（{len(v)} 項）" if isinstance(v, list) else "（內容）"
     text = str(v)
@@ -478,9 +481,16 @@ def _is_case_member(conn, quote_no: str, row, user: dict) -> bool:
         roles = ((json.loads(row["data_json"] or "{}").get("caseRecord") or {}).get("roles") or {})
     except Exception:
         roles = {}
+    # CM3：物件形狀以 username 比對；未轉換的舊字串仍以顯示名稱比對（同名限制只剩這一種）
     me = user.get("display_name") or ""
-    if me and me in {roles.get(k) for k in ("filler", "sales", "executor") if isinstance(roles, dict)}:
-        return True
+    for k in ROLE_KEYS if isinstance(roles, dict) else ():
+        v = roles.get(k)
+        uname = role_username(v)
+        if uname is not None:
+            if uname == user["username"]:
+                return True
+        elif me and isinstance(v, str) and v.strip() == me:
+            return True
     hit = conn.execute(
         "SELECT 1 FROM case_stages cs, json_each(cs.assigned_to) a WHERE cs.quote_no=? AND a.value=? LIMIT 1",
         (quote_no, user["username"]),
@@ -5728,6 +5738,8 @@ def _flatten_case_record(cr: dict) -> dict:
 
     for path, label in _CASE_SCALAR_LABELS.items():
         v = _dig_path(cr, path)
+        if isinstance(v, dict) and path.startswith("roles."):
+            v = role_display(v)             # CM3：案件角色物件
         if v in (None, ""):
             continue
         vmap = _CASE_VALUE_LABELS.get(path)

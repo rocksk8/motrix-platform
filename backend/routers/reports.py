@@ -35,6 +35,7 @@ from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登�
 
 _log = logging.getLogger(__name__)
 
+from helpers.case_roles import role_username, role_display
 router = APIRouter()
 
 _COMPANY  = "允碩整合集創"
@@ -186,7 +187,14 @@ def _case_sales_owner(cr: dict, row, name_index: dict, user_by_id: dict):
     那是另一條線：部門篩選會影響整份報表的取數範圍，改動面遠大於這次交辦，
     而且要先決定「案件的部門是跟著開單者還是跟著業務負責」。已記在 §11。
     """
-    owner = ((cr.get("roles") or {}).get("sales") or "").strip() if isinstance(cr, dict) else ""
+    raw = (cr.get("roles") or {}).get("sales") if isinstance(cr, dict) else None
+    # CM3（2026-09-24）：物件形狀直接用帳號定位（改名、同名都不影響）；未轉換的舊字串照舊反查
+    uname = role_username(raw)
+    if uname:
+        uid = next((i for i, info in user_by_id.items() if info.get("username") == uname), None)
+        if uid is not None:
+            return ("id", uid), (user_by_id[uid].get("displayName") or role_display(raw))
+    owner = role_display(raw)
     if owner:
         uid = name_index.get(owner)
         if uid:
@@ -223,9 +231,10 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 但顯示「目前」名稱（不受 quotations.sales_person 這個建立當下快照字串
     # 影響，見 case["salesPersonId"] 的說明）。
     user_by_id = {
-        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"]}
+        r["id"]: {"deptId": r["department_id"], "deptName": r["dept_name"], "displayName": r["display_name"],
+                  "username": r["username"]}
         for r in conn.execute("""
-            SELECT u.id, u.department_id, u.display_name, d.name AS dept_name
+            SELECT u.id, u.username, u.department_id, u.display_name, d.name AS dept_name
             FROM users u LEFT JOIN departments d ON d.id = u.department_id
         """).fetchall()
     }

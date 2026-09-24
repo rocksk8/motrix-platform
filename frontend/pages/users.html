@@ -427,6 +427,32 @@
         </div>
       </div>
     </div>
+
+    <!-- CM3（2026-09-24）：案件角色還沒對應到帳號的清單。升級時只轉「顯示名稱剛好對到一個帳號」的，
+         查不到或同名的不猜、保留原值，列在這裡；到案件頁把該角色重新選一次就會消失。 -->
+    <div x-show="isSuperAdmin" data-testid="case-roles-unmapped" style="margin-top:20px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px">案件角色未對應帳號</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">
+        案件的填單人／業務負責／執行負責改為記錄帳號。下列舊資料的名稱查不到帳號或有同名，系統不自動猜測；請到案件管理重新選擇。
+      </div>
+      <div x-show="rolesUnmappedError" style="font-size:12px;color:#DC2626" x-text="rolesUnmappedError"></div>
+      <div x-show="!rolesUnmappedError && rolesUnmapped.length === 0" style="font-size:12px;color:var(--text-dim)">沒有未對應的案件角色。</div>
+      <table x-show="rolesUnmapped.length > 0" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="text-align:left;border-bottom:1px solid var(--border-light)">
+          <th style="padding:6px">案件</th><th style="padding:6px">角色</th><th style="padding:6px">目前記錄的名稱</th><th style="padding:6px">原因</th>
+        </tr></thead>
+        <tbody>
+          <template x-for="r in rolesUnmapped" :key="r.quoteNo + r.role">
+            <tr style="border-bottom:1px solid var(--border-light)">
+              <td style="padding:6px"><a :href="'case-management.html?q=' + encodeURIComponent(r.quoteNo)" x-text="r.quoteNo + '　' + (r.customer || '') + (r.project ? '／' + r.project : '')"></a></td>
+              <td style="padding:6px" x-text="r.roleLabel"></td>
+              <td style="padding:6px" x-text="r.value"></td>
+              <td style="padding:6px" x-text="r.reason"></td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- ══ 新增/編輯 Modal ══ -->
@@ -1271,6 +1297,23 @@
         }
         await this.loadModuleCatalog()
         await Promise.all([this.loadUsers(), this.loadCustomRoles(), this.loadRoleLabels(), this.loadOrgTree()])
+        if (this.isSuperAdmin) this.loadRolesUnmapped()
+      },
+
+      rolesUnmapped: [],
+      rolesUnmappedError: '',
+      async loadRolesUnmapped() {
+        try {
+          const r = await fetch('/api/system/case-roles-unmapped', {
+            headers: { Authorization: 'Bearer ' + this.session.token }
+          })
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          this.rolesUnmapped = (await r.json()).items || []
+          this.rolesUnmappedError = ''
+        } catch (e) {
+          // 讀不到要說出來，不可以顯示成「沒有未對應的案件角色」
+          this.rolesUnmappedError = '讀不到案件角色對應清單，請重新整理頁面。'
+        }
       },
 
       async loadModuleCatalog() {

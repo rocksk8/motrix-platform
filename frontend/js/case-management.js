@@ -1778,6 +1778,41 @@ function app() {
     // 這時 total／amount 都是空的，任何換算都會算出 0 並自動存回去 ⇒ 會改金額的動作一律不做。
     moneyMasked() { return !!this.selected?.moneyMasked },
 
+    // CM3（2026-09-24）：案件角色存 {username, display}；未轉換的舊資料是顯示名稱字串（升級時查不到或
+    // 同名的不猜，見 db.py::_m116_case_roles_username）。選單的 value 一律是帳號。
+    roleUser(k) {
+      const v = this.cr.caseRecord?.roles?.[k]
+      if (v && typeof v === 'object') return v.username || ''
+      return (typeof v === 'string' && v.trim()) ? '__legacy__' : ''
+    },
+    setRole(k, val) {
+      if (!this.cr.caseRecord || val === '__legacy__' || val === this.roleUser(k)) return
+      if (!this.cr.caseRecord.roles) this.cr.caseRecord.roles = { filler: '', sales: '', executor: '' }
+      if (!val) { this.cr.caseRecord.roles[k] = '' } else {
+        const u = (this.selectableUsers || []).find(x => x.username === val)
+        const cur = this.cr.caseRecord.roles[k]
+        this.cr.caseRecord.roles[k] = { username: val, display: (u && (u.display_name || u.username)) || cur?.display || val }
+      }
+      this.setDirty()
+    },
+    // 選單裡沒有對應選項的現值：未對應帳號的舊字串、或已不在可選名單的帳號（例如停用）
+    roleExtra(k) {
+      const v = this.cr.caseRecord?.roles?.[k]
+      if (typeof v === 'string' && v.trim()) return { value: '__legacy__', label: v + '（未對應帳號）' }
+      if (v && typeof v === 'object' && v.username && !(this.selectableUsers || []).some(u => u.username === v.username)) {
+        return { value: v.username, label: (v.display || v.username) + '（不在可選名單）' }
+      }
+      return null
+    },
+    get roleSel() {
+      const self = this
+      const o = {}
+      for (const k of ['filler', 'sales', 'executor']) {
+        Object.defineProperty(o, k, { enumerable: true, get: () => self.roleUser(k), set: v => self.setRole(k, v) })
+      }
+      return o
+    },
+
     // CM14b（2026-09-24）：不是案件成員、靠 cashier 模組讀到的 ⇒ 除收款外全唯讀（後端另擋寫入）
     caseReadOnly() { return !!this.selected?.cashierReadOnly },
 

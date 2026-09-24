@@ -1656,9 +1656,14 @@ def _unique_username_by_display(conn, display_name):
 def _auto_members(conn, quote_no):
     """§11.7：業務＝quotations.sales_person；專案＝caseRecord.roles.executor；後勤不自動帶。
     回 (members, notes)。解不出（同名／查無）⇒ 不帶，notes 說明要手動指定。"""
+    # CM3（2026-09-24）：roles.executor 可能是 {"username","display"}（新）或顯示名稱字串（未轉換的舊資料）
     row = conn.execute(
         "SELECT sales_person, sales_person_id,"
-        " json_extract(data_json, '$.caseRecord.roles.executor') AS executor"
+        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
+        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.username') END AS executor_user,"
+        " CASE json_type(data_json, '$.caseRecord.roles.executor') WHEN 'object'"
+        "   THEN json_extract(data_json, '$.caseRecord.roles.executor.display')"
+        "   ELSE json_extract(data_json, '$.caseRecord.roles.executor') END AS executor"
         " FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
     members = {c: [] for c in CATEGORIES}
     notes = {}
@@ -1676,7 +1681,12 @@ def _auto_members(conn, quote_no):
     else:
         notes["sales"] = ("報價單業務人員「%s」對不到唯一的帳號，請手動指定" % (row["sales_person"] or "")
                           if row["sales_person"] else "報價單沒有業務人員，請手動指定")
-    exe_user = _unique_username_by_display(conn, row["executor"])
+    if row["executor_user"]:
+        hit = conn.execute("SELECT username FROM users WHERE username = ? AND active = 1",
+                           (row["executor_user"],)).fetchone()
+        exe_user = hit["username"] if hit else None
+    else:
+        exe_user = _unique_username_by_display(conn, row["executor"])
     if exe_user:
         members["project"].append({"username": exe_user, "person_bp": None, "source": "auto_executor"})
     else:
