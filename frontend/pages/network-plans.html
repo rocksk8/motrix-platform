@@ -186,7 +186,7 @@
           </template>
           <template x-if="!createForm.quoteNo">
             <div>
-              <input type="text" x-model="caseSearch" placeholder="搜尋案件編號／客戶名稱／案件名稱…"
+              <input class="filter" type="text" x-model="caseSearch" placeholder="搜尋案件編號／客戶名稱／案件名稱…"
                      style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
               <div style="max-height:220px;overflow-y:auto;margin-top:6px;border:1px solid var(--border-light);border-radius:6px" x-show="caseOptionsLoading || filteredCaseOptions().length">
                 <div x-show="caseOptionsLoading" style="padding:10px;font-size:12px;color:var(--text-dim)">載入案件中…</div>

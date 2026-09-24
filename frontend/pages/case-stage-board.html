@@ -173,7 +173,7 @@
       <div class="toolbar">
         <div class="field">
           <span>部門</span>
-          <select x-model="departmentId" @change="loadStageBoard()">
+          <select class="filter" x-model="departmentId" @change="loadStageBoard()">
             <option value="">全部部門</option>
             <template x-for="d in allDepartments" :key="d.id">
               <option :value="d.id" x-text="d.divisionName + ' / ' + d.name"></option>
@@ -182,7 +182,7 @@
         </div>
         <div class="field">
           <span>業務員</span>
-          <select x-model="salesFilter">
+          <select class="filter" x-model="salesFilter">
             <option value="">全部</option>
             <template x-for="s in salesPersonOptions" :key="s">
               <option :value="s" x-text="s"></option>
@@ -190,7 +190,7 @@
           </select>
         </div>
         <div class="field">
-          <input type="text" x-model="searchQ" placeholder="搜尋客戶／案件…">
+          <input class="filter" type="text" x-model="searchQ" placeholder="搜尋客戶／案件…">
         </div>
         <button type="button" class="toggle-chip" :class="{active: onlyMine}" @click="onlyMine = !onlyMine">只看我的</button>
         <div class="view-toggle">

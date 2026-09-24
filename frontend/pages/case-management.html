@@ -997,7 +997,7 @@
                   <div class="mat-card">
                     <div class="mat-card__head">
                       <input class="fi" type="text" placeholder="品名" x-model="mat.name" @input="setDirty()" style="flex:1;min-width:0">
-                      <input class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:11px;flex-shrink:0">
+                      <input data-saved-field class="fi" type="text" placeholder="廠牌/型號" x-model="mat.model" @input="setDirty()" style="width:110px;font-size:11px;flex-shrink:0">
                       <input class="fi" type="number" placeholder="數量" x-model.number="mat.qty" min="1" @input="setDirty()" style="width:52px;flex-shrink:0">
                       <input class="fi" type="text" placeholder="單位" x-model="mat.unit" @input="setDirty()" style="width:44px;font-size:12px;flex-shrink:0">
                       <span class="mat-tag" :class="mat.arrived ? 'mat-tag--arrived' : mat.ordered ? 'mat-tag--ordered' : 'mat-tag--pending'"
@@ -1088,7 +1088,7 @@
                     <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--tone-info-bg);border:1px solid var(--tone-info-border);border-radius:7px;flex-wrap:wrap">
                       <span style="font-size:11px;font-weight:600;color:var(--tone-info-fg);font-family:var(--font-zh);white-space:nowrap">一鍵同步保固</span>
                       <input type="date" x-model="_syncWarrantyDate" class="fi fi--sm" style="width:138px;flex-shrink:0">
-                      <select x-model.number="_syncWarrantyMonths" class="fi fi--sm" style="width:96px;flex-shrink:0">
+                      <select data-saved-field x-model.number="_syncWarrantyMonths" class="fi fi--sm" style="width:96px;flex-shrink:0">
                         <option value="3">3 月</option>
                         <option value="6">6 月</option>
                         <option value="12">12 月（1 年）</option>
@@ -1169,7 +1169,7 @@
                               <div class="dev-row" style="margin-top:4px">
                                 <span class="dev-row__lbl">保固</span>
                                 <input class="fi fi--sm" type="date" x-model="dev.warrantyStart" @change="setDirty()" style="flex:none;width:auto">
-                                <select class="fi fi--sm" x-model.number="dev.warrantyMonths" @change="setDirty()" style="flex:none;width:96px;margin-left:6px">
+                                <select data-saved-field class="fi fi--sm" x-model.number="dev.warrantyMonths" @change="setDirty()" style="flex:none;width:96px;margin-left:6px">
                                   <option value="3">3 月</option>
                                   <option value="6">6 月</option>
                                   <option value="12">12 月（1 年）</option>
@@ -1229,7 +1229,7 @@
                         <div class="dev-row" style="margin-top:4px">
                           <span class="dev-row__lbl">保固</span>
                           <input class="fi fi--sm" type="date" x-model="entry.dev.warrantyStart" @change="setDirty()" style="flex:none;width:auto">
-                          <select class="fi fi--sm" x-model.number="entry.dev.warrantyMonths" @change="setDirty()" style="flex:none;width:96px;margin-left:6px">
+                          <select data-saved-field class="fi fi--sm" x-model.number="entry.dev.warrantyMonths" @change="setDirty()" style="flex:none;width:96px;margin-left:6px">
                             <option value="3">3 月</option>
                             <option value="6">6 月</option>
                             <option value="12">12 月（1 年）</option>
@@ -2300,7 +2300,7 @@
                            （待付不能有金額/日期、部分或已付必須有日期），這裡先擋一次
                            並給明確訊息，不要讓使用者撞到原始 400 -->
                       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-                        <select class="fi fi--sm" style="width:104px" x-model="m.paidStatus"
+                        <select data-saved-field class="fi fi--sm" style="width:104px" x-model="m.paidStatus"
                                 :disabled="!moCanEdit()" @change="moOnStatusChange(mi)">
                           <option value="pending">待付</option>
                           <option value="partial">部分已付</option>
@@ -3433,7 +3433,7 @@
         </div>
         <div>
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">狀態</label>
-          <select x-model="dispatchForm.status"
+          <select data-saved-field x-model="dispatchForm.status"
                   style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
             <option value="draft">草稿</option>
             <option value="sent">已送出</option>
@@ -3446,7 +3446,7 @@
         </div>
         <div>
           <label style="font-size:11px;font-weight:500;color:var(--text-secondary);display:block;margin-bottom:4px">工作範圍</label>
-          <input type="text" x-model="dispatchForm.scope" placeholder="簡述承攬工項…"
+          <input data-saved-field type="text" x-model="dispatchForm.scope" placeholder="簡述承攬工項…"
                  style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
         </div>
         <div>

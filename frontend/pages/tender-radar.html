@@ -256,7 +256,7 @@
         </div>
         <div>
           <label class="fi-label">關鍵字（逗號分隔，任一中即命中）</label>
-          <input class="fi" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
+          <input data-saved-field class="fi" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
         </div>
         <div>
           <label class="fi-label">排除詞（逗號分隔，一中就整筆排除）</label>
@@ -345,7 +345,7 @@
       <button class="btn btn-ghost btn-sm" x-show="search"
               @click="search = ''; loadTenders()">清除</button>
       <span style="font-size:12px;color:var(--text-secondary)">只看</span>
-      <select class="fi" style="width:190px" x-model="watchFilter">
+      <select class="fi filter" style="width:190px" x-model="watchFilter">
         <option value="">全部（不篩選）</option>
         <template x-for="w in watches" :key="w.id">
           <option :value="String(w.id)" x-text="w.name"></option>

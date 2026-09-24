@@ -105,7 +105,7 @@
         <div class="tb-head"><span class="ttl">網路架構選型導覽</span><span class="sub">技術族系 · 世代對照 · 產品連結</span></div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
           <div class="gsearch-box">
-            <input type="text" placeholder="搜尋型號／品牌，如「U6-Pro」「Omada」" x-model="globalSearch">
+            <input class="filter" type="text" placeholder="搜尋型號／品牌，如「U6-Pro」「Omada」" x-model="globalSearch">
             <button class="gsearch-clr" x-show="globalSearch" @click="globalSearch=''">✕</button>
           </div>
           <button class="mibtn" :class="mode==='browse' ? 'pri' : ''" @click="mode='browse'">瀏覽</button>
@@ -309,7 +309,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">建議售價區間</div>
-            <input class="field-input" type="text" placeholder="NT$12,000–35,000" x-model="modal.priceRange">
+            <input data-saved-field class="field-input" type="text" placeholder="NT$12,000–35,000" x-model="modal.priceRange">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">依賴／相關備註</div>
@@ -338,7 +338,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">型號</div>
-            <input class="field-input" type="text" placeholder="U7-Pro" x-model="modal.model">
+            <input data-saved-field class="field-input" type="text" placeholder="U7-Pro" x-model="modal.model">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">連結網址</div>

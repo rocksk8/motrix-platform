@@ -103,7 +103,7 @@
         <button class="btn btn-primary" @click="save()" :disabled="saving || !editable" x-show="editable">
           <span x-text="saving ? '儲存中…' : isDirty ? '儲存' : '已儲存'"></span>
         </button>
-        <select x-model="statusSelect" @change="changeStatus()" :disabled="!editable" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <select data-saved-field x-model="statusSelect" @change="changeStatus()" :disabled="!editable" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
           <template x-for="s in STATUSES" :key="s"><option :value="s" x-text="s"></option></template>
         </select>
         <span style="flex:1"></span>
@@ -361,7 +361,7 @@
 <div class="modal-overlay" x-show="stockPickerOpen" x-cloak @keydown.escape.window="stockPickerOpen=false">
   <div class="modal-box" @click.stop>
     <h3>從庫存挑選設備</h3>
-    <input type="text" x-model="stockSearch" @input.debounce.300ms="searchStock()" placeholder="搜尋序號 / MAC…"
+    <input class="filter" type="text" x-model="stockSearch" @input.debounce.300ms="searchStock()" placeholder="搜尋序號 / MAC…"
            style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:12px;box-sizing:border-box">
     <div style="overflow-y:auto;flex:1">
       <template x-if="stockSearching"><div style="color:var(--text-dim);font-size:12px">搜尋中…</div></template>

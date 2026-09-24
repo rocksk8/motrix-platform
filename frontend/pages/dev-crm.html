@@ -520,7 +520,7 @@
              兩個控制項綁同一個 filterStatus，而且 chips 那組沒有數字、資訊量
              比較少。這一排改放使用者真正缺的：人員與排序。 -->
         <div style="display:flex;gap:5px;margin-top:8px">
-          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px"
                   x-model="filterPerson" @change="savePersonPref()">
             <option value="">所有人員</option>
             <option value="__me__">只看我負責的</option>
@@ -530,7 +530,7 @@
           </select>
         </div>
         <div style="display:flex;gap:5px;margin-top:6px;align-items:center">
-          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px"
+          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px"
                   x-model="sortPref.sortMode" @change="saveSort()">
             <option value="updated">最後更新</option>
             <option value="created">建立日期</option>
@@ -542,11 +542,11 @@
                   x-text="sortPref.sortDir === 'asc' ? '↑ 由舊到新' : '↓ 由新到舊'"></button>
         </div>
         <div style="display:flex;gap:5px;margin-top:8px">
-          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
+          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterYear">
             <option value="">年份</option>
             <template x-for="y in yearOptions" :key="y"><option :value="y" x-text="y + '年'"></option></template>
           </select>
-          <select class="dc-select" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterMonth">
+          <select class="dc-select filter" style="flex:1;font-size:11px;padding:5px 6px" x-model="filterMonth">
             <option value="">月份</option>
             <template x-for="m in 12" :key="m">
               <option :value="String(m).padStart(2,'0')" x-text="m + '月'"></option>
@@ -924,7 +924,7 @@
                 </div>
                 <div>
                   <span class="dc-lbl">案件狀態快照（選填）</span>
-                  <select class="dc-select" x-model="logForm.status_snapshot">
+                  <select data-saved-field class="dc-select" x-model="logForm.status_snapshot">
                     <option value="">不記錄</option>
                     <option>洽談中</option><option>成案</option><option>未成案</option><option>暫擱置</option>
                   </select>
@@ -1073,7 +1073,7 @@
             </div>
             <div class="dc-form-group">
               <label>案件狀態</label>
-              <select class="dc-select" x-model="caseForm.status">
+              <select data-saved-field class="dc-select" x-model="caseForm.status">
                 <option>洽談中</option><option>成案</option><option>未成案</option>
               </select>
             </div>

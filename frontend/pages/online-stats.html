@@ -97,11 +97,11 @@
     <div class="os-bar">
       <div class="os-field">
         <label>起始日期</label>
-        <input class="fi" type="date" x-model="start" @change="load()">
+        <input class="fi filter" type="date" x-model="start" @change="load()">
       </div>
       <div class="os-field">
         <label>結束日期</label>
-        <input class="fi" type="date" x-model="end" @change="load()">
+        <input class="fi filter" type="date" x-model="end" @change="load()">
       </div>
       <button class="btn btn-secondary btn-sm" @click="thisMonth()">本月</button>
       <button class="btn btn-secondary btn-sm" @click="last30()">近 30 天</button>
@@ -150,7 +150,7 @@
         <!-- 成員篩選走 members（users 表全部人），不是上面那張表的成員——沒有活躍
              時數但有操作紀錄的人，在舊版點不到，而那常常正是要查的人。 -->
         <label for="os-member" style="font-size:11px;color:var(--text-dim)">成員</label>
-        <select id="os-member" class="fi" style="width:210px;font-size:12px"
+        <select id="os-member" class="fi filter" style="width:210px;font-size:12px"
                 x-model="trailUser" @change="reloadTrail()">
           <option value="">全部成員</option>
           <template x-for="m in members" :key="m.userId">
@@ -160,7 +160,7 @@
         <button class="btn btn-secondary btn-sm" x-show="trailUser" @click="selectMember('')">顯示全部</button>
         <button class="btn btn-secondary btn-sm" @click="loadTrail()">重新整理</button>
         <label style="font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:5px;cursor:pointer">
-          <input type="checkbox" x-model="showPaths"> 顯示原始路徑
+          <input class="filter" type="checkbox" x-model="showPaths"> 顯示原始路徑
         </label>
         <span style="font-size:11px;color:var(--text-dim);margin-left:auto" x-text="trailNote"></span>
       </div>

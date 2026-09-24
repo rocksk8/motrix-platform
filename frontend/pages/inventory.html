@@ -173,7 +173,7 @@
       <div class="field-row" style="grid-column:1/-1">
         <div class="field-label">料號 <span style="color:var(--danger)">*</span></div>
         <div style="display:flex;gap:8px">
-          <select class="field-input" style="flex:0 0 160px" x-model="intake.brandFilter" @change="intake.partNo=''">
+          <select class="field-input filter" style="flex:0 0 160px" x-model="intake.brandFilter" @change="intake.partNo=''">
             <option value="">全部廠牌</option>
             <template x-for="b in intakeBrandOptions" :key="b"><option :value="b" x-text="b"></option></template>
           </select>

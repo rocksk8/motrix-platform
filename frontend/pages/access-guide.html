@@ -170,7 +170,7 @@
         <div class="tb-head"><span class="ttl">門禁系統選型導覽</span><span class="sub">場域情境 · 元件分類適配 · 產品連結</span></div>
         <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
           <div class="gsearch-box">
-            <input type="text" placeholder="搜尋型號／品牌…" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">
+            <input class="filter" type="text" placeholder="搜尋型號／品牌…" x-model="globalSearch" @input="if(globalSearch.trim()) browseView='scenario'">
             <button class="gsearch-clr" x-show="globalSearch" @click="globalSearch=''">✕</button>
           </div>
           <button class="mibtn" :class="mode==='browse' ? 'pri' : ''" @click="mode='browse'">瀏覽</button>
@@ -235,7 +235,7 @@
                           </div>
                         </div>
                         <div class="prod-search" x-show="productsFor(c.code).length>3 && !globalSearch.trim()">
-                          <input type="text" placeholder="搜尋型號／規格，如「8」「PoE」「24」" x-model="productSearch[c.code]">
+                          <input class="filter" type="text" placeholder="搜尋型號／規格，如「8」「PoE」「24」" x-model="productSearch[c.code]">
                           <button class="clr" x-show="productSearch[c.code]" @click="productSearch[c.code]=''">✕</button>
                         </div>
                         <template x-for="p in filteredProductsFor(c.code)" :key="p.id">
@@ -451,7 +451,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">建議售價區間</div>
-            <input class="field-input" type="text" placeholder="US$99~洽詢報價" x-model="modal.priceRange">
+            <input data-saved-field class="field-input" type="text" placeholder="US$99~洽詢報價" x-model="modal.priceRange">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">依賴／相關備註</div>
@@ -513,7 +513,7 @@
           </div>
           <div class="field-row">
             <div class="field-label">型號</div>
-            <input class="field-input" type="text" placeholder="Access Reader Lite" x-model="modal.model">
+            <input data-saved-field class="field-input" type="text" placeholder="Access Reader Lite" x-model="modal.model">
           </div>
           <div class="field-row" style="grid-column:1/-1">
             <div class="field-label">連結網址</div>
@@ -560,7 +560,7 @@
 
       <div class="compare-toolbar">
         <label class="compare-toggle">
-          <input type="checkbox" x-model="compareShowUniform">
+          <input class="filter" type="checkbox" x-model="compareShowUniform">
           <span x-text="compareShowUniform ? '顯示全部規格' : '只顯示有差異的規格'"></span>
         </label>
         <span class="compare-hint" x-show="!compareShowUniform && uniformKeysFor(compareProducts()).length>0"
