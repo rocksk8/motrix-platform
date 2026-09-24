@@ -556,3 +556,4 @@ hichan-0a 代裁（待確認）：
 - CM3 角色改存帳號：**升級時自動轉**（db.py migration；依〈凍住的歷史不要呼叫活的程式碼〉migration 自帶查表，不呼叫 resolve_role 等會演進的 helper）；查無帳號或同名**不猜，保留原字串**。
 - 未對應清單：**系統設定頁一張表**（superadmin 唯讀端點），隨時可查。
 - CM14 轉換後以 username 比對；未對應的舊字串仍以顯示名稱比對（同名限制沿用）——hichan-0a 同意。
+- CM14／CM15 已推（9a9fa3b、608e2ce、85dc492）。**CM14b**（使用者：「讀得到，但只能改收款」）：持 cashier 模組的非成員可 **讀** 任何案件（GET /api/quotations/{no}、案件清單可見性），案件頁對他除「收款」外全部唯讀（前端鎖＋後端 CM14 已擋）；金額照 money_visible（cashier 本來可見）。⚠ 清單可見性一併放寬時，MP6 地圖案件圖層逐筆可見性要同步（共用 helper）。執行 hichan-8d，排在 CM3 之前。
