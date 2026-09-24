@@ -1799,28 +1799,38 @@
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">運輸物流費</span>
-          <input class="cost-input" type="number" min="0" x-model.number="q.indirectLogistics"
-                 @input="calcTotals(); setDirty()">
+          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectLogistics"
+                 :value="numShown(q.indirectLogistics, $el, 'indirectLogistics')" :class="{'num-bad': badNum.indirectLogistics}"
+                 @blur="$el.value = numShown(q.indirectLogistics, $el, 'indirectLogistics', true)"
+                 @input="if (setNumField(q, 'indirectLogistics', 'indirectLogistics', $event.target.value)) { calcTotals(); setDirty() }">
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">安裝施工</span>
-          <input class="cost-input" type="number" min="0" x-model.number="q.indirectInstallation"
-                 @input="calcTotals(); setDirty()">
+          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectInstallation"
+                 :value="numShown(q.indirectInstallation, $el, 'indirectInstallation')" :class="{'num-bad': badNum.indirectInstallation}"
+                 @blur="$el.value = numShown(q.indirectInstallation, $el, 'indirectInstallation', true)"
+                 @input="if (setNumField(q, 'indirectInstallation', 'indirectInstallation', $event.target.value)) { calcTotals(); setDirty() }">
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">差異項</span>
-          <input class="cost-input" type="number" min="0" x-model.number="q.indirectTravel"
-                 @input="calcTotals(); setDirty()">
+          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectTravel"
+                 :value="numShown(q.indirectTravel, $el, 'indirectTravel')" :class="{'num-bad': badNum.indirectTravel}"
+                 @blur="$el.value = numShown(q.indirectTravel, $el, 'indirectTravel', true)"
+                 @input="if (setNumField(q, 'indirectTravel', 'indirectTravel', $event.target.value)) { calcTotals(); setDirty() }">
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">保固預估</span>
-          <input class="cost-input" type="number" min="0" x-model.number="q.indirectWarranty"
-                 @input="calcTotals(); setDirty()">
+          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectWarranty"
+                 :value="numShown(q.indirectWarranty, $el, 'indirectWarranty')" :class="{'num-bad': badNum.indirectWarranty}"
+                 @blur="$el.value = numShown(q.indirectWarranty, $el, 'indirectWarranty', true)"
+                 @input="if (setNumField(q, 'indirectWarranty', 'indirectWarranty', $event.target.value)) { calcTotals(); setDirty() }">
         </div>
         <div class="cost-row" style="align-items:center">
           <span class="cost-row__label">其他費用</span>
-          <input class="cost-input" type="number" min="0" x-model.number="q.indirectOther"
-                 @input="calcTotals(); setDirty()">
+          <input class="cost-input" type="text" inputmode="decimal" data-num="indirectOther"
+                 :value="numShown(q.indirectOther, $el, 'indirectOther')" :class="{'num-bad': badNum.indirectOther}"
+                 @blur="$el.value = numShown(q.indirectOther, $el, 'indirectOther', true)"
+                 @input="if (setNumField(q, 'indirectOther', 'indirectOther', $event.target.value)) { calcTotals(); setDirty() }">
         </div>
         <div class="cost-row" style="border-bottom:none">
           <span class="cost-row__label">間接成本合計</span>
@@ -2101,7 +2111,8 @@
   const API = '/api'
   // ── 報價單模板版本：本頁（quotation-form.html）或其邏輯有任何改動都須遞增 ──
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
-  const FORM_VERSION = 'V3.3'
+  // V3.4（2026-09-24 N14）：內部成本區五個間接費改用文字框，接受「12,000」與全形數字；無法辨識時標紅不存
+  const FORM_VERSION = 'V3.4'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在

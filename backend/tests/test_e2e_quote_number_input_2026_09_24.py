@@ -166,3 +166,56 @@ def test_clearing_margin_keeps_previous_value_and_review(live_server, make_user)
             assert page.input_value(MARGIN) == "20", "失焦還原成上一個值"
         finally:
             browser.close()
+
+
+def _saved_data():
+    import db
+    conn = db.get_db()
+    try:
+        row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (QUOTE_NO,)).fetchone()
+    finally:
+        conn.close()
+    return json.loads(row["data_json"])
+
+
+@pytest.mark.e2e
+def test_internal_cost_inputs_accept_separators_and_block_bad_values(live_server, make_user):
+    """N14 擴大範圍（使用者裁示）：內部成本區五個間接費也接受千分位與全形數字；無法辨識時標紅不存。"""
+    username, password = make_user(username="e2e_num3", role="superadmin")
+    _seed()
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        dialogs = []
+        page.on("dialog", lambda d: (dialogs.append(d.message), d.accept()))
+        try:
+            _login(page, live_server, username, password)
+            _open(page, live_server)
+            LOG = 'input[data-num="indirectLogistics"]'
+            OTHER = 'input[data-num="indirectOther"]'
+            page.locator(LOG).wait_for(state="visible")
+            page.fill(LOG, "12,000")
+            assert page.evaluate(f"{DATA}.q.indirectLogistics") == 12000
+            page.fill(OTHER, "３，５００")
+            assert page.evaluate(f"{DATA}.q.indirectOther") == 3500
+            assert page.evaluate(f"{DATA}.tot.totalIndirect") >= 15500
+
+            page.fill(OTHER, "35oo")
+            assert "num-bad" in (page.get_attribute(OTHER, "class") or "")
+            assert page.evaluate(f"{DATA}.q.indirectOther") == 3500
+            page.click('button:has-text("儲存草稿")')
+            time.sleep(1.0)
+            assert any("無法辨識" in m for m in dialogs), dialogs
+            assert "indirectLogistics" not in _saved_data() or _saved_data().get("indirectLogistics") != 12000, \
+                "標紅時不可以存檔"
+
+            page.fill(OTHER, "3,500")
+            page.click('button:has-text("儲存草稿")')
+            for _ in range(100):
+                if _saved_data().get("indirectLogistics") == 12000:
+                    break
+                time.sleep(0.1)
+            d = _saved_data()
+            assert d["indirectLogistics"] == 12000 and d["indirectOther"] == 3500
+        finally:
+            browser.close()
