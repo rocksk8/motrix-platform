@@ -628,3 +628,10 @@ hichan-0a 代裁（待確認）：
 - 併修：bonus approve 同一層多位簽核人時，第一位簽完就跳下一層（違反 tiered_approval「同一層依序輪流簽」）；其他單據同型寫法先列清單。
 - 簽核設定頁顯示內部設定鍵（unified_approval_flow 等）已修 6178b4a（使用者回報）。
 - 正式機基準改 3a66611（0d0688d，使用者已部署 20260925_023333_3a66611）。
+
+## 🔴 EX-SIGN 額外支出同層簽核（2026-09-25 03:3x；使用者：「先暫停升級檔，把這個修復」；執行 hichan-8d）
+- 更正：原報「同層他人被寫 approvedAt」有誤（讀碼看錯 break）。實測：只准第一位（或其代理）簽、一簽就換層、而且 **status 從不寫**（簽過的也顯示 pending）。
+- 使用者裁：**同層每一位都要依序簽完才過層**（與獎金分潤、tiered_approval 共用規則一致）；每位簽時寫自己的 status／approvedAt／approvedBy（代理記 onBehalfOf）；額外支出與變更申請兩條路；plan_self_cascade「任一人即通過」一併對齊（先列再改）。
+- 既有資料（已過層但 status=pending）不寫 migration，列交付說明。
+- 建包暫停中，修完推上再重建。
+- NEXT（本包匯出後）：畫面測試共用瀏覽器與伺服器（使用者已選）。
