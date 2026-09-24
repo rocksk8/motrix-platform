@@ -70,8 +70,25 @@
     .mp-me { display:block; width:14px; height:14px; border-radius:50%;
              background:#DC2626; border:3px solid #fff;
              box-shadow:0 0 0 1px #DC2626, 0 1px 4px rgba(0,0,0,.4); }
-    #mp-canvas { height:460px; border-radius:var(--radius);
+    /* `MP5`：高度隨視窗。字級按鈕用根元素 zoom，而 zoom 會把 vh 一起放大 ⇒ 除以 `--fz`
+       （同 `test_fz_no_raw_vh_is_left_in_the_frontend` 的規則）。下限 320px：矮視窗仍看得到地圖。 */
+    #mp-canvas { height:max(320px, calc(62vh / var(--fz,1))); border-radius:var(--radius);
                  border:1px solid var(--border-light); }
+    .mp-map-tools { display:flex; justify-content:flex-end; gap:8px; margin-bottom:6px; }
+    /* 全螢幕＝頁內滿版（不用瀏覽器 Fullscreen API：不需使用者授權、Esc 與按鈕都能退出）。
+       ⚠️ 用 `inset:0` 不用視窗高度單位：fixed 元素的 inset 不受根元素 zoom 放大，vh 會。 */
+    .mp-map-panel.mp-full { position:fixed; inset:0; z-index:3000; margin:0 !important;
+                            border-radius:0; display:flex; flex-direction:column; }
+    .mp-map-panel.mp-full > .mp-panel-body { flex:1; display:flex; flex-direction:column; min-height:0; }
+    .mp-map-panel.mp-full #mp-canvas { flex:1; height:auto; min-height:0; border-radius:0; }
+    .mp-table-scroll { overflow-x:auto; }
+    /* 手機：斷點與全站一致（style.css 的 767px）。 */
+    @media (max-width: 767px) {
+      .mp-wrap { padding:10px; }
+      #mp-canvas { height:max(260px, calc(50vh / var(--fz,1))); }
+      .mp-search { width:100% !important; }
+      .mp-table-scroll .table { min-width:640px; }
+    }
   </style>
 </head>
 <body>
@@ -87,7 +104,7 @@
 
 <div class="app-shell">
   <main class="main">
-  <div x-data="mapPage()" x-init="init()" class="mp-wrap">
+  <div x-data="mapPage()" x-init="init()" class="mp-wrap" @keydown.escape.window="fullMap && toggleFull()">
 
     <h1 class="page-title">地圖</h1>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
@@ -346,8 +363,12 @@
     </div>
 
     <!-- 底圖：只有按了按鈕才存在 -->
-    <div class="panel" style="margin-top:12px" x-show="mapOpen">
+    <div class="panel mp-map-panel" :class="{'mp-full': fullMap}" style="margin-top:12px" x-show="mapOpen">
       <div class="mp-panel-body">
+        <div class="mp-map-tools">
+          <button type="button" class="btn btn-ghost btn-sm mp-full-btn" @click="toggleFull()"
+                  x-text="fullMap ? '結束全螢幕' : '全螢幕'"></button>
+        </div>
         <div class="mp-note warn" x-show="tileError">
           <!-- ⚠️ **不要替使用者斷定原因。** 這裡只有一個訊號（圖磚載不出來），
                而它至少對應兩個成因：沒有對外連線、或瀏覽器的安全政策擋下。
@@ -374,6 +395,7 @@
 
     <!-- ── 清單：**預設就是這個**，零對外連線 ── -->
     <div class="panel" style="margin-top:12px">
+      <div class="mp-table-scroll">
       <table class="table">
         <thead><tr>
           <th>來源</th><th>機關</th><th>名稱</th><th>地點</th>
@@ -476,6 +498,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 
     <p style="font-size:11px;color:var(--text-dim);margin-top:18px">
@@ -543,6 +566,13 @@ function mapPage() {
     tenderFilter: 'notClosed',
     // `MP4`：關鍵字與「附近 N 筆」（空字串＝全部）。
     q: '', nearN: '',
+    // `MP5`：頁內全螢幕。Leaflet 重新量尺寸交給 `_watchMapSize()` 的 ResizeObserver
+    //   （容器一變它就 invalidateSize）——不在這裡再叫一次（突變實測：拿掉這裡那一次，題照樣綠 ⇒ 多餘）。
+    fullMap: false,
+    toggleFull() {
+      this.fullMap = !this.fullMap
+      try { document.body.style.overflow = this.fullMap ? 'hidden' : '' } catch (_e) {}
+    },
     _markerOf: null, _pendingRow: null,
     //: Google 導航**只給網址**（使用者點了才由 Google 處理；我們不存任何 Google 回傳的資料）。
     navUrl(p) {
