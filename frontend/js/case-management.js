@@ -248,6 +248,8 @@ function app() {
     assignedUsersSaving: false,
     exportingProjectReport: false,
     headerMoreOpen: false,   // CU5：標頭「更多」選單
+    needReceivedDate: {},    // CU7：剛勾已收款、還沒填日期的期別（以 item.id 為鍵；不寫進 item，否則會跟著存進 data_json）
+    savedFlash: {},          // CU6：即時儲存成功 ⇒ 區塊標題閃 ✓（鍵：case／stages／dispatch-<id>／xe-<id>／mo-<itemId>）
 
     caseTasks: [],
     caseTasksLoading: false,
@@ -548,6 +550,7 @@ function app() {
         if (!r.ok) { this._xeFail(j.detail || '日期儲存失敗'); return }
         if ('invoiceDate' in j) x.invoiceDate = j.invoiceDate
         if ('paidDate' in j) x.paidDate = j.paidDate
+        this.flashSaved('xe-' + x.id)
         if (j.updatedAt) x.updatedAt = j.updatedAt
       } catch (e) { this._xeFail('網路錯誤：' + e.message) }
     },
@@ -1063,7 +1066,7 @@ function app() {
         const d = await r.json().catch(() => ({}))
         this.moMsgError = !r.ok
         this.moMsg = r.ok ? '發票日期已儲存' : ('發票日期儲存失敗：' + (d.detail || r.status))
-        if (r.ok) m.invoiceDate = d.invoiceDate
+        if (r.ok) { m.invoiceDate = d.invoiceDate; this.flashSaved('mo-' + m.itemId) }
       } catch (e) {
         this.moMsgError = true
         this.moMsg = '網路錯誤：' + e.message
@@ -2275,6 +2278,27 @@ function app() {
       this.setDirty()
     },
 
+    // CU6：即時儲存成功閃 ✓（1.6 秒後消失；連續存檔以最後一次為準）
+    flashSaved(key) {
+      const at = Date.now()
+      this.savedFlash = { ...this.savedFlash, [key]: at }
+      setTimeout(() => {
+        if (this.savedFlash[key] !== at) return
+        const next = { ...this.savedFlash }; delete next[key]; this.savedFlash = next
+      }, 1600)
+    },
+
+    // CU7：勾「已收款」的當下還沒填收款日期 ⇒ 把游標帶到日期欄並框紅（不自動填：收到錢是人的判斷）
+    onReceivedToggled(item) {
+      const need = !!(item.received && !item.receivedAt)
+      this.needReceivedDate = { ...this.needReceivedDate, [item.id]: need }
+      if (!need) return
+      this.$nextTick(() => {
+        const el = document.getElementById('pay-' + item.id + '-received-at')
+        if (el) { el.focus(); el.scrollIntoView({ block: 'nearest' }) }
+      })
+    },
+
     setDirty() {
       this.dirty = true
       window.motrixIsDirty = true
@@ -2452,6 +2476,7 @@ function app() {
           } else {
             this.saveStatus = 'saved'
             this.saveMsg = '已儲存'
+            this.flashSaved('case')
             setTimeout(() => { if (!this.dirty) { this.saveStatus = ''; this.saveMsg = '' } }, 2000)
           }
           // 收款／階段等改動會影響五關，總覽跟著更新
@@ -2858,6 +2883,7 @@ function app() {
         })
         if (!r.ok) { alert('儲存失敗'); return }
         Object.assign(st, await r.json())
+        this.flashSaved('stages')
         this._checkAllStagesDone()
       } catch (e) { alert('發生錯誤：' + e.message) }
     },
@@ -2868,7 +2894,7 @@ function app() {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees`, {
           method: 'POST', headers: this._authHeaders(true), body: JSON.stringify({ username })
         })
-        if (r.ok) Object.assign(st, await r.json())
+        if (r.ok) { Object.assign(st, await r.json()); this.flashSaved('stages') }
       } catch {}
     },
     async removeStageAssignee(st, username) {
@@ -2878,7 +2904,7 @@ function app() {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}/assignees/${encodeURIComponent(username)}`, {
           method: 'DELETE', headers: this._authHeaders()
         })
-        if (r.ok) Object.assign(st, await r.json())
+        if (r.ok) { Object.assign(st, await r.json()); this.flashSaved('stages') }
       } catch {}
     },
 
@@ -3202,7 +3228,7 @@ function app() {
           method: 'PUT', headers: this._authHeaders(true),
           body: JSON.stringify({ visitDate: visit.visitDate, visitPeople: visit.visitPeople, note: visit.note })
         })
-        if (r.ok) Object.assign(st, await r.json())
+        if (r.ok) { Object.assign(st, await r.json()); this.flashSaved('stages') }
       } catch {}
     },
     stageTotalVisits(st) { return (st.visits || []).filter(v => v.visitDate || v.note).length },
@@ -4125,6 +4151,7 @@ function app() {
         const j = await r.json().catch(() => ({}))
         if (!r.ok) { alert(j.detail || '發票日期儲存失敗'); return }
         d.invoiceDate = j.invoiceDate
+        this.flashSaved('dispatch-' + d.id)
         if (j.updated_at) d.updatedAt = j.updated_at
       } catch (e) { alert('網路錯誤：' + e.message) }
     },
