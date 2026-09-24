@@ -433,3 +433,9 @@ DB      CURRENT_VERSION 109（與正式機 46dc6ae 相同）⇒ 這次沒有資�
 - hichan-0a 代裁（待確認）：UR1 網路錯誤不還原（keepalive 可能已送達）——同意。CM1 改為「分段存＋分段比對基準」——同意（整張單一個 updated_at 會讓不同分頁互擋，達不到 CM 規格的目的）。
 - NEXT：module-counts 索引（v114 以後）；`static/vendor/leaflet/` 目錄不帶版本，升版會被一年快取卡住 ⇒ 改帶版本目錄（hichan-61 於 MP 完成後）。
 - master spec-coverage 紅（N11 撞名）：hichan-0a 的 `test_n11_remaining_…` 改名解除（eaf1209）。
+
+## 🔴 CM13 案件金額欄位後端遮蔽（2026-09-24 使用者表單：「要，後端移除金額欄位」；執行者 hichan-8d，排在 CM2 之後）
+- 實查（origin/master 4e0072f）：`GET /api/quotations`（quotations.py:699）回 `total／pretax／direct_margin_pct／net_margin_pct` 給任何看得到該案件的人；結案檢核清單（:1041 `"total"`）同；`GET /api/quotations/{quote_no}` 回整份 data_json（含品項單價與成本）。`can_see_financial()` 只套在財務總覽三支（auth.py:201 docstring 明寫）。
+- 裁示：沒有 `can_see_financial()` 的帳號，後端**不回**金額、毛利、單價、成本欄位；畫面顯示「—」。順序：清單 → 結案檢核 → 案件內容。
+- ⚠ 簽核人例外照舊（quotations.py:5649 的既有規則）；⚠ 案件內容回寫時，被遮蔽的欄位不可被空值蓋掉（伺服器以 DB 現值補回）——這是本項最大風險，要有題。
+- ⚠ 題：viewer／engineer 拿不到欄位（先在 master 證明紅）；sales／admin／financial_view 照舊拿到；engineer 存檔後 DB 金額不變。
