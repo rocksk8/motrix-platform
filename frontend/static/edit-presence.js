@@ -39,12 +39,29 @@
     catch (e) { return ''; }
   }
 
+  // W-1（2026-09-24）：提示條原本疊在內容上（position:fixed），第二個人開同一件時案件頁標頭的
+  // 「儲存」「更多」被它蓋住。改成顯示時把它的高度加進 --topbar-h——全站內容都用這個變數讓出上方
+  // 空間，所以 5 個有提示條的頁面一起往下讓；提示條本身用「加之前的原值」定位，隱藏時還原。
+  var baseTopbar = null;
+  function reserveSpace(on) {
+    var root = document.documentElement;
+    if (baseTopbar === null) {
+      baseTopbar = getComputedStyle(root).getPropertyValue('--topbar-h').trim() || '54px';
+      root.style.setProperty('--presence-top', baseTopbar);
+    }
+    if (on && bar) root.style.setProperty('--topbar-h', 'calc(' + baseTopbar + ' + ' + bar.offsetHeight + 'px)');
+    else root.style.removeProperty('--topbar-h');
+  }
+  window.addEventListener('resize', function () {
+    if (bar && bar.style.display !== 'none') reserveSpace(true);   // 窄螢幕換行時高度會變
+  });
+
   function ensureBar() {
     if (bar) return bar;
     bar = document.createElement('div');
     bar.id = 'motrix-presence-bar';
     bar.style.cssText =
-      'display:none;position:fixed;top:var(--topbar-h,54px);left:0;right:0;z-index:400;' +
+      'display:none;position:fixed;top:var(--presence-top,var(--topbar-h,54px));left:0;right:0;z-index:400;' +
       'background:#FEF3C7;border-bottom:1px solid #FDE68A;color:#92400E;' +
       'padding:9px 18px;font-size:13px;font-family:var(--font-zh, sans-serif);' +
       'display:flex;align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.08)';
@@ -55,7 +72,7 @@
 
   function render(others) {
     var el = ensureBar();
-    if (!others || !others.length) { el.style.display = 'none'; return; }
+    if (!others || !others.length) { el.style.display = 'none'; reserveSpace(false); return; }
     // §9 XSS 規範：displayName 是使用者可控字串，一律用 DOM API 插入，不用 innerHTML
     el.textContent = '';
     var icon = document.createElement('span');
@@ -71,6 +88,7 @@
     el.appendChild(icon);
     el.appendChild(msg);
     el.style.display = 'flex';
+    reserveSpace(true);
   }
 
 
@@ -198,7 +216,7 @@
       closeModal();
       if (TYPE && ID) release(TYPE, ID);
       TYPE = ID = null;
-      if (bar) bar.style.display = 'none';
+      if (bar) { bar.style.display = 'none'; reserveSpace(false); }
     },
     // 存檔收到 409 時可以叫這個，立刻更新警示內容
     refresh: beat
