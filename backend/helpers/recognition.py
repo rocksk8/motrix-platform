@@ -39,6 +39,19 @@ FLAG_LABELS = {
     "legacy_tax":          "舊 1～4% 稅率單（非法定稅率，請會計確認）",
 }
 
+#: 待補登連結開案件頁的哪個分頁（2026-09-24 使用者裁：開對應分頁）＝那筆資料實際登錄的地方。
+#: 每個 FLAG_LABELS 的 key 都要在這裡有決定（tests 守門）；None ＝ 不帶分頁。
+FLAG_TABS = {
+    "dispatch_no_invoice": "dispatch",   # 派工的廠商發票日登在承攬商分頁
+    "material_no_invoice": "fin",        # 叫料在財務分頁
+    "extra_no_invoice":    "xexp",       # 額外支出分頁
+    "extra_no_paid_date":  "xexp",
+    "stage_ratio_unset":   "exec",       # 階段比例在執行分頁
+    "stage_ratio_not_100": "exec",
+    "case_incomplete":     "exec",
+    "legacy_tax":          None,         # 稅率在報價單本身，案件頁沒有對應分頁
+}
+
 #: 報表頂端的口徑說明（使用者：「數字不同的部分，在營運報表內可註明並且標註」）
 BASIS_NOTES = {
     "accrual": ("本報表預設採權責口徑：收入依案件階段完成月認列（未稅），支出依廠商發票月認列"
@@ -307,10 +320,12 @@ def extra_entries(conn, basis):
 # 待補登標註
 # ══════════════════════════════════════════════════════════════════════
 
-def _flag_item(quote_no, customer, doc, desc, amount, day, money_ok):
+def _flag_item(quote_no, customer, doc, desc, amount, day, money_ok, kind):
+    tab = FLAG_TABS[kind]
+    link = "case-management.html?q=%s" % quote_no + ("&tab=%s" % tab if tab else "")
     return {"quoteNo": quote_no, "customer": customer or "", "doc": doc, "desc": desc,
             "amount": (round(amount) if amount is not None else None) if money_ok else None,
-            "date": day, "link": "case-management.html?q=%s" % quote_no}
+            "date": day, "link": link}
 
 
 def recognition_flags(conn, year, department_id=None, money_ok=True):
@@ -328,22 +343,22 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
         if e["quoteNo"] in in_scope and e["provisional"] and (e["date"][:4] == y or e["date"] == ""):
             flags["dispatch_no_invoice"].append(_flag_item(
                 e["quoteNo"], customer.get(e["quoteNo"]), "派工 #%s" % e["dispatchId"], e["desc"],
-                e["amount"], e["date"], money_ok))
+                e["amount"], e["date"], money_ok, "dispatch_no_invoice"))
     for e in material_entries(conn, "accrual", department_id):
         if e["provisional"] and (e["date"][:4] == y or e["date"] == ""):
             flags["material_no_invoice"].append(_flag_item(
-                e["quoteNo"], customer.get(e["quoteNo"]), "叫料", e["desc"], e["amount"], e["date"], money_ok))
+                e["quoteNo"], customer.get(e["quoteNo"]), "叫料", e["desc"], e["amount"], e["date"], money_ok, "material_no_invoice"))
     for e in extra_entries(conn, "accrual"):
         if e["quoteNo"] not in in_scope:
             continue
         if e["provisional"] and e["date"][:4] == y:
             flags["extra_no_invoice"].append(_flag_item(
                 e["quoteNo"], customer.get(e["quoteNo"]), "額外支出 #%s" % e["expenseId"], e["desc"],
-                e["amount"], e["date"], money_ok))
+                e["amount"], e["date"], money_ok, "extra_no_invoice"))
         if e["paidDate"] == "" and e["date"][:4] == y:
             flags["extra_no_paid_date"].append(_flag_item(
                 e["quoteNo"], customer.get(e["quoteNo"]), "額外支出 #%s" % e["expenseId"], e["desc"],
-                e["amount"], e["date"], money_ok))
+                e["amount"], e["date"], money_ok, "extra_no_paid_date"))
 
     stages = _stages_by_quote(conn)
     for r in cases:
@@ -352,12 +367,12 @@ def recognition_flags(conn, year, department_id=None, money_ok=True):
             if kind in rev["flags"]:
                 amt = rev["unrecognized"] if kind == "case_incomplete" else r["pretax"]
                 flags[kind].append(_flag_item(r["quote_no"], r["customer_name"], "案件",
-                                              r["project_name"] or "", amt, "", money_ok))
+                                              r["project_name"] or "", amt, "", money_ok, kind))
         try:
             data = json.loads(r["data_json"] or "{}") or {}
         except (TypeError, ValueError):
             data = {}
         if quote_tax_type(data) == "legacy":
             flags["legacy_tax"].append(_flag_item(r["quote_no"], r["customer_name"], "報價單",
-                                                  "稅率 %s%%" % data.get("taxRate"), r["total"], "", money_ok))
+                                                  "稅率 %s%%" % data.get("taxRate"), r["total"], "", money_ok, "legacy_tax"))
     return {k: {"label": FLAG_LABELS[k], "count": len(v), "items": v} for k, v in flags.items()}

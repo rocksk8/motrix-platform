@@ -499,8 +499,10 @@ function reportsApp() {
       // 期別切在「季報」時多帶 quarter，匯出檔才會有「本季收支」那一頁／工作表
       // （不帶時輸出與先前完全一致）。expense_month 已由 _syncSubPeriods() 跟著
       // period-bar 同步，所以月報的匯出本來就會對到畫面上的月份。
+      // D4-1（2026-09-24）：帶上畫面目前的口徑；原本沒帶 ⇒ 畫面切現金，匯出的仍是權責。
       var url = '/api/reports/financial/' + fmt + '?period=' + this.periodParam +
                 '&expense_month=' + this.expensesMonth +
+                '&basis=' + encodeURIComponent(this.expensesBasis || 'accrual') +
                 (this.expensesScope === 'quarter' ? '&quarter=' + this.expensesQuarter : '') +
                 (this.departmentId ? '&department_id=' + this.departmentId : '')
       try {

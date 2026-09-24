@@ -77,7 +77,7 @@ def test_report_shows_basis_note_and_flag_list_and_switches_basis(live_server, m
             flag.click()
             link = page.locator('[data-testid="recognition-flags"] a:has-text("MQ-RBE-001")')
             link.wait_for(state="visible", timeout=5000)
-            assert link.get_attribute("href") == "case-management.html?q=MQ-RBE-001"
+            assert link.get_attribute("href") == "case-management.html?q=MQ-RBE-001&tab=dispatch"
 
             page.click('[data-testid="basis-cash"]')
             page.wait_for_function(f"() => ({RPT}.expensesData || {{}}).basis === 'cash'", timeout=20000)

@@ -79,6 +79,8 @@
       background: #fff; border-radius: var(--radius-lg);
       width: 100%; max-width: 680px;
       box-shadow: var(--shadow-lg); flex-shrink: 0;
+      /* D8-2：扣掉外層上下 padding 40px（全域規則只扣 2rem ⇒ 字級特時底邊超出視窗），內容由 .modal-body 內捲 */
+      max-height: calc(calc(100dvh / var(--fz,1)) - 80px);
     }
     .modal-head {
       display: flex; align-items: center; padding: 16px 22px;

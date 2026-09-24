@@ -95,7 +95,7 @@ MODULES = (
 ROLE_TEMPLATES = {
     "superadmin": ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions", "selection_overview",),
     "admin": ("dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier",),
-    "sales": ("dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task",),
+    "sales": ("dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task", "map",),
     "engineer": ("dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task",),
     "viewer": ("dashboard",),
 }

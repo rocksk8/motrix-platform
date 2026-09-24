@@ -393,7 +393,7 @@ def test_every_flag_kind_has_a_label_and_a_link(client, sa):
     from helpers.recognition import FLAG_LABELS
     assert set(body["recognitionFlags"]) == set(FLAG_LABELS)
     it = [i for i in body["recognitionFlags"]["dispatch_no_invoice"]["items"] if i["quoteNo"] == "MQ-RB-070"][0]
-    assert it["link"] == "case-management.html?q=MQ-RB-070"
+    assert it["link"] == "case-management.html?q=MQ-RB-070&tab=dispatch"   # 2026-09-24 使用者裁：開對應分頁
 
 
 def test_a_dispatch_put_without_the_invoice_date_key_keeps_it(client, sa):

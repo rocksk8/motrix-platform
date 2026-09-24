@@ -13,6 +13,8 @@ registry 必須與它們逐項相同 ⇒ 正式機帳號身上的 `modules` JSON
 📌 2026-09-24（CU2b，使用者裁示的用詞統一「代辦→待辦」）：兩個模組的**顯示名稱**
    「案件代辦－…」改為「案件待辦－…」。key（project_approve_eng／biz）不動，帳號身上的
    modules JSON 只存 key ⇒ 零影響。這是這份 golden 唯一一次改 label，理由是用詞裁示。
+📌 2026-09-24（實走 7-SL，使用者裁示「業務預設開地圖」）：sales 樣板末尾加 `map`。
+   只影響之後套用樣板的帳號；既有帳號身上的 modules JSON 不動。
 ☠️ 產生 registry 時第一版就踩到一次：`("dashboard")` 少一個逗號，viewer 樣板變成
    字串、長度 9 ——這一題會抓到那種錯。
 """
@@ -68,7 +70,7 @@ GOLDEN_MODULES = [
 GOLDEN_ROLE_TEMPLATES = {
     "superadmin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions", "selection_overview"],
     "admin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier"],
-    "sales": ["dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task"],
+    "sales": ["dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task", "map"],
     "engineer": ["dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task"],
     "viewer": ["dashboard"],
 }
