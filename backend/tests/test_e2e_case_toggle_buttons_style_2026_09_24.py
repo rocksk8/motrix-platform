@@ -7,6 +7,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_e2e_case_page_golden_2026_09_24 import _seed  # noqa: F401  (live_server 是 fixture)
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -35,11 +36,7 @@ def test_toggle_buttons_are_styled_and_readable(live_server, make_user, theme, e
     ctx = browser.new_context()
     ctx.add_init_script(f"try {{ localStorage.setItem('motrix_theme', '{theme}') }} catch (e) {{}}")
     page = ctx.new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/case-management.html")
     page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.caseCounts", timeout=20000)
     off = page.evaluate(STYLE, "[data-quick=mine]")

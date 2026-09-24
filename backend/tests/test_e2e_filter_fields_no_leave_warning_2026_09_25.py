@@ -8,6 +8,7 @@ sidebar.js 的 _maybeSetDirty 只略過 type=search／range 或 class 含 search
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 
 # 頁面 → (篩選欄 x-model 名稱, 反向控制：會存檔的欄位 x-model 名稱)
@@ -76,18 +77,12 @@ def test_filter_fields_do_not_mark_the_page_dirty(live_server, make_user, monkey
     ctx = browser.new_context()
     ctx.route("**/tile.openstreetmap.org/**", lambda r: r.abort())   # 地圖圖磚不連外
     page = ctx.new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    sess = inject_login(page, live_server, u[0], u[1])
     if "{pid}" in page_name:
-        ids["pid"] = page.evaluate("""async () => {
-          const t = JSON.parse(localStorage.getItem('motrix_session')).token
-          const r = await fetch('/api/network-plans', { method: 'POST',
-            headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ siteName: 'W8 規劃' }) })
-          return (await r.json()).id }""")
+        r = page.request.post(f"{live_server}/api/network-plans", data={"siteName": "W8 規劃"},
+                              headers={"Authorization": "Bearer " + sess["token"]})
+        assert r.ok, r.text()
+        ids["pid"] = r.json()["id"]
     page.goto(f"{live_server}/pages/" + page_name.replace("?", ".html?", 1).format(**ids) + ("" if "?" in page_name else ".html"))
     page.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')", timeout=15000)
     page.wait_for_timeout(1500)

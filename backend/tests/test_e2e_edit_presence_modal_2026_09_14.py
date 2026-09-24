@@ -19,17 +19,14 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    inject_login(page, base_url, username, password)
 
 
 def _seed_quote(quote_no):

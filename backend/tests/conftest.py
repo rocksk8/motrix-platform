@@ -1634,7 +1634,7 @@ def login_as(client):
         assert not d.get("totpRequired"), "這個帳號要 TOTP：login_as 不處理，請走登入頁"
         sess = {k: d.get(k) for k in ("token", "userId", "username", "displayName", "role", "modules", "loginAt")}
         ctx = getattr(target, "context", target)
-        ctx.add_init_script("try { localStorage.setItem('motrix_session', %s) } catch (e) {}"
-                            % _json.dumps(_json.dumps(sess)))
+        from tests._e2e_login import session_init_script   # 含「已經過 index」的分頁旗標（見那裡）
+        ctx.add_init_script(session_init_script(sess))
         return sess
     return _login

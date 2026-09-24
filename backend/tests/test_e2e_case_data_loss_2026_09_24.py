@@ -14,6 +14,7 @@ import time
 
 import pytest
 
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 
 pytest.importorskip("playwright.sync_api")
@@ -27,11 +28,7 @@ NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base_url, username, password)
 
 
 def _seed(quote_no):

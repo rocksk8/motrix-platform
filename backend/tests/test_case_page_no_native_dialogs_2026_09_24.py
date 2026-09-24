@@ -15,6 +15,7 @@ import threading
 import time
 
 import pytest
+from tests._e2e_login import inject_login  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGE = ROOT / "frontend" / "pages" / "case-management.html"
@@ -144,11 +145,7 @@ def test_main_actions_use_no_native_dialogs(live_server, make_user, e2e_browser)
     browser = e2e_browser
     page = browser.new_context().new_page()
     seen = forbid_native_dialogs(page)
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_function(
         f"() => {{ const c = {DATA_JS}; return c.selected && c.selected.quote_no === '{NO}'"

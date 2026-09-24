@@ -16,6 +16,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_e2e_case_page_golden_2026_09_24 import NO, _seed  # noqa: F401  (live_server 是 fixture)
 
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_theme_2026_09_24.json")
@@ -83,11 +84,7 @@ def _open(browser, base, user, theme):
     ctx.add_init_script(f"try {{ localStorage.setItem('motrix_theme', '{theme}') }} catch (e) {{}}")
     page = ctx.new_page()
     page.on("dialog", lambda d: d.dismiss())
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', user[0])
-    page.fill('input[x-model="password"]', user[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, user[0], user[1])
     page.goto(f"{base}/pages/case-management.html?q={NO}")
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}' && {DATA_JS}.caseCounts",
                            timeout=20000)

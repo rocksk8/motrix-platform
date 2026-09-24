@@ -15,17 +15,14 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    inject_login(page, base_url, username, password)
 
 
 def _seed_audit(username, display, action, target_id, label, detail, at):
@@ -108,6 +105,7 @@ def test_history_sidebar_entry_and_scope_for_non_admin(live_server, make_user, e
     browser = e2e_browser
     page = browser.new_page()
     _login(page, live_server, u, p)
+    page.goto(f"{live_server}/index.html")     # 登入改注入 token 後不會自動停在 index；這一題要看 index 上的導覽列
     # 導覽要有入口——功能做了但沒人找得到等於沒做。
     # 2026-09-14：側欄退役（display:none），入口搬到上方導覽列 #app-mainnav。
     # 用 state="attached" 而不是預設的 visible：mega-menu 的第二層

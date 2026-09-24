@@ -41,6 +41,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 import uvicorn
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 #: ⚠️ 我單方面宣告的測試掛鉤。頁面還不存在，選擇器只能由我先定。
@@ -114,11 +115,7 @@ def _bonus_module_on(monkeypatch):
 
 
 def _login(page, base_url, username, password):
-    page.goto("%s/pages/login.html" % base_url)
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base_url, username, password)
 
 
 def _open_bonus(browser, live_server, username, password):

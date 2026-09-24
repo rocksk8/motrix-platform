@@ -9,6 +9,7 @@
 - 關卡矩陣的格子可點，開案件並停在該關的分頁
 觀測點：API 回應、資料庫 deal_tag、頁面 activeTab。
 """
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import expect_toast, forbid_native_dialogs
 import json
 import threading
@@ -121,11 +122,7 @@ def _open(browser, base, user, path=None):
     page = browser.new_context().new_page()
     # CM12 P4：案件頁不再用原生對話框 ⇒ 記下任何原生對話框（題目斷言要是空的）
     dialogs = forbid_native_dialogs(page)
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', user[0])
-    page.fill('input[x-model="password"]', user[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, user[0], user[1])
     page.goto(f"{base}/pages/case-management.html" + (path or f"?q={NO}"))
     if path is None:
         page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'",

@@ -9,6 +9,7 @@
 
 需要 `playwright`（見 `test_e2e_playwright_2026_09_07.py` 檔頭說明）。
 """
+from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 import json
 import threading
@@ -28,11 +29,7 @@ PANEL = "#xe-panel"
 
 
 def _login(page, base_url, username, password):
-    page.goto(f"{base_url}/pages/login.html")
-    page.fill('input[x-model="username"]', username)
-    page.fill('input[x-model="password"]', password)
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    inject_login(page, base_url, username, password)
 
 
 def _seed_case(quote_no="MQ-XEUI-001"):

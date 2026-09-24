@@ -14,6 +14,7 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 NO = "MQ-CLR-001"
@@ -48,11 +49,7 @@ def _case(no, stages):
 def _open(browser, base, user, query=""):
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', user[0])
-    page.fill('input[x-model="password"]', user[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, user[0], user[1])
     page.goto(f"{base}/pages/case-management.html{query}")
     page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token && !{DATA_JS}.loading",
                            timeout=20000)

@@ -11,6 +11,7 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 ERR = "[data-testid=case-counts-error]"
@@ -40,11 +41,7 @@ def test_counts_failure_is_shown_and_retry_recovers(live_server, make_user, e2e_
     browser = e2e_browser
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     fail = {"on": True}
 
     def handler(route):

@@ -152,3 +152,24 @@ def test_drain_waits_for_in_flight_requests_and_fails_if_they_never_finish():
             cf._drain_servers(timeout=0.2)
     finally:
         cf._SERVER_APPS.remove(fake)
+
+
+@pytest.mark.e2e
+def test_inject_login_writes_the_same_session_shape_as_the_login_page(live_server, make_user, new_page):
+    from tests._e2e_login import inject_login
+    u = make_user(username="shf_inj", role="admin")
+    ui = new_page()
+    ui.goto(f"{live_server}/pages/login.html")
+    ui.fill('input[x-model="username"]', u[0])
+    ui.fill('input[x-model="password"]', u[1])
+    ui.click('button:has-text("登入")')
+    ui.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    real = ui.evaluate(SESSION_JS)
+    inj = new_page()
+    inject_login(inj, live_server, u[0], u[1])
+    inj.goto(f"{live_server}/pages/case-management.html")
+    inj.wait_for_function("() => window.Alpine && document.querySelector('[x-data]')")
+    got = inj.evaluate(SESSION_JS)
+    assert sorted(real) == sorted(got), (sorted(real), sorted(got))
+    assert {k: got[k] for k in ("username", "role", "userId")} == {k: real[k] for k in ("username", "role", "userId")}
+    assert inj.url.endswith("/pages/case-management.html"), ("注入後不應被導回登入頁", inj.url)

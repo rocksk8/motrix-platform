@@ -11,6 +11,7 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 OLDEST = "MQ-PAGE-0000"
@@ -39,11 +40,7 @@ def _bulk(n):
 def _open(browser, base, user, query=""):
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', user[0])
-    page.fill('input[x-model="password"]', user[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, user[0], user[1])
     page.goto(f"{base}/pages/case-management.html{query}")
     page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token && !{DATA_JS}.loading",
                            timeout=20000)
@@ -104,11 +101,7 @@ def test_summary_never_shows_the_loaded_page_count_as_the_total(live_server, mak
     browser = e2e_browser
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.route("**/api/quotations?*counts=1*", lambda route: (time.sleep(2.0), route.continue_()))
     page.goto(f"{live_server}/pages/case-management.html")
     page.wait_for_function("() => document.querySelectorAll('.cm-card[data-quote-no]').length === 100",

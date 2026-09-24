@@ -12,6 +12,7 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 NO = "MQ-ALLDONE-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -43,11 +44,7 @@ def _open(browser, base, user):
     page = browser.new_context().new_page()
     dialogs = []
     page.on("dialog", lambda d: (dialogs.append(d.message), d.dismiss()))
-    page.goto(f"{base}/pages/login.html")
-    page.fill('input[x-model="username"]', user[0])
-    page.fill('input[x-model="password"]', user[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, base, user[0], user[1])
     page.goto(f"{base}/pages/case-management.html?q={NO}&tab=exec")
     page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
     return page, dialogs

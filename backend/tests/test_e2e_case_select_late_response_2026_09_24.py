@@ -11,6 +11,7 @@ import time
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 A = "MQ-SEL-001"
 B = "MQ-SEL-002"
@@ -46,11 +47,7 @@ def test_a_late_response_for_the_earlier_click_does_not_switch_back(live_server,
     browser = e2e_browser
     page = browser.new_context().new_page()
     page.on("dialog", lambda d: d.accept())
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/case-management.html")
     page.wait_for_function(f"() => {DATA_JS} && {DATA_JS}.session && {DATA_JS}.session.token",
                            timeout=20000)

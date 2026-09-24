@@ -11,6 +11,7 @@ from datetime import datetime
 import pytest
 
 pytest.importorskip("playwright.sync_api")
+from tests._e2e_login import inject_login  # noqa: E402
 
 NO = "MQ-MARKALL-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -49,11 +50,7 @@ def test_mark_all_read_does_not_bounce_back(live_server, client, make_user, e2e_
         conn.close()
     browser = e2e_browser
     page = browser.new_context().new_page()
-    page.goto(f"{live_server}/pages/login.html")
-    page.fill('input[x-model="username"]', u[0])
-    page.fill('input[x-model="password"]', u[1])
-    page.click('button:has-text("登入")')
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=15000)
+    inject_login(page, live_server, u[0], u[1])
     page.goto(f"{live_server}/pages/case-management.html")
     bar = page.locator(".cm-unread-bar")
     bar.wait_for(state="visible", timeout=15000)
