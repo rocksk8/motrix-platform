@@ -4,8 +4,11 @@
 這裡把同一條規則擴到全站：前端所有頁面／腳本的可見文字（剝 HTML／CSS／JS 註解），以及後端送到畫面、
 信件、PDF、Excel 的字串常值（只看 Python 字串 token，docstring 不算）。模組 key 不動，只改顯示文字。
 
-例外只有一種：**匯入**讀欄名時同時收新舊標題（舊匯出檔的欄名是「備注」）——同一行必須同時有新詞。
+例外：①**匯入**讀欄名時同時收新舊標題（舊匯出檔的欄名是「備注」）——同一行必須同時有新詞。
+②**逐字法條**（2026-09-26，稽核 S-4）：營業稅法 §8 的條文用的是「代辦」（政府委託代辦），不是「待辦」的錯字；
+  只放過與 `helpers.legal_params.ARTICLE_8_ITEMS` 逐字相同的字串，改動過一個字就不算。
 """
+import ast
 import io
 import pathlib
 import re
@@ -75,10 +78,35 @@ def _is_import_compat(text, old, new):
     return old in text and new in text and ("n['" in text or 'n["' in text)
 
 
+def _statute_texts():
+    from helpers.legal_params import ARTICLE_8_ITEMS
+    return {t for _n, t in ARTICLE_8_ITEMS}
+
+
+def _is_statute_verbatim(p, token):
+    """legal_params.py 裡與逐字條文完全相同的字串常值。"""
+    if p.name != "legal_params.py":
+        return False
+    try:
+        val = ast.literal_eval(token)
+    except (ValueError, SyntaxError):
+        return False
+    return isinstance(val, str) and val in _statute_texts()
+
+
+def test_statute_exception_is_verbatim_only():
+    """反向控制：逐字條文放過；改一個字、或出現在別的檔 ⇒ 不放過。"""
+    lp = ROOT / "backend" / "helpers" / "legal_params.py"
+    t = next(x for x in _statute_texts() if "代辦" in x)
+    assert _is_statute_verbatim(lp, repr(t))
+    assert not _is_statute_verbatim(lp, repr(t + "。"))
+    assert not _is_statute_verbatim(ROOT / "backend" / "helpers" / "other.py", repr(t))
+
+
 def test_old_words_are_gone_from_what_users_see_site_wide():
     for old, new in OLD_WORDS.items():
         bad = [f"{p.relative_to(ROOT)}:{n}: {t[:100]}" for p, n, t in _hits(lambda s, o=old: o in s)
-               if not _is_import_compat(t, old, new)]
+               if not _is_import_compat(t, old, new) and not _is_statute_verbatim(p, t)]
         assert not bad, f"「{old}」應改為「{new}」：\n" + "\n".join(bad)
 
 
