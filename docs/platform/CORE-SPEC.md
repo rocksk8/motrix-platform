@@ -77,6 +77,7 @@ modules/<key>/
 
 - 載入模組時收集 `provides.endpoints`，對照 FastAPI 實際路由；宣告了卻不存在、存在卻未宣告 ⇒ 啟動記 ERROR、守門測試紅。
 - `GET /api/platform/endpoints`：列出已啟用模組的端點、參數與回傳 schema、所需權限 ⇒ 頁面建構器只從這裡挑資料來源。
+- 擴充：能力目錄 `GET /api/platform/catalog`（CUSTOMIZATION-SPEC P1，§3.8；2026-09-26）已包含已載入模組的端點（實際路由、參數名）、provider、事件、輸出引擎、可自訂點（`module.json` `customization`，P3 §3.9）。回傳 schema 與逐端點權限尚未列出（程式裡沒有機器可讀來源）。
 
 ## 8. 測試分層
 

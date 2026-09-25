@@ -34,6 +34,13 @@ def check_module_dir(d):
     lk = m.get("license_key")
     if not isinstance(lk, str) or not lk.strip():
         problems.append("module.json 缺 license_key（預設＝資料夾名 %s）" % d.name)
+    # P3 可自訂點（CUSTOMIZATION-SPEC §5）：每個模組都要寫（沒有可自訂點也要寫出空的類別＝有人決定過）。
+    # loader 對「沒寫」不擋（不在客戶現場擋啟動），所以「一定要寫」只在這裡守。
+    if "customization" not in m:
+        problems.append("module.json 缺 customization（可自訂點；沒有也要寫 schema＋空清單）")
+    else:
+        from core import customization as _cust
+        problems += ["customization 格式錯誤 %s：%s" % (p["path"], p["message"]) for p in _cust.validate_manifest(m)]
     version = m.get("version")
     if (d / "CHANGELOG.md").is_file():
         top = _VERSION_HEAD.search((d / "CHANGELOG.md").read_text(encoding="utf-8"))
@@ -61,7 +68,9 @@ def _good(tmp_path):
     (d / "README.md").write_text("# zz\n", encoding="utf-8")
     (d / "CHANGELOG.md").write_text("# zz 更新紀錄\n\n## 1.2.0 — 2026-09-25\n- 新增\n\n## 1.1.0 — 2026-09-20\n", encoding="utf-8")
     (d / "module.json").write_text(json.dumps({"key": "zz_mod", "version": "1.2.0", "license_key": "zz_mod",
-                                               "data": {"tables": [], "files": []}}), encoding="utf-8")
+                                               "data": {"tables": [], "files": []},
+                                               "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []}}),
+                                   encoding="utf-8")
     return d
 
 
@@ -78,6 +87,8 @@ def test_rc_good_synthetic_module_passes(tmp_path):
     (lambda d: _edit_json(d, lambda m: m.update(license_key="  ")), "license_key"),
     (lambda d: _edit_json(d, lambda m: m.update(version="1.3.0")), "≠ module.json version"),
     (lambda d: (d / "CHANGELOG.md").write_text("# 無版號\n", encoding="utf-8"), "找不到"),
+    (lambda d: _edit_json(d, lambda m: m.pop("customization")), "缺 customization"),
+    (lambda d: _edit_json(d, lambda m: m["customization"].pop("outputs")), "customization 格式錯誤"),
 ])
 def test_rc_each_missing_item_is_caught(tmp_path, mutate, expect):
     d = _good(tmp_path)
