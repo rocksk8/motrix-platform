@@ -22,6 +22,7 @@ from helpers.legal_params import round_half_up
 #   `from helpers import procurement`     —— **接縫**，`procurement.today()` 必須在呼叫當下
 #                                           才解析，直接匯入 `today` 會複製函式物件、換不掉
 from helpers import procurement
+from core import registry as _registry
 from helpers.procurement import (
     STATUS_ORDERED,
     STATUS_RECEIVED,
@@ -680,3 +681,36 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
     _audit(_tok(authorization), "inventory.delete", "stock_item", str(item_id),
            f"{row['part_no']} / {row['serial_no']}")
     return {"ok": True}
+
+
+class _StockSerials:
+    """IP-19 `stock.serial`：案件（M01）的設備序號認領／釋放庫存序號。
+
+    在呼叫端的連線上寫、不 commit（M01 與案件資料同一筆交易 commit）。"""
+
+    @staticmethod
+    def claim(conn, sn, *, quote_no, device_id, actor, now):
+        """序號不在庫存系統 ⇒ None（不追蹤，不擋存檔）；在庫 ⇒ 標成 installed、回 "in_stock"；
+        在庫存系統但不是在庫（已出貨、已被別案認領…）⇒ 不動、回它目前的狀態（呼叫端列為衝突）。"""
+        row = conn.execute("SELECT id, status FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)).fetchone()
+        if not row:
+            return None
+        if row["status"] == "in_stock":
+            conn.execute("""
+                UPDATE stock_items
+                SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
+                WHERE id=?
+            """, (quote_no, device_id, now, actor, now, row["id"]))
+        return row["status"]
+
+    @staticmethod
+    def release(conn, sn, *, device_id, now):
+        """這個設備先前認領的序號放回在庫（只放本設備認領的那一筆）。"""
+        conn.execute("""
+            UPDATE stock_items
+            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
+            WHERE serial_no=? AND status='installed' AND case_device_id=?
+        """, (now, sn, device_id))
+
+
+_registry.provide("stock.serial", "supply", _StockSerials)

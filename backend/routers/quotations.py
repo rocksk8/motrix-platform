@@ -2229,7 +2229,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     """
     from routers.vouchers import vouchers_by_case
     list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-15（M04）
-    from routers.shipping_notes import list_shipping_notes
+    list_shipping = _registry.single_provider("shipping.list_for_case")      # IP-18（M03，暫定號）
     from routers.completion_notes import list_completion_notes
     from routers.case_extra_expenses import list_extra_expenses
 
@@ -2249,7 +2249,8 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
             "vouchers":        part(vouchers_by_case, quote_no, authorization=authorization),
             "dispatches":      (part(list_dispatches, quote_no=quote_no, authorization=authorization)
                                 if list_dispatches else {"ok": False, "status": 404, "detail": DISPATCHES_UNAVAILABLE}),
-            "shippingNotes":   part(list_shipping_notes, quote_no=quote_no, authorization=authorization),
+            "shippingNotes":   (part(list_shipping, quote_no=quote_no, authorization=authorization)
+                                if list_shipping else {"ok": False, "status": 404, "detail": SHIPPING_UNAVAILABLE}),
             "completionNotes": part(list_completion_notes, quote_no=quote_no, authorization=authorization),
             "updates":         part(list_case_updates, quote_no, authorization=authorization),
             "extraExpenses":   part(list_extra_expenses, quote_no, authorization=authorization),
@@ -2259,6 +2260,10 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
 
 #: IP-15 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
 DISPATCHES_UNAVAILABLE = "外包工班模組未安裝：沒有承攬派工資料"
+#: IP-18 對方不在時：案件整包的出貨單段回這一句（前端出貨單分頁顯示它，不顯示「尚未建立」）
+SHIPPING_UNAVAILABLE = "採購・庫存・出貨模組未安裝：沒有出貨單資料"
+#: IP-19 對方不在時：設備序號沒有同步庫存（存檔照常）
+STOCK_UNAVAILABLE = "設備序號未同步庫存：採購・庫存・出貨模組未安裝"
 
 
 @router.get("/api/quotations/{quote_no}/close-gates")
@@ -2424,7 +2429,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
 QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除"
 
 
-def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> list:
+def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> tuple:
     """設備登載 devices[] 的序號若對應到庫存序號，隨案件資料整包存檔一併同步扣/還庫存。
 
     devices[] 沒有獨立端點（addDevice/removeDevice/onMaterialArrived/syncMaterialsToDevices 四處
@@ -2438,45 +2443,44 @@ def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list
     卻卡在別的狀態，兩邊會無聲分岔且沒有人知道。這裡不擋存檔（維持原本「不擋」的設計），但會把
     這些衝突收集起來回傳給呼叫端，由 API 回應告知前端。
 
-    回傳：衝突清單 [{sn, deviceId, stockStatus}]。
+    回傳：(衝突清單 [{sn, deviceId, stockStatus}], notice)。
+
+    2026-09-26（M03 搬遷前置）：庫存表屬 M03，改經 IP-19 `stock.serial` 的 claim／release 寫，
+    在本函式的連線上、不 commit（與案件存檔同一筆交易）。M03 不在 ⇒ 不同步庫存、存檔照常，
+    有序號變動時 notice＝STOCK_UNAVAILABLE（沒有序號變動就沒有什麼沒同步）。
     """
+    stock = _registry.single_provider("stock.serial")
     now   = datetime.now().isoformat()
     actor = user.get("display_name") or user["username"]
     old_by_id = {d.get("id"): d for d in old_devices if d.get("id") is not None}
     new_by_id = {d.get("id"): d for d in new_devices if d.get("id") is not None}
     conflicts = []
+    touched = False
 
     for did, dev in new_by_id.items():
         sn = (dev.get("sn") or "").strip()
         old_sn = (old_by_id.get(did) or {}).get("sn", "").strip() if old_by_id.get(did) else ""
         if not sn or sn == old_sn:
             continue
-        srow = conn.execute(
-            "SELECT id, status FROM stock_items WHERE serial_no=? ORDER BY id LIMIT 1", (sn,)
-        ).fetchone()
-        if not srow:
-            continue  # 序號不在庫存系統裡追蹤，維持原本不擋存檔的行為
-        if srow["status"] != "in_stock":
-            conflicts.append({"sn": sn, "deviceId": str(did), "stockStatus": srow["status"]})
+        touched = True
+        if stock is None:
             continue
-        conn.execute("""
-            UPDATE stock_items
-            SET status='installed', quote_no=?, case_device_id=?, consumed_at=?, consumed_by=?, updated_at=?
-            WHERE id=?
-        """, (quote_no, str(did), now, actor, now, srow["id"]))
+        status = stock.claim(conn, sn, quote_no=quote_no, device_id=str(did), actor=actor, now=now)
+        if status is None:
+            continue  # 序號不在庫存系統裡追蹤，維持原本不擋存檔的行為
+        if status != "in_stock":
+            conflicts.append({"sn": sn, "deviceId": str(did), "stockStatus": status})
 
     for did, old_dev in old_by_id.items():
         old_sn = (old_dev.get("sn") or "").strip()
         new_sn = (new_by_id.get(did) or {}).get("sn", "").strip() if new_by_id.get(did) else ""
         if not old_sn or old_sn == new_sn:
             continue
-        conn.execute("""
-            UPDATE stock_items
-            SET status='in_stock', quote_no='', case_device_id='', consumed_at='', consumed_by='', updated_at=?
-            WHERE serial_no=? AND status='installed' AND case_device_id=?
-        """, (now, old_sn, str(did)))
+        touched = True
+        if stock is not None:
+            stock.release(conn, old_sn, device_id=str(did), now=now)
 
-    return conflicts
+    return conflicts, (STOCK_UNAVAILABLE if stock is None and touched else None)
 
 
 @router.post("/api/quotations/{quote_no}/case-unlock")
@@ -2789,15 +2793,18 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
         new_case_record = body.case_record or {}
         new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
         data["caseRecord"] = new_case_record
-        stock_conflicts = []
+        stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
-            stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
+            stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
         now = save_quotation_json(conn, quote_no, data)
         conn.commit()
         conn.close()
         spawn_bg_thread(_backup_quotation, args=(quote_no,))
         _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
-        return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        out = {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        if stock_notice:
+            out["stockNotice"] = stock_notice
+        return out
 
 
 # ── Case change request approve/reject (2026-08-26) ────────────────────────────
@@ -2893,12 +2900,14 @@ def _apply_case_change_request(conn, req, approver: dict, authorization: str,
         new_devices = new_case_record.get("devices") or []
         new_case_record["stages"] = cr.get("stages") or []
         data["caseRecord"] = new_case_record
-        stock_conflicts = []
+        stock_conflicts, stock_notice = [], None
         if new_devices != old_devices:
-            stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, approver)
+            stock_conflicts, stock_notice = _sync_device_stock(conn, quote_no, old_devices, new_devices, approver)
         save_quotation_json(conn, quote_no, data)
         if stock_conflicts:
             result["stockConflicts"] = stock_conflicts
+        if stock_notice:
+            result["stockNotice"] = stock_notice             # IP-19：M03 不在 ⇒ 序號沒有同步庫存
         deferred_audits.append(('case.update', 'quotation', quote_no,
                                 f"{label}（半解鎖審核通過套用）",
                                 {"stockConflicts": stock_conflicts} if stock_conflicts else None))

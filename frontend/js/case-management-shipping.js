@@ -6,6 +6,7 @@ window.CM_PARTS.push(() => ({
     // ── 出貨單 ──
     shippingNotes: [],
     shippingNotesLoading: false,
+    shippingNotesNotice: '',          // IP-18：採購・庫存・出貨模組不在時的說明（取代「尚未建立任何出貨單」）
     snSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     showShippingModal: false,
     editShippingNoteNo: null,
@@ -38,7 +39,9 @@ window.CM_PARTS.push(() => ({
         if (!live()) return
         const body = r.ok ? await r.json() : null
         if (!live()) return
-        if (r.ok) this.shippingNotes = body
+        if (r.ok) { this.shippingNotes = body; this.shippingNotesNotice = '' }
+        // IP-18：整包帶來的 404 附說明；之後在分頁上重新載入時模組路由不在（404 沒有說明）⇒ 沿用那一句
+        else if (r.status === 404) this.shippingNotesNotice = (pre && pre.detail) || this.shippingNotesNotice
       } catch {}
       this.shippingNotesLoading = false
       this.$nextTick(() => this._initSubListSortable('sn'))

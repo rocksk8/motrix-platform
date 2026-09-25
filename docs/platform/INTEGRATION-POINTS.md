@@ -352,3 +352,37 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 | 守門 | 提供方（隨模組搬走）`backend/modules/crm/tests/test_crm_quote_deleted_provider.py`：①M02 已登記 ②**正對照**：刪草稿 ⇒ 連到它的案件解除、別張單的案件不動、稽核一筆；取用方（M02 不在也成立）`backend/tests/platform/test_crm_quote_deleted_connector.py`：③**反向控制**：拿掉提供者 ⇒ 200、`notice` 明說、案件不動、WARNING ④產品碼除了 M02 與凍結 migration 沒有寫 `dev_cases`／`dev_logs` 的 SQL；`table_write_exceptions.json` 對應 debt 已刪；畫面：`test_e2e_quote_delete_crm_absent_notice_2026_09_26`（M02 不在 ⇒ 報價清單顯示 notice）、`modules/crm/tests/test_e2e_crm_quote_delete_no_notice_2026_09_26`（在 ⇒ 只有「報價單已刪除」，隨模組搬走） |
 
 **尚未處理**：`dev_cases`／`dev_logs` 仍被 L1（全站搜尋、未讀標記、行事曆標題、封存匯出、稽核目標檢查）與 M01（報價單動態）、M08（儀表板）**直接讀**。M02 不在時表仍在（凍結 migration 建立），讀取不會壞，可見性經 `row_access`（未登錄 ⇒ fail closed，連 admin 也看不到）；要切斷須由 M02 提供讀取連接器，另開題（DEPENDENCY-MAP §3 #2／#5／#6）。
+
+---
+
+## IP-18　`shipping.list_for_case`：案件整包的出貨單段（M03 → M01）
+
+對應 DEPENDENCY-MAP §3 #22、l2_import_baseline `M01 router:quotations -> M03 router:shipping_notes`（M03 搬遷前置，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.shipping_notes.list_shipping_notes`。寫法同 IP-15（C 的 `dispatch.list_for_case`）。編號為暫定，由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`routers/shipping_notes.py::list_shipping_notes_for_case`（`list_shipping_notes` 的包裝） |
+| 使用方 | M01 `routers/quotations.py::case_bundle` 的 `parts.shippingNotes` |
+| 形式 | provider，單一提供者（`core.registry`；M03 搬進 `modules/` 前以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`_registry.provide("shipping.list_for_case", "supply", list_shipping_notes_for_case)`<br>取用：`fn = registry.single_provider("shipping.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權，權限判斷與單獨打 `/api/shipping-notes?quote_no=` 逐字相同） |
+| 回傳 | 出貨單列；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
+| 對方不在時 | 整包照常回；`parts.shippingNotes`＝`{"ok": false, "status": 404, "detail": SHIPPING_UNAVAILABLE}`（「採購・庫存・出貨模組未安裝：沒有出貨單資料」）。案件頁出貨單分頁顯示這一句（不顯示「尚未建立任何出貨單」），「新增出貨單」鈕不顯示 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側隨模組 |
+
+---
+
+## IP-19　`stock.serial`：案件設備序號認領／釋放庫存（M03 → M01）
+
+對應 DEPENDENCY-MAP §4 `stock_items`（M01 `routers/quotations.py::_sync_device_stock` 直寫）、`table_write_exceptions` 的 debt（已刪）。M03 搬遷前置，2026-09-26。編號為暫定。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`routers/inventory.py::_StockSerials`（`claim`／`release`） |
+| 使用方 | M01 `routers/quotations.py::_sync_device_stock`（案件設備登載 `devices[]` 的序號比對；即時存檔與半解鎖審核套用兩條路徑） |
+| 形式 | provider，單一提供者（`core.registry`；M03 搬進 `modules/` 前以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`_registry.provide("stock.serial", "supply", _StockSerials)`<br>取用：`s = registry.single_provider("stock.serial")`；`None` ⇒ 退化。`s.claim(conn, sn, quote_no=…, device_id=…, actor=…, now=…) -> None｜狀態`；`s.release(conn, sn, device_id=…, now=…)` |
+| 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
+| 對方不在時 | 案件存檔照常；序號不同步庫存；有序號變動時回應帶 `stockNotice`＝「設備序號未同步庫存：採購・庫存・出貨模組未安裝」，案件頁存檔狀態列顯示「已儲存；…」；沒有序號變動就不帶 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側隨模組 |
