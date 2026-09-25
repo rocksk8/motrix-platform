@@ -689,6 +689,9 @@ def _is_safe_name(value: str) -> bool:
     return bool(value) and bool(_SAFE_NAME_RE.match(value)) and ".." not in value
 
 
+_history_lock = threading.Lock()
+
+
 def _append_history(action: str, job_id: str, success: bool, log_path: str = ""):
     entry = {
         "time": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -696,14 +699,19 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
         "success": success,
         "logPath": log_path,
     }
-    history = []
-    if HISTORY_PATH.exists():
-        try:
-            history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            history = []
-    history.insert(0, entry)
-    HISTORY_PATH.write_text(json.dumps(history[:200], ensure_ascii=False, indent=2), encoding="utf-8")
+    # 讀→改→寫要在鎖內、寫入要原子（暫存檔＋os.replace）：解除鎖定端點與 job 收尾執行緒會同時寫，
+    # 原本兩個 write_text 交錯 ⇒ 合法 JSON 後面接上另一次較長寫入的殘字、且其中一筆遺失（2026-09-26 B 反向控制時抓到）。
+    with _history_lock:
+        history = []
+        if HISTORY_PATH.exists():
+            try:
+                history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                history = []
+        history.insert(0, entry)
+        tmp = HISTORY_PATH.with_name(f"{HISTORY_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp.write_text(json.dumps(history[:200], ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, HISTORY_PATH)
 
 
 def _try_acquire_job_lock(job_id: str) -> bool:
