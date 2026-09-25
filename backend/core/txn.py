@@ -6,6 +6,7 @@
 自己用 `watch_reads()` 登記判斷式（例：案件登記 quotations.data_json）。
 """
 import os
+import threading
 
 #: begin_write 開的寫交易：id(conn) -> {"conn": conn, "read": {watch_name: bool}}
 #: ⚠️ sqlite3.Connection 不能掛屬性、也不支援弱參照 ⇒ 以 id 為鍵並保留連線本身比對（避免 id 重用誤判），
@@ -58,7 +59,8 @@ def begin_write(conn) -> bool:
         return False
     conn.execute("BEGIN IMMEDIATE")
     _prune_write_txns()
-    st = {"conn": conn, "read": {name: False for name in _READ_WATCHERS}}
+    st = {"conn": conn, "read": {name: False for name in _READ_WATCHERS},
+          "thread": threading.get_ident()}   # core.events 用：同一條執行緒還開著寫交易時不可以發佈事件
     _WRITE_TXNS[id(conn)] = st
 
     def _trace(sql, _st=st):

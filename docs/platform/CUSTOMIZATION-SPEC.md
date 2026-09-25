@@ -138,6 +138,9 @@
 |---|---|
 | 宣告 | 事件要先宣告：`events.declare(name, owner, version, fields)`。宣告會進能力目錄（P1），欄位清單就是契約 |
 | 發佈 | `events.publish(name, payload)`：**在發佈方的交易 commit 之後呼叫**。沒有訂閱者是正常情況 |
+| 發佈時機的守門（2026-09-26，稽核 D H-S1） | 同一條執行緒還開著 `core.txn.begin_write` 的寫交易時就發佈 ⇒ 違反契約（測試 raise、產品記 ERROR 照送） |
+| payload（2026-09-26，稽核 D H-M1） | **只能放 JSON 可序列化的值**；每個訂閱者拿到的是 JSON 來回的完整副本〔更正：原本的實作是 `dict(payload)` 淺拷貝，巢狀資料會被訂閱者改掉，連發佈方的物件也會被改〕 |
+| 執行時間（2026-09-26，稽核 D H-S2） | 訂閱者同步執行，**必須很快返回**；超過 0.2 秒記 WARNING。寄信、呼叫外部 API 這類慢工作，要由訂閱者自己丟到背景 |
 | 訂閱 | `events.subscribe(name, handler, subscriber=<模組 key>)`：在模組匯入時登記。模組沒載入（未安裝、停用、未授權），它的訂閱就不存在 ⇒ 只是少了一個反應 |
 | 隔離 | 任何一個訂閱者丟例外，都**不影響發佈方，也不影響其他訂閱者**；失敗記 ERROR，並留在「最近失敗」清單（`events.recent_failures()`），供管理頁顯示 |
 | 契約檢查 | 發佈沒宣告過的事件，或 payload 少了宣告的欄位：預設記 ERROR 照送；設了 `MOTRIX_STRICT_DB_GUARDS=1`（測試）就 raise（沿用「守門預設記 ERROR 照寫」的原則） |

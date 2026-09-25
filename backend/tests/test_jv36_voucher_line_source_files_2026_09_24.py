@@ -276,6 +276,37 @@ def test_second_expense_on_the_same_line_brings_its_own_amount(
 
 
 @pytest.mark.e2e
+def test_auto_amount_does_not_linger_after_switching_to_a_case_or_an_expense_without_amount(
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
+    """稽核 D H-S3／H-S4（2026-09-26）：自動帶入的金額沒被手改過時，
+    ①同一行換成「案件」⇒ 金額清空；②換成沒有金額的支出 ⇒ 不留上一筆的金額。"""
+    _seed(seed_extra_expense)
+    seed_extra_expense(QUOTE, total_cost=0, category="其他", description="待報價支出",
+                       expense_date="2026-09-12", files=[])
+    u, p = make_user(username="jv36_linger", role="superadmin", modules=["cashier"])
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    hdr = {"Authorization": "Bearer " + r.json()["token"]}
+    r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV36", "lines": [
+        {"account_code": "1113", "debit": 0, "credit": 5000}, {"account_code": "6111"}]})
+    vid = r.json()["id"]
+    page = e2e_browser.new_page(viewport={"width": 1280, "height": 900})
+    token = _login(page, live_server, u, p)["token"]
+    _open_with_case(page, live_server, token, vid)
+
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    assert page.evaluate("() => %s.lines[1].debit" % _D) == "5000"
+    page.click('[data-testid="summary-panel-expense"]:has-text("待報價支出")')      # H-S4
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["summary"].startswith("待報價支出") and not line["debit"], line
+
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    assert page.evaluate("() => %s.lines[1].debit" % _D) == "5000"
+    page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)                   # H-S3
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["source_type"] == "case" and not line["debit"], line
+
+
+@pytest.mark.e2e
 def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
     _seed(seed_extra_expense)

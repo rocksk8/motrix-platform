@@ -269,6 +269,11 @@ function voucherPage() {
           else if (autoUntouched) { l.debit = ''; l._autoDebit = null }   // 新的一筆沒有可帶的金額 ⇒ 不留上一筆的
         }
       }
+      // 稽核 D H-S3（2026-09-26）：同一行從自動帶入的支出換成「案件」時，摘要已經是案件，金額卻還是上一筆支出的
+      //   ⇒ 借方仍是上一次自動帶入、沒被手改過的值 ⇒ 清空（手改過的照舊不動）。
+      if (e.source_type === 'case' && l._autoDebit != null && String(l.debit || '') === l._autoDebit) {
+        l.debit = ''; l._autoDebit = null
+      }
       if (e.source_type === 'case' && e.source_key !== this.sourceQuote) {
         this.sourceQuote = e.source_key
         this.loadSources()

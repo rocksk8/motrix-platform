@@ -9,6 +9,7 @@
 - 訂閱：`subscribe(name, handler, subscriber=<模組 key>)`——模組匯入時登記；模組沒載入就沒有訂閱。
 - 隔離：訂閱者丟例外不影響發佈方與其他訂閱者；失敗記 ERROR 並留在 recent_failures()。
 """
+import json
 import logging
 import os
 import threading
@@ -84,11 +85,42 @@ def _contract_problem(name: str, payload: dict):
     return None
 
 
+#: 訂閱者超過這個時間才返回 ⇒ 記 WARNING（訂閱者同步執行，慢工作要自己丟背景；稽核 D H-S2）
+_SLOW_SUBSCRIBER_SECONDS = 0.2
+
+
+def _open_write_txn_in_this_thread() -> bool:
+    """同一條執行緒是否還開著 core.txn.begin_write 的寫交易（稽核 D H-S1：發佈必須在 commit 之後）。"""
+    from core import txn
+    me = threading.get_ident()
+    for st in list(txn._WRITE_TXNS.values()):
+        try:
+            if st.get("thread") == me and st["conn"].in_transaction:
+                return True
+        except Exception:                      # noqa: BLE001  連線已關
+            continue
+    return False
+
+
+def _payload_copy(payload):
+    """稽核 D H-M1：原本 dict(payload) 是淺拷貝，巢狀資料會被訂閱者改掉（連發佈方的物件也被改）。
+    改成 JSON 來回：每個訂閱者拿到完整獨立的副本，同時守住「payload 只能放 JSON 可序列化的值」的契約
+    （之後跨行程或寫進紀錄都用得上）。"""
+    return json.loads(json.dumps(payload or {}, ensure_ascii=False))
+
+
 def publish(name: str, payload: dict) -> int:
     """依登記順序送給所有訂閱者；回傳成功送達的訂閱者數。訂閱者失敗不外拋。"""
     with _lock:
         problem = _contract_problem(name, payload)
         subs = list(_SUBS.get(name, []))
+    if problem is None and _open_write_txn_in_this_thread():
+        problem = f"事件 {name} 在寫交易還沒 commit 時就發佈（必須在 commit 之後）"
+    if problem is None:
+        try:
+            json.dumps(payload or {})
+        except (TypeError, ValueError) as e:
+            problem = f"事件 {name} 的 payload 不是 JSON 可序列化的值：{e}"
     if problem:
         if _strict():
             raise ValueError(problem)
@@ -96,7 +128,15 @@ def publish(name: str, payload: dict) -> int:
     delivered = 0
     for subscriber, handler in subs:
         try:
-            handler(dict(payload or {}))          # 給副本：訂閱者改 payload 不影響下一個訂閱者
+            t0 = time.monotonic()
+            try:
+                arg = _payload_copy(payload)
+            except (TypeError, ValueError):
+                arg = dict(payload or {})          # 產品模式：已記 ERROR，仍盡量送達
+            handler(arg)                           # 給完整副本：訂閱者改 payload 不影響下一個訂閱者與發佈方
+            took = time.monotonic() - t0
+            if took > _SLOW_SUBSCRIBER_SECONDS:
+                _log.warning("事件 %s 的訂閱者 %s 花了 %.2f 秒（會拖慢發佈方；慢工作請自己丟背景）", name, subscriber, took)
             delivered += 1
         except Exception as e:                     # noqa: BLE001  隔離：一個訂閱者壞掉不可以拖垮其他人
             rec = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "event": name,

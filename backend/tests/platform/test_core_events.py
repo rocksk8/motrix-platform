@@ -98,3 +98,69 @@ def test_declarations_are_listed_for_the_capability_catalog():
     events.declare("t.b", "m_a", 2, ["id"], "B 事件")
     events.declare("t.a", "m_a", 1, [])
     assert [(d.name, d.version) for d in events.declarations()] == [("t.a", 1), ("t.b", 2)]
+
+
+def test_nested_payload_is_not_shared_between_subscribers_or_with_the_publisher():
+    # 稽核 D H-M1：dict(payload) 是淺拷貝，巢狀資料會被第一個訂閱者改掉
+    events.declare("t.nested", "m_a", 1, ["items"])
+    seen = []
+
+    def first(p):
+        p["items"].append("被第一個訂閱者加的")
+        p["items"][0] = "被改掉"
+
+    events.subscribe("t.nested", first, subscriber="m_b")
+    events.subscribe("t.nested", lambda p: seen.append(list(p["items"])), subscriber="m_c")
+    original = {"items": ["原本"]}
+    events.publish("t.nested", original)
+    assert seen == [["原本"]]
+    assert original == {"items": ["原本"]}                 # 發佈方手上的物件也不可以被改
+
+
+def test_publishing_inside_an_open_write_transaction_is_refused(monkeypatch, tmp_path):
+    # 稽核 D H-S1：規格「發佈在 commit 之後」要有守門
+    import sqlite3
+    from core import txn
+    monkeypatch.setenv("MOTRIX_STRICT_DB_GUARDS", "1")
+    events.declare("t.tx", "m_a", 1, ["id"])
+    conn = sqlite3.connect(tmp_path / "x.db")
+    conn.execute("CREATE TABLE t (a)")
+    txn.begin_write(conn)
+    with pytest.raises(ValueError, match="commit 之後"):
+        events.publish("t.tx", {"id": 1})
+    conn.commit()
+    assert events.publish("t.tx", {"id": 1}) == 0            # commit 之後照常
+    conn.close()
+
+
+def test_publishing_in_another_threads_transaction_is_not_blocked(monkeypatch, tmp_path):
+    # 反向控制：別條執行緒開著交易，不影響這條執行緒發佈
+    import sqlite3
+    import threading
+    from core import txn
+    monkeypatch.setenv("MOTRIX_STRICT_DB_GUARDS", "1")
+    events.declare("t.tx2", "m_a", 1, ["id"])
+    conn = sqlite3.connect(tmp_path / "y.db", check_same_thread=False)
+    conn.execute("CREATE TABLE t (a)")
+    t = threading.Thread(target=txn.begin_write, args=(conn,))
+    t.start(); t.join()
+    assert events.publish("t.tx2", {"id": 1}) == 0
+    conn.rollback(); conn.close()
+
+
+def test_non_json_payload_violates_the_contract(monkeypatch):
+    monkeypatch.setenv("MOTRIX_STRICT_DB_GUARDS", "1")
+    events.declare("t.obj", "m_a", 1, ["id"])
+    with pytest.raises(ValueError, match="JSON"):
+        events.publish("t.obj", {"id": object()})
+
+
+def test_slow_subscriber_is_logged(caplog, monkeypatch):
+    # 稽核 D H-S2：訂閱者同步執行，慢的要看得到
+    monkeypatch.setattr(events, "_SLOW_SUBSCRIBER_SECONDS", 0.01)
+    import time as _t
+    events.declare("t.slow", "m_a", 1, ["id"])
+    events.subscribe("t.slow", lambda p: _t.sleep(0.05), subscriber="m_slow")
+    with caplog.at_level("WARNING", logger="motrix.events"):
+        events.publish("t.slow", {"id": 1})
+    assert any("m_slow" in r.getMessage() and "秒" in r.getMessage() for r in caplog.records)

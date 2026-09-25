@@ -296,6 +296,8 @@ function requestUpStep(step) {
   const box = document.getElementById('upConfirm');
   box.classList.remove('hidden');
   box.innerHTML = `<b>${esc(label)}</b>：${esc(desc)}
+    ${step === 'rollback-full' ? (() => { const pv = (upSession && upSession.steps || {})['rollback-full-preview'];
+        return `<div data-testid="up-preview-age" style="margin-top:6px">預覽時間：<b>${esc(pv && pv.at || '（尚未預覽）')}</b>。預覽之後如果服務曾經啟動並寫入資料，那些資料不在清單裡、回滾時也會一起消失；不確定就先停服務、再預覽一次。</div>`; })() : ''}
     ${step === 'rollback-full' ? '<div style="margin-top:6px">輸入 <b>FULL</b> 確認：<input id="upFull" style="width:120px"></div>' : ''}
     <div style="margin-top:10px"><button class="danger" onclick="confirmUpStep()">確認執行</button> <button class="ghost" onclick="cancelUpStep()">取消</button></div>`;
 }
