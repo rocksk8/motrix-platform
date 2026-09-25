@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.28 — 2026-09-26（C，稽核 D C-M4，wip/c-audit-d-2；列車取號）〔core_bump：暫用 1.99 → 1.28〕
+> 同批的 C-M3／C-M5／C-S1～S5／C-O1／U14 已隨第三班以 1.22 合回；本段只有 C-M4。介面不變。
+- L1（行為）：公式 `round` 改為四捨五入（`helpers.legal_params.round_half_up`；原本是內建的銀行家捨入，C-M4）
+
 ## 1.27 — 2026-09-26（P9 拖曳排版器，wip/h-p9；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.27〕
 > 只有新增。
 - L1（新增）：定義文件庫 `layout` kind 的驗證器與程式預設（`routers/definitions.py`）——key＝`module:<模組>`、body＝`{"ops": [...]}`；發布／還原前經 `core.catalog.check_layout`（P3 排版守門第一個產品呼叫者），問題路徑 `ops[i].…`；程式預設＝`{"ops": []}`（模組未載入 ⇒ 沒有預設）

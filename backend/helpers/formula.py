@@ -15,6 +15,9 @@
 """
 import ast
 from datetime import date
+from decimal import Decimal
+
+from helpers.legal_params import round_half_up
 
 MAX_LENGTH = 500
 MAX_DEPTH = 30
@@ -250,9 +253,14 @@ def evaluate(expr, values: dict):
             if any(a is None for a in nums):
                 return None
             if name == "round":
+                # 四捨五入（稽核 D C-M4）：內建 round 是銀行家捨入（2.5 ⇒ 2），1.005 還會因浮點變 1.0。
+                # 用 L1 法規參數那一支（主持裁示不另寫一份）：乘上 10^位數、四捨五入到整數、再除回來。
                 digits = int(nums[1]) if len(nums) == 2 else 0
-                r = round(nums[0] + 0.0, digits)
-                return int(r) if digits == 0 else r
+                scale = Decimal(10) ** digits
+                n = round_half_up(nums[0], scale)
+                if digits <= 0:
+                    return int(Decimal(n) / scale)
+                return float(Decimal(n) / scale)
             return {"min": lambda: min(nums), "max": lambda: max(nums), "sum": lambda: sum(nums),
                     "abs": lambda: abs(nums[0])}[name]()
         raise FormulaError("不支援的寫法", _pos(expr, node))           # check 已擋，理論上到不了

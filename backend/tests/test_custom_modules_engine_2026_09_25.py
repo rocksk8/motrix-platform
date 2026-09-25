@@ -770,3 +770,16 @@ def test_draft_can_only_be_changed_by_its_creator_or_a_superadmin(loan, make_use
     assert c.get(url, headers=h["super"]).json()["canEdit"] is True                      # 超級管理員
     assert c.post(url + "/transitions/submit", headers=h["super"], json={}).status_code == 200
     assert c.get(url, headers=h["req"]).json()["canEdit"] is False                       # 送出之後誰都不能改內容
+
+
+@pytest.mark.parametrize("expr,want", [
+    ("round(2.5)", 3), ("round(3.5)", 4), ("round(-2.5)", -3),      # 不是銀行家捨入（2.5 ⇒ 2）
+    ("round(738.5)", 739),                                          # 補充保費同一類（AUDIT-D-R1-R3 D-1）
+    ("round(1.005, 2)", 1.01),                                      # 浮點 1.00499… 不可以變 1.0
+    ("round(10 / 3, 2)", 3.33), ("round(1234, -2)", 1200),
+])
+def test_formula_round_is_half_up(expr, want):
+    """C-M4：公式的 round＝四捨五入，與法規金額用同一支 L1 函式（helpers.legal_params.round_half_up）。"""
+    from helpers import formula as F
+    got = F.evaluate(expr, {})
+    assert got == want and type(got) is type(want), (expr, got)
