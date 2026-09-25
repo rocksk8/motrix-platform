@@ -1,10 +1,9 @@
-"""IP-11 `crm.quote_deleted`：刪報價單時解除業務開發案件的轉建連結（M02 搬遷，2026-09-26）。
+"""IP-11 `crm.quote_deleted` 取用方這一側（M01 刪報價單）：M02 不在時也要成立的題（M02 搬遷，2026-09-26）。
 
 原本 M01 `routers/quotations.py` 直寫 `dev_cases`（table_write_exceptions 的 debt）⇒ 改由 M02 提供。
-① 提供者已登記（模組載入時）
-② 正對照：刪草稿報價單 ⇒ 連到它的案件連結清空、退回「洽談中」，別張單的案件不動；稽核照寫
 ③ 反向控制：M02 不在 ⇒ 報價單照刪、案件不動、回應 notice 明說、記 WARNING
 ④ 產品碼除了 M02 與凍結 migration，沒有寫 dev_cases／dev_logs 的 SQL
+提供方的登記與正對照在 `modules/crm/tests/test_crm_quote_deleted_provider.py`（隨模組搬走）。
 """
 import logging
 import re
@@ -46,24 +45,6 @@ def _cases():
     try:
         return {r["case_name"]: (r["converted_quote_no"], r["status"])
                 for r in conn.execute("SELECT case_name, converted_quote_no, status FROM dev_cases")}
-    finally:
-        conn.close()
-
-
-def test_provider_is_registered(client):
-    assert set(registry.providers("crm.quote_deleted")) == {"crm"}
-
-
-def test_deleting_a_quote_unlinks_only_its_dev_cases(client, make_user):
-    h = _login(client, make_user)
-    _seed()
-    r = client.delete("/api/quotations/%s" % QNO, headers=h)
-    assert r.status_code == 200 and r.json() == {"ok": True}, r.text
-    assert _cases() == {"連到要刪的": ("", "洽談中"), "連到別張": (OTHER, "成案")}
-    import db
-    conn = db.get_db()
-    try:
-        assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='dev_case.unlink_deleted_quote'").fetchone()[0] == 1
     finally:
         conn.close()
 
