@@ -135,3 +135,19 @@ M06 的 `vouchers_all`。
 | 守門 | `backend/tests/platform/test_case_stage_connectors.py`：①5 個 kind 全部登記 ②**正對照**：報價單成案、階段到期／完成兩個欄位分開寫回 ③**反向控制**：拿掉 `quotation` 提供者 ⇒ 不丟例外、`data_json` 沒有 event id、WARNING 說明原因 ④不認得的 slot 被拒 ⑤L1 檔內不再有寫這 5 張表的 SQL；`table_write_exceptions.json` 對應 5 筆 debt 已刪。既有 `test_quote_json_direct_writes_lost_update_2026_09_25::test_google_calendar_event_id`（空窗寫入不被蓋掉）照綠。突變：不登記 quotation 提供者、缺席時不記 WARNING ⇒ 皆轉紅。⑥（X 稽核 A-3 補，2026-09-25）假的 Google 每次回**不同**的 id：階段到期／完成各寫進自己的欄位（對調 ⇒ 紅）；invoice_voucher／payment_request／shipping_note 三支回寫各自執行、只寫自己那一列、其他欄位不動，建立事件期間別人改過單據不被蓋回（寫錯值、整包蓋掉 ⇒ 紅）。原本這三支只驗了「有登記」，沒有題目執行過 |
 
 **尚未處理（不在 A11 範圍）**：L1 行事曆仍**直接讀** 5 張 L2 表來組事件標題與內容（`SELECT … FROM invoice_vouchers` 等）。寫入已歸位，讀取的相依還在；要切斷須改成各模組提供「事件內容」或把 push 函式移回各模組，另開題。
+
+---
+
+## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）
+
+L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 import）。規格：CUSTOMIZATION-SPEC §7.1。
+
+| 欄位 | 內容 |
+|---|---|
+| 形式 | L1 函式（`from helpers import legal_params as lp`） |
+| 語法 | `versions = lp.load_versions()`（依 effectiveFrom 排序的清單）<br>`rules = lp.rules_for_date(versions, "YYYY-MM-DD" 或 date)`：`effectiveFrom ≤ 日期` 的最新一版（深拷貝）；沒有 ⇒ 丟 `lp.NoApplicableRules`（`ValueError` 子類，訊息可直接給使用者）<br>`lp.rules_by_version(versions, "2026")` ⇒ dict 或 `None`<br>`lp.today()`：「今天」的唯一來源（測試 monkeypatch 它） |
+| 回傳 | 一版＝`{version, effectiveFrom, resident{50,9A,9B:{tax_rate,tax_threshold}}, non_resident{50:{tax_rate,tax_threshold,low_salary_rate},9A,9B}, nhi{rate, max_single_payment, thresholds{50,9A,9B}}, minimum_wage{monthly}, sources[]}`。獎金（非每月薪資）扣繳用 `resident["50"]`（5%／起扣 90,501）；補充保費費率 `nhi.rate`、單次上限 `nhi.max_single_payment` |
+| 單據凍結 | 使用方存 `version` 與整份 `rules` 快照；修改舊單沿用快照，使用者明確選擇才重挑（勞報單的做法見 `routers/payslips.py::update_payslip`） |
+| 對方不在時 | 不適用（L1）。日期沒有適用版本 ⇒ 使用方**拒絕產生並說明**（不猜、不送 0） |
+| 契約版本 | 1（2026-09-25，CORE_VERSION 1.5）。欄位只准加；獎金 4 倍投保金額需要的新欄位（例：`nhi.bonus_multiple`）要加時，照 MODULE-GUIDE §2 升次版號 |
+| 守門 | `tests/test_legal_params_r1_2026_09_25.py`（選版、凍結、門檻＝最低工資）；`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params）；`tests/platform/test_l1_interface_snapshot.py`（介面變動要升版） |
