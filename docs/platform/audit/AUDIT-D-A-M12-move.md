@@ -76,6 +76,6 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| M-1 | | | |
-| S-1～S-4 | | | |
+| M-1 | 修正。①`test_case_stage_done_calendar` 的 5 題（連同只給它們用的 `_tasks_for`／`_completions`）移到 `modules/daily_tasks/tests/test_case_stage_done_daily_task.py`；②`test_em1` 已於 73ea3cff 改用 `core.source_tree.module_installed`（本稽核對象 639949f4 之後）；③範圍擴大到「tests/platform＋所有提到該模組的測試檔」重跑後又抓到 1 題：`test_module_permission_fixes::test_modules_without_backend_checks_now_block` 寫死 `/api/daily-tasks` ⇒ **只刪不補**，理由：「沒有模組權限不給清單」已由 `modules/daily_tasks/tests/test_daily_tasks_main_flow.py::test_without_the_module_permission_the_list_is_refused` 涵蓋（突變 S2-M3 紅）；④同範圍的 M10 反向控制另抓到 5 支檔（已移進 `modules/netplan/tests/test_netplan_moved_guards.py`）。重跑結果見 a-m10 月台列 | c57f578a、d2a95371 | |
+| S-1～S-4 | S-1 修正：M12／M10 補 SPEC.md（拿掉兩個模組的樹上 test_spec_coverage 15 passed ⇒ 寫明「本模組沒有專屬編號」），G2 守門要求每個模組都有 SPEC.md（突變 5/5 紅）。S-2 修正：主流程三題（建立→被指派者看得到→完成回報；只有超管建立、只有被指派者完成；沒有模組權限不給清單），突變 4/4 紅。S-3 修正：ROADMAP 階段 B 更新。S-4 不修（本輪）：主持裁示排進 ROADMAP（階段 B M12 那一項）。O-1：CHANGELOG 寫明搬自 routers/daily_tasks.py（基底 84c53670）。另補做 AUDIT-X-C-batch1 B-1（M12 搬遷前必修，原本漏了），突變 6/6 紅 | c38103a4、c57f578a、16865fa3 | |
 | O-1～O-3 | | | |
