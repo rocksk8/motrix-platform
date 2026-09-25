@@ -53,8 +53,11 @@ def _with_legal(monkeypatch, version=YEAR_PARAMS_VERSION):
 
 
 def _drop(monkeypatch, *caps):
+    """拿掉提供者：legacy 登記與已載入模組的 ModuleSpec.providers 兩處都要處理（M07 搬進 modules/ 後在後者）。"""
     monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
                         {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] not in caps})
+    orig = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap in caps else orig(cap))
     for c in caps:
         assert not registry.providers(c), c
 
