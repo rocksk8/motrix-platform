@@ -79,7 +79,7 @@
 
 - **待排的交叉稽核**（CORE-SPEC §9d）：R1～R3 法規（609cd5b8）；B 的 .venv／requirements 守門／§C-13；C 的 P4／P5／P8；主持的 P6 事件匯流排、傳票修正、完整回滾預覽。負載允許時，每次派 1 個獨立代理。
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；privacy_notice_acks 在 M04 搬遷時改用模組自己的表。
-- **全量名額排隊**（PLAYBOOK §C-13，全機同時最多 2 組）：目前佔用＝R（wip/r-legal）、C（wip/c-fix-x1 e2e 段，23:25 起；B 的 3.12 全量 23:22 結束後交棒）。排隊：① A wip/a-bonus 全量（動到 L1 email_notify／notification_prefs；R 合回並 rebase 之後）② B 修好 hard_cap／shared_fixtures 兩題後補一輪全量。名額一空出來，主持就通知下一位，並更新這一行。
+- **全量名額排隊**（PLAYBOOK §C-13：測試鎖一次只放 1 組全量；更新 23:58）：C 的 e2e 段已跑完（batch1 已合回）。排隊：① B 的 K5／K6 負載重現（-n 4 跑兩輪，約 10 分鐘）② C 的 wip/c-p8 全量（L1 新增 3 張表與新 router，§C-4）③ A 的 wip/a-bonus 全量（R 已合回，rebase 之後）④ 所有分支合回後，在 platform 上跑一輪全量（D7 前的基準）。主持在名額空出來時通知下一位，並更新這一行。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
   - O2：`test_bonus_case_multi_approver_tier` 之後卡住十幾分鐘（A2，約 22:50，滿載時；沒有 dump），停在 multi_approver 之後、vouchers 的第一題；連跑三檔、開 faulthandler 都無法重現。
