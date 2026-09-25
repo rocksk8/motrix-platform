@@ -368,6 +368,7 @@
    "dynamic_sql": false,
    "imports": [
     "core:network_plan_topology",
+    "helper:company_identity",
     "helper:startup"
    ],
    "kind": "core",
@@ -555,9 +556,7 @@
    "api_prefixes": [],
    "dynamic_sql": true,
    "imports": [
-    "helper:voucher",
-    "router:accounting_export",
-    "router:vouchers"
+    "plat:registry"
    ],
    "kind": "helper",
    "path": "backend/helpers/bonus_vouchers.py",
@@ -781,6 +780,17 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:part_catalog": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/part_catalog.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:procurement": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -999,6 +1009,17 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/voucher_template.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:xlsx_out": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/xlsx_out.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
@@ -3761,17 +3782,23 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:company_identity",
     "helper:module_registry",
+    "helper:part_catalog",
     "helper:settings",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:xlsx_out"
    ],
    "imports": [
     "core:db",
     "helper:audit",
     "helper:auth",
+    "helper:company_identity",
+    "helper:part_catalog",
     "helper:settings",
+    "helper:xlsx_out",
+    "plat:registry",
     "router:contractor_vouchers",
-    "router:parts",
     "router:reports"
    ],
    "kind": "router",
@@ -3780,43 +3807,43 @@
    "routes": [
     {
      "func": "get_t100_export_config",
-     "line": 203,
+     "line": 206,
      "method": "GET",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "set_t100_export_config",
-     "line": 220,
+     "line": 223,
      "method": "PUT",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "t100_export_vouchers",
-     "line": 470,
+     "line": 473,
      "method": "GET",
      "path": "/api/reports/t100-export/vouchers"
     },
     {
      "func": "t100_export_preview",
-     "line": 494,
+     "line": 497,
      "method": "GET",
      "path": "/api/reports/t100-export/preview"
     },
     {
      "func": "t100_export_confirm",
-     "line": 521,
+     "line": 524,
      "method": "POST",
      "path": "/api/reports/t100-export/confirm"
     },
     {
      "func": "t100_export_confirmed_list",
-     "line": 548,
+     "line": 551,
      "method": "GET",
      "path": "/api/reports/t100-export/confirmed"
     },
     {
      "func": "t100_export_unconfirm",
-     "line": 582,
+     "line": 585,
      "method": "POST",
      "path": "/api/reports/t100-export/unconfirm"
     }
@@ -4230,7 +4257,7 @@
     "helper:edit_log",
     "helper:settings",
     "helper:tiered_approval",
-    "router:accounting_export"
+    "plat:registry"
    ],
    "kind": "router",
    "path": "backend/routers/bonus.py",
@@ -4382,73 +4409,73 @@
     },
     {
      "func": "get_case_bonus_voucher_accounts",
-     "line": 1893,
+     "line": 1896,
      "method": "GET",
      "path": "/api/bonus/cases/voucher-accounts"
     },
     {
      "func": "put_case_bonus_voucher_accounts",
-     "line": 1908,
+     "line": 1911,
      "method": "PUT",
      "path": "/api/bonus/cases/voucher-accounts"
     },
     {
      "func": "list_case_bonuses",
-     "line": 1934,
+     "line": 1937,
      "method": "GET",
      "path": "/api/bonus/cases"
     },
     {
      "func": "get_case_bonus",
-     "line": 1985,
+     "line": 1988,
      "method": "GET",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "create_case_bonus",
-     "line": 2038,
+     "line": 2041,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "update_case_bonus",
-     "line": 2077,
+     "line": 2080,
      "method": "PUT",
      "path": "/api/bonus/cases/{quote_no}"
     },
     {
      "func": "preview_case_bonus",
-     "line": 2178,
+     "line": 2181,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/preview"
     },
     {
      "func": "submit_case_bonus",
-     "line": 2214,
+     "line": 2217,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/submit"
     },
     {
      "func": "approve_case_bonus",
-     "line": 2241,
+     "line": 2244,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/approve"
     },
     {
      "func": "reject_case_bonus",
-     "line": 2304,
+     "line": 2307,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/reject"
     },
     {
      "func": "return_case_bonus",
-     "line": 2331,
+     "line": 2334,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/return"
     },
     {
      "func": "mark_case_bonus_paid",
-     "line": 2362,
+     "line": 2365,
      "method": "POST",
      "path": "/api/bonus/cases/{quote_no}/mark-paid"
     }
@@ -4793,12 +4820,14 @@
     "helper:quotations",
     "helper:row_access",
     "helper:settings",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:xlsx_out"
    ],
    "imports": [
     "core:db",
     "helper:auth",
     "helper:quotations",
+    "helper:xlsx_out",
     "router:contractor_vouchers",
     "router:reports"
    ],
@@ -4808,25 +4837,25 @@
    "routes": [
     {
      "func": "get_payable_queue",
-     "line": 120,
+     "line": 121,
      "method": "GET",
      "path": "/api/cashier/payable-queue"
     },
     {
      "func": "get_receivable_queue",
-     "line": 131,
+     "line": 132,
      "method": "GET",
      "path": "/api/cashier/receivable-queue"
     },
     {
      "func": "get_execution_history",
-     "line": 168,
+     "line": 169,
      "method": "GET",
      "path": "/api/cashier/execution-history"
     },
     {
      "func": "export_execution_history",
-     "line": 182,
+     "line": 183,
      "method": "GET",
      "path": "/api/cashier/export"
     }
@@ -6798,6 +6827,7 @@
     "helper:email_notify",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:part_catalog",
     "helper:procurement",
     "helper:settings",
     "helper:tiered_approval"
@@ -6807,6 +6837,7 @@
     "helper:audit",
     "helper:auth",
     "helper:email_notify",
+    "helper:part_catalog",
     "helper:procurement"
    ],
    "kind": "router",
@@ -6815,31 +6846,31 @@
    "routes": [
     {
      "func": "list_part_categories",
-     "line": 43,
+     "line": 35,
      "method": "GET",
      "path": "/api/parts/categories"
     },
     {
      "func": "list_parts",
-     "line": 52,
+     "line": 44,
      "method": "GET",
      "path": "/api/parts"
     },
     {
      "func": "create_part",
-     "line": 73,
+     "line": 65,
      "method": "POST",
      "path": "/api/parts"
     },
     {
      "func": "update_part",
-     "line": 122,
+     "line": 114,
      "method": "PUT",
      "path": "/api/parts/{part_id}"
     },
     {
      "func": "delete_part",
-     "line": 175,
+     "line": 167,
      "method": "DELETE",
      "path": "/api/parts/{part_id}"
     }
@@ -7721,6 +7752,7 @@
     "helper:audit",
     "helper:auth",
     "helper:case_roles",
+    "helper:company_identity",
     "helper:dates",
     "helper:email_notify",
     "helper:financial_mask",
@@ -7731,20 +7763,23 @@
     "helper:row_access",
     "helper:settings",
     "helper:startup",
-    "helper:tiered_approval"
+    "helper:tiered_approval",
+    "helper:xlsx_out"
    ],
    "imports": [
     "core:db",
     "helper:audit",
     "helper:auth",
     "helper:case_roles",
+    "helper:company_identity",
     "helper:dates",
     "helper:email_notify",
     "helper:financial_mask",
     "helper:quotations",
     "helper:recognition",
     "helper:settings",
-    "helper:startup"
+    "helper:startup",
+    "helper:xlsx_out"
    ],
    "kind": "router",
    "path": "backend/routers/reports.py",
@@ -7752,73 +7787,73 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2346,
+     "line": 2291,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2359,
+     "line": 2304,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2394,
+     "line": 2339,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2513,
+     "line": 2458,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2574,
+     "line": 2519,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2751,
+     "line": 2696,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "bank_reconcile",
-     "line": 2843,
+     "line": 2788,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     },
     {
      "func": "customer_history",
-     "line": 2912,
+     "line": 2857,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3160,
+     "line": 3105,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3442,
+     "line": 3387,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3743,
+     "line": 3688,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3930,
+     "line": 3875,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
