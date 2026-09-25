@@ -18,7 +18,7 @@
 | R7 | 跨模組待辦中心、簽核佇列／單據檢視／案件看板三頁的行動版、批次核准（同類型、低於門檻）、自動存檔抽成 L1 元件 | 使用者體驗、NUEiP | 主持＋B（階段 C） | ⏳ |
 | R8 | 欄位層權限：可自訂點帶權限屬性，排版器與匯出都要遵守 | Ragic、NUEiP | C（P3／P4／P5） | ⏳ |
 | R9 | 補充保費捨位規則：查到官方規則後，統一改成 `round_half_up` | 程式不一致 | 待官方依據 | ⏳ |
-| R10 | 獎金分潤三項＋U4：送審／待發放通知、送交出納頁、發放日列支出＋案件頁相關傳票；撥付時自動算扣繳與補充保費（投保金額、全年累計） | CORE-SPEC「使用者裁示」獎金分潤、U4 | A | 🔄 A（wip/a-bonus）：三項＋U4 使用方完成；**待 R1 合回時登記 IP-9 `legal.rules_for_date` 並在版本結構補 `nhi.bonus_insured_multiple`**（INTEGRATION-POINTS IP-9） |
+| R10 | 獎金分潤三項＋U4：送審／待發放通知、送交出納頁、發放日列支出＋案件頁相關傳票；撥付時自動算扣繳與補充保費（投保金額、全年累計） | CORE-SPEC「使用者裁示」獎金分潤、U4 | A | 🔄 A（wip/a-bonus）：三項＋U4 使用方完成；**R1（IP-7）合回後改接 `helpers.legal_params`；倍數欄位 `nhi.bonus_insured_multiple` 由 R 補**（INTEGRATION-POINTS「U4 撥付時的扣繳與補充保費」） |
 
 ## 階段 P：自訂與獨立升級的底層串接點（CUSTOMIZATION-SPEC §5；2026-09-25 使用者核心方向）
 

@@ -41,7 +41,7 @@ def _require_view_access(user: dict) -> None:
         raise HTTPException(403, "僅管理員、出納或財務可查閱")
 
 
-# ── 獎金分潤（IP-7 bonus.payouts，INTEGRATION-POINTS.md）───────────────────────
+# ── 獎金分潤（IP-8 bonus.payouts，INTEGRATION-POINTS.md）───────────────────────
 #: 薪資獎金模組（M07）不在時對使用者說的話（不可以默默略過）
 BONUS_MISSING = "薪資獎金模組未安裝：出納頁不顯示獎金分潤"
 
@@ -202,7 +202,7 @@ def _execution_history(conn, start: str, end: str, user: dict = None) -> dict:
         "outgoing": outgoing, "outgoingTotal": sum(v["grandTotal"] for v in outgoing),
         "incoming": incoming, "incomingTotal": sum(i["amount"] for i in incoming),
     }
-    # 獎金分潤發放紀錄（IP-7）：只給看得到獎金的人；M07 不在 ⇒ 空清單＋明說
+    # 獎金分潤發放紀錄（IP-8）：只給看得到獎金的人；M07 不在 ⇒ 空清單＋明說
     p, notice = _bonus_payouts(user or {})
     bonus = p.paid(conn, start, end) if p is not None else []
     out.update({"bonusVisible": _bonus_visible(user or {}), "bonusNotice": notice,

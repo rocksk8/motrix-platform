@@ -78,7 +78,7 @@ function cashierApp() {
     cashierHistoryIncoming:     [],
     cashierHistoryOutgoingTotal: 0,
     cashierHistoryIncomingTotal: 0,
-    // 獎金分潤（IP-7）：待發放清單、發放紀錄、標記已發放的對話框
+    // 獎金分潤（IP-8）：待發放清單、發放紀錄、標記已發放的對話框
     bonusQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
     bonusPay: { show: false, quoteNo: '', detail: null, bank: '', saving: false, error: '' },
     bonusPayNotice: '',
@@ -233,6 +233,16 @@ function cashierApp() {
         this.bonusPay.detail = d
         this.bonusPay.bank = d.defaultBankAccountCode || ''
       } catch (e) { this.bonusPay.error = '載入獎金明細失敗：' + e.message }
+    },
+    // U4：單據上存的法規參數快照（發放當時用哪一版、哪些數字）
+    dedParamsText(d) {
+      const p = d && d.params
+      if (!p) return ''
+      const pct = x => (Math.round(x * 10000) / 100) + '%'
+      return '法規參數 ' + (d.version || '—') + '：扣繳 ' + pct(p.withholding_rate) + '（每次給付達 ' +
+        Number(p.withholding_threshold).toLocaleString() + ' 起扣）・補充保費 ' + pct(p.nhi_rate) +
+        '（全年累計超過投保金額 ' + p.nhi_bonus_multiple + ' 倍的部分，單次上限 ' +
+        Number(p.nhi_max_single_payment).toLocaleString() + '）'
     },
     bonusPayRows() {
       const d = this.bonusPay.detail || {}

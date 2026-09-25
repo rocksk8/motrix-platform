@@ -156,7 +156,7 @@ def test_export_excel_has_both_sheets_with_data(client, make_user):
     assert "spreadsheetml" in r.headers["content-type"]
 
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    # 2026-09-25（CORE-SPEC 獎金分潤：送交出納）：最高管理者／出納多一張獎金發放明細（IP-7）
+    # 2026-09-25（CORE-SPEC 獎金分潤：送交出納）：最高管理者／出納多一張獎金發放明細（IP-8）
     assert wb.sheetnames == ["已匯款明細", "已收款明細", "獎金發放明細"]
 
     ws1 = wb["已匯款明細"]

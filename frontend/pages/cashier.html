@@ -310,7 +310,7 @@
               <button class="ctab" :class="{on: cashierSub==='receivable'}" @click="cashierSub='receivable'">
                 待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
               </button>
-              <!-- 獎金分潤待發放（IP-7；只給最高管理者與出納，財務看不到——SPEC-BONUS C1） -->
+              <!-- 獎金分潤待發放（IP-8；只給最高管理者與出納，財務看不到——SPEC-BONUS C1） -->
               <button class="ctab" x-show="bonusQueue.visible" :class="{on: cashierSub==='bonus'}" @click="cashierSub='bonus'" data-testid="cashier-bonus-tab">
                 獎金待發放<span class="tab__cnt" x-text="bonusQueue.items.length"></span>
               </button>
@@ -918,6 +918,9 @@
                 </template>
               </tbody>
             </table>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px" x-show="bonusPay.detail.deductions"
+                 x-text="dedParamsText(bonusPay.detail.deductions)" data-testid="cashier-bonus-ded-params"></div>
+            <!-- 算不出來（沒有適用的法規參數、有人沒有投保金額）⇒ 後端會拒絕標記，這裡先講原因 -->
             <div class="alert-bar" x-show="bonusPay.detail.deductionNotice" x-text="bonusPay.detail.deductionNotice" data-testid="cashier-bonus-deduction-notice"></div>
             <label class="field-label">付款銀行（支出傳票草稿的貸方科目）</label>
             <select class="field-input" x-model="bonusPay.bank" data-testid="cashier-bonus-bank">

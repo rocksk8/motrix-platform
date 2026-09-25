@@ -3661,7 +3661,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             "category": e["category"],   # `AC2`：首頁儀表板 otherBreakdown 用
         })
 
-    # ── 其他模組登記的支出（IP-8 expense.entries；目前：獎金分潤以發放日列支出，
+    # ── 其他模組登記的支出（IP-9 expense.entries；目前：獎金分潤以發放日列支出，
     # 權責與現金兩種口徑相同）。提供者不在 ⇒ 少這一類，其餘照常。併入「其他支出」，category 區分。
     from core import registry
     for _name, fn in sorted(registry.providers("expense.entries").items()):

@@ -7,7 +7,7 @@
            本次計費基數 = max(0, 累計前 + 本次 − max(門檻, 累計前))；四捨五入到元
 ```
 - **門檻與費率不寫死**：一律由呼叫端傳入 `params`（R1 法規參數版本；`params_from_legal_version()` 轉換）。
-  法規參數服務由 L1 以提供者 `legal.rules_for_date` 登記（INTEGRATION-POINTS IP-9）；還沒登記 ⇒
+  法規參數服務由 L1 以提供者 `legal.rules_for_date` 登記（INTEGRATION-POINTS IP-7（R1））；還沒登記 ⇒
   `legal_params_for()` 回 `(None, 原因)`，呼叫端照舊不計算、而且明說（不送 0 當成算過）。
 - **同一人在同一張單出現在多個類別 ⇒ 先合併再算**（起扣標準是「每次給付」）。
 - **投保金額沒有設定 ⇒ 不猜**：`missing` 列出來，呼叫端拒絕撥付（不以 0 計算）。
@@ -82,7 +82,7 @@ def compute_bonus_deductions(lines, *, params, insured, ytd_before):
     insured     {username: 投保金額}；沒有或不是正整數 ⇒ 列入 `missing`
     ytd_before  {username: 本次之前的全年累計獎金}
 
-    回 {"version", "lines": [{username, displayName, gross, withholding, nhiBase, nhiPremium, net,
+    回 {"version", "params"（快照）, "lines": [{username, displayName, gross, withholding, nhiBase, nhiPremium, net,
          insuredAmount, ytdBefore, ytdAfter}], "totals": {gross, withholding, nhiPremium, net}, "missing": [username]}
     `missing` 非空時該人的扣繳與保費**不計算**（值為 None），呼叫端必須拒絕撥付。
     """
@@ -112,7 +112,9 @@ def compute_bonus_deductions(lines, *, params, insured, ytd_before):
         tot["gross"] += gross
         out.append(row)
     tot["net"] = tot["gross"] - tot["withholding"] - tot["nhiPremium"]
-    return {"version": params.get("version", ""), "lines": out, "totals": tot, "missing": missing}
+    # 單據存當次使用的版本＋參數快照（R1 規則：舊單沿用建立時的版本）
+    return {"version": params.get("version", ""), "params": {k: params[k] for k in PARAM_KEYS},
+            "lines": out, "totals": tot, "missing": missing}
 
 
 def params_from_legal_version(v):
@@ -141,7 +143,7 @@ def params_from_legal_version(v):
 def legal_params_for(on_date):
     """撥付日適用的參數。回 `(params | None, 原因)`。
 
-    經提供者 `legal.rules_for_date`（IP-9：`fn(on_date) -> R1 版本 dict`；沒有適用版本 ⇒ ValueError）。
+    經提供者 `legal.rules_for_date`（IP-7（R1）：`fn(on_date) -> R1 版本 dict`；沒有適用版本 ⇒ ValueError）。
     未登記 ⇒ `(None, LEGAL_MISSING)`；有登記而算不出來 ⇒ `(None, 具體原因)`。"""
     fn = registry.single_provider("legal.rules_for_date")
     if fn is None:

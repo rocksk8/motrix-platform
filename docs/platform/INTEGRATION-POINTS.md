@@ -138,6 +138,7 @@ M06 的 `vouchers_all`。
 
 ---
 
+<<<<<<< HEAD
 ## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）
 
 L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 import）。規格：CUSTOMIZATION-SPEC §9.1。
@@ -155,6 +156,9 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 ---
 
 ## IP-7　`bonus.payouts`：獎金分潤待發放與發放紀錄（M07 → M05 出納）
+=======
+## IP-8　`bonus.payouts`：獎金分潤待發放與發放紀錄（M07 → M05 出納）
+>>>>>>> 3d8ab9eb (chore(獎金分潤): 串接點改編 IP-8／IP-9（IP-7 為 R1 法規參數）；單據存參數快照；兩頁顯示版本與參數)
 
 對應 CORE-SPEC「使用者裁示」獎金分潤：送交出納（RUN-PLAN §5 A 線 ③）。出納頁（M05）原本沒有獎金分潤；
 不 import M07，改由 M07 公開這一個讀取連接器。**「標記已發放」不經連接器**：出納頁直接打獎金那一支
@@ -173,7 +177,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-8　`expense.entries`：其他模組登記的支出（M07 → M08 報表）
+## IP-9　`expense.entries`：其他模組登記的支出（M07 → M08 報表）
 
 對應 CORE-SPEC「使用者裁示」獎金分潤：財務報表——以**發放日**列為支出，進營運報表與月支出。
 
@@ -192,22 +196,22 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-9　`legal.rules_for_date`：撥付日適用的法規參數（L1 法規參數服務 → M07）
+## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
-對應 CORE-SPEC「使用者裁示」U4（獎金分潤撥付時自動計算扣繳與二代健保補充保費）。門檻與費率**不寫死**，走 R1 法規參數版本；
-R1（`wip/r-legal`，`helpers/legal_params.py`）尚未合回 ⇒ **本項先定契約與使用方，提供方待 R1 合回時登記**（不另建參數表）。
+不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 法規參數服務（R1）：⏳ 待登記。預定一行：`registry.provide("legal.rules_for_date", "legal", lambda on: rules_for_date(load_versions(), on))` |
-| 使用方 | M07 `helpers/bonus_deductions.py::legal_params_for` → `deductions_for_award`（`routers/bonus.py` 的 `mark-paid` 與明細的試算） |
-| 形式 | provider，單一提供者 |
-| 語法 | 取用：`fn = registry.single_provider("legal.rules_for_date")`；`fn(on_date: "YYYY-MM-DD") -> R1 的一版 dict`；沒有適用版本 ⇒ 丟 `ValueError`（R1 的 `NoApplicableRules`） |
-| 回傳 | 使用方讀：`version`、`resident["50"].tax_rate`／`tax_threshold`（非每月給付薪資扣繳 5%、起扣標準）、`nhi.rate`、`nhi.max_single_payment`、**`nhi.bonus_insured_multiple`**（獎金超過投保金額的倍數，法規為 4）。⚠ **R1 目前的版本結構沒有 `bonus_insured_multiple`**：合回時要在版本結構與設定頁補上這個欄位；缺的話使用方拒絕計算並說明「法規參數缺少：nhi_bonus_multiple」，**不猜 4** |
-| 對方不在時 | 撥付**照舊**：傳票保留一行金額 0 的「代扣稅款（如適用）」由出納填（這是本項之前的既有行為），回應 `notice` 與明細 `deductionNotice`＝「未計算扣繳與補充保費：法規參數服務尚未接上（R1）」，出納頁執行紀錄的扣繳欄顯示「未計算」（值 `None`，不是 0）。**有提供者而算不出來**（沒有適用版本、欄位缺）⇒ 同樣不計算並寫明原因。**有提供者、參數齊，而有人沒有投保金額** ⇒ `mark-paid` 回 409 列出名字，狀態不變（不以 0 計算） |
-| 契約版本 | 1（2026-09-25）；使用方已完成，提供方待 R1 |
-| 守門 | 同上測試檔（以測試提供者代替 R1）：純函式邊界（起扣 90,500／90,501、同一人跨類別先合併、4 倍門檻跨越與已超過、單次上限、四捨五入、缺投保金額≠0、參數缺欄位不猜）、`test_mark_paid_refuses_without_insured_amount`、`test_mark_paid_computes_and_books_deductions`（傳票：借 應付＝貸 實發＋代扣稅款＋代收補充保費）、`test_ytd_external_counts_toward_cap`、`test_reverse_without_legal_params_pays_but_says_not_computed`、`test_reverse_without_accounting_still_computes_and_pays`（**反向控制**：會計模組不在 ⇒ 照算、照發、沒有傳票並明說）。突變 9 種皆轉紅 |
+| 提供方 | L1 `helpers/legal_params.py`（R1，IP-7） |
+| 使用方 | M07 `helpers/bonus_deductions.py::legal_params_for` → `deductions_for_award`：`POST /api/bonus/cases/{單號}/mark-paid`（撥付）、`GET /api/bonus/cases/{單號}`（待發放試算；已發放顯示快照）；頁面 `pages/bonus.html`「扣繳與補充保費」、`pages/cashier.html` 標記已發放對話框 |
+| 形式 | L1 函式直接呼叫（非 provider） |
+| 語法 | `params_from_legal_version(lp.rules_for_date(lp.load_versions(), 撥付日))` |
+| 回傳 | 讀一版的 `version`、`resident["50"].tax_rate`／`tax_threshold`（非每月給付薪資扣繳 5%、起扣標準）、`nhi.rate`、`nhi.max_single_payment`、`nhi.bonus_insured_multiple`（獎金超過投保金額的倍數；主持裁示由 R 在合回前加入並列為必填）。轉成 `bonus_deductions.PARAM_KEYS` 五個鍵；計算結果連同 **`version` 與參數快照**存進 `mark_paid` 那一筆編寫紀錄（長期記憶、不可改刪），已發放的單一律顯示快照，不再依現行參數重算 |
+| 讀不到時 | **拒絕撥付**：沒有適用版本（`lp.NoApplicableRules`）、欄位不齊（`DeductionParamsError`，例如缺倍數）⇒ `mark-paid` 回 409「無法計算扣繳與補充保費：<原因>；未標記已發放。」，狀態不變；明細的 `deductionNotice` 同一句，兩頁都顯示、按鈕照常可按但後端會擋。名單上有人沒有投保金額 ⇒ 409 列出名字。**不以 0 或預設值代替**（主持裁示 2026-09-25）。會計模組（M06）不在時照算、照發，只是沒有傳票（IP-2 的退化） |
+| 契約版本 | 1（2026-09-25）；依 IP-7 的版本結構 |
+| 守門 | `backend/tests/platform/test_bonus_payout_connectors.py`：純函式邊界（起扣 90,500／90,501、同一人跨類別先合併、4 倍門檻跨越與已超過、單次上限、四捨五入、缺投保金額≠0、參數缺欄位不猜）、撥付拒絕（缺投保金額、沒有適用版本）、撥付入傳票（借 應付＝貸 實發＋代扣稅款＋代收補充保費）、MOTRIX 以外累計計入門檻、版本與參數快照存在單據上、會計模組不在時照算照發。突變 14 種皆轉紅 |
 
 **投保金額與全年累計**存在 `system_settings["payroll_insurance_profiles"]`＝`{username: {insuredAmount, ytdExternal: {年: 金額}}}`；
-全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
+全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。端點 `GET /api/bonus/insurance`、`PUT /api/bonus/insurance/{username}`（最高管理者）；頁面在獎金頁「投保金額與全年累計」。
+不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
 ⚠ 投保金額屬薪資等級資訊，端點只給最高管理者；而 `system_settings` 會進一般每日 JSON——資料分類（MODULE-GUIDE §3.2 是否列 F2）待 C 判定，見 RUN-PLAN §6 本項回報。

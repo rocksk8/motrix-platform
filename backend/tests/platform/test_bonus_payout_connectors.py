@@ -1,7 +1,7 @@
 """獎金分潤三項（CORE-SPEC「使用者裁示」獎金分潤：通知／送交出納／財務報表）＋ U4 扣繳與補充保費。
 
-INTEGRATION-POINTS：IP-7 `bonus.payouts`（M07 → M05 出納）、IP-8 `expense.entries`（M07 → M08 報表）、
-IP-9 `legal.rules_for_date`（L1 法規參數 → M07，R1 合回前以測試提供者代替）。
+INTEGRATION-POINTS：IP-8 `bonus.payouts`（M07 → M05 出納）、IP-9 `expense.entries`（M07 → M08 報表）、
+IP-7（R1） `legal.rules_for_date`（L1 法規參數 → M07，R1 合回前以測試提供者代替）。
 
 ① 通知：送審 ⇒ 輪到的簽核人＋代理人；換人 ⇒ 下一位；核准進待發放 ⇒ 出納；名單成員不因在名單上收到
 ② 出納頁：待發放清單、標記已發放＝獎金那一支 API、執行紀錄與 Excel；財務看不到獎金
@@ -137,7 +137,7 @@ def test_mail_body_has_no_amount(monkeypatch):
     assert len(got) == 2 and not any("NT$" in g or "金額：" in g for g in got)
 
 
-# ── ② 出納頁（IP-7）─────────────────────────────────────────────────────────
+# ── ② 出納頁（IP-8）─────────────────────────────────────────────────────────
 
 def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, make_user):
     from tests.test_bonus_case_api_2026_09_24 import _login
@@ -196,7 +196,7 @@ def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people,
     assert client.get("/api/cashier/export", headers=_auth(people["bc_cash"])).status_code == 200
 
 
-# ── ③ 報表（IP-8）與案件頁相關傳票 ──────────────────────────────────────────
+# ── ③ 報表（IP-9）與案件頁相關傳票 ──────────────────────────────────────────
 
 def _year_other(client, tok, year):
     r = client.get("/api/reports/expenses-monthly?year=%s" % year, headers=_auth(tok))
@@ -326,6 +326,8 @@ def test_mark_paid_computes_and_books_deductions(client, people, monkeypatch):
     # 快照：已發放後仍顯示發放當時的計算；全年累計進下一張的「累計前」
     d = client.get("/api/bonus/cases/MQ-BP-U2", headers=_auth(people["bc_sa"])).json()
     assert d["deductions"]["totals"] == tot
+    assert d["deductions"]["version"] == "2026" and d["deductions"]["params"] == {
+        k: PARAMS[k] for k in bd.PARAM_KEYS}                      # 版本＋參數快照存在單據上
     ins = client.get("/api/bonus/insurance", headers=_auth(people["bc_sa"])).json()
     assert next(i for i in ins["items"] if i["username"] == "bc_s1")["ytdMotrix"] == 100000
 

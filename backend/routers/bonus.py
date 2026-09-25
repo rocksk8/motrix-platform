@@ -1632,7 +1632,7 @@ from helpers.tiered_approval import (  # noqa: E402
 )
 from helpers.auth import user_has_module  # noqa: E402
 from helpers import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
-from helpers import bonus_payouts  # noqa: E402  IP-7／IP-8 提供者＋通知對象（import 即登記）
+from helpers import bonus_payouts  # noqa: E402  IP-8／IP-9 提供者＋通知對象（import 即登記）
 from helpers import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")

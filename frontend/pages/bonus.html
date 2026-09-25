@@ -305,7 +305,7 @@
                         <div class="bn-err" x-show="detail.deductionNotice" x-text="detail.deductionNotice" data-testid="bn-deduction-notice"></div>
                         <template x-if="detail.deductions">
                           <div>
-                            <div class="bn-note" x-show="detail.deductions.version" x-text="'法規參數版本：' + detail.deductions.version"></div>
+                            <div class="bn-note" x-text="dedParamsText(detail.deductions)" data-testid="bn-ded-params"></div>
                             <template x-for="d in detail.deductions.lines" :key="d.username">
                               <div class="bn-row" :data-testid="'bn-ded-' + d.username">
                                 <span class="who" x-text="d.displayName"></span>

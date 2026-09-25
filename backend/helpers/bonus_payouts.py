@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""獎金分潤對外：出納頁（IP-7）、營運報表與月支出（IP-8）、通知對象（CORE-SPEC「使用者裁示」獎金分潤三項）。
+"""獎金分潤對外：出納頁（IP-8）、營運報表與月支出（IP-9）、通知對象（CORE-SPEC「使用者裁示」獎金分潤三項）。
 
-- IP-7 `bonus.payouts`（M07 → M05 出納）：待發放清單、期間內已發放紀錄。
+- IP-8 `bonus.payouts`（M07 → M05 出納）：待發放清單、期間內已發放紀錄。
   出納頁的「標記已發放」打的是**同一支** `POST /api/bonus/cases/{單號}/mark-paid`（同一個動作，不另寫一份）。
-- IP-8 `expense.entries`（M07 → M08 報表）：以**發放日**列為支出（案件合計，不列個人）。
+- IP-9 `expense.entries`（M07 → M08 報表）：以**發放日**列為支出（案件合計，不列個人）。
 - 通知對象：送審／換人簽 ⇒ 當層下一位簽核人＋他今天有效的代理人；進入待發放 ⇒ 出納。
   **名單上的成員不會因為「在名單上」而收到通知**（金額屬敏感資訊）；信裡不放金額。
   ⚠️ 名單成員同時是簽核人或出納時，仍以簽核人／出納的身分收到（否則沒人知道要簽、要發）。
@@ -47,7 +47,7 @@ def paid_snapshot(conn, award_id):
     return _parse(row["changes_json"]).get("deductions")
 
 
-# ── IP-7 bonus.payouts（契約版本 1）───────────────────────────────────────────
+# ── IP-8 bonus.payouts（契約版本 1）───────────────────────────────────────────
 
 class _Payouts:
     """出納頁用。兩支都在呼叫端的連線上讀，不寫。"""
@@ -82,7 +82,7 @@ class _Payouts:
 registry.provide("bonus.payouts", "payroll", _Payouts)
 
 
-# ── IP-8 expense.entries（契約版本 1；多提供者，以名稱區分）─────────────────────
+# ── IP-9 expense.entries（契約版本 1；多提供者，以名稱區分）─────────────────────
 
 def _expense_entries(conn, start, end):
     """發放日在 [start, end] 的獎金分潤：[{date, quoteNo, desc, amount, category}]，一案一筆（不列個人）。"""
