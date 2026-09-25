@@ -1,5 +1,5 @@
 {
- "core_version": "1.11",
+ "core_version": "1.12",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -747,6 +747,7 @@
    "NEW_SETTINGS": "const",
    "PACKAGE_DEFAULT_CONFIG": "const",
    "POST_CONVERT_NAME": "const",
+   "RUNTIME_STATE_SETTINGS": "const",
    "TOOL_LOG_NAMES": "const",
    "V9_BASELINE": "const",
    "V9_COMPANY_DEFAULTS": "const",
