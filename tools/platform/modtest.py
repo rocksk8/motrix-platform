@@ -336,24 +336,47 @@ FULL_MAX_WORKERS = 4
 PARTIAL_MAX_WORKERS = 2
 
 
+def _say(msg):
+    """印中文提示：被別的程式 import 呼叫時，主控台可能是 cp932／cp950（稽核 B-M1 附帶）⇒ 以 utf-8 寫、壞字取代。"""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+        sys.stdout.flush()
+
+
 def cap_workers(extra, limit):
-    """extra 裡的 -n N 超過上限 ⇒ 壓到上限並說出來。回傳新的 extra。"""
+    """extra 裡的 xdist worker 數超過上限 ⇒ 壓到上限並說出來。回傳新的 extra。
+
+    認得的寫法：`-n X`、`-nX`、`-n=X`、`--numprocesses X`、`--numprocesses=X`（稽核 B-M1：原本 `-nauto`、
+    `--numprocesses=8` 沒被解析）。`auto`／`logical`／非數字／負數 ⇒ **一律改成上限**（原本 auto 被當成
+    「等於上限」而原樣放行 ⇒ 12 核機器開 12 個 worker）。
+    """
     out, i = list(extra), 0
     while i < len(out):
         a = out[i]
-        val, j = None, None
+        val, kind = None, None
         if a in ("-n", "--numprocesses") and i + 1 < len(out):
-            val, j = out[i + 1], i + 1
-        elif a.startswith("-n") and a[2:].isdigit():
-            val, j = a[2:], i
+            val, kind = out[i + 1], "next"
+        elif a.startswith("--numprocesses="):
+            val, kind = a[len("--numprocesses="):], "long="
+        elif a.startswith("-n="):
+            val, kind = a[3:], "short="
+        elif a.startswith("-n") and len(a) > 2:
+            val, kind = a[2:], "short"
         if val is not None:
-            n = limit if val in ("auto", "logical") else int(val) if val.isdigit() else None
-            if n is None or n > limit:
-                print("⚠ -n %s 超過 §C-13 上限，改為 -n %d" % (val, limit))
-                if j == i:
-                    out[i] = "-n%d" % limit
+            if not (val.isdigit() and int(val) <= limit):
+                _say("⚠ -n %s 超過 §C-13 上限（或不是具體數字），改為 -n %d" % (val, limit))
+                if kind == "next":
+                    out[i + 1] = str(limit)
+                elif kind == "long=":
+                    out[i] = "--numprocesses=%d" % limit
+                elif kind == "short=":
+                    out[i] = "-n=%d" % limit
                 else:
-                    out[j] = str(limit)
+                    out[i] = "-n%d" % limit
+            if kind == "next":
+                i += 1
         i += 1
     return out
 
@@ -512,8 +535,23 @@ def write_last_full(result, root=None):
     if result.get("dirty") or not re.fullmatch(r"[0-9a-f]{40}", sha):
         return latest
     per = base / "full_results" / (sha + ".json")
-    _atomic_write_json(per, result)
+    # 稽核 B-S4：同一個 commit 重跑時保留先前每一輪的摘要——偶發紅之後重跑一次綠，閘門照樣放行（以最新一輪為準），
+    # 但看得到「這個 commit 曾經紅過」（〈偶發失敗先當產品競態〉）。
+    history = []
+    if per.is_file():
+        try:
+            prev = json.loads(per.read_text(encoding="utf-8"))
+            history = list(prev.get("history") or []) + [_run_summary(prev)]
+        except (OSError, ValueError):
+            history = [{"unreadable": True}]
+    _atomic_write_json(per, dict(result, history=history))
     return per
+
+
+def _run_summary(r):
+    e2e = r.get("e2e") or {}
+    return {"started": r.get("started"), "finished": r.get("finished"), "ok": r.get("ok"),
+            "interrupted": r.get("interrupted"), "failed": r.get("failed"), "e2e_failed": e2e.get("failed")}
 
 
 def _now():
@@ -521,12 +559,29 @@ def _now():
     return datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+def tree_state(repo=None):
+    """(HEAD, 工作樹狀態)。狀態**含未追蹤檔**（gitignored 的照樣排除）——稽核 B-M3：原本 `--untracked-files=no`，
+    忘了 git add 的產品檔、未追蹤的測試／conftest 外掛都會影響一輪全量，卻記成 dirty=false。"""
+    def g(*args):
+        return subprocess.run(["git", "-C", str(repo or REPO), *args], capture_output=True, text=True,
+                              encoding="utf-8", check=True).stdout
+    return g("rev-parse", "HEAD").strip(), g("status", "--porcelain", "--untracked-files=normal")
+
+
+def run_dirty(start, end):
+    """這一輪全量能不能代表 start 的 commit：開跑時不乾淨、或跑到一半 HEAD／工作樹變了 ⇒ dirty（稽核 B-M3）。"""
+    (h0, s0), (h1, s1) = start, end
+    return bool(s0.strip()) or h0 != h1 or s0 != s1
+
+
 def run_full(extra, a):
-    """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹（write_last_full：full_results/<commit>.json＋.last_full.json）。"""
+    """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹（write_last_full：full_results/<commit>.json＋.last_full.json）。
+    dirty：開跑與結束各取一次 tree_state()，由 run_dirty() 判定。"""
+    start = tree_state()
     result = {
-        "commit": git("rev-parse", "HEAD").strip(),
+        "commit": start[0],
         "branch": git("rev-parse", "--abbrev-ref", "HEAD").strip(),
-        "dirty": bool(git("status", "--porcelain", "--untracked-files=no").strip()),
+        "dirty": run_dirty(start, start),
         "started": _now(), "finished": None,
         "passed": None, "failed": None, "errors": None, "skipped": None,
         "e2e": None, "ok": False, "interrupted": False,
@@ -555,6 +610,16 @@ def run_full(extra, a):
         raise
     finally:
         result["finished"] = _now()
+        try:
+            end = tree_state()
+            if run_dirty(start, end) and not result["dirty"]:
+                print("[全量結果] ⚠ 跑到一半 HEAD 或工作樹變了（%s → %s）⇒ 記為 dirty，不代表這個 commit"
+                      % (start[0][:8], end[0][:8]))
+            result["dirty"] = run_dirty(start, end)
+            result["head_at_end"] = end[0]
+        except Exception as e:                      # noqa: BLE001 — 判不出來 ⇒ 當成 dirty（寧可擋）
+            print("[全量結果] ⚠ 結束時讀不到工作樹狀態：%r ⇒ 記為 dirty" % e)
+            result["dirty"] = True
         try:
             dest = write_last_full(result)
             print("[全量結果] %s ok=%s → %s" % (result["commit"][:8], result["ok"], dest))

@@ -133,7 +133,12 @@ def last_full(path: Path, commit_full_sha: str) -> dict:
         return {"state": "dirty", "detail": "那次全量跑的時候工作樹有未 commit 的改動，結果不代表這個 commit", "record": rec}
     if rec.get("ok") is not True:
         return {"state": "failed", "detail": "這個 commit 的全量沒有全綠", "record": rec}
-    return {"state": "ok", "detail": "這個 commit 的全量全綠", "record": rec}
+    # 稽核 B-S4：放行以最新一輪為準，但先前紅過要說出來（偶發紅常常是真的競態）
+    red = sum(1 for h in rec.get("history") or [] if h.get("ok") is not True)
+    if red:
+        return {"state": "ok", "detail": f"這個 commit 的全量全綠（⚠ 同一個 commit 先前紅過 {red} 次，請確認不是偶發競態）",
+                "record": rec, "red_runs": red}
+    return {"state": "ok", "detail": "這個 commit 的全量全綠", "record": rec, "red_runs": 0}
 
 
 # ── 正式機健康檢查（D1）──────────────────────────────────────────────────
