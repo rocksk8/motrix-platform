@@ -197,6 +197,9 @@ KNOWN SL17
 KNOWN SL18
 KNOWN SL19
 KNOWN D20
+AMBIGUOUS_ACK P1 標案 §3p 的 P1 與 §3f 的 P1（free_safe_port）撞號
+AMBIGUOUS_ACK P2 標案 §3p 的 P2 與 §3f 的 P2（free_safe_port）撞號
+AMBIGUOUS_ACK P3 標案 §3p 的 P3 與 §3f 的 P3（free_safe_port）撞號
 AMBIGUOUS_ACK P4 標案 §3p 的 P4 與 §3f 的 P4（free_safe_port）撞號
 AMBIGUOUS_ACK SL1 標案排程 SL1 與精算頁 SL1 撞號
 AMBIGUOUS_ACK SL19 同一個編號在 §3j 宣告兩次

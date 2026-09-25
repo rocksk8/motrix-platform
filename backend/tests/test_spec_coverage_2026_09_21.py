@@ -754,7 +754,7 @@ PENDING = {
 #:    在那之前，這張表讓「守門分辨不出來」這件事**不是安靜的**。
 AMBIGUOUS_ACK = {
     "G1", "G2", "M1", "M2", "M3", "M4", "M5", "M6",
-    "P1", "P2", "P3", "R1", "R2",   # P4／SL19 → modules/tender_radar/SPEC.md
+    "R1", "R2",   # P1～P4／SL19 → modules/tender_radar/SPEC.md（只跟 M11 撞號）
     "T1", "T2", "T3", "T4", "T5", "U8", "U9",
     "V1", "V2", "V3",
     # 📌 `§18 放行判準`曾經用 `G1`–`G10`，與 `§3` 的 G 系列撞號。
