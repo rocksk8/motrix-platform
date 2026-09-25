@@ -100,7 +100,7 @@ def test_all_six_document_types_go_through_the_shared_helper():
     """六種單據的連簽都走同一個 helper（有人改回自己蓋章時這一題會抓到）。"""
     from core import source_tree
     root = Path(__file__).resolve().parents[1] / "routers"
-    files = {p.name: p for p in source_tree.router_files()}      # 端點檔可能已搬進模組（M04：modules/subcontract/api/）
+    files = {p.name: p for p in source_tree.router_files()}      # 端點檔可能已搬進模組（外包工班：modules/subcontract/api/）
     for f in CALLERS:
         src = files[f].read_text(encoding="utf-8")
         assert re.search(r"cascade_self_tiers\(", src), f
