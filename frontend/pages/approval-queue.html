@@ -370,6 +370,7 @@
     .aq-type-tag.aq-type-pr        { background: #FFEDD5; color: #9A3412; }
     .aq-type-tag.aq-type-cc        { background: #EDE9FE; color: #6D28D9; }
     .aq-type-tag.aq-type-vo        { background: #DBEAFE; color: #1E40AF; }  /* AS3：會計傳票 */
+    .aq-type-tag.aq-type-cm        { background: #F1F5F9; color: #334155; }  /* P8：自訂模組單據 */
 
   /* -- Mobile RWD -- */
   @media (max-width:767px) {
@@ -475,7 +476,7 @@
                     <span class="aq-type-tag" :class="'aq-type-' + typeTagClass(item)" x-text="docTypeLabel(item)"></span>
                     <span class="aq-card__age" :class="'vm-age--' + ageWord(item)" x-text="ageText(item)"></span>
                   </div>
-                  <div class="aq-card__r2" x-text="item.customer + (item.projectName ? '｜' + item.projectName : '')"></div>
+                  <div class="aq-card__r2" x-text="cardSubtitle(item)"></div>
                   <div class="aq-card__r3">
                     <span class="aq-card__amt" x-text="amountDisplay(item)"></span>
                     <span class="aq-card__flow">
@@ -489,10 +490,19 @@
                       <span x-text="tierText(item)"></span>
                     </span>
                     <span class="aq-card__act">
-                      <button type="button" class="btn btn-primary btn-sm"
-                              @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
-                      <button type="button" class="btn btn-reject btn-sm"
-                              @click.stop="quickReject(item)" :disabled="actioning">退回</button>
+                      <!-- P8：自訂模組單據的簽核在它自己的頁面（依該單那一版的定義）⇒ 卡片只給「開啟簽核」 -->
+                      <template x-if="item.type === 'custom_record'">
+                        <a class="btn btn-primary btn-sm" :href="customRecordHref(item)" @click.stop
+                           :data-open-custom="item.moduleKey + ':' + item.quoteNo">開啟簽核</a>
+                      </template>
+                      <template x-if="item.type !== 'custom_record'">
+                        <span style="display:contents">
+                          <button type="button" class="btn btn-primary btn-sm"
+                                  @click.stop="quickApprove(item)" :disabled="actioning">核准</button>
+                          <button type="button" class="btn btn-reject btn-sm"
+                                  @click.stop="quickReject(item)" :disabled="actioning">退回</button>
+                        </span>
+                      </template>
                     </span>
                   </div>
                 </div>
@@ -1192,7 +1202,7 @@
         get typeCounts() {
           const color = {
             quotation: '#4338CA', cv: '#92400E', iv: '#065F46',
-            sn: '#155E75', pr: '#9A3412', cc: '#6D28D9', vo: '#1E40AF',
+            sn: '#155E75', pr: '#9A3412', cc: '#6D28D9', vo: '#1E40AF', cm: '#334155',
           }
           const map = new Map()
           this.flatItems.forEach(i => {
@@ -1232,7 +1242,19 @@
           if (item.type === 'voucher') return '傳票（會計）'
           // SPEC-BONUS §十一（2026-09-24）：以案件為中心的獎金分潤
           if (item.type === 'bonus_case_award') return '獎金分潤'
+          // P8（IP-10）：自訂模組單據，標籤用模組名稱
+          if (item.type === 'custom_record') return item.moduleName || item.moduleKey || '自訂模組'
           return '報價單'
+        },
+
+        // P8：自訂模組單據開在執行頁（簽核人不需要模組權限；網址帶 key 與單號，不必手打）
+        customRecordHref(item) {
+          return 'custom-records.html?key=' + encodeURIComponent(item?.moduleKey || '') + '&no=' + encodeURIComponent(item?.quoteNo || '')
+        },
+
+        cardSubtitle(item) {
+          if (item?.type === 'custom_record') return (item.requestedByDisplay || '') + (item.statusLabel ? '｜' + item.statusLabel : '')
+          return item.customer + (item.projectName ? '｜' + item.projectName : '')
         },
 
         typeTagClass(item) {
@@ -1244,6 +1266,7 @@
           if (item?.type === 'case_change') return 'cc'
           if (item?.type === 'voucher') return 'vo'
           if (item?.type === 'bonus_case_award') return 'pr'
+          if (item?.type === 'custom_record') return 'cm'
           return 'quotation'
         },
 
@@ -1305,6 +1328,7 @@
         amountDisplay(item) {
           if (item?.type === 'shipping_note') return (item.total || 0) + ' 項'
           if (item?.type === 'case_change') return item.projectName || ''
+          if (item?.type === 'custom_record') return item.statusLabel || ''
           return 'NT$ ' + (item?.total || 0).toLocaleString()
         },
 
@@ -1473,6 +1497,8 @@
         },
 
         selectItem(item) {
+          // P8：自訂模組單據沒有佇列詳情端點，簽核在執行頁做 ⇒ 直接開那一張
+          if (item && item.type === 'custom_record') { location.href = this.customRecordHref(item); return }
           this.selected = item
           this.drawerOpen = true
           this.loadDetail(item)
