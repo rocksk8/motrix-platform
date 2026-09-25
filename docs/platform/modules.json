@@ -274,12 +274,13 @@
    "key": "subcontract",
    "name": "外包工班",
    "units": [
+    "mod:subcontract/__init__",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/contractor-voucher-approval-settings.html",
     "page:pages/contractors.html",
-    "page:pages/vendor-contractors.html",
-    "router:contractor_vouchers",
-    "router:contractors",
-    "router:vendor_contractors"
+    "page:pages/vendor-contractors.html"
    ],
    "tables": [
     "contractor_dispatches",

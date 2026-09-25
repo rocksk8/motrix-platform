@@ -1,0 +1,21 @@
+{
+  "key": "subcontract",
+  "name": "外包工班",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "subcontract",
+  "permissions": ["contractor_list"],
+  "tables": ["contractors", "vendor_contractors", "contractor_dispatches", "contractor_payment_vouchers"],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。含 F2 的欄位（身分證號、地址、銀行帳戶、憑據快照裡的帳戶）由 archive._F2_FIELDS 分流",
+  "data": {
+    "tables": [
+      {"name": "contractors", "class": "T1"},
+      {"name": "vendor_contractors", "class": "T1"},
+      {"name": "contractor_dispatches", "class": "T1"},
+      {"name": "contractor_payment_vouchers", "class": "T1"}
+    ],
+    "files": []
+  },
+  "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers"]},
+  "pages": [{"path": "contractors.html"}, {"path": "vendor-contractors.html"}, {"path": "contractor-voucher-approval-settings.html"}]
+}

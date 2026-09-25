@@ -25,10 +25,10 @@
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`routers/vendor_contractors.py::_dispatch_row` |
+| 提供方 | M04 外包工班：`modules/subcontract/vendor_contractors.py::_dispatch_row` |
 | 使用方 | M01 `helpers/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）；M06 `routers/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工） |
-| 形式 | provider，單一提供者（`core.registry`）。M04 尚未搬進 `modules/`，暫以 `registry.provide()` 在匯入時登記；搬遷後改寫進 `ModuleSpec.providers`，這一行刪除 |
-| 語法 | 提供：`_registry.provide("dispatch.row", "subcontract", _dispatch_row)`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
+| 形式 | provider，單一提供者（`core.registry`）。2026-09-26 M04 搬進 `modules/subcontract/`，改由 `ModuleSpec.providers` 宣告（模組未載入即不登記） |
+| 語法 | 提供：`ModuleSpec(providers={("dispatch.row", "subcontract"): vendor_contractors._dispatch_row})`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
 | 回傳 | `fn(row: sqlite3.Row) -> dict`。`row` 是 `contractor_dispatches` 一列（可 JOIN `vendor_contractors.name AS vendor_name`）。使用方讀的欄位：`id`、`quoteNo`、`vendorName`、`scope`、`items`、`personnel`、`totalAmount`、`personnelTotal`、`grandTotal`（含稅承攬商費用＋外包人員）、`invoiceNo`、`acceptedAt` |
 | 對方不在時 | recognition：應計派工回 `[]` 並記 WARNING ⇒ 營運報表少了承攬商這一類支出，其餘照常。現金口徑讀匯款申請快照，不受影響。<br>vouchers：案件支出來源只剩額外支出，不列承攬商派工。<br>皆不丟例外。<br>**明說（稽核 X-1，2026-09-25）**：`_collect_expenses` 與 `/api/reports/expenses-monthly`（含待補登 `recognitionFlags`）回 `unavailable: [{"category": "contractor", "reason": "外包工班模組未安裝：承攬商派工的應計成本沒有列入（不是 0 筆）"}]`（`helpers.recognition.dispatch_unavailable(basis)`；現金口徑為 `[]`），報表頁顯示紅框 `data-testid="expense-unavailable"`；`/api/vouchers/summary-sources` 回 `unavailable: [{"category": "contractor_dispatch", …}]`，傳票頁帶入面板顯示 `data-testid="source-unavailable"` |
 | 契約版本 | 1（2026-09-25） |
@@ -213,10 +213,10 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`routers/vendor_contractors.py`（`list_dispatches` 的包裝） |
+| 提供方 | M04 外包工班：`modules/subcontract/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝） |
 | 使用方 | M01 `routers/quotations.py::case_bundle`（`GET /api/quotations/{no}/case-bundle`）的 `parts.dispatches` |
-| 形式 | provider，單一提供者（`core.registry`）；M04 搬進 modules/ 後改寫進 `ModuleSpec.providers` |
-| 語法 | 提供：`_registry.provide("dispatch.list_for_case", "subcontract", fn)`<br>取用：`fn = registry.single_provider("dispatch.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權、權限判斷與單獨打 `/api/contractor-dispatches?quote_no=` 逐字相同） |
+| 形式 | provider，單一提供者（`core.registry`）；`ModuleSpec.providers` 宣告 |
+| 語法 | 提供：`ModuleSpec(providers={("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case})`<br>取用：`fn = registry.single_provider("dispatch.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權、權限判斷與單獨打 `/api/contractor-dispatches?quote_no=` 逐字相同） |
 | 回傳 | 派工單列（`dispatch.row` 形狀）；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
 | 對方不在時 | 整包照常回；`parts.dispatches`＝`{"ok": false, "status": 404, "detail": DISPATCHES_UNAVAILABLE}`（「外包工班模組未安裝：沒有承攬派工資料」），前端照「那一段回非 2xx」處理 |
 | 契約版本 | 1（2026-09-26） |
@@ -231,7 +231,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M01 案件：`routers/quotations.py::_append_items_to_quotation` |
-| 使用方 | M04 `routers/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
+| 使用方 | M04 `modules/subcontract/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
 | 形式 | provider，單一提供者；要與呼叫端同一筆交易（呼叫端已拿寫鎖）⇒ 不用事件 |
 | 語法 | 提供：`_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)`<br>取用：`append = registry.single_provider("quotation.append_items")`；`None` ⇒ 退化。`append(conn, quote_no, header, items, now) -> now`；`items`＝`[{description, qty, unit, cost, note}]` |
 | 回傳 | 在呼叫端連線上寫、不 commit。報價單不存在 ⇒ `HTTPException(404)`；不是草稿 ⇒ `409`（原本在 M04 的規則逐字搬來）。品項換成報價品項：成本＝cost、毛利 30%、售價由報價單自己算；前面加一列區段標題 |
@@ -247,10 +247,10 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`routers/contractor_vouchers.py::_voucher_public` |
+| 提供方 | M04 外包工班：`modules/subcontract/contractor_vouchers.py::_voucher_public` |
 | 使用方 | M05 `routers/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
 | 形式 | provider，單一提供者 |
-| 語法 | 提供：`_registry.provide("contractor_voucher.public", "subcontract", _voucher_public)`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
+| 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
 | 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
 | 對方不在時 | 出納待付款：`404`＋`CONTRACTOR_MISSING`（「外包工班模組未安裝：出納頁不顯示承攬商匯款」），頁面顯示這一句；執行歷史：`outgoing` 空、`contractorNotice` 明說，Excel「已匯款明細」第一列寫同一句；T100 預覽：`notice`＝`T100_CONTRACTOR_MISSING`（匯出的 Excel 是 T100 匯入檔，不加說明列）。皆不丟例外 |
 | 契約版本 | 1（2026-09-26） |

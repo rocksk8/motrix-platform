@@ -37,9 +37,9 @@ _UNTOUCHED = (
      '已回簽（客戶已驗收）的完工單不可撤銷核准，請先取消回簽'),
     ('routers/completion_notes.py',
      '系統已設定簽核流程，此完工單缺少簽核層資料，請重新送審'),
-    ('routers/contractor_vouchers.py',
+    ('modules/subcontract/api/contractor_vouchers.py',
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
-    ('routers/contractor_vouchers.py',
+    ('modules/subcontract/api/contractor_vouchers.py',
      '系統已設定簽核流程，此申請缺少簽核層資料，請重新送審'),
     ('routers/daily_tasks.py',
      'year_month 格式錯誤，應為 YYYY-MM'),
@@ -123,7 +123,7 @@ CASES = (
      ("日期", "記錄對象", "工作內容"), "pages/case-management.html"),
     ("routers/system.py", None, "備份目標", ("backend", "local_drive", "s3"),
      ("備份目標", "本機磁碟機", "S3 相容物件儲存"), "pages/company-profile-settings.html"),
-    ("routers/vendor_contractors.py", None, "不支援的驗收操作", ("pending_acceptance", "accepted", "action"),
+    ("modules/subcontract/api/vendor_contractors.py", None, "不支援的驗收操作", ("pending_acceptance", "accepted", "action"),
      ("待驗收", "確認驗收"), "pages/case-management.html"),
 )
 

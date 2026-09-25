@@ -15,7 +15,7 @@ from helpers.uploads import save_document_files, delete_document_file
 from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
-from routers.contractors import _stamp_passbook
+from modules.subcontract.api.contractors import _stamp_passbook
 
 router = APIRouter()
 
@@ -171,9 +171,6 @@ def _dispatch_row(row) -> dict:
 # 派工單列 → 公開形狀（含 grandTotal＝含稅承攬商費用＋外包人員）。別組不再 import 本檔的
 # 私有函式，改用 `core.registry.single_provider("dispatch.row")`；M04 不在時對方拿到 None，
 # 自行退化成「沒有派工資訊」。欄位只准加不准改名／刪除（改了要升契約版本）。
-_registry.provide("dispatch.row", "subcontract", _dispatch_row)
-# IP-12：M01 案件整包（/api/quotations/{no}/bundle）的承攬派工段；同一份授權與權限判斷
-_registry.provide("dispatch.list_for_case", "subcontract", lambda quote_no, authorization: list_dispatches(quote_no=quote_no, authorization=authorization))
 
 
 # ── 承攬商 CRUD ───────────────────────────────────────────────────────────────
@@ -858,3 +855,8 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
 
 #: IP-13 對方不在時的說明
 QUOTE_IMPORT_UNAVAILABLE = "案件模組未安裝：無法把派工品項匯入報價單"
+
+
+def list_dispatches_for_case(quote_no: str, authorization: str) -> list:
+    """IP-12 `dispatch.list_for_case`：M01 案件整包的承攬派工段；授權與權限判斷與 `list_dispatches` 同一份。"""
+    return list_dispatches(quote_no=quote_no, authorization=authorization)

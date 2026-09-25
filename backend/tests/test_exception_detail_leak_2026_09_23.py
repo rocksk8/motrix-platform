@@ -209,7 +209,7 @@ def _by_identity(entries):
 #: 幾行程式碼就變成另一個端點）。
 _BASELINE_A = {
     ("backend\\routers\\completion_notes.py", "download_completion_pdf"),
-    ("backend\\routers\\contractor_vouchers.py", "download_contractor_voucher_pdf"),
+    ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "download_contractor_voucher_pdf"),
     ("backend\\routers\\customers.py", "create_customer"),
     ("backend\\routers\\invoice_vouchers.py", "download_invoice_voucher_pdf"),
     ("backend\\routers\\network_plans.py", "preview_network_plan_topology"),
@@ -257,8 +257,8 @@ _BASELINE_B = {
     ("backend\\routers\\case_extra_expenses.py", "submit_change_request"),
     ("backend\\routers\\completion_notes.py", "submit_completion_note"),
     ("backend\\routers\\completion_notes.py", "approve_completion_note"),
-    ("backend\\routers\\contractor_vouchers.py", "submit_contractor_voucher"),
-    ("backend\\routers\\contractor_vouchers.py", "approve_contractor_voucher"),
+    ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "submit_contractor_voucher"),
+    ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "approve_contractor_voucher"),
     ("backend\\routers\\invoice_vouchers.py", "submit_invoice_voucher"),
     ("backend\\routers\\invoice_vouchers.py", "approve_invoice_voucher"),
     ("backend\\routers\\payment_requests.py", "submit_payment_request"),

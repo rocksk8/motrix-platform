@@ -25,7 +25,7 @@ import trail
 from helpers import licensing as license_core
 from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, shipping_notes, inventory, search, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, payslips, daily_tasks, module_versions, dev_crm, shipping_notes, inventory, search, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records
@@ -676,17 +676,14 @@ app.include_router(parts.router)
 app.include_router(dashboard.router)
 app.include_router(system.router)
 app.include_router(reports.router)
-app.include_router(contractors.router)
 app.include_router(payslips.router)
 app.include_router(daily_tasks.router)
 app.include_router(module_versions.router)
-app.include_router(vendor_contractors.router)
 app.include_router(dev_crm.router, prefix="/api")
 app.include_router(shipping_notes.router)
 app.include_router(completion_notes.router)
 app.include_router(inventory.router)
 app.include_router(search.router)
-app.include_router(contractor_vouchers.router)
 app.include_router(invoice_vouchers.router)
 app.include_router(org_structure.router)
 app.include_router(payment_requests.router)
