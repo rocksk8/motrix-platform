@@ -1,5 +1,5 @@
 {
- "core_version": "1.16",
+ "core_version": "1.17",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -793,6 +793,7 @@
    "FRONTEND_PAGES": "const",
    "logic_files": "def()",
    "module_dirs": "def()",
+   "module_installed": "def(path)",
    "page_file": "def(name)",
    "page_files": "def()",
    "product_files": "def()",
