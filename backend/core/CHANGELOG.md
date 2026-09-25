@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（C）
+## 1.14 — 2026-09-26（C）〔core_bump：暫用 1.99 → 1.14〕
 > C（P8 前端缺口 #3～#7、P2 開票憑據稅別依據、P2 第二份單據勞務報酬單＋R3 個資告知）。
 - L1（新增）：串接點 IP-10 `approval.queue_items`——「待我簽核」佇列與角標收其他模組的待簽項目（M01 取用；L1 自訂模組引擎提供 `custom_modules.queue_items`）；自訂模組通知的 ref_id＝`custom:<模組>:<單號>`（`notify_ref`）
 - L1（新增）：`core.definitions.list_definitions`／`delete_draft`；API `GET /api/definitions/{kind}`、`DELETE /api/definitions/{kind}/{key}/draft`

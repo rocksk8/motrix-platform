@@ -717,7 +717,7 @@ def notify_ref(rec) -> str:
 
 
 def queue_items(conn) -> list:
-    """IP-7 `approval.queue_items`：簽核中的自訂模組單據，形狀同「待我簽核」佇列的其他類型（`type`＝`custom_record`）。
+    """IP-10 `approval.queue_items`：簽核中的自訂模組單據，形狀同「待我簽核」佇列的其他類型（`type`＝`custom_record`）。
     只列「目前狀態有簽核、而且還沒簽完」的；誰看得到由佇列那一端的 `_queue_visible_to` 決定。"""
     out, defs = [], {}
     rows = conn.execute("SELECT module_key, record_no, def_version, status, approval_json, created_by, created_at "
