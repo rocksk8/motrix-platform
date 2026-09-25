@@ -117,7 +117,7 @@ python -c "import sys;sys.path.insert(0,'backend/tools');import deploy_insights 
 | D-1 | 必修 | ✅ 關閉（C 2026-09-25 於 platform `fbc653cf` 重跑 H1：真的 `apply` 出來的包 ⇒ 列表讀到 `{product: full, …}`） |
 | D-2 | 必修 | ✅ 關閉（重跑 H3：`disabledRaw='null'`、`lockRaw='[]'` ⇒ 不丟例外，轉成「讀不懂」警示） |
 | D-3 | 建議 | ✅ 關閉（重跑 H2：`未載入（未授權）：…` ⇒ 狀態「未授權」） |
-| D-4 | 建議 | ✅ 關閉（重跑 H4 突變：拿掉 `?mode=ro` ⇒ 1 紅，原本 5 綠）；`-shm` 已接受 |
+| D-4 | 建議 | ✅ 關閉（重跑 H4 突變：拿掉 `?mode=ro` ⇒ 1 紅，原本 5 綠）；`-shm` 已接受。**實測證據（C 2026-09-26，D7 預演）**：WAL 模式的庫，只要沒有其他連線開著（`-wal`／`-shm` 不存在），以 `mode=ro` 開啟就會在資料庫目錄**建出** `-wal` 與 `-shm`（`tests/platform/test_final_drill_tool.py::test_ro_backup_does_not_touch_the_source[True]` 在直接用 `mode=ro` 時紅）。對正式機 D5 的影響：服務停著時讀一次停用清單，會在 `backend/` 留下兩個空的側檔，內容不變；仍屬已接受的範圍。要做到一個位元組都不寫，作法是先複製 .db＋-wal 再讀複本（D7 工具已這樣做） |
 | D-5 | 建議 | ✅ 關閉（讀碼：PHF 只留 `名稱==版本`，`@ URL` 改成 `<url 已移除>`，其他行丟掉） |
 | D-6 | 建議 | ✅ 關閉（重跑 H5：DB 不存在 ⇒「原因不明」警示；exit 非 0 無輸出 ⇒「（沒有訊息）」警示） |
 | C-1 | 觀察 | ✅ 關閉（主持已修，且是 U10 實際成因） |
