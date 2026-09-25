@@ -352,3 +352,60 @@ def test_external_scan_times_out_as_unreachable(tmp_path, monkeypatch):
 def test_default_pdf_dirs_inside_install_are_not_external(inst):
     assert U.external_pdf_dirs(inst, {"pdf_base_path": json.dumps(os.path.join(inst, "報價單PDF")),
                                       "shipping_pdf_base_path": json.dumps("")}) == {}
+
+
+# ── 公司資料只補空值（A8c 的升級側）──────────────────────────────────────
+
+def _profile_db(tmp_path, profile):
+    db = str(tmp_path / "p.db")
+    _make_db(db, settings={"company_profile": profile})
+    return db
+
+
+def _profile(db):
+    return json.loads(U.settings_rows(db)["company_profile"])
+
+
+def test_company_profile_blanks_are_filled_from_v9_constants(tmp_path):
+    """V9 種子形狀（name／tax_id，沒有英文名、電話、email）⇒ 只補缺的三欄。"""
+    db = _profile_db(tmp_path, {"name": "允碩整合集創股份有限公司", "tax_id": "60575481", "contact_info": ""})
+    r = U.fill_company_profile_blanks(db)
+    assert r["filled"] == {"company_name": "允碩整合集創股份有限公司",       # 沿用 name（company_identity 不讀 name）
+                           "company_name_en": "MOTRIX Synergy Integration Corp.",
+                           "phone": "04-3610-6566", "email": "info@miactw.com"}
+    p = _profile(db)
+    assert p["name"] == "允碩整合集創股份有限公司" and p["tax_id"] == "60575481"
+    assert "taxId" not in p                                        # 別名 tax_id 已有值 ⇒ 不補
+
+
+def test_existing_company_profile_values_are_never_overwritten(tmp_path):
+    before = {"companyName": "允碩整合集創股份有限公司", "taxId": "60575481", "phone": "02-9999-0000",
+              "email": "someone@example.invalid", "companyNameEn": "Custom EN"}
+    db = _profile_db(tmp_path, before)
+    assert U.fill_company_profile_blanks(db)["filled"] == {}
+    assert _profile(db) == before
+
+
+def test_other_companies_install_is_not_stamped_with_our_data(tmp_path):
+    db = _profile_db(tmp_path, {"name": "別家公司", "tax_id": "12345678"})
+    r = U.fill_company_profile_blanks(db)
+    assert r["filled"] == {} and "看不出是本公司安裝" in r["skipped"]
+    assert _profile(db) == {"name": "別家公司", "tax_id": "12345678"}
+
+
+def test_verify_accepts_the_fill_but_not_a_rewrite(inst, new_src, tmp_path):
+    db = os.path.join(inst, "backend", "motrix_erp.db")
+    c = sqlite3.connect(db)
+    c.execute("INSERT OR REPLACE INTO system_settings VALUES ('company_profile', ?, '')",
+              (json.dumps({"name": "允碩整合集創股份有限公司", "tax_id": "60575481"}),))
+    c.commit()
+    c.close()
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    U.fill_company_profile_blanks(db)
+    assert U.verify_conversion(inst, m) == []                     # 只多出補的欄位 ⇒ 通過
+    c = sqlite3.connect(db)
+    c.execute("UPDATE system_settings SET value_json=? WHERE key='company_profile'",
+              (json.dumps({"name": "改掉了", "tax_id": "60575481"}),))
+    c.commit()
+    c.close()
+    assert any("company_profile" in p for p in U.verify_conversion(inst, m))

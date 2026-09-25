@@ -114,6 +114,7 @@ python <NEW>\tools\platform\upgrade.py convert --root <ROOT> --backup-dir <BK> -
 - 刪掉 V9 程式檔、換上新版程式檔；資料、DB、設定一律不動。
 - 用新版的 `init_db` 補跑基準 migration 到 v116，並建 `module_schema_versions`。
 - 設定只補缺的鍵（目前只有 `payslip_archive_path`＝空字串，意思是用預設目錄）；既有值不改。
+- 公司資料只補空值：`company_profile` 缺公司名／英文名／統編／電話／email 時，補上 V9 原本寫死在報表與網路規劃的值（只在看得出是本公司安裝時補；已有值的欄位不動）；補了哪些欄位記在 `conversion_log.json` 的 `company_profile.filled`。
 - 產出：`<BK>\conversion_log.json`。
 
 ## 5. 驗證

@@ -131,6 +131,7 @@ def convert(root: str, backup_dir: str, new_source: str) -> dict:
         _write_log(backup_dir, "conversion_log.json", rep)
         raise RuntimeError("migration 失敗：%s" % mig.stderr[-800:])
     rep["settings_added"] = U.add_missing_settings(os.path.join(root, U.DB_FILES[0]))
+    rep["company_profile"] = U.fill_company_profile_blanks(os.path.join(root, U.DB_FILES[0]))
     _write_log(backup_dir, "conversion_log.json", rep)
     return rep
 

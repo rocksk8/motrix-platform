@@ -484,6 +484,84 @@ def add_missing_settings(db_path: str, new_settings: dict = None) -> dict:
         conn.close()
 
 
+
+
+# ── 公司資料只補空值（主持 2026-09-25，A8c 的升級側）────────────────────────────
+#
+# A8c 把報表／網路規劃裡寫死的聯絡資料改從 company_identity 取；正式機的 company_profile
+# 若缺這幾欄，換版後那些位置會悄悄變空白。⇒ 轉換時**只補空值**，已有值的欄位一律不動
+# （§9b「轉換只准新增」）。值照抄 V9 原始碼（c83dae6e）裡被 A8c 刪掉的常數：
+#   backend/routers/reports.py:66      _COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
+#   backend/network_plan_export.py:19  _COMPANY  = "允碩整合集創股份有限公司"
+#   backend/network_plan_export.py:20  _COMPANY2 = "MOTRIX Synergy Integration Corp."
+# 🔴 只在**看得出是本公司安裝**時才補（統編是 60575481，或公司名含「允碩」）：
+#    新版會賣給客戶，不可以把我們的聯絡資料蓋進別人的安裝（比照 db._m106 只認統編）。
+V9_COMPANY_DEFAULTS = {
+    "company_name": "允碩整合集創股份有限公司",
+    "company_name_en": "MOTRIX Synergy Integration Corp.",
+    "tax_id": "60575481",
+    "phone": "04-3610-6566",
+    "email": "info@miactw.com",
+}
+#: company_identity 讀的別名（任一個有值就算「已有值」）。⚠ 必須與 helpers.company_identity._PROFILE_ALIASES
+#: 相同（本檔不 import app；tests/test_company_contact_a8c 比對兩份）。注意 V9 種子形狀的 `name`
+#: **不在**別名裡——company_identity 不讀它 ⇒ 公司名空白時先沿用 `name`（使用者自己的資料），沒有才用常數。
+_PROFILE_ALIASES = {
+    "company_name": ("companyName", "company_name"),
+    "company_name_en": ("companyNameEn", "company_name_en"),
+    "tax_id": ("taxId", "tax_id"),
+    "phone": ("phone",),
+    "email": ("email",),
+}
+
+
+def _is_our_install(profile: dict) -> bool:
+    tax = str(profile.get("taxId") or profile.get("tax_id") or "").strip()
+    names = " ".join(str(profile.get(k) or "") for k in ("companyName", "company_name", "name"))
+    return tax == V9_COMPANY_DEFAULTS["tax_id"] or "允碩" in names
+
+
+def fill_company_profile_blanks(db_path: str) -> dict:
+    """回 `{"filled": {欄: 值}, "skipped": 原因或 None}`。已有值的欄位不動；不是本公司安裝就不補。"""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT value_json FROM system_settings WHERE key='company_profile'").fetchone()
+        try:
+            profile = json.loads(row[0]) if row and row[0] else {}
+        except (TypeError, ValueError):
+            return {"filled": {}, "skipped": "company_profile 讀不懂，不動"}
+        if not isinstance(profile, dict):
+            return {"filled": {}, "skipped": "company_profile 不是物件，不動"}
+        if not _is_our_install(profile):
+            return {"filled": {}, "skipped": "看不出是本公司安裝（統編與公司名都對不上），不補"}
+        filled = {}
+        for field, value in V9_COMPANY_DEFAULTS.items():
+            if any(str(profile.get(a) or "").strip() for a in _PROFILE_ALIASES[field]):
+                continue
+            if field == "company_name" and str(profile.get("name") or "").strip():
+                value = str(profile["name"]).strip()
+            profile[field] = value
+            filled[field] = value
+        if filled:
+            conn.execute("UPDATE system_settings SET value_json=? WHERE key='company_profile'",
+                         (json.dumps(profile, ensure_ascii=False),))
+            conn.commit()
+        return {"filled": filled, "skipped": None}
+    finally:
+        conn.close()
+
+
+def _additive_json_change(before: str, after: str, allowed_new: set) -> bool:
+    """`after` 只比 `before` 多了 `allowed_new` 裡的鍵，其餘鍵的值完全相同。"""
+    try:
+        b, a = json.loads(before), json.loads(after)
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(b, dict) or not isinstance(a, dict):
+        return False
+    return all(a.get(k) == v for k, v in b.items()) and set(a) - set(b) <= allowed_new
+
+
 # ── 階段 3：驗證（不含啟動伺服器）─────────────────────────────────────────
 
 def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
@@ -500,8 +578,12 @@ def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
             problems.append("列數改變：%s %d → %d" % (t, n, after[t]))
     s_after = settings_rows(main)
     for k, v in manifest["pre"]["settings"].items():
-        if s_after.get(k) != v:
-            problems.append("既有設定被改寫或刪除：%s" % k)
+        if s_after.get(k) == v:
+            continue
+        # 唯一的例外：company_profile 只多出「補空值」的那幾欄（fill_company_profile_blanks）
+        if k == "company_profile" and _additive_json_change(v, s_after.get(k), set(V9_COMPANY_DEFAULTS)):
+            continue
+        problems.append("既有設定被改寫或刪除：%s" % k)
     extra = set(s_after) - set(manifest["pre"]["settings"])
     unexpected = extra - set(NEW_SETTINGS)
     if unexpected:
