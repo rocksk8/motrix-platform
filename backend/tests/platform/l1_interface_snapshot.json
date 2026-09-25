@@ -1,5 +1,5 @@
 {
- "core_version": "1.29",
+ "core_version": "1.30",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -92,6 +92,7 @@
    "_generate_shipping_pdf": "def(note_no, actor=…, action_type=…)",
    "_get_pdf_base": "def()",
    "build_quote_preview_html": "def(q, status, deal_tag, internal=…)",
+   "fmt_money_blank_zero": "def(n)",
    "generate_case_closing_pdf_bytes": "def(quote_no)",
    "generate_contractor_voucher_pdf_bytes": "def(voucher_no)",
    "generate_invoice_voucher_pdf_bytes": "def(voucher_no)",
@@ -646,6 +647,7 @@
    "plan_self_cascade": "def(tiers, ct_idx, username, conn=…)",
    "resolve_active_flow_setting": "def(doc_type)",
    "resolve_department_manager": "def(conn, department_id)",
+   "resolve_display_names": "def(conn, slots)",
    "resolve_division_manager": "def(conn, division_id)",
    "resolve_submitter_org_chain": "def(conn, requester_username)",
    "resolve_tier_approvers": "def(conn, tier_setting, requester_username=…)",
