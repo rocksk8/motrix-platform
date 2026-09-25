@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 491,
+  "tests": 492,
   "unmapped": 9,
   "kinds": {
    "api": 262,
    "e2e": 119,
-   "unit": 43,
+   "unit": 44,
    "audit": 67
   },
   "routes": 509
@@ -977,9 +977,12 @@
     "core:main",
     "dir:backend/helpers/",
     "dir:backend/modules/",
+    "dir:docs/platform/",
     "dir:frontend/pages/",
     "dir:product/",
     "dir:tools/platform/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/__init__.py",
     "file:backend/modules/tender_radar/module.json",
     "file:docs/platform/modules.json",
     "file:product/core-only.json",
@@ -988,22 +991,28 @@
     "helper:auth",
     "mod:tender_radar/api",
     "page:index.html",
+    "page:pages/login.html",
     "plat:registry"
    ],
    "evidence": {
     "page": [
-     "frontend/index.html"
+     "frontend/index.html",
+     "frontend/pages/login.html"
     ],
     "path": [
      "backend/core/registry.py",
      "backend/helpers/",
+     "backend/helpers/__init__.py",
      "backend/helpers/auth.py",
      "backend/main.py",
      "backend/modules/",
+     "backend/modules/__init__.py",
      "backend/modules/tender_radar/api.py",
      "backend/modules/tender_radar/module.json",
+     "docs/platform/",
      "docs/platform/modules.json",
      "frontend/pages/",
+     "frontend/pages/login.html",
      "product/",
      "product/core-only.json",
      "tools/platform/",
@@ -9555,6 +9564,17 @@
      "backend/version_manifest.json",
      "docs/windows/",
      "docs/windows/STATE.md"
+    ]
+   }
+  },
+  "backend/tests/test_verify_package_decoy_2026_09_25.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tools/verify_package.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tools/verify_package.py"
     ]
    }
   },
