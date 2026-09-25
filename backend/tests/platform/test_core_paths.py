@@ -56,6 +56,7 @@ V9_LOCATIONS = {
     # V9 c83dae6e 的 backend/autostart.bat（排程工作啟動它；Python 不讀它）
     "AUTOSTART_BAT": os.path.join(BACKEND, "autostart.bat"),
     "FRONTEND_DIR": os.path.join(ROOT, "frontend"),
+    "FRONTEND_PAGES_DIR": os.path.join(ROOT, "frontend", "pages"),
 }
 
 V9_PDF = {

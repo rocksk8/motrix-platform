@@ -41,7 +41,7 @@ GET /pages/{name}.html
   都不是                                          ⇒ 404
 ```
 
-- loader 在載入每個模組時收集 `module.json` `pages[].path` ⇒ `registry.page_map: {檔名: (模組key, 絕對路徑)}`；**同名衝突（兩個模組或模組與 L1 撞名）⇒ 啟動失敗**，不靜默覆蓋。
+- loader 在載入每個模組時收集 `module.json` `pages[].path` ⇒ `registry.page_map: {檔名: (模組key, 絕對路徑)}`；**同名衝突（兩個模組或模組與 L1 撞名）⇒ 啟動失敗**，不靜默覆蓋。〔更正（B，2026-09-26 01:14，主持裁示）：不讓整台起不來（可販售產品）⇒ 比照 STATES-PLATFORM P-LD-07 路由衝突：依 key 排序先到先得，後到的模組**整個**記 failed、不掛（在 mount_modules 之前檢查），記 ERROR，模組管理頁與 D5 看得到原因；實作在 `core.pages.check_and_register`，page_map 不放 registry〕
 - 路由在 `StaticFiles` mount 之前註冊（mount `/` 會吃掉所有路徑）。快取標頭沿用 main.py:213 的 `no-cache` 規則；`_REFERER_RELAXED_PATHS` 是 URL 比對，不受影響。
 - 停用時回 404 而不是 403：與端點行為一致（CORE-SPEC 啟停守門「關閉後，端點回 404」）。
 - 頁面的權限檢查**不在這一層加**（現況也沒有；頁面是殼，資料由 API 守門）。要不要加列在 §7 D3。
@@ -72,7 +72,7 @@ GET /pages/{name}.html
 
 | 步 | 內容 | 驗證 |
 |---|---|---|
-| C1 | `core.pages` 路由＋`registry.page_map`；**頁面還沒搬**，page_map 指向 `frontend/pages/`（tender_radar 先宣告） | 停用 tender_radar ⇒ `/pages/tender-radar.html` 404；啟用 ⇒ 200；撞名 ⇒ 啟動失敗（反向控制） |
+| C1 | `core.pages` 路由＋`registry.page_map`；**頁面還沒搬**，page_map 指向 `frontend/pages/`（tender_radar 先宣告） | 停用 tender_radar ⇒ `/pages/tender-radar.html` 404；啟用 ⇒ 200；撞名 ⇒ 啟動失敗（反向控制）〔更正：撞名 ⇒ 後到的模組記 failed、不掛（同上）；停用 ⇒ 404＋提示頁（D2 更正）〕 |
 | C2 | 路徑解析集中：`core.source_tree.page_file(name)`（依 page_map），測試與工具改用它；dep_scan 的 `page:` 單位名改成**邏輯名**（`page:pages/x.html`，與實體位置無關）⇒ modules.json／test_map 不用跟著搬家改 | 全量；守門：`frontend/pages` 字面值只准出現在 `source_tree`（反向控制：新增一處寫死 ⇒ 紅） |
 | C3 | 選單：`menu_groups.json`、`menu_l1.json`、各模組 `pages[].menu`、`/api/platform/menu`；**新舊並行**：`sidebar.js` 仍用舊選單 | **對等守門**：以超級管理員與每一種單一模組權限，比對 API 產生的選單與舊 `buildSidebar()` 的項目（href、label、群組、順序）完全一致 |
 | C4 | `sidebar.js` 切到 API；刪 `_hideUnavailableModulePages`／`_FILE_MODULE` | e2e：停用模組 ⇒ 選單項消失、頁面 404（PLAYBOOK §A 完成條件）；所有會開頁的 e2e（〈頁面結構改動的 e2e 範圍〉） |
@@ -97,7 +97,7 @@ C1、C2 不影響使用者畫面；C3 只加不改；C4 是唯一改變前端行
 | # | 問題 | 推薦 |
 |---|---|---|
 | D1 | URL 維持 `/pages/x.html`（本文）或改 `/m/<key>/x.html` | **維持**：換 URL 會讓已寄出的信件連結失效，而收益只有「看得出屬於哪個模組」，這個資訊 page_map 已經有 |
-| D2 | 停用模組的頁面回 404 或導向「模組未啟用」說明頁 | **404**（與端點一致、守門好寫）；前端 `auth-guard` 可以在 404 時顯示友善訊息 |
+| D2 | 停用模組的頁面回 404 或導向「模組未啟用」說明頁 | **404**（與端點一致、守門好寫）；前端 `auth-guard` 可以在 404 時顯示友善訊息〔更正（B，2026-09-26 01:14）：這個推薦是在沒看到 STATES-PLATFORM P-FE-03（A2，「直接打網址 ⇒ 提示頁，不是 404」）的情況下做的，設計時漏查。主持裁示改採選項 A：**HTTP 404＋伺服器產生的提示頁**（四種文案、`data-testid=module-unavailable`），頁面本體不送出；sidebar.js 的前端提示框留作後備（伺服器不認得該頁屬於哪個模組時）〕 |
 | D3 | 頁面 URL 要不要加伺服器端權限檢查 | **本階段不加**：頁面是殼、資料由 API 守門；加了要處理未登入導向 login 的流程，另開一項 |
 | D4 | 選單群組是否允許模組自訂 | **不允許**（固定鍵＋L1 定義），自訂選單屬於 CUSTOMIZATION（使用者層），不是模組層 |
 

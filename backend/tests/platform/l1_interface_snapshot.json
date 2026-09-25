@@ -1,5 +1,5 @@
 {
- "core_version": "1.12",
+ "core_version": "1.13",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -76,6 +76,7 @@
    "FRONTEND_DIR": "const",
    "auth_middleware": "async def(request, call_next)",
    "license_gate_middleware": "async def(request, call_next)",
+   "module_page": "def(name)",
    "no_cache_static": "async def(request, call_next)",
    "root": "def()",
    "security_headers": "async def(request, call_next)",
@@ -644,6 +645,21 @@
    "registered": "def()",
    "run_all": "def(conn)"
   },
+  "plat:pages": {
+   "NOTICE": "const",
+   "PAGE_NAME": "const",
+   "PageConflict": "class",
+   "build_page_map": "def(manifests, l1_dir)",
+   "check_and_register": "def(modules_dir, l1_dir)",
+   "collect": "def(manifests, l1_dir)",
+   "lookup": "def(name, page_map)",
+   "notice_html": "def(module_name, kind)",
+   "notice_kind": "def(state)",
+   "page_response": "def(name, page_map, l1_dir, is_loaded, state_of)",
+   "read_manifests": "def(modules_dir)",
+   "resolve": "def(name, page_map, enabled, l1_dir)",
+   "valid_name": "def(name)"
+  },
   "plat:paths": {
    "AUTOSTART_BAT": "const",
    "BACKEND_DIR": "const",
@@ -665,6 +681,7 @@
    "DEPLOYED_COMMIT_FILE": "const",
    "DatabaseMissing": "class",
    "FRONTEND_DIR": "const",
+   "FRONTEND_PAGES_DIR": "const",
    "HEARTBEAT_CONFIG": "const",
    "INITIAL_ADMIN_CREDENTIALS": "const",
    "INITIAL_DEMO_CREDENTIALS": "const",
@@ -723,8 +740,11 @@
   },
   "plat:source_tree": {
    "BACKEND": "const",
+   "FRONTEND_PAGES": "const",
    "logic_files": "def()",
    "module_dirs": "def()",
+   "page_file": "def(name)",
+   "page_files": "def()",
    "product_files": "def()",
    "rel": "def(p)",
    "router_files": "def()"

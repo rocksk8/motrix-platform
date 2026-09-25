@@ -93,6 +93,8 @@ VERSION_MANIFEST = backend("version_manifest.json")
 #: 排程啟動腳本。內含**這台機器的設定**（對外連線總開關、安裝路徑），不是程式碼（稽核 X-9b M-4）
 AUTOSTART_BAT = backend("autostart.bat")
 FRONTEND_DIR = root("frontend")
+#: L1 頁面（與還沒搬家的模組頁面）；模組頁面的實際位置由 core.pages 依 module.json 決定（階段 C）
+FRONTEND_PAGES_DIR = os.path.join(FRONTEND_DIR, "pages")
 
 
 def modules_disabled_cache(db_path: str) -> str:

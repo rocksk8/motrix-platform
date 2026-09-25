@@ -76,6 +76,7 @@
    "plat:definitions",
    "plat:loader",
    "plat:migrations",
+   "plat:pages",
    "plat:paths",
    "plat:registry",
    "plat:source_tree",

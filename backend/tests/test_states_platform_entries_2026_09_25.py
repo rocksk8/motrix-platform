@@ -118,19 +118,29 @@ def test_sidebar_hides_entry_of_module_not_in_package(live_server, make_user, e2
 ])
 def test_direct_url_to_unloaded_module_shows_notice(live_server, make_user, e2e_browser, monkeypatch,
                                                      state, kind, title):
-    """P-FE-03：提示頁取代頁面本體（`<main>` 藏起來），寫明原因與處理方式。"""
+    """P-FE-03：提示頁寫明原因與處理方式。
+    2026-09-26（階段 C／C1，裁示 D2 選項 A）：改由**伺服器**回 HTTP 404＋提示頁（core.pages）——頁面本體不送出，
+    與端點一致；原本是頁面照常 200、前端蓋提示框（sidebar.js 那段留作後備）。"""
     _unload_tender_radar(monkeypatch, state=state)
-    page = _page(e2e_browser, live_server, make_user, "sp_fe03_" + kind, "tender-radar.html")
+    u = make_user(username="sp_fe03_" + kind, role="superadmin")
+    page = e2e_browser.new_context().new_page()
+    inject_login(page, live_server, u[0], u[1])
+    resp = page.goto(f"{live_server}/pages/tender-radar.html")
+    assert resp.status == 404
     page.locator(_NOTICE).wait_for(state="visible", timeout=15000)
     assert page.locator(_NOTICE).get_attribute("data-state") == kind
     assert page.locator(_NOTICE + " h2").inner_text().strip() == title
-    assert page.evaluate("() => getComputedStyle(document.querySelector('main.main')).display") == "none"
+    assert page.locator("main.main").count() == 0, "頁面本體不可以送出"
 
 
 @pytest.mark.e2e
 def test_direct_url_to_loaded_module_has_no_notice(live_server, make_user, e2e_browser):
-    """正對照：模組已載入 ⇒ 沒有提示頁、頁面本體照常顯示。"""
-    page = _page(e2e_browser, live_server, make_user, "sp_fe03_ok", "tender-radar.html")
+    """正對照：模組已載入 ⇒ 200、沒有提示頁、頁面本體照常顯示。"""
+    u = make_user(username="sp_fe03_ok", role="superadmin")
+    page = e2e_browser.new_context().new_page()
+    page.route("**/tile.openstreetmap.org/**", lambda route: route.abort())
+    inject_login(page, live_server, u[0], u[1])
+    assert page.goto(f"{live_server}/pages/tender-radar.html").status == 200
     _availability_loaded(page)
     assert page.evaluate("() => window.MOTRIX_MODULE_AVAILABILITY.tender_radar.state") == "loaded"
     assert page.locator(_NOTICE).count() == 0

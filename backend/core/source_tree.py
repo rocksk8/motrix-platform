@@ -71,3 +71,44 @@ def product_files():
         files += sorted(p for p in root.rglob("*.py")
                         if not any(part in _NON_PRODUCT_DIRS for part in p.relative_to(root).parts))
     return files
+
+
+# ── 前端頁面（階段 C／C2，docs/platform/STAGE-C-DESIGN.md）──────────────────
+# 頁面會從 frontend/pages/ 逐模組搬進 modules/<key>/pages/（對外 URL 不變）。
+# ☠️ 讀頁面原始碼的測試與工具一律從這裡取路徑：自己拼 `frontend/pages/x.html` 的，頁面搬走後會
+#    找不到檔（紅，還好）；自己 glob `frontend/pages/*.html` 的，會**安靜地少掃搬走的那些**（綠，最糟）。
+#    守門：tests/platform/test_page_paths_centralized.py（寫死的位置只准變少）。
+
+#: L1 頁面（以及還沒搬家的模組頁面）所在
+# 從 core.paths 取，不用 __file__ 推（test_no_file_relative_data_paths；全量抓到）
+from core import paths as _paths  # noqa: E402
+FRONTEND_PAGES = Path(_paths.FRONTEND_PAGES_DIR)
+
+
+def _page_map():
+    import json
+    from core import pages
+    manifests = {d.name: (json.loads((d / "module.json").read_text(encoding="utf-8")), d) for d in module_dirs()}
+    return pages.build_page_map(manifests, FRONTEND_PAGES)
+
+
+def page_file(name):
+    """頁面檔名（`x.html`）⇒ 實體路徑，不論模組啟用與否（讀原始碼用）。找不到 ⇒ FileNotFoundError。"""
+    from core import pages
+    if not pages.valid_name(name):
+        raise FileNotFoundError("不是合法的頁面檔名：%r" % (name,))
+    hit = next((v for k, v in _page_map().items() if k.lower() == name.lower()), None)
+    if hit is not None:
+        return hit[1]
+    p = FRONTEND_PAGES / name
+    if p.is_file():
+        return p
+    raise FileNotFoundError("找不到頁面 %s（frontend/pages 與各模組 pages/ 都沒有）" % name)
+
+
+def page_files():
+    """全部頁面檔（frontend/pages/*.html ∪ modules/*/pages/*.html），依檔名排序。"""
+    files = list(FRONTEND_PAGES.glob("*.html"))
+    for d in module_dirs():
+        files += list((d / "pages").glob("*.html"))
+    return sorted(files, key=lambda p: p.name.lower())

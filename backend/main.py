@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode
 from helpers import (
@@ -24,7 +24,7 @@ import trail
 
 from helpers import licensing as license_core
 from helpers import geo as geo_core
-from core import loader as module_loader, registry as module_registry
+from core import loader as module_loader, pages as module_pages, registry as module_registry
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, shipping_notes, inventory, search, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
@@ -711,6 +711,8 @@ app.include_router(legal_params.router)
 # 🔴 必須在**所有** L1 include_router 之後、StaticFiles 之前：同方法同路徑的兩條路由都會掛上、
 #    先掛的默默勝出 ⇒ 模組先掛就能蓋掉 L1。mount_modules() 比對已掛的路由，撞到的模組整個不掛、
 #    記 failed＋原因。排程與啟動提示只取「掛上之後」仍在 registry.loaded() 裡的模組。
+# 頁面衝突比照路由衝突（階段 C／C1）：**在 mount_modules 之前**檢查，衝突的模組改記 failed ⇒ 路由、排程都不掛。
+_PAGE_MAP = module_pages.check_and_register(module_loader.MODULES_DIR, _paths.FRONTEND_PAGES_DIR)
 module_loader.mount_modules(app)
 if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # 例：標案雷達；關著時 run_scan() 立刻返回、不對外連線。只跑 registry.loaded() 的
@@ -723,6 +725,25 @@ for _m in module_registry.loaded():
         _msg = _notice()
         if _msg:
             logger.info(_msg)
+
+
+# ── 頁面（階段 C／C1，core.pages）──────────────────────────────────────────────
+# 🔴 必須在 StaticFiles 之前（mount "/" 會接走所有路徑）。每個請求現查模組狀態（管理頁、測試都會改）。
+# 模組沒有載入 ⇒ HTTP 404＋伺服器產生的提示頁（裁示 D2 選項 A，與 P-FE-03 並存）；不屬於任何模組 ⇒ L1 頁面目錄（_paths.FRONTEND_PAGES_DIR）。
+
+def _module_state(key):
+    return next((s for s in module_registry.module_states() if s["key"] == key), None)
+
+
+@app.api_route("/pages/{name:path}", methods=["GET", "HEAD"], include_in_schema=False)
+def module_page(name: str):
+    r = module_pages.page_response(name, _PAGE_MAP, _paths.FRONTEND_PAGES_DIR,
+                                   module_registry.is_loaded, _module_state)
+    if r is None:
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
+    if r[0] == "file":
+        return FileResponse(r[1])
+    return HTMLResponse(r[1], status_code=404)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

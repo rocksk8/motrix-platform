@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
+> rebase 時 1.8、1.9 已被 X-9b、A 使用 ⇒ 1.10（PLAYBOOK §C-7）。只有新增。
+- L1（新增）：`core.pages` 頁面對照與提供（階段 C／C1，STAGE-C-DESIGN §3）——`collect`／`build_page_map`／`lookup`／`resolve`／`page_response`／`notice_kind`／`notice_html`／`read_manifests`／`check_and_register`／`valid_name`／`PageConflict`／`PAGE_NAME`／`NOTICE`
+- L0（新增）：`core.paths.FRONTEND_PAGES_DIR`
+- 行為（main.py）：`GET|HEAD /pages/{name}` 由 `core.pages` 提供（StaticFiles 之前）——模組已載入 ⇒ 檔案；沒有載入 ⇒ **HTTP 404＋伺服器提示頁**（停用／未授權／失敗／未安裝，裁示 D2 選項 A，與 P-FE-03 並存）；頁面衝突比照 P-LD-07：在 `mount_modules` 之前檢查，後到的模組整個記 failed、不掛
+- L0（新增）：`core.source_tree.FRONTEND_PAGES`／`page_file(name)`／`page_files()`——讀頁面原始碼的唯一入口（C2，頁面搬進模組資料夾後照樣找得到；守門 tests/platform/test_page_paths_centralized.py）
+
 ## 1.12 — 2026-09-26（A，獎金分潤）〔core_bump：暫用 1.10 → 1.12〕
 - L1（新增）：`helpers.email_notify.notify_bonus_submitted`（獎金分潤輪到的簽核人＋代理人）、`notify_bonus_payout_ready`（核准待發放 → 出納）；信中不含金額。通知設定新增 `bonus_submitted`、`bonus_payout_ready` 兩個可個別關閉的事件（CORE-SPEC「使用者裁示」獎金分潤：通知）
 - 串接點（新增，L2 之間）：IP-8 `bonus.payouts`（M07 → M05 出納）、IP-9 `expense.entries`（M07 → M08 報表）；U4 經 IP-7 `helpers.legal_params` 依撥付日選版，讀不到或欄位不齊 ⇒ 拒絕撥付
