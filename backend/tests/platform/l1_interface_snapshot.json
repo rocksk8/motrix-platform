@@ -1,5 +1,5 @@
 {
- "core_version": "1.28",
+ "core_version": "1.29",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -218,8 +218,9 @@
    "queue_items": "def(conn)",
    "rebuild_index": "def(conn)",
    "ref_options": "def(conn, target, q=…, limit=…)",
+   "ref_target_modules": "def(target)",
    "ref_targets": "def()",
-   "register_ref_target": "def(key, table, label_column, id_column=…)",
+   "register_ref_target": "def(key, table, label_column, id_column=…, modules=…)",
    "render_output": "def(conn, module_key, record_no)",
    "render_view": "def(body, view)",
    "sample_values": "def(body)",

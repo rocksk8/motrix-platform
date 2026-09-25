@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.29 — 2026-09-26（C，參照選項權限）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.29〕
+> P8 前端代理回報：參照欄選項只檢查目前模組的權限。只有新增與收緊。
+- L1（新增）：`helpers.custom_modules.register_ref_target(..., modules=)`（讀這個對象需要的權限）、`ref_target_modules(target)`
+- L1（行為）：`GET /api/custom/{key}/ref-options/{field}` 也檢查被參照那一方的讀取權限：`custom:<模組>` 要有該模組權限、`customers` 要有客戶相關權限；沒有 ⇒ 403
+
 ## 1.28 — 2026-09-26（C，稽核 D C-M4，wip/c-audit-d-2；列車取號）〔core_bump：暫用 1.99 → 1.28〕
 > 同批的 C-M3／C-M5／C-S1～S5／C-O1／U14 已隨第三班以 1.22 合回；本段只有 C-M4。介面不變。
 - L1（行為）：公式 `round` 改為四捨五入（`helpers.legal_params.round_half_up`；原本是內建的銀行家捨入，C-M4）
