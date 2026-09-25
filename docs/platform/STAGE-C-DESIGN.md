@@ -89,7 +89,7 @@ GET /pages/{name}.html
 | C2 | 路徑解析集中：`core.source_tree.page_file(name)`（依 page_map），測試與工具改用它；dep_scan 的 `page:` 單位名改成**邏輯名**（`page:pages/x.html`，與實體位置無關）⇒ modules.json／test_map 不用跟著搬家改 | 全量；守門：`frontend/pages` 字面值只准出現在 `source_tree`（反向控制：新增一處寫死 ⇒ 紅） |
 | C3 | 選單：`menu_groups.json`、`menu_l1.json`、各模組 `pages[].menu`、`/api/platform/menu`；**新舊並行**：`sidebar.js` 仍用舊選單 | **對等守門**：以超級管理員與每一種單一模組權限，比對 API 產生的選單與舊 `buildSidebar()` 的項目（href、label、群組、順序）完全一致 |
 | C4 | `sidebar.js` 切到 API；刪 `_hideUnavailableModulePages`／`_FILE_MODULE` | e2e：停用模組 ⇒ 選單項消失、頁面 404（PLAYBOOK §A 完成條件）；所有會開頁的 e2e（〈頁面結構改動的 e2e 範圍〉） |
-| C5 | 逐模組實體搬家（依 PLAYBOOK §B 的模組順序，搬一個合一個）：`git mv` 頁面與專屬 JS，module.json `pages` 補齊 | 該模組的 e2e＋tests/platform；`product_select`／`module_update` 的包內路徑改為模組資料夾（見 §6） |
+| C5 | 逐模組實體搬家（依 PLAYBOOK §B 的模組順序，搬一個合一個）：`git mv` 頁面與專屬 JS，module.json `pages` 補齊 | 該模組的 e2e＋tests/platform；`product_select`／`module_update` 的包內路徑改為模組資料夾（見 §6）〔補（稽核 D P-O2，2026-09-26）：`core.pages.PAGE_NAME` 只接受 `.html`；模組頁面要附圖片或 js 時，另訂位置或放寬規則，並一併補守門〕 |
 
 C1、C2 不影響使用者畫面；C3 只加不改；C4 是唯一改變前端行為的一步。
 
