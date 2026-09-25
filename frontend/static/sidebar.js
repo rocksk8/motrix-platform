@@ -1236,3 +1236,14 @@ if (typeof module !== 'undefined' && module.exports) {
     _hideUnavailableModulePages()
   }
 })()
+
+// ── P8：已發布的自訂模組併進主選單（CUSTOMIZATION-SPEC §3.7）──────────────────────────
+// 🔴 疊加點只有這一段：選單邏輯全在 custom-modules-nav.js（在已渲染的 #app-mainnav 上追加項目），
+//    上面的 buildSidebar()／renderMainNav() 不動。階段 C 改由 /api/platform/menu 產生選單時，把這段搬走即可。
+;(function () {
+  if (document.querySelector('script[data-custom-modules-nav]')) return
+  var el = document.createElement('script')
+  el.src = (location.pathname.indexOf('/pages/') >= 0 ? '../' : '') + 'static/custom-modules-nav.js'
+  el.setAttribute('data-custom-modules-nav', '')
+  document.head.appendChild(el)
+})()
