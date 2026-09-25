@@ -452,6 +452,11 @@ function cashierApp() {
           headers: { Authorization: 'Bearer ' + this._token() },
           body: fd,
         })
+        // M08 搬遷（主持裁示 A）：銀行對帳目前由「營運報表」模組提供（M05 搬遷時收回，ROADMAP M05）。
+        // 模組不在 ⇒ 路由不存在：GET 會 404，POST 可能落到靜態檔 mount 而回 405 ⇒ 兩者都明說原因，不顯示 "Not Found"。
+        if (res.status === 404 || res.status === 405) {
+          throw new Error('銀行對帳需要「營運報表」模組，目前未啟用；請洽管理者於「系統 → 模組管理」確認')
+        }
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
           throw new Error(j.detail || '比對失敗')
