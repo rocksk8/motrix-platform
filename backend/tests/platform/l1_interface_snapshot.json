@@ -1,5 +1,5 @@
 {
- "core_version": "1.13",
+ "core_version": "1.14",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -256,6 +256,8 @@
    "SendHandle.__init__": "def(self)",
    "SendHandle.wait": "def(self, timeout=…)",
    "_admin_emails": "def(event_key=…)",
+   "_base_url": "def()",
+   "_build_html": "def(mail_key, title, badge_text, badge_color, rows, quote_no, base_url, note=…, intro=…, button_text=…, impact=…, action=…)",
    "_send_raising": "def(to_addrs, subject, html)",
    "email_send_policy": "def(env=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
@@ -454,6 +456,29 @@
    "module_licensed": "def(manifest, status, gate_enabled)",
    "sign_license": "def(payload, private_key_pem)",
    "verify_license": "def(blob=…)"
+  },
+  "helper:mail_types": {
+   "CATEGORIES": "const",
+   "GROUPS": "const",
+   "MODES": "const",
+   "MailType": "class",
+   "MailType.action": "field",
+   "MailType.category": "field",
+   "MailType.event": "field",
+   "MailType.extra": "field=…",
+   "MailType.group": "field",
+   "MailType.impact": "field",
+   "MailType.key": "field",
+   "MailType.name": "field",
+   "MailType.owner": "field=…",
+   "OVERRIDES_KEY": "const",
+   "ROLES": "const",
+   "SUBJECT_PREFIX": "const",
+   "all_types": "def()",
+   "get": "def(key)",
+   "keys": "def()",
+   "register": "def(key, name, category, group, event, impact, action, owner=…)",
+   "subject": "def(key, reason)"
   },
   "helper:module_registry": {
    "BADGE_EXCLUDE": "const",
