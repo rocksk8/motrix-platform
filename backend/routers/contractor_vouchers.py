@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, model_validator
 
 from db import get_db, next_entity_code, spawn_bg_thread
+from helpers.quotations import begin_write, write_txn
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
     notify_module_activity, notify_contractor_voucher_submitted, notify_contractor_voucher_next_tier,
@@ -234,118 +235,118 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
     # BEGIN IMMEDIATE：把「查詢是否已有申請」跟「寫入新申請」鎖進同一個交易，
     # 避免兩個近乎同時送出的請求都通過重複檢查、對同一筆派發各自建立一張申請
     # （dispatch_id UNIQUE 仍是最後防線，但這裡先在應用層就把窗口關掉）。
-    conn.execute("BEGIN IMMEDIATE")
-    dispatch = conn.execute(
-        "SELECT d.*, v.name AS vendor_name, v.tax_id AS vendor_tax_id, v.data_json AS vendor_data_json "
-        "FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id=d.vendor_id WHERE d.id=?",
-        (body.dispatch_id,)
-    ).fetchone()
-    if not dispatch:
-        conn.close()
-        raise HTTPException(404, "找不到對應的承攬商派發紀錄")
-    if dispatch["status"] not in ("accepted", "completed"):
-        conn.close()
-        raise HTTPException(409, "僅「已驗收」或「完工」狀態的派發可產生匯款申請")
-    existing = conn.execute(
-        "SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE dispatch_id=?", (body.dispatch_id,)
-    ).fetchone()
-    if existing:
-        conn.close()
-        raise HTTPException(409, f"此派發已產生匯款申請（{existing['voucher_no']}）")
-
-    # 2026-08-31：使用者要求產生匯款申請當下就能直接填/改應付款日期，不用先
-    # 跳去編輯派發紀錄。有帶就順便寫回派發本身（維持派發跟申請快照的日期
-    # 一致），沒帶就沿用派發既有的 payable_date（可能是空的，也沒關係）。
-    payable_date = dispatch["payable_date"] if "payable_date" in dispatch.keys() else ""
-    if body.payable_date:
-        try:
-            date.fromisoformat(body.payable_date)
-        except ValueError:
+    with write_txn(conn):   # 拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        dispatch = conn.execute(
+            "SELECT d.*, v.name AS vendor_name, v.tax_id AS vendor_tax_id, v.data_json AS vendor_data_json "
+            "FROM contractor_dispatches d LEFT JOIN vendor_contractors v ON v.id=d.vendor_id WHERE d.id=?",
+            (body.dispatch_id,)
+        ).fetchone()
+        if not dispatch:
             conn.close()
-            raise HTTPException(400, f"應付款日期格式錯誤（{body.payable_date}），需為 YYYY-MM-DD")
-        payable_date = body.payable_date
+            raise HTTPException(404, "找不到對應的承攬商派發紀錄")
+        if dispatch["status"] not in ("accepted", "completed"):
+            conn.close()
+            raise HTTPException(409, "僅「已驗收」或「完工」狀態的派發可產生匯款申請")
+        existing = conn.execute(
+            "SELECT voucher_no, quote_no, data_json FROM contractor_payment_vouchers WHERE dispatch_id=?", (body.dispatch_id,)
+        ).fetchone()
+        if existing:
+            conn.close()
+            raise HTTPException(409, f"此派發已產生匯款申請（{existing['voucher_no']}）")
+
+        # 2026-08-31：使用者要求產生匯款申請當下就能直接填/改應付款日期，不用先
+        # 跳去編輯派發紀錄。有帶就順便寫回派發本身（維持派發跟申請快照的日期
+        # 一致），沒帶就沿用派發既有的 payable_date（可能是空的，也沒關係）。
+        payable_date = dispatch["payable_date"] if "payable_date" in dispatch.keys() else ""
+        if body.payable_date:
+            try:
+                date.fromisoformat(body.payable_date)
+            except ValueError:
+                conn.close()
+                raise HTTPException(400, f"應付款日期格式錯誤（{body.payable_date}），需為 YYYY-MM-DD")
+            payable_date = body.payable_date
+            conn.execute(
+                "UPDATE contractor_dispatches SET payable_date=? WHERE id=?", (payable_date, body.dispatch_id)
+            )
+
+        keys = dispatch.keys()
+        items = json.loads(dispatch["items_json"] or "[]")
+        personnel = json.loads(dispatch["personnel_json"] or "[]") if "personnel_json" in keys else []
+        personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
+        total = float(dispatch["total_amount"] or 0)
+        if not total and items:
+            total = sum(float(it.get("amount", 0) or 0) for it in items)
+        tax_rate = float(dispatch["tax_rate"]) if "tax_rate" in keys and dispatch["tax_rate"] is not None else 0.05
+        tax_amount = round(total * tax_rate)
+        total_with_tax = total + tax_amount
+
+        # 外包名單人員（personnel_json）本身只快照 id/name/amount/note，不含銀行帳戶——
+        # 這裡在「建立申請當下」另外去外包名冊（contractors 表）撈一次目前的銀行帳戶／
+        # 存簿影本，跟承攬商本身的銀行資訊一樣寫進 snapshot_json 凍結，之後 contractors
+        # 表異動不會回頭改變已產生的申請。查無資料（例如人員已被刪除）就留空，不擋建立。
+        personnel_ids = [p["id"] for p in personnel if p.get("id")]
+        personnel_bank = {}
+        if personnel_ids:
+            ph = ",".join("?" * len(personnel_ids))
+            for prow in conn.execute(
+                f"SELECT id, bank_code, bank_name, bank_branch, bank_account_name, bank_account_number, "
+                f"bank_passbook_image FROM contractors WHERE id IN ({ph})", personnel_ids
+            ).fetchall():
+                personnel_bank[prow["id"]] = dict(prow)
+        personnel_snapshot = []
+        for p in personnel:
+            pb = personnel_bank.get(p.get("id"), {})
+            personnel_snapshot.append({
+                **p,
+                "bankCode":          pb.get("bank_code", ""),
+                "bankName":          pb.get("bank_name", ""),
+                "bankBranch":        pb.get("bank_branch", ""),
+                "bankAccountName":   pb.get("bank_account_name", ""),
+                "bankAccountNumber": pb.get("bank_account_number", ""),
+                "bankPassbookImage": pb.get("bank_passbook_image", ""),
+            })
+
+        vendor_data = json.loads(dispatch["vendor_data_json"] or "{}") if dispatch["vendor_data_json"] else {}
+        snapshot = {
+            "vendorName":        dispatch["vendor_name"] or "",
+            "vendorTaxId":       dispatch["vendor_tax_id"] or "",
+            "bankCode":          vendor_data.get("bankCode", ""),
+            "bankName":          vendor_data.get("bankName", ""),
+            "bankBranch":        vendor_data.get("bankBranch", ""),
+            "bankAccountName":   vendor_data.get("bankAccountName", ""),
+            "bankAccountNumber": vendor_data.get("bankAccountNumber", ""),
+            "bankPassbookImage": vendor_data.get("bankPassbookImage", ""),
+            "invoiceNo":         (dispatch["invoice_no"] if "invoice_no" in keys else "") or "",
+            "payableDate":       payable_date or "",
+            "invoiceFiles":      json.loads(dispatch["invoice_files_json"] or "[]") if "invoice_files_json" in keys else [],
+            "dispatchDate":      dispatch["dispatch_date"] or "",
+            "scope":             dispatch["scope"] or "",
+            "items":             items,
+            "personnel":         personnel_snapshot,
+            "totalAmount":       total,
+            "taxRate":           tax_rate,
+            "taxAmount":         tax_amount,
+            "totalWithTax":      total_with_tax,
+            "personnelTotal":    personnel_total,
+            "grandTotal":        total_with_tax + personnel_total,
+        }
+
+        now = datetime.now().isoformat()
+        voucher_no = next_entity_code(conn, "contractor_payment_vouchers", "PV", code_col="voucher_no")
         conn.execute(
-            "UPDATE contractor_dispatches SET payable_date=? WHERE id=?", (payable_date, body.dispatch_id)
+            "INSERT INTO contractor_payment_vouchers "
+            "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, "
+            "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
+             json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
         )
-
-    keys = dispatch.keys()
-    items = json.loads(dispatch["items_json"] or "[]")
-    personnel = json.loads(dispatch["personnel_json"] or "[]") if "personnel_json" in keys else []
-    personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
-    total = float(dispatch["total_amount"] or 0)
-    if not total and items:
-        total = sum(float(it.get("amount", 0) or 0) for it in items)
-    tax_rate = float(dispatch["tax_rate"]) if "tax_rate" in keys and dispatch["tax_rate"] is not None else 0.05
-    tax_amount = round(total * tax_rate)
-    total_with_tax = total + tax_amount
-
-    # 外包名單人員（personnel_json）本身只快照 id/name/amount/note，不含銀行帳戶——
-    # 這裡在「建立申請當下」另外去外包名冊（contractors 表）撈一次目前的銀行帳戶／
-    # 存簿影本，跟承攬商本身的銀行資訊一樣寫進 snapshot_json 凍結，之後 contractors
-    # 表異動不會回頭改變已產生的申請。查無資料（例如人員已被刪除）就留空，不擋建立。
-    personnel_ids = [p["id"] for p in personnel if p.get("id")]
-    personnel_bank = {}
-    if personnel_ids:
-        ph = ",".join("?" * len(personnel_ids))
-        for prow in conn.execute(
-            f"SELECT id, bank_code, bank_name, bank_branch, bank_account_name, bank_account_number, "
-            f"bank_passbook_image FROM contractors WHERE id IN ({ph})", personnel_ids
-        ).fetchall():
-            personnel_bank[prow["id"]] = dict(prow)
-    personnel_snapshot = []
-    for p in personnel:
-        pb = personnel_bank.get(p.get("id"), {})
-        personnel_snapshot.append({
-            **p,
-            "bankCode":          pb.get("bank_code", ""),
-            "bankName":          pb.get("bank_name", ""),
-            "bankBranch":        pb.get("bank_branch", ""),
-            "bankAccountName":   pb.get("bank_account_name", ""),
-            "bankAccountNumber": pb.get("bank_account_number", ""),
-            "bankPassbookImage": pb.get("bank_passbook_image", ""),
-        })
-
-    vendor_data = json.loads(dispatch["vendor_data_json"] or "{}") if dispatch["vendor_data_json"] else {}
-    snapshot = {
-        "vendorName":        dispatch["vendor_name"] or "",
-        "vendorTaxId":       dispatch["vendor_tax_id"] or "",
-        "bankCode":          vendor_data.get("bankCode", ""),
-        "bankName":          vendor_data.get("bankName", ""),
-        "bankBranch":        vendor_data.get("bankBranch", ""),
-        "bankAccountName":   vendor_data.get("bankAccountName", ""),
-        "bankAccountNumber": vendor_data.get("bankAccountNumber", ""),
-        "bankPassbookImage": vendor_data.get("bankPassbookImage", ""),
-        "invoiceNo":         (dispatch["invoice_no"] if "invoice_no" in keys else "") or "",
-        "payableDate":       payable_date or "",
-        "invoiceFiles":      json.loads(dispatch["invoice_files_json"] or "[]") if "invoice_files_json" in keys else [],
-        "dispatchDate":      dispatch["dispatch_date"] or "",
-        "scope":             dispatch["scope"] or "",
-        "items":             items,
-        "personnel":         personnel_snapshot,
-        "totalAmount":       total,
-        "taxRate":           tax_rate,
-        "taxAmount":         tax_amount,
-        "totalWithTax":      total_with_tax,
-        "personnelTotal":    personnel_total,
-        "grandTotal":        total_with_tax + personnel_total,
-    }
-
-    now = datetime.now().isoformat()
-    voucher_no = next_entity_code(conn, "contractor_payment_vouchers", "PV", code_col="voucher_no")
-    conn.execute(
-        "INSERT INTO contractor_payment_vouchers "
-        "(voucher_no, dispatch_id, quote_no, vendor_id, status, snapshot_json, data_json, "
-        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (voucher_no, body.dispatch_id, dispatch["quote_no"], dispatch["vendor_id"], "草稿",
-         json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
-    )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "contractor_voucher.create", "contractor_payment_voucher", voucher_no,
-           f"{voucher_no}（{snapshot['vendorName'] or '外包人員點工'}）")
-    notify_module_activity("承攬商匯款申請", "建立", user.get("display_name") or user["username"],
-                            f"{voucher_no}（{snapshot['vendorName']}）", "case-management.html")
-    return {"voucher_no": voucher_no, "created_at": now}
+        conn.commit()
+        conn.close()
+        _audit(_tok(authorization), "contractor_voucher.create", "contractor_payment_voucher", voucher_no,
+               f"{voucher_no}（{snapshot['vendorName'] or '外包人員點工'}）")
+        notify_module_activity("承攬商匯款申請", "建立", user.get("display_name") or user["username"],
+                                f"{voucher_no}（{snapshot['vendorName']}）", "case-management.html")
+        return {"voucher_no": voucher_no, "created_at": now}
 
 
 @router.delete("/api/contractor-vouchers/{voucher_no}")

@@ -26,6 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
+from helpers.quotations import begin_write, write_txn
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity, notify_payment_request_submitted, notify_payment_request_next_tier,
@@ -368,84 +369,84 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
     conn = get_db()
     # BEGIN IMMEDIATE：把「算剩餘可請款額度」跟「寫入新申請」鎖進同一個交易，
     # 避免兩個近乎同時送出的請求都通過超額檢查、合計超過報價單總額。
-    conn.execute("BEGIN IMMEDIATE")
-    q = conn.execute(
-        "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
-        (body.quote_no,)
-    ).fetchone()
-    if not q:
-        conn.close()
-        raise HTTPException(404, "找不到關聯的報價單")
-    data = json.loads(q["data_json"] or "{}")
-    quote_total  = float(q["total"] or 0)
-    quote_pretax = float(q["pretax"] or 0) or quote_total
+    with write_txn(conn):   # 拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        q = conn.execute(
+            "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
+            (body.quote_no,)
+        ).fetchone()
+        if not q:
+            conn.close()
+            raise HTTPException(404, "找不到關聯的報價單")
+        data = json.loads(q["data_json"] or "{}")
+        quote_total  = float(q["total"] or 0)
+        quote_pretax = float(q["pretax"] or 0) or quote_total
 
-    customer_id = data.get("customerId")
-    customer_tax_id = ""
-    if customer_id:
-        crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
-        customer_tax_id = (crow["tax_id"] if crow else "") or ""
+        customer_id = data.get("customerId")
+        customer_tax_id = ""
+        if customer_id:
+            crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+            customer_tax_id = (crow["tax_id"] if crow else "") or ""
 
-    remaining = _quote_remaining(conn, body.quote_no)
-    remaining_amount = remaining["remainingAmount"]
+        remaining = _quote_remaining(conn, body.quote_no)
+        remaining_amount = remaining["remainingAmount"]
 
-    # 報價單品項參考（僅供顯示用，刻意排除 cost/margin/unitPriceOverride 等
-    # 內部機密欄位——比照 invoice_vouchers.py 同樣的理由，這份文件可能會給客戶看）。
-    quote_items_snapshot = [
-        {
-            "description": it.get("description", ""),
-            "brand":       it.get("brand", ""),
-            "qty":         it.get("qty", ""),
-            "unit":        it.get("unit", ""),
-            "unitPrice":   it.get("unitPrice", 0),
-            "amount":      it.get("amount", 0),
-            "notes":       it.get("notes", ""),
+        # 報價單品項參考（僅供顯示用，刻意排除 cost/margin/unitPriceOverride 等
+        # 內部機密欄位——比照 invoice_vouchers.py 同樣的理由，這份文件可能會給客戶看）。
+        quote_items_snapshot = [
+            {
+                "description": it.get("description", ""),
+                "brand":       it.get("brand", ""),
+                "qty":         it.get("qty", ""),
+                "unit":        it.get("unit", ""),
+                "unitPrice":   it.get("unitPrice", 0),
+                "amount":      it.get("amount", 0),
+                "notes":       it.get("notes", ""),
+            }
+            for it in (data.get("items") or [])
+            if it.get("type") != "header"
+        ]
+
+        try:
+            request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
+                data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+            )
+        except HTTPException:
+            conn.close()
+            raise
+
+        if request_amount > remaining_amount + 1e-6:
+            conn.close()
+            raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
+
+        snapshot = {
+            "customerName":    q["customer_name"] or "",
+            "customerTaxId":   customer_tax_id,
+            "projectName":     q["project_name"] or "",
+            "quoteItems":      quote_items_snapshot,
+            "selectedItems":   selected_items_snapshot,
+            "requestedAmount": request_amount,      # 含稅（＝ payment_requests.amount）
+            "pretaxAmount":    round(pretax_amount),
+            "taxAmount":       round(tax_amount),
         }
-        for it in (data.get("items") or [])
-        if it.get("type") != "header"
-    ]
+        terms = body.terms.model_dump() if body.terms else _quote_default_terms(data)
 
-    try:
-        request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
-            data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+        now = datetime.now().isoformat()
+        request_no = next_entity_code(conn, "payment_requests", "PR", code_col="request_no")
+        conn.execute(
+            "INSERT INTO payment_requests "
+            "(request_no, quote_no, scope, stage, amount, ratio_pct, status, terms_json, snapshot_json, data_json, "
+            "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (request_no, body.quote_no, body.scope, body.stage, request_amount, ratio_pct,
+             "草稿", json.dumps(terms, ensure_ascii=False), json.dumps(snapshot, ensure_ascii=False), "{}",
+             user["username"], now, now)
         )
-    except HTTPException:
+        conn.commit()
         conn.close()
-        raise
-
-    if request_amount > remaining_amount + 1e-6:
-        conn.close()
-        raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
-
-    snapshot = {
-        "customerName":    q["customer_name"] or "",
-        "customerTaxId":   customer_tax_id,
-        "projectName":     q["project_name"] or "",
-        "quoteItems":      quote_items_snapshot,
-        "selectedItems":   selected_items_snapshot,
-        "requestedAmount": request_amount,      # 含稅（＝ payment_requests.amount）
-        "pretaxAmount":    round(pretax_amount),
-        "taxAmount":       round(tax_amount),
-    }
-    terms = body.terms.model_dump() if body.terms else _quote_default_terms(data)
-
-    now = datetime.now().isoformat()
-    request_no = next_entity_code(conn, "payment_requests", "PR", code_col="request_no")
-    conn.execute(
-        "INSERT INTO payment_requests "
-        "(request_no, quote_no, scope, stage, amount, ratio_pct, status, terms_json, snapshot_json, data_json, "
-        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (request_no, body.quote_no, body.scope, body.stage, request_amount, ratio_pct,
-         "草稿", json.dumps(terms, ensure_ascii=False), json.dumps(snapshot, ensure_ascii=False), "{}",
-         user["username"], now, now)
-    )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "payment_request.create", "payment_request", request_no,
-           f"{request_no}（{snapshot['customerName']}）")
-    notify_module_activity("請款單", "建立", user.get("display_name") or user["username"],
-                            f"{request_no}（{snapshot['customerName']}）", "case-management.html")
-    return {"request_no": request_no, "created_at": now}
+        _audit(_tok(authorization), "payment_request.create", "payment_request", request_no,
+               f"{request_no}（{snapshot['customerName']}）")
+        notify_module_activity("請款單", "建立", user.get("display_name") or user["username"],
+                                f"{request_no}（{snapshot['customerName']}）", "case-management.html")
+        return {"request_no": request_no, "created_at": now}
 
 
 @router.put("/api/payment-requests/{request_no}")
@@ -462,88 +463,88 @@ def update_payment_request(request_no: str, body: RequestUpdateIn, authorization
         raise HTTPException(400, "請選擇請款範圍")
 
     conn = get_db()
-    conn.execute("BEGIN IMMEDIATE")
-    row = conn.execute(
-        "SELECT status, quote_no, terms_json FROM payment_requests WHERE request_no=?", (request_no,)
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "請款單不存在")
-    if row["status"] != "草稿":
-        conn.close()
-        raise HTTPException(409, "僅草稿狀態可修改")
-    quote_no = row["quote_no"]
+    with write_txn(conn):   # 拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT status, quote_no, terms_json FROM payment_requests WHERE request_no=?", (request_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, "請款單不存在")
+        if row["status"] != "草稿":
+            conn.close()
+            raise HTTPException(409, "僅草稿狀態可修改")
+        quote_no = row["quote_no"]
 
-    q = conn.execute(
-        "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
-        (quote_no,)
-    ).fetchone()
-    if not q:
-        conn.close()
-        raise HTTPException(404, "找不到關聯的報價單")
-    data = json.loads(q["data_json"] or "{}")
-    quote_total  = float(q["total"] or 0)
-    quote_pretax = float(q["pretax"] or 0) or quote_total
+        q = conn.execute(
+            "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
+            (quote_no,)
+        ).fetchone()
+        if not q:
+            conn.close()
+            raise HTTPException(404, "找不到關聯的報價單")
+        data = json.loads(q["data_json"] or "{}")
+        quote_total  = float(q["total"] or 0)
+        quote_pretax = float(q["pretax"] or 0) or quote_total
 
-    customer_id = data.get("customerId")
-    customer_tax_id = ""
-    if customer_id:
-        crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
-        customer_tax_id = (crow["tax_id"] if crow else "") or ""
+        customer_id = data.get("customerId")
+        customer_tax_id = ""
+        if customer_id:
+            crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+            customer_tax_id = (crow["tax_id"] if crow else "") or ""
 
-    remaining = _quote_remaining(conn, quote_no, exclude_request_no=request_no)
-    remaining_amount = remaining["remainingAmount"]
+        remaining = _quote_remaining(conn, quote_no, exclude_request_no=request_no)
+        remaining_amount = remaining["remainingAmount"]
 
-    quote_items_snapshot = [
-        {
-            "description": it.get("description", ""),
-            "brand":       it.get("brand", ""),
-            "qty":         it.get("qty", ""),
-            "unit":        it.get("unit", ""),
-            "unitPrice":   it.get("unitPrice", 0),
-            "amount":      it.get("amount", 0),
-            "notes":       it.get("notes", ""),
+        quote_items_snapshot = [
+            {
+                "description": it.get("description", ""),
+                "brand":       it.get("brand", ""),
+                "qty":         it.get("qty", ""),
+                "unit":        it.get("unit", ""),
+                "unitPrice":   it.get("unitPrice", 0),
+                "amount":      it.get("amount", 0),
+                "notes":       it.get("notes", ""),
+            }
+            for it in (data.get("items") or [])
+            if it.get("type") != "header"
+        ]
+
+        try:
+            request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
+                data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+            )
+        except HTTPException:
+            conn.close()
+            raise
+
+        if request_amount > remaining_amount + 1e-6:
+            conn.close()
+            raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
+
+        snapshot = {
+            "customerName":    q["customer_name"] or "",
+            "customerTaxId":   customer_tax_id,
+            "projectName":     q["project_name"] or "",
+            "quoteItems":      quote_items_snapshot,
+            "selectedItems":   selected_items_snapshot,
+            "requestedAmount": request_amount,
+            "pretaxAmount":    round(pretax_amount),
+            "taxAmount":       round(tax_amount),
         }
-        for it in (data.get("items") or [])
-        if it.get("type") != "header"
-    ]
+        terms = body.terms.model_dump() if body.terms else json.loads(row["terms_json"] or "{}")
 
-    try:
-        request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot = _calc_scope_amount(
-            data, remaining, quote_total, quote_pretax, body.scope, body.ratio_pct, body.amount, body.items
+        now = datetime.now().isoformat()
+        conn.execute(
+            "UPDATE payment_requests SET scope=?, stage=?, amount=?, ratio_pct=?, terms_json=?, "
+            "snapshot_json=?, updated_at=? WHERE request_no=?",
+            (body.scope, body.stage, request_amount, ratio_pct, json.dumps(terms, ensure_ascii=False),
+             json.dumps(snapshot, ensure_ascii=False), now, request_no)
         )
-    except HTTPException:
+        conn.commit()
         conn.close()
-        raise
-
-    if request_amount > remaining_amount + 1e-6:
-        conn.close()
-        raise HTTPException(409, f"超過剩餘可請款金額（剩餘 NT$ {remaining_amount:,.0f}）")
-
-    snapshot = {
-        "customerName":    q["customer_name"] or "",
-        "customerTaxId":   customer_tax_id,
-        "projectName":     q["project_name"] or "",
-        "quoteItems":      quote_items_snapshot,
-        "selectedItems":   selected_items_snapshot,
-        "requestedAmount": request_amount,
-        "pretaxAmount":    round(pretax_amount),
-        "taxAmount":       round(tax_amount),
-    }
-    terms = body.terms.model_dump() if body.terms else json.loads(row["terms_json"] or "{}")
-
-    now = datetime.now().isoformat()
-    conn.execute(
-        "UPDATE payment_requests SET scope=?, stage=?, amount=?, ratio_pct=?, terms_json=?, "
-        "snapshot_json=?, updated_at=? WHERE request_no=?",
-        (body.scope, body.stage, request_amount, ratio_pct, json.dumps(terms, ensure_ascii=False),
-         json.dumps(snapshot, ensure_ascii=False), now, request_no)
-    )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "payment_request.update", "payment_request", request_no,
-           f"{request_no}（{snapshot['customerName']}）")
-    return {"ok": True, "amount": request_amount}
+        _audit(_tok(authorization), "payment_request.update", "payment_request", request_no,
+               f"{request_no}（{snapshot['customerName']}）")
+        return {"ok": True, "amount": request_amount}
 
 
 @router.delete("/api/payment-requests/{request_no}")

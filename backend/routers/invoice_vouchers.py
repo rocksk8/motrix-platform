@@ -26,6 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
+from helpers.quotations import begin_write, write_txn
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity, notify_invoice_voucher_submitted, notify_invoice_voucher_next_tier,
@@ -271,138 +272,138 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
     # 避免兩個近乎同時送出的請求都通過超額檢查、合計超過報價單總額
     # （這是這輪剩餘額度重新設計要防的核心情境，光靠應用層檢查不夠，需要
     # 資料庫層級把窗口關掉）。
-    conn.execute("BEGIN IMMEDIATE")
-    q = conn.execute(
-        "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
-        (body.quote_no,)
-    ).fetchone()
-    if not q:
-        conn.close()
-        raise HTTPException(404, "找不到關聯的報價單")
-    data = json.loads(q["data_json"] or "{}")
-    quote_total  = float(q["total"] or 0)
-    quote_pretax = float(q["pretax"] or 0) or quote_total
+    with write_txn(conn):   # 拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        q = conn.execute(
+            "SELECT customer_name, project_name, total, pretax, data_json FROM quotations WHERE quote_no=?",
+            (body.quote_no,)
+        ).fetchone()
+        if not q:
+            conn.close()
+            raise HTTPException(404, "找不到關聯的報價單")
+        data = json.loads(q["data_json"] or "{}")
+        quote_total  = float(q["total"] or 0)
+        quote_pretax = float(q["pretax"] or 0) or quote_total
 
-    customer_id = data.get("customerId")
-    customer_tax_id = ""
-    if customer_id:
-        crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
-        customer_tax_id = (crow["tax_id"] if crow else "") or ""
+        customer_id = data.get("customerId")
+        customer_tax_id = ""
+        if customer_id:
+            crow = conn.execute("SELECT tax_id FROM customers WHERE id=?", (customer_id,)).fetchone()
+            customer_tax_id = (crow["tax_id"] if crow else "") or ""
 
-    remaining = _quote_remaining(conn, body.quote_no)
-    remaining_amount = remaining["remainingAmount"]
+        remaining = _quote_remaining(conn, body.quote_no)
+        remaining_amount = remaining["remainingAmount"]
 
-    # 報價單品項參考（開立發票要寫的實際品名，不是收款期別）——只帶客戶看得到的欄位，
-    # 刻意排除 cost/margin/unitPriceOverride 等內部機密欄位，避免內部成本/毛利
-    # 外流到這份要交給財務（甚至可能對外）的開票申請文件上。
-    quote_items_snapshot = [
-        {
-            "description": it.get("description", ""),
-            "brand":       it.get("brand", ""),
-            "qty":         it.get("qty", ""),
-            "unit":        it.get("unit", ""),
-            "unitPrice":   it.get("unitPrice", 0),
-            "amount":      it.get("amount", 0),
-            "notes":       it.get("notes", ""),
+        # 報價單品項參考（開立發票要寫的實際品名，不是收款期別）——只帶客戶看得到的欄位，
+        # 刻意排除 cost/margin/unitPriceOverride 等內部機密欄位，避免內部成本/毛利
+        # 外流到這份要交給財務（甚至可能對外）的開票申請文件上。
+        quote_items_snapshot = [
+            {
+                "description": it.get("description", ""),
+                "brand":       it.get("brand", ""),
+                "qty":         it.get("qty", ""),
+                "unit":        it.get("unit", ""),
+                "unitPrice":   it.get("unitPrice", 0),
+                "amount":      it.get("amount", 0),
+                "notes":       it.get("notes", ""),
+            }
+            for it in (data.get("items") or [])
+            if it.get("type") != "header"
+        ]
+
+        # voucher.amount（唯一權威金額欄位，供剩餘額度 SUM() 用）一律存「含稅」，
+        # 才能跟 quoteTotal（含稅合約總額）直接比較。兩種 scope 換算方向相反：
+        #   scope='amount'：使用者輸入的就是含稅金額（比照款項明細 itemAmountWithTax
+        #     的既有慣例），未稅 = 含稅 × quotePretax/quoteTotal
+        #   scope='items'：品項金額欄位比照報價單品項本身（unitPrice/amount）是未稅，
+        #     未稅加總後要 × quoteTotal/quotePretax 換算成含稅，才能存進 amount 欄位
+        selected_items_snapshot = []
+        if body.scope == "amount":
+            if not body.amount or body.amount <= 0:
+                conn.close()
+                raise HTTPException(400, "請輸入申請金額")
+            request_amount = body.amount
+            pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
+        else:
+            if not body.items:
+                conn.close()
+                raise HTTPException(400, "請至少選擇一項品項")
+            quote_items_by_id = {it.get("id"): it for it in (data.get("items") or []) if it.get("type") != "header"}
+            qty_remaining_by_id = {it["itemId"]: it["remainingQty"] for it in remaining["items"]}
+            pretax_amount = 0.0
+            for line in body.items:
+                src = quote_items_by_id.get(line.itemId)
+                if not src:
+                    conn.close()
+                    raise HTTPException(400, f"找不到品項 id={line.itemId}")
+                if line.qty <= 0:
+                    conn.close()
+                    raise HTTPException(400, f"品項「{src.get('description','')}」數量需大於 0")
+                avail = qty_remaining_by_id.get(line.itemId, 0)
+                if line.qty > avail + 1e-9:
+                    conn.close()
+                    raise HTTPException(409, f"品項「{src.get('description','')}」剩餘可申請數量不足（剩餘 {avail:g}）")
+                if line.amount <= 0:
+                    conn.close()
+                    raise HTTPException(400, f"品項「{src.get('description','')}」金額需大於 0")
+                pretax_amount += line.amount
+                selected_items_snapshot.append({
+                    "itemId":      line.itemId,
+                    "description": src.get("description", ""),
+                    "brand":       src.get("brand", ""),
+                    "unit":        src.get("unit", ""),
+                    "unitPrice":   src.get("unitPrice", 0),
+                    "qty":         line.qty,
+                    "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
+                })
+            request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
+
+        # AC1（2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行」）：
+        #   稅額＝round_half_up(銷售額 × 5%)（零稅率／免稅＝0），與報價、稅務匯出同一算法；
+        #   含稅＝銷售額＋稅額（發票三欄自洽；與使用者輸入的申請金額可能差 ±1 元，列交付說明）。
+        #   舊 1～4% 報價：數字不改（沿用原本的比例換算），快照標「非法定稅率，請會計確認」。
+        #   ⚠️ 只影響**新建立**的開票申請；已建立的快照不回頭改。
+        tax_type = quote_tax_type(data)
+        tax_note = ""
+        if tax_type == "legacy":
+            tax_amount = request_amount - pretax_amount
+            tax_note = "舊稅率 %s%%（已停用）：%s" % (data.get("taxRate"), LEGACY_TAX_NOTE)
+        else:
+            pretax_amount, tax_amount = tax_split(pretax_amount, tax_type)
+            request_amount = pretax_amount + tax_amount
+
+        if request_amount > remaining_amount + 1e-6:
+            conn.close()
+            raise HTTPException(409, f"超過剩餘可開票金額（剩餘 NT$ {remaining_amount:,.0f}）")
+
+        snapshot = {
+            "customerName":    q["customer_name"] or "",
+            "customerTaxId":   customer_tax_id,
+            "projectName":     q["project_name"] or "",
+            "quoteItems":      quote_items_snapshot,
+            "selectedItems":   selected_items_snapshot,
+            "requestedAmount": request_amount,      # 含稅（＝ voucher.amount）
+            "pretaxAmount":    round(pretax_amount),
+            "taxAmount":       round(tax_amount),
+            "taxType":         tax_type,
+            "taxNote":         tax_note,
         }
-        for it in (data.get("items") or [])
-        if it.get("type") != "header"
-    ]
 
-    # voucher.amount（唯一權威金額欄位，供剩餘額度 SUM() 用）一律存「含稅」，
-    # 才能跟 quoteTotal（含稅合約總額）直接比較。兩種 scope 換算方向相反：
-    #   scope='amount'：使用者輸入的就是含稅金額（比照款項明細 itemAmountWithTax
-    #     的既有慣例），未稅 = 含稅 × quotePretax/quoteTotal
-    #   scope='items'：品項金額欄位比照報價單品項本身（unitPrice/amount）是未稅，
-    #     未稅加總後要 × quoteTotal/quotePretax 換算成含稅，才能存進 amount 欄位
-    selected_items_snapshot = []
-    if body.scope == "amount":
-        if not body.amount or body.amount <= 0:
-            conn.close()
-            raise HTTPException(400, "請輸入申請金額")
-        request_amount = body.amount
-        pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
-    else:
-        if not body.items:
-            conn.close()
-            raise HTTPException(400, "請至少選擇一項品項")
-        quote_items_by_id = {it.get("id"): it for it in (data.get("items") or []) if it.get("type") != "header"}
-        qty_remaining_by_id = {it["itemId"]: it["remainingQty"] for it in remaining["items"]}
-        pretax_amount = 0.0
-        for line in body.items:
-            src = quote_items_by_id.get(line.itemId)
-            if not src:
-                conn.close()
-                raise HTTPException(400, f"找不到品項 id={line.itemId}")
-            if line.qty <= 0:
-                conn.close()
-                raise HTTPException(400, f"品項「{src.get('description','')}」數量需大於 0")
-            avail = qty_remaining_by_id.get(line.itemId, 0)
-            if line.qty > avail + 1e-9:
-                conn.close()
-                raise HTTPException(409, f"品項「{src.get('description','')}」剩餘可申請數量不足（剩餘 {avail:g}）")
-            if line.amount <= 0:
-                conn.close()
-                raise HTTPException(400, f"品項「{src.get('description','')}」金額需大於 0")
-            pretax_amount += line.amount
-            selected_items_snapshot.append({
-                "itemId":      line.itemId,
-                "description": src.get("description", ""),
-                "brand":       src.get("brand", ""),
-                "unit":        src.get("unit", ""),
-                "unitPrice":   src.get("unitPrice", 0),
-                "qty":         line.qty,
-                "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
-            })
-        request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
-
-    # AC1（2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行」）：
-    #   稅額＝round_half_up(銷售額 × 5%)（零稅率／免稅＝0），與報價、稅務匯出同一算法；
-    #   含稅＝銷售額＋稅額（發票三欄自洽；與使用者輸入的申請金額可能差 ±1 元，列交付說明）。
-    #   舊 1～4% 報價：數字不改（沿用原本的比例換算），快照標「非法定稅率，請會計確認」。
-    #   ⚠️ 只影響**新建立**的開票申請；已建立的快照不回頭改。
-    tax_type = quote_tax_type(data)
-    tax_note = ""
-    if tax_type == "legacy":
-        tax_amount = request_amount - pretax_amount
-        tax_note = "舊稅率 %s%%（已停用）：%s" % (data.get("taxRate"), LEGACY_TAX_NOTE)
-    else:
-        pretax_amount, tax_amount = tax_split(pretax_amount, tax_type)
-        request_amount = pretax_amount + tax_amount
-
-    if request_amount > remaining_amount + 1e-6:
+        now = datetime.now().isoformat()
+        voucher_no = next_entity_code(conn, "invoice_vouchers", "IV", code_col="voucher_no")
+        conn.execute(
+            "INSERT INTO invoice_vouchers "
+            "(voucher_no, quote_no, scope, amount, status, snapshot_json, data_json, "
+            "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (voucher_no, body.quote_no, body.scope, request_amount,
+             "草稿", json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
+        )
+        conn.commit()
         conn.close()
-        raise HTTPException(409, f"超過剩餘可開票金額（剩餘 NT$ {remaining_amount:,.0f}）")
-
-    snapshot = {
-        "customerName":    q["customer_name"] or "",
-        "customerTaxId":   customer_tax_id,
-        "projectName":     q["project_name"] or "",
-        "quoteItems":      quote_items_snapshot,
-        "selectedItems":   selected_items_snapshot,
-        "requestedAmount": request_amount,      # 含稅（＝ voucher.amount）
-        "pretaxAmount":    round(pretax_amount),
-        "taxAmount":       round(tax_amount),
-        "taxType":         tax_type,
-        "taxNote":         tax_note,
-    }
-
-    now = datetime.now().isoformat()
-    voucher_no = next_entity_code(conn, "invoice_vouchers", "IV", code_col="voucher_no")
-    conn.execute(
-        "INSERT INTO invoice_vouchers "
-        "(voucher_no, quote_no, scope, amount, status, snapshot_json, data_json, "
-        "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (voucher_no, body.quote_no, body.scope, request_amount,
-         "草稿", json.dumps(snapshot, ensure_ascii=False), "{}", user["username"], now, now)
-    )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "invoice_voucher.create", "invoice_voucher", voucher_no,
-           f"{voucher_no}（{snapshot['customerName']}）")
-    notify_module_activity("開票申請憑據", "建立", user.get("display_name") or user["username"],
-                            f"{voucher_no}（{snapshot['customerName']}）", "case-management.html")
-    return {"voucher_no": voucher_no, "created_at": now}
+        _audit(_tok(authorization), "invoice_voucher.create", "invoice_voucher", voucher_no,
+               f"{voucher_no}（{snapshot['customerName']}）")
+        notify_module_activity("開票申請憑據", "建立", user.get("display_name") or user["username"],
+                                f"{voucher_no}（{snapshot['customerName']}）", "case-management.html")
+        return {"voucher_no": voucher_no, "created_at": now}
 
 
 @router.delete("/api/invoice-vouchers/{voucher_no}")
