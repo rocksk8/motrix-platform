@@ -353,6 +353,33 @@
           </div>
         </div>
 
+        <!-- R3 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §7.3） -->
+        <div class="ns-card" data-privacy-notice-card>
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">個資蒐集告知</div>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-desc">
+              承攬人員名冊與勞報單蒐集身分證、地址、帳戶等個資時，依個資法第 8 條須告知：公司名稱、蒐集目的、個資類別、
+              利用期間／地區／對象／方式、當事人權利（第 3 條）與不提供的影響。這段文字會印在「列印告知書」上。
+              留空時使用系統範本；範本中【】的部分請依公司實際情況填寫。
+            </div>
+            <div class="ns-field">
+              <textarea x-model="cfg.privacy_notice" data-privacy-notice rows="12"
+                        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;
+                               line-height:1.7;font-family:inherit;background:var(--white);color:var(--text-main);resize:vertical"
+                        placeholder="留空＝使用系統範本（按下方「套用範本」可以帶入後修改）"></textarea>
+            </div>
+            <div class="ns-actions" style="gap:10px">
+              <button class="btn btn-ghost" data-apply-template @click="applyPrivacyTemplate()">套用範本</button>
+              <button class="btn btn-primary" data-save-privacy @click="save()" :disabled="saving">
+                <span x-show="!saving">儲存設定</span>
+                <span x-show="saving">儲存中…</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- WebAuthn 網域設定 -->
         <!-- 2026-09-16：Passkey 功能暫緩，整張卡片不顯示。後端
              /api/settings/webauthn-config 的 GET/PATCH 都回 404，留著只會讓
@@ -775,6 +802,15 @@
         cfg: {
           name: '', tax_id: '', contact_info: '', address: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
+          privacy_notice: '',
+        },
+        // R3：帶入範本（已有文字時先確認，避免蓋掉公司改過的內容）
+        async applyPrivacyTemplate() {
+          if ((this.cfg.privacy_notice || '').trim() && !confirm('目前已有告知文字，要用範本取代嗎？')) return
+          const r = await fetch('/api/legal-params/privacy-notice', {
+            headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) { this.msg = '讀不到範本'; this.isError = true; return }
+          this.cfg.privacy_notice = (await r.json()).template || ''
         },
         // 🔴 據點清單。**畫面上的座標是字串**，送出時才變數字 ——
         // 用 `x-model.number` 綁的話，清空會變成 `''` 或 `NaN`，

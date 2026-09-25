@@ -471,6 +471,30 @@
         </div>
       </div>
 
+      <!-- R3：個資蒐集告知（個資法 §8 I；告知文字在「公司資料設定」維護） -->
+      <div class="form-section" data-privacy-card>
+        <div class="form-section-title">個資蒐集告知</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;line-height:1.6">
+          蒐集身分證、地址、帳戶等個資時，須告知蒐集目的、類別、利用方式與當事人權利。可列印告知書請當事人簽名。
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="printNotice()"
+                  :disabled="!privacyNotice">列印告知書</button>
+          <template x-if="privacyAck">
+            <span data-privacy-acked style="font-size:13px;color:var(--success)"
+                  x-text="'✓ 已告知：' + (privacyAck.at || '').replace('T', ' ').slice(0, 16) + '　' + (privacyAck.by || '')"></span>
+          </template>
+          <template x-if="!privacyAck">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+              <input type="checkbox" data-privacy-ack x-model="privacyAckRequested" style="width:auto">
+              已告知當事人（儲存時記錄時間與人員）
+            </label>
+          </template>
+        </div>
+        <div x-show="!privacyAck && !privacyAckRequested" data-privacy-missing
+             style="margin-top:6px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
+      </div>
+
       <div class="form-section">
         <div class="form-section-title">備注</div>
         <div class="form-group">
@@ -495,6 +519,7 @@
 
 <script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
+<script src="../static/privacy-notice.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
@@ -521,6 +546,21 @@ function contractorsPage() {
     selectedContractor: null,
     contractorDispatches: [],
     dispatchesLoading: false,
+    privacyNotice: null,         // R3：列印用的告知文字
+    privacyAck: null,            // 這位人員已記錄的「已告知」
+    privacyAckRequested: false,
+
+    printNotice() {
+      if (!this.privacyNotice || !window.MotrixPrivacyNotice) return
+      window.MotrixPrivacyNotice.print(this.privacyNotice, this.form.name)
+    },
+    async _recordPrivacyAck(id) {
+      const r = await fetch(`${API}/contractors/${id}/privacy-notice/ack`, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) throw new Error('個資告知紀錄寫入失敗（' + r.status + '）')
+      this.privacyAck = (await r.json()).ack
+      this.privacyAckRequested = false
+    },
 
     // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
     //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -538,6 +578,7 @@ function contractorsPage() {
       if (this.session.role !== 'superadmin' && !mods.includes('contractor_list')) {
         alert('此頁面僅限最高權限使用者或具有「外包名冊」模組授權的使用者存取'); window.history.back(); return
       }
+      try { this.privacyNotice = await window.MotrixPrivacyNotice.load(this.session.token) } catch(e) {}
       await this.load()
       // `MP1`：地圖「開啟單據」帶 `?id=` 進來 ⇒ 直接打開那一筆；找不到要說出來。
       const linkId = window.MotrixRecordLink && MotrixRecordLink.param('id')
@@ -642,6 +683,7 @@ function contractorsPage() {
       this.idCardFront = ''; this.idCardFrontPreview = null
       this.idCardBack  = ''; this.idCardBackPreview  = null
       this.bankPassbook = ''; this.bankPassbookPreview = null
+      this.privacyAck = null; this.privacyAckRequested = false
       this.errMsg = ''
       this.showModal = true
     },
@@ -653,8 +695,14 @@ function contractorsPage() {
       this.idCardFront = ''; this.idCardFrontPreview = null
       this.idCardBack  = ''; this.idCardBackPreview  = null
       this.bankPassbook = ''; this.bankPassbookPreview = null
+      this.privacyAck = null; this.privacyAckRequested = false
       this.errMsg = ''
       this.showModal = true
+      try {
+        const pr = await fetch(`${API}/contractors/${c.id}/privacy-notice`, {
+          headers: { Authorization: 'Bearer ' + this.session.token } })
+        if (pr.ok && this.editId === c.id) this.privacyAck = (await pr.json()).ack || null
+      } catch(e) {}
       try {
         const r = await fetch(`${API}/contractors/${c.id}/id-card`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -741,6 +789,17 @@ function contractorsPage() {
             try { detail = (await pr.json()).detail || detail } catch (e) { /* 不是 JSON */ }
             this.errMsg = '承攬商資料已儲存，但身分證／存摺影本上傳失敗（' + detail + '）。'
               + '請重新選擇檔案再試一次。'
+            this.saving = false
+            await this.load()
+            return
+          }
+        }
+        // R3：勾了「已告知當事人」⇒ 伺服器記錄時間與人員（失敗不關視窗，讓使用者重試）
+        if (this.privacyAckRequested && !this.privacyAck && targetId) {
+          try { await this._recordPrivacyAck(targetId) }
+          catch (e) {
+            this.errMsg = '承攬商資料已儲存，但' + e.message + '，請再按一次儲存。'
+            if (!this.editId) this.editId = targetId
             this.saving = false
             await this.load()
             return

@@ -829,6 +829,8 @@ class CompanyProfile(BaseModel):
     # 每一筆：`id`（後端配發）／`name`（必填、不可重複）／`address`（必填）／
     # `lat`／`lon`（選填）／銀行四欄（選填，**留空＝沿用主要據點**）。
     locations: Optional[list] = None
+    # R3（個資法 §8 I）：個資蒐集告知文字；空白 ⇒ 列印時用範本（helpers/privacy_notice.py）
+    privacy_notice: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -842,6 +844,7 @@ _COMPANY_PROFILE_DEFAULT = {
     "address": "", "google_maps_api_key": "",
     "office_lat": None, "office_lon": None,
     "locations": [],
+    "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）
 }
 
 #: 據點可以自己帶的銀行欄位。**留空＝沿用主要據點。**

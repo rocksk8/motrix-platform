@@ -4,6 +4,7 @@
 - GET  /api/legal-params/tax-rules          清單＋跨年狀態（superadmin）
 - PUT  /api/legal-params/tax-rules          整份清單：結構驗證＋守門（門檻＝最低工資）＋已生效版本不可改刪（superadmin）
 - GET  /api/legal-params/tax-basis-options  零稅率／免稅依據選項（登入即可）
+- GET  /api/legal-params/privacy-notice     個資蒐集告知文字（登入即可；不含個資）
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -28,6 +29,19 @@ def get_tax_basis_options(authorization: str = Header(None)):
         "options": {k: [{"code": c, "label": lb, "noteRequired": c in lp.TAX_BASIS_NOTE_REQUIRED}
                         for c, lb in v] for k, v in lp.TAX_BASIS_OPTIONS.items()},
     }
+
+
+@router.get("/api/legal-params/privacy-notice")
+def get_privacy_notice(authorization: str = Header(None)):
+    """R3：列印告知書用的文字（登入即可讀；不含個資）。空白設定 ⇒ 範本。"""
+    from helpers import privacy_notice as pn
+    from helpers.settings import _get_setting
+    _require_user(authorization)
+    profile = _get_setting("company_profile", {}) or {}
+    text = pn.notice_text(profile)
+    return {"company": profile.get("name", ""), "text": text, "hash": pn.notice_hash(text),
+            "isTemplate": not str(profile.get("privacy_notice") or "").strip(),
+            "template": pn.template_for(profile.get("name", ""))}
 
 
 @router.put("/api/legal-params/tax-rules")

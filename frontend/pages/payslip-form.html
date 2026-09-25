@@ -343,6 +343,30 @@
         </div>
       </div>
 
+      <!-- R3：個資蒐集告知（個資法 §8 I） -->
+      <div class="card" data-privacy-card>
+        <div class="card-title">七、個資蒐集告知</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;line-height:1.6">
+          蒐集受領人的身分證字號、地址、帳戶等個資時，依個資法第 8 條須告知蒐集目的、類別、利用方式與當事人權利。
+          告知文字在「公司資料設定」維護；可列印告知書請當事人簽名。
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost" data-print-notice @click="printNotice()"
+                  :disabled="!privacyNotice">列印告知書</button>
+          <template x-if="q.privacyNotice">
+            <span data-privacy-acked style="font-size:13px;color:var(--success)"
+                  x-text="'✓ 已告知：' + (q.privacyNotice.at || '').replace('T', ' ').slice(0, 16) + '　' + (q.privacyNotice.by || '')"></span>
+          </template>
+          <template x-if="!q.privacyNotice">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin:0">
+              <input type="checkbox" data-privacy-ack x-model="privacyNoticeAcked" @change="dirty()" style="width:auto">
+              已告知當事人（儲存時記錄時間與人員）
+            </label>
+          </template>
+        </div>
+        <div x-show="!q.privacyNotice && !privacyNoticeAcked" data-privacy-missing
+             style="margin-top:8px;font-size:12px;color:var(--warning)">尚未記錄個資告知</div>
+      </div>
     </div>
 
     <!-- 右側試算卡 -->
@@ -485,6 +509,7 @@
 </div>
 
 <script src="../static/notif.js"></script>
+<script src="../static/privacy-notice.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
@@ -507,6 +532,8 @@ function payslipForm() {
     storedRules: null,
     applicableVersion: '',    // 目前開單日期適用的版本
     recalcTaxRules: false,
+    privacyNotice: null,      // R3：列印用的告知文字
+    privacyNoticeAcked: false,
     contractorIdCardFront: '',
     contractorIdCardBack: '',
     loadingIdCard: false,
@@ -630,6 +657,11 @@ function payslipForm() {
       else if (this.storedRules) this._useRules(this.storedRules)
     },
 
+    // ── R3：列印告知書 ───────────────────────────────────────────────────────
+    printNotice() {
+      if (!this.privacyNotice || !window.MotrixPrivacyNotice) return
+      window.MotrixPrivacyNotice.print(this.privacyNotice, this.q.contractorName)
+    },
 
     filterCon() {
       const q = this.conSearch.toLowerCase().trim()
@@ -694,6 +726,8 @@ function payslipForm() {
         alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return
       }
 
+      // R3：告知文字（列印要在點擊當下同步開視窗，所以先載入）
+      try { this.privacyNotice = await window.MotrixPrivacyNotice.load(this.session.token) } catch(e) {}
 
       // Load contractors list
       try {
@@ -770,7 +804,8 @@ function payslipForm() {
           slip_no: this.q.slipNo,
           contractor_id: this.q.contractorId || null,
           data: { ...this.q, calc: this.result,
-                  recalcTaxRules: this.recalcTaxRules }         // R1：明確選擇重算才依日期重挑
+                  recalcTaxRules: this.recalcTaxRules,          // R1：明確選擇重算才依日期重挑
+                  privacyNoticeAcked: this.privacyNoticeAcked } // R3：時間與人員由伺服器記錄
         }
         const method = this.isNew ? 'POST' : 'PUT'
         const url = this.isNew ? `${API}/payslips` : `${API}/payslips/${this.q.slipNo}`
@@ -790,6 +825,7 @@ function payslipForm() {
           this.storedRules = this.rules
           this.recalcTaxRules = false
         }
+        if (d.privacyNotice) { this.q.privacyNotice = d.privacyNotice; this.privacyNoticeAcked = false }
         if (d.slip_no && d.slip_no !== this.q.slipNo) {
           this.q.slipNo = d.slip_no
           history.replaceState(null, '', '?id=' + d.slip_no)

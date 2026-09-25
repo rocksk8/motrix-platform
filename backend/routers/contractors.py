@@ -395,6 +395,31 @@ def update_contractor(cid: int, body: ContractorIn, authorization: str = Header(
     return {"updated_at": now}
 
 
+@router.get("/api/contractors/{cid}/privacy-notice")
+def get_contractor_privacy_ack(cid: int, authorization: str = Header(None)):
+    """R3（個資法 §8）：這位人員的「已告知」紀錄（沒有 ⇒ ack=None）。"""
+    from helpers import privacy_notice as _pn
+    _require_user(authorization, require_superadmin=True, module='contractor_list')
+    return {"ack": _pn.get_ack("contractor", cid)}
+
+
+@router.post("/api/contractors/{cid}/privacy-notice/ack")
+def ack_contractor_privacy_notice(cid: int, authorization: str = Header(None)):
+    """記錄「已告知當事人」：時間與人員由伺服器決定；已記錄的不覆蓋。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization, require_superadmin=True, module='contractor_list')
+    conn = get_db()
+    row = conn.execute("SELECT name FROM contractors WHERE id=?", (cid,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "找不到此外包人員")
+    rec, created = _pn.record_ack("contractor", cid, user)
+    if created:
+        _audit(_tok(authorization), 'contractor.privacy_notice_ack', 'contractor', str(cid), row["name"],
+               {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 @router.patch("/api/contractors/{cid}/active")
 def toggle_contractor_active(cid: int, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)

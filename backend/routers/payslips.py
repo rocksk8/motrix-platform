@@ -78,6 +78,19 @@ def _rules_for_slip(d: dict) -> dict:
         raise HTTPException(400, str(e))
 
 
+def _apply_privacy_ack(d: dict, old, user: dict) -> None:
+    """R3（個資法 §8）：「已告知當事人」由伺服器蓋時間與人員；已記錄的不可被前端覆蓋或清除。
+    前端只送 `privacyNoticeAcked: true`；送來的 `privacyNotice` 一律不採用。"""
+    from helpers import privacy_notice as _pn
+    requested = d.pop("privacyNoticeAcked", False) is True
+    d.pop("privacyNotice", None)
+    existing = (old or {}).get("privacyNotice") if isinstance(old, dict) else None
+    rec = _pn.merge_ack(existing, requested, user,
+                        _pn.current_notice() if requested and not existing else "")
+    if rec:
+        d["privacyNotice"] = rec
+
+
 def _freeze_rules(d: dict, rules: dict) -> None:
     """單據凍結：版本號＋參數快照（修改舊單沿用它）。"""
     d["taxRulesVersion"] = rules.get("version", "")
@@ -221,6 +234,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     d     = body.data
     d.pop("recalcTaxRules", None)
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
+    _apply_privacy_ack(d, None, user)     # R3：已告知紀錄由伺服器蓋時間與人員
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -282,7 +296,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     notify_module_activity("勞報單", "建立", user.get("display_name") or user["username"],
                             f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html")
     return {"slip_no": slip_no, "calc": calc, "created_at": now,
-            "taxRulesVersion": d["taxRulesVersion"]}
+            "taxRulesVersion": d["taxRulesVersion"], "privacyNotice": d.get("privacyNotice")}
 
 
 @router.get("/api/payslips/{slip_no}")
@@ -300,7 +314,7 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 
 @router.put("/api/payslips/{slip_no}")
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
-    _require_user(authorization, require_superadmin=True, module='payslip')
+    user = _require_user(authorization, require_superadmin=True, module='payslip')
     conn0 = get_db()
     existing = conn0.execute("SELECT status, tax_rules_version, data_json FROM payslips WHERE slip_no=?",
                              (slip_no,)).fetchone()
@@ -331,6 +345,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
             if rules is None:
                 raise HTTPException(409, f"本單建立時的法規參數版本「{ver}」已不存在；"
                                          "請勾選「依給付日重新套用規則」後再存檔")
+    _apply_privacy_ack(d, old, user)
 
     gross       = int(d.get("grossAmount", 0))
     income_type = d.get("incomeType", "9A")
@@ -366,7 +381,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
            f"{slip_no}（{d.get('contractorName', '')}）",
            {"taxRulesVersion": d["taxRulesVersion"], "recalcTaxRules": recalc})
     return {"slip_no": slip_no, "calc": calc, "updated_at": now,
-            "taxRulesVersion": d["taxRulesVersion"]}
+            "taxRulesVersion": d["taxRulesVersion"], "privacyNotice": d.get("privacyNotice")}
 
 
 @router.delete("/api/payslips/{slip_no}", status_code=204)
