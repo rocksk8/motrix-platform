@@ -2,7 +2,7 @@
 
 ☠️ 一題卡住（例如 page.evaluate 等一個沒人回答的對話框）會拖住一個 worker 直到整輪逾時；
 平行之後其他題也被拖著——而最後看到的只有「整輪逾時」，看不出卡在哪一題哪一行。
-⇒ conftest 檔尾 `_e2e_hard_cap`：每一題 e2e 設上限（MOTRIX_E2E_HARD_CAP，預設 120s），超過就寫下所有
+⇒ conftest 檔尾 `_E2EHardCapPhase`：每一題 e2e 的 setup／call／teardown 各自設上限（MOTRIX_E2E_HARD_CAP，預設 120s），超過就寫下所有
    執行緒的堆疊；xdist worker 裡順便結束那個 worker（xdist 判失敗、換新 worker 接著跑），主控在摘要印出堆疊
    並補一行 `FAILED <題> - Timeout…` 給建包閘門。單程序只寫堆疊、不結束（結束會讓剩下的題全都不跑）。
 
@@ -79,6 +79,35 @@ def test_single_process_prints_the_stack_but_keeps_going(probe, tmp_path):
     assert "2 passed" in out, out[-600:]
     assert "STUCK-LINE-MARKER" in out or "test_zz_hardcap_probe.py\", line 7" in out, out[-1500:]
     assert "- Timeout: e2e 逐題上限" not in out, "單程序沒有失敗，不可以補 FAILED 行"
+    assert "（call 階段逾時）" in out, "堆疊要標明是哪個階段逾時：\n" + out[-800:]
+
+
+SLOW_SETUP_SRC = '''import time
+import pytest
+
+
+@pytest.fixture
+def slow_setup():
+    time.sleep(%(setup)d)   # SLOW-SETUP-MARKER
+    yield
+
+
+@pytest.mark.e2e
+def test_stuck_after_slow_setup(slow_setup):
+    time.sleep(%(sleep)d)   # STUCK-LINE-MARKER
+'''
+
+
+def test_slow_setup_is_labelled_and_the_body_is_still_caught(probe, tmp_path):
+    """2026-09-25（CORE-SPEC K5）：setup 慢（模擬滿載下共用伺服器／瀏覽器啟動）⇒ 標成 setup 逾時；
+    本體卡住仍然會在自己的計時器裡被抓到那一行。原本 setup＋本體共用一個計時器，堆疊停在 setup、本體那一行消失。"""
+    f = probe(0)
+    open(f, "w", encoding="utf-8").write(SLOW_SETUP_SRC % {"setup": 4, "sleep": 5})
+    r, took, out = _pytest([f], 2, tmp_path, "slow")
+    assert r.returncode == 0, out[-800:]
+    assert "（setup 階段逾時）" in out, out[-1500:]
+    assert "SLOW-SETUP-MARKER" in out or "test_zz_hardcap_probe.py\", line 7" in out, out[-1500:]
+    assert "（call 階段逾時）" in out and ("STUCK-LINE-MARKER" in out or "line 13" in out), out[-1500:]
 
 
 def test_a_quick_e2e_leaves_nothing_behind(probe, tmp_path):

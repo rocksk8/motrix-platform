@@ -44,7 +44,10 @@ def test_login_as_writes_the_same_session_shape_as_the_login_page(live_server, m
     real = ui.evaluate(SESSION_JS)
     inj = new_page()
     login_as(inj, u)
-    inj.goto(f"{live_server}/pages/login.html")
+    # 讀注入結果的地方要是「同源、不跑頁面程式、不會導向」的文件：登入頁偵測到已登入會自動導向 index，
+    # evaluate 撞上導向就是「Execution context was destroyed」（2026-09-25 全量 -n 4 偶發紅，CORE-SPEC K6）。
+    # login_as 以 add_init_script 在每份文件注入 ⇒ /api/ping 這份 JSON 文件也看得到同一份 session。
+    inj.goto(f"{live_server}/api/ping")
     injected = inj.evaluate(SESSION_JS)
     assert sorted(real) == sorted(injected), (sorted(real), sorted(injected))
     assert {k: injected[k] for k in ("username", "role", "userId")} == {k: real[k] for k in ("username", "role", "userId")}

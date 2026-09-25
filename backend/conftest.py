@@ -1655,7 +1655,10 @@ def login_as(client):
 # - 單程序（沒有 -n）⇒ 只寫堆疊、不結束（結束會讓整個 pytest 停掉、剩下的題全都不跑——a3 提醒）；
 #   題目收尾時若已超過上限，摘要照樣印出堆疊當警告（那一題本身沒有失敗，結束碼不變）。
 # - 題目正常結束一定取消計時器，否則上限會累計到下一題。
-# - autouse、最早建立 ⇒ 最晚拆掉：題目本體與收尾（含共用伺服器的排空）都在範圍內。
+# - 🔴 2026-09-25（B）：**setup／call／teardown 三個階段各自計時**，堆疊檔標明是哪個階段逾時。
+#   原本是一個 autouse fixture 從 setup 起算到 teardown ⇒ 滿載（-n 6）時光是 setup（共用伺服器／瀏覽器）
+#   就超過上限，堆疊停在 setup，而題目本體卡住的那一行反而不會被寫下來（test_e2e_hard_cap 單程序題在全量偶發紅）。
+#   不採「拉長上限」：那只會讓真的卡在 setup 的題更晚被發現。
 _E2E_HARD_CAP_DEFAULT = 120
 
 
@@ -1675,36 +1678,72 @@ def _e2e_hard_cap_dir():
     return os.path.join(tempfile.gettempdir(), "motrix-e2e-hardcap-" + run)
 
 
-@pytest.fixture(autouse=True)
-def _e2e_hard_cap(request):
-    if request.node.get_closest_marker("e2e") is None:
-        yield
-        return
-    import faulthandler
-    import time as _t
-    import uuid as _uuid
-    cap = _e2e_hard_cap_seconds()
-    d = _e2e_hard_cap_dir()
-    os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, "%s.txt" % _uuid.uuid4().hex)
-    fh = open(path, "w", encoding="utf-8")
-    fh.write(request.node.nodeid + "\n")
-    fh.flush()
-    # 是不是 xdist worker 以 config.workerinput 為準（真的 worker 才有）。
-    # ☠️ 不用環境變數 PYTEST_XDIST_WORKER：在 worker 裡起的子 pytest 會繼承它 ⇒ 子行程誤以為自己是 worker、
-    #    單程序也走 exit=True（a3 在全量 -n 2 抓到 test_e2e_hard_cap 的單程序題紅）。
-    faulthandler.dump_traceback_later(cap, exit=hasattr(request.config, "workerinput"), file=fh)
-    t0 = _t.monotonic()
-    try:
-        yield
-    finally:
+class _E2EHardCapPhase:
+    """一題 e2e 的一個階段（setup／call／teardown）的上限計時；逾時寫堆疊檔，第一行是「nodeid [階段]」。"""
+
+    def __init__(self, item, phase):
+        self.item, self.phase = item, phase
+
+    def __enter__(self):
+        import faulthandler
+        import time as _t
+        import uuid as _uuid
+        self.cap = _e2e_hard_cap_seconds()
+        d = _e2e_hard_cap_dir()
+        os.makedirs(d, exist_ok=True)
+        self.path = os.path.join(d, "%s.txt" % _uuid.uuid4().hex)
+        self.fh = open(self.path, "w", encoding="utf-8")
+        self.fh.write("%s [%s]\n" % (self.item.nodeid, self.phase))
+        self.fh.flush()
+        # 是不是 xdist worker 以 config.workerinput 為準（真的 worker 才有）。
+        # ☠️ 不用環境變數 PYTEST_XDIST_WORKER：在 worker 裡起的子 pytest 會繼承它 ⇒ 子行程誤以為自己是 worker、
+        #    單程序也走 exit=True（a3 在全量 -n 2 抓到 test_e2e_hard_cap 的單程序題紅）。
+        faulthandler.dump_traceback_later(self.cap, exit=hasattr(self.item.config, "workerinput"), file=self.fh)
+        self.t0 = _t.monotonic()
+        return self
+
+    def __exit__(self, *exc):
+        import faulthandler
+        import time as _t
         faulthandler.cancel_dump_traceback_later()
-        fh.close()
-        if _t.monotonic() - t0 < cap:
+        self.fh.close()
+        if _t.monotonic() - self.t0 < self.cap:
             try:
-                os.remove(path)
+                os.remove(self.path)
             except OSError:
                 pass
+        return False
+
+
+def _e2e_hard_cap_applies(item):
+    return item.get_closest_marker("e2e") is not None
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_setup(item):
+    if not _e2e_hard_cap_applies(item):
+        yield
+        return
+    with _E2EHardCapPhase(item, "setup"):
+        yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    if not _e2e_hard_cap_applies(item):
+        yield
+        return
+    with _E2EHardCapPhase(item, "call"):
+        yield
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    if not _e2e_hard_cap_applies(item):
+        yield
+        return
+    with _E2EHardCapPhase(item, "teardown"):
+        yield
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
@@ -1729,11 +1768,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
                 os.remove(f)
             except OSError:
                 pass
-        nodeid, _, stack = body.partition("\n")
-        tr.write_line("── %s" % nodeid)
+        head, _, stack = body.partition("\n")
+        nodeid, _, phase = head.partition(" [")
+        phase = phase.rstrip("]") or "?"
+        tr.write_line("── %s（%s 階段逾時）" % (nodeid, phase))
         for line in stack.rstrip().splitlines():
             tr.write_line("   " + line)
-        killed.append(nodeid)
+        if nodeid not in killed:
+            killed.append(nodeid)
     if worker_run:
         # 給建包閘門（_e2e_gate.ps1 認 `FAILED … Timeout`）；xdist 自己那行會被截斷、也不含 Timeout
         for nodeid in killed:
