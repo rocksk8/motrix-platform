@@ -1038,6 +1038,92 @@ def _health_gate_ok() -> bool:
     return _last_health["ok"] and (time.time() - _last_health["at"]) <= HEALTH_VALID_SECONDS
 
 
+# ── V9 → 新版升級精靈（CORE-SPEC §9e D4）─────────────────────────────────
+#
+# 每一步是固定名稱（_dashboard_remote.ps1 -Action upgrade -Step <名稱>），由人逐步按、逐步確認。
+# ⚠️ 不走 `_run_job`：那支的判定屬於 deploy/rollback 的 v2 協定，而 `_PROTOCOL_EXEMPT` 被釘成只有 build
+#    （豁免是便宜的變綠路徑）。升級步驟另走這支，判定更嚴格：只認遠端腳本的結束碼，
+#    而遠端腳本拿不到 upgrade.py 的結束碼標記時自己就 exit 1（fail closed）。
+
+UPGRADE_STEPS = ("push", "stop-services", "preflight", "backup", "convert", "verify",
+                 "start-services", "rollback-code", "rollback-full")
+#: 會讓正式機停止服務或改動程式／資料的步驟：需要健康檢查通過或人工確認（同部署）
+_UPGRADE_GUARDED = {"stop-services"}
+
+
+class UpgradeStepIn(BaseModel):
+    step: str
+    package: str
+    backupStamp: str
+    username: str
+    password: str
+    confirm: bool = False
+    #: rollback-full 會丟掉轉換後寫入的資料 ⇒ 必須另外輸入 FULL
+    confirmText: str = ""
+    healthAck: bool = False
+
+
+def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str):
+    global _active_job_id
+    with _jobs_lock:
+        _jobs[job_id] = {"status": "running", "lines": [], "action": action}
+    DEPLOY_LOGS_DIR.mkdir(exist_ok=True)
+    log_path = DEPLOY_LOGS_DIR / f"{time.strftime('%Y%m%d_%H%M%S')}_{action}_{job_id[:8]}.log"
+    success = False
+    try:
+        with log_path.open("a", encoding="utf-8") as log_file:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT),
+                                    creationflags=CREATE_NO_WINDOW)
+            proc.stdin.write(input_text)
+            proc.stdin.close()
+            for line in proc.stdout:
+                s = line.rstrip("\n")
+                with _jobs_lock:
+                    _jobs[job_id]["lines"].append(s)
+                log_file.write(s + "\n")
+                log_file.flush()
+            proc.wait()
+        success = proc.returncode == 0
+    finally:
+        with _jobs_lock:
+            _jobs[job_id]["status"] = "succeeded" if success else "failed"
+        _append_history(action, job_id, success, str(log_path))
+        with _active_job_lock:
+            if _active_job_id == job_id:
+                _active_job_id = None
+
+
+@app.post("/api/upgrade/step")
+def upgrade_step(body: UpgradeStepIn):
+    if body.step not in UPGRADE_STEPS:
+        return JSONResponse(status_code=400, content={"detail": f"未知的升級步驟：{body.step}"})
+    if not body.confirm:
+        return JSONResponse(status_code=400, content={"detail": "需要先在網頁上確認這一步"})
+    if not _is_safe_name(body.package) or not _is_safe_name(body.backupStamp):
+        return JSONResponse(status_code=400, content={"detail": "部署包名稱或備份時間戳不合法"})
+    package_path = DEPLOY_PACKAGES_DIR / body.package
+    if not package_path.exists():
+        return JSONResponse(status_code=400, content={"detail": f"找不到部署包：{package_path}"})
+    if body.step == "rollback-full" and body.confirmText != "FULL":
+        return JSONResponse(status_code=400, content={
+            "detail": "完整回滾會丟掉轉換後寫入的所有資料，必須在確認欄輸入 FULL。多數情況請先用「只回程式」。"})
+    if body.step in _UPGRADE_GUARDED and not _health_gate_ok() and not body.healthAck:
+        return JSONResponse(status_code=409, content={
+            "detail": "停服務之前需要 10 分鐘內通過的部署前健康檢查，或勾選「我已確認正式機狀態」。"})
+    job_id = uuid.uuid4().hex
+    if not _try_acquire_job_lock(job_id):
+        return JSONResponse(status_code=409, content={"detail": "已經有一個部署／回滾／升級工作正在執行，請等它結束"})
+    if body.step in _UPGRADE_GUARDED and not _health_gate_ok():
+        _append_history(f"升級停服務：未通過健康檢查但已人工確認（{body.package}）", job_id, False)
+    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", {
+        "Action": "upgrade", "Step": body.step, "Username": body.username,
+        "PackagePath": str(package_path), "BackupStamp": body.backupStamp})
+    threading.Thread(target=_run_upgrade_job,
+                     args=(job_id, f"upgrade-{body.step}", cmd, body.password + "\n"), daemon=True).start()
+    return {"jobId": job_id}
+
+
 class LogTailIn(BaseModel):
     username: str
     password: str

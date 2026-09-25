@@ -18,8 +18,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("deploy", "rollback", "list-snapshots", "tail-log", "check-only", "health")]
+    [ValidateSet("deploy", "rollback", "list-snapshots", "tail-log", "check-only", "health", "upgrade")]
     [string]$Action,
+
+    # CORE-SPEC §9e D4：V9 → 新版升級精靈的單一步驟（固定清單，不接受任意指令）
+    [ValidateSet("", "push", "stop-services", "preflight", "backup", "convert", "verify", "start-services", "rollback-code", "rollback-full")]
+    [string]$Step = "",
+    # 備份目錄的時間戳記（只准字母數字底線連字號，由儀表板產生並驗證）
+    [string]$BackupStamp = "",
 
     [Parameter(Mandatory = $true)]
     [string]$Username,
@@ -53,6 +59,16 @@ if ($Action -eq "deploy" -and -not $PackagePath) {
 if ($Action -eq "rollback" -and -not $SnapshotTimestamp) {
     Fail "-Action rollback 需要 -SnapshotTimestamp。"
 }
+if ($Action -eq "upgrade") {
+    if (-not $Step) { Fail "-Action upgrade 需要 -Step。" }
+    if (-not $PackagePath) { Fail "-Action upgrade 需要 -PackagePath（新版部署包）。" }
+    if ($BackupStamp -notmatch '^[A-Za-z0-9_-]+$') { Fail "-BackupStamp 不合法：只准字母、數字、底線、連字號。" }
+}
+# 升級用的正式機位置：全部在安裝目錄以外（upgrade.py 會拒絕放在安裝目錄內的來源與備份）
+$ProdDesktop = "C:\Users\Motrix\Desktop"
+$UpgradeBackupRoot = Join-Path $ProdDesktop "MOTRIX-UPGRADE-BACKUP"
+#: 排程工作名稱（docs/quick §1.1）；停服務時三個都停，恢復時依序開回
+$ProdTasks = @("MOTRIX ERP Server Autostart", "MOTRIX ERP Daily Backup", "MOTRIX ERP Heartbeat")
 
 # 2026-09-08 修復：`Read-Host -AsSecureString` 依賴主控台的遮罩輸入機制，
 # stdin 被 deploy_dashboard.py 用管線重新導向（不是真的互動主控台）時會
@@ -268,6 +284,68 @@ try {
         [string]$outText = $raw
         Write-Host "===JSON==="
         $outText | ConvertTo-Json
+    } elseif ($Action -eq "upgrade") {
+        $pkgName = Split-Path $PackagePath -Leaf
+        $remotePkg = Join-Path $ProdDesktop $pkgName
+        $bk = Join-Path $UpgradeBackupRoot $BackupStamp
+        if ($Step -eq "push") {
+            Write-Host "推送新版部署包：$PackagePath → $remotePkg ..."
+            Copy-Item -Path $PackagePath -Destination $ProdDesktop -ToSession $session -Recurse -Force
+            Ok "推送完成。"
+            return
+        }
+        Write-Host "遠端執行升級步驟：$Step（安裝目錄 $ProdRoot，備份目錄 $bk）"
+        $remoteExitCode = $null
+        Invoke-Command -Session $session -ArgumentList $Step, $ProdRoot, $remotePkg, $bk, $ProdTasks -ScriptBlock {
+            param($Step, $Root, $Pkg, $Bk, $Tasks)
+            $tool = Join-Path $Pkg "tools\platform\upgrade.py"
+            if ($Step -ne "stop-services" -and $Step -ne "start-services" -and -not (Test-Path $tool)) {
+                Write-Output "找不到 $tool（部署包還沒推送，或不是新版的包）"
+                Write-Output "===EXITCODE=1==="
+                return
+            }
+            switch ($Step) {
+                "stop-services" {
+                    foreach ($t in $Tasks) { Disable-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | Out-Null; Write-Output "已停用排程：$t" }
+                    # 只停 python 系列、而且只停正在監聽 666 的行程（比照 restart.bat）
+                    foreach ($c in @(Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue)) {
+                        $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+                        if ($p -and $p.ProcessName -match '^python') { Stop-Process -Id $p.Id -Force; Write-Output "已停止 $($p.ProcessName) PID=$($p.Id)" }
+                        elseif ($p) { Write-Output "port 666 被 $($p.ProcessName) 佔用，不是 python，不動它" }
+                    }
+                    # autostart.bat 的 crash-restart 迴圈會把服務拉回來 ⇒ 一併停掉（比照 restart.bat 以 commandline 比對）
+                    Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'autostart\.bat|autostart_hidden\.vbs' } |
+                        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Write-Output "已停止 autostart 迴圈 PID=$($_.ProcessId)" }
+                    Start-Sleep -Seconds 3
+                    $left = @(Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue).Count
+                    if ($left -gt 0) { Write-Output "⚠ port 666 仍有 $left 個監聽者"; Write-Output "===EXITCODE=1===" } else { Write-Output "port 666 已無監聽"; Write-Output "===EXITCODE=0===" }
+                    return
+                }
+                "start-services" {
+                    foreach ($t in $Tasks) { Enable-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | Out-Null; Write-Output "已啟用排程：$t" }
+                    Start-ScheduledTask -TaskName $Tasks[0] -ErrorAction SilentlyContinue
+                    Write-Output "已觸發 $($Tasks[0])（含 90 秒延遲，約 2 分鐘後服務回來；Heartbeat 下一輪會恢復打卡）"
+                    Write-Output "===EXITCODE=0==="
+                    return
+                }
+            }
+            $args2 = switch ($Step) {
+                "preflight"     { @("preflight", "--root", $Root, "--v9-port", "666") }
+                "backup"        { @("backup", "--root", $Root, "--backup-dir", $Bk) }
+                "convert"       { @("convert", "--root", $Root, "--backup-dir", $Bk, "--new-source", $Pkg) }
+                "verify"        { @("verify", "--root", $Root, "--backup-dir", $Bk, "--port", "6671") }
+                "rollback-code" { @("rollback", "--root", $Root, "--backup-dir", $Bk, "--mode", "code") }
+                "rollback-full" { @("rollback", "--root", $Root, "--backup-dir", $Bk, "--mode", "full", "--yes") }
+            }
+            $env:PYTHONIOENCODING = "utf-8"
+            & python $tool @args2 2>&1 | ForEach-Object { "$_" }
+            Write-Output "===EXITCODE=$LASTEXITCODE==="
+        } | ForEach-Object {
+            if ($_ -match '^===EXITCODE=(-?\d+)===$') { $remoteExitCode = [int]$matches[1] } else { Write-Host $_ }
+        }
+        if ($null -eq $remoteExitCode) { Fail "取不到升級步驟 $Step 的結束碼（連線可能中斷），不能當成成功。" }
+        if ($remoteExitCode -ne 0) { Fail "升級步驟 $Step 失敗（exit code $remoteExitCode），詳見上方輸出。" }
+        Ok "升級步驟 $Step 完成。"
     } elseif ($Action -eq "health") {
         # health（CORE-SPEC §9e D1，2026-09-25）：部署前健康檢查，**完全唯讀**。
         # 只收集事實、不做判斷——判斷規則在開發機 deploy_insights.evaluate_health()（有測試）。

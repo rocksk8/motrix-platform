@@ -126,6 +126,25 @@
     <div class="log hidden" id="logTail"></div>
   </div>
 
+  <div class="card" style="margin-bottom:16px">
+    <h2>5. V9 → 新版升級精靈（只在換版時使用；每一步都要按、都要確認）</h2>
+    <div style="font-size:12px;color:#aaa;margin-bottom:8px">
+      依 docs/platform/UPGRADE-RUNBOOK.md。備份與新版程式都放在正式機安裝目錄以外。
+      出問題時先用「只回程式」（保留轉換後的新資料）；「完整回滾」會丟掉轉換後寫入的所有資料。
+    </div>
+    <select id="upPkg"></select>
+    <input id="upUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
+    <input id="upPass" type="password" placeholder="正式機密碼">
+    <div class="row"><span>備份時間戳（這一次升級固定用這個）</span><span id="upStamp">…</span></div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F87171;margin-bottom:8px">
+      <input type="checkbox" id="upHealthAck" style="width:auto;margin:0">
+      我已確認正式機狀態（停服務前沒有通過健康檢查時才勾——會記進歷史紀錄）
+    </label>
+    <div id="upSteps" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+    <div class="confirm-box hidden" id="upConfirm"></div>
+    <div class="log hidden" id="upLog"></div>
+  </div>
+
   <div class="card">
     <h2>歷史紀錄</h2>
     <div id="historyList"></div>
@@ -181,6 +200,57 @@ async function runHealth() {
     d.warnings.map(w => '<div style="color:#F59E0B">• ' + esc(w) + '</div>').join('') +
     '<div style="color:#888;font-size:11px;margin-top:6px">最近本機備份：' + esc(f.latestDbBackup ? f.latestDbBackup.at : '無') +
     '｜磁碟：' + disks + '｜port 666 監聽：' + esc(f.port666Listen) + '｜檢查時間：' + esc(f.checkedAt) + '</div>';
+}
+
+// §9e D4：升級精靈
+const UP_STEPS = [
+  ['push', '① 推送新版包', '把部署包複製到正式機桌面（安裝目錄以外）。不停服務、不改任何東西。'],
+  ['stop-services', '② 停服務', '停用三個排程工作（自動啟動、每日備份、心跳），並停掉 port 666 的 python 服務與自動重啟迴圈。之後使用者連不上系統。'],
+  ['preflight', '③ 預檢', '唯讀檢查：安裝結構、資料庫版本、磁碟、最近備份、告警、服務已停、開發機標記。'],
+  ['backup', '④ 備份＋試還原', '備份資料庫、程式、設定；完成後自動試還原並逐檔比對雜湊，不通過就停在這裡。'],
+  ['convert', '⑤ 轉換', '換上新版程式、補齊資料庫結構與新設定（只新增、不改既有值）。需要 ④ 通過。'],
+  ['verify', '⑥ 驗證', '比對列數、設定、資料清單，並在 6671 埠試啟動新版。'],
+  ['start-services', '⑦ 啟動服務', '重新啟用三個排程工作並啟動服務（約 2 分鐘後回來）。'],
+  ['rollback-code', '回滾：只回程式', '換回 V9 程式，保留轉換後寫入的資料。出問題時優先用這個。'],
+  ['rollback-full', '回滾：完整', '程式、資料庫、設定全部還原到備份當下（雜湊逐一相等）。會丟掉轉換後寫入的所有資料。'],
+];
+let upDone = {};
+let pendingUp = null;
+function initUpgrade() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  document.getElementById('upStamp').textContent =
+    `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+  renderUpSteps();
+}
+function renderUpSteps() {
+  document.getElementById('upSteps').innerHTML = UP_STEPS.map(([k, label]) =>
+    `<button class="${k.startsWith('rollback') ? 'danger' : 'ghost'}" onclick="requestUpStep('${k}')">${upDone[k] === true ? '✅ ' : upDone[k] === false ? '⛔ ' : ''}${label}</button>`).join('');
+}
+function requestUpStep(step) {
+  const [, label, desc] = UP_STEPS.find(s => s[0] === step);
+  pendingUp = step;
+  const box = document.getElementById('upConfirm');
+  box.classList.remove('hidden');
+  box.innerHTML = `<b>${esc(label)}</b>：${esc(desc)}
+    ${step === 'rollback-full' ? '<div style="margin-top:6px">輸入 <b>FULL</b> 確認：<input id="upFull" style="width:120px"></div>' : ''}
+    <div style="margin-top:10px"><button class="danger" onclick="confirmUpStep()">確認執行</button> <button class="ghost" onclick="cancelUpStep()">取消</button></div>`;
+}
+function cancelUpStep() { pendingUp = null; document.getElementById('upConfirm').classList.add('hidden'); }
+async function confirmUpStep() {
+  const step = pendingUp; if (!step) return;
+  const full = document.getElementById('upFull');
+  const body = { step, package: document.getElementById('upPkg').value,
+    backupStamp: document.getElementById('upStamp').textContent,
+    username: document.getElementById('upUser').value.trim(), password: document.getElementById('upPass').value,
+    confirm: true, confirmText: full ? full.value : '', healthAck: document.getElementById('upHealthAck').checked };
+  cancelUpStep();
+  const log = document.getElementById('upLog');
+  log.classList.remove('hidden');
+  log.textContent = '';
+  const res = await fetch('/api/upgrade/step', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) { log.textContent = '⛔ ' + (data.detail || '請求失敗'); return; }
+  pollJob(data.jobId, 'upLog', ok => { upDone[step] = ok; renderUpSteps(); });
 }
 
 // §9e D2：這一包會改到哪些模組
@@ -250,6 +320,7 @@ async function refreshPackages() {
   const pkgs = await (await fetch('/api/packages')).json();
   const sel = document.getElementById('pkgSelect');
   sel.innerHTML = pkgs.map(p => `<option value="${p.folder}">${p.folder} — ${p.commit_short || '?'} (${p.built_at || '?'})</option>`).join('');
+  document.getElementById('upPkg').innerHTML = sel.innerHTML;
 }
 
 async function refreshHistory() {
@@ -436,6 +507,7 @@ async function loadCheckOnly() {
 refreshDevStatus();
 refreshPackages();
 refreshHistory();
+initUpgrade();
 connectProdWs();
 setInterval(refreshDevStatus, 15000);
 </script>
