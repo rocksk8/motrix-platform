@@ -11,12 +11,10 @@ from core import loader, registry, source_tree
 
 @pytest.fixture
 def clean_registry():
-    saved_loaded, saved_failed = dict(registry._LOADED), dict(registry._FAILED)
+    snap = registry.snapshot()          # 整份複本（含 _STATES）；不自己列舉內部表
     registry._reset()
     yield
-    registry._reset()
-    registry._LOADED.update(saved_loaded)
-    registry._FAILED.update(saved_failed)
+    registry.restore(snap)
 
 
 @pytest.mark.parametrize("spec,ok", [

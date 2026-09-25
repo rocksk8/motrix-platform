@@ -33,11 +33,10 @@ def _auth(client, make_user, name="ms_sa", role="superadmin"):
 
 @pytest.fixture
 def isolated_registry():
-    saved = (dict(registry._LOADED), dict(registry._FAILED), dict(registry._STATES))
+    snap = registry.snapshot()
     registry._reset()
     yield
-    registry._reset()
-    registry._LOADED.update(saved[0]); registry._FAILED.update(saved[1]); registry._STATES.update(saved[2])
+    registry.restore(snap)
 
 
 def _synthetic_pkg(tmp_path, names, license_keys=None, pkg_name="zzsel"):
@@ -202,3 +201,13 @@ def test_after_restart_the_module_is_gone_and_data_stays(gate, tmp_path):
     out = r.stdout + r.stderr
     assert r.returncode == 0 and "1 passed" in out, out[-3000:]
     assert "CHILD_GATE_OK %s" % gate in out, out[-2000:]
+
+
+def test_registry_snapshot_restores_every_table():
+    """反向控制：清空後 restore 必須把每一張表都還原（含 _STATES）。"""
+    before = registry.snapshot()
+    assert before[2], "狀態表是空的——這題就什麼都沒驗"
+    registry._reset()
+    assert registry.module_states() == []
+    registry.restore(before)
+    assert registry.snapshot() == before

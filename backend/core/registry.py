@@ -61,6 +61,20 @@ def _reset():
     _STATES.clear()
 
 
+def snapshot() -> tuple:
+    """測試用：整份登錄表的複本。夾具一律用 snapshot()/restore()，不要自己列舉內部表——
+    新增一張表時，自己列舉的夾具會漏掉它（2026-09-25 實例：_STATES 被清空沒還原，
+    全量時同一個 worker 後面的題全紅）。_LEGACY_PROVIDERS 是模組匯入時登記的，不在這裡動。"""
+    return dict(_LOADED), dict(_FAILED), {k: dict(v) for k, v in _STATES.items()}
+
+
+def restore(snap: tuple) -> None:
+    _reset()
+    _LOADED.update(snap[0])
+    _FAILED.update(snap[1])
+    _STATES.update(snap[2])
+
+
 def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] = None) -> None:
     if state not in STATES:
         raise ValueError(f"unknown module state {state!r}")
