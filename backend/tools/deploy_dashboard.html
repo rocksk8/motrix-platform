@@ -202,6 +202,12 @@ async function runHealth() {
   el.innerHTML = (d.ok ? '<div style="color:#4ADE80">✅ 通過（10 分鐘內部署不需再確認）</div>' : '<div style="color:#F87171">⛔ 未通過</div>') +
     d.problems.map(p => '<div style="color:#F87171">• ' + esc(p) + '</div>').join('') +
     d.warnings.map(w => '<div style="color:#F59E0B">• ' + esc(w) + '</div>').join('') +
+    // §9e D5：正式機模組狀態（唯讀；狀態取自最近一次啟動紀錄）
+    ((d.modules || []).length ? '<table data-testid="prod-modules" style="margin-top:8px;font-size:12px;width:100%">' +
+      '<tr><th align="left">模組</th><th align="left">已安裝</th><th align="left">部署包 lock</th><th align="left">狀態</th><th align="left">原因</th></tr>' +
+      d.modules.map(m => `<tr><td>${esc(m.key)}</td><td>${esc(m.installedVersion ?? '—')}</td><td>${esc(m.lockVersion ?? '—')}</td>` +
+        `<td style="color:${m.state === '已載入' ? '#4ADE80' : '#F59E0B'}">${esc(m.state)}</td><td>${esc(m.reason)}</td></tr>`).join('') +
+      '</table>' : '') +
     '<div style="color:#888;font-size:11px;margin-top:6px">最近本機備份：' + esc(f.latestDbBackup ? f.latestDbBackup.at : '無') +
     '｜磁碟：' + disks + '｜port 666 監聽：' + esc(f.port666Listen) + '｜檢查時間：' + esc(f.checkedAt) + '</div>';
 }

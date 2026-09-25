@@ -180,7 +180,67 @@ def evaluate_health(facts: dict, now=None) -> dict:
         problems.append(f"正式機安裝根目錄有開發機標記 {m}：會讓正式機{'停止寄信' if m == '.no_email_send' else '停止雲端備份'}，而且不會報錯")
     if not facts.get("piiFolders"):
         warnings.append("正式機看不到「系統存檔_個資」資料夾：新版上線後整庫雲端備份與勞報單鏡像會暫停並每天告警")
-    return {"ok": not problems, "problems": problems, "warnings": warnings}
+    mods = summarize_modules(facts.get("modules")) if "modules" in facts else {"rows": [], "warnings": []}
+    warnings.extend(mods["warnings"])
+    return {"ok": not problems, "problems": problems, "warnings": warnings, "modules": mods["rows"]}
+
+
+# ── 正式機模組狀態（D5）──────────────────────────────────────────────────
+
+def summarize_modules(mfacts: dict) -> dict:
+    """把 _prod_health_facts.ps1 的 `modules` 事實整理成一張表＋警示。只提醒、不擋部署。
+    狀態取自最近一次啟動的 log（「模組 X 版本 已載入」／「模組 X 未載入：原因」）；沒有 log 就是「不明」，不猜。"""
+    import json as _json
+    import re
+    mfacts = mfacts or {}
+    warnings = []
+    installed = {m.get("key"): m for m in (mfacts.get("installed") or []) if m.get("key")}
+    lock, lock_mods = None, {}
+    if mfacts.get("lockRaw"):
+        try:
+            lock = _json.loads(mfacts["lockRaw"])
+            lock_mods = lock.get("modules") or {}
+        except ValueError:
+            warnings.append("正式機的 modules.lock.json 讀不懂")
+    else:
+        warnings.append("正式機沒有 modules.lock.json（V9 或舊版部署包沒有這個檔）")
+    disabled = None
+    raw = mfacts.get("disabledRaw")
+    if mfacts.get("disabledError"):
+        warnings.append("讀不到正式機的停用清單：" + str(mfacts["disabledError"]).splitlines()[-1][:200])
+    elif raw:
+        try:
+            disabled = set(_json.loads(raw))
+        except ValueError:
+            warnings.append("正式機的停用清單讀不懂")
+    elif raw == "":
+        disabled = set()
+    state = {}
+    for line in mfacts.get("logLines") or []:
+        m = re.search(r"模組 (\S+) (?:(\S+) )?已載入", line)
+        if m:
+            state[m.group(1)] = ("已載入", "")
+            continue
+        m = re.search(r"模組 (\S+) 未載入[：:]\s*(.*)$", line)
+        if m:
+            state[m.group(1)] = ("未載入", m.group(2).strip())
+    rows = []
+    for key in sorted(set(installed) | set(lock_mods)):
+        inst, lk = installed.get(key), lock_mods.get(key) or {}
+        st, why = state.get(key, ("不明（沒有啟動紀錄）", ""))
+        if disabled is not None and key in disabled:
+            why = (why + "；" if why else "") + "停用清單內"
+        rows.append({"key": key, "installedVersion": inst.get("version") if inst else None,
+                     "lockVersion": lk.get("version"), "state": st, "reason": why})
+        if inst is None:
+            warnings.append(f"模組 {key} 在 lock 裡、卻沒有安裝")
+        elif lock is not None and not lk:
+            warnings.append(f"模組 {key} 已安裝、卻不在 lock 裡")
+        elif lk and inst.get("version") != lk.get("version"):
+            warnings.append(f"模組 {key} 的版本與 lock 不一致（安裝 {inst.get('version')}，lock {lk.get('version')}）")
+        if st == "未載入" and "停用" not in why and "未授權" not in why:
+            warnings.append(f"模組 {key} 載入失敗：{why}")
+    return {"rows": rows, "warnings": warnings}
 
 
 # ── 分支上游 ─────────────────────────────────────────────────────────────
