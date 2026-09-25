@@ -14,6 +14,7 @@
    "helper:audit",
    "helper:auth",
    "helper:build_info",
+   "helper:case_access",
    "helper:case_roles",
    "helper:company_identity",
    "helper:daily_checks",
