@@ -150,9 +150,12 @@ def test_submitted_old_link_still_gets_a_fresh_draft(client, people):
 # ── ④ 邊界 ──────────────────────────────────────────────────────────────────
 
 def test_m07_no_longer_touches_vouchers_all():
-    backend = Path(__file__).resolve().parents[2]
-    for rel in ("helpers/bonus_vouchers.py", "routers/bonus.py"):
-        assert "vouchers_all" not in (backend / rel).read_text(encoding="utf-8"), rel
+    """M07 的每一支檔（modules.json 取，不寫死；稽核 Y-2）都不可以直接碰 M06 的 vouchers_all。"""
+    from tests.platform.test_voucher_connectors import _group_py_files
+    files = _group_py_files("M07")
+    assert len(files) >= 5, files                                     # 正對照：不是空清單
+    for mod, path in files.items():
+        assert "vouchers_all" not in path.read_text(encoding="utf-8"), mod
 
 
 def test_the_page_marks_unavailable_vouchers():

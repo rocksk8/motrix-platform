@@ -120,14 +120,35 @@ def test_without_accounting_bonus_still_works_and_says_so(client, people, monkey
 
 # ── ③ 邊界 ──────────────────────────────────────────────────────────────────
 
-def test_m07_no_longer_imports_m06_functions():
+def _group_py_files(group):
+    """modules.json 裡某一組的 router／helper 單位 → 檔案（稽核 Y-2：不寫死檔名，M07 新增檔案也掃得到）。"""
+    import json
     from pathlib import Path
-    backend = Path(__file__).resolve().parents[2]
-    for rel in ("helpers/bonus_vouchers.py", "routers/bonus.py"):
-        src = (backend / rel).read_text(encoding="utf-8")
-        for bad in ("from routers.vouchers import", "from routers.accounting_export import",
-                    "from helpers.voucher import"):
-            assert bad not in src, (rel, bad)
+    root = Path(__file__).resolve().parents[3]
+    units = json.loads((root / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))["modules"][group]["units"]
+    out = {}
+    for u in units:
+        kind, name = u.split(":", 1)
+        if kind in ("router", "helper"):
+            out["%ss.%s" % (kind, name)] = root / "backend" / ("routers" if kind == "router" else "helpers") / (name + ".py")
+    return out
+
+
+def test_m07_does_not_import_m06_at_load_time():
+    """M07 的每一支檔（modules.json 取）在**模組層**不可以 import M06；只准在函式內延遲載入並處理 ImportError
+    （helpers/bonus_pdf.py::_m06）。模組層 import ⇒ M06 不在包裡時整個 M07 載不起來（稽核 Y-2 實測）。"""
+    import ast
+    m06 = set(_group_py_files("M06"))
+    m07 = _group_py_files("M07")
+    assert "helpers.bonus_pdf" in m07 and "routers.bonus" in m07          # 正對照：真的掃到了
+    bad = []
+    for mod, path in m07.items():
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.ImportFrom) and node.module in m06:
+                bad.append((mod, node.module))
+            if isinstance(node, ast.Import):
+                bad += [(mod, a.name) for a in node.names if a.name in m06]
+    assert bad == [], bad
 
 
 def test_the_page_shows_the_voucher_notice():
@@ -135,3 +156,46 @@ def test_the_page_shows_the_voucher_notice():
     from pathlib import Path
     html = (Path(__file__).resolve().parents[3] / "frontend" / "pages" / "bonus.html").read_text(encoding="utf-8")
     assert 'x-text="detail.voucherNotice"' in html
+
+
+def test_m07_loads_without_m06_files_and_says_so(tmp_path):
+    """稽核 Y-2 反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，
+    `routers.bonus` 照常載入；獎金分潤單預覽／PDF 用的元件明說「會計模組未安裝」。"""
+    import subprocess
+    import sys
+    from pathlib import Path
+    backend = Path(__file__).resolve().parents[2]
+    code = (
+        "import sys\n"
+        "sys.modules['helpers.voucher'] = None\n"
+        "sys.modules['helpers.voucher_pdf'] = None\n"
+        "import routers.bonus as b\n"
+        "from helpers import bonus_pdf\n"
+        "try:\n"
+        "    bonus_pdf._m06()\n"
+        "    print('M06-PRESENT')\n"
+        "except bonus_pdf.AccountingPdfMissing as e:\n"
+        "    print('MISSING:' + str(e))\n"
+        "print('ROUTES:%d' % len(b.router.routes))\n")
+    r = subprocess.run([sys.executable, "-B", "-c", code], cwd=str(backend), capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=120,
+                       env=dict(__import__("os").environ, PYTHONIOENCODING="utf-8"))
+    assert r.returncode == 0, r.stderr[-2000:]
+    assert "MISSING:會計模組未安裝" in r.stdout, r.stdout
+    assert int(r.stdout.split("ROUTES:")[1]) > 10
+
+
+def test_preview_and_pdf_say_accounting_missing(client, people, monkeypatch):
+    """M06 不在時：組版面丟 AccountingPdfMissing（不是 ImportError）；預覽與匯出端點回 503 並說明（不是 500）。"""
+    import pytest
+    from helpers import bonus_pdf
+    import routers.bonus as rb
+
+    def _gone():
+        raise bonus_pdf.AccountingPdfMissing(bonus_pdf.ACCOUNTING_PDF_MISSING)
+    monkeypatch.setattr(bonus_pdf, "_m06", _gone)
+    with pytest.raises(bonus_pdf.AccountingPdfMissing):
+        bonus_pdf.build_award_html({"id": 1}, [], [], {}, "2026-09-25 00:00")
+    monkeypatch.setattr(rb, "preview_award_html", lambda award_id: _gone())
+    r = client.get("/api/bonus/awards/1/preview", headers=_auth(people["bc_sa"]))
+    assert r.status_code == 503 and "會計模組未安裝" in r.json()["detail"], r.text
