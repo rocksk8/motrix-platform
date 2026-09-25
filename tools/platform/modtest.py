@@ -315,10 +315,26 @@ def interface_changed(rel, old_ref, new_ref=None):
     if old is None or new is None:
         return True
     G = _interface_tools()
+    # 稽核 D O-2：與 G1 守門同一個範圍——跨模組在用的底線名稱（_require_user、_get_setting…）也算介面
+    extra = frozenset(_cross_boundary().get(unit_name(rel), ()))
     try:
-        return G.interface_of(old.lstrip("﻿")) != G.interface_of(new)
+        return G.interface_of(old.lstrip("﻿"), extra) != G.interface_of(new, extra)
     except SyntaxError:
         return True
+
+
+_CROSS = None
+
+
+def _cross_boundary():
+    """G1 的 cross_boundary_public()（掃全部產品碼，一次執行只算一次）；算不出來 ⇒ 空（退回只看公開名稱）。"""
+    global _CROSS
+    if _CROSS is None:
+        try:
+            _CROSS = _interface_tools().cross_boundary_public()
+        except Exception:        # noqa: BLE001
+            _CROSS = {}
+    return _CROSS
 
 
 def iface_checker(a):
@@ -371,12 +387,16 @@ def name_filter(seeds, deps, by_unit, graph, refs, report):
                 ch = SN.ALL
                 break
             ch = (ch or set()) | c
+        srcs = [t for f in by_unit.get(s, []) for t in (_source(f, old), _source(f, new)) if t is not None]
+        if ch is not SN.ALL:
+            # 稽核 D S-M1：模組內引用閉包——改私有 _a，呼叫它的公開 b 也算被改（否則只 import b 的使用者全被拿掉）
+            report.setdefault("names_direct", {})[s] = sorted(ch)
+            ch = SN.expand_internal(srcs, ch)
         report["names"][s] = "全部（判斷不了）" if ch is SN.ALL else sorted(ch)
         if ch is SN.ALL:
             keep |= users
             continue
-        # 資料表一跳也細到被改的名稱（否則 db.py 這類帶 dynamic_sql 的單位，改哪個函式都擴到所有表）
-        srcs = [t for f in by_unit.get(s, []) for t in (_source(f, old), _source(f, new)) if t is not None]
+        # 資料表一跳也細到被改的名稱（閉包後；否則 db.py 這類帶 dynamic_sql 的單位，改哪個函式都擴到所有表）
         nt = SN.name_tables(srcs, ch, known) if known is not None else None
         if nt is not None:
             report.setdefault("name_tables", {})[s] = nt

@@ -39,6 +39,43 @@ def changed_names(old_src, new_src):
     return {k for k in set(on) | set(nn) if on.get(k) != nn.get(k)}
 
 
+def _refs(node):
+    """一個頂層定義的本體引用了哪些名稱（`ast.Name` 讀取＋`ast.Attribute` 的屬性名）。"""
+    out = set()
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            out.add(n.id)
+        elif isinstance(n, ast.Attribute):
+            out.add(n.attr)
+    return out
+
+
+def expand_internal(sources, names):
+    """稽核 D S-M1：模組內的引用閉包——任何頂層定義引用了被改的名稱，它也算被改，反覆做到不再增加。
+    sources：同一個模組的新舊兩版原始碼（兩版的引用關係都算，刪掉的呼叫也要算）。names 是 ALL ⇒ ALL。
+    例：改 `_as_date`，而公開的 `rules_for_date` 呼叫它 ⇒ 只 import `rules_for_date` 的使用者也要選到。"""
+    if names is ALL:
+        return ALL
+    graph = {}
+    for src in sources:
+        try:
+            tree = ast.parse(src)
+        except SyntaxError:
+            return ALL
+        for node in tree.body:
+            for d in _def_names(node):
+                graph.setdefault(d, set()).update(_refs(node) - {d})
+    out = set(names)
+    grew = True
+    while grew:
+        grew = False
+        for d, refs in graph.items():
+            if d not in out and refs & out:
+                out.add(d)
+                grew = True
+    return out
+
+
 def used_names(src, target, reexp=None):
     """target：目標的點名（`helpers.email_notify`、`db`、`core.events`、`modules.tender_radar.api`）。
     reexp：`helpers/__init__` 的再匯出 {名稱: 來源模組葉名}（`from helpers import f` 對回 email_notify）。"""

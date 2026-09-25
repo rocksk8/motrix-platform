@@ -104,3 +104,46 @@ def test_dotted():
     assert SN.dotted("backend/helpers/email_notify.py") == "helpers.email_notify"
     assert SN.dotted("backend/db.py") == "db"
     assert SN.dotted("backend/modules/tender_radar/__init__.py") == "modules.tender_radar"
+
+
+# ── 稽核 D S-M1：模組內引用閉包 ────────────────────────────────────────────
+
+MOD = '''def _a():
+    return 1
+
+
+def b():
+    return _a() + 1
+
+
+def c():
+    return b()
+
+
+def d():
+    return 4
+'''
+
+
+def test_expand_internal_follows_callers_transitively():
+    assert SN.expand_internal([MOD], {"_a"}) == {"_a", "b", "c"}
+
+
+def test_expand_internal_leaves_unrelated_names():
+    assert "d" not in SN.expand_internal([MOD], {"_a"})
+
+
+def test_expand_internal_uses_both_versions():
+    """新版把呼叫拿掉了，舊版還有 ⇒ 仍然算（刪掉的呼叫也是改動的一部分）。"""
+    new = MOD.replace("return _a() + 1", "return 2")
+    assert "b" in SN.expand_internal([MOD, new], {"_a"})
+
+
+def test_rc_expand_internal_all_stays_all():
+    assert SN.expand_internal([MOD], SN.ALL) is SN.ALL
+
+
+def test_rc_expand_internal_needs_repeated_rounds():
+    """呼叫者定義在被呼叫者之前（c → b → _a）：單輪由上往下掃會漏掉 c，必須反覆到不再增加。"""
+    src = "def c():\n    return b()\n\n\ndef b():\n    return _a()\n\n\ndef _a():\n    return 1\n"
+    assert SN.expand_internal([src], {"_a"}) == {"_a", "b", "c"}
