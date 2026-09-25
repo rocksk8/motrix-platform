@@ -5,9 +5,11 @@
   ① 建構器（超級管理員）：基本＋編號預覽 → 欄位（拖曳、必填、預設、公式〔先打錯看位置〕、參照）
      → 版面（分組、列表欄）→ 流程（狀態、轉換、兩層簽核〔第二層帶 when〕、通知）→ 輸出（指定版型、預覽）
      → 發布（先故意缺參照對象：422 標回步驟與欄位；補上後看差異、發布）
+  ①′ 超級管理員在 users.html 勾選「自訂模組 › 測試用設備借用單」授權給一般使用者（走 PUT /api/users；斷言打在 DB）
   ② 一般使用者（只有 custom.equipment_loan 權限）：新增（先漏必填：400 標回欄位）→ 送審
   ③ 兩位簽核人（沒有模組權限，用 &no= 開單）依序核准 → ④ 申請人匯出 PDF
   ⑤ 改定義發布第 2 版 ⇒ 舊單仍是第 1 版（輸出照舊）、新單用第 2 版
+另一題：一般使用者開舊單，欄位標籤與按鈕用該單那一版的定義（單據帶回的 definition；沒帶時用 meta?version=）。
 
 - 等待一律等動作的終點狀態（草稿存檔完成、busy 解除、狀態改變），不用 sleep。
 - 布林下拉（必填、終點、只限申請人）寫死 value＋x-model.boolean ⇒ 驗 DB 裡是 true／false，不是字串。
@@ -60,6 +62,32 @@ def _record(no):
         conn.close()
 
 
+def _user_modules(username):
+    conn = _db()
+    try:
+        return json.loads(conn.execute("SELECT modules FROM users WHERE username=?", (username,)).fetchone()[0] or "[]")
+    finally:
+        conn.close()
+
+
+def _grant_in_users_page(page, base, username, module_label):
+    """超級管理員在帳號管理頁編輯帳號、在「自訂模組」分組勾選模組、儲存（PUT /api/users/{id}）。"""
+    page.goto(base + "/pages/users.html")
+    row = page.locator("div", has=page.get_by_text(username, exact=True)).filter(
+        has=page.get_by_role("button", name="編輯")).last
+    row.get_by_role("button", name="編輯").click()
+    modal = page.locator(".modal-box", has=page.locator(".modal-head__title", has_text="編輯使用者"))
+    modal.wait_for(state="visible")
+    modal.get_by_text("自訂模組", exact=True).click()
+    chip = modal.locator("label", has=page.get_by_text(module_label, exact=True))
+    chip.wait_for(state="visible")
+    with page.expect_response(lambda r: r.request.method == "PUT" and "/api/users/" in r.url) as resp:
+        chip.click()
+        modal.get_by_role("button", name="儲存變更").click()
+    assert resp.value.status == 200, resp.value.text()
+    modal.wait_for(state="hidden")
+
+
 def _record_count():
     conn = _db()
     try:
@@ -81,6 +109,16 @@ def _output_html(client, token, no):
     r = client.get("/api/custom/%s/records/%s/output" % (KEY, no), headers={"Authorization": "Bearer " + token})
     assert r.status_code == 200, r.text
     return r.text
+
+
+def _meta_labels(html):
+    """輸出 HTML 的 meta 區每一列的標籤（精確，一列一個；不用子字串判斷）。"""
+    return re.findall(r"<div><span>([^<]*)</span>", html)
+
+
+def _qty_meta_label(body):
+    meta = [b for b in body["output"]["template"]["blocks"] if b["type"] == "meta"][0]
+    return [f["label"] for f in meta["fields"] if f["path"] == "fields.qty"][0]
 
 
 def _login_token(client, user):
@@ -286,7 +324,7 @@ def _assert_definition_v1():
 @pytest.mark.e2e
 def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, make_user, new_context, client):
     admin = make_user(username="p8_admin", role="superadmin")
-    requester = make_user(username="p8_user", role="viewer", modules=["custom.%s" % KEY])
+    requester = make_user(username="p8_user", role="viewer", modules=[])
     mgr = make_user(username="p8_mgr", role="viewer", modules=[])
     boss = make_user(username="p8_boss", role="viewer", modules=[])
     errors = []
@@ -295,6 +333,12 @@ def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, ma
     ap = _page(new_context, live_server, admin, errors)
     _build_equipment_loan(ap, live_server)
     _assert_definition_v1()
+
+    # ①′ 授權走網頁（PUT /api/users），不直接寫 DB
+    assert "custom.%s" % KEY not in _user_modules("p8_user")
+    _grant_in_users_page(ap, live_server, "p8_user", "測試用設備借用單")
+    assert "custom.%s" % KEY in _user_modules("p8_user")
+    assert "custom.%s" % KEY not in _user_modules("p8_mgr"), "只授權給被編輯的那個帳號"
 
     # ② 一般使用者：選單出現模組 → 新增（先漏必填）→ 送審
     up = _page(new_context, live_server, requester, errors)
@@ -375,8 +419,10 @@ def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, ma
 
     token = _login_token(client, requester)
     assert _record(no)["def_version"] == 1
-    old_html = _output_html(client, token, no)
-    assert "數量" in old_html and "借用數量" not in old_html, "舊單要照它當時的版本輸出"
+    v1_label, v2_label = _qty_meta_label(_definition(1)[1]), _qty_meta_label(_definition(2)[1])
+    assert v1_label != v2_label
+    old_labels = _meta_labels(_output_html(client, token, no))
+    assert v1_label in old_labels and v2_label not in old_labels, ("舊單要照它當時的版本輸出", old_labels)
 
     up.goto("%s/pages/custom-records.html?key=%s" % (live_server, KEY))
     up.wait_for_selector("#cr-new")
@@ -388,7 +434,8 @@ def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, ma
     no2 = up.get_attribute("#cr-record", "data-record-no")
     assert _record(no2)["def_version"] == 2
     assert up.inner_text("#cr-record-version") == "2"
-    assert "借用數量" in _output_html(client, token, no2)
+    new_labels = _meta_labels(_output_html(client, token, no2))
+    assert v2_label in new_labels and v1_label not in new_labels, new_labels
 
     up.goto("%s/pages/custom-records.html?key=%s&no=%s" % (live_server, KEY, no))
     up.wait_for_selector('#cr-record[data-record-no="%s"]' % no)
@@ -423,3 +470,175 @@ def test_d4_builder_restores_an_old_version_as_a_new_one(live_server, make_user,
     assert v == 3 and b["fields"][0]["label"] == "甲"
     assert _definition(2)[1]["fields"][0]["label"] == "乙", "還原不可以改歷史"
     assert not errors, errors
+
+
+def _publish(client, h, key, body):
+    assert client.put("/api/definitions/custom_module/%s/draft" % key, json={"body": body}, headers=h).status_code == 200
+    r = client.post("/api/definitions/custom_module/%s/publish" % key, json={}, headers=h)
+    assert r.status_code == 200, r.text
+
+
+def _def_body(key, version):
+    conn = _db()
+    try:
+        r = conn.execute("SELECT body_json FROM ui_definitions WHERE kind='custom_module' AND key=? AND version=?",
+                         (key, version)).fetchone()
+        return json.loads(r["body_json"])
+    finally:
+        conn.close()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("source", ["record-definition", "meta-version"])
+def test_old_record_uses_its_own_definition_version_for_a_regular_user(live_server, make_user, new_context, client, source):
+    """#2：一般使用者（非超級管理員）開舊單 ⇒ 欄位標籤、表單、按鈕都用該單那一版的定義，不是最新版。
+    meta-version：攔掉單據回應裡的 definition ⇒ 頁面要改問 `meta?version=`。"""
+    key = "old_def_check"
+    admin = make_user(username="p8_od_admin", role="superadmin")
+    user = make_user(username="p8_od_user", role="viewer", modules=["custom.%s" % key])
+    h = {"Authorization": "Bearer " + _login_token(client, admin)}
+    body = {"name": "舊版測試", "permission": "custom.%s" % key, "numbering": {"prefix": "OD", "date": "", "digits": 3},
+            "fields": [{"key": "a", "label": "甲欄", "type": "text", "dataClass": "T1"},
+                       {"key": "gone", "label": "只在第一版", "type": "text", "dataClass": "T1"}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                         "transitions": [{"key": "go", "label": "送出", "from": "draft", "to": "done"}]}}
+    _publish(client, h, key, body)
+    uh = {"Authorization": "Bearer " + _login_token(client, user)}
+    r = client.post("/api/custom/%s/records" % key, json={"values": {"a": "x", "gone": "y"}}, headers=uh)
+    assert r.status_code == 200, r.text
+    no = r.json()["record_no"]
+    body["fields"] = [{"key": "a", "label": "甲欄（新）", "type": "text", "dataClass": "T1"},
+                      {"key": "added", "label": "第二版才有", "type": "text", "dataClass": "T1"}]
+    body["workflow"]["transitions"][0]["label"] = "提交"
+    _publish(client, h, key, body)
+    v1, v2 = _def_body(key, 1), _def_body(key, 2)
+    assert v1["fields"][0]["label"] != v2["fields"][0]["label"]
+    assert v1["workflow"]["transitions"][0]["label"] != v2["workflow"]["transitions"][0]["label"]
+
+    errors, meta_versions = [], []
+    page = _page(new_context, live_server, user, errors)
+    page.on("request", lambda q: "/meta?version=" in q.url and meta_versions.append(q.url))
+    if source == "meta-version":
+        def strip(route):
+            resp = route.fetch()
+            data = resp.json()
+            data.pop("definition", None)
+            route.fulfill(response=resp, json=data)
+        page.route(re.compile(r".*/api/custom/%s/records/[^/?]+$" % key), strip)
+    page.goto("%s/pages/custom-records.html?key=%s&no=%s" % (live_server, key, no))
+    page.wait_for_selector('#cr-record[data-record-no="%s"] [data-view-field="a"]' % no)
+    view = page.eval_on_selector_all("#cr-record [data-view-field]",
+                                     "els => els.map(e => [e.dataset.viewField, e.querySelector('span').textContent])")
+    assert view == [[f["key"], f["label"]] for f in v1["fields"]], view
+    btn = page.locator('#cr-record [data-transition="go"]')
+    assert btn.inner_text().strip() == v1["workflow"]["transitions"][0]["label"]
+    page.click("#cr-edit")
+    page.wait_for_selector("#cr-form")
+    form = page.eval_on_selector_all("#cr-form [data-field]", "els => els.map(e => [e.dataset.field, e.querySelector('label span').textContent])")
+    assert form == [[f["key"], f["label"]] for f in v1["fields"]], form
+    if source == "meta-version":
+        assert any("version=1" in u for u in meta_versions), meta_versions
+    else:
+        assert not meta_versions, "單據已帶回 definition，不必再問 meta"
+    assert not errors, errors
+
+
+@pytest.mark.e2e
+def test_checkbox_field_saves_a_real_boolean(live_server, make_user, new_context, client):
+    """稽核 P8F-S1：執行頁的布林欄位（下拉 是／否）⇒ DB 裡是 true／false（不是字串 "false"，那是 truthy）；
+    重新開單顯示原值；再存一次仍是布林；「（未選）」是 null。"""
+    key = "bool_check"
+    admin = make_user(username="p8_bc_admin", role="superadmin")
+    user = make_user(username="p8_bc_user", role="viewer", modules=["custom.%s" % key])
+    h = {"Authorization": "Bearer " + _login_token(client, admin)}
+    _publish(client, h, key, {
+        "name": "布林測試", "permission": "custom.%s" % key, "numbering": {"prefix": "BC", "date": "", "digits": 3},
+        "fields": [{"key": "t", "label": "名稱", "type": "text", "dataClass": "T1"},
+                   {"key": "ok", "label": "已確認", "type": "checkbox", "dataClass": "T1"}],
+        "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                     "transitions": [{"key": "go", "label": "完成", "from": "draft", "to": "done"}]}})
+
+    def data(no):
+        conn = _db()
+        try:
+            r = conn.execute("SELECT data_json FROM custom_records WHERE module_key=? AND record_no=?", (key, no)).fetchone()
+            return json.loads(r[0])
+        finally:
+            conn.close()
+
+    errors = []
+    page = _page(new_context, live_server, user, errors)
+    page.goto("%s/pages/custom-records.html?key=%s" % (live_server, key))
+    page.click("#cr-new")
+    page.fill("#cr-in-t", "a")
+    page.select_option("#cr-in-ok", "false")
+    page.click("#cr-save")
+    page.wait_for_selector('#cr-record[data-record-no][data-busy="0"]')
+    no = page.get_attribute("#cr-record", "data-record-no")
+    assert data(no)["ok"] is False, data(no)
+
+    page.goto("%s/pages/custom-records.html?key=%s&no=%s" % (live_server, key, no))
+    page.wait_for_selector('#cr-record[data-record-no="%s"]' % no)
+    page.click("#cr-edit")
+    page.wait_for_selector("#cr-in-ok")
+    assert page.eval_on_selector("#cr-in-ok", "e => e.value") == "false", "重新開單要顯示原本存的「否」"
+    with page.expect_response(lambda r: r.request.method == "PUT" and ("/records/" + no) in r.url) as resp:
+        page.click("#cr-save")
+    assert resp.value.status == 200, resp.value.text()
+    assert data(no)["ok"] is False, data(no)
+
+    page.click("#cr-edit")
+    page.select_option("#cr-in-ok", "true")
+    with page.expect_response(lambda r: r.request.method == "PUT" and ("/records/" + no) in r.url) as resp:
+        page.click("#cr-save")
+    assert resp.value.status == 200
+    assert data(no)["ok"] is True, data(no)
+
+    page.click("#cr-edit")
+    page.select_option("#cr-in-ok", "")
+    with page.expect_response(lambda r: r.request.method == "PUT" and ("/records/" + no) in r.url) as resp:
+        page.click("#cr-save")
+    assert resp.value.status == 200
+    assert data(no).get("ok") is None, data(no)
+    assert not errors, errors
+
+
+@pytest.mark.e2e
+def test_publish_waits_for_the_draft_save_with_a_limit(live_server, make_user, new_context, client):
+    """稽核 P8F-S2：發布前等草稿存完有上限（10 秒）；伺服器一直不回 ⇒ 畫面標存檔失敗、不發布（不默默放行）。"""
+    key = "flush_limit"
+    admin = make_user(username="p8_fl_admin", role="superadmin")
+    h = {"Authorization": "Bearer " + _login_token(client, admin)}
+    assert client.put("/api/definitions/custom_module/%s/draft" % key, json={"body": {
+        "name": "存檔上限", "permission": "custom.%s" % key, "numbering": {"prefix": "FL", "date": "", "digits": 3},
+        "fields": [{"key": "a", "label": "甲", "type": "text", "dataClass": "T1"}],
+        "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                     "transitions": [{"key": "go", "label": "完成", "from": "draft", "to": "done"}]}}}, headers=h).status_code == 200
+    errors, held = [], []
+    page = _page(new_context, live_server, admin, errors)
+    page.goto("%s/pages/module-builder.html?key=%s" % (live_server, key))
+    page.wait_for_selector("#mb-step-1", state="visible")
+    page.route(re.compile(r".*/api/definitions/custom_module/%s/draft$" % key),
+               lambda r: held.append(r) if r.request.method == "PUT" else r.continue_())
+    page.fill("#mb-name", "存檔上限（改）")
+    page.wait_for_function("() => document.getElementById('mb-save-state').dataset.saving === '1'")   # 存檔送出、卡在路上
+    _step(page, 6)
+    page.click("#mb-publish")
+    page.wait_for_selector("#mb-publish[disabled]", state="attached")
+    page.wait_for_selector("#mb-publish:not([disabled])", state="attached", timeout=30000)   # 發布這個動作結束了
+    assert page.get_attribute("#mb-save-state", "data-state") == "error"
+    assert page.inner_text("#mb-error").strip(), "逾時要在畫面上說明"
+    assert _definition_of(key) is None, "存檔沒完成就不可以發布"
+    assert held, "草稿存檔應該被攔在路上"
+    for r in held:
+        r.abort()
+    assert not errors, errors
+
+
+def _definition_of(key):
+    conn = _db()
+    try:
+        return conn.execute("SELECT version FROM ui_definitions WHERE kind='custom_module' AND key=? AND status='published'",
+                            (key,)).fetchone()
+    finally:
+        conn.close()
