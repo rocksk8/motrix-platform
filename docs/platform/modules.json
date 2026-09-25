@@ -60,6 +60,7 @@
    "page:pages/users.html",
    "page:pages/work-log.html",
    "plat:loader",
+   "plat:paths",
    "plat:registry",
    "plat:source_tree",
    "router:approval_delegates",
