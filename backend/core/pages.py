@@ -44,10 +44,25 @@ def valid_name(name) -> bool:
     return isinstance(name, str) and bool(PAGE_NAME.match(name)) and ".." not in name
 
 
-def collect(manifests, l1_dir):
+#: L1 頁面清單（模組不可以宣告；稽核 D P-M1）。與 docs/platform/modules.json 的 L1 頁面單位一致（守門 test_core_pages）。
+L1_PAGES_FILE = Path(__file__).with_name("l1_pages.json")
+
+
+def load_l1_pages(path=None):
+    """L1 頁面檔名集合（小寫）；讀不到 ⇒ 空集合（呼叫端的守門題會紅，產品不因此起不來）。"""
+    try:
+        return {n.lower() for n in json.loads(Path(path or L1_PAGES_FILE).read_text(encoding="utf-8"))}
+    except (OSError, ValueError):
+        logger.error("讀不到 L1 頁面清單 %s ⇒ 模組宣告 L1 頁面將無法擋下", path or L1_PAGES_FILE)
+        return set()
+
+
+def collect(manifests, l1_dir, l1_pages=None):
     """{模組key: (manifest, 模組資料夾)} ⇒ (page_map {檔名: (模組key, 實體路徑)}, refused {模組key: 原因}, missing {模組key: [檔名]})。
 
     **衝突**（比照 P-LD-07）⇒ 整個模組列進 refused：
+    - 宣告了 L1 頁面（l1_pages；None ⇒ 讀 core/l1_pages.json）——稽核 D P-M1：模組把 login.html 宣告成自己的，
+      停用那個模組登入頁就 404
     - 宣告的檔名不合 PAGE_NAME
     - 檔名（不分大小寫）已被先到的模組宣告
     - 模組資料夾與 frontend/pages 各有一份（兩份會漂移）
@@ -57,6 +72,7 @@ def collect(manifests, l1_dir):
      蓋掉了它應有的 disabled／unlicensed 狀態（全量抓到）〕
     """
     l1_dir = Path(l1_dir)
+    l1 = load_l1_pages() if l1_pages is None else {n.lower() for n in l1_pages}
     out, refused, missing = {}, {}, {}
     for key in sorted(manifests):
         manifest, mod_dir = manifests[key]
@@ -65,6 +81,9 @@ def collect(manifests, l1_dir):
             name = p.get("path") if isinstance(p, dict) else None
             if not valid_name(name):
                 problems.append("宣告的頁面檔名不合法：%r" % (name,))
+                continue
+            if name.lower() in l1:
+                problems.append("頁面 %s 是 L1 頁面，模組不可以宣告" % name)
                 continue
             same = [n for n in out if n.lower() == name.lower()]
             if same:
