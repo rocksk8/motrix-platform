@@ -90,29 +90,6 @@ def test_round_half_up_and_floor_on_the_boundaries():
         lp.round_half_up(True, 0.0211)
 
 
-def test_nhi_supplement_matches_half_up_for_every_amount_from_20000_to_2000000():
-    """全域掃描（稽核 D-1）：後端勞報單計算 vs 四捨五入，逐元比對；扣繳 vs 元以下捨去。
-    正對照：同一個範圍內，內建 round() 與四捨五入不同的金額要恰好是稽核數到的 99 個（題目看得到差異）。"""
-    from modules.payroll.api.payslips import _calc
-    rules = lp.DEFAULT_TAX_RULE_VERSIONS[0]
-    nhi = Fraction(repr(rules["nhi"]["rate"]))
-    tax = Fraction(repr(rules["resident"]["9A"]["tax_rate"]))
-    th_tax = rules["resident"]["9A"]["tax_threshold"]
-    bad, banker_diff = [], 0
-    for g in range(20000, 2000001):
-        want_nhi = _half_up_oracle(g * nhi.numerator, nhi.denominator)
-        want_tax = (g * tax.numerator) // tax.denominator if g >= th_tax else 0
-        got = _calc(g, "9A", "本國籍", False, rules)
-        if got["nhiSupplement"] != want_nhi or got["taxWithheld"] != want_tax:
-            bad.append((g, got["nhiSupplement"], want_nhi, got["taxWithheld"], want_tax))
-            if len(bad) > 20:
-                break
-        if round(g * float(nhi)) != want_nhi:
-            banker_diff += 1
-    assert not bad, "後端與四捨五入／捨去不一致（金額, 補充保費, 應為, 扣繳, 應為）：%s" % bad[:20]
-    assert banker_diff == 99, "正對照：內建 round() 在這個範圍應該有 99 個金額不同，實得 %d" % banker_diff
-
-
 @pytest.mark.parametrize("rate", [0.05, 0.06, 0.10, 0.18, 0.20])
 def test_withholding_floor_matches_integer_floor_for_all_legal_rates(rate):
     f = Fraction(repr(rate))
@@ -120,136 +97,13 @@ def test_withholding_floor_matches_integer_floor_for_all_legal_rates(rate):
     assert not bad[:5]
 
 
-def test_api_stores_739_for_35000(client, make_user):
-    h = _hdr(client, make_user)
-    r = client.post("/api/payslips", json={"data": _data(35000, "9A", "2026-10-01")}, headers=h)
-    assert r.status_code == 201, r.text
-    assert r.json()["calc"]["nhiSupplement"] == 739
-    row = client.get("/api/payslips/" + r.json()["slip_no"], headers=h).json()
-    assert row["nhi_supplement"] == 739 and row["net_amount"] == 35000 - 3500 - 739
-
-
 # ── D-2 並行修改 ────────────────────────────────────────────────────────────────
-
-def test_concurrent_edits_do_not_clear_a_recorded_ack(client, make_user, monkeypatch):
-    """A 修改（沒勾已告知）讀完舊單後停在計算；B 同時勾「已告知」。放行 A 之後，紀錄不可以消失。
-    修好：A 拿著寫鎖，B 等 A 寫完才讀（讀到 A 的結果再加上紀錄）。
-    交易外讀（突變）：B 先寫完紀錄，A 用自己讀到的舊單整包蓋回 ⇒ 紀錄被清掉。"""
-    from modules.payroll.api import payslips as ps
-    h = _hdr(client, make_user)
-    no = client.post("/api/payslips", json={"data": _data()}, headers=h).json()["slip_no"]
-
-    real_calc = ps._calc
-    paused, release = threading.Event(), threading.Event()
-
-    def slow_calc(*a, **k):
-        if threading.current_thread().name == "editor-A":
-            paused.set()
-            release.wait(15)
-        return real_calc(*a, **k)
-
-    monkeypatch.setattr(ps, "_calc", slow_calc)
-    errors = []
-
-    def edit(ack):
-        try:
-            ps.update_payslip(no, ps.PayslipIn(data=_data(remarks="A" if not ack else "B",
-                                                           **({"privacyNoticeAcked": True} if ack else {}))),
-                              authorization=h["Authorization"])
-        except Exception as e:          # noqa: BLE001
-            errors.append(e)
-
-    a = threading.Thread(target=edit, args=(False,), name="editor-A")
-    a.start()
-    try:
-        assert paused.wait(15), "A 沒有走到計算"
-        b = threading.Thread(target=edit, args=(True,), name="editor-B")
-        b.start()
-        b.join(2.0)                    # 修好：B 卡在寫鎖；突變：B 已經寫完
-    finally:
-        release.set()
-    a.join(30)
-    b.join(30)
-    assert not a.is_alive() and not b.is_alive()
-    assert not errors, errors
-    rec = client.get("/api/payslips/" + no, headers=h).json()["data"].get("privacyNotice")
-    assert rec and rec.get("at") and rec["byUsername"] == "dfix_su", "並行修改把已告知紀錄清掉了"
-
-
-def test_edit_refusals_release_the_write_lock(client, make_user):
-    """寫交易裡的 4xx（找不到、已匯出、版本不存在）要放掉寫鎖：之後的寫入不可以卡住。"""
-    import db
-    h = _hdr(client, make_user)
-    assert client.put("/api/payslips/PS-209901-001", json={"data": _data()}, headers=h).status_code == 404
-    no = client.post("/api/payslips", json={"data": _data()}, headers=h).json()["slip_no"]
-    conn = db.get_db()
-    try:
-        conn.execute("UPDATE payslips SET status='已匯出' WHERE slip_no=?", (no,))
-        conn.commit()
-    finally:
-        conn.close()
-    assert client.put("/api/payslips/" + no, json={"data": _data()}, headers=h).status_code == 409
-    conn = db.get_db()
-    try:
-        conn.execute("PRAGMA busy_timeout=500")
-        conn.execute("BEGIN IMMEDIATE")        # 還被鎖著 ⇒ 0.5 秒後 database is locked
-        conn.rollback()
-    finally:
-        conn.close()
 
 
 # ── S-6 單據凍結 ────────────────────────────────────────────────────────────────
 
-def test_editing_uses_the_snapshot_even_if_its_future_version_was_changed(client, make_user, frozen_today):
-    """突變 M12（改用版本號查）存活處：未生效的版本可以改；改了之後修改舊單，仍要沿用建立時的快照。"""
-    h = _hdr(client, make_user)
-    r = client.put("/api/legal-params/tax-rules", json={"versions": lp.load_versions() + [_v2027()]}, headers=h)
-    assert r.status_code == 200, r.text
-    r = client.post("/api/payslips", json={"data": _data(31000, "50", "2027-01-05")}, headers=h)
-    assert r.status_code == 201 and r.json()["calc"]["nhiSupplement"] == 654, r.text     # 31,000 ≥ 30,900
-    no = r.json()["slip_no"]
-    vs = lp.load_versions()
-    v27 = next(v for v in vs if v["version"] == "2027")
-    v27["minimum_wage"]["monthly"] = 32000
-    v27["nhi"]["thresholds"]["50"] = 32000
-    r = client.put("/api/legal-params/tax-rules", json={"versions": vs}, headers=h)
-    assert r.status_code == 200, r.text                                                   # 未生效 ⇒ 可以改
-    r = client.put("/api/payslips/" + no, json={"data": _data(31000, "50", "2027-01-05")}, headers=h)
-    assert r.status_code == 200, r.text
-    assert r.json()["calc"]["nhiSupplement"] == 654, "沒勾重算 ⇒ 沿用快照（門檻 30,900），不是改過的 2027 版"
-    snap = client.get("/api/payslips/" + no, headers=h).json()["data"]["taxRulesSnapshot"]
-    assert snap["minimum_wage"]["monthly"] == 30900
-
-
-def test_create_ignores_a_snapshot_sent_by_the_client(client, make_user):
-    """突變 M16（建立時收前端快照）存活處：建立時送來的快照與版本號一律不採用。"""
-    h = _hdr(client, make_user)
-    fake = copy.deepcopy(lp.DEFAULT_TAX_RULE_VERSIONS[0])
-    fake["nhi"]["rate"] = 0.0
-    fake["version"] = "偽造"
-    r = client.post("/api/payslips", json={"data": _data(taxRulesSnapshot=fake, taxRulesVersion="偽造")}, headers=h)
-    assert r.status_code == 201, r.text
-    assert r.json()["calc"]["nhiSupplement"] == 633 and r.json()["taxRulesVersion"] == "2026"
-    no = r.json()["slip_no"]
-    row = client.get("/api/payslips/" + no, headers=h).json()
-    assert row["data"]["taxRulesSnapshot"]["nhi"]["rate"] == 0.0211 and row["tax_rules_version"] == "2026"
-    r = client.put("/api/payslips/" + no, json={"data": _data()}, headers=h)
-    assert r.status_code == 200 and r.json()["calc"]["nhiSupplement"] == 633, "存下來的快照也不可以是前端的"
-
 
 # ── S-3 設定值損毀 ──────────────────────────────────────────────────────────────
-
-
-def test_corrupted_text_archive_refuses_the_ack_but_not_the_save(client, make_user):
-    h = _hdr(client, make_user)
-    no = client.post("/api/payslips", json={"data": _data()}, headers=h).json()["slip_no"]
-    _set_raw_setting(pn.TEXTS_KEY, "not json")
-    r = client.put("/api/payslips/" + no, json={"data": _data(privacyNoticeAcked=True)}, headers=h)
-    assert r.status_code == 409 and "損毀" in r.json()["detail"], r.text
-    assert "privacyNotice" not in client.get("/api/payslips/" + no, headers=h).json()["data"]
-    r = client.put("/api/payslips/" + no, json={"data": _data(remarks="沒勾")}, headers=h)
-    assert r.status_code == 200, "沒勾已告知的存檔不受影響（§9.3 不擋存檔）"
-    assert _raw_setting(pn.TEXTS_KEY) == "not json"
 
 
 # ── S-5 告知全文 ────────────────────────────────────────────────────────────────

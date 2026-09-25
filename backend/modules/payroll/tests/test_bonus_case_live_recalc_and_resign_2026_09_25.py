@@ -11,9 +11,9 @@ import json
 
 import pytest
 
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _login, _set_flow)
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 SPLIT = {"sales": 5000, "project": 3000, "admin": 2000}
 

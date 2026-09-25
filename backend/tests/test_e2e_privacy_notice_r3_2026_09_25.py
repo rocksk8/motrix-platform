@@ -38,34 +38,3 @@ def test_company_profile_page_edits_the_notice(live_server, make_user, new_page,
     page.wait_for_function(f"() => !{ROOT}.saving && {ROOT}.msg === '設定已儲存'", timeout=10000)
     saved = (_get_setting("company_profile", {}) or {}).get("privacy_notice", "")
     assert "個人資料保護法" in saved and "台北市（測試）" in saved
-
-
-@pytest.mark.e2e
-def test_payslip_form_prints_and_records_the_notice(live_server, make_user, new_page, login_as, client):
-    u = make_user(username="r3e_ps", role="superadmin")
-    page = new_page()
-    page.context.add_init_script(NO_PRINT)
-    login_as(page, u)
-    page.goto(live_server + "/pages/payslip-form.html")
-    _ready(page, f"{ROOT}.rulesVersion !== '' && {ROOT}.privacyNotice")
-    card = page.locator("[data-privacy-card]")
-    assert card.locator("[data-privacy-missing]").is_visible()
-    page.evaluate(f"""() => {{ const d = {ROOT}; d.q.contractorName = '王受領'; d.q.serviceContent = '安裝';
-        d.q.grossAmount = 10000; d.calc() }}""")
-    with page.context.expect_page(timeout=10000) as pop:
-        card.locator("[data-print-notice]").click()
-    doc = pop.value
-    doc.wait_for_load_state()
-    assert "王受領" in doc.locator("[data-subject]").inner_text()
-    assert "蒐集目的" in doc.locator("[data-notice-text]").inner_text()
-    doc.close()
-
-    card.locator("input[data-privacy-ack]").check()
-    page.evaluate(f"() => {ROOT}.save()")
-    acked = card.locator("[data-privacy-acked]")
-    acked.wait_for(state="visible", timeout=10000)
-    assert "r3e_ps" in acked.inner_text()
-    no = page.evaluate(f"() => {ROOT}.q.slipNo")
-    tok = client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]
-    rec = client.get("/api/payslips/" + no, headers={"Authorization": "Bearer " + tok}).json()["data"]["privacyNotice"]
-    assert rec["byUsername"] == "r3e_ps" and rec["noticeHash"] == pn.notice_hash(pn.current_notice())

@@ -81,7 +81,7 @@ def test_cascaded_cells_record_the_signer():
 
 def test_a_delegated_cascade_records_on_behalf_of(client, make_user):
     """代理：他代理 boss 的層也可以一起蓋掉 ⇒ 那一格記 approvedBy=他、onBehalfOf=boss、顯示名稱查得到。"""
-    from tests.test_bonus_case_api_2026_09_24 import _delegate
+    from tests._delegates import delegate as _delegate
     make_user(username="cs_me", role="admin")
     make_user(username="cs_boss", role="admin")
     import db

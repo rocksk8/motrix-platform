@@ -9,8 +9,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_e2e_bonus_case_page_2026_09_24 import _login  # noqa: E402,F401
-from tests.test_bonus_case_api_2026_09_24 import _seed_case, _set_flow, _auth, _login as _api_login  # noqa: E402
+from modules.payroll.tests.test_e2e_bonus_case_page_2026_09_24 import _login  # noqa: E402,F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _seed_case, _set_flow, _auth, _login as _api_login  # noqa: E402
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs  # noqa: E402
 
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"

@@ -13,14 +13,6 @@ def _hdr(client, make_user):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
 
 
-def test_status_follows_the_payroll_switch(client, make_user, monkeypatch):
-    h = _hdr(client, make_user)
-    monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
-    assert client.get("/api/system/bonus-module-status", headers=h).json()["enabled"] is True
-    monkeypatch.setenv("BONUS_MODULE_ENABLED", "0")
-    assert client.get("/api/system/bonus-module-status", headers=h).json() == {"enabled": False}
-
-
 def test_without_payroll_it_is_off_and_says_why(client, make_user, monkeypatch):
     from routers import system
     h = _hdr(client, make_user)

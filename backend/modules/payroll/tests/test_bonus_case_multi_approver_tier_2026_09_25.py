@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _login)
 
 
@@ -63,7 +63,7 @@ def _submit(client, people, no):
 
 
 def test_both_approvers_in_one_tier_must_sign(client, people, sa3):
-    from tests.test_bonus_case_api_2026_09_24 import _set_flow
+    from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _set_flow
     _set_flow(["bc_sa2"])          # 讓設定列存在，再覆寫成「一層兩人」
     _flow(["bc_sa2", "bc_sa3"])
     no = "MQ-MAT-001"
@@ -88,7 +88,7 @@ def test_both_approvers_in_one_tier_must_sign(client, people, sa3):
 
 
 def test_second_approver_cannot_sign_before_the_first(client, people, sa3):
-    from tests.test_bonus_case_api_2026_09_24 import _set_flow
+    from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _set_flow
     _set_flow(["bc_sa2"])
     _flow(["bc_sa2", "bc_sa3"])
     no = "MQ-MAT-002"
@@ -100,7 +100,7 @@ def test_second_approver_cannot_sign_before_the_first(client, people, sa3):
 
 def test_two_single_approver_tiers_still_advance_one_per_signature(client, people, sa3):
     """回歸：一層一人時行為不變（每簽一次換一層，最後一層簽完才待發放）。"""
-    from tests.test_bonus_case_api_2026_09_24 import _set_flow
+    from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _set_flow
     _set_flow(["bc_sa2"])
     _flow(["bc_sa2"], ["bc_sa3"])
     no = "MQ-MAT-003"

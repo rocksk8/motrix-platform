@@ -16,7 +16,7 @@ import json
 import pytest
 
 from tests.test_case_extra_expenses_api_2026_09_11 import _login, _auth, _make_case, _base, _payload
-from tests.test_bonus_case_api_2026_09_24 import _delegate
+from tests._delegates import delegate as _delegate
 
 NO = "MQ-XTR-001"
 

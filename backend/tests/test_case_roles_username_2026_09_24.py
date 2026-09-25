@@ -123,32 +123,6 @@ def test_member_check_by_username_ignores_same_display_name(client, make_user):
     assert r.status_code == 403, r.text
 
 
-def test_bonus_auto_executor_uses_username(client, make_user):
-    import db
-    from modules.payroll.api import bonus
-    make_user(username="rl_bexec", role="engineer"); _set_display("rl_bexec", "現在的名字")
-    _seed({"executor": {"username": "rl_bexec", "display": "當時的名字"}})
-    conn = db.get_db()
-    try:
-        members, notes = bonus._auto_members(conn, NO)
-    finally:
-        conn.close()
-    assert [m["username"] for m in members["project"]] == ["rl_bexec"], (members, notes)
-
-
-def test_bonus_auto_executor_legacy_string_still_works(client, make_user):
-    import db
-    from modules.payroll.api import bonus
-    make_user(username="rl_bold", role="engineer"); _set_display("rl_bold", "舊資料名")
-    _seed({"executor": "舊資料名"})
-    conn = db.get_db()
-    try:
-        members, _ = bonus._auto_members(conn, NO)
-    finally:
-        conn.close()
-    assert [m["username"] for m in members["project"]] == ["rl_bold"]
-
-
 def test_reports_sales_owner_uses_username():
     from routers import reports as rp
     users = {1: {"displayName": "同名", "username": "a"}, 2: {"displayName": "同名", "username": "b"}}

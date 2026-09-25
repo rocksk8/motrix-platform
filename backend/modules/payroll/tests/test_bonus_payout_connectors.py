@@ -17,8 +17,8 @@ import pytest
 from core import registry
 from modules.payroll import bonus_deductions as bd
 from helpers import legal_params as lp
-from tests._bonus_insure import insure_all
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests._bonus_insure import insure_all
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow, _delegate)
 
 YEAR_PARAMS_VERSION = {   # R1 的一版的形狀（helpers.legal_params，IP-7）——合成，不讀產品的預設值
@@ -156,7 +156,7 @@ def test_mail_body_has_no_amount(monkeypatch):
 
 def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, make_user):
     insure_all()
-    from tests.test_bonus_case_api_2026_09_24 import _login
+    from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _login
     _to_payout(client, people, "MQ-BP-C1")
     q = client.get("/api/cashier/bonus-queue", headers=_auth(people["bc_cash"])).json()
     row = next(i for i in q["items"] if i["quoteNo"] == "MQ-BP-C1")
