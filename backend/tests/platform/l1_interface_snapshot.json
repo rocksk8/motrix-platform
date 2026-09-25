@@ -1,5 +1,5 @@
 {
- "core_version": "1.1",
+ "core_version": "1.2",
  "interface": {
   "core:archive": {
    "SNAPSHOT_IDENTITY_TABLES": "const",
@@ -316,9 +316,12 @@
    "LICENSE_KIND_PERPETUAL": "const",
    "LICENSE_KIND_SUBSCRIPTION": "const",
    "LICENSE_PATH": "const",
+   "MODULE_LICENSE_NOT_CHECKED": "const",
    "license_block_message": "def(status)",
    "license_blocks_request": "def(status)",
    "machine_fingerprint": "def()",
+   "module_license_check": "def(manifest)",
+   "module_licensed": "def(manifest, status, gate_enabled)",
    "sign_license": "def(payload, private_key_pem)",
    "verify_license": "def(blob=…)"
   },
@@ -331,6 +334,12 @@
    "SUPERADMIN_DEFAULT": "const",
    "catalog": "def()",
    "refuse_unknown_new_keys": "def(new_modules, existing_modules=…)"
+  },
+  "helper:module_switches": {
+   "SETTING_KEY": "const",
+   "configured_disabled": "def()",
+   "read_disabled_at_startup": "def(db_path=…)",
+   "set_enabled": "def(key, enabled)"
   },
   "helper:notification_prefs": {
    "EVENT_GROUPS": "const",
@@ -426,10 +435,26 @@
    "xl_safe": "def(val)",
    "xl_style": "def(wb)"
   },
+  "plat:events": {
+   "EventDecl": "class",
+   "EventDecl.description": "field=…",
+   "EventDecl.fields": "field",
+   "EventDecl.name": "field",
+   "EventDecl.owner": "field",
+   "EventDecl.version": "field",
+   "declarations": "def()",
+   "declare": "def(name, owner, version, fields, description=…)",
+   "publish": "def(name, payload)",
+   "recent_failures": "def()",
+   "restore": "def(state)",
+   "snapshot": "def()",
+   "subscribe": "def(name, handler, subscriber)",
+   "subscribers": "def(name)"
+  },
   "plat:loader": {
    "MODULES_DIR": "const",
    "core_compatible": "def(spec, core_version=…)",
-   "load_all": "def(modules_dir=…, package=…)"
+   "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…)"
   },
   "plat:paths": {
    "BACKEND_DIR": "const",
@@ -488,15 +513,20 @@
    "RuntimeSwitch.env": "field",
    "RuntimeSwitch.is_on": "field",
    "RuntimeSwitch.label": "field",
+   "STATES": "const",
    "failed": "def()",
    "is_loaded": "def(key)",
    "loaded": "def()",
    "mark_failed": "def(key, reason)",
+   "module_states": "def()",
    "provide": "def(capability, name, fn)",
    "providers": "def(capability)",
    "register": "def(loaded)",
+   "restore": "def(snap)",
    "runtime_switches": "def()",
-   "single_provider": "def(capability)"
+   "set_state": "def(key, state, reason=…, manifest=…)",
+   "single_provider": "def(capability)",
+   "snapshot": "def()"
   },
   "plat:source_tree": {
    "BACKEND": "const",

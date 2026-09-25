@@ -52,6 +52,16 @@ def test_rc_signature_change_needs_major():
     assert not G.bump_ok("1.2", "1.3", "major") and G.bump_ok("1.2", "2.0", "major")
 
 
+def test_rc_trailing_defaulted_params_are_a_compatible_extension():
+    """尾端加有預設值的參數 ⇒ 相容擴充（次版號）；拿掉預設值、插在中間、改名 ⇒ 仍是修改（主版號）。"""
+    ok = {"plat:x": {"f": "def(a, b=…)"}}
+    for new, need in (("def(a, b=…, c=…)", "minor"), ("def(a, b=…, *, c=…)", "minor"), ("def(a, b=…, **kw)", "minor"),
+                      ("def(a, b=…, c)", "major"), ("def(a, c=…, b=…)", "major"), ("def(a, bb=…)", "major"),
+                      ("def(a, b)", "major")):
+        a, c, r = G.diff(ok, {"plat:x": {"f": new}})
+        assert G.required_bump(a, c, r) == need, (new, a, c)
+
+
 def test_rc_removal_needs_major():
     a, c, r = G.diff({"plat:x": {"f": "def()", "g": "def()"}}, {"plat:x": {"f": "def()"}})
     assert r == ["plat:x::g"] and G.required_bump(a, c, r) == "major"

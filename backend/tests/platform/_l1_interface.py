@@ -94,8 +94,24 @@ def current_interface(units=None):
     return res
 
 
+def _params(desc):
+    m = __import__("re").match(r"^def\((.*)\)$", desc)
+    if not m:
+        return None
+    return [p.strip() for p in m.group(1).split(",") if p.strip()]
+
+
+def compatible_extension(old_desc, new_desc):
+    """相容擴充：舊參數原樣、原順序保留在前面，新加的都有預設值（或是 *args／**kwargs／keyword-only 分隔）。"""
+    o, n = _params(old_desc), _params(new_desc)
+    if o is None or n is None or n[:len(o)] != o:
+        return False
+    return all(p.endswith("=…") or p.startswith("*") for p in n[len(o):])
+
+
 def diff(old, new):
-    """(added, changed, removed)：各為 ["unit::name", ...]。整個單位新增／刪除也算。"""
+    """(added, changed, removed)：各為 ["unit::name", ...]。整個單位新增／刪除也算。
+    簽章只在尾端加了有預設值的參數 ⇒ 算「新增」（相容擴充，升次版號即可）。"""
     added, changed, removed = [], [], []
     for u in sorted(set(old) | set(new)):
         o, n = old.get(u, {}), new.get(u, {})
@@ -106,7 +122,10 @@ def diff(old, new):
             elif k not in n:
                 removed.append(key)
             elif o[k] != n[k]:
-                changed.append("%s  %s → %s" % (key, o[k], n[k]))
+                if compatible_extension(o[k], n[k]):
+                    added.append("%s  %s → %s（相容擴充）" % (key, o[k], n[k]))
+                else:
+                    changed.append("%s  %s → %s" % (key, o[k], n[k]))
     return added, changed, removed
 
 
