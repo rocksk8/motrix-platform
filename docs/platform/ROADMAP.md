@@ -71,11 +71,13 @@
 4. M02 業務開發 — ✅ 後端完成（C，2026-09-26，`modules/crm`）：IP-13 `crm.quote_deleted` 取代 M01 直寫 `dev_cases`；反向控制（刪掉模組資料夾）：啟動 ping 200、三個前綴 404、報價單照刪並回 notice。剩：他模組直接讀 `dev_cases`／`dev_logs`（讀取連接器另開題）、停滯檢查直寫 `audit_log`、頁面（階段 C）
 5. M04 外包工班 — ✅ 後端完成（C，2026-09-26，`modules/subcontract`，router 放 `api/`）：IP-15／17／14 切斷與 M01／M05／M06 的 import（對方不在時皆明說）；案件存取守門與 normalize_date 先下沉 L1；dep_scan 改用 `core.source_tree.module_files`。剩：他模組直接讀四張表（讀取連接器另開題）、~~`privacy_notice_acks` 改用模組自己的表~~〔更正：主持裁示維持 L1 共用表——個資告知是跨模組的共用能力，稽核 D O-1〕、頁面（階段 C）
 6. M05 應收應付 — 需要 A6、A8
+   - 搬遷時把 `/api/reports/bank-reconcile` 收回 M05（業務語意屬於出納；M08 搬遷時暫留 M08，主持 2026-09-26 裁示）
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
 9. M03 採購庫存出貨 — 需要 §4 的 stock_items（🔄 A 2026-09-26 開工，wip/a-m03）
-10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider（分給 B，主持 2026-09-26）
+10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider（分給 B，主持 2026-09-26）〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
+   - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
 
 ## 階段 G：準則的守門（MODULE-GUIDE 標「⚠ 未守門」的項目）
 
