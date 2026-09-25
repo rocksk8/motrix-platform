@@ -145,6 +145,24 @@
 | 不做的事 | 不做跨行程或持久化佇列（目前單機單行程）；也不做「交易內」的同步參與，需要同一個交易內一起寫的，走 provider |
 
 
+## 7. P7 模組更新包（規格細節，2026-09-25 B）
+
+**用途**：以單一模組為單位更新已安裝的系統（裁示 2：獨立升級），不動 L0／L1，也不動其他模組。儀表板的操作介面由主持接（D2 已能預覽「這次改到哪些模組」）。
+
+| 項目 | 規則 |
+|---|---|
+| 工具 | `python tools/platform/module_update.py build／check／apply／rollback／list` |
+| 包的內容 | `backend/modules/<key>/`（**不含** `tests/`、`SPEC.md`）＋它 `module.json` 宣告的頁面 `frontend/pages/<path>`＋`module-update.lock.json`（lock 結構同 9c①，`kind: "module_update"`，只列這一個模組；另記 `built_from` commit 與 `core_version`） |
+| 打包前提 | 工作樹乾淨（只打已 commit 的內容，從 git 取檔）；該模組的 CHANGELOG 最上面版號＝module.json version（G2） |
+| 套用前檢查（全部過才動手） | ① 包的 lock 與內容雜湊一致 ② 安裝目錄有 `backend/modules.lock.json`（full_package）③ 安裝目錄的 `CORE_VERSION` 滿足模組 `core` 範圍 ④ 版本只能往上（同版或降版 ⇒ 拒絕，除非 `--allow-downgrade`）⑤ 模組帶 `migrations/` ⇒ 拒絕（模組自有 migration 尚未實作；見下方「未做」） |
+| 套用 | 先把安裝目錄現有的 `modules/<key>/` 與它的頁面複製到 `module_backups/<key>/<時間>/`（附雜湊清單），再整個替換；更新安裝目錄的 `modules.lock.json` 該模組那一筆；寫 `module_backups/<key>/<時間>/apply.json` 紀錄。**需要重啟服務才生效**（路由在啟動時掛上，同 9c③） |
+| 回滾 | 從最近一次（或指定）備份還原 `modules/<key>/` 與頁面；還原後雜湊必須與備份時逐一相等，否則報錯；`modules.lock.json` 還原為備份時那一筆 |
+| 首次安裝 | 安裝目錄沒有這個模組 ⇒ 允許（備份記錄「原本不存在」，回滾＝移除該模組與頁面） |
+| 資料 | 不動資料庫；模組的表由凍結 migration 或未來的模組 migration 建立 |
+| 守門 | `tests/platform/test_module_update.py`：合成安裝目錄上跑 build→apply→rollback，雜湊逐一相等；每一條套用前檢查各有反向控制 |
+
+**未做（排入 ROADMAP 階段 P）**：模組自有 migration 的套用與回滾（P7b）；正式機上的實際套用流程（停服務、套用、重啟、健康檢查、失敗自動回滾）由儀表板串接（主持）。
+
 ## 8. 建構介面與排版器的畫面需求（P8 前端、P9；主持 2026-09-25，給 C 設計 P5／P8 API 時對齊）
 
 > 參考 BENCHMARK §3.3（NUEiP／Ragic 的區塊自訂）與 §4（使用者體驗）。原則：**所見即所得、每一步都能預覽、發布前能看差異、發布後能還原**。
