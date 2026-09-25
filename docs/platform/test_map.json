@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 464,
+  "tests": 465,
   "unmapped": 6,
   "kinds": {
    "api": 251,
-   "e2e": 117,
+   "e2e": 118,
    "unit": 38,
    "audit": 58
   },
@@ -224,6 +224,34 @@
     ],
     "path": [
      "backend/modules/tender_radar/tests/fixtures/tender_list_20260921.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_mp1_case_link_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_map_tiles.py",
+    "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "page:pages/map.html",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_map_tiles.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+    ],
+    "page": [
+     "frontend/pages/map.html",
+     "frontend/pages/tender-radar.html"
     ],
     "module_dir": [
      "backend/modules/tender_radar/"
@@ -8584,6 +8612,7 @@
   "backend/tests/test_spec_coverage_2026_09_21.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/",
     "dir:docs/windows/",
     "file:docs/windows/SCOPE.md",
     "file:docs/windows/STATE.md",
@@ -8596,6 +8625,7 @@
      "frontend/static/sidebar.js"
     ],
     "path": [
+     "backend/modules/",
      "docs/windows/",
      "docs/windows/SCOPE.md",
      "docs/windows/STATE.md"
