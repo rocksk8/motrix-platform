@@ -42,10 +42,17 @@ def changed_files(repo=REPO, base_ref=BASE_REF):
     return sorted(n for n in names if n)
 
 
-def missing_cards(changed, snapshot, backend=U.BACKEND):
-    """改到的檔中屬於 G1 單位、卻沒有單位卡的 ⇒ [(單位, 路徑)]。"""
+#: 規則 1「改到就要補卡」目前只強制這些路徑（主持 2026-09-26：使用者裁示「轉移流程優先」，
+#: 模組搬遷期間各包大量改到 helper，全面強制會讓每一班列車都卡在補卡）。D1 搬遷完成後擴大到 backend/helpers/ 等 L1。
+ENFORCED_PREFIXES = ("backend/core/",)
+
+
+def missing_cards(changed, snapshot, backend=U.BACKEND, enforced=ENFORCED_PREFIXES):
+    """改到的檔中屬於 G1 單位、在強制範圍內、卻沒有單位卡的 ⇒ [(單位, 路徑)]。"""
     out = []
     for rel in changed:
+        if not any(rel.replace("\\", "/").startswith(pre) for pre in enforced):
+            continue
         u = U.path_unit(rel)
         if u is None or u not in snapshot:
             continue
@@ -190,8 +197,23 @@ def test_rc_changed_file_without_card_is_caught(snapshot):
     """改到一個沒卡的 L1 檔（helper:auth 目前沒有卡）⇒ 抓得到；改到有卡的、非 L1 的 ⇒ 不抓。"""
     rel_nocard = next(("backend/helpers/%s.py" % u.split(":", 1)[1]) for u in sorted(snapshot)
                       if u.startswith("helper:") and U.cards({u: snapshot[u]})[u]["card"] is None)
-    miss = missing_cards([rel_nocard, "backend/core/events.py", "backend/routers/cashier.py", "docs/x.md"], snapshot)
+    files = [rel_nocard, "backend/core/events.py", "backend/routers/cashier.py", "docs/x.md"]
+    miss = missing_cards(files, snapshot, enforced=("backend/",))       # 範圍擴大到全部 ⇒ 抓得到
     assert [r for _, r in miss] == [rel_nocard]
+    assert missing_cards(files, snapshot) == []                         # 目前的強制範圍（backend/core/）不含 helper
+
+
+def test_rc_core_file_without_card_is_caught_in_current_scope(snapshot, tmp_path):
+    """目前的強制範圍：core/ 底下沒有卡的單位 ⇒ 抓得到（用暫存 backend，真的拿掉一張卡）。"""
+    import shutil
+    b = tmp_path / "backend"
+    shutil.copytree(U.BACKEND / "core", b / "core")
+    p = b / "core" / "events.py"
+    src = p.read_text(encoding="utf-8")
+    import re as _re
+    p.write_text(_re.sub(r"(?m)^\[[^\]]+\].*\n", "", src), encoding="utf-8")      # 拿掉整張卡
+    miss = missing_cards(["backend/core/events.py"], snapshot, backend=b)
+    assert [r for _, r in miss] == ["backend/core/events.py"]
 
 
 def test_rc_git_diff_sees_committed_uncommitted_and_new_files(tmp_path):
