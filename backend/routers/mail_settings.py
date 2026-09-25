@@ -88,7 +88,8 @@ def receivable(t, o, username, role):
     group_hit = {"none": False, "admins": role in ("admin", "superadmin"),
                  "superadmins": role == "superadmin"}[t.group]
     if mode == "custom":
-        group_hit = username in (ov.get("users") or []) or role in (ov.get("roles") or [])
+        chosen = ov.get("roles") or []
+        group_hit = username in (ov.get("users") or []) or role in chosen
     return group_hit or bool(t.event)
 
 

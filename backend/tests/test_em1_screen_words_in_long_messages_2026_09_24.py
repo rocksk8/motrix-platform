@@ -92,7 +92,7 @@ _UNTOUCHED = (
     ('routers/system.py',
      'RP ID 與 Origin 必須同時設定或同時清空'),
     ('routers/system.py',
-     '找不到可發送對象：請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email'),
+     '找不到可發送對象：請確認「信件與通知收件設定」的測試信收件人，並為其帳號填寫 Email'),
     ('routers/system.py',
      'cycle_start_day 需介於 1～28 之間（29 以後的日子二月沒有）'),
 )
