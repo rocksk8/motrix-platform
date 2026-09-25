@@ -100,7 +100,7 @@ def rebase_check(green, onto, repo=None):
     - 帶進來的碰到 FIXTURE_LAYER ⇒ 全量
     - 兩邊改了同一個程式檔 ⇒ 全量（以「同檔」近似「程式碼衝突」：比 git 文字衝突寬，寧可多跑）
     - 兩邊改了同一個 .md ⇒ 只列出、不觸發全量（讀文件的守門在 tests/platform，差異題本來就會跑）
-    - 都沒有 ⇒ 本分支差異題（modtest --base <onto>）＋ tests/platform
+    - 都沒有 ⇒ `modtest --changed-since <green>`（green 與 HEAD 兩棵樹的差＝帶進來的＋全量之後才改的；本分支已在全量驗過的 fixture 層不會被算進去）
     ⚠ 只看「帶進來的」：本分支自己改的 fixture 層由它自己的全量負責（§C-4），不在這裡判定。
     """
     repo = repo or REPO
@@ -126,8 +126,8 @@ def print_rebase_check(r):
     if r["need_full"]:
         print("🔴 判定：重跑全量（§C-11 例外）")
     else:
-        print("✓ 判定：rebase 後跑 `modtest --base %s` ＋ tests/platform；回報寫「全量在 %s，差異題在 %s」"
-              % (r["onto"], r["green"], r["onto"]))
+        print("✓ 判定：rebase 後跑 `modtest --changed-since %s`（含 tests/platform）；回報寫「全量在 %s，差異題在 %s」"
+              % (r["green"], r["green"], r["onto"]))
 
 
 def load_map(refresh):

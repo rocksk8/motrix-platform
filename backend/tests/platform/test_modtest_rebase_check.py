@@ -100,3 +100,14 @@ def test_cli_exit_code_follows_the_verdict(repo, monkeypatch, capsys):
     _write_commit(r, "backend/pytest.ini", "[pytest]\n", "他人改 pytest.ini")
     assert MT.main(["--rebase-check", green, "--onto", "platform"]) == 3
     assert "重跑全量" in capsys.readouterr().out
+
+
+def test_cli_recommends_changed_since_green(repo, monkeypatch, capsys):
+    """不需全量時建議 `--changed-since <green>`：`--base <onto>` 在本分支自己改過 fixture 層時會被 modtest 拒絕
+    （2026-09-26 實際踩到）。"""
+    r, green = repo
+    monkeypatch.setattr(MT, "REPO", r)
+    _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
+    assert MT.main(["--rebase-check", green, "--onto", "platform"]) == 0
+    out = capsys.readouterr().out
+    assert "modtest --changed-since %s" % green in out and "--base" not in out
