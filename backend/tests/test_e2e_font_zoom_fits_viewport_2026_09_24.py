@@ -189,9 +189,12 @@ def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, mak
 def _raw_vh_tokens():
     """回 `(code, comments)`：程式碼裡沒包 `/ var(--fz,1)` 的 Nvh 與註解裡的 Nvh。
 
-    📌 「該改的 ＝ 0；**解釋它的 ＝ 10**」——註解裡那 10 處是說明「為什麼用 calc」的文字，
+    📌 「該改的 ＝ 0；**解釋它的 ＝ 3**」——註解裡那 3 處是說明「為什麼用 calc」的文字，
        機械修法最省力的做法是連它們一起改掉或刪掉（那會讓下一個人看不懂而改回去），
        所以把數字釘死：少了也紅，提醒有人動了解釋。
+    🔄 原為 10；2026-09-25 f784bff4 遺棄選型知識庫、刪掉 8 個 *-guide／selection-db-overview 頁面，
+       其中 7 處隨頁面一起消失 ⇒ 改為 3（dev-crm 1、voucher 2）。這個計數同時是正對照（證明掃描器掃得到註解），
+       維持精確值，不放寬成 >0。
     """
     import pathlib
     import re
@@ -224,6 +227,6 @@ def test_fz_no_raw_vh_is_left_in_the_frontend():
           % (len(code), sorted({c[0] for c in code}), len(comments)))
     assert code == [], (
         "還有沒包 `calc(Nvh / var(--fz,1))` 的 Nvh（字級放大時會超出畫面）：%r" % code[:10])
-    assert len(comments) == 10, (
-        "註解裡說明 vh 的文字從 10 處變成 %d 處——有人動了解釋，確認是不是機械修法順手改掉的：%r"
+    assert len(comments) == 3, (
+        "註解裡說明 vh 的文字從 3 處變成 %d 處——有人動了解釋，確認是不是機械修法順手改掉的：%r"
         % (len(comments), comments))
