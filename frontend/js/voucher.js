@@ -253,9 +253,19 @@ function voucherPage() {
       l.summary = e.summary
       l.source_type = e.source_type
       l.source_key = e.source_key
-      if (e.source_type !== 'case' && !String(l.debit || '').trim() && !String(l.credit || '').trim()) {
-        const a = this.parseAmount(e.amount)
-        if (!a.err && a.v > 0) l.debit = String(a.v)
+      // 2026-09-25（使用者：「同一案件按下支出項，只有第一筆金額會連動，第二筆不會」→ 裁示「同一行替換：金額跟著換」）：
+      //   原本只在「借貸都空白」時帶入 ⇒ 同一行換成第二筆支出時，借方還是第一筆的金額，摘要與金額對不上。
+      //   ⇒ 這一行的借方是**上一次自動帶入、而且使用者沒改過**的值時，換支出項就跟著換成新的金額；
+      //      使用者手改過（或載入時就有的金額）⇒ 仍然不動（N12「不蓋掉人打的數字」不變）。
+      //   `_autoDebit` 只存在畫面上，不送後端（存檔的欄位是逐欄挑的）。
+      if (e.source_type !== 'case' && !String(l.credit || '').trim()) {
+        const blank = !String(l.debit || '').trim()
+        const autoUntouched = l._autoDebit != null && String(l.debit || '') === l._autoDebit
+        if (blank || autoUntouched) {
+          const a = this.parseAmount(e.amount)
+          if (!a.err && a.v > 0) { l.debit = String(a.v); l._autoDebit = l.debit }
+          else if (autoUntouched) { l.debit = ''; l._autoDebit = null }   // 新的一筆沒有可帶的金額 ⇒ 不留上一筆的
+        }
       }
       if (e.source_type === 'case' && e.source_key !== this.sourceQuote) {
         this.sourceQuote = e.source_key

@@ -236,6 +236,46 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
 
 
 @pytest.mark.e2e
+def test_second_expense_on_the_same_line_brings_its_own_amount(
+        live_server, client, make_user, seed_extra_expense, e2e_browser):
+    """2026-09-25 使用者回報：同一案件按下支出項，只有第一筆的金額會連動，第二筆不會。
+    裁示「同一行替換：金額跟著換」——自動帶入且沒被手改過的金額，換支出項時跟著換；手改過的保留。"""
+    _seed(seed_extra_expense)
+    u, p = make_user(username="jv36_second", role="superadmin", modules=["cashier"])
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    hdr = {"Authorization": "Bearer " + r.json()["token"]}
+    r = client.post(VOUCHERS, headers=hdr, json={"summary": "JV36", "lines": [
+        {"account_code": "1113", "debit": 0, "credit": 5000}, {"account_code": "6111"}]})
+    vid = r.json()["id"]
+    page = e2e_browser.new_page(viewport={"width": 1280, "height": 900})
+    token = _login(page, live_server, u, p)["token"]
+    _open_with_case(page, live_server, token, vid)
+
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    assert page.evaluate("() => %s.lines[1].debit" % _D) == "5000"
+    page.click('[data-testid="summary-panel-expense"]:has-text("雜支")')        # 同一行換成第二筆
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    print("第二筆：摘要 %r、借方 %r" % (line["summary"], line["debit"]))
+    assert line["summary"].startswith("雜支") and line["debit"] == "800", (
+        "同一行換成第二筆支出，金額應跟著換成 800：%r" % line)
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')    # 再換回來也要跟著換
+    assert page.evaluate("() => %s.lines[1].debit" % _D) == "5000"
+
+    # 使用者手改過金額 ⇒ 換支出項時保留他打的數字（N12 不變）
+    page.locator("input[x-model='l.debit']").nth(1).fill("4321")
+    page.click('[data-testid="summary-panel-expense"]:has-text("雜支")')
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["summary"].startswith("雜支") and line["debit"] == "4321", line
+
+    # 存檔的內容只有正式欄位（畫面用的 _autoDebit 不送出）
+    page.click('[data-testid="voucher-save"]')
+    page.wait_for_function("() => !%s.busy" % _D, timeout=10000)
+    saved = client.get(f"{VOUCHERS}/{vid}", headers=hdr).json()
+    ln = [l for l in saved["lines"] if l.get("source_type") == "extra_expense"][0]
+    assert int(ln["debit"]) == 4321 and "_autoDebit" not in ln
+
+
+@pytest.mark.e2e
 def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
     _seed(seed_extra_expense)
