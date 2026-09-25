@@ -202,6 +202,26 @@ def test_bk19_a_tmp_path_is_accepted(tmp_path):
 #: 2026-09-22 用 `MOTRIX_BK19_REPORT=1` 實跑 60 題量到的越界寫入。
 #: 🔑 **這張表是量出來的，不是想出來的** —— 先量再訂判準。
 #: ⚠️ 每一列都是一個真的隔離缺口：測試在**專案目錄裡**建檔。
+def unexpected_writes(recorded, known_writes, benign):
+    """BK19 記下的寫入 ⇒ 沒登記的那些。
+
+    ☠️ 2026-09-26（B，RUN-PLAN O1）：`os.makedirs` 建上層目錄時是遞迴呼叫**模組層的** `makedirs(head)`，
+    而那個名字已被 BK19 換成記錄版 ⇒ 建 `uploads/_demo_uploads` 時，若 `uploads` 還不存在（全新 worktree），
+    會另外記一筆 `makedirs: <repo>/uploads`。開發樹裡 `uploads` 早就在 ⇒ 永遠重現不出來，只在 detached
+    worktree 的全量偶發紅。⇒ 一筆 makedirs 若只是某一筆**已登記**寫入的上層目錄，不算新缺口。
+    """
+    rows = [(line.split(": ", 1)[0], line.split(": ", 1)[-1].replace("\\", "/").rstrip("/")) for line in recorded]
+    ok = lambda p: any(b in p for b in benign) or any(k.replace("\\", "/") in p for k in known_writes)
+    out = []
+    for line, (what, path) in sorted(zip(recorded, rows)):
+        if ok(path):
+            continue
+        if what == "makedirs" and any(q.startswith(path + "/") and ok(q) for _, q in rows):
+            continue
+        out.append(line)
+    return out
+
+
 KNOWN_REPO_WRITES = (
     "uploads/_demo_uploads",
     "_demo_case_closing_pdf_archive",
@@ -285,14 +305,7 @@ def test_bk19_nothing_new_was_written_outside_tmp():
     recorded = getattr(conftest, "_BK19_WRITES", None)
     assert recorded is not None, "`conftest` 裡沒有 `_BK19_WRITES` —— 守門不存在"
 
-    unexpected = []
-    for line in sorted(recorded):
-        path = line.split(": ", 1)[-1].replace("\\", "/")
-        if any(b in path for b in BENIGN):
-            continue
-        if any(known.replace("\\", "/") in path for known in KNOWN_REPO_WRITES):
-            continue
-        unexpected.append(line)
+    unexpected = unexpected_writes(recorded, KNOWN_REPO_WRITES, BENIGN)
     assert not unexpected, (
         "測試寫到了 tmp 之外、而且不在已登記的存量清單裡：\n  "
         + "\n  ".join(unexpected)
@@ -342,3 +355,29 @@ def test_bk20_main_does_not_create_directories_at_import_time():
         "這些建目錄的呼叫在 `main.py` 的模組層執行：\n  " + "\n  ".join(offenders)
         + "\n☠️ conftest 的 patch 還沒生效，它們就已經在真實磁碟上建好目錄了。\n"
           "⇒ 改成延遲執行（第一次真的要用的時候），或搬進啟動事件處理器。")
+
+
+# ── O1（2026-09-26）：遞迴 makedirs 的上層目錄 ─────────────────────────────
+
+def test_parent_created_by_a_known_makedirs_is_not_a_new_gap():
+    """全新 worktree 的全量實際記到的兩筆：已登記的 uploads/_demo_uploads 與它的上層 uploads。"""
+    rec = {r"makedirs: D:\wt\uploads\_demo_uploads", r"makedirs: D:\wt\uploads"}
+    assert unexpected_writes(rec, KNOWN_REPO_WRITES, BENIGN) == []
+
+
+def test_rc_parent_rule_needs_a_known_child():
+    """反向控制：上層目錄底下沒有已登記的寫入 ⇒ 照樣紅（不可以因為「是某個東西的上層」就放行）。"""
+    rec = {r"makedirs: D:\wt\newdir\child", r"makedirs: D:\wt\newdir"}
+    assert sorted(unexpected_writes(rec, KNOWN_REPO_WRITES, BENIGN)) == sorted(rec)
+
+
+def test_rc_parent_rule_is_only_for_makedirs():
+    """反向控制：寫檔（open）不因為路徑是已登記項目的前綴而放行。"""
+    rec = {r"makedirs: D:\wt\uploads\_demo_uploads", r"open: D:\wt\uploads"}
+    assert unexpected_writes(rec, KNOWN_REPO_WRITES, BENIGN) == [r"open: D:\wt\uploads"]
+
+
+def test_rc_string_prefix_is_not_a_parent():
+    """反向控制：`uploads/_demo` 是 `uploads/_demo_uploads` 的字串前綴但不是上層目錄（比對要以 / 為界）。"""
+    rec = {r"makedirs: D:\wt\uploads\_demo_uploads", r"makedirs: D:\wt\uploads\_demo"}
+    assert unexpected_writes(rec, KNOWN_REPO_WRITES, BENIGN) == [r"makedirs: D:\wt\uploads\_demo"]
