@@ -36,6 +36,17 @@
 10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
 
+## 階段 G：準則的守門（MODULE-GUIDE 標「⚠ 未守門」的項目）
+
+| # | 守門 | 狀態 |
+|---|---|---|
+| G1 | L1 公開介面快照：介面一有變動就紅，要求同時升 `CORE_VERSION` 並寫 `core/CHANGELOG.md` | ⏳ B |
+| G2 | 每個模組都要有 `README.md`、`CHANGELOG.md`、`module.json` 的 `data`；CHANGELOG 最上面的版號＝`module.json` 的 version | ⏳ B |
+| G3 | `module.json` 的 data 分類與備份匯出清單、表分類守門一致（T1 必須匯出、T3 不匯出、F2 不進一般鏡像） | ⏳ B |
+| G4 | 模組程式有改動，但 CHANGELOG 或版號沒更新 ⇒ 紅（用 modtest 的改動清單判斷） | ⏳ B |
+| G5 | 版本紀錄頁改由各模組 CHANGELOG 彙整產生；`version_manifest.json` 退場 | ⏳ |
+| G6 | 勞報單（F2）上雲：獨立、權限更窄的資料夾 | ⏳ C（A8 之後） |
+
 ## 階段 C：前端跟著模組走（第二階段的前置）
 
 - 模組頁面搬進 `modules/<key>/pages/`，由載入器掛載靜態路徑
