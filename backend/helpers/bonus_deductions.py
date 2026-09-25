@@ -69,7 +69,8 @@ def nhi_base_of(gross, ytd_before, insured, params):
 
 
 def nhi_premium_of(base, params):
-    """補充保費＝基數 × 費率，四捨五入到元（ROADMAP R9：官方捨位規則查到前，統一用 round_half_up）。"""
+    """補充保費＝基數 × 費率，四捨五入到元（健保署規定；不可以用 Python round()＝銀行家捨入）。
+    ⚠️ 捨入只在這一處：L1 共用四捨五入函式（helpers.legal_params，IP-7）合回後改呼叫它。"""
     return int((_dec(base) * _dec(params["nhi_rate"])).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 

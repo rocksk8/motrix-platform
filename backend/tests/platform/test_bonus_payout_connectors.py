@@ -287,6 +287,13 @@ def test_nhi_rounds_half_up():
     assert _one(80020, insured=20000, params=p)["nhiPremium"] == 1
 
 
+def test_nhi_35000_is_739_not_banker_rounding():
+    """D 稽核 R1：健保署規定四捨五入；Python round() 是銀行家捨入（738.5 → 738）。
+    捨入集中在 bonus_deductions.nhi_premium_of 一處；L1 共用四捨五入函式合回後只換那一處。"""
+    assert bd.nhi_premium_of(35000, PARAMS) == 739
+    assert round(35000 * 0.0211) == 738                     # 對照：round() 會少 1 元
+
+
 def test_missing_insured_is_not_zero():
     r = bd.compute_bonus_deductions([{"username": "u", "amount": 1000}], params=PARAMS,
                                     insured={}, ytd_before={})
