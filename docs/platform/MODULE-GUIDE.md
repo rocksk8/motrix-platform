@@ -103,7 +103,7 @@
 
 ```
 modules/<key>/
-  module.json      key／name／version／core 範圍／permissions／data／provides
+  module.json      key／name／version／core 範圍／license_key／permissions／data／provides／pages
   __init__.py      MODULE = ModuleSpec(...)（routers、schedulers、providers、runtime_switches）
   api.py           端點（只 import core／helpers／db 與本模組）
   *.py             業務邏輯
@@ -115,6 +115,12 @@ modules/<key>/
   SPEC.md          規格條件（機器讀）：## 規格條件（編號宣告，格式同 STATE.md）／## 範圍（### THIS／NEXT／EXEMPT）／
                    ## 登記（C_OWNED／KNOWN／AMBIGUOUS_ACK）；test_spec_coverage 讀它，拿掉模組時跟著消失
 ```
+
+**選配（CORE-SPEC §9c，2026-09-25）**
+- `license_key`：授權金鑰 `modules` 清單比對用的值（授權單位＝模組，不是權限 key）；沒寫 ⇒ 等於資料夾名；清單 `"*"` ＝全開。⚠ 未守門（「每個 module.json 都有 license_key」由 G2 補）
+- `pages`：本模組的頁面。模組這次沒有載入（未授權／停用／載入失敗）⇒ 側欄藏起這些入口。守門：`tests/platform/test_module_selection.py`、`tests/test_e2e_module_settings_2026_09_25.py`
+- 優先順序：不在包內＞未授權＞管理者停用；未授權與停用都**不 import** 模組（路由不掛、排程不跑、提供者不登記），資料不動。管理者啟停**重啟後生效**。守門：同上（含子行程真的重啟）
+- 因此模組**不可以**在 import 以外的地方偷偷做事（例如別的模組直接 import 它）——不 import 就要等於不存在。
 
 ## 6. 更新紀錄與版本（各模組獨立）
 
