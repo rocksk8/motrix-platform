@@ -18,6 +18,8 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve()
 REPO = HERE.parents[2]
+#: 專案環境的資料夾名（主工作樹底下）。2026-09-25：正式機是 3.12 ⇒ .venv312；舊的 .venv（3.13）已損壞，待主持通知後處理
+VENV_DIR = ".venv312"
 #: 比對時一定要看的套件（產品執行期）
 KEY_PACKAGES = ("fastapi", "starlette", "uvicorn", "pydantic", "pydantic-core", "cryptography", "webauthn",
                 "openpyxl", "pypdf", "pillow", "boto3", "pyotp", "qrcode", "python-multipart")
@@ -34,9 +36,9 @@ def main_worktree_root():
 
 
 def venv_python():
-    p = main_worktree_root() / ".venv" / "Scripts" / "python.exe"
+    p = main_worktree_root() / VENV_DIR / "Scripts" / "python.exe"
     if not p.is_file():
-        p2 = main_worktree_root() / ".venv" / "bin" / "python"
+        p2 = main_worktree_root() / VENV_DIR / "bin" / "python"
         return p2 if p2.is_file() else None
     return p
 
@@ -87,7 +89,7 @@ def compare(venv, prod):
 def cmd_check():
     py = venv_python()
     if py is None:
-        print("⚠ 找不到專案 .venv（%s）⇒ 先跑 project_env.py create" % (main_worktree_root() / ".venv"))
+        print("⚠ 找不到專案環境（%s）⇒ 先跑 project_env.py create" % (main_worktree_root() / VENV_DIR))
         return 2
     prod_file = REPO / "backend" / "tools" / "prod_env.json"
     if not prod_file.is_file():
@@ -107,7 +109,7 @@ def cmd_check():
 
 def cmd_create(pyver):
     root = main_worktree_root()
-    venv = root / ".venv"
+    venv = root / VENV_DIR
     subprocess.run(["py", "-%s" % pyver, "-m", "venv", str(venv)], check=True)
     py = venv_python()
     subprocess.run([str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"], check=True)
@@ -123,7 +125,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("create")
-    c.add_argument("--python", default="3.12", help="正式機是 3.12（autostart.bat 的 Python312\uvicorn.exe，主持 2026-09-25 查證）")
+    c.add_argument("--python", default="3.12", help="正式機是 3.12（autostart.bat 用 Python312/Scripts/uvicorn.exe，主持 2026-09-25 查證）")
     sub.add_parser("check")
     sub.add_parser("where")
     a = ap.parse_args(argv)

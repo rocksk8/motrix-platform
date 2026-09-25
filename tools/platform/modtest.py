@@ -282,7 +282,7 @@ def resolve_python(explicit=None):
     if py is not None:
         return str(py)
     print("⚠ 找不到專案 .venv（%s）⇒ 這一輪改用 %s，套件版本不一定等於 requirements.txt。"
-          "\n  建立：python tools/platform/project_env.py create" % (project_env.main_worktree_root() / ".venv",
+          "\n  建立：python tools/platform/project_env.py create" % (project_env.main_worktree_root() / project_env.VENV_DIR,
                                                                     sys.executable))
     return sys.executable
 
