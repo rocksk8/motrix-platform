@@ -372,26 +372,9 @@ def _safe_close(conn) -> None:
         pass
 
 
-def _is_case_approver(data_json: str, user: dict, conn) -> bool:
-    """這個人是否出現在這張單的簽核名單裡（任何一層）或本人就是送審申請人。
-
-    含「目前有效的簽核代理人」——代理人在簽核路徑上處處被視同本人
-    （`check_approve_permission()` 等），檢視權限沒有理由是例外。
-    """
-    try:
-        appr = (json.loads(data_json or "{}") or {}).get("approval") or {}
-    except Exception:
-        return False
-    names = {a["username"] for tier in (_active_tiers(appr) or [])
-             for a in (tier.get("approvers") or []) if a.get("username")}
-    if appr.get("requestedBy"):
-        names.add(appr["requestedBy"])
-    if user["username"] in names:
-        return True
-    try:
-        return bool(set(active_delegators_for(conn, user["username"])) & names)
-    except Exception:
-        return False
+# 稽核 Y-5（2026-09-25）：簽核人放行只留一份規則——helpers 版 `is_document_approver`。
+# 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
+from helpers.quotations import is_document_approver as _is_case_approver  # noqa: E402
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
