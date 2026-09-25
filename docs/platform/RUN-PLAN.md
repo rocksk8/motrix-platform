@@ -93,6 +93,7 @@
 - **信件收件設定＋用語正式化**（使用者 2026-09-26，見 CORE-SPEC 裁示表）：派給 A（email_notify、notification_prefs 的作者），排在 wip/a-bonus 合回之後、D7 之前。
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；privacy_notice_acks 在 M04 搬遷時改用模組自己的表。
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
+  - C｜`wip/c-d7`｜afccc3b8｜tests/platform＋test_upgrade_drill＋test_states_data_ops：623 過（-m not e2e）｜🔴 動到 L0（`core/upgrade.py`：RUNTIME_STATE_SETTINGS，D7 預演抓到的升級阻擋點）；fixture 層／main.py：無；CHANGELOG 段落暫用號，core_bump 已在本地套用（列車上請再依 origin 重新取號）
   - wip/x-r-fix｜8cc2dd29｜差異題綠（R 系列＋新題 136、e2e 25、修補後 70）；曾在 2c8ff4d3 跑全量：非 e2e 4100 綠 2 紅（報價表單版號、全站用詞＝本包自己的，已於 8cc2dd29 修好）、e2e 389 綠｜不動 fixture 層／main；L1 新增（暫 CORE 1.12，需 core_bump）、version_manifest 加「勞報單 2026-09-26c」並在「報價單 2026-09-25r」句尾加一句（VR3）｜登記 02:38 X-R
 - **全量名額排隊**（更新 2026-09-26 02:43）：§G3 生效後，新的全量改由列車統一跑。仍在跑、而且依規定跑完就直接合回的有：B 的 C1（合回閘門約 02:52）、C 的第二批全量。A 的 a-bonus 走合回閘門，不經過測試鎖。⚠ A 有一支孤兒 pytest（pid 53300），停不掉，已請使用者處理。**第一班列車預計約 03:15 發車**，要等月台上至少有 3 包（目前只有 x-r-fix 1 包）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
