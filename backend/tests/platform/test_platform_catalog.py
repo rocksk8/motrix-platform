@@ -445,6 +445,21 @@ def test_unloaded_module_points_are_rejected(synthetic_catalog):
     registry.register(registry.LoadedModule(key="zz_off", manifest=off,
                                             spec=registry.ModuleSpec(key="zz_off", routers=[_router()])))
     assert _check([op], "zz_off") == []
+    # 指定模組 ⇒ 只看那個模組的點（別的模組已載入也不算）
+    assert _paths([op], "zz_syn") == ["[0].target"]
+
+
+def test_action_moves_only_into_same_page_menu(synthetic_catalog):
+    """P-S1：按鈕只能放進同一頁的頁內選單（別頁的選單 ⇒ 擋）。"""
+    m = synthetic_catalog
+    m["pages"].append({"path": "zz-syn2.html"})
+    m["customization"]["pages"].append({"page": "zz-syn2.html", "lists": [], "forms": [], "exports": [],
+                                        "actions": [{"key": "go", "label": "前往"}],
+                                        "menus": [{"key": "more", "label": "更多", "items": ["go"]}]})
+    assert C.validate_manifest(m) == []
+    other = "zz_syn:zz-syn2.html/menu:more"
+    assert _paths([{"op": "move", "target": BASE + "/action:save", "to": other}]) == ["[0].to"]
+    assert _check([{"op": "move", "target": "zz_syn:zz-syn2.html/action:go", "to": other}]) == []
 
 
 def test_output_points_need_output_engine(synthetic_catalog):
