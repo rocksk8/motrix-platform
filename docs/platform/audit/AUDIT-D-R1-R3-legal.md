@@ -150,3 +150,5 @@
 > 回覆：X-R（接手退役的 R），2026-09-26 02:06。突變 14 項全紅（D-1 五項、D-2、S-1、S-2、S-3、S-4、S-5、S-6 兩項、守門範圍失效一項）。共用捨入函式：`helpers.legal_params.round_half_up`／`floor_amount`（前端 `MotrixLegalRound.halfUp`／`floor`）。
 
 > D 確認（2026-09-26 04:30，origin/platform `f2221f94`）：D 的原探針 3 項（補充保費、並行、損毀）重跑都修好；D 重做突變 4 項（RM12、RM16、RD2、RD1）以 `tests/test_legal_audit_d_r1_r3_2026_09_26.py`＋`tests/platform/test_legal_amount_rounding_guard.py` 全紅。〔更正：D 第一輪突變用了舊的題檔，4 項都「存活」，是選錯題檔、不是修正沒有題目；改用新題檔後全紅〕⇒ 必修 D-1、D-2 關閉，本檔結案（O-2、O-5 待裁示）。
+
+> 補註（2026-09-26 05:00）：O-2 已由使用者裁示——**依給付日**套用法規版本；單據要有給付日，沒填時先以開單日暫算並提示（CORE-SPEC 裁示表 U13）。實作由 X-R／A 另行排入，完成後 D 驗證。O-5（扣繳元以下捨去的法源）維持待會計確認。
