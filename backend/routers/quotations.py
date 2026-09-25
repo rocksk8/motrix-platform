@@ -374,7 +374,8 @@ def _safe_close(conn) -> None:
 
 # 稽核 Y-5（2026-09-25）：簽核人放行只留一份規則——helpers 版 `is_document_approver`。
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
-from helpers.quotations import is_document_approver as _is_case_approver  # noqa: E402
+from helpers.quotations import (  # noqa: E402
+    is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
@@ -419,16 +420,11 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
     if (skip_if_semi_unlocked and (q["deal_tag"] or "") == "已結案"
             and q["case_semi_unlocked"]):
         return q
-    try:
-        row_access.require("case", user, q)
-    except HTTPException:
-        allowed = (
-            (allow_module and user_has_module(user, allow_module))
-            or (allow_approver and _is_case_approver(q["data_json"], user, conn))
-        )
-        if not allowed:
-            _safe_close(conn)
-            raise
+    # 稽核 Y-5：放行規則與 helpers.quotations.guard_case_access 同一份（case_access_allowed）；
+    # 這裡只多「已結案半解鎖」的例外與回傳欄位（deal_tag、case_semi_unlocked）。
+    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
+        _safe_close(conn)
+        raise HTTPException(403, CASE_ACCESS.deny_message)
     return q
 
 

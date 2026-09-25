@@ -64,6 +64,18 @@ def is_document_approver(data_json: str, user: dict, conn) -> bool:
         return False
 
 
+def case_access_allowed(conn, q, user: dict, *, allow_approver: bool = False,
+                        allow_module: str = None) -> bool:
+    """單一案件列 `q`（需含 sales_person_id、sales_person、assigned_user_ids、data_json）准不准這個人動。
+    規則只有這一份：row_access `case`／scope="owner"，否則 `allow_module`，否則（`allow_approver`）簽核人。
+    `guard_case_access()` 與 `routers/quotations.py::_guard_case()` 都呼叫這一支（稽核 Y-5）。"""
+    if row_access.visible("case", user, q, scope="owner"):
+        return True
+    from helpers.auth import user_has_module
+    return bool((allow_module and user_has_module(user, allow_module))
+                or (allow_approver and is_document_approver(q["data_json"], user, conn)))
+
+
 def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
                       allow_module: str = None):
     """「用 quote_no 直接取單一案件」的共用守門（2026-09-13 模組權限稽核）。
@@ -92,13 +104,9 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     if not q:
         _txn.safe_close(conn)
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    if not row_access.visible("case", user, q, scope="owner"):
-        from helpers.auth import user_has_module
-        allowed = ((allow_module and user_has_module(user, allow_module))
-                   or (allow_approver and is_document_approver(q["data_json"], user, conn)))
-        if not allowed:
-            _txn.safe_close(conn)
-            raise HTTPException(403, CASE_ACCESS.deny_message)
+    if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
+        _txn.safe_close(conn)
+        raise HTTPException(403, CASE_ACCESS.deny_message)
     return q
 
 
