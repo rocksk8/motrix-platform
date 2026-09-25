@@ -21,7 +21,7 @@
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 41 | 21 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
 | `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 25 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 9 | 0 | `tests/platform/test_core_loader.py` |
-| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。 | 7 | 13 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
+| `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。 | 7 | 14 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 48 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 22 | 7 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
@@ -38,7 +38,7 @@
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 14 | 6 | — |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 5 | 2 | — |
-| `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 32 | 1 | — |
+| `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 34 | 1 | — |
 | `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 3 | 4 | — |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 12 | 5 | — |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 2 | — |
@@ -55,11 +55,11 @@
 | `helper:module_switches` | L1 | CORE-SPEC §9c ③ 管理者啟停：`system_settings.modules_disabled`（模組 key 陣列）。（無單位卡） | 9 | 2 | — |
 | `helper:notification_prefs` | L1 | Per-user email notification opt-out list.（無單位卡） | 3 | 2 | — |
 | `helper:part_catalog` | L1 | 料件分類代碼表（L1；DEPENDENCY-MAP §3 #17）。（無單位卡） | 2 | 2 | — |
-| `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 15 | 4 | — |
+| `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 11 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 9 | — |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 31 | — |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 16 | 8 | — |
-| `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 24 | 14 | — |
+| `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 24 | 15 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 4 | 9 | — |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 7 | 3 | — |
