@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`BN8` · 獎金分潤單成為**第九個** doc type（`SPEC-BN8.md`）。
 
-# 現況實查（2026-09-23，`routers/bonus.py`）
+# 現況實查（2026-09-23，`modules/payroll/api/bonus.py`）
 
 ```
 端點        /items  /items(POST)  /base  /awards/plan  /awards  /awards(POST)
@@ -467,12 +467,12 @@ def test_bn8_is_paid_is_false_for_a_genuinely_unpaid_award():
     🔑 純邏輯測試，不碰資料庫 —— 與 `people_for_item`／`split_award` 同一種寫法。
     """
     try:
-        from helpers.bonus import is_paid
+        from modules.payroll.bonus import is_paid
     except ImportError:
         pytest.fail(
-            "`helpers.bonus` 裡沒有 `is_paid`。\n"
+            "`modules.payroll.bonus` 裡沒有 `is_paid`。\n"
             + "📌 `SPEC-BN8.md §5c`／`STATE.md §246`：`is_paid()` 要住在\n"
-              "   `helpers/bonus.py`（純邏輯），不要放進 router。")
+              "   `modules/payroll/bonus.py`（純邏輯），不要放進 router。")
     unpaid = {"voucher_no_payment": "", "paid_manually_at": ""}
     assert is_paid(unpaid) is False, (
         "一張兩個欄位都是空字串的單，`is_paid()` 回 %r（預期 `False`）。\n"

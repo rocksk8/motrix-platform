@@ -100,7 +100,7 @@ def _bonus_module_on(monkeypatch):
     ⚠️ 環境變數要先清掉：它是另一條開關路徑，留著的話這裡就分不出
     「旗標真的被打開了」與「環境剛好設著」。
     """
-    import helpers.bonus as hb
+    import modules.payroll.bonus as hb
 
     monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
     monkeypatch.setattr(hb, "BONUS_MODULE_ENABLED", True)

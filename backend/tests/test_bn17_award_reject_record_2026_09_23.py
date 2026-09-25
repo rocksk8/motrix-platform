@@ -34,7 +34,7 @@ GET  /api/bonus/awards/{id}          帶出 last_reject
             - 退回一次 -> bonus_award_edit_log 前後都是 0 列
             兩者都證明本檔對應的斷言（400／edit_log +1）對著舊碼會紅。
 §5 家族／edit_log 呼叫點  直接把 `_guards_empty_reason()`／AST 呼叫點
-            掃描邏輯套用在舊版 `routers/bonus.py` 全文上：`reject_award`
+            掃描邏輯套用在舊版 `modules/payroll/api/bonus.py` 全文上：`reject_award`
             回 False（沒擋）、`append_edit_log(table="bonus_award_edit_log")`
             呼叫點回 False（不存在）——與現在的實作（True／True）對比，
             證明這兩道守門分辨得出「補之前」與「補之後」。
@@ -268,8 +268,8 @@ def _extract_function_source(path, func_name):
 #: `§5` 今天的母體。改動這裡**退回給 A**——它是規格點名的清單，不是我
 #: 自己盤點的。
 _REASON_GUARD_FAMILY = (
-    ("routers/bonus.py", "reject_award"),
-    ("routers/bonus.py", "mark_award_paid"),
+    ("modules/payroll/api/bonus.py", "reject_award"),
+    ("modules/payroll/api/bonus.py", "mark_award_paid"),
     ("routers/vouchers.py", "void_voucher"),
 )
 
@@ -322,7 +322,7 @@ def test_bn17_edit_log_write_site_for_bonus_award_exists():
     ⚠️ 表存在超過一整輪都是 0 筆（規格 §5 自己踩過這個坑），只驗
     「表在」證明不了「有人在寫」。
     """
-    src = (ROOT / "routers" / "bonus.py").read_text(encoding="utf-8")
+    src = (ROOT / "modules" / "payroll" / "api" / "bonus.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     found = False
     for node in ast.walk(tree):
@@ -337,5 +337,5 @@ def test_bn17_edit_log_write_site_for_bonus_award_exists():
                         and kw.value.value == "bonus_award_edit_log":
                     found = True
     assert found, (
-        "`routers/bonus.py` 裡找不到任何一個 `append_edit_log(..., "
+        "`modules/payroll/api/bonus.py` 裡找不到任何一個 `append_edit_log(..., "
         "table=\"bonus_award_edit_log\")` 呼叫點——表存在不代表有人在用它。")

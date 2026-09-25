@@ -155,7 +155,7 @@ def test_bn18_the_override_branch_reads_the_named_flag_not_peoples_truthiness():
     ——不用 regex（會被字串／註解騙），直接讀 AST 的 `Compare`／`Call`
     節點結構。
     """
-    src = (ROOT / "routers" / "bonus.py").read_text(encoding="utf-8")
+    src = (ROOT / "modules" / "payroll" / "api" / "bonus.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef)

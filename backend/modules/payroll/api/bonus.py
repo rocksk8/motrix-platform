@@ -18,7 +18,7 @@
 
 # 🔴 基數不在這裡算
 
-`helpers.bonus.base_amount_for()` 讀 `settlement.summary.netProfit` 的**已存值**。
+`modules.payroll.bonus.base_amount_for()` 讀 `settlement.summary.netProfit` 的**已存值**。
 這一支**不乘 10%／1%** —— 那兩個係數只寫在 `settlement.html`，
 再寫一份就是第三份實作，而三份一定會分岔。
 """
@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse, Response
 from db import get_db
 from helpers import _require_user, _audit, _tok, _get_setting
 from helpers.edit_log import append_edit_log
-from helpers.bonus import (
+from modules.payroll.bonus import (
     base_amount_for, people_for_item, split_award, pool_for, remainder_of,
     visible_lines, PERSON_SOURCES, BASIS_POINTS,
     bonus_signatures_of, is_paid, BonusChainUnreadable, MAKER_SLOT,
@@ -41,7 +41,7 @@ from helpers.bonus import (
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
-from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for, preview_award_html
+from modules.payroll.bonus_pdf import can_export, export_award_pdf, display_names_for, preview_award_html
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 logger = logging.getLogger(__name__)
@@ -413,7 +413,7 @@ def _attach_manual_people(conn, items):
 def _attach_group_people(conn, items):
     """`BN14`：幫每個 `person_source == "group"` 的項目補上
     `_group_members`／`_group_error`，`people_for_item()` 只讀這兩個鍵，
-    自己不查資料庫（維持純函式，`helpers/bonus.py` 的既有規則——同
+    自己不查資料庫（維持純函式，`modules/payroll/bonus.py` 的既有規則——同
     `QS1-a` `_case_people()` 那條「解析放在呼叫端」）。
 
     一次查完全部群組，不逐項目各查一次（同 `BN15`／`QS1-a` 那幾支的
@@ -485,7 +485,7 @@ def _case_names_for(conn, quote_nos):
             for r in rows}
 
 
-#: `BN11` 搬到 `helpers/bonus.py`（`SETTLEMENT_FIELDS`／`settlement_fields`）
+#: `BN11` 搬到 `modules/payroll/bonus.py`（`SETTLEMENT_FIELDS`／`settlement_fields`）
 #: ——`bonus_pdf.py` 也要用同一份，helper 不能 import router，只能反過來。
 #: 這兩個名字留著、行為不變，call site 全部不用改。
 _SETTLEMENT_FIELDS = SETTLEMENT_FIELDS
@@ -538,7 +538,7 @@ def plan_award(quote_no: str, authorization: str = Header(None)):
     前端**做得到**自己照 `person_source` 組（案件 API 有 `assignedTo`），
     ☠️ 而那是把同一條規則抄到第二個地方：
     ```
-    helpers/bonus.py 已標「已知的未來來源 quotations.assigned_user_ids」
+    modules/payroll/bonus.py 已標「已知的未來來源 quotations.assigned_user_ids」
     ⇒ 加它的那天：後端改、JS 不會跟
     ⇒ 症狀是**少發一個人，而總額對得起來**
     ```
@@ -636,7 +636,7 @@ _CLOSED_DEAL_TAG = "已結案"
 # `/awards/candidates` 與 `/awards/{award_id}` 是**同一種形狀**（`/awards/`
 # 後面都只有一段）：`{award_id}` 若宣告在前，`/awards/candidates` 會被
 # 它接走，`"candidates"` 當 `award_id` 做 int 轉換失敗 -> 422。
-# 📌 依據見 `routers/bonus.py` 頂端 `GET /awards/plan/{quote_no}` 的同款
+# 📌 依據見 `modules/payroll/api/bonus.py` 頂端 `GET /awards/plan/{quote_no}` 的同款
 # 註解——同一個坑，這裡先把話留給下一個加端點的人。
 @router.get("/awards/candidates")
 def award_candidates(authorization: str = Header(None)):
@@ -1438,7 +1438,7 @@ def preview_award(award_id: int, authorization: str = Header(None)):
 
     🔑 閘門綁在端點上，不綁在參數上（同 `JV11`）：兩支各自寫死自己的規則，
     沒有一個「條件」可以寫錯。權限與匯出同一道（`_is_manager`）。
-    📌 與 PDF 來自同一支 `helpers/bonus_pdf.py::_award_html()`，版面只有一份。
+    📌 與 PDF 來自同一支 `modules/payroll/bonus_pdf.py::_award_html()`，版面只有一份。
     """
     user = _require_user(authorization)
     if not _is_manager(user):
@@ -1495,7 +1495,7 @@ def download_award_pdf(award_id: int, authorization: str = Header(None)):
     既有 16 個呼叫端同一形狀。**權限與 `POST /awards` 同一道閘**
     （`_is_manager`）。
 
-    閘門：`helpers/bonus_pdf.py::can_export()`——`voided_at` 優先於
+    閘門：`modules/payroll/bonus_pdf.py::can_export()`——`voided_at` 優先於
     `status`（已作廢的單不管簽到哪裡都放行；`JV11`／`JV15` 同一條裁定）。
     """
     user = _require_user(authorization)
@@ -1605,7 +1605,7 @@ def _case_people(conn, quote_no):
 # ══════════════════════════════════════════════════════════════════════════════
 #
 # 表：bonus_case_awards／bonus_case_award_lines／bonus_case_award_edit_log（db.py v113）。
-# 算式：helpers/bonus_case.py（純函式）。舊的 bonus_awards 流程不理會（§11.7「直接作廢」
+# 算式：modules/payroll/bonus_case.py（純函式）。舊的 bonus_awards 流程不理會（§11.7「直接作廢」
 # ⇒ 新頁面不顯示、不擋；不以 migration 作廢任何資料）。
 #
 #   已精算 ──建立──▶ 草稿 ──送審──▶ 待審核 ──簽核完成──▶ 待發放 ──出納標記──▶ 已發放
@@ -1616,17 +1616,17 @@ def _case_people(conn, quote_no):
 # 簽核人只能是最高管理者（W1，使用者 2026-09-24「簽核人只能是最高管理者」）：
 # 送審時鏈上（含有效代理人）出現非 superadmin 就擋；核准時再確認一次。
 
-from helpers.bonus_case import (  # noqa: E402
+from modules.payroll.bonus_case import (  # noqa: E402
     BonusCalcError, CATEGORIES, CATEGORY_LABELS, DEFAULT_RATE_BP, DEFAULT_SPLIT_BP, allocate,
 )
-from helpers.bonus import BASE_FIELD, LEGACY_SETTLEMENT_MESSAGE  # noqa: E402
+from modules.payroll.bonus import BASE_FIELD, LEGACY_SETTLEMENT_MESSAGE  # noqa: E402
 from helpers.tiered_approval import (  # noqa: E402
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
 )
 from helpers.auth import user_has_module  # noqa: E402
-from helpers import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
-from helpers import bonus_payouts  # noqa: E402  IP-8／IP-9 提供者＋通知對象（import 即登記）
-from helpers import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
+from modules.payroll import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
+from modules.payroll import bonus_payouts  # noqa: E402  IP-8／IP-9 提供者＋通知對象（import 即登記）
+from modules.payroll import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")
 _RATE_KEY = "bonus_case_default_rate_bp"

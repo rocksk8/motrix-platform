@@ -2,7 +2,7 @@
 import pytest
 
 from routers.reports import _parse_period, _compute_achievement
-from routers.payslips import _calc, _get_tax_rules
+from modules.payroll.api.payslips import _calc, _get_tax_rules
 from helpers.quotations import _steps_to_tiers, payment_item_amounts
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
 from routers.quotations import _active_tiers, _current_tier_idx

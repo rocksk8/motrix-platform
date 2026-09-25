@@ -93,7 +93,7 @@ def test_round_half_up_and_floor_on_the_boundaries():
 def test_nhi_supplement_matches_half_up_for_every_amount_from_20000_to_2000000():
     """全域掃描（稽核 D-1）：後端勞報單計算 vs 四捨五入，逐元比對；扣繳 vs 元以下捨去。
     正對照：同一個範圍內，內建 round() 與四捨五入不同的金額要恰好是稽核數到的 99 個（題目看得到差異）。"""
-    from routers.payslips import _calc
+    from modules.payroll.api.payslips import _calc
     rules = lp.DEFAULT_TAX_RULE_VERSIONS[0]
     nhi = Fraction(repr(rules["nhi"]["rate"]))
     tax = Fraction(repr(rules["resident"]["9A"]["tax_rate"]))
@@ -135,7 +135,7 @@ def test_concurrent_edits_do_not_clear_a_recorded_ack(client, make_user, monkeyp
     """A 修改（沒勾已告知）讀完舊單後停在計算；B 同時勾「已告知」。放行 A 之後，紀錄不可以消失。
     修好：A 拿著寫鎖，B 等 A 寫完才讀（讀到 A 的結果再加上紀錄）。
     交易外讀（突變）：B 先寫完紀錄，A 用自己讀到的舊單整包蓋回 ⇒ 紀錄被清掉。"""
-    from routers import payslips as ps
+    from modules.payroll.api import payslips as ps
     h = _hdr(client, make_user)
     no = client.post("/api/payslips", json={"data": _data()}, headers=h).json()["slip_no"]
 

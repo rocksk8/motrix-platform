@@ -31,7 +31,7 @@ status == "已核准"      -> 放
 import logging
 
 from db import get_db
-from helpers.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_fields
+from modules.payroll.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_fields
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 
@@ -131,7 +131,7 @@ def _line_rows(lines, display_names):
 
 
 def _pct_text(bp):
-    """基點 -> 人看得懂的百分比字串。與 `routers/bonus.py::_pct_text()` 同一條
+    """基點 -> 人看得懂的百分比字串。與 `modules/payroll/api/bonus.py::_pct_text()` 同一條
     規則（那一支不對外公開，這裡只是同樣的格式化，不是重複的業務規則）。
     """
     return ("%g%%" % ((int(bp or 0)) / 100.0))
@@ -165,8 +165,8 @@ def _settle_pct(n):
 
 
 def _settlement_of(conn, quote_no):
-    """案件精算存值。與 `routers/bonus.py::_settlement_of()` 同形狀的一次
-    查詢——`helpers/bonus.py` 的 `settlement_fields()` 已經是唯一一份
+    """案件精算存值。與 `modules/payroll/api/bonus.py::_settlement_of()` 同形狀的一次
+    查詢——`modules/payroll/bonus.py` 的 `settlement_fields()` 已經是唯一一份
     「挑哪些鍵、缺值回 `None`」的規則，會分岔的風險在那裡，已經只有一份；
     這裡只是換一種資料存取路徑把值撈出來，不算重刻規則本身。
     """
@@ -184,7 +184,7 @@ def _settlement_of(conn, quote_no):
 
 def _settlement_rows_html(settle):
     """精算明細表的 11 列 `<tr>`（`BN11`）。**唯一列定義是 `SETTLEMENT_ROWS`**
-    （`helpers/bonus.py`）——順序、標籤逐字照它，值來自 `settlement_fields()`
+    （`modules/payroll/bonus.py`）——順序、標籤逐字照它，值來自 `settlement_fields()`
     （原樣帶出，這裡不重算任何係數）。
 
     `quotedTotal`（含稅總額）不是獨立一列，是 `quotedPretax` 那一列的
@@ -332,7 +332,7 @@ def display_names_for(conn, usernames):
     沒有直接呼叫它，但查詢與落回邏輯不重寫第二次判斷式，只是換一種
     輸入輸出包裝。
 
-    `QS1-a §3③`：`routers/bonus.py` 的 `list_awards()`／`get_award()`
+    `QS1-a §3③`：`modules/payroll/api/bonus.py` 的 `list_awards()`／`get_award()`
     也用它給每一列分潤明細補 `displayName`——原本沒有底線是因為只有
     `bonus_pdf.py` 自己用，現在是共用工具，底線拿掉（同 `resolve_display_
     names()` 當初從 `_` 改成公開名字的理由：保留底線會誤導成「模組內部
@@ -384,7 +384,7 @@ def preview_award_html(award_id):
 def export_award_pdf(award_id):
     """回 `(award, pdf_bytes)`；找不到這張單回 `(None, None)`。
 
-    ⚠️ 呼叫端（`routers/bonus.py`）自己先呼叫 `can_export()` 判斷放不放
+    ⚠️ 呼叫端（`modules/payroll/api/bonus.py`）自己先呼叫 `can_export()` 判斷放不放
     行——這支只負責**組出 PDF**，不做閘門判斷（同 `export_voucher_pdf()`
     與 `download_voucher_pdf()` 的分工：閘門在 router，內容產生在
     helpers）。

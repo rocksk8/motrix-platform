@@ -1167,6 +1167,9 @@ if (typeof module !== 'undefined' && module.exports) {
     'dev-crm.html': { key: 'crm', name: '業務開發' },
     'contractors.html': { key: 'subcontract', name: '外包工班' },
     'vendor-contractors.html': { key: 'subcontract', name: '外包工班' },
+    'payslips.html': { key: 'payroll', name: '薪資獎金' },
+    'payslip-form.html': { key: 'payroll', name: '薪資獎金' },
+    'bonus.html': { key: 'payroll', name: '薪資獎金' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

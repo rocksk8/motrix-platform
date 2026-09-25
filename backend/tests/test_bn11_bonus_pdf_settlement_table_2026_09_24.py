@@ -28,7 +28,7 @@ _SETTLE = {"summary": {
 
 
 def _html(settle):
-    from helpers.bonus_pdf import build_award_html
+    from modules.payroll.bonus_pdf import build_award_html
     award = {"id": 1, "award_no": "BA-BN11-001", "quote_no": "MQ-BN11-001",
              "status": "已核准", "voided_at": "", "created_by": "u", "created_at": "2026-09-24"}
     return build_award_html(award, [], {}, {}, "2026-09-24 00:00", settle=settle)
@@ -36,7 +36,7 @@ def _html(settle):
 
 def _rows(html):
     """PDF HTML 裡精算表的 `(標籤, 值)`，照出現順序。"""
-    from helpers.bonus import SETTLEMENT_ROWS
+    from modules.payroll.bonus import SETTLEMENT_ROWS
     labels = [lbl for _k, lbl, _kind, _n in SETTLEMENT_ROWS]
     out = []
     for m in re.finditer(r"<tr><td>(.*?)</td><td class='num'>(.*?)</td></tr>", html):
@@ -81,7 +81,7 @@ def test_bn11_a_missing_settlement_still_prints_the_table_with_dashes():
 
 def test_bn11_settlement_page_still_carries_every_label_verbatim():
     """🔴 **誤報時改這一題，不要改 `settlement.html` 的文案。**"""
-    from helpers.bonus import SETTLEMENT_ROWS
+    from modules.payroll.bonus import SETTLEMENT_ROWS
     src = (FRONTEND / "settlement.html").read_text(encoding="utf-8")
     missing = [lbl for _k, lbl, _kind, _n in SETTLEMENT_ROWS if lbl not in src]
     assert not missing, (

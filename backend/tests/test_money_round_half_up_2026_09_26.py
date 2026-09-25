@@ -361,7 +361,7 @@ def test_recognition_flag_amount_rounds_half_up():
 
 def test_bonus_settlement_money_rounds_half_up():
     """獎金精算明細金額：10.5 ⇒ NT$ 11（舊：NT$ 10）。bonus_pdf L160"""
-    from helpers.bonus_pdf import _settle_money
+    from modules.payroll.bonus_pdf import _settle_money
     assert _settle_money(10.5) == "NT$ 11"
     assert _settle_money(None) == "—" and _settle_money(0) == "NT$ 0"
 
