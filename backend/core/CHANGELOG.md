@@ -2,13 +2,17 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.12（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕
-> `core.registry.CORE_VERSION` 1.11 → 1.12（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10，版號由 core_bump 依 origin 取）。
+## 1.13（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
+> `core.registry.CORE_VERSION` 1.12 → 1.13（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12，版號由 core_bump 依 origin 取）。
 - L1（相容擴充）：`static/privacy-notice.js` 新增 `subjectState()`——單據上手動輸入的聯絡人（報價單、案件、完工單、網路規劃書）的告知狀態；紀錄鍵含聯絡人姓名，伺服器只接受已存檔的那一位（2026-09-26 主持裁示）
 - L1（新增）：`helpers.privacy_notice` 個資蒐集告知擴大到其他表單（CUSTOMIZATION-SPEC §9.3）——`CONTACT_TEMPLATE`／`USER_TEMPLATE`／`PURPOSES`／`purpose_template_for`／`purpose_notice_text`／`current_purpose_notice`／`record_purpose_ack`／`acks_with_prefix`；既有函式簽章不變
 - L1（相容擴充）：`GET /api/legal-params/privacy-notice?purpose=contractor|contact|user`（沒帶＝`contractor`，與 1.7 相同；不認得的用途 400）；前端元件 `static/privacy-notice.js` 的 `load(token, purpose?)`、新增 `contactsState()`
 - L1（新增欄位）：`company_profile.privacy_notice_contact`、`company_profile.privacy_notice_user`；設定鍵 `privacy_notice_acks` 新增鍵形 `customer_contact:`／`supplier_contact:`／`vendor_contractor:`／`user:`
 - 清單 `docs/platform/pii_forms.json`＋守門 `tests/platform/test_pii_forms_notice.py`（MODULE-GUIDE §11）
+
+## 1.12 — 2026-09-26（A，獎金分潤）〔core_bump：暫用 1.10 → 1.12〕
+- L1（新增）：`helpers.email_notify.notify_bonus_submitted`（獎金分潤輪到的簽核人＋代理人）、`notify_bonus_payout_ready`（核准待發放 → 出納）；信中不含金額。通知設定新增 `bonus_submitted`、`bonus_payout_ready` 兩個可個別關閉的事件（CORE-SPEC「使用者裁示」獎金分潤：通知）
+- 串接點（新增，L2 之間）：IP-8 `bonus.payouts`（M07 → M05 出納）、IP-9 `expense.entries`（M07 → M08 報表）；U4 經 IP-7 `helpers.legal_params` 依撥付日選版，讀不到或欄位不齊 ⇒ 拒絕撥付
 
 ## 1.11 — 2026-09-26〔core_bump：暫用 1.99 → 1.11〕
 > C（P4／P5 定義文件庫＋自訂欄位、P8 自訂模組引擎、A8d branding、S-CC07 N-1；原排 1.5，合回時 1.5～1.9 已被使用，依 §C-7 取下一號）。
