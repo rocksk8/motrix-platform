@@ -83,3 +83,10 @@ def test_a_hard_cap_kill_is_listed_as_a_timeout_only_once():
     assert r["Timeouts"] == ["tests/test_e2e_z.py::test_stuck"], r
     assert r["Failures"] in ([], None), "同一題被逐題上限結束，不可以再算成斷言失敗：%r" % r
     assert "\n".join(r["Message"]).count('py -m pytest "tests/test_e2e_z.py::test_stuck" -v') == 1
+
+
+def test_the_build_runs_e2e_with_four_workers():
+    """PERF #3（2026-09-25）：建包的 e2e 段平行 4 個 worker。退回單程序會讓建包多約 13 分鐘，而沒有任何題會紅。"""
+    src = BUILD.read_text(encoding="utf-8-sig")
+    assert "$e2eWorkers = 4" in src
+    assert '-m "e2e" -n $e2eWorkers' in src, "e2e 那一段沒有帶 -n"

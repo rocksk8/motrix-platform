@@ -658,7 +658,12 @@ Write-Host "`n[測試] 執行 pytest（e2e，真實瀏覽器）..."
 $_tE2e = Get-Date
 # `-rf` 讓失敗的那幾題印出 `FAILED <題> - <例外類別>: <訊息>` —— 那一行是
 # 下面分類的依據。
-& $pyExe -m pytest -q -rf -m "e2e" --durations=20 --basetemp="${pytestTemp}_e2e" 2>&1 |
+# 2026-09-25（PERF #3）：e2e 改 4 個 worker 平行（原本單程序循序）。前置條件都已就位：
+#   逾時算失敗（_e2e_gate.ps1）、建包獨佔兩格測試名額（Acquire-TestExclusive）、每 worker 一套共用瀏覽器與伺服器
+#   （conftest #5）、逐題上限（conftest `_e2e_hard_cap`，卡住的題印出堆疊並結束該 worker、不拖整輪）。
+# ⚠️ 平行下紅的時序題照「偶發先當產品競態」查，不加 retry、不放寬 timeout。切換前同一 tree 連跑多次 -n 4 全綠。
+$e2eWorkers = 4
+& $pyExe -m pytest -q -rf -m "e2e" -n $e2eWorkers --durations=20 --basetemp="${pytestTemp}_e2e" 2>&1 |
     Tee-Object -Variable e2eOut |
     ForEach-Object { Write-Host $_ }
 $e2eExit = $LASTEXITCODE
