@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>信件與通知收件設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .ms-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .ms-tabs { display: flex; gap: 8px; margin-top: 16px; max-width: 1200px; flex-wrap: wrap }
+    .ms-tab { padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--white);
+      font-size: 13px; cursor: pointer; color: var(--text-secondary); font-family: inherit }
+    .ms-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600 }
+    .ms-card { max-width: 1200px; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; overflow-x: auto }
+    .ms-table { width: 100%; border-collapse: collapse; font-size: 13px }
+    .ms-table th, .ms-table td { padding: 9px 10px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top }
+    .ms-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; white-space: nowrap }
+    .ms-sub { font-size: 11px; color: var(--text-dim); margin-top: 3px; line-height: 1.5 }
+    .ms-sel, .ms-in { padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;
+      background: var(--white); color: var(--text-main); font-family: inherit }
+    .ms-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px }
+    .ms-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: var(--border-light); cursor: pointer }
+    .ms-chip.on { background: #DBEAFE; color: #1D4ED8; font-weight: 600 }
+    .ms-bad { color: var(--danger); font-size: 12px }
+    .ms-ok { color: var(--success); font-size: 12px }
+    .ms-note { max-width: 1200px; margin-top: 16px; padding: 12px 16px; border-radius: 8px; background: #EFF6FF;
+      border: 1px solid #BFDBFE; color: #1E3A8A; font-size: 13px; line-height: 1.7 }
+    @media (max-width: 767px) { .ms-main { margin-left: 0; padding: 20px 16px } }
+  </style>
+</head>
+<body x-data="mailSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="ms-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">信件與通知收件設定</h1>
+        <p class="pg__s">每一種系統寄出的信件都在這裡指定收件人。「照預設」依信件類型的預設收件人寄送；「僅超級管理員」只寄給超級管理員；「指定帳號／角色」除了事件相關人員之外，另寄給指定的帳號與角色。系統技術類預設只寄超級管理員。個人仍可在使用者管理中退訂自己收得到的類型。</p>
+      </div>
+    </div>
+
+    <div class="ms-note">主旨格式固定為「【MOTRIX 系統通知】分類－事由」，內文依「事由、影響、建議處理、發送時間與來源」呈現；下表的「影響」「建議處理」即為各類信件內文的預設說明。</div>
+
+    <div class="ms-tabs">
+      <button class="ms-tab" :class="{on: cat === ''}" @click="cat = ''">全部</button>
+      <template x-for="(label, k) in categories" :key="k">
+        <button class="ms-tab" :class="{on: cat === k}" @click="cat = k" x-text="label" :data-testid="'ms-cat-' + k"></button>
+      </template>
+    </div>
+    <div class="ms-bad" x-show="errMsg" x-text="errMsg" style="margin-top:12px" data-testid="ms-err"></div>
+
+    <div class="ms-card">
+      <table class="ms-table">
+        <thead><tr><th>信件類型</th><th>分類</th><th>預設收件人</th><th>影響／建議處理</th><th style="min-width:280px">收件人設定</th><th></th></tr></thead>
+        <tbody>
+          <template x-for="t in shown" :key="t.key">
+            <tr :data-testid="'ms-row-' + t.key">
+              <td><div x-text="t.name"></div><div class="ms-sub" x-text="t.key"></div></td>
+              <td x-text="t.categoryLabel"></td>
+              <td><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
+              <td><div class="ms-sub" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-text="'建議處理：' + t.action"></div></td>
+              <td>
+                <select class="ms-sel" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
+                  <template x-for="(label, m) in modes" :key="m"><option :value="m" x-text="label"></option></template>
+                </select>
+                <template x-if="t.edit.mode === 'custom'">
+                  <div>
+                    <div class="ms-sub">角色</div>
+                    <div class="ms-chips">
+                      <template x-for="r in roles" :key="r">
+                        <span class="ms-chip" :class="{on: t.edit.roles.includes(r)}" @click="toggle(t.edit.roles, r)"
+                              :data-testid="'ms-role-' + t.key + '-' + r" x-text="roleLabel(r)"></span>
+                      </template>
+                    </div>
+                    <div class="ms-sub">帳號</div>
+                    <select class="ms-sel" @change="if ($event.target.value) { toggle(t.edit.users, $event.target.value); $event.target.value = '' }"
+                            :data-testid="'ms-user-' + t.key">
+                      <option value="">＋加入帳號</option>
+                      <template x-for="u in users" :key="u.username"><option :value="u.username" x-text="(u.displayName || u.username) + '（' + u.username + '）'"></option></template>
+                    </select>
+                    <div class="ms-chips">
+                      <template x-for="u in t.edit.users" :key="u">
+                        <span class="ms-chip on" @click="toggle(t.edit.users, u)" x-text="u + ' ✕'"></span>
+                      </template>
+                    </div>
+                  </div>
+                </template>
+              </td>
+              <td style="white-space:nowrap">
+                <button class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
+                <div class="ms-ok" x-show="t.okMsg" x-text="t.okMsg"></div>
+                <div class="ms-bad" x-show="t.errMsg" x-text="t.errMsg"></div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function mailSettingsPage() {
+      const ROLE_LABELS = { superadmin: '超級管理員', admin: '管理員', sales: '業務', engineer: '工程', user: '一般使用者', viewer: '檢視者' }
+      return {
+        items: [], categories: {}, modes: {}, roles: [], users: [], cat: '', errMsg: '',
+        _initDone: false,
+        _hdr() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        roleLabel(r) { return ROLE_LABELS[r] || r },
+        get shown() { return this.items.filter(t => !this.cat || t.category === this.cat) },
+        toggle(arr, v) { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); else arr.push(v) },
+        changed(t) { return JSON.stringify(t.edit) !== JSON.stringify(t.saved) },
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          await this.load()
+        },
+        async load() {
+          try {
+            const r = await fetch('/api/mail-types', { headers: this._hdr() })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { this.errMsg = '讀取失敗：' + (d.detail || r.status); return }
+            this.categories = d.categories; this.modes = d.modes; this.roles = d.roles
+            this.items = d.items.map(t => {
+              const o = t.override || {}
+              const cur = { mode: o.mode || 'default', users: [...(o.users || [])], roles: [...(o.roles || [])] }
+              return Object.assign(t, { edit: JSON.parse(JSON.stringify(cur)), saved: cur, saving: false, okMsg: '', errMsg: '' })
+            })
+            const u = await fetch('/api/users', { headers: this._hdr() })
+            if (u.ok) this.users = ((await u.json()) || []).filter(x => x.active)
+          } catch (e) { this.errMsg = '讀取失敗：' + e.message }
+        },
+        async save(t) {
+          t.saving = true; t.okMsg = ''; t.errMsg = ''
+          try {
+            const r = await fetch('/api/mail-types/' + encodeURIComponent(t.key) + '/recipients',
+              { method: 'PUT', headers: this._hdr(), body: JSON.stringify(t.edit) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { t.errMsg = '儲存失敗：' + (d.detail || r.status); return }
+            t.saved = { mode: d.override.mode, users: [...(d.override.users || [])], roles: [...(d.override.roles || [])] }
+            t.edit = JSON.parse(JSON.stringify(t.saved))
+            t.okMsg = '已儲存'
+          } catch (e) { t.errMsg = '儲存失敗：' + e.message }
+          finally { t.saving = false }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

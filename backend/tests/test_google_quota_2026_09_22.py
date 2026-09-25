@@ -556,10 +556,15 @@ def test_gb12_the_warning_mail_is_sent_once_per_cycle_and_raises(
         lambda *a, **kw: pytest.fail("走了 _async_send —— 射後不理會標記已通知而信沒出去"),
         raising=False)
 
+    # 2026-09-26（信件收件人登記）：收件人經 _group_emails("geo_quota_warning")；
+    # 原本的假函式收 *a，把「呼叫少了收件人參數（執行即 TypeError）」蓋掉了 ⇒ 改驗三個參數的形狀。
+    monkeypatch.setattr(email_notify, "_group_emails", lambda key: ["sa@example.invalid"], raising=False)
     notify(used=800, quota=1000)
     notify(used=850, quota=1000)
     assert len(sent) == 1, (
         f"同一個週期寄了 {len(sent)} 封警戒信 —— 一個週期只能寄一次。")
+    to, subject, body = sent[0]
+    assert to == ["sa@example.invalid"] and subject.startswith("【MOTRIX 系統通知】系統技術－")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -643,6 +648,7 @@ def test_gb7_a_small_quota_really_does_warn_and_degrade(client, monkeypatch):
     monkeypatch.setattr(geo, "usage_this_period", lambda *a, **kw: 95,
                         raising=False)
     sent = []
+    monkeypatch.setattr(email_notify, "_group_emails", lambda key: ["sa@example.invalid"], raising=False)
     monkeypatch.setattr(email_notify, "_send_raising",
                         lambda *a, **kw: sent.append(a) or email_notify.SEND_SENT,
                         raising=False)

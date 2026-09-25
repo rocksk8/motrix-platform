@@ -586,11 +586,15 @@
                 <div x-show="_notifyGroupOpen[grp.group]" x-cloak
                      style="display:flex;flex-direction:column;gap:4px;padding:8px 10px">
                   <template x-for="item in grp.items" :key="item.key">
-                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;padding:4px 2px">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 2px"
+                           :style="item.receivable ? 'cursor:pointer' : 'color:var(--text-dim)'"
+                           :data-testid="'notify-type-' + item.key">
                       <input type="checkbox"
-                             :checked="!form.notificationMuted.includes(item.key)"
+                             :disabled="!item.receivable"
+                             :checked="item.receivable && !form.notificationMuted.includes(item.key)"
                              @change="toggleNotifyType(item.key)">
                       <span x-text="item.label"></span>
+                      <span x-show="!item.receivable" style="font-size:10px">（此帳號不在收件範圍；由「信件與通知收件設定」決定）</span>
                     </label>
                   </template>
                 </div>
@@ -818,51 +822,10 @@
       allModules: [],
       catalogError: '',
 
-      // 對應 backend/helpers/notification_prefs.py 的 EVENT_GROUPS —— 兩邊修改時要同步
-      allNotifyTypes: [
-        {key:'approval_request',       label:'報價單待審核通知（當層簽核人）', group:'簽核流程'},
-        {key:'next_tier',              label:'報價單進入下一層審核',           group:'簽核流程'},
-        {key:'approved',               label:'報價單審核完成',                 group:'簽核流程'},
-        {key:'returned',               label:'報價單退回修改',                 group:'簽核流程'},
-        {key:'resubmit_requester',     label:'修改版報價單重新送審確認',       group:'簽核流程'},
-        {key:'shipping_submitted',     label:'出貨單待審核通知（當層簽核人）', group:'簽核流程'},
-        {key:'shipping_next_tier',     label:'出貨單進入下一層審核',           group:'簽核流程'},
-        {key:'shipping_approved',      label:'出貨單審核完成',                 group:'簽核流程'},
-        {key:'shipping_returned',      label:'出貨單退回修改',                 group:'簽核流程'},
-        {key:'contractor_voucher_submitted', label:'承攬商匯款申請待審核通知（當層簽核人）', group:'簽核流程'},
-        {key:'contractor_voucher_next_tier', label:'承攬商匯款申請進入下一層審核',           group:'簽核流程'},
-        {key:'contractor_voucher_approved',  label:'承攬商匯款申請審核完成',                 group:'簽核流程'},
-        {key:'contractor_voucher_returned',  label:'承攬商匯款申請退回修改',                 group:'簽核流程'},
-        {key:'invoice_voucher_submitted',    label:'開票申請憑據待審核通知（當層簽核人）',   group:'簽核流程'},
-        {key:'invoice_voucher_next_tier',    label:'開票申請憑據進入下一層審核',             group:'簽核流程'},
-        {key:'invoice_voucher_approved',     label:'開票申請憑據審核完成',                   group:'簽核流程'},
-        {key:'invoice_voucher_returned',     label:'開票申請憑據退回修改',                   group:'簽核流程'},
-        {key:'payment_request_submitted',    label:'請款單待審核通知（當層簽核人）',         group:'簽核流程'},
-        {key:'payment_request_next_tier',    label:'請款單進入下一層審核',                   group:'簽核流程'},
-        {key:'payment_request_approved',     label:'請款單審核完成',                         group:'簽核流程'},
-        {key:'payment_request_returned',     label:'請款單退回修改',                         group:'簽核流程'},
-        {key:'bonus_submitted',        label:'獎金分潤待審核通知（輪到我簽，含代理；信中不含金額）', group:'簽核流程'},
-        {key:'bonus_payout_ready',     label:'獎金分潤核准待發放（出納；信中不含金額）', group:'簽核流程'},
-        {key:'approval_reminder',      label:'簽核逾期催辦提醒（工作日 1/3/5 天分級升級）', group:'簽核流程'},
-        {key:'daily_task_assigned',    label:'工作事項指派通知',   group:'工作事項'},
-        {key:'daily_task_completed',   label:'工作事項完成回報',   group:'工作事項'},
-        {key:'daily_task_overdue',     label:'工作事項逾期未完成', group:'工作事項'},
-        {key:'daily_task_overdue_manager', label:'工作事項逾期未完成（我是部門主管，通知我部門成員的逾期事項）', group:'工作事項'},
-        {key:'daily_task_edited',      label:'工作事項內容已編輯', group:'工作事項'},
-        {key:'range_task_deadline',    label:'區間工作事項即將到期', group:'工作事項'},
-        {key:'case_stage_deadline',    label:'案件執行進度即將到期', group:'案件與到期提醒'},
-        {key:'case_stage_deadline_manager', label:'案件執行進度即將到期（我是部門主管，通知我部門成員的案件進度）', group:'案件與到期提醒'},
-        {key:'warranty_expiry',        label:'設備保固即將到期',     group:'案件與到期提醒'},
-        {key:'dev_case_stale',         label:'業務開發案件逾期未跟進', group:'案件與到期提醒'},
-        {key:'dev_case_delete_request',label:'業務開發案件刪除申請', group:'業務開發審核'},
-        {key:'dev_case_relink_request',label:'業務開發案件連結異動申請', group:'業務開發審核'},
-        {key:'settlement_finalized',   label:'成本精算完結通知',   group:'系統與報表'},
-        {key:'case_closing_report',    label:'案件結案報表 PDF（僅最高管理員）', group:'系統與報表'},
-        {key:'monthly_report',         label:'每月營運報表',       group:'系統與報表'},
-        {key:'module_activity',        label:'各模組新增／異動通知（建立帳號、案件等一般活動）', group:'系統與報表'},
-        {key:'case_close_blocked',     label:'結案被防呆機制擋下（未達成前置條件）', group:'已結案案件解鎖'},
-        {key:'case_change_requested',  label:'已結案案件半解鎖期間的變更/上傳待審核（僅最高管理員）', group:'已結案案件解鎖'},
-      ],
+      // 信件類型清單來自登記表（GET /api/mail-types/receivable；CORE-SPEC 信件收件人④）。
+      // 編輯既有帳號時只有「收得到」的類型可以勾選（退訂）；收不到的類型列出但不能勾選，
+      // 收件範圍由「信件與通知收件設定」決定——個人設定不能把自己加進受限的類型。
+      allNotifyTypes: [],
 
       get notifyGroups() {
         const order = [], map = {}
@@ -884,7 +847,24 @@
       },
 
       notifyGroupOnCount(items) {
-        return items.filter(it => !this.form.notificationMuted.includes(it.key)).length
+        return items.filter(it => it.receivable && !this.form.notificationMuted.includes(it.key)).length
+      },
+
+      // 信件類型：既有帳號 ⇒ 依收件範圍標 receivable；新帳號 ⇒ 全部列出（建立後再依角色與設定決定）
+      async loadNotifyTypes(userId) {
+        const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+        const h = { Authorization: 'Bearer ' + (s.token || '') }
+        try {
+          if (userId) {
+            const r = await fetch('/api/mail-types/receivable?user_id=' + encodeURIComponent(userId), { headers: h })
+            const d = r.ok ? await r.json() : { items: [] }
+            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, receivable: t.receivable }))
+          } else {
+            const r = await fetch('/api/mail-types', { headers: h })
+            const d = r.ok ? await r.json() : { items: [] }
+            this.allNotifyTypes = (d.items || []).map(t => ({ key: t.key, label: t.name, group: t.categoryLabel, receivable: true }))
+          }
+        } catch (e) { this.allNotifyTypes = [] }
       },
 
       get isSuperAdmin() { return this.session.role === 'superadmin' },
@@ -1127,6 +1107,7 @@
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this._notifyGroupOpen = {}
         this.showModal = true
+        this.loadNotifyTypes(null)
       },
 
       openEdit(user) {
@@ -1152,10 +1133,12 @@
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this._notifyGroupOpen = {}
-        for (const { group, items } of this.notifyGroups) {
-          this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
-        }
         this.showModal = true
+        this.loadNotifyTypes(user.id).then(() => {
+          for (const { group, items } of this.notifyGroups) {
+            this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
+          }
+        })
       },
 
       closeModal() {

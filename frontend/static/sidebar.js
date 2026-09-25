@@ -791,6 +791,8 @@ if (typeof module !== 'undefined' && module.exports) {
       //    只是拿掉側欄入口，不讓人再從這裡點進去設一個不會生效的東西。
       ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
+      // CORE-SPEC「信件與通知的收件人、用語」：每一種信件指定收件人（僅超級管理員）
+      ni(pg('mail-settings.html'),   'ntfy',  '信件與通知收件設定', ['mail-settings.html'],   sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
       ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
       // CORE-SPEC §9c：模組啟停／授權狀態（啟停重啟後生效）
