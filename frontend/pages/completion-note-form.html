@@ -133,33 +133,6 @@
             </div>
           </div>
 
-          <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
-          <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.noteNo ? '/api/completion-notes/' + encodeURIComponent(s.noteNo) : null, s => s.form && s.form.recipient)"
-               x-init="pnLoadNotice(); pnRefresh(); $watch('noteNo', () => pnRefresh())"
-               style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light, #E5E7EB);border-radius:6px">
-            <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-            <div style="font-size:11px;color:var(--text-dim, #6B7280);margin-bottom:8px;line-height:1.6">
-              客戶驗收人／聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
-            </div>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
-                      :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
-              <template x-if="pnAck()">
-                <span data-privacy-acked style="font-size:12px;color:var(--success, #16A34A)"
-                      x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
-              </template>
-              <template x-if="!pnAck()">
-                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
-                  <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
-                         @change="pnCheck($event.target.checked)" style="width:auto">
-                  已告知當事人（記錄時間與人員）
-                </label>
-              </template>
-            </div>
-            <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-                 style="margin-top:6px;font-size:11px;color:var(--warning, #D97706)">尚未記錄個資告知</div>
-            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger, #DC2626)" x-text="privacyErr"></div>
-          </div>
           <div class="cnf-card">
             <div class="cnf-card-title">期間與保固</div>
             <div class="cnf-grid">
@@ -257,6 +230,33 @@
             <textarea class="cnf-in" rows="3" x-model="form.pending_items" :disabled="!editable()" @input="dirty=true"
                       placeholder="尚未完成或待改善的項目、預計完成時間"></textarea>
             <div class="cnf-hint">留空的話不會出現在完工單上；但**有未完成項目時請務必填寫**。</div>
+          </div>
+          <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
+          <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.noteNo ? '/api/completion-notes/' + encodeURIComponent(s.noteNo) : null, s => s.form && s.form.recipient)"
+               x-init="pnLoadNotice(); pnRefresh(); $watch('noteNo', () => pnRefresh())"
+               style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+              客戶驗收人／聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
+                      :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
+              <template x-if="pnAck()">
+                <span data-privacy-acked style="font-size:12px;color:var(--success)"
+                      x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
+              </template>
+              <template x-if="!pnAck()">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
+                  <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
+                         @change="pnCheck($event.target.checked)" style="width:auto">
+                  已告知當事人（記錄時間與人員）
+                </label>
+              </template>
+            </div>
+            <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
+                 style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+            <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
           </div>
           <div class="cnf-card">
             <div class="cnf-card-title">備註</div>

@@ -1343,16 +1343,16 @@
         <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
         <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.q && s.q.quoteNo && !s.isNewRecord ? '/api/quotations/' + encodeURIComponent(s.q.quoteNo) : null, s => s.q && s.q.contactName, { role: 'contact' })"
              x-init="pnLoadNotice(); pnRefresh(); $watch('q.quoteNo', () => pnRefresh())"
-             style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light, #E5E7EB);border-radius:6px">
+             style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
           <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-          <div style="font-size:11px;color:var(--text-dim, #6B7280);margin-bottom:8px;line-height:1.6">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
             聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
                     :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
             <template x-if="pnAck()">
-              <span data-privacy-acked style="font-size:12px;color:var(--success, #16A34A)"
+              <span data-privacy-acked style="font-size:12px;color:var(--success)"
                     x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
             </template>
             <template x-if="!pnAck()">
@@ -1364,8 +1364,8 @@
             </template>
           </div>
           <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-               style="margin-top:6px;font-size:11px;color:var(--warning, #D97706)">尚未記錄個資告知</div>
-          <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger, #DC2626)" x-text="privacyErr"></div>
+               style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+          <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
         </div>
         <div class="form-group">
           <label class="form-label">送貨地址 / 發票地址</label>
@@ -2160,7 +2160,8 @@
   // V3.5（2026-09-24 CU2b）：用詞統一「完結案件」→「結案」（成案確認視窗）
   // V3.6（2026-09-25）：新單載入期間使用者先動的條款（點方塊／打字）不再被預設組蓋回；載入中點方塊不誤跳確認
   // V3.7（2026-09-25，R2）：零稅率／免稅選依據（營業稅法 §7、§8），送審前必填
-  const FORM_VERSION = 'V3.8'
+  // V3.9（2026-09-26，個資蒐集告知）：聯絡人下方加告知區塊（列印告知書、已告知紀錄）
+  const FORM_VERSION = 'V3.9'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在

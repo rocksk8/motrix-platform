@@ -117,6 +117,12 @@
   },
   {
    "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/privacy-notice",
+   "handler": "get_quotation_privacy_acks",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
    "path": "/api/quotations/{quote_no}/close-gates",
    "handler": "case_close_gates",
    "scope": "row_access"
