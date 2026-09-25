@@ -6,6 +6,8 @@
   python tools/platform/modtest.py --commit <SHA>      該 commit 本身的改動（<SHA>^..<SHA>）
   python tools/platform/modtest.py --changed-since <SHA>  <SHA> 之後到 HEAD 的已提交改動（不含工作樹）
   python tools/platform/modtest.py --files a.py b.html 直接指定改動檔
+  python tools/platform/modtest.py --rebase-check <GREEN> [--onto origin/platform]
+              §C-11 判定：帶進來的有 fixture 層或兩邊改同檔 ⇒ 全量（exit 3），否則差異題＋tests/platform（exit 0）
   --dry-run   只印受影響單位、測試清單與題數（collect-only 全部一次再篩），不執行
   --full      跑全量：非 e2e（-n --workers）＋ e2e（-n --e2e-workers）兩段；basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖；
               結果（含失敗、中斷，ok=false）原子寫入主工作樹 tools/platform/.last_full.json（沒有這個檔＝沒跑過）
@@ -83,6 +85,49 @@ def changed_files(a):
     if not a.base:
         out += git("ls-files", "--others", "--exclude-standard")
     return sorted(set(l for l in out.splitlines() if l.strip()))
+
+
+def _names(repo, *diff_args):
+    out = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", "--no-renames", *diff_args],
+                         capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    return set(l for l in out.splitlines() if l.strip())
+
+
+def rebase_check(green, onto, repo=None):
+    """PLAYBOOK §C-11：全量綠在 green（rebase 前的分支尖端）之後 rebase 到 onto，要不要重跑全量。
+
+    帶進來的＝merge-base..onto；本分支的＝merge-base..green。
+    - 帶進來的碰到 FIXTURE_LAYER ⇒ 全量
+    - 兩邊改了同一個程式檔 ⇒ 全量（以「同檔」近似「程式碼衝突」：比 git 文字衝突寬，寧可多跑）
+    - 兩邊改了同一個 .md ⇒ 只列出、不觸發全量（讀文件的守門在 tests/platform，差異題本來就會跑）
+    - 都沒有 ⇒ 本分支差異題（modtest --base <onto>）＋ tests/platform
+    ⚠ 只看「帶進來的」：本分支自己改的 fixture 層由它自己的全量負責（§C-4），不在這裡判定。
+    """
+    repo = repo or REPO
+    mb = subprocess.run(["git", "-C", str(repo), "merge-base", green, onto], capture_output=True, text=True,
+                        encoding="utf-8", check=True).stdout.strip()
+    incoming, mine = _names(repo, mb, onto), _names(repo, mb, green)
+    fixture = sorted(f for f in incoming if f in FIXTURE_LAYER)
+    both = incoming & mine
+    overlap = sorted(f for f in both if not f.endswith(".md"))
+    return {"green": green, "onto": onto, "merge_base": mb,
+            "incoming": sorted(incoming), "mine": sorted(mine),
+            "fixture_layer": fixture, "overlap": overlap, "overlap_docs": sorted(both - set(overlap)),
+            "need_full": bool(fixture or overlap)}
+
+
+def print_rebase_check(r):
+    print("全量綠在 %s；rebase 到 %s（merge-base %s）" % (r["green"], r["onto"], r["merge_base"][:10]))
+    print("帶進來的改動檔 %d；本分支改動檔 %d" % (len(r["incoming"]), len(r["mine"])))
+    print("fixture 層：%s" % ("、".join(r["fixture_layer"]) or "無"))
+    print("兩邊都改的程式檔（視為程式碼衝突）：%s" % ("、".join(r["overlap"]) or "無"))
+    if r["overlap_docs"]:
+        print("兩邊都改的文件（不觸發全量）：%s" % "、".join(r["overlap_docs"]))
+    if r["need_full"]:
+        print("🔴 判定：重跑全量（§C-11 例外）")
+    else:
+        print("✓ 判定：rebase 後跑 `modtest --base %s` ＋ tests/platform；回報寫「全量在 %s，差異題在 %s」"
+              % (r["onto"], r["green"], r["onto"]))
 
 
 def load_map(refresh):
@@ -496,6 +541,8 @@ def main(argv=None):
     g.add_argument("--commit")
     g.add_argument("--changed-since", metavar="SHA", help="SHA 之後（不含）到 HEAD 的已提交改動")
     g.add_argument("--files", nargs="+")
+    g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後要不要重跑全量（只判定、不執行）")
+    ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/.last_full.json")
     ap.add_argument("--workers", type=int, default=FULL_MAX_WORKERS, help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
@@ -513,6 +560,13 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_]+", a.window):
         ap.error("--window 只能是英數底線")
+    if a.rebase_check:
+        r = rebase_check(a.rebase_check, a.onto)
+        if a.json:
+            sys.stdout.buffer.write((json.dumps(r, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
+        else:
+            print_rebase_check(r)
+        return 3 if r["need_full"] else 0
     global PYEXE
     PYEXE = resolve_python(a.python)
 
