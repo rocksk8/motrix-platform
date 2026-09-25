@@ -170,5 +170,5 @@
 
 - （2026-09-26 X-VAT 帶出）`:,.0f` 格式化共 23 處也是銀行家捨入：開票與報價路徑上的值已經是整數，不受影響；額外支出這類帶角分的值，顯示時可能差 1 元。改成先經 round_half_up 再格式化。
 - （2026-09-26 P8G 帶出）`modtest --list` 會直接執行測試，而不是只列出選題；應改為只列清單、不執行（B）。
-- （2026-09-26 D 稽核 CA-O3，M01 搬遷必做）`case.present` 要寫進 M01 的 ModuleSpec.providers，不可以在 import 時登記；否則模組載入失敗時登記會殘留，case_access 會誤判 M01 還在。
+- （2026-09-26 D 稽核 CA-O3，M01 搬遷必做）`case.access`（已兼作 M01 在不在的訊號，`case.present` 已刪）要寫進 M01 的 ModuleSpec.providers，不可以在 import 時登記；否則模組載入失敗時登記會殘留，case_access 會誤判 M01 還在。
 - （2026-09-26 08:04 D 稽核 CA-O4，M01 搬遷必做，與 CA-O3 一起做）現在 `case.access`（IP-12；c-case-access-3 起也是 L1 判斷「M01 在不在」的訊號）在 `helpers/quotations.py` 匯入時登記，而 L1 的 `pdf_gen`、`routers/system` 也匯入這支檔 ⇒ 只改成 ModuleSpec 登記還不夠，**要一併切斷 L1 對 `helpers.quotations` 的匯入**，否則 M01 被拿掉時 L1 仍把它載入、登記仍在，「M01 不在 ⇒ 404」退回修正前。驗收：真刪 M01 後 `case.access` 不在登記表。

@@ -192,23 +192,6 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-15　`case.present`：M01 案件模組「我在」的訊號（M01 → L1 案件存取守門）
-
-對應稽核 D AUDIT-D-C-case-access CA-M1（2026-09-26）。L1 案件存取守門要知道 M01 在不在；**不能看 `quotations` 表**——V9 基準在每個安裝都建這張表。編號為暫定（C、A 的串接點同時期暫用 IP-10～14），由列車依合回順序定號。
-
-| 欄位 | 內容 |
-|---|---|
-| 提供方 | M01 案件：`routers/quotations.py::_case_present`（匯入時登記；M01 搬進 `modules/` 後改寫進 `ModuleSpec.providers`） |
-| 使用方 | L1 `helpers/case_access.py::case_module_present`（`guard_case_access`、`case_access_allowed`） |
-| 形式 | provider（`core.registry`），只看有沒有登記、不呼叫 |
-| 語法 | 提供：`_registry.provide("case.present", "quotations", _case_present)`<br>取用：`bool(registry.providers("case.present"))` |
-| 回傳 | `True`（不使用） |
-| 對方不在時 | `guard_case_access` 一律 404「報價單 … 不存在（案件模組未載入）」、`case_access_allowed` 一律 False——表與資料在也一樣、連超級管理員也不放行（fail closed） |
-| 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_case_access_l1.py::test_without_m01_access_is_404_even_though_the_table_and_row_exist`（真實 schema、案件列在、擁有者＋超級管理員；拿掉提供者 ⇒ 404／False） |
-
----
-
 ## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
 不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。
@@ -277,6 +260,8 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 | 對方不在時 | 規劃書照常建立、編輯、匯出；**不能綁定案件**：建立時帶案件單號 ⇒ 400「案件模組未安裝：規劃書無法綁定案件（不填案件單號即可建立獨立的規劃書）」；依案件查詢 ⇒ 404「案件模組未安裝：無法依案件查詢網路架構規劃書」 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/netplan/tests/test_netplan_case_access.py`：①提供者已登記 ②正對照：綁定案件時帶出客戶名、依案件查詢有逐案權限（外人 403）③**反向控制**：拿掉提供者 ⇒ 不綁案件的建立照常、綁案件 400、依案件查詢 404，訊息明說；逐案守門的歸類由 `test_case_read_scope.py` 守 |
+
+**L1 案件存取守門也以本串接點為「M01 在不在」的訊號**（主持裁示 2026-09-26，只留一個訊號；原本 C 另立的 `case.present` 已刪）：`helpers.case_access.case_module_present()` ＝ 有沒有 `case.access` 提供者；沒有 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣（稽核 D CA-M1）。守門 `tests/platform/test_case_access_l1.py`：拿掉 `case.access` ⇒ L1 守門 404，且取用方（網路規劃書）明說「案件模組未安裝」——兩條路結果一致。
 
 ---
 
