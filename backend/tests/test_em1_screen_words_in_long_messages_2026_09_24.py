@@ -95,9 +95,8 @@ _UNTOUCHED = (
      '找不到可發送對象：請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email'),
     ('routers/system.py',
      'cycle_start_day 需介於 1～28 之間（29 以後的日子二月沒有）'),
-    ('modules/tender_radar/api.py',
-     '沒有要變更的設定（scanHours／notifyHours）'),
 )
+# M11 的「沒有要變更的設定（scanHours／notifyHours）」由 modules/tender_radar/tests/ 自己釘（2026-09-25）
 
 
 def _page(name):

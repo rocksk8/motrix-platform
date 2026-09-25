@@ -104,7 +104,8 @@ def test_fx1a1b_the_listed_switches_are_still_reported(client, make_user):
     body = _get(client, hdr)
 
     names = {s.get("name") for s in body.get("switches") or []}
-    assert {"MOTRIX_TENDER_RADAR", "MOTRIX_GEO"} <= names, (
+    # L1 的開關；M11 的 MOTRIX_TENDER_RADAR 由 modules/tender_radar/tests/ 自己釘
+    assert {"MOTRIX_GEO"} <= names, (
         f"白名單裡的開關沒有回出來，只有：{sorted(names)}"
     )
     for s in body["switches"]:

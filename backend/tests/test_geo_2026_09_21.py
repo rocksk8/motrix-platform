@@ -465,10 +465,13 @@ def test_map_works_with_the_radar_off(client, make_user, monkeypatch):
     """
     _seed_legacy_profile()
     monkeypatch.setattr(_geo(), "GEO_ENABLED", True)
-    import modules.tender_radar.source as ts
-    monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", False)
+    import importlib.util
     monkeypatch.delenv("MOTRIX_TENDER_RADAR", raising=False)
-    assert ts.radar_on() is False, "前提不成立：雷達應該是關的"
+    if importlib.util.find_spec("modules.tender_radar") is not None:
+        import modules.tender_radar.source as ts
+        monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", False)
+        assert ts.radar_on() is False, "前提不成立：雷達應該是關的"
+    # 模組未安裝 ＝ 沒有雷達，正是「不在雷達內也要能用地圖」的極端情形 ⇒ 照樣驗下去
 
     hdr = _auth(client, make_user)
     r = client.get(MAP_PATH, headers=hdr)

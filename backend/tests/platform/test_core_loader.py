@@ -95,10 +95,20 @@ def test_real_modules_all_load(clean_registry):
 
 
 def test_source_tree_includes_module_files():
-    """正對照：搬進 modules/ 的檔一定在守門掃描範圍內。"""
+    """正對照：搬進 modules/ 的檔一定在守門掃描範圍內。
+
+    不綁特定 L2 模組（2026-09-25 刪 M11 反向控制）：任取一個有 api.py 的已安裝模組；
+    一個都沒有 ⇒ 明確 skip（不是默默通過）。M11 自己的那一份在 modules/tender_radar/tests/。
+    """
     rels = {source_tree.rel(p) for p in source_tree.router_files()}
-    assert "modules/tender_radar/api.py" in rels
     assert "routers/system.py" in rels
+    mods = [d for d in source_tree.module_dirs() if (d / "api.py").is_file()]
+    if not mods:
+        pytest.skip("沒有任何已安裝且帶 api.py 的模組（modules/*/module.json）⇒ 模組端的正對照無對象")
+    d = mods[0]
+    api = source_tree.rel(d / "api.py")
+    assert api in rels
     logic = {source_tree.rel(p) for p in source_tree.logic_files()}
-    assert "modules/tender_radar/source.py" in logic
-    assert "modules/tender_radar/api.py" not in logic
+    assert api not in logic
+    others = [source_tree.rel(p) for p in d.glob("*.py") if p.name not in ("api.py", "__init__.py")]
+    assert set(others) <= logic, sorted(set(others) - logic)

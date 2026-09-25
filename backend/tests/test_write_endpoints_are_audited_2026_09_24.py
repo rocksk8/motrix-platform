@@ -167,9 +167,15 @@ def test_refusal_only_audit_helper_does_not_count():
 def test_the_scanner_sees_what_it_should():
     """量尺：真的掃得到端點；認得出有稽核的；認得出沒有稽核的；不被字串騙。"""
     rows = _all()
-    assert len(rows) > 300, len(rows)
+    # 掃到的寫入端點數對照一個獨立量法（直接數 @router.post/put/patch/delete）——不綁任何一個 L2 模組的端點數
+    import re as _re
+    from core import source_tree as _st
+    n_decorated = sum(len(_re.findall(r"@router\.(post|put|patch|delete)\(", p.read_text(encoding="utf-8")))
+                      for p in _st.router_files())
+    assert n_decorated > 0 and len(rows) >= 0.95 * n_decorated, (len(rows), n_decorated)
     by = {(f, m, p): fn for f, m, p, fn in rows}
-    assert is_audited(by[("modules/tender_radar/api.py", "POST", "/api/tender-radar/watches")])
+    # 正對照用 L1 端點；M11 自己的那一條在 modules/tender_radar/tests/
+    assert is_audited(by[("approval_delegates.py", "POST", "/api/approval-delegates")])
     src = (
         "@router.post('/x')\n"
         "def a():\n"

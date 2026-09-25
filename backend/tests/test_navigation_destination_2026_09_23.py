@@ -176,7 +176,7 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 143
+_BASELINE_COUNT = 142   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
 
 
 def test_em10_the_navigation_tone_message_count_does_not_drop():
@@ -187,7 +187,8 @@ def test_em10_the_navigation_tone_message_count_does_not_drop():
     連一個錯的指路牌都沒有了，比原本更糟。這一題釘住「訊息只能變得
     更可比對，不能就地消失」。
     """
-    hits = _scan_all_nav_messages()
+    hits = [(p, s) for p, s in _scan_all_nav_messages()
+            if "modules" not in str(p).replace("\\", "/").split("/")]
     assert len(hits) >= _BASELINE_COUNT, (
         "含導航語氣的可見字串只掃到 %d 條，低於基準 %d：\n" % (
             len(hits), _BASELINE_COUNT)
@@ -220,29 +221,6 @@ def test_em10_edge_path_message_points_to_a_findable_label():
     assert target in page, (
         "訊息說要去「%s」，而 `company-profile-settings.html` 裡找不到\n"
         "這個字——實際的卡片標題是「Edge 瀏覽器路徑」。" % target)
-
-
-def test_em10_tender_radar_health_message_points_to_a_findable_label():
-    """🔴🔴 **`②` `email_notify.py`：訊息說去看「雷達健康狀態」，畫面上沒有這五個字。**
-
-    `tender-radar.html` 那個健康區塊的標題是 `x-text="healthText"`——
-    動態文字，沒有固定的「雷達健康狀態」這個標籤。
-
-    ✅ **A 已裁定修法方向：乙**（在畫面上加一個固定小標，不是改訊息
-    措辭）——判準：「便宜的修法」與「可被守門看見的修法」之間選後者，
-    改措辭會把一個可比對的東西變成不可比對的，讓同一類缺陷下次可以
-    再長出來而沒有人發現。⇒ 本題直接釘「乙」落地後的樣子：畫面上要
-    找得到「雷達健康狀態」這個固定字串。
-    """
-    hits = _scan_all_nav_messages()
-    msg = next((s for p, s in hits if "雷達健康狀態" in s), None)
-    assert msg is not None, "找不到那句訊息——退回改本檔的錨點。"
-    page = _page_text("tender-radar.html")
-    assert "雷達健康狀態" in page, (
-        "訊息說要去看「雷達健康狀態」，而 `tender-radar.html` 裡找不到\n"
-        "這個固定字串——健康區塊的標題目前是 `x-text=\"healthText\"`\n"
-        "（動態文字）。A 已裁乙案：請在畫面上加一個固定小標「雷達健康"
-        "狀態」，讓這個目的地變得可比對。")
 
 
 def test_em10_annual_target_message_points_to_the_wrong_place():

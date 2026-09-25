@@ -81,8 +81,7 @@ def test_every_event_key_used_in_email_notify_is_registered():
                         and isinstance(inner.args[0], ast.Constant)
                         and isinstance(inner.args[0].value, str)):
                     used.setdefault(inner.args[0].value, node.name)
-    # 正對照：搬出去的那三個 key 一定要掃得到，否則守門的對象已經被搬走了
-    assert {"tender_found", "tender_fetch_failed", "tender_source_changed"} <= set(used), sorted(used)
+    # 模組自己的 key 由各模組 tests/ 釘（M11：modules/tender_radar/tests/），這裡不綁特定 L2 模組
 
     assert used, "沒有掃到任何 event key，掃描邏輯可能已與 email_notify.py 的寫法脫節"
     missing = {k: fn for k, fn in used.items() if k not in EVENT_KEYS}
