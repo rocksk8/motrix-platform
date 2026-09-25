@@ -126,6 +126,7 @@
 ## 6. 進度紀錄（最新在上）
 
 - 2026-09-26 05:00 C：**`wip/c-case-access` 已上月台（7c056468），A 可以依賴**。L1 `helpers/case_access.py` 提供 `CASE_ACCESS`、`is_document_approver`、`case_access_allowed`、`guard_case_access`；`helpers.quotations`／`helpers` 的同名匯入保留（同一物件，呼叫端不必改）。L1 其他檔新增讀 `quotations` 會被 `test_case_access_l1` 擋；案件表不存在 ⇒ 404。M01／M03／M05／M10 搬遷時：直接 `from helpers.case_access import …` 即不算對 M01 的相依（dep_scan 以定義所在歸屬）。
+- 2026-09-26 04:56 D：⑩ M12 稽核（`AUDIT-D-A-M12-move.md`）：真的刪掉 modules/daily_tasks ⇒ 系統健康檢查 6 項照跑、端點 404、ping 200 ✅；**必修 M-1**：反向控制紅 9 題（§B-11 只允許 1），其中 test_case_stage_done_calendar 5 題與 test_em1 1 題需要 M12 卻留在模組外；另 2 題框架題（登記表、UNIT-INDEX）請主持裁定是否列入允許清單。
 - 2026-09-26 04:54 B：M08 開工（D:\MOTRIX-PLATFORM-B17，wip/b-m08）。**動 L1 預告**：`/api/now` 與 `/api/company/tax|search`（GCIS 查統編，L1、M03、M04 都在用）從 `routers/dashboard.py` 拆出，成為 L1 router `routers/company_lookup.py`（端點路徑、權限、GCIS 額度設定鍵都不變）；地圖（map_points、map.html、/api/map）在 modules.json 歸 L1（主持確認）。其他線若在改 dashboard.py 的這兩段請告知。
 - 2026-09-26 04:54：M08 裁示更正：主持先前指示 `_collect_income_items`／`_collect_tax_invoices` 由「M08 公開 provider」——**這是錯的**，那兩個函式收的是應收收入與進項發票，照主持自己的規則屬於「純資料、多個模組在用」⇒ 改為下沉 L1 中立位置（B 發現與 ROADMAP A8b 牴觸），M05 搬遷時收回 M05。拿掉 M08 時，出納與會計匯出不受影響。
 - 2026-09-26 04:47：A 修好共用守門 X-2（模組不在包裡時豁免），M12、M10 搭第三班；B 的 scope 上月台，scope_rc 三項都選到而且真的紅。M08 從 A 移給 B，C4 之前先做。
