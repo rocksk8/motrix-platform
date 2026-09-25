@@ -371,7 +371,12 @@ try {
         # health（CORE-SPEC §9e D1，2026-09-25）：部署前健康檢查，**完全唯讀**。
         # 只收集事實、不做判斷——判斷規則在開發機 deploy_insights.evaluate_health()（有測試）。
         # 單一字串回傳（先在遠端 ConvertTo-Json），理由同 tail-log：避開 Remoting 對物件加簽的屬性。
-        $raw = Invoke-Command -Session $session -FilePath (Join-Path $PSScriptRoot "_prod_health_facts.ps1") -ArgumentList $ProdRoot
+        # 遠端的非終止錯誤不可以在這裡變成終止（本檔 $ErrorActionPreference = Stop）：
+        # 否則整支 exit 1、畫面只有「連線失敗」。錯誤原文印在 JSON 區塊之前，儀表板會記錄。
+        $remErr = $null
+        $raw = Invoke-Command -Session $session -FilePath (Join-Path $PSScriptRoot "_prod_health_facts.ps1") -ArgumentList $ProdRoot -ErrorAction Continue -ErrorVariable remErr
+        foreach ($e in @($remErr)) { if ($e) { Write-Host ("[remote-error] " + [string]$e) } }
+        if (-not $raw) { Fail ("正式機的健康檢查腳本沒有回傳任何內容。" + (@($remErr) -join " | ")) }
         [string]$outText = $raw
         Write-Host "===JSON==="
         Write-Host $outText

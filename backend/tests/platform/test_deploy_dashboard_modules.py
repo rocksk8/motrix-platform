@@ -158,3 +158,10 @@ def test_single_installed_module_as_dict_is_still_listed():
     s = di.summarize_modules({"installed": {"key": "m", "version": "1"}, "lockRaw": None, "logLines": []})
     assert [r["key"] for r in s["rows"]] == ["m"]
     assert not any("讀不懂" in w for w in s["warnings"])
+
+
+def test_fact_errors_become_warnings():
+    facts = {"alertActive": False, "latestDbBackup": {"name": "x", "at": "2099-01-01T00:00:00"},
+             "disks": [{"name": "C", "freeGB": 100}], "installDrive": "C", "port666Listen": 1,
+             "devMarkers": [], "piiFolders": ["x"], "factErrors": ["Get-NetTCPConnection 失敗"]}
+    assert any("Get-NetTCPConnection 失敗" in w for w in di.evaluate_health(facts)["warnings"])

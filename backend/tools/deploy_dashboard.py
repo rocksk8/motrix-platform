@@ -632,6 +632,17 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                     _active_job_id = None
 
 
+def _log_remote_failure(action: str, text: str) -> None:
+    """遠端失敗的原文寫進 deploy_logs/remote_<action>_last_error.txt（gitignored）：
+    畫面上的訊息使用者看得到、開發端看不到；排查不可以靠請使用者截圖。"""
+    try:
+        DEPLOY_LOGS_DIR.mkdir(exist_ok=True)
+        (DEPLOY_LOGS_DIR / f"remote_{action}_last_error.txt").write_text(
+            time.strftime("%Y-%m-%d %H:%M:%S") + "\n" + text + "\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
 def _remote_error(proc) -> str:
     """遠端腳本失敗時給畫面的訊息：stdout 與 stderr 都要帶。
     2026-09-25 使用者實跑只看到「連線失敗」——PowerShell 未攔截的例外只寫 stderr，原本整段被丟掉。"""
@@ -1161,9 +1172,11 @@ def _run_remote_json(action: str, username: str, password: str, timeout=90):
     except subprocess.TimeoutExpired:
         return None, "連線正式機逾時"
     if proc.returncode != 0:
+        _log_remote_failure(action, _remote_error(proc))
         return None, _remote_error(proc)
     marker = "===JSON==="
     if marker not in proc.stdout:
+        _log_remote_failure(action, _remote_error(proc))
         return None, "正式機回傳內容沒有 JSON 區塊"
     try:
         return json.loads(proc.stdout.split(marker, 1)[1].strip()), None

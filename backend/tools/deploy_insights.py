@@ -180,6 +180,11 @@ def evaluate_health(facts: dict, now=None) -> dict:
         problems.append(f"正式機安裝根目錄有開發機標記 {m}：會讓正式機{'停止寄信' if m == '.no_email_send' else '停止雲端備份'}，而且不會報錯")
     if not facts.get("piiFolders"):
         warnings.append("正式機看不到「系統存檔_個資」資料夾：新版上線後整庫雲端備份與勞報單鏡像會暫停並每天告警")
+    fe = facts.get("factErrors") or []
+    if isinstance(fe, str):
+        fe = [fe]
+    for e in (fe if isinstance(fe, list) else [])[:5]:
+        warnings.append("正式機收集事實時出錯（該項可能不完整）：" + str(e)[:200])
     if "pythonVersion" in facts and not facts.get("pythonVersion"):
         warnings.append("沒有取得正式機的 Python 版本（開發機 venv 無法對齊）：" + str(facts.get("pythonError") or "原因不明"))
     mods = summarize_modules(facts.get("modules") if isinstance(facts.get("modules"), dict) else {})         if "modules" in facts else {"rows": [], "warnings": []}

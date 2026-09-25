@@ -6,8 +6,14 @@
 #>
 # 讀檔一律 -Encoding UTF8：PS 5.1 預設用系統字碼頁（cp950／cp932），Python 寫的 UTF-8 告警會變亂碼（測試抓到）
 param([Parameter(Mandatory = $true)][string]$Root, [int]$Port = 666)
-# 稽核 A-3：輸出固定 UTF-8，結果不可以取決於執行者主控台的字碼頁（cp932／cp950 會把中文告警變亂碼）
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# 唯讀收集事實：任何一項失敗都不可以讓整支中斷（中斷＝畫面只剩「連線失敗」，2026-09-25 使用者實跑）。
+# 錯誤收進 factErrors 一起回傳，判斷交給 evaluate_health。
+$ErrorActionPreference = "Continue"
+$Error.Clear()
+# 稽核 A-3：輸出固定 UTF-8，結果不可以取決於執行者主控台的字碼頁（cp932／cp950 會把中文告警變亂碼）。
+# ⚠ 遠端工作階段（wsmprovhost）沒有主控台，設定可能丟例外 ⇒ 包 try；-FilePath 的回傳走 Remoting 序列化，不經主控台編碼
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+$Error.Clear()
 $b = Join-Path $Root "backend"
 $alertFile = Join-Path $Root "backup_alerts\BACKUP_ALERT.txt"
 $alertText = ""
@@ -133,5 +139,6 @@ if ($pyExe) {
     devMarkers     = @(@(".no_email_send", ".no_cloud_archive") | Where-Object { Test-Path (Join-Path $Root $_) })
     piiFolders     = $pii
     deployedRaw    = $deployed
+    factErrors     = @($Error | Select-Object -First 20 | ForEach-Object { [string]$_ })
     modules        = @{ installed = $installed; lockRaw = $lockRaw; disabledRaw = $disabledRaw; disabledError = $disabledError; dbMissing = $dbMissing; logLines = $modLog }
 } | ConvertTo-Json -Depth 6 -Compress

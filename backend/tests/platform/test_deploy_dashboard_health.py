@@ -144,3 +144,14 @@ def test_remote_failure_shows_stderr_not_just_a_generic_message():
     assert dd._remote_error(p) == "[FAIL] 某原因"
     p = types.SimpleNamespace(returncode=5, stdout="", stderr="")
     assert "exit 5" in dd._remote_error(p)
+
+
+def test_remote_failure_is_written_to_a_local_log(monkeypatch, tmp_path):
+    # 畫面上的錯誤只有使用者看得到；開發端要能自己讀，不靠截圖
+    import types
+    monkeypatch.setattr(dd, "DEPLOY_LOGS_DIR", tmp_path)
+    monkeypatch.setattr(dd.subprocess, "run", lambda *a, **k: types.SimpleNamespace(
+        returncode=1, stdout="", stderr="WinRM cannot complete the operation"))
+    facts, err = dd._run_remote_json("health", "u", "p")
+    assert facts is None and "WinRM cannot complete" in err
+    assert "WinRM cannot complete" in (tmp_path / "remote_health_last_error.txt").read_text(encoding="utf-8")
