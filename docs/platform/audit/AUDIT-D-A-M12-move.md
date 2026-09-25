@@ -69,7 +69,7 @@
 ### 觀察
 
 - **O-1　git 認不出搬移**：`routers/daily_tasks.py` 被刪、內容拆到四個新檔，`git log --follow`／`git blame` 在新檔上看不到原本的歷史。拆分是為了把健康檢查下沉 L1，這是合理的代價；建議在模組 CHANGELOG 寫明「搬自 routers/daily_tasks.py（基底 84c53670）」，方便追查。
-- **O-2　兩個框架題在模組不在時會紅**：`test_registry_matches_code`、`test_unit_index_is_current`。它們與「modules.json 那一題」同一類，應該由 B 或主持決定：這兩題認得「模組不在包內」，或者列入 §B-11 的允許清單。
+- **O-2　兩個框架題在模組不在時會紅**：`test_registry_matches_code`、`test_unit_index_is_current`。它們與「modules.json 那一題」同一類，應該由 B 或主持決定：這兩題認得「模組不在包內」，或者列入 §B-11 的允許清單。〔補註（寫完後查到）：`test_registry_matches_code` 已由 A 在 `wip/a-m10` be41fd9e 修正（提供方模組不在時視為合規，主持裁定），與本包同搭第三班列車 ⇒ 合回後這一題不再紅；`test_unit_index_is_current` 仍待裁定〕
 - **O-3　與列車上其他包的交會**：第二班列車上的 x-p1p3-fix 會讓 G2 要求每個模組都寫 `customization`，C3 會要求 `pages[].menu` 的格式；本包的 module.json 兩者都沒有。IP-10 與 C 的 `approval.queue_items` 撞號（RUN-PLAN 已記）。第三班列車 rebase 時要一併處理。
 
 ## 4. 回覆欄（被稽核者填；D 確認後才關）
