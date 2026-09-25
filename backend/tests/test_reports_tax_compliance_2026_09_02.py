@@ -93,7 +93,7 @@ def test_invoice_no_empty_string_still_allowed(client, make_user):
 # ── ②稅務匯出不再被稅額沖銷回溯改寫 ─────────────────────────────────────────
 
 def test_tax_export_uses_original_amount_ignoring_writeoff(client, make_user):
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     import db
     conn = db.get_db()
     try:

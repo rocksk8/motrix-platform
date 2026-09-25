@@ -38,6 +38,7 @@
    "helper:part_catalog",
    "helper:privacy_notice",
    "helper:procurement",
+   "helper:receivables",
    "helper:row_access",
    "helper:settings",
    "helper:startup",
@@ -100,6 +101,7 @@
    "plat:upgrade",
    "router:approval_delegates",
    "router:auth",
+   "router:company_lookup",
    "router:customers",
    "router:definitions",
    "router:custom_records",
@@ -154,6 +156,7 @@
    "/api/audit-log",
    "/api/auth",
    "/api/build-info",
+   "/api/company",
    "/api/customers",
    "/api/definitions",
    "/api/custom-modules",
@@ -166,6 +169,7 @@
    "/api/module-versions",
    "/api/modules",
    "/api/notifications",
+   "/api/now",
    "/api/online-users",
    "/api/org",
    "/api/parts",
@@ -462,11 +466,9 @@
    ],
    "tables": [],
    "api_prefixes": [
-    "/api/company",
     "/api/dashboard",
     "/api/devices",
     "/api/materials-summary",
-    "/api/now",
     "/api/reports",
     "/api/sales-orders"
    ]

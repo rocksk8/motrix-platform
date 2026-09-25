@@ -69,7 +69,7 @@ def _quote(no, pretax, total, extra, pay_items, status="已成案"):
 
 
 def _invoice_rows(no):
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     return [r for r in _collect_tax_invoices() if r["quoteNo"] == no]
 
 
