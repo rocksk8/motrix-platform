@@ -2,18 +2,19 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 469,
-  "unmapped": 7,
+  "tests": 473,
+  "unmapped": 8,
   "kinds": {
-   "api": 253,
+   "api": 255,
    "e2e": 118,
-   "unit": 39,
-   "audit": 59
+   "unit": 40,
+   "audit": 60
   },
   "routes": 506
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
+  "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/test_bn16_award_status_filter_2026_09_24.py",
   "backend/tests/test_bonus_award_export_watermark_2026_09_23.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -524,6 +525,35 @@
     ]
    }
   },
+  "backend/tests/platform/test_core_upgrade.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "core:main",
+    "file:tools/platform/upgrade.py",
+    "page:index.html",
+    "plat:__init__",
+    "plat:paths",
+    "plat:upgrade"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/core/upgrade.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "backend/core/paths.py",
+     "backend/db.py",
+     "backend/main.py",
+     "frontend/index.html",
+     "tools/platform/upgrade.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_dep_scan_controls.py": {
    "kind": "audit",
    "units": [
@@ -547,6 +577,15 @@
     "/api/build",
     "/api/build-gate",
     "/api/module-changes"
+   ]
+  },
+  "backend/tests/platform/test_deploy_dashboard_health.py": {
+   "kind": "api",
+   "units": [],
+   "evidence": {},
+   "unresolved_api": [
+    "/api/deploy",
+    "/api/prod-health"
    ]
   },
   "backend/tests/platform/test_deploy_insights.py": {
@@ -684,6 +723,39 @@
    }
   },
   "backend/tests/platform/test_voucher_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:frontend/pages/",
+    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
+    "helper:bonus_vouchers",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/helpers/bonus_vouchers.py",
+     "backend/routers/bonus.py",
+     "frontend/pages/",
+     "frontend/pages/bonus.html"
+    ]
+   }
+  },
+  "backend/tests/platform/test_voucher_status_connectors.py": {
    "kind": "api",
    "units": [
     "core:db",
@@ -8969,6 +9041,17 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_upgrade_drill_2026_09_25.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/"
+    ]
+   }
   },
   "backend/tests/test_upgrade_path_2026_09_21.py": {
    "kind": "unit",

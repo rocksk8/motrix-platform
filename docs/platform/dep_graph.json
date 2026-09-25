@@ -3710,6 +3710,25 @@
    "tables_r": [],
    "tables_w": []
   },
+  "plat:upgrade": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:paths"
+   ],
+   "kind": "plat",
+   "path": "backend/core/upgrade.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "schema_version"
+   ],
+   "tables_r": [
+    "schema_version"
+   ],
+   "tables_w": [
+    "system_settings"
+   ]
+  },
   "router:account_items": {
    "api_prefixes": [
     "/api/account-items"
@@ -10470,10 +10489,12 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "core:archive"
+    "core:archive",
+    "plat:upgrade"
    ],
    "path": "backend/db.py:439",
    "readers": [
+    "plat:upgrade",
     "router:system"
    ],
    "tables_r": [],
@@ -10657,6 +10678,7 @@
     "core:db",
     "helper:settings",
     "mod:tender_radar/source",
+    "plat:upgrade",
     "router:daily_tasks"
    ]
   },
