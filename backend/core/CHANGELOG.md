@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.19 — 2026-09-26（A，信件稽核修正 wip/a-mail-fix；列車取號）〔core_bump：暫用 1.99 → 1.19〕
+- L1（新增）：`helpers.mail_types.MANAGED_ELSEWHERE`——收件人由別處維護、不在信件設定頁覆寫的類型（每月營運報表；稽核 M-S3）
+
 ## 1.18 — 2026-09-26（C）〔core_bump：暫用 1.99 → 1.14〕〔core_bump：暫用 1.14 → 1.18〕
 > C（P8 前端缺口 #3～#7、P2 開票憑據稅別依據、P2 第二份單據勞務報酬單＋R3 個資告知）。
 - L1（新增）：串接點 IP-10 `approval.queue_items`——「待我簽核」佇列與角標收其他模組的待簽項目（M01 取用；L1 自訂模組引擎提供 `custom_modules.queue_items`）；自訂模組通知的 ref_id＝`custom:<模組>:<單號>`（`notify_ref`）
