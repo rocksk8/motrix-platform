@@ -1,0 +1,5 @@
+{
+ "name": "core-only",
+ "description": "只有 L0／L1 共用核心，不含任何 L2 模組",
+ "modules": []
+}

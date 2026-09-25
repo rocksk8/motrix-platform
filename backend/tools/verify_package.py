@@ -442,8 +442,32 @@ def main():
 
     print("### (6) 包內 db.py 的版本（🔴 擋關）")
     check_db_version(pkg, args.expect_db_version)
+    print()
+
+    print("### (7) 產品選配：modules.lock.json ＝ 包內模組、L0／L1 必要檔齊全（🔴 擋關，CORE-SPEC §9c①）")
+    check_product_selection(pkg)
 
     sys.exit(R.finish())
+
+
+def check_product_selection(pkg):
+    """判定與打包時同一套（tools/platform/product_select.py::check），不另寫一份。"""
+    import importlib.util
+    src = os.path.join(WT, "tools", "platform", "product_select.py")
+    if not os.path.isfile(src):
+        R.fail("產品選配", "找不到 %s ⇒ 這一項無法檢驗（**不是 PASS**）" % src)
+        return
+    spec = importlib.util.spec_from_file_location("_product_select", src)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    problems = mod.check(pkg)
+    if problems:
+        for p in problems:
+            R.fail("產品選配", p)
+        return
+    lock = json.load(io.open(os.path.join(pkg, "backend", mod.LOCK_NAME), encoding="utf-8"))
+    print("  ✅ 產品 %s：模組 %s；排除 %s" % (lock.get("product"), sorted(lock.get("modules") or {}) or "（無 L2）",
+                                          lock.get("excluded") or "無"))
 
 
 #: 「系統更新紀錄」頁要的欄位（`helpers/startup.py::_sync_module_versions()` 讀它們）。

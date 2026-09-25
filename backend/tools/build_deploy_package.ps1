@@ -36,7 +36,10 @@ param(
     [int]$MaxAgeDays = 7,
     # 同一份 tree（含環境）今天 12 小時內已嚴格全綠 ⇒ 預設沿用、不重跑測試（PLAN-TEST-PERF §3.1）。
     # 加 -ForceTests 一律重跑（每週至少一次、或懷疑環境變了時用）。
-    [switch]$ForceTests
+    [switch]$ForceTests,
+    # 產品設定檔（CORE-SPEC §9c①）：repo 根目錄 product/<名稱>.json 列出要包的 L2 模組；
+    # 沒選到的 backend/modules/<key>/（連同它宣告的頁面）不進包，包內寫 backend/modules.lock.json。
+    [string]$Product = "full"
 )
 
 $ErrorActionPreference = "Stop"
@@ -864,6 +867,13 @@ if (-not (Test-Path $buildCommitPath)) {
 }
 Write-Host "      .build_commit: $commitShort"
 
+# --- 產品選配（CORE-SPEC §9c①）：沒選到的模組整個資料夾不進包，寫 modules.lock.json ---
+$productSelect = Join-Path $projectRoot "tools\platform\product_select.py"
+& $pyExe $productSelect apply --pkg $pkgDir --product $Product
+if ($LASTEXITCODE -ne 0) {
+    Fail "產品選配失敗（-Product $Product，exit code $LASTEXITCODE），部署包未完成，已中止。"
+}
+
 # --- Step 5.6: 精簡 backend/version_manifest.json（PK1 → T12）---
 #
 # 🔴 這份檔案有兩個讀者：
@@ -917,6 +927,7 @@ $manifest = [ordered]@{
     commit               = $commit
     commit_short         = $commitShort
     branch               = $branch
+    product              = $Product
     built_at             = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     version_manifest_latest = $versionLatest
     # 🔴 2026-09-22 新增：使用者問「打包的時間為什麼會越來越久」，

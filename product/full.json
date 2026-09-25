@@ -1,0 +1,5 @@
+{
+ "name": "full",
+ "description": "全部模組（包裡現有的每一個 L2 模組）",
+ "modules": ["*"]
+}
