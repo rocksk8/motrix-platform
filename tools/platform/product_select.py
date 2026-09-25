@@ -12,7 +12,8 @@
 apply：沒選到的 `backend/modules/<key>/` 整個資料夾刪掉，連同它 module.json 宣告的前端頁面
        （`pages[].path`，位於 frontend/pages/）；寫 `backend/modules.lock.json`。
 check：lock 檔必須存在、列出的模組＝包內實際的模組資料夾、版本＝各自 module.json；
-       L0／L1 必要檔（docs/platform/modules.json 的 L1 Python 單位與 backend/core/*.py）一個都不能缺。
+       L0／L1 必要檔（docs/platform/modules.json 的 L1 Python 單位與 backend/core/*.py）一個都不能缺；
+       tools/platform/upgrade.py 也必須在包裡（升級精靈用）。
 """
 import argparse
 import json
@@ -27,6 +28,9 @@ REPO = Path(__file__).resolve().parents[2]
 PRODUCT_DIR = REPO / "product"
 MODULES_JSON = REPO / "docs" / "platform" / "modules.json"
 LOCK_NAME = "modules.lock.json"
+#: 包根目錄底下一定要有的檔（相對部署包根）。tools/ 刻意進包：升級精靈與 UPGRADE-RUNBOOK 在正式機執行
+#: <NEW>\\tools\\platform\\upgrade.py（主持 2026-09-25 裁示；不可加 export-ignore）。
+REQUIRED_PKG_FILES = ("tools/platform/upgrade.py",)
 
 
 class SelectError(Exception):
@@ -148,6 +152,9 @@ def check(pkg, modules_json=MODULES_JSON):
     for rel in required_l1_files(modules_json):
         if not (backend / rel).is_file():
             problems.append("缺 L0／L1 必要檔 backend/%s" % rel)
+    for rel in REQUIRED_PKG_FILES:
+        if not (Path(pkg) / rel).is_file():
+            problems.append("缺部署包必要檔 %s（升級精靈在正式機執行它）" % rel)
     if lock.get("core_version") != core_version(backend):
         problems.append("lock 的 core_version %s ≠ 包內 CORE_VERSION %s" % (lock.get("core_version"), core_version(backend)))
     return problems

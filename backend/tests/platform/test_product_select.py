@@ -24,6 +24,8 @@ def _pkg(tmp_path, mods=("alpha", "beta")):
     (b / "main.py").write_text("", encoding="utf-8")
     (pkg / "frontend" / "pages").mkdir(parents=True)
     (pkg / "frontend" / "pages" / "index.html").write_text("", encoding="utf-8")
+    (pkg / "tools" / "platform").mkdir(parents=True)
+    (pkg / "tools" / "platform" / "upgrade.py").write_text("", encoding="utf-8")
     for i, k in enumerate(mods):
         d = b / "modules" / k
         d.mkdir(parents=True)
@@ -146,3 +148,20 @@ def test_real_required_l1_files_exist_in_the_repo(_only_synthetic_core, monkeypa
     assert len(req) > 20
     missing = [r for r in req if not (REPO / "backend" / r).is_file()]
     assert not missing, missing
+
+
+def test_rc_missing_upgrade_tool_blocks(tmp_path):
+    """tools/ 刻意進包（升級精靈在正式機執行 tools/platform/upgrade.py）⇒ 缺了要擋。"""
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    (pkg / "tools" / "platform" / "upgrade.py").unlink()
+    assert any("tools/platform/upgrade.py" in p for p in PS.check(pkg, mj))
+
+
+def test_real_repo_still_tracks_the_upgrade_tool_without_export_ignore():
+    """正對照：repo 真的有 tools/platform/upgrade.py，而且 .gitattributes 沒有把它排除出包。"""
+    import subprocess
+    assert (REPO / "tools" / "platform" / "upgrade.py").is_file()
+    out = subprocess.run(["git", "-C", str(REPO), "check-attr", "export-ignore", "--", "tools/platform/upgrade.py"],
+                         capture_output=True, text=True, check=True).stdout
+    assert "export-ignore: set" not in out, out
