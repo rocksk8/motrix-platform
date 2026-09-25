@@ -553,7 +553,8 @@ try {
     $physCores = (Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum
 } catch { $physCores = 0 }
 if (-not $physCores -or $physCores -lt 2) { $physCores = 4 }   # 查不到就用保守值
-$workers = [Math]::Max(2, [Math]::Min($physCores, 8))
+# PLAYBOOK §C-13（稽核 D B-S2）：全量 -n 4 以下——建包也在同一台開發機上跑，理由相同（原本上限 8）
+$workers = [Math]::Max(2, [Math]::Min($physCores, 4))
 
 # 降到 BelowNormal，子行程（pytest worker）會繼承。**不影響總時間多少**
 # （CPU 本來就吃得滿），但可以讓打包期間滑鼠、瀏覽器、編輯器還跟得上——
