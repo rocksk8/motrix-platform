@@ -112,7 +112,7 @@ def test_cash_position_requires_admin(client, make_user):
 def test_tax_export_lists_invoiced_items_with_tax_breakdown_and_year_filter(client, make_user):
     """單一呼叫涵蓋：已開發票品項正確列出＋稅額拆算正確／未開發票品項不列入／
     年份篩選排除不同年份資料——三個 tax-export 情境合併成一次匯出呼叫，避免連續
-    呼叫觸發 _check_export_rate() 的 5 秒匯出冷卻（同一 pytest 進程內測試 user_id
+    呼叫觸發 helpers.xlsx_out.check_export_rate() 的 5 秒匯出冷卻（同一 pytest 進程內測試 user_id
     常常重複，見 test_cash_position 等其他檔案的既有慣例）。"""
     username, password = make_user(role="admin")
     token = _login(client, username, password)

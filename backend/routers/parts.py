@@ -11,16 +11,8 @@ from helpers.procurement import clean_lead_time
 
 router = APIRouter()
 
-# 固定分類清單：新增分類時可在此增列（顯示順序＝清單順序）
-PART_CATEGORIES = [
-    {"name": "網通設備", "prefix": "NET"},
-    {"name": "監控設備", "prefix": "CCTV"},
-    {"name": "交換器",   "prefix": "SW"},
-    {"name": "伺服器/工控", "prefix": "SVR"},
-    {"name": "線材配件", "prefix": "CAB"},
-    {"name": "其他",     "prefix": "OTH"},
-]
-PART_CATEGORY_PREFIX = {c["name"]: c["prefix"] for c in PART_CATEGORIES}
+# 分類代碼表在 L1（helpers/part_catalog.py；DEPENDENCY-MAP §3 #17）
+from helpers.part_catalog import PART_CATEGORIES, PART_CATEGORY_PREFIX  # noqa: E402
 
 
 def _next_part_no(conn, prefix: str) -> str:

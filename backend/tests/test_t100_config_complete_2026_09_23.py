@@ -57,7 +57,7 @@ REQUIRED = ("salesRevenueAccount", "outputTaxAccount", "contractorExpenseAccount
 
 
 def _part_categories():
-    from routers.parts import PART_CATEGORIES
+    from helpers.part_catalog import PART_CATEGORIES
     return [c["name"] for c in PART_CATEGORIES]
 
 
@@ -109,7 +109,7 @@ def test_the_part_categories_list_is_a_list_of_dicts_with_name():
        而那個紅會指向**測試寫錯了**，不是指向設定。
     📌 而我**不釘 6 這個數字** —— 判準是「涵蓋全部的鍵」，加分類時它自己跟上。
     """
-    from routers.parts import PART_CATEGORIES
+    from helpers.part_catalog import PART_CATEGORIES
     assert PART_CATEGORIES and all(
         isinstance(c, dict) and c.get("name") for c in PART_CATEGORIES), (
         "`PART_CATEGORIES` 的形狀變了：%r\n" % (PART_CATEGORIES[:2],)

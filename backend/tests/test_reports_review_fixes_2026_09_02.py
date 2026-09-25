@@ -1,5 +1,5 @@
 """2026-09-02 反派視角複查 MOTRIX-ERP-QUICK.md 營運報表模組，抓到並修復 5 項：
-①Excel 匯出未防公式注入（CWE-1236）——_set_row()/_xl_safe() 補上
+①Excel 匯出未防公式注入（CWE-1236）——set_row()/xl_safe() 補上（2026-09-25 下沉 helpers/xlsx_out.py）
 ②GET /api/settings/operating-targets 完全沒有角色檢查，任何登入者皆可讀取年度目標
 ③《月支出》「其他支出」月度加總用精算完結日期分月，跟明細顯示的 expenseDate 對不上
 ④_parse_period() 格式錯誤（如 2026-13）會丟未捕捉例外變成 500
@@ -66,21 +66,21 @@ def _insert_case(quote_no, quote_date="2026-01-05", deal_tag="已成案",
 # ── ①Excel 公式注入防護 ──────────────────────────────────────────────────────
 
 def test_xl_safe_neutralizes_formula_triggers():
-    from routers.reports import _xl_safe
-    assert _xl_safe("=HYPERLINK(\"http://evil\",\"x\")").startswith("'=")
-    assert _xl_safe("+1+1").startswith("'+")
-    assert _xl_safe("-1").startswith("'-")
-    assert _xl_safe("@SUM(1)").startswith("'@")
-    assert _xl_safe("正常客戶名稱") == "正常客戶名稱"
-    assert _xl_safe(12345) == 12345  # 非字串（金額欄位）原樣通過
+    from helpers.xlsx_out import xl_safe
+    assert xl_safe("=HYPERLINK(\"http://evil\",\"x\")").startswith("'=")
+    assert xl_safe("+1+1").startswith("'+")
+    assert xl_safe("-1").startswith("'-")
+    assert xl_safe("@SUM(1)").startswith("'@")
+    assert xl_safe("正常客戶名稱") == "正常客戶名稱"
+    assert xl_safe(12345) == 12345  # 非字串（金額欄位）原樣通過
 
 
 def test_set_row_writes_malicious_string_as_literal_text():
     import openpyxl
-    from routers.reports import _set_row
+    from helpers.xlsx_out import set_row
     wb = openpyxl.Workbook()
     ws = wb.active
-    _set_row(ws, 1, ["=cmd|'/c calc'!A1", "正常文字"])
+    set_row(ws, 1, ["=cmd|'/c calc'!A1", "正常文字"])
     cell = ws.cell(row=1, column=1)
     # openpyxl 對開頭 "=" 的字串預設會標成公式（data_type == 'f'）；修復後
     # 應該被中和成純文字，data_type 仍是字串。

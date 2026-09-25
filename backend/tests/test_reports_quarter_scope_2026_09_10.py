@@ -364,7 +364,7 @@ def test_excel_export_gains_quarter_sheet(client, make_user):
     assert "MQ-EXP-AUG" in flat, "Q3 內的案件應出現在本季收支表"
     assert "MQ-EXP-DEC" not in flat, "Q4 的案件不應出現在本季收支表"
 
-    # 不帶 quarter（另一個使用者，避開 _check_export_rate 的 per-user 冷卻）
+    # 不帶 quarter（另一個使用者，避開 helpers.xlsx_out.check_export_rate 的 per-user 冷卻）
     token2 = _login(client, without_user, without_pw)
     r2 = client.get("/api/reports/financial/excel?period=2026-Q3&expense_month=2026-09",
                     headers=_auth(token2))

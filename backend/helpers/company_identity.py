@@ -107,6 +107,18 @@ def location_identity(location_id=None) -> dict:
     return out
 
 
+def company_name() -> str:
+    """報表／匯出抬頭用的公司名（主要據點；ROADMAP A8：取代 reports／accounting_export／
+    network_plan_export 各自寫死的 `_COMPANY`）。全部留空 ⇒ `""`。"""
+    return location_identity()["company_name"]
+
+
+def company_heading(text: str, sep: str = " — ") -> str:
+    """`<公司名><sep><text>`；公司名是空的 ⇒ 只回 `text`（不印出孤立的分隔符）。"""
+    name = company_name()
+    return f"{name}{sep}{text}" if name else text
+
+
 def _location_of(payload) -> str:
     """這份單據屬於哪一個據點。回 `""` ⇒ 主要據點。
 

@@ -36,7 +36,7 @@ Excel、財務人員在 T100 用既有匯入功能手動核對匯入，風險小
     這樣設計的理由：銀行帳戶是「這一筆錢實際走哪個戶頭」的一次性事實，跟後續
     設定頁清單怎麼改都無關，不應該被之後的設定變動追溯影響。
   - **依料件分類**：`inventoryExpenseAccounts`（`{分類名稱: 科目代號}`，鍵對應
-    `parts.py::PART_CATEGORIES`）——這個**是**即時查表（不快照），因為分類本身
+    `helpers/part_catalog.py::PART_CATEGORIES`）——這個**是**即時查表（不快照），因為分類本身
     不會變，之後財務更正某分類的科目代號，應該連未確認的舊事件都一起套用新值，
     跟 `salesRevenueAccount` 等其餘固定欄位是同一種「即時解析」邏輯。
   - 其餘科目（銷貨收入/銷項稅額/承攬商費用/部門別/傳票別）維持全公司單一設定，
@@ -73,9 +73,11 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
-from routers.reports import _collect_tax_invoices, _check_export_rate, _xl_style, _set_row, _COMPANY
+from routers.reports import _collect_tax_invoices  # §3 #11：資料擁有權待辦（ROADMAP）
+from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.company_identity import company_heading
 from routers.contractor_vouchers import _voucher_public
-from routers.parts import PART_CATEGORIES
+from helpers.part_catalog import PART_CATEGORIES
 
 router = APIRouter()
 
@@ -86,7 +88,7 @@ _DEFAULT_T100_CONFIG = {
     "salesRevenueAccount":       "",  # 銷貨收入科目代號
     "outputTaxAccount":          "",  # 銷項稅額科目代號
     "contractorExpenseAccount":  "",  # 承攬商費用科目代號
-    "inventoryExpenseAccounts":  {},  # {料件分類: 科目代號}，鍵對應 parts.py::PART_CATEGORIES（2026-09-01 同輪新增）
+    "inventoryExpenseAccounts":  {},  # {料件分類: 科目代號}，鍵對應 helpers/part_catalog.py::PART_CATEGORIES（2026-09-01 同輪新增）
     "departmentCode":            "",  # 部門別代號（選填，留空則傳票不分部門）
     "voucherCategory":           "轉", # 傳票別（T100 常見：現／轉／記，預設「轉」）
 }
@@ -112,7 +114,7 @@ class T100ExportConfigBody(BaseModel):
 
 def _t100_config() -> dict:
     cfg = {**_DEFAULT_T100_CONFIG, **(_get_setting("t100_export_config", {}) or {})}
-    # 確保目前所有料件分類（parts.py::PART_CATEGORIES）都有一個鍵可填，即使
+    # 確保目前所有料件分類（helpers/part_catalog.py::PART_CATEGORIES）都有一個鍵可填，即使
     # 使用者還沒存過任何值；分類名稱之後若新增，重新 GET 一次就會自動補上
     # 空白鍵，不需要額外 migration 或手動同步。
     filled = dict(cfg.get("inventoryExpenseAccounts") or {})
@@ -395,7 +397,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
     ws = wb.active
     ws.title = "T100傳票匯出"
     ws.sheet_view.showGridLines = False
-    mk, fill, mk_border, al = _xl_style(wb)
+    mk, fill, mk_border, al = xl_style(wb)
     BD = mk_border()
 
     missing_codes = [k for k in ("salesRevenueAccount", "outputTaxAccount", "contractorExpenseAccount")
@@ -411,7 +413,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     ws.merge_cells("A1:K1")
     c = ws["A1"]
-    c.value = f"{_COMPANY} — T100 傳票批次匯出（{start} ~ {end}）"
+    c.value = company_heading(f"T100 傳票批次匯出（{start} ~ {end}）")
     c.font = mk(bold=True, size=13, color="FFFFFF")
     c.fill = fill("111827")
     c.alignment = al("center")
@@ -429,7 +431,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
 
     headers = ["傳票號", "傳票日期", "傳票別", "摘要", "科目代號", "科目名稱",
                "借方金額", "貸方金額", "部門別", "來源單號", "交易對象"]
-    _set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
+    set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
     ws.row_dimensions[3].height = 22
 
     r = 4
@@ -437,7 +439,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
     body_aligns = [al("center"), al("center"), al("center"), al("left"), al("center"),
                    al("center"), al("right"), al("right"), al("center"), al("center"), al("left")]
     for row in rows:
-        _set_row(ws, r, [
+        set_row(ws, r, [
             row["voucherNo"], row["date"], row["category"], row["summary"],
             row["acctCode"], row["acctName"], row["debit"] or "", row["credit"] or "",
             row["dept"], row["sourceNo"], row["counterparty"],
@@ -446,7 +448,7 @@ def _build_t100_voucher_excel(rows: list, start: str, end: str, cfg: dict, gen_a
         total_credit += row["credit"]
         r += 1
 
-    _set_row(ws, r, ["合計", "", "", "", "", "", total_debit, total_credit, "", "", ""],
+    set_row(ws, r, ["合計", "", "", "", "", "", total_debit, total_credit, "", "", ""],
              font=mk(bold=True), fill=fill("F9FAFB"), border=BD, aligns=body_aligns)
 
     buf = io.BytesIO()
@@ -476,7 +478,7 @@ def t100_export_vouchers(
     已付款料件設備進貨；已標記「已匯入」的事件自動排除，不會重複出現在匯出檔裡。"""
     u = _require_t100_admin(authorization)
     _validate_range(start, end)
-    _check_export_rate(u["id"], "excel")
+    check_export_rate(u["id"], "excel")
     cfg = _t100_config()
     events = _collect_t100_events(start, end)
     rows = _flatten_events_for_excel(events)

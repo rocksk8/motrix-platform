@@ -14,9 +14,9 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path, run_edge_pdf
+from helpers.company_identity import company_name
 from network_plan_topology import build_topology_svg, build_topology_text_summary_html
 
-_COMPANY  = "允碩整合集創股份有限公司"
 _COMPANY2 = "MOTRIX Synergy Integration Corp."
 
 # (data_json key, 章節/分頁標題, 欄位 [(key, 中文表頭), ...]) —— 與
@@ -194,7 +194,8 @@ def build_plan_excel(plan: dict) -> bytes:
     ws = wb.create_sheet("封面")
     ws.column_dimensions["A"].width = 20
     ws.column_dimensions["B"].width = 44
-    ws["A1"] = _COMPANY
+    # 公司名空白時寫 None 不寫 ""：openpyxl 的空字串會產生非法的空 inlineStr（Excel 開檔要修復）
+    ws["A1"] = company_name() or None
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = _COMPANY2
     ws["A2"].font = Font(size=9, color="6B7280")
@@ -364,7 +365,7 @@ def build_plan_html(plan: dict) -> str:
         "  .footer{text-align:center;font-size:9px;color:#888;margin-top:14px;padding-top:10px;border-top:1px solid #EDEAE4;font-family:Arial,sans-serif}\n"
         "</style>\n</head>\n<body>\n<div id=\"root\">\n"
         '<div class="accent-bar"></div>\n'
-        f'<div class="header">\n  <div>\n    <div class="co-name">{_esc(_COMPANY)}</div>\n'
+        f'<div class="header">\n  <div>\n    <div class="co-name">{_esc(company_name())}</div>\n'
         f'    <div class="co-sub">{_esc(_COMPANY2)}</div>\n'
         '    <div class="co-sub" style="margin-top:3px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
         '  </div>\n  <div>\n    <div class="doc-title">網路架構規劃書</div>\n  </div>\n</div>\n'

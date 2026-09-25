@@ -6,14 +6,13 @@ import logging
 import os
 import tempfile
 import threading
-import time
 from calendar import monthrange
 from datetime import date, datetime
 from typing import Optional
 from urllib.parse import quote as _url_quote
 
 import openpyxl
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 
 from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
@@ -27,6 +26,8 @@ from helpers import (
 )
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
 from helpers.financial_mask import money_visible
+from helpers.xlsx_out import check_export_rate, set_row, xl_style
+from helpers.company_identity import company_heading
 from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
     normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
     extra_entries, recognition_flags,
@@ -37,13 +38,8 @@ _log = logging.getLogger(__name__)
 from helpers.case_roles import role_username, role_display
 router = APIRouter()
 
-_COMPANY  = "允碩整合集創"
 
 # Per-user export rate limit — keyed by (user_id, fmt) so Excel / PDF are independent
-_EXCEL_COOLDOWN = 5   # seconds — fast generation, just prevent double-clicks
-_PDF_COOLDOWN   = 30  # seconds — Edge headless is resource-intensive
-_export_times: dict = {}
-_export_lock = threading.Lock()
 
 
 def _require_reports_access(u: dict) -> None:
@@ -67,16 +63,6 @@ def _require_reports_access(u: dict) -> None:
         raise HTTPException(403, "僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表")
 
 
-def _check_export_rate(user_id: int, fmt: str) -> None:
-    """Raise 429 if this user exported this format within the cooldown window."""
-    cooldown = _PDF_COOLDOWN if fmt == "pdf" else _EXCEL_COOLDOWN
-    with _export_lock:
-        key = (user_id, fmt)
-        last = _export_times.get(key, 0.0)
-        wait = cooldown - (time.monotonic() - last)
-        if wait > 0:
-            raise HTTPException(429, f"請等待 {int(wait) + 1} 秒後再次匯出")
-        _export_times[key] = time.monotonic()
 _COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
 
 
@@ -679,56 +665,15 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
 
 # ── Excel builder ─────────────────────────────────────────────────────────────
 
-def _xl_style(wb):
-    """Return reusable style factory."""
-    def f(bold=False, size=9, color="000000", wrap=False, italic=False):
-        return Font(name="微軟正黑體", bold=bold, size=size, color=color, italic=italic)
-    def fill(hex_color):
-        return PatternFill("solid", fgColor=hex_color)
-    def border():
-        s = Side(style="thin", color="D1D5DB")
-        return Border(left=s, right=s, top=s, bottom=s)
-    def al(h="left", v="center", wrap=False):
-        return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
-    return f, fill, border, al
 
 
-# openpyxl 會把「開頭是 =/+/-/@ 的字串」自動當成公式寫入（Cell.value 的
-# bind_value() 行為），不是單純字面字串——只要使用者能在客戶名稱/專案名稱/
-# 款項備注/發票號碼/承攬商名稱/料件名稱等任一自由文字欄位填入
-# `=HYPERLINK(...)` 或舊式 DDE payload，之後任何人匯出本報表 Excel 並在
-# Excel 開啟，就可能觸發公式/連結（CWE-1236，CSV/Formula Injection 同類
-# 手法對 xlsx 一樣有效）。PDF/HTML 路徑已經用 html.escape() 處理過這類風險
-# （見 _build_report_html() 的 esc()），這裡比照同樣的防禦精神，把觸發字元
-# 開頭的字串前面補一個單引號讓 openpyxl 存成純文字。
-_XL_FORMULA_TRIGGERS = ("=", "+", "-", "@")
-
-
-def _xl_safe(val):
-    if isinstance(val, str) and val[:1] in _XL_FORMULA_TRIGGERS:
-        return "'" + val
-    return val
-
-
-def _set_row(ws, row_idx, values, font=None, fill=None, border=None, aligns=None, height=None):
-    for ci, val in enumerate(values, 1):
-        cell = ws.cell(row=row_idx, column=ci, value=_xl_safe(val))
-        if font:   cell.font   = font
-        if fill:   cell.fill   = fill
-        if border: cell.border = border
-        if aligns and ci - 1 < len(aligns):
-            cell.alignment = aligns[ci - 1]
-        elif aligns and len(aligns) == 1:
-            cell.alignment = aligns[0]
-    if height:
-        ws.row_dimensions[row_idx].height = height
 
 
 def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
-    mk, fill, mk_border, al = _xl_style(wb)
+    mk, fill, mk_border, al = xl_style(wb)
     BD = mk_border()
 
     C_DARK   = "111827"
@@ -757,7 +702,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     # banner
     ws1.merge_cells("A1:D1")
     c = ws1["A1"]
-    c.value = f"{_COMPANY} — 營運報表"
+    c.value = company_heading("營運報表")
     c.font  = mk(bold=True, size=16, color=C_WHITE)
     c.fill  = fill(C_DARK)
     c.alignment = al("center")
@@ -841,7 +786,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ("已結案未精算",        f"{s['settleOverdueCount']} 件", "待補精算" if s["settleOverdueCount"] > 0 else "無"),
     ]
     for label, val, note in case_rows:
-        _set_row(ws1, r, [label, val, note, ""],
+        set_row(ws1, r, [label, val, note, ""],
                  font=mk(size=9),
                  border=BD,
                  aligns=[al("left"), al("right"), al("left"), al("left")],
@@ -866,7 +811,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws_acv.merge_cells("A1:F1")
     c = ws_acv["A1"]
-    c.value = f"{_COMPANY} — {acv_year} 年度目標達成率"
+    c.value = company_heading(f"{acv_year} 年度目標達成率")
     c.font  = mk(bold=True, size=14, color=C_WHITE)
     c.fill  = fill("7C3AED")
     c.alignment = al("center")
@@ -899,7 +844,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         c.alignment = al("left")
         ws_acv.row_dimensions[4].height = 20
 
-        _set_row(ws_acv, 5,
+        set_row(ws_acv, 5,
                  ["指標", "年度目標", "YTD 實績", "達成率", "按時間比例目標", "狀態"],
                  font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("374151"), border=BD,
@@ -917,7 +862,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                 rc, st, bg = C_ORANGE, "追趕中", C_LYELLOW
             else:
                 rc, st, bg = C_RED,    "落後 ✗", C_LRED
-            _set_row(ws, ri, [label, val_fn(target), val_fn(actual), rate_s, pro_s, st],
+            set_row(ws, ri, [label, val_fn(target), val_fn(actual), rate_s, pro_s, st],
                      font=mk(size=9), fill=fill(bg), border=BD,
                      aligns=[al("left"), al("right"), al("right"), al("right"), al("right"), al("center")],
                      height=18)
@@ -954,7 +899,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             ws_acv.row_dimensions[ri].height = 20
             ri += 1
 
-            _set_row(ws_acv, ri,
+            set_row(ws_acv, ri,
                      ["業務員", "配額目標（元）", "YTD 合約（元）", "合約達成率", "案件配額", "案件達成率"],
                      font=mk(bold=True, size=9, color=C_WHITE),
                      fill=fill("374151"), border=BD,
@@ -968,7 +913,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                 rv_c = C_GREEN if (rv is not None and rv >= 95) else C_ORANGE if (rv is not None and rv >= 80) else C_RED if rv is not None else C_GRAY
                 cs_c = C_GREEN if (cs is not None and cs >= 95) else C_ORANGE if (cs is not None and cs >= 80) else C_RED if cs is not None else C_GRAY
                 bg   = C_LGREEN if (rv is not None and rv >= 95) else C_LYELLOW if (rv is not None and rv >= 80) else C_LRED if rv is not None else C_WHITE
-                _set_row(ws_acv, ri,
+                set_row(ws_acv, ri,
                          [sp["name"], sp["targetRevenue"], sp["ytdRevenue"],
                           f"{rv:.1f}%" if rv is not None else "—",
                           f"{int(sp['targetCases'] or 0)} 件",
@@ -1000,7 +945,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws2.row_dimensions[1].height = 24
 
-    _set_row(ws2, 2, hdrs2,
+    set_row(ws2, 2, hdrs2,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1020,7 +965,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             item["note"] or "",
         ]
         bg = C_LGREEN
-        _set_row(ws2, r_i, row_vals,
+        set_row(ws2, r_i, row_vals,
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"), al("left"), al("left"), al("left"),
                          al("center"), al("right"), al("center"),
@@ -1041,7 +986,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
                 sum(i["feeAmount"] or 0 for i in data["periodItems"]),
                 sum(i["netAmount"] or 0 for i in data["periodItems"]),
                 "", "", ""]
-    _set_row(ws2, sr, sum_vals,
+    set_row(ws2, sr, sum_vals,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill(C_DARK), border=BD,
              aligns=[al("left")] + [al("right")] * 12,
@@ -1066,13 +1011,13 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws3.row_dimensions[1].height = 24
 
-    _set_row(ws3, 2, hdrs3,
+    set_row(ws3, 2, hdrs3,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
 
     for r_i, item in enumerate(data["outstanding"], 3):
-        _set_row(ws3, r_i,
+        set_row(ws3, r_i,
                  [item["quoteNo"], item["customer"], item["project"], item["salesPerson"],
                   item["dealTag"], item["type"], item["amount"], item["pct"], item["quoteDate"]],
                  font=mk(size=9), fill=fill(C_LRED), border=BD,
@@ -1082,7 +1027,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ws3.cell(row=r_i, column=7).number_format = '#,##0'
 
     sr3 = len(data["outstanding"]) + 3
-    _set_row(ws3, sr3, ["合計未收", "", "", "", "", "",
+    set_row(ws3, sr3, ["合計未收", "", "", "", "", "",
                          sum(i["amount"] for i in data["outstanding"]),
                          "", ""],
              font=mk(bold=True, size=9, color=C_WHITE),
@@ -1117,12 +1062,12 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         c.alignment = al("center")
         ws.row_dimensions[start_row].height = 22
         r = start_row + 1
-        _set_row(ws, r, income_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
+        set_row(ws, r, income_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
         r += 1
         for item in items:
             aa = item["actualAmount"]
-            _set_row(ws, r, [
+            set_row(ws, r, [
                 item["quoteNo"], item["customer"], item["project"], item["salesPerson"], item["type"],
                 item["amount"], item["receivedAt"], aa if aa is not None else item["amount"],
                 item["feeAmount"] or None, item["netAmount"], item["invoiceNo"] or "",
@@ -1133,7 +1078,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             for ci in (6, 8, 9, 10):
                 ws.cell(row=r, column=ci).number_format = '#,##0'
             r += 1
-        _set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", "",
+        set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", "",
                           sum(i["amount"] for i in items), "",
                           sum((i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in items),
                           sum(i["feeAmount"] or 0 for i in items), sum(i["netAmount"] or 0 for i in items), ""],
@@ -1151,25 +1096,25 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         c.alignment = al("center")
         ws.row_dimensions[start_row].height = 22
         r = start_row + 1
-        _set_row(ws, r, expense_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
+        set_row(ws, r, expense_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
                  fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
         r += 1
         for it in items:
             file_names = "、".join(f.get("filename", "") for f in (it.get("files") or []))
-            _set_row(ws, r, [it.get("date", ""), cat_label.get(it.get("cat"), it.get("cat", "")),
+            set_row(ws, r, [it.get("date", ""), cat_label.get(it.get("cat"), it.get("cat", "")),
                               it.get("quoteNo", ""), it.get("desc", ""), it.get("amount", 0), file_names],
                      font=mk(size=9), fill=fill(C_LYELLOW), border=BD,
                      aligns=[al("center"), al("center"), al("left"), al("left"), al("right"), al("left")], height=18)
             ws.cell(row=r, column=5).number_format = '#,##0'
             r += 1
-        _set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", sum(i.get("amount", 0) for i in items), ""],
+        set_row(ws, r, ["合計（" + str(len(items)) + " 筆）", "", "", "", sum(i.get("amount", 0) for i in items), ""],
                  font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
                  aligns=[al("left"), al("left"), al("left"), al("left"), al("right"), al("left")], height=20)
         ws.cell(row=r, column=5).number_format = '#,##0'
         return r + 2
 
     def write_net_summary(ws, start_row, income_total, expense_total, label):
-        _set_row(ws, start_row, [f"{label}收入合計", income_total, f"{label}支出合計", expense_total,
+        set_row(ws, start_row, [f"{label}收入合計", income_total, f"{label}支出合計", expense_total,
                                   f"{label}淨額", income_total - expense_total],
                  font=mk(bold=True, size=10, color=C_WHITE), fill=fill(C_DARK), border=BD,
                  aligns=[al("left"), al("right"), al("left"), al("right"), al("left"), al("right")], height=22)
@@ -1251,11 +1196,11 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     dc.alignment = al("center")
     ws_year.row_dimensions[3].height = 22
     matrix_hdrs = ["月份", "承攬商派發", "設備進貨", "料件進貨", "其他支出", "合計"]
-    _set_row(ws_year, 4, matrix_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
+    set_row(ws_year, 4, matrix_hdrs, font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD, aligns=[al("center")], height=20)
     r_i = 5
     for m in exp.get("monthly") or []:
-        _set_row(ws_year, r_i,
+        set_row(ws_year, r_i,
                  [m["label"], m["contractor"], m["equipment"], m["material"], m["other"], m["total"]],
                  font=mk(size=9), fill=fill(C_WHITE), border=BD,
                  aligns=[al("center")] + [al("right")] * 5, height=18)
@@ -1263,7 +1208,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             ws_year.cell(row=r_i, column=ci).number_format = '#,##0'
         r_i += 1
     tot = exp.get("totals") or {}
-    _set_row(ws_year, r_i,
+    set_row(ws_year, r_i,
              ["全年合計", tot.get("contractor", 0), tot.get("equipment", 0),
               tot.get("material", 0), tot.get("other", 0), tot.get("total", 0)],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
@@ -1302,7 +1247,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws4.row_dimensions[1].height = 24
 
-    _set_row(ws4, 2, hdrs4,
+    set_row(ws4, 2, hdrs4,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1338,7 +1283,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             f"{am:.1f}%" if am is not None else "",
             c_["grossProfit"] if c_["grossProfit"] is not None else "",
         ]
-        _set_row(ws4, r_i, row_v,
+        set_row(ws4, r_i, row_v,
                  font=mk(size=9), fill=fill(bg), border=BD,
                  aligns=[al("left"), al("left"), al("left"), al("left"),
                          al("center"), al("center"), al("right"), al("right"),
@@ -1376,7 +1321,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws5.row_dimensions[1].height = 24
 
-    _set_row(ws5, 2, hdrs5,
+    set_row(ws5, 2, hdrs5,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1385,7 +1330,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         bg  = C_LGRAY if r_i % 2 == 0 else C_WHITE
         am  = sp["avgActualMarginPct"]
         est = sp["avgMarginPct"]
-        _set_row(ws5, r_i,
+        set_row(ws5, r_i,
                  [sp["salesPerson"], sp["caseCount"], sp["totalAmount"],
                   sp["receivedAmount"], f"{sp['collectionRate']:.1f}%",
                   f"{est:.1f}%",
@@ -1408,7 +1353,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     tt5 = sum(x["totalAmount"] for x in data["salesPerf"])
     tr5 = sum(x["receivedAmount"] for x in data["salesPerf"])
     ts5 = sum(x["settledCount"] for x in data["salesPerf"])
-    _set_row(ws5, sr5,
+    set_row(ws5, sr5,
              ["合計", sum(x["caseCount"] for x in data["salesPerf"]),
               tt5, tr5,
               f"{round(tr5/tt5*100,1) if tt5 else 0}%", "", "", ts5],
@@ -1465,7 +1410,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             ws6.cell(row=2, column=col).alignment = al("center")
     ws6.row_dimensions[2].height = 16
 
-    _set_row(ws6, 3, hdrs6,
+    set_row(ws6, 3, hdrs6,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1489,7 +1434,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         gross_pct     = float(s.get("grossMarginPct", 0) or 0)
         net_pct       = float(s.get("netMarginPct", 0) or 0)
         net_prof      = int(s.get("netProfit", 0) or 0)
-        _set_row(ws6, r_i,
+        set_row(ws6, r_i,
                  [mc["quoteNo"], mc["customer"], mc["project"], mc["salesPerson"],
                   mc["dealTag"], mc["pretax"],
                   orig_cost, f"{orig_margin:.1f}%", f"{orig_net_pct:.1f}%", orig_net_prof,
@@ -1522,7 +1467,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         tot_net_prof  = sum(int((mc.get("settleSummary") or {}).get("netProfit",0) or 0) for mc in data["marginCases"])
         tot_est       = sum(int((mc["pretax"] or 0) * (mc["netMarginPct"] or 0) / 100) for mc in data["marginCases"])
         tot_act       = sum(mc["grossProfit"] or 0 for mc in data["marginCases"])
-        _set_row(ws6, sr6,
+        set_row(ws6, sr6,
                  ["合計","","","","", tot_pretax,
                   tot_orig_cost,"","", tot_orig_np,
                   tot_item, tot_extra, tot_total,"","", tot_net_prof,
@@ -1555,7 +1500,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws7.row_dimensions[1].height = 24
 
-    _set_row(ws7, 2, hdrs7,
+    set_row(ws7, 2, hdrs7,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1568,7 +1513,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
             bg, status = C_LYELLOW, "30天內"
         else:
             bg, status = C_WHITE, "警示"
-        _set_row(ws7, r_i,
+        set_row(ws7, r_i,
                  [w_["quoteNo"], w_["customer"], w_["project"],
                   w_["device"], w_["sn"], w_["mac"],
                   w_["expiry"], dl, status],
@@ -1602,13 +1547,13 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws8.row_dimensions[1].height = 24
 
-    _set_row(ws8, 2, hdrs8,
+    set_row(ws8, 2, hdrs8,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
 
     for r_i, ov in enumerate(so_list, 3):
-        _set_row(ws8, r_i,
+        set_row(ws8, r_i,
                  [ov["quoteNo"], ov["customer"], ov["project"],
                   ov["salesPerson"], ov["closedAt"]],
                  font=mk(size=9), fill=fill(C_LYELLOW), border=BD,
@@ -1640,7 +1585,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
     c.alignment = al("center")
     ws9.row_dimensions[1].height = 24
 
-    _set_row(ws9, 2, hdrs9,
+    set_row(ws9, 2, hdrs9,
              font=mk(bold=True, size=9, color=C_WHITE),
              fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
@@ -1651,7 +1596,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         bg_band = C_LRED if bkey == "90+" else C_LYELLOW if bkey == "61-90" else C_LBLUE if bkey == "31-60" else C_LGREEN
         for it in band.get("items") or []:
             days = it["daysElapsed"]
-            _set_row(ws9, ar_r,
+            set_row(ws9, ar_r,
                      [band["label"], it["quoteNo"], it["customer"], it["project"],
                       it["salesPerson"], it["dealTag"], it["type"],
                       it["amount"], f"{it['pct']:.1f}%", it["quoteDate"], days],
@@ -1670,7 +1615,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
         ws9.cell(row=3, column=1).value = "目前無未收款應收帳款"
         ws9.cell(row=3, column=1).font  = mk(size=9, color=C_GREEN, italic=True)
     else:
-        _set_row(ws9, ar_r,
+        set_row(ws9, ar_r,
                  ["合計", "", "", "", "", "", "",
                   ar_total.get("amount", 0), "", "", ""],
                  font=mk(bold=True, size=9, color=C_WHITE),
@@ -2171,7 +2116,7 @@ tr.in-period{{background:#EFF6FF}}
 .footer{{font-size:7pt;color:#9CA3AF;text-align:center;margin-top:8px;border-top:1px solid #E5E7EB;padding-top:6px}}
 </style></head><body>
 
-<h1>{_COMPANY} 營運報表</h1>
+<h1>{company_heading("營運報表", sep=" ")}</h1>
 <div class="sub">{_COMPANY2} ｜ 期間：{period_label} ｜ 產製：{gen_at}</div>
 
 <!-- 摘要 -->
@@ -2300,7 +2245,7 @@ tr.in-period{{background:#EFF6FF}}
 <!-- 帳齡分析 -->
 {_pdf_ar_aging(data.get("arAging") or {}, tbl_hdr, fmt)}
 
-<div class="footer">{_COMPANY} — 此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考 ｜ {gen_at}</div>
+<div class="footer">{company_heading("此報表由 MOTRIX ERP 系統自動產製，僅供內部管理參考")} ｜ {gen_at}</div>
 </body></html>"""
     return html
 
@@ -2366,7 +2311,7 @@ def report_excel(
 ):
     u = _require_user(authorization)
     _require_reports_access(u)
-    _check_export_rate(u["id"], "excel")
+    check_export_rate(u["id"], "excel")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
@@ -2401,7 +2346,7 @@ def report_pdf(
 ):
     u = _require_user(authorization)
     _require_reports_access(u)
-    _check_export_rate(u["id"], "pdf")
+    check_export_rate(u["id"], "pdf")
     label, d0, d1 = _parse_period(period)
     data   = _augment_with_targets(_collect(d0, d1, department_id), d0)
     data["arAging"] = _compute_ar_aging()
@@ -2699,7 +2644,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
     ws = wb.active
     ws.title = "銷項發票清單"
     ws.sheet_view.showGridLines = False
-    mk, fill, mk_border, al = _xl_style(wb)
+    mk, fill, mk_border, al = xl_style(wb)
     BD = mk_border()
 
     widths = [16, 12, 12, 14, 22, 14, 14, 12, 14, 10, 30]
@@ -2707,7 +2652,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
         ws.column_dimensions[get_column_letter(i)].width = w
 
     ws.merge_cells("A1:K1")
-    c = ws["A1"]; c.value = f"{_COMPANY} — 銷項發票清單（{period_label}）"
+    c = ws["A1"]; c.value = company_heading(f"銷項發票清單（{period_label}）")
     c.font = mk(bold=True, size=13, color="FFFFFF"); c.fill = fill("111827"); c.alignment = al("center")
     ws.row_dimensions[1].height = 28
 
@@ -2719,7 +2664,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
 
     headers = ["發票號碼", "發票開立日期", "收款日期", "案件號", "客戶名稱", "統一編號",
                "金額（未稅）", "稅額", "金額（含稅）", "稅別", "備註"]
-    _set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
+    set_row(ws, 3, headers, font=mk(bold=True, color="FFFFFF"), fill=fill("2563EB"), border=BD, aligns=[al("center")])
     ws.row_dimensions[3].height = 22
 
     r = 4
@@ -2729,7 +2674,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
     # AC1：稅別與備註（舊 1～4% 單標「非法定稅率，請會計確認」）
     type_label = {"taxable": "應稅 5%", "zero": "零稅率", "exempt": "免稅", "legacy": "舊稅率（已停用）"}
     for row in rows:
-        _set_row(ws, r, [
+        set_row(ws, r, [
             row["invoiceNo"], row["invoiceDate"], row["date"], row["quoteNo"], row["customer"], row["taxId"],
             row["amountPretax"], row["taxAmount"], row["amountTotal"],
             type_label.get(row.get("taxType"), ""), row.get("taxNote", ""),
@@ -2739,7 +2684,7 @@ def _build_tax_export_excel(rows: list, period_label: str, gen_at: str) -> bytes
         total_incl   += row["amountTotal"]
         r += 1
 
-    _set_row(ws, r, ["合計", "", "", "", "", "", total_pretax, total_tax, total_incl, "", ""],
+    set_row(ws, r, ["合計", "", "", "", "", "", total_pretax, total_tax, total_incl, "", ""],
              font=mk(bold=True), fill=fill("F9FAFB"), border=BD, aligns=body_aligns)
 
     buf = io.BytesIO()
@@ -2756,7 +2701,7 @@ def tax_export_excel(
     """銷項發票清單匯出（Excel），供記帳士/營業稅申報使用。不篩選 year 時匯出全部。"""
     u = _require_user(authorization)
     _require_reports_access(u)
-    _check_export_rate(u["id"], "excel")
+    check_export_rate(u["id"], "excel")
     rows = _collect_tax_invoices(year, month)
     label = "全部區間"
     if year and month:

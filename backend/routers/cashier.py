@@ -27,7 +27,8 @@ from urllib.parse import quote as _url_quote
 from db import get_db
 from helpers import _require_user, user_has_module, payment_item_amounts
 from routers.contractor_vouchers import _voucher_public
-from routers.reports import _check_export_rate, _xl_style, _set_row, _collect_income_items
+from routers.reports import _collect_income_items  # §3 #14：資料擁有權待辦（ROADMAP）
+from helpers.xlsx_out import check_export_rate, set_row, xl_style
 
 router = APIRouter()
 
@@ -184,7 +185,7 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     reports.py 既有的 Excel 樣式 helper，不重新發明一套。"""
     user = _require_user(authorization)
     _require_view_access(user)
-    _check_export_rate(user["id"], "excel")
+    check_export_rate(user["id"], "excel")
     d0, d1 = _default_month_range()
     start = start or d0
     end = end or d1
@@ -197,7 +198,7 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     import openpyxl
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
-    mk, fill, mk_border, al = _xl_style(wb)
+    mk, fill, mk_border, al = xl_style(wb)
     BD = mk_border()
     C_DARK, C_WHITE = "111827", "FFFFFF"
 
@@ -213,16 +214,16 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     c.fill = fill(C_DARK)
     c.alignment = al("center")
     ws1.row_dimensions[1].height = 24
-    _set_row(ws1, 2, hdrs1, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
+    set_row(ws1, 2, hdrs1, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
     r = 3
     for v in data["outgoing"]:
-        _set_row(ws1, r, [v["voucherNo"], v["quoteNo"], v["vendorName"] or "（外包人員點工）",
+        set_row(ws1, r, [v["voucherNo"], v["quoteNo"], v["vendorName"] or "（外包人員點工）",
                            v["grandTotal"], v["payableDate"] or "", v["paidAt"][:10] if v["paidAt"] else ""],
                  font=mk(size=9), border=BD, aligns=[al("left")], height=18)
         ws1.cell(row=r, column=4).number_format = '#,##0'
         r += 1
-    _set_row(ws1, r, ["合計", "", "", data["outgoingTotal"], "", ""],
+    set_row(ws1, r, ["合計", "", "", data["outgoingTotal"], "", ""],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
              aligns=[al("left")], height=20)
     ws1.cell(row=r, column=4).number_format = '#,##0'
@@ -239,17 +240,17 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     c.fill = fill(C_DARK)
     c.alignment = al("center")
     ws2.row_dimensions[1].height = 24
-    _set_row(ws2, 2, hdrs2, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
+    set_row(ws2, 2, hdrs2, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
     r = 3
     for it in data["incoming"]:
         aa = it["actualAmount"]
-        _set_row(ws2, r, [it["quoteNo"], it["customer"], it["salesPerson"], it["type"],
+        set_row(ws2, r, [it["quoteNo"], it["customer"], it["salesPerson"], it["type"],
                            aa if aa is not None else it["amount"], it["receivedAt"]],
                  font=mk(size=9), border=BD, aligns=[al("left")], height=18)
         ws2.cell(row=r, column=5).number_format = '#,##0'
         r += 1
-    _set_row(ws2, r, ["合計", "", "", "", data["incomingTotal"], ""],
+    set_row(ws2, r, ["合計", "", "", "", data["incomingTotal"], ""],
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
              aligns=[al("left")], height=20)
     ws2.cell(row=r, column=5).number_format = '#,##0'

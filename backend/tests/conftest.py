@@ -553,7 +553,7 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     monkeypatch.setattr(photos, "_PHOTO_UPLOAD_BASE", str(tmp_path / "uploads" / "projects"))
     monkeypatch.setattr(db, "DEMO_PROJECT_PHOTOS_DIR", str(tmp_path / "uploads" / "_demo_projects"))
 
-    # reports.py::_check_export_rate() keys its process-global cooldown dict by
+    # helpers/xlsx_out.py::check_export_rate()（2026-09-25 自 reports.py 下沉 L1）keys its process-global cooldown dict by
     # (user_id, fmt) — user_id is a fresh DB's autoincrement value, so it gets
     # *recycled* across tests (each test starts a brand-new empty DB). Without
     # resetting this dict per test, a test in this file that calls an excel/pdf
@@ -562,8 +562,9 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     # seconds of wall-clock time (confirmed flaky failure 2026-09-01, only ever
     # reproduces in a full-suite run, never in isolation — see MOTRIX-ERP-QUICK.md
     # §12 2026-09-01 entries for the feature that surfaced it).
-    import routers.reports as reports_module
-    monkeypatch.setattr(reports_module, "_export_times", {})
+    # ⚠️ 必須指名 L1 那一份：報表、出納、T100 共用這一個 dict，而它只有這一個名字。
+    import helpers.xlsx_out as xlsx_out_module
+    monkeypatch.setattr(xlsx_out_module, "_export_times", {})
 
     # routers/auth.py::_rl_state 是**同一個形狀的第二個** process-global dict，
     # 以「用戶端 IP」為鍵。而 TestClient 的預設來源是 `"testclient"` ——
