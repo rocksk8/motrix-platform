@@ -52,7 +52,7 @@ def test_login_as_writes_the_same_session_shape_as_the_login_page(live_server, m
 
 @pytest.mark.e2e
 def test_old_style_playwright_works_after_the_shared_one_is_stopped(new_page):
-    import tests.conftest as cf
+    import conftest as cf
     new_page().goto("data:text/html,<p>shared</p>")        # 共用的已啟動
     assert cf._PW["browser"] is not None
     cf._stop_shared_browser()                              # _pw_coexist 在「還沒轉」的模組前做的事
@@ -68,7 +68,7 @@ def test_old_style_playwright_works_after_the_shared_one_is_stopped(new_page):
 def test_the_coexist_switch_only_fires_for_modules_that_still_import_sync_playwright():
     import types
 
-    import tests.conftest as cf
+    import conftest as cf
     assert cf._module_opens_its_own_playwright(types.SimpleNamespace(sync_playwright=object())) is True
     assert cf._module_opens_its_own_playwright(types.SimpleNamespace()) is False
     assert cf._module_opens_its_own_playwright(None) is False
@@ -89,7 +89,7 @@ def test_each_test_gets_an_isolated_context(live_server, new_page, step):
 
 @pytest.mark.e2e
 def test_context_hooks_run_for_every_new_context(new_context, request):
-    import tests.conftest as cf
+    import conftest as cf
     seen = []
     cf.E2E_CONTEXT_HOOKS.append(lambda ctx, req: seen.append(req.node.name))
     try:
@@ -110,7 +110,7 @@ def fresh_mode(monkeypatch):
 
 @pytest.mark.e2e
 def test_the_fresh_switch_gives_this_test_its_own_browser_and_server(fresh_mode, live_server, new_page, request):
-    import tests.conftest as cf
+    import conftest as cf
     page = new_page()
     page.goto(f"{live_server}/pages/login.html")
     assert cf._PW["browser"] is None, "開關打開時不應啟動共用瀏覽器"
@@ -125,7 +125,7 @@ def shared_mode(monkeypatch):
 
 @pytest.mark.e2e
 def test_without_the_switch_the_browser_and_server_are_shared(shared_mode, live_server, new_page, request):
-    import tests.conftest as cf
+    import conftest as cf
     page = new_page()
     page.goto(f"{live_server}/pages/login.html")
     assert page.context.browser is cf._PW["browser"] is not None
@@ -138,7 +138,7 @@ def test_drain_waits_for_in_flight_requests_and_fails_if_they_never_finish():
     import threading
     import time
 
-    import tests.conftest as cf
+    import conftest as cf
 
     class _Fake:
         n = 1

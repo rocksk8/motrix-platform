@@ -259,7 +259,7 @@ def test_s5_main_actually_starts_the_tender_scheduler():
     ✅ 附帶好處：這題同時保護既有的五個排程 —— 有人拿掉 `main.py:492` 那個
     區塊的任何一行，它都會紅。
     """
-    backend = Path(__file__).resolve().parent.parent
+    backend = Path(__file__).resolve().parents[3]   # modules/tender_radar/tests → backend
     proc = run_python(["-c", _S5_SCRIPT], cwd=backend, timeout=180)
     assert proc.returncode == 0, (
         f"子行程失敗（returncode={proc.returncode}）：\n{proc.stderr[-2500:]}"
@@ -458,7 +458,7 @@ def _seed_log(rows):
 
 def _five_hit_page():
     """真實 fixture（5 筆）—— 沿用第 4 輪的樣本，不手寫。"""
-    from tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
     return REAL
 
 
@@ -515,7 +515,7 @@ def test_n1_one_email_per_day_not_per_tender(client, admin_with_email, monkeypat
 
 def test_n2_no_hits_means_no_email(client, admin_with_email, monkeypatch):
     """§3 N2：命中 0 筆 → 0 封。「今天沒標案」不是異常，不該打擾任何人。"""
-    from tests.test_tender_match_2026_09_21 import HTML_EMPTY_RESULTS
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import HTML_EMPTY_RESULTS
     mails = _sent(monkeypatch)
     _run(monkeypatch, page=HTML_EMPTY_RESULTS)
     assert len(mails) == 0, f"零命中不該寄信，實際 {len(mails)} 封"
@@ -569,7 +569,7 @@ def test_n6_suspected_redesign_is_a_different_event(
     ⚠️ 兩者處置相反：**改版要改解析器、掛掉只要等它好**。
     共用一個 key 的話，使用者關掉其中一個就同時關掉另一個。
     """
-    from tests.test_tender_match_2026_09_21 import HTML_MOSTLY_DROPPED
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import HTML_MOSTLY_DROPPED
     _seed_log([])
     changed = _spy(monkeypatch, tn, NOTIFY_CHANGED)
     failed = _spy(monkeypatch, tn, NOTIFY_FAILED)

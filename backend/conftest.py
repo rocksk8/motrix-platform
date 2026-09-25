@@ -98,7 +98,7 @@ def _bk19_write_allowed(path) -> bool:
 
 
 #: repo 根目錄。repo 內的越界寫入是**隔離缺口**，repo 外的是**事故**。
-_BK19_REPO_ROOT = _Bk19Path(__file__).resolve().parent.parent.parent
+_BK19_REPO_ROOT = _Bk19Path(__file__).resolve().parents[1]   # 本檔在 backend/（2026-09-25 自 tests/ 上移，讓 modules/*/tests 共用）
 
 
 def _bk19_inside_repo(path) -> bool:
@@ -633,7 +633,7 @@ def client(_app, _template_db, tmp_path, monkeypatch):
     _join_own_background_threads(threads_before)
 
 
-_BACKEND_DIR = str(_Bk19Path(__file__).resolve().parents[1])
+_BACKEND_DIR = str(_Bk19Path(__file__).resolve().parent)
 BG_JOIN_BUDGET_SECONDS = 30
 
 
@@ -647,7 +647,8 @@ def _is_own_background_thread(t) -> bool:
         return True                          # db.spawn_bg_thread（以 ctx.run 起）
     mod = sys.modules.get(getattr(target, "__module__", "") or "")
     f = getattr(mod, "__file__", "") or ""
-    return f.startswith(_BACKEND_DIR) and "tests" not in _Bk19Path(f).parts   # 產品碼直接 threading.Thread 起的
+    return (f.startswith(_BACKEND_DIR) and "tests" not in _Bk19Path(f).parts   # 產品碼直接 threading.Thread 起的
+            and _Bk19Path(f).name != "conftest.py")                           # 本檔在 backend/ 根，不是產品碼
 
 
 def _join_own_background_threads(threads_before):
@@ -1145,7 +1146,7 @@ def _basetemp_safe_to_delete(path) -> bool:
     if not p.exists() or not p.is_dir():
         return False
     temp_root = Path(tempfile.gettempdir()).resolve()
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[1]
     if p == temp_root or p == Path(p.anchor) or p in repo_root.parents or p == repo_root:
         return False
     if repo_root in p.parents and "tests" not in p.parts:

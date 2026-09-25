@@ -45,6 +45,7 @@ GRAPH_PATH = REPO / "docs" / "platform" / "dep_graph.json"
 
 #: 改到這些 ⇒ 所有測試的執行環境都變了，縮小不成立
 FIXTURE_LAYER = (
+    "backend/conftest.py",            # 2026-09-25 自 backend/tests/ 上移（modules/*/tests 共用）
     "backend/tests/conftest.py",
     "backend/pytest.ini",
     "backend/requirements.txt",
@@ -55,6 +56,8 @@ FIXTURE_IMPLIED = {"core:main"}
 #: 契約測試所在（存在才算）
 CONTRACT_DIRS = ("backend/tests/platform", "backend/core/tests")
 TEMP_PREFIX = "motrix-pytest-"
+#: 全量／計數的收集範圍（同 pytest.ini testpaths；modules/*/tests 是模組自己的測試）
+TEST_ROOTS = ["tests", "modules"]
 
 
 def git(*args):
@@ -289,7 +292,7 @@ _COUNT_RE = re.compile(r"(\d+)\s+tests?\s+collected|collected\s+(\d+)\s+items?|^
 def collect_per_file(window):
     """collect-only 全部 tests/ 一次（數秒）⇒ {repo 相對檔名: 題數}。
     ⚠ 逐檔傳給 pytest 收集反而慢十倍以上（實測 300 檔 60 秒 vs 全部 5 秒）。"""
-    code, out = run_pytest(["tests"], [], window, full=False, collect_only=True)
+    code, out = run_pytest(TEST_ROOTS, [], window, full=False, collect_only=True)
     tail = out.strip().splitlines()[-1] if out.strip() else ""
     per = {}
     for l in out.splitlines():
@@ -308,11 +311,14 @@ def load_groups():
         return None, None
     m = json.loads(MODULES_PATH.read_text(encoding="utf-8"))
     owner, names = {}, {"L1": "共用核心"}
-    specs = [("L1", m["L1"])] + sorted(m["modules"].items())         + [("retired:" + k, v) for k, v in sorted(m.get("retired", {}).items())]
+    specs = [("L1", m["L1"])] + sorted(m["modules"].items()) \
+        + [("retired:" + k, v) for k, v in sorted(m.get("retired", {}).items())]
     for g, spec in specs:
         names.setdefault(g, spec.get("name", g))
         for u in spec.get("units", []):
             owner.setdefault(u, g)
+        if spec.get("key"):
+            owner.setdefault("dir:backend/modules/%s/" % spec["key"], g)   # 模組測試目錄的歸屬
     return owner, names
 
 
@@ -361,7 +367,7 @@ def main(argv=None):
             per, tail = collect_per_file(a.window)
             print("全量：%s 題（%s）" % (sum(per.values()) if per is not None else None, tail))
             return 0
-        code, _ = run_pytest(["tests"], extra, a.window, full=True)
+        code, _ = run_pytest(TEST_ROOTS, extra, a.window, full=True)
         return code
 
     changed = changed_files(a)

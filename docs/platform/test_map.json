@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 448,
+  "tests": 453,
   "unmapped": 5,
   "kinds": {
-   "unit": 32,
+   "api": 246,
+   "unit": 35,
    "audit": 56,
-   "api": 244,
    "e2e": 116
   },
   "routes": 505
@@ -20,6 +20,326 @@
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py"
  ],
  "tests": {
+  "backend/modules/tender_radar/tests/test_tender_columns_stored_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_detail_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/modules/tender_radar/tests/fixtures/tender_detail_20260921.html",
+    "file:backend/tests/_timefreeze.py",
+    "helper:email_notify",
+    "helper:settings",
+    "mod:tender_radar/api",
+    "mod:tender_radar/source",
+    "mod:tender_radar/tests/test_tender_match_2026_09_21",
+    "mod:tender_radar/tests/test_tender_notify_2026_09_21",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/settings.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py",
+     "backend/modules/tender_radar/tests/test_tender_notify_2026_09_21.py",
+     "backend/tests/_timefreeze.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "page": [
+     "backend/modules/tender_radar/tests/fixtures/tender_detail_20260921.html",
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "backend/modules/tender_radar/tests/fixtures/tender_detail_20260921.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_labels_2026_09_22.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_timefreeze.py",
+    "mod:tender_radar/api",
+    "mod:tender_radar/match",
+    "mod:tender_radar/source",
+    "mod:tender_radar/tests/test_tender_match_2026_09_21",
+    "mod:tender_radar/tests/test_tender_notify_2026_09_21"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/tender_radar/match.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py",
+     "backend/modules/tender_radar/tests/test_tender_notify_2026_09_21.py",
+     "backend/tests/_timefreeze.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_list_order_and_links_2026_09_22.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "dir:frontend/pages/",
+    "mod:tender_radar/api",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_mark_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/modules/tender_radar/tests/fixtures/tender_list_20260921.html",
+    "file:backend/tests/_timefreeze.py",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/match",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/match.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/tests/_timefreeze.py"
+    ],
+    "page": [
+     "backend/modules/tender_radar/tests/fixtures/tender_list_20260921.html"
+    ],
+    "path": [
+     "backend/modules/tender_radar/tests/fixtures/tender_list_20260921.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_notify_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_subproc.py",
+    "file:backend/tests/_timefreeze.py",
+    "helper:email_notify",
+    "helper:notification_prefs",
+    "helper:settings",
+    "mod:tender_radar/notify",
+    "mod:tender_radar/source",
+    "mod:tender_radar/tests/test_tender_match_2026_09_21"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/helpers/settings.py",
+     "backend/modules/tender_radar/notify.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py",
+     "backend/tests/_subproc.py",
+     "backend/tests/_timefreeze.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_reset_endpoint_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_subproc.py",
+    "mod:tender_radar/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_subproc.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_schedule_2026_09_21.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "helper:email_notify",
+    "helper:settings",
+    "mod:tender_radar/api",
+    "mod:tender_radar/source",
+    "mod:tender_radar/tests/test_tender_match_2026_09_21"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/settings.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/modules/tender_radar/tests/test_tender_match_2026_09_21.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_search_and_org_geo_2026_09_22.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "helper:geo",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/match",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/match.py",
+     "backend/tests/_map_cache_warm.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py",
+     "backend/routers/map_points.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_startup_log_2026_09_21.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_subproc.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_subproc.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
+  "backend/tests/platform/test_auth_login_contract.py": {
+   "kind": "api",
+   "units": [
+    "router:auth"
+   ],
+   "evidence": {
+    "api": [
+     "backend/routers/auth.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_core_loader.py": {
    "kind": "unit",
    "units": [
@@ -47,6 +367,23 @@
     ]
    }
   },
+  "backend/tests/platform/test_core_paths.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/version_manifest.json",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py"
+    ],
+    "path": [
+     "backend/version_manifest.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_module_boundaries.py": {
    "kind": "audit",
    "units": [
@@ -61,6 +398,17 @@
     ],
     "path": [
      "backend/routers/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_v9_baseline.py": {
+   "kind": "unit",
+   "units": [
+    "core:db"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
     ]
    }
   },
@@ -466,13 +814,13 @@
    "kind": "audit",
    "units": [
     "core:archive",
-    "core:main",
-    "file:backend/tests/conftest.py"
+    "core:conftest",
+    "core:main"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
-     "backend/tests/conftest.py"
+     "backend/conftest.py"
     ],
     "path": [
      "backend/main.py"
@@ -647,13 +995,13 @@
   "backend/tests/test_begin_only_via_begin_write_2026_09_25.py": {
    "kind": "audit",
    "units": [
-    "helper:quotations",
+    "plat:txn",
     "router:bonus",
     "router:quotations"
    ],
    "evidence": {
     "path": [
-     "backend/helpers/quotations.py",
+     "backend/core/txn.py",
      "backend/routers/bonus.py",
      "backend/routers/quotations.py"
     ]
@@ -1244,15 +1592,15 @@
   "backend/tests/test_browser_netguard_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "core:conftest",
     "file:backend/tests/_map_tiles.py",
-    "file:backend/tests/conftest.py",
     "page:pages/login.html",
     "page:pages/map.html"
    ],
    "evidence": {
     "import": [
-     "backend/tests/_map_tiles.py",
-     "backend/tests/conftest.py"
+     "backend/conftest.py",
+     "backend/tests/_map_tiles.py"
     ],
     "page": [
      "frontend/pages/login.html",
@@ -2178,7 +2526,6 @@
   "backend/tests/test_comment_reintroduces_guarded_literal_2026_09_23.py": {
    "kind": "audit",
    "units": [
-    "dir:backend/tests/",
     "dir:frontend/js/",
     "dir:frontend/pages/",
     "helper:voucher",
@@ -2192,7 +2539,6 @@
     "path": [
      "backend/helpers/voucher.py",
      "backend/routers/vouchers.py",
-     "backend/tests/",
      "frontend/js/",
      "frontend/pages/"
     ]
@@ -4440,16 +4786,16 @@
   "backend/tests/test_e2e_shared_fixtures_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "core:conftest",
     "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/conftest.py",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/login.html"
    ],
    "evidence": {
     "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/conftest.py"
+     "backend/conftest.py",
+     "backend/tests/_e2e_login.py"
     ],
     "page": [
      "frontend/index.html",
@@ -6983,6 +7329,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_payslip_archive_path_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "helper:settings",
+    "plat:__init__",
+    "plat:paths",
+    "router:payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/helpers/settings.py",
+     "backend/routers/__init__.py",
+     "backend/routers/payslips.py"
+    ]
+   }
+  },
   "backend/tests/test_payslip_edit_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
@@ -7263,15 +7628,15 @@
     "file:backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
-    "helper:quotations",
+    "plat:txn",
     "router:material_orders",
     "router:quotations",
     "router:vendor_contractors"
    ],
    "evidence": {
     "import": [
+     "backend/core/txn.py",
      "backend/db.py",
-     "backend/helpers/quotations.py",
      "backend/routers/material_orders.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py",
@@ -7721,6 +8086,19 @@
     ]
    }
   },
+  "backend/tests/test_row_access_2026_09_25.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:row_access"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/row_access.py"
+    ]
+   }
+  },
   "backend/tests/test_runtime_switches_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -7750,10 +8128,14 @@
    "units": [
     "core:db",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
-    "helper:quotations"
+    "helper:quotations",
+    "plat:__init__",
+    "plat:txn"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/txn.py",
      "backend/db.py",
      "backend/helpers/quotations.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
@@ -8170,260 +8552,6 @@
    "evidence": {
     "import": [
      "backend/db.py"
-    ]
-   }
-  },
-  "backend/tests/test_tender_columns_stored_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/source.py"
-    ]
-   }
-  },
-  "backend/tests/test_tender_detail_2026_09_21.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_timefreeze.py",
-    "file:backend/tests/fixtures/tender_detail_20260921.html",
-    "file:backend/tests/test_tender_match_2026_09_21.py",
-    "file:backend/tests/test_tender_notify_2026_09_21.py",
-    "helper:email_notify",
-    "helper:settings",
-    "mod:tender_radar/api",
-    "mod:tender_radar/source",
-    "page:pages/tender-radar.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/email_notify.py",
-     "backend/helpers/settings.py",
-     "backend/modules/tender_radar/source.py",
-     "backend/tests/_timefreeze.py",
-     "backend/tests/test_tender_match_2026_09_21.py",
-     "backend/tests/test_tender_notify_2026_09_21.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ],
-    "page": [
-     "backend/tests/fixtures/tender_detail_20260921.html",
-     "frontend/pages/tender-radar.html"
-    ],
-    "path": [
-     "backend/tests/fixtures/tender_detail_20260921.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_labels_2026_09_22.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_timefreeze.py",
-    "file:backend/tests/test_tender_match_2026_09_21.py",
-    "file:backend/tests/test_tender_notify_2026_09_21.py",
-    "mod:tender_radar/api",
-    "mod:tender_radar/match",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/tender_radar/match.py",
-     "backend/modules/tender_radar/source.py",
-     "backend/tests/_timefreeze.py",
-     "backend/tests/test_tender_match_2026_09_21.py",
-     "backend/tests/test_tender_notify_2026_09_21.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_list_order_and_links_2026_09_22.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/pages/",
-    "mod:tender_radar/api",
-    "page:pages/tender-radar.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ],
-    "page": [
-     "frontend/pages/tender-radar.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/tender-radar.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_mark_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/api",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/source.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_match_2026_09_21.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_timefreeze.py",
-    "file:backend/tests/fixtures/tender_list_20260921.html",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/match",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/match.py",
-     "backend/modules/tender_radar/source.py",
-     "backend/tests/_timefreeze.py"
-    ],
-    "page": [
-     "backend/tests/fixtures/tender_list_20260921.html"
-    ],
-    "path": [
-     "backend/tests/fixtures/tender_list_20260921.html"
-    ]
-   }
-  },
-  "backend/tests/test_tender_notify_2026_09_21.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_subproc.py",
-    "file:backend/tests/_timefreeze.py",
-    "file:backend/tests/test_tender_match_2026_09_21.py",
-    "helper:email_notify",
-    "helper:notification_prefs",
-    "helper:settings",
-    "mod:tender_radar/notify",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/email_notify.py",
-     "backend/helpers/notification_prefs.py",
-     "backend/helpers/settings.py",
-     "backend/modules/tender_radar/notify.py",
-     "backend/modules/tender_radar/source.py",
-     "backend/tests/_subproc.py",
-     "backend/tests/_timefreeze.py",
-     "backend/tests/test_tender_match_2026_09_21.py"
-    ]
-   }
-  },
-  "backend/tests/test_tender_reset_endpoint_2026_09_21.py": {
-   "kind": "api",
-   "units": [
-    "file:backend/tests/_subproc.py",
-    "mod:tender_radar/api"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_subproc.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ]
-   }
-  },
-  "backend/tests/test_tender_schedule_2026_09_21.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_tender_match_2026_09_21.py",
-    "helper:email_notify",
-    "helper:settings",
-    "mod:tender_radar/api",
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/email_notify.py",
-     "backend/helpers/settings.py",
-     "backend/modules/tender_radar/source.py",
-     "backend/tests/test_tender_match_2026_09_21.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_search_and_org_geo_2026_09_22.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/helpers/__init__.py",
-    "file:backend/tests/_map_cache_warm.py",
-    "helper:geo",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/api",
-    "mod:tender_radar/match",
-    "router:map_points"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/geo.py",
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/match.py",
-     "backend/tests/_map_cache_warm.py"
-    ],
-    "api": [
-     "backend/modules/tender_radar/api.py",
-     "backend/routers/map_points.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_tender_startup_log_2026_09_21.py": {
-   "kind": "unit",
-   "units": [
-    "file:backend/tests/_subproc.py"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_subproc.py"
     ]
    }
   },

@@ -41,6 +41,7 @@
 # ⚠️ 加這行之後還要 `git add --renormalize <該檔>` 重新存一次，
 #    規則本身不會把已經正規化的 blob 還原。
 backend/tests/fixtures/**    -text
+backend/modules/*/tests/fixtures/**    -text
 
 # 二進位：不要碰
 *.png           binary
@@ -93,6 +94,11 @@ docs/windows export-ignore
 # 東西，已查證 verify_package.py 與 DEPLOY.md 都不依賴這兩者）
 backend/tests/** export-ignore
 backend/tests export-ignore
+# 2026-09-25：conftest 自 backend/tests/ 上移到 backend/（讓 modules/*/tests 共用 fixture）；
+# 模組測試跟著模組放在 backend/modules/<key>/tests/（CORE-SPEC §3）——同屬測試，一併排除
+backend/conftest.py export-ignore
+backend/modules/*/tests/** export-ignore
+backend/modules/*/tests export-ignore
 backend/requirements-dev.txt export-ignore
 backend/db_migration_plan.md export-ignore
 

@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 
 TENDERS_PATH = "/api/tender-radar/tenders"
-PAGE = (Path(__file__).resolve().parent.parent.parent
+PAGE = (Path(__file__).resolve().parents[4]   # modules/tender_radar/tests → repo 根
         / "frontend" / "pages" / "tender-radar.html")
 
 

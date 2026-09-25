@@ -200,7 +200,7 @@ def test_p4_notifications_still_only_cover_matched_tenders(client, monkeypatch):
     一個「把全部塞進信裡」的實作**照樣只寄一封**。
     """
     import db
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     conn = db.get_db()
     try:
@@ -215,7 +215,7 @@ def test_p4_notifications_still_only_cover_matched_tenders(client, monkeypatch):
         conn.close()
     _seed(watches=[("監視", ["監視"], [])])
 
-    from tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
     mails = _sent(monkeypatch)
     freeze_slot(monkeypatch, ts, 18)
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", True)

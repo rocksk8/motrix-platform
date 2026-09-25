@@ -11,7 +11,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._map_tiles import block_tiles
-from tests.conftest import _assert_no_browser_outbound
+from conftest import _assert_no_browser_outbound
 
 FETCH = """(u) => fetch(u).then(r => 'ok:' + r.status, () => 'blocked')"""
 

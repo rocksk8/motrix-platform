@@ -241,8 +241,8 @@ def test_d1_detail_fetched_only_for_matched_tenders(client, monkeypatch):
     🔑 這一條把 N 從「當天所有公告」綁到「你真的在乎的那幾筆」——
     **是整個安全閥的基礎**：沒有它，上限與間隔都只是在拖慢一件不該做的事。
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     calls = _detail_spy(monkeypatch)
     _sent(monkeypatch)
@@ -264,8 +264,8 @@ def test_d2_daily_detail_limit_is_enforced(client, monkeypatch):
     ⚠️ 觀測點是**呼叫次數**，不是「有幾筆有地點」——
     後者在「呼叫了但解析失敗」時也會是 0。
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     limit = _need(ts, "DETAIL_DAILY_LIMIT")
     assert isinstance(limit, int) and limit > 0, f"上限要是正整數，實際 {limit!r}"
@@ -289,8 +289,8 @@ def test_d3_interval_between_detail_fetches(client, monkeypatch):
     （`fetch_raw`／`procurement.today`／`_PUBKEY_DEV`／`LICENSE_PATH`／
     `Timer`／`_pref_enabled`／現在是 `time.sleep`）。
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     _need(ts, "time")
     # 🔴 `conftest._no_politeness_delay` 把這個常數設成 0（全域，為了速度）——
@@ -326,8 +326,8 @@ def test_d4_detail_failure_keeps_the_tender_with_null_location(client, monkeypat
     ⚠️⚠️ **不可以因為拿不到地點就整筆丟掉** —— 這條線的承諾是「不會漏掉標案」，
     而地點只是錦上添花。**為了一個附加欄位而丟掉主體，是最糟的失敗方向。**
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     _detail_spy(monkeypatch, html=None, error="timeout")
     monkeypatch.setattr(ts, "fetch_detail", lambda url, *a, **kw: (None, "timeout"))
@@ -359,8 +359,8 @@ def test_d5_disabled_switch_means_no_detail_fetch(client, monkeypatch):
 
 def test_d6_tender_with_location_is_not_refetched(client, monkeypatch):
     """§3 D6：已經有 `location` 的標案，**下次不再抓它的詳細頁**（冪等）。"""
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     calls = _detail_spy(monkeypatch)
     _sent(monkeypatch)
@@ -392,7 +392,7 @@ def test_d6_tender_with_location_is_not_refetched(client, monkeypatch):
 def test_d7_procurement_type_and_method_come_from_the_list_page():
     """§3 D7：`procurement_type` 與 `tender_method` **從列表頁解析**，
     ⚠️ **不增加任何對外請求**。"""
-    from tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
 
     items, _, _ = _need(ts, "parse_list")(REAL)
     first = next(i for i in items if i["case_no"] == "TYGH115152")
@@ -411,7 +411,7 @@ def test_d8_missing_column_is_null_not_empty_string():
     📌 **今天第五次這一族**（前置時間未知／預算沒寫／抓不到 vs 不認得／
     截止日沒寫／現在是採購性質）。
     """
-    from tests.test_tender_match_2026_09_21 import (
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import (
         COL_ORG, REAL, _DATA, _rebuild, _set_cell,
     )
 
@@ -437,8 +437,8 @@ def test_d8_missing_column_is_null_not_empty_string():
 # ── D9～D11：信件 ─────────────────────────────────────────────────────────
 
 def _mail_body(monkeypatch):
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _assert_mails, _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _assert_mails, _sent
 
     mails = _sent(monkeypatch)
     _detail_spy(monkeypatch)
@@ -513,8 +513,8 @@ def test_d13_configured_time_does_not_change_the_daily_cap(client, monkeypatch):
     """
     freeze_slot(monkeypatch, ts)      # 兩次呼叫必須落在同一個時段裡
     from helpers.settings import _set_setting
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     _set_setting(SCAN_HOUR_SETTING, 9)
     _sent(monkeypatch)
@@ -545,7 +545,7 @@ def test_d14_default_scan_hour_is_testable(client):
 # ── 共用 helper ───────────────────────────────────────────────────────────
 
 def _spy_fetch(monkeypatch, page):
-    from tests.test_tender_notify_2026_09_21 import _spy
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _spy
     return _spy(monkeypatch, ts, "fetch_raw", result=(page, None))
 
 
@@ -645,7 +645,7 @@ def test_d20_premise_list_page_really_gives_the_redirect_form():
     🔑 **否定式斷言（「存進去的不可以是轉址前的」）必須配一個肯定式前提
     （「來源真的是轉址前的」）**，否則它守的是一個不存在的風險。
     """
-    from tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
     assert LIST_URL_PREFIX in REAL, (
         f"列表頁樣本裡找不到 {LIST_URL_PREFIX!r} —— D20 的前提不成立，"
         "D20 與這一題都要重新檢視（可能是對方改版了）"
@@ -669,8 +669,8 @@ def test_d20_stored_url_is_the_url_actually_landed_on(client, admin_and_watch,
     ⚠️ 觀測點刻意**不是** `fetch_detail` 的回傳值，是 **DB 裡最後存的那個字串** ——
     使用者點的是那個，不是回傳值。
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     _need(ts, "fetch_detail")
     monkeypatch.setattr(ts, "fetch_detail",
@@ -708,8 +708,8 @@ def test_d20b_unfetched_tender_keeps_its_url(client, admin_and_watch,
     🔑 **否定式斷言擋不住「把欄位清空」這種過關法。**
     （轉址前的網址點下去照樣到得了頁面，空的點不了。）
     """
-    from tests.test_tender_match_2026_09_21 import REAL
-    from tests.test_tender_notify_2026_09_21 import _sent
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_notify_2026_09_21 import _sent
 
     _need(ts, "fetch_detail")
     monkeypatch.setattr(ts, "fetch_detail",

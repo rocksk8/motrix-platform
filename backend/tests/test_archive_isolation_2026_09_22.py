@@ -213,6 +213,9 @@ KNOWN_REPO_WRITES = (
     "_demo_shipping_pdf_archive",
     "export_archive",
     ".initial_admin_credentials.txt",
+    # 2026-09-25（B）：與上一列同一類（demo 帳號的初始密碼檔，路徑見 core/paths.py INITIAL_DEMO_CREDENTIALS）。
+    #   不是新缺口：以前看不到，是因為本檔的 `import conftest` 拿到空的複本（見 test_bk19_the_write_guard_… 的註記）。
+    ".initial_demo_credentials.txt",
 )
 
 #: pytest／Python 自己的，不算缺口。
@@ -246,6 +249,15 @@ def test_bk19_the_write_guard_catches_a_real_write(tmp_path):
     ok = tmp_path / "nested" / "dir"
     _os.makedirs(ok, exist_ok=True)
     assert ok.is_dir(), "tmp 底下的 makedirs 被擋掉了 —— 守門太寬，會擋住所有測試"
+
+    # 🧹 這一題故意寫的兩筆是反向控制，不是缺口 ⇒ 驗完從紀錄裡拿掉，免得 test_bk19_nothing_new_… 把它們當成新增。
+    # 🔴 2026-09-25（B）：以前不需要這一步，是因為那一題的 `import conftest` 拿到的是**另一份空的複本**
+    #    （conftest 在 tests/ 時註冊名是 tests.conftest，`import conftest` 另外載入一份）⇒ 它一直是假綠燈。
+    #    conftest 上移到 backend/ 之後拿到的是真正在記錄的那一份，這兩筆才看得見。
+    import conftest
+    for probe in ("makedirs: " + target, "open: " + _os.path.join("Q:\\", "bk19_file.txt")):
+        assert probe in conftest._BK19_WRITES, "守門沒有記下反向控制的寫入：%r" % probe
+        conftest._BK19_WRITES.discard(probe)
 
 
 def test_bk19_nothing_new_was_written_outside_tmp():

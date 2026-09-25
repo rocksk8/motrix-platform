@@ -33,7 +33,7 @@ from pathlib import Path
 
 from tests._subproc import run_python
 
-BACKEND = Path(__file__).resolve().parent.parent
+BACKEND = Path(__file__).resolve().parents[3]   # modules/tender_radar/tests → backend
 ANCHOR = "MOTRIX_TENDER_RADAR"
 
 # ⚠️ 收集器必須在 `import main` **之前**掛上 —— 那一行 log 是在 import 時發出的。

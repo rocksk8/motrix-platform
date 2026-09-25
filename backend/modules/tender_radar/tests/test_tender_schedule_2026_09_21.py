@@ -86,7 +86,7 @@ def _auth(client, make_user):
 
 
 def _real_list_page():
-    from tests.test_tender_match_2026_09_21 import REAL
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import REAL
     return REAL
 
 
@@ -110,7 +110,7 @@ def _page_batch(n):
     改哪一個都行，而機關名改完仍然含中文、仍然不像日期
     ⇒ 不會撞到 `parse_list` 的形狀驗證（第 4 輪條件 6c 三道）。
     """
-    from tests.test_tender_match_2026_09_21 import (
+    from modules.tender_radar.tests.test_tender_match_2026_09_21 import (
         REAL, _get_cell, _rebuild, _split_results, _set_cell, COL_ORG,
     )
     _m, _header, data = _split_results(REAL)

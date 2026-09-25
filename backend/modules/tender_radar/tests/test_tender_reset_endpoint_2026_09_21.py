@@ -62,7 +62,7 @@ from pathlib import Path
 
 from tests._subproc import run_python
 
-BACKEND = Path(__file__).resolve().parent.parent
+BACKEND = Path(__file__).resolve().parents[3]   # modules/tender_radar/tests → backend
 RESET_PATH = "/api/tender-radar/reset-today"
 
 # ── 子行程腳本 ───────────────────────────────────────────────────────────

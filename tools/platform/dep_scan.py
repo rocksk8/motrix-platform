@@ -32,7 +32,7 @@ OUT = ROOT / "docs" / "platform" / "dep_graph.json"
 
 # backend 頂層非 router／helper 的模組中，屬於執行期共用能力者（腳本／種子檔不列）
 CORE_SKIP_PREFIX = ("sync_", "create_", "fix_", "issue_")
-CORE_SKIP_SUFFIX = ("_seed.py",)
+CORE_SKIP_SUFFIX = ("_seed.py", "conftest.py")  # conftest.py：2026-09-25 自 tests/ 上移到 backend/，是測試設定不是產品碼
 
 HTTP_METHODS = {"get", "post", "put", "delete", "patch", "api_route"}
 

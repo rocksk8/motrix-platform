@@ -27,6 +27,7 @@ OUT = REPO / "docs" / "platform" / "test_map.json"
 
 HTTP_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocket"}
 _API_RE = re.compile(r"^/api(/|$)")
+_MOD_TEST_RE = re.compile(r"^backend/modules/([^/]+)/tests/")
 AUTH_ROUTER = "backend/routers/auth.py"
 _LOGIN_SEGS = ("api", "auth", "login")
 _AUTH_TEST_NAME = re.compile(r"auth|login|session|totp|webauthn|passkey|password", re.I)
@@ -470,11 +471,19 @@ def scan_test(path, R):
 def build():
     files = tracked_files()
     R = Resolver(files)
-    tests = sorted(p for p in files if p.startswith(TESTS_DIR + "/")
+    tests = sorted(p for p in files if (p.startswith(TESTS_DIR + "/") or _MOD_TEST_RE.match(p))
                    and re.search(r"/test_[^/]*\.py$", p))
     result = {}
     for t in tests:
         result[t] = scan_test(t, R)
+        m = _MOD_TEST_RE.match(t)
+        if m:
+            # 模組自己的測試（CORE-SPEC §3 modules/<key>/tests/）⇒ 歸屬該模組：模組資料夾內任一檔改動都挑它
+            key = m.group(1)
+            r = result[t]
+            r["module"] = key
+            r["units"] = sorted(set(r["units"]) | {"dir:%s/modules/%s/" % (BACKEND, key)})
+            r["evidence"]["module_dir"] = ["%s/modules/%s/" % (BACKEND, key)]
     unmapped = sorted(t for t, v in result.items() if not v["units"])
     kinds = {}
     for v in result.values():
