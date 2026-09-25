@@ -106,7 +106,7 @@
 - 代價：L1 的 `helpers/case_access.py` 讀 M01 的 `quotations`（守門需要案件列的業務、協作者與簽核資料）。**這是唯一准許新增的 L1 讀取**。
 - 守門：`tests/platform/test_case_access_l1.py`——L1（含 L0 `core/`）其他檔新增讀或寫 `quotations` ⇒ 紅；判準用 dep_scan 的 SQL 解析（另補逗號 join；f-string 插入的表名靜態無從得知）。下沉當下已經在讀寫的 9 個檔列在基線（讀：archive、audit、company_identity、google_calendar、item_reads、search、system；讀寫：db、pdf_gen），只准變少。
 - ~~M01 不在（案件表不存在）⇒ `guard_case_access` 一律 404，不放行、不 500。~~〔更正（稽核 D CA-M1，2026-09-26）：原句的判準錯了——V9 基準的 `init_db` 在每個安裝都建 `quotations`，「表不存在」在真實安裝不會發生，M01 停用或不在包內時表與資料照樣在。〕
-- M01 不在（**M01 沒有登記 `case.present`**，IP-15；搬進 modules/ 後＝模組沒載入）⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，表與資料在也一樣、連超級管理員也不放行。表不存在（`no such table`）同樣 404；其他資料庫錯誤照樣丟出，不回「不存在」。
+- M01 不在（~~**M01 沒有登記 `case.present`**，IP-15~~〔更正：主持裁示只留一個訊號，改看 A 的 `case.access`（IP-12）；`case.present` 已刪〕**M01 沒有提供 `case.access`**；搬進 modules/ 後＝模組沒載入）⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，表與資料在也一樣、連超級管理員也不放行。表不存在（`no such table`）同樣 404；其他資料庫錯誤照樣丟出，不回「不存在」。
 
 ## 4. 跨組共用的表
 

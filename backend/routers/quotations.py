@@ -6905,12 +6905,6 @@ def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -
         conn.close()
 
 
-def _case_present() -> bool:
-    """IP-15 `case.present`：M01 已載入（L1 `helpers.case_access` 以此判斷 M01 在不在，不看表）。"""
-    return True
-
-
-_registry.provide("case.present", "quotations", _case_present)
 _registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
 _registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)
 
