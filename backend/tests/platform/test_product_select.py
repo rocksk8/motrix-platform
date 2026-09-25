@@ -199,3 +199,16 @@ def test_module_update_kind_checks_only_listed_modules(tmp_path):
     lock["modules"]["gamma"] = {"version": "1.0.0", "sha256": "0" * 64}
     (b / PS.LOCK_NAME).write_text(json.dumps(lock), encoding="utf-8")
     assert any("不在包裡" in p for p in PS.check(pkg, mj))
+
+
+def test_package_own_modules_json_is_the_reference(tmp_path):
+    """包內帶了 docs/platform/modules.json ⇒ 以它為準（不是目前 repo 的清單）。"""
+    pkg, _ = _pkg(tmp_path)
+    own = pkg / "docs" / "platform"
+    own.mkdir(parents=True)
+    (own / "modules.json").write_text(json.dumps({"L1": {"units": ["helper:auth"]}, "modules": {}}), encoding="utf-8")
+    PS.apply(pkg, {"name": "core-only", "modules": []})
+    (pkg / "backend" / "main.py").unlink()            # 不在包自己的 L1 清單裡 ⇒ 不算缺
+    assert PS.check(pkg) == []
+    (pkg / "backend" / "helpers" / "auth.py").unlink()  # 在清單裡 ⇒ 缺
+    assert any("helpers/auth.py" in p for p in PS.check(pkg))

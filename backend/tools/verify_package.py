@@ -194,6 +194,62 @@ def scan(root, skip):
     return hits, allrel
 
 
+#: 誘餌裡的「不該被抓」檔（反向對照：規則太寬時它會被抓到）
+DECOY_BENIGN = (os.path.join("backend", "main.py"), os.path.join("frontend", "pages", "index.html"))
+#: 誘餌裡的 log（logs 目錄＋*.log 兩條規則的正對照）
+DECOY_LOG = os.path.join("backend", "logs", "server.log")
+
+
+def build_decoy():
+    """在暫存目錄造一份「一定要被擋」的產物樹（2026-09-25：正對照不綁工作樹裡剛好有的東西）。
+
+    ☠️ 舊版正對照去工作樹找真實的開發庫／私鑰／log ⇒ 乾淨的 worktree 沒有 ⇒ 報告作廢。
+       那是「守門綁在環境狀態上」：換一台乾淨的機器，守門就不能用。
+    ⇒ 改成自己造：檔名與位置照 POSITIVE_CONTROL，內容是無害的假資料。
+    """
+    import tempfile
+    root = tempfile.mkdtemp(prefix="motrix-verify-decoy-")
+    for _rule, rel in POSITIVE_CONTROL:
+        full = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(full) or root, exist_ok=True)
+        with io.open(full, "w", encoding="utf-8") as f:
+            f.write("decoy\n")
+    for rel in DECOY_BENIGN + (DECOY_LOG,):
+        full = os.path.join(root, rel)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with io.open(full, "w", encoding="utf-8") as f:
+            f.write("decoy\n")
+    return root
+
+
+def remove_decoy(root):
+    import shutil
+    import stat
+
+    def _clear(func, path, _exc):
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    shutil.rmtree(root, onerror=_clear)
+
+
+def positive_control_decoy():
+    """① 用自造的誘餌樹驗證比對器：每個誘餌都要被對應規則抓到，無害檔一個都不能被抓。"""
+    root = build_decoy()
+    try:
+        hits, _ = scan(root, WT_SKIP)
+        ok = positive_control(hits)
+        wrong = [rel for rel in DECOY_BENIGN
+                 if any(rel.lower() == h.lower() for key, _d, _f in BAD for h in hits[key])]
+        if wrong:
+            R.void("無害檔被規則抓到：%s ⇒ 規則太寬，包側結論不可解讀" % "；".join(wrong))
+            ok = False
+        else:
+            print("  ⇒ ✅ 反向對照：無害檔 %d 個都沒被抓" % len(DECOY_BENIGN))
+        return ok
+    finally:
+        remove_decoy(root)
+
+
 def positive_control(wt_hits):
     """② 逐一列具名檔。**每一個都要被對應的規則抓到。**"""
     print("-" * 74)
@@ -215,8 +271,8 @@ def positive_control(wt_hits):
         if not n:
             missing.append(label)
     if missing:
-        R.void("這些在工作樹裡應該被抓到卻沒抓到：" + "；".join(missing)
-               + " ⇒ 掃描器可能壞了或指錯根目錄")
+        R.void("這些誘餌應該被抓到卻沒抓到：" + "；".join(missing)
+               + " ⇒ 比對器壞了")
     else:
         print("  ⇒ ✅ 正對照成立，包側的數字可以解讀")
     return not missing
@@ -351,9 +407,8 @@ def main():
     print("受測包：%s" % pkg)
     print()
 
-    print("### (1) 正對照（工作樹）—— 沒過則整份作廢")
-    wt_hits, _ = scan(WT, WT_SKIP)
-    positive_control(wt_hits)
+    print("### (1) 正對照（暫存目錄的自造誘餌，不依賴工作樹）—— 沒過則整份作廢")
+    positive_control_decoy()
     # 空目錄 os.walk 走不到檔案 ⇒ 另算
     bk = os.path.join(WT, "backend")
     if os.path.isdir(bk):

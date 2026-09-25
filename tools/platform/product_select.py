@@ -141,8 +141,26 @@ def apply(pkg, prod):
     return lock
 
 
-def required_l1_files(modules_json=MODULES_JSON):
-    """包裡一定要有的 L0／L1 檔（相對 backend/）。"""
+def _core_files_at(pkg):
+    """包打包時那個 commit 的 backend/core/*.py（依包內 .build_commit 從 git 列）；取不到 ⇒ None。"""
+    import subprocess
+    bc = Path(pkg) / "backend" / ".build_commit"
+    if not bc.is_file():
+        return None
+    try:
+        out = subprocess.run(["git", "-C", str(REPO), "ls-tree", "--name-only", bc.read_text(encoding="ascii").strip(),
+                              "backend/core/"], capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return sorted("core/" + Path(l).name for l in out.splitlines() if l.endswith(".py"))
+
+
+def required_l1_files(modules_json=MODULES_JSON, core_files=None):
+    """包裡一定要有的 L0／L1 檔（相對 backend/）。
+
+    🔴 2026-09-25（B）：以**包自己的 commit** 為準（包內 docs/platform/modules.json＋.build_commit 的 core/）。
+       初版用「目前 repo」的清單 ⇒ 拿去驗較早打的包時，把包打好之後才新增的 L1 檔算成缺檔
+       （verify 一個 a870fa44 的包，報缺 core/events.py、helpers/module_switches.py）。"""
     data = json.loads(Path(modules_json).read_text(encoding="utf-8"))
     req = set()
     for u in data["L1"]["units"]:
@@ -155,15 +173,21 @@ def required_l1_files(modules_json=MODULES_JSON):
             req.add("helpers/%s.py" % name)
         elif kind == "router":
             req.add("routers/%s.py" % name)
-    for p in (REPO / "backend" / "core").glob("*.py"):
-        req.add("core/%s" % p.name)
+    if core_files is None:
+        core_files = ["core/%s" % p.name for p in (REPO / "backend" / "core").glob("*.py")]
+    req.update(core_files)
     return sorted(req)
 
 
-def check(pkg, modules_json=MODULES_JSON):
-    """部署包 ⇒ 問題清單（空＝通過）。"""
+def check(pkg, modules_json=None):
+    """部署包 ⇒ 問題清單（空＝通過）。modules_json 預設用包內那一份（同一個 commit）。"""
     backend = Path(pkg) / "backend"
     problems = []
+    core_files = None
+    if modules_json is None:
+        own = Path(pkg) / "docs" / "platform" / "modules.json"
+        modules_json = own if own.is_file() else MODULES_JSON
+        core_files = _core_files_at(pkg)
     lock_p = backend / LOCK_NAME
     if not lock_p.is_file():
         return ["缺 backend/%s（沒有經過產品選配，或選配失敗）" % LOCK_NAME]
@@ -187,7 +211,7 @@ def check(pkg, modules_json=MODULES_JSON):
             problems.append("模組 %s：內容雜湊與 lock 不符（打包後被改過）" % k)
     if kind == "module_update":
         return problems             # 更新包只帶模組本身，不驗 L0／L1（P7 會另訂套用前檢查）
-    for rel in required_l1_files(modules_json):
+    for rel in required_l1_files(modules_json, core_files):
         if not (backend / rel).is_file():
             problems.append("缺 L0／L1 必要檔 backend/%s" % rel)
     for rel in REQUIRED_PKG_FILES:
