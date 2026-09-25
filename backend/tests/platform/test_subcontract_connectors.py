@@ -1,6 +1,6 @@
-"""M04 外包工班的串接點，**取用方這一側、M04 不在也要成立的題**（2026-09-26）：
+"""外包工班 外包工班的串接點，**取用方這一側、外包工班 不在也要成立的題**（2026-09-26）：
 IP-12 `dispatch.list_for_case`（M01 案件整包）、IP-14 `contractor_voucher.public`（M05 出納、M06 T100 匯出）
-拿掉提供者 ⇒ 照常回應並明說；M01／M05／M06 不再直接 import M04。
+拿掉提供者 ⇒ 照常回應並明說；M01／M05／M06 不再直接 import 外包工班。
 提供方的登記與正對照在 `modules/subcontract/tests/test_subcontract_providers.py`（隨模組搬走）。
 """
 import json
@@ -58,7 +58,7 @@ def _items():
         conn.close()
 
 
-# ── IP-12（M04 不在）─────────────────────────────────────────────────────────
+# ── IP-12（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_case_bundle_without_m04(client, make_user, monkeypatch):
     from routers import quotations as q
@@ -71,7 +71,7 @@ def test_case_bundle_without_m04(client, make_user, monkeypatch):
     assert r.json()["parts"]["updates"]["ok"] is True                     # 其他段照常
 
 
-# ── IP-14（M04 不在）─────────────────────────────────────────────────────────
+# ── IP-14（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     from routers import accounting_export as ae, cashier as ca
