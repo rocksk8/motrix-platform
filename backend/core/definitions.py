@@ -180,6 +180,8 @@ def _restore_locked(conn, kind, key, scope, version, note, user) -> dict:
         raise DefinitionError("第 %s 版在目前的環境驗證不通過，無法還原" % version, problems)
     out = _insert_published(conn, kind, key, scope, old["body"], note or ("還原自第 %s 版" % version), user)
     conn.commit()
+    # 稽核 D C-O1：還原不動草稿 ⇒ 下一次「發布」會把那份舊草稿蓋在還原的結果上；回應明說，由畫面提示
+    out["draftPending"] = get(conn, kind, key, scope, 0) is not None
     return out
 
 
