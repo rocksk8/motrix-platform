@@ -96,7 +96,9 @@ def _record_count():
         conn.close()
 
 
-def _notices(username, ref_id):
+def _notices(username, record_no):
+    """站內通知的 ref_id＝`custom:<模組>:<單號>`（c-p2-legal notify_ref；列車 train/0926-0415 交會）。"""
+    ref_id = "custom:%s:%s" % (KEY, record_no)
     conn = _db()
     try:
         return [dict(r) for r in conn.execute("SELECT type, message FROM notifications WHERE username=? AND ref_id=?",
