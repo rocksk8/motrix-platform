@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。
 
-機器可讀的清單：`docs/platform/pii_forms.json`。每一張「有個資輸入欄位」的頁面都要在清單上有一個決定：
+機器可讀的清單：`docs/platform/pii_forms.json`（鍵＝頁面檔名，頁面可能在 L1 或模組資料夾，位置一律問
+`core.source_tree.page_files()`）。每一張「有個資輸入欄位」的頁面都要在清單上有一個決定：
   - `notice`：頁面有告知區塊（列印告知書＋「已告知當事人」＋「尚未記錄個資告知」），並有伺服器端的紀錄端點。
   - `covered_by`：這頁的個資是從另一張有告知的主檔帶進來、而且**不能手打**（輸入元素是 readonly／disabled）。
     主持裁示 2026-09-26：可以手動輸入的聯絡人就是在蒐集個資 ⇒ 要 `notice`。
@@ -10,17 +11,21 @@
 
 偵測方式：`x-model` 綁定路徑的最後一段（去掉底線、轉小寫）以個資欄位字尾結尾（`PII_SUFFIXES`）。
 ⚠ 守不到：不經 `x-model` 的輸入（例：`:value` ＋ `@input`、原生 `<form>` 的 `name=`）；目前產品頁面沒有這種寫法。
+⚠ 範圍：`page_files()`（L1 頁面＋模組頁面），不含入口 `index.html`（沒有表單）。
 
 用法：python backend/tests/platform/_pii_forms.py   列出掃描結果（頁面 ⇒ 個資欄位）
 """
 import json
 import re
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parents[1]
 REPO = BACKEND.parent
 REGISTRY = REPO / "docs" / "platform" / "pii_forms.json"
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
 
 #: 自然人個資欄位的字尾（綁定路徑最後一段去底線、轉小寫後比對）。
 PII_SUFFIXES = ("phone", "mobile", "email", "address", "idnumber", "contactname", "contactperson",
@@ -35,17 +40,14 @@ NOTICE_MARKERS = ("data-privacy-card", "data-print-notice", "data-privacy-ack", 
 _XMODEL = re.compile(r'x-model(?:\.[a-z]+)*\s*=\s*"([^"]+)"')
 
 
-def page_files(repo=REPO):
-    """產品頁面：`frontend/pages/*.html`、`frontend/index.html`、各模組 `backend/modules/<key>/pages/*.html`。"""
-    repo = Path(repo)
-    files = sorted((repo / "frontend" / "pages").glob("*.html"))
-    idx = repo / "frontend" / "index.html"
-    if idx.is_file():
-        files.append(idx)
-    mods = repo / "backend" / "modules"
-    if mods.is_dir():
-        files += sorted(mods.glob("*/pages/*.html"))
-    return files
+def product_pages():
+    from core import source_tree
+    return source_tree.page_files()
+
+
+def product_router_text():
+    from core import source_tree
+    return "\n".join(p.read_text(encoding="utf-8") for p in source_tree.router_files())
 
 
 def _suffix_of(binding):
@@ -76,14 +78,13 @@ def _not_typeable(text, binding):
     return bool(tags) and all(re.search(r'(?<![:\w-])(readonly|disabled)(?![\w-])', t) for t in tags)
 
 
-def scan(repo=REPO):
-    """{相對路徑: [個資欄位綁定]}（只列有個資欄位的頁面）。"""
-    repo = Path(repo)
+def scan(pages=None):
+    """{頁面檔名: [個資欄位綁定]}（只列有個資欄位的頁面）。pages 預設＝產品全部頁面。"""
     res = {}
-    for f in page_files(repo):
-        fields = pii_fields(f.read_text(encoding="utf-8"))
+    for f in (product_pages() if pages is None else pages):
+        fields = pii_fields(Path(f).read_text(encoding="utf-8"))
         if fields:
-            res[f.relative_to(repo).as_posix()] = fields
+            res[Path(f).name] = fields
     return res
 
 
@@ -91,30 +92,22 @@ def load_registry(path=REGISTRY):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def _router_text(repo):
-    repo = Path(repo)
-    parts = [p.read_text(encoding="utf-8") for p in sorted((repo / "backend" / "routers").glob("*.py"))]
-    mods = repo / "backend" / "modules"
-    if mods.is_dir():
-        parts += [p.read_text(encoding="utf-8") for p in sorted(mods.rglob("*.py")) if "tests" not in p.parts]
-    return "\n".join(parts)
-
-
-def violations(repo=REPO, registry=None):
+def violations(registry=None, pages=None, router_text=None):
     """清單與頁面對不上的地方（空清單＝全部有人決定過，而且決定還成立）。"""
-    repo = Path(repo)
     reg = registry if registry is not None else load_registry()
     forms = reg.get("forms", {})
-    found = scan(repo)
-    routers = None
+    pages = product_pages() if pages is None else list(pages)
+    by_name = {Path(p).name: Path(p) for p in pages}
+    found = scan(pages)
+    routers = router_text
     errs = []
     for page, fields in found.items():
         if page not in forms:
             errs.append(f"{page}：有個資欄位 {fields}，但 pii_forms.json 沒有決定（加告知區塊，或寫明 covered_by／not_natural_person）")
     for page, dec in forms.items():
-        f = repo / page
-        if not f.is_file():
-            errs.append(f"{page}：清單上有，但檔案不存在（過期的決定）")
+        f = by_name.get(page)
+        if f is None or not f.is_file():
+            errs.append(f"{page}：清單上有，但頁面不存在（過期的決定）")
             continue
         text = f.read_text(encoding="utf-8")
         fields = found.get(page, [])
@@ -136,7 +129,7 @@ def violations(repo=REPO, registry=None):
             if not apis:
                 errs.append(f"{page}：notice 要列出伺服器端的紀錄端點 ack_api")
             if routers is None:
-                routers = _router_text(repo)
+                routers = product_router_text()
             for a in apis:
                 if f'"{a}"' not in routers:
                     errs.append(f"{page}：ack_api {a} 在 router 裡找不到")

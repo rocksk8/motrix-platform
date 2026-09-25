@@ -1,7 +1,7 @@
 {
-  "_說明": "蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。守門：backend/tests/platform/test_pii_forms_notice.py（掃描規則在 _pii_forms.py）。每一張有個資輸入欄位的頁面都要有剛好一種決定：notice（頁面有告知區塊＋伺服器紀錄端點）、covered_by（個資來自另一張有告知的主檔）、not_natural_person（法人資料）。後兩種要逐欄列 fields，頁面多一個個資欄位就轉紅、要重新決定；身分證號、生日這類強個資不可以用後兩種帶過。",
+  "_說明": "蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。鍵＝頁面檔名（頁面可能在 L1 或模組資料夾，位置一律問 core.source_tree.page_files()）。守門：backend/tests/platform/test_pii_forms_notice.py（掃描規則在 _pii_forms.py）。每一張有個資輸入欄位的頁面都要有剛好一種決定：notice（頁面有告知區塊＋伺服器紀錄端點）、covered_by（個資來自另一張有告知的主檔）、not_natural_person（法人資料）。後兩種要逐欄列 fields，頁面多一個個資欄位就轉紅、要重新決定；身分證號、生日這類強個資不可以用後兩種帶過。",
   "forms": {
-    "frontend/pages/contractors.html": {
+    "contractors.html": {
       "notice": {
         "purpose": "contractor",
         "ack_kind": "contractor:<id>",
@@ -9,7 +9,7 @@
       },
       "since": "R3 2026-09-25"
     },
-    "frontend/pages/payslip-form.html": {
+    "payslip-form.html": {
       "notice": {
         "purpose": "contractor",
         "ack_kind": "勞報單 data_json.privacyNotice（存檔時送 privacyNoticeAcked）",
@@ -17,7 +17,7 @@
       },
       "since": "R3 2026-09-25"
     },
-    "frontend/pages/customers.html": {
+    "customers.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "customer_contact:<客戶id>:<聯絡人id>",
@@ -25,7 +25,7 @@
       },
       "since": "2026-09-26"
     },
-    "frontend/pages/suppliers.html": {
+    "suppliers.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "supplier_contact:<供應商id>:<聯絡人id>",
@@ -33,7 +33,7 @@
       },
       "since": "2026-09-26"
     },
-    "frontend/pages/vendor-contractors.html": {
+    "vendor-contractors.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "vendor_contractor:<id>",
@@ -41,7 +41,7 @@
       },
       "since": "2026-09-26"
     },
-    "frontend/pages/users.html": {
+    "users.html": {
       "notice": {
         "purpose": "user",
         "ack_kind": "user:<id>",
@@ -49,7 +49,7 @@
       },
       "since": "2026-09-26"
     },
-    "frontend/pages/quotation-form.html": {
+    "quotation-form.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "quote_contact:<報價單號>:<聯絡人姓名>",
@@ -58,7 +58,7 @@
       "since": "2026-09-26",
       "note": "聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）；業務的 Email／電話由使用者帳號（users.html）涵蓋。"
     },
-    "frontend/pages/case-management.html": {
+    "case-management.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "case_site_contact:<報價單號>:<現場聯絡人姓名>",
@@ -67,7 +67,7 @@
       "since": "2026-09-26",
       "note": "合約現場聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）。"
     },
-    "frontend/pages/completion-note-form.html": {
+    "completion-note-form.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "completion_contact:<完工單號>:<驗收人姓名>",
@@ -76,7 +76,7 @@
       "since": "2026-09-26",
       "note": "客戶驗收人／聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）。"
     },
-    "frontend/pages/network-plan-form.html": {
+    "network-plan-form.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>",
@@ -85,7 +85,7 @@
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：聯絡人是手動輸入，要有告知。"
     },
-    "frontend/pages/network-plans.html": {
+    "network-plans.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>（建立時記錄）",
@@ -94,7 +94,7 @@
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：建立視窗的聯絡人是手動輸入，要有告知。"
     },
-    "frontend/pages/company-profile-settings.html": {
+    "company-profile-settings.html": {
       "not_natural_person": true,
       "fields": ["cfg.bank_account_number", "loc.address", "loc.bank_account_number", "loc.email", "loc.phone"],
       "reason": "公司本身與各據點的地址、電話、Email、匯款帳號，屬法人資料。",
