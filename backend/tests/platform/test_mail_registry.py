@@ -26,7 +26,9 @@ BANNED = ("多半", "不會自己好", "看起來", "好像", "應該", "大概"
 #: 寄信原語與收件人包裝函式本身（參數是變數，屬於實作；守門看的是它們的呼叫端）
 PRIMITIVES = {"_send", "_async_send", "_send_raising", "_send_with_attachments", "_smtp_send_blocked",
               "_admin_emails", "_superadmin_emails", "_group_emails", "_lookup_emails",
-              "_department_manager_emails", "_monthly_report_recipient_emails", "_with_event_recipients"}
+              "_department_manager_emails", "_monthly_report_recipient_emails", "_with_event_recipients",
+              # 只查詢「群組收件人是否為空」、不寄信（routers/mail_settings.py，稽核 M-S1）
+              "_no_recipient"}
 
 
 def _name(call):
@@ -270,3 +272,80 @@ def test_pages_bind_the_registry():
     page = (fe / "pages" / "mail-settings.html").read_text(encoding="utf-8")
     assert "'/api/mail-types/' + encodeURIComponent(t.key) + '/recipients'" in page
     assert "mail-settings.html" in (fe / "static" / "sidebar.js").read_text(encoding="utf-8")
+
+
+# ── 稽核 D（AUDIT-D-A-mail-settings）────────────────────────────────────────────
+
+def test_no_superadmin_does_not_fall_back_to_admins(staff, caplog):
+    """M-M1：找不到可收信的超級管理員時，系統技術類**不退回一般管理員**（使用者：「普通管理員不需要收到這類信」）。"""
+    import db
+    from helpers import email_notify as en
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET email='' WHERE role='superadmin'")
+        conn.commit()
+    finally:
+        conn.close()
+    assert en._group_emails("backup_stale") == []                    # 不是 ["ms_adm@example.com"]
+    assert en._lookup_emails(["ms_eng"], "zz_not_registered") == []  # 未登記 fail closed 也不退回
+    assert any("超級管理員" in r.message for r in caplog.records)
+
+
+def test_settings_page_says_when_nobody_receives(client, staff):
+    """M-S1：所有超級管理員都退訂某一種系統技術類 ⇒ 設定頁標出「目前沒有人會收到」。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET notification_muted=? WHERE role='superadmin'", (json.dumps(["disk_space_low"]),))
+        conn.commit()
+    finally:
+        conn.close()
+    items = {t["key"]: t for t in client.get("/api/mail-types", headers=staff["sa"]).json()["items"]}
+    assert items["disk_space_low"]["noRecipient"] is True
+    assert items["backup_stale"]["noRecipient"] is False              # 正對照：沒退訂的那一類有人收
+    assert items["approval_request"]["noRecipient"] is False          # 有事件收件人的不判定
+
+
+def test_receivable_in_superadmin_only_mode(client, staff):
+    """M-S2：「僅超級管理員」模式下，一般管理員的清單裡這一類是收不到的。"""
+    import db
+    h = staff["sa"]
+    conn = db.get_db()
+    try:
+        ids = {r["username"]: r["id"] for r in conn.execute("SELECT id, username FROM users")}
+    finally:
+        conn.close()
+    assert client.put("/api/mail-types/settlement_finalized/recipients", headers=h,
+                      json={"mode": "superadmin_only"}).status_code == 200
+    items = {t["key"]: t["receivable"] for t in client.get(
+        "/api/mail-types/receivable?user_id=%d" % ids["ms_adm"], headers=h).json()["items"]}
+    assert items["settlement_finalized"] is False
+    items = {t["key"]: t["receivable"] for t in client.get(
+        "/api/mail-types/receivable?user_id=%d" % ids["ms_sa"], headers=h).json()["items"]}
+    assert items["settlement_finalized"] is True
+
+
+def test_monthly_report_has_one_recipient_source(client, staff):
+    """M-S3：每月營運報表的收件人只在「報表收件人設定」維護；本頁不接受覆寫，也不會被舊覆寫影響。"""
+    from helpers import email_notify as en
+    from helpers.settings import _set_setting
+    h = staff["sa"]
+    r = client.put("/api/mail-types/monthly_report/recipients", headers=h, json={"mode": "superadmin_only"})
+    assert r.status_code == 400
+    item = next(t for t in client.get("/api/mail-types", headers=h).json()["items"] if t["key"] == "monthly_report")
+    assert item["managedElsewhere"]
+    import db
+    conn = db.get_db()
+    try:
+        adm_id = conn.execute("SELECT id FROM users WHERE username='ms_adm'").fetchone()["id"]
+    finally:
+        conn.close()
+    _set_setting("monthly_report_recipients", {"userIds": [adm_id]})
+    _set_setting(mt.OVERRIDES_KEY, {"monthly_report": {"mode": "superadmin_only", "users": [], "roles": []}})
+    assert en._monthly_report_recipient_emails() == ["ms_adm@example.com"]    # 舊覆寫不影響
+
+
+def test_settings_page_shows_no_recipient_and_elsewhere():
+    from pathlib import Path
+    page = (Path(__file__).resolve().parents[3] / "frontend" / "pages" / "mail-settings.html").read_text(encoding="utf-8")
+    assert 'x-show="t.noRecipient"' in page and "t.managedElsewhere" in page

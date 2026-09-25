@@ -153,15 +153,28 @@ def legal_params_for(on_date):
 
 # ── 投保金額與全年累計（system_settings）────────────────────────────────────
 
+class ProfilesCorrupt(ValueError):
+    """投保金額設定存在但內容壞掉（稽核 A-S2）。"""
+
+
+#: 設定壞掉時對使用者說的話
+PROFILES_CORRUPT = ("投保金額設定損毀（system_settings.%s 不是有效的 JSON 物件），請由系統管理員修復；"
+                    "為避免覆寫其他人的投保金額，本次不寫入、不計算" % PROFILE_KEY)
+
+
 def load_profiles(conn):
+    """沒有設定 ⇒ {}；**有設定但壞掉 ⇒ ProfilesCorrupt**（不可以當成空的：寫入端會拿空的加一人整份覆寫，
+    其他人的投保金額就全部消失，而計算端會把所有人當成「沒有投保金額」）。"""
     row = conn.execute("SELECT value_json FROM system_settings WHERE key = ?", (PROFILE_KEY,)).fetchone()
     if row is None:
         return {}
     try:
         v = json.loads(row["value_json"])
     except (TypeError, ValueError):
-        return {}
-    return v if isinstance(v, dict) else {}
+        raise ProfilesCorrupt(PROFILES_CORRUPT)
+    if not isinstance(v, dict):
+        raise ProfilesCorrupt(PROFILES_CORRUPT)
+    return v
 
 
 def insured_amounts(profiles):
@@ -204,7 +217,10 @@ def deductions_for_award(conn, award, lines, on_date):
     params, rules, why = legal_params_for(on_date)
     if params is None:
         return None, why
-    profiles = load_profiles(conn)
+    try:
+        profiles = load_profiles(conn)
+    except ProfilesCorrupt as e:
+        return None, str(e)
     out = compute_bonus_deductions(
         lines, params=params, insured=insured_amounts(profiles),
         ytd_before=ytd_before(conn, profiles, on_date[:4], award["id"]))

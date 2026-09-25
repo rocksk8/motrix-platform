@@ -2483,7 +2483,10 @@ def get_insurance_profiles(year: int = 0, authorization: str = Header(None)):
     year = year or datetime.now().year
     conn = get_db()
     try:
-        prof = bonus_deductions.load_profiles(conn)
+        try:
+            prof = bonus_deductions.load_profiles(conn)
+        except bonus_deductions.ProfilesCorrupt as e:
+            raise HTTPException(409, str(e))
         motrix = bonus_deductions.ytd_in_motrix(conn, year)
         ext = bonus_deductions.ytd_external(prof, year)
         users = [dict(r) for r in conn.execute(
@@ -2526,7 +2529,10 @@ def put_insurance_profile(username: str, body: dict = Body(...), authorization: 
     try:
         if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is None:
             raise HTTPException(404, "找不到這個帳號。")
-        prof = bonus_deductions.load_profiles(conn)
+        try:
+            prof = bonus_deductions.load_profiles(conn)
+        except bonus_deductions.ProfilesCorrupt as e:     # 稽核 A-S2：不可以拿空的整份覆寫
+            raise HTTPException(409, str(e))
     finally:
         conn.close()
     cur = dict(prof.get(username) or {})

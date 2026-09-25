@@ -67,7 +67,11 @@
               <td><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
               <td><div class="ms-sub" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-text="'建議處理：' + t.action"></div></td>
               <td>
-                <select class="ms-sel" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
+                <div class="ms-bad" x-show="t.noRecipient" :data-testid="'ms-norecip-' + t.key">目前沒有任何人會收到這類信（超級管理員都退訂了，或沒有人設定 email）。</div>
+                <template x-if="t.managedElsewhere">
+                  <div class="ms-sub" :data-testid="'ms-elsewhere-' + t.key" x-text="t.managedElsewhere"></div>
+                </template>
+                <select class="ms-sel" x-show="!t.managedElsewhere" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
                   <template x-for="(label, m) in modes" :key="m"><option :value="m" x-text="label"></option></template>
                 </select>
                 <template x-if="t.edit.mode === 'custom'">
@@ -94,7 +98,7 @@
                 </template>
               </td>
               <td style="white-space:nowrap">
-                <button class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
+                <button x-show="!t.managedElsewhere" class="btn btn-primary btn-sm" :disabled="t.saving || !changed(t)" @click="save(t)" :data-testid="'ms-save-' + t.key">儲存</button>
                 <div class="ms-ok" x-show="t.okMsg" x-text="t.okMsg"></div>
                 <div class="ms-bad" x-show="t.errMsg" x-text="t.errMsg"></div>
               </td>

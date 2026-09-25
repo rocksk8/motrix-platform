@@ -22,11 +22,21 @@ def _overrides():
     return _get_setting(mt.OVERRIDES_KEY, {}) or {}
 
 
+def _no_recipient(t):
+    """事件收件人以外，群組收件人（依目前的覆寫與個人退訂）是否一個人都沒有（稽核 M-S1）。
+    只看沒有事件收件人的類型（有事件收件人的，每一封信的收件人不同）。"""
+    if t.event or t.key in mt.MANAGED_ELSEWHERE:
+        return False
+    from helpers import email_notify as en
+    return not en._group_emails(t.key)
+
+
 def _type_view(t, o):
     return {"key": t.key, "name": t.name, "category": t.category, "categoryLabel": mt.CATEGORIES[t.category],
             "group": t.group, "groupLabel": mt.GROUPS[t.group], "event": t.event,
             "impact": t.impact, "action": t.action, "owner": t.owner,
-            "override": o.get(t.key) or {"mode": "default", "users": [], "roles": []}}
+            "override": o.get(t.key) or {"mode": "default", "users": [], "roles": []},
+            "managedElsewhere": mt.MANAGED_ELSEWHERE.get(t.key, "")}
 
 
 @router.get("/api/mail-types")
@@ -36,6 +46,8 @@ def list_mail_types(authorization: str = Header(None)):
     order = list(mt.CATEGORIES)
     items = sorted((_type_view(t, o) for t in mt.all_types()),
                    key=lambda v: (order.index(v["category"]), v["name"]))
+    for v in items:
+        v["noRecipient"] = _no_recipient(mt.get(v["key"]))
     return {"items": items, "categories": mt.CATEGORIES, "groups": mt.GROUPS, "roles": list(mt.ROLES),
             "modes": {"default": "照預設", "superadmin_only": "僅超級管理員", "custom": "指定帳號／角色"}}
 
@@ -46,6 +58,8 @@ def set_mail_recipients(key: str, body: dict = Body(...), authorization: str = H
     t = mt.get(key)
     if t is None:
         raise HTTPException(404, "信件類型不存在：%s" % key)
+    if key in mt.MANAGED_ELSEWHERE:
+        raise HTTPException(400, mt.MANAGED_ELSEWHERE[key] + "，不在本頁設定。")
     body = body or {}
     mode = body.get("mode")
     if mode not in mt.MODES:

@@ -442,3 +442,47 @@ def test_reverse_without_accounting_still_computes_and_pays(client, people, monk
     assert client.get("/api/cashier/bonus-queue", headers=_auth(people["bc_cash"])).status_code == 200
     paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-A1'")[0]["paid_at"][:4]
     assert [e for e in _year_other(client, people["bc_sa"], paid)["details"]["other"] if e["quoteNo"] == "MQ-BP-A1"]
+
+
+# ── 稽核 D（AUDIT-D-A-bonus-U4）建議 ─────────────────────────────────────────────
+
+def test_ytd_counts_only_paid_bonuses(client, people):
+    """A-S1：全年累計只算「已發放」的獎金；待發放（還沒付）的不算。"""
+    insure_all()
+    _to_payout(client, people, "MQ-BP-Y1")                                  # 待發放
+    assert bd.ytd_in_motrix(bd_conn(), date_year()).get("bc_s1", 0) == 0
+    client.post("/api/bonus/cases/MQ-BP-Y1/mark-paid", headers=_auth(people["bc_cash"]), json={})
+    paid = _q("SELECT SUM(l.amount) AS s FROM bonus_case_award_lines l JOIN bonus_case_awards a"
+              " ON a.id=l.award_id WHERE a.quote_no='MQ-BP-Y1' AND l.username='bc_s1'")[0]["s"]
+    assert bd.ytd_in_motrix(bd_conn(), date_year()).get("bc_s1") == paid
+
+
+def bd_conn():
+    import db
+    return db.get_db()
+
+
+def date_year():
+    from datetime import date
+    return date.today().year
+
+
+def test_corrupt_profiles_are_never_overwritten(client, people):
+    """A-S2：投保金額設定壞掉 ⇒ 讀、寫、撥付都拒絕；原本的內容一個字都不動。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) "
+                     "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                     (bd.PROFILE_KEY, "{壞掉", "t"))
+        conn.commit()
+    finally:
+        conn.close()
+    before = _q("SELECT value_json FROM system_settings WHERE key=?", (bd.PROFILE_KEY,))[0]["value_json"]
+    r = client.put("/api/bonus/insurance/bc_s1", headers=_auth(people["bc_sa"]), json={"insuredAmount": 30000})
+    assert r.status_code == 409 and "損毀" in r.json()["detail"], r.text
+    assert client.get("/api/bonus/insurance", headers=_auth(people["bc_sa"])).status_code == 409
+    _to_payout(client, people, "MQ-BP-Y2")
+    r = client.post("/api/bonus/cases/MQ-BP-Y2/mark-paid", headers=_auth(people["bc_cash"]), json={})
+    assert r.status_code == 409 and "損毀" in r.json()["detail"], r.text
+    assert _q("SELECT value_json FROM system_settings WHERE key=?", (bd.PROFILE_KEY,))[0]["value_json"] == before

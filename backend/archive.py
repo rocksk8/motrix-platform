@@ -528,11 +528,11 @@ def _alert_email_failed(reason: str, why: str) -> None:
 
 
 def _send_backup_error_email(reason: str, ts: str):
-    """Send async email to superadmin (最高管理者) on ERROR-level backup failure
-    — 2026-08-24 改用 _superadmin_emails() 而非 _admin_emails()：備份基礎設施出問題
-    （例如雲端硬碟磁碟機代號跑掉）需要有權限處理伺服器/磁碟機掛載的人知道，不是
-    一般 admin 職務範圍；_superadmin_emails() 找不到人時仍會 fallback 回全體
-    admin/superadmin，不會真的寄不出去。
+    """備份嚴重錯誤（ERROR 級）寄給超級管理員：備份基礎設施出問題（例如雲端硬碟磁碟機代號跑掉）
+    需要有權限處理伺服器與磁碟機掛載的人知道，不是一般管理員的職務範圍。
+    收件人經信件類型登記表（`backup_error`，系統技術類，只寄超級管理員）；**找不到超級管理員時
+    不退回一般管理員**（使用者 2026-09-26：「普通管理員不需要收到這類信」），改由下面的
+    `_alert_email_failed()` 寫警示檔。
 
     S-CN03：寄信在背景執行緒等結果；**寄成功才寫 `.emailed_<日期>`**（同原因當天不再寄），
     失敗或找不到收件人 ⇒ `_alert_email_failed()`。回傳那條等待執行緒（測試用 join）。
