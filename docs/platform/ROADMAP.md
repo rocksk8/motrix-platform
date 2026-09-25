@@ -87,10 +87,11 @@
 | G5 | 版本紀錄頁改由各模組 CHANGELOG 彙整產生；`version_manifest.json` 退場 | ⏳ |
 | G6 | 勞報單（F2）上雲：獨立、權限更窄的資料夾 | ⏳ C（A8 之後） |
 | G6b | 個資資料夾的寫入一律經 `archive._pii_ensure_dir`／`_pii_copy_file`（新增寫入路徑時不可以用 makedirs）——目前只有既有三條路徑的行為題（稽核 X-9b S-5） | ⏳ |
+| G7 | L1 直接讀 L2 模組的表（過渡期）時必須先看 `core.registry.is_loaded()`（MODULE-GUIDE §5 選配；STATES-PLATFORM P-DT-01）：掃描 L1 對 L2 表的讀取，對到沒有載入檢查的 ⇒ 紅 | ⏳ |
 
 ## 階段 S：系統狀態的處理（STATES 目錄）
 
-> C 的目錄：`docs/platform/states/STATES-DATA-OPS.md`（資料／升級／部署／備份／通知，編號 S-C…）。A 的目錄（模組平台，編號 S-P…）由 A 合回時併入本節。
+> C 的目錄：`docs/platform/states/STATES-DATA-OPS.md`（資料／升級／部署／備份／通知，編號 S-C…）。A 的目錄：`docs/platform/states/STATES-PLATFORM.md`（模組平台，編號 S-P＋原列編號，例 P-LD-03 ⇒ S-PLD03）；高的 2 項與主持裁示的 6 項已在 A 的 STATES 分支處理（見該檔 §9.4），這裡只列中、低。
 > 高且缺守門的項目先補（C：S-CD02、S-CC07、S-CC06、S-CN03、S-CU10；主持：S-CU01、S-CU06、S-CP01、S-CP02）；每一項註明 V9 是否同樣受影響，V9 修不修由使用者決定。
 
 | # | 狀態 | 嚴重度 | 目前守門 | 狀態 |
@@ -141,6 +142,20 @@
 | S-CN05 | heartbeat 的 ping_url 未設 | 中 | 缺 | ⏳ |
 | S-CN06 | 正式機殘留 `.no_email_send` | 中 | `test_email_send_policy`（系統頁顯示：缺） | ⏳ |
 | S-CN07 | 備份告警 WARN 等級不寄信且被下一輪清掉 | 中 | 缺 | ⏳ |
+| S-PLD03 | core 主版號一升，沒跟上的模組同時消失（缺升版前的相容性預檢） | 中 | `test_core_loader.py::test_core_range`（只驗判斷） | ⏳ |
+| S-PLD06 | 模組 `__init__` 匯入失敗（缺套件、引用別組私有函式） | 中 | `test_core_loader.py::test_broken_module_is_isolated_and_reported` | ⏳ |
+| S-PLD08 | 有程式、沒有 module.json 的資料夾完全不出現在狀態表 | 中 | 缺 | ⏳ |
+| S-PLD12 | 模組 migration 執行器尚未實作（失敗 ⇒ 不載入＋回滾）；第一個有自有表的模組搬進來前必須補 | 中 | 缺（機制未實作） | ⏳ |
+| S-PLD13 | 載入失敗原因是英文例外字串 | 低 | 缺 | ⏳ |
+| S-PSW04 | 停用清單殘留不存在的 key，管理頁看不到也清不掉 | 低 | 缺 | ⏳ |
+| S-PSW07 | 停用清單內容壞掉 | 中 | `test_module_selection.py::test_read_disabled_values`（與 P-SW-05 同路徑：沿用快取／全部停用） | ✅ A（併入 P-SW-05） |
+| S-PSW10 | 兩位管理者同時切換，後寫覆蓋前寫 | 低 | 缺 | ⏳ |
+| S-PSW11 | 權限畫面可勾選未安裝／未載入模組的權限 key | 中 | 缺 | ⏳ |
+| S-PIP02 | 同一能力多個 provider：第一個請求才 500（應在啟動時讓後登記的模組 failed） | 中 | `test_dispatch_connector.py::test_registry_rules`（只驗丟例外） | ⏳ |
+| S-PIP03 | provider 呼叫丟例外 ⇒ 獎金核准整筆不成立、營運報表整份 500（應降級並明說） | 中 | 缺 | ⏳ |
+| S-PFE04 | 模組狀態 API 失敗時入口照常顯示（可接受：API 仍 404） | 低 | 缺 | ⏳ |
+| S-PFE05 | 入口先出現再被藏（閃一下） | 低 | 缺 | ⏳ |
+| S-PDT01b | 地圖的背景定位（`_map_geocode_backlog`）在標案雷達未載入時仍把 `tenders` 的機關／地點送去查座標 | 低 | 缺 | ⏳ |
 
 ## 階段 C：前端跟著模組走（第二階段的前置）
 

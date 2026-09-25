@@ -65,8 +65,16 @@
     recordUrl: function (p, session) {
       var url = target(p)
       if (!url) return null
-      var gate = PAGE_GATE[url.split('?')[0]]
-      return (gate && !gate(session)) ? null : url
+      var page = url.split('?')[0]
+      var gate = PAGE_GATE[page]
+      if (gate && !gate(session)) return null
+      // STATES-PLATFORM P-FE-06：頁面屬於這次沒有載入的模組（停用／未授權／失敗／不在安裝包）⇒ 不產生連結。
+      //   狀態由 sidebar.js 取回（`MOTRIX_MODULE_AVAILABILITY`）；還沒取回（未知）⇒ 照舊產生，
+      //   點了由該頁的提示頁接手（P-FE-03）。
+      var mp = window.MOTRIX_MODULE_PAGES && window.MOTRIX_MODULE_PAGES[page]
+      var av = window.MOTRIX_MODULE_AVAILABILITY
+      if (mp && av && !(av[mp.key] && av[mp.key].state === 'loaded')) return null
+      return url
     },
     mapUrl: function (sourceKey, recordKey) {
       return 'map.html?focus=' + encodeURIComponent(sourceKey + ':' + recordKey)

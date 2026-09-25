@@ -37,9 +37,14 @@ logger = logging.getLogger(__name__)
 # 載入失敗的模組只記 ERROR，不擋啟動。
 # CORE-SPEC §9c：② 未授權（helpers/licensing）> ③ 管理者停用（system_settings.modules_disabled，
 # 啟動時讀一次 ⇒ 改了要重啟才生效）。兩者都不 import 該模組，資料不動。
+# STATES-PLATFORM P-SW-05：停用清單讀不到（主庫被鎖、損毀）時不可以當成「沒有停用」——
+# 沿用上次成功讀到的快取；沒有快取 ⇒ 所有模組暫不載入（寧可少開，不可多開），管理頁與狀態端點標示。
 from helpers import module_switches as _module_switches
+_disabled = _module_switches.read_disabled_list()
+module_registry.set_disabled_list(_disabled.source, _disabled.message)
 module_loader.load_all(license_check=license_core.module_license_check,
-                       disabled=_module_switches.read_disabled_at_startup())
+                       disabled=module_loader.ALL if _disabled.all_disabled else _disabled.keys,
+                       disabled_reason=_module_switches.UNREADABLE_REASON if _disabled.all_disabled else None)
 
 from core import paths as _paths
 FRONTEND_DIR = _paths.FRONTEND_DIR
@@ -601,9 +606,8 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     daily_tasks.schedule_overdue_check()
     reports.schedule_monthly_report()
     dev_crm.schedule_dev_case_stale_check()
-    # L2 模組的排程（例：標案雷達；關著時 run_scan() 立刻返回、不對外連線）。
-    # 只跑 registry.loaded() 的（停用／未授權不 import ⇒ 不跑）；子行程守門呼叫同一個函式驗證。
-    module_loader.start_schedulers()
+    # L2 模組的排程在下面「模組路由」那一段、mount_modules() 之後才啟動（STATES-PLATFORM P-LD-07：
+    # 路由衝突而不掛的模組，排程不可以已經在跑）。
     # 背景把地址查成座標（2026-09-22 §3v）。使用者裁示「不要他按按鈕」。
     # ⚠️ 受 GEO_ENABLED 管：關著時一次都不發（不是「發了失敗」）。
     # 🔴 它有每日上限與連續失敗停止 —— 一個會自己跑的迴圈，
@@ -634,11 +638,7 @@ else:
 # 「這台機器會不會對外連線」與排程開不開**無關**：排程關著時，使用者按「立即掃描」
 # 照樣會連出去。放進閘門裡的話，「排程關、雷達開」的機器就不印了——
 # **而那正是測試機的組態，最需要被標記的那一台剛好不會被標記。**
-for _m in module_registry.loaded():
-    for _notice in _m.spec.startup_notices:
-        _msg = _notice()
-        if _msg:
-            logger.info(_msg)
+# （模組的啟動提示在下面 mount_modules() 之後才印：被判路由衝突的模組不算開著。）
 # ⚠️ **地理查詢也要有啟動痕跡**（2026-09-22 §8 FX1a）。
 # 它先前完全沒有 ⇒ 一台「以為開了而其實沒開」的機器，
 # 症狀是「地圖上沒有點」—— ☠️ 而那與「地址查不到」「還沒暖快取」
@@ -692,9 +692,6 @@ app.include_router(approval_delegates.router)
 app.include_router(cashier.router)
 app.include_router(accounting_export.router)
 app.include_router(licensing.router)
-for _m in module_registry.loaded():
-    for _r in _m.spec.routers:
-        app.include_router(_r)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)
 app.include_router(account_items.router)
@@ -703,6 +700,23 @@ app.include_router(vouchers.router)
 app.include_router(item_reads.router)
 app.include_router(modules.router)
 app.include_router(legal_params.router)
+
+# ── L2 模組：路由、排程、啟動提示（STATES-PLATFORM P-LD-07）──────────────────────
+# 🔴 必須在**所有** L1 include_router 之後、StaticFiles 之前：同方法同路徑的兩條路由都會掛上、
+#    先掛的默默勝出 ⇒ 模組先掛就能蓋掉 L1。mount_modules() 比對已掛的路由，撞到的模組整個不掛、
+#    記 failed＋原因。排程與啟動提示只取「掛上之後」仍在 registry.loaded() 裡的模組。
+module_loader.mount_modules(app)
+if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
+    # 例：標案雷達；關著時 run_scan() 立刻返回、不對外連線。只跑 registry.loaded() 的
+    # （停用／未授權不 import、路由衝突已 unload ⇒ 不跑）；子行程守門呼叫同一個函式驗證。
+    module_loader.start_schedulers()
+# ⚠️ 啟動提示**不可以**放進排程閘門：「這台機器會不會對外連線」與排程開不開無關（理由見上面「標案雷達：
+#    只記開著那一側」）。
+for _m in module_registry.loaded():
+    for _notice in _m.spec.startup_notices:
+        _msg = _notice()
+        if _msg:
+            logger.info(_msg)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

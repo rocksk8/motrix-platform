@@ -1,5 +1,5 @@
 {
- "core_version": "1.8",
+ "core_version": "1.9",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -412,9 +412,18 @@
    "refuse_unknown_new_keys": "def(new_modules, existing_modules=…)"
   },
   "helper:module_switches": {
+   "DisabledList": "class",
+   "DisabledList.all_disabled": "field",
+   "DisabledList.keys": "field",
+   "DisabledList.message": "field=…",
+   "DisabledList.source": "field",
+   "READ_ATTEMPTS": "const",
+   "READ_TIMEOUT_SECONDS": "const",
    "SETTING_KEY": "const",
+   "UNREADABLE_REASON": "const",
    "configured_disabled": "def()",
    "read_disabled_at_startup": "def(db_path=…)",
+   "read_disabled_list": "def(db_path=…)",
    "set_enabled": "def(key, enabled)"
   },
   "helper:notification_prefs": {
@@ -549,10 +558,13 @@
    "subscribers": "def(name)"
   },
   "plat:loader": {
+   "ALL": "const",
+   "DISABLED_REASON": "const",
    "MODULES_DIR": "const",
    "MODULES_PACKAGE": "const",
    "core_compatible": "def(spec, core_version=…)",
-   "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…)",
+   "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…, disabled_reason=…)",
+   "mount_modules": "def(app)",
    "start_schedulers": "def()"
   },
   "plat:paths": {
@@ -593,6 +605,7 @@
    "UPLOADS_ROOT": "const",
    "VERSION_MANIFEST": "const",
    "backend": "def(*parts)",
+   "modules_disabled_cache": "def(db_path)",
    "require_db": "def(path=…, env=…)",
    "root": "def(*parts)"
   },
@@ -614,6 +627,7 @@
    "RuntimeSwitch.is_on": "field",
    "RuntimeSwitch.label": "field",
    "STATES": "const",
+   "disabled_list": "def()",
    "failed": "def()",
    "is_loaded": "def(key)",
    "loaded": "def()",
@@ -624,9 +638,11 @@
    "register": "def(loaded)",
    "restore": "def(snap)",
    "runtime_switches": "def()",
+   "set_disabled_list": "def(source, message=…)",
    "set_state": "def(key, state, reason=…, manifest=…, note=…)",
    "single_provider": "def(capability)",
-   "snapshot": "def()"
+   "snapshot": "def()",
+   "unload": "def(key, reason)"
   },
   "plat:source_tree": {
    "BACKEND": "const",

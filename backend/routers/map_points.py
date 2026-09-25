@@ -393,7 +393,16 @@ def _case_points(user, located, budget=None):
     return points, missing
 
 
+def _tender_module_loaded() -> bool:
+    """STATES-PLATFORM P-DT-01：`tenders` 表屬於標案雷達（M11）。模組這次沒有載入（停用／未授權／失敗／
+    不在安裝包）⇒ 地圖不列標案（表與資料照舊保留）。最小改動：看登錄表；provider 化留給 M08 搬遷。"""
+    from core import registry
+    return registry.is_loaded("tender_radar")
+
+
 def _may_see_tenders(user) -> bool:
+    if not _tender_module_loaded():
+        return False
     if (user or {}).get("role") == "superadmin":
         return True
     mods = (user or {}).get("modules") or []
@@ -636,7 +645,11 @@ def _build_points(user, wanted):
     # ⚠️ **只回報「被要求的」來源**：使用者沒問的東西出現在回報裡，
     # 會讓他以為那個來源是開著的。
     if "tenders" in wanted:
-        if not _may_see_tenders(user):
+        if not _tender_module_loaded():
+            # 🔴 同上：說出來。停用的模組的資料不出現在地圖上，點下去也不會連到停用的頁面。
+            source_info.append({"source": "tenders", "skipped": "module_not_loaded", "count": 0,
+                                "note": "標案雷達模組目前未啟用，地圖上不會顯示標案"})
+        elif not _may_see_tenders(user):
             # 🔴 **說出來，不要只是少一層點。**
             source_info.append({"source": "tenders", "skipped": "no_permission",
                                 "count": 0,

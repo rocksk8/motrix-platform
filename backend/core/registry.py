@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.8"
+CORE_VERSION = "1.9"
 
 
 @dataclass
@@ -50,6 +50,10 @@ _FAILED: Dict[str, str] = {}
 _STATES: Dict[str, dict] = {}
 STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED = "loaded", "unlicensed", "disabled", "failed"
 STATES = (STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED)
+#: 這次啟動讀停用清單的結果（STATES-PLATFORM P-SW-05）：{"source", "message"}。
+#: source ∈ db（讀到主庫）／no_db（主庫不存在）／cache（主庫讀不到，沿用上次成功讀到的清單）／
+#: unreadable（讀不到也沒有快取 ⇒ 所有模組暫不載入）。沒有設定過＝空 dict（例：測試直接呼叫 load_all）。
+_DISABLED_LIST: Dict[str, str] = {}
 #: 尚未搬進 modules/ 的模組（仍在 routers/、helpers/）登記的提供者：{(capability, name): fn}。
 #: 搬遷後改寫進 ModuleSpec.providers，這裡的登記一併刪掉。
 _LEGACY_PROVIDERS: Dict[Tuple[str, str], Callable] = {}
@@ -60,13 +64,14 @@ def _reset():
     _LOADED.clear()
     _FAILED.clear()
     _STATES.clear()
+    _DISABLED_LIST.clear()
 
 
 def snapshot() -> tuple:
     """測試用：整份登錄表的複本。夾具一律用 snapshot()/restore()，不要自己列舉內部表——
     新增一張表時，自己列舉的夾具會漏掉它（2026-09-25 實例：_STATES 被清空沒還原，
     全量時同一個 worker 後面的題全紅）。_LEGACY_PROVIDERS 是模組匯入時登記的，不在這裡動。"""
-    return dict(_LOADED), dict(_FAILED), {k: dict(v) for k, v in _STATES.items()}
+    return dict(_LOADED), dict(_FAILED), {k: dict(v) for k, v in _STATES.items()}, dict(_DISABLED_LIST)
 
 
 def restore(snap: tuple) -> None:
@@ -74,6 +79,7 @@ def restore(snap: tuple) -> None:
     _LOADED.update(snap[0])
     _FAILED.update(snap[1])
     _STATES.update(snap[2])
+    _DISABLED_LIST.update(snap[3])
 
 
 def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] = None, note: str = "") -> None:
@@ -84,6 +90,16 @@ def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] =
                     "license_key": m.get("license_key") or key,
                     "pages": [pg.get("path") for pg in (m.get("pages") or []) if pg.get("path")],
                     "state": state, "reason": reason, "note": note or ""}
+
+
+def set_disabled_list(source: str, message: str = "") -> None:
+    """記下這次啟動的停用清單來源（管理頁與狀態端點顯示）。"""
+    _DISABLED_LIST.clear()
+    _DISABLED_LIST.update({"source": source, "message": message})
+
+
+def disabled_list() -> dict:
+    return dict(_DISABLED_LIST)
 
 
 def module_states() -> List[dict]:
@@ -106,6 +122,14 @@ def register(loaded: LoadedModule) -> None:
 
 def mark_failed(key: str, reason: str) -> None:
     _FAILED[key] = reason
+
+
+def unload(key: str, reason: str) -> None:
+    """已 import、但不可以掛上的模組（例：路由衝突，STATES-PLATFORM P-LD-07）改記為 failed：
+    移出已載入清單（provider、runtime switch、排程、路由都不會再從這裡取到它）。"""
+    lm = _LOADED.pop(key, None)
+    mark_failed(key, reason)
+    set_state(key, STATE_FAILED, reason, lm.manifest if lm else None)
 
 
 def loaded() -> List[LoadedModule]:

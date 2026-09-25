@@ -1148,27 +1148,73 @@ if (typeof module !== 'undefined' && module.exports) {
       .catch(function () {})
   }
 
-  // ── CORE-SPEC §9c：這次啟動沒有載入的模組（停用／未授權／載入失敗）⇒ 藏起它的頁面入口 ──
+  // ── CORE-SPEC §9c／STATES-PLATFORM P-FE-02・03：模組頁面的入口與直接打網址 ──────────────
   //
-  // 清單要後端給（`/api/system/modules/unavailable-pages`，來源是載入器的結果），不寫死在這裡。
-  // 做法同上面的獎金：事後藏已渲染的連結，不動 build() 的同步流程。
-  // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把清單留著）。
-  var _unavailablePages = []
+  // 狀態要後端給（`/api/system/modules/availability`，來源是載入器這次啟動的結果），不寫死在這裡；
+  // 寫死的只有「哪一頁屬於哪個模組」（守門：每個 modules/*/module.json 的 pages 都要在這張表裡、key 對得上）。
+  // 🔴 入口只在狀態是 loaded 時顯示：**清單裡沒有這個 key ＝不在安裝包**，也要藏（P-FE-02；原本只藏
+  //    「列為未載入」的頁面，不在包內的模組永遠列不進去，入口照樣出現）。
+  // ⚠️ 清單取不到（網路、後端錯）⇒ 入口照常顯示（P-FE-04：API 仍會 404，不會越權）。
+  // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把結果留著）。
+  var MODULE_PAGES = {
+    'tender-radar.html': { key: 'tender_radar', name: '標案雷達' },
+  }
+  window.MOTRIX_MODULE_PAGES = MODULE_PAGES
+  var _moduleAvailability = null
+  function _moduleLoaded(pgName) {
+    var m = MODULE_PAGES[pgName]
+    if (!m || !_moduleAvailability) return true
+    var st = _moduleAvailability[m.key]
+    return !!(st && st.state === 'loaded')
+  }
   function _applyUnavailablePages() {
-    _unavailablePages.forEach(function (pgName) {
+    if (!_moduleAvailability) return
+    Object.keys(MODULE_PAGES).forEach(function (pgName) {
+      if (_moduleLoaded(pgName)) return
       document.querySelectorAll('a[href$="' + pgName + '"]').forEach(function (a) {
         a.style.display = 'none'
       })
     })
   }
+  // 直接打網址（書籤、別頁連結）進入未載入模組的頁面 ⇒ 提示頁，不是 404：頁面是靜態檔，
+  // 404 會讓人以為網址打錯；而「頁面照常載入、API 404、區塊空白」會讓人以為壞了（P-FE-03）。
+  var _MODULE_NOTICE = {
+    disabled:   ['此模組目前已停用', '請洽最高管理者於「系統 → 模組管理」啟用，重新啟動服務後生效。'],
+    unlicensed: ['此模組未授權', '目前的授權不包含這個模組，請聯絡供應商取得包含此模組的授權。'],
+    failed:     ['此模組載入失敗', '請洽系統管理者於「系統 → 模組管理」查看原因。'],
+    missing:    ['此模組未安裝', '這個安裝包沒有包含這個模組。'],
+  }
+  function _showModuleNotice() {
+    var m = MODULE_PAGES[file]
+    if (!m || _moduleLoaded(file)) return
+    var st = _moduleAvailability[m.key]
+    var kind = st ? st.state : 'missing'
+    var txt = _MODULE_NOTICE[kind] || _MODULE_NOTICE.failed
+    var main = document.querySelector('main')
+    if (!main || document.querySelector('[data-testid="module-unavailable"]')) return
+    main.style.display = 'none'
+    var box = document.createElement('div')
+    box.className = main.className
+    box.setAttribute('data-testid', 'module-unavailable')
+    box.setAttribute('data-state', kind)
+    box.innerHTML = '<div style="max-width:640px;margin:48px auto;padding:24px 28px;border:1px solid var(--border-light,#E5E7EB);'
+      + 'border-radius:10px;background:var(--white,#fff);line-height:1.7">'
+      + '<div style="font-size:12px;color:var(--text-secondary,#6B7280)">' + esc(m.name) + '</div>'
+      + '<h2 style="margin:4px 0 8px;font-size:20px">' + esc(txt[0]) + '</h2>'
+      + '<p style="margin:0 0 16px;color:var(--text-secondary,#4B5563)">' + esc(txt[1]) + '</p>'
+      + '<a class="btn" href="index.html">回首頁</a></div>'
+    main.parentNode.insertBefore(box, main.nextSibling)
+  }
   function _hideUnavailableModulePages() {
     if (!s || !s.token) return
-    fetch('/api/system/modules/unavailable-pages', { headers: { Authorization: 'Bearer ' + s.token } })
+    fetch('/api/system/modules/availability', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
-        if (!d || !d.pages) return
-        _unavailablePages = d.pages
+        if (!d || typeof d !== 'object') return
+        _moduleAvailability = d
+        window.MOTRIX_MODULE_AVAILABILITY = d
         _applyUnavailablePages()
+        _showModuleNotice()
       })
       .catch(function () {})
   }

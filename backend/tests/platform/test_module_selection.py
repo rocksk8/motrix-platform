@@ -161,6 +161,8 @@ def test_license_not_checked_is_visible_in_state(tmp_path, monkeypatch, isolated
 
 def test_read_disabled_never_creates_the_db(tmp_path):
     missing = tmp_path / "nope.db"
+    got = ms.read_disabled_list(str(missing))
+    assert (got.keys, got.all_disabled, got.source) == (frozenset(), False, ms.SOURCE_NO_DB)
     assert ms.read_disabled_at_startup(str(missing)) == frozenset()
     assert not missing.exists(), "讀不存在的主庫時不可以建出空檔（會讓 require_db 守門失效）"
 
@@ -170,7 +172,8 @@ def test_read_disabled_values(tmp_path):
     c = sqlite3.connect(p)
     c.execute("CREATE TABLE other (x)")
     c.commit()
-    assert ms.read_disabled_at_startup(str(p)) == frozenset()                          # 表還沒建
+    assert ms.read_disabled_list(str(p)).source == ms.SOURCE_DB                           # 表還沒建＝確定沒停用
+    assert ms.read_disabled_at_startup(str(p)) == frozenset()
     c.execute("CREATE TABLE system_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)")
     c.execute("INSERT INTO system_settings VALUES ('modules_disabled', '[\"zz_x\", \" \", 3]', '')")
     c.commit()
@@ -178,7 +181,9 @@ def test_read_disabled_values(tmp_path):
     c.execute("UPDATE system_settings SET value_json='{壞' WHERE key='modules_disabled'")
     c.commit()
     c.close()
-    assert ms.read_disabled_at_startup(str(p)) == frozenset()
+    # P-SW-07：內容壞掉不再當成「沒有停用」⇒ 沿用上一次讀到的（上面那次讀取寫了快取）
+    got = ms.read_disabled_list(str(p))
+    assert (got.keys, got.source) == (frozenset({"zz_x"}), ms.SOURCE_CACHE) and got.message
 
 
 def test_concurrent_toggles_do_not_lose_updates(client, monkeypatch):
@@ -219,6 +224,222 @@ def test_concurrent_toggles_do_not_lose_updates(client, monkeypatch):
     monkeypatch.setattr(ms, "_normalize", real)
     assert not errs, errs
     assert ms.configured_disabled() == ["zz_c4_a", "zz_c4_b"]
+
+
+# ── C2 讀不到停用清單（STATES-PLATFORM P-SW-05）：不可以默默反轉管理者的決定 ──────────────
+
+def _synthetic_state(monkeypatch, key, state="loaded", **extra):
+    """合成模組的狀態列（不綁任何真實 L2 模組；AUDIT-X-9c A-2）。monkeypatch 自動還原。"""
+    row = {"key": key, "name": key, "version": "0.0.1", "license_key": key, "pages": [], "state": state,
+           "reason": ""}
+    row.update(extra)
+    monkeypatch.setitem(registry._STATES, key, row)
+    return row
+
+
+def _settings_db(path, value='["zz_mod"]', wal=False):
+    c = sqlite3.connect(path)
+    if wal:
+        c.execute("PRAGMA journal_mode=WAL")                               # 主庫的實際組態（db.py）
+    c.execute("CREATE TABLE system_settings (key TEXT PRIMARY KEY, value_json TEXT, updated_at TEXT)")
+    c.execute("INSERT INTO system_settings VALUES ('modules_disabled', ?, '')", (value,))
+    c.commit()
+    c.close()
+
+
+class _Unreadable:
+    """讓主庫讀不到的三種方式（AUDIT-X-9c C-2：主庫是 WAL，在 WAL 上 `BEGIN EXCLUSIVE` **不擋讀**，
+    只用 journal 庫＋BEGIN EXCLUSIVE 驗的話，綠燈證明的是另一種庫）。"""
+
+    def __init__(self, path, how):
+        self.path, self.how, self.w = str(path), how, None
+
+    def __enter__(self):
+        if self.how == "journal_exclusive":          # R2 原本的手法
+            self.w = sqlite3.connect(self.path, isolation_level=None)
+            self.w.execute("BEGIN EXCLUSIVE")
+        elif self.how == "wal_locking_mode_exclusive":   # WAL：另一條連線 locking_mode=EXCLUSIVE 後寫入
+            self.w = sqlite3.connect(self.path, isolation_level=None)
+            self.w.execute("PRAGMA locking_mode=EXCLUSIVE")
+            self.w.execute("UPDATE system_settings SET updated_at='x'")
+        elif self.how == "corrupt_header":           # 檔頭損毀（file is not a database）
+            with open(self.path, "r+b") as f:
+                f.write(b"\0" * 100)
+        else:
+            raise ValueError(self.how)
+        return self
+
+    def __exit__(self, *exc):
+        if self.w is not None:
+            self.w.close()
+
+
+_HOW = ["journal_exclusive", "wal_locking_mode_exclusive", "corrupt_header"]
+
+
+def _locked(path):
+    """R2 的手法：另一條連線持有排他鎖（備份、另一個 uvicorn、手動工具）。"""
+    w = sqlite3.connect(str(path), isolation_level=None)
+    w.execute("BEGIN EXCLUSIVE")
+    return w
+
+
+def test_wal_begin_exclusive_does_not_block_reads(tmp_path):
+    """對照（C-2）：WAL 庫上 BEGIN EXCLUSIVE 不擋讀 ⇒ 讀得到、source=db。若這題紅了，代表上面的手法表要重看。"""
+    p = tmp_path / "m.db"
+    _settings_db(p, wal=True)
+    w = _locked(p)
+    try:
+        got = ms.read_disabled_list(str(p))
+    finally:
+        w.execute("ROLLBACK")
+        w.close()
+    assert (got.keys, got.source) == (frozenset({"zz_mod"}), ms.SOURCE_DB)
+
+
+@pytest.mark.parametrize("how", _HOW)
+def test_locked_db_uses_last_good_list_then_all_disabled(tmp_path, monkeypatch, how):
+    from core import paths
+    monkeypatch.setattr(ms, "READ_TIMEOUT_SECONDS", 0.05)
+    p = tmp_path / "m.db"
+    _settings_db(p, wal=(how != "journal_exclusive"))
+    ok = ms.read_disabled_list(str(p))                                   # 讀到 ⇒ 寫快取
+    assert (ok.keys, ok.all_disabled, ok.source, ok.message) == (frozenset({"zz_mod"}), False, ms.SOURCE_DB, "")
+    cache = paths.modules_disabled_cache(str(p))
+    assert cache == str(p) + ".modules_disabled.json" and os.path.isfile(cache)
+
+    with _Unreadable(p, how):
+        got = ms.read_disabled_list(str(p))                              # 有快取 ⇒ 沿用
+        assert (got.keys, got.all_disabled, got.source) == (frozenset({"zz_mod"}), False, ms.SOURCE_CACHE)
+        assert "讀取失敗" in got.message and "上次" in got.message
+        os.remove(cache)
+        got = ms.read_disabled_list(str(p))                              # 沒有快取 ⇒ 全部停用
+        assert got.all_disabled is True and got.source == ms.SOURCE_UNREADABLE and "暫不載入" in got.message
+        compat = ms.read_disabled_at_startup(str(p))                     # 舊介面：回所有模組資料夾，不是空集合
+        assert compat == frozenset(d.name for d in (BACKEND / "modules").iterdir() if (d / "module.json").is_file())
+    assert not os.path.exists(cache), "讀不到時不可以寫快取（會把「讀不到」存成「上次讀到」）"
+
+
+def test_retry_is_bounded(tmp_path, monkeypatch):
+    """重試有上限：READ_ATTEMPTS 次、每次 READ_TIMEOUT_SECONDS。"""
+    calls = []
+    real = sqlite3.connect
+    monkeypatch.setattr(ms.sqlite3, "connect", lambda *a, **k: (calls.append(k.get("timeout")) if "mode=ro" in str(a[0]) else None) or real(*a, **k))
+    monkeypatch.setattr(ms, "READ_TIMEOUT_SECONDS", 0.05)
+    p = tmp_path / "m.db"
+    _settings_db(p)
+    w = _locked(p)
+    try:
+        ms.read_disabled_list(str(p))
+    finally:
+        w.execute("ROLLBACK")
+        w.close()
+    assert calls == [0.05] * ms.READ_ATTEMPTS
+
+
+def test_loader_all_disabled_marks_every_module(tmp_path, monkeypatch, isolated_registry):
+    pkg = _synthetic_pkg(tmp_path, ["zz_p", "zz_q", "zz_nolic2"], pkg_name="zzsel_all")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    loader.load_all(str(pkg), "zzsel_all", license_check=lambda m: (m["key"] != "zz_nolic2", "未授權：測試"),
+                    disabled=loader.ALL, disabled_reason=ms.UNREADABLE_REASON)
+    st = {s["key"]: (s["state"], s["reason"]) for s in registry.module_states()}
+    assert st == {"zz_p": ("disabled", ms.UNREADABLE_REASON), "zz_q": ("disabled", ms.UNREADABLE_REASON),
+                  "zz_nolic2": ("unlicensed", "未授權：測試")}                         # 未授權仍優先
+    assert registry.loaded() == [] and "zzsel_all.zz_p" not in sys.modules
+
+
+def test_toggle_updates_the_cache(client, make_user, monkeypatch):
+    """停用後重啟、剛好主庫被鎖 ⇒ 要沿用的是**停用之後**的清單，不是上一次啟動時的。"""
+    import db
+    from core import paths
+    _synthetic_state(monkeypatch, "zz_tog")
+    h = _auth(client, make_user)
+    assert client.put("/api/system/modules/zz_tog", headers=h, json={"enabled": False}).status_code == 200
+    cache = paths.modules_disabled_cache(db.DB_PATH)
+    with open(cache, encoding="utf-8") as f:
+        assert json.load(f)["modules_disabled"] == ["zz_tog"]
+    client.put("/api/system/modules/zz_tog", headers=h, json={"enabled": True})
+    with open(cache, encoding="utf-8") as f:
+        assert json.load(f)["modules_disabled"] == []
+
+
+def test_admin_page_shows_disabled_list_source(client, make_user):
+    h = _auth(client, make_user)
+    snap = registry.snapshot()
+    try:
+        registry.set_disabled_list(ms.SOURCE_UNREADABLE, "停用清單讀取失敗（測試）")
+        d = client.get("/api/system/modules", headers=h).json()["disabledList"]
+        assert d == {"source": "unreadable", "message": "停用清單讀取失敗（測試）"}
+    finally:
+        registry.restore(snap)
+
+
+# ── C3 模組入口與授權變更（STATES-PLATFORM P-FE-02、P-SW-03）─────────────────────
+
+def test_availability_lists_package_modules_only(client, make_user, monkeypatch):
+    h = _auth(client, make_user, name="ms_av", role="viewer")
+    _synthetic_state(monkeypatch, "zz_ghost", "failed", name="幽靈", reason="機密的技術細節")
+    d = client.get("/api/system/modules/availability", headers=h).json()
+    assert d["zz_ghost"] == {"state": "failed", "label": "載入失敗", "name": "幽靈"}       # 不回原因
+    assert "機密的技術細節" not in json.dumps(d, ensure_ascii=False)
+    assert "no_such_module" not in d                                                     # 不在包內＝不列
+    old = client.get("/api/system/modules/unavailable-pages", headers=h)                # 相容端點仍在（1.x 不刪）
+    assert old.status_code == 200 and isinstance(old.json()["pages"], list)
+
+
+_MODULE_PAGES_RE = r"var MODULE_PAGES = \{(.*?)\n  \}"
+_MODULE_PAGE_ROW_RE = r"'([^']+\.html)':\s*\{\s*key:\s*'([^']+)'"
+
+
+def _declared_module_pages(js):
+    import re
+    block = re.search(_MODULE_PAGES_RE, js, re.S)
+    return dict(re.findall(_MODULE_PAGE_ROW_RE, block.group(1))) if block else None
+
+
+def _page_mismatches(declared, want):
+    return {p: k for p, k in want.items() if declared.get(p) != k}
+
+
+def test_every_module_page_is_declared_in_sidebar():
+    """sidebar.js 的 MODULE_PAGES 必須涵蓋每個 modules/*/module.json 的 pages，key 對得上——
+    否則那一頁的入口不會跟著模組狀態藏起來、直接打網址也不會有提示頁。不綁特定 L2 模組。"""
+    sb = (BACKEND.parent / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
+    declared = _declared_module_pages(sb)
+    assert declared, "正對照：解析不到 MODULE_PAGES 或任何一列（解析器壞了）"
+    want = {}
+    for mj in sorted((BACKEND / "modules").glob("*/module.json")):
+        man = json.loads(mj.read_text(encoding="utf-8"))
+        for pg in man.get("pages") or []:
+            want[pg["path"]] = man["key"]
+    assert not _page_mismatches(declared, want), "MODULE_PAGES 缺少或 key 不符：%s" % _page_mismatches(declared, want)
+
+
+def test_every_module_page_guard_negative_control():
+    """反向控制：同一個解析器與比對，少一列、key 不符都要報出來。"""
+    fake = "var MODULE_PAGES = {\n    'a.html': { key: 'a', name: 'A' },\n  }\n"
+    declared = _declared_module_pages(fake)
+    assert declared == {"a.html": "a"}
+    assert _page_mismatches(declared, {"a.html": "a", "b.html": "b"}) == {"b.html": "b"}
+    assert _page_mismatches(declared, {"a.html": "x"}) == {"a.html": "x"}
+
+
+@pytest.mark.parametrize("was,now_ok,expect_after,expect_changed", [
+    ("loaded", False, "unlicensed", True),        # 執行中授權沒了（到期、換金鑰）⇒ 重啟後不載入
+    ("unlicensed", True, "loaded", True),         # 授權補上了 ⇒ 重啟後載入
+    ("loaded", True, "loaded", False),            # 反向控制：沒變
+    ("unlicensed", False, "unlicensed", False),
+])
+def test_license_change_is_shown_until_restart(client, make_user, monkeypatch, was, now_ok, expect_after,
+                                               expect_changed):
+    h = _auth(client, make_user)
+    _synthetic_state(monkeypatch, "zz_lic", was)
+    monkeypatch.setattr(lic, "module_license_check",
+                        lambda man: (now_ok, "" if now_ok else "未授權：授權金鑰未包含此模組（zz_lic）"))
+    row = {m["key"]: m for m in client.get("/api/system/modules", headers=h).json()["modules"]}["zz_lic"]
+    assert (row["state"], row["afterRestart"], row["licenseChanged"]) == (was, expect_after, expect_changed)
+    assert ("重啟後生效" in row["licenseNote"]) is expect_changed
+    assert row["pendingRestart"] is (was != expect_after)
 
 
 # ── D 這個行程的 API ──────────────────────────────────────────────────────────
@@ -313,7 +534,7 @@ def test_page_and_sidebar_wiring():
     assert not re.search(r"fetch\([^)]*restart", page, re.I)                        # 不打任何重啟端點
     assert not re.search(r"<button[^>]*>[^<]*重(新)?啟", page)                        # 沒有重啟按鈕
     sb = (fe / "static" / "sidebar.js").read_text(encoding="utf-8")
-    assert "/api/system/modules/unavailable-pages" in sb and "module-settings.html" in sb
+    assert "/api/system/modules/availability" in sb and "module-settings.html" in sb
     assert sb.count("_applyUnavailablePages()") >= 2                                  # 選單重建後再套用
 
 
@@ -371,12 +592,12 @@ def _reenabled_settings(tmp_path, monkeypatch):
     c.close()
     monkeypatch.setattr(db, "DB_PATH", str(p))
     ms.set_enabled("zz_gate", False)
-    assert ms.read_disabled_at_startup(str(p)) == frozenset({"zz_gate"}), "前提：停用有寫進去"
+    assert ms.read_disabled_list(str(p)).keys == frozenset({"zz_gate"}), "前提：停用有寫進去"
     ms.set_enabled("zz_gate", True)
     return p
 
 
-@pytest.mark.parametrize("gate", ["disabled", "unlicensed", "both", "reenabled", "coreonly"])
+@pytest.mark.parametrize("gate", ["disabled", "unlicensed", "both", "reenabled", "coreonly", "unreadable"])
 def test_after_restart_the_module_is_gone_and_data_stays(gate, tmp_path, monkeypatch):
     from tests._subproc import utf8_env
     pkg, name = _gate_tree(tmp_path, gate)

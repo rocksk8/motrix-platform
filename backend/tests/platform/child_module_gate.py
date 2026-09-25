@@ -15,6 +15,7 @@
   both        ⇒ 兩者同時（優先順序：未授權 ＞ 停用）
   reenabled   ⇒ 停用後又開回來，再重啟（CORE-SPEC §9c「開回來後恢復」，B-4）
   coreonly    ⇒ modules 資料夾是空的（product/core-only.json）：三支 /api/system/modules* 照常回應
+  unreadable  ⇒ 停用清單讀不到、也沒有快取（STATES-PLATFORM P-SW-05）⇒ 所有模組暫不載入
 """
 import os
 import sys
@@ -38,20 +39,24 @@ import helpers.module_switches as _ms       # noqa: E402
 _loader.MODULES_DIR = PKG_DIR
 _loader.MODULES_PACKAGE = PKG
 
+# main 讀的是 read_disabled_list()（P-SW-05）；在 import main 之前換掉它的來源。
 if GATE in ("disabled", "both"):
-    _ms.read_disabled_at_startup = lambda db_path=None: frozenset({KEY})
+    _ms.read_disabled_list = lambda db_path=None: _ms.DisabledList(frozenset({KEY}), False, _ms.SOURCE_DB)
+if GATE == "unreadable":
+    _ms.read_disabled_list = lambda db_path=None: _ms.DisabledList(frozenset(), True, _ms.SOURCE_UNREADABLE,
+                                                                   "停用清單讀取失敗（子行程測試）")
 if GATE in ("unlicensed", "both"):
     _lic.LICENSE_GATE_ENABLED = True
     _lic.verify_license = lambda blob=None: {"valid": True, "reason": "ok", "modules": ["some_other_module"],
                                              "kind": "subscription"}
 if GATE == "reenabled":
     # 讀的是父行程用真的 set_enabled（停用 → 啟用）寫過的庫，走真的讀取路徑
-    _real_read = _ms.read_disabled_at_startup
+    _real_read = _ms.read_disabled_list
     _settings_db = os.environ["MOTRIX_TEST_CHILD_SETTINGS"]
-    _ms.read_disabled_at_startup = lambda db_path=None: _real_read(_settings_db)
+    _ms.read_disabled_list = lambda db_path=None: _real_read(_settings_db)
 
 EXPECT = {"disabled": "disabled", "unlicensed": "unlicensed", "both": "unlicensed",
-          "reenabled": "loaded", "coreonly": None}[GATE]
+          "reenabled": "loaded", "coreonly": None, "unreadable": "disabled"}[GATE]
 
 
 def _auth(client, make_user):
@@ -80,6 +85,7 @@ def test_gate(client, make_user):
         # 反向控制：一個模組都沒有 ⇒ 管理頁與選單 API 照常回應、內容是空的，切換不存在的模組 ⇒ 404
         assert listing.json()["modules"] == []
         assert unavailable.json()["pages"] == []
+        assert client.get("/api/system/modules/availability", headers=h).json() == {}
         assert client.put("/api/system/modules/" + KEY, headers=h, json={"enabled": False}).status_code == 404
         assert _loader.start_schedulers() == 0
         print("CHILD_GATE_OK", GATE)
@@ -111,6 +117,12 @@ def test_gate(client, make_user):
         assert st["reason"]
         assert PAGE in unavailable.json()["pages"]                     # 選單：入口列為不可用
         assert "%s.%s" % (PKG, KEY) not in sys.modules, "沒載入的模組不可以被 import"
+    avail = client.get("/api/system/modules/availability", headers=h).json()
+    assert avail[KEY]["state"] == EXPECT and "reason" not in avail[KEY]
+    if GATE == "unreadable":
+        assert st["reason"] == _ms.UNREADABLE_REASON
+        dl = listing.json()["disabledList"]
+        assert dl["source"] == "unreadable" and "讀取失敗" in dl["message"]
     if EXPECT == "unlicensed":
         assert "未授權" in st["reason"] and st["canToggle"] is False
 

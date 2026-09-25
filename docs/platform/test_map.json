@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 502,
+  "tests": 510,
   "unmapped": 9,
   "kinds": {
-   "api": 265,
-   "e2e": 122,
+   "api": 271,
+   "e2e": 123,
    "unit": 45,
-   "audit": 70
+   "audit": 71
   },
-  "routes": 515
+  "routes": 516
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -484,6 +484,35 @@
     ]
    }
   },
+  "backend/tests/platform/test_case_read_scope.py": {
+   "kind": "api",
+   "units": [
+    "dir:docs/platform/",
+    "file:docs/platform/case_read_scope.json",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/routers/quotations.py",
+     "docs/platform/",
+     "docs/platform/case_read_scope.json"
+    ]
+   },
+   "unresolved_api": [
+    "/api/gone",
+    "/api/x/{}",
+    "/api/y"
+   ]
+  },
   "backend/tests/platform/test_case_stage_connectors.py": {
    "kind": "api",
    "units": [
@@ -539,8 +568,9 @@
    }
   },
   "backend/tests/platform/test_core_loader.py": {
-   "kind": "unit",
+   "kind": "api",
    "units": [
+    "core:main",
     "file:backend/modules/tender_radar/module.json",
     "mod:tender_radar/api",
     "plat:__init__",
@@ -557,11 +587,26 @@
      "backend/core/source_tree.py"
     ],
     "path": [
+     "backend/main.py",
      "backend/modules/tender_radar/api.py",
      "backend/modules/tender_radar/module.json",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "unresolved_api": [
+    "/api/zza",
+    "/api/zzdoc/status",
+    "/api/zzdoc/{}",
+    "/api/zzfix/other",
+    "/api/zzfix/status",
+    "/api/zzfix/{}",
+    "/api/zzitem/{}",
+    "/api/zzok",
+    "/api/zzping",
+    "/api/zzx",
+    "/api/zzy/1",
+    "/api/zzy/{}"
+   ]
   },
   "backend/tests/platform/test_core_paths.py": {
    "kind": "unit",
@@ -583,24 +628,32 @@
    }
   },
   "backend/tests/platform/test_core_upgrade.py": {
-   "kind": "audit",
+   "kind": "api",
    "units": [
     "core:db",
     "core:main",
     "dir:tools/platform/",
     "file:backend/autostart.bat",
+    "file:backend/helpers/__init__.py",
     "file:backend/restart.bat",
     "file:tools/platform/upgrade.py",
+    "helper:build_info",
     "page:index.html",
     "plat:__init__",
     "plat:paths",
-    "plat:upgrade"
+    "plat:upgrade",
+    "router:auth"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/paths.py",
-     "backend/core/upgrade.py"
+     "backend/core/upgrade.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/build_info.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
     ],
     "page": [
      "frontend/index.html"
@@ -765,6 +818,10 @@
    "units": [
     "core:db",
     "helper:recognition",
+    "js:js/reports.js",
+    "js:js/voucher.js",
+    "page:pages/reports.html",
+    "page:pages/voucher.html",
     "plat:__init__",
     "plat:registry",
     "router:reports",
@@ -778,8 +835,25 @@
      "backend/helpers/recognition.py",
      "backend/routers/reports.py",
      "backend/routers/vouchers.py"
+    ],
+    "api": [
+     "backend/routers/reports.py",
+     "backend/routers/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/reports.js",
+     "frontend/js/voucher.js",
+     "frontend/pages/reports.html",
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/js/reports.js",
+     "frontend/js/voucher.js",
+     "frontend/pages/reports.html",
+     "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_email_send_policy.py": {
    "kind": "unit",
@@ -791,6 +865,25 @@
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/email_notify.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_integration_points_registered.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:docs/platform/INTEGRATION-POINTS.md",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "docs/platform/",
+     "docs/platform/INTEGRATION-POINTS.md"
     ]
    }
   },
@@ -827,6 +920,36 @@
     ],
     "path": [
      "backend/helpers/legal_params.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_modtest_full_results.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "path": [
+     "tools/platform/",
+     "tools/platform/modtest.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_modtest_rebase_check.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/conftest.py",
+    "file:backend/pytest.ini",
+    "file:tools/platform/modtest.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/conftest.py",
+     "backend/pytest.ini",
+     "tools/platform/",
+     "tools/platform/modtest.py"
     ]
    }
   },
@@ -919,6 +1042,7 @@
     "core:db",
     "dir:backend/modules/",
     "dir:frontend/pages/",
+    "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
     "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/_subproc.py",
@@ -930,6 +1054,7 @@
     "page:pages/module-settings.html",
     "plat:__init__",
     "plat:loader",
+    "plat:paths",
     "plat:registry",
     "router:system"
    ],
@@ -937,6 +1062,7 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/loader.py",
+     "backend/core/paths.py",
      "backend/core/registry.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
@@ -958,6 +1084,7 @@
      "backend/tests/test_e2e_module_settings_2026_09_25.py",
      "frontend/pages/",
      "frontend/pages/module-settings.html",
+     "frontend/static/",
      "frontend/static/sidebar.js"
     ]
    },
@@ -1121,9 +1248,12 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:docs/platform/",
     "dir:frontend/pages/",
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "helper:bonus_vouchers",
+    "file:docs/platform/modules.json",
+    "helper:bonus_pdf",
     "page:pages/bonus.html",
     "plat:__init__",
     "plat:registry",
@@ -1134,6 +1264,9 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/bonus_pdf.py",
+     "backend/routers/bonus.py",
      "backend/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
@@ -1143,8 +1276,8 @@
      "frontend/pages/bonus.html"
     ],
     "path": [
-     "backend/helpers/bonus_vouchers.py",
-     "backend/routers/bonus.py",
+     "docs/platform/",
+     "docs/platform/modules.json",
      "frontend/pages/",
      "frontend/pages/bonus.html"
     ]
@@ -1155,8 +1288,8 @@
    "units": [
     "core:db",
     "dir:frontend/pages/",
+    "file:backend/tests/platform/test_voucher_connectors.py",
     "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "helper:bonus_vouchers",
     "page:pages/bonus.html",
     "plat:__init__",
     "plat:registry",
@@ -1167,6 +1300,7 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/tests/platform/test_voucher_connectors.py",
      "backend/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
@@ -1176,8 +1310,6 @@
      "frontend/pages/bonus.html"
     ],
     "path": [
-     "backend/helpers/bonus_vouchers.py",
-     "backend/routers/bonus.py",
      "frontend/pages/",
      "frontend/pages/bonus.html"
     ]
@@ -2478,6 +2610,25 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_case_approver_single_rule_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "helper:quotations",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/quotations.py",
+     "backend/routers/quotations.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_case_attachments_scope_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -3760,6 +3911,22 @@
      "backend/routers/auth.py"
     ]
    }
+  },
+  "backend/tests/test_dev_case_row_access_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "router:dev_crm"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/dev_crm.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dev_case_soft_delete_guard_2026_08_28.py": {
    "kind": "api",
@@ -5722,12 +5889,16 @@
     "file:backend/tests/_e2e_login.py",
     "page:index.html",
     "page:pages/case-management.html",
-    "page:pages/login.html"
+    "page:pages/login.html",
+    "router:auth"
    ],
    "evidence": {
     "import": [
      "backend/conftest.py",
      "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
     ],
     "page": [
      "frontend/index.html",
@@ -5739,8 +5910,7 @@
      "frontend/pages/case-management.html",
      "frontend/pages/login.html"
     ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_e2e_system_settings_ui_2026_09_11.py": {
    "kind": "e2e",
@@ -7031,6 +7201,22 @@
      "frontend/static/sidebar.js"
     ]
    }
+  },
+  "backend/tests/test_last_received_bank_account_access_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_legal_params_r1_2026_09_25.py": {
    "kind": "api",
@@ -9471,6 +9657,47 @@
     "path": [
      "backend/db.py",
      "backend/main.py"
+    ]
+   }
+  },
+  "backend/tests/test_states_platform_entries_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/tender_radar/module.json",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+    "helper:geo",
+    "page:pages/map.html",
+    "page:pages/module-settings.html",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py"
+    ],
+    "page": [
+     "frontend/pages/map.html",
+     "frontend/pages/module-settings.html",
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "backend/modules/tender_radar/",
+     "backend/modules/tender_radar/module.json"
     ]
    }
   },

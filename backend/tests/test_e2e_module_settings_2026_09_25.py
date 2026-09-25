@@ -128,12 +128,44 @@ def test_core_only_page_and_sidebar_still_work(live_server, make_user, e2e_brows
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         inject_login(page, live_server, u[0], u[1])
-        with page.expect_response(lambda r: "/api/system/modules/unavailable-pages" in r.url) as resp:
+        with page.expect_response(lambda r: "/api/system/modules/availability" in r.url) as resp:
             page.goto(f"{live_server}/pages/module-settings.html")
-        assert resp.value.status == 200 and resp.value.json() == {"pages": []}
+        assert resp.value.status == 200 and resp.value.json() == {}                   # 側欄改用 availability
         page.locator("text=這個安裝包裡沒有可選配的模組").wait_for(state="visible", timeout=15000)
         page.wait_for_load_state("networkidle")
         assert page.locator("#app-mainnav a[href$='module-settings.html']").count() >= 1, "選單要照常建出來"
         assert not errors, errors
+    finally:
+        registry.restore(snap)
+
+
+@pytest.mark.e2e
+def test_page_shows_unreadable_disabled_list_and_license_change(live_server, make_user, e2e_browser, monkeypatch):
+    """STATES-PLATFORM P-SW-05／P-SW-03：頂端標「停用清單讀取失敗」、該列標「授權變更於重啟後生效」。
+    正對照：正常啟動、授權沒變 ⇒ 兩者都不出現。"""
+    from core import registry
+    from helpers import licensing as lic
+    # 合成模組列（不綁真實 L2 模組；AUDIT-X-9c A-2）
+    monkeypatch.setitem(registry._STATES, "zz_e2e", {"key": "zz_e2e", "name": "合成模組", "version": "0.0.1",
+                                                     "license_key": "zz_e2e", "pages": [], "state": "loaded",
+                                                     "reason": ""})
+    page = _open(e2e_browser, live_server, make_user, "mse_sa4", "module-settings.html")
+    page.locator("[data-testid='ms-state-zz_e2e']").wait_for(timeout=15000)
+    assert not page.locator("[data-testid='ms-disabled-list']").is_visible()
+    assert not page.locator("[data-testid='ms-license-zz_e2e']").is_visible()
+
+    snap = registry.snapshot()
+    try:
+        registry.set_disabled_list("unreadable", "停用清單讀取失敗（database is locked），也沒有上次的紀錄")
+        monkeypatch.setattr(lic, "module_license_check", lambda man: (False, "未授權：授權金鑰未包含此模組"))
+        page.reload()
+        banner = page.locator("[data-testid='ms-disabled-list']")
+        banner.wait_for(state="visible", timeout=15000)
+        assert banner.get_attribute("data-source") == "unreadable"
+        assert "模組暫不載入" in banner.inner_text() and "database is locked" in banner.inner_text()
+        note = page.locator("[data-testid='ms-license-zz_e2e']")
+        note.wait_for(state="visible", timeout=10000)
+        assert "授權變更於重啟後生效" in note.inner_text()
+        assert page.locator("[data-testid='ms-pending-zz_e2e']").is_visible()
     finally:
         registry.restore(snap)

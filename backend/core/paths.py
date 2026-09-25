@@ -95,6 +95,14 @@ AUTOSTART_BAT = backend("autostart.bat")
 FRONTEND_DIR = root("frontend")
 
 
+def modules_disabled_cache(db_path: str) -> str:
+    """停用清單的「上一次成功讀到」快取（STATES-PLATFORM P-SW-05）：主庫旁的 `<主庫>.modules_disabled.json`。
+
+    F4（可重建）：不上雲、不進每日匯出、不進部署包（.gitignore）。放在主庫旁而不是固定路徑：
+    測試夾具換掉 `db.DB_PATH` 時，快取跟著隔離，不會寫到真實目錄。"""
+    return str(db_path) + ".modules_disabled.json"
+
+
 # ── 主庫不存在時拒絕啟動 ───────────────────────────────────────────────────
 #: 全新安裝旗標。只在「第一次啟動、確定要建新庫」時設，建好後移除。
 NEW_DB_FLAG = "MOTRIX_CREATE_NEW_DB"

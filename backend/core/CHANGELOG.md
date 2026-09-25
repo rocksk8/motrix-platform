@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.9 — 2026-09-26
+> A（STATES-PLATFORM §9 修正：路由衝突、停用清單讀不到、模組入口與提示頁、地圖、授權變更提示）。
+- L0（新增）：`core.loader.mount_modules(app)`——在所有 L1 router 之後掛模組路由；模組任一條路由會被既有路由（L1 或先掛的模組）完整接住 ⇒ 該模組整個不掛、記 failed＋原因（P-LD-07）；以 starlette `route.matches()` 探測，FastAPI 新舊版（0.133／0.141）都成立；router 讀不出路徑 ⇒ 不掛；`main.py` 的模組排程與啟動提示移到它之後
+- L0（新增）：`core.registry.unload(key, reason)`、`set_disabled_list()`／`disabled_list()`（snapshot／restore 一併涵蓋）；`core.loader.ALL`、`DISABLED_REASON`、`load_all(…, disabled_reason=…)`（全部停用＋原因）
+- L1（新增）：`core.paths.modules_disabled_cache(db_path)`（主庫旁 `<db>.modules_disabled.json`，F4）；`helpers.module_switches.read_disabled_list()` → `DisabledList(keys, all_disabled, source, message)`：讀不到 ⇒ 有上限重試 ⇒ 沿用快取 ⇒ 沒有快取就全部停用（P-SW-05）；內容壞掉同樣處理（P-SW-07）；`set_enabled` 同步更新快取；`read_disabled_at_startup()` 保留（讀不到且沒有快取時改回所有模組資料夾名，不再回空集合）
+- L1（新增）：API `/api/system/modules/availability`（登入即可，`{key: {state, label, name}}`，不回原因）側欄改用它；舊的 `/api/system/modules/unavailable-pages` 保留相容（同一主版號內不刪，列不出不在安裝包的模組，新程式不要用）；`/api/system/modules` 加 `disabledList`、各列 `licenseChanged`／`licenseNote`（P-SW-03）
+- L1（修改行為）：地圖在標案雷達未載入時不列標案，`sources` 標 `module_not_loaded`（P-DT-01）
+
 ## 1.8 — 2026-09-26
 > rebase 時 1.7 已被 R 使用 ⇒ 1.8。稽核 X-9b O-9（使用者表單裁示）與 STATES-DATA-OPS S-CU12。介面不變，只有行為。
 - L1（修改行為，介面不變）：`archive._F2_FIELDS` 加 `協力廠商`（`vendor_contractors.data_json` 的戶名／帳號／存摺影像），`承攬付款憑據` 另加 `snapshot_json` 最上層同三鍵——協力廠商（承攬商本身）的帳戶一律當個資：一般每日／月 JSON 拿掉，完整列只進個資資料夾（O-9）

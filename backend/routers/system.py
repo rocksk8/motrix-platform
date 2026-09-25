@@ -711,18 +711,42 @@ def get_runtime_switches(authorization: str = Header(None)):
 _MODULE_STATE_LABELS = {"loaded": "啟用", "disabled": "停用", "unlicensed": "未授權", "failed": "載入失敗"}
 
 
+#: STATES-PLATFORM P-SW-03：授權在執行中變了（到期、換金鑰）——模組層級只在啟動時判斷，這裡標出來。
+LICENSE_CHANGED_NOTE = "授權變更於重啟後生效"
+
+
+def _license_now(st):
+    """現在（這個請求當下）重新判一次模組授權；回 (ok, reason)。讀金鑰失敗 ⇒ None（不猜）。"""
+    from helpers import licensing as _lic
+    try:
+        return _lic.module_license_check({"key": st["key"], "license_key": st.get("license_key")})
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
 def _module_rows():
     from core import registry as _registry
     from helpers import module_switches as _ms
     configured = set(_ms.configured_disabled())
     rows = []
     for st in _registry.module_states():
+        lic_now = _license_now(st) if st["state"] != "failed" else None
+        licensed_now = None if lic_now is None else bool(lic_now[0])
         after = st["state"]
-        if st["state"] in ("loaded", "disabled"):          # 未授權／載入失敗不受管理者開關影響
+        if st["state"] == "unlicensed" and licensed_now:
+            after = "loaded"                                  # 授權補上了：重啟後依管理者開關
+        if st["state"] in ("loaded", "disabled") or after == "loaded":
             after = "disabled" if st["key"] in configured else "loaded"
+        if licensed_now is False:
+            after = "unlicensed"                              # 授權沒了：重啟後不載入
+        license_changed = licensed_now is not None and (
+            licensed_now != (st["state"] != "unlicensed"))
         rows.append({**st, "stateLabel": _MODULE_STATE_LABELS[st["state"]],
                      "afterRestart": after, "afterRestartLabel": _MODULE_STATE_LABELS[after],
                      "pendingRestart": after != st["state"],
+                     "licenseChanged": license_changed,
+                     "licenseNote": ((LICENSE_CHANGED_NOTE + "：" + (lic_now[1] or "目前授權包含此模組"))
+                                     if license_changed else ""),
                      "canToggle": st["state"] in ("loaded", "disabled")})
     return rows
 
@@ -731,7 +755,10 @@ def _module_rows():
 def list_system_modules(authorization: str = Header(None)):
     """模組管理頁：每個模組的目前狀態、原因、重啟後狀態。限 superadmin。"""
     _require_user(authorization, require_superadmin=True, module='settings')
-    return {"pid": os.getpid(), "startedAt": _PROCESS_STARTED_AT, "modules": _module_rows()}
+    from core import registry as _registry
+    return {"pid": os.getpid(), "startedAt": _PROCESS_STARTED_AT, "modules": _module_rows(),
+            # P-SW-05：這次啟動的停用清單從哪裡來（db／no_db／cache／unreadable）＋給管理者看的說明
+            "disabledList": _registry.disabled_list() or {"source": "", "message": ""}}
 
 
 class _ModuleToggleIn(BaseModel):
@@ -758,10 +785,22 @@ def toggle_system_module(key: str, body: _ModuleToggleIn, authorization: str = H
     return {"ok": True, "module": row, "restartRequired": row["pendingRestart"]}
 
 
+@router.get("/api/system/modules/availability")
+def module_availability(authorization: str = Header(None)):
+    """選單與頁面提示用（任何登入者）：`{key: {"state", "label", "name"}}`，這次啟動的模組狀態。
+    不在這份清單裡的 key ＝不在這個安裝包（STATES-PLATFORM P-FE-02）。**不回原因**——原因只給
+    superadmin 的 `/api/system/modules`。取代 2026-09-25 的 `/unavailable-pages`（只列未載入的頁面，
+    不在安裝包的模組因此永遠不會被藏）。"""
+    _require_user(authorization)
+    from core import registry as _registry
+    return {st["key"]: {"state": st["state"], "label": _MODULE_STATE_LABELS[st["state"]], "name": st["name"]}
+            for st in _registry.module_states()}
+
+
 @router.get("/api/system/modules/unavailable-pages")
 def unavailable_module_pages(authorization: str = Header(None)):
-    """選單用（任何登入者）：這次啟動沒有載入的模組的頁面——側欄把這些入口藏起來。
-    只回頁面檔名，不回原因（原因只給 superadmin 的模組管理頁）。"""
+    """⚠ 相容用（CORE 1.2 的端點；同一主版號內不刪）：這次啟動沒有載入的模組的頁面。
+    側欄已改用 `/availability`——這份清單列不出「不在安裝包」的模組（P-FE-02），新程式不要用。"""
     _require_user(authorization)
     from core import registry as _registry
     return {"pages": sorted({p for st in _registry.module_states() if st["state"] != "loaded"

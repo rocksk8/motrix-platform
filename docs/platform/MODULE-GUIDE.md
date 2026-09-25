@@ -140,6 +140,10 @@ modules/<key>/
 - `pages`：本模組的頁面。模組這次沒有載入（未授權／停用／載入失敗）⇒ 側欄藏起這些入口。守門：`tests/platform/test_module_selection.py`、`tests/test_e2e_module_settings_2026_09_25.py`
 - 優先順序：不在包內＞未授權＞管理者停用；未授權與停用都**不 import** 模組（路由不掛、排程不跑、提供者不登記），資料不動。管理者啟停**重啟後生效**。守門：同上（含子行程真的重啟）
 - 因此模組**不可以**在 import 以外的地方偷偷做事（例如別的模組直接 import 它）——不 import 就要等於不存在。
+- **路由不可以與 L1 或其他模組重複**（STATES-PLATFORM P-LD-07）：模組路由在所有 L1 router 之後由 `core.loader.mount_modules(app)` 掛上；同方法同路徑（路徑參數視為相同）⇒ 後到的模組整個不掛、狀態「載入失敗」＋原因。模組的排程與啟動提示只對掛上的模組執行。守門：`tests/platform/test_core_loader.py::test_mount_modules_*`、`::test_main_mounts_modules_after_every_l1_router`
+- **頁面要登記在 `frontend/static/sidebar.js` 的 `MODULE_PAGES`**（頁面 → 模組 key）：入口只在模組「已載入」時顯示（不在安裝包＝不顯示）；直接打網址進入未載入模組的頁面 ⇒ 提示頁（停用／未授權／載入失敗／未安裝），不是 404；`record-link.js` 不產生指向未載入模組的連結。守門：`tests/platform/test_module_selection.py::test_every_module_page_is_declared_in_sidebar`、`tests/test_states_platform_entries_2026_09_25.py`
+- **停用清單讀不到不等於沒有停用**（P-SW-05）：主庫被鎖或內容壞掉 ⇒ 沿用上次成功讀到的清單（主庫旁 `<db>.modules_disabled.json`，F4）；沒有快取 ⇒ 所有模組暫不載入（寧可少開，不可多開），模組管理頁頂端標示。守門：`tests/platform/test_module_selection.py::test_locked_db_uses_last_good_list_then_all_disabled`、子行程 `test_after_restart_…[unreadable]`
+- L1 若直接讀某個模組的表（過渡期，例：地圖讀 `tenders`），必須先看 `core.registry.is_loaded(<key>)`，未載入 ⇒ 不列並說明原因。⚠ 未守門（ROADMAP 階段 G：G7；地圖這一處有 `tests/test_states_platform_entries_2026_09_25.py`，但沒有掃描「L1 讀 L2 表而沒看載入狀態」的通用守門）
 
 ## 6. 更新紀錄與版本（各模組獨立）
 

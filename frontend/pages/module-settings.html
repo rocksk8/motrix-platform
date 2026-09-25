@@ -65,6 +65,13 @@
       <b x-text="licenseNotes.join('、')"></b>（開發模式）：所有模組一律可載入，沒有檢查授權金鑰。
     </div>
 
+    <!-- STATES-PLATFORM P-SW-05：這次啟動讀不到停用清單（沿用快取／全部暫不載入）⇒ 頂端明說 -->
+    <div class="ms-note ms-note--warn" x-show="disabledList.message" data-testid="ms-disabled-list"
+         :data-source="disabledList.source">
+      <b x-text="disabledList.source === 'unreadable' ? '停用清單讀取失敗，模組暫不載入。' : '停用清單讀取失敗，本次啟動沿用上次的清單。'"></b>
+      <span x-text="disabledList.message"></span>
+    </div>
+
     <div class="ms-msg" :class="{ 'ms-msg--err': isError }" x-show="msg" x-text="msg" data-testid="ms-msg"></div>
 
     <table class="ms-table" data-testid="ms-table">
@@ -80,6 +87,7 @@
               <span class="ms-state" :class="'ms-state--' + m.state" x-text="m.stateLabel" :data-testid="'ms-state-' + m.key"></span>
               <div class="ms-reason" x-show="m.reason" x-text="m.reason" :data-testid="'ms-reason-' + m.key"></div>
               <div class="ms-mnote" x-show="m.note" x-text="m.note" :data-testid="'ms-mnote-' + m.key"></div>
+              <div class="ms-pending" x-show="m.licenseChanged" x-text="m.licenseNote" :data-testid="'ms-license-' + m.key"></div>
             </td>
             <td>
               <span x-text="m.afterRestartLabel"></span>
@@ -108,6 +116,7 @@
       return {
         modules: [],
         licenseNotes: [],
+        disabledList: { source: '', message: '' },
         startedAt: '',
         loaded: false,
         busy: false,
@@ -139,6 +148,7 @@
           const d = await r.json()
           this.modules = d.modules || []
           this.licenseNotes = [...new Set(this.modules.map(m => m.note).filter(Boolean))]
+          this.disabledList = d.disabledList || { source: '', message: '' }
           this.startedAt = d.startedAt || ''
           this.loaded = true
         },
