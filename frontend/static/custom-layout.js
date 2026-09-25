@@ -84,11 +84,114 @@
     return a
   }
 
+  // ── 編輯操作（建構器 ③ 用；P9 排版器共用）：一律回傳新的 ui 物件，不改傳入的 ──
+
+  function cloneUi(def) {
+    var ui = JSON.parse(JSON.stringify(uiOf(def)))
+    ui.form = ui.form || {}
+    ui.form.groups = Array.isArray(ui.form.groups) ? ui.form.groups : []
+    ui.list = ui.list || {}
+    ui.list.columns = Array.isArray(ui.list.columns) ? ui.list.columns : []
+    return ui
+  }
+
+  /** 新增一個分組（標題可空）。 */
+  function addGroup(def, title) {
+    var ui = cloneUi(def)
+    ui.form.groups.push({ title: title || '', fields: [] })
+    return ui
+  }
+
+  /** 刪除分組：組內欄位回到「未分組」。 */
+  function removeGroup(def, gi) {
+    var ui = cloneUi(def)
+    ui.form.groups.splice(gi, 1)
+    return ui
+  }
+
+  function renameGroup(def, gi, title) {
+    var ui = cloneUi(def)
+    if (ui.form.groups[gi]) ui.form.groups[gi].title = title
+    return ui
+  }
+
+  function moveGroup(def, gi, dir) {
+    var ui = cloneUi(def)
+    ui.form.groups = move(ui.form.groups, gi, dir)
+    return ui
+  }
+
+  /** 把欄位放進分組 gi（先從其他組拿掉）；gi＝-1 ⇒ 回到未分組。 */
+  function assignField(def, fieldKey, gi) {
+    var ui = cloneUi(def)
+    ui.form.groups.forEach(function (g) { g.fields = (g.fields || []).filter(function (k) { return k !== fieldKey }) })
+    if (gi >= 0 && ui.form.groups[gi]) ui.form.groups[gi].fields.push(fieldKey)
+    return ui
+  }
+
+  function moveFieldInGroup(def, gi, index, dir) {
+    var ui = cloneUi(def)
+    if (ui.form.groups[gi]) ui.form.groups[gi].fields = move(ui.form.groups[gi].fields || [], index, dir)
+    return ui
+  }
+
+  /** 沒有被分到任何組的欄位 key（依欄位順序）。 */
+  function ungroupedFields(def) {
+    var used = {}
+    ;(((uiOf(def).form || {}).groups) || []).forEach(function (g) { (g.fields || []).forEach(function (k) { used[k] = true }) })
+    return fieldsOf(def).filter(function (f) { return !used[f.key] }).map(function (f) { return f.key })
+  }
+
+  /** 列表可以選的欄：系統欄＋所有欄位。 */
+  function availableColumns(def) {
+    return SYSTEM_COLUMNS.map(function (c) { return { key: c.key, label: c.label, system: true } })
+      .concat(fieldsOf(def).map(function (f) { return { key: f.key, label: f.label || f.key, system: false } }))
+  }
+
+  /** 列表欄開／關。第一次設定時以目前的預設欄為起點（避免一勾就只剩一欄）。 */
+  function toggleColumn(def, colKey) {
+    var ui = cloneUi(def)
+    if (!ui.list.columns.length) ui.list.columns = listColumns(def).map(function (c) { return c.key })
+    var i = ui.list.columns.indexOf(colKey)
+    if (i >= 0) ui.list.columns.splice(i, 1)
+    else ui.list.columns.push(colKey)
+    return ui
+  }
+
+  function moveColumn(def, index, dir) {
+    var ui = cloneUi(def)
+    if (!ui.list.columns.length) ui.list.columns = listColumns(def).map(function (c) { return c.key })
+    ui.list.columns = move(ui.list.columns, index, dir)
+    return ui
+  }
+
+  /** 欄位改名或刪除之後，把版面裡的舊 key 換掉或拿掉（newKey 空 ⇒ 刪除）。 */
+  function renameFieldKey(def, oldKey, newKey) {
+    var ui = cloneUi(def)
+    ui.form.groups.forEach(function (g) {
+      g.fields = (g.fields || []).map(function (k) { return k === oldKey ? newKey : k }).filter(function (k) { return k })
+    })
+    ui.list.columns = ui.list.columns.map(function (k) { return k === oldKey ? newKey : k }).filter(function (k) { return k })
+    return ui
+  }
+
   window.MotrixCustomLayout = {
     SYSTEM_COLUMNS: SYSTEM_COLUMNS,
     formSections: formSections,
     listColumns: listColumns,
     cellValue: cellValue,
     move: move,
+    // 編輯操作
+    addGroup: addGroup,
+    removeGroup: removeGroup,
+    renameGroup: renameGroup,
+    moveGroup: moveGroup,
+    assignField: assignField,
+    moveFieldInGroup: moveFieldInGroup,
+    ungroupedFields: ungroupedFields,
+    availableColumns: availableColumns,
+    toggleColumn: toggleColumn,
+    moveColumn: moveColumn,
+    renameFieldKey: renameFieldKey,
   }
 })()
