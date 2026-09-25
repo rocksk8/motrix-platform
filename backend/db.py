@@ -371,6 +371,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "env_guide_recommendations", "gateway_categories", "gateway_fit",
     "gateway_products", "gateway_scenarios", "geocode_cache",
     "geocode_usage", "invoice_vouchers", "item_reads", "login_rate_limit",
+    "ui_definitions",           # 2026-09-25 定義文件庫（core 模組 migration v1）；demo 的定義一併清空
     "module_schema_versions",   # 2026-09-25 模組 migration 版本表；比照 schema_version（清掉 ⇒ init_db 重跑）
     "module_versions", "monitor_categories", "monitor_fit",
     "monitor_products", "monitor_scenarios", "netarch_families",
@@ -747,6 +748,9 @@ def init_db(path: str = None):
         conn.close()                    # 拒絕＝不留連線（Windows 上開著的連線會鎖住庫檔）
         raise
     _ensure_module_schema_versions(conn)
+    # 每模組 migration（CORE-SPEC §6）：V9 基準之後的新表一律在這裡建（core 的 ui_definitions 等）
+    from core import migrations as _module_migrations
+    _module_migrations.run_all(conn)
     _seed_setting(conn, "edge_path", "")
     # `WL7` §5⓪①：全新安裝的出廠值改成空字串，不是我們的公司資料。
     # ⚠️ `_seed_setting` 是 `DO NOTHING`（key 已存在就不覆寫），

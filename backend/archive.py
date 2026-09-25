@@ -1975,6 +1975,8 @@ def _daily_backup_tables() -> dict:
         "承攬付款憑據":     "SELECT * FROM contractor_payment_vouchers ORDER BY id",
         "承攬派工":         "SELECT * FROM contractor_dispatches ORDER BY id",
         "承攬人員":         "SELECT * FROM contractors ORDER BY id",
+        # 2026-09-25 定義文件庫（版面／輸出版型覆寫／自訂欄位／自訂模組；T1）
+        "定義文件":         "SELECT * FROM ui_definitions ORDER BY id",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
         # ── 業務開發 ──
