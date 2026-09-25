@@ -396,6 +396,8 @@ def get_record(conn, module_key, record_no) -> dict:
     rec = _row(conn, module_key, record_no)
     d = _load_def(conn, module_key, rec["def_version"])
     rec["view"] = _view(d["body"], rec, rec["data"])
+    # 單據凍結在建立時的定義版本 ⇒ 畫面的標籤、欄位與按鈕要用這一版，不是最新版
+    rec["definition"] = d["body"]
     rec["log"] = [dict(r) for r in conn.execute("SELECT action, from_state, to_state, by_user, note, at FROM custom_record_log "
                                                  "WHERE record_id=? ORDER BY id", (rec["id"],)).fetchall()]
     return rec
@@ -659,6 +661,19 @@ def default_template(body) -> dict:
                        {"type": "approval_sign"}, {"type": "identity_footer"}]}
 
 
+def _permission_keys() -> list:
+    """給權限目錄（helpers.module_registry）：已發布的自訂模組各一個權限 key。定義表還沒建 ⇒ 沒有。"""
+    import sqlite3
+    from db import get_db
+    conn = get_db()
+    try:
+        return [(m["permission"], m["name"] or m["key"], "自訂模組") for m in published_modules(conn)]
+    except sqlite3.OperationalError:
+        return []
+    finally:
+        conn.close()
+
+
 def declare_events():
     from core import events
     events.declare(EVENT_TRANSITIONED, "L1:custom_modules", 1, ("module", "recordNo", "from", "to", "action", "by"),
@@ -666,3 +681,6 @@ def declare_events():
 
 
 declare_events()
+
+from helpers import module_registry as _module_registry  # noqa: E402
+_module_registry.register_key_source(_permission_keys)

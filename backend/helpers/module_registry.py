@@ -137,6 +137,37 @@ BADGE_EXCLUDE = {
 
 MODULE_KEYS = frozenset(k for k, _label, _group in MODULES)
 
+#: 動態權限 key 的來源（P8：已發布的自訂模組各有一個權限 key，預設 `custom.<key>`）。
+#: 每個來源是 `fn() -> [(key, 權限畫面的名稱, 分組)]`；由提供者在匯入時登記，本檔不認得任何提供者。
+_KEY_SOURCES = []
+
+
+def register_key_source(fn) -> None:
+    if fn not in _KEY_SOURCES:
+        _KEY_SOURCES.append(fn)
+
+
+def dynamic_modules() -> list:
+    """所有動態來源目前的權限 key。某個來源失敗 ⇒ 略過它並記 WARNING（它的 key 會被當成不認得 ⇒ 擋下新授權，不會放行）。"""
+    import logging
+    out, seen = [], set(MODULE_KEYS)
+    for fn in list(_KEY_SOURCES):
+        try:
+            rows = fn() or []
+        except Exception as e:                                  # noqa: BLE001
+            logging.getLogger(__name__).warning("權限 key 來源 %s 失敗：%s", getattr(fn, "__name__", fn), e)
+            continue
+        for k, label, group in rows:
+            if k not in seen:
+                seen.add(k)
+                out.append((k, label, group))
+    return out
+
+
+def known_keys() -> frozenset:
+    """固定目錄＋動態來源（已發布的自訂模組）。"""
+    return MODULE_KEYS | frozenset(k for k, _l, _g in dynamic_modules())
+
 
 def refuse_unknown_new_keys(new_modules, existing_modules=()) -> None:
     """B7 第三階段（使用者：「要，只驗這次新增的」）：這次**新加入**的 key 必須在目錄內。
@@ -147,7 +178,8 @@ def refuse_unknown_new_keys(new_modules, existing_modules=()) -> None:
     """
     from fastapi import HTTPException
     keep = set(existing_modules or ())
-    bad = sorted({k for k in (new_modules or ()) if k not in MODULE_KEYS and k not in keep})
+    known = known_keys()
+    bad = sorted({k for k in (new_modules or ()) if k not in known and k not in keep})
     if bad:
         raise HTTPException(400, "不認得的權限模組：%s（請重新整理頁面後再試）" % "、".join(bad))
 
@@ -155,6 +187,6 @@ def refuse_unknown_new_keys(new_modules, existing_modules=()) -> None:
 def catalog() -> dict:
     """給權限畫面（users.html）用：目錄＋角色樣板。"""
     return {
-        "modules": [{"key": k, "label": label, "group": group} for k, label, group in MODULES],
+        "modules": [{"key": k, "label": label, "group": group} for k, label, group in MODULES + tuple(dynamic_modules())],
         "roleTemplates": {role: list(keys) for role, keys in ROLE_TEMPLATES.items()},
     }

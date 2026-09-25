@@ -378,3 +378,68 @@ def test_custom_module_tables_are_backed_up_and_cleared_for_demo(client):
     for t in ("custom_records", "custom_record_log", "custom_record_counters"):
         assert t in names and t in db.DEMO_CLEARED_TABLES
     assert "custom_record_values" in db.DEMO_CLEARED_TABLES          # 索引可由 data_json 重建，不另外匯出
+
+
+# ── 權限：在網站上授權自訂模組（D4「不改程式碼」；主持前端缺口 #1）──────────────
+
+def _user_id(username):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_custom_module_permission_can_be_granted_on_the_users_page(client, make_user):
+    """發布前 `custom.equipment_loan` 是不認得的 key（400）；發布後權限目錄列得出來、使用者管理頁授權得進去，
+    被授權的人就能用那個模組——全程走 API，不寫 DB。"""
+    boss = _login(client, make_user, "cm_grant_super", role="superadmin")
+    staff = _login(client, make_user, "cm_grant_staff", role="user", modules=[])
+    uid = _user_id("cm_grant_staff")
+    r = client.put("/api/users/%d" % uid, headers=boss, json={"modules": ["custom.equipment_loan"]})
+    assert r.status_code == 400 and "custom.equipment_loan" in r.json()["detail"]
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=boss, json={"body": loan_definition()})
+    client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=boss, json={})
+    cat = client.get("/api/modules/catalog", headers=boss).json()["modules"]
+    assert {"key": "custom.equipment_loan", "label": "測試用設備借用單", "group": "自訂模組"} in cat
+    assert client.get("/api/custom/%s/records" % KEY, headers=staff).status_code == 403
+    assert client.put("/api/users/%d" % uid, headers=boss, json={"modules": ["custom.equipment_loan"]}).status_code == 200
+    assert client.get("/api/custom/%s/records" % KEY, headers=staff).status_code == 200
+    assert [m["key"] for m in client.get("/api/custom-modules", headers=staff).json()] == [KEY]
+
+
+def test_custom_module_permission_source_failure_refuses_new_grants(client, make_user, monkeypatch):
+    """動態來源壞掉 ⇒ 那些 key 當成不認得、擋下新授權（不放行）；固定目錄照常。"""
+    from helpers import module_registry as MR
+    boss = _login(client, make_user, "cm_grant_super2", role="superadmin")
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=boss, json={"body": loan_definition()})
+    client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=boss, json={})
+
+    def _boom():
+        raise RuntimeError("定義表讀不到")
+    monkeypatch.setattr(MR, "_KEY_SOURCES", [_boom])
+    make_user("cm_grant_staff2", "Custom-Pass-123", role="user", modules=[])
+    r = client.put("/api/users/%d" % _user_id("cm_grant_staff2"), headers=boss, json={"modules": ["custom.equipment_loan"]})
+    assert r.status_code == 400
+    keys = [m["key"] for m in client.get("/api/modules/catalog", headers=boss).json()["modules"]]
+    assert "dashboard" in keys and "custom.equipment_loan" not in keys
+
+
+def test_custom_module_old_record_comes_with_its_own_definition(loan):
+    """主持前端缺口 #2：看舊單據時，標籤與按鈕要用那一版的定義（讀取單據時帶回 `definition`；meta 支援 `?version=`）。"""
+    client, h = loan
+    old = _new(client, h)
+    body = loan_definition()
+    body["fields"][0]["label"] = "設備名稱（第 2 版）"
+    body["workflow"]["transitions"][0]["label"] = "送出審核"
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h["super"], json={"body": body})
+    client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h["super"], json={})
+    got = client.get("/api/custom/%s/records/%s" % (KEY, old["record_no"]), headers=h["req"]).json()
+    assert got["def_version"] == 1
+    assert got["definition"]["fields"][0]["label"] == "設備"
+    assert got["definition"]["workflow"]["transitions"][0]["label"] == "送審"
+    assert client.get("/api/custom/%s/meta" % KEY, headers=h["req"]).json()["definition"]["fields"][0]["label"] == "設備名稱（第 2 版）"
+    m1 = client.get("/api/custom/%s/meta" % KEY, headers=h["req"], params={"version": 1}).json()
+    assert m1["version"] == 1 and m1["definition"]["fields"][0]["label"] == "設備"
+    assert client.get("/api/custom/%s/meta" % KEY, headers=h["req"], params={"version": 9}).status_code == 404

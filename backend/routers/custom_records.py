@@ -65,12 +65,17 @@ def list_custom_modules(authorization: str = Header(None)):
 
 
 @router.get("/api/custom/{key}/meta")
-def custom_module_meta(key: str, authorization: str = Header(None)):
-    """表單與列表要的定義（最新發布版）。"""
+def custom_module_meta(key: str, version: int = Query(None), authorization: str = Header(None)):
+    """表單與列表要的定義：預設最新發布版；`?version=N` ⇒ 那一版（看舊單據時用；單據讀取本身也帶 `definition`）。"""
     u = _require_user(authorization)
     conn = get_db()
     try:
         d = _can_use(conn, u, key)
+        if version is not None and version != d["version"]:
+            try:
+                d = CM._load_def(conn, key, version)
+            except CM.CustomModuleError as e:
+                return _err(e)
     finally:
         conn.close()
     return {"key": key, "version": d["version"], "definition": d["body"]}
