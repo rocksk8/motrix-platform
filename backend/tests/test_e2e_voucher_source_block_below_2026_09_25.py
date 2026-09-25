@@ -91,8 +91,10 @@ def test_the_block_sits_below_the_lines_cases_left_files_right(live_server, make
     _pick_case(page)
     lines, block = _box(page, "table.vc-lines"), _box(page, '[data-testid="src-block"]')
     left, right = _box(page, '[data-testid="src-cases"]'), _box(page, '[data-testid="src-files"]')
+    mid = _box(page, '[data-testid="src-expenses"]')
     assert block["t"] >= lines["b"], ("來源區塊要在分錄下方", lines, block)
-    assert right["l"] >= left["r"] - 1 and abs(right["t"] - left["t"]) < 4, ("寬螢幕要左右兩欄", left, right)
+    # 📌 2026-09-25 使用者：「案件、支出項、已上傳檔案這三個並排由左到右」⇒ 三欄（原本兩欄、支出項在案件下方）
+    assert left["r"] <= mid["l"] + 1 and mid["r"] <= right["l"] + 1, ("寬螢幕要三欄由左到右", left, mid, right)
     picked = page.locator('[data-testid="src-case"].on')
     assert picked.count() == 1 and QNO in picked.inner_text() and "來源客戶" in picked.inner_text()
     assert "▶" in picked.inner_text(), "選中的案件要標 ▶"
@@ -212,16 +214,39 @@ def test_a_file_used_by_another_voucher_is_marked_and_says_which(live_server, ma
 @pytest.mark.parametrize("width,stacked", [(1024, False), (768, True), (390, True)])
 def test_narrow_screens_stack_the_two_columns_without_horizontal_overflow(live_server, make_user, e2e_browser, client,
                                                                          width, stacked):
-    """兩欄或上下排看**區塊本身**的寬度（< 700px 上下排）：傳票紙面有最大寬度，1024 與 1440 時區塊一樣寬
-    （實測 783px），兩欄放得下；視窗再窄（約 < 920px）區塊才縮，768 時 586px ⇒ 上下排。任何寬度都不可橫向溢出。"""
+    """三欄或上下排看**區塊本身**的寬度（< 700px 上下排）：傳票紙面有最大寬度，1024 與 1440 時區塊一樣寬
+    （實測 783px，內容 753px），三欄（最小約 608px）放得下；視窗再窄（約 < 920px）區塊才縮，768 時 586px ⇒ 上下排。
+    任何寬度都不可橫向溢出。"""
     u = make_user(username="vcsrc_%d" % width, role="superadmin")
     vid = _seed(client, u)
     page = _open(e2e_browser, live_server, u, vid, width=width, height=800)
     _pick_case(page)
     left, right = _box(page, '[data-testid="src-cases"]'), _box(page, '[data-testid="src-files"]')
+    mid = _box(page, '[data-testid="src-expenses"]')
     if stacked:
-        assert right["t"] >= left["b"] - 1, ("%d 寬要上下排" % width, left, right)
+        assert mid["t"] >= left["b"] - 1 and right["t"] >= mid["b"] - 1, ("%d 寬要上下排" % width, left, mid, right)
     else:
-        assert right["l"] >= left["r"] - 1, ("%d 寬兩欄放得下" % width, left, right)
+        assert left["r"] <= mid["l"] + 1 and mid["r"] <= right["l"] + 1, ("%d 寬三欄放得下" % width, left, mid, right)
+    sw, vw = page.evaluate("() => [document.documentElement.scrollWidth, innerWidth]")
+    assert sw <= vw, "頁面橫向溢出：%s > %s" % (sw, vw)
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("width", [1440, 1024])
+def test_the_three_columns_sit_side_by_side_from_the_same_top(live_server, make_user, e2e_browser, client, width):
+    """使用者（2026-09-25）：「傳票，案件、支出項、已上傳檔案這三個並排由左到右，方便點選跟查閱」。
+    三欄由左到右、同一高度起始，1024 寬不橫向溢出。"""
+    u = make_user(username="vcsrc3_%d" % width, role="superadmin")
+    vid = _seed(client, u)
+    page = _open(e2e_browser, live_server, u, vid, width=width, height=900)
+    _pick_case(page)
+    cols = [_box(page, '[data-testid="%s"]' % t) for t in ("src-cases", "src-expenses", "src-files")]
+    assert all(cols), cols
+    assert cols[0]["r"] <= cols[1]["l"] + 1 and cols[1]["r"] <= cols[2]["l"] + 1, ("三欄要由左到右", cols)
+    tops = [c["t"] for c in cols]
+    assert max(tops) - min(tops) < 2, ("三欄要同一高度起始", tops)
+    heads = page.evaluate("""() => ['src-cases','src-expenses','src-files'].map(t =>
+        document.querySelector('[data-testid=' + t + '] .vc-src__hint').innerText)""")
+    assert heads[0].startswith("案件") and heads[1].startswith("支出項") and heads[2].startswith("已上傳檔案"), heads
     sw, vw = page.evaluate("() => [document.documentElement.scrollWidth, innerWidth]")
     assert sw <= vw, "頁面橫向溢出：%s > %s" % (sw, vw)
