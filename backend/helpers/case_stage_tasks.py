@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 CATEGORY = "案件進度"
 NOTICE_NO_DAILY_TASKS = "未建立每日任務：每日任務模組未安裝"
+# 取消勾選／刪除階段時，原本建立過的每日任務收不回來（M12 不在時 M01 不碰 M12 的表）。
+# 任務 id 留在 case_stages.daily_task_id：M12 裝回來之後再勾選／取消勾選，會收斂到同一筆任務，不會多出一筆。
+NOTICE_NOT_WITHDRAWN = "未收回每日任務：每日任務模組未安裝，原本建立的任務仍在"
 
 
 def _tasks():
@@ -50,9 +53,16 @@ def _tasks():
     return _registry.single_provider("daily_task.external")
 
 
-def daily_task_notice():
-    """給呼叫端放進回應的提示：M12 不在時明說沒有建立每日任務；在的時候回 None。"""
-    return None if _tasks() is not None else NOTICE_NO_DAILY_TASKS
+def daily_task_notice(done=True, had_task=False):
+    """給呼叫端放進回應的提示（AUDIT-X-C-batch1 B-1）；M12 在的時候回 None。
+
+    M12 不在時：勾選（done=True）⇒ 沒有建立每日任務；取消勾選或刪除階段（done=False）⇒ 原本有任務
+    （had_task）才要說「沒有收回」，原本就沒有任務就沒有什麼要說的。"""
+    if _tasks() is not None:
+        return None
+    if done:
+        return NOTICE_NO_DAILY_TASKS
+    return NOTICE_NOT_WITHDRAWN if had_task else None
 
 
 def sync_daily_task_for_case_stage(stage_id: int, actor_username: str = "",

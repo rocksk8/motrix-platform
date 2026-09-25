@@ -393,6 +393,8 @@ window.CM_PARTS.push(() => ({
       try {
         const r = await fetch(`${this._stagesApiBase()}/${st.id}`, { method: 'DELETE', headers: this._authHeaders() })
         if (!r.ok) { MotrixUI.toast('刪除失敗', {kind: 'error'}); return }
+        const j = await r.json().catch(() => ({}))
+        if (j.notice) MotrixUI.toast(j.notice, {kind: 'info', ms: 8000})   // IP-5：每日任務模組不在時明說沒有收回
         stages.splice(idx, 1)
         stages.forEach(s => { if (s.dependsOn) s.dependsOn = s.dependsOn.filter(id => id !== st.id) })
       } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
@@ -435,7 +437,11 @@ window.CM_PARTS.push(() => ({
           method: 'PUT', headers: this._authHeaders(true), body: JSON.stringify(fields)
         })
         if (!r.ok) { MotrixUI.toast('儲存失敗', {kind: 'error'}); return }
-        Object.assign(st, await r.json())
+        const j = await r.json()
+        const notice = j.notice
+        delete j.notice
+        Object.assign(st, j)
+        if (notice) MotrixUI.toast(notice, {kind: 'info', ms: 8000})   // IP-5：每日任務模組不在時明說沒有建立／收回
         this.flashSaved('stages')
         this._checkAllStagesDone()
       } catch (e) { MotrixUI.toast('發生錯誤：' + e.message, {kind: 'error'}) }
