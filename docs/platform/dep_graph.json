@@ -282,13 +282,12 @@
     "helper:geo",
     "helper:licensing",
     "helper:startup",
-    "helper:tender_source",
-    "router:access_guide",
+    "plat:loader",
+    "plat:registry",
     "router:account_items",
     "router:accounting_export",
     "router:approval_delegates",
     "router:auth",
-    "router:automation_guide",
     "router:bonus",
     "router:case_action_items",
     "router:case_extra_expenses",
@@ -300,8 +299,6 @@
     "router:daily_tasks",
     "router:dashboard",
     "router:dev_crm",
-    "router:env_guide",
-    "router:gateway_guide",
     "router:inventory",
     "router:invoice_vouchers",
     "router:item_reads",
@@ -311,8 +308,6 @@
     "router:material_orders",
     "router:module_versions",
     "router:modules",
-    "router:monitor_guide",
-    "router:netarch_guide",
     "router:network_plans",
     "router:network_plans_quick",
     "router:org_structure",
@@ -324,9 +319,7 @@
     "router:search",
     "router:shipping_notes",
     "router:suppliers",
-    "router:switch_guide",
     "router:system",
-    "router:tender_radar",
     "router:uploads",
     "router:vendor_contractors",
     "router:vouchers"
@@ -854,40 +847,6 @@
     "module_versions",
     "sessions",
     "users"
-   ]
-  },
-  "helper:tender_match": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [],
-   "kind": "helper",
-   "path": "backend/helpers/tender_match.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "helper:tender_source": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "helper:email_notify",
-    "helper:settings",
-    "helper:tender_match"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/tender_source.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "tender_watches"
-   ],
-   "tables_w": [
-    "system_settings",
-    "tender_fetch_log",
-    "tender_hits",
-    "tenders"
    ]
   },
   "helper:tiered_approval": {
@@ -1648,6 +1607,214 @@
    "tables_r": [],
    "tables_w": []
   },
+  "mod:tender_radar/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:tender_radar/api",
+    "mod:tender_radar/source",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:tender_radar/api": {
+   "api_prefixes": [
+    "/api/tender-radar"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval",
+    "mod:tender_radar/match",
+    "mod:tender_radar/notify",
+    "mod:tender_radar/source"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:settings",
+    "mod:tender_radar/match",
+    "mod:tender_radar/source"
+   ],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_watches",
+     "line": 94,
+     "method": "GET",
+     "path": "/api/tender-radar/watches"
+    },
+    {
+     "func": "create_watch",
+     "line": 106,
+     "method": "POST",
+     "path": "/api/tender-radar/watches"
+    },
+    {
+     "func": "update_watch",
+     "line": 137,
+     "method": "PUT",
+     "path": "/api/tender-radar/watches/{watch_id}"
+    },
+    {
+     "func": "delete_watch",
+     "line": 219,
+     "method": "DELETE",
+     "path": "/api/tender-radar/watches/{watch_id}"
+    },
+    {
+     "func": "list_tenders",
+     "line": 260,
+     "method": "GET",
+     "path": "/api/tender-radar/tenders"
+    },
+    {
+     "func": "radar_status",
+     "line": 445,
+     "method": "GET",
+     "path": "/api/tender-radar/status"
+    },
+    {
+     "func": "get_schedule",
+     "line": 491,
+     "method": "GET",
+     "path": "/api/tender-radar/schedule"
+    },
+    {
+     "func": "set_schedule",
+     "line": 539,
+     "method": "PUT",
+     "path": "/api/tender-radar/schedule"
+    },
+    {
+     "func": "manual_scan",
+     "line": 570,
+     "method": "POST",
+     "path": "/api/tender-radar/scan"
+    },
+    {
+     "func": "mark_tender",
+     "line": 645,
+     "method": "POST",
+     "path": "/api/tender-radar/tenders/{case_no}/mark"
+    },
+    {
+     "func": "unmark_tender",
+     "line": 677,
+     "method": "DELETE",
+     "path": "/api/tender-radar/tenders/{case_no}/mark"
+    },
+    {
+     "func": "reset_today",
+     "line": 601,
+     "method": "POST",
+     "path": "/api/tender-radar/reset-today"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "tender_watches",
+    "users"
+   ],
+   "tables_w": [
+    "tender_fetch_log",
+    "tender_hits",
+    "tender_watches",
+    "tenders"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "system_settings",
+    "tender_fetch_log",
+    "tender_hits",
+    "tender_watches",
+    "tenders"
+   ]
+  },
+  "mod:tender_radar/match": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/match.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:tender_radar/notify": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:email_notify"
+   ],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/notify.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:tender_radar/source": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:settings",
+    "mod:tender_radar/match",
+    "mod:tender_radar/notify"
+   ],
+   "kind": "mod",
+   "module_key": "tender_radar",
+   "path": "backend/modules/tender_radar/source.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "tender_watches"
+   ],
+   "tables_w": [
+    "system_settings",
+    "tender_fetch_log",
+    "tender_hits",
+    "tenders"
+   ]
+  },
   "page:index.html": {
    "api_calls": [
     "/api/auth/logout",
@@ -1681,42 +1848,6 @@
     "router:auth",
     "router:dashboard",
     "router:org_structure"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/access-guide.html": {
-   "api_calls": [
-    "/api/access-guide/categories",
-    "/api/access-guide/categories/{}",
-    "/api/access-guide/fit",
-    "/api/access-guide/fit/{}",
-    "/api/access-guide/products",
-    "/api/access-guide/products/{}",
-    "/api/access-guide/scenarios",
-    "/api/access-guide/scenarios/{}",
-    "/api/access-guide/{}/{}",
-    "/api/auth/me"
-   ],
-   "api_prefixes": [
-    "/api/access-guide",
-    "/api/auth"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/access-guide.html",
-   "routers_called": [
-    "router:access_guide",
-    "router:auth"
-   ],
-   "routers_called_effective": [
-    "router:access_guide",
-    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1934,42 +2065,6 @@
    "routers_called_effective": [
     "router:auth",
     "router:system"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/automation-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/automation-guide/categories",
-    "/api/automation-guide/categories/{}",
-    "/api/automation-guide/fit",
-    "/api/automation-guide/fit/{}",
-    "/api/automation-guide/products",
-    "/api/automation-guide/products/{}",
-    "/api/automation-guide/scenarios",
-    "/api/automation-guide/scenarios/{}",
-    "/api/automation-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/automation-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/automation-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:automation_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:automation_guide"
    ],
    "tables_r": [],
    "tables_w": []
@@ -2453,76 +2548,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "page:pages/env-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/env-guide/environments",
-    "/api/env-guide/environments/{}",
-    "/api/env-guide/links",
-    "/api/env-guide/links/{}",
-    "/api/env-guide/recommendations",
-    "/api/env-guide/recommendations/{}",
-    "/api/env-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/env-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/env-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:env_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:env_guide"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/gateway-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/gateway-guide/categories",
-    "/api/gateway-guide/categories/{}",
-    "/api/gateway-guide/fit",
-    "/api/gateway-guide/fit/{}",
-    "/api/gateway-guide/products",
-    "/api/gateway-guide/products/{}",
-    "/api/gateway-guide/scenarios",
-    "/api/gateway-guide/scenarios/{}",
-    "/api/gateway-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/gateway-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/gateway-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:gateway_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:gateway_guide"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "page:pages/google-calendar-settings.html": {
    "api_calls": [
     "/api/settings/google-calendar",
@@ -2695,76 +2720,6 @@
    ],
    "routers_called_effective": [
     "router:module_versions"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/monitor-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/monitor-guide/categories",
-    "/api/monitor-guide/categories/{}",
-    "/api/monitor-guide/fit",
-    "/api/monitor-guide/fit/{}",
-    "/api/monitor-guide/products",
-    "/api/monitor-guide/products/{}",
-    "/api/monitor-guide/scenarios",
-    "/api/monitor-guide/scenarios/{}",
-    "/api/monitor-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/monitor-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/monitor-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:monitor_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:monitor_guide"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "page:pages/netarch-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/netarch-guide/families",
-    "/api/netarch-guide/families/{}",
-    "/api/netarch-guide/generations",
-    "/api/netarch-guide/generations/{}",
-    "/api/netarch-guide/products",
-    "/api/netarch-guide/products/{}",
-    "/api/netarch-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/netarch-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/netarch-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:netarch_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:netarch_guide"
    ],
    "tables_r": [],
    "tables_w": []
@@ -3269,30 +3224,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "page:pages/selection-db-overview.html": {
-   "api_calls": [
-    "/api/auth/me"
-   ],
-   "api_prefixes": [
-    "/api/auth"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/selection-db-overview.html",
-   "routers_called": [
-    "router:auth"
-   ],
-   "routers_called_effective": [
-    "router:auth"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "page:pages/settlement.html": {
    "api_calls": [
     "/api/contractor-dispatches",
@@ -3425,42 +3356,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "page:pages/switch-guide.html": {
-   "api_calls": [
-    "/api/auth/me",
-    "/api/switch-guide/categories",
-    "/api/switch-guide/categories/{}",
-    "/api/switch-guide/fit",
-    "/api/switch-guide/fit/{}",
-    "/api/switch-guide/products",
-    "/api/switch-guide/products/{}",
-    "/api/switch-guide/scenarios",
-    "/api/switch-guide/scenarios/{}",
-    "/api/switch-guide/{}/{}"
-   ],
-   "api_prefixes": [
-    "/api/auth",
-    "/api/switch-guide"
-   ],
-   "api_unmatched": [],
-   "imports": [
-    "js:static/auth-guard.js",
-    "js:static/notif.js",
-    "js:static/sidebar.js"
-   ],
-   "kind": "page",
-   "path": "frontend/pages/switch-guide.html",
-   "routers_called": [
-    "router:auth",
-    "router:switch_guide"
-   ],
-   "routers_called_effective": [
-    "router:auth",
-    "router:switch_guide"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "page:pages/tender-radar.html": {
    "api_calls": [
     "/api/map/points",
@@ -3486,12 +3381,12 @@
    "kind": "page",
    "path": "frontend/pages/tender-radar.html",
    "routers_called": [
-    "router:map_points",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "router:map_points"
    ],
    "routers_called_effective": [
-    "router:map_points",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "router:map_points"
    ],
    "tables_r": [],
    "tables_w": []
@@ -3684,157 +3579,40 @@
    "tables_r": [],
    "tables_w": []
   },
-  "router:access_guide": {
-   "api_prefixes": [
-    "/api/access-guide"
-   ],
+  "plat:loader": {
+   "api_prefixes": [],
    "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
    "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
+    "plat:registry"
    ],
-   "kind": "router",
-   "path": "backend/routers/access_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_scenarios",
-     "line": 20,
-     "method": "GET",
-     "path": "/api/access-guide/scenarios"
-    },
-    {
-     "func": "create_scenario",
-     "line": 30,
-     "method": "POST",
-     "path": "/api/access-guide/scenarios"
-    },
-    {
-     "func": "update_scenario",
-     "line": 54,
-     "method": "PUT",
-     "path": "/api/access-guide/scenarios/{code}"
-    },
-    {
-     "func": "delete_scenario",
-     "line": 72,
-     "method": "DELETE",
-     "path": "/api/access-guide/scenarios/{code}"
-    },
-    {
-     "func": "list_categories",
-     "line": 89,
-     "method": "GET",
-     "path": "/api/access-guide/categories"
-    },
-    {
-     "func": "create_category",
-     "line": 99,
-     "method": "POST",
-     "path": "/api/access-guide/categories"
-    },
-    {
-     "func": "update_category",
-     "line": 127,
-     "method": "PUT",
-     "path": "/api/access-guide/categories/{code}"
-    },
-    {
-     "func": "delete_category",
-     "line": 150,
-     "method": "DELETE",
-     "path": "/api/access-guide/categories/{code}"
-    },
-    {
-     "func": "list_fit",
-     "line": 167,
-     "method": "GET",
-     "path": "/api/access-guide/fit"
-    },
-    {
-     "func": "create_fit",
-     "line": 177,
-     "method": "POST",
-     "path": "/api/access-guide/fit"
-    },
-    {
-     "func": "update_fit",
-     "line": 209,
-     "method": "PUT",
-     "path": "/api/access-guide/fit/{fit_id}"
-    },
-    {
-     "func": "delete_fit",
-     "line": 227,
-     "method": "DELETE",
-     "path": "/api/access-guide/fit/{fit_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 244,
-     "method": "GET",
-     "path": "/api/access-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 254,
-     "method": "POST",
-     "path": "/api/access-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 279,
-     "method": "PUT",
-     "path": "/api/access-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 297,
-     "method": "DELETE",
-     "path": "/api/access-guide/products/{prod_id}"
-    }
-   ],
+   "kind": "plat",
+   "path": "backend/core/loader.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "access_categories",
-    "access_fit",
-    "access_products",
-    "access_scenarios"
-   ],
-   "tables_w_transitive": [
-    "access_categories",
-    "access_fit",
-    "access_products",
-    "access_scenarios",
-    "audit_log",
-    "notifications",
-    "system_settings"
-   ]
+   "tables_w": []
+  },
+  "plat:registry": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "plat",
+   "path": "backend/core/registry.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "plat:source_tree": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "plat",
+   "path": "backend/core/source_tree.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "router:account_items": {
    "api_prefixes": [
@@ -4343,158 +4121,6 @@
     "system_settings",
     "users",
     "webauthn_credentials"
-   ]
-  },
-  "router:automation_guide": {
-   "api_prefixes": [
-    "/api/automation-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/automation_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_scenarios",
-     "line": 20,
-     "method": "GET",
-     "path": "/api/automation-guide/scenarios"
-    },
-    {
-     "func": "create_scenario",
-     "line": 30,
-     "method": "POST",
-     "path": "/api/automation-guide/scenarios"
-    },
-    {
-     "func": "update_scenario",
-     "line": 54,
-     "method": "PUT",
-     "path": "/api/automation-guide/scenarios/{code}"
-    },
-    {
-     "func": "delete_scenario",
-     "line": 72,
-     "method": "DELETE",
-     "path": "/api/automation-guide/scenarios/{code}"
-    },
-    {
-     "func": "list_categories",
-     "line": 89,
-     "method": "GET",
-     "path": "/api/automation-guide/categories"
-    },
-    {
-     "func": "create_category",
-     "line": 99,
-     "method": "POST",
-     "path": "/api/automation-guide/categories"
-    },
-    {
-     "func": "update_category",
-     "line": 127,
-     "method": "PUT",
-     "path": "/api/automation-guide/categories/{code}"
-    },
-    {
-     "func": "delete_category",
-     "line": 150,
-     "method": "DELETE",
-     "path": "/api/automation-guide/categories/{code}"
-    },
-    {
-     "func": "list_fit",
-     "line": 167,
-     "method": "GET",
-     "path": "/api/automation-guide/fit"
-    },
-    {
-     "func": "create_fit",
-     "line": 177,
-     "method": "POST",
-     "path": "/api/automation-guide/fit"
-    },
-    {
-     "func": "update_fit",
-     "line": 209,
-     "method": "PUT",
-     "path": "/api/automation-guide/fit/{fit_id}"
-    },
-    {
-     "func": "delete_fit",
-     "line": 227,
-     "method": "DELETE",
-     "path": "/api/automation-guide/fit/{fit_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 244,
-     "method": "GET",
-     "path": "/api/automation-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 254,
-     "method": "POST",
-     "path": "/api/automation-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 279,
-     "method": "PUT",
-     "path": "/api/automation-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 297,
-     "method": "DELETE",
-     "path": "/api/automation-guide/products/{prod_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "automation_categories",
-    "automation_fit",
-    "automation_products",
-    "automation_scenarios"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "automation_categories",
-    "automation_fit",
-    "automation_products",
-    "automation_scenarios",
-    "notifications",
-    "system_settings"
    ]
   },
   "router:bonus": {
@@ -6124,284 +5750,6 @@
     "system_settings"
    ]
   },
-  "router:env_guide": {
-   "api_prefixes": [
-    "/api/env-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/env_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_environments",
-     "line": 19,
-     "method": "GET",
-     "path": "/api/env-guide/environments"
-    },
-    {
-     "func": "create_environment",
-     "line": 31,
-     "method": "POST",
-     "path": "/api/env-guide/environments"
-    },
-    {
-     "func": "update_environment",
-     "line": 63,
-     "method": "PUT",
-     "path": "/api/env-guide/environments/{code}"
-    },
-    {
-     "func": "delete_environment",
-     "line": 87,
-     "method": "DELETE",
-     "path": "/api/env-guide/environments/{code}"
-    },
-    {
-     "func": "list_recommendations",
-     "line": 104,
-     "method": "GET",
-     "path": "/api/env-guide/recommendations"
-    },
-    {
-     "func": "create_recommendation",
-     "line": 116,
-     "method": "POST",
-     "path": "/api/env-guide/recommendations"
-    },
-    {
-     "func": "update_recommendation",
-     "line": 149,
-     "method": "PUT",
-     "path": "/api/env-guide/recommendations/{rec_id}"
-    },
-    {
-     "func": "delete_recommendation",
-     "line": 173,
-     "method": "DELETE",
-     "path": "/api/env-guide/recommendations/{rec_id}"
-    },
-    {
-     "func": "list_links",
-     "line": 190,
-     "method": "GET",
-     "path": "/api/env-guide/links"
-    },
-    {
-     "func": "create_link",
-     "line": 200,
-     "method": "POST",
-     "path": "/api/env-guide/links"
-    },
-    {
-     "func": "update_link",
-     "line": 222,
-     "method": "PUT",
-     "path": "/api/env-guide/links/{link_id}"
-    },
-    {
-     "func": "delete_link",
-     "line": 244,
-     "method": "DELETE",
-     "path": "/api/env-guide/links/{link_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "env_guide_environments",
-    "env_guide_links",
-    "env_guide_recommendations"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "env_guide_environments",
-    "env_guide_links",
-    "env_guide_recommendations",
-    "notifications",
-    "system_settings"
-   ]
-  },
-  "router:gateway_guide": {
-   "api_prefixes": [
-    "/api/gateway-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/gateway_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_scenarios",
-     "line": 20,
-     "method": "GET",
-     "path": "/api/gateway-guide/scenarios"
-    },
-    {
-     "func": "create_scenario",
-     "line": 30,
-     "method": "POST",
-     "path": "/api/gateway-guide/scenarios"
-    },
-    {
-     "func": "update_scenario",
-     "line": 54,
-     "method": "PUT",
-     "path": "/api/gateway-guide/scenarios/{code}"
-    },
-    {
-     "func": "delete_scenario",
-     "line": 72,
-     "method": "DELETE",
-     "path": "/api/gateway-guide/scenarios/{code}"
-    },
-    {
-     "func": "list_categories",
-     "line": 89,
-     "method": "GET",
-     "path": "/api/gateway-guide/categories"
-    },
-    {
-     "func": "create_category",
-     "line": 99,
-     "method": "POST",
-     "path": "/api/gateway-guide/categories"
-    },
-    {
-     "func": "update_category",
-     "line": 127,
-     "method": "PUT",
-     "path": "/api/gateway-guide/categories/{code}"
-    },
-    {
-     "func": "delete_category",
-     "line": 150,
-     "method": "DELETE",
-     "path": "/api/gateway-guide/categories/{code}"
-    },
-    {
-     "func": "list_fit",
-     "line": 167,
-     "method": "GET",
-     "path": "/api/gateway-guide/fit"
-    },
-    {
-     "func": "create_fit",
-     "line": 177,
-     "method": "POST",
-     "path": "/api/gateway-guide/fit"
-    },
-    {
-     "func": "update_fit",
-     "line": 209,
-     "method": "PUT",
-     "path": "/api/gateway-guide/fit/{fit_id}"
-    },
-    {
-     "func": "delete_fit",
-     "line": 227,
-     "method": "DELETE",
-     "path": "/api/gateway-guide/fit/{fit_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 244,
-     "method": "GET",
-     "path": "/api/gateway-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 254,
-     "method": "POST",
-     "path": "/api/gateway-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 279,
-     "method": "PUT",
-     "path": "/api/gateway-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 297,
-     "method": "DELETE",
-     "path": "/api/gateway-guide/products/{prod_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "gateway_categories",
-    "gateway_fit",
-    "gateway_products",
-    "gateway_scenarios"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "gateway_categories",
-    "gateway_fit",
-    "gateway_products",
-    "gateway_scenarios",
-    "notifications",
-    "system_settings"
-   ]
-  },
   "router:inventory": {
    "api_prefixes": [
     "/api/inventory"
@@ -6695,9 +6043,9 @@
    "imports": [
     "core:db",
     "helper:auth",
+    "helper:module_registry",
     "router:dev_crm",
-    "router:quotations",
-    "router:system"
+    "router:quotations"
    ],
    "kind": "router",
    "path": "backend/routers/item_reads.py",
@@ -6705,31 +6053,31 @@
    "routes": [
     {
      "func": "mark_read",
-     "line": 82,
+     "line": 84,
      "method": "POST",
      "path": "/api/reads"
     },
     {
      "func": "list_reads",
-     "line": 99,
+     "line": 101,
      "method": "GET",
      "path": "/api/reads"
     },
     {
      "func": "migrate_legacy_reads",
-     "line": 126,
+     "line": 128,
      "method": "POST",
      "path": "/api/reads/batch"
     },
     {
      "func": "unread_items",
-     "line": 266,
+     "line": 268,
      "method": "POST",
      "path": "/api/reads/unread"
     },
     {
      "func": "module_counts",
-     "line": 288,
+     "line": 290,
      "method": "GET",
      "path": "/api/reads/module-counts"
     }
@@ -7092,284 +6440,6 @@
    ],
    "tables_w": [],
    "tables_w_transitive": []
-  },
-  "router:monitor_guide": {
-   "api_prefixes": [
-    "/api/monitor-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/monitor_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_scenarios",
-     "line": 20,
-     "method": "GET",
-     "path": "/api/monitor-guide/scenarios"
-    },
-    {
-     "func": "create_scenario",
-     "line": 30,
-     "method": "POST",
-     "path": "/api/monitor-guide/scenarios"
-    },
-    {
-     "func": "update_scenario",
-     "line": 54,
-     "method": "PUT",
-     "path": "/api/monitor-guide/scenarios/{code}"
-    },
-    {
-     "func": "delete_scenario",
-     "line": 72,
-     "method": "DELETE",
-     "path": "/api/monitor-guide/scenarios/{code}"
-    },
-    {
-     "func": "list_categories",
-     "line": 89,
-     "method": "GET",
-     "path": "/api/monitor-guide/categories"
-    },
-    {
-     "func": "create_category",
-     "line": 99,
-     "method": "POST",
-     "path": "/api/monitor-guide/categories"
-    },
-    {
-     "func": "update_category",
-     "line": 127,
-     "method": "PUT",
-     "path": "/api/monitor-guide/categories/{code}"
-    },
-    {
-     "func": "delete_category",
-     "line": 150,
-     "method": "DELETE",
-     "path": "/api/monitor-guide/categories/{code}"
-    },
-    {
-     "func": "list_fit",
-     "line": 167,
-     "method": "GET",
-     "path": "/api/monitor-guide/fit"
-    },
-    {
-     "func": "create_fit",
-     "line": 177,
-     "method": "POST",
-     "path": "/api/monitor-guide/fit"
-    },
-    {
-     "func": "update_fit",
-     "line": 209,
-     "method": "PUT",
-     "path": "/api/monitor-guide/fit/{fit_id}"
-    },
-    {
-     "func": "delete_fit",
-     "line": 227,
-     "method": "DELETE",
-     "path": "/api/monitor-guide/fit/{fit_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 244,
-     "method": "GET",
-     "path": "/api/monitor-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 254,
-     "method": "POST",
-     "path": "/api/monitor-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 279,
-     "method": "PUT",
-     "path": "/api/monitor-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 297,
-     "method": "DELETE",
-     "path": "/api/monitor-guide/products/{prod_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "monitor_categories",
-    "monitor_fit",
-    "monitor_products",
-    "monitor_scenarios"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "monitor_categories",
-    "monitor_fit",
-    "monitor_products",
-    "monitor_scenarios",
-    "notifications",
-    "system_settings"
-   ]
-  },
-  "router:netarch_guide": {
-   "api_prefixes": [
-    "/api/netarch-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/netarch_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_families",
-     "line": 19,
-     "method": "GET",
-     "path": "/api/netarch-guide/families"
-    },
-    {
-     "func": "create_family",
-     "line": 29,
-     "method": "POST",
-     "path": "/api/netarch-guide/families"
-    },
-    {
-     "func": "update_family",
-     "line": 53,
-     "method": "PUT",
-     "path": "/api/netarch-guide/families/{code}"
-    },
-    {
-     "func": "delete_family",
-     "line": 71,
-     "method": "DELETE",
-     "path": "/api/netarch-guide/families/{code}"
-    },
-    {
-     "func": "list_generations",
-     "line": 88,
-     "method": "GET",
-     "path": "/api/netarch-guide/generations"
-    },
-    {
-     "func": "create_generation",
-     "line": 98,
-     "method": "POST",
-     "path": "/api/netarch-guide/generations"
-    },
-    {
-     "func": "update_generation",
-     "line": 128,
-     "method": "PUT",
-     "path": "/api/netarch-guide/generations/{gen_id}"
-    },
-    {
-     "func": "delete_generation",
-     "line": 152,
-     "method": "DELETE",
-     "path": "/api/netarch-guide/generations/{gen_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 169,
-     "method": "GET",
-     "path": "/api/netarch-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 179,
-     "method": "POST",
-     "path": "/api/netarch-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 204,
-     "method": "PUT",
-     "path": "/api/netarch-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 222,
-     "method": "DELETE",
-     "path": "/api/netarch-guide/products/{prod_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "netarch_families",
-    "netarch_generations",
-    "netarch_products"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "netarch_families",
-    "netarch_generations",
-    "netarch_products",
-    "notifications",
-    "system_settings"
-   ]
   },
   "router:network_plans": {
    "api_prefixes": [
@@ -9005,158 +8075,6 @@
     "system_settings"
    ]
   },
-  "router:switch_guide": {
-   "api_prefixes": [
-    "/api/switch-guide"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify"
-   ],
-   "kind": "router",
-   "path": "backend/routers/switch_guide.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_scenarios",
-     "line": 20,
-     "method": "GET",
-     "path": "/api/switch-guide/scenarios"
-    },
-    {
-     "func": "create_scenario",
-     "line": 30,
-     "method": "POST",
-     "path": "/api/switch-guide/scenarios"
-    },
-    {
-     "func": "update_scenario",
-     "line": 54,
-     "method": "PUT",
-     "path": "/api/switch-guide/scenarios/{code}"
-    },
-    {
-     "func": "delete_scenario",
-     "line": 72,
-     "method": "DELETE",
-     "path": "/api/switch-guide/scenarios/{code}"
-    },
-    {
-     "func": "list_categories",
-     "line": 89,
-     "method": "GET",
-     "path": "/api/switch-guide/categories"
-    },
-    {
-     "func": "create_category",
-     "line": 99,
-     "method": "POST",
-     "path": "/api/switch-guide/categories"
-    },
-    {
-     "func": "update_category",
-     "line": 127,
-     "method": "PUT",
-     "path": "/api/switch-guide/categories/{code}"
-    },
-    {
-     "func": "delete_category",
-     "line": 150,
-     "method": "DELETE",
-     "path": "/api/switch-guide/categories/{code}"
-    },
-    {
-     "func": "list_fit",
-     "line": 167,
-     "method": "GET",
-     "path": "/api/switch-guide/fit"
-    },
-    {
-     "func": "create_fit",
-     "line": 177,
-     "method": "POST",
-     "path": "/api/switch-guide/fit"
-    },
-    {
-     "func": "update_fit",
-     "line": 209,
-     "method": "PUT",
-     "path": "/api/switch-guide/fit/{fit_id}"
-    },
-    {
-     "func": "delete_fit",
-     "line": 227,
-     "method": "DELETE",
-     "path": "/api/switch-guide/fit/{fit_id}"
-    },
-    {
-     "func": "list_products",
-     "line": 244,
-     "method": "GET",
-     "path": "/api/switch-guide/products"
-    },
-    {
-     "func": "create_product",
-     "line": 254,
-     "method": "POST",
-     "path": "/api/switch-guide/products"
-    },
-    {
-     "func": "update_product",
-     "line": 279,
-     "method": "PUT",
-     "path": "/api/switch-guide/products/{prod_id}"
-    },
-    {
-     "func": "delete_product",
-     "line": 297,
-     "method": "DELETE",
-     "path": "/api/switch-guide/products/{prod_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "switch_categories",
-    "switch_fit",
-    "switch_products",
-    "switch_scenarios"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "switch_categories",
-    "switch_fit",
-    "switch_products",
-    "switch_scenarios",
-    "system_settings"
-   ]
-  },
   "router:system": {
    "api_prefixes": [
     "/api/audit-log",
@@ -9184,8 +8102,6 @@
     "helper:quote_terms",
     "helper:settings",
     "helper:startup",
-    "helper:tender_match",
-    "helper:tender_source",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -9208,8 +8124,8 @@
     "helper:quote_terms",
     "helper:settings",
     "helper:startup",
-    "helper:tender_source",
     "helper:tiered_approval",
+    "plat:registry",
     "router:auth"
    ],
    "kind": "router",
@@ -9344,247 +8260,247 @@
     },
     {
      "func": "get_runtime_switches",
-     "line": 654,
+     "line": 655,
      "method": "GET",
      "path": "/api/system/runtime-switches"
     },
     {
      "func": "get_bonus_module_status",
-     "line": 701,
+     "line": 704,
      "method": "GET",
      "path": "/api/system/bonus-module-status"
     },
     {
      "func": "get_company_profile",
-     "line": 1096,
+     "line": 1099,
      "method": "GET",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "set_company_profile",
-     "line": 1197,
+     "line": 1200,
      "method": "PUT",
      "path": "/api/settings/company-profile"
     },
     {
      "func": "get_default_payment_terms",
-     "line": 1295,
+     "line": 1298,
      "method": "GET",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "set_default_payment_terms",
-     "line": 1301,
+     "line": 1304,
      "method": "PUT",
      "path": "/api/settings/payment-terms"
     },
     {
      "func": "get_edge_path_setting",
-     "line": 1312,
+     "line": 1315,
      "method": "GET",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "set_edge_path_setting",
-     "line": 1323,
+     "line": 1326,
      "method": "PATCH",
      "path": "/api/settings/edge-path"
     },
     {
      "func": "get_pdf_base_path_setting",
-     "line": 1339,
+     "line": 1342,
      "method": "GET",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "set_pdf_base_path_setting",
-     "line": 1347,
+     "line": 1350,
      "method": "PATCH",
      "path": "/api/settings/pdf-base-path"
     },
     {
      "func": "get_webauthn_config",
-     "line": 1431,
+     "line": 1434,
      "method": "GET",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "set_webauthn_config",
-     "line": 1447,
+     "line": 1450,
      "method": "PATCH",
      "path": "/api/settings/webauthn-config"
     },
     {
      "func": "get_google_quota_setting",
-     "line": 1517,
+     "line": 1520,
      "method": "GET",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "set_google_quota_setting",
-     "line": 1538,
+     "line": 1541,
      "method": "PUT",
      "path": "/api/settings/google-quota"
     },
     {
      "func": "get_backup_retention_setting",
-     "line": 1598,
+     "line": 1601,
      "method": "GET",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "set_backup_retention_setting",
-     "line": 1605,
+     "line": 1608,
      "method": "PATCH",
      "path": "/api/settings/backup-retention"
     },
     {
      "func": "get_quote_terms_defaults",
-     "line": 1714,
+     "line": 1717,
      "method": "GET",
      "path": "/api/settings/quote-terms-defaults"
     },
     {
      "func": "get_quote_terms_presets",
-     "line": 1722,
+     "line": 1725,
      "method": "GET",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "set_quote_terms_presets",
-     "line": 1729,
+     "line": 1732,
      "method": "PUT",
      "path": "/api/settings/quote-terms-presets"
     },
     {
      "func": "get_cloud_backup_target_setting",
-     "line": 1807,
+     "line": 1810,
      "method": "GET",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "set_cloud_backup_target_setting",
-     "line": 1814,
+     "line": 1817,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 1850,
+     "line": 1853,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 1863,
+     "line": 1866,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 1888,
+     "line": 1891,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 1902,
+     "line": 1905,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 1918,
+     "line": 1921,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 1934,
+     "line": 1937,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 1965,
+     "line": 1968,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 1971,
+     "line": 1974,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 1998,
+     "line": 2001,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2022,
+     "line": 2025,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2046,
+     "line": 2049,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2076,
+     "line": 2079,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2091,
+     "line": 2094,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2106,
+     "line": 2109,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2139,
+     "line": 2142,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2183,
+     "line": 2186,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2257,
+     "line": 2260,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 2392,
+     "line": 2395,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 2423,
+     "line": 2426,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 2439,
+     "line": 2442,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     }
@@ -9617,7 +8533,6 @@
     "schema_version",
     "sessions",
     "shipping_notes",
-    "tender_watches",
     "user_activity_daily",
     "user_request_log",
     "users",
@@ -9642,146 +8557,8 @@
     "sessions",
     "shipping_notes",
     "system_settings",
-    "tender_fetch_log",
-    "tender_hits",
-    "tenders",
     "users",
     "work_logs"
-   ]
-  },
-  "router:tender_radar": {
-   "api_prefixes": [
-    "/api/tender-radar"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tender_match",
-    "helper:tender_source",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:settings",
-    "helper:tender_match",
-    "helper:tender_source"
-   ],
-   "kind": "router",
-   "path": "backend/routers/tender_radar.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_watches",
-     "line": 94,
-     "method": "GET",
-     "path": "/api/tender-radar/watches"
-    },
-    {
-     "func": "create_watch",
-     "line": 106,
-     "method": "POST",
-     "path": "/api/tender-radar/watches"
-    },
-    {
-     "func": "update_watch",
-     "line": 137,
-     "method": "PUT",
-     "path": "/api/tender-radar/watches/{watch_id}"
-    },
-    {
-     "func": "delete_watch",
-     "line": 219,
-     "method": "DELETE",
-     "path": "/api/tender-radar/watches/{watch_id}"
-    },
-    {
-     "func": "list_tenders",
-     "line": 260,
-     "method": "GET",
-     "path": "/api/tender-radar/tenders"
-    },
-    {
-     "func": "radar_status",
-     "line": 445,
-     "method": "GET",
-     "path": "/api/tender-radar/status"
-    },
-    {
-     "func": "get_schedule",
-     "line": 491,
-     "method": "GET",
-     "path": "/api/tender-radar/schedule"
-    },
-    {
-     "func": "set_schedule",
-     "line": 539,
-     "method": "PUT",
-     "path": "/api/tender-radar/schedule"
-    },
-    {
-     "func": "manual_scan",
-     "line": 570,
-     "method": "POST",
-     "path": "/api/tender-radar/scan"
-    },
-    {
-     "func": "mark_tender",
-     "line": 645,
-     "method": "POST",
-     "path": "/api/tender-radar/tenders/{case_no}/mark"
-    },
-    {
-     "func": "unmark_tender",
-     "line": 677,
-     "method": "DELETE",
-     "path": "/api/tender-radar/tenders/{case_no}/mark"
-    },
-    {
-     "func": "reset_today",
-     "line": 601,
-     "method": "POST",
-     "path": "/api/tender-radar/reset-today"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "users"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "tender_watches",
-    "users"
-   ],
-   "tables_w": [
-    "tender_fetch_log",
-    "tender_hits",
-    "tender_watches",
-    "tenders"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "system_settings",
-    "tender_fetch_log",
-    "tender_hits",
-    "tender_watches",
-    "tenders"
    ]
   },
   "router:uploads": {
@@ -10244,8 +9021,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:access_guide"
+    "core:db"
    ]
   },
   "table:access_fit": {
@@ -10258,8 +9034,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:access_guide"
+    "core:db"
    ]
   },
   "table:access_products": {
@@ -10272,8 +9047,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:access_guide"
+    "core:db"
    ]
   },
   "table:access_scenarios": {
@@ -10286,8 +9060,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:access_guide"
+    "core:db"
    ]
   },
   "table:account_items": {
@@ -10367,8 +9140,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:automation_guide"
+    "core:db"
    ]
   },
   "table:automation_fit": {
@@ -10381,8 +9153,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:automation_guide"
+    "core:db"
    ]
   },
   "table:automation_products": {
@@ -10395,8 +9166,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:automation_guide"
+    "core:db"
    ]
   },
   "table:automation_scenarios": {
@@ -10409,8 +9179,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:automation_guide"
+    "core:db"
    ]
   },
   "table:bonus_award_edit_log": {
@@ -11014,8 +9783,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:env_guide"
+    "core:db"
    ]
   },
   "table:env_guide_links": {
@@ -11028,8 +9796,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:env_guide"
+    "core:db"
    ]
   },
   "table:env_guide_recommendations": {
@@ -11042,8 +9809,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:env_guide"
+    "core:db"
    ]
   },
   "table:gateway_categories": {
@@ -11056,8 +9822,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:gateway_guide"
+    "core:db"
    ]
   },
   "table:gateway_fit": {
@@ -11070,8 +9835,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:gateway_guide"
+    "core:db"
    ]
   },
   "table:gateway_products": {
@@ -11084,8 +9848,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:gateway_guide"
+    "core:db"
    ]
   },
   "table:gateway_scenarios": {
@@ -11098,8 +9861,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:gateway_guide"
+    "core:db"
    ]
   },
   "table:geocode_cache": {
@@ -11221,8 +9983,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:monitor_guide"
+    "core:db"
    ]
   },
   "table:monitor_fit": {
@@ -11235,8 +9996,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:monitor_guide"
+    "core:db"
    ]
   },
   "table:monitor_products": {
@@ -11249,8 +10009,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:monitor_guide"
+    "core:db"
    ]
   },
   "table:monitor_scenarios": {
@@ -11263,8 +10022,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:monitor_guide"
+    "core:db"
    ]
   },
   "table:netarch_families": {
@@ -11277,8 +10035,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:netarch_guide"
+    "core:db"
    ]
   },
   "table:netarch_generations": {
@@ -11291,8 +10048,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:netarch_guide"
+    "core:db"
    ]
   },
   "table:netarch_products": {
@@ -11305,8 +10061,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:netarch_guide"
+    "core:db"
    ]
   },
   "table:network_plans": {
@@ -11688,8 +10443,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:switch_guide"
+    "core:db"
    ]
   },
   "table:switch_fit": {
@@ -11702,8 +10456,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:switch_guide"
+    "core:db"
    ]
   },
   "table:switch_products": {
@@ -11716,8 +10469,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:switch_guide"
+    "core:db"
    ]
   },
   "table:switch_scenarios": {
@@ -11730,8 +10482,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "core:db",
-    "router:switch_guide"
+    "core:db"
    ]
   },
   "table:system_settings": {
@@ -11751,7 +10502,7 @@
    "writers": [
     "core:db",
     "helper:settings",
-    "helper:tender_source",
+    "mod:tender_radar/source",
     "router:daily_tasks"
    ]
   },
@@ -11782,8 +10533,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:tender_source",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
    ]
   },
   "table:tender_hits": {
@@ -11798,8 +10549,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:tender_source",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
    ]
   },
   "table:tender_watches": {
@@ -11812,12 +10563,12 @@
    "path": "backend/db.py:3891",
    "readers": [
     "core:archive",
-    "helper:tender_source"
+    "mod:tender_radar/source"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:tender_radar"
+    "mod:tender_radar/api"
    ]
   },
   "table:tenders": {
@@ -11835,8 +10586,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:tender_source",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
    ]
   },
   "table:user_activity_daily": {
@@ -11911,6 +10662,7 @@
     "helper:recognition",
     "helper:tiered_approval",
     "helper:voucher",
+    "mod:tender_radar/api",
     "router:approval_delegates",
     "router:bonus",
     "router:case_action_items",
@@ -11921,7 +10673,6 @@
     "router:quotations",
     "router:reports",
     "router:system",
-    "router:tender_radar",
     "router:vouchers"
    ],
    "tables_r": [],

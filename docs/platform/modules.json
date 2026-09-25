@@ -59,6 +59,9 @@
    "page:pages/schema-status.html",
    "page:pages/users.html",
    "page:pages/work-log.html",
+   "plat:loader",
+   "plat:registry",
+   "plat:source_tree",
    "router:approval_delegates",
    "router:auth",
    "router:customers",
@@ -387,10 +390,12 @@
    "key": "tender_radar",
    "name": "標案雷達",
    "units": [
-    "helper:tender_match",
-    "helper:tender_source",
-    "page:pages/tender-radar.html",
-    "router:tender_radar"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/match",
+    "mod:tender_radar/notify",
+    "mod:tender_radar/source",
+    "page:pages/tender-radar.html"
    ],
    "tables": [
     "tender_fetch_log",

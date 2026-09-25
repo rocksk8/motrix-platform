@@ -168,21 +168,77 @@ def backend_units() -> dict[str, dict]:
         if p.name.startswith(CORE_SKIP_PREFIX) or p.name.endswith(CORE_SKIP_SUFFIX):
             continue
         units[f"core:{p.stem}"] = {"kind": "core", "path": rel(p)}
+    # L0 平台：backend/core/<file>.py ⇒ plat:<file>（歸 L1）
+    for p in sorted((BACKEND / "core").glob("*.py")) if (BACKEND / "core").is_dir() else []:
+        if not _docstring_only(p):
+            units[f"plat:{p.stem}"] = {"kind": "plat", "path": rel(p)}
+    # L2 模組：backend/modules/<key>/<file>.py ⇒ mod:<key>/<file>（整個資料夾歸同一組）
+    for d in sorted((BACKEND / "modules").iterdir()) if (BACKEND / "modules").is_dir() else []:
+        if not d.is_dir() or d.name.startswith(("_", ".")):
+            continue
+        for p in sorted(d.glob("*.py")):
+            if p.name == "__init__.py" and _docstring_only(p):
+                continue
+            units[f"mod:{d.name}/{p.stem}"] = {"kind": "mod", "path": rel(p), "module_key": d.name,
+                                              "role": _mod_role(p)}
     return units
 
 
-def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], units: dict) -> set[str]:
+def _docstring_only(p: Path) -> bool:
+    body = parse(p).body
+    return all(isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant) for n in body)
+
+
+def _is_router_file(tree: ast.Module) -> bool:
+    return any(isinstance(n, ast.Assign) and isinstance(n.value, ast.Call)
+               and getattr(n.value.func, "id", None) == "APIRouter"
+               and any(getattr(t, "id", None) == "router" for t in n.targets)
+               for n in tree.body)
+
+
+def _mod_role(p: Path) -> str:
+    if p.name == "__init__.py":
+        return "init"
+    return "router" if _is_router_file(parse(p)) else "helper"
+
+
+def _self_pkg(self_name: str) -> tuple[str, str] | None:
+    """mod:<key>/<file> ⇒ ("mod", key)；plat:<file> ⇒ ("plat", "")。相對 import 用。"""
+    if self_name.startswith("mod:"):
+        return "mod", self_name[4:].split("/", 1)[0]
+    if self_name.startswith("plat:"):
+        return "plat", ""
+    return None
+
+
+def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], units: dict,
+                    self_name: str = "") -> set[str]:
     deps: set[str] = set()
 
     def add(u: str):
         if u in units:
             deps.add(u)
 
+    def add_mod(key: str, sub: str | None):
+        """modules.<key>[.<sub>]：sub 是檔案就指向它，否則指向套件 __init__。"""
+        if sub and f"mod:{key}/{sub}" in units:
+            add(f"mod:{key}/{sub}")
+        else:
+            add(f"mod:{key}/__init__")
+
+    def add_plat(sub: str | None):
+        add(f"plat:{sub}" if sub and f"plat:{sub}" in units else "plat:__init__")
+
+    pkg = _self_pkg(self_name)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for a in node.names:
                 parts = a.name.split(".")
-                if parts[0] == "helpers" and len(parts) > 1:
+                if parts[0] == "modules" and len(parts) > 1:
+                    add_mod(parts[1], parts[2] if len(parts) > 2 else None)
+                elif parts[0] == "core":
+                    add_plat(parts[1] if len(parts) > 1 else None)
+                elif parts[0] == "helpers" and len(parts) > 1:
                     add(f"helper:{parts[1]}")
                 elif parts[0] == "routers" and len(parts) > 1:
                     add(f"router:{parts[1]}")
@@ -190,6 +246,30 @@ def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], uni
                     add(f"core:{parts[0]}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
+            if node.level >= 1 and pkg:
+                kind, key = pkg
+                targets = [mod.split(".")[0]] if mod else [a.name for a in node.names]
+                for t in targets:
+                    add_mod(key, t) if kind == "mod" else add_plat(t)
+                continue
+            parts0 = mod.split(".")
+            if node.level == 0 and parts0[0] == "modules":
+                if len(parts0) >= 3:
+                    add_mod(parts0[1], parts0[2])
+                elif len(parts0) == 2:
+                    for a in node.names:
+                        add_mod(parts0[1], a.name)
+                else:
+                    for a in node.names:
+                        add_mod(a.name, None)
+                continue
+            if node.level == 0 and parts0[0] == "core":
+                if len(parts0) >= 2:
+                    add_plat(parts0[1])
+                else:
+                    for a in node.names:
+                        add_plat(a.name)
+                continue
             if node.level == 1 and self_kind == "helper":
                 if mod:
                     add(f"helper:{mod.split('.')[0]}")
@@ -343,6 +423,10 @@ def match_call(call: str, routes: list[tuple[str, str, re.Pattern]]) -> set[str]
 
 # ───────────────────────── 主流程 ─────────────────────────
 
+def is_router(u: dict) -> bool:
+    return u["kind"] == "router" or (u["kind"] == "mod" and u.get("role") == "router")
+
+
 def build() -> dict:
     tables = known_tables()
     known = set(tables)
@@ -353,21 +437,22 @@ def build() -> dict:
 
     all_routes: list[tuple[str, str, re.Pattern]] = []
     for name, u in list(units.items()):
-        if u["kind"] not in ("router", "helper", "core"):
+        if u["kind"] not in ("router", "helper", "core", "mod", "plat"):
             continue
         tree = parse(ROOT / u["path"])
-        u["imports"] = sorted(resolve_imports(tree, u["kind"], reexp, units) - {name})
+        u["imports"] = sorted(resolve_imports(tree, u["kind"], reexp, units, name) - {name})
         r, w, ddl, dyn = sql_tables(string_chunks(tree), known)
         u["tables_r"], u["tables_w"], u["tables_ddl"] = sorted(r - w), sorted(w), sorted(ddl)
         u["dynamic_sql"] = dyn
         # 表名以獨立字串出現（`table="x"` 交給共用 helper 寫）⇒ 讀寫方向不明，另列
         named = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and n.value in known}
         u["tables_named"] = sorted(named - w - ddl)
-        if u["kind"] == "router":
+        if is_router(u):
             stem = name.split(":", 1)[1]
-            routes = router_routes(tree, main_pre.get(stem, ""))
+            routes = router_routes(tree, main_pre.get(stem, "") if u["kind"] == "router" else "")
             u["routes"] = routes
-            u["registered"] = stem in main_pre
+            # mod:* 由 L0 模組載入器掛載（core/loader.py），不經 main.py include_router
+            u["registered"] = (stem in main_pre) if u["kind"] == "router" else "loader"
             u["api_prefixes"] = sorted({api_prefix(x["path"]) for x in routes})
             for x in routes:
                 all_routes.append((name, x["path"], route_regex(x["path"])))
@@ -431,13 +516,15 @@ def build() -> dict:
         while stack:
             n = stack.pop()
             for d in units[n].get("imports", []):
-                if d.startswith("helper:") and d not in seen:
+                same_mod = (d.startswith("mod:") and units[d].get("role") != "router" and start.startswith("mod:")
+                            and units[d]["module_key"] == units[start]["module_key"])
+                if (d.startswith("helper:") or same_mod) and d not in seen:
                     seen.add(d)
                     stack.append(d)
         return seen
 
     for name, u in units.items():
-        if u["kind"] == "router":
+        if is_router(u):
             hs = closure(name)
             u["helpers_transitive"] = sorted(hs)
             u["tables_w_transitive"] = sorted(set(u["tables_w"]).union(*[units[h]["tables_w"] for h in hs]))
@@ -465,6 +552,15 @@ def positive_controls(g: dict) -> list[str]:
         ("router:vouchers names table voucher_edit_log", "voucher_edit_log" in U["router:vouchers"]["tables_named"]),
         # 反向控制：db.py:425 註解「CREATE TABLE IF NOT EXISTS is a no-op」不可變成表
         ("comment text is not a table (table:IF absent)", "table:IF" not in U),
+        # backend/modules/tender_radar/api.py:27 `from modules.tender_radar import source as tender_source`
+        ("mod:tender_radar/api imports mod:tender_radar/source",
+         "mod:tender_radar/source" in U.get("mod:tender_radar/api", {}).get("imports", [])),
+        ("mod:tender_radar/api is a router serving /api/tender-radar",
+         U.get("mod:tender_radar/api", {}).get("role") == "router"
+         and "/api/tender-radar" in U.get("mod:tender_radar/api", {}).get("api_prefixes", [])),
+        # backend/modules/tender_radar/__init__.py:3 `from core.registry import ModuleSpec, RuntimeSwitch`
+        ("mod:tender_radar/__init__ imports plat:registry",
+         "plat:registry" in U.get("mod:tender_radar/__init__", {}).get("imports", [])),
     ]
     for label, ok in checks:
         if not ok:
@@ -473,7 +569,7 @@ def positive_controls(g: dict) -> list[str]:
 
 
 MODULES = ROOT / "docs" / "platform" / "modules.json"
-ASSIGNED_KINDS = ("router", "helper", "core", "page", "js")  # 皆須剛好歸屬一組（派工最低要求為 router/helper/page）
+ASSIGNED_KINDS = ("router", "helper", "core", "page", "js", "mod", "plat")  # 皆須剛好歸屬一組
 
 
 def load_groups(path: Path = MODULES) -> tuple[dict[str, list[str]], dict[str, list[str]], set[str]]:
@@ -491,6 +587,41 @@ def load_groups(path: Path = MODULES) -> tuple[dict[str, list[str]], dict[str, l
     return u2g, t2g, set(m["modules"])
 
 
+def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
+    """backend/modules/<key>/：①整個資料夾歸同一組 ②該組 key＝資料夾名
+    ③module.json 的 tables／provides.api_prefixes 與 modules.json 該組一致。"""
+    m = json.loads(path.read_text(encoding="utf-8"))
+    by_key = {g["key"]: (gid, g) for gid, g in m["modules"].items()}
+    u2g, _, _ = load_groups(path)
+    errors = []
+    keys = sorted({u["module_key"] for u in U.values() if u["kind"] == "mod"})
+    for key in keys:
+        groups = {g for n, u in U.items() if u.get("module_key") == key for g in u2g.get(n, [])}
+        if len(groups) != 1:
+            errors.append(f"modules/{key}/: 資料夾內單位分屬 {sorted(groups) or '無'}（必須同一組）")
+        if key not in by_key:
+            errors.append(f"modules/{key}/: modules.json 沒有 key={key!r} 的模組（模組 key 必須等於資料夾名）")
+            continue
+        gid, grp = by_key[key]
+        if groups and groups != {gid}:
+            errors.append(f"modules/{key}/: 單位歸屬 {sorted(groups)}，但 key={key!r} 是 {gid}")
+        mj = BACKEND / "modules" / key / "module.json"
+        if not mj.is_file():
+            errors.append(f"modules/{key}/module.json 不存在")
+            continue
+        spec = json.loads(mj.read_text(encoding="utf-8"))
+        if spec.get("key") != key:
+            errors.append(f"modules/{key}/module.json: key={spec.get('key')!r} ≠ 資料夾名")
+        for field, mine, theirs in (
+            ("tables", set(spec.get("tables", [])), set(grp.get("tables", []))),
+            ("api_prefixes", set(spec.get("provides", {}).get("api_prefixes", [])), set(grp.get("api_prefixes", []))),
+        ):
+            if mine != theirs:
+                errors.append(f"modules/{key}/module.json {field} 與 modules.json {gid} 不一致："
+                              f"只在 module.json {sorted(mine - theirs)}；只在 modules.json {sorted(theirs - mine)}")
+    return errors
+
+
 def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, list[str]]]:
     """①歸屬檢查（錯誤）②跨群組邊清單（只列，不失敗）。"""
     U = g["units"]
@@ -503,6 +634,7 @@ def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, l
     for n in sorted(u2g):
         if n not in U:
             errors.append(f"{n}: modules.json 列了，但掃描不到（過期）")
+    errors += check_module_folders(U, path)
 
     edges: dict[str, list[str]] = defaultdict(list)
     grp = lambda n: (u2g.get(n) or ["?"])[0]
