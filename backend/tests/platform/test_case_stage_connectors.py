@@ -26,9 +26,16 @@ def _inline_bg(monkeypatch):
 
 
 def _without(monkeypatch, capability, name):
+    """拿掉一個提供者：未搬遷模組在 _LEGACY_PROVIDERS，已搬進 modules/ 的在已載入模組的 ModuleSpec.providers。"""
     key = (capability, name)
-    assert key in registry._LEGACY_PROVIDERS, "前提：提供者應該已登記（%s/%s）" % key
-    monkeypatch.delitem(registry._LEGACY_PROVIDERS, key)
+    if key in registry._LEGACY_PROVIDERS:
+        monkeypatch.delitem(registry._LEGACY_PROVIDERS, key)
+        return
+    for lm in registry.loaded():
+        if key in lm.spec.providers:
+            monkeypatch.delitem(lm.spec.providers, key)
+            return
+    raise AssertionError("前提：提供者應該已登記（%s/%s）" % key)
 
 
 def _login(client, make_user, name):
@@ -61,8 +68,8 @@ def _q(sql, *args):
 
 # ── IP-5 ────────────────────────────────────────────────────────────────
 
-def test_daily_task_connector_provider_is_registered_by_m12():
-    import routers.daily_tasks  # noqa: F401  M12 在匯入時登記
+def test_daily_task_connector_provider_is_registered_by_m12(client):
+    # 2026-09-26：M12 搬進 modules/，提供者改由 ModuleSpec 宣告，載入器掛模組時登記（client 夾具）
     p = registry.single_provider("daily_task.external")
     assert p is not None and callable(p.upsert) and callable(p.withdraw)
 

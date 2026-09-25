@@ -242,7 +242,7 @@ def test_trail_prune_keeps_recent_and_drops_old(client, make_user):
     """保留 90 天：舊的清掉、近期的留著（每日排程會呼叫）。"""
     import db
     from datetime import datetime, timedelta
-    from routers.daily_tasks import _prune_request_log
+    from helpers.system_checks import _prune_request_log
 
     su, sp = make_user(username="tr_prune", role="superadmin")
     tok = _login(client, su, sp)

@@ -500,8 +500,9 @@
    "key": "daily_tasks",
    "name": "每日任務",
    "units": [
-    "page:pages/daily-tasks.html",
-    "router:daily_tasks"
+    "mod:daily_tasks/__init__",
+    "mod:daily_tasks/api",
+    "page:pages/daily-tasks.html"
    ],
    "tables": [
     "daily_task_completions",

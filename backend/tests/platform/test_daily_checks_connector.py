@@ -17,6 +17,12 @@ SYS = ("_check_backup_freshness", "_check_disk_space", "_check_temp_bloat", "_ch
        "_check_approval_reminders", "_prune_request_log")
 
 
+def _only(monkeypatch, fake):
+    """daily.check 的提供者換成 fake（其他能力不動）：legacy 與已載入模組的 ModuleSpec.providers 兩處都要處理。"""
+    orig = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap: dict(fake) if cap == "daily.check" else orig(cap))
+
+
 @pytest.fixture
 def sys_calls(monkeypatch):
     called = []
@@ -31,8 +37,7 @@ def test_both_providers_are_registered(client):
 
 
 def test_reverse_without_module_providers_system_checks_still_run(monkeypatch, sys_calls):
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "daily.check"})
+    _only(monkeypatch, {})
     assert not registry.providers("daily.check")
     for mode in ("startup", "daily"):
         del sys_calls[:]
@@ -46,16 +51,13 @@ def test_one_failing_provider_does_not_stop_the_others(monkeypatch, sys_calls):
 
     def boom(mode):
         raise RuntimeError("x")
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {**{k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "daily.check"},
-                         ("daily.check", "aa_boom"): boom,
-                         ("daily.check", "zz_ok"): lambda mode: ran.append(mode)})
+    _only(monkeypatch, {"aa_boom": boom, "zz_ok": lambda mode: ran.append(mode)})
     assert daily_checks.run_once("daily") == ["aa_boom", "zz_ok"]
     assert ran == ["daily"] and "_check_backup_freshness" in sys_calls
 
 
 def test_daily_tasks_startup_catchup_advances_the_guard(client, monkeypatch):
-    import routers.daily_tasks as dt
+    import modules.daily_tasks.api as dt
     days = []
     monkeypatch.setattr(dt, "_check_overdue_and_notify", lambda d=None: days.append(d))
     monkeypatch.setattr(dt, "_check_range_task_deadline", lambda: None)

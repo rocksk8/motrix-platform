@@ -41,7 +41,7 @@ _UNTOUCHED = (
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
     ('routers/contractor_vouchers.py',
      '系統已設定簽核流程，此申請缺少簽核層資料，請重新送審'),
-    ('routers/daily_tasks.py',
+    ('modules/daily_tasks/api.py',
      'year_month 格式錯誤，應為 YYYY-MM'),
     ('routers/dashboard.py',
      '僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱'),
