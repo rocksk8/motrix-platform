@@ -1,0 +1,84 @@
+# 稽核：主持的部署儀表板修正（C 稽核，2026-09-25）
+
+> 依 PLAYBOOK §E。對象：commit `7be69753`（S-CP01／S-CP02／S-CU01／S-CU06，STATES-DATA-OPS 編號）。
+> 稽核範圍只有這四項修正；儀表板其餘部分（D2／D4／D6、modtest 等）的稽核另開一份。
+> 分級：**必修**（不修不能關）／**建議**／**觀察**。關閉規則：被稽核者回覆後，由 C 確認才關。
+> 路徑前綴 `backend/`；`DD`＝`tools/deploy_dashboard.py`、`DI`＝`tools/deploy_insights.py`、`PHF`＝`tools/_prod_health_facts.ps1`。
+
+## 0. 結論
+
+- 四項修正的主要缺陷都已修好，也有測試；S-CP02 的 `.done` 規則突變後會轉紅（C 實測）。
+- **必修 3 項**：
+  1. A-1：回滾的逾時比轉換短，逾時後會把回滾砍到一半。
+  2. A-2：健康檢查的磁碟判斷只認 C:，S-CP02 的一半還沒修。
+  3. A-3：一支新測試在 C 的環境是紅的，原因是 PowerShell 輸出編碼沒有固定。
+- 建議 3 項、觀察 3 項。
+- 驗證：`tests/platform/test_deploy_dashboard_{jobs,health_facts,upgrade,health,gates}.py` 在 C 的環境 **48 passed、1 failed**（A-3）。
+
+## 1. 逐項驗收
+
+| 項目 | 規格（STATES「應有行為」） | 驗收 | 證據 |
+|---|---|---|---|
+| S-CP01 歷史寫入 | 修正變數；補一題不 mock `_run_job` 的測試 | ✅ | DD:582 改用 `outcome == "succeeded"`；`test_deploy_job_writes_history_even_when_it_fails` 真的跑 `_run_job`（以 python 子行程代替 PowerShell） |
+| S-CP02 D1 假綠燈 | 以最新 `YYYY-MM-DD/.done` 為準；**磁碟未知不放行** | ⚠ 一半 | `.done` ✅（PHF:14-24）。C 實測：只有 `pre_update_*`＋沒有 `.done` 的日期資料夾 ⇒ `latestDbBackup: null`；補上 `.done` ⇒ 取到。**磁碟那一半未改**，見 A-2 |
+| S-CU01 WinRM 掛住 | 每步有逾時；逾時標 failed、放鎖、明說狀態未知 | ⚠ | 機制 ✅（DD:478-499）；`test_hung_upgrade_job_is_killed_and_reported` 驗到失敗、放鎖、訊息。但上限值有問題，見 A-1 |
+| S-CU06 時間戳 | 伺服器記住備份目錄、可選既有備份 | ✅（可選既有備份未做） | `upgrade_session.json`（DD:1131-1208）；頁面從伺服器讀（deploy_dashboard.html:224）；步驟的時間戳要和進行中那一輪相同，否則 409（DD:1219-1223）；讀不懂的時候不當成沒有 |
+
+## 2. 發現
+
+### 必修
+
+**A-1　回滾的逾時比轉換短：逾時會把回滾砍到一半**
+- 位置：DD:478-481。`_JOB_TIMEOUT_MIN` 只列了 build／deploy／rollback／upgrade-push／backup／convert。`upgrade-rollback-code`、`upgrade-rollback-full`、`verify`、`start-services` 都落到預設的 20 分鐘，但 `upgrade-convert` 是 45 分鐘。
+- 為什麼是必修：
+  - 回滾複製的量不比轉換少（full 另外還還原 DB）。
+  - 逾時後 `taskkill /T` 會砍掉本機的 PowerShell 與 WinRM 連線，正式機上的回滾很可能停在一半。
+  - C 在 STATES 的 S-CU07【實測 R3】證明回滾不是原子的：中斷後新舊程式檔混在一起，重跑同一個回滾才會收斂。
+- 重現：`python -c "import sys;sys.path.insert(0,'backend/tools');import deploy_dashboard as d;print({k:d._JOB_TIMEOUT_MIN.get(k,d._JOB_TIMEOUT_DEFAULT_MIN) for k in ['upgrade-convert','upgrade-rollback-code','upgrade-rollback-full']})"`，得到 `{convert:45, rollback-code:20, rollback-full:20}`。
+- 建議修法：
+  - 不可逆的步驟（convert、rollback-*）上限至少與 convert 相同，或更長。
+  - 逾時訊息依步驟區分：回滾逾時要明說「回滾可能只做了一半——等正式機恢復後重跑同一個回滾（可以收斂）」。
+
+**A-2　健康檢查的磁碟只認 C:（S-CP02 未修完）**
+- 位置：DI:164。`if d.get("name") == "C" and …`。清單裡沒有 C，或安裝根目錄不在 C: 時，一律放行。
+- STATES S-CP02 的「應有行為」寫的是「磁碟找不到 ⇒ 未確認（不放行）」。產品會賣給客戶自架，安裝在 D: 很常見（MODULE-GUIDE／記憶〈不可以用安裝路徑猜正式機〉同一類）。
+- 重現：`python -c "import sys;sys.path.insert(0,'backend/tools');import deploy_insights as i;f={'alertActive':False,'latestDbBackup':{'at':__import__('datetime').datetime.now().isoformat(timespec='seconds'),'name':'x'},'disks':[{'name':'D','freeGB':0.1}],'port666Listen':1,'devMarkers':[],'piiFolders':['x']};print(i.evaluate_health(f))"`，得到 `ok: True`（D: 只剩 0.1 GB 也放行）。
+- 建議修法：
+  - PHF 回傳安裝根目錄所在的磁碟代號。
+  - 規則改看那一顆；找不到就列為 problem。
+
+**A-3　`test_alert_and_dev_markers_are_collected` 在 C 的環境是紅的（輸出編碼沒固定）**
+- 位置：PHF 本身沒有設定 `[Console]::OutputEncoding`。測試以 `encoding="utf-8"` 解讀 powershell 的 stdout（tests/platform/test_deploy_dashboard_health_facts.py:19-21）。
+- C 的環境（系統字碼頁 cp932）得到 `alertText='�_�[�H…'`，於是 `AssertionError`。
+- 同一個腳本經 `_dashboard_remote.ps1` 執行時，外層有設 UTF-8（DD:613），所以正式路徑大概沒問題。但測試的結果取決於跑的人的主控台字碼頁；B 的全量在別的環境可能是綠的，造成「你那邊綠、我這邊紅」。
+- 重現：`cd backend && python -m pytest tests/platform/test_deploy_dashboard_health_facts.py::test_alert_and_dev_markers_are_collected -p no:cacheprovider --basetemp=<自己的暫存>`
+- 建議修法：PHF 開頭加一行 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`（腳本自己決定輸出編碼，不依賴呼叫者）。
+
+### 建議
+
+- **B-1　部署 `_run_job` 的看門狗沒有測試**：只測了 `_run_upgrade_job` 會逾時中止；`_run_job`（deploy／rollback／build）接了同一支 `_start_watchdog`（DD:526），但沒有題目。另外成功路徑（`success=True` 寫進歷史）也沒測；目前兩題都是失敗路徑。
+- **B-2　升級紀錄檔讀不懂時永遠卡住**：新開一輪與結束一輪都拒絕 `corrupt`（DD:1166-1170、1192-1193），只能人工處理 `upgrade_session.json`，但 RUNBOOK 與畫面都沒寫要怎麼處理。建議畫面顯示檔案位置與「改名成 .bad 後重新整理」這類步驟，並寫進 UPGRADE-RUNBOOK。
+- **B-3　逾時後的狀態**：逾時後 job 標為 `failed`，但實際是「未知」。訊息已經說明了；建議另設一個 `timeout` 狀態，讓歷史與「15 分鐘內剛失敗」的判斷區分得出來。
+
+### 觀察
+
+- **C-1**：新鮮度用的是 `.done` 的修改時間，不是資料夾名稱的日期（PHF:22；DI:152）。舊日期資料夾的 `.done` 如果被重寫過，會看起來很新。實務上 `.done` 在當天寫入，影響很小。
+- **C-2**：伺服器端仍然不管步驟順序，這是 STATES S-CU08（中），不在這次範圍內。
+- **C-3**：一輪升級結束之後，UI 就不能再對那一份備份做回滾（步驟要求進行中的那一輪）。這是合理的，但要在畫面上提醒「回滾完成前不要結束這一輪」。
+
+## 3. 反向控制與假綠燈檢查
+
+- **S-CP02 突變**：拿掉 PHF 的 `.done` 條件後，`test_only_daily_snapshot_with_done_counts` 轉紅（C 實測，檔案已還原）。
+- **假綠燈**：`test_evaluator_consumes_real_script_output` 驗的是「只有 pre_update 時不放行」。但 PHF 的名稱正規式本來就排除 `pre_update_*`，所以這題證明不了 `.done` 規則；證明它的是上一題。兩題要一起留著。
+- **失敗路徑**：S-CU01 已測逾時。回滾路徑的逾時上限沒有測（A-1）。
+
+## 4. 回覆欄（被稽核者填；C 確認後才關）
+
+| # | 回覆（修正／不修＋理由／需使用者裁示） | commit | C 確認 |
+|---|---|---|---|
+| A-1 | | | |
+| A-2 | | | |
+| A-3 | | | |
+| B-1 | | | |
+| B-2 | | | |
+| B-3 | | | |
