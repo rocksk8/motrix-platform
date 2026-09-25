@@ -371,45 +371,7 @@ try {
         # health（CORE-SPEC §9e D1，2026-09-25）：部署前健康檢查，**完全唯讀**。
         # 只收集事實、不做判斷——判斷規則在開發機 deploy_insights.evaluate_health()（有測試）。
         # 單一字串回傳（先在遠端 ConvertTo-Json），理由同 tail-log：避開 Remoting 對物件加簽的屬性。
-        $raw = Invoke-Command -Session $session -ArgumentList $ProdRoot -ScriptBlock {
-            param($Root)
-            $b = Join-Path $Root "backend"
-            $alertFile = Join-Path $Root "backup_alerts\BACKUP_ALERT.txt"
-            $alertText = ""
-            if (Test-Path $alertFile) { $alertText = ((Get-Content $alertFile -TotalCount 5) -join "`n") }
-            $latestBackup = $null
-            $bdir = Join-Path $b "db_backups"
-            if (Test-Path $bdir) {
-                $f = Get-ChildItem $bdir -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-                if ($f) { $latestBackup = @{ name = $f.Name; at = $f.LastWriteTime.ToString("s") } }
-            }
-            $disks = @()
-            foreach ($d in (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)) {
-                if ($d.Free -ne $null) { $disks += @{ name = $d.Name; freeGB = [math]::Round($d.Free / 1GB, 1) } }
-            }
-            $listen = @(Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue).Count
-            $pii = @()
-            foreach ($d in (Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue)) {
-                foreach ($sub in @("我的雲端硬碟\系統存檔_個資", "My Drive\系統存檔_個資")) {
-                    $p = Join-Path $d.Root $sub
-                    if (Test-Path -LiteralPath $p) { $pii += $p }
-                }
-            }
-            $deployed = $null
-            $dm = Join-Path $b ".deployed_commit.json"
-            if (Test-Path $dm) { $deployed = (Get-Content $dm -Raw) }
-            @{
-                checkedAt      = (Get-Date).ToString("s")
-                alertActive    = (Test-Path $alertFile)
-                alertText      = $alertText
-                latestDbBackup = $latestBackup
-                disks          = $disks
-                port666Listen  = $listen
-                devMarkers     = @(@(".no_email_send", ".no_cloud_archive") | Where-Object { Test-Path (Join-Path $Root $_) })
-                piiFolders     = $pii
-                deployedRaw    = $deployed
-            } | ConvertTo-Json -Depth 5 -Compress
-        }
+        $raw = Invoke-Command -Session $session -FilePath (Join-Path $PSScriptRoot "_prod_health_facts.ps1") -ArgumentList $ProdRoot
         [string]$outText = $raw
         Write-Host "===JSON==="
         Write-Host $outText

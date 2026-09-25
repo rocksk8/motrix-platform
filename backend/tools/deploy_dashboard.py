@@ -473,6 +473,32 @@ def decide_outcome(returncode: int, output: str,
     return "succeeded"
 
 
+#: S-U01（2026-09-25 C 稽核）：WinRM 掛住不回時 job 會永遠 running、鎖永遠不放。
+#: 每個動作一個上限（分鐘）；超過就強制中止本機這一側，並明說「正式機狀態不明」。
+_JOB_TIMEOUT_MIN = {
+    "build": 90, "deploy": 45, "rollback": 30,
+    "upgrade-push": 30, "upgrade-backup": 90, "upgrade-convert": 45,
+}
+_JOB_TIMEOUT_DEFAULT_MIN = 20
+
+
+def _start_watchdog(proc, job_id: str, action: str):
+    limit = _JOB_TIMEOUT_MIN.get(action, _JOB_TIMEOUT_DEFAULT_MIN) * 60
+
+    def _watch():
+        try:
+            proc.wait(timeout=limit)
+        except subprocess.TimeoutExpired:
+            msg = (f"[逾時] {action} 超過 {limit // 60} 分鐘沒有結束，已強制中止本機這一側的 PowerShell／WinRM。"
+                   "⚠ 正式機上的動作可能仍在進行或只做了一半——先用「部署前健康檢查」與「查看正式機 log」確認，再決定下一步。")
+            with _jobs_lock:
+                if job_id in _jobs:
+                    _jobs[job_id]["lines"].append(msg)
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True,
+                           creationflags=CREATE_NO_WINDOW)
+    threading.Thread(target=_watch, daemon=True).start()
+
+
 def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
     global _active_job_id
     with _jobs_lock:
@@ -497,6 +523,7 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
             if input_text is not None:
                 proc.stdin.write(input_text)
                 proc.stdin.close()
+            _start_watchdog(proc, job_id, action)
 
             for line in proc.stdout:
                 stripped = line.rstrip("\n")
@@ -550,7 +577,9 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                 if (parsed and action in _ROLLED_BACK_TEXT) else "")
 
         if action in ("deploy", "rollback"):
-            _append_history(action, job_id, success, str(log_path))
+            # S-P01（2026-09-25 C 稽核）：原本這裡的 `success` 從未賦值 ⇒ 每一次部署／回滾在這一行 NameError，
+            # 歷史從來沒寫進去，「15 分鐘內剛失敗」的警告因此永遠不觸發。成功的定義就是上面判定的 outcome。
+            _append_history(action, job_id, outcome == "succeeded", str(log_path))
     finally:
         # 不管上面成功、失敗、還是中途拋例外，只要是這個 job 占著鎖，
         # 一定要釋放——否則儀表板重啟前這把鎖會卡死，之後所有部署/回滾
@@ -1063,7 +1092,7 @@ class UpgradeStepIn(BaseModel):
     healthAck: bool = False
 
 
-def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str):
+def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str, stamp: str = ""):
     global _active_job_id
     with _jobs_lock:
         _jobs[job_id] = {"status": "running", "lines": [], "action": action}
@@ -1077,6 +1106,7 @@ def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str):
                                     creationflags=CREATE_NO_WINDOW)
             proc.stdin.write(input_text)
             proc.stdin.close()
+            _start_watchdog(proc, job_id, action)
             for line in proc.stdout:
                 s = line.rstrip("\n")
                 with _jobs_lock:
@@ -1089,9 +1119,93 @@ def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str):
         with _jobs_lock:
             _jobs[job_id]["status"] = "succeeded" if success else "failed"
         _append_history(action, job_id, success, str(log_path))
+        if stamp and action.startswith("upgrade-"):
+            _record_step(stamp, action[len("upgrade-"):], success)
         with _active_job_lock:
             if _active_job_id == job_id:
                 _active_job_id = None
+
+
+# S-U06（2026-09-25 C 稽核）：備份時間戳原本在前端產生 ⇒ 頁面重整後 UI 再也指不到原本的備份。
+# 改成伺服器端的「這一輪升級」紀錄：時間戳由伺服器產生並落地，重整或重啟儀表板都還在；
+# 同一時間只能有一輪；要開新的一輪，必須先寫明原因結束舊的。
+UPGRADE_SESSION_PATH = TOOLS_DIR / "upgrade_session.json"
+_upgrade_session_lock = threading.Lock()
+
+
+def _load_session():
+    try:
+        return json.loads(UPGRADE_SESSION_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except Exception:
+        # 讀不懂 ≠ 沒有：不可以當成沒有而讓人開新的一輪（那會失去舊備份的指向）
+        return {"corrupt": True}
+
+
+def _save_session(s):
+    tmp = UPGRADE_SESSION_PATH.with_name(UPGRADE_SESSION_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, UPGRADE_SESSION_PATH)
+
+
+def _record_step(stamp: str, step: str, ok: bool):
+    with _upgrade_session_lock:
+        cur = _load_session()
+        if cur and cur.get("stamp") == stamp:
+            cur.setdefault("steps", {})[step] = {"ok": ok, "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+            _save_session(cur)
+
+
+class SessionNewIn(BaseModel):
+    package: str
+
+
+class SessionCloseIn(BaseModel):
+    reason: str
+
+
+@app.get("/api/upgrade/session")
+def get_upgrade_session():
+    return _load_session() or {}
+
+
+@app.post("/api/upgrade/session")
+def new_upgrade_session(body: SessionNewIn):
+    if not _is_safe_name(body.package) or not (DEPLOY_PACKAGES_DIR / body.package).exists():
+        return JSONResponse(status_code=400, content={"detail": "找不到這個部署包"})
+    with _upgrade_session_lock:
+        cur = _load_session()
+        if cur and (cur.get("corrupt") or not cur.get("closedAt")):
+            return JSONResponse(status_code=409, content={
+                "detail": ("升級紀錄檔讀不出來，請先人工確認 upgrade_session.json" if cur.get("corrupt") else
+                           "已經有一輪升級還沒結束（備份時間戳 %s）。要開新的一輪，先寫明原因結束它。" % cur.get("stamp", "?")),
+                "session": cur})
+        s = {"stamp": time.strftime("%Y%m%d_%H%M%S"), "package": body.package,
+             "createdAt": time.strftime("%Y-%m-%d %H:%M:%S"), "steps": {}, "closedAt": None}
+        _save_session(s)
+    _append_history(f"開始一輪升級（{body.package}，備份時間戳 {s['stamp']}）", "session", True)
+    return s
+
+
+@app.post("/api/upgrade/session/close")
+def close_upgrade_session(body: SessionCloseIn):
+    reason = (body.reason or "").strip()
+    if len(reason) < 4:
+        return JSONResponse(status_code=400, content={"detail": "結束這一輪升級必須寫明原因"})
+    with _upgrade_session_lock:
+        cur = _load_session()
+        if not cur or cur.get("corrupt") or cur.get("closedAt"):
+            return JSONResponse(status_code=400, content={"detail": "目前沒有進行中的升級"})
+        with _active_job_lock:
+            busy = _active_job_id is not None
+        if busy:
+            return JSONResponse(status_code=409, content={"detail": "有工作正在執行，等它結束再關"})
+        cur["closedAt"] = time.strftime("%Y-%m-%d %H:%M:%S")
+        cur["closeReason"] = reason
+        _save_session(cur)
+    _append_history(f"結束一輪升級（備份時間戳 {cur.get('stamp')}）：{reason}", "session", True)
+    return cur
 
 
 @app.post("/api/upgrade/step")
@@ -1102,6 +1216,11 @@ def upgrade_step(body: UpgradeStepIn):
         return JSONResponse(status_code=400, content={"detail": "需要先在網頁上確認這一步"})
     if not _is_safe_name(body.package) or not _is_safe_name(body.backupStamp):
         return JSONResponse(status_code=400, content={"detail": "部署包名稱或備份時間戳不合法"})
+    cur = _load_session()
+    if (not cur or cur.get("corrupt") or cur.get("closedAt")
+            or cur.get("stamp") != body.backupStamp or cur.get("package") != body.package):
+        return JSONResponse(status_code=409, content={
+            "detail": "這一步不屬於目前進行中的那一輪升級（或升級紀錄讀不出來）。請重新整理頁面，以伺服器上的紀錄為準。"})
     package_path = DEPLOY_PACKAGES_DIR / body.package
     if not package_path.exists():
         return JSONResponse(status_code=400, content={"detail": f"找不到部署包：{package_path}"})
@@ -1120,7 +1239,7 @@ def upgrade_step(body: UpgradeStepIn):
         "Action": "upgrade", "Step": body.step, "Username": body.username,
         "PackagePath": str(package_path), "BackupStamp": body.backupStamp})
     threading.Thread(target=_run_upgrade_job,
-                     args=(job_id, f"upgrade-{body.step}", cmd, body.password + "\n"), daemon=True).start()
+                     args=(job_id, f"upgrade-{body.step}", cmd, body.password + "\n", body.backupStamp), daemon=True).start()
     return {"jobId": job_id}
 
 

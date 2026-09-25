@@ -21,6 +21,10 @@ def client(monkeypatch, tmp_path):
     (tmp_path / "pkgs" / "20260925_new").mkdir(parents=True)
     monkeypatch.setattr(dd, "_last_health", {"at": 0.0, "ok": False})
     monkeypatch.setattr(dd, "_active_job_id", None)
+    monkeypatch.setattr(dd, "UPGRADE_SESSION_PATH", tmp_path / "upgrade_session.json")
+    # 進行中的一輪升級（S-U06：時間戳由伺服器保存）
+    (tmp_path / "upgrade_session.json").write_text(json.dumps(
+        {"stamp": "20260925_2000", "package": "20260925_new", "steps": {}, "closedAt": None}), encoding="utf-8")
     c = TestClient(dd.app, client=("127.0.0.1", 1))
     c.runs = runs
     c.tmp = tmp_path
@@ -59,7 +63,8 @@ def test_preflight_runs_with_fixed_step_name(client):
     r = client.post("/api/upgrade/step", json=_body())
     assert r.status_code == 200
     _wait(client)
-    job_id, action, cmd, stdin = client.runs[0]
+    job_id, action, cmd, stdin, stamp = client.runs[0]
+    assert stamp == "20260925_2000"
     joined = " ".join(cmd)
     assert action == "upgrade-preflight" and "-Step 'preflight'" in joined and "-Action 'upgrade'" in joined
     assert stdin == "x\n" and "'x'" not in joined          # 密碼只走 stdin，不進指令列
@@ -84,6 +89,44 @@ def test_stop_services_needs_health_or_ack(client):
 def test_job_lock_shared_with_deploy(client, monkeypatch):
     monkeypatch.setattr(dd, "_active_job_id", "someone-else")
     assert client.post("/api/upgrade/step", json=_body()).status_code == 409
+
+
+# ── S-U06：這一輪升級的紀錄在伺服器端 ─────────────────────────────────────
+
+def test_step_with_a_stamp_not_in_the_current_session_is_refused(client):
+    r = client.post("/api/upgrade/step", json=_body(backupStamp="20260101_0000"))
+    assert r.status_code == 409 and client.runs == []
+
+
+def test_step_without_any_session_is_refused(client):
+    (client.tmp / "upgrade_session.json").unlink()
+    assert client.post("/api/upgrade/step", json=_body()).status_code == 409
+
+
+def test_corrupt_session_file_is_not_treated_as_none(client):
+    (client.tmp / "upgrade_session.json").write_text("{bad", encoding="utf-8")
+    assert client.post("/api/upgrade/step", json=_body()).status_code == 409
+    assert client.post("/api/upgrade/session", json={"package": "20260925_new"}).status_code == 409
+
+
+def test_session_survives_reload_and_only_one_at_a_time(client):
+    assert client.get("/api/upgrade/session").json()["stamp"] == "20260925_2000"
+    r = client.post("/api/upgrade/session", json={"package": "20260925_new"})
+    assert r.status_code == 409 and r.json()["session"]["stamp"] == "20260925_2000"
+
+
+def test_close_needs_reason_then_new_session_gets_server_stamp(client):
+    assert client.post("/api/upgrade/session/close", json={"reason": ""}).status_code == 400
+    assert client.post("/api/upgrade/session/close", json={"reason": "演練結束，正式日另開"}).status_code == 200
+    s = client.post("/api/upgrade/session", json={"package": "20260925_new"}).json()
+    assert s["stamp"] != "20260925_2000" and s["closedAt"] is None
+
+
+def test_step_results_are_recorded_in_the_session(client):
+    dd._record_step("20260925_2000", "backup", True)
+    assert client.get("/api/upgrade/session").json()["steps"]["backup"]["ok"] is True
+    dd._record_step("OTHER", "convert", True)          # 別一輪的結果不可以寫進這一輪
+    assert "convert" not in client.get("/api/upgrade/session").json()["steps"]
 
 
 def test_remote_script_knows_every_step():

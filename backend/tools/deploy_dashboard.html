@@ -135,7 +135,10 @@
     <select id="upPkg"></select>
     <input id="upUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
     <input id="upPass" type="password" placeholder="正式機密碼">
-    <div class="row"><span>備份時間戳（這一次升級固定用這個）</span><span id="upStamp">…</span></div>
+    <div class="row"><span>這一輪升級（伺服器保存，重新整理也不會遺失）</span><span id="upStamp">…</span></div>
+    <button class="ghost" id="upNewBtn" onclick="newUpSession()">開始新一輪升級（用上面選的部署包）</button>
+    <button class="ghost" id="upCloseBtn" onclick="closeUpSession()">結束這一輪（需寫原因）</button>
+    <input id="upCloseReason" placeholder="結束原因（例如：演練完成／已回滾，改日再做）">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F87171;margin-bottom:8px">
       <input type="checkbox" id="upHealthAck" style="width:auto;margin:0">
       我已確認正式機狀態（停服務前沒有通過健康檢查時才勾——會記進歷史紀錄）
@@ -216,11 +219,39 @@ const UP_STEPS = [
 ];
 let upDone = {};
 let pendingUp = null;
-function initUpgrade() {
-  const d = new Date(), p = n => String(n).padStart(2, '0');
-  document.getElementById('upStamp').textContent =
-    `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+let upSession = null;   // S-U06：以伺服器上的紀錄為準，前端不自己產生時間戳
+async function initUpgrade() {
+  try { upSession = await (await fetch('/api/upgrade/session')).json(); } catch (e) { upSession = null; }
+  const active = upSession && upSession.stamp && !upSession.closedAt;
+  const el = document.getElementById('upStamp');
+  if (upSession && upSession.corrupt) {
+    el.textContent = '⛔ 升級紀錄檔讀不出來，請先人工確認 upgrade_session.json';
+  } else if (active) {
+    el.textContent = `進行中：${upSession.stamp}（部署包 ${upSession.package}，開始於 ${upSession.createdAt}）`;
+    document.getElementById('upPkg').value = upSession.package;
+  } else {
+    el.textContent = '沒有進行中的升級';
+  }
+  upDone = {};
+  if (active) for (const [k, v] of Object.entries(upSession.steps || {})) upDone[k] = v.ok;
+  document.getElementById('upNewBtn').disabled = !!active;
+  document.getElementById('upCloseBtn').disabled = !active;
+  document.getElementById('upPkg').disabled = !!active;
   renderUpSteps();
+}
+async function newUpSession() {
+  const res = await fetch('/api/upgrade/session', { method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ package: document.getElementById('upPkg').value }) });
+  const d = await res.json();
+  if (!res.ok) { const log = document.getElementById('upLog'); log.classList.remove('hidden'); log.textContent = '⛔ ' + d.detail; }
+  initUpgrade(); refreshHistory();
+}
+async function closeUpSession() {
+  const res = await fetch('/api/upgrade/session/close', { method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ reason: document.getElementById('upCloseReason').value }) });
+  const d = await res.json();
+  if (!res.ok) { const log = document.getElementById('upLog'); log.classList.remove('hidden'); log.textContent = '⛔ ' + d.detail; }
+  initUpgrade(); refreshHistory();
 }
 function renderUpSteps() {
   document.getElementById('upSteps').innerHTML = UP_STEPS.map(([k, label]) =>
@@ -239,8 +270,12 @@ function cancelUpStep() { pendingUp = null; document.getElementById('upConfirm')
 async function confirmUpStep() {
   const step = pendingUp; if (!step) return;
   const full = document.getElementById('upFull');
-  const body = { step, package: document.getElementById('upPkg').value,
-    backupStamp: document.getElementById('upStamp').textContent,
+  if (!upSession || !upSession.stamp || upSession.closedAt) {
+    const log = document.getElementById('upLog'); log.classList.remove('hidden');
+    log.textContent = '⛔ 先按「開始新一輪升級」'; cancelUpStep(); return;
+  }
+  const body = { step, package: upSession.package,
+    backupStamp: upSession.stamp,
     username: document.getElementById('upUser').value.trim(), password: document.getElementById('upPass').value,
     confirm: true, confirmText: full ? full.value : '', healthAck: document.getElementById('upHealthAck').checked };
   cancelUpStep();
@@ -250,7 +285,7 @@ async function confirmUpStep() {
   const res = await fetch('/api/upgrade/step', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
   const data = await res.json();
   if (!res.ok) { log.textContent = '⛔ ' + (data.detail || '請求失敗'); return; }
-  pollJob(data.jobId, 'upLog', ok => { upDone[step] = ok; renderUpSteps(); });
+  pollJob(data.jobId, 'upLog', () => initUpgrade());   // 結果以伺服器紀錄為準
 }
 
 // §9e D2：這一包會改到哪些模組
