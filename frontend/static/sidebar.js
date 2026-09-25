@@ -1161,6 +1161,9 @@ if (typeof module !== 'undefined' && module.exports) {
   var MODULE_PAGES = {
     'tender-radar.html': { key: 'tender_radar', name: '標案雷達' },
     'daily-tasks.html': { key: 'daily_tasks', name: '每日任務' },
+    'network-plans.html': { key: 'netplan', name: '網路規劃' },
+    'network-plan-form.html': { key: 'netplan', name: '網路規劃' },
+    'topology-quick.html': { key: 'netplan', name: '網路規劃' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

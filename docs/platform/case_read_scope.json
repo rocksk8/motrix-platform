@@ -2,7 +2,7 @@
  "_doc": "案件底下的讀取路徑（GET，路徑或參數帶 quote_no）各歸哪一類權限。唯一來源；守門 backend/tests/platform/test_case_read_scope.py。 row_access＝逐案（helpers.row_access `case`，含經 _guard_case／guard_case_access／_guard_queue_detail）； module＝只受模組權限（CORE-SPEC 使用者裁示「案件子資料的權限範圍」Z-5：有該模組即可看全部案件的子資料）； own_rule＝模組自有的可見規則（例：獎金分潤 SPEC-BONUS §七）。改動分類要先問使用者（PLAYBOOK §F）。",
  "routes": [
   {
-   "file": "routers/network_plans.py",
+   "file": "modules/netplan/api.py",
    "path": "/api/network-plans",
    "handler": "list_network_plans",
    "scope": "module"
@@ -86,7 +86,7 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/network_plans.py",
+   "file": "modules/netplan/api.py",
    "path": "/api/quotations/{quote_no}/network-plan",
    "handler": "get_network_plan_by_case",
    "scope": "row_access"

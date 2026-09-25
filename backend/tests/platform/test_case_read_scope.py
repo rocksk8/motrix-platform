@@ -18,7 +18,8 @@ SCOPE = Path(__file__).resolve().parents[3] / "docs" / "platform" / "case_read_s
 CLASSES = {"row_access", "module", "own_rule"}
 #: 逐案守門的呼叫（直接或經共用守門）
 CASE_GUARDS = ("row_access.", "_guard_case(", "guard_case_access(", "_guard_queue_detail(",
-               "_guard_action_item_case(", "get_quotation(")
+               "_guard_action_item_case(", "get_quotation(",
+               ".guard(conn, quote_no")      # IP-11 case.access（M01 提供；別組經它做逐案檢查）
 
 
 def scan(sources):

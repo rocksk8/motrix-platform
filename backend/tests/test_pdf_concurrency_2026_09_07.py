@@ -59,7 +59,7 @@ def test_pdf_gen_and_network_plan_export_share_the_same_runner():
     改比對那支函式。
     """
     import pdf_gen
-    import network_plan_export
+    import modules.netplan.export as network_plan_export
     import routers.reports as reports_module
 
     assert pdf_gen.run_edge_pdf is run_edge_pdf
