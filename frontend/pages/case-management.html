@@ -3995,6 +3995,26 @@
             </div>
           </div>
 
+          <!-- R2（營業稅法 §7、§8）：零稅率／免稅的依據。報價上有就顯示；沒有（舊單）就在這裡補填 -->
+          <template x-if="ivRemaining.taxType === 'zero' || ivRemaining.taxType === 'exempt'">
+            <div data-iv-tax-basis style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px;font-size:12px">
+              <div style="font-weight:600;margin-bottom:6px" x-text="(ivRemaining.taxType === 'zero' ? '零稅率' : '免稅') + '依據'"></div>
+              <div x-show="!ivRemaining.taxBasisMissing" x-text="ivRemaining.taxBasisLabel" style="color:var(--text-secondary)"></div>
+              <div x-show="ivRemaining.taxBasisMissing">
+                <div style="color:var(--tone-warning-fg, #B45309);margin-bottom:6px">報價單沒有記錄依據，請補填（必填）</div>
+                <select data-iv-tax-basis-code x-model="ivTaxBasis.code"
+                        style="width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;margin-bottom:6px">
+                  <option value="">請選擇依據</option>
+                  <template x-for="o in ivTaxBasisChoices()" :key="o.code">
+                    <option :value="o.code" x-text="o.label"></option>
+                  </template>
+                </select>
+                <input type="text" data-iv-tax-basis-note x-model="ivTaxBasis.note" placeholder="說明（款次、法條或證明文件）"
+                       style="width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px">
+              </div>
+            </div>
+          </template>
+
           <div style="display:flex;gap:8px;margin-bottom:14px">
             <button @click="ivMode='amount'" :style="ivMode==='amount' ? 'background:var(--tone-violet-fg);color:var(--surface);border-color:var(--tone-violet-fg)' : 'background:var(--surface);color:var(--text-secondary);border-color:var(--border-light)'"
                     style="flex:1;padding:8px;border-radius:6px;border:1px solid;font-size:12px;font-family:var(--font-zh);cursor:pointer;font-weight:600">按金額</button>

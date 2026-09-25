@@ -45,6 +45,7 @@ from helpers import (
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 from helpers.errors import trace_id
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE
+from helpers.legal_params import tax_basis_error, tax_basis_label   # R2（L1）
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -101,6 +102,8 @@ class VoucherCreateIn(BaseModel):
     scope:    str                            # 'amount'（自訂金額）| 'items'（自訂品項+數量）
     amount:   Optional[float] = None         # scope='amount' 時必填
     items:    Optional[List[InvoiceItemIn]] = None   # scope='items' 時必填
+    # R2（營業稅法 §7、§8）：零稅率／免稅報價沒有依據時（舊單），申請時補填 {code, note}
+    taxBasis: Optional[dict] = None
 
 
 # ── Approval tier helpers（純邏輯部分共用 helpers/tiered_approval.py，見上方 import）──
@@ -129,6 +132,7 @@ def _voucher_public(row, include_snapshot: bool = True) -> dict:
         "taxAmount":     snap.get("taxAmount", 0),
         "taxType":       snap.get("taxType", ""),      # AC1 之前建立的快照沒有這兩欄
         "taxNote":       snap.get("taxNote", ""),
+        "taxBasis":      snap.get("taxBasis"),                 # R2 之前建立的快照沒有（None）
         "selectedItems": snap.get("selectedItems") or [],
         "issuedFiles":   json.loads(d.get("issued_files_json") or "[]"),
         "exportCount":   d.get("export_count") or 0,
@@ -233,9 +237,16 @@ def get_invoice_voucher_remaining(quote_no: str, authorization: str = Header(Non
     conn = get_db()
     guard_case_access(conn, quote_no, user, allow_module="case_manage")
     info = _quote_remaining(conn, quote_no)
+    qrow = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     conn.close()
     if info is None:
         raise HTTPException(404, "找不到關聯的報價單")
+    # R2：零稅率／免稅報價沒有有效依據（舊單）⇒ 申請畫面要求補填
+    qdata = json.loads((qrow["data_json"] if qrow else None) or "{}")
+    kind = quote_tax_type(qdata)
+    info["taxType"] = kind
+    info["taxBasisMissing"] = bool(tax_basis_error(kind, qdata.get("taxBasis")))
+    info["taxBasisLabel"] = "" if info["taxBasisMissing"] else tax_basis_label(qdata.get("taxBasis"))
     return info
 
 
@@ -364,6 +375,16 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
         #   ⚠️ 只影響**新建立**的開票申請；已建立的快照不回頭改。
         tax_type = quote_tax_type(data)
         tax_note = ""
+        # R2：零稅率／免稅的新開票申請一定要有依據——報價上有就帶入，沒有（舊單）就用申請時補填的
+        tax_basis = None
+        if tax_type in ("zero", "exempt"):
+            tax_basis = data.get("taxBasis") if not tax_basis_error(tax_type, data.get("taxBasis")) else body.taxBasis
+            err = tax_basis_error(tax_type, tax_basis)
+            if err:
+                conn.close()
+                raise HTTPException(400, err + "；報價單沒有記錄依據時，請在開票申請補填")
+            tax_basis = {"code": tax_basis.get("code"), "note": str(tax_basis.get("note") or "").strip()}
+            tax_note = ("零稅率" if tax_type == "zero" else "免稅") + "依據：" + tax_basis_label(tax_basis)
         if tax_type == "legacy":
             tax_amount = request_amount - pretax_amount
             tax_note = "舊稅率 %s%%（已停用）：%s" % (data.get("taxRate"), LEGACY_TAX_NOTE)
@@ -386,6 +407,7 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
             "taxAmount":       round(tax_amount),
             "taxType":         tax_type,
             "taxNote":         tax_note,
+            "taxBasis":        tax_basis,
         }
 
         now = datetime.now().isoformat()

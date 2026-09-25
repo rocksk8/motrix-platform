@@ -195,6 +195,27 @@ def validate_quote_tax(q: dict) -> None:
             raise HTTPException(400, "稅別與稅率不一致（應稅為 5%%，零稅率與免稅為 0%%）")
 
 
+# ── R2（2026-09-25，CUSTOMIZATION-SPEC §7.2）：零稅率、免稅要有依據 ─────────────────
+#
+# 選項與檢查在 L1 `helpers.legal_params`（開票申請等其他模組共用）；這裡只決定「報價何時必填」。
+from helpers.legal_params import TAX_BASIS_OPTIONS, tax_basis_error, tax_basis_label  # noqa: E402,F401
+
+
+def validate_tax_basis(q: dict, status) -> None:
+    """報價存檔：零稅率／免稅且**不是草稿** ⇒ 依據必填（草稿可先存，自動存檔不被擋）。
+    應稅單的 taxBasis 移除（避免殘留的依據被印出來）。"""
+    q = q if isinstance(q, dict) else {}
+    kind = quote_tax_type(q)
+    if kind not in ("zero", "exempt"):
+        q.pop("taxBasis", None)
+        return
+    if (status or q.get("status") or "草稿") == "草稿":
+        return
+    err = tax_basis_error(kind, q.get("taxBasis"))
+    if err:
+        raise HTTPException(400, err)
+
+
 def tax_split(sales, tax_type: str) -> tuple:
     """(銷售額, 稅額)。應稅 ⇒ 稅額＝round_half_up(銷售額 × 5%)；零稅率／免稅 ⇒ 0。
 

@@ -27,6 +27,9 @@ window.CM_PARTS.push(() => ({
     ivCreateModal: false,
     ivRemaining: null,
     ivRemainingLoading: false,
+    // R2（營業稅法 §7、§8）：零稅率／免稅報價沒有依據時，申請開票要補填
+    ivTaxBasis: { code: '', note: '' },
+    ivTaxBasisOptions: null,
     ivMode: 'amount',
     ivAmountInput: 0,
     ivItemSelections: {},
@@ -425,8 +428,15 @@ window.CM_PARTS.push(() => ({
       this.ivAmountInput = 0
       this.ivItemSelections = {}
       this.ivRemaining = null
+      this.ivTaxBasis = { code: '', note: '' }
       this.ivCreateModal = true
       this.ivRemainingLoading = true
+      if (!this.ivTaxBasisOptions) {
+        try {
+          const o = await fetch('/api/legal-params/tax-basis-options', { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (o.ok) this.ivTaxBasisOptions = (await o.json()).options
+        } catch (e) {}
+      }
       try {
         const r = await fetch(`/api/invoice-vouchers/remaining?quote_no=${encodeURIComponent(this.selected.quote_no)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
@@ -501,6 +511,12 @@ window.CM_PARTS.push(() => ({
         if (this.ivSelectedGrossTotal() > this.ivRemaining.remainingAmount) { MotrixUI.toast('超過剩餘可申請金額', {kind: 'error'}); return }
         body = { quote_no: this.selected.quote_no, scope: 'items', items }
       }
+      // R2：零稅率／免稅且報價沒有依據 ⇒ 要在這裡補填（後端同樣會擋）
+      if (this.ivRemaining.taxBasisMissing) {
+        const err = this.ivTaxBasisError()
+        if (err) { MotrixUI.toast(err, {kind: 'error'}); return }
+        body.taxBasis = { code: this.ivTaxBasis.code, note: this.ivTaxBasis.note }
+      }
       if (!(await MotrixUI.confirm('確定送出建立開票申請憑據？'))) return
       this.ivSubmitting = true
       try {
@@ -514,6 +530,18 @@ window.CM_PARTS.push(() => ({
         await this.loadInvoiceVouchers(this.selected?.quote_no)
       } catch (e) { MotrixUI.toast('網路錯誤：' + e.message, {kind: 'error'}) }
       this.ivSubmitting = false
+    },
+
+    ivTaxBasisChoices() {
+      const k = this.ivRemaining?.taxType
+      return (this.ivTaxBasisOptions && (k === 'zero' || k === 'exempt')) ? this.ivTaxBasisOptions[k] : []
+    },
+    ivTaxBasisError() {
+      const name = this.ivRemaining?.taxType === 'zero' ? '零稅率' : '免稅'
+      const opt = this.ivTaxBasisChoices().find(o => o.code === this.ivTaxBasis.code)
+      if (!opt) return '此報價為' + name + '，請選擇' + name + '依據'
+      if (opt.noteRequired && !(this.ivTaxBasis.note || '').trim()) return name + '依據請在說明欄填寫款次或法條'
+      return ''
     },
 
     async deleteInvoiceVoucher(v) {

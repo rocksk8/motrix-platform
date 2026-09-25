@@ -112,7 +112,9 @@ def test_delegate_line_uses_server_identity(client, token):
 def test_terms_changed_against_backend_defaults_and_presets(client, token):
     # 📌 2026-09-24（AC1）：1～4% 已停用，新單建不出 3% ⇒ 改用零稅率驗「稅」這一條原因；
     #    舊 1～4% 單的原文字由 test_tax_by_law 直接對 compute_approval_reasons() 驗。
-    no = _create(client, token, _data(deliveryTerms="改過的交貨條件", taxRate=0, taxType="zero"))
+    # 📌 2026-09-25（R2）：零稅率送審要有依據（營業稅法 §7）⇒ 帶 taxBasis
+    no = _create(client, token, _data(deliveryTerms="改過的交貨條件", taxRate=0, taxType="zero",
+                                      taxBasis={"code": "7-1", "note": ""}))
     rs = _reasons(no)
     assert "稅別為零稅率（非應稅 5%）" in rs
     assert "報價條件已修改，非預設內容（交貨條件）" in rs

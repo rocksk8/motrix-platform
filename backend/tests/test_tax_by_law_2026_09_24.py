@@ -230,7 +230,9 @@ def test_new_invoice_request_taxes_the_sales_amount_at_five_percent(client, make
 def test_new_invoice_request_on_an_exempt_quote_has_no_tax(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-V2", 20000, 20000, {"taxRate": 0}, [])
-    v = _new_voucher(client, h, {"quote_no": "MQ-V2", "scope": "amount", "amount": 5000})
+    # 📌 2026-09-25（R2）：免稅報價沒有依據 ⇒ 開票申請要補填（營業稅法 §8）
+    v = _new_voucher(client, h, {"quote_no": "MQ-V2", "scope": "amount", "amount": 5000,
+                                 "taxBasis": {"code": "8", "note": "第 N 款（測試）"}})
     assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (5000, 0, 5000)
 
 

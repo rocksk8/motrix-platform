@@ -3,6 +3,7 @@
 
 - GET  /api/legal-params/tax-rules          清單＋跨年狀態（superadmin）
 - PUT  /api/legal-params/tax-rules          整份清單：結構驗證＋守門（門檻＝最低工資）＋已生效版本不可改刪（superadmin）
+- GET  /api/legal-params/tax-basis-options  零稅率／免稅依據選項（登入即可）
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -17,6 +18,16 @@ def get_tax_rule_versions(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     versions = lp.load_versions()
     return {"versions": versions, "status": lp.year_status(versions, lp.today())}
+
+
+@router.get("/api/legal-params/tax-basis-options")
+def get_tax_basis_options(authorization: str = Header(None)):
+    """R2：零稅率／免稅依據的選項（報價頁、開票申請共用；唯一來源＝helpers.legal_params）。"""
+    _require_user(authorization)
+    return {
+        "options": {k: [{"code": c, "label": lb, "noteRequired": c in lp.TAX_BASIS_NOTE_REQUIRED}
+                        for c, lb in v] for k, v in lp.TAX_BASIS_OPTIONS.items()},
+    }
 
 
 @router.put("/api/legal-params/tax-rules")

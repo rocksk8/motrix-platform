@@ -247,6 +247,59 @@ def year_status(versions, today) -> dict:
     }
 
 
+# ── R2（CUSTOMIZATION-SPEC §7.2）：零稅率、免稅的依據 ─────────────────────────────
+#
+# 營業稅法 §7（零稅率，第 1～9 款；全國法規資料庫 G0340080 flno=7，2026-09-25 查，款名為摘要）、
+# §8（免稅，第一項共三十餘款；款次與內容由使用者填，本檔不逐款抄錄——未逐字取得條文）。
+# 依據存在單據 data_json.taxBasis = {code, note}；核心欄位（稅別、稅率、金額）不動。
+TAX_BASIS_OPTIONS = {
+    "zero": [
+        ("7-1", "營業稅法 §7 ① 外銷貨物"),
+        ("7-2", "營業稅法 §7 ② 與外銷有關之勞務，或在國內提供而在國外使用之勞務"),
+        ("7-3", "營業稅法 §7 ③ 免稅商店銷售與過境或出境旅客之貨物"),
+        ("7-4", "營業稅法 §7 ④ 銷售與保稅區營業人供營運之貨物或勞務"),
+        ("7-5", "營業稅法 §7 ⑤ 國際間之運輸"),
+        ("7-6", "營業稅法 §7 ⑥ 國際運輸用之船舶、航空器及遠洋漁船"),
+        ("7-7", "營業稅法 §7 ⑦ 銷售與國際運輸用之船舶、航空器及遠洋漁船所使用之貨物或修繕勞務"),
+        ("7-8", "營業稅法 §7 ⑧ 保稅區營業人銷售與課稅區營業人未輸往課稅區而直接出口之貨物"),
+        ("7-9", "營業稅法 §7 ⑨ 保稅區營業人銷售與課稅區營業人存入自由港區事業或海關管理之保稅倉庫、物流中心以供外銷之貨物"),
+        ("zero-other", "其他法律規定之零稅率（請於說明填寫法條）"),
+    ],
+    "exempt": [
+        ("8", "營業稅法 §8 第一項（請於說明填寫款次與內容）"),
+        ("exempt-other", "其他法律規定之免稅（請於說明填寫法條）"),
+    ],
+}
+#: 選這些代碼時「說明」必填
+TAX_BASIS_NOTE_REQUIRED = {"zero-other", "8", "exempt-other"}
+
+
+def tax_basis_label(basis) -> str:
+    """依據的顯示文字（開票申請快照與畫面用）。沒有 ⇒ ''。"""
+    if not isinstance(basis, dict):
+        return ""
+    code = basis.get("code")
+    label = next((lb for opts in TAX_BASIS_OPTIONS.values() for c, lb in opts if c == code), "")
+    note = str(basis.get("note") or "").strip()
+    return "；".join(x for x in (label, note) if x)
+
+
+def tax_basis_error(tax_type: str, basis) -> str:
+    """零稅率／免稅的依據是否有效。有效（或應稅）⇒ ''；否則回傳給使用者看的錯誤訊息。"""
+    if tax_type not in ("zero", "exempt"):
+        return ""
+    name = "零稅率" if tax_type == "zero" else "免稅"
+    law = "營業稅法 §7" if tax_type == "zero" else "營業稅法 §8"
+    code = basis.get("code") if isinstance(basis, dict) else None
+    if not code:
+        return f"稅別為{name}，請選擇{name}依據（{law}）"
+    if code not in {c for c, _l in TAX_BASIS_OPTIONS[tax_type]}:
+        return f"{name}依據不正確，請重新選擇（{law}）"
+    if code in TAX_BASIS_NOTE_REQUIRED and not str(basis.get("note") or "").strip():
+        return f"{name}依據選了「{dict(TAX_BASIS_OPTIONS[tax_type])[code]}」，請在說明欄填寫款次或法條"
+    return ""
+
+
 # ── 讀寫設定 ──────────────────────────────────────────────────────────────────
 
 def load_versions() -> list:

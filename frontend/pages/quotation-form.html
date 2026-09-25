@@ -1577,6 +1577,21 @@
                      x-text="'此單使用已停用的稅率 ' + q.taxRate + '%，數字維持原樣；存檔前請改選法定稅別'"></div>
                 <div class="form-hint warn" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status !== 'approved'">非應稅需主管審核</div>
                 <div class="form-hint" style="color:var(--success)" x-show="(taxKind() === 'zero' || taxKind() === 'exempt') && q.approval?.status === 'approved'">已核准</div>
+                <!-- R2（營業稅法 §7、§8）：零稅率／免稅的依據。送出審核時必填；草稿可以先存 -->
+                <div x-show="taxKind() === 'zero' || taxKind() === 'exempt'" data-tax-basis style="margin-top:6px">
+                  <select class="form-select" data-tax-basis-code :value="taxBasisCode()"
+                          @change="setTaxBasis('code', $event.target.value)">
+                    <option value="" x-text="(taxKind() === 'zero' ? '零稅率' : '免稅') + '依據（必填）'"></option>
+                    <template x-for="o in taxBasisChoices()" :key="o.code">
+                      <option :value="o.code" x-text="o.label" :selected="o.code === taxBasisCode()"></option>
+                    </template>
+                  </select>
+                  <input class="form-input" type="text" data-tax-basis-note style="margin-top:4px"
+                         :value="taxBasisNote()" @input="setTaxBasis('note', $event.target.value)"
+                         placeholder="說明（款次、法條、外銷證明文件等）">
+                  <div class="form-hint warn" data-tax-basis-error x-show="taxBasisErr || taxBasisError()"
+                       x-text="taxBasisErr || taxBasisError()"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -2236,6 +2251,8 @@
       // `termsPresets` 是設定裡的清單；**報價單本身存的是複製過去的文字**，
       // 不是指向這裡的 key——改了設定不會動到已開出去的單（見後端 docstring）。
       termsPresets: [],
+      taxBasisOptions: null,      // R2：{ zero: [{code,label,noteRequired}], exempt: [...] }
+      taxBasisErr: '',
       _termsDefaultsLoaded: false,   // N13：預設條款是否已從後端取得
       termsDefaultKey: '',
       termsManageOpen: false,
@@ -2311,6 +2328,48 @@
         if (k === 'zero') return '營業稅（零稅率）'
         if (k === 'exempt') return '免稅'
         return '營業稅' + (this.q.taxRate ?? 5) + '%'
+      },
+      // ── R2（營業稅法 §7、§8）：零稅率／免稅要有依據（送出時必填；草稿可先存）──
+      async loadTaxBasisOptions() {
+        try {
+          const r = await fetch(`${this.API}/legal-params/tax-basis-options`, {
+            headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) this.taxBasisOptions = (await r.json()).options
+        } catch (e) {}
+      },
+      taxBasisChoices() {
+        const k = this.taxKind()
+        return (this.taxBasisOptions && (k === 'zero' || k === 'exempt')) ? this.taxBasisOptions[k] : []
+      },
+      taxBasisCode() { return (this.q.taxBasis && this.q.taxBasis.code) || '' },
+      taxBasisNote() { return (this.q.taxBasis && this.q.taxBasis.note) || '' },
+      setTaxBasis(field, v) {
+        const b = { code: this.taxBasisCode(), note: this.taxBasisNote() }
+        b[field] = v
+        this.q.taxBasis = b
+        this.taxBasisErr = ''
+        this.setDirty()
+      },
+      // 與後端 helpers/legal_params.py::tax_basis_error 同一套規則
+      taxBasisError() {
+        const k = this.taxKind()
+        if (k !== 'zero' && k !== 'exempt') return ''
+        const name = k === 'zero' ? '零稅率' : '免稅'
+        const law = k === 'zero' ? '營業稅法 §7' : '營業稅法 §8'
+        const code = this.taxBasisCode()
+        if (!code) return '稅別為' + name + '，請選擇' + name + '依據（' + law + '）'
+        const opt = this.taxBasisChoices().find(o => o.code === code)
+        if (this.taxBasisOptions && !opt) return name + '依據不正確，請重新選擇（' + law + '）'
+        if (opt && opt.noteRequired && !this.taxBasisNote().trim()) return name + '依據請在說明欄填寫款次或法條'
+        return ''
+      },
+      _taxBasisBlocksSubmit(status) {
+        if ((status || '草稿') === '草稿') return false
+        const err = this.taxBasisError()
+        if (!err) return false
+        this.taxBasisErr = err
+        alert(err)
+        return true
       },
       _legacyTaxBlocksSave() {
         if (this.taxKind() !== '') return false
@@ -2554,6 +2613,7 @@
       async apiSave(isNew) {
         if (Object.keys(this.badNum).length) return false   // 解析不了的數字不送（自動存檔靜默略過）
         if (this.taxKind() === '') return false             // AC1：已停用稅率要先改選（後端同樣會擋）
+        if ((this.q.status || '草稿') !== '草稿' && this.taxBasisError()) return false   // R2：後端同樣會擋
         // 一旦開始存檔，單號的權威就交給後端回應了：載入時那支非同步取號若在這之後
         // 才回來，一律不得再寫進 q.quoteNo（見 _peekQuoteNo()）。
         // 只看「目前有沒有號碼」是不夠的——使用者在取號還沒回來時就按送審的話，
@@ -2948,6 +3008,7 @@
 
       async saveDraft() {
         if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
+        if (this._taxBasisBlocksSubmit(this.unlocked ? '待審核' : this.q.status)) return
         // 2026-09-10：原本這裡在 quoteNo 為空時會寫死 `MQ-{ym}-001` 當暫用號。
         // 那個值幾乎一定已經被別人用掉，後端撞號後改派下一號，畫面上看到的號碼
         // 就跟實際建立的那張對不起來（已用可控實驗重現：把 /api/next-quote-no
@@ -3285,6 +3346,7 @@
 
       async submitQuote() {
         if (this._badNumBlocksSave() || this._legacyTaxBlocksSave()) return
+        if (this._taxBasisBlocksSubmit('待審核')) return
         if (!this.q.customerName) { alert('請填寫客戶名稱'); return }
         if (!this.q.projectName)  { alert('請填寫案件名稱'); return }
         this.submitNote = ''
@@ -3753,6 +3815,7 @@
         // 條款組（2026-09-14）。一定要在讀取既有報價單之前載入完成——
         // checkApproval() 的比對基準要靠它，而且新單要自動套用預設那一組。
         await this.loadTermsPresets()
+        this.loadTaxBasisOptions()   // R2：零稅率／免稅依據選項（不擋載入）
 
         // ── 從 URL 讀取報價單號 ──
         const params  = new URLSearchParams(window.location.search)

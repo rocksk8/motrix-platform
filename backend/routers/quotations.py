@@ -44,6 +44,7 @@ from helpers import (
     validate_quote_tax,
     summarize_payment_items,
 )
+from helpers.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
@@ -1464,6 +1465,7 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
     user = _require_user(authorization)
     q   = body.data
     validate_quote_tax(q)   # AC1：只能存法定稅別
+    validate_tax_basis(q, body.status)   # R2：零稅率／免稅送出要有依據（營業稅法 §7、§8）
     if body.status == "待審核":
         _apply_server_submit_reasons(q, user)
     now = datetime.now().isoformat()
@@ -1696,6 +1698,9 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
             "status":             "pending",
             "reasons":            [f"解鎖後修改（v{edit_rev}），需重新簽核"],
         }
+
+    # R2（營業稅法 §7、§8）：零稅率／免稅送出（非草稿）要有依據；應稅單移除殘留依據
+    validate_tax_basis(q, new_status)
 
     # ── 待審核：build approval tiers from settings ─────────────────────────────
     if new_status == "待審核":
