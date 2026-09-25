@@ -145,16 +145,22 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | X 確認 |
 |---|---|---|---|
-| A-1 | | | |
-| A-2 | | | |
-| A-3 | | | |
-| B-1 | | | |
-| B-2 | | | |
-| B-3 | | | |
-| B-4 | | | |
-| C-1 | | | |
-| C-2 | | | |
-| C-3 | | | |
-| C-4 | | | |
-| C-5 | | | |
-| C-6 | | | |
+| A-1 | 不在這次範圍（主持裁示）：P-SW-05 已在 `wip/a-platform-states`，由另一個代理合回。⚠ 該分支與本修正衝突，見表下「合併注意」 | — | |
+| A-2 | 修正。① `load_all()` 在呼叫當下讀 `MODULES_DIR`／新增的 `MODULES_PACKAGE`；② 子行程由父行程在 tmp 建合成模組樹（`zz_gate`：路由、排程、頁面），`import main` 前換掉；參數加 `reenabled`、`coreonly`；③ D 組用合成模組 `zz_toggle`（路由插在 StaticFiles 前、題後依身分移除，registry 用 snapshot／restore）；④ e2e 用合成狀態列；選單題「任取已載入且選單有入口的模組」，沒有就 skip 並說明；另加 core-only e2e（空狀態表 ⇒ 管理頁說沒有模組、選單照常、無 JS 錯誤）；⑤ conftest 的 `_no_politeness_delay` 搬到 `modules/tender_radar/tests/conftest.py`；⑥ 靜態守門 `test_no_real_l2_module_named_here`（含正對照）、`test_conftest_names_no_l2_module`；MODULE-GUIDE §7 補寫法與守門。**反向控制實跑**：拿掉 `modules/tender_radar` 跑 TMS＋e2e ⇒ **37 passed、2 skipped**（兩題 skip 都寫明 core-only；修正前 X 的 R6 是 7 failed）。突變：`load_all` 改回讀定義時的目錄 ⇒ 6 紅；conftest 再 import L2 ⇒ 紅；e2e 再點名 `tender_radar` ⇒ 紅 | 5f372370 | |
+| A-3 | 修正。registry 狀態加 `note`（`set_state(…, note=…)`，`reason` 仍＝有問題，不會被當錯誤）；loader 在授權通過時保存說明（loaded 與 disabled 都帶）；`/api/system/modules` 每列帶 `note`；模組管理頁狀態格顯示、頂端提示一次「授權檢查未啟用（開發模式）」。題：`test_license_not_checked_is_visible_in_state`（含反向：授權有啟用 ⇒ note 空）、`test_admin_api_shows_the_license_note`、e2e `test_license_not_checked_is_shown`（含正對照）。突變：loader 丟 note ⇒ 紅；狀態不存 note ⇒ 紅；頁面不顯示提示 ⇒ e2e 紅 | 5f372370 | |
+| B-1 | 修正。表清單改從 `vars(registry)` 列（`_` 開頭 dict、排除 `_LEGACY_PROVIDERS`），斷言 snapshot 份數＝表數，每張表放探針。突變 `dict(_FAILED)`→`{}` ⇒ 紅 | 5f372370 | |
+| B-2 | 修正。`modules` 不是 `list[str]` ⇒ 未授權「模組清單格式不正確」。新增 6 組參數（字串、`"*"` 字串、dict、混型別、正確拒絕）。突變拿掉型別檢查 ⇒ 5 紅 | 5f372370 | |
+| B-3 | 修正。新增 `core.loader.start_schedulers()`，main 在排程閘門內改呼叫它；子行程在重啟後直接呼叫同一函式：停用／未授權 ⇒ 0 次，開回 ⇒ 1 次，core-only ⇒ 0。突變：函式不跑 ⇒ 紅；停用的模組照樣 import＋登錄 ⇒ 紅。⚠ 殘留：「main 有沒有在閘門內呼叫它」沒有題（session 閘門恆關） | 5f372370 | |
+| B-4 | 修正。子行程 `reenabled`：父行程用真的 `set_enabled` 停用（先確認讀得到）再啟用，子行程用真的讀取路徑 ⇒ 200、讀到停用期間的資料列、排程 1 次。突變：啟用時不拿掉 key ⇒ 紅 | 5f372370 | |
+| C-1 | 不在範圍：STATES-PLATFORM 與 P-FE-02／03、P-DT-01、P-LD-07 由 `wip/a-platform-states` 合回 | — | |
+| C-2 | 不在範圍（屬 A-1）。提醒合回 A-1 的代理：該分支 `test_locked_db_uses_last_good_list_then_all_disabled` 仍用一般 journal 庫＋`BEGIN EXCLUSIVE`，要補 WAL 觸發方式 | — | |
+| C-3 | 不修。① 「掃整頁」在現況是必要的：側欄已退役，選單在 `#app-mainnav`（不在 `#app-sidebar`）；② 帶查詢字串的連結（P-FE-06）與 API 失敗（P-FE-04，STATES 判「可接受」）由 `wip/a-platform-states` 處理（`record-link.js` 依模組狀態不產生連結）。現在改 `sidebar.js` 同一段必然與該分支衝突 | — | |
+| C-4 | 修正。`set_enabled` 讀改寫放進同一個寫入交易（`core.txn.write_txn`；第一版直接寫 `BEGIN IMMEDIATE`，被全量的 `test_begin_only_via_begin_write` 擋下，35189b82 改正）。題：兩條執行緒都卡在「讀完、未寫」⇒ 兩個 key 都要在。突變改回原本的讀改寫 ⇒ 紅（`['zz_c4_b'] == ['zz_c4_a','zz_c4_b']`，確認是遺失更新） | 5f372370 | |
+| C-5 | 環境：`D:\MOTRIX-PLATFORM\.venv` 在 22:1x 被刪一半；本次用自建 `.venv-x9`（Python 3.12.8，requirements＋dev）。發現 `requirements-dev.txt` 沒有 `httpx`（starlette 1.7 的 TestClient 需要 `httpx2` 或 `httpx`），全新 venv 下 `client` 夾具全部 ERROR ⇒ 另案處理（未改 requirements：屬 fixture 層） | — | |
+| C-6 | 不在範圍；本次重現同一現象（初始帳號憑證檔寫進 worktree 的 `backend/`），已隨 worktree 刪除 | — | |
+
+**驗證（X9）**：全量在 8ac0b042（基準 2801d757）：非 e2e 3745 passed／7 failed，e2e 367 passed／2 skipped。7 紅之中：1 題是本修正造成的（`test_begin_only_via_begin_write`，35189b82 修正）；另外 6 題在 origin/platform 7c66c232 單獨重跑也紅，是既有問題：`test_module_history::test_fn4_*` 兩題、`test_licensing_core::test_08a`，以及 `test_no_credentials_in_query` 三題（自建 venv 沒有 numpy／cv2）。rebase 到 a33ef2b5 之後，重跑 `tests/platform`、§9c e2e、begin 守門、tender 平台控制題：464 passed（-n 2、低優先權，PLAYBOOK §C-13）。突變 12 項全紅，全部已還原。
+
+**合併注意（給合回 `wip/a-platform-states` 的代理）**：
+- 與本修正重疊的檔：`core/loader.py`、`core/registry.py`（兩邊都用 CORE 1.5 ⇒ 後合者升 1.6，重產 G1 快照）、`helpers/module_switches.py` 的 `set_enabled`（該分支加寫快取，要放進本修正的交易之後）、`main.py` 排程段（該分支移到 `mount_modules()` 之後，請改呼叫 `module_loader.start_schedulers()`）、`module-settings.html`、三支 §9c 測試檔、`core/CHANGELOG.md`。
+- 該分支新增的題（子行程 `unreadable`、`test_toggle_updates_the_cache`、`test_admin_page_shows_disabled_list_source`、e2e 第 3 題）點名 `tender_radar`，合回後 `test_no_real_l2_module_named_here` 會紅——改用本檔的合成模組（`synthetic_loaded`、`_gate_tree`）。
