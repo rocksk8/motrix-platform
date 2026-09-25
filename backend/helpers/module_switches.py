@@ -59,13 +59,37 @@ def configured_disabled() -> list:
 
 
 def set_enabled(key: str, enabled: bool) -> list:
-    """寫入設定，回新的停用清單。重啟後生效。"""
-    from helpers.settings import _set_setting
-    cur = set(configured_disabled())
-    if enabled:
-        cur.discard(key)
-    else:
-        cur.add(key)
-    new = sorted(cur)
-    _set_setting(SETTING_KEY, new)
+    """寫入設定，回新的停用清單。重啟後生效。
+
+    讀、改、寫在**同一個寫入交易**裡（BEGIN IMMEDIATE）：兩位 superadmin 同時切換不同模組時，
+    後寫的不可以蓋掉先寫的（AUDIT-X-9c C-4／STATES P-SW-10）。第二個寫入者在 BEGIN 等鎖，
+    拿到鎖時讀到的已經是第一個寫入者提交後的清單。"""
+    from datetime import datetime
+    from db import get_db
+    conn = get_db()
+    try:
+        conn.isolation_level = None                       # 交易自己管：BEGIN IMMEDIATE 先拿寫鎖再讀
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (SETTING_KEY,)).fetchone()
+            try:
+                cur = set(_normalize(json.loads(row[0]))) if row else set()
+            except (TypeError, ValueError):
+                _log.warning("%s 內容無法解析 ⇒ 以空清單為基礎寫入", SETTING_KEY)
+                cur = set()
+            if enabled:
+                cur.discard(key)
+            else:
+                cur.add(key)
+            new = sorted(cur)
+            conn.execute(
+                "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+                (SETTING_KEY, json.dumps(new, ensure_ascii=False), datetime.now().isoformat()))
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
     return new

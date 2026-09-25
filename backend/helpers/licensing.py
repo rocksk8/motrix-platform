@@ -655,7 +655,13 @@ def module_licensed(manifest, status, gate_enabled):
     if license_blocks_request(status):
         return False, "未授權：" + license_block_message(status)
     key = (manifest or {}).get("license_key") or (manifest or {}).get("key") or ""
-    mods = status.get("modules") or []
+    mods = status.get("modules")
+    if mods is None:
+        mods = []
+    # 只接受 list[str]：字串會讓 `key in mods` 變成子字串比對（'tender_radar' in 'xtender_radarx'）。
+    # 金鑰有簽章、簽發端產的是 list，但驗證端不依賴簽發端永遠正確（AUDIT-X-9c B-2）。
+    if not isinstance(mods, list) or not all(isinstance(m, str) for m in mods):
+        return False, "未授權：授權金鑰的模組清單格式不正確（應為清單，實際是 %s）" % type(mods).__name__
     if "*" in mods or key in mods:
         return True, ""
     return False, "未授權：授權金鑰未包含此模組（%s）" % key

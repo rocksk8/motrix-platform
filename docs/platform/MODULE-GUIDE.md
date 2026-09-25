@@ -148,6 +148,9 @@ modules/<key>/
 - pytest 一律帶自己的 `--basetemp`，跑完刪掉。
 - 測試函式不要取成 `test_<字母><數字>_…` 這種形式（例：`test_l2_…`）：`test_spec_coverage` 會把它當成規格條件編號。
 - 守門的正對照不可以綁在特定的 L2 模組上（拿掉那個模組，守門就會失效）；改用合成的假模組，或「任取一個已載入的模組」。
+  - 子行程要換模組樹：在 `import main` 之前改 `core.loader.MODULES_DIR`／`MODULES_PACKAGE`（`load_all()` 在呼叫當下才讀；例：`tests/platform/child_module_gate.py`）。「任取」找不到時用 `pytest.skip` 說明原因，不可以紅。
+  - L1 的測試設定（`backend/conftest.py`）不可以 import L2 模組；模組自己的夾具放 `modules/<key>/tests/conftest.py`。
+  - 守門：`test_module_selection.py::test_conftest_names_no_l2_module`；§9c 的守門檔另有 `::test_no_real_l2_module_named_here`。⚠ 未守門：其他守門檔是否點名 L2 模組（沒有全庫掃描）。
 
 ## 8. 新增一個模組的步驟
 

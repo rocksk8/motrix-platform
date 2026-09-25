@@ -1,5 +1,5 @@
 {
- "core_version": "1.4",
+ "core_version": "1.5",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -513,8 +513,10 @@
   },
   "plat:loader": {
    "MODULES_DIR": "const",
+   "MODULES_PACKAGE": "const",
    "core_compatible": "def(spec, core_version=…)",
-   "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…)"
+   "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…)",
+   "start_schedulers": "def()"
   },
   "plat:paths": {
    "BACKEND_DIR": "const",
@@ -584,7 +586,7 @@
    "register": "def(loaded)",
    "restore": "def(snap)",
    "runtime_switches": "def()",
-   "set_state": "def(key, state, reason=…, manifest=…)",
+   "set_state": "def(key, state, reason=…, manifest=…, note=…)",
    "single_provider": "def(capability)",
    "snapshot": "def()"
   },

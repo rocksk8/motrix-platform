@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.5 — 2026-09-25
+> X9（AUDIT-X-9c 修正：A-2 守門不綁 L2 模組、A-3 授權檢查未啟用要看得到、B-1～B-4、C-4）。
+- L0（新增）：`core.loader.MODULES_PACKAGE`；`load_all()` 的 `modules_dir`／`package` 沒給時讀**呼叫當下**的 `MODULES_DIR`／`MODULES_PACKAGE`（原本綁在預設參數上，子行程守門換不掉）
+- L0（新增）：`core.loader.start_schedulers()`——啟動已載入模組的排程、回傳呼叫數；`main.py` 在排程閘門內改呼叫它（子行程守門驗同一條路）
+- L0（新增）：`core.registry.set_state(…, note=…)`；狀態多一個 `note` 欄位（不是問題但要讓人看到的狀態，例：`授權檢查未啟用`）。`reason` 維持「非空＝有問題」；`/api/system/modules` 每列帶 `note`，模組管理頁顯示在狀態格＋頂端提示
+- L1（修改行為，介面不變）：`helpers.licensing.module_licensed()` 的金鑰 `modules` 不是 `list[str]` ⇒ 未授權（原本字串會變成子字串比對）
+- L1（修改行為，介面不變）：`helpers.module_switches.set_enabled()` 讀改寫在同一個 `BEGIN IMMEDIATE` 交易裡（同時切換不會互相蓋掉）
+
 ## 1.4 — 2026-09-25
 - L1（新增）：`helpers.doc_template`——輸出引擎（P2，CUSTOMIZATION-SPEC §3.4）：`render(template, view, parts)`、`render_blocks`、`load_default(key)`、`validate(template, sample_view)`、`BLOCKS`（積木目錄 v1）、`THEMES`、`TemplateError`；預設版型 `helpers/output_templates/invoice_voucher.json`；`pdf_gen._build_invoice_voucher_html(v, template=None)` 可吃覆寫版型
 

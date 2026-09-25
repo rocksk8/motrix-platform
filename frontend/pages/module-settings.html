@@ -33,6 +33,8 @@
     .ms-state--failed { background: #FEE2E2; color: #991B1B; }
     .ms-pending { color: #B45309; font-weight: 700; }
     .ms-reason { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
+    .ms-mnote { color: #92400E; font-size: 12px; margin-top: 4px; font-weight: 700; }
+    .ms-note--warn { background: #FEF3C7; border-color: #F59E0B; color: #92400E; }
     .ms-msg { max-width: 960px; margin-top: 12px; font-size: 13px; }
     .ms-msg--err { color: var(--danger); }
   </style>
@@ -57,6 +59,12 @@
       <span x-show="startedAt">（這次啟動時間：<span x-text="startedAt"></span>）</span>
     </div>
 
+    <!-- CORE-SPEC §9c：授權檢查沒有啟用時，狀態要標「授權檢查未啟用」（AUDIT-X-9c A-3）。
+         忘了打開授權開關就出貨時，這一行是唯一看得出差別的地方。 -->
+    <div class="ms-note ms-note--warn" x-show="licenseNotes.length" data-testid="ms-license-note">
+      <b x-text="licenseNotes.join('、')"></b>（開發模式）：所有模組一律可載入，沒有檢查授權金鑰。
+    </div>
+
     <div class="ms-msg" :class="{ 'ms-msg--err': isError }" x-show="msg" x-text="msg" data-testid="ms-msg"></div>
 
     <table class="ms-table" data-testid="ms-table">
@@ -71,6 +79,7 @@
             <td>
               <span class="ms-state" :class="'ms-state--' + m.state" x-text="m.stateLabel" :data-testid="'ms-state-' + m.key"></span>
               <div class="ms-reason" x-show="m.reason" x-text="m.reason" :data-testid="'ms-reason-' + m.key"></div>
+              <div class="ms-mnote" x-show="m.note" x-text="m.note" :data-testid="'ms-mnote-' + m.key"></div>
             </td>
             <td>
               <span x-text="m.afterRestartLabel"></span>
@@ -98,6 +107,7 @@
     function moduleSettingsPage() {
       return {
         modules: [],
+        licenseNotes: [],
         startedAt: '',
         loaded: false,
         busy: false,
@@ -128,6 +138,7 @@
           }
           const d = await r.json()
           this.modules = d.modules || []
+          this.licenseNotes = [...new Set(this.modules.map(m => m.note).filter(Boolean))]
           this.startedAt = d.startedAt || ''
           this.loaded = true
         },

@@ -601,9 +601,8 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     reports.schedule_monthly_report()
     dev_crm.schedule_dev_case_stale_check()
     # L2 模組的排程（例：標案雷達；關著時 run_scan() 立刻返回、不對外連線）。
-    for _m in module_registry.loaded():
-        for _sched in _m.spec.schedulers:
-            _sched()
+    # 只跑 registry.loaded() 的（停用／未授權不 import ⇒ 不跑）；子行程守門呼叫同一個函式驗證。
+    module_loader.start_schedulers()
     # 背景把地址查成座標（2026-09-22 §3v）。使用者裁示「不要他按按鈕」。
     # ⚠️ 受 GEO_ENABLED 管：關著時一次都不發（不是「發了失敗」）。
     # 🔴 它有每日上限與連續失敗停止 —— 一個會自己跑的迴圈，

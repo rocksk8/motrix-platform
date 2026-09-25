@@ -15,6 +15,10 @@ from core import registry
 logger = logging.getLogger("motrix.loader")
 
 MODULES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "modules")
+#: 與 MODULES_DIR 成對：資料夾底下的模組以 `<MODULES_PACKAGE>.<key>` import。
+#: 兩者都在 `load_all()` **呼叫當下**才讀（不綁在預設參數上）⇒ 子行程守門可以在 `import main`
+#: 之前換成合成模組樹，驗「core-only＋合成模組」而不綁任何真實的 L2 模組（AUDIT-X-9c A-2）。
+MODULES_PACKAGE = "modules"
 
 _CMP = re.compile(r"^\s*(>=|<=|==|>|<)\s*(\d+(?:\.\d+)*)\s*$")
 
@@ -46,12 +50,17 @@ def core_compatible(spec: str, core_version: str = registry.CORE_VERSION) -> boo
     return True
 
 
+def _current_modules_dir():
+    """呼叫當下的 MODULES_DIR（程式碼目錄，不是資料；與原本的預設參數同一個值）。"""
+    return MODULES_DIR
+
+
 def _read_manifest(folder):
     with open(os.path.join(folder, "module.json"), encoding="utf-8") as f:
         return json.load(f)
 
 
-def load_all(modules_dir: str = MODULES_DIR, package: str = "modules",
+def load_all(modules_dir: str = None, package: str = None,
              license_check=None, disabled=frozenset()):
     """回傳成功載入的 LoadedModule 清單（依資料夾名排序，結果可重現）。
 
@@ -60,7 +69,14 @@ def load_all(modules_dir: str = MODULES_DIR, package: str = "modules",
 
     `license_check(manifest) -> (ok, reason)`：由呼叫端（main.py）注入——L0 不依賴 L1 的授權實作。
     沒給 ⇒ 不檢查。`disabled`：管理者停用的模組 key 集合（啟動時讀一次；改了要重啟才生效）。
+    ok 時的 reason（例：「授權檢查未啟用」）不是錯誤，寫進狀態的 `note`，不寫進 `reason`
+    （`reason` 非空＝有問題，模組管理頁與儀表板都這樣判斷）。
+    `modules_dir`／`package` 沒給 ⇒ 讀呼叫當下的 MODULES_DIR／MODULES_PACKAGE。
     """
+    if modules_dir is None:
+        modules_dir = _current_modules_dir()
+    if package is None:
+        package = MODULES_PACKAGE
     if not os.path.isdir(modules_dir):
         return []
     for name in sorted(os.listdir(modules_dir)):
@@ -68,6 +84,7 @@ def load_all(modules_dir: str = MODULES_DIR, package: str = "modules",
         if not os.path.isfile(os.path.join(folder, "module.json")):
             continue
         manifest = None
+        note = ""
         try:
             manifest = _read_manifest(folder)
             if manifest.get("key") != name:
@@ -85,8 +102,9 @@ def load_all(modules_dir: str = MODULES_DIR, package: str = "modules",
                     registry.set_state(name, registry.STATE_UNLICENSED, why, manifest)
                     logger.warning("模組 %s 未載入（未授權）：%s", name, why)
                     continue
+                note = why or ""
             if name in disabled:
-                registry.set_state(name, registry.STATE_DISABLED, "管理者已停用（資料保留）", manifest)
+                registry.set_state(name, registry.STATE_DISABLED, "管理者已停用（資料保留）", manifest, note=note)
                 logger.info("模組 %s 未載入：管理者已停用", name)
                 continue
             mod = importlib.import_module(f"{package}.{name}")
@@ -99,6 +117,20 @@ def load_all(modules_dir: str = MODULES_DIR, package: str = "modules",
             logger.error("模組 %s 未載入：%s", name, e)
             continue
         registry.register(registry.LoadedModule(key=name, manifest=manifest, spec=spec))
-        registry.set_state(name, registry.STATE_LOADED, "", manifest)
+        registry.set_state(name, registry.STATE_LOADED, "", manifest, note=note)
         logger.info("模組 %s %s 已載入", name, manifest.get("version", "?"))
     return registry.loaded()
+
+
+def start_schedulers() -> int:
+    """啟動已載入模組的排程（main.py 在排程閘門開著時呼叫），回傳呼叫了幾個。
+
+    只迭代 `registry.loaded()`：停用、未授權、載入失敗的模組沒有被 import，排程自然不跑（CORE-SPEC §9c③）。
+    抽成函式是為了讓子行程守門**真的呼叫到 main 用的同一條路**——測試 session 的排程閘門恆關
+    （MOTRIX_DISABLE_SCHEDULERS=1），只看閘門的話「停用後排程沒跑」在測試裡恆真（AUDIT-X-9c B-3）。"""
+    n = 0
+    for m in registry.loaded():
+        for sched in m.spec.schedulers:
+            sched()
+            n += 1
+    return n

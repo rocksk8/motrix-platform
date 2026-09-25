@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.4"
+CORE_VERSION = "1.5"
 
 
 @dataclass
@@ -44,8 +44,9 @@ class LoadedModule:
 _LOADED: Dict[str, LoadedModule] = {}
 _FAILED: Dict[str, str] = {}
 #: 每個 modules/<key> 這次啟動的結果（CORE-SPEC §9c）：
-#:   {"key","name","version","state","reason","pages","license_key"}，
-#:   state ∈ STATES。「不在包內」的模組沒有資料夾，這裡不會出現（優先順序最高）。
+#:   {"key","name","version","state","reason","note","pages","license_key"}，
+#:   state ∈ STATES。reason 非空＝有問題（未授權／停用／失敗的原因）；note＝不是問題但要讓人看到的狀態
+#:   （例：loaded 而「授權檢查未啟用」，CORE-SPEC §9c）。「不在包內」的模組沒有資料夾，這裡不會出現（優先順序最高）。
 _STATES: Dict[str, dict] = {}
 STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED = "loaded", "unlicensed", "disabled", "failed"
 STATES = (STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED)
@@ -75,14 +76,14 @@ def restore(snap: tuple) -> None:
     _STATES.update(snap[2])
 
 
-def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] = None) -> None:
+def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] = None, note: str = "") -> None:
     if state not in STATES:
         raise ValueError(f"unknown module state {state!r}")
     m = manifest or {}
     _STATES[key] = {"key": key, "name": m.get("name") or key, "version": m.get("version") or "",
                     "license_key": m.get("license_key") or key,
                     "pages": [pg.get("path") for pg in (m.get("pages") or []) if pg.get("path")],
-                    "state": state, "reason": reason}
+                    "state": state, "reason": reason, "note": note or ""}
 
 
 def module_states() -> List[dict]:
