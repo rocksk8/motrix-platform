@@ -466,6 +466,8 @@ def _candidate(st, doc_no, meta, used_map):
         "fileId": file_id,
         "filename": name,
         "mime": (meta or {}).get("mime") or "",
+        # 2026-09-25：傳票來源預覽視窗下方顯示「上傳日期」（沒有就空字串，畫面不顯示那一段）
+        "uploadedAt": (meta or {}).get("uploadedAt") or "",
         "exists": exists,
         "reason": reason,
         "missing": describe_missing(meta),

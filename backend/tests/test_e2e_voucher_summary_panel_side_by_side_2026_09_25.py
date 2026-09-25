@@ -1,8 +1,11 @@
-"""傳票：分錄與「摘要來源」面板左右並排（使用者 2026-09-25：「目前是上下，需要額外拖曳到下面再回來上面填寫」）。
+"""傳票：點來源帶入後，焦點回到那一行的摘要格（keepSummaryFocus）。
 
-內容欄夠寬（約視窗 ≥1340px、字級標準）⇒ 左分錄、右來源面板（sticky、欄內捲動），點來源帶入後焦點回到該行摘要；
-不夠寬（1024、字級「特」）⇒ 退回上下排，且不可橫向溢出。
-觀測點：分錄表與面板的實際位置（getBoundingClientRect）、document.activeElement。
+📌 更正留著（2026-09-25）：這個檔原本守 4963170 的「分錄與摘要來源面板左右並排」（內容欄夠寬 ⇒ 右側 sticky 面板；
+   不夠寬／字級「特」⇒ 上下排）。使用者以示意圖改成版型 A：帶入來源移到**分錄下方**（左案件、右已上傳檔案），
+   右側面板與它的 container query 已移除 ⇒ 並排、sticky、退回上下排這三題作廢，版面改由
+   `test_e2e_voucher_source_block_below_2026_09_25` 守。
+   仍適用的只有「帶入後焦點回到那一行摘要」：使用者點完來源可以直接接著打字。
+觀測點：document.activeElement。
 """
 import json
 
@@ -14,17 +17,12 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 QNO = "MQ-VCSPLIT-01"
 D = "Alpine.$data(document.querySelector('[x-data]'))"
-BOX = """() => { const r = s => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect();
-  return { l: b.left, t: b.top, r: b.right, b: b.bottom } };
-  return { lines: r('table.vc-lines'), panel: r('[data-testid=summary-panel]'), vw: innerWidth, vh: innerHeight,
-           sw: document.documentElement.scrollWidth } }"""
-
 
 
 def _rendered(page):
-    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。
-    ⚠️ 只適用於沒有 CSS transition 的元素（有 transition 的要等轉場落定）。"""
+    """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
     page.evaluate("() => new Promise(r => (window.Alpine ? Alpine.nextTick : (f => f()))(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
+
 
 def _seed(client, u, n=6):
     import db
@@ -52,56 +50,21 @@ def _open(browser, base, u, vid, width, height, zoom=None):
     page = ctx.new_page()
     inject_login(page, base, u[0], u[1])
     page.goto(f"{base}/pages/voucher.html?id={vid}")
-    page.wait_for_function(f"() => {{ try {{ return {D}.id == {vid} && {D}.lines.length && {D}.canEdit }} catch (e) {{ return false }} }}",
+    page.wait_for_function(f"() => {{ try {{ return {D}.id == {vid} && {D}.lines.length && {D}.canEdit && {D}.sourcesLoaded }} catch (e) {{ return false }} }}",
                            timeout=20000)
     _rendered(page)   # PERF #6：原本固定等 500ms
-    page.locator("textarea[x-model='l.summary']").nth(2).focus()        # 第 3 行摘要 ⇒ 面板出現
-    page.locator("[data-testid=summary-panel]").wait_for(state="visible", timeout=5000)
+    page.locator("textarea[x-model='l.summary']").nth(2).focus()        # 第 3 行摘要
+    page.locator("[data-testid=src-block]").wait_for(state="visible", timeout=5000)
     return page
 
 
 @pytest.mark.e2e
-def test_wide_screen_puts_the_source_panel_beside_the_lines(live_server, client, make_user, e2e_browser):
-    u = make_user(username="vcs_wide", role="superadmin")
+def test_picking_a_case_keeps_the_focus_on_that_lines_summary(live_server, make_user, e2e_browser, client):
+    u = make_user(username="split_focus", role="superadmin")
     vid = _seed(client, u)
-    browser = e2e_browser
-    page = _open(browser, live_server, u, vid, 1440, 900)
-    b = page.evaluate(BOX)
-    assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
-    assert b["panel"]["t"] < b["lines"]["b"], ("面板要與分錄同一列，不是在下面", b)
-    assert b["lines"]["t"] < b["vh"] and b["panel"]["t"] < b["vh"], ("兩區都要在第一屏內", b)
-    assert b["sw"] <= b["vw"], ("不可橫向溢出", b)
-    # 帶入後焦點仍在該行摘要
-    page.locator(f"[data-testid=summary-panel-case]:has-text('{QNO}')").click()
-    page.wait_for_function(f"() => {D}.lines[2].summary.includes('{QNO}')", timeout=5000)
-    _rendered(page)   # PERF #6：原本固定等 200ms（焦點在 $nextTick 裡回到該行）
-    focused = page.evaluate("() => [...document.querySelectorAll(\"textarea[x-model='l.summary']\")].indexOf(document.activeElement)")
-    assert focused == 2, ("帶入後焦點應回到第 3 行摘要", focused)
-
-
-@pytest.mark.e2e
-def test_the_panel_stays_in_view_while_scrolling_a_long_voucher(live_server, client, make_user, e2e_browser):
-    """分錄很多行時往下捲：右欄 sticky，停在導覽列下方、仍在畫面內（不必捲回上面才看得到來源）。"""
-    u = make_user(username="vcs_long", role="superadmin")
-    vid = _seed(client, u, n=30)
-    browser = e2e_browser
-    page = _open(browser, live_server, u, vid, 1440, 900)
-    b = page.evaluate(BOX)
-    assert b["lines"]["r"] <= b["panel"]["l"], ("1440 寬應左右並排", b)
-    page.evaluate("() => window.scrollBy(0, 600)")
-    _rendered(page)   # PERF #6：原本固定等 300ms
-    top = page.evaluate("() => document.querySelector('[data-testid=summary-panel]').getBoundingClientRect().top")
-    header = page.evaluate("() => document.querySelector('.mnav').getBoundingClientRect().bottom")
-    assert header <= top < b["vh"], ("捲動後面板要停在導覽列下方", top, header)
-
-
-@pytest.mark.e2e
-@pytest.mark.parametrize("width,height,zoom", [(1024, 768, None), (1440, 900, "1.3")], ids=["1024", "font-xl"])
-def test_narrow_or_large_font_falls_back_to_stacked(live_server, client, make_user, width, height, zoom, e2e_browser):
-    u = make_user(username="vcs_" + ("xl" if zoom else str(width)), role="superadmin")
-    vid = _seed(client, u)
-    browser = e2e_browser
-    page = _open(browser, live_server, u, vid, width, height, zoom)
-    b = page.evaluate(BOX)
-    assert b["panel"]["t"] >= b["lines"]["b"], ("應退回上下排", b)
-    assert b["sw"] <= b["vw"], ("不可橫向溢出", b)
+    page = _open(e2e_browser, live_server, u, vid, 1440, 900)
+    page.click(f'[data-testid="src-case"]:has-text("{QNO}")')
+    page.wait_for_function(f"() => {D}.lines[2].summary.includes('並排客戶')", timeout=5000)
+    _rendered(page)
+    idx = page.evaluate("() => [...document.querySelectorAll(\"textarea[x-model='l.summary']\")].indexOf(document.activeElement)")
+    assert idx == 2, "點案件帶入後，焦點應該回到第 3 行摘要，實際 %s" % idx

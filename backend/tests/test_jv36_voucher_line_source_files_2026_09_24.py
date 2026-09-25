@@ -246,7 +246,7 @@ def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
     line = page.evaluate("() => %s.lines[1]" % _D)
     assert line["credit"] == "5000" and not line["debit"], (
         "N12：這一行已有金額，不可以再帶入：%r" % line)
-    page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
+    page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)   # 2026-09-25：案件清單移到分錄下方的帶入來源區塊
     line = page.evaluate("() => %s.lines[1]" % _D)
     assert (line["source_type"], line["source_key"]) == ("case", QUOTE), line
     page.locator('[data-testid="line-source-file-open"]:has-text("回簽.png")').wait_for(

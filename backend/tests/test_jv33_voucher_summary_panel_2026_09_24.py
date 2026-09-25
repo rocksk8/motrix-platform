@@ -13,6 +13,10 @@
 ```
 📌 更正留著（2026-09-24，`JV36`）：② 的「；接續」依使用者更正改為「選 XXX ⇒ 覆蓋＋連帶 XXX 的已上傳檔案」，
    ④ 併進 JV36（限空白行帶入借方）；兩區同時可見與載入中狀態保留。題見 `test_jv36_*`。
+📌 更正留著（2026-09-25，使用者以示意圖確認版型 A）：右側「帶入面板」改成分錄下方的「帶入來源」區塊
+   （左案件、右該案已上傳檔案），**常駐**不必 focus；「本傳票已上傳檔案」那一區移到下方附件區
+   （每個附件有縮圖、點開同一個預覽窗）。規則不變的部分沿用這裡的題，只換選擇器；新版型的題見
+   `test_e2e_voucher_source_block_below_2026_09_25`。
 """
 import pytest
 
@@ -23,8 +27,8 @@ from tests.test_jv28_voucher_attachment_preview_2026_09_24 import (  # noqa: E40
     _png_bytes, _upload, _open_page)
 
 QUOTE = "MQ-JV33-001"
-PANEL = '[data-testid="summary-panel"]'
-FILES = '[data-testid="summary-panel-files"]'
+PANEL = '[data-testid="src-block"]'
+FILES = '.vc-att'   # 2026-09-25：本傳票已上傳檔案 ⇒ 下方附件區
 EXPENSES = '[data-testid="summary-panel-expenses"]'
 SUMMARY = "textarea[x-model='l.summary']"
 
@@ -122,11 +126,11 @@ def test_jv33_clicking_a_source_overwrites_the_summary_instead_of_appending(
     _wait_expenses(page, exp)
     page.click('[data-testid="summary-panel-expense"]:has-text("%s")' % exp[:6])
     first = _summary2(page)
-    page.click('[data-testid="summary-panel-file"]:has-text("吊車發票.png")')
+    page.click('[data-testid="voucher-att-open"]:has-text("吊車發票.png")')
     page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible", timeout=10000)
     page.click('[data-testid="voucher-att-close"]')
     after_file = _summary2(page)
-    page.click('[data-testid="summary-panel-case"]:has-text("%s")' % QUOTE)
+    page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)
     second = _summary2(page)
     print("JV33 頁面實測：點支出項 ⇒", repr(first), "；點附件檔名 ⇒", repr(after_file),
           "；再點案件 ⇒", repr(second))
@@ -144,7 +148,7 @@ def test_jv33_the_thumbnail_previews_without_touching_the_summary(
     _setup(page, live_server, make_user, seed_extra_expense, "jv33_c")
     _line2(page).click()
     page.wait_for_selector(PANEL, state="visible", timeout=5000)
-    thumb = page.locator('[data-testid="summary-panel-thumb"]').first
+    thumb = page.locator('[data-testid="voucher-att-thumb"]').first
     thumb.wait_for(state="visible", timeout=10000)
     thumb.click()
     page.wait_for_selector('[data-testid="voucher-att-preview"]', state="visible",

@@ -58,15 +58,30 @@
     .vc-err{margin:10px 0;padding:9px 11px;border:1px solid #FCA5A5;background:#FEF2F2;border-radius:var(--radius);font-size:12px;color:#7F1D1D;line-height:1.7}
     .vc-ok{margin:10px 0;padding:9px 11px;border:1px solid #BBF7D0;background:#F0FDF4;border-radius:var(--radius);font-size:12px;color:#14532D;line-height:1.7}
 
-    .vc-wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap;container-type:inline-size}
-    .vc-src-ph{display:none}
-    @container (min-width: 1330px) {
-      .vc-sheet.vc-sheet--split{flex:1 1 0;min-width:0;max-width:none}
-      .vc-body--split{display:grid;grid-template-columns:minmax(640px,1fr) 300px;gap:20px;align-items:start}
-      .vc-body--split .vc-body__side{position:sticky;top:calc(var(--topbar-h,54px) + 12px);max-height:calc(100vh / var(--fz,1) - var(--topbar-h,54px) - 24px);overflow-y:auto}
-      .vc-body--split .vc-body__side > .vc-src:first-of-type{margin-top:0}
-      .vc-body--split .vc-src-ph{display:block;padding:14px;border:1px dashed var(--border-light);border-radius:var(--radius);font-size:12px;line-height:1.8;color:var(--text-secondary);font-family:var(--font-zh)}
-    }
+    .vc-wrap{display:flex;gap:26px;align-items:flex-start;flex-wrap:wrap}
+    /* 帶入來源（2026-09-25，使用者確認版型 A；取代 4963170 的右側並排面板）：分錄下方，左案件、右已上傳檔案。
+       兩欄或上下排看**區塊本身**的寬度（container query）：字級是根元素 zoom，media query 看不到。 */
+    .vc-srcblk{margin-top:18px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px 14px;font-family:var(--font-zh);container-type:inline-size}
+    .vc-srcblk__cols{display:grid;grid-template-columns:1fr;gap:14px}
+    @container (min-width: 700px) { .vc-srcblk__cols{grid-template-columns:minmax(240px,2fr) 3fr} }
+    .vc-srcblk__col{min-width:0}
+    .vc-srcblk__case{display:flex;gap:6px;align-items:baseline;width:100%;text-align:left;padding:6px 8px;margin:2px 0;border:1px solid transparent;border-radius:6px;background:none;font:inherit;font-size:12px;cursor:pointer;color:var(--text-primary)}
+    .vc-srcblk__case:hover{background:var(--hover-bg,#F5F4F0)}
+    .vc-srcblk__case.on{border-color:var(--accent);background:var(--accent-light,#EEF2FF);font-weight:600}
+    .vc-srcblk__mark{display:inline-block;width:1em;flex:0 0 auto;color:var(--accent)}
+    .vc-srcblk__files{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+    .vc-srcblk__file{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border:1px solid var(--border-light);border-radius:6px;background:#fff;cursor:pointer;font:inherit;font-size:11px;min-width:0}
+    .vc-srcblk__file:disabled{cursor:not-allowed;opacity:.55}
+    .vc-srcblk__thumb{width:80px;height:60px;object-fit:cover;border-radius:4px;background:#F5F4F0}
+    .vc-pdf-icon{display:flex;align-items:center;justify-content:center;width:80px;height:60px;border-radius:4px;background:#FEE2E2;color:#B91C1C;font-weight:700;font-size:13px}
+    .vc-pdf-icon--sm{width:48px;height:48px;font-size:11px}
+    .vc-srcblk__name{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .vc-srcblk__brought{color:#15803D;font-weight:600}
+    .vc-pv-stage{position:relative;display:flex;align-items:center;justify-content:center}
+    .vc-pv-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;border:1px solid var(--border-light);background:#fff;font-size:16px;cursor:pointer}
+    .vc-pv-nav--prev{left:4px}
+    .vc-pv-nav--next{right:4px}
+    .vc-pv-meta{font-size:12px;color:var(--text-secondary);margin-right:auto}
     .vc-side{width:290px;flex-shrink:0;font-family:var(--font-zh)}
     .vc-side__hd{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;font-weight:700;color:var(--text-primary)}
     .vc-side__chk{font-size:11px;color:var(--text-secondary);font-weight:400;display:flex;align-items:center;gap:4px;cursor:pointer}
@@ -257,7 +272,7 @@
                要開新的請按左上角的「＋ 新增傳票」。</div>
         </div>
 
-        <div class="vc-sheet" :class="{ 'vc-sheet--split': canEdit }" x-show="editing">
+        <div class="vc-sheet" x-show="editing">
           <!-- ⚠️ 抬頭從設定讀，**不要寫死** —— 公司抬頭在這個 repo 裡已經
                寫死在 14 個檔、56 行，再加一處就是第 57 處。 -->
           <div class="vc-org" x-text="company || '（尚未設定公司抬頭）'"></div>
@@ -305,10 +320,6 @@
               <option :value="a.code" :label="a.label" x-text="a.label"></option>
             </template>
           </datalist>
-          <!-- 分錄與帶入來源：內容欄夠寬時左右並排（右欄 sticky、獨立捲動），不夠寬（含字級「特」）時上下排。
-               用 container query 看 .vc-wrap 的實際寬度：字級是根元素 zoom，media query 看不到（2026-09-25）。 -->
-          <div class="vc-body" :class="{ 'vc-body--split': canEdit }">
-            <div class="vc-body__main">
           <table class="vc-lines">
             <thead>
               <tr>
@@ -405,9 +416,6 @@
                   x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
           </div>
 
-            </div>
-            <div class="vc-body__side">
-              <div class="vc-src-ph" x-show="canEdit && panelLine < 0">點摘要格，就能在這裡帶入案件、支出項與檔案；分錄不用離開畫面。</div>
           <!-- ══ 摘要來源（JV7）═══════════════════════════════════════
                使用者逐字（§159b (7)）：「摘要部分也要有分頁選單帶入案件跟
                哪些已上傳檔案並帶入摘要，也可以手動填寫或修改摘要」。
@@ -418,59 +426,80 @@
                ☠️ 切頁籤**不會**重新帶入：那種實作看起來像功能正常
                   （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼
                   附件清單、切回來，**他打的字沒了**。 -->
-          <!-- `JV33`：帶入面板。摘要格 focus 時出現，**兩區同時列出**（不用切頁籤）：
-               本傳票已上傳檔案（文字 ⇒ 檔名接進摘要；縮圖 ⇒ JV28 頁內預覽）＋支出項。
-               🔴 空白 ⇒ 填入；非空 ⇒ 以「；」接續（只限這個面板）。 -->
-          <div class="vc-src" data-testid="summary-panel" x-show="canEdit && panelLine >= 0"
-               style="display:none">
+          <!-- 帶入來源（2026-09-25，使用者以示意圖確認版型 A；取代 JV33 的右側面板與 4963170 的並排）：
+               分錄下方，左＝案件清單（單號＋客戶，選中標 ▶），右＝該案已上傳檔案縮圖（PDF 顯示圖示）。
+               點案件 ⇒ 目前這一行摘要改成案件名稱（沿用 JV33 panelPick 的規則），右欄列出它的檔案；
+               點檔案 ⇒ 預覽視窗，按「帶入附件」才加入（沿用 JV36 的帶入與 source_key），取消／Esc 不帶入。
+               支出項（JV21／JV33 的規則不變）列在案件清單下方。 -->
+          <div class="vc-srcblk" data-testid="src-block" x-show="canEdit" style="display:none">
             <div class="vc-src__hd">
-              <span x-text="'帶入到第 ' + (panelLine + 1) + ' 行摘要'"></span>
-              <span class="vc-src__hint">點選案件或支出項：這一行摘要改成它的名稱，下方列出它的已上傳檔案（勾選才帶入）。</span>
-              <button class="vc-src__tab" style="margin-left:auto" @click="closePanel()">關閉</button>
+              <span data-testid="src-target" x-text="'帶入到第 ' + (srcTargetLine() + 1) + ' 行摘要'"></span>
+              <span class="vc-src__hint">點摘要格可換一行；點案件看它的已上傳檔案，點檔案預覽後確認才帶入附件。</span>
             </div>
-            <div data-testid="summary-panel-files">
-              <div class="vc-src__hint" style="margin:4px 0">本傳票已上傳檔案</div>
-              <template x-for="a in attachments" :key="a.file_id">
-                <div style="display:flex;align-items:center;gap:8px">
-                  <template x-if="attThumbs[a.file_id]">
-                    <img data-testid="summary-panel-thumb" :src="attThumbs[a.file_id]" alt=""
-                         width="32" height="32" style="width:32px;height:32px;object-fit:cover;border-radius:4px;cursor:pointer"
-                         @click="openAttPreview(a)">
-                  </template>
-                  <button class="vc-src__item" data-testid="summary-panel-file"
-                          @click="openAttPreview(a)">
-                    <span class="vc-src__txt" x-text="a.filename"></span>
+            <div class="vc-srcblk__cols">
+              <div class="vc-srcblk__col" data-testid="src-cases">
+                <div class="vc-src__hint" style="margin:4px 0">案件</div>
+                <template x-for="(e, ei) in panelCases()" :key="'c' + ei">
+                  <button class="vc-srcblk__case" data-testid="src-case" :class="{ on: e.source_key === sourceQuote }"
+                          @click="pickSrcCase(e)">
+                    <span class="vc-srcblk__mark" x-text="e.source_key === sourceQuote ? '▶' : ''"></span>
+                    <span x-text="e.source_key"></span>
+                    <span style="color:var(--text-secondary)" x-text="e.customer_name"></span>
                   </button>
+                </template>
+                <div class="vc-src__empty" x-show="!panelCases().length">目前沒有可選的案件。</div>
+
+                <div data-testid="summary-panel-expenses" style="margin-top:10px">
+                  <div class="vc-src__hint" style="margin:4px 0">支出項</div>
+                  <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
+                  <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
+                    <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
+                            data-testid="summary-panel-expense" @click="srcPick(e)">
+                      <span class="vc-src__txt" x-text="e.summary"></span>
+                      <!-- `JV21`：已被其他未作廢傳票帶入 ⇒ 紅字寫出傳票號（點了會被擋並說明） -->
+                      <span class="vc-src__used" data-testid="expense-used" x-show="(e.usedBy || []).length"
+                            x-text="'已帶入 ' + (e.usedBy || []).map(u => u.voucherNo).join('、')"></span>
+                    </button>
+                  </template>
+                  <div class="vc-src__empty" data-testid="summary-panel-msg" style="color:#B91C1C"
+                       x-show="panelMsg" x-text="panelMsg"></div>
+                  <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
+                       x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
                 </div>
-              </template>
-              <div class="vc-src__empty" x-show="!attachments.length">這張傳票還沒有上傳檔案。</div>
-            </div>
-            <div data-testid="summary-panel-cases" style="margin-top:8px">
-              <div class="vc-src__hint" style="margin:4px 0">案件</div>
-              <template x-for="(e, ei) in panelCases()" :key="'c' + ei">
-                <button class="vc-src__item" data-testid="summary-panel-case" @click="panelPick(e); keepSummaryFocus()">
-                  <span class="vc-src__txt" x-text="e.summary"></span>
-                </button>
-              </template>
-              <div class="vc-src__empty" x-show="!panelCases().length">目前沒有可選的案件。</div>
-            </div>
-            <div data-testid="summary-panel-expenses" style="margin-top:8px">
-              <div class="vc-src__hint" style="margin:4px 0">支出項</div>
-              <!-- 載入中（選了案件之後的那一趟還沒回來）⇒ 說「載入中…」，不沿用上一趟的提示。 -->
-              <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
-              <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
-                <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
-                        data-testid="summary-panel-expense" @click="panelPick(e); keepSummaryFocus()">
-                  <span class="vc-src__txt" x-text="e.summary"></span>
-                  <!-- `JV21`：已被其他未作廢傳票帶入 ⇒ 紅字寫出傳票號（點了會被擋並說明） -->
-                  <span class="vc-src__used" data-testid="expense-used" x-show="(e.usedBy || []).length"
-                        x-text="'已帶入 ' + (e.usedBy || []).map(u => u.voucherNo).join('、')"></span>
-                </button>
-              </template>
-              <div class="vc-src__empty" data-testid="summary-panel-msg" style="color:#B91C1C"
-                   x-show="panelMsg" x-text="panelMsg"></div>
-              <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
-                   x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
+              </div>
+
+              <div class="vc-srcblk__col" data-testid="src-files">
+                <div class="vc-src__hint" style="margin:4px 0"
+                     x-text="sourceQuote ? ('已上傳檔案　' + sourceQuote) : '已上傳檔案'"></div>
+                <div class="vc-src__empty" x-show="!sourceQuote">先點左邊的案件。</div>
+                <div class="vc-src__empty" x-show="sourceQuote && srcState().loading">載入中…</div>
+                <!-- x-if 不是 x-show：既有題用 `.vc-err` 的第一個等頁面錯誤訊息，隱藏的也會被取到 -->
+                <template x-if="sourceQuote && srcState().err">
+                  <div class="vc-err" x-text="srcState().err"></div>
+                </template>
+                <div class="vc-srcblk__files" x-show="sourceQuote && !srcState().loading">
+                  <template x-for="(f, fi) in srcFiles()" :key="f.type + f.docNo + f.fileId">
+                    <button class="vc-srcblk__file" data-testid="src-file" :title="f.filename"
+                            :disabled="f.exists === false" @click="openSrcPreview(fi)">
+                      <template x-if="srcThumbs[srcFileKey(f)]">
+                        <img class="vc-srcblk__thumb" :src="srcThumbs[srcFileKey(f)]" alt="">
+                      </template>
+                      <template x-if="!srcThumbs[srcFileKey(f)] && attKind(f) === 'pdf'">
+                        <span class="vc-pdf-icon" data-testid="src-file-pdf">PDF</span>
+                      </template>
+                      <template x-if="!srcThumbs[srcFileKey(f)] && attKind(f) !== 'pdf'">
+                        <span class="vc-pdf-icon" style="background:#F5F4F0;color:var(--text-secondary)">檔案</span>
+                      </template>
+                      <span class="vc-srcblk__name" x-text="f.filename"></span>
+                      <span class="vc-srcblk__brought" data-testid="src-file-brought" x-show="isBrought(f)">已帶入</span>
+                      <span style="color:#B91C1C" x-show="f.exists === false" x-text="f.reason"></span>
+                    </button>
+                  </template>
+                </div>
+                <div class="vc-src__empty"
+                     x-show="sourceQuote && !srcState().loading && !srcState().err && !srcFiles().length">
+                  這個案件沒有已上傳檔案。</div>
+              </div>
             </div>
           </div>
 
@@ -553,8 +582,6 @@
               <div class="vc-err" x-text="sourceErr"></div>
             </template>
           </div>
-            </div>
-          </div>
 
           <!-- ══ 附件（JV3）════════════════════════════════════════════
                使用者逐字（§159b (7)）：「必須有上傳功能可以合併輸出」。
@@ -613,6 +640,10 @@
                        alt="" width="48" height="48" style="width:48px;height:48px;object-fit:cover;border-radius:4px;cursor:pointer"
                        @click="openAttPreview(a)">
                 </template>
+                <template x-if="!attThumbs[a.file_id] && attKind(a) === 'pdf'">
+                  <span class="vc-pdf-icon vc-pdf-icon--sm" data-testid="voucher-att-pdf-icon" style="cursor:pointer"
+                        @click="openAttPreview(a)">PDF</span>
+                </template>
                 <a href="#" class="vc-att__name" data-testid="voucher-att-open"
                    @click.prevent="openAttPreview(a)" x-text="a.filename"></a>
                 <span class="vc-att__meta" x-text="fileSize(a.size)"></span>
@@ -640,8 +671,7 @@
               </label>
               <span class="vc-att__hint" x-show="uploading">處理中…</span>
               <span class="vc-att__hint">
-                可帶入的憑證在下方「摘要來源」的「已上傳檔案」頁籤 ——
-                先點一個案件，再點要帶入的檔案。
+                可帶入的憑證在分錄下方的「已上傳檔案」——先點左邊的案件，再點檔案預覽、確認後帶入。
               </span>
             </div>
 
@@ -833,25 +863,36 @@
   <!-- `JV28`：附件頁內預覽窗。疊在傳票預覽窗之上（z-index 高一層），兩個清單共用。
        📌 放在傳票預覽窗**之後**：既有題用 querySelector('.modal-box') 取第一個，放前面會取到這個（隱藏的）。
        🔴 只有 attKind() 判定為 image／pdf 的才內嵌；其餘（含 SVG／HTML）只給下載。 -->
+  <!-- 2026-09-25：來源檔（分錄下方「已上傳檔案」）也用這個視窗——◀ ▶ 切換同案其他檔案、下方案件單號與上傳日期、
+       「取消」「帶入附件」（只有來源檔才有；附件區點開只看不帶入）。鍵盤比照 MotrixUI：Esc 關（等同取消）、
+       焦點鎖在視窗內、← → 切換。 -->
   <div class="modal-overlay" x-show="attPv.open" style="display:none;z-index:300"
-       data-testid="voucher-att-preview" @click.self="closeAttPv()">
-    <div class="modal-box">
+       data-testid="voucher-att-preview" @click.self="closeAttPv()"
+       @keydown.escape.stop.prevent="closeAttPv()" @keydown.tab="trapAttPvTab($event)"
+       @keydown.arrow-left="stepAttPv(-1)" @keydown.arrow-right="stepAttPv(1)">
+    <div class="modal-box" role="dialog" aria-modal="true" x-ref="attPvBox">
       <div class="modal-head">
         <span class="modal-head__title"
-              x-text="(attPvItem() ? attPvItem().filename : '') + '　（' + (attPv.idx + 1) + ' / ' + attachments.length + '）'"></span>
+              x-text="(attPvItem() ? attPvItem().filename : '') + '　（' + (attPv.idx + 1) + ' / ' + attPvItems().length + '）'"></span>
         <button class="modal-close" data-testid="voucher-att-close" @click="closeAttPv()">×</button>
       </div>
       <div class="modal-body" style="text-align:center">
         <div class="vc-att__hint" x-show="attPv.loading">載入中…</div>
         <template x-if="attPv.err"><div class="vc-err" x-text="attPv.err"></div></template>
+        <div class="vc-pv-stage">
+        <button class="vc-pv-nav vc-pv-nav--prev" data-testid="att-pv-prev" x-show="attPvItems().length > 1 && !attPv.ext"
+                @click="stepAttPv(-1)" aria-label="上一個">◀</button>
         <template x-if="attPv.kind === 'image' && attPv.url">
           <img data-testid="voucher-att-preview-img" :src="attPv.url" alt=""
-               style="max-width:100%;max-height:calc(70vh / var(--fz,1));object-fit:contain">
+               style="max-width:calc(100% - 96px);max-height:calc(70vh / var(--fz,1));object-fit:contain">
         </template>
         <template x-if="attPv.kind === 'pdf' && attPv.url">
           <iframe data-testid="voucher-att-preview-pdf" :src="attPv.url" title="附件預覽"
-                  style="width:100%;height:calc(70vh / var(--fz,1));border:1px solid var(--border-light)"></iframe>
+                  style="width:calc(100% - 96px);height:calc(70vh / var(--fz,1));border:1px solid var(--border-light)"></iframe>
         </template>
+        <button class="vc-pv-nav vc-pv-nav--next" data-testid="att-pv-next" x-show="attPvItems().length > 1 && !attPv.ext"
+                @click="stepAttPv(1)" aria-label="下一個">▶</button>
+        </div>
         <template x-if="attPv.kind === 'download' && attPvItem()">
           <div style="padding:24px">
             <div x-text="attPvItem().filename"></div>
@@ -861,9 +902,20 @@
         </template>
       </div>
       <div class="modal-foot">
-        <button class="btn btn-ghost btn-sm" :disabled="attachments.length < 2" @click="stepAttPv(-1)">上一個</button>
-        <button class="btn btn-ghost btn-sm" :disabled="attachments.length < 2" @click="stepAttPv(1)">下一個</button>
-        <button class="btn btn-sm" data-testid="voucher-att-download" @click="downloadAttachment(attPvItem())">下載</button>
+        <span class="vc-pv-meta" data-testid="att-pv-meta" x-text="attPvMeta()"></span>
+        <template x-if="attPv.mode === 'src'">
+          <span style="display:flex;gap:8px;align-items:center">
+            <span class="vc-err" style="margin:0;padding:4px 8px" x-show="attErr" x-text="attErr"></span>
+            <button class="btn btn-ghost btn-sm" data-testid="att-pv-cancel" @click="closeAttPv()">取消</button>
+            <button class="btn btn-sm" data-testid="att-pv-bring"
+                    :disabled="uploading || !attPvItem() || isBrought(attPvItem()) || attPvItem().exists === false"
+                    @click="bringFromPreview()"
+                    x-text="attPvItem() && isBrought(attPvItem()) ? '已帶入' : (uploading ? '帶入中…' : '帶入附件')"></button>
+          </span>
+        </template>
+        <template x-if="attPv.mode !== 'src'">
+          <button class="btn btn-sm" data-testid="voucher-att-download" @click="downloadAttachment(attPvItem())">下載</button>
+        </template>
       </div>
     </div>
   </div>

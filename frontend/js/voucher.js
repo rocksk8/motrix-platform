@@ -261,7 +261,7 @@ function voucherPage() {
     panelCases() {
       return ((this.sources || {})['案件'] || []).map(function (it) {
         return { summary: it.summary || it.quote_no, source_type: 'case',
-                 source_key: it.quote_no || '' }
+                 source_key: it.quote_no || '', customer_name: it.customer_name || '' }
       }).filter(function (e) { return e.source_key })
     },
 
@@ -303,7 +303,84 @@ function voucherPage() {
         this.sourceQuote = e.source_key
         this.loadSources()
       }
-      this.loadLineFiles(e.source_type, e.source_key)
+      return this.loadLineFiles(e.source_type, e.source_key)
+    },
+
+    // ── 帶入來源區塊（2026-09-25，分錄下方：左案件、右已上傳檔案；取代右側面板）─────────
+    //    區塊常駐（草稿時），帶入的目標是最後聚焦的那一行摘要；還沒點過摘要格就是第 1 行。
+    srcTargetLine() {
+      if (this.panelLine >= 0) return this.panelLine
+      return this.summaryTarget >= 0 ? this.summaryTarget : 0
+    },
+
+    _ensureSrcTarget() {
+      if (this.panelLine < 0) this.panelLine = this.srcTargetLine()
+      if (!this.lines[this.panelLine]) { this.addLine(); this.panelLine = this.lines.length - 1 }
+    },
+
+    async pickSrcCase(e) {
+      if (!this.canEdit || !e) return
+      this._ensureSrcTarget()
+      const loading = this.panelPick(e)
+      this.keepSummaryFocus()          // 先把焦點還給摘要格（使用者可以接著打字），檔案在背景載入
+      await loading
+      this.loadSrcThumbs()
+    },
+
+    srcPick(e) {
+      if (!this.canEdit || !e) return
+      this._ensureSrcTarget()
+      this.panelPick(e)
+      this.keepSummaryFocus()
+    },
+
+    srcState() { return this.lineFiles({ source_type: 'case', source_key: this.sourceQuote }) },
+
+    srcFiles() { return this.srcState().files || [] },
+
+    srcFileKey(f) { return f.type + '|' + f.docNo + '|' + f.fileId },
+
+    _srcFileUrl(f) {
+      return '/api/vouchers/line-source-file?source_type=case&ref=' + encodeURIComponent(this.sourceQuote)
+        + '&file_id=' + encodeURIComponent(f.fileId)
+    },
+
+    // 右欄縮圖：只給內嵌得了的圖片（同 JV28 的判準）；換案件時舊的 revoke。
+    srcThumbs: {},
+
+    async loadSrcThumbs() {
+      const old = this.srcThumbs
+      Object.keys(old).forEach(function (k) { URL.revokeObjectURL(old[k]) })
+      this.srcThumbs = {}
+      const quote = this.sourceQuote
+      for (const f of this.srcFiles()) {
+        if (f.exists === false || this.attKind(f) !== 'image') continue
+        try {
+          const type = this._ATT_IMAGE[f.filename.toLowerCase().slice(f.filename.lastIndexOf('.'))]
+          const blob = await this._fetchAttBlob({ _url: this._srcFileUrl(f) }, type)
+          if (quote !== this.sourceQuote) return       // 換了案件：這一批作廢
+          this.srcThumbs = Object.assign({}, this.srcThumbs, { [this.srcFileKey(f)]: URL.createObjectURL(blob) })
+        } catch (e) { /* 縮圖失敗不擋清單：點開預覽會說出錯誤 */ }
+      }
+    },
+
+    async openSrcPreview(i) {
+      const list = this.srcFiles().map(f => Object.assign({}, f, { _url: this._srcFileUrl(f) }))
+      if (!list[i]) return
+      this.attErr = ''
+      this.attPv.mode = 'src'
+      this.attPv.list = list
+      this.attPv.ext = null
+      this.attPv.open = true
+      this._focusAttPv()
+      await this._loadAttPv(i)
+    },
+
+    async bringFromPreview() {
+      const f = this.attPvItem()
+      if (!f || this.isBrought(f)) return
+      await this.bringIn(f)
+      if (this.isBrought(f)) this.closeAttPv()      // 失敗就留在視窗裡，錯誤顯示在下方
     },
 
     // ── `JV36`：各行來源的已上傳檔案（只列出；勾選才帶入）─────────────
@@ -593,7 +670,9 @@ function voucherPage() {
     },
 
     // 預覽 modal 的狀態。`url` 只在 image／pdf 時才有；關閉或切換時 revoke。
-    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false, ext: null },
+    // mode：'att'＝本傳票附件（只看）、'src'＝分錄下方的來源檔（可帶入，list 是那一案的檔案）、
+    //       'ext'＝JV36 單一來源檔（每行的勾選清單）。
+    attPv: { open: false, idx: -1, kind: '', url: '', err: '', loading: false, ext: null, mode: 'att', list: null },
 
     openAttachment(a) {
       // `JV16` 那份清單（預覽窗內）與編輯頁清單**共用同一個頁內預覽窗**，不再 window.open。
@@ -603,16 +682,60 @@ function voucherPage() {
     async openAttPreview(a) {
       const idx = this.attachments.indexOf(a)
       if (idx < 0) return
+      this.attPv.mode = 'att'
+      this.attPv.list = null
       this.attPv.ext = null
       this.attPv.open = true
+      this._focusAttPv()
       await this._loadAttPv(idx)
     },
 
     // `JV36`：預覽一個還沒帶入的來源檔（同一個預覽窗、同一套內嵌規則）。
     async openExtPreview(item) {
+      this.attPv.mode = 'ext'
+      this.attPv.list = null
       this.attPv.ext = item
       this.attPv.open = true
+      this._focusAttPv()
       await this._loadAttPv(-1)
+    },
+
+    attPvItems() { return this.attPv.list || this.attachments || [] },
+
+    // 視窗下方：來源檔寫「案件單號・上傳日期」；附件寫來源與大小。
+    attPvMeta() {
+      const it = this.attPvItem()
+      if (!it) return ''
+      if (this.attPv.mode === 'src') {
+        const at = String(it.uploadedAt || '').slice(0, 10)
+        return '案件 ' + this.sourceQuote + (at ? '　上傳 ' + at : '')
+      }
+      return this.attPv.mode === 'att' ? (this.fileSize(it.size) || '') : ''
+    },
+
+    // MotrixUI 的鍵盤規則：打開時焦點進視窗、Tab 鎖在視窗內、關閉後焦點回到原位。
+    _attPvOpener: null,
+
+    _focusAttPv() {
+      this._attPvOpener = document.activeElement
+      this.$nextTick(() => {
+        const box = this.$refs.attPvBox
+        const first = box && (box.querySelector('[data-testid="att-pv-cancel"]')
+                              || box.querySelector('[data-testid="voucher-att-close"]'))
+        if (first) first.focus()
+      })
+    },
+
+    trapAttPvTab(ev) {
+      const box = this.$refs.attPvBox
+      if (!box) return
+      const f = Array.from(box.querySelectorAll('button, [href], iframe, [tabindex]:not([tabindex="-1"])'))
+        .filter(el => !el.disabled && el.offsetParent !== null)
+      if (!f.length) { ev.preventDefault(); return }
+      const first = f[0], last = f[f.length - 1]
+      const inside = box.contains(document.activeElement)
+      if (ev.shiftKey && (document.activeElement === first || !inside)) { ev.preventDefault(); last.focus() }
+      else if (!ev.shiftKey && (document.activeElement === last || !inside)) { ev.preventDefault(); first.focus() }
     },
 
     _revokeAttPv() {
@@ -622,7 +745,8 @@ function voucherPage() {
 
     async _loadAttPv(idx) {
       this._revokeAttPv()
-      const a = this.attPv.ext || this.attachments[idx]
+      const a = this.attPv.ext || this.attPvItems()[idx]
+      if (!a) return
       this.attPv.idx = idx
       this.attPv.err = ''
       this.attPv.kind = this.attKind(a)
@@ -643,20 +767,26 @@ function voucherPage() {
       }
     },
 
-    attPvItem() { return this.attPv.ext || this.attachments[this.attPv.idx] || null },
+    attPvItem() { return this.attPv.ext || this.attPvItems()[this.attPv.idx] || null },
 
     stepAttPv(d) {
-      const n = this.attachments.length
-      if (!n || this.attPv.ext) return
+      const n = this.attPvItems().length
+      if (!this.attPv.open || !n || this.attPv.ext) return
       return this._loadAttPv((this.attPv.idx + d + n) % n)
     },
 
     closeAttPv() {
+      if (!this.attPv.open) return
       this._revokeAttPv()
       this.attPv.open = false
       this.attPv.ext = null
+      this.attPv.list = null
+      this.attPv.mode = 'att'
       this.attPv.idx = -1
       this.attPv.kind = ''
+      const back = this._attPvOpener
+      this._attPvOpener = null
+      if (back && back.focus && document.contains(back)) this.$nextTick(() => back.focus({ preventScroll: true }))
     },
 
     async downloadAttachment(a) {
