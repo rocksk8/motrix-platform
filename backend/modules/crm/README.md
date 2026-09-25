@@ -28,6 +28,5 @@
 
 ## 尚未處理
 
-- 規格條件仍在 `docs/windows/STATE.md`，尚未拆成本模組的 `SPEC.md`。
 - 停滯自動改狀態（`_check_dev_case_stale`）仍直接 `INSERT INTO audit_log`（系統身分，沒有 token 可交給 `helpers.audit._audit`）；DEPENDENCY-MAP §4 要求一律走 `_audit`，需要 L1 提供「以系統身分記稽核」的入口。
 - 頁面 `dev-crm.html` 仍在 `frontend/pages/`（階段 C 由 B 搬）：本模組不在時側欄入口隱藏、API 404，但直接打網址頁面照樣載入（與 M11 相同）。
