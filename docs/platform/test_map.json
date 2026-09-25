@@ -566,6 +566,7 @@
   "backend/tests/platform/test_core_paths.py": {
    "kind": "unit",
    "units": [
+    "file:backend/autostart.bat",
     "file:backend/version_manifest.json",
     "plat:__init__",
     "plat:paths"
@@ -576,6 +577,7 @@
      "backend/core/paths.py"
     ],
     "path": [
+     "backend/autostart.bat",
      "backend/version_manifest.json"
     ]
    }
@@ -585,6 +587,9 @@
    "units": [
     "core:db",
     "core:main",
+    "dir:tools/platform/",
+    "file:backend/autostart.bat",
+    "file:backend/restart.bat",
     "file:tools/platform/upgrade.py",
     "page:index.html",
     "plat:__init__",
@@ -601,10 +606,13 @@
      "frontend/index.html"
     ],
     "path": [
+     "backend/autostart.bat",
      "backend/core/paths.py",
      "backend/db.py",
      "backend/main.py",
+     "backend/restart.bat",
      "frontend/index.html",
+     "tools/platform/",
      "tools/platform/upgrade.py"
     ]
    }
@@ -891,15 +899,18 @@
   "backend/tests/platform/test_module_selection.py": {
    "kind": "api",
    "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
     "file:backend/modules/tender_radar/module.json",
+    "file:backend/tests/_subproc.py",
     "file:backend/tests/platform/child_module_gate.py",
+    "file:backend/tests/test_e2e_module_settings_2026_09_25.py",
     "helper:licensing",
     "helper:module_switches",
     "js:static/sidebar.js",
-    "mod:tender_radar/api",
     "page:pages/module-settings.html",
-    "page:pages/tender-radar.html",
     "plat:__init__",
     "plat:loader",
     "plat:registry",
@@ -910,26 +921,32 @@
      "backend/core/__init__.py",
      "backend/core/loader.py",
      "backend/core/registry.py",
+     "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/licensing.py",
-     "backend/helpers/module_switches.py"
+     "backend/helpers/module_switches.py",
+     "backend/tests/_subproc.py"
     ],
     "api": [
-     "backend/modules/tender_radar/api.py",
      "backend/routers/system.py"
     ],
     "page": [
      "frontend/pages/module-settings.html",
-     "frontend/pages/tender-radar.html",
      "frontend/static/sidebar.js"
     ],
     "path": [
+     "backend/modules/",
      "backend/modules/tender_radar/module.json",
      "backend/tests/platform/child_module_gate.py",
+     "backend/tests/test_e2e_module_settings_2026_09_25.py",
+     "frontend/pages/",
      "frontend/pages/module-settings.html",
      "frontend/static/sidebar.js"
     ]
    },
+   "unresolved_api": [
+    "/api/zz-toggle/ping"
+   ],
    "login_fixture": true
   },
   "backend/tests/platform/test_module_update.py": {
@@ -5183,21 +5200,30 @@
   "backend/tests/test_e2e_module_settings_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/_e2e_login.py",
+    "helper:licensing",
     "page:pages/module-settings.html",
-    "page:pages/tender-radar.html",
     "plat:__init__",
-    "plat:registry"
+    "plat:registry",
+    "router:system"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/licensing.py",
      "backend/tests/_e2e_login.py"
     ],
+    "api": [
+     "backend/routers/system.py"
+    ],
     "page": [
-     "frontend/pages/module-settings.html",
-     "frontend/pages/tender-radar.html"
+     "frontend/pages/module-settings.html"
+    ],
+    "path": [
+     "frontend/pages/module-settings.html"
     ]
    }
   },
@@ -8250,7 +8276,9 @@
     "helper:settings",
     "plat:__init__",
     "plat:paths",
-    "router:system"
+    "router:contractor_vouchers",
+    "router:system",
+    "router:vendor_contractors"
    ],
    "evidence": {
     "import": [
@@ -8261,7 +8289,9 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/system.py"
+     "backend/routers/contractor_vouchers.py",
+     "backend/routers/system.py",
+     "backend/routers/vendor_contractors.py"
     ]
    },
    "login_fixture": true

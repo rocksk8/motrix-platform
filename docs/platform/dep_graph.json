@@ -18,6 +18,7 @@
    "path": "backend/archive.py",
    "tables_ddl": [],
    "tables_named": [
+    "contractor_payment_vouchers",
     "contractors",
     "customers",
     "payslips",
@@ -802,16 +803,17 @@
    "dynamic_sql": false,
    "imports": [
     "core:db",
-    "helper:settings"
+    "helper:settings",
+    "plat:txn"
    ],
    "kind": "helper",
    "path": "backend/helpers/module_switches.py",
    "tables_ddl": [],
    "tables_named": [],
-   "tables_r": [
+   "tables_r": [],
+   "tables_w": [
     "system_settings"
-   ],
-   "tables_w": []
+   ]
   },
   "helper:notification_prefs": {
    "api_prefixes": [],
@@ -3863,7 +3865,7 @@
   },
   "plat:upgrade": {
    "api_prefixes": [],
-   "dynamic_sql": false,
+   "dynamic_sql": true,
    "imports": [
     "plat:paths"
    ],
@@ -8964,7 +8966,6 @@
     "schema_version",
     "sessions",
     "shipping_notes",
-    "system_settings",
     "user_activity_daily",
     "user_request_log",
     "users",
@@ -9984,6 +9985,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "core:archive",
     "router:daily_tasks",
     "router:quotations"
    ],
@@ -10944,13 +10946,13 @@
    "path": "backend/db.py:545",
    "readers": [
     "core:archive",
-    "helper:bonus_vouchers",
-    "helper:module_switches"
+    "helper:bonus_vouchers"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "core:db",
+    "helper:module_switches",
     "helper:privacy_notice",
     "helper:settings",
     "mod:tender_radar/source",
