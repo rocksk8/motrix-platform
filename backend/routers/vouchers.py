@@ -1788,3 +1788,32 @@ def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, no
 
 
 _registry.provide("voucher.draft", "accounting", _provide_voucher_draft)
+
+
+# ── 連接器 IP-4 voucher.void_draft／voucher.status（INTEGRATION-POINTS.md，契約版本 1）────
+# 別組不直接讀寫 vouchers_all。都在呼叫端的交易裡做，不 commit。
+def _provide_voucher_void_draft(conn, voucher_id, *, voided_by, now, reason):
+    """只作廢「草稿」。回 {"result": "voided"|"not_draft"|"gone", "voucher_no", "status"}：
+    voided＝已作廢；not_draft＝已送審，不動；gone＝不存在或早已作廢（呼叫端解除連結即可）。"""
+    v = conn.execute("SELECT voucher_no, status, voided_at FROM vouchers_all WHERE id = ?",
+                     (voucher_id,)).fetchone()
+    if v is None or v["voided_at"]:
+        return {"result": "gone", "voucher_no": v["voucher_no"] if v else "", "status": v["status"] if v else ""}
+    if v["status"] != "草稿":
+        return {"result": "not_draft", "voucher_no": v["voucher_no"], "status": v["status"]}
+    conn.execute("UPDATE vouchers_all SET voided_at=?, voided_by=?, void_reason=?, updated_at=? WHERE id=?",
+                 (now, voided_by, reason, now, voucher_id))
+    return {"result": "voided", "voucher_no": v["voucher_no"], "status": v["status"]}
+
+
+def _provide_voucher_status(conn, voucher_id):
+    """回 {"id", "voucher_no", "status", "voided"}；不存在 ⇒ None。"""
+    v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id = ?",
+                     (voucher_id,)).fetchone()
+    if v is None:
+        return None
+    return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
+
+
+_registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)
+_registry.provide("voucher.status", "accounting", _provide_voucher_status)

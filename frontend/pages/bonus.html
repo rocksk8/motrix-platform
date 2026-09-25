@@ -318,7 +318,8 @@
                     <template x-for="v in detail.vouchers" :key="v.id">
                       <div class="bn-row">
                         <span x-text="voucherKindLabel(v.kind)"></span>
-                        <a :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
+                        <a x-show="!v.unavailable" :href="'voucher.html?id=' + v.id" x-text="v.voucher_no" style="color:var(--accent);text-decoration:underline"></a>
+                        <span x-show="v.unavailable" x-text="v.voucher_no" data-testid="bn-voucher-unavailable"></span>
                         <span x-text="v.voided ? '已作廢' : v.status"></span>
                       </div>
                     </template>

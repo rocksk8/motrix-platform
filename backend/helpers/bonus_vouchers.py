@@ -89,6 +89,15 @@ def _make(conn, award, kind, lines, summary, who, now):
 
 def create_accrual(conn, award, who, now):
     """進入待發放：借 費用／貸 應付，金額＝名單發放合計（不含尾差）。"""
+    left = int(award.get("accrual_voucher_id") or 0)
+    status = registry.single_provider("voucher.status")
+    if left and status is not None:
+        v = status(conn, left)
+        # 只有「上次退回時會計模組不在、沒能作廢」才會留下仍是草稿的舊連結 ⇒ 不覆蓋、不另開一張
+        # （否則舊草稿變孤兒）。已送審的舊連結照原行為：另開新草稿，舊的由會計處理。
+        if v is not None and not v["voided"] and v["status"] == "草稿":
+            return None, ("上一張轉帳傳票草稿 %s 尚未作廢，未產生新的傳票草稿；"
+                          "請會計先作廢那一張後再處理。" % v["voucher_no"])
     total = _paid_total(conn, award["id"])
     if total <= 0:
         return None, "發放合計為 0，未產生傳票草稿。"
@@ -115,33 +124,40 @@ def create_payment(conn, award, who, now, bank_code):
 
 
 def withdraw_accrual(conn, award, who, now, reason):
-    """退回：轉帳草稿還是草稿 ⇒ 作廢並解除連結；已送審 ⇒ 不動、回提示。回 `(voided_no, notice)`。"""
+    """退回：轉帳草稿還是草稿 ⇒ 作廢並解除連結；已送審 ⇒ 不動、回提示。回 `(voided_no, notice)`。
+
+    經 M06 的 `voucher.void_draft`（IP-4）。M06 不在 ⇒ 退回照常，**不作廢、保留連結**（之後查得到是哪一張），
+    並明說——不可以默默略過，也不可以直接改 M06 的表。"""
     vid = int(award.get("accrual_voucher_id") or 0)
     if not vid:
         return None, ""
-    v = conn.execute("SELECT voucher_no, status, voided_at FROM vouchers_all WHERE id = ?", (vid,)).fetchone()
-    if v is None or v["voided_at"]:
-        conn.execute("UPDATE bonus_case_awards SET accrual_voucher_id = 0 WHERE id = ?", (award["id"],))
-        return None, ""
-    if v["status"] != "草稿":
+    void = registry.single_provider("voucher.void_draft")
+    if void is None:
+        return None, ("未作廢傳票（#%d）：會計模組未安裝；退回照常，請會計另行處理那一張傳票。" % vid)
+    r = void(conn, vid, voided_by=who, now=now, reason="獎金分潤退回：%s" % reason)
+    if r["result"] == "not_draft":
         return None, ("傳票 %s 已送審（%s），系統不會自動作廢；請會計另行處理。"
-                      % (v["voucher_no"], v["status"]))
-    conn.execute("UPDATE vouchers_all SET voided_at=?, voided_by=?, void_reason=?, updated_at=? WHERE id=?",
-                 (now, who, "獎金分潤退回：%s" % reason, now, vid))
+                      % (r["voucher_no"], r["status"]))
     conn.execute("UPDATE bonus_case_awards SET accrual_voucher_id = 0 WHERE id = ?", (award["id"],))
-    return v["voucher_no"], ""
+    return (r["voucher_no"] if r["result"] == "voided" else None), ""
 
 
 def linked_vouchers(conn, award):
-    """獎金頁顯示用：這張獎金分潤產生過、目前仍連結的傳票。"""
+    """獎金頁顯示用：這張獎金分潤產生過、目前仍連結的傳票（經 M06 的 `voucher.status`，IP-4）。
+
+    M06 不在 ⇒ 連結的每一張仍列出，標「會計模組未安裝，無法查詢狀態」（`unavailable`）——
+    不讓傳票從畫面上消失（消失會被當成「沒有傳票」）。"""
+    status = registry.single_provider("voucher.status")
     out = []
     for kind in ("accrual", "payment"):
         vid = int(award.get("%s_voucher_id" % kind) or 0)
         if not vid:
             continue
-        v = conn.execute("SELECT id, voucher_no, status, voided_at FROM vouchers_all WHERE id = ?",
-                         (vid,)).fetchone()
+        if status is None:
+            out.append({"kind": kind, "id": vid, "voucher_no": "傳票 #%d" % vid,
+                        "status": "會計模組未安裝，無法查詢狀態", "voided": False, "unavailable": True})
+            continue
+        v = status(conn, vid)
         if v is not None:
-            out.append({"kind": kind, "id": v["id"], "voucher_no": v["voucher_no"],
-                        "status": v["status"], "voided": bool(v["voided_at"])})
+            out.append({"kind": kind, **v})
     return out
