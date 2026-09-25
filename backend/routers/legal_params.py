@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""法規參數（L1；ROADMAP 階段 R，規格 CUSTOMIZATION-SPEC §7）。
+"""法規參數（L1；ROADMAP 階段 R，規格 CUSTOMIZATION-SPEC §9）。
 
 - GET  /api/legal-params/tax-rules          清單＋跨年狀態（superadmin）
 - PUT  /api/legal-params/tax-rules          整份清單：結構驗證＋守門（門檻＝最低工資）＋已生效版本不可改刪（superadmin）

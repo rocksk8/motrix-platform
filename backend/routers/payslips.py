@@ -57,7 +57,7 @@ def _archive_path(slip_no: str, idx: int) -> str:
 
 # ── 稅務計算 ──────────────────────────────────────────────────────────────────
 
-# R1（2026-09-25，CUSTOMIZATION-SPEC §7.1）：規則改由 L1 `helpers.legal_params` 依**單據日期**挑版本；
+# R1（2026-09-25，CUSTOMIZATION-SPEC §9.1）：規則改由 L1 `helpers.legal_params` 依**單據日期**挑版本；
 # 原本這裡只有一套寫死的規則，修改舊單會用「當下」的規則重算。
 from helpers import legal_params as _lp
 

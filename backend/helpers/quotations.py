@@ -195,7 +195,7 @@ def validate_quote_tax(q: dict) -> None:
             raise HTTPException(400, "稅別與稅率不一致（應稅為 5%%，零稅率與免稅為 0%%）")
 
 
-# ── R2（2026-09-25，CUSTOMIZATION-SPEC §7.2）：零稅率、免稅要有依據 ─────────────────
+# ── R2（2026-09-25，CUSTOMIZATION-SPEC §9.2）：零稅率、免稅要有依據 ─────────────────
 #
 # 選項與檢查在 L1 `helpers.legal_params`（開票申請等其他模組共用）；這裡只決定「報價何時必填」。
 from helpers.legal_params import TAX_BASIS_OPTIONS, tax_basis_error, tax_basis_label  # noqa: E402,F401

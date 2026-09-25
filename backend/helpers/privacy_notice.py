@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §7.3；個人資料保護法 §8 I）。
+"""L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。
 
 - 告知文字：`company_profile.privacy_notice`；空白 ⇒ 範本（公司名稱代入）。
 - 已告知紀錄：伺服器蓋時間、人員與告知文字雜湊；**已記錄的不可覆蓋或清除**（`merge_ack`）。

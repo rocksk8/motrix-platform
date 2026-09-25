@@ -1,4 +1,4 @@
-// R3 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §7.3）：列印告知書的共用元件（L1）。
+// R3 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3）：列印告知書的共用元件（L1）。
 // 告知文字由 GET /api/legal-params/privacy-notice 提供（公司設定頁的文字；空白＝範本）。
 (function () {
   function esc(s) {

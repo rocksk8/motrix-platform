@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""守門（MODULE-GUIDE §11；CUSTOMIZATION-SPEC §7.1）：法規數字只能出現在 L1 法規參數服務。
+"""守門（MODULE-GUIDE §11；CUSTOMIZATION-SPEC §9.1）：法規數字只能出現在 L1 法規參數服務。
 
 扣繳起扣標準、補充保費費率、最低工資每年會變；寫死在模組裡 ⇒ 跨年時只改到一處（BENCHMARK §7 第一項的成因：
 勞報單的規則原本寫死在 `routers/payslips.py`，修改舊單還會用當下的規則重算）。

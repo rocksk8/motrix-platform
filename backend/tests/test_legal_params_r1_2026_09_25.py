@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""R1 法規參數依生效日版本化（CUSTOMIZATION-SPEC §7.1；BENCHMARK §6.2、§6.3、§7）。
+"""R1 法規參數依生效日版本化（CUSTOMIZATION-SPEC §9.1；BENCHMARK §6.2、§6.3、§7）。
 
 守住的規則：
 ① 依單據日期挑版本；日期早於最早一版 ⇒ 拒絕（不猜）。

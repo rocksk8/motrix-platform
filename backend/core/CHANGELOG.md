@@ -4,8 +4,8 @@
 
 ## 1.7 — 2026-09-25（R）
 > `core.registry.CORE_VERSION` 1.6 → 1.7（G1 快照要求升次版號；R 對 `core/registry.py` 只改這一行）。
-- L1（新增）：`helpers.legal_params` 法規參數服務（R1，CUSTOMIZATION-SPEC §7.1）——`load_versions`／`save_versions`／`rules_for_date`／`rules_by_version`／`validate_version(s)`／`frozen_changes`／`year_status`／`minimum_wage_mismatch`／`today`；零稅率／免稅依據 `TAX_BASIS_OPTIONS`／`tax_basis_error`／`tax_basis_label`（R2，§7.2）
-- L1（新增）：`helpers.privacy_notice` 個資蒐集告知（R3，§7.3）——`TEMPLATE`／`template_for`／`notice_text`／`current_notice`／`notice_hash`／`merge_ack`／`get_ack`／`record_ack`
+- L1（新增）：`helpers.legal_params` 法規參數服務（R1，CUSTOMIZATION-SPEC §9.1）——`load_versions`／`save_versions`／`rules_for_date`／`rules_by_version`／`validate_version(s)`／`frozen_changes`／`year_status`／`minimum_wage_mismatch`／`today`；零稅率／免稅依據 `TAX_BASIS_OPTIONS`／`tax_basis_error`／`tax_basis_label`（R2，§9.2）
+- L1（新增）：`helpers.privacy_notice` 個資蒐集告知（R3，§9.3）——`TEMPLATE`／`template_for`／`notice_text`／`current_notice`／`notice_hash`／`merge_ack`／`get_ack`／`record_ack`
 - L1（新增）：端點 `/api/legal-params/tax-rules`（GET／PUT）、`/api/legal-params/tax-basis-options`、`/api/legal-params/privacy-notice`；頁面 `legal-params.html`；前端元件 `static/privacy-notice.js`
 - L1（新增欄位）：`company_profile.privacy_notice`；設定鍵 `tax_rules_versions`、`privacy_notice_acks`
 

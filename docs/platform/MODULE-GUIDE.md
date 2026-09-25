@@ -182,7 +182,7 @@ modules/<key>/
 - 守門：`tests/platform/test_module_update.py`（合成 repo 與安裝目錄：打包→套用→回滾雜湊逐一相等；每一條套用前檢查都有反向控制；repo 現有模組的正對照）。
 - ⚠ 未守門：正式機上的「停服務→套用→重啟→健康檢查→失敗自動回滾」流程由儀表板串接（主持）。
 
-## 11. 法規參數與法規欄位（CUSTOMIZATION-SPEC §7）
+## 11. 法規參數與法規欄位（CUSTOMIZATION-SPEC §9）
 
 - 扣繳率、起扣標準、補充保費門檻、最低工資一律向 L1 `helpers.legal_params` 依**單據日期**取版本，模組不寫死數字；單據存版本號與參數快照，修改舊單沿用快照，除非使用者明確選擇重算。守門：`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params 與凍結的 db.py 種子）。
 - 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。

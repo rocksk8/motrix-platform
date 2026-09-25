@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""R3 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §7.3；BENCHMARK §6.6、§7）。
+"""R3 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；BENCHMARK §6.6、§7）。
 
 守住的規則：
 ① 範本涵蓋 §8 I 六款；公司名稱代入；公司設定頁可以存自己的文字，空白 ⇒ 範本。

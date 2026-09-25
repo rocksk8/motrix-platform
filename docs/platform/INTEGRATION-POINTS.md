@@ -140,7 +140,7 @@ M06 的 `vouchers_all`。
 
 ## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）
 
-L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 import）。規格：CUSTOMIZATION-SPEC §7.1。
+L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 import）。規格：CUSTOMIZATION-SPEC §9.1。
 
 | 欄位 | 內容 |
 |---|---|
