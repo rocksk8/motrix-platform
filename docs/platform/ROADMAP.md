@@ -74,8 +74,9 @@
 
 | # | 守門 | 狀態 |
 |---|---|---|
-| G1 | L1 公開介面快照：介面一有變動就紅，要求同時升 `CORE_VERSION` 並寫 `core/CHANGELOG.md` | ⏳ B |
-| G2 | 每個模組都要有 `README.md`、`CHANGELOG.md`、`module.json` 的 `data`；CHANGELOG 最上面的版號＝`module.json` 的 version | ⏳ B |
+| G1 | L1 公開介面快照：介面一有變動就紅，要求同時升 `CORE_VERSION` 並寫 `core/CHANGELOG.md` | ✅ B（test_l1_interface_snapshot.py） |
+| G1b | G1 守不到的三項：L1 函式的回傳形狀、L1 router 的 HTTP 端點、L1 資料表欄位 | ⏳ |
+| G2 | 每個模組都要有 `README.md`、`CHANGELOG.md`、`module.json` 的 `data` 與 `license_key`；CHANGELOG 最上面的版號＝`module.json` 的 version | ✅ B（test_module_package_files.py） |
 | G3 | `module.json` 的 data 分類與備份匯出清單、表分類守門一致（T1 必須匯出、T3 不匯出、F2 不進一般鏡像） | ⏳ B |
 | G4 | 模組程式有改動，但 CHANGELOG 或版號沒更新 ⇒ 紅（用 modtest 的改動清單判斷） | ⏳ B |
 | G5 | 版本紀錄頁改由各模組 CHANGELOG 彙整產生；`version_manifest.json` 退場 | ⏳ |
