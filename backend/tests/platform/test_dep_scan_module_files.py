@@ -1,6 +1,6 @@
 """「模組裡有哪些檔」只有一份定義：`core.source_tree.module_files`（主持裁示 2026-09-26）。
 
-M04 依 CORE-SPEC §3 把三支 router 放在 `modules/subcontract/api/`；dep_scan 原本只掃模組第一層（`d.glob("*.py")`）、
+外包工班依 CORE-SPEC §3 把三支 router 放在 `modules/subcontract/api/`；dep_scan 原本只掃模組第一層（`d.glob("*.py")`）、
 source_tree 只認 `api.py`／`api/` ⇒ 兩份清單各走各的，任一種放法都有一道守門看不到。
 ① 一致性：dep_scan 掃到的每個模組檔集合＝source_tree 的集合（真實 repo，逐模組比，不綁特定模組）
 ② 正對照：子目錄裡的檔與它的跨組 import 抓得到、tests/ 不算（dep_scan 合成樹 `_synthetic_checks`）

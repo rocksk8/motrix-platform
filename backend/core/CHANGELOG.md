@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.21 — 2026-09-26（C，模組檔案清單單一來源）〔core_bump：暫用 1.99 → 1.21〕
+> 主持裁示：「模組裡有哪些檔」只有一份定義。A 的 M03、C 的 M04、B 的 M08 把多支 router 放在 `api/`（CORE-SPEC §3）都依賴它。只有新增。
+- L0（新增）：`core.source_tree.module_files(d)`——模組資料夾所有層的 `*.py`，排除 tests／migrations；`router_files`／`logic_files` 與 tools/platform/dep_scan.py 都用它
+- 工具：dep_scan 的模組單位名稱 `mod:<key>/<相對路徑>`（第一層不變，例 `mod:tender_radar/api`；子目錄例 `mod:<key>/api/orders`）；`modules.<key>.<子目錄>.<檔>` 的 import 指到那個檔
+
 ## 1.20 — 2026-09-26（P1／P3，wip/cloud-p1p3＋稽核修正 wip/x-p1p3-fix；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.8 → 1.15〕〔core_bump：暫用 1.15 → 1.20〕
 > `core.registry.CORE_VERSION` 1.19 → 1.20（只有新增）。
 - L0（新增）：`core.customization`——module.json 可自訂點（P3）：`SCHEMA_VERSIONS`／`PAGE_KINDS`／`OPS_*`／`EXPORT_FORMATS`、`OP_KEYS`／`MOVE_DEST_KINDS`、`validate_manifest(manifest)`、`require_valid(manifest)`、`core_fields(manifest)`、`endpoint_parts(spec)`。攤平與排版檢查是私有的（`_raw_points`、`_check_ops`），對外只經 `core.catalog`（稽核 P-M1）
