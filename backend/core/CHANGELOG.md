@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（C，M07 搬遷前置）
+## 1.30 — 2026-09-26（C，M07 搬遷前置）〔core_bump：暫用 1.99 → 1.30〕
 > M07 薪資獎金搬進 modules/ 的前置：切斷 M07 → M06 與 L1 → M07。只有新增。
 - L1（新增）：`helpers.tiered_approval.resolve_display_names`（自 M06 `helpers/voucher.py` 下沉，簽核格帳號 → 顯示名稱；voucher 保留同名匯入）、`pdf_gen.fmt_money_blank_zero`（自 M06 `helpers/voucher_pdf.py._fmt_money` 下沉，0 印空白）
 - L1（行為）：`/api/system/bonus-module-status` 改走新串接點 IP-16 `bonus.module_status`（M07 → L1；編號暫定，列車定號）；M07 不在 ⇒ `{"enabled": false, "notice": …}`
