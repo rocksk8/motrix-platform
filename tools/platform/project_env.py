@@ -113,6 +113,8 @@ def cmd_create(pyver):
     subprocess.run([str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"], check=True)
     subprocess.run([str(py), "-m", "pip", "install", "-q", "-r", str(REPO / "backend" / "requirements.txt"),
                     "-r", str(REPO / "backend" / "requirements-dev.txt")], check=True)
+    # playwright 的瀏覽器版本跟著套件版本走：新裝的 playwright 要自己的 chromium build，否則 e2e 全部啟動失敗
+    subprocess.run([str(py), "-m", "playwright", "install", "chromium"], check=True)
     print("✓ %s（%s）" % (py, venv_facts(py)["python"]))
     return cmd_check()
 
@@ -121,7 +123,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("create")
-    c.add_argument("--python", default="3.13")
+    c.add_argument("--python", default="3.12", help="正式機是 3.12（autostart.bat 的 Python312\uvicorn.exe，主持 2026-09-25 查證）")
     sub.add_parser("check")
     sub.add_parser("where")
     a = ap.parse_args(argv)

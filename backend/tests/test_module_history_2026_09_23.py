@@ -347,7 +347,8 @@ def test_fn4_something_actually_calls_append_edit_log():
 
 def _voucher_update_path(client):
     """找傳票更新端點。找不到 ⇒ 說出我找過什麼。"""
-    paths = [r.path for r in client.app.routes if hasattr(r, "path")]
+    from tests._routes import route_paths   # FastAPI 0.14x 不攤平 include_router（見 tests/_routes.py）
+    paths = route_paths(client.app)
     cands = [p for p in paths
              if re.search(r"/api/vouchers?/\{[^}]+\}$", p)]
     if not cands:

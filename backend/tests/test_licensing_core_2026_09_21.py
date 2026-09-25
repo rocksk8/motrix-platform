@@ -517,7 +517,8 @@ _STATUS_PATH = "/api/license/status"
 
 
 def _route_exists(app, path):
-    return any(getattr(r, "path", None) == path for r in app.routes)
+    from tests._routes import route_paths   # FastAPI 0.14x 不攤平 include_router（見 tests/_routes.py）
+    return path in route_paths(app)
 
 
 def _login_token(client, make_user, username="tester"):
