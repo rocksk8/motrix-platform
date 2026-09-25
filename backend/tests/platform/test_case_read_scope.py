@@ -12,6 +12,8 @@ import ast
 import json
 from pathlib import Path
 
+import pytest
+
 from core import source_tree
 
 SCOPE = Path(__file__).resolve().parents[3] / "docs" / "platform" / "case_read_scope.json"
@@ -83,11 +85,40 @@ def test_reverse_controls_each_drift_is_reported():
     assert problems(scan(_SRC), bad) == ["不認得的類別 'public'：r.py /api/y"]
 
 
+def installed_routes(routes, installed=source_tree.module_installed):
+    """清單上屬於 `modules/<key>/` 而那個模組不在（選配、反向控制 PLAYBOOK §B-11）的路徑不比對；
+    模組在就照比，不在 modules/ 底下的一律照比（主持裁示 2026-09-26，同 X-2 登記表的規則）。"""
+    return [r for r in routes if installed(r["file"])]
+
+
+def _scope_routes():
+    return installed_routes(json.loads(SCOPE.read_text(encoding="utf-8"))["routes"])
+
+
+def test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared():
+    mods = source_tree.module_dirs()
+    assert mods, "沒有任何已安裝的模組 ⇒『模組在』那一半無對象"
+    here = "modules/%s/api.py" % mods[0].name
+    routes = [{"file": "modules/zz_absent/api/x.py", "path": "/api/zz/{quote_no}", "handler": "zz", "scope": "module"},
+              {"file": here, "path": "/api/here/{quote_no}", "handler": "h", "scope": "module"},
+              {"file": "routers/zz_gone.py", "path": "/api/old/{quote_no}", "handler": "o", "scope": "module"}]
+    kept = installed_routes(routes)
+    assert [r["handler"] for r in kept] == ["h", "o"]
+    # 模組在、但程式碼沒有 ⇒ 照樣報；不在 modules/ 底下的 ⇒ 照樣報；模組不在的 ⇒ 不報
+    assert problems([], kept) == ["清單有、程式碼沒有：%s /api/here/{quote_no}（h）" % here,
+                                  "清單有、程式碼沒有：routers/zz_gone.py /api/old/{quote_no}（o）"]
+
+
 def test_real_scan_sees_the_case_read():
-    assert ("routers/quotations.py", "/api/quotations/{quote_no}", "get_quotation") in _real()
+    """真實掃描的正對照不綁特定 L2：取清單上第一個「提供者在安裝包裡」的路徑，掃描必須看得到它。"""
+    routes = _scope_routes()
+    if not routes:
+        pytest.skip("安裝包裡沒有任何讀案件的路徑（例：只有核心）⇒ 無對象")
+    r = routes[0]
+    assert (r["file"], r["path"], r["handler"]) in _real(), r
 
 
 def test_every_case_read_is_classified():
-    routes = [r for r in json.loads(SCOPE.read_text(encoding="utf-8"))["routes"] if source_tree.module_installed(r["file"])]
+    routes = _scope_routes()
     bad = problems(_real(), routes)
     assert not bad, "docs/platform/case_read_scope.json 與程式碼不一致（MODULE-GUIDE §1.1）：\n  " + "\n  ".join(bad)
