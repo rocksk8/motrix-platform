@@ -569,25 +569,6 @@ def delete_daily_task(task_id: int, authorization: str = Header(None)):
     return {"ok": True}
 
 
-@router.get("/api/settings/reminder-send-failures")
-def get_reminder_send_failures(authorization: str = Header(None)):
-    """簽核提醒**永久寄不出去**的那幾筆。
-
-    ## 🔴 這個端點存在的理由，比「多一個 API」深一層
-    YA5 要求失敗要有落點，而 A 的原話是：
-    > ⚠️ **落點要看得到** —— ☠️ 只寫進 log 的話就是把這一條原封不動換了個位置。
-
-    📌 那正是這一整節在修的形狀：**一個沒有人看得到的事實等於沒有發生過。**
-    ⇒ 一筆紀錄回答的是「**哪一張單子、哪一階、為什麼、試了幾次**」，
-    而那四個合起來才足以讓人去處置它（通常是去幫那個人填 email）。
-
-    ⚠️ 限 superadmin：它列得出單號與簽核流程的狀態。
-    """
-    _require_user(authorization, require_superadmin=True, module='settings')
-    # 最新的排前面 —— 使用者要看的是「現在還卡著什麼」。
-    return {"items": list(reversed(reminder_send_failures()))}
-
-
 @router.get("/api/daily-tasks/{task_id}/history")
 def get_task_history(
     task_id:  int,
