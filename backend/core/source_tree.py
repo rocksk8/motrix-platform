@@ -24,10 +24,17 @@ def module_dirs():
 
 
 #: 模組內不算產品碼的子目錄（與 product_files() 同一份）
-def _module_py(d):
-    """模組資料夾底下所有層的 `*.py`，排除 tests／migrations 等非產品目錄。"""
-    return sorted(p for p in d.rglob("*.py")
+def module_files(d):
+    """模組資料夾 `d` 底下**所有層**的 `*.py`，排除 tests／migrations 等非產品目錄。
+
+    「模組裡有哪些檔」只在這裡定義一次：router_files／logic_files 與 tools/platform/dep_scan.py 都用這一支
+    （2026-09-26 主持裁示：M04 依 CORE-SPEC §3 放在 `api/`，dep_scan 原本只掃第一層、這裡只認 `api.py`／`api/`，
+    兩份清單各走各的 ⇒ 任一種放法都有一道守門看不到）。守門：tests/platform/test_dep_scan_module_files.py。"""
+    return sorted(p for p in Path(d).rglob("*.py")
                   if not any(part in _NON_PRODUCT_DIRS + ("migrations",) for part in p.relative_to(d).parts))
+
+
+_module_py = module_files          # 舊名（本檔內部用）
 
 
 def _is_api(d, p):
