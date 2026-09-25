@@ -66,10 +66,10 @@ def _setup(page, live_server, make_user, seed_extra_expense, uname):
     exp = [it["summary"] for it in r.json()["tabs"]["支出項"]]
     assert exp, "量尺：案件底下沒有支出項——下面量不到東西：%r" % r.json()
     _open_page(page, live_server, vid)
-    # 🔑 選案件走使用者真的會走的那一步：頁籤區「案件」點那一筆（它會覆蓋第 1 行摘要，
-    #    所以下面的題都在**第 2 行**上量）。
-    page.click('[data-testid="summary-source-tab"]:text-is("案件")')
-    page.click(f'[data-testid="summary-source-item"]:has-text("{QUOTE}")')
+    # 🔑 選案件走使用者真的會走的那一步：點第 1 行摘要，再點帶入來源區塊的案件（它會覆蓋第 1 行摘要，
+    #    所以下面的題都在**第 2 行**上量）。📌 2026-09-25：頁籤區拿掉，改走帶入來源區塊。
+    page.locator(SUMMARY).nth(0).click()
+    page.click(f'[data-testid="src-case"]:has-text("{QUOTE}")')
     page.wait_for_function(
         "q => Alpine.$data(document.querySelector('[x-data]')).sourceQuote === q", arg=QUOTE,
         timeout=10000)

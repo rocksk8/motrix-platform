@@ -171,8 +171,10 @@ _D = "Alpine.$data(document.querySelector('[x-data]'))"
 def _open_with_case(page, live_server, token, vid):
     page.goto(f"{live_server}/pages/voucher.html?id={vid}")
     page.wait_for_function("() => %s.id == %d" % (_D, vid), timeout=15000)
-    page.click('[data-testid="summary-source-tab"]:text-is("案件")')
-    page.click(f'[data-testid="summary-source-item"]:has-text("{QUOTE}")')
+    # 📌 2026-09-25：「摘要來源」頁籤區與每行底下的勾選清單拿掉（使用者裁定）⇒ 改走分錄下方的帶入來源區塊；
+    #    斷言不變。第 1 行選案件（它會覆蓋第 1 行摘要），下面的題都在第 2 行上量。
+    page.locator("textarea[x-model='l.summary']").nth(0).click()
+    page.click(f'[data-testid="src-case"]:has-text("{QUOTE}")')
     page.locator("textarea[x-model='l.summary']").nth(1).click()
     page.locator('[data-testid="summary-panel-expense"]').first.wait_for(state="visible", timeout=15000)
 
@@ -198,8 +200,8 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
     page.locator("textarea[x-model='l.summary']").nth(1).fill("原本的摘要")
     page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
     line = page.evaluate("() => %s.lines[1]" % _D)
-    files = page.locator('[data-testid="line-source-files"]').first
-    files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').wait_for(
+    files = page.locator('[data-testid="src-files"]')
+    files.locator('[data-testid="src-file"]:has-text("吊車單據.png")').wait_for(
         state="visible", timeout=10000)
     before = _att_count(page)
     print("JV36 頁面實測：選支出項 ⇒ 摘要 %r、來源 %r/%r、借方 %r；清單出現、附件數 %d"
@@ -210,19 +212,23 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
     assert line["debit"] == "5000", "N12：借貸空白的行，金額應該帶入借方：%r" % line["debit"]
     assert before == 0, "只列出、沒勾選，附件數就變了：%d" % before
 
-    files.locator('[data-testid="line-source-file-open"]:has-text("吊車單據.png")').click()
+    files.locator('[data-testid="src-file"]:has-text("吊車單據.png")').click()
     page.wait_for_selector('[data-testid="voucher-att-preview-img"]', state="visible", timeout=10000)
-    page.click('[data-testid="voucher-att-close"]')
+    page.click('[data-testid="att-pv-cancel"]')
+    assert _att_count(page) == 0, "預覽後取消卻帶入了"
 
-    files.locator('[data-testid="line-source-file-check"]').first.check()
+    files.locator('[data-testid="src-file"]:has-text("吊車單據.png")').click()
+    page.click('[data-testid="att-pv-bring"]')
     page.wait_for_function("() => %s.attachments.length === 1" % _D, timeout=10000)
-    assert files.locator('[data-testid="line-source-file-brought"]:visible').count() == 1
+    assert files.locator('[data-testid="src-file-brought"]:visible').count() == 1
 
     page.click('[data-testid="voucher-save"]')
     page.wait_for_function("() => !%s.busy" % _D, timeout=10000)
     page.reload()
     page.wait_for_function("() => %s.id == %d" % (_D, vid), timeout=15000)
-    again = page.locator('[data-testid="line-source-files"] [data-testid="line-source-file-open"]')
+    # 重開後點回那一行摘要 ⇒ 右欄自動換成它記住的來源（JV36：點 XXX 就連帶 XXX 的檔案）
+    page.locator("textarea[x-model='l.summary']").nth(1).click()
+    again = page.locator('[data-testid="src-files"] [data-testid="src-file"] .vc-srcblk__name')
     again.first.wait_for(state="visible", timeout=10000)
     print("JV36 頁面實測：存檔重開 ⇒ 清單 %r、附件數 %d" % (again.all_inner_texts(), _att_count(page)))
     assert again.all_inner_texts() == ["吊車單據.png"]
@@ -249,5 +255,5 @@ def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
     page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)   # 2026-09-25：案件清單移到分錄下方的帶入來源區塊
     line = page.evaluate("() => %s.lines[1]" % _D)
     assert (line["source_type"], line["source_key"]) == ("case", QUOTE), line
-    page.locator('[data-testid="line-source-file-open"]:has-text("回簽.png")').wait_for(
+    page.locator('[data-testid="src-files"] [data-testid="src-file"]:has-text("回簽.png")').wait_for(
         state="visible", timeout=10000)

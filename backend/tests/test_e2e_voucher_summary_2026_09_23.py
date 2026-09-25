@@ -49,9 +49,11 @@ from tests._ports import free_safe_port
 
 #: ⚠️ 我單方面宣告的掛鉤。改名**退回給我**。
 HOOKS = {
-    "tabs": '[data-testid="summary-source-tabs"]',
-    "tab": '[data-testid="summary-source-tab"]',
-    "item": '[data-testid="summary-source-item"]',
+    # 📌 2026-09-25（使用者裁定拿掉「摘要來源」頁籤區，收進分錄下方的帶入來源區塊；0a 派 bf 改題，斷言不刪）：
+    #    tabs ⇒ 帶入來源區塊；item ⇒ 區塊裡的案件；「切頁籤」⇒「換到另一行、再點回有來源的這一行」
+    #    （點回有來源的行會把右欄換成它的來源——新版裡最像「切頁籤」、也最可能被寫成重新帶入的那一步）。
+    "tabs": '[data-testid="src-block"]',
+    "item": '[data-testid="src-case"]',
     # 🔴 `JV12` 把這個欄位從 `<input>` 換成 `<textarea>`（讓高度隨文字
     #    調整），選擇器不綁標籤名，改綁的元件型別再換一次也不必回來改。
     "summary": '[x-model="l.summary"]',
@@ -215,14 +217,9 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user, e2e
     # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
     _open_editor(page)
 
-    _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
-    tab_case = _need(page,
-                     '%s:has-text("案件")' % HOOKS["tab"], "「案件」頁籤")
-    tab_file = _need(page,
-                     '%s:has-text("已上傳檔案")' % HOOKS["tab"],
-                     "「已上傳檔案」頁籤")
-
-    tab_case.first.click()
+    _need(page, HOOKS["tabs"], "帶入來源區塊")
+    lines = _need(page, HOOKS["summary"], "分錄行的摘要欄")
+    lines.first.click()
     _items_shown(page)
     _need(page, HOOKS["item"], "案件來源的清單").first.click()
     _brought_in(page)
@@ -238,9 +235,12 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user, e2e
     # ③ 切走再切回來
     # ⚠️ 這兩個固定等待**保留**（PERF #6 的 N 類）：要證明的是「切頁籤**不會**重新帶入」，
     #    「沒有發生」沒有事件可以等 ⇒ 給錯誤寫法（若有的非同步重新帶入）一段時間發生。
-    tab_file.first.click()
+    #    新版：換到第 2 行，再點回有來源的第 1 行（右欄會換成它的來源）。
+    if lines.count() < 2:
+        page.click('button:has-text("新增一行")')
+    lines.nth(1).click()
     page.wait_for_timeout(300)
-    tab_case.first.click()
+    lines.first.click()
     page.wait_for_timeout(500)
 
     after = box.input_value()
@@ -287,9 +287,8 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_bro
     # 🔴 `JV8` 之後這一步不可略（使用者 `§201`）。
     _open_editor(page)
 
-    _need(page, HOOKS["tabs"], "摘要來源的分頁選單")
-    _need(page, '%s:has-text("案件")' % HOOKS["tab"],
-          "「案件」頁籤").first.click()
+    _need(page, HOOKS["tabs"], "帶入來源區塊")
+    _need(page, HOOKS["summary"], "分錄行的摘要欄").first.click()
     _items_shown(page)
     _need(page, HOOKS["item"], "案件來源的清單").first.click()
     _brought_in(page)

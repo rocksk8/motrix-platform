@@ -47,9 +47,9 @@ function voucherPage() {
     // ☠️ 最容易寫錯的實作是「**切頁籤時重新帶入**」—— 它看起來像功能正常
     //    （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼附件清單、
     //    切回來，**他打的字沒了**。
-    // ⇒ 所以 `pickTab()` **只換頁籤，一個字都不寫回分錄**；
-    //   唯一會寫進 `l.summary` 的是 `applySource()`，而它只在**點一筆來源**時跑。
-    sourceTab: '案件',
+    // ⇒ 寫進 `l.summary` 的只有 `panelPick()`，而它只在**點一筆來源**時跑；瀏覽來源
+    //   （換一行、看檔案、開預覽）一個字都不寫回分錄。
+    //   📌 2026-09-25：頁籤區（`pickTab`／`applySource`）隨使用者裁定移除，收進分錄下方的帶入來源區塊。
     sources: {},
     sourceNotes: {},
     sourcesLoaded: false,
@@ -58,13 +58,9 @@ function voucherPage() {
     sourceErr: '',
     //: 頁籤②「已上傳檔案」要先知道**是哪一個案件** —— 憑證掛在案件底下。
     sourceQuote: '',
-    //: `JV18`：展開中的「已計算」明細是哪一筆（`tabItems()` 的索引），
-    //: `-1` = 都沒展開。⚠️ 用索引不用布林——同時只能展開一筆，展開下一筆
-    //: 要先把上一筆收起來，不然清單會越展越長。
+    //: `JV18`：展開中的「已計算」明細是哪一個檔（`srcFileKey()`），`-1` = 都沒展開。
+    //: ⚠️ 同時只能展開一筆，展開下一筆要先把上一筆收起來，不然清單會越展越長。
     usedInfoOpen: -1,
-    //: `JV21`：支出項頁籤裡展開中的品項／人員明細是哪一筆，`-1` = 都沒展開。
-    //: 同 `usedInfoOpen` 的理由，各自獨立（切頁籤時兩個都重置，見 `pickTab()`）。
-    expandedExpense: -1,
 
     // ── 附件（`JV3`）──
     //
@@ -172,62 +168,24 @@ function voucherPage() {
       }
     },
 
-    tabNames() { return Object.keys(this.sources || {}) },
-
-    tabItems() { return (this.sources || {})[this.sourceTab] || [] },
-
-    tabNote() { return (this.sourceNotes || {})[this.sourceTab] || '' },
-
-    // `JV18`：使用者原話「計算過的內容須…」= 已被別張傳票帶入過。
-    // 只標記，不擋——已計算的候選一樣按得下去（後端也沒有加新的拒絕，
-    // 同一條規則：擋住會把作廢重開那條合法路踩死）。
-    // ⚠️ 紅字要**點得開**，不做成 tooltip（手機版是另一份頁面，會漏掉）。
-    toggleUsedInfo(si) {
-      this.usedInfoOpen = (this.usedInfoOpen === si) ? -1 : si
-    },
-
-    // `JV21`：支出項頁籤裡，承攬商派工那一筆展開成品項／人員兩種子列
-    // （額外支出沒有子列，`items` 是空陣列，展不開）。
-    // 同一套「用索引記哪一筆展開」的做法，理由同 `toggleUsedInfo()`：
-    // 同時只能展開一筆，展開下一筆前先把上一筆收起來。
-    toggleExpenseExpand(si) {
-      this.expandedExpense = (this.expandedExpense === si) ? -1 : si
-    },
-
     // `usedAt`／`uploaded_at` 是 ISO 字串，這裡只取到分鐘，不需要秒。
     fmtDateTime(s) {
       return String(s || '').replace('T', ' ').slice(0, 16)
     },
 
-    // 🔴 **只換頁籤，什麼都不寫回分錄。**
-    //    ☠️ 在這裡順手帶入的話，使用者切走再切回來，**他打的字會被蓋掉**，
-    //       而畫面上一切正常 —— 他只會覺得「我剛剛好像打過」。
-    pickTab(name) {
-      this.sourceTab = name
-      this.usedInfoOpen = -1
-      this.expandedExpense = -1
-    },
-
-    //: 帶入到 `summaryTarget` 那一行。**唯一會寫進 `l.summary` 的地方。**
-    applySource(it) {
-      if (!this.canEdit) return
-      const s = (it && (it.summary || it.text)) || ''
-      if (!s) return
-      let i = this.summaryTarget
-      if (!this.lines[i]) { this.addLine(); i = this.lines.length - 1 }
-      // ⚠️ 覆蓋那一行的摘要 —— 而**只有使用者點了來源才會走到這裡**。
-      this.lines[i].summary = s
-      // 🔑 順手記下是哪一個案件，頁籤②（可帶入的憑證）才有範圍。
-      //    ⚠️ 重新拿來源**不會**再寫一次摘要：`loadSources()` 只換資料，
-      //       寫進 `l.summary` 的**只有這一支**。
-      if (it && it.quote_no && it.quote_no !== this.sourceQuote) {
-        this.sourceQuote = it.quote_no
-        this.loadSources()
-      }
-    },
-
     // `JV33`：點（focus）哪一行摘要，帶入面板就對著那一行。
-    focusLine(i) { this.summaryTarget = i; this.panelLine = i },
+    focusLine(i) {
+      this.summaryTarget = i
+      this.panelLine = i
+      // `JV36`（使用者：「點選 XXX 的時候它下方能自動連帶 XXX 內有的上傳檔案」）：這一行已有來源 ⇒
+      // 右欄換成那個來源的檔案。📌 只換右欄顯示，**不寫摘要**（JV7：瀏覽不可以蓋掉使用者打的字）。
+      const l = this.lines[i]
+      if (!l || !l.source_type || !l.source_key) return
+      if (this.srcSel.type === l.source_type && this.srcSel.key === String(l.source_key)) return
+      this.srcSel = { type: l.source_type, key: String(l.source_key),
+                      label: l.source_type === 'case' ? String(l.source_key) : (l.summary || String(l.source_key)) }
+      this.loadLineFiles(l.source_type, l.source_key).then(() => this.loadSrcThumbs())
+    },
 
     // ── `JV33` 帶入面板 ─────────────────────────────────────────────
     //
@@ -318,47 +276,66 @@ function voucherPage() {
       if (!this.lines[this.panelLine]) { this.addLine(); this.panelLine = this.lines.length - 1 }
     },
 
+    // 右欄顯示的是**目前選中的來源**（點案件 ⇒ 該案；點支出項 ⇒ 那一筆支出）的已上傳檔案。
+    // 📌 2026-09-25：每行摘要底下的 JV36 清單拿掉後，支出項自己的檔案改在這裡看、這裡帶入。
+    srcSel: { type: '', key: '', label: '' },
+
+    // 點選被 JV21 擋下（已被其他傳票帶入／同一張裡重複）時 panelPick 不改那一行，右欄也不換。
+    _selectSrc(e, loading) {
+      if (!loading) return null
+      this.srcSel = { type: e.source_type, key: String(e.source_key),
+                      label: e.source_type === 'case' ? e.source_key : (e.summary || e.source_key) }
+      return loading
+    },
+
     async pickSrcCase(e) {
       if (!this.canEdit || !e) return
       this._ensureSrcTarget()
-      const loading = this.panelPick(e)
+      const loading = this._selectSrc(e, this.panelPick(e))
       this.keepSummaryFocus()          // 先把焦點還給摘要格（使用者可以接著打字），檔案在背景載入
+      if (!loading) return
       await loading
       this.loadSrcThumbs()
     },
 
-    srcPick(e) {
+    async srcPick(e) {
       if (!this.canEdit || !e) return
       this._ensureSrcTarget()
-      this.panelPick(e)
+      const loading = this._selectSrc(e, this.panelPick(e))
       this.keepSummaryFocus()
+      if (!loading) return
+      await loading
+      this.loadSrcThumbs()
     },
 
-    srcState() { return this.lineFiles({ source_type: 'case', source_key: this.sourceQuote }) },
+    srcState() {
+      if (!this.srcSel.key) return { loading: false, files: [], err: '' }
+      return this.lineFiles({ source_type: this.srcSel.type, source_key: this.srcSel.key })
+    },
 
     srcFiles() { return this.srcState().files || [] },
 
     srcFileKey(f) { return f.type + '|' + f.docNo + '|' + f.fileId },
 
     _srcFileUrl(f) {
-      return '/api/vouchers/line-source-file?source_type=case&ref=' + encodeURIComponent(this.sourceQuote)
-        + '&file_id=' + encodeURIComponent(f.fileId)
+      return '/api/vouchers/line-source-file?source_type=' + encodeURIComponent(this.srcSel.type)
+        + '&ref=' + encodeURIComponent(this.srcSel.key) + '&file_id=' + encodeURIComponent(f.fileId)
     },
 
-    // 右欄縮圖：只給內嵌得了的圖片（同 JV28 的判準）；換案件時舊的 revoke。
+    // 右欄縮圖：只給內嵌得了的圖片（同 JV28 的判準）；換來源時舊的 revoke。
     srcThumbs: {},
 
     async loadSrcThumbs() {
       const old = this.srcThumbs
       Object.keys(old).forEach(function (k) { URL.revokeObjectURL(old[k]) })
       this.srcThumbs = {}
-      const quote = this.sourceQuote
+      const sel = this.srcSel
       for (const f of this.srcFiles()) {
         if (f.exists === false || this.attKind(f) !== 'image') continue
         try {
           const type = this._ATT_IMAGE[f.filename.toLowerCase().slice(f.filename.lastIndexOf('.'))]
           const blob = await this._fetchAttBlob({ _url: this._srcFileUrl(f) }, type)
-          if (quote !== this.sourceQuote) return       // 換了案件：這一批作廢
+          if (sel !== this.srcSel) return               // 換了來源：這一批作廢
           this.srcThumbs = Object.assign({}, this.srcThumbs, { [this.srcFileKey(f)]: URL.createObjectURL(blob) })
         } catch (e) { /* 縮圖失敗不擋清單：點開預覽會說出錯誤 */ }
       }
@@ -416,23 +393,6 @@ function voucherPage() {
     },
 
     // 勾選 ⇒ 複製成傳票附件（沿用 `bringIn`，原檔被刪傳票仍保留）；失敗就把勾拿掉。
-    async bringInLine(f, ev) {
-      if (!ev.target.checked || this.isBrought(f)) return
-      await this.bringIn(f)
-      if (!this.isBrought(f)) ev.target.checked = false
-    },
-
-    previewSourceFile(l, f) {
-      return this.openExtPreview({
-        filename: f.filename, mime: f.mime,
-        _url: '/api/vouchers/line-source-file?source_type=' + encodeURIComponent(l.source_type)
-              + '&ref=' + encodeURIComponent(l.source_key)
-              + '&file_id=' + encodeURIComponent(f.fileId),
-      })
-    },
-
-    closePanel() { this.panelLine = -1 },
-
     // 點來源帶入後焦點回到那一行的摘要格：並排時使用者不必離開分錄就能接著打字（2026-09-25）。
     keepSummaryFocus() {
       const i = this.panelLine >= 0 ? this.panelLine : this.summaryTarget
@@ -708,7 +668,8 @@ function voucherPage() {
       if (!it) return ''
       if (this.attPv.mode === 'src') {
         const at = String(it.uploadedAt || '').slice(0, 10)
-        return '案件 ' + this.sourceQuote + (at ? '　上傳 ' + at : '')
+        const who = this.srcSel.type === 'case' ? '案件 ' + this.srcSel.key : this.srcSel.label
+        return who + (at ? '　上傳 ' + at : '')
       }
       return this.attPv.mode === 'att' ? (this.fileSize(it.size) || '') : ''
     },

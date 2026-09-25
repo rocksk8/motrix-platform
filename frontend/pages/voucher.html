@@ -360,29 +360,7 @@
                              @focus="focusLine(i)" rows="1"
                              x-effect="l.summary; $nextTick(() => { $el.style.height = 'auto'; $el.style.height = $el.scrollHeight + 'px' })"
                              placeholder="3/30 向量圓專 XV15543058"></textarea>
-                    <!-- `JV36`：這一行摘要的來源 XXX 本身的已上傳檔案——只列出，**勾選才帶入**。 -->
-                    <template x-if="l.source_type">
-                      <div class="vc-linefiles" data-testid="line-source-files"
-                           style="font-size:11px;margin-top:4px;text-align:left">
-                        <div x-show="lineFiles(l).loading">載入中…</div>
-                        <div class="vc-err" x-show="lineFiles(l).err" x-text="lineFiles(l).err"></div>
-                        <template x-for="f in lineFiles(l).files" :key="f.type + f.docNo + f.fileId">
-                          <div style="display:flex;align-items:center;gap:6px">
-                            <input type="checkbox" data-testid="line-source-file-check"
-                                   :checked="isBrought(f)"
-                                   :disabled="isBrought(f) || !isSaved || !canEdit || f.exists === false"
-                                   @change="bringInLine(f, $event)">
-                            <a href="#" data-testid="line-source-file-open"
-                               @click.prevent="previewSourceFile(l, f)" x-text="f.filename"></a>
-                            <span data-testid="line-source-file-brought" x-show="isBrought(f)">已帶入</span>
-                            <span x-show="f.exists === false" x-text="f.reason"></span>
-                          </div>
-                        </template>
-                        <div x-show="!lineFiles(l).loading && !lineFiles(l).err && !lineFiles(l).files.length">
-                          這個來源沒有已上傳檔案。</div>
-                        <div x-show="!isSaved && lineFiles(l).files.length">存檔後才能勾選帶入。</div>
-                      </div>
-                    </template></td>
+                    </td>
                   <td class="num"><input class="num" x-model="l.debit"
                              :disabled="!canEdit" inputmode="numeric"></td>
                   <td class="num"><input class="num" x-model="l.credit"
@@ -416,21 +394,14 @@
                   x-text="'借貸差額 ' + fmt(Math.abs(totalDebit - totalCredit))"></span>
           </div>
 
-          <!-- ══ 摘要來源（JV7）═══════════════════════════════════════
-               使用者逐字（§159b (7)）：「摘要部分也要有分頁選單帶入案件跟
-               哪些已上傳檔案並帶入摘要，也可以手動填寫或修改摘要」。
-
-               🔴 **帶入是起點不是終點**：§164 —— 實例 PDF 的三行摘要沒有一行
-                  是同一個格式，而三行裡兩行都有的「事由」沒有來源可以帶
-                  ⇒ 帶入只是省打字，帶完之後那一格仍然要打得動。
-               ☠️ 切頁籤**不會**重新帶入：那種實作看起來像功能正常
-                  （點哪個頁籤就帶哪個，很合理），而使用者打完字去看一眼
-                  附件清單、切回來，**他打的字沒了**。 -->
           <!-- 帶入來源（2026-09-25，使用者以示意圖確認版型 A；取代 JV33 的右側面板與 4963170 的並排）：
-               分錄下方，左＝案件清單（單號＋客戶，選中標 ▶），右＝該案已上傳檔案縮圖（PDF 顯示圖示）。
-               點案件 ⇒ 目前這一行摘要改成案件名稱（沿用 JV33 panelPick 的規則），右欄列出它的檔案；
-               點檔案 ⇒ 預覽視窗，按「帶入附件」才加入（沿用 JV36 的帶入與 source_key），取消／Esc 不帶入。
-               支出項（JV21／JV33 的規則不變）列在案件清單下方。 -->
+               分錄下方，左＝案件清單（單號＋客戶，選中標 ▶）＋支出項，右＝**目前選中的來源**的已上傳檔案縮圖
+               （點案件 ⇒ 該案的；點支出項 ⇒ 那一筆支出的；PDF 顯示圖示）。
+               點案件／支出項 ⇒ 目前這一行摘要改成它的名稱（沿用 JV33 panelPick：覆蓋、JV21 重複帶入擋下並紅字說明）；
+               點檔案 ⇒ 預覽視窗，按「帶入附件」才加入（沿用 JV36 的帶入與 source_key），取消／Esc 不帶入；
+               已被其他傳票帶入的檔案標「已計算」（JV18，只標不擋，點看是哪一張）。
+               📌 2026-09-25 使用者裁定：每行摘要底下的勾選清單（JV36）與「摘要來源」頁籤區（JV7）拿掉，
+                  能做的事都收進這個區塊（題改走這裡，斷言不刪）。 -->
           <div class="vc-srcblk" data-testid="src-block" x-show="canEdit" style="display:none">
             <div class="vc-src__hd">
               <span data-testid="src-target" x-text="'帶入到第 ' + (srcTargetLine() + 1) + ' 行摘要'"></span>
@@ -453,7 +424,7 @@
                   <div class="vc-src__hint" style="margin:4px 0">支出項</div>
                   <div class="vc-src__empty" data-testid="summary-panel-loading" x-show="sourcesLoading">載入中…</div>
                   <template x-for="(e, ei) in (sourcesLoading ? [] : panelExpenses())" :key="ei">
-                    <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child }"
+                    <button class="vc-src__item" :class="{ 'vc-src__item--child': e.child, on: !e.child && srcSel.type === e.source_type && srcSel.key === e.source_key }"
                             data-testid="summary-panel-expense" @click="srcPick(e)">
                       <span class="vc-src__txt" x-text="e.summary"></span>
                       <!-- `JV21`：已被其他未作廢傳票帶入 ⇒ 紅字寫出傳票號（點了會被擋並說明） -->
@@ -470,14 +441,14 @@
 
               <div class="vc-srcblk__col" data-testid="src-files">
                 <div class="vc-src__hint" style="margin:4px 0"
-                     x-text="sourceQuote ? ('已上傳檔案　' + sourceQuote) : '已上傳檔案'"></div>
-                <div class="vc-src__empty" x-show="!sourceQuote">先點左邊的案件。</div>
-                <div class="vc-src__empty" x-show="sourceQuote && srcState().loading">載入中…</div>
+                     x-text="srcSel.key ? ('已上傳檔案　' + srcSel.label) : '已上傳檔案'"></div>
+                <div class="vc-src__empty" x-show="!srcSel.key">先點左邊的案件或支出項。</div>
+                <div class="vc-src__empty" x-show="srcSel.key && srcState().loading">載入中…</div>
                 <!-- x-if 不是 x-show：既有題用 `.vc-err` 的第一個等頁面錯誤訊息，隱藏的也會被取到 -->
-                <template x-if="sourceQuote && srcState().err">
+                <template x-if="srcSel.key && srcState().err">
                   <div class="vc-err" x-text="srcState().err"></div>
                 </template>
-                <div class="vc-srcblk__files" x-show="sourceQuote && !srcState().loading">
+                <div class="vc-srcblk__files" x-show="srcSel.key && !srcState().loading">
                   <template x-for="(f, fi) in srcFiles()" :key="f.type + f.docNo + f.fileId">
                     <button class="vc-srcblk__file" data-testid="src-file" :title="f.filename"
                             :disabled="f.exists === false" @click="openSrcPreview(fi)">
@@ -492,96 +463,28 @@
                       </template>
                       <span class="vc-srcblk__name" x-text="f.filename"></span>
                       <span class="vc-srcblk__brought" data-testid="src-file-brought" x-show="isBrought(f)">已帶入</span>
+                      <!-- `JV18`：已被其他傳票計算過 ⇒ 紅字「已計算」（只標不擋）；點它看是哪一張、什麼時候 -->
+                      <span class="vc-src__used" data-testid="src-file-used" x-show="f.used && !isBrought(f)"
+                            @click.stop="usedInfoOpen = usedInfoOpen === srcFileKey(f) ? -1 : srcFileKey(f)"
+                            title="點看被哪張傳票用過">已計算</span>
+                      <template x-if="usedInfoOpen === srcFileKey(f)">
+                        <span class="vc-src__usedinfo" data-testid="src-file-usedinfo" @click.stop>
+                          <template x-for="(u, ui) in (f.usedBy || [])" :key="ui">
+                            <span style="display:block" x-text="u.voucherNo + '　' + fmtDateTime(u.usedAt)"></span>
+                          </template>
+                        </span>
+                      </template>
                       <span style="color:#B91C1C" x-show="f.exists === false" x-text="f.reason"></span>
                     </button>
                   </template>
                 </div>
                 <div class="vc-src__empty"
-                     x-show="sourceQuote && !srcState().loading && !srcState().err && !srcFiles().length">
-                  這個案件沒有已上傳檔案。</div>
+                     x-show="srcSel.key && !srcState().loading && !srcState().err && !srcFiles().length">
+                  這個來源沒有已上傳檔案。</div>
               </div>
             </div>
           </div>
 
-          <div class="vc-src" x-show="sourcesLoaded">
-            <div class="vc-src__hd">
-              <span>摘要來源</span>
-              <span class="vc-src__hint">點一筆帶入到目前這一行的摘要，帶入後仍然可以直接修改。</span>
-            </div>
-            <div class="vc-src__tabs" data-testid="summary-source-tabs">
-              <template x-for="t in tabNames()" :key="t">
-                <button class="vc-src__tab" data-testid="summary-source-tab"
-                        :class="{ on: t === sourceTab }" @click="pickTab(t)"
-                        x-text="t"></button>
-              </template>
-            </div>
-            <div class="vc-src__list">
-              <!-- 🔑 兩個頁籤點下去做的事**不一樣**，而按鈕長得一樣：
-                   案件      -> 帶入摘要文字（JV7）
-                   已上傳檔案 -> 帶入一個憑證檔（JV3，後端複製一份）
-                   ⚠️ 所以分支寫在這裡而不是寫在一支「什麼都做」的函式裡 ——
-                      那支函式的每一個呼叫端都要先猜它這次會做哪一件。 -->
-              <template x-for="(it, si) in tabItems()" :key="si">
-                <div>
-                  <button class="vc-src__item" data-testid="summary-source-item"
-                          :disabled="!canEdit || (it.exists === false)"
-                          @click="sourceTab === '已上傳檔案' ? bringIn(it) : applySource(it); keepSummaryFocus()">
-                    <span class="vc-src__txt"
-                          x-text="it.summary || it.text || it.filename"></span>
-                    <!-- ⚠️ 實體檔不見的那幾筆**照樣列出來並標記** ——
-                         濾掉的話使用者會覺得「那張發票我明明傳過」而畫面上什麼都沒有。 -->
-                    <span class="vc-src__meta"
-                          x-text="it.exists === false ? (it.reason || '檔案已遺失')
-                                  : (it.project_name || it.status || it.type || '')"></span>
-                    <!-- `JV18`：使用者原話「計算過是已經被其他傳票使用的意思」，
-                         只標「摘要來源→已上傳檔案」這個候選清單（A 裁定甲），
-                         不擴到傳票自己的附件清單或傳票清單頁。只標記不擋——
-                         這顆一樣按得下去，@click.stop 只是不要連帶觸發帶入。 -->
-                    <span class="vc-src__used" x-show="sourceTab === '已上傳檔案' && it.used"
-                          @click.stop="toggleUsedInfo(si)" title="點看被哪張傳票用過">已計算</span>
-                    <!-- `JV21`：支出項頁籤——被其他未作廢傳票帶入過的標紅字＋傳票號 -->
-                    <span class="vc-src__used" x-show="sourceTab === '支出項' && (it.usedBy || []).some(u => u.voucherId !== id)"
-                          x-text="'已帶入 ' + (it.usedBy || []).filter(u => u.voucherId !== id).map(u => u.voucherNo).join('、')"></span>
-                    <!-- `JV21`：支出項頁籤，承攬商派工可以展開成品項／人員兩種
-                         子列（額外支出沒有子列，`items` 是空陣列，箭頭不出現—
-                         §3b②：不假裝有第三層，展不開就不畫展開的箭頭）。 -->
-                    <span class="vc-src__expand"
-                          x-show="sourceTab === '支出項' && (it.items || []).length"
-                          @click.stop="toggleExpenseExpand(si)"
-                          x-text="expandedExpense === si ? '收起品項 ▲' : '展開品項 ▼'"></span>
-                  </button>
-                  <div class="vc-src__usedinfo" x-show="usedInfoOpen === si">
-                    <template x-for="(u, ui) in (it.usedBy || [])" :key="ui">
-                      <div x-text="u.voucherNo + '　' + fmtDateTime(u.usedAt)"></div>
-                    </template>
-                  </div>
-                  <!-- `JV21` 第三層：品項／人員，各自獨立可點，直接
-                       `applySource()`（與第二層同一支函式，子列本來就有
-                       自己的 `summary`）。 -->
-                  <div class="vc-src__children"
-                       x-show="sourceTab === '支出項' && expandedExpense === si">
-                    <template x-for="(ch, ci) in (it.items || [])" :key="ci">
-                      <button class="vc-src__item vc-src__item--child"
-                              data-testid="summary-source-child"
-                              :disabled="!canEdit"
-                              @click="applySource(ch); keepSummaryFocus()">
-                        <span class="vc-src__txt" x-text="ch.summary"></span>
-                      </button>
-                    </template>
-                  </div>
-                </div>
-              </template>
-              <!-- 🔑 空清單要說出**為什麼**空的（後端給的那句話，不在這裡重寫）：
-                   「已上傳檔案」的附件表屬於 JV3、還沒建。
-                   ☠️ 只畫一個空盒子的話，使用者會以為功能壞了 ——
-                      而那與功能真的壞了長得一模一樣。 -->
-              <div class="vc-src__empty" x-show="!tabItems().length"
-                   x-text="tabNote() || '這個頁籤目前沒有可帶入的來源。'"></div>
-            </div>
-            <template x-if="sourceErr">
-              <div class="vc-err" x-text="sourceErr"></div>
-            </template>
-          </div>
 
           <!-- ══ 附件（JV3）════════════════════════════════════════════
                使用者逐字（§159b (7)）：「必須有上傳功能可以合併輸出」。

@@ -177,6 +177,38 @@ def test_the_preview_follows_motrix_ui_keyboard_rules(live_server, make_user, e2
 
 
 @pytest.mark.e2e
+def test_a_file_used_by_another_voucher_is_marked_and_says_which(live_server, make_user, e2e_browser, client):
+    """`JV18`（頁籤區拿掉後改在這裡）：已被其他傳票帶入的檔案標紅字「已計算」，點它看是哪一張；只標不擋。"""
+    u = make_user(username="vcsrc_used", role="superadmin")
+    vid = _seed(client, u)
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u[0], "password": u[1]}).json()["token"]}
+    other = client.post("/api/vouchers", headers=h, json={"summary": "另一張", "lines": [
+        {"account_code": "6111", "debit": 10, "credit": 0}, {"account_code": "1113", "debit": 0, "credit": 10}]}).json()
+    files = client.get(f"/api/vouchers/line-source-files?source_type=case&ref={QNO}", headers=h).json()["files"]
+    f0 = [f for f in files if f["filename"] == FILES[0][1]][0]
+    r = client.post(f"/api/vouchers/{other['id']}/attachments", headers=h,
+                    json={"picks": [{"type": f0["type"], "docNo": f0["docNo"], "fileId": f0["fileId"]}]})
+    assert r.status_code == 200, r.text[:300]
+    page = _open(e2e_browser, live_server, u, vid)
+    _pick_case(page)
+    tile = page.locator(f'[data-testid="src-file"]:has-text("{FILES[0][1]}")')
+    used = tile.locator('[data-testid="src-file-used"]')
+    used.wait_for(state="visible", timeout=5000)
+    assert "已計算" in used.inner_text()
+    used.click()
+    info = tile.locator('[data-testid="src-file-usedinfo"]')
+    info.wait_for(state="visible", timeout=5000)
+    assert other["voucher_no"] in info.inner_text(), info.inner_text()
+    assert not page.locator('[data-testid="voucher-att-preview"]').is_visible(), "點「已計算」不應該打開預覽"
+    other_tile = page.locator(f'[data-testid="src-file"]:has-text("{FILES[1][1]}")')
+    assert other_tile.locator('[data-testid="src-file-used"]').is_hidden(), "沒被用過的不可以標已計算"
+    # 只標不擋：仍然可以預覽並帶入
+    tile.locator(".vc-srcblk__name").click()
+    page.click('[data-testid="att-pv-bring"]')
+    page.wait_for_function(f"() => {D}.attachments.length === 1", timeout=10000)
+
+
+@pytest.mark.e2e
 @pytest.mark.parametrize("width,stacked", [(1024, False), (768, True), (390, True)])
 def test_narrow_screens_stack_the_two_columns_without_horizontal_overflow(live_server, make_user, e2e_browser, client,
                                                                          width, stacked):
