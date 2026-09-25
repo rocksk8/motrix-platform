@@ -439,6 +439,17 @@ def permission_of(module_key, body) -> str:
     return body.get("permission") or "custom.%s" % module_key
 
 
+def _dump_values(vals) -> str:
+    """寫入 data_json：非有限數字一律拒絕（稽核 D C-M5 第二道防線；第一道是 custom_fields._coerce）。
+    json.dumps 預設會寫出非標準的 NaN ⇒ 之後讀單與整個列表都 500；在交易內擋下 ⇒ 什麼都不寫。"""
+    try:
+        return json.dumps(vals, ensure_ascii=False, allow_nan=False)
+    except ValueError:
+        raise CustomModuleError("欄位值不可以是 NaN 或無限大",
+                                [{"key": k, "message": "不可以是 NaN 或無限大"} for k, v in vals.items()
+                                 if isinstance(v, float) and not math.isfinite(v)])
+
+
 def _finite(v):
     """讀出時把非有限的數字換成空值（修正前可能已寫進 NaN／inf；JSON 不能序列化它們）。"""
     if isinstance(v, float) and not math.isfinite(v):
@@ -534,7 +545,7 @@ def create_record(conn, module_key, values, user) -> dict:
         no = next_number(conn, module_key, body["numbering"])
         cur = conn.execute("INSERT INTO custom_records (module_key, record_no, def_version, status, data_json, approval_json, "
                            "created_by, created_at, updated_by, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                           (module_key, no, d["version"], body["workflow"]["initial"], json.dumps(vals, ensure_ascii=False),
+                           (module_key, no, d["version"], body["workflow"]["initial"], _dump_values(vals),
                             "{}", user["username"], now, user["username"], now))
         _write_index(conn, cur.lastrowid, module_key, vals)
         _log(conn, cur.lastrowid, "create", "", body["workflow"]["initial"], user["username"])
@@ -570,7 +581,7 @@ def update_record(conn, module_key, record_no, values, user) -> dict:
             raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
         now = datetime.now().isoformat(timespec="seconds")
         conn.execute("UPDATE custom_records SET data_json=?, updated_by=?, updated_at=? WHERE id=?",
-                     (json.dumps(vals, ensure_ascii=False), user["username"], now, rec["id"]))
+                     (_dump_values(vals), user["username"], now, rec["id"]))
         _write_index(conn, rec["id"], module_key, vals)
         _log(conn, rec["id"], "update", rec["status"], rec["status"], user["username"])
         conn.commit()
