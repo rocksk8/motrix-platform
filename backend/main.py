@@ -28,6 +28,7 @@ from core import loader as module_loader, registry as module_registry
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, shipping_notes, inventory, search, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
 from routers import modules
+from routers import legal_params   # R1 法規參數（L1）
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -701,6 +702,7 @@ app.include_router(bonus.router)
 app.include_router(vouchers.router)
 app.include_router(item_reads.router)
 app.include_router(modules.router)
+app.include_router(legal_params.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

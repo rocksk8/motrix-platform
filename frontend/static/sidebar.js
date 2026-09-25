@@ -795,6 +795,7 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
       // CORE-SPEC §9c：模組啟停／授權狀態（啟停重啟後生效）
       ni(pg('module-settings.html'),   'sett',  '模組管理',   ['module-settings.html'],   sa),
+      ni(pg('legal-params.html'),      'sett',  '法規參數設定', ['legal-params.html'],     sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         cAudit),
       ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], cShipLog),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               cVer),

@@ -57,26 +57,31 @@ def _archive_path(slip_no: str, idx: int) -> str:
 
 # ── 稅務計算 ──────────────────────────────────────────────────────────────────
 
-def _get_tax_rules() -> dict:
-    return _get_setting("tax_rules", {
-        "version": "2026",
-        "resident": {
-            "50":  {"tax_rate": 0.05, "tax_threshold": 90501},
-            "9A":  {"tax_rate": 0.10, "tax_threshold": 20010},
-            "9B":  {"tax_rate": 0.10, "tax_threshold": 20010}
-        },
-        "non_resident": {
-            "50":  {"tax_rate": 0.18, "tax_threshold": 0, "low_salary_rate": 0.06},
-            "9A":  {"tax_rate": 0.20, "tax_threshold": 0},
-            "9B":  {"tax_rate": 0.20, "tax_threshold": 5001}
-        },
-        "nhi": {
-            "rate": 0.0211,
-            "max_single_payment": 10000000,
-            "thresholds": {"50": 29500, "9A": 20000, "9B": 20000}
-        },
-        "minimum_wage": {"monthly": 29500}
-    })
+# R1（2026-09-25，CUSTOMIZATION-SPEC §7.1）：規則改由 L1 `helpers.legal_params` 依**單據日期**挑版本；
+# 原本這裡只有一套寫死的規則，修改舊單會用「當下」的規則重算。
+from helpers import legal_params as _lp
+
+
+def _get_tax_rules(on=None) -> dict:
+    """`on`（YYYY-MM-DD 或 date；None＝今天）適用的那一版。沒有 ⇒ NoApplicableRules。"""
+    return _lp.rules_for_date(_lp.load_versions(), on or _lp.today())
+
+
+def _slip_date(d: dict) -> str:
+    return (str(d.get("slipDate") or "").strip()[:10]) or _lp.today().isoformat()
+
+
+def _rules_for_slip(d: dict) -> dict:
+    try:
+        return _get_tax_rules(_slip_date(d))
+    except ValueError as e:          # NoApplicableRules 或日期格式錯
+        raise HTTPException(400, str(e))
+
+
+def _freeze_rules(d: dict, rules: dict) -> None:
+    """單據凍結：版本號＋參數快照（修改舊單沿用它）。"""
+    d["taxRulesVersion"] = rules.get("version", "")
+    d["taxRulesSnapshot"] = rules
 
 
 def _calc(gross: int, income_type: str, nationality: str, has_union: bool, rules: dict) -> dict:
@@ -145,9 +150,23 @@ class PayslipIn(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/api/tax-rules")
-def get_tax_rules(authorization: str = Header(None)):
+def get_tax_rules(date: Optional[str] = None, version: Optional[str] = None,
+                  authorization: str = Header(None)):
+    """單一版規則（勞報單頁試算用）。`version` 優先；否則依 `date`（空＝今天）。
+    回應另附 `status`（跨年提示），勞報單頁據此顯示「下一年度規則未設定」。"""
     _require_user(authorization, require_superadmin=True, module='payslip')
-    return _get_tax_rules()
+    versions = _lp.load_versions()
+    if version:
+        rules = _lp.rules_by_version(versions, version)
+        if rules is None:
+            raise HTTPException(404, f"找不到法規參數版本 {version}")
+    else:
+        try:
+            rules = _lp.rules_for_date(versions, date or _lp.today())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    rules["status"] = _lp.year_status(versions, _lp.today())
+    return rules
 
 
 @router.get("/api/next-slip-no")
@@ -200,7 +219,8 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     now   = datetime.now().isoformat()
     month = datetime.now().strftime("%Y%m")
     d     = body.data
-    rules = _get_tax_rules()
+    d.pop("recalcTaxRules", None)
+    rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
@@ -219,7 +239,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
 
     d["slipNo"]         = slip_no
     d["calc"]           = calc
-    d["taxRulesVersion"] = rules.get("version", "2026")
+    _freeze_rules(d, rules)
 
     def _insert(no: str):
         conn.execute("""
@@ -234,7 +254,7 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
             income_type, gross,
             calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
             d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-            d.get("status", "草稿"), rules.get("version", "2026"),
+            d.get("status", "草稿"), d["taxRulesVersion"],
             json.dumps(d, ensure_ascii=False),
             user["username"], now, now
         ))
@@ -261,7 +281,8 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
            f"{slip_no}（{d.get('contractorName', '')}）")
     notify_module_activity("勞報單", "建立", user.get("display_name") or user["username"],
                             f"{slip_no}（{d.get('contractorName', '')}）", "payslips.html")
-    return {"slip_no": slip_no, "calc": calc, "created_at": now}
+    return {"slip_no": slip_no, "calc": calc, "created_at": now,
+            "taxRulesVersion": d["taxRulesVersion"]}
 
 
 @router.get("/api/payslips/{slip_no}")
@@ -281,7 +302,8 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True, module='payslip')
     conn0 = get_db()
-    existing = conn0.execute("SELECT status FROM payslips WHERE slip_no=?", (slip_no,)).fetchone()
+    existing = conn0.execute("SELECT status, tax_rules_version, data_json FROM payslips WHERE slip_no=?",
+                             (slip_no,)).fetchone()
     conn0.close()
     if not existing:
         raise HTTPException(404, "找不到此勞報單")
@@ -292,7 +314,23 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         raise HTTPException(409, "已匯出的勞報單不可修改")
     now   = datetime.now().isoformat()
     d     = body.data
-    rules = _get_tax_rules()
+    try:
+        old = json.loads(existing["data_json"] or "{}")
+    except ValueError:
+        old = {}
+    # R1：修改舊單沿用**建立當時**的規則（資料庫裡的快照；前端送來的快照一律不採用）。
+    #     只有使用者明確勾選「依給付日重新套用規則」才改用日期挑版。
+    recalc = d.pop("recalcTaxRules", False) is True
+    if recalc:
+        rules = _rules_for_slip(d)
+    else:
+        rules = old.get("taxRulesSnapshot") if isinstance(old.get("taxRulesSnapshot"), dict) else None
+        if rules is None:            # 本功能之前建立的舊單：依版本號查
+            ver = existing["tax_rules_version"] or old.get("taxRulesVersion") or ""
+            rules = _lp.rules_by_version(_lp.load_versions(), ver)
+            if rules is None:
+                raise HTTPException(409, f"本單建立時的法規參數版本「{ver}」已不存在；"
+                                         "請勾選「依給付日重新套用規則」後再存檔")
 
     gross       = int(d.get("grossAmount", 0))
     income_type = d.get("incomeType", "9A")
@@ -302,7 +340,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
 
     d["slipNo"]          = slip_no
     d["calc"]            = calc
-    d["taxRulesVersion"] = rules.get("version", "2026")
+    _freeze_rules(d, rules)
 
     conn = get_db()
     res = conn.execute("""
@@ -317,7 +355,7 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
         income_type, gross,
         calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
         d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-        d.get("status", "草稿"), rules.get("version", "2026"),
+        d.get("status", "草稿"), d["taxRulesVersion"],
         json.dumps(d, ensure_ascii=False), now, slip_no
     ))
     conn.commit()
@@ -325,8 +363,10 @@ def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(No
     if res.rowcount == 0:
         raise HTTPException(404, "找不到此勞報單")
     _audit(_tok(authorization), 'payslip.update', 'payslip', slip_no,
-           f"{slip_no}（{d.get('contractorName', '')}）")
-    return {"slip_no": slip_no, "calc": calc, "updated_at": now}
+           f"{slip_no}（{d.get('contractorName', '')}）",
+           {"taxRulesVersion": d["taxRulesVersion"], "recalcTaxRules": recalc})
+    return {"slip_no": slip_no, "calc": calc, "updated_at": now,
+            "taxRulesVersion": d["taxRulesVersion"]}
 
 
 @router.delete("/api/payslips/{slip_no}", status_code=204)

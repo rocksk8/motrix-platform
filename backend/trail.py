@@ -86,6 +86,7 @@ MODULE_LABELS = {
     "gateway-guide":        "閘道器與控制器選型導覽",
     "inventory":            "庫存",
     "invoice-vouchers":     "開票申請",
+    "legal-params":         "法規參數",
     "list-prefs":           "清單欄位偏好",
     "materials-summary":    "材料彙總",
     "module-versions":      "版本紀錄",
@@ -125,7 +126,7 @@ SINGLETON_MODULES = {
     "approval-history", "approval-queue", "audit-log", "auth", "cashier", "company",
     "dashboard", "dev-crm", "inventory", "materials-summary", "module-versions",
     "network-plans-quick", "next-quote-no", "next-slip-no", "now", "online-users",
-    "org", "reports", "search", "settings", "system", "tax-rules", "user-activity",
+    "org", "reports", "search", "settings", "system", "tax-rules", "legal-params", "user-activity",
     "access-guide", "automation-guide", "env-guide", "gateway-guide", "monitor-guide",
     "netarch-guide", "switch-guide",
 }

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>法規參數設定 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .lp-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .lp-warn { max-width: 1100px; margin-top: 16px; padding: 12px 16px; border-radius: 8px;
+      background: #FEF3C7; border: 1px solid #F59E0B; color: #92400E; font-size: 13px; line-height: 1.6 }
+    .lp-card { max-width: 1100px; margin-top: 20px; border: 1px solid var(--border); border-radius: 10px; overflow-x: auto; }
+    .lp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .lp-table th, .lp-table td { padding: 8px 10px; border-bottom: 1px solid var(--border-light); text-align: left; white-space: nowrap; }
+    .lp-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+    .lp-table input { width: 104px; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px;
+      background: var(--white); color: var(--text-main); font-family: inherit; }
+    .lp-table input:disabled { background: transparent; border-color: transparent; color: var(--text-main); }
+    .lp-tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--border-light); color: var(--text-secondary); }
+    .lp-bad { color: var(--danger); font-size: 12px; }
+    .lp-actions { display: flex; gap: 10px; margin-top: 16px; max-width: 1100px; align-items: center; }
+    .lp-src { max-width: 1100px; margin-top: 18px; font-size: 11px; color: var(--text-dim); line-height: 1.7; word-break: break-all; }
+    @media (max-width: 767px) { .lp-main { margin-left: 0; padding: 20px 16px; } }
+  </style>
+</head>
+<body x-data="legalParamsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="lp-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">法規參數設定</h1>
+        <p class="pg__s">勞報單的扣繳率、起扣標準、二代健保補充保費門檻與最低工資，依「生效日」分版本；每張勞報單依開單日期套用當時的版本，修改舊單沿用建立時的版本。已生效的版本不能修改，要更正請新增一版。</p>
+      </div>
+    </div>
+
+    <template x-for="(w, i) in (status.warnings || [])" :key="i">
+      <div class="lp-warn" data-legal-warning x-text="w"></div>
+    </template>
+
+    <div class="lp-card">
+      <table class="lp-table">
+        <thead>
+          <tr>
+            <th>版本</th><th>生效日</th><th>最低工資（月）</th><th>兼職薪資補充保費門檻（50）</th>
+            <th>薪資起扣（50）</th><th>執行業務起扣（9A／9B）</th><th>補充保費費率</th><th>補充保費門檻（9A／9B）</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(v, i) in versions" :key="i">
+            <tr :data-version="v.version">
+              <td>
+                <input type="text" x-model="v.version" :disabled="isFrozen(v)" style="width:70px">
+                <span class="lp-tag" x-show="isFrozen(v)">已生效</span>
+              </td>
+              <td><input type="date" x-model="v.effectiveFrom" :disabled="isFrozen(v)" style="width:140px"></td>
+              <td><input type="number" data-field="minimum_wage" x-model.number="v.minimum_wage.monthly" :disabled="isFrozen(v)"
+                         @input="v.nhi.thresholds['50'] = v.minimum_wage.monthly"></td>
+              <td>
+                <input type="number" data-field="nhi50" x-model.number="v.nhi.thresholds['50']" :disabled="isFrozen(v)">
+                <div class="lp-bad" data-mismatch x-show="v.nhi.thresholds['50'] !== v.minimum_wage.monthly">須等於最低工資</div>
+              </td>
+              <td><input type="number" x-model.number="v.resident['50'].tax_threshold" :disabled="isFrozen(v)"></td>
+              <td>
+                <input type="number" x-model.number="v.resident['9A'].tax_threshold" :disabled="isFrozen(v)"
+                       @input="v.resident['9B'].tax_threshold = v.resident['9A'].tax_threshold">
+              </td>
+              <td><input type="number" step="0.0001" x-model.number="v.nhi.rate" :disabled="isFrozen(v)"></td>
+              <td>
+                <input type="number" x-model.number="v.nhi.thresholds['9A']" :disabled="isFrozen(v)"
+                       @input="v.nhi.thresholds['9B'] = v.nhi.thresholds['9A']">
+              </td>
+              <td>
+                <button class="btn btn-ghost btn-sm" x-show="!isFrozen(v)" @click="versions.splice(i, 1); dirty = true">移除</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="lp-actions">
+      <button class="btn btn-ghost" data-add-next-year @click="addNextYear()">新增下一年度（複製最新一版）</button>
+      <button class="btn btn-primary" data-save @click="save()" :disabled="saving" x-text="saving ? '儲存中…' : '儲存'"></button>
+      <span class="lp-bad" data-error x-show="errMsg" x-text="errMsg"></span>
+      <span style="font-size:12px;color:var(--success)" x-show="okMsg" x-text="okMsg"></span>
+    </div>
+
+    <div class="lp-src">
+      <div>未列在表格的欄位（非居住者稅率、單次給付上限等）沿用複製來源的數字。每一版的法規來源：</div>
+      <template x-for="v in versions" :key="'s' + v.version">
+        <div><strong x-text="v.version"></strong>：<span x-text="(v.sources || []).join('；') || '（未填）'"></span></div>
+      </template>
+      <div style="margin-top:6px">116 年（2027）最低工資 30,900 元為勞動部審議數字、尚待行政院核定；核定後再新增一版。</div>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function legalParamsPage() {
+      return {
+        versions: [], status: {}, today: '', saving: false, errMsg: '', okMsg: '', dirty: false,
+        _initDone: false,
+        _hdr() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          await this.load()
+        },
+        async load() {
+          const r = await fetch('/api/legal-params/tax-rules', { headers: this._hdr() })
+          if (!r.ok) { this.errMsg = '讀取失敗：' + await r.text(); return }
+          const d = await r.json()
+          this.versions = (d.versions || []).map(v => ({ ...v, _saved: true }))
+          this.status = d.status || {}
+          this.today = this.status.today || new Date().toISOString().slice(0, 10)
+        },
+        // 已生效（生效日 ≤ 今天）且已存檔的版本不能改（後端同樣擋）
+        isFrozen(v) { return !!v._saved && v.effectiveFrom <= this.today },
+        addNextYear() {
+          const last = this.versions[this.versions.length - 1]
+          const y = last ? parseInt(String(last.effectiveFrom).slice(0, 4)) + 1 : new Date().getFullYear() + 1
+          const v = JSON.parse(JSON.stringify(last || {}))
+          delete v._saved
+          v.version = String(y)
+          v.effectiveFrom = y + '-01-01'
+          v.sources = ['（請填寫：最低工資核定公告、財政部起扣標準公告、健保署補充保費簡表）']
+          this.versions.push(v)
+          this.dirty = true
+        },
+        async save() {
+          this.errMsg = ''; this.okMsg = ''
+          const bad = this.versions.find(v => v.nhi.thresholds['50'] !== v.minimum_wage.monthly)
+          if (bad) { this.errMsg = '版本 ' + bad.version + '：兼職薪資補充保費門檻須等於最低工資'; return }
+          this.saving = true
+          try {
+            const body = { versions: this.versions.map(v => { const c = { ...v }; delete c._saved; return c }) }
+            const r = await fetch('/api/legal-params/tax-rules', { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body) })
+            if (!r.ok) {
+              let msg = await r.text()
+              try { msg = JSON.parse(msg).detail || msg } catch (e) {}
+              this.errMsg = '儲存失敗：' + msg
+              return
+            }
+            const d = await r.json()
+            this.versions = (d.versions || []).map(v => ({ ...v, _saved: true }))
+            this.status = d.status || {}
+            this.dirty = false
+            this.okMsg = '已儲存'
+          } finally { this.saving = false }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

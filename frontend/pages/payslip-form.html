@@ -102,6 +102,15 @@
     </div>
   </div>
 
+  <!-- R1：跨年提示（12 月且下一年度法規參數未設定、今年沿用去年規則、門檻≠最低工資） -->
+  <template x-for="(w, i) in rulesWarnings" :key="i">
+    <div data-legal-warning style="margin-bottom:12px;padding:10px 14px;border-radius:8px;background:#FEF3C7;
+         border:1px solid #F59E0B;color:#92400E;font-size:13px">
+      <span x-text="w"></span>
+      <a href="legal-params.html" style="margin-left:8px;color:#92400E;font-weight:600">前往法規參數設定 →</a>
+    </div>
+  </template>
+
   <div class="layout">
     <!-- 左側表單 -->
     <div>
@@ -221,7 +230,7 @@
           </div>
           <div class="form-group">
             <label>開單日期</label>
-            <input type="date" x-model="q.slipDate" @change="dirty()">
+            <input type="date" x-model="q.slipDate" @change="dirty(); onSlipDateChange()">
           </div>
         </div>
         <div class="form-row full">
@@ -333,6 +342,7 @@
           </div>
         </div>
       </div>
+
     </div>
 
     <!-- 右側試算卡 -->
@@ -373,9 +383,18 @@
           </button>
         </div>
 
-        <div x-show="errMsg" style="color:var(--danger);font-size:12px;margin-top:10px;text-align:center" x-text="errMsg"></div>
-        <div style="margin-top:12px;font-size:11px;color:var(--text-dim);text-align:center">
-          稅率版本：<span x-text="rulesVersion"></span>年度
+        <div x-show="errMsg" data-err style="color:var(--danger);font-size:12px;margin-top:10px;text-align:center" x-text="errMsg"></div>
+        <div data-rules-version style="margin-top:12px;font-size:11px;color:var(--text-dim);text-align:center">
+          法規參數版本：<span x-text="rulesVersion"></span>（<span x-text="rulesEffectiveFrom"></span> 起）
+        </div>
+        <!-- R1：修改舊單沿用建立時的版本；開單日期適用的版本不同時，由使用者明確選擇是否重算 -->
+        <div x-show="!isNew && applicableVersion && applicableVersion !== storedVersion" data-rules-mismatch
+             style="margin-top:8px;padding:8px 10px;border-radius:6px;background:#FEF3C7;font-size:11px;color:#92400E;line-height:1.6">
+          開單日期適用 <b x-text="applicableVersion"></b> 版，本單沿用建立時的 <b x-text="storedVersion"></b> 版。
+          <label style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer">
+            <input type="checkbox" data-recalc x-model="recalcTaxRules" @change="onRecalcToggle(); dirty()" style="width:auto">
+            依開單日期重新套用規則
+          </label>
         </div>
 
         <!-- 匯出記錄 -->
@@ -481,7 +500,13 @@ function payslipForm() {
     conFiltered: [],
     showConDrop: false,
     rules: null,
-    rulesVersion: '2026',
+    rulesVersion: '',
+    rulesEffectiveFrom: '',
+    rulesWarnings: [],
+    storedVersion: '',        // 既有單建立時的版本（沿用它，除非勾選重算）
+    storedRules: null,
+    applicableVersion: '',    // 目前開單日期適用的版本
+    recalcTaxRules: false,
     contractorIdCardFront: '',
     contractorIdCardBack: '',
     loadingIdCard: false,
@@ -571,6 +596,41 @@ function payslipForm() {
 
     dirty() { this.isDirty = true },
 
+    // ── R1：法規參數依開單日期挑版本 ─────────────────────────────────────────
+    async _fetchRules(qs) {
+      const r = await fetch(`${API}/tax-rules?${qs}`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+      if (!r.ok) {
+        let msg = await r.text()
+        try { msg = JSON.parse(msg).detail || msg } catch (e) {}
+        throw new Error(msg)
+      }
+      return r.json()
+    },
+    _useRules(rules) {
+      this.rules = rules
+      this.rulesVersion = rules.version || ''
+      this.rulesEffectiveFrom = rules.effectiveFrom || ''
+      this.calc()
+    },
+    // 依目前開單日期查適用版本；新單（或勾選重算）就直接套用
+    async onSlipDateChange() {
+      try {
+        const r = await this._fetchRules('date=' + encodeURIComponent(this.q.slipDate || ''))
+        this.rulesWarnings = (r.status && r.status.warnings) || []
+        this.applicableVersion = r.version || ''
+        if (this.isNew || this.recalcTaxRules) this._useRules(r)
+        if (this.errMsg && this.errMsg.indexOf('法規參數') >= 0) this.errMsg = ''
+      } catch (e) {
+        this.applicableVersion = ''
+        this.errMsg = e.message
+      }
+    },
+    async onRecalcToggle() {
+      if (this.recalcTaxRules) await this.onSlipDateChange()
+      else if (this.storedRules) this._useRules(this.storedRules)
+    },
+
+
     filterCon() {
       const q = this.conSearch.toLowerCase().trim()
       this.conFiltered = q
@@ -634,11 +694,6 @@ function payslipForm() {
         alert('此頁面僅限最高權限使用者或具有「勞報單」模組授權的使用者存取'); window.history.back(); return
       }
 
-      // Load tax rules
-      try {
-        const r = await fetch(`${API}/tax-rules`, { headers: { Authorization: 'Bearer ' + this.session.token } })
-        if (r.ok) { this.rules = await r.json(); this.rulesVersion = this.rules.version || '2026' }
-      } catch(e) {}
 
       // Load contractors list
       try {
@@ -667,6 +722,13 @@ function payslipForm() {
           if (r.ok) {
             const row = await r.json()
             Object.assign(this.q, row.data)
+            // R1：沿用建立時的規則（快照；沒有快照的舊單依版本號查）
+            this.storedVersion = row.tax_rules_version || (row.data || {}).taxRulesVersion || ''
+            try {
+              this.storedRules = (row.data || {}).taxRulesSnapshot
+                || await this._fetchRules('version=' + encodeURIComponent(this.storedVersion))
+              this._useRules(this.storedRules)
+            } catch(e) { this.errMsg = e.message }
             this.exportCount = row.export_count || 0
             this.exportLog   = JSON.parse(row.export_log || '[]')
             this.conSearch = this.q.contractorName || ''
@@ -693,6 +755,7 @@ function payslipForm() {
         } catch(e) {}
       }
 
+      await this.onSlipDateChange()   // 新單：套用開單日期的版本；既有單：只比對、顯示差異
       this.calc()
     },
 
@@ -706,7 +769,8 @@ function payslipForm() {
         const payload = {
           slip_no: this.q.slipNo,
           contractor_id: this.q.contractorId || null,
-          data: { ...this.q, calc: this.result }
+          data: { ...this.q, calc: this.result,
+                  recalcTaxRules: this.recalcTaxRules }         // R1：明確選擇重算才依日期重挑
         }
         const method = this.isNew ? 'POST' : 'PUT'
         const url = this.isNew ? `${API}/payslips` : `${API}/payslips/${this.q.slipNo}`
@@ -715,8 +779,17 @@ function payslipForm() {
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
           body: JSON.stringify(payload)
         })
-        if (!r.ok) { this.errMsg = await r.text(); this.saving = false; return }
+        if (!r.ok) {
+          let msg = await r.text()
+          try { msg = JSON.parse(msg).detail || msg } catch (e) {}
+          this.errMsg = '儲存失敗：' + msg; this.saving = false; return
+        }
         const d = await r.json()
+        if (d.taxRulesVersion) {
+          this.storedVersion = d.taxRulesVersion
+          this.storedRules = this.rules
+          this.recalcTaxRules = false
+        }
         if (d.slip_no && d.slip_no !== this.q.slipNo) {
           this.q.slipNo = d.slip_no
           history.replaceState(null, '', '?id=' + d.slip_no)
