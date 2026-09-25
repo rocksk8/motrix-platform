@@ -125,6 +125,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:15 C（主持裁示，通知 B）：**`tools/platform/dep_scan.py` 列舉模組檔案改用 `core.source_tree`**。起因：M04 有三支 router、依 CORE-SPEC §3 放在 `modules/subcontract/api/`，而 dep_scan 只掃模組第一層（`d.glob("*.py")`）、source_tree 只認 `api.py`／`api/` ⇒ 兩份清單各走各的，任何一種放法都有一道守門看不到。改法：遞迴與排除（tests、migrations）只在 source_tree 定義一次（新增 `module_files(d)`），dep_scan 只使用；單位名稱 `mod:<key>/<相對路徑>`（例 `mod:subcontract/api/contractors`），現有單位名稱不變。附正對照、一致性題、突變。B 的 M08 若用到 dep_scan 的單位名稱，搬 `api/` 結構時會看到新名稱。
 - 2026-09-26 05:00 C：**`wip/c-case-access` 已上月台（7c056468），A 可以依賴**。L1 `helpers/case_access.py` 提供 `CASE_ACCESS`、`is_document_approver`、`case_access_allowed`、`guard_case_access`；`helpers.quotations`／`helpers` 的同名匯入保留（同一物件，呼叫端不必改）。L1 其他檔新增讀 `quotations` 會被 `test_case_access_l1` 擋；案件表不存在 ⇒ 404。M01／M03／M05／M10 搬遷時：直接 `from helpers.case_access import …` 即不算對 M01 的相依（dep_scan 以定義所在歸屬）。
 - 2026-09-26 04:56 D：⑩ M12 稽核（`AUDIT-D-A-M12-move.md`）：真的刪掉 modules/daily_tasks ⇒ 系統健康檢查 6 項照跑、端點 404、ping 200 ✅；**必修 M-1**：反向控制紅 9 題（§B-11 只允許 1），其中 test_case_stage_done_calendar 5 題與 test_em1 1 題需要 M12 卻留在模組外；另 2 題框架題（登記表、UNIT-INDEX）請主持裁定是否列入允許清單。
 - 2026-09-26 04:54 B：M08 開工（D:\MOTRIX-PLATFORM-B17，wip/b-m08）。**動 L1 預告**：`/api/now` 與 `/api/company/tax|search`（GCIS 查統編，L1、M03、M04 都在用）從 `routers/dashboard.py` 拆出，成為 L1 router `routers/company_lookup.py`（端點路徑、權限、GCIS 額度設定鍵都不變）；地圖（map_points、map.html、/api/map）在 modules.json 歸 L1（主持確認）。其他線若在改 dashboard.py 的這兩段請告知。
