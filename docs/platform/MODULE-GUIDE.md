@@ -156,3 +156,13 @@ modules/<key>/
 3. 需要其他模組的能力 ⇒ 照 §1 處理，並登記串接點。
 4. 資料照 §3 分類；位置向 `core.paths` 取得。
 5. 反向控制：刪掉資料夾 ⇒ 伺服器照常啟動、其餘測試照常通過。
+
+## 9. 產品選配（匯出，CORE-SPEC §9c①）
+
+- 產品設定檔 `product/<名稱>.json`：`{"name", "description", "modules": [...]}`；`["*"]`＝包裡現有的全部模組，`[]`＝只有 L0／L1。列了包裡沒有的模組 ⇒ 打包中止（不猜、不略過）。
+- 打包：`build_deploy_package.ps1 -Product <名稱>`（預設 full）。沒選到的 `backend/modules/<key>/` 整個資料夾與它 `module.json` 宣告的頁面（`pages[].path`）不進包；包內寫 `backend/modules.lock.json`（lock_version／kind／product／core_version／各模組 version、core、內容 sha256／excluded／removed_pages）。
+- 模組要能被選配，`module.json` 必須宣告 `version`、`core`、`pages`、`provides.api_prefixes`（演練依 api_prefixes 驗證端點在或不在）。
+- 守門：`verify_package.py` (7)＝`tools/platform/product_select.py check`（lock＝包內模組、版本與雜湊一致、L0／L1 必要檔齊全、`tools/platform/upgrade.py` 在包裡）；單元 `tests/platform/test_product_select.py`。
+- 演練：`python tools/platform/product_drill.py --pkg <包> --port <埠>`：暫存位置啟動、改掉臨時密碼、`/api/auth/me` 正對照、已安裝模組的端點與頁面 200、被排除的 404。
+- ⚠ 未守門：頁面尚未搬進模組資料夾（階段 C）前，頁面是否屬於某模組只看 `module.json` 的 `pages` 宣告。
+
