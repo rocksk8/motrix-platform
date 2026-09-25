@@ -192,17 +192,17 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | X 確認 |
 |---|---|---|---|
-| X-1 | | | |
-| X-2 | | | |
-| X-3 | | | |
-| Y-1 | | | |
-| Y-2 | | | |
-| Y-3 | | | |
-| Y-4 | | | |
-| Y-5 | | | |
-| Z-1 | | | |
-| Z-2 | | | |
-| Z-3 | | | |
-| Z-4 | | | |
-| Z-5 | | | |
+| X-1 | 修正：`helpers.recognition.dispatch_unavailable(basis)`；營運報表／月支出（含待補登，同一份回應）回 `unavailable:[{category:"contractor",reason}]`，報表頁紅框；`summary-sources` 回 `unavailable`，傳票帶入面板顯示；現金口徑不說缺（不受影響）。IP-1「對方不在時」已改寫。守門 `test_absence_is_said_in_report_flags_and_voucher_sources`＋頁面綁定；突變 6 種皆紅 | wip/a-ip-fix | |
+| X-2 | 修正：`tests/platform/test_integration_points_registered.py`：provide／ModuleSpec providers ＝登記表 provider 各節；single_provider／providers 取用必須已登記。正對照用合成文件與原始碼（不綁 L2），另斷言真實掃描抓得到 `dispatch.row`（防兩邊皆空）。突變：登記表少一個、程式碼多一個 provide、取用未登記 ⇒ 皆紅。MODULE-GUIDE §1 寫入規則 | wip/a-ip-fix | |
+| X-3 | 修正：`tests/test_dev_case_row_access_2026_09_25.py`：同模組同角色外人在列表、單筆、記錄列表、活動統計四條路徑都看不到；owner 與列入業務者看得到（正對照）。突變 dev_crm 四個 visible 套用點（含 M9 列表）⇒ 皆紅 | wip/a-ip-fix | |
+| Y-1 | 修正：只給 admin+ 或出納模組（與出納頁 `canExecuteCashier()` 同一條）；外人 403。V9 同一支端點只記錄、不修。守門 `test_last_received_bank_account_access_2026_09_25.py`；突變 ⇒ 紅 | wip/a-ip-fix | |
+| Y-2 | 修正：`helpers/bonus_pdf.py` 的 M06 匯入改在函式內（`_m06()`），缺席 ⇒ `AccountingPdfMissing`，預覽／PDF 端點 503 並說明；M07 照常載入。兩題邊界守門改從 modules.json 取 M07 全部檔案，改驗「模組層不 import M06」。反向控制：子行程擋掉 `helpers.voucher`／`voucher_pdf`，`routers.bonus` 照常載入。IP-2 補寫實體缺席的行為與殘留相依（baseline 兩筆，要清掉須把三支函式下沉 L1，另開題）。突變 3 種皆紅 | wip/a-ip-fix | |
+| Y-3 | 修正：`router_files()` 收 `api.py` 或 `api/` 下全部；`logic_files()` 收模組所有層（扣端點檔、根 `__init__`、tests／migrations）。沙盒正對照 `test_source_tree_covers_core_spec_subdirectories`；受影響守門 8 檔綠；突變 3 種皆紅。**未改**：`test_no_credentials_in_query` 的 `ROUTERS` 寫死 `routers/`——它的反向控制會把全域 `ROUTERS` 指向 tmp_path，改掃描來源要一併重寫那兩題控制，排下一輪；`test_exception_detail_leak:74` 的 `ROUTERS_DIR` 是未使用的常數（實際掃描在 :190 已用 `router_files()`），不影響 | wip/a-ip-fix | |
+| Y-4 | 修正：mp6 與它 import 的 mp1 都改成 e2e 題內 importorskip（mp1 用 `_page_deps()`）。反向控制（擋掉 playwright）：修前 1 skipped（整檔）→ 修後 8 passed、4 skipped（只有 e2e）；正常環境 12 passed | wip/a-ip-fix | |
+| Y-5 | 修正：`_is_case_approver` 改引用 `is_document_approver`；`_guard_case` 與 `guard_case_access` 都改呼叫 `case_access_allowed()`，規則只剩一份（router 只多半解鎖例外與回傳欄位）。**漂移確有實害**：額外支出的簽核人（非案件成員）在簽核佇列詳情被 403、看不到金額——修前題紅（403）、修後綠。更正：a3004b64 訊息裡「scope 不同」一句是錯的，6fa4a7e1 已更正並完成合併。案件守門 45 檔 621 passed（1 紅＝licensing test_08a，基準 6c3bfd8b 同樣紅，與本修無關）；突變 3 種皆紅 | wip/a-ip-fix | |
+| Z-1 | 觀察，接受：M06／M04 搬遷時（PLAYBOOK §B）加「legacy 與 ModuleSpec 的 (cap, name) 不可重疊」與「modules/ 底下禁止 registry.provide()」兩題；本輪不動 registry | wip/a-ip-fix | |
+| Z-2 | 觀察，接受：三處 admin 直通是 row_access 導入前的寫法，`case` 已登錄所以目前不影響結果；排入 M01／M02 搬遷時改為只走 row_access | wip/a-ip-fix | |
+| Z-3 | 觀察，接受：批次匯出稽核紀錄改寫實際匯出的單號、docstring 寫明「看不到的靜默略過是刻意（不洩漏存在與否）」——M01 範圍，排入 M01 搬遷 | wip/a-ip-fix | |
+| Z-4 | 觀察：通用 L2 邊界守門（AST，含 G1 看得見底線 API）已涵蓋屬性存取與跨行 import；`test_no_one_imports_the_private_function_anymore` 留作快速字面檢查，不再加強 | wip/a-ip-fix | |
+| Z-5 | 觀察，需寫進規格：子資源（派工、傳票 by-case）只做模組檢查是現行行為；是否要逐案檢查屬權限範圍（PLAYBOOK §F 要問使用者），本輪不改，建議主持排入 U 題 | wip/a-ip-fix | |
 | Z-6 | （環境，不需 A 回覆） | | |
