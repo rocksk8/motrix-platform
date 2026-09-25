@@ -121,3 +121,70 @@ def test_rc_conftest_using_the_changed_name_disables_test_filtering(monkeypatch)
     """反向控制：fixture 經 conftest 用到被改的名稱 ⇒ 所有直接 import 它的測試都要跑（不可以只看測試檔自己）。"""
     got, rep = _name_select(monkeypatch, conftest="from helpers.a import f\n")
     assert "backend/tests/test_own_g.py" in got and "helper:a" in rep.get("names_conftest", {})
+
+
+# ── 稽核 D S-M1／S-S2／O-2 ─────────────────────────────────────────────────
+
+P_OLD = "def _x():\n    return 1\n\n\ndef b():\n    return _x()\n\n\ndef g():\n    return 2\n"
+P_NEW = P_OLD.replace("return 1", "return 99")
+
+
+def _private_select(monkeypatch, u1_src="from helpers.a import b\n", u2_src="from helpers.a import g\n"):
+    srcs = {
+        ("backend/helpers/a.py", "OLD"): P_OLD, ("backend/helpers/a.py", None): P_NEW,
+        ("backend/routers/u1.py", None): u1_src, ("backend/routers/u2.py", None): u2_src,
+        ("backend/tests/test_own_f.py", None): "from helpers.a import b\n",
+        ("backend/tests/test_own_g.py", None): "from helpers.a import g\n",
+        ("backend/conftest.py", None): "import os\n",
+    }
+    monkeypatch.setattr(MT, "_source", lambda rel, ref: srcs.get((rel, ref)))
+    chk = lambda rel: False     # noqa: E731
+    chk.refs = ("OLD", None)
+    picked, rep = MT.select(["backend/helpers/a.py"], NT, NG, chk)
+    return {p for p in picked if p.startswith("backend/tests/test_")}, rep
+
+
+def test_rc_private_change_reaches_users_of_its_public_caller(monkeypatch):
+    """S-M1：改私有 _x；u1 與 test_own_f 只 import b，而 b 呼叫 _x ⇒ 都要選到。只用 g 的不選。"""
+    got, rep = _private_select(monkeypatch)
+    assert {"backend/tests/test_u1.py", "backend/tests/test_own_f.py"} <= got
+    assert "backend/tests/test_u2.py" not in got and "backend/tests/test_own_g.py" not in got
+    assert rep["names_direct"]["helper:a"] == ["_x"] and rep["names"]["helper:a"] == ["_x", "b"]
+
+
+def test_rc_user_passing_the_module_around_is_kept(monkeypatch):
+    """S-S2：使用者把模組物件整個傳出去（ALL）⇒ 判斷不了 ⇒ 保留。"""
+    got, _ = _private_select(monkeypatch, u2_src="from helpers import a\n\ndef f(k):\n    return k(a)\n")
+    assert "backend/tests/test_u2.py" in got
+
+
+def test_rc_user_with_unrecognised_import_is_kept(monkeypatch):
+    """S-S2：dep_scan 認得它依賴 a，但 AST 找不到 import 方式（例：importlib）⇒ used 是空集合 ⇒ 保留。"""
+    got, _ = _private_select(monkeypatch, u2_src="import importlib\nm = importlib.import_module('helpers.a')\n")
+    assert "backend/tests/test_u2.py" in got
+
+
+def test_real_helper_private_change_selects_its_tests(monkeypatch):
+    """S-M1 的真實情境（D 的突變）：只改 legal_params._as_date ⇒ test_legal_params_r1 必須被選到
+    （D 實測：同一個突變下它有 6 題紅，而閉包前的名稱層級把它拿掉了）。"""
+    rel = "backend/helpers/legal_params.py"
+    cur = (MT.REPO / rel).read_text(encoding="utf-8-sig")
+    old = cur.replace("    return date.fromisoformat(s)", "    return date.fromisoformat(s).replace(year=2026)")
+    assert old != cur, "legal_params._as_date 的寫法變了，更新這一題的突變"
+    real_source = MT._source
+    monkeypatch.setattr(MT, "_source", lambda r, ref: old if (r == rel and ref == "OLD") else real_source(r, ref))
+    chk = lambda r: False     # noqa: E731
+    chk.refs = ("OLD", None)
+    picked, rep = MT.select([rel], MT.load_map(False), MT.load_graph(), chk)
+    assert "backend/tests/test_legal_params_r1_2026_09_25.py" in picked
+    assert rep["names_direct"]["helper:legal_params"] == ["_as_date"]
+
+
+def test_rc_cross_boundary_private_signature_change_is_an_interface_change(monkeypatch):
+    """O-2：_require_user 這類跨模組在用的底線名稱改簽名 ⇒ 介面有變（與 G1 守門同一個範圍）。"""
+    monkeypatch.setattr(MT, "_show", lambda repo, ref, rel: "def _require_user(a):\n    return a\n" if ref == "OLD"
+                        else "def _require_user(a, b):\n    return a\n")
+    monkeypatch.setattr(MT, "_cross_boundary", lambda: {"helper:auth": {"_require_user"}})
+    assert MT.interface_changed("backend/helpers/auth.py", "OLD", "NEW") is True
+    monkeypatch.setattr(MT, "_cross_boundary", lambda: {})
+    assert MT.interface_changed("backend/helpers/auth.py", "OLD", "NEW") is False, "反向控制：不帶 extra 就看不到"
