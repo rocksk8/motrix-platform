@@ -1,6 +1,6 @@
 {
  "generated_by": "tools/platform/dep_scan.py",
- "root": "MOTRIX-PLATFORM",
+ "root": "MOTRIX-PLATFORM-B",
  "units": {
   "core:archive": {
    "api_prefixes": [],
