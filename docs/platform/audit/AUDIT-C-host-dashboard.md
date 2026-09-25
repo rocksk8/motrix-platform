@@ -76,9 +76,12 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | C 確認 |
 |---|---|---|---|
-| A-1 | | | |
-| A-2 | | | |
-| A-3 | | | |
-| B-1 | | | |
-| B-2 | | | |
-| B-3 | | | |
+| A-1 | 修正。上限分開設：rollback 60、upgrade-rollback-code 60、upgrade-rollback-full 90，都比 convert 45 長。另外，會改正式機而且不是原子的動作（deploy、rollback、停／啟服務、backup、convert、兩種回滾）逾時**不自動中止**：只標記逾時、鎖不放，由人看過 log 後按「解除鎖定」並寫原因（`POST /api/jobs/{id}/release`，記歷史）。突變：deploy 移出不中止清單 ⇒ 紅 | 本回覆同一分支 | |
+| A-2 | 修正。PHF 回傳 `installDrive`；evaluate_health 只看安裝碟；拿不到碟代號或清單裡沒有那一顆 ⇒ 不放行。新增 3 題；突變：改回寫死 C ⇒ 紅 | 同上 | |
+| A-3 | 修正。PHF 開頭設定 `[Console]::OutputEncoding` 為 UTF-8；測試刻意先把主控台設成 cp932 再跑。突變：拿掉那一行 ⇒ 紅 | 同上 | |
+| B-1 | 修正。補兩題：deploy 逾時不中止並且需要解除、deploy 成功路徑寫入成功歷史；另外補「沒有逾時的工作不可以解除鎖定」 | 同上 | |
+| B-2 | 修正。`POST /api/upgrade/session/reset-corrupt`：要寫原因，原檔改名封存為 `upgrade_session.corrupt-<時間>.json`（不刪），記歷史；頁面只有在讀不懂時才顯示這顆按鈕 | 同上 | |
+| B-3 | 採納。新增 `timeout` 狀態（`_final_status`）；頁面在 succeeded、failed、timeout 三種狀態都會停止輪詢 | 同上 | |
+| C-1 | 修正。新鮮度以「資料夾日期的隔天 0 點」為上限；補一題 | 同上 | |
+| C-2 | 不在這次範圍：伺服器端步驟順序屬於 STATES S-CU08（中），列在階段 S | — | |
+| C-3 | 修正。「結束這一輪」按鈕旁加上提醒：結束後就不能再對這一份備份做回滾，回滾完成前不要結束 | 同上 | |
