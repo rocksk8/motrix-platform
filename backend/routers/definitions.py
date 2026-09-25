@@ -69,7 +69,8 @@ def _payslip_sample_view():
         "contractorName": "範例承攬人", "contractorIdNumber": "A123456789", "serviceContent": "範例勞務",
         "serviceStartDate": "2026-09-01", "serviceEndDate": "2026-09-05", "incomeType": "9A", "slipDate": "2026-09-06",
         "slipNo": "PS-202609-0001", "remarks": "範例備註", "grossAmount": 30000, "paymentMethod": "匯款",
-        "calc": {"taxWithheld": 3000, "nhiSupplement": 633, "netAmount": 26367, "taxRate": 0.1, "nhiRate": 0.0211},
+        # 法規數字不寫死（test_legal_params_single_source）：樣本只放金額，不放費率
+        "calc": {"taxWithheld": 0, "nhiSupplement": 0, "netAmount": 30000},
         "bankCode": "000", "bankName": "範例銀行", "bankBranch": "範例分行", "bankAccountName": "範例承攬人",
         "bankAccountNumber": "0000000000"})
 
