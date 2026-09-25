@@ -137,7 +137,7 @@
 | `versions(kind, key, scope)` | 版本清單（不含 body） |
 | `get(kind, key, scope, version)` | 取一版 |
 | `diff(a, b)` | JSON 差異：新增／刪除／變更的路徑（例：`blocks[5].boxes[0].rows[0].label`），給「發布前看差異」用 |
-| `restore(kind, key, scope, version, note)` | **不改歷史**：把舊版內容再發布成一個新版本（版本號繼續往上） |
+| `restore(kind, key, scope, version, note)` | **不改歷史**：把舊版內容再發布成一個新版本（版本號繼續往上）；不動草稿，回應的 `draftPending` 標出「還有一份未發布的草稿，下一次發布會蓋掉這次還原」，由畫面提示（稽核 D C-O1） |
 | `resolve(kind, key, role)` | 套用順序：`role:<角色>` 最新發布版 ＞ `company` 最新發布版 ＞ 程式出貨的預設（例：`helpers/output_templates/<key>.json`） |
 
 - **驗證器登記**：每個 kind 登記一支驗證器（例：`output_template` ⇒ `doc_template.validate`）。驗證器回傳問題清單，每一項帶**位置**（JSON 路徑），給建構器標出錯在哪。
