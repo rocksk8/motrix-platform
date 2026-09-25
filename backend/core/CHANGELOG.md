@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.99 — 2026-09-26（C，D7）
+> C（D7 預演抓到的升級阻擋點）。
+- L0（新增）：`core.upgrade.RUNTIME_STATE_SETTINGS`——啟動時就會更新的執行期狀態（每日掃描的節流日期）；`settings_changes` 只在值是日期且沒有往回走時放行，其他鍵照舊逐一比對。原本真實庫的舊日期會讓新版啟動後的驗證判定「改寫既有設定」⇒ 正式機升級被判失敗而回滾
+
 ## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
 > rebase 時 1.8、1.9 已被 X-9b、A 使用 ⇒ 1.10（PLAYBOOK §C-7）。只有新增。
 - L1（新增）：`core.pages` 頁面對照與提供（階段 C／C1，STAGE-C-DESIGN §3）——`collect`／`build_page_map`／`lookup`／`resolve`／`page_response`／`notice_kind`／`notice_html`／`read_manifests`／`check_and_register`／`valid_name`／`PageConflict`／`PAGE_NAME`／`NOTICE`
