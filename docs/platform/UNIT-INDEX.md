@@ -16,8 +16,8 @@
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 4 | 1 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 13 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 41 | 21 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 24 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
-| `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 9 | 0 | `tests/platform/test_core_loader.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 27 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 10 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。 | 7 | 13 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 47 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 22 | 7 | — |
@@ -30,7 +30,7 @@
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 5 | 38 | — |
-| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 16 | 49 | — |
+| `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 16 | 48 | — |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 14 | 6 | — |
@@ -41,7 +41,7 @@
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 8 | 4 | — |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 2 | — |
 | `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 59 | 29 | — |
-| `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 12 | — |
+| `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 11 | — |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 13 | 3 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 8 | 2 | — |
 | `helper:geo` | L1 | 地理查詢：地址 → 座標（OSM／Nominatim），以及兩點間的直線距離。（無單位卡） | 67 | 3 | — |
