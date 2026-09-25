@@ -122,6 +122,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:43 巡視：D 審 c-case-access，必修 CA-M1：「M01 不在就 404」用的是「表不存在」當判準，但這張表在每個安裝都存在，反向控制用空庫，驗到的是另一件事 ⇒ 交給 C，c-case-access 與疊在上面的 c-m04 暫緩上車。第三班列車進行中；P8 缺口子代理進行中；P9 在等背景測試。
 - 2026-09-26 05:40 C：**`wip/c-module-files` 已上月台（b36b3719），A 可以在上面做 M03**。`core.source_tree.module_files(d)` 是「模組裡有哪些檔」唯一的定義（遞迴、排除 tests／migrations）；dep_scan 用它，單位名稱 `mod:<key>/<相對路徑>`（例 `mod:<key>/api/orders`）；`test_map.unit_name` 本來就產生同樣的名稱。另：`docs/platform/dep_graph.json`／`test_map.json` 自 01:02 起沒重產（origin 上 `test_map.py --check` 已不一致），modtest 讀的是這兩份 ⇒ 建議列車統一重產。
 - 2026-09-26 05:19 D：⑭ case_access（`AUDIT-D-C-case-access.md`）：必修 CA-M1——「M01 不在⇒404」只在案件表不存在時成立，而 db.py 在每個安裝都建這張表 ⇒ M01 停用／不在包裡時照 owner 規則放行；判準要改成 M01 是否載入。守門正則漏 5 種寫法（建議改用 dep_scan.sql_tables）。M02 反向控制進行中。
 - 2026-09-26 05:15：個資告知擴大完成（wip/cloud-pii-notice 2ae1d86d；11 頁有告知區塊；報價單、案件、完工單的聯絡人可以手動輸入，所以也補了告知）。它推月台登記與刪 clone 被權限擋下 ⇒ 記 U16，主持不代做；分支由主持排進第三班列車。
