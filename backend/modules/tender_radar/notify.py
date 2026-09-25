@@ -5,6 +5,19 @@ L1 寄信原語（收件人、版面、寄送）一律經 `_en.<name>` 取用：
 測試對 `helpers.email_notify` 的 patch 照樣生效；本檔不另寫一套寄信邏輯。
 """
 from helpers import email_notify as _en
+from helpers import mail_types as _mt
+
+# 信件類型（CORE-SPEC「信件與通知的收件人、用語」）：模組載入時登記；模組不在 ⇒ 類型不存在
+_mt.register("tender_found", "標案雷達新標案", "business", "admins", "",
+             "有符合關鍵字的新標案，截止日前未處理將錯過投標。",
+             "請登入系統，於標案雷達頁檢視標案內容並決定是否投標。", owner="tender_radar")
+_mt.register("tender_fetch_failed", "標案雷達無法連線來源網站", "system", "superadmins", "",
+             "本次排程沒有取得任何標案；連線恢復前，新標案不會通知。",
+             "系統會於下次排程自動重試。若連續多日沒有收到標案彙總信，請至標案雷達頁查看「雷達健康狀態」。",
+             owner="tender_radar")
+_mt.register("tender_source_changed", "標案雷達來源網站格式異動", "system", "superadmins", "",
+             "大部分資料無法解析；解析器調整之前，標案雷達每日結果為 0 筆，而頁面不會顯示錯誤。",
+             "請通知系統維護人員依來源網站的新格式調整解析器。", owner="tender_radar")
 
 
 # ── 標案雷達（2026-09-21，細線 6 第 5 步）────────────────────────────────────
@@ -90,10 +103,9 @@ def notify_tender_found(tenders: list, watch_names: list = None,
         # ⚠️ 講成「找到 N 筆符合條件」是**騙人的**——那是未經篩選的全部。
         intro = (
             f"<b>共 {len(tenders or [])} 筆</b>標案（<b>其中 {due_soon} 筆七日內截止</b>）。"
-            "標案雷達開始運作了。"
-            "<b>⚠️ 你還沒設定任何搜尋條件，所以這是未經篩選的清單。</b>"
-            "請到標案雷達頁面新增關鍵字與<b>排除詞</b>——"
-            "沒有排除詞的話，這個功能會在第三天就吵到被你關掉。"
+            "標案雷達已開始運作。"
+            "<b>目前尚未設定任何搜尋條件，以下為未經篩選的清單。</b>"
+            "請至標案雷達頁面新增關鍵字與<b>排除詞</b>；未設定排除詞時，每日彙總的筆數可能過多。"
         )
     else:
         # D11：開頭先給大綱，不是直接進清單。
@@ -111,17 +123,17 @@ def notify_tender_found(tenders: list, watch_names: list = None,
     note = _TENDER_SOURCE_NOTE
     if announce_quiet_period:
         note = (
-            "📌 這是標案雷達的第一封信。<b>接下來 7 天是純記錄模式，不會再寄信</b>——"
-            "系統照常每天抓取並記錄，只是不打擾你。"
-            "請在這段期間到畫面上確認關鍵字抓得準不準、需不需要加排除詞，"
-            "第 8 天起才會恢復每日彙總。<br>" + note
+            "本信為標案雷達的第一封通知。<b>接下來 7 天為純記錄模式，不再寄信</b>："
+            "系統照常每日抓取並記錄。"
+            "請於此期間至畫面確認關鍵字與排除詞的設定，"
+            "第 8 天起恢復每日彙總。<br>" + note
         )
     html = _en._build_html(
-        "標案雷達：新標案", f"{len(tenders or [])} 筆", "#1D4ED8",
+        "tender_found", "標案雷達：新標案", f"{len(tenders or [])} 筆", "#1D4ED8",
         rows, "", _en._base_url(), note=note, intro=intro,
         button_text="前往標案雷達",
     )
-    _en._send_raising(to, f"【MOTRIX】標案雷達：{len(tenders or [])} 筆新標案", html)
+    _en._send_raising(to, _mt.subject("tender_found", f"標案雷達新標案 {len(tenders or [])} 筆"), html)
 
 
 def notify_tender_fetch_failed(error: str, since: str = "") -> None:
@@ -141,18 +153,14 @@ def notify_tender_fetch_failed(error: str, since: str = "") -> None:
     if since:
         rows.append(("上次成功", since))
     intro = (
-        "標案雷達連不上政府電子採購網，今天沒有抓到任何標案。"
-        "<b>這通常不需要處理</b>——對方站台維護或網路暫時不通，下次排程會自動再試。"
-        "這封信只在「從正常變成異常」的那一次寄出，連續失敗不會每天寄。"
+        "標案雷達本次無法連線政府電子採購網，未取得任何標案。"
+        "可能原因為來源網站維護或網路中斷。本通知僅於狀態由正常轉為異常時發送一次，連續失敗不重複發送。"
     )
-    note = (
-        "如果連續多天都沒有收到標案彙總信，請到系統的標案雷達頁面看「雷達健康狀態」。"
-        + _TENDER_SOURCE_NOTE
-    )
-    html = _en._build_html("標案雷達：抓不到來源網站", "連線失敗", "#B91C1C",
+    note = _TENDER_SOURCE_NOTE
+    html = _en._build_html("tender_fetch_failed", "標案雷達：無法連線來源網站", "連線失敗", "#B91C1C",
                        rows, "", _en._base_url(), note=note, intro=intro,
                        button_text="前往標案雷達")
-    _en._send_raising(to, "【MOTRIX】⚠️ 標案雷達抓不到政府電子採購網", html)
+    _en._send_raising(to, _mt.subject("tender_fetch_failed", "標案雷達無法連線政府電子採購網"), html)
 
 
 def notify_tender_source_changed(parsed: int, dropped: int) -> None:
@@ -169,12 +177,10 @@ def notify_tender_source_changed(parsed: int, dropped: int) -> None:
     rows = [("成功解析", f"{parsed} 筆"), ("解析失敗", f"{dropped} 筆"),
             ("本次總筆數", f"{total} 筆")]
     intro = (
-        "標案雷達連得上政府電子採購網，但<b>大部分資料解析不出來</b>，"
-        "多半是對方改了頁面結構。"
-        "<b>這件事不會自己好</b>——在解析器跟著調整之前，雷達每天都會是 0 筆，"
-        "而畫面上看起來一切正常。"
+        "標案雷達可以連線政府電子採購網，但大部分資料無法解析，研判來源網站已變更頁面格式。"
+        "此狀況需要調整解析器，不會自行恢復。"
     )
-    html = _en._build_html("標案雷達：疑似對方改版", f"丟棄 {dropped} 筆", "#92400E",
+    html = _en._build_html("tender_source_changed", "標案雷達：來源網站格式異動", f"無法解析 {dropped} 筆", "#92400E",
                        rows, "", _en._base_url(), note=_TENDER_SOURCE_NOTE, intro=intro,
                        button_text="前往標案雷達")
-    _en._send_raising(to, "【MOTRIX】⚠️ 標案雷達疑似對方網站改版", html)
+    _en._send_raising(to, _mt.subject("tender_source_changed", "標案雷達來源網站格式異動"), html)

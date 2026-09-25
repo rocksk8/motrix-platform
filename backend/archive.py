@@ -537,28 +537,18 @@ def _send_backup_error_email(reason: str, ts: str):
     S-CN03：寄信在背景執行緒等結果；**寄成功才寫 `.emailed_<日期>`**（同原因當天不再寄），
     失敗或找不到收件人 ⇒ `_alert_email_failed()`。回傳那條等待執行緒（測試用 join）。
     """
-    from helpers.email_notify import _superadmin_emails, _async_send, SEND_SENT, SEND_SKIPPED
-    to = _superadmin_emails()
+    from helpers.email_notify import (_superadmin_emails, _async_send, _build_html, _base_url,
+                                      SEND_SENT, SEND_SKIPPED)
+    from helpers import mail_types as _mt
+    to = _superadmin_emails("backup_error")
     if not to:
-        _alert_email_failed(reason, "找不到收件人（沒有啟用中的最高管理者或管理員）")
+        _alert_email_failed(reason, "找不到收件人（沒有啟用中、設定了 email 的超級管理員）")
         return None
-    html = (
-        "<div style='font-family:Arial,sans-serif;padding:24px;max-width:600px'>"
-        "<h2 style='color:#DC2626'>⚠ MOTRIX ERP — 備份嚴重錯誤</h2>"
-        f"<p style='color:#374151'>發生時間：{ts}</p>"
-        "<div style='background:#FEE2E2;border:1px solid #FCA5A5;border-radius:6px;"
-        "padding:12px 16px;margin:12px 0'>"
-        f"<strong>錯誤原因：</strong><br>{reason}</div>"
-        "<p style='color:#374151'>請儘速確認：</p>"
-        "<ol style='color:#374151'>"
-        "<li>Google 雲端硬碟是否已掛載（任一代號皆可，可存取「我的雲端硬碟/系統存檔」）</li>"
-        "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
-        "<li>伺服器磁碟空間是否不足</li>"
-        "</ol>"
-        "<p style='color:#6B7280;font-size:12px'>此訊息每日每類錯誤最多寄送一次（寄成功才算）。</p>"
-        "</div>"
-    )
-    handle = _async_send(to, "[MOTRIX] ⚠ 備份嚴重錯誤警示", html)
+    html = _build_html("backup_error", "備份嚴重錯誤", "錯誤", "#DC2626",
+                       [("發生時間", ts), ("錯誤原因", reason)], "", _base_url(),
+                       intro="本次備份發生嚴重錯誤，未完成。",
+                       note="同一類錯誤每日最多發送一次（發送成功才計入）。")
+    handle = _async_send(to, _mt.subject("backup_error", "備份嚴重錯誤"), html)
     reason_key = reason[:80]
 
     def _await():

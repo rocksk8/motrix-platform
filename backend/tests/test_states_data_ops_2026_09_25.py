@@ -334,7 +334,7 @@ def alert_env(tmp_path, monkeypatch):
     monkeypatch.setattr(archive, "_ALERT_DIR", str(tmp_path / "backup_alerts"))
     audits, sent = [], []
     monkeypatch.setattr(archive, "_system_audit", lambda action, *a, **k: audits.append(action))
-    monkeypatch.setattr(en, "_superadmin_emails", lambda: ["boss@example.invalid"])
+    monkeypatch.setattr(en, "_superadmin_emails", lambda key=None: ["boss@example.invalid"])
     state = {"outcome": en.SEND_SENT}
     threads = []
     real_send = archive._send_backup_error_email
@@ -415,7 +415,7 @@ def test_state_cn03_unwritable_alert_dir_still_audits_and_emails(alert_env, monk
 def test_state_cn03_no_recipient_is_recorded(alert_env, monkeypatch):
     archive, audits, sent, state, join, _d = alert_env
     import helpers.email_notify as en
-    monkeypatch.setattr(en, "_superadmin_emails", lambda: [])
+    monkeypatch.setattr(en, "_superadmin_emails", lambda key=None: [])
     archive._write_backup_alert("雲端路徑不可用", level="ERROR")
     join()
     assert sent == [] and "backup.alert_email_failed" in audits

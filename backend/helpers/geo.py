@@ -753,15 +753,19 @@ def notify_quota_warning(used=None, quota=None) -> bool:
     if (_get_setting(QUOTA_WARNED_SETTING, "") or "") == period:
         return False
 
-    subject = "Google 地圖額度已達警戒線（週期 %s 起）" % period
-    body = (
-        "本週期（%s 起）Google 地理編碼已送出 %s 次請求，設定的免費額度 %s 次，"
-        "已達警戒線 %s%%。\n\n"
-        "達到硬上限之後，系統會自動退回免費的定位來源（精度較低），"
-        "功能不會關閉；下一個週期開始會自動恢復，不需要有人去按。"
-        % (period, used, quota, warn_pct))
+    from helpers import mail_types as _mt
+    to = email_notify._group_emails("geo_quota_warning")
+    if not to:
+        return False
+    body = email_notify._build_html(
+        "geo_quota_warning", "地圖定位額度達警戒線", "%s%%" % warn_pct, "#D97706",
+        [("計費週期", "%s 起" % period), ("已送出請求", "%s 次" % used), ("免費額度", "%s 次" % quota),
+         ("警戒線", "%s%%" % warn_pct)], "", email_notify._base_url(),
+        intro="本週期 Google 地理編碼的請求次數已達設定的警戒線。")
     # 先寄再記：先記的話寄失敗就永遠不會再寄。
-    result = email_notify._send_raising(subject, body)
+    # 2026-09-26：原本呼叫 `_send_raising(subject, body)` 少了收件人參數，執行即 TypeError（信從未寄出）。
+    result = email_notify._send_raising(
+        to, _mt.subject("geo_quota_warning", "Google 地圖定位額度已達警戒線（週期 %s 起）" % period), body)
     if result == email_notify.SEND_SENT:
         _set_setting(QUOTA_WARNED_SETTING, period)
         return True

@@ -1513,6 +1513,11 @@ def create_user(body: UserIn, authorization: str = Header(None)):
         raise HTTPException(400, "密碼過於簡單或為已知弱密碼，請改用更強的密碼")
     now = datetime.now().isoformat()
     refuse_unknown_new_keys(body.modules)
+    from helpers import mail_types as _mt
+    from helpers.notification_prefs import EVENT_KEYS as _EVENT_KEYS
+    unknown = [k for k in (body.notification_muted or []) if _mt.get(k) is None and k not in _EVENT_KEYS]
+    if unknown:
+        raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
     conn = get_db()
     try:
         conn.execute("""
@@ -1564,6 +1569,14 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     if body.phone        is not None: sets.append("phone=?");        params.append(body.phone)
     if body.modules      is not None: sets.append("modules=?");      params.append(json.dumps(body.modules, ensure_ascii=False))
     if body.notification_muted is not None:
+        # 個人退訂只接受登記過的信件類型（CORE-SPEC 信件收件人④）：打錯字或不存在的 key 存進去不會有任何效果，
+        # 而畫面會以為已退訂。
+        from helpers import mail_types as _mt
+        from helpers.notification_prefs import EVENT_KEYS as _EVENT_KEYS   # 模組未載入時它的類型仍可保留在退訂清單
+        unknown = [k for k in body.notification_muted if _mt.get(k) is None and k not in _EVENT_KEYS]
+        if unknown:
+            conn.close()
+            raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
         sets.append("notification_muted=?")
         params.append(json.dumps(body.notification_muted, ensure_ascii=False))
     if body.department_id is not None:

@@ -130,9 +130,12 @@ def test_notification_events_are_individually_mutable():
     import pathlib
     from helpers.notification_prefs import EVENT_KEYS
     assert {"bonus_submitted", "bonus_payout_ready"} <= set(EVENT_KEYS)
-    users = (pathlib.Path(__file__).resolve().parents[3] / "frontend" / "pages" / "users.html").read_text(encoding="utf-8")
+    # 2026-09-26：使用者頁的退訂清單改由信件類型登記表 API 產生（不再寫死副本）
+    from helpers import mail_types
     for k in ("bonus_submitted", "bonus_payout_ready"):
-        assert "{key:'%s'," % k in users, k
+        assert mail_types.get(k) is not None, k
+    users = (pathlib.Path(__file__).resolve().parents[3] / "frontend" / "pages" / "users.html").read_text(encoding="utf-8")
+    assert "/api/mail-types/receivable?user_id=" in users
 
 
 def test_mail_body_has_no_amount(monkeypatch):

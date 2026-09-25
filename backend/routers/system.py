@@ -1980,7 +1980,7 @@ def get_email_notify(authorization: str = Header(None)):
     safe["smtp_password"] = _MASKED if cfg.get("smtp_password") else ""
     # Show which admin/superadmin users will receive admin notifications
     from helpers.email_notify import _admin_emails
-    safe["admin_email_preview"] = _admin_emails()
+    safe["admin_email_preview"] = _admin_emails("system_test_mail")
     return safe
 
 
@@ -2058,19 +2058,16 @@ def test_google_calendar(authorization: str = Header(None)):
 @router.post("/api/settings/email-notify/test")
 def test_email_notify(authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True)
-    from helpers.email_notify import _send_raising, _admin_emails
-    to = _admin_emails()
+    from helpers.email_notify import _send_raising, _admin_emails, _build_html, _base_url
+    from helpers import mail_types as _mt
+    to = _admin_emails("system_test_mail")
     if not to:
-        raise HTTPException(400, "找不到可發送對象：請至「使用者管理」為 admin 或 superadmin 帳號填寫 Email")
-    html = (
-        "<div style='font-family:Arial,sans-serif;padding:24px'>"
-        "<h2 style='color:#1a1a1a'>MOTRIX專案管理系統 — Email 通知測試</h2>"
-        "<p>此為測試郵件，SMTP 設定正常。</p>"
-        f"<p style='color:#888;font-size:12px'>由 {user.get('display_name') or user['username']} 觸發</p>"
-        "</div>"
-    )
+        raise HTTPException(400, "找不到可發送對象：請確認「信件與通知收件設定」的測試信收件人，並為其帳號填寫 Email")
+    html = _build_html("system_test_mail", "測試信", "測試", "#2563EB",
+                       [("觸發者", user.get('display_name') or user['username'])], "", _base_url(),
+                       intro="本信為寄信設定測試。")
     try:
-        _send_raising(to, "[MOTRIX] 測試通知", html)
+        _send_raising(to, _mt.subject("system_test_mail", "寄信設定測試"), html)
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     except Exception as e:
