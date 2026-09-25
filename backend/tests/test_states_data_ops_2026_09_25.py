@@ -171,6 +171,42 @@ def test_state_cc07_short_gap_prunes_normally_without_alert(tmp_path, monkeypatc
     assert alerts == [] and not (tmp_path / archive._PRUNE_HOLD_NAME).exists()
 
 
+@pytest.mark.parametrize("jump", [3, 10, 29])
+def test_state_cc07_small_clock_jump_holds_pruning_every_day(tmp_path, monkeypatch, jump):
+    """N-1（稽核確認）：往前跳、但**小於**保留天數。原本「今天以外全部過期」不成立 ⇒ 真實快照照刪、沒有告警
+    （稽核實測 30 份：跳 3／10／29 天 ⇒ 刪 2／9／23 份）。應有：最新一份距今天超過 2 天 ⇒ 暫停、寫標記、每天告警，連跑 10 天。"""
+    import archive
+    real = date.today()
+    _days(tmp_path, real, 30)
+    monkeypatch.setattr(archive, "_LOCAL_DB_BACKUP", str(tmp_path))
+    real_names = {p.name for p in tmp_path.iterdir()}
+    for day in range(10):
+        alerts = []
+        monkeypatch.setattr(archive, "_write_backup_alert", lambda r, level="WARN": alerts.append((level, r)))
+        today = real + timedelta(days=jump + day)
+        _fake_today(monkeypatch, archive, today)
+        (tmp_path / today.isoformat()).mkdir()                 # 照常每天快照後清理
+        archive._prune_local_db_backups(keep_days=30)
+        left = {p.name for p in tmp_path.iterdir()}
+        assert real_names <= left, "跳 %d 天、第 %d 天刪了真實快照" % (jump, day + 1)
+        assert alerts and alerts[0][0] == "ERROR" and "暫停清理" in alerts[0][1], "跳 %d 天、第 %d 天沒有告警" % (jump, day + 1)
+    assert (tmp_path / archive._PRUNE_HOLD_NAME).is_file()
+
+
+def test_state_cc07_two_day_gap_is_still_normal(tmp_path, monkeypatch):
+    """邊界：最新一份是前天（差 2 天）⇒ 還算正常（規則是「超過 2 天」），照日期清理、不告警。"""
+    import archive
+    real = date.today()
+    for i in range(2, 40):
+        (tmp_path / (real - timedelta(days=i)).isoformat()).mkdir()
+    monkeypatch.setattr(archive, "_LOCAL_DB_BACKUP", str(tmp_path))
+    alerts = []
+    monkeypatch.setattr(archive, "_write_backup_alert", lambda r, level="WARN": alerts.append(r))
+    archive._prune_local_db_backups(keep_days=30)
+    assert alerts == [] and not (tmp_path / archive._PRUNE_HOLD_NAME).exists()
+    assert min(p.name for p in tmp_path.iterdir()) == (real - timedelta(days=30)).isoformat()
+
+
 def test_state_cc07_future_dated_snapshot_holds_pruning(tmp_path, monkeypatch):
     """時鐘往回撥：有份數的日期晚於今天 ⇒ 暫停清理並寫標記。"""
     import archive

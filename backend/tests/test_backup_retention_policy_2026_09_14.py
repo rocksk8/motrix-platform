@@ -57,6 +57,10 @@ def test_daily_pruned_at_60_days_weekly_at_90(arch):
     drop_weekly = (today - timedelta(days=200)).strftime("%Y-W%W")
     _mkdir_with_file(base, "週備份", keep_weekly)
     _mkdir_with_file(base, "週備份", drop_weekly)
+    # 2026-09-26 S-CC07 N-1：最新一份距今天超過 2 天（週層 14 天）會被判成時鐘異常而暫停清理；
+    # 本題守日期規則 ⇒ 補「昨天」與「本週」各一份，代表平常的連續狀態（異常那一側見 test_states_data_ops_2026_09_25）。
+    _mkdir_with_file(base, "每日備份", (today - timedelta(days=1)).isoformat())
+    _mkdir_with_file(base, "週備份", today.strftime("%Y-W%W"))
 
     ret = arch._backup_retention()
     arch._prune_cloud_backups(daily_keep_days=ret["cloud_daily_keep_days"],

@@ -1500,8 +1500,15 @@ def _parse_week(name: str):
     return datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
 
 
+#: N-1（稽核確認，主持 2026-09-26 裁示）：最新一份（今天以外）距今天超過這麼多天 ⇒ 視為時鐘往前跳或停機過，當輪不清理。
+#: 每日層＝2 天（STATES S-CC07 原文「晚 >2 天而中間沒有快照」）；週／月層的正常間隔本來就超過 2 天，用 2 個週期。
+_PRUNE_GAP_DAYS_DAILY = 2
+_PRUNE_GAP_DAYS_WEEKLY = 14
+_PRUNE_GAP_DAYS_MONTHLY = 62
+
+
 def _prune_select(names, parse, cutoff_ord: int, label: str, hold_local: str, hold_s3,
-                  keep_newest: int = None) -> list:
+                  keep_newest: int = None, gap_days: int = None) -> list:
     """回這一輪要刪的名字：日期早於 cutoff、而且不在最新 keep_newest 份內。名字解析不了的一律不動。
 
     時鐘異常或該層已有 `.prune_hold` 標記 ⇒ 回空清單並 ERROR 告警（每一輪都告警）。
@@ -1524,6 +1531,10 @@ def _prune_select(names, parse, cutoff_ord: int, label: str, hold_local: str, ho
     if future:
         reason = ("有 %d 份的日期晚於今天（最晚 %s，今天 %s）—— 系統時鐘可能往回撥了"
                   % (len(future), max(future).isoformat(), today.isoformat()))
+    elif gap_days is not None and others and today.toordinal() - max(others).toordinal() > gap_days:
+        # N-1：往前跳、但小於保留天數時，上一條不會成立，真實快照會被靜默刪掉（稽核實測跳 29 天 ⇒ 30 份剩 7 份）
+        reason = ("最新一份（%s）距今天 %s 已經 %d 天，中間沒有快照（超過 %d 天）—— 系統時鐘可能往前跳了，或機器停機過"
+                  % (max(others).isoformat(), today.isoformat(), today.toordinal() - max(others).toordinal(), gap_days))
     elif expired and max(others).toordinal() < cutoff_ord:
         reason = ("除了今天以外，所有份數都超過保留天數（最新一份是 %s，今天 %s）—— "
                   "系統時鐘可能往前跳了，或機器停機很久" % (max(others).isoformat(), today.isoformat()))
@@ -1575,7 +1586,8 @@ def _prune_local_db_backups(keep_days: int = 30, pre_update_keep: int = 5) -> No
         cutoff = date.today().toordinal() - keep_days
         _names = [n for n in os.listdir(_LOCAL_DB_BACKUP) if os.path.isdir(os.path.join(_LOCAL_DB_BACKUP, n))]
         for name in _prune_select(_names, _parse_day, cutoff, "本機 SQLite 快照",
-                                  os.path.join(_LOCAL_DB_BACKUP, _PRUNE_HOLD_NAME), None):
+                                  os.path.join(_LOCAL_DB_BACKUP, _PRUNE_HOLD_NAME), None,
+                                  gap_days=_PRUNE_GAP_DAYS_DAILY):
             path = os.path.join(_LOCAL_DB_BACKUP, name)
             if not os.path.isdir(path):
                 continue
@@ -1648,7 +1660,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     try:
         for name in _prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
                                   _parse_day, cutoff_daily, "雲端每日備份",
-                                  os.path.join(_daily_dir(), _PRUNE_HOLD_NAME), f"每日備份/{_PRUNE_HOLD_NAME}"):
+                                  os.path.join(_daily_dir(), _PRUNE_HOLD_NAME), f"每日備份/{_PRUNE_HOLD_NAME}",
+                                  gap_days=_PRUNE_GAP_DAYS_DAILY):
             try:
                 d = date.fromisoformat(name)
             except ValueError:
@@ -1668,7 +1681,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
             for name in _prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
                                       _parse_day, cutoff_daily, "個資每日備份",
                                       os.path.join(_pii_daily, _PRUNE_HOLD_NAME),
-                                      f"{_PII_ARCHIVE_DIRNAME}/每日備份/{_PRUNE_HOLD_NAME}"):
+                                      f"{_PII_ARCHIVE_DIRNAME}/每日備份/{_PRUNE_HOLD_NAME}",
+                                      gap_days=_PRUNE_GAP_DAYS_DAILY):
                 try:
                     d = date.fromisoformat(name)
                 except ValueError:
@@ -1683,7 +1697,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     try:
         for name in _prune_select(_cloud_list_top_level(_weekly_dir(), "週備份"),
                                   _parse_week, cutoff_weekly, "雲端週備份",
-                                  os.path.join(_weekly_dir(), _PRUNE_HOLD_NAME), f"週備份/{_PRUNE_HOLD_NAME}"):
+                                  os.path.join(_weekly_dir(), _PRUNE_HOLD_NAME), f"週備份/{_PRUNE_HOLD_NAME}",
+                                  gap_days=_PRUNE_GAP_DAYS_WEEKLY):
             try:
                 year_str, week_str = name.split('-W')
                 d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
@@ -1701,7 +1716,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     try:
         for name in _prune_select(_cloud_list_top_level(_monthly_dir(), "月備份"),
                                   _parse_month, cutoff_monthly, "雲端月備份",
-                                  os.path.join(_monthly_dir(), _PRUNE_HOLD_NAME), f"月備份/{_PRUNE_HOLD_NAME}"):
+                                  os.path.join(_monthly_dir(), _PRUNE_HOLD_NAME), f"月備份/{_PRUNE_HOLD_NAME}",
+                                  gap_days=_PRUNE_GAP_DAYS_MONTHLY):
             try:
                 d = date.fromisoformat(f"{name}-01")     # YYYY-MM → 當月 1 號
             except ValueError:
@@ -1718,7 +1734,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
             for name in _prune_select(_cloud_list_top_level(_pii_monthly, f"{_PII_ARCHIVE_DIRNAME}/月備份"),
                                       _parse_month, cutoff_monthly, "個資月備份",
                                       os.path.join(_pii_monthly, _PRUNE_HOLD_NAME),
-                                      f"{_PII_ARCHIVE_DIRNAME}/月備份/{_PRUNE_HOLD_NAME}"):
+                                      f"{_PII_ARCHIVE_DIRNAME}/月備份/{_PRUNE_HOLD_NAME}",
+                                      gap_days=_PRUNE_GAP_DAYS_MONTHLY):
                 try:
                     d = date.fromisoformat(f"{name}-01")
                 except ValueError:
