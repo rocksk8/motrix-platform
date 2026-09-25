@@ -188,3 +188,25 @@ def test_rc_cross_boundary_private_signature_change_is_an_interface_change(monke
     assert MT.interface_changed("backend/helpers/auth.py", "OLD", "NEW") is True
     monkeypatch.setattr(MT, "_cross_boundary", lambda: {})
     assert MT.interface_changed("backend/helpers/auth.py", "OLD", "NEW") is False, "反向控制：不帶 extra 就看不到"
+
+
+# ── 稽核 D S-S1：tools/platform/scope_rc.py（真突變反向控制，發版前／每批合回後跑）────────────
+
+def _rc():
+    import importlib.util as ilu
+    spec = ilu.spec_from_file_location("_scope_rc", REPO / "tools" / "platform" / "scope_rc.py")
+    mod = ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_every_reverse_control_anchor_is_current():
+    """清單裡每個突變的原句在目前的程式碼恰好出現一次（有人改了那段就提醒更新清單，不讓檢查安靜地失效）。"""
+    for name, rel, old, new, expect, why in _rc().MUTATIONS:
+        assert (REPO / rel).read_text(encoding="utf-8").count(old) == 1, name
+        assert (REPO / expect).is_file(), name
+
+
+def test_rc_stale_anchor_is_a_failure_not_a_skip():
+    r = _rc().run_one("x", "backend/helpers/legal_params.py", "THIS LINE DOES NOT EXIST", "", "backend/tests/x.py", "")
+    assert r["ok"] is False and "清單過期" in r["why"]
