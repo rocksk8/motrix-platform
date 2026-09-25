@@ -1,7 +1,7 @@
 {
   "key": "crm",
   "name": "業務開發",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": ">=1.0,<2.0",
   "license_key": "crm",
   "permissions": ["dev_crm"],
@@ -14,6 +14,8 @@
     ],
     "files": []
   },
+  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
   "provides": {"api_prefixes": ["/api/dev-cases", "/api/dev-crm", "/api/dev-logs"]},
   "pages": [{"path": "dev-crm.html"}]
 }

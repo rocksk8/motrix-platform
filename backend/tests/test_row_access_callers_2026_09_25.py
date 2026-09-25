@@ -7,18 +7,17 @@
 import dataclasses
 import json
 
-from tests.test_row_access_2026_09_25 import CASE, DEV
+from tests.test_row_access_2026_09_25 import CASE
 
 QNO = "MQ-RA-0925"
 
 
 def test_registered_rules_are_the_verified_ones():
+    """案件那一份（業務開發那一份在 modules/crm/tests/test_crm_row_access_rule.py，隨模組搬走）。"""
     from helpers.quotations import CASE_ACCESS
-    from modules.crm.api import DEV_CASE_ACCESS
     from helpers import row_access as ra
     assert dataclasses.replace(CASE_ACCESS, deny_message="") == dataclasses.replace(CASE, deny_message="")
-    assert dataclasses.replace(DEV_CASE_ACCESS, deny_message="") == dataclasses.replace(DEV, deny_message="")
-    assert ra._REGISTRY["case"] is CASE_ACCESS and ra._REGISTRY["dev_case"] is DEV_CASE_ACCESS
+    assert ra._REGISTRY["case"] is CASE_ACCESS
 
 
 def _uid(username):

@@ -1,4 +1,7 @@
-"""瀏覽器層級：深色模式下頁面外框（頂欄＋主導覽列）「畫出來」真的是深色。
+"""瀏覽器端對端：業務開發列表在深色模式下的面板配色。
+
+（2026-09-26 自 tests/test_e2e_dark_mode_sidebar_2026_09_13.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
+瀏覽器層級：深色模式下頁面外框（頂欄＋主導覽列）「畫出來」真的是深色。
 
 **起因（2026-09-13）**：使用者回報「部分頁面在黑暗模式下，左側的選單列表是白背景」。
 根因是 15 頁把 `<aside class="sidebar">` 包進 `<div class="app-shell">`，而深色模式的
@@ -97,81 +100,27 @@ def _open_dark(page, base_url, page_name):
 
 
 @pytest.mark.e2e
-def test_sidebar_paints_dark_in_dark_mode(live_server, make_user, e2e_browser):
-    """深色模式下，各頁的頂欄與主導覽列背景實際畫出來都必須是深色。
+def test_dev_crm_list_panel_paints_dark(live_server, make_user, e2e_browser):
+    """業務開發的左側案件列表在深色模式下要是深的（2026-09-14 使用者回報）。
 
-    兩個元素走的是相反的路徑，所以要一起量才有意義：
-      .topbar 在排除清單裡（不被反轉），靠自己本來就是深色；
-      .mnav   不在清單裡（會被反轉），靠 #fff 被翻成深色。
-    任一條路徑壞掉，使用者看到的都是「上面那條是白的」。
+    這頁原本自己寫了 11 條 `:root[data-theme="dark"]` 手寫深色覆寫，被全站的反轉
+    濾鏡再翻一次 → 整片變白。**這種錯誤只有量像素看得到**：computed style 讀到的
+    是作者寫的 `#1A1A1A`（看起來完全正確），畫出來卻是 `#E5E5E5`。
+
+    結構面的守門在 `test_dark_mode_chrome_structure_2026_09_13.py`
+    （掃頁面有沒有自己的深色色票），這裡是最終畫面的驗收。
     """
-    username, password = make_user(username="e2e_dark", role="superadmin")
-
-    browser = e2e_browser
-    context = browser.new_context(viewport={"width": 1440, "height": 900})
-    # 深色模式存在 localStorage，各頁 <head> 的同步腳本會在頁面腳本之前讀它
-    context.add_init_script(
-        "try { localStorage.setItem('motrix_theme', 'dark') } catch (e) {}")
-    page = context.new_page()
-    _login(page, live_server, username, password)
-
-    offenders = []
-    for name in SAMPLE_PAGES:
-        _open_dark(page, live_server, name)
-        assert page.evaluate(
-            "document.documentElement.getAttribute('data-theme')") == "dark", (
-            f"{name}：深色模式沒有生效，這次量到的顏色不能代表任何事")
-        for selector, label in ((".topbar", "頂欄"), (".mnav", "主導覽列")):
-            lum = _median_luminance(page, selector)
-            if lum > DARK_MAX:
-                offenders.append(
-                    f"{name}: {label}（{selector}）背景亮度 {lum}（深色應 ≤ {DARK_MAX}）")
-
-    assert not offenders, (
-        "深色模式下這些頁面的外框被畫成亮底：\n  " + "\n  ".join(offenders)
-        + "\n.topbar 亮掉通常是它又被包進某個容器，導致 style.css 的反轉排除清單"
-          "（body > *:not(.topbar)）對不上；.mnav 亮掉通常是有人把它加進排除清單，"
-          "或頁面自己寫了 :root[data-theme=\"dark\"] 覆寫而被反轉兩次。")
-
-
-@pytest.mark.e2e
-def test_probe_catches_the_original_regression(live_server, make_user, e2e_browser):
-    """負向控制：讓主導覽列退出反轉範圍，上面那支測試的探針必須翻成亮色。
-
-    這證明兩件事——探針量得到差異（不是永遠回深色的假綠燈），以及「元素沒被
-    反轉到」確實就是使用者會看到白色導覽的原因。
-
-    2026-09-14 側欄退役後改用 `.mnav`。**做法刻意是注入一條 `filter: none`，
-    不是把元素包進容器**：`.topbar` 試過包 `.app-shell`，結果是 `position:fixed`
-    的容器塊變成那個 shell（高度 0、y=104），頂欄整條被移到 104px 並且掉出
-    `.mnav` 的堆疊層被內容蓋住——量到的是蓋在上面的深色內容而不是頂欄本身，
-    等於測了個假的。`.mnav` 這條規則不會動到位置與堆疊，只改「有沒有被反轉」
-    這一個變因，而且對應的正是真實的回歸路徑（有人把它加進排除清單，或頁面
-    自己寫 :root[data-theme="dark"] 覆寫導致反轉兩次）。
-    """
-    username, password = make_user(username="e2e_dark_ctl", role="superadmin")
-
+    username, password = make_user(username="e2e_dark_dc", role="superadmin")
     browser = e2e_browser
     context = browser.new_context(viewport={"width": 1440, "height": 900})
     context.add_init_script(
         "try { localStorage.setItem('motrix_theme', 'dark') } catch (e) {}")
     page = context.new_page()
     _login(page, live_server, username, password)
-    _open_dark(page, live_server, "reports.html")
-
-    before = _median_luminance(page, ".mnav")
-    assert before <= DARK_MAX, f"修好的狀態就該是深色，卻量到 {before}"
-
-    page.evaluate("""() => {
-        const st = document.createElement('style')
-        st.textContent =
-          ':root[data-theme="dark"] body > .mnav { filter: none !important; }'
-        document.head.appendChild(st)
-    }""")
-    page.wait_for_timeout(150)
-
-    after = _median_luminance(page, ".mnav")
-    assert after >= BRIGHT_MIN, (
-        f"主導覽列退出反轉範圍後應該留在白底（≥ {BRIGHT_MIN}），"
-        f"實際量到 {after}——表示這支探針或那條 CSS 規則跟預期不一樣，"
-        f"上面那支『量到是深色』的測試也就不能當成證據。")
+    page.goto(f"{live_server}/pages/dev-crm.html")
+    page.wait_for_selector(".dc-list", timeout=10000)
+    page.wait_for_timeout(200)
+    median = _median_luminance(page, ".dc-list")
+    assert median <= DARK_MAX, (
+        f"業務開發的案件列表在深色模式下亮度 {median}（深色應 ≤ {DARK_MAX}）"
+        f"——通常是頁面自己寫了 :root[data-theme=\"dark\"] 的深色覆寫，被反轉成淺色")
