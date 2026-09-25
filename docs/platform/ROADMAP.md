@@ -66,7 +66,7 @@
 2. M12 每日任務 — 需要 A11（case_stage_tasks）與 §4 的 system_settings、user_request_log
    - **搬遷前必修**（稽核 X-C-batch1 B-1）：IP-5 的 `notice` 要在前端顯示（取消勾選時要明說「沒有收回」、不留舊任務與 id）；未修不准搬。
 3. M10 網路規劃 — 依賴 M01 的路由前綴，需要 A10
-4. M02 業務開發 — 需要 A3、§4 的 dev_cases
+4. M02 業務開發 — ✅ 後端完成（C，2026-09-26，`modules/crm`）：IP-11 `crm.quote_deleted` 取代 M01 直寫 `dev_cases`；反向控制（刪掉模組資料夾）：啟動 ping 200、三個前綴 404、報價單照刪並回 notice。剩：他模組直接讀 `dev_cases`／`dev_logs`（讀取連接器另開題）、停滯檢查直寫 `audit_log`、SPEC.md、頁面（階段 C）
 5. M04 外包工班 — 需要 A6
 6. M05 應收應付 — 需要 A6、A8
 7. M06 會計 — 需要 A7、A8
