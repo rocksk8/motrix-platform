@@ -132,6 +132,8 @@ modules/<key>/
 | 案件可見範圍 | 全站搜尋、儀表板動態牆**對齊報價列表**（被指派者、cashier 可見）；規則集中於 L1 `helpers/row_access.py`，各模組登錄；未登錄的 kind 一律 fail closed |
 | 測試範圍期望 | 改 L2 模組 ⇒ 只跑該模組＋契約；改 L1（main／system／db／共用 helper）⇒ 接近全量是結構性的（寫的是幾乎每支 router 都讀的表），接受全量 |
 | 勞報單存檔上雲 | **進雲端，但放獨立、權限更窄的資料夾**（與一般單據 PDF 鏡像分開；含個資）。DATA-COMPAT §7b |
+| 每日備份的個資 | 新版：含個資的表（contractors 影像三欄、payslips 的身分證字號／地址／電話／Email）**排除於一般每日 JSON**，完整份另存「系統存檔_個資\每日備份」（人建資料夾、程式不自動建）；還原時合回 |
+| V9 個資外洩（K2） | **V9 不修，等換版**；雲端既有的歷史每日備份**保留不動**（2026-09-25 使用者裁示） |
 
 §6 更正：原文「V9 既有 `db.py` 的 v1~v84」→ 實際基準為 **v116**（`db.py:133`，DATA-COMPAT §3）。
 
@@ -140,3 +142,4 @@ modules/<key>/
 | # | 項目 | 現象 | 位置 | 狀態 |
 |---|---|---|---|---|
 | K1 | 舊資料以顯示名稱比對擁有者 | `quotations.sales_person_id` 為 NULL 的舊資料改比 `sales_person`＝使用者 `display_name`。`display_name` 是 NOT NULL 但可為空字串 ⇒ **顯示名稱為空的帳號看得到所有「業務欄也為空」的舊案件**（清單與單筆一致，不是兩份實作的差異） | L1 `helpers/row_access.py`（`legacy_name_col`）；規則宣告 `helpers/quotations.py::CASE_ACCESS` | 2026-09-25 裁示：這次不動，另開題（回填 `sales_person_id` 或禁止空顯示名稱） |
+| K2 | V9 正式機每日備份含個資 | 承攬人員身分證正反面與存摺影像（base64）、勞報單的身分證字號／地址／電話，每天寫進一般權限的雲端「每日備份」 | V9 `archive.py:1603`（contractors `SELECT *`）、`:1617`（payslips）；影像來源 `routers/contractors.py:75,108,423` | **使用者接受的風險**（2026-09-25）：V9 不修、等換版；雲端歷史備份保留不動。新版依 MODULE-GUIDE §3.2 修正（C） |
