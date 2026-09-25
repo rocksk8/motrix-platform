@@ -2,10 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（C，案件存取守門下沉）
+## 1.21 — 2026-09-26（C，案件存取守門下沉）〔core_bump：暫用 1.99 → 1.21〕
 > 主持裁示：案件存取守門自 M01 下沉 L1，M01／M03／M05／M10 與 M04 搬遷都依賴它。只有新增。
 - L1（新增）：`helpers.case_access`——`CASE_ACCESS`（row_access `case` 規則，登錄照舊）、`is_document_approver`、`case_access_allowed`、`guard_case_access`；`helpers.quotations` 與 `helpers` 保留同名匯入（同一個物件）
-- L1（行為）：案件表不存在（M01 不在）⇒ `guard_case_access` 回 404，不放行
+- L1（新增）：`helpers.case_access.CASE_PRESENT`／`case_module_present()`——M01 在不在看它登記的 `case.present`（IP-15），不看表（稽核 D CA-M1）
+- L1（行為）：M01 不在 ⇒ `guard_case_access` 404、`case_access_allowed` False（表與資料在也一樣）；只有 `no such table` 當查無此案，其他資料庫錯誤照樣丟出（CA-S2）
+- M01（新增）：`routers/quotations.py` 登記 `case.present`
 - 已知例外：L1 讀 M01 `quotations` 只准經本檔（DEPENDENCY-MAP §3.2，守門 `test_case_access_l1`）
 
 ## 1.20 — 2026-09-26（P1／P3，wip/cloud-p1p3＋稽核修正 wip/x-p1p3-fix；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.8 → 1.15〕〔core_bump：暫用 1.15 → 1.20〕
