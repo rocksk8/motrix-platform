@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.16 — 2026-09-26（B）〔core_bump：暫用 1.11 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕
+> 階段 C／C3：選單由登錄表產生。只有新增。
+- L1（新增）：`core.menu`——`load_l1`／`module_items`／`validate`／`visible`／`build`／`denied`／`MENU_L1`／`ITEM_KEYS`；資料 `core/menu_l1.json`（群組固定鍵＋L1 選單項）；模組以 module.json `pages[].menu` 宣告自己的選單項
+- L1（新增）：端點 `GET /api/platform/menu`（`routers/platform_menu.py`）——目前使用者看得到的選單；C3 期間與 sidebar.js 舊選單並行，對等守門 `tests/platform/test_menu_parity.py`
+- L1（新增）：`core.pages.L1_PAGES_FILE`／`load_l1_pages()`、資料 `core/l1_pages.json`；`collect(…, l1_pages=None)`（相容擴充）——模組宣告 L1 頁面一律算衝突（稽核 D P-M1）
+
 ## 1.15 — 2026-09-26（X-R）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.15〕
 > 稽核 AUDIT-D-R1-R3-legal 的修正（D-1、D-2、S-1～S-6、O-3、O-4）。暫用 1.10：合回時依 origin 取下一號。只有新增；行為修正列在下面。
 - L1（新增）：`helpers.legal_params.round_half_up(amount, rate=1)`（四捨五入到元，補充保費）、`floor_amount(amount, rate=1)`（元以下捨去，扣繳）——法規金額捨入的唯一來源（IP-7 契約 1.2）；前端 `static/legal-round.js`（`MotrixLegalRound.halfUp／floor／taipeiToday`）

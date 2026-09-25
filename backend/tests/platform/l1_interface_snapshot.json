@@ -1,5 +1,5 @@
 {
- "core_version": "1.15",
+ "core_version": "1.16",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -673,6 +673,16 @@
    "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…, disabled_reason=…)",
    "mount_modules": "def(app)",
    "start_schedulers": "def()"
+  },
+  "plat:menu": {
+   "ITEM_KEYS": "const",
+   "MENU_L1": "const",
+   "build": "def(l1, mod_items, modules, superadmin)",
+   "denied": "def(l1, mod_items, modules, superadmin)",
+   "load_l1": "def(path=…)",
+   "module_items": "def(manifests)",
+   "validate": "def(l1, mod_items=…)",
+   "visible": "def(perm, modules, superadmin)"
   },
   "plat:migrations": {
    "current_version": "def(conn, module)",
