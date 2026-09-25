@@ -21,6 +21,8 @@
   - 這個能力大家都要 ⇒ 下沉到 L1；
   - 只有少數模組要 ⇒ 對方用 `core.registry` 的 provider 或事件公開，**對方不在時，呼叫方只能少一項功能，不可以壞掉**。
 - 每一個串接點都要登記在 `docs/platform/INTEGRATION-POINTS.md`，寫明六件事：形式／語法／回傳／對方不在時／契約版本／守門。
+  - 登記表與程式碼一致：程式碼 `provide()`／`ModuleSpec(providers=…)` 的 capability ＝登記表中「形式＝provider」各節標題的 capability；`single_provider()`／`providers()` 取用的都必須已登記。守門：`backend/tests/platform/test_integration_points_registered.py`（CORE-SPEC §5；稽核 X-2）。
+  - 對方不在時要**明說**（回應帶 `notice` 或 `unavailable`，頁面顯示），不可以跟「0 筆」「沒有」長得一樣。守門：各串接點的反向控制題。
 - 守門：`backend/tests/platform/test_module_boundaries.py`（L2 之間的 import 只准減少）。
 
 ## 2. 底層穩定契約（「底層不會變動」的具體意思）
