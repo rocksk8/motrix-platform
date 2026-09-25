@@ -206,15 +206,15 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | X 確認 |
 |---|---|---|---|
-| M-1 | | | |
-| M-2 | | | |
-| M-3 | | | |
-| M-4 | | | |
-| S-1 | | | |
-| S-2 | | | |
-| S-3 | | | |
-| S-4 | | | |
-| S-5 | | | |
-| S-6 | | | |
-| S-7 | | | |
-| O-1～O-9 | | | |
+| M-1 | 修正。新增 `U.settings_changes()`，`verify_conversion` 與 `T.verify` 的啟動後比對共用同一支（補空值不算改寫）。補題：`test_m1_full_verify_accepts_the_company_fill`（跑完整 `T.verify`）；反向控制 `test_m1_rewrite_during_startup_is_still_caught`（啟動時改寫 `pdf_base_path` ⇒ 紅）。演練夾具改成「本公司、欄位不齊」（S-6）。修正前實跑（b2469f61 程式＋新夾具）：演練 verify＝`["新版啟動後改寫了既有設定：['company_profile']"]`。突變（改回逐鍵相等）⇒ 紅 | 54a5ffba | |
+| M-2 | 修正。新增 `U.data_changes()`：回滾只核對備份時就在的檔（不見或被改＝problem，訊息列出路徑）；新增的檔列進 `info.data_added`；本機每日快照 `db_backups/` 缺少或改變列進 `info.data_rotated`（保留期限清除是正常行為），兩者都不算失敗，CLI 印成資訊。補題：code／full × 轉換後新增上傳檔＋每日快照＋舊快照被清；反向控制：code／full × 既有資料檔不見／被改 ⇒ 仍紅。演練轉換後改寫上傳檔與每日快照（S-6）。修正前演練實跑：code、full 都回 `['資料目錄與轉換前不同']`。突變 2 個（改回完全相同、拿掉快照例外）⇒ 皆紅 | 54a5ffba | |
+| M-3 | 修正。`_F2_FIELDS` 加 `承攬付款憑據`，新規格 `json_list`＝`snapshot_json.personnel[]` 的 `bankAccountName`／`bankAccountNumber`／`bankPassbookImage`：一般份拿掉，完整列進個資資料夾，`merge_general_and_pii` 整欄取個資份合回。守門 `test_general_tree_has_no_f2_copied_into_other_tables`：外包人員哨兵 → **真實 API**（協力廠商 → 派工 → 建立憑據）→ 每日＋週備份 → 掃一般樹：①哨兵值不可以出現 ②所有 JSON 欄位裡 F2 鍵名（由 `_F2_FIELDS` 推導）有值的位置必須在允許清單，而且清單每一條都要真的出現。正對照：個資資料夾有哨兵；掃描器正對照一題。最上層的協力廠商帳戶列在允許清單並標 O-9 待裁示。突變 2 個（拿掉宣告、不處理 json_list）⇒ 皆紅。MODULE-GUIDE §3.2 補規則與守門 | 54a5ffba | |
+| M-4 | 修正，採 (a)。`core.paths.AUTOSTART_BAT`，歸類成設定（備份、完整回滾還原）；轉換保留機器上的版本，機器沒有才從新版包補上，兩邊不同 ⇒ `conversion_log.json` 的 `package_default_config` 與 CLI 提示人比對；`verify_conversion` 另比 manifest 內所有設定檔的雜湊。只有 `PACKAGE_DEFAULT_CONFIG` 宣告的檔會從包補上（開發機標記、授權不會）。補題 4＋classify 2。突變 2 個（不歸設定、verify 不看設定檔）⇒ 皆紅 | 54a5ffba | |
+| S-1 | 修正。新增 `U.check_backup()`：manifest 讀得到、`manifest.root` 與 `--root` 相符、逐檔雜湊＋試還原。回滾動手前先跑，不過就一個檔都不動（CLI exit 7）；`convert` 也重驗，不再只看 `backup_verify.json`。補題：RC7（別人的備份）、RC8（備份缺檔）、RC1c（驗過之後才被改）、CLI exit 7，皆斷言安裝目錄逐檔雜湊不變。突變 2 個 ⇒ 皆紅。S-CU07（回滾不是原子的）沒有處理：前置驗證排除了「備份有問題」這個最主要的中途失敗原因；複製途中崩潰仍會停在一半，重跑同一個回滾指令可收斂 | 54a5ffba | |
+| S-2 | 修正。工具寫在備份目錄最上層的紀錄檔（`TOOL_LOG_NAMES`＋`rollback_*.json`）不算備份檔 ⇒ 試還原可以重跑；DB 讀不了列成 problem，不丟例外；demo 庫也做 integrity（O-7）。沒有改用 `quick_check`：`integrity_check` 比較完整，例外改由 try 接住。補題：重跑＋反向控制（子目錄的多餘檔仍紅）、主庫／demo 庫標頭損毀。突變 2 個 ⇒ 皆紅 | 54a5ffba | |
+| S-3 | 修正。備份時記各表內容雜湊 `pre.digests`（只比轉換前就有的欄 ⇒ migration 新增欄不算改寫）；`verify_conversion` 報「列數相同、內容不同」。轉換完成寫 `post_convert.json`；完整回滾前 `changes_since_conversion()` 列出新增／被刪／被改寫的表／新表的列，基準是轉換完成當下（轉換本身寫的那幾列不算）；沒有基準檔（轉換沒做完）退回備份當下並註明。限制：同一張表同時有新增與改寫時只報新增。演練實測 V9→新版轉換沒有改寫任何既有表。補題 4。突變 2 個 ⇒ 皆紅 | 54a5ffba | |
+| S-4 | 主持裁示寫進 CORE-SPEC §9b（保留原句並註明更正）：以工具現行作法為準，交給人決定。工具：驗證不過 exit 3，並印「建議執行回滾」與兩條完整指令（先只回程式）；回滾比對通過之後，自動在 `--ping-port`（預設 6671）啟動 V9 並 ping，只印結果、寫進 `rollback_<mode>.json`，ping 不過 exit 6；`--no-ping` 可略過。演練改走同一條路（`T.rollback_and_ping`）。RUNBOOK §5、§6 同步。補題 4。突變 2 個（不 ping、不提示）⇒ 皆紅 | 54a5ffba | |
+| S-5 | 修正。`_pii_ensure_dir()` 逐層 `os.mkdir`，根目錄不在 ⇒ `PiiFolderMissing`（`os.mkdir` 不建上層，所以檢查之後才消失也建不回來）；`_pii_copy_file()`。每日整庫、月整庫、個資 JSON、勞報單鏡像四條寫入路徑改用；失敗 ⇒ ERROR 告警「個資資料夾在寫入途中消失」，不建回來。補題 5（含 isdir 之後、mkdir 之前消失的最窄競態，以及整輪每日備份）。突變 5 個 ⇒ 皆紅。月整庫那一條只有 helper 題覆蓋。⚠ 未守門：**新增**的寫入路徑有沒有走 helper，排進 ROADMAP G6b | 54a5ffba | |
+| S-6 | 修正。演練夾具新增 `company_incomplete`（本公司、統編有值、聯絡方式只有電話 ⇒ 轉換補英文名與 email）與 `write_files`（轉換後寫上傳檔與每日快照），預設開啟；另斷言 `v9_after_start_row_kept`、`new_files_kept`、補了哪些欄位、`changes_since_conversion`、回滾結束碼、O-1。修正前實跑（b2469f61 程式＋新夾具）：M-1 變體 verify 紅；M-2 變體 code、full 回滾皆紅。修正後演練 2 passed | 54a5ffba | |
+| S-7 | 修正。`replace_program()` 回傳 `removed_without_replacement`（完整清單，寫進 `conversion_log.json`），CLI 印個數。補題 1；突變 ⇒ 紅 | 54a5ffba | |
+| O-1～O-9 | O-1 修正：manifest 記備份時**原檔**的 `logical_digest`（schema＋各表全部欄位），完整回滾比它；位元組仍與備份副本比；CORE-SPEC §9b 驗收更正並註明標頭計數欄位（保留原句）。補題 3（含「副本與 manifest 一起換掉 ⇒ 只有邏輯比對紅」）；突變 ⇒ 紅。O-2：CLI 印 manifest SHA256，RUNBOOK 寫明抄到備份目錄以外、偵測不了蓄意竄改。O-3 修正（`"\\/"`、CU:216 換行）。O-4：同 B-2 修正（AUDIT-X-C-batch1 回覆欄）。O-5：RUNBOOK §7 寫明。O-6：補題——每日備份實際寫出的一般份與個資份檔案合回，等於原表（含承攬付款憑據）；工具不呼叫 `merge_general_and_pii` 維持現狀（DR-SOP 手動步驟），不修。O-7 修正（見 S-2）。O-8 不修：`rollback_snapshots`、`exports` 由部署 PowerShell 寫，Python 產品碼不讀；core.paths 的契約是「產品碼讀的位置＋與 V9 原始碼逐一對照」，放進去需要另一種對照來源。O-9 需裁示（與 M-3 守門連動：裁定屬個資 ⇒ 從允許清單移除，守門轉紅，再補 `_F2_FIELDS`） | 54a5ffba；O-6 題 1a510909 | |
