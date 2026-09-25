@@ -2,6 +2,21 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.11 — 2026-09-26〔core_bump：暫用 1.99 → 1.11〕
+> C（P4／P5 定義文件庫＋自訂欄位、P8 自訂模組引擎、A8d branding、S-CC07 N-1；原排 1.5，合回時 1.5～1.9 已被使用，依 §C-7 取下一號）。
+- L1（新增）：公開端點 `/api/system/branding`（公司名稱／簡稱；統編只在帶有效登入時回，ROADMAP A8d）
+- L1（新增）：`helpers.module_registry.register_key_source`／`dynamic_modules`／`known_keys`——動態權限 key 來源（已發布的自訂模組各一個 `custom.<key>`）；權限目錄與 `refuse_unknown_new_keys` 都認得；來源失敗 ⇒ 擋下新授權
+- L1（行為）：備份清理 S-CC07 N-1——最新一份（今天以外）距今天超過 2 天（週／月層 2 個週期）⇒ 暫停清理、寫 `.prune_hold`、每輪告警
+- L1（新增）：`core.definitions`——定義文件庫（CUSTOMIZATION-SPEC §3.5；P5 版面、P2 輸出版型覆寫、P4 自訂欄位、P8 自訂模組共用）：`save_draft`／`get`／`versions`／`publish`（先過驗證器，不過不發布並回帶位置的問題）／`restore`（不改歷史，再發布成新版）／`resolve`（role＞company＞程式預設）／`diff`（JSON 路徑）／`validate`、`register_validator`、`register_default`、`KINDS`、`DefinitionError`；表 `ui_definitions`（T1，每日 JSON 匯出，demo 清空）
+- L1（新增）：`core.migrations`——每模組獨立版本的 migration 執行器（CORE-SPEC §6）：`register`／`registered`／`current_version`／`run_all`（版本須從 1 連續；每支跑完立刻記版本，中途失敗停在上一版）；`init_db` 在 `module_schema_versions` 之後執行；`core` v1＝`ui_definitions`。V9 基準 v116 不動
+- L1（新增）：`helpers.custom_fields`——自訂欄位命名空間（P4，§3.6）：`validate_definition`（帶位置；不可與核心欄位同名）、`clean`（型別正規化、必填、預設值；未定義的鍵丟掉並回報）、`TYPES`／`DATA_CLASSES`／`KEY_RE`
+- L1（新增）：`helpers.doc_template.problems()`（同 `validate`，每一項帶 JSON 路徑）；開票申請憑據輸出改依「單據凍結的版本＞公司最新發布版＞程式預設」套版，讀定義失敗 ⇒ 程式預設＋WARNING
+- L1（新增）：API `/api/definitions/{kind}/{key}`（GET、`/draft` PUT、`/validate`、`/publish`、`/versions/{v}`、`/diff`、`/restore/{v}`、`/resolve`）、`/api/definitions/output_template/{key}/preview`（樣本資料預覽）；僅超級管理員
+- L1（新增）：`helpers.formula`——安全公式（`check` 回錯誤位置、`evaluate`、`references`、`evaluation_order` 循環偵測；空值不等於 0、除以 0 回報；不允許屬性／索引／次方／其他函式）
+- L1（新增）：`helpers.custom_modules`——自訂模組引擎（P8）：`validate_module`（欄位、公式、參照、流程可達性、簽核層與條件、輸出版型，每項帶位置）、文件式單據 `create_record`／`update_record`（只限起始狀態）／`transition`／`decide`（分層簽核沿用 `helpers.tiered_approval`，層可帶條件公式）／`get_record`／`list_records`／`render_output`／`rebuild_index`（欄位索引不匯出，從單據重建）；單據凍結在建立時的定義版本；通知與事件 `custom_module.transitioned` 在 commit 之後才送；個資（F2）欄位在分流接上前一律拒絕；`register_ref_target`
+- L1（新增）：core migration v2——`custom_records`／`custom_record_values`（欄位索引）／`custom_record_counters`／`custom_record_log`（T1，每日 JSON 匯出，demo 清空）；API `/api/custom-modules`（清單、能力目錄、公式檢查、編號預覽、輸出預覽）與 `/api/custom/{key}/…`（單據 CRUD、轉換、核准／退回、輸出 HTML／PDF）；`pdf_gen.html_to_pdf_bytes()`
+- L1（新增）：自訂模組單據讀取帶回該版定義（`definition`）；`GET /api/custom/{key}/meta?version=`
+
 ## 1.10 — 2026-09-26
 > 主持（稽核 D 主持份 H-M1／H-S1／H-S2 與確認時的 N-1／N-2）。介面不變，只有行為。
 - L1（修改行為，介面不變）：`core.events.publish` 給每個訂閱者 JSON 來回的完整副本（原本 `dict(payload)` 是淺拷貝，巢狀資料會被訂閱者改掉，發佈方的物件也會）；payload 必須是 JSON 可序列化、而且來回不變的值（tuple、非字串的鍵都算違約）；同一條執行緒還開著 `begin_write` 的寫交易時發佈也算違約（測試 raise、產品記 ERROR 照送）；訂閱者超過 0.2 秒記 WARNING
