@@ -25,6 +25,8 @@ requests>=2.31.0
 # paths/ports) holds up under multiple worker processes -- sequential and
 # -n auto runs produced identical pass/fail results.
 pytest-xdist>=3.5.0
+# pytest itself: declared directly (audit D B-O1) -- was only pulled in by pytest-xdist.
+pytest>=8.0
 
 # 2026-09-25 (project .venv): found by running the suite in a clean venv built
 # only from requirements*.txt -- the shared python on this machine happened to

@@ -142,6 +142,9 @@ class _Detonator:
 @pytest.fixture
 def dash(monkeypatch):
     """載入部署儀表板，**並且在任何請求之前拆掉所有會真的動手的路徑**。"""
+    # 儀表板 import 同目錄的 deploy_insights ⇒ 自己把 backend/tools 放進 sys.path（2026-09-26：原本靠別的測試先放，
+    # 單獨跑這個檔 9 題 ModuleNotFoundError，全量裡才會過——順序相依）
+    monkeypatch.syspath_prepend(str(DASHBOARD.parent))
     spec = importlib.util.spec_from_file_location(
         "motrix_deploy_dashboard_under_test", DASHBOARD)
     mod = importlib.util.module_from_spec(spec)
@@ -161,10 +164,11 @@ def _http_routes(mod):
     📌 動態列舉，不手寫清單 —— 🔑 **明天新增的那一支自動被涵蓋**，
     而手寫清單的漏法是「沒有人想到要把它加進來」。
     """
+    from tests._routes import all_routes
     out = []
-    for route in mod.app.routes:
-        methods = getattr(route, "methods", None)
-        path = getattr(route, "path", None)
+    # 稽核 D B-O2：經 tests._routes 攤平——FastAPI 0.14x 的 include_router 不再攤平進 app.routes，
+    # 儀表板日後改用 include_router 時，直接走訪會安靜地少掉那些路由。
+    for path, methods, _route in all_routes(mod.app):
         if not methods or not path:
             continue
         concrete = path

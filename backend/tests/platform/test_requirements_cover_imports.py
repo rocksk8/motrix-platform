@@ -120,6 +120,53 @@ def test_test_imports_are_in_requirements():
     assert not bad, "測試 import 了 requirements(-dev).txt 裝不到的套件（全新環境會收集失敗）：\n" + _fmt(bad)
 
 
+#: 測試夾具在**執行期**才 import 的函式庫（我們的碼只 import 它們，不直接 import 它們依賴的套件）
+RUNTIME_IMPORTERS = ("starlette.testclient",)
+
+
+def runtime_imports(importers=RUNTIME_IMPORTERS):
+    """這些函式庫原始碼頂層 import 的、**目前環境有安裝**的第三方模組（沒裝的是 try/except 後備，略過）。"""
+    import ast
+    import importlib
+    import inspect
+    p2d = md.packages_distributions()
+    out = {}
+    for name in importers:
+        tree = ast.parse(inspect.getsource(importlib.import_module(name)))
+        for n in ast.walk(tree):
+            mods = [a.name for a in n.names] if isinstance(n, ast.Import) else \
+                [n.module] if isinstance(n, ast.ImportFrom) and n.module and n.level == 0 else []
+            for m in mods:
+                top = m.split(".")[0]
+                if top in p2d and top != name.split(".")[0]:
+                    out.setdefault(top, set()).add(name)
+    return out
+
+
+def test_runtime_imports_of_test_fixtures_are_in_requirements():
+    """稽核 B-S1：httpx2 是 TestClient 執行期才載入的（starlette 中繼資料裡是 extra=='full'，閉包會跳過）⇒
+    只掃直接 import 的話，從 requirements-dev 拿掉它照樣綠（突變 B02 存活過）。"""
+    allowed = closure(declared(["requirements.txt", "requirements-dev.txt"]))
+    bad = uncovered(runtime_imports(), allowed)
+    assert not bad, "測試夾具執行期需要、requirements(-dev).txt 裝不到的套件（全新環境 client 夾具會壞）：\n" + _fmt(bad)
+
+
+def test_runtime_scan_sees_httpx2():
+    """正對照：掃得到 TestClient 需要的 httpx2（掃描壞掉時上一題會安靜地綠）。"""
+    assert "httpx2" in runtime_imports()
+
+
+def test_rc_removing_httpx2_from_dev_requirements_is_caught():
+    """反向控制（突變 B02 的重現）：宣告裡沒有 httpx2 ⇒ 紅。"""
+    allowed = closure(declared(["requirements.txt", "requirements-dev.txt"]) - {"httpx2"})
+    assert "httpx2" in uncovered(runtime_imports(), allowed)
+
+
+def test_pytest_is_declared_directly():
+    """稽核 B-O1：pytest 要直接宣告，不可以只靠 pytest-xdist 的相依帶進來。"""
+    assert "pytest" in declared(["requirements-dev.txt"])
+
+
 def test_scanner_sees_known_imports():
     """正對照：掃得到產品碼的 fastapi 與測試的 pytest（掃描壞掉時上面兩題會安靜地綠）。"""
     assert "fastapi" in third_party_imports(_product_files())

@@ -193,3 +193,14 @@ def test_compare_only_warns_on_range_and_lists_package_diffs():
     assert any("fastapi" in d for d in PE.compare(venv, {"python": "3.12.10", "packages": {"fastapi": "2"}}))
     assert not any("Python" in d for d in PE.compare(venv, {"python": "3.12.10", "packages": {}}))   # 範圍內不比 Python
     assert any("不在支援範圍" in d for d in PE.compare(venv, {"python": "3.10.1", "packages": {}}))
+
+
+# ── B-S2：建包的 pytest worker 數 ─────────────────────────────────────────────
+
+def test_build_script_workers_within_full_limit():
+    """建包也在同一台開發機上跑 ⇒ 上限同 §C-13 全量（modtest.FULL_MAX_WORKERS）。"""
+    import re
+    src = (REPO / "backend" / "tools" / "build_deploy_package.ps1").read_text(encoding="utf-8-sig")
+    caps = re.findall(r"\$workers\s*=\s*\[Math\]::Max\(\s*\d+\s*,\s*\[Math\]::Min\(\s*\$physCores\s*,\s*(\d+)\s*\)\s*\)", src)
+    assert caps, "找不到建包的 worker 計算式（改寫了就要一起改這題）"
+    assert all(int(c) <= MT.FULL_MAX_WORKERS for c in caps), caps

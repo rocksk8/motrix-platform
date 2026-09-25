@@ -180,7 +180,7 @@ modules/<key>/
 2. **新版開發機第一次啟動或第一次打包之前，必須先建開發庫**：設 `MOTRIX_CREATE_NEW_DB=1` 建一次（啟動一次，或只跑 `python -c "import db; db.init_db()"`），建好後移除旗標。主工作樹與每一個要打包的 worktree 都要各自有一份（`backend/motrix_erp.db`，已在 .gitignore）。
    原因：`build_deploy_package.ps1` 的版本紀錄反方向守門（`check_version_sync.py`，VR7）要讀這個庫；**讀不到就判失敗、擋打包**（刻意設計：一道讀不到就放行的守門等於不存在）。新版開發庫全新建立，**不讀、不複製 V9 開發目錄**；D7 最終驗證另用 V9 開發庫的複本，放在獨立演練目錄。（2026-09-25 主持裁示；9c① 演練時發現新版 repo 沒有開發庫）
 
-3. **建專案專用 Python 環境**：`python tools/platform/project_env.py create [--python 3.13]` ⇒ 主工作樹 `.venv`（gitignored），只照 requirements*.txt 安裝；測試與 D7 驗證一律用它（這台機器的 `python` 是別人的 venv，套件版本不等於 requirements）。正式機版本取得後（`backend/tools/prod_env.json`，儀表板健康檢查產生）用 `project_env.py check` 比對，不一致就依正式機重建。
+3. **建專案專用 Python 環境**：`python tools/platform/project_env.py create [--python 3.13]` ⇒ 主工作樹 `.venv`（gitignored），只照 requirements*.txt 安裝；測試與 D7 驗證一律用它（這台機器的 `python` 是別人的 venv，套件版本不等於 requirements）。正式機版本取得後（`backend/tools/prod_env.json`，儀表板健康檢查產生）用 `project_env.py check` 比對，不一致就依正式機重建。〔更正（B，2026-09-26，稽核 D B-M2）：資料夾是 `.venv<主次版號>`（3.12 ⇒ `.venv312`，3.13 ⇒ `.venv313`），不是 `.venv`；**資料夾已存在一律拒絕**（不覆寫共用環境，PLAYBOOK §C-12；原本 `--python 3.13` 會就地裝進 `.venv312`）。check 只提示、不擋（使用者裁示不綁 Python 版本），也不是「不一致就重建」〕
 
 **正式機**：不放 `.no_email_send`、不設 `MOTRIX_EMAIL_SEND` ⇒ 照常寄信（與 V9 現況相同，不需額外步驟）。兩個標記都在 `.gitignore`，`tools/verify_package.py` 的 `dev-marker` 規則擋它們進部署包。
 
