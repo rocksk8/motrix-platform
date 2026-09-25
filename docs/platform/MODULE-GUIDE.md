@@ -28,7 +28,7 @@
 - L0＋L1 對外公開的介面（函式名稱、參數、回傳形狀、資料表欄位）以 `core.registry.CORE_VERSION` 標版本。
 - **同一主版號內只准新增，不准修改或刪除。** 要改或刪 ⇒ 主版號 +1，並且每個模組的 `module.json` 的 `core` 範圍都要重新確認。
 - 模組以 `"core": ">=1.0,<2.0"` 宣告相容範圍；載入器看不懂範圍或範圍不相容 ⇒ 不載入，並寫明原因，不猜。
-- 守門：`backend/tests/platform/test_l1_interface_snapshot.py`（G1）——modules.json 的 L1 Python 單位（plat:／core:／helper:）之公開函式／類別／dataclass 欄位簽章與大寫常數名稱，與快照 `l1_interface_snapshot.json` 比對；有差異就紅。修法：升 `CORE_VERSION`、寫 `core/CHANGELOG.md`、跑 `_l1_interface.py --update`（版號不足會拒絕重產）。另驗 CHANGELOG 最上面的版號＝`CORE_VERSION`。
+- 守門：`backend/tests/platform/test_l1_interface_snapshot.py`（G1）——modules.json 的 L1 Python 單位（plat:／core:／helper:）之公開函式／類別／dataclass 欄位簽章與大寫常數名稱（**範圍 2，2026-09-25 稽核 G-1／G-2**：「公開」＝不以底線開頭，或列在 `helpers/__init__.py` 的 `__all__`，或被 L1 以外的產品碼 import——例如 `_require_user`；描述含 `async` 與僅限位置參數 `/`；**預設值的內容不納入**，預設值語意改變要自己升版並寫 CHANGELOG），與快照 `l1_interface_snapshot.json` 比對；有差異就紅。修法：升 `CORE_VERSION`、寫 `core/CHANGELOG.md`、跑 `_l1_interface.py --update`（版號不足會拒絕重產）。另驗 CHANGELOG 最上面的版號＝`CORE_VERSION`。快照的判定範圍（`scope_version`）變動時，`--update` 要附 `--reason`，快照記下 `scope_history`（原因、新看得見的名稱），且同一個 commit 必須修改本節或 CORE-SPEC（守門驗 git 歷史）；範圍變大不等於介面新增，不要求升版。
 - ⚠ 未守門：回傳形狀（靜態讀不出來）、L1 router 的 HTTP 端點、L1 資料表欄位（已排入 ROADMAP 階段 G：G1b）
 
 ## 3. 資料分類與存放規則

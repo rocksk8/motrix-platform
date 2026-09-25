@@ -24,6 +24,9 @@ REPO = BACKEND.parent
 MODULES_JSON = REPO / "docs" / "platform" / "modules.json"
 SNAPSHOT = HERE / "l1_interface_snapshot.json"
 REGISTRY = BACKEND / "core" / "registry.py"
+#: 快照「看得見什麼」的定義版本。2＝納入跨模組在用的底線名稱與 async／posonly（稽核 G-1、G-2）。
+#: 範圍變大時重產：只要求「舊快照看得見的名稱」沒有修改／刪除，新看見的不算新增介面。
+SCOPE_VERSION = 2
 CHANGELOG = BACKEND / "core" / "CHANGELOG.md"
 
 _UPPER = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -47,6 +50,8 @@ def _sig(args):
     first_default = len(pos) - len(args.defaults)
     for i, a in enumerate(pos):
         out.append(a.arg + ("=…" if i >= first_default else ""))
+        if args.posonlyargs and i == len(args.posonlyargs) - 1:
+            out.append("/")                       # 僅限位置參數（G-2）
     if args.vararg:
         out.append("*" + args.vararg.arg)
     elif args.kwonlyargs:
@@ -58,44 +63,120 @@ def _sig(args):
     return "(" + ", ".join(out) + ")"
 
 
-def interface_of(source):
-    """一個模組的公開介面 ⇒ {名稱: 描述字串}。"""
+def _kind(node):
+    return "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+
+
+def interface_of(source, extra_public=frozenset()):
+    """一個模組的公開介面 ⇒ {名稱: 描述字串}。
+
+    公開＝不以底線開頭，**或**列在 extra_public（跨模組實際在用的底線名稱，見 cross_boundary_public；稽核 G-1）。
+    描述含 `async` 與僅限位置參數的 `/`（稽核 G-2）；**預設值的內容不納入**——預設值語意改變要自己升版並寫 CHANGELOG。
+    """
     tree = ast.parse(source)
     out = {}
+
+    def pub(name):
+        return not name.startswith("_") or name in extra_public
+
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
-            out[node.name] = "def" + _sig(node.args)
-        elif isinstance(node, ast.ClassDef) and not node.name.startswith("_"):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and pub(node.name):
+            out[node.name] = _kind(node) + _sig(node.args)
+        elif isinstance(node, ast.ClassDef) and pub(node.name):
             out[node.name] = "class"
             for item in node.body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) \
                         and (not item.name.startswith("_") or item.name == "__init__"):
-                    out["%s.%s" % (node.name, item.name)] = "def" + _sig(item.args)
+                    out["%s.%s" % (node.name, item.name)] = _kind(item) + _sig(item.args)
                 elif isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name) \
                         and not item.target.id.startswith("_"):
                     out["%s.%s" % (node.name, item.target.id)] = "field" + ("=…" if item.value is not None else "")
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for t in targets:
-                if isinstance(t, ast.Name) and _UPPER.match(t.id):
+                if isinstance(t, ast.Name) and (_UPPER.match(t.id) or t.id in extra_public):
                     out[t.id] = "const"
     return out
 
 
+_SKIP_DIRS = ("tests", "tools", "scripts", "migrations_frozen", "__pycache__", ".venv")
+
+
+def _module_to_unit(mod):
+    """import 的模組名 ⇒ G1 的單位名（不是 L1 Python 單位 ⇒ None）。"""
+    parts = mod.split(".")
+    if parts[0] == "helpers" and len(parts) > 1:
+        return "helper:" + parts[1]
+    if parts[0] == "core" and len(parts) > 1:
+        return "plat:" + parts[1]
+    if len(parts) == 1 and parts[0] not in ("helpers", "core", "routers", "modules"):
+        return "core:" + parts[0]
+    return None
+
+
+def cross_boundary_public(units=None):
+    """{單位: {底線名稱…}}：實際被當成跨模組 API 用的底線名稱（稽核 G-1）。
+
+    ① `helpers/__init__.py` 的 `__all__` 列出的名稱（依它的 `from .x import` 對回原模組）
+    ② L1 以外的產品碼（routers、modules、backend 頂層非 L1 檔）直接 import 的底線名稱
+    """
+    units = set(l1_python_units() if units is None else units)
+    extra = {}
+    init = BACKEND / "helpers" / "__init__.py"
+    reexport = {}
+    if init.is_file():
+        tree = ast.parse(init.read_text(encoding="utf-8-sig"))
+        exported = set()
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.module:
+                unit = "helper:" + node.module.split(".")[-1] if node.level == 1 else _module_to_unit(node.module)
+                for a in node.names:
+                    reexport[a.asname or a.name] = (unit, a.name)
+            elif isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets):
+                exported |= {e.value for e in getattr(node.value, "elts", []) if isinstance(e, ast.Constant)}
+        for name in exported:
+            unit, orig = reexport.get(name, (None, None))
+            if unit in units and orig.startswith("_"):
+                extra.setdefault(unit, set()).add(orig)
+    l1_files = {unit_path(u).resolve() for u in units if unit_path(u)}
+    for f in BACKEND.rglob("*.py"):
+        rel = f.relative_to(BACKEND)
+        if any(x in rel.parts for x in _SKIP_DIRS) or f.name == "conftest.py" or f.resolve() in l1_files:
+            continue
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8-sig"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or node.level != 0 or not node.module:
+                continue
+            for a in node.names:
+                if not a.name.startswith("_"):
+                    continue
+                if node.module == "helpers":
+                    unit, orig = reexport.get(a.name, (None, None))
+                else:
+                    unit, orig = _module_to_unit(node.module), a.name
+                if unit in units:
+                    extra.setdefault(unit, set()).add(orig)
+    return extra
+
+
 def current_interface(units=None):
     units = l1_python_units() if units is None else units
+    extra = cross_boundary_public(units)
     res = {}
     for u in units:
         p = unit_path(u)
         if p is None or not p.is_file():
             res[u] = {"__missing__": "unit"}
             continue
-        res[u] = interface_of(p.read_text(encoding="utf-8-sig"))
+        res[u] = interface_of(p.read_text(encoding="utf-8-sig"), frozenset(extra.get(u, ())))
     return res
 
 
 def _params(desc):
-    m = __import__("re").match(r"^def\((.*)\)$", desc)
+    m = __import__("re").match(r"^def\((.*)\)$", desc) or __import__("re").match(r"^async def\((.*)\)$", desc)
     if not m:
         return None
     return [p.strip() for p in m.group(1).split(",") if p.strip()]
@@ -104,6 +185,8 @@ def _params(desc):
 def compatible_extension(old_desc, new_desc):
     """相容擴充：舊參數原樣、原順序保留在前面，新加的都有預設值（或是 *args／**kwargs／keyword-only 分隔）。"""
     o, n = _params(old_desc), _params(new_desc)
+    if old_desc.startswith("async") != new_desc.startswith("async"):
+        return False                              # def ⇄ async def：呼叫端 await 與否全變 ⇒ 修改
     if o is None or n is None or n[:len(o)] != o:
         return False
     return all(p.endswith("=…") or p.startswith("*") for p in n[len(o):])
@@ -160,13 +243,60 @@ def core_version():
     return m.group(1) if m else None
 
 
-def changelog_top_version():
-    m = re.search(r"^##\s+(\d+\.\d+)\b", CHANGELOG.read_text(encoding="utf-8"), re.M)
-    return m.group(1) if m else None
+def changelog_top_version(text=None):
+    """最上面一個「## 主.次」。三段版號（## 1.4.1）不算成 1.4（稽核 O-2），直接讀不到 ⇒ None。"""
+    text = CHANGELOG.read_text(encoding="utf-8") if text is None else text
+    m = re.search(r"^##\s+(\d+(?:\.\d+)+)", text, re.M)
+    if not m or m.group(1).count(".") != 1:
+        return None
+    return m.group(1)
+
+
+def _scope1_desc(v):
+    """範圍 2 的描述 ⇒ 範圍 1 的格式（拿掉 async 前綴與 `/` 標記），用來和舊快照比對「本來就看得見的」有沒有變。"""
+    v = v[len("async "):] if v.startswith("async ") else v
+    return v.replace(", /", "").replace("(/, ", "(").replace("(/)", "()")
 
 
 def load_snapshot():
     return json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+
+
+def _arg(argv, name):
+    """--name value／--name=value ⇒ value；沒有 ⇒ None。"""
+    for i, a in enumerate(argv):
+        if a == name and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith(name + "="):
+            return a.split("=", 1)[1]
+    return None
+
+
+#: 範圍變動時必須一起改的規則說明（至少一份）
+RULE_DOCS = ("docs/platform/MODULE-GUIDE.md", "docs/platform/CORE-SPEC.md")
+
+
+def scope_changes_without_rule_docs(repo=None, snapshot_rel=None):
+    """改到快照 scope_version 的 commit，若沒有同時改 RULE_DOCS 之一 ⇒ 列出（含工作樹未提交的改動）。"""
+    import subprocess
+    repo = Path(repo or REPO)
+    snapshot_rel = snapshot_rel or SNAPSHOT.relative_to(REPO).as_posix()
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True,
+                              encoding="utf-8", check=True).stdout
+
+    bad = []
+    commits = git("log", "--format=%H", "-G", '"scope_version"', "--", snapshot_rel).split()
+    for c in commits:
+        files = set(git("show", "--name-only", "--format=", c).split())
+        if not files & set(RULE_DOCS):
+            bad.append(c[:8])
+    if '"scope_version"' in git("diff", "HEAD", "--", snapshot_rel):
+        dirty = set(git("diff", "HEAD", "--name-only").split())
+        if not dirty & set(RULE_DOCS):
+            bad.append("（工作樹未提交）")
+    return bad
 
 
 def main(argv):
@@ -175,14 +305,37 @@ def main(argv):
     if "--update" in argv:
         if SNAPSHOT.exists():
             snap = load_snapshot()
-            a, c, r = diff(snap["interface"], cur)
+            old = snap["interface"]
+            scope_change = snap.get("scope_version", 1) < SCOPE_VERSION
+            if scope_change and not _arg(argv, "--reason"):
+                print("拒絕重產：快照範圍 %s → %s 要附原因（--reason \"…\"），並在同一個 commit 修改 MODULE-GUIDE／CORE-SPEC 的規則說明"
+                      % (snap.get("scope_version", 1), SCOPE_VERSION))
+                return 1
+            if scope_change:
+                # 範圍變大：只比舊快照看得見的名稱（描述格式也跟著變 ⇒ 用新規則重算舊快照看得見的那些）
+                cur_cmp = {u: {k: _scope1_desc(v) for k, v in cur.get(u, {}).items() if k in old.get(u, {})} for u in old}
+                a, c, r = diff(old, cur_cmp)
+                print("快照範圍 %s → %s：只比對舊快照看得見的名稱" % (snap.get("scope_version", 1), SCOPE_VERSION))
+            else:
+                a, c, r = diff(old, cur)
             need = required_bump(a, c, r)
             if not bump_ok(snap["core_version"], ver, need):
                 print("拒絕重產：介面差異需要 %s 升版，而 CORE_VERSION %s → %s 不足。"
                       % (need, snap["core_version"], ver))
                 return 1
-        SNAPSHOT.write_text(json.dumps({"core_version": ver, "interface": cur}, ensure_ascii=False,
-                                       indent=1, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+        history = []
+        if SNAPSHOT.exists():
+            snap = load_snapshot()
+            history = snap.get("scope_history", [])
+            if snap.get("scope_version", 1) < SCOPE_VERSION:
+                old = snap["interface"]
+                widened = sorted("%s::%s" % (u, k) for u, items in cur.items() for k in items if k not in old.get(u, {}))
+                history.append({"from": snap.get("scope_version", 1), "to": SCOPE_VERSION,
+                                "reason": _arg(argv, "--reason"), "newly_visible": widened})
+        SNAPSHOT.write_text(json.dumps({"core_version": ver, "scope_version": SCOPE_VERSION, "scope_history": history,
+                                        "interface": cur},
+                                       ensure_ascii=False, indent=1, sort_keys=True) + "\n",
+                            encoding="utf-8", newline="\n")
         print("已重產：CORE_VERSION %s，%d 個單位" % (ver, len(cur)))
         return 0
     snap = load_snapshot()

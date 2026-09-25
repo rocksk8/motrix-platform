@@ -98,7 +98,8 @@ def test_rc_update_refuses_without_bump(tmp_path, monkeypatch):
     """重產工具在版號不足時拒絕（否則「改了介面就重產快照」會讓守門失效）。"""
     import json
     snap = tmp_path / "snap.json"
-    snap.write_text(json.dumps({"core_version": "1.2", "interface": {"plat:x": {"f": "def(a)"}}}), encoding="utf-8")
+    snap.write_text(json.dumps({"core_version": "1.2", "scope_version": G.SCOPE_VERSION,
+                                "interface": {"plat:x": {"f": "def(a)"}}}), encoding="utf-8")
     monkeypatch.setattr(G, "SNAPSHOT", snap)
     monkeypatch.setattr(G, "current_interface", lambda units=None: {"plat:x": {"f": "def(a, b)"}})
     monkeypatch.setattr(G, "core_version", lambda: "1.3")
@@ -107,3 +108,100 @@ def test_rc_update_refuses_without_bump(tmp_path, monkeypatch):
     monkeypatch.setattr(G, "core_version", lambda: "2.0")
     assert G.main(["--update"]) == 0
     assert json.loads(snap.read_text(encoding="utf-8"))["core_version"] == "2.0"
+
+
+# ── 稽核 AUDIT-C-B-guards 的缺口（G-1、G-2、O-2）────────────────────────────
+
+def test_rc_underscore_names_used_across_modules_are_part_of_the_interface():
+    """G-1：`_require_user` 這類底線名稱，只要被 L1 以外 import 或列在 helpers.__all__，就算公開介面。"""
+    extra = G.cross_boundary_public()
+    assert "_require_user" in extra.get("helper:auth", set())
+    assert "_require_user" in G.current_interface()["helper:auth"]
+    src = "def _require_user(a, module=None):\n    pass\ndef _private(x):\n    pass\n"
+    seen = G.interface_of(src, frozenset({"_require_user"}))
+    assert "_require_user" in seen and "_private" not in seen
+    a, c, r = G.diff({"helper:auth": seen},
+                     {"helper:auth": G.interface_of(src.replace(", module=None", ""), frozenset({"_require_user"}))})
+    assert G.required_bump(a, c, r) == "major"
+
+
+def test_rc_async_and_posonly_changes_are_visible():
+    """G-2：def ⇄ async def、僅限位置參數的改動，描述要不同，而且算修改（主版號）。"""
+    base = G.interface_of("def f(x, y):\n    pass\n")
+    for mutated in ("async def f(x, y):\n    pass\n", "def f(x, /, y):\n    pass\n"):
+        a, c, r = G.diff({"u": base}, {"u": G.interface_of(mutated)})
+        assert G.required_bump(a, c, r) == "major", mutated
+
+
+def test_rc_three_part_changelog_version_is_not_read_as_two():
+    """O-2：`## 1.4.1` 不可以被讀成 1.4。"""
+    assert G.changelog_top_version("# x\n\n## 1.4.1 — d\n") is None
+    assert G.changelog_top_version("# x\n\n## 1.4 — d\n") == "1.4"
+
+
+
+# ── scope_version 不可以變成繞過升版的路（主持 2026-09-25）──────────────────
+
+def test_scope_changes_come_with_rule_docs():
+    bad = G.scope_changes_without_rule_docs()
+    assert not bad, ("改了快照的 scope_version，卻沒有在同一個 commit 修改規則說明（%s）：%s"
+                     % ("／".join(G.RULE_DOCS), bad))
+
+
+def test_snapshot_records_why_the_scope_widened():
+    snap = G.load_snapshot()
+    if snap.get("scope_version", 1) > 1:
+        hist = snap.get("scope_history") or []
+        assert hist and hist[-1]["to"] == snap["scope_version"] and (hist[-1].get("reason") or "").strip(), hist
+        assert "helper:auth::_require_user" in hist[-1]["newly_visible"]
+
+
+def test_rc_scope_change_without_rule_docs_is_caught(tmp_path):
+    """只改 scope_version、不改規則說明 ⇒ 紅；同一個 commit 一起改規則 ⇒ 綠。"""
+    import subprocess
+    r = tmp_path / "r"
+    snap = r / "snap.json"
+    doc = r / "docs" / "platform" / "MODULE-GUIDE.md"
+    doc.parent.mkdir(parents=True)
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(r), *a], check=True, capture_output=True)
+    git("init", "-q")
+    git("config", "user.email", "t@example.invalid")
+    git("config", "user.name", "t")
+    snap.write_text('{\n "scope_version": 1\n}\n', encoding="utf-8")
+    doc.write_text("rules v1\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "init")
+    snap.write_text('{\n "scope_version": 2\n}\n', encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "只改範圍")
+    bad = G.scope_changes_without_rule_docs(repo=r, snapshot_rel="snap.json")
+    assert len(bad) == 1
+    snap.write_text('{\n "scope_version": 3\n}\n', encoding="utf-8")
+    doc.write_text("rules v3\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "範圍＋規則")
+    assert len(G.scope_changes_without_rule_docs(repo=r, snapshot_rel="snap.json")) == 1, "第二次有改規則 ⇒ 不再多一筆"
+
+
+def test_rc_update_refuses_scope_change_without_reason(tmp_path, monkeypatch):
+    import json
+    snap = tmp_path / "snap.json"
+    snap.write_text(json.dumps({"core_version": "1.2", "interface": {"plat:x": {"f": "def(a)"}}}), encoding="utf-8")
+    monkeypatch.setattr(G, "SNAPSHOT", snap)
+    monkeypatch.setattr(G, "current_interface", lambda units=None: {"plat:x": {"f": "def(a)", "_g": "def()"}})
+    monkeypatch.setattr(G, "core_version", lambda: "1.2")
+    assert G.main(["--update"]) == 1
+    assert G.main(["--update", "--reason", "納入跨模組底線名稱"]) == 0
+    saved = json.loads(snap.read_text(encoding="utf-8"))
+    assert saved["scope_history"][-1]["newly_visible"] == ["plat:x::_g"]
+
+
+def test_rc_a_name_newly_visible_in_the_widened_scope_is_guarded_next_time():
+    """擴大後才看得見的名稱（_require_user），之後被改要抓得到（真快照裡確實有它）。"""
+    snap = G.load_snapshot()["interface"]
+    assert "_require_user" in snap["helper:auth"]
+    mutated = dict(snap, **{"helper:auth": dict(snap["helper:auth"], _require_user="def(authorization)")})
+    a, c, r = G.diff(snap, mutated)
+    assert any("_require_user" in x for x in c) and G.required_bump(a, c, r) == "major"

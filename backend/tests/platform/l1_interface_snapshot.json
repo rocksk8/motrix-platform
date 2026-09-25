@@ -9,6 +9,10 @@
    "SNAPSHOT_SIZE_HISTORY_MIN": "const",
    "SNAPSHOT_SIZE_RATIO_HI": "const",
    "SNAPSHOT_SIZE_RATIO_LO": "const",
+   "_backup_customers": "def()",
+   "_backup_quotation": "def(quote_no)",
+   "_backup_retention": "def()",
+   "_backup_suppliers": "def()",
    "backed_up_table_names": "def()",
    "bytes_per_audit_row": "def(db_bytes, audit_rows)",
    "cloud_archive_enabled": "def()",
@@ -52,6 +56,7 @@
    "DEMO_UPLOADS_DIR": "const",
    "SchemaNewerThanBaseline": "class",
    "V9_BASELINE": "const",
+   "_MIGRATIONS": "const",
    "db_conn": "def()",
    "get_db": "def()",
    "get_demo_db": "def()",
@@ -68,14 +73,22 @@
   },
   "core:main": {
    "FRONTEND_DIR": "const",
-   "auth_middleware": "def(request, call_next)",
-   "license_gate_middleware": "def(request, call_next)",
-   "no_cache_static": "def(request, call_next)",
+   "auth_middleware": "async def(request, call_next)",
+   "license_gate_middleware": "async def(request, call_next)",
+   "no_cache_static": "async def(request, call_next)",
    "root": "def()",
-   "security_headers": "def(request, call_next)",
-   "slow_request_log": "def(request, call_next)"
+   "security_headers": "async def(request, call_next)",
+   "slow_request_log": "async def(request, call_next)"
   },
   "core:pdf_gen": {
+   "_PDF_BASE_DEFAULT": "const",
+   "_generate_case_closing_pdf": "def(quote_no, actor=…, action_type=…)",
+   "_generate_contractor_voucher_pdf": "def(voucher_no, actor=…, action_type=…)",
+   "_generate_invoice_voucher_pdf": "def(voucher_no, actor=…, action_type=…)",
+   "_generate_payment_request_pdf": "def(request_no, actor=…, action_type=…)",
+   "_generate_quotation_pdf": "def(quote_no, actor=…, action_type=…)",
+   "_generate_shipping_pdf": "def(note_no, actor=…, action_type=…)",
+   "_get_pdf_base": "def()",
    "build_quote_preview_html": "def(q, status, deal_tag, internal=…)",
    "generate_case_closing_pdf_bytes": "def(quote_no)",
    "generate_contractor_voucher_pdf_bytes": "def(voucher_no)",
@@ -86,7 +99,10 @@
    "generate_project_execution_report_pdf_bytes": "def(quote_no)",
    "generate_shipping_pdf_bytes": "def(note_no)"
   },
-  "core:photos": {},
+  "core:photos": {
+   "_photo_root": "def()",
+   "_process_project_photo": "def(image_bytes, uploader_name)"
+  },
   "core:trail": {
    "ACTION_LABELS": "const",
    "ACTION_PAIRS": "const",
@@ -113,12 +129,25 @@
    "status_ok": "def(status)"
   },
   "helper:audit": {
+   "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
+   "_filter_live_notifications": "def(conn, rows)",
+   "_notify": "def(username, type_, ref_id, ref_label, message)",
+   "_purge_notifications": "def(ref_id, types)",
    "notify_org_chain_notice": "def(conn, tiers, requester_username, ref_id, ref_label, message, type_=…)"
   },
   "helper:auth": {
    "DEMO_TOKEN_PREFIX": "const",
    "MIN_PASSWORD_LEN": "const",
    "PASSKEY_ENABLED": "const",
+   "_CREDENTIALS_FILE": "const",
+   "_LEGACY_WEAK_PASSWORDS": "const",
+   "_SUPERADMIN_MODULES": "const",
+   "_hash": "def(password)",
+   "_hash_pw": "def(password)",
+   "_require_user": "def(authorization, require_superadmin=…, module=…)",
+   "_tok": "def(auth)",
+   "_verify_pw": "def(password, stored)",
+   "_write_initial_credentials": "def(username, password, path=…)",
    "can_see_financial": "def(user)",
    "is_weak_password": "def(password)",
    "require_any_module": "def(user, keys, label)",
@@ -152,7 +181,11 @@
    "short_name": "def(name)",
    "snapshot_for": "def(location_id)"
   },
-  "helper:dates": {},
+  "helper:dates": {
+   "_add_months": "def(d, months)",
+   "_warranty_expiry": "def(warranty_start, warranty_months)",
+   "_workdays_elapsed": "def(start_date, end_date)"
+  },
   "helper:doc_template": {
    "BLOCKS": "const",
    "THEMES": "const",
@@ -180,6 +213,8 @@
    "SendHandle": "class",
    "SendHandle.__init__": "def(self)",
    "SendHandle.wait": "def(self, timeout=…)",
+   "_admin_emails": "def(event_key=…)",
+   "_send_raising": "def(to_addrs, subject, html)",
    "email_send_policy": "def(env=…)",
    "notify_approval_reminder": "def(doc_type_label, doc_no, desc, days_elapsed, approver_usernames, also_superadmin=…)",
    "notify_approval_request": "def(quote_no, customer, approver_usernames)",
@@ -397,12 +432,19 @@
    "rule_for": "def(kind)",
    "visible": "def(kind, user, row, scope=…)"
   },
-  "helper:settings": {},
+  "helper:settings": {
+   "_get_setting": "def(key, default=…)",
+   "_set_setting": "def(key, value)"
+  },
   "helper:startup": {
    "DEMO_ACCOUNT_ENABLED": "const",
    "EDGE_PDF_MAX_CONCURRENCY": "const",
    "EDGE_PDF_SEMAPHORE": "const",
    "EDGE_PDF_TIMEOUT_SECONDS": "const",
+   "_EDGE_CANDIDATES": "const",
+   "_cleanup_sessions": "def()",
+   "_get_edge_path": "def()",
+   "_sync_module_versions": "def()",
    "demo_account_on": "def()",
    "drift_between": "def(entries, db_keys)",
    "flag_weak_passwords": "def()",
@@ -440,8 +482,9 @@
   },
   "helper:uploads": {
    "UPLOADS_ROOT": "const",
+   "_effective_subfolder": "def(subfolder)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",
-   "save_document_files": "def(subfolder, doc_no, files, uploaded_by, watermark_by=…)"
+   "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)"
   },
   "helper:xlsx_out": {
    "EXCEL_COOLDOWN": "const",
@@ -599,5 +642,55 @@
    "verify_rollback": "def(root, manifest, mode)",
    "walk": "def(root)"
   }
- }
+ },
+ "scope_history": [
+  {
+   "from": 1,
+   "newly_visible": [
+    "core:archive::_backup_customers",
+    "core:archive::_backup_quotation",
+    "core:archive::_backup_retention",
+    "core:archive::_backup_suppliers",
+    "core:db::_MIGRATIONS",
+    "core:pdf_gen::_PDF_BASE_DEFAULT",
+    "core:pdf_gen::_generate_case_closing_pdf",
+    "core:pdf_gen::_generate_contractor_voucher_pdf",
+    "core:pdf_gen::_generate_invoice_voucher_pdf",
+    "core:pdf_gen::_generate_payment_request_pdf",
+    "core:pdf_gen::_generate_quotation_pdf",
+    "core:pdf_gen::_generate_shipping_pdf",
+    "core:pdf_gen::_get_pdf_base",
+    "core:photos::_photo_root",
+    "core:photos::_process_project_photo",
+    "helper:audit::_audit",
+    "helper:audit::_filter_live_notifications",
+    "helper:audit::_notify",
+    "helper:audit::_purge_notifications",
+    "helper:auth::_CREDENTIALS_FILE",
+    "helper:auth::_LEGACY_WEAK_PASSWORDS",
+    "helper:auth::_SUPERADMIN_MODULES",
+    "helper:auth::_hash",
+    "helper:auth::_hash_pw",
+    "helper:auth::_require_user",
+    "helper:auth::_tok",
+    "helper:auth::_verify_pw",
+    "helper:auth::_write_initial_credentials",
+    "helper:dates::_add_months",
+    "helper:dates::_warranty_expiry",
+    "helper:dates::_workdays_elapsed",
+    "helper:email_notify::_admin_emails",
+    "helper:email_notify::_send_raising",
+    "helper:settings::_get_setting",
+    "helper:settings::_set_setting",
+    "helper:startup::_EDGE_CANDIDATES",
+    "helper:startup::_cleanup_sessions",
+    "helper:startup::_get_edge_path",
+    "helper:startup::_sync_module_versions",
+    "helper:uploads::_effective_subfolder"
+   ],
+   "reason": "稽核 G-1／G-2：納入 helpers.__all__ 與 L1 以外 import 的底線名稱；描述加 async 與僅限位置參數",
+   "to": 2
+  }
+ ],
+ "scope_version": 2
 }
