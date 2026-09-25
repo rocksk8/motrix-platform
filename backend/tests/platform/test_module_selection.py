@@ -686,3 +686,23 @@ def test_registry_snapshot_restores_every_table():
     finally:
         registry.restore(outer)
     assert all("zz_snapshot_probe" not in t for t in _registry_tables().values())
+
+
+@pytest.mark.parametrize("corrupt", ["{壞", "", "[]", '{"modules_disabled": "zz_mod"}', '{"other": []}', "null"])
+def test_corrupt_cache_and_unreadable_db_means_all_disabled(tmp_path, monkeypatch, corrupt):
+    """D 觀察 X06（2026-09-26）：主庫讀不到、而快取檔也損毀 ⇒ **全部停用**（不可以當成「沒有停用任何模組」）。
+    損毀的快取回 [] 的話，管理者停用的模組會在這次啟動全部被打開，而題目原本仍是綠的。"""
+    from core import paths
+    monkeypatch.setattr(ms, "READ_TIMEOUT_SECONDS", 0.05)
+    p = tmp_path / "m.db"
+    _settings_db(p, wal=(_HOW[0] != "journal_exclusive"))
+    assert ms.read_disabled_list(str(p)).source == ms.SOURCE_DB                  # 正對照：讀到並寫了快取
+    cache = paths.modules_disabled_cache(str(p))
+    with open(cache, "w", encoding="utf-8") as f:
+        f.write(corrupt)
+    with _Unreadable(p, _HOW[0]):
+        got = ms.read_disabled_list(str(p))
+        assert got.source != ms.SOURCE_DB, "反向控制沒有生效：主庫其實讀得到"
+        assert got.all_disabled is True and got.source == ms.SOURCE_UNREADABLE, (corrupt, got)
+        assert ms.read_disabled_at_startup(str(p)) == frozenset(
+            d.name for d in (BACKEND / "modules").iterdir() if (d / "module.json").is_file())
