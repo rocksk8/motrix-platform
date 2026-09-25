@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.7 — 2026-09-25（R）
+> `core.registry.CORE_VERSION` 1.6 → 1.7（G1 快照要求升次版號；R 對 `core/registry.py` 只改這一行）。
+- L1（新增）：`helpers.legal_params` 法規參數服務（R1，CUSTOMIZATION-SPEC §7.1）——`load_versions`／`save_versions`／`rules_for_date`／`rules_by_version`／`validate_version(s)`／`frozen_changes`／`year_status`／`minimum_wage_mismatch`／`today`；零稅率／免稅依據 `TAX_BASIS_OPTIONS`／`tax_basis_error`／`tax_basis_label`（R2，§7.2）
+- L1（新增）：`helpers.privacy_notice` 個資蒐集告知（R3，§7.3）——`TEMPLATE`／`template_for`／`notice_text`／`current_notice`／`notice_hash`／`merge_ack`／`get_ack`／`record_ack`
+- L1（新增）：端點 `/api/legal-params/tax-rules`（GET／PUT）、`/api/legal-params/tax-basis-options`、`/api/legal-params/privacy-notice`；頁面 `legal-params.html`；前端元件 `static/privacy-notice.js`
+- L1（新增欄位）：`company_profile.privacy_notice`；設定鍵 `tax_rules_versions`、`privacy_notice_acks`
+
 ## 1.6 — 2026-09-25
 > 稽核 X-9b（AUDIT-X-9b-upgrade-paths-pii.md）與 X-C-batch1 B-2 的修正。只有新增與相容擴充（選填參數）。
 - L0（新增）：`core.upgrade.settings_changes()`——轉換後驗證與新版啟動後比對共用的設定判準（補空值不算改寫，含「鍵在、值是空字串」）（M-1、B-2）
