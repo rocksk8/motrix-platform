@@ -52,3 +52,16 @@
 | P8F-S1 | | | |
 | P8F-S2 | | | |
 | P8F-O1～O3 | | | |
+
+### D 確認（2026-09-26 04:24；對象：origin/wip/h-p8-frontend `6f9a4902`，修正 `82258a0a`）
+
+回覆欄在分支上；列車 rebase 之後 SHA 會變，以 platform 上的內容為準。在 6f9a4902 上，`test_e2e_p8_module_builder_2026_09_26.py` **6 passed**。
+
+| # | D 確認 | 證據 |
+|---|---|---|
+| P8F-S1 | ✅ 關閉 | D 重做 F05（原本存活，拿掉 checkbox 的 `.boolean`）⇒ `test_checkbox_field_saves_a_real_boolean` 紅 |
+| P8F-S2 | ✅ 關閉 | `flushSave` 改成等 `_inflight`，並加上 `flushLimitMs` 上限（module-builder.html:891-905）。D 突變 FS2（逾時照樣放行）⇒ `test_publish_waits_for_the_draft_save_with_a_limit` 紅 |
+| P8F-O1 | ✅ 關閉 | D4 驗收題改在 users.html 授權（PUT /api/users）：授權前沒有、授權後有、沒有授權給其他帳號，三個斷言都打在 DB 的 `users.modules`。另外兩支輔助題仍以夾具直接給權限（測試前置，可接受） |
+| P8F-O2、O3 | ✅ 接受 | O2 依 C4 裁示；O3 依回覆 |
+
+⇒ 本檔結案（修正合回 platform 後生效）。
