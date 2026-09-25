@@ -1694,7 +1694,10 @@ def _e2e_hard_cap(request):
     fh = open(path, "w", encoding="utf-8")
     fh.write(request.node.nodeid + "\n")
     fh.flush()
-    faulthandler.dump_traceback_later(cap, exit=bool(os.environ.get("PYTEST_XDIST_WORKER")), file=fh)
+    # 是不是 xdist worker 以 config.workerinput 為準（真的 worker 才有）。
+    # ☠️ 不用環境變數 PYTEST_XDIST_WORKER：在 worker 裡起的子 pytest 會繼承它 ⇒ 子行程誤以為自己是 worker、
+    #    單程序也走 exit=True（a3 在全量 -n 2 抓到 test_e2e_hard_cap 的單程序題紅）。
+    faulthandler.dump_traceback_later(cap, exit=hasattr(request.config, "workerinput"), file=fh)
     t0 = _t.monotonic()
     try:
         yield

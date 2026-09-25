@@ -18,8 +18,8 @@ import time
 import pytest
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROBE_DIR = os.path.join(BACKEND, "tests", "_hardcap_probe_tmp")     # 要吃到 tests/conftest.py ⇒ 放在 tests/ 底下
-PROBE = os.path.join(PROBE_DIR, "test_zz_hardcap_probe.py")
+# 探針要吃到 tests/conftest.py ⇒ 放在 tests/ 底下；每一題各自一個目錄（-n 下三題同時跑，共用會互刪）
+PROBE_ROOT = os.path.join(BACKEND, "tests")
 
 SRC = '''import time
 import pytest
@@ -38,18 +38,23 @@ def test_quick():
 
 @pytest.fixture
 def probe():
-    os.makedirs(PROBE_DIR, exist_ok=True)
+    import uuid
+    d = os.path.join(PROBE_ROOT, "_hardcap_probe_%s" % uuid.uuid4().hex[:8])
+    os.makedirs(d)
+    f = os.path.join(d, "test_zz_hardcap_probe.py")
 
     def _write(sleep):
-        open(PROBE, "w", encoding="utf-8").write(SRC % {"sleep": sleep})
-        return PROBE
+        open(f, "w", encoding="utf-8").write(SRC % {"sleep": sleep})
+        return f
     yield _write
-    shutil.rmtree(PROBE_DIR, ignore_errors=True)
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def _pytest(args, cap, tmp_path, tag):
-    env = dict(os.environ, MOTRIX_E2E_HARD_CAP=str(cap), PYTHONIOENCODING="utf-8")
-    env.pop("MOTRIX_E2E_HARDCAP_RUN", None)
+    # 子 pytest 不可以繼承外層的 xdist／本次執行狀態（這一題自己在 -n 下跑時，外層是 worker）
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith("PYTEST_XDIST_") and k not in ("PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN")}
+    env.update(MOTRIX_E2E_HARD_CAP=str(cap), PYTHONIOENCODING="utf-8")
     t0 = time.time()
     r = subprocess.run([sys.executable, "-m", "pytest", *args, "-q", "-rf", "-p", "no:cacheprovider",
                         "--basetemp", str(tmp_path / tag)],
@@ -64,7 +69,7 @@ def test_under_xdist_a_stuck_e2e_is_stopped_and_says_where(probe, tmp_path):
     assert r.returncode != 0, out[-800:]
     assert took < 40, "沒有被中止，睡滿了（%.1fs）" % took
     assert "STUCK-LINE-MARKER" in out or "test_zz_hardcap_probe.py\", line 7" in out, "沒印出卡在哪一行：\n" + out[-1500:]
-    assert "FAILED tests/_hardcap_probe_tmp/test_zz_hardcap_probe.py::test_stuck_here - Timeout" in out, out[-800:]
+    assert "test_zz_hardcap_probe.py::test_stuck_here - Timeout: e2e 逐題上限" in out, out[-800:]
     assert "1 passed" in out, "卡住的那題之後，同一輪其他題要照跑：\n" + out[-600:]
 
 
