@@ -99,6 +99,7 @@
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
     - ✅ **已查明（B，856e5497）**：原先歸因於「滿載」是錯的，實際是目錄狀態造成的。os.makedirs 遞迴建上層目錄時，呼叫到的是被 BK19 換掉的記錄版 makedirs；在全新的 worktree 裡 uploads 還不存在，所以多記了一筆上層目錄。開發樹裡 uploads 早就存在，因此只有全新 worktree 的全量會紅。修法：比對改成純函式，已登記寫入的上層目錄不算新缺口，並附 3 題反向控制。**這印證了「偶發失敗先當成真問題查」：它根本不是偶發。**
   - O2：`test_bonus_case_multi_approver_tier` 之後卡住十幾分鐘（A2，約 22:50，滿載時；沒有 dump），停在 multi_approver 之後、vouchers 的第一題；連跑三檔、開 faulthandler 都無法重現。
+  - O5：`test_e2e_login_enter_submits::test_enter_logs_in[after_failed_attempt-webauthn]` 在 C1 全量（f3b59691）e2e 裡紅 1 次：等待導向 /index.html，8 秒逾時。單獨重跑 3 次都綠。這一輪含 core.pages（/pages 路由改由伺服器提供），要查它和登入導向是否有時序關係；下次出現時先抓頁面的網路紀錄與 dump。
   - O3／O4：`test_e2e_hard_cap` 的單程序題、`test_e2e_shared_fixtures` 的 login_as（B 負責修，已知原因＝滿載時的時序）。
 - 稽核：每一項完成、合回之後，照 CORE-SPEC §9d 的分配交叉稽核（A 審 C、B 審 A、C 審 B 與主持）；新的工作線也照這個輪替。
 - 視窗上下文：各視窗會自動摘要，不會因為太長而中斷。若某個視窗出現重複、迷失或品質下降，就不再派工給它，改用新的子代理（獨立 worktree）接手；派工內容一律寫成自足的說明，並引用本檔與 PLAYBOOK，不依賴對話記憶。
@@ -106,6 +107,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 02:43：B 的 C1 全量跑完，非 e2e 紅 1（VR3，已修）、e2e 紅 1（登錄為 O5），照 §G3「跑完直接合回」處理，合回閘門預估 02:52。main.py 兩邊都改了，是真的程式碼重疊，列車的全量要特別留意。D1b 進度：legal_params 從 75.4% 降到 18.9%；email_notify 單一名稱中位數 22.4%；auth 中位數 33.4%（_require_user 76.5%）；db 約 88%，原因是動態 SQL 被保守地擴大到資料表一跳，下一步把資料表一跳細到被改的函式。
 - 2026-09-26 02:40：R1～R3 稽核修正完成，已登記月台（wip/x-r-fix 8cc2dd29，突變 14 全紅；共用捨入函式是 legal_params.round_half_up／floor_amount，寫進 IP-7 契約 1.2）。範圍外的發現：開票申請的營業稅也用了銀行家捨入 ⇒ 新版另派修正，V9 記成 U11 補充。O-2、O-5 記成 U13。
 - 2026-09-26 02:22：使用者問「模組化之後驗證範圍應該會縮小」。主持用 modtest --dry-run --files 量了一次（總數 510 檔）：
   - core/events 13%、routers/cashier 16%、voucher.js 20%、tender_radar/match 20%；
