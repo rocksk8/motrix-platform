@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
-from helpers.quotations import begin_write, save_quotation_json
+from helpers.quotations import begin_write, save_quotation_json, write_txn
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.recognition import normalize_date  # `AC2`
 from routers.contractors import _stamp_passbook
@@ -815,66 +815,66 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
     # Load quotation —— lost update：讀 data_json 前先拿寫鎖
-    begin_write(conn)
-    qrow = conn.execute(
-        "SELECT quote_no, status, data_json, updated_at FROM quotations WHERE quote_no=?",
-        (drow["quote_no"],)
-    ).fetchone()
-    if not qrow:
-        conn.close()
-        raise HTTPException(404, "找不到對應報價單")
-    if qrow["status"] != "草稿":
-        conn.close()
-        raise HTTPException(409, f"報價單目前為「{qrow['status']}」狀態，請先在報價單頁面解鎖後再匯入")
+    with write_txn(conn):   # lost update；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        qrow = conn.execute(
+            "SELECT quote_no, status, data_json, updated_at FROM quotations WHERE quote_no=?",
+            (drow["quote_no"],)
+        ).fetchone()
+        if not qrow:
+            conn.close()
+            raise HTTPException(404, "找不到對應報價單")
+        if qrow["status"] != "草稿":
+            conn.close()
+            raise HTTPException(409, f"報價單目前為「{qrow['status']}」狀態，請先在報價單頁面解鎖後再匯入")
 
-    vendor_name = drow["vendor_name"] or (f"承攬商#{drow['vendor_id']}" if drow["vendor_id"] else "外包人員（點工）")
-    dispatch_items = []
-    try:
-        dispatch_items = json.loads(drow["items_json"] or "[]")
-    except Exception:
-        pass
+        vendor_name = drow["vendor_name"] or (f"承攬商#{drow['vendor_id']}" if drow["vendor_id"] else "外包人員（點工）")
+        dispatch_items = []
+        try:
+            dispatch_items = json.loads(drow["items_json"] or "[]")
+        except Exception:
+            pass
 
-    qdata = {}
-    try:
-        qdata = json.loads(qrow["data_json"] or "{}")
-    except Exception:
-        pass
+        qdata = {}
+        try:
+            qdata = json.loads(qrow["data_json"] or "{}")
+        except Exception:
+            pass
 
-    if not isinstance(qdata.get("items"), list):
-        qdata["items"] = []
+        if not isinstance(qdata.get("items"), list):
+            qdata["items"] = []
 
-    # Add section header
-    qdata["items"].append({
-        "id": str(uuid.uuid4()),
-        "type": "header",
-        "description": f"外包承攬 — {vendor_name}"
-    })
-    # Convert dispatch items to quotation items (cost = vendor unit_price)
-    for it in dispatch_items:
-        unit_price = float(it.get("unitPrice", 0) or 0)
-        qty = float(it.get("qty", 1) or 1)
+        # Add section header
         qdata["items"].append({
             "id": str(uuid.uuid4()),
-            "description": it.get("description", ""),
-            "brand": "",
-            "qty": qty,
-            "unit": it.get("unit", "式"),
-            "cost": unit_price,
-            "margin": 0.30,
-            "unitPrice": None,
-            "unitPriceOverride": False,
-            "amount": 0,
-            "notes": it.get("note", "")
+            "type": "header",
+            "description": f"外包承攬 — {vendor_name}"
         })
+        # Convert dispatch items to quotation items (cost = vendor unit_price)
+        for it in dispatch_items:
+            unit_price = float(it.get("unitPrice", 0) or 0)
+            qty = float(it.get("qty", 1) or 1)
+            qdata["items"].append({
+                "id": str(uuid.uuid4()),
+                "description": it.get("description", ""),
+                "brand": "",
+                "qty": qty,
+                "unit": it.get("unit", "式"),
+                "cost": unit_price,
+                "margin": 0.30,
+                "unitPrice": None,
+                "unitPriceOverride": False,
+                "amount": 0,
+                "notes": it.get("note", "")
+            })
 
-    now = datetime.now().isoformat()
-    # T9（2026-09-23）：①漏 commit ⇒ 回 200 而 UPDATE 被回滾；②第 4 個位置參數是 status，
-    # 先前傳 username ⇒ 只修①會把報價單狀態改成使用者名稱。與 material_orders.py 09-10 同型。
-    save_quotation_json(conn, qrow["quote_no"], qdata, updated_at=now)
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), 'vendor.dispatch.import', 'contractor_dispatch', str(did),
-           f"匯入 {len(dispatch_items)} 品項至 {qrow['quote_no']}")
-    notify_module_activity("承攬商派發", "匯入報價單品項", user.get("display_name") or user["username"],
-                            f"{vendor_name} → {qrow['quote_no']}", "vendor-contractors.html")
-    return {"ok": True, "imported": len(dispatch_items), "updated_at": now}
+        now = datetime.now().isoformat()
+        # T9（2026-09-23）：①漏 commit ⇒ 回 200 而 UPDATE 被回滾；②第 4 個位置參數是 status，
+        # 先前傳 username ⇒ 只修①會把報價單狀態改成使用者名稱。與 material_orders.py 09-10 同型。
+        save_quotation_json(conn, qrow["quote_no"], qdata, updated_at=now)
+        conn.commit()
+        conn.close()
+        _audit(_tok(authorization), 'vendor.dispatch.import', 'contractor_dispatch', str(did),
+               f"匯入 {len(dispatch_items)} 品項至 {qrow['quote_no']}")
+        notify_module_activity("承攬商派發", "匯入報價單品項", user.get("display_name") or user["username"],
+                                f"{vendor_name} → {qrow['quote_no']}", "vendor-contractors.html")
+        return {"ok": True, "imported": len(dispatch_items), "updated_at": now}

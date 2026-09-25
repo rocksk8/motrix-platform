@@ -551,6 +551,36 @@ def begin_write(conn) -> bool:
     return True
 
 
+class write_txn:
+    """`with write_txn(conn): ...` ＝ begin_write ＋「區塊內任何例外 ⇒ rollback 並關閉連線」。
+
+    🔴 2026-09-25（bf 3b3504ba 抓到的那一型）：拿了寫鎖之後的路徑丟例外（HTTPException 或任何沒預期的錯）
+    而沒關連線 ⇒ 寫鎖留到連線被回收，其他人的寫入卡 30 秒後 500「database is locked」。
+    逐處在 raise 前手寫 conn.close() 會漏（被呼叫的函式丟出來的例外看不到）⇒ 用區塊保證。
+    正常離開區塊時什麼都不做：commit／close 照舊由呼叫端決定（同一條連線之後可能還要用）。"""
+
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        begin_write(self.conn)
+        return self.conn
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is not None:
+            # ⚠️ 收尾絕不可以蓋掉原本的例外：很多路徑在 raise 4xx 之前已經自己 conn.close()，
+            #    對已關閉的連線讀 in_transaction／rollback 會丟 ProgrammingError（2026-09-25 回歸實測 17 題）。
+            try:
+                self.conn.rollback()
+            except Exception:         # noqa: BLE001  已關閉／沒有交易 ⇒ 沒有鎖要放
+                pass
+            try:
+                self.conn.close()     # 已關過也無妨
+            except Exception:         # noqa: BLE001
+                pass
+        return False
+
+
 def save_quotation_json(
     conn,
     quote_no: str,

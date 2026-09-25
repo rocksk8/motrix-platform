@@ -12,7 +12,7 @@ from datetime import datetime
 import copy
 from typing import List, Optional
 
-from helpers.quotations import begin_write
+from helpers.quotations import begin_write, write_txn
 from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
@@ -2333,69 +2333,69 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag == "已結案" and user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可結案")
     conn = get_db()
-    begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
-    row = conn.execute(
-        "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    cname = row['customer_name'] or ''
-    pname = row['project_name'] or ''
-    d = json.loads(row["data_json"] or "{}")
-    old_tag = d.get("dealTag", "")
-    # 已成案 需先完成簽核（報價單狀態為「已送出」）
-    if body.deal_tag == "已成案" and row["status"] != "已送出":
-        conn.close()
-        raise HTTPException(400, "報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」")
-    # 已結案只能從「已成案」進入（§5.2 狀態圖：已結案僅案件管理「完結案」，
-    # 不可從未提供/已提供/未成案直接跳過去），避免繞過已成案那一步的簽核前置
-    if body.deal_tag == "已結案" and old_tag != "已成案":
-        conn.close()
-        raise HTTPException(400, "案件須先標記為「已成案」才能結案")
-    # 完結案防呆（2026-08-25 使用者提出、2026-08-26 施作）：①執行管理進度100%
-    # ②款項明細全部收齊③相關單據（報價單/承攬商匯款申請/開票申請憑據/出貨單/
-    # 請款單）簽核流程全部完成，三項須同時達成才能完結案；任一未達成直接 400
-    # 擋下，並通知尚未完成該項的簽核人＋最高管理員（見 _case_close_block_reasons()）。
-    if body.deal_tag == "已結案":
-        reasons, pending_usernames = _case_close_block_reasons(conn, quote_no, d)
-        if reasons:
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
             conn.close()
-            spawn_bg_thread(notify_case_close_blocked, args=(quote_no, cname, pname, reasons, pending_usernames))
-            _audit(_tok(authorization), 'case.close_blocked', 'quotation', quote_no,
-                   f"{quote_no}（{cname}）結案被擋下", {"reasons": reasons})
-            raise HTTPException(400, "尚有前置條件未達成，無法結案：" + "；".join(reasons))
-    # 已成案 → 降級 限管理員以上
-    if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        cname = row['customer_name'] or ''
+        pname = row['project_name'] or ''
+        d = json.loads(row["data_json"] or "{}")
+        old_tag = d.get("dealTag", "")
+        # 已成案 需先完成簽核（報價單狀態為「已送出」）
+        if body.deal_tag == "已成案" and row["status"] != "已送出":
+            conn.close()
+            raise HTTPException(400, "報價單需完成簽核（狀態為「已送出」）才能標記為「已成案」")
+        # 已結案只能從「已成案」進入（§5.2 狀態圖：已結案僅案件管理「完結案」，
+        # 不可從未提供/已提供/未成案直接跳過去），避免繞過已成案那一步的簽核前置
+        if body.deal_tag == "已結案" and old_tag != "已成案":
+            conn.close()
+            raise HTTPException(400, "案件須先標記為「已成案」才能結案")
+        # 完結案防呆（2026-08-25 使用者提出、2026-08-26 施作）：①執行管理進度100%
+        # ②款項明細全部收齊③相關單據（報價單/承攬商匯款申請/開票申請憑據/出貨單/
+        # 請款單）簽核流程全部完成，三項須同時達成才能完結案；任一未達成直接 400
+        # 擋下，並通知尚未完成該項的簽核人＋最高管理員（見 _case_close_block_reasons()）。
+        if body.deal_tag == "已結案":
+            reasons, pending_usernames = _case_close_block_reasons(conn, quote_no, d)
+            if reasons:
+                conn.close()
+                spawn_bg_thread(notify_case_close_blocked, args=(quote_no, cname, pname, reasons, pending_usernames))
+                _audit(_tok(authorization), 'case.close_blocked', 'quotation', quote_no,
+                       f"{quote_no}（{cname}）結案被擋下", {"reasons": reasons})
+                raise HTTPException(400, "尚有前置條件未達成，無法結案：" + "；".join(reasons))
+        # 已成案 → 降級 限管理員以上
+        if old_tag == "已成案" and body.deal_tag != "已成案" and user["role"] not in ("superadmin", "admin"):
+            conn.close()
+            raise HTTPException(403, "已成案狀態只有管理員以上才可降級")
+        # 已結案不可逆轉（僅 superadmin 可例外覆寫）
+        if old_tag == "已結案" and user["role"] != "superadmin":
+            conn.close()
+            raise HTTPException(403, "案件已結案，僅超級管理員可變更案件進度")
+        d["dealTag"] = body.deal_tag or ''
+        if body.log_entry:
+            if "statusLog" not in d or not isinstance(d["statusLog"], list):
+                d["statusLog"] = []
+            d["statusLog"].append(body.log_entry)
+        save_quotation_json(conn, quote_no, d)
+        conn.commit()
         conn.close()
-        raise HTTPException(403, "已成案狀態只有管理員以上才可降級")
-    # 已結案不可逆轉（僅 superadmin 可例外覆寫）
-    if old_tag == "已結案" and user["role"] != "superadmin":
-        conn.close()
-        raise HTTPException(403, "案件已結案，僅超級管理員可變更案件進度")
-    d["dealTag"] = body.deal_tag or ''
-    if body.log_entry:
-        if "statusLog" not in d or not isinstance(d["statusLog"], list):
-            d["statusLog"] = []
-        d["statusLog"].append(body.log_entry)
-    save_quotation_json(conn, quote_no, d)
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
-           f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
-    notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
-                            f"{quote_no}（{cname}）", "quotations.html")
-    if body.deal_tag == '已成案' and old_tag != '已成案':
-        spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
-    if body.deal_tag == '已結案':
-        try:
-            actor_u = _require_user(authorization)
-            actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
-        except Exception:
-            actor_name = ""
-        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
-        spawn_bg_thread(_generate_case_closing_pdf, args=(quote_no, actor_name, '結案報表'))
-    return {"ok": True}
+        _audit(_tok(authorization), 'deal_tag.change', 'quotation', quote_no,
+               f"{quote_no}（{cname}）", {'from': old_tag, 'to': body.deal_tag})
+        notify_module_activity("報價單", f"案件進度變更為「{body.deal_tag}」", user.get("display_name") or user["username"],
+                                f"{quote_no}（{cname}）", "quotations.html")
+        if body.deal_tag == '已成案' and old_tag != '已成案':
+            spawn_bg_thread(push_event_for_quotation_won, args=(quote_no,))
+        if body.deal_tag == '已結案':
+            try:
+                actor_u = _require_user(authorization)
+                actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
+            except Exception:
+                actor_name = ""
+            spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '結案'))
+            spawn_bg_thread(_generate_case_closing_pdf, args=(quote_no, actor_name, '結案報表'))
+        return {"ok": True}
 
 
 @router.delete("/api/quotations/{quote_no}")
@@ -3013,41 +3013,42 @@ def approve_case_change(change_id: int, authorization: str = Header(None)):
     if user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可審核已結案案件的變更申請")
     conn = get_db()
-    req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
-    if not req:
+    with write_txn(conn):   # lost update：變更申請的狀態與案件 data_json 都在寫鎖內讀（_apply_case_change_request 會整包寫回）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        req = conn.execute("SELECT * FROM case_change_requests WHERE id=?", (change_id,)).fetchone()
+        if not req:
+            conn.close()
+            raise HTTPException(404, "找不到此筆變更申請")
+        if req["status"] != "pending":
+            conn.close()
+            raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
+        self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
+        if self_msg:
+            conn.close()
+            raise HTTPException(403, self_msg)
+        # 稽核延後到 commit 之後才寫（2026-09-15）——見
+        # `_apply_case_change_request()` docstring：在這條 conn 還握著寫鎖時
+        # 另開連線寫 audit_log，會撞上 SQLite 單一 writer 等滿 30 秒 busy_timeout，
+        # 而且例外被 `_audit()` 吞掉，稽核紀錄直接消失。實測 32.8 秒。
+        deferred_audits: list = []
+        try:
+            apply_result = _apply_case_change_request(conn, req, user, authorization,
+                                                      deferred_audits)
+        except HTTPException:
+            conn.close()
+            raise
+        now = datetime.now().isoformat()
+        approver_display = user.get("display_name") or user["username"]
+        conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
+                     (approver_display, now, change_id))
+        conn.commit()
         conn.close()
-        raise HTTPException(404, "找不到此筆變更申請")
-    if req["status"] != "pending":
-        conn.close()
-        raise HTTPException(409, f"此筆變更申請已經是「{req['status']}」狀態")
-    self_msg = check_no_tier_self_approval(conn, {"requestedBy": req["requested_by"]}, user)
-    if self_msg:
-        conn.close()
-        raise HTTPException(403, self_msg)
-    # 稽核延後到 commit 之後才寫（2026-09-15）——見
-    # `_apply_case_change_request()` docstring：在這條 conn 還握著寫鎖時
-    # 另開連線寫 audit_log，會撞上 SQLite 單一 writer 等滿 30 秒 busy_timeout，
-    # 而且例外被 `_audit()` 吞掉，稽核紀錄直接消失。實測 32.8 秒。
-    deferred_audits: list = []
-    try:
-        apply_result = _apply_case_change_request(conn, req, user, authorization,
-                                                  deferred_audits)
-    except HTTPException:
-        conn.close()
-        raise
-    now = datetime.now().isoformat()
-    approver_display = user.get("display_name") or user["username"]
-    conn.execute("UPDATE case_change_requests SET status='approved', decided_by=?, decided_at=? WHERE id=?",
-                 (approver_display, now, change_id))
-    conn.commit()
-    conn.close()
-    # 到這裡寫鎖已經放掉，`_audit()` 自己那條連線才進得去
-    for action, target_type, target_id, target_label, detail in deferred_audits:
-        _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
-    spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
-    _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
-            f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")
-    return {"ok": True, "status": "approved", **(apply_result or {})}
+        # 到這裡寫鎖已經放掉，`_audit()` 自己那條連線才進得去
+        for action, target_type, target_id, target_label, detail in deferred_audits:
+            _audit(_tok(authorization), action, target_type, target_id, target_label, detail)
+        spawn_bg_thread(_backup_quotation, args=(req["quote_no"],))
+        _notify(req["requested_by"], "case_change_decided", req["quote_no"], req["quote_no"],
+                f"您對已結案案件 {req['quote_no']} 提出的變更「{req['summary']}」已由 {approver_display} 核准套用")
+        return {"ok": True, "status": "approved", **(apply_result or {})}
 
 
 @router.post("/api/case-changes/{change_id}/reject")
@@ -4143,60 +4144,60 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     user = _require_user(authorization)
     now  = datetime.now().isoformat()
     conn = get_db()
-    begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
-    row = conn.execute(
-        "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
-        "FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    # 2026-09-13（模組權限稽核）：這支原本只要求登入——任何已登入帳號（含 viewer
-    # 與 automation 服務帳號）都能覆寫**任何**案件的成本精算，只有 finalized 之後
-    # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
-    # GET 相同的擁有者檢查。
-    try:
-        _check_quotation_owner(row, user)
-        _require_financial_view(user)
-    except HTTPException:
-        conn.close()
-        raise
-    data = json.loads(row["data_json"] or "{}")
-    existing_settlement = data.get("settlement") or {}
-    if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
-        conn.close()
-        raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
-    data["settlement"] = body.settlement
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
+            "FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        # 2026-09-13（模組權限稽核）：這支原本只要求登入——任何已登入帳號（含 viewer
+        # 與 automation 服務帳號）都能覆寫**任何**案件的成本精算，只有 finalized 之後
+        # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
+        # GET 相同的擁有者檢查。
+        try:
+            _check_quotation_owner(row, user)
+            _require_financial_view(user)
+        except HTTPException:
+            conn.close()
+            raise
+        data = json.loads(row["data_json"] or "{}")
+        existing_settlement = data.get("settlement") or {}
+        if existing_settlement.get("status") == "finalized" and user["role"] != "superadmin":
+            conn.close()
+            raise HTTPException(403, "精算已完結，僅超級管理員可重新修改")
+        data["settlement"] = body.settlement
 
-    # append edit history entry for settlement saves
-    is_finalized = body.settlement.get("status") == "finalized"
-    history = data.get("editHistory") or []
-    if not isinstance(history, list):
-        history = []
-    settle_rev = len(history) + 1
-    history.append({
-        "rev":       settle_rev,
-        "at":        now,
-        "by":        user["username"],
-        "byDisplay": user["display_name"] or user["username"],
-        "type":      "settlement_finalized" if is_finalized else "settlement_draft",
-    })
-    data["editHistory"] = history
+        # append edit history entry for settlement saves
+        is_finalized = body.settlement.get("status") == "finalized"
+        history = data.get("editHistory") or []
+        if not isinstance(history, list):
+            history = []
+        settle_rev = len(history) + 1
+        history.append({
+            "rev":       settle_rev,
+            "at":        now,
+            "by":        user["username"],
+            "byDisplay": user["display_name"] or user["username"],
+            "type":      "settlement_finalized" if is_finalized else "settlement_draft",
+        })
+        data["editHistory"] = history
 
-    now = save_quotation_json(conn, quote_no, data, updated_at=now)
-    conn.commit()
-    conn.close()
-    cname = row["customer_name"] or ""
-    spawn_bg_thread(_backup_quotation, args=(quote_no,))
-    _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
-           f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
-           {"rev": settle_rev})
-    if is_finalized:
-        notify_settlement_finalized(
-            quote_no, cname,
-            user.get("display_name") or user["username"],
-        )
-    return {"ok": True, "updated_at": now}
+        now = save_quotation_json(conn, quote_no, data, updated_at=now)
+        conn.commit()
+        conn.close()
+        cname = row["customer_name"] or ""
+        spawn_bg_thread(_backup_quotation, args=(quote_no,))
+        _audit(_tok(authorization), 'quotation.settlement', 'quotation', quote_no,
+               f"{quote_no}（{cname}）成本精算{'完結' if is_finalized else '更新'}",
+               {"rev": settle_rev})
+        if is_finalized:
+            notify_settlement_finalized(
+                quote_no, cname,
+                user.get("display_name") or user["username"],
+            )
+        return {"ok": True, "updated_at": now}
 
 
 # ── 案件財務總覽（應收應付，2026-09-09）────────────────────────────────────────
@@ -5046,112 +5047,113 @@ def get_approval_queue_count(authorization: str = Header(None)):
 def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute(
-        "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
-        (quote_no,)
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
-    cname = row["customer_name"] or ""
-    d     = json.loads(row["data_json"] or "{}")
-    appr  = d.get("approval") or {}
-    tiers = _active_tiers(appr)
-    now   = datetime.now().isoformat()
-
-    if tiers:
-        ct_idx = _current_tier_idx(appr)
-        ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
-        if not ok:
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            (quote_no,)
+        ).fetchone()
+        if not row:
             conn.close()
-            raise HTTPException(status_code, err_msg)
-        tier      = tiers[ct_idx]
-        approvers = tier.get("approvers") or []
-        first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
-        my_entry = first_pending
+            raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
+        cname = row["customer_name"] or ""
+        d     = json.loads(row["data_json"] or "{}")
+        appr  = d.get("approval") or {}
+        tiers = _active_tiers(appr)
+        now   = datetime.now().isoformat()
 
-        my_entry["status"]     = "approved"
-        my_entry["approvedAt"] = now
+        if tiers:
+            ct_idx = _current_tier_idx(appr)
+            ok, status_code, err_msg = check_approve_permission(tiers, ct_idx, user["username"], conn=conn)
+            if not ok:
+                conn.close()
+                raise HTTPException(status_code, err_msg)
+            tier      = tiers[ct_idx]
+            approvers = tier.get("approvers") or []
+            first_pending = next((a for a in approvers if a.get("status") != "approved"), None)
+            my_entry = first_pending
 
-        tier_done = all(a.get("status") == "approved" for a in approvers)
-        cascaded = []
-        if tier_done:
-            # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade，
-            # 且只吃「剩下未簽的只有他自己」的連續層，不會替別人做決定。
-            if body.cascade:
-                cascaded = cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
-            landed = ct_idx + 1 + len(cascaded)
-            appr["currentTier"] = landed
-            all_done = landed >= len(tiers)
-            if not all_done:
-                next_tier = tiers[landed]
-                _next_names = []
-                for na in next_tier.get("approvers") or []:
-                    _notify(na["username"], "approval_request", quote_no, quote_no,
-                            f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
-                    _next_names.append(na["username"])
-                notify_next_tier(quote_no, cname, landed + 1, len(tiers), _next_names)
+            my_entry["status"]     = "approved"
+            my_entry["approvedAt"] = now
+
+            tier_done = all(a.get("status") == "approved" for a in approvers)
+            cascaded = []
+            if tier_done:
+                # 同一人連任多層時一次簽完（2026-09-15）：前端確認過才會帶 cascade，
+                # 且只吃「剩下未簽的只有他自己」的連續層，不會替別人做決定。
+                if body.cascade:
+                    cascaded = cascade_self_tiers(tiers, ct_idx, user["username"], now, conn=conn)
+                landed = ct_idx + 1 + len(cascaded)
+                appr["currentTier"] = landed
+                all_done = landed >= len(tiers)
+                if not all_done:
+                    next_tier = tiers[landed]
+                    _next_names = []
+                    for na in next_tier.get("approvers") or []:
+                        _notify(na["username"], "approval_request", quote_no, quote_no,
+                                f"報價單 {quote_no}（{cname}）輪到您簽核（第 {landed + 1} 層 / 共 {len(tiers)} 層）")
+                        _next_names.append(na["username"])
+                    notify_next_tier(quote_no, cname, landed + 1, len(tiers), _next_names)
+            else:
+                all_done = False
+
+            # write back tiers
+            appr["tiers"] = tiers
+            appr.pop("steps", None)
+            appr.pop("currentStep", None)
+            _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
+            detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
+                             f"{my_entry.get('displayName', user['username'])} 已簽核")
         else:
-            all_done = False
+            # no tiers on this quotation — check global settings first
+            if user["role"] != "superadmin":
+                conn.close()
+                raise HTTPException(403, "僅超級管理員可執行此操作")
+            # If global approval_flow has tiers configured, block the no-tier fallback.
+            # This prevents a quotation submitted before flow was set (tiers missing)
+            # from being approved without going through the flow.
+            _global_flow   = resolve_active_flow_setting("quotation")
+            try:
+                _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
+            except UnresolvedManagerError as e:
+                conn.close()
+                raise HTTPException(400, str(e))
+            if _global_tiers:
+                conn.close()
+                raise HTTPException(
+                    403,
+                    "系統已設定簽核流程，此報價單缺少簽核層資料。"
+                    "請請申請人收回並重新送審，以套用最新簽核設定"
+                )
+            self_block_msg = check_no_tier_self_approval(conn, appr, user)
+            if self_block_msg:
+                conn.close()
+                raise HTTPException(403, self_block_msg)
+            all_done      = True
+            detail_status = "超級管理員簽核"
+            _signed_tier_nos = []
 
-        # write back tiers
-        appr["tiers"] = tiers
-        appr.pop("steps", None)
-        appr.pop("currentStep", None)
-        _signed_tier_nos = [i + 1 for i in [ct_idx, *cascaded]]
-        detail_status = (f"第 {'、'.join(str(n) for n in _signed_tier_nos)} 層 "
-                         f"{my_entry.get('displayName', user['username'])} 已簽核")
-    else:
-        # no tiers on this quotation — check global settings first
-        if user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
-        # If global approval_flow has tiers configured, block the no-tier fallback.
-        # This prevents a quotation submitted before flow was set (tiers missing)
-        # from being approved without going through the flow.
-        _global_flow   = resolve_active_flow_setting("quotation")
-        try:
-            _global_tiers = _setting_to_active_tiers(_global_flow, conn, appr.get("requestedBy"))
-        except UnresolvedManagerError as e:
-            conn.close()
-            raise HTTPException(400, str(e))
-        if _global_tiers:
-            conn.close()
-            raise HTTPException(
-                403,
-                "系統已設定簽核流程，此報價單缺少簽核層資料。"
-                "請請申請人收回並重新送審，以套用最新簽核設定"
-            )
-        self_block_msg = check_no_tier_self_approval(conn, appr, user)
-        if self_block_msg:
-            conn.close()
-            raise HTTPException(403, self_block_msg)
-        all_done      = True
-        detail_status = "超級管理員簽核"
-        _signed_tier_nos = []
+        if all_done:
+            appr["approvedBy"]        = user["username"]
+            appr["approvedByDisplay"] = body.approvedByDisplay or user.get("display_name") or user["username"]
+            appr["approvedAt"]        = now
+            appr["status"]            = "approved"
+            d["approval"] = appr
+            save_quotation_json(conn, quote_no, d, status="已送出", updated_at=now)
+            approver_name = appr.get("approvedByDisplay") or user.get("display_name") or user.get("username") or ""
+            spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'))
+            notify_approved(quote_no, cname, approver_name, appr.get("requestedBy") or "")
+            detail_status = "已送出"
+        else:
+            d["approval"] = appr
+            # 若 tier 已推進（至少一層完成但未全部通過）→ 顯示「簽核中」
+            new_status = "簽核中" if (appr.get("currentTier") or 0) > 0 else None
+            save_quotation_json(conn, quote_no, d, status=new_status, updated_at=now)
 
-    if all_done:
-        appr["approvedBy"]        = user["username"]
-        appr["approvedByDisplay"] = body.approvedByDisplay or user.get("display_name") or user["username"]
-        appr["approvedAt"]        = now
-        appr["status"]            = "approved"
-        d["approval"] = appr
-        save_quotation_json(conn, quote_no, d, status="已送出", updated_at=now)
-        approver_name = appr.get("approvedByDisplay") or user.get("display_name") or user.get("username") or ""
-        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, approver_name, '簽核'))
-        notify_approved(quote_no, cname, approver_name, appr.get("requestedBy") or "")
-        detail_status = "已送出"
-    else:
-        d["approval"] = appr
-        # 若 tier 已推進（至少一層完成但未全部通過）→ 顯示「簽核中」
-        new_status = "簽核中" if (appr.get("currentTier") or 0) > 0 else None
-        save_quotation_json(conn, quote_no, d, status=new_status, updated_at=now)
-
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
-           f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
-    return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
+        conn.commit()
+        conn.close()
+        _audit(_tok(authorization), "quotation.approve", "quotation", quote_no,
+               f"{quote_no}（{cname}）", {"allDone": all_done, "status": detail_status})
+        return {"ok": True, "allDone": all_done, "signedTiers": _signed_tier_nos}
 
 
 @router.post("/api/quotations/{quote_no}/reject")
@@ -5243,61 +5245,62 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
     """拒絕結案：永久鎖定，不可再修改或送審。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute(
-        "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
-        (quote_no,)
-    ).fetchone()
-    if not row:
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            (quote_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
+        cname = row["customer_name"] or ""
+        d     = json.loads(row["data_json"] or "{}")
+        appr  = d.get("approval") or {}
+        tiers = _active_tiers(appr)
+
+        if tiers:
+            ct_idx    = _current_tier_idx(appr)
+            tier      = tiers[ct_idx] if ct_idx < len(tiers) else {}
+            approvers = tier.get("approvers") or []
+            is_in_tier = any(a["username"] == user["username"] for a in approvers)
+            if not is_in_tier and user["role"] != "superadmin":
+                conn.close()
+                raise HTTPException(403, "無拒絕權限（非當層簽核人員）")
+        else:
+            if user["role"] != "superadmin":
+                conn.close()
+                raise HTTPException(403, "僅超級管理員可執行此操作")
+
+        note = body.note or ""
+        now  = datetime.now().isoformat()
+        d["rejection"] = {
+            "rejectedBy":        user["username"],
+            "rejectedByDisplay": user.get("display_name") or user["username"],
+            "rejectedAt":        now,
+            "note":              note,
+        }
+        if not isinstance(d.get("statusLog"), list):
+            d["statusLog"] = []
+        d["statusLog"].append({
+            "at":   now,
+            "user": user.get("display_name") or user["username"],
+            "from": "待審核",
+            "to":   "已拒絕",
+            "note": note,
+        })
+
+        save_quotation_json(conn, quote_no, d, status="已拒絕", updated_at=now)
+        conn.commit()
+
+        requester = appr.get("requestedBy")
+        if requester:
+            suffix = f"：{note}" if note else ""
+            _notify(requester, "approval_rejected", quote_no, quote_no,
+                    f"報價單 {quote_no}（{cname}）已被拒絕結案{suffix}")
         conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
-    cname = row["customer_name"] or ""
-    d     = json.loads(row["data_json"] or "{}")
-    appr  = d.get("approval") or {}
-    tiers = _active_tiers(appr)
-
-    if tiers:
-        ct_idx    = _current_tier_idx(appr)
-        tier      = tiers[ct_idx] if ct_idx < len(tiers) else {}
-        approvers = tier.get("approvers") or []
-        is_in_tier = any(a["username"] == user["username"] for a in approvers)
-        if not is_in_tier and user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "無拒絕權限（非當層簽核人員）")
-    else:
-        if user["role"] != "superadmin":
-            conn.close()
-            raise HTTPException(403, "僅超級管理員可執行此操作")
-
-    note = body.note or ""
-    now  = datetime.now().isoformat()
-    d["rejection"] = {
-        "rejectedBy":        user["username"],
-        "rejectedByDisplay": user.get("display_name") or user["username"],
-        "rejectedAt":        now,
-        "note":              note,
-    }
-    if not isinstance(d.get("statusLog"), list):
-        d["statusLog"] = []
-    d["statusLog"].append({
-        "at":   now,
-        "user": user.get("display_name") or user["username"],
-        "from": "待審核",
-        "to":   "已拒絕",
-        "note": note,
-    })
-
-    save_quotation_json(conn, quote_no, d, status="已拒絕", updated_at=now)
-    conn.commit()
-
-    requester = appr.get("requestedBy")
-    if requester:
-        suffix = f"：{note}" if note else ""
-        _notify(requester, "approval_rejected", quote_no, quote_no,
-                f"報價單 {quote_no}（{cname}）已被拒絕結案{suffix}")
-    conn.close()
-    _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
-           f"{quote_no}（{cname}）", {"note": note})
-    return {"ok": True}
+        _audit(_tok(authorization), "quotation.reject_final", "quotation", quote_no,
+               f"{quote_no}（{cname}）", {"note": note})
+        return {"ok": True}
 
 
 # ── Case updates (activity feed / comment board) ─────────────────────────────
@@ -6488,6 +6491,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
     table, key = _REASSIGN_TABLES[body.type]
     conn = get_db()
     try:
+        begin_write(conn)   # lost update：各單據的 data_json／approval_json 在寫鎖內讀、整包寫回
         target = conn.execute(
             "SELECT username, display_name FROM users WHERE username=? AND active=1",
             (to_username,)).fetchone()

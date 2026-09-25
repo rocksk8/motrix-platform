@@ -174,6 +174,55 @@ def _c_dispatch_import(client, h):
     return None, lambda: client.post(f"/api/contractor-dispatches/{did}/import-to-quote", headers=h),         lambda d: "配線施工" in [it.get("description") for it in d.get("items") or []]
 
 
+# ── B 組：簽核流程 ───────────────────────────────────────────────────────────
+def _c_approve(client, h, me):
+    from tests.test_approval_reassign_history_2026_09_14 import _seed_quote_pending
+    _seed_quote_pending("MQ-LU-APR", me)
+    return None, lambda: client.post("/api/quotations/MQ-LU-APR/approve", headers=h, json={}),         lambda d: d["approval"]["tiers"][0]["approvers"][0].get("status") == "approved"
+
+
+def _c_reject_final(client, h, me):
+    from tests.test_approval_reassign_history_2026_09_14 import _seed_quote_pending
+    _seed_quote_pending("MQ-LU-REJ", me)
+    return None, lambda: client.post("/api/quotations/MQ-LU-REJ/reject-final", headers=h, json={"reason": "探針"}),         lambda d: "reject" in json.dumps(d.get("approval") or {}, ensure_ascii=False).lower() or         "拒絕" in json.dumps(d.get("approval") or {}, ensure_ascii=False)
+
+
+def _c_reassign(client, h, me):
+    from tests.test_approval_reassign_history_2026_09_14 import _seed_quote_pending
+    _seed_quote_pending("MQ-LU-RSG", "lu_old")
+    return None, lambda: client.post("/api/approval-queue/reassign", headers=h,
+                                     json={"type": "quotation", "id": "MQ-LU-RSG", "to_username": "lu_new",
+                                           "reason": "探針"}),         lambda d: d["approval"]["tiers"][0]["approvers"][0].get("username") == "lu_new"
+
+
+def _c_case_change(client, h, me):
+    from tests.test_case_change_approve_deadlock_2026_09_15 import _seed as _seed_change
+    _, cid = _seed_change("MQ-LU-CHG")
+    return None, lambda: client.post(f"/api/case-changes/{cid}/approve", headers=h),         lambda d: (d["caseRecord"].get("contract") or {}).get("deliveryAddress") == "新北市"
+
+
+B_CASES = {"approve_quotation": _c_approve, "reject_final": _c_reject_final,
+           "reassign_approval": _c_reassign, "case_change_approve": _c_case_change}
+
+
+@pytest.mark.parametrize("case", sorted(B_CASES))
+def test_b_approval_flows_do_not_overwrite_a_write_in_the_gap(client, make_user, gap_probe, case):
+    u, pw = make_user(username="lub_" + case[:12], role="superadmin")
+    make_user(username="lu_old", role="admin")
+    make_user(username="lu_new", role="admin")
+    h = _login(client, u, pw)
+    _, trigger, landed = B_CASES[case](client, h, u)
+    gap_probe["armed"] = True
+    r = trigger()
+    assert r.status_code in (200, 201), r.text
+    assert gap_probe["fired"] == 1, "探針沒有插進空窗（被測路徑變了）"
+    for t in gap_probe["threads"]:
+        t.join(40)
+    d = _data(gap_probe["quote"])
+    assert d.get("_probe") == "寫在空窗裡", "端點用讀到的舊 data_json 整包寫回，蓋掉了空窗裡的寫入"
+    assert landed(d), ("端點自己的修改沒有落地", d.get("approval"), d.get("caseRecord", {}).get("contract"))
+
+
 CASES = {
     "dispatch_import": _c_dispatch_import,
     "payment_invoice_upload": _c_pay_upload, "payment_invoice_delete": _c_pay_delete,
@@ -206,3 +255,66 @@ def test_a_write_in_the_gap_is_not_overwritten(client, make_user, gap_probe, cas
     d = _data(gap_probe["quote"])
     assert d.get("_probe") == "寫在空窗裡", "端點用讀到的舊 data_json 整包寫回，蓋掉了空窗裡的寫入"
     assert landed(d), "端點自己的修改沒有落地"
+
+
+# ── 拿了寫鎖之後丟例外 ⇒ 寫鎖一定要釋放（bf 3b3504ba 那一型；W-6「database is locked」的成因之一）───────
+def _lock_is_free():
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("PRAGMA busy_timeout = 1000")        # 被卡住的話 1 秒就放棄
+        conn.execute("BEGIN IMMEDIATE")
+        conn.rollback()
+        return True
+    except Exception as e:                                 # noqa: BLE001
+        return repr(e)
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("case", sorted(CASES) + ["B:" + k for k in sorted(B_CASES)])
+def test_an_error_after_taking_the_write_lock_releases_it(client, make_user, monkeypatch, case):
+    u, pw = make_user(username="lk_" + case.replace(":", "")[:14], role="superadmin")
+    make_user(username="lu_old", role="admin")
+    make_user(username="lu_new", role="admin")
+    h = _login(client, u, pw)
+    if case.startswith("B:"):
+        _, trigger, _ = B_CASES[case[2:]](client, h, u)
+        call = trigger
+    else:
+        _seed(assigned=[])
+        who, trigger, _ = CASES[case](client, h)
+        if who == "approver":
+            u2, pw2 = make_user(username="lk_appr", role="superadmin")
+            h2 = _login(client, u2, pw2)
+            call = lambda: trigger(h2)            # noqa: E731
+        else:
+            call = trigger
+
+    def _boom(*a, **k):
+        raise RuntimeError("拿了寫鎖之後的意外錯誤（探針）")
+    for mod in (q, mo, vc):
+        monkeypatch.setattr(mod, "save_quotation_json", _boom)
+    with pytest.raises(RuntimeError) as excinfo:          # 握著例外（traceback 還引用著 frame），貼近正式機
+        call()
+    assert "探針" in str(excinfo.value)
+    free = _lock_is_free()
+    assert free is True, ("丟例外之後寫鎖沒有釋放（連線沒關）", free)
+
+
+def test_write_txn_never_masks_the_original_error(client):
+    """很多路徑在 raise 4xx 之前自己先 conn.close()；write_txn 的收尾不可以把它變成 ProgrammingError。"""
+    import db
+    from fastapi import HTTPException
+    from helpers.quotations import write_txn
+    conn = db.get_db()
+    with pytest.raises(HTTPException) as e:
+        with write_txn(conn):
+            conn.close()
+            raise HTTPException(409, "原本的錯誤")
+    assert e.value.status_code == 409
+    conn2 = db.get_db()                                  # 另一種：沒關就丟 ⇒ 收尾要釋放寫鎖
+    with pytest.raises(ValueError):
+        with write_txn(conn2):
+            raise ValueError("x")
+    assert _lock_is_free() is True
