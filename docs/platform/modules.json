@@ -75,6 +75,7 @@
    "plat:events",
    "plat:definitions",
    "plat:loader",
+   "plat:menu",
    "plat:migrations",
    "plat:pages",
    "plat:paths",
@@ -95,6 +96,7 @@
    "router:modules",
    "router:org_structure",
    "router:parts",
+   "router:platform_menu",
    "router:search",
    "router:system",
    "router:uploads"

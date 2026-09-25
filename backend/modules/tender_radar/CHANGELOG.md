@@ -1,5 +1,8 @@
 # 標案雷達 更新紀錄
 
+## 1.1.0 — 2026-09-26
+- module.json `pages[].menu`：選單項改由模組自己宣告（階段 C／C3，core.menu；群組 business、order 20＝業務開發與地圖之間）；模組沒載入 ⇒ 選單不出現
+
 ## 1.0.1 — 2026-09-25
 - module.json 新增 `license_key: tender_radar`（CORE-SPEC §9c ② 模組授權；授權金鑰的 modules 清單寫這個值）
 
