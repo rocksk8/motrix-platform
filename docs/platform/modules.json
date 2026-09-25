@@ -469,21 +469,20 @@
    "key": "netplan",
    "name": "網路規劃",
    "units": [
-    "core:network_plan_export",
-    "core:network_plan_topology",
+    "mod:netplan/__init__",
+    "mod:netplan/api",
+    "mod:netplan/export",
+    "mod:netplan/topology",
     "page:pages/network-plan-form.html",
     "page:pages/network-plans.html",
-    "page:pages/topology-quick.html",
-    "router:network_plans",
-    "router:network_plans_quick"
+    "page:pages/topology-quick.html"
    ],
    "tables": [
     "network_plans"
    ],
    "api_prefixes": [
     "/api/network-plans",
-    "/api/network-plans-quick",
-    "/api/quotations"
+    "/api/network-plans-quick"
    ]
   },
   "M11": {

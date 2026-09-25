@@ -1,0 +1,41 @@
+{
+  "key": "netplan",
+  "name": "網路規劃",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "netplan",
+  "permissions": [
+    "netplan",
+    "netplan_edit"
+  ],
+  "tables": [
+    "network_plans"
+  ],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration",
+  "data": {
+    "tables": [
+      {
+        "name": "network_plans",
+        "class": "T1"
+      }
+    ],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": [
+      "/api/network-plans",
+      "/api/network-plans-quick"
+    ]
+  },
+  "pages": [
+    {
+      "path": "network-plans.html"
+    },
+    {
+      "path": "network-plan-form.html"
+    },
+    {
+      "path": "topology-quick.html"
+    }
+  ]
+}

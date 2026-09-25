@@ -615,3 +615,26 @@ def save_quotation_json(
             (json.dumps(data, ensure_ascii=False), now, deal_tag, settle_status, quote_no),
         )
     return now
+
+
+# ── 串接點 IP-11 `case.access`（INTEGRATION-POINTS；2026-09-26 M10 搬遷前置）──────────
+# 別組（目前是 M10 網路規劃書）要「確認這個人能不能看這個案件」「讀案件的客戶／專案名稱」時走這裡，
+# 不 import 本檔、也不直接讀 quotations。M01 不在 ⇒ 沒有提供者，使用方明說「案件模組未安裝」。
+class _CaseAccess:
+    @staticmethod
+    def guard(conn, quote_no, user, allow_module=None):
+        """同 guard_case_access：不存在 404、無權限 403（擋下時會關連線）；通過回單列。"""
+        return guard_case_access(conn, quote_no, user, allow_module=allow_module)
+
+    @staticmethod
+    def summary(conn, quote_no):
+        """{customer, project}；案件不存在 ⇒ None。"""
+        row = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?",
+                           (quote_no,)).fetchone()
+        if row is None:
+            return None
+        return {"customer": row["customer_name"] or "", "project": row["project_name"] or ""}
+
+
+from core import registry as _registry  # noqa: E402
+_registry.provide("case.access", "case", _CaseAccess)

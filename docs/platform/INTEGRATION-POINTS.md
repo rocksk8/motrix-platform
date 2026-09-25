@@ -243,3 +243,20 @@ M12 每日任務搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/daily_
 | 對方不在時 | 少那一類檢查，其餘照常；**系統健康檢查（憑證、備份、磁碟、暫存、簽核催辦、請求紀錄清理）不依賴任何 L2 模組，一律執行** |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_daily_checks_connector.py`：①兩個提供者都已登記 ②**反向控制**：拿掉所有 `daily.check` 提供者 ⇒ 系統檢查兩種模式都照跑 ③一支提供者丟例外不影響其他支與系統檢查 ④逐日補跑行為照舊；`tests/test_backup_freshness_disk_2026_09_14.py::test_checks_are_wired_into_daily_schedule`（改為行為題）；登記表一致性由 `test_integration_points_registered.py` 守 |
+
+---
+
+## IP-11　`case.access`：案件的逐案權限與摘要（M01 → M10）
+
+M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/network_plans.py` 經 `helpers` 套件 import M01 的 `guard_case_access`，並直接讀 `quotations` 取客戶／專案名稱（l2_import_baseline「M10 router:network_plans -> M01 helper:quotations」）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `helpers/quotations.py::_CaseAccess`（`guard`／`summary`） |
+| 使用方 | M10 `modules/netplan/api.py`：`GET /api/quotations/{quote_no}/network-plan`（`guard`）、`POST /api/network-plans` 綁定案件時（`summary`） |
+| 形式 | provider，單一提供者（M01 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`registry.provide("case.access", "case", _CaseAccess)`<br>取用：`ca = registry.single_provider("case.access")`；`None` ⇒ 退化。`ca.guard(conn, quote_no, user, allow_module=…)`；`ca.summary(conn, quote_no)` |
+| 回傳 | `guard`：同 `guard_case_access`——案件不存在 404、無權限 403（擋下時關連線），通過回單列。`summary`：`{customer, project}`；案件不存在 ⇒ `None` |
+| 對方不在時 | 規劃書照常建立、編輯、匯出；**不能綁定案件**：建立時帶案件單號 ⇒ 400「案件模組未安裝：規劃書無法綁定案件（不填案件單號即可建立獨立的規劃書）」；依案件查詢 ⇒ 404「案件模組未安裝：無法依案件查詢網路架構規劃書」 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/modules/netplan/tests/test_netplan_case_access.py`：①提供者已登記 ②正對照：綁定案件時帶出客戶名、依案件查詢有逐案權限（外人 403）③**反向控制**：拿掉提供者 ⇒ 不綁案件的建立照常、綁案件 400、依案件查詢 404，訊息明說；逐案守門的歸類由 `test_case_read_scope.py` 守 |
