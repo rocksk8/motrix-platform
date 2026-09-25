@@ -531,8 +531,12 @@ window.CM_PARTS.push(() => ({
     //    第二次帶的 base 是第一次送出前的 _segBase（第一次回來才更新）⇒ 伺服器分段比對 409「已被他人更新」，
     //    而他人就是自己。
     //    ⇒ 在途時再呼叫**不另外送**，只標記「再存一次」並拿同一個 promise；前一次成功、基準更新之後，
-    //       用最新的基準再送一次。某一次失敗（409／驗證不過）就停，不自動重送（交給使用者處理）。
-    //    呼叫端 `await saveCaseRecord()` 會等到佇列清空。
+    //       用最新的基準再送一次。呼叫端 `await saveCaseRecord()` 會等到佇列清空。
+    // 🔴 更正（2026-09-25）：原本「某一次失敗（409／驗證不過）就停」⇒ 在途的是只填一欄時的自動存檔
+    //    （伺服器 400），使用者補完另一欄按「儲存」，這一按被吞掉、畫面只剩前一次的錯誤、資料沒進資料庫。
+    //    ⇒ 一次嘗試期間**有新的存檔請求**，不論那一次成敗都用最新狀態再送一次；
+    //       沒有新請求才停（失敗本身不觸發重送，不會無限重試）。
+    //    守門：test_e2e_case_save_queue_after_failure_2026_09_25。
     saveCaseRecord() {
       if (this._saveRun) {
         this._saveAgain = true
@@ -540,11 +544,10 @@ window.CM_PARTS.push(() => ({
       }
       this._saveRun = (async () => {
         try {
-          let ok
           do {
             this._saveAgain = false
-            ok = await this._saveCaseRecordOnce()
-          } while (ok && this._saveAgain)
+            await this._saveCaseRecordOnce()
+          } while (this._saveAgain)
         } finally {
           this._saveRun = null
         }
