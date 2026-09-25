@@ -165,7 +165,8 @@ modules/<key>/
 **開發機部署步驟（依序）**
 
 1. **先在安裝根目錄放 `.no_email_send`**（或設 `MOTRIX_EMAIL_SEND=off`）——沒有它就會真的寄信（email 預設寄，2026-09-25 裁示）；同時放 `.no_cloud_archive`
-2. 第一次啟動且沒有主庫：設 `MOTRIX_CREATE_NEW_DB=1` 啟動一次，建好後移除
+2. **新版開發機第一次啟動或第一次打包之前，必須先建開發庫**：設 `MOTRIX_CREATE_NEW_DB=1` 建一次（啟動一次，或只跑 `python -c "import db; db.init_db()"`），建好後移除旗標。主工作樹與每一個要打包的 worktree 都要各自有一份（`backend/motrix_erp.db`，已在 .gitignore）。
+   原因：`build_deploy_package.ps1` 的版本紀錄反方向守門（`check_version_sync.py`，VR7）要讀這個庫；**讀不到就判失敗、擋打包**（刻意設計：一道讀不到就放行的守門等於不存在）。新版開發庫全新建立，**不讀、不複製 V9 開發目錄**；D7 最終驗證另用 V9 開發庫的複本，放在獨立演練目錄。（2026-09-25 主持裁示；9c① 演練時發現新版 repo 沒有開發庫）
 
 **正式機**：不放 `.no_email_send`、不設 `MOTRIX_EMAIL_SEND` ⇒ 照常寄信（與 V9 現況相同，不需額外步驟）。兩個標記都在 `.gitignore`，`tools/verify_package.py` 的 `dev-marker` 規則擋它們進部署包。
 
