@@ -1,5 +1,5 @@
 {
- "core_version": "1.14",
+ "core_version": "1.15",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -420,17 +420,23 @@
    "push_event_for_shipping_note": "def(note_no)"
   },
   "helper:legal_params": {
+   "ARTICLE_8_DELETED": "const",
+   "ARTICLE_8_ITEMS": "const",
+   "ARTICLE_8_SOURCE": "const",
    "DEFAULT_TAX_RULE_VERSIONS": "const",
    "INCOME_TYPES": "const",
    "LEGACY_EFFECTIVE_FROM": "const",
    "LEGACY_KEY": "const",
+   "LEGACY_TAX_BASIS_LABELS": "const",
    "NoApplicableRules": "class",
    "TAX_BASIS_NOTE_REQUIRED": "const",
    "TAX_BASIS_OPTIONS": "const",
    "VERSIONS_KEY": "const",
+   "floor_amount": "def(amount, rate=…)",
    "frozen_changes": "def(old_versions, new_versions, today)",
    "load_versions": "def()",
    "minimum_wage_mismatch": "def(v)",
+   "round_half_up": "def(amount, rate=…)",
    "rules_by_version": "def(versions, version)",
    "rules_for_date": "def(versions, on)",
    "save_versions": "def(versions)",
@@ -519,16 +525,20 @@
   },
   "helper:privacy_notice": {
    "ACKS_KEY": "const",
+   "AcksCorrupted": "class",
    "COMPANY_PLACEHOLDER": "const",
    "TEMPLATE": "const",
+   "TEXTS_KEY": "const",
    "ack_record": "def(user, text, now=…)",
+   "archive_text": "def(conn, text)",
    "current_notice": "def()",
    "get_ack": "def(kind, key)",
    "merge_ack": "def(existing, requested, user, text)",
    "notice_hash": "def(text)",
    "notice_text": "def(profile)",
    "record_ack": "def(kind, key, user)",
-   "template_for": "def(company_name)"
+   "template_for": "def(company_name)",
+   "text_for_hash": "def(h)"
   },
   "helper:procurement": {
    "STATUS_ORDERED": "const",
