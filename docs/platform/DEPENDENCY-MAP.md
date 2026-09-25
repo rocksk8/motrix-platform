@@ -99,6 +99,14 @@
 | `helpers/case_stage_tasks.py` | `:39` `sync_daily_task_for_case_stage`（由 `routers/quotations.py:3374` 呼叫） | daily_tasks, daily_task_completions | **連接器**：M12 公開「由外部來源建立／同步任務」；M01 發事件 |
 | `helpers/quotations.py` | 被 16 支 router 引用 | quotations | **拆**：`begin_write`(`:567`)／`write_txn`(`:612`)／`_safe_close`(`:44`) 下沉 L1；其餘（稅額、請款、`guard_case_access` `:77`）留 M01 並公開成連接器 |
 
+### 3.2 已知例外：L1 讀 M01 的 `quotations` 表（主持裁示 2026-09-26）
+
+案件存取守門（`guard_case_access`、`case_access_allowed`、`is_document_approver`、`CASE_ACCESS`）自 M01 `helpers/quotations.py` 下沉到 L1 `helpers/case_access.py`（#2「案件可見性規則 → L1 權限」）。M03 出貨、M04 外包、M05 開票／請款、M10 網路規劃因此不再依賴 M01（l2_import_baseline 刪 4 條邊）。
+
+- 代價：L1 的 `helpers/case_access.py` 讀 M01 的 `quotations`（守門需要案件列的業務、協作者與簽核資料）。**這是唯一准許新增的 L1 讀取**。
+- 守門：`tests/platform/test_case_access_l1.py`——L1 其他檔新增讀 `quotations` ⇒ 紅；下沉當下已經在讀的 9 個檔（archive、db、pdf_gen、audit、company_identity、google_calendar、item_reads、search、system）列在基線，次數只准變少。
+- M01 不在（案件表不存在）⇒ `guard_case_access` 一律 404，不放行、不 500。
+
 ## 4. 跨組共用的表
 
 | 表 | 寫入者（router 直接） | 位置 | 處置 |
