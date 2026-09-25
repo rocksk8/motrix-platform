@@ -59,12 +59,11 @@ def test_pdf_gen_and_network_plan_export_share_the_same_runner():
     改比對那支函式。
     """
     import pdf_gen
-    import modules.netplan.export as network_plan_export
     import routers.reports as reports_module
 
     assert pdf_gen.run_edge_pdf is run_edge_pdf
-    assert network_plan_export.run_edge_pdf is run_edge_pdf
     assert reports_module.run_edge_pdf is run_edge_pdf
+    # 網路規劃（modules/netplan/export.py）那一處 （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
 
 
 def test_no_module_spawns_edge_outside_the_shared_runner():

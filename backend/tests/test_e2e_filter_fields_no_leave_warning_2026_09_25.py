@@ -19,12 +19,12 @@ PAGES = {
     "customer-log?id={cid}": (["sortDir"], None),
     "supplier-log?id={sid}": (["sortDir"], None),
     "work-log":          (["viewDate"], None),
-    "network-plans":     (["caseSearch"], "createForm.siteName"),
     "inventory":         (["intake.brandFilter"], "intake.invoiceNo"),
     "devices":           (["filterCustomer"], None),
     "online-stats":      (["start", "end", "trailUser", "showPaths"], None),
-    "network-plan-form?id={pid}": (["stockSearch"], "plan.siteName"),
 }
+# 模組的頁面由模組自己的測試加進 PAGES 再呼叫同一支（例：modules/netplan/tests/test_netplan_moved_guards.py），
+# 拿掉那個模組時跟著消失（PLAYBOOK §B-11）。
 
 # 在 x-for 裡、要有資料才渲染的欄位：不在畫面上時略過（靜態守門另外看原始碼）
 OPTIONAL = {"productSearch[c.code]"}
