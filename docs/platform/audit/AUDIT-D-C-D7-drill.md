@@ -80,12 +80,12 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| K-M1 | | | |
-| K-S1 | | | |
-| K-S2 | | | |
-| K-S3 | | | |
-| K-S4 | | | |
-| K-O1～O3 | | | |
+| K-M1 | 修正：順序改為 4c 轉換 → **6a 完整回滾（第一份備份 `upgrade-backup`，轉換前的原始庫）** → 6b 再轉換 → 6c 只回程式。6a 抽成 `full_rollback_step(root)`：固定用第一份備份；V9 啟動**之前**以 `logical_digest`（iterdump sha256）比對主庫等於 `source-backup`；還原有問題或不相等 ⇒ 判失敗且**不啟動 V9**。補題：假的 rollback／start 記錄呼叫，驗證用的是第一份備份、不相等或有問題 ⇒ 失敗且沒有啟動。突變 K02（改用第二份）、K03（不相等照樣啟動）紅；D 的 K01（只拿掉判定式的相等條件）在新結構下是**等價突變**——不相等時根本不啟動 V9，ping 不可能 ok，判定照樣失敗；把兩處相等條件一起拿掉 ⇒ 紅。預演第 5 次 11 步全過（FINAL-DRILL-REPORT） | wip/c-d7-km1 2d9fcf1f | |
+| K-S1 | 修正：每一步之後都 `_must`（含 3 取新版程式、6a） | wip/c-d7-km1 2d9fcf1f | |
+| K-S2 | 修正：冒煙清單先拿掉 `/api/definitions/custom_module`（第二批 wip/c-p2-legal 在月台上，合回後加回）；新增 `test_smoke_paths_are_real_routes_or_pages`（每一條必須是 app 的 GET 路由或 frontend/ 的頁面，用 `tests/_routes.all_routes`） | wip/c-d7-km1 2d9fcf1f | |
+| K-S3 | **改採 D 的建議**（撤回原本「不論成敗都刪」）：`cleanup(root, ok, keep)`——全部通過且沒有 `--keep-install` 才刪；失敗時四個演練目錄全部保留，路徑寫進報告與 `final_drill.json` 的 `kept_for_diagnosis`，由人看完再刪。原本的理由（複本 539 MB）不成立：失敗是少數情況，而失敗時被刪掉的正是要排查的現場。下一次執行會因 `v9-install` 已存在而拒絕（訊息說明是上次保留的），不會蓋掉現場；`source-backup` 一律保留。補題 2 題；突變 K04（失敗也刪）、K05（報告不寫位置）紅 | wip/c-d7-km1 2d9fcf1f | |
+| K-S4 | 修正：報告標頭與步驟 5 寫明演練帳號 `final_drill_admin` 只存在演練複本。新順序下 6a 完整回滾會把它隨原始庫一起還原掉，6b／6c 的庫裡沒有這個帳號 ⇒ 「只回程式」之後的 `changes_since_conversion` 不會出現來源不明的 users 新增 | wip/c-d7-km1 2d9fcf1f | |
+| K-O1～O3 | O1 記下：演練目錄的舊快照沒有 .db，碰舊快照的行為（備份清理保留 7 份）在演練裡不等於正式機，已寫進 FINAL-DRILL-REPORT 的正式 D7 待辦前提；O2 同意：守門只掃 startup.py 的字面寫法，規則「啟動時的寫入只能經 startup.py」需寫進 CORE-SPEC，屬規格變更，請主持裁定後我補守門；O3 知悉：啟動後的證據只涵蓋 system_settings，與「只准新增」相容，不改 | wip/c-d7-km1 2d9fcf1f | |
 
 ### D 預先查核（2026-09-26 03:49；回覆欄尚未填，不算關閉）
 
