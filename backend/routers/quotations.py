@@ -1642,18 +1642,19 @@ def create_quotation(body: QuotationIn, authorization: str = Header(None)):
                 raise HTTPException(400, str(e))
             raise
         _conn2 = get_db()
-        # 3b 收尾追加修正（2026-08-23）：不能直接 json.dumps(q, ...) 整包覆寫——
-        # q.caseRecord.stages 仍是 client 送來的原始（可能已作廢）id，上面已經把
-        # 正確版本同步進 data_json 了。改成讀回目前資料庫現有的 data_json，只patch
-        # approval 這個欄位，其餘（含剛修正好的 caseRecord.stages）維持不動。
-        _row2 = _conn2.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()
-        _data2 = json.loads(_row2["data_json"] or "{}") if _row2 else dict(q)
-        _data2["approval"] = appr
-        _conn2.execute(
-            "UPDATE quotations SET data_json=? WHERE quote_no=?",
-            (json.dumps(_data2, ensure_ascii=False), qno)
-        )
-        _conn2.commit()
+        with write_txn(_conn2):   # lost update：讀回 data_json、只 patch approval 的這段在寫鎖內（C 組）
+            # 3b 收尾追加修正（2026-08-23）：不能直接 json.dumps(q, ...) 整包覆寫——
+            # q.caseRecord.stages 仍是 client 送來的原始（可能已作廢）id，上面已經把
+            # 正確版本同步進 data_json 了。改成讀回目前資料庫現有的 data_json，只patch
+            # approval 這個欄位，其餘（含剛修正好的 caseRecord.stages）維持不動。
+            _row2 = _conn2.execute("SELECT data_json FROM quotations WHERE quote_no=?", (qno,)).fetchone()
+            _data2 = json.loads(_row2["data_json"] or "{}") if _row2 else dict(q)
+            _data2["approval"] = appr
+            _conn2.execute(
+                "UPDATE quotations SET data_json=? WHERE quote_no=?",
+                (json.dumps(_data2, ensure_ascii=False), qno)
+            )
+            _conn2.commit()
         _conn2.close()
 
     spawn_bg_thread(_backup_quotation, args=(qno,))
@@ -1888,73 +1889,74 @@ def update_status(quote_no: str, body: QuotationStatusUpdate, authorization: str
     if body.status not in _STATUS_PATCH_WHITELIST:
         raise HTTPException(400, f"不支援的狀態值：{body.status}")
     conn = get_db()
-    row = conn.execute(
-        "SELECT customer_name, status, data_json, location_id "
-        "FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    # Block bypass: cannot force 已送出 while approval tiers are still pending
-    if body.status == "已送出" and row["status"] in ("待審核", "簽核中"):
-        _d    = json.loads(row["data_json"] or "{}")
-        _appr = _d.get("approval") or {}
-        _tiers = _active_tiers(_appr)
-        if _tiers:
-            _ct = _current_tier_idx(_appr)
-            if _ct < len(_tiers):
-                conn.close()
-                raise HTTPException(
-                    403,
-                    f"此報價單尚有 {len(_tiers) - _ct} 層待完成的簽核，"
-                    "請透過正式簽核流程完成審核，不可直接強制送出"
-                )
-    cname = row['customer_name'] or ''
-    # `QL25`（依據使用者 2026-09-23 裁示）入口③：superadmin 直接改狀態，
-    # 不叫 submit、不經過 save_quotation_json()，是一句獨立的
-    # `UPDATE quotations SET status=?`——規格逐字點名這是最容易漏的入口。
-    # 🔴 判準是**離開草稿這個轉換**，不是「目的地剛好是待審核」——這支
-    # 端點的白名單容許 superadmin 直接從「草稿」跳到「已送出」（繞過分層
-    # 簽核），那樣也要凍結，不能因為沒有經過「待審核」就漏掉。
-    # ⚠️ 這支的白名單也含「草稿」：superadmin 也可能直接把狀態**改回**
-    # 草稿（`_STATUS_PATCH_WHITELIST` 裡就有），那是規格 §4 列的兩條回
-    # 草稿路徑（recall／reject）之外**第三條沒有被列出來的路**——同一條
-    # 原則（「任何把 status 寫成草稿的地方都要清快照」）套在這裡：離開
-    # 草稿覆蓋，回到草稿清掉；待審核／簽核中之間互轉（已經離開過草稿）
-    # 不重新凍結，維持離開草稿那一刻凍住的值。
-    _leaving_draft = row["status"] == "草稿" and body.status != "草稿"
-    _entering_draft = body.status == "草稿"
-    if _leaving_draft or _entering_draft:
-        try:
-            _sd = json.loads(row["data_json"] or "{}")
-        except (TypeError, ValueError):
-            _sd = {}
-        if _leaving_draft:
-            _sd[SNAPSHOT_KEY] = snapshot_for(row["location_id"] or "")
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT customer_name, status, data_json, location_id "
+            "FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        # Block bypass: cannot force 已送出 while approval tiers are still pending
+        if body.status == "已送出" and row["status"] in ("待審核", "簽核中"):
+            _d    = json.loads(row["data_json"] or "{}")
+            _appr = _d.get("approval") or {}
+            _tiers = _active_tiers(_appr)
+            if _tiers:
+                _ct = _current_tier_idx(_appr)
+                if _ct < len(_tiers):
+                    conn.close()
+                    raise HTTPException(
+                        403,
+                        f"此報價單尚有 {len(_tiers) - _ct} 層待完成的簽核，"
+                        "請透過正式簽核流程完成審核，不可直接強制送出"
+                    )
+        cname = row['customer_name'] or ''
+        # `QL25`（依據使用者 2026-09-23 裁示）入口③：superadmin 直接改狀態，
+        # 不叫 submit、不經過 save_quotation_json()，是一句獨立的
+        # `UPDATE quotations SET status=?`——規格逐字點名這是最容易漏的入口。
+        # 🔴 判準是**離開草稿這個轉換**，不是「目的地剛好是待審核」——這支
+        # 端點的白名單容許 superadmin 直接從「草稿」跳到「已送出」（繞過分層
+        # 簽核），那樣也要凍結，不能因為沒有經過「待審核」就漏掉。
+        # ⚠️ 這支的白名單也含「草稿」：superadmin 也可能直接把狀態**改回**
+        # 草稿（`_STATUS_PATCH_WHITELIST` 裡就有），那是規格 §4 列的兩條回
+        # 草稿路徑（recall／reject）之外**第三條沒有被列出來的路**——同一條
+        # 原則（「任何把 status 寫成草稿的地方都要清快照」）套在這裡：離開
+        # 草稿覆蓋，回到草稿清掉；待審核／簽核中之間互轉（已經離開過草稿）
+        # 不重新凍結，維持離開草稿那一刻凍住的值。
+        _leaving_draft = row["status"] == "草稿" and body.status != "草稿"
+        _entering_draft = body.status == "草稿"
+        if _leaving_draft or _entering_draft:
+            try:
+                _sd = json.loads(row["data_json"] or "{}")
+            except (TypeError, ValueError):
+                _sd = {}
+            if _leaving_draft:
+                _sd[SNAPSHOT_KEY] = snapshot_for(row["location_id"] or "")
+            else:
+                _sd.pop(SNAPSHOT_KEY, None)
+            conn.execute(
+                "UPDATE quotations SET status=?, data_json=?, updated_at=? WHERE quote_no=?",
+                (body.status, json.dumps(_sd, ensure_ascii=False),
+                 datetime.now().isoformat(), quote_no))
         else:
-            _sd.pop(SNAPSHOT_KEY, None)
-        conn.execute(
-            "UPDATE quotations SET status=?, data_json=?, updated_at=? WHERE quote_no=?",
-            (body.status, json.dumps(_sd, ensure_ascii=False),
-             datetime.now().isoformat(), quote_no))
-    else:
-        conn.execute("UPDATE quotations SET status=?, updated_at=? WHERE quote_no=?",
-                     (body.status, datetime.now().isoformat(), quote_no))
-    conn.commit()
-    conn.close()
-    action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
-    action = action_map.get(body.status, 'quotation.status_change')
-    _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
-    notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
-                            f"{quote_no}（{cname}）", "quotations.html")
-    if body.status == '已送出':
-        try:
-            actor_u = _require_user(authorization)
-            actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
-        except Exception:
-            actor_name = ""
-        spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '已簽核'))
-    return {"ok": True}
+            conn.execute("UPDATE quotations SET status=?, updated_at=? WHERE quote_no=?",
+                         (body.status, datetime.now().isoformat(), quote_no))
+        conn.commit()
+        conn.close()
+        action_map = {'待審核': 'quotation.submit', '已送出': 'quotation.approve'}
+        action = action_map.get(body.status, 'quotation.status_change')
+        _audit(_tok(authorization), action, 'quotation', quote_no, f"{quote_no}（{cname}）", {'status': body.status})
+        notify_module_activity("報價單", f"狀態變更為「{body.status}」", user.get("display_name") or user["username"],
+                                f"{quote_no}（{cname}）", "quotations.html")
+        if body.status == '已送出':
+            try:
+                actor_u = _require_user(authorization)
+                actor_name = actor_u.get("display_name") or actor_u.get("username") or ""
+            except Exception:
+                actor_name = ""
+            spawn_bg_thread(_generate_quotation_pdf, args=(quote_no, actor_name, '已簽核'))
+        return {"ok": True}
 
 
 @router.post("/api/quotations/{quote_no}/recall")
@@ -1962,41 +1964,42 @@ def recall_quotation(quote_no: str, authorization: str = Header(None)):
     """申請人將「待審核」或「簽核中」的報價單收回草稿，清除簽核進度。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute(
-        "SELECT status, data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
-    ).fetchone()
-    if not row:
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT status, data_json, customer_name FROM quotations WHERE quote_no=?", (quote_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        if row["status"] not in ("待審核", "簽核中"):
+            conn.close()
+            raise HTTPException(400, f"只有「待審核」或「簽核中」的報價單可以收回（目前狀態：{row['status']}）")
+        q = json.loads(row["data_json"])
+        appr = q.get("approval") or {}
+        if appr.get("requestedBy") != user["username"]:
+            conn.close()
+            raise HTTPException(403, "只有原送審申請人可以收回報價單")
+        cname = row["customer_name"] or q.get("customerName") or ""
+        q.pop("approval", None)
+        q["status"] = "草稿"
+        # `QL25`（依據使用者 2026-09-23 裁示）：回到草稿要清掉據點快照——
+        # 草稿階段仍跟著設定即時走，快照還在的話，收回之後、還沒再送審之前
+        # 這段時間會印出舊抬頭（而那與「凍結生效中」長得一樣，沒有人會報修）。
+        q.pop(SNAPSHOT_KEY, None)
+        now = datetime.now().isoformat()
+        deal_tag, settle_status = quote_hot_fields(q)
+        conn.execute(
+            "UPDATE quotations SET status='草稿', data_json=?, updated_at=?, deal_tag=?, settle_status=? "
+            "WHERE quote_no=?",
+            (json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status, quote_no),
+        )
+        conn.commit()
         conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    if row["status"] not in ("待審核", "簽核中"):
-        conn.close()
-        raise HTTPException(400, f"只有「待審核」或「簽核中」的報價單可以收回（目前狀態：{row['status']}）")
-    q = json.loads(row["data_json"])
-    appr = q.get("approval") or {}
-    if appr.get("requestedBy") != user["username"]:
-        conn.close()
-        raise HTTPException(403, "只有原送審申請人可以收回報價單")
-    cname = row["customer_name"] or q.get("customerName") or ""
-    q.pop("approval", None)
-    q["status"] = "草稿"
-    # `QL25`（依據使用者 2026-09-23 裁示）：回到草稿要清掉據點快照——
-    # 草稿階段仍跟著設定即時走，快照還在的話，收回之後、還沒再送審之前
-    # 這段時間會印出舊抬頭（而那與「凍結生效中」長得一樣，沒有人會報修）。
-    q.pop(SNAPSHOT_KEY, None)
-    now = datetime.now().isoformat()
-    deal_tag, settle_status = quote_hot_fields(q)
-    conn.execute(
-        "UPDATE quotations SET status='草稿', data_json=?, updated_at=?, deal_tag=?, settle_status=? "
-        "WHERE quote_no=?",
-        (json.dumps(q, ensure_ascii=False), now, deal_tag, settle_status, quote_no),
-    )
-    conn.commit()
-    conn.close()
-    _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
-           f"{quote_no}（{cname}）已由申請人收回草稿")
-    notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
-                            f"{quote_no}（{cname}）", "quotations.html")
-    return {"quote_no": quote_no, "status": "草稿"}
+        _audit(_tok(authorization), "quotation.recall", "quotation", quote_no,
+               f"{quote_no}（{cname}）已由申請人收回草稿")
+        notify_module_activity("報價單", "收回草稿", user.get("display_name") or user["username"],
+                                f"{quote_no}（{cname}）", "quotations.html")
+        return {"quote_no": quote_no, "status": "草稿"}
 
 
 # ── 完結案五關卡（2026-09-14 重構）──────────────────────────────────────
@@ -5170,83 +5173,84 @@ def reject_quotation(quote_no: str, body: ApprovalActionBody, authorization: str
     """退回修改：清除簽核、單號升版（-Rn）、狀態回草稿，申請人可重新編輯後再送審。"""
     user = _require_user(authorization)
     conn = get_db()
-    row = conn.execute(
-        "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
-        (quote_no,)
-    ).fetchone()
-    if not row:
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（C 組：直接 UPDATE data_json 的路徑）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
+            (quote_no,)
+        ).fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
+        cname = row["customer_name"] or ""
+        d     = json.loads(row["data_json"] or "{}")
+        appr  = d.get("approval") or {}
+        tiers = _active_tiers(appr)
+
+        ct_idx = _current_tier_idx(appr)
+        ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
+        if not ok:
+            conn.close()
+            raise HTTPException(status_code, err_msg)
+
+        new_no = _next_revision_no(quote_no)
+        note   = body.note or ""
+        now    = datetime.now().isoformat()
+
+        # Append to statusLog
+        if not isinstance(d.get("statusLog"), list):
+            d["statusLog"] = []
+        _from_status = d.get("status") or "待審核"
+        d["statusLog"].append({
+            "at":   now,
+            "user": user.get("display_name") or user["username"],
+            "from": _from_status,
+            "to":   f"草稿（退回，改為 {new_no}）",
+            "note": note,
+        })
+        # Snapshot items/summary for submitter reference after return
+        d["returnInfo"] = {
+            "returnedBy":        user["username"],
+            "returnedByDisplay": user.get("display_name") or user["username"],
+            "returnedAt":        now,
+            "note":              note,
+            "originalQuoteNo":   quote_no,
+            "previousItems": [
+                {
+                    "type":        i.get("type", "item"),
+                    "description": i.get("description", ""),
+                    "brand":       i.get("brand", ""),
+                    "qty":         i.get("qty", 0),
+                    "unit":        i.get("unit", ""),
+                    "unitPrice":   i.get("unitPrice", 0),
+                }
+                for i in (d.get("items") or [])
+                if i.get("description", "").strip() or i.get("type") == "header"
+            ],
+        }
+        # Update quoteNo and status in data_json too
+        d["quoteNo"] = new_no
+        d["status"]  = "草稿"
+        d.pop("approval", None)
+        # `QL25`（依據使用者 2026-09-23 裁示）：退回也是回草稿的一條路，
+        # 同 recall_quotation() 清掉據點快照——理由一樣：草稿階段要跟著
+        # 設定即時走，不是印退回當下凍結的那份舊抬頭。
+        d.pop(SNAPSHOT_KEY, None)
+
+        conn.execute(
+            "UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=? WHERE quote_no=?",
+            (new_no, json.dumps(d, ensure_ascii=False), now, quote_no)
+        )
+        conn.commit()
+
+        requester = appr.get("requestedBy")
+        if requester:
+            _notify(requester, "approval_returned", new_no, new_no,
+                    f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審")
+            notify_returned(quote_no, new_no, cname, note, requester)
         conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在或不在待審核狀態")
-    cname = row["customer_name"] or ""
-    d     = json.loads(row["data_json"] or "{}")
-    appr  = d.get("approval") or {}
-    tiers = _active_tiers(appr)
-
-    ct_idx = _current_tier_idx(appr)
-    ok, status_code, err_msg = check_reject_permission(tiers, ct_idx, user, conn=conn)
-    if not ok:
-        conn.close()
-        raise HTTPException(status_code, err_msg)
-
-    new_no = _next_revision_no(quote_no)
-    note   = body.note or ""
-    now    = datetime.now().isoformat()
-
-    # Append to statusLog
-    if not isinstance(d.get("statusLog"), list):
-        d["statusLog"] = []
-    _from_status = d.get("status") or "待審核"
-    d["statusLog"].append({
-        "at":   now,
-        "user": user.get("display_name") or user["username"],
-        "from": _from_status,
-        "to":   f"草稿（退回，改為 {new_no}）",
-        "note": note,
-    })
-    # Snapshot items/summary for submitter reference after return
-    d["returnInfo"] = {
-        "returnedBy":        user["username"],
-        "returnedByDisplay": user.get("display_name") or user["username"],
-        "returnedAt":        now,
-        "note":              note,
-        "originalQuoteNo":   quote_no,
-        "previousItems": [
-            {
-                "type":        i.get("type", "item"),
-                "description": i.get("description", ""),
-                "brand":       i.get("brand", ""),
-                "qty":         i.get("qty", 0),
-                "unit":        i.get("unit", ""),
-                "unitPrice":   i.get("unitPrice", 0),
-            }
-            for i in (d.get("items") or [])
-            if i.get("description", "").strip() or i.get("type") == "header"
-        ],
-    }
-    # Update quoteNo and status in data_json too
-    d["quoteNo"] = new_no
-    d["status"]  = "草稿"
-    d.pop("approval", None)
-    # `QL25`（依據使用者 2026-09-23 裁示）：退回也是回草稿的一條路，
-    # 同 recall_quotation() 清掉據點快照——理由一樣：草稿階段要跟著
-    # 設定即時走，不是印退回當下凍結的那份舊抬頭。
-    d.pop(SNAPSHOT_KEY, None)
-
-    conn.execute(
-        "UPDATE quotations SET quote_no=?, status='草稿', data_json=?, updated_at=? WHERE quote_no=?",
-        (new_no, json.dumps(d, ensure_ascii=False), now, quote_no)
-    )
-    conn.commit()
-
-    requester = appr.get("requestedBy")
-    if requester:
-        _notify(requester, "approval_returned", new_no, new_no,
-                f"報價單 {new_no}（原 {quote_no}，{cname}）已退回修改，請確認後重新送審")
-        notify_returned(quote_no, new_no, cname, note, requester)
-    conn.close()
-    _audit(_tok(authorization), "quotation.return", "quotation", new_no,
-           f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
-    return {"ok": True, "new_quote_no": new_no}
+        _audit(_tok(authorization), "quotation.return", "quotation", new_no,
+               f"{new_no}（原 {quote_no}，{cname}）", {"note": note, "previous_no": quote_no})
+        return {"ok": True, "new_quote_no": new_no}
 
 
 @router.post("/api/quotations/{quote_no}/reject-final")

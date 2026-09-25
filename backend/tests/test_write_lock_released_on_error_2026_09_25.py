@@ -10,6 +10,7 @@ import pytest
 import routers.contractor_vouchers as cv
 import routers.invoice_vouchers as iv
 import routers.payment_requests as pr
+import routers.quotations as q
 
 
 class _BoomAfterBegin:
@@ -48,6 +49,10 @@ CASES = {
     "payment_request_create": (pr, "post", "/api/payment-requests",
                                {"quote_no": "MQ-X", "scope": "amount", "stage": "full", "amount": 100}),
     "payment_request_update": (pr, "put", "/api/payment-requests/PR-X", {"scope": "amount", "stage": "full", "amount": 100}),
+    # lost update C 組新包進 write_txn 的三支（讀之前就拿鎖 ⇒ 拿鎖後出錯也要放）
+    "quotation_status": (q, "patch", "/api/quotations/MQ-X/status", {"status": "已送出"}),
+    "quotation_recall": (q, "post", "/api/quotations/MQ-X/recall", None),
+    "quotation_reject": (q, "post", "/api/quotations/MQ-X/reject", {"note": "x"}),
 }
 
 
@@ -65,7 +70,7 @@ def test_an_error_after_begin_immediate_releases_the_write_lock(client, make_use
         return p
     monkeypatch.setattr(mod, "get_db", _proxy_get_db)
     with pytest.raises(RuntimeError) as excinfo:          # 握著例外，貼近正式機
-        getattr(client, method)(path, headers=h, json=body)
+        getattr(client, method)(path, headers=h, **({"json": body} if body is not None else {}))
     assert "探針" in str(excinfo.value)
     assert any(p._armed for p in made), "前提：探針要在拿了寫鎖之後才觸發"
     free = _lock_is_free()

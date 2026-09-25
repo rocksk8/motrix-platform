@@ -339,11 +339,16 @@ def push_event_for_quotation_won(quote_no: str) -> None:
             f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}",
             date.today(),
         )
-        d = json.loads(row["data_json"] or "{}")
-        d["googleCalendarEventId"] = event_id
-        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
-                     (json.dumps(d, ensure_ascii=False), quote_no))
-        conn.commit()
+        # 2026-09-25 lost update（C 組）：上面建事件是一次網路請求（最慢的一段），期間別人可能已存了這張單
+        # ⇒ 不可以用一開始讀到的 data_json 整包寫回；事件建好之後才拿寫鎖、重讀，只寫入 event id。
+        from helpers.quotations import write_txn
+        with write_txn(conn):
+            cur = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            d = json.loads((cur["data_json"] if cur else None) or "{}")
+            d["googleCalendarEventId"] = event_id
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(d, ensure_ascii=False), quote_no))
+            conn.commit()
         conn.close()
         logger.info("push_event_for_quotation_won: %s -> event %s", quote_no, event_id)
     except Exception as exc:
