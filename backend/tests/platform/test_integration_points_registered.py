@@ -7,6 +7,9 @@
 
 正對照：比對函式用合成的文件與原始碼跑，多一個／少一個／取用未登記都要回報；另外斷言真實掃描抓得到已知的 `dispatch.row`
 （掃不到任何東西時「兩邊都空＝相等」會是假綠）。
+
+模組不在（選配、PLAYBOOK §B 步驟 11 反向控制）：該節「提供方」列出的路徑**全部**是 `modules/<key>/…`、且那些資料夾都不在
+⇒「登記表有、程式碼沒有提供」不算（主持裁定 2026-09-26）。資料夾在就照樣比對；提供方沒寫出模組路徑（例如仍寫 `routers/…`）不豁免。
 """
 import ast
 import re
@@ -28,6 +31,35 @@ def doc_capabilities(text):
         form = re.search(r"^\| 形式 \|\s*([^|]*)", sec, re.M)
         if form and form.group(1).strip().startswith("provider"):
             caps |= set(_CAP.findall(head))
+    return caps
+
+
+def _provider_paths(sec):
+    """一節「提供方」列裡反引號內、含 `/` 的路徑（`::` 之後的名稱去掉）。"""
+    row = re.search(r"^\| 提供方 \|([^\n]*)", sec, re.M)
+    if not row:
+        return []
+    return [c.split("::")[0] for c in re.findall(r"`([^`]+)`", row.group(1)) if "/" in c]
+
+
+def _module_key(path):
+    """`modules/<key>/…`／`backend/modules/<key>/…` ⇒ key；其他路徑 ⇒ None。"""
+    parts = path.replace(chr(92), "/").split("/")
+    if parts[:1] == ["backend"]:
+        parts = parts[1:]
+    return parts[1] if len(parts) > 2 and parts[0] == "modules" else None
+
+
+def absent_module_capabilities(text, installed=source_tree.module_installed):
+    """提供方全部寫成 `modules/<key>/…` 且那些模組都不在的節 ⇒ 它標題列的 capability（可以沒有人提供）。"""
+    caps = set()
+    for sec in re.split(r"\n(?=## IP-)", text):
+        if not sec.startswith("## IP-"):
+            continue
+        paths = _provider_paths(sec)
+        # installed() 對非模組路徑一律回 True ⇒ 提供方混有 routers／helpers 路徑就不會豁免
+        if paths and not any(installed(p) for p in paths):
+            caps |= doc_capabilities(sec)
     return caps
 
 
@@ -59,10 +91,11 @@ def code_capabilities(sources):
     return provided, consumed
 
 
-def mismatches(doc_caps, provided, consumed):
+def mismatches(doc_caps, provided, consumed, absent=frozenset()):
+    """absent：提供方模組不在的 capability（absent_module_capabilities），只豁免「登記表有、程式碼沒有提供」。"""
     out = []
     out += ["程式碼有提供、登記表沒有：%s" % c for c in sorted(provided - doc_caps)]
-    out += ["登記表有、程式碼沒有提供：%s" % c for c in sorted(doc_caps - provided)]
+    out += ["登記表有、程式碼沒有提供：%s" % c for c in sorted(doc_caps - provided - absent)]
     out += ["程式碼有取用、登記表沒有：%s" % c for c in sorted(consumed - doc_caps)]
     return out
 
@@ -109,7 +142,65 @@ def test_real_scan_sees_a_known_capability():
     assert "dispatch.row" in provided and "dispatch.row" in consumed, (provided, consumed)
 
 
+# ── 模組不在時（主持裁定 2026-09-26）：合成資料，模組名不綁任何真的 L2 ─────────────────────────
+
+_DOC_MOD = """# x
+## IP-1　`g.gone`：提供方模組不在
+| 提供方 | M99：`modules/zz_absent/api.py::_X` |
+| 形式 | provider，單一提供者 |
+## IP-2　`h.here`：提供方模組在
+| 提供方 | M98：`modules/{here}/api.py::_Y` |
+| 形式 | provider，單一提供者 |
+## IP-3　`i.old`：提供方沒寫出模組
+| 提供方 | M97：`routers/zz_absent.py::_Z` |
+| 形式 | provider，單一提供者 |
+## IP-4　`j.mixed`：一個模組不在＋一個不是模組
+| 提供方 | M96：`modules/zz_absent/x.py::_A`；M95：`helpers/zz.py::_B` |
+| 形式 | provider，多提供者 |
+"""
+
+
+def _installed_name():
+    mods = source_tree.module_dirs()
+    assert mods, "沒有任何已安裝的模組 ⇒『模組在』那一題無對象"
+    return mods[0].name
+
+
+def test_absent_module_green_present_module_still_red():
+    doc = _DOC_MOD.replace("{here}", _installed_name())
+    absent = absent_module_capabilities(doc)
+    assert absent == {"g.gone"}
+    # 模組不在 ⇒ 沒有人提供也綠
+    assert mismatches({"g.gone"}, set(), set(), absent) == []
+    # 模組在、但沒有提供 ⇒ 照樣紅；提供方沒寫模組路徑、或混著非模組路徑 ⇒ 不豁免
+    assert mismatches(doc_capabilities(doc), set(), set(), absent) == [
+        "登記表有、程式碼沒有提供：h.here", "登記表有、程式碼沒有提供：i.old", "登記表有、程式碼沒有提供：j.mixed"]
+    # 豁免只蓋「沒有人提供」：取用未登記、提供未登記照樣紅
+    assert mismatches(set(), {"g.gone"}, {"g.gone"}, absent) == [
+        "程式碼有提供、登記表沒有：g.gone", "程式碼有取用、登記表沒有：g.gone"]
+
+
+def test_every_installed_module_can_be_removed_without_breaking_the_registry():
+    """真實的樹：逐一假裝拿掉每個已安裝模組（它的原始碼不掃、module_installed 說不在），登記表比對仍須一致。
+
+    紅 ⇒ 那個模組提供的串接點，登記表「提供方」沒寫成 `modules/<key>/…`（或與非模組提供者混寫而程式碼只剩模組提供）。"""
+    text = DOC.read_text(encoding="utf-8")
+    srcs = {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.product_files()}
+    bad = {}
+    for d in source_tree.module_dirs():
+        key = d.name
+        def installed(path, k=key):
+            return source_tree.module_installed(path) and _module_key(path) != k
+        rest = {r: s for r, s in srcs.items() if _module_key(r) != key}
+        assert len(rest) < len(srcs), "拿掉 %s 沒有少掃任何檔 ⇒ 路徑比對失效" % key
+        got = mismatches(doc_capabilities(text), *code_capabilities(rest), absent_module_capabilities(text, installed))
+        if got:
+            bad[key] = got
+    assert not bad, "拿掉模組後登記表比對失敗（提供方請寫 modules/<key>/…）：%s" % bad
+
+
 def test_registry_matches_code():
     provided, consumed = _real()
-    bad = mismatches(doc_capabilities(DOC.read_text(encoding="utf-8")), provided, consumed)
+    text = DOC.read_text(encoding="utf-8")
+    bad = mismatches(doc_capabilities(text), provided, consumed, absent_module_capabilities(text))
     assert not bad, "INTEGRATION-POINTS.md 與程式碼不一致（CORE-SPEC §5）：\n  " + "\n  ".join(bad)

@@ -106,14 +106,14 @@ M06 的 `vouchers_all`。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M12 每日任務：`routers/daily_tasks.py::_ExternalTasks`（`upsert`／`withdraw`） |
+| 提供方 | M12 每日任務：`modules/daily_tasks/api.py::_ExternalTasks`（`upsert`／`withdraw`） |
 | 使用方 | M01 `helpers/case_stage_tasks.py::sync_daily_task_for_case_stage`（案件執行進度勾選完成 → 月曆上一筆「已完成」任務）、`delete_daily_task_for_case_stage`（階段刪除 → 收回）；`routers/quotations.py` 階段更新端點（回應的 `notice`） |
-| 形式 | provider，單一提供者（`core.registry`；M12 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
-| 語法 | 提供：`_registry.provide("daily_task.external", "daily_tasks", _ExternalTasks)`<br>取用：`t = registry.single_provider("daily_task.external")`；`None` ⇒ 退化。`t.upsert(conn, task_id=…, task_date=…, title=…, description=…, category=…, assignees=[…], created_by=…, case_no=…, completion_report=…, now=…) -> task_id`；`t.withdraw(conn, task_id, now)` |
+| 形式 | provider，單一提供者（`core.registry`；M12 以 `ModuleSpec.providers` 宣告，模組未載入即不登記） |
+| 語法 | 提供：`ModuleSpec(providers={("daily_task.external", "daily_tasks"): api._ExternalTasks})`<br>取用：`t = registry.single_provider("daily_task.external")`；`None` ⇒ 退化。`t.upsert(conn, task_id=…, task_date=…, title=…, description=…, category=…, assignees=[…], created_by=…, case_no=…, completion_report=…, now=…) -> task_id`；`t.withdraw(conn, task_id, now)` |
 | 回傳 | `upsert` 回任務 id（`task_id` 指到已刪除或不存在的列 ⇒ 新建）；替每個負責人寫完成紀錄（否則隔天寄逾期通知）。**在呼叫端的連線上寫、不 commit**：M01 把 id 記回 `case_stages.daily_task_id` 後一起 commit |
 | 對方不在時 | **勾選照常存檔**，不產生每日任務；階段更新端點回應 `notice`＝「未建立每日任務：每日任務模組未安裝」（`helpers/case_stage_tasks.NOTICE_NO_DAILY_TASKS`）；背景同步記 INFO 後返回；階段刪除不做收回。皆不丟例外。**提供者在但失敗**（`upsert`／`withdraw` 丟例外）：同樣照常存檔、`notice` 為空、只記 WARNING——既有的 fire-and-forget 設計，畫面不會知道（X 稽核 C-2，2026-09-25 補記） |
 | 契約版本 | 1（2026-09-25） |
-| 守門 | `backend/tests/platform/test_case_stage_connectors.py`：①M12 已登記 ②**正對照**：勾選 ⇒ 一筆任務＋完成紀錄、id 記回、取消勾選收回 ③**反向控制**：拿掉提供者 ⇒ 200、`done=1`、零筆任務、`notice` 明說 ④M01 檔內不再有寫 `daily_tasks`／`daily_task_completions` 的 SQL；`table_write_exceptions.json` 對應兩筆 debt 已刪（邊界守門 ③）。突變：notice 不看提供者、提供者不寫完成紀錄 ⇒ 皆轉紅 |
+| 守門 | `backend/modules/daily_tasks/tests/test_ip5_daily_task_external.py`（隨 M12）：①M12 已登記 ②**正對照**：勾選 ⇒ 一筆任務＋完成紀錄、id 記回、取消勾選收回 ；`backend/tests/platform/test_case_stage_connectors.py`：③**反向控制**：拿掉提供者 ⇒ 200、`done=1`、零筆任務、`notice` 明說 ④M01 檔內不再有寫 `daily_tasks`／`daily_task_completions` 的 SQL；`table_write_exceptions.json` 對應兩筆 debt 已刪（邊界守門 ③）。突變：notice 不看提供者、提供者不寫完成紀錄 ⇒ 皆轉紅 |
 
 ---
 
@@ -220,7 +220,7 @@ M12 每日任務搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/daily_
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M12 `routers/daily_tasks.py::run_daily_checks`（名稱 `daily_tasks`：逾期、區間到期；啟動補跑用 `dt_overdue_last_check` 逐日補）；M01 `helpers/case_deadlines.py::run_daily_checks`（名稱 `case_deadlines`：案件階段到期、案件專案期間、保固到期） |
+| 提供方 | M12 `modules/daily_tasks/api.py::run_daily_checks`（名稱 `daily_tasks`：逾期、區間到期；啟動補跑用 `dt_overdue_last_check` 逐日補）；M01 `helpers/case_deadlines.py::run_daily_checks`（名稱 `case_deadlines`：案件階段到期、案件專案期間、保固到期） |
 | 使用方 | L1 `helpers/daily_checks.py::run_module_checks`（由 `schedule_daily_checks()` 在啟動與每天 08:00 呼叫；main.py 啟動） |
 | 形式 | provider，**多提供者、以名稱區分**（依名稱排序逐一呼叫；某一支丟例外只記錄，不影響其他支） |
 | 語法 | 提供：`registry.provide("daily.check", "<名稱>", fn)`<br>取用：`for name, fn in sorted(registry.providers("daily.check").items()): fn(mode)` |
