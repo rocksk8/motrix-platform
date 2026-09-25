@@ -73,7 +73,10 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 🔴 2026-09-25（視窗 R）45 -> 46：R1 新增 legal-params.html（法規參數設定，Alpine，有 _initDone 守衛）。
 #: 🔴 2026-09-26（主持，列車 train/0926-0313）46 -> 47：a-mail 新增 mail-settings.html（信件與通知收件設定，Alpine）。
 #:    a-mail 與 x-r-fix 各自在自己的基底上改這個數字，列車上兩者交會才是 47。
-PAGE_POPULATION = 47
+#: 🔴 2026-09-26（視窗 H，P8 前端）46 -> 48：新增 module-builder.html（模組建構器）與 custom-records.html
+#:    （自訂模組執行頁），兩頁都是 Alpine、有 _initDone 守衛。
+#: 🔴 2026-09-26（主持，列車 train/0926-0415）交會：47（a-mail）＋2（P8 前端）＝49。
+PAGE_POPULATION = 49
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

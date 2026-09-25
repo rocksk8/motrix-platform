@@ -299,13 +299,16 @@
           try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
           return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
         },
-        async api(method, url, body) {
-          var r = await fetch(url, { method: method, headers: this._hdr(), body: body === undefined ? undefined : JSON.stringify(body) })
+        async api(method, url) { return this._json(await fetch(url, { method: method, headers: this._hdr() })) },
+        async _json(r) {
           var text = await r.text()
           var data = null
           try { data = text ? JSON.parse(text) : null } catch (e) { data = text }
           return { ok: r.ok, status: r.status, data: data }
         },
+        // 寫入一律走這兩支（method 寫死，送出點一眼看得到）
+        async post(url, body) { return this._json(await fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
+        async put(url, body) { return this._json(await fetch(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
         base() { return '/api/custom/' + encodeURIComponent(this.key) },
 
         async init() {
@@ -428,8 +431,8 @@
           try {
             var isNew = this.mode === 'new'
             var r = isNew
-              ? await this.api('POST', this.base() + '/records', { values: this.payload() })
-              : await this.api('PUT', this.base() + '/records/' + encodeURIComponent(this.record.record_no), { values: this.payload() })
+              ? await this.post(this.base() + '/records', { values: this.payload() })
+              : await this.put(this.base() + '/records/' + encodeURIComponent(this.record.record_no), { values: this.payload() })
             if (!r.ok) {
               var probs = (r.data && r.data.problems) || []
               var fe = {}
@@ -522,7 +525,7 @@
           if (this.busy) return
           this.busy = true; this.errMsg = ''
           try {
-            var r = await this.api('POST', this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/transitions/' + encodeURIComponent(t.key), { note: '' })
+            var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/transitions/' + encodeURIComponent(t.key), { note: '' })
             await this.afterAction(r, t.label + '完成')
           } finally { this.busy = false }
         },
@@ -534,7 +537,7 @@
           }
           this.busy = true; this.errMsg = ''
           try {
-            var r = await this.api('POST', this.base() + '/records/' + encodeURIComponent(this.record.record_no) + (approve ? '/approve' : '/reject'), { note: this.note || '' })
+            var r = await this.post(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + (approve ? '/approve' : '/reject'), { note: this.note || '' })
             await this.afterAction(r, approve ? '已核准' : '已退回')
           } finally { this.busy = false }
         },
