@@ -123,6 +123,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 06:22：P8 前端缺口 #3～#7 完成並上月台（wip/h-p8-gaps 27fd6df1；e2e 11 題、突變 16 全紅；差異題 2016 過）。後端缺口「custom: 參照沒有檢查被參照模組的權限」交給 C。U14 的 canEdit 等 c-audit-d 合回之後再接（主持佇列）。另外 modtest 的 `--list` 會直接開跑，而不是只列清單，排進 ROADMAP 給 B。
 - 2026-09-26 06:1x A：a-m10 更新到 ca73e25e（§B-11 兩個模組都只剩允許清單的紅；X-2／Z-5 正對照不綁 L2；case_read_scope 豁免補反向控制）；D 稽核 M12 的回覆欄已填（dfebd89d）。M03（wip/a-m03，本地）：前置 IP-16／IP-17、cherry-pick C 的 module_files、搬進 modules/supply/api/、案件頁 e2e 完成，§B-11 反向控制跑中。範圍外：origin 的 modules.json 裡 js:static/legal-round.js 未歸屬（dep_scan --check-modules）。
 - 2026-09-26 06:13：D 審完 ⑫、⑬：a-m10（M10＋M12）必修 0，M12 M-1 已關閉 ⇒ 可以上第四班；c-m02 必修 M02-M1（真刪後有 33 題需要 M02 卻在模組外）⇒ 交給 C。PLAYBOOK §B-11 補充：收集錯誤也算不過。
 - 2026-09-26 06:13 巡視：第三班列車的全量應該快跑完了（死線約 06:25）。C 的 CA-M1 修正上月台（c-case-access-2）；A 的 a-m10 修正已推；B 在做 M08；D 在審；P8 缺口與 P9 子代理在等背景測試。不派工。
