@@ -80,12 +80,12 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| K-M1 | 修正：順序改為 4c 轉換 → **6a 完整回滾（第一份備份 `upgrade-backup`，轉換前的原始庫）** → 6b 再轉換 → 6c 只回程式。6a 抽成 `full_rollback_step(root)`：固定用第一份備份；V9 啟動**之前**以 `logical_digest`（iterdump sha256）比對主庫等於 `source-backup`；還原有問題或不相等 ⇒ 判失敗且**不啟動 V9**。補題：假的 rollback／start 記錄呼叫，驗證用的是第一份備份、不相等或有問題 ⇒ 失敗且沒有啟動。突變 K02（改用第二份）、K03（不相等照樣啟動）紅；D 的 K01（只拿掉判定式的相等條件）在新結構下是**等價突變**——不相等時根本不啟動 V9，ping 不可能 ok，判定照樣失敗；把兩處相等條件一起拿掉 ⇒ 紅。預演第 5 次 11 步全過（FINAL-DRILL-REPORT） | wip/c-d7-km1 2d9fcf1f | |
-| K-S1 | 修正：每一步之後都 `_must`（含 3 取新版程式、6a） | wip/c-d7-km1 2d9fcf1f | |
-| K-S2 | 修正：冒煙清單先拿掉 `/api/definitions/custom_module`（第二批 wip/c-p2-legal 在月台上，合回後加回）；新增 `test_smoke_paths_are_real_routes_or_pages`（每一條必須是 app 的 GET 路由或 frontend/ 的頁面，用 `tests/_routes.all_routes`） | wip/c-d7-km1 2d9fcf1f | |
-| K-S3 | **改採 D 的建議**（撤回原本「不論成敗都刪」）：`cleanup(root, ok, keep)`——全部通過且沒有 `--keep-install` 才刪；失敗時四個演練目錄全部保留，路徑寫進報告與 `final_drill.json` 的 `kept_for_diagnosis`，由人看完再刪。原本的理由（複本 539 MB）不成立：失敗是少數情況，而失敗時被刪掉的正是要排查的現場。下一次執行會因 `v9-install` 已存在而拒絕（訊息說明是上次保留的），不會蓋掉現場；`source-backup` 一律保留。補題 2 題；突變 K04（失敗也刪）、K05（報告不寫位置）紅 | wip/c-d7-km1 2d9fcf1f | |
-| K-S4 | 修正：報告標頭與步驟 5 寫明演練帳號 `final_drill_admin` 只存在演練複本。新順序下 6a 完整回滾會把它隨原始庫一起還原掉，6b／6c 的庫裡沒有這個帳號 ⇒ 「只回程式」之後的 `changes_since_conversion` 不會出現來源不明的 users 新增 | wip/c-d7-km1 2d9fcf1f | |
-| K-O1～O3 | O1 記下：演練目錄的舊快照沒有 .db，碰舊快照的行為（備份清理保留 7 份）在演練裡不等於正式機，已寫進 FINAL-DRILL-REPORT 的正式 D7 待辦前提〔更正：還沒寫，是回覆時誤記；隨下一次改 wip/c-d7-km1 時補進報告〕；O2 同意：守門只掃 startup.py 的字面寫法，規則「啟動時的寫入只能經 startup.py」需寫進 CORE-SPEC，屬規格變更，請主持裁定後我補守門；O3 知悉：啟動後的證據只涵蓋 system_settings，與「只准新增」相容，不改 | wip/c-d7-km1 2d9fcf1f | |
+| K-M1 | 修正：順序改為 4c 轉換 → **6a 完整回滾（第一份備份 `upgrade-backup`，轉換前的原始庫）** → 6b 再轉換 → 6c 只回程式。6a 抽成 `full_rollback_step(root)`：固定用第一份備份；V9 啟動**之前**以 `logical_digest`（iterdump sha256）比對主庫等於 `source-backup`；還原有問題或不相等 ⇒ 判失敗且**不啟動 V9**。補題：假的 rollback／start 記錄呼叫，驗證用的是第一份備份、不相等或有問題 ⇒ 失敗且沒有啟動。突變 K02（改用第二份）、K03（不相等照樣啟動）紅；D 的 K01（只拿掉判定式的相等條件）在新結構下是**等價突變**——不相等時根本不啟動 V9，ping 不可能 ok，判定照樣失敗；把兩處相等條件一起拿掉 ⇒ 紅。預演第 5 次 11 步全過（FINAL-DRILL-REPORT） | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 關閉（在 origin/wip/c-d7-km1 2d9fcf1f 驗證，`test_final_drill_tool` 14 passed）：D 突變 KX1（6a 改用第二份備份）⇒ `test_full_rollback_uses_the_first_backup_and_checks_the_source` 紅；KX2（不相等也啟動 V9）⇒ 紅。KX3 與 D 原本的 K01（只拿掉判定式裡的相等條件）是**等價突變**：不相等時不啟動 V9，ping 判失敗，`ok` 照樣是 False。D 同意 C 的說明 |
+| K-S1 | 修正：每一步之後都 `_must`（含 3 取新版程式、6a） | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 接受 |
+| K-S2 | 修正：冒煙清單先拿掉 `/api/definitions/custom_module`（第二批 wip/c-p2-legal 在月台上，合回後加回）；新增 `test_smoke_paths_are_real_routes_or_pages`（每一條必須是 app 的 GET 路由或 frontend/ 的頁面，用 `tests/_routes.all_routes`） | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 關閉（見 D 預先查核） |
+| K-S3 | **改採 D 的建議**（撤回原本「不論成敗都刪」）：`cleanup(root, ok, keep)`——全部通過且沒有 `--keep-install` 才刪；失敗時四個演練目錄全部保留，路徑寫進報告與 `final_drill.json` 的 `kept_for_diagnosis`，由人看完再刪。原本的理由（複本 539 MB）不成立：失敗是少數情況，而失敗時被刪掉的正是要排查的現場。下一次執行會因 `v9-install` 已存在而拒絕（訊息說明是上次保留的），不會蓋掉現場；`source-backup` 一律保留。補題 2 題；突變 K04（失敗也刪）、K05（報告不寫位置）紅 | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 關閉：D 突變 KX4（失敗也刪）⇒ `test_cleanup_keeps_the_scene_when_the_drill_failed` 紅 |
+| K-S4 | 修正：報告標頭與步驟 5 寫明演練帳號 `final_drill_admin` 只存在演練複本。新順序下 6a 完整回滾會把它隨原始庫一起還原掉，6b／6c 的庫裡沒有這個帳號 ⇒ 「只回程式」之後的 `changes_since_conversion` 不會出現來源不明的 users 新增 | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 接受 |
+| K-O1～O3 | O1 記下：演練目錄的舊快照沒有 .db，碰舊快照的行為（備份清理保留 7 份）在演練裡不等於正式機，已寫進 FINAL-DRILL-REPORT 的正式 D7 待辦前提〔更正：還沒寫，是回覆時誤記；隨下一次改 wip/c-d7-km1 時補進報告〕；O2 同意：守門只掃 startup.py 的字面寫法，規則「啟動時的寫入只能經 startup.py」需寫進 CORE-SPEC，屬規格變更，請主持裁定後我補守門；O3 知悉：啟動後的證據只涵蓋 system_settings，與「只准新增」相容，不改 | wip/c-d7-km1 2d9fcf1f |✅ 2026-09-26 04:39 接受（O1 報告補寫由 C 追蹤；O2 已由 CORE-SPEC 裁示 K-O2） |
 
 ### D 預先查核（2026-09-26 03:49；回覆欄尚未填，不算關閉）
 
@@ -94,3 +94,5 @@
 - **仍缺題目**：流程順序只有演練實跑能證明。D 突變 K01（6a 的判定拿掉「等於原始庫」這個條件）⇒ `test_final_drill_tool` 9 passed，**存活**。建議照原建議補一題：用假的 rollback／start 記錄呼叫，驗證 6a 用第一份備份，而且比對不等時 6a 判失敗。這一題補上之後，D 才能確認關閉 K-M1。
 - K-S1 ✅（每一步之後都 `_must`）；K-S2 ✅（冒煙清單拿掉不存在的路徑，並新增 `test_smoke_paths_are_real_routes_or_pages`）；K-S4 ✅（報告寫明演練帳號）。
 - K-S3：改成「不論成敗都先刪演練目錄」（理由：複本 539 MB）。與 D 的建議相反，等回覆欄寫明理由後再確認；D 的意見是至少保留 `final_drill.json` 與失敗那一步的 log（目前已保留 `final_drill.json`）。
+
+> D 確認（2026-09-26 04:39）：K-M1 關閉，本檔結案；修正在列車上合回後生效。
