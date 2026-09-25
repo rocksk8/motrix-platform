@@ -28,7 +28,7 @@ from core import registry
 from db import get_db
 from helpers import _require_user, user_has_module, payment_item_amounts
 from routers.contractor_vouchers import _voucher_public
-from routers.reports import _collect_income_items  # §3 #14：資料擁有權待辦（ROADMAP）
+from helpers.receivables import collect_income_items as _collect_income_items  # §3 #14：M08 搬遷 ③ 下沉 L1（ROADMAP A8b，M05 搬遷時收回）
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 
 router = APIRouter()

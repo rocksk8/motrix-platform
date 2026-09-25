@@ -50,7 +50,7 @@
 | A6 | `recognition`／reports／vouchers 的 `_dispatch_row` → M04 公開連接器 | §3 #7 #8 #9 | 🔄 A |
 | A7 | `bonus_vouchers` → M06「建立傳票草稿」連接器 | §3 #18 #19 | ⏳ |
 | A8 | Excel 樣式與匯出速率限制下沉 L1 輸出（`helpers/xlsx_out.py`）；`_COMPANY` → company_identity；`PART_CATEGORIES` → `helpers/part_catalog.py` | §3 #10 #12 #13 #17 | ✅ C |
-| A8b | 待辦：`_collect_tax_invoices`（→ M05 連接器）、`_collect_income_items`（→ M05 連接器）——資料擁有權，A8 未動 | §3 #11 #14 | ⏳ |
+| A8b | 待辦：`_collect_tax_invoices`（→ M05 連接器）、`_collect_income_items`（→ M05 連接器）——資料擁有權，A8 未動〔中繼（2026-09-26，M08 搬遷，主持裁示 a）：先下沉 L1 `helpers/receivables.py`，M05／M06 不再 import M08；M05 搬遷時收回 M05〕 | §3 #11 #14 | ⏳ |
 | A8c | 寫死的公司聯絡資料 `reports._COMPANY2`、`network_plan_export._COMPANY2` 與頁尾 → company_identity（`contact_line`／`footer_line`／`name_pair`／`short_name`） | A8 發現 | ✅ C |
 | A8d | 待辦（A8c 盤點發現，不在 A8c 範圍）。~~🔴 **第一項（高，安全）**：`helpers/auth.py:29` 預設解鎖密碼含統編（可被推測）~~⚠ **更正（C，2026-09-25，X 稽核 C-4 時查證）**：`auth.py:29` 是 `_LEGACY_WEAK_PASSWORDS`（弱密碼黑名單），`helpers/startup.init_unlock_passwords` 每天把符合的解鎖密碼清空；沒有預設值、未設定就無法解鎖（`routers/auth.py` verify-unlock）。真正的問題是 `frontend/pages/users.html:619` 把這組舊密碼當成「預設」印在畫面上，另 `:482`／`:486` placeholder 用本公司 email／電話——三處已修（C `wip/c-fix-x1`，守門 `test_users_page_does_not_show_a_legacy_unlock_password`）；其餘：前端寫死的公司名／統編（`frontend/index.html:827-828`、`pages/login.html:203,303`）；`helpers/startup.py:112,130` 初始帳號種子寫死特定人員 email；設定頁 placeholder 用本公司資料 | A8c 發現 | 🔄 C 2026-09-26：前端寫死的公司名／統編（首頁頁尾、登入頁卡片與頁尾）改讀公開端點 `/api/system/branding`（統編只在帶有效登入時回）；users.html 已於 X-batch1 C-4 修。**未做**：`helpers/startup.py` 初始帳號種子（`jeff`／本公司人員 email）——新安裝的預設超級管理員帳號名稱屬販售前確認（U8） |
 | A9 | system 指名 L2（tender／bonus／quote_terms）→ 模組登錄表 | §3 #26 #27 #28 | 🔄 tender 已完成；bonus、quote_terms 尚未 |
@@ -75,7 +75,7 @@
 9. M03 採購庫存出貨 — 需要 §4 的 stock_items
 10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
-   - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
+   - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
 
 ## 階段 G：準則的守門（MODULE-GUIDE 標「⚠ 未守門」的項目）
 

@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.22 — 2026-09-26（B，M08 搬遷；暫用號，合回時 core_bump 依 origin 取號）
+> M08 搬遷 ③（主持裁示 a）：應收收入與銷項發票的資料收集自 routers/reports.py 下沉 L1。`core.registry.CORE_VERSION` 1.21 → 1.22（只有新增）。
+- L1（新增）：`helpers.receivables`——`collect_income_items`／`collect_tax_invoices`／`round_half_up_invoice`（函式本體與原本逐字相同）；M05 cashier、M06 accounting_export 改從這裡取，不再 import M08（ROADMAP A8b 中繼，M05 搬遷時收回）
+- L1（新增）：`routers/company_lookup.py`——`/api/now`、`/api/company/tax/{tax_id}`、`/api/company/search`（GCIS 統編／公司名稱查詢）自 `routers/dashboard.py` 拆出（路徑、權限、額度設定鍵不變；M08 搬遷 ②）
+
 ## 1.21 — 2026-09-26（C，模組檔案清單單一來源）〔core_bump：暫用 1.99 → 1.21〕
 > 主持裁示：「模組裡有哪些檔」只有一份定義。A 的 M03、C 的 M04、B 的 M08 把多支 router 放在 `api/`（CORE-SPEC §3）都依賴它。只有新增。
 - L0（新增）：`core.source_tree.module_files(d)`——模組資料夾所有層的 `*.py`，排除 tests／migrations；`router_files`／`logic_files` 與 tools/platform/dep_scan.py 都用它

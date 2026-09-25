@@ -25,7 +25,7 @@ def _strings(rel):
 
 
 def test_em8_the_gcis_limit_message_does_not_send_users_to_a_missing_setting():
-    msgs = [s for s in _strings("backend/routers/dashboard.py") if "明天會自動恢復" in s]
+    msgs = [s for s in _strings("backend/routers/company_lookup.py") if "明天會自動恢復" in s]
     assert msgs, "找不到那句上限訊息（錨點「明天會自動恢復」）—— 退回改本檔的錨點。"
     front = "".join(p.read_text(encoding="utf-8", errors="replace")
                     for p in (ROOT / "frontend").rglob("*.html"))
