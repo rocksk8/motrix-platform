@@ -98,7 +98,8 @@
    "generate_payslip_pdf_bytes": "def(slip_no)",
    "generate_pdf_bytes": "def(quote_no, internal=…)",
    "generate_project_execution_report_pdf_bytes": "def(quote_no)",
-   "generate_shipping_pdf_bytes": "def(note_no)"
+   "generate_shipping_pdf_bytes": "def(note_no)",
+   "html_to_pdf_bytes": "def(html_content)"
   },
   "core:photos": {
    "_photo_root": "def()",
@@ -182,6 +183,43 @@
    "short_name": "def(name)",
    "snapshot_for": "def(location_id)"
   },
+  "helper:custom_fields": {
+   "DATA_CLASSES": "const",
+   "KEY_RE": "const",
+   "TYPES": "const",
+   "clean": "def(values, definition)",
+   "validate_definition": "def(body, key=…, core_fields=…)"
+  },
+  "helper:custom_modules": {
+   "CustomModuleError": "class",
+   "CustomModuleError.__init__": "def(self, message, problems=…, status=…)",
+   "DATE_FORMATS": "const",
+   "EVENT_TRANSITIONED": "const",
+   "FIELD_TYPES": "const",
+   "KEY_RE": "const",
+   "PREFIX_RE": "const",
+   "STATE_KEY_RE": "const",
+   "clean_values": "def(conn, body, values)",
+   "compute": "def(body, values)",
+   "create_record": "def(conn, module_key, values, user)",
+   "decide": "def(conn, module_key, record_no, user, approve, note=…)",
+   "declare_events": "def()",
+   "default_template": "def(body)",
+   "format_number": "def(numbering, day, seq)",
+   "get_record": "def(conn, module_key, record_no)",
+   "list_records": "def(conn, module_key, status=…, field=…, value=…, limit=…)",
+   "next_number": "def(conn, module_key, numbering, day=…)",
+   "permission_of": "def(module_key, body)",
+   "published_modules": "def(conn)",
+   "ref_targets": "def()",
+   "register_ref_target": "def(key, table, label_column, id_column=…)",
+   "render_output": "def(conn, module_key, record_no)",
+   "render_view": "def(body, view)",
+   "sample_view": "def(body)",
+   "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
+   "update_record": "def(conn, module_key, record_no, values, user)",
+   "validate_module": "def(body, key=…)"
+  },
   "helper:dates": {
    "_add_months": "def(d, months)",
    "_warranty_expiry": "def(warranty_start, warranty_months)",
@@ -192,6 +230,7 @@
    "THEMES": "const",
    "TemplateError": "class",
    "load_default": "def(key)",
+   "problems": "def(template, sample_view=…)",
    "render": "def(template, data, parts)",
    "render_blocks": "def(blocks, data, parts)",
    "validate": "def(template, sample_view=…)"
@@ -279,6 +318,17 @@
    "mask_row": "def(row, cols=…)",
    "money_visible": "def(user)",
    "restore_case_record": "def(new_cr, db_cr)"
+  },
+  "helper:formula": {
+   "FUNCTIONS": "const",
+   "FormulaError": "class",
+   "FormulaError.__init__": "def(self, message, pos=…)",
+   "MAX_DEPTH": "const",
+   "MAX_LENGTH": "const",
+   "check": "def(expr, fields=…)",
+   "evaluate": "def(expr, values)",
+   "evaluation_order": "def(formulas)",
+   "references": "def(expr)"
   },
   "helper:geo": {
    "FETCH_TIMEOUT_SECONDS": "const",
@@ -541,6 +591,21 @@
    "xl_safe": "def(val)",
    "xl_style": "def(wb)"
   },
+  "plat:definitions": {
+   "DefinitionError": "class",
+   "DefinitionError.__init__": "def(self, message, problems=…)",
+   "KINDS": "const",
+   "diff": "def(a, b, path=…)",
+   "get": "def(conn, kind, key, scope, version=…)",
+   "publish": "def(conn, kind, key, scope, note=…, user=…)",
+   "register_default": "def(kind, fn)",
+   "register_validator": "def(kind, fn)",
+   "resolve": "def(conn, kind, key, role=…)",
+   "restore": "def(conn, kind, key, scope, version, note=…, user=…)",
+   "save_draft": "def(conn, kind, key, scope, body, user=…)",
+   "validate": "def(kind, key, body)",
+   "versions": "def(conn, kind, key, scope)"
+  },
   "plat:events": {
    "EventDecl": "class",
    "EventDecl.description": "field=…",
@@ -566,6 +631,12 @@
    "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…, disabled_reason=…)",
    "mount_modules": "def(app)",
    "start_schedulers": "def()"
+  },
+  "plat:migrations": {
+   "current_version": "def(conn, module)",
+   "register": "def(module, version, fn)",
+   "registered": "def()",
+   "run_all": "def(conn)"
   },
   "plat:paths": {
    "AUTOSTART_BAT": "const",
