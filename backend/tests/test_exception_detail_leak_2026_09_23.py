@@ -216,8 +216,8 @@ _BASELINE_A = {
     ("backend\\modules\\netplan\\api.py", "import_network_plan_excel"),
     ("backend\\modules\\netplan\\api.py", "preview_quick_topology"),
     ("backend\\routers\\payment_requests.py", "download_payment_request_pdf"),
-    ("backend\\routers\\payslips.py", "get_archive_pdf"),
-    ("backend\\routers\\payslips.py", "pdf_download"),
+    ("backend\\modules\\payroll\\api\\payslips.py", "get_archive_pdf"),
+    ("backend\\modules\\payroll\\api\\payslips.py", "pdf_download"),
     ("backend\\routers\\quotations.py", "create_quotation"),
     ("backend\\routers\\quotations.py", "download_quotation_pdf"),
     ("backend\\routers\\quotations.py", "download_case_closing_report_pdf"),
@@ -252,7 +252,7 @@ _BASELINE_A_NAMED_EXCEPTION = {
 
 #: B 組基準（**不要動**的 17 處）。
 _BASELINE_B = {
-    ("backend\\routers\\bonus.py", "submit_award"),
+    ("backend\\modules\\payroll\\api\\bonus.py", "submit_award"),
     ("backend\\routers\\case_extra_expenses.py", "submit_extra_expense"),
     ("backend\\routers\\case_extra_expenses.py", "submit_change_request"),
     ("backend\\routers\\completion_notes.py", "submit_completion_note"),
