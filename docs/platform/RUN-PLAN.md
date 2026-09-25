@@ -119,6 +119,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:13 巡視：月台上有 a-m10（含 M12）、b-scope、c-audit-d、c-case-access、c-ko2、c-m02；個資告知約 05:10 會登記。D 派做 ⑫ M02、⑬ M10／M12、⑭ case_access 的合回前稽核。第三班列車約 05:30 發車（等 D 至少審完搬遷類）。
 - 2026-09-26 05:07：第二班列車合回之後，主持派出兩個子代理：P8 前端接上缺口 #3～#7 與 custom: 通知點擊（wip/h-p8-gaps）；P9 拖曳排版器（wip/h-p9）。B 先完成 M08，再做 C4。§G3 補一條規則：全量跑的期間不可以改列車的樹。
 - 2026-09-26 05:05：**第二班列車合回**（train/0926-0415，7 包：C3、c-d7-km1、c-p2-legal、a-mail-fix、x-vat-round、x-p1p3-fix、h-p8-frontend，全部上車；platform 10b30038）。
   - 取號：CORE 1.16 C3／1.17 c-d7-km1／1.18 c-p2-legal／1.19 a-mail-fix（`mail_types.MANAGED_ELSEWHERE` 另立一段，1.14 已合回不改寫）／1.20 P1P3；版本紀錄：案件管理/財務憑證 26e、外包名冊 26f、案件管理 26g、營運報表 26h、庫存管理 26i、財務憑證/T100匯出 26j；獎金分潤 X-VAT 句併入 26c、P8 前端併入系統 26a、報價單 25r 句尾補一句（皆未出貨）；IP-10 `approval.queue_items` 維持（origin 未使用；A 的 daily.check 上車時改取 IP-11）；tender_radar 1.1.0（a-mail＋C3 合併）→1.2.0（P1P3）。
