@@ -1591,6 +1591,8 @@
                          placeholder="說明（款次、法條、外銷證明文件等）">
                   <div class="form-hint warn" data-tax-basis-error x-show="taxBasisErr || taxBasisError()"
                        x-text="taxBasisErr || taxBasisError()"></div>
+                  <div class="form-hint" data-tax-basis-source x-show="taxKind() === 'exempt' && taxBasisSources && taxBasisSources.exempt"
+                       x-text="'條文出處：' + ((taxBasisSources && taxBasisSources.exempt) || '')"></div>
                 </div>
               </div>
             </div>
@@ -2253,6 +2255,7 @@
       // 不是指向這裡的 key——改了設定不會動到已開出去的單（見後端 docstring）。
       termsPresets: [],
       taxBasisOptions: null,      // R2：{ zero: [{code,label,noteRequired}], exempt: [...] }
+      taxBasisSources: null,      // 稽核 S-4：{ exempt: '§8 逐字條文出處' }
       taxBasisErr: '',
       _termsDefaultsLoaded: false,   // N13：預設條款是否已從後端取得
       termsDefaultKey: '',
@@ -2335,7 +2338,7 @@
         try {
           const r = await fetch(`${this.API}/legal-params/tax-basis-options`, {
             headers: { Authorization: 'Bearer ' + this.session.token } })
-          if (r.ok) this.taxBasisOptions = (await r.json()).options
+          if (r.ok) { const j = await r.json(); this.taxBasisOptions = j.options; this.taxBasisSources = j.sources || null }
         } catch (e) {}
       },
       taxBasisChoices() {

@@ -1,7 +1,6 @@
 """勞報單 CRUD、稅務計算、序號、PDF 下載 — superadmin only."""
 import json
 import logging
-import math
 import os
 import re
 from datetime import datetime
@@ -14,6 +13,7 @@ from pydantic import BaseModel
 from db import get_db, is_demo_mode, DEMO_PAYSLIP_ARCHIVE_DIR
 from helpers import _require_user, _tok, _audit, _get_setting, notify_module_activity
 from helpers.errors import trace_id
+from core.txn import write_txn
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -78,17 +78,23 @@ def _rules_for_slip(d: dict) -> dict:
         raise HTTPException(400, str(e))
 
 
-def _apply_privacy_ack(d: dict, old, user: dict) -> None:
+def _apply_privacy_ack(d: dict, old, user: dict, conn) -> None:
     """R3（個資法 §8）：「已告知當事人」由伺服器蓋時間與人員；已記錄的不可被前端覆蓋或清除。
-    前端只送 `privacyNoticeAcked: true`；送來的 `privacyNotice` 一律不採用。"""
+    前端只送 `privacyNoticeAcked: true`；送來的 `privacyNotice` 一律不採用。
+    `old` 必須是**拿到寫鎖之後**讀的舊單（稽核 D-2）；新寫的紀錄把告知全文存檔（稽核 S-5，同一交易）。"""
     from helpers import privacy_notice as _pn
     requested = d.pop("privacyNoticeAcked", False) is True
     d.pop("privacyNotice", None)
     existing = (old or {}).get("privacyNotice") if isinstance(old, dict) else None
-    rec = _pn.merge_ack(existing, requested, user,
-                        _pn.current_notice() if requested and not existing else "")
+    text = _pn.current_notice() if requested and not existing else ""
+    rec = _pn.merge_ack(existing, requested, user, text)
     if rec:
         d["privacyNotice"] = rec
+        if rec is not existing:
+            try:
+                _pn.archive_text(conn, text)
+            except _pn.AcksCorrupted as e:
+                raise HTTPException(409, str(e))
 
 
 def _freeze_rules(d: dict, rules: dict) -> None:
@@ -106,7 +112,7 @@ def _calc(gross: int, income_type: str, nationality: str, has_union: bool, rules
         r = rules["resident"][income_type]
         if gross >= r["tax_threshold"]:
             tax_rate = r["tax_rate"]
-            tax_withheld = math.floor(gross * tax_rate)
+            tax_withheld = _lp.floor_amount(gross, tax_rate)
     else:
         r = rules["non_resident"][income_type]
         if gross >= r.get("tax_threshold", 0):
@@ -115,7 +121,7 @@ def _calc(gross: int, income_type: str, nationality: str, has_union: bool, rules
                 tax_rate = r["low_salary_rate"] if gross <= min_1_5 else r["tax_rate"]
             else:
                 tax_rate = r["tax_rate"]
-            tax_withheld = math.floor(gross * tax_rate)
+            tax_withheld = _lp.floor_amount(gross, tax_rate)
 
     nhi_supplement = 0
     nhi_rate = 0.0
@@ -124,7 +130,8 @@ def _calc(gross: int, income_type: str, nationality: str, has_union: bool, rules
         if gross >= threshold:
             nhi_rate = rules["nhi"]["rate"]
             base = min(gross, rules["nhi"]["max_single_payment"])
-            nhi_supplement = round(base * nhi_rate)
+            # 稽核 D-1：健保署「角以下 4 捨 5 入」；內建 round() 是銀行家捨入（35,000 × 2.11% ⇒ 738，應為 739）
+            nhi_supplement = _lp.round_half_up(base, nhi_rate)
 
     return {
         "taxRate":       tax_rate,
@@ -234,11 +241,16 @@ def create_payslip(body: PayslipIn, authorization: str = Header(None)):
     d     = body.data
     d.pop("recalcTaxRules", None)
     rules = _rules_for_slip(d)            # R1：依開單（給付）日期挑版本；沒有適用版本 ⇒ 400
-    _apply_privacy_ack(d, None, user)     # R3：已告知紀錄由伺服器蓋時間與人員
 
     conn = get_db()
     conn.execute("INSERT INTO payslip_seq (month, seq) VALUES (?, 0) ON CONFLICT(month) DO NOTHING",
                  (month,))
+    try:
+        _apply_privacy_ack(d, None, user, conn)   # R3：已告知紀錄由伺服器蓋時間與人員（全文存檔跟著本交易）
+    except HTTPException:
+        conn.rollback()
+        conn.close()
+        raise
 
     slip_no = body.slip_no or d.get("slipNo") or _peek_next_slip_no(conn, month)
     if not _SLIP_NO_RE.match(slip_no):
@@ -315,68 +327,69 @@ def get_payslip(slip_no: str, authorization: str = Header(None)):
 @router.put("/api/payslips/{slip_no}")
 def update_payslip(slip_no: str, body: PayslipIn, authorization: str = Header(None)):
     user = _require_user(authorization, require_superadmin=True, module='payslip')
-    conn0 = get_db()
-    existing = conn0.execute("SELECT status, tax_rules_version, data_json FROM payslips WHERE slip_no=?",
-                             (slip_no,)).fetchone()
-    conn0.close()
-    if not existing:
-        raise HTTPException(404, "找不到此勞報單")
-    # 2026-08-28（模組逐步檢查）：匯出成 PDF 封存後（record_export 設 status='已匯出'）
-    # 沒有取消匯出的還原機制，屬單向終結狀態；比照 delete_payslip() 既有的同一道鎖，
-    # 避免封存的 PDF 內容跟資料庫最新金額/稅額悄悄兜不起來。
-    if existing["status"] == "已匯出":
-        raise HTTPException(409, "已匯出的勞報單不可修改")
-    now   = datetime.now().isoformat()
-    d     = body.data
-    try:
-        old = json.loads(existing["data_json"] or "{}")
-    except ValueError:
-        old = {}
-    # R1：修改舊單沿用**建立當時**的規則（資料庫裡的快照；前端送來的快照一律不採用）。
-    #     只有使用者明確勾選「依給付日重新套用規則」才改用日期挑版。
+    now    = datetime.now().isoformat()
+    d      = body.data
     recalc = d.pop("recalcTaxRules", False) is True
-    if recalc:
-        rules = _rules_for_slip(d)
-    else:
-        rules = old.get("taxRulesSnapshot") if isinstance(old.get("taxRulesSnapshot"), dict) else None
-        if rules is None:            # 本功能之前建立的舊單：依版本號查
-            ver = existing["tax_rules_version"] or old.get("taxRulesVersion") or ""
-            rules = _lp.rules_by_version(_lp.load_versions(), ver)
-            if rules is None:
-                raise HTTPException(409, f"本單建立時的法規參數版本「{ver}」已不存在；"
-                                         "請勾選「依給付日重新套用規則」後再存檔")
-    _apply_privacy_ack(d, old, user)
-
-    gross       = int(d.get("grossAmount", 0))
-    income_type = d.get("incomeType", "9A")
-    nationality = d.get("contractorNationality", "本國籍")
-    has_union   = bool(d.get("contractorHasUnionInsurance", False))
-    calc        = _calc(gross, income_type, nationality, has_union, rules)
-
-    d["slipNo"]          = slip_no
-    d["calc"]            = calc
-    _freeze_rules(d, rules)
-
+    # 稽核 D-2（2026-09-26）：讀舊單 → 合併（已告知紀錄、快照）→ 整包寫回，全部在同一個寫交易裡。
+    # 原本在交易外讀：兩人同時修改時，後寫的一方用「讀的當下」的舊單整包蓋回，
+    # 別人剛記下的「已告知」紀錄被清掉（CUSTOMIZATION-SPEC §9.3「已記錄的不能被覆蓋或清除」）。
+    # write_txn：區塊內任何例外（含 4xx）⇒ 回滾並關連線，不會把寫鎖留著。
     conn = get_db()
-    res = conn.execute("""
-        UPDATE payslips SET
-          contractor_id=?, contractor_name=?, income_type=?,
-          gross_amount=?, tax_withheld=?, nhi_supplement=?, net_amount=?,
-          payment_method=?, slip_date=?, status=?, tax_rules_version=?,
-          data_json=?, updated_at=?
-        WHERE slip_no=?
-    """, (
-        body.contractor_id, d.get("contractorName", ""),
-        income_type, gross,
-        calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
-        d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
-        d.get("status", "草稿"), d["taxRulesVersion"],
-        json.dumps(d, ensure_ascii=False), now, slip_no
-    ))
-    conn.commit()
+    with write_txn(conn):
+        existing = conn.execute("SELECT status, tax_rules_version, data_json FROM payslips WHERE slip_no=?",
+                                (slip_no,)).fetchone()
+        if not existing:
+            raise HTTPException(404, "找不到此勞報單")
+        # 2026-08-28（模組逐步檢查）：匯出成 PDF 封存後（record_export 設 status='已匯出'）
+        # 沒有取消匯出的還原機制，屬單向終結狀態；比照 delete_payslip() 既有的同一道鎖，
+        # 避免封存的 PDF 內容跟資料庫最新金額/稅額悄悄兜不起來。
+        if existing["status"] == "已匯出":
+            raise HTTPException(409, "已匯出的勞報單不可修改")
+        try:
+            old = json.loads(existing["data_json"] or "{}")
+        except ValueError:
+            old = {}
+        # R1：修改舊單沿用**建立當時**的規則（資料庫裡的快照；前端送來的快照一律不採用）。
+        #     只有使用者明確勾選「依給付日重新套用規則」才改用日期挑版。
+        if recalc:
+            rules = _rules_for_slip(d)
+        else:
+            rules = old.get("taxRulesSnapshot") if isinstance(old.get("taxRulesSnapshot"), dict) else None
+            if rules is None:            # 本功能之前建立的舊單：依版本號查
+                ver = existing["tax_rules_version"] or old.get("taxRulesVersion") or ""
+                rules = _lp.rules_by_version(_lp.load_versions(), ver)
+                if rules is None:
+                    raise HTTPException(409, f"本單建立時的法規參數版本「{ver}」已不存在；"
+                                             "請勾選「依給付日重新套用規則」後再存檔")
+        _apply_privacy_ack(d, old, user, conn)
+
+        gross       = int(d.get("grossAmount", 0))
+        income_type = d.get("incomeType", "9A")
+        nationality = d.get("contractorNationality", "本國籍")
+        has_union   = bool(d.get("contractorHasUnionInsurance", False))
+        calc        = _calc(gross, income_type, nationality, has_union, rules)
+
+        d["slipNo"]          = slip_no
+        d["calc"]            = calc
+        _freeze_rules(d, rules)
+
+        conn.execute("""
+            UPDATE payslips SET
+              contractor_id=?, contractor_name=?, income_type=?,
+              gross_amount=?, tax_withheld=?, nhi_supplement=?, net_amount=?,
+              payment_method=?, slip_date=?, status=?, tax_rules_version=?,
+              data_json=?, updated_at=?
+            WHERE slip_no=?
+        """, (
+            body.contractor_id, d.get("contractorName", ""),
+            income_type, gross,
+            calc["taxWithheld"], calc["nhiSupplement"], calc["netAmount"],
+            d.get("paymentMethod", "匯款"), d.get("slipDate", ""),
+            d.get("status", "草稿"), d["taxRulesVersion"],
+            json.dumps(d, ensure_ascii=False), now, slip_no
+        ))
+        conn.commit()
     conn.close()
-    if res.rowcount == 0:
-        raise HTTPException(404, "找不到此勞報單")
     _audit(_tok(authorization), 'payslip.update', 'payslip', slip_no,
            f"{slip_no}（{d.get('contractorName', '')}）",
            {"taxRulesVersion": d["taxRulesVersion"], "recalcTaxRules": recalc})

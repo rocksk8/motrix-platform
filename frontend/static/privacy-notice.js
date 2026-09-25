@@ -15,7 +15,8 @@
 
   // 告知書 HTML：公司名稱＋告知文字＋當事人姓名＋簽名欄
   function documentHtml(notice, subjectName) {
-    const today = new Date().toISOString().slice(0, 10)
+    // 稽核 S-2：當事人簽名的日期用台北時間（toISOString() 是 UTC，台灣 00:00～07:59 會印成前一天）
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
     return '<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>個人資料蒐集告知書</title>' +
       '<style>body{font-family:"Microsoft JhengHei",sans-serif;margin:32px;color:#111;line-height:1.8;font-size:14px}' +
       'h1{font-size:18px;text-align:center;margin-bottom:4px}.co{text-align:center;color:#444;margin-bottom:18px}' +

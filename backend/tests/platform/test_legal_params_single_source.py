@@ -24,7 +24,9 @@ def hits(text: str) -> list:
     """去掉註解之後的法規數字。"""
     out = []
     for i, line in enumerate(text.splitlines(), 1):
-        code = re.split(r"\s#|^#|//", line, maxsplit=1)[0]
+        # 稽核 O-3（2026-09-26）：原本一行裡只要有 `//`（例如 "https://…"）就截斷，後面的程式碼看不到
+        #   ⇒ 只把「行首或空白之後」的 # 與 // 當註解
+        code = re.split(r"(?:^|\s)(?:#|//)", line, maxsplit=1)[0]
         if _PAT.search(code):
             out.append((i, line.strip()[:120]))
     return out
@@ -35,6 +37,8 @@ def test_positive_control_the_scanner_finds_a_hard_coded_threshold():
     assert hits("rate = 0.0211")
     assert not hits("# 註解裡的 29500 不算")
     assert not hits("x = 295001")
+    assert hits('const u = "https://x"; const th = 29500'), "`https://` 之後的程式碼也要看得到"
+    assert not hits("const a = 1  // 29500 是註解")
 
 
 def test_legal_numbers_live_only_in_the_legal_params_service():

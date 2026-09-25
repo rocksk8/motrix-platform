@@ -117,10 +117,10 @@ def test_invoice_request_dialog_asks_for_the_missing_basis(live_server, make_use
     assert "免稅依據" in page.evaluate("() => window.__toasts[0]")
     assert _vouchers(no) == [], "沒有依據不可以建立"
 
-    box.locator("select[data-iv-tax-basis-code]").select_option("8")
-    box.locator("input[data-iv-tax-basis-note]").fill("第 N 款（測試）")
+    box.locator("select[data-iv-tax-basis-code]").select_option("8-3")
+    box.locator("input[data-iv-tax-basis-note]").fill("醫療勞務（測試）")
     page.locator("button:has-text('送出建立')").click()
     page.wait_for_function(f"() => !{ROOT}.ivCreateModal && !{ROOT}.ivSubmitting", timeout=15000)
     [snap] = _vouchers(no)
-    assert snap["taxBasis"] == {"code": "8", "note": "第 N 款（測試）"}
+    assert snap["taxBasis"] == {"code": "8-3", "note": "醫療勞務（測試）"}
     assert snap["taxNote"].startswith("免稅依據：")

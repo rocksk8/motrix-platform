@@ -203,9 +203,11 @@ modules/<key>/
 ## 11. 法規參數與法規欄位（CUSTOMIZATION-SPEC §9）
 
 - 扣繳率、起扣標準、補充保費門檻、最低工資一律向 L1 `helpers.legal_params` 依**單據日期**取版本，模組不寫死數字；單據存版本號與參數快照，修改舊單沿用快照，除非使用者明確選擇重算。守門：`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params 與凍結的 db.py 種子）。
+- 法規金額（補充保費、扣繳稅額）的捨入一律用 L1 `legal_params.round_half_up`（四捨五入到元）／`floor_amount`（元以下捨去），前端用 `static/legal-round.js`；讀法規參數的程式不可以直接 `round()`／`math.floor()`／`Math.round()`（內建 round 是銀行家捨入：35,000 × 2.11% 會變 738，應為 739）。守門：`tests/platform/test_legal_amount_rounding_guard.py`（2026-09-26，稽核 D-1）。
+- 讀舊單 → 合併 → 整包寫回的法規單據（例：勞報單的已告知紀錄、快照）必須在 `core.txn.write_txn` 裡讀。守門：`tests/test_legal_audit_d_r1_r3_2026_09_26.py` 的並行題（只守勞報單；其他單據沿用 core.txn 的 lost-update 規則，⚠ 沒有全域守門）。
 - 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。
-- 零稅率／免稅送出時必填依據（`tax_basis_error`）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。
-- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。新增其他蒐集個資的表單（例：客戶聯絡人）⚠ 未守門（沒有機器可讀的「哪些表單蒐集個資」清單）。
+- 零稅率／免稅送出時必填依據（`tax_basis_error`）；免稅依據是營業稅法 §8 第一項逐字條文的逐款下拉（`ARTICLE_8_ITEMS`，出處 `ARTICLE_8_SOURCE`；條文修正時改這張表）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。
+- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋；新紀錄同時把告知全文存進 `privacy_notice_texts`（雜湊 → 全文，只增不改）；紀錄的設定值讀不懂 ⇒ 拒絕寫入（`AcksCorrupted`），不可以當成空的覆寫。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。新增其他蒐集個資的表單（例：客戶聯絡人）⚠ 未守門（沒有機器可讀的「哪些表單蒐集個資」清單）。
 
 ## 12. 信件與通知（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）
 
