@@ -870,6 +870,9 @@ class CompanyProfile(BaseModel):
     locations: Optional[list] = None
     # R3（個資法 §8 I）：個資蒐集告知文字；空白 ⇒ 列印時用範本（helpers/privacy_notice.py）
     privacy_notice: str = ''
+    # 2026-09-26：其他蒐集個資的表單各自的告知文字（聯絡人／使用者帳號）；空白 ⇒ 該用途的範本
+    privacy_notice_contact: str = ''
+    privacy_notice_user: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -884,6 +887,8 @@ _COMPANY_PROFILE_DEFAULT = {
     "office_lat": None, "office_lon": None,
     "locations": [],
     "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）
+    "privacy_notice_contact": "",   # 聯絡人用（客戶／供應商／承攬商），空白＝範本
+    "privacy_notice_user": "",      # 使用者帳號用，空白＝範本
 }
 
 #: 據點可以自己帶的銀行欄位。**留空＝沿用主要據點。**

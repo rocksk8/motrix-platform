@@ -169,3 +169,55 @@ def delete_customer(cid: int, authorization: str = Header(None)):
     notify_module_activity("客戶管理", "刪除", user.get("display_name") or user["username"],
                             cname, "customers.html")
     return {"ok": True}
+
+
+
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3，2026-09-26 擴大到聯絡人）──────────────────────
+# 告知的對象是每一位聯絡人（自然人），不是客戶本身；紀錄存在 L1 設定鍵 `privacy_notice_acks`
+# （`customer_contact:<客戶id>:<聯絡人id>`），由伺服器蓋時間與人員，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+def _privacy_contacts(conn, cid: int):
+    row = conn.execute("SELECT name, data_json FROM customers WHERE id=?", (cid,)).fetchone()
+    if not row:
+        return None, []
+    try:
+        d = json.loads(row["data_json"] or "{}")
+    except ValueError:
+        d = {}
+    contacts = d.get("contacts") if isinstance(d, dict) else None
+    return row["name"], (contacts if isinstance(contacts, list) else [])
+
+
+@router.get("/api/customers/{cid}/privacy-notice")
+def get_customer_contact_privacy_acks(cid: int, authorization: str = Header(None)):
+    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
+    conn = get_db()
+    name, _ = _privacy_contacts(conn, cid)
+    conn.close()
+    if name is None:
+        raise HTTPException(404, "客戶不存在")
+    return {"acks": _pn.acks_with_prefix("customer_contact", cid)}
+
+
+@router.post("/api/customers/{cid}/contacts/{ctid}/privacy-notice/ack")
+def ack_customer_contact_privacy_notice(cid: int, ctid: str, authorization: str = Header(None)):
+    """記錄「已告知這位聯絡人」：時間與人員由伺服器決定；已記錄的不覆蓋。聯絡人要先存進客戶資料。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'case_manage', 'dev_crm', 'procurement'), "客戶管理")
+    conn = get_db()
+    name, contacts = _privacy_contacts(conn, cid)
+    conn.close()
+    if name is None:
+        raise HTTPException(404, "客戶不存在")
+    ct = next((c for c in contacts if isinstance(c, dict) and str(c.get("id")) == str(ctid)), None)
+    if ct is None:
+        raise HTTPException(404, "找不到這位聯絡人（請先儲存客戶資料）")
+    rec, created = _pn.record_purpose_ack("customer_contact", f"{cid}:{ctid}", user, "contact")
+    if created:
+        _audit(_tok(authorization), 'customer.privacy_notice_ack', 'customer', f"{cid}:{ctid}",
+               f"{name}／{ct.get('name') or ''}", {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}

@@ -1,0 +1,89 @@
+{
+  "_說明": "蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。守門：backend/tests/platform/test_pii_forms_notice.py（掃描規則在 _pii_forms.py）。每一張有個資輸入欄位的頁面都要有剛好一種決定：notice（頁面有告知區塊＋伺服器紀錄端點）、covered_by（個資來自另一張有告知的主檔）、not_natural_person（法人資料）。後兩種要逐欄列 fields，頁面多一個個資欄位就轉紅、要重新決定；身分證號、生日這類強個資不可以用後兩種帶過。",
+  "forms": {
+    "frontend/pages/contractors.html": {
+      "notice": {
+        "purpose": "contractor",
+        "ack_kind": "contractor:<id>",
+        "ack_api": ["/api/contractors/{cid}/privacy-notice", "/api/contractors/{cid}/privacy-notice/ack"]
+      },
+      "since": "R3 2026-09-25"
+    },
+    "frontend/pages/payslip-form.html": {
+      "notice": {
+        "purpose": "contractor",
+        "ack_kind": "勞報單 data_json.privacyNotice（存檔時送 privacyNoticeAcked）",
+        "ack_api": ["/api/payslips", "/api/payslips/{slip_no}"]
+      },
+      "since": "R3 2026-09-25"
+    },
+    "frontend/pages/customers.html": {
+      "notice": {
+        "purpose": "contact",
+        "ack_kind": "customer_contact:<客戶id>:<聯絡人id>",
+        "ack_api": ["/api/customers/{cid}/privacy-notice", "/api/customers/{cid}/contacts/{ctid}/privacy-notice/ack"]
+      },
+      "since": "2026-09-26"
+    },
+    "frontend/pages/suppliers.html": {
+      "notice": {
+        "purpose": "contact",
+        "ack_kind": "supplier_contact:<供應商id>:<聯絡人id>",
+        "ack_api": ["/api/suppliers/{sid}/privacy-notice", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"]
+      },
+      "since": "2026-09-26"
+    },
+    "frontend/pages/vendor-contractors.html": {
+      "notice": {
+        "purpose": "contact",
+        "ack_kind": "vendor_contractor:<id>",
+        "ack_api": ["/api/vendor-contractors/{vid}/privacy-notice", "/api/vendor-contractors/{vid}/privacy-notice/ack"]
+      },
+      "since": "2026-09-26"
+    },
+    "frontend/pages/users.html": {
+      "notice": {
+        "purpose": "user",
+        "ack_kind": "user:<id>",
+        "ack_api": ["/api/users/{user_id}/privacy-notice", "/api/users/{user_id}/privacy-notice/ack"]
+      },
+      "since": "2026-09-26"
+    },
+    "frontend/pages/quotation-form.html": {
+      "covered_by": ["frontend/pages/customers.html", "frontend/pages/users.html"],
+      "fields": ["q.contactEmail", "q.contactName", "q.contactPhone", "q.deliveryAddress", "q.salesEmail", "q.salesPhone"],
+      "reason": "聯絡人與送貨地址由客戶主檔帶入；業務的 Email／電話由使用者帳號帶入。手動改寫或新增的聯絡人不另行告知（⚠ 未擋：沒有檢查它是否存在於客戶主檔）。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    },
+    "frontend/pages/case-management.html": {
+      "covered_by": "frontend/pages/customers.html",
+      "fields": ["cr.caseRecord.contract.contactPerson", "cr.caseRecord.contract.contactPhone", "cr.caseRecord.contract.deliveryAddress", "shippingForm.delivery_address"],
+      "reason": "合約聯絡人、送貨地址是客戶方的資料，來源是客戶主檔與報價單。⚠ 未擋：手動輸入的新聯絡人。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    },
+    "frontend/pages/completion-note-form.html": {
+      "covered_by": "frontend/pages/customers.html",
+      "fields": ["form.contact_phone", "form.site_address"],
+      "reason": "完工單的現場聯絡電話與地址是客戶方的資料（客戶主檔／報價單帶入）。⚠ 未擋：手動輸入的新聯絡人。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    },
+    "frontend/pages/network-plan-form.html": {
+      "covered_by": "frontend/pages/customers.html",
+      "fields": ["plan.contactName", "plan.contactPhone"],
+      "reason": "網路規劃的聯絡人是客戶方窗口。⚠ 未擋：這裡是手動輸入，沒有從客戶主檔選取；是否要在本頁另加告知區塊待主持裁示。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    },
+    "frontend/pages/network-plans.html": {
+      "covered_by": "frontend/pages/customers.html",
+      "fields": ["createForm.contactName", "createForm.contactPhone"],
+      "reason": "同 network-plan-form.html（建立網路規劃的快速表單）。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    },
+    "frontend/pages/company-profile-settings.html": {
+      "not_natural_person": true,
+      "fields": ["cfg.bank_account_number", "loc.address", "loc.bank_account_number", "loc.email", "loc.phone"],
+      "reason": "公司本身與各據點的地址、電話、Email、匯款帳號，屬法人資料。",
+      "decided_by": "cloud-pii 2026-09-26（待主持確認）"
+    }
+  }
+}

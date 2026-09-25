@@ -9,6 +9,10 @@
   ⇒ 每次寫入新的已告知紀錄時，把那一版全文存進設定鍵 `privacy_notice_texts`（雜湊 → 全文），只增不改。
 - 設定值讀不懂（稽核 S-3）：**拒絕寫入並記 ERROR**（`AcksCorrupted`），不可以當成空的再整份寫回——
   那會清掉其他人員的紀錄、連損毀的原始內容也蓋掉。
+- 2026-09-26 擴大到其他蒐集自然人個資的表單（客戶／供應商聯絡人、承攬商、使用者帳號）：
+  告知文字依用途（`PURPOSES`）分開，紀錄同樣存在 `privacy_notice_acks`
+  （`customer_contact:<客戶id>:<聯絡人id>`、`supplier_contact:…`、`vendor_contractor:<id>`、`user:<id>`）。
+  哪些表單蒐集個資 ⇒ 告知區塊的對應：`docs/platform/pii_forms.json`（守門 tests/platform/test_pii_forms_notice.py）。
 """
 import hashlib
 import json
@@ -54,6 +58,58 @@ TEMPLATE = """個人資料蒐集告知事項（依個人資料保護法第 8 條
 """
 
 
+#: 客戶／供應商／承攬商（廠商）聯絡人：業務往來聯繫用（2026-09-26 擴大到其他表單）。
+CONTACT_TEMPLATE = """個人資料蒐集告知事項（依個人資料保護法第 8 條第 1 項）
+
+{公司名稱}（以下簡稱本公司）因與您或您所屬的公司有業務往來（報價、訂購、交貨、施工、請款與售後服務），蒐集您的個人資料，依法告知下列事項：
+
+一、蒐集者名稱：{公司名稱}。
+
+二、蒐集目的：客戶、供應商與協力廠商管理，業務聯繫，報價、訂單、交貨、施工與售後服務，以及帳務處理。
+
+三、個人資料類別：姓名、職稱、所屬公司、聯絡電話、電子郵件、通訊軟體帳號、聯絡地址。
+
+四、利用期間、地區、對象及方式：
+（一）期間：自蒐集之日起，至業務往來結束且法令規定的保存期間屆滿為止。
+（二）地區：中華民國境內，以及本公司資料備份所在地【請填寫】。
+（三）對象：本公司，以及為履行業務而須提供的協力廠商、物流業者與依法令得要求提供的機關。
+（四）方式：以書面或電子方式蒐集、處理及利用，包括聯繫、寄送單據、列印與備份。
+
+五、您的權利：依個人資料保護法第 3 條，您可以向本公司請求查詢或閱覽、製給複製本、補充或更正、停止蒐集處理或利用、刪除您的個人資料；但本公司依法令必須保存的資料不在此限。聯絡窗口與方式：【請填寫】。
+
+六、不提供的影響：您可以自由選擇是否提供；不提供或提供不完整時，本公司可能無法與您聯繫或提供報價、交貨與服務。
+"""
+
+#: 使用者帳號（員工）：系統帳號與內部管理用。
+USER_TEMPLATE = """個人資料蒐集告知事項（依個人資料保護法第 8 條第 1 項）
+
+{公司名稱}（以下簡稱本公司）因為您開設與管理本系統使用者帳號，蒐集您的個人資料，依法告知下列事項：
+
+一、蒐集者名稱：{公司名稱}。
+
+二、蒐集目的：系統帳號管理與身分驗證、內部通知與聯繫、工作指派與簽核、資訊安全與稽核紀錄。
+
+三、個人資料類別：姓名、帳號、所屬部門、職務權限、電子郵件、聯絡電話，以及使用本系統產生的操作與登入紀錄。
+
+四、利用期間、地區、對象及方式：
+（一）期間：自帳號開設之日起，至帳號停用且內部稽核紀錄保存期間屆滿為止。
+（二）地區：中華民國境內，以及本公司資料備份所在地【請填寫】。
+（三）對象：本公司，及依法令得要求提供的機關。
+（四）方式：以電子方式蒐集、處理及利用，包括寄送系統通知、登入驗證、稽核紀錄與備份。
+
+五、您的權利：依個人資料保護法第 3 條，您可以向本公司請求查詢或閱覽、製給複製本、補充或更正、停止蒐集處理或利用、刪除您的個人資料；但本公司依法令或資訊安全稽核必須保存的紀錄不在此限。聯絡窗口與方式：【請填寫】。
+
+六、不提供的影響：您可以自由選擇是否提供；不提供或提供不完整時，本公司將無法為您開設帳號或寄送系統通知。
+"""
+
+#: 告知的用途 ⇒ (範本, `company_profile` 裡公司自訂文字的鍵)。`contractor` 就是 R3 原本那一份。
+PURPOSES = {
+    "contractor": (TEMPLATE, "privacy_notice"),
+    "contact": (CONTACT_TEMPLATE, "privacy_notice_contact"),
+    "user": (USER_TEMPLATE, "privacy_notice_user"),
+}
+
+
 def template_for(company_name: str) -> str:
     return TEMPLATE.replace(COMPANY_PLACEHOLDER, (company_name or "").strip() or "本公司")
 
@@ -68,6 +124,25 @@ def notice_text(profile: dict) -> str:
 def current_notice() -> str:
     from helpers.settings import _get_setting
     return notice_text(_get_setting("company_profile", {}) or {})
+
+
+def purpose_template_for(purpose: str, company_name: str) -> str:
+    """某一種用途的範本（公司名稱代入）。不認得的用途 ⇒ KeyError（不猜）。"""
+    tmpl = PURPOSES[purpose][0]
+    return tmpl.replace(COMPANY_PLACEHOLDER, (company_name or "").strip() or "本公司")
+
+
+def purpose_notice_text(profile: dict, purpose: str) -> str:
+    """某一種用途的告知文字：公司自訂的；空白 ⇒ 該用途的範本。"""
+    profile = profile or {}
+    key = PURPOSES[purpose][1]
+    custom = str(profile.get(key) or "").strip()
+    return custom if custom else purpose_template_for(purpose, profile.get("name", ""))
+
+
+def current_purpose_notice(purpose: str) -> str:
+    from helpers.settings import _get_setting
+    return purpose_notice_text(_get_setting("company_profile", {}) or {}, purpose)
 
 
 def notice_hash(text: str) -> str:
@@ -150,10 +225,29 @@ def get_ack(kind: str, key) -> dict:
         conn.close()
 
 
+def acks_with_prefix(kind: str, key_prefix) -> dict:
+    """`<kind>:<key_prefix>:<子鍵>` 的所有紀錄 ⇒ {子鍵: 紀錄}（例：一家客戶底下每一位聯絡人）。
+    讀不懂 ⇒ AcksCorrupted（同 get_ack：不當成「沒有紀錄」）。"""
+    conn = get_db()
+    try:
+        acks = _load_dict(conn, ACKS_KEY)
+    finally:
+        conn.close()
+    head = f"{kind}:{key_prefix}:"
+    return {k[len(head):]: v for k, v in acks.items() if k.startswith(head) and isinstance(v, dict)}
+
+
 def record_ack(kind: str, key, user: dict) -> tuple:
     """寫入一筆「已告知」；已經有就不動。回傳 (紀錄, 是否新寫入)。"""
-    k = f"{kind}:{key}"
-    text = current_notice()
+    return _record(f"{kind}:{key}", current_notice(), user)
+
+
+def record_purpose_ack(kind: str, key, user: dict, purpose: str) -> tuple:
+    """同 `record_ack`，雜湊的是該用途（`PURPOSES`）當下的告知文字。"""
+    return _record(f"{kind}:{key}", current_purpose_notice(purpose), user)
+
+
+def _record(k: str, text: str, user: dict) -> tuple:
     conn = get_db()
     with write_txn(conn):
         acks = _load_dict(conn, ACKS_KEY)          # 讀不懂 ⇒ AcksCorrupted（write_txn 回滾並關連線）

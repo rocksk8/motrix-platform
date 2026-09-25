@@ -8,6 +8,7 @@
   <title>供應商管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script src="../static/gov-lookup.js"></script>
+  <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <script src="../static/vendor/xlsx-0.18.5.full.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -747,6 +748,32 @@
           </div>
         </div>
 
+        <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3）：對象是每一位聯絡人；告知文字在「公司資料設定」維護 -->
+        <div class="form-section" data-privacy-card>
+          <div class="form-section-title">個資蒐集告知</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+            聯絡人的姓名、電話、Email 屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。可列印告知書請聯絡人簽名；沒有記錄不影響存檔。
+          </div>
+          <div x-show="!form.contacts || form.contacts.length === 0" style="font-size:12px;color:var(--text-dim)">尚無聯絡人</div>
+          <template x-for="ct in (form.contacts || [])" :key="'pn-' + ct.id">
+            <div data-privacy-contact style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border-light)">
+              <span style="font-size:13px;min-width:80px" x-text="ct.name || '（未填姓名）'"></span>
+              <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint(ct)" :disabled="!privacyNotice">列印告知書</button>
+              <template x-if="pnAck(ct)">
+                <span data-privacy-acked style="font-size:12px;color:var(--success)"
+                      x-text="'✓ 已告知：' + (pnAck(ct).at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck(ct).by || '')"></span>
+              </template>
+              <template x-if="!pnAck(ct)">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
+                  <input type="checkbox" data-privacy-ack :checked="pnReq(ct)" @change="pnSetReq(ct, $event.target.checked)" style="width:auto">
+                  已告知當事人（儲存時記錄時間與人員）
+                </label>
+              </template>
+              <span x-show="!pnAck(ct) && !pnReq(ct)" data-privacy-missing style="font-size:12px;color:var(--warning)">尚未記錄個資告知</span>
+            </div>
+          </template>
+        </div>
+
         <!-- 備註 -->
         <div class="form-group">
           <label class="form-label">備註 / 往來注意事項</label>
@@ -813,6 +840,7 @@
       get categoryChips() {
         return this._catChips(this.suppliers, this.SUPPLIER_CATEGORIES, s => s.category)
       },
+      ...window.MotrixPrivacyNotice.contactsState(),   // 個資蒐集告知（CUSTOMIZATION-SPEC §9.3）
       showModal: false,
       isDirty: false,
       editingId: null,
@@ -854,6 +882,7 @@
         this.session = JSON.parse(raw)
         if (!this.session.token) { location.href = '../pages/login.html'; return }
         this.loadTagPresets()
+        this.pnLoadNotice()     // 個資蒐集告知文字（聯絡人用；列印告知書）
         await this.fetchSuppliers()
         // `MP1`：地圖「開啟單據」帶 `?id=` 進來 ⇒ 直接打開那一筆；找不到要說出來。
         const linkId = window.MotrixRecordLink && MotrixRecordLink.param('id')
@@ -1066,6 +1095,7 @@
         this.newPreset     = ''
         this.showAddPreset = false
         this.loadTagPresets()
+        this.pnReset()
         this.showModal     = true
       },
 
@@ -1086,6 +1116,7 @@
         this.newPreset     = ''
         this.showAddPreset = false
         this.loadTagPresets()
+        this.pnLoadAcks(`${API}/suppliers/${s.id}/privacy-notice`)
         this.showModal     = true
       },
 
@@ -1121,7 +1152,16 @@
           })
           if (r.status === 401) { this.logout(); return }
           if (!r.ok) { const e = await r.json().catch(()=>{}); this.formError = e?.detail || '儲存失敗'; return }
+          const targetId = this.editingId || (await r.json()).id
           await this.fetchSuppliers()
+          // 個資蒐集告知：勾了「已告知」的聯絡人 ⇒ 伺服器記錄時間與人員（失敗不關視窗，讓使用者再按一次儲存）
+          try { await this.pnRecordRequested(`${API}/suppliers/${targetId}`, this.form.contacts) }
+          catch (e) {
+            this.formError = '供應商資料已儲存，但' + e.message + '，請再按一次儲存。'
+            if (!this.editingId) this.editingId = targetId
+            this.isDirty = false
+            return
+          }
           this.isDirty = false
           this.closeModal()
         } catch(e) { this.formError = '連線失敗，請稍後再試' }

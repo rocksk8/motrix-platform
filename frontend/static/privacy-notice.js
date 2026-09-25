@@ -7,8 +7,10 @@
     })
   }
 
-  async function load(token) {
-    const r = await fetch('/api/legal-params/privacy-notice', { headers: { Authorization: 'Bearer ' + token } })
+  // purpose：'contractor'（預設，承攬人員／勞報單）、'contact'（客戶／供應商／承攬商聯絡人）、'user'（使用者帳號）
+  async function load(token, purpose) {
+    const q = purpose ? ('?purpose=' + encodeURIComponent(purpose)) : ''
+    const r = await fetch('/api/legal-params/privacy-notice' + q, { headers: { Authorization: 'Bearer ' + token } })
     if (!r.ok) throw new Error('讀不到個資告知文字（' + r.status + '）')
     return r.json()
   }
@@ -42,5 +44,43 @@
     return w
   }
 
-  window.MotrixPrivacyNotice = { load: load, documentHtml: documentHtml, print: print }
+  // 多位聯絡人的告知狀態（客戶／供應商表單；2026-09-26）。用法：`...MotrixPrivacyNotice.contactsState()`。
+  //   privacyAcks：已記錄的 {聯絡人id: 紀錄}（伺服器來的）；privacyAckReq：這次勾了「已告知」的 {聯絡人id: true}。
+  //   紀錄不放進表單資料（form）：表單整包會存進 data_json，紀錄只能由伺服器寫。
+  function contactsState() {
+    return {
+      privacyNotice: null,
+      privacyAcks: {},
+      privacyAckReq: {},
+      async pnLoadNotice() {
+        try { this.privacyNotice = await load(this.session.token, 'contact') } catch (e) { this.privacyNotice = null }
+      },
+      pnReset() { this.privacyAcks = {}; this.privacyAckReq = {} },
+      async pnLoadAcks(url) {
+        this.pnReset()
+        try {
+          const r = await fetch(url, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) this.privacyAcks = (await r.json()).acks || {}
+        } catch (e) {}
+      },
+      pnAck(ct) { return this.privacyAcks[String(ct.id)] || null },
+      pnReq(ct) { return !!this.privacyAckReq[String(ct.id)] },
+      pnSetReq(ct, on) { this.privacyAckReq = Object.assign({}, this.privacyAckReq, { [String(ct.id)]: !!on }) },
+      pnPrint(ct) { if (this.privacyNotice) print(this.privacyNotice, (ct && ct.name) || '') },
+      // 存檔成功後呼叫：把勾了「已告知」的聯絡人逐一記錄；失敗丟例外（呼叫端不關視窗，讓使用者重試）
+      async pnRecordRequested(baseUrl, contacts) {
+        for (const ct of (contacts || [])) {
+          const k = String(ct.id)
+          if (!this.privacyAckReq[k] || this.privacyAcks[k]) continue
+          const r = await fetch(baseUrl + '/contacts/' + encodeURIComponent(k) + '/privacy-notice/ack', {
+            method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (!r.ok) throw new Error('聯絡人「' + (ct.name || k) + '」的個資告知紀錄寫入失敗（' + r.status + '）')
+          this.privacyAcks = Object.assign({}, this.privacyAcks, { [k]: (await r.json()).ack })
+          this.pnSetReq(ct, false)
+        }
+      },
+    }
+  }
+
+  window.MotrixPrivacyNotice = { load: load, documentHtml: documentHtml, print: print, contactsState: contactsState }
 })()

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>使用者管理 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -486,6 +487,29 @@
             <input class="form-input" type="text" x-model="form.phone" placeholder="02-1234-5678">
           </div>
         </div>
+        <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；告知文字在「公司資料設定」維護） -->
+        <div data-privacy-card style="margin-bottom:14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
+          <div style="font-size:10px;font-weight:600;color:var(--text-dim);letter-spacing:.08em;margin-bottom:6px">個資蒐集告知</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+            帳號的姓名、Email、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。可列印告知書請當事人簽名；沒有記錄不影響存檔。
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="printNotice()"
+                    :disabled="!privacyNotice">列印告知書</button>
+            <template x-if="privacyAck">
+              <span data-privacy-acked style="font-size:12px;color:var(--success)"
+                    x-text="'✓ 已告知：' + (privacyAck.at || '').replace('T', ' ').slice(0, 16) + '　' + (privacyAck.by || '')"></span>
+            </template>
+            <template x-if="!privacyAck">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
+                <input type="checkbox" data-privacy-ack x-model="privacyAckRequested" style="width:auto">
+                已告知當事人（儲存時記錄時間與人員）
+              </label>
+            </template>
+          </div>
+          <div x-show="!privacyAck && !privacyAckRequested" data-privacy-missing
+               style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+        </div>
         <!-- 處/部門 -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="form-group">
@@ -802,6 +826,13 @@
       showModal: false,
       editingId: null,
       formError: '',
+      privacyNotice: null,         // 個資蒐集告知：列印用的告知文字（使用者帳號用）
+      privacyAck: null,            // 這個帳號已記錄的「已告知」
+      privacyAckRequested: false,
+      printNotice() {
+        if (!this.privacyNotice || !window.MotrixPrivacyNotice) return
+        window.MotrixPrivacyNotice.print(this.privacyNotice, this.form.displayName || this.form.username)
+      },
       _modGroupOpen: {},    // 存取模組手風琴展開狀態（編輯使用者 Modal）
       _notifyGroupOpen: {}, // Email 通知偏好手風琴展開狀態（編輯使用者 Modal）
       showCrModal: false,
@@ -1106,6 +1137,7 @@
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this._notifyGroupOpen = {}
+        this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
         this.loadNotifyTypes(null)
       },
@@ -1133,12 +1165,18 @@
         this.formError = ''
         this._modGroupOpen = this._initGroupOpenState(this.form.modules)
         this._notifyGroupOpen = {}
+        this.privacyAck = null; this.privacyAckRequested = false
         this.showModal = true
         this.loadNotifyTypes(user.id).then(() => {
           for (const { group, items } of this.notifyGroups) {
             this._notifyGroupOpen[group] = items.some(it => this.form.notificationMuted.includes(it.key))
           }
         })
+        const uid = user.id
+        fetch(`/api/users/${uid}/privacy-notice`, { headers: this._headers() })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => { if (d && this.editingId === uid) this.privacyAck = d.ack || null })
+          .catch(() => {})
       },
 
       closeModal() {
@@ -1193,6 +1231,7 @@
           const err = await res.json().catch(() => ({}))
           this.formError = err.detail || '操作失敗'; return
         }
+        const targetId = this.editingId || (await res.json().catch(() => ({}))).id
         if (this.editingId && this.form.unlockPassword) {
           const ur = await fetch(`/api/users/${this.editingId}/unlock-password`, {
             method: 'PATCH', headers: this._headers(),
@@ -1212,6 +1251,17 @@
             const de = await dr.json().catch(() => ({}))
             this.formError = de.detail || '每日工作事項密碼設定失敗'; return
           }
+        }
+        // 個資蒐集告知：勾了「已告知當事人」⇒ 伺服器記錄時間與人員（失敗不關視窗，讓使用者重試）
+        if (this.privacyAckRequested && !this.privacyAck && targetId) {
+          const pr = await fetch(`/api/users/${targetId}/privacy-notice/ack`, { method: 'POST', headers: this._headers() })
+          if (!pr.ok) {
+            if (!this.editingId) this.editingId = targetId
+            await this.loadUsers()
+            this.formError = '帳號已儲存，但個資告知紀錄寫入失敗（' + pr.status + '），請再按一次儲存。'; return
+          }
+          this.privacyAck = (await pr.json()).ack
+          this.privacyAckRequested = false
         }
         await this.loadUsers()
         this.closeModal()
@@ -1273,6 +1323,7 @@
           if (!this.session.token) { window.location.href = 'login.html'; return }
         } catch(e) { window.location.href = 'login.html'; return }
 
+        try { this.privacyNotice = await window.MotrixPrivacyNotice.load(this.session.token, 'user') } catch(e) {}
         const res = await fetch('/api/auth/me', {
           headers: {'Authorization': 'Bearer ' + this.session.token}
         })
