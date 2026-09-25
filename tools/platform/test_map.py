@@ -5,7 +5,7 @@
   python tools/platform/test_map.py --stdout        印出不寫檔
   python tools/platform/test_map.py --check         與已提交的 test_map.json 比對，不同 ⇒ exit 1
 
-單位命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/。對應來源：
+單位命名同 dep_graph.json（router:/helper:/core:/page:/js:/mod:<key>/<file>/plat:），其餘 file:<路徑>、dir:<目錄>/。對應來源：
   import     import／from ... import（backend 模組、tests 內的共用檔與被引用的測試檔）
   api        字串中的 /api/... 路徑對到 router 的路由表（@router.xxx＋APIRouter/include_router prefix）
   page       字串中出現的 frontend 頁面／js／css 檔名
@@ -46,8 +46,16 @@ def _parse(path):
 
 # ── 單位命名（與 tools/platform/dep_scan.py 一致）────────────────────────────
 
-_CORE_SKIP_PREFIX = ("sync_", "switch_guide_patch", "create_", "fix_", "issue_")
-_CORE_SKIP_SUFFIX = ("_seed.py",)
+def _dep_scan_consts():
+    """core: 的排除規則以 dep_scan.py 為唯一來源（不複製常數，免得兩邊漂移）。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_dep_scan_consts", Path(__file__).with_name("dep_scan.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return tuple(mod.CORE_SKIP_PREFIX), tuple(mod.CORE_SKIP_SUFFIX)
+
+
+_CORE_SKIP_PREFIX, _CORE_SKIP_SUFFIX = _dep_scan_consts()
 
 
 def unit_name(path):
@@ -59,6 +67,10 @@ def unit_name(path):
     if len(parts) == 3 and parts[0] == BACKEND and parts[1] in ("routers", "helpers") \
             and name.endswith(".py") and name != "__init__.py":
         return ("router:" if parts[1] == "routers" else "helper:") + name[:-3]
+    if len(parts) >= 4 and parts[:2] == [BACKEND, "modules"] and name.endswith(".py"):
+        return "mod:%s/%s" % (parts[2], "/".join(parts[3:])[:-3])        # mod:<key>/<file>
+    if len(parts) == 3 and parts[:2] == [BACKEND, "core"] and name.endswith(".py"):
+        return "plat:" + name[:-3]                                          # L0 平台
     if len(parts) == 2 and parts[0] == BACKEND and name.endswith(".py") \
             and not name.startswith(_CORE_SKIP_PREFIX) and not name.endswith(_CORE_SKIP_SUFFIX):
         return "core:" + name[:-3]
@@ -103,7 +115,8 @@ def build_routes(files):
     main_tree = _parse(main)
     inc = _include_prefixes(main_tree) if main_tree else {}
     routes = []
-    sources = [p for p in files if p.startswith(f"{BACKEND}/routers/") and p.endswith(".py")] + [main]
+    sources = [p for p in files if p.endswith(".py") and p.startswith((f"{BACKEND}/routers/", f"{BACKEND}/modules/"))]
+    sources.append(main)
     for path in sources:
         tree = _parse(path)
         if tree is None:

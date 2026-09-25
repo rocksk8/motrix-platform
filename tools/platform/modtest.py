@@ -26,6 +26,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -37,6 +38,7 @@ from test_map import REPO, build as build_map, unit_name  # noqa: E402
 
 BACKEND = REPO / "backend"
 MAP_PATH = REPO / "docs" / "platform" / "test_map.json"
+MODULES_PATH = REPO / "docs" / "platform" / "modules.json"
 GRAPH_PATH = REPO / "docs" / "platform" / "dep_graph.json"
 
 #: 改到這些 ⇒ 所有測試的執行環境都變了，縮小不成立
@@ -278,14 +280,47 @@ def collect_per_file(window):
     ⚠ 逐檔傳給 pytest 收集反而慢十倍以上（實測 300 檔 60 秒 vs 全部 5 秒）。"""
     code, out = run_pytest(["tests"], [], window, full=False, collect_only=True)
     tail = out.strip().splitlines()[-1] if out.strip() else ""
-    if code not in (0, 5):
-        return None, tail
     per = {}
     for l in out.splitlines():
         if "::" in l:
             f = "backend/" + l.split("::", 1)[0].replace("\\", "/")
             per[f] = per.get(f, 0) + 1
-    return per, tail
+    if code not in (0, 5) and not per:
+        return None, tail
+    # 有收集錯誤但仍收到題目 ⇒ 照算，另在輸出標明（錯誤檔的題數算不到）
+    return per, (tail if code not in (0, 5) else "")
+
+
+def load_groups():
+    """modules.json ⇒ ({unit: 群組}, {群組: 顯示名})；不存在 ⇒ (None, None)。"""
+    if not MODULES_PATH.exists():
+        return None, None
+    m = json.loads(MODULES_PATH.read_text(encoding="utf-8"))
+    owner, names = {}, {"L1": "共用核心"}
+    specs = [("L1", m["L1"])] + sorted(m["modules"].items())         + [("retired:" + k, v) for k, v in sorted(m.get("retired", {}).items())]
+    for g, spec in specs:
+        names.setdefault(g, spec.get("name", g))
+        for u in spec.get("units", []):
+            owner.setdefault(u, g)
+    return owner, names
+
+
+def module_summary(picked, reasons, per, owner):
+    """依「被挑中的原因單位」歸組：{群組: [檔…]}。一個檔可同時算進多組。"""
+    out = {}
+    for t in picked:
+        gs = set()
+        for r in reasons[t]:
+            u = r.split("（", 1)[0]
+            if u == "契約測試":
+                gs.add("契約")
+            elif u == "改動的測試檔":
+                gs.add("改動的測試檔")
+            else:
+                gs.add(owner.get(u, "其他（file:／dir:／未列入 modules.json）"))
+        for g in gs:
+            out.setdefault(g, []).append(t)
+    return out
 
 
 def main(argv=None):
@@ -299,6 +334,7 @@ def main(argv=None):
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
+    ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
     argv = list(sys.argv[1:] if argv is None else argv)
     extra = []
     if "--" in argv:
@@ -321,15 +357,19 @@ def main(argv=None):
     graph = load_graph()
     picked, rep = select(changed, tmap, graph)
 
-    n_items, tail, full_n = None, "", None
+    n_items, tail, full_n, per = None, "", None, None
     if a.dry_run:
         per, tail = collect_per_file(a.window)
         if per is not None:
             n_items = sum(per.get(t, 0) for t in picked)
             full_n = sum(per.values())
 
+    owner, gnames = load_groups()
+    summary = module_summary(picked, rep["reasons"], per if a.dry_run else None, owner) if owner else None
     if a.json:
         rep["tests"] = picked
+        rep["by_module"] = ({g: {"files": len(v), "items": sum(per.get(t, 0) for t in v) if per else None}
+                             for g, v in sorted(summary.items())} if summary else None)
         rep["items"] = n_items
         rep["full_items"] = full_n
         sys.stdout.buffer.write((json.dumps(rep, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
@@ -348,12 +388,23 @@ def main(argv=None):
             print("🔴 改到 fixture 層（%s）⇒ 須全量（--full）；不縮小" % ", ".join(rep["need_full"]))
         print("挑出測試檔 %d／%d" % (len(picked), len(tmap["tests"])))
         if a.dry_run:
-            for t in picked:
-                print("  %s  ← %s" % (t, "、".join(rep["reasons"][t][:4])))
+            if summary is None:
+                print("（無 docs/platform/modules.json ⇒ 不做模組彙總）")
+            else:
+                print("依模組（一檔可跨組，合計會大於總數）：")
+                for g in sorted(summary, key=lambda k: (not k.startswith(("L1", "M")), k)):
+                    fs = summary[g]
+                    print("  %-6s %-10s %4d 檔／%5s 題" % (g, gnames.get(g, ""), len(fs),
+                                                        sum(per.get(t, 0) for t in fs) if per else "?"))
+            if a.list:
+                for t in picked:
+                    print("  %s  ← %s" % (t, "、".join(rep["reasons"][t][:4])))
             if n_items is None:
                 print("題數：收集失敗（%s）" % tail)
             else:
                 print("題數（collect-only）：%d／全量 %d（%.1f%%）" % (n_items, full_n, 100.0 * n_items / max(full_n, 1)))
+                if tail:
+                    print("⚠ 收集有錯誤，出錯的檔不計入題數：%s" % tail)
 
     if a.dry_run:
         return 0
@@ -372,8 +423,13 @@ if __name__ == "__main__":
             _s.reconfigure(encoding="utf-8", errors="replace")   # 導向檔案時預設 locale（cp932／cp950）會炸在中文
         except (AttributeError, ValueError):
             pass
+    if hasattr(signal, "SIGBREAK"):
+        # Windows：Ctrl-Break／關閉主控台視窗送的是 SIGBREAK，預設直接結束行程 ⇒ finally 不會跑、暫存留下
+        def _on_break(signum, frame):
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGBREAK, _on_break)
     try:
         sys.exit(main())
     except KeyboardInterrupt:
-        print("\n中斷；basetemp 已清除。")
+        print("\n中斷。")
         sys.exit(130)

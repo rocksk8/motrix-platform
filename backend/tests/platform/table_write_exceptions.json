@@ -1,0 +1,110 @@
+{
+ "_doc": "L2 表被非擁有組直接寫入的例外：只准變少；ref 寫出處（DEPENDENCY-MAP §4 等）。",
+ "exceptions": [
+  {
+   "table": "account_items",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "bonus_award_lines",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "case_action_items",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "case_extra_expenses",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "case_stage_visits",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "case_stages",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "case_stages",
+   "writer": "helper:google_calendar",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "daily_task_completions",
+   "writer": "helper:case_stage_tasks",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "daily_tasks",
+   "writer": "helper:case_stage_tasks",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "dev_cases",
+   "writer": "router:quotations",
+   "ref": "DEPENDENCY-MAP §4"
+  },
+  {
+   "table": "invoice_vouchers",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "invoice_vouchers",
+   "writer": "helper:google_calendar",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "payment_requests",
+   "writer": "helper:google_calendar",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "quotations",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "quotations",
+   "writer": "core:pdf_gen",
+   "ref": "DEPENDENCY-MAP §5「輸出：PDF」樣板回 M01 後消失；此寫入未列於 §4"
+  },
+  {
+   "table": "quotations",
+   "writer": "helper:google_calendar",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "shipping_notes",
+   "writer": "helper:google_calendar",
+   "ref": "DEPENDENCY-MAP §3.1"
+  },
+  {
+   "table": "stock_batches",
+   "writer": "core:db",
+   "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入"
+  },
+  {
+   "table": "stock_items",
+   "writer": "router:quotations",
+   "ref": "DEPENDENCY-MAP §4"
+  },
+  {
+   "table": "vouchers_all",
+   "writer": "helper:bonus_vouchers",
+   "ref": "DEPENDENCY-MAP §4"
+  },
+  {
+   "table": "vouchers_all",
+   "writer": "router:quotations",
+   "ref": "DEPENDENCY-MAP §4"
+  }
+ ]
+}
