@@ -114,6 +114,8 @@
 
 反向控制：`tools/platform/scope_rc.py`（真突變 ⇒ 選到且真的紅；發版前／每批合回後跑，結果記進 modtest_stats.jsonl）。
 
+**已知例外**（主持裁示 2026-09-26）：`main.py`、`db`（整份）、`db.get_db`／`db.init_db`、`auth._require_user`／`auth._tok`——每條請求或每一題的建庫都會經過；D1b 的 ≤30% 以其他名稱驗收。**落點**：階段 B 各模組的表與 migration 搬進模組（MODULE-GUIDE §4 模組 migration 執行器）之後，重量一次 db；屆時不再每題都經過的部分，從例外清單拿掉。
+
 **不變的政策**：全量照舊——fixture 層改動、發版前、每批合回後。main.py 的 fixture 隱含維持（main 組裝整個 app，改它就是改所有端點的進入點）。
 
 **目標**（實作後重量同一張表）：legal_params、email_notify、main 以外的常用 helper ≤30%。auth、db 屬於「每一條請求都經過」的核心，名稱層級後若仍高於 30%，逐一列出原因，由主持裁示是否接受。
