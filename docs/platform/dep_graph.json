@@ -18,7 +18,9 @@
    "path": "backend/archive.py",
    "tables_ddl": [],
    "tables_named": [
+    "contractors",
     "customers",
+    "payslips",
     "quotations",
     "schema_version",
     "system_settings",
@@ -567,8 +569,7 @@
     "system_settings"
    ],
    "tables_w": [
-    "bonus_case_awards",
-    "vouchers_all"
+    "bonus_case_awards"
    ]
   },
   "helper:build_info": {
@@ -2319,6 +2320,7 @@
     "/api/settings/edge-path",
     "/api/settings/google-quota",
     "/api/settings/pdf-base-path",
+    "/api/settings/pii-archive-status",
     "/api/settings/webauthn-config"
    ],
    "api_prefixes": [
@@ -8505,128 +8507,134 @@
      "path": "/api/settings/cloud-backup-target"
     },
     {
-     "func": "set_cloud_backup_target_setting",
+     "func": "get_pii_archive_status",
      "line": 1817,
+     "method": "GET",
+     "path": "/api/settings/pii-archive-status"
+    },
+    {
+     "func": "set_cloud_backup_target_setting",
+     "line": 1829,
      "method": "PUT",
      "path": "/api/settings/cloud-backup-target"
     },
     {
      "func": "get_email_notify",
-     "line": 1853,
+     "line": 1865,
      "method": "GET",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "set_email_notify",
-     "line": 1866,
+     "line": 1878,
      "method": "PUT",
      "path": "/api/settings/email-notify"
     },
     {
      "func": "get_google_calendar",
-     "line": 1891,
+     "line": 1903,
      "method": "GET",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "set_google_calendar",
-     "line": 1905,
+     "line": 1917,
      "method": "PUT",
      "path": "/api/settings/google-calendar"
     },
     {
      "func": "test_google_calendar",
-     "line": 1921,
+     "line": 1933,
      "method": "POST",
      "path": "/api/settings/google-calendar/test"
     },
     {
      "func": "test_email_notify",
-     "line": 1937,
+     "line": 1949,
      "method": "POST",
      "path": "/api/settings/email-notify/test"
     },
     {
      "func": "get_custom_roles",
-     "line": 1968,
+     "line": 1980,
      "method": "GET",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "create_custom_role",
-     "line": 1974,
+     "line": 1986,
      "method": "POST",
      "path": "/api/settings/custom-roles"
     },
     {
      "func": "update_custom_role",
-     "line": 2001,
+     "line": 2013,
      "method": "PUT",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "delete_custom_role",
-     "line": 2025,
+     "line": 2037,
      "method": "DELETE",
      "path": "/api/settings/custom-roles/{rid}"
     },
     {
      "func": "get_schema_status",
-     "line": 2049,
+     "line": 2061,
      "method": "GET",
      "path": "/api/system/schema-status"
     },
     {
      "func": "get_role_labels",
-     "line": 2079,
+     "line": 2091,
      "method": "GET",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "put_role_labels",
-     "line": 2094,
+     "line": 2106,
      "method": "PUT",
      "path": "/api/settings/role-labels"
     },
     {
      "func": "get_webauthn_config_status",
-     "line": 2109,
+     "line": 2121,
      "method": "GET",
      "path": "/api/system/webauthn-config-status"
     },
     {
      "func": "list_online_users",
-     "line": 2142,
+     "line": 2154,
      "method": "GET",
      "path": "/api/online-users"
     },
     {
      "func": "user_activity_stats",
-     "line": 2186,
+     "line": 2198,
      "method": "GET",
      "path": "/api/user-activity"
     },
     {
      "func": "user_activity_trail",
-     "line": 2260,
+     "line": 2272,
      "method": "GET",
      "path": "/api/user-activity/trail"
     },
     {
      "func": "edit_presence_heartbeat",
-     "line": 2395,
+     "line": 2407,
      "method": "POST",
      "path": "/api/edit-presence"
     },
     {
      "func": "edit_presence_release",
-     "line": 2426,
+     "line": 2438,
      "method": "DELETE",
      "path": "/api/edit-presence"
     },
     {
      "func": "case_roles_unmapped",
-     "line": 2442,
+     "line": 2454,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
     }
@@ -9706,6 +9714,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "core:archive",
     "core:trail",
     "router:map_points"
    ],
@@ -10307,6 +10316,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "core:archive",
     "core:db",
     "core:trail"
    ],
@@ -10966,7 +10976,6 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:bonus_vouchers",
     "helper:voucher",
     "router:quotations",
     "router:vouchers"
