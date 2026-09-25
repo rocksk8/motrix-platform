@@ -147,3 +147,19 @@
 | P-1 | 必修 | 開 |
 | G-2～G-5、P-2 | 建議 | 開 |
 | O-1～O-4 | 觀察 | 開 |
+
+### B 的逐項回覆（2026-09-25；狀態仍由 C 確認後才改「關閉」）
+
+| 編號 | 回覆 | 處置／證據 |
+|---|---|---|
+| G-1 | 修正 | `wip/b-audit-g1` 0878f461：「公開」改為不以底線開頭，**或**列在 `helpers/__init__.py` 的 `__all__`，**或**被 L1 以外的產品碼 import（`cross_boundary_public`），共新看得見 40 項（含 `_require_user`）。**真突變重跑 B1**：刪 `_require_user` 的 `module` 參數 ⇒ `test_interface_matches_snapshot` 紅（原本綠）。快照範圍版本 1→2 要附原因並同 commit 改 MODULE-GUIDE（守門驗 git 歷史），範圍變大不等於介面新增 |
+| P-1 | 修正 | `wip/b-verify-decoy` 4fc6d9cc：modules/ 底下沒有 module.json 的資料夾 ⇒ 擋；必要檔改由包內 modules.json **全部** L1 單位推導（含 page:／js:、router:）＋套件 `__init__.py`＋main.py，路徑相對包根。**重跑 B5、B6**（合成包與真部署包突變）⇒ 兩項都擋；B6+ 照舊報缺 |
+| G-2 | 修正（部分） | 描述加 `async` 前綴與僅限位置參數 `/`；def⇄async def 算修改（主版號）。**預設值的內容不納入**：MODULE-GUIDE §2 已寫明「預設值語意改變要自己升版並寫 CHANGELOG」 |
+| G-3 | 接受，待修 | 排在 P7 之後：「頂層 `tables`（＋模組 migration 建的表）＝`data.tables` 的 name 集合」；`PII_ROUTED_SETTINGS` 改從 archive 推導 |
+| G-4 | 接受，待修 | 排在 P7 之後：納入 `pages[].path`；module.json 只排除 `version` 欄位本身的變動 |
+| G-5 | 接受 | 採「寫明」：L1 行為（簽章不變）改變靠 `core/CHANGELOG.md` 自律＋全量；寫進 CORE-SPEC §9d（與 G-3／G-4 同一批） |
+| P-2 | 接受，措辭更正 | 9c① 的組合測試是另外跑的（core-only＝刪掉 M11 後全部執行：非 e2e 3,318 過／只剩 (c)，e2e 359 過），PD 本身只做端點煙霧測試。將在 MODULE-GUIDE §9 寫明兩者分工，並把「PD 自動跑組合測試」列進 ROADMAP |
+| O-1 | 說明 | 沒有模組時 skip 是刻意的（core-only 是合法組合）；`key`＝資料夾名已由 `dep_scan --check-modules` 守（A） |
+| O-2 | 修正 | `changelog_top_version` 改為三段版號讀不到 ⇒ None；反向控制 `## 1.4.1` |
+| O-3 | 修正（部分） | 範圍變動必附 `--reason`、記 `scope_history`、同 commit 改規則說明（守門）；「手動改快照 JSON」仍可繞過，接受為已知限制（任何人手改都會出現在 diff／稽核） |
+| O-4 | 修正 | `core/*.py` 改依包的 `.build_commit` 從 git 列（36f4dfed），不再用 repo 的 glob |
