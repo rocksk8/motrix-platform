@@ -7,12 +7,16 @@
 | 區段 | 來源（擁有者） |
 |---|---|
 | `modules[].endpoints` | 已載入模組的 `ModuleSpec.routers`（程式實際提供的路由，不是宣告） |
-| `modules[].points` | `module.json` 的 `customization`＋`pages[].menu`（`core.customization.points`） |
+| `modules[].points` | `module.json` 的 `customization`＋`pages[].menu`，經 `_module_points` 過濾（＝`layout_points()` 同一份） |
 | `providers` | `core.registry`（模組的 `ModuleSpec.providers`＋尚未搬遷模組的 `registry.provide`） |
 | `events` | `core.events.declarations()` |
 | 其他區段（`outputs`、`fieldTypes`、`formulaFunctions`…） | 擁有者以 `register_section(name, owner, fn)` 登記；**擁有者不在 ⇒ 區段標 unavailable 並說明**，不自己補一份清單 |
 
 不在這裡寫死任何能力清單：寫死的那一份就是第二個來源。
+
+**可自訂點的唯一入口**（稽核 P-M1）：`layout_points(module_key)`。過濾只在 `_module_points` 一處：
+引用不存在端點／版型的點、選單裡被藏起的按鈕、未載入的模組。目錄 `build()`、排版守門 `check_layout()`
+（P5 layout 驗證器與 P9 都必須呼叫它）都只經過這一處；`customization._raw_points` 不准在別處呼叫（守門）。
 """
 import threading
 from typing import Callable, Dict, Tuple
@@ -112,6 +116,70 @@ def output_problems(pts, templates) -> list:
     return out
 
 
+def _templates_of(outputs_entry):
+    """outputs 區段 ⇒ 可選版型 key 集合；區段不在或擁有者失敗 ⇒ None（每一個輸出點都是問題）。"""
+    if not isinstance(outputs_entry, dict) or not outputs_entry.get("available"):
+        return None
+    return {t.get("key") for t in (outputs_entry.get("items") or {}).get("templates", [])}
+
+
+def _outputs_entry():
+    with _lock:
+        owned = _SECTIONS.get("outputs")
+    if owned is None:
+        return None
+    try:
+        return {"available": True, "items": owned[1]()}
+    except Exception:                                           # noqa: BLE001 與 build() 同一判準：失敗 ⇒ 沒有版型
+        return None
+
+
+def _module_points(m, templates, eps=None):
+    """**唯一的過濾處**：已載入模組 ⇒ (可用的點, problems)。
+
+    - 引用了模組路由沒有的端點 ⇒ 藏起、列 problems
+    - 輸出點的預設版型不存在（或 outputs 區段不在）⇒ 藏起、列 problems；留下的輸出點帶 `templates`（可選版型）
+    - 選單項目引用了被藏起的按鈕 ⇒ 從 items 拿掉；選單因此沒有項目 ⇒ 選單也藏起、列 problems
+    """
+    if eps is None:
+        eps = module_endpoints(m.spec)
+    pts = customization._raw_points(m.manifest or {})        # noqa: SLF001 唯一允許的呼叫點（守門）
+    problems = endpoint_problems(pts, eps) + output_problems(pts, templates)
+    bad = {p["point"] for p in problems}
+    kept = []
+    for p in pts:
+        if p["id"] in bad:
+            continue
+        if p["kind"] == "menu":
+            items = [it for it in p["items"] if it not in bad]
+            if not items:
+                problems.append({"point": p["id"], "message": "選單的按鈕全部被藏起（程式沒有提供）⇒ 選單不列出"})
+                continue
+            p = dict(p, items=items)
+        elif p["kind"] == "output":
+            p = dict(p, templates=sorted(templates))
+        kept.append(p)
+    return kept, problems
+
+
+def layout_points(module_key=None) -> list:
+    """可自訂點的**唯一入口**（目錄與排版守門同一份）。`module_key=None` ⇒ 全部已載入模組。
+
+    未載入（停用／未授權／載入失敗／不存在）的模組 ⇒ 沒有任何點。"""
+    templates = _templates_of(_outputs_entry())
+    out = []
+    for m in sorted(registry.loaded(), key=lambda x: x.key):
+        if module_key is None or m.key == module_key:
+            out += _module_points(m, templates)[0]
+    return out
+
+
+def check_layout(module_key, ops) -> list:
+    """排版操作守門（P5 `layout` 驗證器與 P9 都必須呼叫它）：只能動 `layout_points(module_key)` 裡的點。
+    ⇒ 問題清單 `[{path, message}]`，空＝合格。"""
+    return customization._check_ops(layout_points(module_key), ops)   # noqa: SLF001
+
+
 def _providers():
     rows = {}
     for (cap, name), fn in registry._LEGACY_PROVIDERS.items():   # noqa: SLF001 同屬 core，只讀
@@ -150,17 +218,13 @@ def build() -> dict:
                            "reason": "擁有者回報失敗：%s: %s" % (type(e).__name__, e)}
             gaps.append({"section": name, "message": extra[name]["reason"]})
 
-    templates = None
-    if extra.get("outputs", {}).get("available"):
-        templates = {t.get("key") for t in (extra["outputs"]["items"] or {}).get("templates", [])}
+    templates = _templates_of(extra.get("outputs"))
 
     mods = []
     for m in sorted(registry.loaded(), key=lambda x: x.key):
         man = m.manifest or {}
         eps = module_endpoints(m.spec)
-        pts = customization.points(man)
-        problems = endpoint_problems(pts, eps) + output_problems(pts, templates)
-        bad = {p["point"] for p in problems}
+        pts, problems = _module_points(m, templates, eps)
         mods.append({
             "key": m.key, "name": man.get("name") or m.key, "version": man.get("version") or "",
             "core": man.get("core") or "", "permissions": list(man.get("permissions") or []),
@@ -169,7 +233,7 @@ def build() -> dict:
             "coreFields": customization.core_fields(man),
             "endpoints": eps,
             # 引用了程式沒有提供的東西的點不列出（排版器看不到它），改列在 problems
-            "points": [p for p in pts if p["id"] not in bad],
+            "points": pts,
             "problems": problems,
         })
 

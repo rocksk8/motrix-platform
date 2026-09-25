@@ -9,9 +9,11 @@
 
 - `validate_manifest(manifest)`：格式驗證 ⇒ 問題清單 `[{path, message}]`；非空 ⇒ loader 不載入該模組。
   不認得的鍵一律是問題（寬鬆驗證會靜默丟掉欄位）；`schema` 看不懂 ⇒ 不猜。
-- `points(manifest)`：把登記內容攤平成「點」清單（每個點帶 `id`、`kind`、允許的 `ops`），給能力目錄與排版器用。
-- `check_layout(points, ops)`：排版操作只能指向登記過的點、只能做該點允許的操作
-  （「程式沒有提供的選項不可以出現」的資料層守門；P5 的 layout 驗證器與 P9 都要呼叫它）。
+- `_raw_points(manifest)`：把登記內容攤平成「點」清單（每個點帶 `id`、`kind`、允許的 `ops`）。
+  **未過濾**（仍含引用不存在端點／版型的點、未載入模組的點）⇒ 私有；唯一的使用者是
+  `core.catalog._module_points`，對外一律走 `core.catalog.layout_points()`（稽核 P-M1）。
+- `_check_ops(points, ops)`：排版操作只能指向傳入的點、只能做該點允許的操作、只能帶該操作認得的鍵。
+  私有；對外入口是 `core.catalog.check_layout(module_key, ops)`（它傳入的一定是 `layout_points()` 那一份）。
 
 與 STAGE-C（B）的 `pages[].menu` 的分工：側欄選單項**只在** `pages[].menu` 宣告（B 的格式），
 本檔不重複宣告，只把有 `menu` 物件的頁面衍生成 `sidebar` 點；`customization.pages[].page`
@@ -29,7 +31,8 @@ PAGE_KINDS = ("lists", "forms", "actions", "menus", "exports")
 OPS_CORE_FIELD = ("move",)
 OPS_DISPLAY_FIELD = ("move", "hide", "show", "relabel")
 OPS_BY_KIND = {
-    "sidebar": ("move", "hide", "relabel"),
+    # 側欄：個人層只能調顯示與排序（STAGE-C §8／D4；v1 不改名、不換群組 ⇒ move 不可以帶 to）
+    "sidebar": ("move", "hide", "show"),
     "list": ("reorder",),
     "form": ("reorder", "add_section"),
     "section": ("move", "relabel"),
@@ -40,6 +43,24 @@ OPS_BY_KIND = {
 }
 
 EXPORT_FORMATS = ("xlsx", "csv", "pdf")
+
+#: 每一種排版操作認得的鍵：(必填, 選填)。不認得的鍵是問題（打錯鍵名不可以回成功而沒有生效）。
+OP_KEYS = {
+    "move": (("op", "target"), ("to", "index")),
+    "hide": (("op", "target"), ()),
+    "show": (("op", "target"), ()),
+    "relabel": (("op", "target", "label"), ()),
+    "reorder": (("op", "target", "order"), ()),
+    "add_section": (("op", "target", "key", "label"), ()),
+    "select_template": (("op", "target", "template"), ()),
+}
+
+#: `move` 的 `to` 可以指向哪一種點（依被移動的點的 kind）。不在表內的 kind ⇒ 不可以帶 `to`（只能在原容器內換位置）。
+MOVE_DEST_KINDS = {
+    "field": ("list", "section"),   # 列表欄 ⇒ 原列表；表單欄 ⇒ 同一張表單的區塊
+    "section": ("form",),           # 區塊 ⇒ 原表單
+    "action": ("menu",),            # 按鈕 ⇒ 同一頁的頁內選單
+}
 
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,39}$")
 _ENDPOINT = re.compile(r"^(GET|POST|PUT|PATCH|DELETE) (/[^\s]*)$")
@@ -280,8 +301,9 @@ def require_valid(manifest) -> None:
 
 # ── 攤平成點 ─────────────────────────────────────────────────────────────────
 
-def points(manifest) -> list:
-    """登記內容 ⇒ 點清單。只對**已通過** validate_manifest 的 manifest 呼叫。
+def _raw_points(manifest) -> list:
+    """登記內容 ⇒ 點清單（未過濾）。只對**已通過** validate_manifest 的 manifest 呼叫。
+    ⚠ 私有：對外取點只准用 `core.catalog.layout_points()`（守門 test_platform_catalog 的單一入口題）。
 
     每個點：`{id, kind, label, ops, ...}`；id 形如 `<module>:<page>/list:<key>/column:<field>`。
     沒有 `customization` ⇒ 只有 sidebar 點（若 pages[].menu 有宣告）。"""
@@ -357,13 +379,15 @@ def core_fields(manifest) -> dict:
 
 # ── 排版操作的守門 ───────────────────────────────────────────────────────────
 
-def check_layout(pts, ops) -> list:
-    """排版操作清單 `[{op, target, ...}]` ⇒ 問題清單。
+def _check_ops(pts, ops) -> list:
+    """排版操作清單 `[{op, target, ...}]` ⇒ 問題清單。`pts` 必須是 `core.catalog.layout_points()` 的輸出。
 
-    - target 不在登記的點裡 ⇒ 擋（程式沒有提供的選項不可以出現）
+    - target 不在點裡 ⇒ 擋（程式沒有提供的選項不可以出現）
     - op 不在該點允許的 ops ⇒ 擋（例：隱藏或改名核心欄位）
-    - `move` 的 `to`（有給時）必須是同一種容器裡登記過的點：欄位只能在同一個表單的區塊之間移動、
-      列表欄位只能留在原本的列表
+    - 該操作不認得的鍵 ⇒ 擋（OP_KEYS）
+    - `move`：`to` 依 MOVE_DEST_KINDS 限定種類與容器；`index` 為非負整數
+    - `select_template`：`template` 必須在該輸出點的可選版型（目錄 outputs 區段）裡
+    - `reorder`：`order` 必須恰好是該容器目前的子點；`add_section`：key 合法且不與既有區塊同名
     """
     by_id = {p["id"]: p for p in pts}
     out = []
@@ -374,23 +398,76 @@ def check_layout(pts, ops) -> list:
         if not isinstance(o, dict):
             out.append(_p(path, "必須是物件"))
             continue
+        op = o.get("op")
+        if op not in OP_KEYS:
+            out.append(_p(path + ".op", "不認得的操作 %r（認得：%s）" % (op, "、".join(OP_KEYS))))
+            continue
         target = o.get("target")
         p = by_id.get(target)
         if p is None:
             out.append(_p(path + ".target", "不是登記過的可自訂點：%r" % (target,)))
             continue
-        if o.get("op") not in p["ops"]:
-            out.append(_p(path + ".op", "點 %s 不允許 %r（允許：%s）" % (target, o.get("op"), "、".join(p["ops"]))))
+        if op not in p["ops"]:
+            out.append(_p(path + ".op", "點 %s 不允許 %r（允許：%s）" % (target, op, "、".join(p["ops"]))))
             continue
-        if o.get("op") == "move" and "to" in o:
-            dest = by_id.get(o["to"])
-            if dest is None:
-                out.append(_p(path + ".to", "目的地不是登記過的可自訂點：%r" % (o["to"],)))
-            elif p["kind"] == "field" and not _same_container(p, dest):
-                out.append(_p(path + ".to", "欄位只能在原本的列表或同一個表單的區塊之間移動：%s ⇒ %s" % (target, o["to"])))
-        if o.get("op") == "relabel" and (not isinstance(o.get("label"), str) or not o["label"].strip()):
-            out.append(_p(path + ".label", "relabel 要給非空的 label"))
+        before = len(out)
+        _check_keys(o, *OP_KEYS[op], path, out)
+        if len(out) > before:
+            continue
+        if op == "move":
+            _check_move(p, o, by_id, path, out)
+        elif op == "relabel":
+            if not isinstance(o["label"], str) or not o["label"].strip():
+                out.append(_p(path + ".label", "relabel 要給非空的 label"))
+        elif op == "select_template":
+            choices = p.get("templates")
+            if not isinstance(choices, list) or o["template"] not in choices:
+                out.append(_p(path + ".template", "版型 %r 不是程式提供的版型（可選：%s）"
+                              % (o["template"], "、".join(choices or []) or "無")))
+        elif op == "reorder":
+            kids = _children(p, pts)
+            order = o["order"]
+            if not isinstance(order, list) or len(order) != len(kids) or set(order) != set(kids):
+                out.append(_p(path + ".order", "order 必須恰好是 %s 目前的子點（%s）" % (target, "、".join(kids))))
+        elif op == "add_section":
+            if _key_ok(o["key"], path + ".key", out):
+                if "%s/section:%s" % (target, o["key"]) in by_id:
+                    out.append(_p(path + ".key", "區塊 %r 已存在" % (o["key"],)))
+            if not isinstance(o["label"], str) or not o["label"].strip():
+                out.append(_p(path + ".label", "add_section 要給非空的 label"))
     return out
+
+
+def _children(p, pts):
+    if p["kind"] == "menu":
+        return list(p.get("items") or [])
+    return [q["id"] for q in pts if q.get("parent") == p["id"]]
+
+
+def _check_move(p, o, by_id, path, out):
+    if "index" in o and (not isinstance(o["index"], int) or isinstance(o["index"], bool) or o["index"] < 0):
+        out.append(_p(path + ".index", "index 必須是非負整數"))
+    if "to" not in o:
+        return
+    kinds = MOVE_DEST_KINDS.get(p["kind"])
+    if kinds is None:
+        out.append(_p(path + ".to", "%s 只能在原位置調整順序，不可以換容器（%s）" % (p["kind"], p["id"])))
+        return
+    dest = by_id.get(o["to"])
+    if dest is None:
+        out.append(_p(path + ".to", "目的地不是登記過的可自訂點：%r" % (o["to"],)))
+    elif dest["kind"] not in kinds:
+        out.append(_p(path + ".to", "%s 不可以移到 %s 底下：%s ⇒ %s" % (p["kind"], dest["kind"], p["id"], o["to"])))
+    elif p["kind"] == "field" and not _same_container(p, dest):
+        out.append(_p(path + ".to", "欄位只能在原本的列表或同一個表單的區塊之間移動：%s ⇒ %s" % (p["id"], o["to"])))
+    elif p["kind"] == "section" and dest["id"] != p.get("parent"):
+        out.append(_p(path + ".to", "區塊只能留在原本的表單：%s ⇒ %s" % (p["id"], o["to"])))
+    elif p["kind"] == "action" and _page_of(dest["id"], "/menu:") != _page_of(p["id"], "/action:"):
+        out.append(_p(path + ".to", "按鈕只能放進同一頁的選單：%s ⇒ %s" % (p["id"], o["to"])))
+
+
+def _page_of(pid, sep):
+    return pid.rsplit(sep, 1)[0]
 
 
 def _same_container(field_pt, dest):
