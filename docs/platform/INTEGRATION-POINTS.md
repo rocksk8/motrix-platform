@@ -25,7 +25,7 @@
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`modules/subcontract/vendor_contractors.py::_dispatch_row` |
+| 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::_dispatch_row` |
 | 使用方 | M01 `helpers/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）；M06 `routers/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工） |
 | 形式 | provider，單一提供者（`core.registry`）。2026-09-26 M04 搬進 `modules/subcontract/`，改由 `ModuleSpec.providers` 宣告（模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("dispatch.row", "subcontract"): vendor_contractors._dispatch_row})`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
@@ -198,7 +198,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`modules/subcontract/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝） |
+| 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝） |
 | 使用方 | M01 `routers/quotations.py::case_bundle`（`GET /api/quotations/{no}/case-bundle`）的 `parts.dispatches` |
 | 形式 | provider，單一提供者（`core.registry`）；`ModuleSpec.providers` 宣告 |
 | 語法 | 提供：`ModuleSpec(providers={("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case})`<br>取用：`fn = registry.single_provider("dispatch.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權、權限判斷與單獨打 `/api/contractor-dispatches?quote_no=` 逐字相同） |
@@ -216,7 +216,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M01 案件：`routers/quotations.py::_append_items_to_quotation` |
-| 使用方 | M04 `modules/subcontract/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
+| 使用方 | M04 `modules/subcontract/api/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
 | 形式 | provider，單一提供者；要與呼叫端同一筆交易（呼叫端已拿寫鎖）⇒ 不用事件 |
 | 語法 | 提供：`_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)`<br>取用：`append = registry.single_provider("quotation.append_items")`；`None` ⇒ 退化。`append(conn, quote_no, header, items, now) -> now`；`items`＝`[{description, qty, unit, cost, note}]` |
 | 回傳 | 在呼叫端連線上寫、不 commit。報價單不存在 ⇒ `HTTPException(404)`；不是草稿 ⇒ `409`（原本在 M04 的規則逐字搬來）。品項換成報價品項：成本＝cost、毛利 30%、售價由報價單自己算；前面加一列區段標題 |
@@ -232,7 +232,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`modules/subcontract/contractor_vouchers.py::_voucher_public` |
+| 提供方 | M04 外包工班：`modules/subcontract/api/contractor_vouchers.py::_voucher_public` |
 | 使用方 | M05 `routers/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
 | 形式 | provider，單一提供者 |
 | 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
