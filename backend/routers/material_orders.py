@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
+from helpers.quotations import begin_write
 from helpers import (
     _require_user, _tok, _audit, save_quotation_json, user_has_module,
     _check_quotation_owner, SQL_DEAL_TAG,
@@ -80,6 +81,7 @@ def update_material_orders(quote_no: str,
     try:
         # 1. 檢查報價單存在 + 讀出權威的 deal_tag（欄位優先，pre-v6 舊列回退
         #    data_json.dealTag——這正是 SQL_DEAL_TAG 存在的原因，勿改回裸欄位）
+        begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
         q = conn.execute(
             f"SELECT data_json, sales_person_id, sales_person, assigned_user_ids, "
             f"{SQL_DEAL_TAG} AS deal_tag FROM quotations WHERE quote_no=?",
@@ -175,6 +177,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
     inv = normalize_date((body or {}).get("invoiceDate"), "發票日期")
     conn = get_db()
     try:
+        begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖
         q = conn.execute(
             "SELECT data_json, sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?",
             (quote_no,)).fetchone()

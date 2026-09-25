@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
-from helpers.quotations import save_quotation_json
+from helpers.quotations import begin_write, save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.recognition import normalize_date  # `AC2`
 from routers.contractors import _stamp_passbook
@@ -814,7 +814,8 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
     if not drow:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
-    # Load quotation
+    # Load quotation —— lost update：讀 data_json 前先拿寫鎖
+    begin_write(conn)
     qrow = conn.execute(
         "SELECT quote_no, status, data_json, updated_at FROM quotations WHERE quote_no=?",
         (drow["quote_no"],)

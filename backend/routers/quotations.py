@@ -11,6 +11,8 @@ from collections import defaultdict
 from datetime import datetime
 import copy
 from typing import List, Optional
+
+from helpers.quotations import begin_write
 from urllib.parse import quote as urlquote
 
 logger = logging.getLogger(__name__)
@@ -2331,6 +2333,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag == "已結案" and user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可結案")
     conn = get_db()
+    begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
     row = conn.execute(
         "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
@@ -3771,7 +3774,11 @@ def _locate_item(arr: list, idx: int, item_id, range_msg: str) -> int:
     return idx
 
 
-def _load_payment_item(conn, no, idx, item_id=None):
+def _load_payment_item(conn, no, idx, item_id=None, lock=True):
+    # lock：先拿寫鎖再讀（之後會整包寫回）。只讀來驗證、之後要 await 慢動作的呼叫端傳 False，
+    #       慢動作做完再以 lock=True 重讀（見 upload_payment_item_invoice_files）。
+    if lock:
+        begin_write(conn)
     row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
     if not row:
         raise HTTPException(404, "報價單不存在")
@@ -3795,7 +3802,8 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, pits, idx = _load_payment_item(conn, no, idx, itemId)
+        req_idx = idx
+        data, pits, idx = _load_payment_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         label = pits[idx].get('label', f'第{idx+1}期')
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
@@ -3811,6 +3819,8 @@ async def upload_payment_item_invoice_files(no: str, idx: int, files: List[Uploa
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_payment_items", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
+        # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
+        data, pits, idx = _load_payment_item(conn, no, req_idx, itemId)
         pits[idx].setdefault("invoiceFiles", [])
         pits[idx]["invoiceFiles"].extend(new_files)
         saved_at = save_quotation_json(conn, no, data)
@@ -3847,10 +3857,12 @@ def delete_payment_item_invoice_file(no: str, idx: int, file_id: str, itemId: Op
     return {"ok": True, "updated_at": saved_at}
 
 
-def _load_material_item(conn, no, idx, item_id=None):
+def _load_material_item(conn, no, idx, item_id=None, lock=True):
     """比照 _load_payment_item()，定位叫料管控清單（cr.caseRecord.materials[]，
     跟出貨單 shipping_notes 是完全不同的資料，這裡是報價單 JSON 裡的料件
-    到料追蹤）裡的一筆。"""
+    到料追蹤）裡的一筆。lock 同 _load_payment_item。"""
+    if lock:
+        begin_write(conn)
     row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
     if not row:
         raise HTTPException(404, "報價單不存在")
@@ -3869,7 +3881,8 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats, idx = _load_material_item(conn, no, idx, itemId)
+        req_idx = idx
+        data, mats, idx = _load_material_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
@@ -3885,6 +3898,8 @@ async def upload_material_files(no: str, idx: int, files: List[UploadFile] = Fil
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
+        # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
+        data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
         mats[idx].setdefault("files", [])
         mats[idx]["files"].extend(new_files)
         saved_at = save_quotation_json(conn, no, data)
@@ -3932,7 +3947,8 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
     conn = get_db()
     _guard_case(conn, no, user, allow_module="case_manage", skip_if_semi_unlocked=True)
     try:
-        data, mats, idx = _load_material_item(conn, no, idx, itemId)
+        req_idx = idx
+        data, mats, idx = _load_material_item(conn, no, idx, itemId, lock=False)   # 只驗證；寫鎖在寫完檔之後才拿
         name = mats[idx].get("name") or f"第{idx+1}項"
         if _check_case_gate(conn, no):
             change_id = _create_case_change_request(
@@ -3948,6 +3964,8 @@ async def upload_material_invoice_files(no: str, idx: int, files: List[UploadFil
                     "message": "案件已結案並處於半解鎖狀態，此上傳已送出，待最高管理員審核通過後才會套用"}
         new_files = await save_document_files("quotation_materials_invoices", f"{no}_{idx}", files,
                                               user.get("display_name") or user["username"])
+        # lost update：檔案寫完才拿寫鎖、重讀最新的 data_json，只把新檔加上去（上傳期間別人存的不會被蓋掉）
+        data, mats, idx = _load_material_item(conn, no, req_idx, itemId)
         mats[idx].setdefault("invoiceFiles", [])
         mats[idx]["invoiceFiles"].extend(new_files)
         saved_at = save_quotation_json(conn, no, data)
@@ -4119,6 +4137,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     user = _require_user(authorization)
     now  = datetime.now().isoformat()
     conn = get_db()
+    begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
     row = conn.execute(
         "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
         "FROM quotations WHERE quote_no=?", (quote_no,)

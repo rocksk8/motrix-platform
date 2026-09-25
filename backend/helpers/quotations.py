@@ -536,6 +536,21 @@ def quote_hot_fields(q: dict) -> tuple:
     return deal_tag, settle_status
 
 
+def begin_write(conn) -> bool:
+    """讀 data_json 之前先拿寫鎖（還不在交易裡才 `BEGIN IMMEDIATE`）；回傳這裡有沒有開交易。
+
+    🔴 2026-09-25 lost update 稽核：`save_quotation_json` 是**整包**寫回、不比對 updated_at。
+    sqlite3 不為 SELECT 開交易 ⇒ 交易外讀到的 data_json 是快照，讀與寫之間別人 commit 的修改
+    （例如案件頁每 1.5 秒的自動存檔）會被整包蓋回。⇒ 凡是「讀 data_json → 改 → 整包寫回」的路徑，
+    讀之前都要先呼叫這裡；已在交易裡的呼叫端（自己先拿過鎖）行為不變。
+    ⚠️ 拿著寫鎖時不可以 await 慢動作（例如寫上傳檔）：那段時間所有寫入都會被卡住 ⇒ 先做完慢動作，
+    再拿鎖、重讀、只套用自己的那一筆修改。"""
+    if conn.in_transaction:
+        return False
+    conn.execute("BEGIN IMMEDIATE")
+    return True
+
+
 def save_quotation_json(
     conn,
     quote_no: str,
