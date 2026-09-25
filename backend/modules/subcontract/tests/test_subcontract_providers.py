@@ -118,6 +118,6 @@ def test_cashier_and_t100_with_m04(client, make_user):
 
 # ── 相依已切斷（本模組這一側）─────────────────────────────────────────────────────
 
-def test_m04_does_not_import_m01():
+def test_subcontract_does_not_import_the_case_module():
     text = (source_tree.BACKEND / "modules" / "subcontract" / "api" / "vendor_contractors.py").read_text(encoding="utf-8")
     assert not re.search(r"save_quotation_json|helpers\.recognition|helpers\.quotations", text)
