@@ -69,7 +69,7 @@
    - ⏳ `helpers/system_checks.run_all` 六項檢查沒有逐項隔離：第一項丟例外，其餘當天都不跑（搬遷前就是這個寫法；AUDIT-D-A-M12-move S-4）。修法：每一項各自 try，補「第一項丟例外，其餘照跑」一題
 3. M10 網路規劃 — ✅ A 2026-09-26 搬進 `modules/netplan`（wip/a-m10，第四班列車）。對 M01 的相依走 IP-12 `case.access`；C 的案件存取下沉 L1 合回後，IP-12 只剩讀案件名稱（summary）
 4. M02 業務開發 — ✅ 後端完成（C，2026-09-26，`modules/crm`）：IP-13 `crm.quote_deleted` 取代 M01 直寫 `dev_cases`；反向控制（刪掉模組資料夾）：啟動 ping 200、三個前綴 404、報價單照刪並回 notice。剩：他模組直接讀 `dev_cases`／`dev_logs`（讀取連接器另開題）、停滯檢查直寫 `audit_log`、頁面（階段 C）
-5. M04 外包工班 — 需要 A6
+5. M04 外包工班 — ✅ 後端完成（C，2026-09-26，`modules/subcontract`，router 放 `api/`）：IP-12／13／14 切斷與 M01／M05／M06 的 import（對方不在時皆明說）；案件存取守門與 normalize_date 先下沉 L1；dep_scan 改用 `core.source_tree.module_files`。剩：他模組直接讀四張表（讀取連接器另開題）、`privacy_notice_acks` 改用模組自己的表（需要模組 migration＋資料移轉）、頁面（階段 C）
 6. M05 應收應付 — 需要 A6、A8
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
