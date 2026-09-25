@@ -101,6 +101,7 @@
   - C：M02 crm／dev_crm（進行中，wip/c-m02）→ M04 → M05 → M06 → M07
   - 搬遷順序依 ROADMAP 階段 B 的相依；兩邊要動同一個 L1 helper 時，先在 RUN-PLAN §6 講一聲再動
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
+  - C｜`wip/c-module-files`（主持裁示：dep_scan 列舉模組檔改用 `core.source_tree.module_files`；**A 的 M03 現在就需要，請排在車頭附近**；C 的 M04、B 的 M08 也依賴）｜b36b3719｜tests/platform＋modules＋test_spec_coverage（-n 2、低優先權）：1087 過；正對照（合成樹子目錄檔與它的跨組 import、tests/ 不算）、一致性題（dep_scan＝source_tree、test_map.unit_name＝dep_scan 單位）、突變 2 項皆紅｜fixture 層／main：無；L0 新增 `module_files`（CORE 暫取 1.21）；只加覆蓋，現有單位名稱不變
   - C｜`wip/c-case-access`（主持裁示：案件存取守門下沉 L1 `helpers/case_access.py`；**A 的 M01／M03／M05／M10 與 C 的 M04 依賴它，請優先上車**）｜7c056468｜合回閘門（tests/platform＋存取／授權／簽核佇列／出貨／網路規劃／開票／請款／承攬憑據等 45 檔，-n 2、低優先權）：1091 過 1 紅（UNIT-INDEX 過期＝本包新增單位，已重產）；rebase 後 tests/platform 704 過；突變 3 項皆紅｜fixture 層／main：無；L1 新增（CORE 暫取 1.16）；l2_import_baseline 刪 4 條邊；與 A wip/a-m10 的 IP-11 `case.access` 會交會（後上車的一方 rebase）
   - C｜`wip/c-ko2`（CORE-SPEC 裁示 K-O2：啟動時寫 DB 只能經 helpers/startup.py＋守門；**依賴 c-d7-km1**，基底＝origin/wip/c-d7-km1 2d9fcf1f，搭第三班）｜cc61a2cc｜tests/platform＋upgrade_drill／upgrade_path／migration_numbering＋system_audit（-n 2、低優先權）：716 過；新守門正對照＋反向控制；突變（刪除移回 auth）紅｜🔴 動 main.py（多一行 `_prune_login_locks()`）、`routers/auth.py`（init_rate_limiting 改只讀）、L1 `helpers/startup.py`；fixture 層：無
   - C｜`wip/c-audit-d`（AUDIT-D-C-P4P5P8 修正：C-M3／C-M5＋第二道防線、C-S1～S5、C-O1、U14；**疊在 c-p2-legal 之上，須排在它後面**）｜d132336f｜合回閘門（tests/platform＋自訂模組／定義庫／版型／勞報單／待我簽核佇列題，-n 2、低優先權）：784 過；突變 14 項皆紅｜fixture 層／main：無；L1 新增與收緊驗證（CORE 暫取 1.15，列車上再取號）；C-M4 未含（等 R 的 round_half_up）
@@ -121,6 +122,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:40 C：**`wip/c-module-files` 已上月台（b36b3719），A 可以在上面做 M03**。`core.source_tree.module_files(d)` 是「模組裡有哪些檔」唯一的定義（遞迴、排除 tests／migrations）；dep_scan 用它，單位名稱 `mod:<key>/<相對路徑>`（例 `mod:<key>/api/orders`）；`test_map.unit_name` 本來就產生同樣的名稱。另：`docs/platform/dep_graph.json`／`test_map.json` 自 01:02 起沒重產（origin 上 `test_map.py --check` 已不一致），modtest 讀的是這兩份 ⇒ 建議列車統一重產。
 - 2026-09-26 05:19 D：⑭ case_access（`AUDIT-D-C-case-access.md`）：必修 CA-M1——「M01 不在⇒404」只在案件表不存在時成立，而 db.py 在每個安裝都建這張表 ⇒ M01 停用／不在包裡時照 owner 規則放行；判準要改成 M01 是否載入。守門正則漏 5 種寫法（建議改用 dep_scan.sql_tables）。M02 反向控制進行中。
 - 2026-09-26 05:15：個資告知擴大完成（wip/cloud-pii-notice 2ae1d86d；11 頁有告知區塊；報價單、案件、完工單的聯絡人可以手動輸入，所以也補了告知）。它推月台登記與刪 clone 被權限擋下 ⇒ 記 U16，主持不代做；分支由主持排進第三班列車。
 - 2026-09-26 05:2x A：a-m10 推上 origin（16865fa3，含 M12，取代 a-m12），D 的 ⑬ 可以開始。內容：D 稽核 M12 的 M-1（5 題移入模組）、S-1（SPEC.md＋G2 守門）、S-2（主流程三題）、S-3（ROADMAP）；補做 X-C-batch1 B-1（M12 搬遷前必修，當初漏了）：勾選／取消勾選／刪除各自提示，畫面顯示，任務 id 保留（主持裁示）。閘門與 §B-11 反向控制跑中。M03 開工（wip/a-m03，疊在 a-m10 上）。
