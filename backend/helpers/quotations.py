@@ -1,6 +1,9 @@
 """Quotation hot-path field sync helpers."""
 import json
+import logging
+import os
 import re
+import traceback
 from datetime import date, datetime
 
 from fastapi import HTTPException
@@ -536,6 +539,31 @@ def quote_hot_fields(q: dict) -> tuple:
     return deal_tag, settle_status
 
 
+_log = logging.getLogger(__name__)
+
+def _strict_db_guards() -> bool:
+    """資料庫結構守門違規時要不要 raise。
+
+    🔴 預設**不** raise（記 ERROR＋堆疊、照寫）：產品會賣給客戶自架，不可以用安裝路徑猜「這是不是正式機」——
+    原本比照 email_notify 只認 \\V9.0\\ 路徑，客戶裝在別處就會被當成開發環境而 raise，直接擋住客戶存檔（2026-09-25 裁示）。
+    只有明確設了 MOTRIX_STRICT_DB_GUARDS=1 才 raise：conftest 在測試啟動時設（漏網之魚在題目裡就紅）；
+    開發機要嚴格可自行設。每次呼叫才讀，測試可以用 monkeypatch 切換。"""
+    return os.environ.get("MOTRIX_STRICT_DB_GUARDS") == "1"
+
+#: begin_write 開的寫交易：id(conn) -> {"conn": conn, "read": 拿鎖之後是否讀過 quotations.data_json}
+#: ⚠️ sqlite3.Connection 不能掛屬性、也不支援弱參照 ⇒ 以 id 為鍵並保留連線本身比對（避免 id 重用誤判），
+#:    每次 begin_write 時清掉已關閉的連線。
+_WRITE_TXNS = {}
+
+
+def _prune_write_txns():
+    for k, st in list(_WRITE_TXNS.items()):
+        try:
+            st["conn"].total_changes          # 已關閉 ⇒ ProgrammingError
+        except Exception:                      # noqa: BLE001
+            _WRITE_TXNS.pop(k, None)
+
+
 def begin_write(conn) -> bool:
     """讀 data_json 之前先拿寫鎖（還不在交易裡才 `BEGIN IMMEDIATE`）；回傳這裡有沒有開交易。
 
@@ -548,7 +576,37 @@ def begin_write(conn) -> bool:
     if conn.in_transaction:
         return False
     conn.execute("BEGIN IMMEDIATE")
+    _prune_write_txns()
+    st = {"conn": conn, "read": False}
+    _WRITE_TXNS[id(conn)] = st
+
+    def _trace(sql, _st=st):
+        # 拿鎖之後讀了 data_json ⇒ 之後的整包寫回是以鎖內的最新資料為底（save_quotation_json 的守門看這個）
+        if not _st["read"] and "data_json" in sql and "quotations" in sql and sql.lstrip()[:6].upper() == "SELECT":
+            _st["read"] = True
+    conn.set_trace_callback(_trace)
     return True
+
+
+def _check_read_under_write_lock(conn, quote_no):
+    """save_quotation_json 的結構守門（2026-09-25 lost update 稽核後開啟）。
+
+    放行條件：這條連線的寫交易是 begin_write 開的，而且**拿鎖之後**讀過 quotations.data_json。
+    ⇒ 擋得住「交易外讀 → 整包寫回」，也擋得住「交易外讀、中途寫了別的表（交易被隱式開啟）→ 整包寫回」
+       與「先讀、再 begin_write、沒重讀就寫回」。
+    ⚠️ 仍有的盲點：不比對讀的是不是**同一張**單、也不比對讀的是不是**這一次**要寫回的那份資料。
+    違規：預設記 ERROR（含呼叫堆疊）並照寫，不因為守門本身擋住使用者；
+    設了 MOTRIX_STRICT_DB_GUARDS=1（測試環境）才 raise——見 _strict_db_guards。"""
+    st = _WRITE_TXNS.get(id(conn))
+    ok = bool(st and st["conn"] is conn and conn.in_transaction and st["read"])
+    if ok:
+        return
+    why = ("不在寫交易內" if not conn.in_transaction else
+           "寫交易不是 begin_write 開的" if not (st and st["conn"] is conn) else "拿鎖之後沒有讀過 data_json")
+    msg = f"save_quotation_json({quote_no!r})：{why}——讀 data_json 之前要先 begin_write／write_txn（lost update）"
+    if _strict_db_guards():
+        raise RuntimeError(msg)
+    _log.error("%s" + chr(10) + "%s", msg, "".join(traceback.format_stack(limit=8)))
 
 
 class write_txn:
@@ -592,6 +650,7 @@ def save_quotation_json(
 
     Optionally updates status. Returns the updated_at timestamp used.
     """
+    _check_read_under_write_lock(conn, quote_no)
     now = updated_at or datetime.now().isoformat()
     deal_tag, settle_status = quote_hot_fields(data)
     if status is not None:

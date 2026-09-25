@@ -18,6 +18,10 @@ own attributes need patching too.
 import importlib
 import os as _bk19_os
 import sys
+
+# 資料庫結構守門（helpers.quotations._strict_db_guards）：產品預設只記 ERROR 照寫（不擋客戶存檔），
+# 測試一律嚴格——漏網之魚在題目裡就紅。子行程（_subproc 起的 pytest／伺服器）也會繼承。
+_bk19_os.environ.setdefault("MOTRIX_STRICT_DB_GUARDS", "1")
 import tempfile as _bk19_tempfile
 from pathlib import Path as _Bk19Path
 

@@ -3141,9 +3141,7 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
     案件頁開啟時連打 5 次建立階段，正好和使用者開始填寫、存檔重疊）。
     ⇒ 還不在交易裡就先 `BEGIN IMMEDIATE` 拿寫鎖再讀；已在交易裡的呼叫端（自己先拿過鎖）行為不變。
     守門：test_stage_sync_lost_update_2026_09_25。"""
-    opened_here = not conn.in_transaction
-    if opened_here:
-        conn.execute("BEGIN IMMEDIATE")
+    opened_here = begin_write(conn)   # 還不在交易裡才開（登記給 save_quotation_json 的守門）
     try:
         row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
@@ -3712,7 +3710,7 @@ def mark_payment(no: str, idx: int, body: dict, authorization: str = Header(None
     try:
         # 2026-09-24：讀-改-寫整份 data_json，兩個人同時標記不同期會互相蓋掉
         # （後寫的那份不含先寫的那期）。BEGIN IMMEDIATE 讓第二個請求等第一個寫完再讀。
-        conn.execute("BEGIN IMMEDIATE")
+        begin_write(conn)
         row = conn.execute("SELECT data_json, updated_at FROM quotations WHERE quote_no=?", (no,)).fetchone()
         if not row:
             raise HTTPException(404, "報價單不存在")
