@@ -282,6 +282,82 @@ def reverse_closure(start, units):
     return seen
 
 
+def direct_dependents(start, units):
+    """start 單位集合 ⇒ 自己＋**直接** import 它們的單位＋直接呼叫它們的頁面／js（一跳，不遞移；彙整點不算）。
+    PLAYBOOK §C-11a ①：改動單位的介面沒變時用這個（遞移擴散只在介面有變時才需要）。"""
+    out = set(start)
+    for name, u in units.items():
+        if name in AGGREGATORS:
+            continue
+        called = set(u.get("routers_called", [])) | set(u.get("routers_called_effective", []))
+        if set(u.get("imports", [])) & start or called & start:
+            out.add(name)
+    return out
+
+
+def _interface_tools():
+    sys.path.insert(0, str(REPO / "backend" / "tests" / "platform"))
+    import _l1_interface as G   # noqa: E402
+    return G
+
+
+def interface_changed(rel, old_ref, new_ref=None):
+    """rel 在 old_ref 與 new_ref（None＝工作樹）之間，公開介面（G1 的描述：名稱、簽名、async、僅限位置參數）有沒有變。
+    非 .py、新增／刪除、讀不到、語法錯誤 ⇒ True（保守：沿用遞移擴散）。"""
+    if not rel.endswith(".py"):
+        return True
+    old = _show(REPO, old_ref, rel)
+    if new_ref is None:
+        p = REPO / rel
+        new = p.read_text(encoding="utf-8-sig") if p.is_file() else None
+    else:
+        new = _show(REPO, new_ref, rel)
+    if old is None or new is None:
+        return True
+    G = _interface_tools()
+    try:
+        return G.interface_of(old.lstrip("﻿")) != G.interface_of(new)
+    except SyntaxError:
+        return True
+
+
+def iface_checker(a):
+    """依 CLI 參數決定介面比對的兩端：--commit X ⇒ X^ 對 X；--changed-since X ⇒ X 對 HEAD；
+    --base X ⇒ X 對工作樹；其餘（工作樹、--files）⇒ HEAD 對工作樹。"""
+    if a.commit:
+        old, new = a.commit + "^", a.commit
+    elif a.changed_since:
+        old, new = a.changed_since, "HEAD"
+    elif a.base:
+        old, new = a.base, None
+    else:
+        old, new = "HEAD", None
+    return lambda rel: interface_changed(rel, old, new)
+
+
+#: §C-11a ⑥：每次選題的統計（主工作樹，gitignored；D1b「常用 helper ≤30%」以這份驗收）
+STATS_REL = ("tools", "platform", "full_results", "modtest_stats.jsonl")
+
+
+def record_stats(changed, picked, tmap, rep, items, full_items, seconds, dry_run, exit_code=None, root=None):
+    """附加一行 JSON。寫不出來只提示、不影響選題結果。"""
+    row = {"at": _now(), "rule": rep.get("rule"), "dry_run": dry_run, "changed": changed,
+           "files": len(picked), "files_total": len(tmap["tests"]),
+           "files_ratio": round(len(picked) / max(len(tmap["tests"]), 1), 4),
+           "items": items, "items_total": full_items,
+           "items_ratio": round(items / full_items, 4) if items is not None and full_items else None,
+           "seconds": round(seconds, 1) if seconds is not None else None, "exit": exit_code,
+           "iface": rep.get("iface")}
+    try:
+        p = Path(root or main_worktree_root()).joinpath(*STATS_REL)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as e:
+        _say("⚠ 選題統計寫不出來：%r" % e)
+    return row
+
+
 def frontend_callers(targets, units):
     """直接呼叫 targets（router）的頁面／js。"""
     out = set()
@@ -317,10 +393,12 @@ def table_hop(changed_units, units, conservative):
     return out
 
 
-def select(changed, tmap, graph):
+def select(changed, tmap, graph, iface_changed=None):
+    """iface_changed(檔) -> bool：有給 ⇒ 介面沒變的單位只擴到直接依賴（§C-11a ①②）；沒給 ⇒ 全部遞移（舊規則）。"""
     tests = tmap["tests"]
     report = {"changed": changed, "direct_units": [], "affected_units": [], "graph": graph is not None,
-              "need_full": [], "unmapped_changes": [], "reasons": {}}
+              "need_full": [], "unmapped_changes": [], "reasons": {},
+              "rule": "direct+iface" if iface_changed else "transitive", "iface": {}}
     need_full = [f for f in changed if f in FIXTURE_LAYER]
     report["need_full"] = need_full
 
@@ -336,8 +414,17 @@ def select(changed, tmap, graph):
     conservative = []
     if graph is not None:
         seeds = {u for u in direct if u in graph}
-        # 直接改動：沿 imports／routers_called 反向遞移（core:main 是彙整點，不往上傳）
-        affected = reverse_closure(seeds, graph) | direct
+        if iface_changed is None:
+            # 舊規則：沿 imports／routers_called 反向遞移（core:main 是彙整點，不往上傳）
+            affected = reverse_closure(seeds, graph) | direct
+        else:
+            # §C-11a ①②：介面有變 ⇒ 遞移；沒變（只改內部）⇒ 只到直接依賴
+            by_unit = {}
+            for f in changed:
+                by_unit.setdefault(unit_name(f), []).append(f)
+            wide = {u for u in seeds if any(iface_changed(f) for f in by_unit.get(u, []))}
+            report["iface"] = {u: ("介面有變 ⇒ 遞移" if u in wide else "介面不變 ⇒ 只到直接依賴") for u in sorted(seeds)}
+            affected = reverse_closure(wide, graph) | direct_dependents(seeds - wide, graph) | direct
         # 資料表一跳：只加該單位本身＋直接呼叫它的頁面／js，不再沿 import 遞移（否則 archive／trail 會拖進全部）
         hop = table_hop(seeds, graph, conservative) - affected
         report["table_hop_units"] = sorted(hop)
@@ -735,6 +822,7 @@ def main(argv=None):
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
     ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
+    ap.add_argument("--transitive", action="store_true", help="舊規則：改動單位一律沿反向 import 遞移擴散（預設：介面沒變只到直接依賴，§C-11a）")
     argv = list(sys.argv[1:] if argv is None else argv)
     extra = []
     if "--" in argv:
@@ -763,7 +851,8 @@ def main(argv=None):
     changed = changed_files(a)
     tmap = load_map(a.refresh_map)
     graph = load_graph()
-    picked, rep = select(changed, tmap, graph)
+    t0 = time.monotonic()
+    picked, rep = select(changed, tmap, graph, None if a.transitive else iface_checker(a))
 
     n_items, tail, full_n, per = None, "", None, None
     if a.dry_run:
@@ -815,6 +904,7 @@ def main(argv=None):
                     print("⚠ 收集有錯誤，出錯的檔不計入題數：%s" % tail)
 
     if a.dry_run:
+        record_stats(changed, picked, tmap, rep, n_items, full_n, None, dry_run=True)
         return 0
     if rep["need_full"]:
         return 3
@@ -822,6 +912,7 @@ def main(argv=None):
         print("沒有受影響的測試。")
         return 0
     code, _ = run_pytest(picked, cap_workers(extra, PARTIAL_MAX_WORKERS), a.window, full=False)
+    record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
     return code
 
 
