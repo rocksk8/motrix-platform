@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """定義文件庫 API（CUSTOMIZATION-SPEC §3.5；§8 建構器／排版器需要的「草稿、驗證、預覽、發布、差異、還原」）。
 
-僅超級管理員。kind：layout／output_template／custom_fields／custom_module；scope：company 或 role:<角色>。
+`/api/definitions/…` 僅超級管理員。kind：layout／output_template／custom_fields／custom_module；scope：company 或 role:<角色>。
+例外：`GET /api/layout/{module}`（P9 執行時套用，§3.10）任何登入者可讀**自己角色**的版面（唯讀、只有 layout）。
 """
 import json
+import re
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -40,6 +42,42 @@ def _validate_custom_fields(body, key):
 D.register_validator("output_template", _validate_output_template)
 D.register_default("output_template", _default_output_template)
 D.register_validator("custom_fields", _validate_custom_fields)
+
+
+# ── layout（P9 排版器；CUSTOMIZATION-SPEC §3.9「排版守門」、§3.10 套用）──────────────
+#: 版面定義的 key＝`module:<模組 key>`；body＝`{"ops": [排版操作…]}`（core.customization.OP_KEYS）。
+LAYOUT_KEY = re.compile(r"^module:([a-z][a-z0-9_]{0,39})$")
+
+
+def _layout_module(key):
+    m = LAYOUT_KEY.match(key or "")
+    return m.group(1) if m else None
+
+
+def _validate_layout(body, key):
+    """P5 layout 驗證器：只能動 `catalog.layout_points(模組)` 裡的點（經 `catalog.check_layout`）。
+    問題的 path 以 body 為根（`ops[3].target`），給排版器標回畫面。"""
+    from core import catalog, registry
+    mod = _layout_module(key)
+    if mod is None:
+        return [{"path": "", "message": "版面的 key 必須是 module:<模組 key>：%r" % key}]
+    out = [{"path": k, "message": "不認得的鍵（版面只有 ops）"} for k in body if k != "ops"]
+    if "ops" not in body:
+        return out + [{"path": "ops", "message": "缺 ops（排版操作清單）"}]
+    if not registry.is_loaded(mod):
+        return out + [{"path": "", "message": "模組 %s 未載入（停用、未授權或不存在）⇒ 沒有可排版的點" % mod}]
+    return out + [{"path": "ops" + p["path"], "message": p["message"]} for p in catalog.check_layout(mod, body["ops"])]
+
+
+def _default_layout(key):
+    """程式預設＝不做任何操作（模組 module.json 登記的原樣）。模組未載入 ⇒ 沒有預設。"""
+    from core import registry
+    mod = _layout_module(key)
+    return {"ops": []} if mod and registry.is_loaded(mod) else None
+
+
+D.register_validator("layout", _validate_layout)
+D.register_default("layout", _default_layout)
 
 #: 各內建模組的核心欄位（自訂欄位不可同名）。模組搬遷後改由 module.json 的 P3 描述提供。
 _CORE_FIELDS = {
@@ -234,6 +272,47 @@ def resolve_definition(kind: str, key: str, role: str = Query(None), authorizati
     finally:
         conn.close()
     return {"body": body, "source": source}
+
+
+@router.get("/api/layout/{module_key}")
+def effective_layout(module_key: str, role: str = Query(None), authorization: str = Header(None)):
+    """P9 執行時套用（CUSTOMIZATION-SPEC §3.10）：目前使用者角色的版面＝`resolve(layout, module:<key>, 角色)`
+    （角色 ＞ 公司 ＞ 程式預設），連同這個模組的可自訂點（`catalog.layout_points`，前端據此算出畫面）。
+
+    - 任何登入者可讀**自己角色**的版面；`?role=` 只給超級管理員（排版器的「以某角色預覽」）。
+    - 已發布的操作逐一再過 `check_layout`：之後模組拿掉了某個點 ⇒ 那一筆**不套用**並列在 `dropped`
+      （讀不懂的拒絕那一筆，不讓整頁壞掉，也不悄悄略過）。
+    - 讀定義失敗 ⇒ 程式預設＋`error`（覆寫層出錯不可以讓頁面打不開）。"""
+    import logging
+    from core import catalog, registry
+    u = _require_user(authorization)
+    if role is not None and u["role"] != "superadmin":
+        raise HTTPException(403, "只有超級管理員可以預覽其他角色的版面")
+    if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not registry.is_loaded(module_key):
+        raise HTTPException(404, "模組未載入")
+    who = role if role is not None else u["role"]
+    key = "module:%s" % module_key
+    error = None
+    conn = get_db()
+    try:
+        body, source = D.resolve(conn, "layout", key, who)
+    except Exception as e:                                   # noqa: BLE001 覆寫層出錯 ⇒ 程式預設
+        logging.getLogger(__name__).warning("讀版面定義失敗 %s（%s）⇒ 用程式預設：%s", key, who, e)
+        body, source, error = {"ops": []}, "default", "讀版面定義失敗，已改用程式預設"
+    finally:
+        conn.close()
+    ops = (body or {}).get("ops") if isinstance(body, dict) else None
+    kept, dropped = [], []
+    for i, op in enumerate(ops if isinstance(ops, list) else []):
+        probs = catalog.check_layout(module_key, [op])
+        if probs:
+            dropped.append({"index": i, "op": op, "message": probs[0]["message"]})
+        else:
+            kept.append(op)
+    if ops is not None and not isinstance(ops, list):
+        dropped.append({"index": None, "op": ops, "message": "ops 不是清單"})
+    return {"module": module_key, "role": who, "source": source, "ops": kept, "dropped": dropped,
+            "error": error, "points": catalog.layout_points(module_key)}
 
 
 @router.post("/api/definitions/output_template/{key}/preview")
