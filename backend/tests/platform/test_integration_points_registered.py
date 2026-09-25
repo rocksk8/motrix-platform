@@ -5,8 +5,9 @@
 - 程式碼取用的 capability（`single_provider("cap")`、`providers("cap")`）必須都已登記（取用一個不存在的能力＝永遠退化）。
 - 掃描範圍：`core.source_tree.product_files()`（含 modules/ 底下所有層）。
 
-正對照：比對函式用合成的文件與原始碼跑，多一個／少一個／取用未登記都要回報；另外斷言真實掃描抓得到已知的 `dispatch.row`
-（掃不到任何東西時「兩邊都空＝相等」會是假綠）。
+正對照：比對函式用合成的文件與原始碼跑，多一個／少一個／取用未登記都要回報；另外斷言真實掃描抓得到 L1 每日執行器
+（`helpers/daily_checks.py`）取用的 `daily.check`（掃不到任何東西時「兩邊都空＝相等」會是假綠）。正對照不綁 L2：
+原本用 M04 提供的 `dispatch.row`，拿掉 M04 時這題一定紅（C 指出，2026-09-26）。
 
 模組不在（選配、PLAYBOOK §B 步驟 11 反向控制）：該節「提供方」列出的路徑**全部**是 `modules/<key>/…`、且那些資料夾都不在
 ⇒「登記表有、程式碼沒有提供」不算（主持裁定 2026-09-26）。資料夾在就照樣比對；提供方沒寫出模組路徑（例如仍寫 `routers/…`）不豁免。
@@ -139,7 +140,7 @@ def test_reverse_controls_each_kind_of_drift_is_reported():
 
 def test_real_scan_sees_a_known_capability():
     provided, consumed = _real()
-    assert "dispatch.row" in provided and "dispatch.row" in consumed, (provided, consumed)
+    assert "daily.check" in consumed, consumed          # L1 helpers/daily_checks.py：任何安裝包都在
 
 
 # ── 模組不在時（主持裁定 2026-09-26）：合成資料，模組名不綁任何真的 L2 ─────────────────────────

@@ -265,11 +265,14 @@ def test_case_execution_face_blocks_account_without_the_module(client, make_user
 # ── 6. 16 個「後端不讀」的模組現在真的會擋 ──────────────────────────────────
 
 def test_modules_without_backend_checks_now_block(client, make_user):
-    """只有 `dashboard` 的帳號打不開料號／客戶／每日工作事項。"""
+    """只有 `dashboard` 的帳號打不開料號／客戶／裝置。
+
+    每日工作事項（/api/daily-tasks）那一項已由 M12 模組內的
+    `test_daily_tasks_main_flow.py::test_without_the_module_permission_the_list_is_refused` 涵蓋，
+    本題只刪不補（拿掉 M12 時端點不在 ⇒ 404，不是本題要驗的 403；AUDIT-D-A-M12-move §B-11）。"""
     u, p = make_user(username="mod_none", role="viewer", modules=["dashboard"])
     tok = _login(client, u, p)
-    for path in ("/api/parts", "/api/parts/categories", "/api/customers",
-                 "/api/daily-tasks", "/api/devices"):
+    for path in ("/api/parts", "/api/parts/categories", "/api/customers", "/api/devices"):
         r = client.get(path, headers=_auth(tok))
         assert r.status_code == 403, f"{path} 沒有擋：{r.status_code}"
 
@@ -357,11 +360,7 @@ def test_remaining_quota_endpoints_are_guarded(client, make_user):
                       headers=_auth(tok)).status_code == 403
 
 
-def test_case_network_plan_lookup_is_guarded(client, make_user):
-    _make_case("MQ-SWEEP-005", sales_person="sw_owner")
-    tok = _outsider(client, make_user, "sw_v5")
-    assert client.get("/api/quotations/MQ-SWEEP-005/network-plan",
-                      headers=_auth(tok)).status_code == 403
+# test_case_network_plan_lookup_is_guarded （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
 
 
 def test_global_search_does_not_bypass_module_checks(client, make_user):

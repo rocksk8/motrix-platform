@@ -27,8 +27,9 @@ _PROBES = [
     ("/api/audit-log", "audit_log", "歷史紀錄"),
     ("/api/module-versions", "module_versions", "版本紀錄"),
     ("/api/shipping-notes/export-history", "shipping_export_log", "出貨單歷史紀錄"),
-    ("/api/network-plans", "netplan", "網路架構規劃書"),
 ]
+# 模組的端點由模組自己的測試帶進同一組檢查（例：modules/netplan/tests/test_netplan_moved_guards.py），
+# 拿掉那個模組時探針跟著消失（PLAYBOOK §B-11）。
 
 
 @pytest.mark.parametrize("path,module,label", _PROBES)
@@ -110,10 +111,4 @@ def test_newly_created_keys_are_grantable_in_the_catalogue():
         assert k in catalogue, f"{k} 後端會擋，但權限目錄裡勾不到"
 
 
-def test_network_plan_read_accepts_case_manage_consumer(client, make_user):
-    """`js/case-management.js` 也會打 /api/network-plans。只認 netplan 會把
-    案件管理那條路徑打死——MODULE-AUDIT §5 說的「擋錯人」失敗模式。"""
-    u, p = make_user(username="cm_only", role="sales", modules=["case_manage"])
-    r = client.get("/api/network-plans", headers=_login(client, u, p))
-    assert r.status_code == 200, \
-        f"案件管理模組打不開規劃書 API（{r.status_code}）——會讓案件頁一片 403"
+# test_network_plan_read_accepts_case_manage_consumer （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
