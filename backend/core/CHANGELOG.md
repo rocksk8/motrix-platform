@@ -2,13 +2,28 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.14（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕〔core_bump：暫用 1.13 → 1.14〕
-> `core.registry.CORE_VERSION` 1.13 → 1.14（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12、1.13，版號由 core_bump 依 origin 取）。
+## 1.16（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕〔core_bump：暫用 1.13 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕
+> `core.registry.CORE_VERSION` 1.15 → 1.16（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12、1.13、1.14，版號由 core_bump 依 origin 取）。
 - L1（相容擴充）：`static/privacy-notice.js` 新增 `subjectState()`——單據上手動輸入的聯絡人（報價單、案件、完工單、網路規劃書）的告知狀態；紀錄鍵含聯絡人姓名，伺服器只接受已存檔的那一位（2026-09-26 主持裁示）
 - L1（新增）：`helpers.privacy_notice` 個資蒐集告知擴大到其他表單（CUSTOMIZATION-SPEC §9.3）——`CONTACT_TEMPLATE`／`USER_TEMPLATE`／`PURPOSES`／`purpose_template_for`／`purpose_notice_text`／`current_purpose_notice`／`record_purpose_ack`／`acks_with_prefix`；既有函式簽章不變
 - L1（相容擴充）：`GET /api/legal-params/privacy-notice?purpose=contractor|contact|user`（沒帶＝`contractor`，與 1.7 相同；不認得的用途 400）；前端元件 `static/privacy-notice.js` 的 `load(token, purpose?)`、新增 `contactsState()`
 - L1（新增欄位）：`company_profile.privacy_notice_contact`、`company_profile.privacy_notice_user`；設定鍵 `privacy_notice_acks` 新增鍵形 `customer_contact:`／`supplier_contact:`／`vendor_contractor:`／`user:`
 - 清單 `docs/platform/pii_forms.json`＋守門 `tests/platform/test_pii_forms_notice.py`（MODULE-GUIDE §11）
+
+## 1.15 — 2026-09-26（X-R）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.15〕
+> 稽核 AUDIT-D-R1-R3-legal 的修正（D-1、D-2、S-1～S-6、O-3、O-4）。暫用 1.10：合回時依 origin 取下一號。只有新增；行為修正列在下面。
+- L1（新增）：`helpers.legal_params.round_half_up(amount, rate=1)`（四捨五入到元，補充保費）、`floor_amount(amount, rate=1)`（元以下捨去，扣繳）——法規金額捨入的唯一來源（IP-7 契約 1.2）；前端 `static/legal-round.js`（`MotrixLegalRound.halfUp／floor／taipeiToday`）
+- L1（新增）：`helpers.legal_params.ARTICLE_8_ITEMS`／`ARTICLE_8_SOURCE`／`ARTICLE_8_DELETED`／`LEGACY_TAX_BASIS_LABELS`；`TAX_BASIS_OPTIONS["exempt"]` 改成 §8 第 1～32 款逐字（代碼 `8-N`），`8` 移出選項（只剩顯示用的舊標籤）；`/api/legal-params/tax-basis-options` 多 `sources`
+- L1（新增）：`helpers.privacy_notice.AcksCorrupted`、`TEXTS_KEY`、`archive_text(conn, text)`、`text_for_hash(h)`；端點 `GET /api/legal-params/privacy-notice/texts/{hash}`；設定鍵 `privacy_notice_texts`
+- L1（修改行為，介面不變）：`record_ack`／`get_ack` 讀不懂設定值 ⇒ `AcksCorrupted`（原本當成空的整份覆寫）；`record_ack` 新紀錄同時存告知全文；`privacy-notice.js` 告知書日期改台北時間
+- 勞報單（M07，行為修正）：補充保費四捨五入（原為銀行家捨入）；`update_payslip` 讀、改、寫在同一個 `write_txn`；新單日期預設台北時間
+
+## 1.14 — 2026-09-26（A，信件與通知收件設定；合回時 core_bump 取號）〔core_bump：暫用 1.99 → 1.13〕〔core_bump：暫用 1.13 → 1.14〕
+- L1（新增）：`helpers.mail_types` 信件類型登記表——`register`／`get`／`all_types`／`keys`／`subject`／`CATEGORIES`／`GROUPS`／`MODES`／`ROLES`／`OVERRIDES_KEY`／`SUBJECT_PREFIX`／`MailType`；模組可在載入時登記自己的信件類型
+- L1（新增）：`helpers.email_notify._group_emails(key)`（群組收件人，依登記表與覆寫）；`_admin_emails`／`_superadmin_emails` 改為它的相容名稱；`_lookup_emails`／`_department_manager_emails`／每月報表收件人套用覆寫；未登記 key fail closed（只寄超級管理員）
+- L1（修改，相容）：`helpers.email_notify._build_html(mail_key, …, impact=None, action=None)`——第一個參數改為信件類型 key，內文固定「事由、影響、建議處理、發送時間與來源」；主旨一律 `mail_types.subject(key, 事由)`
+- L1（新增）：端點 `/api/mail-types`（GET）、`/api/mail-types/{key}/recipients`（PUT）、`/api/mail-types/receivable`（GET）；頁面 `mail-settings.html`
+- 修正：`helpers.geo.notify_quota_warning` 原本呼叫 `_send_raising(subject, body)` 少了收件人參數，執行即 TypeError（額度警戒信從未寄出）
 
 ## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
 > rebase 時 1.8、1.9 已被 X-9b、A 使用 ⇒ 1.10（PLAYBOOK §C-7）。只有新增。
