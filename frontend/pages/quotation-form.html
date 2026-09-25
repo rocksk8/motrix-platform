@@ -2113,7 +2113,8 @@
   // ── 小改版（欄位微調/樣式/文案）+0.1；大改版（版型結構/新增區塊/流程變更）+1 ──
   // V3.4（2026-09-24 N14）：內部成本區五個間接費改用文字框，接受「12,000」與全形數字；無法辨識時標紅不存
   // V3.5（2026-09-24 CU2b）：用詞統一「完結案件」→「結案」（成案確認視窗）
-  const FORM_VERSION = 'V3.5'
+  // V3.6（2026-09-25）：新單載入期間使用者先動的條款（點方塊／打字）不再被預設組蓋回；載入中點方塊不誤跳確認
+  const FORM_VERSION = 'V3.6'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2649,7 +2650,8 @@
         if (!p) return
         if (!silent) {
           // 已經改過內容時先問一聲——套用是整組覆寫，不是合併
-          const base = this._termsBaseline()
+          // init 還沒跑完時欄位還是載入起點的值（預設還沒帶進來）⇒ 跟起點比，否則沒動過也會被當成「改過」而跳確認
+          const base = (!this._initSettled && this._termsAtStart) || this._termsBaseline()
           const dirtyFields = this.termsFieldDefs.filter(f =>
             (this.q[f.key] || '').trim() !== (base[f.key] || '').trim())
           if (dirtyFields.length &&
@@ -3663,10 +3665,16 @@
       // ☠️ 後果不只是 API 發兩次：第二次的回應晚一步抵達，
       //    會把使用者這段期間改過的欄位用伺服器上的舊值**無聲蓋回去**。
       _initDone: false,
+      // init 整段（含新單套用預設條款組、取號）跑完 ⇒ true。給 e2e 等「載入完成」這個終點，不必猜哪一支請求最後回來。
+      _initSettled: false,
+      _termsAtStart: null,
 
       async init() {
         if (this._initDone) return
         this._initDone = true
+        // 條款欄位的初始快照：新單套用預設組前比對，有差 ⇒ 載入期間使用者已經動過（點了方塊或打了字），不覆蓋
+        this._termsAtStart = Object.fromEntries(this.termsFieldDefs.map(f => [f.key, this.q[f.key]]))
+        const _termsAtStart = JSON.stringify([this.q.termsPresetKey, ...this.termsFieldDefs.map(f => this.q[f.key])])
         // ── Session guard ──
         const s = localStorage.getItem('motrix_session')
         if (!s) { window.location.href = 'login.html'; return }
@@ -3771,6 +3779,7 @@
               }
               this.calcTotals()
               this.checkApproval()
+              this._initSettled = true
               return
             }
           } catch(e) {}
@@ -3825,7 +3834,12 @@
           // 就是踩到這一行。只影響新增模式；編輯既有報價單時上面的
           // `Object.assign(this.q, row.data)` 會用那張單自己存的條款，
           // **歷史單據不該因為預設組改過而跟著變**。
-          if (this.termsDefaultKey) {
+          // ☠️ 2026-09-25：方塊與文字框在取完條款組後就畫出來了，而上面的 `await 取號` 負載下是最慢的一支
+          //    ⇒ 空窗裡使用者點的方塊／打的字，原本會在這裡被預設組無聲蓋回去。使用者動過就不帶預設。
+          const _termsTouched = JSON.stringify([this.q.termsPresetKey, ...this.termsFieldDefs.map(f => this.q[f.key])]) !== _termsAtStart
+          if (_termsTouched) {
+            // 保留使用者的選擇
+          } else if (this.termsDefaultKey) {
             this.applyTermsPreset(this.termsDefaultKey, true)
           } else {
             // 沒有任何條款組時維持改動前的行為（單欄位預設付款條件）
@@ -3857,6 +3871,7 @@
           if (typeof h === 'number' && h > 0 && h < 20000) this.previewFrameHeight = Math.ceil(h) + 8
         })
         this.$nextTick(() => this.initSortable())
+        this._initSettled = true
       },
 
       initSortable() {
