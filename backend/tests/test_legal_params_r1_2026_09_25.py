@@ -72,9 +72,28 @@ def test_db_seed_matches_the_default_version_and_passes_the_guard(client):
     seed = _get_setting("tax_rules")
     assert seed, "種子 tax_rules 不見了"
     d = lp.DEFAULT_TAX_RULE_VERSIONS[0]
-    for k in ("resident", "non_resident", "nhi", "minimum_wage"):
+    for k in ("resident", "non_resident", "minimum_wage"):
         assert seed[k] == d[k], k
     assert lp.minimum_wage_mismatch(seed) == ""
+    # 種子（V9 凍結，不改）沒有後加的 bonus_insured_multiple ⇒ 讀取時補上，讀出來＝預設版
+    v = lp.load_versions()[0]
+    assert v["nhi"] == d["nhi"] and lp.validate_version(v) == []
+
+
+def test_bonus_insured_multiple_is_required(client, make_user, frozen_today):
+    """U4 獎金分潤：補充保費門檻＝投保金額 × nhi.bonus_insured_multiple（115 年簡表：4 倍）。"""
+    assert lp.DEFAULT_TAX_RULE_VERSIONS[0]["nhi"]["bonus_insured_multiple"] == 4
+    v = _v2027()
+    del v["nhi"]["bonus_insured_multiple"]
+    assert any("bonus_insured_multiple" in e for e in lp.validate_version(v))
+    v["nhi"]["bonus_insured_multiple"] = 0
+    assert any("bonus_insured_multiple" in e for e in lp.validate_version(v))
+    h = _hdr(client, make_user, "r1_bonus")
+    del v["nhi"]["bonus_insured_multiple"]
+    r = _put_versions(client, h, lp.load_versions() + [v])
+    assert r.status_code == 400 and "bonus_insured_multiple" in r.json()["detail"], r.text
+    v["nhi"]["bonus_insured_multiple"] = 4
+    assert _put_versions(client, h, lp.load_versions() + [v]).status_code == 200
 
 
 def test_guard_rejects_a_version_whose_threshold_differs_from_minimum_wage():

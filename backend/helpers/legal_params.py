@@ -46,6 +46,8 @@ DEFAULT_TAX_RULE_VERSIONS = [
             "rate": 0.0211,
             "max_single_payment": 10000000,
             "thresholds": {"50": 29500, "9A": 20000, "9B": 20000},
+            # 同簡表：所屬投保單位給付的獎金，全年累計「超過投保金額 4 倍」的部分計收補充保費（U4 獎金分潤用）
+            "bonus_insured_multiple": 4,
         },
         "minimum_wage": {"monthly": 29500},
         "sources": [
@@ -160,6 +162,9 @@ def validate_version(v) -> list:
             or not isinstance(nhi.get("thresholds"), dict) \
             or not all(_num(nhi["thresholds"].get(it), 0) for it in INCOME_TYPES):
         errs.append("版本 %s：二代健保（費率、單次上限、各類門檻）不正確" % (name or "?"))
+    elif not _num(nhi.get("bonus_insured_multiple"), 1):
+        errs.append("版本 %s：獎金補充保費門檻倍數（投保金額 × N，nhi.bonus_insured_multiple）必填且 ≥ 1"
+                    % (name or "?"))
     mw = v.get("minimum_wage")
     if not isinstance(mw, dict) or not _num(mw.get("monthly"), 1):
         errs.append("版本 %s：最低工資（月）不正確" % (name or "?"))
@@ -302,11 +307,20 @@ def tax_basis_error(tax_type: str, basis) -> str:
 
 # ── 讀寫設定 ──────────────────────────────────────────────────────────────────
 
+def _backfill(v: dict) -> dict:
+    """後加的欄位：舊資料（V9 的 tax_rules、欄位加入前存的清單）沒有 ⇒ 補 115 年簡表的值。
+    只補「沒有這個鍵」；存了的值（含錯的）照原樣交給驗證。"""
+    nhi = v.get("nhi")
+    if isinstance(nhi, dict) and "bonus_insured_multiple" not in nhi:
+        nhi["bonus_insured_multiple"] = DEFAULT_TAX_RULE_VERSIONS[0]["nhi"]["bonus_insured_multiple"]
+    return v
+
+
 def load_versions() -> list:
     from helpers.settings import _get_setting
     stored = _get_setting(VERSIONS_KEY, None)
     if isinstance(stored, list) and stored:
-        return sort_versions(stored)
+        return [_backfill(v) for v in sort_versions(stored)]
     legacy = _get_setting(LEGACY_KEY, None)
     if isinstance(legacy, dict) and legacy:
         v = copy.deepcopy(legacy)
@@ -314,7 +328,7 @@ def load_versions() -> list:
         v.setdefault("effectiveFrom", LEGACY_EFFECTIVE_FROM)
         if "sources" not in v:
             v["sources"] = copy.deepcopy(DEFAULT_TAX_RULE_VERSIONS[0]["sources"])
-        return [v]
+        return [_backfill(v)]
     return sort_versions(DEFAULT_TAX_RULE_VERSIONS)
 
 

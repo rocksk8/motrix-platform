@@ -50,7 +50,7 @@
         <thead>
           <tr>
             <th>版本</th><th>生效日</th><th>最低工資（月）</th><th>兼職薪資補充保費門檻（50）</th>
-            <th>薪資起扣（50）</th><th>執行業務起扣（9A／9B）</th><th>補充保費費率</th><th>補充保費門檻（9A／9B）</th><th></th>
+            <th>薪資起扣（50）</th><th>執行業務起扣（9A／9B）</th><th>補充保費費率</th><th>補充保費門檻（9A／9B）</th><th>獎金補充保費門檻（投保金額 × N）</th><th></th>
           </tr>
         </thead>
         <tbody>
@@ -77,6 +77,8 @@
                 <input type="number" x-model.number="v.nhi.thresholds['9A']" :disabled="isFrozen(v)"
                        @input="v.nhi.thresholds['9B'] = v.nhi.thresholds['9A']">
               </td>
+              <td><input type="number" min="1" data-field="bonus_multiple" data-saved-field
+                         x-model.number="v.nhi.bonus_insured_multiple" :disabled="isFrozen(v)" style="width:70px"></td>
               <td>
                 <button class="btn btn-ghost btn-sm" x-show="!isFrozen(v)" @click="versions.splice(i, 1); dirty = true">移除</button>
               </td>

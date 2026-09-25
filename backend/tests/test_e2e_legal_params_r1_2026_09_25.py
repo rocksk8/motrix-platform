@@ -50,6 +50,8 @@ def test_settings_page_adds_next_year_and_saves(live_server, make_user, new_page
     mw = row.locator("input[data-field='minimum_wage']")
     mw.fill("30900")
     assert row.locator("input[data-field='nhi50']").input_value() == "30900", "門檻要跟著最低工資"
+    bonus = row.locator("input[data-field='bonus_multiple']")
+    assert bonus.input_value() == "4" and bonus.is_enabled(), "獎金補充保費倍數要看得到、改得到"
     page.locator("[data-save]").click()
     page.wait_for_function(f"() => {ROOT}.okMsg === '已儲存'", timeout=10000)
     vs = lp.load_versions()

@@ -146,8 +146,8 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 |---|---|
 | 形式 | L1 函式（`from helpers import legal_params as lp`） |
 | 語法 | `versions = lp.load_versions()`（依 effectiveFrom 排序的清單）<br>`rules = lp.rules_for_date(versions, "YYYY-MM-DD" 或 date)`：`effectiveFrom ≤ 日期` 的最新一版（深拷貝）；沒有 ⇒ 丟 `lp.NoApplicableRules`（`ValueError` 子類，訊息可直接給使用者）<br>`lp.rules_by_version(versions, "2026")` ⇒ dict 或 `None`<br>`lp.today()`：「今天」的唯一來源（測試 monkeypatch 它） |
-| 回傳 | 一版＝`{version, effectiveFrom, resident{50,9A,9B:{tax_rate,tax_threshold}}, non_resident{50:{tax_rate,tax_threshold,low_salary_rate},9A,9B}, nhi{rate, max_single_payment, thresholds{50,9A,9B}}, minimum_wage{monthly}, sources[]}`。獎金（非每月薪資）扣繳用 `resident["50"]`（5%／起扣 90,501）；補充保費費率 `nhi.rate`、單次上限 `nhi.max_single_payment` |
+| 回傳 | 一版＝`{version, effectiveFrom, resident{50,9A,9B:{tax_rate,tax_threshold}}, non_resident{50:{tax_rate,tax_threshold,low_salary_rate},9A,9B}, nhi{rate, max_single_payment, thresholds{50,9A,9B}, bonus_insured_multiple}, minimum_wage{monthly}, sources[]}`。獎金（非每月薪資）扣繳用 `resident["50"]`（5%／起扣 90,501）；補充保費費率 `nhi.rate`、單次上限 `nhi.max_single_payment`；獎金補充保費門檻＝投保金額 × `nhi.bonus_insured_multiple`（115 年＝4，必填；舊資料讀取時補 4） |
 | 單據凍結 | 使用方存 `version` 與整份 `rules` 快照；修改舊單沿用快照，使用者明確選擇才重挑（勞報單的做法見 `routers/payslips.py::update_payslip`） |
 | 對方不在時 | 不適用（L1）。日期沒有適用版本 ⇒ 使用方**拒絕產生並說明**（不猜、不送 0） |
-| 契約版本 | 1（2026-09-25，CORE_VERSION 1.5）。欄位只准加；獎金 4 倍投保金額需要的新欄位（例：`nhi.bonus_multiple`）要加時，照 MODULE-GUIDE §2 升次版號 |
+| 契約版本 | 1（2026-09-25，CORE_VERSION 1.5）。欄位只准加；再加欄位時照 MODULE-GUIDE §2 升次版號 |
 | 守門 | `tests/test_legal_params_r1_2026_09_25.py`（選版、凍結、門檻＝最低工資）；`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params）；`tests/platform/test_l1_interface_snapshot.py`（介面變動要升版） |
