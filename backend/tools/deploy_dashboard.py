@@ -31,6 +31,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
+import deploy_insights  # 同目錄；CORE-SPEC §9e D2／D6／D7 的純函式
+
 # 正式機是自簽憑證（見 https_setup.ps1），這裡查狀態用的 verify=False 本來
 # 就是刻意跳過驗證（跟 apply_update.ps1 的 curl.exe -k 是同一件事），關掉
 # urllib3 每次都印的 InsecureRequestWarning，避免洗版這個小工具自己的輸出。
@@ -673,12 +675,9 @@ def dev_status():
     branch = _git("branch", "--show-current")
     commit = _git("log", "-1", "--format=%h %s")
     dirty = bool(_git("status", "--porcelain", "--", "backend", "frontend"))
-    ahead_raw = _git("rev-list", "--count", "origin/master..HEAD")
-    try:
-        ahead = int(ahead_raw)
-    except ValueError:
-        ahead = None
-    return {"branch": branch, "commit": commit, "dirty": dirty, "aheadOfOrigin": ahead}
+    # §9e D7：原本寫死 origin/master；新版在 platform 分支 ⇒ 取目前分支的上游，沒有上游回 None 不猜
+    upstream, ahead = deploy_insights.upstream_ahead(PROJECT_ROOT)
+    return {"branch": branch, "commit": commit, "dirty": dirty, "upstream": upstream, "aheadOfOrigin": ahead}
 
 
 def _check_prod_status() -> dict:
@@ -814,9 +813,71 @@ def pre_deploy_check():
 
 # ── 打包 ─────────────────────────────────────────────────────────────────
 
+LAST_FULL_PATH = PROJECT_ROOT / "tools" / "platform" / ".last_full.json"
+
+
+def _head_full_sha() -> str:
+    try:
+        return deploy_insights._git(PROJECT_ROOT, "rev-parse", "HEAD").strip()
+    except RuntimeError:
+        return ""
+
+
+@app.get("/api/build-gate")
+def build_gate():
+    """§9e D6：要打包的 HEAD 有沒有全綠的全量。前端在打包按鈕旁顯示；非 ok 時打包預設擋下。"""
+    head = _head_full_sha()
+    return {"head": head, **deploy_insights.last_full(LAST_FULL_PATH, head)}
+
+
+@app.get("/api/module-changes")
+def module_changes(package: str = "", base: str = "", head: str = ""):
+    """§9e D2：這一包會改到哪些模組。
+    head：部署包 manifest 的 commit（或直接指定）；base：預設取正式機已部署的 commit（或直接指定）。
+    任一端拿不到 ⇒ 400 並說明，不猜。"""
+    if package:
+        if not _is_safe_name(package):
+            return JSONResponse(status_code=400, content={"detail": "無效的部署包名稱"})
+        mp = DEPLOY_PACKAGES_DIR / package / "deploy_manifest.json"
+        try:
+            head = json.loads(mp.read_text(encoding="utf-8-sig")).get("commit", "") or head
+        except Exception:
+            return JSONResponse(status_code=400, content={"detail": f"讀不到部署包的 manifest：{mp}"})
+    if not base:
+        base = (_check_prod_status().get("deployed") or {}).get("commit", "")
+    if not base or not head:
+        return JSONResponse(status_code=400, content={
+            "detail": "缺少比較基準：" + ("正式機已部署版本查不到（連不上或從未套用過部署包）" if not base else "沒有指定部署包或 commit")})
+    for c in (base, head):
+        if not re.fullmatch(r"[0-9a-fA-F]{7,40}", c):
+            return JSONResponse(status_code=400, content={"detail": f"不是 commit：{c}"})
+    try:
+        return deploy_insights.module_changes(PROJECT_ROOT, base, head)
+    except RuntimeError as e:
+        return JSONResponse(status_code=400, content={"detail": f"這個 repo 不認得該 commit：{e}"})
+
+
+class BuildIn(BaseModel):
+    #: 全量沒有全綠仍要打包時必須明確勾選（例如緊急修補）；會記進歷史紀錄
+    overrideTestGate: bool = False
+    overrideReason: str = ""
+
+
 @app.post("/api/build")
-def start_build():
+def start_build(body: BuildIn = None):
+    body = body or BuildIn()
+    gate = build_gate()
+    if gate["state"] != "ok" and not body.overrideTestGate:
+        return JSONResponse(status_code=409, content={
+            "detail": f"測試閘門未通過：{gate['detail']}。先跑全量（modtest --full），或勾選「略過測試閘門」並寫明原因。",
+            "gate": gate})
     job_id = uuid.uuid4().hex
+    if gate["state"] != "ok":
+        # 略過閘門一定要有理由、一定留痕跡：沒寫理由的略過 = 沒有人做過決定
+        reason = (body.overrideReason or "").strip()
+        if len(reason) < 6:
+            return JSONResponse(status_code=400, content={"detail": "略過測試閘門必須寫明原因（至少 6 個字）"})
+        _append_history(f"打包略過測試閘門：{reason}（閘門狀態：{gate['detail']}）", job_id, False)
     cmd = _ps_cmd(TOOLS_DIR / "build_deploy_package.ps1")
     threading.Thread(target=_run_job, args=(job_id, "build", cmd), daemon=True).start()
     return {"jobId": job_id}

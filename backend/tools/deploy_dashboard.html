@@ -61,7 +61,7 @@
       <div class="row"><span>分支</span><span id="devBranch">…</span></div>
       <div class="row"><span>HEAD</span><span id="devCommit">…</span></div>
       <div class="row"><span>工作目錄</span><span id="devDirty">…</span></div>
-      <div class="row"><span>領先 origin</span><span id="devAhead">…</span></div>
+      <div class="row"><span id="devAheadLabel">領先上游</span><span id="devAhead">…</span></div>
     </div>
     <div class="card" id="prodCard">
       <h2>正式機（172.16.10.177）<span id="wsIndicator" style="float:right;font-size:11px;color:#666">連線中…</span></h2>
@@ -73,13 +73,22 @@
 
   <div class="card" style="margin-bottom:16px">
     <h2>1. 打包</h2>
+    <div class="row" style="margin-bottom:8px"><span>測試閘門（這個 commit 的全量）</span><span id="gateState">…</span></div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F59E0B;margin-bottom:8px">
+      <input type="checkbox" id="overrideGate" style="width:auto;margin:0">
+      略過測試閘門（全量沒有全綠仍要打包——僅限緊急修補，會記進歷史紀錄）
+    </label>
+    <input id="overrideReason" placeholder="略過原因（勾選略過時必填）">
     <button id="buildBtn" onclick="startBuild()">開始打包（含完整 pytest，約 5-6 分鐘）</button>
+    <div class="confirm-box hidden" id="buildBlocked"></div>
     <div class="log hidden" id="buildLog"></div>
   </div>
 
   <div class="card" style="margin-bottom:16px">
     <h2>2. 部署到正式機</h2>
-    <select id="pkgSelect"></select>
+    <select id="pkgSelect" onchange="document.getElementById('moduleChanges').classList.add('hidden')"></select>
+    <button class="ghost" onclick="loadModuleChanges()">這一包會改到哪些模組？（對比正式機目前版本）</button>
+    <div class="log hidden" id="moduleChanges" style="white-space:normal"></div>
     <input id="deployUser" placeholder="正式機帳號（例如 Motrix）" value="Motrix">
     <input id="deployPass" type="password" placeholder="正式機密碼">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F59E0B;margin-bottom:8px">
@@ -126,8 +135,41 @@ async function refreshDevStatus() {
     document.getElementById('devBranch').textContent = dev.branch || '?';
     document.getElementById('devCommit').textContent = dev.commit || '?';
     document.getElementById('devDirty').textContent = dev.dirty ? '有未 commit 變更' : '乾淨';
-    document.getElementById('devAhead').textContent = dev.aheadOfOrigin === null ? '未知' : (dev.aheadOfOrigin + ' 個 commit');
+    document.getElementById('devAheadLabel').textContent = dev.upstream ? ('領先 ' + dev.upstream) : '領先上游';
+    document.getElementById('devAhead').textContent = (dev.aheadOfOrigin === null || dev.aheadOfOrigin === undefined)
+      ? '沒有上游分支' : (dev.aheadOfOrigin + ' 個 commit');
   } catch (e) {}
+  refreshGate();
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// §9e D6：打包前要有「這個 commit 的全綠全量」
+async function refreshGate() {
+  try {
+    const g = await (await fetch('/api/build-gate')).json();
+    const el = document.getElementById('gateState');
+    el.textContent = (g.state === 'ok' ? '✅ ' : '⛔ ') + g.detail;
+    el.style.color = g.state === 'ok' ? '#4ADE80' : '#F87171';
+  } catch (e) {}
+}
+
+// §9e D2：這一包會改到哪些模組
+async function loadModuleChanges() {
+  const pkg = document.getElementById('pkgSelect').value;
+  const el = document.getElementById('moduleChanges');
+  el.classList.remove('hidden');
+  el.textContent = '讀取中…';
+  const res = await fetch('/api/module-changes?package=' + encodeURIComponent(pkg));
+  const data = await res.json();
+  if (!res.ok) { el.innerHTML = '<span style="color:#F87171">' + esc(data.detail) + '</span>'; return; }
+  el.innerHTML = `<div style="margin-bottom:6px">正式機 ${esc(data.base.slice(0,8))} → 部署包 ${esc(data.head.slice(0,8))}，共 ${data.fileCount} 個檔</div>` +
+    data.groups.map(g => `<details ${g.id === 'L1' ? 'open' : ''} style="margin:4px 0">
+      <summary><b>${esc(g.name)}</b>（${esc(g.id)}）— ${g.files.length} 個檔${g.id === 'L1' ? ' <span style="color:#F59E0B">⚠ 底層有變動：影響所有模組</span>' : ''}</summary>
+      ${g.changelog.length ? '<div style="margin:4px 0 4px 12px;color:#A7F3D0">' + g.changelog.map(esc).join('<br>') + '</div>' : '<div style="margin-left:12px;color:#888">（這段期間沒有更新紀錄）</div>'}
+      <div style="margin-left:12px;color:#888;font-size:11px">${g.files.map(esc).join('<br>')}</div></details>`).join('');
 }
 
 function renderProdStatus(prod) {
@@ -216,7 +258,19 @@ async function startBuild() {
   document.getElementById('buildBtn').disabled = true;
   const buildLog = document.getElementById('buildLog');
   buildLog.textContent = '';
-  const { jobId } = await (await fetch('/api/build', { method: 'POST' })).json();
+  const blocked = document.getElementById('buildBlocked');
+  blocked.classList.add('hidden');
+  const res = await fetch('/api/build', { method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ overrideTestGate: document.getElementById('overrideGate').checked,
+                           overrideReason: document.getElementById('overrideReason').value }) });
+  const data = await res.json();
+  if (!res.ok) {
+    blocked.classList.remove('hidden');
+    blocked.innerHTML = '<span style="color:#F87171">' + esc(data.detail) + '</span>';
+    document.getElementById('buildBtn').disabled = false;
+    return;
+  }
+  const { jobId } = data;
   pollJob(jobId, 'buildLog', (ok) => {
     document.getElementById('buildBtn').disabled = false;
     if (ok) refreshPackages();
