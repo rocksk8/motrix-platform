@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.15 — 2026-09-26（P1／P3，wip/cloud-p1p3＋稽核修正 wip/x-p1p3-fix；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.8 → 1.15〕
+> `core.registry.CORE_VERSION` 1.14 → 1.15（只有新增）。
+- L0（新增）：`core.customization`——module.json 可自訂點（P3）：`SCHEMA_VERSIONS`／`PAGE_KINDS`／`OPS_*`／`EXPORT_FORMATS`、`OP_KEYS`／`MOVE_DEST_KINDS`、`validate_manifest(manifest)`、`require_valid(manifest)`、`core_fields(manifest)`、`endpoint_parts(spec)`。攤平與排版檢查是私有的（`_raw_points`、`_check_ops`），對外只經 `core.catalog`（稽核 P-M1）
+- L0（行為，相容擴充）：`core.loader.load_all()` 載入前呼叫 `customization.require_valid`；`customization` 格式錯誤 ⇒ 模組不載入（state＝failed，reason 帶前三項問題位置）。沒有 `customization` 鍵 ⇒ 照常載入
+- L1（新增）：`core.catalog`——能力目錄（P1）：`CATALOG_VERSION`、`EXPECTED_SECTIONS`、`register_section(name, owner, fn)`、`section(name)`、`build()`、`module_endpoints(spec)`、`endpoint_problems`、`output_problems`；同一區段兩個擁有者 ⇒ ValueError；**可自訂點唯一入口** `layout_points(module_key=None)`（藏起引用不存在端點／版型的點、選單去掉被藏起的按鈕、未載入模組沒有點）與排版守門 `check_layout(module_key, ops)`（每種操作限定鍵、move 限定容器、select_template 限定程式提供的版型）
+- L1（新增）：端點 `GET /api/platform/catalog`（僅超級管理員，唯讀；`routers/platform_catalog.py`，並把 `helpers.doc_template` 登記成 `outputs` 區段）
+
 ## 1.14 — 2026-09-26（B）〔core_bump：暫用 1.11 → 1.14〕
 > 階段 C／C3：選單由登錄表產生。只有新增。
 - L1（新增）：`core.menu`——`load_l1`／`module_items`／`validate`／`visible`／`build`／`denied`／`MENU_L1`／`ITEM_KEYS`；資料 `core/menu_l1.json`（群組固定鍵＋L1 選單項）；模組以 module.json `pages[].menu` 宣告自己的選單項

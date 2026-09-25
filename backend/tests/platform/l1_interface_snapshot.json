@@ -1,5 +1,5 @@
 {
- "core_version": "1.14",
+ "core_version": "1.15",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -597,6 +597,34 @@
    "set_row": "def(ws, row_idx, values, font=…, fill=…, border=…, aligns=…, height=…)",
    "xl_safe": "def(val)",
    "xl_style": "def(wb)"
+  },
+  "plat:catalog": {
+   "CATALOG_VERSION": "const",
+   "EXPECTED_SECTIONS": "const",
+   "build": "def()",
+   "check_layout": "def(module_key, ops)",
+   "endpoint_problems": "def(pts, endpoints)",
+   "layout_points": "def(module_key=…)",
+   "module_endpoints": "def(spec)",
+   "output_problems": "def(pts, templates)",
+   "register_section": "def(name, owner, fn)",
+   "restore": "def(state)",
+   "section": "def(name)",
+   "snapshot": "def()"
+  },
+  "plat:customization": {
+   "EXPORT_FORMATS": "const",
+   "MOVE_DEST_KINDS": "const",
+   "OPS_BY_KIND": "const",
+   "OPS_CORE_FIELD": "const",
+   "OPS_DISPLAY_FIELD": "const",
+   "OP_KEYS": "const",
+   "PAGE_KINDS": "const",
+   "SCHEMA_VERSIONS": "const",
+   "core_fields": "def(manifest)",
+   "endpoint_parts": "def(spec)",
+   "require_valid": "def(manifest)",
+   "validate_manifest": "def(manifest)"
   },
   "plat:definitions": {
    "DefinitionError": "class",
