@@ -35,7 +35,8 @@ def _without(monkeypatch, capability, name):
         if key in lm.spec.providers:
             monkeypatch.delitem(lm.spec.providers, key)
             return
-    raise AssertionError("前提：提供者應該已登記（%s/%s）" % key)
+    # 提供者本來就不在（例：模組資料夾被刪掉的反向控制）⇒ 已經是「沒有」的狀態
+    assert key not in registry.providers(capability), key
 
 
 def _login(client, make_user, name):
@@ -68,10 +69,6 @@ def _q(sql, *args):
 
 # ── IP-5 ────────────────────────────────────────────────────────────────
 
-def test_daily_task_connector_provider_is_registered_by_m12(client):
-    # 2026-09-26：M12 搬進 modules/，提供者改由 ModuleSpec 宣告，載入器掛模組時登記（client 夾具）
-    p = registry.single_provider("daily_task.external")
-    assert p is not None and callable(p.upsert) and callable(p.withdraw)
 
 
 def _tick(client, h, no, done=True):
@@ -81,18 +78,6 @@ def _tick(client, h, no, done=True):
     return sid, r.json()
 
 
-def test_daily_task_connector_with_m12_the_task_and_completion_are_created(client, make_user):
-    u, h = _login(client, make_user, "ip5_on")
-    _case("MQ-IP5-ON")
-    sid, body = _tick(client, h, "MQ-IP5-ON")
-    assert "notice" not in body
-    tasks = _q("SELECT * FROM daily_tasks WHERE case_no=? AND is_deleted=0", "MQ-IP5-ON")
-    assert len(tasks) == 1 and tasks[0]["title"] == "串接工程｜客戶驗收"
-    assert _q("SELECT daily_task_id FROM case_stages WHERE id=?", sid)[0]["daily_task_id"] == tasks[0]["id"]
-    assert _q("SELECT completed FROM daily_task_completions WHERE task_id=?", tasks[0]["id"])[0]["completed"] == 1
-    # 取消勾選 ⇒ 收回
-    client.put(f"/api/quotations/MQ-IP5-ON/stages/{sid}", headers=h, json={"done": False})
-    assert _q("SELECT is_deleted FROM daily_tasks WHERE id=?", tasks[0]["id"])[0]["is_deleted"] == 1
 
 
 def test_daily_task_connector_without_m12_stage_still_saves_and_says_so(client, make_user, monkeypatch):

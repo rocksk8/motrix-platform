@@ -31,9 +31,9 @@ def sys_calls(monkeypatch):
     return called
 
 
-def test_both_providers_are_registered(client):
-    names = set(registry.providers("daily.check"))
-    assert {"daily_tasks", "case_deadlines"} <= names, names
+def test_case_deadlines_provider_is_registered(client):
+    """M01 的案件類檢查一定在（M12 的那一支在 modules/daily_tasks/tests，拿掉 M12 時一起消失）。"""
+    assert "case_deadlines" in registry.providers("daily.check")
 
 
 def test_reverse_without_module_providers_system_checks_still_run(monkeypatch, sys_calls):
@@ -56,19 +56,6 @@ def test_one_failing_provider_does_not_stop_the_others(monkeypatch, sys_calls):
     assert ran == ["daily"] and "_check_backup_freshness" in sys_calls
 
 
-def test_daily_tasks_startup_catchup_advances_the_guard(client, monkeypatch):
-    import modules.daily_tasks.api as dt
-    days = []
-    monkeypatch.setattr(dt, "_check_overdue_and_notify", lambda d=None: days.append(d))
-    monkeypatch.setattr(dt, "_check_range_task_deadline", lambda: None)
-    y = date.today() - timedelta(days=1)
-    dt._set_setting("dt_overdue_last_check", (y - timedelta(days=3)).isoformat())
-    dt.run_daily_checks("startup")
-    assert days == [(y - timedelta(days=i)).isoformat() for i in (2, 1, 0)]
-    assert dt._get_setting("dt_overdue_last_check") == y.isoformat()
-    del days[:]
-    dt.run_daily_checks("daily")
-    assert days == [None]
 
 
 def test_reminder_failures_endpoint_lives_in_l1(client, make_user, monkeypatch):
