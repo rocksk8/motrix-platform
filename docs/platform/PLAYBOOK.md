@@ -63,7 +63,7 @@
 | 4 | 改 L2 模組只跑受影響的題；改 L1 或 fixture 層（conftest、pytest.ini、requirements）就跑全量，並且在 detached worktree 裡跑 |
 | 5 | 每一條新規則都寫進 MODULE-GUIDE，並配一個守門；還沒有守門的，標「⚠ 未守門」，排進 ROADMAP 階段 G |
 | 6 | 守門要有正對照與反向控制；正對照不可以綁在特定的 L2 模組上 |
-| 7 | L0／L1 介面有新增就升次版號（`CORE_VERSION`），有修改或刪除就升主版號，並寫進 `backend/core/CHANGELOG.md`。**版號在合回時才定**（2026-09-25，一晚撞號三次：9c 修正、R、A2 都拿 1.5）：分支裡先寫「待定」或暫用號碼，rebase 到 origin 當下取「origin 的下一號」，並重產 G1 快照；規格章節編號（CUSTOMIZATION-SPEC §N、MODULE-GUIDE §N、IP-N）同樣在合回時對照 origin 再定 |
+| 7 | L0／L1 介面有新增就升次版號（`CORE_VERSION`），有修改或刪除就升主版號，並寫進 `backend/core/CHANGELOG.md`。**版號在合回時才定**（2026-09-25，一晚撞號三次：9c 修正、R、A2 都拿 1.5）：分支裡先寫「待定」或暫用號碼，rebase 到 origin 當下取「origin 的下一號」，並重產 G1 快照；規格章節編號（CUSTOMIZATION-SPEC §N、MODULE-GUIDE §N、IP-N）同樣在合回時對照 origin 再定。**工具**（B，2026-09-26）：rebase 之後跑 `python tools/platform/core_bump.py`（只列出，exit 3＝要改），確認後加 `--apply`：依 origin 的 CORE_VERSION 把我的 CHANGELOG 段落重新編號（依介面差異取次／主版號、標題註記暫用號）、改 registry、由 origin 的快照重產 G1 快照；rebase 停在 CHANGELOG 衝突時先 `git checkout origin/platform -- backend/core/CHANGELOG.md`（⚠ 不用 --ours／--theirs：rebase 時兩者的意思與 merge 相反，--theirs 是**我的** commit），再以 `--mine <rebase 前的分支尖端>` 指定我的段落。介面變了卻沒寫 CHANGELOG ⇒ 工具拒絕（不替人寫內容） |
 | 8 | 長時間的動作，開跑時就回報「跑什麼、預估多久、死線」，死線＝預估×1.5 |
 | 9 | 回報錯了就更正，而且要保留原本那一句錯的內容 |
 | 10 | 不連線、不寫入正式機；正式機的動作一律由使用者執行 |
