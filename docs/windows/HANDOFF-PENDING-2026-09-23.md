@@ -649,3 +649,8 @@ hichan-0a 代裁（待確認）：
 | 3 | 建包 e2e -n 4（每 worker 一套伺服器＋DB） | hichan-8d（5 之後） |
 | 6 | 擋圖片／字型、固定等待改可觀測事件 | hichan-8d |
 規格與量測：docs/windows/PLAN-TEST-PERF.md（bf）。每項量前後時間與寫入量、證明沒漏驗。全部完成後才匯出升級檔（含 BN22、EX-SIGN 等）。
+
+## 🔴 LOST-UPDATE／鎖釋放 稽核（2026-09-25，hichan-bf＋hichan-a3）——已完成，進下一包
+- 產品缺陷（正式機也會發生）：階段同步蓋掉收款（ade34b95）；save_quotation_json 25 處中 22 處＋直接寫 data_json 5 處「交易外讀→整包寫回」（4b446b20、dcbedf69、c5f1a5c1、7cc66c63）；拿寫鎖後丟例外不放鎖 ⇒ 他人 30 秒後 500「database is locked」（86b55b76、dcbedf69、c5f1a5c1、c71ac196）＝**W-6 成因之一已證實並修**；存檔排隊失敗後吞掉使用者的儲存（53950ccf）。
+- 結構守門（85e038af）：write_txn／begin_write；save_quotation_json 要求「begin_write 開的交易＋拿鎖後讀過 data_json」，預設記 ERROR 照寫、MOTRIX_STRICT_DB_GUARDS=1（測試）才 raise；靜態守門 BEGIN IMMEDIATE 只准在 begin_write（白名單只准變少）。
+- ⚠ 販售時的發現（未改，屬使用者暫停的販售項）：helpers/email_notify.py:20／41 以路徑是否含 \V9.0\ 判斷正式機，其他安裝路徑會**靜默不寄任何通知信**；部署腳本寫死 V9.0 路徑 7 支。
