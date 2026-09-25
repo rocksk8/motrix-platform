@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode
 from helpers import (
-    init_default_admin, init_demo_account, _cleanup_sessions,
+    init_default_admin, init_demo_account, _cleanup_sessions, _prune_login_locks,
     init_unlock_passwords, flag_weak_passwords,
     _sync_module_versions, DEMO_TOKEN_PREFIX,
 )
@@ -660,6 +660,7 @@ if geo_core.geo_on():
     logger.info("MOTRIX_GEO=1 —— 地址定位已開，"
                 "這台機器會對外連線（OpenStreetMap／Nominatim）")
 
+_prune_login_locks()
 auth.init_rate_limiting()
 _sync_module_versions()
 

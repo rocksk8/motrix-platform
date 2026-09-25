@@ -123,6 +123,7 @@ from .startup import (
     flag_weak_passwords,
     init_unlock_passwords,
     _cleanup_sessions,
+    _prune_login_locks,
     _sync_module_versions,
 )
 
