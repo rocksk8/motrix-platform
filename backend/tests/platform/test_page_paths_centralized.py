@@ -60,8 +60,13 @@ def problems(found, baseline, allowed=ALLOWED):
         b = baseline.get(f, 0)
         if n > b:
             msgs.append("%s：寫死 frontend/pages %d 處（基線 %d）⇒ 改用 core.source_tree.page_file()／page_files()" % (f, n, b))
+    installed = {p.name for p in (Path(REPO) / "backend" / "modules").iterdir()
+                 if (p / "module.json").is_file()} if (Path(REPO) / "backend" / "modules").is_dir() else set()
     for f, b in sorted(baseline.items()):
         n = found.get(f, 0)
+        parts = f.split("/")
+        if parts[:2] == ["backend", "modules"] and len(parts) > 2 and parts[2] not in installed:
+            continue            # 模組沒裝（core-only 反向控制、產品選配）⇒ 不是降低，是不在
         if n < b:
             msgs.append("%s：已降到 %d 處（基線 %d）⇒ 同一個 commit 重產基線（--update）" % (f, n, b))
     return msgs

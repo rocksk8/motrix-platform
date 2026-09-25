@@ -132,8 +132,15 @@ def test_reverse_controls_each_violation_is_reported(old, new, expect):
 
 
 def test_real_scan_sees_known_mail_code():
+    import re
     reg, _p = _real()
-    assert {"tender_found", "tender_fetch_failed", "tender_source_changed"} <= reg   # 模組自己登記的
+    # 已安裝模組自己登記的代號都要被掃到（core-only 時沒有模組 ⇒ 只驗下面 L1 那一半）
+    for d in source_tree.module_dirs():
+        own = set()
+        for f in d.rglob("*.py"):
+            if "tests" not in f.relative_to(d).parts:
+                own |= set(re.findall(r'register\(\s*"([a-z0-9_]+)"', f.read_text(encoding="utf-8")))
+        assert own <= reg, (d.name, own - reg)
     srcs = {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.product_files()}
     assert "_async_send(to, _mt.subject(" in srcs["helpers/email_notify.py"]
 
