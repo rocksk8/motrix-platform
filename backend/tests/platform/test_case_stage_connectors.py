@@ -93,6 +93,56 @@ def test_daily_task_connector_without_m12_stage_still_saves_and_says_so(client, 
     assert _q("SELECT done, daily_task_id FROM case_stages WHERE id=?", sid)[0] == {"done": 1, "daily_task_id": 0}
 
 
+def _stage_with_old_task(client, h, no, task_id=77):
+    """M12 在的時候建立過任務（daily_task_id 有值）、之後 M12 被拿掉的狀態：直接寫 M01 自己的 case_stages。"""
+    sid = client.post(f"/api/quotations/{no}/stages", headers=h, json={"label": "叫料出貨"}).json()["id"]
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE case_stages SET done=1, done_at='2026-09-11', daily_task_id=? WHERE id=?", (task_id, sid))
+        conn.commit()
+    finally:
+        conn.close()
+    return sid
+
+
+def test_without_m12_uncheck_says_the_old_task_was_not_withdrawn(client, make_user, monkeypatch):
+    """B-1（AUDIT-X-C-batch1）：M12 不在時取消勾選，原本有任務 ⇒ 明說「沒有收回」，不能說成「沒有建立」。
+
+    任務 id 留著：M12 裝回來後再勾選／取消勾選，會收斂到同一筆任務（見 NOTICE_NOT_WITHDRAWN 註解）。"""
+    from helpers.case_stage_tasks import NOTICE_NOT_WITHDRAWN
+    _without(monkeypatch, "daily_task.external", "daily_tasks")
+    u, h = _login(client, make_user, "ip5_unchk")
+    _case("MQ-IP5-UNCHK")
+    sid = _stage_with_old_task(client, h, "MQ-IP5-UNCHK")
+    r = client.put(f"/api/quotations/MQ-IP5-UNCHK/stages/{sid}", headers=h, json={"done": False, "doneAt": ""})
+    assert r.status_code == 200, r.text
+    assert r.json().get("notice") == NOTICE_NOT_WITHDRAWN and "未收回" in NOTICE_NOT_WITHDRAWN
+    assert _q("SELECT done, daily_task_id FROM case_stages WHERE id=?", sid)[0] == {"done": 0, "daily_task_id": 77}
+
+
+def test_without_m12_uncheck_with_no_task_says_nothing(client, make_user, monkeypatch):
+    """原本就沒有任務 ⇒ 沒有什麼沒收回，不出提示（提示只在真的少了一件事時出現）。"""
+    _without(monkeypatch, "daily_task.external", "daily_tasks")
+    u, h = _login(client, make_user, "ip5_unchk0")
+    _case("MQ-IP5-UNCHK0")
+    sid, _ = _tick(client, h, "MQ-IP5-UNCHK0")
+    r = client.put(f"/api/quotations/MQ-IP5-UNCHK0/stages/{sid}", headers=h, json={"done": False, "doneAt": ""})
+    assert r.status_code == 200 and "notice" not in r.json(), r.json()
+
+
+def test_without_m12_deleting_a_stage_with_a_task_says_so(client, make_user, monkeypatch):
+    from helpers.case_stage_tasks import NOTICE_NOT_WITHDRAWN
+    _without(monkeypatch, "daily_task.external", "daily_tasks")
+    u, h = _login(client, make_user, "ip5_del")
+    _case("MQ-IP5-DEL")
+    sid = _stage_with_old_task(client, h, "MQ-IP5-DEL")
+    r = client.delete(f"/api/quotations/MQ-IP5-DEL/stages/{sid}", headers=h)
+    assert r.status_code == 200 and r.json() == {"ok": True, "notice": NOTICE_NOT_WITHDRAWN}, r.text
+    sid0, _ = _tick(client, h, "MQ-IP5-DEL")                       # 沒有任務的階段 ⇒ 不出提示
+    assert client.delete(f"/api/quotations/MQ-IP5-DEL/stages/{sid0}", headers=h).json() == {"ok": True}
+
+
 def _sql_writes(rel):
     """檔案裡字串常值中的 INSERT/UPDATE/DELETE 目標表。"""
     import re

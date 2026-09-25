@@ -3327,6 +3327,7 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
     if "dueDate" in body:   updates["due_date"]   = body.get("dueDate") or ""
     if "ratioBp" in body:   updates["ratio_bp"]   = normalize_ratio_bp(body.get("ratioBp"))
     was_done = bool(sr["done"])
+    had_task = bool(sr["daily_task_id"]) if "daily_task_id" in sr.keys() else False
     if updates:
         updates["updated_at"] = datetime.now().isoformat()
         sql = "UPDATE case_stages SET " + ", ".join(f"{k}=?" for k in updates) + " WHERE id=?"
@@ -3344,8 +3345,8 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
             spawn_bg_thread(push_event_for_case_stage_done, args=(stage_id,))
             spawn_bg_thread(sync_daily_task_for_case_stage,
                             args=(stage_id, user["username"], actor_name))
-            # IP-5：每日任務模組（M12）不在 ⇒ 勾選照常存檔，但要明說沒有建立每日任務
-            _dt_notice = daily_task_notice()
+            # IP-5：每日任務模組（M12）不在 ⇒ 勾選照常存檔，但要明說沒有建立／沒有收回每日任務
+            _dt_notice = daily_task_notice(done=bool(updates.get("done", was_done)), had_task=had_task)
         else:
             _dt_notice = None
     else:
@@ -3393,7 +3394,11 @@ def delete_case_stage(quote_no: str, stage_id: int, authorization: str = Header(
     if stage_task_id:
         spawn_bg_thread(delete_daily_task_for_case_stage, args=(stage_task_id,))
     _audit(_tok(authorization), 'case_stage.delete', 'case_stage', quote_no, quote_no, {'stageId': stage_id})
-    return {"ok": True}
+    out = {"ok": True}
+    _dt_notice = daily_task_notice(done=False, had_task=bool(stage_task_id))   # IP-5：M12 不在 ⇒ 明說沒有收回
+    if _dt_notice:
+        out["notice"] = _dt_notice
+    return out
 
 
 @router.patch("/api/quotations/{quote_no}/stages/reorder")

@@ -36,3 +36,17 @@ def test_daily_task_connector_with_m12_the_task_and_completion_are_created(clien
     # 取消勾選 ⇒ 收回
     client.put(f"/api/quotations/MQ-IP5-ON/stages/{sid}", headers=h, json={"done": False})
     assert _q("SELECT is_deleted FROM daily_tasks WHERE id=?", tasks[0]["id"])[0]["is_deleted"] == 1
+
+
+def test_with_m12_uncheck_and_delete_carry_no_notice(client, make_user):
+    """正對照（B-1）：M12 在 ⇒ 取消勾選與刪除階段都真的收回，回應不帶提示。"""
+    u, h = _login(client, make_user, "ip5_on2")
+    _case("MQ-IP5-ON2")
+    sid, _ = _tick(client, h, "MQ-IP5-ON2")
+    r = client.put(f"/api/quotations/MQ-IP5-ON2/stages/{sid}", headers=h, json={"done": False, "doneAt": ""})
+    assert r.status_code == 200 and "notice" not in r.json(), r.json()
+    sid2, _ = _tick(client, h, "MQ-IP5-ON2")
+    tid = _q("SELECT daily_task_id FROM case_stages WHERE id=?", sid2)[0]["daily_task_id"]
+    assert tid
+    assert client.delete(f"/api/quotations/MQ-IP5-ON2/stages/{sid2}", headers=h).json() == {"ok": True}
+    assert _q("SELECT is_deleted FROM daily_tasks WHERE id=?", tid)[0]["is_deleted"] == 1
