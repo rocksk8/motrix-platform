@@ -1281,9 +1281,8 @@ def _check_warranty_expiry() -> None:
 #     → 剩 21 天還沒換掉，代表自動續期已經失敗，那才是真警報。
 #       若對 LE 沿用 60 天門檻，每張憑證都會在一切正常的情況下誤報一次，
 #       而狼來了的告警等於沒有告警。
-_CERT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "certs", "cert.pem"
-)
+from core import paths as _paths
+_CERT_PATH = _paths.CERT_PEM
 _CERT_LONG_LIVED_DAYS   = 180              # 總效期超過此天數 → 視為手動簽發
 _CERT_THRESHOLDS_MANUAL = (0, 7, 21, 60)   # 必須遞增
 _CERT_THRESHOLDS_ACME   = (0, 1, 7, 21)

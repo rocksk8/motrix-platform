@@ -17,7 +17,8 @@ from typing import List
 
 from fastapi import HTTPException, UploadFile
 
-UPLOADS_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'uploads'))
+from core import paths as _paths
+UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 _ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.pdf'}
 _MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB／檔

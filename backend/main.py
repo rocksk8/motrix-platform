@@ -36,7 +36,8 @@ logger = logging.getLogger(__name__)
 # 載入失敗的模組只記 ERROR，不擋啟動。
 module_loader.load_all()
 
-FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
+from core import paths as _paths
+FRONTEND_DIR = _paths.FRONTEND_DIR
 
 app = FastAPI(title="MOTRIX ERP API", version="1.0.0")
 
@@ -535,6 +536,12 @@ async def _unhandled_handler(request: Request, exc: Exception):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
+# 🔴 主庫不存在 ⇒ 拒絕啟動，不要讓 sqlite 默默建一個空庫（core.paths.require_db；
+# 全新安裝設 MOTRIX_CREATE_NEW_DB=1 啟動一次）。只守**預設位置**：測試與工具
+# 明確改指 db.DB_PATH 時，那個位置由改指的人負責。
+import db as _db_for_guard
+if _db_for_guard.DB_PATH == _paths.DB_PATH:
+    _paths.require_db(_db_for_guard.DB_PATH)
 init_db()
 init_db(DEMO_DB_PATH)
 init_default_admin()

@@ -152,8 +152,8 @@ DEMO_ACCOUNT_ENABLED = False
 #: demo 帳號的臨時密碼寫到**自己的檔案**，不跟 jeff 共用
 #: `_CREDENTIALS_FILE`——那個檔是覆寫不是附加，兩支 init 在同一次啟動
 #: 都會跑，共用檔案的話後寫的會把先寫的蓋掉。
-_DEMO_CREDENTIALS_FILE = os.path.join(
-    os.path.dirname(__file__), "..", ".initial_demo_credentials.txt")
+from core import paths as _paths
+_DEMO_CREDENTIALS_FILE = _paths.INITIAL_DEMO_CREDENTIALS
 
 
 def demo_account_on():
@@ -358,7 +358,7 @@ def _version_to_updated_at(date_str: str, version: str, time_str: str = "") -> s
     return date_str + "T00:00:00"
 
 
-_MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+_MANIFEST_PATH = _paths.VERSION_MANIFEST
 
 
 def _manifest_entries() -> list:

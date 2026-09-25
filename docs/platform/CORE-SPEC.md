@@ -101,6 +101,9 @@ modules/<key>/
 
 - 開發 port 預設 **667**（避免與 V9 開發機 666 衝突）
 - 開發 DB 為測試資料，不上傳任何正式機
+- 資料位置唯一來源 `backend/core/paths.py`（錨點＝安裝根目錄，值＝V9 原位置）；產品碼不可自行用 `__file__` 算資料路徑
+- 主庫不存在 ⇒ 拒絕啟動（`core.paths.require_db`，只守預設位置）。全新安裝／新開發目錄：設 **`MOTRIX_CREATE_NEW_DB=1`** 啟動一次，建好後移除（旗標仍在時每次啟動記 WARNING）
+- 勞報單存檔目錄設定鍵 `payslip_archive_path`（預設 `backend/export_archive`），與 6 個 `*_pdf_base_path` 同規則
 
 ## 使用者裁示（2026-09-25）
 

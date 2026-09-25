@@ -55,10 +55,10 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
-_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from core import paths as _paths
 
 # 金鑰檔路徑。per-installation 的資料（不是程式碼），已在 .gitignore 第 11 行。
-LICENSE_PATH = os.path.join(_BACKEND_DIR, "license.key")
+LICENSE_PATH = _paths.LICENSE_PATH
 
 # 開發用公鑰。私鑰在 backend/tools/_license_private_key_dev.pem（.gitignore 第 13 行）。
 _PUBKEY_DEV = (

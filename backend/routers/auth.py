@@ -287,7 +287,8 @@ def ping():
     return {"ok": True, "time": datetime.now().isoformat()}
 
 
-_MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "..", "version_manifest.json")
+from core import paths as _paths
+_MANIFEST_PATH = _paths.VERSION_MANIFEST
 _VERSION_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})([a-z]*)$")
 
 
@@ -326,7 +327,7 @@ def system_version():
     return {"version": latest.get("version", ""), "date": latest.get("date", "")}
 
 
-_DEPLOYED_MARKER_PATH = os.path.join(os.path.dirname(__file__), "..", ".deployed_commit.json")
+_DEPLOYED_MARKER_PATH = _paths.DEPLOYED_COMMIT_FILE
 
 
 @router.get("/api/system/deployed-version")

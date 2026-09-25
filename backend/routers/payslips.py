@@ -18,7 +18,8 @@ from helpers.errors import trace_id
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# 匯出存檔目錄（backend/export_archive/）
+# 匯出存檔目錄（預設 backend/export_archive/；system_settings.payslip_archive_path 可覆寫，
+# 比照 pdf_gen 的 6 個 *_pdf_base_path——DATA-COMPAT §4 A-3）
 #
 # 2026-09-22（§12 BK19）：這裡原本在**模組層**就 `os.makedirs()`。
 # 🔑 那表示「有人 import 這支檔案」就會在磁碟上長出一個目錄 ——
@@ -28,7 +29,16 @@ logger = logging.getLogger(__name__)
 #    `os.makedirs(archive_dir, exist_ok=True)`，所以這一行純粹是多的。
 # 📌 判準是〈降級之後它還是會動〉的反面：這一行拿掉之後**行為完全不變**，
 #    少掉的只有「匯入即寫磁碟」這個副作用。
-_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "..", "export_archive")
+from core import paths as _paths
+_ARCHIVE_SETTING_KEY, _ARCHIVE_DIR = _paths.PDF_ARCHIVES["payslip"]
+
+
+def _archive_dir() -> str:
+    # ⚠️ 改了設定之後，舊的勞報單留在原目錄、下載會找不到——與其餘 6 種 PDF 相同，搬檔是另一個動作。
+    if is_demo_mode():
+        return DEMO_PAYSLIP_ARCHIVE_DIR
+    configured = (_get_setting(_ARCHIVE_SETTING_KEY) or "").strip()
+    return configured if configured else _ARCHIVE_DIR
 
 # 唯一合法格式，防止 slip_no 被用來做路徑穿越（2026-08-24 安全審查修正）：
 # _archive_path() 直接用 slip_no 拼檔案路徑，slip_no 若可被前端任意指定
@@ -40,7 +50,7 @@ def _archive_path(slip_no: str, idx: int) -> str:
     if not _SLIP_NO_RE.match(slip_no):
         raise ValueError(f"invalid slip_no: {slip_no!r}")
     # demo 帳號：存至隔離目錄（reset_demo_db() 每次登入清空），不進真實存檔
-    archive_dir = DEMO_PAYSLIP_ARCHIVE_DIR if is_demo_mode() else _ARCHIVE_DIR
+    archive_dir = _archive_dir()
     os.makedirs(archive_dir, exist_ok=True)
     return os.path.join(archive_dir, f"{slip_no}_{idx}.pdf")
 

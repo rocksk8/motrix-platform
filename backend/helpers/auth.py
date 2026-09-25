@@ -34,7 +34,8 @@ _LEGACY_WEAK_PASSWORDS = (
     "motrix123",
 )
 
-_CREDENTIALS_FILE = os.path.join(os.path.dirname(__file__), "..", ".initial_admin_credentials.txt")
+from core import paths as _paths
+_CREDENTIALS_FILE = _paths.INITIAL_ADMIN_CREDENTIALS
 MIN_PASSWORD_LEN = 8
 
 # Session tokens issued to the 'demo' showcase account are prefixed so

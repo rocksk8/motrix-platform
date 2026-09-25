@@ -16,7 +16,8 @@ from helpers import _require_user
 _PHOTO_TOKEN_TTL = 3600  # seconds
 _PHOTO_SECRET_CACHE: bytes | None = None
 
-UPLOADS_ROOT = os.path.realpath(os.path.join(os.path.dirname(__file__), '..', '..', 'uploads'))
+from core import paths as _paths
+UPLOADS_ROOT = _paths.UPLOADS_ROOT
 
 router = APIRouter()
 

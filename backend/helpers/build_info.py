@@ -40,8 +40,8 @@ import sys
 #: 打包時寫進出貨包的 SHA 檔。**出貨包裡沒有 `.git`** ⇒ 正式機只能靠它。
 #: ⚠️ 而它**不是** `.deployed_commit.json`：那一份是 `apply_update.ps1` 寫的
 #:    「磁碟上被套用成什麼」，這一份是「這份程式碼是從哪個 commit 打包出來的」。
-_BUILD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "..", ".build_commit")
+from core import paths as _paths
+_BUILD_FILE = _paths.BUILD_COMMIT_FILE
 
 #: `git` 不在 PATH 上是**正常情況不是例外**（正式機很可能就是）。
 _GIT_TIMEOUT = 5

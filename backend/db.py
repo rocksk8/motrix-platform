@@ -13,8 +13,11 @@ from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
-DB_PATH      = os.path.join(os.path.dirname(__file__), "motrix_erp.db")
-DEMO_DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp_demo.db")
+from core import paths as _paths
+
+# 位置一律取自 core.paths（DATA-COMPAT §4 A-1）；名字保留，測試照舊 monkeypatch 這兩個。
+DB_PATH      = _paths.DB_PATH
+DEMO_DB_PATH = _paths.DEMO_DB_PATH
 
 # Anything that writes files to disk (not just SQL rows) must check
 # is_demo_mode() and redirect into one of these instead of the real shared
@@ -22,19 +25,15 @@ DEMO_DB_PATH = os.path.join(os.path.dirname(__file__), "motrix_erp_demo.db")
 # demo-created files would leak permanently into real storage, and could even
 # collide with real filenames (project photos keyed by project id, PDFs keyed
 # by quote_no/slip_no — both restart from 1 in the freshly-reset demo DB).
-DEMO_PROJECT_PHOTOS_DIR  = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_projects")
-DEMO_UPLOADS_DIR         = os.path.join(os.path.dirname(__file__), "..", "uploads", "_demo_uploads")
-DEMO_PDF_ARCHIVE_DIR     = os.path.join(os.path.dirname(__file__), "_demo_pdf_archive")
-DEMO_PAYSLIP_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_payslip_archive")
-DEMO_SHIPPING_PDF_ARCHIVE_DIR = os.path.join(os.path.dirname(__file__), "_demo_shipping_pdf_archive")
-DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
-    os.path.dirname(__file__), "_demo_contractor_voucher_pdf_archive")
-DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = os.path.join(
-    os.path.dirname(__file__), "_demo_invoice_voucher_pdf_archive")
-DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = os.path.join(
-    os.path.dirname(__file__), "_demo_payment_request_pdf_archive")
-DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = os.path.join(
-    os.path.dirname(__file__), "_demo_case_closing_pdf_archive")
+DEMO_PROJECT_PHOTOS_DIR  = _paths.DEMO_PROJECT_PHOTOS_DIR
+DEMO_UPLOADS_DIR         = _paths.DEMO_UPLOADS_DIR
+DEMO_PDF_ARCHIVE_DIR     = _paths.DEMO_PDF_ARCHIVE_DIR
+DEMO_PAYSLIP_ARCHIVE_DIR = _paths.DEMO_PAYSLIP_ARCHIVE_DIR
+DEMO_SHIPPING_PDF_ARCHIVE_DIR = _paths.DEMO_SHIPPING_PDF_ARCHIVE_DIR
+DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR = _paths.DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR
+DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR = _paths.DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR
+DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR = _paths.DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR
+DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = _paths.DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
 
 # Increment this whenever a new _mNNN function is added to _MIGRATIONS.
 # ⚠️ 新增 migration 是「三個動作」，少任何一個都不會報錯：
@@ -4315,8 +4314,8 @@ def _m094_load_account_items(conn):
     import json
     import os
 
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "data", "account_items_112.json")
+    from core import paths as _p
+    path = os.path.join(_p.STATIC_DATA_DIR, "account_items_112.json")
     if not os.path.exists(path):
         # ⚠️ 缺檔**不要**靜默跳過：那會讓一個沒有科目表的資料庫看起來一切正常，
         # 而傳票的分錄指不到任何東西 —— 那時才發現已經晚了。

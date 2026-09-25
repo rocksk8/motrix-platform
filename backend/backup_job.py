@@ -15,7 +15,9 @@ import sys
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BACKEND_DIR)
 
-_LOG_DIR = os.path.join(BACKEND_DIR, "logs")
+from core import paths as _paths  # noqa: E402（上一行 sys.path 之後才 import 得到）
+
+_LOG_DIR = _paths.LOGS_DIR
 os.makedirs(_LOG_DIR, exist_ok=True)
 
 logging.basicConfig(

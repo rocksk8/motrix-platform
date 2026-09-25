@@ -13,17 +13,13 @@ from db import (
 )
 from helpers import _get_edge_path, _get_setting, payment_item_amounts, notify_case_closing_report, run_edge_pdf
 
+from core import paths as _paths
+
 logger = logging.getLogger(__name__)
 
-_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "報價單PDF",
-)
+_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["quotation"][1]
 
-_SHIPPING_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "出貨單PDF",
-)
+_SHIPPING_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["shipping"][1]
 
 
 def _get_pdf_base() -> str:
@@ -42,15 +38,9 @@ def _get_shipping_pdf_base() -> str:
     return configured if configured else _SHIPPING_PDF_BASE_DEFAULT
 
 
-_CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "承攬商匯款申請PDF",
-)
+_CONTRACTOR_VOUCHER_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["contractor_voucher"][1]
 
-_INVOICE_VOUCHER_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "開票申請憑據PDF",
-)
+_INVOICE_VOUCHER_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["invoice_voucher"][1]
 
 
 def _get_contractor_voucher_pdf_base() -> str:
@@ -67,10 +57,7 @@ def _get_invoice_voucher_pdf_base() -> str:
     return configured if configured else _INVOICE_VOUCHER_PDF_BASE_DEFAULT
 
 
-_PAYMENT_REQUEST_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "請款單PDF",
-)
+_PAYMENT_REQUEST_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["payment_request"][1]
 
 
 def _get_payment_request_pdf_base() -> str:
@@ -80,10 +67,7 @@ def _get_payment_request_pdf_base() -> str:
     return configured if configured else _PAYMENT_REQUEST_PDF_BASE_DEFAULT
 
 
-_CASE_CLOSING_PDF_BASE_DEFAULT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "結案報表PDF",
-)
+_CASE_CLOSING_PDF_BASE_DEFAULT = _paths.PDF_ARCHIVES["case_closing"][1]
 
 
 def _get_case_closing_pdf_base() -> str:

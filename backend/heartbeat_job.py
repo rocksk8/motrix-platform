@@ -10,9 +10,10 @@ import logging
 import os
 import urllib.request
 
-_BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
-_CONFIG_PATH = os.path.join(_BACKEND_DIR, "heartbeat_config.json")
-_LOG_PATH    = os.path.join(_BACKEND_DIR, "logs", "heartbeat_job.log")
+from core import paths as _paths  # 只取路徑常數，不載入 app
+
+_CONFIG_PATH = _paths.HEARTBEAT_CONFIG
+_LOG_PATH    = os.path.join(_paths.LOGS_DIR, "heartbeat_job.log")
 _LOCAL_PING  = "http://127.0.0.1:666/api/ping"
 _TIMEOUT     = 10
 

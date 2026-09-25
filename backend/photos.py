@@ -7,7 +7,9 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-_PHOTO_UPLOAD_BASE = os.path.join(os.path.dirname(__file__), "..", "uploads", "projects")
+from core import paths as _paths
+
+_PHOTO_UPLOAD_BASE = _paths.PROJECT_PHOTOS_DIR
 
 
 def _photo_root():

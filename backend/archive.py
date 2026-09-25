@@ -108,11 +108,13 @@ def _pdf_mirror_dir(subdir: str) -> str:
 
 
 # Local always-on paths (independent of cloud drive mount)
-_BACKEND_DIR      = os.path.dirname(os.path.abspath(__file__))
-_PROJECT_ROOT     = os.path.dirname(_BACKEND_DIR)
-_LOCAL_DB_BACKUP  = os.path.join(_BACKEND_DIR, "db_backups")
-_ALERT_DIR        = os.path.join(_PROJECT_ROOT, "backup_alerts")
-_UPLOADS_DIR      = os.path.join(_PROJECT_ROOT, "uploads")
+# 位置一律取自 core.paths（DATA-COMPAT §2：本檔搬進 core/ 時這幾個會靜默偏移）
+from core import paths as _paths
+_BACKEND_DIR      = _paths.BACKEND_DIR
+_PROJECT_ROOT     = _paths.INSTALL_ROOT
+_LOCAL_DB_BACKUP  = _paths.LOCAL_DB_BACKUP_DIR
+_ALERT_DIR        = _paths.BACKUP_ALERT_DIR
+_UPLOADS_DIR      = _paths.UPLOADS_ROOT
 
 
 def _active_backend() -> str:
@@ -154,7 +156,7 @@ def _archive_reachable() -> bool:
 # 是雲端多了垃圾（發現了可以刪）；正式機誤停的代價是備份靜靜消失好幾週——2026-08-24
 # 真的發生過（磁碟機代號從 G: 變成 H: 之後三週沒人發現）。所以要停的那台明確標記，
 # 判斷不出來的一律照傳。
-_NO_CLOUD_MARKER_PATH = os.path.join(_PROJECT_ROOT, ".no_cloud_archive")
+_NO_CLOUD_MARKER_PATH = _paths.NO_CLOUD_MARKER
 _ENV_CLOUD_FLAG = "MOTRIX_CLOUD_ARCHIVE"
 _cloud_policy_state = {"enabled": None}     # 只為了「狀態變了才寫一次 log」
 
@@ -1166,7 +1168,7 @@ def _prune_audit_log(keep_days: int = 730) -> None:
         logger.exception("_prune_audit_log failed")
 
 
-_SERVER_LOG_PATH = os.path.join(_BACKEND_DIR, "logs", "server.log")
+_SERVER_LOG_PATH = _paths.SERVER_LOG
 _SERVER_LOG_MAX_BYTES = 50 * 1024 * 1024  # 50 MB
 _SERVER_LOG_KEEP_GENERATIONS = 5
 
