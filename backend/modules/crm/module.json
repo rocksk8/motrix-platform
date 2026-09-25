@@ -1,0 +1,19 @@
+{
+  "key": "crm",
+  "name": "業務開發",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "crm",
+  "permissions": ["dev_crm"],
+  "tables": ["dev_cases", "dev_logs"],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6，db.py v27 起）；本模組尚無自有 migration",
+  "data": {
+    "tables": [
+      {"name": "dev_cases", "class": "T1"},
+      {"name": "dev_logs", "class": "T1"}
+    ],
+    "files": []
+  },
+  "provides": {"api_prefixes": ["/api/dev-cases", "/api/dev-crm", "/api/dev-logs"]},
+  "pages": [{"path": "dev-crm.html"}]
+}
