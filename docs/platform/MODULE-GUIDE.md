@@ -76,7 +76,8 @@
 }
 ```
 
-守門：`module.json` 的 data 宣告，必須跟邊界測試與備份匯出清單一致。⚠ 未守門（已排入路線圖）
+守門：`test_module_data_classes.py`（G3）——T1／T2 必須在每日 JSON 備份、T3 必須在排除清單且不在備份、F2 檔案必須有 archive 的個資分流、每一項都要有分類。
+⚠ 未守門：T2 的祕密欄位是否真的從匯出排除（G3b）。
 
 ### 3.5 開發機標記（永不進部署包）
 
@@ -137,6 +138,7 @@ modules/<key>/
 
 - 系統的「版本紀錄」頁從各模組的 CHANGELOG 彙整產生，不再手動維護一份集中的清單。⚠ 未實作（V9 的 `version_manifest.json` 在過渡期仍然同步，已排入路線圖）
 - 查詢某個模組的歷史，只需要讀那個模組的 CHANGELOG。
+- 守門：`test_module_changelog_follows_code.py`（G4）——模組程式（扣掉 tests／README／SPEC／CHANGELOG／module.json）最後一次改動之後，CHANGELOG 最上面必須有新寫進去的版號條目；工作樹有未提交的程式改動而 CHANGELOG 沒改也紅。版號升的幅度是否合理不判斷。
 
 ## 7. 測試
 
