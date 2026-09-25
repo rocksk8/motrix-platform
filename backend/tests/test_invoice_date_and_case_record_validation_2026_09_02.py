@@ -136,7 +136,7 @@ def test_case_record_save_accepts_valid_invoice_no_and_date(client, make_user):
 # ── ②稅務匯出期別歸屬改用 invoiceDate ────────────────────────────────────────
 
 def test_tax_export_period_uses_invoice_date_not_received_date(client, make_user):
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     import db
     conn = db.get_db()
     try:
@@ -173,7 +173,7 @@ def test_tax_export_period_uses_invoice_date_not_received_date(client, make_user
 def test_tax_export_falls_back_to_received_date_when_invoice_date_missing(client, make_user):
     """舊資料沒有 invoiceDate 欄位時，期別歸屬退回 receivedAt，不會讓歷史資料
     從任何年月篩選結果裡憑空消失。"""
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     import db
     conn = db.get_db()
     try:
@@ -203,7 +203,7 @@ def test_accounting_export_date_field_still_uses_received_date(client, make_user
     """T100 現金基礎傳票（accounting_export.py）讀的是 "date" 欄位，必須維持
     收款日期，不能被這次的 invoiceDate 期別修正連帶改掉，否則傳票日期會跟
     銀行實際入帳日對不上。"""
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     import db
     conn = db.get_db()
     try:

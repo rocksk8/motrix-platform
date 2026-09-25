@@ -83,7 +83,7 @@ def test_tax_export_shows_original_invoiced_tax_for_exempt_item(client, make_use
     0，等於讓已開立、已產生銷項稅額的發票在申報文件上憑空消失（見
     reports.py::_collect_tax_invoices() docstring）。taxExempt 對「客戶還欠
     多少」（AR帳齡/收款率）的折算邏輯不受影響，只是不再連動改寫這裡。"""
-    from routers.reports import _collect_tax_invoices
+    from helpers.receivables import collect_tax_invoices as _collect_tax_invoices
     import db
     conn = db.get_db()
     try:
