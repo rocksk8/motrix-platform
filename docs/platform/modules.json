@@ -67,6 +67,7 @@
    "plat:registry",
    "plat:source_tree",
    "plat:txn",
+   "plat:upgrade",
    "router:approval_delegates",
    "router:auth",
    "router:customers",
