@@ -143,6 +143,8 @@
 
 ## 階段 C：前端跟著模組走（第二階段的前置）
 
+> 設計草案：[STAGE-C-DESIGN.md](STAGE-C-DESIGN.md)（B，2026-09-26；URL 不變、實體搬家、C1～C5 順序、待裁示 D1～D4）
+
 - 模組頁面搬進 `modules/<key>/pages/`，由載入器掛載靜態路徑
 - sidebar 選單改由登錄表產生（模組沒裝就不出現）
 - 端點登錄表 `GET /api/platform/endpoints`（CORE-SPEC §7）
