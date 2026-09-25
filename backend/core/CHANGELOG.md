@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.99 — 2026-09-26（A，稽核 D O-4，wip/a-m10 68f16342；第六班列車取號）
+> 介面不變。原 commit 改寫的是 1.17（今 1.26）段落那一行；列車上改為新增本段、不改寫已合回的歷史段落。
+- L0（行為）：`core.source_tree.module_installed(path)` 的「在」改為 `modules/<key>/module.json` 存在（與載入器、`module_dirs()` 同一個判準）；只剩 `__pycache__` 的空資料夾不算在；`modules/`（沒有 key）一律 True
+
 ## 1.33 — 2026-09-26（B，M08 搬遷；暫用號，合回時 core_bump 依 origin 取號）〔core_bump：暫用 1.30 → 1.33〕
 > M08 搬遷 ③（主持裁示 a）：應收收入與銷項發票的資料收集自 routers/reports.py 下沉 L1。`core.registry.CORE_VERSION` 1.29 → 1.30（只有新增）。
 - L1（新增）：`helpers.receivables`——`collect_income_items`／`collect_tax_invoices`／`round_half_up_invoice`（函式本體與原本逐字相同）；M05 cashier、M06 accounting_export 改從這裡取，不再 import M08（ROADMAP A8b 中繼，M05 搬遷時收回）

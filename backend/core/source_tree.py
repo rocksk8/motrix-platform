@@ -128,7 +128,10 @@ def page_files():
 
 
 def module_installed(path) -> bool:
-    """`modules/<key>/…`（可帶 `backend/` 前綴、正反斜線皆可）⇒ 那個模組資料夾在不在；其他路徑一律 True。
+    """`modules/<key>/…`（可帶 `backend/` 前綴、正反斜線皆可）⇒ 那個模組在不在；其他路徑一律 True。
+
+    「在」＝`modules/<key>/module.json` 存在（與載入器、module_dirs() 同一個判準）：只剩 `__pycache__` 的空資料夾
+    不算在（稽核 D O-4，2026-09-26）。
 
     給「清單列著模組的檔案／端點」的守門用：模組被拿掉（產品選配、PLAYBOOK §B 步驟 11 反向控制）時，
     它的條目本來就不在，不算幽靈；模組在的時候照常比對。"""
@@ -136,6 +139,6 @@ def module_installed(path) -> bool:
     if "modules" not in parts:
         return True
     i = parts.index("modules")
-    if i + 1 >= len(parts):
+    if i + 1 >= len(parts) or not parts[i + 1]:
         return True
-    return (BACKEND / "modules" / parts[i + 1]).is_dir()
+    return (BACKEND / "modules" / parts[i + 1] / "module.json").is_file()
