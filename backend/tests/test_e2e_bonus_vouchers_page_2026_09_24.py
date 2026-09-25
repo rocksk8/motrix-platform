@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_bonus_case_page_2026_09_24 import (  # noqa: F401
+from tests._bonus_insure import insure_all  # noqa: E402
     _login, _users, _award, NO, DATA_JS)
 
 
@@ -50,6 +51,7 @@ def _bank_config():
 @pytest.mark.e2e
 def test_cashier_picks_the_bank_and_sees_the_voucher(live_server, make_user, e2e_browser):
     u = _users(make_user)
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _bank_config()
     browser = e2e_browser
     page = browser.new_context().new_page()

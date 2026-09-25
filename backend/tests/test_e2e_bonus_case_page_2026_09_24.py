@@ -16,6 +16,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
+from tests._bonus_insure import insure_all  # noqa: E402
 
 NO = "MQ-E2EBC-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -115,6 +116,7 @@ def test_superadmin_builds_draft_and_submits_in_page(live_server, make_user, e2e
 @pytest.mark.e2e
 def test_member_sees_own_line_and_cashier_marks_paid(live_server, make_user, e2e_browser):
     u = _users(make_user)
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     browser = e2e_browser
     ctx = browser.new_context()
     page = ctx.new_page()

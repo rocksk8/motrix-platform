@@ -6,9 +6,10 @@
 補充保費   全年累計獎金超過「投保金額 × 倍數」的部分 × 費率（單次上限 max_single_payment）
            本次計費基數 = max(0, 累計前 + 本次 − max(門檻, 累計前))；四捨五入到元
 ```
-- **門檻與費率不寫死**：一律由呼叫端傳入 `params`（R1 法規參數版本；`params_from_legal_version()` 轉換）。
-  法規參數服務由 L1 以提供者 `legal.rules_for_date` 登記（INTEGRATION-POINTS IP-7（R1））；還沒登記 ⇒
-  `legal_params_for()` 回 `(None, 原因)`，呼叫端照舊不計算、而且明說（不送 0 當成算過）。
+- **門檻與費率不寫死**：純函式一律由呼叫端傳入 `params`；撥付時讀 L1 法規參數服務
+  `helpers.legal_params`（R1，INTEGRATION-POINTS IP-7）依撥付日選版，`params_from_legal_version()` 轉換。
+  沒有適用版本或欄位不齊 ⇒ `legal_params_for()` 回 `(None, 原因)`，呼叫端**拒絕撥付**（不以 0 或預設值代替）。
+- 單據（`mark_paid` 那一筆編寫紀錄）存當次使用的 `version` 與參數快照。
 - **同一人在同一張單出現在多個類別 ⇒ 先合併再算**（起扣標準是「每次給付」）。
 - **投保金額沒有設定 ⇒ 不猜**：`missing` 列出來，呼叫端拒絕撥付（不以 0 計算）。
 - 投保金額與「MOTRIX 以外發放的全年累計」存在 `system_settings`（`PROFILE_KEY`）。
@@ -17,7 +18,7 @@
 import json
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR
 
-from core import registry
+from helpers import legal_params as lp
 
 #: 設定鍵：{username: {"insuredAmount": int, "ytdExternal": {"2026": int}}}
 PROFILE_KEY = "payroll_insurance_profiles"
@@ -26,8 +27,6 @@ PROFILE_KEY = "payroll_insurance_profiles"
 PARAM_KEYS = ("withholding_rate", "withholding_threshold", "nhi_rate",
               "nhi_bonus_multiple", "nhi_max_single_payment")
 
-#: 法規參數還沒接上時對使用者說的話（不可以默默略過）
-LEGAL_MISSING = "未計算扣繳與補充保費：法規參數服務尚未接上（R1）"
 
 
 class DeductionParamsError(ValueError):
@@ -141,17 +140,14 @@ def params_from_legal_version(v):
 
 
 def legal_params_for(on_date):
-    """撥付日適用的參數。回 `(params | None, 原因)`。
-
-    經提供者 `legal.rules_for_date`（IP-7（R1）：`fn(on_date) -> R1 版本 dict`；沒有適用版本 ⇒ ValueError）。
-    未登記 ⇒ `(None, LEGAL_MISSING)`；有登記而算不出來 ⇒ `(None, 具體原因)`。"""
-    fn = registry.single_provider("legal.rules_for_date")
-    if fn is None:
-        return None, LEGAL_MISSING
+    """撥付日適用的參數（IP-7：`lp.rules_for_date(lp.load_versions(), 日期)`）。回 `(params, rules, "")`；
+    沒有適用版本（`lp.NoApplicableRules`）或欄位不齊（`DeductionParamsError`）⇒ `(None, None, 具體原因)`。
+    `rules` 是那一版的完整內容（IP-7「單據凍結」：存 version 與整份 rules 快照）。"""
     try:
-        return params_from_legal_version(fn(on_date)), ""
-    except ValueError as e:          # NoApplicableRules／DeductionParamsError 皆是 ValueError
-        return None, "無法計算扣繳與補充保費：%s" % e
+        rules = lp.rules_for_date(lp.load_versions(), on_date)
+        return params_from_legal_version(rules), rules, ""
+    except (lp.NoApplicableRules, DeductionParamsError) as e:
+        return None, None, "無法計算扣繳與補充保費：%s" % e
 
 
 # ── 投保金額與全年累計（system_settings）────────────────────────────────────
@@ -204,10 +200,12 @@ def ytd_before(conn, profiles, year, award_id):
 
 def deductions_for_award(conn, award, lines, on_date):
     """撥付日 `on_date` 的試算。回 `(result | None, notice)`；參數接不上 ⇒ `(None, 原因)`。"""
-    params, why = legal_params_for(on_date)
+    params, rules, why = legal_params_for(on_date)
     if params is None:
         return None, why
     profiles = load_profiles(conn)
-    return compute_bonus_deductions(
+    out = compute_bonus_deductions(
         lines, params=params, insured=insured_amounts(profiles),
-        ytd_before=ytd_before(conn, profiles, on_date[:4], award["id"])), ""
+        ytd_before=ytd_before(conn, profiles, on_date[:4], award["id"]))
+    out["rules"] = rules               # 整份法規參數快照（IP-7 單據凍結）
+    return out, ""

@@ -3,7 +3,7 @@
 
 ```
 進入待發放   轉帳傳票草稿：借 費用（6111）／貸 應付（2191）
-標記已發放   支出傳票草稿：借 應付／貸 銀行（實發，出納選，預設 1113）＋貸 代扣稅款、代收補充保費（U4 自動計算）
+標記已發放   支出傳票草稿：借 應付／貸 銀行（實發，出納選，預設 1113）＋貸 代扣稅款、代收補充保費（U4 自動計算，依 IP-7 法規參數）
 退回         轉帳草稿還是「草稿」⇒ 作廢；已送審 ⇒ 不動，回一句提示
 ```
 - 只產生**草稿**：之後走傳票自己的簽核（JV30），不自動過帳。
@@ -113,22 +113,16 @@ def create_accrual(conn, award, who, now):
     ], text + "（應付）", who, now)
 
 
-def create_payment(conn, award, who, now, bank_code, deductions=None):
+def create_payment(conn, award, who, now, bank_code, deductions):
     """標記已發放：借 應付（總額）／貸 銀行（實發）＋貸 代扣稅款＋貸 代收補充保費。
 
-    `deductions`＝`bonus_deductions.compute_bonus_deductions()` 的 totals（U4）。
-    None ⇒ 法規參數還沒接上：照舊留一行金額 0 的代扣稅款由出納填（呼叫端另有 notice 明說沒算）。"""
+    `deductions`＝`bonus_deductions.compute_bonus_deductions()` 的 totals（U4，必填：算不出來時
+    呼叫端已拒絕撥付，不會走到這裡）。"""
     total = _paid_total(conn, award["id"])
     if total <= 0:
         return None, "發放合計為 0，未產生傳票草稿。"
     acc = configured_accounts(conn)
     text = "獎金分潤 %s" % award["quote_no"]
-    if deductions is None:
-        return _make(conn, award, "payment", [
-            {"account_code": acc["payable"], "summary": text + " 發放", "debit": total, "credit": 0},
-            {"account_code": bank_code or acc["bank"], "summary": text + " 發放", "debit": 0, "credit": total},
-            {"account_code": acc["withholding"], "summary": "代扣稅款（如適用）", "debit": 0, "credit": 0},
-        ], text + "（發放）", who, now)
     wh, nhi = int(deductions["withholding"]), int(deductions["nhiPremium"])
     lines = [
         {"account_code": acc["payable"], "summary": text + " 發放", "debit": total, "credit": 0},

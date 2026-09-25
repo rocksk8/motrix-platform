@@ -1,14 +1,14 @@
 """獎金分潤三項（CORE-SPEC「使用者裁示」獎金分潤：通知／送交出納／財務報表）＋ U4 扣繳與補充保費。
 
 INTEGRATION-POINTS：IP-8 `bonus.payouts`（M07 → M05 出納）、IP-9 `expense.entries`（M07 → M08 報表）、
-IP-7（R1） `legal.rules_for_date`（L1 法規參數 → M07，R1 合回前以測試提供者代替）。
+U4 使用 IP-7 L1 `helpers.legal_params`（撥付日選版；題目以 monkeypatch `lp.load_versions` 餵合成的版本）。
 
 ① 通知：送審 ⇒ 輪到的簽核人＋代理人；換人 ⇒ 下一位；核准進待發放 ⇒ 出納；名單成員不因在名單上收到
 ② 出納頁：待發放清單、標記已發放＝獎金那一支 API、執行紀錄與 Excel；財務看不到獎金
 ③ 報表：以發放日列支出（其他支出／獎金分潤）；案件頁相關傳票看得到獎金傳票
 ④ U4：純函式邊界；撥付時自動計算並寫進傳票；沒有投保金額 ⇒ 拒絕、狀態不變
 ⑤ 反向控制：拿掉 M07 的提供者（出納、報表照常，只少獎金並明說）；拿掉會計模組（照算、照發、明說沒傳票）；
-   拿掉法規參數（照舊不計算、明說，不當成算過）
+   撥付日沒有適用的法規參數版本、版本缺倍數欄位（拒絕撥付並說明，不以 0 或預設值代替）
 """
 import io
 
@@ -16,11 +16,13 @@ import pytest
 
 from core import registry
 from helpers import bonus_deductions as bd
+from helpers import legal_params as lp
+from tests._bonus_insure import insure_all
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow, _delegate)
 
-YEAR_PARAMS_VERSION = {   # R1 的一版的形狀（helpers.legal_params）＋本項需要的倍數欄位
-    "version": "2026", "effectiveFrom": "2026-01-01",
+YEAR_PARAMS_VERSION = {   # R1 的一版的形狀（helpers.legal_params，IP-7）——合成，不讀產品的預設值
+    "version": "2026", "effectiveFrom": "2000-01-01",
     "resident": {"50": {"tax_rate": 0.05, "tax_threshold": 90501}},
     "nhi": {"rate": 0.0211, "max_single_payment": 10000000, "bonus_insured_multiple": 4},
 }
@@ -40,8 +42,14 @@ def _q(sql, args=()):
         conn.close()
 
 
+@pytest.fixture(autouse=True)
+def _legal(monkeypatch):
+    """每一題都用合成的版本（IP-7：lp.load_versions() → rules_for_date）；要測別的情境時再覆寫。"""
+    monkeypatch.setattr(lp, "load_versions", lambda: [YEAR_PARAMS_VERSION])
+
+
 def _with_legal(monkeypatch, version=YEAR_PARAMS_VERSION):
-    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("legal.rules_for_date", "legal"), lambda on: version)
+    monkeypatch.setattr(lp, "load_versions", lambda: [version])
 
 
 def _drop(monkeypatch, *caps):
@@ -140,6 +148,7 @@ def test_mail_body_has_no_amount(monkeypatch):
 # ── ② 出納頁（IP-8）─────────────────────────────────────────────────────────
 
 def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, make_user):
+    insure_all()
     from tests.test_bonus_case_api_2026_09_24 import _login
     _to_payout(client, people, "MQ-BP-C1")
     q = client.get("/api/cashier/bonus-queue", headers=_auth(people["bc_cash"])).json()
@@ -155,8 +164,7 @@ def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, 
                    headers=_auth(people["bc_cash"])).json()
     b = next(x for x in h["bonusPaid"] if x["quoteNo"] == "MQ-BP-C1")
     assert b["total"] == row["total"] and h["bonusPaidTotal"] >= row["total"]
-    # 法規參數沒接上時發的 ⇒ None（未計算），不是 0
-    assert b["withholding"] is None and b["nhiPremium"] is None
+    assert b["withholding"] is not None and b["nhiPremium"] is not None and b["net"] is not None
     x = client.get("/api/cashier/export?start=%s&end=%s" % (today, today), headers=_auth(people["bc_cash"]))
     import openpyxl
     ws = openpyxl.load_workbook(io.BytesIO(x.content))["獎金發放明細"]
@@ -184,6 +192,7 @@ def test_cashier_page_binds_bonus_mark_paid():
 
 
 def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people, monkeypatch):
+    insure_all()
     _to_payout(client, people, "MQ-BP-C2")
     _drop(monkeypatch, "bonus.payouts")
     q = client.get("/api/cashier/bonus-queue", headers=_auth(people["bc_cash"]))
@@ -205,6 +214,7 @@ def _year_other(client, tok, year):
 
 
 def test_report_counts_bonus_on_paid_date(client, people):
+    insure_all()
     _to_payout(client, people, "MQ-BP-R1")
     total = _q("SELECT SUM(l.amount) AS s FROM bonus_case_award_lines l JOIN bonus_case_awards a"
                " ON a.id=l.award_id WHERE a.quote_no='MQ-BP-R1'")[0]["s"]
@@ -221,6 +231,7 @@ def test_report_counts_bonus_on_paid_date(client, people):
 
 
 def test_reverse_without_payroll_report_still_works(client, people, monkeypatch):
+    insure_all()
     _to_payout(client, people, "MQ-BP-R2")
     client.post("/api/bonus/cases/MQ-BP-R2/mark-paid", headers=_auth(people["bc_cash"]), json={})
     paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-R2'")[0]["paid_at"][:4]
@@ -231,6 +242,7 @@ def test_reverse_without_payroll_report_still_works(client, people, monkeypatch)
 
 
 def test_case_page_related_vouchers_show_bonus_vouchers(client, people):
+    insure_all()
     _to_payout(client, people, "MQ-BP-V1")
     client.post("/api/bonus/cases/MQ-BP-V1/mark-paid", headers=_auth(people["bc_cash"]), json={})
     ids = {r["accrual_voucher_id"] for r in _q("SELECT * FROM bonus_case_awards WHERE quote_no='MQ-BP-V1'")} | \
@@ -328,6 +340,7 @@ def test_mark_paid_computes_and_books_deductions(client, people, monkeypatch):
     assert d["deductions"]["totals"] == tot
     assert d["deductions"]["version"] == "2026" and d["deductions"]["params"] == {
         k: PARAMS[k] for k in bd.PARAM_KEYS}                      # 版本＋參數快照存在單據上
+    assert d["deductions"]["rules"] == YEAR_PARAMS_VERSION         # 整份法規參數快照（IP-7 單據凍結）
     ins = client.get("/api/bonus/insurance", headers=_auth(people["bc_sa"])).json()
     assert next(i for i in ins["items"] if i["username"] == "bc_s1")["ytdMotrix"] == 100000
 
@@ -374,15 +387,33 @@ def test_bonus_page_binds_insurance_and_deductions():
 
 # ── ⑤ 反向控制：法規參數不在、會計模組不在 ───────────────────────────────────
 
-def test_reverse_without_legal_params_pays_but_says_not_computed(client, people):
-    assert registry.single_provider("legal.rules_for_date") is None       # R1 合回前的現況
+def test_no_applicable_version_refuses_payout(client, people, monkeypatch):
+    """撥付日沒有適用的法規參數版本 ⇒ 拒絕撥付並說明，狀態不變、沒有支出傳票（不以 0 或預設值代替）。"""
+    insure_all()
     _to_payout(client, people, "MQ-BP-L1")
+    _with_legal(monkeypatch, dict(YEAR_PARAMS_VERSION, effectiveFrom="2099-01-01"))
     d = client.get("/api/bonus/cases/MQ-BP-L1", headers=_auth(people["bc_cash"])).json()
-    assert d["deductions"] is None and d["deductionNotice"] == bd.LEGAL_MISSING
+    assert d["deductions"] is None and "無法計算扣繳與補充保費" in d["deductionNotice"]
     r = client.post("/api/bonus/cases/MQ-BP-L1/mark-paid", headers=_auth(people["bc_cash"]), json={})
-    assert r.status_code == 200 and bd.LEGAL_MISSING in r.json()["notice"]
-    wh = [l for l in _payment_lines("MQ-BP-L1") if l["summary"] == "代扣稅款（如適用）"]
-    assert wh and wh[0]["credit"] == 0          # 照舊留給出納，並且上面已明說「未計算」
+    assert r.status_code == 409 and "無法計算扣繳與補充保費" in r.json()["detail"], r.text
+    a = _q("SELECT status, payment_voucher_id FROM bonus_case_awards WHERE quote_no='MQ-BP-L1'")[0]
+    assert a == {"status": "待發放", "payment_voucher_id": 0}
+
+
+def test_version_without_multiple_refuses_payout(client, people, monkeypatch):
+    insure_all()
+    _to_payout(client, people, "MQ-BP-L2")
+    v = dict(YEAR_PARAMS_VERSION, nhi={"rate": 0.0211, "max_single_payment": 10000000})
+    _with_legal(monkeypatch, v)
+    r = client.post("/api/bonus/cases/MQ-BP-L2/mark-paid", headers=_auth(people["bc_cash"]), json={})
+    assert r.status_code == 409 and "nhi_bonus_multiple" in r.json()["detail"], r.text
+
+
+def test_real_legal_params_default_version_is_usable(client, monkeypatch):
+    """正對照（不 monkeypatch）：產品內建的版本接得上本項——有倍數欄位、轉得成 params。"""
+    monkeypatch.undo()
+    p, rules, why = bd.legal_params_for(lp.today().isoformat())
+    assert why == "" and p["nhi_bonus_multiple"] >= 1 and rules["version"], (p, why)
 
 
 def test_reverse_without_accounting_still_computes_and_pays(client, people, monkeypatch):

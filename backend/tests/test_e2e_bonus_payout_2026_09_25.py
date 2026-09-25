@@ -12,6 +12,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._bonus_insure import insure_all  # noqa: E402
 
 NO = "MQ-E2EBP-001"
 CASHIER_JS = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -67,6 +68,7 @@ def _users(make_user):
 def test_cashier_marks_bonus_paid_from_cashier_page(client, live_server, make_user, e2e_browser):
     u = _users(make_user)
     _seed_payout(client, u)
+    insure_all()
     page = e2e_browser.new_page()
     inject_login(page, live_server, *u["bp_cash"])
     page.goto(f"{live_server}/pages/cashier.html")
@@ -75,12 +77,16 @@ def test_cashier_marks_bonus_paid_from_cashier_page(client, live_server, make_us
     tab.click()
     page.locator(f'[data-testid="cashier-bonus-pay-{NO}"]').click()
     page.locator('[data-testid="cashier-bonus-modal"] table tbody tr').first.wait_for(timeout=15000)
-    # 法規參數尚未接上（R1）⇒ 明說未計算
-    assert page.locator('[data-testid="cashier-bonus-deduction-notice"]').is_visible()
+    # 扣繳與補充保費已依撥付日的法規參數試算：顯示版本與參數；沒有拒絕訊息
+    page.locator('[data-testid="cashier-bonus-ded-params"]').wait_for(state="visible", timeout=15000)
+    assert "法規參數" in page.inner_text('[data-testid="cashier-bonus-ded-params"]')
+    assert not page.locator('[data-testid="cashier-bonus-deduction-notice"]').is_visible()
     page.locator('[data-testid="cashier-bonus-confirm"]').click()
     page.wait_for_function(f"() => !{CASHIER_JS}.bonusPay.show && !{CASHIER_JS}.bonusPay.saving", timeout=15000)
     a = _q("SELECT status, paid_by FROM bonus_case_awards WHERE quote_no=?", (NO,))[0]
     assert a == {"status": "已發放", "paid_by": "bp_cash"}
+    snap = _q("SELECT changes_json FROM bonus_case_award_edit_log WHERE action='mark_paid' ORDER BY id DESC LIMIT 1")
+    assert json.loads(snap[0]["changes_json"])["deductions"]["rules"]["version"]      # 版本快照落地
     page.wait_for_function(
         f"() => {CASHIER_JS}.bonusQueue.items.every(i => i.quoteNo !== '{NO}')"
         f" && {CASHIER_JS}.cashierHistoryBonus.some(b => b.quoteNo === '{NO}')", timeout=15000)

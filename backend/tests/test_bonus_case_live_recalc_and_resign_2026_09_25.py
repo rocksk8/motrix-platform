@@ -12,6 +12,7 @@ import json
 import pytest
 
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from tests._bonus_insure import insure_all  # noqa: E402
     people, _seed_case, _create, _members_spec, _auth, _login, _set_flow)
 
 SPLIT = {"sales": 5000, "project": 3000, "admin": 2000}
@@ -261,6 +262,7 @@ def test_reset_rechecks_that_the_chain_is_superadmins_only(client, people, sa3):
 
 
 def test_payout_and_paid_are_not_editable(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     no = "MQ-LR-030"
     _draft(client, people, no)
     _submit(client, people, no)

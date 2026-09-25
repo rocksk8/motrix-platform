@@ -261,6 +261,8 @@
    "notify_approval_request": "def(quote_no, customer, approver_usernames)",
    "notify_approved": "def(quote_no, customer, approved_by, requester_username)",
    "notify_backup_stale": "def(stale, threshold_hours)",
+   "notify_bonus_payout_ready": "def(quote_no, customer, cashier_usernames)",
+   "notify_bonus_submitted": "def(quote_no, customer, approver_usernames)",
    "notify_case_change_requested": "def(quote_no, customer, project, summary, requester_display)",
    "notify_case_close_blocked": "def(quote_no, customer, project, reasons, pending_usernames)",
    "notify_case_closing_report": "def(quote_no, customer, project, pdf_bytes)",

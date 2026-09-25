@@ -4,7 +4,7 @@
 ```
 進入待發放   轉帳傳票草稿：借 薪資支出 6111／貸 應付薪資 2191，摘要帶案號
 標記已發放   支出傳票草稿：借 2191／貸 銀行存款（出納選，預設 1113）
-             ＋一行「代扣稅款（如適用）」貸 2252（可改，金額留空）
+             ＋一行代扣稅款貸 2252（U4 起依法規參數自動計算；未達起扣為 0）
 退回         轉帳草稿還沒送審 ⇒ 作廢；已送審 ⇒ 不動，回應帶提示
 ```
 - 一律只產生**草稿**，走傳票自己的簽核（JV30），不自動過帳。
@@ -14,6 +14,7 @@
 import pytest
 
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from tests._bonus_insure import insure_all  # noqa: E402
     people, _seed_case, _create, _members_spec, _auth)
 
 ACCOUNTS = "/api/bonus/cases/voucher-accounts"
@@ -102,6 +103,7 @@ def test_a_middle_approval_tier_does_not_create_a_voucher(client, people):
 # ── 標記已發放 ⇒ 支出傳票草稿 ─────────────────────────────────────────────────
 
 def test_mark_paid_creates_a_payment_draft_with_a_withholding_line(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-AC3-010")
     r = client.post("/api/bonus/cases/MQ-AC3-010/mark-paid", headers=_auth(people["bc_cash"]))
     assert r.status_code == 200 and r.json()["status"] == "已發放", r.text
@@ -117,6 +119,7 @@ def test_mark_paid_creates_a_payment_draft_with_a_withholding_line(client, peopl
 
 
 def test_cashier_chooses_the_bank_account(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     import db
     conn = db.get_db()
     try:
@@ -134,6 +137,7 @@ def test_cashier_chooses_the_bank_account(client, people):
 
 
 def test_a_bad_bank_account_is_refused_before_anything_changes(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-AC3-012")
     r = client.post("/api/bonus/cases/MQ-AC3-012/mark-paid", headers=_auth(people["bc_cash"]),
                     json={"bank_account_code": "99999"})

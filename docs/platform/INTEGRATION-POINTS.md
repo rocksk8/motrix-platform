@@ -138,7 +138,6 @@ M06 的 `vouchers_all`。
 
 ---
 
-<<<<<<< HEAD
 ## IP-7　L1 法規參數讀取介面（L1 `helpers.legal_params` → 所有算扣繳／補充保費的模組；首個使用方：M07 勞報單，下一個：U4 獎金分潤）
 
 L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 import）。規格：CUSTOMIZATION-SPEC §9.1。
@@ -155,10 +154,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-7　`bonus.payouts`：獎金分潤待發放與發放紀錄（M07 → M05 出納）
-=======
 ## IP-8　`bonus.payouts`：獎金分潤待發放與發放紀錄（M07 → M05 出納）
->>>>>>> 3d8ab9eb (chore(獎金分潤): 串接點改編 IP-8／IP-9（IP-7 為 R1 法規參數）；單據存參數快照；兩頁顯示版本與參數)
 
 對應 CORE-SPEC「使用者裁示」獎金分潤：送交出納（RUN-PLAN §5 A 線 ③）。出納頁（M05）原本沒有獎金分潤；
 不 import M07，改由 M07 公開這一個讀取連接器。**「標記已發放」不經連接器**：出納頁直接打獎金那一支

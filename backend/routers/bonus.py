@@ -1887,13 +1887,15 @@ def _deduction_view(conn, award, lines):
     if award["status"] == "待發放":
         ded, why = bonus_deductions.deductions_for_award(conn, award, lines, datetime.now().date().isoformat())
         out = {"deductions": ded, "deductionNotice": why}
-        if ded is not None and ded["missing"]:
+        if ded is None:
+            out["deductionNotice"] = why + "；無法標記已發放。"
+        elif ded["missing"]:
             out["deductionNotice"] = "有人沒有設定投保金額，無法標記已發放（請先設定投保金額）。"
         return out
     if award["status"] == "已發放":
         snap = bonus_payouts.paid_snapshot(conn, award["id"])
         return {"deductions": snap,
-                "deductionNotice": "" if snap else "這一筆發放時沒有計算扣繳與補充保費（法規參數未接上）。"}
+                "deductionNotice": "" if snap else "這一筆發放時沒有計算扣繳與補充保費（U4 上線前發放）。"}
     return {}
 
 
@@ -2447,19 +2449,20 @@ def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authoriza
             if err:
                 raise HTTPException(400, "銀行科目：%s" % err)
         now = datetime.now().isoformat()
-        # U4：撥付日的扣繳與補充保費。參數接不上 ⇒ 照舊（代扣稅款行 0）並明說；
-        # 參數接上而有人沒有投保金額 ⇒ **拒絕**、狀態不變（不以 0 計算）。
+        # U4：撥付日的扣繳與補充保費。算不出來（沒有適用的法規參數版本、欄位不齊）或有人沒有投保金額
+        # ⇒ **拒絕**、狀態不變（不以 0 或預設值計算）。
         ded, ded_notice = bonus_deductions.deductions_for_award(conn, award, _lines, now[:10])
-        if ded is not None and ded["missing"]:
+        if ded is None:
+            raise HTTPException(409, ded_notice + "；未標記已發放。")
+        if ded["missing"]:
             names = {l["username"]: l["display_name_snapshot"] or l["username"] for l in _lines}
             raise HTTPException(409, "無法計算補充保費：%s 沒有設定投保金額，請先到「獎金分潤 → 投保金額與全年累計」設定。"
                                 % "、".join(names.get(u, u) for u in ded["missing"]))
         conn.execute("UPDATE bonus_case_awards SET status='已發放', paid_by=?, paid_at=?, updated_by=?,"
                      " updated_at=? WHERE id=?", (_user_name(user), now, _user_name(user), now, award["id"]))
-        _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now, "deductions": ded,
-                                                         "deductionNotice": ded_notice})
+        _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now, "deductions": ded})
         voucher, notice = bonus_vouchers.create_payment(conn, award, _user_name(user), now, bank,
-                                                        ded["totals"] if ded else None)
+                                                        ded["totals"])
         conn.commit()
     finally:
         conn.close()
@@ -2467,8 +2470,6 @@ def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authoriza
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 已發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
-    if ded_notice:
-        notice = (notice + " " if notice else "") + ded_notice + "（代扣稅款請出納確認）。"
     return {"ok": True, "status": "已發放", "voucher": voucher, "notice": notice, "deductions": ded}
 
 

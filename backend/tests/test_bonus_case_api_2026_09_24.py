@@ -8,6 +8,7 @@ import json
 from datetime import date, timedelta
 
 import pytest
+from tests._bonus_insure import insure_all  # noqa: E402
 
 
 def _login(client, username, password):
@@ -292,6 +293,7 @@ def test_superadmin_returns_from_payout_and_log_kept(client, people):
 
 
 def test_mark_paid_by_cashier_then_cannot_return(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-BC-051")
     client.post("/api/bonus/cases/MQ-BC-051/approve", headers=_auth(people["bc_sa2"]))
     assert client.post("/api/bonus/cases/MQ-BC-051/mark-paid", headers=_auth(people["bc_s1"])).status_code == 403
@@ -302,6 +304,7 @@ def test_mark_paid_by_cashier_then_cannot_return(client, people):
 
 
 def test_mark_paid_only_from_payout_state(client, people):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-BC-052")     # 待審核
     assert client.post("/api/bonus/cases/MQ-BC-052/mark-paid", headers=_auth(people["bc_cash"])).status_code == 409
 

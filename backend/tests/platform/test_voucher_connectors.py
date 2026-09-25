@@ -12,6 +12,7 @@ import pytest
 
 from core import registry
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from tests._bonus_insure import insure_all  # noqa: E402
     people, _seed_case, _create, _members_spec, _auth)
 
 CAPS = ("voucher.draft", "voucher.account_check", "accounting.settings")
@@ -82,6 +83,7 @@ def test_contract_providers_exist_and_draft_really_writes(client):
 
 def test_with_accounting_the_flow_makes_vouchers(client, people):
     """正對照：同一條流程在 M06 在時確實產生兩張草稿——否則「沒產生」的斷言沒有意義。"""
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     before = _voucher_count()
     r = _to_payout(client, people, "MQ-IP2-001")
     assert r.status_code == 200 and r.json()["voucher"], r.text
@@ -93,6 +95,7 @@ def test_with_accounting_the_flow_makes_vouchers(client, people):
 
 
 def test_without_accounting_bonus_still_works_and_says_so(client, people, monkeypatch):
+    insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _drop_accounting(monkeypatch)
     before = _voucher_count()
 
