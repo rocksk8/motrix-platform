@@ -137,12 +137,14 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| D-1 | | | |
-| D-2 | | | |
-| S-1 | | | |
-| S-2 | | | |
-| S-3 | | | |
-| S-4 | | | |
-| S-5 | | | |
-| S-6 | | | |
-| O-1～O-5 | | | |
+| D-1 | 修正。L1 `legal_params.round_half_up(amount, rate)`（Decimal ROUND_HALF_UP）／`floor_amount`（ROUND_FLOOR，扣繳維持捨去）為唯一來源，勞報單改用；前端改 `static/legal-round.js`（BigInt 整數運算，同一套）——未改成後端試算：前端試算是逐鍵同步，改非同步要處理回應晚到的競態、動 6 處呼叫與既有 e2e 的同步讀值，改以全域比對題守一致。題：後端 20,000～2,000,000 逐元 vs 獨立整數算法（正對照：內建 round() 恰 99 個不同）、前端同範圍校驗和（正對照：銀行家捨入對不上）、頁面 35,000 顯示＝存檔＝739。守門 `tests/platform/test_legal_amount_rounding_guard.py`（讀法規參數的檔案禁 `round(`／`math.floor(`／`Math.round(`，合成文字正對照＋反向控制＋範圍非空）。IP-7 已寫函式名（契約 1.2）。註：實測 `Math.round(g×0.0211)` 在此範圍與四捨五入一致，前端原本沒錯，錯的是後端。突變 5 項（後端改回 round、共用函式改 HALF_EVEN、扣繳改四捨五入、前端 halfUp 改 5 捨、前端改回 Math.round）全紅 | `2c8ff4d3` | |
+| D-2 | 修正。`update_payslip` 讀舊單、合併已告知與快照、UPDATE、commit 全在 `core.txn.write_txn` 內；4xx 由 write_txn 回滾關連線（補題：404／已匯出 409 之後寫鎖已釋放）。並行題：A 停在 `_calc`、B 勾已告知，放行後紀錄仍在。突變：改回交易外讀取（`nullcontext`）⇒ 紅 | `2c8ff4d3` | |
+| S-1 | 修正。開單日期預設 `MotrixLegalRound.taipeiToday()`（Intl，Asia/Taipei）。e2e：瀏覽器時區 UTC、台北 01:30 ⇒ 台北日期。突變改回 toISOString ⇒ 紅 | `2c8ff4d3` | |
+| S-2 | 修正。`privacy-notice.js` 告知書日期改台北時間；同一題驗。突變 ⇒ 紅 | `2c8ff4d3` | |
+| S-3 | 修正（拒絕並告警）。`privacy_notice._load_dict` 讀不懂或非 dict ⇒ `AcksCorrupted`＋ERROR 日誌，原值不動；承攬商 POST／GET 回 409（GET 不再顯示成「尚未告知」，頁面顯示原因）；勞報單勾已告知時全文存檔損毀 ⇒ 409，沒勾的存檔照常（§9.3 不擋存檔）。突變「損毀當空的」⇒ 紅 | `2c8ff4d3` | |
+| S-4 | 修正。營業稅法 §8 第一項 32 款逐字（全國法規資料庫 G0340080 flno=8，2026-09-26 查，整編截止 115-09-18）⇒ `ARTICLE_8_ITEMS`，下拉 `8-1`～`8-32`（第 7 款已刪除不列），說明欄選填；出處 `ARTICLE_8_SOURCE`，選項端點回 `sources`、報價頁顯示。R2 初版代碼 `8` 移出選項（只在 platform 分支存在過），舊資料照常顯示，再送出時提示改選款次。RUN-PLAN §4 原句保留加更正。突變「第 7 款列入」⇒ 紅 | `2c8ff4d3` | |
+| S-5 | 修正。新紀錄寫入時，全文存進 `privacy_notice_texts`（雜湊 → {text, firstAckAt}，只增不改，與紀錄同一交易）；`GET /api/legal-params/privacy-notice/texts/{hash}` 查回。本功能之前的紀錄沒有全文（404）。突變「不存全文」⇒ 紅 | `2c8ff4d3` | |
+| S-6 | 修正（派工的「M12、M16 存活處」與「凍結缺的 2 題」是同一件，合併處理）。補 `test_editing_uses_the_snapshot_even_if_its_future_version_was_changed`（未生效 2027 版開單後修改該版，再改單仍用快照 654）、`test_create_ignores_a_snapshot_sent_by_the_client`（建立時送偽造快照與版本號，存的是伺服器的）。M12、M16 重做 ⇒ 兩項皆紅 | `2c8ff4d3` | |
+| O-1～O-5 | O-1：不是缺陷；更正做法寫進 CUSTOMIZATION-SPEC §9.1「版本不可改」列。PUT 時的「會改變 X 日以後新單」提示未做（UI 強化，不在本輪）。O-2：**需使用者裁示**（開單日期是否＝給付日，或加給付日欄位），已註記於規格。O-3：`test_legal_params_single_source` 註解剝除改成只認行首／空白後的 `#`、`//`（補 `https://` 正對照）；不把 20000／0.05／0.10／10000000 加進清單——這些數字在報價營業稅等處有合法用途，會大量誤報；捨入改由新守門守。O-4：IP-7 已更正（原句保留），契約版本補記 1.1（bonus_insured_multiple）、1.2（捨入函式），CORE 1.12。O-5：**需會計確認**扣繳「元以下捨去」；維持 `floor_amount`，換規則只改這一個函式。另發現（不在本稽核範圍、未改）：`routers/invoice_vouchers.py:336、369、406、407` 營業稅金額用內建 `round()`（銀行家捨入），`helpers/quotations.py:157` 已有四捨五入函式；建議另開一項 | `2c8ff4d3` | |
+
+> 回覆：X-R（接手退役的 R），2026-09-26 02:06。突變 14 項全紅（D-1 五項、D-2、S-1、S-2、S-3、S-4、S-5、S-6 兩項、守門範圍失效一項）。共用捨入函式：`helpers.legal_params.round_half_up`／`floor_amount`（前端 `MotrixLegalRound.halfUp`／`floor`）。
