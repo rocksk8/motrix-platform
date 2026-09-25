@@ -2393,18 +2393,10 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
-    # dev_cases 跟 quotations 之間沒有 FK——刪除前先找出所有轉建連結指到這張單的
-    # 業務開發案件，清空連結並退回「洽談中」，避免懸空參照（converted_quote_no
-    # 指向一張已經不存在的報價單）
-    orphaned = conn.execute(
-        "SELECT id, case_name FROM dev_cases WHERE converted_quote_no=?", (quote_no,)
-    ).fetchall()
-    if orphaned:
-        conn.execute(
-            "UPDATE dev_cases SET converted_quote_no='', status='洽談中', updated_at=? "
-            "WHERE converted_quote_no=?",
-            (datetime.now().isoformat(), quote_no),
-        )
+    # 轉建連結指到這張單的業務開發案件解除連結（IP-11 `crm.quote_deleted`，M02 提供；同一筆交易）。
+    # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-11「對方不在時」）。
+    unlink = _registry.single_provider("crm.quote_deleted")
+    orphaned = unlink(conn, quote_no) if unlink else []
     conn.commit()
     conn.close()
     _purge_notifications(quote_no, ['approval_request', 'approval_returned',
@@ -2415,7 +2407,14 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
                f"{c['case_name']}：連結的報價單 {quote_no} 已刪除，自動解除連結")
     notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
+    if unlink is None:
+        logger.warning("報價單 %s 已刪除；業務開發模組未安裝 —— 轉建連結未解除（IP-11）", quote_no)
+        return {"ok": True, "notice": QUOTE_DELETED_CRM_ABSENT}
     return {"ok": True}
+
+
+#: IP-11 對方不在時的說明（測試與畫面共用同一句）
+QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除"
 
 
 def _sync_device_stock(conn, quote_no: str, old_devices: list, new_devices: list, user: dict) -> list:

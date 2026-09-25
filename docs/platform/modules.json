@@ -239,8 +239,9 @@
    "key": "crm",
    "name": "業務開發",
    "units": [
-    "page:pages/dev-crm.html",
-    "router:dev_crm"
+    "mod:crm/__init__",
+    "mod:crm/api",
+    "page:pages/dev-crm.html"
    ],
    "tables": [
     "dev_cases",

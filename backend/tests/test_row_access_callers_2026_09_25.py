@@ -14,7 +14,7 @@ QNO = "MQ-RA-0925"
 
 def test_registered_rules_are_the_verified_ones():
     from helpers.quotations import CASE_ACCESS
-    from routers.dev_crm import DEV_CASE_ACCESS
+    from modules.crm.api import DEV_CASE_ACCESS
     from helpers import row_access as ra
     assert dataclasses.replace(CASE_ACCESS, deny_message="") == dataclasses.replace(CASE, deny_message="")
     assert dataclasses.replace(DEV_CASE_ACCESS, deny_message="") == dataclasses.replace(DEV, deny_message="")
