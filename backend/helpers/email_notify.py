@@ -1,4 +1,14 @@
 """External email notifications via SMTP (Gmail App Password)."""
+
+#: G1（MODULE-GUIDE §2）：底線開頭但屬於 L1 公開介面的名稱——改簽章或刪除照介面變更升版。
+#: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
+__l1_public__ = (
+    "_admin_emails",
+    "_base_url",
+    "_build_html",
+    "_send_raising",
+)
+
 import html as _html
 import logging
 from datetime import datetime   # notify_backup_stale 用；缺它是執行期 NameError

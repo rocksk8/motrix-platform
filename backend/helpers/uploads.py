@@ -10,6 +10,13 @@ UPLOADS_ROOT 刻意跟 routers/projects.py 各自獨立計算一份（而不是�
 讓既有的 /api/uploads/{file_path:path} serving 端點不必修改就能直接讀到
 這裡新存的檔案；這是刻意的最小風險做法，不去動 projects.py 既有程式碼。
 """
+
+#: G1（MODULE-GUIDE §2）：底線開頭但屬於 L1 公開介面的名稱——改簽章或刪除照介面變更升版。
+#: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
+__l1_public__ = (
+    "_effective_subfolder",
+)
+
 import os
 import uuid
 from datetime import datetime

@@ -1,4 +1,13 @@
 """Date arithmetic utilities."""
+
+#: G1（MODULE-GUIDE §2）：底線開頭但屬於 L1 公開介面的名稱——改簽章或刪除照介面變更升版。
+#: L1 以外只可以用這裡列出的底線名稱（守門：test_l1_interface_snapshot::test_l2_uses_only_declared_l1_underscore_names）。
+__l1_public__ = (
+    "_add_months",
+    "_warranty_expiry",
+    "_workdays_elapsed",
+)
+
 import calendar
 from datetime import date, timedelta
 
