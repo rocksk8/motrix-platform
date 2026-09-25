@@ -500,3 +500,36 @@ def test_pii_folder_vanishing_during_daily_backup_is_not_recreated(pii, client, 
     archive._daily_backup()
     assert not os.path.exists(root), "每日備份途中把個資資料夾建回來了"
     assert any("寫入途中消失" in r for _l, r in alerts), alerts
+
+
+def test_written_general_and_pii_files_merge_back_to_the_tables(client, make_user, isolated_archive, monkeypatch):
+    """稽核 X-9b O-6：合回用的是**每日備份實際寫出的檔**（一般份＋個資份），不是記憶體裡的原始列。"""
+    from datetime import date as _d
+    from db import get_db
+    pii_root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
+    os.makedirs(pii_root)
+    conn = get_db()
+    try:
+        _seed_pii(conn)
+    finally:
+        conn.close()
+    _voucher_via_api(client, make_user)
+    monkeypatch.setattr(archive, "_write_backup_alert", lambda *a, **k: None)
+    archive._daily_backup()
+    day = _d.today().isoformat()
+    general_dir = [dp for dp, _dn, fns in os.walk(isolated_archive)
+                   if "承攬人員.json" in fns and day in dp]
+    assert len(general_dir) == 1, general_dir
+    tables = archive._daily_backup_tables()
+    conn = get_db()
+    try:
+        for fname in archive._F2_FIELDS:
+            general = _json.load(open(os.path.join(general_dir[0], fname + ".json"), encoding="utf-8"))["data"]
+            pii_rows = _json.load(open(os.path.join(pii_root, "每日備份", day, fname + ".json"),
+                                       encoding="utf-8"))["data"]
+            original = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
+            assert original, fname
+            merged, missing = archive.merge_general_and_pii(fname, general, pii_rows)
+            assert missing == [] and merged == original, fname
+    finally:
+        conn.close()
