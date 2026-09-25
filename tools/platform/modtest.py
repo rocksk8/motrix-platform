@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -248,15 +249,24 @@ def _remove_basetemp(p):
     if not ok:
         print("[暫存] 拒絕刪除非本工具建立的路徑：%s" % p)
         return
-    # xdist worker／瀏覽器剛結束時檔案可能還被佔用（2026-09-25 全量 -n 6 實測第一次刪不乾淨）⇒ 重試幾次
-    for _ in range(30):                 # 最多約 60 秒：-n 6 全量實測 12 秒不夠、稍後手動刪即成功
+    # 🔴 更正（保留原判斷）：09-25 全量三次「刪不乾淨」我先判成「檔案仍被佔用」而加長重試（6→30 次），
+    #    實查留下的是測試在 tmp 建的 git repo，git 物件檔是**唯讀** ⇒ Windows 上 rmtree(ignore_errors=True)
+    #    永遠刪不掉，重試多久都一樣。⇒ 先解除唯讀再刪；重試只留給真的被占用的情形。
+    def _clear_readonly(func, path, _exc):
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass
+
+    for _ in range(10):
         if not p.exists():
             break
-        shutil.rmtree(p, ignore_errors=True)
+        shutil.rmtree(p, onerror=_clear_readonly)
         if p.exists():
             time.sleep(2)
     if p.exists():
-        print("[暫存] %s 仍有檔案被佔用、未刪乾淨，請手動刪除（只刪這一個）" % p)
+        print("[暫存] %s 仍有檔案刪不掉（被占用），請手動刪除（只刪這一個）" % p)
 
 
 def run_pytest(targets, extra, window, full, collect_only=False):
