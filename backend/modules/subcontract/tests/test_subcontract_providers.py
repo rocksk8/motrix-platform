@@ -1,6 +1,6 @@
-"""M04 外包工班的串接點，**需要本模組在的題**（拿掉本模組時跟著消失）：
+"""外包工班的串接點，**需要本模組在的題**（拿掉本模組時跟著消失）：
 提供者已登記（IP-1／12／14）、IP-12／IP-14 正對照、IP-13 `quotation.append_items`（M01 → 本模組；含 M01 不在 ⇒ 409）、
-本模組不再 import M01。M04 不在時的反向控制在 `tests/platform/test_subcontract_connectors.py`。
+本模組不再 import M01。本模組不在時的反向控制在 `tests/platform/test_subcontract_connectors.py`。
 """
 import json
 import re
@@ -94,7 +94,7 @@ def test_import_to_quote_without_m01_is_409_and_touches_nothing(client, make_use
     assert len(_items()) == 1
 
 
-# ── IP-12（M04 在）───────────────────────────────────────────────────────────
+# ── IP-12（本模組在）───────────────────────────────────────────────────────────
 
 def test_case_bundle_dispatches_part(client, make_user):
     h = _hdr(client, make_user)
@@ -103,7 +103,7 @@ def test_case_bundle_dispatches_part(client, make_user):
     assert got["ok"] is True and [d["quoteNo"] for d in got["data"]] == [QNO]
 
 
-# ── IP-14（M04 在）───────────────────────────────────────────────────────────
+# ── IP-14（本模組在）───────────────────────────────────────────────────────────
 
 def test_cashier_and_t100_with_m04(client, make_user):
     h = _hdr(client, make_user)
@@ -116,7 +116,7 @@ def test_cashier_and_t100_with_m04(client, make_user):
     assert prev["notice"] == ""
 
 
-# ── 相依已切斷（M04 這一側）─────────────────────────────────────────────────────
+# ── 相依已切斷（本模組這一側）─────────────────────────────────────────────────────
 
 def test_m04_does_not_import_m01():
     text = (source_tree.BACKEND / "modules" / "subcontract" / "api" / "vendor_contractors.py").read_text(encoding="utf-8")

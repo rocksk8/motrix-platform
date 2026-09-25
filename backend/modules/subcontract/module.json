@@ -17,5 +17,6 @@
     "files": []
   },
   "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers"]},
-  "pages": [{"path": "contractors.html"}, {"path": "vendor-contractors.html"}, {"path": "contractor-voucher-approval-settings.html"}]
+  "pages": [{"path": "contractors.html"}, {"path": "vendor-contractors.html"}],
+  "pages_note": "contractor-voucher-approval-settings.html 是已廢棄的舊入口（AS4：簽核設定已移到統一的簽核設定頁），不列入側欄"
 }
