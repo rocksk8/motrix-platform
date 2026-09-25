@@ -11,11 +11,17 @@
 
 apply：沒選到的 `backend/modules/<key>/` 整個資料夾刪掉，連同它 module.json 宣告的前端頁面
        （`pages[].path`，位於 frontend/pages/）；寫 `backend/modules.lock.json`。
-check：lock 檔必須存在、列出的模組＝包內實際的模組資料夾、版本＝各自 module.json；
+lock 檔結構（lock_version 1；預留 P7「模組更新包」：kind＝module_update 時只含被更新的模組）：
+  {"lock_version": 1, "kind": "full_package", "product": "full", "core_version": "1.2",
+   "modules": {"<key>": {"version": "1.0.0", "core": ">=1.0,<2.0", "sha256": "<模組資料夾內容雜湊>"}},
+   "excluded": [...], "removed_pages": [...]}
+check：lock 檔必須存在、列出的模組＝包內實際的模組資料夾（full_package；module_update 只核對它列的）、
+       版本＝各自 module.json、內容雜湊一致；
        L0／L1 必要檔（docs/platform/modules.json 的 L1 Python 單位與 backend/core/*.py）一個都不能缺；
        tools/platform/upgrade.py 也必須在包裡（升級精靈用）。
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -78,6 +84,25 @@ def resolve(prod, available):
     return keep, sorted(set(available) - set(keep))
 
 
+LOCK_VERSION = 1
+KINDS = ("full_package", "module_update")
+
+
+def module_digest(d):
+    """模組資料夾的內容雜湊（相對路徑＋位元組，排序後串接；略過 __pycache__）。P7 用它核對單一模組更新包。"""
+    h = hashlib.sha256()
+    d = Path(d)
+    for f in sorted(p for p in d.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
+        h.update(f.relative_to(d).as_posix().encode("utf-8") + b"\0")
+        h.update(f.read_bytes() + b"\0")
+    return h.hexdigest()
+
+
+def module_entry(d):
+    m = _manifest(d)
+    return {"version": m.get("version"), "core": m.get("core"), "sha256": module_digest(d)}
+
+
 def _rmtree(p):
     def _clear_readonly(func, path, _exc):
         os.chmod(path, stat.S_IWRITE)
@@ -104,9 +129,11 @@ def apply(pkg, prod):
                 removed_pages.append("frontend/pages/" + page["path"])
         _rmtree(available[key])
     lock = {
+        "lock_version": LOCK_VERSION,
+        "kind": "full_package",
         "product": prod["name"],
         "core_version": core_version(backend),
-        "modules": {k: _manifest(available[k]).get("version") for k in keep},
+        "modules": {k: module_entry(available[k]) for k in keep},
         "excluded": drop,
         "removed_pages": removed_pages,
     }
@@ -141,14 +168,25 @@ def check(pkg, modules_json=MODULES_JSON):
     if not lock_p.is_file():
         return ["缺 backend/%s（沒有經過產品選配，或選配失敗）" % LOCK_NAME]
     lock = json.loads(lock_p.read_text(encoding="utf-8"))
+    if lock.get("lock_version") != LOCK_VERSION:
+        return ["lock_version %r 看不懂（這版只認 %d）⇒ 不猜" % (lock.get("lock_version"), LOCK_VERSION)]
+    kind = lock.get("kind")
+    if kind not in KINDS:
+        return ["lock 的 kind %r 不認得（%s）" % (kind, "／".join(KINDS))]
     actual = module_dirs(backend)
     listed = lock.get("modules") or {}
-    if set(listed) != set(actual):
+    if kind == "full_package" and set(listed) != set(actual):
         problems.append("lock 列的模組 %s ≠ 包內實際 %s" % (sorted(listed), sorted(actual)))
+    if kind == "module_update" and set(listed) - set(actual):
+        problems.append("更新包 lock 列的模組不在包裡：%s" % sorted(set(listed) - set(actual)))
     for k in sorted(set(listed) & set(actual)):
-        v = _manifest(actual[k]).get("version")
-        if listed[k] != v:
-            problems.append("模組 %s：lock 版本 %s ≠ module.json %s" % (k, listed[k], v))
+        cur = module_entry(actual[k])
+        if listed[k].get("version") != cur["version"]:
+            problems.append("模組 %s：lock 版本 %s ≠ module.json %s" % (k, listed[k].get("version"), cur["version"]))
+        if listed[k].get("sha256") != cur["sha256"]:
+            problems.append("模組 %s：內容雜湊與 lock 不符（打包後被改過）" % k)
+    if kind == "module_update":
+        return problems             # 更新包只帶模組本身，不驗 L0／L1（P7 會另訂套用前檢查）
     for rel in required_l1_files(modules_json):
         if not (backend / rel).is_file():
             problems.append("缺 L0／L1 必要檔 backend/%s" % rel)

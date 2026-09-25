@@ -50,7 +50,9 @@ def _only_synthetic_core(monkeypatch):
 def test_full_keeps_every_module_and_writes_lock(tmp_path):
     pkg, mj = _pkg(tmp_path)
     lock = PS.apply(pkg, {"name": "full", "modules": ["*"]})
-    assert lock["modules"] == {"alpha": "1.0.0", "beta": "1.1.0"} and lock["excluded"] == []
+    assert {k: v["version"] for k, v in lock["modules"].items()} == {"alpha": "1.0.0", "beta": "1.1.0"}
+    assert lock["excluded"] == [] and lock["lock_version"] == 1 and lock["kind"] == "full_package"
+    assert all(len(v["sha256"]) == 64 for v in lock["modules"].values())
     assert lock["core_version"] == "9.9"
     assert PS.check(pkg, mj) == []
 
@@ -165,3 +167,35 @@ def test_real_repo_still_tracks_the_upgrade_tool_without_export_ignore():
     out = subprocess.run(["git", "-C", str(REPO), "check-attr", "export-ignore", "--", "tools/platform/upgrade.py"],
                          capture_output=True, text=True, check=True).stdout
     assert "export-ignore: set" not in out, out
+
+
+def test_rc_content_changed_after_packaging(tmp_path):
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    (pkg / "backend" / "modules" / "alpha" / "api.py").write_text("x = 1\n", encoding="utf-8")
+    assert any("內容雜湊" in p for p in PS.check(pkg, mj))
+
+
+def test_rc_unknown_lock_version_or_kind_is_refused(tmp_path):
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    lp = pkg / "backend" / PS.LOCK_NAME
+    lock = json.loads(lp.read_text(encoding="utf-8"))
+    for key, bad in (("lock_version", 2), ("kind", "mystery")):
+        broken = dict(lock, **{key: bad})
+        lp.write_text(json.dumps(broken), encoding="utf-8")
+        assert PS.check(pkg, mj), key
+
+
+def test_module_update_kind_checks_only_listed_modules(tmp_path):
+    """P7 預留：module_update 只核對它列的模組（其他模組存在與否不管），且不驗 L0／L1。"""
+    pkg, mj = _pkg(tmp_path)
+    b = pkg / "backend"
+    lock = {"lock_version": 1, "kind": "module_update", "product": "update-alpha", "core_version": "9.9",
+            "modules": {"alpha": PS.module_entry(b / "modules" / "alpha")}}
+    (b / PS.LOCK_NAME).write_text(json.dumps(lock), encoding="utf-8")
+    (b / "helpers" / "auth.py").unlink()
+    assert PS.check(pkg, mj) == []
+    lock["modules"]["gamma"] = {"version": "1.0.0", "sha256": "0" * 64}
+    (b / PS.LOCK_NAME).write_text(json.dumps(lock), encoding="utf-8")
+    assert any("不在包裡" in p for p in PS.check(pkg, mj))
