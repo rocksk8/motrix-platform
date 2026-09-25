@@ -211,6 +211,7 @@
    "next_number": "def(conn, module_key, numbering, day=…)",
    "permission_of": "def(module_key, body)",
    "published_modules": "def(conn)",
+   "rebuild_index": "def(conn)",
    "ref_targets": "def()",
    "register_ref_target": "def(key, table, label_column, id_column=…)",
    "render_output": "def(conn, module_key, record_no)",

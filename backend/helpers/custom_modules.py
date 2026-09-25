@@ -374,6 +374,18 @@ def _write_index(conn, rec_id, module_key, vals):
                      (rec_id, module_key, k, v if isinstance(v, str) else json.dumps(v, ensure_ascii=False), num))
 
 
+def rebuild_index(conn) -> int:
+    """從 `custom_records.data_json` 重建整張欄位索引（從每日 JSON 還原單據之後執行；索引本身不匯出）。回重建的單據數。"""
+    from core.txn import write_txn
+    with write_txn(conn):
+        conn.execute("DELETE FROM custom_record_values")
+        rows = conn.execute("SELECT id, module_key, data_json FROM custom_records").fetchall()
+        for r in rows:
+            _write_index(conn, r["id"], r["module_key"], json.loads(r["data_json"] or "{}"))
+        conn.commit()
+    return len(rows)
+
+
 def _log(conn, rec_id, action, from_state, to_state, user, note=""):
     conn.execute("INSERT INTO custom_record_log (record_id, action, from_state, to_state, by_user, note, at) "
                  "VALUES (?,?,?,?,?,?,?)", (rec_id, action, from_state, to_state, user, note or "",

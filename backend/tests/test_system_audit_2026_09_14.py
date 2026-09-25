@@ -110,6 +110,11 @@ _NOT_IN_JSON_BACKUP = {
         "自然人）住家地址解析出來的經緯度。那張表有 contractor_list 權限保護，"
         "**而每日 JSON 備份會上傳到雲端硬碟** ⇒ 備份它＝把「某人住家的經緯度」"
         "複製到雲端，而那份資料的權限保護在備份裡不存在",
+    # ── 2026-09-25 · P8 自訂模組 ──
+    "custom_record_values":
+        "自訂模組單據的欄位索引：內容完全由 custom_records.data_json 推得（helpers.custom_modules._write_index），"
+        "從 JSON 重建單據後執行 custom_modules.rebuild_index(conn) 即可（test_custom_module_index_can_be_rebuilt_from_the_records）；"
+        "單據本身（custom_records）有進每日匯出",
 }
 
 

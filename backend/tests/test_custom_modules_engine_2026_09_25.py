@@ -318,6 +318,26 @@ def test_custom_module_output_uses_the_fields(loan):
     assert rec["record_no"] in html and "投影機" in html and "6000" in html and "測試用設備借用單" in html
 
 
+def test_custom_module_index_can_be_rebuilt_from_the_records(loan):
+    """索引表不進每日 JSON 匯出（備份守門的排除理由）⇒ 必須真的能從單據重建，查詢結果與重建前相同。"""
+    client, h = loan
+    _new(client, h, item="筆電")
+    _new(client, h, item="投影機")
+    before = client.get("/api/custom/%s/records" % KEY, headers=h["req"], params={"field": "item", "value": "筆電"}).json()
+    import db
+    from helpers import custom_modules as CM
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM custom_record_values")
+        conn.commit()
+        assert client.get("/api/custom/%s/records" % KEY, headers=h["req"], params={"field": "item", "value": "筆電"}).json() == []
+        assert CM.rebuild_index(conn) == 2
+    finally:
+        conn.close()
+    after = client.get("/api/custom/%s/records" % KEY, headers=h["req"], params={"field": "item", "value": "筆電"}).json()
+    assert after == before and len(after) == 1
+
+
 def test_custom_module_unpublished_module_is_404(client, make_user):
     h = _login(client, make_user, "cm_super2", role="superadmin")
     assert client.get("/api/custom/nothing_here/records", headers=h).status_code == 404
