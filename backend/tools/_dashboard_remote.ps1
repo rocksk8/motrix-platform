@@ -306,11 +306,16 @@ try {
             }
             switch ($Step) {
                 "stop-services" {
-                    foreach ($t in $Tasks) { Disable-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | Out-Null; Write-Output "已停用排程：$t" }
-                    # 只停 python 系列、而且只停正在監聽 666 的行程（比照 restart.bat）
+                    # 與 UPGRADE-RUNBOOK §1 一致：先 Disable 再 Stop（只 Disable 的話 Autostart 迴圈 5 秒後會把 uvicorn 拉回來）
+                    foreach ($t in $Tasks) {
+                        Disable-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | Out-Null
+                        Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
+                        Write-Output "已停用並停止排程：$t"
+                    }
+                    # 只停 python／pythonw／uvicorn、而且只停正在監聽 666 的行程（比照 restart.bat）
                     foreach ($c in @(Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue)) {
                         $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
-                        if ($p -and $p.ProcessName -match '^python') { Stop-Process -Id $p.Id -Force; Write-Output "已停止 $($p.ProcessName) PID=$($p.Id)" }
+                        if ($p -and $p.ProcessName -match '^(python|pythonw|uvicorn)$') { Stop-Process -Id $p.Id -Force; Write-Output "已停止 $($p.ProcessName) PID=$($p.Id)" }
                         elseif ($p) { Write-Output "port 666 被 $($p.ProcessName) 佔用，不是 python，不動它" }
                     }
                     # autostart.bat 的 crash-restart 迴圈會把服務拉回來 ⇒ 一併停掉（比照 restart.bat 以 commandline 比對）
@@ -322,10 +327,26 @@ try {
                     return
                 }
                 "start-services" {
-                    foreach ($t in $Tasks) { Enable-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue | Out-Null; Write-Output "已啟用排程：$t" }
+                    # 與 UPGRADE-RUNBOOK §1b 一致：Autostart 與 Daily Backup 先開 → 啟動 → 等 ping → 最後開 Heartbeat
+                    # （服務沒起來前先開心跳會在啟動延遲期間誤報）。
+                    # 🔴 ping 等不到也照樣開 Heartbeat：服務真的起不來時，心跳告警就是該響的那一聲，不可以讓它一起沉默。
+                    Enable-ScheduledTask -TaskName $Tasks[0] -ErrorAction SilentlyContinue | Out-Null
+                    Enable-ScheduledTask -TaskName $Tasks[1] -ErrorAction SilentlyContinue | Out-Null
+                    Write-Output "已啟用排程：$($Tasks[0])、$($Tasks[1])"
                     Start-ScheduledTask -TaskName $Tasks[0] -ErrorAction SilentlyContinue
-                    Write-Output "已觸發 $($Tasks[0])（含 90 秒延遲，約 2 分鐘後服務回來；Heartbeat 下一輪會恢復打卡）"
-                    Write-Output "===EXITCODE=0==="
+                    Write-Output "已觸發 $($Tasks[0])（含 90 秒啟動延遲），開始等待服務回應（最多 240 秒）…"
+                    # 正式機是 HTTPS 自簽憑證 ⇒ 用 backend/tools/_healthcheck_ping.py（Python＋OpenSSL），不用 Invoke-WebRequest
+                    $pingTool = Join-Path $Root "backend\tools\_healthcheck_ping.py"
+                    $up = $false
+                    for ($i = 0; $i -lt 48; $i++) {
+                        Start-Sleep -Seconds 5
+                        & python $pingTool "https://127.0.0.1:666/api/ping" 5 2>&1 | Out-Null
+                        if ($LASTEXITCODE -eq 0) { $up = $true; break }
+                    }
+                    Enable-ScheduledTask -TaskName $Tasks[2] -ErrorAction SilentlyContinue | Out-Null
+                    Write-Output "已啟用排程：$($Tasks[2])"
+                    if ($up) { Write-Output "服務已回應 /api/ping"; Write-Output "===EXITCODE=0===" }
+                    else { Write-Output "⚠ 240 秒內服務沒有回應 /api/ping——心跳已開，會照常告警；請看 server.log 決定是否回滾"; Write-Output "===EXITCODE=1===" }
                     return
                 }
             }
