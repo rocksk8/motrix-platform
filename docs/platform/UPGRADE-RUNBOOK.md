@@ -148,7 +148,11 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 - **不要重按同一步。** 依序確認：
   1. 儀表板「4. 查看正式機最近 log」：看最後幾行是不是還在動，或者已經印出結束訊息。
   2. 在正式機上看 python／powershell 行程是否還在跑（例如轉換期間的 `upgrade.py`）。
-  3. 看 `<BK>` 底下的產出檔：備份 ⇒ `backup_verify.json`；轉換 ⇒ `conversion_log.json`；驗證 ⇒ `verify_log.json`。檔案存在並寫完，代表那一步其實已經完成。
+  3. 看 `<BK>` 底下的產出檔。⚠ **檔案存在不代表成功**：這三個檔在失敗時也會寫出來，一定要看內容（稽核 B-2a 更正；原句「檔案存在並寫完，代表那一步其實已經完成」是錯的）：
+     - 備份：`backup_verify.json` 的 `problems` 是空的，才算通過。
+     - 轉換：`conversion_log.json` 的 `migrate.ok` 是 `true`，**而且**有 `settings_added`（只有成功路徑會寫這一欄）。
+     - 驗證：`verify_log.json` 的 `problems` 是空的。
+     - 內容不符合，或檔案不存在 ⇒ 當成那一步沒有完成。
 - 確認正式機**已經停下來**之後，按「解除鎖定」，並寫明原因（例如「log 顯示轉換已完成，conversion_log.json 已產生」）。這個動作會記進歷史。
 - 解除之後，依確認到的實際狀態決定下一步：做完了就接下一步；做一半就依 §6 回滾。
 
@@ -159,7 +163,9 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
   1. 打開 `backend\tools\upgrade_session.json`（開發機上），找出原本這一輪的 `stamp`，也就是正式機 `Desktop\MOTRIX-UPGRADE-BACKUP\<stamp>`。
   2. 確認那一份備份還在正式機上。
   3. 在儀表板按「封存讀不懂的升級紀錄」，並寫明原因（寫下你確認到的備份時間戳）。原檔會改名成 `upgrade_session.corrupt-<時間>.json` 保留，不會刪除。
-  4. 如果原本那一輪的回滾還沒做完，**不要從儀表板開新的一輪**：改在正式機上照 §6 手動執行 `upgrade.py rollback --backup-dir <原本的 BK>`。
+  4. 如果原本那一輪的回滾還沒做完，**不要從儀表板開新的一輪**：改在正式機上照 §6 手動執行（稽核 B-2b 更正：原句少了 `--root` 與 `--mode`，照打會被擋下）：
+     - 只回程式：`python <NEW>\tools\platform\upgrade.py rollback --root <ROOT> --backup-dir <原本的 BK> --mode code`
+     - 完整回滾：`python <NEW>\tools\platform\upgrade.py rollback --root <ROOT> --backup-dir <原本的 BK> --mode full --yes`（會丟掉轉換後寫入的資料）
 
 ## 7. 事後
 
