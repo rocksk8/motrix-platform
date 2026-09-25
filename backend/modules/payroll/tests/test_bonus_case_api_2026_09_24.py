@@ -8,7 +8,7 @@ import json
 from datetime import date, timedelta
 
 import pytest
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 
 def _login(client, username, password):

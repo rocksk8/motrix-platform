@@ -16,7 +16,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 NO = "MQ-E2EBC-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

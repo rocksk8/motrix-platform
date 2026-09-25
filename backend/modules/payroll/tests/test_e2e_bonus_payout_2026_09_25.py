@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 NO = "MQ-E2EBP-001"
 CASHIER_JS = "Alpine.$data(document.querySelector('[x-data]'))"

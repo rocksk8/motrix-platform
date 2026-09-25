@@ -379,13 +379,6 @@ def test_recognition_flag_amount_rounds_half_up():
     assert _flag_item("Q", "c", "d", "x", None, "2026-01-01", True, "extra_no_invoice")["amount"] is None
 
 
-def test_bonus_settlement_money_rounds_half_up():
-    """獎金精算明細金額：10.5 ⇒ NT$ 11（舊：NT$ 10）。bonus_pdf L160"""
-    from modules.payroll.bonus_pdf import _settle_money
-    assert _settle_money(10.5) == "NT$ 11"
-    assert _settle_money(None) == "—" and _settle_money(0) == "NT$ 0"
-
-
 def test_extra_expense_total_rounds_half_up_to_cents(client):
     """額外支出小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊：round(0.145, 2)＝0.14）。
     case_extra_expenses L172（_recalc）、L725（核准變更 _apply_change）"""

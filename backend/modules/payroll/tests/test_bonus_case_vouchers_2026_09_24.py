@@ -13,9 +13,9 @@
 """
 import pytest
 
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 ACCOUNTS = "/api/bonus/cases/voucher-accounts"
 
@@ -82,7 +82,7 @@ def test_payout_creates_an_accrual_draft_voucher(client, people):
 
 def test_a_middle_approval_tier_does_not_create_a_voucher(client, people):
     """多層簽核：還沒簽完（仍是待審核）⇒ 不產生。"""
-    from tests.test_bonus_case_api_2026_09_24 import _set_flow
+    from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _set_flow
     _set_flow(["bc_sa2"])
     import db
     conn = db.get_db()

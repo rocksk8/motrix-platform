@@ -11,7 +11,7 @@ M06 不在時：退回照常、不作廢、保留連結並明說；明細仍列�
 from pathlib import Path
 
 from core import registry
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
 
 CAPS = ("voucher.draft", "voucher.account_check", "accounting.settings", "voucher.void_draft", "voucher.status")
@@ -151,7 +151,7 @@ def test_submitted_old_link_still_gets_a_fresh_draft(client, people):
 
 def test_m07_no_longer_touches_vouchers_all():
     """M07 的每一支檔（modules.json 取，不寫死；稽核 Y-2）都不可以直接碰 M06 的 vouchers_all。"""
-    from tests.platform.test_voucher_connectors import _group_py_files
+    from modules.payroll.modules.payroll.tests.test_voucher_connectors import _group_py_files
     files = _group_py_files("M07")
     assert len(files) >= 5, files                                     # 正對照：不是空清單
     for mod, path in files.items():
