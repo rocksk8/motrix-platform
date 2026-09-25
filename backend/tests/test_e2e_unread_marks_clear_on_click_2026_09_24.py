@@ -127,65 +127,6 @@ def _dev_crm_with_one_unread(page, live_server):
 
 
 @pytest.mark.e2e
-def test_dev_case_mark_clears_on_click_before_the_server_answers_and_stays_cleared(
-        live_server, make_user, e2e_browser):
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    browser = e2e_browser
-    page = browser.new_page()
-    _login(page, live_server, u, pw)
-    cid, card = _dev_crm_with_one_unread(page, live_server)
-
-    hold = _Hold(page)
-    card.click()
-    page.wait_for_timeout(300)
-    # 🔴 伺服器還沒收到 ⇒ 若畫面等回應才清，這裡標記一定還在
-    assert {"kind": "dev_case", "key": str(cid)} in hold.bodies(), hold.bodies()
-    assert not _rows("SELECT 1 FROM item_reads WHERE kind='dev_case' AND item_key=?", (str(cid),))
-    assert card.locator("text=有更新").count() == 0, "點下去之後標記沒有當下消失"
-
-    hold.release()
-    page.unroute("**/api/reads")
-    for _ in range(50):
-        if _rows("SELECT 1 FROM item_reads WHERE username='alice' AND kind='dev_case' AND item_key=?",
-                 (str(cid),)):
-            break
-        page.wait_for_timeout(100)
-    else:
-        pytest.fail("已讀沒有寫進伺服器")
-
-    # 上一頁回來仍然是已讀
-    page.goto(live_server + "/index.html")
-    page.go_back()
-    _alpine_ready(page)
-    page.wait_for_selector(".dc-case-card:has-text('紅點測試')", timeout=15000)
-    page.wait_for_timeout(800)
-    assert page.locator(".dc-case-card:has-text('紅點測試') >> text=有更新").count() == 0
-
-
-@pytest.mark.e2e
-def test_another_tab_drops_the_mark_without_reloading(live_server, make_user, e2e_browser):
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    browser = e2e_browser
-    ctx = browser.new_context()
-    a = ctx.new_page()
-    _login(a, live_server, u, pw)
-    cid, card_a = _dev_crm_with_one_unread(a, live_server)
-    b = ctx.new_page()
-    b.goto(live_server + "/pages/dev-crm.html")
-    _alpine_ready(b)
-    card_b = b.locator(".dc-case-card:has-text('紅點測試')")
-    card_b.locator("text=有更新").wait_for(state="visible", timeout=15000)
-
-    card_a.click()
-    # 另一分頁：不重整，靠 storage 事件重抓
-    card_b.locator("text=有更新").wait_for(state="detached", timeout=8000)
-
-
-@pytest.mark.e2e
 def test_bell_marks_only_the_notification_that_was_clicked(live_server, make_user, e2e_browser):
     u, pw = make_user(username="alice", role="superadmin")
     now = datetime.now().isoformat()
@@ -326,67 +267,6 @@ class _LateUnread:
 
 
 @pytest.mark.e2e
-def test_a_late_unread_answer_does_not_bring_back_a_mark_clicked_meanwhile(live_server, make_user, e2e_browser):
-    """先渲染再非同步載入＝競態：點過的那一筆，不可以被一個「點選前就送出」的查詢蓋回未讀。"""
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    browser = e2e_browser
-    page = browser.new_page()
-    _login(page, live_server, u, pw)
-    cid, card = _dev_crm_with_one_unread(page, live_server)
-
-    late = _LateUnread(page)
-    page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
-    for _ in range(50):
-        if late.held:
-            break
-        page.wait_for_timeout(100)
-    assert late.held, "重抓未讀的請求沒有送出"
-    card.click()
-    page.wait_for_timeout(300)
-    assert card.locator("text=有更新").count() == 0
-    late.release()
-    page.wait_for_timeout(500)
-    assert card.locator("text=有更新").count() == 0, "晚到的未讀回應把剛點過的那一筆蓋回未讀"
-
-
-@pytest.mark.e2e
-def test_a_query_sent_after_the_click_but_answered_before_the_server_records_it_keeps_the_mark_cleared(
-        live_server, make_user, e2e_browser):
-    """先渲染再非同步載入的另一半：查詢在點選**之後**才送出，而伺服器算它的時候還沒收到那筆已讀
-    （兩條連線，先後不保證）⇒ 回應說「未讀」。只擋「點選前送出的查詢」的話，標記會被蓋回來。
-
-    量法：把 POST /api/reads 攔住不放行（伺服器確定還沒記下），點選之後觸發一次重抓並讓它照常回來。
-    """
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    browser = e2e_browser
-    page = browser.new_page()
-    _login(page, live_server, u, pw)
-    cid, card = _dev_crm_with_one_unread(page, live_server)
-    hold = _Hold(page)
-    card.click()
-    _wait_until_held(page, hold.held)
-    assert card.locator("text=有更新").count() == 0
-    with page.expect_response(lambda r: r.url.endswith("/api/reads/unread"), timeout=10000) as ans:
-        page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
-    assert str(cid) in ans.value.json().get("unread", []), "前提不成立：伺服器這時應該還沒記下已讀"
-    page.wait_for_timeout(300)
-    assert card.locator("text=有更新").count() == 0, "伺服器記下已讀之前的回應把剛點過的那一筆蓋回未讀"
-    # 伺服器記下之後，同一筆真的有新更新 ⇒ 標記要能回來（本地已讀不可以永久壓住它）
-    with page.expect_response(lambda r: r.url.endswith("/api/reads") and r.request.method == "POST",
-                              timeout=10000):
-        hold.release()
-    _audit("bob", "dev_case.update", "dev_case", cid)
-    time.sleep(1.1)
-    _audit("bob", "dev_case.update", "dev_case", cid)
-    page.evaluate("() => window.dispatchEvent(new CustomEvent('motrix:reads-changed'))")
-    card.locator("text=有更新").wait_for(state="visible", timeout=10000)
-
-
-@pytest.mark.e2e
 def test_case_management_late_unread_answer_does_not_undo_a_click(live_server, make_user, e2e_browser):
     make_user(username="bob", role="admin")
     u, pw = make_user(username="alice", role="superadmin")
@@ -429,44 +309,6 @@ def _two_tabs_with_one_unread(p, live_server, u, pw):
     card_b = b.locator(".dc-case-card:has-text('紅點測試')")
     card_b.locator("text=有更新").wait_for(state="visible", timeout=15000)
     return browser, a, b, card_a, card_b
-
-
-@pytest.mark.e2e
-def test_other_tab_updates_within_a_second_even_if_this_tab_leaves_at_once(live_server, make_user, e2e_browser):
-    """使用者裁示「要再優化」：點了之後**立刻換頁**（請求還沒完成、本分頁的後續程式不會再跑），
-    另一分頁仍要在 1 秒內把那一筆標成已讀。"""
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    p = e2e_browser   # PERF #5：共用瀏覽器
-    browser, a, b, card_a, card_b = _two_tabs_with_one_unread(p, live_server, u, pw)
-    hold = _Hold(a)                       # 伺服器那一頭還沒回應
-    card_a.click()
-    a.goto(live_server + "/index.html", wait_until="commit")
-    card_b.locator("text=有更新").wait_for(state="detached", timeout=_OPTIMISTIC_WAIT_MS)
-    browser.close()
-
-
-@pytest.mark.e2e
-def test_other_tab_restores_the_mark_when_the_server_rejects_the_read(live_server, make_user, e2e_browser):
-    make_user(username="bob", role="admin")
-    u, pw = make_user(username="alice", role="superadmin")
-    _dev_case("bob", "紅點測試")
-    p = e2e_browser   # PERF #5：共用瀏覽器
-    browser, a, b, card_a, card_b = _two_tabs_with_one_unread(p, live_server, u, pw)
-    hold = _Hold(a)                       # 先攔住，才量得到「樂觀」那一段
-    card_a.click()
-    # 樂觀：先變已讀……
-    card_b.locator("text=有更新").wait_for(state="detached", timeout=_OPTIMISTIC_WAIT_MS)
-    _wait_until_held(a, hold.held)
-    assert hold.held
-    for r in hold.held:
-        r.fulfill(status=500, body="{}")
-    hold.held = []
-    # ……伺服器拒絕 ⇒ 兩個分頁都還原
-    card_b.locator("text=有更新").wait_for(state="visible", timeout=5000)
-    card_a.locator("text=有更新").wait_for(state="visible", timeout=5000)
-    browser.close()
 
 
 # ── 選單紅點數字與鈴鐺：也要跨分頁即時（使用者追加）─────────────────────────

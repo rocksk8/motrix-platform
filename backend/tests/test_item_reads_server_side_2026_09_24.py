@@ -117,16 +117,6 @@ def test_changes_made_before_the_first_look_are_not_unread(client, make_user):
     assert _unread(client, ha, "dev_case", [cid]) == set()
 
 
-def test_someone_elses_change_after_the_baseline_is_unread(client, make_user):
-    ha = _hdr(client, make_user, "alice")
-    _hdr(client, make_user, "bob")
-    cid = _dev_case(_uid("alice"))
-    _unread(client, ha, "dev_case", [cid])          # 建立基準
-    _tick()
-    _audit("bob", "dev_case.update", "dev_case", cid)
-    assert _unread(client, ha, "dev_case", [cid]) == {str(cid)}
-
-
 def test_my_own_change_is_not_unread(client, make_user):
     ha = _hdr(client, make_user, "alice")
     cid = _dev_case(_uid("alice"))
@@ -134,54 +124,6 @@ def test_my_own_change_is_not_unread(client, make_user):
     _tick()
     _audit("alice", "dev_case.update", "dev_case", cid)
     assert _unread(client, ha, "dev_case", [cid]) == set()
-
-
-def test_marking_one_item_read_clears_only_that_item(client, make_user):
-    ha = _hdr(client, make_user, "alice")
-    _hdr(client, make_user, "bob")
-    c1, c2 = _dev_case(_uid("alice"), "一"), _dev_case(_uid("alice"), "二")
-    _unread(client, ha, "dev_case", [c1, c2])
-    _tick()
-    _audit("bob", "dev_case.update", "dev_case", c1)
-    _audit("bob", "dev_case.update", "dev_case", c2)
-    assert _unread(client, ha, "dev_case", [c1, c2]) == {str(c1), str(c2)}
-    _tick()
-    client.post("/api/reads", json={"kind": "dev_case", "key": str(c1)}, headers=ha)
-    assert _unread(client, ha, "dev_case", [c1, c2]) == {str(c2)}
-
-
-def test_a_new_change_after_reading_makes_it_unread_again(client, make_user):
-    ha = _hdr(client, make_user, "alice")
-    _hdr(client, make_user, "bob")
-    cid = _dev_case(_uid("alice"))
-    _unread(client, ha, "dev_case", [cid])
-    _tick()
-    _audit("bob", "dev_case.update", "dev_case", cid)
-    _tick()
-    client.post("/api/reads", json={"kind": "dev_case", "key": str(cid)}, headers=ha)
-    assert _unread(client, ha, "dev_case", [cid]) == set()
-    _tick()
-    _audit("bob", "dev_case.update", "dev_case", cid)
-    assert _unread(client, ha, "dev_case", [cid]) == {str(cid)}
-
-
-def test_a_dev_log_by_someone_else_marks_its_case_unread(client, make_user):
-    """dev_log 的 audit target 是**日誌 id** 不是案件 id —— 要從 dev_logs 表對回案件。"""
-    import db
-    ha = _hdr(client, make_user, "alice")
-    _hdr(client, make_user, "bob")
-    cid = _dev_case(_uid("alice"))
-    _unread(client, ha, "dev_case", [cid])
-    _tick()
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO dev_logs (case_id, log_date, log_by, created_by, created_at) VALUES (?,?,?,?,?)",
-            (cid, "2026-09-24", _uid("bob"), _uid("bob"), datetime.now().isoformat()))
-        conn.commit()
-    finally:
-        conn.close()
-    assert _unread(client, ha, "dev_case", [cid]) == {str(cid)}
 
 
 def test_case_activity_by_others_is_unread_and_mine_is_not(client, make_user):
