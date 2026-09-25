@@ -38,12 +38,6 @@
    "kind": "frozen"
   },
   {
-   "table": "dev_cases",
-   "writer": "router:quotations",
-   "ref": "DEPENDENCY-MAP §4",
-   "kind": "debt"
-  },
-  {
    "table": "invoice_vouchers",
    "writer": "core:db",
    "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入",

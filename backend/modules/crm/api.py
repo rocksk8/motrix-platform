@@ -1,4 +1,7 @@
-"""業務開發 CRM — 前期案件追蹤 + 開發記錄 (pre-quotation)."""
+"""M02 業務開發 CRM — 前期案件追蹤 + 開發記錄 (pre-quotation)。
+
+2026-09-26 自 `routers/dev_crm.py` 搬入（PLAYBOOK §B）。只 import core／helpers／db（L1）。
+"""
 import json
 import logging
 from datetime import datetime, timedelta, date
@@ -17,7 +20,7 @@ from helpers import (
     push_event_for_dev_case_converted, push_event_for_dev_case_stale,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/api")          # 原本由 main.py 以 prefix="/api" 掛載
 _logger = logging.getLogger(__name__)
 
 _STATUS_OPTIONS = ["洽談中", "成案", "未成案", "暫擱置"]
@@ -1138,6 +1141,24 @@ def _check_dev_case_hold_expiry() -> None:
     finally:
         if conn is not None:
             conn.close()
+
+
+def unlink_deleted_quote(conn, quote_no: str) -> list:
+    """IP-11 `crm.quote_deleted`（M02 → M01）：報價單被刪除 ⇒ 轉建連結指到它的業務開發案件解除連結、退回「洽談中」。
+
+    在**呼叫方的交易內**執行、不 commit（與刪報價單同一筆交易：要嘛都成、要嘛都不成）。
+    dev_cases 與 quotations 之間沒有 FK，不解除就會留下指向不存在報價單的連結。
+    回傳被解除的案件 `[{"id", "case_name"}]`，稽核紀錄由呼叫方寫（它有操作者的身分）。"""
+    rows = conn.execute(
+        "SELECT id, case_name FROM dev_cases WHERE converted_quote_no=?", (quote_no,)
+    ).fetchall()
+    if rows:
+        conn.execute(
+            "UPDATE dev_cases SET converted_quote_no='', status='洽談中', updated_at=? "
+            "WHERE converted_quote_no=?",
+            (datetime.now().isoformat(), quote_no),
+        )
+    return [{"id": r["id"], "case_name": r["case_name"]} for r in rows]
 
 
 def schedule_dev_case_stale_check() -> None:

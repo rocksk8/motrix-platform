@@ -1160,6 +1160,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把結果留著）。
   var MODULE_PAGES = {
     'tender-radar.html': { key: 'tender_radar', name: '標案雷達' },
+    'dev-crm.html': { key: 'crm', name: '業務開發' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null
