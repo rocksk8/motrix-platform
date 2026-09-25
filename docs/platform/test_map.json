@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 459,
+  "tests": 464,
   "unmapped": 6,
   "kinds": {
-   "api": 247,
+   "api": 251,
+   "e2e": 117,
    "unit": 38,
-   "audit": 58,
-   "e2e": 116
+   "audit": 58
   },
   "routes": 505
  },
@@ -81,6 +81,37 @@
     ]
    },
    "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_e2e_boolean_status_select_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_mapiso.py",
+    "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
+    "mod:tender_radar/api",
+    "page:pages/tender-radar.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_mapiso.py",
+     "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
    "module": "tender_radar"
   },
   "backend/modules/tender_radar/tests/test_tender_labels_2026_09_22.py": {
@@ -248,6 +279,53 @@
    },
    "module": "tender_radar"
   },
+  "backend/modules/tender_radar/tests/test_tender_platform_controls_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/test_em1_screen_words_in_long_messages_2026_09_24.py",
+    "file:backend/tests/test_navigation_destination_2026_09_23.py",
+    "file:backend/tests/test_runtime_switches_2026_09_22.py",
+    "file:backend/tests/test_write_endpoints_are_audited_2026_09_24.py",
+    "helper:notification_prefs",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/notify",
+    "mod:tender_radar/source",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py",
+     "backend/tests/test_em1_screen_words_in_long_messages_2026_09_24.py",
+     "backend/tests/test_navigation_destination_2026_09_23.py",
+     "backend/tests/test_runtime_switches_2026_09_22.py",
+     "backend/tests/test_write_endpoints_are_audited_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "backend/modules/tender_radar/",
+     "backend/modules/tender_radar/api.py",
+     "backend/modules/tender_radar/notify.py",
+     "backend/modules/tender_radar/source.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
   "backend/modules/tender_radar/tests/test_tender_reset_endpoint_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -380,7 +458,6 @@
    "units": [
     "file:backend/modules/tender_radar/module.json",
     "mod:tender_radar/api",
-    "mod:tender_radar/source",
     "plat:__init__",
     "plat:loader",
     "plat:registry",
@@ -397,7 +474,6 @@
     "path": [
      "backend/modules/tender_radar/api.py",
      "backend/modules/tender_radar/module.json",
-     "backend/modules/tender_radar/source.py",
      "backend/routers/system.py"
     ]
    }
@@ -416,6 +492,27 @@
     ],
     "path": [
      "backend/version_manifest.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_dispatch_connector.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "helper:recognition",
+    "plat:__init__",
+    "plat:registry",
+    "router:reports",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/recognition.py",
+     "backend/routers/reports.py",
+     "backend/routers/vouchers.py"
     ]
    }
   },
@@ -503,6 +600,39 @@
    "evidence": {
     "import": [
      "backend/db.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_voucher_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:frontend/pages/",
+    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
+    "helper:bonus_vouchers",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/helpers/bonus_vouchers.py",
+     "backend/routers/bonus.py",
+     "frontend/pages/",
+     "frontend/pages/bonus.html"
     ]
    }
   },
@@ -3329,9 +3459,7 @@
     "core:db",
     "file:backend/tests/_mapiso.py",
     "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
-    "mod:tender_radar/api",
     "page:pages/suppliers.html",
-    "page:pages/tender-radar.html",
     "router:suppliers"
    ],
    "evidence": {
@@ -3341,16 +3469,13 @@
      "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
     ],
     "api": [
-     "backend/modules/tender_radar/api.py",
      "backend/routers/suppliers.py"
     ],
     "page": [
-     "frontend/pages/suppliers.html",
-     "frontend/pages/tender-radar.html"
+     "frontend/pages/suppliers.html"
     ],
     "path": [
-     "frontend/pages/suppliers.html",
-     "frontend/pages/tender-radar.html"
+     "frontend/pages/suppliers.html"
     ]
    }
   },
@@ -5195,7 +5320,6 @@
    "kind": "audit",
    "units": [
     "helper:module_registry",
-    "mod:tender_radar/api",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
     "page:pages/users.html",
@@ -5231,7 +5355,6 @@
      "frontend/pages/users.html"
     ],
     "path": [
-     "backend/modules/tender_radar/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/bonus.py",
@@ -5533,6 +5656,7 @@
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
     "helper:settings",
+    "mod:tender_radar/__init__",
     "mod:tender_radar/source",
     "router:map_points",
     "router:system"
@@ -5543,6 +5667,7 @@
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
      "backend/helpers/settings.py",
+     "backend/modules/tender_radar/__init__.py",
      "backend/modules/tender_radar/source.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
@@ -7026,7 +7151,6 @@
     "page:pages/daily-tasks.html",
     "page:pages/notification-settings.html",
     "page:pages/reports.html",
-    "page:pages/tender-radar.html",
     "page:pages/users.html",
     "router:accounting_export",
     "router:reports"
@@ -7038,7 +7162,6 @@
      "frontend/pages/daily-tasks.html",
      "frontend/pages/notification-settings.html",
      "frontend/pages/reports.html",
-     "frontend/pages/tender-radar.html",
      "frontend/pages/users.html"
     ],
     "path": [
@@ -7594,14 +7717,10 @@
    "kind": "audit",
    "units": [
     "file:backend/tests/_subproc.py",
-    "file:backend/tests/test_ports_helper_2026_09_21.py",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/source"
+    "file:backend/tests/test_ports_helper_2026_09_21.py"
    ],
    "evidence": {
     "import": [
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/source.py",
      "backend/tests/_subproc.py"
     ],
     "path": [
@@ -8110,12 +8229,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "helper:xlsx_out",
     "router:reports",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/helpers/xlsx_out.py",
      "backend/routers/reports.py"
     ],
     "api": [
@@ -8588,16 +8709,16 @@
    "kind": "audit",
    "units": [
     "core:db",
+    "helper:part_catalog",
     "js:js/cashier.js",
     "page:pages/cashier.html",
-    "router:accounting_export",
-    "router:parts"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/parts.py"
+     "backend/helpers/part_catalog.py",
+     "backend/routers/accounting_export.py"
     ],
     "page": [
      "frontend/js/cashier.js",
@@ -9510,9 +9631,9 @@
    "kind": "api",
    "units": [
     "core:db",
-    "mod:tender_radar/api",
     "plat:__init__",
     "plat:source_tree",
+    "router:approval_delegates",
     "router:auth",
     "router:item_reads",
     "router:list_prefs",
@@ -9528,7 +9649,7 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/modules/tender_radar/api.py",
+     "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
@@ -9538,7 +9659,6 @@
      "backend/routers/system.py"
     ],
     "path": [
-     "backend/modules/tender_radar/api.py",
      "backend/routers/auth.py"
     ]
    }
@@ -9600,6 +9720,41 @@
     "api": [
      "backend/routers/case_extra_expenses.py",
      "backend/routers/quotations.py"
+    ]
+   }
+  },
+  "backend/tests/test_xlsx_out_l1_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:network_plan_export",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:company_identity",
+    "helper:part_catalog",
+    "helper:settings",
+    "helper:xlsx_out",
+    "router:accounting_export",
+    "router:cashier",
+    "router:parts",
+    "router:reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_identity.py",
+     "backend/helpers/part_catalog.py",
+     "backend/helpers/settings.py",
+     "backend/helpers/xlsx_out.py",
+     "backend/network_plan_export.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/parts.py",
+     "backend/routers/reports.py"
+    ],
+    "path": [
+     "backend/routers/accounting_export.py",
+     "backend/routers/cashier.py",
+     "backend/routers/reports.py"
     ]
    }
   }
