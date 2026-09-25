@@ -98,13 +98,17 @@ def test_smoke_route_matcher():
 
 def test_smoke_paths_are_real_routes_or_pages(client):
     """稽核 D：冒煙清單的每一條都必須是 app 的 GET 路由，或 frontend/ 底下真的有的頁面（打錯字不會在演練時才發現）。
-    ⚠ 新版才有的端點（例：/api/definitions/{kind} 在第二批）要等那一包合回後才會在這裡成立 ⇒ 那時才加進清單。"""
+    屬於 L2 模組的項目登記在 `SMOKE_MODULES`，那個模組不在時不算。"""
     from tests._routes import all_routes
     gets = {p for p, methods, _r in all_routes(client.app) if "GET" in methods}
     front = REPO / "frontend"
     missing = []
+    from core import source_tree
     for name, method, path in FD.SMOKE:
         assert method == "GET", name
+        key = FD.SMOKE_MODULES.get(name)
+        if key and not source_tree.module_installed("modules/%s/" % key):
+            continue                                   # 模組不在這個安裝包（PLAYBOOK §B-11）
         if path == "/" or path.endswith(".html"):
             target = front / ("index.html" if path == "/" else path.lstrip("/"))
             if not target.is_file():

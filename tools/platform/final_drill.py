@@ -55,8 +55,11 @@ SMOKE = [
     ("營運報表", "GET", "/api/reports/financial"), ("營運報表頁", "GET", "/pages/reports.html"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),
-    # 第二批（P8 缺口 #5）合回後加：("定義文件庫", "GET", "/api/definitions/custom_module")
+    ("定義文件庫", "GET", "/api/definitions/custom_module"),         # 第二批（P8 缺口 #5）已合回
 ]
+
+#: 屬於 L2 模組的冒煙項（名稱 → 模組 key）：那個模組不在這個安裝包時，冒煙與守門都不算它（PLAYBOOK §B-11）
+SMOKE_MODULES = {"獎金分潤項目": "payroll"}
 
 
 def sha256(path: str) -> str:
@@ -242,6 +245,10 @@ def smoke(install: str) -> dict:
                                      headers={"Content-Type": "application/json"})
         token = json.loads(urllib.request.urlopen(req, timeout=10).read())["token"]
         for name, method, path in SMOKE:
+            key = SMOKE_MODULES.get(name)
+            if key and not os.path.isfile(os.path.join(install, "backend", "modules", key, "module.json")):
+                out["checks"].append({"name": name, "path": path, "skipped": "模組 %s 不在這個安裝包" % key, "ok": True})
+                continue
             r = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
             try:
                 code = urllib.request.urlopen(r, timeout=30).status
