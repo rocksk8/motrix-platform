@@ -5,11 +5,11 @@
 再處理，記得備註」**（2026-09-23）。
 
 ```
-helpers/bonus.py      BONUS_MODULE_ENABLED = False ＋ bonus_module_on()
+modules/payroll/bonus.py      BONUS_MODULE_ENABLED = False ＋ bonus_module_on()
 routers/system.py     GET /api/system/bonus-module-status（要登入）
 sidebar.js            打那支端點，關閉時隱藏 a[href$="bonus.html"]
 bonus.html            直開網址顯示「暫停使用」
-routers/bonus.py      **零改動** —— 140+ 支既有獎金測試才不會全紅
+modules/payroll/api/bonus.py      **零改動** —— 140+ 支既有獎金測試才不會全紅
 ```
 
 # ☠️ 只測「關掉時不見了」的話，**把整個模組刪掉也會全綠**
@@ -97,7 +97,7 @@ def test_the_bonus_module_is_on_by_default(monkeypatch):
     ⚙️ 釘 `bonus_module_on()` 的**回傳**，不是釘原始碼字面值（〈守門守的對象被搬走〉）。
     ⚠️ 先把環境變數清掉：這一題問的是「**沒有人動過它的時候**」。
     """
-    import helpers.bonus as hb
+    import modules.payroll.bonus as hb
 
     monkeypatch.delenv("BONUS_MODULE_ENABLED", raising=False)
     assert hb.bonus_module_on() is True, (
@@ -114,7 +114,7 @@ def test_the_bonus_module_can_still_be_turned_off_on_site(monkeypatch):
     ```
     ⚠️ ① 的判準是 `== "0"`：用真假值判的話 `"0"` 是非空字串，會判成開著。
     """
-    import helpers.bonus as hb
+    import modules.payroll.bonus as hb
 
     monkeypatch.setenv("BONUS_MODULE_ENABLED", "0")
     assert not hb.bonus_module_on(), "環境變數 `=0` 之後它還是開的 —— 現場關不掉了。"
@@ -152,7 +152,7 @@ def test_the_status_endpoint_answers_both_directions(client, make_user,
     那支驗的是旗標函式，這支驗的是**端點真的去問了那支函式**
     （中間那一段接線斷掉時，只有這一題會紅）。
     """
-    import helpers.bonus as hb
+    import modules.payroll.bonus as hb
 
     hdr = _login(client, make_user, "bonus_flag_reader")
 
@@ -291,7 +291,7 @@ def test_the_bonus_page_says_it_is_suspended():
 
 
 def test_the_bonus_api_itself_is_untouched():
-    """🔴 **`routers/bonus.py` 不可以讀這個旗標。**
+    """🔴 **`modules/payroll/api/bonus.py` 不可以讀這個旗標。**
 
     A 明著交代，理由是可量的：
     ```
@@ -301,12 +301,12 @@ def test_the_bonus_api_itself_is_untouched():
     ⚠️ 而它同時是一條**設計裁示**：這次拉掉的是**入口**，不是資料與行為
       （`SPEC-BN21.md` 留著，資料照樣在，開回來就能用）。
     📌 這一題的措辭要精確：不是「後端不可以有這個旗標」（旗標的家就在
-      `helpers/bonus.py`），是**獎金 API 那一支的行為不因旗標改變**。
+      `modules/payroll/bonus.py`），是**獎金 API 那一支的行為不因旗標改變**。
     """
-    src = (_root() / "backend" / "routers" / "bonus.py").read_text(
+    src = (_root() / "backend" / "modules" / "payroll" / "api" / "bonus.py").read_text(
         encoding="utf-8")
     assert "BONUS_MODULE_ENABLED" not in src and "bonus_module_on" not in src, (
-        "`routers/bonus.py` 讀了模組旗標 ——\n"
+        "`modules/payroll/api/bonus.py` 讀了模組旗標 ——\n"
         + "☠️ 獎金 API 一跟著關，140+ 支直接打 API 的既有測試會全部變紅。")
 
 

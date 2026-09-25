@@ -10,7 +10,7 @@
 的範圍，A 交代這一塊是「`BN14`／`BN18` 的前置」，本檔只覆蓋這一塊：
 
 ```
-✅ helpers/bonus.py::people_for_item() 的 "sales_person" 來源
+✅ modules/payroll/bonus.py::people_for_item() 的 "sales_person" 來源
    要解析出 users.username，不是 quotations.sales_person 的顯示名字串
 ❌ 不做 26 個讀取端的顯示用／識別用逐一分類（那是完整 QS1 的範圍）
 ❌ 不做 migration 的兩層回填與 K 筆列名 logging（同上）
@@ -19,10 +19,10 @@
 # ⚙️ 現況（查證）
 
 ```
-routers/bonus.py::_case_people()：
+modules/payroll/api/bonus.py::_case_people()：
     SELECT quote_no, sales_person, owner, engineer FROM quotations …
     case["sales_person"] = 那一欄的**顯示名字串**（例如「黃玉龍」）
-helpers/bonus.py::people_for_item()：
+modules/payroll/bonus.py::people_for_item()：
     source == "sales_person" 時走 case.get(source) —— 拿到顯示名
 ```
 ⇒ `bonus_award_lines.username` 存進去的是顯示名，不是真的帳號——同一個

@@ -13,7 +13,6 @@
 import json
 from datetime import date
 
-from core import registry
 
 #: 出納頁與報表的顯示文字
 EXPENSE_CATEGORY = "獎金分潤"
@@ -79,7 +78,7 @@ class _Payouts:
         return out
 
 
-registry.provide("bonus.payouts", "payroll", _Payouts)
+# IP-8 由 modules/payroll/__init__.py 的 ModuleSpec.providers 登記（模組沒載入就沒有登記）
 
 
 # ── IP-9 expense.entries（契約版本 1；多提供者，以名稱區分）─────────────────────
@@ -93,7 +92,7 @@ def _expense_entries(conn, start, end):
              "amount": int(r["total"] or 0), "category": EXPENSE_CATEGORY} for r in rows]
 
 
-registry.provide("expense.entries", "bonus", _expense_entries)
+# IP-9 由 modules/payroll/__init__.py 的 ModuleSpec.providers 登記
 
 
 # ── 通知對象 ─────────────────────────────────────────────────────────────────

@@ -125,7 +125,7 @@ def test_member_check_by_username_ignores_same_display_name(client, make_user):
 
 def test_bonus_auto_executor_uses_username(client, make_user):
     import db
-    from routers import bonus
+    from modules.payroll.api import bonus
     make_user(username="rl_bexec", role="engineer"); _set_display("rl_bexec", "現在的名字")
     _seed({"executor": {"username": "rl_bexec", "display": "當時的名字"}})
     conn = db.get_db()
@@ -138,7 +138,7 @@ def test_bonus_auto_executor_uses_username(client, make_user):
 
 def test_bonus_auto_executor_legacy_string_still_works(client, make_user):
     import db
-    from routers import bonus
+    from modules.payroll.api import bonus
     make_user(username="rl_bold", role="engineer"); _set_display("rl_bold", "舊資料名")
     _seed({"executor": "舊資料名"})
     conn = db.get_db()

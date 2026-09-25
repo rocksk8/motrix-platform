@@ -2,7 +2,7 @@
 """`BN2` · 「獎金項目只有最高管理者可見」（使用者逐字）。
 
 ```
-實查 routers/bonus.py:93   list_bonus_items 只 `_require_user(authorization)`
+實查 modules/payroll/api/bonus.py:93   list_bonus_items 只 `_require_user(authorization)`
 ⇒ **任何登入者都看得到**
 ```
 🔑 **寫已經擋住了**（`POST /items` 是 `require_superadmin=True`），

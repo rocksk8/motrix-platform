@@ -380,18 +380,19 @@
    "key": "payroll",
    "name": "薪資獎金",
    "units": [
-    "helper:bonus",
-    "helper:bonus_case",
-    "helper:bonus_deductions",
-    "helper:bonus_pdf",
-    "helper:bonus_payouts",
-    "helper:bonus_vouchers",
     "js:js/bonus.js",
+    "mod:payroll/__init__",
+    "mod:payroll/api/bonus",
+    "mod:payroll/api/payslips",
+    "mod:payroll/bonus",
+    "mod:payroll/bonus_case",
+    "mod:payroll/bonus_deductions",
+    "mod:payroll/bonus_payouts",
+    "mod:payroll/bonus_pdf",
+    "mod:payroll/bonus_vouchers",
     "page:pages/bonus.html",
     "page:pages/payslip-form.html",
-    "page:pages/payslips.html",
-    "router:bonus",
-    "router:payslips"
+    "page:pages/payslips.html"
    ],
    "tables": [
     "bonus_award_edit_log",

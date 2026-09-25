@@ -1,7 +1,7 @@
 """獎金分潤（以案件為中心）的分配算式（SPEC-BONUS §11.2／§11.6／§11.7）。"""
 import pytest
 
-from helpers.bonus_case import BonusCalcError, DEFAULT_RATE_BP, DEFAULT_SPLIT_BP, allocate, pool_amount
+from modules.payroll.bonus_case import BonusCalcError, DEFAULT_RATE_BP, DEFAULT_SPLIT_BP, allocate, pool_amount
 
 
 def _p(*names, bp=None):

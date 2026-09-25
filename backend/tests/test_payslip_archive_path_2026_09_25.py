@@ -11,13 +11,13 @@ from helpers.settings import _set_setting
 
 
 def test_default_is_v9_location(client):
-    from routers import payslips
+    from modules.payroll.api import payslips
     assert payslips._archive_dir() == paths.PDF_ARCHIVES["payslip"][1]
     assert os.path.basename(payslips._archive_dir()) == "export_archive"
 
 
 def test_setting_overrides_and_archive_path_uses_it(client, tmp_path):
-    from routers import payslips
+    from modules.payroll.api import payslips
     _set_setting("payslip_archive_path", str(tmp_path))
     assert payslips._archive_dir() == str(tmp_path)
     p = payslips._archive_path("PS-202609-001", 1)
@@ -26,13 +26,13 @@ def test_setting_overrides_and_archive_path_uses_it(client, tmp_path):
 
 
 def test_blank_setting_falls_back_to_default(client):
-    from routers import payslips
+    from modules.payroll.api import payslips
     _set_setting("payslip_archive_path", "   ")
     assert payslips._archive_dir() == paths.PDF_ARCHIVES["payslip"][1]
 
 
 def test_demo_ignores_setting(client, tmp_path, monkeypatch):
-    from routers import payslips
+    from modules.payroll.api import payslips
     _set_setting("payslip_archive_path", str(tmp_path))
     monkeypatch.setattr(payslips, "is_demo_mode", lambda: True)
     assert payslips._archive_dir() == payslips.DEMO_PAYSLIP_ARCHIVE_DIR

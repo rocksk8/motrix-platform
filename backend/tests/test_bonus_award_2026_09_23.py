@@ -32,7 +32,7 @@ import db
 _BACKEND = Path(__file__).resolve().parent.parent
 _FRONTEND = _BACKEND.parent / "frontend"
 
-_MODULES = ("helpers.bonus", "routers.bonus", "helpers.bonus_award",
+_MODULES = ("modules.payroll.bonus", "modules.payroll.api.bonus", "helpers.bonus_award",
             "routers.bonus_awards")
 
 #: `§五` 的基點制（1/10000）。⚠️ 浮點相加不等於 1 是一個沒有錯誤訊息的缺陷。

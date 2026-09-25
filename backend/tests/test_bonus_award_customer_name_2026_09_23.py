@@ -33,7 +33,7 @@ A 已告知 B：不要在 `bonus_awards` 存一份客戶名快照——那會變
 # 🔴 補證：這 5 題寫完的當下就是綠的（B 在同一份工作樹上幾乎同時做完），
 # 〈新回歸測試一定要先證明它會紅〉這一步沒有機會發生——用**替身**補一次
 
-不 stash／不碰 B 的未提交異動：monkeypatch `routers.bonus._case_names_for`
+不 stash／不碰 B 的未提交異動：monkeypatch `modules.payroll.api.bonus._case_names_for`
 讓它一律回空 dict，重跑這 5 題，結果：
 
 ```

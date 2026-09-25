@@ -42,7 +42,7 @@ BASIS_POINTS = 10000
 #:
 #: 使用者逐字：「獎金分潤模組上傳到正式機就自動啟用」（SPEC-BONUS §11.7）。
 #: 📌 原本預設關的理由是舊設計「三組各自佔淨利的比例、沒有人檢查加總」（`SPEC-BN21.md`）；
-#:    §十一 的新設計改成**同一個獎金池**分三類（合計須 100%，helpers/bonus_case.py 擋），
+#:    §十一 的新設計改成**同一個獎金池**分三類（合計須 100%，modules/payroll/bonus_case.py 擋），
 #:    那個理由已經不成立。
 #: ⚙️ 現場仍可關：環境變數 `BONUS_MODULE_ENABLED=0`。
 #: 🔑 環境變數放在 `bonus_module_on()` 裡讀，不寫進這個常數的初始值——
@@ -61,9 +61,7 @@ def bonus_module_on():
         return False
     return bool(BONUS_MODULE_ENABLED) or env == "1"
 
-from core import registry as _registry  # noqa: E402
-# IP-16：L1 `/api/system/bonus-module-status` 經此得知開關（不 import 本檔）；搬進 modules/ 後改寫進 ModuleSpec.providers
-_registry.provide("bonus.module_status", "payroll", bonus_module_on)
+# IP-16：L1 `/api/system/bonus-module-status` 經此得知開關（不 import 本檔）；由 modules/payroll/__init__.py 的 ModuleSpec.providers 登記
 
 #: 基數的唯一來源。寫成常數是為了讓「它從哪來」可以被查，
 #: 而 `bonus_awards.base_source` 會把它一起凍進每一筆。
@@ -115,7 +113,7 @@ def base_amount_for(settlement):
 #: `SPEC-BN6-BN7.md §1`：逐字抄 `settlement.html` 的十二格鍵名與順序。
 #: 🔴 `BN6` 一個數字都不重算——10%／1% 只寫在 `settlement.html`，
 #: 這裡只把 `summary` 已存的值原樣帶出來。改動任何一個字要回那份規格。
-#: 📌 `SPEC-BN11-BN12.md §2`：原本定義在 `routers/bonus.py`，`BN11` 搬到
+#: 📌 `SPEC-BN11-BN12.md §2`：原本定義在 `modules/payroll/api/bonus.py`，`BN11` 搬到
 #: 這裡——`bonus_pdf.py`（helper）不可以 import router，搬過來才有單一
 #: 來源可以共用，不是為了搬而搬。
 SETTLEMENT_FIELDS = (
@@ -396,7 +394,7 @@ def bonus_signatures_of(award):
             => 這裡只讀鏈，沒有 fallback 分支
     ```
     ⚠️ 沒有設定過簽核流程時鏈是空的 ⇒ 這裡只回「製表」一格——是不是要再
-    退回一個內建的預設層，是送審端點（`routers/bonus.py`）的決定，不是
+    退回一個內建的預設層，是送審端點（`modules/payroll/api/bonus.py`）的決定，不是
     這支版面函式的事。
     """
     out = {MAKER_SLOT: {"by": award.get("created_by") or "",

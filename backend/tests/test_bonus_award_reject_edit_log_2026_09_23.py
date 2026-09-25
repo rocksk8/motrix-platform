@@ -29,7 +29,7 @@ bonus.js:545        rejectAward() 已經把 reason 送進 POST /reject
 ❌ 後端 reject_award()（bonus.py:867）完全沒驗 reason 非空
    ——前端擋得住 UI，直接打 API 繞得過去（〈前端過濾是假的〉）
 ❌ 沒有寫進 bonus_award_edit_log（表存在，v98 建的，
-   全 backend/routers/bonus.py 零筆 append_edit_log 呼叫）
+   全 backend/modules/payroll/api/bonus.py 零筆 append_edit_log 呼叫）
 ❌ 沒有 GET 端點可以讀這張表
 ❌ bonus_award_edit_log 沒有防刪 TRIGGER
 ```

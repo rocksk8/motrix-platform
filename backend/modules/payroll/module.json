@@ -1,0 +1,29 @@
+{
+  "key": "payroll",
+  "name": "薪資獎金",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "payroll",
+  "permissions": ["payslip"],
+  "permissions_note": "獎金分潤依角色（管理員以上）與簽核名單判斷，沒有獨立的模組權限 key",
+  "tables": ["payslips", "payslip_seq", "bonus_items", "bonus_item_people", "bonus_groups", "bonus_group_members",
+             "bonus_awards", "bonus_award_lines", "bonus_award_edit_log",
+             "bonus_case_awards", "bonus_case_award_lines", "bonus_case_award_edit_log"],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流",
+  "data": {
+    "tables": [
+      {"name": "payslips", "class": "T1"}, {"name": "payslip_seq", "class": "T1"},
+      {"name": "bonus_items", "class": "T1"}, {"name": "bonus_item_people", "class": "T1"},
+      {"name": "bonus_groups", "class": "T1"}, {"name": "bonus_group_members", "class": "T1"},
+      {"name": "bonus_awards", "class": "T1"}, {"name": "bonus_award_lines", "class": "T1"},
+      {"name": "bonus_award_edit_log", "class": "T1"},
+      {"name": "bonus_case_awards", "class": "T1"}, {"name": "bonus_case_award_lines", "class": "T1"},
+      {"name": "bonus_case_award_edit_log", "class": "T1"}
+    ],
+    "files": [{"key": "payslip_archive", "class": "F2", "setting": "payslip_archive_path"}]
+  },
+  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；勞報單的輸出版型可覆寫（P2，helpers/output_templates/payslip.json，屬 L1 輸出引擎）",
+  "provides": {"api_prefixes": ["/api/payslips", "/api/next-slip-no", "/api/tax-rules", "/api/bonus"]},
+  "pages": [{"path": "payslips.html"}, {"path": "payslip-form.html"}, {"path": "bonus.html"}]
+}
