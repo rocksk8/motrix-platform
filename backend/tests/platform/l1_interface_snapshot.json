@@ -1,5 +1,5 @@
 {
- "core_version": "1.22",
+ "core_version": "1.23",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -538,16 +538,24 @@
    "ACKS_KEY": "const",
    "AcksCorrupted": "class",
    "COMPANY_PLACEHOLDER": "const",
+   "CONTACT_TEMPLATE": "const",
+   "PURPOSES": "const",
    "TEMPLATE": "const",
    "TEXTS_KEY": "const",
+   "USER_TEMPLATE": "const",
    "ack_record": "def(user, text, now=…)",
+   "acks_with_prefix": "def(kind, key_prefix)",
    "archive_text": "def(conn, text)",
    "current_notice": "def()",
+   "current_purpose_notice": "def(purpose)",
    "get_ack": "def(kind, key)",
    "merge_ack": "def(existing, requested, user, text)",
    "notice_hash": "def(text)",
    "notice_text": "def(profile)",
+   "purpose_notice_text": "def(profile, purpose)",
+   "purpose_template_for": "def(purpose, company_name)",
    "record_ack": "def(kind, key, user)",
+   "record_purpose_ack": "def(kind, key, user, purpose)",
    "template_for": "def(company_name)",
    "text_for_hash": "def(h)"
   },
