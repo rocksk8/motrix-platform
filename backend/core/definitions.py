@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """定義文件庫：草稿、版本、差異、還原（CUSTOMIZATION-SPEC §3.5）。
 
+[單位] plat:definitions    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] DefinitionError, KINDS, diff, get, publish, register_default, register_validator, resolve, restore,
+    save_draft, validate, versions
+[不變式] 每個 (kind, key, scope) 最多一份草稿；已發布的版本不可改、不可刪；還原＝把舊版再發布成新的一版；發布前驗證不過就不發布
+[契約題] tests/test_definitions_store_2026_09_25.py
+[注意] 函式吃呼叫端的連線、不自己開；寫入的函式自己 commit
+
 版面（P5）、輸出版型覆寫（P2）、自訂欄位（P4）、自訂模組（P8）共用這一套；用 `kind` 區分。
 - 每個 (kind, key, scope) 最多一份草稿（version 0，可改）；發布產生不可變的新版本（version＋1）。
 - 已發布的列不可修改、不可刪除；還原＝把舊版內容再發布成新的一版（歷史不改）。

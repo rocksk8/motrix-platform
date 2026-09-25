@@ -1,6 +1,14 @@
 # -*- coding: utf-8 -*-
 """L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。
 
+[單位] plat:registry    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] CORE_VERSION, LoadedModule, ModuleSpec, RuntimeSwitch, STATES, disabled_list, failed, is_loaded,
+    loaded, mark_failed, module_states, provide, providers, register, restore, runtime_switches,
+    set_disabled_list, set_state, single_provider, snapshot, unload
+[不變式] main.py 只迭代這張表、不指名模組；對方沒裝時 providers() 回空 dict、single_provider() 回 None（不是錯誤）
+[契約題] tests/platform/test_core_loader.py, tests/platform/test_module_selection.py
+[注意] CORE_VERSION 在合回時才定（§C-7，用 core_bump）；測試夾具一律用 snapshot()／restore()
+
 L2 模組在 `modules/<key>/__init__.py` 宣告 `MODULE = ModuleSpec(...)`；
 main.py 只迭代這張表，不指名任何模組 ⇒ 刪掉模組資料夾＝少一個功能，不是啟動失敗。
 
