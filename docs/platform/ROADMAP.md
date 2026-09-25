@@ -49,6 +49,60 @@
 | G5 | 版本紀錄頁改由各模組 CHANGELOG 彙整產生；`version_manifest.json` 退場 | ⏳ |
 | G6 | 勞報單（F2）上雲：獨立、權限更窄的資料夾 | ⏳ C（A8 之後） |
 
+## 階段 S：系統狀態的處理（STATES 目錄）
+
+> C 的目錄：`docs/platform/states/STATES-DATA-OPS.md`（資料／升級／部署／備份／通知，編號 S-C…）。A 的目錄（模組平台，編號 S-P…）由 A 合回時併入本節。
+> 高且缺守門的項目先補（C：S-CD02、S-CC07、S-CC06、S-CN03、S-CU10；主持：S-CU01、S-CU06、S-CP01、S-CP02）；每一項註明 V9 是否同樣受影響，V9 修不修由使用者決定。
+
+| # | 狀態 | 嚴重度 | 目前守門 | 狀態 |
+|---|---|---|---|---|
+| S-CU01 | WinRM 連線**掛住不回**（非斷線） | 高 | 缺 | 🔄 主持修、C 稽核 |
+| S-CU02 | WinRM **斷線** | 中 | 缺 | ⏳ |
+| S-CU03 | 儀表板重啟後輪詢不停 | 低 | 缺 | ⏳ |
+| S-CU04 | 轉換中途斷電／磁碟滿（程式換到一半） | 中 | 缺（R2 未入測試） | ⏳ |
+| S-CU05 | 備份中途失敗 | 低 | `test_backup_refuses_non_empty_dir` | ⏳ |
+| S-CU06 | 精靈的備份時間戳隨頁面重整改變 | 高 | 缺 | 🔄 主持修、C 稽核 |
+| S-CU07 | 回滾本身失敗（檔案被鎖） | 中 | 缺（R3 未入測試） | ⏳ |
+| S-CU08 | 同一時間戳重跑、步驟亂序 | 中 | 缺 | ⏳ |
+| S-CU09 | 預檢的磁碟判斷不足 | 中 | `test_preflight_rejects_low_disk`（只涵蓋 DB×3） | ⏳ |
+| S-CU10 | **預檢放行損毀主庫** | 高 | 缺 | 🔄 C（補強中） |
+| S-CU11 | 正式機 PATH 上沒有 python | 中 | 缺 | ⏳ |
+| S-CU12 | 升級後版本號仍顯示舊的 | 中 | 缺 | ⏳ |
+| S-CU13 | 轉換後還能按「啟動服務」而驗證沒過 | 中 | 缺 | ⏳ |
+| S-CC01 | 服務啟動時雲端碟還沒掛上 | 低 | 缺（「先未掛、後掛上」無測試） | ⏳ |
+| S-CC02 | 碟符 G: → H: | 低 | `test_verdict_cache_is_keyed_by_archive_path` | ⏳ |
+| S-CC03 | `系統存檔_個資` 被刪或改名 | 中 | `test_alert_is_edge_triggered` | ⏳ |
+| S-CC04 | 個資資料夾權限被改寬 | 中 | 缺（無法自動） | ⏳ |
+| S-CC05 | 雲端空間滿／單張表寫入失敗 | 中 | `test_partial_backup_failure_is_not_reported_as_ok`（只驗不報 ok） | ⏳ |
+| S-CC06 | **月底最後一天月備份失敗** | 高 | 缺 | 🔄 C（補強中） |
+| S-CC07 | **系統時鐘往前跳** | 高 | 缺 | 🔄 C（補強中） |
+| S-CC08 | 系統時鐘倒退 | 中 | 缺 | ⏳ |
+| S-CC09 | 兩台機器同一天寫雲端 | 低 | `test_archive_ownership_2026_09_14` 全檔、`test_unreadable_marker_fails_open` | ⏳ |
+| S-CC10 | 排程工作與程式內排程同時跑備份 | 中 | 缺 | ⏳ |
+| S-CC11 | 快照時本機碟滿 | 中 | `test_low_disk_alerts`（快照時碟滿：缺） | ⏳ |
+| S-CC12 | 週備份時雲端不可用 | 低 | 缺 | ⏳ |
+| S-CC13 | S3 後端的個資資料 | 低 | `test_object_storage_backend_does_not_upload_and_alerts` | ⏳ |
+| S-CD01 | 主庫不存在 | 低 | `test_require_db_*` | ⏳ |
+| S-CD02 | **主庫部分損毀仍啟動** | 高 | 缺 | 🔄 C（補強中） |
+| S-CD03 | WAL／SHM 殘留 | 低 | 缺（R6 未入測試） | ⏳ |
+| S-CD04 | schema 比基準新 | 低 | `test_newer_than_baseline_is_refused`、`test_preflight_rejects_running_service_and_newer_schema` | ⏳ |
+| S-CD05 | database is locked | 低 | `test_u9_a_locked_or_broken_database_raises_instead_of_reporting_zero` | ⏳ |
+| S-CD06 | demo 庫損毀使正式服務起不來 | 中 | 缺 | ⏳ |
+| S-CD07 | migration 中途失敗 | 低 | `test_u10_every_migration_can_be_run_twice`（中途失敗：缺） | ⏳ |
+| S-CP01 | **部署／回滾結束時 NameError，歷史不寫** | 高 | 缺 | 🔄 主持修、C 稽核 |
+| S-CP02 | **D1 健康檢查假綠燈** | 高 | 缺（`test_each_problem_blocks` 未涵蓋） | 🔄 主持修、C 稽核 |
+| S-CP03 | 部署包不完整 | 中 | 缺 | ⏳ |
+| S-CP04 | 部署包 SHA 與全量紀錄不符 | 中 | `test_build_blocked_when_full_is_for_another_commit`（部署端：缺） | ⏳ |
+| S-CP05 | 開發機標記被帶上正式機 | 低 | 升級端 `test_preflight_each_check_can_fail`；打包端：缺 | ⏳ |
+| S-CP06 | 人工放行留痕誤觸「上次失敗」 | 低 | 缺 | ⏳ |
+| S-CN01 | SMTP 未設定 | 中 | 雷達：`test_n16_smtp_not_configured_does_not_mark`；設定頁狀態：缺 | ⏳ |
+| S-CN02 | SMTP 寄送失敗 | 低 | `test_notify_marks_only_on_success_2026_09_22` | ⏳ |
+| S-CN03 | **告警本身發不出去（告警的告警）** | 高 | 缺（只有新鮮度那一路的 `test_the_daily_guard_is_not_burned_when_the_alert_fails`） | 🔄 C（補強中） |
+| S-CN04 | 收件人查詢失敗與「沒有收件人」無法分辨 | 中 | 缺 | ⏳ |
+| S-CN05 | heartbeat 的 ping_url 未設 | 中 | 缺 | ⏳ |
+| S-CN06 | 正式機殘留 `.no_email_send` | 中 | `test_email_send_policy`（系統頁顯示：缺） | ⏳ |
+| S-CN07 | 備份告警 WARN 等級不寄信且被下一輪清掉 | 中 | 缺 | ⏳ |
+
 ## 階段 C：前端跟著模組走（第二階段的前置）
 
 - 模組頁面搬進 `modules/<key>/pages/`，由載入器掛載靜態路徑
