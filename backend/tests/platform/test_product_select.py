@@ -22,6 +22,9 @@ def _pkg(tmp_path, mods=("alpha", "beta")):
     (b / "helpers").mkdir()
     (b / "helpers" / "auth.py").write_text("", encoding="utf-8")
     (b / "main.py").write_text("", encoding="utf-8")
+    for pkg_dir in ("core", "helpers", "routers", "modules"):
+        (b / pkg_dir).mkdir(exist_ok=True)
+        (b / pkg_dir / "__init__.py").write_text("", encoding="utf-8")
     (pkg / "frontend" / "pages").mkdir(parents=True)
     (pkg / "frontend" / "pages" / "index.html").write_text("", encoding="utf-8")
     (pkg / "tools" / "platform").mkdir(parents=True)
@@ -34,8 +37,9 @@ def _pkg(tmp_path, mods=("alpha", "beta")):
         (d / "api.py").write_text("", encoding="utf-8")
         (pkg / "frontend" / "pages" / (k + ".html")).write_text("", encoding="utf-8")
     mj = tmp_path / "modules.json"
-    mj.write_text(json.dumps({"L1": {"units": ["plat:registry", "helper:auth", "core:main"]}, "modules": {}}),
-                  encoding="utf-8")
+    (pkg / "frontend" / "pages" / "login.html").write_text("", encoding="utf-8")
+    mj.write_text(json.dumps({"L1": {"units": ["plat:registry", "helper:auth", "core:main", "page:pages/login.html"]},
+                              "modules": {}}), encoding="utf-8")
     return pkg, mj
 
 
@@ -148,7 +152,7 @@ def test_real_required_l1_files_exist_in_the_repo(_only_synthetic_core, monkeypa
     monkeypatch.setattr(PS, "REPO", REPO)
     req = _only_synthetic_core()
     assert len(req) > 20
-    missing = [r for r in req if not (REPO / "backend" / r).is_file()]
+    missing = [r for r in req if not (REPO / r).is_file()]
     assert not missing, missing
 
 
@@ -208,7 +212,38 @@ def test_package_own_modules_json_is_the_reference(tmp_path):
     own.mkdir(parents=True)
     (own / "modules.json").write_text(json.dumps({"L1": {"units": ["helper:auth"]}, "modules": {}}), encoding="utf-8")
     PS.apply(pkg, {"name": "core-only", "modules": []})
-    (pkg / "backend" / "main.py").unlink()            # 不在包自己的 L1 清單裡 ⇒ 不算缺
+    (pkg / "frontend" / "pages" / "login.html").unlink()   # 不在包自己的 L1 清單裡 ⇒ 不算缺
     assert PS.check(pkg) == []
     (pkg / "backend" / "helpers" / "auth.py").unlink()  # 在清單裡 ⇒ 缺
     assert any("helpers/auth.py" in p for p in PS.check(pkg))
+
+
+
+# ── 稽核 P-1（C）的反向控制 ───────────────────────────────────────────────────
+
+def test_rc_stray_module_folder_without_manifest_is_caught(tmp_path):
+    """B5：包內留下沒有 module.json 的 modules/x_leftover ⇒ 擋下（不是模組卻會出貨程式碼）。"""
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    leftover = pkg / "backend" / "modules" / "x_leftover"
+    leftover.mkdir()
+    (leftover / "api.py").write_text("", encoding="utf-8")
+    assert any("沒有 module.json" in p for p in PS.check(pkg, mj))
+
+
+@pytest.mark.parametrize("rel", ["backend/helpers/__init__.py", "backend/modules/__init__.py",
+                                 "frontend/pages/login.html", "backend/main.py"])
+def test_rc_missing_required_package_or_frontend_file_blocks(tmp_path, rel):
+    """B6：包內少了套件 __init__.py 或 L1 前端頁 ⇒ 擋下（正式機一啟動就壞）。"""
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    (pkg / rel).unlink()
+    assert any(rel in p for p in PS.check(pkg, mj)), PS.check(pkg, mj)
+
+
+def test_rc_unknown_l1_unit_kind_is_refused(tmp_path):
+    pkg, mj = _pkg(tmp_path)
+    PS.apply(pkg, {"name": "full", "modules": ["*"]})
+    mj.write_text(json.dumps({"L1": {"units": ["weird:thing"]}, "modules": {}}), encoding="utf-8")
+    with pytest.raises(PS.SelectError):
+        PS.check(pkg, mj)

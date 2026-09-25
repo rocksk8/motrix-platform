@@ -156,26 +156,28 @@ def _core_files_at(pkg):
 
 
 def required_l1_files(modules_json=MODULES_JSON, core_files=None):
-    """包裡一定要有的 L0／L1 檔（相對 backend/）。
+    """包裡一定要有的 L0／L1 檔（相對部署包根目錄）。
 
     🔴 2026-09-25（B）：以**包自己的 commit** 為準（包內 docs/platform/modules.json＋.build_commit 的 core/）。
        初版用「目前 repo」的清單 ⇒ 拿去驗較早打的包時，把包打好之後才新增的 L1 檔算成缺檔
-       （verify 一個 a870fa44 的包，報缺 core/events.py、helpers/module_switches.py）。"""
+       （verify 一個 a870fa44 的包，報缺 core/events.py、helpers/module_switches.py）。
+    🔴 稽核 P-1（C，2026-09-25）：初版只推導 plat／core／helper／router 四類 ⇒ 刪掉包內 helpers/__init__.py、
+       frontend/pages/login.html 都不會被擋（正式機一啟動就 ImportError）。
+       ⇒ 改為 modules.json **全部** L1 單位（含 page:／js:），加上 backend 套件的 __init__.py。
+    回傳路徑相對**部署包根目錄**（backend/…、frontend/…）。"""
     data = json.loads(Path(modules_json).read_text(encoding="utf-8"))
-    req = set()
+    req = {"backend/core/__init__.py", "backend/helpers/__init__.py", "backend/routers/__init__.py",
+           "backend/modules/__init__.py", "backend/main.py"}
     for u in data["L1"]["units"]:
         kind, name = u.split(":", 1)
-        if kind == "plat":
-            req.add("core/%s.py" % name)
-        elif kind == "core":
-            req.add("%s.py" % name)
-        elif kind == "helper":
-            req.add("helpers/%s.py" % name)
-        elif kind == "router":
-            req.add("routers/%s.py" % name)
+        path = {"plat": "backend/core/%s.py", "core": "backend/%s.py", "helper": "backend/helpers/%s.py",
+                "router": "backend/routers/%s.py", "page": "frontend/%s", "js": "frontend/%s"}.get(kind)
+        if path is None:
+            raise SelectError("modules.json 的 L1 單位 %r 種類不認得 ⇒ 不猜" % u)
+        req.add(path % name)
     if core_files is None:
         core_files = ["core/%s" % p.name for p in (REPO / "backend" / "core").glob("*.py")]
-    req.update(core_files)
+    req.update("backend/" + c for c in core_files)
     return sorted(req)
 
 
@@ -198,6 +200,13 @@ def check(pkg, modules_json=None):
     if kind not in KINDS:
         return ["lock 的 kind %r 不認得（%s）" % (kind, "／".join(KINDS))]
     actual = module_dirs(backend)
+    mroot = backend / "modules"
+    if mroot.is_dir():
+        stray = sorted(d.name for d in mroot.iterdir()
+                       if d.is_dir() and d.name != "__pycache__" and not (d / "module.json").is_file())
+        if stray:
+            problems.append("backend/modules/ 底下有沒有 module.json 的資料夾：%s（不是模組卻會把程式碼出貨；"
+                            "module.json 改名或打錯字就會變成這樣）" % stray)
     listed = lock.get("modules") or {}
     if kind == "full_package" and set(listed) != set(actual):
         problems.append("lock 列的模組 %s ≠ 包內實際 %s" % (sorted(listed), sorted(actual)))
@@ -212,8 +221,8 @@ def check(pkg, modules_json=None):
     if kind == "module_update":
         return problems             # 更新包只帶模組本身，不驗 L0／L1（P7 會另訂套用前檢查）
     for rel in required_l1_files(modules_json, core_files):
-        if not (backend / rel).is_file():
-            problems.append("缺 L0／L1 必要檔 backend/%s" % rel)
+        if not (Path(pkg) / rel).is_file():
+            problems.append("缺 L0／L1 必要檔 %s" % rel)
     for rel in REQUIRED_PKG_FILES:
         if not (Path(pkg) / rel).is_file():
             problems.append("缺部署包必要檔 %s（升級精靈在正式機執行它）" % rel)
