@@ -7,7 +7,7 @@ from fastapi import APIRouter, Header, Query
 
 from db import get_db
 from helpers import _require_user, user_has_module
-from routers.dev_crm import _can_access_case
+from helpers import row_access
 
 router = APIRouter()
 
@@ -47,9 +47,11 @@ def global_search(q: str = Query(..., min_length=1), authorization: str = Header
         "WHERE (quote_no LIKE ? OR customer_name LIKE ? OR project_name LIKE ?)"
     )
     qparams = [like, like, like]
-    if not is_admin:  # 與 list_quotations() 相同的可見性規則
-        qsql += " AND (sales_person_id=? OR (sales_person_id IS NULL AND sales_person=?))"
-        qparams.extend([u["id"], u["display_name"]])
+    # 與案件列表同一套規則（row_access 的 case，scope=read）。2026-09-25 主持裁示（使用者裁示）：
+    # 原本只比業務歸屬與舊資料顯示名稱，少了 assigned_user_ids 與 cashier ⇒ 兩者現在也搜得到。
+    frag, fparams = row_access.filter_sql("case", u, scope="read")
+    qsql += frag
+    qparams.extend(fparams)
     qsql += " ORDER BY id DESC LIMIT ?"
     qparams.append(_LIMIT)
     quotations = conn.execute(qsql, qparams).fetchall()
@@ -60,7 +62,7 @@ def global_search(q: str = Query(..., min_length=1), authorization: str = Header
             "SELECT * FROM dev_cases WHERE case_name LIKE ? OR customer_name LIKE ? "
             "ORDER BY id DESC LIMIT ?", (like, like, _LIMIT * 3)
         ).fetchall()
-        dev_cases = [r for r in rows if _can_access_case(u, r)][:_LIMIT]
+        dev_cases = [r for r in rows if row_access.visible("dev_case", u, r)][:_LIMIT]
 
     parts = []
     if is_admin or any(user_has_module(u, k) for k in ("procurement", "case_manage")):

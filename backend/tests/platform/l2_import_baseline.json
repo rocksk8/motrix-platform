@@ -25,8 +25,6 @@
   "M07 helper:bonus_vouchers -> M06 router:vouchers",
   "M07 router:bonus -> M06 router:accounting_export",
   "M08 router:dashboard -> M01 helper:quotations",
-  "M08 router:dashboard -> M02 router:dev_crm",
-  "M08 router:map_points -> M01 helper:quotations",
   "M08 router:reports -> M01 helper:quotations",
   "M08 router:reports -> M01 helper:recognition",
   "M08 router:reports -> M04 router:vendor_contractors",

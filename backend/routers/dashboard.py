@@ -12,7 +12,7 @@ from db import db_conn
 from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm_at,
                      user_has_module, can_see_financial,
                      require_any_module, _get_setting, _set_setting)
-from routers.dev_crm import _can_access_case
+from helpers import row_access
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -821,7 +821,7 @@ def dashboard_ops_alerts(authorization: str = Header(None)):
                 FROM dev_cases WHERE is_deleted=0 AND status='洽談中'
             """).fetchall()
         for r in rows:
-            if not _can_access_case(u, r):
+            if not row_access.visible("dev_case", u, r):
                 continue
             try:
                 updated    = datetime.strptime(r["updated_at"], "%Y-%m-%d %H:%M:%S")
@@ -993,13 +993,11 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
         items = []
 
         def _visible_to_sales(row) -> bool:
-            """比照 §3.4 報價列表過濾規則：sales_person_id=自己id OR
-            （尚未回填 sales_person_id 的舊資料）sales_person(顯示名稱文字)=自己"""
-            if is_admin:
-                return True
-            return row["sales_person_id"] == u["id"] or (
-                row["sales_person_id"] is None and row["sales_person"] == u["display_name"]
-            )
+            """與案件列表同一套規則（row_access 的 case，scope=read）。
+            2026-09-25 主持裁示（使用者裁示）：原本只比業務歸屬與舊資料顯示名稱，少了
+            assigned_user_ids 與 cashier ⇒ 被指派者、cashier 現在也看得到對應動態。
+            ⚠️ 查詢必須選出 q.assigned_user_ids，否則被指派那一條永遠比不到。"""
+            return row_access.visible("case", u, row, scope="read")
 
         dept_by_user = {}
         if department_id:
@@ -1014,7 +1012,8 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
         if can_quotation:
             rows = conn.execute("""
                 SELECT cu.id, cu.quote_no, cu.author, cu.content, cu.created_at,
-                       q.customer_name, q.sales_person_id, q.sales_person, du.display_name
+                       q.customer_name, q.sales_person_id, q.sales_person, q.assigned_user_ids,
+                       du.display_name
                 FROM case_updates cu
                 LEFT JOIN quotations q ON q.quote_no = cu.quote_no
                 LEFT JOIN users du ON du.username = cu.author
@@ -1046,7 +1045,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 "link": "work-log.html", "at": norm_at(r["created_at"]),
             })
 
-        # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（沿用 dev_crm._can_access_case 逐筆過濾）
+        # 3. 業務開發：開發記錄 + 案件建立／狀態異動／轉換（row_access 的 dev_case 逐筆過濾）
         if can_dev_crm:
             dc_map = {r["id"]: r for r in conn.execute(
                 "SELECT id, case_name, customer_name, sales_persons, planners, created_by "
@@ -1062,7 +1061,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             """).fetchall()
             for r in dl_rows:
                 dc = dc_map.get(r["case_id"])
-                if not dc or not _can_access_case(u, dc):
+                if not dc or not row_access.visible("dev_case", u, dc):
                     continue
                 items.append({
                     "id": f"dl_{r['id']}", "source": "dev_log", "moduleLabel": "業務開發",
@@ -1084,7 +1083,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
                 except (TypeError, ValueError):
                     continue
                 dc = dc_map.get(case_id)
-                if not dc or not _can_access_case(u, dc):
+                if not dc or not row_access.visible("dev_case", u, dc):
                     continue
                 items.append({
                     "id": f"al_{r['id']}", "source": "dev_case", "moduleLabel": "業務開發",
@@ -1099,7 +1098,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             ph = ",".join("?" * len(_QUOTE_ACTION_LABELS))
             rows = conn.execute(f"""
                 SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS quote_no,
-                       a.target_label, q.sales_person_id, q.sales_person
+                       a.target_label, q.sales_person_id, q.sales_person, q.assigned_user_ids
                 FROM audit_log a LEFT JOIN quotations q ON q.quote_no = a.target_id
                 WHERE a.target_type='quotation' AND a.action IN ({ph})
                 ORDER BY a.at DESC LIMIT 40
@@ -1120,7 +1119,7 @@ def dashboard_activity_feed(limit: int = Query(30, ge=1, le=100),
             ph = ",".join("?" * len(_SHIPPING_ACTION_LABELS))
             rows = conn.execute(f"""
                 SELECT a.id, a.at, a.username, a.display_name, a.action, a.target_id AS note_no,
-                       a.target_label, sn.quote_no, q.sales_person_id, q.sales_person
+                       a.target_label, sn.quote_no, q.sales_person_id, q.sales_person, q.assigned_user_ids
                 FROM audit_log a
                 LEFT JOIN shipping_notes sn ON sn.note_no = a.target_id
                 LEFT JOIN quotations q ON q.quote_no = sn.quote_no

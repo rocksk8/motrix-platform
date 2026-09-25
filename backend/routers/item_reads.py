@@ -27,7 +27,6 @@ from fastapi import APIRouter, Body, Header, HTTPException
 
 from db import get_db
 from helpers import _require_user
-from routers.dev_crm import _can_access_case
 from helpers import row_access
 # 直接取唯一來源（DEPENDENCY-MAP §3 #4）：經 routers.system 轉手會讓 item_reads 依賴整支 system
 from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES
@@ -193,7 +192,7 @@ def _visible_keys(conn, user, kind, keys):
         rows = conn.execute(
             f"SELECT id, created_by, sales_persons, planners FROM dev_cases WHERE id IN ({ph})",
             ids).fetchall()
-        return [str(r["id"]) for r in rows if _can_access_case(user, r)]
+        return [str(r["id"]) for r in rows if row_access.visible("dev_case", user, r)]
     if kind == "daily_task":
         # 每日工作的「有更新」標記原本就只給 admin 以上（daily-tasks.html isNewTask）。
         return keys if admin else []

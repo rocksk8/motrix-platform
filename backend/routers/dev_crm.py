@@ -8,6 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Header, UploadFile
 from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, spawn_bg_thread
+from helpers import row_access
 import threading
 from helpers import (
     _require_user, _tok, _audit, notify_module_activity, notify_dev_case_delete_request,
@@ -97,20 +98,17 @@ def _is_admin(user: dict) -> bool:
     return user["role"] in ("superadmin", "admin")
 
 
-def _can_access_case(user: dict, row) -> bool:
-    """Non-admin users can only access cases they created or are assigned to."""
-    if _is_admin(user):
-        return True
-    uid = user["id"]
-    try:
-        sp = json.loads(row["sales_persons"] or "[]")
-    except Exception:
-        sp = []
-    try:
-        pl = json.loads(row["planners"] or "[]")
-    except Exception:
-        pl = []
-    return row["created_by"] == uid or uid in sp or uid in pl
+# ── M02 業務開發案可見性：登錄到 L1 row_access（DEPENDENCY-MAP §0-5）─────────────
+# 取代原 `_can_access_case()`：admin+ 直通，否則須為建立者、sales_persons 或 planners 之一。
+# 成員欄位壞 JSON 視為空（沿用原行為）；dashboard／search／item_reads 經 row_access 查詢，
+# 不再 import 本檔。沒登錄時 row_access 一律 fail closed。
+DEV_CASE_ACCESS = row_access.OwnerRule(
+    creator_col="created_by",
+    id_list_cols=("sales_persons", "planners"),
+    lenient_json=True,
+    deny_message="無權限存取此業務開發案",
+)
+row_access.register("dev_case", DEV_CASE_ACCESS)
 
 
 # ── Customer visit sync ──────────────────────────────────────────────────────
@@ -289,7 +287,7 @@ def list_dev_cases(
             params,
         ).fetchall()
         if not _is_admin(user):
-            rows = [r for r in rows if _can_access_case(user, r)]
+            rows = [r for r in rows if row_access.visible("dev_case", user, r)]
         return [_case_row(r, umap) for r in rows]
     finally:
         conn.close()
@@ -340,7 +338,7 @@ def get_dev_case(case_id: int, authorization: str = Header("")):
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, row):
+        if not row_access.visible("dev_case", user, row):
             raise HTTPException(403, "無權限查看此案件")
         return _case_row(row, _user_map(conn))
     finally:
@@ -356,7 +354,7 @@ def update_dev_case(case_id: int, body: DevCaseIn, authorization: str = Header("
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, row):
+        if not row_access.visible("dev_case", user, row):
             raise HTTPException(403, "無權限修改此案件")
         # 樂觀鎖：業務開發案件可能有多位業務/企劃同時有編輯權（見 §3.4 sales_persons/
         # planners），沒有鎖的話兩人同時存檔會後寫覆蓋前寫且完全沒有提示
@@ -515,7 +513,7 @@ def update_dev_case_status(
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, row):
+        if not row_access.visible("dev_case", user, row):
             raise HTTPException(403, "無權限修改此案件")
         conn.execute(
             "UPDATE dev_cases SET status=?, updated_at=? WHERE id=?",
@@ -543,7 +541,7 @@ def mark_converted(
         row = conn.execute("SELECT * FROM dev_cases WHERE id=? AND is_deleted=0", (case_id,)).fetchone()
         if not row:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, row):
+        if not row_access.visible("dev_case", user, row):
             raise HTTPException(403, "無權限修改此案件")
         if row["converted_quote_no"]:
             # 已有連結的報價單號，異動／清空一律走審核流程（見 request-relink-quote），
@@ -726,7 +724,7 @@ def list_pending_logs(authorization: str = Header("")):
 @router.get("/dev-crm/activity-stats")
 def dev_crm_activity_stats(authorization: str = Header("")):
     """跨案件每週／每日接洽成效統計：近 60 天每日筆數、近 8 週週彙總、近 30 天依廠商／
-    通路拆解。僅計入已核准（needs_approval=0）的開發記錄；權限比照 _can_access_case
+    通路拆解。僅計入已核准（needs_approval=0）的開發記錄；權限比照 row_access 的 dev_case
     （非 admin 僅計入自己建立或被列為業務/規劃人員的案件）。"""
     user = _require_dev(authorization)
     conn = get_db()
@@ -734,7 +732,7 @@ def dev_crm_activity_stats(authorization: str = Header("")):
         case_rows = conn.execute(
             "SELECT id, sales_persons, planners, created_by, case_name, customer_name FROM dev_cases WHERE is_deleted=0"
         ).fetchall()
-        visible_ids = [r["id"] for r in case_rows if _can_access_case(user, r)]
+        visible_ids = [r["id"] for r in case_rows if row_access.visible("dev_case", user, r)]
         if not visible_ids:
             return {"daily": [], "weekly": [], "byVendor": [], "byChannel": []}
         case_label = {r["id"]: (r["customer_name"] or r["case_name"] or "未命名案件") for r in case_rows}
@@ -809,7 +807,7 @@ def list_dev_logs(case_id: int, authorization: str = Header("")):
         case_row = conn.execute("SELECT * FROM dev_cases WHERE id=?", (case_id,)).fetchone()
         if not case_row:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, case_row):
+        if not row_access.visible("dev_case", user, case_row):
             raise HTTPException(403, "無權限查看此案件")
         umap = _user_map(conn)
         rows = conn.execute(
@@ -852,7 +850,7 @@ async def create_dev_log(case_id: int,
         ).fetchone()
         if not case_row_chk:
             raise HTTPException(404, "案件不存在")
-        if not _can_access_case(user, case_row_chk):
+        if not row_access.visible("dev_case", user, case_row_chk):
             raise HTTPException(403, "無權限在此案件新增記錄")
         needs_approval = 1 if body.log_by != user["id"] else 0
         saved_files = []

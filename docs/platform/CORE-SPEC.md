@@ -133,3 +133,9 @@ modules/<key>/
 | 測試範圍期望 | 改 L2 模組 ⇒ 只跑該模組＋契約；改 L1（main／system／db／共用 helper）⇒ 接近全量是結構性的（寫的是幾乎每支 router 都讀的表），接受全量 |
 
 §6 更正：原文「V9 既有 `db.py` 的 v1~v84」→ 實際基準為 **v116**（`db.py:133`，DATA-COMPAT §3）。
+
+## 已知問題
+
+| # | 項目 | 現象 | 位置 | 狀態 |
+|---|---|---|---|---|
+| K1 | 舊資料以顯示名稱比對擁有者 | `quotations.sales_person_id` 為 NULL 的舊資料改比 `sales_person`＝使用者 `display_name`。`display_name` 是 NOT NULL 但可為空字串 ⇒ **顯示名稱為空的帳號看得到所有「業務欄也為空」的舊案件**（清單與單筆一致，不是兩份實作的差異） | L1 `helpers/row_access.py`（`legacy_name_col`）；規則宣告 `helpers/quotations.py::CASE_ACCESS` | 2026-09-25 裁示：這次不動，另開題（回填 `sales_person_id` 或禁止空顯示名稱） |
