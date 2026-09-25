@@ -111,6 +111,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 03:21 D：⑧ B 的 C1 稽核（`AUDIT-D-B-C1-pages.md`）：必修 P-M1——模組 manifest 可把 L1 頁面（login.html）宣告成自己的，模組停用後登入頁回 404 提示頁（探針實證），建議 L1 頁面明確清單＋衝突拒絕。O5：等待點 /index.html 不經 core.pages、登入鎖定每題重設 ⇒ 無關聯證據；下次抓 /api/auth/login 兩次耗時。
 - 2026-09-26 03:17：**第一班列車發車**（train/0926-0313，worktree D:\MOTRIX-PLATFORM-TRAIN）。
   - 上車：a-mail（車頭，動到 L1 與 main）、x-r-fix、x-unitcard。
   - 列車上取號：a-mail 1.14、x-r-fix 1.15（core_bump）。版本紀錄方面，勞報單改用 26d（26c 已被獎金分潤用掉）、系統 26a 採用 origin 版。INTEGRATION-POINTS 與 MODULE-GUIDE 兩邊的內容都保留。UNIT-INDEX 已重產；CHANGELOG 沒有重複段落。
