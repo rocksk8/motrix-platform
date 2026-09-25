@@ -105,6 +105,7 @@
   - C｜`wip/c-audit-d`（AUDIT-D-C-P4P5P8 修正：C-M3／C-M5＋第二道防線、C-S1～S5、C-O1、U14；**疊在 c-p2-legal 之上，須排在它後面**）｜d132336f｜合回閘門（tests/platform＋自訂模組／定義庫／版型／勞報單／待我簽核佇列題，-n 2、低優先權）：784 過；突變 14 項皆紅｜fixture 層／main：無；L1 新增與收緊驗證（CORE 暫取 1.15，列車上再取號）；C-M4 未含（等 R 的 round_half_up）
   - C｜`wip/c-m02`（D1 階段 B：M02 業務開發搬進 `modules/crm`）｜927b4599（207bc0df 之後只加 SPEC.md 與文件）｜全量未跑；合回閘門：tests/platform 661 過＋業務開發／報價刪除相關 30 檔（含 e2e）1009 過、開報價清單的 e2e 14 過；**反向控制**（刪掉 modules/crm）：啟動 ping 200、三個前綴 404、報價單照刪回 notice；tests/platform＋modules 891 過 2 紅＝`modules_json_lists_only_existing_units`（§B11 允許）與 `test_registry_matches_code`（登記表不認得「模組不在包內」；A 已在 wip/a-m10 修，IP-11 提供方已寫成 `modules/crm/…` 合新規則）；突變 5 項皆紅｜🔴 動 main.py（拿掉 dev_crm 的 import／掛載／排程，與 A 的 M12 改同一行）；M01 `routers/quotations.py` 刪報價單改走 IP-11（暫定號）；`quotations.html` 顯示 notice；刪 dev_cases 的 debt
   - B｜`wip/b-scope`（稽核 D-B env-guards 10 項＋rebase-check 簿記檔規則＋D1b 選題縮小 ①②③⑤⑥＋S-M1 閉包＋_require_user 契約題＋CHANGELOG 段落守門＋scope_rc）｜60a1ae1b｜合回閘門（tests/platform＋部署儀表板＋legal_params r1＋文件守門，-n 1、低優先權）：836 過；scope_rc 真突變 3 項皆選到且紅；稽核 D 兩份必修全部關閉（D-B-env-guards、D-B-D1b-scope）｜🔴 **動 fixture 層**（`backend/requirements-dev.txt`：pytest 直接宣告）；main.py：無；CORE：不升版（只動 tools、tests、deploy 工具）；建包腳本 worker 上限 8 → 4｜登記 2026-09-26 04:46 B
+  - A｜`wip/a-m10`（D1 階段 B：M12 每日任務＋M10 網路規劃搬進 modules/；**取代 wip/a-m12**，已含 D 稽核 M12 的 M-1／S-1～S-3、X-C-batch1 B-1、X-2 模組不在裁定、G2 要求 SPEC.md）｜16865fa3｜先前閘門（be41fd9e）：tests/platform＋模組題＋相關 30 檔 1363 過；16865fa3 閘門（73 檔，-n 1、低優先權）與 §B-11 反向控制（M12、M10 各一次，tests/platform＋所有提到該模組的測試檔）跑中，結果補在本列｜突變：X-2 5/5、G2 SPEC 5/5、M12 主流程 4/4、B-1 6/6 皆紅；選題比例 M12 85.6%→16.4%、M10 74.8%→15.8%｜🔴 動 main.py（拿掉 daily_tasks／network_plans 掛載與排程）、L1 新增 helpers/daily_checks／system_checks、core.source_tree.module_installed（CORE 暫取，列車上 core_bump）；M01 `helpers/quotations`（IP-11 _CaseAccess，與 c-case-access 同檔，後上車者由 A 收斂成只剩 summary）、`routers/quotations.py`（階段 notice）、`helpers/case_stage_tasks.py`；fixture 層：無｜登記 2026-09-26 05:2x A
 - **全量名額排隊**（更新 2026-09-26 02:43）：§G3 生效後，新的全量改由列車統一跑。仍在跑、而且依規定跑完就直接合回的有：B 的 C1（合回閘門約 02:52）、C 的第二批全量。A 的 a-bonus 走合回閘門，不經過測試鎖。⚠ A 有一支孤兒 pytest（pid 53300），停不掉，已請使用者處理。**第一班列車預計約 03:15 發車**，要等月台上至少有 3 包（目前只有 x-r-fix 1 包）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
@@ -119,6 +120,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:2x A：a-m10 推上 origin（16865fa3，含 M12，取代 a-m12），D 的 ⑬ 可以開始。內容：D 稽核 M12 的 M-1（5 題移入模組）、S-1（SPEC.md＋G2 守門）、S-2（主流程三題）、S-3（ROADMAP）；補做 X-C-batch1 B-1（M12 搬遷前必修，當初漏了）：勾選／取消勾選／刪除各自提示，畫面顯示，任務 id 保留（主持裁示）。閘門與 §B-11 反向控制跑中。M03 開工（wip/a-m03，疊在 a-m10 上）。
 - 2026-09-26 05:13 巡視：月台上有 a-m10（含 M12）、b-scope、c-audit-d、c-case-access、c-ko2、c-m02；個資告知約 05:10 會登記。D 派做 ⑫ M02、⑬ M10／M12、⑭ case_access 的合回前稽核。第三班列車約 05:30 發車（等 D 至少審完搬遷類）。
 - 2026-09-26 05:07：第二班列車合回之後，主持派出兩個子代理：P8 前端接上缺口 #3～#7 與 custom: 通知點擊（wip/h-p8-gaps）；P9 拖曳排版器（wip/h-p9）。B 先完成 M08，再做 C4。§G3 補一條規則：全量跑的期間不可以改列車的樹。
 - 2026-09-26 05:05：**第二班列車合回**（train/0926-0415，7 包：C3、c-d7-km1、c-p2-legal、a-mail-fix、x-vat-round、x-p1p3-fix、h-p8-frontend，全部上車；platform 10b30038）。
