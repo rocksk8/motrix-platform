@@ -125,6 +125,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 07:05 C：D1 階段 B 開工 M07 薪資獎金（key `payroll`，worktree C28、wip/c-m07；M05 等 B 的 M08、M06 等 M04／M08 合回，先做 M07）。會動到的共用處：①L1 `routers/system.py` 的 `/api/system/bonus-module-status` 改走 M07 提供者（不再 import `helpers.bonus`，DEPENDENCY-MAP #27）；②`helpers/bonus_pdf.py` 不再借 M06 的 `voucher`／`voucher_pdf`：公司抬頭改用 L1 `company_identity.company_name`、HTML→PDF 改用 L1 `pdf_gen.html_to_pdf_bytes`（Edge 參數相同）、`resolve_display_names`（簽核格的帳號→顯示名稱）與 `_fmt_money` 下沉 L1（M06 保留同名匯入）；③`main.py` 拿掉兩支 router；`sidebar.js`、`modules.json`。
 - 2026-09-26 06:50：D 做完個資告知的合回後稽核：必修 PN-M1（決定以頁為單位，同一頁的第二種當事人，例如出貨單收件人，沒有人決定過）⇒ 裁示改為逐欄決定、收件人要告知，交給 A（出貨模組擁有者），排在 M03 之後；O-1（network_plans 的告知端點要跟著搬進 netplan）已提醒第四班列車長；O-4 module_installed 改看 module.json，交給 A。
 - 2026-09-26 06:49 D：⑯ 個資告知（`AUDIT-D-pii-notice.md`，合回後）：必修 PN-M1——notice 決定以頁為單位，案件頁出貨單收件人＋送貨地址可手打、沒有告知對象而守門放行（違反「手動輸入的聯絡人要 notice」）；建議 3（報價單告知端點權限、畫面換人重新告知、唯讀判斷）；12 頁決定與伺服器端換人重新告知成立。O-1：第四班 M10 rebase 要把 network-plans 告知端點搬進 modules/netplan（守門會抓）。另補 M10 稽核 O-4（空模組資料夾被 module_installed 當成在）。⑮ c-m04 尚未推上 origin，等 C。
 - 2026-09-26 06:43 巡視：各線都在工作（A M03、B M08、C M02-M1／M04、D ⑮～⑰），第四班列車進行中。D1 剩下 M05、M06、M07（C）與 M01（A）尚未開工；這幾個模組彼此牽連，同時開太多條線會衝突，所以不另外派子代理。不派工。
