@@ -305,6 +305,13 @@ def test_auto_amount_does_not_linger_after_switching_to_a_case_or_an_expense_wit
     line = page.evaluate("() => %s.lines[1]" % _D)
     assert line["source_type"] == "case" and not line["debit"], line
 
+    # 稽核 D N-4：手改過的金額，換成案件也要保留
+    page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
+    page.locator("input[x-model='l.debit']").nth(1).fill("4321")
+    page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)
+    line = page.evaluate("() => %s.lines[1]" % _D)
+    assert line["source_type"] == "case" and line["debit"] == "4321", line
+
 
 @pytest.mark.e2e
 def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(

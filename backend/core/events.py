@@ -118,7 +118,9 @@ def publish(name: str, payload: dict) -> int:
         problem = f"事件 {name} 在寫交易還沒 commit 時就發佈（必須在 commit 之後）"
     if problem is None:
         try:
-            json.dumps(payload or {})
+            if json.loads(json.dumps(payload or {})) != (payload or {}):
+                # 稽核 D N-2：tuple 會變 list、非字串的鍵會變字串，json.dumps 不報錯，訂閱者卻會拿到不同的東西
+                problem = f"事件 {name} 的 payload 含有 JSON 來回後會改變的值（tuple、非字串的鍵等）"
         except (TypeError, ValueError) as e:
             problem = f"事件 {name} 的 payload 不是 JSON 可序列化的值：{e}"
     if problem:

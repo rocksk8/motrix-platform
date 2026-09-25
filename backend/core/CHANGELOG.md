@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.10 — 2026-09-26
+> 主持（稽核 D 主持份 H-M1／H-S1／H-S2 與確認時的 N-1／N-2）。介面不變，只有行為。
+- L1（修改行為，介面不變）：`core.events.publish` 給每個訂閱者 JSON 來回的完整副本（原本 `dict(payload)` 是淺拷貝，巢狀資料會被訂閱者改掉，發佈方的物件也會）；payload 必須是 JSON 可序列化、而且來回不變的值（tuple、非字串的鍵都算違約）；同一條執行緒還開著 `begin_write` 的寫交易時發佈也算違約（測試 raise、產品記 ERROR 照送）；訂閱者超過 0.2 秒記 WARNING
+- L1（修改行為，介面不變）：`core.txn.begin_write` 的交易狀態多記一個 `thread`（給 core.events 判斷用）
+
 ## 1.9 — 2026-09-26
 > A（STATES-PLATFORM §9 修正：路由衝突、停用清單讀不到、模組入口與提示頁、地圖、授權變更提示）。
 - L0（新增）：`core.loader.mount_modules(app)`——在所有 L1 router 之後掛模組路由；模組任一條路由會被既有路由（L1 或先掛的模組）完整接住 ⇒ 該模組整個不掛、記 failed＋原因（P-LD-07）；以 starlette `route.matches()` 探測，FastAPI 新舊版（0.133／0.141）都成立；router 讀不出路徑 ⇒ 不掛；`main.py` 的模組排程與啟動提示移到它之後

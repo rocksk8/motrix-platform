@@ -164,3 +164,12 @@ def test_slow_subscriber_is_logged(caplog, monkeypatch):
     with caplog.at_level("WARNING", logger="motrix.events"):
         events.publish("t.slow", {"id": 1})
     assert any("m_slow" in r.getMessage() and "秒" in r.getMessage() for r in caplog.records)
+
+
+@pytest.mark.parametrize("payload", [{"id": (1, 2)}, {"id": {1: "a"}}])
+def test_values_that_change_in_a_json_round_trip_violate_the_contract(monkeypatch, payload):
+    # 稽核 D N-2：tuple→list、{1:..}→{"1":..} 不報錯卻改了內容
+    monkeypatch.setenv("MOTRIX_STRICT_DB_GUARDS", "1")
+    events.declare("t.rt", "m_a", 1, ["id"])
+    with pytest.raises(ValueError, match="JSON 來回"):
+        events.publish("t.rt", payload)
