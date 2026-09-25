@@ -1,7 +1,8 @@
 """專案專用 Python 環境（主工作樹的 .venv）：建立、定位、與正式機環境比對。
 
 用法：
-  python tools/platform/project_env.py create [--python 3.13]   建 <主工作樹>/.venv，照 requirements.txt＋requirements-dev.txt 安裝
+  python tools/platform/project_env.py create [--python 3.13]   建 <主工作樹>/.venv<主次版號>（3.12 ⇒ .venv312）並照
+                                                                requirements.txt＋requirements-dev.txt 安裝；資料夾已存在 ⇒ 拒絕（PLAYBOOK §C-12）
   python tools/platform/project_env.py check                    比對 .venv 與 backend/tools/prod_env.json（正式機環境）
   python tools/platform/project_env.py where                    印出專案 python 的路徑（沒有就非 0）
 
@@ -102,9 +103,8 @@ def cmd_check():
     if py is None:
         print("⚠ 找不到專案環境（%s）⇒ 先跑 project_env.py create" % (main_worktree_root() / VENV_DIR))
         return 2
-    prod_file = REPO / "backend" / "tools" / "prod_env.json"
-    if not prod_file.is_file():
-        prod_file = main_worktree_root() / "backend" / "tools" / "prod_env.json"
+    # 稽核 B-O3：只讀主工作樹那一份（worktree 裡留著的舊檔會被拿來比對）
+    prod_file = main_worktree_root() / "backend" / "tools" / "prod_env.json"
     if not prod_file.is_file():
         print("提示：還沒取得正式機環境（backend/tools/prod_env.json 不存在；使用者在儀表板按一次「部署前健康檢查」即產生）"
               "\n  ⇒ 目前的測試結果代表專案環境 %s（Python %s）。" % (VENV_DIR, venv_facts(py)["python"]))
@@ -120,9 +120,40 @@ def cmd_check():
     return 0
 
 
+def venv_dir_for(pyver):
+    """create 的目標資料夾：依 --python 命名（3.13 ⇒ .venv313）；環境變數 MOTRIX_PROJECT_VENV 有給就用它。
+    稽核 B-M2：原本一律 VENV_DIR（.venv312）⇒ `create --python 3.13` 會把 3.13 就地裝進共用的 3.12 環境。"""
+    return os.environ.get("MOTRIX_PROJECT_VENV") or ".venv" + re.sub(r"\D", "", pyver)
+
+
+def holders(path):
+    """正在使用 path 底下直譯器或以它為參數的行程 pid（PLAYBOOK §C-12）；查不到 ⇒ None。"""
+    if os.name != "nt":
+        return []
+    ps = ("Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -like '%s*' -or $_.CommandLine -like '*%s*' }"
+          " | ForEach-Object { $_.ProcessId }" % (path, path))
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
+                             timeout=60, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return [int(x) for x in out.split() if x.isdigit()]
+
+
 def cmd_create(pyver):
+    """建新的專案環境。**資料夾已存在一律拒絕**（不覆寫、不刪）：共用環境隨時有別的 session 在跑 pytest，
+    就地重建＝2026-09-25 .venv 事件同一類。要換掉：先照 §C-12 查占用、確認沒人用再手動處理，或用另一個名字。"""
+    global VENV_DIR
     root = main_worktree_root()
-    venv = root / VENV_DIR
+    name = venv_dir_for(pyver)
+    venv = root / name
+    if venv.exists():
+        who = holders(venv)
+        state = ("目前使用中的行程：%s" % who) if who else ("查不到占用狀態" if who is None else "目前沒有行程在用")
+        print("⚠ %s 已存在，不覆寫（PLAYBOOK §C-12）。%s\n  ⇒ 換一個名字（環境變數 MOTRIX_PROJECT_VENV），"
+              "或確認沒人使用後自行移除再建。" % (venv, state))
+        return 2
+    VENV_DIR = name
     subprocess.run(["py", "-%s" % pyver, "-m", "venv", str(venv)], check=True)
     py = venv_python()
     subprocess.run([str(py), "-m", "pip", "install", "-q", "--upgrade", "pip"], check=True)
