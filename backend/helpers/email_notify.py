@@ -1444,9 +1444,8 @@ def _monthly_report_recipient_emails() -> list:
     settings key 從未寫入過（superadmin 還沒按過一次「儲存」）時，沿用舊行為寄給
     superadmin，避免上線當下設定值是空的、突然沒人收到信；一旦 superadmin 存過
     一次（即使存的是空清單），就完全照設定值決定收件人，不再 fallback。"""
-    o = _override_of("monthly_report")
-    if o["mode"] != "default":
-        return _group_emails("monthly_report")
+    # 收件人只有一個來源：「報表收件人設定」（monthly_report_recipients）。信件與通知收件設定頁
+    # 對這一種類型不提供覆寫（稽核 M-S3：兩個來源時，設定頁顯示的不是實際收件人）。
     raw = _get_setting("monthly_report_recipients")
     if raw is None:
         return _superadmin_emails("monthly_report")
