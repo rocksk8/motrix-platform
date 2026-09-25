@@ -47,6 +47,8 @@ LEDGER = {
     "V3.7": "d9ef3bdcf0ff01d857837038d804e51e55bcd257cf5a534107dc917949d3e2df",
     # V3.8（X-R，2026-09-26，稽核 S-4）：免稅依據改營業稅法 §8 逐款下拉，下方顯示條文出處。
     "V3.8": "15882f3ed0ccf53a065a43b3a4c4cb24dc25c582dcc9d6d26740752eaa182e3a",
+    # V3.9（X-VAT，2026-09-26）：金額／稅額改用 static/legal-round.js 四捨五入（與後端一致）。
+    "V3.9": "e42e775f9955409b5baff053901aebe715a062b74c8c53ae9a618de2a9f781aa",
 }
 
 

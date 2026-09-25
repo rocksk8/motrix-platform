@@ -89,8 +89,8 @@ window.CM_PARTS.push(() => ({
     // 又被異動過，此頁數字尚未反映最新狀況（見 settlement.html dispatchStale() 同一邏輯）
     financeDispatchStale() {
       if (this.caseSettleStatus() !== 'finalized') return null
-      const frozen = Math.round(this.caseSettleSummary().dispatchTotal || 0)
-      const live   = Math.round(this.dispatchTotalCost() || 0)
+      const frozen = MotrixLegalRound.halfUp(this.caseSettleSummary().dispatchTotal || 0)
+      const live   = MotrixLegalRound.halfUp(this.dispatchTotalCost() || 0)
       if (frozen === live) return null
       return { frozen, live, diff: live - frozen }
     },
@@ -180,7 +180,7 @@ window.CM_PARTS.push(() => ({
     onDispatchItemPrice(idx) {
       const it = this.dispatchForm.items[idx]
       if (!it) return
-      it.amount = Math.round((+it.qty || 0) * (+it.unitPrice || 0))
+      it.amount = MotrixLegalRound.halfUp(+it.qty || 0, +it.unitPrice || 0)
       this._recalcDispatchTotal()
     },
 
@@ -596,7 +596,8 @@ window.CM_PARTS.push(() => ({
     },
 
     _dispatchTaxAmount() {
-      return Math.round(this._dispatchSubtotal() * (+(this.dispatchForm.tax_rate) || 0))
+      // X-VAT（2026-09-26）：與後端 contractor_vouchers／vendor_contractors 的稅額同一套四捨五入
+      return MotrixLegalRound.halfUp(this._dispatchSubtotal(), +(this.dispatchForm.tax_rate) || 0)
     },
 
     _dispatchTotalWithTax() {

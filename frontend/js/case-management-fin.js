@@ -47,7 +47,7 @@ window.CM_PARTS.push(() => ({
     caseSettleItems()   { return this.caseSettlement()?.items   || [] },
     caseSettleExtras()  { return this.caseSettlement()?.extraItems || [] },
     caseSettleMemo()    { return this.caseSettlement()?.memo || '' },
-    caseSettleFmt(n)    { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+    caseSettleFmt(n)    { return 'NT$ ' + (MotrixLegalRound.halfUp(n || 0)).toLocaleString() },
 
     // ── 應收應付總覽（2026-09-09）──────────────────────────────────────────
     async loadFinanceSummary(quoteNo) {
@@ -133,7 +133,7 @@ window.CM_PARTS.push(() => ({
     invoiceMismatch(item, idx) {
       if (this._invoiceEmpty(item.invoicePretax) || this._invoiceEmpty(item.invoiceTax)) return ''
       const sum = (+item.invoicePretax || 0) + (+item.invoiceTax || 0)
-      const due = Math.round(this.itemAmountReceivable(idx))
+      const due = MotrixLegalRound.halfUp(this.itemAmountReceivable(idx))
       return sum === due ? '' : '發票合計 NT$ ' + sum.toLocaleString() + ' 與這一期金額 NT$ '
         + due.toLocaleString() + ' 不同，請確認（不影響存檔）。'
     },
@@ -149,7 +149,8 @@ window.CM_PARTS.push(() => ({
     itemAmountWithTax(idx) {
       const items = this.paymentItems()
       if (items[idx]?.amount != null) return items[idx].amount
-      return Math.round(this.totalWithTax() * (+items[idx]?.pct || 0) / 100)
+      // X-VAT（2026-09-26）：與後端 helpers.quotations.payment_item_amounts 同一套四捨五入（legal-round.js）
+      return MotrixLegalRound.halfUp(this.totalWithTax() * (+items[idx]?.pct || 0) / 100)
     },
 
     // 未稅原價：不受沖銷影響，永遠是該筆款項依報價單稅率換算的未稅基準
@@ -158,8 +159,8 @@ window.CM_PARTS.push(() => ({
       const total  = this.totalWithTax()
       const pretax = this.totalPretax()
       if (items[idx]?.amount != null && total > 0)
-        return Math.round(items[idx].amount * pretax / total)
-      return Math.round(pretax * (+items[idx]?.pct || 0) / 100)
+        return MotrixLegalRound.halfUp(items[idx].amount * pretax / total)
+      return MotrixLegalRound.halfUp(pretax * (+items[idx]?.pct || 0) / 100)
     },
 
     itemAmountTax(idx) {
@@ -177,8 +178,8 @@ window.CM_PARTS.push(() => ({
       if (this.moneyMasked()) return
       // 規範值：直接存含稅整數，pct 作為百分比 input 顯示用
       const total = this.totalWithTax()
-      items[idx].amount = Math.round(withTax)
-      items[idx].pct    = total > 0 ? Math.round(withTax / total * 10000) / 100 : 0
+      items[idx].amount = MotrixLegalRound.halfUp(withTax)
+      items[idx].pct    = total > 0 ? MotrixLegalRound.halfUp(withTax / total * 100, 100) / 100 : 0
     },
 
     _syncLast(items) {
@@ -186,7 +187,7 @@ window.CM_PARTS.push(() => ({
       // 讓最後一筆含稅 = 合約總額 − Σ其他，確保合計精確
       const total   = this.totalWithTax()
       const lastIdx = items.length - 1
-      const othersAmount = items.reduce((s, p, i) => i === lastIdx ? s : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
+      const othersAmount = items.reduce((s, p, i) => i === lastIdx ? s : s + (p.amount ?? MotrixLegalRound.halfUp(total * (+p.pct || 0) / 100)), 0)
       this._setItemAmount(items, lastIdx, Math.max(0, total - othersAmount))
     },
 
@@ -200,13 +201,13 @@ window.CM_PARTS.push(() => ({
         const othersExclLast = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s : s + (+p.pct || 0), 0)
         if ((+items[idx].pct || 0) > Math.max(0, 100 - othersExclLast))
           items[idx].pct = Math.max(0, 100 - othersExclLast)
-        items[idx].amount = Math.round(total * (+items[idx].pct || 0) / 100)
+        items[idx].amount = MotrixLegalRound.halfUp(total * (+items[idx].pct || 0) / 100)
         this._syncLast(items)
       } else {
         const othersSum = items.reduce((s, p, i) => i === idx ? s : s + (+p.pct || 0), 0)
         if ((+items[idx].pct || 0) > Math.max(0, 100 - othersSum))
           items[idx].pct = Math.max(0, 100 - othersSum)
-        items[idx].amount = Math.round(total * (+items[idx].pct || 0) / 100)
+        items[idx].amount = MotrixLegalRound.halfUp(total * (+items[idx].pct || 0) / 100)
       }
       this.setDirty()
     },
@@ -219,8 +220,8 @@ window.CM_PARTS.push(() => ({
       const lastIdx = items.length - 1
       // 計算本項能用的最大含稅（其他非尾款已佔的部分之外）
       const othersTaken = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s
-        : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
-      const capped = Math.min(Math.round(val), Math.max(0, total - othersTaken))
+        : s + (p.amount ?? MotrixLegalRound.halfUp(total * (+p.pct || 0) / 100)), 0)
+      const capped = Math.min(MotrixLegalRound.halfUp(val), Math.max(0, total - othersTaken))
       this._setItemAmount(items, idx, capped)
       if (items.length > 1 && idx !== lastIdx) this._syncLast(items)
       this.setDirty()
@@ -232,11 +233,11 @@ window.CM_PARTS.push(() => ({
       const total  = this.totalWithTax()
       if (!pretax || !isFinite(val) || val < 0) return
       // 未稅 → 換算含稅後，同 onAmountWithTaxChange 邏輯
-      const withTax = Math.round(val * total / pretax)
+      const withTax = MotrixLegalRound.halfUp(val * total / pretax)
       const items   = this.paymentItems()
       const lastIdx = items.length - 1
       const othersTaken = items.reduce((s, p, i) => (i === idx || i === lastIdx) ? s
-        : s + (p.amount ?? Math.round(total * (+p.pct || 0) / 100)), 0)
+        : s + (p.amount ?? MotrixLegalRound.halfUp(total * (+p.pct || 0) / 100)), 0)
       const capped = Math.min(withTax, Math.max(0, total - othersTaken))
       this._setItemAmount(items, idx, capped)
       if (items.length > 1 && idx !== lastIdx) this._syncLast(items)
@@ -456,7 +457,7 @@ window.CM_PARTS.push(() => ({
         delete this.ivItemSelections[it.itemId]
       } else {
         const qty = it.remainingQty
-        this.ivItemSelections[it.itemId] = { qty, amount: Math.round(qty * (it.unitPrice || 0)) }
+        this.ivItemSelections[it.itemId] = { qty, amount: MotrixLegalRound.halfUp(qty || 0, it.unitPrice || 0) }
       }
     },
 
@@ -465,20 +466,16 @@ window.CM_PARTS.push(() => ({
       if (!sel) return
       if (sel.qty > it.remainingQty) sel.qty = it.remainingQty
       if (sel.qty < 0) sel.qty = 0
-      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+      sel.amount = MotrixLegalRound.halfUp(sel.qty || 0, it.unitPrice || 0)
     },
 
     // 按品項模式下，使用者輸入的金額比照報價單品項本身的慣例是「未稅」，
     // 跟「剩餘可申請金額」（含稅，來自 quoteTotal）不是同一個基準，比較前
-    // 必須先用這張報價單自己的稅率（quoteTotal/quotePretax）換算成含稅。
-    _ivTaxRatio() {
-      const p = this.ivRemaining?.quotePretax || 0
-      return p > 0 ? (this.ivRemaining.quoteTotal / p) : 1
-    },
-
+    // 必須先用這張報價單自己的稅率（quoteTotal/quotePretax）換算成含稅（見 ivSelectedGrossTotal）。
+    // X-VAT（2026-09-26）：與後端 invoice_vouchers 同一個算式（申請額 × 未稅／含稅）、同一套四捨五入
     ivAmountPretax() {
-      const ratio = this._ivTaxRatio()
-      return ratio > 0 ? Math.round((this.ivAmountInput || 0) / ratio) : (this.ivAmountInput || 0)
+      const r = this.ivRemaining, a = this.ivAmountInput || 0
+      return (r && r.quoteTotal > 0) ? MotrixLegalRound.halfUp(a * (r.quotePretax || 0) / r.quoteTotal) : a
     },
     ivAmountTax() {
       return (this.ivAmountInput || 0) - this.ivAmountPretax()
@@ -490,7 +487,9 @@ window.CM_PARTS.push(() => ({
     },
     ivSelectedGrossTotal() {
       // 含稅小計，才能跟剩餘可申請金額（含稅）比較
-      return Math.round(this.ivSelectedTotal() * this._ivTaxRatio())
+      const r = this.ivRemaining
+      if (!r || !(r.quotePretax > 0)) return MotrixLegalRound.halfUp(this.ivSelectedTotal())
+      return MotrixLegalRound.halfUp(this.ivSelectedTotal() * r.quoteTotal / r.quotePretax)
     },
     ivSelectedTax() {
       return this.ivSelectedGrossTotal() - this.ivSelectedTotal()

@@ -25,6 +25,8 @@ from helpers import (
     user_has_module, run_edge_pdf,
 )
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 from helpers.financial_mask import money_visible
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
@@ -125,7 +127,7 @@ def _live_dispatch_totals_by_quote(conn) -> dict:
             except Exception:
                 amt = 0
         rate = float(r["tax_rate"]) if r["tax_rate"] is not None else 0.05
-        total_with_tax = amt + round(amt * rate)
+        total_with_tax = amt + round_half_up(amt, rate)
         try:
             personnel = json.loads(r["personnel_json"] or "[]")
         except Exception:
@@ -476,7 +478,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
         if frozen is None:
             continue
         live = live_dispatch_totals.get(c["quoteNo"], 0)
-        if round(live) != round(frozen):
+        if round_half_up(live) != round_half_up(frozen):
             stale_settlement_count += 1
 
     # 已成案/已結案但完全沒有收款期別（caseRecord.payment.items 是空的）：這類
@@ -600,7 +602,7 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
         return round(actual / target * 100, 1) if (target and target != 0) else None
 
     def _pro(target):
-        return round(target * frac) if target else 0
+        return round_half_up(target, frac) if target else 0
 
     t_rev  = ann.get("revenue")          or 0
     t_cs   = ann.get("newCases")         or 0
@@ -2532,9 +2534,9 @@ def _round_half_up(n) -> int:
     """財政部統一發票金額計算慣例是「四捨五入」（.5 一律進位），Python 內建
     `round()` 是「銀行家捨入」（.5 進位到最近偶數）——兩者只在剛好卡在 .5
     邊界時才會差 1 元，但既然這裡的數字要拿去對真實開立的發票金額，就該用
-    跟開票軟體一致的規則，不要假設「大部分時候一樣」就夠了。"""
-    from decimal import Decimal, ROUND_HALF_UP
-    return int(Decimal(str(n)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    跟開票軟體一致的規則，不要假設「大部分時候一樣」就夠了。
+    X-VAT（2026-09-26）：轉呼叫 L1 `legal_params.round_half_up`（金額捨入唯一來源）。"""
+    return round_half_up(n)
 
 
 def _collect_tax_invoices(year: Optional[int] = None, month: Optional[int] = None) -> list:
@@ -2820,15 +2822,15 @@ async def bank_reconcile(file: UploadFile = File(...), authorization: str = Head
             "quoteNo":    r["quote_no"] or "",
             "customer":   r["customer_name"] or "",
             "vendorName": snap.get("vendorName") or "",
-            "amount":     round(float(snap.get("grandTotal") or 0)),
+            "amount":     round_half_up(float(snap.get("grandTotal") or 0)),
         })
 
     matched_voucher_nos = set()
     bank_results = []
     for br in bank_rows:
-        amt_r = round(br["amount"])
+        amt_r = round_half_up(br["amount"])
         candidate = next(
-            (v for v in vouchers if round(v["amount"]) == amt_r and v["voucherNo"] not in matched_voucher_nos),
+            (v for v in vouchers if round_half_up(v["amount"]) == amt_r and v["voucherNo"] not in matched_voucher_nos),
             None,
         )
         if candidate:
@@ -3598,7 +3600,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["contractor"] += e["amount"]
         details["contractor"].append({
-            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"], "provisional": e["provisional"],
         })
 
@@ -3609,7 +3611,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             continue
         monthly[mo]["material"] += e["amount"]
         details["material"].append({
-            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+            "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round_half_up(e["amount"]),
             "taxNote": e["taxNote"], "provisional": e["provisional"],
         })
 
@@ -3641,7 +3643,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         label = agg["name"] + (f"（批號 {agg['batchNo']}）" if agg["batchNo"] else "")
         details[agg["bucket"]].append({
             "date": agg["date"], "quoteNo": "",
-            "desc": f"{label} × {agg['qty']}", "amount": round(agg["amount"]),
+            "desc": f"{label} × {agg['qty']}", "amount": round_half_up(agg["amount"]),
         })
 
     # ── 其他支出（額外支出逐筆）──────────────────────────────────────────────
@@ -3654,7 +3656,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         monthly[mo]["other"] += e["amount"]
         details["other"].append({
             "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"].strip("｜"),
-            "amount": round(e["amount"]), "files": e["files"],
+            "amount": round_half_up(e["amount"]), "files": e["files"],
             # 精算尚未完結：金額還可能變動，前端會標示出來，不要讓使用者
             # 誤以為是已定稿的數字
             "pending": e["pending"], "taxNote": e["taxNote"], "provisional": e["provisional"],
@@ -3671,9 +3673,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         total = e["contractor"] + e["equipment"] + e["material"] + e["other"]
         item = {
             "month": mo, "label": f"{int(mo[5:7])}月",
-            "contractor": round(e["contractor"]), "equipment": round(e["equipment"]),
-            "material": round(e["material"]), "other": round(e["other"]),
-            "total": round(total),
+            "contractor": round_half_up(e["contractor"]), "equipment": round_half_up(e["equipment"]),
+            "material": round_half_up(e["material"]), "other": round_half_up(e["other"]),
+            "total": round_half_up(total),
         }
         monthly_items.append(item)
         for k in ("contractor", "equipment", "material", "other", "total"):

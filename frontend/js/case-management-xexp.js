@@ -69,7 +69,8 @@ window.CM_PARTS.push(() => ({
     // 小計只算給畫面即時顯示用；真正的值以後端算的為準（後端不吃前端傳的金額）
     xeRecalc(i) {
       const x = this.xe.items[i]
-      x.totalCost = Math.round((Number(x.qty) || 0) * (Number(x.unitCost) || 0) * 100) / 100
+      // X-VAT（2026-09-26）：與後端 case_extra_expenses._recalc 同一套（元以下兩位四捨五入）
+      x.totalCost = MotrixLegalRound.halfUp((Number(x.qty) || 0) * (Number(x.unitCost) || 0), 100) / 100
       this.xeDirty(i)
     },
 
@@ -154,7 +155,7 @@ window.CM_PARTS.push(() => ({
     async xeSubmit(i) {
       const x = this.xe.items[i]
       if (!x.id) { this._xeFail('請先儲存再送審'); return }
-      if (!(await MotrixUI.confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${Math.round(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`))) return
+      if (!(await MotrixUI.confirm(`確定送審這筆額外支出？\n\n${x.description}　NT$ ${MotrixLegalRound.halfUp(x.totalCost || 0).toLocaleString()}\n\n送審後在簽核完成前不能修改。`))) return
       const quoteNo = this.selected?.quote_no
       this.xe.busy = true; this.xe.msg = ''
       try {
@@ -274,7 +275,7 @@ window.CM_PARTS.push(() => ({
 
     xeChangeRecalc(i) {
       const c = this.xe.items[i].change
-      c.totalCost = Math.round((Number(c.qty) || 0) * (Number(c.unitCost) || 0) * 100) / 100
+      c.totalCost = MotrixLegalRound.halfUp((Number(c.qty) || 0) * (Number(c.unitCost) || 0), 100) / 100
       this.xeChangeDirty(i)
     },
 
@@ -322,8 +323,8 @@ window.CM_PARTS.push(() => ({
       const c = x.change || {}
       if (x._changeDirty) { this._xeFail('請先儲存變更申請再送審'); return }
       if (!x.changeStatus) { this._xeFail('請先儲存變更申請再送審'); return }
-      const oldA = Math.round(x.totalCost || 0).toLocaleString()
-      const newA = Math.round(c.totalCost || 0).toLocaleString()
+      const oldA = MotrixLegalRound.halfUp(x.totalCost || 0).toLocaleString()
+      const newA = MotrixLegalRound.halfUp(c.totalCost || 0).toLocaleString()
       if (!(await MotrixUI.confirm(`確定送審這筆變更申請？\n\n${c.description}\nNT$ ${oldA} → NT$ ${newA}\n\n`
                  + `核准之前，這筆額外支出維持原本的 NT$ ${oldA}，報表數字不會變動。`))) return
       this.xe.busy = true; this.xe.msg = ''

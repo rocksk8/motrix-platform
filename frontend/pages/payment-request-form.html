@@ -7,6 +7,7 @@
   <title>請款單開立 — MOTRIX ERP</title>
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <style>
@@ -379,39 +380,40 @@ function paymentRequestForm() {
 
     get editable() { return this.q.status === '草稿' },
 
-    fmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+    fmt(n) { return 'NT$ ' + (MotrixLegalRound.halfUp(n || 0)).toLocaleString() },
     dirty() { this.isDirty = true },
 
     statusClass() {
       return { '草稿': 'badge--draft', '待審核': 'badge--pending', '簽核中': 'badge--signing', '已核准': 'badge--approved' }[this.q.status] || ''
     },
 
-    _taxRatio() {
-      if (!this.remaining || !this.remaining.quotePretax) return 1
-      return this.remaining.quoteTotal / this.remaining.quotePretax
-    },
-
+    // X-VAT（2026-09-26）：試算與後端 _calc_scope_amount 同一個算式、同一套四捨五入（legal-round.js）
     ratioToAmount() {
       const total = this.remaining ? this.remaining.quoteTotal : 0
-      return Math.round(total * (this.ratioInput || 0) / 100)
+      return MotrixLegalRound.halfUp(total * (this.ratioInput || 0) / 100)
     },
 
     selectedTotal() {
       return Object.values(this.itemSelections).reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
     },
-    selectedGrossTotal() { return Math.round(this.selectedTotal() * this._taxRatio()) },
+    selectedGrossTotal() {
+      const r = this.remaining
+      if (!r || !r.quotePretax) return MotrixLegalRound.halfUp(this.selectedTotal())
+      return MotrixLegalRound.halfUp(this.selectedTotal() * r.quoteTotal / r.quotePretax)
+    },
     selectedTax() { return this.selectedGrossTotal() - this.selectedTotal() },
 
     // 目前表單狀態下的即時試算（存檔前的預覽用；實際以後端回傳為準）
     currentGross() {
       if (this.q.scope === 'items') return this.selectedGrossTotal()
       if (this.ratioInput > 0) return this.ratioToAmount()
-      return Math.round(this.amountInput || 0)
+      return MotrixLegalRound.halfUp(this.amountInput || 0)
     },
     currentPretax() {
       if (this.q.scope === 'items') return this.selectedTotal()
-      const ratio = this._taxRatio()
-      return ratio > 0 ? Math.round(this.currentGross() / ratio) : this.currentGross()
+      const r = this.remaining
+      return (r && r.quoteTotal > 0) ? MotrixLegalRound.halfUp(this.currentGross() * (r.quotePretax || 0) / r.quoteTotal)
+        : this.currentGross()
     },
     currentTax() { return this.currentGross() - this.currentPretax() },
 
@@ -420,7 +422,7 @@ function paymentRequestForm() {
         delete this.itemSelections[it.itemId]
       } else {
         const qty = it.remainingQty
-        this.itemSelections[it.itemId] = { qty, ratioPct: 100, amount: Math.round(qty * (it.unitPrice || 0)) }
+        this.itemSelections[it.itemId] = { qty, ratioPct: 100, amount: MotrixLegalRound.halfUp(qty || 0, it.unitPrice || 0) }
       }
       this.dirty()
     },
@@ -430,7 +432,7 @@ function paymentRequestForm() {
       if (sel.qty > it.remainingQty) sel.qty = it.remainingQty
       if (sel.qty < 0) sel.qty = 0
       sel.ratioPct = it.remainingQty > 0 ? +(sel.qty / it.remainingQty * 100).toFixed(2) : 0
-      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+      sel.amount = MotrixLegalRound.halfUp(sel.qty || 0, it.unitPrice || 0)
       this.dirty()
     },
     itemRatioChanged(it) {
@@ -439,7 +441,7 @@ function paymentRequestForm() {
       if (sel.ratioPct > 100) sel.ratioPct = 100
       if (sel.ratioPct < 0) sel.ratioPct = 0
       sel.qty = +(it.remainingQty * (sel.ratioPct || 0) / 100).toFixed(4)
-      sel.amount = Math.round(sel.qty * (it.unitPrice || 0))
+      sel.amount = MotrixLegalRound.halfUp(sel.qty || 0, it.unitPrice || 0)
       this.dirty()
     },
 

@@ -46,6 +46,8 @@ from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_vouche
 from helpers.errors import trace_id
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE
 from helpers.legal_params import tax_basis_error, tax_basis_label   # R2（L1）
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）。守門 test_legal_amount_rounding_guard
+from helpers.legal_params import round_half_up
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -333,7 +335,7 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
                 conn.close()
                 raise HTTPException(400, "請輸入申請金額")
             request_amount = body.amount
-            pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
+            pretax_amount = round_half_up(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
         else:
             if not body.items:
                 conn.close()
@@ -366,7 +368,7 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
                     "qty":         line.qty,
                     "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
                 })
-            request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
+            request_amount = round_half_up(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
 
         # AC1（2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行」）：
         #   稅額＝round_half_up(銷售額 × 5%)（零稅率／免稅＝0），與報價、稅務匯出同一算法；
@@ -403,8 +405,8 @@ def create_invoice_voucher(body: VoucherCreateIn, authorization: str = Header(No
             "quoteItems":      quote_items_snapshot,
             "selectedItems":   selected_items_snapshot,
             "requestedAmount": request_amount,      # 含稅（＝ voucher.amount）
-            "pretaxAmount":    round(pretax_amount),
-            "taxAmount":       round(tax_amount),
+            "pretaxAmount":    round_half_up(pretax_amount),
+            "taxAmount":       round_half_up(tax_amount),
             "taxType":         tax_type,
             "taxNote":         tax_note,
             "taxBasis":        tax_basis,

@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>成本精算 — MOTRIX 專案管理系統</title>
+  <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -390,11 +391,11 @@
                     <span x-text="item.actualTotalCost > 0 ? 'NT$ ' + fmt(item.actualTotalCost) : '—'"></span>
                     <template x-if="item.actualCostTaxMode === 'taxed' && item.actualTotalCost > 0">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
-                           x-text="'原含稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                           x-text="'原含稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
                     </template>
                     <template x-if="item.actualCostTaxMode === 'taxed_gross' && item.actualTotalCost > 0">
                       <div style="font-size:9px;color:var(--text-dim);font-weight:400"
-                           x-text="'原未稅 NT$ ' + fmt(Math.round((item.actualQty||0) * (item.actualUnitCost||0)))"></div>
+                           x-text="'原未稅 NT$ ' + fmt(MotrixLegalRound.halfUp(item.actualQty||0, item.actualUnitCost||0))"></div>
                     </template>
                   </td>
 
@@ -758,7 +759,7 @@ function settlementPage() {
     },
 
     fmt(n) {
-      return Math.round(n || 0).toLocaleString()
+      return MotrixLegalRound.halfUp(n || 0).toLocaleString()
     },
 
     // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
@@ -808,7 +809,7 @@ function settlementPage() {
           // calcTotals() 的 inputVat = totalCost×5%），確保未經使用者調整的精算品項
           // 預估/實際毛利率基準一致，「差異(pp)」欄反映的才是真實成本表現而非公式落差
           actualCostTaxMode: 'taxed_gross',
-          actualTotalCost: Math.round((it.qty || 0) * (it.cost || 0) * 1.05),
+          actualTotalCost: MotrixLegalRound.halfUp((it.qty || 0) * (it.cost || 0), 1.05),
           note:            '',
         }))
 
@@ -892,8 +893,8 @@ function settlementPage() {
     // 一致或非完結狀態回傳 null（見 §5.5「精算完結即凍結」設計，此為過期提醒非錯誤）
     dispatchStale() {
       if (this.settlement.status !== 'finalized' || !this._frozenSummary) return null
-      const frozen = Math.round(this._frozenSummary.dispatchTotal || 0)
-      const live   = Math.round(this.summary.dispatchTotal || 0)
+      const frozen = MotrixLegalRound.halfUp(this._frozenSummary.dispatchTotal || 0)
+      const live   = MotrixLegalRound.halfUp(this.summary.dispatchTotal || 0)
       if (frozen === live) return null
       return { frozen, live, diff: live - frozen }
     },
@@ -912,20 +913,21 @@ function settlementPage() {
     },
 
     calcItemCost(item) {
-      const raw = Math.round((item.actualQty || 0) * (item.actualUnitCost || 0))
+      // X-VAT（2026-09-26）：金額一律 static/legal-round.js 四捨五入（與後端同一套）
+      const raw = MotrixLegalRound.halfUp(item.actualQty || 0, item.actualUnitCost || 0)
       if (item.actualCostTaxMode === 'taxed') {
         // 含稅5%：供應商發票金額已含稅，扣掉稅額換算回未稅，與報價稅前收入同一基準才能正確比毛利
-        item.actualTotalCost = Math.round(raw / 1.05)
+        item.actualTotalCost = MotrixLegalRound.halfUp(raw / 1.05)
       } else if (item.actualCostTaxMode === 'taxed_gross') {
         // 含稅5%（自動加總）：填的是未稅底價，稅金無法扣抵、屬實際支出，加總5%計入真實成本
-        item.actualTotalCost = Math.round(raw * 1.05)
+        item.actualTotalCost = MotrixLegalRound.halfUp(raw, 1.05)
       } else {
         item.actualTotalCost = raw
       }
     },
 
     calcExtraCost(ex) {
-      ex.totalCost = Math.round((ex.qty || 0) * (ex.unitCost || 0))
+      ex.totalCost = MotrixLegalRound.halfUp(ex.qty || 0, ex.unitCost || 0)
     },
 
     calcSummary() {
@@ -951,13 +953,13 @@ function settlementPage() {
       const totalActualCost = itemActualTotal + extraTotal + dispatchTotal
       const grossProfit     = quotedPretax - totalActualCost
       const grossMarginPct  = quotedPretax > 0 ? grossProfit / quotedPretax * 100 : 0
-      const adminCost       = Math.round(quotedPretax * 0.10)
-      const charityDonation = Math.round(grossProfit * 0.01)
+      const adminCost       = MotrixLegalRound.halfUp(quotedPretax, 0.10)
+      const charityDonation = MotrixLegalRound.halfUp(grossProfit, 0.01)
       const netProfit       = grossProfit - adminCost - charityDonation
       const netMarginPct    = quotedPretax > 0 ? netProfit / quotedPretax * 100 : 0
 
-      const origAdminCost   = tot.adminCost != null ? tot.adminCost : Math.round(quotedPretax * 0.10)
-      const origCharity     = tot.charityDonation != null ? tot.charityDonation : Math.round(origDirectProfit * 0.01)
+      const origAdminCost   = tot.adminCost != null ? tot.adminCost : MotrixLegalRound.halfUp(quotedPretax, 0.10)
+      const origCharity     = tot.charityDonation != null ? tot.charityDonation : MotrixLegalRound.halfUp(origDirectProfit, 0.01)
       const origNetProfit   = tot.netProfit != null ? tot.netProfit : (origDirectProfit - origAdminCost - origCharity)
       const origNetMarginPct = tot.netMarginPct != null ? tot.netMarginPct
         : (quotedPretax > 0 ? origNetProfit / quotedPretax * 100 : 0)
@@ -967,17 +969,17 @@ function settlementPage() {
       this.summary = {
         quotedPretax, quotedTotal,
         origItemTotal, origTotalCost, origDirectProfit,
-        origMarginPct:    Math.round(origMarginPct * 10) / 10,
+        origMarginPct:    MotrixLegalRound.halfUp(origMarginPct, 10) / 10,
         origAdminCost, origCharity,
-        origNetProfit:    Math.round(origNetProfit),
-        origNetMarginPct: Math.round(origNetMarginPct * 10) / 10,
+        origNetProfit:    MotrixLegalRound.halfUp(origNetProfit),
+        origNetMarginPct: MotrixLegalRound.halfUp(origNetMarginPct, 10) / 10,
         itemActualTotal, extraTotal, dispatchTotal, totalActualCost,
-        grossProfit:     Math.round(grossProfit),
-        grossMarginPct:  Math.round(grossMarginPct * 10) / 10,
+        grossProfit:     MotrixLegalRound.halfUp(grossProfit),
+        grossMarginPct:  MotrixLegalRound.halfUp(grossMarginPct, 10) / 10,
         adminCost, charityDonation,
-        netProfit:       Math.round(netProfit),
-        netMarginPct:    Math.round(netMarginPct * 10) / 10,
-        profitDiff:      Math.round(profitDiff),
+        netProfit:       MotrixLegalRound.halfUp(netProfit),
+        netMarginPct:    MotrixLegalRound.halfUp(netMarginPct, 10) / 10,
+        profitDiff:      MotrixLegalRound.halfUp(profitDiff),
       }
     },
 
