@@ -162,6 +162,19 @@ def settings_rows(db_path: str) -> dict:
         conn.close()
 
 
+def quick_check(db_path: str) -> str:
+    """`PRAGMA quick_check`；"ok"＝通過，其餘（含丟例外）回錯誤字串。與 db.quick_check 同義（本檔不 import db）。"""
+    try:
+        conn = _ro(db_path)
+        try:
+            msgs = [r[0] for r in conn.execute("PRAGMA quick_check").fetchall()]
+        finally:
+            conn.close()
+    except Exception as exc:                                  # noqa: BLE001
+        return "%s: %s" % (type(exc).__name__, exc)
+    return "ok" if msgs == ["ok"] else "；".join(str(m) for m in msgs[:5])
+
+
 def integrity_ok(db_path: str) -> bool:
     conn = _ro(db_path)
     try:
@@ -278,6 +291,10 @@ def preflight(root: str, *, v9_port_open: bool, today: date = None, require_no_d
                                 % (v, V9_BASELINE))
         except Exception as e:                               # noqa: BLE001
             problems.append("讀不到 schema_version：%s" % e)
+        # S-CU10（STATES-DATA-OPS）：損毀的主庫原本能通過預檢，到備份讀列數時才以 traceback 崩潰
+        qc = quick_check(db)
+        if qc != "ok":
+            problems.append("主庫 quick_check 不通過（資料庫檔可能損毀）：%s —— 先從快照還原再升級" % qc[:200])
         size = os.path.getsize(db)
         free = shutil.disk_usage(root).free
         facts.update(db_bytes=size, free_bytes=free)

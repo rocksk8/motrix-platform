@@ -108,3 +108,16 @@
 
 - 【實測】7 項（R1–R6、init_db 損毀）；【讀碼·C 抽查】4 項（S-CC05、S-CC07、S-CP01、S-CP02）；其餘【讀碼】由三組並行蒐證取得 `檔:行`；【推論】已逐一標出（S-CU11、S-CU12、S-CD06），下一步優先實測。
 - 未涵蓋：正式機的實際設定（SMTP、heartbeat ping_url、雲端碟符）——不連正式機，列為使用者可在儀表板 D1 或系統頁確認的項目。
+
+## 9. 補強結果（C 的 5 項，2026-09-25）與 V9 是否同樣受影響
+
+| # | 處理 | 守門（`backend/tests/test_states_data_ops_2026_09_25.py`） | 突變 | V9 正式機是否同樣受影響（`c83dae6e`） |
+|---|---|---|---|---|
+| S-CD02 | `db.quick_check()`；`_snapshot_health` 讀得開之後再做 quick_check，不過 ⇒ 不寫 `.done`、不清舊快照、ERROR；`main.py` 啟動時 `_startup_integrity_check()`，不過 ⇒ ERROR 告警（不擋啟動） | `test_state_cd02_*`（5 題：健康庫 ok、部分損毀仍能 init_db 但 quick_check 不過、快照拒收、損毀主庫不產生 `.done` 且舊快照保留、啟動接線） | 拿掉快照的 quick_check ⇒ 2 紅 | **是**：`backend/archive.py:946-951` `_snapshot_health` 只看讀得開與筆數，無完整性檢查；V9 無啟動檢查 |
+| S-CC07 | `_prune_select()`：每一層（本機、雲端每日、個資每日、週、月、個資月）至少保留最新 `PRUNE_KEEP_NEWEST`＝7 份；除了今天以外全部過期 ⇒ ERROR「系統時鐘可能往前跳」 | `test_state_cc07_*`（正常時鐘照日期清且不告警；跳 40 天保留 7 份並 ERROR；雲端每日同一底線） | 底線拿掉 ⇒ 2 紅 | **是**：`backend/archive.py:1243`（本機 `cutoff = date.today()…`）、`:1313`（雲端每日） |
+| S-CC06 | 每日 `.done` 已在時仍重試 `_monthly_backup()`；`_check_previous_month_backup()`：上個月系統有在跑卻沒有月備份 `.done` ⇒ ERROR（不自動補，因為補做的不是那個月的資料） | `test_state_cc06_*`（同日重試、上月缺漏告警、已完成／全新安裝不告警） | 拿掉同日重試 ⇒ 1 紅 | **是**：`backend/archive.py:1942` 每日 `.done` 在就 return；`:1829` 月份以當天計 |
+| S-CN03 | `_write_backup_alert` 四個管道各自 try；寄信另設 `.emailed_<日期>`，**寄成功才寫**；寄失敗／無收件人 ⇒ `backup.alert_email_failed` audit＋警示檔註記＋ERROR log | `test_state_cn03_*`（成功一天一封、失敗不節流且留痕、警示目錄不可寫仍 audit 與寄信、無收件人留痕、WARN 不寄） | 不論結果都寫節流 ⇒ 1 紅 | **是**：`backend/archive.py:412-498` 同一個 try、`:442` 節流在寄信前寫、`:498` `_async_send` 結果丟棄 |
+| S-CU10 | `core.upgrade.quick_check()`；預檢不過 ⇒ problem，不動任何東西 | `test_state_cu10_*`（健康庫通過、損毀庫擋下） | 拿掉 ⇒ 1 紅 | **否**：V9 沒有升級工具（`core/upgrade.py` 是新版才有） |
+
+- 受影響題目（備份／告警／升級／email 相關 47 檔＋`tests/platform`）：901 passed。
+- 行為變更（已同步調整既有測試）：`test_backup_retention_policy_2026_09_14` 的 `arch` 與 `test_cloud_storage_2026_09_07` 的 S3 清理題把底線設為 1／0，因為它們守的是日期規則、每題只造兩三個資料夾。

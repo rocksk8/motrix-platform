@@ -99,7 +99,7 @@
 | S-CU07 | 回滾本身失敗（檔案被鎖） | 中 | 缺（R3 未入測試） | ⏳ |
 | S-CU08 | 同一時間戳重跑、步驟亂序 | 中 | 缺 | ⏳ |
 | S-CU09 | 預檢的磁碟判斷不足 | 中 | `test_preflight_rejects_low_disk`（只涵蓋 DB×3） | ⏳ |
-| S-CU10 | **預檢放行損毀主庫** | 高 | 缺 | 🔄 C（補強中） |
+| S-CU10 | **預檢放行損毀主庫** | 高 | 缺 | ✅ C（V9 同樣受影響：否） |
 | S-CU11 | 正式機 PATH 上沒有 python | 中 | 缺 | ⏳ |
 | S-CU12 | 升級後版本號仍顯示舊的 | 中 | 缺 | ⏳ |
 | S-CU13 | 轉換後還能按「啟動服務」而驗證沒過 | 中 | 缺 | ⏳ |
@@ -108,8 +108,8 @@
 | S-CC03 | `系統存檔_個資` 被刪或改名 | 中 | `test_alert_is_edge_triggered` | ⏳ |
 | S-CC04 | 個資資料夾權限被改寬 | 中 | 缺（無法自動） | ⏳ |
 | S-CC05 | 雲端空間滿／單張表寫入失敗 | 中 | `test_partial_backup_failure_is_not_reported_as_ok`（只驗不報 ok） | ⏳ |
-| S-CC06 | **月底最後一天月備份失敗** | 高 | 缺 | 🔄 C（補強中） |
-| S-CC07 | **系統時鐘往前跳** | 高 | 缺 | 🔄 C（補強中） |
+| S-CC06 | **月底最後一天月備份失敗** | 高 | 缺 | ✅ C（V9 同樣受影響：是） |
+| S-CC07 | **系統時鐘往前跳** | 高 | 缺 | ✅ C（V9 同樣受影響：是） |
 | S-CC08 | 系統時鐘倒退 | 中 | 缺 | ⏳ |
 | S-CC09 | 兩台機器同一天寫雲端 | 低 | `test_archive_ownership_2026_09_14` 全檔、`test_unreadable_marker_fails_open` | ⏳ |
 | S-CC10 | 排程工作與程式內排程同時跑備份 | 中 | 缺 | ⏳ |
@@ -117,7 +117,7 @@
 | S-CC12 | 週備份時雲端不可用 | 低 | 缺 | ⏳ |
 | S-CC13 | S3 後端的個資資料 | 低 | `test_object_storage_backend_does_not_upload_and_alerts` | ⏳ |
 | S-CD01 | 主庫不存在 | 低 | `test_require_db_*` | ⏳ |
-| S-CD02 | **主庫部分損毀仍啟動** | 高 | 缺 | 🔄 C（補強中） |
+| S-CD02 | **主庫部分損毀仍啟動** | 高 | 缺 | ✅ C（V9 同樣受影響：是） |
 | S-CD03 | WAL／SHM 殘留 | 低 | 缺（R6 未入測試） | ⏳ |
 | S-CD04 | schema 比基準新 | 低 | `test_newer_than_baseline_is_refused`、`test_preflight_rejects_running_service_and_newer_schema` | ⏳ |
 | S-CD05 | database is locked | 低 | `test_u9_a_locked_or_broken_database_raises_instead_of_reporting_zero` | ⏳ |
@@ -131,7 +131,7 @@
 | S-CP06 | 人工放行留痕誤觸「上次失敗」 | 低 | 缺 | ⏳ |
 | S-CN01 | SMTP 未設定 | 中 | 雷達：`test_n16_smtp_not_configured_does_not_mark`；設定頁狀態：缺 | ⏳ |
 | S-CN02 | SMTP 寄送失敗 | 低 | `test_notify_marks_only_on_success_2026_09_22` | ⏳ |
-| S-CN03 | **告警本身發不出去（告警的告警）** | 高 | 缺（只有新鮮度那一路的 `test_the_daily_guard_is_not_burned_when_the_alert_fails`） | 🔄 C（補強中） |
+| S-CN03 | **告警本身發不出去（告警的告警）** | 高 | 缺（只有新鮮度那一路的 `test_the_daily_guard_is_not_burned_when_the_alert_fails`） | ✅ C（V9 同樣受影響：是） |
 | S-CN04 | 收件人查詢失敗與「沒有收件人」無法分辨 | 中 | 缺 | ⏳ |
 | S-CN05 | heartbeat 的 ping_url 未設 | 中 | 缺 | ⏳ |
 | S-CN06 | 正式機殘留 `.no_email_send` | 中 | `test_email_send_policy`（系統頁顯示：缺） | ⏳ |

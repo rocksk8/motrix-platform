@@ -207,6 +207,8 @@ def test_daily_backup_writes_to_s3_and_marker_prevents_rerun(client, monkeypatch
 
 
 def test_prune_cloud_backups_deletes_expired_s3_prefix(client, monkeypatch):
+    import archive as _arch
+    monkeypatch.setattr(_arch, "PRUNE_KEEP_NEWEST", 0)   # 本題守日期規則；底線見 test_states_data_ops_2026_09_25
     fake = FakeS3Client()
     _install_fake_s3(monkeypatch, fake)
     cloud_storage.s3_put_bytes("每日備份/2020-01-01/彙總.json", b"{}")

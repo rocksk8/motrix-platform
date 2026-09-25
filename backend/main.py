@@ -548,6 +548,24 @@ if _db_for_guard.DB_PATH == _paths.DB_PATH:
     _paths.require_db(_db_for_guard.DB_PATH)
 init_db()
 init_db(DEMO_DB_PATH)
+# S-CD02：部分損毀的主庫照常啟動（init_db 不會發現）⇒ 啟動時做一次 quick_check，
+# 不通過 ⇒ ERROR 告警（寄信、BACKUP_ALERT、audit；升級預檢會因告警而擋）。不擋啟動：營運不中斷。
+def _startup_integrity_check():
+    import db as _dbq
+    res = _dbq.quick_check(_dbq.DB_PATH)
+    if res != "ok":
+        logger.error("主庫 quick_check 不通過：%s", res)
+        try:
+            import archive as _arch
+            _arch._write_backup_alert("主庫完整性檢查（quick_check）不通過：%s —— 資料庫檔可能損毀，"
+                                      "每日快照會拒收直到修復；請從最後一份通過檢查的快照還原" % res[:200],
+                                      level="ERROR")
+        except Exception:                                    # noqa: BLE001
+            logger.exception("主庫損毀告警本身失敗")
+    return res
+
+
+_startup_integrity_check()
 init_default_admin()
 init_demo_account()
 flag_weak_passwords()

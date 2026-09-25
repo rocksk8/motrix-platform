@@ -418,11 +418,17 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
     - project folder backup_alerts/BACKUP_ALERT.txt (overwritten)
     - dated log line under backup_alerts/YYYY-MM-DD.log
     - audit_log (throttled once per day for same reason key)
-    - Email to admin/superadmin when level=="ERROR" (throttled daily)
+    - Email to superadmin when level=="ERROR"（寄成功才算寄過；同原因每日最多一封成功）
+
+    🔴 S-CN03（STATES-DATA-OPS，告警的告警）：原本四個管道包在**同一個 try**——警示目錄寫不進去
+    ⇒ audit 與寄信都不執行；而且節流標記在寄信**之前**就寫 ⇒ 寄失敗當天不再寄。
+    ⇒ 現在每個管道各自 try；寄信另有自己的節流（寄成功才寫）；寄不出去另留 audit 與警示檔註記。
     """
+    now = datetime.now().isoformat(timespec="seconds")
+    reason_key = reason[:80]
+    alert_path = os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt")
     try:
         os.makedirs(_ALERT_DIR, exist_ok=True)
-        now = datetime.now().isoformat(timespec="seconds")
         banner = (
             f"[{level}] MOTRIX ERP 備份警示\n"
             f"時間: {now}\n"
@@ -433,74 +439,125 @@ def _write_backup_alert(reason: str, level: str = "WARN") -> None:
             f"2. 本機 SQLite 快照是否仍存在於 backend\\db_backups\\\n"
             f"3. 處理完成後可刪除本檔；系統會在問題持續時再次寫入\n"
         )
-        alert_path = os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt")
         with open(alert_path, "w", encoding="utf-8") as f:
             f.write(banner)
-
-        day_log = os.path.join(_ALERT_DIR, f"{date.today().isoformat()}.log")
-        with open(day_log, "a", encoding="utf-8") as f:
+    except Exception:
+        logger.exception("_write_backup_alert: 寫 BACKUP_ALERT.txt 失敗（其餘管道照走）")
+    try:
+        with open(os.path.join(_ALERT_DIR, f"{date.today().isoformat()}.log"), "a", encoding="utf-8") as f:
             f.write(f"{now}\t{level}\t{reason}\n")
+    except Exception:
+        logger.exception("_write_backup_alert: 寫當日告警日誌失敗")
 
-        # Throttle audit: one alert per reason per day
-        throttle = os.path.join(_ALERT_DIR, f".alerted_{date.today().isoformat()}_{level}")
-        reason_key = reason[:80]
-        throttle_detail = os.path.join(_ALERT_DIR, f".reason_{date.today().isoformat()}")
-        already = False
+    # audit：同原因每日一筆（節流檔讀不到 ⇒ 當成還沒記過：寧可多記一筆，不可少記）
+    throttle_detail = os.path.join(_ALERT_DIR, f".reason_{date.today().isoformat()}")
+    already = False
+    try:
         if os.path.exists(throttle_detail):
-            try:
-                with open(throttle_detail, "r", encoding="utf-8") as f:
-                    already = reason_key in f.read()
-            except Exception:
-                already = False
-        if not already:
-            _system_audit(
-                "backup.alert",
-                reason[:120],
-                {"level": level, "reason": reason, "alertPath": alert_path},
-            )
+            with open(throttle_detail, "r", encoding="utf-8") as f:
+                already = reason_key in f.read()
+    except Exception:
+        already = False
+    if not already:
+        try:
+            _system_audit("backup.alert", reason[:120],
+                          {"level": level, "reason": reason, "alertPath": alert_path})
+        except Exception:
+            logger.exception("_write_backup_alert: audit 失敗")
+        try:
             with open(throttle_detail, "a", encoding="utf-8") as f:
                 f.write(reason_key + "\n")
-            open(throttle, "a").close()
+            open(os.path.join(_ALERT_DIR, f".alerted_{date.today().isoformat()}_{level}"), "a").close()
+        except Exception:
+            logger.exception("_write_backup_alert: 寫節流檔失敗")
 
-            # Email alert for ERROR-level failures (throttled via same daily marker)
-            if level == "ERROR":
-                _send_backup_error_email(reason, now)
+    if level == "ERROR" and not _alert_email_sent_today(reason_key):
+        try:
+            _send_backup_error_email(reason, now)
+        except Exception:
+            logger.exception("_write_backup_alert: 寄告警信失敗")
+            _alert_email_failed(reason, "寄信流程本身丟例外")
+    logger.warning("BACKUP ALERT: %s", reason)
 
-        logger.warning("BACKUP ALERT: %s", reason)
+
+def _alert_email_marker() -> str:
+    return os.path.join(_ALERT_DIR, f".emailed_{date.today().isoformat()}")
+
+
+def _alert_email_sent_today(reason_key: str) -> bool:
+    try:
+        p = _alert_email_marker()
+        if os.path.exists(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return reason_key in f.read()
     except Exception:
-        logger.exception("_write_backup_alert failed")
+        pass
+    return False
 
 
-def _send_backup_error_email(reason: str, ts: str) -> None:
+def _alert_email_failed(reason: str, why: str) -> None:
+    """告警信寄不出去：另留兩個看得見的痕跡（audit、警示檔註記）＋ ERROR log。"""
+    logger.error("備份告警信寄不出去（%s）：%s", why, reason)
+    try:
+        _system_audit("backup.alert_email_failed", reason[:120], {"reason": reason, "why": why})
+    except Exception:
+        logger.exception("_alert_email_failed: audit 失敗")
+    try:
+        with open(os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt"), "a", encoding="utf-8") as f:
+            f.write("\n⚠ 這則告警的通知信寄不出去（%s）—— 請直接處理，不要等信\n" % why)
+    except Exception:
+        logger.exception("_alert_email_failed: 寫警示檔失敗")
+
+
+def _send_backup_error_email(reason: str, ts: str):
     """Send async email to superadmin (最高管理者) on ERROR-level backup failure
     — 2026-08-24 改用 _superadmin_emails() 而非 _admin_emails()：備份基礎設施出問題
     （例如雲端硬碟磁碟機代號跑掉）需要有權限處理伺服器/磁碟機掛載的人知道，不是
     一般 admin 職務範圍；_superadmin_emails() 找不到人時仍會 fallback 回全體
-    admin/superadmin，不會真的寄不出去。"""
-    try:
-        from helpers.email_notify import _superadmin_emails, _async_send
-        to = _superadmin_emails()
-        if not to:
-            return
-        html = (
-            "<div style='font-family:Arial,sans-serif;padding:24px;max-width:600px'>"
-            "<h2 style='color:#DC2626'>⚠ MOTRIX ERP — 備份嚴重錯誤</h2>"
-            f"<p style='color:#374151'>發生時間：{ts}</p>"
-            "<div style='background:#FEE2E2;border:1px solid #FCA5A5;border-radius:6px;"
-            "padding:12px 16px;margin:12px 0'>"
-            f"<strong>錯誤原因：</strong><br>{reason}</div>"
-            "<p style='color:#374151'>請儘速確認：</p>"
-            "<ol style='color:#374151'>"
-            "<li>Google 雲端硬碟是否已掛載（任一代號皆可，可存取「我的雲端硬碟/系統存檔」）</li>"
-            "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
-            "<li>伺服器磁碟空間是否不足</li>"
-            "</ol>"
-            "<p style='color:#6B7280;font-size:12px'>此訊息每日每類錯誤最多寄送一次。</p>"
-            "</div>"
-        )
-        _async_send(to, "[MOTRIX] ⚠ 備份嚴重錯誤警示", html)
-    except Exception:
-        logger.exception("_send_backup_error_email failed")
+    admin/superadmin，不會真的寄不出去。
+
+    S-CN03：寄信在背景執行緒等結果；**寄成功才寫 `.emailed_<日期>`**（同原因當天不再寄），
+    失敗或找不到收件人 ⇒ `_alert_email_failed()`。回傳那條等待執行緒（測試用 join）。
+    """
+    from helpers.email_notify import _superadmin_emails, _async_send, SEND_SENT
+    to = _superadmin_emails()
+    if not to:
+        _alert_email_failed(reason, "找不到收件人（沒有啟用中的最高管理者或管理員）")
+        return None
+    html = (
+        "<div style='font-family:Arial,sans-serif;padding:24px;max-width:600px'>"
+        "<h2 style='color:#DC2626'>⚠ MOTRIX ERP — 備份嚴重錯誤</h2>"
+        f"<p style='color:#374151'>發生時間：{ts}</p>"
+        "<div style='background:#FEE2E2;border:1px solid #FCA5A5;border-radius:6px;"
+        "padding:12px 16px;margin:12px 0'>"
+        f"<strong>錯誤原因：</strong><br>{reason}</div>"
+        "<p style='color:#374151'>請儘速確認：</p>"
+        "<ol style='color:#374151'>"
+        "<li>Google 雲端硬碟是否已掛載（任一代號皆可，可存取「我的雲端硬碟/系統存檔」）</li>"
+        "<li>本機 SQLite 快照（<code>backend/db_backups/</code>）是否仍存在</li>"
+        "<li>伺服器磁碟空間是否不足</li>"
+        "</ol>"
+        "<p style='color:#6B7280;font-size:12px'>此訊息每日每類錯誤最多寄送一次（寄成功才算）。</p>"
+        "</div>"
+    )
+    handle = _async_send(to, "[MOTRIX] ⚠ 備份嚴重錯誤警示", html)
+    reason_key = reason[:80]
+
+    def _await():
+        outcome = handle.wait()
+        if outcome == SEND_SENT:
+            try:
+                os.makedirs(_ALERT_DIR, exist_ok=True)
+                with open(_alert_email_marker(), "a", encoding="utf-8") as f:
+                    f.write(reason_key + "\n")
+            except Exception:
+                logger.exception("寫告警信節流檔失敗")
+        else:
+            _alert_email_failed(reason, "寄送結果：%s" % outcome)
+
+    t = threading.Thread(target=_await, daemon=True)
+    t.start()
+    return t
 
 
 def _clear_backup_alert_if_healthy() -> None:
@@ -954,6 +1011,11 @@ def _snapshot_health(path: str, summary: dict = None, day: str = None,
     names, counts = _snapshot_row_counts(path)
     if names is None:
         return False, ["快照檔讀不開，看不出裡面有什麼資料：%s" % path], {}
+    # S-CD02：讀得開不代表沒壞 —— 部分頁面損毀的庫照樣讀得出表名與筆數
+    from db import quick_check as _quick_check
+    qc = _quick_check(path)
+    if qc != "ok":
+        return False, ["快照 quick_check 不通過（資料庫檔損毀）：%s" % qc[:200]], counts
 
     missing = [t for t in SNAPSHOT_REQUIRED_TABLES if t not in names]
     if missing:
@@ -1332,6 +1394,48 @@ def _rotate_server_log_if_large(
         return False
 
 
+# ── S-CC07（STATES-DATA-OPS）：清理永遠保留最新 N 份 ─────────────────────────────
+# 清理以 `date.today()` 算 cutoff ⇒ 系統時鐘往前跳超過保留天數時，**真實的快照會全部被判成過期**
+# （本機 >30 天全刪、雲端每日 >60 天全刪）。⇒ 不論日期，每一層都至少保留最新 PRUNE_KEEP_NEWEST 份；
+# 而且「除了今天以外全部都過期」就是時鐘或長期停機的徵兆 ⇒ ERROR 告警（同原因每日一封）。
+PRUNE_KEEP_NEWEST = 7
+
+
+def _parse_day(name: str):
+    return date.fromisoformat(name)
+
+
+def _parse_month(name: str):
+    return date.fromisoformat(f"{name}-01")
+
+
+def _parse_week(name: str):
+    year_str, week_str = name.split('-W')
+    return datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
+
+
+def _prune_select(names, parse, cutoff_ord: int, label: str, keep_newest: int = None) -> list:
+    """回要刪的名字：日期早於 cutoff、而且**不在最新 keep_newest 份內**。名字解析不了的一律不動。"""
+    keep_newest = PRUNE_KEEP_NEWEST if keep_newest is None else keep_newest
+    dated = []
+    for n in names:
+        try:
+            dated.append((parse(n), n))
+        except (ValueError, IndexError):
+            continue
+    dated.sort(reverse=True)
+    protected = {n for _d, n in dated[:keep_newest]}
+    doomed = [n for d, n in dated if d.toordinal() < cutoff_ord and n not in protected]
+    kept_old = [n for d, n in dated if d.toordinal() < cutoff_ord and n in protected]
+    others = [d for d, _n in dated if d != date.today()]
+    if kept_old and others and max(others).toordinal() < cutoff_ord:
+        _write_backup_alert(
+            "%s：除了今天以外，所有份數都超過保留天數（最新一份是 %s）—— 系統時鐘可能往前跳了，或機器停機很久。"
+            "已依「至少保留最新 %d 份」停止刪除 %d 份，請確認時鐘" % (label, max(others).isoformat(), keep_newest,
+                                                           len(kept_old)), level="ERROR")
+    return doomed
+
+
 def _prune_local_db_backups(keep_days: int = 30, pre_update_keep: int = 5) -> None:
     """清理 backend/db_backups/ 底下的兩種資料夾——它們的命名規則不同，
     所以清理規則也不同，這是 2026-09-14 補上的第二種：
@@ -1353,7 +1457,8 @@ def _prune_local_db_backups(keep_days: int = 30, pre_update_keep: int = 5) -> No
         if not os.path.isdir(_LOCAL_DB_BACKUP):
             return
         cutoff = date.today().toordinal() - keep_days
-        for name in os.listdir(_LOCAL_DB_BACKUP):
+        _names = [n for n in os.listdir(_LOCAL_DB_BACKUP) if os.path.isdir(os.path.join(_LOCAL_DB_BACKUP, n))]
+        for name in _prune_select(_names, _parse_day, cutoff, "本機 SQLite 快照"):
             path = os.path.join(_LOCAL_DB_BACKUP, name)
             if not os.path.isdir(path):
                 continue
@@ -1424,7 +1529,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
 
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
-        for name in _cloud_list_top_level(_daily_dir(), "每日備份"):
+        for name in _prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
+                                  _parse_day, cutoff_daily, "雲端每日備份"):
             try:
                 d = date.fromisoformat(name)
             except ValueError:
@@ -1441,7 +1547,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         _pii = pii_archive_status()
         if _pii["state"] == "ready":
             _pii_daily = os.path.join(_pii["path"], "每日備份")
-            for name in _cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"):
+            for name in _prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
+                                      _parse_day, cutoff_daily, "個資每日備份"):
                 try:
                     d = date.fromisoformat(name)
                 except ValueError:
@@ -1454,7 +1561,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
 
     cutoff_weekly = date.today().toordinal() - weekly_keep_days
     try:
-        for name in _cloud_list_top_level(_weekly_dir(), "週備份"):
+        for name in _prune_select(_cloud_list_top_level(_weekly_dir(), "週備份"),
+                                  _parse_week, cutoff_weekly, "雲端週備份"):
             try:
                 year_str, week_str = name.split('-W')
                 d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
@@ -1470,7 +1578,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         return          # 永久保留（預設）
     cutoff_monthly = date.today().toordinal() - monthly_keep_days
     try:
-        for name in _cloud_list_top_level(_monthly_dir(), "月備份"):
+        for name in _prune_select(_cloud_list_top_level(_monthly_dir(), "月備份"),
+                                  _parse_month, cutoff_monthly, "雲端月備份"):
             try:
                 d = date.fromisoformat(f"{name}-01")     # YYYY-MM → 當月 1 號
             except ValueError:
@@ -1484,7 +1593,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         _pii = pii_archive_status()
         if _pii["state"] == "ready":
             _pii_monthly = os.path.join(_pii["path"], "月備份")
-            for name in _cloud_list_top_level(_pii_monthly, f"{_PII_ARCHIVE_DIRNAME}/月備份"):
+            for name in _prune_select(_cloud_list_top_level(_pii_monthly, f"{_PII_ARCHIVE_DIRNAME}/月備份"),
+                                      _parse_month, cutoff_monthly, "個資月備份"):
                 try:
                     d = date.fromisoformat(f"{name}-01")
                 except ValueError:
@@ -2045,6 +2155,31 @@ def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) ->
     return summary
 
 
+def _check_previous_month_backup() -> bool:
+    """S-CC06：上個月的月備份若沒完成（而系統上個月確實在跑）⇒ ERROR 告警（同原因每日一封）。
+
+    月備份的內容是「當下的整庫」，事後補做的不是那個月的資料 ⇒ 不自動補，由人決定
+    （例：拿上個月最後一份本機／個資每日快照手動放進 月備份/YYYY-MM/）。回傳是否告警。
+    """
+    try:
+        first = date.today().replace(day=1)
+        prev = (first - timedelta(days=1)).strftime('%Y-%m')
+        marker = os.path.join(_monthly_dir(), prev, '.done')
+        if _cloud_marker_exists(marker, f"月備份/{prev}/.done"):
+            return False
+        ran_last_month = os.path.isdir(_LOCAL_DB_BACKUP) and any(
+            n.startswith(prev + "-") for n in os.listdir(_LOCAL_DB_BACKUP))
+        if not ran_last_month:
+            return False                      # 全新安裝或上個月根本沒在跑：不是缺漏
+        _write_backup_alert(
+            "上個月（%s）的月備份沒有完成 —— 永久保留層缺這個月。請從上個月最後一份每日快照"
+            "（本機 db_backups 或 系統存檔_個資／每日備份）手動補進 月備份/%s/" % (prev, prev), level="ERROR")
+        return True
+    except Exception:
+        logger.exception("_check_previous_month_backup failed")
+        return False
+
+
 def _monthly_backup():
     """月備份（2026-09-14 使用者裁示「長久只留月備份」）——**永久保留**的那一層。
 
@@ -2189,6 +2324,13 @@ def _daily_backup():
         marker      = os.path.join(day_dir, '.done')
         if _cloud_marker_exists(marker, f"每日備份/{today_label}/.done"):
             _clear_backup_alert_if_healthy()
+            # S-CC06：月備份失敗不寫 .done，但每日 .done 已在 ⇒ 原本要等到隔天才重試；
+            # 月底最後一天失敗的話就換月了、那個月永遠沒有月備份。⇒ 同日後續各輪也重試月備份。
+            try:
+                _monthly_backup()
+            except Exception:
+                logger.exception("_monthly_backup retry failed")
+            _check_previous_month_backup()
             return
         conn = get_db()
         now  = datetime.now().isoformat()
@@ -2277,6 +2419,7 @@ def _daily_backup():
         except Exception:
             logger.exception("_monthly_backup failed in daily schedule")
             _write_backup_alert("月備份（永久保留層）失敗，詳見 server.log", level="ERROR")
+        _check_previous_month_backup()
 
         retention = _backup_retention()
         _prune_audit_log(keep_days=retention["audit_log_keep_days"])

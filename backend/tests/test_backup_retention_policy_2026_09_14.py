@@ -30,10 +30,15 @@ def _mkdir_with_file(root, *parts):
 
 
 @pytest.fixture
-def arch(isolated_archive):
+def arch(isolated_archive, monkeypatch):
     """`isolated_archive`（見 conftest）給這一題一個全新的存檔根目錄——
-    `_app` 建的那個是 session 級共用，不隔離的話各題造的日期資料夾會互相干擾。"""
+    `_app` 建的那個是 session 級共用，不隔離的話各題造的日期資料夾會互相干擾。
+
+    2026-09-25 S-CC07：清理多了「至少保留最新 N 份」的底線；本檔守的是**日期規則**，
+    每題只造兩三個資料夾 ⇒ 底線設成 1（仍保留最新一份），日期規則才看得出來。
+    底線本身由 tests/test_states_data_ops_2026_09_25.py 守。"""
     import archive
+    monkeypatch.setattr(archive, "PRUNE_KEEP_NEWEST", 1)
     return archive
 
 

@@ -853,6 +853,24 @@ def _get_version(conn) -> int:
     return row["version"] if row else 0
 
 
+def quick_check(path: str) -> str:
+    """`PRAGMA quick_check` 的結果（"ok"＝通過）。打不開或丟例外 ⇒ 回錯誤字串（不回 "ok"）。
+
+    🔴 S-CD02（STATES-DATA-OPS）：部分損毀的庫 `init_db` 照常成功、伺服器照常啟動，
+    而每日快照原本不做完整性檢查 ⇒ 損毀的庫會被當成健康備份、好的舊快照依保留天數被清掉。
+    """
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % path.replace("\\", "/"), uri=True, timeout=30)
+        try:
+            rows = conn.execute("PRAGMA quick_check").fetchall()
+        finally:
+            conn.close()
+    except Exception as exc:                                  # noqa: BLE001
+        return "%s: %s" % (type(exc).__name__, exc)
+    msgs = [r[0] for r in rows]
+    return "ok" if msgs == ["ok"] else "；".join(str(m) for m in msgs[:5])
+
+
 def _ensure_module_schema_versions(conn) -> None:
     """各模組 migration 的版本表（CORE-SPEC §6）。
 
