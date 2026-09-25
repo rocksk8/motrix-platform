@@ -82,10 +82,10 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| S-M1 | | | |
-| S-S1 | | | |
-| S-S2 | | | |
-| O-1～O-2 | | | |
+| S-M1 | 修正：`scope_names.expand_internal()`——被改名稱在同一個模組內的引用閉包（任何頂層定義的本體引用了被改的名稱就算被改，新舊兩版的引用都算，反覆到不再增加）；`name_filter` 在過濾前套用，`_test_name_filter` 的 conftest 條件與資料表一跳都用閉包後的集合；報告另記 `names_direct`。題：合成「改 _x、使用者只用 b、b 呼叫 _x」⇒ 選到；呼叫者定義在前需多輪；**D 的真突變**（legal_params._as_date）⇒ test_legal_params_r1 被選到。突變：拿掉閉包 2 紅、閉包只做一輪 1 紅。重量（只改一個名稱）：legal_params ≤17.8%（全部名稱）；email_notify 中位數 20.6%（≤30% 40／63，高的是 `_cfg`／`email_send_policy` 這類每封信都經過的設定，約 67.7%）；auth 中位數 31.6%；**db 中位數 81.9%**（遷移與 `_table_exists` 等都被 `init_db` 呼叫，conftest 用 `init_db` ⇒ 改 db 內部幾乎影響全部測試，判斷正確）——這是正確的代價，已寫進 §C-11a 附錄 | 62e319b9 | |
+| S-S1 | 修正：`tools/platform/scope_rc.py`——真突變清單（legal_params._as_date、auth._require_user 少 modules），每項：套用 → 名稱層級選題必須選到會紅的那一題 → 實跑必須紅 → 還原核對；結果記進 modtest_stats.jsonl（kind＝reverse_control）。實跑兩項皆「選到且紅」。清單過期（原句對不上）即失敗、不略過；另有題驗清單的原句與題目檔都存在。列入發版前／每批合回後（§C-11a） | 736196e2 | |
+| S-S2 | 修正：補兩題——使用者把模組物件傳出去（ALL）、dep_scan 認得但 AST 找不到 import（importlib）⇒ 兩者都保留。D 的 Q01 突變（保守分支改成只看交集）⇒ 2 紅 | 62e319b9 | |
+| O-1～O-2 | O-1 收到：預設值／常數值的改動判「介面不變」，名稱層級會把那個名稱列為被改、直接使用者照選；只經直接使用者往下傳的影響靠契約題（S-S1 的機制接住，新發現就加進 scope_rc 清單）。O-2 修正：`interface_changed` 帶入 G1 的 `cross_boundary_public`（一次執行只掃一次）；題：`_require_user` 改簽名 ⇒ 介面有變，反向控制（不帶 extra ⇒ 看不到）；突變（拿掉 extra）⇒ 紅 | 62e319b9 | |
 
 ### D 確認（2026-09-26 04:18；對象：origin/wip/b-scope `50058b45`，修正 `62e319b9`、`736196e2`）
 
