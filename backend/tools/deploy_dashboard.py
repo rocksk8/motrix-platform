@@ -701,17 +701,43 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
     }
     # 讀→改→寫要在鎖內、寫入要原子（暫存檔＋os.replace）：解除鎖定端點與 job 收尾執行緒會同時寫，
     # 原本兩個 write_text 交錯 ⇒ 合法 JSON 後面接上另一次較長寫入的殘字、且其中一筆遺失（2026-09-26 B 反向控制時抓到）。
+    # 讀取端（/api/history、最近失敗警告）也要拿同一把鎖：Windows 上目標檔被開著時 os.replace 丟 PermissionError，
+    # 第一版只鎖寫入端 ⇒ 儀表板輪詢時 300 次寫入掉 145 筆（D 稽核 2026-09-26）。行程外的人（防毒、手動開檔）擋住時短暫重試，
+    # 仍不行就直接覆寫——鎖內沒有別的寫入者，直接寫不會交錯；寧可不原子也不掉筆。
     with _history_lock:
-        history = []
-        if HISTORY_PATH.exists():
-            try:
-                history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-            except Exception:
-                history = []
+        history = _read_history_locked()
+        if history is None:
+            history = []
         history.insert(0, entry)
+        text = json.dumps(history[:200], ensure_ascii=False, indent=2)
         tmp = HISTORY_PATH.with_name(f"{HISTORY_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
-        tmp.write_text(json.dumps(history[:200], ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, HISTORY_PATH)
+        tmp.write_text(text, encoding="utf-8")
+        for attempt in range(5):
+            try:
+                os.replace(tmp, HISTORY_PATH)
+                return
+            except PermissionError:
+                time.sleep(0.05 * (attempt + 1))
+        HISTORY_PATH.write_text(text, encoding="utf-8")
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
+def _read_history_locked():
+    """呼叫端必須持有 _history_lock。檔案不存在 ⇒ []；存在但讀不懂 ⇒ None（讓呼叫端分得出「沒有紀錄」與「讀不到」）。"""
+    if not HISTORY_PATH.exists():
+        return []
+    try:
+        return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _read_history():
+    with _history_lock:
+        return _read_history_locked()
 
 
 def _try_acquire_job_lock(job_id: str) -> bool:
@@ -730,12 +756,10 @@ def _recent_failure_warning() -> str:
     """檢查最近一筆部署/回滾歷史紀錄，如果是 15 分鐘內的失敗，回傳一段
     警告文字給前端的二次確認卡片顯示——2026-09-08 當晚實際發生連續三次
     盲目重試都沒先看清楚上一次到底發生什麼事，這裡至少在畫面上提醒一次。"""
-    if not HISTORY_PATH.exists():
-        return ""
-    try:
-        history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return ""
+    history = _read_history()
+    if history is None:
+        # 讀不到不等於「沒有失敗」：說出來，不靜默放行（唯讀動作的缺口要輸出）
+        return "⚠ 部署歷史紀錄讀不到（deploy_dashboard_history.json），無法確認上一次部署／回滾的結果；請先看 deploy_logs 再決定是否執行。"
     if not history:
         return ""
     last = history[0]
@@ -903,12 +927,8 @@ def list_products():
 
 @app.get("/api/history")
 def get_history():
-    if not HISTORY_PATH.exists():
-        return []
-    try:
-        return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    history = _read_history()
+    return [] if history is None else history
 
 
 # ── 背景 job 查詢 ────────────────────────────────────────────────────────
