@@ -109,7 +109,7 @@
         <!-- U4：員工投保金額與全年累計（補充保費門檻＝投保金額 × 倍數；最高管理者） -->
         <template x-if="isSuper && insuranceOpen">
         <div class="bn-card" data-testid="bn-insurance">
-          <div class="bn-sec">投保金額與全年累計（<input class="bn-in" style="width:64px" x-model.number="insuranceYear" @change="loadInsurance()"> 年）</div>
+          <div class="bn-sec">投保金額與全年累計（<input class="bn-in filter" style="width:64px" x-model.number="insuranceYear" @change="loadInsurance()"> 年）</div>
           <div class="bn-note">補充保費：全年累計獎金超過「投保金額 × 倍數」的部分計收；倍數與費率依法規參數版本。
             「MOTRIX 以外」填同一年由其他管道（例如薪資系統）已發的獎金。沒有設定投保金額的人，獎金無法標記已發放。</div>
           <table class="bn-table" style="width:100%;font-size:13px;margin-top:8px">
