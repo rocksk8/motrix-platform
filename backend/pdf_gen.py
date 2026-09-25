@@ -521,6 +521,30 @@ def generate_pdf_bytes(quote_no: str, internal: bool = False) -> bytes:
                 except Exception: pass
 
 
+def html_to_pdf_bytes(html_content: str) -> bytes:
+    """任意 HTML ⇒ PDF bytes（Edge Headless，與 generate_pdf_bytes 同一套參數）。P8 自訂模組的輸出用。"""
+    edge = _get_edge_path()
+    tmp_html = tmp_pdf = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', encoding='utf-8', delete=False) as f:
+            f.write(html_content)
+            tmp_html = f.name
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            tmp_pdf = f.name
+        file_url = 'file:///' + tmp_html.replace('\\', '/')
+        run_edge_pdf([edge, '--headless', '--disable-gpu', '--no-sandbox', f'--print-to-pdf={tmp_pdf}',
+                      '--no-pdf-header-footer', '--run-all-compositor-stages-before-draw', file_url])
+        if not os.path.exists(tmp_pdf) or os.path.getsize(tmp_pdf) == 0:
+            raise ValueError("Edge 執行完畢但未產生 PDF 檔案")
+        with open(tmp_pdf, 'rb') as f:
+            return f.read()
+    finally:
+        for p in (tmp_html, tmp_pdf):
+            if p:
+                try: os.unlink(p)
+                except Exception: pass
+
+
 # ── 勞報單 PDF ────────────────────────────────────────────────────────────────
 
 # §9 QL：單據抬頭從據點取值。**解析不在這個檔裡** ——

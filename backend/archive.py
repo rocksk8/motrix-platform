@@ -1977,6 +1977,10 @@ def _daily_backup_tables() -> dict:
         "承攬人員":         "SELECT * FROM contractors ORDER BY id",
         # 2026-09-25 定義文件庫（版面／輸出版型覆寫／自訂欄位／自訂模組；T1）
         "定義文件":         "SELECT * FROM ui_definitions ORDER BY id",
+        # 2026-09-25 P8 自訂模組單據（T1；個資欄位在分流接上前由定義驗證拒絕）。索引表 custom_record_values 可由 data_json 重建，不匯出
+        "自訂模組單據":     "SELECT * FROM custom_records ORDER BY id",
+        "自訂模組單據歷程": "SELECT * FROM custom_record_log ORDER BY id",
+        "自訂模組編號":     "SELECT * FROM custom_record_counters ORDER BY module, period",
         "協力廠商":         "SELECT * FROM vendor_contractors ORDER BY id",
         "T100匯出確認":     "SELECT * FROM t100_export_confirmations ORDER BY id",
         # ── 業務開發 ──

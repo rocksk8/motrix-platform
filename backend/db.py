@@ -372,6 +372,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "gateway_products", "gateway_scenarios", "geocode_cache",
     "geocode_usage", "invoice_vouchers", "item_reads", "login_rate_limit",
     "ui_definitions",           # 2026-09-25 定義文件庫（core 模組 migration v1）；demo 的定義一併清空
+    "custom_records", "custom_record_values", "custom_record_counters", "custom_record_log",   # P8 自訂模組單據（core v2）
     "module_schema_versions",   # 2026-09-25 模組 migration 版本表；比照 schema_version（清掉 ⇒ init_db 重跑）
     "module_versions", "monitor_categories", "monitor_fit",
     "monitor_products", "monitor_scenarios", "netarch_families",

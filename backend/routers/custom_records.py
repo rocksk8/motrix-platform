@@ -1,0 +1,241 @@
+# -*- coding: utf-8 -*-
+"""自訂模組的通用 API（P8，CUSTOMIZATION-SPEC §3.1／§8.1）。定義的草稿／發布／差異／還原走 `/api/definitions/custom_module/…`。
+
+- 單據：列表、新增、讀取、修改（只限起始狀態）、轉換、簽核（核准／退回）、輸出（HTML／PDF）。
+  權限：超級管理員，或使用者的模組清單裡有該模組的權限 key（預設 `custom.<key>`）；簽核人另外可以讀與簽自己那一層。
+- 建構器輔助（僅超級管理員）：欄位型別目錄、參照對象目錄、公式語法檢查（回錯誤位置）、編號預覽、輸出預覽（樣本資料）。
+"""
+import json
+from datetime import date
+
+from fastapi import APIRouter, Body, Header, HTTPException, Query
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
+from db import get_db
+from helpers import _require_user, _tok, _audit
+from helpers import custom_modules as CM
+from helpers import formula as FX
+from core import definitions as D
+
+router = APIRouter()
+
+D.register_validator("custom_module", lambda body, key: CM.validate_module(body, key))
+
+
+def _err(e: CM.CustomModuleError):
+    return JSONResponse(status_code=e.status, content={"detail": str(e), "problems": e.problems})
+
+
+def _can_use(conn, user, key) -> dict:
+    """回該模組已發布的定義；沒有權限 ⇒ 403。"""
+    try:
+        d = CM._load_def(conn, key)
+    except CM.CustomModuleError as e:
+        raise HTTPException(e.status, str(e))
+    if user["role"] == "superadmin":
+        return d
+    mods = json.loads(user.get("modules") or "[]")
+    if CM.permission_of(key, d["body"]) not in mods:
+        raise HTTPException(403, "沒有「%s」的權限" % d["body"].get("name", key))
+    return d
+
+
+def _is_approver(rec, username) -> bool:
+    for t in (rec.get("approval") or {}).get("tiers", []):
+        if any(a.get("username") == username for a in t.get("approvers", [])):
+            return True
+    return False
+
+
+# ── 使用者端 ────────────────────────────────────────────────────────────
+
+@router.get("/api/custom-modules")
+def list_custom_modules(authorization: str = Header(None)):
+    """已發布、而且這位使用者看得到的自訂模組（側欄選單用）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        mods = CM.published_modules(conn)
+    finally:
+        conn.close()
+    if u["role"] == "superadmin":
+        return mods
+    mine = set(json.loads(u.get("modules") or "[]"))
+    return [m for m in mods if m["permission"] in mine]
+
+
+@router.get("/api/custom/{key}/meta")
+def custom_module_meta(key: str, authorization: str = Header(None)):
+    """表單與列表要的定義（最新發布版）。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        d = _can_use(conn, u, key)
+    finally:
+        conn.close()
+    return {"key": key, "version": d["version"], "definition": d["body"]}
+
+
+@router.get("/api/custom/{key}/records")
+def list_custom_records(key: str, status: str = Query(None), field: str = Query(None), value: str = Query(None),
+                        authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        return CM.list_records(conn, key, status=status, field=field, value=value)
+    finally:
+        conn.close()
+
+
+@router.post("/api/custom/{key}/records")
+def create_custom_record(key: str, payload: dict = Body(...), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        rec = CM.create_record(conn, key, payload.get("values"), u)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.create", "custom_record", rec["record_no"], "建立 %s" % rec["record_no"], {"module": key})
+    return rec
+
+
+@router.get("/api/custom/{key}/records/{record_no}")
+def get_custom_record(key: str, record_no: str, authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"]):
+            _can_use(conn, u, key)
+        return rec
+    finally:
+        conn.close()
+
+
+@router.put("/api/custom/{key}/records/{record_no}")
+def update_custom_record(key: str, record_no: str, payload: dict = Body(...), authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        rec = CM.update_record(conn, key, record_no, payload.get("values"), u)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.update", "custom_record", record_no, "修改 %s" % record_no, {"module": key})
+    return rec
+
+
+@router.post("/api/custom/{key}/records/{record_no}/transitions/{tkey}")
+def transition_custom_record(key: str, record_no: str, tkey: str, payload: dict = Body(default={}),
+                             authorization: str = Header(None)):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        _can_use(conn, u, key)
+        rec = CM.transition(conn, key, record_no, tkey, u, (payload or {}).get("note", ""))
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.transition", "custom_record", record_no, "%s：%s" % (record_no, tkey), {"module": key})
+    return rec
+
+
+def _decide(key, record_no, authorization, approve, note):
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        rec = CM.decide(conn, key, record_no, u, approve, note)
+    except CM.CustomModuleError as e:
+        return _err(e)
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "custom.approve" if approve else "custom.reject", "custom_record", record_no,
+           "%s %s" % ("核准" if approve else "退回", record_no), {"module": key, "note": note})
+    return rec
+
+
+@router.post("/api/custom/{key}/records/{record_no}/approve")
+def approve_custom_record(key: str, record_no: str, payload: dict = Body(default={}), authorization: str = Header(None)):
+    _require_user(authorization)
+    return _decide(key, record_no, authorization, True, (payload or {}).get("note", ""))
+
+
+@router.post("/api/custom/{key}/records/{record_no}/reject")
+def reject_custom_record(key: str, record_no: str, payload: dict = Body(default={}), authorization: str = Header(None)):
+    _require_user(authorization)
+    return _decide(key, record_no, authorization, False, (payload or {}).get("note", ""))
+
+
+@router.get("/api/custom/{key}/records/{record_no}/output")
+def output_custom_record(key: str, record_no: str, format: str = Query("html"), authorization: str = Header(None)):
+    """單據輸出：用單據凍結的那一版定義的版型。`format=pdf` ⇒ PDF。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        try:
+            rec = CM.get_record(conn, key, record_no)
+        except CM.CustomModuleError as e:
+            return _err(e)
+        if not _is_approver(rec, u["username"]):
+            _can_use(conn, u, key)
+        html = CM.render_output(conn, key, record_no)
+    finally:
+        conn.close()
+    if format == "pdf":
+        import pdf_gen
+        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="%s.pdf"' % record_no})
+    return HTMLResponse(html)
+
+
+# ── 建構器輔助（僅超級管理員）──────────────────────────────────────────────
+
+@router.get("/api/custom-modules/catalog")
+def custom_module_catalog(authorization: str = Header(None)):
+    """能力目錄（建構器只能從這裡挑）：欄位型別、公式函式、參照對象、日期格式、輸出積木。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import doc_template as dt
+    return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
+            "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
+            "dataClasses": ["T1"]}
+
+
+@router.post("/api/custom-modules/formula/check")
+def check_custom_formula(payload: dict = Body(...), authorization: str = Header(None)):
+    """公式語法檢查：`{"formula": "qty * price", "fields": ["qty", "price"]}` ⇒ `{"problems": [{"pos", "message"}]}`。"""
+    _require_user(authorization, require_superadmin=True)
+    fields = payload.get("fields")
+    return {"problems": FX.check(payload.get("formula"), fields if isinstance(fields, list) else None)}
+
+
+@router.post("/api/custom-modules/numbering/preview")
+def preview_custom_numbering(payload: dict = Body(...), authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    n = payload.get("numbering") or {}
+    problems = CM._validate_numbering(n)
+    if problems:
+        return JSONResponse(status_code=422, content={"detail": "編號規則有問題", "problems": problems})
+    return {"example": CM.format_number(n, date.today(), 1)}
+
+
+@router.post("/api/custom-modules/{key}/output/preview")
+def preview_custom_output(key: str, payload: dict = Body(...), authorization: str = Header(None)):
+    """用樣本資料預覽輸出（建構器 ⑤）。body＝整份模組定義（草稿）。"""
+    _require_user(authorization, require_superadmin=True)
+    body = payload.get("body")
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=422, content={"detail": "定義必須是 JSON 物件", "problems": [{"path": "", "message": "定義必須是 JSON 物件"}]})
+    problems = [p for p in CM.validate_module(body, key) if p["path"].startswith(("output", "numbering")) or p["path"] == "fields"]
+    if problems:
+        return JSONResponse(status_code=422, content={"detail": "定義有問題", "problems": problems})
+    return HTMLResponse(CM.render_view(body, CM.sample_view(body)))

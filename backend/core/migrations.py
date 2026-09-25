@@ -78,4 +78,54 @@ def _core_v1_ui_definitions(conn):
     conn.commit()
 
 
+def _core_v2_custom_records(conn):
+    """自訂模組的單據（P8，CUSTOMIZATION-SPEC §1「文件式」）：每筆一份 JSON；欄位值另存索引表供查詢排序；
+    建立或修改模組不用改資料庫結構。T1（每日 JSON 匯出、跟著資料庫備份）。"""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS custom_records (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_key    TEXT    NOT NULL,
+            record_no     TEXT    NOT NULL,
+            def_version   INTEGER NOT NULL,
+            status        TEXT    NOT NULL DEFAULT '',
+            data_json     TEXT    NOT NULL DEFAULT '{}',
+            approval_json TEXT    NOT NULL DEFAULT '{}',
+            created_by    TEXT    NOT NULL DEFAULT '',
+            created_at    TEXT    NOT NULL DEFAULT '',
+            updated_by    TEXT    NOT NULL DEFAULT '',
+            updated_at    TEXT    NOT NULL DEFAULT '',
+            UNIQUE(module_key, record_no)
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_records_status ON custom_records(module_key, status);
+        CREATE TABLE IF NOT EXISTS custom_record_values (
+            record_id  INTEGER NOT NULL,
+            module_key TEXT    NOT NULL,
+            field      TEXT    NOT NULL,
+            value_text TEXT,
+            value_num  REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_values_field ON custom_record_values(module_key, field, value_text);
+        CREATE INDEX IF NOT EXISTS idx_custom_record_values_record ON custom_record_values(record_id);
+        CREATE TABLE IF NOT EXISTS custom_record_counters (
+            module TEXT    NOT NULL,
+            period TEXT    NOT NULL,
+            seq    INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY(module, period)
+        );
+        CREATE TABLE IF NOT EXISTS custom_record_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_id  INTEGER NOT NULL,
+            action     TEXT    NOT NULL,
+            from_state TEXT    NOT NULL DEFAULT '',
+            to_state   TEXT    NOT NULL DEFAULT '',
+            by_user    TEXT    NOT NULL DEFAULT '',
+            note       TEXT    NOT NULL DEFAULT '',
+            at         TEXT    NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_custom_record_log_record ON custom_record_log(record_id);
+    """)
+    conn.commit()
+
+
 register("core", 1, _core_v1_ui_definitions)
+register("core", 2, _core_v2_custom_records)
