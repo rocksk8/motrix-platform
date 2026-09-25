@@ -108,6 +108,48 @@
 
 **不做（v1）**：Excel 版型（第二步，沿用 `helpers/xlsx_out`）、逐條 CSS、拖曳介面（P9）、覆寫版的儲存（P5）。
 
+### 3.5 定義文件庫：草稿、版本、差異、還原（P5 的儲存，P4／P8／P2 覆寫共用；C 2026-09-25）
+
+版面、輸出版型的覆寫版、自訂欄位的定義、自訂模組的定義，性質都一樣：**一份結構化資料（JSON），要有草稿、要能發布成不可變的版本、要能比對差異、要能還原**。所以只做一套 L1 儲存，用 `kind` 區分用途，不各做一套。
+
+**資料表** `ui_definitions`（L1，由 `core` 的第一支模組 migration 建立，記在 `module_schema_versions`，不動 V9 基準）：
+
+| 欄 | 說明 |
+|---|---|
+| `kind` | `layout`（P5 版面）／`output_template`（P2 版型覆寫）／`custom_fields`（P4）／`custom_module`（P8） |
+| `key` | 同一 kind 內的對象，例如 `invoice_voucher`、`module:shipping_notes` |
+| `scope` | `company`（公司預設）或 `role:<角色>`（角色覆寫）；個人層不在這裡（沿用既有清單偏好） |
+| `version` | 同一 (kind, key, scope) 內遞增；**草稿的 version 是 0**，每個 (kind, key, scope) 最多一份草稿 |
+| `status` | `draft`／`published`；已發布的列**不可修改、不可刪除** |
+| `body_json` | 定義本身 |
+| `note`、`created_by`、`created_at`、`published_by`、`published_at` | 誰、何時、為什麼 |
+
+**操作**（`core.definitions`，純函式＋一張表，API 由 L1 router 包一層，僅超級管理員）：
+
+| 操作 | 行為 |
+|---|---|
+| `save_draft(kind, key, scope, body)` | 建立或覆寫草稿（草稿可以改） |
+| `publish(kind, key, scope, note)` | 先跑該 kind 的驗證器，全部通過才發布：草稿內容複製成新的 `published` 版本（version＝上一版＋1），草稿刪除 |
+| `versions(kind, key, scope)` | 版本清單（不含 body） |
+| `get(kind, key, scope, version)` | 取一版 |
+| `diff(a, b)` | JSON 差異：新增／刪除／變更的路徑（例：`blocks[5].boxes[0].rows[0].label`），給「發布前看差異」用 |
+| `restore(kind, key, scope, version, note)` | **不改歷史**：把舊版內容再發布成一個新版本（版本號繼續往上） |
+| `resolve(kind, key, role)` | 套用順序：`role:<角色>` 最新發布版 ＞ `company` 最新發布版 ＞ 程式出貨的預設（例：`helpers/output_templates/<key>.json`） |
+
+- **驗證器登記**：每個 kind 登記一支驗證器（例：`output_template` ⇒ `doc_template.validate`）。驗證器回傳問題清單，每一項帶**位置**（JSON 路徑），給建構器標出錯在哪。
+- **已送出的單據凍結在當時的版本**：單據存 `(kind, key, scope, version)`，重印時用那一版，不用最新版。
+- 資料分類：`ui_definitions` 是 T1（每日 JSON 匯出、跟著資料庫備份）；自訂模組與版面是資料，**不需要升級程式**（§3.3）。
+
+### 3.6 自訂欄位命名空間（P4，C 2026-09-25）
+
+- 內建模組的單據，在自己的 `data_json`（或對應的 JSON 欄位）裡預留 `customFields: {}`；**核心欄位的名稱與計算不動**（§1 裁示）。
+- 欄位定義是 `ui_definitions` 的 `custom_fields` kind（key＝模組 key），body：`{fields:[{key, label, type, required, default, options?, formula?, dataClass}]}`。
+  - `key` 限 `[a-z][a-z0-9_]{0,39}`，**不可以與核心欄位同名**（模組在 P3 描述裡列出核心欄位）。
+  - 型別目錄（v1）：`text`、`number`、`date`、`select`、`checkbox`；`dataClass` 標 `T1`／`F2`（F2 走個資分流，MODULE-GUIDE §3）。
+- 儲存時由 L1 `custom_fields.clean(module, values, definition)` 驗證與正規化：未定義的鍵丟掉並回報、型別不符回 400 並指出是哪一欄、必填檢查。
+- **送審時凍結**：單據記下 `customFieldsVersion`（定義的發布版本號）；之後定義改了，舊單據仍依它自己的版本顯示與輸出。
+- 輸出版型（P2）以 `customFields.<key>` 引用；驗證器會檢查引用的欄位是否存在於該版定義。
+
 ## 4. 不做的事（刻意）
 
 - 不讓使用者寫程式或腳本（裁示）。
