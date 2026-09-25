@@ -49,9 +49,9 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| P8F-S1 | | | |
-| P8F-S2 | | | |
-| P8F-O1～O3 | | | |
+| P8F-S1 | 修正：新題 `test_checkbox_field_saves_a_real_boolean`——存「否」DB 是 `False`、重開單下拉顯示 false、再存仍 `False`；改「是」＝`True`；「（未選）」＝`None`。突變 F05（拿掉 `.boolean`）🔴（字串被後端擋下，單據建不出來） | 82258a0a | |
+| P8F-S2 | 修正：`saveDraft` 回傳「這一次存檔」的 Promise（`_inflight`），`flushSave` 改等它（不輪詢）；上限 `flushLimitMs`＝10 秒，逾時標 `saveState=error`＋`#mb-error` 說明；發布、還原都檢查結果，失敗就不送出。新題 `test_publish_waits_for_the_draft_save_with_a_limit`（攔住草稿 PUT ⇒ 發布結束、畫面標錯、DB 沒有發布版）。突變「拿掉上限」🔴 | 82258a0a | |
+| P8F-O1～O3 | O1 修正：授權改由超級管理員在 users.html 勾選（PUT /api/users），斷言打 `users.modules`；突變「權限目錄不認動態 key」🔴。O2 照裁示維持（C4 退場）。O3 修正：輸出改抽 meta 區每列標籤、與 DB 的 v1／v2 標籤精確比對 | 82258a0a | |
 
 ### D 確認（2026-09-26 04:24；對象：origin/wip/h-p8-frontend `6f9a4902`，修正 `82258a0a`）
 
