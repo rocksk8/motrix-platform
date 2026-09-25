@@ -166,3 +166,11 @@ modules/<key>/
 - 演練：`python tools/platform/product_drill.py --pkg <包> --port <埠>`：暫存位置啟動、改掉臨時密碼、`/api/auth/me` 正對照、已安裝模組的端點與頁面 200、被排除的 404。
 - ⚠ 未守門：頁面尚未搬進模組資料夾（階段 C）前，頁面是否屬於某模組只看 `module.json` 的 `pages` 宣告。
 
+## 10. 模組更新包（P7，CUSTOMIZATION-SPEC §7）
+
+- 單一模組為單位：`python tools/platform/module_update.py build --key <key>`（只取已 commit 的 `modules/<key>/`＋宣告的頁面，不含 tests／SPEC）→ `check` → `apply --root <安裝目錄>`（先備份到 `module_backups/<key>/<時間>/`）→ 需要時 `rollback`。**套用與回滾後都要重啟服務才生效**。
+- 套用前檢查全部通過才動手：包的雜湊、安裝目錄有 `modules.lock.json`、`CORE_VERSION` 滿足模組 `core` 範圍、只准升版、模組帶 `migrations/` 一律拒絕（P7b 未做）。任一不過，安裝目錄完全不動。
+- 要能被獨立更新，模組的 `module.json` 必須正確宣告 `version`、`core`、`pages`（G2、G4 守著版號與 CHANGELOG）。
+- 守門：`tests/platform/test_module_update.py`（合成 repo 與安裝目錄：打包→套用→回滾雜湊逐一相等；每一條套用前檢查都有反向控制；repo 現有模組的正對照）。
+- ⚠ 未守門：正式機上的「停服務→套用→重啟→健康檢查→失敗自動回滾」流程由儀表板串接（主持）。
+
