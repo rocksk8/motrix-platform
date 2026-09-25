@@ -1,0 +1,43 @@
+{
+  "key": "daily_tasks",
+  "name": "每日任務",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "daily_tasks",
+  "permissions": [
+    "daily_task"
+  ],
+  "tables": [
+    "daily_tasks",
+    "daily_task_completions",
+    "daily_task_edit_log"
+  ],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration",
+  "data": {
+    "tables": [
+      {
+        "name": "daily_tasks",
+        "class": "T1"
+      },
+      {
+        "name": "daily_task_completions",
+        "class": "T1"
+      },
+      {
+        "name": "daily_task_edit_log",
+        "class": "T1"
+      }
+    ],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": [
+      "/api/daily-tasks"
+    ]
+  },
+  "pages": [
+    {
+      "path": "daily-tasks.html"
+    }
+  ]
+}
