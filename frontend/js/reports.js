@@ -217,6 +217,8 @@ function reportsApp() {
     get basisNote()        { return (this.expensesData || {}).basisNote || '' },
     get incomeTaxLabel()   { return (this.expensesData || {}).incomeTaxLabel || '' },
     get isAccrual()        { return ((this.expensesData || {}).basis || this.expensesBasis) === 'accrual' },
+    // 稽核 X-1：某一類整個沒算（模組未安裝）⇒ 頁面明說
+    get expenseUnavailable() { return (this.expensesData || {}).unavailable || [] },
     get recognitionFlags() {
       var f = (this.expensesData || {}).recognitionFlags || {}
       return Object.keys(f).map(function (k) { return Object.assign({ kind: k }, f[k]) })

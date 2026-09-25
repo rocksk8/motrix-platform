@@ -340,6 +340,22 @@ def _flag_item(quote_no, customer, doc, desc, amount, day, money_ok, kind):
             "date": day, "link": link}
 
 
+#: IP-1 缺席時對使用者說的話（稽核 X-1：不可以跟「0 筆」長得一樣）
+DISPATCH_UNAVAILABLE = {"category": "contractor",
+                        "reason": "外包工班模組未安裝：承攬商派工的應計成本沒有列入（不是 0 筆）"}
+
+
+def dispatch_unavailable(basis="accrual"):
+    """`[]`＝承攬商派工這一類有算進來；否則 `[{category, reason}]`。
+
+    權責口徑經 IP-1 `dispatch.row` 讀派工單；提供者不在 ⇒ 這一類整個缺。
+    現金口徑讀匯款申請快照，不受影響 ⇒ 永遠 `[]`。"""
+    from core import registry
+    if basis == "cash" or registry.single_provider("dispatch.row") is not None:
+        return []
+    return [dict(DISPATCH_UNAVAILABLE)]
+
+
 def recognition_flags(conn, year, department_id=None, money_ok=True):
     """`{kind: {label, count, items}}`。支出類只列歸在 `year` 的；案件類不分期別。
 

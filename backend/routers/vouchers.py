@@ -695,6 +695,9 @@ def summary_sources(q: str = "", quote_no: str = "",
         finally:
             conn3.close()
         note3 = "" if expenses else "案件「%s」底下目前沒有支出項。" % picked
+    # 稽核 X-1：承攬商派工這一類整個缺（IP-1 提供者不在）⇒ 明說，不可以跟「沒有派工」長得一樣
+    unavailable = [] if _registry.single_provider("dispatch.row") is not None else [
+        {"category": "contractor_dispatch", "reason": "外包工班模組未安裝：承攬商派工無法作為支出來源"}]
 
     cases = []
     for r in rows:
@@ -718,6 +721,7 @@ def summary_sources(q: str = "", quote_no: str = "",
             SUMMARY_TABS[1]: note2,
             SUMMARY_TABS[2]: note3,
         },
+        "unavailable": unavailable,
     }
 
 

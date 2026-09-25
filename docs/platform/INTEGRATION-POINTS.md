@@ -30,9 +30,9 @@
 | 形式 | provider，單一提供者（`core.registry`）。M04 尚未搬進 `modules/`，暫以 `registry.provide()` 在匯入時登記；搬遷後改寫進 `ModuleSpec.providers`，這一行刪除 |
 | 語法 | 提供：`_registry.provide("dispatch.row", "subcontract", _dispatch_row)`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
 | 回傳 | `fn(row: sqlite3.Row) -> dict`。`row` 是 `contractor_dispatches` 一列（可 JOIN `vendor_contractors.name AS vendor_name`）。使用方讀的欄位：`id`、`quoteNo`、`vendorName`、`scope`、`items`、`personnel`、`totalAmount`、`personnelTotal`、`grandTotal`（含稅承攬商費用＋外包人員）、`invoiceNo`、`acceptedAt` |
-| 對方不在時 | recognition：應計派工回 `[]` 並記 WARNING ⇒ 營運報表少了承攬商這一類支出，其餘照常。現金口徑讀匯款申請快照，不受影響。<br>vouchers：案件支出來源只剩額外支出，不列承攬商派工。<br>皆不丟例外 |
+| 對方不在時 | recognition：應計派工回 `[]` 並記 WARNING ⇒ 營運報表少了承攬商這一類支出，其餘照常。現金口徑讀匯款申請快照，不受影響。<br>vouchers：案件支出來源只剩額外支出，不列承攬商派工。<br>皆不丟例外。<br>**明說（稽核 X-1，2026-09-25）**：`_collect_expenses` 與 `/api/reports/expenses-monthly`（含待補登 `recognitionFlags`）回 `unavailable: [{"category": "contractor", "reason": "外包工班模組未安裝：承攬商派工的應計成本沒有列入（不是 0 筆）"}]`（`helpers.recognition.dispatch_unavailable(basis)`；現金口徑為 `[]`），報表頁顯示紅框 `data-testid="expense-unavailable"`；`/api/vouchers/summary-sources` 回 `unavailable: [{"category": "contractor_dispatch", …}]`，傳票頁帶入面板顯示 `data-testid="source-unavailable"` |
 | 契約版本 | 1（2026-09-25） |
-| 守門 | `backend/tests/platform/test_dispatch_connector.py`：①提供者存在且回傳含全部使用欄位 ②registry 重複／多提供者規則 ③**反向控制**：同一批資料先確認派工那一類非空，拿掉提供者後三處照常回結果、只少派工 ④全 backend 不再有人 `import _dispatch_row`。突變驗證：拿掉退化判斷、拿掉 M04 登記、vouchers 不看提供者，三者皆轉紅 |
+| 守門 | `backend/tests/platform/test_dispatch_connector.py`：①提供者存在且回傳含全部使用欄位 ②registry 重複／多提供者規則 ③**反向控制**：同一批資料先確認派工那一類非空，拿掉提供者後三處照常回結果、只少派工 ④全 backend 不再有人 `import _dispatch_row`。突變驗證：拿掉退化判斷、拿掉 M04 登記、vouchers 不看提供者，三者皆轉紅。⑤（X-1）`test_absence_is_said_in_report_flags_and_voucher_sources`：提供者在 ⇒ `unavailable` 空（正對照）；拿掉 ⇒ 報表、待補登、傳票來源三處都有，現金口徑沒有；`test_pages_render_the_absence` 頁面綁定。突變 6 種皆轉紅 |
 
 **尚未處理（不在 A6 範圍）**：`routers/reports.py::_live_dispatch_totals_by_quote` 自己又算了一次
 grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）。這是同一算法的第二份實作，

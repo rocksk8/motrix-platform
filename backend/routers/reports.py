@@ -30,7 +30,7 @@ from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
 from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
     normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
-    extra_entries, recognition_flags,
+    extra_entries, recognition_flags, dispatch_unavailable,
 )
 
 _log = logging.getLogger(__name__)
@@ -3525,6 +3525,8 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "basisNote":         BASIS_NOTES[basis],
         "incomeTaxLabel":    "未稅" if basis == "accrual" else "含稅",
         "recognitionFlags":  flags,
+        # 稽核 X-1：支出與待補登少了哪一類、為什麼（權責口徑少了承攬商派工 ⇒ 兩處都受影響）
+        "unavailable":       expenses_annual.get("unavailable") or [],
         "year":              year,
         "expensesYear":      year,
         "expenses":          expenses_annual,
@@ -3680,7 +3682,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     for cat in details:
         details[cat].sort(key=lambda x: x["date"], reverse=True)
 
-    return {"monthly": monthly_items, "totals": totals, "details": details}
+    # 稽核 X-1：某一類整個沒算（例如 IP-1 提供者不在）⇒ 明說，不可以跟「這期 0 元」長得一樣
+    return {"monthly": monthly_items, "totals": totals, "details": details,
+            "unavailable": dispatch_unavailable(basis)}
 
 
 @router.get("/api/reports/expenses-monthly")

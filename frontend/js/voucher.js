@@ -52,6 +52,7 @@ function voucherPage() {
     //   📌 2026-09-25：頁籤區（`pickTab`／`applySource`）隨使用者裁定移除，收進分錄下方的帶入來源區塊。
     sources: {},
     sourceNotes: {},
+    sourceUnavailable: [],   // 稽核 X-1：整類來源缺席（模組未安裝）
     sourcesLoaded: false,
     //: 摘要來源**正在載入**（每一次，含選了案件之後那一次）。`sourcesLoaded` 只代表「載過一次」。
     sourcesLoading: false,
@@ -159,6 +160,7 @@ function voucherPage() {
         if (quote !== this.sourceQuote) return
         this.sources = d.tabs || {}
         this.sourceNotes = d.notes || {}
+        this.sourceUnavailable = d.unavailable || []
         this.sourcesLoaded = true
       } catch (e) {
         if (quote !== this.sourceQuote) return

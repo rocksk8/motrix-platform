@@ -118,3 +118,51 @@ def test_no_one_imports_the_private_function_anymore():
             if "tests" not in p.parts and p.name != "vendor_contractors.py"
             and "import _dispatch_row" in p.read_text(encoding="utf-8")]
     assert hits == []
+
+
+# ── 稽核 X-1（2026-09-25）：缺席要明說，不可以跟「0 筆」長得一樣 ──────────────────
+
+def _sa(client, make_user):
+    name, pw = make_user(username="ip1_sa", role="superadmin")
+    r = client.post("/api/auth/login", json={"username": name, "password": pw})
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _responses(client, h):
+    rep = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03", headers=h)
+    cash = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03&basis=cash", headers=h)
+    src = client.get(f"/api/vouchers/summary-sources?quote_no={QNO}", headers=h)
+    for r in (rep, cash, src):
+        assert r.status_code == 200, r.text
+    return rep.json(), cash.json(), src.json()
+
+
+def test_absence_is_said_in_report_flags_and_voucher_sources(client, make_user, monkeypatch):
+    _seed()
+    h = _sa(client, make_user)
+    rep, cash, src = _responses(client, h)
+    # 正對照：提供者在 ⇒ 沒有 unavailable，而且派工確實算進來了
+    assert rep["unavailable"] == [] and rep["expenses"]["unavailable"] == []
+    assert [e for e in rep["expenses"]["details"]["contractor"] if e["quoteNo"] == QNO]
+    assert src["unavailable"] == []
+    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
+                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+    rep, cash, src = _responses(client, h)
+    # 營運報表／月支出＋待補登（同一份回應）
+    assert [u["category"] for u in rep["unavailable"]] == ["contractor"]
+    assert "未安裝" in rep["unavailable"][0]["reason"]
+    assert rep["expenses"]["unavailable"] == rep["unavailable"]
+    # 現金口徑讀匯款申請快照，不受影響 ⇒ 不說缺
+    assert cash["unavailable"] == []
+    # 傳票摘要來源：額外支出照常，派工那一類明說缺
+    assert [u["category"] for u in src["unavailable"]] == ["contractor_dispatch"]
+    assert [e["kind"] for e in src["tabs"]["支出項"]] == ["extra_expense"]
+
+
+def test_pages_render_the_absence():
+    from pathlib import Path
+    fe = Path(__file__).resolve().parents[3] / "frontend"
+    assert "(this.expensesData || {}).unavailable" in (fe / "js" / "reports.js").read_text(encoding="utf-8")
+    assert 'data-testid="expense-unavailable"' in (fe / "pages" / "reports.html").read_text(encoding="utf-8")
+    assert "this.sourceUnavailable = d.unavailable" in (fe / "js" / "voucher.js").read_text(encoding="utf-8")
+    assert 'data-testid="source-unavailable"' in (fe / "pages" / "voucher.html").read_text(encoding="utf-8")

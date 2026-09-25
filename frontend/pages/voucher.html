@@ -442,6 +442,10 @@
                        x-show="panelMsg" x-text="panelMsg"></div>
                   <div class="vc-src__empty" x-show="!sourcesLoading && !panelExpenses().length"
                        x-text="panelExpenseNote() || '目前沒有可帶入的支出項。'"></div>
+                  <!-- 稽核 X-1：某一類來源整個缺（模組未安裝），不是「沒有」 -->
+                  <template x-for="u in sourceUnavailable" :key="u.category">
+                    <div class="vc-src__empty" data-testid="source-unavailable" style="color:#B91C1C" x-text="u.reason"></div>
+                  </template>
                 </div>
               </div>
 
