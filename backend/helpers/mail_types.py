@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 CATEGORIES = {"business": "業務", "approval": "簽核", "system": "系統技術"}
 GROUPS = {"none": "只寄事件相關人員", "admins": "管理員與超級管理員", "superadmins": "僅超級管理員"}
 MODES = ("default", "superadmin_only", "custom")
-ROLES = ("superadmin", "admin", "sales", "engineer", "user", "viewer")
+ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
 
 #: system_settings 的鍵：{key: {"mode", "users": [...], "roles": [...]}}
 OVERRIDES_KEY = "mail_recipient_overrides"
