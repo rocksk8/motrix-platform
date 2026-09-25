@@ -39,7 +39,8 @@ dashboard_expenses_monthly     [440, 469]     [516]       0     ← 開兩次只
 import pytest
 
 import routers.dashboard as dash
-import routers.company_lookup as lookup   # GCIS 與 /api/now 已拆到 L1（M08 搬遷 ②）；本檔的保證跟著它們走
+import routers.company_lookup as lookup
+import routers.quotations as quotations_router   # /api/sales-orders 已移到 M01（M08 搬遷，主持裁示 a）   # GCIS 與 /api/now 已拆到 L1（M08 搬遷 ②）；本檔的保證跟著它們走
 
 #: `dashboard.py` 的每一支 GET 端點。**九支全部**（A 2026-09-22 把範圍從兩支改成全部）。
 #: ⚠️ 只打那兩支的話，另外七支的例外路徑仍然沒有人守。
@@ -60,6 +61,9 @@ DASHBOARD_PATHS = (
     "/api/materials-summary",
     "/api/dashboard/activity-feed",
 )
+
+#: 自 dashboard.py 移出、但「每一支都會關掉連線」這個保證仍由本檔守的端點 ⇒ 它現在由哪裡提供。
+MOVED_OUT = {"/api/sales-orders": "M01 routers/quotations.py（2026-09-26 M08 搬遷，資料屬於 M01）"}
 
 #: **被排除的端點，以及排除的理由。** 三支都是「真的不碰資料庫」。
 #:
@@ -268,6 +272,10 @@ def test_every_endpoint_is_either_covered_or_explicitly_exempt():
     }
     assert registered, "前提不成立：`dash.router` 一支 GET 路由都沒有"
 
+    # 自 dashboard 移出、仍在本檔守的端點：確認它確實由新的 router 提供（不是被刪掉而清單沒跟上）
+    moved = {r.path for r in quotations_router.router.routes if r.path in MOVED_OUT}
+    assert moved == set(MOVED_OUT), "MOVED_OUT 裡有端點不在新的 router 上：%s" % (set(MOVED_OUT) - moved)
+    registered |= moved
     accounted = set(DASHBOARD_PATHS) | set(EXEMPT)
     unaccounted = registered - accounted
     assert not unaccounted, (
