@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 50 個；有單位卡 10 個。
+單位 52 個；有單位卡 10 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -16,30 +16,31 @@
 | `plat:migrations` | L0 | 每模組獨立版本的 migration（CORE-SPEC §6）。 | 4 | 1 | `tests/test_definitions_store_2026_09_25.py` |
 | `plat:pages` | L0 | 頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。 | 13 | 2 | `tests/platform/test_core_pages.py` |
 | `plat:paths` | L0 | 資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。 | 41 | 21 | `tests/platform/test_core_paths.py`、`tests/platform/test_no_file_relative_data_paths.py` |
-| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 22 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
+| `plat:registry` | L0 | L0 模組登錄表（docs/platform/CORE-SPEC.md §4、§5）。 | 21 | 24 | `tests/platform/test_core_loader.py`、`tests/platform/test_module_selection.py` |
 | `plat:source_tree` | L0 | 守門測試要掃的原始碼範圍：唯一來源。 | 9 | 0 | `tests/platform/test_core_loader.py` |
 | `plat:txn` | L0 | L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。 | 7 | 13 | `tests/platform/test_core_events.py`、`tests/test_begin_only_via_begin_write_2026_09_25.py` |
 | `plat:upgrade` | L0 | V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。 | 47 | 0 | `tests/platform/test_core_upgrade.py` |
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 22 | 7 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 28 | 60 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 28 | 62 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 8 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 18 | 12 | — |
 | `core:photos` | L1 | Photo upload processing: EXIF GPS extraction and watermarking.（無單位卡） | 2 | 2 | — |
 | `core:trail` | L1 | 操作軌跡（`user_request_log`）的共用設定，以及把路徑翻成人話的對照表。（無單位卡） | 23 | 2 | — |
-| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 5 | 36 | — |
+| `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 5 | 38 | — |
 | `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 16 | 49 | — |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 14 | 6 | — |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 5 | 2 | — |
 | `helper:custom_modules` | L1 | 自訂模組引擎（P8，CUSTOMIZATION-SPEC §1／§3.1／§8.1）：定義是資料，不是程式。（無單位卡） | 28 | 1 | — |
-| `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 3 | 4 | — |
+| `helper:daily_checks` | L1 | L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。（無單位卡） | 3 | 1 | — |
+| `helper:dates` | L1 | Date arithmetic utilities.（無單位卡） | 3 | 6 | — |
 | `helper:doc_template` | L1 | L1 輸出引擎：版型定義（資料）＋單據視圖（資料）⇒ HTML（P2，CUSTOMIZATION-SPEC §3.4）。（無單位卡） | 8 | 4 | — |
 | `helper:edit_log` | L1 | 逐筆編寫紀錄（`FN4②`）—— **缺「改前值」就寫不進去**。（無單位卡） | 5 | 2 | — |
-| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 59 | 27 | — |
+| `helper:email_notify` | L1 | External email notifications via SMTP (Gmail App Password).（無單位卡） | 59 | 29 | — |
 | `helper:errors` | L1 | 例外訊息的去處（`EM3`）：畫面只給代碼，例外全文進 log。（無單位卡） | 1 | 12 | — |
 | `helper:financial_mask` | L1 | 案件金額欄位遮蔽（CM13，2026-09-24 使用者裁示「要，後端移除金額欄位」）。（無單位卡） | 13 | 3 | — |
 | `helper:formula` | L1 | 安全的公式（CUSTOMIZATION-SPEC §1「積木式、不能寫程式」、§8.1 ②「公式語法檢查回傳錯誤位置」）。（無單位卡） | 8 | 2 | — |
@@ -55,8 +56,9 @@
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 15 | 3 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 9 | — |
-| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 31 | — |
+| `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 33 | — |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 16 | 8 | — |
+| `helper:system_checks` | L1 | L1 系統健康的每日檢查（2026-09-26 自 routers/daily_tasks.py 搬出，M12 搬遷前置）。（無單位卡） | 8 | 2 | — |
 | `helper:tiered_approval` | L1 | 共用的 tiers 依序簽核純邏輯（2026-08-22）。（無單位卡） | 24 | 14 | — |
 | `helper:uploads` | L1 | 通用「已開立/已回簽單據」附件上傳（2026-08-24）：報價單回簽、出貨單回簽、（無單位卡） | 4 | 9 | — |
 | `helper:xlsx_out` | L1 | L1 輸出：Excel 樣式、公式注入防護、匯出速率限制（ROADMAP A8／DEPENDENCY-MAP §3 #10 #13）。（無單位卡） | 7 | 3 | — |

@@ -3,8 +3,19 @@
 2026-09-26 自 tests/platform/test_case_stage_connectors.py 移入本模組（拿掉 M12 時這兩題一起消失）；
 「M12 不在時勾選照常、明說原因」那一題留在 tests/platform（它驗的是 M01 的退化，M12 不在時也要綠）。
 """
+import pytest
+
 from core import registry
 from tests.platform.test_case_stage_connectors import _login, _case, _q, _tick  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _inline_bg(monkeypatch):
+    """端點的背景同步改成當場執行（同 tests/platform/test_case_stage_connectors.py 的同名夾具）。
+
+    搬檔時漏了這個 ⇒ 斷言與背景執行緒賽跑：單跑多半綠，前面先跑 netplan 測試就穩定紅（2026-09-26 M10 閘門）。"""
+    from routers import quotations as q
+    monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
 
 
 def test_daily_task_connector_provider_is_registered_by_m12(client):
