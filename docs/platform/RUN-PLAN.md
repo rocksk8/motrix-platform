@@ -80,7 +80,7 @@
 - **待排的交叉稽核**（CORE-SPEC §9d）：R1～R3 法規（609cd5b8）；B 的 .venv／requirements 守門／§C-13；C 的 P4／P5／P8；主持的 P6 事件匯流排、傳票修正、完整回滾預覽。負載允許時，每次派 1 個獨立代理。
 - **這一輪要做（使用者 2026-09-26 裁示）**：其他蒐集個資的表單（客戶聯絡人等）加個資告知，沿用 R3，在 D7 前完成；負載允許時派子代理。P1＋P3 也等負載降下來再派（使用者裁示）。
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；privacy_notice_acks 在 M04 搬遷時改用模組自己的表。
-- **全量名額排隊**（PLAYBOOK §C-13：測試鎖一次只放 1 組全量；更新 23:58）：C 的 e2e 段已跑完（batch1 已合回）。排隊：① B 的 K5／K6 負載重現（-n 4 跑兩輪，約 10 分鐘）② C 的 wip/c-p8 全量（L1 新增 3 張表與新 router，§C-4）③ A 的 wip/a-bonus 全量（R 已合回，rebase 之後）④ 所有分支合回後，在 platform 上跑一輪全量（D7 前的基準）。主持在名額空出來時通知下一位，並更新這一行。
+- **全量名額排隊**（測試鎖 2 個名額，`MOTRIX_PYTEST_SLOTS`；更新 2026-09-26 00:13）：進行中＝C 的 wip/c-p8、B 的 wip/b-hardcap（00:01 拿到 slot2，死線 01:30）。排隊：① A 的 wip/a-bonus ② 所有分支合回後，在 platform 上跑一輪全量（D7 前的基準）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
   - O2：`test_bonus_case_multi_approver_tier` 之後卡住十幾分鐘（A2，約 22:50，滿載時；沒有 dump），停在 multi_approver 之後、vouchers 的第一題；連跑三檔、開 faulthandler 都無法重現。
