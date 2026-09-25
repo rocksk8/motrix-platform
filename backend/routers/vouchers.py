@@ -1774,3 +1774,17 @@ def preview_voucher(voucher_id: int, authorization: str = Header(None)):
     if body is None:
         raise HTTPException(404, "找不到這張傳票。")
     return HTMLResponse(content=body)
+
+
+# ── 連接器 IP-2 voucher.draft（docs/platform/INTEGRATION-POINTS.md，契約版本 1）───────────
+# 別組（例：M07 獎金）要開傳票草稿時走這裡，不 import 本檔的私有函式。
+# 在呼叫端的交易裡寫入，**不 commit**；科目有效性由呼叫端先用 voucher.account_check 檢查。
+def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, now):
+    """lines：[{account_code, summary, debit, credit}]。回 {"id", "voucher_no"}。"""
+    norm = _line_sources(_amount_lines(lines))
+    vid, no = insert_draft_voucher(conn, voucher_date, summary, norm, created_by, now,
+                                   classify_category(conn, norm))
+    return {"id": vid, "voucher_no": no}
+
+
+_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)

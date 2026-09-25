@@ -72,6 +72,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from db import get_db
+from core import registry as _registry
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
 from routers.reports import _collect_tax_invoices  # §3 #11：資料擁有權待辦（ROADMAP）
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
@@ -599,3 +600,19 @@ def t100_export_unconfirm(body: T100UnconfirmBody, authorization: str = Header(N
     _audit(_tok(authorization), "reports.t100_export.unconfirm", "t100_export",
            f"{body.sourceType}:{body.sourceKey}", "撤銷 T100 已匯入標記")
     return {"ok": True}
+
+
+# ── 連接器（docs/platform/INTEGRATION-POINTS.md，契約版本 1）──────────────────────────────
+# IP-2 voucher.account_check：科目代號有效性（與設定頁同一條規則）。回 (ok, err)。
+_registry.provide("voucher.account_check", "accounting", validate_account_code)
+
+
+# IP-3 accounting.settings：只公開別組需要的那一小塊（付款銀行清單與預設），不給整份 T100 設定。
+def _provide_accounting_settings() -> dict:
+    cfg = _t100_config()
+    return {"bankAccounts": [{"name": b.get("name") or "", "acctCode": b.get("acctCode") or ""}
+                             for b in (cfg.get("bankAccounts") or []) if b.get("acctCode")],
+            "defaultBankAccountCode": cfg.get("defaultBankAccountCode") or ""}
+
+
+_registry.provide("accounting.settings", "accounting", _provide_accounting_settings)

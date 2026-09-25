@@ -37,3 +37,44 @@
 **尚未處理（不在 A6 範圍）**：`routers/reports.py::_live_dispatch_totals_by_quote` 自己又算了一次
 grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）。這是同一算法的第二份實作，
 也是 M08 直接讀 M04 的表；應改用 IP-1，另開題。
+（2026-09-25 主持裁示：等 M08 搬遷時再處理。）
+
+---
+
+## IP-2　`voucher.draft`＋`voucher.account_check`：建立傳票草稿（M06 → M07）
+
+對應 DEPENDENCY-MAP §3 #19（ROADMAP A7）。原本 `helpers/bonus_vouchers.py`（M07）直接 import
+`routers.vouchers.insert_draft_voucher／_line_sources／_amount_lines`、`routers.accounting_export.validate_account_code`、
+`helpers.voucher.classify_category`（皆 M06）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_draft`、`routers/accounting_export.py::validate_account_code` |
+| 使用方 | M07 `helpers/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`routers/bonus.py`（標記已發放時驗出納選的銀行科目） |
+| 形式 | provider，單一提供者（`core.registry`；M06 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)`、`_registry.provide("voucher.account_check", "accounting", validate_account_code)`<br>取用：`registry.single_provider("voucher.draft")(conn, voucher_date=…, summary=…, lines=[{account_code, summary, debit, credit}], created_by=…, now=…)`；`registry.single_provider("voucher.account_check")(conn, code)` |
+| 回傳 | draft：`{"id": int, "voucher_no": str}`；在呼叫端的交易裡寫入 `vouchers_all`＋`voucher_lines`，**不 commit**（呼叫端的狀態與傳票連結一起成功、一起失敗）。分錄正規化與傳票類別由 M06 決定。<br>account_check：`(ok: bool, err: str)` |
+| 對方不在時 | **獎金核准／標記已發放照常成立**，不產生傳票，而且明說：回傳 `notice`＝「未產生傳票：會計模組未安裝（獎金狀態照常更新；需要傳票請由會計手動開立）」（前端 `_withNotice` 顯示）。出納帶了銀行科目也不驗、不擋發放。科目設定：GET 的 `problems` 每一項為「會計模組未安裝，無法驗證科目」；PUT 回 400 並寫明原因，一個都不寫入（驗證不了就不存） |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | `backend/tests/platform/test_voucher_connectors.py`：①提供者存在、draft 真的寫出草稿與分錄且不 commit、account_check 對錯都對 ②**反向控制**：同一條流程有 M06 時產生兩張草稿（正對照），拿掉提供者後獎金照走、零張傳票、notice／voucherNotice／problems 都有明確提示 ③M07 不再 import M06 ④頁面綁定 `detail.voucherNotice`。突變驗證：不查 M06、默默略過（notice 空）、仍驗銀行、銀行清單不處理缺席，四者皆轉紅 |
+
+**尚未處理（不在 A7 範圍）**：`helpers/bonus_vouchers.py::withdraw_accrual`（退回時作廢轉帳草稿）與
+`linked_vouchers`（明細列出連結的傳票）仍直接讀寫 M06 的 `vouchers_all`。M06 不在時表仍在（凍結 migration），
+行為不會壞，但屬 M07 直接寫 M06 的表（DEPENDENCY-MAP §4）；應由 M06 再公開「作廢草稿」「查傳票狀態」兩個連接器，另開題。
+
+---
+
+## IP-3　`accounting.settings`：會計設定（付款銀行）（M06 → M07）
+
+對應 DEPENDENCY-MAP §3 #18（ROADMAP A7）。原本 `routers/bonus.py:1885` 函式內 import `routers.accounting_export._t100_config`。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`routers/accounting_export.py::_provide_accounting_settings` |
+| 使用方 | M07 `routers/bonus.py::_payout_bank_choices`（待發放時給出納選付款銀行） |
+| 形式 | provider，單一提供者（同 IP-2） |
+| 語法 | 提供：`_registry.provide("accounting.settings", "accounting", _provide_accounting_settings)`<br>取用：`registry.single_provider("accounting.settings")()` |
+| 回傳 | `{"bankAccounts": [{"name", "acctCode"}], "defaultBankAccountCode": str}`——**只公開這一小塊**，不給整份 T100 設定（其餘是會計內部設定） |
+| 對方不在時 | 明細回 `bankAccounts: []`、`defaultBankAccountCode: ""`，並加 `voucherNotice`＝「未產生傳票：會計模組未安裝（標記已發放照常，不會產生支出傳票）」，獎金頁在「標記已發放」按鈕旁顯示 |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | 同 IP-2 的測試檔（契約形狀＝恰好兩個鍵；反向控制檢查 `bankAccounts` 為空且 `voucherNotice` 有提示；頁面綁定） |

@@ -1882,11 +1882,14 @@ def _payout_bank_choices(award):
     """
     if award.get("status") != "待發放":
         return {}
-    from routers.accounting_export import _t100_config
-    cfg = _t100_config()
-    return {"bankAccounts": [{"name": b.get("name") or "", "acctCode": b.get("acctCode") or ""}
-                             for b in (cfg.get("bankAccounts") or []) if b.get("acctCode")],
-            "defaultBankAccountCode": cfg.get("defaultBankAccountCode") or ""}
+    # IP-3 accounting.settings（INTEGRATION-POINTS.md）：M06 不在 ⇒ 沒有銀行可選，
+    # 並明說「不會產生支出傳票」——標記已發放本身照常。
+    from core import registry
+    settings = registry.single_provider("accounting.settings")
+    if settings is None:
+        return {"bankAccounts": [], "defaultBankAccountCode": "",
+                "voucherNotice": bonus_vouchers.ACCOUNTING_MISSING + "（標記已發放照常，不會產生支出傳票）"}
+    return settings()
 
 
 @router.get("/cases/voucher-accounts")
@@ -2374,7 +2377,8 @@ def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authoriza
         award, _lines = _load_case_award(conn, quote_no)
         if award is None or award["status"] != "待發放":
             raise HTTPException(409, "只有「待發放」的獎金分潤可以標記已發放。")
-        if bank:
+        # M06 不在時銀行科目只用在不會產生的傳票上 ⇒ 不驗、不擋發放（notice 會說明沒產生傳票）
+        if bank and bonus_vouchers.accounting_available():
             err = bonus_vouchers.account_problem(conn, bank)
             if err:
                 raise HTTPException(400, "銀行科目：%s" % err)

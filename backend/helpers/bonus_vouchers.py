@@ -10,12 +10,15 @@
 - 科目**不寫死**：存在 `system_settings`，預設值只是初值；以 `account_items` 為準。
 - 科目有問題（不存在／已停用）⇒ **不產生傳票、回提示**，不猜科目，也**不擋**獎金本身的狀態轉換。
 - 全部在呼叫端的交易裡做，**不 commit**：狀態與傳票連結一起成功、一起失敗。
+- 會計模組（M06）經連接器取用（INTEGRATION-POINTS.md IP-2）；**M06 不在 ⇒ 獎金照常，
+  不產生傳票，回明確提示 `ACCOUNTING_MISSING`**——不可以默默略過。
 """
 import json
 
-from routers.accounting_export import validate_account_code
-from routers.vouchers import insert_draft_voucher, _line_sources, _amount_lines
-from helpers.voucher import classify_category
+from core import registry
+
+#: M06 不在時對使用者說的話（回傳 notice／畫面顯示用；不可以默默略過）
+ACCOUNTING_MISSING = "未產生傳票：會計模組未安裝"
 
 #: 設定鍵 → (system_settings 的 key, 預設科目, 中文名)
 ACCOUNT_SLOTS = {
@@ -43,11 +46,20 @@ def configured_accounts(conn):
     return out
 
 
+def accounting_available():
+    """M06 的兩個連接器都在才算可用（IP-2）。"""
+    return (registry.single_provider("voucher.draft") is not None
+            and registry.single_provider("voucher.account_check") is not None)
+
+
 def account_problem(conn, code):
-    """空 ⇒ 「還沒設定」；不存在／已停用 ⇒ `validate_account_code` 的訊息；沒問題 ⇒ ""。"""
+    """空 ⇒ 「還沒設定」；不存在／已停用 ⇒ M06 的訊息；M06 不在 ⇒ 無法驗證（不當作有效）；沒問題 ⇒ ""。"""
     if not (code or "").strip():
         return "還沒有設定科目"
-    ok, err = validate_account_code(conn, code)
+    check = registry.single_provider("voucher.account_check")
+    if check is None:
+        return "會計模組未安裝，無法驗證科目"
+    ok, err = check(conn, code)
     return "" if ok else err
 
 
@@ -59,6 +71,8 @@ def _paid_total(conn, award_id):
 
 def _make(conn, award, kind, lines, summary, who, now):
     """共用：檢科目 → 正規化 → 寫入。回 `(voucher_dict | None, notice)`。"""
+    if not accounting_available():
+        return None, ACCOUNTING_MISSING + "（獎金狀態照常更新；需要傳票請由會計手動開立）。"
     problems = []
     for ln in lines:
         err = account_problem(conn, ln["account_code"])
@@ -66,9 +80,9 @@ def _make(conn, award, kind, lines, summary, who, now):
             problems.append(err)
     if problems:
         return None, "未產生傳票草稿：%s（請到獎金設定改選科目後，由會計手動開立）。" % "；".join(problems)
-    lines = _line_sources(_amount_lines(lines))
-    vid, no = insert_draft_voucher(conn, now[:10], summary, lines, who, now,
-                                   classify_category(conn, lines))
+    v = registry.single_provider("voucher.draft")(
+        conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now)
+    vid, no = v["id"], v["voucher_no"]
     conn.execute("UPDATE bonus_case_awards SET %s_voucher_id = ? WHERE id = ?" % kind, (vid, award["id"]))
     return {"id": vid, "voucher_no": no, "status": "草稿"}, ""
 

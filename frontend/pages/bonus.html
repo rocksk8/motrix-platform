@@ -294,6 +294,8 @@
                             </template>
                           </select>
                           <button class="bn-btn" :disabled="busy" @click="markPaid()" data-testid="bn-mark-paid">標記已發放</button>
+                          <!-- IP-3：會計模組（M06）不在 ⇒ 沒有銀行可選，明說不會產生支出傳票（不默默略過） -->
+                          <span class="bn-note" x-show="detail.voucherNotice" x-text="detail.voucherNotice" data-testid="bn-voucher-notice"></span>
                         </div>
                       </template>
                       <!-- 最高管理者退回（已發放前） -->
