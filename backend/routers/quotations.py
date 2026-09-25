@@ -4906,7 +4906,7 @@ def get_approval_queue(authorization: str = Header(None)):
             "pendingFileCount":    len(chg.get("addFiles") or []),
         })
 
-    # IP-7 `approval.queue_items`（2026-09-26，P8）：其他模組提供自己的待簽核項目（例：自訂模組單據），
+    # IP-10 `approval.queue_items`（2026-09-26，P8）：其他模組提供自己的待簽核項目（例：自訂模組單據），
     # 形狀同上、`type` 各自不同。提供者壞掉只少那一類，佇列照常（記 exception）。
     items.extend(_queue_provider_items(conn))
     conn.close()
