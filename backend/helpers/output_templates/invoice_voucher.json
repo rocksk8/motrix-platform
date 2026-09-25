@@ -43,6 +43,15 @@
       {"label": "營業稅", "path": "taxAmount"},
       {"label": "申請開票總額（含稅）", "path": "amount", "grand": true}
     ]},
+    {"type": "when", "path": "taxType", "in": ["zero", "exempt"],
+     "then": [
+      {"type": "boxes", "boxes": [
+        {"title": "稅別依據（營業稅法 §7／§8）", "rows": [
+          {"label": "稅別", "path": "taxTypeLabel"},
+          {"label": "依據", "path": "taxBasisLabel"}
+        ]}
+      ]}
+     ]},
     {"type": "when", "path": "scope", "equals": "items",
      "then": [],
      "else": [

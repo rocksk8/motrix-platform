@@ -1785,6 +1785,11 @@ def _generate_contractor_voucher_pdf(voucher_no: str, actor: str = '', action_ty
 
 # ── 開票申請憑據 ──────────────────────────────────────────────────────────────
 
+def _tax_basis_label(basis) -> str:
+    from helpers.legal_params import tax_basis_label
+    return tax_basis_label(basis)
+
+
 def _invoice_voucher_view(v: dict) -> dict:
     """開票申請憑據的**單據視圖**（P2）：計算只在這裡，版型只能引用這些欄位（CUSTOMIZATION-SPEC §3.4）。"""
     appr = v.get('approval') or {}
@@ -1801,6 +1806,10 @@ def _invoice_voucher_view(v: dict) -> dict:
         "applicantName": appr.get('requestedByDisplay') or v.get('createdBy', ''),
         "applicantDate": (appr.get('requestedAt') or v.get('createdAt') or '')[:10],
         "approval": appr,
+        # R2（營業稅法 §7、§8）：零稅率／免稅要印出依據（款次＋說明）；R2 之前的快照沒有 taxBasis ⇒ 退回 taxNote
+        "taxType": v.get('taxType') or "",
+        "taxTypeLabel": {"zero": "零稅率", "exempt": "免稅"}.get(v.get('taxType'), ""),
+        "taxBasisLabel": _tax_basis_label(v.get('taxBasis')) or (v.get('taxNote') or ""),
     }
 
 

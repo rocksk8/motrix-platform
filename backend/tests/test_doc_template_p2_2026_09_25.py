@@ -125,3 +125,35 @@ def test_default_template_is_plain_data():
     t = _tpl()
     assert json.loads(json.dumps(t, ensure_ascii=False)) == t
     assert {b["type"] for b in t["blocks"]} <= set(dt.BLOCKS)
+
+
+# ── R2 × P2：零稅率／免稅的依據要印出來（主持 2026-09-26 併入 P2）─────────────────
+
+@pytest.mark.parametrize("tax_type,code,note,expect", [
+    ("zero", "7-1", "出口報單 AA123", ["零稅率", "營業稅法 §7 ① 外銷貨物", "出口報單 AA123"]),
+    ("exempt", "8", "第 15 款 醫療勞務", ["免稅", "營業稅法 §8 第一項", "第 15 款 醫療勞務"]),
+])
+def test_zero_and_exempt_vouchers_print_their_basis(company, tax_type, code, note, expect):
+    import pdf_gen
+    from helpers.legal_params import tax_basis_label
+    v = dict(copy.deepcopy(CASES["items_preview"]), taxType=tax_type, taxBasis={"code": code, "note": note},
+             pretaxAmount=10000, taxAmount=0, amount=10000)
+    html = pdf_gen._build_invoice_voucher_html(v)
+    assert "稅別依據" in html
+    for text in expect + [tax_basis_label({"code": code, "note": note})]:
+        assert text in html, text
+
+
+def test_taxable_voucher_has_no_basis_box(company):
+    """應稅（沒有 taxType 或 standard）⇒ 不印依據框；與凍結的舊 builder 逐位元組相同（上面那組參數化題）照樣成立。"""
+    import pdf_gen
+    for t in (None, "standard"):
+        v = dict(copy.deepcopy(CASES["items_preview"]), taxType=t)
+        assert "稅別依據" not in pdf_gen._build_invoice_voucher_html(v)
+
+
+def test_old_snapshot_without_basis_falls_back_to_the_tax_note(company):
+    """R2 之前建立的快照沒有 taxBasis，但有 taxNote ⇒ 依據欄印 taxNote（不留白、不猜）。"""
+    import pdf_gen
+    v = dict(copy.deepcopy(CASES["items_preview"]), taxType="zero", taxNote="零稅率依據：舊單補述")
+    assert "零稅率依據：舊單補述" in pdf_gen._build_invoice_voucher_html(v)
