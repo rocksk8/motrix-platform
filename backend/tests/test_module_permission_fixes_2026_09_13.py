@@ -250,12 +250,12 @@ def test_cross_module_consumers_are_not_broken(client, make_user):
     u, p = make_user(username="mod_case", role="engineer", modules=["case_manage"])
     tok = _login(client, u, p)
     assert client.get("/api/parts", headers=_auth(tok)).status_code == 200
-    assert client.get("/api/inventory/parts-summary", headers=_auth(tok)).status_code == 200
 
     u2, p2 = make_user(username="mod_proc", role="sales", modules=["procurement"])
     tok2 = _login(client, u2, p2)
     assert client.get("/api/parts", headers=_auth(tok2)).status_code == 200
-    assert client.get("/api/suppliers", headers=_auth(tok2)).status_code == 200
+    # 庫存摘要（case_manage 叫料）與供應商（procurement）是 M03 的端點：
+    # modules/supply/tests/test_supply_moved_guards.py::test_cross_module_consumers_reach_supply（PLAYBOOK §B-11）
 
 
 # ── 7. /api/sales-orders ────────────────────────────────────────────────────
@@ -292,9 +292,12 @@ def test_case_action_items_not_readable_by_outsiders(client, make_user):
 
 
 def _case_document_bases():
-    """帶 quote_no 讀案件單據的端點；承攬商付款在外包工班（M04），模組不在時不列（PLAYBOOK §B-11）。"""
+    """帶 quote_no 讀案件單據的端點；出貨單在採購・庫存・出貨（M03）、承攬商付款在外包工班（M04），
+    模組不在時不列（端點本來就不在，PLAYBOOK §B-11）。"""
     from core import source_tree
-    bases = ["/api/completion-notes", "/api/shipping-notes", "/api/invoice-vouchers", "/api/payment-requests"]
+    bases = ["/api/completion-notes", "/api/invoice-vouchers", "/api/payment-requests"]
+    if source_tree.module_installed("modules/supply/"):
+        bases.append("/api/shipping-notes")
     if source_tree.module_installed("modules/subcontract/"):
         bases.append("/api/contractor-vouchers")
     return bases

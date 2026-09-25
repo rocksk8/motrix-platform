@@ -130,9 +130,18 @@ ACTIONS = [
     ("A 刪執行階段", "c.removeStage(0)"),
     ("A 刪動態", "c.deleteUpdate(c.caseUpdates[0].id)"),
     ("B 刪材料", "c.removeMaterial(0)"),
-    ("B 刪出貨單", "c.deleteShippingNote(c.shippingNotes[0])"),
     ("B 刪完工單", "c.deleteCompletionNote(c.completionNotes[0])"),
 ]
+
+
+def _supply_installed():
+    from core import source_tree
+    return source_tree.module_installed("modules/supply/api/shipping_notes.py")
+
+
+def _actions():
+    """出貨單屬 M03：模組不在時出貨分頁只有說明、沒有單據可刪 ⇒ 那一步不做，其餘照驗（PLAYBOOK §B-11）。"""
+    return ACTIONS + ([("B 刪出貨單", "c.deleteShippingNote(c.shippingNotes[0])")] if _supply_installed() else [])
 
 
 @pytest.mark.e2e
@@ -149,8 +158,9 @@ def test_main_actions_use_no_native_dialogs(live_server, make_user, e2e_browser)
     page.goto(f"{live_server}/pages/case-management.html?q={NO}")
     page.wait_for_function(
         f"() => {{ const c = {DATA_JS}; return c.selected && c.selected.quote_no === '{NO}'"
-        f" && c.caseUpdates.length && c.shippingNotes.length && c.completionNotes.length }}", timeout=20000)
-    for label, js in ACTIONS:
+        f" && c.caseUpdates.length && c.completionNotes.length"
+        f"{' && c.shippingNotes.length' if _supply_installed() else ''} }}", timeout=20000)
+    for label, js in _actions():
         n0 = len(seen)
         page.evaluate(f"() => {{ const c = {DATA_JS}; {js} }}")
         # 等「原生對話框被記下」或「MotrixUI 確認框出現」其中一個

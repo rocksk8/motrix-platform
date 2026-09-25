@@ -26,7 +26,6 @@ _PROBES = [
     ("/api/parts", "procurement", "料號主檔"),
     ("/api/audit-log", "audit_log", "歷史紀錄"),
     ("/api/module-versions", "module_versions", "版本紀錄"),
-    ("/api/shipping-notes/export-history", "shipping_export_log", "出貨單歷史紀錄"),
 ]
 # 模組的端點由模組自己的測試帶進同一組檢查（例：modules/netplan/tests/test_netplan_moved_guards.py），
 # 拿掉那個模組時探針跟著消失（PLAYBOOK §B-11）。

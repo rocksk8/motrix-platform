@@ -9,6 +9,8 @@
 - 已停用（false）的資料打開編輯 ⇒ 下拉顯示第一個選項（往來中／啟用）
 
 兩個方向都驗，而且讀的是**存下去之後**的值（不是模型）。
+
+2026-09-26 自 tests/ 移入 M03（只剩供應商兩題；拿掉 M03 時跟著消失，PLAYBOOK §B-11）。
 """
 import json
 import sys
@@ -20,7 +22,6 @@ pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login as _login  # noqa: E402,F401
 sys.path.insert(0, str(Path(__file__).resolve().parent))   # 單獨跑這個檔時 tests/ 不在 sys.path
-from _mapiso import no_tile_probe  # noqa: E402,F401  （tender-radar 會載地圖 ⇒ 後端探測底圖伺服器）
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
 RADAR = "Alpine.$data(document.querySelector('.tr-wrap'))"   # 標案雷達的 x-data 不在 body 上
