@@ -256,25 +256,31 @@ def load_default(key: str) -> dict:
 
 def validate(template: dict, sample_view: dict = None) -> list:
     """版型驗證：回問題清單（空＝通過）。檢查積木型別、主題；給了視圖樣本就列出引用不到的欄位。"""
-    problems = []
-    if template.get("theme") not in THEMES:
-        problems.append("未知主題：%r" % template.get("theme"))
+    return [p["message"] for p in problems(template, sample_view)]
 
-    def walk(blocks, where):
+
+def problems(template: dict, sample_view: dict = None) -> list:
+    """同 `validate`，但每一項帶**位置**：`[{"path": "blocks[3].then[0]", "message": …}]`（建構器／排版器標出錯在哪，§8）。"""
+    out = []
+    if template.get("theme") not in THEMES:
+        out.append({"path": "theme", "message": "未知主題：%r" % template.get("theme")})
+
+    def walk(blocks, where, path):
         for n, b in enumerate(blocks or []):
+            here = "%s[%d]" % (path, n)
             t = b.get("type") if isinstance(b, dict) else None
             if t not in BLOCKS:
-                problems.append("%s第 %d 塊：未知積木 %r" % (where, n + 1, t))
+                out.append({"path": here + ".type", "message": "%s第 %d 塊：未知積木 %r" % (where, n + 1, t)})
                 continue
             if t == "when":
-                walk(b.get("then"), where + "when/then ")
-                walk(b.get("else"), where + "when/else ")
+                walk(b.get("then"), where + "when/then ", here + ".then")
+                walk(b.get("else"), where + "when/else ", here + ".else")
             if sample_view is not None:
                 for p in _paths_of(b):
                     if _get(sample_view, p, _MISSING) is _MISSING:
-                        problems.append("%s第 %d 塊（%s）引用不到欄位 %s" % (where, n + 1, t, p))
-    walk(template.get("blocks"), "")
-    return problems
+                        out.append({"path": here, "message": "%s第 %d 塊（%s）引用不到欄位 %s" % (where, n + 1, t, p)})
+    walk(template.get("blocks"), "", "blocks")
+    return out
 
 
 _MISSING = object()

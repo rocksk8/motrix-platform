@@ -1795,7 +1795,32 @@ def _build_invoice_voucher_html(v: dict, template: dict = None) -> str:
         "identity_foot": lambda: _identity_foot(_ident),
         "approval_sign": lambda: _voucher_sign_html(view["approval"]),
     }
-    return _dt.render(template or _dt.load_default("invoice_voucher"), view, parts)
+    return _dt.render(template or _published_output_template("invoice_voucher", v), view, parts)
+
+
+def _published_output_template(key: str, doc: dict = None) -> dict:
+    """P5：輸出版型的套用順序——單據凍結的那一版（`outputTemplate: {scope, version}`）＞公司最新發布版＞程式預設。
+    定義文件庫讀不到（表還沒建、DB 出錯）⇒ 程式預設並記 WARNING：輸出不可以因為覆寫層出錯而印不出來。"""
+    from helpers import doc_template as _dt
+    try:
+        from db import get_db
+        from core import definitions as _defs
+        conn = get_db()
+        try:
+            frozen = (doc or {}).get("outputTemplate") or {}
+            if frozen.get("version"):
+                r = _defs.get(conn, "output_template", key, frozen.get("scope") or "company", int(frozen["version"]))
+                if r and r.get("status") == "published":
+                    return r["body"]
+                logger.warning("單據凍結的輸出版型 %s %s v%s 不存在，改用目前的版型", key, frozen.get("scope"), frozen.get("version"))
+            r = _defs.get(conn, "output_template", key, "company")
+            if r:
+                return r["body"]
+        finally:
+            conn.close()
+    except Exception as e:                                  # noqa: BLE001
+        logger.warning("讀輸出版型覆寫失敗（%s），用程式預設：%s", key, e)
+    return _dt.load_default(key)
 
 
 def _invoice_voucher_dict(row) -> dict:

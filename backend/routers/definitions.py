@@ -21,7 +21,7 @@ def _validate_output_template(body, key):
     from helpers import doc_template as dt
     sample = _SAMPLE_VIEWS.get(key)
     view = sample() if sample else None
-    return [{"path": None, "message": m} for m in dt.validate(body, view)]
+    return dt.problems(body, view)
 
 
 def _default_output_template(key):
@@ -199,8 +199,10 @@ def preview_output_template(key: str, payload: dict = Body(...), authorization: 
     if sample is None:
         raise HTTPException(404, "這個輸出還沒有提供樣本資料預覽")
     body = payload.get("body")
-    problems = dt.validate(body or {}, sample())
+    if not isinstance(body, dict):
+        return JSONResponse(status_code=422, content={"detail": "版型必須是 JSON 物件", "problems": [{"path": "", "message": "版型必須是 JSON 物件"}]})
+    problems = dt.problems(body, sample())
     if problems:
-        return JSONResponse(status_code=422, content={"detail": "版型有問題", "problems": [{"path": None, "message": m} for m in problems]})
+        return JSONResponse(status_code=422, content={"detail": "版型有問題", "problems": problems})
     import pdf_gen
     return HTMLResponse(pdf_gen._build_invoice_voucher_html(json.loads(json.dumps(sample())), template=body))

@@ -138,6 +138,7 @@
 
 - **驗證器登記**：每個 kind 登記一支驗證器（例：`output_template` ⇒ `doc_template.validate`）。驗證器回傳問題清單，每一項帶**位置**（JSON 路徑），給建構器標出錯在哪。
 - **已送出的單據凍結在當時的版本**：單據存 `(kind, key, scope, version)`，重印時用那一版，不用最新版。
+  - 輸出版型的實作（C 2026-09-25）：單據資料裡的 `outputTemplate: {scope, version}` 有值 ⇒ 用那一版（找不到已發布的那一版 ⇒ WARNING 後改用目前的）；沒有 ⇒ 公司最新發布版 ⇒ 程式預設。讀定義失敗 ⇒ 程式預設＋WARNING（覆寫層出錯不可以讓單據印不出來）。**寫入 `outputTemplate` 的時機（送審時）尚未接**，與 P4 的 `customFieldsVersion` 同一批做。
 - 資料分類：`ui_definitions` 是 T1（每日 JSON 匯出、跟著資料庫備份）；自訂模組與版面是資料，**不需要升級程式**（§3.3）。
 
 ### 3.6 自訂欄位命名空間（P4，C 2026-09-25）
