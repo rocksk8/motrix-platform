@@ -1,5 +1,5 @@
 {
- "core_version": "1.3",
+ "core_version": "1.4",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -153,6 +153,15 @@
    "snapshot_for": "def(location_id)"
   },
   "helper:dates": {},
+  "helper:doc_template": {
+   "BLOCKS": "const",
+   "THEMES": "const",
+   "TemplateError": "class",
+   "load_default": "def(key)",
+   "render": "def(template, data, parts)",
+   "render_blocks": "def(blocks, data, parts)",
+   "validate": "def(template, sample_view=…)"
+  },
   "helper:edit_log": {
    "EDIT_LOG_TABLES": "const",
    "MissingOldValue": "class",
