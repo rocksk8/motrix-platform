@@ -299,8 +299,10 @@ def test_em3_the_known_18_and_17_call_sites_still_exist_with_the_same_type():
     entries = _scan_all_normalized()
     by_id = _by_identity(entries)
 
-    want_a = {_norm(k) for k in _BASELINE_A}
-    want_b = {_norm(k) for k in _BASELINE_B}
+    # 模組資料夾被拿掉（選配／反向控制，PLAYBOOK §B 步驟 11）⇒ 它的 call site 本來就不在，不算缺
+    from core import source_tree
+    want_a = {_norm(k) for k in _BASELINE_A if source_tree.module_installed(k[0])}
+    want_b = {_norm(k) for k in _BASELINE_B if source_tree.module_installed(k[0])}
 
     missing_a = [k for k in want_a if k not in by_id or by_id[k]["group"] != "A"]
     missing_b = [k for k in want_b if k not in by_id or by_id[k]["group"] != "B"]

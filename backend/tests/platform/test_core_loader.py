@@ -251,3 +251,15 @@ def test_mount_modules_refuses_unreadable_router(clean_registry):
     registry.set_state("zn_nested", registry.STATE_LOADED, "", {"key": "zn_nested"})
     refused = loader.mount_modules(_l1_app())
     assert set(refused) == {"zn_nested"}, refused
+
+
+def test_module_installed_positive_and_negative():
+    """守門用的「模組在不在」只有一份（core.source_tree.module_installed）。正對照任取一個已安裝的模組，不綁特定 L2。"""
+    mods = source_tree.module_dirs()
+    if not mods:
+        pytest.skip("沒有任何已安裝的模組 ⇒ 正對照無對象")
+    k = mods[0].name
+    for form in ("modules/%s/api.py" % k, "backend/modules/%s/x.py" % k, "backend" + chr(92) + "modules" + chr(92) + k + chr(92) + "x.py"):
+        assert source_tree.module_installed(form) is True, form
+    assert source_tree.module_installed("modules/zz_not_installed/api.py") is False
+    assert source_tree.module_installed("routers/quotations.py") is True

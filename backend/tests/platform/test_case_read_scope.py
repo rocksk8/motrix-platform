@@ -22,6 +22,8 @@ CASE_GUARDS = ("row_access.", "_guard_case(", "guard_case_access(", "_guard_queu
                ".guard(conn, quote_no")      # IP-11 case.access（M01 提供；別組經它做逐案檢查）
 
 
+
+
 def scan(sources):
     """sources：{相對路徑: 原始碼}。回 {(file, path, handler): 處理函式原始碼}。"""
     out = {}
@@ -86,6 +88,6 @@ def test_real_scan_sees_the_case_read():
 
 
 def test_every_case_read_is_classified():
-    routes = json.loads(SCOPE.read_text(encoding="utf-8"))["routes"]
+    routes = [r for r in json.loads(SCOPE.read_text(encoding="utf-8"))["routes"] if source_tree.module_installed(r["file"])]
     bad = problems(_real(), routes)
     assert not bad, "docs/platform/case_read_scope.json 與程式碼不一致（MODULE-GUIDE §1.1）：\n  " + "\n  ".join(bad)

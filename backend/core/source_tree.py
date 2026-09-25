@@ -118,3 +118,17 @@ def page_files():
     for d in module_dirs():
         files += list((d / "pages").glob("*.html"))
     return sorted(files, key=lambda p: p.name.lower())
+
+
+def module_installed(path) -> bool:
+    """`modules/<key>/…`（可帶 `backend/` 前綴、正反斜線皆可）⇒ 那個模組資料夾在不在；其他路徑一律 True。
+
+    給「清單列著模組的檔案／端點」的守門用：模組被拿掉（產品選配、PLAYBOOK §B 步驟 11 反向控制）時，
+    它的條目本來就不在，不算幽靈；模組在的時候照常比對。"""
+    parts = str(path).replace(chr(92), "/").split("/")
+    if "modules" not in parts:
+        return True
+    i = parts.index("modules")
+    if i + 1 >= len(parts):
+        return True
+    return (BACKEND / "modules" / parts[i + 1]).is_dir()
