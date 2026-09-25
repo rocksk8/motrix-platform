@@ -121,7 +121,7 @@
 
 ```
 modules/<key>/
-  module.json      key／name／version／core 範圍／license_key／permissions／data／provides／pages
+  module.json      key／name／version／core 範圍／license_key／permissions／data／provides／pages／customization
   __init__.py      MODULE = ModuleSpec(...)（routers、schedulers、providers、runtime_switches）
   api.py           端點（只 import core／helpers／db 與本模組）
   *.py             業務邏輯
@@ -134,6 +134,12 @@ modules/<key>/
   SPEC.md          規格條件（機器讀）：## 規格條件（編號宣告，格式同 STATE.md）／## 範圍（### THIS／NEXT／EXEMPT）／
                    ## 登記（C_OWNED／KNOWN／AMBIGUOUS_ACK）；test_spec_coverage 讀它，拿掉模組時跟著消失
 ```
+
+**可自訂點（CUSTOMIZATION-SPEC P3，§3.9；2026-09-26）**
+- `customization`：排版器（P9）唯一能動的點——列表欄位、表單區塊、按鈕、頁內選單、匯出、輸出版型；欄位標 `core`（核心：不可隱藏、不可改名）。**每個模組都要寫**，沒有的類別寫空清單。側欄選單項不在這裡寫（在 `pages[].menu`，STAGE-C）。
+- 格式錯誤 ⇒ loader 不載入並列出位置（守門：`tests/platform/test_platform_catalog.py`）；缺 `customization` ⇒ G2 紅（`test_module_package_files.py`）。
+- 登記的端點要是模組真的有的路由、輸出版型要真的存在；否則能力目錄不列那個點（守門：`test_platform_catalog.py::test_every_loaded_module_lists_all_its_points_without_problems`）。
+- ⚠ 未守門：登記內容與頁面實際畫面一致（P9 改由登記渲染之前）。
 
 **選配（CORE-SPEC §9c，2026-09-25）**
 - `license_key`：授權金鑰 `modules` 清單比對用的值（授權單位＝模組，不是權限 key）；沒寫 ⇒ 等於資料夾名；清單 `"*"` ＝全開。⚠ 未守門（「每個 module.json 都有 license_key」由 G2 補）

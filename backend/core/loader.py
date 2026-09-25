@@ -11,6 +11,7 @@ import os
 import re
 
 from core import registry
+from core import customization
 
 logger = logging.getLogger("motrix.loader")
 
@@ -116,6 +117,7 @@ def load_all(modules_dir: str = None, package: str = None,
                 raise ValueError(f"core range: {e}")
             if not ok:
                 raise ValueError(f"requires core {manifest.get('core')}, have {registry.CORE_VERSION}")
+            customization.require_valid(manifest)   # 可自訂點格式錯誤 ⇒ 不載入（CUSTOMIZATION-SPEC P3）
             if license_check is not None:
                 licensed, why = license_check(manifest)
                 if not licensed:

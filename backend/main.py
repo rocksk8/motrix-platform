@@ -32,6 +32,7 @@ from routers import definitions, custom_records
 from routers import modules
 from routers import legal_params
 from routers import platform_menu
+from routers import platform_catalog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -708,6 +709,7 @@ app.include_router(item_reads.router)
 app.include_router(modules.router)
 app.include_router(legal_params.router)
 app.include_router(platform_menu.router)
+app.include_router(platform_catalog.router)
 
 # ── L2 模組：路由、排程、啟動提示（STATES-PLATFORM P-LD-07）──────────────────────
 # 🔴 必須在**所有** L1 include_router 之後、StaticFiles 之前：同方法同路徑的兩條路由都會掛上、

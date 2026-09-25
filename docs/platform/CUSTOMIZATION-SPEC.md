@@ -210,6 +210,86 @@
 
 **未做（P8 後續）**：流程圖的視覺化資料（座標）由前端自己存在定義裡的 `ui` 鍵（引擎不讀它）；列表的排序與分頁；附件欄位；`custom:<模組>` 參照的顯示名稱；個資分流；自訂模組的授權與啟停（§9c 的 license_key）。
 
+### 3.8 能力目錄（P1，wip/cloud-p1p3 2026-09-26；章節號暫定，合回時對照 origin 再定）
+
+**端點**：`GET /api/platform/catalog`（僅超級管理員、唯讀）。實作 `core.catalog.build()`；端點在 `routers/platform_catalog.py`。
+
+**唯一來源的作法**：目錄**不擁有任何清單**，只收集。寫死在目錄裡的任何一份清單都是第二個來源。
+
+| 區段 | 內容 | 擁有者（來源） |
+|---|---|---|
+| `modules[]` | `key／name／version／core／permissions／pages`、`customizationSchema`、`coreFields{實體:[核心欄位]}`、`endpoints[]`、`points[]`、`problems[]` | 已載入模組（`registry.loaded()`）；停用／未授權／失敗的模組不列 |
+| `modules[].endpoints[]` | `{id:"METHOD /path", method, path, summary, params:{path,query,body}}` | 模組 `ModuleSpec.routers` 的實際路由（不是宣告） |
+| `modules[].points[]` | P3 可自訂點（§3.9），每點帶 `id／kind／label／ops` | `module.json` 的 `customization`＋`pages[].menu` |
+| `modules[].problems[]` | 點引用了程式沒有提供的端點或預設版型 ⇒ 該點**不列在 points**，改列在這裡 | — |
+| `providers[]` | `{capability, name, module, source:"module"|"legacy", function, contractVersion:null}` | `core.registry`。契約版本只登記在 INTEGRATION-POINTS（文件不隨包出貨）⇒ 明寫 `null`，不猜 |
+| `events[]` | `{name, owner, version, fields, description, subscribers}` | `core.events.declarations()` |
+| `outputs` | `{themes, blocks, templates[{key,version,theme,title}], formats:null}` | `helpers.doc_template`（由 `routers/platform_catalog` 登記）。格式目錄寫在 `_fmt` 內、沒有公開常數 ⇒ `formats:null` |
+| `fieldTypes`、`formulaFunctions` | 欄位型別、公式函式 | P4／P8 的擁有者以 `catalog.register_section` 登記；**目前 platform 上沒有擁有者** ⇒ `{available:false, reason}` 並列入 `gaps` |
+| `gaps[]` | 規格要求而沒有擁有者（或擁有者丟例外）的區段 | — |
+
+- 其他區段一律 `{available, owner, items}`；擁有者丟例外 ⇒ 只有該區段 `available:false`，其餘照常。
+- `register_section(name, owner, fn)`：同一區段只准一個擁有者（重新匯入同一擁有者可以）；第二個擁有者 ⇒ `ValueError`。
+- 回應格式版本 `catalogVersion`（1）：欄位只准加。
+
+**與 P8 `/api/custom-modules/catalog` 的關係：它引用 P1**（不做成兩個來源）。
+- 理由：①§2 規定能力目錄是唯一來源；②建構器除了欄位型別與公式，還要 provider（④串接）、事件（④通知）、輸出版型（⑤），這些都在 P1；③P1 由擁有者登記、不自帶清單，舊端點改成投影後不會有第二份清單。反過來「P1 包含它」會讓 L1 目錄依賴一個可選引擎的 router，而且清單仍然由那支端點組出來。
+- **P8 合回時要做的事**（C／主持）：`helpers.custom_modules` 在匯入時登記 `fieldTypes`（`FIELD_TYPES`）、`refTargets`、`numberingDateFormats`；`helpers.formula` 登記 `formulaFunctions`（`FUNCTIONS`）；`/api/custom-modules/catalog` 改成 `{fieldTypes: catalog.section("fieldTypes"), …, outputBlocks: catalog.section("outputs")["blocks"]}`，回應形狀不變，前端不用改。守門：`test_custom_modules_engine` 的 catalog 題改為斷言「等於 P1 對應區段」。
+
+**驗收／守門**：`backend/tests/platform/test_platform_catalog.py`——合成模組登記的每一個點都列得出來、引用不存在端點或版型的點被藏起並列在 problems、沒有擁有者的區段列為缺口、兩個擁有者搶同一區段報錯、僅超級管理員；已載入的真實模組逐一驗「登記＝列出、problems 為空」（不點名模組）。
+
+### 3.9 模組描述：可自訂點（P3，wip/cloud-p1p3 2026-09-26；章節號暫定）
+
+`module.json` 新增頂層鍵 `customization`（L0 `core.customization` 驗證；loader 在 import 模組前呼叫）。
+
+```json
+"customization": {
+  "schema": 1,
+  "fields": {"<實體>": [{"key": "caseNo", "label": "案號", "core": true}]},
+  "pages": [{
+    "page": "<本模組 pages[].path 之一>",
+    "lists":   [{"key", "label", "entity", "columns": [{"field", "visible": true}]}],
+    "forms":   [{"key", "label", "entity", "sections": [{"key", "label", "fields": ["<欄位 key>"]}]}],
+    "actions": [{"key", "label", "endpoint?": "POST /api/…", "perm?": "<permissions 之一>"}],
+    "menus":   [{"key", "label", "items": ["<本頁 action key>"]}],
+    "exports": [{"key", "label", "endpoint": "GET /api/…", "format": "xlsx|csv|pdf", "perm?"}]
+  }],
+  "outputs": [{"key", "label", "template": "<helpers/output_templates 的 key>"}]
+}
+```
+
+| 規則 | 內容 |
+|---|---|
+| 必填 | 上面沒標 `?` 的鍵都必填；每一頁五類（lists／forms／actions／menus／exports）與 `outputs` **沒有也要寫空清單**（有人決定過「沒有」） |
+| 嚴格 | 不認得的鍵一律是錯（寬鬆驗證會靜默丟掉欄位）；`schema` 只認得 `1`，看不懂 ⇒ 不猜 |
+| 欄位 | `core: true`＝核心欄位：**不可隱藏、不可改名**，只能移動位置；`core: false`＝可顯示欄位：可隱藏、顯示、改標籤、移動。`key` 為 `[A-Za-z][A-Za-z0-9_]{0,39}`（沿用 API 回應的欄位名）。核心欄位清單也是 P4 自訂欄位的禁用名（§3.6） |
+| 參照 | 列表欄位／表單欄位必須是該實體宣告過的欄位；同一欄位只能在一個區塊；選單項目只能是本頁按鈕；`perm` 必須在 `permissions`；`page` 必須在 `pages[].path` |
+| 端點 | `METHOD /path`，與模組路由逐字相同（含 `{param}`）。loader 只驗格式；**路由不存在**由目錄標成 problem（點不列出）＋守門題變紅（CORE-SPEC §7「宣告了卻不存在」） |
+| 載入 | 格式錯誤 ⇒ 模組不載入（state `failed`，reason 列前三項位置）。**沒有** `customization` ⇒ 照常載入（不在客戶現場擋啟動）；「每個模組都要寫」由 G2 守門在 repo 擋 |
+
+**點與操作**（`core.customization.points()`；id 形如 `<模組>:<頁>/list:<key>/column:<欄位>`）
+
+| 點 | 允許的操作 |
+|---|---|
+| `sidebar`（由 `pages[].menu` 衍生） | move、hide、relabel |
+| `list` | reorder |
+| `form` | reorder、add_section |
+| `section` | move、relabel |
+| `field`（列表欄或表單欄） | 核心：move；可顯示：move、hide、show、relabel |
+| `action`／`export` | move、hide、relabel |
+| `menu` | move、hide、relabel、reorder |
+| `output` | select_template |
+
+**排版守門**（P9「程式沒有提供的選項不可以出現」的資料層）：`core.customization.check_layout(points, ops)`，`ops=[{op, target, to?, label?}]`。target 不是登記的點 ⇒ 擋；op 不在該點允許的操作 ⇒ 擋（例：隱藏或改名核心欄位）；`move` 的 `to` 必須是登記的點，且欄位只能留在原列表或同一張表單的區塊之間。**P5 的 `layout` 驗證器與 P9 都必須呼叫它**（P5／P9 合回時接；⚠ 未接前只有函式本身的守門）。
+
+**與 STAGE-C（B）`pages[].menu` 並存**
+- 側欄選單項**只在** `pages[].menu` 宣告（B 的格式與守門：group 固定鍵、icon 在字典內）；`customization` **不重複宣告**選單項，只把有 `menu` 物件的頁面衍生成 `sidebar` 點。`customization.menus` 指的是**頁面內**的按鈕群組／下拉選單，不是側欄。
+- 兩者唯一的交點是 `customization.pages[].page` 必須等於 `pages[].path`；C5 頁面搬進模組資料夾時 path 不變（STAGE-C §2「URL 不變」），這個交點不受影響。
+- `pages[].menu` 仍可以是舊的字串（CORE-SPEC §4 範例）：字串不衍生 `sidebar` 點，直到 C3 改成物件。
+- 待裁示：側欄點的 `move` 是否允許換群組（STAGE-C D4 只規定模組不能自訂群組，沒有規定使用者層）。v1 先不給 `regroup`。
+
+**範例**：`modules/tender_radar/module.json`（1.1.0）。⚠ 未守門：登記內容與頁面實際畫面一致（P9 改由登記渲染之前，沒有機器可讀的對照）。
+
 ## 4. 不做的事（刻意）
 
 - 不讓使用者寫程式或腳本（裁示）。
