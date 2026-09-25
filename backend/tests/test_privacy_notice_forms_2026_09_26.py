@@ -156,3 +156,79 @@ def test_user_ack_is_recorded_once_and_needs_superadmin(client, make_user):
     assert client.post("/api/users/999999/privacy-notice/ack", headers=h).status_code == 404
     ha = _hdr(client, make_user, "pn2_admin", role="admin")
     assert client.post(f"/api/users/{uid}/privacy-notice/ack", headers=ha).status_code == 403
+
+
+# ── ④ 單據上手動輸入的聯絡人（2026-09-26 主持裁示：報價單、案件、完工單、網路規劃書）─────────
+
+def _insert_quote(quote_no, contact="林聯絡", site="趙現場"):
+    import json as _json
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+            "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (quote_no, "已送出", "測試客戶", "告知測試", 1000, 952,
+             _json.dumps({"dealTag": "已成案", "contactName": contact,
+                          "caseRecord": {"contract": {"contactPerson": site}}}, ensure_ascii=False),
+             "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("role,kind,name", [("contact", "quote_contact", "林聯絡"), ("site", "case_site_contact", "趙現場")])
+def test_quotation_contact_ack_only_for_the_saved_contact(client, make_user, role, kind, name):
+    h = _hdr(client, make_user)
+    no = "PN-Q-" + role
+    _insert_quote(no)
+    base = f"/api/quotations/{no}/privacy-notice"
+    assert client.get(base + "?role=" + role, headers=h).json()["acks"] == {}
+    # 還沒存檔的聯絡人（畫面上改了名字）⇒ 409，不記錄
+    r = client.post(base + "/ack", json={"role": role, "subject": "別人"}, headers=h)
+    assert r.status_code == 409, r.text
+    r1 = client.post(base + "/ack", json={"role": role, "subject": name}, headers=h)
+    assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
+    assert r1.json()["ack"]["noticeHash"] == pn.notice_hash(pn.current_purpose_notice("contact"))
+    r2 = client.post(base + "/ack", json={"role": role, "subject": name}, headers=h)
+    assert r2.json()["created"] is False and r2.json()["ack"] == r1.json()["ack"]
+    assert client.get(base + "?role=" + role, headers=h).json()["acks"] == {name: r1.json()["ack"]}
+    assert pn.get_ack(kind, f"{no}:{name}") == r1.json()["ack"]
+    assert _audit_count("quotation.privacy_notice_ack", no) == 1
+    assert client.post(base + "/ack", json={"role": "nope", "subject": name}, headers=h).status_code == 400
+    assert client.post("/api/quotations/NO-SUCH/privacy-notice/ack", json={"role": role, "subject": name},
+                       headers=h).status_code == 404
+
+
+def test_network_plan_contact_ack_follows_the_saved_contact(client, make_user):
+    h = _hdr(client, make_user)
+    r = client.post("/api/network-plans", json={"siteName": "告知案場", "contactName": "周窗口"}, headers=h)
+    assert r.status_code == 201, r.text
+    pid = r.json()["id"]
+    base = f"/api/network-plans/{pid}/privacy-notice"
+    assert client.post(base + "/ack", json={"subject": "別人"}, headers=h).status_code == 409
+    r1 = client.post(base + "/ack", json={"subject": "周窗口"}, headers=h)
+    assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
+    # 換了聯絡人：舊紀錄留著；新聯絡人要另外告知
+    assert client.put(f"/api/network-plans/{pid}", json={"contactName": "吳新窗口"}, headers=h).status_code == 200
+    assert client.get(base, headers=h).json()["acks"] == {"周窗口": r1.json()["ack"]}
+    assert client.post(base + "/ack", json={"subject": "周窗口"}, headers=h).status_code == 409
+    r2 = client.post(base + "/ack", json={"subject": "吳新窗口"}, headers=h)
+    assert r2.json()["created"] is True
+    assert set(client.get(base, headers=h).json()["acks"]) == {"周窗口", "吳新窗口"}
+    plan_no = client.get(f"/api/network-plans/{pid}", headers=h).json()["planNo"]
+    assert _audit_count("network_plan.privacy_notice_ack", plan_no) == 2
+
+
+def test_completion_note_recipient_ack(client, make_user):
+    h = _hdr(client, make_user)
+    _insert_quote("PN-CN-001")
+    r = client.post("/api/completion-notes", json={"quote_no": "PN-CN-001", "recipient": "陳經理"}, headers=h)
+    assert r.status_code == 201, r.text
+    no = r.json()["note_no"]
+    base = f"/api/completion-notes/{no}/privacy-notice"
+    assert client.post(base + "/ack", json={"subject": "別人"}, headers=h).status_code == 409
+    r1 = client.post(base + "/ack", json={"subject": "陳經理"}, headers=h)
+    assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
+    assert client.get(base, headers=h).json()["acks"] == {"陳經理": r1.json()["ack"]}
+    assert _audit_count("completion.privacy_notice_ack", no) == 1

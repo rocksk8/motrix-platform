@@ -438,5 +438,6 @@ e2e：用建構器從零建立一個「測試用設備借用單」（欄位含�
 | 告知書日期 | 台北時間（稽核 S-2） |
 | 不擋存檔 | 沒勾選不擋存檔或匯出（系統無法驗證實際告知），畫面顯示「尚未記錄個資告知」 |
 | 擴大到其他表單（2026-09-26 使用者裁示，沿用本節機制） | 客戶、供應商的**每一位聯絡人**（`customer_contact:<id>:<聯絡人id>`、`supplier_contact:…`）、承攬商（`vendor_contractor:<id>`）、使用者帳號（`user:<id>`），紀錄同樣存在 `privacy_notice_acks`、伺服器蓋時間／人員／雜湊、不可覆蓋、寫稽核 |
+| 單據上手動輸入的聯絡人（2026-09-26 主持裁示） | 報價單聯絡人（`quote_contact:<單號>:<姓名>`）、案件合約現場聯絡人（`case_site_contact:<單號>:<姓名>`）、完工單驗收人（`completion_contact:<單號>:<姓名>`）、網路規劃書聯絡人（`network_plan_contact:<id>:<姓名>`，建立視窗勾選則建立後記錄）。鍵含姓名：換了聯絡人＝另一個人，要重新告知，舊紀錄保留。伺服器只接受「已存檔的那位聯絡人」（不同 ⇒ 409，請先儲存）；勾選當下記錄 |
 | 用途別告知文字 | 承攬（`privacy_notice`，R3 原本那一份）／聯絡人（`privacy_notice_contact`）／使用者帳號（`privacy_notice_user`），公司設定頁各自維護，空白＝該用途範本；`GET /api/legal-params/privacy-notice?purpose=`（沒帶＝承攬；不認得 ⇒ 400）。紀錄的雜湊是該用途當下的文字 |
 | 哪些表單蒐集個資 | 機器可讀清單 `docs/platform/pii_forms.json`（每一張有個資欄位的頁面：`notice`／`covered_by`／`not_natural_person`），守門 `tests/platform/test_pii_forms_notice.py`（MODULE-GUIDE §11） |

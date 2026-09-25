@@ -782,3 +782,40 @@ def delete_completion_signed_file(note_no: str, file_id: str, authorization: str
         conn.close()
     _audit(_tok(authorization), "completion.delete_signed_file", "completion_note", note_no, note_no)
     return {"ok": True}
+
+
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：單據上手動輸入的聯絡人也是蒐集個資）──
+# 紀錄存在 L1 設定鍵 `privacy_notice_acks`，鍵＝`completion_contact:<單據>:<聯絡人姓名>`（換了聯絡人＝另一個人，要重新告知）。
+# 伺服器只接受「已存檔的那位聯絡人」；時間、人員、告知文字雜湊由伺服器蓋，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+@router.get("/api/completion-notes/{note_no}/privacy-notice")
+def get_completion_privacy_acks(note_no: str, authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT note_no FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "完工單不存在")
+    return {"acks": _pn.acks_with_prefix("completion_contact", note_no)}
+
+
+@router.post("/api/completion-notes/{note_no}/privacy-notice/ack")
+def ack_completion_privacy_notice(note_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    """對象是「客戶驗收人／聯絡人」（recipient）。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    _require_admin(user)
+    subject = str((body or {}).get("subject") or "").strip()
+    conn = get_db()
+    row = conn.execute("SELECT recipient FROM completion_notes WHERE note_no=?", (note_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "完工單不存在")
+    if not subject or subject != (row["recipient"] or "").strip():
+        raise HTTPException(409, "聯絡人與已儲存的不同，請先儲存完工單再勾選")
+    rec, created = _pn.record_purpose_ack("completion_contact", f"{note_no}:{subject}", user, "contact")
+    if created:
+        _audit(_tok(authorization), "completion.privacy_notice_ack", "completion_note", note_no,
+               f"{note_no}／{subject}", {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
