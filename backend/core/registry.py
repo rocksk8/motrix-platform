@@ -43,12 +43,24 @@ class LoadedModule:
 
 _LOADED: Dict[str, LoadedModule] = {}
 _FAILED: Dict[str, str] = {}
+#: 尚未搬進 modules/ 的模組（仍在 routers/、helpers/）登記的提供者：{(capability, name): fn}。
+#: 搬遷後改寫進 ModuleSpec.providers，這裡的登記一併刪掉。
+_LEGACY_PROVIDERS: Dict[Tuple[str, str], Callable] = {}
 
 
 def _reset():
-    """測試用：清空登錄表。"""
+    """測試用：清空登錄表（不動 _LEGACY_PROVIDERS——那是模組匯入時登記的，清了就回不來）。"""
     _LOADED.clear()
     _FAILED.clear()
+
+
+def provide(capability: str, name: str, fn: Callable) -> None:
+    """給還沒搬進 modules/ 的模組在匯入時登記提供者（例：routers/vendor_contractors 的
+    `dispatch.row`）。同名重複登記須是同一個函式，否則是兩份實作在搶，直接報錯。"""
+    key = (capability, name)
+    if key in _LEGACY_PROVIDERS and _LEGACY_PROVIDERS[key] is not fn:
+        raise ValueError(f"provider {capability}/{name} 已登記為另一個函式")
+    _LEGACY_PROVIDERS[key] = fn
 
 
 def register(loaded: LoadedModule) -> None:
@@ -78,8 +90,20 @@ def runtime_switches() -> List[RuntimeSwitch]:
 def providers(capability: str) -> Dict[str, Callable]:
     """回傳 {name: fn}；沒有任何模組提供時是空 dict（不是錯誤）。"""
     out = {}
+    for (cap, name), fn in _LEGACY_PROVIDERS.items():
+        if cap == capability:
+            out[name] = fn
     for m in _LOADED.values():
         for (cap, name), fn in m.spec.providers.items():
             if cap == capability:
                 out[name] = fn
     return out
+
+
+def single_provider(capability: str) -> Optional[Callable]:
+    """單一提供者的能力（例：`dispatch.row` 只有 M04 會提供）。沒有 ⇒ None，使用方退化處理。
+    超過一個 ⇒ 兩份實作在搶同一件事，報錯而不是隨便挑一個。"""
+    found = providers(capability)
+    if len(found) > 1:
+        raise RuntimeError(f"{capability} 有多個提供者：{sorted(found)}")
+    return next(iter(found.values()), None)

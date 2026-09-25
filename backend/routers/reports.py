@@ -26,7 +26,6 @@ from helpers import (
     user_has_module, run_edge_pdf,
 )
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
-from routers.vendor_contractors import _dispatch_row
 from helpers.financial_mask import money_visible
 from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
     normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
@@ -124,7 +123,7 @@ def _fmt(n):
 
 def _live_dispatch_totals_by_quote(conn) -> dict:
     """回傳 {quote_no: 目前有效（非取消）承攬商派發總成本}，算法比照
-    vendor_contractors.py::_dispatch_row() 的 grandTotal（含稅承攬商費用＋
+    M04 連接器 dispatch.row（vendor_contractors._dispatch_row）的 grandTotal（含稅承攬商費用＋
     外包名單人員個別計費），供比對精算快照是否過期使用（見 _collect() 的
     staleSettlementCount）。"""
     rows = conn.execute("""

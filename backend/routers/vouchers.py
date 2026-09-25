@@ -30,11 +30,10 @@ from db import get_db
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
 #    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
 from routers.accounting_export import validate_account_code
-# `JV21`：承攬商派工的 grandTotal（含稅費用＋外包人員）算法**只有一份**——
-# `vendor_contractors._dispatch_row()`，`dashboard.py`／`reports.py` 已經在借用
-# 同一支（同樣的 cross-router import 慣例）。⚠️ **不要自己重算**：
-# `total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
-from routers.vendor_contractors import _dispatch_row
+# `JV21`：承攬商派工的 grandTotal（含稅費用＋外包人員）算法**只有一份**——在 M04，
+# 經連接器 `dispatch.row` 取用（INTEGRATION-POINTS.md IP-1），不 import M04 的私有函式。
+# ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
+from core import registry as _registry
 from helpers import _require_user, _tok, _audit, require_any_module
 from helpers.edit_log import append_edit_log, MissingOldValue
 from helpers.tiered_approval import (
@@ -482,10 +481,10 @@ def _fmt_money(n):
     return ("%.2f" % n).rstrip("0").rstrip(".")
 
 
-def _dispatch_expense_entry(row):
+def _dispatch_expense_entry(row, dispatch_row):
     """`JV21` §3b①：一筆承攬商派工——第二層（派工本身）＋ 第三層（品項／人員）。
 
-    ⚠️ 金額**借用 `_dispatch_row()` 的 `grandTotal`**（含稅承攬商費用＋外包
+    ⚠️ 金額**借用 M04 連接器 `dispatch.row` 的 `grandTotal`**（含稅承攬商費用＋外包
     人員個別計費），不用 `total_amount`——那一欄少了稅、也少了人員費用
     （`§2b`：`ACC-BN6 §3` 已經踩過這個坑）。
 
@@ -497,12 +496,12 @@ def _dispatch_expense_entry(row):
     `personnel[].id` 是小整數，語意不同）。⇒ 這裡改用 `(kind, index)` 識別
     子列，不碰它們各自的 `id`。
 
-    ⚠️ 金額直接讀每一筆自己的 `amount`（`_dispatch_row()` 算 `grandTotal`
+    ⚠️ 金額直接讀每一筆自己的 `amount`（`dispatch.row` 算 `grandTotal`
     用的也是同一個欄位），**不用 `unitPrice` 重算**——那一欄型別不一致
     （`6800` 與 `"12000"` 都出現過），會算的話要先擋空字串，這裡沒有這個
     必要就不引入這個風險。
     """
-    d = _dispatch_row(row)
+    d = dispatch_row(row)
     vendor = (d.get("vendorName") or "").strip()
     scope = (d.get("scope") or "").strip()
     head = "－".join(p for p in (vendor, scope) if p)
@@ -579,11 +578,14 @@ def _case_expense_sources(conn, quote_no):
     這裡——那是開給客戶的票，不是我們的支出。
     """
     out = []
-    for row in conn.execute(
-            "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
-            "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
-            "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)):
-        out.append(_dispatch_expense_entry(row))
+    # M04 不在 ⇒ 沒有 dispatch.row ⇒ 少了承攬商派工這一類來源，額外支出照常（IP-1）
+    dispatch_row = _registry.single_provider("dispatch.row")
+    if dispatch_row is not None:
+        for row in conn.execute(
+                "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
+                "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
+                "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)):
+            out.append(_dispatch_expense_entry(row, dispatch_row))
     for row in conn.execute(
             "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id",
             (quote_no,)):

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from core.txn import begin_write, write_txn
+from core import registry as _registry
 from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.recognition import normalize_date  # `AC2`
@@ -163,6 +164,13 @@ def _dispatch_row(row) -> dict:
         "acceptedAt": (row["accepted_at"] if "accepted_at" in keys else "") or "",
         "acceptedBy": (row["accepted_by"] if "accepted_by" in keys else "") or "",
     }
+
+
+# ── 連接器 dispatch.row（docs/platform/INTEGRATION-POINTS.md IP-1，契約版本 1）──────────
+# 派工單列 → 公開形狀（含 grandTotal＝含稅承攬商費用＋外包人員）。別組不再 import 本檔的
+# 私有函式，改用 `core.registry.single_provider("dispatch.row")`；M04 不在時對方拿到 None，
+# 自行退化成「沒有派工資訊」。欄位只准加不准改名／刪除（改了要升契約版本）。
+_registry.provide("dispatch.row", "subcontract", _dispatch_row)
 
 
 # ── 承攬商 CRUD ───────────────────────────────────────────────────────────────

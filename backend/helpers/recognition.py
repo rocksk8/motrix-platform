@@ -18,11 +18,14 @@
 ⚠️ `ratio_bp` NULL ＝未設、0 ＝這個階段不認列——兩件事。
 """
 import json
+import logging
 from datetime import date
 
 from fastapi import HTTPException
 
 from helpers.quotations import round_half_up, quote_tax_type
+
+_log = logging.getLogger(__name__)
 
 BASES = ("accrual", "cash")
 FULL_BP = 10000
@@ -215,8 +218,13 @@ def _approved_at(approval_json):
 
 
 def dispatch_entries(conn, basis):
-    """派工 → [{date, quoteNo, desc, amount, taxNote, provisional, dispatchId, invoiceDate}]。"""
-    from routers.vendor_contractors import _dispatch_row
+    """派工 → [{date, quoteNo, desc, amount, taxNote, provisional, dispatchId, invoiceDate}]。
+
+    應計（accrual）要 M04 的 `dispatch.row` 連接器（INTEGRATION-POINTS.md IP-1）算派工金額；
+    M04 不在 ⇒ 回 []（少了派工這一類，其餘收入／支出照常），並記 WARNING。
+    現金（cash）讀匯款申請的快照，不需要連接器。
+    """
+    from core import registry
     out = []
     if basis == "cash":
         for r in conn.execute(
@@ -231,10 +239,14 @@ def dispatch_entries(conn, basis):
                         "amount": float(snap.get("grandTotal") or 0), "taxNote": "含稅",
                         "provisional": False, "dispatchId": r["dispatch_id"]})
         return out
+    dispatch_row = registry.single_provider("dispatch.row")
+    if dispatch_row is None:
+        _log.warning("dispatch.row 沒有提供者（M04 未載入）⇒ 應計派工成本略過")
+        return out
     for r in conn.execute(
             "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
             " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
-        d = _dispatch_row(r)
+        d = dispatch_row(r)
         inv = (r["invoice_date"] or "")[:10]
         fallback = (d.get("acceptedAt") or "")[:10] or (r["dispatch_date"] or "")[:10]
         use = inv if inv != "" else fallback
