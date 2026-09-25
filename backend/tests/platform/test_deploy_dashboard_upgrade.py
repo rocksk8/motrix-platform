@@ -109,6 +109,20 @@ def test_corrupt_session_file_is_not_treated_as_none(client):
     assert client.post("/api/upgrade/session", json={"package": "20260925_new"}).status_code == 409
 
 
+def test_corrupt_session_can_be_archived_with_reason_then_restarted(client):
+    """稽核 B-2：讀不懂時要有路可以走，而且原檔封存不刪。"""
+    (client.tmp / "upgrade_session.json").write_text("{bad", encoding="utf-8")
+    assert client.post("/api/upgrade/session/reset-corrupt", json={"reason": ""}).status_code == 400
+    r = client.post("/api/upgrade/session/reset-corrupt", json={"reason": "檔案被截斷，人工確認備份在 20260925_2000"})
+    assert r.status_code == 200
+    assert (client.tmp / r.json()["archivedAs"]).read_text(encoding="utf-8") == "{bad"
+    assert client.post("/api/upgrade/session", json={"package": "20260925_new"}).status_code == 200
+
+
+def test_reset_refuses_a_readable_session(client):
+    assert client.post("/api/upgrade/session/reset-corrupt", json={"reason": "不應該可以封存"}).status_code == 409
+
+
 def test_session_survives_reload_and_only_one_at_a_time(client):
     assert client.get("/api/upgrade/session").json()["stamp"] == "20260925_2000"
     r = client.post("/api/upgrade/session", json={"package": "20260925_new"})

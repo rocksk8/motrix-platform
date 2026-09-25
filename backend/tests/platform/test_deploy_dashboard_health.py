@@ -16,7 +16,7 @@ NOW = datetime(2026, 9, 25, 20, 0, 0)
 
 def _facts(**over):
     f = {"alertActive": False, "alertText": "", "latestDbBackup": {"name": "x.db", "at": (NOW - timedelta(hours=18)).isoformat()},
-         "disks": [{"name": "C", "freeGB": 120}], "port666Listen": 1, "devMarkers": [], "piiFolders": ["H:\\我的雲端硬碟\\系統存檔_個資"]}
+         "disks": [{"name": "C", "freeGB": 120}], "installDrive": "C", "port666Listen": 1, "devMarkers": [], "piiFolders": ["H:\\我的雲端硬碟\\系統存檔_個資"]}
     f.update(over)
     return f
 
@@ -32,7 +32,7 @@ def test_healthy():
     ({"latestDbBackup": {"name": "x", "at": (NOW - timedelta(hours=31)).isoformat()}}, "31 小時前"),
     ({"latestDbBackup": {"name": "x", "at": "昨天"}}, "讀不懂"),
     ({"disks": [{"name": "C", "freeGB": 3}]}, "低於 10 GB"),
-    ({"disks": []}, "拿不到正式機磁碟空間"),
+    ({"disks": []}, "拿不到正式機 C: 的剩餘空間"),
     ({"port666Listen": 0}, "沒有服務在監聽"),
     ({"devMarkers": [".no_email_send"]}, "停止寄信"),
     ({"devMarkers": [".no_cloud_archive"]}, "停止雲端備份"),
@@ -40,6 +40,29 @@ def test_healthy():
 def test_each_problem_blocks(over, needle):
     v = di.evaluate_health(_facts(**over), NOW)
     assert not v["ok"] and any(needle in p for p in v["problems"]), v
+
+
+def test_disk_check_follows_the_install_drive_not_c():
+    """稽核 A-2：裝在 D: 而 D: 快滿，原本只看 C: ⇒ 放行（實測 D: 0.1 GB 仍 ok）。"""
+    v = di.evaluate_health(_facts(installDrive="D", disks=[{"name": "C", "freeGB": 500}, {"name": "D", "freeGB": 0.1}]), NOW)
+    assert not v["ok"] and any("D: 剩餘空間 0.1 GB" in p for p in v["problems"])
+
+
+def test_install_drive_missing_from_disk_list_blocks():
+    v = di.evaluate_health(_facts(installDrive="D", disks=[{"name": "C", "freeGB": 500}]), NOW)
+    assert not v["ok"] and any("拿不到正式機 D:" in p for p in v["problems"])
+
+
+def test_unknown_install_drive_blocks():
+    v = di.evaluate_health(_facts(installDrive=None), NOW)
+    assert not v["ok"] and any("磁碟代號" in p for p in v["problems"])
+
+
+def test_rewritten_done_cannot_make_an_old_snapshot_look_fresh():
+    """稽核 C-1：舊日期資料夾的 .done 被重寫成今天，新鮮度仍以資料夾日期為上限。"""
+    lb = {"name": "2026-09-20", "at": (NOW - timedelta(hours=1)).isoformat()}
+    v = di.evaluate_health(_facts(latestDbBackup=lb), NOW)
+    assert not v["ok"] and any("小時前" in p for p in v["problems"])
 
 
 def test_missing_pii_folder_only_warns():

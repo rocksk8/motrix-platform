@@ -137,7 +137,8 @@
     <input id="upPass" type="password" placeholder="正式機密碼">
     <div class="row"><span>這一輪升級（伺服器保存，重新整理也不會遺失）</span><span id="upStamp">…</span></div>
     <button class="ghost" id="upNewBtn" onclick="newUpSession()">開始新一輪升級（用上面選的部署包）</button>
-    <button class="ghost" id="upCloseBtn" onclick="closeUpSession()">結束這一輪（需寫原因）</button>
+    <button class="ghost" id="upCloseBtn" onclick="closeUpSession()">結束這一輪（需寫原因；⚠ 結束後就不能再對這一份備份做回滾，回滾完成前不要結束）</button>
+    <button class="danger hidden" id="upResetBtn" onclick="resetCorruptSession()">封存讀不懂的升級紀錄（需寫原因，原檔保留）</button>
     <input id="upCloseReason" placeholder="結束原因（例如：演練完成／已回滾，改日再做）">
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#F87171;margin-bottom:8px">
       <input type="checkbox" id="upHealthAck" style="width:auto;margin:0">
@@ -234,6 +235,7 @@ async function initUpgrade() {
   }
   upDone = {};
   if (active) for (const [k, v] of Object.entries(upSession.steps || {})) upDone[k] = v.ok;
+  document.getElementById('upResetBtn').classList.toggle('hidden', !(upSession && upSession.corrupt));
   document.getElementById('upNewBtn').disabled = !!active;
   document.getElementById('upCloseBtn').disabled = !active;
   document.getElementById('upPkg').disabled = !!active;
@@ -244,6 +246,14 @@ async function newUpSession() {
     body: JSON.stringify({ package: document.getElementById('upPkg').value }) });
   const d = await res.json();
   if (!res.ok) { const log = document.getElementById('upLog'); log.classList.remove('hidden'); log.textContent = '⛔ ' + d.detail; }
+  initUpgrade(); refreshHistory();
+}
+async function resetCorruptSession() {
+  const res = await fetch('/api/upgrade/session/reset-corrupt', { method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ reason: document.getElementById('upCloseReason').value }) });
+  const d = await res.json();
+  const log = document.getElementById('upLog'); log.classList.remove('hidden');
+  log.textContent = res.ok ? ('已封存為 ' + d.archivedAs) : ('⛔ ' + d.detail);
   initUpgrade(); refreshHistory();
 }
 async function closeUpSession() {
@@ -377,7 +387,21 @@ function pollJob(jobId, logElId, onDone) {
       logEl.scrollTop = logEl.scrollHeight;
       since = data.totalLines;
     }
-    if (data.status === 'succeeded' || data.status === 'failed') {
+    if (data.timedOut && data.status === 'running' && !logEl.dataset.releaseShown) {
+      // 稽核 A-1：不自動中止的動作逾時 ⇒ 由人看過 log 後寫原因解除
+      logEl.dataset.releaseShown = '1';
+      const box = document.createElement('div');
+      box.innerHTML = `<div style="margin-top:8px;color:#F59E0B">逾時：本機仍在等待，正式機可能仍在進行。確認正式機已停下之後才解除。</div>
+        <input placeholder="解除原因（例如：已從 log 確認回滾完成）" style="width:60%"> <button class="danger">解除鎖定</button>`;
+      logEl.after(box);
+      box.querySelector('button').onclick = async () => {
+        const reason = box.querySelector('input').value;
+        const r = await fetch(`/api/jobs/${jobId}/release`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ reason }) });
+        const d = await r.json();
+        box.querySelector('div').textContent = r.ok ? '已解除鎖定（已記入歷史）' : ('⛔ ' + d.detail);
+      };
+    }
+    if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'timeout') {
       clearInterval(timer);
       if (onDone) onDone(data.status === 'succeeded');
       refreshDevStatus();

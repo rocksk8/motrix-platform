@@ -151,18 +151,29 @@ def evaluate_health(facts: dict, now=None) -> dict:
         problems.append("正式機找不到任何本機資料庫備份（backend/db_backups）")
     else:
         try:
-            age = (now - datetime.fromisoformat(lb["at"])).total_seconds() / 3600
+            at = datetime.fromisoformat(lb["at"])
+            # 稽核 C-1：`.done` 被重寫過會顯得很新 ⇒ 新鮮度不可以比「資料夾日期的隔天 0 點」更新
+            try:
+                from datetime import timedelta
+                cap = datetime.fromisoformat(str(lb.get("name"))) + timedelta(days=1)
+                at = min(at, cap)
+            except (TypeError, ValueError):
+                pass
+            age = (now - at).total_seconds() / 3600
             if age > BACKUP_MAX_AGE_HOURS:
                 problems.append(f"正式機最近一次本機資料庫備份是 {age:.0f} 小時前（{lb.get('name')}），超過 {BACKUP_MAX_AGE_HOURS} 小時")
         except ValueError:
             problems.append(f"正式機備份時間讀不懂：{lb.get('at')!r}")
-    disks = facts.get("disks")
-    if not disks:
-        problems.append("拿不到正式機磁碟空間")
-    else:
-        for d in disks:
-            if d.get("name") == "C" and (d.get("freeGB") is None or d["freeGB"] < MIN_FREE_GB):
-                problems.append(f"正式機 C: 剩餘空間 {d.get('freeGB')} GB，低於 {MIN_FREE_GB} GB（部署前會做 DB 備份與程式快照）")
+    # 稽核 A-2：看「安裝目錄所在的磁碟」，不是寫死 C:；拿不到那一顆的空間 ⇒ 不放行（未知 ≠ 沒問題）
+    disks = facts.get("disks") or []
+    drive = (facts.get("installDrive") or "").upper()
+    target = next((d for d in disks if str(d.get("name", "")).upper() == drive), None) if drive else None
+    if not drive:
+        problems.append("拿不到正式機安裝目錄所在的磁碟代號")
+    elif target is None or target.get("freeGB") is None:
+        problems.append(f"拿不到正式機 {drive}: 的剩餘空間（安裝目錄所在的磁碟）")
+    elif target["freeGB"] < MIN_FREE_GB:
+        problems.append(f"正式機 {drive}: 剩餘空間 {target['freeGB']} GB，低於 {MIN_FREE_GB} GB（部署前會做 DB 備份與程式快照）")
     if not facts.get("port666Listen"):
         problems.append("正式機 port 666 沒有服務在監聽（服務沒有在跑）")
     for m in facts.get("devMarkers") or []:

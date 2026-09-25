@@ -16,8 +16,10 @@ pytestmark = pytest.mark.skipif(os.name != "nt", reason="PowerShell 腳本只在
 
 
 def _facts(root: Path) -> dict:
-    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPT),
-                        "-Root", str(root), "-Port", "1"],
+    # 稽核 A-3：刻意先把主控台輸出設成 cp932 再跑腳本——結果不可以取決於執行者的字碼頁
+    cmd = ("[Console]::OutputEncoding=[System.Text.Encoding]::GetEncoding(932); "
+           f"& '{SCRIPT}' -Root '{root}' -Port 1")
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout.strip().splitlines()[-1])

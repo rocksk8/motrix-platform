@@ -474,29 +474,58 @@ def decide_outcome(returncode: int, output: str,
 
 
 #: S-U01（2026-09-25 C 稽核）：WinRM 掛住不回時 job 會永遠 running、鎖永遠不放。
-#: 每個動作一個上限（分鐘）；超過就強制中止本機這一側，並明說「正式機狀態不明」。
+#: 每個動作一個上限（分鐘）。回滾的上限一定比轉換長（稽核 A-1：原本回滾落在預設 20，比轉換 45 還短）。
 _JOB_TIMEOUT_MIN = {
-    "build": 90, "deploy": 45, "rollback": 30,
-    "upgrade-push": 30, "upgrade-backup": 90, "upgrade-convert": 45,
+    "build": 90, "deploy": 45, "rollback": 60,
+    "upgrade-push": 30, "upgrade-stop-services": 15, "upgrade-start-services": 15,
+    "upgrade-backup": 90, "upgrade-convert": 45,
+    "upgrade-rollback-code": 60, "upgrade-rollback-full": 90,
 }
 _JOB_TIMEOUT_DEFAULT_MIN = 20
+
+#: 會在正式機上「改東西、而且不是原子」的動作：逾時**不自動中止**（稽核 A-1：砍掉本機 PowerShell 會讓
+#: 遠端的回滾／轉換停在一半）。改成標記逾時、鎖不放，由人看過 log 後按「解除鎖定」（要寫原因）。
+_NO_KILL_ON_TIMEOUT = frozenset({
+    "deploy", "rollback", "upgrade-stop-services", "upgrade-start-services",
+    "upgrade-backup", "upgrade-convert", "upgrade-rollback-code", "upgrade-rollback-full",
+})
 
 
 def _start_watchdog(proc, job_id: str, action: str):
     limit = _JOB_TIMEOUT_MIN.get(action, _JOB_TIMEOUT_DEFAULT_MIN) * 60
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["pid"] = proc.pid
 
     def _watch():
         try:
             proc.wait(timeout=limit)
         except subprocess.TimeoutExpired:
-            msg = (f"[逾時] {action} 超過 {limit // 60} 分鐘沒有結束，已強制中止本機這一側的 PowerShell／WinRM。"
-                   "⚠ 正式機上的動作可能仍在進行或只做了一半——先用「部署前健康檢查」與「查看正式機 log」確認，再決定下一步。")
+            if action in _NO_KILL_ON_TIMEOUT:
+                msg = (f"[逾時] {action} 超過 {limit // 60} 分鐘還沒結束。本機**仍在等待**，沒有中止任何東西——"
+                       "正式機上的動作可能仍在進行，中止會讓它停在一半。⚠ 不要重按；先看「查看正式機 log」與健康檢查，"
+                       "確認正式機已經停下來之後，再按「解除鎖定」（要寫原因）。")
+            else:
+                msg = (f"[逾時] {action} 超過 {limit // 60} 分鐘沒有結束，已中止本機這一側（這個動作不改正式機）。"
+                       "先用健康檢查確認正式機狀態。")
             with _jobs_lock:
                 if job_id in _jobs:
                     _jobs[job_id]["lines"].append(msg)
-            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True,
-                           creationflags=CREATE_NO_WINDOW)
+                    _jobs[job_id]["timedOut"] = True
+            if action not in _NO_KILL_ON_TIMEOUT:
+                _kill_tree(proc.pid)
     threading.Thread(target=_watch, daemon=True).start()
+
+
+def _kill_tree(pid: int):
+    subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True, creationflags=CREATE_NO_WINDOW)
+
+
+def _final_status(job_id: str, ok: bool) -> str:
+    """B-3：逾時與失敗分開——「逾時」的意思是正式機狀態不明，處置跟「失敗」不同。"""
+    if _jobs.get(job_id, {}).get("timedOut"):
+        return "timeout"
+    return "succeeded" if ok else "failed"
 
 
 def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
@@ -564,7 +593,7 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
         # **沒有人呼叫的接縫**（`reminder_stage()` 那次的形狀）。
         parsed = parse_result_line(joined)
         with _jobs_lock:
-            _jobs[job_id]["status"] = outcome
+            _jobs[job_id]["status"] = "timeout" if _jobs[job_id].get("timedOut") else outcome
             _jobs[job_id]["legacyProtocol"] = legacy
             _jobs[job_id]["result"] = parsed
             # ⚠️ 只有**講協定的動作**才問文案 —— `describe_rolled_back`
@@ -827,7 +856,37 @@ def job_status(job_id: str, since: int = 0):
             "rolledBackText": job.get("rolledBackText", ""),
             "lines": job["lines"][since:],
             "totalLines": len(job["lines"]),
+            "timedOut": bool(job.get("timedOut")),
         }
+
+
+class ReleaseIn(BaseModel):
+    reason: str
+
+
+@app.post("/api/jobs/{job_id}/release")
+def release_timed_out_job(job_id: str, body: ReleaseIn):
+    """稽核 A-1：不自動中止的動作逾時後，由人確認正式機已停下來，再解除鎖定（要寫原因、留紀錄）。"""
+    global _active_job_id
+    reason = (body.reason or "").strip()
+    if len(reason) < 6:
+        return JSONResponse(status_code=400, content={"detail": "解除鎖定必須寫明原因（例如：已從 log 確認正式機回滾完成）"})
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if not job:
+            return JSONResponse(status_code=404, content={"detail": "找不到這個工作"})
+        if not job.get("timedOut") or job["status"] != "running":
+            return JSONResponse(status_code=409, content={"detail": "只有逾時而且仍在等待中的工作可以解除鎖定"})
+        pid = job.get("pid")
+        job["lines"].append(f"[解除鎖定] {reason}")
+        job["status"] = "timeout"
+    if pid:
+        _kill_tree(pid)
+    _append_history(f"解除鎖定（{job['action']} 逾時）：{reason}", job_id, False)
+    with _active_job_lock:
+        if _active_job_id == job_id:
+            _active_job_id = None
+    return {"released": True}
 
 
 @app.get("/api/pre-deploy-check")
@@ -1117,7 +1176,7 @@ def _run_upgrade_job(job_id: str, action: str, cmd: list, input_text: str, stamp
         success = proc.returncode == 0
     finally:
         with _jobs_lock:
-            _jobs[job_id]["status"] = "succeeded" if success else "failed"
+            _jobs[job_id]["status"] = _final_status(job_id, success)
         _append_history(action, job_id, success, str(log_path))
         if stamp and action.startswith("upgrade-"):
             _record_step(stamp, action[len("upgrade-"):], success)
@@ -1147,6 +1206,27 @@ def _save_session(s):
     tmp = UPGRADE_SESSION_PATH.with_name(UPGRADE_SESSION_PATH.name + ".tmp")
     tmp.write_text(json.dumps(s, ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(tmp, UPGRADE_SESSION_PATH)
+
+
+class ResetCorruptIn(BaseModel):
+    reason: str
+
+
+@app.post("/api/upgrade/session/reset-corrupt")
+def reset_corrupt_session(body: ResetCorruptIn):
+    """稽核 B-2：紀錄檔讀不懂時原本永遠卡住。封存原檔（不刪，留給人工查看它原本指到哪一份備份），
+    要寫原因並記歷史，之後才能開新的一輪。"""
+    reason = (body.reason or "").strip()
+    if len(reason) < 6:
+        return JSONResponse(status_code=400, content={"detail": "封存讀不懂的升級紀錄必須寫明原因"})
+    with _upgrade_session_lock:
+        cur = _load_session()
+        if not cur or not cur.get("corrupt"):
+            return JSONResponse(status_code=409, content={"detail": "升級紀錄可以正常讀取，不需要封存"})
+        dest = UPGRADE_SESSION_PATH.with_name(f"upgrade_session.corrupt-{time.strftime('%Y%m%d_%H%M%S')}.json")
+        os.replace(UPGRADE_SESSION_PATH, dest)
+    _append_history(f"封存讀不懂的升級紀錄 → {dest.name}：{reason}", "session", False)
+    return {"archivedAs": dest.name}
 
 
 def _record_step(stamp: str, step: str, ok: bool):

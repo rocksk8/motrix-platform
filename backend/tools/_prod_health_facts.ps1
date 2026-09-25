@@ -6,6 +6,8 @@
 #>
 # 讀檔一律 -Encoding UTF8：PS 5.1 預設用系統字碼頁（cp950／cp932），Python 寫的 UTF-8 告警會變亂碼（測試抓到）
 param([Parameter(Mandatory = $true)][string]$Root, [int]$Port = 666)
+# 稽核 A-3：輸出固定 UTF-8，結果不可以取決於執行者主控台的字碼頁（cp932／cp950 會把中文告警變亂碼）
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $b = Join-Path $Root "backend"
 $alertFile = Join-Path $Root "backup_alerts\BACKUP_ALERT.txt"
 $alertText = ""
@@ -45,6 +47,7 @@ if (Test-Path $dm) { $deployed = (Get-Content $dm -Raw -Encoding UTF8) }
     latestDbBackup = $latestBackup
     disks          = $disks
     port666Listen  = $listen
+    installDrive   = (Split-Path -Path $Root -Qualifier).TrimEnd(':')
     devMarkers     = @(@(".no_email_send", ".no_cloud_archive") | Where-Object { Test-Path (Join-Path $Root $_) })
     piiFolders     = $pii
     deployedRaw    = $deployed
