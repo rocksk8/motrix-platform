@@ -86,3 +86,17 @@
 | S-S1 | | | |
 | S-S2 | | | |
 | O-1～O-2 | | | |
+
+### D 確認（2026-09-26 04:18；對象：origin/wip/b-scope `50058b45`，修正 `62e319b9`、`736196e2`）
+
+回覆欄在 b-scope 分支上；D 把確認寫在這裡，合併時不會與回覆欄的表格衝突。
+
+| # | D 確認 | 證據 |
+|---|---|---|
+| S-M1 | ✅ 關閉 | `scope_names.expand_internal`（模組內引用閉包）。D 突變 SX1（拿掉閉包）⇒ `test_scope_names`／`test_modtest_scope` 5 紅；SX2（`name_filter` 不呼叫閉包）⇒ 2 紅，含 `test_rc_private_change_reaches_users_of_its_public_caller`。**B 沒見過的新真突變**（主持建議）：`email_notify._users_emails` 拿掉個人退訂過濾 ⇒ 閉包把被改的名稱擴到所有收件人函式與 `notify_*`，選中 444 檔（約 89%，寬扇出的正確代價）；抓得到錯誤的 `test_mail_registry::test_personal_mute_only_removes_and_list_shows_receivable`、`test_notification_prefs_coverage::test_case_change_requested_respects_mute_preference` **都被選到，而且實跑都紅** ⇒ 閉包在第二個模組也成立 |
+| S-S1 | ✅ 關閉 | D 實際執行 `tools/platform/scope_rc.py`：`legal_params._as_date` 選到＝True、紅＝True（選中 64 檔）；`auth._require_user` 選到＝True、紅＝True（342 檔）；結束後稽核樹乾淨。建議把上面的 `email_notify._users_emails` 加進它的清單（第三項） |
+| S-S2 | ✅ 關閉 | D 重做 Q01（原本存活）⇒ 2 紅（`test_rc_user_passing_the_module_around_is_kept` 等） |
+| O-1 | ✅ 接受 | 依回覆 |
+| O-2 | ✅ 關閉 | D 突變 O2b（不帶 extra_public）⇒ `test_rc_cross_boundary_private_signature_change_is_an_interface_change` 紅 |
+
+基準：`test_scope_names`＋`test_modtest_scope` **38 passed**。⇒ 本檔必修全部關閉；b-scope 依主持指示在閘門綠了之後才上月台。
