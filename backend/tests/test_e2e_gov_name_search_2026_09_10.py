@@ -35,7 +35,7 @@ FAKE_GCIS = [
 def live_server(live_server, monkeypatch):
     """把 GCIS 外部查詢換成固定資料（PERF #5：覆寫延伸 conftest 的共用伺服器；
     伺服器與題目在同一個行程，dashboard._gcis_get 在呼叫時才查，換掉就生效）。"""
-    from routers import dashboard
+    from routers import company_lookup as dashboard   # GCIS 已拆到 L1 routers/company_lookup.py（M08 搬遷 ②）
 
     def _fake_gcis_get(url):
         return (FAKE_GCIS, "ok") if "Company_Name%20like" in url or "Company_Name+like" in url \

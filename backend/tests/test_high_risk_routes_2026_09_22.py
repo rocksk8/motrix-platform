@@ -109,7 +109,7 @@ def test_yd1b_the_route_itself_also_checks_not_just_the_middleware(
     是讓那兩支路由自己拿 `authorization` 並呼叫 `_require_user()`。
     """
     import main
-    import routers.dashboard as dash
+    import routers.company_lookup as dash   # GCIS 已拆到 L1（M08 搬遷 ②）；raising=False 的 patch 打錯模組會安靜地連外
 
     # ⚠️ **先換掉產品自己的接縫，再繞過 middleware。**
     # 繞過之後那一支會真的跑起來、真的去打 GCIS ——
@@ -145,7 +145,7 @@ def test_yd3_a_logged_in_caller_gets_through(client, make_user, monkeypatch):
     📌 換掉 `_gcis_get`（產品自己的接縫）**不放行 NETGUARD** ——
     放行的話這一題會變成一次真的對外連線。
     """
-    import routers.dashboard as dash
+    import routers.company_lookup as dash   # GCIS 已拆到 L1（M08 搬遷 ②）；raising=False 的 patch 打錯模組會安靜地連外
 
     monkeypatch.setattr(dash, "_gcis_get", lambda *a, **kw: ([], None),
                         raising=False)
@@ -179,7 +179,7 @@ def test_yd2_the_daily_limit_comes_from_settings(client, make_user, monkeypatch)
     ⇒ 一個寫壞的前端迴圈就能把當天的額度用完，
     **而畫面上只會是「查不到這個統編」。**
     """
-    import routers.dashboard as dash
+    import routers.company_lookup as dash   # GCIS 已拆到 L1（M08 搬遷 ②）；raising=False 的 patch 打錯模組會安靜地連外
     from helpers.settings import _set_setting
 
     calls = []

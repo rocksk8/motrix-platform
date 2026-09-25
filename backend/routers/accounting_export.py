@@ -74,7 +74,7 @@ from pydantic import BaseModel
 from db import get_db
 from core import registry as _registry
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
-from routers.reports import _collect_tax_invoices  # §3 #11：資料擁有權待辦（ROADMAP）
+from helpers.receivables import collect_tax_invoices as _collect_tax_invoices  # §3 #11：M08 搬遷 ③ 下沉 L1（ROADMAP A8b）
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading
 from routers.contractor_vouchers import _voucher_public

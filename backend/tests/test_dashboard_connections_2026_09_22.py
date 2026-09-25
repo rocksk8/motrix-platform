@@ -39,6 +39,7 @@ dashboard_expenses_monthly     [440, 469]     [516]       0     ← 開兩次只
 import pytest
 
 import routers.dashboard as dash
+import routers.company_lookup as lookup   # GCIS 與 /api/now 已拆到 L1（M08 搬遷 ②）；本檔的保證跟著它們走
 
 #: `dashboard.py` 的每一支 GET 端點。**九支全部**（A 2026-09-22 把範圍從兩支改成全部）。
 #: ⚠️ 只打那兩支的話，另外七支的例外路徑仍然沒有人守。
@@ -262,7 +263,7 @@ def test_every_endpoint_is_either_covered_or_explicitly_exempt():
     〈診斷的層級決定覆蓋率〉：**文字比對答的是「有沒有被提到」，不是「有沒有被掛上去」。**
     """
     registered = {
-        r.path for r in dash.router.routes
+        r.path for rt in (dash.router, lookup.router) for r in rt.routes
         if "GET" in getattr(r, "methods", set())
     }
     assert registered, "前提不成立：`dash.router` 一支 GET 路由都沒有"
@@ -296,8 +297,8 @@ def test_an_exempt_endpoint_really_does_not_touch_the_database(
     ⚠️ 兩支 GCIS 端點會對外連線 ⇒ 這裡把 **`_gcis_get` 這個產品自己的接縫**換掉，
     而不是放行 NETGUARD。**放行的話這一題會變成一個對外連線的測試。**
     """
-    monkeypatch.setattr(dash, "_gcis_get", lambda *a, **kw: ([], None),
-                        raising=False)
+    # ⚠ 不用 raising=False：patch 打錯模組時要當場紅，不可以安靜地變成對外連線（2026-09-26 搬遷時實際發生）
+    monkeypatch.setattr(lookup, "_gcis_get", lambda *a, **kw: ([], None))
     hdr = _auth(client, make_user, ledger)
 
     url = path.replace("{tax_id}", "12345678")
