@@ -61,7 +61,7 @@
                 <span class="lp-tag" x-show="isFrozen(v)">已生效</span>
               </td>
               <td><input type="date" x-model="v.effectiveFrom" :disabled="isFrozen(v)" style="width:140px"></td>
-              <td><input type="number" data-field="minimum_wage" x-model.number="v.minimum_wage.monthly" :disabled="isFrozen(v)"
+              <td><input type="number" data-field="minimum_wage" data-saved-field x-model.number="v.minimum_wage.monthly" :disabled="isFrozen(v)"
                          @input="v.nhi.thresholds['50'] = v.minimum_wage.monthly"></td>
               <td>
                 <input type="number" data-field="nhi50" x-model.number="v.nhi.thresholds['50']" :disabled="isFrozen(v)">

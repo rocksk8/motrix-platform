@@ -70,7 +70,8 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #:    差集恰好是這 8 頁，沒有新增（`check_double_init.scan()` 前後各跑一次比對頁名）。
 #: 🔴 2026-09-25（視窗 A，platform）44 -> 45：CORE-SPEC §9c 新增 module-settings.html（模組管理，Alpine，
 #:    有 _initDone 守衛）。實測：HEAD 掃出 44、加頁後 45，差集恰好只有這一頁。
-PAGE_POPULATION = 45
+#: 🔴 2026-09-25（視窗 R）45 -> 46：R1 新增 legal-params.html（法規參數設定，Alpine，有 _initDone 守衛）。
+PAGE_POPULATION = 46
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

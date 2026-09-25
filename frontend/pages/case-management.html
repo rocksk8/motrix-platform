@@ -4001,7 +4001,7 @@
               <div style="font-weight:600;margin-bottom:6px" x-text="(ivRemaining.taxType === 'zero' ? '零稅率' : '免稅') + '依據'"></div>
               <div x-show="!ivRemaining.taxBasisMissing" x-text="ivRemaining.taxBasisLabel" style="color:var(--text-secondary)"></div>
               <div x-show="ivRemaining.taxBasisMissing">
-                <div style="color:var(--tone-warning-fg, #B45309);margin-bottom:6px">報價單沒有記錄依據，請補填（必填）</div>
+                <div style="color:var(--tone-warning-fg);margin-bottom:6px">報價單沒有記錄依據，請補填（必填）</div>
                 <select data-iv-tax-basis-code x-model="ivTaxBasis.code"
                         style="width:100%;padding:6px 8px;border:1px solid var(--border-light);border-radius:5px;font-size:12px;margin-bottom:6px">
                   <option value="">請選擇依據</option>
