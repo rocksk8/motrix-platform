@@ -214,7 +214,7 @@
 
 **未做（P8 後續）**：流程圖的視覺化資料（座標）由前端自己存在定義裡的 `ui` 鍵（引擎不讀它）；列表的排序與分頁；附件欄位；`custom:<模組>` 參照的顯示名稱；個資分流；自訂模組的授權與啟停（§9c 的 license_key）。
 
-### 3.8 能力目錄（P1，wip/cloud-p1p3 2026-09-26；章節號暫定，合回時對照 origin 再定）
+### 3.8 能力目錄（P1，wip/cloud-p1p3 2026-09-26；稽核修正 wip/x-p1p3-fix）
 
 **端點**：`GET /api/platform/catalog`（僅超級管理員、唯讀）。實作 `core.catalog.build()`；端點在 `routers/platform_catalog.py`。
 
@@ -242,7 +242,7 @@
 
 **驗收／守門**：`backend/tests/platform/test_platform_catalog.py`——合成模組登記的每一個點都列得出來、引用不存在端點或版型的點被藏起並列在 problems、沒有擁有者的區段列為缺口、兩個擁有者搶同一區段報錯、僅超級管理員；已載入的真實模組逐一驗「登記＝列出、problems 為空」（不點名模組）。
 
-### 3.9 模組描述：可自訂點（P3，wip/cloud-p1p3 2026-09-26；章節號暫定）
+### 3.9 模組描述：可自訂點（P3，wip/cloud-p1p3 2026-09-26；稽核修正 wip/x-p1p3-fix）
 
 `module.json` 新增頂層鍵 `customization`（L0 `core.customization` 驗證；loader 在 import 模組前呼叫）。
 

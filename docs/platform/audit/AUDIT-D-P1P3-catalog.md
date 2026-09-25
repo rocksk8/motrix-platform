@@ -108,13 +108,13 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| P-M1 | | | |
-| P-M2 | | | |
-| P-S1 | | | |
-| P-S2 | | | |
-| P-S3 | | | |
-| P-S4 | | | |
-| P-O1～O3 | | | |
+| P-M1 | 修正。唯一入口 `catalog.layout_points(module_key=None)`，過濾只在 `catalog._module_points` 一處：不存在的端點／版型、選單 items 去掉被藏起的按鈕（全部被藏起 ⇒ 選單也藏起並列 problems）、未載入模組沒有點。`build()` 與排版守門都經它；守門搬到 `catalog.check_layout(module_key, ops)`，`customization.points／check_layout` 改私有 `_raw_points／_check_ops`。守門 `test_only_one_way_to_get_points`（產品碼掃 AST，只准 `_module_points`／`check_layout` 呼叫；附正對照）。補稽核探針題（刪除按鈕端點改成不存在 ⇒ hide／relabel／move 都擋）、選單去掉藏起按鈕、未載入模組、指定模組篩選。突變 M1a～M1d 皆紅；未載入一項無程式突變（來源只有 registry.loaded()），以同一描述 register 後轉通過作正對照 | 6cacd083 | |
+| P-M2 | 修正。規格定參數名 `template`（必填）；須在輸出點的 `templates`（＝目錄 outputs 區段的版型）裡；outputs 區段不在 ⇒ 輸出點不在 layout_points ⇒ 一律擋（與 output_problems 同一判準）。突變 M2a、M2b 皆紅 | 6cacd083 | |
+| P-S1 | 修正。`MOVE_DEST_KINDS`：列表欄 ⇒ 原列表、表單欄 ⇒ 同表單區塊、區塊 ⇒ 原表單、按鈕 ⇒ 同頁頁內選單；匯出／頁內選單／側欄不可帶 `to`。突變 S1b～S1e 紅；S1a（種類檢查）為等價突變——每種可帶 to 的點都另有更嚴的容器檢查，理由寫在 `_mutations_p1p3.md` | 6cacd083 | |
+| P-S2 | 修正。`OP_KEYS` 列出每種操作的必填／選填鍵，不認得的鍵擋（`lable`、`evil`、側欄 `group`）；reorder（`order`＝恰好是目前子點）、add_section（`key`、`label`，不可撞名）、move（`index` 非負整數）一併定案並驗證。突變 S2a～S2c 紅 | 6cacd083 | |
+| P-S3 | 處理：排在 B 的 C1／C3 之後上列車；後合者（本包）rebase 時重跑 `test_module_package_files` 整檔，合成模組 fixture 同時滿足兩邊規則。tender_radar 版號 C3 用 1.1.0、本包改 1.2.0（C3 上 origin 後處理） | — | |
+| P-S4 | 修正。突變清單落地 `backend/tests/platform/_mutations_p1p3.md`：稽核 P01～P16（依新程式位置重做）＋本次 M／S／O 15 項，共 31 項 30 紅、S1a 等價突變附理由；每項列原文→突變與預期轉紅的題 | 70737644 | |
+| P-O1～O3 | O1：C3 合回後在真實模組重跑 `test_every_loaded_module_lists_all_its_points_without_problems`（rebase 到 C3 時一併跑）。O2：定案寫進 CUSTOMIZATION-SPEC §3.9——以 STAGE-C 為準，套用落在 `/api/platform/menu`，P9 不另套；個人層只調顯示與排序（sidebar ops＝move（index，原群組內）／hide／show），v1 不換群組（`to`、`group` 一律擋）、不改名（STAGE-C §8 列的改名延後）；突變 O2 紅。O3：知悉，行為不改（fail closed） | 6cacd083 | |
 
 ### D 確認（2026-09-26 04:37；對象：origin/wip/x-p1p3-fix `5ddb0265`，修正 `6cacd083` 等）
 
