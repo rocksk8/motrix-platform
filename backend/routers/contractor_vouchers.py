@@ -22,6 +22,7 @@ from pydantic import BaseModel, model_validator
 
 from db import get_db, next_entity_code, spawn_bg_thread
 from core.txn import begin_write, write_txn
+from core import registry as _registry
 from helpers import (
     _require_user, _tok, _audit, _notify, _get_setting, _set_setting, _purge_notifications,
     notify_module_activity, notify_contractor_voucher_submitted, notify_contractor_voucher_next_tier,
@@ -127,6 +128,7 @@ def _require_admin(user: dict):
 
 
 def _voucher_public(row, include_snapshot: bool = True) -> dict:
+    """一張承攬商匯款申請的對外形狀。IP-14 `contractor_voucher.public`（M05 出納、M06 會計匯出）也用這一支。"""
     d = dict(row)
     snap = json.loads(d.get("snapshot_json") or "{}")
     approval = (json.loads(d.get("data_json") or "{}") or {}).get("approval") or {}
@@ -804,3 +806,7 @@ def set_contractor_voucher_approval_flow(body: ApprovalFlowSettings, authorizati
            {"tierCount": len(body.tiers), "approverCount": total_approvers,
             "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}
+
+
+# IP-14：M05 出納（待付、執行歷史）與 M06 會計匯出讀付款憑據時的序列化（原本直接 import `_voucher_public`）
+_registry.provide("contractor_voucher.public", "subcontract", _voucher_public)
