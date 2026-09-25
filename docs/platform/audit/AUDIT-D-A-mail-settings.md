@@ -73,8 +73,10 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| M-M1 | 修正：補題 `test_no_superadmin_does_not_fall_back_to_admins`（系統技術類與未登記 key 都不退回一般管理員）；archive.py 的舊說明改寫。突變 E03 ⇒ 紅 | wip/a-mail-fix 285db21a | |
-| M-S1 | 修正（採「設定頁顯示」）：`/api/mail-types` 每一類帶 `noRecipient`（群組收件人依覆寫與個人退訂為空，且沒有事件收件人），設定頁紅字標出「目前沒有任何人會收到」。題 `test_settings_page_says_when_nobody_receives`；突變 ⇒ 紅。「至少一位超管不可退訂」未採：會限制個人退訂的權利，需使用者裁示 | wip/a-mail-fix 285db21a | |
-| M-S2 | 修正：補題 `test_receivable_in_superadmin_only_mode`。突變 E09 ⇒ 紅 | wip/a-mail-fix 285db21a | |
-| M-S3 | 修正：每月營運報表收件人只有一個來源（報表收件人設定）；`mail_types.MANAGED_ELSEWHERE`，信件設定頁對它不提供覆寫（PUT 400）並顯示實際來源；寄送端不再讀覆寫。題 `test_monthly_report_has_one_recipient_source`；突變 ⇒ 紅 | wip/a-mail-fix 285db21a | |
-| O-1～O-3 | 觀察，接受：O-1 範圍已記下（目前 51 個呼叫點無模組層寄送或關鍵字主旨）；O-2 下一次動信件時把 `_superadmin_emails` 呼叫端改成 `_group_emails`（兩者目前結果相同）；O-3 設定寫入加鎖，排入信件設定頁的下一次修改 | — | |
+| M-M1 | 修正：補題 `test_no_superadmin_does_not_fall_back_to_admins`（系統技術類與未登記 key 都不退回一般管理員）；archive.py 的舊說明改寫。突變 E03 ⇒ 紅 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 關閉：D 重做 E03（原本存活）⇒ `test_no_superadmin_does_not_fall_back_to_admins` 等 2 紅；archive.py 的舊說明（會退回全體管理員）已移除 |
+| M-S1 | 修正（採「設定頁顯示」）：`/api/mail-types` 每一類帶 `noRecipient`（群組收件人依覆寫與個人退訂為空，且沒有事件收件人），設定頁紅字標出「目前沒有任何人會收到」。題 `test_settings_page_says_when_nobody_receives`；突變 ⇒ 紅。「至少一位超管不可退訂」未採：會限制個人退訂的權利，需使用者裁示 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 接受（設定頁標示「沒有任何人會收到」）；「至少一位超管不可退訂」依回覆列為需使用者裁示 |
+| M-S2 | 修正：補題 `test_receivable_in_superadmin_only_mode`。突變 E09 ⇒ 紅 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 關閉：D 重做 E09（原本存活）⇒ `test_receivable_in_superadmin_only_mode` 紅 |
+| M-S3 | 修正：每月營運報表收件人只有一個來源（報表收件人設定）；`mail_types.MANAGED_ELSEWHERE`，信件設定頁對它不提供覆寫（PUT 400）並顯示實際來源；寄送端不再讀覆寫。題 `test_monthly_report_has_one_recipient_source`；突變 ⇒ 紅 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 接受（依回覆的題與突變） |
+| O-1～O-3 | 觀察，接受：O-1 範圍已記下（目前 51 個呼叫點無模組層寄送或關鍵字主旨）；O-2 下一次動信件時把 `_superadmin_emails` 呼叫端改成 `_group_emails`（兩者目前結果相同）；O-3 設定寫入加鎖，排入信件設定頁的下一次修改 | — |✅ 2026-09-26 04:35 接受 |
+
+> D 確認（2026-09-26 04:35）：在 `wip/a-mail-fix` 6c5a2ac7 上重做 E03、E09 全紅。修正合回 origin 後本檔結案。

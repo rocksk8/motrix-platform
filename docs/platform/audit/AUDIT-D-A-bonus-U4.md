@@ -58,6 +58,8 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| A-S1 | 修正：補題 `test_ytd_counts_only_paid_bonuses`（待發放不算、發放後算入）。突變（把待發放算進累計）⇒ 紅 | wip/a-mail-fix 285db21a | |
-| A-S2 | 修正：`load_profiles` 讀到壞掉的設定 ⇒ `ProfilesCorrupt`；GET／PUT 投保金額回 409，撥付回 409，原本內容不動。題 `test_corrupt_profiles_are_never_overwritten`；突變（壞掉當成空的）⇒ 紅 | wip/a-mail-fix 285db21a | |
-| A-O1～O3 | 觀察，接受：1000 萬上限套在計費基數或給付額，待會計確認（主持記入 U13）；A-O3 停用 M07 時的提示，排入模組管理頁（階段 C） | — | |
+| A-S1 | 修正：補題 `test_ytd_counts_only_paid_bonuses`（待發放不算、發放後算入）。突變（把待發放算進累計）⇒ 紅 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 關閉：D 重做 A04（原本存活，累計含未發放）⇒ `test_ytd_counts_only_paid_bonuses` 紅 |
+| A-S2 | 修正：`load_profiles` 讀到壞掉的設定 ⇒ `ProfilesCorrupt`；GET／PUT 投保金額回 409，撥付回 409，原本內容不動。題 `test_corrupt_profiles_are_never_overwritten`；突變（壞掉當成空的）⇒ 紅 | wip/a-mail-fix 285db21a |✅ 2026-09-26 04:35 關閉：D 突變（壞掉的設定當成空的）⇒ `test_corrupt_profiles_are_never_overwritten` 紅 |
+| A-O1～O3 | 觀察，接受：1000 萬上限套在計費基數或給付額，待會計確認（主持記入 U13）；A-O3 停用 M07 時的提示，排入模組管理頁（階段 C） | — |✅ 2026-09-26 04:35 接受（A-O1 待會計確認，U13） |
+
+> D 確認（2026-09-26 04:35）：在 `wip/a-mail-fix` 6c5a2ac7 上重做 A04 與 A-S2 突變，全紅。修正合回 origin 後本檔結案。
