@@ -244,8 +244,13 @@ def _remove_basetemp(p):
     if not ok:
         print("[暫存] 拒絕刪除非本工具建立的路徑：%s" % p)
         return
-    if p.exists():
+    # xdist worker／瀏覽器剛結束時檔案可能還被佔用（2026-09-25 全量 -n 6 實測第一次刪不乾淨）⇒ 重試幾次
+    for _ in range(6):
+        if not p.exists():
+            break
         shutil.rmtree(p, ignore_errors=True)
+        if p.exists():
+            time.sleep(2)
     if p.exists():
         print("[暫存] %s 仍有檔案被佔用、未刪乾淨，請手動刪除（只刪這一個）" % p)
 
