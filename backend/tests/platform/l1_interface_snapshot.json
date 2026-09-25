@@ -363,6 +363,29 @@
    "push_event_for_quotation_won": "def(quote_no)",
    "push_event_for_shipping_note": "def(note_no)"
   },
+  "helper:legal_params": {
+   "DEFAULT_TAX_RULE_VERSIONS": "const",
+   "INCOME_TYPES": "const",
+   "LEGACY_EFFECTIVE_FROM": "const",
+   "LEGACY_KEY": "const",
+   "NoApplicableRules": "class",
+   "TAX_BASIS_NOTE_REQUIRED": "const",
+   "TAX_BASIS_OPTIONS": "const",
+   "VERSIONS_KEY": "const",
+   "frozen_changes": "def(old_versions, new_versions, today)",
+   "load_versions": "def()",
+   "minimum_wage_mismatch": "def(v)",
+   "rules_by_version": "def(versions, version)",
+   "rules_for_date": "def(versions, on)",
+   "save_versions": "def(versions)",
+   "sort_versions": "def(versions)",
+   "tax_basis_error": "def(tax_type, basis)",
+   "tax_basis_label": "def(basis)",
+   "today": "def()",
+   "validate_version": "def(v)",
+   "validate_versions": "def(versions)",
+   "year_status": "def(versions, today)"
+  },
   "helper:licensing": {
    "LICENSE_EXEMPT_PATHS": "const",
    "LICENSE_GATE_ENABLED": "const",
@@ -402,6 +425,19 @@
   "helper:part_catalog": {
    "PART_CATEGORIES": "const",
    "PART_CATEGORY_PREFIX": "const"
+  },
+  "helper:privacy_notice": {
+   "ACKS_KEY": "const",
+   "COMPANY_PLACEHOLDER": "const",
+   "TEMPLATE": "const",
+   "ack_record": "def(user, text, now=…)",
+   "current_notice": "def()",
+   "get_ack": "def(kind, key)",
+   "merge_ack": "def(existing, requested, user, text)",
+   "notice_hash": "def(text)",
+   "notice_text": "def(profile)",
+   "record_ack": "def(kind, key, user)",
+   "template_for": "def(company_name)"
   },
   "helper:procurement": {
    "STATUS_ORDERED": "const",

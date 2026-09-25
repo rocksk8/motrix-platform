@@ -156,14 +156,7 @@ modules/<key>/
   - L1 的測試設定（`backend/conftest.py`）不可以 import L2 模組；模組自己的夾具放 `modules/<key>/tests/conftest.py`。
   - 守門：`test_module_selection.py::test_conftest_names_no_l2_module`；§9c 的守門檔另有 `::test_no_real_l2_module_named_here`。⚠ 未守門：其他守門檔是否點名 L2 模組（沒有全庫掃描）。
 
-## 8. 法規參數與法規欄位（CUSTOMIZATION-SPEC §7）
-
-- 扣繳率、起扣標準、補充保費門檻、最低工資一律向 L1 `helpers.legal_params` 依**單據日期**取版本，模組不寫死數字；單據存版本號與參數快照，修改舊單沿用快照，除非使用者明確選擇重算。守門：`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params 與凍結的 db.py 種子）。
-- 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。
-- 零稅率／免稅送出時必填依據（`tax_basis_error`）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。
-- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。新增其他蒐集個資的表單（例：客戶聯絡人）⚠ 未守門（沒有機器可讀的「哪些表單蒐集個資」清單）。
-
-## 9. 新增一個模組的步驟
+## 8. 新增一個模組的步驟
 
 1. 在 `docs/platform/modules.json` 登記 key 與成員（先登記，改的時候才會有人問「這樣還拆得開嗎」）。
 2. 照 §5 建立資料夾；寫 `module.json`（含 `data` 分類）、`README.md`、`CHANGELOG.md`。
@@ -189,3 +182,9 @@ modules/<key>/
 - 守門：`tests/platform/test_module_update.py`（合成 repo 與安裝目錄：打包→套用→回滾雜湊逐一相等；每一條套用前檢查都有反向控制；repo 現有模組的正對照）。
 - ⚠ 未守門：正式機上的「停服務→套用→重啟→健康檢查→失敗自動回滾」流程由儀表板串接（主持）。
 
+## 11. 法規參數與法規欄位（CUSTOMIZATION-SPEC §7）
+
+- 扣繳率、起扣標準、補充保費門檻、最低工資一律向 L1 `helpers.legal_params` 依**單據日期**取版本，模組不寫死數字；單據存版本號與參數快照，修改舊單沿用快照，除非使用者明確選擇重算。守門：`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params 與凍結的 db.py 種子）。
+- 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。
+- 零稅率／免稅送出時必填依據（`tax_basis_error`）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。
+- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。新增其他蒐集個資的表單（例：客戶聯絡人）⚠ 未守門（沒有機器可讀的「哪些表單蒐集個資」清單）。
