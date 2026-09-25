@@ -755,7 +755,6 @@ def delete_shipping_signed_file(note_no: str, file_id: str, authorization: str =
 # ── IP-6 `calendar.writeback`：行事曆事件 id 由擁有模組自己回寫（2026-09-25，ROADMAP A11）──────
 # L1 `helpers/google_calendar` 建好事件後呼叫這裡，不再直接 UPDATE 本組的表。
 # 事件建立是網路請求（慢）⇒ 這裡才拿寫鎖、重讀、只寫入 event id（不整包蓋回別人的修改）。
-from core import registry as _registry  # noqa: E402
 
 
 def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
@@ -775,12 +774,8 @@ def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
         conn.close()
 
 
-_registry.provide("calendar.writeback", "shipping_note", _calendar_writeback)
-
 
 def list_shipping_notes_for_case(quote_no: str, authorization: str):
     """IP-18：案件整包（M01 case-bundle）的出貨單段。同一份授權、權限判斷與單獨打 `/api/shipping-notes?quote_no=` 逐字相同。"""
     return list_shipping_notes(quote_no=quote_no, authorization=authorization)
 
-
-_registry.provide("shipping.list_for_case", "supply", list_shipping_notes_for_case)

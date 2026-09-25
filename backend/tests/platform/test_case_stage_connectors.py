@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from core import registry
+from core import registry, source_tree
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -163,12 +163,21 @@ def test_m01_and_l1_no_longer_write_foreign_tables():
 
 # ── IP-6 ────────────────────────────────────────────────────────────────
 
-IP6_KINDS = {"invoice_voucher", "payment_request", "shipping_note", "quotation", "case_stage"}
+#: 各 kind 的提供方檔：已搬進 modules/ 的 kind 在模組不在時本來就不登記（PLAYBOOK §B-11）
+IP6_OWNERS = {
+    "invoice_voucher": "routers/invoice_vouchers.py",
+    "payment_request": "routers/payment_requests.py",
+    "shipping_note": "modules/supply/api/shipping_notes.py",
+    "quotation": "routers/quotations.py",
+    "case_stage": "routers/quotations.py",
+}
 
 
-def test_calendar_writeback_every_owner_registers_its_writeback():
-    import routers.invoice_vouchers, routers.payment_requests, routers.shipping_notes, routers.quotations  # noqa: F401,E401
-    assert set(registry.providers("calendar.writeback")) == IP6_KINDS
+def test_calendar_writeback_every_owner_registers_its_writeback(client):
+    """client 夾具＝載入器掛好已安裝的模組（ModuleSpec.providers 在那時登記）。"""
+    import routers.invoice_vouchers, routers.payment_requests, routers.quotations  # noqa: F401,E401
+    want = {k for k, f in IP6_OWNERS.items() if source_tree.module_installed(f)}
+    assert "quotation" in want and set(registry.providers("calendar.writeback")) == want
 
 
 @pytest.fixture()
@@ -227,8 +236,8 @@ def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, dis
 _IP6_DOC_KINDS = [
     ("invoice_voucher", "invoice_vouchers", "voucher_no", "push_event_for_invoice_voucher"),
     ("payment_request", "payment_requests", "request_no", "push_event_for_payment_request"),
-    ("shipping_note", "shipping_notes", "note_no", "push_event_for_shipping_note"),
 ]
+# 出貨單（M03）那一列在 modules/supply/tests/test_supply_calendar_writeback.py（拿掉 M03 時跟著消失）
 
 
 def _doc(table, col, no):
