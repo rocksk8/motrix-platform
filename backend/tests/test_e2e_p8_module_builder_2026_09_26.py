@@ -322,7 +322,7 @@ def _assert_definition_v1():
 
 
 @pytest.mark.e2e
-def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, make_user, new_context, client):
+def test_acceptance_equipment_loan_built_in_browser_then_used_end_to_end(live_server, make_user, new_context, client):
     admin = make_user(username="p8_admin", role="superadmin")
     requester = make_user(username="p8_user", role="viewer", modules=[])
     mgr = make_user(username="p8_mgr", role="viewer", modules=[])
@@ -445,7 +445,7 @@ def test_d4_equipment_loan_built_in_browser_then_used_end_to_end(live_server, ma
 
 
 @pytest.mark.e2e
-def test_d4_builder_restores_an_old_version_as_a_new_one(live_server, make_user, new_context, client):
+def test_builder_restores_an_old_version_as_a_new_one(live_server, make_user, new_context, client):
     """⑥ 可以還原到任一版：還原＝把舊版內容再發布成新版（歷史不改）。"""
     admin = make_user(username="p8_admin2", role="superadmin")
     token = _login_token(client, admin)
