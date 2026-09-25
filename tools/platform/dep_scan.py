@@ -174,16 +174,34 @@ def backend_units() -> dict[str, dict]:
     for p in sorted((BACKEND / "core").glob("*.py")) if (BACKEND / "core").is_dir() else []:
         if not _docstring_only(p):
             units[f"plat:{p.stem}"] = {"kind": "plat", "path": rel(p)}
-    # L2 模組：backend/modules/<key>/<file>.py ⇒ mod:<key>/<file>（整個資料夾歸同一組）
+    # L2 模組：backend/modules/<key>/<相對路徑>.py ⇒ mod:<key>/<相對路徑>（整個資料夾歸同一組）。
+    # 哪些檔算模組的檔由 core.source_tree.module_files 決定（遞迴、排除 tests／migrations；主持裁示 2026-09-26），
+    # 這裡不另訂一份。第一層的檔名稱不變（mod:tender_radar/api）；子目錄例 mod:subcontract/api/contractors。
     for d in sorted((BACKEND / "modules").iterdir()) if (BACKEND / "modules").is_dir() else []:
         if not d.is_dir() or d.name.startswith(("_", ".")):
             continue
-        for p in sorted(d.glob("*.py")):
+        for p in _source_tree().module_files(d):
             if p.name == "__init__.py" and _docstring_only(p):
                 continue
-            units[f"mod:{d.name}/{p.stem}"] = {"kind": "mod", "path": rel(p), "module_key": d.name,
-                                              "role": _mod_role(p)}
+            units[mod_unit(d, p)] = {"kind": "mod", "path": rel(p), "module_key": d.name, "role": _mod_role(p)}
     return units
+
+
+#: 真實 repo 的 backend（合成樹 use_root 會換掉 BACKEND；core.source_tree 一律從這裡匯入，不從合成樹）
+_REAL_BACKEND = Path(__file__).resolve().parents[2] / "backend"
+
+
+def _source_tree():
+    """core.source_tree（純路徑工具，不 import main／routers）。`module_files(d)` 對任何資料夾都適用。"""
+    if str(_REAL_BACKEND) not in sys.path:
+        sys.path.insert(0, str(_REAL_BACKEND))
+    from core import source_tree
+    return source_tree
+
+
+def mod_unit(d: Path, p: Path) -> str:
+    """modules/<key>/<相對路徑>.py ⇒ `mod:<key>/<相對路徑>`（POSIX、去掉 .py）。"""
+    return "mod:%s/%s" % (d.name, p.relative_to(d).with_suffix("").as_posix())
 
 
 def _docstring_only(p: Path) -> bool:
@@ -221,12 +239,17 @@ def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], uni
         if u in units:
             deps.add(u)
 
-    def add_mod(key: str, sub: str | None):
-        """modules.<key>[.<sub>]：sub 是檔案就指向它，否則指向套件 __init__。"""
-        if sub and f"mod:{key}/{sub}" in units:
-            add(f"mod:{key}/{sub}")
-        else:
-            add(f"mod:{key}/__init__")
+    def add_mod(key: str, sub):
+        """modules.<key>[.<a>.<b>…]：由最長的路徑往回找，是檔案就指向它、是子套件就指向它的 __init__，
+        都不是 ⇒ 模組根的 __init__。`sub` 可以是字串（單層）或清單（多層）。"""
+        parts = [sub] if isinstance(sub, str) else list(sub or [])
+        for n in range(len(parts), 0, -1):
+            path = "/".join(parts[:n])
+            for cand in (f"mod:{key}/{path}", f"mod:{key}/{path}/__init__"):
+                if cand in units:
+                    add(cand)
+                    return
+        add(f"mod:{key}/__init__")
 
     def add_plat(sub: str | None):
         add(f"plat:{sub}" if sub and f"plat:{sub}" in units else "plat:__init__")
@@ -237,7 +260,7 @@ def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], uni
             for a in node.names:
                 parts = a.name.split(".")
                 if parts[0] == "modules" and len(parts) > 1:
-                    add_mod(parts[1], parts[2] if len(parts) > 2 else None)
+                    add_mod(parts[1], parts[2:])
                 elif parts[0] == "core":
                     add_plat(parts[1] if len(parts) > 1 else None)
                 elif parts[0] == "helpers" and len(parts) > 1:
@@ -257,7 +280,8 @@ def resolve_imports(tree: ast.Module, self_kind: str, reexp: dict[str, str], uni
             parts0 = mod.split(".")
             if node.level == 0 and parts0[0] == "modules":
                 if len(parts0) >= 3:
-                    add_mod(parts0[1], parts0[2])
+                    for a in node.names:                 # from modules.k.api import contractors ⇒ k/api/contractors
+                        add_mod(parts0[1], parts0[2:] + [a.name])
                 elif len(parts0) == 2:
                     for a in node.names:
                         add_mod(parts0[1], a.name)
@@ -586,7 +610,11 @@ SYNTHETIC_FILES = {
         "from core.zz_reg import Spec\nfrom modules.zz_mod import api\n"),
     "backend/modules/zz_mod/api.py": (
         "from fastapi import APIRouter\nfrom modules.zz_mod import work\nfrom . import util\n"
+        "from modules.zz_mod.service import calc\n"
         "router = APIRouter()\n@router.get(\"/api/zz-mod/run\")\ndef run():\n    return work.go()\n"),
+    # 子目錄裡的檔（CORE-SPEC §3 的 api/、service/）：原本 dep_scan 只掃第一層 ⇒ 這裡的跨組 import 看不到
+    "backend/modules/zz_mod/service/calc.py": "from routers.zz_beta import beta_public\n",
+    "backend/modules/zz_mod/tests/test_zz.py": "from routers.zz_alpha import get_item\n",   # 反向控制：tests 不算模組的檔
     "backend/modules/zz_mod/work.py": "def go():\n    return \"DELETE FROM zz_log\"\n",
     "backend/modules/zz_mod/util.py": "X = 1\n",
     "backend/modules/zz_mod/module.json": (
@@ -605,7 +633,7 @@ SYNTHETIC_MODULES = {
                "tables": [], "api_prefixes": ["/api/zz-alpha"]},
         "MB": {"key": "zz_b", "name": "乙", "units": ["router:zz_beta"], "tables": [], "api_prefixes": ["/api/zz-beta"]},
         "MC": {"key": "zz_mod", "name": "丙", "units": ["mod:zz_mod/__init__", "mod:zz_mod/api", "mod:zz_mod/work",
-                                                    "mod:zz_mod/util"], "tables": ["zz_log"],
+                                                    "mod:zz_mod/util", "mod:zz_mod/service/calc"], "tables": ["zz_log"],
                "api_prefixes": ["/api/zz-mod"]},
     },
     "retired": {},
@@ -630,6 +658,11 @@ def _synthetic_checks(U: dict) -> list[tuple[str, bool]]:
         ("模組內 import（modules.<key> 與相對 import）",
          {"mod:zz_mod/work", "mod:zz_mod/util"} <= set(U.get("mod:zz_mod/api", {}).get("imports", []))),
         ("模組 → 平台（core.<file>）", "plat:zz_reg" in U.get("mod:zz_mod/__init__", {}).get("imports", [])),
+        ("模組子目錄的檔（service/calc）看得到、它的跨組 import 抓得到",
+         "router:zz_beta" in U.get("mod:zz_mod/service/calc", {}).get("imports", [])),
+        ("modules.<key>.<子目錄>.<檔> 的 import 指到那個檔",
+         "mod:zz_mod/service/calc" in U.get("mod:zz_mod/api", {}).get("imports", [])),
+        ("反向控制：模組的 tests/ 不算模組的檔", not any(k.startswith("mod:zz_mod/tests") for k in U)),
         ("模組寫表（DELETE）", "zz_log" in U.get("mod:zz_mod/work", {}).get("tables_w", [])),
         ("反向控制：註解不是表（table:IF 不存在）", "table:IF" not in U),
         ("反向控制：沒寫的邊不存在（zz_beta 不 import helper）",
