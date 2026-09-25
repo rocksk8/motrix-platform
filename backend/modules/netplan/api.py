@@ -387,6 +387,42 @@ async def import_network_plan_excel(plan_id: int, file: UploadFile = File(...),
     return {"ok": True, "updatedSections": list(sections.keys()), "warnings": result["warnings"]}
 
 
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：單據上手動輸入的聯絡人也是蒐集個資）──
+# 紀錄存在 L1 設定鍵 `privacy_notice_acks`，鍵＝`network_plan_contact:<單據>:<聯絡人姓名>`（換了聯絡人＝另一個人，要重新告知）。
+# 伺服器只接受「已存檔的那位聯絡人」；時間、人員、告知文字雜湊由伺服器蓋，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+@router.get("/api/network-plans/{plan_id}/privacy-notice")
+def get_network_plan_privacy_acks(plan_id: int, authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, _VIEW_MODULES, "網路架構規劃書")
+    conn = get_db()
+    row = conn.execute("SELECT id FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "規劃書不存在")
+    return {"acks": _pn.acks_with_prefix("network_plan_contact", plan_id)}
+
+
+@router.post("/api/network-plans/{plan_id}/privacy-notice/ack")
+def ack_network_plan_privacy_notice(plan_id: int, body: dict = Body(...), authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization, require_superadmin=True, module=_EDIT_MODULE)
+    subject = str((body or {}).get("subject") or "").strip()
+    conn = get_db()
+    row = conn.execute("SELECT plan_no, contact_name FROM network_plans WHERE id=?", (plan_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "規劃書不存在")
+    if not subject or subject != (row["contact_name"] or "").strip():
+        raise HTTPException(409, "聯絡人與已儲存的不同，請先儲存規劃書再勾選")
+    rec, created = _pn.record_purpose_ack("network_plan_contact", f"{plan_id}:{subject}", user, "contact")
+    if created:
+        _audit(_tok(authorization), "network_plan.privacy_notice_ack", "network_plan", row["plan_no"],
+               f"{row['plan_no']}／{subject}", {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 # ══ 快速拓樸圖（2026-09-26 自 routers/network_plans_quick.py 併入；模組保持單層，守門的端點掃描收得到）══
 #
 # 快速拓樸圖產生器：對應使用者原本個案腳本（B1F 拓樸圖產生器 b1f_topology.py）
