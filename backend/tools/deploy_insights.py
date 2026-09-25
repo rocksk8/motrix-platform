@@ -110,11 +110,18 @@ def module_changes(root, base: str, head: str, modules_json=None) -> dict:
 
 # ── 測試閘門 ─────────────────────────────────────────────────────────────
 
+def full_result_path(results_dir: Path, commit_full_sha: str) -> Path:
+    """某個 commit 的全量結果檔（modtest --full 依 commit 分檔寫入）。SHA 不是 40 位十六進位 ⇒ 指向一個不存在的檔名。"""
+    import re
+    name = commit_full_sha if re.fullmatch(r"[0-9a-f]{40}", commit_full_sha or "") else "_invalid_"
+    return Path(results_dir) / (name + ".json")
+
+
 def last_full(path: Path, commit_full_sha: str) -> dict:
     """回傳 {state, detail, record}；state ∈ missing／unreadable／other_commit／dirty／failed／ok。"""
     path = Path(path)
     if not path.exists():
-        return {"state": "missing", "detail": "沒有全量紀錄（從未跑過，或結果檔不在主工作樹）", "record": None}
+        return {"state": "missing", "detail": "這個 commit 沒有全量紀錄（沒跑過、跑的時候工作樹有未 commit 的改動，或結果檔不在主工作樹）", "record": None}
     try:
         rec = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:  # noqa: BLE001

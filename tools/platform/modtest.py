@@ -10,7 +10,8 @@
               §C-11 判定：帶進來的有 fixture 層或兩邊改同檔 ⇒ 全量（exit 3），否則差異題＋tests/platform（exit 0）
   --dry-run   只印受影響單位、測試清單與題數（collect-only 全部一次再篩），不執行
   --full      跑全量：非 e2e（-n --workers）＋ e2e（-n --e2e-workers）兩段；basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖；
-              結果（含失敗、中斷，ok=false）原子寫入主工作樹 tools/platform/.last_full.json（沒有這個檔＝沒跑過）
+              結果（含失敗、中斷，ok=false）原子寫入主工作樹 tools/platform/full_results/<commit>.json（儀表板閘門讀這個；
+              dirty 不寫）與 .last_full.json（最近一次，只供人看）
   --window X  basetemp 名稱中的視窗代號（預設 modtest）
   -- <pytest 參數>   其後原樣轉給 pytest
 
@@ -491,14 +492,28 @@ def main_worktree_root():
     return Path(common).parent
 
 
-def write_last_full(result):
-    """原子寫入：同目錄暫存檔 → os.replace。"""
-    dest = main_worktree_root() / "tools" / "platform" / ".last_full.json"
+def _atomic_write_json(dest, result):
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = dest.with_name(".last_full.json.%d.tmp" % os.getpid())
+    tmp = dest.with_name("%s.%d.tmp" % (dest.name, os.getpid()))
     tmp.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     os.replace(tmp, dest)
-    return dest
+
+
+def write_last_full(result, root=None):
+    """原子寫入（同目錄暫存檔 → os.replace）兩處，都在主工作樹 tools/platform/：
+    - `full_results/<commit>.json`：依 commit 分檔，儀表板閘門讀這個（2026-09-26：單一檔會被別的 worktree 的全量蓋掉）。
+      ⚠ dirty（跑的時候有未 commit 的改動）**不寫**：結果不代表這個 commit，而且會蓋掉同一個 commit 乾淨的綠燈。
+    - `.last_full.json`：最近一次（任何 commit、含 dirty），只供人看。
+    回傳 per-commit 檔的路徑（沒寫 ⇒ .last_full.json 的路徑）。"""
+    base = Path(root or main_worktree_root()) / "tools" / "platform"
+    latest = base / ".last_full.json"
+    _atomic_write_json(latest, result)
+    sha = result.get("commit") or ""
+    if result.get("dirty") or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return latest
+    per = base / "full_results" / (sha + ".json")
+    _atomic_write_json(per, result)
+    return per
 
 
 def _now():
@@ -507,7 +522,7 @@ def _now():
 
 
 def run_full(extra, a):
-    """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹的 .last_full.json。"""
+    """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹（write_last_full：full_results/<commit>.json＋.last_full.json）。"""
     result = {
         "commit": git("rev-parse", "HEAD").strip(),
         "branch": git("rev-parse", "--abbrev-ref", "HEAD").strip(),
@@ -544,7 +559,7 @@ def run_full(extra, a):
             dest = write_last_full(result)
             print("[全量結果] %s ok=%s → %s" % (result["commit"][:8], result["ok"], dest))
         except Exception as e:                      # noqa: BLE001 — 寫不出結果檔要說出來，不可靜默
-            print("[全量結果] ⚠ 寫不出 .last_full.json：%r" % e)
+            print("[全量結果] ⚠ 寫不出全量結果檔：%r" % e)
 
 
 def main(argv=None):
@@ -557,7 +572,7 @@ def main(argv=None):
     g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後要不要重跑全量（只判定、不執行）")
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/.last_full.json")
+    ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
     ap.add_argument("--workers", type=int, default=FULL_MAX_WORKERS, help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
     ap.add_argument("--e2e-workers", type=int, default=FULL_MAX_WORKERS, help="--full e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")

@@ -103,6 +103,15 @@ def test_last_full_states(tmp_path):
     assert di.last_full(p, sha)["state"] == "ok"
 
 
+def test_full_result_path_is_per_commit_and_rejects_non_sha(tmp_path):
+    sha = "a" * 40
+    assert di.full_result_path(tmp_path, sha) == tmp_path / (sha + ".json")
+    for bad in ("", "a" * 39, "../" + "a" * 37, "A" * 40, "HEAD"):
+        p = di.full_result_path(tmp_path, bad)
+        assert p.parent == tmp_path and p.name == "_invalid_.json"
+        assert di.last_full(p, bad)["state"] == "missing"
+
+
 def test_upstream_ahead_without_upstream_is_none(repo):
     root, _ = repo
     assert di.upstream_ahead(root) == (None, None)

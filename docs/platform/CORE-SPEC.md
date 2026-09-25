@@ -153,7 +153,7 @@ modules/<key>/
 | D3 | 產品選配打包 | 打包時選擇產品設定檔（full／core-only／自訂）；部署包列表顯示各包的 `modules.lock.json` | 9c①（B） |
 | D4 | V9 → 新版升級精靈 | 預檢 → 備份（顯示雜湊驗證結果）→ 轉換 → 驗證 → 回滾（完整回滾／只回程式）逐步按鈕 | 9b（C） |
 | D5 | 模組狀態 | 正式機各模組：載入、停用、未授權、失敗（附原因） | 9c②③（A） |
-| D6 | 測試閘門 | 打包前顯示「這個 commit 的最近一次全量結果」；沒有全綠的全量 ⇒ 預設擋下打包 | modtest 寫出 `.last_full.json`（B） |
+| D6 | 測試閘門 | 打包前顯示「這個 commit 的最近一次全量結果」；沒有全綠的全量 ⇒ 預設擋下打包 | modtest 寫出 `.last_full.json`（B）〔更正（B，2026-09-26）：單一檔會被任何 worktree 的全量蓋掉（C 的 ok=False 蓋掉上一輪）⇒ 改為依 commit 分檔 `tools/platform/full_results/<完整 SHA>.json`，閘門讀這個 commit 的那一份；dirty 的全量不寫分檔；`.last_full.json` 保留為「最近一次」只供人看〕 |
 | D7 | 修正 | `dev-status` 的領先數比對寫死 `origin/master`，改成目前分支的上游 | 無 |
 
 ## 9d. 交叉稽核（2026-09-25 使用者交辦）

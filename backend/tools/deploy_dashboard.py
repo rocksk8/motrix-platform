@@ -967,7 +967,9 @@ def pre_deploy_check():
 
 # ── 打包 ─────────────────────────────────────────────────────────────────
 
-LAST_FULL_PATH = PROJECT_ROOT / "tools" / "platform" / ".last_full.json"
+#: modtest --full 依 commit 分檔寫的全量結果（<完整 SHA>.json）。2026-09-26：原本只讀單一的 .last_full.json，
+#: 任何 worktree 跑的全量都會蓋掉它（C 的 ok=False 蓋掉上一輪）⇒ 閘門改讀「這個 commit 的那一份」。
+FULL_RESULTS_DIR = PROJECT_ROOT / "tools" / "platform" / "full_results"
 
 
 def _head_full_sha() -> str:
@@ -981,7 +983,7 @@ def _head_full_sha() -> str:
 def build_gate():
     """§9e D6：要打包的 HEAD 有沒有全綠的全量。前端在打包按鈕旁顯示；非 ok 時打包預設擋下。"""
     head = _head_full_sha()
-    return {"head": head, **deploy_insights.last_full(LAST_FULL_PATH, head)}
+    return {"head": head, **deploy_insights.last_full(deploy_insights.full_result_path(FULL_RESULTS_DIR, head), head)}
 
 
 @app.get("/api/module-changes")

@@ -17,9 +17,10 @@ def client(monkeypatch, tmp_path):
     started = []
     monkeypatch.setattr(dd, "_run_job", lambda *a, **kw: started.append(a))       # 🔴 不真的打包
     monkeypatch.setattr(dd, "HISTORY_PATH", tmp_path / "history.json")
-    lf = tmp_path / ".last_full.json"
+    lf = tmp_path / "full_results" / ("a" * 40 + ".json")
+    lf.parent.mkdir()
     lf.write_text(json.dumps({"commit": "a" * 40, "ok": True}), encoding="utf-8")
-    monkeypatch.setattr(dd, "LAST_FULL_PATH", lf)
+    monkeypatch.setattr(dd, "FULL_RESULTS_DIR", lf.parent)
     monkeypatch.setattr(dd, "_head_full_sha", lambda: "a" * 40)
     c = TestClient(dd.app, client=("127.0.0.1", 1))
     c.started = started

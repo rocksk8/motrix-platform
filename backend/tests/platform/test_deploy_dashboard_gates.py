@@ -16,14 +16,15 @@ def client(monkeypatch, tmp_path):
     started = []
     # 🔴 打包 job 換成記錄器：測試永遠不可以真的跑 build_deploy_package.ps1
     monkeypatch.setattr(dd, "_run_job", lambda *a, **kw: started.append(a))
-    monkeypatch.setattr(dd, "LAST_FULL_PATH", tmp_path / ".last_full.json")
+    monkeypatch.setattr(dd, "FULL_RESULTS_DIR", tmp_path / "full_results")
     monkeypatch.setattr(dd, "HISTORY_PATH", tmp_path / "history.json")   # 不寫真的歷史檔
     monkeypatch.setattr(dd, "_head_full_sha", lambda: "a" * 40)
     # 正式機查詢一律換掉：不連線
     monkeypatch.setattr(dd, "_check_prod_status", lambda: {"healthy": None, "deployed": {}})
     c = TestClient(dd.app, client=("127.0.0.1", 1))
     c.started = started
-    c.lf = tmp_path / ".last_full.json"
+    (tmp_path / "full_results").mkdir()
+    c.lf = tmp_path / "full_results" / ("a" * 40 + ".json")      # 這個 commit（HEAD＝a…a）的那一份
     return c
 
 
@@ -42,6 +43,25 @@ def test_build_is_blocked_without_green_full(client):
 
 
 def test_build_blocked_when_full_is_for_another_commit(client):
+    """只有別的 commit 的全綠 ⇒ 這個 commit 沒有紀錄 ⇒ 擋。"""
+    other = client.lf.with_name("b" * 40 + ".json")
+    other.write_text(json.dumps({"commit": "b" * 40, "ok": True}), encoding="utf-8")
+    r = client.post("/api/build", json={})
+    assert r.status_code == 409 and r.json()["gate"]["state"] == "missing"
+
+
+def test_rc_another_commits_red_full_does_not_hide_this_commits_green(client):
+    """2026-09-26 回歸：單一 .last_full.json 時，C 在別的 commit 跑出的 ok=False 蓋掉了上一輪的結果。
+    依 commit 分檔後，別的 commit 的紅燈不影響這個 commit 的綠燈。"""
+    client.lf.write_text(json.dumps({"commit": "a" * 40, "ok": True}), encoding="utf-8")
+    client.lf.with_name("b" * 40 + ".json").write_text(json.dumps({"commit": "b" * 40, "ok": False}), encoding="utf-8")
+    client.lf.with_name(".last_full.json").write_text(json.dumps({"commit": "b" * 40, "ok": False}), encoding="utf-8")
+    r = client.post("/api/build", json={})
+    assert r.status_code == 200, r.json()
+
+
+def test_rc_mismatched_record_inside_the_file_is_caught(client):
+    """反向控制：檔名是這個 commit、內容卻是別的 commit（被手動複製或改名）⇒ other_commit，照樣擋。"""
     client.lf.write_text(json.dumps({"commit": "b" * 40, "ok": True}), encoding="utf-8")
     r = client.post("/api/build", json={})
     assert r.status_code == 409 and r.json()["gate"]["state"] == "other_commit"

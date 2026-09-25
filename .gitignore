@@ -119,3 +119,4 @@ backend/.build_commit
 # modtest --full 的結果（本機狀態，部署儀表板讀它；CORE-SPEC §9e D6）
 tools/platform/.last_full.json
 tools/platform/.last_full.json.*.tmp
+tools/platform/full_results/
