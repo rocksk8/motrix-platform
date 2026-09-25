@@ -116,6 +116,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 03:43 巡視：第一班列車的全量非 e2e 段跑到 80%，還沒有紅。月台上等下一班的有：c-p2-legal、c-d7-km1，另有 C3、scope、P1P3、VAT 將陸續上來。各線都在工作，不派工。
 - 2026-09-26 03:50 C：D1 階段 B 開工 M02 業務開發（key `crm`，worktree C20、wip/c-m02）。會動到的共用處：`main.py`（拿掉 dev_crm 的 import／掛載／排程——A 的 M12 也改同一行 import，合回時由後到的一方解）；`routers/quotations.py` 刪報價單那一段（直寫 `dev_cases` 的 debt 改成 M01 宣告事件 `quotation.deleted`、M02 訂閱解除轉建連結，刪掉 table_write_exceptions 那一筆）；`frontend/static/sidebar.js` MODULE_PAGES；`docs/platform/modules.json`。不動 L1 helper。
 - 2026-09-26 03:30：C 的 p2-legal（第二批）上月台；c-d7 修好 K-M1，預演第 5 次 11 步全過，第一份備份完整回滾後邏輯內容等於原始庫，排在閘門後上月台。撞號提醒：IP-10（C 的 approval.queue_items 與 A 的 daily.check）、版本紀錄 26d（第一班列車已經給勞報單用了）⇒ 下一班車統一重排。§5 補上階段 B 分工。
 - 2026-09-26 03:29：D 完成 ⑥～⑧：a-bonus 必修 0（建議 2）；a-mail 必修 1（M-M1 只缺題目、行為正確 ⇒ 不下車，A 另開小包補）；C1 必修 1（P-M1：模組可以把 L1 頁面宣告成自己的，停用後登入頁會 404 ⇒ 交給 B）。D 的新佇列：⑨ D1b 選題、⑩ M12、⑪ P8 前端。
