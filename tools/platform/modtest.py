@@ -248,7 +248,7 @@ def _remove_basetemp(p):
         print("[暫存] 拒絕刪除非本工具建立的路徑：%s" % p)
         return
     # xdist worker／瀏覽器剛結束時檔案可能還被佔用（2026-09-25 全量 -n 6 實測第一次刪不乾淨）⇒ 重試幾次
-    for _ in range(6):
+    for _ in range(30):                 # 最多約 60 秒：-n 6 全量實測 12 秒不夠、稍後手動刪即成功
         if not p.exists():
             break
         shutil.rmtree(p, ignore_errors=True)
