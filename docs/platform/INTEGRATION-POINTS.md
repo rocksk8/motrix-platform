@@ -205,7 +205,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | 被解除連結的案件（`converted_quote_no` 清空、狀態退回「洽談中」）。**在呼叫端的連線上寫、不 commit**；稽核 `dev_case.unlink_deleted_quote` 由 M01 以操作者身分寫 |
 | 對方不在時 | 報價單**照刪**；案件不動（M02 不在時畫面本來就看不到這些案件）；回應 `notice`＝`routers/quotations.QUOTE_DELETED_CRM_ABSENT`（「若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除」）；記 WARNING。不丟例外 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_crm_quote_deleted_connector.py`：①M02 已登記 ②**正對照**：刪草稿 ⇒ 連到它的案件解除、別張單的案件不動、稽核一筆 ③**反向控制**：拿掉提供者 ⇒ 200、`notice` 明說、案件不動、WARNING ④產品碼除了 M02 與凍結 migration 沒有寫 `dev_cases`／`dev_logs` 的 SQL；`table_write_exceptions.json` 對應 debt 已刪 |
+| 守門 | 提供方（隨模組搬走）`backend/modules/crm/tests/test_crm_quote_deleted_provider.py`：①M02 已登記 ②**正對照**：刪草稿 ⇒ 連到它的案件解除、別張單的案件不動、稽核一筆；取用方（M02 不在也成立）`backend/tests/platform/test_crm_quote_deleted_connector.py`：③**反向控制**：拿掉提供者 ⇒ 200、`notice` 明說、案件不動、WARNING ④產品碼除了 M02 與凍結 migration 沒有寫 `dev_cases`／`dev_logs` 的 SQL；`table_write_exceptions.json` 對應 debt 已刪；畫面：`test_e2e_quote_delete_crm_absent_notice_2026_09_26`（M02 不在 ⇒ 報價清單顯示 notice；在 ⇒ 只有「報價單已刪除」） |
 
 **尚未處理**：`dev_cases`／`dev_logs` 仍被 L1（全站搜尋、未讀標記、行事曆標題、封存匯出、稽核目標檢查）與 M01（報價單動態）、M08（儀表板）**直接讀**。M02 不在時表仍在（凍結 migration 建立），讀取不會壞，可見性經 `row_access`（未登錄 ⇒ fail closed，連 admin 也看不到）；要切斷須由 M02 提供讀取連接器，另開題（DEPENDENCY-MAP §3 #2／#5／#6）。
 
