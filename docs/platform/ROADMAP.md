@@ -9,12 +9,12 @@
 |---|---|---|---|
 | A1 | 寫鎖下沉 `core/txn.py` | §0-4 | ✅ 7db88381 |
 | A2 | 紅點常數改取 module_registry | §3 #4 | ✅ 7cdec57b |
-| A3 | 案件／業務開發案可見性 → `helpers/row_access.py` | §3 #2 #3 #5 #6 | 🔄 A |
-| A4 | 路徑解析層 `core/paths.py` | DATA-COMPAT | ✅ C |
-| A5 | `pdf_gen` 的完工單樣板搬回 M01，L1 只留引擎 | §3 #1 | ⏳ |
-| A6 | `recognition`／reports／vouchers 的 `_dispatch_row` → M04 公開連接器 | §3 #7 #8 #9 | ⏳ |
+| A3 | 案件／業務開發案可見性 → `helpers/row_access.py` | §3 #2 #3 #5 #6 | ✅ 50e8c2cc／0411f818 |
+| A4 | 路徑解析層 `core/paths.py` | DATA-COMPAT | ✅ bef3e25d／41151687 |
+| A5 | `pdf_gen` 的完工單樣板搬回 M01，L1 只留引擎 | §3 #1 | ✅ 4ba73907 |
+| A6 | `recognition`／reports／vouchers 的 `_dispatch_row` → M04 公開連接器 | §3 #7 #8 #9 | 🔄 A |
 | A7 | `bonus_vouchers` → M06「建立傳票草稿」連接器 | §3 #18 #19 | ⏳ |
-| A8 | Excel 樣式與匯出速率限制下沉 L1 輸出；`_COMPANY` → company_identity | §3 #10 #12 #13 | ⏳ |
+| A8 | Excel 樣式與匯出速率限制下沉 L1 輸出；`_COMPANY` → company_identity | §3 #10 #12 #13 #17 | 🔄 C |
 | A9 | system 指名 L2（tender／bonus／quote_terms）→ 模組登錄表 | §3 #26 #27 #28 | 🔄 tender 已完成；bonus、quote_terms 尚未 |
 | A10 | 案件聚合（vouchers_by_case、list_dispatches、list_shipping_notes）→ L1「案件關聯資料提供者」 | §3 #20–22 | ⏳ |
 | A11 | google_calendar、case_stage_tasks 跨領域寫入 → 事件／連接器 | §3.1 | ⏳ |

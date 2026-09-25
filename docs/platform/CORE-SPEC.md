@@ -131,6 +131,7 @@ modules/<key>/
 | 通知信預設 | **預設寄信**；開發機以安裝根目錄 `.no_email_send` 或 `MOTRIX_EMAIL_SEND=off` 擋信（標記永不進部署包） |
 | 案件可見範圍 | 全站搜尋、儀表板動態牆**對齊報價列表**（被指派者、cashier 可見）；規則集中於 L1 `helpers/row_access.py`，各模組登錄；未登錄的 kind 一律 fail closed |
 | 測試範圍期望 | 改 L2 模組 ⇒ 只跑該模組＋契約；改 L1（main／system／db／共用 helper）⇒ 接近全量是結構性的（寫的是幾乎每支 router 都讀的表），接受全量 |
+| 勞報單存檔上雲 | **進雲端，但放獨立、權限更窄的資料夾**（與一般單據 PDF 鏡像分開；含個資）。DATA-COMPAT §7b |
 
 §6 更正：原文「V9 既有 `db.py` 的 v1~v84」→ 實際基準為 **v116**（`db.py:133`，DATA-COMPAT §3）。
 
