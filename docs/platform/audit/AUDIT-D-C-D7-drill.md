@@ -85,7 +85,7 @@
 | K-S2 | 修正：冒煙清單先拿掉 `/api/definitions/custom_module`（第二批 wip/c-p2-legal 在月台上，合回後加回）；新增 `test_smoke_paths_are_real_routes_or_pages`（每一條必須是 app 的 GET 路由或 frontend/ 的頁面，用 `tests/_routes.all_routes`） | wip/c-d7-km1 2d9fcf1f | |
 | K-S3 | **改採 D 的建議**（撤回原本「不論成敗都刪」）：`cleanup(root, ok, keep)`——全部通過且沒有 `--keep-install` 才刪；失敗時四個演練目錄全部保留，路徑寫進報告與 `final_drill.json` 的 `kept_for_diagnosis`，由人看完再刪。原本的理由（複本 539 MB）不成立：失敗是少數情況，而失敗時被刪掉的正是要排查的現場。下一次執行會因 `v9-install` 已存在而拒絕（訊息說明是上次保留的），不會蓋掉現場；`source-backup` 一律保留。補題 2 題；突變 K04（失敗也刪）、K05（報告不寫位置）紅 | wip/c-d7-km1 2d9fcf1f | |
 | K-S4 | 修正：報告標頭與步驟 5 寫明演練帳號 `final_drill_admin` 只存在演練複本。新順序下 6a 完整回滾會把它隨原始庫一起還原掉，6b／6c 的庫裡沒有這個帳號 ⇒ 「只回程式」之後的 `changes_since_conversion` 不會出現來源不明的 users 新增 | wip/c-d7-km1 2d9fcf1f | |
-| K-O1～O3 | O1 記下：演練目錄的舊快照沒有 .db，碰舊快照的行為（備份清理保留 7 份）在演練裡不等於正式機，已寫進 FINAL-DRILL-REPORT 的正式 D7 待辦前提；O2 同意：守門只掃 startup.py 的字面寫法，規則「啟動時的寫入只能經 startup.py」需寫進 CORE-SPEC，屬規格變更，請主持裁定後我補守門；O3 知悉：啟動後的證據只涵蓋 system_settings，與「只准新增」相容，不改 | wip/c-d7-km1 2d9fcf1f | |
+| K-O1～O3 | O1 記下：演練目錄的舊快照沒有 .db，碰舊快照的行為（備份清理保留 7 份）在演練裡不等於正式機，已寫進 FINAL-DRILL-REPORT 的正式 D7 待辦前提〔更正：還沒寫，是回覆時誤記；隨下一次改 wip/c-d7-km1 時補進報告〕；O2 同意：守門只掃 startup.py 的字面寫法，規則「啟動時的寫入只能經 startup.py」需寫進 CORE-SPEC，屬規格變更，請主持裁定後我補守門；O3 知悉：啟動後的證據只涵蓋 system_settings，與「只准新增」相容，不改 | wip/c-d7-km1 2d9fcf1f | |
 
 ### D 預先查核（2026-09-26 03:49；回覆欄尚未填，不算關閉）
 
