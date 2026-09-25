@@ -216,7 +216,7 @@ def _flow_single_tier(client, h, seen):
     import db
     conn = db.get_db()
     try:
-        notes = [dict(x) for x in conn.execute("SELECT username, type FROM notifications WHERE ref_id=?", (rec["record_no"],)).fetchall()]
+        notes = [dict(x) for x in conn.execute("SELECT username, type FROM notifications WHERE ref_id=?", ("custom:%s:%s" % (KEY, rec["record_no"]),)).fetchall()]
     finally:
         conn.close()
     assert {"username": "cm_mgr", "type": "approval"} in notes and {"username": "cm_req", "type": "info"} in notes
@@ -256,7 +256,7 @@ def test_custom_module_reject_revise_and_content_freeze(loan):
     conn = db.get_db()
     try:
         asks = conn.execute("SELECT COUNT(*) FROM notifications WHERE ref_id=? AND username='cm_mgr' AND type='approval'",
-                            (no,)).fetchone()[0]
+                            ("custom:%s:%s" % (KEY, no),)).fetchone()[0]
     finally:
         conn.close()
     assert asks == 1                                               # 退回之後不會再叫簽核人「待您簽核」
@@ -443,3 +443,51 @@ def test_custom_module_old_record_comes_with_its_own_definition(loan):
     m1 = client.get("/api/custom/%s/meta" % KEY, headers=h["req"], params={"version": 1}).json()
     assert m1["version"] == 1 and m1["definition"]["fields"][0]["label"] == "設備"
     assert client.get("/api/custom/%s/meta" % KEY, headers=h["req"], params={"version": 9}).status_code == 404
+
+
+
+# ── 「待我簽核」佇列（IP-10 `approval.queue_items`；主持前端缺口 #3）─────────────────
+
+def _queue(client, h):
+    return [it for g in client.get("/api/approval-queue", headers=h).json()["queue"] for it in g["items"]]
+
+
+def test_custom_module_records_show_up_in_the_approval_queue(loan):
+    client, h = loan
+    rec = _new(client, h)
+    no = rec["record_no"]
+    before = client.get("/api/approval-queue/count", headers=h["mgr"]).json()["count"]
+    client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, no), headers=h["req"], json={})
+    mine = [it for it in _queue(client, h["mgr"]) if it["type"] == "custom_record"]
+    assert [(it["quoteNo"], it["moduleKey"], it["moduleName"], it["statusLabel"]) for it in mine] ==         [(no, KEY, "測試用設備借用單", "簽核中")]
+    assert mine[0]["currentApprovers"][0]["username"] == "cm_mgr" and mine[0]["requestedBy"] == "cm_req"
+    assert client.get("/api/approval-queue/count", headers=h["mgr"]).json()["count"] == before + 1
+    assert not [it for it in _queue(client, h["other"]) if it["type"] == "custom_record"]     # 不在簽核鏈裡的人看不到
+    client.post("/api/custom/%s/records/%s/approve" % (KEY, no), headers=h["mgr"], json={})
+    assert not [it for it in _queue(client, h["mgr"]) if it["type"] == "custom_record"]       # 簽完就消失
+    assert client.get("/api/approval-queue/count", headers=h["mgr"]).json()["count"] == before
+
+
+def test_custom_module_queue_provider_failure_does_not_break_the_queue(loan, monkeypatch):
+    """反向控制：提供者丟例外 ⇒ 佇列與角標照常 200，只少自訂模組那一類。"""
+    client, h = loan
+    from core import registry
+    def _boom(conn):
+        raise RuntimeError("自訂模組讀不到")
+    monkeypatch.setitem(registry._LEGACY_PROVIDERS, ("approval.queue_items", "custom_modules"), _boom)
+    assert client.get("/api/approval-queue", headers=h["mgr"]).status_code == 200
+    assert client.get("/api/approval-queue/count", headers=h["mgr"]).status_code == 200
+
+
+def test_custom_module_notifications_carry_the_module_in_ref_id(loan):
+    """通知的 ref_id＝`custom:<模組>:<單號>`：前端據此開對的頁（單號本身不帶模組）。"""
+    client, h = loan
+    rec = _new(client, h)
+    client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    import db
+    conn = db.get_db()
+    try:
+        refs = {r[0] for r in conn.execute("SELECT ref_id FROM notifications WHERE username='cm_mgr'").fetchall()}
+    finally:
+        conn.close()
+    assert "custom:%s:%s" % (KEY, rec["record_no"]) in refs
