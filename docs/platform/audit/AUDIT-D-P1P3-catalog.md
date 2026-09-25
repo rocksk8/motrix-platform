@@ -115,3 +115,17 @@
 | P-S3 | | | |
 | P-S4 | | | |
 | P-O1～O3 | | | |
+
+### D 確認（2026-09-26 04:37；對象：origin/wip/x-p1p3-fix `5ddb0265`，修正 `6cacd083` 等）
+
+回覆欄在分支上；D 把確認寫在這裡，合併時不會與回覆欄的表格衝突。在 5ddb0265 上，`test_platform_catalog.py` **84 passed**。
+
+| # | D 確認 | 證據 |
+|---|---|---|
+| P-M1 | ✅ 關閉 | 唯一入口 `catalog.layout_points`／`check_layout`，過濾只在 `_module_points`。D 突變 PX1（藏起的點照樣給）⇒ 6 紅，含 D 原探針落成的題；PX2（選單不去掉藏起的按鈕）⇒ `test_menu_drops_hidden_buttons` 等 2 紅；PX5（模組篩選失效）⇒ `test_unloaded_module_points_are_rejected` 紅 |
+| P-M2 | ✅ 關閉 | D 突變 PX3（只檢查有沒有清單、不檢查選的版型在不在裡面）⇒ `…[選不存在的版型]` 紅 |
+| P-S1 | ✅ 接受 | 依回覆（S1b～S1e 紅，S1a 等價突變附理由） |
+| P-S2 | ✅ 關閉 | D 突變 PX4（拿掉 OP_KEYS 的鍵檢查）⇒ 4 紅 |
+| P-S3、P-S4、P-O1～O3 | ✅ 接受 | 突變清單已落地 `_mutations_p1p3.md`；O2 定案寫進 CUSTOMIZATION-SPEC §3.9 |
+
+⇒ 本檔必修全部關閉；修正在列車上合回後生效。
