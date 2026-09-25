@@ -93,6 +93,10 @@
 - **這一輪要做（使用者 2026-09-26 裁示）**：其他蒐集個資的表單（客戶聯絡人等）加個資告知，沿用 R3，在 D7 前完成；負載允許時派子代理。P1＋P3 也等負載降下來再派（使用者裁示）。
 - **信件收件設定＋用語正式化**（使用者 2026-09-26，見 CORE-SPEC 裁示表）：派給 A（email_notify、notification_prefs 的作者），排在 wip/a-bonus 合回之後、D7 之前。
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；privacy_notice_acks 在 M04 搬遷時改用模組自己的表。
+- **D1 階段 B 模組搬遷分工**（2026-09-26 03:30，使用者裁示「轉移優先」；每個模組都照 PLAYBOOK §B，搬完記選題比例（D1b），上月台）：
+  - A：M12 每日任務（進行中，wip/a-m12）→ M10 → M03 → M08 → M01
+  - C：M02 crm／dev_crm（進行中，wip/c-m02）→ M04 → M05 → M06 → M07
+  - 搬遷順序依 ROADMAP 階段 B 的相依；兩邊要動同一個 L1 helper 時，先在 RUN-PLAN §6 講一聲再動
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
   - C｜`wip/c-d7`｜afccc3b8｜tests/platform＋test_upgrade_drill＋test_states_data_ops：623 過（-m not e2e）｜🔴 動到 L0（`core/upgrade.py`：RUNTIME_STATE_SETTINGS，D7 預演抓到的升級阻擋點）；fixture 層／main.py：無；CHANGELOG 段落暫用號，core_bump 已在本地套用（列車上請再依 origin 重新取號）｜⛔ **退回（2026-09-26 03:05）：D 必修 K-M1**，完整回滾沒有驗到用第一份備份還原成原始的 V9 庫；修好後重新登記
   - C｜`wip/c-p2-legal`（第二批：P8 缺口 #3～#7、P2 開票憑據稅別依據、勞報單版型化＋R3 告知、簽核條件 fail-safe）｜bec40ee5｜全量在 5b59af54 前一版：非 e2e 4100 過 1 紅（本包自己的 legal_params 守門：預覽樣本寫死費率，已於 5b59af54 修）、e2e 394 過；rebase 後合回閘門（tests/platform＋自訂模組／定義庫／版型／勞報單／稅別／法規／待我簽核佇列題＋稅別、法規、簽核、獎金佇列 e2e，-n 2、低優先權）：864 過｜fixture 層／main：無；L1 新增（CORE 暫取 1.14，列車上依 origin 再取號）；串接點改編 **IP-10** `approval.queue_items`（IP-8／IP-9 已由獎金分潤使用）；版本紀錄 2026-09-26d／e（案件管理/財務憑證、外包名冊）
@@ -112,6 +116,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 03:30：C 的 p2-legal（第二批）上月台；c-d7 修好 K-M1，預演第 5 次 11 步全過，第一份備份完整回滾後邏輯內容等於原始庫，排在閘門後上月台。撞號提醒：IP-10（C 的 approval.queue_items 與 A 的 daily.check）、版本紀錄 26d（第一班列車已經給勞報單用了）⇒ 下一班車統一重排。§5 補上階段 B 分工。
 - 2026-09-26 03:29：D 完成 ⑥～⑧：a-bonus 必修 0（建議 2）；a-mail 必修 1（M-M1 只缺題目、行為正確 ⇒ 不下車，A 另開小包補）；C1 必修 1（P-M1：模組可以把 L1 頁面宣告成自己的，停用後登入頁會 404 ⇒ 交給 B）。D 的新佇列：⑨ D1b 選題、⑩ M12、⑪ P8 前端。
 - 2026-09-26 03:28 D：⑥ A 的獎金＋U4（`AUDIT-D-A-bonus-U4.md`，已合回，改為合回後稽核）：必修 0；主持點名三點都成立；建議 A-S1（全年累計只算已發放沒有題目）、A-S2（投保金額設定整份覆寫，壞 JSON 時會清光）。⑥～⑧ 與 d7 全部完成。
 - 2026-09-26 03:21 D：⑧ B 的 C1 稽核（`AUDIT-D-B-C1-pages.md`）：必修 P-M1——模組 manifest 可把 L1 頁面（login.html）宣告成自己的，模組停用後登入頁回 404 提示頁（探針實證），建議 L1 頁面明確清單＋衝突拒絕。O5：等待點 /index.html 不經 core.pages、登入鎖定每題重設 ⇒ 無關聯證據；下次抓 /api/auth/login 兩次耗時。
