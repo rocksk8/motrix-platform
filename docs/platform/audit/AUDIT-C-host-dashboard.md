@@ -80,8 +80,26 @@
 | A-2 | 修正。PHF 回傳 `installDrive`；evaluate_health 只看安裝碟；拿不到碟代號或清單裡沒有那一顆 ⇒ 不放行。新增 3 題；突變：改回寫死 C ⇒ 紅 | 同上 || ✅ 關閉。實測：installDrive=D 且 D: 0.1 GB ⇒ problem；缺 installDrive ⇒ problem「拿不到安裝目錄所在的磁碟代號」 |
 | A-3 | 修正。PHF 開頭設定 `[Console]::OutputEncoding` 為 UTF-8；測試刻意先把主控台設成 cp932 再跑。突變：拿掉那一行 ⇒ 紅 | 同上 || ✅ 關閉。C 的環境（cp932）health_facts 全綠；突變拿掉 OutputEncoding 那一行 ⇒ 紅（C 實測，已還原） |
 | B-1 | 修正。補兩題：deploy 逾時不中止並且需要解除、deploy 成功路徑寫入成功歷史；另外補「沒有逾時的工作不可以解除鎖定」 | 同上 || ✅ 關閉。`test_deploy_dashboard_jobs` 59 題中含 deploy 逾時不中止／成功路徑／未逾時不可解除 |
-| B-2 | 修正。`POST /api/upgrade/session/reset-corrupt`：要寫原因，原檔改名封存為 `upgrade_session.corrupt-<時間>.json`（不刪），記歷史；頁面只有在讀不懂時才顯示這顆按鈕 | 同上 || ⚠ 程式 ✅（reset-corrupt 封存不刪、要原因、記歷史）；**RUNBOOK 未寫**（回覆說要寫：`UPGRADE-RUNBOOK.md` 目前沒有「讀不懂的升級紀錄」與「逾時後解除鎖定」的處置）⇒ 維持開啟，補上 RUNBOOK 兩段後關閉 |
+| B-2 | 修正。`POST /api/upgrade/session/reset-corrupt`：要寫原因，原檔改名封存為 `upgrade_session.corrupt-<時間>.json`（不刪），記歷史；頁面只有在讀不懂時才顯示這顆按鈕 | 同上 || ⚠ 維持開啟（C 複核 30aedef8 的 RUNBOOK §6b）：兩段已寫，但有 2 處會誤導操作者，見下方 B-2a／B-2b |
 | B-3 | 採納。新增 `timeout` 狀態（`_final_status`）；頁面在 succeeded、failed、timeout 三種狀態都會停止輪詢 | 同上 || ✅ 關閉（`_final_status`，timeout 與 failed 分開） |
 | C-1 | 修正。新鮮度以「資料夾日期的隔天 0 點」為上限；補一題 | 同上 || ✅ 關閉（新鮮度上限＝資料夾日期隔天 0 點） |
 | C-2 | 不在這次範圍：伺服器端步驟順序屬於 STATES S-CU08（中），列在階段 S | — || ✅ 同意移出本次（S-CU08，階段 S） |
 | C-3 | 修正。「結束這一輪」按鈕旁加上提醒：結束後就不能再對這一份備份做回滾，回滾完成前不要結束 | 同上 || ✅ 關閉（頁面提醒） |
+
+### B-2 複核（C，2026-09-25，對 `30aedef8` 的 UPGRADE-RUNBOOK §6b）
+
+- **B-2a（必修，文件錯）**：§6b ① 第 3 點寫「檔案存在並寫完，代表那一步其實已經完成」。這句是錯的，三個檔在失敗時也會寫：
+  - `backup_verify.json`：不論試還原成敗都寫（`tools/platform/upgrade.py:111`，內容是 `{"problems": [...]}`）。
+  - `conversion_log.json`：migration 失敗時也寫（`:131`，內容 `migrate.ok=false`）。
+  - `verify_log.json`：不論成敗都寫（`:157`）。
+
+  正確的判讀方式：
+  - `backup_verify.json` 的 `problems` 是空的；
+  - `conversion_log.json` 的 `migrate.ok` 是 true，**而且**有 `settings_added` 鍵（只有成功路徑才寫，`:133-134`）；
+  - `verify_log.json` 的 `problems` 是空的。
+
+  照原文判讀的後果：migration 失敗的轉換會被當成「已完成」，然後接著做下一步。
+- **B-2b（必修，指令錯）**：§6b ② 第 4 點的 `upgrade.py rollback --backup-dir <原本的 BK>` 少了必要參數，照打會被 argparse 擋下。正確是 `python <NEW>/tools/platform/upgrade.py rollback --root <ROOT> --backup-dir <原本的 BK> --mode code`，或 `--mode full --yes`，見 §6。
+- 其餘內容 ✅：
+  - 逾時不重按；先看 log 與行程，確認停下後才解除，並寫原因。
+  - 讀不懂時不開新的一輪；封存、不刪；回滾沒做完就改在正式機手動執行。
