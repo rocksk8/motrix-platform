@@ -185,6 +185,9 @@ def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_serve
         ("vendor-contractors.html?id=%d" % ids["vendor_contractors"], "MP1承攬商",
          "vendor_contractors%%3A%d" % ids["vendor_contractors"]),
     ]
+    from core import source_tree
+    if not source_tree.module_installed("modules/supply/"):     # 供應商頁屬 M03：不在時是提示頁（PLAYBOOK §B-11）
+        cases = [c for c in cases if not c[0].startswith("suppliers.html")]
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1366, "height": 900})
     block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）

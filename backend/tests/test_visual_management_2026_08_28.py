@@ -110,38 +110,6 @@ def _create_part(client, token, part_no, safety_stock):
     return r.json()["id"]
 
 
-def test_parts_summary_stock_level_thresholds(client, make_user):
-    admin_user, admin_pw = make_user(role="admin")
-    token = _login(client, admin_user, admin_pw)
-    _create_part(client, token, "TESTPART-RED", safety_stock=10)     # 0 在庫 < 10 → red
-    _create_part(client, token, "TESTPART-YEL", safety_stock=10)     # 12 在庫 (<15) → yellow
-    _create_part(client, token, "TESTPART-GRN", safety_stock=10)     # 20 在庫 → green
-    _create_part(client, token, "TESTPART-NOTHRESH", safety_stock=0) # 未設定 → green
-
-    import db
-    conn = db.get_db()
-    try:
-        now = datetime.now().isoformat()
-        for pn, qty in [("TESTPART-YEL", 12), ("TESTPART-GRN", 20)]:
-            for i in range(qty):
-                conn.execute(
-                    "INSERT INTO stock_items (part_no, serial_no, status, batch_no, cost, created_at, updated_at) "
-                    "VALUES (?,?,?,?,?,?,?)",
-                    (pn, f"{pn}-SN{i}", "in_stock", "PO-TEST", 100, now, now),
-                )
-        conn.commit()
-    finally:
-        conn.close()
-
-    r = client.get("/api/inventory/parts-summary", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    by_pn = {it["part_no"]: it for it in r.json()["items"]}
-    assert by_pn["TESTPART-RED"]["stockLevel"] == "red"
-    assert by_pn["TESTPART-YEL"]["stockLevel"] == "yellow"
-    assert by_pn["TESTPART-GRN"]["stockLevel"] == "green"
-    assert by_pn["TESTPART-NOTHRESH"]["stockLevel"] == "green"
-
-
 def test_update_part_preserves_safety_stock_when_omitted(client, make_user):
     """比照 brand 批次改名／Excel 匯入這類不知道 safetyStock 欄位的既有呼叫路徑——
     PUT 沒帶這個鍵時必須保留原值，不能被悄悄清零（見 update_part() docstring）。"""

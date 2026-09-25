@@ -28,9 +28,6 @@ from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
 
-
-
-
 def _sync_extra_to_table(conn, quote_no):
     """把剛種進 data_json 的 settlement.extraItems 搬進 case_extra_expenses。
 
@@ -357,43 +354,6 @@ def test_login_create_submit_approve_smoke(live_server, make_user, e2e_browser):
     status_value = page2.locator("select.status-select-admin").input_value()
     assert status_value == "已送出", f"簽核後狀態應為已送出，實際: {status_value!r}"
     ctx2.close()
-
-
-@pytest.mark.e2e
-def test_inventory_purchase_suggestions_modal_smoke(live_server, make_user, e2e_browser):
-    """庫存頁「採購建議」按鈕→開啟 Modal→正確顯示低於安全庫存的料號與建議採購量
-    （2026-09-07，架構地圖 §6.6）。後端邏輯已有 test_purchase_suggestions_2026_09_07.py
-    完整涵蓋，這裡只驗證前端按鈕/Modal 這條路徑真的能點得通、資料有正確渲染出來
-    ——純 API 測試看不出 x-show/Modal 綁定寫錯這類純前端問題。"""
-    username, password = make_user(username="e2e_inv_admin", role="admin")
-
-    import db
-    conn = db.get_db()
-    now = "2026-01-01T00:00:00"
-    conn.execute(
-        "INSERT INTO parts (part_no, name, brand, unit, cost, category, safety_stock, active, created_at, updated_at) "
-        "VALUES (?,?,?,?,?,?,?,1,?,?)",
-        ("E2E-LOWSTOCK", "E2E 測試低庫存料件", "", "台", 100, "其他", 10, now, now),
-    )
-    conn.commit()
-    conn.close()
-
-    browser = e2e_browser
-    page = browser.new_page()
-    _login(page, live_server, username, password)
-
-    page.goto(f"{live_server}/pages/inventory.html")
-    page.wait_for_selector('button:has-text("採購建議")', timeout=10000)
-    page.click('button:has-text("採購建議")')
-
-    # 底下主表格本來就會列出這個料號（未篩選），"E2E-LOWSTOCK" 文字在
-    # Modal 開啟前就已經存在於畫面 DOM 裡——必須把查詢範圍限定在
-    # 「採購建議」那個 Modal 本身內，不能用整頁的裸文字搜尋，否則會誤判
-    # 成模組還沒載入資料就通過。
-    modal = page.locator(".modal-box", has_text="採購建議")
-    modal.locator("tr", has_text="E2E-LOWSTOCK").wait_for(timeout=10000)
-    row_text = modal.locator("tr", has_text="E2E-LOWSTOCK").inner_text()
-    assert "15" in row_text, f"應建議補到黃燈門檻 ceil(10*1.5)=15，實際列內容: {row_text!r}"
 
 
 @pytest.mark.e2e

@@ -19,7 +19,8 @@ NEW_KEYS = ("approvedBy", "approvedByDisplay", "onBehalfOf")
 CALLERS = ["completion_notes.py", "contractor_vouchers.py", "invoice_vouchers.py",
            "payment_requests.py", "quotations.py", "shipping_notes.py"]
 #: 端點檔在 L2 模組裡的（檔名 → 模組路徑）：模組不在這個安裝包時不算（PLAYBOOK §B-11）
-CALLER_MODULES = {"contractor_vouchers.py": "modules/subcontract/api/contractor_vouchers.py"}
+CALLER_MODULES = {"contractor_vouchers.py": "modules/subcontract/api/contractor_vouchers.py",
+                  "shipping_notes.py": "modules/supply/api/shipping_notes.py"}
 
 
 def _old_cascade_self_tiers(tiers, ct_idx, username, now, conn=None):
@@ -108,7 +109,7 @@ def test_all_six_document_types_go_through_the_shared_helper():
             continue
         src = files[f].read_text(encoding="utf-8")
         assert re.search(r"cascade_self_tiers\(", src), f
-    xe = (root / "case_extra_expenses.py").read_text(encoding="utf-8")
+    xe = (root / "routers" / "case_extra_expenses.py").read_text(encoding="utf-8")
     assert xe.count("cascade_self_tiers(") == 2 and "tier_completes_on_first" not in xe
 
 

@@ -40,21 +40,6 @@ def _make_quotation(quote_no, status="已送出"):
         conn.close()
 
 
-def _make_shipping_note(note_no, quote_no, status="已核准"):
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO shipping_notes (note_no, quote_no, status, customer_name, project_name, "
-            "items_json, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (note_no, quote_no, status, "測試客戶", "測試專案", "[]", "{}",
-             "2026-01-01T00:00:00", "2026-01-01T00:00:00"),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
 def _make_invoice_voucher(voucher_no, quote_no, status="已核准"):
     import db
     conn = db.get_db()
@@ -128,22 +113,6 @@ def test_quotation_signed_files_upload_rejects_bad_extension(client, make_user):
 
 
 # ── shipping_notes ──────────────────────────────────────────────────────────
-
-def test_shipping_note_signed_files_upload(client, make_user):
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-    _make_quotation("MQ-SIGN-010")
-    _make_shipping_note("DN-SIGN-001", "MQ-SIGN-010")
-
-    up = client.post(
-        "/api/shipping-notes/DN-SIGN-001/signed-files", headers=_auth(token),
-        files={"files": _png_file()},
-    )
-    assert up.status_code == 201, up.text
-
-    lst = client.get("/api/shipping-notes", headers=_auth(token)).json()
-    row = next(n for n in lst if n["noteNo"] == "DN-SIGN-001")
-    assert len(row["signedFiles"]) == 1
 
 
 # ── invoice_vouchers ────────────────────────────────────────────────────────

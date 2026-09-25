@@ -270,6 +270,10 @@ def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser)
     from core import source_tree
     if not source_tree.module_installed("modules/subcontract/"):
         pytest.skip("黃金錄製含外包工班（M04）的派工分頁；模組不在這個安裝包時分頁列本來就不同（PLAYBOOK §B-11）")
+    if not source_tree.module_installed("modules/supply/api/shipping_notes.py"):
+        # golden 錄於「採購・庫存・出貨在」的狀態（出貨分頁有單據與筆數）；模組不在時該分頁改顯示說明，
+        # 那一段由 tests/test_e2e_case_without_supply_2026_09_26.py 驗（PLAYBOOK §B-11）
+        pytest.skip("golden 錄於 M03 在的狀態；M03 不在時的案件頁由 test_e2e_case_without_supply 驗")
     got = _record(live_server, make_user, e2e_browser=e2e_browser)
     if os.environ.get("GOLDEN_WRITE") == "1":
         GOLDEN.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
