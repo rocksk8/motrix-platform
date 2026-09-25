@@ -63,6 +63,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-25 21:50 巡視：沒有新的合回。B 在 .venv 上跑全量（死線 22:01），C 做 P2。D6 覆蓋缺口：§9d 原本分給 A 的（9b／paths／個資）與分給 B 的（IP-1～4／row_access）還沒有稽核 ⇒ 各派一個獨立代理。IMPROVEMENT-REPORT 骨架已建（覆蓋表）。
 - 2026-09-25 21:40 B：專案 .venv 做好（Python 3.13.3，wip/b-venv 210ef6b3）。乾淨環境抓到三個缺口：httpx2、cv2／numpy 沒列在 requirements，以及 BK19 誤擋 .venv 的 __pycache__；都已補齊。新守門 test_requirements_cover_imports；project_env check 會比對 prod_env.json（正式機環境還沒取得，見 U10）。發現：hermes 是 starlette 1.0.1，.venv 是 1.7 ⇒ 過去一直在舊版上測。全量 21:35 開跑，死線 22:01，全綠就合回，接著做 ④ P7。
 - 2026-09-25 21:28 合回：C 批次（fceaadde，CORE_VERSION 1.3）、主持 D3 選配打包（0d55250f）、U10 正式機 Python 版本（507a76ea）。D6 稽核：A 已退役 ⇒ 新代理（獨立 worktree）審 A 的 9c 與 C 批次 1；C 在 P2 之後審 B 的 G1～G4／9c①與主持 D3／D5。
 - 2026-09-25 21:19 合回：A 的 9c 模組啟停與授權（c45d6227）、B 的 G1～G4 準則守門（66f7dd60）、主持的 D5 正式機模組狀態（a64cdcd3）、BENCHMARK（50af9d35）⇒ 階段 R＋U4～U9。A 視窗交接（上下文長），② 改派新代理；法規 R1～R3 由另一個代理進行。C 整串全量進行中（死線 21:45）；B 9c① 演練完成、待合回。
