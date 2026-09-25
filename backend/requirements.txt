@@ -1,3 +1,6 @@
+# Supported Python: >= 3.11 (lower bound only, no upper bound -- user ruling 2026-09-25:
+# do not tie the system to one Python version). Tested on 3.11, 3.12, 3.13.
+# Keep the same number in tools/platform/project_env.py PYTHON_MIN.
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
 python-multipart>=0.0.9

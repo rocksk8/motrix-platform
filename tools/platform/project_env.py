@@ -18,8 +18,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve()
 REPO = HERE.parents[2]
-#: 專案環境的資料夾名（主工作樹底下）。2026-09-25：正式機是 3.12 ⇒ .venv312；舊的 .venv（3.13）已損壞，待主持通知後處理
-VENV_DIR = ".venv312"
+import os
+
+#: 專案環境的資料夾名（主工作樹底下）；可用環境變數 MOTRIX_PROJECT_VENV 指定別的受測版本（例：.venv313）。
+#: 2026-09-25 使用者裁示「Python 版本不綁定」：.venv312 只是其中一個受測版本，不是規格。
+VENV_DIR = os.environ.get("MOTRIX_PROJECT_VENV") or ".venv312"
+#: 支援的 Python 下限（只設下限、不設上限；已實測 3.11／3.12／3.13）。同一個數字寫在 backend/requirements.txt 註解。
+PYTHON_MIN = (3, 11)
 #: 比對時一定要看的套件（產品執行期）
 KEY_PACKAGES = ("fastapi", "starlette", "uvicorn", "pydantic", "pydantic-core", "cryptography", "webauthn",
                 "openpyxl", "pypdf", "pillow", "boto3", "pyotp", "qrcode", "python-multipart")
@@ -73,12 +78,18 @@ def parse_prod_env(data):
     return {"python": py, "packages": {_norm(k): v for k, v in pk.items()}}
 
 
+def in_supported_range(version):
+    """版本字串是否 ≥ PYTHON_MIN（沒有上限）；讀不懂 ⇒ False。"""
+    nums = [int(x) for x in re.findall(r"\d+", version or "")[:2]]
+    return len(nums) == 2 and tuple(nums) >= PYTHON_MIN
+
+
 def compare(venv, prod):
-    """差異清單（空＝一致）。Python 比主次版號；套件比 KEY_PACKAGES 的完整版號。"""
+    """提示清單（空＝沒有要提示的）。**只提示、不擋**（使用者裁示：不綁 Python 版本）：
+    正式機版本不在支援範圍 ⇒ 警告；在範圍內 ⇒ 不比 Python 版本，只列關鍵套件版本差異。"""
     diffs = []
-    mm = lambda v: ".".join(v.split(".")[:2])
-    if mm(venv["python"]) != mm(prod["python"]):
-        diffs.append("Python：專案 %s ≠ 正式機 %s" % (venv["python"], prod["python"] or "（未知）"))
+    if not in_supported_range(prod["python"]):
+        diffs.append("⚠ 正式機 Python %s 不在支援範圍（≥%d.%d）" % (prod["python"] or "（未知）", *PYTHON_MIN))
     for k in KEY_PACKAGES:
         a, b = venv["packages"].get(k), prod["packages"].get(k)
         if a != b:
@@ -95,15 +106,17 @@ def cmd_check():
     if not prod_file.is_file():
         prod_file = main_worktree_root() / "backend" / "tools" / "prod_env.json"
     if not prod_file.is_file():
-        print("⚠ 還沒取得正式機環境（backend/tools/prod_env.json 不存在；使用者在儀表板按一次「部署前健康檢查」即產生）"
-              "\n  ⇒ 目前的測試結果只代表專案 .venv（%s），不代表正式機。" % venv_facts(py)["python"])
-        return 1
-    diffs = compare(venv_facts(py), parse_prod_env(json.loads(prod_file.read_text(encoding="utf-8-sig"))))
+        print("提示：還沒取得正式機環境（backend/tools/prod_env.json 不存在；使用者在儀表板按一次「部署前健康檢查」即產生）"
+              "\n  ⇒ 目前的測試結果代表專案環境 %s（Python %s）。" % (VENV_DIR, venv_facts(py)["python"]))
+        return 0
+    facts = venv_facts(py)
+    prod = parse_prod_env(json.loads(prod_file.read_text(encoding="utf-8-sig")))
+    diffs = compare(facts, prod)
+    print("專案 %s（Python %s）／正式機 Python %s" % (VENV_DIR, facts["python"], prod["python"] or "（未知）"))
     if diffs:
-        print("⚠ 專案 .venv 與正式機環境不一致：\n  " + "\n  ".join(diffs)
-              + "\n  ⇒ 用 project_env.py create --python <正式機主次版號> 重建，並把套件版本對齊。")
-        return 1
-    print("✓ 專案 .venv 與正式機環境一致（Python 主次版號＋%d 個關鍵套件）" % len(KEY_PACKAGES))
+        print("提示（不擋）：\n  " + "\n  ".join(diffs))
+    else:
+        print("✓ 正式機在支援範圍內；%d 個關鍵套件版本相同" % len(KEY_PACKAGES))
     return 0
 
 

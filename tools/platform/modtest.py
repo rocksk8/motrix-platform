@@ -272,6 +272,36 @@ def _remove_basetemp(p):
 
 #: 跑 pytest 用的直譯器：預設主工作樹的專案 .venv（照 requirements 安裝）；由 main() 決定
 PYEXE = None
+#: PLAYBOOK §C-13（2026-09-25 使用者回報 CPU 100%）：全量 -n 4 以下、差異題 -n 2 以下、低優先權
+FULL_MAX_WORKERS = 4
+PARTIAL_MAX_WORKERS = 2
+
+
+def cap_workers(extra, limit):
+    """extra 裡的 -n N 超過上限 ⇒ 壓到上限並說出來。回傳新的 extra。"""
+    out, i = list(extra), 0
+    while i < len(out):
+        a = out[i]
+        val, j = None, None
+        if a in ("-n", "--numprocesses") and i + 1 < len(out):
+            val, j = out[i + 1], i + 1
+        elif a.startswith("-n") and a[2:].isdigit():
+            val, j = a[2:], i
+        if val is not None:
+            n = limit if val in ("auto", "logical") else int(val) if val.isdigit() else None
+            if n is None or n > limit:
+                print("⚠ -n %s 超過 §C-13 上限，改為 -n %d" % (val, limit))
+                if j == i:
+                    out[i] = "-n%d" % limit
+                else:
+                    out[j] = str(limit)
+        i += 1
+    return out
+
+
+def _low_priority_flags():
+    """Windows：低優先權（子行程——xdist worker、瀏覽器——會繼承）。"""
+    return getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if os.name == "nt" else 0
 
 
 def resolve_python(explicit=None):
@@ -301,7 +331,8 @@ def run_pytest(targets, extra, window, full, collect_only=False):
             proc = subprocess.run(cmd, cwd=str(BACKEND), capture_output=True, text=True, encoding="utf-8",
                                   errors="replace")
             return proc.returncode, proc.stdout
-        proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                creationflags=_low_priority_flags())
         tail = []
         for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
             line = raw.decode("utf-8", errors="replace")
@@ -430,8 +461,9 @@ def run_full(extra, a):
         "python_version": subprocess.run([PYEXE or sys.executable, "-c", "import sys;print(sys.version.split()[0])"],
                                          capture_output=True, text=True).stdout.strip(),
     }
-    stages = [("main", ["-m", "not e2e", "-n", str(a.workers)], a.window),
-              ("e2e", ["-m", "e2e", "-n", str(a.e2e_workers)], a.window + "e2e")]
+    stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], FULL_MAX_WORKERS), a.window),
+              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], FULL_MAX_WORKERS), a.window + "e2e")]
+    extra = cap_workers(extra, FULL_MAX_WORKERS)
     codes = {}
     try:
         for name, args, window in stages:
@@ -466,8 +498,8 @@ def main(argv=None):
     g.add_argument("--files", nargs="+")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/.last_full.json")
-    ap.add_argument("--workers", type=int, default=6, help="--full 非 e2e 段的 xdist worker 數")
-    ap.add_argument("--e2e-workers", type=int, default=4, help="--full e2e 段的 xdist worker 數")
+    ap.add_argument("--workers", type=int, default=FULL_MAX_WORKERS, help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
+    ap.add_argument("--e2e-workers", type=int, default=FULL_MAX_WORKERS, help="--full e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
@@ -552,7 +584,7 @@ def main(argv=None):
     if not picked:
         print("沒有受影響的測試。")
         return 0
-    code, _ = run_pytest(picked, extra, a.window, full=False)
+    code, _ = run_pytest(picked, cap_workers(extra, PARTIAL_MAX_WORKERS), a.window, full=False)
     return code
 
 
