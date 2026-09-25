@@ -147,6 +147,7 @@ docs/ASK-ACCOUNTANT.md export-ignore
 # backend/tools/ 逐檔分類（SCOPE.md「backend/tools/ 逐檔分類」節，D 判、17 個
 # 排除／6 個保留／4 個需人裁決／1 個未歸類，17+6+4+1=28=git ls-files backend/tools/
 # 的總數，兩兩互斥且已核對過）——這裡只落地明確的「甲・排除」17 個：
+# （2026-09-25：其中 check_guide_sync.py、local_research_pipeline.py 隨選型遺棄刪除，現為 15 個）
 # 開發/打包/稽核工具，客戶自架不需要
 backend/tools/_dashboard_remote.ps1 export-ignore
 backend/tools/audit_account_permissions.py export-ignore
@@ -164,7 +165,6 @@ backend/tools/code_health.py export-ignore
 backend/tools/deploy_dashboard.html export-ignore
 backend/tools/deploy_dashboard.py export-ignore
 backend/tools/deploy_dashboard_ctl.pyw export-ignore
-backend/tools/local_research_pipeline.py export-ignore
 backend/tools/parse_account_items.py export-ignore
 backend/tools/sync_pending_data_20260817.py export-ignore
 

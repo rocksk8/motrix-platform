@@ -1237,10 +1237,12 @@ INTERNAL_DOC 那 5 個名字只是被歸進「(3b) 內部流程文件」這個**
    _dashboard_remote.ps1 ／ audit_account_permissions.py ／
    backfill_location_identity_snapshot.py ／ build_deploy_package.ps1 ／
    check_approval_queue_coverage.py ／ check_double_init.py ／
-   check_endpoint_entrypoints.py ／ check_guide_sync.py ／ check_prod_drift.ps1 ／
+   check_endpoint_entrypoints.py ／ check_prod_drift.ps1 ／
    check_version_sync.py ／ code_health.py ／
    deploy_dashboard.html ／ deploy_dashboard.py ／ deploy_dashboard_ctl.pyw ／
-   local_research_pipeline.py ／ parse_account_items.py ／ sync_pending_data_20260817.py
+   parse_account_items.py ／ sync_pending_data_20260817.py
+   📌 2026-09-25（platform，視窗 A）：check_guide_sync.py、local_research_pipeline.py 隨選型知識庫遺棄
+      已刪除（CORE-SPEC.md「使用者裁示」）⇒ 甲・排除現為 15、已追蹤檔案現為 26。上面的 17／28 是當時的分類，保留原樣。
 
 ✅ 保留（6）—— 客戶自架必要
    _healthcheck_ping.py ／ apply_update.ps1 ／ https_setup.ps1 ／
