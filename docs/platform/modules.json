@@ -248,7 +248,7 @@
     "contractors",
     "vendor_contractors"
    ],
-   "data": {"tables": [{"name": "contractors", "class": "T2", "f2_fields": ["id_card_image", "id_card_image_back", "bank_passbook_image"], "note": "base64 影像；一般每日 JSON 排除（V9 起已換成佔位字串）；完整列匯出到 系統存檔_個資/每日備份"}]},
+   "data": {"tables": [{"name": "contractors", "class": "T2", "f2_fields": ["id_card_image", "id_card_image_back", "bank_passbook_image", "id_number", "phone", "email", "address", "line_id", "bank_account_name", "bank_account_number"], "note": "一般每日 JSON 排除 F2 欄位；完整列匯出到 系統存檔_個資/每日備份"}]},
    "api_prefixes": [
     "/api/contractor-dispatches",
     "/api/contractor-vouchers",
@@ -339,7 +339,7 @@
     "payslip_seq",
     "payslips"
    ],
-   "data": {"files": [{"key": "payslip_archive", "class": "F2", "setting": "payslip_archive_path", "cloud": "系統存檔_個資/勞報單存檔（人預先建立，程式不建）"}], "tables": [{"name": "payslips", "class": "T2", "f2_fields": ["data_json.contractorIdNumber", "data_json.contractorAddress", "data_json.contractorPhone", "data_json.contractorEmail"], "note": "一般每日 JSON 排除 F2 欄位；完整列匯出到 系統存檔_個資/每日備份"}]},
+   "data": {"files": [{"key": "payslip_archive", "class": "F2", "setting": "payslip_archive_path", "cloud": "系統存檔_個資/勞報單存檔（人預先建立，程式不建）"}], "tables": [{"name": "payslips", "class": "T2", "f2_fields": ["data_json.contractorIdNumber", "data_json.contractorAddress", "data_json.contractorPhone", "data_json.contractorEmail", "data_json.contractorLineId", "data_json.bankAccountName", "data_json.bankAccountNumber"], "note": "一般每日 JSON 排除 F2 欄位；完整列匯出到 系統存檔_個資/每日備份"}]},
    "api_prefixes": [
     "/api/bonus",
     "/api/next-slip-no",

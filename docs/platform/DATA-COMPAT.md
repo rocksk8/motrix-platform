@@ -216,7 +216,7 @@
 | 2 | ~~承攬人員身分證／存摺影像 base64 每天進一般每日 JSON~~（C 18:3x 回報，**錯**） | ❌ 錯：V9 的 `_export_table_json_set` 已對每列做 `_strip_inline_images`（2026-09-14），影像換成佔位字串。C 只看了 `archive.py:1603` 的 `SELECT *`，沒看匯出函式 | 更正後的描述由主持轉給使用者並重新取得裁示 |
 | 2→ | 實際曝險：**整庫 `.db`** 每日／每月複製到一般 `系統存檔\每日備份`、`月備份`（含全部 F2 影像與 F3 祕密）；另 `payslips.data_json` 的身分證字號／地址／電話／Email 是純文字，會進一般每日 JSON | ✅ 裁示 (a)：整庫 `.db` 只放 `系統存檔_個資`；一般每日 JSON 排除 F2 欄位（`archive._F2_FIELDS`），完整列另存個資資料夾；還原以 `merge_general_and_pii` 合回（DR-SOP §3a）。V9 不修（使用者接受的風險，CORE-SPEC K2） | — |
 | 3 | 歷史雲端每日備份（已含整庫 `.db`） | 裁示：保留不動，不盤點、不刪除 | — |
-| 4 | `contractors` 的 `id_number`／`phone`／`email`／`address`／銀行帳號是純文字個資，**仍在一般每日 JSON**（裁示①只點名三個影像欄） | 未處理 | 與 `payslips.data_json` 的同類欄位處置不一致，需要使用者決定是否一併列為 F2 |
+| 4 | ~~`contractors` 的 `id_number`／`phone`／`email`／`address`／銀行帳號仍在一般每日 JSON，待裁示~~ | ✅ **已依使用者裁示①的範圍處理**：判斷依據＝裁示原文「含個資的表改備份到個資資料夾，一般備份排除」涵蓋所有個資欄位，不只三個影像欄（主持 2026-09-25 釐清）。F2＝`id_number`／`phone`／`email`／`address`／`line_id`／`bank_account_name`／`bank_account_number`＋三個影像欄；`payslips.data_json` 同步加 `contractorLineId`／`bankAccountName`／`bankAccountNumber`。銀行代碼／名稱／分行是機構資訊，不列入 | — |
 
 ## 7c. 實作進度（2026-09-25 第二輪）
 

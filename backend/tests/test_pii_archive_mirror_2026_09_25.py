@@ -114,15 +114,23 @@ _IMG = "data:image/jpeg;base64,/9j/SENTINEL_IMAGE_BYTES"
 _IDNO = "A123456789_SENTINEL"
 _TOTP = "TOTPSENTINELBASE32XX"
 _SMTP_PW = "smtp-sentinel-password"
+_C_IDNO, _C_PHONE, _C_MAIL = "B987654321_SENTINEL", "0911-CPHONE", "c-sentinel@example.invalid"
+_C_ADDR, _C_LINE, _C_ACCT = "承攬哨兵地址", "line-sentinel", "000123456789SENTINEL"
+#: 一般份（去個資）不可以出現的值——承攬人員與勞報單兩張表的全部 F2 欄位
+_F2_SENTINELS = (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "sentinel@example.invalid",
+                 _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, _C_ACCT, "哨兵戶名")
 
 
 def _seed_pii(conn):
-    conn.execute("INSERT INTO contractors (name, id_number, id_card_image, id_card_image_back, "
-                 "bank_passbook_image, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
-                 ("哨兵承攬", "B987654321", _IMG, _IMG, _IMG, "2026-09-25", "2026-09-25"))
+    conn.execute("INSERT INTO contractors (name, id_number, phone, email, address, line_id, "
+                 "bank_code, bank_account_name, bank_account_number, id_card_image, id_card_image_back, "
+                 "bank_passbook_image, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                 ("哨兵承攬", _C_IDNO, _C_PHONE, _C_MAIL, _C_ADDR, _C_LINE, "812", "哨兵戶名", _C_ACCT,
+                  _IMG, _IMG, _IMG, "2026-09-25", "2026-09-25"))
     data = {"slipNo": "PS-202609-009", "contractorName": "哨兵承攬", "contractorIdNumber": _IDNO,
             "contractorAddress": "哨兵地址", "contractorPhone": "0900-SENTINEL",
-            "contractorEmail": "sentinel@example.invalid", "grossAmount": 1000}
+            "contractorEmail": "sentinel@example.invalid", "contractorLineId": _C_LINE,
+            "bankAccountName": "哨兵戶名", "bankAccountNumber": _C_ACCT, "grossAmount": 1000}
     import json as _j
     conn.execute("INSERT INTO payslips (slip_no, contractor_name, data_json, created_at, updated_at) "
                  "VALUES (?,?,?,?,?)", ("PS-202609-009", "哨兵承攬", _j.dumps(data, ensure_ascii=False),
@@ -145,7 +153,7 @@ def test_general_rows_drop_f2_fields_and_merge_restores_the_original(client):
             original = _rows(conn, tables[fname])
             general = [archive._general_row(fname, dict(r)) for r in original]
             blob = str(general)
-            for bad in (_IMG, "data:image", _IDNO, "哨兵地址", "0900-SENTINEL", "sentinel@example.invalid"):
+            for bad in _F2_SENTINELS:
                 assert bad not in blob, (fname, bad)
             merged, missing = archive.merge_general_and_pii(fname, general, original)
             assert missing == []
@@ -205,7 +213,7 @@ def test_general_cloud_tree_has_no_db_no_f2_no_f3(client, isolated_archive, monk
     archive._daily_backup()
     archive._weekly_backup()
 
-    sentinels = (_IMG, "data:image", _IDNO, _TOTP, _SMTP_PW)
+    sentinels = _F2_SENTINELS + (_TOTP, _SMTP_PW)
     for path in _walk_files(isolated_archive):
         assert not path.endswith((".db", ".db-wal", ".db-shm")), "一般雲端目錄出現整庫檔：%s" % path
         with open(path, "rb") as fh:

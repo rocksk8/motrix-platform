@@ -1932,11 +1932,16 @@ def backed_up_table_names() -> set:
 # 還原：`merge_general_and_pii()` 把兩份合回原表（DR-SOP「個資欄位合回」）。
 # 守門：tests/test_pii_archive_mirror_2026_09_25.py（一般份不可出現 F2 欄位與 data:image）。
 _F2_FIELDS = {
+    # 範圍＝所有個人識別／聯絡／帳戶欄位（使用者裁示①「含個資的表改備份到個資資料夾，一般備份排除」，
+    # 主持 2026-09-25 釐清：不只三個影像欄）。銀行代碼／銀行名稱／分行是機構資訊，不列入。
     "承攬人員": {"table": "contractors",
-                 "columns": ("id_card_image", "id_card_image_back", "bank_passbook_image")},
+                 "columns": ("id_card_image", "id_card_image_back", "bank_passbook_image",
+                             "id_number", "phone", "email", "address", "line_id",
+                             "bank_account_name", "bank_account_number")},
     "薪資單":   {"table": "payslips",
                  "json": ("data_json", ("contractorIdNumber", "contractorAddress",
-                                        "contractorPhone", "contractorEmail"))},
+                                        "contractorPhone", "contractorEmail", "contractorLineId",
+                                        "bankAccountName", "bankAccountNumber"))},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
