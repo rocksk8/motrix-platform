@@ -164,6 +164,7 @@ modules/<key>/
 - 模組要能被選配，`module.json` 必須宣告 `version`、`core`、`pages`、`provides.api_prefixes`（演練依 api_prefixes 驗證端點在或不在）。
 - 守門：`verify_package.py` (7)＝`tools/platform/product_select.py check`（lock＝包內模組、版本與雜湊一致、L0／L1 必要檔齊全、`tools/platform/upgrade.py` 在包裡）；單元 `tests/platform/test_product_select.py`。
 - 演練：`python tools/platform/product_drill.py --pkg <包> --port <埠>`：暫存位置啟動、改掉臨時密碼、`/api/auth/me` 正對照、已安裝模組的端點與頁面 200、被排除的 404。
+  ⚠ 它是**端點煙霧測試**，不跑 pytest（稽核 P-2）。「該組合的測試」另外跑：full＝打包時的全量；其他產品＝在 worktree 刪掉被排除的模組後跑全部測試（只剩「modules.json 列了但掃描不到」那一題紅是預期的）。由演練工具自動跑組合測試，列在 ROADMAP。
 - ⚠ 未守門：頁面尚未搬進模組資料夾（階段 C）前，頁面是否屬於某模組只看 `module.json` 的 `pages` 宣告。
 
 ## 10. 模組更新包（P7，CUSTOMIZATION-SPEC §7）
