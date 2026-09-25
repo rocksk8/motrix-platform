@@ -13,6 +13,7 @@
 本檔不碰 FastAPI；HTTP 由 `routers/custom_records.py` 包。寫入的函式吃呼叫端的連線、自己 commit。
 """
 import json
+import math
 import re
 from datetime import date, datetime
 
@@ -77,6 +78,11 @@ def validate_module(body: dict, key: str = "") -> list:
     perm = body.get("permission", "custom.%s" % key)
     if not isinstance(perm, str) or not re.match(r"^[a-z][a-z0-9_.]{1,60}$", perm):
         out.append(_p("permission", "權限 key 格式不對：%r" % (perm,)))
+    else:
+        from helpers.module_registry import MODULE_KEYS
+        if perm in MODULE_KEYS:
+            # 稽核 D C-S4：設成內建 key（例 cashier）⇒ 擁有那個內建權限的人全部都能用這個自訂模組
+            out.append(_p("permission", "權限 key 不可以用內建模組的 key：%s（建議 custom.%s）" % (perm, key or "<模組>")))
     out += _validate_numbering(body.get("numbering"))
     fields = body.get("fields")
     if not isinstance(fields, list) or not fields:
@@ -85,7 +91,33 @@ def validate_module(body: dict, key: str = "") -> list:
     out += _validate_fields(fields)
     keys = [f.get("key") for f in fields if isinstance(f, dict)]
     out += _validate_workflow(body.get("workflow"), keys)
+    if not out:
+        out += _validate_by_sample(body)
     out += _validate_output(body)
+    return out
+
+
+def _validate_by_sample(body):
+    """稽核 D C-S1：語法檢查看不出型別錯誤（例 `item > 5`，item 是文字）。用樣本資料實際算一次公式與簽核條件，
+    出錯就在發布時指出位置；算出空值不算錯（執行時會照簽，見 _tier_applies）。"""
+    out = []
+    try:
+        vals = sample_values(body)
+    except Exception:                                        # noqa: BLE001 — 樣本本身組不出來就不做這一步
+        return out
+    for i, f in enumerate(body.get("fields", [])):
+        if isinstance(f, dict) and f.get("type") == "formula":
+            try:
+                _fx.evaluate(f.get("formula"), vals)
+            except _fx.FormulaError as e:
+                out.append(_p("fields[%d].formula" % i, "用樣本資料試算失敗：%s" % e))
+    for i, s in enumerate((body.get("workflow") or {}).get("states", [])):
+        for j, t in enumerate(((s or {}).get("approval") or {}).get("tiers", []) if isinstance(s, dict) else []):
+            if isinstance(t, dict) and t.get("when"):
+                try:
+                    _fx.evaluate(t["when"], vals)
+                except _fx.FormulaError as e:
+                    out.append(_p("workflow.states[%d].approval.tiers[%d].when" % (i, j), "用樣本資料試算失敗：%s" % e))
     return out
 
 
@@ -222,6 +254,20 @@ def _validate_workflow(wf, field_keys):
             if isinstance(tier, dict) and tier.get("when"):
                 for prob in _fx.check(tier["when"], field_keys):
                     out.append(_p(tp + ".when", "第 %d 字：%s" % (prob["pos"] + 1, prob["message"])))
+    # 稽核 D C-S3：起始狀態掛簽核不會生效（單據以起始狀態建立，不會展開簽核）⇒ 發布時擋下
+    if initial in by_key and by_key[initial][1].get("approval"):
+        out.append(_p("workflow.states[%d].approval" % by_key[initial][0], "起始狀態不可以掛簽核（建立單據時不會展開）；請另設一個送審後的狀態"))
+    # 稽核 D C-M3：簽核狀態的 on_approved 互相指向 ⇒ 條件都不成立時會一直自動通過（原本 RecursionError 500）
+    nxt = {k: (s.get("approval") or {}).get("on_approved") for k, (_i, s) in by_key.items() if s.get("approval")}
+    for start in sorted(nxt):
+        path, cur = [start], nxt[start]
+        while cur in nxt and cur not in path:
+            path.append(cur)
+            cur = nxt[cur]
+        if cur == start:
+            out.append(_p("workflow.states[%d].approval.on_approved" % by_key[start][0],
+                          "簽核狀態互相指向，形成循環：%s" % " → ".join(path + [start])))
+            break
     # 可達性：從起始狀態走得到每一個狀態；非終點狀態都要有出路
     if initial in by_key:
         seen, stack = {initial}, [initial]
@@ -326,6 +372,8 @@ def compute(body: dict, values: dict) -> tuple:
     for k in _fx.evaluation_order({k: f["formula"] for k, f in formulas.items()}):
         try:
             out[k] = _fx.evaluate(formulas[k]["formula"], out)
+            if isinstance(out[k], float) and not math.isfinite(out[k]):
+                raise _fx.FormulaError("結果不是有限的數字")
         except _fx.FormulaError as e:
             out[k] = None
             errors.append({"key": k, "message": "%s：公式無法計算（%s）" % (formulas[k].get("label") or k, e)})
@@ -335,13 +383,19 @@ def compute(body: dict, values: dict) -> tuple:
 _SAMPLES = {"text": "範例文字", "number": 1, "date": "2026-09-25", "checkbox": True}
 
 
-def sample_view(body: dict) -> dict:
-    """給輸出預覽與版型驗證用的樣本視圖（與 record_view 同形）。"""
+def sample_values(body: dict) -> dict:
+    """每個輸入欄位一個樣本值（依型別）＋公式算出的值。"""
     vals = {}
     for f in _input_fields(body):
         t = f.get("type")
         vals[f["key"]] = (f.get("options") or ["選項"])[0] if t == "select" else _SAMPLES.get(t, "範例")
     vals, _e = compute(body, vals)
+    return vals
+
+
+def sample_view(body: dict) -> dict:
+    """給輸出預覽與版型驗證用的樣本視圖（與 record_view 同形）。"""
+    vals = sample_values(body)
     numbering = body.get("numbering") or {"prefix": "X"}
     try:
         no = format_number(numbering, date(2026, 9, 25), 1)
@@ -385,12 +439,23 @@ def permission_of(module_key, body) -> str:
     return body.get("permission") or "custom.%s" % module_key
 
 
+def _finite(v):
+    """讀出時把非有限的數字換成空值（修正前可能已寫進 NaN／inf；JSON 不能序列化它們）。"""
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
+    if isinstance(v, dict):
+        return {k: _finite(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_finite(x) for x in v]
+    return v
+
+
 def _row(conn, module_key, record_no):
     r = conn.execute("SELECT * FROM custom_records WHERE module_key=? AND record_no=?", (module_key, record_no)).fetchone()
     if r is None:
         raise CustomModuleError("找不到單據 %s" % record_no, status=404)
     d = dict(r)
-    d["data"] = json.loads(d.pop("data_json") or "{}")
+    d["data"] = _finite(json.loads(d.pop("data_json") or "{}"))
     d["approval"] = json.loads(d.pop("approval_json") or "{}")
     return d
 
@@ -452,7 +517,7 @@ def list_records(conn, module_key, status=None, field=None, value=None, limit=20
     out = []
     for r in conn.execute(sql, args).fetchall():
         d = dict(r)
-        d["data"] = json.loads(d.pop("data_json") or "{}")
+        d["data"] = _finite(json.loads(d.pop("data_json") or "{}"))
         out.append(d)
     return out
 
@@ -479,6 +544,18 @@ def create_record(conn, module_key, values, user) -> dict:
     return rec
 
 
+def can_edit_draft(rec, body, user) -> bool:
+    """U14（使用者 2026-09-26 裁示）：草稿（起始狀態）只有建立者與超級管理員可以修改、送出；同權限的其他人只能看。"""
+    if rec["status"] != body["workflow"]["initial"]:
+        return False
+    return user.get("role") == "superadmin" or user.get("username") == rec.get("created_by")
+
+
+def _require_draft_owner(rec, body, user):
+    if rec["status"] == body["workflow"]["initial"] and not can_edit_draft(rec, body, user):
+        raise CustomModuleError("這張草稿只有建立者（%s）或超級管理員可以修改、送出" % rec.get("created_by"), status=403)
+
+
 def update_record(conn, module_key, record_no, values, user) -> dict:
     """只有在起始狀態（草稿）才能改；送出之後內容凍結。"""
     from core.txn import write_txn
@@ -487,6 +564,7 @@ def update_record(conn, module_key, record_no, values, user) -> dict:
         body = _load_def(conn, module_key, rec["def_version"])["body"]
         if rec["status"] != body["workflow"]["initial"]:
             raise CustomModuleError("單據已送出（%s），不能再修改內容" % rec["status"], status=409)
+        _require_draft_owner(rec, body, user)
         vals, errors, dropped = clean_values(conn, body, values)
         if errors:
             raise CustomModuleError("有 %d 個欄位不對" % len(errors), errors)
@@ -549,7 +627,11 @@ def _tier_applies(tier, data, notices) -> bool:
     return not (v is False or (isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0))
 
 
-def _enter_state(conn, body, rec, to_state, user, action, note, notices):
+#: 一次動作裡「自動通過」最多連跳幾個狀態（稽核 D C-M3：互相指向 ⇒ 無限遞迴 500）
+_MAX_AUTO_HOPS = 20
+
+
+def _enter_state(conn, body, rec, to_state, user, action, note, notices, _hops=0):
     """改狀態：寫紀錄、進入有簽核的狀態就展開簽核層；所有層的條件都不成立 ⇒ 直接當作通過。"""
     from helpers import tiered_approval as ta
     frm = rec["status"]
@@ -570,7 +652,10 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices):
             _log(conn, rec["id"], action, frm, to_state, user["username"], note)
             rec["status"] = to_state
             _published(body, rec, frm, to_state, action, user, notices)
-            return _enter_state(conn, body, rec, cfg["on_approved"], user, "auto_approve", "", notices)
+            if _hops >= _MAX_AUTO_HOPS:
+                raise CustomModuleError("流程設定有循環：簽核條件都不成立的狀態互相自動通過（超過 %d 次），請修正流程定義"
+                                        % _MAX_AUTO_HOPS, status=409)
+            return _enter_state(conn, body, rec, cfg["on_approved"], user, "auto_approve", "", notices, _hops + 1)
         approval = {"state": to_state, "tiers": active, "currentTier": 0, "requestedBy": rec["created_by"],
                     "requestedByDisplay": ta._display_name(conn, rec["created_by"]),
                     "requestedAt": datetime.now().isoformat(timespec="seconds")}
@@ -624,6 +709,7 @@ def transition(conn, module_key, record_no, tkey, user, note="") -> dict:
             raise CustomModuleError("目前狀態 %s 不能執行「%s」" % (rec["status"], t.get("label", tkey)), status=409)
         if rec["approval"] and _state(body, rec["status"]).get("approval"):
             raise CustomModuleError("簽核進行中，請用核准／退回", status=409)
+        _require_draft_owner(rec, body, user)
         if t.get("requester_only") and user["username"] != rec["created_by"] and user["role"] != "superadmin":
             raise CustomModuleError("只有申請人可以執行「%s」" % t.get("label", tkey), status=403)
         _enter_state(conn, body, rec, t["to"], user, tkey, note, notices)

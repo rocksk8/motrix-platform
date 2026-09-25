@@ -5,6 +5,7 @@
 欄位定義存在定義文件庫（core.definitions，kind＝custom_fields，key＝模組 key），有草稿與版本。
 送審時單據記下 `customFieldsVersion`（凍結）。
 """
+import math
 import re
 from datetime import date
 
@@ -65,8 +66,11 @@ def _coerce(f: dict, v):
             return False, None, "必須是數字"
         try:
             n = float(v)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return False, None, "必須是數字"
+        if not math.isfinite(n):
+            # 稽核 D C-M5："nan"／"inf" 會被 float() 收下 ⇒ 寫進資料庫之後整個列表都 500（JSON 不能序列化 NaN）
+            return False, None, "必須是有限的數字（不接受 NaN／無限大）"
         return True, (int(n) if n.is_integer() else n), ""
     if t == "date":
         try:
