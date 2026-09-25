@@ -2393,8 +2393,8 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         raise HTTPException(403, f"只有草稿狀態的報價單可以刪除（目前狀態：{row['status']}）")
     cname = row['customer_name'] or ''
     conn.execute("DELETE FROM quotations WHERE quote_no=?", (quote_no,))
-    # 轉建連結指到這張單的業務開發案件解除連結（IP-11 `crm.quote_deleted`，M02 提供；同一筆交易）。
-    # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-11「對方不在時」）。
+    # 轉建連結指到這張單的業務開發案件解除連結（IP-13 `crm.quote_deleted`，M02 提供；同一筆交易）。
+    # M02 不在 ⇒ 報價單照刪，回應 notice 明說連結沒有解除（INTEGRATION-POINTS IP-13「對方不在時」）。
     unlink = _registry.single_provider("crm.quote_deleted")
     orphaned = unlink(conn, quote_no) if unlink else []
     conn.commit()
@@ -2408,12 +2408,12 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
     notify_module_activity("報價單", "刪除", user.get("display_name") or user["username"],
                             f"{quote_no}（{cname}）", "quotations.html")
     if unlink is None:
-        logger.warning("報價單 %s 已刪除；業務開發模組未安裝 —— 轉建連結未解除（IP-11）", quote_no)
+        logger.warning("報價單 %s 已刪除；業務開發模組未安裝 —— 轉建連結未解除（IP-13）", quote_no)
         return {"ok": True, "notice": QUOTE_DELETED_CRM_ABSENT}
     return {"ok": True}
 
 
-#: IP-11 對方不在時的說明（測試與畫面共用同一句）
+#: IP-13 對方不在時的說明（測試與畫面共用同一句）
 QUOTE_DELETED_CRM_ABSENT = "業務開發模組未安裝：若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除"
 
 

@@ -68,7 +68,7 @@
      ✅ 2026-09-26：勾選／取消勾選／刪除各自一句（「未建立」「未收回」），案件頁以提示顯示（e2e `test_e2e_case_stage_daily_task_notice_2026_09_26.py`）。〔更正（主持裁示 2026-09-26）：原句「不留舊任務與 id」不採用——M12 不在時 M01 不可以寫 M12 的表，任務本來就收不回；id 保留，M12 裝回後再勾選會收斂到同一筆〕
    - ⏳ `helpers/system_checks.run_all` 六項檢查沒有逐項隔離：第一項丟例外，其餘當天都不跑（搬遷前就是這個寫法；AUDIT-D-A-M12-move S-4）。修法：每一項各自 try，補「第一項丟例外，其餘照跑」一題
 3. M10 網路規劃 — ✅ A 2026-09-26 搬進 `modules/netplan`（wip/a-m10，第四班列車）。對 M01 的相依走 IP-12 `case.access`；C 的案件存取下沉 L1 合回後，IP-12 只剩讀案件名稱（summary）
-4. M02 業務開發 — ✅ 後端完成（C，2026-09-26，`modules/crm`）：IP-11 `crm.quote_deleted` 取代 M01 直寫 `dev_cases`；反向控制（刪掉模組資料夾）：啟動 ping 200、三個前綴 404、報價單照刪並回 notice。剩：他模組直接讀 `dev_cases`／`dev_logs`（讀取連接器另開題）、停滯檢查直寫 `audit_log`、頁面（階段 C）
+4. M02 業務開發 — ✅ 後端完成（C，2026-09-26，`modules/crm`）：IP-13 `crm.quote_deleted` 取代 M01 直寫 `dev_cases`；反向控制（刪掉模組資料夾）：啟動 ping 200、三個前綴 404、報價單照刪並回 notice。剩：他模組直接讀 `dev_cases`／`dev_logs`（讀取連接器另開題）、停滯檢查直寫 `audit_log`、頁面（階段 C）
 5. M04 外包工班 — 需要 A6
 6. M05 應收應付 — 需要 A6、A8
 7. M06 會計 — 需要 A7、A8

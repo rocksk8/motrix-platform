@@ -192,25 +192,6 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-11　`crm.quote_deleted`：報價單刪除時解除業務開發案件的轉建連結（M02 → M01）
-
-對應 DEPENDENCY-MAP §4 `dev_cases`（M02 搬遷，2026-09-26）。原本 `routers/quotations.py` 刪報價單時直寫 M02 的 `dev_cases`。編號為暫定：同時期 C 的 `approval.queue_items`、A 的 `daily.check` 也各自暫用 IP-10，由列車依合回順序定號。
-
-| 欄位 | 內容 |
-|---|---|
-| 提供方 | M02 業務開發：`modules/crm/api.py::unlink_deleted_quote`（`ModuleSpec.providers`，模組未載入即不登記） |
-| 使用方 | M01 `routers/quotations.py::delete_quotation`（只刪草稿） |
-| 形式 | provider，單一提供者（`core.registry`）；要與刪報價單同一筆交易 ⇒ 不用事件 |
-| 語法 | 提供：`ModuleSpec(providers={("crm.quote_deleted", "crm"): api.unlink_deleted_quote})`<br>取用：`unlink = registry.single_provider("crm.quote_deleted")`；`None` ⇒ 退化。`unlink(conn, quote_no) -> [{"id", "case_name"}]` |
-| 回傳 | 被解除連結的案件（`converted_quote_no` 清空、狀態退回「洽談中」）。**在呼叫端的連線上寫、不 commit**；稽核 `dev_case.unlink_deleted_quote` 由 M01 以操作者身分寫 |
-| 對方不在時 | 報價單**照刪**；案件不動（M02 不在時畫面本來就看不到這些案件）；回應 `notice`＝`routers/quotations.QUOTE_DELETED_CRM_ABSENT`（「若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除」）；記 WARNING。不丟例外 |
-| 契約版本 | 1（2026-09-26） |
-| 守門 | 提供方（隨模組搬走）`backend/modules/crm/tests/test_crm_quote_deleted_provider.py`：①M02 已登記 ②**正對照**：刪草稿 ⇒ 連到它的案件解除、別張單的案件不動、稽核一筆；取用方（M02 不在也成立）`backend/tests/platform/test_crm_quote_deleted_connector.py`：③**反向控制**：拿掉提供者 ⇒ 200、`notice` 明說、案件不動、WARNING ④產品碼除了 M02 與凍結 migration 沒有寫 `dev_cases`／`dev_logs` 的 SQL；`table_write_exceptions.json` 對應 debt 已刪；畫面：`test_e2e_quote_delete_crm_absent_notice_2026_09_26`（M02 不在 ⇒ 報價清單顯示 notice；在 ⇒ 只有「報價單已刪除」） |
-
-**尚未處理**：`dev_cases`／`dev_logs` 仍被 L1（全站搜尋、未讀標記、行事曆標題、封存匯出、稽核目標檢查）與 M01（報價單動態）、M08（儀表板）**直接讀**。M02 不在時表仍在（凍結 migration 建立），讀取不會壞，可見性經 `row_access`（未登錄 ⇒ fail closed，連 admin 也看不到）；要切斷須由 M02 提供讀取連接器，另開題（DEPENDENCY-MAP §3 #2／#5／#6）。
-
----
-
 ## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
 不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。
@@ -279,3 +260,22 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 | 對方不在時 | 規劃書照常建立、編輯、匯出；**不能綁定案件**：建立時帶案件單號 ⇒ 400「案件模組未安裝：規劃書無法綁定案件（不填案件單號即可建立獨立的規劃書）」；依案件查詢 ⇒ 404「案件模組未安裝：無法依案件查詢網路架構規劃書」 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/netplan/tests/test_netplan_case_access.py`：①提供者已登記 ②正對照：綁定案件時帶出客戶名、依案件查詢有逐案權限（外人 403）③**反向控制**：拿掉提供者 ⇒ 不綁案件的建立照常、綁案件 400、依案件查詢 404，訊息明說；逐案守門的歸類由 `test_case_read_scope.py` 守 |
+
+---
+
+## IP-13　`crm.quote_deleted`：報價單刪除時解除業務開發案件的轉建連結（M02 → M01）
+
+對應 DEPENDENCY-MAP §4 `dev_cases`（M02 搬遷，2026-09-26）。原本 `routers/quotations.py` 刪報價單時直寫 M02 的 `dev_cases`。編號：第五班列車定號 IP-13（C 分支暫用 IP-11；origin 已用到 IP-12 `case.access`）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M02 業務開發：`modules/crm/api.py::unlink_deleted_quote`（`ModuleSpec.providers`，模組未載入即不登記） |
+| 使用方 | M01 `routers/quotations.py::delete_quotation`（只刪草稿） |
+| 形式 | provider，單一提供者（`core.registry`）；要與刪報價單同一筆交易 ⇒ 不用事件 |
+| 語法 | 提供：`ModuleSpec(providers={("crm.quote_deleted", "crm"): api.unlink_deleted_quote})`<br>取用：`unlink = registry.single_provider("crm.quote_deleted")`；`None` ⇒ 退化。`unlink(conn, quote_no) -> [{"id", "case_name"}]` |
+| 回傳 | 被解除連結的案件（`converted_quote_no` 清空、狀態退回「洽談中」）。**在呼叫端的連線上寫、不 commit**；稽核 `dev_case.unlink_deleted_quote` 由 M01 以操作者身分寫 |
+| 對方不在時 | 報價單**照刪**；案件不動（M02 不在時畫面本來就看不到這些案件）；回應 `notice`＝`routers/quotations.QUOTE_DELETED_CRM_ABSENT`（「若有業務開發案件轉建自這張報價單，它們的連結沒有自動解除」）；記 WARNING。不丟例外 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | 提供方（隨模組搬走）`backend/modules/crm/tests/test_crm_quote_deleted_provider.py`：①M02 已登記 ②**正對照**：刪草稿 ⇒ 連到它的案件解除、別張單的案件不動、稽核一筆；取用方（M02 不在也成立）`backend/tests/platform/test_crm_quote_deleted_connector.py`：③**反向控制**：拿掉提供者 ⇒ 200、`notice` 明說、案件不動、WARNING ④產品碼除了 M02 與凍結 migration 沒有寫 `dev_cases`／`dev_logs` 的 SQL；`table_write_exceptions.json` 對應 debt 已刪；畫面：`test_e2e_quote_delete_crm_absent_notice_2026_09_26`（M02 不在 ⇒ 報價清單顯示 notice；在 ⇒ 只有「報價單已刪除」） |
+
+**尚未處理**：`dev_cases`／`dev_logs` 仍被 L1（全站搜尋、未讀標記、行事曆標題、封存匯出、稽核目標檢查）與 M01（報價單動態）、M08（儀表板）**直接讀**。M02 不在時表仍在（凍結 migration 建立），讀取不會壞，可見性經 `row_access`（未登錄 ⇒ fail closed，連 admin 也看不到）；要切斷須由 M02 提供讀取連接器，另開題（DEPENDENCY-MAP §3 #2／#5／#6）。

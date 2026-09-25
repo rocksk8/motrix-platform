@@ -1,4 +1,4 @@
-"""IP-11 `crm.quote_deleted` 取用方這一側（M01 刪報價單）：M02 不在時也要成立的題（M02 搬遷，2026-09-26）。
+"""IP-13 `crm.quote_deleted` 取用方這一側（M01 刪報價單）：M02 不在時也要成立的題（M02 搬遷，2026-09-26）。
 
 原本 M01 `routers/quotations.py` 直寫 `dev_cases`（table_write_exceptions 的 debt）⇒ 改由 M02 提供。
 ③ 反向控制：M02 不在 ⇒ 報價單照刪、案件不動、回應 notice 明說、記 WARNING

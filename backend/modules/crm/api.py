@@ -1144,7 +1144,7 @@ def _check_dev_case_hold_expiry() -> None:
 
 
 def unlink_deleted_quote(conn, quote_no: str) -> list:
-    """IP-11 `crm.quote_deleted`（M02 → M01）：報價單被刪除 ⇒ 轉建連結指到它的業務開發案件解除連結、退回「洽談中」。
+    """IP-13 `crm.quote_deleted`（M02 → M01）：報價單被刪除 ⇒ 轉建連結指到它的業務開發案件解除連結、退回「洽談中」。
 
     在**呼叫方的交易內**執行、不 commit（與刪報價單同一筆交易：要嘛都成、要嘛都不成）。
     dev_cases 與 quotations 之間沒有 FK，不解除就會留下指向不存在報價單的連結。
