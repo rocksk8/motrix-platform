@@ -571,3 +571,46 @@ def test_custom_module_output_preview_can_be_pdf(client, make_user, monkeypatch)
     r = client.post("/api/definitions/output_template/invoice_voucher/preview", headers=h, params={"format": "pdf"},
                     json={"body": dt.load_default("invoice_voucher")})
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf" and "IV-202609-0001" in seen[1]
+
+
+
+# ── 簽核條件 fail-safe（稽核 D 事前提示，2026-09-26）──────────────────────────
+
+def test_custom_module_tier_condition_that_cannot_be_evaluated_still_requires_signing(loan):
+    """條件算出空值（引用的欄位沒填）⇒ 那一層照簽，不是跳過；回應說明原因。"""
+    client, h = loan
+    rec = _new(client, h, unit_value=None)                          # total＝qty×unit_value；unit_value 預設 0 ⇒ 改用空值
+    import db
+    conn = db.get_db()
+    try:                                                            # 直接把 total 變成空值（模擬引用到沒填的欄位）
+        d = json.loads(conn.execute("SELECT data_json FROM custom_records WHERE record_no=?", (rec["record_no"],)).fetchone()[0])
+        d["total"] = None
+        conn.execute("UPDATE custom_records SET data_json=? WHERE record_no=?", (json.dumps(d), rec["record_no"]))
+        conn.commit()
+    finally:
+        conn.close()
+    r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    assert r.status_code == 200
+    assert len(r.json()["approval"]["tiers"]) == 2                  # 第二層（total > 10000）算不出來 ⇒ 照簽
+    assert any("算不出來" in n for n in r.json()["notices"])
+
+
+def test_custom_module_tier_condition_runtime_error_is_not_a_500(loan):
+    """條件公式在執行時出錯（除以 0）⇒ 不回 500；那一層照簽並說明。"""
+    client, h = loan
+    body = loan_definition()
+    body["workflow"]["states"][1]["approval"]["tiers"][1]["when"] = "total / (qty - qty) > 1"
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h["super"], json={"body": body})
+    assert client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h["super"], json={}).status_code == 200
+    rec = _new(client, h)
+    r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    assert r.status_code == 200 and len(r.json()["approval"]["tiers"]) == 2
+    assert any("無法計算" in n for n in r.json()["notices"])
+
+
+def test_custom_module_tier_condition_false_still_skips(loan):
+    """正對照：條件明確不成立（False）⇒ 照舊跳過那一層。"""
+    client, h = loan
+    rec = _new(client, h)                                           # 6000 ≤ 10000
+    r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    assert len(r.json()["approval"]["tiers"]) == 1
