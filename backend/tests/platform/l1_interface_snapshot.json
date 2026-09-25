@@ -1,5 +1,5 @@
 {
- "core_version": "1.17",
+ "core_version": "1.18",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -192,6 +192,7 @@
    "validate_definition": "def(body, key=…, core_fields=…)"
   },
   "helper:custom_modules": {
+   "APPROVER_SOURCES": "const",
    "CustomModuleError": "class",
    "CustomModuleError.__init__": "def(self, message, problems=…, status=…)",
    "DATE_FORMATS": "const",
@@ -210,9 +211,12 @@
    "get_record": "def(conn, module_key, record_no)",
    "list_records": "def(conn, module_key, status=…, field=…, value=…, limit=…)",
    "next_number": "def(conn, module_key, numbering, day=…)",
+   "notify_ref": "def(rec)",
    "permission_of": "def(module_key, body)",
    "published_modules": "def(conn)",
+   "queue_items": "def(conn)",
    "rebuild_index": "def(conn)",
+   "ref_options": "def(conn, target, q=…, limit=…)",
    "ref_targets": "def()",
    "register_ref_target": "def(key, table, label_column, id_column=…)",
    "render_output": "def(conn, module_key, record_no)",
@@ -229,6 +233,10 @@
   },
   "helper:doc_template": {
    "BLOCKS": "const",
+   "BLOCK_ITEM_SPECS": "const",
+   "BLOCK_SPECS": "const",
+   "COLUMN_FORMATS": "const",
+   "FORMATS": "const",
    "THEMES": "const",
    "TemplateError": "class",
    "load_default": "def(key)",
@@ -637,8 +645,10 @@
    "DefinitionError": "class",
    "DefinitionError.__init__": "def(self, message, problems=…)",
    "KINDS": "const",
+   "delete_draft": "def(conn, kind, key, scope)",
    "diff": "def(a, b, path=…)",
    "get": "def(conn, kind, key, scope, version=…)",
+   "list_definitions": "def(conn, kind)",
    "publish": "def(conn, kind, key, scope, note=…, user=…)",
    "register_default": "def(kind, fn)",
    "register_validator": "def(kind, fn)",
