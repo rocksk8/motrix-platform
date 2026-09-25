@@ -4,13 +4,19 @@
 - schema：正對照（合法的過）＋反向控制（逐項弄壞 ⇒ 擋，且指出位置）
 - loader：格式錯誤 ⇒ 模組不載入並說明原因；沒有 customization ⇒ 照常載入
 - 目錄：合成模組登記的每一個點都列得出來；引用程式沒有提供的端點／版型的點不列、改列 problems
-- 排版守門：只能動登記過的點、只能做該點允許的操作（核心欄位不可隱藏或改名）
+- 排版守門：只能動 `catalog.layout_points()` 的點（唯一入口；藏起的點、未載入模組的點都擋）、
+  只能做該點允許的操作（核心欄位不可隱藏或改名）、只能帶該操作認得的鍵、move 有容器限制、
+  select_template 只能選程式提供的版型
+- 單一入口守門：`customization._raw_points`／`_check_ops` 只准在 `core.catalog._module_points`／`check_layout` 呼叫
 - 端點：僅超級管理員；已載入的真實模組逐一驗「登記＝列出、沒有 problems」（不點名任何 L2 模組）
 
 正對照一律用合成模組（MODULE-GUIDE §7：不綁特定 L2 模組）。
+突變清單與預期轉紅的題：同目錄 `_mutations_p1p3.md`。
 """
+import ast
 import copy
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import APIRouter
@@ -234,7 +240,7 @@ def _mod(cat, key):
 def test_catalog_lists_every_registered_point_of_a_module(synthetic_catalog):
     cat = catalog.build()
     mod = _mod(cat, "zz_syn")
-    want = {p["id"] for p in C.points(synthetic_catalog)}
+    want = {p["id"] for p in C._raw_points(synthetic_catalog)}
     got = {p["id"] for p in mod["points"]}
     assert got == want and mod["problems"] == []
     kinds = {p["kind"] for p in mod["points"]}
@@ -252,7 +258,7 @@ def test_catalog_lists_every_registered_point_of_a_module(synthetic_catalog):
 
 
 def test_core_and_display_fields_get_different_ops(synthetic_catalog):
-    pts = {p["id"]: p for p in C.points(synthetic_catalog)}
+    pts = {p["id"]: p for p in catalog.layout_points("zz_syn")}
     core = pts["zz_syn:zz-syn.html/list:docs/column:docNo"]
     disp = pts["zz_syn:zz-syn.html/list:docs/column:note"]
     assert core["core"] is True and "hide" not in core["ops"] and "relabel" not in core["ops"]
@@ -316,27 +322,38 @@ def test_broken_section_does_not_break_catalog(synthetic_catalog):
     assert _mod(cat, "zz_syn")["points"]
 
 
-# ── 排版守門：只能動登記過的點 ──────────────────────────────────────────────
-
-def _pts():
-    return C.points(_manifest())
-
+# ── 排版守門：只能動 layout_points() 的點 ───────────────────────────────────
 
 BASE = "zz_syn:zz-syn.html"
 
 
-def test_layout_on_registered_points_passes():
+def _check(ops, key="zz_syn"):
+    return catalog.check_layout(key, ops)
+
+
+def _paths(ops, key="zz_syn"):
+    return [p["path"] for p in _check(ops, key)]
+
+
+def test_layout_on_registered_points_passes(synthetic_catalog):
     ops = [
         {"op": "hide", "target": BASE + "/list:docs/column:note"},
         {"op": "move", "target": BASE + "/list:docs/column:docNo", "to": BASE + "/list:docs"},
         {"op": "relabel", "target": BASE + "/action:save", "label": "存檔"},
         {"op": "move", "target": BASE + "/form:doc/field:note", "to": BASE + "/form:doc/section:a"},
-        {"op": "move", "target": BASE + "/form:doc/field:docNo", "to": BASE + "/form:doc/section:b"},
+        {"op": "move", "target": BASE + "/form:doc/field:docNo", "to": BASE + "/form:doc/section:b", "index": 0},
+        {"op": "move", "target": BASE + "/form:doc/section:b", "to": BASE + "/form:doc"},
+        {"op": "move", "target": BASE + "/action:save", "to": BASE + "/menu:row"},
         {"op": "hide", "target": BASE + "/export:xlsx"},
-        {"op": "select_template", "target": "zz_syn:output:voucher"},
-        {"op": "move", "target": BASE + "/sidebar"},
+        {"op": "select_template", "target": "zz_syn:output:voucher", "template": "zz_tpl"},
+        {"op": "move", "target": BASE + "/sidebar", "index": 2},
+        {"op": "hide", "target": BASE + "/sidebar"},
+        {"op": "reorder", "target": BASE + "/list:docs",
+         "order": [BASE + "/list:docs/column:" + f for f in ("note", "docNo", "amount")]},
+        {"op": "reorder", "target": BASE + "/menu:row", "order": [BASE + "/action:del", BASE + "/action:edit"]},
+        {"op": "add_section", "target": BASE + "/form:doc", "key": "c", "label": "新區塊"},
     ]
-    assert C.check_layout(_pts(), ops) == []
+    assert _check(ops) == []
 
 
 LAYOUT_NEGATIVE = [
@@ -350,12 +367,177 @@ LAYOUT_NEGATIVE = [
     ("列表欄位搬到表單", {"op": "move", "target": BASE + "/list:docs/column:note", "to": BASE + "/form:doc/section:a"}, "[0].to"),
     ("搬到不存在的地方", {"op": "move", "target": BASE + "/form:doc/field:note", "to": BASE + "/form:doc/section:zz"}, "[0].to"),
     ("改名給空白", {"op": "relabel", "target": BASE + "/action:save", "label": ""}, "[0].label"),
+    # P-M2：版型
+    ("選不存在的版型", {"op": "select_template", "target": "zz_syn:output:voucher", "template": "no_such"}, "[0].template"),
+    ("選版型沒給版型", {"op": "select_template", "target": "zz_syn:output:voucher"}, "[0]"),
+    # P-S1：容器限制
+    ("區塊移到按鈕底下", {"op": "move", "target": BASE + "/form:doc/section:a", "to": BASE + "/action:save"}, "[0].to"),
+    ("區塊移到別張表單", {"op": "move", "target": BASE + "/form:doc/section:a", "to": BASE + "/form:other"}, "[0].to"),
+    ("按鈕移到區塊", {"op": "move", "target": BASE + "/action:save", "to": BASE + "/form:doc/section:a"}, "[0].to"),
+    ("匯出換容器", {"op": "move", "target": BASE + "/export:xlsx", "to": BASE + "/menu:row"}, "[0].to"),
+    ("選單換容器", {"op": "move", "target": BASE + "/menu:row", "to": BASE + "/form:doc"}, "[0].to"),
+    ("側欄換群組", {"op": "move", "target": BASE + "/sidebar", "to": BASE + "/list:docs"}, "[0].to"),
+    ("側欄改名", {"op": "relabel", "target": BASE + "/sidebar", "label": "X"}, "[0].op"),
+    ("index 為負", {"op": "move", "target": BASE + "/sidebar", "index": -1}, "[0].index"),
+    # P-S2：不認得的鍵
+    ("不認得的鍵", {"op": "hide", "target": BASE + "/action:save", "evil": 1}, "[0].evil"),
+    ("鍵名打錯", {"op": "relabel", "target": BASE + "/action:save", "lable": "存檔"}, "[0].lable"),
+    ("側欄帶群組鍵", {"op": "move", "target": BASE + "/sidebar", "group": "finance"}, "[0].group"),
+    ("reorder 少一個", {"op": "reorder", "target": BASE + "/list:docs",
+                      "order": [BASE + "/list:docs/column:docNo"]}, "[0].order"),
+    ("reorder 夾帶別的點", {"op": "reorder", "target": BASE + "/menu:row",
+                         "order": [BASE + "/action:del", BASE + "/action:save"]}, "[0].order"),
+    ("新增區塊撞名", {"op": "add_section", "target": BASE + "/form:doc", "key": "a", "label": "A"}, "[0].key"),
 ]
 
 
 @pytest.mark.parametrize("why,op,where", LAYOUT_NEGATIVE, ids=[n[0] for n in LAYOUT_NEGATIVE])
-def test_layout_touching_unregistered_or_forbidden_is_rejected(why, op, where):
-    assert where in [p["path"] for p in C.check_layout(_pts(), [op])], why
+def test_layout_touching_unregistered_or_forbidden_is_rejected(synthetic_catalog, why, op, where):
+    assert where in _paths([op]), why
+
+
+def _hide_del_endpoint(m):
+    """稽核探針：刪除按鈕的端點改成路由裡沒有的 ⇒ 程式沒有提供這個按鈕。"""
+    m["customization"]["pages"][0]["actions"][2]["endpoint"] = "DELETE /api/zz-syn/nope"
+
+
+def test_hidden_point_is_rejected_by_layout_guard(synthetic_catalog):
+    """P-M1 探針：引用不存在端點的按鈕，目錄藏起來，守門也要擋（hide／relabel／move 都擋）。"""
+    _hide_del_endpoint(synthetic_catalog)
+    gone = BASE + "/action:del"
+    assert gone not in {p["id"] for p in catalog.layout_points("zz_syn")}
+    for op in ({"op": "hide", "target": gone}, {"op": "relabel", "target": gone, "label": "X"},
+               {"op": "move", "target": gone, "to": BASE + "/menu:row"}):
+        assert _paths([op]) == ["[0].target"], op
+
+
+def test_menu_drops_hidden_buttons(synthetic_catalog):
+    """P-M1：選單項目不可以引用被藏起的按鈕（目錄與守門同一份）。"""
+    _hide_del_endpoint(synthetic_catalog)
+    menu = next(p for p in catalog.layout_points("zz_syn") if p["id"] == BASE + "/menu:row")
+    assert menu["items"] == [BASE + "/action:edit"]
+    assert _mod(catalog.build(), "zz_syn")["points"] == catalog.layout_points("zz_syn")
+    # 用原本的順序 reorder（含藏起的按鈕）⇒ 擋
+    assert _paths([{"op": "reorder", "target": BASE + "/menu:row",
+                    "order": [BASE + "/action:edit", BASE + "/action:del"]}]) == ["[0].order"]
+
+
+def test_menu_with_all_buttons_hidden_is_hidden(synthetic_catalog):
+    _hide_del_endpoint(synthetic_catalog)
+    synthetic_catalog["customization"]["pages"][0]["menus"][0]["items"] = ["del"]
+    mod = _mod(catalog.build(), "zz_syn")
+    assert BASE + "/menu:row" not in {p["id"] for p in mod["points"]}
+    assert BASE + "/menu:row" in {p["point"] for p in mod["problems"]}
+    assert _paths([{"op": "hide", "target": BASE + "/menu:row"}]) == ["[0].target"]
+
+
+def test_unloaded_module_points_are_rejected(synthetic_catalog):
+    """P-M1：模組沒有載入（停用／未授權／失敗）⇒ 它的點不可以通過守門。"""
+    off = copy.deepcopy(synthetic_catalog)
+    off["key"] = "zz_off"
+    registry.set_state("zz_off", registry.STATE_DISABLED, "停用", manifest=off)
+    op = {"op": "hide", "target": "zz_off:zz-syn.html/action:edit"}
+    assert catalog.layout_points("zz_off") == []
+    assert not any(p["id"].startswith("zz_off:") for p in catalog.layout_points())
+    assert _paths([op], "zz_off") == ["[0].target"]
+    assert _paths([op], None) == ["[0].target"]
+    # 正對照：同一份描述載入之後就通過
+    registry.register(registry.LoadedModule(key="zz_off", manifest=off,
+                                            spec=registry.ModuleSpec(key="zz_off", routers=[_router()])))
+    assert _check([op], "zz_off") == []
+
+
+def test_output_points_need_output_engine(synthetic_catalog):
+    """P-M2：outputs 區段不在 ⇒ 輸出點不在 layout_points、select_template 一律擋（與 output_problems 同一判準）。"""
+    catalog.restore({})
+    op = {"op": "select_template", "target": "zz_syn:output:voucher", "template": "zz_tpl"}
+    assert "zz_syn:output:voucher" not in {p["id"] for p in catalog.layout_points("zz_syn")}
+    assert _paths([op]) == ["[0].target"]
+
+
+def test_select_template_choices_come_from_output_engine(synthetic_catalog):
+    """可選版型＝目錄 outputs 區段的 templates（不是模組自己寫的那一個）。"""
+    catalog.restore({})
+    catalog.register_section("outputs", "helpers.doc_template",
+                             lambda: {"templates": [{"key": "zz_tpl"}, {"key": "zz_tpl2"}]})
+    out = next(p for p in catalog.layout_points("zz_syn") if p["kind"] == "output")
+    assert out["templates"] == ["zz_tpl", "zz_tpl2"]
+    assert _check([{"op": "select_template", "target": out["id"], "template": "zz_tpl2"}]) == []
+
+
+# ── 單一入口守門：沒有別的取點路徑 ─────────────────────────────────────────
+
+_BACKEND = Path(__file__).resolve().parents[2]
+_PRIVATE = ("_raw_points", "_check_ops")
+#: 唯一允許的呼叫點：{檔案: {私有函式: 允許呼叫它的函式}}
+_ALLOWED = {"core/catalog.py": {"_raw_points": "_module_points", "_check_ops": "check_layout"}}
+
+
+def _private_uses(source):
+    """一個檔案裡用到 `_raw_points`／`_check_ops` 的地方 ⇒ [(名字, 所在函式)]（屬性、名稱、import 都算）。"""
+    found = []
+
+    def walk(node, fn):
+        for ch in ast.iter_child_nodes(node):
+            f = ch.name if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+            if isinstance(ch, ast.Attribute) and ch.attr in _PRIVATE:
+                found.append((ch.attr, fn))
+            elif isinstance(ch, ast.Name) and ch.id in _PRIVATE:
+                found.append((ch.id, fn))
+            elif isinstance(ch, ast.ImportFrom) and any(a.name in _PRIVATE for a in ch.names):
+                found.append(("import", fn))
+            walk(ch, f)
+    walk(ast.parse(source), None)
+    return found
+
+
+def _entry_violations(files):
+    bad = []
+    for rel, src in files:
+        if rel == "core/customization.py":
+            continue
+        allowed = _ALLOWED.get(rel, {})
+        for name, fn in _private_uses(src):
+            if fn is None or allowed.get(name) != fn:       # 模組層一律不准（None 不可以等於「沒有登記」）
+                bad.append("%s：%s 在 %s" % (rel, name, fn or "模組層"))
+    return bad
+
+
+def _product_files():
+    out = []
+    for p in _BACKEND.rglob("*.py"):
+        parts = p.relative_to(_BACKEND).parts
+        if "tests" in parts or any(x.startswith(".") for x in parts):
+            continue
+        out.append((p.relative_to(_BACKEND).as_posix(), p.read_text(encoding="utf-8")))
+    return out
+
+
+def test_only_one_way_to_get_points():
+    """P-M1：目錄與守門只經過 layout_points()；未過濾的點在產品碼裡沒有別的取法。"""
+    files = _product_files()
+    assert _entry_violations(files) == []
+    # 舊的公開名稱不可以回來（回來就是第二個入口）
+    assert not hasattr(C, "points") and not hasattr(C, "check_layout")
+    # build() 與 layout_points() 都走 _module_points；check_layout 走 layout_points
+    calls = {}
+    for node in ast.walk(ast.parse(dict(files)["core/catalog.py"])):
+        if isinstance(node, ast.FunctionDef):
+            calls[node.name] = {c.func.id for c in ast.walk(node)
+                                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+    assert "_module_points" in calls["build"] and "_module_points" in calls["layout_points"]
+    assert "layout_points" in calls["check_layout"]
+
+
+def test_entry_guard_positive_control():
+    """守門的正對照：別處呼叫未過濾的點 ⇒ 亮；允許處換到別的函式 ⇒ 亮。"""
+    leak = "from core import customization\ndef f(m):\n    return customization._raw_points(m)\n"
+    assert _entry_violations([("routers/zz.py", leak)]) == ["routers/zz.py：_raw_points 在 f"]
+    wrong_fn = "def build():\n    return customization._raw_points({})\n"
+    assert _entry_violations([("core/catalog.py", wrong_fn)]) == ["core/catalog.py：_raw_points 在 build"]
+    imp = "from core.customization import _check_ops\n"
+    assert _entry_violations([("helpers/zz.py", imp)]) == ["helpers/zz.py：import 在 模組層"]
+    assert any(rel == "core/catalog.py" for rel, _ in _product_files())      # 掃描範圍含已知的那一個
 
 
 # ── HTTP 端點與真實模組 ────────────────────────────────────────────────────
@@ -391,4 +573,5 @@ def test_every_loaded_module_lists_all_its_points_without_problems(client):
     for m in mods:
         entry = _mod(cat, m.key)
         assert entry["problems"] == [], (m.key, entry["problems"])
-        assert {p["id"] for p in entry["points"]} == {p["id"] for p in C.points(m.manifest)}, m.key
+        assert {p["id"] for p in entry["points"]} == {p["id"] for p in C._raw_points(m.manifest)}, m.key
+        assert entry["points"] == catalog.layout_points(m.key), m.key        # 目錄與守門同一份

@@ -220,8 +220,8 @@
 |---|---|---|
 | `modules[]` | `key／name／version／core／permissions／pages`、`customizationSchema`、`coreFields{實體:[核心欄位]}`、`endpoints[]`、`points[]`、`problems[]` | 已載入模組（`registry.loaded()`）；停用／未授權／失敗的模組不列 |
 | `modules[].endpoints[]` | `{id:"METHOD /path", method, path, summary, params:{path,query,body}}` | 模組 `ModuleSpec.routers` 的實際路由（不是宣告） |
-| `modules[].points[]` | P3 可自訂點（§3.9），每點帶 `id／kind／label／ops` | `module.json` 的 `customization`＋`pages[].menu` |
-| `modules[].problems[]` | 點引用了程式沒有提供的端點或預設版型 ⇒ 該點**不列在 points**，改列在這裡 | — |
+| `modules[].points[]` | P3 可自訂點（§3.9），每點帶 `id／kind／label／ops`；輸出點另帶 `templates`（可選版型＝本表 `outputs.templates`） | `module.json` 的 `customization`＋`pages[].menu`，經 `catalog.layout_points()` 同一處過濾 |
+| `modules[].problems[]` | 點引用了程式沒有提供的端點或預設版型 ⇒ 該點**不列在 points**，改列在這裡；頁內選單的按鈕全被藏起 ⇒ 選單也列在這裡（部分被藏起 ⇒ `items` 去掉那幾個） | — |
 | `providers[]` | `{capability, name, module, source:"module"|"legacy", function, contractVersion:null}` | `core.registry`。契約版本只登記在 INTEGRATION-POINTS（文件不隨包出貨）⇒ 明寫 `null`，不猜 |
 | `events[]` | `{name, owner, version, fields, description, subscribers}` | `core.events.declarations()` |
 | `outputs` | `{themes, blocks, templates[{key,version,theme,title}], formats:null}` | `helpers.doc_template`（由 `routers/platform_catalog` 登記）。格式目錄寫在 `_fmt` 內、沒有公開常數 ⇒ `formats:null` |
@@ -271,7 +271,7 @@
 
 | 點 | 允許的操作 |
 |---|---|
-| `sidebar`（由 `pages[].menu` 衍生） | move、hide、relabel |
+| `sidebar`（由 `pages[].menu` 衍生） | move（只調順序，不可以帶 `to`）、hide、show |
 | `list` | reorder |
 | `form` | reorder、add_section |
 | `section` | move、relabel |
@@ -280,13 +280,26 @@
 | `menu` | move、hide、relabel、reorder |
 | `output` | select_template |
 
-**排版守門**（P9「程式沒有提供的選項不可以出現」的資料層）：`core.customization.check_layout(points, ops)`，`ops=[{op, target, to?, label?}]`。target 不是登記的點 ⇒ 擋；op 不在該點允許的操作 ⇒ 擋（例：隱藏或改名核心欄位）；`move` 的 `to` 必須是登記的點，且欄位只能留在原列表或同一張表單的區塊之間。**P5 的 `layout` 驗證器與 P9 都必須呼叫它**（P5／P9 合回時接；⚠ 未接前只有函式本身的守門）。
+**唯一入口**（稽核 P-M1，2026-09-26）：可自訂點對外只有 `core.catalog.layout_points(module_key=None)` 一個取法；目錄 `build()` 與排版守門都用它。過濾只在 `catalog._module_points` 一處：①引用模組路由沒有的端點 ⇒ 藏起；②輸出點的預設版型不存在或 outputs 區段不在 ⇒ 藏起；③頁內選單去掉被藏起的按鈕（全部被藏起 ⇒ 選單也藏起）；④未載入（停用／未授權／失敗）的模組沒有任何點。`customization._raw_points`（未過濾）與 `_check_ops` 是私有的；守門 `test_platform_catalog.py::test_only_one_way_to_get_points` 擋掉產品碼裡其他呼叫點（正對照 `test_entry_guard_positive_control`）。
+
+**排版守門**（P9「程式沒有提供的選項不可以出現」的資料層）：`core.catalog.check_layout(module_key, ops)`（`module_key=None`＝全部已載入模組，給側欄用）。**P5 的 `layout` 驗證器與 P9 都必須呼叫它**（P5／P9 合回時接；⚠ 未接前只有函式本身的守門）。
+
+| 操作 | 必填鍵 | 選填鍵 | 檢查 |
+|---|---|---|---|
+| `move` | op、target | `to`、`index` | `to` 依被移動的點限定（`MOVE_DEST_KINDS`）：列表欄 ⇒ 原列表；表單欄 ⇒ 同一張表單的區塊；區塊 ⇒ 原表單；按鈕 ⇒ 同一頁的頁內選單；**其他（匯出、頁內選單、側欄）不可以帶 `to`**，只在原位置調順序。`index` 非負整數 |
+| `hide`／`show` | op、target | — | |
+| `relabel` | op、target、label | — | label 非空 |
+| `reorder` | op、target、order | — | `order` 恰好是該容器目前的子點（列表的欄、表單的區塊、選單的項目；已過濾） |
+| `add_section` | op、target、key、label | — | key 合法、不與既有區塊同名 |
+| `select_template` | op、target、template | — | `template` 必須在該輸出點的 `templates`（目錄 outputs 區段；區段不在 ⇒ 輸出點不存在 ⇒ 一律擋）（稽核 P-M2） |
+
+共通：target 不在 `layout_points` ⇒ 擋；op 不在該點允許的操作 ⇒ 擋；**不認得的鍵 ⇒ 擋**（例：`lable` 打錯不可以回成功而沒有生效；稽核 P-S2）。
 
 **與 STAGE-C（B）`pages[].menu` 並存**
 - 側欄選單項**只在** `pages[].menu` 宣告（B 的格式與守門：group 固定鍵、icon 在字典內）；`customization` **不重複宣告**選單項，只把有 `menu` 物件的頁面衍生成 `sidebar` 點。`customization.menus` 指的是**頁面內**的按鈕群組／下拉選單，不是側欄。
 - 兩者唯一的交點是 `customization.pages[].page` 必須等於 `pages[].path`；C5 頁面搬進模組資料夾時 path 不變（STAGE-C §2「URL 不變」），這個交點不受影響。
 - `pages[].menu` 仍可以是舊的字串（CORE-SPEC §4 範例）：字串不衍生 `sidebar` 點，直到 C3 改成物件。
-- 待裁示：側欄點的 `move` 是否允許換群組（STAGE-C D4 只規定模組不能自訂群組，沒有規定使用者層）。v1 先不給 `regroup`。
+- **側欄的使用者自訂以 STAGE-C 為準**（定案 2026-09-26，稽核 P-O2）：套用落在 STAGE-C 的 `GET /api/platform/menu`（它讀使用者／角色的版面後輸出），P9 不另外套一份；本節只定「可以動什麼」。個人層**只能調顯示與排序**：`hide`／`show`、`move`（`index`，在原群組內）。**v1 不准換群組**（`move` 帶 `to` 或帶 `group` 鍵一律擋）、不改名（STAGE-C §8 列的「改名」延後，要開放時升 `OPS_BY_KIND` 並改這一行）。
 
 **範例**：`modules/tender_radar/module.json`（1.1.0）。⚠ 未守門：登記內容與頁面實際畫面一致（P9 改由登記渲染之前，沒有機器可讀的對照）。
 
