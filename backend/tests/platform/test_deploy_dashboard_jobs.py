@@ -102,3 +102,24 @@ def test_deploy_success_path_writes_success(env):
     dd._run_job("j-deploy-ok", "deploy", [sys.executable, "-c", out])
     assert dd._jobs["j-deploy-ok"]["status"] == "succeeded"
     assert _hist(env)[0]["success"] is True
+
+
+def test_history_concurrent_appends_keep_valid_json_and_every_entry(env):
+    """解除鎖定端點與 job 收尾會同時寫歷史：不可以留下殘字、不可以掉筆（2026-09-26 反向控制時出現「…]_deploy_timeout」）。"""
+    import threading
+    n = 40
+    go = threading.Event()
+
+    def w(i):
+        go.wait()
+        dd._append_history(("x" * (i % 7) * 20) + f"a{i}", f"j{i}", i % 2 == 0)
+
+    ths = [threading.Thread(target=w, args=(i,)) for i in range(n)]
+    for th in ths:
+        th.start()
+    go.set()
+    for th in ths:
+        th.join(timeout=30)
+    h = _hist(env)                                               # 殘字 ⇒ 這裡 JSONDecodeError
+    assert sorted(e["action"].lstrip("x") for e in h) == sorted(f"a{i}" for i in range(n))
+    assert not list(env.glob("history.json.*.tmp"))
