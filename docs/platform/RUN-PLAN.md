@@ -126,6 +126,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 07:11 D：**M02-M1、M02-S1 關閉**（c-m02-2 9840974b）：真刪 crm 1251 passed／4 failed＝允許 2＋待 a-m10 合回 2；模組內 34 passed；條件：第四班 a-m10＋c-m02-2 同車時列車上真刪 crm 只剩允許 2 題。新建議 M02-S2（修改業務開發案件的列權限無題，突變存活；搬遷前既有）。
 - 2026-09-26 07:05 C：D1 階段 B 開工 M07 薪資獎金（key `payroll`，worktree C28、wip/c-m07；M05 等 B 的 M08、M06 等 M04／M08 合回，先做 M07）。會動到的共用處：①L1 `routers/system.py` 的 `/api/system/bonus-module-status` 改走 M07 提供者（不再 import `helpers.bonus`，DEPENDENCY-MAP #27）；②`helpers/bonus_pdf.py` 不再借 M06 的 `voucher`／`voucher_pdf`：公司抬頭改用 L1 `company_identity.company_name`、HTML→PDF 改用 L1 `pdf_gen.html_to_pdf_bytes`（Edge 參數相同）、`resolve_display_names`（簽核格的帳號→顯示名稱）與 `_fmt_money` 下沉 L1（M06 保留同名匯入）；③`main.py` 拿掉兩支 router；`sidebar.js`、`modules.json`。
 - 2026-09-26 06:50：D 做完個資告知的合回後稽核：必修 PN-M1（決定以頁為單位，同一頁的第二種當事人，例如出貨單收件人，沒有人決定過）⇒ 裁示改為逐欄決定、收件人要告知，交給 A（出貨模組擁有者），排在 M03 之後；O-1（network_plans 的告知端點要跟著搬進 netplan）已提醒第四班列車長；O-4 module_installed 改看 module.json，交給 A。
 - 2026-09-26 06:49 D：⑯ 個資告知（`AUDIT-D-pii-notice.md`，合回後）：必修 PN-M1——notice 決定以頁為單位，案件頁出貨單收件人＋送貨地址可手打、沒有告知對象而守門放行（違反「手動輸入的聯絡人要 notice」）；建議 3（報價單告知端點權限、畫面換人重新告知、唯讀判斷）；12 頁決定與伺服器端換人重新告知成立。O-1：第四班 M10 rebase 要把 network-plans 告知端點搬進 modules/netplan（守門會抓）。另補 M10 稽核 O-4（空模組資料夾被 module_installed 當成在）。⑮ c-m04 尚未推上 origin，等 C。

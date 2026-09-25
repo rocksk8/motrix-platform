@@ -58,6 +58,10 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| M02-M1 | 修正：需要 M02 的 33 題搬進 `modules/crm/tests/`。整檔 2 個：`test_dev_case_soft_delete_guard`、`test_dev_case_row_access`。從 7 個混合檔只拆業務開發那幾題：`test_api_integration` 11 ⇒ `test_crm_api_integration`；`test_item_reads_server_side` 4 ⇒ `test_crm_item_reads`；`test_feed_attachments` 2 ⇒ `test_crm_feed_attachments`；`test_row_access_callers` 的規則題拆成案件一半（留）與業務開發一半 ⇒ `test_crm_row_access_rule`；e2e 未讀 6、附件縮圖 1、深色模式 1 ⇒ 各自的 `test_e2e_crm_*`。拆前、拆後在 M02 在時跑同一批檔都是 99 題全過。**新範圍反向控制**（刪掉 modules/crm；tests/platform＋modules＋原 7 檔＋em1＋row_access＋spec_coverage，-n 2）：1333 過 4 紅＝`modules_json_lists_only_existing_units`、`test_unit_index_is_current`（§B-11 允許）＋`test_registry_matches_code`、`test_em1`（A 的 a-m10 已修，合回後不再紅） | wip/c-m02-2 9840974b | |
-| M02-S1 | 修正：SPEC.md 的依據改指 `modules/crm/tests/`；模組外只留 M02 不在也成立的 `tests/platform/test_crm_quote_deleted_connector.py` | wip/c-m02-2 9840974b | |
-| O-1～O-2 | | | |
+| M02-M1 | 修正：需要 M02 的 33 題搬進 `modules/crm/tests/`。整檔 2 個：`test_dev_case_soft_delete_guard`、`test_dev_case_row_access`。從 7 個混合檔只拆業務開發那幾題：`test_api_integration` 11 ⇒ `test_crm_api_integration`；`test_item_reads_server_side` 4 ⇒ `test_crm_item_reads`；`test_feed_attachments` 2 ⇒ `test_crm_feed_attachments`；`test_row_access_callers` 的規則題拆成案件一半（留）與業務開發一半 ⇒ `test_crm_row_access_rule`；e2e 未讀 6、附件縮圖 1、深色模式 1 ⇒ 各自的 `test_e2e_crm_*`。拆前、拆後在 M02 在時跑同一批檔都是 99 題全過。**新範圍反向控制**（刪掉 modules/crm；tests/platform＋modules＋原 7 檔＋em1＋row_access＋spec_coverage，-n 2）：1333 過 4 紅＝`modules_json_lists_only_existing_units`、`test_unit_index_is_current`（§B-11 允許）＋`test_registry_matches_code`、`test_em1`（A 的 a-m10 已修，合回後不再紅） | wip/c-m02-2 9840974b || ✅ 2026-09-26 07:11 D 在 `wip/c-m02-2` 9840974b 真刪 modules/crm 重驗：tests/platform＋24 檔 1251 passed、4 failed＝允許 2＋待 a-m10 合回 2（`test_registry_matches_code`、`test_em1`；D 在 ⑬ 已驗 a-m10 的 X-2 豁免與 EM1 略過）；不加旗標收集 1255 題無錯誤；模組內 34 passed；先前紅的 31 題逐題核對都在 `modules/crm/tests`；突變 MC1 紅 ⇒ **關閉**。條件：第四班 a-m10＋c-m02-2 同車時，列車上真刪 crm 須只剩允許的 2 題 |
+| M02-S1 | 修正：SPEC.md 的依據改指 `modules/crm/tests/`；模組外只留 M02 不在也成立的 `tests/platform/test_crm_quote_deleted_connector.py` | wip/c-m02-2 9840974b || ✅ 關閉（SPEC.md 依據改指 `modules/crm/tests/`） |
+| O-1～O-2 | （C 未另填）O-1 IP-11 撞號由列車依 §C-7 重新編號；O-2 已成立 | — | ✅ 關閉（O-1 轉列車處理） |
+
+## 4. 關閉確認時的新發現（D，2026-09-26 07:11）
+
+- **M02-S2（建議）　修改業務開發案件的列權限沒有題目守**：D 突變 MC2 拿掉 `modules/crm/api.py` 更新端點的 `row_access.visible("dev_case", ...)` 403 檢查 ⇒ `modules/crm/tests` 全部＋`tests/test_row_access_*` 共 88 passed（存活）。現有的列權限題只驗「看不到」，沒有驗「改不了」。搬遷前就是這樣（題名與內容與搬遷前相同），不是這次造成的、不擋關閉；建議補一題：非擁有者 PUT 業務開發案件 ⇒ 403，並對刪除申請／核准端點比照。
