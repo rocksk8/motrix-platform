@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。
 
+[單位] plat:txn    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] begin_write, lock_state, read_under_lock, safe_close, strict_db_guards, watch_reads, write_txn
+[不變式] 「讀 → 改 → 整包寫回」的路徑，讀之前先 begin_write()；已在交易內的呼叫端行為不變；不認識任何業務表
+[契約題] tests/platform/test_core_events.py, tests/test_begin_only_via_begin_write_2026_09_25.py
+[注意] 拿著寫鎖時不可以 await 慢動作；strict_db_guards() 預設不 raise（只有 MOTRIX_STRICT_DB_GUARDS=1 才 raise）
+
 下沉原因：16 支 router 為了交易鎖而 import 案件 helper ⇒ 所有模組經由它依賴「案件」
 （DEPENDENCY-MAP §0-4）。這裡不認識任何業務表：要觀測「拿鎖之後讀過某欄位」的模組
 自己用 `watch_reads()` 登記判斷式（例：案件登記 quotations.data_json）。

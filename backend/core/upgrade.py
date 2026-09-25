@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
 """V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。
 
+[單位] plat:upgrade    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] CONFIG_DIRS, CONFIG_FILES, DATA_DIRS, DB_FILES, EXTERNAL_SCAN_TIMEOUT, MANIFEST_NAME, NEW_SETTINGS,
+    PACKAGE_DEFAULT_CONFIG, POST_CONVERT_NAME, TOOL_LOG_NAMES, V9_BASELINE, V9_COMPANY_DEFAULTS,
+    add_missing_settings, backup, changes_since_conversion, check_backup, classify, data_changes,
+    external_pdf_dirs, external_summary, fill_company_profile_blanks, has_changes, integrity_ok,
+    inventory, load_manifest, logical_digest, manifest_sha256, online_backup, preflight, program_files,
+    quick_check, record_post_conversion, replace_program, rollback, rows_added_since, schema_version,
+    settings_changes, settings_rows, sha256_file, sync_package_default_config, table_counts,
+    table_digests, verify_backup_restorable, verify_conversion, verify_external, verify_rollback, walk
+[不變式] 安裝根目錄一律由呼叫者給、不猜路徑；資料原地不動；設定只補缺的鍵；任一步驟不過就不往下走
+[契約題] tests/platform/test_core_upgrade.py
+[注意] L0 工具不是業務模組；啟動伺服器、ping、互動確認在 tools/platform/upgrade.py
+
 五個階段：預檢 → 備份（＋試還原比對雜湊）→ 轉換 → 驗證 → 回滾（完整／只回程式）。
 這支檔只放「對一個明確給定的安裝根目錄做事」的函式；啟動伺服器、ping、互動確認在
 `tools/platform/upgrade.py`。

@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-"""每模組獨立版本的 migration（CORE-SPEC §6）。V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
+"""每模組獨立版本的 migration（CORE-SPEC §6）。
+
+[單位] plat:migrations    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] current_version, register, registered, run_all
+[不變式] 版本從 1 起、連續、不可重複；每支跑完立刻記版本；只准新增（加表、加欄位），不刪欄位、不改名；每支必須冪等
+[契約題] tests/test_definitions_store_2026_09_25.py
+[注意] V9 基準（db._MIGRATIONS v1~v116）凍結不動，新表一律由這裡建；模組沒安裝 ⇒ migration 沒登記 ⇒ 不建它的表
+
+V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
 新的表一律由這裡的模組 migration 建立，版本記在 `module_schema_versions(module, version)`。
 
 - `register(module, version, fn)`：登記一支 migration。版本從 1 起、連續、不可重複。

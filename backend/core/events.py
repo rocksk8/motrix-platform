@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """L1 事件匯流排（CUSTOMIZATION-SPEC §6，ROADMAP P6）。
 
+[單位] plat:events    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] EventDecl, declarations, declare, publish, recent_failures, restore, snapshot, subscribe,
+    subscribers
+[不變式] 發佈在發佈方 commit 之後；沒有訂閱者是正常情況；訂閱者丟例外不外拋（記 ERROR、留在 recent_failures()）
+[契約題] tests/platform/test_core_events.py
+[注意] 需要回傳值或同一個交易內一起寫 ⇒ 走 core.registry 的 provider，不走事件
+
 事件＝「發生了一件事」的通知：發佈方不在乎誰聽、沒有訂閱者是正常情況。
 需要回傳或需要同一個交易內一起寫的，走 provider（core.registry），不走事件。
 

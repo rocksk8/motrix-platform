@@ -1,6 +1,20 @@
 # -*- coding: utf-8 -*-
 """資料位置的唯一來源（DATA-COMPAT §4 A-1，CORE-SPEC「使用者裁示」原地讀取）。
 
+[單位] plat:paths    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] AUTOSTART_BAT, BACKEND_DIR, BACKUP_ALERT_DIR, BUILD_COMMIT_FILE, CERTS_DIR, CERT_PEM, DB_PATH,
+    DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR, DEMO_CONTRACTOR_VOUCHER_PDF_ARCHIVE_DIR, DEMO_DB_PATH,
+    DEMO_INVOICE_VOUCHER_PDF_ARCHIVE_DIR, DEMO_PAYMENT_REQUEST_PDF_ARCHIVE_DIR,
+    DEMO_PAYSLIP_ARCHIVE_DIR, DEMO_PDF_ARCHIVE_DIR, DEMO_PROJECT_PHOTOS_DIR,
+    DEMO_SHIPPING_PDF_ARCHIVE_DIR, DEMO_UPLOADS_DIR, DEPLOYED_COMMIT_FILE, DatabaseMissing,
+    FRONTEND_DIR, HEARTBEAT_CONFIG, INITIAL_ADMIN_CREDENTIALS, INITIAL_DEMO_CREDENTIALS, INSTALL_ROOT,
+    LICENSE_PATH, LOCAL_DB_BACKUP_DIR, LOGS_DIR, NEW_DB_FLAG, NO_CLOUD_MARKER, NO_EMAIL_SEND_MARKER,
+    PDF_ARCHIVES, PROJECT_PHOTOS_DIR, SERVER_LOG, STATIC_DATA_DIR, UPLOADS_ROOT, VERSION_MANIFEST,
+    backend, modules_disabled_cache, require_db, root
+[不變式] 錨點是安裝根目錄，不是呼叫者的 __file__；值與 V9 原位置逐一相同（原地讀取）
+[契約題] tests/platform/test_core_paths.py, tests/platform/test_no_file_relative_data_paths.py
+[注意] 全 backend 唯一允許用 __file__ 算資料路徑的地方；本檔不 import DB（system_settings 覆寫由呼叫端讀）
+
 🔴 **錨點是安裝根目錄，不是呼叫者的 `__file__`。**
 模組搬進 `modules/<key>/api/` 之後，`dirname(__file__)` 算出來的位置會靜默往下偏一層：
 `db.py` 搬進 `core/` ⇒ 指到 `backend/core/motrix_erp.db` ⇒ sqlite 建一個空庫、
