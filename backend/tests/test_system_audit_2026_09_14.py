@@ -636,12 +636,14 @@ _PUBLIC_ROUTES = {
 
 
 def _scan_routes():
-    for f in sorted((_BACKEND / "routers").glob("*.py")):
+    from core import source_tree  # 含 modules/*/api.py；模組檔以相對路徑為名（api.py 會同名）
+    for f in source_tree.router_files():
         src = f.read_text(encoding="utf-8")
+        name = source_tree.rel(f) if source_tree.rel(f).startswith("modules/") else f.name
         marks = [(m.start(), m.group(1).upper(), m.group(2)) for m in _ROUTE_DEC.finditer(src)]
         for i, (pos, method, path) in enumerate(marks):
             end = marks[i + 1][0] if i + 1 < len(marks) else len(src)
-            yield f.name, method, path, src[pos:end]
+            yield name, method, path, src[pos:end]
 
 
 def test_every_route_has_a_guard_or_is_a_known_public_endpoint():
@@ -745,7 +747,8 @@ def test_no_unknown_role_strings_in_backend():
     """
     bad = {}
     pat = re.compile(r"role.{0,20}?['\"]([a-z_]{3,20})['\"]")
-    for f in list((_BACKEND / "routers").glob("*.py")) + list((_BACKEND / "helpers").glob("*.py")):
+    from core import source_tree
+    for f in source_tree.router_files() + source_tree.logic_files():
         src = f.read_text(encoding="utf-8")
         for m in pat.finditer(src):
             token = m.group(1)

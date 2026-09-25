@@ -62,7 +62,7 @@ from pathlib import Path
 import pytest
 
 import helpers.email_notify as en       # noqa: E402
-import helpers.tender_source as ts      # noqa: E402
+import modules.tender_radar.source as ts      # noqa: E402
 from tests._timefreeze import freeze_slot  # noqa: E402
 
 DETAIL_FIXTURE = Path(__file__).parent / "fixtures" / "tender_detail_20260921.html"

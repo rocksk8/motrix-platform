@@ -41,7 +41,7 @@ from pathlib import Path
 import pytest
 
 import db
-from helpers import tender_source as ts
+from modules.tender_radar import source as ts
 
 #: 🔑 **借用 `test_upgrade_path` 的建庫工具，不自己複製一份。**
 #: 那支 harness 有 `test_u0` 當量尺（證明它真的產出 v84 的庫）。

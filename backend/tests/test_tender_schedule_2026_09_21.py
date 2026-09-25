@@ -55,7 +55,7 @@ import json
 
 import pytest
 
-import helpers.tender_source as ts
+import modules.tender_radar.source as ts
 from helpers.settings import _get_setting, _set_setting
 
 SCAN_HOURS_KEY = "tender_radar_scan_hours"

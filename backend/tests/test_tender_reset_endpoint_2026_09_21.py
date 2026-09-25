@@ -97,7 +97,7 @@ _dt.schedule_overdue_check = lambda *a, **kw: None
 
 if MODE == "literal_on":
     # E4：**出貨開關被打開**（一台正常營運的客戶機器），但這不是測試機。
-    import helpers.tender_source as _ts
+    import modules.tender_radar.source as _ts
     _ts.TENDER_RADAR_ENABLED = True
 
 import main
@@ -128,7 +128,7 @@ ctrl = c.post("/api/tender-radar/this-endpoint-does-not-exist",
               headers={"Authorization": "Bearer " + tok})
 print("STATUS=%d" % resp.status_code)
 print("CONTROL=%d" % ctrl.status_code)
-print("RADAR_ON=%d" % int(__import__("helpers.tender_source", fromlist=["x"]).radar_on()))
+print("RADAR_ON=%d" % int(__import__("modules.tender_radar.source", fromlist=["x"]).radar_on()))
 print("BODY=%s" % resp.text[:200].replace("\\n", " "))
 '''
 

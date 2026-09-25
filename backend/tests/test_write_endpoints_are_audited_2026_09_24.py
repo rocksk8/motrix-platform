@@ -19,6 +19,8 @@ import ast
 import glob
 import os
 
+from core import source_tree
+
 BE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AUDIT_CALLS = {"_audit", "_system_audit"}
 WRITE_METHODS = {"post", "put", "patch", "delete"}
@@ -106,12 +108,18 @@ def is_audited(fn):
     return bool(_called(fn) & (AUDIT_CALLS | set(AUDIT_WRAPPERS)))
 
 
+def _key(f):
+    # routers/ 沿用檔名（EXEMPT 既有鍵）；模組的 api.py 同名，用 modules/<key>/api.py
+    r = source_tree.rel(f)
+    return r if r.startswith("modules/") else os.path.basename(f)
+
+
 def _all():
     rows = []
-    for f in sorted(glob.glob(os.path.join(BE, "routers", "*.py"))):
+    for f in source_tree.router_files():
         src = open(f, encoding="utf-8").read()
         for method, path, fn in write_endpoints(src):
-            rows.append((os.path.basename(f), method, path, fn))
+            rows.append((_key(f), method, path, fn))
     return rows
 
 
@@ -161,7 +169,7 @@ def test_the_scanner_sees_what_it_should():
     rows = _all()
     assert len(rows) > 300, len(rows)
     by = {(f, m, p): fn for f, m, p, fn in rows}
-    assert is_audited(by[("tender_radar.py", "POST", "/api/tender-radar/watches")])
+    assert is_audited(by[("modules/tender_radar/api.py", "POST", "/api/tender-radar/watches")])
     src = (
         "@router.post('/x')\n"
         "def a():\n"

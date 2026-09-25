@@ -190,8 +190,9 @@ def test_backend_default_superadmin_modules_match_frontend_template():
 def _router_module_requirements():
     """{API 前綴: 允收模組集合}，從 `require_any_module(user, (...))` 解析。"""
     out = {}
-    for f in glob.glob(os.path.join(ROOT, "backend", "routers", "*.py")):
-        src = _read(f)
+    from core import source_tree  # 含 modules/*/api.py
+    for f in source_tree.router_files():
+        src = _read(str(f))
         for part in re.split(r"\n(?=@router\.)", src)[1:]:
             m = re.match(r'@router\.(get|post|put|patch|delete)\(\s*["\']([^"\']+)', part)
             if not m:

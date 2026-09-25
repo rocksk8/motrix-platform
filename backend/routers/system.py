@@ -636,8 +636,9 @@ def delete_work_log_photo(wid: int, photo_id: str, authorization: str = Header(N
 #:
 #: 每一筆：`name`（環境變數名）／`on`（**這個行程實際判定的結果**）／
 #: `present`（那個變數在不在）／`raw`（**只在白名單裡才回**，它們是 "0"/"1"）。
+#: L2 模組的開關（例：MOTRIX_TENDER_RADAR）由 `core.registry.runtime_switches()` 提供，
+#: 模組沒裝就不列——這裡只放 L1 自己的。
 _RUNTIME_SWITCHES = (
-    ("MOTRIX_TENDER_RADAR", "標案雷達（連政府電子採購網）"),
     ("MOTRIX_GEO", "地址定位（連 OpenStreetMap）"),
     ("MOTRIX_DISABLE_SCHEDULERS", "停用所有背景排程（測試用）"),
 )
@@ -673,16 +674,18 @@ def get_runtime_switches(authorization: str = Header(None)):
     """
     _require_user(authorization, require_superadmin=True, module='settings')
     from helpers import geo as _geo
-    from helpers import tender_source as _tender
+    from core import registry as _registry
 
     # ⚠️ **`on` 走各模組自己的 `*_on()`，不要在這裡重寫一次判斷式。**
     # 重寫的話，這個端點會回報「我以為的規則」而不是「它們實際用的規則」——
     # 🔑 而那正是這個端點存在的理由（〈守門守的對象被搬走〉）。
+    mod_switches = _registry.runtime_switches()
     resolved = {
-        "MOTRIX_TENDER_RADAR": _tender.radar_on(),
         "MOTRIX_GEO": _geo.geo_on(),
         "MOTRIX_DISABLE_SCHEDULERS": os.getenv("MOTRIX_DISABLE_SCHEDULERS") == "1",
     }
+    resolved.update({s.env: s.is_on() for s in mod_switches})
+    switch_list = [(s.env, s.label) for s in mod_switches] + list(_RUNTIME_SWITCHES)
     return {
         # 🔑 **行程資訊**：沒有它的話，「開關沒生效」與「行程根本沒重啟」分不開。
         "pid": os.getpid(),
@@ -692,7 +695,7 @@ def get_runtime_switches(authorization: str = Header(None)):
              "present": os.getenv(name) is not None,
              "raw": os.getenv(name),
              "on": resolved.get(name, False)}
-            for name, label in _RUNTIME_SWITCHES
+            for name, label in switch_list
         ],
     }
 

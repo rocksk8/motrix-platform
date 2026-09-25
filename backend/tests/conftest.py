@@ -237,7 +237,7 @@ def _no_politeness_delay(monkeypatch):
     ☠️ **只有前者的話，這支 fixture 以後壞掉不會有人發現。**
     """
     try:
-        from helpers import tender_source
+        from modules.tender_radar import source as tender_source
     except Exception:       # noqa: BLE001 —— 匯入不了就不是這支 fixture 的事
         return
     monkeypatch.setattr(tender_source, "DETAIL_INTERVAL_SECONDS", 0,
@@ -700,10 +700,8 @@ _ROLE_DEFAULT_MODULES = {
         "dashboard", "quotation", "case_manage", "customer", "procurement",
         "inventory", "equipment", "finance", "reports", "project_approve_eng",
         "project_approve_biz", "financial_view", "work_log", "daily_task",
-        "env_guide", "netarch_guide", "switch_guide", "monitor_guide",
-        "access_guide", "gateway_guide", "automation_guide", "cashier",
+        "cashier",
         "netplan", "audit_log", "shipping_export_log", "module_versions",
-        "selection_overview",
     ],
     "sales": [
         "dashboard", "quotation", "case_manage", "customer", "financial_view",

@@ -46,7 +46,7 @@ from tests._timefreeze import freeze_slot
 
 # ── 契約 ─────────────────────────────────────────────────────────────────────
 
-import helpers.tender_source as ts  # noqa: E402  第 4 輪已存在
+import modules.tender_radar.source as ts  # noqa: E402  第 4 輪已存在
 import helpers.email_notify as en   # noqa: E402  既有模組
 import helpers.notification_prefs as np  # noqa: E402  既有模組
 
@@ -227,7 +227,7 @@ import routers.daily_tasks as _dt
 _dt.schedule_overdue_check = lambda *a, **kw: None
 
 # ④ 把要觀測的那一支換成記錄器
-import helpers.tender_source as _ts
+import modules.tender_radar.source as _ts
 _hits = []
 _ts.schedule_tender_scan = lambda *a, **kw: _hits.append(1)
 

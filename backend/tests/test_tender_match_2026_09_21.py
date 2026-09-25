@@ -51,13 +51,13 @@ from tests._timefreeze import freeze_slot
 # ── 契約 ─────────────────────────────────────────────────────────────────────
 
 try:
-    from helpers import tender_source as src
+    from modules.tender_radar import source as src
 except Exception as exc:  # noqa: BLE001
     src = None
     _SRC_ERR = repr(exc)
 
 try:
-    from helpers import tender_match as tmatch
+    from modules.tender_radar import match as tmatch
 except Exception as exc:  # noqa: BLE001
     tmatch = None
     _MATCH_ERR = repr(exc)

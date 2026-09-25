@@ -186,7 +186,8 @@ def _scan_router_file(path):
 
 def _scan_all():
     out = []
-    for p in sorted(ROUTERS_DIR.glob("*.py")):
+    from core import source_tree  # 模組的 api.py 也要掃（守門對象不可以被搬走）
+    for p in source_tree.router_files():
         out.extend(_scan_router_file(p))
     return out
 

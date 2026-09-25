@@ -465,7 +465,7 @@ def test_map_works_with_the_radar_off(client, make_user, monkeypatch):
     """
     _seed_legacy_profile()
     monkeypatch.setattr(_geo(), "GEO_ENABLED", True)
-    import helpers.tender_source as ts
+    import modules.tender_radar.source as ts
     monkeypatch.setattr(ts, "TENDER_RADAR_ENABLED", False)
     monkeypatch.delenv("MOTRIX_TENDER_RADAR", raising=False)
     assert ts.radar_on() is False, "前提不成立：雷達應該是關的"

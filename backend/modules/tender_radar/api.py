@@ -23,8 +23,8 @@ from helpers.settings import  _set_setting
 from helpers import _audit, _require_user, _tok, require_any_module
 # ⚠️ 走模組不是 `from ... import run_scan`：那會複製走副本，
 # 測試換不掉，而「換不掉」的症狀是計數器永遠 0、那一題永遠綠。
-from helpers import tender_match
-from helpers import tender_source
+from modules.tender_radar import match as tender_match
+from modules.tender_radar import source as tender_source
 # ⚠️ 同理走模組：`geo.geocode` 要 patch 得到（M8b）。
 
 router = APIRouter()

@@ -23,14 +23,18 @@ from archive import _ensure_archive_dirs, _schedule_weekly, _schedule_daily
 import trail
 
 from helpers import licensing as license_core
-from helpers import tender_source as tender_radar_source
 from helpers import geo as geo_core
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, tender_radar, map_points, account_items, bonus, vouchers
+from core import loader as module_loader, registry as module_registry
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
 from routers import modules
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# L2 模組（modules/*）由載入器登錄；main 不指名任何 L2 模組（CORE-SPEC §2）。
+# 載入失敗的模組只記 ERROR，不擋啟動。
+module_loader.load_all()
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
 
@@ -567,9 +571,10 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     daily_tasks.schedule_overdue_check()
     reports.schedule_monthly_report()
     dev_crm.schedule_dev_case_stale_check()
-    # 標案雷達（2026-09-21）。總開關 TENDER_RADAR_ENABLED 預設關，
-    # 關著時 run_scan() 立刻返回、不對外連線——排程照排，但不做事。
-    tender_radar_source.schedule_tender_scan()
+    # L2 模組的排程（例：標案雷達；關著時 run_scan() 立刻返回、不對外連線）。
+    for _m in module_registry.loaded():
+        for _sched in _m.spec.schedulers:
+            _sched()
     # 背景把地址查成座標（2026-09-22 §3v）。使用者裁示「不要他按按鈕」。
     # ⚠️ 受 GEO_ENABLED 管：關著時一次都不發（不是「發了失敗」）。
     # 🔴 它有每日上限與連續失敗停止 —— 一個會自己跑的迴圈，
@@ -600,9 +605,11 @@ else:
 # 「這台機器會不會對外連線」與排程開不開**無關**：排程關著時，使用者按「立即掃描」
 # 照樣會連出去。放進閘門裡的話，「排程關、雷達開」的機器就不印了——
 # **而那正是測試機的組態，最需要被標記的那一台剛好不會被標記。**
-if tender_radar_source.radar_on():
-    logger.info("MOTRIX_TENDER_RADAR=1 —— 標案雷達已開，"
-                "這台機器會對外連線（政府電子採購網）")
+for _m in module_registry.loaded():
+    for _notice in _m.spec.startup_notices:
+        _msg = _notice()
+        if _msg:
+            logger.info(_msg)
 # ⚠️ **地理查詢也要有啟動痕跡**（2026-09-22 §8 FX1a）。
 # 它先前完全沒有 ⇒ 一台「以為開了而其實沒開」的機器，
 # 症狀是「地圖上沒有點」—— ☠️ 而那與「地址查不到」「還沒暖快取」
@@ -663,7 +670,9 @@ app.include_router(approval_delegates.router)
 app.include_router(cashier.router)
 app.include_router(accounting_export.router)
 app.include_router(licensing.router)
-app.include_router(tender_radar.router)
+for _m in module_registry.loaded():
+    for _r in _m.spec.routers:
+        app.include_router(_r)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。
 app.include_router(map_points.router)
 app.include_router(account_items.router)

@@ -415,7 +415,7 @@ def test_the_politeness_delay_is_zero_in_tests():
     📌 是我跑 `--collect-only -k` 去查才發現的，**不是它報錯**。
     ⇒ 寫完一個新的對照組，**第一件事是確認它真的被收集到**。
     """
-    from helpers import tender_source
+    from modules.tender_radar import source as tender_source
     assert tender_source.DETAIL_INTERVAL_SECONDS == 0, (
         f"測試裡的 `DETAIL_INTERVAL_SECONDS` 是 "
         f"{tender_source.DETAIL_INTERVAL_SECONDS}，預期 0 ——\n"

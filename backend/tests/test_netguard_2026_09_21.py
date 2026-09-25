@@ -11,7 +11,7 @@ import urllib.request
 
 import pytest
 
-import helpers.tender_source as ts
+import modules.tender_radar.source as ts
 
 FAKE_URL = "https://example.invalid/netguard-self-test"
 

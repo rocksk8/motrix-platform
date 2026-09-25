@@ -709,7 +709,7 @@ def _store(conn, items):
     去重靠 `UNIQUE(org, case_no)` 與 `UNIQUE(watch_id, tender_id)`，不靠這裡的判斷——
     唯一鍵在資料庫裡，而程式碼裡的判斷會被下一個人改掉。
     """
-    from helpers.tender_match import match_watches
+    from modules.tender_radar.match import match_watches
 
     watches = []
     for r in conn.execute(

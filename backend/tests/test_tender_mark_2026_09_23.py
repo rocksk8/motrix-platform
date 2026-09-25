@@ -235,7 +235,7 @@ def test_td5_a_mark_survives_a_fetch(client, make_user, seeded):
 
     ⚠️ 這一題**綠著出生**（現狀就是安全的）⇒ 它的價值全部在下一題那支反向控制。
     """
-    from helpers import tender_source
+    from modules.tender_radar import source as tender_source
     import db
 
     hdr = _auth(client, make_user, "mark_fetch")

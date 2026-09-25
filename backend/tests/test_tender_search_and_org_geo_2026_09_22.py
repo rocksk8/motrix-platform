@@ -51,7 +51,7 @@ import pytest
 
 from helpers import geo
 from tests._map_cache_warm import serve_from_fake
-from helpers import tender_match
+from modules.tender_radar import match as tender_match
 
 TENDERS_PATH = "/api/tender-radar/tenders"
 

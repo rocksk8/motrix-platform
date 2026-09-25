@@ -32,8 +32,8 @@ import json
 
 import pytest
 
-import helpers.tender_match as tm
-import helpers.tender_source as ts
+import modules.tender_radar.match as tm
+import modules.tender_radar.source as ts
 from tests._timefreeze import freeze_slot
 
 TENDERS_PATH = "/api/tender-radar/tenders"

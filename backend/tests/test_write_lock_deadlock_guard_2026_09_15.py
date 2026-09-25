@@ -64,8 +64,8 @@ _ALLOWED = {
 
 
 def _iter_functions():
-    files = sorted(glob.glob(os.path.join(BACKEND, "routers", "*.py"))) + \
-        sorted(glob.glob(os.path.join(BACKEND, "helpers", "*.py"))) + \
+    from core import source_tree  # 含 modules/*/
+    files = [str(p) for p in source_tree.router_files() + source_tree.logic_files()] + \
         [os.path.join(BACKEND, "main.py")]
     for path in files:
         if "rollback_snapshots" in path:

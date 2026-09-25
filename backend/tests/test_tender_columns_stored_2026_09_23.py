@@ -45,7 +45,7 @@ import pytest
 
 
 def _ts():
-    from helpers import tender_source
+    from modules.tender_radar import source as tender_source
     return tender_source
 
 
