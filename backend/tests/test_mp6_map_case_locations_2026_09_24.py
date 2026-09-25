@@ -155,15 +155,16 @@ def test_mp6_case_addresses_join_the_background_geocode_backlog(client, people):
 # 頁面（e2e）：圖層預設開著、圖例有「案」、清單連回案件頁
 # ══════════════════════════════════════════════════════════════════════
 
-pytest.importorskip("playwright.sync_api")
-
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login  # noqa: E402,F401
+# 稽核 Y-4（2026-09-25）：importorskip 原本在**模組層**，沒有 playwright 的環境會連同上面 5 題 API 可見性題
+# （地圖逐筆可見性的唯一守門）一起 skip ⇒ 改在 e2e 題內呼叫，只跳過這一題。
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
 
 @pytest.mark.e2e
 def test_mp6_the_case_layer_is_on_by_default_and_links_to_the_case(live_server, make_user, _geo, e2e_browser):
+    pytest.importorskip("playwright.sync_api")
+    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login
     u, p = make_user(username="mp6_page", role="superadmin")
     body = {"points": [{"dataset": "cases", "sourceKey": "cases", "recordId": "MQ-202609-007",
                         "quoteNo": "MQ-202609-007", "name": "某工地專案", "org": "某客戶",

@@ -120,10 +120,13 @@ def test_mp1_every_own_point_carries_the_id_of_its_record(client, make_user, _ge
 # 頁面（e2e）
 # ══════════════════════════════════════════════════════════════════════
 
-pw = pytest.importorskip("playwright.sync_api")
-from tests._map_tiles import block_tiles  # noqa: E402
-
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
+# 稽核 Y-4（2026-09-25）：importorskip 原本在**模組層** ⇒ 沒有 playwright 時，上面的 API 題（以及 import 本檔
+# `_geo` 的 test_mp6 的地圖可見性題）整檔一起 skip。改成 e2e 題內呼叫 `_page_deps()`，只跳過 e2e 題。
+def _page_deps():
+    pytest.importorskip("playwright.sync_api")
+    from tests._map_tiles import block_tiles
+    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login
+    return block_tiles, _login
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 
@@ -156,6 +159,7 @@ def _open_map(page, live_server, query):
 
 @pytest.mark.e2e
 def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, make_user, _geo, e2e_browser):
+    block_tiles, _login = _page_deps()
     u, p = make_user(username="mp1_focus", role="superadmin")
     browser = e2e_browser
     page = browser.new_page(viewport={"width": 1280, "height": 900})
@@ -183,6 +187,7 @@ def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, m
 
 @pytest.mark.e2e
 def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo, e2e_browser):
+    block_tiles, _login = _page_deps()
     """看不到那一頁的人不給連結（協力廠商頁限管理員；外包名冊頁要模組；標案雷達要 dev_crm）。"""
     u, p = make_user(username="mp1_gate", role="superadmin")
     browser = e2e_browser
@@ -216,6 +221,7 @@ def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo, e2
 
 @pytest.mark.e2e
 def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_server, make_user, _geo, e2e_browser):
+    block_tiles, _login = _page_deps()
     # `_geo`：標案雷達頁會畫自己的小地圖，後端會探測圖磚——換掉，不對外連線（NETGUARD）。
     ids = _seed()
     u, p = make_user(username="mp1_pages", role="superadmin")
