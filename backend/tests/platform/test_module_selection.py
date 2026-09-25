@@ -204,10 +204,17 @@ def test_after_restart_the_module_is_gone_and_data_stays(gate, tmp_path):
 
 
 def test_registry_snapshot_restores_every_table():
-    """反向控制：清空後 restore 必須把每一張表都還原（含 _STATES）。"""
-    before = registry.snapshot()
-    assert before[2], "狀態表是空的——這題就什麼都沒驗"
-    registry._reset()
-    assert registry.module_states() == []
-    registry.restore(before)
-    assert registry.snapshot() == before
+    """反向控制：清空後 restore 必須把每一張表都還原（含 _STATES）。
+    自己放一筆合成狀態——不依賴「這個 worker 有沒有先 import 過 main」（依賴順序的題本身就是這次的病因）。"""
+    outer = registry.snapshot()
+    try:
+        registry.set_state("zz_snapshot_probe", registry.STATE_DISABLED, "探針")
+        before = registry.snapshot()
+        assert "zz_snapshot_probe" in before[2]
+        registry._reset()
+        assert registry.module_states() == []
+        registry.restore(before)
+        assert registry.snapshot() == before
+    finally:
+        registry.restore(outer)
+    assert "zz_snapshot_probe" not in registry._STATES
