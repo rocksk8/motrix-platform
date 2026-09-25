@@ -1173,10 +1173,31 @@ def pytest_sessionfinish(session, exitstatus):
     basetemp = config.option.basetemp
     if not basetemp or not _basetemp_safe_to_delete(basetemp):
         return
+    if not remove_basetemp_tree(basetemp):
+        _lock_say("\n[暫存] %s 仍有檔案刪不掉（被占用），請稍後手動刪除（只刪這一個）" % basetemp)
+
+
+def remove_basetemp_tree(path) -> bool:
+    """刪掉整個目錄（含唯讀檔），回傳「刪乾淨了沒」。
+
+    🔴 2026-09-25（B）：原本 `rmtree(ignore_errors=True)`，而測試會在 tmp 建 git repo，
+    **git 物件檔是唯讀** ⇒ Windows 上刪不掉、靜默略過 ⇒ 每一輪都留下目錄，訊息卻說「被佔用」。
+    ☠️ 那正是〈測試暫存資料夾用完必刪〉要防的累積（190 GB、228 GB 兩次塞爆）。
+    ⇒ 遇到刪不掉的檔先解除唯讀再刪；仍刪不掉的才是真的被占用。
+    守門：tests/test_basetemp_cleanup_readonly_2026_09_25.py（含「拿掉解除唯讀就紅」的對照）。
+    """
     import shutil
-    shutil.rmtree(str(basetemp), ignore_errors=True)
-    if Path(basetemp).exists():
-        _lock_say("\n[暫存] %s 有部分檔案仍被佔用、沒刪乾淨，請稍後手動刪除" % basetemp)
+    import stat
+
+    def _clear_readonly(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except OSError:
+            pass
+
+    shutil.rmtree(str(path), onerror=_clear_readonly)
+    return not Path(path).exists()
 
 
 def pytest_unconfigure(config):
