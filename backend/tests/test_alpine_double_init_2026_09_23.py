@@ -71,7 +71,9 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 🔴 2026-09-25（視窗 A，platform）44 -> 45：CORE-SPEC §9c 新增 module-settings.html（模組管理，Alpine，
 #:    有 _initDone 守衛）。實測：HEAD 掃出 44、加頁後 45，差集恰好只有這一頁。
 #: 🔴 2026-09-25（視窗 R）45 -> 46：R1 新增 legal-params.html（法規參數設定，Alpine，有 _initDone 守衛）。
-PAGE_POPULATION = 46
+#: 🔴 2026-09-26（視窗 H，P8 前端）46 -> 48：新增 module-builder.html（模組建構器）與 custom-records.html
+#:    （自訂模組執行頁），兩頁都是 Alpine、有 _initDone 守衛。
+PAGE_POPULATION = 48
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 
