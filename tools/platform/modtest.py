@@ -94,6 +94,80 @@ def _names(repo, *diff_args):
     return set(l for l in out.splitlines() if l.strip())
 
 
+# ── 簿記檔：每次合回都會兩邊一起改，只在「同一個項目」被兩邊改時才算衝突（主持 2026-09-26：各線追著跑全量）──
+
+def _show(repo, ref, rel):
+    r = subprocess.run(["git", "-C", str(repo), "show", "%s:%s" % (ref, rel)], capture_output=True, text=True,
+                       encoding="utf-8")
+    return r.stdout if r.returncode == 0 else None
+
+
+def _flat(obj, path=()):
+    """JSON ⇒ {鍵: 值}。dict 逐鍵；純量清單 ⇒ 每個項目一個鍵；dict 清單以 version／key 為鍵（沒有就用位置）。"""
+    out = {}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            out.update(_flat(v, path + (str(k),)))
+    elif isinstance(obj, list):
+        if all(not isinstance(x, (dict, list)) for x in obj):
+            for x in obj:
+                out[path + ("∋", json.dumps(x, ensure_ascii=False))] = True
+        else:
+            for i, x in enumerate(obj):
+                ident = (x.get("version") or x.get("key")) if isinstance(x, dict) else None
+                out.update(_flat(x, path + ("[%s]" % (ident or i),)))
+    else:
+        out[path] = obj
+    return out
+
+
+def _diff_keys(fa, fb):
+    return {k for k in set(fa) | set(fb) if fa.get(k) != fb.get(k)}
+
+
+def _changed_json(a, b):
+    """一般 JSON（version_manifest 以條目 version 為鍵；modules.json 以群組／欄位／單位為鍵）。"""
+    return _diff_keys(_flat(json.loads(a)), _flat(json.loads(b)))
+
+
+def _changed_snapshot(a, b):
+    """G1 快照：core_version 每次合回都變，不算；項目＝「interface／單位／名稱」。"""
+    da, db = json.loads(a), json.loads(b)
+    for d in (da, db):
+        d.pop("core_version", None)
+    return {k[:3] for k in _diff_keys(_flat(da), _flat(db))}
+
+
+def _changed_registry(a, b):
+    """registry.py：只改 CORE_VERSION 那一行 ⇒ 沒有項目；其餘任何改動 ⇒ 一個「其他」項目。"""
+    import difflib
+    keep = lambda t: [l for l in t.splitlines() if not re.match(r"\s*CORE_VERSION\s*=", l)]
+    return {("registry", "其他改動")} if list(difflib.unified_diff(keep(a), keep(b), n=0)) else set()
+
+
+#: 簿記檔 ⇒ 「這一側改了哪些項目」。項目有交集才算衝突。
+BOOKKEEPING = {
+    "backend/core/registry.py": _changed_registry,
+    "backend/tests/platform/l1_interface_snapshot.json": _changed_snapshot,
+    "backend/version_manifest.json": _changed_json,
+    "docs/platform/modules.json": _changed_json,
+}
+
+
+def bookkeeping_overlap(repo, rel, mine_pair, incoming_pair):
+    """兩側 (base, ref) 各自改了哪些項目；有交集或讀不到／解析不了 ⇒ (True, 說明)，否則 (False, 說明)。"""
+    texts = [_show(repo, ref, rel) for ref in (*mine_pair, *incoming_pair)]
+    if any(t is None for t in texts):
+        return True, "有一側讀不到（新增或刪除）⇒ 保守判衝突"
+    try:
+        m = BOOKKEEPING[rel](texts[0], texts[1])
+        i = BOOKKEEPING[rel](texts[2], texts[3])
+    except (ValueError, TypeError, AttributeError) as e:
+        return True, "解析不了（%s）⇒ 保守判衝突" % e
+    both = sorted("/".join(map(str, k)) for k in m & i)
+    return bool(both), ("兩邊都改：%s" % "、".join(both[:5])) if both else "項目不重疊（本分支 %d、帶進來 %d）" % (len(m), len(i))
+
+
 def rebase_check(green, onto, repo=None, head="HEAD"):
     """PLAYBOOK §C-11：全量綠在 green（rebase 前的分支尖端）之後 rebase 到 onto，要不要重跑全量。
 
@@ -106,6 +180,7 @@ def rebase_check(green, onto, repo=None, head="HEAD"):
       ☠️ 不建議 `--changed-since <green>`：它把帶進來的也算進去，對方改到 L0 時會挑出九成（2026-09-26 實測 90.7%）；
          也不建議 `--base <onto>`：本分支自己改過 fixture 層時一定被拒（同日實測）。
     - 帶進來的檔在 head 上又被本分支改過（head 與 onto 的內容不同）⇒ 視為程式碼衝突
+    - 例外：簿記檔（BOOKKEEPING：registry／G1 快照／version_manifest／modules.json）只在**同一個項目**被兩邊改時才算衝突
     ⚠ 只看「帶進來的」：本分支自己改的 fixture 層由它自己的全量負責（§C-4），不在這裡判定。
     ⚠ 要在 rebase **之後**跑（head 已經在 onto 上）；rebase 之前跑，after_green 永遠是空的。
     """
@@ -117,12 +192,25 @@ def rebase_check(green, onto, repo=None, head="HEAD"):
     touched_again = {f for f in incoming & since_green if _names(repo, onto, head, "--", f)}
     fixture = sorted(f for f in incoming if f in FIXTURE_LAYER)
     both = (incoming & mine) | touched_again
-    overlap = sorted(f for f in both if not f.endswith(".md"))
+    # 簿記檔：兩邊的「項目」有交集才算衝突（全量前的改動看 mb..green；rebase 後才改的看 onto..head）
+    bookkeeping = {}
+    for f in sorted(both & set(BOOKKEEPING)):
+        checks = []
+        if f in incoming & mine:
+            checks.append(bookkeeping_overlap(repo, f, (mb, green), (mb, onto)))
+        if f in touched_again:
+            checks.append(bookkeeping_overlap(repo, f, (onto, head), (mb, onto)))
+        hit = [d for c, d in checks if c]
+        bookkeeping[f] = {"conflict": bool(hit), "detail": "；".join(hit or [d for _, d in checks])}
+    benign = {f for f, v in bookkeeping.items() if not v["conflict"]}
+    overlap = sorted(f for f in both - benign if not f.endswith(".md"))
     rebased = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", onto, head]).returncode == 0
     return {"green": green, "onto": onto, "head": head, "merge_base": mb, "rebased": rebased,
             "incoming": sorted(incoming), "mine": sorted(mine),
             "after_green": sorted(since_green - incoming),
-            "fixture_layer": fixture, "overlap": overlap, "overlap_docs": sorted(both - set(overlap)),
+            "fixture_layer": fixture, "overlap": overlap,
+            "overlap_docs": sorted(f for f in both - set(overlap) if f.endswith(".md")),
+            "bookkeeping": bookkeeping,
             "need_full": bool(fixture or overlap)}
 
 
@@ -133,6 +221,8 @@ def print_rebase_check(r):
     print("兩邊都改的程式檔（視為程式碼衝突）：%s" % ("、".join(r["overlap"]) or "無"))
     if r["overlap_docs"]:
         print("兩邊都改的文件（不觸發全量）：%s" % "、".join(r["overlap_docs"]))
+    for f, v in sorted(r.get("bookkeeping", {}).items()):
+        print("簿記檔 %s：%s（%s）" % (f, "🔴 衝突" if v["conflict"] else "不重疊", v["detail"]))
     if r["need_full"]:
         print("🔴 判定：重跑全量（§C-11 例外）")
     elif not r["rebased"]:
