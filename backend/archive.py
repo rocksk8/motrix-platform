@@ -1114,8 +1114,10 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
             pii_db = _pii_db_path("每日備份", today)
             if pii_db:
                 try:
-                    _cloud_copy_file(dest, pii_db,
-                                     f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
+                    _pii_copy_file(dest, pii_db,
+                                   f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
+                except PiiFolderMissing as e:
+                    _pii_vanished_alert("每日整庫備份", e)
                 except Exception as e:
                     _write_backup_alert(f"SQLite 快照複製到雲端（個資資料夾）失敗: {e}", level="ERROR")
         # Prune local snapshots per configured retention (see _backup_retention())
@@ -1130,7 +1132,7 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
 
 
 def _mirror_directory_incremental(local_root: str, dst_root_abs: str, s3_dir_root: str,
-                                   exclude_demo_dirs: bool = True) -> int:
+                                   exclude_demo_dirs: bool = True, copy_fn=None) -> int:
     """共用的「按檔案 size+mtime 判斷是否需要複製」鏡像邏輯（2026-09-07 從
     `_mirror_uploads()` 抽出，供 `_mirror_pdf_archives()` 共用，見該函式與
     `_mirror_uploads()` 各自的 docstring 說明用途差異）。只複製新增/變動過的
@@ -1156,8 +1158,10 @@ def _mirror_directory_incremental(local_root: str, dst_root_abs: str, s3_dir_roo
                     d_size, d_mtime = existing
                     if s.st_size == d_size and int(s.st_mtime) <= int(d_mtime):
                         continue
-                _cloud_copy_file(src, dst, s3_key)
+                (copy_fn or _cloud_copy_file)(src, dst, s3_key)
                 copied += 1
+            except PiiFolderMissing:
+                raise                                 # 整個目的地不在了：不逐檔重試（呼叫端告警）
             except Exception:
                 logger.exception("_mirror_directory_incremental failed for %s", src)
     return copied
@@ -1288,6 +1292,51 @@ def _pii_state_edge(status: dict) -> bool:
     return False
 
 
+class PiiFolderMissing(RuntimeError):
+    """個資資料夾（或它底下正要寫入的上層）在寫入當下不存在——程式不建它。"""
+
+
+def _pii_ensure_dir(dir_abs: str) -> None:
+    """在 `系統存檔_個資` **底下**建目錄：逐層 `os.mkdir`（不用 makedirs），根目錄不在就丟 `PiiFolderMissing`。
+
+    稽核 X-9b S-5：原本「先 isdir 檢查、再 makedirs 連上層一起建」——資料夾在兩步之間被移除
+    （雲端硬碟同步、使用者刪除或改名，發生在一次長時間鏡像的中途）⇒ makedirs 把根目錄建回來，
+    而且繼承上層較寬的分享權限。`os.mkdir` 不建上層 ⇒ 根目錄不在時必定失敗，不可能建回來。
+    """
+    root = _pii_archive_root()
+    if not root:
+        raise PiiFolderMissing("雲端存檔路徑不可用")
+    root_abs, d_abs = os.path.abspath(root), os.path.abspath(dir_abs)
+    rn, dn = os.path.normcase(root_abs), os.path.normcase(d_abs)
+    if dn != rn and not dn.startswith(rn.rstrip("\\/") + os.sep):
+        raise ValueError("不在個資資料夾內：%s" % dir_abs)
+    if not os.path.isdir(root_abs):
+        raise PiiFolderMissing(root_abs)
+    cur = root_abs
+    rel = os.path.relpath(d_abs, root_abs)
+    for part in ([] if rel == "." else rel.split(os.sep)):
+        cur = os.path.join(cur, part)
+        try:
+            os.mkdir(cur)
+        except FileExistsError:
+            pass
+        except FileNotFoundError:
+            raise PiiFolderMissing(root_abs) from None    # 上層（含根目錄）在這之間消失
+
+
+def _pii_copy_file(local_src: str, local_dest_abs: str, s3_key: str) -> None:
+    """個資資料夾版的 `_cloud_copy_file`：目的地的上層只用 `_pii_ensure_dir` 建。"""
+    if _active_backend() == "s3":
+        return _cloud_copy_file(local_src, local_dest_abs, s3_key)
+    _pii_ensure_dir(os.path.dirname(local_dest_abs))
+    shutil.copy2(local_src, local_dest_abs)
+
+
+def _pii_vanished_alert(what: str, exc: Exception) -> None:
+    _write_backup_alert("個資資料夾在寫入途中消失（%s）：%s —— 程式不會重建它，這一輪的%s沒有寫進雲端。"
+                        "請確認資料夾與分享權限" % (what, exc, what), level="ERROR")
+
+
 def _pii_db_path(layer: str, label: str) -> str:
     """個資資料夾內 `<layer>/<label>/motrix_erp.db` 的路徑；資料夾不 ready ⇒ `""`（並走邊緣告警）。"""
     status = pii_archive_status()
@@ -1303,7 +1352,11 @@ def _pii_daily_json_export(conn, day_label: str, now: str):
     _pii_state_edge(status)
     if status["state"] != "ready":
         return None
-    summary = _export_pii_json_set(conn, os.path.join(status["path"], "每日備份", day_label), now)
+    try:
+        summary = _export_pii_json_set(conn, os.path.join(status["path"], "每日備份", day_label), now)
+    except PiiFolderMissing as e:
+        _pii_vanished_alert("個資每日匯出", e)
+        return None
     failed = [k for k, v in summary.items() if v == "error"]
     if failed:
         _write_backup_alert("個資每日匯出失敗：%s" % "、".join(failed), level="ERROR")
@@ -1317,8 +1370,13 @@ def _mirror_pii_archives() -> int:
     if status["state"] != "ready":
         return 0
     dest = os.path.join(status["path"], _PII_PAYSLIP_SUBDIR)
-    copied = _mirror_directory_incremental(_payslip_archive_source(), dest,
-                                           f"{_PII_ARCHIVE_DIRNAME}/{_PII_PAYSLIP_SUBDIR}")
+    try:
+        copied = _mirror_directory_incremental(_payslip_archive_source(), dest,
+                                               f"{_PII_ARCHIVE_DIRNAME}/{_PII_PAYSLIP_SUBDIR}",
+                                               copy_fn=_pii_copy_file)
+    except PiiFolderMissing as e:
+        _pii_vanished_alert("勞報單鏡像", e)
+        return 0
     if copied:
         logger.info("PII archive mirror: copied %d payslip file(s)", copied)
         _system_audit("backup.pii_archive_mirror", date.today().isoformat(), {"copied": copied})
@@ -2052,9 +2110,43 @@ _F2_FIELDS = {
                  "json": ("data_json", ("contractorIdNumber", "contractorAddress",
                                         "contractorPhone", "contractorEmail", "contractorLineId",
                                         "bankAccountName", "bankAccountNumber"))},
+    # 稽核 X-9b M-3：建立承攬付款憑據時，從 contractors 把外包**個人**的帳戶凍結進
+    # snapshot_json.personnel[]（routers/contractor_vouchers.py）⇒ 同一個 F2 值換一張表存放。
+    # "json_list"＝(欄位, 陣列鍵, [鍵…])：一般份把陣列裡每一個物件拿掉這幾個鍵。
+    # ⚠ 最上層的 bankAccountName／bankAccountNumber 是**協力廠商**（承攬商本身）的帳戶，
+    #    是否屬個資待裁示（稽核 O-9，與 vendor_contractors 一起決定），目前照一般表匯出。
+    "承攬付款憑據": {"table": "contractor_payment_vouchers",
+                     "json_list": ("snapshot_json", "personnel",
+                                   ("bankAccountName", "bankAccountNumber", "bankPassbookImage"))},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
+
+
+def _f2_json_columns(spec: dict) -> list:
+    """這張表裡含 F2 內容的 JSON 欄位（還原時整欄取個資份）。"""
+    return [spec[k][0] for k in ("json", "json_list") if k in spec]
+
+
+def _strip_json_f2(raw, list_key, keys):
+    """回傳拿掉 F2 鍵之後的 JSON 字串；解析不了或形狀不對 ⇒ `_F2_UNPARSEABLE`（不原樣照放）。
+    `list_key` 是 None ⇒ 最上層物件；否則 ⇒ `obj[list_key]` 陣列裡的每一個物件。"""
+    if raw in (None, ""):
+        return raw
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        return _F2_UNPARSEABLE
+    if not isinstance(obj, dict):
+        return _F2_UNPARSEABLE
+    targets = [obj] if list_key is None else obj.get(list_key) or []
+    if not isinstance(targets, list):
+        return _F2_UNPARSEABLE
+    for t in targets:
+        if isinstance(t, dict):
+            for k in keys:
+                t.pop(k, None)
+    return json.dumps(obj, ensure_ascii=False)
 
 
 def _general_row(fname: str, row: dict) -> dict:
@@ -2064,19 +2156,12 @@ def _general_row(fname: str, row: dict) -> dict:
         row = {k: v for k, v in row.items() if k not in spec.get("columns", ())}
         if "json" in spec:
             col, keys = spec["json"]
-            raw = row.get(col)
-            if raw not in (None, ""):
-                try:
-                    obj = json.loads(raw)
-                except Exception:
-                    row[col] = _F2_UNPARSEABLE
-                else:
-                    if isinstance(obj, dict):
-                        for k in keys:
-                            obj.pop(k, None)
-                        row[col] = json.dumps(obj, ensure_ascii=False)
-                    else:
-                        row[col] = _F2_UNPARSEABLE
+            if col in row:
+                row[col] = _strip_json_f2(row[col], None, keys)
+        if "json_list" in spec:
+            col, list_key, keys = spec["json_list"]
+            if col in row:
+                row[col] = _strip_json_f2(row[col], list_key, keys)
     return _strip_inline_images(row)
 
 
@@ -2090,9 +2175,7 @@ def merge_general_and_pii(fname: str, general_rows: list, pii_rows: list) -> tup
     if not spec:
         return list(general_rows), []
     by_id = {r.get("id"): r for r in pii_rows}
-    take = list(spec.get("columns", ()))
-    if "json" in spec:
-        take.append(spec["json"][0])
+    take = list(spec.get("columns", ())) + _f2_json_columns(spec)
     out, missing = [], []
     for g in general_rows:
         p = by_id.get(g.get("id"))
@@ -2116,9 +2199,11 @@ def _export_pii_json_set(conn, dest_dir_abs: str, now: str) -> dict:
         try:
             rows = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
             path = os.path.join(dest_dir_abs, f"{fname}.json")
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            _pii_ensure_dir(os.path.dirname(path))       # S-5：不用 makedirs（根目錄不在 ⇒ 失敗，不建回來）
             _atomic_json_write(path, {"exported_at": now, "count": len(rows), "data": rows})
             summary[fname] = len(rows)
+        except PiiFolderMissing:
+            raise
         except Exception:
             logger.exception("PII table export %s failed", fname)
             summary[fname] = "error"
@@ -2245,9 +2330,12 @@ def _monthly_backup():
                 "目前不可用 —— **尚未標記完成**，資料夾建好後的下一次每日備份會補上", level="ERROR")
         else:
             try:
-                _cloud_copy_file(today_snapshot, pii_db,
-                                 f"{_PII_ARCHIVE_DIRNAME}/月備份/{month_label}/motrix_erp.db")
+                _pii_copy_file(today_snapshot, pii_db,
+                               f"{_PII_ARCHIVE_DIRNAME}/月備份/{month_label}/motrix_erp.db")
                 summary["db_snapshot"] = True
+            except PiiFolderMissing as e:
+                summary["db_snapshot"] = False
+                _pii_vanished_alert("月備份整庫檔（%s）" % month_label, e)
             except Exception as e:
                 summary["db_snapshot"] = False
                 _write_backup_alert(f"月備份整庫複製失敗（{month_label}）: {e}", level="ERROR")

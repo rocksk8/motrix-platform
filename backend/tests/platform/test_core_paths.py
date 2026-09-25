@@ -53,6 +53,8 @@ V9_LOCATIONS = {
     "BUILD_COMMIT_FILE": os.path.join(BACKEND, ".build_commit"),
     "DEPLOYED_COMMIT_FILE": os.path.join(BACKEND, ".deployed_commit.json"),
     "VERSION_MANIFEST": os.path.join(BACKEND, "version_manifest.json"),
+    # V9 c83dae6e 的 backend/autostart.bat（排程工作啟動它；Python 不讀它）
+    "AUTOSTART_BAT": os.path.join(BACKEND, "autostart.bat"),
     "FRONTEND_DIR": os.path.join(ROOT, "frontend"),
 }
 

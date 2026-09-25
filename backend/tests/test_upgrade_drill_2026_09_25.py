@@ -37,9 +37,21 @@ def test_convert_then_rollback_restores_v9(mode):
     assert s["backup_verify"] == [], s["backup_verify"]
     assert s["convert"]["migrate"]["ok"], s["convert"]["migrate"]
     assert s["convert"]["settings_added"] == {"payslip_archive_path": ""}
+    # 稽核 X-9b S-6：夾具是「本公司、欄位不齊」⇒ 轉換一定有補欄位（M-1 的觸發條件）
+    assert set(s["convert"]["company_profile"]["filled"]) == {"company_name_en", "email"}, s["convert"]
     assert s["verify"] == [], s["verify"]
     assert s["rows_added_before_rollback"].get("customers") == 1
+    # S-3：完整回滾的提示以「轉換完成當下」為基準 ⇒ 轉換本身寫的列不算，演練寫的那一筆客戶要列出來
+    ch = s["changes_since_conversion"]
+    assert ch["baseline"] == "post_convert" and ch["rows_added"].get("customers") == 1, ch
     assert s["rollback"] == [], s["rollback"]              # 程式（兩種）＋DB／設定（full）雜湊逐一相等
+    assert s["rollback_exit"] == 0, s                      # CLI 同一條路：含自動 V9 ping
+    assert "uploads/projects/1/after_upgrade.jpg" in s["rollback_info"]["data_added"], s["rollback_info"]
+    if mode == "full":                                     # O-1：邏輯內容與備份時的**原檔**相同
+        assert set(s["rollback_info"]["db_logical"].values()) == {"與備份時原檔的邏輯內容相同"}, s["rollback_info"]
     assert s["v9_start"]["ok"], s["v9_start"]              # V9 可以啟動（ping 200）
     assert s["new_row_kept"] is (mode == "code")
+    assert s["v9_after_start_row_kept"], s
+    # 稽核 X-9b S-6／M-2：轉換後寫過上傳檔與每日快照，回滾照樣要過，而且那些檔還在
+    assert s["files_written_after_conversion"] and s["new_files_kept"], s
     assert rep["ok"]

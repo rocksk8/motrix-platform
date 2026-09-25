@@ -90,6 +90,8 @@ INITIAL_DEMO_CREDENTIALS = backend(".initial_demo_credentials.txt")
 BUILD_COMMIT_FILE = backend(".build_commit")
 DEPLOYED_COMMIT_FILE = backend(".deployed_commit.json")
 VERSION_MANIFEST = backend("version_manifest.json")
+#: 排程啟動腳本。內含**這台機器的設定**（對外連線總開關、安裝路徑），不是程式碼（稽核 X-9b M-4）
+AUTOSTART_BAT = backend("autostart.bat")
 FRONTEND_DIR = root("frontend")
 
 

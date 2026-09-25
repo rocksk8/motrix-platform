@@ -239,3 +239,264 @@ def test_without_pii_folder_the_db_is_not_copied_anywhere_in_the_cloud(client, i
     assert not [p for p in _walk_files(isolated_archive) if p.endswith(".db")]
     assert not os.path.exists(os.path.join(parent, archive._PII_ARCHIVE_DIRNAME))
     assert any("個資資料夾未建立" in r for _l, r in alerts)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 稽核 X-9b M-3：F2 值被複製進別的表（承攬付款憑據 snapshot_json.personnel[]）
+# 稽核 X-9b S-5：個資資料夾在「檢查之後、寫入之前」消失 ⇒ 不可以被建回來
+# ══════════════════════════════════════════════════════════════════════════════
+import json as _json
+
+_P_ACCT, _P_NAME = "555000999888SENTINEL", "外包哨兵戶名"
+_V_ACCT = "VENDOR-ACCT-424242"
+
+
+def _f2_json_keys():
+    """F2 鍵名（JSON 欄位裡出現就算個資）：由 `_F2_FIELDS` 推導——contractors 欄名（snake 與 camel）＋
+    各 JSON 規格的鍵。phone／email／address 這三個字太泛（客戶、廠商、公司的聯絡欄也叫這個名字），
+    不列入鍵名掃描；它們由哨兵值掃描負責。"""
+    def camel(n):
+        head, *rest = n.split("_")
+        return head + "".join(w.title() for w in rest)
+    keys = set()
+    for spec in archive._F2_FIELDS.values():
+        for c in spec.get("columns", ()):
+            keys |= {c, camel(c)}
+        if "json" in spec:
+            keys |= set(spec["json"][1])
+        if "json_list" in spec:
+            keys |= set(spec["json_list"][2])
+    return keys - {"phone", "email", "address"}
+
+
+#: 一般份裡**有人決定過**可以留著的 F2 鍵名位置：(檔名, 欄位.路徑) → 理由。
+#: 每一條都必須在本題的資料裡真的出現（沒出現 ⇒ 紅：這張清單不可以變成「全部寫進來就綠」）。
+_F2_KEY_ALLOWED = {
+    ("協力廠商", "data_json.bankAccountNumber"): "協力廠商（承攬商本身）的帳戶；是否屬個資待裁示（稽核 X-9b O-9）",
+    ("協力廠商", "data_json.bankAccountName"): "同上（O-9）",
+    ("承攬付款憑據", "snapshot_json.bankAccountNumber"): "凍結的協力廠商帳戶（最上層，不是 personnel[]）；待裁示（O-9）",
+    ("承攬付款憑據", "snapshot_json.bankAccountName"): "同上（O-9）",
+}
+_PLACEHOLDERS = {archive._IMAGE_PLACEHOLDER, archive._F2_UNPARSEABLE}
+
+
+def _f2_key_hits(value, path, keys, out):
+    """遞迴找 JSON 內容裡、鍵名屬 F2、值不是空的位置。字串值若本身是 JSON 物件／陣列就展開。"""
+    if isinstance(value, str) and value[:1] in "{[":
+        try:
+            value = _json.loads(value)
+        except ValueError:
+            return
+    if isinstance(value, dict):
+        for k, v in value.items():
+            sub = "%s.%s" % (path, k) if path else k
+            if k in keys and isinstance(v, str) and v.strip() and v not in _PLACEHOLDERS:
+                out.add(sub)
+            _f2_key_hits(v, sub, keys, out)
+    elif isinstance(value, list):
+        for v in value:
+            _f2_key_hits(v, path + "[]", keys, out)
+
+
+def _general_f2_key_hits(tree):
+    keys = _f2_json_keys()
+    hits = set()
+    for path in _walk_files(tree):
+        if not path.endswith(".json"):
+            continue
+        fname = os.path.splitext(os.path.basename(path))[0]
+        with open(path, encoding="utf-8") as fh:
+            doc = _json.load(fh)
+        for row in (doc.get("data") if isinstance(doc, dict) else None) or []:
+            if not isinstance(row, dict):
+                continue
+            for col, v in row.items():
+                found = set()
+                if isinstance(v, str) and v[:1] in "{[":         # 只掃 JSON 欄位（快照、data_json…）
+                    _f2_key_hits(v, col, keys, found)
+                hits |= {(fname, h) for h in found}
+    return hits
+
+
+def _voucher_via_api(client, make_user):
+    """外包人員（F2 來源）→ 協力廠商 → 派工（personnel_json 指向外包人員）→ **真正的建立憑據 API**。
+    哨兵值怎麼傳進憑據快照由產品程式決定，不由測試指定。"""
+    from db import get_db
+    conn = get_db()
+    try:
+        cid = conn.execute(
+            "INSERT INTO contractors (name, bank_code, bank_account_name, bank_account_number, "
+            "created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            ("外包哨兵", "812", _P_NAME, _P_ACCT, "2026-09-25", "2026-09-25")).lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+    u, p = make_user("x9b_m3_sa", "X9b-Pass-123", role="superadmin")[:2]
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login",
+                                                  json={"username": u, "password": p}).json()["token"]}
+    r = client.post("/api/vendor-contractors", headers=h,
+                    json={"name": "哨兵工作室", "data": {"bankAccountNumber": _V_ACCT, "bankAccountName": "哨兵工作室"}})
+    assert r.status_code == 201, r.text
+    r = client.post("/api/contractor-dispatches", headers=h, json={
+        "quote_no": "MQ-X9B-M3", "vendor_id": r.json()["id"], "status": "completed",
+        "items_json": [{"description": "x", "qty": 1, "unit": "式", "unitPrice": 100, "amount": 100}],
+        "personnel_json": [{"id": cid, "name": "外包哨兵", "amount": 100}]})
+    assert r.status_code == 201, r.text
+    r = client.post("/api/contractor-vouchers", headers=h, json={"dispatch_id": r.json()["id"]})
+    assert r.status_code == 201, r.text
+    conn = get_db()
+    try:
+        snap = conn.execute("SELECT snapshot_json FROM contractor_payment_vouchers WHERE voucher_no=?",
+                            (r.json()["voucher_no"],)).fetchone()[0]
+    finally:
+        conn.close()
+    assert _P_ACCT in snap, "前提：產品把外包人員帳號凍結進了快照（這題要驗的傳遞路徑）"
+    return snap
+
+
+def test_voucher_snapshot_personnel_accounts_are_f2(client):
+    snap = _json.dumps({"vendorName": "V", "bankAccountNumber": _V_ACCT,
+                        "personnel": [{"id": 1, "name": "外包", "bankCode": "812",
+                                       "bankAccountName": _P_NAME, "bankAccountNumber": _P_ACCT,
+                                       "bankPassbookImage": _IMG}]}, ensure_ascii=False)
+    row = {"id": 7, "voucher_no": "CV-1", "snapshot_json": snap}
+    g = archive._general_row("承攬付款憑據", dict(row))
+    assert _P_ACCT not in str(g) and _P_NAME not in str(g) and "data:image" not in str(g)
+    gs = _json.loads(g["snapshot_json"])
+    assert gs["personnel"][0] == {"id": 1, "name": "外包", "bankCode": "812"}   # 機構資訊與其餘欄位留著
+    assert gs["bankAccountNumber"] == _V_ACCT                                   # 最上層＝協力廠商（O-9 待裁示）
+    merged, missing = archive.merge_general_and_pii("承攬付款憑據", [g], [row])
+    assert missing == [] and merged == [row]
+    assert archive._general_row("承攬付款憑據", {"id": 1, "snapshot_json": "{broken"})["snapshot_json"] \
+        == archive._F2_UNPARSEABLE
+
+
+def test_general_tree_has_no_f2_copied_into_other_tables(client, make_user, isolated_archive, monkeypatch):
+    """🔴 守門（稽核 X-9b M-3）：走真正的建立憑據 API → 每日＋週備份 → 掃一般樹。
+    ① 哨兵值不可以出現在一般樹的任何檔案；
+    ② 所有 JSON 欄位（快照等）裡，F2 鍵名有值的位置都必須在 `_F2_KEY_ALLOWED`（有人決定過），
+       而且清單裡的每一條都要真的出現（反向控制：不可以靠把位置全寫進清單變綠）。"""
+    pii_root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
+    os.makedirs(pii_root)
+    snap = _voucher_via_api(client, make_user)
+    monkeypatch.setattr(archive, "_write_backup_alert", lambda *a, **k: None)
+    archive._daily_backup()
+    archive._weekly_backup()
+
+    for path in _walk_files(isolated_archive):
+        with open(path, "rb") as fh:
+            blob = fh.read().decode("utf-8", "replace")
+        for s in (_P_ACCT, _P_NAME):
+            assert s not in blob, "一般雲端目錄的 %s 含外包人員帳戶 %r" % (path, s)
+    hits = _general_f2_key_hits(isolated_archive)
+    undecided = {h for h in hits if h not in _F2_KEY_ALLOWED}
+    assert not undecided, "一般份的 JSON 欄位裡有 F2 鍵名且有值、沒有人決定過：%s" % sorted(undecided)
+    unused = set(_F2_KEY_ALLOWED) - hits
+    assert not unused, "允許清單裡這幾條本題沒有出現（過期或寫錯，清單不可以只增不減）：%s" % sorted(unused)
+
+    # 正對照：個資資料夾收到了完整快照
+    from datetime import date as _d
+    pii_file = os.path.join(pii_root, "每日備份", _d.today().isoformat(), "承攬付款憑據.json")
+    assert _P_ACCT in open(pii_file, encoding="utf-8").read()
+    assert _json.loads(snap)["personnel"][0]["bankAccountNumber"] == _P_ACCT
+
+
+def test_key_scan_positive_control_sees_a_personnel_account():
+    """掃描器的正對照：把快照原樣（沒有去個資）放進一般樹的形狀 ⇒ 要亮。"""
+    out = set()
+    _f2_key_hits(_json.dumps({"personnel": [{"bankAccountNumber": _P_ACCT}]}), "snapshot_json",
+                 _f2_json_keys(), out)
+    assert out == {"snapshot_json.personnel[].bankAccountNumber"}
+
+
+# ── S-5：檢查之後才消失 ⇒ 寫入失敗並告警，不建回來 ─────────────────────────────
+
+def test_pii_folder_vanishing_mid_mirror_is_not_recreated(pii, monkeypatch):
+    """P3：pii_archive_status 看到資料夾存在 ⇒ 資料夾被移除 ⇒ 寫入。修正前：makedirs 把它建回來。"""
+    root, _src, alerts = pii
+    os.makedirs(root)
+    real_status = archive.pii_archive_status
+
+    def status_then_vanish():
+        st = real_status()
+        shutil.rmtree(root)                           # 檢查之後、寫入之前
+        return st
+    monkeypatch.setattr(archive, "pii_archive_status", status_then_vanish)
+    assert archive._mirror_pii_archives() == 0
+    assert not os.path.exists(root), "資料夾在寫入途中消失，程式把它建回來了"
+    assert any(level == "ERROR" and "寫入途中消失" in r for level, r in alerts), alerts
+
+
+def test_pii_folder_vanishing_before_daily_json_export(pii, client, monkeypatch):
+    root, _src, alerts = pii
+    os.makedirs(root)
+    real_status = archive.pii_archive_status
+
+    def status_then_vanish():
+        st = real_status()
+        shutil.rmtree(root)
+        return st
+    monkeypatch.setattr(archive, "pii_archive_status", status_then_vanish)
+    from db import get_db
+    conn = get_db()
+    try:
+        assert archive._pii_daily_json_export(conn, "2026-09-25", "now") is None
+    finally:
+        conn.close()
+    assert not os.path.exists(root)
+    assert any("寫入途中消失" in r for _l, r in alerts), alerts
+
+
+def test_pii_ensure_dir_creates_only_below_an_existing_root(pii):
+    root, _src, _a = pii
+    with pytest.raises(archive.PiiFolderMissing):
+        archive._pii_ensure_dir(os.path.join(root, "每日備份", "2026-09-25"))
+    with pytest.raises(archive.PiiFolderMissing):
+        archive._pii_ensure_dir(root)                    # 目標就是根目錄本身：沒有子層可建，也要失敗
+    assert not os.path.exists(root)
+    os.makedirs(root)
+    archive._pii_ensure_dir(os.path.join(root, "每日備份", "2026-09-25"))    # 正對照：底下可以建
+    assert os.path.isdir(os.path.join(root, "每日備份", "2026-09-25"))
+    with pytest.raises(ValueError):
+        archive._pii_ensure_dir(os.path.dirname(root))                         # 個資資料夾以外不歸它管
+
+
+def test_pii_folder_vanishing_between_check_and_mkdir(pii, monkeypatch):
+    """競態的最窄處：根目錄的 isdir 檢查通過之後、建第一層子資料夾之前才消失 ⇒ 仍然不可以建回來
+    （`os.mkdir` 不建上層；`makedirs` 會）。"""
+    root, _src, _a = pii
+    os.makedirs(root)
+    real_isdir = os.path.isdir
+    fired = []
+
+    def isdir_then_vanish(path):
+        r = real_isdir(path)
+        if r and not fired and os.path.normcase(os.path.abspath(path)) == os.path.normcase(os.path.abspath(root)):
+            fired.append(path)
+            shutil.rmtree(root)
+        return r
+    monkeypatch.setattr(archive.os.path, "isdir", isdir_then_vanish)
+    with pytest.raises(archive.PiiFolderMissing):
+        archive._pii_ensure_dir(os.path.join(root, "每日備份", "2026-09-25"))
+    monkeypatch.undo()
+    assert fired, "前提：檢查確實發生在消失之前"
+    assert not os.path.exists(root), "檢查之後才消失的個資資料夾被建回來了"
+
+
+def test_pii_folder_vanishing_during_daily_backup_is_not_recreated(pii, client, monkeypatch):
+    """整輪每日備份（整庫 .db、個資 JSON、勞報單鏡像三條寫入路徑）：第一次檢查之後資料夾就消失 ⇒ 全程不建回來。"""
+    root, _src, alerts = pii
+    os.makedirs(root)
+    real_status = archive.pii_archive_status
+    fired = []
+
+    def status_then_vanish():
+        st = real_status()
+        if not fired:                                  # 只消失一次：之後被建回來就留著，才看得到
+            fired.append(1)
+            shutil.rmtree(root)
+        return st if st["state"] != "missing" else {**st, "state": "ready"}   # 讓每一條路徑都以為還在
+    monkeypatch.setattr(archive, "pii_archive_status", status_then_vanish)
+    archive._daily_backup()
+    assert not os.path.exists(root), "每日備份途中把個資資料夾建回來了"
+    assert any("寫入途中消失" in r for _l, r in alerts), alerts

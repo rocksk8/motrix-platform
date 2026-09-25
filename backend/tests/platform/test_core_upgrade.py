@@ -79,6 +79,8 @@ def new_src(tmp_path):
     ("backend/motrix.db", "data"), ("backup_alerts/BACKUP_ALERT.txt", "data"),
     ("backend/license.key", "config"), ("backend/certs/key.pem", "config"), (".env", "config"),
     ("backend/.env.local", "config"), ("backend/heartbeat_config.json", "config"), (".no_email_send", "config"),
+    ("backend/autostart.bat", "config"),                  # 稽核 X-9b M-4：機器設定（對外連線總開關）
+    ("backend/restart.bat", "program"),
     ("backend/__pycache__/x.pyc", "skip"),
 ])
 def test_classify(rel, kind):
@@ -414,3 +416,394 @@ def test_verify_accepts_the_fill_but_not_a_rewrite(inst, new_src, tmp_path):
     c.commit()
     c.close()
     assert any("company_profile" in p for p in U.verify_conversion(inst, m))
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 稽核 X-9b（AUDIT-X-9b-upgrade-paths-pii.md）
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _tool(monkeypatch):
+    """tools/platform/upgrade.py（CLI 層）；migration 與啟動換成假的（不起子行程）。"""
+    import importlib
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools" / "platform"))
+    T = importlib.import_module("upgrade")
+    monkeypatch.setattr(T, "run_migrations",
+                        lambda root: type("R", (), {"returncode": 0, "stdout": "MIGRATE_OK", "stderr": ""})())
+    monkeypatch.setattr(T, "start_and_ping", lambda *a, **k: {"ok": True, "status": 200, "seconds": 0, "log": ""})
+    return T
+
+
+def _db(inst):
+    return os.path.join(inst, "backend", "motrix_erp.db")
+
+
+def _sql(inst, sql, args=()):
+    c = sqlite3.connect(_db(inst))
+    c.execute(sql, args)
+    c.commit()
+    c.close()
+
+
+def _set_profile(inst, profile):
+    _sql(inst, "INSERT OR REPLACE INTO system_settings VALUES ('company_profile', ?, '')",
+         (json.dumps(profile, ensure_ascii=False),))
+
+
+def _backup_verified(T, inst, bd):
+    U.backup(inst, bd)
+    T._write_log(bd, "backup_verify.json", {"problems": U.verify_backup_restorable(bd)})
+
+
+# ── M-1：啟動後的比對與 verify_conversion 共用判準（補空值不是改寫）──────────
+
+def test_m1_full_verify_accepts_the_company_fill(inst, new_src, tmp_path, monkeypatch):
+    """本公司、欄位不齊 ⇒ 轉換補欄位 ⇒ **整個** T.verify（含啟動後比對）要過。修正前：exit 3 假紅。"""
+    T = _tool(monkeypatch)
+    _set_profile(inst, {"name": "允碩整合集創股份有限公司", "tax_id": "60575481", "contact_info": "04-3610-6566"})
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    rep = T.convert(inst, bd, new_src)
+    assert set(rep["company_profile"]["filled"]) == {"company_name_en", "email"}
+    assert T.verify(inst, bd, 1) == []
+
+
+def test_m1_rewrite_during_startup_is_still_caught(inst, new_src, tmp_path, monkeypatch):
+    """反向控制：新版啟動時把既有設定改掉 ⇒ 啟動後比對要紅（共用判準沒有把它放寬成不看）。"""
+    T = _tool(monkeypatch)
+    _set_profile(inst, {"name": "允碩整合集創股份有限公司", "tax_id": "60575481", "contact_info": ""})
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    T.convert(inst, bd, new_src)
+
+    def start_and_rewrite(root, port, **k):
+        _sql(root, "UPDATE system_settings SET value_json='\"rewritten\"' WHERE key='pdf_base_path'")
+        return {"ok": True, "status": 200, "seconds": 0, "log": ""}
+    monkeypatch.setattr(T, "start_and_ping", start_and_rewrite)
+    assert any("新版啟動後改寫了既有設定：['pdf_base_path']" in p for p in T.verify(inst, bd, 1))
+
+
+def test_m1_cli_verify_failure_suggests_rollback_with_commands(inst, new_src, tmp_path, monkeypatch, capsys):
+    """CORE-SPEC §9b 主持裁示：驗證不過不自動回滾，明確建議並附指令。"""
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    T.convert(inst, bd, new_src)
+    _sql(inst, "DELETE FROM customers WHERE id=1")
+    assert T.main(["verify", "--root", inst, "--backup-dir", bd, "--port", "1"]) == 3
+    out = capsys.readouterr().out
+    assert "建議執行回滾" in out and "--mode code" in out and "--mode full" in out
+    assert os.path.exists(os.path.join(inst, "backend", "core", "paths.py")), "驗證不過時工具自己動了程式檔"
+
+
+# ── B-2（AUDIT-X-C-batch1）：鍵存在、值是空字串 ⇒ 補值不是改寫 ─────────────────
+
+def test_b2_blank_string_fill_passes_verify(inst, new_src, tmp_path):
+    _set_profile(inst, {"name": "允碩整合集創股份有限公司", "tax_id": "", "contact_info": "", "phone": "  "})
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    filled = U.fill_company_profile_blanks(_db(inst))["filled"]
+    assert {"tax_id", "phone"} <= set(filled)
+    assert U.verify_conversion(inst, m) == []
+
+
+@pytest.mark.parametrize("after", [
+    {"name": "允碩整合集創股份有限公司", "tax_id": "99999999", "contact_info": ""},       # 空值補成不是補值的值
+    {"name": "改掉了", "tax_id": "", "contact_info": ""},                                # 有值的欄位被改
+    {"name": "允碩整合集創股份有限公司", "tax_id": ""},                                   # 刪鍵
+    {"name": "允碩整合集創股份有限公司", "tax_id": "", "contact_info": "", "x": "1"},     # 未宣告的新欄
+])
+def test_b2_other_changes_to_company_profile_are_rewrites(inst, new_src, tmp_path, after):
+    _set_profile(inst, {"name": "允碩整合集創股份有限公司", "tax_id": "", "contact_info": ""})
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _set_profile(inst, after)
+    assert "既有設定被改寫或刪除：company_profile" in U.verify_conversion(inst, m)
+
+
+# ── M-2：回滾只核對「備份時就在的檔」；新增的列成資訊 ──────────────────────────
+
+def _after_conversion_files(inst):
+    _write(inst, "uploads/projects/9/after.jpg", b"new")                       # 使用者上傳
+    _write(inst, "backend/db_backups/2099-01-01/.done", b"ok")                  # 新版做的每日快照
+    shutil.rmtree(os.path.join(inst, "backend", "db_backups", date.today().isoformat()))  # 保留期限清掉舊快照
+
+
+@pytest.mark.parametrize("mode", ["code", "full"])
+def test_m2_rollback_passes_when_new_version_wrote_files(inst, new_src, tmp_path, mode):
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    _after_conversion_files(inst)
+    info = {}
+    assert U.rollback(inst, bd, mode, info) == []
+    assert "uploads/projects/9/after.jpg" in info["data_added"]
+    assert "backend/db_backups/2099-01-01/.done" in info["data_added"]
+    assert info["data_rotated"] == ["backend/db_backups/%s/.done" % date.today().isoformat()]
+    assert os.path.isfile(os.path.join(inst, "uploads", "projects", "9", "after.jpg"))   # 回滾不動資料目錄
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed"])
+@pytest.mark.parametrize("mode", ["code", "full"])
+def test_m2_rollback_still_catches_lost_or_changed_data(inst, new_src, tmp_path, mode, damage):
+    """反向控制：備份時就在的資料檔不見或被改 ⇒ 仍然是 problem（放寬的只有「新增」與快照輪替）。"""
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    target = os.path.join(inst, "uploads", "projects", "1", "p.jpg")
+    if damage == "missing":
+        os.remove(target)
+    else:
+        _write(inst, "uploads/projects/1/p.jpg", b"changed")
+    probs = U.rollback(inst, bd, mode)
+    assert any("uploads/projects/1/p.jpg" in p for p in probs), probs
+
+
+# ── M-4：autostart.bat 是機器設定 ────────────────────────────────────────────
+
+_AUTOSTART_MACHINE = b"::set MOTRIX_GEO=1\r\n"      # 這台機器關掉了對外連線
+_AUTOSTART_PACKAGE = b"set MOTRIX_GEO=1\r\n"
+
+
+def test_m4_autostart_is_kept_and_differences_are_reported(inst, new_src, tmp_path):
+    _write(inst, "backend/autostart.bat", _AUTOSTART_MACHINE)
+    _write(new_src, "backend/autostart.bat", _AUTOSTART_PACKAGE)
+    bd = str(tmp_path / "bk")
+    m = U.backup(inst, bd)
+    assert "backend/autostart.bat" in m["config"] and "backend/autostart.bat" not in m["program"]
+    U.replace_program(inst, new_src)
+    rep = U.sync_package_default_config(inst, new_src)
+    assert rep == {"added": [], "kept_differs_from_package": ["backend/autostart.bat"]}
+    assert open(os.path.join(inst, "backend", "autostart.bat"), "rb").read() == _AUTOSTART_MACHINE
+    assert U.verify_conversion(inst, m) == []
+
+
+def test_m4_verify_sees_an_overwritten_autostart(inst, new_src, tmp_path):
+    """反向控制：轉換（或任何人）把機器上的 autostart.bat 換掉 ⇒ verify 要看得到。"""
+    _write(inst, "backend/autostart.bat", _AUTOSTART_MACHINE)
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _write(inst, "backend/autostart.bat", _AUTOSTART_PACKAGE)
+    assert "設定檔被改寫或刪除：['backend/autostart.bat']" in U.verify_conversion(inst, m)
+
+
+def test_m4_missing_autostart_is_added_from_the_package(inst, new_src):
+    _write(new_src, "backend/autostart.bat", _AUTOSTART_PACKAGE)
+    assert U.sync_package_default_config(inst, new_src)["added"] == ["backend/autostart.bat"]
+    assert open(os.path.join(inst, "backend", "autostart.bat"), "rb").read() == _AUTOSTART_PACKAGE
+
+
+def test_m4_only_declared_package_defaults_are_copied(inst, new_src):
+    """新版包裡的其他設定類檔（開發機標記、授權）**不可以**被帶進安裝目錄。"""
+    _write(new_src, ".no_email_send", b"")
+    _write(new_src, "backend/license.key", b"dev-license")
+    U.sync_package_default_config(inst, new_src)
+    assert not os.path.exists(os.path.join(inst, ".no_email_send"))
+    assert open(os.path.join(inst, "backend", "license.key"), "rb").read() == b"lic"
+
+
+# ── S-1：回滾（與轉換）動手前重驗備份 ──────────────────────────────────────────
+
+def _install_snapshot(root):
+    return {rel: U.sha256_file(f) for rel, f in U.walk(root)}
+
+
+def test_s1_rollback_refuses_another_installs_backup(inst, new_src, tmp_path):
+    other = str(tmp_path / "other")
+    shutil.copytree(inst, other)
+    bd_other = str(tmp_path / "bk_other")
+    U.backup(other, bd_other)
+    _convert(inst, new_src, str(tmp_path / "bk"))
+    before = _install_snapshot(inst)
+    info = {}
+    probs = U.rollback(inst, bd_other, "full", info)
+    assert info.get("precheck_failed") and any("不是這個安裝目錄的" in p for p in probs)
+    assert _install_snapshot(inst) == before, "拿別人的備份回滾，卻動了檔案"
+
+
+def test_s1_rollback_with_damaged_backup_deletes_nothing(inst, new_src, tmp_path):
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    os.remove(os.path.join(bd, "program", "backend", "main.py"))
+    before = _install_snapshot(inst)
+    info = {}
+    probs = U.rollback(inst, bd, "code", info)
+    assert info.get("precheck_failed") and probs and all("沒有動任何檔案" in p for p in probs)
+    assert _install_snapshot(inst) == before
+
+
+def test_s1_convert_rechecks_the_backup(inst, new_src, tmp_path, monkeypatch):
+    """RC1c：備份驗過之後才被改 ⇒ convert 拒絕，一個檔都不動。"""
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    with open(os.path.join(bd, "program", "backend", "main.py"), "ab") as f:
+        f.write(b"!")
+    before = _install_snapshot(inst)
+    with pytest.raises(RuntimeError, match="重驗備份不通過"):
+        T.convert(inst, bd, new_src)
+    assert _install_snapshot(inst) == before
+
+
+def test_s1_cli_precheck_failure_exits_7(inst, new_src, tmp_path, monkeypatch):
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    os.remove(os.path.join(bd, "program", "backend", "main.py"))
+    assert T.main(["rollback", "--root", inst, "--backup-dir", bd, "--mode", "code"]) == 7
+
+
+# ── S-2／O-7：試還原可以重跑；DB 讀不了列成 problem ─────────────────────────────
+
+def test_s2_restore_check_can_be_rerun_after_tool_logs(inst, tmp_path, monkeypatch):
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    for name in ("conversion_log.json", "verify_log.json", "rollback_code.json", "post_convert.json"):
+        T._write_log(bd, name, {})
+    assert U.verify_backup_restorable(bd) == []
+    _write(bd, "program/stray.json", b"{}")                  # 反向控制：只有最上層的工具紀錄檔被排除
+    assert U.verify_backup_restorable(bd) != []
+
+
+@pytest.mark.parametrize("rel", ["backend/motrix_erp.db", "backend/motrix_erp_demo.db"])
+def test_s2_corrupt_db_header_is_a_problem_not_an_exception(inst, tmp_path, rel):
+    _make_db(os.path.join(inst, "backend", "motrix_erp_demo.db"))
+    bd = str(tmp_path / "bk")
+    m = U.backup(inst, bd)
+    p = os.path.join(bd, "db", rel)
+    with open(p, "r+b") as f:
+        f.write(b"XXXX")                                     # 標頭 "SQLite format 3" 被毀
+    m["files"]["db/" + rel] = U.sha256_file(p)               # 連 manifest 一起改（只剩 DB 檢查擋得住）
+    probs = U.verify_backup_restorable(bd, m)
+    assert any(rel in x for x in probs), probs
+
+
+# ── S-3：只准新增 ⇒ 驗內容；完整回滾的提示說得出會失去什麼 ──────────────────────
+
+def test_s3_rewrite_with_same_row_count_is_caught(inst, new_src, tmp_path):
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _sql(inst, "UPDATE customers SET name='rewritten' WHERE id=1")
+    assert "既有資料被改寫（列數相同、內容不同）：['customers']" in U.verify_conversion(inst, m)
+
+
+def test_s3_added_column_by_migration_is_not_a_rewrite(inst, new_src, tmp_path):
+    m = _convert(inst, new_src, str(tmp_path / "bk"))
+    _sql(inst, "ALTER TABLE customers ADD COLUMN new_col TEXT DEFAULT 'x'")
+    assert U.verify_conversion(inst, m) == []
+
+
+def test_s3_changes_since_conversion_excludes_the_conversion_itself(inst, new_src, tmp_path):
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    _sql(inst, "CREATE TABLE module_new (id INTEGER PRIMARY KEY)")
+    U.record_post_conversion(inst, bd)
+    empty = U.changes_since_conversion(bd, _db(inst))
+    assert empty["baseline"] == "post_convert" and not U.has_changes(empty), empty
+    _sql(inst, "INSERT INTO customers (name) VALUES ('after')")
+    _sql(inst, "UPDATE customers SET name='rewritten' WHERE id=1")
+    _sql(inst, "INSERT INTO module_new DEFAULT VALUES")
+    rep = U.changes_since_conversion(bd, _db(inst))
+    assert rep["rows_added"] == {"customers": 1, "module_new": 1} and rep["new_tables"] == {}
+    _sql(inst, "DELETE FROM customers WHERE name='after'")
+    rep = U.changes_since_conversion(bd, _db(inst))
+    assert rep["rewritten"] == ["customers"] and rep["rows_added"] == {"module_new": 1}
+    os.remove(os.path.join(bd, U.POST_CONVERT_NAME))          # 轉換沒做完 ⇒ 退回備份當下
+    rep = U.changes_since_conversion(bd, _db(inst))
+    assert rep["baseline"] == "backup" and rep["new_tables"] == {"module_new": 1}
+    assert rep["rows_added"].get("system_settings") == 1       # 轉換本身寫的那一列也算進去（並註明）
+
+
+def test_s3_cli_full_rollback_without_yes_lists_changes(inst, new_src, tmp_path, monkeypatch, capsys):
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    T.convert(inst, bd, new_src)
+    _sql(inst, "INSERT INTO customers (name) VALUES ('after')")
+    assert T.main(["rollback", "--root", inst, "--backup-dir", bd, "--mode", "full"]) == 4
+    out = capsys.readouterr().out
+    assert '新增的列：{"customers": 1}' in out and "轉換完成當下" in out
+    assert os.path.exists(os.path.join(inst, "backend", "core", "paths.py")), "沒有 --yes 卻回滾了"
+
+
+# ── S-4：回滾後自動 ping V9，只印結果 ─────────────────────────────────────────
+
+@pytest.mark.parametrize("ping_ok,code", [(True, 0), (False, 6)])
+def test_s4_rollback_pings_v9_and_reports(inst, new_src, tmp_path, monkeypatch, capsys, ping_ok, code):
+    T = _tool(monkeypatch)
+    seen = []
+
+    def fake_ping(root, port, **k):
+        seen.append((root, port, open(os.path.join(root, "backend", "main.py"), "rb").read()))
+        return {"ok": ping_ok, "status": 200 if ping_ok else None, "seconds": 0, "log": "boom"}
+    monkeypatch.setattr(T, "start_and_ping", fake_ping)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    T.convert(inst, bd, new_src)
+    assert T.main(["rollback", "--root", inst, "--backup-dir", bd, "--mode", "code", "--ping-port", "6999"]) == code
+    assert seen == [(inst, 6999, b"# v9 main")], "ping 的不是回滾後的 V9"
+    out = capsys.readouterr().out
+    assert ("200 OK" if ping_ok else "失敗") in out
+    log = json.load(open(os.path.join(bd, "rollback_code.json"), encoding="utf-8"))
+    assert log["v9_ping"]["ok"] is ping_ok
+
+
+def test_s4_no_ping_skips_and_says_so(inst, new_src, tmp_path, monkeypatch, capsys):
+    T = _tool(monkeypatch)
+    monkeypatch.setattr(T, "start_and_ping", lambda *a, **k: pytest.fail("--no-ping 仍然啟動了 V9"))
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    T.convert(inst, bd, new_src)
+    assert T.main(["rollback", "--root", inst, "--backup-dir", bd, "--mode", "code", "--no-ping"]) == 0
+    assert "手動確認" in capsys.readouterr().out
+
+
+# ── S-7：被刪、新版沒有的檔要列出來 ──────────────────────────────────────────
+
+def test_s7_removed_files_without_replacement_are_listed(inst, new_src):
+    _write(inst, "運維備註.txt", b"note")
+    rep = U.replace_program(inst, new_src)
+    assert rep["removed_without_replacement"] == ["backend/routers/old_only_in_v9.py", "運維備註.txt"]
+
+
+# ── O-1：full 回滾比「備份時原檔」的邏輯內容 ─────────────────────────────────
+
+def test_o1_full_rollback_matches_the_original_logically(inst, new_src, tmp_path):
+    orig = U.logical_digest(_db(inst))
+    bd = str(tmp_path / "bk")
+    m = _convert(inst, new_src, bd)
+    assert m["pre"]["logical"]["backend/motrix_erp.db"] == orig
+    info = {}
+    assert U.rollback(inst, bd, "full", info) == []
+    assert info["db_logical"] == {"backend/motrix_erp.db": "與備份時原檔的邏輯內容相同"}
+
+
+def test_o1_logical_check_is_independent_of_the_backup_copy(inst, new_src, tmp_path):
+    """反向控制：備份副本與 manifest 一起被換成別的內容 ⇒ 位元組比對會過（比的是副本自己），
+    邏輯比對要紅（比的是備份時原檔的雜湊）。"""
+    bd = str(tmp_path / "bk")
+    m = _convert(inst, new_src, bd)
+    assert U.rollback(inst, bd, "full") == []
+    other = str(tmp_path / "other.db")
+    _make_db(other, settings={"company_profile": {"companyName": "別的"}})
+    copy = os.path.join(bd, "db", "backend", "motrix_erp.db")
+    shutil.copy2(other, copy)
+    m["db"]["backend/motrix_erp.db"] = U.sha256_file(copy)
+    shutil.copy2(copy, _db(inst))
+    probs = U.verify_rollback(inst, m, "full")
+    assert probs == ["資料庫的邏輯內容與備份時的原檔不同：backend/motrix_erp.db"], probs
+
+
+def test_o1_logical_digest_ignores_header_counters(tmp_path):
+    src = str(tmp_path / "a.db")
+    _make_db(src)
+    dst = str(tmp_path / "b.db")
+    U.online_backup(src, dst)
+    c = sqlite3.connect(src)
+    c.execute("INSERT INTO customers (name) VALUES ('x')")
+    c.execute("DELETE FROM customers WHERE name='x'")         # 內容回原樣、file change counter 變了
+    c.commit()
+    c.close()
+    assert U.logical_digest(src) == U.logical_digest(dst)
+    c = sqlite3.connect(src)
+    c.execute("UPDATE customers SET name='z' WHERE id=1")
+    c.commit()
+    c.close()
+    assert U.logical_digest(src) != U.logical_digest(dst)

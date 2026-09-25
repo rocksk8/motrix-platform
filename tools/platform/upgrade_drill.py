@@ -59,7 +59,7 @@ def _v9_init_db(install: str) -> None:
         raise RuntimeError("V9 init_db 失敗：%s" % r.stderr[-800:])
 
 
-def build_v9_install(drill_root: str, source_db: str = None) -> str:
+def build_v9_install(drill_root: str, source_db: str = None, company_incomplete: bool = True) -> str:
     install = os.path.join(drill_root, "install")
     os.makedirs(install)
     git_export(V9_REV, install)
@@ -86,7 +86,27 @@ def build_v9_install(drill_root: str, source_db: str = None) -> str:
     U.online_backup(os.path.join(backend, "motrix_erp.db"), os.path.join(snap, "motrix_erp.db"))
     with open(os.path.join(snap, ".done"), "w", encoding="utf-8") as f:
         f.write("drill")
+    if company_incomplete:
+        _make_company_profile_incomplete(install)
     return install
+
+
+#: 稽核 X-9b S-6：全新 V9 庫的統編空白 ⇒ 轉換不補欄位 ⇒ M-1（啟動後比對沒有補空值例外）在綠燈下漏掉。
+#: 改成「本公司、欄位不齊」：統編有值、聯絡方式只有電話 ⇒ 轉換會補英文名與 email。
+DRILL_COMPANY_PROFILE = {"name": "允碩整合集創股份有限公司", "tax_id": "60575481",
+                         "contact_info": "Tel: 04-3610-6566"}
+
+
+def _make_company_profile_incomplete(install: str) -> None:
+    conn = sqlite3.connect(os.path.join(install, U.DB_FILES[0]))
+    try:
+        conn.execute("UPDATE system_settings SET value_json=? WHERE key='company_profile'",
+                     (json.dumps(DRILL_COMPANY_PROFILE, ensure_ascii=False),))
+        if conn.total_changes != 1:
+            raise RuntimeError("演練庫沒有 company_profile 這一列（V9 種子改了？）")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _insert_new_data(install: str) -> None:
@@ -100,6 +120,18 @@ def _insert_new_data(install: str) -> None:
         conn.close()
 
 
+def _write_new_files(install: str) -> list:
+    """稽核 X-9b S-6／M-2：新版上線後一定會寫檔——使用者上傳、每日快照。回寫入的相對路徑。"""
+    rels = ["uploads/projects/1/after_upgrade.jpg",
+            "backend/db_backups/2099-01-01/.done"]           # 不與今天的快照撞名；只要是「轉換後才出現」
+    for rel in rels:
+        p = os.path.join(install, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(b"written-after-conversion")
+    return rels
+
+
 def _count(install: str, table: str) -> int:
     conn = sqlite3.connect(os.path.join(install, U.DB_FILES[0]))
     try:
@@ -108,12 +140,13 @@ def _count(install: str, table: str) -> int:
         conn.close()
 
 
-def drill(mode: str, source_db: str = None, keep: bool = False) -> dict:
+def drill(mode: str, source_db: str = None, keep: bool = False,
+          company_incomplete: bool = True, write_files: bool = True) -> dict:
     drill_root = tempfile.mkdtemp(prefix="motrix-upgrade-drill-")
     assert "V9.0" not in drill_root, "演練路徑含 V9.0（V9 會把它當正式機寄信）：%s" % drill_root
     rep = {"mode": mode, "drill_root": drill_root, "steps": {}}
     try:
-        install = build_v9_install(drill_root, source_db)
+        install = build_v9_install(drill_root, source_db, company_incomplete)
         new_src = os.path.join(drill_root, "new")
         os.makedirs(new_src)
         git_export("HEAD", new_src)
@@ -138,12 +171,19 @@ def drill(mode: str, source_db: str = None, keep: bool = False) -> dict:
             return rep
         before_new = _count(install, "customers")
         _insert_new_data(install)
+        s["files_written_after_conversion"] = _write_new_files(install) if write_files else []
         s["rows_added_before_rollback"] = U.rows_added_since(m, os.path.join(install, U.DB_FILES[0]))
-        s["rollback"] = U.rollback(install, backup_dir, mode)
+        s["changes_since_conversion"] = U.changes_since_conversion(backup_dir, os.path.join(install, U.DB_FILES[0]))
+        # 走 CLI 同一條路：回滾 → 比對 → 自動啟動 V9 ping（只記結果）
+        s["rollback_exit"], rlog = T.rollback_and_ping(install, backup_dir, mode, free_port())
+        s["rollback"], s["rollback_info"] = rlog["problems"], rlog["info"]
         s["new_row_kept"] = _count(install, "customers") == before_new + 1
-        s["v9_start"] = {k: v for k, v in T.start_and_ping(install, free_port()).items() if k != "log"}
+        s["v9_start"] = rlog["v9_ping"] if isinstance(rlog["v9_ping"], dict) else {"ok": False}
         s["v9_after_start_row_kept"] = _count(install, "customers") >= before_new + (1 if mode == "code" else 0)
-        rep["ok"] = (not s["rollback"] and s["v9_start"]["ok"]
+        s["new_files_kept"] = all(os.path.isfile(os.path.join(install, r))
+                                  for r in s["files_written_after_conversion"])
+        rep["ok"] = (not s["rollback"] and s["v9_start"]["ok"] and s["v9_after_start_row_kept"]
+                     and s["new_files_kept"]
                      and (s["new_row_kept"] if mode == "code" else not s["new_row_kept"]))
         return rep
     finally:

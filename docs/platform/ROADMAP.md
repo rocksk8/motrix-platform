@@ -85,6 +85,7 @@
 | G4 | 模組程式有改動，但 CHANGELOG 或版號沒更新 ⇒ 紅（依 git 歷史：版號條目要寫在最後一次程式改動之後） | ✅ B（test_module_changelog_follows_code.py） |
 | G5 | 版本紀錄頁改由各模組 CHANGELOG 彙整產生；`version_manifest.json` 退場 | ⏳ |
 | G6 | 勞報單（F2）上雲：獨立、權限更窄的資料夾 | ⏳ C（A8 之後） |
+| G6b | 個資資料夾的寫入一律經 `archive._pii_ensure_dir`／`_pii_copy_file`（新增寫入路徑時不可以用 makedirs）——目前只有既有三條路徑的行為題（稽核 X-9b S-5） | ⏳ |
 
 ## 階段 S：系統狀態的處理（STATES 目錄）
 

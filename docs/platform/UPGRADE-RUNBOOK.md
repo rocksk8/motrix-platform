@@ -101,8 +101,11 @@ python <NEW>\tools\platform\upgrade.py backup --root <ROOT> --backup-dir <BK>
 ```
 
 - 主庫與 demo 庫用 SQLite Online Backup API；程式目錄與設定／身分檔（heartbeat_config、license、憑證、`.env` 類、初始帳密檔）逐檔複製；資料目錄（uploads、7 類 PDF、db_backups…）**原地不動，只記清單與雜湊**。
-- 完成後自動把備份還原到暫存位置、逐檔比對 SHA256、主庫 integrity_check 與各表列數。**不通過 ⇒ exit 2，不可以往下。**
+- 完成後自動把備份還原到暫存位置、逐檔比對 SHA256、主庫與 demo 庫 integrity_check、主庫各表列數（讀不了的庫列成問題，不丟例外）。工具自己寫在 `<BK>` 的紀錄檔不算備份檔，所以這一步可以重跑。**不通過 ⇒ exit 2，不可以往下。**
 - 產出：`<BK>\upgrade_manifest.json`（每個備份檔的雜湊）、`<BK>\backup_verify.json`。
+- 工具最後印出 **manifest 的 SHA256**：抄到備份目錄以外（例如升級紀錄或紙本）。manifest 沒有外部錨點：備份檔和 manifest 被一起改的話，試還原照樣通過；它能偵測損毀，偵測不了蓄意竄改（稽核 X-9b O-2）。回滾前對照這個值。
+- manifest 也記下每張表的內容雜湊與主庫、demo 庫**原檔**的邏輯內容雜湊（轉換驗證與完整回滾用）。
+- `autostart.bat` 歸類為**設定**（這台機器的對外連線總開關），跟 license、憑證一起備份（稽核 X-9b M-4）。
 
 ## 4. 轉換
 
@@ -110,12 +113,14 @@ python <NEW>\tools\platform\upgrade.py backup --root <ROOT> --backup-dir <BK>
 python <NEW>\tools\platform\upgrade.py convert --root <ROOT> --backup-dir <BK> --new-source <NEW>
 ```
 
-- 沒有通過驗證的備份就拒絕執行。
+- 沒有通過驗證的備份就拒絕執行；**動手前再重驗一次**（manifest 是這個安裝目錄的、逐檔雜湊、試還原），不過就不動任何檔案（稽核 X-9b S-1）。
 - 刪掉 V9 程式檔、換上新版程式檔；資料、DB、設定一律不動。
+- `backend\autostart.bat`：**保留這台機器的版本**，不被新版包覆蓋；機器上沒有才從新版包補上。兩邊內容不同時，工具印出「⚠ 以下設定檔保留了這台機器的版本…」，請人工比對新版有沒有要加的內容（`conversion_log.json` 的 `package_default_config`）。
+- 被刪掉、而新版沒有同路徑檔的檔（例如人放在安裝目錄的備註、臨時腳本）列在 `conversion_log.json` 的 `replace_program.removed_without_replacement`；它們只留在備份裡（稽核 X-9b S-7）。
 - 用新版的 `init_db` 補跑基準 migration 到 v116，並建 `module_schema_versions`。
 - 設定只補缺的鍵（目前只有 `payslip_archive_path`＝空字串，意思是用預設目錄）；既有值不改。
 - 公司資料只補空值：`company_profile` 缺公司名／英文名／統編／電話／email 時，補上 V9 原本寫死在報表與網路規劃的值（只在看得出是本公司安裝時補；已有值的欄位不動）；補了哪些欄位記在 `conversion_log.json` 的 `company_profile.filled`。
-- 產出：`<BK>\conversion_log.json`。
+- 產出：`<BK>\conversion_log.json`、`<BK>\post_convert.json`（轉換完成當下各表的列數與內容雜湊；完整回滾前用它列出「轉換後才寫入」的資料）。
 
 ## 5. 驗證
 
@@ -123,10 +128,11 @@ python <NEW>\tools\platform\upgrade.py convert --root <ROOT> --backup-dir <BK> -
 python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --port <正式以外的 port，例如 6671>
 ```
 
-- 先比資料：各表列數與轉換前相同、既有設定逐項相同、只多出宣告過的新設定鍵、資料目錄清單相同。
+- 先比資料：各表列數與轉換前相同、各表內容相同（只比轉換前就有的欄；migration 新增的欄不影響）、既有設定逐項相同、只多出宣告過的新設定鍵、設定檔（含 `autostart.bat`）沒被改寫、資料目錄清單相同。
+- 「既有設定逐項相同」的唯一例外是 `company_profile` 的**補空值**（§4）：原本沒有、或值是空字串／只有空白的欄位，補上 V9 常數。轉換後比對與新版啟動後的比對用**同一支**判準（稽核 X-9b M-1、X-C-batch1 B-2）。
 - 外部 PDF 目錄：只比「檔案數與總大小沒有變少」（變多可以）。連不到 ⇒ 印「警告（不擋升級）：無法確認…」，記在 `verify_log.json` 的 `warnings`；人工確認網路碟恢復後再看一次即可。
 - 再在**非正式 port** 啟動新版、`/api/ping` 200、停掉；啟動後既有設定仍不得被改寫。
-- 通過 ⇒ 用正常方式在正式 port 啟動新版（排程工作）。不通過 ⇒ exit 3 ⇒ 進 §6。
+- 通過 ⇒ 用正常方式在正式 port 啟動新版（排程工作）。不通過 ⇒ exit 3，工具印出「建議執行回滾」與兩種回滾的完整指令 ⇒ 由人決定，進 §6。**工具不會自動回滾**（CORE-SPEC §9b 主持裁示：回滾不是原子動作，由人逐步確認）。
 
 ## 6. 回滾（出問題時）
 
@@ -135,10 +141,17 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 | **只回程式**（建議先用） | `upgrade.py rollback --root <ROOT> --backup-dir <BK> --mode code` | 換回 V9 程式；**保留**轉換後寫入的資料 | 新版有問題，但資料要留著 |
 | **完整回滾** | `upgrade.py rollback --root <ROOT> --backup-dir <BK> --mode full [--yes]` | 程式＋DB＋設定還原成備份時的樣子（雜湊逐一相等）；轉換後才出現的設定檔會刪掉 | 資料本身有疑慮，要回到升級前那一刻 |
 
-- 完整回滾前工具會列出「轉換後新增的列數」；沒有 `--yes` 不執行。**那些列會消失。**
-- 兩種模式都會逐檔比對雜湊（程式；完整回滾另比 DB 與設定），不一致 ⇒ exit 5。
+- **動手前先重驗備份**：備份不是這個安裝目錄的、逐檔雜湊或試還原不過 ⇒ exit 7，**一個檔都沒動**（稽核 X-9b S-1）。先把 manifest SHA256 與 §3 抄下的值對照。
+- 完整回滾前工具會列出**轉換完成之後**寫入、回滾會失去的資料：新增的列、被刪的列、被改寫的表、新表裡的列（基準是 `post_convert.json`，轉換本身寫的那幾列不算）；沒有 `--yes` 不執行（exit 4）。**那些資料會消失。**（轉換沒做完、沒有 `post_convert.json` 時，基準退回備份當下，並註明含轉換本身的寫入。）
+- 回滾後比對：
+  - 程式檔（兩種模式）、設定檔（完整回滾）：與備份逐檔雜湊相等。
+  - 資料庫（完整回滾）：與**備份時原檔**的**邏輯內容相同**（sqlite 逐表比對 schema＋全部欄位）。位元組只會等於備份副本：SQLite 標頭的計數欄位（offset 24-27、92-95）與原檔不同是 Online Backup API 的正常行為（稽核 X-9b O-1）。
+  - 資料目錄：只核對**備份時就在的檔**都還在、雜湊相同。轉換後新增的檔（使用者上傳、新版的每日快照）保留在原位，列成資訊，不算失敗；本機每日快照被保留期限清掉也只列資訊（稽核 X-9b M-2）。備份時就在的檔不見或被改 ⇒ 失敗（回滾不動資料目錄，那是新版執行期間造成的，要人查）。
+  - 不一致 ⇒ exit 5。
+- 比對通過之後，工具**自動**在非正式 port（預設 6671，`--ping-port` 可改）啟動 V9 並 ping `/api/ping`，印出結果並寫進 `rollback_<mode>.json`；ping 不過 ⇒ exit 6（回滾本身已完成，看印出的 log 決定下一步）。`--no-ping` 可略過，改手動確認。
 - 回滾前：服務必須是 §1 停止後的狀態（轉換失敗時通常還是；若已經 §1b 恢復過，先再做一次 §1）。
-- 回滾完：在非正式 port 啟動 V9 確認 `/api/ping` 200，再做 §1b 恢復服務，最後確認 Heartbeat 打卡恢復。
+- 回滾完：確認 V9 ping 200（工具已印出）後，做 §1b 恢復服務，最後確認 Heartbeat 打卡恢復。
+- 結束碼一覽：0 完成／4 完整回滾沒加 `--yes`／5 回滾後比對不通過／6 比對通過但 V9 ping 不過／7 回滾前檢查不通過（沒動任何檔案）。
 - 「只回程式」成立的前提：新版對 DB 只做新增（CORE-SPEC §6）。演練已驗證 V9 讀得了新版寫過的庫並正常啟動。
 
 ## 6b. 用儀表板操作時的兩種異常（稽核 B-2，2026-09-25）
@@ -172,6 +185,8 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 
 - `<BK>` 保留到新版穩定運作為止（建議至少一個月的月備份已產生在 `系統存檔_個資\月備份\`）。
 - 設定頁「雲端備份目標」確認「個資存檔（勞報單）雲端資料夾：已就緒」。
+- 個資資料夾不存在的期間：月備份不寫 `.done`，所以一般的月 JSON 每天都會重新匯出並覆蓋，內容會變成「當月最後一次的資料」；每天一封告警（有上限）。這是設計（資料夾建好後的下一次每日備份就會補齊並標記完成），不是故障（稽核 X-9b O-5）。
+- 個資資料夾在寫入途中消失（雲端同步、刪除、改名）⇒ 程式不會把它建回來（只准在資料夾**底下**建子資料夾），那一輪的個資備份不寫，並發出「個資資料夾在寫入途中消失」告警（稽核 X-9b S-5）。
 
 ## 附：開發機演練（不碰正式機）
 
@@ -180,6 +195,7 @@ python tools/platform/upgrade_drill.py --mode both [--source-db <開發機 V9 �
 ```
 
 - 在 `%TEMP%` 建 V9 形狀的安裝目錄（程式取 `c83dae6e`），跑 預檢 → 備份＋試還原 → 轉換 → 驗證 → 寫入一筆新資料 → 回滾 → V9 啟動 ping。
+- 夾具刻意包含兩種會出事的情境（稽核 X-9b S-6）：`company_profile` 是**本公司、欄位不齊**（轉換一定會補欄位）；轉換後除了寫 DB，還寫**上傳檔與每日快照**。回滾走 CLI 同一條路（`rollback_and_ping`）。
 - 演練路徑不可以含 `V9.0`（V9 的寄信判定看安裝路徑）；啟動一律 `MOTRIX_DISABLE_SCHEDULERS=1`、`MOTRIX_CLOUD_ARCHIVE=off`、`MOTRIX_EMAIL_SEND=off`，並放 `.no_cloud_archive`。
 - `--source-db` 以 Online Backup API 唯讀複製，來源檔不變（2026-09-25 實測雜湊前後相同）。
 - 自動化測試：`backend/tests/test_upgrade_drill_2026_09_25.py`（兩種模式）、`backend/tests/platform/test_core_upgrade.py`（純函式）。

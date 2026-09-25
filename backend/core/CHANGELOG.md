@@ -2,6 +2,18 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.6 — 2026-09-25
+> 稽核 X-9b（AUDIT-X-9b-upgrade-paths-pii.md）與 X-C-batch1 B-2 的修正。只有新增與相容擴充（選填參數）。
+- L0（新增）：`core.upgrade.settings_changes()`——轉換後驗證與新版啟動後比對共用的設定判準（補空值不算改寫，含「鍵在、值是空字串」）（M-1、B-2）
+- L0（新增）：`core.upgrade.data_changes()`；`rollback(..., info=None)`／`verify_rollback(..., info=None)`（相容擴充）——回滾只核對備份時就在的資料檔，新增的列成資訊、本機快照輪替不算失敗（M-2）
+- L0（新增）：`core.upgrade.PACKAGE_DEFAULT_CONFIG`、`sync_package_default_config()`；`core.paths.AUTOSTART_BAT`——`autostart.bat` 歸類為設定，轉換保留機器版本；`verify_conversion` 另比設定檔（M-4）
+- L0（新增）：`core.upgrade.check_backup()`——轉換與回滾動手前重驗備份（安裝根目錄、逐檔雜湊、試還原）（S-1）；`TOOL_LOG_NAMES`（試還原可重跑）、demo 庫 integrity、讀不了的庫列成問題（S-2、O-7）
+- L0（新增）：`core.upgrade.table_digests()`、`logical_digest()`、`record_post_conversion()`、`changes_since_conversion()`、`has_changes()`、`POST_CONVERT_NAME`——「只准新增」驗內容；完整回滾前列出轉換後才寫入的資料；完整回滾以備份時原檔的邏輯內容驗收（S-3、O-1）
+- L0（新增）：`core.upgrade.manifest_sha256()`（O-2）；`replace_program()` 回傳多 `removed_without_replacement`（S-7）
+- L1（新增）：`archive.PiiFolderMissing`；個資資料夾只准往下逐層建（`os.mkdir`），根目錄不在 ⇒ 失敗並告警，不建回來（S-5）
+- L1（行為）：`archive._F2_FIELDS` 加 `承攬付款憑據`（`snapshot_json.personnel[]` 的外包人員帳戶），一般份拿掉、完整列進個資資料夾；`merge_general_and_pii` 支援（M-3）
+- CLI `tools/platform/upgrade.py`：驗證不過印建議回滾與指令（不自動回滾）；回滾後自動啟動 V9 ping、只印結果（`--ping-port`／`--no-ping`；exit 6／7）（CORE-SPEC §9b 主持裁示）
+
 ## 1.5 — 2026-09-25
 > X9（AUDIT-X-9c 修正：A-2 守門不綁 L2 模組、A-3 授權檢查未啟用要看得到、B-1～B-4、C-4）。
 - L0（新增）：`core.loader.MODULES_PACKAGE`；`load_all()` 的 `modules_dir`／`package` 沒給時讀**呼叫當下**的 `MODULES_DIR`／`MODULES_PACKAGE`（原本綁在預設參數上，子行程守門換不掉）
