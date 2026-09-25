@@ -245,6 +245,23 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-16　`bonus.module_status`：獎金分潤入口該不該出現（M07 → L1 system）
+
+對應 DEPENDENCY-MAP #27（M07 搬遷前置，2026-09-26）。原本 L1 `routers/system.py::get_bonus_module_status` 直接 import M07 的 `helpers.bonus.bonus_module_on`。編號為暫定（同時期多條線暫用 IP-10～15），由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`helpers/bonus.py::bonus_module_on`（匯入時登記；搬進 `modules/` 後改寫進 `ModuleSpec.providers`） |
+| 使用方 | L1 `routers/system.py::get_bonus_module_status`（`GET /api/system/bonus-module-status`；側欄、`bonus.html`、案件結案頁都問它） |
+| 形式 | provider，單一提供者 |
+| 語法 | 提供：`_registry.provide("bonus.module_status", "payroll", bonus_module_on)`<br>取用：`fn = registry.single_provider("bonus.module_status")`；`None` ⇒ 退化。`fn() -> bool` |
+| 回傳 | 開著沒（`BONUS_MODULE_ENABLED`：`"0"` 關、預設開） |
+| 對方不在時 | 200、`{"enabled": false, "notice": BONUS_MODULE_ABSENT}`（「薪資獎金模組未安裝：獎金分潤不提供」）⇒ 入口隱藏、頁面顯示暫停，與模組沒載入同一個結果。不丟例外 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_bonus_module_status_connector.py`：①正對照（跟著開關）②**反向控制**：拿掉提供者 ⇒ 200、關、notice ③system 不再 import helpers.bonus |
+
+---
+
 ## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
 不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。

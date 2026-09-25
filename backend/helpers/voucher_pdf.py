@@ -90,14 +90,8 @@ _MARGIN = 42.6
 _COL_W = (61.4, 102.2, 163.5, 92.1, 92.0)
 
 
-def _fmt_money(n):
-    """金額。**0 印空白不印 0** —— 使用者的實例上，借方有數字時貸方那一格是留白的。
-
-    ☠️ 印 0 的話，一張三行的傳票看起來像有六個金額；
-       而「0」在會計上是一個**有意義的數字**，不等於「沒有填」。
-    """
-    v = int(n or 0)
-    return "{:,}".format(v) if v else ""
+# 2026-09-26 下沉 L1 `pdf_gen.fmt_money_blank_zero`（獎金分潤單也用）；本檔照舊用 `_fmt_money`
+from pdf_gen import fmt_money_blank_zero as _fmt_money  # noqa: E402
 
 
 def _company_name():

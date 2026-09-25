@@ -35,26 +35,18 @@ from helpers.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_field
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 
-# 稽核 Y-2（2026-09-25）：M06 會計的 `helpers.voucher`／`helpers.voucher_pdf` 只有「組 PDF／預覽」要用
-# ⇒ 在用到時才 import（`_m06()`）。M06 不在包裡時，M07 照常載入；預覽與匯出回 503 並明說（ACCOUNTING_PDF_MISSING）。
-# 這仍是 M07 → M06 的相依（l2_import_baseline 兩筆），要清掉得把三支共用函式下沉 L1——另開題。
-
-#: M06 不在時對使用者說的話
-ACCOUNTING_PDF_MISSING = "會計模組未安裝：無法產生獎金分潤單預覽／PDF（版面與輸出元件屬會計模組）"
+# 2026-09-26（M07 搬遷）：組 PDF／預覽要用的四樣都在 L1——簽核格顯示名稱 `helpers.tiered_approval`、
+# 公司抬頭 `helpers.company_identity`（主要據點，QL8）、HTML→PDF `pdf_gen.html_to_pdf_bytes`（Edge 參數與傳票相同）、
+# 金額 `pdf_gen.fmt_money_blank_zero`。原本借 M06 的 `helpers.voucher`／`helpers.voucher_pdf`（稽核 Y-2：用到時才 import，
+# M06 不在就 503）⇒ 現在 M06 不在時獎金分潤單照樣能預覽與匯出，l2_import_baseline 那兩筆邊刪除。
 
 
-class AccountingPdfMissing(RuntimeError):
-    pass
-
-
-def _m06():
-    """回 `(resolve_display_names, _company_name, _render, _fmt_money)`；M06 不在 ⇒ AccountingPdfMissing。"""
-    try:
-        from helpers.voucher import resolve_display_names
-        from helpers.voucher_pdf import _company_name, _render, _fmt_money
-    except ImportError as e:
-        raise AccountingPdfMissing(ACCOUNTING_PDF_MISSING) from e
-    return resolve_display_names, _company_name, _render, _fmt_money
+def _pdf_parts():
+    """回 `(resolve_display_names, company_name, render, fmt_money)`，全部是 L1。"""
+    from helpers.company_identity import company_name
+    from helpers.tiered_approval import resolve_display_names
+    from pdf_gen import fmt_money_blank_zero, html_to_pdf_bytes
+    return resolve_display_names, company_name, html_to_pdf_bytes, fmt_money_blank_zero
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +114,7 @@ def _line_rows(lines, display_names):
     套在收款人這個不同的資料形狀上）。
     """
     e = _esc
-    _fmt_money = _m06()[3]
+    _fmt_money = _pdf_parts()[3]
     rows = []
     for ln in lines or ():
         username = ln.get("username") or ""
@@ -236,7 +228,7 @@ def build_award_html(award, lines, signatures, display_names, exported_at,
     印不出值也要讓人看到「這裡本來該有 11 個數字」。
     """
     e = _esc
-    _resolve, _company_name, _render, _fmt_money = _m06()
+    _resolve, _company_name, _render, _fmt_money = _pdf_parts()
     watermark = award_watermark_html(award)
     total = sum(int(ln.get("amount") or 0) for ln in lines or ())
     settle_rows_html = _settlement_rows_html(settle)
@@ -372,7 +364,7 @@ def _award_html(award_id):
         lines = [dict(r) for r in conn.execute(
             "SELECT * FROM bonus_award_lines WHERE award_id = ? ORDER BY id",
             (award_id,))]
-        signatures = _m06()[0](conn, bonus_signatures_of(award))
+        signatures = _pdf_parts()[0](conn, bonus_signatures_of(award))
         display_names = display_names_for(
             conn, (ln.get("username") for ln in lines))
         settle = _settlement_of(conn, award.get("quote_no"))
@@ -400,4 +392,4 @@ def export_award_pdf(award_id):
     award, html_text = _award_html(award_id)
     if award is None:
         return None, None
-    return award, _m06()[2](html_text)
+    return award, _pdf_parts()[2](html_text)
