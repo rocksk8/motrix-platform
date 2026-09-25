@@ -12,7 +12,7 @@
   3. 新版程式：`--package`（build_deploy_package.ps1 打出來的部署包）；沒給 ⇒ `git archive <--new-rev>`（報告會註明不是部署包）。
   4. 升級：預檢 → 備份＋試還原 → 轉換 → 驗證（新版啟動 ping）。
   5. 冒煙：在轉換後的目錄啟動新版，用演練專用的超級管理員登入，逐一打主要頁面與 API（報價、案件、傳票、獎金、出納、報表、模組管理、自訂模組）。
-  6. 回滾：「只回程式」→ V9 啟動 ping、雜湊比對；再轉換一次 → 「完整回滾」→ V9 啟動 ping、雜湊比對。
+  6. 回滾：用**第一份**備份「完整回滾」→ 與 source-backup 比對邏輯內容 → V9 啟動 ping；再轉換一次 → 「只回程式」→ V9 啟動 ping。
   7. 報告：`--report`（Markdown）；演練安裝目錄預設刪除，`source-backup` 保留到使用者回來（RUN-PLAN §3-7）。
 
 🔴 安全
@@ -54,7 +54,8 @@ SMOKE = [
     ("出納待付", "GET", "/api/cashier/payable-queue"), ("請款單列表", "GET", "/api/payment-requests"),
     ("營運報表", "GET", "/api/reports/financial"), ("營運報表頁", "GET", "/pages/reports.html"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
-    ("定義文件庫", "GET", "/api/definitions/custom_module"), ("版本", "GET", "/api/system/version"),
+    ("版本", "GET", "/api/system/version"),
+    # 第二批（P8 缺口 #5）合回後加：("定義文件庫", "GET", "/api/definitions/custom_module")
 ]
 
 
@@ -131,6 +132,20 @@ def step(rep, name):
             print("[D7] %s ⇒ %s（%.1f 秒）" % (name, "OK" if self.s["ok"] else "失敗", self.s["seconds"]), flush=True)
             return et is not None and not isinstance(ev, KeyboardInterrupt)
     return _S()
+
+
+def logical_digest(db_path: str) -> str:
+    """資料庫的邏輯內容雜湊（iterdump 逐行）：位元組會因 Online Backup 的標頭計數器而不同，邏輯內容不會。"""
+    if not os.path.isfile(db_path):             # connect 會默默建一個空庫 ⇒ 兩邊都不在時會「相同」
+        raise FileNotFoundError(db_path)
+    h = hashlib.sha256()
+    c = sqlite3.connect(db_path)
+    try:
+        for line in c.iterdump():
+            h.update(line.encode("utf-8") + b"\n")
+    finally:
+        c.close()
+    return h.hexdigest()
 
 
 def backup_source(v9: str, dest: str) -> dict:
@@ -245,7 +260,9 @@ def smoke(install: str) -> dict:
 def write_report(rep: dict, path: str) -> None:
     lines = ["# D7 最終轉移升級驗證報告", "",
              "> 產生：`tools/platform/final_drill.py`（%s）。來源：`%s`（只讀）；演練目錄：`%s`。" % (rep["at"], rep["v9_dir"], rep["drill_root"]),
-             "> 新版程式：%s" % rep["new_source"], "", "## 結果", "",
+             "> 新版程式：%s" % rep["new_source"],
+             "> 冒煙用的演練帳號：`%s`（只插入演練複本的庫；完整回滾時隨原始庫一起還原掉）" % rep.get("drill_admin", DRILL_ADMIN[0]),
+             "", "## 結果", "",
              "| # | 步驟 | 結果 | 耗時（秒） | 摘要 |", "|---|---|---|---|---|"]
     for i, s in enumerate(rep["steps"], 1):
         summary = {k: v for k, v in s.items() if k not in ("name", "ok", "seconds")}
@@ -290,6 +307,7 @@ def main(argv=None):
                 UD.git_export(a.new_rev, new_src)
                 s["rev"] = subprocess.run(["git", "-C", str(T.REPO), "rev-parse", a.new_rev],
                                           capture_output=True, text=True).stdout.strip()
+            _must(rep)
         with step(rep, "4a 預檢") as s:
             pf = U.preflight(install, v9_port_open=False, require_no_dev_markers=False)
             s.update(problems=pf["problems"]); s["ok"] = pf["ok"]
@@ -309,13 +327,21 @@ def main(argv=None):
         _must(rep)
         with step(rep, "5 冒煙") as s:
             ensure_drill_admin(install)
+            s["drill_admin"] = DRILL_ADMIN[0] + "（只存在演練複本；完整回滾會把它一起還原掉）"
             s.update(smoke(install))
-        with step(rep, "6a 只回程式") as s:
-            code, log = T.rollback_and_ping(install, backup_dir, "code", UD.free_port())
-            s.update(exit=code, problems=log["problems"], v9_ping=log["v9_ping"])
-            s["ok"] = code == 0 and not log["problems"] and (log["v9_ping"] or {}).get("ok")
+        # 稽核 D K-M1：完整回滾要用**第一份**備份（轉換前的 V9 庫），而且要證明還原後與原始庫邏輯內容相同。
+        # 比對在 V9 啟動之前做（V9 一啟動就會寫每日掃描日期之類的執行期狀態）。
+        with step(rep, "6a 完整回滾（第一份備份）") as s:
+            info = {}
+            s["problems"] = U.rollback(install, backup_dir, "full", info)
+            src_db = os.path.join(root, "source-backup", "backend", "motrix_erp.db")
+            s["logical_equal_to_source"] = logical_digest(os.path.join(install, "backend", "motrix_erp.db")) == logical_digest(src_db)
+            r = T.start_and_ping(install, UD.free_port())
+            s["v9_ping"] = {k: v for k, v in r.items() if k != "log"}
+            s["ok"] = not s["problems"] and s["logical_equal_to_source"] and r["ok"]
+        _must(rep)
         backup2 = os.path.join(root, "upgrade-backup-2")
-        with step(rep, "6b 再轉換（完整回滾前）") as s:
+        with step(rep, "6b 再轉換（只回程式前）") as s:
             U.backup(install, backup2)
             s["backup_problems"] = U.verify_backup_restorable(backup2)
             T._write_log(backup2, "backup_verify.json", {"problems": s["backup_problems"]})
@@ -324,21 +350,25 @@ def main(argv=None):
             s.update(T.convert(install, backup2, new_src))
             s["verify"] = T.verify(install, backup2, UD.free_port()); s["ok"] = not s["verify"]
         _must(rep)
-        with step(rep, "6c 完整回滾") as s:
-            code, log = T.rollback_and_ping(install, backup2, "full", UD.free_port())
+        with step(rep, "6c 只回程式") as s:
+            code, log = T.rollback_and_ping(install, backup2, "code", UD.free_port())
             s.update(exit=code, problems=log["problems"], v9_ping=log["v9_ping"])
             s["ok"] = code == 0 and not log["problems"] and (log["v9_ping"] or {}).get("ok")
+        _must(rep)
     except _Stop as e:
         rep["stopped_at"] = str(e)
     finally:
         rep["ok"] = bool(rep["steps"]) and all(s["ok"] for s in rep["steps"]) and "stopped_at" not in rep
-        write_report(rep, a.report)
-        with open(os.path.join(root, "final_drill.json"), "w", encoding="utf-8") as f:
-            json.dump(rep, f, ensure_ascii=False, indent=1, default=str)
-        if not a.keep_install:
-            for d in ("v9-install", "new", "upgrade-backup", "upgrade-backup-2"):
-                shutil.rmtree(os.path.join(root, d), ignore_errors=True)
-        print("[D7] 報告：%s；總判定：%s" % (a.report, "通過" if rep["ok"] else "未通過"))
+        rep["drill_admin"] = DRILL_ADMIN[0]
+        try:
+            if not a.keep_install:          # 先清演練目錄（不論成敗）；報告寫不出來也不可以留下 539 MB 的複本
+                for d in ("v9-install", "new", "upgrade-backup", "upgrade-backup-2"):
+                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+        finally:
+            write_report(rep, a.report)
+            with open(os.path.join(root, "final_drill.json"), "w", encoding="utf-8") as f:
+                json.dump(rep, f, ensure_ascii=False, indent=1, default=str)
+            print("[D7] 報告：%s；總判定：%s" % (a.report, "通過" if rep["ok"] else "未通過"))
     return 0 if rep["ok"] else 1
 
 
