@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>模組管理 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <style>
+    .ms-main {
+      margin-left: var(--sidebar-w);
+      margin-top: var(--topbar-h);
+      padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h));
+      background: var(--white);
+    }
+    .ms-note {
+      max-width: 960px; margin-top: 20px; padding: 12px 16px; border-radius: 8px;
+      background: var(--bg-soft, #F6F7F9); border: 1px solid var(--border-light); font-size: 13px;
+      color: var(--text-secondary); line-height: 1.6;
+    }
+    .ms-note b { color: var(--text-main); }
+    .ms-table { width: 100%; max-width: 960px; margin-top: 20px; border-collapse: collapse; font-size: 13px; }
+    .ms-table th, .ms-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .ms-table th { font-weight: 700; color: var(--text-secondary); font-size: 12px; }
+    .ms-state { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+    .ms-state--loaded { background: #DCFCE7; color: #166534; }
+    .ms-state--disabled { background: #E5E7EB; color: #374151; }
+    .ms-state--unlicensed { background: #FEF3C7; color: #92400E; }
+    .ms-state--failed { background: #FEE2E2; color: #991B1B; }
+    .ms-pending { color: #B45309; font-weight: 700; }
+    .ms-reason { color: var(--text-secondary); font-size: 12px; margin-top: 4px; }
+    .ms-msg { max-width: 960px; margin-top: 12px; font-size: 13px; }
+    .ms-msg--err { color: var(--danger); }
+  </style>
+</head>
+<body x-data="moduleSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="ms-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">模組管理</h1>
+        <p class="pg__s">這個安裝包裡的模組與狀態：啟用、停用、未授權、載入失敗（附原因）。停用後路由不掛、排程不跑、選單不出現，資料保留。</p>
+      </div>
+    </div>
+
+    <div class="ms-note" data-testid="ms-restart-note">
+      <b>啟用／停用在重新啟動服務後才生效。</b>
+      「目前狀態」是這次啟動實際的樣子；「重啟後」是依目前設定、下次啟動會變成的樣子，兩者不同的列會標示「待重啟」。
+      本頁不提供重啟：重新啟動服務屬於部署與維運的動作，請依既有程序進行。
+      <span x-show="startedAt">（這次啟動時間：<span x-text="startedAt"></span>）</span>
+    </div>
+
+    <div class="ms-msg" :class="{ 'ms-msg--err': isError }" x-show="msg" x-text="msg" data-testid="ms-msg"></div>
+
+    <table class="ms-table" data-testid="ms-table">
+      <thead>
+        <tr><th>模組</th><th>版本</th><th>目前狀態</th><th>重啟後</th><th></th></tr>
+      </thead>
+      <tbody>
+        <template x-for="m in modules" :key="m.key">
+          <tr :data-testid="'ms-row-' + m.key">
+            <td><div x-text="m.name"></div><div class="ms-reason" x-text="m.key"></div></td>
+            <td x-text="m.version"></td>
+            <td>
+              <span class="ms-state" :class="'ms-state--' + m.state" x-text="m.stateLabel" :data-testid="'ms-state-' + m.key"></span>
+              <div class="ms-reason" x-show="m.reason" x-text="m.reason" :data-testid="'ms-reason-' + m.key"></div>
+            </td>
+            <td>
+              <span x-text="m.afterRestartLabel"></span>
+              <span class="ms-pending" x-show="m.pendingRestart" :data-testid="'ms-pending-' + m.key">（待重啟）</span>
+            </td>
+            <td>
+              <template x-if="m.canToggle">
+                <button class="btn" :disabled="busy" @click="toggle(m)"
+                        :data-testid="'ms-toggle-' + m.key"
+                        x-text="m.afterRestart === 'loaded' ? '停用' : '啟用'"></button>
+              </template>
+              <template x-if="!m.canToggle">
+                <span class="ms-reason">無法以管理者開關處理</span>
+              </template>
+            </td>
+          </tr>
+        </template>
+        <tr x-show="loaded && modules.length === 0"><td colspan="5" class="ms-reason">這個安裝包裡沒有可選配的模組。</td></tr>
+      </tbody>
+    </table>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function moduleSettingsPage() {
+      return {
+        modules: [],
+        startedAt: '',
+        loaded: false,
+        busy: false,
+        msg: '',
+        isError: false,
+        // Alpine 3 會自己呼叫 init()，body 上的 x-init 又呼叫一次 ⇒ 用旗標擋第二次
+        _initDone: false,
+
+        _auth() {
+          const s = JSON.parse(localStorage.getItem('motrix_session') || '{}')
+          return s.token ? { Authorization: 'Bearer ' + s.token } : null
+        },
+
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          await this.reload()
+        },
+
+        async reload() {
+          const h = this._auth()
+          if (!h) { location.replace('login.html'); return }
+          const r = await fetch('/api/system/modules', { headers: h })
+          if (!r.ok) {
+            this.isError = true
+            this.msg = r.status === 403 ? '只有最高管理者可以管理模組。' : '讀取模組清單失敗（' + r.status + '）'
+            return
+          }
+          const d = await r.json()
+          this.modules = d.modules || []
+          this.startedAt = d.startedAt || ''
+          this.loaded = true
+        },
+
+        async toggle(m) {
+          const enable = m.afterRestart !== 'loaded'
+          this.busy = true; this.msg = ''; this.isError = false
+          try {
+            const r = await fetch('/api/system/modules/' + encodeURIComponent(m.key), {
+              method: 'PUT',
+              headers: { ...this._auth(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: enable }),
+            })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { this.isError = true; this.msg = d.detail || ('操作失敗（' + r.status + '）'); return }
+            this.msg = '已' + (enable ? '啟用' : '停用') + '「' + m.name + '」，' +
+                       (d.restartRequired ? '重新啟動服務後生效。' : '與目前狀態相同，不需要重新啟動。')
+            await this.reload()
+          } finally {
+            this.busy = false
+          }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

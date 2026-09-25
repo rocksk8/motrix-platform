@@ -793,6 +793,8 @@ if (typeof module !== 'undefined' && module.exports) {
       ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
       ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
       ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
+      // CORE-SPEC §9c：模組啟停／授權狀態（啟停重啟後生效）
+      ni(pg('module-settings.html'),   'sett',  '模組管理',   ['module-settings.html'],   sa),
       ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         cAudit),
       ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], cShipLog),
       ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               cVer),
@@ -1116,6 +1118,7 @@ if (typeof module !== 'undefined' && module.exports) {
         _curGroup = null
         _deniedPages = []
         buildSidebar()
+        _applyUnavailablePages()
         var dnEl = document.getElementById('tb-display-name')
         if (dnEl) dnEl.textContent = esc(d.displayName || d.username || '')
       })
@@ -1144,13 +1147,39 @@ if (typeof module !== 'undefined' && module.exports) {
       .catch(function () {})
   }
 
+  // ── CORE-SPEC §9c：這次啟動沒有載入的模組（停用／未授權／載入失敗）⇒ 藏起它的頁面入口 ──
+  //
+  // 清單要後端給（`/api/system/modules/unavailable-pages`，來源是載入器的結果），不寫死在這裡。
+  // 做法同上面的獎金：事後藏已渲染的連結，不動 build() 的同步流程。
+  // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把清單留著）。
+  var _unavailablePages = []
+  function _applyUnavailablePages() {
+    _unavailablePages.forEach(function (pgName) {
+      document.querySelectorAll('a[href$="' + pgName + '"]').forEach(function (a) {
+        a.style.display = 'none'
+      })
+    })
+  }
+  function _hideUnavailableModulePages() {
+    if (!s || !s.token) return
+    fetch('/api/system/modules/unavailable-pages', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (d) {
+        if (!d || !d.pages) return
+        _unavailablePages = d.pages
+        _applyUnavailablePages()
+      })
+      .catch(function () {})
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      build(); _refreshSession(); _hideBonusEntryIfModuleDisabled()
+      build(); _refreshSession(); _hideBonusEntryIfModuleDisabled(); _hideUnavailableModulePages()
     })
   } else {
     build()
     _refreshSession()
     _hideBonusEntryIfModuleDisabled()
+    _hideUnavailableModulePages()
   }
 })()

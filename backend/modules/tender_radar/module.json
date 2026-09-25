@@ -1,8 +1,9 @@
 {
   "key": "tender_radar",
   "name": "標案雷達",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": ">=1.0,<2.0",
+  "license_key": "tender_radar",
   "permissions": ["tender_radar"],
   "tables": ["tenders", "tender_hits", "tender_watches", "tender_fetch_log"],
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration",

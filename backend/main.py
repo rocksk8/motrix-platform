@@ -34,7 +34,11 @@ logger = logging.getLogger(__name__)
 
 # L2 模組（modules/*）由載入器登錄；main 不指名任何 L2 模組（CORE-SPEC §2）。
 # 載入失敗的模組只記 ERROR，不擋啟動。
-module_loader.load_all()
+# CORE-SPEC §9c：② 未授權（helpers/licensing）> ③ 管理者停用（system_settings.modules_disabled，
+# 啟動時讀一次 ⇒ 改了要重啟才生效）。兩者都不 import 該模組，資料不動。
+from helpers import module_switches as _module_switches
+module_loader.load_all(license_check=license_core.module_license_check,
+                       disabled=_module_switches.read_disabled_at_startup())
 
 from core import paths as _paths
 FRONTEND_DIR = _paths.FRONTEND_DIR

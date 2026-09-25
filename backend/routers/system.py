@@ -699,6 +699,74 @@ def get_runtime_switches(authorization: str = Header(None)):
         ],
     }
 
+# ── CORE-SPEC §9c 模組選配：狀態、管理者啟停（2026-09-25）──────────────────────
+#
+# 狀態由 L0 載入器在**這次啟動**時決定（core.registry.module_states）：
+#   loaded 啟用／disabled 管理者停用／unlicensed 未授權／failed 載入失敗（附原因）
+#   優先順序：不在包內（沒有資料夾，不會列出）＞ 未授權 ＞ 管理者停用。
+# 🔴 管理者啟停**重啟後生效**（2026-09-25 裁示：不做動態卸載路由）。所以每一列分開回
+#    「目前狀態」（這個行程實際的樣子）與「重啟後」（依目前設定），兩者不同 ⇒ pendingRestart。
+# ⚠️ 這裡不提供重啟：重啟正式機是部署／運維的動作，由使用者決定（同一裁示）。
+
+_MODULE_STATE_LABELS = {"loaded": "啟用", "disabled": "停用", "unlicensed": "未授權", "failed": "載入失敗"}
+
+
+def _module_rows():
+    from core import registry as _registry
+    from helpers import module_switches as _ms
+    configured = set(_ms.configured_disabled())
+    rows = []
+    for st in _registry.module_states():
+        after = st["state"]
+        if st["state"] in ("loaded", "disabled"):          # 未授權／載入失敗不受管理者開關影響
+            after = "disabled" if st["key"] in configured else "loaded"
+        rows.append({**st, "stateLabel": _MODULE_STATE_LABELS[st["state"]],
+                     "afterRestart": after, "afterRestartLabel": _MODULE_STATE_LABELS[after],
+                     "pendingRestart": after != st["state"],
+                     "canToggle": st["state"] in ("loaded", "disabled")})
+    return rows
+
+
+@router.get("/api/system/modules")
+def list_system_modules(authorization: str = Header(None)):
+    """模組管理頁：每個模組的目前狀態、原因、重啟後狀態。限 superadmin。"""
+    _require_user(authorization, require_superadmin=True, module='settings')
+    return {"pid": os.getpid(), "startedAt": _PROCESS_STARTED_AT, "modules": _module_rows()}
+
+
+class _ModuleToggleIn(BaseModel):
+    enabled: bool
+
+
+@router.put("/api/system/modules/{key}")
+def toggle_system_module(key: str, body: _ModuleToggleIn, authorization: str = Header(None)):
+    """superadmin 啟用／停用一個模組（寫 system_settings.modules_disabled）。**重啟後生效**，資料不動。
+
+    未授權或載入失敗的模組不可切換——那不是管理者開關能解決的事（400 並說明原因）。"""
+    _require_user(authorization, require_superadmin=True, module='settings')
+    rows = {r["key"]: r for r in _module_rows()}
+    if key not in rows:
+        raise HTTPException(404, "找不到模組：%s（不在這個安裝包裡）" % key)
+    if not rows[key]["canToggle"]:
+        raise HTTPException(400, "模組 %s 目前是「%s」：%s——管理者開關無法處理" %
+                            (key, rows[key]["stateLabel"], rows[key]["reason"] or ""))
+    from helpers import module_switches as _ms
+    _ms.set_enabled(key, body.enabled)
+    _audit(_tok(authorization), "system.module.enable" if body.enabled else "system.module.disable",
+           "settings", key, "%s模組 %s（重啟後生效）" % ("啟用" if body.enabled else "停用", key))
+    row = {r["key"]: r for r in _module_rows()}[key]
+    return {"ok": True, "module": row, "restartRequired": row["pendingRestart"]}
+
+
+@router.get("/api/system/modules/unavailable-pages")
+def unavailable_module_pages(authorization: str = Header(None)):
+    """選單用（任何登入者）：這次啟動沒有載入的模組的頁面——側欄把這些入口藏起來。
+    只回頁面檔名，不回原因（原因只給 superadmin 的模組管理頁）。"""
+    _require_user(authorization)
+    from core import registry as _registry
+    return {"pages": sorted({p for st in _registry.module_states() if st["state"] != "loaded"
+                             for p in st["pages"]})}
+
 
 @router.get("/api/system/bonus-module-status")
 def get_bonus_module_status(authorization: str = Header(None)):

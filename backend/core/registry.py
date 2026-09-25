@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.1"
+CORE_VERSION = "1.2"
 
 
 @dataclass
@@ -43,6 +43,12 @@ class LoadedModule:
 
 _LOADED: Dict[str, LoadedModule] = {}
 _FAILED: Dict[str, str] = {}
+#: 每個 modules/<key> 這次啟動的結果（CORE-SPEC §9c）：
+#:   {"key","name","version","state","reason","pages","license_key"}，
+#:   state ∈ STATES。「不在包內」的模組沒有資料夾，這裡不會出現（優先順序最高）。
+_STATES: Dict[str, dict] = {}
+STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED = "loaded", "unlicensed", "disabled", "failed"
+STATES = (STATE_LOADED, STATE_UNLICENSED, STATE_DISABLED, STATE_FAILED)
 #: 尚未搬進 modules/ 的模組（仍在 routers/、helpers/）登記的提供者：{(capability, name): fn}。
 #: 搬遷後改寫進 ModuleSpec.providers，這裡的登記一併刪掉。
 _LEGACY_PROVIDERS: Dict[Tuple[str, str], Callable] = {}
@@ -52,6 +58,22 @@ def _reset():
     """測試用：清空登錄表（不動 _LEGACY_PROVIDERS——那是模組匯入時登記的，清了就回不來）。"""
     _LOADED.clear()
     _FAILED.clear()
+    _STATES.clear()
+
+
+def set_state(key: str, state: str, reason: str = "", manifest: Optional[dict] = None) -> None:
+    if state not in STATES:
+        raise ValueError(f"unknown module state {state!r}")
+    m = manifest or {}
+    _STATES[key] = {"key": key, "name": m.get("name") or key, "version": m.get("version") or "",
+                    "license_key": m.get("license_key") or key,
+                    "pages": [pg.get("path") for pg in (m.get("pages") or []) if pg.get("path")],
+                    "state": state, "reason": reason}
+
+
+def module_states() -> List[dict]:
+    """依 key 排序；給系統設定頁與選單用。"""
+    return [dict(_STATES[k]) for k in sorted(_STATES)]
 
 
 def provide(capability: str, name: str, fn: Callable) -> None:

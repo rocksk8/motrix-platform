@@ -68,7 +68,9 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 🔴 2026-09-25（視窗 A，platform）52 -> 44：選型知識庫遺棄（CORE-SPEC.md「使用者裁示」），
 #:    刪了 7 個 *-guide.html 與 selection-db-overview.html。實測：HEAD 掃出 52、刪後掃出 44，
 #:    差集恰好是這 8 頁，沒有新增（`check_double_init.scan()` 前後各跑一次比對頁名）。
-PAGE_POPULATION = 44
+#: 🔴 2026-09-25（視窗 A，platform）44 -> 45：CORE-SPEC §9c 新增 module-settings.html（模組管理，Alpine，
+#:    有 _initDone 守衛）。實測：HEAD 掃出 44、加頁後 45，差集恰好只有這一頁。
+PAGE_POPULATION = 45
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

@@ -15,7 +15,7 @@
     # 簽一把授權
     python tools/issue_license.py issue \
         --customer "第二家公司股份有限公司" --tax-id 87654321 \
-        --machine 0123456789abcdef --modules quotation,case_manage \
+        --machine 0123456789abcdef --modules tender_radar,case \
         --days 365 --out license.key
 
 ⚠️ 私鑰
@@ -207,7 +207,7 @@ def main(argv=None):
     p_iss.add_argument("--machine", default=None,
                        help="目標機器指紋（預設：本機）")
     p_iss.add_argument("--modules", default="*",
-                       help="模組清單，逗號分隔；'*' 代表全開（預設 '*'）")
+                       help="模組清單（各模組 module.json 的 license_key，預設＝modules/ 資料夾名），逗號分隔；'*' 代表全開（預設 '*'）")
     p_iss.add_argument("--days", type=int, default=365,
                        help="有效天數（預設 365；--expires 優先）")
     p_iss.add_argument("--expires", default=None, help="到期日 YYYY-MM-DD")

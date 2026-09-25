@@ -637,3 +637,31 @@ def machine_fingerprint():
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
     _FINGERPRINT_CACHE = digest[:16]
     return _FINGERPRINT_CACHE
+
+
+# ── 模組授權（CORE-SPEC §9c ②，2026-09-25 裁示 (b)）──────────────────────────
+#
+# 授權的單位是「賣的東西」＝模組：金鑰的 `modules` 清單寫模組的 `license_key`
+# （module.json；沒寫 ⇒ 資料夾名），`"*"` ＝ 全開。不用權限 key——那是模組內部更細的粒度。
+# 開發模式照既有規則：`LICENSE_GATE_ENABLED` 為 False ⇒ 完全不介入（連 verify_license 都不呼叫）。
+
+MODULE_LICENSE_NOT_CHECKED = "授權檢查未啟用"
+
+
+def module_licensed(manifest, status, gate_enabled):
+    """純函式：回 `(ok, reason)`。reason 是給人看的中文；ok 時 reason 可能是「授權檢查未啟用」。"""
+    if not gate_enabled:
+        return True, MODULE_LICENSE_NOT_CHECKED
+    if license_blocks_request(status):
+        return False, "未授權：" + license_block_message(status)
+    key = (manifest or {}).get("license_key") or (manifest or {}).get("key") or ""
+    mods = status.get("modules") or []
+    if "*" in mods or key in mods:
+        return True, ""
+    return False, "未授權：授權金鑰未包含此模組（%s）" % key
+
+
+def module_license_check(manifest):
+    """載入器用（main.py 注入 core.loader.load_all）。每次呼叫當下讀開關與金鑰。"""
+    gate = LICENSE_GATE_ENABLED
+    return module_licensed(manifest, verify_license() if gate else {}, gate)
