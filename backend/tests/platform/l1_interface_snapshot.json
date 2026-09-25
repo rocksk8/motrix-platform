@@ -681,12 +681,14 @@
    "run_all": "def(conn)"
   },
   "plat:pages": {
+   "L1_PAGES_FILE": "const",
    "NOTICE": "const",
    "PAGE_NAME": "const",
    "PageConflict": "class",
    "build_page_map": "def(manifests, l1_dir)",
    "check_and_register": "def(modules_dir, l1_dir)",
-   "collect": "def(manifests, l1_dir)",
+   "collect": "def(manifests, l1_dir, l1_pages=…)",
+   "load_l1_pages": "def(path=…)",
    "lookup": "def(name, page_map)",
    "notice_html": "def(module_name, kind)",
    "notice_kind": "def(state)",

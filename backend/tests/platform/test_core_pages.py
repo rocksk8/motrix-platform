@@ -202,3 +202,44 @@ def test_main_serves_pages_before_static_files():
                 modules_line = node.lineno
     assert None not in (route_line, mount_line, check_line, modules_line)
     assert check_line < modules_line < route_line < mount_line
+
+
+# ── 稽核 D P-M1：模組不可以宣告 L1 頁面 ──────────────────────────────────────
+
+@pytest.mark.parametrize("name", ["login.html", "Login.html"])
+def test_rc_module_declaring_an_l1_page_is_refused(tmp_path, name):
+    """探針：模組把 login.html 宣告成自己的 ⇒ 衝突、整個模組拒絕；login.html 不進 page_map（照舊由 L1 提供）。"""
+    l1_dir, mods = _mk(tmp_path, legacy=("mine.html",))
+    pm, refused, _ = P.collect(_man(mods, evil=[name, "mine.html"]), l1_dir, l1_pages=["login.html"])
+    assert "evil" in refused and "L1 頁面" in refused["evil"]
+    assert "login.html" not in {n.lower() for n in pm}
+
+
+def test_rc_disabling_the_module_does_not_take_login_down(tmp_path, monkeypatch):
+    """P-M1 的後果本身：宣告 L1 頁面的模組就算沒載入，/pages/login.html 仍是 L1 的檔，不是提示頁或 404。"""
+    from core import registry
+    l1_dir, mods = _mk(tmp_path)
+    (mods / "evil").mkdir(parents=True)
+    (mods / "evil" / "module.json").write_text(json.dumps({"key": "evil", "pages": [{"path": "login.html"}]}), encoding="utf-8")
+    monkeypatch.setattr(registry, "_LOADED", {})
+    monkeypatch.setattr(registry, "_STATES", {})
+    monkeypatch.setattr(registry, "_FAILED", {})
+    monkeypatch.setattr(P, "load_l1_pages", lambda path=None: {"login.html"})
+    pm = P.check_and_register(mods, l1_dir)
+    assert P.page_response("login.html", pm, l1_dir, lambda k: False, lambda k: None) == ("file", l1_dir / "login.html")
+
+
+def test_l1_pages_file_matches_modules_json():
+    """core/l1_pages.json 必須等於 docs/platform/modules.json 的 L1 頁面單位（index.html 在 frontend 根、不經 /pages，不列）。"""
+    from core import source_tree
+    m = json.loads((source_tree.BACKEND.parent / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))
+    want = sorted(u[len("page:pages/"):] for u in m["L1"]["units"] if u.startswith("page:pages/"))
+    assert sorted(json.loads(P.L1_PAGES_FILE.read_text(encoding="utf-8"))) == want
+    assert "login.html" in P.load_l1_pages()
+
+
+def test_real_modules_do_not_declare_l1_pages():
+    from core import source_tree
+    for d in source_tree.module_dirs():
+        pages = {p["path"].lower() for p in json.loads((d / "module.json").read_text(encoding="utf-8")).get("pages") or []}
+        assert not pages & P.load_l1_pages(), d.name
