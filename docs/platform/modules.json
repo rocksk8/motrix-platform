@@ -62,6 +62,7 @@
    "page:pages/schema-status.html",
    "page:pages/users.html",
    "page:pages/work-log.html",
+   "plat:events",
    "plat:loader",
    "plat:paths",
    "plat:registry",
