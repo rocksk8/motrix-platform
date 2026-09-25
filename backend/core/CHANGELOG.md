@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.24 — 2026-09-26（C，模組檔案清單單一來源）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.24〕
+> 主持裁示：「模組裡有哪些檔」只有一份定義。A 的 M03、C 的 M04、B 的 M08 把多支 router 放在 `api/`（CORE-SPEC §3）都依賴它。只有新增。
+- L0（新增）：`core.source_tree.module_files(d)`——模組資料夾所有層的 `*.py`，排除 tests／migrations；`router_files`／`logic_files` 與 tools/platform/dep_scan.py 都用它
+- 工具：dep_scan 的模組單位名稱 `mod:<key>/<相對路徑>`（第一層不變，例 `mod:tender_radar/api`；子目錄例 `mod:<key>/api/orders`）；`modules.<key>.<子目錄>.<檔>` 的 import 指到那個檔
+
 ## 1.23（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕〔core_bump：暫用 1.13 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕〔core_bump：暫用 1.16 → 1.23〕
 > `core.registry.CORE_VERSION` 1.15 → 1.16（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12、1.13、1.14，版號由 core_bump 依 origin 取）。
 - L1（相容擴充）：`static/privacy-notice.js` 新增 `subjectState()`——單據上手動輸入的聯絡人（報價單、案件、完工單、網路規劃書）的告知狀態；紀錄鍵含聯絡人姓名，伺服器只接受已存檔的那一位（2026-09-26 主持裁示）
