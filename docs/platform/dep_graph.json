@@ -122,6 +122,24 @@
    "tables_r": [],
    "tables_w": []
   },
+  "core:completion_pdf": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:startup",
+    "router:completion_notes"
+   ],
+   "kind": "core",
+   "path": "backend/completion_pdf.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "completion_notes"
+   ],
+   "tables_w": []
+  },
   "core:db": {
    "api_prefixes": [],
    "dynamic_sql": true,
@@ -380,8 +398,7 @@
     "helper:quotations",
     "helper:settings",
     "helper:startup",
-    "plat:paths",
-    "router:completion_notes"
+    "plat:paths"
    ],
    "kind": "core",
    "path": "backend/pdf_gen.py",
@@ -393,7 +410,6 @@
     "case_stage_visits",
     "case_stages",
     "case_updates",
-    "completion_notes",
     "contractor_dispatches",
     "contractor_payment_vouchers",
     "contractors",
@@ -815,7 +831,7 @@
    "dynamic_sql": false,
    "imports": [
     "helper:quotations",
-    "router:vendor_contractors"
+    "plat:registry"
    ],
    "kind": "helper",
    "path": "backend/helpers/recognition.py",
@@ -4858,8 +4874,8 @@
     "helper:uploads"
    ],
    "imports": [
+    "core:completion_pdf",
     "core:db",
-    "core:pdf_gen",
     "helper:audit",
     "helper:auth",
     "helper:dates",
@@ -7728,8 +7744,7 @@
     "helper:quotations",
     "helper:recognition",
     "helper:settings",
-    "helper:startup",
-    "router:vendor_contractors"
+    "helper:startup"
    ],
    "kind": "router",
    "path": "backend/routers/reports.py",
@@ -7737,73 +7752,73 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2347,
+     "line": 2346,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2360,
+     "line": 2359,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2395,
+     "line": 2394,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2514,
+     "line": 2513,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2575,
+     "line": 2574,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2752,
+     "line": 2751,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "bank_reconcile",
-     "line": 2844,
+     "line": 2843,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     },
     {
      "func": "customer_history",
-     "line": 2913,
+     "line": 2912,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 3161,
+     "line": 3160,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3443,
+     "line": 3442,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3744,
+     "line": 3743,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3931,
+     "line": 3930,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -8709,6 +8724,7 @@
     "helper:quotations",
     "helper:recognition",
     "helper:uploads",
+    "plat:registry",
     "plat:txn",
     "router:contractors"
    ],
@@ -8718,133 +8734,133 @@
    "routes": [
     {
      "func": "list_vendor_contractors",
-     "line": 171,
+     "line": 179,
      "method": "GET",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "list_vendors_selectable",
-     "line": 199,
+     "line": 207,
      "method": "GET",
      "path": "/api/vendor-contractors/selectable"
     },
     {
      "func": "get_vendor_contractor",
-     "line": 213,
+     "line": 221,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "create_vendor_contractor",
-     "line": 225,
+     "line": 233,
      "method": "POST",
      "path": "/api/vendor-contractors"
     },
     {
      "func": "update_vendor_contractor",
-     "line": 253,
+     "line": 261,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "toggle_vendor_active",
-     "line": 294,
+     "line": 302,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/active"
     },
     {
      "func": "get_vendor_passbook",
-     "line": 317,
+     "line": 325,
      "method": "GET",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "upload_vendor_passbook",
-     "line": 333,
+     "line": 341,
      "method": "PUT",
      "path": "/api/vendor-contractors/{vid}/passbook"
     },
     {
      "func": "delete_vendor_contractor",
-     "line": 366,
+     "line": 374,
      "method": "DELETE",
      "path": "/api/vendor-contractors/{vid}"
     },
     {
      "func": "update_vendor_visits",
-     "line": 393,
+     "line": 401,
      "method": "PATCH",
      "path": "/api/vendor-contractors/{vid}/visits"
     },
     {
      "func": "list_dispatches",
-     "line": 428,
+     "line": 436,
      "method": "GET",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "get_dispatch",
-     "line": 450,
+     "line": 458,
      "method": "GET",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "create_dispatch",
-     "line": 466,
+     "line": 474,
      "method": "POST",
      "path": "/api/contractor-dispatches"
     },
     {
      "func": "update_dispatch",
-     "line": 508,
+     "line": 516,
      "method": "PUT",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "delete_dispatch",
-     "line": 563,
+     "line": 571,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}"
     },
     {
      "func": "upload_dispatch_files",
-     "line": 591,
+     "line": 599,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/files"
     },
     {
      "func": "delete_dispatch_file",
-     "line": 627,
+     "line": 635,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/files/{file_id}"
     },
     {
      "func": "upload_dispatch_invoice_files",
-     "line": 658,
+     "line": 666,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/invoice-files"
     },
     {
      "func": "delete_dispatch_invoice_file",
-     "line": 695,
+     "line": 703,
      "method": "DELETE",
      "path": "/api/contractor-dispatches/{did}/invoice-files/{file_id}"
     },
     {
      "func": "set_dispatch_invoice_date",
-     "line": 724,
+     "line": 732,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/invoice-date"
     },
     {
      "func": "accept_dispatch",
-     "line": 757,
+     "line": 765,
      "method": "PATCH",
      "path": "/api/contractor-dispatches/{did}/accept"
     },
     {
      "func": "import_dispatch_to_quote",
-     "line": 803,
+     "line": 811,
      "method": "POST",
      "path": "/api/contractor-dispatches/{did}/import-to-quote"
     }
@@ -8915,8 +8931,8 @@
     "helper:voucher",
     "helper:voucher_attachments",
     "helper:voucher_pdf",
-    "router:accounting_export",
-    "router:vendor_contractors"
+    "plat:registry",
+    "router:accounting_export"
    ],
    "kind": "router",
    "path": "backend/routers/vouchers.py",
@@ -8924,115 +8940,115 @@
    "routes": [
     {
      "func": "create_voucher",
-     "line": 353,
+     "line": 352,
      "method": "POST",
      "path": "/api/vouchers"
     },
     {
      "func": "list_vouchers",
-     "line": 404,
+     "line": 403,
      "method": "GET",
      "path": "/api/vouchers"
     },
     {
      "func": "vouchers_by_case",
-     "line": 605,
+     "line": 607,
      "method": "GET",
      "path": "/api/vouchers/by-case/{quote_no}"
     },
     {
      "func": "summary_sources",
-     "line": 630,
+     "line": 632,
      "method": "GET",
      "path": "/api/vouchers/summary-sources"
     },
     {
      "func": "line_source_files_endpoint",
-     "line": 739,
+     "line": 741,
      "method": "GET",
      "path": "/api/vouchers/line-source-files"
     },
     {
      "func": "line_source_file_endpoint",
-     "line": 759,
+     "line": 761,
      "method": "GET",
      "path": "/api/vouchers/line-source-file"
     },
     {
      "func": "read_voucher",
-     "line": 790,
+     "line": 792,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "voucher_edit_log",
-     "line": 850,
+     "line": 852,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/edit-log"
     },
     {
      "func": "submit_voucher",
-     "line": 885,
+     "line": 887,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/submit"
     },
     {
      "func": "approve_voucher",
-     "line": 951,
+     "line": 953,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/approve"
     },
     {
      "func": "send_back_voucher",
-     "line": 1035,
+     "line": 1037,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/send-back"
     },
     {
      "func": "void_voucher",
-     "line": 1109,
+     "line": 1111,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/void"
     },
     {
      "func": "post_voucher_endpoint",
-     "line": 1183,
+     "line": 1185,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/post"
     },
     {
      "func": "update_voucher",
-     "line": 1218,
+     "line": 1220,
      "method": "PUT",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "add_voucher_attachments",
-     "line": 1401,
+     "line": 1403,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/attachments"
     },
     {
      "func": "delete_voucher_attachment",
-     "line": 1509,
+     "line": 1511,
      "method": "DELETE",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_attachment",
-     "line": 1578,
+     "line": 1580,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_pdf",
-     "line": 1681,
+     "line": 1683,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/pdf-download"
     },
     {
      "func": "preview_voucher",
-     "line": 1754,
+     "line": 1756,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/preview"
     }
@@ -9592,7 +9608,7 @@
    "path": "backend/db.py:3527",
    "readers": [
     "core:archive",
-    "core:pdf_gen",
+    "core:completion_pdf",
     "router:quotations"
    ],
    "tables_r": [],
