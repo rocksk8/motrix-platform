@@ -28,7 +28,7 @@ from fastapi import APIRouter, Body, Header, HTTPException
 from db import get_db
 from helpers import _require_user
 from routers.dev_crm import _can_access_case
-from routers.quotations import _visible_case_filter_sql
+from helpers import row_access
 # 直接取唯一來源（DEPENDENCY-MAP §3 #4）：經 routers.system 轉手會讓 item_reads 依賴整支 system
 from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES
 from helpers.module_registry import BADGE_EXCLUDE as _MODULE_EXCLUDE_ACTIONS
@@ -180,7 +180,7 @@ def _visible_keys(conn, user, kind, keys):
         if admin:
             return keys
         ph = ",".join("?" * len(keys))
-        frag, fparams = _visible_case_filter_sql(user)
+        frag, fparams = row_access.filter_sql("case", user, scope="read")
         rows = conn.execute(
             f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}){frag}",
             keys + fparams).fetchall()

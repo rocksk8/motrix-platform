@@ -34,7 +34,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 from db import db_conn
 from helpers import _require_user, user_has_module
 from helpers import geo
-from helpers.quotations import _check_quotation_owner
+from helpers import row_access
 
 logger = logging.getLogger(__name__)
 
@@ -352,23 +352,12 @@ def _case_rows_visible_to(user, rows):
     """🔴 **逐筆**套用案件可見性：非 admin／superadmin 只看得到自己名下或被分配的案件。
 
     ☠️ 只擋模組的話，有 `case_manage` 的業務會在地圖上看到**別的業務的客戶與工地地址**——
-       而案件管理頁刻意不給他看（`list_quotations` 的 `_visible_case_filter_sql`）。
-    🔑 判準沿用 `helpers.quotations._check_quotation_owner`（單筆存取的那一道），不另寫一套：
-       兩套規則會漂移，而漂移的那一天沒有任何題會紅。
+       而案件管理頁刻意不給他看（`list_quotations` 的過濾）。
+    🔑 判準與列表是同一份：L1 `row_access` 的 `case`，scope="read"（admin+／擁有者／
+       被分配／cashier，CM14b）。以前這裡自己再寫一次 admin 與 cashier 例外——兩套規則會
+       漂移，而漂移的那一天沒有任何題會紅（search 與動態牆就是這樣漂掉的）。
     """
-    if (user or {}).get("role") in ("superadmin", "admin"):
-        return list(rows)
-    # CM14b（2026-09-24）：持 cashier 模組者看得到全部案件——與 _visible_case_filter_sql 同一條規則
-    if user_has_module(user, "cashier"):
-        return list(rows)
-    out = []
-    for r in rows:
-        try:
-            _check_quotation_owner(r, user)
-        except HTTPException:
-            continue
-        out.append(r)
-    return out
+    return [r for r in rows if row_access.visible("case", user or {}, r, scope="read")]
 
 
 def _case_points(user, located, budget=None):

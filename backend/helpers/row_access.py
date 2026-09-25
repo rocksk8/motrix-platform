@@ -21,7 +21,10 @@ admin 直通收在介面內：呼叫端不必（也不該）再自己判斷 role
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
+
+from fastapi import HTTPException
 
 from helpers.auth import user_has_module
 
@@ -44,9 +47,12 @@ class OwnerRule:
     lenient_json: bool = False
     #: scope="read" 時直接放行的模組
     read_bypass_modules: tuple[str, ...] = field(default_factory=tuple)
+    #: require() 擋下時的 403 訊息
+    deny_message: str = "無權限存取這筆資料"
 
 
 _REGISTRY: dict[str, OwnerRule] = {}
+_log = logging.getLogger(__name__)
 
 
 def register(kind: str, rule: OwnerRule) -> None:
@@ -55,11 +61,13 @@ def register(kind: str, rule: OwnerRule) -> None:
     _REGISTRY[kind] = rule
 
 
-def rule_for(kind: str) -> OwnerRule:
-    try:
-        return _REGISTRY[kind]
-    except KeyError:
-        raise KeyError(f"row_access：{kind!r} 尚未登錄（擁有該表的模組要先 register）") from None
+def rule_for(kind: str) -> OwnerRule | None:
+    """未登錄 ⇒ None。🔴 呼叫端一律 fail closed：擁有該表的模組不在（被拆掉／沒載入）時，
+    只能少看到東西，不可以多看到——所以連 admin 也不直通。"""
+    rule = _REGISTRY.get(kind)
+    if rule is None:
+        _log.warning("row_access：%r 尚未登錄（擁有該表的模組沒有載入？）⇒ 一律不放行", kind)
+    return rule
 
 
 def _bypass(rule: OwnerRule, user: dict, scope: str) -> bool:
@@ -95,6 +103,8 @@ def _id_list(raw, lenient: bool) -> list:
 
 def visible(kind: str, user: dict, row, scope: str = "owner") -> bool:
     rule = rule_for(kind)
+    if rule is None:
+        return False
     if _bypass(rule, user, scope):
         return True
     uid = user["id"]
@@ -117,8 +127,10 @@ def visible(kind: str, user: dict, row, scope: str = "owner") -> bool:
 
 
 def filter_sql(kind: str, user: dict, prefix: str = "", scope: str = "owner") -> tuple[str, list]:
-    """回傳 (fragment, params)。直通者回 ("", [])；否則 fragment 以 " AND (" 開頭。"""
+    """回傳 (fragment, params)。直通者回 ("", [])；否則 fragment 以 " AND " 開頭。未登錄 ⇒ 恆假。"""
     rule = rule_for(kind)
+    if rule is None:
+        return (" AND 0", [])
     if _bypass(rule, user, scope):
         return ("", [])
     p = prefix
@@ -143,3 +155,10 @@ def filter_sql(kind: str, user: dict, prefix: str = "", scope: str = "owner") ->
     if not terms:
         return (" AND 0", [])
     return (" AND (" + " OR ".join(terms) + ")", params)
+
+
+def require(kind: str, user: dict, row, scope: str = "owner") -> None:
+    """單筆存取守門：不可見 ⇒ 403（訊息取自登錄的 deny_message）。"""
+    if not visible(kind, user, row, scope):
+        rule = _REGISTRY.get(kind)
+        raise HTTPException(403, rule.deny_message if rule else "無權限存取這筆資料")

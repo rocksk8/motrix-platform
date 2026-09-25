@@ -21,10 +21,11 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db
+from helpers import row_access
 from core.txn import begin_write
 from helpers import (
     _require_user, _tok, _audit, save_quotation_json, user_has_module,
-    _check_quotation_owner, SQL_DEAL_TAG,
+    SQL_DEAL_TAG,
 )
 from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
 from helpers.recognition import normalize_date  # `AC2`
@@ -91,7 +92,7 @@ def update_material_orders(quote_no: str,
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
 
         # 2. 擁有者檢查：非 admin+ 不能碰別的業務的案件（quote_no 可列舉）
-        _check_quotation_owner(q, user)
+        row_access.require("case", user, q)
 
         data = json.loads(q["data_json"] or "{}")
 
@@ -183,7 +184,7 @@ def set_material_order_invoice_date(quote_no: str, item_id: str, body: dict = Bo
             (quote_no,)).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        _check_quotation_owner(q, user)
+        row_access.require("case", user, q)
         data = json.loads(q["data_json"] or "{}")
         orders = (data.get("caseRecord") or {}).get("materialOrders") or []
         hit = [mo for mo in orders if isinstance(mo, dict) and str(mo.get("itemId")) == item_id]
@@ -219,7 +220,7 @@ def get_material_orders(quote_no: str, authorization: str = Header(None)):
         ).fetchone()
         if not q:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        _check_quotation_owner(q, user)
+        row_access.require("case", user, q)
 
         data = json.loads(q["data_json"] or "{}")
         orders = data.get("caseRecord", {}).get("materialOrders", [])

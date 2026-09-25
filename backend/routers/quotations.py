@@ -22,8 +22,9 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from db import get_db, spawn_bg_thread
+from helpers import row_access
 from helpers import (
-    _require_user, _tok, _audit, _notify, _purge_notifications, _check_quotation_owner,
+    _require_user, _tok, _audit, _notify, _purge_notifications,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
     notify_approval_request, notify_next_tier, notify_approved,
     notify_returned, notify_resubmit_requester, notify_settlement_finalized,
@@ -248,28 +249,10 @@ def _current_tier_idx(appr: dict) -> int:
     return ct
 
 
-def _visible_case_filter_sql(user: dict, prefix: str = "") -> tuple:
-    """回傳 (sql_fragment, params)：非 admin/superadmin 只能看自己名下業務歸屬的案件，
-    或被 assigned_user_ids 勾選分配的案件（2026-08-27 起，接上原本只存欄位、沒實際
-    拿來過濾可見性的 assigned_user_ids——見 quotations.py::update_case_assigned_users()
-    /case-management.html 成員分配 UI）。json_each() 是 SQLite JSON1 擴充函式，
-    daily_tasks.py 的 json_each(assigned_to) 已在用同一招。prefix 是 SQL 別名前綴
-    （例如 stage_board() JOIN case_stages 後用 'q.'），unaliased 查詢留空字串即可。
-
-    2026-09-24（CM14b 使用者裁示「讀得到，但只能改收款」）：持 cashier 模組者看得到全部案件。
-    寫入面另外把關（update_case_record 只放行 payment 分段；其餘端點仍走擁有者檢查）。"""
-    if user_has_module(user, "cashier"):
-        return ("", [])
-    return (
-        f" AND ({prefix}sales_person_id=? OR ({prefix}sales_person_id IS NULL AND {prefix}sales_person=?)"
-        f" OR EXISTS (SELECT 1 FROM json_each({prefix}assigned_user_ids) WHERE value=?))",
-        [user["id"], user["display_name"], user["id"]],
-    )
-
-
-# `_check_quotation_owner()` 於 2026-09-10 抽到 helpers/quotations.py（見該處
-# docstring）——叫料 API 是第三個呼叫點，且新增時漏了這道檢查。本檔案改為
-# 從 helpers 引用，行為完全不變。
+# 案件可見性（原 `_visible_case_filter_sql()`／`_check_quotation_owner()` 兩份）已合併為
+# L1 `helpers/row_access` 的 `case`，規則宣告在 helpers/quotations.py 的 `CASE_ACCESS`。
+#   清單／批次 ⇒ row_access.filter_sql("case", user, scope="read")
+#   單筆      ⇒ row_access.require("case", user, row)（scope="owner"；GET 單筆用 "read"）
 
 
 # ── Case semi-unlock / change-request helpers (2026-08-26) ────────────────────
@@ -452,7 +435,7 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
             and q["case_semi_unlocked"]):
         return q
     try:
-        _check_quotation_owner(q, user)
+        row_access.require("case", user, q)
     except HTTPException:
         allowed = (
             (allow_module and user_has_module(user, allow_module))
@@ -475,7 +458,7 @@ def _is_case_member(conn, quote_no: str, row, user: dict) -> bool:
     if user["role"] in ("superadmin", "admin"):
         return True
     try:
-        _check_quotation_owner(row, user)       # 業務（id／舊資料顯示名稱）＋ assigned_user_ids
+        row_access.require("case", user, row)       # 業務（id／舊資料顯示名稱）＋ assigned_user_ids
         return True
     except HTTPException:
         pass
@@ -891,10 +874,9 @@ def list_quotations(
     # /api/quotations 短暫 500）。
     where_sql = ""
     params = []
-    if user["role"] not in ("superadmin", "admin"):
-        frag, fparams = _visible_case_filter_sql(user)
-        where_sql += frag
-        params.extend(fparams)
+    frag, fparams = row_access.filter_sql("case", user, scope="read")
+    where_sql += frag
+    params.extend(fparams)
     if status:
         where_sql += " AND status=?"; params.append(status)
     if customer:
@@ -1048,10 +1030,9 @@ def stage_board(department_id: Optional[int] = None, authorization: str = Header
         f"WHERE {SQL_DEAL_TAG} = '已成案'"
     )
     params = []
-    if user["role"] not in ("superadmin", "admin"):
-        frag, fparams = _visible_case_filter_sql(user, prefix="q.")
-        sql += frag
-        params.extend(fparams)
+    frag, fparams = row_access.filter_sql("case", user, prefix="q.", scope="read")
+    sql += frag
+    params.extend(fparams)
     sql += " ORDER BY q.quote_no, cs.sort_order"
     rows = conn.execute(sql, params).fetchall()
 
@@ -1130,7 +1111,7 @@ def case_activity(body: dict = Body(...), authorization: str = Header(None)):
     try:
         if user["role"] not in ("superadmin", "admin"):
             ph = ",".join("?" * len(quote_nos))
-            frag, fparams = _visible_case_filter_sql(user)
+            frag, fparams = row_access.filter_sql("case", user, scope="read")
             allowed = conn.execute(
                 f"SELECT quote_no FROM quotations WHERE quote_no IN ({ph}){frag}",
                 quote_nos + fparams,
@@ -1211,7 +1192,7 @@ def gate_matrix(authorization: str = Header(None)):
     這件事是這支端點存在的唯一理由：那五個條件散在五個頁籤裡，跨案件比較等於開五次。
 
     順便帶上階段到期資訊（逾期數／下一個到期日），這樣矩陣右側那兩欄不必再打一次
-    /api/quotations/stage-board。權限篩選比照該端點，沿用 _visible_case_filter_sql()。
+    /api/quotations/stage-board。權限篩選比照該端點（row_access 的 case，scope=read）。
 
     唯讀，不觸發任何通知。**效能**：每件案件約 15 次 SQLite 查詢（六張單據表各兩次
     ＋階段＋額外支出兩次），開發機 26 件實測整支約 40ms；本機 SQLite 讀取是微秒級，
@@ -1227,10 +1208,9 @@ def gate_matrix(authorization: str = Header(None)):
         f"FROM quotations WHERE {SQL_DEAL_TAG} IN ('已成案', '已結案')"
     )
     params: list = []
-    if user["role"] not in ("superadmin", "admin"):
-        frag, fparams = _visible_case_filter_sql(user)
-        sql += frag
-        params.extend(fparams)
+    frag, fparams = row_access.filter_sql("case", user, scope="read")
+    sql += frag
+    params.extend(fparams)
     sql += " ORDER BY quote_no DESC"
     rows = conn.execute(sql, params).fetchall()
 
@@ -1303,13 +1283,12 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    # CM14b（2026-09-24 使用者裁示）：持 cashier 模組者讀得到任何案件 ⇒ scope="read"
     try:
-        _check_quotation_owner(row, user)
+        row_access.require("case", user, row, scope="read")
     except HTTPException:
-        # CM14b（2026-09-24 使用者裁示）：持 cashier 模組者讀得到任何案件
-        if not user_has_module(user, "cashier"):
-            conn.close()
-            raise
+        conn.close()
+        raise
     # 不是案件成員、靠 cashier 例外讀到的 ⇒ 案件頁除收款外全唯讀（寫入面後端另擋，見 update_case_record）
     cashier_read_only = not _is_case_member(conn, quote_no, row, user)
     conn.close()
@@ -1766,7 +1745,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        _check_quotation_owner(existing, user)
+        row_access.require("case", user, existing)
     except HTTPException:
         conn.close()
         raise
@@ -2296,7 +2275,7 @@ def case_close_gates(quote_no: str, authorization: str = Header(None)):
         row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        _check_quotation_owner(row, user)
+        row_access.require("case", user, row)
         d = json.loads(row["data_json"] or "{}")
         gates = _case_close_gates(conn, quote_no, d)
         for g in gates:
@@ -2413,7 +2392,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        _check_quotation_owner(row, user)
+        row_access.require("case", user, row)
     except HTTPException:
         conn.close()
         raise
@@ -4131,7 +4110,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     # （MQ-YYYYMM-NNN），等於任何已登入帳號都能讀到**任何**案件的成本、毛利
     # 與精算明細——跟 2026-08-24 修掉的報價單 IDOR 是同一種洞，只是漏在這支。
     # 改用跟同一批資料既有端點一致的擁有者規則（admin+ 直通、否則必須是
-    # 該案業務或被指派的協作者），見 helpers/quotations.py::_check_quotation_owner。
+    # 該案業務或被指派的協作者），見 helpers/quotations.py::CASE_ACCESS。
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
@@ -4141,7 +4120,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    _check_quotation_owner(row, user)
+    row_access.require("case", user, row)
     _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
     return {"settlement": data.get("settlement", None), "items": data.get("items", []),
@@ -4167,7 +4146,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
         # GET 相同的擁有者檢查。
         try:
-            _check_quotation_owner(row, user)
+            row_access.require("case", user, row)
             _require_financial_view(user)
         except HTTPException:
             conn.close()
@@ -4246,7 +4225,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        _check_quotation_owner(row, user)
+        row_access.require("case", user, row)
         _require_financial_view(user)
     except HTTPException:
         conn.close()
@@ -6825,10 +6804,9 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
                f" AND due_date != '' AND due_date < ?) AS stage_overdue "
                f"FROM quotations WHERE quote_no IN ({ph})")
         params = [datetime.now().strftime("%Y-%m-%d")] + nos
-        if user["role"] not in ("superadmin", "admin"):
-            frag, fparams = _visible_case_filter_sql(user)
-            sql += frag
-            params += fparams
+        frag, fparams = row_access.filter_sql("case", user, scope="read")
+        sql += frag
+        params += fparams
         rows = {r["quote_no"]: r for r in conn.execute(sql, params)}
         names = {r["id"]: (r["display_name"] or r["username"])
                  for r in conn.execute("SELECT id, username, display_name FROM users")}

@@ -16,7 +16,7 @@
 
 **權限**（跟這個專案既有的作法一致）
 
-- 一律先過 `_check_quotation_owner()`：`quote_no` 可列舉，不擋就是 IDOR
+- 一律先過 `row_access.require("case", …)`：`quote_no` 可列舉，不擋就是 IDOR
 - 建立：任何看得到這張案件的人都可以填（實際花錢的人通常不是管理員）
 - 編輯／刪除／送審：**填寫人本人或 admin+**（別人填的不該被隨手改掉）
 - 核准／駁回：純粹依「是否為當層簽核人員」判斷，**不額外要求 admin 角色**
@@ -38,10 +38,11 @@ from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from db import get_db
+from helpers import row_access
 from helpers.auth import user_has_module
 from helpers.recognition import normalize_date  # `AC2`
 from helpers import (
-    _require_user, _tok, _audit, _notify, _check_quotation_owner,
+    _require_user, _tok, _audit, _notify,
     can_see_financial, is_document_approver,
     notify_module_activity,
     active_tiers as _active_tiers, current_tier_idx as _current_tier_idx,
@@ -153,7 +154,7 @@ def _guard_case(conn, quote_no: str, user: dict):
     ).fetchone()
     if not q:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    _check_quotation_owner(q, user)
+    row_access.require("case", user, q)
 
 
 def _can_modify(row, user: dict) -> bool:

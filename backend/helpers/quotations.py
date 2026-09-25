@@ -9,6 +9,7 @@ from datetime import date, datetime
 from fastapi import HTTPException
 
 from core import txn as _txn
+from helpers import row_access
 
 
 # Prefer real columns; fall back to data_json for rows not yet re-saved (pre-v6 backward compat).
@@ -19,28 +20,22 @@ SQL_SETTLE_STATUS = (
 )
 
 
-def _check_quotation_owner(row, user: dict) -> None:
-    """單筆存取（get/update/delete）比照 list_quotations() 既有的擁有者規則：非
-    admin/superadmin 只能存取自己名下的報價單，quote_no 格式可預測
-    （MQ-YYYYMM-NNN），沒有這道檢查會讓任何登入使用者用猜/列舉 quote_no 看到
-    甚至刪掉別的業務的報價單，繞過清單頁刻意做的隱藏（2026-08-24 安全審查
-    修正，IDOR）。2026-08-27：補上 assigned_user_ids 判斷，跟 list_quotations()
-    的可見性規則保持一致。
-
-    2026-09-10：從 routers/quotations.py 抽到 helpers/——`routers/material_orders.py`
-    （叫料 API）是第三個需要這道檢查的呼叫點，且當初新增時漏了它、把同一個
-    IDOR 又開了一次。放在 helpers 讓之後任何「用 quote_no 直接取單筆」的新
-    端點都能直接引用，不必再各自重寫或忘記寫。"""
-    if user["role"] in ("superadmin", "admin"):
-        return
-    sp_id   = row["sales_person_id"] if "sales_person_id" in row.keys() else None
-    sp_name = row["sales_person"] if "sales_person" in row.keys() else None
-    owns = (sp_id == user["id"]) or (sp_id is None and sp_name == user["display_name"])
-    if not owns and "assigned_user_ids" in row.keys():
-        assigned = json.loads(row["assigned_user_ids"] or "[]")
-        owns = user["id"] in assigned
-    if not owns:
-        raise HTTPException(403, "無權限存取其他業務的報價單")
+# ── M01 案件可見性：登錄到 L1 row_access（DEPENDENCY-MAP §0-5）──────────────────
+# 取代原 `_check_quotation_owner()`（單筆）與 routers/quotations.py `_visible_case_filter_sql()`
+# （SQL）兩份各自實作；兩種形式現在由同一份宣告推導，等價由 tests/test_row_access_2026_09_25.py 守。
+#   owner：admin+／本人業務（sales_person_id）／舊資料（id 為 NULL 比顯示名稱）／assigned_user_ids
+#   read ：owner＋持 cashier 模組者（CM14b，2026-09-24 使用者裁示「讀得到，但只能改收款」）
+# 🔑 這段在模組層：啟動時經 routers.quotations → helpers 匯入即登錄；M01 搬進 modules/ 時一起帶走。
+#    沒登錄時 row_access 一律 fail closed（只會少看到，不會多看到）。
+CASE_ACCESS = row_access.OwnerRule(
+    owner_id_col="sales_person_id",
+    legacy_name_col="sales_person",
+    id_list_cols=("assigned_user_ids",),
+    lenient_json=False,
+    read_bypass_modules=("cashier",),
+    deny_message="無權限存取其他業務的報價單",
+)
+row_access.register("case", CASE_ACCESS)
 
 
 def is_document_approver(data_json: str, user: dict, conn) -> bool:
@@ -73,9 +68,9 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
                       allow_module: str = None):
     """「用 quote_no 直接取單一案件」的共用守門（2026-09-13 模組權限稽核）。
 
-    `quote_no` 可列舉（`MQ-YYYYMM-NNN`），少了這道就是 IDOR。規則沿用
-    `_check_quotation_owner()`：admin+ 直通，否則必須是該案業務或 `assigned_user_ids`
-    裡的協作者。放在 helpers 而不是某支 router，是因為需要它的地方橫跨
+    `quote_no` 可列舉（`MQ-YYYYMM-NNN`），少了這道就是 IDOR。規則是 `row_access`
+    的 `case`／scope="owner"（見上方 `CASE_ACCESS`）：admin+ 直通，否則必須是該案業務或
+    `assigned_user_ids` 裡的協作者。放在 helpers 而不是某支 router，是因為需要它的地方橫跨
     `quotations.py`／`case_action_items.py`／完工單／出貨單／三種憑證流／網路架構
     規劃書——2026-09-10 `_check_quotation_owner()` 從 router 搬到這裡的理由完全相同
     （當時是叫料 API 忘了加，把同一個 IDOR 又開了一次）。
@@ -97,15 +92,13 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     if not q:
         _txn.safe_close(conn)
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    try:
-        _check_quotation_owner(q, user)
-    except HTTPException:
+    if not row_access.visible("case", user, q, scope="owner"):
         from helpers.auth import user_has_module
         allowed = ((allow_module and user_has_module(user, allow_module))
                    or (allow_approver and is_document_approver(q["data_json"], user, conn)))
         if not allowed:
             _txn.safe_close(conn)
-            raise
+            raise HTTPException(403, CASE_ACCESS.deny_message)
     return q
 
 

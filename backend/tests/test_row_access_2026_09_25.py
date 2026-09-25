@@ -207,8 +207,32 @@ def test_admin_and_bypass_return_empty_fragment():
     assert ra.filter_sql("_t_case", USERS[3], scope="owner") != ("", [])
 
 
-def test_unknown_kind_and_scope_are_refused():
-    with pytest.raises(KeyError):
-        ra.visible("_t_nope", USERS[0], {})
+def test_unregistered_kind_fails_closed(caplog):
+    """擁有該表的模組不在 ⇒ 只能少看到，不可以多看到：連 admin 都不放行，SQL 恆假，並記 WARNING。"""
+    conn = _db(case_rows=_case_rows(WELL_FORMED_LISTS))
+    assert "_t_unregistered" not in ra._REGISTRY
+    with caplog.at_level("WARNING", logger="helpers.row_access"):
+        for u in USERS:                                   # 含 admin／superadmin／cashier
+            for scope in ra.SCOPES:
+                assert _py_ids(conn, "q", "_t_unregistered", u, scope) == set()
+                assert _sql_ids(conn, "q", "_t_unregistered", u, scope) == set()
+                with pytest.raises(HTTPException) as e:
+                    ra.require("_t_unregistered", u, {"sales_person_id": u["id"]}, scope)
+                assert e.value.status_code == 403
+    assert any("_t_unregistered" in r.getMessage() for r in caplog.records)
+    # 正對照：同一批資料、登錄後就看得到
+    ra.register("_t_unregistered_ctrl", CASE)
+    assert _sql_ids(conn, "q", "_t_unregistered_ctrl", USERS[0], "owner")
+
+
+def test_require_uses_registered_message():
+    ra.register("_t_msg", ra.OwnerRule(owner_id_col="sales_person_id", deny_message="不是你的"))
+    ra.require("_t_msg", USERS[0], {"sales_person_id": 1})
+    with pytest.raises(HTTPException) as e:
+        ra.require("_t_msg", USERS[0], {"sales_person_id": 2})
+    assert (e.value.status_code, e.value.detail) == (403, "不是你的")
+
+
+def test_unknown_scope_is_refused():
     with pytest.raises(ValueError):
         ra.filter_sql("_t_case", USERS[0], scope="all")
