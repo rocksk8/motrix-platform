@@ -11,9 +11,9 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_e2e_bonus_case_page_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_e2e_bonus_case_page_2026_09_24 import (  # noqa: F401
     _login, _users, _award, NO, DATA_JS)
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 
 def _db():

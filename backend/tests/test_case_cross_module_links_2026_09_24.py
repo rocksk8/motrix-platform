@@ -110,7 +110,11 @@ def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_use
     links.locator("[data-testid=case-link-voucher]").first.wait_for(state="visible", timeout=10000)
     assert links.locator("[data-testid=case-link-map]").get_attribute("href") \
         == "map.html?focus=" + "cases%3A" + NO
-    assert links.locator("[data-testid=case-link-bonus]").get_attribute("href") == f"bonus.html?q={NO}"
+    from core import source_tree
+    if (source_tree.BACKEND / "modules" / "payroll" / "module.json").is_file():
+        assert links.locator("[data-testid=case-link-bonus]").get_attribute("href") == f"bonus.html?q={NO}"
+    else:                                   # M07 不在這個安裝包（PLAYBOOK §B-11）⇒ 獎金那一個連結不出現，其餘照常
+        assert links.locator("[data-testid=case-link-bonus]").count() == 0
     assert links.locator("[data-testid=case-link-voucher]").get_attribute("href") == f"voucher.html?id={vid}"
 
 

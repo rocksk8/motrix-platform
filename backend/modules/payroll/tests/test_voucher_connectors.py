@@ -11,9 +11,9 @@ M07 獎金不再 import M06 的私有函式；M06 不在時：
 import pytest
 
 from core import registry
-from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
+from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
-from tests._bonus_insure import insure_all  # noqa: E402
+from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
 CAPS = ("voucher.draft", "voucher.account_check", "accounting.settings")
 MISSING = "未產生傳票：會計模組未安裝"
