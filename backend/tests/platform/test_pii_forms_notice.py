@@ -99,6 +99,21 @@ def test_reverse_control_new_field_on_exempt_page_turns_red(tmp_path):
     assert any(page in e and "fields" in e for e in errs), errs
 
 
+def test_typed_contact_cannot_be_covered_by_a_master_form(tmp_path):
+    """主持裁示 2026-09-26：手動輸入的聯絡人要有告知；只有 readonly／disabled 的欄位可以用 covered_by。"""
+    root = _mini_repo(tmp_path)
+    reg = copy.deepcopy(pf.load_registry())
+    page = root / "frontend" / "pages" / "doc-x.html"
+    page.write_text('<input x-model="doc.contactName">', encoding="utf-8")
+    reg["forms"]["frontend/pages/doc-x.html"] = {"covered_by": "frontend/pages/customers.html",
+                                                 "fields": ["doc.contactName"], "reason": "x"}
+    assert any("doc-x.html" in e and "手動輸入" in e for e in pf.violations(root, reg))
+    page.write_text('<input x-model="doc.contactName" readonly>', encoding="utf-8")
+    assert not [e for e in pf.violations(root, reg) if "doc-x.html" in e]
+    page.write_text('<input x-model="doc.contactName" :disabled="!editable">', encoding="utf-8")
+    assert any("doc-x.html" in e and "手動輸入" in e for e in pf.violations(root, reg)), "依狀態的 :disabled 仍可手打"
+
+
 def test_reverse_control_stale_decision_turns_red(tmp_path):
     root = _mini_repo(tmp_path)
     reg = copy.deepcopy(pf.load_registry())

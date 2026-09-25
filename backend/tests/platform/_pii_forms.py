@@ -3,7 +3,8 @@
 
 機器可讀的清單：`docs/platform/pii_forms.json`。每一張「有個資輸入欄位」的頁面都要在清單上有一個決定：
   - `notice`：頁面有告知區塊（列印告知書＋「已告知當事人」＋「尚未記錄個資告知」），並有伺服器端的紀錄端點。
-  - `covered_by`：這頁的個資是從另一張有告知的主檔帶進來的（例：報價單的聯絡人來自客戶主檔）。
+  - `covered_by`：這頁的個資是從另一張有告知的主檔帶進來、而且**不能手打**（輸入元素是 readonly／disabled）。
+    主持裁示 2026-09-26：可以手動輸入的聯絡人就是在蒐集個資 ⇒ 要 `notice`。
   - `not_natural_person`：欄位屬於法人（公司本身），不是自然人。
 非 `notice` 的決定要逐欄寫出 `fields`，與掃描結果一模一樣；頁面多了一個個資欄位 ⇒ 轉紅，要有人重新決定。
 
@@ -66,6 +67,13 @@ def pii_fields(text):
         if _suffix_of(m.group(1)):
             out.add(m.group(1).strip())
     return sorted(out)
+
+
+def _not_typeable(text, binding):
+    """這個綁定的每一個輸入元素都帶靜態 `readonly` 或 `disabled`（不是 `:disabled` 這種依狀態的）。"""
+    tags = [m.group(0) for m in re.finditer(r"<(?:input|textarea|select)\b[^>]*>", text)
+            if re.search(r'x-model(?:\.[a-z]+)*\s*=\s*"' + re.escape(binding) + '"', m.group(0))]
+    return bool(tags) and all(re.search(r'(?<![:\w-])(readonly|disabled)(?![\w-])', t) for t in tags)
 
 
 def scan(repo=REPO):
@@ -142,6 +150,10 @@ def violations(repo=REPO, registry=None):
         if strong:
             errs.append(f"{page}：有強個資欄位 {strong}，不可以用 {kind} 帶過，頁面要有告知區塊")
         if kind == "covered_by":
+            # 主持裁示 2026-09-26：手動輸入的聯絡人就是在蒐集個資 ⇒ 只有「不能手打」（readonly／disabled）的欄位可以用 covered_by
+            typed = [x for x in fields if not _not_typeable(text, x)]
+            if typed:
+                errs.append(f"{page}：covered_by 的欄位 {typed} 可以手動輸入，要有告知區塊（notice），不可以用 covered_by 帶過")
             tgts = dec["covered_by"] if isinstance(dec["covered_by"], list) else [dec["covered_by"]]
             if not tgts:
                 errs.append(f"{page}：covered_by 是空的")

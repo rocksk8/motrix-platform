@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>網路架構規劃書 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
+  <script src="../static/privacy-notice.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
   <style>
@@ -220,6 +221,24 @@
         <label>聯絡電話</label>
         <input type="text" x-model="createForm.contactPhone">
       </div>
+      <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
+      <div data-privacy-card style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light, #E5E7EB);border-radius:6px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
+        <div style="font-size:11px;color:var(--text-dim, #6B7280);margin-bottom:8px;line-height:1.6">
+          案場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。勾選後於建立時一併記錄；沒有記錄不影響建立。
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
+                  :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
+            <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
+                   @change="pnCheck($event.target.checked)" style="width:auto">
+            已告知當事人（建立時記錄時間與人員）
+          </label>
+        </div>
+        <div x-show="pnSubject() && !privacyAckRequested" data-privacy-missing
+             style="margin-top:6px;font-size:11px;color:var(--warning, #D97706)">尚未記錄個資告知</div>
+      </div>
 
       <div x-show="createErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="createErr"></div>
 
@@ -254,6 +273,8 @@
       showCreateModal: false,
       createMode: 'case',
       createForm: { quoteNo: '', siteName: '', contactName: '', contactPhone: '' },
+      // 個資蒐集告知（CUSTOMIZATION-SPEC §9.3）：建立視窗勾了「已告知」⇒ 建立後記錄
+      ...window.MotrixPrivacyNotice.subjectState('contact', s => null, s => s.createForm && s.createForm.contactName, { deferred: true }),
       createErr: '',
       creating: false,
       selectedCaseLabel: '',
@@ -315,6 +336,8 @@
       openCreateModal() {
         this.createMode = 'case'
         this.createForm = { quoteNo: '', siteName: '', contactName: '', contactPhone: '' }
+        this.privacyAckRequested = false; this.privacyErr = ''
+        if (!this.privacyNotice) this.pnLoadNotice()
         this.selectedCaseLabel = ''
         this.caseSearch = ''
         this.createErr = ''
@@ -376,6 +399,16 @@
           })
           if (!r.ok) { this.createErr = (await r.json().catch(() => ({}))).detail || '建立失敗'; this.creating = false; return }
           const d = await r.json()
+          if (this.privacyAckRequested && this.pnSubject()) {
+            const ok = await this.pnRecord(`${API}/network-plans/${d.id}`)
+            if (!ok) {
+              // 規劃書已建立；告知紀錄沒寫進去 ⇒ 說清楚，然後到規劃書頁（那裡可以重新勾選）
+              this.createErr = '規劃書已建立，但' + this.privacyErr + '。請在規劃書頁面重新勾選「已告知當事人」。'
+              this.creating = false
+              setTimeout(() => { location.href = `network-plan-form.html?id=${d.id}` }, 4000)
+              return
+            }
+          }
           location.href = `network-plan-form.html?id=${d.id}`
         } catch (e) { this.createErr = '網路錯誤：' + e.message }
         this.creating = false

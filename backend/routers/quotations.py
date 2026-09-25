@@ -6883,3 +6883,59 @@ def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -
 
 _registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
 _registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)
+
+
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：單據上手動輸入的聯絡人也是蒐集個資）──
+# 紀錄存在 L1 設定鍵 `privacy_notice_acks`，鍵＝`quote_contact／case_site_contact:<單據>:<聯絡人姓名>`（換了聯絡人＝另一個人，要重新告知）。
+# 伺服器只接受「已存檔的那位聯絡人」；時間、人員、告知文字雜湊由伺服器蓋，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+_PN_ROLES = {"contact": ("quote_contact", ("contactName",)),
+             "site": ("case_site_contact", ("caseRecord", "contract", "contactPerson"))}
+
+
+def _pn_role(role):
+    if role not in _PN_ROLES:
+        raise HTTPException(400, "不認得的聯絡人種類：" + str(role))
+    return _PN_ROLES[role]
+
+
+@router.get("/api/quotations/{quote_no}/privacy-notice")
+def get_quotation_privacy_acks(quote_no: str, role: str = "contact", authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    kind, _ = _pn_role(role)
+    user = _require_user(authorization)
+    conn = get_db()
+    row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    row_access.require("case", user, row, scope="read")
+    return {"acks": _pn.acks_with_prefix(kind, quote_no)}
+
+
+@router.post("/api/quotations/{quote_no}/privacy-notice/ack")
+def ack_quotation_privacy_notice(quote_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    body = body or {}
+    kind, path = _pn_role(body.get("role") or "contact")
+    user = _require_user(authorization)
+    subject = str(body.get("subject") or "").strip()
+    conn = get_db()
+    row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+    row_access.require("case", user, row)
+    try:
+        cur = json.loads(row["data_json"] or "{}")
+    except ValueError:
+        cur = {}
+    for k in path:
+        cur = cur.get(k) if isinstance(cur, dict) else None
+    if not subject or subject != str(cur or "").strip():
+        raise HTTPException(409, "聯絡人與已儲存的不同，請先儲存再勾選")
+    rec, created = _pn.record_purpose_ack(kind, f"{quote_no}:{subject}", user, "contact")
+    if created:
+        _audit(_tok(authorization), "quotation.privacy_notice_ack", "quotation", quote_no,
+               f"{quote_no}／{subject}", {"noticeHash": rec.get("noticeHash"), "role": body.get("role") or "contact"})
+    return {"ack": rec, "created": created}

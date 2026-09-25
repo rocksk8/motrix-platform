@@ -82,5 +82,66 @@
     }
   }
 
-  window.MotrixPrivacyNotice = { load: load, documentHtml: documentHtml, print: print, contactsState: contactsState }
+  // 單據上手動輸入的聯絡人（報價單、案件、完工單、網路規劃書；2026-09-26 主持裁示）。
+  //   baseOf(self)：單據的 API 路徑（例 `/api/network-plans/5`；還沒存檔 ⇒ null）；subjectOf(self)：目前的聯絡人姓名。
+  //   紀錄鍵含姓名 ⇒ 換了聯絡人就是另一個人，要重新告知；伺服器只接受「已存檔的那位聯絡人」。
+  //   opts.role：同一張單據有兩種聯絡人時用來區分（報價單聯絡人／案件現場聯絡人）；opts.deferred：勾選先記著，建立後再記錄。
+  function subjectState(purpose, baseOf, subjectOf, opts) {
+    opts = opts || {}
+    const roleQ = opts.role ? ('?role=' + encodeURIComponent(opts.role)) : ''
+    return {
+      privacyNotice: null,
+      privacyAcks: {},
+      privacyAckRequested: false,
+      privacyErr: '',
+      pnSubject() { return String(subjectOf(this) || '').trim() },
+      pnAck() { const s = this.pnSubject(); return s ? (this.privacyAcks[s] || null) : null },
+      async pnLoadNotice() {
+        try { this.privacyNotice = await load(this.session.token, purpose) } catch (e) { this.privacyNotice = null }
+      },
+      async pnRefresh() {
+        const base = baseOf(this)
+        this.privacyAcks = {}; this.privacyAckRequested = false; this.privacyErr = ''
+        if (!base) return
+        try {
+          const r = await fetch(base + '/privacy-notice' + roleQ, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          if (r.ok) this.privacyAcks = (await r.json()).acks || {}
+        } catch (e) {}
+      },
+      pnPrint() { if (this.privacyNotice && this.pnSubject()) print(this.privacyNotice, this.pnSubject()) },
+      async pnCheck(on) {
+        this.privacyErr = ''
+        this.privacyAckRequested = !!on
+        if (on && !opts.deferred) await this.pnRecord()
+      },
+      // 回傳 true＝已記錄；失敗把原因放在 privacyErr（區塊裡顯示），並取消勾選
+      async pnRecord(baseOverride) {
+        const base = baseOverride || baseOf(this)
+        const subject = this.pnSubject()
+        if (!base) { this.privacyErr = '請先儲存單據，再記錄個資告知'; this.privacyAckRequested = false; return false }
+        if (!subject) { this.privacyAckRequested = false; return false }
+        try {
+          const r = await fetch(base + '/privacy-notice/ack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.session.token },
+            body: JSON.stringify({ subject: subject, role: opts.role || '' }) })
+          if (!r.ok) {
+            let d = ''
+            try { d = (await r.json()).detail || '' } catch (e) {}
+            throw new Error(d || ('HTTP ' + r.status))
+          }
+          this.privacyAcks = Object.assign({}, this.privacyAcks, { [subject]: (await r.json()).ack })
+          this.privacyAckRequested = false
+          return true
+        } catch (e) {
+          this.privacyErr = '個資告知紀錄寫入失敗：' + e.message
+          this.privacyAckRequested = false
+          return false
+        }
+      },
+    }
+  }
+
+  window.MotrixPrivacyNotice = { load: load, documentHtml: documentHtml, print: print, contactsState: contactsState,
+                                 subjectState: subjectState }
 })()
