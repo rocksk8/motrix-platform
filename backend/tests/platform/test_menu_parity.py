@@ -139,13 +139,25 @@ def _hrefs(r):
 def test_api_menu_follows_permissions_and_module_state(client, make_user, monkeypatch):
     from core import registry
     from tests.test_mp1_map_points_link_to_records_2026_09_24 import _auth
+    from core import source_tree
     h = _auth(client, make_user)                 # 最高管理者
     r = client.get("/api/platform/menu", headers=h)
     assert r.status_code == 200
-    assert "tender-radar.html" in _hrefs(r) and "users.html" in _hrefs(r)
-
-    monkeypatch.delitem(registry._LOADED, "tender_radar")      # 模組沒載入 ⇒ 選單項不出現
-    assert "tender-radar.html" not in _hrefs(client.get("/api/platform/menu", headers=h))
+    assert "users.html" in _hrefs(r)
+    # 任取一個已載入、有選單項的模組（不綁特定 L2；core-only 反向控制時沒有 ⇒ 模組狀態那一半無對象）
+    pick = None
+    for d in source_tree.module_dirs():
+        pages = json.loads((d / "module.json").read_text(encoding="utf-8")).get("pages") or []
+        href = next((p["path"] for p in pages if p.get("menu")), None)
+        if href and d.name in registry._LOADED:
+            pick = (d.name, href)
+            break
+    if pick is None:
+        pytest.skip("沒有已載入且宣告選單項的模組 ⇒ 「模組沒載入 ⇒ 選單項不出現」無對象")
+    key, href = pick
+    assert href in _hrefs(r)
+    monkeypatch.delitem(registry._LOADED, key)          # 模組沒載入 ⇒ 選單項不出現
+    assert href not in _hrefs(client.get("/api/platform/menu", headers=h))
 
 
 def test_api_menu_requires_login(client):
