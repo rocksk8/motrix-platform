@@ -2,19 +2,20 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 475,
-  "unmapped": 8,
+  "tests": 484,
+  "unmapped": 9,
   "kinds": {
-   "api": 256,
-   "e2e": 118,
-   "unit": 41,
-   "audit": 60
+   "api": 258,
+   "e2e": 119,
+   "unit": 44,
+   "audit": 63
   },
-  "routes": 506
+  "routes": 509
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/platform/test_deploy_dashboard_health.py",
+  "backend/tests/platform/test_deploy_dashboard_jobs.py",
   "backend/tests/test_bn16_award_status_filter_2026_09_24.py",
   "backend/tests/test_bonus_award_export_watermark_2026_09_23.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -483,6 +484,19 @@
     ]
    }
   },
+  "backend/tests/platform/test_core_events.py": {
+   "kind": "unit",
+   "units": [
+    "plat:__init__",
+    "plat:events"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/events.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_core_loader.py": {
    "kind": "unit",
    "units": [
@@ -588,6 +602,27 @@
     "/api/prod-health"
    ]
   },
+  "backend/tests/platform/test_deploy_dashboard_health_facts.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tools/_prod_health_facts.ps1"
+   ],
+   "evidence": {
+    "path": [
+     "backend/tools/_prod_health_facts.ps1"
+    ]
+   }
+  },
+  "backend/tests/platform/test_deploy_dashboard_jobs.py": {
+   "kind": "api",
+   "units": [],
+   "evidence": {},
+   "unresolved_api": [
+    "/api/jobs",
+    "/api/jobs/j-deploy-hang/release",
+    "/api/jobs/j-ok/release"
+   ]
+  },
   "backend/tests/platform/test_deploy_dashboard_upgrade.py": {
    "kind": "api",
    "units": [
@@ -599,6 +634,9 @@
     ]
    },
    "unresolved_api": [
+    "/api/upgrade/session",
+    "/api/upgrade/session/close",
+    "/api/upgrade/session/reset-corrupt",
     "/api/upgrade/step"
    ]
   },
@@ -662,6 +700,19 @@
     ]
    }
   },
+  "backend/tests/platform/test_l1_interface_snapshot.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_l1_interface.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_l1_interface.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_module_boundaries.py": {
    "kind": "audit",
    "units": [
@@ -678,6 +729,109 @@
      "backend/routers/"
     ]
    }
+  },
+  "backend/tests/platform/test_module_changelog_follows_code.py": {
+   "kind": "audit",
+   "units": [
+    "file:CHANGELOG.md",
+    "mod:tender_radar/api",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "CHANGELOG.md",
+     "backend/modules/tender_radar/api.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_data_classes.py": {
+   "kind": "audit",
+   "units": [
+    "core:archive",
+    "file:backend/modules/tender_radar/module.json",
+    "file:backend/tests/test_system_audit_2026_09_14.py",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/test_system_audit_2026_09_14.py"
+    ],
+    "path": [
+     "backend/modules/tender_radar/module.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_package_files.py": {
+   "kind": "audit",
+   "units": [
+    "file:CHANGELOG.md",
+    "file:backend/modules/tender_radar/module.json",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "CHANGELOG.md",
+     "backend/modules/tender_radar/module.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_selection.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/modules/tender_radar/module.json",
+    "file:backend/tests/platform/child_module_gate.py",
+    "helper:licensing",
+    "helper:module_switches",
+    "js:static/sidebar.js",
+    "mod:tender_radar/api",
+    "page:pages/module-settings.html",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/licensing.py",
+     "backend/helpers/module_switches.py"
+    ],
+    "api": [
+     "backend/modules/tender_radar/api.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/module-settings.html",
+     "frontend/pages/tender-radar.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "backend/modules/tender_radar/module.json",
+     "backend/tests/platform/child_module_gate.py",
+     "frontend/pages/module-settings.html",
+     "frontend/static/sidebar.js"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_no_file_relative_data_paths.py": {
    "kind": "audit",
@@ -4771,6 +4925,27 @@
     ],
     "page": [
      "frontend/pages/case-management.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_module_settings_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/module-settings.html",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/module-settings.html",
+     "frontend/pages/tender-radar.html"
     ]
    }
   },
