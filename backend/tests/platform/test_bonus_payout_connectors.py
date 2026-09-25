@@ -206,7 +206,8 @@ def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people,
                         "items": []}
     h = client.get("/api/cashier/execution-history", headers=_auth(people["bc_cash"]))
     assert h.status_code == 200 and h.json()["bonusNotice"] and h.json()["bonusPaid"] == []
-    assert client.get("/api/cashier/payable-queue", headers=_auth(people["bc_cash"])).status_code == 200
+    # 待付款是外包工班的承攬商匯款（IP-14），與薪資獎金無關；外包工班不在的包裡它回 404 ⇒ 這裡看與兩者都無關的應收
+    assert client.get("/api/cashier/receivable-queue", headers=_auth(people["bc_cash"])).status_code == 200
     assert client.get("/api/cashier/export", headers=_auth(people["bc_cash"])).status_code == 200
 
 
