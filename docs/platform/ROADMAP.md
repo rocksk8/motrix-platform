@@ -67,7 +67,7 @@
    - **搬遷前必修**（稽核 X-C-batch1 B-1）：IP-5 的 `notice` 要在前端顯示（取消勾選時要明說「沒有收回」、不留舊任務與 id）；未修不准搬。
 3. M10 網路規劃 — 依賴 M01 的路由前綴，需要 A10
 4. M02 業務開發 — 需要 A3、§4 的 dev_cases
-5. M04 外包工班 — 需要 A6
+5. M04 外包工班 — ✅ 後端完成（C，2026-09-26，`modules/subcontract`，router 放 `api/`）：IP-12／13／14 切斷與 M01／M05／M06 的 import（對方不在時皆明說）；案件存取守門與 normalize_date 先下沉 L1；dep_scan 改用 `core.source_tree.module_files`。剩：他模組直接讀四張表（讀取連接器另開題）、`privacy_notice_acks` 改用模組自己的表（需要模組 migration＋資料移轉）、頁面（階段 C）
 6. M05 應收應付 — 需要 A6、A8
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
