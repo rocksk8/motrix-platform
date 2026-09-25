@@ -5,7 +5,7 @@
   - 提供者在 ⇒ 數字與原本一致（既有 test_reports_logic_fixes 的兩題是正對照；這裡再驗一次等價）
   - 提供者不在（外包工班模組未安裝）⇒ `staleSettlementCount` 是 None ＋ 說明，不是 0（不可以把「無法檢查」說成「沒有過期」）
 """
-from tests.test_reports_logic_fixes_2026_08_28 import _insert_case, _insert_dispatch
+from modules.analytics.tests.test_reports_logic_fixes_2026_08_28 import _insert_case, _insert_dispatch
 
 def _stale_case():
     _insert_case("MQ-IP1-001", deal_tag="已結案", settlement={"status": "finalized", "summary": {

@@ -103,8 +103,10 @@ def test_smoke_paths_are_real_routes_or_pages(client):
     gets = {p for p, methods, _r in all_routes(client.app) if "GET" in methods}
     front = REPO / "frontend"
     missing = []
-    for name, method, path in FD.SMOKE:
+    for name, method, path, skipped in FD.smoke_plan(str(REPO / "backend")):
         assert method == "GET", name
+        if skipped:                       # 模組不在這棵樹（反向控制／產品選配）：它的路由本來就不在
+            continue
         if path == "/" or path.endswith(".html"):
             target = front / ("index.html" if path == "/" else path.lstrip("/"))
             if not target.is_file():
@@ -112,6 +114,23 @@ def test_smoke_paths_are_real_routes_or_pages(client):
         elif not any(_route_matches(g, path) for g in gets):
             missing.append((name, path))
     assert not missing, "冒煙清單裡不存在的路徑：%s" % missing
+
+
+def test_smoke_plan_skips_only_entries_of_absent_modules(tmp_path):
+    """帶模組 key 的條目：模組不在包內 ⇒ 略過且寫出原因；在 ⇒ 照跑；不帶 key 的永遠照跑（合成樹，不綁真實模組）。"""
+    keyed = [e for e in FD.SMOKE if len(e) > 3]
+    if not keyed:
+        pytest.skip("SMOKE 目前沒有帶模組 key 的條目 ⇒ 無對象")
+    key = keyed[0][3]
+    backend = tmp_path / "backend"
+    (backend / "modules").mkdir(parents=True)
+    absent = FD.smoke_plan(str(backend))
+    assert [p[3] for p in absent if p[3]] and all(key in p[3] for p in absent if p[0] == keyed[0][0])
+    assert all(p[3] is None for p, e in zip(absent, FD.SMOKE) if len(e) == 3)
+    (backend / "modules" / key).mkdir()
+    (backend / "modules" / key / "module.json").write_text("{}", encoding="utf-8")
+    present = FD.smoke_plan(str(backend))
+    assert all(p[3] is None for p, e in zip(present, FD.SMOKE) if len(e) == 3 or e[3] == key)
 
 
 def test_logical_digest_ignores_bytes_but_not_content(tmp_path):

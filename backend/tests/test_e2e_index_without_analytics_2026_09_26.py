@@ -24,15 +24,6 @@ def _open(e2e_browser, live_server, make_user, name, stats_404):
 
 
 @pytest.mark.e2e
-def test_index_shows_normal_hero_when_analytics_is_loaded(live_server, make_user, e2e_browser):
-    """正對照：模組在 ⇒ 沒有「需要營運分析模組」的說明。"""
-    page = _open(e2e_browser, live_server, make_user, "idx_an_ok", stats_404=False)
-    page.wait_for_function("() => { const el = document.querySelector('[x-data]'); "
-                           "return el && Alpine.$data(el) && Alpine.$data(el).statsLoaded === true }", timeout=15000)
-    assert page.locator(_MISSING).count() == 0
-
-
-@pytest.mark.e2e
 def test_index_says_the_module_is_missing_not_that_the_server_is_restarting(live_server, make_user, e2e_browser):
     page = _open(e2e_browser, live_server, make_user, "idx_an_missing", stats_404=True)
     page.locator(_MISSING).wait_for(state="visible", timeout=15000)

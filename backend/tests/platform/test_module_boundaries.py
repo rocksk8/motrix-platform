@@ -68,6 +68,14 @@ def test_baseline_has_no_vanished_edges(units, groups, baseline):
                       + _fmt(gone))
 
 
+def test_edges_of_modules_not_installed_are_not_vanished(units, groups, baseline):
+    """反向控制：來源是沒裝的模組（`mod:<不存在的 key>/…`）⇒ 不算消失；來源是一般單位 ⇒ 照報（合成邊，不綁真實模組）。"""
+    fake_mod = "M99 mod:zz_not_installed/api -> M01 helper:quotations"
+    fake_router = "M99 router:zz_not_there -> M01 helper:quotations"
+    _, gone = B.check_import_baseline(units, groups, list(baseline) + [fake_mod, fake_router])
+    assert fake_mod not in gone and fake_router in gone, gone
+
+
 # ── ② ─────────────────────────────────────────────────────────────────────
 
 def test_every_router_helper_page_has_exactly_one_owner(units, groups):

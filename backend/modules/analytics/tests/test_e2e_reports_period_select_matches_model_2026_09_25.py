@@ -18,17 +18,10 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_e2e_reports_period_sync_2026_09_10 import _login  # noqa: E402,F401
+from tests._e2e_login import inject_login as _login  # noqa: E402,F401
 
-_MISMATCHES_JS = """() => [...document.querySelectorAll('select[x-model], select[x-model\\\\.number]')]
-  .filter(s => s.offsetParent !== null)
-  .map(s => {
-    const expr = s.getAttribute('x-model') ?? s.getAttribute('x-model.number')
-    let model
-    try { model = Alpine.evaluate(s, expr) } catch (e) { model = '<err>' }
-    return { expr, dom: s.value, model: model == null ? '' : String(model) }
-  })
-  .filter(r => r.dom !== r.model)"""
+from tests._e2e_select_model import MISMATCHES_JS as _MISMATCHES_JS  # noqa: E402
+
 
 
 def _open(page, base):

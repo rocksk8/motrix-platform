@@ -149,20 +149,6 @@ def test_bonus_auto_executor_legacy_string_still_works(client, make_user):
     assert [m["username"] for m in members["project"]] == ["rl_bold"]
 
 
-def test_reports_sales_owner_uses_username():
-    from modules.analytics.api import reports as rp
-    users = {1: {"displayName": "同名", "username": "a"}, 2: {"displayName": "同名", "username": "b"}}
-    name_index = rp._build_name_index(users)
-    row = {"sales_person_id": None, "sales_person": ""}
-
-    class R(dict):
-        def keys(self):
-            return super().keys()
-    key, label = rp._case_sales_owner({"roles": {"sales": {"username": "b", "display": "同名"}}}, R(row),
-                                      name_index, users)
-    assert key == ("id", 2) and label == "同名"
-
-
 def test_change_history_and_summary_show_display_not_dict():
     from routers import quotations as q
     assert q._fmt_change_value({"username": "a", "display": "王小美"}) == "王小美"

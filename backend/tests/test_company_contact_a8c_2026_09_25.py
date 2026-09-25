@@ -16,7 +16,7 @@ OURS = {"company_name": "允碩整合集創股份有限公司", "company_name_en
         "tax_id": "60575481", "phone": "04-3610-6566", "email": "info@miactw.com"}
 
 
-@pytest.mark.parametrize("rel", ["modules/analytics/api/reports.py", "network_plan_export.py", "pdf_gen.py"])
+@pytest.mark.parametrize("rel", ["network_plan_export.py", "pdf_gen.py"])   # 營運報表：modules/analytics/tests/test_company_contact_a8c_2026_09_25.py
 def test_no_hardcoded_company_contacts_left(rel):
     src = (BACKEND / rel).read_text(encoding="utf-8")
     for needle in ("60575481", "3610-6566", "miactw", "MOTRIX Synergy", "_COMPANY2"):

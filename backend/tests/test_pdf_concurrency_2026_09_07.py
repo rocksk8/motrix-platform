@@ -48,25 +48,6 @@ def test_semaphore_is_reusable_after_release():
             pass  # 借了就還，重複很多次都不該卡住或報錯
 
 
-def test_pdf_gen_and_network_plan_export_share_the_same_runner():
-    """pdf_gen.py／network_plan_export.py／routers/reports.py 三處必須走同一支
-    `run_edge_pdf()`，並發限制才是全站共用一份額度，不是三個各自獨立、加起來
-    變相把上限乘以三。
-
-    2026-09-15 改寫：在此之前比對的是三個模組各自 import 的 `EDGE_PDF_SEMAPHORE`
-    是不是同一個物件。Edge 的呼叫（semaphore ＋ 逾時 ＋ 逾時記 log）已收斂進
-    `helpers/startup.py::run_edge_pdf()`，三個模組不再自己持有 semaphore，所以
-    改比對那支函式。
-    """
-    import pdf_gen
-    import network_plan_export
-    import modules.analytics.api.reports as reports_module
-
-    assert pdf_gen.run_edge_pdf is run_edge_pdf
-    assert network_plan_export.run_edge_pdf is run_edge_pdf
-    assert reports_module.run_edge_pdf is run_edge_pdf
-
-
 def test_no_module_spawns_edge_outside_the_shared_runner():
     """沒有人繞過 `run_edge_pdf()` 自己 spawn Edge。
 
@@ -101,3 +82,21 @@ def test_no_module_spawns_edge_outside_the_shared_runner():
         "這些檔案自己 spawn Edge，繞過了 run_edge_pdf() 的並發上限與逾時處理："
         f"{offenders}"
     )
+
+
+def test_pdf_gen_and_network_plan_export_share_the_same_runner():
+    """pdf_gen.py／network_plan_export.py／routers/reports.py 三處必須走同一支
+    `run_edge_pdf()`，並發限制才是全站共用一份額度，不是三個各自獨立、加起來
+    變相把上限乘以三。
+
+    2026-09-15 改寫：在此之前比對的是三個模組各自 import 的 `EDGE_PDF_SEMAPHORE`
+    是不是同一個物件。Edge 的呼叫（semaphore ＋ 逾時 ＋ 逾時記 log）已收斂進
+    `helpers/startup.py::run_edge_pdf()`，三個模組不再自己持有 semaphore，所以
+    改比對那支函式。
+    """
+    import pdf_gen
+    import network_plan_export
+
+    assert pdf_gen.run_edge_pdf is run_edge_pdf
+    assert network_plan_export.run_edge_pdf is run_edge_pdf
+    # 營運報表那一處：modules/analytics/tests/test_pdf_concurrency_2026_09_07.py

@@ -165,6 +165,8 @@ def test_em1_the_other_long_messages_did_not_change_a_single_character():
     missing = []
     cache = {}
     for rel, msg in _UNTOUCHED:
+        if rel.startswith("modules/analytics/"):   # 營運分析那幾條：modules/analytics/tests/test_em1_screen_words_in_long_messages_2026_09_24.py
+            continue
         if rel not in cache:
             cache[rel] = set(_all_details(rel))
         if msg not in cache[rel]:

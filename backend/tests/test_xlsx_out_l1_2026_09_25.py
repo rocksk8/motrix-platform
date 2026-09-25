@@ -37,14 +37,6 @@ def test_accounting_export_takes_part_categories_from_l1():
     assert "PART_CATEGORIES" in _imports_from("routers/accounting_export.py", "helpers.part_catalog")
 
 
-def test_no_hardcoded_company_name_left():
-    for rel in ("modules/analytics/api/reports.py", "routers/accounting_export.py", "network_plan_export.py"):
-        tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
-        names = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
-                 for t in n.targets if isinstance(t, ast.Name)}
-        assert "_COMPANY" not in names, rel
-
-
 def test_cooldown_is_one_shared_state():
     """報表、出納、T100 共用同一個冷卻（搬移前就是同一個 dict）。"""
     uid = 987_001
@@ -93,3 +85,11 @@ def test_network_plan_cover_uses_company_profile(client):
     _set_company("網規測試公司")
     wb = openpyxl.load_workbook(io.BytesIO(npe.build_plan_excel({"name": "x", "data": {}})))
     assert wb["封面"]["A1"].value == "網規測試公司"
+
+
+def test_no_hardcoded_company_name_left():
+    for rel in ("routers/accounting_export.py", "network_plan_export.py"):   # 營運報表：modules/analytics/tests/test_xlsx_out_l1_2026_09_25.py
+        tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
+        names = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
+                 for t in n.targets if isinstance(t, ast.Name)}
+        assert "_COMPANY" not in names, rel

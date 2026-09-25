@@ -103,27 +103,6 @@ def test_the_unpay_precedent_really_does_both_layers():
         + "🔑 兩層分開這件事失去了它的既有前例。")
 
 
-def test_the_audit_action_naming_convention_is_already_in_use():
-    """⚙️ **`<module>.<verb>` 這個命名不是我發明的** —— 既有 34 支已經在用。
-
-    ```
-    reports.py:2352  _audit(…, "reports.export", …)
-    reports.py:2837  _audit(…, "reports.bank_reconcile", …)
-    ```
-    📌 ⇒ `③` 沿用 `audit_log` 時**不必發明新慣例**，跟上就好。
-    ⚠️ 而我順手複核了施工圖的「reports.py 有 8 處寫入」：
-       `_audit(` **4** ／ `_set_setting` **3** ／ 第 8 個是 `:24` 的 **import**
-       ⇒ 真正的寫入是 **7**。結論成立，而數字要更正（已回報）。
-    """
-    src = (_BACKEND / "modules" / "analytics" / "api" / "reports.py").read_text(encoding="utf-8")
-    actions = set(re.findall(r'_audit\([^,]+,\s*"([a-z_]+\.[a-z_]+)"', src))
-    assert actions, (
-        "`reports.py` 裡找不到 `<module>.<verb>` 形狀的 `_audit(` 呼叫 ——\n"
-        + "🔑 那個慣例變了 ⇒ `③` 的命名規則要重訂。")
-    assert all("." in a for a in actions), (
-        "有 action 不是 `<module>.<verb>` 形狀：%s" % sorted(actions))
-
-
 # ══════════════════════════════════════════════════════════════════════
 # 🔴 ② 逐筆編寫紀錄：兩張，同形狀
 # ══════════════════════════════════════════════════════════════════════
