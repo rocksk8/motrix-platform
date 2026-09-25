@@ -185,14 +185,14 @@ def test_other_expense_bucketed_by_expense_date_not_finalize_date(client, make_u
 
 @pytest.mark.parametrize("bad_period", ["2026-13", "abc", "Q", "2026-Q9", "2026-00"])
 def test_parse_period_rejects_malformed_input(bad_period):
-    from routers.reports import _parse_period
+    from modules.analytics.api.reports import _parse_period
     with pytest.raises(HTTPException) as exc:
         _parse_period(bad_period)
     assert exc.value.status_code == 400
 
 
 def test_parse_period_still_accepts_valid_forms():
-    from routers.reports import _parse_period
+    from modules.analytics.api.reports import _parse_period
     assert _parse_period("2026")[0] == "2026 年度"
     assert _parse_period("2026-03")[0] == "2026 年 3 月"
     assert _parse_period("2026-Q2")[0] == "2026 年第 2 季"
@@ -208,7 +208,7 @@ def test_financial_endpoint_returns_400_not_500_on_bad_period(client, make_user)
 # ── ⑤業務員改名後績效/目標達成率不應被拆散 ──────────────────────────────────
 
 def test_salesperson_rename_does_not_fragment_performance(client, make_user):
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     username, password = make_user(username="sp_rename_test", role="sales")
     import db
     conn = db.get_db()
@@ -239,7 +239,7 @@ def test_salesperson_rename_does_not_fragment_performance(client, make_user):
 
 
 def test_achievement_matches_by_id_after_salesperson_rename(client, make_user):
-    from routers.reports import _collect, _compute_achievement
+    from modules.analytics.api.reports import _collect, _compute_achievement
     username, password = make_user(username="sp_rename_test2", role="sales")
     import db
     conn = db.get_db()

@@ -38,7 +38,7 @@ def _capture(monkeypatch, delay=0.0):
 
 def test_every_import_site_uses_the_wrapper_and_the_product_function_is_untouched(client, monkeypatch):
     import sys
-    import routers.reports as reports_module
+    import modules.analytics.api.reports as reports_module
     w = pdf_gen.run_edge_pdf
     assert all(getattr(m, "run_edge_pdf") is w
                for m in (startup, helpers, network_plan_export, voucher_pdf, reports_module)), \

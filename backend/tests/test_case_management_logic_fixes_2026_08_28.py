@@ -47,7 +47,7 @@ def test_payment_item_amounts_without_pretax_keeps_old_behavior():
 def test_ar_aging_excludes_tax_exempt_portion(client, make_user):
     """整合測試：已核准沖銷的未收款項目，帳齡分析裡的應收金額要是未稅價，
     不是原始含稅金額——直接用真實案件（MQ-202608-007）發現的落差重現。"""
-    from routers.reports import _compute_ar_aging
+    from modules.analytics.api.reports import _compute_ar_aging
     import db
     conn = db.get_db()
     try:

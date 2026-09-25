@@ -1,0 +1,27 @@
+{
+  "key": "analytics",
+  "name": "營運分析",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "analytics",
+  "permissions": ["dashboard", "reports"],
+  "tables": [],
+  "tables_note": "本模組不擁有任何表：儀表板與營運報表只讀其他模組的資料（DEPENDENCY-MAP §2 M08）；精算快照過期檢查經 IP-1 dispatch.row 讀派工",
+  "data": {
+    "tables": [],
+    "files": []
+  },
+  "provides": {"api_prefixes": ["/api/dashboard", "/api/devices", "/api/materials-summary", "/api/reports"]},
+  "pages": [
+    {"path": "reports.html",
+     "menu": {"group": "finance", "label": "營運報表", "order": 10, "perm": ["finance", "reports"], "badge": "sb-mod-finance"}},
+    {"path": "devices.html",
+     "menu": {"group": "device", "label": "設備登載", "order": 10, "perm": ["equipment"], "badge": "sb-mod-equipment"}},
+    {"path": "warranty.html",
+     "menu": {"group": "device", "label": "保固追蹤", "order": 20, "perm": ["equipment"], "badge": "sb-mod-warranty"}},
+    {"path": "procurement.html",
+     "menu": {"group": "supply", "label": "採購管理", "order": 60, "perm": ["procurement"], "badge": "sb-mod-procurement"}},
+    {"path": "sales-orders.html"}
+  ],
+  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []}
+}

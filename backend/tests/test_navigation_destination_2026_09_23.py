@@ -238,7 +238,7 @@ def test_em10_annual_target_message_points_to_the_wrong_place():
     事實本身不會漂移），不是驗收的核心那一格。
     """
     msg = next((s for s in _string_literals_in_py(
-                   ROOT / "backend" / "routers" / "reports.py")
+                   ROOT / "backend" / "modules" / "analytics" / "api" / "reports.py")
                if "年度目標" in s and _has_nav_tone(s)), None)
     assert msg is not None, "找不到年度目標那句導航訊息——退回改本檔的錨點。"
     assert "系統設定" not in msg, (

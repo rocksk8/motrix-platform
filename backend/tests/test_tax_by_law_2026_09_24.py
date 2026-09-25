@@ -101,7 +101,7 @@ def test_taxable_period_uses_sales_times_five_percent(client):
 
 def test_legacy_rate_keeps_its_numbers_and_is_flagged(client):
     """舊 3% 單：數字不變（照原本的算法），標「非法定稅率，請會計確認」。"""
-    from routers.reports import _round_half_up
+    from modules.analytics.api.reports import _round_half_up
     _quote("MQ-L3", 10000, 10300, {"taxRate": 3}, [_paid(10300)])
     [r] = _invoice_rows("MQ-L3")
     old_tax = _round_half_up(10300 - 10300 / 1.05)
@@ -321,7 +321,7 @@ def test_tax_export_workbook_shows_the_tax_type_and_the_legacy_note(client):
     """「稅務匯出該筆標『非法定稅率，請會計確認』」要真的印在給記帳士的檔案上，不只在資料裡。"""
     import io
     import openpyxl
-    from routers.reports import _build_tax_export_excel
+    from modules.analytics.api.reports import _build_tax_export_excel
     _quote("MQ-X1", 10000, 10000, {"taxRate": 0, "taxType": "zero"}, [_paid(10000, "AB00000011")])
     _quote("MQ-X2", 10000, 10300, {"taxRate": 3}, [_paid(10300, "AB00000012")])
     rows = _invoice_rows("MQ-X1") + _invoice_rows("MQ-X2")

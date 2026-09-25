@@ -86,7 +86,7 @@ def test_the_net_profit_formula_lives_in_exactly_one_place():
 
     # 後端**不可以**有第二份乘法（它們只讀已存值）。
     hits = []
-    for rel in ("pdf_gen.py", "routers/reports.py"):
+    for rel in ("pdf_gen.py", "modules/analytics/api/reports.py"):
         src = (_BACKEND / rel).read_text(encoding="utf-8")
         for i, line in enumerate(src.splitlines(), 1):
             # X-VAT：也抓 round_half_up(x, 0.10) 這種寫法（乘法搬進捨入函式的參數）
@@ -109,7 +109,7 @@ def test_the_reports_fallback_to_gross_profit_really_exists():
        它不是一段爛碼，它是一段**在別的脈絡下正確**的碼。
     📌 〈同一段碼在新脈絡下的風險不同〉。
     """
-    src = (_BACKEND / "routers" / "reports.py").read_text(encoding="utf-8")
+    src = (_BACKEND / "modules" / "analytics" / "api" / "reports.py").read_text(encoding="utf-8")
     assert re.search(r'settle\.get\("netProfit"\)\s*or\s*settle\.get\("grossProfit"\)',
                      src), (
         "`reports.py` 裡找不到 `netProfit or grossProfit` 的 fallback ——\n"

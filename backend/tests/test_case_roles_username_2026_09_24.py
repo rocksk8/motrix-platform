@@ -150,7 +150,7 @@ def test_bonus_auto_executor_legacy_string_still_works(client, make_user):
 
 
 def test_reports_sales_owner_uses_username():
-    from routers import reports as rp
+    from modules.analytics.api import reports as rp
     users = {1: {"displayName": "同名", "username": "a"}, 2: {"displayName": "同名", "username": "b"}}
     name_index = rp._build_name_index(users)
     row = {"sales_person_id": None, "sales_person": ""}

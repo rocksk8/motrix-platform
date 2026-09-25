@@ -286,7 +286,7 @@ def test_month_expense_slice_still_prefix_matches():
     """`_month_expense_slice()` 改成 `_months_expense_slice()` 的包裝之後，仍必須
     是「月份前綴字串比對」而不是日期區間比對——details 的 date 欄位長度不保證是
     完整 YYYY-MM-DD，改用區間比對會讓只有 YYYY-MM 的資料被靜默丟掉。"""
-    from routers import reports
+    from modules.analytics.api import reports
 
     expenses = {"details": {
         "contractor": [
@@ -391,7 +391,7 @@ def test_report_html_gains_quarter_section(client, make_user):
     只是不呼叫 _html_to_pdf()（真的轉檔需要 Edge headless）。"""
     from datetime import datetime
     import db
-    from routers import reports
+    from modules.analytics.api import reports
 
     make_user(role="admin")
     conn = db.get_db()

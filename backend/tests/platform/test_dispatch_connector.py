@@ -79,7 +79,7 @@ def _observe():
     """三個使用方各呼叫一次，回傳 (派工那一類的筆數, 其他類是否照常)。"""
     import db
     from helpers.recognition import dispatch_entries
-    from routers.reports import _collect_expenses
+    from modules.analytics.api.reports import _collect_expenses
     from routers.vouchers import _case_expense_sources
     conn = db.get_db()
     try:

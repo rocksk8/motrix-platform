@@ -43,9 +43,9 @@ _UNTOUCHED = (
      '系統已設定簽核流程，此申請缺少簽核層資料，請重新送審'),
     ('routers/daily_tasks.py',
      'year_month 格式錯誤，應為 YYYY-MM'),
-    ('routers/dashboard.py',
+    ('routers/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入
      '僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱'),
-    ('routers/dashboard.py',
+    ('routers/quotations.py',   # M08 搬遷 ④：隨 /api/sales-orders 自 dashboard.py 移入
      '此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）'),
     ('routers/dev_crm.py',
      '此案件已連結報價單，如需異動或解除請透過「修改連結」送審'),
@@ -79,9 +79,9 @@ _UNTOUCHED = (
      '這樣設定會讓階段之間互相循環依賴，請重新選擇前置階段'),
     ('routers/quotations.py',
      '系統已設定簽核流程，此報價單缺少簽核層資料。請請申請人收回並重新送審，以套用最新簽核設定'),
-    ('routers/reports.py',
+    ('modules/analytics/api/reports.py',
      '僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表'),
-    ('routers/reports.py',
+    ('modules/analytics/api/reports.py',
      'CSV 編碼無法辨識，請確認匯出檔案格式（支援 UTF-8 / Big5）'),
     ('routers/shipping_notes.py',
      '已回簽（客戶確認收貨）的出貨單不可撤銷核准，請先取消回簽'),

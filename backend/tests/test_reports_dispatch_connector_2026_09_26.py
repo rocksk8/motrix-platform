@@ -5,12 +5,7 @@
   - 提供者在 ⇒ 數字與原本一致（既有 test_reports_logic_fixes 的兩題是正對照；這裡再驗一次等價）
   - 提供者不在（外包工班模組未安裝）⇒ `staleSettlementCount` 是 None ＋ 說明，不是 0（不可以把「無法檢查」說成「沒有過期」）
 """
-from pathlib import Path
-
 from tests.test_reports_logic_fixes_2026_08_28 import _insert_case, _insert_dispatch
-
-ROOT = Path(__file__).resolve().parents[2]
-
 
 def _stale_case():
     _insert_case("MQ-IP1-001", deal_tag="已結案", settlement={"status": "finalized", "summary": {
@@ -20,7 +15,7 @@ def _stale_case():
 
 def test_totals_through_the_provider_match_the_old_algorithm(client, make_user):
     import db
-    from routers.reports import _live_dispatch_totals_by_quote
+    from modules.analytics.api.reports import _live_dispatch_totals_by_quote
     _stale_case()
     conn = db.get_db()
     try:
@@ -32,7 +27,7 @@ def test_totals_through_the_provider_match_the_old_algorithm(client, make_user):
 
 def test_without_the_dispatch_provider_the_check_says_it_could_not_run(client, make_user, monkeypatch):
     from core import registry
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     _stale_case()
     real = registry.single_provider
     monkeypatch.setattr(registry, "single_provider", lambda cap: None if cap == "dispatch.row" else real(cap))
@@ -43,12 +38,13 @@ def test_without_the_dispatch_provider_the_check_says_it_could_not_run(client, m
 
 def test_with_the_provider_there_is_no_note(client, make_user):
     """正對照：提供者在 ⇒ 照常計數、沒有說明。"""
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     _stale_case()
     s = _collect("2026-01-01", "2026-12-31")["summary"]
     assert s["staleSettlementCount"] == 1 and s["staleSettlementNote"] is None
 
 
 def test_report_page_shows_the_note():
-    html = (ROOT / "frontend" / "pages" / "reports.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("reports.html").read_text(encoding="utf-8")
     assert 'data-testid="stale-settlement-unavailable"' in html and "summary.staleSettlementNote" in html

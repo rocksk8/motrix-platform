@@ -249,7 +249,7 @@ def _insert_dispatch_row(quote_no, total_amount, personnel=None):
 def test_live_dispatch_total_tax_rounds_half_up(client):
     """精算過期比對用的即時派工含稅：10,010 ⇒ 10,010＋501＝10,511（舊：10,510）。reports L130"""
     import db
-    from routers.reports import _live_dispatch_totals_by_quote
+    from modules.analytics.api.reports import _live_dispatch_totals_by_quote
     _insert_dispatch_row("MQ-VAT-R1", 10010)
     _insert_dispatch_row("MQ-VAT-R2", 10000)
     conn = db.get_db()
@@ -264,7 +264,7 @@ def test_stale_settlement_compare_rounds_half_up(client):
     """精算快照 dispatchTotal 10,510.5（前端加總外包人員 .5）vs 即時 10,511 ⇒ 一致、不算過期
     （舊：round(10,510.5)＝10,510 ≠ 10,511 ⇒ 誤報過期）。reports L481"""
     import db
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     now = "2026-01-01T00:00:00"
     conn = db.get_db()
     try:
@@ -284,7 +284,7 @@ def test_stale_settlement_compare_rounds_half_up(client):
 
 def test_achievement_prorata_rounds_half_up(client):
     """過去年度 frac＝1 ⇒ 目標 1,000,000.5 的應達 ⇒ 1,000,001（舊：1,000,000）。reports L605"""
-    from routers.reports import _compute_achievement
+    from modules.analytics.api.reports import _compute_achievement
     ach = _compute_achievement(2020, {"year": 2020, "annual": {"revenue": 1000000.5, "grossProfit": 3000}}, [])
     assert ach["annual"]["revenue"]["prorata"] == 1000001
     assert ach["annual"]["grossProfit"]["prorata"] == 3000                                # 正對照
@@ -317,7 +317,7 @@ def test_bank_reconcile_matches_amounts_rounded_half_up(client, make_user):
 
 
 def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
-    import routers.reports as rp
+    import modules.analytics.api.reports as rp
 
     def _mk(rows, **extra):
         return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",
@@ -343,7 +343,7 @@ def test_expense_report_details_and_monthly_round_half_up(client, monkeypatch):
     """支出結構（reports._collect_expenses）：承攬商 20.5⇒21、叫料 40.5⇒41、料件 30.5⇒31、
     其他 10.5⇒11（舊：20／40／30／10）；月合計 20.5＋40.5＋30.5＋1＝92.5 ⇒ 93（舊：92）。
     reports L3602、L3613、L3645、L3658、L3675～L3677"""
-    from routers.reports import _collect_expenses
+    from modules.analytics.api.reports import _collect_expenses
     _patch_entries(monkeypatch, contractor=[("2019-03-05", 20.5)], material=[("2019-03-06", 40.5)],
                    other=[("2019-03-07", 1)])
     _stock("VAT-P1", 30.5, "2019-03-08T00:00:00")

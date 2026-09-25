@@ -92,7 +92,7 @@ def test_closing_report_matches_operations_report(client, make_user):
     這才是使用者實際會撞到的症狀——兩份文件擺在一起金額對不上。"""
     import db
     from pdf_gen import _case_closing_report_data
-    from routers import reports
+    from modules.analytics.api import reports
 
     make_user(role="admin")
     conn = db.get_db()

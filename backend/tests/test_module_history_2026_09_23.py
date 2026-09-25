@@ -115,7 +115,7 @@ def test_the_audit_action_naming_convention_is_already_in_use():
        `_audit(` **4** ／ `_set_setting` **3** ／ 第 8 個是 `:24` 的 **import**
        ⇒ 真正的寫入是 **7**。結論成立，而數字要更正（已回報）。
     """
-    src = (_BACKEND / "routers" / "reports.py").read_text(encoding="utf-8")
+    src = (_BACKEND / "modules" / "analytics" / "api" / "reports.py").read_text(encoding="utf-8")
     actions = set(re.findall(r'_audit\([^,]+,\s*"([a-z_]+\.[a-z_]+)"', src))
     assert actions, (
         "`reports.py` 裡找不到 `<module>.<verb>` 形狀的 `_audit(` 呼叫 ——\n"

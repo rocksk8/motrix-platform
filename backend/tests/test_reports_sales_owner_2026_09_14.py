@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-import routers.reports as rp
+import modules.analytics.api.reports as rp
 
 
 def _row(sales_person="開單者", sales_person_id=None):

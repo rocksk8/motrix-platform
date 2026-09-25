@@ -126,7 +126,7 @@ def test_tax_export_uses_original_amount_ignoring_writeoff(client, make_user):
 def test_ar_aging_still_uses_writeoff_adjusted_amount(client, make_user):
     """taxExempt 對「客戶還欠多少」的折算邏輯（AR帳齡/收款率）不受這次修復影響
     ——只有稅務匯出改用原始金額，AR 這條線本來就該用沖銷後的數字。"""
-    from routers.reports import _compute_ar_aging
+    from modules.analytics.api.reports import _compute_ar_aging
     import db
     conn = db.get_db()
     try:
@@ -155,7 +155,7 @@ def test_ar_aging_still_uses_writeoff_adjusted_amount(client, make_user):
 # ── ③稅額四捨五入（ROUND_HALF_UP） ──────────────────────────────────────────
 
 def test_round_half_up_matches_taiwan_invoice_convention():
-    from routers.reports import _round_half_up
+    from modules.analytics.api.reports import _round_half_up
     assert _round_half_up(2.5) == 3   # Python 內建 round(2.5) 會是 2（銀行家捨入），這裡要是 3
     assert _round_half_up(3.5) == 4
     assert _round_half_up(-2.5) == -3  # Decimal ROUND_HALF_UP 對 .5 一律「遠離零」進位

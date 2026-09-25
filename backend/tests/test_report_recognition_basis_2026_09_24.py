@@ -429,7 +429,7 @@ def test_exports_label_tax_basis_and_carry_the_note(client, sa, basis, label):
     from helpers.recognition import BASIS_NOTES
     assert BASIS_NOTES[basis] in cells
 
-    from routers.reports import (_augment_with_targets, _build_income_expense_scopes, _build_report_html,
+    from modules.analytics.api.reports import (_augment_with_targets, _build_income_expense_scopes, _build_report_html,
                                  _collect, _parse_period)
     lab, d0, d1 = _parse_period("2026")
     data = _augment_with_targets(_collect(d0, d1, None), d0)

@@ -165,36 +165,6 @@
    "badge": "sb-mod-inventory"
   },
   {
-   "group": "supply",
-   "href": "procurement.html",
-   "label": "採購管理",
-   "order": 60,
-   "perm": [
-    "procurement"
-   ],
-   "badge": "sb-mod-procurement"
-  },
-  {
-   "group": "device",
-   "href": "devices.html",
-   "label": "設備登載",
-   "order": 10,
-   "perm": [
-    "equipment"
-   ],
-   "badge": "sb-mod-equipment"
-  },
-  {
-   "group": "device",
-   "href": "warranty.html",
-   "label": "保固追蹤",
-   "order": 20,
-   "perm": [
-    "equipment"
-   ],
-   "badge": "sb-mod-warranty"
-  },
-  {
    "group": "device",
    "href": "network-plans.html",
    "label": "網路架構規劃書",
@@ -209,17 +179,6 @@
     "topology-quick.html"
    ],
    "badge": "sb-mod-netplan"
-  },
-  {
-   "group": "finance",
-   "href": "reports.html",
-   "label": "營運報表",
-   "order": 10,
-   "perm": [
-    "finance",
-    "reports"
-   ],
-   "badge": "sb-mod-finance"
   },
   {
    "group": "finance",

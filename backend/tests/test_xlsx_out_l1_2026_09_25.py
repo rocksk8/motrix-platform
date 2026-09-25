@@ -26,7 +26,7 @@ def _imports_from(rel, module):
 
 @pytest.mark.parametrize("rel", ["routers/accounting_export.py", "routers/cashier.py"])
 def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel):
-    got = _imports_from(rel, "routers.reports")
+    got = _imports_from(rel, "routers.reports") | _imports_from(rel, "modules.analytics.api.reports")
     moved = {"_xl_style", "_set_row", "_check_export_rate", "_COMPANY",
              "xl_style", "set_row", "check_export_rate"}
     assert not (got & moved), got & moved
@@ -38,7 +38,7 @@ def test_accounting_export_takes_part_categories_from_l1():
 
 
 def test_no_hardcoded_company_name_left():
-    for rel in ("routers/reports.py", "routers/accounting_export.py", "network_plan_export.py"):
+    for rel in ("modules/analytics/api/reports.py", "routers/accounting_export.py", "network_plan_export.py"):
         tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
         names = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
                  for t in n.targets if isinstance(t, ast.Name)}

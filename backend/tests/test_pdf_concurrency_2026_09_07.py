@@ -60,7 +60,7 @@ def test_pdf_gen_and_network_plan_export_share_the_same_runner():
     """
     import pdf_gen
     import network_plan_export
-    import routers.reports as reports_module
+    import modules.analytics.api.reports as reports_module
 
     assert pdf_gen.run_edge_pdf is run_edge_pdf
     assert network_plan_export.run_edge_pdf is run_edge_pdf

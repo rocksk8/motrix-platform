@@ -38,7 +38,7 @@ dashboard_expenses_monthly     [440, 469]     [516]       0     ← 開兩次只
 """
 import pytest
 
-import routers.dashboard as dash
+import modules.analytics.api.dashboard as dash
 import routers.company_lookup as lookup
 import routers.quotations as quotations_router   # /api/sales-orders 已移到 M01（M08 搬遷，主持裁示 a）   # GCIS 與 /api/now 已拆到 L1（M08 搬遷 ②）；本檔的保證跟著它們走
 
