@@ -136,8 +136,9 @@ class _Net:
         page.on("requestfailed", self._done)
 
     # 側欄／通知／在線狀態的輪詢與案件頁無關，而且次數隨執行時間漂移 ⇒ 不記
+    # /api/custom-modules：側欄疊加自訂模組選單（custom-modules-nav.js，P8），每頁都打、與案件頁無關
     _IGNORE = ("/api/auth/me", "/api/build-info", "/api/notifications", "/api/online-users",
-               "/api/approval-queue/count", "/api/reads/module-counts", "/api/edit-presence")
+               "/api/approval-queue/count", "/api/reads/module-counts", "/api/edit-presence", "/api/custom-modules")
 
     def _req(self, r):
         if "/api/" in r.url:
