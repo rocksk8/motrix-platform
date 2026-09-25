@@ -9,6 +9,7 @@
 ⇒ PDF 層問的是「**這份單的抬頭是什麼**」，不是「`company_profile` 裡有什麼鍵」。
 """
 import json
+import re
 from datetime import datetime
 
 from db import get_db
@@ -57,8 +58,10 @@ DEFAULT_IDENTITY = {
 }
 
 #: `company_profile` 頂層那幾個欄位的對照（既有安裝已經在用的鍵）。
+#: 2026-09-25：`name` 是設定頁最上方「公司名稱」存的鍵（company-profile-settings.html:121），原本不在別名裡
+#: ⇒ 只填那一欄的安裝，單據抬頭沒有公司名。放在最後當後備。
 _PROFILE_ALIASES = {
-    "company_name": ("companyName", "company_name"),
+    "company_name": ("companyName", "company_name", "name"),
     "company_name_en": ("companyNameEn", "company_name_en"),
     "tax_id": ("taxId", "tax_id"),
     "phone": ("phone",),
@@ -98,13 +101,28 @@ def location_identity(location_id=None) -> dict:
                 break
 
     out = {}
+    contact = contact_info_parts(profile)
     for field, default in DEFAULT_IDENTITY.items():
         out[field] = _first_filled(
             here.get(field),
             primary.get(field),
             *[profile.get(alias) for alias in _PROFILE_ALIASES.get(field, ())],
+            contact.get(field, ""),          # 電話／email 的最後後備：設定頁的「聯絡方式」
             default)
     return out
+
+
+def contact_info_parts(profile: dict) -> dict:
+    """設定頁最上方「聯絡方式」（`contact_info`，例 `Tel: 04-1234-5678｜a@b.com`）拆出電話與 email。
+
+    與 db._m106 的拆法相同；只當作**最後的後備**（據點欄、company_profile 的 phone／email 都空時才用）。
+    """
+    contact = str((profile or {}).get("contact_info") or "")
+    m = re.search(r"[^\s｜|]+@[^\s｜|]+", contact)
+    email = m.group(0) if m else ""
+    phone = contact[:m.start()] if m else contact
+    phone = re.sub(r"(?i)^\s*tel[:：]\s*", "", phone).strip(" ｜|")
+    return {"phone": phone, "email": email}
 
 
 def company_name() -> str:

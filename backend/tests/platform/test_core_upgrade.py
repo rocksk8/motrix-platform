@@ -370,12 +370,17 @@ def test_company_profile_blanks_are_filled_from_v9_constants(tmp_path):
     """V9 種子形狀（name／tax_id，沒有英文名、電話、email）⇒ 只補缺的三欄。"""
     db = _profile_db(tmp_path, {"name": "允碩整合集創股份有限公司", "tax_id": "60575481", "contact_info": ""})
     r = U.fill_company_profile_blanks(db)
-    assert r["filled"] == {"company_name": "允碩整合集創股份有限公司",       # 沿用 name（company_identity 不讀 name）
-                           "company_name_en": "MOTRIX Synergy Integration Corp.",
+    assert r["filled"] == {"company_name_en": "MOTRIX Synergy Integration Corp.",
                            "phone": "04-3610-6566", "email": "info@miactw.com"}
     p = _profile(db)
     assert p["name"] == "允碩整合集創股份有限公司" and p["tax_id"] == "60575481"
-    assert "taxId" not in p                                        # 別名 tax_id 已有值 ⇒ 不補
+    assert "company_name" not in p and "taxId" not in p           # name／tax_id 已是 company_identity 讀得到的值 ⇒ 不補
+
+
+def test_phone_and_email_inside_contact_info_count_as_existing(tmp_path):
+    db = _profile_db(tmp_path, {"name": "允碩整合集創股份有限公司", "tax_id": "60575481",
+                                "contact_info": "Tel: 02-1111-2222｜mine@example.invalid"})
+    assert U.fill_company_profile_blanks(db)["filled"] == {"company_name_en": "MOTRIX Synergy Integration Corp."}
 
 
 def test_existing_company_profile_values_are_never_overwritten(tmp_path):

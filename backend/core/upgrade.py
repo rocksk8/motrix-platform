@@ -16,6 +16,7 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -507,12 +508,22 @@ V9_COMPANY_DEFAULTS = {
 #: 相同（本檔不 import app；tests/test_company_contact_a8c 比對兩份）。注意 V9 種子形狀的 `name`
 #: **不在**別名裡——company_identity 不讀它 ⇒ 公司名空白時先沿用 `name`（使用者自己的資料），沒有才用常數。
 _PROFILE_ALIASES = {
-    "company_name": ("companyName", "company_name"),
+    "company_name": ("companyName", "company_name", "name"),
     "company_name_en": ("companyNameEn", "company_name_en"),
     "tax_id": ("taxId", "tax_id"),
     "phone": ("phone",),
     "email": ("email",),
 }
+
+
+def _contact_info_parts(profile: dict) -> dict:
+    """與 helpers.company_identity.contact_info_parts 相同（本檔不 import app；測試比對兩份）。"""
+    contact = str((profile or {}).get("contact_info") or "")
+    m = re.search(r"[^\s｜|]+@[^\s｜|]+", contact)
+    email = m.group(0) if m else ""
+    phone = contact[:m.start()] if m else contact
+    phone = re.sub(r"(?i)^\s*tel[:：]\s*", "", phone).strip(" ｜|")
+    return {"phone": phone, "email": email}
 
 
 def _is_our_install(profile: dict) -> bool:
@@ -538,8 +549,8 @@ def fill_company_profile_blanks(db_path: str) -> dict:
         for field, value in V9_COMPANY_DEFAULTS.items():
             if any(str(profile.get(a) or "").strip() for a in _PROFILE_ALIASES[field]):
                 continue
-            if field == "company_name" and str(profile.get("name") or "").strip():
-                value = str(profile["name"]).strip()
+            if field in ("phone", "email") and _contact_info_parts(profile)[field]:
+                continue                     # company_identity 會從「聯絡方式」讀到 ⇒ 已有值
             profile[field] = value
             filled[field] = value
         if filled:

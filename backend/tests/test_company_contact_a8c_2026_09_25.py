@@ -91,3 +91,29 @@ def test_upgrade_alias_table_matches_company_identity():
     from helpers import company_identity as ci
     for field, aliases in U._PROFILE_ALIASES.items():
         assert tuple(ci._PROFILE_ALIASES[field]) == tuple(aliases), field
+
+
+@pytest.mark.parametrize("contact", ["Tel: 04-3610-6566｜info@miactw.com", "04-1234 ｜ a@b.c", "只有電話 02-9", "x@y.z", ""])
+def test_upgrade_and_identity_split_contact_info_the_same_way(contact):
+    from core import upgrade as U
+    from helpers import company_identity as ci
+    assert U._contact_info_parts({"contact_info": contact}) == ci.contact_info_parts({"contact_info": contact})
+
+
+def test_top_level_settings_fields_reach_the_documents(client):
+    """設定頁最上方「公司名稱／統一編號／聯絡方式」（name／tax_id／contact_info）只填這一區，單據也要印得出來。"""
+    from helpers.settings import _set_setting
+    from helpers.company_identity import location_identity
+    _set_setting("company_profile", {"name": "新客戶股份有限公司", "tax_id": "12345678",
+                                     "contact_info": "Tel: 02-2222-3333｜hi@new.example", "locations": []})
+    ident = location_identity()
+    assert (ident["company_name"], ident["tax_id"], ident["phone"], ident["email"]) ==         ("新客戶股份有限公司", "12345678", "02-2222-3333", "hi@new.example")
+
+
+def test_location_fields_still_win_over_top_level(client):
+    from helpers.settings import _set_setting
+    from helpers.company_identity import location_identity
+    _set_setting("company_profile", {"name": "舊名", "contact_info": "Tel: 1｜old@x.y",
+                                     "locations": [{"id": "L1", "company_name": "據點名", "phone": "9", "email": "loc@x.y"}]})
+    ident = location_identity()
+    assert (ident["company_name"], ident["phone"], ident["email"]) == ("據點名", "9", "loc@x.y")
