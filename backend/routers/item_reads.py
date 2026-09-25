@@ -29,7 +29,9 @@ from db import get_db
 from helpers import _require_user
 from routers.dev_crm import _can_access_case
 from routers.quotations import _visible_case_filter_sql
-from routers.system import _MODULE_ACTION_PREFIXES, _MODULE_EXCLUDE_ACTIONS
+# 直接取唯一來源（DEPENDENCY-MAP §3 #4）：經 routers.system 轉手會讓 item_reads 依賴整支 system
+from helpers.module_registry import BADGE_PREFIXES as _MODULE_ACTION_PREFIXES
+from helpers.module_registry import BADGE_EXCLUDE as _MODULE_EXCLUDE_ACTIONS
 
 router = APIRouter()
 
