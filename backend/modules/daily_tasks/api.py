@@ -1052,7 +1052,6 @@ def run_daily_checks(mode: str = "daily") -> None:
 # daily_task_completions，改用這個提供者。**在呼叫端的連線上寫、不 commit**：呼叫端把
 # 「任務 id 記回自己的表」與這裡的寫入放在同一個交易裡。欄位只准加（契約版本 1）。
 # 取用：`core.registry.single_provider("daily_task.external")`；None ⇒ 每日任務模組未安裝。
-from core import registry as _registry  # noqa: E402
 
 
 def _external_upsert(conn, *, task_id: int, task_date: str, title: str, description: str,
@@ -1102,5 +1101,5 @@ class _ExternalTasks:
     withdraw = staticmethod(_external_withdraw)
 
 
-_registry.provide("daily_task.external", "daily_tasks", _ExternalTasks)
-_registry.provide("daily.check", "daily_tasks", run_daily_checks)
+# 提供者（IP-5 daily_task.external、IP-10 daily.check）由 modules/daily_tasks/__init__.py 的 ModuleSpec 宣告：
+# 模組沒有載入（停用／未授權／不在包裡）⇒ 不登記。
