@@ -263,3 +263,14 @@ def test_module_installed_positive_and_negative():
         assert source_tree.module_installed(form) is True, form
     assert source_tree.module_installed("modules/zz_not_installed/api.py") is False
     assert source_tree.module_installed("routers/quotations.py") is True
+
+
+def test_module_installed_means_module_json_not_just_a_folder(tmp_path, monkeypatch):
+    """只剩 __pycache__ 的空資料夾（拿掉模組後殘留）不算「在」；與載入器同一個判準（稽核 D O-4）。"""
+    (tmp_path / "modules" / "zz_left" / "__pycache__").mkdir(parents=True)
+    (tmp_path / "modules" / "zz_real").mkdir(parents=True)
+    (tmp_path / "modules" / "zz_real" / "module.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(source_tree, "BACKEND", tmp_path)
+    assert source_tree.module_installed("modules/zz_left/api.py") is False
+    assert source_tree.module_installed("modules/zz_real/api.py") is True
+    assert [d.name for d in source_tree.module_dirs()] == ["zz_real"]      # 同一個判準

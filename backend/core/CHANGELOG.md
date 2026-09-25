@@ -3,7 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## 1.17 — 2026-09-26（A，M10 搬遷；列車上 core_bump 取號）〔core_bump：暫用 1.96 → 1.17〕
-- L0（新增）：`core.source_tree.module_installed(path)`——守門判斷「清單上的模組檔所屬模組在不在」的唯一實作（模組被拿掉時，它的條目不算幽靈；PLAYBOOK §B 步驟 11）
+- L0（新增）：`core.source_tree.module_installed(path)`——守門判斷「清單上的模組檔所屬模組在不在」的唯一實作（模組被拿掉時，它的條目不算幽靈；PLAYBOOK §B 步驟 11）；「在」＝`modules/<key>/module.json` 存在，與載入器同一個判準（只剩 `__pycache__` 的空資料夾不算，稽核 D O-4）
 
 ## 1.16 — 2026-09-26（A，M12 搬遷前置；列車上 core_bump 取號）〔core_bump：暫用 1.98 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕
 - L1（新增）：`helpers.daily_checks`——每日 08:00 執行器（`schedule_daily_checks`／`run_once`／`run_module_checks`）；模組以提供者 `daily.check` 登記（INTEGRATION-POINTS IP-10）
