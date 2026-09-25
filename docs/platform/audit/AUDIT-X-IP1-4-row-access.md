@@ -204,5 +204,5 @@
 | Z-2 | 觀察，接受：三處 admin 直通是 row_access 導入前的寫法，`case` 已登錄所以目前不影響結果；排入 M01／M02 搬遷時改為只走 row_access | wip/a-ip-fix | |
 | Z-3 | 觀察，接受：批次匯出稽核紀錄改寫實際匯出的單號、docstring 寫明「看不到的靜默略過是刻意（不洩漏存在與否）」——M01 範圍，排入 M01 搬遷 | wip/a-ip-fix | |
 | Z-4 | 觀察：通用 L2 邊界守門（AST，含 G1 看得見底線 API）已涵蓋屬性存取與跨行 import；`test_no_one_imports_the_private_function_anymore` 留作快速字面檢查，不再加強 | wip/a-ip-fix | |
-| Z-5 | 觀察，需寫進規格：子資源（派工、傳票 by-case）只做模組檢查是現行行為；是否要逐案檢查屬權限範圍（PLAYBOOK §F 要問使用者），本輪不改，建議主持排入 U 題 | wip/a-ip-fix | |
+| Z-5 | 使用者裁示「維持現狀並寫進規格」（CORE-SPEC）。MODULE-GUIDE §1.1 寫明三類（row_access／module／own_rule）並逐一列出子資料路徑；機器可讀清單 `docs/platform/case_read_scope.json`（30 條：23／4／3）；守門 `test_case_read_scope.py`：新增讀取路徑未歸類、清單有而程式碼沒有、標 row_access 卻沒呼叫逐案守門、未知類別 ⇒ 皆紅（突變 3 種皆紅） | wip/a-read-scope | |
 | Z-6 | （環境，不需 A 回覆） | | |

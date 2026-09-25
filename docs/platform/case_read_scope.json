@@ -1,0 +1,185 @@
+{
+ "_doc": "案件底下的讀取路徑（GET，路徑或參數帶 quote_no）各歸哪一類權限。唯一來源；守門 backend/tests/platform/test_case_read_scope.py。 row_access＝逐案（helpers.row_access `case`，含經 _guard_case／guard_case_access／_guard_queue_detail）； module＝只受模組權限（CORE-SPEC 使用者裁示「案件子資料的權限範圍」Z-5：有該模組即可看全部案件的子資料）； own_rule＝模組自有的可見規則（例：獎金分潤 SPEC-BONUS §七）。改動分類要先問使用者（PLAYBOOK §F）。",
+ "routes": [
+  {
+   "file": "routers/network_plans.py",
+   "path": "/api/network-plans",
+   "handler": "list_network_plans",
+   "scope": "module"
+  },
+  {
+   "file": "routers/vendor_contractors.py",
+   "path": "/api/contractor-dispatches",
+   "handler": "list_dispatches",
+   "scope": "module"
+  },
+  {
+   "file": "routers/vouchers.py",
+   "path": "/by-case/{quote_no}",
+   "handler": "vouchers_by_case",
+   "scope": "module"
+  },
+  {
+   "file": "routers/vouchers.py",
+   "path": "/summary-sources",
+   "handler": "summary_sources",
+   "scope": "module"
+  },
+  {
+   "file": "routers/bonus.py",
+   "path": "/awards/plan/{quote_no}",
+   "handler": "plan_award",
+   "scope": "own_rule"
+  },
+  {
+   "file": "routers/bonus.py",
+   "path": "/base/{quote_no}",
+   "handler": "get_bonus_base",
+   "scope": "own_rule"
+  },
+  {
+   "file": "routers/bonus.py",
+   "path": "/cases/{quote_no}",
+   "handler": "get_case_bonus",
+   "scope": "own_rule"
+  },
+  {
+   "file": "routers/case_action_items.py",
+   "path": "/api/quotations/{quote_no}/action-items",
+   "handler": "list_case_action_items",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/case_extra_expenses.py",
+   "path": "/api/quotations/{quote_no}/extra-expenses",
+   "handler": "list_extra_expenses",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/completion_notes.py",
+   "path": "/api/completion-notes",
+   "handler": "list_completion_notes",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/contractor_vouchers.py",
+   "path": "/api/contractor-vouchers",
+   "handler": "list_contractor_vouchers",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/invoice_vouchers.py",
+   "path": "/api/invoice-vouchers",
+   "handler": "list_invoice_vouchers",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/invoice_vouchers.py",
+   "path": "/api/invoice-vouchers/remaining",
+   "handler": "get_invoice_voucher_remaining",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/material_orders.py",
+   "path": "/api/quotations/{quote_no}/material-orders",
+   "handler": "get_material_orders",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/network_plans.py",
+   "path": "/api/quotations/{quote_no}/network-plan",
+   "handler": "get_network_plan_by_case",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/payment_requests.py",
+   "path": "/api/payment-requests",
+   "handler": "list_payment_requests",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/payment_requests.py",
+   "path": "/api/payment-requests/remaining",
+   "handler": "get_payment_request_remaining",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}",
+   "handler": "get_quotation",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/case-bundle",
+   "handler": "case_bundle",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/close-gates",
+   "handler": "case_close_gates",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/closing-report-pdf",
+   "handler": "download_case_closing_report_pdf",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/finance-summary",
+   "handler": "get_finance_summary",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/pdf-download",
+   "handler": "download_quotation_pdf",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/project-report-pdf",
+   "handler": "download_project_execution_report_pdf",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/settlement",
+   "handler": "get_settlement",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/stages",
+   "handler": "list_case_stages_normalized",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/updates",
+   "handler": "list_case_updates",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/versions",
+   "handler": "list_quotation_versions",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/quotations.py",
+   "path": "/api/quotations/{quote_no}/versions/{seq}/download",
+   "handler": "download_quotation_version",
+   "scope": "row_access"
+  },
+  {
+   "file": "routers/shipping_notes.py",
+   "path": "/api/shipping-notes",
+   "handler": "list_shipping_notes",
+   "scope": "row_access"
+  }
+ ]
+}

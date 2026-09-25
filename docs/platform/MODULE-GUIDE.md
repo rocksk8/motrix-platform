@@ -25,6 +25,17 @@
   - 對方不在時要**明說**（回應帶 `notice` 或 `unavailable`，頁面顯示），不可以跟「0 筆」「沒有」長得一樣。守門：各串接點的反向控制題。
 - 守門：`backend/tests/platform/test_module_boundaries.py`（L2 之間的 import 只准減少）。
 
+### 1.1 案件資料的讀取權限範圍（CORE-SPEC 使用者裁示「案件子資料的權限範圍」，2026-09-26）
+
+| 類別 | 規則 | 目前的路徑 |
+|---|---|---|
+| row_access（逐案） | 案件本身（`case`／`dev_case`）：admin+、該案業務、協作者；經 `helpers.row_access` 或共用守門（`_guard_case`／`guard_case_access`） | 案件本體與執行面共 23 條（報價單、階段、精算、動態、PDF、完工單、出貨單、三種憑證流、叫料、網路規劃書、待辦…），完整清單見 `docs/platform/case_read_scope.json` |
+| module（只受模組權限） | 案件底下的**子資料**：有該模組權限即可看全部案件的子資料（採購、會計、出納依職務需要）。**使用者裁示維持現狀**，改動要再問使用者 | `GET /api/network-plans`（`routers/network_plans.py`）<br>`GET /api/contractor-dispatches`（`routers/vendor_contractors.py`）<br>`GET /by-case/{quote_no}`（`routers/vouchers.py`）<br>`GET /summary-sources`（`routers/vouchers.py`） |
+| own_rule（模組自有規則） | 模組依自己的規格決定可見範圍（例：獎金分潤只給最高管理者、出納與名單本人，SPEC-BONUS §七） | `GET /awards/plan/{quote_no}`（`routers/bonus.py`）<br>`GET /base/{quote_no}`（`routers/bonus.py`）<br>`GET /cases/{quote_no}`（`routers/bonus.py`） |
+
+- 機器可讀的唯一來源：`docs/platform/case_read_scope.json`（每一條 GET、路徑或參數帶 `quote_no` 的讀取路徑，都要歸在其中一類）。
+- 守門：`backend/tests/platform/test_case_read_scope.py`——新增的讀取路徑沒有歸類 ⇒ 紅；標 row_access 而處理函式沒有呼叫逐案守門 ⇒ 紅。
+
 ## 2. 底層穩定契約（「底層不會變動」的具體意思）
 
 - L0＋L1 對外公開的介面（函式名稱、參數、回傳形狀、資料表欄位）以 `core.registry.CORE_VERSION` 標版本。
