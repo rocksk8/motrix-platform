@@ -29,6 +29,7 @@ from routers import auth, quotations, customers, suppliers, parts, dashboard, sy
 from routers import item_reads
 from routers import modules
 from routers import legal_params
+from routers import platform_catalog
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -703,6 +704,7 @@ app.include_router(vouchers.router)
 app.include_router(item_reads.router)
 app.include_router(modules.router)
 app.include_router(legal_params.router)
+app.include_router(platform_catalog.router)
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────

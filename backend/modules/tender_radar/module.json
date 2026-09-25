@@ -1,7 +1,7 @@
 {
   "key": "tender_radar",
   "name": "標案雷達",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "core": ">=1.0,<2.0",
   "license_key": "tender_radar",
   "permissions": ["tender_radar"],
@@ -17,5 +17,88 @@
     "files": []
   },
   "provides": {"api_prefixes": ["/api/tender-radar"]},
-  "pages": [{"path": "tender-radar.html"}]
+  "pages": [{"path": "tender-radar.html"}],
+  "customization": {
+    "schema": 1,
+    "fields": {
+      "tender": [
+        {"key": "marked", "label": "標註", "core": true},
+        {"key": "org", "label": "機關", "core": true},
+        {"key": "caseNo", "label": "案號", "core": true},
+        {"key": "name", "label": "標案名稱", "core": true},
+        {"key": "location", "label": "地點", "core": false},
+        {"key": "procurementType", "label": "採購性質", "core": false},
+        {"key": "tenderMethod", "label": "招標方式", "core": false},
+        {"key": "budget", "label": "預算", "core": true},
+        {"key": "publishedAt", "label": "公告日", "core": false},
+        {"key": "deadline", "label": "截止投標", "core": false},
+        {"key": "matchedWatches", "label": "標籤", "core": false}
+      ],
+      "watch": [
+        {"key": "name", "label": "條件名稱", "core": true},
+        {"key": "keywords", "label": "關鍵字", "core": true},
+        {"key": "excludes", "label": "排除詞", "core": false},
+        {"key": "org", "label": "機關", "core": false},
+        {"key": "budgetMin", "label": "預算下限", "core": false},
+        {"key": "budgetMax", "label": "預算上限", "core": false},
+        {"key": "enabled", "label": "狀態", "core": true}
+      ],
+      "schedule": [
+        {"key": "scanHours", "label": "抓取時段", "core": true},
+        {"key": "notifyHours", "label": "寄信時段", "core": true}
+      ]
+    },
+    "pages": [
+      {
+        "page": "tender-radar.html",
+        "lists": [
+          {"key": "tenders", "label": "標案清單", "entity": "tender", "columns": [
+            {"field": "marked", "visible": true},
+            {"field": "org", "visible": true},
+            {"field": "caseNo", "visible": true},
+            {"field": "name", "visible": true},
+            {"field": "location", "visible": true},
+            {"field": "procurementType", "visible": true},
+            {"field": "tenderMethod", "visible": true},
+            {"field": "budget", "visible": true},
+            {"field": "publishedAt", "visible": true},
+            {"field": "deadline", "visible": true},
+            {"field": "matchedWatches", "visible": true}
+          ]},
+          {"key": "watches", "label": "搜尋條件清單", "entity": "watch", "columns": [
+            {"field": "name", "visible": true},
+            {"field": "enabled", "visible": true},
+            {"field": "keywords", "visible": true},
+            {"field": "excludes", "visible": true},
+            {"field": "org", "visible": true},
+            {"field": "budgetMin", "visible": true},
+            {"field": "budgetMax", "visible": true}
+          ]}
+        ],
+        "forms": [
+          {"key": "watch", "label": "搜尋條件", "entity": "watch", "sections": [
+            {"key": "main", "label": "條件", "fields": ["name", "keywords", "excludes", "org", "budgetMin", "budgetMax", "enabled"]}
+          ]},
+          {"key": "schedule", "label": "排程", "entity": "schedule", "sections": [
+            {"key": "main", "label": "時段", "fields": ["scanHours", "notifyHours"]}
+          ]}
+        ],
+        "actions": [
+          {"key": "refresh", "label": "重新整理", "endpoint": "GET /api/tender-radar/status", "perm": "tender_radar"},
+          {"key": "scan", "label": "立即掃描", "endpoint": "POST /api/tender-radar/scan", "perm": "tender_radar"},
+          {"key": "watchSave", "label": "新增條件", "endpoint": "POST /api/tender-radar/watches", "perm": "tender_radar"},
+          {"key": "watchToggle", "label": "停用／啟用", "endpoint": "PUT /api/tender-radar/watches/{watch_id}", "perm": "tender_radar"},
+          {"key": "watchEdit", "label": "編輯", "perm": "tender_radar"},
+          {"key": "watchDelete", "label": "刪除", "endpoint": "DELETE /api/tender-radar/watches/{watch_id}", "perm": "tender_radar"},
+          {"key": "scheduleSave", "label": "儲存排程", "endpoint": "PUT /api/tender-radar/schedule", "perm": "tender_radar"},
+          {"key": "tenderMark", "label": "標註", "endpoint": "POST /api/tender-radar/tenders/{case_no}/mark", "perm": "tender_radar"}
+        ],
+        "menus": [
+          {"key": "watchRow", "label": "條件列操作", "items": ["watchToggle", "watchEdit", "watchDelete"]}
+        ],
+        "exports": []
+      }
+    ],
+    "outputs": []
+  }
 }

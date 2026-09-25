@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.8 — 2026-09-26（P1／P3，wip/cloud-p1p3；⚠ 暫用號：合回時依 PLAYBOOK §C-7 取 origin 的下一號並重產 G1 快照）
+> `core.registry.CORE_VERSION` 1.7 → 1.8（只有新增）。
+- L0（新增）：`core.customization`——module.json 可自訂點（P3）：`SCHEMA_VERSIONS`／`PAGE_KINDS`／`OPS_*`／`EXPORT_FORMATS`、`validate_manifest(manifest)`、`require_valid(manifest)`、`points(manifest)`、`core_fields(manifest)`、`check_layout(points, ops)`、`endpoint_parts(spec)`
+- L0（行為，相容擴充）：`core.loader.load_all()` 載入前呼叫 `customization.require_valid`；`customization` 格式錯誤 ⇒ 模組不載入（state＝failed，reason 帶前三項問題位置）。沒有 `customization` 鍵 ⇒ 照常載入
+- L1（新增）：`core.catalog`——能力目錄（P1）：`CATALOG_VERSION`、`EXPECTED_SECTIONS`、`register_section(name, owner, fn)`、`section(name)`、`build()`、`module_endpoints(spec)`、`endpoint_problems`、`output_problems`；同一區段兩個擁有者 ⇒ ValueError
+- L1（新增）：端點 `GET /api/platform/catalog`（僅超級管理員，唯讀；`routers/platform_catalog.py`，並把 `helpers.doc_template` 登記成 `outputs` 區段）
+
 ## 1.7 — 2026-09-25（R）
 > `core.registry.CORE_VERSION` 1.6 → 1.7（G1 快照要求升次版號；R 對 `core/registry.py` 只改這一行）。
 - L1（新增）：`helpers.legal_params` 法規參數服務（R1，CUSTOMIZATION-SPEC §9.1）——`load_versions`／`save_versions`／`rules_for_date`／`rules_by_version`／`validate_version(s)`／`frozen_changes`／`year_status`／`minimum_wage_mismatch`／`today`；零稅率／免稅依據 `TAX_BASIS_OPTIONS`／`tax_basis_error`／`tax_basis_label`（R2，§9.2）
