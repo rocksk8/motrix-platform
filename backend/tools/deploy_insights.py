@@ -129,6 +129,49 @@ def last_full(path: Path, commit_full_sha: str) -> dict:
     return {"state": "ok", "detail": "這個 commit 的全量全綠", "record": rec}
 
 
+# ── 正式機健康檢查（D1）──────────────────────────────────────────────────
+
+#: 本機 DB 快照多久沒更新就算不健康（每日排程 02:00；給 6 小時緩衝）
+BACKUP_MAX_AGE_HOURS = 30
+MIN_FREE_GB = 10
+
+
+def evaluate_health(facts: dict, now=None) -> dict:
+    """把正式機回傳的事實（_dashboard_remote.ps1 -Action health）判成 {ok, problems, warnings}。
+    problems 會擋部署；warnings 只提醒。事實缺漏 ⇒ 當成問題（拿不到 ≠ 沒問題）。"""
+    from datetime import datetime
+    now = now or datetime.now()
+    problems, warnings = [], []
+    if not isinstance(facts, dict) or not facts:
+        return {"ok": False, "problems": ["正式機沒有回傳任何健康資訊"], "warnings": []}
+    if facts.get("alertActive"):
+        problems.append("正式機有未解除的備份告警：" + (facts.get("alertText") or "（內容空白）").splitlines()[0])
+    lb = facts.get("latestDbBackup")
+    if not lb or not lb.get("at"):
+        problems.append("正式機找不到任何本機資料庫備份（backend/db_backups）")
+    else:
+        try:
+            age = (now - datetime.fromisoformat(lb["at"])).total_seconds() / 3600
+            if age > BACKUP_MAX_AGE_HOURS:
+                problems.append(f"正式機最近一次本機資料庫備份是 {age:.0f} 小時前（{lb.get('name')}），超過 {BACKUP_MAX_AGE_HOURS} 小時")
+        except ValueError:
+            problems.append(f"正式機備份時間讀不懂：{lb.get('at')!r}")
+    disks = facts.get("disks")
+    if not disks:
+        problems.append("拿不到正式機磁碟空間")
+    else:
+        for d in disks:
+            if d.get("name") == "C" and (d.get("freeGB") is None or d["freeGB"] < MIN_FREE_GB):
+                problems.append(f"正式機 C: 剩餘空間 {d.get('freeGB')} GB，低於 {MIN_FREE_GB} GB（部署前會做 DB 備份與程式快照）")
+    if not facts.get("port666Listen"):
+        problems.append("正式機 port 666 沒有服務在監聽（服務沒有在跑）")
+    for m in facts.get("devMarkers") or []:
+        problems.append(f"正式機安裝根目錄有開發機標記 {m}：會讓正式機{'停止寄信' if m == '.no_email_send' else '停止雲端備份'}，而且不會報錯")
+    if not facts.get("piiFolders"):
+        warnings.append("正式機看不到「系統存檔_個資」資料夾：新版上線後整庫雲端備份與勞報單鏡像會暫停並每天告警")
+    return {"ok": not problems, "problems": problems, "warnings": warnings}
+
+
 # ── 分支上游 ─────────────────────────────────────────────────────────────
 
 def upstream_ahead(root):

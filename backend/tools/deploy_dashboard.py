@@ -896,12 +896,17 @@ class DeployIn(BaseModel):
     # 建立，只是「自動判定→自動回滾」這段換成人工決定。預設關閉，不是
     # 日常部署的預設行為，只在已經反覆確認健康檢查本身不可靠時才勾選。
     skipAutoRollback: bool = False
+    #: §9e D1：10 分鐘內沒有通過的健康檢查時，必須明確勾選「我已確認正式機狀態」
+    healthAck: bool = False
 
 
 @app.post("/api/deploy")
 def start_deploy(body: DeployIn):
     if not body.confirm:
         return JSONResponse(status_code=400, content={"detail": "需要先在網頁上完成二次確認（confirm 必須為 true）"})
+    if not _health_gate_ok() and not body.healthAck:
+        return JSONResponse(status_code=409, content={
+            "detail": "部署前健康檢查：10 分鐘內沒有通過的紀錄。請先按「部署前健康檢查」；若確認問題與這次部署無關，勾選「我已確認正式機狀態」後再部署。"})
     if not _is_safe_name(body.package):
         return JSONResponse(status_code=400, content={"detail": "無效的部署包名稱"})
     package_path = DEPLOY_PACKAGES_DIR / body.package
@@ -911,6 +916,8 @@ def start_deploy(body: DeployIn):
     job_id = uuid.uuid4().hex
     if not _try_acquire_job_lock(job_id):
         return JSONResponse(status_code=409, content={"detail": "已經有一個部署/回滾工作正在執行，請等它結束再試"})
+    if not _health_gate_ok():
+        _append_history(f"部署未通過健康檢查但已人工確認（{body.package}）", job_id, False)
     named_args = {"Action": "deploy", "Username": body.username, "PackagePath": str(package_path)}
     if body.skipAutoRollback:
         named_args["SkipAutoRollback"] = "true"
@@ -984,6 +991,51 @@ def list_snapshots(body: SnapshotsIn):
         except Exception:
             pass
     return JSONResponse(status_code=502, content={"detail": "無法解析正式機回傳的快照清單", "raw": proc.stdout})
+
+
+#: 最近一次健康檢查結果（記憶體內）：部署前必須有「10 分鐘內、通過」的一筆，否則要明確確認
+_last_health = {"at": 0.0, "ok": False}
+HEALTH_VALID_SECONDS = 600
+
+
+class HealthIn(BaseModel):
+    username: str
+    password: str
+
+
+def _run_remote_json(action: str, username: str, password: str, timeout=90):
+    cmd = _ps_cmd(TOOLS_DIR / "_dashboard_remote.ps1", {"Action": action, "Username": username})
+    try:
+        proc = subprocess.run(cmd, input=password + "\n", capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT), timeout=timeout,
+                              creationflags=CREATE_NO_WINDOW)
+    except subprocess.TimeoutExpired:
+        return None, "連線正式機逾時"
+    if proc.returncode != 0:
+        return None, proc.stdout.strip() or "連線失敗"
+    marker = "===JSON==="
+    if marker not in proc.stdout:
+        return None, "正式機回傳內容沒有 JSON 區塊"
+    try:
+        return json.loads(proc.stdout.split(marker, 1)[1].strip()), None
+    except Exception:
+        return None, "無法解析正式機回傳的 JSON"
+
+
+@app.post("/api/prod-health")
+def prod_health(body: HealthIn):
+    """§9e D1：部署前健康檢查（唯讀）。結果記在記憶體，部署時檢查是否 10 分鐘內通過。"""
+    facts, err = _run_remote_json("health", body.username, body.password)
+    if err:
+        _last_health.update(at=time.time(), ok=False)
+        return JSONResponse(status_code=502, content={"detail": err})
+    verdict = deploy_insights.evaluate_health(facts)
+    _last_health.update(at=time.time(), ok=verdict["ok"])
+    return {**verdict, "facts": facts}
+
+
+def _health_gate_ok() -> bool:
+    return _last_health["ok"] and (time.time() - _last_health["at"]) <= HEALTH_VALID_SECONDS
 
 
 class LogTailIn(BaseModel):
