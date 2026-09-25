@@ -180,7 +180,9 @@ def evaluate_health(facts: dict, now=None) -> dict:
         problems.append(f"正式機安裝根目錄有開發機標記 {m}：會讓正式機{'停止寄信' if m == '.no_email_send' else '停止雲端備份'}，而且不會報錯")
     if not facts.get("piiFolders"):
         warnings.append("正式機看不到「系統存檔_個資」資料夾：新版上線後整庫雲端備份與勞報單鏡像會暫停並每天告警")
-    mods = summarize_modules(facts.get("modules")) if "modules" in facts else {"rows": [], "warnings": []}
+    if "pythonVersion" in facts and not facts.get("pythonVersion"):
+        warnings.append("沒有取得正式機的 Python 版本（開發機 venv 無法對齊）：" + str(facts.get("pythonError") or "原因不明"))
+    mods = summarize_modules(facts.get("modules") if isinstance(facts.get("modules"), dict) else {})         if "modules" in facts else {"rows": [], "warnings": []}
     warnings.extend(mods["warnings"])
     return {"ok": not problems, "problems": problems, "warnings": warnings, "modules": mods["rows"]}
 
@@ -194,36 +196,64 @@ def summarize_modules(mfacts: dict) -> dict:
     import re
     mfacts = mfacts or {}
     warnings = []
-    installed = {m.get("key"): m for m in (mfacts.get("installed") or []) if m.get("key")}
+    # 稽核 D-2：每一種事實各自容錯。值來自正式機的檔案與 DB，型別不可信；
+    # 任何一項讀不懂都只轉成警示，不可以讓整個健康檢查 500（那會讓上一次的「通過」繼續有效）
+    inst_raw = mfacts.get("installed") or []
+    if isinstance(inst_raw, dict):                      # ConvertTo-Json 把單元素陣列拆開
+        inst_raw = [inst_raw]
+    installed = {}
+    if isinstance(inst_raw, list):
+        installed = {m.get("key"): m for m in inst_raw if isinstance(m, dict) and m.get("key")}
+    else:
+        warnings.append("正式機已安裝模組清單讀不懂")
     lock, lock_mods = None, {}
     if mfacts.get("lockRaw"):
         try:
             lock = _json.loads(mfacts["lockRaw"])
-            lock_mods = lock.get("modules") or {}
-        except ValueError:
+            lock_mods = lock.get("modules") if isinstance(lock, dict) else None
+            if not isinstance(lock_mods, dict) or not all(isinstance(v, dict) for v in lock_mods.values()):
+                raise ValueError
+        except (ValueError, TypeError):
+            lock, lock_mods = None, {}
             warnings.append("正式機的 modules.lock.json 讀不懂")
     else:
         warnings.append("正式機沒有 modules.lock.json（V9 或舊版部署包沒有這個檔）")
     disabled = None
     raw = mfacts.get("disabledRaw")
-    if mfacts.get("disabledError"):
-        warnings.append("讀不到正式機的停用清單：" + str(mfacts["disabledError"]).splitlines()[-1][:200])
+    err = mfacts.get("disabledError")
+    if err is not None:
+        last = str(err).strip().splitlines()[-1][:200] if str(err).strip() else "（沒有訊息）"
+        warnings.append("讀不到正式機的停用清單：" + last)
+    elif mfacts.get("dbMissing"):
+        warnings.append("正式機找不到 motrix_erp.db，停用清單無法確認")
     elif raw:
         try:
-            disabled = set(_json.loads(raw))
-        except ValueError:
+            val = _json.loads(raw)
+            if not isinstance(val, list) or not all(isinstance(x, str) for x in val):
+                raise ValueError
+            disabled = set(val)
+        except (ValueError, TypeError):
             warnings.append("正式機的停用清單讀不懂")
     elif raw == "":
         disabled = set()
+    else:
+        # 稽核 D-6：讀不到≠沒有停用
+        warnings.append("沒有取得正式機的停用清單（原因不明）")
     state = {}
-    for line in mfacts.get("logLines") or []:
+    lines = mfacts.get("logLines") or []
+    if isinstance(lines, str):
+        lines = [lines]
+    for line in lines if isinstance(lines, list) else []:
+        line = str(line)
         m = re.search(r"模組 (\S+) (?:(\S+) )?已載入", line)
         if m:
             state[m.group(1)] = ("已載入", "")
             continue
-        m = re.search(r"模組 (\S+) 未載入[：:]\s*(.*)$", line)
+        # 稽核 D-3：loader 的格式是「未載入（未授權）：原因」，括號段可有可無
+        m = re.search(r"模組 (\S+) 未載入(?:（([^）]*)）)?[：:]\s*(.*)$", line)
         if m:
-            state[m.group(1)] = ("未載入", m.group(2).strip())
+            tag, why = (m.group(2) or ""), m.group(3).strip()
+            state[m.group(1)] = ("未授權" if tag == "未授權" else "未載入", why)
     rows = []
     for key in sorted(set(installed) | set(lock_mods)):
         inst, lk = installed.get(key), lock_mods.get(key) or {}
@@ -238,7 +268,7 @@ def summarize_modules(mfacts: dict) -> dict:
             warnings.append(f"模組 {key} 已安裝、卻不在 lock 裡")
         elif lk and inst.get("version") != lk.get("version"):
             warnings.append(f"模組 {key} 的版本與 lock 不一致（安裝 {inst.get('version')}，lock {lk.get('version')}）")
-        if st == "未載入" and "停用" not in why and "未授權" not in why:
+        if st == "未載入" and "停用" not in why:
             warnings.append(f"模組 {key} 載入失敗：{why}")
     return {"rows": rows, "warnings": warnings}
 

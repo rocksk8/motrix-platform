@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -55,6 +56,18 @@ CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 TOOLS_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = TOOLS_DIR.parent
 PROJECT_ROOT = BACKEND_DIR.parent
+#: 部署包裡模組清單的檔名：與打包端（tools/platform/product_select.py）同一個定義
+def _lock_name():
+    import importlib.util
+    src = PROJECT_ROOT / "tools" / "platform" / "product_select.py"
+    try:
+        spec = importlib.util.spec_from_file_location("_product_select_for_dashboard", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.LOCK_NAME
+    except Exception:
+        return "modules.lock.json"
+_LOCK_NAME = _lock_name()
 DEPLOY_PACKAGES_DIR = PROJECT_ROOT / "deploy_packages"
 HISTORY_PATH = TOOLS_DIR / "deploy_dashboard_history.json"
 # 2026-09-08（複查後新增）：job 輸出原本只存記憶體，這個小工具本身重啟
@@ -825,7 +838,8 @@ def list_packages():
                     manifest = {}
                 # §9e D3：包了哪些模組（9c① 的 modules.lock.json）。讀不到就明說，不當成「全部」
                 lock = None
-                lp = d / "modules.lock.json"
+                # 稽核 D-1：打包把 lock 寫在 <包>/backend/（product_select.apply）；位置與檔名跟它共用同一個定義
+                lp = d / "backend" / _LOCK_NAME
                 if lp.exists():
                     try:
                         lk = json.loads(lp.read_text(encoding="utf-8-sig"))
@@ -1157,13 +1171,15 @@ def prod_health(body: HealthIn):
         return JSONResponse(status_code=502, content={"detail": err})
     verdict = deploy_insights.evaluate_health(facts)
     # 正式機的 Python 環境落地成檔：開發機的專案 venv 要對齊它（B 的 .venv 題依此重建）
+    # 寫不出來要明說：2026-09-25 第一次實跑版本沒拿到、檔沒寫出，而畫面一個字都沒提
     if facts.get("pythonVersion"):
         try:
             PROD_ENV_PATH.write_text(json.dumps({
                 "capturedAt": facts.get("checkedAt"), "pythonVersion": facts.get("pythonVersion"),
+                "pythonPath": facts.get("pythonPath"), "pythonSource": facts.get("pythonSource"),
                 "pipFreeze": facts.get("pipFreeze") or []}, ensure_ascii=False, indent=2), encoding="utf-8")
-        except OSError:
-            pass
+        except OSError as e:
+            verdict["warnings"].append(f"正式機 Python 環境寫不進 {PROD_ENV_PATH.name}：{e}")
     _last_health.update(at=time.time(), ok=verdict["ok"])
     return {**verdict, "facts": facts}
 
@@ -1450,5 +1466,6 @@ if __name__ == "__main__":
     # 📌 綁 127.0.0.1 **留著**，而它不再是唯一的防線 ——
     # 現在就算有人用 `--host 0.0.0.0` 起它，請求層那道也會擋下來。
     # 🔑 兩層都要有：這一層擋「監聽在哪」，那一層擋「誰打得到」。
-    print("MOTRIX 部署儀表板：http://127.0.0.1:8765")
+    if sys.stdout is not None:     # pythonw 沒有 stdout：print 會丟例外，伺服器起不來（2026-09-25 實測）
+        print("MOTRIX 部署儀表板：http://127.0.0.1:8765")
     uvicorn.run(app, host="127.0.0.1", port=8765, log_level="warning")

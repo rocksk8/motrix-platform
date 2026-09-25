@@ -59,16 +59,32 @@ def test_unknown_or_unsafe_product_is_refused(client, bad):
     assert r.status_code == 400 and client.started == []
 
 
+def _product_select():
+    import importlib.util
+    src = Path(dd.PROJECT_ROOT) / "tools" / "platform" / "product_select.py"
+    spec = importlib.util.spec_from_file_location("_ps_for_test", src)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def test_packages_show_their_module_lock(client, monkeypatch):
+    # 稽核 D-1：lock 由打包端（product_select.apply）真的寫出來，不自己擺檔——位置錯了這題才會紅
+    ps = _product_select()
     pk = client.tmp / "pkgs"
-    (pk / "20260925_full").mkdir(parents=True)
-    (pk / "20260925_full" / "deploy_manifest.json").write_text('{"commit_short": "abc"}', encoding="utf-8")
-    (pk / "20260925_full" / "modules.lock.json").write_text(json.dumps(
-        {"lock_version": 1, "kind": "full_package", "product": "full",
-         "modules": {"tender_radar": {"version": "1.0.1", "sha256": "x"}}}), encoding="utf-8")
+    full = pk / "20260925_full"
+    mdir = full / "backend" / "modules" / "some_mod"
+    mdir.mkdir(parents=True)
+    (mdir / "module.json").write_text(json.dumps({"key": "some_mod", "version": "1.0.1"}), encoding="utf-8")
+    (full / "deploy_manifest.json").write_text('{"commit_short": "abc"}', encoding="utf-8")
+    ps.apply(full, {"name": "full", "modules": ["*"]})
     (pk / "20260925_old").mkdir()
     (pk / "20260925_old" / "deploy_manifest.json").write_text('{"commit_short": "def"}', encoding="utf-8")
     monkeypatch.setattr(dd, "DEPLOY_PACKAGES_DIR", pk)
     got = {p["folder"]: p for p in client.get("/api/packages").json()}
-    assert got["20260925_full"]["lock"] == {"product": "full", "kind": "full_package", "modules": {"tender_radar": "1.0.1"}}
+    assert got["20260925_full"]["lock"] == {"product": "full", "kind": "full_package", "modules": {"some_mod": "1.0.1"}}
     assert got["20260925_old"]["lock"] is None                  # 舊包沒有 lock：明確是 None，不當成「全部」
+
+
+def test_lock_name_is_shared_with_the_packager():
+    assert dd._LOCK_NAME == _product_select().LOCK_NAME

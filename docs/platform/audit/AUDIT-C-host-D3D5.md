@@ -114,7 +114,22 @@ python -c "import sys;sys.path.insert(0,'backend/tools');import deploy_insights 
 
 | 編號 | 級別 | 狀態 |
 |---|---|---|
-| D-1 | 必修 | 開 |
-| D-2 | 必修 | 開 |
-| D-3～D-6 | 建議 | 開 |
-| C-1～C-3 | 觀察 | 開 |
+| D-1 | 必修 | 主持已回覆，待 C 確認 |
+| D-2 | 必修 | 主持已回覆，待 C 確認 |
+| D-3～D-6 | 建議 | 主持已回覆，待 C 確認 |
+| C-1～C-3 | 觀察 | C-1 已修；C-2、C-3 見回覆 |
+
+### 主持回覆（2026-09-25，wip/h-d3d5-fix）
+
+| 編號 | 處理 | 突變驗證 |
+|---|---|---|
+| D-1 | 列表改讀 `<包>/backend/<LOCK_NAME>`，檔名從 `product_select.LOCK_NAME` 取（同一個定義）。測試改用 `product_select.apply` 產生真的包，不自己擺檔；另補「檔名與打包端相同」一題 | 改回讀包根目錄 ⇒ 紅 |
+| D-2 | installed、lock、停用清單、logLines 各自容錯，型別不對就轉成「讀不懂」警示，不丟例外；補 13 種異常型別參數化題，以及「單一模組被 ConvertTo-Json 拆成物件照樣列出」 | 拿掉 lock 型別檢查 ⇒ 3 紅；拿掉停用清單型別檢查 ⇒ 紅；拿掉 dict 拆封 ⇒ 紅 |
+| D-3 | 正規式接受 `未載入（標記）：`，標記是「未授權」時狀態就顯示「未授權」；測試從 `core/loader.py` 原始碼取真正的格式字串，不自己編 | 改回舊正規式 ⇒ 3 紅。loader 輸出機器可讀欄位的建議記進階段 S，不在這次做 |
+| D-4 | 假庫改成 WAL；斷言 PHF 讀 DB 的連線字串含 `?mode=ro` | 未另做突變（斷言對象是腳本文字，拿掉 `?mode=ro` 必紅）。服務停著時可能留下 `-shm`，已接受，不另處理 |
+| D-5 | pip freeze 只留 `名稱==版本`；`名稱 @ URL` 改成 `名稱 @ <url 已移除>`；其他行（例如 `-e`）丟掉。事實題斷言沒有 `://` | — |
+| D-6 | PHF 另外輸出 `dbMissing`；python 以非 0 結束而且沒有輸出時，改寫成「python exit N，沒有輸出」。DI 在「DB 不存在」「錯誤訊息是空的」「兩者皆無」三種情況都出警示 | 拿掉「原因不明」那一支 ⇒ 紅 |
+| C-1 | **已修，並且是 U10 的實際成因**：2026-09-25 22:05 使用者第一次按健康檢查，WinRM 有連上，但 `prod_env.json` 沒有寫出。原因是 PHF 用 PATH 上的 `python`，而 WinRM 工作階段沒有使用者層的 PATH；讀不到版本時，儀表板又靜默略過不寫檔。修法：python 改從 `backend/autostart.bat` 的 uvicorn.exe 路徑推得（正式機是 `…\Python312`），找不到才用 PATH；回傳 `pythonPath`、`pythonSource`、`pythonError`。儀表板在沒拿到版本或寫檔失敗時都會出警示 | 關掉 autostart 推導 ⇒ 紅；拿掉「沒取得版本」警示 ⇒ 紅 |
+| C-2 | 未實測；pip freeze 通常只要數秒。先觀察下次實跑耗時，不調整 | — |
+| C-3 | 同意，移到階段 S（啟動標記要 loader 配合輸出） | — |
+| 附帶 | pythonw 啟動時 `print` 會因為沒有 stdout 而使伺服器起不來（22:0x 實測），已加上防護。這一項**沒有自動測試**，下次用 pythonw 重啟時人工確認 | — |
