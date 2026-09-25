@@ -218,17 +218,6 @@ def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo, e2
 def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_server, make_user, _geo, e2e_browser):
     # `_geo`：標案雷達頁會畫自己的小地圖，後端會探測圖磚——換掉，不對外連線（NETGUARD）。
     ids = _seed()
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute("INSERT INTO tenders (case_no, name, org, location, fetched_at)"
-                     " VALUES ('MP1-T-9', 'MP1標案', 'MP1機關', '台中市', '2026-09-24')")
-        # 第二筆：「只有那一列被標示」要有別列可以比（只有一列時「全部標示」也會過——突變 M5 抓到）。
-        conn.execute("INSERT INTO tenders (case_no, name, org, location, fetched_at)"
-                     " VALUES ('MP1-T-8', 'MP1別的標案', 'MP1機關', '台中市', '2026-09-24')")
-        conn.commit()
-    finally:
-        conn.close()
     u, p = make_user(username="mp1_pages", role="superadmin")
     cases = [
         ("customers.html?id=%d" % ids["customers"], "MP1客戶", "customers%%3A%d" % ids["customers"]),
@@ -255,17 +244,8 @@ def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_serve
     page.goto(live_server + "/pages/customers.html?id=99999")
     page.locator(".motrix-deeplink-miss").wait_for(state="visible", timeout=15000)
     assert page.locator(".detail-pane.open").count() == 0
-    # 標案雷達：`?case=` ⇒ 那一列被標示並有回地圖的連結。
-    page.goto(live_server + "/pages/tender-radar.html?case=MP1-T-9")
-    page.wait_for_function(
-        "() => { const r = document.querySelector('tr[data-case-no=\"MP1-T-9\"]');"
-        " return r && r.style.outline.indexOf('2px') >= 0 }", timeout=15000)
-    href = page.locator('tr[data-case-no="MP1-T-9"] a.mp1-onmap').get_attribute("href")
-    assert href == "map.html?focus=tenders%3AMP1-T-9", href
-    other = page.locator("tr[data-case-no]").evaluate_all(
-        "els => els.filter(e => e.style.outline).map(e => e.dataset.caseNo)")
-    rows_n = page.locator("tr[data-case-no]").count()
-    assert rows_n >= 2 and other == ["MP1-T-9"], "只有那一列被標示（共 %d 列）：%r" % (rows_n, other)
+    # 標案雷達那一段（`?case=` ⇒ 那一列被標示並有回地圖的連結）屬 M11：
+    # modules/tender_radar/tests/test_tender_mp1_case_link_2026_09_24.py（2026-09-25 拆出）
 
 
 def test_mp1_the_shipping_note_links_to_its_point_on_the_map():
