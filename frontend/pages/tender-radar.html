@@ -36,6 +36,9 @@
     .tr-form-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
                     gap:10px; margin-bottom:10px; }
     .tr-src { font-size:11px; color:var(--text-dim); margin-top:18px; }
+    /* P9：表單區塊標題（跨滿整列；順序由 CSS order 決定） */
+    .tr-sec-label { grid-column:1 / -1; font-size:11px; font-weight:600; color:var(--text-secondary);
+                    border-bottom:1px solid var(--border-light); padding-bottom:3px; margin-top:4px; }
 
     /* 🔴 被標註的那幾筆**要看得出來是被標的**，不能只是排在前面。
        ☠️ 只排在前面的話，使用者看到的是「順序怎麼變了」——
@@ -91,7 +94,12 @@
   <main class="main">
   <div x-data="tenderRadarPage()" x-init="init()" class="tr-wrap">
 
-    <h1 class="page-title">標案雷達</h1>
+    <h1 class="page-title">標案雷達<span data-layout-editor-slot></span></h1>
+    <!-- P9：版面（公司／角色／個人）由 layout-runtime.js 套用；讀不到時說出來，不假裝套用成功 -->
+    <div class="ml-layout-note" x-show="$store.layout.failed" x-text="$store.layout.error"></div>
+    <div class="ml-layout-note" x-show="$store.layout.mode === 'preview'"
+         x-text="'預覽中：' + $store.layout.previewLabel + '（唯讀，關閉排版器後回到自己的版面）'"></div>
+    <div class="ml-layout-note" x-show="$store.layout.mode === 'edit'">編輯中：畫面顯示的是草稿，發布之後其他人才看得到。</div>
     <p style="font-size:12px;color:var(--text-secondary);margin-top:4px">
       依搜尋條件自動比對政府電子採購網的招標公告，每日一次，命中的會寄一封彙總信。
       <!-- ⚠️ 原本這裡寫「**不發送通知**」：一是 HTML 裡的 Markdown 粗體會顯示成
@@ -212,18 +220,20 @@
     <div class="panel" style="margin-top:12px" x-show="schedule">
       <div class="tr-panel-body">
         <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
-          <div>
+          <div data-layout-field="schedule:scanHours" :style="'order:' + $store.layout.fieldOrder('schedule', 'scanHours')">
             <label class="fi-label">抓取時段（逗號分隔，0-23）</label>
             <input class="fi" style="width:180px" type="text" x-model="scanHoursText"
                    placeholder="9,12,15,18">
           </div>
-          <div>
+          <div data-layout-field="schedule:notifyHours" :style="'order:' + $store.layout.fieldOrder('schedule', 'notifyHours')">
             <label class="fi-label">寄信時段（留空＝不寄）</label>
             <input class="fi" style="width:180px" type="text" x-model="notifyHoursText"
                    placeholder="18">
           </div>
-          <button class="btn btn-ghost btn-sm" @click="saveSchedule()">儲存</button>
-          <span style="font-size:12px" x-show="scheduleMsg" x-text="scheduleMsg"></span>
+          <button class="btn btn-ghost btn-sm" @click="saveSchedule()" data-layout-action="scheduleSave" style="order:900"
+                  x-show="$store.layout.shown('action', 'scheduleSave')"
+                  x-text="$store.layout.label('action', 'scheduleSave', '儲存')"></button>
+          <span style="font-size:12px;order:901" x-show="scheduleMsg" x-text="scheduleMsg"></span>
         </div>
         <!-- 📌 「留空＝不寄」要寫出來：它是一個合法設定，而它看起來像「還沒設」。
              不寫的話使用者不會知道自己可以關掉它。 -->
@@ -240,43 +250,50 @@
     <div style="display:flex;align-items:center;justify-content:space-between;margin:18px 0 8px">
       <h2 style="font-size:14px;font-weight:600">搜尋條件</h2>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading">重新整理</button>
-        <button class="btn btn-ghost btn-sm" @click="scanNow()"
+        <button class="btn btn-ghost btn-sm" @click="refresh()" :disabled="loading" data-layout-action="refresh"
+                x-show="$store.layout.shown('action', 'refresh')" :style="'order:' + $store.layout.order('action', 'refresh')"
+                x-text="$store.layout.label('action', 'refresh', '重新整理')"></button>
+        <button class="btn btn-ghost btn-sm" @click="scanNow()" data-layout-action="scan"
+                x-show="$store.layout.shown('action', 'scan')" :style="'order:' + $store.layout.order('action', 'scan')"
                 :disabled="scanning || !(status && status.enabled)"
                 :title="status && !status.enabled ? '總開關關閉時不會對外連線' : ''"
-                x-text="scanning ? '掃描中…' : '立即掃描'"></button>
+                x-text="scanning ? '掃描中…' : $store.layout.label('action', 'scan', '立即掃描')"></button>
       </div>
     </div>
 
     <div class="panel tr-panel-body">
-      <div class="tr-form-grid">
-        <div>
+      <div class="tr-form-grid" data-layout-form="watch">
+        <template x-for="sec in $store.layout.sections('watch')" :key="sec.key">
+          <div class="tr-sec-label" :data-layout-section="'watch:' + sec.key" :style="'order:' + sec.order"
+               x-show="sec.fields.length" x-text="sec.label"></div>
+        </template>
+        <div data-layout-field="watch:name" :style="'order:' + $store.layout.fieldOrder('watch', 'name')">
           <label class="fi-label">條件名稱</label>
           <input class="fi" type="text" x-model="form.name" placeholder="例：監視系統標案">
         </div>
-        <div>
+        <div data-layout-field="watch:keywords" :style="'order:' + $store.layout.fieldOrder('watch', 'keywords')">
           <label class="fi-label">關鍵字（逗號分隔，任一中即命中）</label>
           <input data-saved-field class="fi" type="text" x-model="form.keywords" placeholder="監視,門禁,監控">
         </div>
-        <div>
-          <label class="fi-label">排除詞（逗號分隔，一中就整筆排除）</label>
+        <div data-layout-field="watch:excludes" x-show="$store.layout.fieldShown('watch', 'excludes')" :style="'order:' + $store.layout.fieldOrder('watch', 'excludes')">
+          <label class="fi-label" x-text="$store.layout.fieldLabel('watch', 'excludes', '排除詞（逗號分隔，一中就整筆排除）')">排除詞（逗號分隔，一中就整筆排除）</label>
           <input class="fi" type="text" x-model="form.excludes" placeholder="維護,保養">
         </div>
-        <div>
-          <label class="fi-label">機關（留空＝不篩）</label>
+        <div data-layout-field="watch:org" x-show="$store.layout.fieldShown('watch', 'org')" :style="'order:' + $store.layout.fieldOrder('watch', 'org')">
+          <label class="fi-label" x-text="$store.layout.fieldLabel('watch', 'org', '機關（留空＝不篩）')">機關（留空＝不篩）</label>
           <input class="fi" type="text" x-model="form.org" placeholder="留空 = 所有機關">
         </div>
-        <div>
-          <label class="fi-label">預算下限（留空＝不篩）</label>
+        <div data-layout-field="watch:budgetMin" x-show="$store.layout.fieldShown('watch', 'budgetMin')" :style="'order:' + $store.layout.fieldOrder('watch', 'budgetMin')">
+          <label class="fi-label" x-text="$store.layout.fieldLabel('watch', 'budgetMin', '預算下限（留空＝不篩）')">預算下限（留空＝不篩）</label>
           <input class="fi" type="number" min="0" x-model="form.budgetMin" placeholder="留空 = 不設下限">
         </div>
-        <div>
-          <label class="fi-label">預算上限（留空＝不篩）</label>
+        <div data-layout-field="watch:budgetMax" x-show="$store.layout.fieldShown('watch', 'budgetMax')" :style="'order:' + $store.layout.fieldOrder('watch', 'budgetMax')">
+          <label class="fi-label" x-text="$store.layout.fieldLabel('watch', 'budgetMax', '預算上限（留空＝不篩）')">預算上限（留空＝不篩）</label>
           <input class="fi" type="number" min="0" x-model="form.budgetMax" placeholder="留空 = 不設上限">
         </div>
         <!-- D21：`enabled` 有資料欄位、有後端、有「已停用」標籤，卻沒有任何地方能改它。
              ⇒ 表單看起來就是不完整，而使用者說的「需要有儲存」很可能就是這個。 -->
-        <div>
+        <div data-layout-field="watch:enabled" :style="'order:' + $store.layout.fieldOrder('watch', 'enabled')">
           <label class="fi-label">狀態</label>
           <!-- ⚠ 不可用 :value="false"：Alpine 會移除 value 屬性，選項值退回文字（truthy）⇒ 後端存成啟用。 -->
           <select class="fi" x-model.boolean="form.enabled">
@@ -288,7 +305,9 @@
       <!-- ⚠️ 「留空 = 不篩」不是廢話：留空被當成 0 的話，「沒設上限」會變成
            「上限 0 元」——一筆都不會中，而且畫面上看不出任何異常。 -->
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-primary btn-sm" @click="save()" x-text="form.id ? '儲存變更' : '新增條件'"></button>
+        <button class="btn btn-primary btn-sm" @click="save()" data-layout-action="watchSave"
+                x-show="$store.layout.shown('action', 'watchSave')"
+                x-text="form.id ? '儲存變更' : $store.layout.label('action', 'watchSave', '新增條件')"></button>
         <button class="btn btn-ghost btn-sm" x-show="form.id" @click="resetForm()">取消</button>
         <span style="font-size:11px;color:var(--danger)" x-text="formError"></span>
       </div>
@@ -300,26 +319,32 @@
          x-show="listError" x-text="listError"></div>
 
     <template x-for="w in watches" :key="w.id">
-      <div class="panel tr-panel-body" style="display:flex;justify-content:space-between;gap:12px">
-        <div>
-          <div style="font-weight:600;font-size:13px">
-            <span x-text="w.name"></span>
-            <span x-show="!w.enabled" class="badge badge--draft">已停用</span>
-          </div>
-          <div style="margin-top:5px">
-            <template x-for="k in w.keywords" :key="k"><span class="chip" x-text="k"></span></template>
-            <template x-for="x in w.excludes" :key="x"><span class="badge badge--danger" x-text="'排除 ' + x"></span></template>
-          </div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:5px">
-            機關：<span x-text="w.org || '不篩'"></span>
-            ・預算：<span x-text="(w.budgetMin === null ? '不設下限' : w.budgetMin.toLocaleString()) + ' ~ ' + (w.budgetMax === null ? '不設上限' : w.budgetMax.toLocaleString())"></span>
-          </div>
+      <div class="panel tr-panel-body" style="display:flex;justify-content:space-between;gap:12px" :data-watch-id="w.id">
+        <!-- P9：顯示哪些欄、什麼順序由版面決定（cols('watches')）；每一欄怎麼畫仍在這裡 -->
+        <div style="display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center" data-layout-list="watches">
+          <template x-for="c in $store.layout.cols('watches')" :key="c.field">
+            <span :data-col="c.field" style="font-size:11px;color:var(--text-dim)">
+              <template x-if="c.field === 'name'"><span style="font-weight:600;font-size:13px;color:var(--text)" x-text="w.name"></span></template>
+              <template x-if="c.field === 'enabled'"><span x-show="!w.enabled" class="badge badge--draft">已停用</span></template>
+              <template x-if="c.field === 'keywords'"><span><template x-for="k in w.keywords" :key="k"><span class="chip" x-text="k"></span></template></span></template>
+              <template x-if="c.field === 'excludes'"><span><template x-for="x in w.excludes" :key="x"><span class="badge badge--danger" x-text="'排除 ' + x"></span></template></span></template>
+              <template x-if="c.field === 'org'"><span x-text="$store.layout.colLabel('watches', 'org', '機關') + '：' + (w.org || '不篩')"></span></template>
+              <!-- ⚠️ 預算用 === null：0 元是合法金額 -->
+              <template x-if="c.field === 'budgetMin'"><span x-text="$store.layout.colLabel('watches', 'budgetMin', '預算下限') + '：' + (w.budgetMin === null ? '不設下限' : w.budgetMin.toLocaleString())"></span></template>
+              <template x-if="c.field === 'budgetMax'"><span x-text="$store.layout.colLabel('watches', 'budgetMax', '預算上限') + '：' + (w.budgetMax === null ? '不設上限' : w.budgetMax.toLocaleString())"></span></template>
+            </span>
+          </template>
         </div>
-        <div style="display:flex;gap:6px;align-items:flex-start">
-          <button class="btn btn-ghost btn-sm" @click="toggleEnabled(w)"
-                  x-text="w.enabled ? '停用' : '啟用'"></button>
-          <button class="btn btn-ghost btn-sm" @click="edit(w)">編輯</button>
-          <button class="btn btn-ghost btn-sm" @click="remove(w)">刪除</button>
+        <div style="display:flex;gap:6px;align-items:flex-start" data-layout-menu="watchRow" x-show="$store.layout.shown('menu', 'watchRow')">
+          <button class="btn btn-ghost btn-sm" @click="toggleEnabled(w)" data-layout-action="watchToggle"
+                  x-show="$store.layout.shown('action', 'watchToggle')" :style="'order:' + $store.layout.itemOrder('watchRow', 'watchToggle')"
+                  x-text="$store.layout.label('action', 'watchToggle', w.enabled ? '停用' : '啟用')"></button>
+          <button class="btn btn-ghost btn-sm" @click="edit(w)" data-layout-action="watchEdit"
+                  x-show="$store.layout.shown('action', 'watchEdit')" :style="'order:' + $store.layout.itemOrder('watchRow', 'watchEdit')"
+                  x-text="$store.layout.label('action', 'watchEdit', '編輯')"></button>
+          <button class="btn btn-ghost btn-sm" @click="remove(w)" data-layout-action="watchDelete"
+                  x-show="$store.layout.shown('action', 'watchDelete')" :style="'order:' + $store.layout.itemOrder('watchRow', 'watchDelete')"
+                  x-text="$store.layout.label('action', 'watchDelete', '刪除')"></button>
         </div>
       </div>
     </template>
@@ -346,6 +371,7 @@
       <button class="btn btn-ghost btn-sm" x-show="search"
               @click="search = ''; loadTenders()">清除</button>
       <span style="font-size:12px;color:var(--text-secondary)">只看</span>
+      <span data-layout-personal="tenders"></span>
       <select class="fi filter" style="width:190px" x-model="watchFilter">
         <option value="">全部（不篩選）</option>
         <template x-for="w in watches" :key="w.id">
@@ -380,101 +406,90 @@
     <div class="tr-note" style="background:var(--danger-light);color:var(--danger);margin-bottom:8px"
          x-show="markError" x-text="markError"></div>
     <div class="table-scroll">
-      <table class="data-table" x-show="visibleTenders.length > 0">
+      <!-- P9：欄的顯示、順序、標題由版面決定（$store.layout.cols：角色 ＞ 公司 ＞ 程式預設，再疊個人層）；
+           每一欄「怎麼畫」仍寫在這裡。版面還沒回來之前不畫表（避免先畫預設再跳成別的樣子）。 -->
+      <table class="data-table" data-layout-list="tenders"
+             x-show="visibleTenders.length > 0 && ($store.layout.ready || $store.layout.failed)">
         <thead><tr>
-          <th style="width:52px">標註</th>
-          <th>機關</th><th>案號</th><th>標案名稱</th><th>地點</th>
-          <th>採購性質</th><th>招標方式</th>
-          <th style="text-align:right">預算</th><th>公告日</th><th>截止投標</th><th>標籤</th>
+          <template x-for="c in $store.layout.cols('tenders')" :key="c.field">
+            <th :data-col="c.field" :style="c.field === 'marked' ? 'width:52px' : (c.field === 'budget' ? 'text-align:right' : '')"
+                x-text="$store.layout.colLabel('tenders', c.field, tenderColLabels[c.field])"></th>
+          </template>
         </tr></thead>
         <tbody>
           <template x-for="t in visibleTenders" :key="t.id">
             <tr :class="t.marked ? 'tr-marked' : ''" :data-case-no="t.caseNo"
                 :style="focusCase === t.caseNo ? 'outline:2px solid var(--accent);outline-offset:-2px' : ''">
-              <!-- 🔴 **切換鈕**（未標註／已標註）。
-                   ⚠️ `title` 帶「誰標的、什麼時候」—— 規格允許 tooltip 或小字，
-                   而這裡**兩個都給**：tooltip 在手機上點不出來，
-                   小字在欄位窄的時候會擠掉標案名稱。
-                   ☠️ 只給 tooltip 的話，手機使用者永遠看不到是誰標的。
-                   📌 `markedByName` 後端保證是字串（讀不到人時是空字串，
-                      不是 null）⇒ 這裡的 `|| '未知'` 接得住兩種。 -->
-              <td style="text-align:center">
-                <button class="tr-mark-btn" :class="t.marked ? 'on' : ''"
-                        :disabled="markBusy === t.caseNo"
-                        @click="toggleMark(t)"
-                        :aria-pressed="t.marked ? 'true' : 'false'"
-                        :title="t.marked
-                          ? ((t.markedByName || '未知') + ' 於 '
-                             + (t.markedAt || '不明時間') + ' 標註．再按一次取消')
-                          : '標註這一筆，它會排到清單最上方'"
-                        x-text="t.marked ? '\u2691' : '\u2690'"></button>
-                <template x-if="t.marked">
-                  <span class="tr-mark-who"
-                        x-text="(t.markedByName || '未知')
-                                + (t.markedAt ? ('．' + t.markedAt.slice(5, 10)) : '')"></span>
-                </template>
-              </td>
-              <!-- 🔴 **機關名稱與標案名稱都要可點。**
-                   使用者在清單上掃的是**機關名稱**（他認得哪些機關常發
-                   他做得來的標案），而標案名稱太長、常被截斷
-                   ⇒ 只做一個的話**他會去點另一個然後以為壞了**。
-
-                   ⚠️ `x-if` 不是 `x-show`：沒有網址時 **DOM 裡不該有 `<a>`**。
-                   ☠️ `href=""` 是一個看起來可以點、點了沒反應的東西，
-                   而那比一開始就不可點更糟——使用者會以為是網路壞了，
-                   然後再點五次。
-                   📌 後端保證空網址回 `null` 而不是 `""`（SO8），
-                   所以這裡的 `t.url` 判斷**有可能寫對**。
-
-                   ⚠️ `rel="noopener"` **不是可選的**：少了它，被開啟的那一頁
-                   可以透過 `window.opener` 改寫我們這一頁的網址，
-                   而使用者不會發現分頁被換掉了。 -->
-              <td style="font-size:12px">
-                <template x-if="t.url">
-                  <a :href="t.url" target="_blank" rel="noopener noreferrer"
-                     x-text="t.org"></a>
-                </template>
-                <template x-if="!t.url"><span x-text="t.org"></span></template>
-              </td>
-              <td style="font-size:12px;font-family:LINE Seed TW_OTF, sans-serif">
-                <span x-text="t.caseNo"></span>
-                <a class="mp1-onmap" style="font-size:11px;margin-left:4px"
-                   :href="MotrixRecordLink.mapUrl('tenders', t.caseNo)">在地圖上看</a>
-              </td>
-              <td style="font-size:12px">
-                <template x-if="t.url">
-                  <a :href="t.url" target="_blank" rel="noopener noreferrer"
-                     x-text="t.name"></a>
-                </template>
-                <template x-if="!t.url"><span x-text="t.name"></span></template>
-              </td>
-              <!-- ⚠️ 三欄一律 `|| '—'`：NULL 顯示「—」不是空白。
-                   空白讓人分不出「沒有這個欄位」與「這一頁沒載好」。 -->
-              <td style="font-size:12px" x-text="t.location || '—'"></td>
-              <td style="font-size:12px" x-text="t.procurementType || '—'"></td>
-              <td style="font-size:12px" x-text="t.tenderMethod || '—'"></td>
-              <!-- ⚠️ 預算用 === null 判斷：0 元是合法金額，
-                   用真假值會把「預算 0 元」顯示成「未公告」。 -->
-              <td style="text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif"
-                  x-text="t.budget === null ? '未公告' : t.budget.toLocaleString()"></td>
-              <td style="font-size:12px" x-text="t.publishedAt || '—'"></td>
-              <td style="font-size:12px" x-text="t.deadline || '未公告'"></td>
-              <!-- ⚠️ 一筆標案可以命中多個條件 ⇒ 全部列出來。
-                   沒有命中時顯示「—」**不留白**：留白會讓人分不出
-                   「沒有命中」與「這一欄壞了」。 -->
-              <td style="font-size:12px">
-                <!-- ⚠️ 這裡**刻意不寫 `!t.matchedWatches ||`**：
-                     後端保證「沒命中是空陣列，不是缺鍵」（P2），
-                     而多一道防呆會把「後端哪天真的漏掉那個鍵」
-                     **變成看不見**——畫面照常顯示「—」，沒有人會發現。
-                     🔑 防呆擋掉的不只是壞資料，還有**壞資料的症狀**。 -->
-                <template x-if="t.matchedWatches.length === 0">
-                  <span style="color:var(--text-dim)">—</span>
-                </template>
-                <template x-for="w in t.matchedWatches" :key="w.id">
-                  <span class="chip" style="margin:0 3px 3px 0" x-text="w.name"></span>
-                </template>
-              </td>
+              <template x-for="c in $store.layout.cols('tenders')" :key="c.field">
+                <td :data-col="c.field" :style="tenderCellStyle(c.field)">
+                  <!-- 🔴 標註是**切換鈕**；title 帶「誰標的、什麼時候」，小字也給（手機點不出 tooltip） -->
+                  <template x-if="c.field === 'marked'">
+                    <span>
+                      <button class="tr-mark-btn" :class="t.marked ? 'on' : ''"
+                              x-show="$store.layout.shown('action', 'tenderMark')"
+                              :aria-label="$store.layout.label('action', 'tenderMark', '標註')"
+                              :disabled="markBusy === t.caseNo"
+                              @click="toggleMark(t)"
+                              :aria-pressed="t.marked ? 'true' : 'false'"
+                              :title="t.marked
+                                ? ((t.markedByName || '未知') + ' 於 '
+                                   + (t.markedAt || '不明時間') + ' 標註．再按一次取消')
+                                : '標註這一筆，它會排到清單最上方'"
+                              x-text="t.marked ? '\u2691' : '\u2690'"></button>
+                      <template x-if="t.marked">
+                        <span class="tr-mark-who"
+                              x-text="(t.markedByName || '未知')
+                                      + (t.markedAt ? ('．' + t.markedAt.slice(5, 10)) : '')"></span>
+                      </template>
+                    </span>
+                  </template>
+                  <!-- 🔴 機關與標案名稱都要可點；沒有網址時 DOM 裡不該有 <a>（x-if，不是 x-show）；rel=noopener 不是可選的 -->
+                  <template x-if="c.field === 'org'">
+                    <span>
+                      <template x-if="t.url">
+                        <a :href="t.url" target="_blank" rel="noopener noreferrer"
+                           x-text="t.org"></a>
+                      </template>
+                      <template x-if="!t.url"><span x-text="t.org"></span></template>
+                    </span>
+                  </template>
+                  <template x-if="c.field === 'caseNo'">
+                    <span>
+                      <span x-text="t.caseNo"></span>
+                      <a class="mp1-onmap" style="font-size:11px;margin-left:4px"
+                         :href="MotrixRecordLink.mapUrl('tenders', t.caseNo)">在地圖上看</a>
+                    </span>
+                  </template>
+                  <template x-if="c.field === 'name'">
+                    <span>
+                      <template x-if="t.url">
+                        <a :href="t.url" target="_blank" rel="noopener noreferrer"
+                           x-text="t.name"></a>
+                      </template>
+                      <template x-if="!t.url"><span x-text="t.name"></span></template>
+                    </span>
+                  </template>
+                  <!-- ⚠️ NULL 顯示「—」不是空白：空白分不出「沒有這個欄位」與「沒載好」 -->
+                  <template x-if="c.field === 'location'"><span x-text="t.location || '—'"></span></template>
+                  <template x-if="c.field === 'procurementType'"><span x-text="t.procurementType || '—'"></span></template>
+                  <template x-if="c.field === 'tenderMethod'"><span x-text="t.tenderMethod || '—'"></span></template>
+                  <!-- ⚠️ 預算用 === null 判斷：0 元是合法金額 -->
+                  <template x-if="c.field === 'budget'"><span x-text="t.budget === null ? '未公告' : t.budget.toLocaleString()"></span></template>
+                  <template x-if="c.field === 'publishedAt'"><span x-text="t.publishedAt || '—'"></span></template>
+                  <template x-if="c.field === 'deadline'"><span x-text="t.deadline || '未公告'"></span></template>
+                  <!-- ⚠️ 刻意不寫 `!t.matchedWatches ||`：後端保證沒命中是空陣列（P2），多一道防呆會把「後端漏鍵」變成看不見 -->
+                  <template x-if="c.field === 'matchedWatches'">
+                    <span>
+                      <template x-if="t.matchedWatches.length === 0">
+                        <span style="color:var(--text-dim)">—</span>
+                      </template>
+                      <template x-for="w in t.matchedWatches" :key="w.id">
+                        <span class="chip" style="margin:0 3px 3px 0" x-text="w.name"></span>
+                      </template>
+                    </span>
+                  </template>
+                </td>
+              </template>
             </tr>
           </template>
         </tbody>
@@ -507,6 +522,19 @@
 <script src="../static/record-link.js"></script>
 <script src="../static/notif.js"></script>
 <script src="../static/sidebar.js"></script>
+<script src="../static/custom-layout.js"></script>
+<script src="../static/layout-runtime.js"></script>
+<script src="../static/layout-editor.js"></script>
+<script>
+// P9（CUSTOMIZATION-SPEC §3.10）：fallback＝版面讀不到時的欄位順序（守門：必須等於 module.json 登記的順序）
+MotrixLayout.init({
+  module: 'tender_radar', page: 'tender-radar.html',
+  fallback: { lists: {
+    tenders: ['marked', 'org', 'caseNo', 'name', 'location', 'procurementType', 'tenderMethod', 'budget', 'publishedAt', 'deadline', 'matchedWatches'],
+    watches: ['name', 'enabled', 'keywords', 'excludes', 'org', 'budgetMin', 'budgetMax'],
+  } },
+})
+</script>
 <script>
 function tenderRadarPage() {
   return {
@@ -523,6 +551,17 @@ function tenderRadarPage() {
     scanHoursText: '', notifyHoursText: '', mapInfo: null,
     form: { id: null, name: '', keywords: '', excludes: '', org: '',
             budgetMin: '', budgetMax: '', enabled: true },
+
+    //: 標案清單各欄在這一頁的標題（版面沒有改名時用這個；改名 ⇒ $store.layout.colLabel 回新名）
+    tenderColLabels: { marked: '標註', org: '機關', caseNo: '案號', name: '標案名稱', location: '地點',
+                       procurementType: '採購性質', tenderMethod: '招標方式', budget: '預算',
+                       publishedAt: '公告日', deadline: '截止投標', matchedWatches: '標籤' },
+    tenderCellStyle(field) {
+      if (field === 'marked') return 'text-align:center'
+      if (field === 'budget') return 'text-align:right;font-size:12px;font-family:LINE Seed TW_OTF, sans-serif'
+      if (field === 'caseNo') return 'font-size:12px;font-family:LINE Seed TW_OTF, sans-serif'
+      return 'font-size:12px'
+    },
 
     _h() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this.token } },
 

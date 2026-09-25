@@ -98,8 +98,10 @@ def test_module_migrations_core_table_is_created_by_init_db(client):
 
 # ── 定義文件庫 ───────────────────────────────────────────────────────────────
 
-def test_definitions_draft_publish_versions_and_restore_never_rewrite_history(defs_conn):
+def test_definitions_draft_publish_versions_and_restore_never_rewrite_history(defs_conn, monkeypatch):
     from core import definitions as D
+    # 本題驗儲存語意（與 kind 無關）；P9 起 layout 有真的驗證器（key 要 module:<模組>）⇒ 這裡拿掉
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)
     D.save_draft(defs_conn, "layout", "quotations.list", "company", {"columns": ["a"]}, "boss")
     assert D.get(defs_conn, "layout", "quotations.list", "company") is None      # 草稿不是發布版
     v1 = D.publish(defs_conn, "layout", "quotations.list", "company", "第一版", "boss")
@@ -147,6 +149,7 @@ def test_definitions_validator_blocks_publish_and_returns_positions(defs_conn, m
 def test_definitions_restore_is_validated_against_the_current_environment(defs_conn, monkeypatch):
     """舊版可能引用已經不存在的東西 ⇒ 還原前也要過驗證器。"""
     from core import definitions as D
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)   # 驗儲存語意；P9 的 layout 驗證器要 module:<模組>
     D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["old"]})
     D.publish(defs_conn, "layout", "k", "company")
     monkeypatch.setitem(D._VALIDATORS, "layout", lambda body, key: [{"path": "columns[0]", "message": "欄位已刪除"}])
@@ -157,6 +160,7 @@ def test_definitions_restore_is_validated_against_the_current_environment(defs_c
 
 def test_definitions_resolve_order_role_then_company_then_default(defs_conn, monkeypatch):
     from core import definitions as D
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)   # 驗儲存語意；P9 的 layout 驗證器要 module:<模組>
     monkeypatch.setitem(D._DEFAULTS, "layout", lambda key: {"from": "default"})
     assert D.resolve(defs_conn, "layout", "k", "sales") == ({"from": "default"}, "default")
     D.save_draft(defs_conn, "layout", "k", "company", {"from": "company"})
