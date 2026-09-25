@@ -56,7 +56,7 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| CA-M1 | | | |
-| CA-S1 | | | |
-| CA-S2 | | | |
-| CA-O1 | | | |
+| CA-M1 | 修正：判準改成「M01 有沒有登記 `case.present`」（新串接點 IP-15；M01 在 `routers/quotations.py` 匯入時登記，搬進 modules/ 後改寫進 ModuleSpec ⇒ 停用、未授權、不在包內就沒有登記），不看表。M01 不在 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣。反向控制改用真實 schema（`client` 夾具、案件列在、擁有者＋超級管理員）：`test_without_m01_access_is_404_even_though_the_table_and_row_exist`。DEPENDENCY-MAP §3.2 原句劃掉並加〔更正〕。突變 4 項皆紅（guard／allowed 不看、判準改回、M01 不登記） | wip/c-case-access a82da8ec | |
+| CA-S1 | 修正：守門改用 dep_scan 的 `string_chunks`＋`sql_tables`（與 dep_graph 同一份判準），寫入一併納入基線（db、pdf_gen 為 rw）。dep_scan 也不認得逗號 join ⇒ 守門另補一條；加引號、隱式串接、寫入 dep_scan 本來就認得。f-string 插入的表名靜態無從得知，寫明為已知限制。解析器題 9 例（含 2 個反向控制）；突變 2 項皆紅（不看逗號 join、寫入不算） | wip/c-case-access a82da8ec | |
+| CA-S2 | 修正：只有 `no such table` 當成查無此案（404）；其他 `OperationalError`（例 `database is locked`）照樣丟出。題：`test_missing_table_is_404_and_a_locked_database_is_not`；突變 1 項紅 | wip/c-case-access a82da8ec | |
+| CA-O1 | 採納：守門範圍加上 L0 `backend/core/*.py`（目前沒有讀取，列入掃描後照樣綠） | wip/c-case-access a82da8ec | |
