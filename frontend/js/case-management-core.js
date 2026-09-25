@@ -633,7 +633,11 @@ window.CM_PARTS.push(() => ({
             if (JSON.stringify(this.cr.caseRecord[k]) === sent[k]) this.cr.caseRecord[k] = adopted[k]
           }
           const conflicts = res.stockConflicts || []
-          if (conflicts.length) {
+          if (res.stockNotice) {
+            // IP-19：採購・庫存・出貨模組不在 ⇒ 存檔照常、序號沒有同步庫存，要讓使用者知道
+            this.saveStatus = 'dirty'
+            this.saveMsg = '已儲存；' + res.stockNotice
+          } else if (conflicts.length) {
             // 序號已登載到案件，但庫存系統裡這些序號其實卡在別的狀態（已出貨/已安裝於
             // 別案件等）——不擋存檔，但要讓使用者看到，不然庫存跟案件記錄會無聲分岔
             this.saveStatus = 'dirty'

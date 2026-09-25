@@ -776,3 +776,11 @@ def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
 
 
 _registry.provide("calendar.writeback", "shipping_note", _calendar_writeback)
+
+
+def list_shipping_notes_for_case(quote_no: str, authorization: str):
+    """IP-18：案件整包（M01 case-bundle）的出貨單段。同一份授權、權限判斷與單獨打 `/api/shipping-notes?quote_no=` 逐字相同。"""
+    return list_shipping_notes(quote_no=quote_no, authorization=authorization)
+
+
+_registry.provide("shipping.list_for_case", "supply", list_shipping_notes_for_case)

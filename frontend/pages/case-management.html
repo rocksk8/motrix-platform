@@ -2829,7 +2829,7 @@
                   </select>
                   <button x-show="snSortPref.sortMode && snSortPref.sortMode !== 'custom'" @click="toggleSubListSortDir('sn')"
                           style="font-size:11px;padding:3px 8px;border:1px solid var(--border-light);border-radius:5px;background:var(--surface);cursor:pointer" x-text="snSortPref.sortDir==='asc'?'↑':'↓'"></button>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
+                  <button x-show="['superadmin','admin'].includes(session.role) && !shippingNotesNotice"
                           class="btn-add" @click="openNewShippingNote()" style="padding:5px 12px;font-size:12px">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 4v16m8-8H4"/></svg>
                     新增出貨單
@@ -2839,8 +2839,12 @@
                 <!-- Loading -->
                 <div x-show="shippingNotesLoading" style="text-align:center;padding:30px;color:var(--text-dim);font-size:12px">載入中…</div>
 
+                <!-- IP-18：採購・庫存・出貨模組不在 ⇒ 說清楚，不顯示「尚未建立」 -->
+                <div x-show="!shippingNotesLoading && shippingNotesNotice" data-testid="shipping-unavailable"
+                     style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px" x-text="shippingNotesNotice"></div>
+
                 <!-- Empty -->
-                <div x-show="!shippingNotesLoading && shippingNotes.length===0"
+                <div x-show="!shippingNotesLoading && !shippingNotesNotice && shippingNotes.length===0"
                      style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px">
                   尚未建立任何出貨單
                 </div>
