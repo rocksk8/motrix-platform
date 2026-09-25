@@ -38,6 +38,7 @@
 grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）。這是同一算法的第二份實作，
 也是 M08 直接讀 M04 的表；應改用 IP-1，另開題。
 （2026-09-25 主持裁示：等 M08 搬遷時再處理。）
+〔✅ 已處理（B，2026-09-26，M08 搬遷 ⑤）：改用 `registry.single_provider("dispatch.row")` 的 `grandTotal`，算法只剩一份；提供者不在 ⇒ 回 None，`staleSettlementCount` 為 None 並附 `staleSettlementNote`「外包工班模組未安裝：無法檢查已完結的精算快照是否過期（不是 0 件）」，報表頁顯示 `data-testid="stale-settlement-unavailable"`。題：`tests/test_reports_dispatch_connector_2026_09_26.py`（等價、明說、正對照）；突變（不在時回 {}）⇒ 紅〕
 
 ---
 

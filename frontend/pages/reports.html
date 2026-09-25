@@ -454,6 +454,13 @@
             </span>
           </div>
 
+          <!-- M08 搬遷 ⑤：外包工班模組不在 ⇒ 精算快照無法檢查（明說，不顯示成 0 件） -->
+          <div x-show="summary.staleSettlementNote" data-testid="stale-settlement-unavailable"
+               style="margin-bottom:10px;padding:9px 14px;background:#F3F4F6;border:1px solid #9CA3AF;border-radius:6px;font-size:12px;color:#374151;display:flex;align-items:center;gap:8px">
+            <span style="font-size:14px">ℹ️</span>
+            <span x-text="summary.staleSettlementNote"></span>
+          </div>
+
           <!-- 已成案缺收款期別警示 -->
           <div x-show="casesWithoutPaymentItems.length > 0"
                style="margin-bottom:10px;padding:9px 14px;background:#FEF2F2;border:1px solid #DC2626;border-radius:6px;font-size:12px;color:#991B1B;display:flex;align-items:center;gap:8px">
