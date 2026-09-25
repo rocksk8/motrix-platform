@@ -610,7 +610,9 @@ if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     _ensure_archive_dirs()
     _schedule_daily()
     _schedule_weekly()
-    daily_tasks.schedule_overdue_check()
+    # 2026-09-26：每日 08:00 檢查改由 L1 執行器跑（模組以 daily.check 登記；系統健康檢查不依賴任何 L2 模組）
+    from helpers import daily_checks as _daily_checks
+    _daily_checks.schedule_daily_checks()
     reports.schedule_monthly_report()
     dev_crm.schedule_dev_case_stale_check()
     # L2 模組的排程在下面「模組路由」那一段、mount_modules() 之後才啟動（STATES-PLATFORM P-LD-07：

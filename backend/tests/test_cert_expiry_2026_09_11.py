@@ -63,7 +63,7 @@ LE_DAYS     = 90    # Let's Encrypt 的固定效期
 def sent(monkeypatch):
     """攔截寄信，只記呼叫參數——這裡測的是排程判斷邏輯，不是郵件內容。"""
     calls = []
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     monkeypatch.setattr(dt, "notify_cert_expiry", lambda *a, **kw: calls.append(a))
     return calls
 
@@ -71,7 +71,7 @@ def sent(monkeypatch):
 @pytest.fixture()
 def cert_at(tmp_path, monkeypatch):
     """回傳一個「把憑證換成指定條件」的函式，並把 _CERT_PATH 指過去。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     path = tmp_path / "cert.pem"
 
     def _set(days_left, total_days=MKCERT_DAYS, cn="Test Issuer"):
@@ -96,7 +96,7 @@ def fake_cert(monkeypatch):
     **換了一張新憑證**（fingerprint 改變）。所以 fingerprint 在這裡是參數。
     """
     state = {}
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
 
     monkeypatch.setattr(dt, "_read_serving_cert",
                         lambda path=None: (dict(state) if state else None))
@@ -115,7 +115,7 @@ def fake_cert(monkeypatch):
 
 
 def _run():
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     dt._check_cert_expiry()
 
 
@@ -149,7 +149,7 @@ def test_no_cert_file_is_silent(client, sent, tmp_path, monkeypatch):
     start.bat／autostart.bat 是 `if exist certs\\cert.pem` 才加 --ssl-* 參數，
     所以「沒有憑證檔」是一個合法且會實際發生的狀態（也是憑證出事時的緊急退路）。
     """
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     monkeypatch.setattr(dt, "_CERT_PATH", str(tmp_path / "does_not_exist.pem"))
     _run()
     assert sent == []
@@ -158,7 +158,7 @@ def test_no_cert_file_is_silent(client, sent, tmp_path, monkeypatch):
 
 def test_unreadable_cert_is_silent(client, sent, tmp_path, monkeypatch):
     """檔案在但內容不是憑證 → 記 log、不寄信、不拋例外（不能讓整個每日排程掛掉）。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     bad = tmp_path / "cert.pem"
     bad.write_text("this is not a certificate")
     monkeypatch.setattr(dt, "_CERT_PATH", str(bad))
@@ -319,7 +319,7 @@ def test_far_away_run_prunes_old_cert_keys(client, sent, fake_cert):
 # ── 6. 解析結果本身 ──────────────────────────────────────────────────────────
 
 def test_reads_cert_fields(client, cert_at, tmp_path):
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     cert_at(days_left=30, total_days=LE_DAYS, cn="R11")
     info = dt._read_serving_cert()
     assert info["issuer_cn"] == "R11"

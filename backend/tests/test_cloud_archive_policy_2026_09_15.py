@@ -168,7 +168,7 @@ def test_no_stale_cloud_alert_on_a_machine_that_does_not_upload(client, make_use
     這是設定造成的「沒有雲端備份」，不是故障；每天寄一封只會讓人學會忽略這封信。
     """
     import archive
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     sent = []
     monkeypatch.setattr(dt, "notify_backup_stale", lambda *a, **k: sent.append((a, k)))
     monkeypatch.setattr(dt.threading, "Thread",
@@ -191,7 +191,7 @@ def test_no_stale_cloud_alert_on_a_machine_that_does_not_upload(client, make_use
 
 def test_local_snapshot_staleness_still_alerts_when_cloud_is_off(client, make_user, monkeypatch):
     """關掉的只有雲端那條線。本機快照停了照樣要叫——那才是「備份程式沒在跑」。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     sent = []
     monkeypatch.setattr(dt, "notify_backup_stale", lambda *a, **k: sent.append((a, k)))
     monkeypatch.setattr(dt.threading, "Thread",

@@ -224,8 +224,8 @@ class _Stub(types.ModuleType):
 sys.modules["archive"] = _Stub("archive")
 
 # ③ 其他會在 import 時起排程的，一併換掉
-import routers.daily_tasks as _dt
-_dt.schedule_overdue_check = lambda *a, **kw: None
+import helpers.daily_checks as _dck   # 2026-09-26：每日排程改由 L1 執行器起
+_dck.schedule_daily_checks = lambda *a, **kw: None
 
 # ④ 把要觀測的那一支換成記錄器
 import modules.tender_radar.source as _ts

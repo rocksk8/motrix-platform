@@ -44,14 +44,14 @@ def _guard_keys():
 def sent(monkeypatch):
     """攔截寄信，只記錄呼叫參數——這裡測的是排程判斷邏輯，不是郵件內容。"""
     calls = []
-    import routers.daily_tasks as dt
+    import helpers.case_deadlines as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     monkeypatch.setattr(dt, "notify_case_project_overdue",
                         lambda *a, **kw: calls.append(a))
     return calls
 
 
 def _run():
-    import routers.daily_tasks as dt
+    import helpers.case_deadlines as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     dt._check_case_project_timeline_deadline()
 
 

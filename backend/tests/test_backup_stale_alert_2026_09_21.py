@@ -182,7 +182,7 @@ def test_the_daily_guard_is_not_burned_when_the_alert_fails(client, monkeypatch)
     **「不要重複寄」與「失敗了要能再試」是兩件事，而同一個旗標同時擔了兩個責任。**
     ⇒ 旗標要在**送出成功之後**才寫。
     """
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     from helpers.settings import _get_setting, _set_setting
 
     _set_setting(GUARD_KEY, "")
@@ -223,7 +223,7 @@ def test_a_failing_alert_is_not_completely_silent(client, monkeypatch, caplog):
     **代價是「備份告警自己壞了」變成不可觀測的** ——
     而那正是最需要被觀測的那一種失敗。
     """
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     from helpers.settings import _set_setting
 
     _set_setting(GUARD_KEY, "")

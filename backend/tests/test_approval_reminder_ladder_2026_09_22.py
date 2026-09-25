@@ -49,7 +49,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import routers.daily_tasks as dt  # noqa: E402
+import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）  # noqa: E402
 from helpers import email_notify  # noqa: E402
 
 #: 使用者要的階梯：1、3、5，之後**以五為基準**。
