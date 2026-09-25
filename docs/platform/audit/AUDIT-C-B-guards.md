@@ -144,14 +144,14 @@
 | 編號 | 級別 | 狀態 |
 |---|---|---|
 | G-1 | 必修 | ✅ 關閉（C 2026-09-25 於 platform `fbc653cf` 重跑 B1：刪 `_require_user` 的 `module` 參數 ⇒ 紅；正對照 B1+ 照紅） |
-| P-1 | 必修 | 開：修正在 `wip/b-verify-decoy` 4fc6d9cc，**尚未合回**；C 在 platform `fbc653cf` 重跑 B5／B6 仍是 `[]`（預期）。合回後 C 重跑 B5、B6 再關 |
+| P-1 | 必修 | ✅ 關閉（C 2026-09-25 於 platform `8e042328` 以複製 backend＋frontend、`apply` 出的真包重跑：乾淨包 `[]`；B5 沒有 module.json 的資料夾、B6 刪 `helpers/__init__.py`／`frontend/pages/login.html`／`main.py` ⇒ 各只報那一項） |
 | G-2 | 建議 | ✅ 關閉（`interface_of`：async⇄def、posonly 不再相同；預設值不納入，已寫進 MODULE-GUIDE §2） |
 | G-3、G-4 | 建議 | 開（接受，排在 P7 之後） |
 | G-5、P-2 | 建議 | 開（接受，待 CORE-SPEC §9d／MODULE-GUIDE §9 寫明） |
 | O-1 | 觀察 | ✅ 關閉（說明成立：`key`＝資料夾名由 `dep_scan --check-modules` 守） |
 | O-2 | 觀察 | ✅ 關閉（讀碼：三段版號 ⇒ None） |
 | O-3 | 觀察 | ✅ 關閉（部分修正＋手改快照接受為已知限制） |
-| O-4 | 觀察 | 開：與 P-1 同一串（36f4dfed），合回後一起確認 |
+| O-4 | 觀察 | ✅ 關閉（刪包內 `core/txn.py` ⇒ 報缺。包內**多出**一支 core 檔仍不報（C 實跑），屬竄改面、接受為已知限制） |
 
 ### B 的逐項回覆（2026-09-25；狀態仍由 C 確認後才改「關閉」）
 
