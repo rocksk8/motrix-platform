@@ -1162,7 +1162,6 @@ if (typeof module !== 'undefined' && module.exports) {
     'tender-radar.html': { key: 'tender_radar', name: '標案雷達' },
     'contractors.html': { key: 'subcontract', name: '外包工班' },
     'vendor-contractors.html': { key: 'subcontract', name: '外包工班' },
-    'contractor-voucher-approval-settings.html': { key: 'subcontract', name: '外包工班' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

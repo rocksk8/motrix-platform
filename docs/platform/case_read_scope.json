@@ -8,7 +8,7 @@
    "scope": "module"
   },
   {
-   "file": "routers/vendor_contractors.py",
+   "file": "modules/subcontract/api/vendor_contractors.py",
    "path": "/api/contractor-dispatches",
    "handler": "list_dispatches",
    "scope": "module"
@@ -62,7 +62,7 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/contractor_vouchers.py",
+   "file": "modules/subcontract/api/contractor_vouchers.py",
    "path": "/api/contractor-vouchers",
    "handler": "list_contractor_vouchers",
    "scope": "row_access"
