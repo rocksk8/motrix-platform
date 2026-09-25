@@ -164,7 +164,10 @@ def test_em1_the_map_message_no_longer_explains_our_logs_but_the_comment_still_d
 def test_em1_the_other_long_messages_did_not_change_a_single_character():
     missing = []
     cache = {}
+    from core import source_tree
     for rel, msg in _UNTOUCHED:
+        if not source_tree.module_installed(rel):
+            continue                      # 模組被拿掉（選配／反向控制）：它的訊息本來就不在
         if rel not in cache:
             cache[rel] = set(_all_details(rel))
         if msg not in cache[rel]:
