@@ -666,6 +666,18 @@ def test_number_field_refuses_nan_and_infinity(loan, bad):
     assert client.get("/api/custom/%s/records" % KEY, headers=h["req"]).json() == []
 
 
+def test_nan_that_slips_past_coerce_is_refused_at_write(loan, monkeypatch):
+    """C-M5 第二道防線：就算欄位轉換漏放了 NaN（例：之後新增的型別），寫入時也擋下（400），資料庫沒有這一筆。"""
+    client, h = loan
+    from helpers import custom_modules as cm
+    real = cm.clean_values
+    monkeypatch.setattr(cm, "clean_values", lambda conn, body, values: (lambda r: ({**r[0], "qty": float("nan")}, r[1], r[2]))(real(conn, body, values)))
+    r = client.post("/api/custom/%s/records" % KEY, headers=h["req"], json={"values": {"item": "x", "qty": 1}})
+    assert r.status_code == 400 and any(p["key"] == "qty" for p in r.json()["problems"])
+    monkeypatch.setattr(cm, "clean_values", real)
+    assert client.get("/api/custom/%s/records" % KEY, headers=h["req"]).json() == []
+
+
 def test_existing_nan_data_can_still_be_read(loan):
     """C-M5：修正前已經寫進去的 NaN 資料，讀單與列表都不可以 500（非有限值讀出為空值）。"""
     client, h = loan
