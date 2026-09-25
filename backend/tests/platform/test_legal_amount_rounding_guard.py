@@ -204,9 +204,8 @@ def test_money_page_script_tag_control():
 
 
 def _module_absent(f):
-    """`modules/<key>/…` 而那個模組資料夾不在（不在這個安裝包）⇒ 這一檔本來就不在，不算清單過期（PLAYBOOK §B-11）。"""
-    parts = f.split("/")
-    return len(parts) > 2 and parts[0] == "modules" and not (source_tree.BACKEND / "modules" / parts[1]).is_dir()
+    """`modules/<key>/…` 而那個模組不在（不在這個安裝包）⇒ 這一檔本來就不在，不算清單過期（PLAYBOOK §B-11；判準同 core.source_tree.module_installed）。"""
+    return not source_tree.module_installed(f)
 
 
 def test_money_scope_files_exist():
