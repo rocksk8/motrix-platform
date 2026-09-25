@@ -5,22 +5,18 @@
   "M01 router:quotations -> M04 router:vendor_contractors",
   "M01 router:quotations -> M06 helper:voucher",
   "M01 router:quotations -> M06 router:vouchers",
-  "M03 router:shipping_notes -> M01 helper:quotations",
-  "M04 router:contractor_vouchers -> M01 helper:quotations",
   "M04 router:vendor_contractors -> M01 helper:quotations",
   "M04 router:vendor_contractors -> M01 helper:recognition",
   "M05 router:cashier -> M01 helper:quotations",
   "M05 router:cashier -> M04 router:contractor_vouchers",
   "M05 router:cashier -> M08 router:reports",
   "M05 router:invoice_vouchers -> M01 helper:quotations",
-  "M05 router:payment_requests -> M01 helper:quotations",
   "M06 router:accounting_export -> M04 router:contractor_vouchers",
   "M06 router:accounting_export -> M08 router:reports",
   "M07 helper:bonus_pdf -> M06 helper:voucher",
   "M07 helper:bonus_pdf -> M06 helper:voucher_pdf",
   "M08 router:dashboard -> M01 helper:quotations",
   "M08 router:reports -> M01 helper:quotations",
-  "M08 router:reports -> M01 helper:recognition",
-  "M10 router:network_plans -> M01 helper:quotations"
+  "M08 router:reports -> M01 helper:recognition"
  ]
 }
