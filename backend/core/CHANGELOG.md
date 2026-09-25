@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.99 — 2026-09-26（A，信件與通知收件設定；合回時 core_bump 取號）
+- L1（新增）：`helpers.mail_types` 信件類型登記表——`register`／`get`／`all_types`／`keys`／`subject`／`CATEGORIES`／`GROUPS`／`MODES`／`ROLES`／`OVERRIDES_KEY`／`SUBJECT_PREFIX`／`MailType`；模組可在載入時登記自己的信件類型
+- L1（新增）：`helpers.email_notify._group_emails(key)`（群組收件人，依登記表與覆寫）；`_admin_emails`／`_superadmin_emails` 改為它的相容名稱；`_lookup_emails`／`_department_manager_emails`／每月報表收件人套用覆寫；未登記 key fail closed（只寄超級管理員）
+- L1（修改，相容）：`helpers.email_notify._build_html(mail_key, …, impact=None, action=None)`——第一個參數改為信件類型 key，內文固定「事由、影響、建議處理、發送時間與來源」；主旨一律 `mail_types.subject(key, 事由)`
+- L1（新增）：端點 `/api/mail-types`（GET）、`/api/mail-types/{key}/recipients`（PUT）、`/api/mail-types/receivable`（GET）；頁面 `mail-settings.html`
+- 修正：`helpers.geo.notify_quota_warning` 原本呼叫 `_send_raising(subject, body)` 少了收件人參數，執行即 TypeError（額度警戒信從未寄出）
+
 ## 1.12 — 2026-09-26（A，獎金分潤）〔core_bump：暫用 1.10 → 1.12〕
 - L1（新增）：`helpers.email_notify.notify_bonus_submitted`（獎金分潤輪到的簽核人＋代理人）、`notify_bonus_payout_ready`（核准待發放 → 出納）；信中不含金額。通知設定新增 `bonus_submitted`、`bonus_payout_ready` 兩個可個別關閉的事件（CORE-SPEC「使用者裁示」獎金分潤：通知）
 - 串接點（新增，L2 之間）：IP-8 `bonus.payouts`（M07 → M05 出納）、IP-9 `expense.entries`（M07 → M08 報表）；U4 經 IP-7 `helpers.legal_params` 依撥付日選版，讀不到或欄位不齊 ⇒ 拒絕撥付
