@@ -124,6 +124,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 06:43 巡視：各線都在工作（A M03、B M08、C M02-M1／M04、D ⑮～⑰），第四班列車進行中。D1 剩下 M05、M06、M07（C）與 M01（A）尚未開工；這幾個模組彼此牽連，同時開太多條線會衝突，所以不另外派子代理。不派工。
 - 2026-09-26 06:39：第三班列車合回（2934bbc9／2794b93e，4 包，0 紅）。第四班列車進行中。D 關閉 case_access 的 CA-M1 ⇒ c-case-access-2 搭第五班；D 下一個審 c-m04（⑮）、個資告知（⑯）、M08（⑰）。CA-O3 寫進 ROADMAP，M01 搬遷時必做。
 - 2026-09-26 06:38 D：⑭ case_access **CA-M1 關閉**（c-case-access-2 a82da8ec）：判準改看 `case.present`，loader 對停用／未授權不 import ⇒ 成立；D 突變 6/6 紅、基準 106 passed；CA-S1／S2／O1 關閉；新增觀察 CA-O2（表名變數、大寫 Quotations 抓不到）、CA-O3（M01 搬遷時 case.present 要進 ModuleSpec.providers）。仍開：M02-M1。
 - 2026-09-26 06:36：**第三班列車合回**（train/0926-0517，4 包：b-scope（車頭，fixture 層）→ c-ko2 → c-audit-d → cloud-pii-notice，全部上車；platform 2934bbc9）。
