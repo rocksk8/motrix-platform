@@ -122,6 +122,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 06:13 巡視：第三班列車的全量應該快跑完了（死線約 06:25）。C 的 CA-M1 修正上月台（c-case-access-2）；A 的 a-m10 修正已推；B 在做 M08；D 在審；P8 缺口與 P9 子代理在等背景測試。不派工。
 - 2026-09-26 06:13 D：⑫ M02（`AUDIT-D-C-M02-move.md`）：必修 M02-M1——真刪 modules/crm、新範圍 940 passed／35 failed，33 題需要 M02 留在模組外（test_api_integration 11、dev_case_soft_delete 5、e2e unread 6…）。⑬（`AUDIT-D-A-M10-M12.md`，a-m10 d2a95371）：必修 0；**M12 M-1 關閉**（真刪 953 passed、2 failed 皆允許）；M10 真刪 885 passed、2 failed 皆允許、無收集錯誤；X-2 突變 7/7 紅。仍開：M02-M1、CA-M1。
 - 2026-09-26 06:02：**系統性問題**：M12（D）、M04（C）的反向控制都抓到「守門的結果會隨 L2 模組在不在而改變」，共 5 道：IP 登記、正對照綁 dispatch.row、G1 的 L1 介面依使用者計算、UNIT-INDEX、case_read_scope。處置：與其每搬一個模組才抓一題，改由 B 做「core-only 反向控制」工具（modules/ 全拿掉跑 tests/platform），每一班列車都跑；G1 的介面定義不應該隨安裝的模組而變（交給 B）；其餘分給作者 A。已補 3 支 js 的歸屬（6945583e）。
 - 2026-09-26 05:43 巡視：D 審 c-case-access，必修 CA-M1：「M01 不在就 404」用的是「表不存在」當判準，但這張表在每個安裝都存在，反向控制用空庫，驗到的是另一件事 ⇒ 交給 C，c-case-access 與疊在上面的 c-m04 暫緩上車。第三班列車進行中；P8 缺口子代理進行中；P9 在等背景測試。
