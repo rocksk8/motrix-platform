@@ -17,5 +17,6 @@
     "files": []
   },
   "provides": {"api_prefixes": ["/api/tender-radar"]},
-  "pages": [{"path": "tender-radar.html"}]
+  "pages": [{"path": "tender-radar.html",
+             "menu": {"group": "business", "label": "標案雷達", "order": 20, "perm": ["tender_radar"], "badge": "sb-mod-tender-radar"}}]
 }

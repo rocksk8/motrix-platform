@@ -63,10 +63,23 @@ GET /pages/{name}.html
 - L1 頁面（使用者、組織、稽核…）的選單項寫在 `core/menu_l1.json`，同一個格式。
 - 圖示：`sidebar.js` 的 `ic` 字典搬成 `frontend/static/menu-icons.js`，`icon` 只能是字典裡的鍵（守門檢查）。
 
+〔更正（B，2026-09-26，C3 實作後定案；**此後不再改**，P1＋P3 依此格式）：上面的範例與三條說明有四處與實作不同，以下為準——
+① **沒有 `icon`**：`renderMainNav()`（2026-09-14 側欄改上方下拉）早已不畫圖示，而且舊碼的 `radar`／`vouch`／`acct`／`bonus`／`co` 根本不在 `ic` 字典裡；留著是死資料。
+② **`perm` 是清單或兩個固定字串**：`["k1","k2"]`（任一模組權限；最高管理者一律可）／`"superadmin"`／`"any"`——舊碼有 `cRpt || cFi`、`true`、`sa` 三種，單一字串表達不了。
+③ **群組定義在 `core/menu_l1.json` 的 `groups`**，沒有另一個 `menu_groups.json`。
+④ 其餘欄位：`order`（整數，同群組內排序；標案雷達實際是 20，排在業務開發 10 與地圖 30 之間）、選填 `active`（預設＝該頁本身）、`badge`（徽章元素 id）、`extra_badge`（`{"id","color"}`）。**不認得的欄位 ⇒ `core.menu.validate` 報錯**。
+定案範例：`"menu": {"group": "business", "label": "標案雷達", "order": 20, "perm": ["tender_radar"], "badge": "sb-mod-tender-radar"}`〕
+
 **產生**：`GET /api/platform/menu` 回傳目前使用者看得到的群組與項目：
 `L1 項目 ∪ 已啟用模組的項目` → 依 `perm` 過濾（同 `computeFlags` 的 `has(k)`）→ 依 group 順序、`order` 排序。
 
 **前端**：`buildSidebar()` 改成呼叫這支 API 再交給現有的 `renderMainNav()`（渲染不動）。`_hideUnavailableModulePages()` 與 `_FILE_MODULE` 在切換完成後刪除（資料改由 menu 回應帶 `module`）。
+
+〔更正（B，2026-09-26，主持裁示）：**不改成打 API 再畫**。舊選單是同步渲染，獎金入口隱藏、未載入模組入口隱藏、`_deniedPages` 無權限提示與大量 e2e 都假設選單已經在畫面上；改成非同步＝〈先渲染再非同步載入〉競態。改為：
+- 伺服器提供 `/static/sidebar.js` 時在最前面接上 `window.MOTRIX_MENU = {…}`（L1＋已載入模組的宣告，含 `perm`；與使用者無關、每個請求現查模組狀態）；前端用原本的 `has()` 同步過濾後交給 `sec()`／`ni()`，時序不變，HTML 不用改。
+- `GET /api/platform/menu`（伺服器端過濾）保留給其他使用端。
+- C4 同時把**已發布的自訂模組**（P8，`custom-modules-nav.js` 以 MutationObserver 在 `#app-mainnav` 追加）納入 `MOTRIX_MENU` 的來源，`custom-modules-nav.js` 退場 ⇒ 選單只有一個來源。
+- 時機：C1、C3、P8 前端合回之後；開工時主持通知各視窗凍結 sidebar.js 相關測試直到 C4 合回（約 15 個測試檔以靜態解析讀 `ni()`／`sec()`，要改讀 `core/menu_l1.json`）。C3 的對等守門在 C4 退場。〕
 
 ## 5. 轉換順序（每一步都可單獨合回、單獨回退）
 

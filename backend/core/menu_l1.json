@@ -1,0 +1,433 @@
+{
+ "_doc": "L1 選單（階段 C／C3，core/menu.py）。群組固定（裁示 D4）；模組的選單項寫在各自 module.json pages[].menu。2026-09-26 由 sidebar.js buildSidebar() 逐項轉出（tests/platform/_menu_legacy.py），對等守門 test_menu_parity。",
+ "groups": [
+  {
+   "key": "main",
+   "label": "主選單"
+  },
+  {
+   "key": "business",
+   "label": "業務"
+  },
+  {
+   "key": "case",
+   "label": "案件"
+  },
+  {
+   "key": "supply",
+   "label": "廠商與採購"
+  },
+  {
+   "key": "device",
+   "label": "設備"
+  },
+  {
+   "key": "finance",
+   "label": "財務"
+  },
+  {
+   "key": "payroll",
+   "label": "勞務管理"
+  },
+  {
+   "key": "mywork",
+   "label": "我的工作"
+  },
+  {
+   "key": "system",
+   "label": "系統"
+  }
+ ],
+ "items": [
+  {
+   "group": "main",
+   "href": "/index.html",
+   "label": "儀表板",
+   "order": 10,
+   "perm": [
+    "dashboard",
+    "finance",
+    "quotation"
+   ],
+   "active": [
+    "index.html",
+    ""
+   ]
+  },
+  {
+   "group": "business",
+   "href": "dev-crm.html",
+   "label": "業務開發",
+   "order": 10,
+   "perm": [
+    "dev_crm"
+   ],
+   "badge": "sb-mod-dev-crm"
+  },
+  {
+   "group": "business",
+   "href": "map.html",
+   "label": "地圖",
+   "order": 30,
+   "perm": [
+    "map"
+   ]
+  },
+  {
+   "group": "business",
+   "href": "quotations.html",
+   "label": "報價單",
+   "order": 40,
+   "perm": [
+    "quotation"
+   ],
+   "active": [
+    "quotations.html",
+    "quotation-form.html"
+   ],
+   "badge": "sb-mod-quotation"
+  },
+  {
+   "group": "case",
+   "href": "case-management.html",
+   "label": "案件管理",
+   "order": 10,
+   "perm": [
+    "case_manage"
+   ],
+   "badge": "sb-mod-case"
+  },
+  {
+   "group": "case",
+   "href": "case-stage-board.html",
+   "label": "案件執行看板",
+   "order": 20,
+   "perm": [
+    "case_manage"
+   ]
+  },
+  {
+   "group": "supply",
+   "href": "customers.html",
+   "label": "客戶管理",
+   "order": 10,
+   "perm": [
+    "customer"
+   ],
+   "active": [
+    "customers.html",
+    "customer-log.html"
+   ],
+   "badge": "sb-mod-customer"
+  },
+  {
+   "group": "supply",
+   "href": "suppliers.html",
+   "label": "供應商管理",
+   "order": 20,
+   "perm": [
+    "procurement"
+   ],
+   "active": [
+    "suppliers.html",
+    "supplier-log.html"
+   ],
+   "badge": "sb-mod-suppliers"
+  },
+  {
+   "group": "supply",
+   "href": "vendor-contractors.html",
+   "label": "承攬商管理",
+   "order": 30,
+   "perm": [
+    "procurement"
+   ],
+   "badge": "sb-mod-vendor"
+  },
+  {
+   "group": "supply",
+   "href": "parts.html",
+   "label": "料號主檔",
+   "order": 40,
+   "perm": [
+    "procurement"
+   ],
+   "badge": "sb-mod-parts"
+  },
+  {
+   "group": "supply",
+   "href": "inventory.html",
+   "label": "庫存管理",
+   "order": 50,
+   "perm": [
+    "inventory"
+   ],
+   "badge": "sb-mod-inventory"
+  },
+  {
+   "group": "supply",
+   "href": "procurement.html",
+   "label": "採購管理",
+   "order": 60,
+   "perm": [
+    "procurement"
+   ],
+   "badge": "sb-mod-procurement"
+  },
+  {
+   "group": "device",
+   "href": "devices.html",
+   "label": "設備登載",
+   "order": 10,
+   "perm": [
+    "equipment"
+   ],
+   "badge": "sb-mod-equipment"
+  },
+  {
+   "group": "device",
+   "href": "warranty.html",
+   "label": "保固追蹤",
+   "order": 20,
+   "perm": [
+    "equipment"
+   ],
+   "badge": "sb-mod-warranty"
+  },
+  {
+   "group": "device",
+   "href": "network-plans.html",
+   "label": "網路架構規劃書",
+   "order": 30,
+   "perm": [
+    "netplan",
+    "netplan_edit"
+   ],
+   "active": [
+    "network-plans.html",
+    "network-plan-form.html",
+    "topology-quick.html"
+   ],
+   "badge": "sb-mod-netplan"
+  },
+  {
+   "group": "finance",
+   "href": "reports.html",
+   "label": "營運報表",
+   "order": 10,
+   "perm": [
+    "finance",
+    "reports"
+   ],
+   "badge": "sb-mod-finance"
+  },
+  {
+   "group": "finance",
+   "href": "cashier.html",
+   "label": "出納",
+   "order": 20,
+   "perm": [
+    "cashier"
+   ]
+  },
+  {
+   "group": "finance",
+   "href": "voucher.html",
+   "label": "傳票",
+   "order": 30,
+   "perm": [
+    "cashier"
+   ]
+  },
+  {
+   "group": "finance",
+   "href": "account-items.html",
+   "label": "會計科目",
+   "order": 40,
+   "perm": [
+    "cashier"
+   ]
+  },
+  {
+   "group": "finance",
+   "href": "bonus.html",
+   "label": "獎金分潤",
+   "order": 50,
+   "perm": "any"
+  },
+  {
+   "group": "payroll",
+   "href": "contractors.html",
+   "label": "外包名冊",
+   "order": 10,
+   "perm": [
+    "contractor_list"
+   ]
+  },
+  {
+   "group": "payroll",
+   "href": "payslips.html",
+   "label": "勞報單",
+   "order": 20,
+   "perm": [
+    "payslip"
+   ],
+   "active": [
+    "payslips.html",
+    "payslip-form.html"
+   ]
+  },
+  {
+   "group": "mywork",
+   "href": "work-log.html",
+   "label": "工作日誌",
+   "order": 10,
+   "perm": [
+    "work_log"
+   ],
+   "badge": "sb-mod-worklog"
+  },
+  {
+   "group": "mywork",
+   "href": "daily-tasks.html",
+   "label": "每日工作事項",
+   "order": 20,
+   "perm": [
+    "daily_task"
+   ],
+   "badge": "sb-mod-daily-task",
+   "extra_badge": {
+    "id": "sb-dt-badge",
+    "color": "#7C3AED"
+   }
+  },
+  {
+   "group": "mywork",
+   "href": "approval-queue.html",
+   "label": "簽核佇列",
+   "order": 30,
+   "perm": [
+    "quotation"
+   ],
+   "extra_badge": {
+    "id": "sb-approval-badge",
+    "color": "#DC2626"
+   }
+  },
+  {
+   "group": "mywork",
+   "href": "approval-delegates.html",
+   "label": "簽核代理人",
+   "order": 40,
+   "perm": [
+    "quotation"
+   ]
+  },
+  {
+   "group": "mywork",
+   "href": "approval-history.html",
+   "label": "簽核歷史",
+   "order": 50,
+   "perm": [
+    "quotation"
+   ]
+  },
+  {
+   "group": "system",
+   "href": "users.html",
+   "label": "使用者管理",
+   "order": 10,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "org-structure.html",
+   "label": "組織架構設定",
+   "order": 20,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "approval-settings.html",
+   "label": "簽核設定",
+   "order": 30,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "notification-settings.html",
+   "label": "通知設定",
+   "order": 40,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "google-calendar-settings.html",
+   "label": "Google 行事曆設定",
+   "order": 50,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "company-profile-settings.html",
+   "label": "公司資料設定",
+   "order": 60,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "module-settings.html",
+   "label": "模組管理",
+   "order": 70,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "legal-params.html",
+   "label": "法規參數設定",
+   "order": 80,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "audit-log.html",
+   "label": "歷史紀錄",
+   "order": 90,
+   "perm": [
+    "audit_log"
+   ]
+  },
+  {
+   "group": "system",
+   "href": "shipping-export-history.html",
+   "label": "出貨單歷史紀錄",
+   "order": 100,
+   "perm": [
+    "shipping_export_log"
+   ]
+  },
+  {
+   "group": "system",
+   "href": "module-versions.html",
+   "label": "版本紀錄",
+   "order": 110,
+   "perm": [
+    "module_versions"
+   ]
+  },
+  {
+   "group": "system",
+   "href": "online-stats.html",
+   "label": "在線時數統計",
+   "order": 120,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
+   "href": "schema-status.html",
+   "label": "Schema 狀態",
+   "order": 130,
+   "perm": "superadmin"
+  }
+ ]
+}
