@@ -2601,3 +2601,26 @@ def case_roles_unmapped(authorization: str = Header(None)):
                           "project": r["project_name"] or "", "role": key, "roleLabel": ROLE_LABELS[key],
                           "value": v, "reason": reason})
     return {"items": items}
+
+
+@router.get("/api/settings/reminder-send-failures")
+def get_reminder_send_failures(authorization: str = Header(None)):
+    """簽核提醒**永久寄不出去**的那幾筆。
+
+    2026-09-26：自 routers/daily_tasks.py 移來（簽核催辦已下沉 L1 helpers/system_checks.py；
+    留在每日任務模組的話，停用每日任務會讓這個落點一起消失）。
+
+    ## 🔴 這個端點存在的理由，比「多一個 API」深一層
+    YA5 要求失敗要有落點，而 A 的原話是：
+    > ⚠️ **落點要看得到** —— ☠️ 只寫進 log 的話就是把這一條原封不動換了個位置。
+
+    📌 那正是這一整節在修的形狀：**一個沒有人看得到的事實等於沒有發生過。**
+    ⇒ 一筆紀錄回答的是「**哪一張單子、哪一階、為什麼、試了幾次**」，
+    而那四個合起來才足以讓人去處置它（通常是去幫那個人填 email）。
+
+    ⚠️ 限 superadmin：它列得出單號與簽核流程的狀態。
+    """
+    _require_user(authorization, require_superadmin=True, module='settings')
+    # 最新的排前面 —— 使用者要看的是「現在還卡著什麼」。
+    from helpers.system_checks import reminder_send_failures
+    return {"items": list(reversed(reminder_send_failures()))}

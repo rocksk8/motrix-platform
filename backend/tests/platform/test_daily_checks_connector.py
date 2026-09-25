@@ -67,3 +67,16 @@ def test_daily_tasks_startup_catchup_advances_the_guard(client, monkeypatch):
     del days[:]
     dt.run_daily_checks("daily")
     assert days == [None]
+
+
+def test_reminder_failures_endpoint_lives_in_l1(client, make_user, monkeypatch):
+    """簽核催辦的失敗落點（端點）跟著催辦下沉 L1：停用每日任務不可以讓它消失。
+    這一題也真的呼叫端點——搬移時它曾經引用一個已經不在本檔的函式（執行才會 NameError）。"""
+    from helpers import system_checks
+    monkeypatch.setattr(system_checks, "reminder_send_failures", lambda: [{"doc_no": "A"}, {"doc_no": "B"}])
+    name, pw = make_user(username="rsf_sa", role="superadmin")
+    tok = client.post("/api/auth/login", json={"username": name, "password": pw}).json()["token"]
+    r = client.get("/api/settings/reminder-send-failures", headers={"Authorization": "Bearer " + tok})
+    assert r.status_code == 200 and r.json() == {"items": [{"doc_no": "B"}, {"doc_no": "A"}]}, r.text
+    import routers.system as rs
+    assert any(getattr(rt, "path", "") == "/api/settings/reminder-send-failures" for rt in rs.router.routes)
