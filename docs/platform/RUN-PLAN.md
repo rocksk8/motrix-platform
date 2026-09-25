@@ -119,6 +119,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 05:07：第二班列車合回之後，主持派出兩個子代理：P8 前端接上缺口 #3～#7 與 custom: 通知點擊（wip/h-p8-gaps）；P9 拖曳排版器（wip/h-p9）。B 先完成 M08，再做 C4。§G3 補一條規則：全量跑的期間不可以改列車的樹。
 - 2026-09-26 05:05：**第二班列車合回**（train/0926-0415，7 包：C3、c-d7-km1、c-p2-legal、a-mail-fix、x-vat-round、x-p1p3-fix、h-p8-frontend，全部上車；platform 10b30038）。
   - 取號：CORE 1.16 C3／1.17 c-d7-km1／1.18 c-p2-legal／1.19 a-mail-fix（`mail_types.MANAGED_ELSEWHERE` 另立一段，1.14 已合回不改寫）／1.20 P1P3；版本紀錄：案件管理/財務憑證 26e、外包名冊 26f、案件管理 26g、營運報表 26h、庫存管理 26i、財務憑證/T100匯出 26j；獎金分潤 X-VAT 句併入 26c、P8 前端併入系統 26a、報價單 25r 句尾補一句（皆未出貨）；IP-10 `approval.queue_items` 維持（origin 未使用；A 的 daily.check 上車時改取 IP-11）；tender_radar 1.1.0（a-mail＋C3 合併）→1.2.0（P1P3）。
   - 全量（5ddd9f44，-n 4、低優先權）：非 e2e 4402 過 8 紅、e2e 407 過 1 紅。7＋1 題**交會問題**，列車上修（d1afb50c 等兩筆）：C3 選單 L1 登錄缺 a-mail 的 mail-settings（對等守門）；core/l1_pages.json 缺 mail-settings／module-builder／custom-records；X-VAT 與 a-mail-fix 新題頁面路徑未經 source_tree（C1 守門）；單位卡缺 plat:menu／catalog／customization、definitions／pages／upgrade 公開介面缺新名稱；P8 驗收 e2e 通知查詢用單號、c-p2-legal 已改 ref_id＝`custom:<模組>:<單號>`；Alpine 頁母體 49（合併時處理）。修後相關題 1146 過（-n 2）；rebase 到 origin（只有文件）後版本紀錄、單位卡、G1 共 56 過。
