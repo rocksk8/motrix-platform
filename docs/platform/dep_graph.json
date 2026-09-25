@@ -1,6 +1,6 @@
 {
  "generated_by": "tools/platform/dep_scan.py",
- "root": "MOTRIX-PLATFORM-TRAIN3",
+ "root": "MOTRIX-PLATFORM-TRAIN4",
  "units": {
   "core:archive": {
    "api_prefixes": [],
@@ -319,6 +319,7 @@
     "core:trail",
     "helper:auth",
     "helper:build_info",
+    "helper:daily_checks",
     "helper:geo",
     "helper:licensing",
     "helper:module_switches",
@@ -340,7 +341,6 @@
     "router:contractors",
     "router:custom_records",
     "router:customers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:definitions",
     "router:dev_crm",
@@ -355,8 +355,6 @@
     "router:material_orders",
     "router:module_versions",
     "router:modules",
-    "router:network_plans",
-    "router:network_plans_quick",
     "router:org_structure",
     "router:parts",
     "router:payment_requests",
@@ -385,32 +383,6 @@
     "user_activity_daily",
     "user_request_log"
    ]
-  },
-  "core:network_plan_export": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:network_plan_topology",
-    "helper:company_identity",
-    "helper:startup"
-   ],
-   "kind": "core",
-   "path": "backend/network_plan_export.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
-  "core:network_plan_topology": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [],
-   "kind": "core",
-   "path": "backend/network_plan_topology.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
   },
   "core:pdf_gen": {
    "api_prefixes": [],
@@ -648,6 +620,31 @@
    "tables_r": [],
    "tables_w": []
   },
+  "helper:case_deadlines": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:dates",
+    "helper:email_notify",
+    "helper:settings",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/case_deadlines.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "case_stages",
+    "departments",
+    "quotations",
+    "users"
+   ],
+   "tables_w": [
+    "system_settings"
+   ]
+  },
   "helper:case_roles": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -738,6 +735,20 @@
     "custom_records"
    ]
   },
+  "helper:daily_checks": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:system_checks",
+    "plat:registry"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/daily_checks.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
   "helper:dates": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -825,7 +836,9 @@
   "helper:formula": {
    "api_prefixes": [],
    "dynamic_sql": false,
-   "imports": [],
+   "imports": [
+    "helper:legal_params"
+   ],
    "kind": "helper",
    "path": "backend/helpers/formula.py",
    "tables_ddl": [],
@@ -1005,6 +1018,7 @@
     "helper:legal_params",
     "helper:row_access",
     "helper:tiered_approval",
+    "plat:registry",
     "plat:txn"
    ],
    "kind": "helper",
@@ -1102,6 +1116,37 @@
     "module_versions",
     "sessions",
     "users"
+   ]
+  },
+  "helper:system_checks": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "core:archive",
+    "core:db",
+    "helper:audit",
+    "helper:dates",
+    "helper:email_notify",
+    "helper:settings",
+    "plat:paths"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/system_checks.py",
+   "tables_ddl": [],
+   "tables_named": [
+    "contractor_payment_vouchers",
+    "invoice_vouchers",
+    "payment_requests",
+    "quotations",
+    "shipping_notes"
+   ],
+   "tables_r": [
+    "audit_log",
+    "users"
+   ],
+   "tables_w": [
+    "system_settings",
+    "user_request_log"
    ]
   },
   "helper:tiered_approval": {
@@ -1299,10 +1344,10 @@
    "kind": "js",
    "path": "frontend/js/case-management-close.js",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations",
     "router:system",
     "router:vouchers"
@@ -1354,11 +1399,11 @@
    "kind": "js",
    "path": "frontend/js/case-management-core.js",
    "routers_called": [
+    "mod:netplan/api",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations",
     "router:uploads"
    ],
@@ -1435,9 +1480,9 @@
    "kind": "js",
    "path": "frontend/js/case-management-exec.js",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "tables_r": [],
@@ -1468,7 +1513,7 @@
    "kind": "js",
    "path": "frontend/js/case-management-feed.js",
    "routers_called": [
-    "router:daily_tasks",
+    "mod:daily_tasks/api",
     "router:quotations",
     "router:system",
     "router:uploads"
@@ -1673,12 +1718,12 @@
    "kind": "js",
    "path": "frontend/js/reports.js",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:cashier",
     "router:dashboard",
     "router:material_orders",
-    "router:network_plans",
     "router:org_structure",
     "router:quotations",
     "router:reports",
@@ -1805,6 +1850,49 @@
    "tables_r": [],
    "tables_w": []
   },
+  "js:static/layout-editor.js": {
+   "api_calls": [
+    "/api/definitions/layout/",
+    "/api/platform/menu",
+    "/api/settings/role-labels"
+   ],
+   "api_prefixes": [
+    "/api/definitions",
+    "/api/platform",
+    "/api/settings"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/layout-editor.js",
+   "routers_called": [
+    "router:definitions",
+    "router:platform_menu",
+    "router:system"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "js:static/layout-runtime.js": {
+   "api_calls": [
+    "/api/layout/",
+    "/api/list-prefs/"
+   ],
+   "api_prefixes": [
+    "/api/layout",
+    "/api/list-prefs"
+   ],
+   "api_unmatched": [],
+   "imports": [],
+   "kind": "js",
+   "path": "frontend/static/layout-runtime.js",
+   "routers_called": [
+    "router:definitions",
+    "router:list_prefs"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
   "js:static/legal-round.js": {
    "api_calls": [],
    "api_prefixes": [],
@@ -1860,8 +1948,8 @@
    "kind": "js",
    "path": "frontend/static/notif.js",
    "routers_called": [
+    "mod:daily_tasks/api",
     "router:auth",
-    "router:daily_tasks",
     "router:item_reads",
     "router:quotations",
     "router:search",
@@ -1884,8 +1972,8 @@
    "kind": "js",
    "path": "frontend/static/privacy-notice.js",
    "routers_called": [
-    "router:legal_params",
-    "router:network_plans"
+    "mod:netplan/api",
+    "router:legal_params"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1940,6 +2028,347 @@
    "kind": "js",
    "path": "frontend/static/ui.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:daily_tasks/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:daily_tasks/api",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "daily_tasks",
+   "path": "backend/modules/daily_tasks/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [
+    "daily_tasks"
+   ],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:daily_tasks/api": {
+   "api_prefixes": [
+    "/api/daily-tasks"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:dates",
+    "helper:email_notify",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:dates",
+    "helper:email_notify",
+    "helper:settings"
+   ],
+   "kind": "mod",
+   "module_key": "daily_tasks",
+   "path": "backend/modules/daily_tasks/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_daily_tasks",
+     "line": 300,
+     "method": "GET",
+     "path": "/api/daily-tasks"
+    },
+    {
+     "func": "get_daily_task",
+     "line": 394,
+     "method": "GET",
+     "path": "/api/daily-tasks/{task_id}"
+    },
+    {
+     "func": "create_daily_task",
+     "line": 415,
+     "method": "POST",
+     "path": "/api/daily-tasks"
+    },
+    {
+     "func": "update_daily_task",
+     "line": 468,
+     "method": "PUT",
+     "path": "/api/daily-tasks/{task_id}"
+    },
+    {
+     "func": "delete_daily_task",
+     "line": 548,
+     "method": "DELETE",
+     "path": "/api/daily-tasks/{task_id}"
+    },
+    {
+     "func": "get_task_history",
+     "line": 573,
+     "method": "GET",
+     "path": "/api/daily-tasks/{task_id}/history"
+    },
+    {
+     "func": "get_task_edit_log",
+     "line": 686,
+     "method": "GET",
+     "path": "/api/daily-tasks/{task_id}/edit-log"
+    },
+    {
+     "func": "export_task_history",
+     "line": 731,
+     "method": "GET",
+     "path": "/api/daily-tasks/{task_id}/history/export"
+    },
+    {
+     "func": "complete_daily_task",
+     "line": 811,
+     "method": "PATCH",
+     "path": "/api/daily-tasks/{task_id}/complete"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "departments",
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "daily_task_completions",
+    "daily_task_edit_log",
+    "daily_tasks"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "daily_task_completions",
+    "daily_task_edit_log",
+    "daily_tasks",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:netplan/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:netplan/api",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "netplan",
+   "path": "backend/modules/netplan/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:netplan/api": {
+   "api_prefixes": [
+    "/api/network-plans",
+    "/api/network-plans-quick",
+    "/api/quotations"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:company_identity",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:privacy_notice",
+    "helper:settings",
+    "helper:startup",
+    "helper:tiered_approval",
+    "mod:netplan/export",
+    "mod:netplan/topology"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:privacy_notice",
+    "mod:netplan/export",
+    "mod:netplan/topology",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "netplan",
+   "path": "backend/modules/netplan/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_network_plans",
+     "line": 79,
+     "method": "GET",
+     "path": "/api/network-plans"
+    },
+    {
+     "func": "get_network_plan",
+     "line": 102,
+     "method": "GET",
+     "path": "/api/network-plans/{plan_id}"
+    },
+    {
+     "func": "get_network_plan_by_case",
+     "line": 114,
+     "method": "GET",
+     "path": "/api/quotations/{quote_no}/network-plan"
+    },
+    {
+     "func": "create_network_plan",
+     "line": 132,
+     "method": "POST",
+     "path": "/api/network-plans"
+    },
+    {
+     "func": "update_network_plan",
+     "line": 184,
+     "method": "PUT",
+     "path": "/api/network-plans/{plan_id}"
+    },
+    {
+     "func": "update_network_plan_status",
+     "line": 217,
+     "method": "PATCH",
+     "path": "/api/network-plans/{plan_id}/status"
+    },
+    {
+     "func": "delete_network_plan",
+     "line": 251,
+     "method": "DELETE",
+     "path": "/api/network-plans/{plan_id}"
+    },
+    {
+     "func": "preview_network_plan_topology",
+     "line": 272,
+     "method": "POST",
+     "path": "/api/network-plans/{plan_id}/topology-preview"
+    },
+    {
+     "func": "export_network_plan_excel",
+     "line": 294,
+     "method": "GET",
+     "path": "/api/network-plans/{plan_id}/export/excel"
+    },
+    {
+     "func": "export_network_plan_pdf",
+     "line": 312,
+     "method": "GET",
+     "path": "/api/network-plans/{plan_id}/export/pdf"
+    },
+    {
+     "func": "import_network_plan_excel",
+     "line": 334,
+     "method": "POST",
+     "path": "/api/network-plans/{plan_id}/import/excel"
+    },
+    {
+     "func": "get_network_plan_privacy_acks",
+     "line": 395,
+     "method": "GET",
+     "path": "/api/network-plans/{plan_id}/privacy-notice"
+    },
+    {
+     "func": "ack_network_plan_privacy_notice",
+     "line": 408,
+     "method": "POST",
+     "path": "/api/network-plans/{plan_id}/privacy-notice/ack"
+    },
+    {
+     "func": "preview_quick_topology",
+     "line": 451,
+     "method": "POST",
+     "path": "/api/network-plans-quick/preview"
+    },
+    {
+     "func": "export_quick_topology_pdf",
+     "line": 464,
+     "method": "POST",
+     "path": "/api/network-plans-quick/pdf"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "network_plans"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "login_rate_limit",
+    "module_versions",
+    "network_plans",
+    "notifications",
+    "sessions",
+    "system_settings",
+    "users"
+   ]
+  },
+  "mod:netplan/export": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:company_identity",
+    "helper:startup",
+    "mod:netplan/topology"
+   ],
+   "kind": "mod",
+   "module_key": "netplan",
+   "path": "backend/modules/netplan/export.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:netplan/topology": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "netplan",
+   "path": "backend/modules/netplan/topology.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -2464,13 +2893,15 @@
    "kind": "page",
    "path": "frontend/pages/case-management.html",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
     "router:accounting_export",
     "router:auth",
     "router:case_action_items",
@@ -2479,12 +2910,10 @@
     "router:contractor_vouchers",
     "router:contractors",
     "router:customers",
-    "router:daily_tasks",
     "router:inventory",
     "router:invoice_vouchers",
     "router:legal_params",
     "router:material_orders",
-    "router:network_plans",
     "router:parts",
     "router:payment_requests",
     "router:quotations",
@@ -2655,19 +3084,19 @@
    "kind": "page",
    "path": "frontend/pages/completion-note-form.html",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "tables_r": [],
@@ -2728,14 +3157,10 @@
   },
   "page:pages/custom-records.html": {
    "api_calls": [
-    "/api/custom/",
-    "/api/customers",
-    "/api/users"
+    "/api/custom/"
    ],
    "api_prefixes": [
-    "/api/custom",
-    "/api/customers",
-    "/api/users"
+    "/api/custom"
    ],
    "api_unmatched": [],
    "imports": [
@@ -2748,14 +3173,10 @@
    "kind": "page",
    "path": "frontend/pages/custom-records.html",
    "routers_called": [
-    "router:auth",
-    "router:custom_records",
-    "router:customers"
+    "router:custom_records"
    ],
    "routers_called_effective": [
-    "router:auth",
-    "router:custom_records",
-    "router:customers"
+    "router:custom_records"
    ],
    "tables_r": [],
    "tables_w": []
@@ -2862,13 +3283,13 @@
    "kind": "page",
    "path": "frontend/pages/daily-tasks.html",
    "routers_called": [
+    "mod:daily_tasks/api",
     "router:auth",
-    "router:daily_tasks",
     "router:dashboard"
    ],
    "routers_called_effective": [
+    "mod:daily_tasks/api",
     "router:auth",
-    "router:daily_tasks",
     "router:dashboard"
    ],
    "tables_r": [],
@@ -3160,6 +3581,7 @@
     "/api/custom-modules/catalog",
     "/api/custom-modules/formula/check",
     "/api/custom-modules/numbering/preview",
+    "/api/definitions/custom_module",
     "/api/definitions/custom_module/",
     "/api/org/tree",
     "/api/users"
@@ -3271,12 +3693,12 @@
    "kind": "page",
    "path": "frontend/pages/network-plan-form.html",
    "routers_called": [
-    "router:inventory",
-    "router:network_plans"
+    "mod:netplan/api",
+    "router:inventory"
    ],
    "routers_called_effective": [
-    "router:inventory",
-    "router:network_plans"
+    "mod:netplan/api",
+    "router:inventory"
    ],
    "tables_r": [],
    "tables_w": []
@@ -3301,11 +3723,11 @@
    "kind": "page",
    "path": "frontend/pages/network-plans.html",
    "routers_called": [
-    "router:network_plans",
+    "mod:netplan/api",
     "router:quotations"
    ],
    "routers_called_effective": [
-    "router:network_plans",
+    "mod:netplan/api",
     "router:quotations"
    ],
    "tables_r": [],
@@ -3470,18 +3892,18 @@
    "kind": "page",
    "path": "frontend/pages/payment-request-form.html",
    "routers_called": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:payment_requests",
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:payment_requests",
     "router:quotations"
    ],
@@ -3622,20 +4044,20 @@
    "kind": "page",
    "path": "frontend/pages/quotation-form.html",
    "routers_called": [
+    "mod:netplan/api",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations",
     "router:uploads"
    ],
    "routers_called_effective": [
+    "mod:netplan/api",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations",
     "router:uploads"
    ],
@@ -3665,19 +4087,19 @@
    "kind": "page",
    "path": "frontend/pages/quotations.html",
    "routers_called": [
+    "mod:netplan/api",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:netplan/api",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "tables_r": [],
@@ -3710,12 +4132,12 @@
    "path": "frontend/pages/reports.html",
    "routers_called": [],
    "routers_called_effective": [
+    "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:cashier",
     "router:dashboard",
     "router:material_orders",
-    "router:network_plans",
     "router:org_structure",
     "router:quotations",
     "router:reports",
@@ -3917,6 +4339,9 @@
    "api_unmatched": [],
    "imports": [
     "js:static/auth-guard.js",
+    "js:static/custom-layout.js",
+    "js:static/layout-editor.js",
+    "js:static/layout-runtime.js",
     "js:static/notif.js",
     "js:static/record-link.js",
     "js:static/sidebar.js"
@@ -3951,10 +4376,10 @@
    "kind": "page",
    "path": "frontend/pages/topology-quick.html",
    "routers_called": [
-    "router:network_plans_quick"
+    "mod:netplan/api"
    ],
    "routers_called_effective": [
-    "router:network_plans_quick"
+    "mod:netplan/api"
    ],
    "tables_r": [],
    "tables_w": []
@@ -6006,6 +6431,7 @@
     "helper:custom_modules",
     "helper:doc_template",
     "helper:formula",
+    "helper:legal_params",
     "helper:module_registry",
     "helper:settings",
     "helper:tiered_approval"
@@ -6111,7 +6537,7 @@
     },
     {
      "func": "preview_custom_output",
-     "line": 286,
+     "line": 295,
      "method": "POST",
      "path": "/api/custom-modules/{key}/output/preview"
     }
@@ -6245,145 +6671,6 @@
     "customers",
     "notifications",
     "system_settings"
-   ]
-  },
-  "router:daily_tasks": {
-   "api_prefixes": [
-    "/api/daily-tasks",
-    "/api/settings"
-   ],
-   "dynamic_sql": true,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:dates",
-    "helper:email_notify",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:archive",
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:dates",
-    "helper:email_notify",
-    "helper:settings",
-    "plat:paths",
-    "plat:registry"
-   ],
-   "kind": "router",
-   "path": "backend/routers/daily_tasks.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_daily_tasks",
-     "line": 300,
-     "method": "GET",
-     "path": "/api/daily-tasks"
-    },
-    {
-     "func": "get_daily_task",
-     "line": 394,
-     "method": "GET",
-     "path": "/api/daily-tasks/{task_id}"
-    },
-    {
-     "func": "create_daily_task",
-     "line": 415,
-     "method": "POST",
-     "path": "/api/daily-tasks"
-    },
-    {
-     "func": "update_daily_task",
-     "line": 468,
-     "method": "PUT",
-     "path": "/api/daily-tasks/{task_id}"
-    },
-    {
-     "func": "delete_daily_task",
-     "line": 548,
-     "method": "DELETE",
-     "path": "/api/daily-tasks/{task_id}"
-    },
-    {
-     "func": "get_reminder_send_failures",
-     "line": 573,
-     "method": "GET",
-     "path": "/api/settings/reminder-send-failures"
-    },
-    {
-     "func": "get_task_history",
-     "line": 592,
-     "method": "GET",
-     "path": "/api/daily-tasks/{task_id}/history"
-    },
-    {
-     "func": "get_task_edit_log",
-     "line": 705,
-     "method": "GET",
-     "path": "/api/daily-tasks/{task_id}/edit-log"
-    },
-    {
-     "func": "export_task_history",
-     "line": 750,
-     "method": "GET",
-     "path": "/api/daily-tasks/{task_id}/history/export"
-    },
-    {
-     "func": "complete_daily_task",
-     "line": 830,
-     "method": "PATCH",
-     "path": "/api/daily-tasks/{task_id}/complete"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [
-    "contractor_payment_vouchers",
-    "invoice_vouchers",
-    "payment_requests",
-    "quotations",
-    "shipping_notes"
-   ],
-   "tables_r": [
-    "audit_log",
-    "case_stages",
-    "departments",
-    "quotations",
-    "users"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "case_stages",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "daily_task_completions",
-    "daily_task_edit_log",
-    "daily_tasks",
-    "system_settings",
-    "user_request_log"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "daily_task_completions",
-    "daily_task_edit_log",
-    "daily_tasks",
-    "notifications",
-    "system_settings",
-    "user_request_log"
    ]
   },
   "router:dashboard": {
@@ -6536,7 +6823,8 @@
   },
   "router:definitions": {
    "api_prefixes": [
-    "/api/definitions"
+    "/api/definitions",
+    "/api/layout"
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
@@ -6555,7 +6843,9 @@
     "helper:auth",
     "helper:custom_fields",
     "helper:doc_template",
-    "plat:definitions"
+    "plat:catalog",
+    "plat:definitions",
+    "plat:registry"
    ],
    "kind": "router",
    "path": "backend/routers/definitions.py",
@@ -6563,67 +6853,73 @@
    "routes": [
     {
      "func": "list_definitions",
-     "line": 86,
+     "line": 124,
      "method": "GET",
      "path": "/api/definitions/{kind}"
     },
     {
      "func": "delete_definition_draft",
-     "line": 99,
+     "line": 137,
      "method": "DELETE",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "get_definition",
-     "line": 117,
+     "line": 155,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}"
     },
     {
      "func": "save_definition_draft",
-     "line": 130,
+     "line": 168,
      "method": "PUT",
      "path": "/api/definitions/{kind}/{key}/draft"
     },
     {
      "func": "validate_definition",
-     "line": 146,
+     "line": 184,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/validate"
     },
     {
      "func": "publish_definition",
-     "line": 154,
+     "line": 192,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/publish"
     },
     {
      "func": "get_definition_version",
-     "line": 170,
+     "line": 208,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/versions/{version}"
     },
     {
      "func": "diff_definition",
-     "line": 186,
+     "line": 224,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/diff"
     },
     {
      "func": "restore_definition",
-     "line": 211,
+     "line": 249,
      "method": "POST",
      "path": "/api/definitions/{kind}/{key}/restore/{version}"
     },
     {
      "func": "resolve_definition",
-     "line": 227,
+     "line": 265,
      "method": "GET",
      "path": "/api/definitions/{kind}/{key}/resolve"
     },
     {
+     "func": "effective_layout",
+     "line": 278,
+     "method": "GET",
+     "path": "/api/layout/{module_key}"
+    },
+    {
      "func": "preview_output_template",
-     "line": 240,
+     "line": 319,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -7694,194 +7990,6 @@
    "tables_w": [],
    "tables_w_transitive": []
   },
-  "router:network_plans": {
-   "api_prefixes": [
-    "/api/network-plans",
-    "/api/quotations"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:legal_params",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:privacy_notice",
-    "helper:quotations",
-    "helper:row_access",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "core:network_plan_export",
-    "core:network_plan_topology",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:privacy_notice",
-    "helper:quotations"
-   ],
-   "kind": "router",
-   "path": "backend/routers/network_plans.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_network_plans",
-     "line": 70,
-     "method": "GET",
-     "path": "/api/network-plans"
-    },
-    {
-     "func": "get_network_plan",
-     "line": 93,
-     "method": "GET",
-     "path": "/api/network-plans/{plan_id}"
-    },
-    {
-     "func": "get_network_plan_by_case",
-     "line": 105,
-     "method": "GET",
-     "path": "/api/quotations/{quote_no}/network-plan"
-    },
-    {
-     "func": "create_network_plan",
-     "line": 120,
-     "method": "POST",
-     "path": "/api/network-plans"
-    },
-    {
-     "func": "update_network_plan",
-     "line": 172,
-     "method": "PUT",
-     "path": "/api/network-plans/{plan_id}"
-    },
-    {
-     "func": "update_network_plan_status",
-     "line": 205,
-     "method": "PATCH",
-     "path": "/api/network-plans/{plan_id}/status"
-    },
-    {
-     "func": "delete_network_plan",
-     "line": 239,
-     "method": "DELETE",
-     "path": "/api/network-plans/{plan_id}"
-    },
-    {
-     "func": "preview_network_plan_topology",
-     "line": 260,
-     "method": "POST",
-     "path": "/api/network-plans/{plan_id}/topology-preview"
-    },
-    {
-     "func": "export_network_plan_excel",
-     "line": 282,
-     "method": "GET",
-     "path": "/api/network-plans/{plan_id}/export/excel"
-    },
-    {
-     "func": "export_network_plan_pdf",
-     "line": 300,
-     "method": "GET",
-     "path": "/api/network-plans/{plan_id}/export/pdf"
-    },
-    {
-     "func": "import_network_plan_excel",
-     "line": 322,
-     "method": "POST",
-     "path": "/api/network-plans/{plan_id}/import/excel"
-    },
-    {
-     "func": "get_network_plan_privacy_acks",
-     "line": 383,
-     "method": "GET",
-     "path": "/api/network-plans/{plan_id}/privacy-notice"
-    },
-    {
-     "func": "ack_network_plan_privacy_notice",
-     "line": 396,
-     "method": "POST",
-     "path": "/api/network-plans/{plan_id}/privacy-notice/ack"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "network_plans"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "network_plans",
-    "notifications",
-    "quotations",
-    "system_settings"
-   ]
-  },
-  "router:network_plans_quick": {
-   "api_prefixes": [
-    "/api/network-plans-quick"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:auth",
-    "helper:errors",
-    "helper:module_registry"
-   ],
-   "imports": [
-    "core:network_plan_export",
-    "core:network_plan_topology",
-    "helper:auth",
-    "helper:errors"
-   ],
-   "kind": "router",
-   "path": "backend/routers/network_plans_quick.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "preview_quick_topology",
-     "line": 34,
-     "method": "POST",
-     "path": "/api/network-plans-quick/preview"
-    },
-    {
-     "func": "export_quick_topology_pdf",
-     "line": 47,
-     "method": "POST",
-     "path": "/api/network-plans-quick/pdf"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "sessions",
-    "users"
-   ],
-   "tables_w": [],
-   "tables_w_transitive": []
-  },
   "router:org_structure": {
    "api_prefixes": [
     "/api/org"
@@ -8424,9 +8532,11 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
+    "helper:case_deadlines",
     "helper:case_roles",
     "helper:case_stage_tasks",
     "helper:company_identity",
+    "helper:dates",
     "helper:email_notify",
     "helper:errors",
     "helper:financial_mask",
@@ -8451,6 +8561,7 @@
     "core:pdf_gen",
     "helper:audit",
     "helper:auth",
+    "helper:case_deadlines",
     "helper:case_roles",
     "helper:case_stage_tasks",
     "helper:company_identity",
@@ -8482,433 +8593,433 @@
    "routes": [
     {
      "func": "next_quote_no",
-     "line": 737,
+     "line": 738,
      "method": "GET",
      "path": "/api/next-quote-no"
     },
     {
      "func": "list_quotations",
-     "line": 796,
+     "line": 797,
      "method": "GET",
      "path": "/api/quotations"
     },
     {
      "func": "stage_board",
-     "line": 979,
+     "line": 980,
      "method": "GET",
      "path": "/api/quotations/stage-board"
     },
     {
      "func": "case_activity",
-     "line": 1084,
+     "line": 1085,
      "method": "POST",
      "path": "/api/quotations/case-activity"
     },
     {
      "func": "get_last_received_bank_account",
-     "line": 1125,
+     "line": 1126,
      "method": "GET",
      "path": "/api/quotations/last-received-bank-account"
     },
     {
      "func": "gate_matrix",
-     "line": 1173,
+     "line": 1174,
      "method": "GET",
      "path": "/api/quotations/gate-matrix"
     },
     {
      "func": "get_quotation",
-     "line": 1266,
+     "line": 1267,
      "method": "GET",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_case_assigned_users",
-     "line": 1300,
+     "line": 1301,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/assigned-users"
     },
     {
      "func": "toggle_quotation_signed",
-     "line": 1323,
+     "line": 1324,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-toggle"
     },
     {
      "func": "upload_quotation_signed_files",
-     "line": 1383,
+     "line": 1384,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/signed-files"
     },
     {
      "func": "delete_quotation_signed_file",
-     "line": 1407,
+     "line": 1408,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/signed-files/{file_id}"
     },
     {
      "func": "create_quotation",
-     "line": 1443,
+     "line": 1444,
      "method": "POST",
      "path": "/api/quotations"
     },
     {
      "func": "update_quotation",
-     "line": 1642,
+     "line": 1643,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "update_status",
-     "line": 1855,
+     "line": 1856,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/status"
     },
     {
      "func": "recall_quotation",
-     "line": 1933,
+     "line": 1934,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/recall"
     },
     {
      "func": "case_bundle",
-     "line": 2215,
+     "line": 2216,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/case-bundle"
     },
     {
      "func": "case_close_gates",
-     "line": 2257,
+     "line": 2258,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2296,
+     "line": 2297,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2375,
+     "line": 2376,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2476,
+     "line": 2477,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2525,
+     "line": 2526,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2641,
+     "line": 2642,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 2957,
+     "line": 2958,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 2980,
+     "line": 2981,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3028,
+     "line": 3029,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3262,
+     "line": 3263,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3280,
+     "line": 3281,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3309,
+     "line": 3310,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3362,
+     "line": 3364,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3399,
+     "line": 3405,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3423,
+     "line": 3429,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3451,
+     "line": 3457,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3474,
+     "line": 3480,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3507,
+     "line": 3513,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3533,
+     "line": 3539,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3564,
+     "line": 3570,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3587,
+     "line": 3593,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3676,
+     "line": 3682,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 3788,
+     "line": 3794,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 3831,
+     "line": 3837,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 3871,
+     "line": 3877,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 3910,
+     "line": 3916,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 3935,
+     "line": 3941,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 3976,
+     "line": 3982,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4001,
+     "line": 4007,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4033,
+     "line": 4039,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4062,
+     "line": 4068,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_settlement",
-     "line": 4107,
+     "line": 4113,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 4131,
+     "line": 4137,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "get_finance_summary",
-     "line": 4194,
+     "line": 4200,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "get_approval_queue",
-     "line": 4423,
+     "line": 4429,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 4938,
+     "line": 4944,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approve_quotation",
-     "line": 5053,
+     "line": 5059,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5166,
+     "line": 5172,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5251,
+     "line": 5257,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5316,
+     "line": 5322,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5452,
+     "line": 5458,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5534,
+     "line": 5540,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5565,
+     "line": 5571,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5596,
+     "line": 5602,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5637,
+     "line": 5643,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5695,
+     "line": 5701,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5760,
+     "line": 5766,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5801,
+     "line": 5807,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5837,
+     "line": 5843,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_queue_detail",
-     "line": 6191,
+     "line": 6197,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 6478,
+     "line": 6484,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     },
     {
      "func": "approval_history",
-     "line": 6617,
+     "line": 6623,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6737,
+     "line": 6743,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6804,
+     "line": 6810,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6921,
+     "line": 6927,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6935,
+     "line": 6941,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     }
@@ -9494,6 +9605,7 @@
     "helper:auth",
     "helper:bonus",
     "helper:case_roles",
+    "helper:dates",
     "helper:email_notify",
     "helper:errors",
     "helper:geo",
@@ -9509,6 +9621,7 @@
     "helper:row_access",
     "helper:settings",
     "helper:startup",
+    "helper:system_checks",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -9534,6 +9647,7 @@
     "helper:quote_terms",
     "helper:settings",
     "helper:startup",
+    "helper:system_checks",
     "helper:tiered_approval",
     "plat:registry",
     "router:auth"
@@ -9943,6 +10057,12 @@
      "line": 2566,
      "method": "GET",
      "path": "/api/system/case-roles-unmapped"
+    },
+    {
+     "func": "get_reminder_send_failures",
+     "line": 2607,
+     "method": "GET",
+     "path": "/api/settings/reminder-send-failures"
     }
    ],
    "tables_ddl": [],
@@ -9997,6 +10117,7 @@
     "quotations",
     "sessions",
     "system_settings",
+    "user_request_log",
     "users",
     "work_logs"
    ]
@@ -10574,7 +10695,7 @@
    "path": "backend/db.py:534",
    "readers": [
     "helper:quotations",
-    "router:daily_tasks",
+    "helper:system_checks",
     "router:dashboard",
     "router:item_reads",
     "router:quotations",
@@ -10935,10 +11056,10 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
+    "helper:case_deadlines",
     "helper:google_calendar",
     "helper:recognition",
     "router:bonus",
-    "router:daily_tasks",
     "router:dashboard"
    ],
    "tables_r": [],
@@ -11020,7 +11141,7 @@
    "kind": "table",
    "named_by": [
     "core:archive",
-    "router:daily_tasks",
+    "helper:system_checks",
     "router:quotations"
    ],
    "path": "backend/db.py:1523",
@@ -11170,7 +11291,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:daily_tasks"
+    "mod:daily_tasks/api"
    ]
   },
   "table:daily_task_edit_log": {
@@ -11187,14 +11308,16 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:daily_tasks"
+    "mod:daily_tasks/api"
    ]
   },
   "table:daily_tasks": {
    "api_prefixes": [],
    "imports": [],
    "kind": "table",
-   "named_by": [],
+   "named_by": [
+    "mod:daily_tasks/__init__"
+   ],
    "path": "backend/db.py:705",
    "readers": [
     "core:archive",
@@ -11206,7 +11329,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:daily_tasks"
+    "mod:daily_tasks/api"
    ]
   },
   "table:departments": {
@@ -11220,11 +11343,12 @@
    "path": "backend/db.py:1638",
    "readers": [
     "core:archive",
+    "helper:case_deadlines",
     "helper:email_notify",
     "helper:tiered_approval",
+    "mod:daily_tasks/api",
     "router:auth",
     "router:case_action_items",
-    "router:daily_tasks",
     "router:reports"
    ],
    "tables_r": [],
@@ -11438,8 +11562,8 @@
    "imports": [],
    "kind": "table",
    "named_by": [
+    "helper:system_checks",
     "helper:voucher_attachments",
-    "router:daily_tasks",
     "router:definitions",
     "router:quotations"
    ],
@@ -11630,7 +11754,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:network_plans"
+    "mod:netplan/api"
    ]
   },
   "table:notifications": {
@@ -11680,7 +11804,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "router:daily_tasks",
+    "helper:system_checks",
     "router:quotations"
    ],
    "path": "backend/db.py:1845",
@@ -11805,8 +11929,8 @@
    "named_by": [
     "core:archive",
     "core:trail",
+    "helper:system_checks",
     "helper:voucher_attachments",
-    "router:daily_tasks",
     "router:search"
    ],
    "path": "backend/db.py:447",
@@ -11815,6 +11939,7 @@
     "helper:audit",
     "helper:bonus_payouts",
     "helper:bonus_pdf",
+    "helper:case_deadlines",
     "helper:case_stage_tasks",
     "helper:company_identity",
     "helper:google_calendar",
@@ -11826,14 +11951,12 @@
     "router:cashier",
     "router:completion_notes",
     "router:contractor_vouchers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:dev_crm",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:map_points",
     "router:material_orders",
-    "router:network_plans",
     "router:payment_requests",
     "router:reports",
     "router:search",
@@ -11909,7 +12032,7 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "router:daily_tasks",
+    "helper:system_checks",
     "router:map_points",
     "router:quotations"
    ],
@@ -12059,12 +12182,13 @@
    "tables_w": [],
    "writers": [
     "core:db",
+    "helper:case_deadlines",
     "helper:module_switches",
     "helper:privacy_notice",
     "helper:settings",
+    "helper:system_checks",
     "mod:tender_radar/source",
-    "plat:upgrade",
-    "router:daily_tasks"
+    "plat:upgrade"
    ]
   },
   "table:t100_export_confirmations": {
@@ -12216,7 +12340,7 @@
    "tables_w": [],
    "writers": [
     "core:main",
-    "router:daily_tasks"
+    "helper:system_checks"
    ]
   },
   "table:users": {
@@ -12240,16 +12364,18 @@
     "helper:auth",
     "helper:bonus_payouts",
     "helper:bonus_pdf",
+    "helper:case_deadlines",
     "helper:email_notify",
     "helper:google_calendar",
     "helper:recognition",
+    "helper:system_checks",
     "helper:tiered_approval",
     "helper:voucher",
+    "mod:daily_tasks/api",
     "mod:tender_radar/api",
     "router:approval_delegates",
     "router:bonus",
     "router:case_action_items",
-    "router:daily_tasks",
     "router:dashboard",
     "router:dev_crm",
     "router:mail_settings",

@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 540,
+  "tests": 554,
   "unmapped": 9,
   "kinds": {
-   "api": 282,
-   "e2e": 130,
-   "unit": 49,
-   "audit": 79
+   "api": 290,
+   "e2e": 134,
+   "unit": 50,
+   "audit": 80
   },
-  "routes": 567
+  "routes": 568
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -24,6 +24,248 @@
   "backend/tests/test_netguard_2026_09_21.py"
  ],
  "tests": {
+  "backend/modules/daily_tasks/tests/test_case_stage_done_daily_task.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/daily_tasks/",
+    "file:backend/tests/test_case_stage_done_calendar_2026_09_11.py",
+    "helper:case_stage_tasks",
+    "mod:daily_tasks/__init__",
+    "mod:daily_tasks/api",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/case_stage_tasks.py",
+     "backend/modules/daily_tasks/__init__.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/tests/test_case_stage_done_calendar_2026_09_11.py"
+    ],
+    "api": [
+     "backend/modules/daily_tasks/api.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/daily_tasks/"
+    ]
+   },
+   "module": "daily_tasks"
+  },
+  "backend/modules/daily_tasks/tests/test_daily_check_provider.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/daily_tasks/",
+    "mod:daily_tasks/api",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/modules/daily_tasks/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/daily_tasks/"
+    ]
+   },
+   "module": "daily_tasks"
+  },
+  "backend/modules/daily_tasks/tests/test_daily_tasks_main_flow.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/daily_tasks/",
+    "mod:daily_tasks/__init__",
+    "mod:daily_tasks/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/daily_tasks/__init__.py",
+     "backend/modules/daily_tasks/api.py"
+    ],
+    "api": [
+     "backend/modules/daily_tasks/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/daily_tasks/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "daily_tasks"
+  },
+  "backend/modules/daily_tasks/tests/test_ip5_daily_task_external.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/daily_tasks/",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "plat:__init__",
+    "plat:registry",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/daily_tasks/"
+    ]
+   },
+   "module": "daily_tasks"
+  },
+  "backend/modules/netplan/tests/test_netplan_case_access.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/netplan/",
+    "mod:netplan/api",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "netplan"
+  },
+  "backend/modules/netplan/tests/test_netplan_company_profile.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/netplan/",
+    "file:backend/tests/test_xlsx_out_l1_2026_09_25.py",
+    "helper:settings",
+    "mod:netplan/export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/settings.py",
+     "backend/modules/netplan/export.py",
+     "backend/tests/test_xlsx_out_l1_2026_09_25.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "module": "netplan"
+  },
+  "backend/modules/netplan/tests/test_netplan_moved_guards.py": {
+   "kind": "e2e",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/netplan/",
+    "file:backend/tests/test_e2e_filter_fields_no_leave_warning_2026_09_25.py",
+    "file:backend/tests/test_module_no_admin_bypass_2026_09_14.py",
+    "file:backend/tests/test_module_permission_fixes_2026_09_13.py",
+    "mod:netplan/api",
+    "mod:netplan/export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/netplan/export.py",
+     "backend/pdf_gen.py",
+     "backend/tests/test_e2e_filter_fields_no_leave_warning_2026_09_25.py",
+     "backend/tests/test_module_no_admin_bypass_2026_09_14.py",
+     "backend/tests/test_module_permission_fixes_2026_09_13.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "module": "netplan"
+  },
+  "backend/modules/netplan/tests/test_network_plan_topology.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/netplan/",
+    "mod:netplan/api",
+    "mod:netplan/export",
+    "mod:netplan/topology"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/netplan/export.py",
+     "backend/modules/netplan/topology.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "netplan"
+  },
+  "backend/modules/netplan/tests/test_network_plans.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/netplan/",
+    "mod:netplan/api",
+    "mod:netplan/export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/netplan/export.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "netplan"
+  },
+  "backend/modules/netplan/tests/test_network_plans_quick.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/netplan/",
+    "mod:netplan/api",
+    "mod:netplan/export",
+    "mod:netplan/topology"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/netplan/export.py",
+     "backend/modules/netplan/topology.py"
+    ],
+    "api": [
+     "backend/modules/netplan/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/netplan/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "netplan"
+  },
   "backend/modules/tender_radar/tests/test_tender_columns_stored_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -310,6 +552,45 @@
    },
    "module": "tender_radar"
   },
+  "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_map_tiles.py",
+    "file:backend/tests/_mapiso.py",
+    "page:pages/tender-radar.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:definitions",
+    "router:list_prefs"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_map_tiles.py",
+     "backend/tests/_mapiso.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/list_prefs.py"
+    ],
+    "page": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "path": [
+     "frontend/pages/tender-radar.html"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
   "backend/modules/tender_radar/tests/test_tender_platform_controls_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -347,7 +628,6 @@
     ],
     "path": [
      "backend/modules/tender_radar/",
-     "backend/modules/tender_radar/api.py",
      "backend/modules/tender_radar/notify.py",
      "backend/modules/tender_radar/source.py"
     ],
@@ -565,32 +845,30 @@
    }
   },
   "backend/tests/platform/test_case_read_scope.py": {
-   "kind": "api",
+   "kind": "audit",
    "units": [
     "dir:docs/platform/",
     "file:docs/platform/case_read_scope.json",
     "plat:__init__",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py"
     ],
-    "api": [
-     "backend/routers/quotations.py"
-    ],
     "path": [
-     "backend/routers/quotations.py",
      "docs/platform/",
      "docs/platform/case_read_scope.json"
     ]
    },
    "unresolved_api": [
     "/api/gone",
+    "/api/here/{}",
+    "/api/old/{}",
     "/api/x/{}",
-    "/api/y"
+    "/api/y",
+    "/api/zz/{}"
    ]
   },
   "backend/tests/platform/test_case_stage_connectors.py": {
@@ -603,7 +881,6 @@
     "helper:google_calendar",
     "plat:__init__",
     "plat:registry",
-    "router:daily_tasks",
     "router:invoice_vouchers",
     "router:payment_requests",
     "router:quotations",
@@ -618,7 +895,6 @@
      "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
      "backend/routers/__init__.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
@@ -685,12 +961,11 @@
    "kind": "api",
    "units": [
     "core:main",
-    "file:backend/modules/tender_radar/module.json",
-    "mod:tender_radar/api",
     "plat:__init__",
     "plat:loader",
     "plat:registry",
     "plat:source_tree",
+    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -702,8 +977,7 @@
     ],
     "path": [
      "backend/main.py",
-     "backend/modules/tender_radar/api.py",
-     "backend/modules/tender_radar/module.json",
+     "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -728,7 +1002,6 @@
     "core:main",
     "dir:docs/platform/",
     "dir:frontend/pages/",
-    "file:backend/modules/tender_radar/module.json",
     "file:docs/platform/modules.json",
     "page:index.html",
     "page:pages/login.html",
@@ -750,7 +1023,6 @@
     ],
     "path": [
      "backend/main.py",
-     "backend/modules/tender_radar/module.json",
      "docs/platform/",
      "docs/platform/modules.json",
      "frontend/index.html",
@@ -825,6 +1097,31 @@
     ]
    }
   },
+  "backend/tests/platform/test_daily_checks_connector.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:daily_checks",
+    "helper:system_checks",
+    "plat:__init__",
+    "plat:registry",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/daily_checks.py",
+     "backend/helpers/system_checks.py",
+     "backend/routers/system.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_dep_scan_controls.py": {
    "kind": "audit",
    "units": [
@@ -836,6 +1133,23 @@
     "path": [
      "docs/platform/",
      "docs/platform/modules.json",
+     "tools/platform/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_dep_scan_module_files.py": {
+   "kind": "unit",
+   "units": [
+    "dir:tools/platform/",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
      "tools/platform/"
     ]
    }
@@ -908,13 +1222,11 @@
    "units": [
     "dir:backend/modules/",
     "dir:tools/platform/",
-    "file:backend/modules/tender_radar/module.json",
     "file:tools/platform/product_select.py"
    ],
    "evidence": {
     "path": [
      "backend/modules/",
-     "backend/modules/tender_radar/module.json",
      "tools/platform/",
      "tools/platform/product_select.py"
     ]
@@ -1227,7 +1539,6 @@
   "backend/tests/platform/test_menu_parity.py": {
    "kind": "api",
    "units": [
-    "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_menu_legacy.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
@@ -1257,9 +1568,6 @@
      "frontend/pages/tender-radar.html",
      "frontend/pages/users.html",
      "frontend/static/sidebar.js"
-    ],
-    "path": [
-     "backend/modules/tender_radar/module.json"
     ]
    }
   },
@@ -1366,8 +1674,6 @@
    "units": [
     "dir:frontend/pages/",
     "file:CHANGELOG.md",
-    "file:backend/modules/tender_radar/module.json",
-    "mod:tender_radar/api",
     "plat:__init__",
     "plat:source_tree"
    ],
@@ -1378,8 +1684,6 @@
     ],
     "path": [
      "CHANGELOG.md",
-     "backend/modules/tender_radar/api.py",
-     "backend/modules/tender_radar/module.json",
      "frontend/pages/"
     ]
    }
@@ -1388,7 +1692,6 @@
    "kind": "audit",
    "units": [
     "core:archive",
-    "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/test_system_audit_2026_09_14.py",
     "plat:__init__",
     "plat:paths",
@@ -1403,8 +1706,7 @@
      "backend/tests/test_system_audit_2026_09_14.py"
     ],
     "path": [
-     "backend/archive.py",
-     "backend/modules/tender_radar/module.json"
+     "backend/archive.py"
     ]
    }
   },
@@ -1412,7 +1714,6 @@
    "kind": "audit",
    "units": [
     "file:CHANGELOG.md",
-    "file:backend/modules/tender_radar/module.json",
     "plat:__init__",
     "plat:customization",
     "plat:source_tree"
@@ -1424,8 +1725,7 @@
      "backend/core/source_tree.py"
     ],
     "path": [
-     "CHANGELOG.md",
-     "backend/modules/tender_radar/module.json"
+     "CHANGELOG.md"
     ]
    }
   },
@@ -1437,7 +1737,6 @@
     "dir:frontend/pages/",
     "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
-    "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/_subproc.py",
     "file:backend/tests/platform/child_module_gate.py",
     "file:backend/tests/test_e2e_module_settings_2026_09_25.py",
@@ -1472,7 +1771,6 @@
     ],
     "path": [
      "backend/modules/",
-     "backend/modules/tender_radar/module.json",
      "backend/tests/platform/child_module_gate.py",
      "backend/tests/test_e2e_module_settings_2026_09_25.py",
      "frontend/pages/",
@@ -1493,10 +1791,7 @@
     "dir:backend/modules/",
     "dir:frontend/pages/",
     "dir:tools/platform/",
-    "file:backend/modules/tender_radar/SPEC.md",
-    "file:backend/modules/tender_radar/module.json",
     "file:tools/platform/module_update.py",
-    "mod:tender_radar/api",
     "page:index.html",
     "plat:registry"
    ],
@@ -1508,9 +1803,6 @@
      "backend/core/",
      "backend/core/registry.py",
      "backend/modules/",
-     "backend/modules/tender_radar/SPEC.md",
-     "backend/modules/tender_radar/api.py",
-     "backend/modules/tender_radar/module.json",
      "frontend/pages/",
      "tools/platform/",
      "tools/platform/module_update.py"
@@ -1520,11 +1812,11 @@
   "backend/tests/platform/test_no_file_relative_data_paths.py": {
    "kind": "audit",
    "units": [
+    "helper:system_checks",
     "helper:uploads",
     "plat:__init__",
     "plat:paths",
     "plat:source_tree",
-    "router:daily_tasks",
     "router:payslips"
    ],
    "evidence": {
@@ -1534,8 +1826,8 @@
     ],
     "path": [
      "backend/core/paths.py",
+     "backend/helpers/system_checks.py",
      "backend/helpers/uploads.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/payslips.py"
     ]
    }
@@ -1563,11 +1855,36 @@
     ]
    }
   },
+  "backend/tests/platform/test_p9_layout.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/platform/test_platform_catalog.py",
+    "page:pages/customers.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/tests/platform/test_platform_catalog.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/customers.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_page_paths_centralized.py": {
    "kind": "audit",
    "units": [
     "dir:frontend/pages/",
-    "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/platform/test_core_paths.py",
     "file:tools/platform/product_select.py",
     "page:index.html",
@@ -1592,7 +1909,6 @@
      "backend/core/pages.py",
      "backend/core/paths.py",
      "backend/core/source_tree.py",
-     "backend/modules/tender_radar/module.json",
      "backend/tests/platform/test_core_paths.py",
      "backend/tests/platform/test_page_paths_centralized.py",
      "frontend/index.html",
@@ -1627,7 +1943,6 @@
    "kind": "api",
    "units": [
     "core:main",
-    "file:backend/modules/tender_radar/module.json",
     "helper:doc_template",
     "plat:__init__",
     "plat:catalog",
@@ -1653,8 +1968,7 @@
     ],
     "path": [
      "backend/core/catalog.py",
-     "backend/core/customization.py",
-     "backend/modules/tender_radar/module.json"
+     "backend/core/customization.py"
     ]
    },
    "unresolved_api": [
@@ -1676,13 +1990,11 @@
     "dir:tools/platform/",
     "file:backend/helpers/__init__.py",
     "file:backend/modules/__init__.py",
-    "file:backend/modules/tender_radar/module.json",
     "file:docs/platform/modules.json",
     "file:product/core-only.json",
     "file:tools/platform/product_select.py",
     "file:tools/platform/upgrade.py",
     "helper:auth",
-    "mod:tender_radar/api",
     "page:index.html",
     "page:pages/login.html",
     "plat:registry"
@@ -1700,8 +2012,6 @@
      "backend/main.py",
      "backend/modules/",
      "backend/modules/__init__.py",
-     "backend/modules/tender_radar/api.py",
-     "backend/modules/tender_radar/module.json",
      "docs/platform/",
      "docs/platform/modules.json",
      "frontend/pages/",
@@ -2188,14 +2498,14 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:email_notify",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/email_notify.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -2246,7 +2556,6 @@
     "page:pages/approval-settings.html",
     "page:pages/voucher.html",
     "router:accounting_export",
-    "router:daily_tasks",
     "router:system",
     "router:vouchers"
    ],
@@ -2257,7 +2566,6 @@
     ],
     "api": [
      "backend/routers/accounting_export.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ],
@@ -2343,16 +2651,18 @@
     "core:archive",
     "core:db",
     "file:backend/helpers/__init__.py",
+    "helper:daily_checks",
     "helper:notification_prefs",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
+     "backend/helpers/daily_checks.py",
      "backend/helpers/notification_prefs.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -2416,14 +2726,14 @@
     "core:archive",
     "helper:email_notify",
     "helper:settings",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/settings.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -3673,14 +3983,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:settings",
-    "router:daily_tasks"
+    "helper:case_deadlines",
+    "helper:settings"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/settings.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/case_deadlines.py",
+     "backend/helpers/settings.py"
     ]
    }
   },
@@ -3801,23 +4111,18 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
-    "helper:case_stage_tasks",
     "helper:google_calendar",
-    "router:daily_tasks",
     "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
      "backend/routers/__init__.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/daily_tasks.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -3957,13 +4262,13 @@
    "units": [
     "core:db",
     "helper:notification_prefs",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/notification_prefs.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -3972,13 +4277,13 @@
    "units": [
     "core:archive",
     "core:db",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
      "backend/db.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -4058,17 +4363,18 @@
   "backend/tests/test_company_contact_a8c_2026_09_25.py": {
    "kind": "api",
    "units": [
-    "core:network_plan_export",
     "core:pdf_gen",
     "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
     "helper:auth",
     "helper:company_identity",
     "helper:settings",
+    "mod:netplan/export",
     "page:index.html",
     "page:pages/login.html",
     "page:pages/users.html",
     "plat:__init__",
+    "plat:source_tree",
     "plat:upgrade",
     "router:auth",
     "router:reports"
@@ -4076,12 +4382,12 @@
    "evidence": {
     "import": [
      "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/core/upgrade.py",
      "backend/helpers/__init__.py",
      "backend/helpers/auth.py",
      "backend/helpers/company_identity.py",
      "backend/helpers/settings.py",
-     "backend/network_plan_export.py",
      "backend/pdf_gen.py"
     ],
     "api": [
@@ -4093,6 +4399,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/netplan/export.py",
      "backend/routers/reports.py",
      "frontend/pages/",
      "frontend/pages/login.html",
@@ -4377,6 +4684,24 @@
      "backend/routers/quotations.py"
     ]
    }
+  },
+  "backend/tests/test_custom_ref_options_permission_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/tests/test_custom_modules_engine_2026_09_25.py",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_custom_modules_engine_2026_09_25.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_daily_backup_identity_after_snapshot_2026_09_24.py": {
    "kind": "unit",
@@ -5310,8 +5635,8 @@
    "units": [
     "core:db",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "mod:daily_tasks/api",
     "page:pages/case-management.html",
-    "router:daily_tasks",
     "router:quotations"
    ],
    "evidence": {
@@ -5320,7 +5645,7 @@
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/daily_tasks.py",
+     "backend/modules/daily_tasks/api.py",
      "backend/routers/quotations.py"
     ],
     "page": [
@@ -5554,6 +5879,25 @@
      "frontend/pages/case-management.html"
     ],
     "path": [
+     "frontend/pages/case-management.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_case_stage_daily_task_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "page": [
      "frontend/pages/case-management.html"
     ]
    }
@@ -5866,7 +6210,7 @@
     "file:backend/tests/_e2e_login.py",
     "helper:geo",
     "js:static/sidebar.js",
-    "router:network_plans"
+    "mod:netplan/api"
    ],
    "evidence": {
     "import": [
@@ -5876,7 +6220,7 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/network_plans.py"
+     "backend/modules/netplan/api.py"
     ],
     "page": [
      "frontend/static/sidebar.js"
@@ -6264,6 +6608,41 @@
     ]
    }
   },
+  "backend/tests/test_e2e_p8_gaps_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/approval-queue.html",
+    "page:pages/custom-records.html",
+    "page:pages/module-builder.html",
+    "router:custom_records",
+    "router:definitions",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/custom-records.html",
+     "frontend/pages/module-builder.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/custom-records.html",
+     "frontend/pages/module-builder.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_p8_module_builder_2026_09_26.py": {
    "kind": "e2e",
    "units": [
@@ -6430,13 +6809,13 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:netplan/api",
     "page:pages/case-management.html",
     "page:pages/completion-note-form.html",
     "page:pages/network-plan-form.html",
     "page:pages/network-plans.html",
     "page:pages/quotation-form.html",
-    "router:completion_notes",
-    "router:network_plans"
+    "router:completion_notes"
    ],
    "evidence": {
     "import": [
@@ -6445,8 +6824,8 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
-     "backend/routers/completion_notes.py",
-     "backend/routers/network_plans.py"
+     "backend/modules/netplan/api.py",
+     "backend/routers/completion_notes.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
@@ -7058,7 +7437,6 @@
   "backend/tests/test_edge_profile_2026_09_25.py": {
    "kind": "api",
    "units": [
-    "core:network_plan_export",
     "core:pdf_gen",
     "file:backend/helpers/__init__.py",
     "helper:startup",
@@ -7070,7 +7448,6 @@
      "backend/helpers/__init__.py",
      "backend/helpers/startup.py",
      "backend/helpers/voucher_pdf.py",
-     "backend/network_plan_export.py",
      "backend/pdf_gen.py",
      "backend/routers/reports.py"
     ]
@@ -7091,9 +7468,12 @@
    "kind": "audit",
    "units": [
     "helper:module_registry",
+    "mod:daily_tasks/api",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
     "page:pages/users.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:approval_delegates",
     "router:auth",
     "router:bonus",
@@ -7102,7 +7482,6 @@
     "router:cashier",
     "router:completion_notes",
     "router:contractor_vouchers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:dev_crm",
     "router:inventory",
@@ -7118,6 +7497,8 @@
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/module_registry.py"
     ],
     "page": [
@@ -7126,6 +7507,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/daily_tasks/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/bonus.py",
@@ -7134,7 +7516,6 @@
      "backend/routers/cashier.py",
      "backend/routers/completion_notes.py",
      "backend/routers/contractor_vouchers.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/dashboard.py",
      "backend/routers/dev_crm.py",
      "backend/routers/inventory.py",
@@ -8461,6 +8842,8 @@
     "helper:auth",
     "helper:module_registry",
     "js:static/sidebar.js",
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
     "page:index.html",
     "page:pages/inventory.html",
     "page:pages/users.html",
@@ -8474,14 +8857,12 @@
     "router:contractors",
     "router:custom_records",
     "router:customers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:dev_crm",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
-    "router:network_plans",
     "router:parts",
     "router:payment_requests",
     "router:payslips",
@@ -8502,6 +8883,8 @@
      "backend/helpers/module_registry.py"
     ],
     "api": [
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/netplan/api.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
@@ -8510,14 +8893,12 @@
      "backend/routers/contractors.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/dashboard.py",
      "backend/routers/dev_crm.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
-     "backend/routers/network_plans.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
      "backend/routers/payslips.py",
@@ -8551,7 +8932,6 @@
     "helper:module_registry",
     "page:pages/users.html",
     "router:module_versions",
-    "router:network_plans",
     "router:parts",
     "router:shipping_notes",
     "router:system"
@@ -8563,7 +8943,6 @@
     ],
     "api": [
      "backend/routers/module_versions.py",
-     "backend/routers/network_plans.py",
      "backend/routers/parts.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/system.py"
@@ -8584,11 +8963,9 @@
     "router:completion_notes",
     "router:contractor_vouchers",
     "router:customers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:inventory",
     "router:invoice_vouchers",
-    "router:network_plans",
     "router:parts",
     "router:payment_requests",
     "router:quotations",
@@ -8609,11 +8986,9 @@
      "backend/routers/completion_notes.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/customers.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/dashboard.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
-     "backend/routers/network_plans.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
@@ -9101,62 +9476,6 @@
    "units": [],
    "evidence": {}
   },
-  "backend/tests/test_network_plan_topology.py": {
-   "kind": "api",
-   "units": [
-    "core:network_plan_export",
-    "core:network_plan_topology",
-    "router:network_plans"
-   ],
-   "evidence": {
-    "import": [
-     "backend/network_plan_export.py",
-     "backend/network_plan_topology.py"
-    ],
-    "api": [
-     "backend/routers/network_plans.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_network_plans.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "core:network_plan_export",
-    "router:network_plans"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/network_plan_export.py"
-    ],
-    "api": [
-     "backend/routers/network_plans.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_network_plans_quick.py": {
-   "kind": "api",
-   "units": [
-    "core:network_plan_export",
-    "core:network_plan_topology",
-    "router:network_plans",
-    "router:network_plans_quick"
-   ],
-   "evidence": {
-    "import": [
-     "backend/network_plan_export.py",
-     "backend/network_plan_topology.py"
-    ],
-    "api": [
-     "backend/routers/network_plans.py",
-     "backend/routers/network_plans_quick.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_no_credentials_in_query_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -9215,7 +9534,7 @@
     "file:backend/helpers/__init__.py",
     "helper:email_notify",
     "helper:settings",
-    "router:daily_tasks"
+    "helper:system_checks"
    ],
    "evidence": {
     "import": [
@@ -9223,7 +9542,7 @@
      "backend/helpers/__init__.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/settings.py",
-     "backend/routers/daily_tasks.py"
+     "backend/helpers/system_checks.py"
     ]
    }
   },
@@ -9268,12 +9587,12 @@
    "units": [
     "core:db",
     "core:trail",
+    "helper:system_checks",
     "page:pages/customers.html",
     "router:auth",
     "router:completion_notes",
     "router:contractors",
     "router:customers",
-    "router:daily_tasks",
     "router:dev_crm",
     "router:list_prefs",
     "router:parts",
@@ -9284,7 +9603,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/daily_tasks.py",
+     "backend/helpers/system_checks.py",
      "backend/trail.py"
     ],
     "api": [
@@ -9539,7 +9858,6 @@
   "backend/tests/test_pdf_concurrency_2026_09_07.py": {
    "kind": "audit",
    "units": [
-    "core:network_plan_export",
     "core:pdf_gen",
     "file:backend/helpers/__init__.py",
     "helper:startup",
@@ -9549,7 +9867,6 @@
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/startup.py",
-     "backend/network_plan_export.py",
      "backend/pdf_gen.py",
      "backend/routers/reports.py"
     ],
@@ -9623,6 +9940,8 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
     "mod:tender_radar/api",
     "router:account_items",
     "router:accounting_export",
@@ -9635,7 +9954,6 @@
     "router:contractors",
     "router:custom_records",
     "router:customers",
-    "router:daily_tasks",
     "router:dashboard",
     "router:definitions",
     "router:dev_crm",
@@ -9649,8 +9967,6 @@
     "router:map_points",
     "router:module_versions",
     "router:modules",
-    "router:network_plans",
-    "router:network_plans_quick",
     "router:org_structure",
     "router:parts",
     "router:payment_requests",
@@ -9674,6 +9990,8 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/netplan/api.py",
      "backend/modules/tender_radar/api.py",
      "backend/routers/account_items.py",
      "backend/routers/accounting_export.py",
@@ -9686,7 +10004,6 @@
      "backend/routers/contractors.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/daily_tasks.py",
      "backend/routers/dashboard.py",
      "backend/routers/definitions.py",
      "backend/routers/dev_crm.py",
@@ -9700,8 +10017,6 @@
      "backend/routers/map_points.py",
      "backend/routers/module_versions.py",
      "backend/routers/modules.py",
-     "backend/routers/network_plans.py",
-     "backend/routers/network_plans_quick.py",
      "backend/routers/org_structure.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
@@ -10078,11 +10393,11 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "mod:netplan/api",
     "page:pages/quotation-form.html",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:network_plans",
     "router:quotations"
    ],
    "evidence": {
@@ -10091,10 +10406,10 @@
      "backend/pdf_gen.py"
     ],
     "api": [
+     "backend/modules/netplan/api.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/material_orders.py",
-     "backend/routers/network_plans.py",
      "backend/routers/quotations.py"
     ],
     "page": [
@@ -11857,6 +12172,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:netplan/api",
     "plat:__init__",
     "plat:source_tree",
     "router:approval_delegates",
@@ -11865,8 +12181,6 @@
     "router:definitions",
     "router:item_reads",
     "router:list_prefs",
-    "router:network_plans",
-    "router:network_plans_quick",
     "router:quotations",
     "router:system"
    ],
@@ -11877,18 +12191,18 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/netplan/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
-     "backend/routers/network_plans.py",
-     "backend/routers/network_plans_quick.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ],
     "path": [
+     "backend/modules/netplan/api.py",
      "backend/routers/auth.py"
     ]
    }
@@ -11956,13 +12270,15 @@
   "backend/tests/test_xlsx_out_l1_2026_09_25.py": {
    "kind": "api",
    "units": [
-    "core:network_plan_export",
     "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
     "helper:company_identity",
     "helper:part_catalog",
     "helper:settings",
     "helper:xlsx_out",
+    "mod:netplan/export",
+    "plat:__init__",
+    "plat:source_tree",
     "router:accounting_export",
     "router:cashier",
     "router:parts",
@@ -11970,18 +12286,20 @@
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/company_identity.py",
      "backend/helpers/part_catalog.py",
      "backend/helpers/settings.py",
      "backend/helpers/xlsx_out.py",
-     "backend/network_plan_export.py",
      "backend/routers/__init__.py",
      "backend/routers/accounting_export.py",
      "backend/routers/parts.py",
      "backend/routers/reports.py"
     ],
     "path": [
+     "backend/modules/netplan/export.py",
      "backend/routers/accounting_export.py",
      "backend/routers/cashier.py",
      "backend/routers/reports.py"
