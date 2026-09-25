@@ -48,18 +48,41 @@ if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyCon
 
 ### 1b. 恢復服務（轉換驗證通過後，或回滾驗證通過後）
 
+- 順序：先服務、確認回應、**最後開心跳**。
+- 🔴 **等不到回應也照開心跳**（最多等 240 秒）：服務真的起不來時，心跳告警就是該響的那一聲，不可以讓它一起沉默。輸出會標示失敗，由人決定是否回滾（§6）。
+- ping 用 `backend	ools\_healthcheck_ping.py`（Python＋OpenSSL，接受 HTTPS 自簽憑證；`apply_update.ps1` 用的也是它）。exit 0＝收到 200。PS 5.1 的 `Invoke-WebRequest` 對自簽憑證會失敗，不要用。
+- 與部署儀表板升級精靈的啟停步驟一致（c61e8c75）。
+
+在 `<ROOT>ackend	ools` 底下，以系統管理員身分開 PowerShell：
+
 ```powershell
-$Tasks = @('MOTRIX ERP Server Autostart', 'MOTRIX ERP Daily Backup', 'MOTRIX ERP Heartbeat')
-# 依序：先服務、再備份、最後心跳（服務沒起來前先開心跳會誤報）
-foreach ($t in $Tasks) {
+$Tasks   = @('MOTRIX ERP Server Autostart', 'MOTRIX ERP Daily Backup', 'MOTRIX ERP Heartbeat')
+$PingUrl = 'https://127.0.0.1:666/api/ping'      # HTTP 安裝改 http://
+$MaxWait = 240                                   # 秒
+
+# ① 服務與備份排程
+foreach ($t in $Tasks | Where-Object { $_ -notlike '*Heartbeat*' }) {
     Enable-ScheduledTask -TaskName $t | Out-Null
-    if ($t -like '*Autostart*') { Start-ScheduledTask -TaskName $t; Start-Sleep 20 }
+    if ($t -like '*Autostart*') { Start-ScheduledTask -TaskName $t }
 }
-Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:666/api/ping" | Select-Object StatusCode   # 200（HTTPS 安裝改 https://）
+
+# ② 等服務回應（最多 $MaxWait 秒）
+$ok = $false; $t0 = Get-Date
+while (((Get-Date) - $t0).TotalSeconds -lt $MaxWait) {
+    & python .\_healthcheck_ping.py $PingUrl 5 | Out-Null
+    if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+    Start-Sleep 5
+}
+if ($ok) { Write-Host "服務已回應 200" } else { Write-Warning "服務 $MaxWait 秒內沒有回應 —— 心跳照開（它會告警）；請決定是否回滾（§6）" }
+
+# ③ 心跳最後開（不論 ② 成敗）
+Enable-ScheduledTask -TaskName 'MOTRIX ERP Heartbeat' | Out-Null
+Start-ScheduledTask  -TaskName 'MOTRIX ERP Heartbeat'
+Start-Sleep 10
 Get-ScheduledTaskInfo -TaskName 'MOTRIX ERP Heartbeat' | Select-Object LastRunTime, LastTaskResult
 ```
 
-- 最後確認 **Heartbeat 打卡恢復**：下一個週期後 `LastRunTime` 更新、`LastTaskResult` 為 0，外部監控（healthchecks 類）顯示恢復。
+- 最後確認 **Heartbeat 打卡恢復**：`LastRunTime` 更新、`LastTaskResult` 為 0，外部監控（healthchecks 類）顯示恢復。② 失敗時心跳會報「服務沒有回應」——那是預期的告警，不是誤報。
 
 ## 2. 預檢（不改任何東西）
 
