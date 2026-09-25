@@ -3120,9 +3120,21 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
     在那之後也會呼叫這裡把新 id 立刻寫回 `data_json`。可選傳入 `updated_at`
     沿用呼叫端已經算好的同一個時間戳記，避免同一次請求裡把 `updated_at` 又悄悄
     往後推一次、讓回傳給前端的樂觀鎖時間戳跟資料庫實際值對不上。回傳實際寫入的
-    時間戳（查無此單則回傳 None）。"""
+    時間戳（查無此單則回傳 None）。
+
+    🔴 2026-09-25：讀與寫必須在同一個寫入交易裡。多數呼叫端（例如 `create_case_stage`）是
+    **commit 之後**才呼叫這裡；sqlite3 不為 SELECT 開交易 ⇒ 這裡讀到的 data_json 是交易外的快照，
+    處理完再整包寫回 ⇒ 中間 commit 的收款 PATCH 被蓋回舊值（畫面「已儲存」、DB 回到填值之前；
+    案件頁開啟時連打 5 次建立階段，正好和使用者開始填寫、存檔重疊）。
+    ⇒ 還不在交易裡就先 `BEGIN IMMEDIATE` 拿寫鎖再讀；已在交易裡的呼叫端（自己先拿過鎖）行為不變。
+    守門：test_stage_sync_lost_update_2026_09_25。"""
+    opened_here = not conn.in_transaction
+    if opened_here:
+        conn.execute("BEGIN IMMEDIATE")
     row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
     if not row:
+        if opened_here:
+            conn.commit()        # 只結束自己開的交易；呼叫端自己的交易照舊由它處理
         return None
     data = json.loads(row["data_json"] or "{}")
     stage_rows = conn.execute(
