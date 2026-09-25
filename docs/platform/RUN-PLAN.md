@@ -124,6 +124,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 06:49 D：⑯ 個資告知（`AUDIT-D-pii-notice.md`，合回後）：必修 PN-M1——notice 決定以頁為單位，案件頁出貨單收件人＋送貨地址可手打、沒有告知對象而守門放行（違反「手動輸入的聯絡人要 notice」）；建議 3（報價單告知端點權限、畫面換人重新告知、唯讀判斷）；12 頁決定與伺服器端換人重新告知成立。O-1：第四班 M10 rebase 要把 network-plans 告知端點搬進 modules/netplan（守門會抓）。另補 M10 稽核 O-4（空模組資料夾被 module_installed 當成在）。⑮ c-m04 尚未推上 origin，等 C。
 - 2026-09-26 06:43 巡視：各線都在工作（A M03、B M08、C M02-M1／M04、D ⑮～⑰），第四班列車進行中。D1 剩下 M05、M06、M07（C）與 M01（A）尚未開工；這幾個模組彼此牽連，同時開太多條線會衝突，所以不另外派子代理。不派工。
 - 2026-09-26 06:39：第三班列車合回（2934bbc9／2794b93e，4 包，0 紅）。第四班列車進行中。D 關閉 case_access 的 CA-M1 ⇒ c-case-access-2 搭第五班；D 下一個審 c-m04（⑮）、個資告知（⑯）、M08（⑰）。CA-O3 寫進 ROADMAP，M01 搬遷時必做。
 - 2026-09-26 06:38 D：⑭ case_access **CA-M1 關閉**（c-case-access-2 a82da8ec）：判準改看 `case.present`，loader 對停用／未授權不 import ⇒ 成立；D 突變 6/6 紅、基準 106 passed；CA-S1／S2／O1 關閉；新增觀察 CA-O2（表名變數、大寫 Quotations 抓不到）、CA-O3（M01 搬遷時 case.present 要進 ModuleSpec.providers）。仍開：M02-M1。

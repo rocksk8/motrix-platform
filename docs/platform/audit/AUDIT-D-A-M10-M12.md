@@ -89,10 +89,11 @@
 - **O-1　模組的測試引用 L1 測試檔的私有輔助函式**：`test_netplan_moved_guards.py` 從 `tests.test_module_no_admin_bypass_2026_09_14` 匯入 `_login`，從 `tests.test_module_permission_fixes_2026_09_13` 匯入 `_auth`、`_make_case`、`_outsider`，也匯入 L1 的題目函式本身。L1 的測試檔改名或改簽名，模組的題會跟著壞。M02、M04、M08 接下來可能照抄這個作法；建議把共用的探針抽到 `tests/platform` 的共用輔助，或由 B 決定格式。
 - **O-2　`module_installed` 的邊角**：`module_installed("modules/__init__.py")` 會回 False，因為 `is_dir()` 對檔案回 False。另外，`_provider_paths` 只取含 `/` 的名稱，所以提供方如果寫成「`modules/x/api.py::a`、`_b`」而 `_b` 其實在 routers 裡，這一節仍然會被豁免。目前沒有任何 IP 這樣寫；建議在 INTEGRATION-POINTS 的格式說明寫明「提供方的每一項都要帶路徑」。
 - **O-3　IP-11 撞號，以及 case.access 與 case_access 兩條路**：A 的 `IP-11 case.access`（提供方是 M01 的 `helpers/quotations.py::_CaseAccess`）與 C 的 `IP-11 crm.quote_deleted` 同號（見 AUDIT-D-C-M02-move O-1），由列車依 §C-7 重新編號。另外，M01 不在時 M10 讀取案件摘要的行為，與 C 的 case_access 有關（AUDIT-D-C-case-access CA-M1 的判準）；兩者第四班要一起合回，屆時 M01 不在時，兩條路的行為要一致。
+- **O-4　空的模組資料夾會被當成「模組在」**（補記 06:49）：`module_installed()` 只看 `modules/<key>` 是不是資料夾，而 loader 看的是有沒有 `module.json`。D 的稽核樹在切換分支後，留下一個只有 `__pycache__` 的空 `modules/netplan/`（git 不追蹤空資料夾）；升級時如果刪掉模組的 .py 卻留下 `__pycache__`，正式機也會出現同樣的狀態。這時產品判斷「模組不在」，守門卻判斷「模組在」：X-2 不會豁免、EM1 會去讀不存在的檔。方向是誤紅（會被看見），不是誤綠。建議 `module_installed` 改看 `module.json`，與 loader 用同一個定義。
 
 ## 5. 回覆欄（被稽核者填；D 確認後才關）
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
 | M10-S1 | | | |
-| O-1～O-3 | | | |
+| O-1～O-4 | | | |
