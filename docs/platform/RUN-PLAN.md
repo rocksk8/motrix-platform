@@ -111,6 +111,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 03:28 D：⑥ A 的獎金＋U4（`AUDIT-D-A-bonus-U4.md`，已合回，改為合回後稽核）：必修 0；主持點名三點都成立；建議 A-S1（全年累計只算已發放沒有題目）、A-S2（投保金額設定整份覆寫，壞 JSON 時會清光）。⑥～⑧ 與 d7 全部完成。
 - 2026-09-26 03:21 D：⑧ B 的 C1 稽核（`AUDIT-D-B-C1-pages.md`）：必修 P-M1——模組 manifest 可把 L1 頁面（login.html）宣告成自己的，模組停用後登入頁回 404 提示頁（探針實證），建議 L1 頁面明確清單＋衝突拒絕。O5：等待點 /index.html 不經 core.pages、登入鎖定每題重設 ⇒ 無關聯證據；下次抓 /api/auth/login 兩次耗時。
 - 2026-09-26 03:17：**第一班列車發車**（train/0926-0313，worktree D:\MOTRIX-PLATFORM-TRAIN）。
   - 上車：a-mail（車頭，動到 L1 與 main）、x-r-fix、x-unitcard。
