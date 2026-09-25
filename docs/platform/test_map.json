@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 493,
+  "tests": 495,
   "unmapped": 9,
   "kinds": {
    "api": 262,
    "e2e": 119,
-   "unit": 44,
-   "audit": 68
+   "unit": 45,
+   "audit": 69
   },
   "routes": 509
  },
@@ -825,7 +825,9 @@
   "backend/tests/platform/test_module_changelog_follows_code.py": {
    "kind": "audit",
    "units": [
+    "dir:frontend/pages/",
     "file:CHANGELOG.md",
+    "file:backend/modules/tender_radar/module.json",
     "mod:tender_radar/api",
     "plat:__init__",
     "plat:source_tree"
@@ -837,7 +839,9 @@
     ],
     "path": [
      "CHANGELOG.md",
-     "backend/modules/tender_radar/api.py"
+     "backend/modules/tender_radar/api.py",
+     "backend/modules/tender_radar/module.json",
+     "frontend/pages/"
     ]
    }
   },
@@ -848,16 +852,19 @@
     "file:backend/modules/tender_radar/module.json",
     "file:backend/tests/test_system_audit_2026_09_14.py",
     "plat:__init__",
+    "plat:paths",
     "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
      "backend/core/__init__.py",
+     "backend/core/paths.py",
      "backend/core/source_tree.py",
      "backend/tests/test_system_audit_2026_09_14.py"
     ],
     "path": [
+     "backend/archive.py",
      "backend/modules/tender_radar/module.json"
     ]
    }
@@ -1049,6 +1056,21 @@
      "tools/platform/",
      "tools/platform/product_select.py",
      "tools/platform/upgrade.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_requirements_cover_imports.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:tools/platform/",
+    "file:backend/conftest.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/conftest.py",
+     "backend/modules/",
+     "tools/platform/"
     ]
    }
   },
@@ -1747,6 +1769,17 @@
     ],
     "path": [
      "backend/tests/_bg_leak_probe.py"
+    ]
+   }
+  },
+  "backend/tests/test_bk19_interpreter_cache_2026_09_25.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/conftest.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/conftest.py"
     ]
    }
   },
