@@ -449,11 +449,15 @@
         },
 
         // ── 單據 ──
-        async defFor(version) {
+        // 單據凍結在建立時的定義版本 ⇒ 標籤、欄位、按鈕都用那一版：
+        // 單據讀取本身帶 definition（簽核人沒有模組權限也拿得到）；沒帶才問 meta?version=
+        async defFor(version, rec) {
+          if (rec && rec.definition) { this._defCache[version] = rec.definition; return rec.definition }
           if (this._defCache[version]) return this._defCache[version]
-          if (this.me.role === 'superadmin') {
-            var r = await this.api('GET', '/api/definitions/custom_module/' + encodeURIComponent(this.key) + '/versions/' + version)
-            if (r.ok && r.data && r.data.body) { this._defCache[version] = r.data.body; return r.data.body }
+          var r = await this.api('GET', this.base() + '/meta?version=' + encodeURIComponent(version))
+          if (r.ok && r.data && r.data.definition && r.data.version === version) {
+            this._defCache[version] = r.data.definition
+            return r.data.definition
           }
           return null
         },
@@ -465,7 +469,7 @@
         },
         async showRecord(rec) {
           this.record = rec
-          this.recDef = await this.defFor(rec.def_version)
+          this.recDef = await this.defFor(rec.def_version, rec)
           this.note = ''
           this.mode = 'view'
           try {

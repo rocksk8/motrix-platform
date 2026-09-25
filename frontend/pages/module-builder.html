@@ -747,7 +747,7 @@
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, sel: null, dragOver: false,
-        dirty: false, saving: false, saveState: 'idle', savedAt: '', _saveTimer: null, _loading: false,
+        dirty: false, saving: false, saveState: 'idle', savedAt: '', _saveTimer: null, _loading: false, _inflight: null, flushLimitMs: 10000,
         draftProblems: [], publishProblems: [],
         numExample: '', numProblems: [], _numTimer: null,
         fxProblems: {}, fxState: {}, _fxTimers: {}, whenProblems: {}, whenState: {}, _whenTimers: {},
@@ -858,10 +858,17 @@
           if (this.step === 5) this.queuePreview()
           if (this.step === 6) this.diffLoaded = false
         },
-        async saveDraft(keepalive) {
-          if (!this.def || !this.key) return
+        // 回傳「這一次存檔」的 Promise；已有一次在路上 ⇒ 排下一次，並回傳路上那一次
+        saveDraft(keepalive) {
+          if (!this.def || !this.key) return Promise.resolve()
           clearTimeout(this._saveTimer)
-          if (this.saving) { this._saveTimer = setTimeout(() => this.saveDraft(), 300); return }
+          if (this._inflight) { this._saveTimer = setTimeout(() => this.saveDraft(), 300); return this._inflight }
+          var p = this._putDraft(keepalive)
+          this._inflight = p
+          p.then(() => { if (this._inflight === p) this._inflight = null })
+          return p
+        },
+        async _putDraft(keepalive) {
           var snapshot = JSON.stringify(this.def)
           this.saving = true
           try {
@@ -879,14 +886,22 @@
             this.saveState = 'error'
           } finally { this.saving = false }
         },
+        // 發布／還原／看差異前把草稿存完：等「進行中那一次存檔」的回應（不輪詢）；
+        // 上限 flushLimitMs（伺服器不回、或使用者一直在改）⇒ 標成存檔失敗，不默默放行
         async flushSave() {
-          if (this.dirty || this.saving) {
-            await this.saveDraft()
-            while (this.saving || this.dirty) {
-              await new Promise(function (res) { setTimeout(res, 100) })
-              if (this.dirty && !this.saving) await this.saveDraft()
-              if (this.saveState === 'error') return false
+          var deadline = Date.now() + this.flushLimitMs
+          while (this.dirty || this._inflight) {
+            var left = deadline - Date.now()
+            if (left <= 0) {
+              this.saveState = 'error'
+              this.errMsg = '草稿存檔超過 ' + Math.round(this.flushLimitMs / 1000) + ' 秒沒有完成，已停止；請確認連線後再試'
+              return false
             }
+            var p = this._inflight || this.saveDraft()
+            var timer = null
+            await Promise.race([p, new Promise(function (res) { timer = setTimeout(res, left) })])
+            clearTimeout(timer)
+            if (this.saveState === 'error') return false
           }
           return this.saveState !== 'error'
         },
@@ -1248,7 +1263,7 @@
           if (this.busy) return
           this.busy = true; this.publishProblems = []; this.errMsg = ''
           try {
-            if (!(await this.flushSave())) { this.errMsg = '草稿存檔失敗，未發布'; return }
+            if (!(await this.flushSave())) { this.errMsg = '未發布：' + (this.errMsg || '草稿存檔失敗'); return }
             var r = await this.api('POST', this.defUrl() + '/publish', { note: this.publishNote })
             if (r.status === 422) {
               this.publishProblems = (r.data && r.data.problems) || []
@@ -1269,9 +1284,9 @@
           if (this.busy) return
           var ok = window.MotrixUI ? await window.MotrixUI.confirm('把第 ' + v + ' 版的內容再發布成新的一版？（歷史不會被改）', { okText: '還原' }) : true
           if (!ok) return
-          this.busy = true; this.publishProblems = []
+          this.busy = true; this.publishProblems = []; this.errMsg = ''
           try {
-            await this.flushSave()
+            if (!(await this.flushSave())) { this.errMsg = '未還原：' + (this.errMsg || '草稿存檔失敗'); return }
             var r = await this.api('POST', this.defUrl() + '/restore/' + v, { note: '' })
             if (r.status === 422) { this.publishProblems = (r.data && r.data.problems) || []; return }
             if (!r.ok) { this.errMsg = '還原失敗：' + ((r.data && r.data.detail) || r.status); return }
