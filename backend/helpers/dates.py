@@ -2,6 +2,8 @@
 import calendar
 from datetime import date, timedelta
 
+from fastapi import HTTPException
+
 
 def _add_months(d: date, months: int) -> date:
     m    = d.month - 1 + months
@@ -35,3 +37,22 @@ def _warranty_expiry(warranty_start: str, warranty_months) -> tuple:
         return exp, (exp - date.today()).days
     except Exception:
         return None, None
+
+
+# 2026-09-26 自 M01 helpers/recognition.py 下沉（M04 搬遷：外包工班、叫料、額外支出都要驗日期欄，`AC2`）
+def normalize_date(v, label="日期"):
+    """'' ＝未登錄；否則必須是 YYYY-MM-DD 的真實日期。回正規化後的字串。"""
+    if v is None:
+        return ""
+    if not isinstance(v, str):
+        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
+    v = v.strip()
+    # 日期欄可能是 datetime 字串以外的東西；只接受整 10 碼的日期
+    if v == "":
+        return ""
+    if len(v) != 10:
+        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
+    try:
+        return date.fromisoformat(v).isoformat()
+    except ValueError:
+        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
