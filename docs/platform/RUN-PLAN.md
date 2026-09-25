@@ -83,6 +83,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-25 23:55 R（法規代理，時間由 date 產生）：合回 R1～R3（wip/r-legal）。R1 法規參數依生效日版本化（L1 `helpers.legal_params`、設定頁「法規參數設定」、勞報單凍結版本＋快照、12 月提示、門檻＝最低工資守門、`nhi.bonus_insured_multiple`；U4 介面見 INTEGRATION-POINTS IP-7）；R2 零稅率／免稅必填依據（報價、開票申請）；R3 個資蒐集告知（公司設定頁範本、列印告知書、「已告知」紀錄）。規格 CUSTOMIZATION-SPEC §9、MODULE-GUIDE §11；CORE_VERSION 1.7。驗證：全量（3.11）在 d435987f——非 e2e 3777 過／2 紅（test_e2e_hard_cap，單獨重跑綠）、e2e 375 全綠；差異題在 4fb1c7be 之後（.venv312，-n 2）817 題全綠。
 - 2026-09-25 23:50 巡視（時間由 datetime 產生）：
   - 已合回：B 的 .venv312、§C-13、Python 不綁定（ba14bf36 等）；C 的 batch1 修正（972fbb5b）；9b 修正（a11de47e，CORE 1.6）；9c 修正（13f37f0a，1.5）；主持的完整回滾預覽（4fb1c7be）。
   - 派出關閉確認代理（X-9c／X-batch1／X-9b）；O-9（承攬商帳戶列為個資，使用者裁示）與 .build_commit 由子代理處理中。
