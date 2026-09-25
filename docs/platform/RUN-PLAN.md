@@ -119,6 +119,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 04:19：D 關閉確認 D1b（b-scope 可以上第三班；D 用 email_notify 另一個真突變驗證閉包在第二個模組也成立）與 C 的 P4／P5／P8 必修（C-M4 等 round_half_up）。PLAYBOOK 新增 §C-14：腳本與 git 不可以用 `;` 串接（一晚兩次）。
 - 2026-09-26 04:18 D：D1b S-M1 關閉（閉包突變 2 項紅；B 沒見過的 email_notify._users_emails 真突變「選到且紅」；scope_rc 實跑兩項皆過）。C 的 P4／P5／P8：C-M1、M2、M3、M5 關閉（在 c-audit-d d132336f 驗證，探針重跑＋突變 5 紅），C-M4 仍開（等 round_half_up）。〔更正：上一個 commit 3729e8b3 的訊息寫了 D1b，實際只含 C 的確認；D1b 在這一筆〕
 - 2026-09-26 04:14 巡視：**第二班列車發車**，由列車長子代理操作。車上 7 包：C3 → c-d7-km1 → c-p2-legal → a-mail-fix → x-vat-round → x-p1p3-fix → h-p8-frontend。b-scope 等 D 確認後搭第三班，c-m02、a-m12 也搭第三班，約 05:30 發車。各線都在工作。
 - 2026-09-26 04:12：B 修完 D1b 的 S-M1（模組內引用閉包、scope_rc 反向控制工具），閘門綠了就上月台，D 做關閉確認。閉包後重新量測：legal_params ≤17.8%、email_notify 中位數 20.6%、auth 31.6%、db 81.9%（整份列為例外）。C3 已上月台。
