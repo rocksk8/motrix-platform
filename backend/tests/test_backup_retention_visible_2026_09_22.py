@@ -286,6 +286,8 @@ def test_bk5_a_failed_db_copy_must_not_mark_the_month_done(arch, monkeypatch):
         raise OSError("雲端磁碟在複製整庫檔案時斷線")
 
     monkeypatch.setattr(arch, "_cloud_copy_file", _boom)
+    # 稽核 X-9b S-5：整庫 .db 進個資資料夾改走 `_pii_copy_file`（不用 makedirs）⇒ 失敗注入點要一起換
+    monkeypatch.setattr(arch, "_pii_copy_file", _boom)
 
     arch._monthly_backup()
 
@@ -331,6 +333,8 @@ def test_bk5_the_summary_records_that_the_db_is_missing(arch, monkeypatch):
         lambda conn, d, s3, now: {"quotations": 3})
     _seed_today_snapshot(arch)
     monkeypatch.setattr(arch, "_cloud_copy_file",
+                        lambda *a, **kw: (_ for _ in ()).throw(OSError("斷線")))
+    monkeypatch.setattr(arch, "_pii_copy_file",                     # 稽核 X-9b S-5（同上一題）
                         lambda *a, **kw: (_ for _ in ()).throw(OSError("斷線")))
 
     arch._monthly_backup()
