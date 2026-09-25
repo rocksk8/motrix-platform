@@ -557,7 +557,11 @@ function contractorsPage() {
     async _recordPrivacyAck(id) {
       const r = await fetch(`${API}/contractors/${id}/privacy-notice/ack`, {
         method: 'POST', headers: { Authorization: 'Bearer ' + this.session.token } })
-      if (!r.ok) throw new Error('個資告知紀錄寫入失敗（' + r.status + '）')
+      if (!r.ok) {
+        let why = ''
+        try { why = (await r.json()).detail || '' } catch (e) {}
+        throw new Error('個資告知紀錄寫入失敗（' + r.status + (why ? '：' + why : '') + '）')
+      }
       this.privacyAck = (await r.json()).ack
       this.privacyAckRequested = false
     },
@@ -702,6 +706,9 @@ function contractorsPage() {
         const pr = await fetch(`${API}/contractors/${c.id}/privacy-notice`, {
           headers: { Authorization: 'Bearer ' + this.session.token } })
         if (pr.ok && this.editId === c.id) this.privacyAck = (await pr.json()).ack || null
+        else if (pr.status === 409 && this.editId === c.id) {   // 稽核 S-3：紀錄損毀要說出來，不顯示成「尚未告知」
+          try { this.errMsg = (await pr.json()).detail || '' } catch (e) {}
+        }
       } catch(e) {}
       try {
         const r = await fetch(`${API}/contractors/${c.id}/id-card`, {

@@ -5,6 +5,7 @@
 - PUT  /api/legal-params/tax-rules          整份清單：結構驗證＋守門（門檻＝最低工資）＋已生效版本不可改刪（superadmin）
 - GET  /api/legal-params/tax-basis-options  零稅率／免稅依據選項（登入即可）
 - GET  /api/legal-params/privacy-notice     個資蒐集告知文字（登入即可；不含個資）
+- GET  /api/legal-params/privacy-notice/texts/{hash}  已告知紀錄當時的告知全文（登入即可）
 """
 from fastapi import APIRouter, Body, Header, HTTPException
 
@@ -28,6 +29,8 @@ def get_tax_basis_options(authorization: str = Header(None)):
     return {
         "options": {k: [{"code": c, "label": lb, "noteRequired": c in lp.TAX_BASIS_NOTE_REQUIRED}
                         for c, lb in v] for k, v in lp.TAX_BASIS_OPTIONS.items()},
+        # 稽核 S-4（2026-09-26）：§8 選項是逐字條文，出處給畫面顯示
+        "sources": {"exempt": lp.ARTICLE_8_SOURCE},
     }
 
 
@@ -42,6 +45,20 @@ def get_privacy_notice(authorization: str = Header(None)):
     return {"company": profile.get("name", ""), "text": text, "hash": pn.notice_hash(text),
             "isTemplate": not str(profile.get("privacy_notice") or "").strip(),
             "template": pn.template_for(profile.get("name", ""))}
+
+
+@router.get("/api/legal-params/privacy-notice/texts/{notice_hash}")
+def get_privacy_notice_text(notice_hash: str, authorization: str = Header(None)):
+    """稽核 S-5：已告知紀錄上的 noticeHash ⇒ 當時告知的全文（紀錄寫入時存檔；只增不改）。"""
+    from helpers import privacy_notice as pn
+    _require_user(authorization)
+    try:
+        entry = pn.text_for_hash(notice_hash)
+    except pn.AcksCorrupted as e:
+        raise HTTPException(409, str(e))
+    if entry is None:
+        raise HTTPException(404, "查無這一版告知文字（本功能之前的紀錄沒有存全文）")
+    return {"hash": notice_hash, "text": entry.get("text", ""), "firstAckAt": entry.get("firstAckAt")}
 
 
 @router.put("/api/legal-params/tax-rules")

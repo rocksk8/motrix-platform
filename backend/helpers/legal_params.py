@@ -14,6 +14,7 @@
 import copy
 import re
 from datetime import date
+from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 VERSIONS_KEY = "tax_rules_versions"
 LEGACY_KEY = "tax_rules"
@@ -71,6 +72,38 @@ class NoApplicableRules(ValueError):
 def today() -> date:
     """「今天」的唯一來源（跨年提示、已生效判斷、空白單據日期）；測試以 monkeypatch 換掉。"""
     return date.today()
+
+
+# ── 法規金額的捨入（唯一來源；稽核 D-1，2026-09-26）──────────────────────────────
+#
+# 🔴 Python 內建 `round()` 是銀行家捨入（.5 捨入到偶數：round(738.5) == 738），浮點乘法另有誤差
+#    ⇒ 法規金額一律走這裡：金額與費率都轉成十進位（Decimal）再捨入，不經過浮點乘積。
+# - 補充保費：健保署「保險費之繳納，以元為單位，角以下 4 捨 5 入」
+#   （https://www.nhi.gov.tw/ch/cp-2947-71ec6-3150-1.html，2026-09-26 查）⇒ `round_half_up`。
+# - 扣繳稅額：沿用「元以下捨去」（V9 起即如此；官方條文未核對，稽核 L-5／O-5）⇒ `floor_amount`。
+# 守門：tests/platform/test_legal_amount_rounding_guard.py（讀法規參數的程式不可以直接用 round()／math.floor()）。
+# 前端同一套算法：frontend/static/legal-round.js（整數運算），全域比對題守住兩邊一致。
+
+def _dec(x) -> Decimal:
+    if isinstance(x, bool):
+        raise TypeError("法規金額不接受布林值")
+    if isinstance(x, Decimal):
+        return x
+    if isinstance(x, int):
+        return Decimal(x)
+    if isinstance(x, float):
+        return Decimal(repr(x))       # 0.0211 ⇒ Decimal('0.0211')（最短表示，不是二進位展開）
+    return Decimal(str(x).strip())
+
+
+def round_half_up(amount, rate=1) -> int:
+    """`amount × rate` 四捨五入到元（角以下 4 捨 5 入）。補充保費等「四捨五入」的法規金額用這個。"""
+    return int((_dec(amount) * _dec(rate)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def floor_amount(amount, rate=1) -> int:
+    """`amount × rate` 元以下捨去。扣繳稅額用這個。"""
+    return int((_dec(amount) * _dec(rate)).quantize(Decimal(1), rounding=ROUND_FLOOR))
 
 
 # ── 純函式 ────────────────────────────────────────────────────────────────────
@@ -255,8 +288,53 @@ def year_status(versions, today) -> dict:
 # ── R2（CUSTOMIZATION-SPEC §9.2）：零稅率、免稅的依據 ─────────────────────────────
 #
 # 營業稅法 §7（零稅率，第 1～9 款；全國法規資料庫 G0340080 flno=7，2026-09-25 查，款名為摘要）、
-# §8（免稅，第一項共三十餘款；款次與內容由使用者填，本檔不逐款抄錄——未逐字取得條文）。
+# §8（免稅，第一項第 1～32 款，第 7 款已刪除）。
+# 〔原句（R，2026-09-25）：「§8（免稅，第一項共三十餘款；款次與內容由使用者填，本檔不逐款抄錄——未逐字取得條文）」
+#   ⇒ 2026-09-26 稽核 S-4：已取得逐字條文，改成逐款下拉〕
 # 依據存在單據 data_json.taxBasis = {code, note}；核心欄位（稅別、稅率、金額）不動。
+
+#: 加值型及非加值型營業稅法 §8 第一項**逐字**條文（款次, 內容）。
+#: 出處：全國法規資料庫 https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=G0340080&flno=8
+#: 查詢日 2026-09-26（該站「法規整編資料截止日：民國 115 年 09 月 18 日」）。條文修正時照新條文改這張表。
+ARTICLE_8_SOURCE = ("加值型及非加值型營業稅法 §8 第一項，全國法規資料庫 "
+                    "https://law.moj.gov.tw/LawClass/LawSingle.aspx?pcode=G0340080&flno=8"
+                    "（2026-09-26 查；整編截止 115-09-18）")
+ARTICLE_8_ITEMS = [
+    (1, "出售之土地。"),
+    (2, "供應之農田灌溉用水。"),
+    (3, "醫院、診所、療養院提供之醫療勞務、藥品、病房之住宿及膳食。"),
+    (4, "依法經主管機關許可設立之社會福利團體、機構及勞工團體，提供之社會福利勞務及政府委託代辦之社會福利勞務。"),
+    (5, "學校、幼稚園與其他教育文化機構提供之教育勞務及政府委託代辦之文化勞務。"),
+    (6, "出版業發行經主管教育行政機關審定之各級學校所用教科書及經政府依法獎勵之重要學術專門著作。"),
+    (7, "（刪除）"),
+    (8, "職業學校不對外營業之實習商店銷售之貨物或勞務。"),
+    (9, "依法登記之報社、雜誌社、通訊社、電視臺與廣播電臺銷售其本事業之報紙、出版品、通訊稿、廣告、節目播映及節目播出。但報社銷售之廣告及電視臺之廣告播映不包括在內。"),
+    (10, "合作社依法經營銷售與社員之貨物或勞務及政府委託其代辦之業務。"),
+    (11, "農會、漁會、工會、商業會、工業會依法經營銷售與會員之貨物或勞務及政府委託其代辦之業務，或依農產品市場交易法設立且農會、漁會、合作社、政府之投資比例合計占百分之七十以上之農產品批發市場，依同法第二十七條規定收取之管理費。"),
+    (12, "依法組織之慈善救濟事業標售或義賣之貨物與舉辦之義演，其收入除支付標售、義賣及義演之必要費用外，全部供作該事業本身之用者。"),
+    (13, "政府機構、公營事業及社會團體，依有關法令組設經營不對外營業之員工福利機構，銷售之貨物或勞務。"),
+    (14, "監獄工廠及其作業成品售賣所銷售之貨物或勞務。"),
+    (15, "郵政、電信機關依法經營之業務及政府核定之代辦業務。"),
+    (16, "政府專賣事業銷售之專賣品及經許可銷售專賣品之營業人，依照規定價格銷售之專賣品。"),
+    (17, "代銷印花稅票或郵票之勞務。"),
+    (18, "肩挑負販沿街叫賣者銷售之貨物或勞務。"),
+    (19, "飼料及未經加工之生鮮農、林、漁、牧產物、副產物；農、漁民銷售其收穫、捕獲之農、林、漁、牧產物、副產物。"),
+    (20, "漁民銷售其捕獲之魚介。"),
+    (21, "稻米、麵粉之銷售及碾米加工。"),
+    (22, "依第四章第二節規定計算稅額之營業人，銷售其非經常買進、賣出而持有之固定資產。"),
+    (23, "保險業承辦政府推行之軍公教人員與其眷屬保險、勞工保險、學生保險、農、漁民保險、輸出保險及強制汽車第三人責任保險，以及其自保費收入中扣除之再保分出保費、人壽保險提存之責任準備金、年金保險提存之責任準備金及健康保險提存之責任準備金。但人壽保險、年金保險、健康保險退保收益及退保收回之責任準備金，不包括在內。"),
+    (24, "各級政府發行之債券及依法應課徵證券交易稅之證券。"),
+    (25, "各級政府機關標售賸餘或廢棄之物資。"),
+    (26, "銷售與國防單位使用之武器、艦艇、飛機、戰車及與作戰有關之偵訊、通訊器材。"),
+    (27, "肥料、農業、畜牧用藥、農耕用之機器設備、農地搬運車及其所用油、電。"),
+    (28, "供沿岸、近海漁業使用之漁船、供漁船使用之機器設備、漁網及其用油。"),
+    (29, "銀行業總、分行往來之利息、信託投資業運用委託人指定用途而盈虧歸委託人負擔之信託資金收入及典當業銷售不超過應收本息之流當品。"),
+    (30, "金條、金塊、金片、金幣及純金之金飾或飾金。但加工費不在此限。"),
+    (31, "經主管機關核准設立之學術、科技研究機構提供之研究勞務。"),
+    (32, "經營衍生性金融商品、公司債、金融債券、新臺幣拆款及外幣拆款之銷售額。但佣金及手續費不包括在內。"),
+]
+#: 已刪除的款次：不列入選項
+ARTICLE_8_DELETED = {n for n, t in ARTICLE_8_ITEMS if t == "（刪除）"}
 TAX_BASIS_OPTIONS = {
     "zero": [
         ("7-1", "營業稅法 §7 ① 外銷貨物"),
@@ -270,13 +348,15 @@ TAX_BASIS_OPTIONS = {
         ("7-9", "營業稅法 §7 ⑨ 保稅區營業人銷售與課稅區營業人存入自由港區事業或海關管理之保稅倉庫、物流中心以供外銷之貨物"),
         ("zero-other", "其他法律規定之零稅率（請於說明填寫法條）"),
     ],
-    "exempt": [
-        ("8", "營業稅法 §8 第一項（請於說明填寫款次與內容）"),
-        ("exempt-other", "其他法律規定之免稅（請於說明填寫法條）"),
-    ],
+    "exempt": [("8-%d" % n, "營業稅法 §8 第一項第 %d 款：%s" % (n, t))
+               for n, t in ARTICLE_8_ITEMS if n not in ARTICLE_8_DELETED]
+              + [("exempt-other", "其他法律規定之免稅（請於說明填寫法條）")],
 }
-#: 選這些代碼時「說明」必填
-TAX_BASIS_NOTE_REQUIRED = {"zero-other", "8", "exempt-other"}
+#: 選這些代碼時「說明」必填（§8 已逐款列出 ⇒ 不再要求說明；「其他法律規定」仍要）
+TAX_BASIS_NOTE_REQUIRED = {"zero-other", "exempt-other"}
+#: 已不在選項裡、但舊資料可能存著的代碼（只用於顯示；新送出的單據要改選）。
+#: "8"＝R2 初版的「§8 第一項＋說明填款次」（2026-09-25～26，只在 platform 分支、正式機沒有）。
+LEGACY_TAX_BASIS_LABELS = {"8": "營業稅法 §8 第一項（舊選項，款次見說明）"}
 
 
 def tax_basis_label(basis) -> str:
@@ -284,7 +364,8 @@ def tax_basis_label(basis) -> str:
     if not isinstance(basis, dict):
         return ""
     code = basis.get("code")
-    label = next((lb for opts in TAX_BASIS_OPTIONS.values() for c, lb in opts if c == code), "")
+    label = next((lb for opts in TAX_BASIS_OPTIONS.values() for c, lb in opts if c == code),
+                 LEGACY_TAX_BASIS_LABELS.get(code, ""))
     note = str(basis.get("note") or "").strip()
     return "；".join(x for x in (label, note) if x)
 
@@ -299,6 +380,9 @@ def tax_basis_error(tax_type: str, basis) -> str:
     if not code:
         return f"稅別為{name}，請選擇{name}依據（{law}）"
     if code not in {c for c, _l in TAX_BASIS_OPTIONS[tax_type]}:
+        if tax_type == "exempt" and code in LEGACY_TAX_BASIS_LABELS:
+            return ("免稅依據已改為逐款選擇，請重新選擇 §8 的款次（原說明：%s）"
+                    % (str(basis.get("note") or "").strip() or "—"))
         return f"{name}依據不正確，請重新選擇（{law}）"
     if code in TAX_BASIS_NOTE_REQUIRED and not str(basis.get("note") or "").strip():
         return f"{name}依據選了「{dict(TAX_BASIS_OPTIONS[tax_type])[code]}」，請在說明欄填寫款次或法條"

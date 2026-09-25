@@ -510,6 +510,7 @@
 
 <script src="../static/notif.js"></script>
 <script src="../static/privacy-notice.js"></script>
+<script src="../static/legal-round.js"></script>
 <script src="../static/sidebar.js"></script>
 <script>
 const API = '/api'
@@ -555,7 +556,7 @@ function payslipForm() {
       contractorNationality: '本國籍', contractorHasUnionInsurance: false,
       serviceContent: '', serviceStartDate: '', serviceEndDate: '',
       incomeType: '9A', incomeSubtype: '',
-      slipDate: new Date().toISOString().slice(0, 10),
+      slipDate: window.MotrixLegalRound.taipeiToday(),   // 稽核 S-1：台北時間（UTC 在台灣清晨會是前一天，而日期決定法規版本）
       grossAmount: 0, paymentMethod: '匯款',
       bankCode: '', bankName: '', bankBranch: '',
       bankAccountName: '', bankAccountNumber: '',
@@ -583,10 +584,11 @@ function payslipForm() {
       return '未達門檻，免扣繳'
     },
 
-    fmt(n) { return 'NT$ ' + (Math.round(n || 0)).toLocaleString() },
+    fmt(n) { return 'NT$ ' + Number(n || 0).toLocaleString() },   // 金額已是整數（捨入在 calc 做完）
 
     calc() {
       if (!this.rules) return
+      const LR = window.MotrixLegalRound     // 法規金額的捨入（L1，frontend/static/legal-round.js）
       const rules = this.rules
       const gross = parseInt(this.q.grossAmount) || 0
       const itype = this.q.incomeType
@@ -598,14 +600,14 @@ function payslipForm() {
 
       if (isResident) {
         const r = rules.resident[itype]
-        if (gross >= r.tax_threshold) { taxRate = r.tax_rate; taxWithheld = Math.floor(gross * taxRate) }
+        if (gross >= r.tax_threshold) { taxRate = r.tax_rate; taxWithheld = LR.floor(gross, taxRate) }
       } else {
         const r = rules.non_resident[itype]
         if (gross >= (r.tax_threshold || 0)) {
           if (r.low_salary_rate != null) {
             taxRate = gross <= rules.minimum_wage.monthly * 1.5 ? r.low_salary_rate : r.tax_rate
           } else { taxRate = r.tax_rate }
-          taxWithheld = Math.floor(gross * taxRate)
+          taxWithheld = LR.floor(gross, taxRate)
         }
       }
 
@@ -614,7 +616,8 @@ function payslipForm() {
         const th = rules.nhi.thresholds[itype]
         if (gross >= th) {
           nhiRate = rules.nhi.rate
-          nhiSupplement = Math.round(Math.min(gross, rules.nhi.max_single_payment) * nhiRate)
+          // 稽核 D-1：角以下 4 捨 5 入，與後端 legal_params.round_half_up 同一套整數算法
+          nhiSupplement = LR.halfUp(Math.min(gross, rules.nhi.max_single_payment), nhiRate)
         }
       }
 

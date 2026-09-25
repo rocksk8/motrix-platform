@@ -72,8 +72,10 @@ def test_zero_rate_options_cover_all_nine_items_of_article_7():
     ("zero", {"code": "8", "note": "x"}, False),           # 免稅的代碼不能拿來當零稅率依據
     ("zero", {"code": "zero-other"}, False),              # 其他 ⇒ 說明必填
     ("zero", {"code": "zero-other", "note": "科學園區設置管理條例"}, True),
-    ("exempt", {"code": "8"}, False),                     # §8 ⇒ 款次必填
-    ("exempt", {"code": "8", "note": "第 1 款"}, True),
+    ("exempt", {"code": "8-1"}, True),                    # §8 逐款選（2026-09-26 稽核 S-4）⇒ 不必再填說明
+    ("exempt", {"code": "8-7"}, False),                   # 第 7 款已刪除，不是選項
+    ("exempt", {"code": "8-33"}, False),
+    ("exempt", {"code": "8", "note": "第 1 款"}, False),  # R2 初版的「§8＋說明」已不是選項（要重選款次）
     ("taxable", None, True),
 ])
 def test_tax_basis_error(kind, basis, ok):
@@ -101,6 +103,20 @@ def test_exempt_under_article_8_requires_the_item_number(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(taxRate=0, taxType="exempt", taxBasis={"code": "8"}), headers=h)
     assert r.status_code == 400 and "款次" in r.json()["detail"], r.text
+    r = client.post("/api/quotations", json=_body(taxRate=0, taxType="exempt", taxBasis={"code": "8-5"}), headers=h)
+    assert r.status_code == 201, r.text
+
+
+def test_article_8_options_are_the_verbatim_items_with_source():
+    """稽核 S-4：§8 第一項 32 款逐字（第 7 款已刪除 ⇒ 31 個選項）＋「其他法律規定」。"""
+    from helpers import legal_params as lp
+    assert [n for n, _t in lp.ARTICLE_8_ITEMS] == list(range(1, 33))
+    assert lp.ARTICLE_8_DELETED == {7}
+    codes = [c for c, _l in TAX_BASIS_OPTIONS["exempt"]]
+    assert codes == ["8-%d" % n for n in range(1, 33) if n != 7] + ["exempt-other"]
+    assert dict(TAX_BASIS_OPTIONS["exempt"])["8-1"] == "營業稅法 §8 第一項第 1 款：出售之土地。"
+    assert "law.moj.gov.tw" in lp.ARTICLE_8_SOURCE and "G0340080" in lp.ARTICLE_8_SOURCE
+    assert tax_basis_label({"code": "8", "note": "第 3 款"}).startswith("營業稅法 §8 第一項（舊選項"), "舊資料要顯示得出來"
 
 
 def test_a_draft_can_be_saved_without_basis(client, make_user):
@@ -154,7 +170,7 @@ def test_invoice_request_on_an_old_quote_without_basis_needs_one(client, make_us
     r = _voucher(client, h, {"quote_no": "MQ-R2E", "scope": "amount", "amount": 5000})
     assert r.status_code == 400 and "開票申請補填" in r.json()["detail"], r.text
     r = _voucher(client, h, {"quote_no": "MQ-R2E", "scope": "amount", "amount": 5000,
-                             "taxBasis": {"code": "8", "note": "第 N 款"}})
+                             "taxBasis": {"code": "8-3"}})
     assert r.status_code == 201, r.text
 
 
@@ -190,4 +206,5 @@ def test_options_endpoint_is_the_single_source(client, make_user):
     h = _hdr(client, make_user)
     opts = client.get("/api/legal-params/tax-basis-options", headers=h).json()["options"]
     assert [o["code"] for o in opts["zero"]] == [c for c, _l in TAX_BASIS_OPTIONS["zero"]]
-    assert {o["code"] for o in opts["exempt"] if o["noteRequired"]} == {"8", "exempt-other"}
+    assert {o["code"] for o in opts["exempt"] if o["noteRequired"]} == {"exempt-other"}
+    assert [o["code"] for o in opts["exempt"]] == [c for c, _l in TAX_BASIS_OPTIONS["exempt"]]

@@ -5,15 +5,29 @@
 - 已告知紀錄：伺服器蓋時間、人員與告知文字雜湊；**已記錄的不可覆蓋或清除**（`merge_ack`）。
   勞報單存在自己的 data_json；承攬商（contractors 表沒有 JSON 欄位，不改 schema）存在
   設定鍵 `privacy_notice_acks`（`"contractor:<id>"` → 紀錄）。
+- 告知文字全文（稽核 S-5，2026-09-26）：紀錄只存 16 碼雜湊，公司改了告知文字就查不回當時告知的內容
+  ⇒ 每次寫入新的已告知紀錄時，把那一版全文存進設定鍵 `privacy_notice_texts`（雜湊 → 全文），只增不改。
+- 設定值讀不懂（稽核 S-3）：**拒絕寫入並記 ERROR**（`AcksCorrupted`），不可以當成空的再整份寫回——
+  那會清掉其他人員的紀錄、連損毀的原始內容也蓋掉。
 """
 import hashlib
 import json
+import logging
+import re
 from datetime import datetime
 
 from core.txn import write_txn
 from db import get_db
 
 ACKS_KEY = "privacy_notice_acks"
+TEXTS_KEY = "privacy_notice_texts"
+
+logger = logging.getLogger(__name__)
+_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+class AcksCorrupted(ValueError):
+    """告知紀錄（或告知文字存檔）的設定值讀不懂 ⇒ 拒絕寫入；訊息可以直接給使用者。"""
 COMPANY_PLACEHOLDER = "{公司名稱}"
 
 #: 個資法 §8 I 應告知事項：①機關名稱 ②蒐集目的 ③個資類別 ④利用期間、地區、對象、方式
@@ -78,12 +92,62 @@ def merge_ack(existing, requested: bool, user: dict, text: str):
     return None
 
 
+# ── 設定值的讀取：讀不懂就拒絕（不當成空的） ─────────────────────────────────────
+
+def _load_dict(conn, key: str) -> dict:
+    """設定鍵的 dict。沒有這一列 ⇒ {}；有但讀不懂或不是 dict ⇒ AcksCorrupted（記 ERROR，原值不動）。"""
+    row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (key,)).fetchone()
+    if row is None or row[0] is None:
+        return {}
+    try:
+        val = json.loads(row[0])
+    except ValueError:
+        val = None
+    if not isinstance(val, dict):
+        logger.error("個資告知設定值損毀，已拒絕寫入以免覆蓋：key=%s 前 80 字=%r", key, str(row[0])[:80])
+        raise AcksCorrupted("個資告知紀錄的設定值（%s）損毀，系統已拒絕寫入以免覆蓋既有紀錄；"
+                            "請聯絡系統管理者修復後再試" % key)
+    return val
+
+
+# ── 告知文字全文（雜湊 → 全文；只增不改） ───────────────────────────────────────
+
+def archive_text(conn, text: str) -> str:
+    """把這一版告知文字存進 `privacy_notice_texts`（已有同雜湊就不動）。回傳雜湊。
+    🔴 呼叫端必須已經在這條連線上拿到寫鎖（begin_write／write_txn，或同一交易裡已寫過別的表），
+    本函式不 commit（跟著呼叫端的交易一起提交或回滾）。"""
+    h = notice_hash(text)
+    texts = _load_dict(conn, TEXTS_KEY)
+    if h not in texts:
+        texts[h] = {"text": text or "", "firstAckAt": datetime.now().isoformat(timespec="seconds")}
+        conn.execute(
+            "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",
+            (TEXTS_KEY, json.dumps(texts, ensure_ascii=False), datetime.now().isoformat()))
+    return h
+
+
+def text_for_hash(h: str):
+    """紀錄上的 noticeHash ⇒ 當時的告知全文（dict：text、firstAckAt）；查不到 ⇒ None。"""
+    if not _HASH_RE.match(str(h or "")):
+        return None
+    conn = get_db()
+    try:
+        entry = _load_dict(conn, TEXTS_KEY).get(h)
+    finally:
+        conn.close()
+    return entry if isinstance(entry, dict) else None
+
+
 # ── 承攬商的紀錄（設定鍵） ─────────────────────────────────────────────────────
 
 def get_ack(kind: str, key) -> dict:
-    from helpers.settings import _get_setting
-    acks = _get_setting(ACKS_KEY, {}) or {}
-    return acks.get(f"{kind}:{key}") if isinstance(acks, dict) else None
+    """讀不懂 ⇒ AcksCorrupted（不當成「沒有紀錄」：那會讓畫面顯示「尚未告知」而使用者重做一次）。"""
+    conn = get_db()
+    try:
+        return _load_dict(conn, ACKS_KEY).get(f"{kind}:{key}")
+    finally:
+        conn.close()
 
 
 def record_ack(kind: str, key, user: dict) -> tuple:
@@ -92,18 +156,13 @@ def record_ack(kind: str, key, user: dict) -> tuple:
     text = current_notice()
     conn = get_db()
     with write_txn(conn):
-        row = conn.execute("SELECT value_json FROM system_settings WHERE key=?", (ACKS_KEY,)).fetchone()
-        try:
-            acks = json.loads(row["value_json"]) if row else {}
-        except ValueError:
-            acks = {}
-        if not isinstance(acks, dict):
-            acks = {}
+        acks = _load_dict(conn, ACKS_KEY)          # 讀不懂 ⇒ AcksCorrupted（write_txn 回滾並關連線）
         if isinstance(acks.get(k), dict) and acks[k].get("at"):
             conn.rollback()
             conn.close()
             return acks[k], False
         acks[k] = ack_record(user, text)
+        archive_text(conn, text)
         conn.execute(
             "INSERT INTO system_settings (key, value_json, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json, updated_at=excluded.updated_at",

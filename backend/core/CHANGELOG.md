@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.12 — 2026-09-26（X-R）〔core_bump：暫用 1.10 → 1.12〕
+> 稽核 AUDIT-D-R1-R3-legal 的修正（D-1、D-2、S-1～S-6、O-3、O-4）。暫用 1.10：合回時依 origin 取下一號。只有新增；行為修正列在下面。
+- L1（新增）：`helpers.legal_params.round_half_up(amount, rate=1)`（四捨五入到元，補充保費）、`floor_amount(amount, rate=1)`（元以下捨去，扣繳）——法規金額捨入的唯一來源（IP-7 契約 1.2）；前端 `static/legal-round.js`（`MotrixLegalRound.halfUp／floor／taipeiToday`）
+- L1（新增）：`helpers.legal_params.ARTICLE_8_ITEMS`／`ARTICLE_8_SOURCE`／`ARTICLE_8_DELETED`／`LEGACY_TAX_BASIS_LABELS`；`TAX_BASIS_OPTIONS["exempt"]` 改成 §8 第 1～32 款逐字（代碼 `8-N`），`8` 移出選項（只剩顯示用的舊標籤）；`/api/legal-params/tax-basis-options` 多 `sources`
+- L1（新增）：`helpers.privacy_notice.AcksCorrupted`、`TEXTS_KEY`、`archive_text(conn, text)`、`text_for_hash(h)`；端點 `GET /api/legal-params/privacy-notice/texts/{hash}`；設定鍵 `privacy_notice_texts`
+- L1（修改行為，介面不變）：`record_ack`／`get_ack` 讀不懂設定值 ⇒ `AcksCorrupted`（原本當成空的整份覆寫）；`record_ack` 新紀錄同時存告知全文；`privacy-notice.js` 告知書日期改台北時間
+- 勞報單（M07，行為修正）：補充保費四捨五入（原為銀行家捨入）；`update_payslip` 讀、改、寫在同一個 `write_txn`；新單日期預設台北時間
+
 ## 1.11 — 2026-09-26〔core_bump：暫用 1.99 → 1.11〕
 > C（P4／P5 定義文件庫＋自訂欄位、P8 自訂模組引擎、A8d branding、S-CC07 N-1；原排 1.5，合回時 1.5～1.9 已被使用，依 §C-7 取下一號）。
 - L1（新增）：公開端點 `/api/system/branding`（公司名稱／簡稱；統編只在帶有效登入時回，ROADMAP A8d）

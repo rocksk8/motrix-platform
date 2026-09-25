@@ -400,7 +400,10 @@ def get_contractor_privacy_ack(cid: int, authorization: str = Header(None)):
     """R3（個資法 §8）：這位人員的「已告知」紀錄（沒有 ⇒ ack=None）。"""
     from helpers import privacy_notice as _pn
     _require_user(authorization, require_superadmin=True, module='contractor_list')
-    return {"ack": _pn.get_ack("contractor", cid)}
+    try:
+        return {"ack": _pn.get_ack("contractor", cid)}
+    except _pn.AcksCorrupted as e:          # 稽核 S-3：讀不懂 ≠ 沒有紀錄
+        raise HTTPException(409, str(e))
 
 
 @router.post("/api/contractors/{cid}/privacy-notice/ack")
@@ -413,7 +416,10 @@ def ack_contractor_privacy_notice(cid: int, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, "找不到此外包人員")
-    rec, created = _pn.record_ack("contractor", cid, user)
+    try:
+        rec, created = _pn.record_ack("contractor", cid, user)
+    except _pn.AcksCorrupted as e:          # 稽核 S-3：拒絕寫入（不整份覆寫），ERROR 已記
+        raise HTTPException(409, str(e))
     if created:
         _audit(_tok(authorization), 'contractor.privacy_notice_ack', 'contractor', str(cid), row["name"],
                {"noticeHash": rec.get("noticeHash")})
