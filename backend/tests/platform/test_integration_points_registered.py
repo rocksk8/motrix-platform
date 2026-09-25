@@ -205,3 +205,35 @@ def test_registry_matches_code():
     text = DOC.read_text(encoding="utf-8")
     bad = mismatches(doc_capabilities(text), provided, consumed, absent_module_capabilities(text))
     assert not bad, "INTEGRATION-POINTS.md 與程式碼不一致（CORE-SPEC §5）：\n  " + "\n  ".join(bad)
+
+
+# ── 稽核 D M04-S1（2026-09-26）：模組在的時候，登記表寫的提供方檔案必須真的存在 ─────────────
+# X-2 豁免只看 `modules/<key>` 資料夾在不在；路徑寫錯（例：漏了 `api/`）時守門不會紅。
+
+def missing_provider_files(text, installed=source_tree.module_installed, backend=source_tree.BACKEND):
+    """各節「提供方」列的 `.py` 路徑：所屬模組在（或不是模組路徑）而檔案不存在 ⇒ 列出。"""
+    out = []
+    for sec in re.split(r"\n(?=## IP-)", text):
+        if not sec.startswith("## IP-"):
+            continue
+        for p in _provider_paths(sec):
+            rel = p.replace(chr(92), "/")
+            rel = rel[len("backend/"):] if rel.startswith("backend/") else rel
+            if rel.endswith(".py") and installed(rel) and not (backend / rel).is_file():
+                out.append("%s：%s" % (sec.splitlines()[0][:40], p))
+    return out
+
+
+def test_missing_provider_files_positive_and_reverse_controls(tmp_path):
+    (tmp_path / "modules" / "zz" ).mkdir(parents=True)
+    (tmp_path / "modules" / "zz" / "api.py").write_text("x", encoding="utf-8")
+    doc = ("## IP-1　`a.b`：甲\n| 提供方 | `modules/zz/api.py::f` |\n"
+           "## IP-2　`c.d`：乙\n| 提供方 | `modules/zz/wrong.py::g` |\n"
+           "## IP-3　`e.f`：丙\n| 提供方 | `modules/gone/api.py::h` |\n")
+    got = missing_provider_files(doc, installed=lambda p: "gone" not in p, backend=tmp_path)
+    assert got == ["## IP-2　`c.d`：乙：modules/zz/wrong.py"]       # 路徑寫錯的被抓到；模組不在的不算
+
+
+def test_every_provider_file_in_the_registry_exists():
+    bad = missing_provider_files(DOC.read_text(encoding="utf-8"))
+    assert not bad, "INTEGRATION-POINTS 的提供方檔案不存在（路徑寫錯？）：\n  " + "\n  ".join(bad)

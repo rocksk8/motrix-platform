@@ -7,7 +7,6 @@
 """
 import pytest
 
-import modules.subcontract.api.contractor_vouchers as cv
 import routers.invoice_vouchers as iv
 import routers.payment_requests as pr
 import routers.quotations as q
@@ -44,7 +43,8 @@ def _lock_is_free():
 
 
 CASES = {
-    "contractor_voucher_create": (cv, "post", "/api/contractor-vouchers", {"dispatch_id": 1}),
+    # 外包工班的端點以模組路徑字串登記：模組不在這個安裝包時不 import（PLAYBOOK §B-11，稽核 D M04-M1）
+    "contractor_voucher_create": ("modules.subcontract.api.contractor_vouchers", "post", "/api/contractor-vouchers", {"dispatch_id": 1}),
     "invoice_voucher_create": (iv, "post", "/api/invoice-vouchers", {"quote_no": "MQ-X", "scope": "amount", "amount": 100}),
     "payment_request_create": (pr, "post", "/api/payment-requests",
                                {"quote_no": "MQ-X", "scope": "amount", "stage": "full", "amount": 100}),
@@ -59,6 +59,12 @@ CASES = {
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_an_error_after_begin_immediate_releases_the_write_lock(client, make_user, monkeypatch, case):
     mod, method, path, body = CASES[case]
+    if isinstance(mod, str):
+        from core import source_tree
+        if not source_tree.module_installed(mod.replace(".", "/") + ".py"):
+            pytest.skip("%s 的模組不在這個安裝包（PLAYBOOK §B-11）" % mod)
+        import importlib
+        mod = importlib.import_module(mod)
     u, pw = make_user(username="wl_" + case[:16], role="superadmin")
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
     real = mod.get_db
