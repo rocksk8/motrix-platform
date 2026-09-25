@@ -257,6 +257,40 @@ def smoke(install: str) -> dict:
     return out
 
 
+#: 第一份備份＝轉換前的原始 V9 庫（完整回滾唯一正確的基準，稽核 D K-M1）；第二份＝再轉換前的狀態（只回程式用）
+FIRST_BACKUP, SECOND_BACKUP = "upgrade-backup", "upgrade-backup-2"
+DRILL_DIRS = ("v9-install", "new", FIRST_BACKUP, SECOND_BACKUP)
+
+
+def full_rollback_step(root: str) -> dict:
+    """6a 完整回滾（K-M1）：以**第一份**備份還原，V9 啟動**之前**比對主庫與 source-backup 的邏輯內容。
+    還原有問題或內容不相等 ⇒ 判失敗、不啟動 V9（在不對的庫上啟動只會多寫東西，讓現場更難看懂）。"""
+    install = os.path.join(root, "v9-install")
+    out = {"backup": FIRST_BACKUP}
+    out["problems"] = U.rollback(install, os.path.join(root, FIRST_BACKUP), "full", {})
+    out["logical_equal_to_source"] = (
+        logical_digest(os.path.join(install, "backend", "motrix_erp.db"))
+        == logical_digest(os.path.join(root, "source-backup", "backend", "motrix_erp.db")))
+    if out["problems"] or not out["logical_equal_to_source"]:
+        out["v9_ping"] = {"ok": False, "skipped": "還原有問題或與原始庫不相等，不啟動 V9"}
+    else:
+        r = T.start_and_ping(install, UD.free_port())
+        out["v9_ping"] = {k: v for k, v in r.items() if k != "log"}
+    out["ok"] = not out["problems"] and out["logical_equal_to_source"] and bool(out["v9_ping"].get("ok"))
+    return out
+
+
+def cleanup(root: str, ok: bool, keep: bool) -> list:
+    """K-S3：全部通過（且沒有 --keep-install）才刪演練目錄；失敗時**保留**，回傳保留的路徑寫進報告，
+    由人看完再刪（下一次執行會因 v9-install 已存在而拒絕，不會蓋掉現場）。source-backup 一律保留。"""
+    present = [os.path.join(root, d) for d in DRILL_DIRS if os.path.exists(os.path.join(root, d))]
+    if ok and not keep:
+        for d in present:
+            shutil.rmtree(d, ignore_errors=True)
+        return []
+    return present
+
+
 def write_report(rep: dict, path: str) -> None:
     lines = ["# D7 最終轉移升級驗證報告", "",
              "> 產生：`tools/platform/final_drill.py`（%s）。來源：`%s`（只讀）；演練目錄：`%s`。" % (rep["at"], rep["v9_dir"], rep["drill_root"]),
@@ -272,6 +306,9 @@ def write_report(rep: dict, path: str) -> None:
     lines += ["", "## 總判定", "", "**%s**" % ("通過" if rep["ok"] else "未通過（見上表 ❌ 的步驟）"), ""]
     if rep.get("stopped_at"):
         lines += ["> 在「%s」失敗後停止：後面的步驟沒有意義，而且不應在壞掉的狀態上繼續動作。" % rep["stopped_at"], ""]
+    if rep.get("kept_for_diagnosis"):
+        lines += ["> 演練目錄**保留**供排查（確認後手動刪除；刪之前再跑一次會被拒絕）：",
+                  *["> - `%s`" % d for d in rep["kept_for_diagnosis"]], ""]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -287,11 +324,12 @@ def main(argv=None):
     a = ap.parse_args(argv)
     root = os.path.abspath(a.drill_root)
     assert "V9.0" not in root, "演練路徑含 V9.0"
-    assert not os.path.exists(os.path.join(root, "v9-install")), "演練目錄已有 v9-install（上次沒清）：%s" % root
+    assert not os.path.exists(os.path.join(root, "v9-install")), \
+        "演練目錄已有 v9-install（上次失敗時保留供排查，或用了 --keep-install）：看完後手動刪除 %s" % root
     assert not T.port_open(666), "port 666 有服務在跑：先停掉 V9 開發機的伺服器（複製資料庫時不可以有人在寫）"
     rep = {"at": datetime.now().isoformat(timespec="seconds"), "v9_dir": a.v9_dir, "drill_root": root, "steps": [],
            "new_source": ("部署包 `%s`" % a.package) if a.package else ("`git archive %s`（不是部署包）" % a.new_rev)}
-    install, backup_dir = os.path.join(root, "v9-install"), os.path.join(root, "upgrade-backup")
+    install, backup_dir = os.path.join(root, "v9-install"), os.path.join(root, FIRST_BACKUP)
     try:
         with step(rep, "1 備份來源（唯讀）") as s:
             s.update(backup_source(a.v9_dir, os.path.join(root, "source-backup")))
@@ -332,15 +370,9 @@ def main(argv=None):
         # 稽核 D K-M1：完整回滾要用**第一份**備份（轉換前的 V9 庫），而且要證明還原後與原始庫邏輯內容相同。
         # 比對在 V9 啟動之前做（V9 一啟動就會寫每日掃描日期之類的執行期狀態）。
         with step(rep, "6a 完整回滾（第一份備份）") as s:
-            info = {}
-            s["problems"] = U.rollback(install, backup_dir, "full", info)
-            src_db = os.path.join(root, "source-backup", "backend", "motrix_erp.db")
-            s["logical_equal_to_source"] = logical_digest(os.path.join(install, "backend", "motrix_erp.db")) == logical_digest(src_db)
-            r = T.start_and_ping(install, UD.free_port())
-            s["v9_ping"] = {k: v for k, v in r.items() if k != "log"}
-            s["ok"] = not s["problems"] and s["logical_equal_to_source"] and r["ok"]
+            s.update(full_rollback_step(root))
         _must(rep)
-        backup2 = os.path.join(root, "upgrade-backup-2")
+        backup2 = os.path.join(root, SECOND_BACKUP)
         with step(rep, "6b 再轉換（只回程式前）") as s:
             U.backup(install, backup2)
             s["backup_problems"] = U.verify_backup_restorable(backup2)
@@ -361,9 +393,7 @@ def main(argv=None):
         rep["ok"] = bool(rep["steps"]) and all(s["ok"] for s in rep["steps"]) and "stopped_at" not in rep
         rep["drill_admin"] = DRILL_ADMIN[0]
         try:
-            if not a.keep_install:          # 先清演練目錄（不論成敗）；報告寫不出來也不可以留下 539 MB 的複本
-                for d in ("v9-install", "new", "upgrade-backup", "upgrade-backup-2"):
-                    shutil.rmtree(os.path.join(root, d), ignore_errors=True)
+            rep["kept_for_diagnosis"] = cleanup(root, rep["ok"], a.keep_install)
         finally:
             write_report(rep, a.report)
             with open(os.path.join(root, "final_drill.json"), "w", encoding="utf-8") as f:
