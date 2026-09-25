@@ -101,6 +101,12 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 02:22：使用者問「模組化之後驗證範圍應該會縮小」。主持用 modtest --dry-run --files 量了一次（總數 510 檔）：
+  - core/events 13%、routers/cashier 16%、voucher.js 20%、tender_radar/match 20%；
+  - **helpers/legal_params 74%、helpers/email_notify 81%、main.py 87%**。
+  - 結論：模組與頁面的改動已經縮小；常用的 L1 helper 仍然幾乎等於全量，推測是選題沿著 main 的 import 閉包擴散。
+  - 已派給 B：選題改成「直接依賴＋介面不變規則＋模組題只載入 L1＋該模組」，並記錄選題比例，目標是常用 helper 在 30% 以下。
+  - C 的 D7 預演抓到正式機升級一定會碰到的阻擋點：啟動時會寫入兩個節流日期，被判成「改寫設定」。已在 wip/c-d7 修好。
 - 2026-09-26 02:18：A 完成 X06 題（cdf41cc0 已合回），信件收件設定做完（wip/a-mail，52 種信件類型登記、mail-settings.html、主旨與內文正式化、禁用詞守門，突變 11 全紅），要等 a-bonus 合回後 rebase，再跑全量。順帶發現 V9 的地圖額度警戒信從來沒寄出去 ⇒ U12。B 的 rebase-check 簿記檔規則完成（ccc474f7），排在 C1 之後跑全量。
 - 2026-09-26 02:13 巡視：4 個視窗與 4 個子代理都在工作（A 的 a-bonus 跑差異題後合回；B 的 C1 全量＋b-audit-d；C 的 gaps2＋p2-legal 全量，含 when 條件改成 fail-safe；D 審 C 的後端；子代理：P8 前端、P1＋P3 修正、R 修正、個資告知合回）。**D1 階段 B（10 個模組搬遷）目前沒有人做，是最長的一段**：A 做完 a-bonus 與信件收件設定之後接 M12、M10…；C 做完 gaps2 之後分擔一半。不派工。
 - 2026-09-26 02:10 D：合回前稽核 ⑤-a P1＋P3（`AUDIT-D-P1P3-catalog.md`：必修 P-M1、P-M2，**關閉前不可合回**；突變 16 全紅；試 rebase 只在 §C-7 三檔衝突）、⑤-b P8 前端 ece37cf1（`AUDIT-D-P8-frontend.md`：必修 0，可合回；建議 checkbox 補題）。接著做 ④ C 的 P4／P5／P8 後端（23b04b74）。
