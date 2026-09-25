@@ -77,7 +77,6 @@ from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
 from routers.reports import _collect_tax_invoices  # §3 #11：資料擁有權待辦（ROADMAP）
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading
-from routers.contractor_vouchers import _voucher_public
 from helpers.part_catalog import PART_CATEGORIES
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
@@ -232,7 +231,14 @@ def set_t100_export_config(body: T100ExportConfigBody, authorization: str = Head
 
 # ── 傳票資料組裝 ────────────────────────────────────────────────────────────────
 
+#: IP-14 對方不在時（M04 外包工班）：T100 預覽的說明
+T100_CONTRACTOR_MISSING = "外包工班模組未安裝：本次匯出不含承攬商費用的付款傳票"
+
+
 def _collect_paid_contractor_vouchers(start: str, end: str) -> list:
+    pub = _registry.single_provider("contractor_voucher.public")       # IP-14（M04）
+    if pub is None:
+        return []                                                     # M04 不在 ⇒ 沒有承攬付款傳票可匯
     conn = get_db()
     try:
         rows = conn.execute("""
@@ -240,7 +246,7 @@ def _collect_paid_contractor_vouchers(start: str, end: str) -> list:
             WHERE is_paid=1 AND paid_at BETWEEN ? AND ?
             ORDER BY paid_at
         """, (start + "T00:00:00", end + "T23:59:59")).fetchall()
-        return [_voucher_public(r, include_snapshot=False) for r in rows]
+        return [pub(r, include_snapshot=False) for r in rows]
     finally:
         conn.close()
 
@@ -507,6 +513,8 @@ def t100_export_preview(
     _validate_range(start, end)
     events = _collect_t100_events(start, end)
     return {
+        # IP-14 對方不在時：預覽明說少了承攬商付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
+        "notice": "" if _registry.single_provider("contractor_voucher.public") else T100_CONTRACTOR_MISSING,
         "count": len(events),
         "totalAmount": sum(e["amount"] for e in events),
         "events": [

@@ -11,7 +11,6 @@ from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
 from core.txn import begin_write, write_txn
 from core import registry as _registry
-from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -173,6 +172,8 @@ def _dispatch_row(row) -> dict:
 # 私有函式，改用 `core.registry.single_provider("dispatch.row")`；M04 不在時對方拿到 None，
 # 自行退化成「沒有派工資訊」。欄位只准加不准改名／刪除（改了要升契約版本）。
 _registry.provide("dispatch.row", "subcontract", _dispatch_row)
+# IP-12：M01 案件整包（/api/quotations/{no}/bundle）的承攬派工段；同一份授權與權限判斷
+_registry.provide("dispatch.list_for_case", "subcontract", lambda quote_no, authorization: list_dispatches(quote_no=quote_no, authorization=authorization))
 
 
 # ── 承攬商 CRUD ───────────────────────────────────────────────────────────────
@@ -859,67 +860,35 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
     if not drow:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
-    # Load quotation —— lost update：讀 data_json 前先拿寫鎖
+    # 報價單的格式與寫入歸 M01（IP-13 `quotation.append_items`）：本模組只交出中性的品項，
+    # M01 在同一筆交易內（本函式已拿寫鎖）讀單、檢查草稿、換成報價品項並存檔。M01 不在 ⇒ 409 明說。
+    append = _registry.single_provider("quotation.append_items")
+    if append is None:
+        conn.close()
+        raise HTTPException(409, QUOTE_IMPORT_UNAVAILABLE)
     with write_txn(conn):   # lost update；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
-        qrow = conn.execute(
-            "SELECT quote_no, status, data_json, updated_at FROM quotations WHERE quote_no=?",
-            (drow["quote_no"],)
-        ).fetchone()
-        if not qrow:
-            conn.close()
-            raise HTTPException(404, "找不到對應報價單")
-        if qrow["status"] != "草稿":
-            conn.close()
-            raise HTTPException(409, f"報價單目前為「{qrow['status']}」狀態，請先在報價單頁面解鎖後再匯入")
-
         vendor_name = drow["vendor_name"] or (f"承攬商#{drow['vendor_id']}" if drow["vendor_id"] else "外包人員（點工）")
         dispatch_items = []
         try:
             dispatch_items = json.loads(drow["items_json"] or "[]")
         except Exception:
             pass
-
-        qdata = {}
-        try:
-            qdata = json.loads(qrow["data_json"] or "{}")
-        except Exception:
-            pass
-
-        if not isinstance(qdata.get("items"), list):
-            qdata["items"] = []
-
-        # Add section header
-        qdata["items"].append({
-            "id": str(uuid.uuid4()),
-            "type": "header",
-            "description": f"外包承攬 — {vendor_name}"
-        })
-        # Convert dispatch items to quotation items (cost = vendor unit_price)
-        for it in dispatch_items:
-            unit_price = float(it.get("unitPrice", 0) or 0)
-            qty = float(it.get("qty", 1) or 1)
-            qdata["items"].append({
-                "id": str(uuid.uuid4()),
-                "description": it.get("description", ""),
-                "brand": "",
-                "qty": qty,
-                "unit": it.get("unit", "式"),
-                "cost": unit_price,
-                "margin": 0.30,
-                "unitPrice": None,
-                "unitPriceOverride": False,
-                "amount": 0,
-                "notes": it.get("note", "")
-            })
-
+        # cost＝承攬單價（外包成本）；毛利與售價由 M01 依報價單規則處理
+        items = [{"description": it.get("description", ""),
+                  "qty": float(it.get("qty", 1) or 1),
+                  "unit": it.get("unit", "式"),
+                  "cost": float(it.get("unitPrice", 0) or 0),
+                  "note": it.get("note", "")} for it in dispatch_items]
         now = datetime.now().isoformat()
-        # T9（2026-09-23）：①漏 commit ⇒ 回 200 而 UPDATE 被回滾；②第 4 個位置參數是 status，
-        # 先前傳 username ⇒ 只修①會把報價單狀態改成使用者名稱。與 material_orders.py 09-10 同型。
-        save_quotation_json(conn, qrow["quote_no"], qdata, updated_at=now)
+        append(conn, drow["quote_no"], f"外包承攬 — {vendor_name}", items, now)
         conn.commit()
         conn.close()
         _audit(_tok(authorization), 'vendor.dispatch.import', 'contractor_dispatch', str(did),
-               f"匯入 {len(dispatch_items)} 品項至 {qrow['quote_no']}")
+               f"匯入 {len(dispatch_items)} 品項至 {drow['quote_no']}")
         notify_module_activity("承攬商派發", "匯入報價單品項", user.get("display_name") or user["username"],
-                                f"{vendor_name} → {qrow['quote_no']}", "vendor-contractors.html")
+                                f"{vendor_name} → {drow['quote_no']}", "vendor-contractors.html")
         return {"ok": True, "imported": len(dispatch_items), "updated_at": now}
+
+
+#: IP-13 對方不在時的說明
+QUOTE_IMPORT_UNAVAILABLE = "案件模組未安裝：無法把派工品項匯入報價單"
