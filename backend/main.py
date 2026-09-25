@@ -27,8 +27,8 @@ from helpers import geo as geo_core
 from core import loader as module_loader, registry as module_registry
 from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, shipping_notes, inventory, search, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
-from routers import definitions as definitions_router   # CUSTOMIZATION-SPEC §3.5 定義文件庫
-from routers import custom_records as custom_records_router   # P8 自訂模組引擎（通用 API）
+# CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
+from routers import definitions, custom_records
 from routers import modules
 from routers import legal_params
 
@@ -688,8 +688,8 @@ app.include_router(payment_requests.router)
 app.include_router(list_prefs.router)
 app.include_router(case_action_items.router)
 app.include_router(uploads.router)
-app.include_router(definitions_router.router)
-app.include_router(custom_records_router.router)
+app.include_router(definitions.router)
+app.include_router(custom_records.router)
 app.include_router(network_plans.router)
 app.include_router(network_plans_quick.router)
 app.include_router(approval_delegates.router)

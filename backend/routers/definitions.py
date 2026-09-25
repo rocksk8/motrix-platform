@@ -93,6 +93,8 @@ def save_definition_draft(kind: str, key: str, scope: str = Query("company"), pa
         return _err(e)
     finally:
         conn.close()
+    _audit(_tok(authorization), "definitions.save_draft", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+           "存 %s %s（%s）草稿" % (kind, key, scope), {})
     return {"draft": d, "problems": D.validate(kind, key, d["body"])}
 
 

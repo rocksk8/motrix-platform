@@ -150,30 +150,39 @@ def transition_custom_record(key: str, record_no: str, tkey: str, payload: dict 
     return rec
 
 
-def _decide(key, record_no, authorization, approve, note):
-    u = _require_user(authorization)
-    conn = get_db()
+def _decide(conn, u, key, record_no, approve, note):
     try:
-        rec = CM.decide(conn, key, record_no, u, approve, note)
+        return CM.decide(conn, key, record_no, u, approve, note)
     except CM.CustomModuleError as e:
         return _err(e)
-    finally:
-        conn.close()
-    _audit(_tok(authorization), "custom.approve" if approve else "custom.reject", "custom_record", record_no,
-           "%s %s" % ("核准" if approve else "退回", record_no), {"module": key, "note": note})
-    return rec
 
 
 @router.post("/api/custom/{key}/records/{record_no}/approve")
 def approve_custom_record(key: str, record_no: str, payload: dict = Body(default={}), authorization: str = Header(None)):
-    _require_user(authorization)
-    return _decide(key, record_no, authorization, True, (payload or {}).get("note", ""))
+    u = _require_user(authorization)
+    note = (payload or {}).get("note", "")
+    conn = get_db()
+    try:
+        rec = _decide(conn, u, key, record_no, True, note)
+    finally:
+        conn.close()
+    if isinstance(rec, dict):
+        _audit(_tok(authorization), "custom.approve", "custom_record", record_no, "核准 %s" % record_no, {"module": key, "note": note})
+    return rec
 
 
 @router.post("/api/custom/{key}/records/{record_no}/reject")
 def reject_custom_record(key: str, record_no: str, payload: dict = Body(default={}), authorization: str = Header(None)):
-    _require_user(authorization)
-    return _decide(key, record_no, authorization, False, (payload or {}).get("note", ""))
+    u = _require_user(authorization)
+    note = (payload or {}).get("note", "")
+    conn = get_db()
+    try:
+        rec = _decide(conn, u, key, record_no, False, note)
+    finally:
+        conn.close()
+    if isinstance(rec, dict):
+        _audit(_tok(authorization), "custom.reject", "custom_record", record_no, "退回 %s" % record_no, {"module": key, "note": note})
+    return rec
 
 
 @router.get("/api/custom/{key}/records/{record_no}/output")

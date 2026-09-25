@@ -482,6 +482,13 @@ class _Effects:
     def append(self, message):
         self.notices.append(message)
 
+    def notify(self, username, type_, ref_id, ref_label, message):
+        """站內通知：記下來，commit 之後才寫（`helpers.audit._notify` 自己開連線）。"""
+        def _send():
+            from helpers.audit import _notify
+            _notify(username, type_, ref_id, ref_label, message)
+        self.later.append(_send)
+
     def flush(self):
         import logging
         for fn in self.later:
@@ -533,7 +540,6 @@ def _published(body, rec, frm, to, action, user, effects):
 
 
 def _notify_state(body, rec, st, approval, notices):
-    from helpers.audit import _notify
     label = "%s %s" % (body.get("name", ""), rec["record_no"])
     targets = set()
     n = st.get("notify") or {}
@@ -544,11 +550,11 @@ def _notify_state(body, rec, st, approval, notices):
         tier = approval["tiers"][0]
         fp = next((a for a in tier["approvers"] if a.get("status") != "approved"), None)
         if fp:
-            notices.later.append(lambda u=fp["username"]: _notify(u, "approval", rec["record_no"], label, "%s 待您簽核" % label))
+            notices.notify(fp["username"], "approval", rec["record_no"], label, "%s 待您簽核" % label)
             notices.append("已通知 %s 簽核" % fp.get("displayName", fp["username"]))
     for u in sorted(targets):
         msg = "%s 狀態：%s" % (label, st.get("label", st.get("key")))
-        notices.later.append(lambda u=u, msg=msg: _notify(u, "info", rec["record_no"], label, msg))
+        notices.notify(u, "info", rec["record_no"], label, msg)
 
 
 def transition(conn, module_key, record_no, tkey, user, note="") -> dict:
@@ -607,9 +613,8 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                 _log(conn, rec["id"], "approve_tier", rec["status"], rec["status"], user["username"], note)
                 nxt = ta.first_pending_approver(tiers[appr["currentTier"]])
                 if nxt:
-                    from helpers.audit import _notify
                     label = "%s %s" % (body.get("name", ""), rec["record_no"])
-                    notices.later.append(lambda u=nxt["username"]: _notify(u, "approval", rec["record_no"], label, "%s 待您簽核" % label))
+                    notices.notify(nxt["username"], "approval", rec["record_no"], label, "%s 待您簽核" % label)
         else:
             ok, code, msg = ta.check_reject_permission(tiers, idx, user, conn)
             if not ok:

@@ -72,6 +72,17 @@ EXEMPT = {
         "只產生暫時 challenge 放在記憶體，不落地；完成註冊的端點才寫入並稽核",
     ("auth.py", "POST", "/api/auth/webauthn/login/begin"):
         "只產生暫時 challenge 放在記憶體，不落地；登入成功由 _issue_session 稽核",
+    # ── 2026-09-26 P5／P8 建構器的檢查與預覽（只回結果，不存檔）──────────────
+    ("definitions.py", "POST", "/api/definitions/{kind}/{key}/validate"):
+        "純檢查：跑驗證器回問題清單，不存檔（存草稿、發布、還原各自稽核）",
+    ("definitions.py", "POST", "/api/definitions/output_template/{key}/preview"):
+        "純預覽：用樣本資料產生 HTML，不存檔",
+    ("custom_records.py", "POST", "/api/custom-modules/formula/check"):
+        "純檢查：公式語法檢查回錯誤位置，不存檔",
+    ("custom_records.py", "POST", "/api/custom-modules/numbering/preview"):
+        "純預覽：回編號範例，不佔用流水號、不存檔",
+    ("custom_records.py", "POST", "/api/custom-modules/{key}/output/preview"):
+        "純預覽：用樣本資料產生 HTML，不存檔",
 }
 
 _VAGUE = {"", "不需要", "例外", "n/a", "na", "todo", "無", "略", "同上", "暫時"}
