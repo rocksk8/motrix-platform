@@ -156,3 +156,18 @@
 | B-S3 | | | |
 | B-S4 | | | |
 | B-O1～O3 | | | |
+
+### D 確認（2026-09-26 03:58；對象：B 在本機 `wip/b-scope` 上的回覆 `3a62d617`，修正 `f14ee6db`、`4d0808a0`）
+
+回覆欄在 b-scope 分支上，還沒進 origin；D 把確認寫在這裡，合併時不會與回覆欄的表格衝突。在 `63a47f4e` 上，相關 3 檔（`test_env_and_load_guards`、`test_modtest_full_results`、`test_requirements_cover_imports`）**52 passed**。
+
+| # | D 確認 | 證據 |
+|---|---|---|
+| B-M1 | ✅ 關閉 | 直接呼叫 `cap_workers(e, 2)`：`-n 8`、`-n8`、`-n=8`、`--numprocesses=8`、`--numprocesses 8`、`-nauto`、`-n auto`、`-n logical`、`-n -1` 全部壓到 2，`-n 2` 不變。D 突變 BR5（`auto` 照傳）⇒ `test_cap_workers_every_spelling` 等 6 紅 |
+| B-M2 | ✅ 關閉 | `project_env.py:150` 資料夾已存在就拒絕；D 突變 BR3（拿掉檢查）⇒ `test_rc_create_refuses_an_existing_folder` 紅 |
+| B-M3 | ✅ 關閉 | `tree_state` 改用 `--untracked-files=normal`，`run_dirty` 開跑與結束各判一次；D 突變 BR1（改回 `=no`）⇒ `test_rc_untracked_file_makes_the_run_dirty` 紅；BR2（只看開跑）⇒ 3 紅。原本存活的 B07 這一類，現在由行為題守住 |
+| B-S1 | ✅ 關閉 | D 突變 BR4（requirements-dev 拿掉 httpx2，原 B02 存活）⇒ `test_runtime_imports_of_test_fixtures_are_in_requirements` 紅 |
+| B-S2 | ✅ 關閉 | `build_deploy_package.ps1:557` `Min($physCores, 4)` |
+| B-S3、B-S4、B-O1～O3 | ✅ 接受 | 依回覆欄；D 抽查 B-S3（`_low_priority_flags`）與 B-O1（pytest 直接宣告）的題目都在，並包含在上面的 52 passed 裡 |
+
+⇒ 本檔必修全部關閉。⚠ 這些修正與 D1b 選題（`AUDIT-D-B-D1b-scope.md`，必修 S-M1）在同一個分支上：**b-scope 在 S-M1 關閉之前不可以合回**，所以本檔的關閉要等那一包合回之後才在 origin 上生效。
