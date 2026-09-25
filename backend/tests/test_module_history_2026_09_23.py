@@ -94,7 +94,7 @@ def test_the_unpay_precedent_really_does_both_layers():
     ```
     ☠️ 少了這一題，`§四` 那整段（合併會失去什麼）建立在**一段我沒有讀過的描述**上。
     """
-    src = (_BACKEND / "routers" / "contractor_vouchers.py").read_text(encoding="utf-8")
+    src = (_BACKEND / "modules" / "subcontract" / "api" / "contractor_vouchers.py").read_text(encoding="utf-8")
     assert '"action": "paid" if action == "pay" else "unpaid"' in src, (
         "`contractor_vouchers.py` 不再把 `unpaid` append 進 `paid_log` ——\n"
         + "🔑 那個前例變了 ⇒ **`§四` 那一段的理由要重寫**。")
