@@ -2,17 +2,18 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 465,
-  "unmapped": 6,
+  "tests": 469,
+  "unmapped": 7,
   "kinds": {
-   "api": 251,
+   "api": 253,
    "e2e": 118,
-   "unit": 38,
-   "audit": 58
+   "unit": 39,
+   "audit": 59
   },
-  "routes": 505
+  "routes": 506
  },
  "unmapped": [
+  "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/test_bn16_award_status_filter_2026_09_24.py",
   "backend/tests/test_bonus_award_export_watermark_2026_09_23.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
@@ -520,6 +521,57 @@
     ],
     "path": [
      "backend/version_manifest.json"
+    ]
+   }
+  },
+  "backend/tests/platform/test_dep_scan_controls.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "dir:tools/platform/",
+    "file:docs/platform/modules.json"
+   ],
+   "evidence": {
+    "path": [
+     "docs/platform/",
+     "docs/platform/modules.json",
+     "tools/platform/"
+    ]
+   }
+  },
+  "backend/tests/platform/test_deploy_dashboard_gates.py": {
+   "kind": "api",
+   "units": [],
+   "evidence": {},
+   "unresolved_api": [
+    "/api/build",
+    "/api/build-gate",
+    "/api/module-changes"
+   ]
+  },
+  "backend/tests/platform/test_deploy_insights.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "file:backend/core/CHANGELOG.md",
+    "file:docs/platform/modules.json",
+    "page:pages/dev-crm.html",
+    "plat:loader",
+    "router:auth",
+    "router:dev_crm"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/pages/dev-crm.html"
+    ],
+    "path": [
+     "backend/core/CHANGELOG.md",
+     "backend/core/loader.py",
+     "backend/db.py",
+     "backend/routers/auth.py",
+     "backend/routers/dev_crm.py",
+     "docs/platform/modules.json",
+     "frontend/pages/dev-crm.html"
     ]
    }
   },
@@ -7658,6 +7710,30 @@
     ],
     "api": [
      "backend/routers/dev_crm.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_pii_archive_mirror_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "helper:settings",
+    "plat:__init__",
+    "plat:paths",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/db.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
     ]
    },
    "login_fixture": true
