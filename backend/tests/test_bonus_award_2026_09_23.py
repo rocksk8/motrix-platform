@@ -78,7 +78,9 @@ def test_the_net_profit_formula_lives_in_exactly_one_place():
        「不可以再加一份」這句話就沒有意義了。
     """
     html = (_FRONTEND / "pages" / "settlement.html").read_text(encoding="utf-8")
-    assert "quotedPretax * 0.10" in html and "grossProfit * 0.01" in html, (
+    # 〔X-VAT，2026-09-26：算式改成 MotrixLegalRound.halfUp(quotedPretax, 0.10)／halfUp(grossProfit, 0.01)
+    #   （四捨五入與後端一致；係數仍只在這裡）。原斷言："quotedPretax * 0.10"、"grossProfit * 0.01"〕
+    assert "halfUp(quotedPretax, 0.10)" in html and "halfUp(grossProfit, 0.01)" in html, (
         "`settlement.html` 裡找不到那兩個係數 ——\n"
         + "🔑 算式搬家了 ⇒ **本檔引用的行號與禁令都要重寫**。")
 
@@ -87,7 +89,8 @@ def test_the_net_profit_formula_lives_in_exactly_one_place():
     for rel in ("pdf_gen.py", "routers/reports.py"):
         src = (_BACKEND / rel).read_text(encoding="utf-8")
         for i, line in enumerate(src.splitlines(), 1):
-            if re.search(r"\*\s*0\.10\b|\*\s*0\.01\b", line):
+            # X-VAT：也抓 round_half_up(x, 0.10) 這種寫法（乘法搬進捨入函式的參數）
+            if re.search(r"\*\s*0\.10\b|\*\s*0\.01\b|,\s*0\.10\s*\)|,\s*0\.01\s*\)", line):
                 hits.append("%s:%d %s" % (rel, i, line.strip()[:60]))
     assert not hits, (
         "後端已經有第二份係數：\n  " + "\n  ".join(hits)

@@ -32,6 +32,8 @@ import logging
 
 from db import get_db
 from helpers.bonus import bonus_signatures_of, SETTLEMENT_ROWS, settlement_fields
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 
 # 稽核 Y-2（2026-09-25）：M06 會計的 `helpers.voucher`／`helpers.voucher_pdf` 只有「組 PDF／預覽」要用
 # ⇒ 在用到時才 import（`_m06()`）。M06 不在包裡時，M07 照常載入；預覽與匯出回 503 並明說（ACCOUNTING_PDF_MISSING）。
@@ -157,7 +159,7 @@ def _settle_money(n):
     """
     if n is None:
         return "—"
-    return "NT$ %s" % "{:,}".format(round(n))
+    return "NT$ %s" % "{:,}".format(round_half_up(n))
 
 
 def _settle_pct(n):

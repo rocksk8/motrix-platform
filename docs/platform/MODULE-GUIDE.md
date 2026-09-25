@@ -204,6 +204,7 @@ modules/<key>/
 
 - 扣繳率、起扣標準、補充保費門檻、最低工資一律向 L1 `helpers.legal_params` 依**單據日期**取版本，模組不寫死數字；單據存版本號與參數快照，修改舊單沿用快照，除非使用者明確選擇重算。守門：`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params 與凍結的 db.py 種子）。
 - 法規金額（補充保費、扣繳稅額）的捨入一律用 L1 `legal_params.round_half_up`（四捨五入到元）／`floor_amount`（元以下捨去），前端用 `static/legal-round.js`；讀法規參數的程式不可以直接 `round()`／`math.floor()`／`Math.round()`（內建 round 是銀行家捨入：35,000 × 2.11% 會變 738，應為 739）。守門：`tests/platform/test_legal_amount_rounding_guard.py`（2026-09-26，稽核 D-1）。
+- **所有金額**（營業稅、開票申請、請款單、報價收款期別、外包派發稅額、成本精算、報表整數化）的捨入也一律用 `legal_params.round_half_up`（`helpers.quotations.round_half_up` 轉呼叫它；元以下兩位用 `round_half_up(x, 100) / 100`），前端用 `MotrixLegalRound.halfUp`（頁面要載入 `static/legal-round.js`）。不可以用內建 `round()`（10,015 × 30% ＝ 3,004.5 會變 3,004）或 `Math.round(a * b)`（0.7 × 45 會變 31）。守門：同一檔的「擴大範圍」段——開票／請款／報價／外包稅額／成本精算的檔案清單（`MONEY_PY_FILES`／`MONEY_JS_FILES`）禁止 `round(`／`Math.round(`，非金額在同一行標 `/* 非金額 */`；清單內的檔搬進模組時要跟著改清單（X-VAT，2026-09-26）。⚠ 未涵蓋：`:,.0f` 等格式化字串（顯示用，同樣是銀行家捨入）、公式引擎 `round()`（L1 formula，語意待決）。
 - 讀舊單 → 合併 → 整包寫回的法規單據（例：勞報單的已告知紀錄、快照）必須在 `core.txn.write_txn` 裡讀。守門：`tests/test_legal_audit_d_r1_r3_2026_09_26.py` 的並行題（只守勞報單；其他單據沿用 core.txn 的 lost-update 規則，⚠ 沒有全域守門）。
 - 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。
 - 零稅率／免稅送出時必填依據（`tax_basis_error`）；免稅依據是營業稅法 §8 第一項逐字條文的逐款下拉（`ARTICLE_8_ITEMS`，出處 `ARTICLE_8_SOURCE`；條文修正時改這張表）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。

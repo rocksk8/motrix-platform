@@ -15,6 +15,8 @@ from fastapi import APIRouter, HTTPException, Header, Body
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 # ⚠️ 兩種匯入方式是刻意的，不是沒整理：
 #   `from helpers.procurement import ...` —— 純函式，測試不需要換掉它們，直接匯入沒問題
 #   `from helpers import procurement`     —— **接縫**，`procurement.today()` 必須在呼叫當下
@@ -233,7 +235,7 @@ def purchase_suggestions(authorization: str = Header(None)):
             "unit": d["unit"], "category": d["category"],
             "safetyStock": safety_stock, "inStockCount": in_stock,
             "stockLevel": level, "suggestedQty": suggested_qty,
-            "unitCost": unit_cost, "estimatedCost": round(unit_cost * suggested_qty, 2),
+            "unitCost": unit_cost, "estimatedCost": round_half_up(unit_cost * suggested_qty, 100) / 100,
             "lastSupplierId": last_batch.get("supplierId"),
             "lastSupplierName": last_batch.get("supplierName") or "",
             "lastPurchaseAt": last_batch.get("lastPurchaseAt") or "",
@@ -246,7 +248,7 @@ def purchase_suggestions(authorization: str = Header(None)):
             "receivedAt": cycle["received_at"],
         })
     result.sort(key=lambda r: (r["stockLevel"] != "red", -r["estimatedCost"]))
-    total_estimated_cost = round(sum(r["estimatedCost"] for r in result), 2)
+    total_estimated_cost = round_half_up(sum(r["estimatedCost"] for r in result), 100) / 100
     return {"items": result, "count": len(result),
             "totalEstimatedCost": total_estimated_cost,
             "legacyLeadTimeSuppliers": legacy_lead_time_suppliers}

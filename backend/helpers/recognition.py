@@ -336,7 +336,7 @@ def _flag_item(quote_no, customer, doc, desc, amount, day, money_ok, kind):
     tab = FLAG_TABS[kind]
     link = "case-management.html?q=%s" % quote_no + ("&tab=%s" % tab if tab else "")
     return {"quoteNo": quote_no, "customer": customer or "", "doc": doc, "desc": desc,
-            "amount": (round(amount) if amount is not None else None) if money_ok else None,
+            "amount": (round_half_up(amount) if amount is not None else None) if money_ok else None,
             "date": day, "link": link}
 
 

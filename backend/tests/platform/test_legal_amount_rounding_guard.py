@@ -11,8 +11,11 @@ U4 獎金是第二個算補充保費的模組，照抄就會再錯一次。
 - 範圍（前端）：frontend 的 .html／.js 裡**讀法規參數**（呼叫 `/tax-rules` 端點）的檔案，
   `static/legal-round.js` 除外。禁止 `Math.round(`／`Math.floor(`／`Math.ceil(`／`Math.trunc(`
   ⇒ 改用 `MotrixLegalRound.halfUp`／`.floor`。
+- 擴大範圍（X-VAT，2026-09-26）：開票、請款、報價、外包稅額、成本精算、叫料的金額計算——明確的檔案清單
+  `MONEY_PY_FILES`／`MONEY_JS_FILES`（見檔案後段），禁止 `round(`／`Math.round(`；非金額標 `/* 非金額 */`。
 - 正對照與反向控制：用合成文字（不綁任何 L2 模組）；另驗範圍不是空的（掃描對象消失時不可以默默變綠）。
 """
+import ast
 import re
 
 from core import source_tree
@@ -117,3 +120,114 @@ def test_legal_amounts_are_rounded_only_by_the_legal_params_service():
             bad.append(f"frontend/{rel}:{ln}: {s}")
     assert not bad, ("法規金額要用 helpers.legal_params.round_half_up／floor_amount（前端 MotrixLegalRound），"
                      "不可以直接 round()／math.floor()／Math.round()：\n" + "\n".join(bad))
+
+
+# ── 擴大範圍：開票、請款、報價、外包稅額、成本精算的金額計算（X-VAT，2026-09-26）────────────────
+#
+# 成因：開票申請（invoice_vouchers）與請款單用內建 round() 換算未稅／含稅（銀行家捨入：10.5 ⇒ 10），
+#   報價收款期別 payment_item_amounts 也是（10,015 × 30% ＝ 3,004.5 ⇒ 後端 3,004、畫面 3,005）；
+#   外包派發稅額後端 round()、前端 Math.round() ⇒ 10,010 × 5% ＝ 500.5 兩邊差 1 元。
+#   這些檔**不讀法規參數**，上面的範圍掃不到 ⇒ 用明確的檔案清單。
+# - Python：清單內的檔不可以呼叫內建 round()（AST 判斷，docstring／註解裡的字不算），也不可以自己
+#   import ROUND_HALF_UP 另做一套 ⇒ 一律 `legal_params.round_half_up`。
+# - 前端：清單內的檔不可以 Math.round( ⇒ 一律 `MotrixLegalRound.halfUp`。非金額（例：檔案大小 KB）要在
+#   同一行用註解標 `/* 非金額 */`——標記＝有人做過決定，不是豁免清單。
+# - 用到 MotrixLegalRound 的頁面（含載入 case-management-*.js 的頁面）必須載入 static/legal-round.js。
+# - 清單裡的檔不存在 ⇒ 紅（檔案搬進模組時要跟著改清單，不可以默默失去對象）。
+MONEY_PY_FILES = (
+    "routers/invoice_vouchers.py", "routers/payment_requests.py", "helpers/quotations.py",
+    "routers/contractor_vouchers.py", "routers/vendor_contractors.py",
+)
+MONEY_JS_FILES = (
+    "pages/quotation-form.html", "pages/payment-request-form.html", "pages/settlement.html",
+    "js/case-management-fin.js", "js/case-management-dispatch.js", "js/case-management-xexp.js",
+    "js/case-management-exec.js",
+)
+_NOT_MONEY = re.compile(r"/\*\s*非金額\s*\*/|//\s*非金額")
+_LEGAL_ROUND_TAG = re.compile(r'<script\s+src="\.\./static/legal-round\.js"\s*>')
+
+
+def money_py_hits(src: str) -> list:
+    """內建 round() 的呼叫、自己 import ROUND_HALF_UP 的行。"""
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "round":
+            out.append(node.lineno)
+        elif isinstance(node, ast.ImportFrom) and node.module == "decimal" \
+                and any(a.name.startswith("ROUND_") for a in node.names):
+            out.append(node.lineno)
+    return sorted(out)
+
+
+def money_js_hits(text: str) -> list:
+    return [(i, ln.strip()[:120]) for i, ln in enumerate(text.splitlines(), 1)
+            if re.search(r"\bMath\.round\s*\(", _strip_js(ln)) and not _NOT_MONEY.search(ln)]
+
+
+def page_needs_legal_round(html: str, js_texts: dict) -> bool:
+    """頁面本身或它載入的 case-management-*.js 用到 MotrixLegalRound ⇒ True。"""
+    if "MotrixLegalRound" in html:
+        return True
+    for name in re.findall(r'<script\s+src="\.\./js/([\w.-]+\.js)"', html):
+        if "MotrixLegalRound" in js_texts.get(name, ""):
+            return True
+    return False
+
+
+def test_money_positive_control_python():
+    assert money_py_hits("x = round(a * b / c)\n") == [1]
+    assert money_py_hits("def f():\n    return {'t': round(t)}\n") == [2]
+    assert money_py_hits("from decimal import Decimal, ROUND_HALF_UP\n") == [1], "自己另做一套四捨五入也要擋"
+
+
+def test_money_reverse_control_python():
+    assert not money_py_hits("x = round_half_up(a * b / c)\n")
+    assert not money_py_hits('"""round(490.5) == 490"""\n# round(x)\ny = d.round(2)\n'), \
+        "docstring、註解、方法呼叫不算"
+    assert not money_py_hits("from decimal import Decimal\n")
+
+
+def test_money_positive_and_reverse_control_js():
+    assert money_js_hits("const t = Math.round(pretax * rate)\n")
+    assert money_js_hits("x-text=\"Math.round(n).toLocaleString()\"\n")
+    assert not money_js_hits("const t = MotrixLegalRound.halfUp(pretax, rate)\n")
+    assert not money_js_hits("// 舊寫法 Math.round(pretax * rate)\n")
+    assert not money_js_hits("' KB' + Math.round(v.size/1024 /* 非金額 */)\n"), "標了非金額 ⇒ 不算"
+    assert money_js_hits("Math.round(v.size/1024) // 金額\n"), "要寫的是「非金額」，其他註解不算"
+
+
+def test_money_page_script_tag_control():
+    js = {"case-management-fin.js": "MotrixLegalRound.halfUp(x)", "case-management-list.js": "x"}
+    assert page_needs_legal_round('<script src="../js/case-management-fin.js"></script>', js)
+    assert not page_needs_legal_round('<script src="../js/case-management-list.js"></script>', js)
+    assert page_needs_legal_round("const t = MotrixLegalRound.halfUp(a, b)", {})
+
+
+def test_money_scope_files_exist():
+    missing = [f"backend/{f}" for f in MONEY_PY_FILES if not (source_tree.BACKEND / f).exists()]
+    missing += [f"frontend/{f}" for f in MONEY_JS_FILES if not (FRONTEND / f).exists()]
+    assert not missing, "守門清單裡的檔不見了（搬進模組了？請同步更新 MONEY_*_FILES）：\n" + "\n".join(missing)
+
+
+def test_invoice_quote_and_payment_amounts_use_the_shared_half_up():
+    bad = []
+    for f in MONEY_PY_FILES:
+        p = source_tree.BACKEND / f
+        for ln in money_py_hits(p.read_text(encoding="utf-8")):
+            bad.append(f"backend/{f}:{ln}")
+    for f in MONEY_JS_FILES:
+        for ln, s in money_js_hits((FRONTEND / f).read_text(encoding="utf-8")):
+            bad.append(f"frontend/{f}:{ln}: {s}")
+    assert not bad, ("開票／請款／報價／外包稅額／成本精算的金額要用 legal_params.round_half_up"
+                     "（前端 MotrixLegalRound.halfUp），不可以直接 round()／Math.round()"
+                     "（非金額請在同一行標 /* 非金額 */）：\n" + "\n".join(bad))
+
+
+def test_pages_using_the_shared_rounding_load_legal_round_js():
+    js_texts = {p.name: p.read_text(encoding="utf-8") for p in (FRONTEND / "js").glob("*.js")}
+    pages = sorted((FRONTEND / "pages").glob("*.html"))
+    assert pages
+    bad = [p.name for p in pages
+           if page_needs_legal_round(p.read_text(encoding="utf-8"), js_texts)
+           and not _LEGAL_ROUND_TAG.search(p.read_text(encoding="utf-8"))]
+    assert not bad, "用到 MotrixLegalRound 卻沒有載入 ../static/legal-round.js（執行時 ReferenceError）：" + ", ".join(bad)

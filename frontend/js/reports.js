@@ -331,7 +331,7 @@ function reportsApp() {
       return (v >= 0 ? '+NT$ ' : '-NT$ ') + Math.abs(v).toLocaleString()
     },
     estGrossProfit(mc) {
-      return Math.round((mc.pretax || 0) * (mc.netMarginPct || 0) / 100)
+      return MotrixLegalRound.halfUp((mc.pretax || 0) * (mc.netMarginPct || 0) / 100)   // X-VAT：金額四捨五入（legal-round.js）
     },
     pct(n) {
       return (n || 0).toFixed(1) + '%'

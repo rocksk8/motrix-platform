@@ -153,10 +153,14 @@ LEGAL_TAX_RATE = 0.05
 LEGACY_TAX_NOTE = "非法定稅率，請會計確認"
 
 
-def round_half_up(n) -> int:
-    """四捨五入到元（Python 內建 round 是銀行家捨入：round(490.5) == 490）。"""
-    from decimal import Decimal, ROUND_HALF_UP
-    return int(Decimal(str(n)).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+def round_half_up(n, rate=1) -> int:
+    """四捨五入到元（Python 內建 round 是銀行家捨入：round(490.5) == 490）。
+
+    轉呼叫 L1 `helpers.legal_params.round_half_up`（金額捨入的唯一來源；X-VAT，2026-09-26）。
+    保留這個名字是因為既有呼叫端（recognition、reports）從這裡 import。
+    """
+    from helpers.legal_params import round_half_up as _rhu
+    return _rhu(n, rate)
 
 
 def quote_tax_type(data: dict) -> str:
@@ -231,7 +235,7 @@ def tax_split(sales, tax_type: str) -> tuple:
     """
     sales = round_half_up(sales)
     if tax_type == "taxable":
-        return sales, round_half_up(sales * LEGAL_TAX_RATE)
+        return sales, round_half_up(sales, LEGAL_TAX_RATE)
     if tax_type in ("zero", "exempt"):
         return sales, 0
     raise ValueError("tax_split 不處理稅別 %r（舊 1～4% 單由呼叫端沿用原算法）" % tax_type)
@@ -316,7 +320,7 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
     if not pay_items:
         return []
     others = sum(
-        p["amount"] if p.get("amount") is not None else round(total * (p.get("pct") or 0) / 100)
+        p["amount"] if p.get("amount") is not None else round_half_up(total * (p.get("pct") or 0) / 100)
         for p in pay_items[1:]
     )
     out = []
@@ -326,9 +330,9 @@ def payment_item_amounts(total: float, pay_items: list, pretax: float = None,
         elif idx == 0:
             amt = int(total - others)
         else:
-            amt = round(total * (pi.get("pct") or 0) / 100)
+            amt = round_half_up(total * (pi.get("pct") or 0) / 100)
         if apply_tax_exempt and pi.get("taxExempt") and pretax and total:
-            amt = round(amt * pretax / total)
+            amt = round_half_up(amt * pretax / total)
         out.append(amt)
     return out
 

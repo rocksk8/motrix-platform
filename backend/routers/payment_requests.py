@@ -43,6 +43,8 @@ from helpers import (
 )
 from pdf_gen import generate_payment_request_pdf_bytes, _generate_payment_request_pdf
 from helpers.errors import trace_id
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）。守門 test_legal_amount_rounding_guard
+from helpers.legal_params import round_half_up
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -255,15 +257,15 @@ def _calc_scope_amount(data: dict, remaining: dict, quote_total: float, quote_pr
             if ratio_pct_in <= 0 or ratio_pct_in > 100:
                 raise HTTPException(400, "請款比例需介於 0～100 之間")
             ratio_pct = ratio_pct_in
-            request_amount = round(quote_total * ratio_pct / 100)
+            request_amount = round_half_up(quote_total * ratio_pct / 100)
         elif amount_in:
             request_amount = amount_in
-            ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+            ratio_pct = round_half_up(request_amount / quote_total * 100, 100) / 100 if quote_total > 0 else 0
         else:
             raise HTTPException(400, "請輸入請款金額或請款比例")
         if request_amount <= 0:
             raise HTTPException(400, "請款金額需大於 0")
-        pretax_amount = round(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
+        pretax_amount = round_half_up(request_amount * quote_pretax / quote_total) if quote_total > 0 else request_amount
         selected_items_snapshot = []
     else:
         if not items_in:
@@ -293,8 +295,8 @@ def _calc_scope_amount(data: dict, remaining: dict, quote_total: float, quote_pr
                 "qty":         line.qty,
                 "amount":      line.amount,   # 未稅（比照報價單品項金額慣例）
             })
-        request_amount = round(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
-        ratio_pct = round(request_amount / quote_total * 100, 2) if quote_total > 0 else 0
+        request_amount = round_half_up(pretax_amount * quote_total / quote_pretax) if quote_pretax > 0 else pretax_amount
+        ratio_pct = round_half_up(request_amount / quote_total * 100, 100) / 100 if quote_total > 0 else 0
 
     tax_amount = request_amount - pretax_amount
     return request_amount, pretax_amount, tax_amount, ratio_pct, selected_items_snapshot
@@ -425,8 +427,8 @@ def create_payment_request(body: RequestCreateIn, authorization: str = Header(No
             "quoteItems":      quote_items_snapshot,
             "selectedItems":   selected_items_snapshot,
             "requestedAmount": request_amount,      # 含稅（＝ payment_requests.amount）
-            "pretaxAmount":    round(pretax_amount),
-            "taxAmount":       round(tax_amount),
+            "pretaxAmount":    round_half_up(pretax_amount),
+            "taxAmount":       round_half_up(tax_amount),
         }
         terms = body.terms.model_dump() if body.terms else _quote_default_terms(data)
 
@@ -528,8 +530,8 @@ def update_payment_request(request_no: str, body: RequestUpdateIn, authorization
             "quoteItems":      quote_items_snapshot,
             "selectedItems":   selected_items_snapshot,
             "requestedAmount": request_amount,
-            "pretaxAmount":    round(pretax_amount),
-            "taxAmount":       round(tax_amount),
+            "pretaxAmount":    round_half_up(pretax_amount),
+            "taxAmount":       round_half_up(tax_amount),
         }
         terms = body.terms.model_dump() if body.terms else json.loads(row["terms_json"] or "{}")
 

@@ -41,6 +41,8 @@ from db import get_db
 from helpers import row_access
 from helpers.auth import user_has_module
 from helpers.recognition import normalize_date  # `AC2`
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 from helpers import (
     _require_user, _tok, _audit, _notify,
     can_see_financial, is_document_approver,
@@ -169,7 +171,7 @@ def _recalc(body: ExtraExpenseIn) -> float:
     比照叫料端點的作法，金額欄位不接受客戶端計算結果。"""
     qty = max(0.0, float(body.qty or 0))
     unit_cost = max(0.0, float(body.unitCost or 0))
-    return round(qty * unit_cost, 2)
+    return round_half_up(qty * unit_cost, 100) / 100   # 元以下兩位（分）四捨五入
 
 
 def _validate(body: ExtraExpenseIn):
@@ -722,8 +724,8 @@ def _apply_change(conn, row, change: dict, actor_display: str, now: str) -> floa
     `approval_json.changeHistory`——查帳要看的是「這筆從多少改成多少、誰核准的」，
     把 approval_json 整個換掉就查不到了。"""
     exp_id, quote_no = row["id"], row["quote_no"]
-    total = round(max(0.0, float(change.get("qty") or 0)) *
-                  max(0.0, float(change.get("unitCost") or 0)), 2)
+    total = round_half_up(max(0.0, float(change.get("qty") or 0)) *
+                          max(0.0, float(change.get("unitCost") or 0)), 100) / 100
     merged_files = _files_of(row) + (change.get("addFiles") or [])
 
     appr = _jcol(row, "approval_json")

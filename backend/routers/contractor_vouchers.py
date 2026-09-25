@@ -37,6 +37,8 @@ from helpers import (
 )
 from pdf_gen import generate_contractor_voucher_pdf_bytes, _generate_contractor_voucher_pdf
 from helpers.errors import trace_id
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -277,7 +279,7 @@ def create_contractor_voucher(body: VoucherCreateIn, authorization: str = Header
         if not total and items:
             total = sum(float(it.get("amount", 0) or 0) for it in items)
         tax_rate = float(dispatch["tax_rate"]) if "tax_rate" in keys and dispatch["tax_rate"] is not None else 0.05
-        tax_amount = round(total * tax_rate)
+        tax_amount = round_half_up(total, tax_rate)
         total_with_tax = total + tax_amount
 
         # 外包名單人員（personnel_json）本身只快照 id/name/amount/note，不含銀行帳戶——

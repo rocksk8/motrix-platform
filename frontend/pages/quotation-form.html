@@ -7,6 +7,7 @@
   <link rel="icon" type="image/png" href="../static/favicon.png">
   <title>報價單 - MOTRIX 專案管理系統</title>
   <script src="../static/vendor/sortable-1.15.3.min.js"></script>
+  <script src="../static/legal-round.js"></script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -1477,7 +1478,7 @@
                     <td class="internal">
                       <div class="cell-display internal"
                            :style="(item.amount - (item.qty||0)*(item.cost||0)*1.05) < 0 ? 'color:var(--danger)' : 'color:#15803D'"
-                           x-text="item.cost > 0 && item.amount > 0 ? Math.round(item.amount - (item.qty||0)*(item.cost||0)*1.05).toLocaleString() : ''">
+                           x-text="item.cost > 0 && item.amount > 0 ? MotrixLegalRound.halfUp(item.amount - (item.qty||0)*(item.cost||0)*1.05).toLocaleString() : ''">
                       </div>
                     </td>
                   </template>
@@ -1906,7 +1907,7 @@
                   <span style="font-weight:400;color:var(--text-secondary)" x-text="v.by ? ' · ' + v.by : ''"></span>
                 </div>
                 <div style="font-size:10px;color:var(--text-dim);margin-top:1px"
-                     x-text="(v.at ? new Date(v.at).toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '') + (v.size ? ' · ' + Math.round(v.size/1024) + ' KB' : '')"></div>
+                     x-text="(v.at ? new Date(v.at).toLocaleString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '') + (v.size ? ' · ' + Math.round(v.size/1024 /* 非金額 */) + ' KB' : '')"></div>
               </div>
               <button x-show="v.available" @click="downloadVersion(v)"
                       style="flex-shrink:0;padding:4px 10px;font-size:10px;font-family:LINE Seed TW_OTF, sans-serif;font-weight:600;background:#fff;color:#065F46;border:1px solid #A7F3D0;border-radius:5px;cursor:pointer">
@@ -2132,7 +2133,9 @@
   // V3.5（2026-09-24 CU2b）：用詞統一「完結案件」→「結案」（成案確認視窗）
   // V3.6（2026-09-25）：新單載入期間使用者先動的條款（點方塊／打字）不再被預設組蓋回；載入中點方塊不誤跳確認
   // V3.7（2026-09-25，R2）：零稅率／免稅選依據（營業稅法 §7、§8），送審前必填
-  const FORM_VERSION = 'V3.8'
+  // V3.8（2026-09-26，X-R 稽核 S-4）：免稅依據改營業稅法 §8 逐款下拉
+  // V3.9（2026-09-26，X-VAT）：金額／稅額改用 static/legal-round.js 四捨五入（與後端一致；小數數量、負數不再差 1 元）
+  const FORM_VERSION = 'V3.9'
 
   // ── 報價條件預設文字（供「與預設不同」比對用；付款條件另可被後端 settings/payment-terms 覆蓋）──
   // 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：內容在
@@ -2395,7 +2398,7 @@
         if (!item.unitPriceOverride && item.cost > 0) {
           item.unitPrice = this.calcUnitPrice(item.cost, item.margin)
         }
-        item.amount = Math.round((item.qty || 0) * (item.unitPrice || 0))
+        item.amount = MotrixLegalRound.halfUp(item.qty || 0, item.unitPrice || 0)
         this.calcTotals()
       },
 
@@ -2403,15 +2406,16 @@
         const items = this.q.items
         const subtotal   = items.reduce((s,i) => s + (i.amount||0), 0)
         const totalCost  = items.reduce((s,i) => s + (i.qty||0)*(i.cost||0), 0)
-        const inputVat   = Math.round(totalCost * 0.05)
+        const inputVat   = MotrixLegalRound.halfUp(totalCost, 0.05)
         const pretax     = subtotal - (this.q.discount||0) + (this.q.freight||0)
         const salesTaxRate = (this.q.taxRate !== undefined ? this.q.taxRate : 5) / 100
-        const tax        = Math.round(pretax * salesTaxRate)
+        // X-VAT（2026-09-26）：與後端 legal_params.round_half_up 同一套四捨五入（static/legal-round.js）
+        const tax        = MotrixLegalRound.halfUp(pretax, salesTaxRate)
         const total      = pretax + tax
         const directProfit    = pretax - totalCost - inputVat
         const directMarginPct = pretax > 0 ? directProfit / pretax * 100 : 0
-        const adminCost       = Math.round(pretax * 0.10)
-        const charityDonation = Math.round(directProfit * 0.01)
+        const adminCost       = MotrixLegalRound.halfUp(pretax, 0.10)
+        const charityDonation = MotrixLegalRound.halfUp(directProfit, 0.01)
         const totalIndirect   = adminCost + charityDonation +
           (this.q.indirectLogistics||0) + (this.q.indirectInstallation||0) +
           (this.q.indirectTravel||0)    + (this.q.indirectWarranty||0)    +
@@ -2421,10 +2425,10 @@
 
         this.tot = { subtotal, pretax, tax, total,
           totalCost, inputVat, directProfit,
-          directMarginPct: Math.round(directMarginPct*10)/10,
+          directMarginPct: MotrixLegalRound.halfUp(directMarginPct, 10)/10,
           adminCost, charityDonation, totalIndirect,
-          netProfit: Math.round(netProfit),
-          netMarginPct: Math.round(netMarginPct*10)/10,
+          netProfit: MotrixLegalRound.halfUp(netProfit),
+          netMarginPct: MotrixLegalRound.halfUp(netMarginPct, 10)/10,
         }
       },
 

@@ -143,7 +143,8 @@ window.CM_PARTS.push(() => ({
       const m = this.materialOrders[i]
       const q = Number(m.quantity) || 0
       const p = Number(m.unitPrice) || 0
-      m.totalPrice = Math.round(q * p * 100) / 100
+      // X-VAT（2026-09-26）：金額（元以下兩位）一律 static/legal-round.js 四捨五入
+      m.totalPrice = MotrixLegalRound.halfUp(q * p, 100) / 100
       if (m.paidStatus === 'paid') m.paidAmount = m.totalPrice
       else if (m.paidStatus === 'pending') { m.paidAmount = 0; m.paidDate = '' }
       this.moDirty = true
@@ -193,14 +194,14 @@ window.CM_PARTS.push(() => ({
         if (!name) { this.moMsgError = true; this.moMsg = '有項目還沒填名稱'; return }
         const quantity  = Math.max(0, Number(m.quantity) || 0)
         const unitPrice = Math.max(0, Number(m.unitPrice) || 0)
-        const totalPrice = Math.round(quantity * unitPrice * 100) / 100
+        const totalPrice = MotrixLegalRound.halfUp(quantity * unitPrice, 100) / 100
         let paidAmount = 0
         let paidDate = null
         if (m.paidStatus === 'paid') {
           paidAmount = totalPrice
           paidDate = m.paidDate || ''
         } else if (m.paidStatus === 'partial') {
-          paidAmount = Math.round((Number(m.paidAmount) || 0) * 100) / 100
+          paidAmount = MotrixLegalRound.halfUp(Number(m.paidAmount) || 0, 100) / 100
           paidDate = m.paidDate || ''
           if (paidAmount > totalPrice) { this.moMsgError = true; this.moMsg = `「${name}」的已付金額大於小計`; return }
         }
@@ -339,7 +340,7 @@ window.CM_PARTS.push(() => ({
     caseProgressPct() {
       const stages = this.cr.caseRecord?.stages || []
       if (!stages.length) return 0
-      return Math.round(stages.filter(s => s.done).length / stages.length * 100)
+      return Math.round(stages.filter(s => s.done).length / stages.length * 100 /* 非金額 */)
     },
 
     _firstUndoneStageId() {
@@ -414,7 +415,7 @@ window.CM_PARTS.push(() => ({
     // `AC2`：階段收入比例。存基點（1/10000）；空白＝未設（null，不是 0——0 是「這個階段不認列」）
     stageRatioPct(st) { return st.ratioBp === null || st.ratioBp === undefined ? '' : st.ratioBp / 100 },
     setStageRatio(st, v) {
-      const bp = (v === '' || v === null || v === undefined) ? null : Math.round(Number(v) * 100)
+      const bp = (v === '' || v === null || v === undefined) ? null : Math.round(Number(v) * 100 /* 非金額 */)
       if (bp !== null && (!Number.isFinite(bp) || bp < 0 || bp > 10000)) { MotrixUI.toast('比例需為 0～100%', {kind: 'info'}); return }
       this.updateStage(st, { ratioBp: bp })
     },
@@ -575,7 +576,7 @@ window.CM_PARTS.push(() => ({
         if (!min || s < min) min = s
         if (!max || e > max) max = e
       })
-      return Math.round((max - min) / 86400000)
+      return Math.round((max - min) / 86400000 /* 非金額 */)
     },
     // 【可調】檔位切換門檻。想讓它更早/更晚跳到週或月檔位，改這兩個數字就好，
     // 其餘邏輯不用動。判斷依據是「所有階段的最早起日到最晚迄日」的天數跨幅。
@@ -861,7 +862,7 @@ window.CM_PARTS.push(() => ({
         const base = Date.now()
         selected.forEach((item, ii) => {
           const groupId = 'grp_' + (base + ii).toString(36) + Math.random().toString(36).slice(2, 5)
-          const qty = Math.min(Math.round(item.qty) || 1, 50)
+          const qty = Math.min(Math.round(item.qty /* 非金額 */) || 1, 50)
           for (let i = 0; i < qty; i++) {
             this.cr.caseRecord.devices.push({
               id: base + Math.random(),
@@ -1191,7 +1192,7 @@ window.CM_PARTS.push(() => ({
       if (!start || !months) return 'active'
       const expiry = new Date(start)
       expiry.setMonth(expiry.getMonth() + (+months))
-      const daysLeft = Math.round((expiry - new Date()) / 86400000)
+      const daysLeft = Math.round((expiry - new Date()) / 86400000 /* 非金額 */)
       if (daysLeft < 0)  return 'expired'
       if (daysLeft < 90) return 'expiring'
       return 'active'
@@ -1210,7 +1211,7 @@ window.CM_PARTS.push(() => ({
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       deadline.setHours(0, 0, 0, 0)
-      return Math.round((deadline - today) / 86400000)
+      return Math.round((deadline - today) / 86400000 /* 非金額 */)
     },
 
     async openNetworkPlan() {

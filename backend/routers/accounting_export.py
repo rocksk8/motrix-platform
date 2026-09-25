@@ -79,6 +79,8 @@ from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading
 from routers.contractor_vouchers import _voucher_public
 from helpers.part_catalog import PART_CATEGORIES
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 
 router = APIRouter()
 
@@ -247,7 +249,7 @@ def _voucher_line(d, category, summary, acct_code, acct_name, debit, credit, dep
     return {
         "date": d, "category": category, "summary": summary,
         "acctCode": acct_code, "acctName": acct_name,
-        "debit": round(debit) if debit else 0, "credit": round(credit) if credit else 0,
+        "debit": round_half_up(debit) if debit else 0, "credit": round_half_up(credit) if credit else 0,
         "dept": dept, "sourceNo": source_no, "counterparty": counterparty,
     }
 

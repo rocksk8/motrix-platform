@@ -13,6 +13,8 @@ from helpers import (_require_user, _warranty_expiry, payment_item_amounts, norm
                      user_has_module, can_see_financial,
                      require_any_module, _get_setting, _set_setting)
 from helpers import row_access
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -556,7 +558,7 @@ def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), autho
         "basis": "accrual",
         "basisLabel": "權責口徑（依廠商發票月）",
         "items": items,
-        "otherBreakdown": {mo: {k: round(v) for k, v in cats.items()} for mo, cats in other_breakdown.items()},
+        "otherBreakdown": {mo: {k: round_half_up(v) for k, v in cats.items()} for mo, cats in other_breakdown.items()},
     }
 
 

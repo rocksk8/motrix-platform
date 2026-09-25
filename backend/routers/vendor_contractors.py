@@ -14,6 +14,8 @@ from core import registry as _registry
 from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.recognition import normalize_date  # `AC2`
+# X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
+from helpers.legal_params import round_half_up
 from routers.contractors import _stamp_passbook
 
 router = APIRouter()
@@ -132,7 +134,7 @@ def _dispatch_row(row) -> dict:
     if not total and items:
         total = sum(float(it.get("amount", 0) or 0) for it in items)
     tax_rate = float(row["tax_rate"]) if "tax_rate" in keys and row["tax_rate"] is not None else 0.05
-    tax_amount = round(total * tax_rate)
+    tax_amount = round_half_up(total, tax_rate)
     total_with_tax = total + tax_amount
     return {
         "id": row["id"],
