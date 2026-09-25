@@ -188,15 +188,15 @@
 | 項目 | 規則 |
 |---|---|
 | 欄位型別 | `text`／`number`／`date`／`select`／`checkbox`（同 §3.6）＋`formula`（唯讀，由公式算）＋`ref`（`target`：參照目錄 `users`、`customers`，或 `custom:<模組>`） |
-| 公式 | `helpers.formula`：數字、字串、欄位 key、`+ - * / %`、比較、`and／or／not`、`if(條件, 是, 否)`、`round`、`min`、`max`、`sum`、`abs`、`coalesce`、`days_between`。只能一行，最長 500 字。**空值不等於 0**（`coalesce(x, 0)` 才當 0）；除以 0 ⇒ 那一欄空值並回報。循環引用在發布前擋下 |
+| 公式 | `helpers.formula`：數字、字串、欄位 key、`+ - * / %`、比較、`and／or／not`、`if(條件, 是, 否)`、`round`、`min`、`max`、`sum`、`abs`、`coalesce`、`days_between`。只能一行，最長 500 字。**空值不等於 0**（`coalesce(x, 0)` 才當 0）；除以 0 ⇒ 那一欄空值並回報。循環引用在發布前擋下。數字欄位不收 NaN／無限大（稽核 D C-M5）；發布前用樣本資料實際算一次公式與簽核條件，型別錯誤在發布時就指出位置（C-S1） |
 | 資料分類 | 只收 T1。**F2（個資）欄位一律拒絕**，直到個資分流接上自訂模組（單據是整份 JSON，分流要另外做） |
 | 流程 | 起始狀態、終點（`final`）至少一個；每個狀態都要從起始狀態走得到；非終點狀態要有出路；終點不可以再轉出。轉換可以設 `requester_only` |
-| 簽核 | 掛在**狀態**上：進入該狀態就展開簽核層（沿用 `helpers.tiered_approval`：依序、代理人、當層任一人可退回；簽核人可以是帳號、部門主管、處主管、申請人主管）。層可以帶條件 `when`（公式），條件不成立那一層就不列入；全部不成立 ⇒ 直接視為通過。簽核中的狀態**不能用轉換跳過簽核** |
+| 簽核 | 掛在**狀態**上：進入該狀態就展開簽核層（沿用 `helpers.tiered_approval`：依序、代理人、當層任一人可退回；簽核人可以是帳號、部門主管、處主管、申請人主管）。層可以帶條件 `when`（公式），條件不成立那一層就不列入；全部不成立 ⇒ 直接視為通過。簽核中的狀態**不能用轉換跳過簽核**。**條件只有明確不成立（False 或 0）才跳過該層；算出空值（有欄位沒填）或執行出錯 ⇒ 那一層照簽**，回應的 notices 寫明原因（稽核 D C-M1／C-M2、C-O4）。起始狀態不可以掛簽核（C-S3）；簽核狀態的 on_approved 不可以互相指向，執行時自動通過最多連跳 20 次，超過回 409（C-M3） |
 | 通知與事件 | 狀態的 `notify`：`requester`、`users`。進入簽核狀態時通知第一位簽核人，每過一層通知下一位。每次狀態改變發事件 `custom_module.transitioned`（`module, recordNo, from, to, action, by`）。**通知與事件都在 commit 之後才送** |
 | 編號 | `前綴-日期-流水號`；日期格式 `YYYYMMDD`（每日重新計）、`YYYYMM`（每月）、空白（不分期）；位數 3～8 |
 | 輸出 | `output.template` 是 doc_template 版型（§3.4），視圖欄位：`recordNo`、`status`、`statusLabel`、`createdBy`、`createdAt`、`moduleName`、`fields.<key>`（也可以直接寫 `<key>`）、`approval`。沒有指定版型 ⇒ 通用版型（抬頭、編號、狀態、每個欄位一列、簽核欄、頁尾） |
 | 凍結 | 單據建立時記下 `def_version`；之後的修改、流程與輸出都用那一版。起始狀態以外不能改內容 |
-| 權限 | 超級管理員，或使用者的模組清單裡有 `permission`（預設 `custom.<key>`）。簽核人不需要模組權限，也能讀單據、簽自己那一層 |
+| 權限 | 超級管理員，或使用者的模組清單裡有 `permission`（預設 `custom.<key>`）。簽核人不需要模組權限，也能讀單據、簽自己那一層。permission 不可以用內建模組的 key，也不可以與另一個已發布的自訂模組共用（C-S4）；簽核代理人也能讀單與輸出（C-S2）。**草稿（起始狀態）只有建立者與超級管理員可以修改、送出**，同權限的其他人只能看（使用者裁示 U14，2026-09-26；後端 403，讀單回 `canEdit`） |
 | 儲存 | 表 `custom_records`（每筆一份 JSON）、`custom_record_values`（欄位索引，可由 JSON 重建，不匯出）、`custom_record_counters`、`custom_record_log`。由 core 的第 2 支模組 migration 建立；T1，每日 JSON 匯出、demo 清空 |
 
 **API**

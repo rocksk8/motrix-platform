@@ -19,7 +19,24 @@ from core import definitions as D
 
 router = APIRouter()
 
-D.register_validator("custom_module", lambda body, key: CM.validate_module(body, key))
+def _validate_custom_module(body, key):
+    problems = CM.validate_module(body, key)
+    perm = (body or {}).get("permission") if isinstance(body, dict) else None
+    if perm:
+        # 稽核 D C-S4：兩個自訂模組共用同一個權限 key ⇒ 授權一個等於授權兩個、權限畫面只顯示其中一個名稱
+        conn = get_db()
+        try:
+            other = [m["key"] for m in CM.published_modules(conn) if m["permission"] == perm and m["key"] != key]
+        except Exception:                                    # noqa: BLE001 — 表還沒建（全新安裝）
+            other = []
+        finally:
+            conn.close()
+        if other:
+            problems.append({"path": "permission", "message": "權限 key %s 已被自訂模組 %s 使用" % (perm, "、".join(other))})
+    return problems
+
+
+D.register_validator("custom_module", _validate_custom_module)
 
 
 def _err(e: CM.CustomModuleError):
@@ -40,10 +57,14 @@ def _can_use(conn, user, key) -> dict:
     return d
 
 
-def _is_approver(rec, username) -> bool:
-    for t in (rec.get("approval") or {}).get("tiers", []):
-        if any(a.get("username") == username for a in t.get("approvers", [])):
-            return True
+def _is_approver(rec, username, conn=None) -> bool:
+    """簽核鏈裡的人，或是簽核鏈裡某人目前有效的簽核代理人（稽核 D C-S2：代理人能簽卻讀不到單）。"""
+    names = {a.get("username") for t in (rec.get("approval") or {}).get("tiers", []) for a in t.get("approvers", [])}
+    if username in names:
+        return True
+    if conn is not None and names:
+        from helpers.tiered_approval import active_delegators_for
+        return bool(names & set(active_delegators_for(conn, username)))
     return False
 
 
@@ -117,8 +138,10 @@ def get_custom_record(key: str, record_no: str, authorization: str = Header(None
             rec = CM.get_record(conn, key, record_no)
         except CM.CustomModuleError as e:
             return _err(e)
-        if not _is_approver(rec, u["username"]):
+        if not _is_approver(rec, u["username"], conn):
             _can_use(conn, u, key)
+        # U14：前端依這個欄位決定要不要顯示「修改」「送出」（後端另外擋 403）
+        rec["canEdit"] = CM.can_edit_draft(rec, rec["definition"], u)
         return rec
     finally:
         conn.close()
@@ -200,7 +223,7 @@ def output_custom_record(key: str, record_no: str, format: str = Query("html"), 
             rec = CM.get_record(conn, key, record_no)
         except CM.CustomModuleError as e:
             return _err(e)
-        if not _is_approver(rec, u["username"]):
+        if not _is_approver(rec, u["username"], conn):
             _can_use(conn, u, key)
         html = CM.render_output(conn, key, record_no)
     finally:

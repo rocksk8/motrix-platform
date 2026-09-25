@@ -599,10 +599,10 @@ def test_custom_module_tier_condition_runtime_error_is_not_a_500(loan):
     """條件公式在執行時出錯（除以 0）⇒ 不回 500；那一層照簽並說明。"""
     client, h = loan
     body = loan_definition()
-    body["workflow"]["states"][1]["approval"]["tiers"][1]["when"] = "total / (qty - qty) > 1"
+    body["workflow"]["states"][1]["approval"]["tiers"][1]["when"] = "total / (qty - 2) > 1"   # 樣本 qty＝1 算得出來；qty＝2 才除以 0
     client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h["super"], json={"body": body})
     assert client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h["super"], json={}).status_code == 200
-    rec = _new(client, h)
+    rec = _new(client, h, qty=2)
     r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
     assert r.status_code == 200 and len(r.json()["approval"]["tiers"]) == 2
     assert any("無法計算" in n for n in r.json()["notices"])
@@ -614,3 +614,147 @@ def test_custom_module_tier_condition_false_still_skips(loan):
     rec = _new(client, h)                                           # 6000 ≤ 10000
     r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
     assert len(r.json()["approval"]["tiers"]) == 1
+
+
+# ── 稽核 D（AUDIT-D-C-P4P5P8）C-M3／C-M5／C-S1～S5 ──────────────────────────
+
+def _auto_loop_definition():
+    """兩個簽核狀態、條件都不成立、on_approved 互相指向。"""
+    b = loan_definition()
+    b["workflow"]["states"] = [
+        {"key": "draft", "label": "草稿"},
+        {"key": "p1", "label": "一", "approval": {"tiers": [{"approvers": [{"username": "cm_mgr"}], "when": "qty > 999"}],
+                                                   "on_approved": "p2", "on_rejected": "done"}},
+        {"key": "p2", "label": "二", "approval": {"tiers": [{"approvers": [{"username": "cm_mgr"}], "when": "qty > 999"}],
+                                                   "on_approved": "p1", "on_rejected": "done"}},
+        {"key": "done", "label": "結束", "final": True},
+    ]
+    b["workflow"]["transitions"] = [{"key": "submit", "label": "送審", "from": "draft", "to": "p1"}]
+    return b
+
+
+def test_auto_approve_cycle_is_refused_at_publish():
+    """C-M3（發布時）：簽核狀態的 on_approved 互相指向 ⇒ 發布前就擋下並指出位置。"""
+    got = _paths(_auto_loop_definition())
+    assert any(k.endswith(".approval.on_approved") and "循環" in m for k, m in got.items())
+
+
+def test_auto_approve_cycle_at_runtime_is_a_clear_409_not_500(loan, monkeypatch):
+    """C-M3（執行時）：繞過發布驗證（例：舊版定義）也要回明確錯誤，不是 RecursionError；單據維持草稿。"""
+    client, h = loan
+    import db
+    from core import definitions as D
+    monkeypatch.setitem(D._VALIDATORS, "custom_module", lambda body, key: [])
+    conn = db.get_db()
+    try:
+        D.save_draft(conn, "custom_module", KEY, "company", _auto_loop_definition(), "x")
+        D.publish(conn, "custom_module", KEY, "company")
+    finally:
+        conn.close()
+    rec = _new(client, h)
+    r = client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    assert r.status_code == 409 and "循環" in r.json()["detail"]
+    assert client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["req"]).json()["status"] == "draft"
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "-inf", "NaN", "1e999"])
+def test_number_field_refuses_nan_and_infinity(loan, bad):
+    """C-M5：非有限的數字在寫入前擋下（400、指出欄位），資料庫沒有這一筆。"""
+    client, h = loan
+    r = client.post("/api/custom/%s/records" % KEY, headers=h["req"], json={"values": {"item": "x", "qty": bad}})
+    assert r.status_code == 400 and any(p["key"] == "qty" for p in r.json()["problems"])
+    assert client.get("/api/custom/%s/records" % KEY, headers=h["req"]).json() == []
+
+
+def test_existing_nan_data_can_still_be_read(loan):
+    """C-M5：修正前已經寫進去的 NaN 資料，讀單與列表都不可以 500（非有限值讀出為空值）。"""
+    client, h = loan
+    rec = _new(client, h)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE custom_records SET data_json=? WHERE record_no=?",
+                     ('{"item": "舊", "qty": NaN, "total": Infinity}', rec["record_no"]))
+        conn.commit()
+    finally:
+        conn.close()
+    one = client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["req"])
+    assert one.status_code == 200 and one.json()["data"]["qty"] is None and one.json()["data"]["total"] is None
+    assert client.get("/api/custom/%s/records" % KEY, headers=h["req"]).status_code == 200
+
+
+def test_type_errors_in_conditions_are_caught_at_publish():
+    """C-S1：`item > 5`（item 是文字）語法沒錯、執行才錯 ⇒ 用樣本資料試算，發布時就指出位置。"""
+    b = loan_definition()
+    b["workflow"]["states"][1]["approval"]["tiers"][1]["when"] = "item > 5"
+    assert "試算失敗" in _paths(b)["workflow.states[1].approval.tiers[1].when"]
+
+
+def test_initial_state_cannot_have_an_approval():
+    """C-S3：起始狀態掛簽核永遠不會展開 ⇒ 發布時擋下。"""
+    b = loan_definition()
+    b["workflow"]["states"][0]["approval"] = copy.deepcopy(b["workflow"]["states"][1]["approval"])
+    assert "起始狀態不可以掛簽核" in _paths(b)["workflow.states[0].approval"]
+
+
+def test_permission_cannot_be_a_builtin_key_or_shared(client, make_user):
+    """C-S4：不可以用內建模組的 key；不可以與另一個已發布的自訂模組共用。"""
+    b = loan_definition()
+    b["permission"] = "cashier"
+    assert "內建模組" in _paths(b)["permission"]
+    h = _login(client, make_user, "cm_perm_super", role="superadmin")
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h, json={"body": loan_definition()})
+    assert client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h, json={}).status_code == 200
+    client.put("/api/definitions/custom_module/other_loan/draft", headers=h, json={"body": loan_definition()})
+    r = client.post("/api/definitions/custom_module/other_loan/publish", headers=h, json={})
+    assert r.status_code == 422 and any(p["path"] == "permission" and "已被自訂模組" in p["message"] for p in r.json()["problems"])
+
+
+def test_delegate_can_read_the_record_they_can_sign(loan, monkeypatch):
+    """C-S2：簽核代理人可以簽，也要讀得到單據與輸出（沒有模組權限也一樣）；不是代理人照樣 403。"""
+    client, h = loan
+    rec = _new(client, h)
+    client.post("/api/custom/%s/records/%s/transitions/submit" % (KEY, rec["record_no"]), headers=h["req"], json={})
+    from helpers import tiered_approval as ta
+    assert client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["other"]).status_code == 403
+    monkeypatch.setattr(ta, "active_delegators_for", lambda conn, u, today=None: {"cm_mgr"} if u == "cm_other" else set())
+    assert client.get("/api/custom/%s/records/%s" % (KEY, rec["record_no"]), headers=h["other"]).status_code == 200
+    assert client.get("/api/custom/%s/records/%s/output" % (KEY, rec["record_no"]), headers=h["other"]).status_code == 200
+
+
+def test_publish_and_restore_take_the_write_lock(monkeypatch):
+    """C-S5：發布／還原讀草稿之前先拿寫鎖（begin_write）。"""
+    import sqlite3
+    import core.txn as txn
+    from core import definitions as D, migrations
+    calls = []
+    real = txn.begin_write
+    monkeypatch.setattr(txn, "begin_write", lambda conn: calls.append(1) or real(conn))
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE module_schema_versions (module TEXT PRIMARY KEY, version INTEGER, applied_at TEXT)")
+    migrations._core_v1_ui_definitions(conn)
+    D.save_draft(conn, "layout", "k", "company", {"a": 1})
+    D.publish(conn, "layout", "k", "company")
+    D.restore(conn, "layout", "k", "company", 1)
+    assert len(calls) == 2
+    conn.close()
+
+
+# ── U14（使用者 2026-09-26 裁示）：草稿只有建立者與超級管理員可以修改、送出 ─────────
+
+def test_draft_can_only_be_changed_by_its_creator_or_a_superadmin(loan, make_user, client):
+    c, h = loan
+    other = _login(client, make_user, "cm_same_perm", modules=["custom.equipment_loan"])     # 同一個模組權限
+    rec = _new(c, h)
+    no = rec["record_no"]
+    url = "/api/custom/%s/records/%s" % (KEY, no)
+    got = c.get(url, headers=other)
+    assert got.status_code == 200 and got.json()["canEdit"] is False                      # 同權限的人：看得到、不能改
+    assert c.put(url, headers=other, json={"values": {"item": "改", "qty": 1}}).status_code == 403
+    assert c.post(url + "/transitions/submit", headers=other, json={}).status_code == 403
+    assert c.get(url, headers=h["req"]).json()["canEdit"] is True                        # 正對照：建立者
+    assert c.put(url, headers=h["req"], json={"values": {"item": "改", "qty": 1}}).status_code == 200
+    assert c.get(url, headers=h["super"]).json()["canEdit"] is True                      # 超級管理員
+    assert c.post(url + "/transitions/submit", headers=h["super"], json={}).status_code == 200
+    assert c.get(url, headers=h["req"]).json()["canEdit"] is False                       # 送出之後誰都不能改內容

@@ -132,6 +132,19 @@ def _insert_published(conn, kind, key, scope, body, note, user) -> dict:
 
 
 def publish(conn, kind, key, scope, note="", user="") -> dict:
+    """稽核 D C-S5：讀草稿之前先拿寫鎖 ⇒ 兩人同時發布不會 UNIQUE 衝突、發布時的自動存檔不會被刪掉。"""
+    from core.txn import begin_write
+    _check(kind, key, scope)
+    began = begin_write(conn)
+    try:
+        return _publish_locked(conn, kind, key, scope, note, user)
+    except Exception:
+        if began:
+            conn.rollback()
+        raise
+
+
+def _publish_locked(conn, kind, key, scope, note, user) -> dict:
     draft = get(conn, kind, key, scope, 0)
     if draft is None:
         raise DefinitionError("沒有草稿可以發布")
@@ -147,6 +160,18 @@ def publish(conn, kind, key, scope, note="", user="") -> dict:
 
 def restore(conn, kind, key, scope, version, note="", user="") -> dict:
     """把第 `version` 版再發布成新的一版（歷史不改）。也要過驗證器（舊版可能引用已不存在的東西）。"""
+    from core.txn import begin_write
+    _check(kind, key, scope)
+    began = begin_write(conn)
+    try:
+        return _restore_locked(conn, kind, key, scope, version, note, user)
+    except Exception:
+        if began:
+            conn.rollback()
+        raise
+
+
+def _restore_locked(conn, kind, key, scope, version, note, user) -> dict:
     old = get(conn, kind, key, scope, int(version))
     if old is None or old["status"] != "published":
         raise DefinitionError("找不到第 %s 版（已發布）" % version)
