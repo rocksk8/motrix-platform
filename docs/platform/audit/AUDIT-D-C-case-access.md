@@ -56,7 +56,12 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| CA-M1 | 修正：判準改成「M01 有沒有登記 `case.present`」（新串接點 IP-15；M01 在 `routers/quotations.py` 匯入時登記，搬進 modules/ 後改寫進 ModuleSpec ⇒ 停用、未授權、不在包內就沒有登記），不看表。M01 不在 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣。反向控制改用真實 schema（`client` 夾具、案件列在、擁有者＋超級管理員）：`test_without_m01_access_is_404_even_though_the_table_and_row_exist`。DEPENDENCY-MAP §3.2 原句劃掉並加〔更正〕。突變 4 項皆紅（guard／allowed 不看、判準改回、M01 不登記） | wip/c-case-access a82da8ec | |
-| CA-S1 | 修正：守門改用 dep_scan 的 `string_chunks`＋`sql_tables`（與 dep_graph 同一份判準），寫入一併納入基線（db、pdf_gen 為 rw）。dep_scan 也不認得逗號 join ⇒ 守門另補一條；加引號、隱式串接、寫入 dep_scan 本來就認得。f-string 插入的表名靜態無從得知，寫明為已知限制。解析器題 9 例（含 2 個反向控制）；突變 2 項皆紅（不看逗號 join、寫入不算） | wip/c-case-access a82da8ec | |
-| CA-S2 | 修正：只有 `no such table` 當成查無此案（404）；其他 `OperationalError`（例 `database is locked`）照樣丟出。題：`test_missing_table_is_404_and_a_locked_database_is_not`；突變 1 項紅 | wip/c-case-access a82da8ec | |
-| CA-O1 | 採納：守門範圍加上 L0 `backend/core/*.py`（目前沒有讀取，列入掃描後照樣綠） | wip/c-case-access a82da8ec | |
+| CA-M1 | 修正：判準改成「M01 有沒有登記 `case.present`」（新串接點 IP-15；M01 在 `routers/quotations.py` 匯入時登記，搬進 modules/ 後改寫進 ModuleSpec ⇒ 停用、未授權、不在包內就沒有登記），不看表。M01 不在 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣。反向控制改用真實 schema（`client` 夾具、案件列在、擁有者＋超級管理員）：`test_without_m01_access_is_404_even_though_the_table_and_row_exist`。DEPENDENCY-MAP §3.2 原句劃掉並加〔更正〕。突變 4 項皆紅（guard／allowed 不看、判準改回、M01 不登記） | wip/c-case-access a82da8ec || ✅ 2026-09-26 06:38 D 在 `wip/c-case-access-2` a82da8ec 確認：判準改看 `case.present` 登記；loader 對停用／未授權模組不 import（`core/loader.py::load_all`）⇒ 搬進 modules/ 後登記也不會發生，判準成立。D 突變 6/6 紅（永遠當在、allowed 不看、guard 不看、空登記當在、M01 不登記〔另帶紅 test_module_permission_fixes 8 題〕、鎖也當查無）；基準 5 檔 106 passed ⇒ **關閉** |
+| CA-S1 | 修正：守門改用 dep_scan 的 `string_chunks`＋`sql_tables`（與 dep_graph 同一份判準），寫入一併納入基線（db、pdf_gen 為 rw）。dep_scan 也不認得逗號 join ⇒ 守門另補一條；加引號、隱式串接、寫入 dep_scan 本來就認得。f-string 插入的表名靜態無從得知，寫明為已知限制。解析器題 9 例（含 2 個反向控制）；突變 2 項皆紅（不看逗號 join、寫入不算） | wip/c-case-access a82da8ec || ✅ 關閉。D 探測：f-string 內的靜態表名、`+` 串接、f-string 寫入都抓得到（解析器題未列，建議補進參數）；抓不到的是表名放變數與大寫 `Quotations`（SQLite 表名不分大小寫）⇒ 記觀察 CA-O2，不擋 |
+| CA-S2 | 修正：只有 `no such table` 當成查無此案（404）；其他 `OperationalError`（例 `database is locked`）照樣丟出。題：`test_missing_table_is_404_and_a_locked_database_is_not`；突變 1 項紅 | wip/c-case-access a82da8ec || ✅ 關閉（D 突變 CM4「鎖也當查無」紅） |
+| CA-O1 | 採納：守門範圍加上 L0 `backend/core/*.py`（目前沒有讀取，列入掃描後照樣綠） | wip/c-case-access a82da8ec || ✅ 關閉 |
+
+## 4. 關閉確認後的觀察（D，2026-09-26 06:38）
+
+- **CA-O2　守門的兩個盲點**：①表名放在變數裡（`t="quotations"; f"… FROM {t}"`）；②大小寫不同（`FROM Quotations`，SQLite 視為同一張表）。這兩種寫法 `access()` 都回空。①是靜態掃描本來就做不到的；②建議在 `dep_scan.sql_tables` 比對時忽略大小寫（會影響 dep_graph，由 B 決定）。
+- **CA-O3　模組 import 成功但 spec 驗證失敗的情形**：M01 搬進 modules/ 之後，如果仍然在 import 時登記 `case.present`，那麼「import 成功、`MODULE` 缺漏或 key 不符 ⇒ STATE_FAILED」的時候，登記已經留下了 ⇒ `case_module_present()` 會回 True。IP-15 已寫明「改寫進 `ModuleSpec.providers`」，照這樣做就沒有這個問題；M01 搬遷的稽核會驗這一點。

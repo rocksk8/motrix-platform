@@ -124,6 +124,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 06:38 D：⑭ case_access **CA-M1 關閉**（c-case-access-2 a82da8ec）：判準改看 `case.present`，loader 對停用／未授權不 import ⇒ 成立；D 突變 6/6 紅、基準 106 passed；CA-S1／S2／O1 關閉；新增觀察 CA-O2（表名變數、大寫 Quotations 抓不到）、CA-O3（M01 搬遷時 case.present 要進 ModuleSpec.providers）。仍開：M02-M1。
 - 2026-09-26 06:36：**第三班列車合回**（train/0926-0517，4 包：b-scope（車頭，fixture 層）→ c-ko2 → c-audit-d → cloud-pii-notice，全部上車；platform 2934bbc9）。
   - 取號：CORE 1.21 c-ko2（K-O2 句原被 cherry-pick 併進已合回的 1.17 段，移出另立一段）／1.22 c-audit-d／1.23 個資告知（core_bump）；b-scope 不升版。版本紀錄：個資蒐集告知 2026-09-26k（26e 已用）。報價表單 FORM_VERSION：個資告知改 V3.10（V3.9 已被 X-VAT 用），帳本 LEDGER 登記 V3.10。各包自帶的簿記 commit（c-audit-d d132336f、個資告知 71f68b2e／6cef4e32／f7fcc81a／2ae1d86d、manifest 19346d6b）在列車上略過、改由列車 commit 取號。git cherry：4 包皆無已合回的重複 commit。
   - 重產 UNIT-INDEX、dep_graph.json、test_map.json（後兩份自 01:02 未重產，主持追加）。
