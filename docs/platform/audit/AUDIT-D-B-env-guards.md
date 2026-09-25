@@ -148,14 +148,14 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| B-M1 | | | |
-| B-M2 | | | |
-| B-M3 | | | |
-| B-S1 | | | |
-| B-S2 | | | |
-| B-S3 | | | |
-| B-S4 | | | |
-| B-O1～O3 | | | |
+| B-M1 | 修正：`cap_workers` 認得 `-n X`／`-nX`／`-n=X`／`--numprocesses X`／`--numprocesses=X`；`auto`／`logical`／非數字／負數一律改成上限；提示改走 `_say()`（cp932 主控台不炸）。題：`test_env_and_load_guards::test_cap_workers_every_spelling`（13 種寫法，含 D 表上全部）＋ cp932 題。突變 B05 ⇒ 11 紅 | f14ee6db | |
+| B-M2 | 修正：`create` 目標依 `--python` 命名（`.venv313`）；**資料夾已存在一律拒絕**（不提供 --force：就地覆寫或先刪再建都是 .venv 事件同一類），並照 §C-12 列出占用行程；CORE-SPEC §10 保留原句加更正。題：`test_rc_create_refuses_an_existing_folder`（monkeypatch subprocess.run，驗證沒有呼叫 venv／pip）。突變（拿掉存在檢查）⇒ 紅 | f14ee6db、4d0808a0 | |
+| B-M3 | 修正：抽出 `tree_state()`（`--untracked-files=normal`，gitignored 照樣排除）與 `run_dirty()`；`run_full` 開跑、結束各取一次，開跑不乾淨或中途 HEAD／工作樹變了 ⇒ dirty，並記 `head_at_end`；結束時讀不到狀態 ⇒ 當成 dirty。題：暫存 git repo 驗未追蹤檔、HEAD 中途變、工作樹中途改；**行為題**實際呼叫 `run_full`（pytest 換掉）驗寫出去的紀錄。突變 B07 ⇒ 2 紅、不算未追蹤檔 ⇒ 1 紅。〔更正：B07 在我第一版題目（AST 檢查呼叫次數）下仍存活，屬「驗程式長相」的假綠燈，已改成行為題〕另確認：全量跑完後 Bfull 工作樹 `status --untracked-files=normal` 為空（測試產生的 uploads 等都已 gitignore），不會讓每一輪都 dirty | f14ee6db | |
+| B-S1 | 修正：新增 `runtime_imports()`，掃描測試夾具在執行期才 import 的函式庫（`starlette.testclient`）頂層 import 的**已安裝**第三方模組，要求都在 requirements(-dev) 閉包內；正對照「掃得到 httpx2」＋反向控制。突變 B02（拿掉 httpx2）⇒ 紅 | 4d0808a0 | |
+| B-S2 | 修正：建包 `Min($physCores, 4)`（保留 BOM／CRLF，PowerShell 剖析 0 錯誤）；題 `test_build_script_workers_within_full_limit`（≤ modtest.FULL_MAX_WORKERS）。突變（改回 8）⇒ 紅 | 4d0808a0 | |
+| B-S3 | 修正：補 `_low_priority_flags`（Windows 等於 BELOW_NORMAL）、`in_supported_range`／`parse_prod_env`／`compare` 的題。突變 B06 ⇒ 紅 | f14ee6db | |
+| B-S4 | 修正：per-commit 檔保留 `history`（先前每一輪的 started／finished／ok／failed／e2e_failed）；閘門仍以最新一輪放行，但回 `red_runs` 並在說明寫「先前紅過 N 次」。題：紅→綠重跑。突變（不保留）⇒ 紅 | f14ee6db | |
+| B-O1～O3 | O1 修正：requirements-dev 直接宣告 `pytest>=8.0`（題 `test_pytest_is_declared_directly`，突變 ⇒ 紅）。O2 修正：`test_deploy_dashboard_local_only` 改經 `tests._routes.all_routes`；**另發現**這個檔單獨跑有 9 題 `ModuleNotFoundError: deploy_insights`（靠別的測試先把 backend/tools 放進 sys.path，全量裡才會過——順序相依），fixture 改為自己 `syspath_prepend`，單獨跑 10 綠。O3 修正：`check` 只讀主工作樹的 prod_env.json | 4d0808a0、f14ee6db | |
 
 ### D 確認（2026-09-26 03:58；對象：B 在本機 `wip/b-scope` 上的回覆 `3a62d617`，修正 `f14ee6db`、`4d0808a0`）
 
