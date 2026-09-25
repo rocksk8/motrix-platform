@@ -596,112 +596,97 @@ def _identity_foot_short(ident: dict) -> str:
 from helpers.company_identity import short_name as _short_name  # noqa: E402
 
 
-def _build_payslip_html(d: dict) -> str:
-    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
-    def amt(n): return f"NT$ {int(n):,}" if n else "NT$ 0"
-    def pct(r): return (f"{r*100:.2f}".rstrip('0').rstrip('.') + '%') if r else '0%'
+def _payslip_esc(s):
+    return (s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')
 
-    # QL16：薪資單的抬頭**繼續讀開單時的快照**（`payslips.data_json`）。
-    #
-    # 判準是**這份單據有沒有已經交到外面的人手上**（A 2026-09-22 裁定）：
-    # 薪資單已經交給員工，員工可能拿去報稅或貸款
-    # => 重印**必須重現當初發出去的那一份**，公司改名搬家之後也一樣。
-    # QL10（讀即時值）套的是還在流程裡的案件文件 ——
-    # 匯款帳號要回答「**現在**該匯到哪」，而薪資單的抬頭回答的是
-    # 「**當初是誰付的**」。**那不是同一個問題。**
-    company  = d.get('companyName', '')
-    tax_id   = d.get('companyTaxId', '')
-    contact  = d.get('companyContactInfo', '')
 
-    # QL17：舊薪資單的 `data_json` 根本**沒有**這三個欄位時怎麼辦。
-    #
-    # 三條路，A 明著排除了其中兩條：
-    #   X 安靜地用即時值補   => 一份看起來像正本、而抬頭是今天的文件。
-    #                          **它不會報錯，而它在說謊。**
-    #   X 直接拒絕重印       => 擋掉所有舊薪資單的合法重印，代價太大。
-    #   O 用即時值，**而且在文件上標明**
-    # 〈降級之後它還是會動〉：降級可以，**而降級必須看得見** ——
-    # 真正要擋的是「**安靜**」那兩個字，不是「即時值」。
-    _reprint_note = ''
+def _payslip_view(d: dict) -> dict:
+    """勞報單的**單據視圖**（P2 第二份單據，2026-09-26）：計算只在這裡，版型只引用這些欄位（CUSTOMIZATION-SPEC §3.4）。
+
+    規則照抄改版前的 builder（tests/_frozen/legacy_payslip_html.py）：
+    - QL16：抬頭讀開單時的快照（`companyName`／`companyTaxId`／`companyContactInfo`）；
+    - QL17：三個都沒有 ⇒ 用現行公司資料，**而且在文件上標明**（`reprint`＝True，片段 `reprint_note`）。
+    - R3（個資法 §8 I）：`privacyNotice`（伺服器蓋的 {at, by}）有值 ⇒ 印「已告知（時間、人員）」；
+      沒有 ⇒ 附上告知事項全文（取自公司資料設定的「個資蒐集告知」，空白用範本）。
+    """
+    company = d.get('companyName', '')
+    tax_id = d.get('companyTaxId', '')
+    contact = d.get('companyContactInfo', '')
+    reprint = False
     if not (company or tax_id or contact):
         _live = location_identity(None)      # QL8：人事文件沒有所屬據點 => 主要據點
         company = _live.get('company_name', '')
         tax_id = _live.get('tax_id', '')
-        contact = '｜'.join(
-            x for x in (_live.get('phone', ''), _live.get('email', '')) if x)
-        _reprint_note = (
-            '<div style="margin:6px 0 10px;padding:6px 10px;border:1px solid #999;'
-            'background:#F5F5F5;font-size:8.5pt;color:#333;line-height:1.6">'
-            '※ 本件甲方抬頭為<strong>現行</strong>公司資料，'
-            '非開單當時的紀錄（這份單據建立時未留存抬頭）。'
-            '</div>\n')
-    cname    = d.get('contractorName', '')
-    cid_no   = d.get('contractorIdNumber', '')
-    cphone   = d.get('contractorPhone', '')
-    cemail   = d.get('contractorEmail', '')
-    caddr    = d.get('contractorAddress', '')
-    cnat     = d.get('contractorNationality', '本國籍')
-    cunion   = d.get('contractorHasUnionInsurance', False)
-    cline    = ''  # LINE ID removed from output
+        contact = '｜'.join(x for x in (_live.get('phone', ''), _live.get('email', '')) if x)
+        reprint = True
+    s_start, s_end = d.get('serviceStartDate', ''), d.get('serviceEndDate', '')
+    itype, isubtype = d.get('incomeType', ''), d.get('incomeSubtype', '')
+    itype_label = {'50': '50－薪資所得', '9A': '9A－執行業務所得', '9B': '9B－稿費版稅演講鐘點費'}.get(itype, itype)
+    if isubtype:
+        # ⚠ 與改版前相同：子類別先跳脫一次、印出時再跳脫一次（`&` 會變成 `&amp;amp;`）。保留原樣，另記在 ROADMAP。
+        itype_label += f'（{_payslip_esc(isubtype)}）'
+    gross = int(d.get('grossAmount', 0))
+    calc = d.get('calc', {})
+    tax_w, nhi_s = int(calc.get('taxWithheld', 0)), int(calc.get('nhiSupplement', 0))
+    tax_r, nhi_r = calc.get('taxRate', 0), calc.get('nhiRate', 0)
 
-    content  = d.get('serviceContent', '')
-    s_start  = d.get('serviceStartDate', '')
-    s_end    = d.get('serviceEndDate', '')
-    period   = f"{s_start} ～ {s_end}" if s_start and s_end else (s_start or s_end or '—')
-    itype    = d.get('incomeType', '')
-    isubtype = d.get('incomeSubtype', '')
-    slip_date= d.get('slipDate', '')
-    slip_no  = d.get('slipNo', '')
-    remarks  = d.get('remarks', '')
-    gross    = int(d.get('grossAmount', 0))
-    pay_m    = d.get('paymentMethod', '匯款')
-
-    calc     = d.get('calc', {})
-    tax_w    = int(calc.get('taxWithheld', 0))
-    nhi_s    = int(calc.get('nhiSupplement', 0))
-    net_a    = int(calc.get('netAmount', gross))
-    tax_r    = calc.get('taxRate', 0)
-    nhi_r    = calc.get('nhiRate', 0)
-
-    bank_code = d.get('bankCode', '')
-    bank_name = d.get('bankName', '')
-    bank_bran = d.get('bankBranch', '')
-    bank_acct = d.get('bankAccountName', '')
-    bank_no   = d.get('bankAccountNumber', '')
-
-    itype_labels = {'50': '50－薪資所得', '9A': '9A－執行業務所得', '9B': '9B－稿費版稅演講鐘點費'}
-    itype_label  = itype_labels.get(itype, itype)
-    if isubtype: itype_label += f'（{esc(isubtype)}）'
-
-    is_resident = cnat != '外國籍（未滿183天）'
-    tax_note = ''
+    def pct(r):
+        return (f"{r*100:.2f}".rstrip('0').rstrip('.') + '%') if r else '0%'
+    cnat = d.get('contractorNationality', '本國籍')
     if tax_w > 0:
-        if is_resident:
-            tax_note = f'（達起扣門檻，代扣繳 {pct(tax_r)}）'
-        else:
-            tax_note = f'（非居住者，代扣繳 {pct(tax_r)}）'
+        tax_note = f'（達起扣門檻，代扣繳 {pct(tax_r)}）' if cnat != '外國籍（未滿183天）' else f'（非居住者，代扣繳 {pct(tax_r)}）'
     else:
         tax_note = '（未達起扣門檻，免扣繳）'
-
-    nhi_note = ''
+    cunion = d.get('contractorHasUnionInsurance', False)
     if nhi_s > 0:
         nhi_note = f'（代扣二代健保補充保費 {pct(nhi_r)}）'
     elif cunion:
         nhi_note = '（職業工會投保，免扣二代健保）'
     else:
         nhi_note = '（未達門檻，免扣繳）'
+    ack = d.get('privacyNotice') if isinstance(d.get('privacyNotice'), dict) else None
+    acked = bool(ack and ack.get('at'))
+    if acked:
+        notice_text = ''
+    else:
+        from helpers.privacy_notice import current_notice
+        notice_text = current_notice()
+    return {
+        **d,
+        "companyName": company, "companyTaxId": tax_id, "companyContact": contact, "reprint": reprint,
+        "contractorName": d.get('contractorName', ''), "contractorIdNumber": d.get('contractorIdNumber', ''),
+        "contractorPhone": d.get('contractorPhone', ''), "contractorEmail": d.get('contractorEmail', ''),
+        "contractorAddress": d.get('contractorAddress', ''), "contractorNationality": cnat,
+        "unionInsured": bool(cunion),
+        "servicePeriod": f"{s_start} ～ {s_end}" if s_start and s_end else (s_start or s_end or '—'),
+        "serviceContent": d.get('serviceContent', ''), "incomeTypeLabel": itype_label,
+        "slipNo": d.get('slipNo', ''), "slipDate": d.get('slipDate', ''), "remarks": d.get('remarks', ''),
+        "grossAmount": gross, "taxWithheld": tax_w, "nhiSupplement": nhi_s,
+        "netAmount": int(calc.get('netAmount', gross)), "taxNote": tax_note, "nhiNote": nhi_note,
+        "paymentMethod": d.get('paymentMethod', '匯款'),
+        "bankCode": d.get('bankCode', ''), "bankName": d.get('bankName', ''), "bankBranch": d.get('bankBranch', ''),
+        "bankAccountName": d.get('bankAccountName', ''), "bankAccountNumber": d.get('bankAccountNumber', ''),
+        "privacyAcked": acked, "privacyAckAt": (ack or {}).get('at', '').replace('T', ' ')[:16],
+        "privacyAckBy": (ack or {}).get('by', ''), "privacyNoticeText": notice_text,
+    }
 
-    id_card_front  = d.get('_id_card_front', '')
-    id_card_back   = d.get('_id_card_back', '')
-    bank_passbook  = d.get('_bank_passbook', '')
 
-    remarks_section = ''
-    if remarks:
-        remarks_section = (
-            '\n<div class="section-title">六、備註</div>'
-            f'\n<table><tr><td style="white-space:pre-wrap">{esc(remarks)}</td></tr></table>'
-        )
+def _payslip_reprint_note(view) -> str:
+    if not view.get("reprint"):
+        return ''
+    return ('<div style="margin:6px 0 10px;padding:6px 10px;border:1px solid #999;'
+            'background:#F5F5F5;font-size:8.5pt;color:#333;line-height:1.6">'
+            '※ 本件甲方抬頭為<strong>現行</strong>公司資料，'
+            '非開單當時的紀錄（這份單據建立時未留存抬頭）。'
+            '</div>\n')
 
+
+def _payslip_passbook_html(d: dict) -> str:
+    """附件：乙方銀行存簿影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
+    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    cname, slip_no = d.get('contractorName', ''), d.get('slipNo', '')
+    bank_code, bank_name, bank_bran, bank_no = d.get('bankCode', ''), d.get('bankName', ''), d.get('bankBranch', ''), d.get('bankAccountNumber', '')
+    bank_passbook = d.get('_bank_passbook', '')
     passbook_section = ''
     if bank_passbook:
         passbook_section = f"""
@@ -741,6 +726,14 @@ def _build_payslip_html(d: dict) -> str:
   </div>
 </div>"""
 
+    return passbook_section
+
+
+def _payslip_id_card_html(d: dict) -> str:
+    """附件：乙方身分證影本（照抄改版前的 HTML；沒有影本 ⇒ 空字串）。"""
+    def esc(s): return (s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\n','<br>')
+    cname, cid_no, slip_no = d.get('contractorName', ''), d.get('contractorIdNumber', ''), d.get('slipNo', '')
+    id_card_front, id_card_back = d.get('_id_card_front', ''), d.get('_id_card_back', '')
     id_card_section = ''
     if id_card_front or id_card_back:
         if id_card_front and id_card_back:
@@ -793,125 +786,24 @@ def _build_payslip_html(d: dict) -> str:
   </div>
 </div>"""
 
-    bank_row = ''
-    if pay_m == '匯款':
-        bank_row = f"""
-        <tr><th>匯款銀行</th>
-          <td colspan="3">{esc(bank_code)} {esc(bank_name)} {esc(bank_bran)}</td></tr>
-        <tr><th>匯款帳戶</th>
-          <td colspan="3">戶名：{esc(bank_acct)}｜帳號：{esc(bank_no)}</td></tr>"""
+    return id_card_section
 
-    return f"""<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8">
-<style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-@page{{size:A4;margin:0}}
-body{{font-family:"微軟正黑體","Microsoft JhengHei",sans-serif;font-size:11pt;color:#111;background:#fff}}
-#root{{padding:14mm 14mm}}
-.hdr{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}}
-.hdr-mid{{flex:1;text-align:center}}
-h1{{font-size:18pt;font-weight:700;letter-spacing:4px;margin:0 0 2px 0}}
-.hdr-info{{text-align:right;font-size:9pt;color:#444;min-width:150px;line-height:1.8;
-           border:1px solid #999;padding:5px 8px;border-radius:3px}}
-table{{width:100%;border-collapse:collapse;margin-bottom:10px}}
-th,td{{border:1px solid #555;padding:5px 8px;vertical-align:top}}
-th{{background:#f0f0f0;font-weight:600;width:100px;white-space:nowrap}}
-.section-title{{background:#d0d8e8;font-weight:700;font-size:10pt;padding:4px 8px;
-                border:1px solid #555;margin-top:8px;margin-bottom:0}}
-.amount-row th{{width:160px}}
-.amount-row td{{font-size:12pt}}
-.net{{background:#fff8e1;font-weight:700;font-size:13pt}}
-.note-cell{{font-size:9pt;color:#555}}
-.sign{{display:flex;gap:20px;margin-top:14px}}
-.sign-box{{flex:1;border:1px solid #555;padding:10px 12px}}
-.sign-box .label{{font-size:9pt;color:#555;margin-bottom:4px}}
-.sign-line{{height:50px;border-bottom:1px solid #aaa;margin-bottom:4px}}
-.sign-name{{font-size:9pt;color:#444}}
-.footer{{text-align:center;font-size:8pt;color:#888;margin-top:10px;border-top:1px solid #ccc;padding-top:6px}}
-.tag{{display:inline-block;border:1px solid #555;padding:1px 8px;font-size:9pt;margin-right:4px}}
-</style></head><body>
-<div id="root">
-<div class="hdr">
-  <div style="min-width:150px"></div>
-  <div class="hdr-mid">
-    <h1>勞　務　報　酬　單</h1>
-    <div style="font-size:9pt;color:#666">{esc(company)}</div>
-  </div>
-  <div class="hdr-info">
-    單號：{esc(slip_no)}<br>
-    日期：{esc(slip_date)}
-  </div>
-</div>
 
-<div class="section-title">一、甲方（給付單位）</div>
-{_reprint_note}<table>
-  <tr><th>公司名稱</th><td colspan="3">{esc(company)}</td></tr>
-  <tr><th>統一編號</th><td>{esc(tax_id)}</td>
-      <th>聯絡資訊</th><td>{esc(contact)}</td></tr>
-</table>
+def _build_payslip_html(d: dict, template: dict = None) -> str:
+    """勞務報酬單（P2 起由「版型定義＋單據視圖」產生；預設版型 helpers/output_templates/payslip.json）。
 
-<div class="section-title">二、乙方（受領報酬人）</div>
-<table>
-  <tr><th>姓　　名</th><td>{esc(cname)}</td>
-      <th>證件號碼</th><td>{esc(cid_no)}</td></tr>
-  <tr><th>電　　話</th><td>{esc(cphone)}</td>
-      <th>電子信箱</th><td>{esc(cemail)}</td></tr>
-  <tr><th>通訊地址</th><td colspan="3">{esc(caddr)}</td></tr>
-  <tr><th>國　　籍</th><td colspan="3">{esc(cnat)}</td></tr>
-  <tr><th>職業工會</th>
-      <td colspan="3">{'<span class="tag">✓ 已投保職業工會</span>' if cunion else '未投保'}</td></tr>
-</table>
-
-<div class="section-title">三、勞務內容</div>
-<table>
-  <tr><th>服務期間</th><td colspan="3">{esc(period)}</td></tr>
-  <tr><th>勞務內容</th><td colspan="3">{esc(content)}</td></tr>
-  <tr><th>所得類別</th><td colspan="3">{esc(itype_label)}</td></tr>
-</table>
-
-<div class="section-title">四、金額明細</div>
-<table class="amount-row">
-  <tr><th>應付總額</th><td>{amt(gross)}</td><td class="note-cell" colspan="2"></td></tr>
-  <tr><th>代扣所得稅</th><td>{amt(tax_w)}</td>
-      <td class="note-cell" colspan="2">{esc(tax_note)}</td></tr>
-  <tr><th>二代健保費</th><td>{amt(nhi_s)}</td>
-      <td class="note-cell" colspan="2">{esc(nhi_note)}</td></tr>
-  <tr class="net"><th>實　發　金　額</th><td colspan="3">{amt(net_a)}</td></tr>
-</table>
-
-<div class="section-title">五、付款方式</div>
-<table>
-  <tr><th>付款方式</th><td colspan="3"><span class="tag">{esc(pay_m)}</span></td></tr>
-  {bank_row}
-</table>
-{remarks_section}
-<div class="sign">
-  <div class="sign-box">
-    <div class="label">乙方簽名／蓋章</div>
-    <div class="sign-line"></div>
-    <div class="sign-name">{esc(cname)}</div>
-  </div>
-  <div class="sign-box">
-    <div class="label">甲方代表人</div>
-    <div class="sign-line"></div>
-    <div class="sign-name">&nbsp;</div>
-  </div>
-</div>
-<div class="footer">
-  {esc(company)}｜統編：{esc(tax_id)}｜{esc(contact)}
-</div>
-</div>
-{id_card_section}
-{passbook_section}
-<script>
-window.addEventListener("load",function(){{
-  var r=document.getElementById("root");if(!r)return;
-  var A4H=Math.round(297/25.4*96);
-  var h=r.scrollHeight;
-  if(h>A4H){{var s=A4H/h;if(s>=0.50){{r.style.zoom=s.toFixed(4);}}}}
-}});
-</script>
-</body></html>"""
-
+    `template` 給了就用它（P5 覆寫版）；否則依「單據凍結的版本＞公司發布版＞程式預設」。
+    與改版前的 builder 比對（tests/_frozen/legacy_payslip_html.py）：結構正規化後相同＋innerText 相同＋PDF 文字相同
+    （驗收標準見 CUSTOMIZATION-SPEC §3.4；個資告知那兩塊是改版後新增的，比對時拿掉）。
+    """
+    from helpers import doc_template as _dt
+    view = _payslip_view(d)
+    parts = {
+        "reprint_note": lambda: _payslip_reprint_note(view),
+        "id_card_attachment": lambda: _payslip_id_card_html(d),
+        "passbook_attachment": lambda: _payslip_passbook_html(d),
+    }
+    return _dt.render(template or _published_output_template("payslip", d), view, parts)
 
 def generate_payslip_pdf_bytes(slip_no: str) -> bytes:
     edge = _get_edge_path()

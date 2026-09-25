@@ -62,7 +62,19 @@ def _invoice_voucher_sample_view():
 
 
 #: 用樣本資料預覽輸出（§8.1 ⑤）：key ⇒ 產生樣本視圖的函式
-_SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view}
+def _payslip_sample_view():
+    import pdf_gen
+    return pdf_gen._payslip_view({
+        "companyName": "範例股份有限公司", "companyTaxId": "12345678", "companyContactInfo": "Tel 02-0000-0000",
+        "contractorName": "範例承攬人", "contractorIdNumber": "A123456789", "serviceContent": "範例勞務",
+        "serviceStartDate": "2026-09-01", "serviceEndDate": "2026-09-05", "incomeType": "9A", "slipDate": "2026-09-06",
+        "slipNo": "PS-202609-0001", "remarks": "範例備註", "grossAmount": 30000, "paymentMethod": "匯款",
+        "calc": {"taxWithheld": 3000, "nhiSupplement": 633, "netAmount": 26367, "taxRate": 0.1, "nhiRate": 0.0211},
+        "bankCode": "000", "bankName": "範例銀行", "bankBranch": "範例分行", "bankAccountName": "範例承攬人",
+        "bankAccountNumber": "0000000000"})
+
+
+_SAMPLE_VIEWS = {"invoice_voucher": _invoice_voucher_sample_view, "payslip": _payslip_sample_view}
 
 
 def _err(e: D.DefinitionError, status=400):
@@ -239,7 +251,8 @@ def preview_output_template(key: str, payload: dict = Body(...), format: str = Q
     if problems:
         return JSONResponse(status_code=422, content={"detail": "版型有問題", "problems": problems})
     import pdf_gen
-    html = pdf_gen._build_invoice_voucher_html(json.loads(json.dumps(sample())), template=body)
+    builders = {"invoice_voucher": pdf_gen._build_invoice_voucher_html, "payslip": pdf_gen._build_payslip_html}
+    html = builders[key](json.loads(json.dumps(sample())), template=body)
     if format == "pdf":
         from fastapi.responses import Response
         return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf")
