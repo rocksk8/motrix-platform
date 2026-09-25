@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """L1 每日 08:00 檢查執行器（2026-09-26；取代 routers/daily_tasks.py::schedule_overdue_check）。
 
-- 模組的檢查以提供者 `daily.check` 登記（多提供者、以名稱區分；INTEGRATION-POINTS IP-10）：
+- 模組的檢查以提供者 `daily.check` 登記（多提供者、以名稱區分；INTEGRATION-POINTS IP-11）：
   `fn(mode)`，mode＝"startup"（啟動補跑）／"daily"（每天 08:00）。補跑要回溯幾天由各模組自己決定
   （每日任務的逾期檢查照舊用 `dt_overdue_last_check` 逐日補）。模組不在 ⇒ 少那一類檢查，其餘照常。
 - 系統健康檢查（helpers/system_checks.py）一律執行，不依賴任何 L2 模組。

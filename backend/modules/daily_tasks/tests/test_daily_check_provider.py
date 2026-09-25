@@ -1,4 +1,4 @@
-"""IP-10 `daily.check`：M12 自己的那一支（逾期、區間到期；啟動補跑逐日補）。
+"""IP-11 `daily.check`：M12 自己的那一支（逾期、區間到期；啟動補跑逐日補）。
 
 2026-09-26 自 tests/platform/test_daily_checks_connector.py 移入本模組：拿掉 M12 時一起消失。
 """

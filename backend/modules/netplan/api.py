@@ -34,12 +34,12 @@ from helpers import (_require_user, _tok, _audit, notify_module_activity,
                      require_any_module)
 from core import registry as _registry
 
-#: M01 不在時對使用者說的話（IP-11 `case.access`；不可以默默略過）
+#: M01 不在時對使用者說的話（IP-12 `case.access`；不可以默默略過）
 CASE_MISSING = "案件模組未安裝"
 
 
 def _case_access():
-    """IP-11 `case.access`（M01 提供）；None ⇒ 案件模組未安裝。"""
+    """IP-12 `case.access`（M01 提供）；None ⇒ 案件模組未安裝。"""
     return _registry.single_provider("case.access")
 
 # 讀取端點的模組聯集（2026-09-14）：規劃書自己三頁（netplan／netplan_edit）＋

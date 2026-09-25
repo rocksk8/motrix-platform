@@ -1,5 +1,5 @@
 {
- "core_version": "1.24",
+ "core_version": "1.26",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -227,6 +227,11 @@
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
    "validate_module": "def(body, key=…)"
+  },
+  "helper:daily_checks": {
+   "run_module_checks": "def(mode)",
+   "run_once": "def(mode)",
+   "schedule_daily_checks": "def()"
   },
   "helper:dates": {
    "_add_months": "def(d, months)",
@@ -611,6 +616,16 @@
    "manifest_drift": "def()",
    "run_edge_pdf": "def(cmd)"
   },
+  "helper:system_checks": {
+   "REMINDER_FAILURE_KEEP": "const",
+   "REMINDER_FAILURE_SETTING": "const",
+   "REMINDER_FIRST_STAGES": "const",
+   "REMINDER_STEP_AFTER": "const",
+   "reminder_dedup_key": "def(stage)",
+   "reminder_send_failures": "def()",
+   "reminder_stages_at_or_below": "def(days)",
+   "run_all": "def(prune=…)"
+  },
   "helper:tiered_approval": {
    "APPROVAL_DOC_TYPES": "const",
    "APPROVAL_DOC_TYPE_LABELS": "const",
@@ -840,6 +855,7 @@
    "logic_files": "def()",
    "module_dirs": "def()",
    "module_files": "def(d)",
+   "module_installed": "def(path)",
    "page_file": "def(name)",
    "page_files": "def()",
    "product_files": "def()",

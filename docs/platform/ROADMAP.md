@@ -63,11 +63,11 @@
 建議順序，理由是阻擋它的逆向依賴或共用表最少：
 
 1. M11 標案雷達 — ✅ 後端完成；剩地圖 provider（等 M08）與前端頁面
-2. M12 每日任務 — ✅ A 2026-09-26 搬進 `modules/daily_tasks`（wip/a-m10，第三班列車；稽核 AUDIT-D-A-M12-move）。系統健康檢查下沉 L1（`helpers/system_checks.py`），模組檢查走 IP-10 `daily.check`
+2. M12 每日任務 — ✅ A 2026-09-26 搬進 `modules/daily_tasks`（wip/a-m10，第四班列車；稽核 AUDIT-D-A-M12-move）。系統健康檢查下沉 L1（`helpers/system_checks.py`），模組檢查走 IP-11 `daily.check`
    - ~~**搬遷前必修**（稽核 X-C-batch1 B-1）：IP-5 的 `notice` 要在前端顯示（取消勾選時要明說「沒有收回」、不留舊任務與 id）；未修不准搬。~~
      ✅ 2026-09-26：勾選／取消勾選／刪除各自一句（「未建立」「未收回」），案件頁以提示顯示（e2e `test_e2e_case_stage_daily_task_notice_2026_09_26.py`）。〔更正（主持裁示 2026-09-26）：原句「不留舊任務與 id」不採用——M12 不在時 M01 不可以寫 M12 的表，任務本來就收不回；id 保留，M12 裝回後再勾選會收斂到同一筆〕
    - ⏳ `helpers/system_checks.run_all` 六項檢查沒有逐項隔離：第一項丟例外，其餘當天都不跑（搬遷前就是這個寫法；AUDIT-D-A-M12-move S-4）。修法：每一項各自 try，補「第一項丟例外，其餘照跑」一題
-3. M10 網路規劃 — ✅ A 2026-09-26 搬進 `modules/netplan`（wip/a-m10，第三班列車）。對 M01 的相依走 IP-11 `case.access`；C 的案件存取下沉 L1 合回後，IP-11 只剩讀案件名稱（summary）
+3. M10 網路規劃 — ✅ A 2026-09-26 搬進 `modules/netplan`（wip/a-m10，第四班列車）。對 M01 的相依走 IP-12 `case.access`；C 的案件存取下沉 L1 合回後，IP-12 只剩讀案件名稱（summary）
 4. M02 業務開發 — 需要 A3、§4 的 dev_cases
 5. M04 外包工班 — 需要 A6
 6. M05 應收應付 — 需要 A6、A8

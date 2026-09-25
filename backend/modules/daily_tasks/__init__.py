@@ -10,7 +10,7 @@ MODULE = ModuleSpec(
     providers={
         # IP-5：別組（M01 案件執行進度）經此建立／同步每日任務
         ("daily_task.external", "daily_tasks"): api._ExternalTasks,
-        # IP-10：逾期與區間到期檢查登記給 L1 每日執行器（helpers/daily_checks.py）
+        # IP-11：逾期與區間到期檢查登記給 L1 每日執行器（helpers/daily_checks.py）
         ("daily.check", "daily_tasks"): api.run_daily_checks,
     },
 )

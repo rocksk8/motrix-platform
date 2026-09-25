@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.26 — 2026-09-26（A，M10 搬遷；列車上 core_bump 取號）〔core_bump：暫用 1.96 → 1.17〕〔core_bump：暫用 1.17 → 1.26〕
+- L0（新增）：`core.source_tree.module_installed(path)`——守門判斷「清單上的模組檔所屬模組在不在」的唯一實作（模組被拿掉時，它的條目不算幽靈；PLAYBOOK §B 步驟 11）
+
+## 1.25 — 2026-09-26（A，M12 搬遷前置；列車上 core_bump 取號）〔core_bump：暫用 1.98 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕〔core_bump：暫用 1.16 → 1.25〕
+- L1（新增）：`helpers.daily_checks`——每日 08:00 執行器（`schedule_daily_checks`／`run_once`／`run_module_checks`）；模組以提供者 `daily.check` 登記（INTEGRATION-POINTS IP-11）
+- L1（新增）：`helpers.system_checks`——憑證到期、備份新鮮度、磁碟、測試暫存、簽核催辦、請求紀錄清理（自 `routers/daily_tasks.py` 逐字搬出；`run_all(prune)`）；不依賴任何 L2 模組
+- main.py：啟動改呼叫 `helpers.daily_checks.schedule_daily_checks()`（原 `routers.daily_tasks.schedule_overdue_check()` 移除）
+
 ## 1.24 — 2026-09-26（C，模組檔案清單單一來源）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.24〕
 > 主持裁示：「模組裡有哪些檔」只有一份定義。A 的 M03、C 的 M04、B 的 M08 把多支 router 放在 `api/`（CORE-SPEC §3）都依賴它。只有新增。
 - L0（新增）：`core.source_tree.module_files(d)`——模組資料夾所有層的 `*.py`，排除 tests／migrations；`router_files`／`logic_files` 與 tools/platform/dep_scan.py 都用它

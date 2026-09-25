@@ -617,7 +617,7 @@ def save_quotation_json(
     return now
 
 
-# ── 串接點 IP-11 `case.access`（INTEGRATION-POINTS；2026-09-26 M10 搬遷前置）──────────
+# ── 串接點 IP-12 `case.access`（INTEGRATION-POINTS；2026-09-26 M10 搬遷前置）──────────
 # 別組（目前是 M10 網路規劃書）要「確認這個人能不能看這個案件」「讀案件的客戶／專案名稱」時走這裡，
 # 不 import 本檔、也不直接讀 quotations。M01 不在 ⇒ 沒有提供者，使用方明說「案件模組未安裝」。
 class _CaseAccess:

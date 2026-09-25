@@ -1018,7 +1018,7 @@ def _check_range_task_deadline() -> None:
 
 
 
-# ── `daily.check` 提供者（INTEGRATION-POINTS IP-10；L1 執行器 helpers/daily_checks.py）──────────
+# ── `daily.check` 提供者（INTEGRATION-POINTS IP-11；L1 執行器 helpers/daily_checks.py）──────────
 # 2026-09-26：原本本檔的 schedule_overdue_check() 同時跑案件、保固、憑證、備份、磁碟…九種檢查
 # ⇒ 停用每日任務會連帶停掉那些告警。現在本模組只負責自己的兩種；補跑 guard 照舊。
 def run_daily_checks(mode: str = "daily") -> None:
@@ -1101,5 +1101,5 @@ class _ExternalTasks:
     withdraw = staticmethod(_external_withdraw)
 
 
-# 提供者（IP-5 daily_task.external、IP-10 daily.check）由 modules/daily_tasks/__init__.py 的 ModuleSpec 宣告：
+# 提供者（IP-5 daily_task.external、IP-11 daily.check）由 modules/daily_tasks/__init__.py 的 ModuleSpec 宣告：
 # 模組沒有載入（停用／未授權／不在包裡）⇒ 不登記。

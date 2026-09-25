@@ -269,7 +269,7 @@ def _check_warranty_expiry() -> None:
 
 
 
-# ── `daily.check` 提供者（INTEGRATION-POINTS IP-10）─────────────────────────────
+# ── `daily.check` 提供者（INTEGRATION-POINTS IP-11）─────────────────────────────
 def run_daily_checks(mode: str = "daily") -> None:
     """mode：daily（08:00）／startup（啟動補跑）。案件類檢查都看未來，兩種模式做一樣的事。"""
     _check_warranty_expiry()

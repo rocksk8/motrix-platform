@@ -229,7 +229,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-10　`daily.check`：模組的每日 08:00 檢查（各模組 → L1 執行器）
+## IP-11　`daily.check`：模組的每日 08:00 檢查（各模組 → L1 執行器）
 
 M12 每日任務搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/daily_tasks.py::schedule_overdue_check` 一支排程同時跑九種檢查（每日任務逾期、區間到期、案件階段到期、案件專案期間、保固、簽核催辦、憑證、備份新鮮度、磁碟／暫存）⇒ **停用每日任務會連帶停掉備份與磁碟告警**。改成：系統健康檢查下沉 L1（`helpers/system_checks.py`，永遠執行），各模組的檢查以本串接點登記給 L1 執行器（`helpers/daily_checks.py`）。
 
@@ -246,7 +246,7 @@ M12 每日任務搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/daily_
 
 ---
 
-## IP-11　`case.access`：案件的逐案權限與摘要（M01 → M10）
+## IP-12　`case.access`：案件的逐案權限與摘要（M01 → M10）
 
 M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/network_plans.py` 經 `helpers` 套件 import M01 的 `guard_case_access`，並直接讀 `quotations` 取客戶／專案名稱（l2_import_baseline「M10 router:network_plans -> M01 helper:quotations」）。
 
