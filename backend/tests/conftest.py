@@ -1462,8 +1462,14 @@ def _module_opens_its_own_playwright(module):
 
 @pytest.fixture(autouse=True)
 def _pw_coexist(request):
-    """還沒轉的模組自己開 sync_playwright ⇒ 先停掉共用的（見上方「並存」）。"""
-    if _module_opens_its_own_playwright(getattr(request, "module", None)):
+    """共用的 sync_playwright 只活在「用它的題」之間；其他題開始前先停掉：
+    ① 還沒轉的模組自己開 sync_playwright（見上方「並存」）
+    ② 這一題不經過 new_context（不用共用瀏覽器）：sync_playwright 開著時主執行緒上掛著一個**執行中的
+       event loop** ⇒ 之後同一個 worker 的 `asyncio.run()` 全部 RuntimeError（2026-09-25 建包：
+       沒標 e2e 的瀏覽器題混進非 e2e 輪，同一 worker 後面的 upload_path_traversal 15 題紅）。
+       看的是「用不用」而不是 e2e 標記 ⇒ 標記漏標也不會再漏出去；全 e2e 的一輪幾乎每題都用，不會多重啟。"""
+    if (_module_opens_its_own_playwright(getattr(request, "module", None))
+            or "new_context" not in request.fixturenames):
         _stop_shared_browser()
     yield
 

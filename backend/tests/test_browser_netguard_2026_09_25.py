@@ -16,6 +16,7 @@ from tests.conftest import _assert_no_browser_outbound
 FETCH = """(u) => fetch(u).then(r => 'ok:' + r.status, () => 'blocked')"""
 
 
+@pytest.mark.e2e
 @pytest.mark.allow_outbound   # 故意連外：收尾不判，改在題內驗記帳（見 docstring ①）
 def test_an_external_request_is_blocked_and_recorded(request, e2e_browser):
     browser = e2e_browser
@@ -31,6 +32,7 @@ def test_a_recorded_request_makes_the_teardown_assertion_fail():
     _assert_no_browser_outbound([])          # 沒有記帳 ⇒ 不紅
 
 
+@pytest.mark.e2e
 def test_local_and_test_fulfilled_requests_are_not_recorded(request, e2e_browser):
     browser = e2e_browser
     ctx = browser.new_context()

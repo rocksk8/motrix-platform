@@ -87,6 +87,7 @@ def test_each_test_gets_an_isolated_context(live_server, new_page, step):
         assert page.evaluate("() => localStorage.getItem('shf_leak')") is None, "上一題的 localStorage 漏到這一題"
 
 
+@pytest.mark.e2e
 def test_context_hooks_run_for_every_new_context(new_context, request):
     import tests.conftest as cf
     seen = []
