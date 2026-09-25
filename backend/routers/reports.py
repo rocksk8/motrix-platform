@@ -112,34 +112,25 @@ def _fmt(n):
     return f"NT$ {int(n or 0):,}"
 
 
-def _live_dispatch_totals_by_quote(conn) -> dict:
-    """回傳 {quote_no: 目前有效（非取消）承攬商派發總成本}，算法比照
-    M04 連接器 dispatch.row（vendor_contractors._dispatch_row）的 grandTotal（含稅承攬商費用＋
-    外包名單人員個別計費），供比對精算快照是否過期使用（見 _collect() 的
-    staleSettlementCount）。"""
-    rows = conn.execute("""
-        SELECT quote_no, total_amount, tax_rate, personnel_json, items_json
-        FROM contractor_dispatches WHERE status != 'cancelled'
-    """).fetchall()
-    totals: dict = {}
-    for r in rows:
-        amt = float(r["total_amount"] or 0)
-        if not amt:
-            try:
-                items = json.loads(r["items_json"] or "[]")
-                amt = sum(float(it.get("amount", 0) or 0) for it in items)
-            except Exception:
-                amt = 0
-        rate = float(r["tax_rate"]) if r["tax_rate"] is not None else 0.05
-        total_with_tax = amt + round_half_up(amt, rate)
-        try:
-            personnel = json.loads(r["personnel_json"] or "[]")
-        except Exception:
-            personnel = []
-        personnel_total = sum(float(p.get("amount", 0) or 0) for p in personnel)
-        totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + total_with_tax + personnel_total
-    return totals
+def _live_dispatch_totals_by_quote(conn):
+    """{quote_no: 目前有效（非取消）承攬商派發總成本} 或 None（外包工班模組不在）。
 
+    M08 搬遷 ⑤（INTEGRATION-POINTS IP-1 的待辦，2026-09-25 主持裁示「等 M08 搬遷時處理」）：
+    原本自己又算了一次 grandTotal（同一算法的第二份實作），改用 M04 的 `dispatch.row` 提供者，
+    算法只剩一份（含稅承攬商費用＋外包人員個別計費）。
+    ⚠ 提供者不在 ⇒ 回 **None**，不回 `{}`：`{}` 會讓每一筆快照都跟 0 比，把「無法檢查」算成「過期」。
+    供比對精算快照是否過期使用（見 _collect() 的 staleSettlementCount）。"""
+    from core import registry
+    dispatch_row = registry.single_provider("dispatch.row")
+    if dispatch_row is None:
+        return None
+    totals: dict = {}
+    for r in conn.execute(
+            "SELECT cd.*, vc.name AS vendor_name FROM contractor_dispatches cd"
+            " LEFT JOIN vendor_contractors vc ON vc.id = cd.vendor_id WHERE cd.status != 'cancelled'"):
+        d = dispatch_row(r)
+        totals[r["quote_no"]] = totals.get(r["quote_no"], 0) + float(d["grandTotal"] or 0)
+    return totals
 
 def _build_name_index(user_by_id: dict) -> dict:
     """display_name → user id。**同名的一律不收**（值設成 None）。
@@ -474,8 +465,10 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
     # 績效數字可能已經跟實際不符（同一份快照，settlement.html／案件管理財務Tab
     # 各自有逐案件的即時比對banner，這裡只給總數當全域警訊，不逐案列出——
     # 要看是哪幾筆，去對應案件本身的頁面會有詳細比較）。
-    stale_settlement_count = 0
-    for c in cases_all:
+    stale_settlement_count = 0 if live_dispatch_totals is not None else None
+    stale_settlement_note = None if live_dispatch_totals is not None else \
+        "外包工班模組未安裝：無法檢查已完結的精算快照是否過期（不是 0 件）"
+    for c in (cases_all if live_dispatch_totals is not None else ()):
         if c["settleStatus"] != "finalized" or not c["settleSummary"]:
             continue
         frozen = c["settleSummary"].get("dispatchTotal")
@@ -530,6 +523,7 @@ def _collect(period_start: str, period_end: str, department_id: Optional[int] = 
             "backlog":                int(backlog),
             "settleOverdueCount":     len(settle_overdue),
             "staleSettlementCount":   stale_settlement_count,
+            "staleSettlementNote":    stale_settlement_note,
             "missingPaymentItemsCount": len(cases_without_payment_items),
         },
         "periodItems":    period_items,
