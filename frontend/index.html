@@ -470,7 +470,7 @@
             <span class="h-kicker">MOTRIX 專案管理系統</span>
             <!-- 這三個節點刻意擠在同一行：標籤之間的換行會被當成一個空格，
                  中文句子中間會裂一條縫。 -->
-            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && !statsLoaded"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template></h1>
+            <h1 class="h-hero__t"><span x-text="greeting"></span><template x-if="stats.waitingForMe > 0"><span>今天有 <em x-text="stats.waitingForMe"></em> 件事等您處理。</span></template><template x-if="!loading && statsLoaded && stats.waitingForMe === 0"><span>目前沒有待您簽核的項目。</span></template><template x-if="!loading && !statsLoaded && !analyticsMissing"><span>目前讀不到待辦數量，畫面上的數字暫時不準。</span></template><template x-if="!loading && analyticsMissing"><span data-testid="analytics-missing">首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。</span></template></h1>
             <p class="h-hero__sub" x-text="heroSummary"></p>
             <div class="h-hero__acts">
               <a href="pages/approval-queue.html" class="btn btn-primary" style="text-decoration:none" x-show="canQuotation">
@@ -499,7 +499,7 @@
             <div class="h-band__k">等我簽核</div>
             <div class="h-band__n" x-text="stats.waitingForMe"></div>
             <div class="h-band__t">簽核佇列</div>
-            <p class="h-band__p" x-text="stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : (statsLoaded ? '目前沒有待您簽核的單據。' : '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。')"></p>
+            <p class="h-band__p" x-text="stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : (statsLoaded ? '目前沒有待您簽核的單據。' : (analyticsMissing ? '首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。' : '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。'))"></p>
           </a>
           <a href="pages/quotations.html" class="h-band__c">
             <div class="h-band__k">有效期將屆</div>
@@ -842,6 +842,9 @@
       session: {},
       branding: {},   // A8d：公司名稱／統編取自公司資料設定（/api/system/branding），不寫死
       onboardingDismissed: false,
+      //: M08 搬遷 ④：`/api/dashboard/stats` 回 404 ＝「營運分析」模組沒有載入（載入時只會 200／403）。
+      //  ⚠ 不可以講成「連線或伺服器重啟」——那會讓人去等一件不會自己好的事。
+      analyticsMissing: false,
       stats: {
         totalQuotes: 0, pendingQuotes: 0, sentQuotes: 0, waitingForMe: 0,
         activeCases: 0, closedCases: 0, customerCount: 0, projectSummary: {},
@@ -920,6 +923,7 @@ feedCount(key) {
         }
         // FX33：**先問「讀到了嗎」，再問「是不是空的」。**
         // 兩者在 `stats` 上長得一模一樣（都是 0），而它們要講的話相反。
+        if (this.analyticsMissing) return '首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。'
         if (!this.statsLoaded) {
           return '目前讀不到儀表板資料（可能是連線或伺服器正在重啟），'
                + '畫面上的數字暫時不準。重新整理可以再試一次。'
@@ -1066,6 +1070,7 @@ feedCount(key) {
             // FX33：讀不到就是讀不到。**不可以讓它看起來像「沒有資料」** ——
             // `stats` 保持初始 0，而 0 在畫面上會被講成「系統目前還沒有資料」。
             this.statsLoaded = false
+            this.analyticsMissing = (r.status === 404)
           }
         } catch {
           // 逾時／離線／後端重啟中都走這裡。後端重啟中正是這一包的部署視窗：
