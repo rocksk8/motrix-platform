@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 485,
+  "tests": 491,
   "unmapped": 9,
   "kinds": {
-   "api": 258,
+   "api": 262,
    "e2e": 119,
-   "unit": 44,
-   "audit": 64
+   "unit": 43,
+   "audit": 67
   },
   "routes": 509
  },
@@ -484,6 +484,47 @@
     ]
    }
   },
+  "backend/tests/platform/test_case_stage_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "file:backend/routers/__init__.py",
+    "helper:case_stage_tasks",
+    "helper:google_calendar",
+    "plat:__init__",
+    "plat:registry",
+    "router:daily_tasks",
+    "router:invoice_vouchers",
+    "router:payment_requests",
+    "router:quotations",
+    "router:shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_stage_tasks.py",
+     "backend/helpers/google_calendar.py",
+     "backend/routers/__init__.py",
+     "backend/routers/daily_tasks.py",
+     "backend/routers/invoice_vouchers.py",
+     "backend/routers/payment_requests.py",
+     "backend/routers/quotations.py",
+     "backend/routers/shipping_notes.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/helpers/case_stage_tasks.py",
+     "backend/helpers/google_calendar.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_core_events.py": {
    "kind": "unit",
    "units": [
@@ -623,6 +664,51 @@
     "/api/jobs/j-ok/release"
    ]
   },
+  "backend/tests/platform/test_deploy_dashboard_modules.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "dir:backend/modules/tender_radar/",
+    "file:backend/autostart.bat",
+    "file:backend/modules/tender_radar/module.json",
+    "file:backend/tools/_prod_health_facts.ps1",
+    "plat:loader"
+   ],
+   "evidence": {
+    "path": [
+     "backend/autostart.bat",
+     "backend/core/",
+     "backend/core/loader.py",
+     "backend/modules/",
+     "backend/modules/tender_radar/",
+     "backend/modules/tender_radar/module.json",
+     "backend/tools/_prod_health_facts.ps1"
+    ]
+   }
+  },
+  "backend/tests/platform/test_deploy_dashboard_products.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:tools/platform/",
+    "file:backend/modules/tender_radar/module.json",
+    "file:tools/platform/product_select.py"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/",
+     "backend/modules/tender_radar/module.json",
+     "tools/platform/",
+     "tools/platform/product_select.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/build",
+    "/api/packages",
+    "/api/products"
+   ]
+  },
   "backend/tests/platform/test_deploy_dashboard_upgrade.py": {
    "kind": "api",
    "units": [
@@ -701,15 +787,21 @@
    }
   },
   "backend/tests/platform/test_l1_interface_snapshot.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
+    "dir:docs/platform/",
     "file:backend/tests/platform/__init__.py",
-    "file:backend/tests/platform/_l1_interface.py"
+    "file:backend/tests/platform/_l1_interface.py",
+    "file:docs/platform/MODULE-GUIDE.md"
    ],
    "evidence": {
     "import": [
      "backend/tests/platform/__init__.py",
      "backend/tests/platform/_l1_interface.py"
+    ],
+    "path": [
+     "docs/platform/",
+     "docs/platform/MODULE-GUIDE.md"
     ]
    }
   },
@@ -3140,6 +3232,33 @@
     ]
    }
   },
+  "backend/tests/test_company_contact_a8c_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:network_plan_export",
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "helper:company_identity",
+    "helper:settings",
+    "plat:__init__",
+    "plat:upgrade",
+    "router:reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/upgrade.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/company_identity.py",
+     "backend/helpers/settings.py",
+     "backend/network_plan_export.py",
+     "backend/pdf_gen.py"
+    ],
+    "path": [
+     "backend/routers/reports.py"
+    ]
+   }
+  },
   "backend/tests/test_company_locations_2026_09_22.py": {
    "kind": "api",
    "units": [
@@ -3599,6 +3718,25 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_doc_template_p2_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:pdf_gen",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_frozen/legacy_invoice_voucher_html.py",
+    "helper:doc_template",
+    "helper:settings"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/doc_template.py",
+     "backend/helpers/settings.py",
+     "backend/pdf_gen.py",
+     "backend/tests/_frozen/legacy_invoice_voucher_html.py"
+    ]
+   }
   },
   "backend/tests/test_doc_versions_2026_09_14.py": {
    "kind": "api",
@@ -9047,6 +9185,30 @@
     ],
     "api": [
      "backend/routers/quotations.py"
+    ]
+   }
+  },
+  "backend/tests/test_states_data_ops_2026_09_25.py": {
+   "kind": "audit",
+   "units": [
+    "core:archive",
+    "core:db",
+    "core:main",
+    "helper:email_notify",
+    "plat:__init__",
+    "plat:upgrade"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/upgrade.py",
+     "backend/db.py",
+     "backend/helpers/email_notify.py"
+    ],
+    "path": [
+     "backend/db.py",
+     "backend/main.py"
     ]
    }
   },
