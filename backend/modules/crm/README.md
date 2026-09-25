@@ -22,10 +22,12 @@
 ## 本模組不在時
 
 - `/api/dev-cases`、`/api/dev-logs`、`/api/dev-crm` 回 404；側欄入口隱藏（`module.json` 的 `pages`）。
-- 報價單照常可以刪除，回應 `notice` 明說「轉建連結沒有自動解除」（IP-11）；伺服器記 WARNING。
+- 報價單照常可以刪除，回應 `notice` 明說「轉建連結沒有自動解除」（IP-11），報價單清單以琥珀色提示顯示 8 秒；伺服器記 WARNING。
 - 每日 08:00 的停滯／暫緩到期提醒不跑。
 - 其他模組仍會**讀** `dev_cases`／`dev_logs`（儀表板、全站搜尋、未讀標記、報價單動態、行事曆標題、封存匯出）：表由凍結 migration 建立，本模組不在時表仍在，讀取不會壞；讀取相依待另開題切斷（DEPENDENCY-MAP §3 #2／#5／#6）。
 
 ## 尚未處理
 
 - 規格條件仍在 `docs/windows/STATE.md`，尚未拆成本模組的 `SPEC.md`。
+- 停滯自動改狀態（`_check_dev_case_stale`）仍直接 `INSERT INTO audit_log`（系統身分，沒有 token 可交給 `helpers.audit._audit`）；DEPENDENCY-MAP §4 要求一律走 `_audit`，需要 L1 提供「以系統身分記稽核」的入口。
+- 頁面 `dev-crm.html` 仍在 `frontend/pages/`（階段 C 由 B 搬）：本模組不在時側欄入口隱藏、API 404，但直接打網址頁面照樣載入（與 M11 相同）。
