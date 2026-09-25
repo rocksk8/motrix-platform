@@ -408,7 +408,7 @@ def test_acceptance_equipment_loan_built_in_browser_then_used_end_to_end(live_se
     ap.click('.mb-fc[data-field-key="qty"]')
     ap.fill("#mb-f-label", "借用數量")
     _step(ap, 5)
-    row = ap.locator('#mb-out-editor [data-block-type="meta"] [data-meta-row]').filter(
+    row = ap.locator('#mb-out-editor [data-block-type="meta"] [data-list="fields"] [data-item-row]').filter(
         has=ap.locator('select[data-k="path"] option:checked[value="fields.qty"]'))
     row.locator('input[data-k="label"]').fill("借用數量")
     _wait_saved(ap)
