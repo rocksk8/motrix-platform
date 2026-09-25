@@ -105,7 +105,7 @@ def test_only_case_access_may_newly_read_or_write_quotations_in_l1():
 
 def _without_m01(monkeypatch):
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "case.present" else orig(cap))
+    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "case.access" else orig(cap))
 
 
 def _seed_case(quote_no, owner_id):
@@ -166,3 +166,30 @@ def test_missing_table_is_404_and_a_locked_database_is_not(monkeypatch):
             pass
     with pytest.raises(sqlite3.OperationalError, match="locked"):
         ca.guard_case_access(_Locked(), "MQ-202609-001", admin)
+
+
+def test_both_paths_agree_when_m01_is_absent(client, make_user, monkeypatch):
+    """主持裁示：M01 不在時，L1 案件存取守門與經 IP-12 `case.access` 的取用方（網路規劃書）結果一致——都不放行。
+    兩條路看同一個訊號（`case.access`），拿掉它 ⇒ L1 的 guard 404，規劃書依案件查詢也 404 並明說「案件模組未安裝」。"""
+    import db
+    from helpers.case_access import guard_case_access
+    from modules.netplan import api as netplan
+    name = make_user(username="ca_both_boss", role="superadmin")[0]
+    conn = db.get_db()
+    uid = conn.execute("SELECT id FROM users WHERE username=?", (name,)).fetchone()["id"]
+    conn.close()
+    user = {"id": uid, "username": name, "role": "superadmin", "modules": []}
+    _seed_case("MQ-CABOTH-01", uid)
+    au, apw = make_user(username="ca_both_api", role="superadmin")[:2]
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": au, "password": apw}).json()["token"]}
+    url = "/api/quotations/MQ-CABOTH-01/network-plan"
+    assert client.get(url, headers=h).status_code in (200, 404)          # 正對照：M01 在時是否有規劃書與本題無關，只要不是「未安裝」
+    assert netplan.CASE_MISSING not in client.get(url, headers=h).text
+
+    _without_m01(monkeypatch)
+    conn = db.get_db()
+    with pytest.raises(HTTPException) as e:
+        guard_case_access(conn, "MQ-CABOTH-01", user)
+    assert e.value.status_code == 404
+    r = client.get(url, headers=h)
+    assert r.status_code == 404 and netplan.CASE_MISSING in r.json()["detail"]

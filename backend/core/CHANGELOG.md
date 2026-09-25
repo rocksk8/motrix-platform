@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.30 — 2026-09-26（C，案件存取守門下沉）〔core_bump：暫用 1.99 → 1.30〕
+> 主持裁示：案件存取守門自 M01 下沉 L1，M01／M03／M05／M10 與 M04 搬遷都依賴它。只有新增。
+- L1（新增）：`helpers.case_access`——`CASE_ACCESS`（row_access `case` 規則，登錄照舊）、`is_document_approver`、`case_access_allowed`、`guard_case_access`、`case_module_present()`；`helpers.quotations` 與 `helpers` 保留同名匯入（同一個物件）
+- L1（行為）：M01 不在 ⇒ `guard_case_access` 404、`case_access_allowed` False（表與資料在也一樣）；「在不在」看 M01 提供的 `case.access`（IP-12，主持裁示只留一個訊號，稽核 D CA-M1）；只有 `no such table` 當查無此案，其他資料庫錯誤照樣丟出（CA-S2）
+- 已知例外：L1 讀寫 M01 `quotations` 只准經本檔（DEPENDENCY-MAP §3.2，守門 `test_case_access_l1`，判準用 dep_scan 的 SQL 解析＋逗號 join，含 L0 core/）
+
 ## 1.29 — 2026-09-26（C，參照選項權限）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.29〕
 > P8 前端代理回報：參照欄選項只檢查目前模組的權限。只有新增與收緊。
 - L1（新增）：`helpers.custom_modules.register_ref_target(..., modules=)`（讀這個對象需要的權限）、`ref_target_modules(target)`

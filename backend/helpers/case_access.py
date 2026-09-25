@@ -6,7 +6,7 @@
 ⚠ 已知例外（DEPENDENCY-MAP §3.2）：本檔讀 M01 的 `quotations` 表；L1 其他檔新增讀寫這張表會被
 `tests/platform/test_case_access_l1.py` 擋下（既有的讀寫列在基線、只准變少）。
 M01 不在 ⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，不放行。
-「M01 在不在」看模組（`case_module_present()`），**不看表**：V9 基準的 `init_db` 在每個安裝都建 `quotations`，
+「M01 在不在」看它提供的 `case.access`（`case_module_present()`），**不看表**：V9 基準的 `init_db` 在每個安裝都建 `quotations`，
 M01 停用、未授權或不在安裝包時，表與資料照樣在（稽核 D CA-M1）。
 """
 import json
@@ -18,13 +18,15 @@ from core import registry as _registry
 from core import txn as _txn
 from helpers import row_access
 
-#: M01 案件模組的「我在」訊號（INTEGRATION-POINTS IP-15）：M01 匯入時登記；搬進 modules/ 之後改寫進
-#: ModuleSpec.providers ⇒ 模組沒載入（停用、未授權、不在包內）就沒有登記。
-CASE_PRESENT = "case.present"
+#: M01 案件模組「在不在」的訊號＝它提供的 `case.access`（INTEGRATION-POINTS IP-12，A 的 M10 搬遷前置）。
+#: 主持裁示只留一個訊號：別組經 IP-12 `case.access.guard` 走到的也是本檔的 `guard_case_access`，
+#: 兩條路看同一個訊號 ⇒ M01 不在時結果一致（都 404／都不放行）。M01 搬進 modules/ 時 `case.access` 寫進
+#: ModuleSpec.providers（ROADMAP CA-O3）⇒ 停用、未授權、不在包內就沒有登記。
+CASE_PRESENT = "case.access"
 
 
 def case_module_present() -> bool:
-    """M01（案件）現在有沒有載入。以它登記的 `case.present` 為準，不以 `quotations` 表在不在為準。"""
+    """M01（案件）現在有沒有載入。以它提供的 `case.access` 為準，不以 `quotations` 表在不在為準（稽核 D CA-M1）。"""
     return bool(_registry.providers(CASE_PRESENT))
 
 
