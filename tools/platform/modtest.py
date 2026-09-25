@@ -332,7 +332,65 @@ def iface_checker(a):
         old, new = a.base, None
     else:
         old, new = "HEAD", None
-    return lambda rel: interface_changed(rel, old, new)
+    fn = lambda rel: interface_changed(rel, old, new)   # noqa: E731
+    fn.refs = (old, new)                                 # select() 用來做名稱層級（§C-11a ③）
+    return fn
+
+
+def _source(rel, ref):
+    """rel 在 ref（None＝工作樹）的原始碼；讀不到 ⇒ None。"""
+    if ref is None:
+        p = REPO / rel
+        return p.read_text(encoding="utf-8-sig") if p.is_file() else None
+    t = _show(REPO, ref, rel)
+    return t.lstrip("﻿") if t is not None else None
+
+
+def name_filter(seeds, deps, by_unit, graph, refs, report):
+    """§C-11a ③：seeds（介面不變的改動單位）的直接使用者 deps ⇒ 只留用到「這次被改的名稱」的那些。
+    判斷不了（ALL、找不到 import、讀不到原始碼、頁面／js 的呼叫邊）一律保留。report["names"] 記下每個 seed 被改的名稱。"""
+    import scope_names as SN
+    from dep_scan import helper_reexports, known_tables
+    old, new = refs
+    reexp = helper_reexports()
+    try:
+        known = set(known_tables())
+    except Exception:            # noqa: BLE001 — 讀不到表清單 ⇒ 資料表一跳退回整個單位（保守）
+        known = None
+    keep = set(seeds)
+    report.setdefault("names", {})
+    for s in seeds:
+        users = {d for d in deps - seeds
+                 if s in graph.get(d, {}).get("imports", [])
+                 or s in set(graph.get(d, {}).get("routers_called", [])) | set(graph.get(d, {}).get("routers_called_effective", []))}
+        ch = SN.ALL
+        for f in by_unit.get(s, []):
+            a, b = _source(f, old), _source(f, new)
+            c = SN.changed_names(a, b) if a is not None and b is not None else SN.ALL
+            if c is SN.ALL:
+                ch = SN.ALL
+                break
+            ch = (ch or set()) | c
+        report["names"][s] = "全部（判斷不了）" if ch is SN.ALL else sorted(ch)
+        if ch is SN.ALL:
+            keep |= users
+            continue
+        # 資料表一跳也細到被改的名稱（否則 db.py 這類帶 dynamic_sql 的單位，改哪個函式都擴到所有表）
+        srcs = [t for f in by_unit.get(s, []) for t in (_source(f, old), _source(f, new)) if t is not None]
+        nt = SN.name_tables(srcs, ch, known) if known is not None else None
+        if nt is not None:
+            report.setdefault("name_tables", {})[s] = nt
+        target = SN.dotted(graph[s].get("path") or "")
+        for d in users:
+            u = graph.get(d, {})
+            if u.get("kind") in ("page", "js") or not u.get("path", "").endswith(".py"):
+                keep.add(d)
+                continue
+            src = _source(u["path"], new)
+            used = SN.used_names(src, target, reexp) if src is not None else SN.ALL
+            if used is SN.ALL or not used or used & ch:
+                keep.add(d)
+    return keep
 
 
 #: §C-11a ⑥：每次選題的統計（主工作樹，gitignored；D1b「常用 helper ≤30%」以這份驗收）
@@ -369,7 +427,14 @@ def frontend_callers(targets, units):
     return out
 
 
-def table_hop(changed_units, units, conservative):
+def table_hop(changed_units, units, conservative, override=None):
+    """override：{單位: {"tables_r", "tables_w", "tables_ddl", "tables_named", "dynamic_sql"}}——§C-11a ③ 名稱層級時，
+    改用「這次被改的函式」自己的資料表，不用整個單位的（db.py 帶 dynamic_sql ⇒ 否則一律擴到所有表）。"""
+    return _table_hop(changed_units, {**units, **{k: dict(units.get(k, {}), **v) for k, v in (override or {}).items()}},
+                      conservative)
+
+
+def _table_hop(changed_units, units, conservative):
     """資料表一跳（只從直接改動的單位出發，不串接第二跳）：
     - 寫入／DDL／表名以字串交出（tables_named，方向不明）的表 ⇒ 該表的 readers＋named_by
     - dynamic_sql（f-string 組表名，表可能漏列）⇒ 保守擴大：所有已知讀寫表的 readers＋writers＋named_by
@@ -424,9 +489,12 @@ def select(changed, tmap, graph, iface_changed=None):
                 by_unit.setdefault(unit_name(f), []).append(f)
             wide = {u for u in seeds if any(iface_changed(f) for f in by_unit.get(u, []))}
             report["iface"] = {u: ("介面有變 ⇒ 遞移" if u in wide else "介面不變 ⇒ 只到直接依賴") for u in sorted(seeds)}
-            affected = reverse_closure(wide, graph) | direct_dependents(seeds - wide, graph) | direct
+            narrow = direct_dependents(seeds - wide, graph)
+            if getattr(iface_changed, "refs", None):
+                narrow = name_filter(seeds - wide, narrow, by_unit, graph, iface_changed.refs, report)
+            affected = reverse_closure(wide, graph) | narrow | direct
         # 資料表一跳：只加該單位本身＋直接呼叫它的頁面／js，不再沿 import 遞移（否則 archive／trail 會拖進全部）
-        hop = table_hop(seeds, graph, conservative) - affected
+        hop = table_hop(seeds, graph, conservative, report.get("name_tables")) - affected
         report["table_hop_units"] = sorted(hop)
         affected |= hop | frontend_callers(hop, graph)
     report["affected_units"] = sorted(affected)
@@ -466,8 +534,41 @@ def select(changed, tmap, graph, iface_changed=None):
         if u not in covered_units and not any(c.startswith("dir:") and f.startswith(c[4:]) for c in covered_units) \
                 and not spread:
             report["unmapped_changes"].append(f)
+    if report.get("names") and iface_changed is not None and getattr(iface_changed, "refs", None):
+        _test_name_filter(picked, changed, graph, iface_changed.refs, report)
     report["reasons"] = {k: sorted(set(v)) for k, v in sorted(picked.items())}
     return sorted(picked), report
+
+
+def _test_name_filter(picked, changed, graph, refs, report):
+    """§C-11a ③（測試檔）：只因命中「名稱層級的改動單位」而被選中的測試，也看它用了那個單位的哪些名稱——
+    沒用到這次被改的名稱 ⇒ 不選（db.py 有 302 個測試檔直接 import 它建測試資料）。
+    ⚠ conftest.py 用到被改的名稱（或判斷不了）⇒ 那個單位不過濾：fixture 會經它影響所有測試。"""
+    import scope_names as SN
+    from dep_scan import helper_reexports
+    reexp = helper_reexports()
+    scoped = {s: set(ch) for s, ch in report["names"].items() if isinstance(ch, list)}
+    conftest = _source("backend/conftest.py", refs[1])
+    for s in list(scoped):
+        target = SN.dotted(graph.get(s, {}).get("path") or "")
+        used = SN.used_names(conftest, target, reexp) if conftest is not None else SN.ALL
+        if used is SN.ALL or (used & scoped[s]):
+            report.setdefault("names_conftest", {})[s] = "conftest 用到被改的名稱 ⇒ 測試檔不過濾"
+            del scoped[s]
+    dropped = []
+    for t, reasons in list(picked.items()):
+        if t in changed or not reasons or not set(reasons) <= set(scoped):
+            continue
+        src = _source(t, refs[1])
+        keepit = src is None
+        for s in set(reasons):
+            used = SN.used_names(src, SN.dotted(graph[s].get("path") or ""), reexp) if src is not None else SN.ALL
+            if used is SN.ALL or not used or used & scoped[s]:
+                keepit = True
+        if not keepit:
+            dropped.append(t)
+            del picked[t]
+    report["names_dropped_tests"] = len(dropped)
 
 
 def _new_basetemp(window, full):

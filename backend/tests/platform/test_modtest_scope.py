@@ -76,3 +76,48 @@ def test_stats_row_is_appended(tmp_path):
     rows = [json.loads(l) for l in tmp_path.joinpath(*MT.STATS_REL).read_text(encoding="utf-8").splitlines()]
     assert [r["items_ratio"] for r in rows] == [0.1, None] and rows[0]["rule"] == "direct+iface"
     assert rows[1]["exit"] == 0 and rows[1]["files"] == 1
+
+
+# ── §C-11a ③ 名稱層級（整合）──────────────────────────────────────────────
+
+NG = {
+    "helper:a": {"kind": "helper", "imports": [], "path": "backend/helpers/a.py"},
+    "router:u1": {"kind": "router", "imports": ["helper:a"], "path": "backend/routers/u1.py"},
+    "router:u2": {"kind": "router", "imports": ["helper:a"], "path": "backend/routers/u2.py"},
+}
+NT = {"tests": {
+    "backend/tests/test_u1.py": {"kind": "api", "units": ["router:u1"]},
+    "backend/tests/test_u2.py": {"kind": "api", "units": ["router:u2"]},
+    "backend/tests/test_own_f.py": {"kind": "unit", "units": ["helper:a"]},
+    "backend/tests/test_own_g.py": {"kind": "unit", "units": ["helper:a"]},
+}}
+A_OLD = "def f():\n    return 1\n\n\ndef g():\n    return 2\n"
+A_NEW = "def f():\n    return 10\n\n\ndef g():\n    return 2\n"
+
+
+def _name_select(monkeypatch, conftest="import os\n"):
+    srcs = {
+        ("backend/helpers/a.py", "OLD"): A_OLD, ("backend/helpers/a.py", None): A_NEW,
+        ("backend/routers/u1.py", None): "from helpers.a import f\n",
+        ("backend/routers/u2.py", None): "from helpers.a import g\n",
+        ("backend/tests/test_own_f.py", None): "from helpers.a import f\n",
+        ("backend/tests/test_own_g.py", None): "from helpers import a\n\ndef test():\n    assert a.g() == 2\n",
+        ("backend/conftest.py", None): conftest,
+    }
+    monkeypatch.setattr(MT, "_source", lambda rel, ref: srcs.get((rel, ref)))
+    chk = lambda rel: False     # noqa: E731
+    chk.refs = ("OLD", None)
+    picked, rep = MT.select(["backend/helpers/a.py"], NT, NG, chk)
+    return {p for p in picked if p.startswith("backend/tests/test_")}, rep
+
+
+def test_name_level_keeps_only_users_of_the_changed_name(monkeypatch):
+    got, rep = _name_select(monkeypatch)
+    assert got == {"backend/tests/test_u1.py", "backend/tests/test_own_f.py"}
+    assert rep["names"]["helper:a"] == ["f"]
+
+
+def test_rc_conftest_using_the_changed_name_disables_test_filtering(monkeypatch):
+    """反向控制：fixture 經 conftest 用到被改的名稱 ⇒ 所有直接 import 它的測試都要跑（不可以只看測試檔自己）。"""
+    got, rep = _name_select(monkeypatch, conftest="from helpers.a import f\n")
+    assert "backend/tests/test_own_g.py" in got and "helper:a" in rep.get("names_conftest", {})
