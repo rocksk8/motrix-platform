@@ -1,5 +1,5 @@
 {
- "core_version": "1.15",
+ "core_version": "1.16",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -160,6 +160,12 @@
    "build_info": "def()",
    "resolve_commit": "def()",
    "startup_line": "def()"
+  },
+  "helper:case_access": {
+   "CASE_ACCESS": "const",
+   "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
+   "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
+   "is_document_approver": "def(data_json, user, conn)"
   },
   "helper:case_roles": {
    "ROLE_KEYS": "const",

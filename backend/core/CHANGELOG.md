@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.16 — 2026-09-26（C，案件存取守門下沉）〔core_bump：暫用 1.99 → 1.16〕
+> 主持裁示：案件存取守門自 M01 下沉 L1，M01／M03／M05／M10 與 M04 搬遷都依賴它。只有新增。
+- L1（新增）：`helpers.case_access`——`CASE_ACCESS`（row_access `case` 規則，登錄照舊）、`is_document_approver`、`case_access_allowed`、`guard_case_access`；`helpers.quotations` 與 `helpers` 保留同名匯入（同一個物件）
+- L1（行為）：案件表不存在（M01 不在）⇒ `guard_case_access` 回 404，不放行
+- 已知例外：L1 讀 M01 `quotations` 只准經本檔（DEPENDENCY-MAP §3.2，守門 `test_case_access_l1`）
+
 ## 1.15 — 2026-09-26（X-R）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.15〕
 > 稽核 AUDIT-D-R1-R3-legal 的修正（D-1、D-2、S-1～S-6、O-3、O-4）。暫用 1.10：合回時依 origin 取下一號。只有新增；行為修正列在下面。
 - L1（新增）：`helpers.legal_params.round_half_up(amount, rate=1)`（四捨五入到元，補充保費）、`floor_amount(amount, rate=1)`（元以下捨去，扣繳）——法規金額捨入的唯一來源（IP-7 契約 1.2）；前端 `static/legal-round.js`（`MotrixLegalRound.halfUp／floor／taipeiToday`）

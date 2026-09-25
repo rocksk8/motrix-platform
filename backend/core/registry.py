@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.15"
+CORE_VERSION = "1.16"
 
 
 @dataclass
