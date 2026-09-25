@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.98 — 2026-09-26（A，M12 搬遷前置；列車上 core_bump 取號）
+## 1.14 — 2026-09-26（A，M12 搬遷前置；列車上 core_bump 取號）〔core_bump：暫用 1.98 → 1.14〕
 - L1（新增）：`helpers.daily_checks`——每日 08:00 執行器（`schedule_daily_checks`／`run_once`／`run_module_checks`）；模組以提供者 `daily.check` 登記（INTEGRATION-POINTS IP-10）
 - L1（新增）：`helpers.system_checks`——憑證到期、備份新鮮度、磁碟、測試暫存、簽核催辦、請求紀錄清理（自 `routers/daily_tasks.py` 逐字搬出；`run_all(prune)`）；不依賴任何 L2 模組
 - main.py：啟動改呼叫 `helpers.daily_checks.schedule_daily_checks()`（原 `routers.daily_tasks.schedule_overdue_check()` 移除）
