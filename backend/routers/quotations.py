@@ -2770,12 +2770,18 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
     old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
     old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
-    for new_it in new_items_for_inv:
-        validate_invoice_amounts(new_it)   # AC1：發票未稅／稅額只填一欄 ⇒ 拒存
-        new_inv = new_it.get("invoiceNo")
-        if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
-            continue  # 未變動，不必重新驗證
-        validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
+    # 🔴 2026-09-25：驗證不過要先關連線——上面 BEGIN IMMEDIATE 拿了寫鎖，直接 raise 會留著鎖到連線被回收，
+    #    其他人的寫入被鎖住最多 30 秒後 500（test_case_record_validation_releases_lock_2026_09_25）。
+    try:
+        for new_it in new_items_for_inv:
+            validate_invoice_amounts(new_it)   # AC1：發票未稅／稅額只填一欄 ⇒ 拒存
+            new_inv = new_it.get("invoiceNo")
+            if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
+                continue  # 未變動，不必重新驗證
+            validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
+    except Exception:
+        conn.close()
+        raise
 
     gated, change_id = _gate_case_edit(
         conn, quote_no, user, authorization, "case_record_update",
