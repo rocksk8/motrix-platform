@@ -203,8 +203,15 @@ def test_money_page_script_tag_control():
     assert page_needs_legal_round("const t = MotrixLegalRound.halfUp(a, b)", {})
 
 
+def _module_absent(f):
+    """`modules/<key>/…` 而那個模組資料夾不在（不在這個安裝包）⇒ 這一檔本來就不在，不算清單過期（PLAYBOOK §B-11）。"""
+    parts = f.split("/")
+    return len(parts) > 2 and parts[0] == "modules" and not (source_tree.BACKEND / "modules" / parts[1]).is_dir()
+
+
 def test_money_scope_files_exist():
-    missing = [f"backend/{f}" for f in MONEY_PY_FILES if not (source_tree.BACKEND / f).exists()]
+    missing = [f"backend/{f}" for f in MONEY_PY_FILES
+               if not (source_tree.BACKEND / f).exists() and not _module_absent(f)]
     missing += [f"frontend/{f}" for f in MONEY_JS_FILES if not (FRONTEND / f).exists()]
     assert not missing, "守門清單裡的檔不見了（搬進模組了？請同步更新 MONEY_*_FILES）：\n" + "\n".join(missing)
 
@@ -212,6 +219,8 @@ def test_money_scope_files_exist():
 def test_invoice_quote_and_payment_amounts_use_the_shared_half_up():
     bad = []
     for f in MONEY_PY_FILES:
+        if _module_absent(f):
+            continue
         p = source_tree.BACKEND / f
         for ln in money_py_hits(p.read_text(encoding="utf-8")):
             bad.append(f"backend/{f}:{ln}")
