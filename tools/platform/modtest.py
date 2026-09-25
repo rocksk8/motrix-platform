@@ -7,7 +7,8 @@
   python tools/platform/modtest.py --changed-since <SHA>  <SHA> 之後到 HEAD 的已提交改動（不含工作樹）
   python tools/platform/modtest.py --files a.py b.html 直接指定改動檔
   --dry-run   只印受影響單位、測試清單與題數（collect-only 全部一次再篩），不執行
-  --full      跑全量（basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖）
+  --full      跑全量：非 e2e（-n --workers）＋ e2e（-n --e2e-workers）兩段；basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖；
+              結果（含失敗、中斷，ok=false）原子寫入主工作樹 tools/platform/.last_full.json（沒有這個檔＝沒跑過）
   --window X  basetemp 名稱中的視窗代號（預設 modtest）
   -- <pytest 參數>   其後原樣轉給 pytest
 
@@ -272,8 +273,16 @@ def run_pytest(targets, extra, window, full, collect_only=False):
             proc = subprocess.run(cmd, cwd=str(BACKEND), capture_output=True, text=True, encoding="utf-8",
                                   errors="replace")
             return proc.returncode, proc.stdout
-        proc = subprocess.Popen(cmd, cwd=str(BACKEND))
-        return proc.wait(), ""
+        proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        tail = []
+        for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
+            line = raw.decode("utf-8", errors="replace")
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            tail.append(line)
+            if len(tail) > 400:
+                del tail[:200]
+        return proc.wait(), "".join(tail)
     except KeyboardInterrupt:
         if proc is not None and hasattr(proc, "poll") and proc.poll() is None:
             try:
@@ -340,6 +349,83 @@ def module_summary(picked, reasons, per, owner):
     return out
 
 
+# ── 全量＋結果檔（部署儀表板 D6「測試閘門」讀它，CORE-SPEC §9e）──────────────────
+
+#: 摘要行裡的各種計數：`3 failed, 3393 passed, 54 skipped, 3 xfailed, 2 errors in 697.60s`
+_SUMMARY_ITEM = re.compile(r"(\d+) (passed|failed|errors?|skipped|xfailed|xpassed|deselected|warnings?)")
+
+
+def parse_summary(out):
+    """pytest 最後的摘要行 ⇒ {passed, failed, errors, skipped, ...}；找不到摘要行 ⇒ None（不是 0）。"""
+    for line in reversed(out.splitlines()):
+        if re.search(r" in [\d.]+s", line) and _SUMMARY_ITEM.search(line):
+            got = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "xfailed": 0}
+            for n, k in _SUMMARY_ITEM.findall(line):
+                k = "errors" if k.startswith("error") else k
+                if k in got:
+                    got[k] = int(n)
+            return got
+    return None
+
+
+def main_worktree_root():
+    """主工作樹的位置：worktree 用完就刪，結果檔要落在主工作樹（`--git-common-dir` 的上一層）。"""
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return Path(common).parent
+
+
+def write_last_full(result):
+    """原子寫入：同目錄暫存檔 → os.replace。"""
+    dest = main_worktree_root() / "tools" / "platform" / ".last_full.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(".last_full.json.%d.tmp" % os.getpid())
+    tmp.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    os.replace(tmp, dest)
+    return dest
+
+
+def _now():
+    from datetime import datetime
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def run_full(extra, a):
+    """全量＝兩段：非 e2e（-n workers）＋ e2e（-n e2e-workers）。結果（含失敗、中斷）一律寫進主工作樹的 .last_full.json。"""
+    result = {
+        "commit": git("rev-parse", "HEAD").strip(),
+        "branch": git("rev-parse", "--abbrev-ref", "HEAD").strip(),
+        "dirty": bool(git("status", "--porcelain", "--untracked-files=no").strip()),
+        "started": _now(), "finished": None,
+        "passed": None, "failed": None, "errors": None, "skipped": None,
+        "e2e": None, "ok": False, "interrupted": False,
+    }
+    stages = [("main", ["-m", "not e2e", "-n", str(a.workers)], a.window),
+              ("e2e", ["-m", "e2e", "-n", str(a.e2e_workers)], a.window + "e2e")]
+    codes = {}
+    try:
+        for name, args, window in stages:
+            code, out = run_pytest(TEST_ROOTS, args + extra, window, full=True)
+            codes[name] = code
+            counts = parse_summary(out) or {"passed": None, "failed": None, "errors": None, "skipped": None}
+            part = dict(counts, exit=code)
+            if name == "main":
+                result.update(part)
+            else:
+                result["e2e"] = part
+        result["ok"] = all(c == 0 for c in codes.values()) and len(codes) == len(stages)
+        return 0 if result["ok"] else (codes.get("main") or codes.get("e2e") or 1)
+    except KeyboardInterrupt:
+        result["interrupted"] = True
+        raise
+    finally:
+        result["finished"] = _now()
+        try:
+            dest = write_last_full(result)
+            print("[全量結果] %s ok=%s → %s" % (result["commit"][:8], result["ok"], dest))
+        except Exception as e:                      # noqa: BLE001 — 寫不出結果檔要說出來，不可靜默
+            print("[全量結果] ⚠ 寫不出 .last_full.json：%r" % e)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group()
@@ -348,7 +434,9 @@ def main(argv=None):
     g.add_argument("--changed-since", metavar="SHA", help="SHA 之後（不含）到 HEAD 的已提交改動")
     g.add_argument("--files", nargs="+")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--full", action="store_true")
+    ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/.last_full.json")
+    ap.add_argument("--workers", type=int, default=6, help="--full 非 e2e 段的 xdist worker 數")
+    ap.add_argument("--e2e-workers", type=int, default=4, help="--full e2e 段的 xdist worker 數")
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
@@ -367,8 +455,7 @@ def main(argv=None):
             per, tail = collect_per_file(a.window)
             print("全量：%s 題（%s）" % (sum(per.values()) if per is not None else None, tail))
             return 0
-        code, _ = run_pytest(TEST_ROOTS, extra, a.window, full=True)
-        return code
+        return run_full(extra, a)
 
     changed = changed_files(a)
     tmap = load_map(a.refresh_map)
