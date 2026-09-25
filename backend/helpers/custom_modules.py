@@ -523,6 +523,7 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices):
             _published(body, rec, frm, to_state, action, user, notices)
             return _enter_state(conn, body, rec, cfg["on_approved"], user, "auto_approve", "", notices)
         approval = {"state": to_state, "tiers": active, "currentTier": 0, "requestedBy": rec["created_by"],
+                    "requestedByDisplay": ta._display_name(conn, rec["created_by"]),
                     "requestedAt": datetime.now().isoformat(timespec="seconds")}
     conn.execute("UPDATE custom_records SET status=?, approval_json=?, updated_by=?, updated_at=? WHERE id=?",
                  (to_state, json.dumps(approval, ensure_ascii=False), user["username"],
@@ -552,11 +553,11 @@ def _notify_state(body, rec, st, approval, notices):
         tier = approval["tiers"][0]
         fp = next((a for a in tier["approvers"] if a.get("status") != "approved"), None)
         if fp:
-            notices.notify(fp["username"], "approval", rec["record_no"], label, "%s 待您簽核" % label)
+            notices.notify(fp["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
             notices.append("已通知 %s 簽核" % fp.get("displayName", fp["username"]))
     for u in sorted(targets):
         msg = "%s 狀態：%s" % (label, st.get("label", st.get("key")))
-        notices.notify(u, "info", rec["record_no"], label, msg)
+        notices.notify(u, "info", notify_ref(rec), label, msg)
 
 
 def transition(conn, module_key, record_no, tkey, user, note="") -> dict:
@@ -616,7 +617,7 @@ def decide(conn, module_key, record_no, user, approve: bool, note="") -> dict:
                 nxt = ta.first_pending_approver(tiers[appr["currentTier"]])
                 if nxt:
                     label = "%s %s" % (body.get("name", ""), rec["record_no"])
-                    notices.notify(nxt["username"], "approval", rec["record_no"], label, "%s 待您簽核" % label)
+                    notices.notify(nxt["username"], "approval", notify_ref(rec), label, "%s 待您簽核" % label)
         else:
             ok, code, msg = ta.check_reject_permission(tiers, idx, user, conn)
             if not ok:
@@ -661,6 +662,44 @@ def default_template(body) -> dict:
                        {"type": "approval_sign"}, {"type": "identity_footer"}]}
 
 
+def notify_ref(rec) -> str:
+    """站內通知的 ref_id：`custom:<模組 key>:<單號>`（前端據此開 `module-record` 頁；單號本身不帶模組）。"""
+    return "custom:%s:%s" % (rec["module_key"], rec["record_no"])
+
+
+def queue_items(conn) -> list:
+    """IP-7 `approval.queue_items`：簽核中的自訂模組單據，形狀同「待我簽核」佇列的其他類型（`type`＝`custom_record`）。
+    只列「目前狀態有簽核、而且還沒簽完」的；誰看得到由佇列那一端的 `_queue_visible_to` 決定。"""
+    out, defs = [], {}
+    rows = conn.execute("SELECT module_key, record_no, def_version, status, approval_json, created_by, created_at "
+                        "FROM custom_records WHERE approval_json != '{}'").fetchall()
+    for r in rows:
+        key = (r["module_key"], r["def_version"])
+        if key not in defs:
+            try:
+                defs[key] = _load_def(conn, *key)["body"]
+            except CustomModuleError:
+                defs[key] = None
+        body = defs[key]
+        if body is None or not _state(body, r["status"]).get("approval"):
+            continue
+        appr = json.loads(r["approval_json"] or "{}")
+        tiers, ct = appr.get("tiers") or [], appr.get("currentTier") or 0
+        if ct >= len(tiers):
+            continue
+        out.append({
+            "type": "custom_record", "moduleKey": r["module_key"], "moduleName": body.get("name", ""),
+            "quoteNo": r["record_no"], "customer": "", "projectName": body.get("name", ""), "total": 0,
+            "quoteDate": (r["created_at"] or "")[:10], "salesPerson": "",
+            "requestedBy": appr.get("requestedBy") or r["created_by"],
+            "requestedByDisplay": appr.get("requestedByDisplay") or appr.get("requestedBy") or r["created_by"],
+            "requestedAt": appr.get("requestedAt") or "", "tiers": tiers, "currentTier": ct, "tierCount": len(tiers),
+            "currentApprovers": tiers[ct].get("approvers") or [],
+            "statusLabel": _state(body, r["status"]).get("label", r["status"]),
+        })
+    return out
+
+
 def _permission_keys() -> list:
     """給權限目錄（helpers.module_registry）：已發布的自訂模組各一個權限 key。定義表還沒建 ⇒ 沒有。"""
     import sqlite3
@@ -684,3 +723,6 @@ declare_events()
 
 from helpers import module_registry as _module_registry  # noqa: E402
 _module_registry.register_key_source(_permission_keys)
+
+from core import registry as _registry  # noqa: E402
+_registry.provide("approval.queue_items", "custom_modules", queue_items)

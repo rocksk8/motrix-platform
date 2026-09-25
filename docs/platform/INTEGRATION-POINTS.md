@@ -211,3 +211,18 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。端點 `GET /api/bonus/insurance`、`PUT /api/bonus/insurance/{username}`（最高管理者）；頁面在獎金頁「投保金額與全年累計」。
 不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
 ⚠ 投保金額屬薪資等級資訊，端點只給最高管理者；而 `system_settings` 會進一般每日 JSON——資料分類（MODULE-GUIDE §3.2 是否列 F2）待 C 判定，見 RUN-PLAN §6 本項回報。
+
+## IP-10　`approval.queue_items`：「待我簽核」佇列的其他來源（任何模組 → M01 佇列；首個提供方：L1 自訂模組引擎）
+
+對應 CUSTOMIZATION-SPEC §3.7（P8）、主持 P8 前端缺口 #3（2026-09-26，C）。原本 `routers/quotations.py::get_approval_queue` 逐一寫死各單據表；自訂模組的單據是資料、表是共用的 `custom_records`，不能再寫死一種。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據） |
+| 使用方 | M01 `routers/quotations.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)` |
+| 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
+| 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
+| 回傳 | 項目清單，形狀同佇列的其他類型：`type`（自訂模組＝`custom_record`）、`quoteNo`（單號）、`requestedBy`／`requestedByDisplay`／`requestedAt`、`tiers`／`currentTier`／`tierCount`／`currentApprovers`；自訂模組另帶 `moduleKey`、`moduleName`、`statusLabel`。**只列還沒簽完的**；誰看得到由使用方的 `_queue_visible_to` 決定（與其他類型同一條規則） |
+| 對方不在時 | 沒有提供者 ⇒ 佇列只列內建單據（跟 P8 之前一樣）；某個提供者丟例外 ⇒ 那一類不列、記 exception，佇列與角標照常 |
+| 契約版本 | 1（2026-09-26，CORE_VERSION 1.10 同一批）。欄位只准加 |
+| 守門 | `backend/tests/test_custom_modules_engine_2026_09_25.py`：①正對照：送審後出現在簽核人的佇列與角標、簽完就消失 ②非簽核人（一般使用者）看不到別人的 ③反向控制：提供者丟例外 ⇒ 佇列 200、內建單據照列 |

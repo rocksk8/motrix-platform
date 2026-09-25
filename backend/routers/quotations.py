@@ -4408,6 +4408,17 @@ def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
     return False
 
 
+def _queue_provider_items(conn) -> list:
+    from core import registry as _reg
+    out = []
+    for name, fn in sorted(_reg.providers("approval.queue_items").items()):
+        try:
+            out.extend(fn(conn) or [])
+        except Exception:                                    # noqa: BLE001
+            logger.exception("待簽核佇列：提供者 %s 失敗（這一類不列出）", name)
+    return out
+
+
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
@@ -4895,6 +4906,9 @@ def get_approval_queue(authorization: str = Header(None)):
             "pendingFileCount":    len(chg.get("addFiles") or []),
         })
 
+    # IP-7 `approval.queue_items`（2026-09-26，P8）：其他模組提供自己的待簽核項目（例：自訂模組單據），
+    # 形狀同上、`type` 各自不同。提供者壞掉只少那一類，佇列照常（記 exception）。
+    items.extend(_queue_provider_items(conn))
     conn.close()
 
     # 權限過濾（2026-09-15）：管理員以上看全部，其他人只看自己送審的與簽核鏈裡
@@ -4984,6 +4998,10 @@ def get_approval_queue_count(authorization: str = Header(None)):
         "SELECT change_approval_json FROM case_extra_expenses "
         "WHERE change_status IN ('待審核','簽核中')"
     ).fetchall()]
+    # IP-7：其他模組提供的待簽核項目（例：自訂模組單據）——角標要跟佇列列表一致
+    approval_jsons += [json.dumps({"tiers": it["tiers"], "currentTier": it["currentTier"],
+                                   "requestedBy": it["requestedBy"]}, ensure_ascii=False)
+                       for it in _queue_provider_items(conn)]
     # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
     # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
     ccr_count = 0
