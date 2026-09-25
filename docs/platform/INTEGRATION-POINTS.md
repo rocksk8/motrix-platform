@@ -192,6 +192,23 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-12　`dispatch.list_for_case`：案件整包的承攬派工段（M04 → M01）
+
+對應 l2_import_baseline `M01 router:quotations -> M04 router:vendor_contractors`（M04 搬遷，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vendor_contractors.list_dispatches`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`modules/subcontract/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝） |
+| 使用方 | M01 `routers/quotations.py::case_bundle`（`GET /api/quotations/{no}/case-bundle`）的 `parts.dispatches` |
+| 形式 | provider，單一提供者（`core.registry`）；`ModuleSpec.providers` 宣告 |
+| 語法 | 提供：`ModuleSpec(providers={("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case})`<br>取用：`fn = registry.single_provider("dispatch.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權、權限判斷與單獨打 `/api/contractor-dispatches?quote_no=` 逐字相同） |
+| 回傳 | 派工單列（`dispatch.row` 形狀）；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
+| 對方不在時 | 整包照常回；`parts.dispatches`＝`{"ok": false, "status": 404, "detail": DISPATCHES_UNAVAILABLE}`（「外包工班模組未安裝：沒有承攬派工資料」），前端照「那一段回非 2xx」處理 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | 提供方（隨模組搬走）`backend/modules/subcontract/tests/test_subcontract_providers.py`：登記、正對照；取用方（外包工班不在也成立）`backend/tests/platform/test_subcontract_connectors.py`：拿掉提供者 ⇒ 整包照回、那一段 404 說明、其他段照常。突變：整包不看提供者、不登記 ⇒ 紅 |
+
+---
+
 ## IP-13　`quotation.append_items`：把外部品項附加到草稿報價單（M01 → M04）
 
 對應 l2_import_baseline `M04 router:vendor_contractors -> M01 helper:quotations`。原本 M04「派工品項匯入報價單」自己讀 `quotations`、組報價品項、呼叫 M01 的 `save_quotation_json` 寫回。報價單的格式與寫入歸 M01。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
@@ -205,7 +222,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | 在呼叫端連線上寫、不 commit。報價單不存在 ⇒ `HTTPException(404)`；不是草稿 ⇒ `409`（原本在 M04 的規則逐字搬來）。品項換成報價品項：成本＝cost、毛利 30%、售價由報價單自己算；前面加一列區段標題 |
 | 對方不在時 | 匯入端點回 `409`＋`QUOTE_IMPORT_UNAVAILABLE`（「案件模組未安裝：無法把派工品項匯入報價單」），派工本身不動 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_subcontract_connectors.py` |
+| 守門 | `backend/modules/subcontract/tests/test_subcontract_providers.py`：經 M01 匯入（品項欄位逐一比對）、非草稿 409、M01 不在 ⇒ 409 且報價單不動；`test_quote_json_lost_update` 探針改包 M01。突變：匯入不看 M01、M01 不擋非草稿、成本放錯欄 ⇒ 紅 |
 
 ---
 
@@ -222,7 +239,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
 | 對方不在時 | 出納待付款：`404`＋`CONTRACTOR_MISSING`（「外包工班模組未安裝：出納頁不顯示承攬商匯款」），頁面顯示這一句；執行歷史：`outgoing` 空、`contractorNotice` 明說，Excel「已匯款明細」第一列寫同一句；T100 預覽：`notice`＝`T100_CONTRACTOR_MISSING`（匯出的 Excel 是 T100 匯入檔，不加說明列）。皆不丟例外 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_subcontract_connectors.py` |
+| 守門 | 提供方 `backend/modules/subcontract/tests/test_subcontract_providers.py`：正對照；取用方 `backend/tests/platform/test_subcontract_connectors.py`：待付 404＋原因、執行歷史 contractorNotice、Excel 第一列、T100 預覽 notice；畫面 `test_e2e_cashier_subcontract_absent_notice_2026_09_26`。突變：出納不看提供者、不說缺（兩處）、畫面吞掉 404 ⇒ 紅 |
 
 **尚未處理**：M01／M05／M06／M08 與 L1（封存、PDF、報表、傳票附件）仍**直接讀** `contractor_payment_vouchers`、`contractor_dispatches`、`vendor_contractors`、`contractors`；M04 不在時表仍在（凍結 migration），讀取不會壞。讀取連接器另開題。
 
