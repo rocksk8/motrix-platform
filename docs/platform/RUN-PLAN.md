@@ -83,6 +83,7 @@
 - **全量名額排隊**（測試鎖 2 個名額，`MOTRIX_PYTEST_SLOTS`；更新 2026-09-26 00:13）：進行中＝C 的 wip/c-p8、B 的 wip/b-hardcap（00:01 拿到 slot2，死線 01:30）。排隊：① A 的 wip/a-bonus ② 所有分支合回後，在 platform 上跑一輪全量（D7 前的基準）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
+    - ✅ **已查明（B，856e5497）**：原先歸因於「滿載」是錯的，實際是目錄狀態造成的。os.makedirs 遞迴建上層目錄時，呼叫到的是被 BK19 換掉的記錄版 makedirs；在全新的 worktree 裡 uploads 還不存在，所以多記了一筆上層目錄。開發樹裡 uploads 早就存在，因此只有全新 worktree 的全量會紅。修法：比對改成純函式，已登記寫入的上層目錄不算新缺口，並附 3 題反向控制。**這印證了「偶發失敗先當成真問題查」：它根本不是偶發。**
   - O2：`test_bonus_case_multi_approver_tier` 之後卡住十幾分鐘（A2，約 22:50，滿載時；沒有 dump），停在 multi_approver 之後、vouchers 的第一題；連跑三檔、開 faulthandler 都無法重現。
   - O3／O4：`test_e2e_hard_cap` 的單程序題、`test_e2e_shared_fixtures` 的 login_as（B 負責修，已知原因＝滿載時的時序）。
 - 稽核：每一項完成、合回之後，照 CORE-SPEC §9d 的分配交叉稽核（A 審 C、B 審 A、C 審 B 與主持）；新的工作線也照這個輪替。
