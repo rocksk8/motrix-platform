@@ -1,0 +1,489 @@
+{
+ "_doc": "分組唯一機器可讀來源（CORE-SPEC.md「使用者裁示」）。單位名稱同 dep_graph.json。守門：python tools/platform/dep_scan.py --check-modules",
+ "L1": {
+  "units": [
+   "core:archive",
+   "core:backup_job",
+   "core:cloud_storage",
+   "core:db",
+   "core:heartbeat_job",
+   "core:main",
+   "core:pdf_gen",
+   "core:photos",
+   "core:trail",
+   "helper:audit",
+   "helper:auth",
+   "helper:build_info",
+   "helper:case_roles",
+   "helper:company_identity",
+   "helper:dates",
+   "helper:edit_log",
+   "helper:email_notify",
+   "helper:errors",
+   "helper:financial_mask",
+   "helper:geo",
+   "helper:google_calendar",
+   "helper:licensing",
+   "helper:module_registry",
+   "helper:notification_prefs",
+   "helper:procurement",
+   "helper:settings",
+   "helper:startup",
+   "helper:tiered_approval",
+   "helper:uploads",
+   "js:static/approval-cascade.js",
+   "js:static/auth-guard.js",
+   "js:static/edit-presence.js",
+   "js:static/gov-lookup.js",
+   "js:static/list-sort.js",
+   "js:static/notif.js",
+   "js:static/record-link.js",
+   "js:static/sidebar.js",
+   "js:static/ui.js",
+   "page:index.html",
+   "page:pages/approval-delegates.html",
+   "page:pages/approval-settings.html",
+   "page:pages/audit-log.html",
+   "page:pages/change-password.html",
+   "page:pages/company-profile-settings.html",
+   "page:pages/customer-log.html",
+   "page:pages/customers.html",
+   "page:pages/google-calendar-settings.html",
+   "page:pages/login-qr-approve.html",
+   "page:pages/login.html",
+   "page:pages/module-versions.html",
+   "page:pages/notification-settings.html",
+   "page:pages/online-stats.html",
+   "page:pages/org-structure.html",
+   "page:pages/parts.html",
+   "page:pages/schema-status.html",
+   "page:pages/users.html",
+   "page:pages/work-log.html",
+   "router:approval_delegates",
+   "router:auth",
+   "router:customers",
+   "router:item_reads",
+   "router:licensing",
+   "router:list_prefs",
+   "router:module_versions",
+   "router:modules",
+   "router:org_structure",
+   "router:parts",
+   "router:search",
+   "router:system",
+   "router:uploads"
+  ],
+  "tables": [
+   "approval_delegates",
+   "audit_log",
+   "customers",
+   "departments",
+   "divisions",
+   "edit_presence",
+   "geocode_cache",
+   "geocode_usage",
+   "item_reads",
+   "login_rate_limit",
+   "module_versions",
+   "notifications",
+   "parts",
+   "schema_version",
+   "sessions",
+   "system_settings",
+   "user_activity_daily",
+   "user_list_prefs",
+   "user_request_log",
+   "users",
+   "webauthn_credentials",
+   "work_logs"
+  ],
+  "api_prefixes": [
+   "/api/approval-delegates",
+   "/api/audit-log",
+   "/api/auth",
+   "/api/build-info",
+   "/api/customers",
+   "/api/edit-presence",
+   "/api/license",
+   "/api/list-prefs",
+   "/api/module-versions",
+   "/api/modules",
+   "/api/notifications",
+   "/api/online-users",
+   "/api/org",
+   "/api/parts",
+   "/api/photo-token",
+   "/api/ping",
+   "/api/reads",
+   "/api/search",
+   "/api/settings",
+   "/api/system",
+   "/api/uploads",
+   "/api/user-activity",
+   "/api/users",
+   "/api/work-logs"
+  ]
+ },
+ "modules": {
+  "M01": {
+   "key": "case",
+   "name": "案件",
+   "units": [
+    "helper:case_stage_tasks",
+    "helper:quotations",
+    "helper:quote_terms",
+    "helper:recognition",
+    "js:js/case-management-biz.js",
+    "js:js/case-management-close.js",
+    "js:js/case-management-completion.js",
+    "js:js/case-management-core.js",
+    "js:js/case-management-dispatch.js",
+    "js:js/case-management-exec.js",
+    "js:js/case-management-feed.js",
+    "js:js/case-management-fin.js",
+    "js:js/case-management-list.js",
+    "js:js/case-management-shipping.js",
+    "js:js/case-management-xexp.js",
+    "page:pages/approval-history.html",
+    "page:pages/approval-queue.html",
+    "page:pages/case-management.html",
+    "page:pages/case-stage-board.html",
+    "page:pages/completion-note-form.html",
+    "page:pages/quotation-form.html",
+    "page:pages/quotations.html",
+    "page:pages/settlement.html",
+    "router:case_action_items",
+    "router:case_extra_expenses",
+    "router:completion_notes",
+    "router:material_orders",
+    "router:quotations"
+   ],
+   "tables": [
+    "case_action_items",
+    "case_change_requests",
+    "case_extra_expenses",
+    "case_stage_visits",
+    "case_stages",
+    "case_updates",
+    "completion_notes",
+    "quotations",
+    "quote_seq"
+   ],
+   "api_prefixes": [
+    "/api/approval-history",
+    "/api/approval-queue",
+    "/api/case-batch",
+    "/api/case-changes",
+    "/api/completion-notes",
+    "/api/next-quote-no",
+    "/api/quotations"
+   ]
+  },
+  "M02": {
+   "key": "crm",
+   "name": "業務開發",
+   "units": [
+    "page:pages/dev-crm.html",
+    "router:dev_crm"
+   ],
+   "tables": [
+    "dev_cases",
+    "dev_logs"
+   ],
+   "api_prefixes": [
+    "/api/dev-cases",
+    "/api/dev-crm",
+    "/api/dev-logs"
+   ]
+  },
+  "M03": {
+   "key": "supply",
+   "name": "採購・庫存・出貨",
+   "units": [
+    "page:pages/inventory.html",
+    "page:pages/shipping-export-history.html",
+    "page:pages/supplier-log.html",
+    "page:pages/suppliers.html",
+    "router:inventory",
+    "router:shipping_notes",
+    "router:suppliers"
+   ],
+   "tables": [
+    "purchase_suggestion_status",
+    "shipping_notes",
+    "stock_batches",
+    "stock_items",
+    "suppliers"
+   ],
+   "api_prefixes": [
+    "/api/inventory",
+    "/api/shipping-notes",
+    "/api/suppliers"
+   ]
+  },
+  "M04": {
+   "key": "subcontract",
+   "name": "外包工班",
+   "units": [
+    "page:pages/contractor-voucher-approval-settings.html",
+    "page:pages/contractors.html",
+    "page:pages/vendor-contractors.html",
+    "router:contractor_vouchers",
+    "router:contractors",
+    "router:vendor_contractors"
+   ],
+   "tables": [
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
+    "contractors",
+    "vendor_contractors"
+   ],
+   "api_prefixes": [
+    "/api/contractor-dispatches",
+    "/api/contractor-vouchers",
+    "/api/contractors",
+    "/api/vendor-contractors"
+   ]
+  },
+  "M05": {
+   "key": "arap",
+   "name": "應收應付",
+   "units": [
+    "js:js/cashier.js",
+    "page:pages/cashier.html",
+    "page:pages/payment-request-form.html",
+    "page:pages/receivables.html",
+    "router:cashier",
+    "router:invoice_vouchers",
+    "router:payment_requests"
+   ],
+   "tables": [
+    "invoice_vouchers",
+    "payment_requests"
+   ],
+   "api_prefixes": [
+    "/api/cashier",
+    "/api/invoice-vouchers",
+    "/api/payment-requests"
+   ]
+  },
+  "M06": {
+   "key": "accounting",
+   "name": "會計",
+   "units": [
+    "helper:voucher",
+    "helper:voucher_attachments",
+    "helper:voucher_pdf",
+    "helper:voucher_template",
+    "js:js/account-items.js",
+    "js:js/voucher.js",
+    "page:pages/account-items.html",
+    "page:pages/voucher.html",
+    "router:account_items",
+    "router:accounting_export",
+    "router:vouchers"
+   ],
+   "tables": [
+    "account_items",
+    "t100_export_confirmations",
+    "voucher_attachments",
+    "voucher_edit_log",
+    "voucher_lines",
+    "vouchers",
+    "vouchers_all"
+   ],
+   "api_prefixes": [
+    "/api/account-items",
+    "/api/reports",
+    "/api/settings",
+    "/api/vouchers"
+   ]
+  },
+  "M07": {
+   "key": "payroll",
+   "name": "薪資獎金",
+   "units": [
+    "helper:bonus",
+    "helper:bonus_case",
+    "helper:bonus_pdf",
+    "helper:bonus_vouchers",
+    "js:js/bonus.js",
+    "page:pages/bonus.html",
+    "page:pages/payslip-form.html",
+    "page:pages/payslips.html",
+    "router:bonus",
+    "router:payslips"
+   ],
+   "tables": [
+    "bonus_award_edit_log",
+    "bonus_award_lines",
+    "bonus_awards",
+    "bonus_case_award_edit_log",
+    "bonus_case_award_lines",
+    "bonus_case_awards",
+    "bonus_group_members",
+    "bonus_groups",
+    "bonus_item_people",
+    "bonus_items",
+    "payslip_seq",
+    "payslips"
+   ],
+   "api_prefixes": [
+    "/api/bonus",
+    "/api/next-slip-no",
+    "/api/payslips",
+    "/api/tax-rules"
+   ]
+  },
+  "M08": {
+   "key": "analytics",
+   "name": "分析",
+   "units": [
+    "js:js/reports.js",
+    "page:pages/devices.html",
+    "page:pages/map.html",
+    "page:pages/procurement.html",
+    "page:pages/reports.html",
+    "page:pages/sales-orders.html",
+    "page:pages/warranty.html",
+    "router:dashboard",
+    "router:map_points",
+    "router:reports"
+   ],
+   "tables": [],
+   "api_prefixes": [
+    "/api/company",
+    "/api/dashboard",
+    "/api/devices",
+    "/api/map",
+    "/api/materials-summary",
+    "/api/now",
+    "/api/reports",
+    "/api/sales-orders"
+   ]
+  },
+  "M10": {
+   "key": "netplan",
+   "name": "網路規劃",
+   "units": [
+    "core:network_plan_export",
+    "core:network_plan_topology",
+    "page:pages/network-plan-form.html",
+    "page:pages/network-plans.html",
+    "page:pages/topology-quick.html",
+    "router:network_plans",
+    "router:network_plans_quick"
+   ],
+   "tables": [
+    "network_plans"
+   ],
+   "api_prefixes": [
+    "/api/network-plans",
+    "/api/network-plans-quick",
+    "/api/quotations"
+   ]
+  },
+  "M11": {
+   "key": "tender",
+   "name": "標案雷達",
+   "units": [
+    "helper:tender_match",
+    "helper:tender_source",
+    "page:pages/tender-radar.html",
+    "router:tender_radar"
+   ],
+   "tables": [
+    "tender_fetch_log",
+    "tender_hits",
+    "tender_watches",
+    "tenders"
+   ],
+   "api_prefixes": [
+    "/api/tender-radar"
+   ]
+  },
+  "M12": {
+   "key": "daily_tasks",
+   "name": "每日任務",
+   "units": [
+    "page:pages/daily-tasks.html",
+    "router:daily_tasks"
+   ],
+   "tables": [
+    "daily_task_completions",
+    "daily_task_edit_log",
+    "daily_tasks"
+   ],
+   "api_prefixes": [
+    "/api/daily-tasks",
+    "/api/settings"
+   ]
+  }
+ },
+ "retired": {
+  "M09": {
+   "key": "selection_guide",
+   "name": "選型知識庫",
+   "decision": "2026-09-25 使用者裁示遺棄；表只留在凍結的 V9 migration（CORE-SPEC.md「使用者裁示」）",
+   "units": [
+    "page:pages/access-guide.html",
+    "page:pages/automation-guide.html",
+    "page:pages/env-guide.html",
+    "page:pages/gateway-guide.html",
+    "page:pages/monitor-guide.html",
+    "page:pages/netarch-guide.html",
+    "page:pages/selection-db-overview.html",
+    "page:pages/switch-guide.html",
+    "router:access_guide",
+    "router:automation_guide",
+    "router:env_guide",
+    "router:gateway_guide",
+    "router:monitor_guide",
+    "router:netarch_guide",
+    "router:switch_guide"
+   ],
+   "tables": [
+    "access_categories",
+    "access_fit",
+    "access_products",
+    "access_scenarios",
+    "automation_categories",
+    "automation_fit",
+    "automation_products",
+    "automation_scenarios",
+    "env_guide_environments",
+    "env_guide_links",
+    "env_guide_recommendations",
+    "gateway_categories",
+    "gateway_fit",
+    "gateway_products",
+    "gateway_scenarios",
+    "monitor_categories",
+    "monitor_fit",
+    "monitor_products",
+    "monitor_scenarios",
+    "netarch_families",
+    "netarch_generations",
+    "netarch_products",
+    "switch_categories",
+    "switch_fit",
+    "switch_products",
+    "switch_scenarios"
+   ]
+  },
+  "legacy": {
+   "name": "疑似廢棄表",
+   "decision": "2026-09-25 使用者裁示不帶進新模組，只留在凍結 migration",
+   "units": [],
+   "tables": [
+    "bonus_template_versions",
+    "bonus_templates",
+    "project_logs",
+    "project_stages",
+    "projects",
+    "voucher_template_versions",
+    "voucher_templates"
+   ]
+  }
+ }
+}

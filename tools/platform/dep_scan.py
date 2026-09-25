@@ -472,9 +472,74 @@ def positive_controls(g: dict) -> list[str]:
     return fails
 
 
+MODULES = ROOT / "docs" / "platform" / "modules.json"
+ASSIGNED_KINDS = ("router", "helper", "core", "page", "js")  # 皆須剛好歸屬一組（派工最低要求為 router/helper/page）
+
+
+def load_groups(path: Path = MODULES) -> tuple[dict[str, list[str]], dict[str, list[str]], set[str]]:
+    """modules.json ⇒ (unit→[群組…], table→[群組…], L2 群組集合)。群組名：L1／M01…／retired:M09。"""
+    m = json.loads(path.read_text(encoding="utf-8"))
+    groups = {"L1": m["L1"]}
+    groups.update(m["modules"])
+    groups.update({f"retired:{k}": v for k, v in m.get("retired", {}).items()})
+    u2g, t2g = defaultdict(list), defaultdict(list)
+    for gname, g in groups.items():
+        for u in g.get("units", []):
+            u2g[u].append(gname)
+        for t in g.get("tables", []):
+            t2g[t].append(gname)
+    return u2g, t2g, set(m["modules"])
+
+
+def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, list[str]]]:
+    """①歸屬檢查（錯誤）②跨群組邊清單（只列，不失敗）。"""
+    U = g["units"]
+    u2g, t2g, l2 = load_groups(path)
+    errors: list[str] = []
+    for n, u in sorted(U.items()):
+        if u["kind"] in ASSIGNED_KINDS and len(u2g.get(n, [])) != 1:
+            label = "未歸屬" if not u2g.get(n) else f"重複歸屬 {u2g[n]}"
+            errors.append(f"{n}: {label}")
+    for n in sorted(u2g):
+        if n not in U:
+            errors.append(f"{n}: modules.json 列了，但掃描不到（過期）")
+
+    edges: dict[str, list[str]] = defaultdict(list)
+    grp = lambda n: (u2g.get(n) or ["?"])[0]
+    for n, u in sorted(U.items()):
+        src = grp(n)
+        if src == "?":
+            continue
+        deps = [(d, "import") for d in u.get("imports", [])]
+        deps += [(d, "api") for d in u.get("routers_called", [])]
+        for d, how in deps:
+            dst = grp(d)
+            if dst == src or dst == "?":
+                continue
+            if n == "core:main" and d.startswith("router:"):
+                edges["載入器 main→router（預期；待模組載入器取代）"].append(f"{dst} {d}")
+            elif src in l2 and dst in l2:
+                edges[f"L2→L2 {how}"].append(f"{src} {n} → {dst} {d}")
+            elif src == "L1" and dst in l2:
+                edges[f"L1→L2 {how}（逆向）"].append(f"{n} → {dst} {d}")
+            elif dst.startswith("retired:"):
+                edges[f"→退役 {how}"].append(f"{src} {n} → {dst} {d}")
+    warnings = []
+    for n, u in sorted(U.items()):
+        if u["kind"] == "table" and len(t2g.get(n[6:], [])) != 1:
+            warnings.append(f"{n}: 表歸屬 {t2g.get(n[6:]) or '無'}")
+    for t in sorted(t2g):
+        if f"table:{t}" not in U:
+            warnings.append(f"table:{t}: modules.json 列了，但掃描不到")
+    edges["表歸屬警告（不失敗）"] = warnings
+    return errors, edges
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="只跑正對照")
+    ap.add_argument("--check-modules", action="store_true",
+                    help="驗 modules.json：router/helper/page 各歸屬一組（失敗 exit 1）；列出跨組邊（不失敗）")
     ap.add_argument("--out", default=str(OUT))
     a = ap.parse_args()
     g = build()
@@ -483,6 +548,21 @@ def main() -> int:
         print("正對照失敗（掃描器不可信，不寫檔）：", *fails, sep="\n  ", file=sys.stderr)
         return 2
     print(f"正對照 OK；units={len(g['units'])}")
+    if a.check_modules:
+        errors, edges = check_modules(g)
+        # 正對照：routers/accounting_export.py:76 `from routers.reports import …`（M06→M08）必須出現在清單裡
+        known = "M06 router:accounting_export → M08 router:reports"
+        if not any(e == known for e in edges.get("L2→L2 import", [])):
+            print(f"正對照失敗：跨組邊清單缺已知邊「{known}」", file=sys.stderr)
+            return 2
+        for k, v in edges.items():
+            print(f"\n== {k}：{len(v)}")
+            for e in v:
+                print("  " + e)
+        print(f"\n== 歸屬錯誤：{len(errors)}")
+        for e in errors:
+            print("  " + e)
+        return 1 if errors else 0
     if not a.check:
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
