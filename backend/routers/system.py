@@ -829,8 +829,17 @@ def get_bonus_module_status(authorization: str = Header(None)):
     「這個入口該不該出現」，不然一般使用者連側邊欄都建不對。
     """
     _require_user(authorization)
-    from helpers import bonus as _bonus
-    return {"enabled": _bonus.bonus_module_on()}
+    # IP-16 `bonus.module_status`（M07 → L1）：不 import M07（DEPENDENCY-MAP #27）。
+    # M07 不在 ⇒ 關（入口隱藏、頁面顯示暫停），並說明原因——與「模組沒載入」同一個結果
+    from core import registry as _registry
+    status = _registry.single_provider("bonus.module_status")
+    if status is None:
+        return {"enabled": False, "notice": BONUS_MODULE_ABSENT}
+    return {"enabled": bool(status())}
+
+
+#: IP-16 對方不在時的說明
+BONUS_MODULE_ABSENT = "薪資獎金模組未安裝：獎金分潤不提供"
 
 
 # ── Company profile（甲方設定，勞報單使用）────────────────────────────────────

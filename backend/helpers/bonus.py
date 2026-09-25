@@ -61,6 +61,10 @@ def bonus_module_on():
         return False
     return bool(BONUS_MODULE_ENABLED) or env == "1"
 
+from core import registry as _registry  # noqa: E402
+# IP-16：L1 `/api/system/bonus-module-status` 經此得知開關（不 import 本檔）；搬進 modules/ 後改寫進 ModuleSpec.providers
+_registry.provide("bonus.module_status", "payroll", bonus_module_on)
+
 #: 基數的唯一來源。寫成常數是為了讓「它從哪來」可以被查，
 #: 而 `bonus_awards.base_source` 會把它一起凍進每一筆。
 BASE_FIELD = "netProfit"

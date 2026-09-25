@@ -41,8 +41,7 @@ from helpers.bonus import (
 from helpers.tiered_approval import (
     approval_flow_setting_key, setting_to_active_tiers, UnresolvedManagerError,
 )
-from helpers.bonus_pdf import (can_export, export_award_pdf, display_names_for, preview_award_html,
-                               AccountingPdfMissing)
+from helpers.bonus_pdf import can_export, export_award_pdf, display_names_for, preview_award_html
 
 router = APIRouter(prefix="/api/bonus", tags=["bonus"])
 logger = logging.getLogger(__name__)
@@ -1444,10 +1443,7 @@ def preview_award(award_id: int, authorization: str = Header(None)):
     user = _require_user(authorization)
     if not _is_manager(user):
         raise HTTPException(403, "僅管理員以上可預覽獎金分潤單。")
-    try:
-        body = preview_award_html(award_id)
-    except AccountingPdfMissing as exc:          # 稽核 Y-2：M06 不在 ⇒ 明說，不是 500
-        raise HTTPException(503, str(exc))
+    body = preview_award_html(award_id)       # 版面元件都在 L1（2026-09-26）：M06 不在也能預覽
     if body is None:
         raise HTTPException(404, "找不到這張獎金分潤單。")
     return HTMLResponse(content=body)
@@ -1518,10 +1514,7 @@ def download_award_pdf(award_id: int, authorization: str = Header(None)):
     ok, msg = can_export(dict(row))
     if not ok:
         raise HTTPException(400, msg)
-    try:
-        _award, pdf_bytes = export_award_pdf(award_id)
-    except AccountingPdfMissing as exc:          # 稽核 Y-2：M06 不在 ⇒ 明說，不是 500
-        raise HTTPException(503, str(exc))
+    _award, pdf_bytes = export_award_pdf(award_id)   # 版面元件都在 L1：M06 不在也能匯出
     _audit(_tok(authorization), "bonus.award.pdf_download", "bonus_awards",
            str(award_id), "匯出獎金分潤單 PDF")
     return Response(
