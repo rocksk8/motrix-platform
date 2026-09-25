@@ -7,8 +7,9 @@
  *   ui.form.groups  = [{title, fields:[欄位 key…]}]   表單的分組與欄位順序
  *   ui.list.columns = ['$recordNo', '$status', 'qty', …] 列表要顯示的欄位與順序（$ 開頭＝系統欄）
  *
- * 📌 P9 共用排版元件之後要從這裡抽出：本檔只有純函式（不碰 DOM、不綁 Alpine），
- *    抽離時搬檔即可，兩個呼叫端不用改寫。
+ * P9（2026-09-26）：內建模組的版面模型也在本檔（pageModel／applyOps／compileOps／describeDiff／applyPersonal，
+ *    CUSTOMIZATION-SPEC §3.10）；排版器 layout-editor.js 與執行時 layout-runtime.js 共用。本檔只有純函式
+ *    （不碰 DOM、不綁 Alpine、不打 API）。
  */
 ;(function () {
   //: 列表可用的系統欄（值來自單據本身，不是欄位）

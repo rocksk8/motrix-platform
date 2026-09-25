@@ -286,7 +286,7 @@
 
 **唯一入口**（稽核 P-M1，2026-09-26）：可自訂點對外只有 `core.catalog.layout_points(module_key=None)` 一個取法；目錄 `build()` 與排版守門都用它。過濾只在 `catalog._module_points` 一處：①引用模組路由沒有的端點 ⇒ 藏起；②輸出點的預設版型不存在或 outputs 區段不在 ⇒ 藏起；③頁內選單去掉被藏起的按鈕（全部被藏起 ⇒ 選單也藏起）；④未載入（停用／未授權／失敗）的模組沒有任何點。`customization._raw_points`（未過濾）與 `_check_ops` 是私有的；守門 `test_platform_catalog.py::test_only_one_way_to_get_points` 擋掉產品碼裡其他呼叫點（正對照 `test_entry_guard_positive_control`）。
 
-**排版守門**（P9「程式沒有提供的選項不可以出現」的資料層）：`core.catalog.check_layout(module_key, ops)`（`module_key=None`＝全部已載入模組，給側欄用）。**P5 的 `layout` 驗證器與 P9 都必須呼叫它**（P5／P9 合回時接；⚠ 未接前只有函式本身的守門）。
+**排版守門**（P9「程式沒有提供的選項不可以出現」的資料層）：`core.catalog.check_layout(module_key, ops)`（`module_key=None`＝全部已載入模組，給側欄用）。**P5 的 `layout` 驗證器與 P9 都必須呼叫它**（P5／P9 合回時接；⚠ 未接前只有函式本身的守門）。〔補（P9，2026-09-26）：已接——`routers/definitions.py` 的 layout 驗證器（發布、還原、`/validate`）與 `GET /api/layout/{模組}`（逐筆過濾）都經過它；守門 `tests/platform/test_p9_layout.py`（§3.10）〕
 
 | 操作 | 必填鍵 | 選填鍵 | 檢查 |
 |---|---|---|---|
@@ -305,7 +305,39 @@
 - `pages[].menu` 仍可以是舊的字串（CORE-SPEC §4 範例）：字串不衍生 `sidebar` 點，直到 C3 改成物件。
 - **側欄的使用者自訂以 STAGE-C 為準**（定案 2026-09-26，稽核 P-O2）：套用落在 STAGE-C 的 `GET /api/platform/menu`（它讀使用者／角色的版面後輸出），P9 不另外套一份；本節只定「可以動什麼」。個人層**只能調顯示與排序**：`hide`／`show`、`move`（`index`，在原群組內）。**v1 不准換群組**（`move` 帶 `to` 或帶 `group` 鍵一律擋）、不改名（STAGE-C §8 列的「改名」延後，要開放時升 `OPS_BY_KIND` 並改這一行）。
 
-**範例**：`modules/tender_radar/module.json`（1.1.0）。⚠ 未守門：登記內容與頁面實際畫面一致（P9 改由登記渲染之前，沒有機器可讀的對照）。
+**範例**：`modules/tender_radar/module.json`（1.1.0）。⚠ 未守門：登記內容與頁面實際畫面一致（P9 改由登記渲染之前，沒有機器可讀的對照）。〔補（P9，2026-09-26）：標案雷達 1.3.0 起列表由登記渲染，守門 `test_page_fallback_columns_match_module_registration`（頁面 fallback 欄位＝登記、每個登記欄都有畫法）；其他模組接上 §3.10 時照做〕
+
+### 3.10 排版器與執行時套用（P9，wip/h-p9 2026-09-26）
+
+**版面定義**＝定義文件庫（§3.5）的 `layout` kind：key＝`module:<模組 key>`，scope＝`company`／`role:<角色>`（`users.role`），body＝`{"ops": [排版操作…]}`（§3.9 的 `OP_KEYS`）。
+- **驗證器**（`routers/definitions.py` 登記）：key 格式、body 只准 `ops`、模組已載入，其餘交給 `core.catalog.check_layout(模組, ops)`；問題路徑 `ops[i].…`。發布與還原都經過它（§3.9「P5 layout 驗證器與 P9 都必須呼叫它」由此接上）。
+- **程式預設**＝`{"ops": []}`（模組登記的原樣）；模組未載入 ⇒ 沒有預設。
+- **角色覆寫是整份，不是疊加**：`resolve` 回傳角色版，就不再看公司版。排版器在角色第一次覆寫時以公司最新發布版為起點；之後公司再改，**不會**流進已有的角色版（要跟上就在角色範圍再發布一次）。
+
+**執行時**：`GET /api/layout/{模組}`（任何登入者，唯讀）⇒ `{module, role, source, ops, dropped, error, points}`。
+- `source`＝`role:<角色> vN`／`company vN`／`default`；`?role=` 只給超級管理員（排版器的「以某角色預覽」），其他人 403。
+- 已發布的操作逐一再過 `check_layout`：模組後來拿掉了某個點 ⇒ 那一筆不套用、列在 `dropped`（讀不懂的拒絕那一筆，不讓整頁壞、也不悄悄略過）。讀定義失敗 ⇒ 程式預設＋`error`。
+- 前端三支（`frontend/static/`）：`custom-layout.js`（純函式：`pageModel`／`applyOps`／`compileOps`／`describeDiff`／`applyPersonal`，排版器與執行時共用，**狀態 ⇒ 操作只有 compileOps 一處**）、`layout-runtime.js`（Alpine store `$store.layout`）、`layout-editor.js`（同頁編輯模式）。
+
+**模組頁面接上的做法**（其他模組照做；標案雷達 `tender-radar.html` 是範例）：
+1. module.json `customization` 登記點（§3.9）。
+2. 頁面在 Alpine 之前載入三支 js 並呼叫 `MotrixLayout.init({module, page, fallback:{lists:{<列表>:[欄位…]}}})`；`fallback`＝版面讀不到時的欄位順序，**必須等於登記**（守門照 tender_radar 的 `test_page_fallback_columns_match_module_registration` 寫一題）。
+3. 列表：`<template x-for="c in $store.layout.cols('<列表>')">` 畫欄，每一欄的畫法用 `x-if="c.field === '…'"` 留在頁面；標題 `$store.layout.colLabel(列表, 欄, 頁面原本的字)`（沒改名 ⇒ 頁面原字）。表還沒拿到版面之前不畫（`$store.layout.ready || $store.layout.failed`）。
+4. 表單：欄位容器用 CSS `order: $store.layout.fieldOrder(表單, 欄)`、`x-show="fieldShown(…)"`、標籤 `fieldLabel(…, 原字)`；區塊標題用 `sections(表單)`（order＝區塊序×100，欄位＝區塊序×100＋欄序＋1）。
+5. 按鈕／頁內選單／匯出：`x-show="shown(kind, key)"`、`order(kind, key)`、`label(kind, key, 原字)`（原字可以是動態文字）；選單項目 `itemOrder(選單, 按鈕)`。
+6. 標題旁放 `<span data-layout-editor-slot></span>`（超級管理員看到「編輯版面」）；列表旁放 `<span data-layout-personal="<列表>"></span>`（個人層）。
+7. e2e 等待點：`<html data-layout-state="ready|failed" data-layout-source="…">`、`#ml-editor` 的 `data-busy`／`data-state`。
+
+**個人層**（§1 裁示）：沿用清單偏好 `GET/PUT /api/list-prefs/layout-cols.<模組>.<列表>`，`sortMode:"columns"`、`customOrder`＝欄位 key 依序、隱藏的前綴 `-`。只作用在公司／角色層之後仍顯示的欄；核心欄位的 `-` 與上層隱藏的欄一律不理（**在套用時擋**：清單偏好後端不解析內容）。個人層不經定義庫；非超級管理員寫 `/api/definitions/layout/…` ⇒ 403。
+
+**側欄項目**：排版器只寫進 layout 定義（該頁 `sidebar` 點的 `hide`、`move index`＝群組內第幾項）並在面板上預覽（讀 `/api/platform/menu`）。實際套到側欄等 C4（`window.MOTRIX_MENU`）：依 §3.9 定案落在 STAGE-C 的選單產生處（讀使用者角色的版面後輸出），P9 不另外套一份。
+
+**已知的缺口**（排版器因此不提供對應選項——程式沒提供的選項不出現）：
+- `add_section`：`check_layout` 只認得 `layout_points` 裡的區塊 ⇒ 同一串操作裡新增的區塊不能當 `move … to` 的目的地 ⇒ 新增的區塊放不進欄位。要開放需改 `_check_ops`（L0，先登記規格再改）。
+- 按鈕移進頁內選單（`move action to menu`）：`applyOps` 已會套，面板未提供（頁面要能把按鈕畫在選單裡，逐頁實作）。
+- 只有圖示的按鈕（例：標案雷達的標註旗子）改名只影響 `aria-label`。
+- ⚠ 未守門：頁面是否對每一個登記的按鈕／表單欄都接上 `$store.layout`（目前只守列表欄）。
+
 
 ## 4. 不做的事（刻意）
 
