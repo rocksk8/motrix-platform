@@ -491,3 +491,83 @@ def test_custom_module_notifications_carry_the_module_in_ref_id(loan):
     finally:
         conn.close()
     assert "custom:%s:%s" % (KEY, rec["record_no"]) in refs
+
+
+# ── 主持前端缺口 #4～#7 ─────────────────────────────────────────────────────
+
+def test_custom_module_catalog_has_block_specs_themes_formats_and_approver_sources(client, make_user):
+    from helpers import doc_template as dt
+    h = _login(client, make_user, "cm_cat_super", role="superadmin")
+    cat = client.get("/api/custom-modules/catalog", headers=h).json()
+    assert set(cat["outputBlockSpecs"]) == set(dt.BLOCKS)                 # 每個積木都有參數規格
+    assert cat["outputBlockSpecs"]["items_table"]["params"]["columns"]["type"] == "list:column"
+    assert "column" in cat["outputBlockItemSpecs"] and "voucher_standard" in cat["outputThemes"]
+    assert cat["outputFormats"] == ["html", "pdf"] and cat["fieldFormats"] == list(dt.FORMATS)
+    assert {s["sourceType"] for s in cat["approverSources"]} == {"", "department_manager", "division_manager", "submitter_manager"}
+
+
+def test_doc_template_specs_match_the_engine():
+    """規格與引擎一致：規格列出的每個格式引擎都認得；積木清單兩邊相同（規格是給建構器的，不能多也不能少）。"""
+    from helpers import doc_template as dt
+    assert set(dt.BLOCK_SPECS) == set(dt.BLOCKS)
+    for how in dt.FORMATS:
+        dt._fmt("2026-09-25T00:00:00" if how == "date10" else 1, how)
+    with pytest.raises(dt.TemplateError):
+        dt._fmt("x", "no_such_format")
+    for spec in dt.BLOCK_SPECS.values():
+        for p in spec["params"].values():
+            kind = p["type"].split(":", 1)
+            assert kind[0] in ("text", "int", "bool", "path", "cond", "list", "blocks")
+            if kind[0] == "list" and kind[1] != "text":
+                assert kind[1] in dt.BLOCK_ITEM_SPECS
+
+
+def test_definitions_can_be_listed_with_drafts_and_a_draft_can_be_deleted(client, make_user):
+    h = _login(client, make_user, "cm_list_super", role="superadmin")
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h, json={"body": loan_definition()})
+    client.post("/api/definitions/custom_module/%s/publish" % KEY, headers=h, json={})
+    client.put("/api/definitions/custom_module/%s/draft" % KEY, headers=h, json={"body": loan_definition()})
+    client.put("/api/definitions/custom_module/draft_only/draft", headers=h, json={"body": {"name": "只有草稿"}})
+    rows = {r["key"]: r for r in client.get("/api/definitions/custom_module", headers=h).json()}
+    assert rows[KEY]["latestVersion"] == 1 and rows[KEY]["hasDraft"] is True
+    assert rows["draft_only"]["latestVersion"] is None and rows["draft_only"]["hasDraft"] is True
+    assert client.delete("/api/definitions/custom_module/%s/draft" % KEY, headers=h).status_code == 200
+    assert client.delete("/api/definitions/custom_module/%s/draft" % KEY, headers=h).status_code == 404
+    got = client.get("/api/definitions/custom_module/%s" % KEY, headers=h).json()
+    assert got["draft"] is None and [v["version"] for v in got["versions"]] == [1]   # 已發布的不受影響
+    assert client.get("/api/definitions/nope", headers=h).status_code == 400
+    staff = _login(client, make_user, "cm_list_staff", role="admin")
+    assert client.get("/api/definitions/custom_module", headers=staff).status_code == 403
+
+
+def test_custom_module_ref_options(loan):
+    client, h = loan
+    got = client.get("/api/custom/%s/ref-options/borrower" % KEY, headers=h["req"], params={"q": "cm_re"}).json()
+    assert {"value": "cm_req", "label": got[0]["label"]} in got and all("cm_re" in o["value"] or "cm_re" in o["label"] for o in got)
+    assert client.get("/api/custom/%s/ref-options/item" % KEY, headers=h["req"]).status_code == 404   # 不是參照欄
+    assert client.get("/api/custom/%s/ref-options/borrower" % KEY, headers=h["other"]).status_code == 403
+    rec = _new(client, h, item="相機")
+    import db
+    from helpers import custom_modules as CM
+    conn = db.get_db()
+    try:
+        opts = CM.ref_options(conn, "custom:%s" % KEY, rec["record_no"][-4:])
+    finally:
+        conn.close()
+    assert opts[0]["value"] == rec["record_no"] and "相機" in opts[0]["label"]
+
+
+def test_custom_module_output_preview_can_be_pdf(client, make_user, monkeypatch):
+    """PDF 預覽（主持缺口 #7）：同一份 HTML 交給 pdf_gen.html_to_pdf_bytes（Edge 在測試裡換掉）。"""
+    import pdf_gen
+    seen = []
+    monkeypatch.setattr(pdf_gen, "html_to_pdf_bytes", lambda html: seen.append(html) or b"%PDF-1.4 fake")
+    h = _login(client, make_user, "cm_pdf_super", role="superadmin")
+    r = client.post("/api/custom-modules/%s/output/preview" % KEY, headers=h, params={"format": "pdf"},
+                    json={"body": loan_definition()})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf" and r.content.startswith(b"%PDF")
+    assert "EL-20260925-0001" in seen[0]
+    from helpers import doc_template as dt
+    r = client.post("/api/definitions/output_template/invoice_voucher/preview", headers=h, params={"format": "pdf"},
+                    json={"body": dt.load_default("invoice_voucher")})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf" and "IV-202609-0001" in seen[1]

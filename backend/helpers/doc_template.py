@@ -205,6 +205,50 @@ BLOCKS = {
     "items_table": _b_items_table, "amount_box": _b_amount_box, "totals": _b_totals,
     "approval_sign": _b_approval_sign, "sign_boxes": _b_sign_boxes, "identity_footer": _b_identity_footer,
 }
+#: 欄位值格式目錄（`format`）；表格欄另有 `index`（列號）、`spec_brand`（規格＋品牌）
+FORMATS = ("text", "str", "money", "date10")
+COLUMN_FORMATS = FORMATS + ("index", "spec_brand")
+
+#: 積木參數規格（建構器／排版器依它產生屬性面板；P8 缺口 #4）。每個參數：型別、必填、說明。
+#: 型別：`text`（字串）、`int`、`bool`、`path`（視圖路徑）、`cond`（`{path, equals}` 或 `{path, in}`）、
+#: `list:<子項名稱>`（子項規格見 `items`）、`blocks`（巢狀積木清單）
+_P = lambda type_, required=False, desc="": {"type": type_, "required": required, "desc": desc}  # noqa: E731
+BLOCK_SPECS = {
+    "watermark": {"desc": "滿版浮水印（例：預覽稿）", "params": {
+        "text": _P("text", True, "大字"), "small": _P("text", True, "小字"), "count": _P("int", False, "重複次數（預設 12）"),
+        "unless": _P("cond", False, "條件成立就不印")}},
+    "accent_bar": {"desc": "頁首色條", "params": {}},
+    "identity_header": {"desc": "公司抬頭＋單據標題（抬頭取自公司資料）", "params": {"title": _P("text", True, "單據標題")}},
+    "meta": {"desc": "單據資訊列（編號、日期…）", "params": {"fields": _P("list:field", True)}},
+    "banner": {"desc": "提示橫幅；文字可用 {路徑|預設}", "params": {
+        "text": _P("text", True), "unless": _P("cond", False, "條件成立就不印")}},
+    "boxes": {"desc": "並排的資訊框", "params": {"boxes": _P("list:box", True)}},
+    "when": {"desc": "條件分支", "params": {
+        "path": _P("path", True), "equals": _P("text", False), "in": _P("list:text", False),
+        "then": _P("blocks", False), "else": _P("blocks", False)}},
+    "items_table": {"desc": "明細表", "params": {
+        "source": _P("path", True, "清單的路徑"), "label": _P("text", True, "表格上方的標題"),
+        "columns": _P("list:column", True), "hide_when_empty": _P("bool", False, "沒有資料就整段不印")}},
+    "amount_box": {"desc": "單一金額框", "params": {
+        "label": _P("text", True), "row_label": _P("text", True), "path": _P("path", True)}},
+    "totals": {"desc": "合計表", "params": {"rows": _P("list:total_row", True)}},
+    "approval_sign": {"desc": "系統簽核歷程（誰、何時簽）", "params": {}},
+    "sign_boxes": {"desc": "手寫簽名欄", "params": {"boxes": _P("list:sign_box", True)}},
+    "identity_footer": {"desc": "公司頁尾（取自公司資料）", "params": {}},
+}
+#: `list:<子項>` 的子項規格
+BLOCK_ITEM_SPECS = {
+    "field": {"label": _P("text", True), "path": _P("path", True), "format": _P("text", False, "、".join(FORMATS)),
+              "style": _P("text", False, "strong_mono＝等寬粗體")},
+    "box": {"title": _P("text", True), "rows": _P("list:field", True)},
+    "column": {"title": _P("text", True), "path": _P("path", False, "format＝index 時不用"),
+               "format": _P("text", False, "、".join(COLUMN_FORMATS)), "align": _P("text", False, "right＝靠右"),
+               "width": _P("text", False, "例：12%"), "brand_path": _P("path", False, "spec_brand 用")},
+    "total_row": {"label": _P("text", True), "path": _P("path", True), "grand": _P("bool", False, "總計列加粗")},
+    "sign_box": {"label": _P("text", True), "date_label": _P("text", True), "name_path": _P("path", False),
+                 "date_path": _P("path", False)},
+}
+
 #: 手寫簽名欄沒有值時的底線
 _BLANK_LINE = "＿＿＿＿＿＿＿＿＿＿"
 
