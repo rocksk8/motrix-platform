@@ -168,6 +168,26 @@ def _c_mat_order_invoice_date(client, h):
                                       json={"invoiceDate": "2026-09-20"}),         lambda d: d["caseRecord"]["materialOrders"][0].get("invoiceDate") == "2026-09-20"
 
 
+def _c_case_record_full(client, h):
+    """案件紀錄「整包存」（非分段；原本只有分段存才拿鎖）。"""
+    cr = _data()["caseRecord"]
+    cr["payment"]["items"][1]["note"] = "整包存探針"
+    return None, lambda: client.patch(f"/api/quotations/{NO}/case-record", headers=h, json={"case_record": cr}),         lambda d: d["caseRecord"]["payment"]["items"][1].get("note") == "整包存探針"
+
+
+def _c_case_record_segment(client, h):
+    """案件紀錄「分段存」（案件頁自動存檔走的路徑；舊碼只有這條路徑拿鎖）。"""
+    pay = _data()["caseRecord"]["payment"]
+    new = json.loads(json.dumps(pay)); new["items"][1]["note"] = "分段存探針"
+    return None, lambda: client.patch(f"/api/quotations/{NO}/case-record", headers=h,
+                                      json={"segments": {"payment": new}, "base": {"payment": pay}, "defaults": {}}),         lambda d: d["caseRecord"]["payment"]["items"][1].get("note") == "分段存探針"
+
+
+def _c_stage_create(client, h):
+    """建立階段 ⇒ _sync_stages_to_json（bf ade34b95 修過空窗；這裡另驗出錯要放鎖）。"""
+    return None, lambda: client.post(f"/api/quotations/{NO}/stages", headers=h, json={"label": "探針階段"}),         lambda d: any(st.get("label") == "探針階段" for st in d["caseRecord"].get("stages") or [])
+
+
 def _c_dispatch_import(client, h):
     from tests.test_dispatch_import_to_quote_persists_2026_09_23 import _insert_draft_quote_and_dispatch
     did = _insert_draft_quote_and_dispatch("MQ-LU-DISP")
@@ -225,6 +245,8 @@ def test_b_approval_flows_do_not_overwrite_a_write_in_the_gap(client, make_user,
 
 CASES = {
     "dispatch_import": _c_dispatch_import,
+    "case_record_full": _c_case_record_full, "case_record_segment": _c_case_record_segment,
+    "stage_create": _c_stage_create,
     "payment_invoice_upload": _c_pay_upload, "payment_invoice_delete": _c_pay_delete,
     "material_file_upload": _c_mat_upload, "material_file_delete": _c_mat_delete,
     "material_invoice_upload": _c_mat_inv_upload, "material_invoice_delete": _c_mat_inv_delete,

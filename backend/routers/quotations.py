@@ -2669,155 +2669,155 @@ def update_case_record(quote_no: str, body: CaseRecordUpdate, authorization: str
     user = _require_user(authorization)
     conn = get_db()
     adopted = {}
-    if body.segments is not None:
-        # 分段存：比對到寫入之間不可以有別人插進來（兩人改不同分段時，後寫的那份
-        # 必須是以先寫的結果為底合併），所以從讀取就持有寫鎖。
-        conn.execute("BEGIN IMMEDIATE")
-    row = conn.execute(
-        "SELECT id, customer_name, project_name, data_json, updated_at, sales_person_id, sales_person, "
-        "assigned_user_ids, deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?",
-        (quote_no,),
-    ).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    # 2026-09-24（CM14）：這支原本沒有任何擁有者檢查——任何登入者都能寫任何案件（IDOR）。
-    # 例外：已結案且半解鎖——每一筆都排進 superadmin 審核，把關在審核（比照 _guard_case）。
-    semi_unlocked = (row["deal_tag"] or "") == "已結案" and bool(row["case_semi_unlocked"])
-    if not semi_unlocked and not _is_case_member(conn, quote_no, row, user):
-        # 使用者裁示（CM14 追加）：持 cashier 模組者可寫所有案件的「收款」分段——只放行分段格式、
-        # 只含 payment；其他分段與舊整包格式仍須成員。頁面替缺少分段補的預設值（defaults）
-        # 不是出納的改動，這條路上一律不寫。
-        cashier_payment_only = (user_has_module(user, "cashier") and body.segments is not None
-                                and set(body.segments) <= {"payment"})
-        if not cashier_payment_only:
+    # 分段存：比對到寫入之間不可以有別人插進來（兩人改不同分段時，後寫的那份
+    # 必須是以先寫的結果為底合併），所以從讀取就持有寫鎖。
+    # 2026-09-25：整包存（case_record）原本只在分段存時才拿鎖 ⇒ 整包存是交易外讀、整包寫回（lost update）；一律拿。
+    with write_txn(conn):   # 從讀取就持有寫鎖；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+        row = conn.execute(
+            "SELECT id, customer_name, project_name, data_json, updated_at, sales_person_id, sales_person, "
+            "assigned_user_ids, deal_tag, case_semi_unlocked FROM quotations WHERE quote_no=?",
+            (quote_no,),
+        ).fetchone()
+        if not row:
             conn.close()
-            raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
-        body.defaults = None
-    if body.segments is not None:
-        # 2026-09-24（CM1）：過去整包取代 caseRecord ⇒ 兩人同時編同一件，後存者靜默蓋掉
-        # 前一個人的改動。改成只替換改到的分段；那一段在資料庫的現值與呼叫端的基準
-        # 不同（有人改過）就整筆拒絕，不合併、不寫入。stages 由專屬端點維護，不收。
-        current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
-        segments = {k: v for k, v in body.segments.items() if k != "stages"}
-        cmp_cr = current_cr if money_visible(user) else mask_case_record(copy.deepcopy(current_cr))
-        conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
-        if conflicts:
+            raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        # 2026-09-24（CM14）：這支原本沒有任何擁有者檢查——任何登入者都能寫任何案件（IDOR）。
+        # 例外：已結案且半解鎖——每一筆都排進 superadmin 審核，把關在審核（比照 _guard_case）。
+        semi_unlocked = (row["deal_tag"] or "") == "已結案" and bool(row["case_semi_unlocked"])
+        if not semi_unlocked and not _is_case_member(conn, quote_no, row, user):
+            # 使用者裁示（CM14 追加）：持 cashier 模組者可寫所有案件的「收款」分段——只放行分段格式、
+            # 只含 payment；其他分段與舊整包格式仍須成員。頁面替缺少分段補的預設值（defaults）
+            # 不是出納的改動，這條路上一律不寫。
+            cashier_payment_only = (user_has_module(user, "cashier") and body.segments is not None
+                                    and set(body.segments) <= {"payment"})
+            if not cashier_payment_only:
+                conn.close()
+                raise HTTPException(403, "只有這個案件的成員（業務、協作者、案件角色、階段負責人）或管理員可以修改")
+            body.defaults = None
+        if body.segments is not None:
+            # 2026-09-24（CM1）：過去整包取代 caseRecord ⇒ 兩人同時編同一件，後存者靜默蓋掉
+            # 前一個人的改動。改成只替換改到的分段；那一段在資料庫的現值與呼叫端的基準
+            # 不同（有人改過）就整筆拒絕，不合併、不寫入。stages 由專屬端點維護，不收。
+            current_cr = (json.loads(row["data_json"] or "{}").get("caseRecord") or {})
+            segments = {k: v for k, v in body.segments.items() if k != "stages"}
+            cmp_cr = current_cr if money_visible(user) else mask_case_record(copy.deepcopy(current_cr))
+            conflicts = _segment_conflicts(cmp_cr, segments, body.base or {})
+            if conflicts:
+                conn.close()
+                raise HTTPException(409, {"code": "segment_conflict", "segments": conflicts,
+                                          "message": "案件資料已被其他人更新：" + "、".join(conflicts)})
+            merged = {**current_cr, **segments}
+            for k, v in (body.defaults or {}).items():
+                if k == "stages" or k in segments:
+                    continue
+                if current_cr.get(k) is None:
+                    merged[k] = v
+                else:
+                    adopted[k] = current_cr[k]
+            body.case_record = merged
+        # Optimistic lock: client may send expectedUpdatedAt to avoid silent overwrite
+        expected = (body.case_record or {}).pop("_expectedUpdatedAt", None) if isinstance(body.case_record, dict) else None
+        if expected and row["updated_at"] and expected != row["updated_at"]:
             conn.close()
-            raise HTTPException(409, {"code": "segment_conflict", "segments": conflicts,
-                                      "message": "案件資料已被其他人更新：" + "、".join(conflicts)})
-        merged = {**current_cr, **segments}
-        for k, v in (body.defaults or {}).items():
-            if k == "stages" or k in segments:
-                continue
-            if current_cr.get(k) is None:
-                merged[k] = v
-            else:
-                adopted[k] = current_cr[k]
-        body.case_record = merged
-    # Optimistic lock: client may send expectedUpdatedAt to avoid silent overwrite
-    expected = (body.case_record or {}).pop("_expectedUpdatedAt", None) if isinstance(body.case_record, dict) else None
-    if expected and row["updated_at"] and expected != row["updated_at"]:
-        conn.close()
-        raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
-    label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
-    data = json.loads(row["data_json"] or "{}")
-    if not money_visible(user):
-        # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
-        # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
+            raise HTTPException(409, "案件資料已被其他人更新，請重新載入後再存")
+        label = f"{quote_no}（{row['customer_name'] or ''}{'／' if row['project_name'] else ''}{row['project_name'] or ''}）"
+        data = json.loads(row["data_json"] or "{}")
+        if not money_visible(user):
+            # CM13（2026-09-24）：這個帳號拿到的是遮蔽過的 caseRecord，送回來的款項期別沒有金額鍵。
+            # 以資料庫現值補回，不可以讓空值蓋掉真正的金額；新增／刪除／重排期別不允許（D2）。
+            try:
+                body.case_record = restore_case_record(body.case_record or {}, data.get("caseRecord") or {})
+            except PaymentStructureChange:
+                conn.close()
+                raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
+
+        # 2026-08-31（安全稽核發現）：這支整包存檔端點原本完全沒有角色檢查——
+        # 案件管理頁面的款項明細（勾選已收款／填實收金額／手續費）就是走這支，
+        # 不是走有 admin+ 門檻的 mark_payment（PATCH .../payment/{idx}，只有
+        # receivables.html 在用），任何登入使用者都能在案件管理頁面直接改動
+        # 金流狀態。這支端點同時承載材料/合約條款/角色等其他任何登入使用者都
+        # 該能編輯的欄位，不能整支端點都要求 admin+；改成只在真的偵測到
+        # received/actualAmount/feeAmount 這幾個金流欄位有變動時才擋，偵測到就
+        # 整筆拒絕（不寫入任何欄位），不做「只還原金流欄位、其餘正常存檔」的
+        # 靜默處理——使用者已確認採「拒絕整筆」，避免使用者不知情下被悄悄改回
+        # 舊值。比對用 item["id"]（新增/編輯款項期別時前端固定會帶，見
+        # case-management.js::addPaymentItem()）配對新舊品項，不能用陣列索引位置
+        # 比對——sales/engineer 本來就能自行新增/刪除/調整款項期別（跟「標記
+        # 已收款」是完全不同的動作），若用位置比對，光是筆數改變（新增一期
+        # 款項）就會被整支擋下，變成非 admin/出納完全不能編輯款項明細，不是
+        # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
+        old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
+        if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+            err = _payment_items_lock_violation(old_items, new_items)
+            if err:
+                conn.close()
+                raise HTTPException(403, err)
+        # 2026-09-24：所有角色——這次新增或有改動的已收款期別要過 mark_payment 同一組驗證。
+        # 資料庫裡原本就有的「已收無日期」不擋，否則整張案件會存不下去。
         try:
-            body.case_record = restore_case_record(body.case_record or {}, data.get("caseRecord") or {})
-        except PaymentStructureChange:
+            _validate_changed_receipts(old_items, new_items)
+        except HTTPException:
             conn.close()
-            raise HTTPException(403, "此帳號沒有財務檢視權限，不可新增、刪除或調整款項期別")
+            raise
 
-    # 2026-08-31（安全稽核發現）：這支整包存檔端點原本完全沒有角色檢查——
-    # 案件管理頁面的款項明細（勾選已收款／填實收金額／手續費）就是走這支，
-    # 不是走有 admin+ 門檻的 mark_payment（PATCH .../payment/{idx}，只有
-    # receivables.html 在用），任何登入使用者都能在案件管理頁面直接改動
-    # 金流狀態。這支端點同時承載材料/合約條款/角色等其他任何登入使用者都
-    # 該能編輯的欄位，不能整支端點都要求 admin+；改成只在真的偵測到
-    # received/actualAmount/feeAmount 這幾個金流欄位有變動時才擋，偵測到就
-    # 整筆拒絕（不寫入任何欄位），不做「只還原金流欄位、其餘正常存檔」的
-    # 靜默處理——使用者已確認採「拒絕整筆」，避免使用者不知情下被悄悄改回
-    # 舊值。比對用 item["id"]（新增/編輯款項期別時前端固定會帶，見
-    # case-management.js::addPaymentItem()）配對新舊品項，不能用陣列索引位置
-    # 比對——sales/engineer 本來就能自行新增/刪除/調整款項期別（跟「標記
-    # 已收款」是完全不同的動作），若用位置比對，光是筆數改變（新增一期
-    # 款項）就會被整支擋下，變成非 admin/出納完全不能編輯款項明細，不是
-    # 這次要的效果。新增的品項若一開始就帶 received=true 仍視為違規擋下。
-    old_items = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-    new_items = ((body.case_record or {}).get("payment") or {}).get("items") or []
-    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
-        err = _payment_items_lock_violation(old_items, new_items)
-        if err:
+        # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
+        # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
+        # receivables.html 出納快速登錄那條路，這裡才是大多數人真正在用的地方），
+        # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
+        # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
+        # 為什麼不能用陣列位置）。
+        new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
+        old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
+        old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
+        # 🔴 2026-09-25：驗證不過要先關連線——上面 BEGIN IMMEDIATE 拿了寫鎖，直接 raise 會留著鎖到連線被回收，
+        #    其他人的寫入被鎖住最多 30 秒後 500（test_case_record_validation_releases_lock_2026_09_25）。
+        try:
+            for new_it in new_items_for_inv:
+                validate_invoice_amounts(new_it)   # AC1：發票未稅／稅額只填一欄 ⇒ 拒存
+                new_inv = new_it.get("invoiceNo")
+                if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
+                    continue  # 未變動，不必重新驗證
+                validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
+        except Exception:
             conn.close()
-            raise HTTPException(403, err)
-    # 2026-09-24：所有角色——這次新增或有改動的已收款期別要過 mark_payment 同一組驗證。
-    # 資料庫裡原本就有的「已收無日期」不擋，否則整張案件會存不下去。
-    try:
-        _validate_changed_receipts(old_items, new_items)
-    except HTTPException:
-        conn.close()
-        raise
+            raise
 
-    # 2026-09-02（反派/國稅局視角複查發現）：這支整包存檔端點是案件管理財務
-    # Tab 填發票號碼的實際主要路徑（mark_payment() 的 invoiceNo 驗證只涵蓋
-    # receivables.html 出納快速登錄那條路，這裡才是大多數人真正在用的地方），
-    # 過去完全沒有走到格式/重複驗證，等於前面加的防呆對最常用的入口沒有生效。
-    # 用 item id 比對排除自己這筆（見 validate_invoice_no() docstring 說明
-    # 為什麼不能用陣列位置）。
-    new_items_for_inv = ((body.case_record or {}).get("payment") or {}).get("items") or []
-    old_items_for_inv = ((data.get("caseRecord") or {}).get("payment") or {}).get("items") or []
-    old_inv_by_id = {it.get("id"): it.get("invoiceNo") for it in old_items_for_inv if it.get("id") is not None}
-    # 🔴 2026-09-25：驗證不過要先關連線——上面 BEGIN IMMEDIATE 拿了寫鎖，直接 raise 會留著鎖到連線被回收，
-    #    其他人的寫入被鎖住最多 30 秒後 500（test_case_record_validation_releases_lock_2026_09_25）。
-    try:
-        for new_it in new_items_for_inv:
-            validate_invoice_amounts(new_it)   # AC1：發票未稅／稅額只填一欄 ⇒ 拒存
-            new_inv = new_it.get("invoiceNo")
-            if new_it.get("id") is not None and old_inv_by_id.get(new_it.get("id")) == new_inv:
-                continue  # 未變動，不必重新驗證
-            validate_invoice_no(conn, new_inv, exclude_quote_no=quote_no, exclude_item_id=new_it.get("id"))
-    except Exception:
+        gated, change_id = _gate_case_edit(
+            conn, quote_no, user, authorization, "case_record_update",
+            f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
+        )
+        if gated:
+            conn.close()
+            return {"ok": True, "pending": True, "changeRequestId": change_id,
+                    "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
+        old_devices = (data.get("caseRecord") or {}).get("devices") or []
+        new_devices = (body.case_record or {}).get("devices") or []
+        # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
+        # 整包 stages 同步）：case-management.js 的階段操作（label/done/日期/負責人/
+        # 前置階段/前往記錄）已全部改走 Phase 2 的 granular 端點即時寫入，且每個 granular
+        # 端點寫完都會呼叫 `_sync_stages_to_json()` 把結果同步回 data_json——這條整包
+        # 存檔路徑（`saveCaseRecord()`）現在只用來存 materials/payment/contract/roles 等
+        # 其他欄位。過去這裡會信任 client 送來的 `stages` 陣列並整批覆寫回 case_stages，
+        # 原意是怕忽略掉這個欄位會讓伺服器值變舊，但反而造成真正的資料損毀：使用者
+        # 用 granular 端點剛存好的日期／負責人，一旦頁面上任何其他欄位（材料、付款…）
+        # 觸發這條 1.5 秒防抖的整包存檔，就會被瀏覽器記憶體裡「這次載入當下」的舊
+        # `stages` 快照蓋回空值（2026-08-24 案件執行看板日期消失回報，追出的根因）。
+        # 一律改成忽略 client 送來的 `stages`，永遠保留伺服器現有值——因為 granular
+        # 端點已經確保 data_json.caseRecord.stages 隨時是最新的，不需要也不該再讓這條
+        # 路徑覆寫。
+        new_case_record = body.case_record or {}
+        new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
+        data["caseRecord"] = new_case_record
+        stock_conflicts = []
+        if new_devices != old_devices:
+            stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
+        now = save_quotation_json(conn, quote_no, data)
+        conn.commit()
         conn.close()
-        raise
-
-    gated, change_id = _gate_case_edit(
-        conn, quote_no, user, authorization, "case_record_update",
-        f"{label} 更新案件記錄（材料/款項/角色/合約等）", {"case_record": body.case_record or {}},
-    )
-    if gated:
-        conn.close()
-        return {"ok": True, "pending": True, "changeRequestId": change_id,
-                "message": "案件已結案並處於半解鎖狀態，此變更已送出，待最高管理員審核通過後才會套用"}
-    old_devices = (data.get("caseRecord") or {}).get("devices") or []
-    new_devices = (body.case_record or {}).get("devices") or []
-    # caseRecord.stages 正規化（2026-08-23，3a 新增／3b 上線後修正；2026-08-24 停用
-    # 整包 stages 同步）：case-management.js 的階段操作（label/done/日期/負責人/
-    # 前置階段/前往記錄）已全部改走 Phase 2 的 granular 端點即時寫入，且每個 granular
-    # 端點寫完都會呼叫 `_sync_stages_to_json()` 把結果同步回 data_json——這條整包
-    # 存檔路徑（`saveCaseRecord()`）現在只用來存 materials/payment/contract/roles 等
-    # 其他欄位。過去這裡會信任 client 送來的 `stages` 陣列並整批覆寫回 case_stages，
-    # 原意是怕忽略掉這個欄位會讓伺服器值變舊，但反而造成真正的資料損毀：使用者
-    # 用 granular 端點剛存好的日期／負責人，一旦頁面上任何其他欄位（材料、付款…）
-    # 觸發這條 1.5 秒防抖的整包存檔，就會被瀏覽器記憶體裡「這次載入當下」的舊
-    # `stages` 快照蓋回空值（2026-08-24 案件執行看板日期消失回報，追出的根因）。
-    # 一律改成忽略 client 送來的 `stages`，永遠保留伺服器現有值——因為 granular
-    # 端點已經確保 data_json.caseRecord.stages 隨時是最新的，不需要也不該再讓這條
-    # 路徑覆寫。
-    new_case_record = body.case_record or {}
-    new_case_record["stages"] = (data.get("caseRecord") or {}).get("stages") or []
-    data["caseRecord"] = new_case_record
-    stock_conflicts = []
-    if new_devices != old_devices:
-        stock_conflicts = _sync_device_stock(conn, quote_no, old_devices, new_devices, user)
-    now = save_quotation_json(conn, quote_no, data)
-    conn.commit()
-    conn.close()
-    spawn_bg_thread(_backup_quotation, args=(quote_no,))
-    _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
-    return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
+        spawn_bg_thread(_backup_quotation, args=(quote_no,))
+        _audit(_tok(authorization), 'case.update', 'quotation', quote_no, label)
+        return {"ok": True, "updated_at": now, "stockConflicts": stock_conflicts, "adopted": adopted}
 
 
 # ── Case change request approve/reject (2026-08-26) ────────────────────────────
@@ -3141,39 +3141,48 @@ def _sync_stages_to_json(conn, quote_no: str, updated_at: str = None) -> str | N
     opened_here = not conn.in_transaction
     if opened_here:
         conn.execute("BEGIN IMMEDIATE")
-    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-    if not row:
-        if opened_here:
-            conn.commit()        # 只結束自己開的交易；呼叫端自己的交易照舊由它處理
-        return None
-    data = json.loads(row["data_json"] or "{}")
-    stage_rows = conn.execute(
-        "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
-    ).fetchall()
-    stages_json = []
-    for sr in stage_rows:
-        visit_rows = conn.execute(
-            "SELECT visit_date, visit_people, note FROM case_stage_visits WHERE stage_id=? ORDER BY id",
-            (sr["id"],),
+    try:
+        row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            if opened_here:
+                conn.commit()        # 只結束自己開的交易；呼叫端自己的交易照舊由它處理
+            return None
+        data = json.loads(row["data_json"] or "{}")
+        stage_rows = conn.execute(
+            "SELECT * FROM case_stages WHERE quote_no=? ORDER BY sort_order, id", (quote_no,)
         ).fetchall()
-        stages_json.append({
-            "id":         sr["id"],
-            "label":      sr["label"],
-            "done":       bool(sr["done"]),
-            "doneAt":     sr["done_at"],
-            "startDate":  sr["start_date"],
-            "dueDate":    sr["due_date"],
-            "assignedTo": json.loads(sr["assigned_to"] or "[]"),
-            "dependsOn":  json.loads(sr["depends_on"] or "[]"),
-            "visits": [
-                {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
-                for v in visit_rows
-            ],
-        })
-    data.setdefault("caseRecord", {})["stages"] = stages_json
-    result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
-    conn.commit()
-    return result_ts
+        stages_json = []
+        for sr in stage_rows:
+            visit_rows = conn.execute(
+                "SELECT visit_date, visit_people, note FROM case_stage_visits WHERE stage_id=? ORDER BY id",
+                (sr["id"],),
+            ).fetchall()
+            stages_json.append({
+                "id":         sr["id"],
+                "label":      sr["label"],
+                "done":       bool(sr["done"]),
+                "doneAt":     sr["done_at"],
+                "startDate":  sr["start_date"],
+                "dueDate":    sr["due_date"],
+                "assignedTo": json.loads(sr["assigned_to"] or "[]"),
+                "dependsOn":  json.loads(sr["depends_on"] or "[]"),
+                "visits": [
+                    {"visitDate": v["visit_date"], "visitPeople": v["visit_people"], "note": v["note"]}
+                    for v in visit_rows
+                ],
+            })
+        data.setdefault("caseRecord", {})["stages"] = stages_json
+        result_ts = save_quotation_json(conn, quote_no, data, updated_at=updated_at)
+        conn.commit()
+        return result_ts
+    except BaseException:
+        # 2026-09-25：自己開的交易中途出錯 ⇒ rollback 放掉寫鎖（連線屬於呼叫端，不在這裡關）
+        if opened_here:
+            try:
+                conn.rollback()
+            except Exception:   # noqa: BLE001
+                pass
+        raise
 
 
 def _sync_json_stages_to_table(conn, quote_no: str, stages_from_json: list) -> None:
