@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
 import json
 import re
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -533,38 +535,142 @@ def build() -> dict:
     return {"generated_by": "tools/platform/dep_scan.py", "root": ROOT.name, "units": units}
 
 
-def positive_controls(g: dict) -> list[str]:
-    """已知存在的相依必須被抓到；抓不到＝掃描器壞了。"""
-    U = g["units"]
-    fails = []
-    checks = [
-        # routers/quotations.py:15 `from helpers.quotations import begin_write, write_txn`
-        ("router:quotations imports helper:quotations", "helper:quotations" in U["router:quotations"]["imports"]),
-        # `from helpers import (...)` 經 __init__ 再匯出解析：quotations 用 _audit ⇒ helper:audit
-        ("router:quotations imports helper:audit (via __init__ re-export)", "helper:audit" in U["router:quotations"]["imports"]),
-        ("router:quotations imports core:db", "core:db" in U["router:quotations"]["imports"]),
-        ("router:quotations writes table quotations", "quotations" in U["router:quotations"]["tables_w"]),
-        ("table users exists", "table:users" in U),
-        ("page:pages/quotations.html calls router:quotations",
-         "router:quotations" in U["page:pages/quotations.html"]["routers_called_effective"]),
-        ("router:auth serves /api/auth", "/api/auth" in U["router:auth"]["api_prefixes"]),
-        # routers/vouchers.py `table="voucher_edit_log"` 交給 helpers/edit_log 寫
-        ("router:vouchers names table voucher_edit_log", "voucher_edit_log" in U["router:vouchers"]["tables_named"]),
-        # 反向控制：db.py:425 註解「CREATE TABLE IF NOT EXISTS is a no-op」不可變成表
-        ("comment text is not a table (table:IF absent)", "table:IF" not in U),
-        # backend/modules/tender_radar/api.py:27 `from modules.tender_radar import source as tender_source`
-        ("mod:tender_radar/api imports mod:tender_radar/source",
-         "mod:tender_radar/source" in U.get("mod:tender_radar/api", {}).get("imports", [])),
-        ("mod:tender_radar/api is a router serving /api/tender-radar",
-         U.get("mod:tender_radar/api", {}).get("role") == "router"
-         and "/api/tender-radar" in U.get("mod:tender_radar/api", {}).get("api_prefixes", [])),
-        # backend/modules/tender_radar/__init__.py:3 `from core.registry import ModuleSpec, RuntimeSwitch`
-        ("mod:tender_radar/__init__ imports plat:registry",
-         "plat:registry" in U.get("mod:tender_radar/__init__", {}).get("imports", [])),
+@contextlib.contextmanager
+def use_root(root: Path):
+    """暫時把掃描根目錄換成 `root`（合成樹的正對照用）；各函式都在呼叫當下才讀這三個全域值。"""
+    global ROOT, BACKEND, FRONTEND
+    saved = (ROOT, BACKEND, FRONTEND)
+    ROOT, BACKEND, FRONTEND = Path(root), Path(root) / "backend", Path(root) / "frontend"
+    try:
+        yield
+    finally:
+        ROOT, BACKEND, FRONTEND = saved
+
+
+# ── 合成樹：正對照不綁任何真實 L2 模組（MODULE-GUIDE：拿掉那個模組，守門不可以跟著失效）──
+# 每一個檔案都刻意寫出一種掃描器必須看得懂的寫法；檢查項在 SYNTHETIC_CHECKS。
+SYNTHETIC_FILES = {
+    "backend/db.py": (
+        "# 反向控制：註解裡的 CREATE TABLE IF NOT EXISTS is a no-op 不可以變成表\n"
+        "def init_db(conn):\n"
+        "    conn.executescript(\"\"\"\n"
+        "        CREATE TABLE IF NOT EXISTS zz_items (id INTEGER PRIMARY KEY, name TEXT);\n"
+        "        CREATE TABLE IF NOT EXISTS zz_log (id INTEGER PRIMARY KEY);\n"
+        "    \"\"\")\n"
+        "def get_db():\n    return None\n"),
+    "backend/main.py": (
+        "from routers import zz_alpha, zz_beta\n"
+        "app.include_router(zz_alpha.router)\napp.include_router(zz_beta.router)\n"),
+    "backend/helpers/__init__.py": "from .zz_help import zz_fn\n",
+    "backend/helpers/zz_help.py": (
+        "from db import get_db\n"
+        "def zz_fn(conn):\n    conn.execute(\"INSERT INTO zz_items (name) VALUES (?)\", ('x',))\n"),
+    "backend/routers/zz_alpha.py": (
+        "from fastapi import APIRouter\n"
+        "from db import get_db\n"
+        "from helpers import zz_fn                      # 經 helpers/__init__ 再匯出\n"
+        "from routers.zz_beta import beta_public        # router → router（跨組邊的正對照）\n"
+        "router = APIRouter(prefix=\"/api/zz-alpha\")\n"
+        "@router.get(\"/items/{item_id}\")\n"
+        "def get_item(item_id: int):\n"
+        "    sql = f\"UPDATE zz_items SET name=? WHERE id=?\"\n"
+        "    write_log(table=\"zz_log\")                  # 表名以參數交給別人寫\n"),
+    "backend/routers/zz_beta.py": (
+        "from fastapi import APIRouter\n"
+        "router = APIRouter()\n"
+        "def beta_public():\n    return 1\n"
+        "@router.get(\"/api/zz-beta/list\")\n"
+        "def lst():\n    return \"SELECT * FROM zz_items\"\n"),
+    "backend/core/zz_reg.py": "class Spec:\n    pass\n",
+    "backend/modules/zz_mod/__init__.py": (
+        "from core.zz_reg import Spec\nfrom modules.zz_mod import api\n"),
+    "backend/modules/zz_mod/api.py": (
+        "from fastapi import APIRouter\nfrom modules.zz_mod import work\nfrom . import util\n"
+        "router = APIRouter()\n@router.get(\"/api/zz-mod/run\")\ndef run():\n    return work.go()\n"),
+    "backend/modules/zz_mod/work.py": "def go():\n    return \"DELETE FROM zz_log\"\n",
+    "backend/modules/zz_mod/util.py": "X = 1\n",
+    "backend/modules/zz_mod/module.json": (
+        '{"key": "zz_mod", "tables": ["zz_log"], "provides": {"api_prefixes": ["/api/zz-mod"]}}\n'),
+    "frontend/pages/zz.html": (
+        "<script src=\"../js/zz.js\"></script>\n<script>\nconst API = '/api'\n"
+        "fetch(`${API}/zz-alpha/items/${id}`)\n</script>\n"),
+    "frontend/js/zz.js": "fetch('/api/zz-mod/run')\n",
+}
+
+#: 合成樹的分組（check-modules 的正對照：zz_alpha → zz_beta 必須被列成跨組邊）
+SYNTHETIC_MODULES = {
+    "L1": {"units": ["core:db", "core:main", "helper:zz_help", "plat:zz_reg"], "tables": ["zz_items"]},
+    "modules": {
+        "MA": {"key": "zz_a", "name": "甲", "units": ["router:zz_alpha", "page:pages/zz.html", "js:js/zz.js"],
+               "tables": [], "api_prefixes": ["/api/zz-alpha"]},
+        "MB": {"key": "zz_b", "name": "乙", "units": ["router:zz_beta"], "tables": [], "api_prefixes": ["/api/zz-beta"]},
+        "MC": {"key": "zz_mod", "name": "丙", "units": ["mod:zz_mod/__init__", "mod:zz_mod/api", "mod:zz_mod/work",
+                                                    "mod:zz_mod/util"], "tables": ["zz_log"],
+               "api_prefixes": ["/api/zz-mod"]},
+    },
+    "retired": {},
+}
+
+
+def _synthetic_checks(U: dict) -> list[tuple[str, bool]]:
+    a = U.get("router:zz_alpha", {})
+    return [
+        ("router → helper（直接 import 經 __init__ 再匯出）", "helper:zz_help" in a.get("imports", [])),
+        ("router → core:db", "core:db" in a.get("imports", [])),
+        ("router → router", "router:zz_beta" in a.get("imports", [])),
+        ("router 寫表（UPDATE）", "zz_items" in a.get("tables_w", [])),
+        ("helper 寫表（INSERT）", "zz_items" in U.get("helper:zz_help", {}).get("tables_w", [])),
+        ("router 讀表（SELECT）", "zz_items" in U.get("router:zz_beta", {}).get("tables_r", [])),
+        ("表名以參數傳遞（tables_named）", "zz_log" in a.get("tables_named", [])),
+        ("router 的 APIRouter prefix", "/api/zz-alpha" in a.get("api_prefixes", [])),
+        ("頁面經基底常數＋../js 腳本呼叫到兩支 router",
+         {"router:zz_alpha", "mod:zz_mod/api"} <= set(U.get("page:pages/zz.html", {}).get("routers_called_effective", []))),
+        ("模組 router 角色與路由", U.get("mod:zz_mod/api", {}).get("role") == "router"
+         and "/api/zz-mod" in U.get("mod:zz_mod/api", {}).get("api_prefixes", [])),
+        ("模組內 import（modules.<key> 與相對 import）",
+         {"mod:zz_mod/work", "mod:zz_mod/util"} <= set(U.get("mod:zz_mod/api", {}).get("imports", []))),
+        ("模組 → 平台（core.<file>）", "plat:zz_reg" in U.get("mod:zz_mod/__init__", {}).get("imports", [])),
+        ("模組寫表（DELETE）", "zz_log" in U.get("mod:zz_mod/work", {}).get("tables_w", [])),
+        ("反向控制：註解不是表（table:IF 不存在）", "table:IF" not in U),
+        ("反向控制：沒寫的邊不存在（zz_beta 不 import helper）",
+         "helper:zz_help" not in U.get("router:zz_beta", {}).get("imports", [])),
     ]
-    for label, ok in checks:
-        if not ok:
-            fails.append(label)
+
+
+def build_synthetic(tmp: Path) -> dict:
+    for rel_path, text in SYNTHETIC_FILES.items():
+        f = tmp / rel_path
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+    (tmp / "docs" / "platform").mkdir(parents=True, exist_ok=True)
+    (tmp / "docs" / "platform" / "modules.json").write_text(
+        json.dumps(SYNTHETIC_MODULES, ensure_ascii=False), encoding="utf-8")
+    with use_root(tmp):
+        return build()
+
+
+def positive_controls(g: dict | None = None) -> list[str]:
+    """掃描器自我檢查：在合成樹上抓得到已知的每一種邊，才有資格報「沒有其他的」。
+
+    ⚠️ 不看真實 repo 的任何 L2 模組（MODULE-GUIDE：正對照不可以綁在特定 L2 上——拿掉那個模組，
+    掃描器就會自判不可信，所有依賴它的守門跟著停擺）。`g`（真實圖）只做不綁模組的最低檢查。
+    """
+    fails = []
+    with tempfile.TemporaryDirectory(prefix="dep_scan_synth_") as td:
+        tmp = Path(td)
+        U = build_synthetic(tmp)["units"]
+        fails += [label for label, ok in _synthetic_checks(U) if not ok]
+        with use_root(tmp):
+            errors, edges = check_modules({"units": U}, tmp / "docs" / "platform" / "modules.json")
+        if errors:
+            fails.append(f"合成樹的分組應為 0 錯誤，實得 {errors}")
+        if "MA router:zz_alpha → MB router:zz_beta" not in edges.get("L2→L2 import", []):
+            fails.append("check-modules 未列出已知跨組邊 MA router:zz_alpha → MB router:zz_beta")
+    if g is not None:
+        # 真實圖：只驗 L0／L1（不隨 L2 模組增刪而變）
+        R = g["units"]
+        if "core:db" not in R or not any(u["kind"] == "table" for u in R.values()):
+            fails.append("真實 repo 掃不到 core:db 或任何資料表（掃描根目錄錯了？）")
     return fails
 
 
@@ -681,12 +787,7 @@ def main() -> int:
         return 2
     print(f"正對照 OK；units={len(g['units'])}")
     if a.check_modules:
-        errors, edges = check_modules(g)
-        # 正對照：routers/accounting_export.py:76 `from routers.reports import …`（M06→M08）必須出現在清單裡
-        known = "M06 router:accounting_export → M08 router:reports"
-        if not any(e == known for e in edges.get("L2→L2 import", [])):
-            print(f"正對照失敗：跨組邊清單缺已知邊「{known}」", file=sys.stderr)
-            return 2
+        errors, edges = check_modules(g)       # 正對照（合成樹的已知跨組邊）已在 positive_controls 驗過
         for k, v in edges.items():
             print(f"\n== {k}：{len(v)}")
             for e in v:
