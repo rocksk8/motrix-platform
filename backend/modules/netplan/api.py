@@ -430,7 +430,7 @@ def ack_network_plan_privacy_notice(plan_id: int, body: dict = Body(...), author
 # 規劃書（不用填 WAN／VLAN／IP／防火牆…等其餘 9 個分頁）。
 #
 # 刻意設計成完全無狀態、不落地存檔：前端把 devices／switchPorts 資料整包放在
-# 瀏覽器 localStorage（見 frontend/pages/topology-quick.html），這裡只負責把
+# 瀏覽器 localStorage（見快速拓樸頁 topology-quick.html），這裡只負責把
 # 收到的資料畫成 SVG 預覽或轉出 PDF，不寫進 network_plans 資料表，也不建立任何
 # 規劃書紀錄——用完即丟，不需要走完整規劃書的建立/刪除/狀態流程。
 #
