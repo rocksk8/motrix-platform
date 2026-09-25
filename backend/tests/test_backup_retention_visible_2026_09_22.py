@@ -79,6 +79,8 @@ HIDDEN_FIELDS = ("cloud_monthly_keep_days", "local_pre_update_keep")
 @pytest.fixture
 def arch(isolated_archive):
     import archive
+    # 2026-09-25 裁示 (a)：整庫 .db 只放個資資料夾（人預先建立；測試裡代為建立）
+    os.makedirs(os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME), exist_ok=True)
     return archive
 
 

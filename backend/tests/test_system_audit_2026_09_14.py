@@ -387,6 +387,11 @@ def _run_daily_backup_with(monkeypatch, tmp_path, tables: dict):
     monkeypatch.setattr(archive, "_archive_ok", lambda: True)
     monkeypatch.setattr(archive, "_mirror_uploads", lambda: None)
     monkeypatch.setattr(archive, "_mirror_pdf_archives", lambda: None)
+    # 2026-09-25：個資資料夾（人預先建立）視為已就緒——這組題目守的是每日層的成敗判定
+    (tmp_path / "pii").mkdir(exist_ok=True)
+    monkeypatch.setattr(archive, "pii_archive_status",
+                        lambda: {"state": "ready", "path": str(tmp_path / "pii"), "reason": ""})
+    monkeypatch.setattr(archive, "_pii_daily_json_export", lambda *a, **k: None)
     monkeypatch.setattr(archive, "_daily_dir", lambda: str(tmp_path))
     monkeypatch.setattr(archive, "_cloud_marker_exists", lambda *a, **k: False)
     monkeypatch.setattr(archive, "_cloud_write_json", lambda *a, **k: None)

@@ -1813,6 +1813,18 @@ def get_cloud_backup_target_setting(authorization: str = Header(None)):
     return cloud_backup_target()
 
 
+@router.get("/api/settings/pii-archive-status")
+def get_pii_archive_status(authorization: str = Header(None)):
+    """F2 個資存檔（勞報單）雲端資料夾現況——給設定頁「雲端備份」區塊顯示（2026-09-25）。
+
+    `live` 是現在實查的結果；`last` 是排程最後一次記下的狀態（`system_settings.pii_archive_state`）。
+    """
+    _require_user(authorization, require_superadmin=True)
+    import archive
+    return {"live": archive.pii_archive_status(),
+            "last": _get_setting(archive._PII_STATE_KEY, {}) or {}}
+
+
 @router.put("/api/settings/cloud-backup-target")
 def set_cloud_backup_target_setting(body: CloudBackupTargetBody, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)

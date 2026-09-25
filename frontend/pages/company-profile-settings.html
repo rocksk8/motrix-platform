@@ -750,6 +750,16 @@
             <div x-show="cloudMsg" x-text="cloudMsg" x-transition
                  :style="cloudIsError ? 'color:#DC2626' : 'color:#16A34A'"
                  style="font-size:13px;margin-top:12px;font-weight:600"></div>
+            <!-- F2 個資存檔（勞報單）：資料夾由人預先建立並收窄權限，程式不自動建立（MODULE-GUIDE §3.2） -->
+            <div class="ns-desc" data-pii-archive-status style="margin-top:14px">
+              <strong>個資存檔（勞報單）雲端資料夾：</strong>
+              <span x-show="pii.state === 'ready'" style="color:#16A34A;font-weight:600">已就緒</span>
+              <span x-show="pii.state === 'missing' || pii.state === 's3_unsupported'" style="color:#DC2626;font-weight:600">未上雲</span>
+              <span x-show="pii.state === 'cloud_off' || pii.state === 'cloud_unavailable'" style="color:#6B7280">不適用</span>
+              <span x-show="!pii.state" style="color:#6B7280">讀取中…</span>
+              <div x-show="pii.path" x-text="pii.path" style="font-size:12px;color:#6B7280"></div>
+              <div x-show="pii.reason" x-text="pii.reason" style="font-size:12px;color:#6B7280"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -813,6 +823,7 @@
         edgeSaving: false, edgeSaved: false, edgeMsg: '', edgeIsError: false,
         cloud: { backend: 'local_drive', s3: { bucket: '', endpoint_url: '', region: 'us-east-1', prefix: 'motrix-erp-backups/' } },
         cloudSaving: false, cloudSaved: false, cloudMsg: '', cloudIsError: false,
+        pii: { state: '', path: '', reason: '' },
 
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
@@ -864,12 +875,13 @@
           // ⚠️ 解構的順序**就是陣列的順序**。多塞一個查詢進中間而忘了改這一行，
           //    後面每一個都會拿到隔壁那支端點的回應 —— 而它們都是
           //    `{...}` 合併，所以不會丟例外，只會讓畫面上出現別人的值。
-          const [ret, gq, pdf, edge, cloud] = await Promise.allSettled([
+          const [ret, gq, pdf, edge, cloud, pii] = await Promise.allSettled([
             get('/api/settings/backup-retention'),
             get('/api/settings/google-quota'),
             get('/api/settings/pdf-base-path'),
             get('/api/settings/edge-path'),
             get('/api/settings/cloud-backup-target'),
+            get('/api/settings/pii-archive-status'),
           ])
           if (ret.status === 'fulfilled' && ret.value) this.retention = { ...this.retention, ...ret.value }
           if (gq.status === 'fulfilled' && gq.value) {
@@ -881,6 +893,7 @@
           if (cloud.status === 'fulfilled' && cloud.value) {
             this.cloud = { ...this.cloud, ...cloud.value, s3: { ...this.cloud.s3, ...(cloud.value.s3 || {}) } }
           }
+          if (pii.status === 'fulfilled' && pii.value && pii.value.live) this.pii = { ...this.pii, ...pii.value.live }
           this.sysLoading = false
         },
 

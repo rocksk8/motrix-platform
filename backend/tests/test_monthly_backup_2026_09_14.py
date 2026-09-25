@@ -18,12 +18,21 @@ def _month_dir(archive_mod):
     return os.path.join(archive_mod._monthly_dir(), date.today().strftime("%Y-%m"))
 
 
+def _pii_root(isolated_archive):
+    """2026-09-25 裁示 (a)：整庫 .db 只放個資資料夾；資料夾由人預先建立（測試裡代為建立）。"""
+    import archive
+    root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
 def _daily_dir_today(archive_mod):
     return os.path.join(archive_mod._daily_dir(), date.today().isoformat())
 
 
 def test_daily_backup_also_writes_monthly_layer(isolated_archive):
     import archive
+    _pii_root(isolated_archive)
 
     archive._daily_backup()
 
@@ -44,11 +53,14 @@ def test_monthly_layer_includes_full_db_not_only_json(isolated_archive):
     """JSON 那層刻意不收憑證欄位與內嵌影像（見 §8.3），只有整庫 .db 是完整的。
     長期保留的那一份如果只有 JSON，等於長期保留了一份殘缺的資料。"""
     import archive
+    pii = _pii_root(isolated_archive)
 
     archive._daily_backup()
 
-    db_copy = os.path.join(_month_dir(archive), "motrix_erp.db")
-    assert os.path.isfile(db_copy), "月備份必須含整份 motrix_erp.db"
+    # 整庫檔在個資資料夾的月備份層，一般月備份資料夾不可以有 .db（2026-09-25 裁示 (a)）
+    db_copy = os.path.join(pii, "月備份", date.today().strftime("%Y-%m"), "motrix_erp.db")
+    assert os.path.isfile(db_copy), "月備份必須含整份 motrix_erp.db（個資資料夾）"
+    assert not os.path.exists(os.path.join(_month_dir(archive), "motrix_erp.db")), "一般月備份資料夾出現整庫 .db"
     assert os.path.getsize(db_copy) > 0
 
     summary = json.load(open(os.path.join(_month_dir(archive), "彙總.json"), encoding="utf-8"))
@@ -57,6 +69,7 @@ def test_monthly_layer_includes_full_db_not_only_json(isolated_archive):
 
 
 def test_monthly_backup_is_idempotent_within_the_same_month(isolated_archive):
+    _pii_root(isolated_archive)
     """同一個月跑幾次每日備份，月備份只會真的寫一次——靠 .done marker。
     觀測點挑 audit_log 的 backup.monthly_ok 筆數（真正的下游效果），
     不是檔案的 mtime（那個在 Windows 上顆粒度不夠可靠）。"""

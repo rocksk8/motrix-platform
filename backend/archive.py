@@ -197,6 +197,7 @@ def cloud_archive_enabled() -> bool:
 #      正式機當天沒備份，但備份頁面綠燈、沒有 audit、沒有信。
 #   ② `_snapshot_sqlite()` 的雲端複製不看 marker，第二台會直接覆蓋當天的
 #      `每日備份/{date}/motrix_erp.db`——那是還原優先序的第二層。
+#      （2026-09-25 起整庫改放 `系統存檔_個資/每日備份/{date}/`；所有權檢查照舊涵蓋。）
 #
 # 這不是假想：2026-09-07「conftest 雲端備份隔離死碼把測試假資料寫進真實 G: 碟」
 # 就是同一類。磁碟機代號本身不是身分，資料夾路徑也不是——要有一個明確的標記。
@@ -1045,11 +1046,16 @@ def _snapshot_sqlite(also_to_cloud: bool = True):
                  "counts": counts},
             )
         if also_to_cloud and _archive_ok():
-            try:
-                cloud_dest = os.path.join(_daily_dir(), today, "motrix_erp.db")
-                _cloud_copy_file(dest, cloud_dest, f"每日備份/{today}/motrix_erp.db")
-            except Exception as e:
-                _write_backup_alert(f"SQLite 快照複製到雲端失敗: {e}", level="ERROR")
+            # 🔴 2026-09-25 使用者裁示 (a)：整庫 .db 含全部 F2 個資與 F3 祕密 ⇒ 只放個資資料夾。
+            #    個資資料夾未建立 ⇒ **不複製、也不退回一般資料夾**（雲端就沒有整庫備份），
+            #    由 `_pii_state_edge()` 告警（狀態改變才發）。
+            pii_db = _pii_db_path("每日備份", today)
+            if pii_db:
+                try:
+                    _cloud_copy_file(dest, pii_db,
+                                     f"{_PII_ARCHIVE_DIRNAME}/每日備份/{today}/motrix_erp.db")
+                except Exception as e:
+                    _write_backup_alert(f"SQLite 快照複製到雲端（個資資料夾）失敗: {e}", level="ERROR")
         # Prune local snapshots per configured retention (see _backup_retention())
         _ret = _backup_retention()
         _prune_local_db_backups(keep_days=_ret["local_db_keep_days"],
@@ -1151,6 +1157,110 @@ def _mirror_pdf_archives() -> int:
                      total, len(_pdf_archive_dirs()))
         _system_audit("backup.pdf_archive_mirror", date.today().isoformat(), {"copied": total})
     return total
+
+
+# ── F2 含個資文件：勞報單存檔（2026-09-25 使用者裁示：進雲端，但放獨立、權限更窄的資料夾）──
+#
+# 位置：與「系統存檔」**並列**的頂層資料夾 `系統存檔_個資`（不在 PDF存檔鏡像 底下）
+#   ⇒ 分享「系統存檔」給別人時不會連帶分享個資。
+#
+# 🔴 **程式永不自動建立 `系統存檔_個資`**（MODULE-GUIDE §3.2、主持裁示）：
+#    程式建的資料夾會繼承上層（我的雲端硬碟）的分享權限 ⇒ **比一般鏡像更寬**，
+#    正好違反「權限更窄」——而且它會成功、不報錯（〈降級之後它還是會動〉）。
+#    ⇒ 資料夾存在＝有人建過並設過權限；不存在 ⇒ 不上傳，告警「勞報單只有本機一份」。
+#    （底下的 `勞報單存檔` 子資料夾可以由程式建：它繼承的是已被收窄的 `系統存檔_個資`。）
+# ⚠️ S3 後端：「權限更窄」要靠另一個 bucket／prefix 的存取政策，尚未實作 ⇒ 同樣不上傳並告警。
+# 告警走邊緣觸發（狀態改變才記；`_write_backup_alert` 另有每日每原因一封的上限）。
+# 狀態落點：`system_settings.pii_archive_state`。
+_PII_ARCHIVE_DIRNAME = "系統存檔_個資"
+_PII_PAYSLIP_SUBDIR = "勞報單存檔"
+_PII_STATE_KEY = "pii_archive_state"
+#: 這幾種狀態代表「勞報單上不了雲」，而原因不在一般備份那一側 ⇒ 要單獨告警
+_PII_ALERT_STATES = ("missing", "s3_unsupported")
+
+
+def _pii_archive_root() -> str:
+    base = _archive_base()
+    return os.path.join(os.path.dirname(base), _PII_ARCHIVE_DIRNAME) if base else ""
+
+
+def _payslip_archive_source() -> str:
+    """勞報單存檔的本機目錄（比照 routers/payslips._archive_dir；背景排程不會是 demo）。"""
+    key, default = _paths.PDF_ARCHIVES["payslip"]
+    configured = (_get_setting(key) or "").strip()
+    return configured if configured else default
+
+
+def pii_archive_status() -> dict:
+    """`{state, path, reason}`。state：ready／missing／cloud_off／cloud_unavailable／s3_unsupported。"""
+    if not cloud_archive_enabled():
+        return {"state": "cloud_off", "path": "", "reason": "這台機器不上傳雲端存檔"}
+    if _active_backend() == "s3":
+        return {"state": "s3_unsupported", "path": "",
+                "reason": "S3 後端的個資獨立位置尚未實作 —— 勞報單只有本機一份"}
+    root = _pii_archive_root()
+    if not root:
+        return {"state": "cloud_unavailable", "path": "",
+                "reason": "雲端存檔路徑不可用（一般備份告警已涵蓋）"}
+    if os.path.isdir(root):
+        return {"state": "ready", "path": root, "reason": ""}
+    return {"state": "missing", "path": root,
+            "reason": ("個資資料夾未建立：%s —— 勞報單只有本機一份。"
+                       "整庫備份與個資欄位也不在雲端。"
+                       "請在雲端硬碟手動建立此資料夾並收窄分享權限（程式不會自動建立）" % root)}
+
+
+def _pii_state_edge(status: dict) -> bool:
+    """狀態改變才記錄／告警；回傳這一次有沒有發告警。"""
+    prev = _get_setting(_PII_STATE_KEY, {}) or {}
+    if prev.get("state") == status["state"]:
+        return False
+    _set_setting(_PII_STATE_KEY, {"state": status["state"], "path": status["path"],
+                                  "changed_at": datetime.now().isoformat(timespec="seconds")})
+    _system_audit("backup.pii_archive_state", status["state"],
+                  {"from": prev.get("state"), "to": status["state"], "path": status["path"]})
+    if status["state"] in _PII_ALERT_STATES:
+        _write_backup_alert(status["reason"], level="ERROR")
+        return True
+    logger.info("個資存檔狀態：%s → %s", prev.get("state"), status["state"])
+    return False
+
+
+def _pii_db_path(layer: str, label: str) -> str:
+    """個資資料夾內 `<layer>/<label>/motrix_erp.db` 的路徑；資料夾不 ready ⇒ `""`（並走邊緣告警）。"""
+    status = pii_archive_status()
+    _pii_state_edge(status)
+    if status["state"] != "ready":
+        return ""
+    return os.path.join(status["path"], layer, label, "motrix_erp.db")
+
+
+def _pii_daily_json_export(conn, day_label: str, now: str):
+    """F2 表完整列 → `系統存檔_個資/每日備份/{day}/`。資料夾不 ready ⇒ 不做（告警走邊緣觸發）。"""
+    status = pii_archive_status()
+    _pii_state_edge(status)
+    if status["state"] != "ready":
+        return None
+    summary = _export_pii_json_set(conn, os.path.join(status["path"], "每日備份", day_label), now)
+    failed = [k for k, v in summary.items() if v == "error"]
+    if failed:
+        _write_backup_alert("個資每日匯出失敗：%s" % "、".join(failed), level="ERROR")
+    return summary
+
+
+def _mirror_pii_archives() -> int:
+    """勞報單存檔 → `系統存檔_個資/勞報單存檔`（增量、只增不減，同 `_mirror_pdf_archives`）。"""
+    status = pii_archive_status()
+    _pii_state_edge(status)
+    if status["state"] != "ready":
+        return 0
+    dest = os.path.join(status["path"], _PII_PAYSLIP_SUBDIR)
+    copied = _mirror_directory_incremental(_payslip_archive_source(), dest,
+                                           f"{_PII_ARCHIVE_DIRNAME}/{_PII_PAYSLIP_SUBDIR}")
+    if copied:
+        logger.info("PII archive mirror: copied %d payslip file(s)", copied)
+        _system_audit("backup.pii_archive_mirror", date.today().isoformat(), {"copied": copied})
+    return copied
 
 
 def _prune_audit_log(keep_days: int = 730) -> None:
@@ -1325,6 +1435,23 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     except Exception:
         logger.exception("_prune_cloud_backups (daily) failed")
 
+    # 個資資料夾的每日層（整庫 .db＋F2 完整列）跟一般每日層同一個保留天數（2026-09-25）。
+    # ⚠️ 只刪名字是 YYYY-MM-DD 的資料夾；個資資料夾不 ready 就整段不動。
+    try:
+        _pii = pii_archive_status()
+        if _pii["state"] == "ready":
+            _pii_daily = os.path.join(_pii["path"], "每日備份")
+            for name in _cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"):
+                try:
+                    d = date.fromisoformat(name)
+                except ValueError:
+                    continue
+                if d.toordinal() < cutoff_daily:
+                    _cloud_delete_dir(os.path.join(_pii_daily, name), f"{_PII_ARCHIVE_DIRNAME}/每日備份/{name}")
+                    logger.info("Pruned old PII daily backup dir: %s", name)
+    except Exception:
+        logger.exception("_prune_cloud_backups (pii daily) failed")
+
     cutoff_weekly = date.today().toordinal() - weekly_keep_days
     try:
         for name in _cloud_list_top_level(_weekly_dir(), "週備份"):
@@ -1353,6 +1480,19 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
                 logger.info("Pruned old cloud monthly backup dir: %s", name)
     except Exception:
         logger.exception("_prune_cloud_backups (monthly) failed")
+    try:
+        _pii = pii_archive_status()
+        if _pii["state"] == "ready":
+            _pii_monthly = os.path.join(_pii["path"], "月備份")
+            for name in _cloud_list_top_level(_pii_monthly, f"{_PII_ARCHIVE_DIRNAME}/月備份"):
+                try:
+                    d = date.fromisoformat(f"{name}-01")
+                except ValueError:
+                    continue
+                if d.toordinal() < cutoff_monthly:
+                    _cloud_delete_dir(os.path.join(_pii_monthly, name), f"{_PII_ARCHIVE_DIRNAME}/月備份/{name}")
+    except Exception:
+        logger.exception("_prune_cloud_backups (pii monthly) failed")
 
 
 def _backup_quotation(quote_no: str):
@@ -1783,6 +1923,93 @@ def backed_up_table_names() -> set:
             for m in _BACKUP_TABLE_RE.findall(sql)}
 
 
+# ── F2 欄位：一般每日 JSON 排除、完整列另匯出到個資資料夾（2026-09-25 使用者裁示①）──
+#
+# 鍵是 `_daily_backup_tables()` 的檔名（中文標籤），值是這張表的 F2 欄位：
+#   "columns"   整欄屬 F2 ⇒ 一般份**整個鍵拿掉**
+#   "json"      (欄位, [鍵…]) ⇒ 一般份把那個 JSON 欄位 parse 後拿掉這幾個鍵
+# 完整列（含 F2）只寫到 `系統存檔_個資/每日備份/{date}/`，資料夾規則同勞報單（人建、程式不建）。
+# 還原：`merge_general_and_pii()` 把兩份合回原表（DR-SOP「個資欄位合回」）。
+# 守門：tests/test_pii_archive_mirror_2026_09_25.py（一般份不可出現 F2 欄位與 data:image）。
+_F2_FIELDS = {
+    "承攬人員": {"table": "contractors",
+                 "columns": ("id_card_image", "id_card_image_back", "bank_passbook_image")},
+    "薪資單":   {"table": "payslips",
+                 "json": ("data_json", ("contractorIdNumber", "contractorAddress",
+                                        "contractorPhone", "contractorEmail"))},
+}
+#: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
+_F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
+
+
+def _general_row(fname: str, row: dict) -> dict:
+    """一般份的一列：拿掉 F2 欄位，再抽掉內嵌影像。沒有 F2 宣告的表只做後者（行為同 V9）。"""
+    spec = _F2_FIELDS.get(fname)
+    if spec:
+        row = {k: v for k, v in row.items() if k not in spec.get("columns", ())}
+        if "json" in spec:
+            col, keys = spec["json"]
+            raw = row.get(col)
+            if raw not in (None, ""):
+                try:
+                    obj = json.loads(raw)
+                except Exception:
+                    row[col] = _F2_UNPARSEABLE
+                else:
+                    if isinstance(obj, dict):
+                        for k in keys:
+                            obj.pop(k, None)
+                        row[col] = json.dumps(obj, ensure_ascii=False)
+                    else:
+                        row[col] = _F2_UNPARSEABLE
+    return _strip_inline_images(row)
+
+
+def merge_general_and_pii(fname: str, general_rows: list, pii_rows: list) -> tuple:
+    """還原用：一般份＋個資份合回原表。回 `(rows, missing_ids)`。
+
+    依 `id` 對齊；個資份有的列 ⇒ F2 欄位（與整個 JSON 欄位）取個資份的原值。
+    個資份缺的列 ⇒ 保留一般份（F2 欄位缺），並列進 `missing_ids`——**不猜、不補空值**。
+    """
+    spec = _F2_FIELDS.get(fname)
+    if not spec:
+        return list(general_rows), []
+    by_id = {r.get("id"): r for r in pii_rows}
+    take = list(spec.get("columns", ()))
+    if "json" in spec:
+        take.append(spec["json"][0])
+    out, missing = [], []
+    for g in general_rows:
+        p = by_id.get(g.get("id"))
+        if p is None:
+            out.append(dict(g))
+            missing.append(g.get("id"))
+            continue
+        merged = dict(g)
+        for c in take:
+            if c in p:
+                merged[c] = p[c]
+        out.append(merged)
+    return out, missing
+
+
+def _export_pii_json_set(conn, dest_dir_abs: str, now: str) -> dict:
+    """F2 表的**完整列**（不抽影像、不拿欄位）→ 個資資料夾。呼叫端先確認資料夾 ready。"""
+    summary = {}
+    tables = _daily_backup_tables()
+    for fname in _F2_FIELDS:
+        try:
+            rows = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
+            path = os.path.join(dest_dir_abs, f"{fname}.json")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            _atomic_json_write(path, {"exported_at": now, "count": len(rows), "data": rows})
+            summary[fname] = len(rows)
+        except Exception:
+            logger.exception("PII table export %s failed", fname)
+            summary[fname] = "error"
+    return summary
+
+
 def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) -> dict:
     """把 _daily_backup_tables() 的每一張表各匯出成一個 JSON 檔到指定目的地，
     回傳 {表名: 筆數 or "error"} 的 summary。
@@ -1800,7 +2027,7 @@ def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) ->
     summary: dict = {}
     for fname, sql in _daily_backup_tables().items():
         try:
-            rows = [_strip_inline_images(dict(r)) for r in conn.execute(sql).fetchall()]
+            rows = [_general_row(fname, dict(r)) for r in conn.execute(sql).fetchall()]
             _cloud_write_json(
                 os.path.join(dest_dir_abs, f"{fname}.json"),
                 f"{s3_prefix}/{fname}.json",
@@ -1868,14 +2095,22 @@ def _monthly_backup():
             "月備份（%s）的當日快照內容不合格，**未複製、未標記完成**：%s"
             % (month_label, "；".join(snap_reasons)), level="ERROR")
     elif os.path.isfile(today_snapshot):
-        try:
-            _cloud_copy_file(today_snapshot,
-                             os.path.join(month_dir, "motrix_erp.db"),
-                             f"{s3_dir}/motrix_erp.db")
-            summary["db_snapshot"] = True
-        except Exception as e:
+        # 整庫 .db 只放個資資料夾（使用者裁示 (a)，同每日層）。資料夾未建立 ⇒ 這個月的永久備份
+        # 就沒有整庫檔 ⇒ 不寫 .done（BK5），明天再試，直到個資資料夾建好為止。
+        pii_db = _pii_db_path("月備份", month_label)
+        if not pii_db:
             summary["db_snapshot"] = False
-            _write_backup_alert(f"月備份整庫複製失敗（{month_label}）: {e}", level="ERROR")
+            _write_backup_alert(
+                f"月備份（{month_label}）的整庫檔需要個資資料夾「{_PII_ARCHIVE_DIRNAME}」，"
+                "目前不可用 —— **尚未標記完成**，資料夾建好後的下一次每日備份會補上", level="ERROR")
+        else:
+            try:
+                _cloud_copy_file(today_snapshot, pii_db,
+                                 f"{_PII_ARCHIVE_DIRNAME}/月備份/{month_label}/motrix_erp.db")
+                summary["db_snapshot"] = True
+            except Exception as e:
+                summary["db_snapshot"] = False
+                _write_backup_alert(f"月備份整庫複製失敗（{month_label}）: {e}", level="ERROR")
     else:
         summary["db_snapshot"] = False
         _write_backup_alert(
@@ -1938,6 +2173,12 @@ def _daily_backup():
         _write_backup_alert("PDF 存檔雲端鏡像失敗，詳見 server.log", level="ERROR")
 
     try:
+        _mirror_pii_archives()
+    except Exception:
+        logger.exception("_mirror_pii_archives failed in daily schedule")
+        _write_backup_alert("勞報單（個資）雲端鏡像失敗，詳見 server.log", level="ERROR")
+
+    try:
         today_label = date.today().isoformat()
         day_dir     = os.path.join(_daily_dir(), today_label)
         marker      = os.path.join(day_dir, '.done')
@@ -1950,6 +2191,11 @@ def _daily_backup():
         summary: dict = _daily_backup_summary_header(today_label, now)
         summary.update(_export_table_json_set(
             conn, day_dir, f"每日備份/{today_label}", now))
+        try:
+            _pii_daily_json_export(conn, today_label, now)
+        except Exception:
+            logger.exception("_pii_daily_json_export failed")
+            _write_backup_alert("個資每日匯出失敗，詳見 server.log", level="ERROR")
 
         conn.close()
         _cloud_write_json(os.path.join(day_dir, '彙總.json'), f"每日備份/{today_label}/彙總.json", summary)
