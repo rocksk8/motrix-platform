@@ -3,6 +3,7 @@
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
 ## 1.13 — 2026-09-26（A，信件與通知收件設定；合回時 core_bump 取號）〔core_bump：暫用 1.99 → 1.13〕
+- L1（新增）：`helpers.mail_types.MANAGED_ELSEWHERE`——收件人由別處維護、不在信件設定頁覆寫的類型（每月營運報表；稽核 M-S3）
 - L1（新增）：`helpers.mail_types` 信件類型登記表——`register`／`get`／`all_types`／`keys`／`subject`／`CATEGORIES`／`GROUPS`／`MODES`／`ROLES`／`OVERRIDES_KEY`／`SUBJECT_PREFIX`／`MailType`；模組可在載入時登記自己的信件類型
 - L1（新增）：`helpers.email_notify._group_emails(key)`（群組收件人，依登記表與覆寫）；`_admin_emails`／`_superadmin_emails` 改為它的相容名稱；`_lookup_emails`／`_department_manager_emails`／每月報表收件人套用覆寫；未登記 key fail closed（只寄超級管理員）
 - L1（修改，相容）：`helpers.email_notify._build_html(mail_key, …, impact=None, action=None)`——第一個參數改為信件類型 key，內文固定「事由、影響、建議處理、發送時間與來源」；主旨一律 `mail_types.subject(key, 事由)`
