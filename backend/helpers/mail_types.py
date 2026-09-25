@@ -27,6 +27,9 @@ ROLES = ("superadmin", "admin", "sales", "engineer", "viewer")
 #: system_settings 的鍵：{key: {"mode", "users": [...], "roles": [...]}}
 OVERRIDES_KEY = "mail_recipient_overrides"
 
+#: 收件人由別處維護、不在「信件與通知收件設定」覆寫的類型 ⇒ {key: 說明}（稽核 M-S3：收件人只能有一個來源）
+MANAGED_ELSEWHERE = {"monthly_report": "每月營運報表的收件人在「通知設定 → 每月營運報表收件人」維護"}
+
 #: 主旨前綴（用語規範，MODULE-GUIDE §11）
 SUBJECT_PREFIX = "【MOTRIX 系統通知】"
 
