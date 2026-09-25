@@ -27,6 +27,9 @@ OUT = REPO / "docs" / "platform" / "test_map.json"
 
 HTTP_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocket"}
 _API_RE = re.compile(r"^/api(/|$)")
+AUTH_ROUTER = "backend/routers/auth.py"
+_LOGIN_SEGS = ("api", "auth", "login")
+_AUTH_TEST_NAME = re.compile(r"auth|login|session|totp|webauthn|passkey|password", re.I)
 _DOTTED_RE = re.compile(r"(?:routers|helpers|tests|core|modules|platform)(?:\.[A-Za-z_][A-Za-z0-9_]*)+")
 _FMT_RE = re.compile(r"%[sdr]|\{[^/{}]*\}")
 _ASSET_RE = re.compile(r"[\w\-./]*?[\w\-]+\.(?:html|js|css)\b")
@@ -394,6 +397,7 @@ def scan_test(path, R):
                     break
 
     api_items = [[s] for s in sc.strings] + sc.fstrings
+    auth_calls = set()
     for parts in api_items:
         segs = _api_segments(parts, sc.consts)
         if segs is None:
@@ -401,8 +405,17 @@ def scan_test(path, R):
         owners, _how = R.api(segs)
         if owners:
             ev["api"].update(owners)
+            if AUTH_ROUTER in owners:
+                auth_calls.add(tuple(segs))
         else:
             unresolved_api.add("/" + "/".join(x if x is not None else "{}" for x in segs))
+    # 只為了取得登入狀態而打 /api/auth/login ⇒ 視為 fixture，不算依賴 router:auth（主持裁示 2026-09-25）。
+    # 仍算依賴：檔名像 auth 類測試，或打了 login 以外任何落在 router:auth 的端點（含萬用段）。
+    # 保護：backend/tests/platform/test_auth_login_contract.py 每次必跑。
+    login_fixture = (auth_calls and auth_calls <= {_LOGIN_SEGS}
+                     and not _AUTH_TEST_NAME.search(path.rsplit("/", 1)[-1]))
+    if login_fixture:
+        ev["api"].discard(AUTH_ROUTER)
 
     texts = list(sc.strings) + list(sc.consts.values())
     for parts in sc.fstrings:
@@ -449,6 +462,8 @@ def scan_test(path, R):
     }
     if unresolved_api:
         out["unresolved_api"] = sorted(unresolved_api)
+    if login_fixture:
+        out["login_fixture"] = True
     return out
 
 

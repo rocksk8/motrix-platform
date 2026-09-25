@@ -5,12 +5,12 @@
   "tests": 448,
   "unmapped": 5,
   "kinds": {
-   "audit": 55,
-   "api": 245,
-   "unit": 31,
-   "e2e": 117
+   "unit": 32,
+   "audit": 56,
+   "api": 244,
+   "e2e": 116
   },
-  "routes": 609
+  "routes": 505
  },
  "unmapped": [
   "backend/tests/test_bn16_award_status_filter_2026_09_24.py",
@@ -20,6 +20,50 @@
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py"
  ],
  "tests": {
+  "backend/tests/platform/test_core_loader.py": {
+   "kind": "unit",
+   "units": [
+    "file:backend/modules/tender_radar/module.json",
+    "mod:tender_radar/api",
+    "mod:tender_radar/source",
+    "plat:__init__",
+    "plat:loader",
+    "plat:registry",
+    "plat:source_tree",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/loader.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "backend/modules/tender_radar/api.py",
+     "backend/modules/tender_radar/module.json",
+     "backend/modules/tender_radar/source.py",
+     "backend/routers/system.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_module_boundaries.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/routers/",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_boundaries.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_boundaries.py"
+    ],
+    "path": [
+     "backend/routers/"
+    ]
+   }
+  },
   "backend/tests/test_ac1_write_actions_2026_09_23.py": {
    "kind": "audit",
    "units": [
@@ -35,7 +79,6 @@
     "page:pages/online-stats.html",
     "page:pages/receivables.html",
     "page:pages/sales-orders.html",
-    "page:pages/selection-db-overview.html",
     "page:pages/shipping-export-history.html"
    ],
    "evidence": {
@@ -48,7 +91,6 @@
      "frontend/pages/online-stats.html",
      "frontend/pages/receivables.html",
      "frontend/pages/sales-orders.html",
-     "frontend/pages/selection-db-overview.html",
      "frontend/pages/shipping-export-history.html",
      "frontend/static/auth-guard.js",
      "frontend/static/notif.js",
@@ -85,8 +127,7 @@
     "core:db",
     "file:backend/data/account_items_112.json",
     "page:pages/account-items.html",
-    "router:account_items",
-    "router:auth"
+    "router:account_items"
    ],
    "evidence": {
     "import": [
@@ -94,8 +135,7 @@
      "backend/routers/account_items.py"
     ],
     "api": [
-     "backend/routers/account_items.py",
-     "backend/routers/auth.py"
+     "backend/routers/account_items.py"
     ],
     "page": [
      "frontend/pages/account-items.html"
@@ -103,7 +143,8 @@
     "path": [
      "backend/data/account_items_112.json"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_alpine_double_init_2026_09_23.py": {
    "kind": "audit",
@@ -192,7 +233,6 @@
    "units": [
     "core:db",
     "router:approval_delegates",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -201,30 +241,28 @@
     ],
     "api": [
      "backend/routers/approval_delegates.py",
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_flow_scope.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:system"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_queue_badge_consistency_2026_09_15.py": {
    "kind": "api",
    "units": [
     "core:db",
     "page:pages/approval-queue.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -232,13 +270,13 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py": {
    "kind": "unit",
@@ -255,7 +293,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -263,16 +300,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_queue_detail_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -280,10 +316,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_queue_detail_authz_2026_09_14.py": {
    "kind": "api",
@@ -306,7 +342,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -314,16 +349,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_reassign_history_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -331,10 +365,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_approval_reminder_ladder_2026_09_22.py": {
    "kind": "api",
@@ -400,7 +434,6 @@
     "page:pages/approval-settings.html",
     "page:pages/voucher.html",
     "router:accounting_export",
-    "router:auth",
     "router:daily_tasks",
     "router:system",
     "router:vouchers"
@@ -412,7 +445,6 @@
     ],
     "api": [
      "backend/routers/accounting_export.py",
-     "backend/routers/auth.py",
      "backend/routers/daily_tasks.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
@@ -427,7 +459,8 @@
      "frontend/pages/approval-settings.html",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_archive_isolation_2026_09_22.py": {
    "kind": "audit",
@@ -461,7 +494,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations",
     "router:system",
     "router:vouchers"
@@ -471,12 +503,12 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_audit_account_permissions_2026_08_28.py": {
    "kind": "api",
@@ -490,19 +522,6 @@
     ],
     "path": [
      "backend/tools/audit_account_permissions.py"
-    ]
-   }
-  },
-  "backend/tests/test_automation_guide.py": {
-   "kind": "api",
-   "units": [
-    "router:auth",
-    "router:automation_guide"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/auth.py",
-     "backend/routers/automation_guide.py"
     ]
    }
   },
@@ -540,7 +559,6 @@
    "kind": "api",
    "units": [
     "core:archive",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -548,10 +566,10 @@
      "backend/archive.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_backup_retention_visible_2026_09_22.py": {
    "kind": "api",
@@ -560,7 +578,6 @@
     "core:db",
     "dir:frontend/pages/",
     "page:pages/company-profile-settings.html",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -569,7 +586,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -579,7 +595,8 @@
      "frontend/pages/",
      "frontend/pages/company-profile-settings.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_backup_stale_alert_2026_09_21.py": {
    "kind": "api",
@@ -714,7 +731,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:bonus",
     "router:system",
     "router:vouchers"
@@ -724,7 +740,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py",
      "backend/routers/system.py"
     ],
@@ -732,13 +747,13 @@
      "backend/routers/bonus.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bn18_manual_override_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -746,13 +761,13 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "path": [
      "backend/routers/bonus.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_award_2026_09_23.py": {
    "kind": "api",
@@ -760,7 +775,6 @@
     "core:db",
     "helper:bonus",
     "page:pages/settlement.html",
-    "router:auth",
     "router:bonus",
     "router:reports"
    ],
@@ -771,7 +785,6 @@
      "backend/routers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
@@ -782,7 +795,8 @@
      "backend/routers/reports.py",
      "frontend/pages/settlement.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_award_approval_2026_09_23.py": {
    "kind": "api",
@@ -790,7 +804,6 @@
     "core:db",
     "helper:bonus",
     "helper:tiered_approval",
-    "router:auth",
     "router:bonus",
     "router:system"
    ],
@@ -801,14 +814,14 @@
      "backend/helpers/tiered_approval.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py",
      "backend/routers/system.py"
     ],
     "path": [
      "backend/db.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_award_customer_name_2026_09_23.py": {
    "kind": "api",
@@ -854,7 +867,6 @@
    "units": [
     "core:db",
     "helper:bonus",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -864,10 +876,10 @@
      "backend/routers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_award_reject_edit_log_2026_09_23.py": {
    "kind": "api",
@@ -890,7 +902,6 @@
     "core:db",
     "js:js/bonus.js",
     "page:pages/bonus.html",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -898,14 +909,14 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
      "frontend/js/bonus.js",
      "frontend/pages/bonus.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_case_allocation_2026_09_24.py": {
    "kind": "unit",
@@ -922,7 +933,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:bonus",
     "router:quotations"
    ],
@@ -931,11 +941,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_case_edit_log_trigger_2026_09_24.py": {
    "kind": "api",
@@ -1028,7 +1038,6 @@
     "core:db",
     "dir:backend/",
     "helper:bonus",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1037,13 +1046,13 @@
      "backend/helpers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "path": [
      "backend/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_item_create_2026_09_23.py": {
    "kind": "api",
@@ -1052,7 +1061,6 @@
     "core:main",
     "dir:backend/helpers/",
     "dir:backend/routers/",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1060,7 +1068,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "path": [
@@ -1068,13 +1075,13 @@
      "backend/main.py",
      "backend/routers/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_items_visibility_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1082,10 +1089,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_legacy_retired_2026_09_24.py": {
    "kind": "api",
@@ -1093,7 +1100,6 @@
     "core:db",
     "dir:frontend/js/",
     "js:js/bonus.js",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1101,7 +1107,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
@@ -1111,7 +1116,8 @@
      "frontend/js/",
      "frontend/js/bonus.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_manual_and_picker_2026_09_23.py": {
    "kind": "api",
@@ -1124,7 +1130,6 @@
     "helper:tiered_approval",
     "js:js/bonus.js",
     "page:pages/bonus.html",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1133,7 +1138,6 @@
      "backend/helpers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
@@ -1151,7 +1155,8 @@
      "frontend/js/bonus.js",
      "frontend/pages/bonus.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_module_flag_2026_09_23.py": {
    "kind": "api",
@@ -1165,7 +1170,6 @@
     "page:pages/account-items.html",
     "page:pages/bonus.html",
     "page:pages/voucher.html",
-    "router:auth",
     "router:bonus",
     "router:system"
    ],
@@ -1174,7 +1178,6 @@
      "backend/helpers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -1193,14 +1196,14 @@
      "frontend/static/",
      "frontend/static/sidebar.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_sales_person_uses_username_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1208,13 +1211,13 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "path": [
      "backend/pdf_gen.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_bonus_settlement_preview_2026_09_23.py": {
    "kind": "api",
@@ -1222,7 +1225,6 @@
     "core:db",
     "helper:bonus",
     "page:pages/settlement.html",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -1231,13 +1233,13 @@
      "backend/helpers/bonus.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
      "frontend/pages/settlement.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_browser_netguard_2026_09_25.py": {
    "kind": "e2e",
@@ -1321,7 +1323,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:case_action_items",
     "router:quotations"
    ],
@@ -1330,11 +1331,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_attachments_scope_2026_09_23.py": {
    "kind": "api",
@@ -1357,7 +1358,6 @@
     "core:db",
     "helper:uploads",
     "helper:voucher_attachments",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -1367,16 +1367,15 @@
      "backend/helpers/voucher_attachments.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_batch_ops_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1384,16 +1383,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_bundle_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:quotations",
@@ -1406,7 +1404,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
      "backend/routers/quotations.py",
@@ -1414,13 +1411,13 @@
      "backend/routers/vendor_contractors.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_change_approve_deadlock_2026_09_15.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1428,16 +1425,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_change_summary_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1446,10 +1442,10 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_close_checklist_2026_09_24.py": {
    "kind": "e2e",
@@ -1458,7 +1454,6 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ui_dialogs.py",
     "page:pages/case-management.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1468,7 +1463,6 @@
      "backend/tests/_ui_dialogs.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
@@ -1477,7 +1471,8 @@
     "path": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_closing_pdf_taxexempt_2026_09_10.py": {
    "kind": "api",
@@ -1485,7 +1480,6 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/routers/__init__.py",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -1494,11 +1488,9 @@
      "backend/pdf_gen.py",
      "backend/routers/__init__.py",
      "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/auth.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_cross_module_links_2026_09_24.py": {
    "kind": "e2e",
@@ -1510,7 +1502,6 @@
     "page:pages/case-management.html",
     "page:pages/map.html",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -1519,7 +1510,6 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -1529,13 +1519,13 @@
      "frontend/pages/map.html",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_extra_expenses_api_2026_09_11.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:case_extra_expenses",
     "router:quotations"
    ],
@@ -1544,17 +1534,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_finance_summary_2026_09_09.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations",
     "router:vendor_contractors"
    ],
@@ -1563,17 +1552,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_gate_batch_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1582,16 +1570,15 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_gate_matrix_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1599,16 +1586,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_item_by_id_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1616,16 +1602,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_list_quick_filters_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:item_reads",
     "router:quotations"
    ],
@@ -1634,17 +1619,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_list_server_side_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1652,17 +1636,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_management_logic_fixes_2026_08_28.py": {
    "kind": "api",
    "units": [
     "core:db",
     "helper:quotations",
-    "router:auth",
     "router:quotations",
     "router:reports"
    ],
@@ -1673,16 +1656,15 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_money_mask_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:material_orders",
     "router:quotations"
    ],
@@ -1691,11 +1673,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/material_orders.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_page_no_native_dialogs_2026_09_24.py": {
    "kind": "e2e",
@@ -1794,7 +1776,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1802,17 +1783,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_project_merge.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:auth",
     "router:case_action_items",
     "router:quotations",
     "router:system"
@@ -1823,12 +1803,12 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_project_overdue_2026_09_10.py": {
    "kind": "api",
@@ -1849,7 +1829,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1857,17 +1836,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_record_payment_gate_2026_08_31.py": {
    "kind": "api",
    "units": [
     "core:db",
     "page:pages/receivables.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1875,19 +1853,18 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_record_segmented_save_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -1895,10 +1872,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_record_validation_releases_lock_2026_09_25.py": {
    "kind": "api",
@@ -1921,7 +1898,6 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
-    "router:auth",
     "router:bonus",
     "router:quotations",
     "router:reports",
@@ -1936,17 +1912,16 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_semi_unlock.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations",
     "router:system"
    ],
@@ -1955,11 +1930,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_stage_done_calendar_2026_09_11.py": {
    "kind": "api",
@@ -1969,7 +1944,6 @@
     "file:backend/routers/__init__.py",
     "helper:case_stage_tasks",
     "helper:google_calendar",
-    "router:auth",
     "router:daily_tasks",
     "router:quotations"
    ],
@@ -1984,18 +1958,17 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/daily_tasks.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_case_stages_endpoints_2026_09_07.py": {
    "kind": "api",
    "units": [
     "core:db",
     "page:pages/quotation-form.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -2003,19 +1976,18 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cashier_execution_history_2026_08_31.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:cashier",
     "router:contractor_vouchers",
     "router:quotations",
@@ -2026,20 +1998,19 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/cashier.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cashier_module_2026_08_31.py": {
    "kind": "api",
    "units": [
     "core:db",
     "page:pages/receivables.html",
-    "router:auth",
     "router:cashier",
     "router:contractor_vouchers",
     "router:quotations",
@@ -2050,7 +2021,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/cashier.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/quotations.py",
@@ -2059,14 +2029,14 @@
     "page": [
      "frontend/pages/receivables.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cashier_reads_all_cases_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
     "file:backend/tests/test_mp6_map_case_locations_2026_09_24.py",
-    "router:auth",
     "router:material_orders",
     "router:quotations"
    ],
@@ -2076,11 +2046,11 @@
      "backend/tests/test_mp6_map_case_locations_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/material_orders.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cashier_split_2026_09_23.py": {
    "kind": "api",
@@ -2160,7 +2130,6 @@
     "core:cloud_storage",
     "core:db",
     "file:backend/helpers/__init__.py",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -2171,10 +2140,10 @@
      "backend/helpers/__init__.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_cm12_p3_prep_2026_09_24.py": {
    "kind": "audit",
@@ -2238,7 +2207,6 @@
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
     "helper:settings",
-    "router:auth",
     "router:map_points",
     "router:system"
    ],
@@ -2252,26 +2220,24 @@
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py",
      "backend/routers/system.py"
     ],
     "path": [
      "backend/pdf_gen.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_company_profile_ql26_save_button_2026_09_23.py": {
    "kind": "api",
    "units": [
     "dir:frontend/pages/",
     "page:pages/company-profile-settings.html",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -2281,13 +2247,13 @@
      "frontend/pages/",
      "frontend/pages/company-profile-settings.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_company_profile_superadmin_only_2026_09_22.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -2295,17 +2261,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_completion_notes_2026_09_12.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:auth",
     "router:completion_notes",
     "router:quotations"
    ],
@@ -2315,11 +2280,11 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/completion_notes.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_contractor_bank_branch_2026_09_24.py": {
    "kind": "api",
@@ -2329,7 +2294,6 @@
     "dir:frontend/pages/",
     "page:pages/approval-queue.html",
     "page:pages/contractors.html",
-    "router:auth",
     "router:contractors",
     "router:quotations"
    ],
@@ -2339,7 +2303,6 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/contractors.py",
      "backend/routers/quotations.py"
     ],
@@ -2352,14 +2315,14 @@
      "frontend/pages/approval-queue.html",
      "frontend/pages/contractors.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_contractor_voucher_paid_date_2026_08_31.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:auth",
     "router:contractor_vouchers",
     "router:vendor_contractors"
    ],
@@ -2369,11 +2332,11 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_core.py": {
    "kind": "audit",
@@ -2441,8 +2404,7 @@
     "dir:frontend/js/",
     "js:js/account-items.js",
     "router:account_items",
-    "router:accounting_export",
-    "router:auth"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
@@ -2450,8 +2412,7 @@
      "backend/routers/accounting_export.py"
     ],
     "api": [
-     "backend/routers/account_items.py",
-     "backend/routers/auth.py"
+     "backend/routers/account_items.py"
     ],
     "page": [
      "frontend/js/account-items.js"
@@ -2461,7 +2422,8 @@
      "frontend/js/",
      "frontend/js/account-items.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_daily_backup_identity_after_snapshot_2026_09_24.py": {
    "kind": "unit",
@@ -2497,7 +2459,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:dashboard"
    ],
    "evidence": {
@@ -2506,10 +2467,10 @@
      "backend/routers/dashboard.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dashboard.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dashboard_empty_state_2026_09_23.py": {
    "kind": "audit",
@@ -2529,7 +2490,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:dashboard"
    ],
    "evidence": {
@@ -2537,10 +2497,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dashboard.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dashboard_stats_merge_2026_09_22.py": {
    "kind": "audit",
@@ -2629,21 +2589,19 @@
   "backend/tests/test_dev_case_soft_delete_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:dev_crm"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dev_crm.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dispatch_edit_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:vendor_contractors"
    ],
    "evidence": {
@@ -2651,29 +2609,27 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dispatch_file_uploads.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:vendor_contractors"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dispatch_import_to_quote_persists_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:vendor_contractors"
    ],
    "evidence": {
@@ -2681,34 +2637,32 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_dispatch_invoice_payable_date_2026_08_30.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:contractor_vouchers",
     "router:quotations",
     "router:vendor_contractors"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_doc_versions_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -2718,10 +2672,10 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_account_tree_2026_09_23.py": {
    "kind": "e2e",
@@ -2814,7 +2768,6 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
     "page:pages/bonus.html",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -2824,7 +2777,6 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
@@ -2833,7 +2785,8 @@
     "path": [
      "frontend/pages/bonus.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_bonus_empty_state_2026_09_23.py": {
    "kind": "e2e",
@@ -2911,7 +2864,6 @@
     "core:db",
     "file:backend/tests/test_e2e_bonus_case_page_2026_09_24.py",
     "page:pages/bonus.html",
-    "router:auth",
     "router:bonus"
    ],
    "evidence": {
@@ -2920,7 +2872,6 @@
      "backend/tests/test_e2e_bonus_case_page_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/bonus.py"
     ],
     "page": [
@@ -2929,7 +2880,8 @@
     "path": [
      "frontend/pages/bonus.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_boolean_status_select_2026_09_25.py": {
    "kind": "e2e",
@@ -2937,10 +2889,10 @@
     "core:db",
     "file:backend/tests/_mapiso.py",
     "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
+    "mod:tender_radar/api",
     "page:pages/suppliers.html",
     "page:pages/tender-radar.html",
-    "router:suppliers",
-    "router:tender_radar"
+    "router:suppliers"
    ],
    "evidence": {
     "import": [
@@ -2949,8 +2901,8 @@
      "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
     ],
     "api": [
-     "backend/routers/suppliers.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py",
+     "backend/routers/suppliers.py"
     ],
     "page": [
      "frontend/pages/suppliers.html",
@@ -3005,7 +2957,6 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "page:pages/case-management.html",
-    "router:auth",
     "router:item_reads"
    ],
    "evidence": {
@@ -3014,7 +2965,6 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ],
     "page": [
@@ -3023,7 +2973,8 @@
     "path": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py": {
    "kind": "e2e",
@@ -3192,7 +3143,6 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "page:pages/case-management.html",
-    "router:auth",
     "router:item_reads"
    ],
    "evidence": {
@@ -3201,7 +3151,6 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ],
     "page": [
@@ -3210,7 +3159,8 @@
     "path": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_case_management_font_zoom_2026_09_24.py": {
    "kind": "e2e",
@@ -3238,7 +3188,6 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "page:pages/case-management.html",
-    "router:auth",
     "router:item_reads"
    ],
    "evidence": {
@@ -3247,7 +3196,6 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ],
     "page": [
@@ -3256,7 +3204,8 @@
     "path": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_case_mark_one_read_count_2026_09_24.py": {
    "kind": "e2e",
@@ -3264,7 +3213,6 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "page:pages/case-management.html",
-    "router:auth",
     "router:item_reads"
    ],
    "evidence": {
@@ -3273,7 +3221,6 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ],
     "page": [
@@ -3282,7 +3229,8 @@
     "path": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_case_money_mask_2026_09_24.py": {
    "kind": "e2e",
@@ -3729,21 +3677,13 @@
     "file:backend/tests/_ports.py",
     "file:frontend/css/style.css",
     "js:static/sidebar.js",
-    "page:pages/access-guide.html",
-    "page:pages/automation-guide.html",
     "page:pages/case-management.html",
     "page:pages/customers.html",
     "page:pages/dev-crm.html",
-    "page:pages/env-guide.html",
-    "page:pages/gateway-guide.html",
     "page:pages/inventory.html",
-    "page:pages/monitor-guide.html",
-    "page:pages/netarch-guide.html",
     "page:pages/parts.html",
     "page:pages/procurement.html",
-    "page:pages/reports.html",
-    "page:pages/selection-db-overview.html",
-    "page:pages/switch-guide.html"
+    "page:pages/reports.html"
    ],
    "evidence": {
     "import": [
@@ -3752,21 +3692,13 @@
     ],
     "page": [
      "frontend/css/style.css",
-     "frontend/pages/access-guide.html",
-     "frontend/pages/automation-guide.html",
      "frontend/pages/case-management.html",
      "frontend/pages/customers.html",
      "frontend/pages/dev-crm.html",
-     "frontend/pages/env-guide.html",
-     "frontend/pages/gateway-guide.html",
      "frontend/pages/inventory.html",
-     "frontend/pages/monitor-guide.html",
-     "frontend/pages/netarch-guide.html",
      "frontend/pages/parts.html",
      "frontend/pages/procurement.html",
      "frontend/pages/reports.html",
-     "frontend/pages/selection-db-overview.html",
-     "frontend/pages/switch-guide.html",
      "frontend/static/sidebar.js"
     ],
     "path": [
@@ -3843,7 +3775,6 @@
     "file:backend/tests/_ports.py",
     "page:pages/case-management.html",
     "page:pages/dev-crm.html",
-    "router:auth",
     "router:dev_crm",
     "router:quotations",
     "router:uploads"
@@ -3855,7 +3786,6 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dev_crm.py",
      "backend/routers/quotations.py",
      "backend/routers/uploads.py"
@@ -3867,7 +3797,8 @@
     "path": [
      "frontend/pages/dev-crm.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_filter_fields_no_leave_warning_2026_09_25.py": {
    "kind": "e2e",
@@ -3992,7 +3923,6 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -4001,13 +3931,13 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_login_enter_submits_2026_09_25.py": {
    "kind": "e2e",
@@ -4109,16 +4039,12 @@
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "js:static/notif.js",
     "page:pages/case-management.html",
-    "page:pages/quotations.html",
-    "router:auth"
+    "page:pages/quotations.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/auth.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
@@ -4128,7 +4054,8 @@
     "path": [
      "frontend/pages/quotations.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_online_widget_2026_09_14.py": {
    "kind": "e2e",
@@ -4400,7 +4327,6 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
     "page:pages/quotation-form.html",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -4409,7 +4335,6 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -4418,7 +4343,8 @@
     "path": [
      "frontend/pages/quotation-form.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_received_installment_lock_2026_09_24.py": {
    "kind": "e2e",
@@ -4511,30 +4437,6 @@
     ]
    }
   },
-  "backend/tests/test_e2e_selection_overview_2026_09_11.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/automation-guide.html",
-    "page:pages/selection-db-overview.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/automation-guide.html",
-     "frontend/pages/selection-db-overview.html"
-    ],
-    "path": [
-     "frontend/pages/selection-db-overview.html"
-    ]
-   }
-  },
   "backend/tests/test_e2e_shared_fixtures_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -4542,16 +4444,12 @@
     "file:backend/tests/conftest.py",
     "page:index.html",
     "page:pages/case-management.html",
-    "page:pages/login.html",
-    "router:auth"
+    "page:pages/login.html"
    ],
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
      "backend/tests/conftest.py"
-    ],
-    "api": [
-     "backend/routers/auth.py"
     ],
     "page": [
      "frontend/index.html",
@@ -4563,7 +4461,8 @@
      "frontend/pages/case-management.html",
      "frontend/pages/login.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_system_settings_ui_2026_09_11.py": {
    "kind": "e2e",
@@ -4758,7 +4657,6 @@
     "file:backend/tests/_e2e_login.py",
     "helper:uploads",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -4768,13 +4666,13 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_voucher_summary_2026_09_23.py": {
    "kind": "e2e",
@@ -4805,7 +4703,6 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -4814,13 +4711,13 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_edge_profile_2026_09_25.py": {
    "kind": "api",
@@ -4858,6 +4755,7 @@
    "kind": "audit",
    "units": [
     "helper:module_registry",
+    "mod:tender_radar/api",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
     "page:pages/users.html",
@@ -4881,7 +4779,6 @@
     "router:reports",
     "router:shipping_notes",
     "router:system",
-    "router:tender_radar",
     "router:vendor_contractors"
    ],
    "evidence": {
@@ -4894,6 +4791,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/tender_radar/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/bonus.py",
@@ -4914,7 +4812,6 @@
      "backend/routers/reports.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/system.py",
-     "backend/routers/tender_radar.py",
      "backend/routers/vendor_contractors.py",
      "frontend/pages/case-management.html",
      "frontend/pages/company-profile-settings.html",
@@ -4941,7 +4838,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -4949,10 +4845,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_em6_machine_id_unreadable_2026_09_24.py": {
    "kind": "unit",
@@ -4972,7 +4868,6 @@
    "units": [
     "core:db",
     "dir:frontend/",
-    "router:auth",
     "router:dashboard",
     "router:inventory"
    ],
@@ -4981,14 +4876,14 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/inventory.py"
     ],
     "path": [
      "backend/routers/dashboard.py",
      "frontend/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_em9_silent_write_failure_2026_09_23.py": {
    "kind": "audit",
@@ -5029,22 +4924,25 @@
    "units": [
     "core:db",
     "dir:backend/routers/",
-    "router:auth",
+    "plat:__init__",
+    "plat:source_tree",
     "router:completion_notes"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/routers/completion_notes.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/completion_notes.py"
     ],
     "path": [
      "backend/routers/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_extra_expense_reject_permission_2026_09_24.py": {
    "kind": "api",
@@ -5076,7 +4974,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:case_extra_expenses",
     "router:quotations"
    ],
@@ -5085,11 +4982,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_extra_expenses_migration_2026_09_11.py": {
    "kind": "api",
@@ -5107,7 +5004,6 @@
    "units": [
     "core:db",
     "helper:uploads",
-    "router:auth",
     "router:dev_crm",
     "router:uploads"
    ],
@@ -5117,18 +5013,17 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dev_crm.py",
      "backend/routers/uploads.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_feed_attachments_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
     "helper:uploads",
-    "router:auth",
     "router:dev_crm",
     "router:quotations"
    ],
@@ -5138,17 +5033,16 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dev_crm.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_finance_advisory_2026_08_28.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -5156,10 +5050,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_form_version_bumped_2026_09_24.py": {
    "kind": "audit",
@@ -5199,8 +5093,7 @@
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
     "helper:settings",
-    "helper:tender_source",
-    "router:auth",
+    "mod:tender_radar/source",
     "router:map_points",
     "router:system"
    ],
@@ -5210,17 +5103,17 @@
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
      "backend/helpers/settings.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/source.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_geo_fallback_2026_09_22.py": {
    "kind": "api",
@@ -5229,7 +5122,6 @@
     "file:backend/helpers/__init__.py",
     "helper:geo",
     "helper:settings",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -5240,10 +5132,10 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_geo_request_count_2026_09_22.py": {
    "kind": "api",
@@ -5283,7 +5175,6 @@
     "file:backend/routers/__init__.py",
     "helper:geo",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -5295,13 +5186,13 @@
      "backend/routers/map_points.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_geocode_shortcircuit_2026_09_22.py": {
    "kind": "api",
@@ -5311,7 +5202,6 @@
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
     "helper:settings",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -5323,10 +5213,10 @@
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_geocode_warm_2026_09_22.py": {
    "kind": "api",
@@ -5365,7 +5255,6 @@
     "page:pages/company-profile-settings.html",
     "page:pages/map.html",
     "page:pages/tender-radar.html",
-    "router:auth",
     "router:map_points",
     "router:system"
    ],
@@ -5376,7 +5265,6 @@
      "backend/tests/_mapiso.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py",
      "backend/routers/system.py"
     ],
@@ -5388,7 +5276,8 @@
     "path": [
      "frontend/pages/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_google_quota_2026_09_22.py": {
    "kind": "api",
@@ -5401,7 +5290,6 @@
     "helper:settings",
     "page:pages/company-profile-settings.html",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points",
     "router:system"
    ],
@@ -5414,7 +5302,6 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py",
      "backend/routers/system.py"
     ],
@@ -5428,7 +5315,8 @@
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_high_risk_routes_2026_09_22.py": {
    "kind": "api",
@@ -5469,7 +5357,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations",
     "router:reports"
    ],
@@ -5479,17 +5366,16 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_item_reads_server_side_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
     "js:static/sidebar.js",
-    "router:auth",
     "router:item_reads"
    ],
    "evidence": {
@@ -5497,19 +5383,18 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ],
     "page": [
      "frontend/static/sidebar.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_journal_voucher_create_2026_09_23.py": {
    "kind": "api",
    "units": [
     "helper:voucher",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5518,30 +5403,28 @@
      "backend/routers/vouchers.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_journal_voucher_flow_2026_09_23.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv13_voucher_signature_display_names_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
     "helper:voucher",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5550,10 +5433,10 @@
      "backend/helpers/voucher.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv22_voucher_edit_history_2026_09_24.py": {
    "kind": "api",
@@ -5578,7 +5461,6 @@
     "core:db",
     "helper:uploads",
     "helper:voucher_attachments",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5588,13 +5470,13 @@
      "backend/helpers/voucher_attachments.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "path": [
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv26_voucher_lines_inserts_agree_2026_09_24.py": {
    "kind": "audit",
@@ -5616,7 +5498,6 @@
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:uploads",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5626,13 +5507,13 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv29_voucher_category_auto_2026_09_24.py": {
    "kind": "e2e",
@@ -5641,7 +5522,6 @@
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:voucher",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5651,19 +5531,18 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv30_voucher_approval_permission_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:system",
     "router:vouchers"
    ],
@@ -5672,11 +5551,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv31_voucher_posting_signature_2026_09_24.py": {
    "kind": "e2e",
@@ -5684,7 +5563,6 @@
     "core:db",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/voucher.html",
-    "router:auth",
     "router:system",
     "router:vouchers"
    ],
@@ -5694,14 +5572,14 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv32_voucher_amount_input_2026_09_24.py": {
    "kind": "e2e",
@@ -5709,7 +5587,6 @@
     "core:db",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5718,7 +5595,6 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -5727,7 +5603,8 @@
     "path": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv33_voucher_summary_panel_2026_09_24.py": {
    "kind": "e2e",
@@ -5754,7 +5631,6 @@
     "core:db",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5763,7 +5639,6 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -5772,7 +5647,8 @@
     "path": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv35_voucher_reassign_2026_09_24.py": {
    "kind": "e2e",
@@ -5780,7 +5656,6 @@
     "core:db",
     "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
     "page:pages/approval-queue.html",
-    "router:auth",
     "router:quotations",
     "router:system",
     "router:vouchers"
@@ -5791,7 +5666,6 @@
      "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
@@ -5802,7 +5676,8 @@
     "path": [
      "frontend/pages/approval-queue.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py": {
    "kind": "e2e",
@@ -5811,7 +5686,6 @@
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:uploads",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -5821,13 +5695,13 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_jv4_voucher_page_under_cashier_2026_09_24.py": {
    "kind": "audit",
@@ -5864,7 +5738,6 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_subproc.py",
     "helper:licensing",
-    "router:auth",
     "router:licensing"
    ],
    "evidence": {
@@ -5874,16 +5747,15 @@
      "backend/tests/_subproc.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/licensing.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_location_fallback_rules_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:pdf_gen",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -5891,17 +5763,16 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_location_identity_roundtrip_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:pdf_gen",
     "file:backend/routers/__init__.py",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -5911,10 +5782,10 @@
      "backend/routers/system.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_log_rotation_2026_09_07.py": {
    "kind": "api",
@@ -5936,7 +5807,6 @@
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -5947,7 +5817,6 @@
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
@@ -5957,7 +5826,8 @@
      "frontend/pages/",
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_map_invalidate_size_2026_09_22.py": {
    "kind": "audit",
@@ -5982,7 +5852,6 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -5994,10 +5863,10 @@
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_map_user_location_2026_09_22.py": {
    "kind": "api",
@@ -6008,7 +5877,6 @@
     "helper:geo",
     "helper:settings",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -6020,13 +5888,13 @@
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_map_you_are_here_2026_09_22.py": {
    "kind": "audit",
@@ -6048,7 +5916,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -6056,16 +5923,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_material_orders_2026_09_10.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:material_orders"
    ],
    "evidence": {
@@ -6073,10 +5939,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/material_orders.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_md_split_identifiers_2026_09_23.py": {
    "kind": "audit",
@@ -6136,7 +6002,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:item_reads",
     "router:system"
    ],
@@ -6147,10 +6012,10 @@
      "backend/routers/system.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/item_reads.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_module_history_2026_09_23.py": {
    "kind": "api",
@@ -6158,7 +6023,6 @@
     "core:db",
     "helper:audit",
     "helper:edit_log",
-    "router:auth",
     "router:contractor_vouchers",
     "router:reports",
     "router:vouchers"
@@ -6170,7 +6034,6 @@
      "backend/helpers/edit_log.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "path": [
@@ -6178,7 +6041,8 @@
      "backend/routers/contractor_vouchers.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_module_keys_consistency_2026_09_13.py": {
    "kind": "api",
@@ -6189,6 +6053,8 @@
     "page:index.html",
     "page:pages/inventory.html",
     "page:pages/users.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:account_items",
     "router:approval_delegates",
     "router:auth",
@@ -6217,6 +6083,8 @@
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/auth.py",
      "backend/helpers/module_registry.py"
     ],
@@ -6267,7 +6135,6 @@
     "core:db",
     "helper:module_registry",
     "page:pages/users.html",
-    "router:auth",
     "router:module_versions",
     "router:network_plans",
     "router:parts",
@@ -6280,7 +6147,6 @@
      "backend/helpers/module_registry.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/module_versions.py",
      "backend/routers/network_plans.py",
      "backend/routers/parts.py",
@@ -6290,14 +6156,14 @@
     "page": [
      "frontend/pages/users.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_module_permission_fixes_2026_09_13.py": {
    "kind": "api",
    "units": [
     "core:db",
     "helper:email_notify",
-    "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
@@ -6314,8 +6180,7 @@
     "router:reports",
     "router:search",
     "router:shipping_notes",
-    "router:suppliers",
-    "router:switch_guide"
+    "router:suppliers"
    ],
    "evidence": {
     "import": [
@@ -6324,7 +6189,6 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
@@ -6341,10 +6205,10 @@
      "backend/routers/reports.py",
      "backend/routers/search.py",
      "backend/routers/shipping_notes.py",
-     "backend/routers/suppliers.py",
-     "backend/routers/switch_guide.py"
+     "backend/routers/suppliers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_module_registry_2026_09_24.py": {
    "kind": "e2e",
@@ -6418,7 +6282,6 @@
    "units": [
     "core:db",
     "helper:email_notify",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -6427,10 +6290,10 @@
      "backend/helpers/email_notify.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_mp0_map_popup_escapes_external_text_2026_09_24.py": {
    "kind": "e2e",
@@ -6515,7 +6378,6 @@
     "page:pages/suppliers.html",
     "page:pages/tender-radar.html",
     "page:pages/vendor-contractors.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -6528,7 +6390,6 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
@@ -6546,7 +6407,8 @@
      "frontend/pages/case-management.html",
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_mp2_map_coarse_pins_and_clusters_2026_09_24.py": {
    "kind": "e2e",
@@ -6654,7 +6516,6 @@
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/case-management.html",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -6666,7 +6527,6 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
@@ -6676,7 +6536,8 @@
     "path": [
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_mp8_map_opens_from_cache_2026_09_24.py": {
    "kind": "e2e",
@@ -6688,7 +6549,6 @@
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:geo",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -6701,7 +6561,6 @@
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ],
     "page": [
@@ -6710,7 +6569,8 @@
     "path": [
      "frontend/pages/map.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_navigation_destination_2026_09_23.py": {
    "kind": "audit",
@@ -6756,11 +6616,11 @@
   "backend/tests/test_netguard_2026_09_21.py": {
    "kind": "unit",
    "units": [
-    "helper:tender_source"
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
-     "backend/helpers/tender_source.py"
+     "backend/modules/tender_radar/source.py"
     ]
    }
   },
@@ -6769,7 +6629,6 @@
    "units": [
     "core:network_plan_export",
     "core:network_plan_topology",
-    "router:auth",
     "router:network_plans"
    ],
    "evidence": {
@@ -6778,17 +6637,16 @@
      "backend/network_plan_topology.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/network_plans.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_network_plans.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:network_plan_export",
-    "router:auth",
     "router:network_plans"
    ],
    "evidence": {
@@ -6797,17 +6655,16 @@
      "backend/network_plan_export.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/network_plans.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_network_plans_quick.py": {
    "kind": "api",
    "units": [
     "core:network_plan_export",
     "core:network_plan_topology",
-    "router:auth",
     "router:network_plans",
     "router:network_plans_quick"
    ],
@@ -6817,11 +6674,11 @@
      "backend/network_plan_topology.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/network_plans.py",
      "backend/routers/network_plans_quick.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_no_credentials_in_query_2026_09_22.py": {
    "kind": "api",
@@ -6856,10 +6713,14 @@
     "core:db",
     "helper:email_notify",
     "helper:notification_prefs",
+    "plat:__init__",
+    "plat:source_tree",
     "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/notification_prefs.py",
@@ -6900,7 +6761,6 @@
     "helper:settings",
     "page:pages/company-profile-settings.html",
     "page:pages/map.html",
-    "router:auth",
     "router:map_points",
     "router:system"
    ],
@@ -6913,7 +6773,6 @@
      "backend/tests/_mapiso.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py",
      "backend/routers/system.py"
     ],
@@ -6924,7 +6783,8 @@
     "path": [
      "frontend/pages/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_online_activity_2026_09_14.py": {
    "kind": "api",
@@ -6972,7 +6832,6 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -6981,10 +6840,10 @@
      "backend/helpers/__init__.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_package_prune_by_age_2026_09_25.py": {
    "kind": "audit",
@@ -7056,7 +6915,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7064,16 +6922,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_payment_item_and_material_uploads.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7081,17 +6938,16 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_payment_receipt_validation_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
     "js:js/cashier.js",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7099,19 +6955,18 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/js/cashier.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_payment_requests.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:payment_requests",
     "router:quotations",
     "router:system"
@@ -7121,18 +6976,17 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_payslip_edit_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:payslips"
    ],
    "evidence": {
@@ -7140,10 +6994,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/payslips.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_pdf_archive_mirror_2026_09_07.py": {
    "kind": "api",
@@ -7190,7 +7044,6 @@
     "core:db",
     "core:photos",
     "helper:uploads",
-    "router:auth",
     "router:dev_crm"
    ],
    "evidence": {
@@ -7200,10 +7053,10 @@
      "backend/photos.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dev_crm.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_ports_helper_2026_09_21.py": {
    "kind": "unit",
@@ -7222,7 +7075,6 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:licensing",
-    "router:auth",
     "router:customers",
     "router:inventory",
     "router:parts"
@@ -7234,18 +7086,17 @@
      "backend/helpers/licensing.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/customers.py",
      "backend/routers/inventory.py",
      "backend/routers/parts.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_purchase_suggestions_2026_09_07.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:inventory",
     "router:parts"
    ],
@@ -7254,11 +7105,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/inventory.py",
      "backend/routers/parts.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_px1_permission_message_matches_guard_2026_09_24.py": {
    "kind": "audit",
@@ -7289,15 +7140,15 @@
   "backend/tests/test_pytest_guards_2026_09_21.py": {
    "kind": "audit",
    "units": [
-    "file:backend/helpers/__init__.py",
     "file:backend/tests/_subproc.py",
     "file:backend/tests/test_ports_helper_2026_09_21.py",
-    "helper:tender_source"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
-     "backend/helpers/__init__.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/_subproc.py"
     ],
     "path": [
@@ -7333,7 +7184,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:dashboard",
     "router:quotations"
    ],
@@ -7343,17 +7193,16 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dashboard.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quotation_create_identity_2026_09_10.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7361,16 +7210,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quotation_create_no_orphan_2026_09_10.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7378,10 +7226,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quote_json_direct_writes_lost_update_2026_09_25.py": {
    "kind": "api",
@@ -7446,7 +7294,6 @@
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
     "helper:company_identity",
-    "router:auth",
     "router:quotations",
     "router:system"
    ],
@@ -7458,11 +7305,11 @@
      "backend/tests/_pdf_identity.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quote_location_realpath_2026_09_23.py": {
    "kind": "api",
@@ -7538,7 +7385,6 @@
    "units": [
     "core:db",
     "page:pages/quotation-form.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7546,13 +7392,13 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quote_preview_server_layout_2026_09_24.py": {
    "kind": "api",
@@ -7560,7 +7406,6 @@
     "core:db",
     "core:pdf_gen",
     "page:pages/quotation-form.html",
-    "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
@@ -7573,7 +7418,6 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/material_orders.py",
@@ -7583,7 +7427,8 @@
     "page": [
      "frontend/pages/quotation-form.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quote_submit_reasons_server_2026_09_24.py": {
    "kind": "api",
@@ -7592,7 +7437,6 @@
     "dir:frontend/pages/",
     "helper:quote_terms",
     "page:pages/quotation-form.html",
-    "router:auth",
     "router:quotations",
     "router:system"
    ],
@@ -7603,7 +7447,6 @@
      "backend/routers/system.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ],
@@ -7614,13 +7457,13 @@
      "frontend/pages/",
      "frontend/pages/quotation-form.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_quote_terms_presets_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -7628,16 +7471,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_receivables_by_receipt_date_2026_09_12.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7645,16 +7487,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_received_installment_lock_2026_09_24.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -7662,10 +7503,10 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_repo_health_2026_09_22.py": {
    "kind": "audit",
@@ -7686,7 +7527,6 @@
     "core:db",
     "helper:recognition",
     "page:pages/case-management.html",
-    "router:auth",
     "router:case_extra_expenses",
     "router:dashboard",
     "router:material_orders",
@@ -7701,7 +7541,6 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/dashboard.py",
      "backend/routers/material_orders.py",
@@ -7712,13 +7551,13 @@
     "page": [
      "frontend/pages/case-management.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_bugfix_2026_08_30.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7727,16 +7566,15 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_expenses.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7744,16 +7582,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_export_expenses.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7762,34 +7599,30 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_logic_fixes_2026_08_28.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/auth.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_quarter_scope_2026_09_10.py": {
    "kind": "api",
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7799,16 +7632,15 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_receivables_monthly.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7816,16 +7648,15 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_review_fixes_2026_09_02.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports",
     "router:system"
    ],
@@ -7835,17 +7666,16 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_sales_owner_2026_09_14.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7854,16 +7684,15 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_reports_tax_compliance_2026_09_02.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:quotations",
     "router:reports",
     "router:system"
@@ -7874,12 +7703,12 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py",
      "backend/routers/reports.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_router_registration_2026_09_10.py": {
    "kind": "audit",
@@ -7899,7 +7728,6 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tools/build_deploy_package.ps1",
     "helper:geo",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -7909,13 +7737,13 @@
      "backend/main.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ],
     "path": [
      "backend/tools/build_deploy_package.ps1"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_save_quotation_json_guard_2026_09_25.py": {
    "kind": "api",
@@ -7969,7 +7797,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:dashboard",
     "router:reports"
    ],
@@ -7978,11 +7805,11 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/dashboard.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py": {
    "kind": "api",
@@ -7990,7 +7817,6 @@
     "core:db",
     "core:pdf_gen",
     "page:pages/settlement.html",
-    "router:auth",
     "router:reports"
    ],
    "evidence": {
@@ -7999,13 +7825,13 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/reports.py"
     ],
     "page": [
      "frontend/pages/settlement.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_shared_playwright_event_loop_2026_09_25.py": {
    "kind": "e2e",
@@ -8068,7 +7894,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:invoice_vouchers",
     "router:quotations",
     "router:shipping_notes"
@@ -8078,12 +7903,12 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/quotations.py",
      "backend/routers/shipping_notes.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_site_wording_2026_09_24.py": {
    "kind": "audit",
@@ -8116,7 +7941,6 @@
     "core:db",
     "core:main",
     "page:pages/login.html",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -8125,7 +7949,6 @@
      "backend/main.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ],
     "page": [
@@ -8134,7 +7957,8 @@
     "path": [
      "frontend/pages/login.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_spec_coverage_2026_09_21.py": {
    "kind": "audit",
@@ -8161,15 +7985,15 @@
    "kind": "unit",
    "units": [
     "core:db",
-    "file:backend/helpers/__init__.py",
     "file:backend/tests/test_upgrade_path_2026_09_21.py",
-    "helper:tender_source"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/test_upgrade_path_2026_09_21.py"
     ]
    }
@@ -8194,7 +8018,6 @@
    "kind": "api",
    "units": [
     "router:accounting_export",
-    "router:auth",
     "router:inventory",
     "router:parts",
     "router:suppliers"
@@ -8202,12 +8025,12 @@
    "evidence": {
     "api": [
      "backend/routers/accounting_export.py",
-     "backend/routers/auth.py",
      "backend/routers/inventory.py",
      "backend/routers/parts.py",
      "backend/routers/suppliers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_subproc_helper_2026_09_21.py": {
    "kind": "unit",
@@ -8225,8 +8048,8 @@
    "units": [
     "core:archive",
     "core:db",
-    "dir:backend/helpers/",
-    "dir:backend/routers/",
+    "plat:__init__",
+    "plat:source_tree",
     "router:auth",
     "router:dashboard",
     "router:quotations",
@@ -8235,6 +8058,8 @@
    "evidence": {
     "import": [
      "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
@@ -8242,10 +8067,6 @@
      "backend/routers/dashboard.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
-    ],
-    "path": [
-     "backend/helpers/",
-     "backend/routers/"
     ]
    }
   },
@@ -8298,7 +8119,6 @@
    "units": [
     "core:db",
     "router:accounting_export",
-    "router:auth",
     "router:contractor_vouchers",
     "router:quotations",
     "router:vendor_contractors"
@@ -8309,12 +8129,12 @@
     ],
     "api": [
      "backend/routers/accounting_export.py",
-     "backend/routers/auth.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tax_by_law_2026_09_24.py": {
    "kind": "api",
@@ -8323,7 +8143,6 @@
     "core:pdf_gen",
     "helper:quotations",
     "helper:quote_terms",
-    "router:auth",
     "router:invoice_vouchers",
     "router:quotations",
     "router:reports"
@@ -8337,11 +8156,11 @@
      "backend/routers/reports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_template_db_2026_09_25.py": {
    "kind": "api",
@@ -8358,14 +8177,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/helpers/__init__.py",
-    "helper:tender_source"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/tender_source.py"
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py"
     ]
    }
   },
@@ -8379,24 +8198,22 @@
     "file:backend/tests/test_tender_notify_2026_09_21.py",
     "helper:email_notify",
     "helper:settings",
-    "helper:tender_source",
-    "page:pages/tender-radar.html",
-    "router:auth",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/source",
+    "page:pages/tender-radar.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/settings.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/_timefreeze.py",
      "backend/tests/test_tender_match_2026_09_21.py",
      "backend/tests/test_tender_notify_2026_09_21.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ],
     "page": [
      "backend/tests/fixtures/tender_detail_20260921.html",
@@ -8405,7 +8222,8 @@
     "path": [
      "backend/tests/fixtures/tender_detail_20260921.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_labels_2026_09_22.py": {
    "kind": "api",
@@ -8414,42 +8232,39 @@
     "file:backend/tests/_timefreeze.py",
     "file:backend/tests/test_tender_match_2026_09_21.py",
     "file:backend/tests/test_tender_notify_2026_09_21.py",
-    "helper:tender_match",
-    "helper:tender_source",
-    "router:auth",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/match",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/tender_match.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/match.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/_timefreeze.py",
      "backend/tests/test_tender_match_2026_09_21.py",
      "backend/tests/test_tender_notify_2026_09_21.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_list_order_and_links_2026_09_22.py": {
    "kind": "api",
    "units": [
     "core:db",
     "dir:frontend/pages/",
-    "page:pages/tender-radar.html",
-    "router:auth",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "page:pages/tender-radar.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ],
     "page": [
      "frontend/pages/tender-radar.html"
@@ -8458,45 +8273,45 @@
      "frontend/pages/",
      "frontend/pages/tender-radar.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_mark_2026_09_23.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/helpers/__init__.py",
-    "helper:tender_source",
-    "router:auth",
-    "router:tender_radar"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/tender_source.py"
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_match_2026_09_21.py": {
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/helpers/__init__.py",
     "file:backend/tests/_timefreeze.py",
     "file:backend/tests/fixtures/tender_list_20260921.html",
-    "helper:tender_match",
-    "helper:tender_source"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/match",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/tender_match.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/match.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/_timefreeze.py"
     ],
     "page": [
@@ -8517,7 +8332,8 @@
     "helper:email_notify",
     "helper:notification_prefs",
     "helper:settings",
-    "helper:tender_source"
+    "mod:tender_radar/notify",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
@@ -8525,7 +8341,8 @@
      "backend/helpers/email_notify.py",
      "backend/helpers/notification_prefs.py",
      "backend/helpers/settings.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/notify.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/_subproc.py",
      "backend/tests/_timefreeze.py",
      "backend/tests/test_tender_match_2026_09_21.py"
@@ -8536,14 +8353,14 @@
    "kind": "api",
    "units": [
     "file:backend/tests/_subproc.py",
-    "router:tender_radar"
+    "mod:tender_radar/api"
    ],
    "evidence": {
     "import": [
      "backend/tests/_subproc.py"
     ],
     "api": [
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ]
    }
   },
@@ -8554,23 +8371,22 @@
     "file:backend/tests/test_tender_match_2026_09_21.py",
     "helper:email_notify",
     "helper:settings",
-    "helper:tender_source",
-    "router:auth",
-    "router:tender_radar"
+    "mod:tender_radar/api",
+    "mod:tender_radar/source"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/email_notify.py",
      "backend/helpers/settings.py",
-     "backend/helpers/tender_source.py",
+     "backend/modules/tender_radar/source.py",
      "backend/tests/test_tender_match_2026_09_21.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_search_and_org_geo_2026_09_22.py": {
    "kind": "api",
@@ -8579,25 +8395,26 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_map_cache_warm.py",
     "helper:geo",
-    "helper:tender_match",
-    "router:auth",
-    "router:map_points",
-    "router:tender_radar"
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/api",
+    "mod:tender_radar/match",
+    "router:map_points"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
-     "backend/helpers/tender_match.py",
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/match.py",
      "backend/tests/_map_cache_warm.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/map_points.py",
-     "backend/routers/tender_radar.py"
+     "backend/modules/tender_radar/api.py",
+     "backend/routers/map_points.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_tender_startup_log_2026_09_21.py": {
    "kind": "unit",
@@ -8616,7 +8433,6 @@
     "file:backend/helpers/__init__.py",
     "helper:geo",
     "helper:settings",
-    "router:auth",
     "router:map_points"
    ],
    "evidence": {
@@ -8626,10 +8442,10 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/map_points.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_totp_2026_09_07.py": {
    "kind": "api",
@@ -8671,7 +8487,6 @@
    "units": [
     "core:db",
     "core:main",
-    "router:auth",
     "router:system"
    ],
    "evidence": {
@@ -8681,10 +8496,10 @@
      "backend/routers/system.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/system.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_upgrade_path_2026_09_21.py": {
    "kind": "unit",
@@ -8703,7 +8518,6 @@
     "core:db",
     "helper:auth",
     "helper:uploads",
-    "router:auth",
     "router:quotations"
    ],
    "evidence": {
@@ -8713,10 +8527,10 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_upload_path_traversal_2026_09_24.py": {
    "kind": "unit",
@@ -8799,7 +8613,6 @@
     "file:backend/version_manifest.json",
     "helper:startup",
     "page:pages/module-versions.html",
-    "router:auth",
     "router:module_versions"
    ],
    "evidence": {
@@ -8810,7 +8623,6 @@
      "backend/tests/_prod_baseline.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/module_versions.py"
     ],
     "page": [
@@ -8821,7 +8633,8 @@
      "frontend/pages/",
      "frontend/pages/module-versions.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_version_manifest_shipped_is_immutable_2026_09_25.py": {
    "kind": "audit",
@@ -8868,7 +8681,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:inventory",
     "router:parts",
     "router:quotations",
@@ -8879,30 +8691,29 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/inventory.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py",
      "backend/routers/reports.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_attachment_download_2026_09_23.py": {
    "kind": "api",
    "units": [
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_attachment_list_in_modal_2026_09_23.py": {
    "kind": "audit",
@@ -8937,7 +8748,6 @@
     "helper:voucher_attachments",
     "js:js/voucher.js",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -8950,7 +8760,6 @@
      "backend/routers/vouchers.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -8963,7 +8772,8 @@
      "frontend/pages/",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_edit_lines_2026_09_23.py": {
    "kind": "api",
@@ -8971,7 +8781,6 @@
     "core:db",
     "dir:frontend/js/",
     "js:js/voucher.js",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -8979,7 +8788,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -8989,7 +8797,8 @@
      "frontend/js/",
      "frontend/js/voucher.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_expense_brought_in_once_2026_09_24.py": {
    "kind": "e2e",
@@ -8998,7 +8807,6 @@
     "file:backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:voucher_attachments",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -9008,11 +8816,9 @@
      "backend/routers/vouchers.py",
      "backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/auth.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_export_gate_2026_09_23.py": {
    "kind": "api",
@@ -9021,7 +8827,6 @@
     "dir:frontend/pages/",
     "js:js/voucher.js",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -9029,7 +8834,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -9040,7 +8844,8 @@
      "frontend/pages/",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_export_only_in_preview_2026_09_23.py": {
    "kind": "audit",
@@ -9063,15 +8868,14 @@
   "backend/tests/test_voucher_export_watermark_2026_09_23.py": {
    "kind": "api",
    "units": [
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_freeze_2026_09_23.py": {
    "kind": "audit",
@@ -9101,7 +8905,6 @@
     "dir:frontend/pages/",
     "js:js/voucher.js",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -9109,7 +8912,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -9120,7 +8922,8 @@
      "frontend/pages/",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_pdf_export_2026_09_23.py": {
    "kind": "api",
@@ -9129,7 +8932,6 @@
     "dir:frontend/js/",
     "helper:uploads",
     "js:js/voucher.js",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -9138,7 +8940,6 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -9148,7 +8949,8 @@
      "frontend/js/",
      "frontend/js/voucher.js"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py": {
    "kind": "e2e",
@@ -9240,18 +9042,17 @@
    "kind": "api",
    "units": [
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_summary_sources_2026_09_23.py": {
    "kind": "api",
@@ -9261,7 +9062,6 @@
     "dir:frontend/pages/",
     "js:js/voucher.js",
     "page:pages/voucher.html",
-    "router:auth",
     "router:vouchers"
    ],
    "evidence": {
@@ -9269,7 +9069,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -9282,7 +9081,8 @@
      "frontend/pages/",
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_voucher_template_placeholders_2026_09_23.py": {
    "kind": "unit",
@@ -9454,11 +9254,13 @@
   "backend/tests/test_wording_guards_2026_09_23.py": {
    "kind": "audit",
    "units": [
-    "helper:email_notify"
+    "helper:email_notify",
+    "mod:tender_radar/notify"
    ],
    "evidence": {
     "path": [
-     "backend/helpers/email_notify.py"
+     "backend/helpers/email_notify.py",
+     "backend/modules/tender_radar/notify.py"
     ]
    }
   },
@@ -9466,30 +9268,35 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:tender_radar/api",
+    "plat:__init__",
+    "plat:source_tree",
     "router:auth",
     "router:item_reads",
     "router:list_prefs",
     "router:network_plans",
     "router:network_plans_quick",
     "router:quotations",
-    "router:system",
-    "router:tender_radar"
+    "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/tender_radar/api.py",
      "backend/routers/auth.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
      "backend/routers/network_plans.py",
      "backend/routers/network_plans_quick.py",
      "backend/routers/quotations.py",
-     "backend/routers/system.py",
-     "backend/routers/tender_radar.py"
+     "backend/routers/system.py"
     ],
     "path": [
+     "backend/modules/tender_radar/api.py",
      "backend/routers/auth.py"
     ]
    }
@@ -9497,9 +9304,15 @@
   "backend/tests/test_write_lock_deadlock_guard_2026_09_15.py": {
    "kind": "audit",
    "units": [
-    "core:main"
+    "core:main",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "path": [
      "backend/main.py"
     ]
@@ -9509,7 +9322,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
     "router:contractor_vouchers",
     "router:invoice_vouchers",
     "router:payment_requests",
@@ -9524,13 +9336,13 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/auth.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_xe_change_request_2026_09_11.py": {
    "kind": "api",
