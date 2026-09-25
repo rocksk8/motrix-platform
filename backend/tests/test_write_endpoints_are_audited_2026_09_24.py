@@ -145,7 +145,8 @@ def test_every_write_endpoint_writes_an_audit_record_or_is_exempt_with_a_reason(
 
 def test_exempt_entries_point_at_endpoints_that_exist():
     live = {(f, m, p) for f, m, p, _ in _all()}
-    ghosts = sorted(set(EXEMPT) - live)
+    # 模組資料夾被拿掉（選配／反向控制）時，它的例外條目不算幽靈
+    ghosts = sorted(k for k in set(EXEMPT) - live if source_tree.module_installed(k[0]))
     assert not ghosts, "EXEMPT 列了不存在的端點（改名或刪了要一起清）：%s" % ghosts
 
 

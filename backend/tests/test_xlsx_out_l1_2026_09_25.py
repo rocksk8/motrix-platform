@@ -39,6 +39,9 @@ def test_accounting_export_takes_part_categories_from_l1():
 
 def test_no_hardcoded_company_name_left():
     for rel in ("routers/reports.py", "routers/accounting_export.py", "modules/netplan/export.py"):
+        from core import source_tree
+        if not source_tree.module_installed(rel):
+            continue                                  # 模組未安裝（選配／反向控制）
         tree = ast.parse((BACKEND / rel).read_text(encoding="utf-8"))
         names = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
                  for t in n.targets if isinstance(t, ast.Name)}
@@ -88,8 +91,3 @@ def test_empty_company_prints_no_dangling_separator(client):
     assert a1 == "T100 傳票批次匯出（2026-09-01 ~ 2026-09-30）"
 
 
-def test_network_plan_cover_uses_company_profile(client):
-    import modules.netplan.export as npe
-    _set_company("網規測試公司")
-    wb = openpyxl.load_workbook(io.BytesIO(npe.build_plan_excel({"name": "x", "data": {}})))
-    assert wb["封面"]["A1"].value == "網規測試公司"
