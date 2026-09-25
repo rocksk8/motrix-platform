@@ -729,9 +729,13 @@
             headers: { Authorization: 'Bearer ' + this.session.token }
           })
           if (!r.ok) { alert('後端刪除失敗'); return }
+          // IP-11：業務開發模組不在時，後端照刪並回 notice（轉建連結沒有解除）——要讓使用者看到，不可以吞掉
+          var body = await r.json().catch(function () { return {} })
+          var notice = (body && body.notice) || ''
         } catch { alert('網路錯誤，刪除失敗'); return }
         this.quotes = this.quotes.filter(q => q.quote_no !== quoteNo)
-        this.toast('報價單已刪除')
+        if (notice) this.toast('報價單已刪除。' + notice, '#B45309', 8000)
+        else this.toast('報價單已刪除')
       },
 
       async duplicateQuote(quoteNo) {
@@ -769,12 +773,12 @@
         } catch { this.toast('網路錯誤，複製失敗', '#DC2626') }
       },
 
-      toast(msg, bg = '#0A0A0A') {
+      toast(msg, bg = '#0A0A0A', ms = 2500) {
         const el = document.createElement('div')
         el.textContent = msg
         el.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:${bg};color:#F5F4F0;padding:8px 18px;border-radius:6px;font-size:12px;z-index:9999;font-family:LINE Seed TW_OTF, sans-serif`
         document.body.appendChild(el)
-        setTimeout(() => el.remove(), 2500)
+        setTimeout(() => el.remove(), ms)
       },
 
       logout() {
