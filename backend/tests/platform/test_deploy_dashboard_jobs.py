@@ -123,3 +123,38 @@ def test_history_concurrent_appends_keep_valid_json_and_every_entry(env):
     h = _hist(env)                                               # 殘字 ⇒ 這裡 JSONDecodeError
     assert sorted(e["action"].lstrip("x") for e in h) == sorted(f"a{i}" for i in range(n))
     assert not list(env.glob("history.json.*.tmp"))
+
+
+def test_history_writes_survive_a_concurrent_reader(env):
+    """D 稽核：只鎖寫入端時，儀表板輪詢 /api/history 會讓 os.replace 在 Windows 丟 PermissionError ⇒ 那一筆掉了。
+    讀與寫同時進行：寫入不可以丟例外、不可以掉筆。"""
+    import threading
+    stop = threading.Event()
+    reads = []
+
+    def poll():
+        while not stop.is_set():
+            reads.append(len(dd.get_history()))
+
+    rd = threading.Thread(target=poll)
+    rd.start()
+    errors = []
+    try:
+        for i in range(150):
+            try:
+                dd._append_history("r%d" % i, "j", True)
+            except Exception as e:                       # noqa: BLE001 — 任何例外都算掉筆
+                errors.append(repr(e))
+    finally:
+        stop.set()
+        rd.join(timeout=30)
+    assert not errors, errors[:3]
+    assert len(_hist(env)) == 150
+    assert reads, "前提：讀取端真的有在跑"
+
+
+def test_unreadable_history_is_reported_not_treated_as_no_failure(env):
+    """讀不到歷史 ≠ 上一次沒有失敗：警告要說出來。"""
+    (env / "history.json").write_text("{殘字", encoding="utf-8")
+    assert "讀不到" in dd._recent_failure_warning()
+    assert dd.get_history() == []
