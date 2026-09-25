@@ -824,8 +824,8 @@
     </div>
 
     <div style="padding-top:8px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between">
-      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif">MOTRIX SYNERGY INTEGRATION — 允碩整合集創股份有限公司</span>
-      <span style="font-size:10px;color:var(--text-dim)">統一編號 60575481</span>
+      <span style="font-size:10px;color:var(--text-dim);font-family:LINE Seed TW_OTF, sans-serif" x-text="[(branding.companyNameEn || '').toUpperCase(), branding.companyName].filter(Boolean).join(' — ')"></span>
+      <span style="font-size:10px;color:var(--text-dim)" x-show="branding.taxId" x-text="'統一編號 ' + branding.taxId"></span>
     </div>
     </div><!-- /.h-wrap -->
 
@@ -840,6 +840,7 @@
       today: '',
       now: '',
       session: {},
+      branding: {},   // A8d：公司名稱／統編取自公司資料設定（/api/system/branding），不寫死
       onboardingDismissed: false,
       stats: {
         totalQuotes: 0, pendingQuotes: 0, sentQuotes: 0, waitingForMe: 0,
@@ -987,6 +988,8 @@ feedCount(key) {
         const s = localStorage.getItem('motrix_session')
         if (!s) { window.location.href = 'pages/login.html'; return }
         try { this.session = JSON.parse(s) } catch(e) { window.location.href = 'pages/login.html'; return }
+        fetch(`${API}/system/branding`, { headers: { Authorization: 'Bearer ' + this.session.token } })
+          .then(r => r.ok ? r.json() : {}).then(d => { this.branding = d || {} }).catch(() => {})
 
         // 無儀表板相關權限 → 導向案件管理頁面（2026-08-26 專案管理併入案件
         // 管理後，案件管理是這類角色最泛用的落地頁）

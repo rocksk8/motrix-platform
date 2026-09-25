@@ -144,3 +144,32 @@ def test_location_fields_still_win_over_top_level(client):
                                      "locations": [{"id": "L1", "company_name": "據點名", "phone": "9", "email": "loc@x.y"}]})
     ident = location_identity()
     assert (ident["company_name"], ident["phone"], ident["email"]) == ("據點名", "9", "loc@x.y")
+
+
+# ── A8d：前端不再寫死公司名與統編 ─────────────────────────────────────────────
+
+@pytest.mark.parametrize("rel", ["index.html", "pages/login.html"])
+def test_a8d_pages_do_not_hardcode_the_company(rel):
+    src = (BACKEND.parent / "frontend" / rel).read_text(encoding="utf-8")
+    for needle in ("60575481", "允碩", "MOTRIX SYNERGY INTEGRATION —"):
+        assert needle not in src, (rel, needle)
+    assert "/api/system/branding" in src                       # 改從公司資料設定取
+
+
+def test_a8d_branding_is_public_but_tax_id_needs_a_login(client, make_user):
+    from helpers.settings import _set_setting
+    _set_setting("company_profile", {"name": "範例科技股份有限公司", "tax_id": "12345678"})
+    r = client.get("/api/system/branding")
+    assert r.status_code == 200
+    assert r.json() == {"companyName": "範例科技股份有限公司", "companyNameEn": "", "shortName": "範例科技"}
+    assert "taxId" not in client.get("/api/system/branding", headers={"Authorization": "Bearer nope"}).json()
+    u, p = make_user("a8d_user", "A8d-Pass-123", role="user")[:2]
+    tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+    assert client.get("/api/system/branding", headers={"Authorization": "Bearer " + tok}).json()["taxId"] == "12345678"
+
+
+def test_a8d_branding_is_empty_when_nothing_is_set(client):
+    """沒有設定公司資料 ⇒ 空字串，不補任何公司的名字（尤其不是本公司的）。"""
+    from helpers.settings import _set_setting
+    _set_setting("company_profile", {})
+    assert client.get("/api/system/branding").json() == {"companyName": "", "companyNameEn": "", "shortName": ""}

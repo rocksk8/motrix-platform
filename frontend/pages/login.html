@@ -200,7 +200,7 @@
 
     <div class="card">
       <div class="card-title">登入系統</div>
-      <div class="card-sub">允碩整合集創 · 內部管理平台</div>
+      <div class="card-sub" x-text="(branding.shortName ? branding.shortName + ' · ' : '') + '內部管理平台'">內部管理平台</div>
 
       <form @submit.prevent="login()" x-show="!totpStep">
         <div class="form-group">
@@ -300,7 +300,7 @@
       <hr class="divider">
       <div class="footer-note">
         如需開立帳號或重設密碼，請聯繫系統管理員<br>
-        <span style="color:#333" x-text="'MOTRIX 專案管理系統 ' + (systemVersion || 'v1.0') + ' · 允碩整合集創'"></span>
+        <span style="color:#333" x-text="'MOTRIX 專案管理系統 ' + (systemVersion || 'v1.0') + (branding.shortName ? ' · ' + branding.shortName : '')"></span>
       </div>
     </div>
   </div>
@@ -314,6 +314,7 @@
       loading:  false,
       error:    '',
       systemVersion: '',
+      branding: {},   // A8d：公司名稱取自公司資料設定（/api/system/branding），不寫死
       webauthnConfigured: false,
       totpStep: false,
       totpCode: '',
@@ -594,6 +595,10 @@
         fetch('/api/system/version')
           .then(res => res.ok ? res.json() : null)
           .then(data => { if (data && data.version) this.systemVersion = data.version })
+          .catch(() => {})
+        fetch('/api/system/branding')
+          .then(res => res.ok ? res.json() : {})
+          .then(data => { this.branding = data || {} })
           .catch(() => {})
 
         const s = localStorage.getItem('motrix_session')

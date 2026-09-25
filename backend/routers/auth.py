@@ -327,6 +327,25 @@ def system_version():
     return {"version": latest.get("version", ""), "date": latest.get("date", "")}
 
 
+@router.get("/api/system/branding")
+def system_branding(authorization: str = Header(None)):
+    """公司名稱（登入頁卡片、頁尾與首頁頁尾用；ROADMAP A8d：取代前端寫死的公司名與統編）。
+
+    Public：登入頁還沒有 session。**統編只在帶有效登入時回傳**（登入頁用不到，不對外多給）。
+    值取自公司資料設定（主要據點 ＞ company_profile），沒填就是空字串——前端照空的顯示，不補任何公司的名字。"""
+    from helpers.company_identity import location_identity, short_name
+    ident = location_identity()
+    out = {"companyName": ident["company_name"], "companyNameEn": ident["company_name_en"],
+           "shortName": short_name(ident["company_name"])}
+    if authorization:
+        try:
+            _require_user(authorization)
+            out["taxId"] = ident["tax_id"]
+        except HTTPException:
+            pass
+    return out
+
+
 _DEPLOYED_MARKER_PATH = _paths.DEPLOYED_COMMIT_FILE
 
 
