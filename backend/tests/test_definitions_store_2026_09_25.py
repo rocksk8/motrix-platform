@@ -114,6 +114,19 @@ def test_definitions_draft_publish_versions_and_restore_never_rewrite_history(de
     assert D.get(defs_conn, "layout", "quotations.list", "company", 2)["body"] == {"columns": ["a", "b"]}
 
 
+def test_restore_says_when_an_older_draft_is_still_pending(defs_conn):
+    """C-O1：還原不動草稿；回應的 draftPending 告訴畫面「還有一份未發布的草稿，發布會蓋掉這次還原」。"""
+    from core import definitions as D
+    D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["a"]})
+    D.publish(defs_conn, "layout", "k", "company")
+    D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["a", "b"]})
+    D.publish(defs_conn, "layout", "k", "company")
+    assert D.restore(defs_conn, "layout", "k", "company", 1)["draftPending"] is False
+    D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["zz"]})
+    assert D.restore(defs_conn, "layout", "k", "company", 2)["draftPending"] is True
+    assert D.get(defs_conn, "layout", "k", "company", 0)["body"] == {"columns": ["zz"]}     # 草稿本身不動
+
+
 def test_definitions_publish_without_a_draft_is_refused(defs_conn):
     from core import definitions as D
     with pytest.raises(D.DefinitionError, match="沒有草稿"):
