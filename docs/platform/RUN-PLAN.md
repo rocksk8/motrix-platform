@@ -96,6 +96,7 @@
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
   - C｜`wip/c-d7`｜afccc3b8｜tests/platform＋test_upgrade_drill＋test_states_data_ops：623 過（-m not e2e）｜🔴 動到 L0（`core/upgrade.py`：RUNTIME_STATE_SETTINGS，D7 預演抓到的升級阻擋點）；fixture 層／main.py：無；CHANGELOG 段落暫用號，core_bump 已在本地套用（列車上請再依 origin 重新取號）
   - wip/x-r-fix｜8cc2dd29｜差異題綠（R 系列＋新題 136、e2e 25、修補後 70）；曾在 2c8ff4d3 跑全量：非 e2e 4100 綠 2 紅（報價表單版號、全站用詞＝本包自己的，已於 8cc2dd29 修好）、e2e 389 綠｜不動 fixture 層／main；L1 新增（暫 CORE 1.12，需 core_bump）、version_manifest 加「勞報單 2026-09-26c」並在「報價單 2026-09-25r」句尾加一句（VR3）｜登記 02:38 X-R
+  - X-UC｜`wip/x-unitcard`｜14ee6bc9｜tests/platform＋契約題 2 檔：637 過（-n 2、低優先權）；突變 12 全紅｜fixture 層／main：無；動 L0 `core/*.py` 9 檔但**只改模組 docstring**（AST 去掉 docstring 後與 origin 相同、G1 快照不變、core_bump：不用升版）；新增 tools/platform/unit_index.py、tests/platform/test_unit_cards.py、docs/platform/UNIT-INDEX.md｜登記 2026-09-26 02:56 X-UC
 - **全量名額排隊**（更新 2026-09-26 02:43）：§G3 生效後，新的全量改由列車統一跑。仍在跑、而且依規定跑完就直接合回的有：B 的 C1（合回閘門約 02:52）、C 的第二批全量。A 的 a-bonus 走合回閘門，不經過測試鎖。⚠ A 有一支孤兒 pytest（pid 53300），停不掉，已請使用者處理。**第一班列車預計約 03:15 發車**，要等月台上至少有 3 包（目前只有 x-r-fix 1 包）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
@@ -109,6 +110,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 02:56 X-UC：§G2 單位卡＋總索引＋守門完成，上月台（wip/x-unitcard 14ee6bc9）。L0 core/ 9 檔補卡；UNIT-INDEX 48 單位（有卡 9）。⚠ 合回之後：各線改到沒卡的 L0／L1 檔（helpers、db、main、新的 core/pages、core/menu）會被要求補卡；改了任何 L1 的 import 關係也要重產 UNIT-INDEX（直接使用者數會變）。
 - 2026-09-26 02:52：使用者常設裁示：V9 的錯誤一律等換版，不再檢查 V9 有沒有同類問題，所有驗證以新版為準，**轉移流程優先**（D1 模組搬遷、D7）。已寫進 CORE-SPEC，並通知全部視窗。
 - 2026-09-26 02:51：使用者表單裁示：U14 草稿只有建立者與超管可以改、送（交給 C）；U13 依給付日（x-r-fix 合回後派子代理做）；V9 的 N-1、U11、U11 補充、U12 全部等換版（N-1 分支保留不推）。已寫進 CORE-SPEC 裁示表。
 - 2026-09-26 02:50 A：wip/a-bonus 合回（A 線 ③ 獎金三項＋U4）。通知（送審→輪到的簽核人＋代理人、核准→出納；信中不含金額；可個別關閉）、IP-8 `bonus.payouts`（出納頁獎金待發放、執行歷史、Excel；財務看不到）、IP-9 `expense.entries`（發放日列營運報表與月支出）、獎金傳票帶案件來源（案件頁相關傳票）、U4 經 IP-7 legal_params 撥付日選版自動算扣繳與補充保費（投保金額與全年累計；讀不到或缺投保金額⇒拒絕撥付；存版本與整份 rules 快照）。**全量在 fae19134**（4028＋e2e 388，0 紅）；**合回閘門在本 HEAD**（tests/platform＋獎金／出納／法規／報表題＋獎金與出納 e2e，899 passed；modtest --base 選到全量的 89%，依主持裁示改跑閘門）。突變：U4 14＋5＋1、通知與出納／報表 6、e2e 1，全紅。CORE 1.12（core_bump）、版本紀錄 2026-09-26c。待辦：R 的 round_half_up／floor_amount 隨列車合回後取代 U4 本地捨入；投保金額存 system_settings、會進一般每日 JSON——資料分類（F2？）請 C 判定；M07 停用而資料仍在時報表少列已發放獎金（觀察）。
