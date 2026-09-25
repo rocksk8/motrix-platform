@@ -122,10 +122,10 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| C-M1 | | | |
-| C-M2 | | | |
-| C-M3 | | | |
-| C-M4 | | | |
-| C-M5 | | | |
-| C-S1～S5 | | | |
-| C-O1～O4 | | | |
+| C-M1 | 修正（fail-safe）：條件只有明確不成立（False／0）才跳過該層；算出空值 ⇒ 那一層照簽，notices 寫明「條件無法判斷，依規定列入」。規格 §3.7 已寫。突變 2 項紅 | 第二批 wip/c-p2-legal b757ac26 | |
+| C-M2 | 修正：執行期出錯（FormulaError）⇒ 那一層照簽並說明，不再 500；型別錯誤另由 C-S1 在發布時抓 | 同上 | |
+| C-M3 | 修正：發布時找出 on_approved 構成的環並擋下（指出位置）；執行時自動通過最多連跳 20 次（`_MAX_AUTO_HOPS`），超過回 409、單據維持原狀 | wip/c-audit-d d132336f（疊在第二批 bec40ee5 之上） | |
+| C-M4 | 待 R 的 `helpers.legal_params.round_half_up` 合回後接上（主持裁示不另寫一份）；補 2.5／-2.5／1.005 三題＋突變 | （待） | |
+| C-M5 | 修正：`custom_fields._coerce` 用 `math.isfinite` 擋 NaN／inf（400、指出欄位）；第二道防線 `_dump_values` 寫入時 `allow_nan=False`（交易內擋下、什麼都不寫）；舊資料讀出時非有限值換成空值（讀單、列表不 500）；公式結果非有限 ⇒ 報錯。突變 3 項紅 | wip/c-audit-d d132336f（疊在第二批 bec40ee5 之上） | |
+| C-S1～S5 | 全部修正：S1 發布時用樣本值試算公式與條件（`sample_values`／`_validate_by_sample`）；S2 `_is_approver` 認得代理人（讀單與輸出）；S3 起始狀態不可以掛簽核；S4 permission 不可以是內建模組 key、不可以與已發布的自訂模組共用；S5 發布／還原先 `begin_write`。突變各 1～2 項紅 | wip/c-audit-d d132336f（疊在第二批 bec40ee5 之上） | |
+| C-O1～O4 | O1 修正：還原回應帶 `draftPending`，規格 §3.5 同步（突變 1 項紅）；O2 不在本批：P4 送審凍結要等第一個接 `custom_fields.clean` 的內建模組，屆時附「定義改版後舊單仍用舊版」一題（ROADMAP P4 已標未做）；O3 已由使用者裁示 U14：草稿只有建立者與超級管理員可以修改、送出（後端 403，讀單回 `canEdit`，前端依此隱藏按鈕；突變 2 項紅）；O4 規格 §3.7 已寫明空值／出錯的處理 | wip/c-audit-d d132336f（疊在第二批 bec40ee5 之上） | |
