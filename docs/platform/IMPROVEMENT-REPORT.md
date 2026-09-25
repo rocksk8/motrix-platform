@@ -8,7 +8,7 @@
 | 對象（作者） | 稽核者 | 稽核檔 | 狀態 |
 |---|---|---|---|
 | 部署儀表板 D1／D2／D4／D6／D7（主持） | C | `AUDIT-C-host-dashboard.md` | ✅ 結案：必修 3＋B-2 複核 2、建議 3、觀察 3 全部關閉（C-2 移到階段 S） |
-| §9c②③ 模組啟停與授權（A） | 獨立代理 | `AUDIT-X-9c-module-select.md` | 稽核完成：必修 3、建議 4、觀察 6；修正代理進行中（A-1 在 wip/a-platform-states） |
+| §9c②③ 模組啟停與授權（A） | 獨立代理 | `AUDIT-X-9c-module-select.md` | 必修 A-2、A-3，建議 B-1～B-4，觀察 C-4 已修並合回（13f37f0a，突變 12 項全紅；core-only 反向控制 37 過）；A-1、C-1、C-2 在 wip/a-platform-states；C-3 以理由不修；待稽核者確認 |
 | A11、STATES 高 5 項、A8c、升級只補空值（C） | 獨立代理 | `AUDIT-X-C-batch1.md` | 稽核完成：必修 3、建議 4、觀察 7；C 修正中（B-2 移交 9b 修正代理） |
 | §9b 升級與回滾、core.paths、個資分流（C） | 獨立代理（接手 A 的分配） | `AUDIT-X-9b-upgrade-paths-pii.md` | 稽核完成：必修 4、建議 7、觀察 9；修正代理進行中（擋 D7） |
 | IP-1～IP-4、row_access（A） | 獨立代理（接手 B 的分配） | `AUDIT-X-IP1-4-row-access.md` | 進行中 |
