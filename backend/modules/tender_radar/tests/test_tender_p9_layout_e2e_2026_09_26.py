@@ -192,7 +192,11 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     assert sales.locator("th[data-col=tenderMethod]").inner_text() == "方式"
     assert sales.locator("[data-layout-section='watch:scope']").inner_text() == "範圍"
     # 表單：機關移到「條件」區塊（CSS order 在「範圍」區塊標題之前）
-    assert _order(sales, "[data-layout-field='watch:org']") < _order(sales, "[data-layout-section='watch:scope']")
+    o = {k: _order(sales, sel) for k, sel in (("excludes", "[data-layout-field='watch:excludes']"),
+                                               ("org", "[data-layout-field='watch:org']"),
+                                               ("scope", "[data-layout-section='watch:scope']"),
+                                               ("budgetMin", "[data-layout-field='watch:budgetMin']"))}
+    assert o["excludes"] < o["org"] < o["scope"] < o["budgetMin"], o                 # 條件：…排除詞、機關 ｜範圍：預算…
     assert sales.get_by_test_id("ml-edit-open").count() == 0                         # 非超級管理員沒有排版器
 
     # ④ 公司預設發布第 2 版（地點打開）⇒ 還原第 1 版 ⇒ 畫面跟著回去
