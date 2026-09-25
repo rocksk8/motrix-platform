@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.17 — 2026-09-26（C，D7）〔core_bump：暫用 1.99 → 1.14〕〔core_bump：暫用 1.14 → 1.17〕
+> C（D7 預演抓到的升級阻擋點）。
+- L0（新增）：`core.upgrade.RUNTIME_STATE_SETTINGS`——啟動時就會更新的執行期狀態（每日掃描的節流日期）；`settings_changes` 只在值是日期且沒有往回走時放行，其他鍵照舊逐一比對。原本真實庫的舊日期會讓新版啟動後的驗證判定「改寫既有設定」⇒ 正式機升級被判失敗而回滾
+
 ## 1.16 — 2026-09-26（B）〔core_bump：暫用 1.11 → 1.14〕〔core_bump：暫用 1.14 → 1.16〕
 > 階段 C／C3：選單由登錄表產生。只有新增。
 - L1（新增）：`core.menu`——`load_l1`／`module_items`／`validate`／`visible`／`build`／`denied`／`MENU_L1`／`ITEM_KEYS`；資料 `core/menu_l1.json`（群組固定鍵＋L1 選單項）；模組以 module.json `pages[].menu` 宣告自己的選單項
