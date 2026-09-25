@@ -63,6 +63,7 @@ backend/tools/deploy_dashboard_history.json
 backend/tools/upgrade_session.json
 backend/tools/upgrade_session.json.tmp
 backend/tools/upgrade_session.corrupt-*.json
+backend/tools/prod_env.json
 backend/tools/deploy_logs/
 backend/tools/deploy_dashboard_run.log
 

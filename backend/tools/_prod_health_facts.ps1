@@ -79,8 +79,15 @@ $serverLog = Join-Path $b "logs\server.log"
 if (Test-Path $serverLog) {
     $modLog = @(Get-Content $serverLog -Tail 3000 -Encoding UTF8 | Where-Object { $_ -match '模組 \S+ (\S+ )?(已載入|未載入)' } | Select-Object -Last 40 | ForEach-Object { [string]$_ })
 }
+# 正式機的 Python 版本與套件（唯讀）：開發機的專案 venv 要對齊它，「在正式機的環境裡驗證過」才成立
+$pyVersion = $null
+$pipFreeze = $null
+try { $pyVersion = ((& python --version 2>&1) | Out-String).Trim() } catch { $pyVersion = $null }
+try { $pipFreeze = ((& python -m pip freeze --disable-pip-version-check 2>$null) | ForEach-Object { [string]$_ }) } catch { $pipFreeze = $null }
 @{
     checkedAt      = (Get-Date).ToString("s")
+    pythonVersion  = $pyVersion
+    pipFreeze      = @($pipFreeze)
     alertActive    = (Test-Path $alertFile)
     alertText      = $alertText
     latestDbBackup = $latestBackup

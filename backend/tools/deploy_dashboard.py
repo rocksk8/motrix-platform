@@ -823,8 +823,40 @@ def list_packages():
                     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
                 except Exception:
                     manifest = {}
-                packages.append({"folder": d.name, "path": str(d), **manifest})
+                # §9e D3：包了哪些模組（9c① 的 modules.lock.json）。讀不到就明說，不當成「全部」
+                lock = None
+                lp = d / "modules.lock.json"
+                if lp.exists():
+                    try:
+                        lk = json.loads(lp.read_text(encoding="utf-8-sig"))
+                        lock = {"product": lk.get("product"), "kind": lk.get("kind"),
+                                "modules": {k: (v or {}).get("version") for k, v in (lk.get("modules") or {}).items()}}
+                    except Exception:
+                        lock = {"error": "modules.lock.json 讀不懂"}
+                packages.append({"folder": d.name, "path": str(d), **manifest, "lock": lock})
     return packages
+
+
+PRODUCTS_DIR = PROJECT_ROOT / "product"
+#: 最近一次健康檢查讀到的正式機 Python 版本與套件（gitignored）
+PROD_ENV_PATH = TOOLS_DIR / "prod_env.json"
+
+
+def _products():
+    out = []
+    for p in sorted(PRODUCTS_DIR.glob("*.json")) if PRODUCTS_DIR.exists() else []:
+        try:
+            d = json.loads(p.read_text(encoding="utf-8-sig"))
+            out.append({"name": p.stem, "description": d.get("description", ""), "modules": d.get("modules", [])})
+        except Exception:
+            out.append({"name": p.stem, "error": "產品設定檔讀不懂"})
+    return out
+
+
+@app.get("/api/products")
+def list_products():
+    """§9e D3：可以打包的產品設定檔（product/*.json）。"""
+    return _products()
 
 
 @app.get("/api/history")
@@ -949,11 +981,17 @@ class BuildIn(BaseModel):
     #: 全量沒有全綠仍要打包時必須明確勾選（例如緊急修補）；會記進歷史紀錄
     overrideTestGate: bool = False
     overrideReason: str = ""
+    #: §9e D3：產品設定檔名稱（product/<name>.json）；預設 full，與 build_deploy_package.ps1 相同
+    product: str = "full"
 
 
 @app.post("/api/build")
 def start_build(body: BuildIn = None):
     body = body or BuildIn()
+    valid = {p["name"] for p in _products() if "error" not in p}
+    if not _is_safe_name(body.product) or body.product not in valid:
+        return JSONResponse(status_code=400, content={
+            "detail": f"沒有這個產品設定檔：{body.product}（可選：{'、'.join(sorted(valid)) or '無'}）"})
     gate = build_gate()
     if gate["state"] != "ok" and not body.overrideTestGate:
         return JSONResponse(status_code=409, content={
@@ -966,7 +1004,7 @@ def start_build(body: BuildIn = None):
         if len(reason) < 6:
             return JSONResponse(status_code=400, content={"detail": "略過測試閘門必須寫明原因（至少 6 個字）"})
         _append_history(f"打包略過測試閘門：{reason}（閘門狀態：{gate['detail']}）", job_id, False)
-    cmd = _ps_cmd(TOOLS_DIR / "build_deploy_package.ps1")
+    cmd = _ps_cmd(TOOLS_DIR / "build_deploy_package.ps1", {"Product": body.product})
     threading.Thread(target=_run_job, args=(job_id, "build", cmd), daemon=True).start()
     return {"jobId": job_id}
 
@@ -1118,6 +1156,14 @@ def prod_health(body: HealthIn):
         _last_health.update(at=time.time(), ok=False)
         return JSONResponse(status_code=502, content={"detail": err})
     verdict = deploy_insights.evaluate_health(facts)
+    # 正式機的 Python 環境落地成檔：開發機的專案 venv 要對齊它（B 的 .venv 題依此重建）
+    if facts.get("pythonVersion"):
+        try:
+            PROD_ENV_PATH.write_text(json.dumps({
+                "capturedAt": facts.get("checkedAt"), "pythonVersion": facts.get("pythonVersion"),
+                "pipFreeze": facts.get("pipFreeze") or []}, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError:
+            pass
     _last_health.update(at=time.time(), ok=verdict["ok"])
     return {**verdict, "facts": facts}
 

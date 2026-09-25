@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """部署前健康檢查（CORE-SPEC §9e D1）：判斷規則與部署閘門。不連正式機、不觸發部署。"""
+import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -103,6 +104,15 @@ def test_health_endpoint_then_deploy_allowed(client, monkeypatch):
     assert h.status_code == 200 and h.json()["ok"] is True
     r = client.post("/api/deploy", json=BODY)
     assert r.status_code == 200
+
+
+def test_health_saves_prod_python_env_for_venv_alignment(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(dd, "PROD_ENV_PATH", tmp_path / "prod_env.json")       # 不寫真的檔
+    monkeypatch.setattr(dd, "_run_remote_json", lambda *a, **kw: (_facts(
+        pythonVersion="Python 3.11.9", pipFreeze=["fastapi==0.115.0"], checkedAt="t"), None))
+    client.post("/api/prod-health", json={"username": "M", "password": "x"})
+    saved = json.loads((tmp_path / "prod_env.json").read_text(encoding="utf-8"))
+    assert saved["pythonVersion"] == "Python 3.11.9" and saved["pipFreeze"] == ["fastapi==0.115.0"]
 
 
 def test_failed_health_still_blocks(client, monkeypatch):

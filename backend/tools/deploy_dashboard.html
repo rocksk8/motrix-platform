@@ -79,6 +79,9 @@
       略過測試閘門（全量沒有全綠仍要打包——僅限緊急修補，會記進歷史紀錄）
     </label>
     <input id="overrideReason" placeholder="略過原因（勾選略過時必填）">
+    <div class="row" style="margin-bottom:8px"><span>產品（要包哪些模組）</span>
+      <select id="productSel" data-testid="product-select" style="width:auto"></select></div>
+    <div id="productDesc" style="font-size:12px;color:#aaa;margin-bottom:8px"></div>
     <button id="buildBtn" onclick="startBuild()">開始打包（含完整 pytest，約 5-6 分鐘）</button>
     <div class="confirm-box hidden" id="buildBlocked"></div>
     <div class="log hidden" id="buildLog"></div>
@@ -182,6 +185,19 @@ async function refreshGate() {
     const el = document.getElementById('gateState');
     el.textContent = (g.state === 'ok' ? '✅ ' : '⛔ ') + g.detail;
     el.style.color = g.state === 'ok' ? '#4ADE80' : '#F87171';
+  } catch (e) {}
+}
+
+// §9e D3：產品設定檔（product/*.json）
+async function refreshProducts() {
+  try {
+    const ps = await (await fetch('/api/products')).json();
+    const sel = document.getElementById('productSel');
+    sel.innerHTML = ps.filter(p => !p.error).map(p => `<option value="${esc(p.name)}"${p.name === 'full' ? ' selected' : ''}>${esc(p.name)}</option>`).join('');
+    const desc = () => { const p = ps.find(x => x.name === sel.value) || {};
+      document.getElementById('productDesc').textContent = (p.description || '') +
+        '（模組：' + ((p.modules || []).map(m => m === '*' ? '全部' : m).join('、') || '無，只有共用核心') + '）'; };
+    sel.onchange = desc; desc();
   } catch (e) {}
 }
 
@@ -370,7 +386,11 @@ window.addEventListener('beforeunload', () => {
 async function refreshPackages() {
   const pkgs = await (await fetch('/api/packages')).json();
   const sel = document.getElementById('pkgSelect');
-  sel.innerHTML = pkgs.map(p => `<option value="${p.folder}">${p.folder} — ${p.commit_short || '?'} (${p.built_at || '?'})</option>`).join('');
+  // §9e D3：包了哪些模組（沒有 lock 的舊包明確標出來，不當成「全部」）
+  const lockText = p => !p.lock ? '（舊包：沒有模組清單）'
+    : p.lock.error ? '（' + p.lock.error + '）'
+    : '產品 ' + (p.lock.product || '?') + '：' + (Object.keys(p.lock.modules || {}).join('、') || '只有共用核心');
+  sel.innerHTML = pkgs.map(p => `<option value="${esc(p.folder)}">${esc(p.folder)} — ${esc(p.commit_short || '?')} (${esc(p.built_at || '?')}) ${esc(lockText(p))}</option>`).join('');
   document.getElementById('upPkg').innerHTML = sel.innerHTML;
 }
 
@@ -425,7 +445,8 @@ async function startBuild() {
   blocked.classList.add('hidden');
   const res = await fetch('/api/build', { method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ overrideTestGate: document.getElementById('overrideGate').checked,
-                           overrideReason: document.getElementById('overrideReason').value }) });
+                           overrideReason: document.getElementById('overrideReason').value,
+                           product: document.getElementById('productSel').value || 'full' }) });
   const data = await res.json();
   if (!res.ok) {
     blocked.classList.remove('hidden');
@@ -572,6 +593,7 @@ async function loadCheckOnly() {
 refreshDevStatus();
 refreshPackages();
 refreshHistory();
+refreshProducts();
 initUpgrade();
 connectProdWs();
 setInterval(refreshDevStatus, 15000);

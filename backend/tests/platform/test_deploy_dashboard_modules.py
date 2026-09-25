@@ -78,6 +78,8 @@ def test_facts_script_collects_modules_from_a_fake_install(tmp_path):
     facts = json.loads(r.stdout.strip().splitlines()[-1])
     # Get-Content -Raw 的字串帶附加屬性，ConvertTo-Json 會把它變成物件（測試抓到）⇒ 原始檔內容必須是字串
     assert isinstance(facts["deployedRaw"], str) and json.loads(facts["deployedRaw"]) == {"commit": "abc"}
+    assert isinstance(facts["pythonVersion"], str) and facts["pythonVersion"].startswith("Python 3")
+    assert isinstance(facts["pipFreeze"], list) and all(isinstance(x, str) for x in facts["pipFreeze"])
     m = facts["modules"]
     assert isinstance(m["lockRaw"], str) and all(isinstance(x, str) for x in m["logLines"])
     assert m["installed"] == [{"key": "tender_radar", "version": "1.0.1"}] or m["installed"] == {"key": "tender_radar", "version": "1.0.1"}
