@@ -44,11 +44,17 @@ def split_sections(text):
 
 
 def my_sections(mine_text, onto_text):
-    """我的 CHANGELOG 最上面、onto 沒有的段落（以標題行比對）。"""
-    onto_headers = {h for h, _, _ in split_sections(onto_text)[1]}
+    """我的 CHANGELOG 最上面、onto 沒有的段落。
+
+    以**內文**比對，不以標題行：段落合回時 core_bump 會改寫標題（換版號、加「暫用 X → Y」註記），
+    以標題比對會把已經合回的段落又當成我的、再編一次號（2026-09-26 C3 疊在 C1 上時實際發生：C1 的內容重複成 1.14）。
+    標題也相同的一樣算已合回（內文空白的段落靠標題辨認）。"""
+    onto = split_sections(onto_text)[1]
+    onto_bodies = {body.strip() for _, _, body in onto if body.strip()}
+    onto_headers = {h for h, _, _ in onto}
     out = []
     for h, v, body in split_sections(mine_text)[1]:
-        if h in onto_headers:
+        if h in onto_headers or (body.strip() and body.strip() in onto_bodies):
             break
         out.append((h, v, body))
     return out

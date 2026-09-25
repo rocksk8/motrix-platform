@@ -67,3 +67,15 @@ def test_rc_my_sections_stop_at_the_first_shared_header():
     """我的段落只取最上面、onto 沒有的——onto 也有的那段之後不再往下找（不會把舊段落重編號）。"""
     mine = _mine(("1.9", "c1"))
     assert [s[1] for s in CB.my_sections(mine, ONTO)] == [(1, 9)]
+
+
+def test_rc_already_merged_section_with_rewritten_header_is_not_mine():
+    """2026-09-26 實際發生：C1 以「## 1.13 …〔core_bump：暫用 1.10 → 1.13〕」合回；C3 疊在 C1 上，它的 CHANGELOG
+    仍是 C1 的原標題「## 1.10 …」。以標題比對會把 C1 的段落又當成我的（重複成 1.14）。以內文比對 ⇒ 只剩 C3 那一段。"""
+    c1_body = "\n- core.pages\n\n"
+    onto = PRE + "## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.13〕" + c1_body + "## 1.9 — 2026-09-26\n> A\n- a\n\n## 1.8 — 2026-09-26\n> X\n- x\n"
+    mine = PRE + "## 1.11 — 2026-09-26（B-c3）\n- core.menu\n\n" + "## 1.10 — 2026-09-26（B）" + c1_body + "## 1.8 — 2026-09-26\n> X\n- x\n"
+    secs = CB.my_sections(mine, onto)
+    assert [s[1] for s in secs] == [(1, 11)]
+    text, ver, _ = CB.plan(mine, onto, (1, 13), "minor")
+    assert ver == "1.14" and text.count("core.pages") == 1
