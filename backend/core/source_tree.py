@@ -47,7 +47,7 @@ def product_files():
     與 `router_files()`／`logic_files()` 不同：這份含根目錄檔（db.py、archive.py…）與模組的子目錄
     （CORE-SPEC §3 `modules/<key>/api/`、`service/`）——「整個產品不可以出現 X」類守門用這份。
     """
-    files = sorted(BACKEND.glob("*.py"))
+    files = sorted(p for p in BACKEND.glob("*.py") if p.name != "conftest.py")  # conftest.py 在 backend/ 根（2026-09-25 自 tests/ 上移），是測試設定不是產品碼
     for sub in ("core", "routers", "helpers"):
         files += sorted((BACKEND / sub).glob("*.py"))
     root = BACKEND / "modules"

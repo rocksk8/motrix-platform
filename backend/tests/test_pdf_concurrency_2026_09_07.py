@@ -89,6 +89,8 @@ def test_no_module_spawns_edge_outside_the_shared_runner():
                 continue
             path = os.path.join(root, name)
             rel = os.path.relpath(path, backend)
+            if rel.replace("\\", "/") == "conftest.py":  # conftest.py 在 backend/ 根（2026-09-25 自 tests/ 上移），是測試設定不是產品碼
+                continue
             if rel.replace("\\", "/") == "helpers/startup.py":
                 continue  # run_edge_pdf() 本人，就是那個唯一該碰 subprocess 的地方
             src = open(path, encoding="utf-8", errors="replace").read()

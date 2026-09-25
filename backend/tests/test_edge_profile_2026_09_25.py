@@ -19,7 +19,8 @@ BACKEND = Path(__file__).resolve().parents[1]
 def test_product_code_never_passes_a_user_data_dir():
     """產品預設行為不變：產品碼（tests 以外）沒有任何一處帶 `--user-data-dir`。"""
     hits = [str(p.relative_to(BACKEND)) for p in BACKEND.rglob("*.py")
-            if "tests" not in p.relative_to(BACKEND).parts and "--user-data-dir" in p.read_text(encoding="utf-8", errors="ignore")]
+            if "tests" not in p.relative_to(BACKEND).parts and p.name != "conftest.py"  # conftest.py 在 backend/ 根（2026-09-25 自 tests/ 上移），是測試設定不是產品碼
+            and "--user-data-dir" in p.read_text(encoding="utf-8", errors="ignore")]
     assert hits == [], "產品碼帶了 --user-data-dir：%s" % hits
 
 
