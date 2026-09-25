@@ -249,7 +249,7 @@ def test_daily_task_is_marked_complete_so_no_overdue_mail(client, make_user):
     直接跑 `_check_overdue_and_notify()` 驗證——這比檢查 completions 表更接近
     使用者真正會遇到的事（信箱裡有沒有多一封）。
     """
-    from routers import daily_tasks as dt
+    from modules.daily_tasks import api as dt
     username, password = make_user(username="stgdt4", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-STGDT-004")
