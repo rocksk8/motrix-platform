@@ -1,5 +1,5 @@
 {
- "core_version": "1.15",
+ "core_version": "1.16",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -466,6 +466,7 @@
   "helper:mail_types": {
    "CATEGORIES": "const",
    "GROUPS": "const",
+   "MANAGED_ELSEWHERE": "const",
    "MODES": "const",
    "MailType": "class",
    "MailType.action": "field",

@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.95 — 2026-09-26（A，信件稽核修正；列車上 core_bump 取號）
+## 1.16 — 2026-09-26（A，信件稽核修正；列車上 core_bump 取號）〔core_bump：暫用 1.95 → 1.16〕
 - L1（新增）：`helpers.mail_types.MANAGED_ELSEWHERE`——收件人由別處維護、不在信件設定頁覆寫的類型（每月營運報表；稽核 M-S3）
 
 ## 1.15 — 2026-09-26（X-R）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.15〕
