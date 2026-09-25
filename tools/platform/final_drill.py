@@ -165,6 +165,14 @@ def build_install(v9: str, install: str) -> dict:
         n += 1
     for rel in _dbs(v9):
         ro_backup(os.path.join(v9, rel), os.path.join(install, rel))
+    # 開發機的舊備份告警（例：開發機沒有掛雲端 ⇒「找不到雲端備份路徑」）會讓預檢擋下。
+    # 正式機升級前要由人處理；演練複本裡封存它，並把內容寫進報告（不是刪掉、也不是假裝沒有）。
+    dev_alert = None
+    alert = os.path.join(install, "backup_alerts", "BACKUP_ALERT.txt")
+    if os.path.exists(alert):
+        with open(alert, encoding="utf-8", errors="replace") as f:
+            dev_alert = f.read(600)
+        os.replace(alert, os.path.join(install, "backup_alerts", "BACKUP_ALERT.drill-archived.txt"))
     for marker in (".no_email_send", ".no_cloud_archive"):
         with open(os.path.join(install, marker), "w", encoding="utf-8") as f:
             f.write("D7 final drill")
@@ -173,7 +181,7 @@ def build_install(v9: str, install: str) -> dict:
     U.online_backup(os.path.join(install, "backend", "motrix_erp.db"), os.path.join(snap, "motrix_erp.db"))
     with open(os.path.join(snap, ".done"), "w", encoding="utf-8") as f:
         f.write("D7 final drill")
-    return {"files": n, "db": _dbs(install)}
+    return {"files": n, "db": _dbs(install), "dev_alert_archived": dev_alert}
 
 
 def _py_in(backend: str, code: str) -> str:
@@ -290,6 +298,7 @@ def main(argv=None):
             m = U.backup(install, backup_dir)
             s["files"], s["db"] = len(m["files"]), list(m["db"])
             s["problems"] = U.verify_backup_restorable(backup_dir); s["ok"] = not s["problems"]
+            T._write_log(backup_dir, "backup_verify.json", {"problems": s["problems"]})   # 轉換只認已驗證的備份
         _must(rep)
         with step(rep, "4c 轉換") as s:
             s.update(T.convert(install, backup_dir, new_src))
@@ -308,6 +317,10 @@ def main(argv=None):
         backup2 = os.path.join(root, "upgrade-backup-2")
         with step(rep, "6b 再轉換（完整回滾前）") as s:
             U.backup(install, backup2)
+            s["backup_problems"] = U.verify_backup_restorable(backup2)
+            T._write_log(backup2, "backup_verify.json", {"problems": s["backup_problems"]})
+            if s["backup_problems"]:
+                raise RuntimeError("第二次備份試還原不通過：%s" % s["backup_problems"])
             s.update(T.convert(install, backup2, new_src))
             s["verify"] = T.verify(install, backup2, UD.free_port()); s["ok"] = not s["verify"]
         _must(rep)
