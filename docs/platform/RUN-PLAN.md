@@ -92,6 +92,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 00:40 A：AUDIT-X-IP1-4-row-access 修正合回（wip/a-ip-fix，10 commits）。必修 X-1（IP-1 缺席明說：報表／待補登／傳票來源回 `unavailable` 並顯示）、X-2（登記表與程式碼一致守門，CORE-SPEC §5）、X-3（dev_crm 四條讀取路徑的 row_access 行為題）；建議 Y-1（收款帳戶端點限出納／管理員）、Y-2（M06 不在時 M07 照常載入，PDF 端點 503）、Y-3（core.source_tree 涵蓋 api/、service/）、Y-4（mp1／mp6 importorskip 移入 e2e 題）、Y-5（簽核人與案件守門規則合為一份；修出實際缺陷：額外支出簽核人在簽核佇列被 403）。每項突變皆紅（合計 22 種）。差異題：tests/platform＋變動檔 541 passed；1 紅為本機 venv 缺 cv2／numpy（同步 requirements 後 6/6 綠）。另：licensing test_08a 在稽核基準 6c3bfd8b 也紅（本機環境），非本次造成。延後：Y-3 的 test_no_credentials_in_query 掃描來源改寫、Z 項排入各模組搬遷。回覆欄已填，待 X 確認。
 - 2026-09-26 00:35：雲端試跑第二項：P1 能力目錄＋P3 模組描述（分支 wip/cloud-p1p3，只 push 分支）。雲端不佔本機 CPU，所以不受「等負載降下來」的限制。要求與 STAGE-C 的 module.json 欄位一起設計。
 - 2026-09-26 00:15：使用者裁示「雲端先試一項小工作」：把「個資告知擴大範圍」派到雲端（分支 wip/cloud-pii-notice，只 push 分支，不合回）。回報要附雲端環境的障礙清單；主持在 Windows 開發機驗證後才合回，再決定要不要全面搬。
 - 2026-09-26 00:14 巡視：沒有新的合回，每個視窗都有工作，沒有人超過死線（A2 00:40／01:00、B 01:30）。不派工。
