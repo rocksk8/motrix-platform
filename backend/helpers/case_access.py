@@ -3,17 +3,29 @@
 原本在 M01 `helpers/quotations.py`；M01、M03 出貨、M04 外包、M05 開票／請款、M10 網路規劃都用它，
 留在 M01 等於每個模組都依賴 M01。`helpers.quotations` 保留同名匯入，既有呼叫端不用改。
 
-⚠ 已知例外（DEPENDENCY-MAP §3.2）：本檔讀 M01 的 `quotations` 表；L1 其他檔新增讀這張表會被
-`tests/platform/test_case_access_l1.py` 擋下（既有的讀取列在基線、只准變少）。
-M01 不在（案件表不存在）⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，不放行。
+⚠ 已知例外（DEPENDENCY-MAP §3.2）：本檔讀 M01 的 `quotations` 表；L1 其他檔新增讀寫這張表會被
+`tests/platform/test_case_access_l1.py` 擋下（既有的讀寫列在基線、只准變少）。
+M01 不在 ⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，不放行。
+「M01 在不在」看模組（`case_module_present()`），**不看表**：V9 基準的 `init_db` 在每個安裝都建 `quotations`，
+M01 停用、未授權或不在安裝包時，表與資料照樣在（稽核 D CA-M1）。
 """
 import json
 import sqlite3
 
 from fastapi import HTTPException
 
+from core import registry as _registry
 from core import txn as _txn
 from helpers import row_access
+
+#: M01 案件模組的「我在」訊號（INTEGRATION-POINTS IP-15）：M01 匯入時登記；搬進 modules/ 之後改寫進
+#: ModuleSpec.providers ⇒ 模組沒載入（停用、未授權、不在包內）就沒有登記。
+CASE_PRESENT = "case.present"
+
+
+def case_module_present() -> bool:
+    """M01（案件）現在有沒有載入。以它登記的 `case.present` 為準，不以 `quotations` 表在不在為準。"""
+    return bool(_registry.providers(CASE_PRESENT))
 
 
 # ── 案件可見性：登錄到 L1 row_access（DEPENDENCY-MAP §0-5）─────────────────────
@@ -65,6 +77,8 @@ def case_access_allowed(conn, q, user: dict, *, allow_approver: bool = False,
     """單一案件列 `q`（需含 sales_person_id、sales_person、assigned_user_ids、data_json）准不准這個人動。
     規則只有這一份：row_access `case`／scope="owner"，否則 `allow_module`，否則（`allow_approver`）簽核人。
     `guard_case_access()` 與 `routers/quotations.py::_guard_case()` 都呼叫這一支（稽核 Y-5）。"""
+    if not case_module_present():
+        return False                        # M01 不在 ⇒ 不放行（連 admin 也一樣；row_access 的 fail-closed 同一個原則）
     if row_access.visible("case", user, q, scope="owner"):
         return True
     from helpers.auth import user_has_module
@@ -93,13 +107,20 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     擋下來時順手把連線關掉：呼叫端清一色是「conn = get_db() → 操作 → close()」的
     直線寫法，沒有 try/finally。
     """
+    if not case_module_present():
+        # M01 不在（主持裁示條件 3）：與「查無此案」相同，一律 404、不放行；表與資料在也一樣（CA-M1）
+        _txn.safe_close(conn)
+        raise HTTPException(404, f"報價單 {quote_no} 不存在（案件模組未載入）")
     try:
         q = conn.execute(
             "SELECT sales_person_id, sales_person, assigned_user_ids, data_json "
             "FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
-    except sqlite3.OperationalError:
-        # 案件表不存在（M01 不在這個安裝裡）⇒ 與「查無此案」相同：404，一律不放行（主持裁示條件 3）
+    except sqlite3.OperationalError as e:
+        # 只有「表不存在」當成查無此案；資料庫被鎖等其他錯誤照樣丟出，不可以回「單號不存在」（CA-S2）
+        if "no such table" not in str(e):
+            _txn.safe_close(conn)
+            raise
         q = None
     if not q:
         _txn.safe_close(conn)

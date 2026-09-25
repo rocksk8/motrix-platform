@@ -192,6 +192,23 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-15　`case.present`：M01 案件模組「我在」的訊號（M01 → L1 案件存取守門）
+
+對應稽核 D AUDIT-D-C-case-access CA-M1（2026-09-26）。L1 案件存取守門要知道 M01 在不在；**不能看 `quotations` 表**——V9 基準在每個安裝都建這張表。編號為暫定（C、A 的串接點同時期暫用 IP-10～14），由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`routers/quotations.py::_case_present`（匯入時登記；M01 搬進 `modules/` 後改寫進 `ModuleSpec.providers`） |
+| 使用方 | L1 `helpers/case_access.py::case_module_present`（`guard_case_access`、`case_access_allowed`） |
+| 形式 | provider（`core.registry`），只看有沒有登記、不呼叫 |
+| 語法 | 提供：`_registry.provide("case.present", "quotations", _case_present)`<br>取用：`bool(registry.providers("case.present"))` |
+| 回傳 | `True`（不使用） |
+| 對方不在時 | `guard_case_access` 一律 404「報價單 … 不存在（案件模組未載入）」、`case_access_allowed` 一律 False——表與資料在也一樣、連超級管理員也不放行（fail closed） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_case_access_l1.py::test_without_m01_access_is_404_even_though_the_table_and_row_exist`（真實 schema、案件列在、擁有者＋超級管理員；拿掉提供者 ⇒ 404／False） |
+
+---
+
 ## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
 不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。
