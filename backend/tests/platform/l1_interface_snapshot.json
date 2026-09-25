@@ -1,5 +1,5 @@
 {
- "core_version": "1.30",
+ "core_version": "1.31",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -245,7 +245,8 @@
   "helper:dates": {
    "_add_months": "def(d, months)",
    "_warranty_expiry": "def(warranty_start, warranty_months)",
-   "_workdays_elapsed": "def(start_date, end_date)"
+   "_workdays_elapsed": "def(start_date, end_date)",
+   "normalize_date": "def(v, label=…)"
   },
   "helper:doc_template": {
    "BLOCKS": "const",
