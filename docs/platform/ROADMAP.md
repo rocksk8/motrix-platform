@@ -74,7 +74,7 @@
    - 搬遷時把 `/api/reports/bank-reconcile` 收回 M05（業務語意屬於出納；M08 搬遷時暫留 M08，主持 2026-09-26 裁示）
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
-9. M03 採購庫存出貨 — 需要 §4 的 stock_items（🔄 A 2026-09-26 開工，wip/a-m03）
+9. M03 採購庫存出貨 — ✅ A 2026-09-26 搬進 `modules/supply`（wip/a-m03）。M01 的案件整包出貨段、設備序號認領改走 IP-18／IP-19（暫定號），stock_items 直寫 debt 已刪
 10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider（分給 B，主持 2026-09-26）〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
    - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider）
