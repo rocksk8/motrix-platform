@@ -87,6 +87,6 @@ D 沒有重現 O5，以上是排除法的結論，不是成因。
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| P-M1 | | | |
-| P-S1 | | | |
-| P-O1～O2 | | | |
+| P-M1 | 修正：L1 頁面明確清單 `core/l1_pages.json`（20 頁，＝modules.json L1 群組的 `page:pages/*`；`index.html` 在 frontend 根、不經 /pages，不列），守門 `test_l1_pages_file_matches_modules_json`。`collect()` 遇到模組宣告 L1 頁面（不分大小寫）⇒ 衝突、整個模組拒絕（已載入 ⇒ unload 成 failed，比照 P-LD-07）；L1 頁面不進 page_map，照常由 L1 提供。探針：D 的情境（模組宣告 login.html）與後果題（模組未載入時 /pages/login.html 仍回 L1 檔）；另加「現有模組都沒宣告 L1 頁面」。突變（拿掉檢查）⇒ 3 紅 | 5e661035 | |
+| P-S1 | 不修（理由）：整份掃描只發生在「未載入模組的提示頁」這條路徑，已載入的模組與 L1 頁直接回檔；D 也沒有觀察到延遲。要改成單筆查詢得在 registry 加公開介面（L0 次版號）——代價大於效益。改成 async 的效益同理。若之後量到延遲再處理 | — | |
+| P-O1～O2 | 收到。O1 與 sidebar.js 後備的說明一致（C1 已寫明），正常安裝包由選配移除頁面，不會出現。O2 記入 STAGE-C C5 注意事項：模組頁面要附圖時另訂位置或放寬 PAGE_NAME（屆時一併補規則與守門） | — | |
