@@ -2081,3 +2081,62 @@ def schedule_overdue_check() -> None:
     t = threading.Timer(_next_08(), _loop)
     t.daemon = True
     t.start()
+
+
+# ── IP-5 `daily_task.external`：由外部來源建立／同步任務（2026-09-25，ROADMAP A11）──────────
+#
+# 別組（目前是 M01 案件執行進度，helpers/case_stage_tasks.py）不再直接寫 daily_tasks／
+# daily_task_completions，改用這個提供者。**在呼叫端的連線上寫、不 commit**：呼叫端把
+# 「任務 id 記回自己的表」與這裡的寫入放在同一個交易裡。欄位只准加（契約版本 1）。
+# 取用：`core.registry.single_provider("daily_task.external")`；None ⇒ 每日任務模組未安裝。
+from core import registry as _registry  # noqa: E402
+
+
+def _external_upsert(conn, *, task_id: int, task_date: str, title: str, description: str,
+                     category: str, assignees: list, created_by: str, case_no: str,
+                     completion_report: str, now: str) -> int:
+    """建立或更新一筆「已完成的事」的任務，並替每個負責人補完成紀錄（否則隔天會寄逾期通知）。
+    `task_id` 指到已刪除或不存在的列 ⇒ 新建一筆。回任務 id。"""
+    existing = conn.execute(
+        "SELECT id FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)
+    ).fetchone() if task_id else None
+    assignees_json = json.dumps(assignees, ensure_ascii=False)
+    if existing:
+        conn.execute(
+            "UPDATE daily_tasks SET task_date=?, title=?, description=?, category=?, "
+            "assigned_to=?, case_no=?, updated_at=? WHERE id=?",
+            (task_date, title, description, category, assignees_json, case_no, now, task_id))
+    else:
+        cur = conn.execute(
+            "INSERT INTO daily_tasks "
+            "(task_date, title, description, category, priority, assigned_to, "
+            " created_by, created_at, updated_at, is_deleted, recurrence_type, "
+            " recurrence_days, recurrence_end_date, supervisors, case_no) "
+            "VALUES (?,?,?,?,'一般',?,?,?,?,0,'once','[]','','[]',?)",
+            (task_date, title, description, category, assignees_json,
+             created_by or "", now, now, case_no))
+        task_id = cur.lastrowid
+    for username in assignees:
+        conn.execute(
+            "INSERT INTO daily_task_completions "
+            "(task_id, username, occurrence_date, completed, report, completed_at) "
+            "VALUES (?,?,?,1,?,?) "
+            "ON CONFLICT(task_id, occurrence_date, username) DO UPDATE SET "
+            "completed=1, completed_at=excluded.completed_at",
+            (task_id, username, task_date, completion_report, now))
+    return task_id
+
+
+def _external_withdraw(conn, task_id: int, now: str) -> None:
+    """收回（soft delete，與使用者自己刪任務同一條路徑）。"""
+    if task_id:
+        conn.execute("UPDATE daily_tasks SET is_deleted=1, updated_at=? WHERE id=?", (now, task_id))
+
+
+class _ExternalTasks:
+    """IP-5 的提供者物件：`upsert(conn, **kw) -> task_id`、`withdraw(conn, task_id, now)`。"""
+    upsert = staticmethod(_external_upsert)
+    withdraw = staticmethod(_external_withdraw)
+
+
+_registry.provide("daily_task.external", "daily_tasks", _ExternalTasks)

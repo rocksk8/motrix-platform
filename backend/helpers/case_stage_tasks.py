@@ -26,20 +26,43 @@
 
 跟 `google_calendar.py` 的三個 push 一樣是 fire-and-forget：包在最外層
 try/except，任何失敗只記 log，絕不能讓「月曆沒同步」擋住勾選這個主要動作。
+
+🔑 2026-09-25（ROADMAP A11，INTEGRATION-POINTS IP-5）：本檔（M01）**不再直接寫**
+`daily_tasks`／`daily_task_completions`（M12 的表），改走 M12 公開的
+`daily_task.external` 提供者；本檔只讀自己的 `case_stages`／`quotations`、決定任務內容，
+並把任務 id 記回 `case_stages.daily_task_id`。M12 未安裝 ⇒ 勾選照常存檔，只是不產生
+每日任務，`daily_task_notice()` 回「未建立每日任務：每日任務模組未安裝」。
 """
 import json
 import logging
 from datetime import date, datetime
 
+from core import registry as _registry
+
 logger = logging.getLogger(__name__)
 
 CATEGORY = "案件進度"
+NOTICE_NO_DAILY_TASKS = "未建立每日任務：每日任務模組未安裝"
+
+
+def _tasks():
+    """M12 的 IP-5 提供者；未安裝 ⇒ None。"""
+    return _registry.single_provider("daily_task.external")
+
+
+def daily_task_notice():
+    """給呼叫端放進回應的提示：M12 不在時明說沒有建立每日任務；在的時候回 None。"""
+    return None if _tasks() is not None else NOTICE_NO_DAILY_TASKS
 
 
 def sync_daily_task_for_case_stage(stage_id: int, actor_username: str = "",
                                    actor_display: str = "") -> None:
     """依 `case_stages.done` 建立／更新／收回對應的每日工作事項。"""
     try:
+        tasks = _tasks()
+        if tasks is None:
+            logger.info("sync_daily_task_for_case_stage(%s)：%s", stage_id, NOTICE_NO_DAILY_TASKS)
+            return
         from db import get_db
         conn = get_db()
         row = conn.execute("""
@@ -53,11 +76,11 @@ def sync_daily_task_for_case_stage(stage_id: int, actor_username: str = "",
             return
 
         task_id = row["daily_task_id"] or 0
+        now = datetime.now().isoformat()
 
         if not row["done"]:
             if task_id:
-                conn.execute("UPDATE daily_tasks SET is_deleted=1, updated_at=? WHERE id=?",
-                             (datetime.now().isoformat(), task_id))
+                tasks.withdraw(conn, task_id, now)
                 conn.execute("UPDATE case_stages SET daily_task_id=0 WHERE id=?", (stage_id,))
                 conn.commit()
                 logger.info("sync_daily_task_for_case_stage: stage %s 取消勾選，收回任務 %s",
@@ -83,51 +106,24 @@ def sync_daily_task_for_case_stage(stage_id: int, actor_username: str = "",
         pname = row["project_name"] or ""
         case_name = pname or row["quote_no"]
         stage_label = row["label"] or "執行階段"
-        title = f"{case_name}｜{stage_label}"
-        description = (f"案件執行進度「{stage_label}」已完成。\n"
-                       f"案件編號：{row['quote_no']}\n客戶：{cname}\n"
-                       f"（本列由案件管理勾選執行進度時自動建立）")
-        now = datetime.now().isoformat()
-
-        existing = conn.execute(
-            "SELECT id FROM daily_tasks WHERE id=? AND is_deleted=0", (task_id,)
-        ).fetchone() if task_id else None
-
-        if existing:
-            conn.execute(
-                "UPDATE daily_tasks SET task_date=?, title=?, description=?, category=?, "
-                "assigned_to=?, case_no=?, updated_at=? WHERE id=?",
-                (task_date, title, description, CATEGORY,
-                 json.dumps(assignees, ensure_ascii=False), row["quote_no"], now, task_id))
-        else:
-            cur = conn.execute(
-                "INSERT INTO daily_tasks "
-                "(task_date, title, description, category, priority, assigned_to, "
-                " created_by, created_at, updated_at, is_deleted, recurrence_type, "
-                " recurrence_days, recurrence_end_date, supervisors, case_no) "
-                "VALUES (?,?,?,?,'一般',?,?,?,?,0,'once','[]','','[]',?)",
-                (task_date, title, description, CATEGORY,
-                 json.dumps(assignees, ensure_ascii=False),
-                 actor_username or "", now, now, row["quote_no"]))
-            task_id = cur.lastrowid
-            conn.execute("UPDATE case_stages SET daily_task_id=? WHERE id=?", (task_id, stage_id))
-
-        # 見模組 docstring 第 2 點：不標完成的話，隔天每個負責人都會收到逾期通知
-        for username in assignees:
-            conn.execute(
-                "INSERT INTO daily_task_completions "
-                "(task_id, username, occurrence_date, completed, report, completed_at) "
-                "VALUES (?,?,?,1,?,?) "
-                "ON CONFLICT(task_id, occurrence_date, username) DO UPDATE SET "
-                "completed=1, completed_at=excluded.completed_at",
-                (task_id, username, task_date,
-                 f"案件管理勾選「{stage_label}」完成"
-                 + (f"（{actor_display}）" if actor_display else ""), now))
-
+        # 見模組 docstring 第 2 點：完成紀錄由提供者一併寫（不標完成，隔天每個負責人都會收到逾期通知）
+        new_id = tasks.upsert(
+            conn, task_id=task_id, task_date=task_date,
+            title=f"{case_name}｜{stage_label}",
+            description=(f"案件執行進度「{stage_label}」已完成。\n"
+                         f"案件編號：{row['quote_no']}\n客戶：{cname}\n"
+                         f"（本列由案件管理勾選執行進度時自動建立）"),
+            category=CATEGORY, assignees=assignees, created_by=actor_username or "",
+            case_no=row["quote_no"],
+            completion_report=(f"案件管理勾選「{stage_label}」完成"
+                               + (f"（{actor_display}）" if actor_display else "")),
+            now=now)
+        if new_id != task_id:
+            conn.execute("UPDATE case_stages SET daily_task_id=? WHERE id=?", (new_id, stage_id))
         conn.commit()
         conn.close()
         logger.info("sync_daily_task_for_case_stage: stage %s -> daily_task %s (%s)",
-                    stage_id, task_id, task_date)
+                    stage_id, new_id, task_date)
     except Exception as exc:
         logger.warning("sync_daily_task_for_case_stage(%r) failed: %s", stage_id, exc)
 
@@ -137,10 +133,12 @@ def delete_daily_task_for_case_stage(task_id: int) -> None:
     if not task_id:
         return
     try:
+        tasks = _tasks()
+        if tasks is None:
+            return
         from db import get_db
         conn = get_db()
-        conn.execute("UPDATE daily_tasks SET is_deleted=1, updated_at=? WHERE id=?",
-                     (datetime.now().isoformat(), task_id))
+        tasks.withdraw(conn, task_id, datetime.now().isoformat())
         conn.commit()
         conn.close()
         logger.info("delete_daily_task_for_case_stage: soft-deleted task %s", task_id)

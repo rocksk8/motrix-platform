@@ -105,7 +105,7 @@ from .google_calendar import (
     create_test_event as create_calendar_test_event,
 )
 from .case_stage_tasks import (
-    sync_daily_task_for_case_stage,
+    sync_daily_task_for_case_stage, daily_task_notice,
     delete_daily_task_for_case_stage,
 )
 from .uploads import (
@@ -175,7 +175,7 @@ __all__ = [
     "push_event_for_case_stage_due", "push_event_for_case_stage_done",
     "push_event_delete_for_case_stage",
     # case_stage_tasks（執行進度 → 每日工作事項月曆）
-    "sync_daily_task_for_case_stage", "delete_daily_task_for_case_stage",
+    "sync_daily_task_for_case_stage", "delete_daily_task_for_case_stage", "daily_task_notice",
     # uploads
     "save_document_files", "delete_document_file",
     # startup

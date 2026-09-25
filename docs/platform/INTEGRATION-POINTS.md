@@ -97,3 +97,41 @@ M06 的 `vouchers_all`。
 | 對方不在時 | **退回照常**成立；不作廢、**保留連結**（之後查得到是哪一張），回傳 `notice`＝「未作廢傳票（#id）：會計模組未安裝；退回照常，請會計另行處理那一張傳票」。明細仍列出每一張連結的傳票，標 `unavailable` 與「會計模組未安裝，無法查詢狀態」，頁面不給連結（不讓傳票從畫面消失）。<br>**M06 回來後**：再次進入待發放時，若舊連結仍是未作廢的草稿 ⇒ 不另開、不覆蓋，notice 明說「上一張轉帳傳票草稿 … 尚未作廢」；舊連結已送審 ⇒ 照原行為另開新草稿 |
 | 契約版本 | 1（2026-09-25） |
 | 守門 | `backend/tests/platform/test_voucher_status_connectors.py`：①void_draft 三種結果＋status 形狀＋不 commit ②**反向控制**：有 M06 時退回會作廢（正對照）；拿掉後不作廢、有提示、連結保留、M06 的表沒被動、明細標無法查詢 ③M06 回來：殘留草稿不另開不覆蓋；已送審的舊連結照常另開 ④M07 原始碼不再出現 `vouchers_all`、頁面有 unavailable 分支。突變 5 種皆轉紅（默默略過、傳票從明細消失、拿掉殘留防護、防護放太寬擋到已送審、M06 不在仍解除連結） |
+
+---
+
+## IP-5　`daily_task.external`：由外部來源建立／同步每日任務（M12 → M01）
+
+對應 DEPENDENCY-MAP §3.1（ROADMAP A11）。原本 `helpers/case_stage_tasks.py`（M01）直接寫 M12 的 `daily_tasks`／`daily_task_completions`。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M12 每日任務：`routers/daily_tasks.py::_ExternalTasks`（`upsert`／`withdraw`） |
+| 使用方 | M01 `helpers/case_stage_tasks.py::sync_daily_task_for_case_stage`（案件執行進度勾選完成 → 月曆上一筆「已完成」任務）、`delete_daily_task_for_case_stage`（階段刪除 → 收回）；`routers/quotations.py` 階段更新端點（回應的 `notice`） |
+| 形式 | provider，單一提供者（`core.registry`；M12 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`_registry.provide("daily_task.external", "daily_tasks", _ExternalTasks)`<br>取用：`t = registry.single_provider("daily_task.external")`；`None` ⇒ 退化。`t.upsert(conn, task_id=…, task_date=…, title=…, description=…, category=…, assignees=[…], created_by=…, case_no=…, completion_report=…, now=…) -> task_id`；`t.withdraw(conn, task_id, now)` |
+| 回傳 | `upsert` 回任務 id（`task_id` 指到已刪除或不存在的列 ⇒ 新建）；替每個負責人寫完成紀錄（否則隔天寄逾期通知）。**在呼叫端的連線上寫、不 commit**：M01 把 id 記回 `case_stages.daily_task_id` 後一起 commit |
+| 對方不在時 | **勾選照常存檔**，不產生每日任務；階段更新端點回應 `notice`＝「未建立每日任務：每日任務模組未安裝」（`helpers/case_stage_tasks.NOTICE_NO_DAILY_TASKS`）；背景同步記 INFO 後返回；階段刪除不做收回。皆不丟例外 |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | `backend/tests/platform/test_case_stage_connectors.py`：①M12 已登記 ②**正對照**：勾選 ⇒ 一筆任務＋完成紀錄、id 記回、取消勾選收回 ③**反向控制**：拿掉提供者 ⇒ 200、`done=1`、零筆任務、`notice` 明說 ④M01 檔內不再有寫 `daily_tasks`／`daily_task_completions` 的 SQL；`table_write_exceptions.json` 對應兩筆 debt 已刪（邊界守門 ③）。突變：notice 不看提供者、提供者不寫完成紀錄 ⇒ 皆轉紅 |
+
+---
+
+## IP-6　`calendar.writeback`：行事曆事件 id 由擁有模組回寫（M01／M03／M05 → L1 行事曆）
+
+對應 DEPENDENCY-MAP §3.1（ROADMAP A11）。原本 L1 `helpers/google_calendar.py` 直接 UPDATE 5 張 L2 表寫回 event id。
+
+**選型（評估對呼叫端改動最小）**：採「擁有模組登記回寫的提供者」，不採「L1 只回傳 event id、各模組自己回寫」。後者要把 5 個 push 函式的呼叫端（6 支 router 的背景執行緒）全部改寫成「拿到 id 再回寫」，而那些呼叫是 fire-and-forget 的背景執行緒、拿不到回傳值；前者呼叫端**零改動**，只在擁有模組各加一支回寫函式。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M05 `routers/invoice_vouchers.py`（`invoice_voucher`）、`routers/payment_requests.py`（`payment_request`）；M03 `routers/shipping_notes.py`（`shipping_note`）；M01 `routers/quotations.py`（`quotation`、`case_stage`） |
+| 使用方 | L1 `helpers/google_calendar.py::_write_back`（`push_event_for_invoice_voucher`／`payment_request`／`shipping_note`／`quotation_won`／`case_stage_due`／`case_stage_done`） |
+| 形式 | provider，**多提供者、以名稱區分**（`registry.providers("calendar.writeback")[kind]`） |
+| 語法 | 提供：`_registry.provide("calendar.writeback", "<kind>", fn)`<br>取用：`registry.providers("calendar.writeback").get(kind)`；`None` ⇒ 退化。`fn(key, event_id, slot="default")`；`case_stage` 的 `slot` ∈ `due`（到期日事件）／`done`（完成日事件），其他值 ⇒ `KeyError`（不猜欄位） |
+| 回傳 | 無。提供者自己開連線、**拿寫鎖、重讀、只寫入 event id**（事件建立是網路請求，不可以用建事件前讀到的 `data_json` 整包蓋回；原本只有 quotation 這樣做，invoice／payment／shipping 三支現在也一樣）。`event_id=""` ＝清除 |
+| 對方不在時 | 事件照建（或照刪），只是不回寫；記 WARNING「…的擁有模組未安裝 —— event id 未回寫」。不丟例外 |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | `backend/tests/platform/test_case_stage_connectors.py`：①5 個 kind 全部登記 ②**正對照**：報價單成案、階段到期／完成兩個欄位分開寫回 ③**反向控制**：拿掉 `quotation` 提供者 ⇒ 不丟例外、`data_json` 沒有 event id、WARNING 說明原因 ④不認得的 slot 被拒 ⑤L1 檔內不再有寫這 5 張表的 SQL；`table_write_exceptions.json` 對應 5 筆 debt 已刪。既有 `test_quote_json_direct_writes_lost_update_2026_09_25::test_google_calendar_event_id`（空窗寫入不被蓋掉）照綠。突變：不登記 quotation 提供者、缺席時不記 WARNING ⇒ 皆轉紅 |
+
+**尚未處理（不在 A11 範圍）**：L1 行事曆仍**直接讀** 5 張 L2 表來組事件標題與內容（`SELECT … FROM invoice_vouchers` 等）。寫入已歸位，讀取的相依還在；要切斷須改成各模組提供「事件內容」或把 push 函式移回各模組，另開題。

@@ -878,3 +878,29 @@ def record_payment_request_export(request_no: str, mode: str = "external", autho
     _audit(_tok(authorization), "payment_request.export_pdf", "payment_request", request_no,
            f"{request_no} PDF 匯出（{mode}）by {user['username']}")
     return {"export_count": count, "log": log}
+
+
+# ── IP-6 `calendar.writeback`：行事曆事件 id 由擁有模組自己回寫（2026-09-25，ROADMAP A11）──────
+# L1 `helpers/google_calendar` 建好事件後呼叫這裡，不再直接 UPDATE 本組的表。
+# 事件建立是網路請求（慢）⇒ 這裡才拿寫鎖、重讀、只寫入 event id（不整包蓋回別人的修改）。
+from core import registry as _registry  # noqa: E402
+
+
+def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
+    from core.txn import write_txn
+    conn = get_db()
+    try:
+        with write_txn(conn):
+            r = conn.execute("SELECT data_json FROM payment_requests WHERE request_no=?", (key,)).fetchone()
+            if not r:
+                return
+            d = json.loads(r["data_json"] or "{}")
+            d["googleCalendarEventId"] = event_id
+            conn.execute("UPDATE payment_requests SET data_json=? WHERE request_no=?",
+                         (json.dumps(d, ensure_ascii=False), key))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+_registry.provide("calendar.writeback", "payment_request", _calendar_writeback)

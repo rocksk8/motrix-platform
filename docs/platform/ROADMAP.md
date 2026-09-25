@@ -51,7 +51,7 @@
 | A8c | 待辦：寫死的公司聯絡資料 `reports._COMPANY2`（統編／電話／email）、`network_plan_export._COMPANY2` 與 PDF 頁尾 → company_identity | A8 發現 | ⏳ |
 | A9 | system 指名 L2（tender／bonus／quote_terms）→ 模組登錄表 | §3 #26 #27 #28 | 🔄 tender 已完成；bonus、quote_terms 尚未 |
 | A10 | 案件聚合（vouchers_by_case、list_dispatches、list_shipping_notes）→ L1「案件關聯資料提供者」 | §3 #20–22 | ⏳ |
-| A11 | google_calendar、case_stage_tasks 跨領域寫入 → 事件／連接器 | §3.1 | ⏳ |
+| A11 | google_calendar、case_stage_tasks 跨領域寫入 → 連接器 IP-5 `daily_task.external`、IP-6 `calendar.writeback` | §3.1 | ✅ C（L1 行事曆仍直接讀 5 張表，見 IP-6「尚未處理」） |
 | A12 | 共用表直寫（stock_items、vouchers_all、dev_cases、system_settings、user_request_log）→ 擁有者連接器 | §4 | ⏳ |
 
 ## 階段 B：L2 逐一搬進 `modules/<key>/`

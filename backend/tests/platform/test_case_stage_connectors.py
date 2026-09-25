@@ -1,0 +1,179 @@
+# -*- coding: utf-8 -*-
+"""IP-5 `daily_task.external`（M12 → M01）與 IP-6 `calendar.writeback`（M01／M03／M05 → L1 行事曆）。
+
+ROADMAP A11／DEPENDENCY-MAP §3.1：M01 不再直接寫 M12 的 daily_tasks／daily_task_completions；
+L1 行事曆不再直接寫 5 張 L2 表。
+
+⚙️ 反向控制：同一條流程先確認「提供者在 ⇒ 真的有寫」（正對照），再拿掉提供者 ⇒
+主流程照常、只少那一項，而且明說。
+"""
+import ast
+import json
+from pathlib import Path
+
+import pytest
+
+from core import registry
+
+BACKEND = Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _inline_bg(monkeypatch):
+    """端點的背景同步改成當場執行（斷言看得到結果；不留執行緒）。"""
+    from routers import quotations as q
+    monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
+
+
+def _without(monkeypatch, capability, name):
+    key = (capability, name)
+    assert key in registry._LEGACY_PROVIDERS, "前提：提供者應該已登記（%s/%s）" % key
+    monkeypatch.delitem(registry._LEGACY_PROVIDERS, key)
+
+
+def _login(client, make_user, name):
+    u, p = make_user(name, "Conn-Pass-123", role="superadmin")[:2]
+    tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+    return u, {"Authorization": "Bearer " + tok}
+
+
+def _case(no):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, "
+                     "data_json, created_at, updated_at, deal_tag) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                     (no, "已送出", "串接客戶", "串接工程", 1000, 952, "{}",
+                      "2026-01-01T00:00:00", "2026-01-01T00:00:00", "已成案"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _q(sql, *args):
+    import db
+    conn = db.get_db()
+    try:
+        return [dict(r) for r in conn.execute(sql, args).fetchall()]
+    finally:
+        conn.close()
+
+
+# ── IP-5 ────────────────────────────────────────────────────────────────
+
+def test_daily_task_connector_provider_is_registered_by_m12():
+    import routers.daily_tasks  # noqa: F401  M12 在匯入時登記
+    p = registry.single_provider("daily_task.external")
+    assert p is not None and callable(p.upsert) and callable(p.withdraw)
+
+
+def _tick(client, h, no, done=True):
+    sid = client.post(f"/api/quotations/{no}/stages", headers=h, json={"label": "客戶驗收"}).json()["id"]
+    r = client.put(f"/api/quotations/{no}/stages/{sid}", headers=h, json={"done": done, "doneAt": "2026-09-11"})
+    assert r.status_code == 200, r.text
+    return sid, r.json()
+
+
+def test_daily_task_connector_with_m12_the_task_and_completion_are_created(client, make_user):
+    u, h = _login(client, make_user, "ip5_on")
+    _case("MQ-IP5-ON")
+    sid, body = _tick(client, h, "MQ-IP5-ON")
+    assert "notice" not in body
+    tasks = _q("SELECT * FROM daily_tasks WHERE case_no=? AND is_deleted=0", "MQ-IP5-ON")
+    assert len(tasks) == 1 and tasks[0]["title"] == "串接工程｜客戶驗收"
+    assert _q("SELECT daily_task_id FROM case_stages WHERE id=?", sid)[0]["daily_task_id"] == tasks[0]["id"]
+    assert _q("SELECT completed FROM daily_task_completions WHERE task_id=?", tasks[0]["id"])[0]["completed"] == 1
+    # 取消勾選 ⇒ 收回
+    client.put(f"/api/quotations/MQ-IP5-ON/stages/{sid}", headers=h, json={"done": False})
+    assert _q("SELECT is_deleted FROM daily_tasks WHERE id=?", tasks[0]["id"])[0]["is_deleted"] == 1
+
+
+def test_daily_task_connector_without_m12_stage_still_saves_and_says_so(client, make_user, monkeypatch):
+    """反向控制：拿掉 M12 ⇒ 勾選照常存檔、零筆每日任務、回應明說原因。"""
+    from helpers.case_stage_tasks import NOTICE_NO_DAILY_TASKS
+    _without(monkeypatch, "daily_task.external", "daily_tasks")
+    u, h = _login(client, make_user, "ip5_off")
+    _case("MQ-IP5-OFF")
+    sid, body = _tick(client, h, "MQ-IP5-OFF")
+    assert body.get("done") in (True, 1)
+    assert body.get("notice") == NOTICE_NO_DAILY_TASKS == "未建立每日任務：每日任務模組未安裝"
+    assert _q("SELECT * FROM daily_tasks WHERE case_no=?", "MQ-IP5-OFF") == []
+    assert _q("SELECT done, daily_task_id FROM case_stages WHERE id=?", sid)[0] == {"done": 1, "daily_task_id": 0}
+
+
+def _sql_writes(rel):
+    """檔案裡字串常值中的 INSERT/UPDATE/DELETE 目標表。"""
+    import re
+    src = (BACKEND / rel).read_text(encoding="utf-8")
+    out = set()
+    for n in ast.walk(ast.parse(src)):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str):
+            for m in re.finditer(r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)", n.value, re.I):
+                out.add(m.group(1).lower())
+    return out
+
+
+def test_m01_and_l1_no_longer_write_foreign_tables():
+    assert not ({"daily_tasks", "daily_task_completions"} & _sql_writes("helpers/case_stage_tasks.py"))
+    assert not ({"case_stages", "invoice_vouchers", "payment_requests", "shipping_notes", "quotations"}
+                & _sql_writes("helpers/google_calendar.py"))
+
+
+# ── IP-6 ────────────────────────────────────────────────────────────────
+
+IP6_KINDS = {"invoice_voucher", "payment_request", "shipping_note", "quotation", "case_stage"}
+
+
+def test_calendar_writeback_every_owner_registers_its_writeback():
+    import routers.invoice_vouchers, routers.payment_requests, routers.shipping_notes, routers.quotations  # noqa: F401,E401
+    assert set(registry.providers("calendar.writeback")) == IP6_KINDS
+
+
+@pytest.fixture()
+def fake_google(monkeypatch):
+    from helpers import google_calendar as gc
+    monkeypatch.setattr(gc, "_create_all_day_event", lambda s, d, dt: "evt-ip6")
+    monkeypatch.setattr(gc, "_update_all_day_event", lambda eid, s, d, dt: eid)
+    monkeypatch.setattr(gc, "_delete_event", lambda eid: None)
+    return gc
+
+
+def test_calendar_writeback_with_owner_event_id_is_written_back(client, make_user, fake_google):
+    _case("MQ-IP6-ON")
+    fake_google.push_event_for_quotation_won("MQ-IP6-ON")
+    d = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", "MQ-IP6-ON")[0]["data_json"])
+    assert d.get("googleCalendarEventId") == "evt-ip6"
+
+
+def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, fake_google):
+    u, h = _login(client, make_user, "ip6_stage")
+    _case("MQ-IP6-STG")
+    sid = client.post("/api/quotations/MQ-IP6-STG/stages", headers=h, json={"label": "驗收"}).json()["id"]
+    import db
+    conn = db.get_db()
+    conn.execute("UPDATE case_stages SET due_date='2026-10-01', done=1, done_at='2026-09-30' WHERE id=?", (sid,))
+    conn.commit()
+    conn.close()
+    fake_google.push_event_for_case_stage_due(sid)
+    fake_google.push_event_for_case_stage_done(sid)
+    row = _q("SELECT google_calendar_event_id, google_calendar_done_event_id FROM case_stages WHERE id=?", sid)[0]
+    assert row == {"google_calendar_event_id": "evt-ip6", "google_calendar_done_event_id": "evt-ip6"}
+
+
+def test_calendar_writeback_without_owner_event_is_created_but_nothing_is_written(client, make_user, fake_google, monkeypatch, caplog):
+    """反向控制：拿掉 M01 的回寫 ⇒ 不丟例外、不寫任何東西、記 WARNING 說明原因。"""
+    import logging
+    _without(monkeypatch, "calendar.writeback", "quotation")
+    _case("MQ-IP6-OFF")
+    with caplog.at_level(logging.WARNING, logger=fake_google.logger.name):
+        fake_google.push_event_for_quotation_won("MQ-IP6-OFF")
+    d = json.loads(_q("SELECT data_json FROM quotations WHERE quote_no=?", "MQ-IP6-OFF")[0]["data_json"])
+    assert "googleCalendarEventId" not in d
+    assert "擁有模組未安裝" in caplog.text
+
+
+def test_calendar_writeback_unknown_stage_slot_is_refused():
+    import routers.quotations  # noqa: F401
+    fn = registry.providers("calendar.writeback")["case_stage"]
+    with pytest.raises(KeyError):
+        fn(1, "evt", "guessed_slot")

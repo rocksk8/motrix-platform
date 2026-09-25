@@ -32,6 +32,7 @@ from helpers import (
     push_event_for_case_stage_due, push_event_delete_for_case_stage,
     push_event_for_case_stage_done,
     sync_daily_task_for_case_stage, delete_daily_task_for_case_stage,
+    daily_task_notice,
     check_approve_permission, check_reject_permission, check_no_tier_self_approval,
     resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
     submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice,
@@ -3352,8 +3353,16 @@ def update_case_stage(quote_no: str, stage_id: int, body: dict = Body(...), auth
             spawn_bg_thread(push_event_for_case_stage_done, args=(stage_id,))
             spawn_bg_thread(sync_daily_task_for_case_stage,
                             args=(stage_id, user["username"], actor_name))
+            # IP-5：每日任務模組（M12）不在 ⇒ 勾選照常存檔，但要明說沒有建立每日任務
+            _dt_notice = daily_task_notice()
+        else:
+            _dt_notice = None
+    else:
+        _dt_notice = None
     sr = _get_stage_row(conn, quote_no, stage_id)
     result = _serialize_stage(conn, sr)
+    if _dt_notice:
+        result["notice"] = _dt_notice
     conn.close()
     _audit(_tok(authorization), 'case_stage.update', 'case_stage', quote_no, quote_no, {'stageId': stage_id})
     return result
@@ -6847,3 +6856,40 @@ def case_batch_export(body: dict = Body(...), authorization: str = Header(None))
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{urlquote(fname)}"},
     )
+
+
+# ── IP-6 `calendar.writeback`：報價單／案件階段的行事曆事件 id 由本組回寫（2026-09-25，ROADMAP A11）──
+from core import registry as _registry  # noqa: E402
+
+#: 案件階段的兩個事件欄位（到期日事件、完成日事件）
+_STAGE_EVENT_COLUMNS = {"due": "google_calendar_event_id", "done": "google_calendar_done_event_id"}
+
+
+def _calendar_writeback_quotation(quote_no: str, event_id: str, slot: str = "default") -> None:
+    from core.txn import write_txn
+    conn = get_db()
+    try:
+        # 2026-09-25 lost update：事件建好之後才拿寫鎖、重讀，只寫入 event id
+        with write_txn(conn):
+            cur = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+            d = json.loads((cur["data_json"] if cur else None) or "{}")
+            d["googleCalendarEventId"] = event_id
+            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                         (json.dumps(d, ensure_ascii=False), quote_no))
+            conn.commit()
+    finally:
+        conn.close()
+
+
+def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -> None:
+    col = _STAGE_EVENT_COLUMNS[slot]                 # 不認得的 slot ⇒ KeyError（不猜欄位）
+    conn = get_db()
+    try:
+        conn.execute("UPDATE case_stages SET %s=? WHERE id=?" % col, (event_id, stage_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
+_registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)

@@ -227,6 +227,20 @@ def create_test_event() -> str:
 # 這輪只做「新建」，不做「更新既有事件」，event id 先存起來供之後擴充用。
 # 全部包在最外層 try/except：任何失敗只記 log，不能讓背景執行緒的例外影響任何東西。
 
+# ── IP-6 `calendar.writeback`（2026-09-25，ROADMAP A11）─────────────────────────
+# 本檔（L1）只負責跟 Google 打交道；event id **由擁有那張表的模組自己回寫**
+# （invoice_voucher／payment_request→M05、shipping_note→M03、quotation／case_stage→M01）。
+# 擁有模組不在 ⇒ 事件照建，只是不回寫，記 WARNING；不丟例外。
+def _write_back(kind: str, key, event_id: str, slot: str = "default") -> bool:
+    from core import registry as _registry
+    fn = _registry.providers("calendar.writeback").get(kind)
+    if fn is None:
+        logger.warning("行事曆事件 %s 已處理，但 %s 的擁有模組未安裝 —— event id 未回寫", event_id, kind)
+        return False
+    fn(key, event_id, slot)
+    return True
+
+
 def push_event_for_invoice_voucher(voucher_no: str) -> None:
     try:
         from db import get_db
@@ -245,12 +259,8 @@ def push_event_for_invoice_voucher(voucher_no: str) -> None:
             f"開票申請憑據 {voucher_no} 已完成簽核核准。\n客戶：{cname}\n金額（含稅）：NT$ {amount:,.0f}",
             date.today(),
         )
-        d = json.loads(row["data_json"] or "{}")
-        d["googleCalendarEventId"] = event_id
-        conn.execute("UPDATE invoice_vouchers SET data_json=? WHERE voucher_no=?",
-                     (json.dumps(d, ensure_ascii=False), voucher_no))
-        conn.commit()
         conn.close()
+        _write_back("invoice_voucher", voucher_no, event_id)
         logger.info("push_event_for_invoice_voucher: %s -> event %s", voucher_no, event_id)
     except Exception as exc:
         logger.warning("push_event_for_invoice_voucher(%r) failed: %s", voucher_no, exc)
@@ -274,12 +284,8 @@ def push_event_for_payment_request(request_no: str) -> None:
             f"請款單 {request_no} 已完成簽核核准。\n客戶：{cname}\n金額（含稅）：NT$ {amount:,.0f}",
             date.today(),
         )
-        d = json.loads(row["data_json"] or "{}")
-        d["googleCalendarEventId"] = event_id
-        conn.execute("UPDATE payment_requests SET data_json=? WHERE request_no=?",
-                     (json.dumps(d, ensure_ascii=False), request_no))
-        conn.commit()
         conn.close()
+        _write_back("payment_request", request_no, event_id)
         logger.info("push_event_for_payment_request: %s -> event %s", request_no, event_id)
     except Exception as exc:
         logger.warning("push_event_for_payment_request(%r) failed: %s", request_no, exc)
@@ -308,12 +314,8 @@ def push_event_for_shipping_note(note_no: str) -> None:
             f"出貨單 {note_no} 已完成簽核核准。\n客戶：{cname}\n關聯案件：{row['quote_no'] or ''}\n出貨日期：{ship_date_str or '未填寫'}",
             event_date,
         )
-        d = json.loads(row["data_json"] or "{}")
-        d["googleCalendarEventId"] = event_id
-        conn.execute("UPDATE shipping_notes SET data_json=? WHERE note_no=?",
-                     (json.dumps(d, ensure_ascii=False), note_no))
-        conn.commit()
         conn.close()
+        _write_back("shipping_note", note_no, event_id)
         logger.info("push_event_for_shipping_note: %s -> event %s", note_no, event_id)
     except Exception as exc:
         logger.warning("push_event_for_shipping_note(%r) failed: %s", note_no, exc)
@@ -339,17 +341,10 @@ def push_event_for_quotation_won(quote_no: str) -> None:
             f"報價單 {quote_no} 已標記為「已成案」。\n客戶：{cname}\n案件名稱：{pname}\n金額（含稅）：NT$ {total:,.0f}",
             date.today(),
         )
-        # 2026-09-25 lost update（C 組）：上面建事件是一次網路請求（最慢的一段），期間別人可能已存了這張單
-        # ⇒ 不可以用一開始讀到的 data_json 整包寫回；事件建好之後才拿寫鎖、重讀，只寫入 event id。
-        from core.txn import write_txn
-        with write_txn(conn):
-            cur = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-            d = json.loads((cur["data_json"] if cur else None) or "{}")
-            d["googleCalendarEventId"] = event_id
-            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
-                         (json.dumps(d, ensure_ascii=False), quote_no))
-            conn.commit()
+        # 2026-09-25 lost update（C 組）：建事件是網路請求（最慢的一段），期間別人可能已存了這張單
+        # ⇒ 擁有模組（M01）回寫時才拿寫鎖、重讀、只寫入 event id（routers/quotations._calendar_writeback_quotation）。
         conn.close()
+        _write_back("quotation", quote_no, event_id)
         logger.info("push_event_for_quotation_won: %s -> event %s", quote_no, event_id)
     except Exception as exc:
         logger.warning("push_event_for_quotation_won(%r) failed: %s", quote_no, exc)
@@ -424,8 +419,9 @@ def push_event_for_case_stage_due(stage_id: int) -> None:
         if not due_date_str:
             if existing_id:
                 _delete_event_with_retry(existing_id)
-                conn.execute("UPDATE case_stages SET google_calendar_event_id='' WHERE id=?", (stage_id,))
-                conn.commit()
+                conn.close()
+                _write_back("case_stage", stage_id, "", "due")
+                return
             conn.close()
             return
 
@@ -443,9 +439,8 @@ def push_event_for_case_stage_due(stage_id: int) -> None:
         else:
             event_id = _create_event_with_retry(summary, description, event_date)
 
-        conn.execute("UPDATE case_stages SET google_calendar_event_id=? WHERE id=?", (event_id, stage_id))
-        conn.commit()
         conn.close()
+        _write_back("case_stage", stage_id, event_id, "due")
         logger.info("push_event_for_case_stage_due: %s -> event %s", stage_id, event_id)
     except Exception as exc:
         logger.warning("push_event_for_case_stage_due(%r) failed: %s", stage_id, exc)
@@ -501,10 +496,9 @@ def push_event_for_case_stage_done(stage_id: int) -> None:
         if not row["done"]:
             if existing_id:
                 _delete_event_with_retry(existing_id)
-                conn.execute(
-                    "UPDATE case_stages SET google_calendar_done_event_id='' WHERE id=?",
-                    (stage_id,))
-                conn.commit()
+                conn.close()
+                _write_back("case_stage", stage_id, "", "done")
+                return
             conn.close()
             return
 
@@ -527,10 +521,8 @@ def push_event_for_case_stage_done(stage_id: int) -> None:
         else:
             event_id = _create_event_with_retry(summary, description, event_date)
 
-        conn.execute("UPDATE case_stages SET google_calendar_done_event_id=? WHERE id=?",
-                     (event_id, stage_id))
-        conn.commit()
         conn.close()
+        _write_back("case_stage", stage_id, event_id, "done")
         logger.info("push_event_for_case_stage_done: %s -> event %s", stage_id, event_id)
     except Exception as exc:
         logger.warning("push_event_for_case_stage_done(%r) failed: %s", stage_id, exc)

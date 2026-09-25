@@ -38,24 +38,6 @@
    "kind": "frozen"
   },
   {
-   "table": "case_stages",
-   "writer": "helper:google_calendar",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
-   "table": "daily_task_completions",
-   "writer": "helper:case_stage_tasks",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
-   "table": "daily_tasks",
-   "writer": "helper:case_stage_tasks",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
    "table": "dev_cases",
    "writer": "router:quotations",
    "ref": "DEPENDENCY-MAP §4",
@@ -68,18 +50,6 @@
    "kind": "frozen"
   },
   {
-   "table": "invoice_vouchers",
-   "writer": "helper:google_calendar",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
-   "table": "payment_requests",
-   "writer": "helper:google_calendar",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
    "table": "quotations",
    "writer": "core:db",
    "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入",
@@ -89,18 +59,6 @@
    "table": "quotations",
    "writer": "core:pdf_gen",
    "ref": "DEPENDENCY-MAP §4（主持 2026-09-25 裁示補入）；§5「輸出：PDF」樣板回 M01 後消失",
-   "kind": "debt"
-  },
-  {
-   "table": "quotations",
-   "writer": "helper:google_calendar",
-   "ref": "DEPENDENCY-MAP §3.1",
-   "kind": "debt"
-  },
-  {
-   "table": "shipping_notes",
-   "writer": "helper:google_calendar",
-   "ref": "DEPENDENCY-MAP §3.1",
    "kind": "debt"
   },
   {
