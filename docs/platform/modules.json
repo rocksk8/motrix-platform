@@ -273,9 +273,10 @@
     "page:pages/shipping-export-history.html",
     "page:pages/supplier-log.html",
     "page:pages/suppliers.html",
-    "router:inventory",
-    "router:shipping_notes",
-    "router:suppliers"
+    "mod:supply/__init__",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers"
    ],
    "tables": [
     "purchase_suggestion_status",

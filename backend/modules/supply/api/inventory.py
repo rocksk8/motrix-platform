@@ -22,7 +22,6 @@ from helpers.legal_params import round_half_up
 #   `from helpers import procurement`     —— **接縫**，`procurement.today()` 必須在呼叫當下
 #                                           才解析，直接匯入 `today` 會複製函式物件、換不掉
 from helpers import procurement
-from core import registry as _registry
 from helpers.procurement import (
     STATUS_ORDERED,
     STATUS_RECEIVED,
@@ -684,7 +683,7 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
 
 
 class _StockSerials:
-    """IP-19 `stock.serial`：案件（M01）的設備序號認領／釋放庫存序號。
+    """IP-19 `stock.serial`：案件（M01）的設備序號認領／釋放庫存序號（`modules/supply/__init__.py` 宣告）。
 
     在呼叫端的連線上寫、不 commit（M01 與案件資料同一筆交易 commit）。"""
 
@@ -712,5 +711,3 @@ class _StockSerials:
             WHERE serial_no=? AND status='installed' AND case_device_id=?
         """, (now, sn, device_id))
 
-
-_registry.provide("stock.serial", "supply", _StockSerials)

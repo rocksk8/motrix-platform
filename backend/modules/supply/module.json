@@ -1,0 +1,67 @@
+{
+  "key": "supply",
+  "name": "採購・庫存・出貨",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "supply",
+  "permissions": [
+    "procurement",
+    "inventory",
+    "shipping_export_log"
+  ],
+  "permissions_note": "procurement 同時管 L1 的料號主檔（routers/parts.py）；出貨單另認 case_manage／quotation（案件頁與簽核佇列）",
+  "tables": [
+    "suppliers",
+    "stock_items",
+    "stock_batches",
+    "purchase_suggestion_status",
+    "shipping_notes"
+  ],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。本模組不在時表仍在：M01 案件查詢、M08 儀表板、L1 料號／搜尋／備份照樣讀得到（唯讀）",
+  "data": {
+    "tables": [
+      {
+        "name": "suppliers",
+        "class": "T1"
+      },
+      {
+        "name": "stock_items",
+        "class": "T1"
+      },
+      {
+        "name": "stock_batches",
+        "class": "T1"
+      },
+      {
+        "name": "purchase_suggestion_status",
+        "class": "T1"
+      },
+      {
+        "name": "shipping_notes",
+        "class": "T1"
+      }
+    ],
+    "files": []
+  },
+  "provides": {
+    "api_prefixes": [
+      "/api/suppliers",
+      "/api/inventory",
+      "/api/shipping-notes"
+    ]
+  },
+  "pages": [
+    {
+      "path": "suppliers.html"
+    },
+    {
+      "path": "supplier-log.html"
+    },
+    {
+      "path": "inventory.html"
+    },
+    {
+      "path": "shipping-export-history.html"
+    }
+  ]
+}

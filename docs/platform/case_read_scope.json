@@ -182,7 +182,7 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/shipping_notes.py",
+   "file": "modules/supply/api/shipping_notes.py",
    "path": "/api/shipping-notes",
    "handler": "list_shipping_notes",
    "scope": "row_access"

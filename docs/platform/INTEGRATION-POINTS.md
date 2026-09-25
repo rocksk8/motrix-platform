@@ -127,7 +127,7 @@ M06 的 `vouchers_all`。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M05 `routers/invoice_vouchers.py`（`invoice_voucher`）、`routers/payment_requests.py`（`payment_request`）；M03 `routers/shipping_notes.py`（`shipping_note`）；M01 `routers/quotations.py`（`quotation`、`case_stage`） |
+| 提供方 | M05 `routers/invoice_vouchers.py`（`invoice_voucher`）、`routers/payment_requests.py`（`payment_request`）；M03 `modules/supply/api/shipping_notes.py`（`shipping_note`）；M01 `routers/quotations.py`（`quotation`、`case_stage`） |
 | 使用方 | L1 `helpers/google_calendar.py::_write_back`（`push_event_for_invoice_voucher`／`payment_request`／`shipping_note`／`quotation_won`／`case_stage_due`／`case_stage_done`） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("calendar.writeback")[kind]`） |
 | 語法 | 提供：`_registry.provide("calendar.writeback", "<kind>", fn)`<br>取用：`registry.providers("calendar.writeback").get(kind)`；`None` ⇒ 退化。`fn(key, event_id, slot="default")`；`case_stage` 的 `slot` ∈ `due`（到期日事件）／`done`（完成日事件），其他值 ⇒ `KeyError`（不猜欄位） |
@@ -362,10 +362,10 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M03 採購・庫存・出貨：`routers/shipping_notes.py::list_shipping_notes_for_case`（`list_shipping_notes` 的包裝） |
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/api/shipping_notes.py::list_shipping_notes_for_case`（`list_shipping_notes` 的包裝） |
 | 使用方 | M01 `routers/quotations.py::case_bundle` 的 `parts.shippingNotes` |
-| 形式 | provider，單一提供者（`core.registry`；M03 搬進 `modules/` 前以 `registry.provide()` 在匯入時登記） |
-| 語法 | 提供：`_registry.provide("shipping.list_for_case", "supply", list_shipping_notes_for_case)`<br>取用：`fn = registry.single_provider("shipping.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權，權限判斷與單獨打 `/api/shipping-notes?quote_no=` 逐字相同） |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
+| 語法 | 提供：`ModuleSpec(providers={("shipping.list_for_case", "supply"): shipping_notes.list_shipping_notes_for_case})`<br>取用：`fn = registry.single_provider("shipping.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權，權限判斷與單獨打 `/api/shipping-notes?quote_no=` 逐字相同） |
 | 回傳 | 出貨單列；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
 | 對方不在時 | 整包照常回；`parts.shippingNotes`＝`{"ok": false, "status": 404, "detail": SHIPPING_UNAVAILABLE}`（「採購・庫存・出貨模組未安裝：沒有出貨單資料」）。案件頁出貨單分頁顯示這一句（不顯示「尚未建立任何出貨單」），「新增出貨單」鈕不顯示 |
 | 契約版本 | 1（2026-09-26） |
@@ -379,10 +379,10 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M03 採購・庫存・出貨：`routers/inventory.py::_StockSerials`（`claim`／`release`） |
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::_StockSerials`（`claim`／`release`） |
 | 使用方 | M01 `routers/quotations.py::_sync_device_stock`（案件設備登載 `devices[]` 的序號比對；即時存檔與半解鎖審核套用兩條路徑） |
-| 形式 | provider，單一提供者（`core.registry`；M03 搬進 `modules/` 前以 `registry.provide()` 在匯入時登記） |
-| 語法 | 提供：`_registry.provide("stock.serial", "supply", _StockSerials)`<br>取用：`s = registry.single_provider("stock.serial")`；`None` ⇒ 退化。`s.claim(conn, sn, quote_no=…, device_id=…, actor=…, now=…) -> None｜狀態`；`s.release(conn, sn, device_id=…, now=…)` |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
+| 語法 | 提供：`ModuleSpec(providers={("stock.serial", "supply"): inventory._StockSerials})`<br>取用：`s = registry.single_provider("stock.serial")`；`None` ⇒ 退化。`s.claim(conn, sn, quote_no=…, device_id=…, actor=…, now=…) -> None｜狀態`；`s.release(conn, sn, device_id=…, now=…)` |
 | 回傳 | `claim`：序號不在庫存系統 ⇒ `None`（不追蹤、不擋存檔）；在庫 ⇒ 標成 installed、回 `"in_stock"`；其他狀態 ⇒ 不動、回該狀態（M01 列為 `stockConflicts`）。**在呼叫端的連線上寫、不 commit**：與案件資料同一筆交易 |
 | 對方不在時 | 案件存檔照常；序號不同步庫存；有序號變動時回應帶 `stockNotice`＝「設備序號未同步庫存：採購・庫存・出貨模組未安裝」，案件頁存檔狀態列顯示「已儲存；…」；沒有序號變動就不帶 |
 | 契約版本 | 1（2026-09-26） |

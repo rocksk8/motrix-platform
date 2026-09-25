@@ -1174,6 +1174,10 @@ if (typeof module !== 'undefined' && module.exports) {
     'devices.html':      { key: 'analytics', name: '營運分析' },
     'warranty.html':     { key: 'analytics', name: '營運分析' },
     'procurement.html':  { key: 'analytics', name: '營運分析' },
+    'suppliers.html': { key: 'supply', name: '採購・庫存・出貨' },
+    'supplier-log.html': { key: 'supply', name: '採購・庫存・出貨' },
+    'inventory.html': { key: 'supply', name: '採購・庫存・出貨' },
+    'shipping-export-history.html': { key: 'supply', name: '採購・庫存・出貨' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

@@ -222,8 +222,8 @@ _BASELINE_A = {
     ("backend\\routers\\quotations.py", "download_quotation_pdf"),
     ("backend\\routers\\quotations.py", "download_case_closing_report_pdf"),
     ("backend\\routers\\quotations.py", "download_project_execution_report_pdf"),
-    ("backend\\routers\\shipping_notes.py", "download_shipping_pdf"),
-    ("backend\\routers\\suppliers.py", "create_supplier"),
+    ("backend\\modules\\supply\\api\\shipping_notes.py", "download_shipping_pdf"),
+    ("backend\\modules\\supply\\api\\suppliers.py", "create_supplier"),
     ("backend\\routers\\system.py", "test_google_calendar"),
     ("backend\\routers\\system.py", "test_email_notify"),
 }
@@ -265,8 +265,8 @@ _BASELINE_B = {
     ("backend\\routers\\payment_requests.py", "approve_payment_request"),
     ("backend\\routers\\quotations.py", "update_quotation"),
     ("backend\\routers\\quotations.py", "approve_quotation"),
-    ("backend\\routers\\shipping_notes.py", "submit_shipping_note"),
-    ("backend\\routers\\shipping_notes.py", "approve_shipping_note"),
+    ("backend\\modules\\supply\\api\\shipping_notes.py", "submit_shipping_note"),
+    ("backend\\modules\\supply\\api\\shipping_notes.py", "approve_shipping_note"),
     ("backend\\routers\\vouchers.py", "submit_voucher"),
     ("backend\\routers\\vouchers.py", "update_voucher"),
 }
