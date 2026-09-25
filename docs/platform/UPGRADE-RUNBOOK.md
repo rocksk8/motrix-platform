@@ -50,10 +50,11 @@ if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyCon
 
 - 順序：先服務、確認回應、**最後開心跳**。
 - 🔴 **等不到回應也照開心跳**（最多等 240 秒）：服務真的起不來時，心跳告警就是該響的那一聲，不可以讓它一起沉默。輸出會標示失敗，由人決定是否回滾（§6）。
-- ping 用 `backend	ools\_healthcheck_ping.py`（Python＋OpenSSL，接受 HTTPS 自簽憑證；`apply_update.ps1` 用的也是它）。exit 0＝收到 200。PS 5.1 的 `Invoke-WebRequest` 對自簽憑證會失敗，不要用。
+- ping 用 `backend\tools\_healthcheck_ping.py`（Python＋OpenSSL，接受 HTTPS 自簽憑證；`apply_update.ps1` 用的也是它）。exit 0＝收到 200。PS 5.1 的 `Invoke-WebRequest` 對自簽憑證會失敗，不要用。
 - 與部署儀表板升級精靈的啟停步驟一致（c61e8c75）。
+- 換版後**第一次啟動會比較慢**：啟動時對主庫做一次 `quick_check`（S-CD02，同步、全庫掃描；正式機的庫要多久未量過，X 稽核 C-7）。240 秒內等不到回應時，先看 `logs\server.log` 是否還在 quick_check，不要急著判定起不來。
 
-在 `<ROOT>ackend	ools` 底下，以系統管理員身分開 PowerShell：
+在 `<ROOT>\backend\tools` 底下，以系統管理員身分開 PowerShell：
 
 ```powershell
 $Tasks   = @('MOTRIX ERP Server Autostart', 'MOTRIX ERP Daily Backup', 'MOTRIX ERP Heartbeat')

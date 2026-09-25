@@ -145,7 +145,25 @@ def test_calendar_writeback_with_owner_event_id_is_written_back(client, make_use
     assert d.get("googleCalendarEventId") == "evt-ip6"
 
 
-def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, fake_google):
+@pytest.fixture()
+def distinct_google(monkeypatch):
+    """每一次建立事件都回**不同**的 id（X 稽核 A-3：同一個假值驗不出寫反）；`on_create` 可在建立期間插入動作。"""
+    from helpers import google_calendar as gc
+    made, hooks = [], []
+
+    def _create(summary, desc, dt):
+        for h in hooks:
+            h()
+        made.append("evt-%d" % (len(made) + 1))
+        return made[-1]
+    monkeypatch.setattr(gc, "_create_all_day_event", _create)
+    monkeypatch.setattr(gc, "_update_all_day_event", lambda eid, s, d, dt: eid)
+    monkeypatch.setattr(gc, "_delete_event", lambda eid: None)
+    gc.made, gc.on_create = made, hooks
+    return gc
+
+
+def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, distinct_google):
     u, h = _login(client, make_user, "ip6_stage")
     _case("MQ-IP6-STG")
     sid = client.post("/api/quotations/MQ-IP6-STG/stages", headers=h, json={"label": "驗收"}).json()["id"]
@@ -154,10 +172,65 @@ def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, fak
     conn.execute("UPDATE case_stages SET due_date='2026-10-01', done=1, done_at='2026-09-30' WHERE id=?", (sid,))
     conn.commit()
     conn.close()
-    fake_google.push_event_for_case_stage_due(sid)
-    fake_google.push_event_for_case_stage_done(sid)
+    distinct_google.push_event_for_case_stage_due(sid)
+    due_id = distinct_google.made[-1]
+    distinct_google.push_event_for_case_stage_done(sid)
+    done_id = distinct_google.made[-1]
+    assert due_id != done_id
     row = _q("SELECT google_calendar_event_id, google_calendar_done_event_id FROM case_stages WHERE id=?", sid)[0]
-    assert row == {"google_calendar_event_id": "evt-ip6", "google_calendar_done_event_id": "evt-ip6"}
+    assert row == {"google_calendar_event_id": due_id, "google_calendar_done_event_id": done_id}
+
+
+#: 單號放在 data_json 的三種單據：(kind, 表, 單號欄, 觸發函式)
+_IP6_DOC_KINDS = [
+    ("invoice_voucher", "invoice_vouchers", "voucher_no", "push_event_for_invoice_voucher"),
+    ("payment_request", "payment_requests", "request_no", "push_event_for_payment_request"),
+    ("shipping_note", "shipping_notes", "note_no", "push_event_for_shipping_note"),
+]
+
+
+def _doc(table, col, no):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO %s (%s, quote_no, data_json) VALUES (?, ?, ?)" % (table, col),
+                     (no, "MQ-IP6-DOC", json.dumps({"keep": "原本的值"})))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _doc_data(table, col, no):
+    return json.loads(_q("SELECT data_json FROM %s WHERE %s=?" % (table, col), no)[0]["data_json"])
+
+
+@pytest.mark.parametrize("kind,table,col,push", _IP6_DOC_KINDS)
+def test_calendar_writeback_document_kinds_write_their_own_row(client, distinct_google, kind, table, col, push):
+    """X 稽核 A-3：三支回寫原本沒有任何題目執行過。每一種都要把**這一次**建出來的 id 寫進**自己那一列**，其他欄位不動。"""
+    _doc(table, col, "IP6-%s-A" % kind)
+    _doc(table, col, "IP6-%s-B" % kind)
+    getattr(distinct_google, push)("IP6-%s-A" % kind)
+    a = _doc_data(table, col, "IP6-%s-A" % kind)
+    assert a == {"keep": "原本的值", "googleCalendarEventId": distinct_google.made[-1]}
+    assert "googleCalendarEventId" not in _doc_data(table, col, "IP6-%s-B" % kind)
+
+
+@pytest.mark.parametrize("kind,table,col,push", _IP6_DOC_KINDS)
+def test_calendar_writeback_document_kinds_do_not_overwrite_concurrent_edits(client, distinct_google, kind, table, col, push):
+    """lost-update：建立事件（網路請求）期間別人改了單據 ⇒ 回寫只加 event id，不把舊的 data_json 蓋回去。"""
+    no = "IP6-%s-LU" % kind
+    _doc(table, col, no)
+
+    def _someone_edits():
+        import db
+        conn = db.get_db()
+        conn.execute("UPDATE %s SET data_json=? WHERE %s=?" % (table, col),
+                     (json.dumps({"keep": "別人剛改的"}, ensure_ascii=False), no))
+        conn.commit()
+        conn.close()
+    distinct_google.on_create.append(_someone_edits)
+    getattr(distinct_google, push)(no)
+    assert _doc_data(table, col, no) == {"keep": "別人剛改的", "googleCalendarEventId": distinct_google.made[-1]}
 
 
 def test_calendar_writeback_without_owner_event_is_created_but_nothing_is_written(client, make_user, fake_google, monkeypatch, caplog):

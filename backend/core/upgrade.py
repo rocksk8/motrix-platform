@@ -652,11 +652,12 @@ _PROFILE_ALIASES = {
 def _contact_info_parts(profile: dict) -> dict:
     """與 helpers.company_identity.contact_info_parts 相同（本檔不 import app；測試比對兩份）。"""
     contact = str((profile or {}).get("contact_info") or "")
-    m = re.search(r"[^\s｜|]+@[^\s｜|]+", contact)
+    m = re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", contact)
     email = m.group(0) if m else ""
-    phone = contact[:m.start()] if m else contact
-    phone = re.sub(r"(?i)^\s*tel[:：]\s*", "", phone).strip(" ｜|")
-    return {"phone": phone, "email": email}
+    rest = (contact[:m.start()] + " " + contact[m.end():]) if m else contact
+    # X 稽核 B-3：電話只接受「以數字為主」的片段；地址等自由文字不可以被印成 Tel（找不到就留空）
+    p = re.search(r"[+(]?\d[\d\-\s()#轉]{5,}\d", rest)
+    return {"phone": p.group(0).strip() if p else "", "email": email}
 
 
 def _is_our_install(profile: dict) -> bool:

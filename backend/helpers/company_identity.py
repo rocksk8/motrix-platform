@@ -115,14 +115,16 @@ def location_identity(location_id=None) -> dict:
 def contact_info_parts(profile: dict) -> dict:
     """設定頁最上方「聯絡方式」（`contact_info`，例 `Tel: 04-1234-5678｜a@b.com`）拆出電話與 email。
 
-    與 db._m106 的拆法相同；只當作**最後的後備**（據點欄、company_profile 的 phone／email 都空時才用）。
+    只當作**最後的後備**（據點欄、company_profile 的 phone／email 都空時才用）。原本與 db._m106 的拆法相同，
+    X 稽核 B-3 改成電話只收以數字為主的片段（m106 是凍結的歷史 migration，不跟著改）。
     """
     contact = str((profile or {}).get("contact_info") or "")
-    m = re.search(r"[^\s｜|]+@[^\s｜|]+", contact)
+    m = re.search(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}", contact)
     email = m.group(0) if m else ""
-    phone = contact[:m.start()] if m else contact
-    phone = re.sub(r"(?i)^\s*tel[:：]\s*", "", phone).strip(" ｜|")
-    return {"phone": phone, "email": email}
+    rest = (contact[:m.start()] + " " + contact[m.end():]) if m else contact
+    # X 稽核 B-3：電話只接受「以數字為主」的片段；地址等自由文字不可以被印成 Tel（找不到就留空）
+    p = re.search(r"[+(]?\d[\d\-\s()#轉]{5,}\d", rest)
+    return {"phone": p.group(0).strip() if p else "", "email": email}
 
 
 def company_name() -> str:

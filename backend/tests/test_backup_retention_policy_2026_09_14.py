@@ -195,7 +195,10 @@ def test_prune_local_keeps_pre_update_out_of_date_based_rule(arch, tmp_path):
 
     old_day = (date.today() - timedelta(days=90)).isoformat()
     new_day = date.today().isoformat()
-    for n in (old_day, new_day, "pre_update_20260101_000000", "pre_update_20260914_000000"):
+    # 2026-09-25 S-CC07：只剩「今天＋一份很舊的」會被判成時鐘異常而暫停清理（與 V9 a1cc2871 相同）；
+    # 本題守日期規則 ⇒ 補一份昨天的，代表平常的連續狀態（異常那一側見 test_states_data_ops_2026_09_25）。
+    prev_day = (date.today() - timedelta(days=1)).isoformat()
+    for n in (old_day, prev_day, new_day, "pre_update_20260101_000000", "pre_update_20260914_000000"):
         os.makedirs(os.path.join(local, n))
 
     arch._prune_local_db_backups(keep_days=30, pre_update_keep=1)

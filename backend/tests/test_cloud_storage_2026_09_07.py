@@ -214,9 +214,13 @@ def test_prune_cloud_backups_deletes_expired_s3_prefix(client, monkeypatch):
     cloud_storage.s3_put_bytes("每日備份/2020-01-01/彙總.json", b"{}")
     cloud_storage.s3_put_bytes("每日備份/2020-01-01/報價單.json", b"{}")
 
-    from datetime import date
+    from datetime import date, timedelta
     today = date.today().isoformat()
     cloud_storage.s3_put_bytes(f"每日備份/{today}/彙總.json", b"{}")
+    # 2026-09-25 S-CC07：只剩「今天＋一份很舊的」會被判成時鐘異常而暫停清理（與 V9 a1cc2871 相同）；
+    # 本題守日期規則 ⇒ 補一份昨天的，代表平常的連續狀態（異常那一側見 test_states_data_ops_2026_09_25）。
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    cloud_storage.s3_put_bytes(f"每日備份/{yesterday}/彙總.json", b"{}")
 
     archive._prune_cloud_backups(daily_keep_days=365, weekly_keep_days=730)
 

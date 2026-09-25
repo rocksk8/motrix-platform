@@ -23,6 +23,18 @@ def test_no_hardcoded_company_contacts_left(rel):
         assert needle not in src, (rel, needle)
 
 
+def test_users_page_does_not_show_a_legacy_unlock_password():
+    """X 稽核 C-4：使用者管理頁寫著「預設 miac@60575481」——那是舊的弱密碼（`_LEGACY_WEAK_PASSWORDS`，啟動時清掉），
+    不是預設值；印在畫面上等於公開一組舊密碼。placeholder 也不用本公司的 email／電話。"""
+    from helpers.auth import _LEGACY_WEAK_PASSWORDS
+    src = (BACKEND.parent / "frontend" / "pages" / "users.html").read_text(encoding="utf-8")
+    for pw in _LEGACY_WEAK_PASSWORDS:
+        if any(c.isdigit() for c in pw) and any(c.isalpha() for c in pw):     # 「password」這種普通字不算
+            assert pw not in src, pw
+    for needle in ("3610-6566", "miactw"):
+        assert needle not in src, needle
+
+
 def test_lines_match_the_old_hardcoded_format_when_filled():
     from helpers.company_identity import contact_line, footer_line, name_pair
     assert contact_line(ident=OURS) == "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
@@ -99,6 +111,21 @@ def test_upgrade_and_identity_split_contact_info_the_same_way(contact):
     from helpers import company_identity as ci
     assert U._contact_info_parts({"contact_info": contact}) == ci.contact_info_parts({"contact_info": contact})
 
+
+
+@pytest.mark.parametrize("contact,phone,email", [
+    ("台中市西屯區XX路1號", "", ""),                                  # 地址不可以被印成 Tel
+    ("info@x.com Tel: 04-1234-567", "04-1234-567", "info@x.com"),      # email 在前，電話不可以不見
+    ("04-1234-5678, info@x.com", "04-1234-5678", "info@x.com"),        # 分隔用的逗號不進電話
+    ("Tel: 04-3610-6566｜info@miactw.com", "04-3610-6566", "info@miactw.com"),
+    ("(04)3610-6566 轉 12｜a@b.co", "(04)3610-6566 轉 12", "a@b.co"),
+])
+def test_contact_info_phone_only_takes_the_numeric_part(contact, phone, email):
+    """X 稽核 B-3：`contact_info` 是自由文字，電話只收以數字為主的片段（印出來的東西會寄給客戶）。"""
+    from core import upgrade as U
+    from helpers import company_identity as ci
+    assert ci.contact_info_parts({"contact_info": contact}) == {"phone": phone, "email": email}
+    assert U._contact_info_parts({"contact_info": contact}) == {"phone": phone, "email": email}
 
 def test_top_level_settings_fields_reach_the_documents(client):
     """設定頁最上方「公司名稱／統一編號／聯絡方式」（name／tax_id／contact_info）只填這一區，單據也要印得出來。"""

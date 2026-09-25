@@ -496,13 +496,31 @@ def _alert_email_sent_today(reason_key: str) -> bool:
 
 
 def _alert_email_failed(reason: str, why: str) -> None:
-    """告警信寄不出去：另留兩個看得見的痕跡（audit、警示檔註記）＋ ERROR log。"""
+    """告警信寄不出去：另留兩個看得見的痕跡（audit、警示檔註記）＋ ERROR log。
+
+    X 稽核 B-4：痕跡要有速率上限——同一個告警原因＋同一種寄不出去的原因，每天只留一筆 audit
+    （開發機 `.no_email_send`／新客戶還沒設 SMTP 時，原本每一次 ERROR 告警都加一筆）。寄信本身照樣每輪重試。"""
     logger.error("備份告警信寄不出去（%s）：%s", why, reason)
+    key = "%s｜%s" % (reason[:80], why[:40])
+    marker = os.path.join(_ALERT_DIR, f".email_failed_{date.today().isoformat()}")
+    audited_today = False
     try:
-        _system_audit("backup.alert_email_failed", reason[:120], {"reason": reason, "why": why})
+        if os.path.exists(marker):
+            with open(marker, "r", encoding="utf-8") as f:
+                audited_today = key in f.read().splitlines()
+        if not audited_today:
+            os.makedirs(_ALERT_DIR, exist_ok=True)
+            with open(marker, "a", encoding="utf-8") as f:
+                f.write(key + "\n")
     except Exception:
-        logger.exception("_alert_email_failed: audit 失敗")
+        logger.exception("_alert_email_failed: 寫節流檔失敗（照樣留痕跡）")
+    if not audited_today:
+        try:
+            _system_audit("backup.alert_email_failed", reason[:120], {"reason": reason, "why": why})
+        except Exception:
+            logger.exception("_alert_email_failed: audit 失敗")
     try:
+        # BACKUP_ALERT.txt 每次告警都整檔覆寫 ⇒ 註記每次都要補上（不節流；檔案不會變長）
         with open(os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt"), "a", encoding="utf-8") as f:
             f.write("\n⚠ 這則告警的通知信寄不出去（%s）—— 請直接處理，不要等信\n" % why)
     except Exception:
@@ -519,7 +537,7 @@ def _send_backup_error_email(reason: str, ts: str):
     S-CN03：寄信在背景執行緒等結果；**寄成功才寫 `.emailed_<日期>`**（同原因當天不再寄），
     失敗或找不到收件人 ⇒ `_alert_email_failed()`。回傳那條等待執行緒（測試用 join）。
     """
-    from helpers.email_notify import _superadmin_emails, _async_send, SEND_SENT
+    from helpers.email_notify import _superadmin_emails, _async_send, SEND_SENT, SEND_SKIPPED
     to = _superadmin_emails()
     if not to:
         _alert_email_failed(reason, "找不到收件人（沒有啟用中的最高管理者或管理員）")
@@ -552,6 +570,8 @@ def _send_backup_error_email(reason: str, ts: str):
                     f.write(reason_key + "\n")
             except Exception:
                 logger.exception("寫告警信節流檔失敗")
+        elif outcome == SEND_SKIPPED:
+            _alert_email_failed(reason, "這台機器設定成不寄信（開發機標記或寄信未設定），不是寄了失敗")
         else:
             _alert_email_failed(reason, "寄送結果：%s" % outcome)
 
@@ -1452,11 +1472,19 @@ def _rotate_server_log_if_large(
         return False
 
 
-# ── S-CC07（STATES-DATA-OPS）：清理永遠保留最新 N 份 ─────────────────────────────
+# ── S-CC07（STATES-DATA-OPS）：時鐘異常 ⇒ 暫停清理，每一輪都告警 ─────────────────────
 # 清理以 `date.today()` 算 cutoff ⇒ 系統時鐘往前跳超過保留天數時，**真實的快照會全部被判成過期**
-# （本機 >30 天全刪、雲端每日 >60 天全刪）。⇒ 不論日期，每一層都至少保留最新 PRUNE_KEEP_NEWEST 份；
-# 而且「除了今天以外全部都過期」就是時鐘或長期停機的徵兆 ⇒ ERROR 告警（同原因每日一封）。
+# （本機 >30 天全刪、雲端每日 >60 天全刪）。
+# ⇒ 偵測到下列任一狀況，那一層**這一輪一份都不刪**，並 ERROR 告警：
+#    ① 有份數的日期晚於今天（時鐘往回撥）
+#    ② 有東西要刪，而且除了今天以外**全部**都過期（時鐘往前跳，或停機超過保留天數）
+# ☠️ 只靠「每一輪重新推算」不夠（X 稽核 A-1 實測）：原本只「保留最新 7 份、其餘照刪」，而時鐘跳了的隔天，
+#    前一天那份「未來日期」的快照會讓 ② 不成立 ⇒ 30 份真實快照跳的當天剩 6 份、第 7 天剩 0，告警只響第一天。
+# ⇒ 偵測到時在那一層寫 `.prune_hold` 標記；**標記在就不清理、每一輪都告警**，直到有人確認時鐘正確後手動刪掉標記。
+#    與 V9 的修正相同（V9 a1cc2871）；新版另外保留「不論日期，每一層至少留最新 PRUNE_KEEP_NEWEST 份」的底線。
+# 本機快照、雲端每日／週／月、個資每日／月，六層走同一個判定。
 PRUNE_KEEP_NEWEST = 7
+_PRUNE_HOLD_NAME = ".prune_hold"
 
 
 def _parse_day(name: str):
@@ -1472,8 +1500,12 @@ def _parse_week(name: str):
     return datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
 
 
-def _prune_select(names, parse, cutoff_ord: int, label: str, keep_newest: int = None) -> list:
-    """回要刪的名字：日期早於 cutoff、而且**不在最新 keep_newest 份內**。名字解析不了的一律不動。"""
+def _prune_select(names, parse, cutoff_ord: int, label: str, hold_local: str, hold_s3,
+                  keep_newest: int = None) -> list:
+    """回這一輪要刪的名字：日期早於 cutoff、而且不在最新 keep_newest 份內。名字解析不了的一律不動。
+
+    時鐘異常或該層已有 `.prune_hold` 標記 ⇒ 回空清單並 ERROR 告警（每一輪都告警）。
+    `hold_s3=None` ⇒ 標記一律在本機檔案系統（本機快照那一層不走雲端後端）。"""
     keep_newest = PRUNE_KEEP_NEWEST if keep_newest is None else keep_newest
     dated = []
     for n in names:
@@ -1482,15 +1514,41 @@ def _prune_select(names, parse, cutoff_ord: int, label: str, keep_newest: int = 
         except (ValueError, IndexError):
             continue
     dated.sort(reverse=True)
+    today = date.today()
     protected = {n for _d, n in dated[:keep_newest]}
     doomed = [n for d, n in dated if d.toordinal() < cutoff_ord and n not in protected]
-    kept_old = [n for d, n in dated if d.toordinal() < cutoff_ord and n in protected]
-    others = [d for d, _n in dated if d != date.today()]
-    if kept_old and others and max(others).toordinal() < cutoff_ord:
+    expired = [n for d, n in dated if d.toordinal() < cutoff_ord]
+    future = [d for d, _n in dated if d > today]
+    others = [d for d, _n in dated if d != today]
+    reason = None
+    if future:
+        reason = ("有 %d 份的日期晚於今天（最晚 %s，今天 %s）—— 系統時鐘可能往回撥了"
+                  % (len(future), max(future).isoformat(), today.isoformat()))
+    elif expired and max(others).toordinal() < cutoff_ord:
+        reason = ("除了今天以外，所有份數都超過保留天數（最新一份是 %s，今天 %s）—— "
+                  "系統時鐘可能往前跳了，或機器停機很久" % (max(others).isoformat(), today.isoformat()))
+    try:
+        held = (os.path.exists(hold_local) if hold_s3 is None
+                else _cloud_marker_exists(hold_local, hold_s3))
+    except Exception:                                   # noqa: BLE001
+        logger.exception("_prune_select: 讀清理暫停標記失敗 —— 當成暫停（寧可不刪）")
+        held = True
+    if reason and not held:
+        try:
+            if hold_s3 is None:
+                with open(hold_local, "w", encoding="utf-8") as f:
+                    f.write(datetime.now().isoformat())
+            else:
+                _cloud_write_marker(hold_local, hold_s3)
+        except Exception:                               # noqa: BLE001
+            logger.exception("_prune_select: 寫清理暫停標記失敗")
+    if reason or held:
         _write_backup_alert(
-            "%s：除了今天以外，所有份數都超過保留天數（最新一份是 %s）—— 系統時鐘可能往前跳了，或機器停機很久。"
-            "已依「至少保留最新 %d 份」停止刪除 %d 份，請確認時鐘" % (label, max(others).isoformat(), keep_newest,
-                                                           len(kept_old)), level="ERROR")
+            "%s：已暫停清理，這一輪一份都沒刪（原本會刪 %d 份）。原因：%s。"
+            "確認系統時鐘正確後，刪除 %s 才會恢復清理"
+            % (label, len(doomed), reason or "先前偵測到時鐘異常，尚未有人確認", hold_local),
+            level="ERROR")
+        return []
     return doomed
 
 
@@ -1516,7 +1574,8 @@ def _prune_local_db_backups(keep_days: int = 30, pre_update_keep: int = 5) -> No
             return
         cutoff = date.today().toordinal() - keep_days
         _names = [n for n in os.listdir(_LOCAL_DB_BACKUP) if os.path.isdir(os.path.join(_LOCAL_DB_BACKUP, n))]
-        for name in _prune_select(_names, _parse_day, cutoff, "本機 SQLite 快照"):
+        for name in _prune_select(_names, _parse_day, cutoff, "本機 SQLite 快照",
+                                  os.path.join(_LOCAL_DB_BACKUP, _PRUNE_HOLD_NAME), None):
             path = os.path.join(_LOCAL_DB_BACKUP, name)
             if not os.path.isdir(path):
                 continue
@@ -1588,7 +1647,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     cutoff_daily = date.today().toordinal() - daily_keep_days
     try:
         for name in _prune_select(_cloud_list_top_level(_daily_dir(), "每日備份"),
-                                  _parse_day, cutoff_daily, "雲端每日備份"):
+                                  _parse_day, cutoff_daily, "雲端每日備份",
+                                  os.path.join(_daily_dir(), _PRUNE_HOLD_NAME), f"每日備份/{_PRUNE_HOLD_NAME}"):
             try:
                 d = date.fromisoformat(name)
             except ValueError:
@@ -1606,7 +1666,9 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         if _pii["state"] == "ready":
             _pii_daily = os.path.join(_pii["path"], "每日備份")
             for name in _prune_select(_cloud_list_top_level(_pii_daily, f"{_PII_ARCHIVE_DIRNAME}/每日備份"),
-                                      _parse_day, cutoff_daily, "個資每日備份"):
+                                      _parse_day, cutoff_daily, "個資每日備份",
+                                      os.path.join(_pii_daily, _PRUNE_HOLD_NAME),
+                                      f"{_PII_ARCHIVE_DIRNAME}/每日備份/{_PRUNE_HOLD_NAME}"):
                 try:
                     d = date.fromisoformat(name)
                 except ValueError:
@@ -1620,7 +1682,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     cutoff_weekly = date.today().toordinal() - weekly_keep_days
     try:
         for name in _prune_select(_cloud_list_top_level(_weekly_dir(), "週備份"),
-                                  _parse_week, cutoff_weekly, "雲端週備份"):
+                                  _parse_week, cutoff_weekly, "雲端週備份",
+                                  os.path.join(_weekly_dir(), _PRUNE_HOLD_NAME), f"週備份/{_PRUNE_HOLD_NAME}"):
             try:
                 year_str, week_str = name.split('-W')
                 d = datetime.strptime(f"{year_str} {week_str} 1", "%Y %W %w").date()
@@ -1637,7 +1700,8 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
     cutoff_monthly = date.today().toordinal() - monthly_keep_days
     try:
         for name in _prune_select(_cloud_list_top_level(_monthly_dir(), "月備份"),
-                                  _parse_month, cutoff_monthly, "雲端月備份"):
+                                  _parse_month, cutoff_monthly, "雲端月備份",
+                                  os.path.join(_monthly_dir(), _PRUNE_HOLD_NAME), f"月備份/{_PRUNE_HOLD_NAME}"):
             try:
                 d = date.fromisoformat(f"{name}-01")     # YYYY-MM → 當月 1 號
             except ValueError:
@@ -1652,7 +1716,9 @@ def _prune_cloud_backups(daily_keep_days: int = 60, weekly_keep_days: int = 90,
         if _pii["state"] == "ready":
             _pii_monthly = os.path.join(_pii["path"], "月備份")
             for name in _prune_select(_cloud_list_top_level(_pii_monthly, f"{_PII_ARCHIVE_DIRNAME}/月備份"),
-                                      _parse_month, cutoff_monthly, "個資月備份"):
+                                      _parse_month, cutoff_monthly, "個資月備份",
+                                      os.path.join(_pii_monthly, _PRUNE_HOLD_NAME),
+                                      f"{_PII_ARCHIVE_DIRNAME}/月備份/{_PRUNE_HOLD_NAME}"):
                 try:
                     d = date.fromisoformat(f"{name}-01")
                 except ValueError:
