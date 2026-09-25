@@ -110,3 +110,19 @@ def test_source_tree_includes_module_files():
     assert api not in logic
     others = [source_tree.rel(p) for p in d.glob("*.py") if p.name not in ("api.py", "__init__.py")]
     assert set(others) <= logic, sorted(set(others) - logic)
+
+
+def test_source_tree_covers_core_spec_subdirectories(tmp_path, monkeypatch):
+    """稽核 Y-3：照 CORE-SPEC §3 用 `api/`、`service/` 子目錄的模組不可以被守門掃描漏掉（沙盒，不綁任何 L2 模組）。"""
+    mod = tmp_path / "modules" / "zz"
+    for rel in ("module.json", "__init__.py", "api/__init__.py", "api/x.py", "api/sub/y.py",
+                "service/calc.py", "top.py", "tests/test_zz.py", "migrations/0001_a.py"):
+        (mod / rel).parent.mkdir(parents=True, exist_ok=True)
+        (mod / rel).write_text("{}" if rel.endswith(".json") else "", encoding="utf-8")
+    for sub in ("routers", "helpers"):
+        (tmp_path / sub).mkdir()
+    monkeypatch.setattr(source_tree, "BACKEND", tmp_path.resolve())
+    routers = {source_tree.rel(p) for p in source_tree.router_files()}
+    logic = {source_tree.rel(p) for p in source_tree.logic_files()}
+    assert routers == {"modules/zz/api/__init__.py", "modules/zz/api/x.py", "modules/zz/api/sub/y.py"}
+    assert logic == {"modules/zz/service/calc.py", "modules/zz/top.py"}

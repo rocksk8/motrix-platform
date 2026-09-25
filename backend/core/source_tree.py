@@ -17,18 +17,34 @@ def module_dirs():
     return sorted(p for p in root.iterdir() if (p / "module.json").is_file())
 
 
+#: 模組內不算產品碼的子目錄（與 product_files() 同一份）
+def _module_py(d):
+    """模組資料夾底下所有層的 `*.py`，排除 tests／migrations 等非產品目錄。"""
+    return sorted(p for p in d.rglob("*.py")
+                  if not any(part in _NON_PRODUCT_DIRS + ("migrations",) for part in p.relative_to(d).parts))
+
+
+def _is_api(d, p):
+    """端點檔：`api.py`，或 CORE-SPEC §3 的 `api/` 目錄底下任一層的檔。"""
+    rel = p.relative_to(d).parts
+    return rel == ("api.py",) or rel[0] == "api"
+
+
 def router_files():
-    """定義 HTTP 端點的檔案：`routers/*.py` ＋ 各模組的 `api.py`。"""
+    """定義 HTTP 端點的檔案：`routers/*.py` ＋ 各模組的 `api.py` 或 `api/` 底下的全部 `*.py`
+    （稽核 Y-3：照 CORE-SPEC §3 用 `api/` 目錄的模組，原本會被靜默漏掉）。"""
     files = sorted((BACKEND / "routers").glob("*.py"))
-    files += [d / "api.py" for d in module_dirs() if (d / "api.py").is_file()]
+    for d in module_dirs():
+        files += [p for p in _module_py(d) if _is_api(d, p)]
     return files
 
 
 def logic_files():
-    """非端點的共用／業務邏輯：`helpers/*.py` ＋ 各模組除 `api.py`、`__init__.py` 以外的檔。"""
+    """非端點的共用／業務邏輯：`helpers/*.py` ＋ 各模組所有層的 `*.py`（`service/` 等子目錄也算），
+    扣掉端點檔（`api.py`、`api/`）與模組根的 `__init__.py`。"""
     files = sorted((BACKEND / "helpers").glob("*.py"))
     for d in module_dirs():
-        files += sorted(p for p in d.glob("*.py") if p.name not in ("api.py", "__init__.py"))
+        files += [p for p in _module_py(d) if not _is_api(d, p) and p != d / "__init__.py"]
     return files
 
 
