@@ -300,6 +300,40 @@ def update_vendor_contractor(vid: int, body: VendorContractorIn, authorization: 
     return {"ok": True, "updated_at": now}
 
 
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3，2026-09-26 擴大到承攬商）──────────────────────
+# 承攬商的聯絡人姓名、電話、Email、地址與帳戶可能是自然人（個人工作室／聯絡窗口）⇒ 告知對象是聯絡人。
+# 紀錄存在 L1 設定鍵 `privacy_notice_acks`（`vendor_contractor:<id>`），伺服器蓋時間與人員，已記錄的不覆蓋。
+
+@router.get("/api/vendor-contractors/{vid}/privacy-notice")
+def get_vendor_privacy_ack(vid: int, authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    return {"ack": _pn.get_ack("vendor_contractor", vid)}
+
+
+@router.post("/api/vendor-contractors/{vid}/privacy-notice/ack")
+def ack_vendor_privacy_notice(vid: int, authorization: str = Header(None)):
+    """記錄「已告知當事人」：時間與人員由伺服器決定；已記錄的不覆蓋。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('procurement', 'case_manage', 'contractor_list'), "承攬商管理")
+    if user["role"] not in ("superadmin", "admin"):
+        raise HTTPException(403, "需要管理員權限")
+    conn = get_db()
+    row = conn.execute("SELECT name, contact_name FROM vendor_contractors WHERE id=?", (vid,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "找不到此承攬商")
+    rec, created = _pn.record_purpose_ack("vendor_contractor", vid, user, "contact")
+    if created:
+        _audit(_tok(authorization), 'vendor.privacy_notice_ack', 'vendor_contractor', str(vid),
+               row["name"], {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 @router.patch("/api/vendor-contractors/{vid}/active")
 def toggle_vendor_active(vid: int, authorization: str = Header(None)):
     user = _require_user(authorization)

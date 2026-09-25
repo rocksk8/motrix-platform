@@ -215,7 +215,8 @@ modules/<key>/
 - 讀舊單 → 合併 → 整包寫回的法規單據（例：勞報單的已告知紀錄、快照）必須在 `core.txn.write_txn` 裡讀。守門：`tests/test_legal_audit_d_r1_r3_2026_09_26.py` 的並行題（只守勞報單；其他單據沿用 core.txn 的 lost-update 規則，⚠ 沒有全域守門）。
 - 每一版「兼職薪資補充保費門檻＝當年最低工資」。守門：`tests/test_legal_params_r1_2026_09_25.py`（預設值、種子、PUT 驗證）。
 - 零稅率／免稅送出時必填依據（`tax_basis_error`）；免稅依據是營業稅法 §8 第一項逐字條文的逐款下拉（`ARTICLE_8_ITEMS`，出處 `ARTICLE_8_SOURCE`；條文修正時改這張表）。守門：`tests/test_tax_basis_r2_2026_09_25.py`。
-- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋；新紀錄同時把告知全文存進 `privacy_notice_texts`（雜湊 → 全文，只增不改）；紀錄的設定值讀不懂 ⇒ 拒絕寫入（`AcksCorrupted`），不可以當成空的覆寫。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。新增其他蒐集個資的表單（例：客戶聯絡人）⚠ 未守門（沒有機器可讀的「哪些表單蒐集個資」清單）。
+- 蒐集個資的表單提供告知（列印或「已告知」紀錄），紀錄由伺服器蓋時間與人員、不可覆蓋；新紀錄同時把告知全文存進 `privacy_notice_texts`（雜湊 → 全文，只增不改）；紀錄的設定值讀不懂 ⇒ 拒絕寫入（`AcksCorrupted`），不可以當成空的覆寫。守門：`tests/test_privacy_notice_r3_2026_09_25.py`。其他表單的告知：`tests/test_privacy_notice_forms_2026_09_26.py`，清單與守門見下一條。
+- **蒐集自然人個資的表單都要有告知**（2026-09-26）：清單 `docs/platform/pii_forms.json` 列出「有個資輸入欄位的頁面 ⇒ 決定」，每一頁剛好一種：`notice`（頁面有告知區塊＝`data-privacy-card`／`data-print-notice`／`data-privacy-ack`／`data-privacy-missing`＋載入 `static/privacy-notice.js`，並列出伺服器紀錄端點 `ack_api`）、`covered_by`（個資由另一張 `notice` 表單帶入）、`not_natural_person`（法人資料）。後兩種要逐欄列 `fields`、寫 `reason`；身分證號、生日不可以用後兩種帶過。紀錄一律走 `helpers.privacy_notice.record_purpose_ack`（設定鍵 `privacy_notice_acks`），告知文字依用途（`PURPOSES`：承攬／聯絡人／帳號）分開。新增這類表單：照抄 `contractors.html`（單一當事人）或 `customers.html`（多位聯絡人，`MotrixPrivacyNotice.contactsState()`）的區塊，並在清單加一條。守門：`tests/platform/test_pii_forms_notice.py`（掃描規則 `tests/platform/_pii_forms.py`：`x-model` 綁定最後一段的個資字尾）——新頁面有個資欄位而清單沒有決定、`notice` 頁拿掉區塊或端點、豁免頁多一個個資欄位、過期的決定 ⇒ 紅；正對照＝暫存頁面＋承攬人員名冊；反向控制＝「全部寫成豁免」要紅。⚠ 守不到：不經 `x-model` 的輸入；`covered_by` 頁面上手動輸入、沒有存進主檔的聯絡人（清單 `reason` 已註明）。
 
 ## 12. 信件與通知（CORE-SPEC「使用者裁示」信件與通知的收件人、用語，2026-09-26）
 

@@ -35,16 +35,23 @@ def get_tax_basis_options(authorization: str = Header(None)):
 
 
 @router.get("/api/legal-params/privacy-notice")
-def get_privacy_notice(authorization: str = Header(None)):
-    """R3：列印告知書用的文字（登入即可讀；不含個資）。空白設定 ⇒ 範本。"""
+def get_privacy_notice(purpose: str = "contractor", authorization: str = Header(None)):
+    """R3：列印告知書用的文字（登入即可讀；不含個資）。空白設定 ⇒ 範本。
+
+    `purpose`（2026-09-26）：`contractor`（預設，R3 原本那一份）／`contact`（客戶、供應商、廠商聯絡人）／
+    `user`（使用者帳號）。不認得的用途 ⇒ 400（不猜、不退回預設）。"""
     from helpers import privacy_notice as pn
     from helpers.settings import _get_setting
     _require_user(authorization)
+    if purpose not in pn.PURPOSES:
+        raise HTTPException(400, "不認得的告知用途：" + str(purpose))
     profile = _get_setting("company_profile", {}) or {}
-    text = pn.notice_text(profile)
+    text = pn.purpose_notice_text(profile, purpose)
+    key = pn.PURPOSES[purpose][1]
     return {"company": profile.get("name", ""), "text": text, "hash": pn.notice_hash(text),
-            "isTemplate": not str(profile.get("privacy_notice") or "").strip(),
-            "template": pn.template_for(profile.get("name", ""))}
+            "purpose": purpose, "profileKey": key,
+            "isTemplate": not str(profile.get(key) or "").strip(),
+            "template": pn.purpose_template_for(purpose, profile.get("name", ""))}
 
 
 @router.get("/api/legal-params/privacy-notice/texts/{notice_hash}")

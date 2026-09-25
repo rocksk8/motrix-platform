@@ -173,3 +173,55 @@ def update_supplier_visits(sid: int, body: dict, authorization: str = Header(Non
                             f"{sname}{('（' + _latest_visit['date'] + '）') if _latest_visit.get('date') else ''}",
                             "suppliers.html", detail=_latest_visit.get("note", ""))
     return {"ok": True, "count": visit_count, "updated_at": now}
+
+
+
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3，2026-09-26 擴大到聯絡人）──────────────────────
+# 告知的對象是每一位聯絡人（自然人），不是供應商本身；紀錄存在 L1 設定鍵 `privacy_notice_acks`
+# （`supplier_contact:<供應商id>:<聯絡人id>`），由伺服器蓋時間與人員，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+def _privacy_contacts(conn, sid: int):
+    row = conn.execute("SELECT name, data_json FROM suppliers WHERE id=?", (sid,)).fetchone()
+    if not row:
+        return None, []
+    try:
+        d = json.loads(row["data_json"] or "{}")
+    except ValueError:
+        d = {}
+    contacts = d.get("contacts") if isinstance(d, dict) else None
+    return row["name"], (contacts if isinstance(contacts, list) else [])
+
+
+@router.get("/api/suppliers/{sid}/privacy-notice")
+def get_supplier_contact_privacy_acks(sid: int, authorization: str = Header(None)):
+    """每一位聯絡人的「已告知」紀錄：{"acks": {聯絡人id: 紀錄}}（沒有紀錄的不列）。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    conn = get_db()
+    name, _ = _privacy_contacts(conn, sid)
+    conn.close()
+    if name is None:
+        raise HTTPException(404, "供應商不存在")
+    return {"acks": _pn.acks_with_prefix("supplier_contact", sid)}
+
+
+@router.post("/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack")
+def ack_supplier_contact_privacy_notice(sid: int, ctid: str, authorization: str = Header(None)):
+    """記錄「已告知這位聯絡人」：時間與人員由伺服器決定；已記錄的不覆蓋。聯絡人要先存進供應商資料。"""
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    require_any_module(user, ('customer', 'procurement', 'inventory'), "供應商管理")
+    conn = get_db()
+    name, contacts = _privacy_contacts(conn, sid)
+    conn.close()
+    if name is None:
+        raise HTTPException(404, "供應商不存在")
+    ct = next((c for c in contacts if isinstance(c, dict) and str(c.get("id")) == str(ctid)), None)
+    if ct is None:
+        raise HTTPException(404, "找不到這位聯絡人（請先儲存供應商資料）")
+    rec, created = _pn.record_purpose_ack("supplier_contact", f"{sid}:{ctid}", user, "contact")
+    if created:
+        _audit(_tok(authorization), 'supplier.privacy_notice_ack', 'supplier', f"{sid}:{ctid}",
+               f"{name}／{ct.get('name') or ''}", {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}

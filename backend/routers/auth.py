@@ -1595,6 +1595,34 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
     return {"ok": True}
 
 
+# ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3，2026-09-26 擴大到使用者帳號）─────────────────
+# 帳號的姓名、Email、電話是員工個資。紀錄存在 L1 設定鍵 `privacy_notice_acks`（`user:<id>`），
+# 伺服器蓋時間與人員，已記錄的不覆蓋；沒有紀錄不擋存檔。
+
+@router.get("/api/users/{user_id}/privacy-notice")
+def get_user_privacy_ack(user_id: int, authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    _require_user(authorization, require_superadmin=True)
+    return {"ack": _pn.get_ack("user", user_id)}
+
+
+@router.post("/api/users/{user_id}/privacy-notice/ack")
+def ack_user_privacy_notice(user_id: int, authorization: str = Header(None)):
+    """記錄「已告知當事人」：時間與人員由伺服器決定；已記錄的不覆蓋。"""
+    from helpers import privacy_notice as _pn
+    actor = _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    row = conn.execute("SELECT username, display_name FROM users WHERE id=?", (user_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "使用者不存在")
+    rec, created = _pn.record_purpose_ack("user", user_id, actor, "user")
+    if created:
+        _audit(_tok(authorization), 'user.privacy_notice_ack', 'user', str(user_id),
+               row["display_name"] or row["username"], {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 @router.delete("/api/users/{user_id}")
 def delete_user(user_id: int, authorization: str = Header(None)):
     actor = _require_user(authorization, require_superadmin=True)
