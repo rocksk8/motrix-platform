@@ -50,6 +50,8 @@
    "js:static/custom-modules-nav.js",
    "js:static/edit-presence.js",
    "js:static/gov-lookup.js",
+   "js:static/layout-editor.js",
+   "js:static/layout-runtime.js",
    "js:static/legal-round.js",
    "js:static/list-sort.js",
    "js:static/notif.js",
