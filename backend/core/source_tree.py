@@ -35,3 +35,23 @@ def logic_files():
 def rel(p) -> str:
     """相對 backend 的 POSIX 路徑，例：`routers/system.py`、`modules/tender_radar/api.py`。"""
     return Path(p).resolve().relative_to(BACKEND).as_posix()
+
+
+#: 產品碼以外的 backend 子目錄（不隨產品執行路徑載入）
+_NON_PRODUCT_DIRS = ("tests", "tools", "scripts", "migrations_frozen", "__pycache__")
+
+
+def product_files():
+    """全部產品碼：backend 根目錄 `*.py` ＋ `core/`、`routers/`、`helpers/` ＋ `modules/` 底下**所有層**的 `*.py`。
+
+    與 `router_files()`／`logic_files()` 不同：這份含根目錄檔（db.py、archive.py…）與模組的子目錄
+    （CORE-SPEC §3 `modules/<key>/api/`、`service/`）——「整個產品不可以出現 X」類守門用這份。
+    """
+    files = sorted(BACKEND.glob("*.py"))
+    for sub in ("core", "routers", "helpers"):
+        files += sorted((BACKEND / sub).glob("*.py"))
+    root = BACKEND / "modules"
+    if root.is_dir():
+        files += sorted(p for p in root.rglob("*.py")
+                        if not any(part in _NON_PRODUCT_DIRS for part in p.relative_to(root).parts))
+    return files

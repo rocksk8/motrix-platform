@@ -81,6 +81,7 @@ Desktop.ini
 # 帶到正式機——這正是選用「gitignore 過的檔案」而不是設定值的原因。
 # 見 archive.py::cloud_archive_enabled()
 .no_cloud_archive
+.no_email_send
 
 # ── demo 帳號的隔離存檔目錄（2026-09-22，RG4）───────────────────────────────
 # `db.py` 的 `DEMO_*_ARCHIVE_DIR` 那一組常數，跑測試與登入 demo 帳號時會建。

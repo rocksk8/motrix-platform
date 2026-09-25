@@ -207,6 +207,23 @@
 | 5 | `uploads/`、7 個 PDF 目錄、`db_backups/` 的容量 | B 方案的搬遷時間與空間 |
 | 6 | `.no_cloud_archive` 是否只存在開發機 | 確認 §2 盲側風險的影響面 |
 
+## 7b. 待裁示
+
+| # | 項目 | 現況 | 為什麼要裁示 |
+|---|---|---|---|
+| 1 | 勞報單存檔（`export_archive/`）上雲端鏡像 | V9 起就**不在** PDF 鏡像清單（`archive.py:1126-1131` 只列 6 類）⇒ 只有本機一份 | 勞報單含個人資料（身分證字號等），上雲前需使用者裁示（主持 2026-09-25） |
+
+## 7c. 實作進度（2026-09-25 第二輪）
+
+| 項目 | commit |
+|---|---|
+| A-1 `core/paths.py`＋契約測試＋主庫不存在拒絕（`MOTRIX_CREATE_NEW_DB`） | `bef3e25d`、`41151687` |
+| A-2 email 改明確旗標（`.no_email_send`／`MOTRIX_EMAIL_SEND=off`，預設寄） | wip/c-email |
+| A-3 `export_archive` 設定鍵 `payslip_archive_path` | `41151687` |
+| A-4 uploads 根收斂 | `41151687` |
+| §3 V9 基準比對＋`module_schema_versions` | `c057832a` |
+| 守門：`__file__` 資料路徑、`V9.0` 字樣（正對照：對 `c83dae6e` 原版報出 59 處／1 處） | wip/c-email |
+
 ## 8. 更正（保留錯的那一列）
 
 | 原寫法 | 實際 | 證據 |

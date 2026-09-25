@@ -73,6 +73,8 @@ LOCAL_DB_BACKUP_DIR = backend("db_backups")
 BACKUP_ALERT_DIR = root("backup_alerts")
 #: 開發機不上雲端的標記（.gitignore 內，永不進部署包）
 NO_CLOUD_MARKER = root(".no_cloud_archive")
+#: 開發機不寄信的標記（2026-09-25 使用者裁示：預設寄信，開發機放這個擋；.gitignore 內）
+NO_EMAIL_SEND_MARKER = root(".no_email_send")
 
 # ── log ────────────────────────────────────────────────────────────────────
 LOGS_DIR = backend("logs")

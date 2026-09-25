@@ -17,30 +17,63 @@ from .notification_prefs import is_enabled as _pref_enabled
 logger = logging.getLogger(__name__)
 
 
-def _is_production_install() -> bool:
-    """正式機身分守門，比照 apply_update.ps1／setup_autostart_task.ps1 既有的
-    「只認 C:\\Users\\Motrix\\Desktop\\V9.0 這個安裝路徑」慣例——這支檔案自己的
-    絕對路徑若不在 \\V9.0\\ 底下，就一律視為開發/測試環境。"""
-    here = os.path.abspath(__file__).replace("/", "\\")
-    return "\\V9.0\\" in here
+# ── 這台機器寄不寄信（2026-09-25 使用者裁示：預設寄信，開發機用明確標記擋）─────────
+#
+# 🔴 **不可以再用安裝路徑判定正式機**（原本只認 `\V9.0\`）：新版裝在任何別的路徑，
+#    正式機的通知信就會全部靜默停寄，而且沒有任何錯誤。〈不可以用安裝路徑猜正式機〉。
+#
+# 判斷（任一成立就擋；每次呼叫都重讀，換標記立即生效——比照 archive.cloud_archive_enabled）：
+#   1. 環境變數 `MOTRIX_EMAIL_SEND=off`（0／false／no／disabled 同義）
+#   2. 安裝根目錄有 `.no_email_send`（.gitignore 內，建包守門擋它進部署包）
+#   3. 都沒有 ⇒ **寄**（維持正式機現況）
+#
+# ⚠️ 預設是「寄」而不是「擋」：正式機誤停的代價是通知靜默消失、沒有人會報修；
+#    開發機誤寄的代價是同仁收到假信——那已經發生過兩次（2026-08-26、08-27），
+#    所以**每一台開發機第一件事是放 `.no_email_send`**（CORE-SPEC §10 部署步驟）。
+#    測試另有 conftest `_netguard` 攔 `smtplib.SMTP`（只保護測試行程）。
+EMAIL_SEND_ENV = "MOTRIX_EMAIL_SEND"
+_EMAIL_SEND_OFF = ("off", "0", "false", "no", "disabled")
+from core import paths as _paths  # noqa: E402
+_NO_EMAIL_SEND_MARKER_PATH = _paths.NO_EMAIL_SEND_MARKER
+_email_policy_state = {"allowed": None}     # 只為了「狀態變了才寫一次 log」
 
 
-_PRODUCTION_INSTALL = _is_production_install()
+def email_send_policy(env=None):
+    """回 `(allowed, 原因)`。原因一律講得出來源（環境變數或標記檔的完整路徑）。"""
+    env = os.environ if env is None else env
+    raw = (env.get(EMAIL_SEND_ENV) or "").strip().lower()
+    if raw in _EMAIL_SEND_OFF:
+        return False, "環境變數 %s=%s" % (EMAIL_SEND_ENV, raw)
+    if os.path.exists(_NO_EMAIL_SEND_MARKER_PATH):
+        return False, "存在標記檔 %s" % _NO_EMAIL_SEND_MARKER_PATH
+    if raw:
+        # 設了卻認不得（例：`of`）⇒ 不猜成「擋」：正式機因打錯字而停信是看不見的那一側
+        return True, "環境變數 %s=%s 無法辨識，視為未設定；預設寄信" % (EMAIL_SEND_ENV, raw)
+    return True, "預設寄信（無 %s、無 .no_email_send）" % EMAIL_SEND_ENV
+
+
+def _log_policy_if_changed() -> bool:
+    allowed, why = email_send_policy()
+    if _email_policy_state["allowed"] is not allowed:
+        _email_policy_state["allowed"] = allowed
+        if allowed:
+            logger.info("email：這台機器會寄信（%s）", why)
+        else:
+            logger.info("email：這台機器不寄信，原因＝%s", why)
+    return allowed
+
+
+_log_policy_if_changed()        # 啟動時記一次（import 即啟動）
 
 
 def _smtp_send_blocked(subject: str) -> bool:
-    """2026-08-27 新增的硬性防呆：開發機啟動 dev server 時，既有的「簽核逾期催辦」
-    啟動排程曾經意外對真實同仁寄出真實催辦信（見 _apply_dev_subject_prefix 的
-    dev_mode 機制——那套是 2026-08-26 針對同類事故加的軟性提醒，只會在 subject
-    加註文字，需要手動開啟且不會真的擋下寄送，這次同一種事故又發生了一次，代表
-    「預設關閉、需要手動開啟」的軟性方案不夠）。這裡改成預設硬擋：只要目前執行的
-    程式碼不是安裝在正式機路徑（_is_production_install()），無論 email_notify 設定
-    的 enabled／dev_mode 開關怎麼設，一律不會真的呼叫 SMTP 寄信，只會記錄
-    log 供除錯查看內容。要在開發機真的測試寄信，請直接用真實的正式機環境測試，
-    不要在本機開發環境啟動會觸發背景排程的完整 dev server。"""
-    if _PRODUCTION_INSTALL:
+    """開發機寄出真實信件的硬性防呆（2026-08-27 起；判定方式 2026-09-25 改為明確標記）。
+
+    無論 email_notify 設定的 enabled／dev_mode 怎麼設，被擋時一律不呼叫 SMTP，只記 log。"""
+    if _log_policy_if_changed():
         return False
-    logger.warning("email BLOCKED — not running from production install path (dev/test environment); subject: %r", subject)
+    _allowed, why = email_send_policy()
+    logger.warning("email BLOCKED（%s）；subject: %r", why, subject)
     return True
 
 _STYLE = """

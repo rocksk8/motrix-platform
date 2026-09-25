@@ -68,6 +68,8 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import os
+
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -126,8 +128,10 @@ def smtp(monkeypatch):
 
     # ① transport 先換掉 —— 這一行沒生效的話，下面那一行會讓真信寄出去
     monkeypatch.setattr(email_notify.smtplib, "SMTP", _FakeSMTP)
-    # ② 才繞過硬擋
-    monkeypatch.setattr(email_notify, "_PRODUCTION_INSTALL", True)
+    # ② 才繞過硬擋（2026-09-25 起判定改為明確標記：拿掉環境變數、標記檔指到不存在的位置）
+    monkeypatch.delenv(email_notify.EMAIL_SEND_ENV, raising=False)
+    monkeypatch.setattr(email_notify, "_NO_EMAIL_SEND_MARKER_PATH",
+                        os.path.join(os.path.dirname(__file__), "_no_such_marker_"))
     # ③ 設定要「啟用」，否則 `_send` 第一個 return 就走掉了
     # ⚠️ 鍵名是從 `_send()` **讀出來的**（`email_notify.py:161-165`），
     #    不是憑印象寫的 —— 我第一版猜成 `host`／`user`／`password`，

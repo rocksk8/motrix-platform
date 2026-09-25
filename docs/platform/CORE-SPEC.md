@@ -99,6 +99,13 @@ modules/<key>/
 
 ## 10. 環境
 
+**開發機部署步驟（依序）**
+
+1. **先在安裝根目錄放 `.no_email_send`**（或設 `MOTRIX_EMAIL_SEND=off`）——沒有它就會真的寄信（email 預設寄，2026-09-25 裁示）；同時放 `.no_cloud_archive`
+2. 第一次啟動且沒有主庫：設 `MOTRIX_CREATE_NEW_DB=1` 啟動一次，建好後移除
+
+**正式機**：不放 `.no_email_send`、不設 `MOTRIX_EMAIL_SEND` ⇒ 照常寄信（與 V9 現況相同，不需額外步驟）。兩個標記都在 `.gitignore`，`tools/verify_package.py` 的 `dev-marker` 規則擋它們進部署包。
+
 - 開發 port 預設 **667**（避免與 V9 開發機 666 衝突）
 - 開發 DB 為測試資料，不上傳任何正式機
 - 資料位置唯一來源 `backend/core/paths.py`（錨點＝安裝根目錄，值＝V9 原位置）；產品碼不可自行用 `__file__` 算資料路徑

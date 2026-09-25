@@ -41,6 +41,8 @@ V9_LOCATIONS = {
     "LOCAL_DB_BACKUP_DIR": os.path.join(BACKEND, "db_backups"),
     "BACKUP_ALERT_DIR": os.path.join(ROOT, "backup_alerts"),
     "NO_CLOUD_MARKER": os.path.join(ROOT, ".no_cloud_archive"),
+    # 不是 V9 既有位置：2026-09-25 新增（email 改用標記判定，取代安裝路徑）
+    "NO_EMAIL_SEND_MARKER": os.path.join(ROOT, ".no_email_send"),
     "LOGS_DIR": os.path.join(BACKEND, "logs"),
     "SERVER_LOG": os.path.join(BACKEND, "logs", "server.log"),
     "HEARTBEAT_CONFIG": os.path.join(BACKEND, "heartbeat_config.json"),

@@ -123,6 +123,9 @@ BAD = [
     ("dotenv", ".env 檔",
      lambda r, n: n.lower() == ".env" or n.lower().startswith(".env.")),
     ("pycache", "__pycache__", lambda r, n: "__pycache__" in r.lower()),
+    # 2026-09-25：開發機標記檔帶進部署包 ⇒ 正式機不寄信／不上雲（而且沒有錯誤）
+    ("dev-marker", "開發機標記檔",
+     lambda r, n: n.lower() in (".no_email_send", ".no_cloud_archive")),
 ]
 
 # ---- 不該給客戶的「能力」（不是檔案欄）----
@@ -159,6 +162,8 @@ POSITIVE_CONTROL = [
     ("db-sqlite",   os.path.join("backend", "motrix_erp_demo.db")),
     ("private_key", os.path.join("backend", "tools",
                                  "_license_private_key_dev.pem")),
+    # 開發機一定要有它（CORE-SPEC §10 部署步驟第一條）⇒ 沒有時報告作廢，方向是安全的
+    ("dev-marker",  ".no_email_send"),
 ]
 
 
