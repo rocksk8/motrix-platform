@@ -1,0 +1,78 @@
+{
+  "key": "payslip",
+  "version": 1,
+  "theme": "payslip",
+  "title": {"path": "slipNo", "suffix": " 勞務報酬單"},
+  "blocks": [
+    {"type": "doc_header", "title": "勞　務　報　酬　單", "subtitle_path": "companyName",
+     "info": [{"label": "單號：", "path": "slipNo"}, {"label": "日期：", "path": "slipDate"}]},
+
+    {"type": "section_title", "text": "一、甲方（給付單位）"},
+    {"type": "part", "name": "reprint_note"},
+    {"type": "kv_table", "rows": [
+      {"cells": [{"th": "公司名稱"}, {"path": "companyName", "colspan": 3}]},
+      {"cells": [{"th": "統一編號"}, {"path": "companyTaxId"}, {"th": "聯絡資訊"}, {"path": "companyContact"}]}
+    ]},
+
+    {"type": "section_title", "text": "二、乙方（受領報酬人）"},
+    {"type": "kv_table", "rows": [
+      {"cells": [{"th": "姓　　名"}, {"path": "contractorName"}, {"th": "證件號碼"}, {"path": "contractorIdNumber"}]},
+      {"cells": [{"th": "電　　話"}, {"path": "contractorPhone"}, {"th": "電子信箱"}, {"path": "contractorEmail"}]},
+      {"cells": [{"th": "通訊地址"}, {"path": "contractorAddress", "colspan": 3}]},
+      {"cells": [{"th": "國　　籍"}, {"path": "contractorNationality", "colspan": 3}]},
+      {"when": {"path": "unionInsured", "equals": true},
+       "cells": [{"th": "職業工會"}, {"text": "✓ 已投保職業工會", "tag": true, "colspan": 3}]},
+      {"unless": {"path": "unionInsured", "equals": true},
+       "cells": [{"th": "職業工會"}, {"text": "未投保", "colspan": 3}]}
+    ]},
+
+    {"type": "section_title", "text": "三、勞務內容"},
+    {"type": "kv_table", "rows": [
+      {"cells": [{"th": "服務期間"}, {"path": "servicePeriod", "colspan": 3}]},
+      {"cells": [{"th": "勞務內容"}, {"path": "serviceContent", "colspan": 3}]},
+      {"cells": [{"th": "所得類別"}, {"path": "incomeTypeLabel", "colspan": 3}]}
+    ]},
+
+    {"type": "section_title", "text": "四、金額明細"},
+    {"type": "kv_table", "class": "amount-row", "rows": [
+      {"cells": [{"th": "應付總額"}, {"path": "grossAmount", "format": "ntd"}, {"class": "note-cell", "colspan": 2}]},
+      {"cells": [{"th": "代扣所得稅"}, {"path": "taxWithheld", "format": "ntd"}, {"path": "taxNote", "class": "note-cell", "colspan": 2}]},
+      {"cells": [{"th": "二代健保費"}, {"path": "nhiSupplement", "format": "ntd"}, {"path": "nhiNote", "class": "note-cell", "colspan": 2}]},
+      {"class": "net", "cells": [{"th": "實　發　金　額"}, {"path": "netAmount", "format": "ntd", "colspan": 3}]}
+    ]},
+
+    {"type": "section_title", "text": "五、付款方式"},
+    {"type": "kv_table", "rows": [
+      {"cells": [{"th": "付款方式"}, {"path": "paymentMethod", "tag": true, "colspan": 3}]},
+      {"when": {"path": "paymentMethod", "equals": "匯款"},
+       "cells": [{"th": "匯款銀行"}, {"text": "{bankCode} {bankName} {bankBranch}", "colspan": 3}]},
+      {"when": {"path": "paymentMethod", "equals": "匯款"},
+       "cells": [{"th": "匯款帳戶"}, {"text": "戶名：{bankAccountName}｜帳號：{bankAccountNumber}", "colspan": 3}]}
+    ]},
+
+    {"type": "when", "path": "remarks", "present": true, "then": [
+      {"type": "section_title", "text": "六、備註"},
+      {"type": "kv_table", "rows": [{"cells": [{"path": "remarks", "style": "pre_wrap"}]}]}
+    ]},
+
+    {"type": "kv_table", "id": "privacy_status", "rows": [
+      {"when": {"path": "privacyAcked", "equals": true},
+       "cells": [{"th": "個資告知"}, {"text": "已告知（{privacyAckAt}，{privacyAckBy}）", "colspan": 3}]},
+      {"unless": {"path": "privacyAcked", "equals": true},
+       "cells": [{"th": "個資告知"}, {"text": "個人資料蒐集告知事項見附件", "colspan": 3}]}
+    ]},
+
+    {"type": "sign_boxes", "variant": "named", "boxes": [
+      {"label": "乙方簽名／蓋章", "name_path": "contractorName"},
+      {"label": "甲方代表人"}
+    ]},
+    {"type": "footer_text", "text": "{companyName}｜統編：{companyTaxId}｜{companyContact}"}
+  ],
+  "after_root": [
+    {"type": "part", "name": "id_card_attachment"},
+    {"type": "part", "name": "passbook_attachment"},
+    {"type": "when", "id": "privacy_notice_page", "path": "privacyAcked", "equals": false, "then": [
+      {"type": "text_page", "title": "附件：個人資料蒐集告知事項", "path": "privacyNoticeText"}
+    ]}
+  ]
+}
