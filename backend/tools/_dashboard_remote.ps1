@@ -22,7 +22,7 @@ param(
     [string]$Action,
 
     # CORE-SPEC §9e D4：V9 → 新版升級精靈的單一步驟（固定清單，不接受任意指令）
-    [ValidateSet("", "push", "stop-services", "preflight", "backup", "convert", "verify", "start-services", "rollback-code", "rollback-full")]
+    [ValidateSet("", "push", "stop-services", "preflight", "backup", "convert", "verify", "start-services", "rollback-code", "rollback-full-preview", "rollback-full")]
     [string]$Step = "",
     # 備份目錄的時間戳記（只准字母數字底線連字號，由儀表板產生並驗證）
     [string]$BackupStamp = "",
@@ -356,11 +356,15 @@ try {
                 "convert"       { @("convert", "--root", $Root, "--backup-dir", $Bk, "--new-source", $Pkg) }
                 "verify"        { @("verify", "--root", $Root, "--backup-dir", $Bk, "--port", "6671") }
                 "rollback-code" { @("rollback", "--root", $Root, "--backup-dir", $Bk, "--mode", "code") }
+                # 預覽：不帶 --yes ⇒ upgrade.py 只列出「會失去的資料」、不動任何檔，exit 4（這裡視為成功）
+                "rollback-full-preview" { @("rollback", "--root", $Root, "--backup-dir", $Bk, "--mode", "full") }
                 "rollback-full" { @("rollback", "--root", $Root, "--backup-dir", $Bk, "--mode", "full", "--yes") }
             }
             $env:PYTHONIOENCODING = "utf-8"
             & python $tool @args2 2>&1 | ForEach-Object { "$_" }
-            Write-Output "===EXITCODE=$LASTEXITCODE==="
+            $ec = $LASTEXITCODE
+            if ($Step -eq "rollback-full-preview" -and $ec -eq 4) { $ec = 0 }
+            Write-Output "===EXITCODE=$ec==="
         } | ForEach-Object {
             if ($_ -match '^===EXITCODE=(-?\d+)===$') { $remoteExitCode = [int]$matches[1] } else { Write-Host $_ }
         }

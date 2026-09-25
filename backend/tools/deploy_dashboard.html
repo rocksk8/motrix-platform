@@ -238,6 +238,7 @@ const UP_STEPS = [
   ['verify', '⑥ 驗證', '比對列數、設定、資料清單，並在 6671 埠試啟動新版。'],
   ['start-services', '⑦ 啟動服務', '開回自動啟動與每日備份、啟動服務並等它回應（最多 4 分鐘），最後開回心跳。服務沒回應也會開心跳（讓告警照常響），並標示失敗。'],
   ['rollback-code', '回滾：只回程式', '換回 V9 程式，保留轉換後寫入的資料。出問題時優先用這個。'],
+  ['rollback-full-preview', '預覽完整回滾', '唯讀：列出完整回滾會失去的資料（轉換後新增或改寫的列、新表），不動任何檔。完整回滾前必須先看過。'],
   ['rollback-full', '回滾：完整', '程式、資料庫、設定全部還原到備份當下（雜湊逐一相等）。會丟掉轉換後寫入的所有資料。'],
 ];
 let upDone = {};
@@ -287,7 +288,7 @@ async function closeUpSession() {
 }
 function renderUpSteps() {
   document.getElementById('upSteps').innerHTML = UP_STEPS.map(([k, label]) =>
-    `<button class="${k.startsWith('rollback') ? 'danger' : 'ghost'}" onclick="requestUpStep('${k}')">${upDone[k] === true ? '✅ ' : upDone[k] === false ? '⛔ ' : ''}${label}</button>`).join('');
+    `<button class="${k.startsWith('rollback') && k !== 'rollback-full-preview' ? 'danger' : 'ghost'}" onclick="requestUpStep('${k}')">${upDone[k] === true ? '✅ ' : upDone[k] === false ? '⛔ ' : ''}${label}</button>`).join('');
 }
 function requestUpStep(step) {
   const [, label, desc] = UP_STEPS.find(s => s[0] === step);

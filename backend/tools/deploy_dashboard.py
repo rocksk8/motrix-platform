@@ -492,7 +492,7 @@ _JOB_TIMEOUT_MIN = {
     "build": 90, "deploy": 45, "rollback": 60,
     "upgrade-push": 30, "upgrade-stop-services": 15, "upgrade-start-services": 15,
     "upgrade-backup": 90, "upgrade-convert": 45,
-    "upgrade-rollback-code": 60, "upgrade-rollback-full": 90,
+    "upgrade-rollback-code": 60, "upgrade-rollback-full": 90, "upgrade-rollback-full-preview": 10,
 }
 _JOB_TIMEOUT_DEFAULT_MIN = 20
 
@@ -1218,7 +1218,7 @@ def _health_gate_ok() -> bool:
 #    而遠端腳本拿不到 upgrade.py 的結束碼標記時自己就 exit 1（fail closed）。
 
 UPGRADE_STEPS = ("push", "stop-services", "preflight", "backup", "convert", "verify",
-                 "start-services", "rollback-code", "rollback-full")
+                 "start-services", "rollback-code", "rollback-full-preview", "rollback-full")
 #: 會讓正式機停止服務或改動程式／資料的步驟：需要健康檢查通過或人工確認（同部署）
 _UPGRADE_GUARDED = {"stop-services"}
 
@@ -1388,6 +1388,14 @@ def upgrade_step(body: UpgradeStepIn):
     package_path = DEPLOY_PACKAGES_DIR / body.package
     if not package_path.exists():
         return JSONResponse(status_code=400, content={"detail": f"找不到部署包：{package_path}"})
+    # 9b 稽核順帶發現（2026-09-25）：完整回滾一律帶 --yes ⇒「會失去哪些資料」只出現在 log，人在確認前看不到。
+    # 改成：這一輪必須先跑過「預覽」（唯讀，列出清單），而且預覽要在最近一次轉換之後，才准完整回滾。
+    if body.step == "rollback-full":
+        steps = cur.get("steps") or {}
+        pv, cv = steps.get("rollback-full-preview") or {}, steps.get("convert") or {}
+        if not pv.get("ok") or (cv.get("at") and (pv.get("at") or "") < cv["at"]):
+            return JSONResponse(status_code=409, content={
+                "detail": "完整回滾前，必須先按「預覽完整回滾」看過會失去的資料清單（而且要在最近一次轉換之後）。"})
     if body.step == "rollback-full" and body.confirmText != "FULL":
         return JSONResponse(status_code=400, content={
             "detail": "完整回滾會丟掉轉換後寫入的所有資料，必須在確認欄輸入 FULL。多數情況請先用「只回程式」。"})

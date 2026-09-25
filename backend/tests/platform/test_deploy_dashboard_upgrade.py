@@ -70,7 +70,15 @@ def test_preflight_runs_with_fixed_step_name(client):
     assert stdin == "x\n" and "'x'" not in joined          # 密碼只走 stdin，不進指令列
 
 
+def _set_steps(client, steps):
+    p = client.tmp / "upgrade_session.json"
+    d = json.loads(p.read_text(encoding="utf-8"))
+    d["steps"] = steps
+    p.write_text(json.dumps(d), encoding="utf-8")
+
+
 def test_rollback_full_needs_typed_full(client):
+    _set_steps(client, {"rollback-full-preview": {"ok": True, "at": "2026-09-25 23:00:00"}})
     assert client.post("/api/upgrade/step", json=_body(step="rollback-full")).status_code == 400
     assert client.post("/api/upgrade/step", json=_body(step="rollback-full", confirmText="full")).status_code == 400
     assert client.runs == []
@@ -151,3 +159,27 @@ def test_remote_script_knows_every_step():
     assert m, "找不到 -Step 的 ValidateSet"
     remote = set(re.findall(r'"([^"]+)"', m.group(1)))
     assert remote == set(dd.UPGRADE_STEPS)
+
+
+def test_rollback_full_needs_a_preview_after_the_latest_convert(client):
+    # 9b 稽核順帶發現：完整回滾一律帶 --yes ⇒ 會失去的資料只出現在 log。先預覽才准執行
+    body = _body(step="rollback-full", confirmText="FULL")
+    assert client.post("/api/upgrade/step", json=body).status_code == 409          # 沒預覽
+    _set_steps(client, {"rollback-full-preview": {"ok": False, "at": "2026-09-25 23:00:00"}})
+    assert client.post("/api/upgrade/step", json=body).status_code == 409          # 預覽失敗
+    _set_steps(client, {"rollback-full-preview": {"ok": True, "at": "2026-09-25 22:00:00"},
+                        "convert": {"ok": True, "at": "2026-09-25 22:30:00"}})
+    assert client.post("/api/upgrade/step", json=body).status_code == 409          # 預覽早於轉換＝過期
+    assert client.runs == []
+    _set_steps(client, {"convert": {"ok": True, "at": "2026-09-25 22:30:00"},
+                        "rollback-full-preview": {"ok": True, "at": "2026-09-25 22:40:00"}})
+    assert client.post("/api/upgrade/step", json=body).status_code == 200
+
+
+def test_preview_is_readonly_and_treats_exit4_as_success():
+    src = (Path(dd.TOOLS_DIR) / "_dashboard_remote.ps1").read_text(encoding="utf-8-sig")
+    import re
+    line = re.search(r'"rollback-full-preview"\s*\{[^}]*\}', src).group(0)
+    assert '"--mode", "full"' in line and "--yes" not in line                     # 不帶 --yes ＝ upgrade.py 不動檔
+    assert re.search(r'rollback-full-preview"\s*-and\s*\$ec\s*-eq\s*4', src)
+    assert "rollback-full-preview" not in dd._NO_KILL_ON_TIMEOUT                  # 唯讀：逾時可以直接中止
