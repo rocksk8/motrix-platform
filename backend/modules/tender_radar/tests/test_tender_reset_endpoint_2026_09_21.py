@@ -92,8 +92,8 @@ class _Stub(types.ModuleType):
         return lambda *a, **kw: None
 
 sys.modules["archive"] = _Stub("archive")
-import routers.daily_tasks as _dt
-_dt.schedule_overdue_check = lambda *a, **kw: None
+import helpers.daily_checks as _dck   # 2026-09-26：每日排程改由 L1 執行器起
+_dck.schedule_daily_checks = lambda *a, **kw: None
 
 if MODE == "literal_on":
     # E4：**出貨開關被打開**（一台正常營運的客戶機器），但這不是測試機。

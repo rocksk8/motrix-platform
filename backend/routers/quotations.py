@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from db import get_db, spawn_bg_thread
 from helpers import row_access
+from helpers import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,

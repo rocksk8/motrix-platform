@@ -211,3 +211,20 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。端點 `GET /api/bonus/insurance`、`PUT /api/bonus/insurance/{username}`（最高管理者）；頁面在獎金頁「投保金額與全年累計」。
 不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
 ⚠ 投保金額屬薪資等級資訊，端點只給最高管理者；而 `system_settings` 會進一般每日 JSON——資料分類（MODULE-GUIDE §3.2 是否列 F2）待 C 判定，見 RUN-PLAN §6 本項回報。
+
+---
+
+## IP-10　`daily.check`：模組的每日 08:00 檢查（各模組 → L1 執行器）
+
+M12 每日任務搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/daily_tasks.py::schedule_overdue_check` 一支排程同時跑九種檢查（每日任務逾期、區間到期、案件階段到期、案件專案期間、保固、簽核催辦、憑證、備份新鮮度、磁碟／暫存）⇒ **停用每日任務會連帶停掉備份與磁碟告警**。改成：系統健康檢查下沉 L1（`helpers/system_checks.py`，永遠執行），各模組的檢查以本串接點登記給 L1 執行器（`helpers/daily_checks.py`）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M12 `routers/daily_tasks.py::run_daily_checks`（名稱 `daily_tasks`：逾期、區間到期；啟動補跑用 `dt_overdue_last_check` 逐日補）；M01 `helpers/case_deadlines.py::run_daily_checks`（名稱 `case_deadlines`：案件階段到期、案件專案期間、保固到期） |
+| 使用方 | L1 `helpers/daily_checks.py::run_module_checks`（由 `schedule_daily_checks()` 在啟動與每天 08:00 呼叫；main.py 啟動） |
+| 形式 | provider，**多提供者、以名稱區分**（依名稱排序逐一呼叫；某一支丟例外只記錄，不影響其他支） |
+| 語法 | 提供：`registry.provide("daily.check", "<名稱>", fn)`<br>取用：`for name, fn in sorted(registry.providers("daily.check").items()): fn(mode)` |
+| 回傳 | 無。`fn(mode)`：`mode`＝`"startup"`（啟動補跑；要回溯幾天由模組自己決定）或 `"daily"`（每天 08:00） |
+| 對方不在時 | 少那一類檢查，其餘照常；**系統健康檢查（憑證、備份、磁碟、暫存、簽核催辦、請求紀錄清理）不依賴任何 L2 模組，一律執行** |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_daily_checks_connector.py`：①兩個提供者都已登記 ②**反向控制**：拿掉所有 `daily.check` 提供者 ⇒ 系統檢查兩種模式都照跑 ③一支提供者丟例外不影響其他支與系統檢查 ④逐日補跑行為照舊；`tests/test_backup_freshness_disk_2026_09_14.py::test_checks_are_wired_into_daily_schedule`（改為行為題）；登記表一致性由 `test_integration_points_registered.py` 守 |

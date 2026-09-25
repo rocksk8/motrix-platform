@@ -77,8 +77,8 @@ class _Stub(types.ModuleType):
 
 
 sys.modules["archive"] = _Stub("archive")
-import routers.daily_tasks as _dt
-_dt.schedule_overdue_check = lambda *a, **kw: None
+import helpers.daily_checks as _dck   # 2026-09-26：每日排程改由 L1 執行器起
+_dck.schedule_daily_checks = lambda *a, **kw: None
 
 import main   # noqa: F401
 

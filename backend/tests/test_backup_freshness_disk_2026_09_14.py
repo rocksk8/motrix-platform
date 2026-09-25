@@ -22,7 +22,7 @@ def sent(monkeypatch):
     `helpers.email_notify` 上的——daily_tasks 是 `from helpers import notify_...`
     把函式綁成自己的模組屬性，patch 原始出處不會影響它已經綁好的那份參照。
     """
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     calls = {"backup": [], "disk": []}
     monkeypatch.setattr(dt, "notify_backup_stale",
                         lambda *a, **k: calls["backup"].append((a, k)))
@@ -57,13 +57,13 @@ def _insert_backup_audit(action: str, at: datetime):
 def test_no_backup_history_at_all_does_not_alert(client, sent):
     """全新環境（一筆備份紀錄都沒有）不是故障，是還沒跑過第一次。
     這裡誤報會讓人第一天就學會忽略這封信。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     dt._check_backup_freshness()
     assert sent["backup"] == []
 
 
 def test_fresh_backup_does_not_alert(client, sent):
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     now = datetime.now()
     _insert_backup_audit("backup.sqlite_snapshot", now - timedelta(hours=3))
     _insert_backup_audit("backup.daily_ok", now - timedelta(hours=3))
@@ -72,7 +72,7 @@ def test_fresh_backup_does_not_alert(client, sent):
 
 
 def test_stale_backup_alerts_with_both_layers(client, sent):
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     old = datetime.now() - timedelta(hours=50)
     _insert_backup_audit("backup.sqlite_snapshot", old)
     _insert_backup_audit("backup.daily_ok", old)
@@ -88,7 +88,7 @@ def test_stale_backup_alerts_with_both_layers(client, sent):
 def test_cloud_stale_but_local_fresh_reports_only_cloud(client, sent):
     """本機快照還活著、只有雲端那層斷掉——這正是「另一台機器搶先寫了 .done
     害正式機早退」的症狀。信裡要指名是哪一層，不能只講「備份有問題」。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     _insert_backup_audit("backup.sqlite_snapshot", datetime.now() - timedelta(hours=2))
     _insert_backup_audit("backup.daily_ok", datetime.now() - timedelta(hours=72))
 
@@ -102,7 +102,7 @@ def test_cloud_stale_but_local_fresh_reports_only_cloud(client, sent):
 def test_partial_backup_counts_as_having_run(client, sent):
     """`backup.daily_partial` 代表備份確實跑了、只是有表失敗——那個情境有自己的
     告警，這支不該重複叫。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     _insert_backup_audit("backup.sqlite_snapshot", datetime.now() - timedelta(hours=2))
     _insert_backup_audit("backup.daily_partial", datetime.now() - timedelta(hours=2))
     dt._check_backup_freshness()
@@ -110,7 +110,7 @@ def test_partial_backup_counts_as_having_run(client, sent):
 
 
 def test_alerts_at_most_once_per_day(client, sent):
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     old = datetime.now() - timedelta(hours=50)
     _insert_backup_audit("backup.sqlite_snapshot", old)
     _insert_backup_audit("backup.daily_ok", old)
@@ -124,7 +124,7 @@ def test_alerts_at_most_once_per_day(client, sent):
 
 def test_guard_clears_when_backup_recovers(client, sent):
     """壞了寄一封 → 修好 → 再壞應該要能**立刻再寄**，而不是被昨天的 guard 擋住。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     from helpers import _get_setting
 
     old = datetime.now() - timedelta(hours=50)
@@ -144,7 +144,7 @@ def test_guard_clears_when_backup_recovers(client, sent):
 # ── 磁碟空間 ────────────────────────────────────────────────────────────────
 
 def test_healthy_disk_does_not_alert(client, sent, monkeypatch):
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     import shutil
 
     monkeypatch.setattr(
@@ -158,7 +158,7 @@ def test_healthy_disk_does_not_alert(client, sent, monkeypatch):
 
 def test_low_disk_alerts(client, sent, monkeypatch):
     """同時低於 10% 與 20 GB 才叫——兩個門檻取「較寬鬆的滿足就算健康」。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     import shutil
 
     monkeypatch.setattr(
@@ -175,7 +175,7 @@ def test_low_disk_alerts(client, sent, monkeypatch):
 
 def test_big_disk_with_low_pct_but_plenty_of_gb_is_fine(client, sent, monkeypatch):
     """2 TB 的碟剩 8%（164 GB）不該叫——只看百分比會太早吵。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     import shutil
 
     monkeypatch.setattr(
@@ -189,7 +189,7 @@ def test_big_disk_with_low_pct_but_plenty_of_gb_is_fine(client, sent, monkeypatc
 
 def test_small_disk_with_enough_pct_is_fine(client, sent, monkeypatch):
     """256 GB 的碟剩 15%（38 GB）也不該叫——只看絕對 GB 會太晚。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     import shutil
 
     monkeypatch.setattr(
@@ -204,7 +204,7 @@ def test_small_disk_with_enough_pct_is_fine(client, sent, monkeypatch):
 def test_disk_targets_dedupe_same_drive(client):
     """資料庫碟跟雲端存檔碟在測試環境下都在同一顆暫存碟——同一個磁碟機代號
     只該回報一次，否則信裡會出現兩列一模一樣的內容。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     targets = dt._disk_targets()
     drives = [os.path.splitdrive(os.path.abspath(p))[0].upper() for _, p in targets]
     assert len(drives) == len(set(drives))
@@ -212,18 +212,23 @@ def test_disk_targets_dedupe_same_drive(client):
 
 # ── 接線：確認真的掛進每日排程，不是寫了沒人呼叫 ─────────────────────────────
 
-def test_checks_are_wired_into_daily_schedule():
+def test_checks_are_wired_into_daily_schedule(monkeypatch):
     """這兩支的價值完全來自「每天真的會跑」。只驗函式本身正確、沒驗有沒有被
     排程呼叫，就是典型的假綠燈——2026-09-10 `case_project_overdue` 那個
     notification key 漏註冊就是同一類。"""
-    import inspect
-    import routers.daily_tasks as dt
-
-    src = inspect.getsource(dt.schedule_overdue_check)
-    assert src.count("_check_backup_freshness()") >= 3, \
-        "每日排程／首次啟動／補跑三條路徑都要呼叫"
-    assert src.count("_check_disk_space()") >= 3
-    assert src.count("_check_temp_bloat()") >= 3
+    # 2026-09-26：排程改由 L1 執行器（helpers/daily_checks.py）跑；改驗行為（兩種模式都真的呼叫），
+    # 不再數原始碼裡出現幾次——而且不依賴每日任務模組在不在（它原本寄生在 M12）。
+    from helpers import daily_checks, system_checks
+    monkeypatch.setattr(daily_checks, "run_module_checks", lambda mode: [])
+    for mode in ("startup", "daily"):
+        called = []
+        for n in ("_check_backup_freshness", "_check_disk_space", "_check_temp_bloat", "_check_cert_expiry",
+                  "_check_approval_reminders", "_prune_request_log"):
+            monkeypatch.setattr(system_checks, n, (lambda n=n: called.append(n)))
+        daily_checks.run_once(mode)
+        assert {"_check_backup_freshness", "_check_disk_space", "_check_temp_bloat",
+                "_check_cert_expiry", "_check_approval_reminders"} <= set(called), (mode, called)
+        assert ("_prune_request_log" in called) == (mode == "daily")
 
 
 def test_notification_keys_registered():
@@ -254,7 +259,7 @@ def _fake_temp(tmp_path, monkeypatch, dirs: dict):
 def test_temp_bloat_alerts_and_lists_the_dirs(client, sent, tmp_path, monkeypatch):
     """超過門檻要寄信，而且信裡要列出是哪些目錄——只說「太大了」的話，
     收信的人還是不知道能刪什麼。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     _fake_temp(tmp_path, monkeypatch, {
         "motrix-pytest-20260915_010101": 3 * 1024 * 1024,
         "motrix-bench-auto":             1 * 1024 * 1024,
@@ -279,7 +284,7 @@ def test_temp_bloat_ignores_unrelated_temp_dirs(client, sent, tmp_path, monkeypa
 
     正向控制在上一題（同樣的門檻下，名字對的目錄會叫），所以這題不是
     「什麼都不叫」的假綠燈。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     _fake_temp(tmp_path, monkeypatch, {
         "chrome-installer-cache": 8 * 1024 * 1024,
         "msedge_profile_tmp":     8 * 1024 * 1024,
@@ -292,7 +297,7 @@ def test_temp_bloat_ignores_unrelated_temp_dirs(client, sent, tmp_path, monkeypa
 
 def test_temp_bloat_under_threshold_is_quiet(client, sent, tmp_path, monkeypatch):
     """門檻以下不要吵：測試暫存本來就會有，會長大才是問題。"""
-    import routers.daily_tasks as dt
+    import helpers.system_checks as dt  # 2026-09-26 自 routers/daily_tasks 搬出（M12 搬遷前置）
     _fake_temp(tmp_path, monkeypatch, {"motrix-pytest-tiny": 64 * 1024})
     monkeypatch.setattr(dt, "_TEMP_BLOAT_MIN_GB", 1)
 

@@ -16,6 +16,7 @@
    "helper:build_info",
    "helper:case_roles",
    "helper:company_identity",
+   "helper:daily_checks",
    "helper:custom_fields",
    "helper:custom_modules",
    "helper:formula",
@@ -39,6 +40,7 @@
    "helper:row_access",
    "helper:settings",
    "helper:startup",
+   "helper:system_checks",
    "helper:tiered_approval",
    "helper:uploads",
    "helper:xlsx_out",
@@ -169,6 +171,7 @@
    "name": "案件",
    "units": [
     "core:completion_pdf",
+    "helper:case_deadlines",
     "helper:case_stage_tasks",
     "helper:quotations",
     "helper:quote_terms",
