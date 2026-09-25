@@ -112,17 +112,58 @@ def test_rc_update_refuses_without_bump(tmp_path, monkeypatch):
 
 # ── 稽核 AUDIT-C-B-guards 的缺口（G-1、G-2、O-2）────────────────────────────
 
-def test_rc_underscore_names_used_across_modules_are_part_of_the_interface():
-    """G-1：`_require_user` 這類底線名稱，只要被 L1 以外 import 或列在 helpers.__all__，就算公開介面。"""
-    extra = G.cross_boundary_public()
-    assert "_require_user" in extra.get("helper:auth", set())
+def test_rc_declared_underscore_names_are_part_of_the_interface():
+    """G-1（2026-09-26 改為顯式宣告）：`_require_user` 這類底線名稱，列在該 L1 檔的 `__l1_public__` 就是公開介面。"""
     assert "_require_user" in G.current_interface()["helper:auth"]
-    src = "def _require_user(a, module=None):\n    pass\ndef _private(x):\n    pass\n"
-    seen = G.interface_of(src, frozenset({"_require_user"}))
+    src = "__l1_public__ = (\"_require_user\",)\ndef _require_user(a, module=None):\n    pass\ndef _private(x):\n    pass\n"
+    seen = G.interface_of(src)
     assert "_require_user" in seen and "_private" not in seen
-    a, c, r = G.diff({"helper:auth": seen},
-                     {"helper:auth": G.interface_of(src.replace(", module=None", ""), frozenset({"_require_user"}))})
+    a, c, r = G.diff({"helper:auth": seen}, {"helper:auth": G.interface_of(src.replace(", module=None", ""))})
     assert G.required_bump(a, c, r) == "major"
+    # 拿掉宣告 ⇒ 它從介面消失 ⇒ 算刪除、要升主版號（宣告本身就是契約）
+    a, c, r = G.diff({"helper:auth": seen}, {"helper:auth": G.interface_of(src.split("\n", 1)[1])})
+    assert r == ["helper:auth::_require_user"] and G.required_bump(a, c, r) == "major"
+
+
+def test_interface_does_not_depend_on_who_uses_it(monkeypatch):
+    """介面只讀 L1 檔自己（拿掉任何 L2 模組都算出同一份）：跨模組掃描一被呼叫就炸 ⇒ current_interface 照樣算得出來、且等於快照。"""
+    def _boom(*a, **k):
+        raise AssertionError("current_interface 不可以依賴 L2 怎麼用（cross_boundary_public）")
+    monkeypatch.setattr(G, "cross_boundary_public", _boom)
+    snap = G.load_snapshot()["interface"]
+    a, c, r = G.diff(snap, G.current_interface())
+    assert not (a or c or r), (a, c, r)
+
+
+def test_l2_uses_only_declared_l1_underscore_names():
+    """L1 以外用到的 L1 底線名稱（含 helpers.__all__ 轉出的）必須列在該檔的 `__l1_public__`。"""
+    bad = G.undeclared_uses()
+    assert not bad, ("這些 L1 底線名稱被 L1 以外使用、但沒有宣告成公開介面：" + _fmt(
+        "%s::%s" % (u, n) for u, ns in sorted(bad.items()) for n in sorted(ns))
+        + "\n⇒ 要嘛在該 L1 檔的 __l1_public__ 宣告（它就成為契約，改簽章／刪除要升版），要嘛改用公開名稱。")
+
+
+def test_rc_undeclared_use_is_caught_in_a_synthetic_tree(tmp_path):
+    """反向控制（合成樹，不綁真實模組）：宣告的 `_a` 不報；沒宣告的 `_b`（直接 import）與 `_c`（經 helpers.__all__ 轉出）都報。"""
+    b = tmp_path / "backend"
+    (b / "helpers").mkdir(parents=True)
+    (b / "routers").mkdir()
+    (b / "helpers" / "x.py").write_text(
+        "__l1_public__ = (\"_a\",)\ndef _a(): pass\ndef _b(): pass\ndef _c(): pass\n", encoding="utf-8")
+    (b / "helpers" / "__init__.py").write_text(
+        "from .x import _c\n__all__ = [\"_c\"]\n", encoding="utf-8")
+    (b / "routers" / "y.py").write_text("from helpers.x import _a, _b\n", encoding="utf-8")
+    assert G.undeclared_uses(["helper:x"], backend=b) == {"helper:x": {"_b", "_c"}}
+    (b / "helpers" / "x.py").write_text(
+        "__l1_public__ = (\"_a\", \"_b\", \"_c\")\ndef _a(): pass\ndef _b(): pass\ndef _c(): pass\n", encoding="utf-8")
+    assert G.undeclared_uses(["helper:x"], backend=b) == {}
+
+
+@pytest.mark.parametrize("decl", ["__l1_public__ = \"_a\"\n", "__l1_public__ = (\"a\",)\n", "__l1_public__ = (f(),)\n"])
+def test_rc_malformed_declaration_is_refused(decl):
+    """宣告格式不對（不是字串 tuple、列了非底線名稱、非常數）⇒ ValueError，不猜。"""
+    with pytest.raises(ValueError):
+        G.declared_public(decl)
 
 
 def test_rc_async_and_posonly_changes_are_visible():

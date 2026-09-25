@@ -1,7 +1,9 @@
 """G1：L0／L1 公開介面快照（MODULE-GUIDE §2「底層穩定契約」）。
 
 範圍：docs/platform/modules.json 的 L1 單位中，Python 單位（plat:／core:／helper:）的
-  - 公開（不以 _ 開頭）的頂層函式與類別：參數簽章（名稱、有無預設值、*args、keyword-only、**kwargs）
+  - 公開的頂層函式與類別：參數簽章（名稱、有無預設值、*args、keyword-only、**kwargs）
+    公開＝不以 _ 開頭，或列在該檔自己的 `__l1_public__`（L1 自己宣告；2026-09-26 起不再依「有沒有 L2 在用」決定——
+    那會讓介面隨安裝了哪些模組而改變：拿掉 M04 ⇒ `_generate_contractor_voucher_pdf` 變成「刪除」、要升主版號）
   - 公開類別的公開方法簽章與 dataclass 欄位（有型別註記的類別屬性）
   - 全大寫的模組常數名稱（只記名稱，不記值）
 ⚠ 守不到：回傳形狀（靜態讀不出來）、L1 router 的 HTTP 端點、資料表欄位（MODULE-GUIDE 標「⚠ 未守門」）。
@@ -32,11 +34,34 @@ CHANGELOG = BACKEND / "core" / "CHANGELOG.md"
 _UPPER = re.compile(r"^[A-Z][A-Z0-9_]*$")
 
 
-def unit_path(unit):
+def unit_path(unit, backend=None):
+    backend = Path(backend) if backend is not None else BACKEND
     kind, name = unit.split(":", 1)
-    return {"plat": BACKEND / "core" / (name + ".py"),
-            "core": BACKEND / (name + ".py"),
-            "helper": BACKEND / "helpers" / (name + ".py")}.get(kind)
+    return {"plat": backend / "core" / (name + ".py"),
+            "core": backend / (name + ".py"),
+            "helper": backend / "helpers" / (name + ".py")}.get(kind)
+
+
+#: L1 檔案自己宣告「這些底線名稱是公開介面」的模組變數名
+DECL = "__l1_public__"
+
+
+def declared_public(source):
+    """原始碼頂層的 `__l1_public__ = ("_a", "_b")` ⇒ {"_a", "_b"}；沒有 ⇒ 空集合。
+    格式不對（不是字串常數組成的 tuple／list、或名稱不以底線開頭）⇒ ValueError（不猜）。"""
+    for node in ast.parse(source).body:
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        if not any(isinstance(t, ast.Name) and t.id == DECL for t in targets):
+            continue
+        if not isinstance(node.value, (ast.Tuple, ast.List)) or not all(
+                isinstance(e, ast.Constant) and isinstance(e.value, str) for e in node.value.elts):
+            raise ValueError("%s 必須是字串常數組成的 tuple／list" % DECL)
+        names = {e.value for e in node.value.elts}
+        bad = sorted(n for n in names if not n.startswith("_"))
+        if bad:
+            raise ValueError("%s 只列底線開頭的名稱（其餘本來就公開）：%s" % (DECL, bad))
+        return names
+    return set()
 
 
 def l1_python_units(modules_json=MODULES_JSON):
@@ -67,14 +92,16 @@ def _kind(node):
     return "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
 
 
-def interface_of(source, extra_public=frozenset()):
+def interface_of(source, extra_public=None):
     """一個模組的公開介面 ⇒ {名稱: 描述字串}。
 
-    公開＝不以底線開頭，**或**列在 extra_public（跨模組實際在用的底線名稱，見 cross_boundary_public；稽核 G-1）。
+    公開＝不以底線開頭，**或**列在 extra_public（預設＝原始碼自己的 `__l1_public__`，見 declared_public）。
     描述含 `async` 與僅限位置參數的 `/`（稽核 G-2）；**預設值的內容不納入**——預設值語意改變要自己升版並寫 CHANGELOG。
     """
     tree = ast.parse(source)
     out = {}
+    if extra_public is None:
+        extra_public = frozenset(declared_public(source))
 
     def pub(name):
         return not name.startswith("_") or name in extra_public
@@ -114,15 +141,17 @@ def _module_to_unit(mod):
     return None
 
 
-def cross_boundary_public(units=None):
-    """{單位: {底線名稱…}}：實際被當成跨模組 API 用的底線名稱（稽核 G-1）。
+def cross_boundary_public(units=None, backend=None):
+    """{單位: {底線名稱…}}：**實際**被當成跨模組 API 用的底線名稱（稽核 G-1）。
 
     ① `helpers/__init__.py` 的 `__all__` 列出的名稱（依它的 `from .x import` 對回原模組）
     ② L1 以外的產品碼（routers、modules、backend 頂層非 L1 檔）直接 import 的底線名稱
+    ⚠ 2026-09-26 起**不決定介面**（介面看 `__l1_public__`）；只給守門用：用到的必須是宣告過的（undeclared_uses）。
     """
+    backend = Path(backend) if backend is not None else BACKEND
     units = set(l1_python_units() if units is None else units)
     extra = {}
-    init = BACKEND / "helpers" / "__init__.py"
+    init = backend / "helpers" / "__init__.py"
     reexport = {}
     if init.is_file():
         tree = ast.parse(init.read_text(encoding="utf-8-sig"))
@@ -138,9 +167,9 @@ def cross_boundary_public(units=None):
             unit, orig = reexport.get(name, (None, None))
             if unit in units and orig.startswith("_"):
                 extra.setdefault(unit, set()).add(orig)
-    l1_files = {unit_path(u).resolve() for u in units if unit_path(u)}
-    for f in BACKEND.rglob("*.py"):
-        rel = f.relative_to(BACKEND)
+    l1_files = {unit_path(u, backend).resolve() for u in units if unit_path(u, backend)}
+    for f in backend.rglob("*.py"):
+        rel = f.relative_to(backend)
         if any(x in rel.parts for x in _SKIP_DIRS) or f.name == "conftest.py" or f.resolve() in l1_files:
             continue
         try:
@@ -163,16 +192,31 @@ def cross_boundary_public(units=None):
 
 
 def current_interface(units=None):
+    """L1 自己宣告的介面：只讀 L1 檔案本身（不掃 L2）⇒ 裝了哪些模組都算出同一份。"""
     units = l1_python_units() if units is None else units
-    extra = cross_boundary_public(units)
     res = {}
     for u in units:
         p = unit_path(u)
         if p is None or not p.is_file():
             res[u] = {"__missing__": "unit"}
             continue
-        res[u] = interface_of(p.read_text(encoding="utf-8-sig"), frozenset(extra.get(u, ())))
+        res[u] = interface_of(p.read_text(encoding="utf-8-sig"))
     return res
+
+
+def undeclared_uses(units=None, backend=None):
+    """{單位: {名稱…}}：L1 以外（或 helpers.__all__）用到、而該 L1 檔 `__l1_public__` 沒宣告的底線名稱。
+    非空 ⇒ 有人在用 L1 的私有名稱（要嘛宣告成公開、要嘛改用公開名稱）。"""
+    backend = Path(backend) if backend is not None else BACKEND
+    units = set(l1_python_units() if units is None else units)
+    out = {}
+    for u, names in cross_boundary_public(units, backend).items():
+        p = unit_path(u, backend)
+        declared = declared_public(p.read_text(encoding="utf-8-sig")) if p and p.is_file() else set()
+        missing = names - declared
+        if missing:
+            out[u] = missing
+    return out
 
 
 def _params(desc):
