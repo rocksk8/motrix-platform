@@ -130,7 +130,8 @@ def test_notification_events_are_individually_mutable():
     import pathlib
     from helpers.notification_prefs import EVENT_KEYS
     assert {"bonus_submitted", "bonus_payout_ready"} <= set(EVENT_KEYS)
-    users = (pathlib.Path(__file__).resolve().parents[3] / "frontend" / "pages" / "users.html").read_text(encoding="utf-8")
+    from core import source_tree
+    users = source_tree.page_file("users.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
     for k in ("bonus_submitted", "bonus_payout_ready"):
         assert "{key:'%s'," % k in users, k
 
@@ -185,7 +186,8 @@ def test_cashier_page_binds_bonus_mark_paid():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[3] / "frontend"
     js = (root / "js" / "cashier.js").read_text(encoding="utf-8")
-    html = (root / "pages" / "cashier.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("cashier.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
     assert "'/api/bonus/cases/' + encodeURIComponent(this.bonusPay.quoteNo) + '/mark-paid'" in js
     assert "/api/cashier/bonus-queue" in js
     assert 'data-testid="cashier-bonus-tab"' in html and "bonusQueue.notice" in html
@@ -386,7 +388,8 @@ def test_bonus_page_binds_insurance_and_deductions():
     import pathlib
     root = pathlib.Path(__file__).resolve().parents[3] / "frontend"
     js = (root / "js" / "bonus.js").read_text(encoding="utf-8")
-    html = (root / "pages" / "bonus.html").read_text(encoding="utf-8")
+    from core import source_tree
+    html = source_tree.page_file("bonus.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
     assert "'/api/bonus/insurance/' + encodeURIComponent(it.username)" in js
     assert 'data-testid="bn-deductions"' in html and "detail.deductionNotice" in html
     assert "'nhi'" in html

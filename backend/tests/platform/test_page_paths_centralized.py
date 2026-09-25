@@ -24,7 +24,9 @@ SKIP_PARTS = {"__pycache__", "node_modules", ".git"}
 
 #: `"frontend" / "pages"`、`frontend/pages`、`"frontend", "pages"`、`FRONTEND_DIR / "pages"`、`_FRONTEND / 'pages'`
 #: 單一交替式：同一處只算一次（`_FRONTEND / 'pages'` 由第一支抓；第二支只收帶後綴的 `FRONTEND_DIR` 之類）
-PATTERN = re.compile(r"frontend['\"]?\s*[/\\,]\s*['\"]?pages|\b_?FRONTEND\w+\s*[/,]\s*['\"]pages['\"]", re.I)
+#: 第三支（2026-09-26，A 的新題以 `root / "pages" / "cashier.html"` 繞過前兩支）：任何 `"pages" / "x.html"`
+PATTERN = re.compile(r"frontend['\"]?\s*[/\\,]\s*['\"]?pages|\b_?FRONTEND\w+\s*[/,]\s*['\"]pages['\"]"
+                     r"|(?<!frontend)(?<!FRONTEND)['\"]pages['\"]\s*/\s*['\"][\w.-]+\.html['\"]", re.I)
 
 
 def count(text):
@@ -133,7 +135,7 @@ def test_rc_every_pattern_is_detected():
     """每一種寫法各自被抓到、而且只算一次（修改 PATTERN 時不可以悄悄漏掉其中一種）。"""
     samples = ['ROOT / "frontend" / "pages" / "x.html"', "p = 'frontend/pages/x.html'", "'frontend\\pages'",
                'os.path.join(ROOT, "frontend", "pages")', 'FRONTEND_DIR / "pages"', "_FRONTEND / 'pages' / name",
-               'os.path.join(FRONTEND_DIR, "pages")']
+               'os.path.join(FRONTEND_DIR, "pages")', 'root / "pages" / "cashier.html"']
     for s in samples:
         assert count(s) == 1, s
     assert count('ROOT / "frontend" / "static"') == 0 and count('mod / "pages"') == 0
