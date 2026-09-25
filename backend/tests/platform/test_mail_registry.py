@@ -264,9 +264,10 @@ def test_mail_body_has_the_fixed_sections():
 def test_pages_bind_the_registry():
     from pathlib import Path
     fe = Path(__file__).resolve().parents[3] / "frontend"
-    users = (fe / "pages" / "users.html").read_text(encoding="utf-8")
+    from core import source_tree
+    users = source_tree.page_file("users.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
     assert "/api/mail-types/receivable?user_id=" in users and ":disabled=\"!item.receivable\"" in users
     assert "{key:'approval_request'" not in users              # 不再有寫死的副本
-    page = (fe / "pages" / "mail-settings.html").read_text(encoding="utf-8")
+    page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
     assert "'/api/mail-types/' + encodeURIComponent(t.key) + '/recipients'" in page
     assert "mail-settings.html" in (fe / "static" / "sidebar.js").read_text(encoding="utf-8")

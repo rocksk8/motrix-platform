@@ -67,7 +67,7 @@
               <td><div x-text="t.groupLabel"></div><div class="ms-sub" x-show="t.event" x-text="'事件相關：' + t.event"></div></td>
               <td><div class="ms-sub" x-text="'影響：' + t.impact"></div><div class="ms-sub" x-text="'建議處理：' + t.action"></div></td>
               <td>
-                <select class="ms-sel" x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
+                <select class="ms-sel" data-saved-field x-model="t.edit.mode" :data-testid="'ms-mode-' + t.key">
                   <template x-for="(label, m) in modes" :key="m"><option :value="m" x-text="label"></option></template>
                 </select>
                 <template x-if="t.edit.mode === 'custom'">

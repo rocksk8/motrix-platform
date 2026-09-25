@@ -16,7 +16,7 @@
   ⚠️ 不新增資料表：模組 migration 的執行器還沒有（MODULE-GUIDE §4），V9 基準 v116 凍結。
 """
 import json
-from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR
+from decimal import Decimal
 
 from helpers import legal_params as lp
 
@@ -52,10 +52,10 @@ def _check_params(params):
 
 
 def withholding_of(gross, params):
-    """一人一次給付的扣繳稅額。未達起扣標準 ⇒ 0；否則 給付額 × 稅率，元以下捨去（同勞報單 `math.floor`）。"""
+    """一人一次給付的扣繳稅額。未達起扣標準 ⇒ 0；否則 給付額 × 稅率，元以下捨去（L1 共用 `lp.floor_amount`，IP-7）。"""
     if gross < params["withholding_threshold"]:
         return 0
-    return int((_dec(gross) * _dec(params["withholding_rate"])).to_integral_value(ROUND_FLOOR))
+    return lp.floor_amount(gross, params["withholding_rate"])
 
 
 def nhi_base_of(gross, ytd_before, insured, params):
@@ -69,9 +69,8 @@ def nhi_base_of(gross, ytd_before, insured, params):
 
 
 def nhi_premium_of(base, params):
-    """補充保費＝基數 × 費率，四捨五入到元（健保署規定；不可以用 Python round()＝銀行家捨入）。
-    ⚠️ 捨入只在這一處：L1 共用四捨五入函式（helpers.legal_params，IP-7）合回後改呼叫它。"""
-    return int((_dec(base) * _dec(params["nhi_rate"])).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    """補充保費＝基數 × 費率，四捨五入到元（健保署規定）；用 L1 共用 `lp.round_half_up`（IP-7，列車 2026-09-26 接上）。"""
+    return lp.round_half_up(base, params["nhi_rate"])
 
 
 def compute_bonus_deductions(lines, *, params, insured, ytd_before):

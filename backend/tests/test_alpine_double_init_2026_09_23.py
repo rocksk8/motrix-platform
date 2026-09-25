@@ -71,7 +71,9 @@ SHARED_FILES = ("auth-guard.js", "notif.js", "sidebar.js", "edit-presence.js",
 #: 🔴 2026-09-25（視窗 A，platform）44 -> 45：CORE-SPEC §9c 新增 module-settings.html（模組管理，Alpine，
 #:    有 _initDone 守衛）。實測：HEAD 掃出 44、加頁後 45，差集恰好只有這一頁。
 #: 🔴 2026-09-25（視窗 R）45 -> 46：R1 新增 legal-params.html（法規參數設定，Alpine，有 _initDone 守衛）。
-PAGE_POPULATION = 46
+#: 🔴 2026-09-26（主持，列車 train/0926-0313）46 -> 47：a-mail 新增 mail-settings.html（信件與通知收件設定，Alpine）。
+#:    a-mail 與 x-r-fix 各自在自己的基底上改這個數字，列車上兩者交會才是 47。
+PAGE_POPULATION = 47
 SHARED_POPULATION = 2
 ALREADY_GUARDED = 2
 

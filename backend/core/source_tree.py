@@ -2,7 +2,7 @@
 """守門測試要掃的原始碼範圍：唯一來源。
 
 [單位] plat:source_tree    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] BACKEND, logic_files, module_dirs, product_files, rel, router_files
+[公開介面] BACKEND, FRONTEND_PAGES, logic_files, module_dirs, page_file, page_files, product_files, rel, router_files
 [不變式] 「掃全部 router／邏輯檔」的守門一律從這裡取清單（模組搬進 modules/ 之後才不會安靜地少掃一塊）
 [契約題] tests/platform/test_core_loader.py
 [注意] 只給守門與工具用，產品碼不 import
