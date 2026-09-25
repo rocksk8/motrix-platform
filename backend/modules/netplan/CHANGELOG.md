@@ -1,5 +1,9 @@
 # 網路規劃 更新紀錄
 
+## 1.0.2 — 2026-09-26
+- 第四班列車：IP 定號（`daily.check` IP-10→IP-11、`case.access` IP-11→IP-12，cb4667b1）
+- `module.json` 補 `customization`（本模組目前沒有可自訂點：寫出空類別＝有人決定過）
+
 ## 1.0.1 — 2026-09-26
 - 快速拓樸的說明文字不寫死頁面路徑（頁面位置一律經 `core.source_tree`）
 

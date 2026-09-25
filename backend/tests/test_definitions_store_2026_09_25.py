@@ -116,9 +116,10 @@ def test_definitions_draft_publish_versions_and_restore_never_rewrite_history(de
     assert D.get(defs_conn, "layout", "quotations.list", "company", 2)["body"] == {"columns": ["a", "b"]}
 
 
-def test_restore_says_when_an_older_draft_is_still_pending(defs_conn):
+def test_restore_says_when_an_older_draft_is_still_pending(defs_conn, monkeypatch):
     """C-O1：還原不動草稿；回應的 draftPending 告訴畫面「還有一份未發布的草稿，發布會蓋掉這次還原」。"""
     from core import definitions as D
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)   # 驗儲存語意；P9 的 layout 驗證器要 module:<模組>
     D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["a"]})
     D.publish(defs_conn, "layout", "k", "company")
     D.save_draft(defs_conn, "layout", "k", "company", {"columns": ["a", "b"]})

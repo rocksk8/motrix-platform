@@ -742,6 +742,7 @@ def test_publish_and_restore_take_the_write_lock(monkeypatch):
     calls = []
     real = txn.begin_write
     monkeypatch.setattr(txn, "begin_write", lambda conn: calls.append(1) or real(conn))
+    monkeypatch.delitem(D._VALIDATORS, "layout", raising=False)   # 驗儲存語意；P9 的 layout 驗證器要 module:<模組>
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.execute("CREATE TABLE module_schema_versions (module TEXT PRIMARY KEY, version INTEGER, applied_at TEXT)")

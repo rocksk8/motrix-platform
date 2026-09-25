@@ -1,7 +1,7 @@
 {
   "key": "netplan",
   "name": "網路規劃",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "core": ">=1.0,<2.0",
   "license_key": "netplan",
   "permissions": [
@@ -37,5 +37,11 @@
     {
       "path": "topology-quick.html"
     }
-  ]
+  ],
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  }
 }
