@@ -484,7 +484,8 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices):
     from helpers import tiered_approval as ta
     frm = rec["status"]
     st = _state(body, to_state)
-    approval = {}
+    # 沒有簽核的狀態：保留上一次的簽核紀錄（核准後的輸出要印得出誰簽過）；進入有簽核的狀態才換成新的一輪
+    approval = rec.get("approval") or {}
     if st.get("approval"):
         cfg = st["approval"]
         tiers = [t for t in cfg.get("tiers", []) if not t.get("when") or _fx.evaluate(t["when"], rec["data"])]
@@ -508,7 +509,7 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices):
     _log(conn, rec["id"], action, frm, to_state, user["username"], note)
     rec["status"], rec["approval"] = to_state, approval
     _published(body, rec, frm, to_state, action, user, notices)
-    _notify_state(body, rec, st, approval, notices)
+    _notify_state(body, rec, st, approval if st.get("approval") else {}, notices)   # 保留的舊紀錄不再通知簽核人
     return rec
 
 

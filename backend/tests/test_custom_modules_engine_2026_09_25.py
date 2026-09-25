@@ -233,6 +233,9 @@ def test_custom_module_conditional_second_tier_and_order(loan):
     assert r.json()["status"] == "pending" and r.json()["approval"]["currentTier"] == 1
     r = client.post("/api/custom/%s/records/%s/approve" % (KEY, no), headers=h["boss"], json={})
     assert r.json()["status"] == "approved"
+    assert [a["status"] for t in r.json()["approval"]["tiers"] for a in t["approvers"]] == ["approved", "approved"]
+    html = client.get("/api/custom/%s/records/%s/output" % (KEY, no), headers=h["req"]).text
+    assert html.count("✓ 已簽核") == 2                              # 核准後的輸出印得出兩層簽核
     r = client.post("/api/custom/%s/records/%s/transitions/give_back" % (KEY, no), headers=h["req"], json={})
     assert r.json()["status"] == "returned"
     assert [x["action"] for x in r.json()["log"]] == ["create", "submit", "approve_tier", "approve", "give_back"]
@@ -249,6 +252,14 @@ def test_custom_module_reject_revise_and_content_freeze(loan):
     assert r.status_code == 409                                    # 不在來源狀態
     r = client.post("/api/custom/%s/records/%s/reject" % (KEY, no), headers=h["mgr"], json={"note": "數量不對"})
     assert r.json()["status"] == "rejected"
+    import db
+    conn = db.get_db()
+    try:
+        asks = conn.execute("SELECT COUNT(*) FROM notifications WHERE ref_id=? AND username='cm_mgr' AND type='approval'",
+                            (no,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert asks == 1                                               # 退回之後不會再叫簽核人「待您簽核」
     assert client.post("/api/custom/%s/records/%s/transitions/revise" % (KEY, no), headers=h["super"], json={}).status_code == 200
     r = client.put("/api/custom/%s/records/%s" % (KEY, no), headers=h["req"], json={"values": {"item": "改", "qty": 1}})
     assert r.status_code == 200 and r.json()["data"]["total"] == 0          # unit_value 沒填 ⇒ 預設 0
