@@ -2,11 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（C，稽核 D 修正）
+## 1.21 — 2026-09-26（C，稽核 D 修正）〔core_bump：暫用 1.99 → 1.21〕
 > C（AUDIT-D-C-P4P5P8 必修 C-M3／C-M5、建議 C-S1～S5、觀察 C-O1、使用者裁示 U14）。只有新增與收緊驗證。
 - L1（新增）：`helpers.custom_modules.sample_values`（發布時試算用的樣本值）、`can_edit_draft(rec, body, user)`（U14：草稿只有建立者與超級管理員可以修改、送出）；讀單回 `canEdit`
 - L1（行為）：自訂模組發布驗證多擋 on_approved 循環、起始狀態掛簽核、permission 用內建 key 或與已發布模組共用、公式與條件的樣本試算錯誤；執行時自動通過最多連跳 20 次（超過 409）；數字欄位拒收 NaN／inf（寫入時 `allow_nan=False` 第二道），舊資料讀出為空值；代理人可讀單與輸出；別人的草稿 update／transition 回 403
 - L1（行為）：`core.definitions.publish`／`restore` 先拿寫鎖（`begin_write`）；`restore` 回傳多 `draftPending`（C-O1）
+- L1（行為）：公式 `round` 改為四捨五入（`helpers.legal_params.round_half_up`；原本是內建的銀行家捨入，C-M4）
 
 ## 1.20 — 2026-09-26（P1／P3，wip/cloud-p1p3＋稽核修正 wip/x-p1p3-fix；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.8 → 1.15〕〔core_bump：暫用 1.15 → 1.20〕
 > `core.registry.CORE_VERSION` 1.19 → 1.20（只有新增）。
