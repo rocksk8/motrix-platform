@@ -136,7 +136,7 @@ def test_legal_amounts_are_rounded_only_by_the_legal_params_service():
 # - 清單裡的檔不存在 ⇒ 紅（檔案搬進模組時要跟著改清單，不可以默默失去對象）。
 MONEY_PY_FILES = (
     "routers/invoice_vouchers.py", "routers/payment_requests.py", "helpers/quotations.py",
-    "routers/contractor_vouchers.py", "routers/vendor_contractors.py",
+    "modules/subcontract/api/contractor_vouchers.py", "modules/subcontract/api/vendor_contractors.py",   # 2026-09-26 外包工班搬進模組
 )
 MONEY_JS_FILES = (
     "pages/quotation-form.html", "pages/payment-request-form.html", "pages/settlement.html",
