@@ -2225,7 +2225,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     - 不加快取（hichan-0a 裁 D3）：資料都是即時的，只合併請求。
     """
     from routers.vouchers import vouchers_by_case
-    from routers.vendor_contractors import list_dispatches
+    list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-12（M04）
     from routers.shipping_notes import list_shipping_notes
     from routers.completion_notes import list_completion_notes
     from routers.case_extra_expenses import list_extra_expenses
@@ -2244,13 +2244,18 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
         "parts": {
             "health":          part(case_close_gates, quote_no, authorization=authorization),
             "vouchers":        part(vouchers_by_case, quote_no, authorization=authorization),
-            "dispatches":      part(list_dispatches, quote_no=quote_no, authorization=authorization),
+            "dispatches":      (part(list_dispatches, quote_no=quote_no, authorization=authorization)
+                                if list_dispatches else {"ok": False, "status": 404, "detail": DISPATCHES_UNAVAILABLE}),
             "shippingNotes":   part(list_shipping_notes, quote_no=quote_no, authorization=authorization),
             "completionNotes": part(list_completion_notes, quote_no=quote_no, authorization=authorization),
             "updates":         part(list_case_updates, quote_no, authorization=authorization),
             "extraExpenses":   part(list_extra_expenses, quote_no, authorization=authorization),
         },
     }
+
+
+#: IP-12 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
+DISPATCHES_UNAVAILABLE = "外包工班模組未安裝：沒有承攬派工資料"
 
 
 @router.get("/api/quotations/{quote_no}/close-gates")
@@ -6905,5 +6910,46 @@ def _case_present() -> bool:
 
 
 _registry.provide("case.present", "quotations", _case_present)
+
+def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, now: str) -> str:
+    """IP-13 `quotation.append_items`（M01 → M04）：把外部品項附加到**草稿**報價單。
+
+    在呼叫端的連線與交易內執行（呼叫端已拿寫鎖）、不 commit。`items`＝`[{description, qty, unit, cost, note}]`，
+    換成報價品項（成本＝cost，毛利 30%，售價由報價單自己算）；前面加一列區段標題 `header`。
+    報價單不存在 ⇒ 404；不是草稿 ⇒ 409（原本寫在 M04 的規則，逐字搬來）。回傳 `now`。"""
+    qrow = conn.execute(
+        "SELECT quote_no, status, data_json FROM quotations WHERE quote_no=?", (quote_no,)
+    ).fetchone()
+    if not qrow:
+        raise HTTPException(404, "找不到對應報價單")
+    if qrow["status"] != "草稿":
+        raise HTTPException(409, f"報價單目前為「{qrow['status']}」狀態，請先在報價單頁面解鎖後再匯入")
+    try:
+        qdata = json.loads(qrow["data_json"] or "{}")
+    except Exception:
+        qdata = {}
+    if not isinstance(qdata.get("items"), list):
+        qdata["items"] = []
+    qdata["items"].append({"id": str(uuid.uuid4()), "type": "header", "description": header})
+    for it in items:
+        qdata["items"].append({
+            "id": str(uuid.uuid4()),
+            "description": it.get("description", ""),
+            "brand": "",
+            "qty": it.get("qty", 1),
+            "unit": it.get("unit", "式"),
+            "cost": it.get("cost", 0),
+            "margin": 0.30,
+            "unitPrice": None,
+            "unitPriceOverride": False,
+            "amount": 0,
+            "notes": it.get("note", ""),
+        })
+    # T9（2026-09-23）：第 4 個位置參數是 status ⇒ 一律用關鍵字傳 updated_at
+    save_quotation_json(conn, quote_no, qdata, updated_at=now)
+    return now
+
+
 _registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
+_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)
 _registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)

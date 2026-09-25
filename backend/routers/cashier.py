@@ -27,7 +27,6 @@ from urllib.parse import quote as _url_quote
 from core import registry
 from db import get_db
 from helpers import _require_user, user_has_module, payment_item_amounts
-from routers.contractor_vouchers import _voucher_public
 from routers.reports import _collect_income_items  # §3 #14：資料擁有權待辦（ROADMAP）
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 
@@ -44,6 +43,8 @@ def _require_view_access(user: dict) -> None:
 # ── 獎金分潤（IP-8 bonus.payouts，INTEGRATION-POINTS.md）───────────────────────
 #: 薪資獎金模組（M07）不在時對使用者說的話（不可以默默略過）
 BONUS_MISSING = "薪資獎金模組未安裝：出納頁不顯示獎金分潤"
+#: IP-14 對方不在時（M04 外包工班）：待付款回 404＋這一句；執行歷史帶 contractorNotice
+CONTRACTOR_MISSING = "外包工班模組未安裝：出納頁不顯示承攬商匯款"
 
 
 def _bonus_visible(user: dict) -> bool:
@@ -62,11 +63,14 @@ def _bonus_payouts(user: dict):
 
 
 def _payable_queue(conn) -> list:
+    pub = registry.single_provider("contractor_voucher.public")        # IP-14（M04）
+    if pub is None:
+        raise HTTPException(404, CONTRACTOR_MISSING)                  # 待付款整頁都是承攬商匯款 ⇒ 明說，不回空清單
     rows = conn.execute("""
         SELECT * FROM contractor_payment_vouchers
         WHERE status='已核准' AND is_paid=0
     """).fetchall()
-    items = [_voucher_public(r, include_snapshot=False) for r in rows]
+    items = [pub(r, include_snapshot=False) for r in rows]
     # payableDate 空值排最後；非空依日期升冪（快到期的排前面）
     items.sort(key=lambda v: (not v["payableDate"], v["payableDate"]))
     return items
@@ -190,17 +194,19 @@ def _default_month_range():
 
 
 def _execution_history(conn, start: str, end: str, user: dict = None) -> dict:
+    pub = registry.single_provider("contractor_voucher.public")        # IP-14（M04）；不在 ⇒ 沒有承攬付款
     outgoing_rows = conn.execute("""
         SELECT * FROM contractor_payment_vouchers
         WHERE is_paid=1 AND paid_at BETWEEN ? AND ?
         ORDER BY paid_at DESC
-    """, (start, end)).fetchall()
-    outgoing = [_voucher_public(r, include_snapshot=False) for r in outgoing_rows]
+    """, (start, end)).fetchall() if pub else []
+    outgoing = [pub(r, include_snapshot=False) for r in outgoing_rows]
     incoming = _collect_income_items(start, end)
     out = {
         "start": start, "end": end,
         "outgoing": outgoing, "outgoingTotal": sum(v["grandTotal"] for v in outgoing),
         "incoming": incoming, "incomingTotal": sum(i["amount"] for i in incoming),
+        "contractorNotice": "" if pub else CONTRACTOR_MISSING,
     }
     # 獎金分潤發放紀錄（IP-8）：只給看得到獎金的人；M07 不在 ⇒ 空清單＋明說
     p, notice = _bonus_payouts(user or {})
@@ -262,6 +268,10 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     set_row(ws1, 2, hdrs1, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
              aligns=[al("center")], height=20)
     r = 3
+    if data["contractorNotice"]:                                    # IP-14 不在 ⇒ 表內明說，不是空白表
+        set_row(ws1, r, [data["contractorNotice"]] + [""] * 5, font=mk(size=9), border=BD,
+                aligns=[al("left")], height=18)
+        r += 1
     for v in data["outgoing"]:
         set_row(ws1, r, [v["voucherNo"], v["quoteNo"], v["vendorName"] or "（外包人員點工）",
                            v["grandTotal"], v["payableDate"] or "", v["paidAt"][:10] if v["paidAt"] else ""],

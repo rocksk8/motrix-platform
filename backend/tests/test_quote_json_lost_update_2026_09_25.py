@@ -16,7 +16,7 @@ import pytest
 
 import routers.material_orders as mo
 import routers.quotations as q
-import routers.vendor_contractors as vc
+import routers.vendor_contractors as vc  # noqa: F401  端點仍在 M04；寫回改由 M01（IP-13）
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 
 
@@ -37,7 +37,7 @@ def _probe_write(quote_no):
 def gap_probe(monkeypatch):
     """被測端點每一次呼叫 save_quotation_json 之前（讀完、寫回前）插入一次探針寫入。"""
     state = {"fired": 0, "threads": [], "quote": NO}
-    for mod in (q, mo, vc):
+    for mod in (q, mo):     # 外包派工匯入（vc）經 IP-13 由 M01 的 q.save_quotation_json 寫（2026-09-26 M04 搬遷）
         original = mod.save_quotation_json
 
         def _wrapped(conn, quote_no, data, *a, _orig=original, **kw):
@@ -315,7 +315,7 @@ def test_an_error_after_taking_the_write_lock_releases_it(client, make_user, mon
 
     def _boom(*a, **k):
         raise RuntimeError("拿了寫鎖之後的意外錯誤（探針）")
-    for mod in (q, mo, vc):
+    for mod in (q, mo):     # 外包派工匯入（vc）經 IP-13 由 M01 的 q.save_quotation_json 寫（2026-09-26 M04 搬遷）
         monkeypatch.setattr(mod, "save_quotation_json", _boom)
     with pytest.raises(RuntimeError) as excinfo:          # 握著例外（traceback 還引用著 frame），貼近正式機
         call()
