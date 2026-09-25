@@ -124,6 +124,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 04:54 B：M08 開工（D:\MOTRIX-PLATFORM-B17，wip/b-m08）。**動 L1 預告**：`/api/now` 與 `/api/company/tax|search`（GCIS 查統編，L1、M03、M04 都在用）從 `routers/dashboard.py` 拆出，成為 L1 router `routers/company_lookup.py`（端點路徑、權限、GCIS 額度設定鍵都不變）；地圖（map_points、map.html、/api/map）在 modules.json 歸 L1（主持確認）。其他線若在改 dashboard.py 的這兩段請告知。
 - 2026-09-26 04:54：M08 裁示更正：主持先前指示 `_collect_income_items`／`_collect_tax_invoices` 由「M08 公開 provider」——**這是錯的**，那兩個函式收的是應收收入與進項發票，照主持自己的規則屬於「純資料、多個模組在用」⇒ 改為下沉 L1 中立位置（B 發現與 ROADMAP A8b 牴觸），M05 搬遷時收回 M05。拿掉 M08 時，出納與會計匯出不受影響。
 - 2026-09-26 04:47：A 修好共用守門 X-2（模組不在包裡時豁免），M12、M10 搭第三班；B 的 scope 上月台，scope_rc 三項都選到而且真的紅。M08 從 A 移給 B，C4 之前先做。
 - 2026-09-26 04:43 巡視：D 確認關閉 c-d7（K-M1、K-S3）、P1＋P3（P-M1、P-M2、P-S2）、A 的信件與獎金（M-M1、M-S2、A-S）。第二班列車進行中（04:14 發車）；第三班約 05:30 發車，車上有 b-scope、c-ko2、c-audit-d、c-m02、a-m12、個資告知。各線都在工作，不派工。
