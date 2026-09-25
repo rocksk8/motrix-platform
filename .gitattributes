@@ -99,6 +99,8 @@ backend/tests export-ignore
 backend/conftest.py export-ignore
 backend/modules/*/tests/** export-ignore
 backend/modules/*/tests export-ignore
+# 模組規格條件（自 docs/windows/STATE.md 分出，性質同 docs/windows：我們怎麼做這個系統）
+backend/modules/*/SPEC.md export-ignore
 backend/requirements-dev.txt export-ignore
 backend/db_migration_plan.md export-ignore
 
