@@ -66,6 +66,48 @@
 - 自訂模組與版面定義是資料，**不需要升級程式**；它們跟著資料庫備份。
 - 儀表板要能顯示「這次只更新哪些模組」（已有：D2 模組變更預覽），並且只套用那些模組。
 
+### 3.4 輸出引擎版型化（P2，C 2026-09-25）
+
+**目標**：單據的 PDF 不再由每種單據一支寫死的 builder 產生，而是由「**版型定義（資料）＋單據視圖（資料）**」經 L1 輸出引擎組出 HTML，再交給既有的 Edge 轉 PDF。排版器（P9）之後只編輯版型定義。
+
+**三層，各自的責任**
+
+| 層 | 內容 | 誰能改 |
+|---|---|---|
+| 單據視圖（view） | 由擁有模組把一筆單據整理成**扁平、已計算好**的欄位（金額、稅、狀態、申請人…）。計算只在這裡，版型不能計算核心欄位（§1 裁示：核心欄位與計算不動） | 程式（擁有模組） |
+| 版型定義（template） | JSON：`{key, version, theme, blocks:[…]}`。只能引用視圖欄位與 `customFields.*`；只能使用積木目錄裡的積木（見下） | 預設版型隨程式出貨；覆寫版（公司／角色）存在 P5 版面定義，有版本 |
+| 輸出引擎（L1） | `helpers/doc_template.render(template, view, ident)`：依積木逐一產生 HTML 片段，**所有值一律跳脫**；不執行任何版型提供的程式 | 程式（L1） |
+
+**積木目錄（v1）**：每個積木有型別與參數，未知型別 ⇒ 渲染失敗並指出是哪一塊（不略過、不猜）。
+
+| 積木 | 參數 | 說明 |
+|---|---|---|
+| `watermark` | `unless`（條件）、`text`、`small` | 預覽稿浮水印（例：狀態不是「已核准」） |
+| `accent_bar` | — | 頁首色條 |
+| `identity_header` | `title` | 公司抬頭（據點身分＋快照，沿用 company_identity）＋單據標題 |
+| `meta` | `fields:[{label, path, style?, format?}]` | 單號／日期等三欄資訊列 |
+| `banner` | `unless`、`text`（可含 `{path}`） | 預覽提示列 |
+| `boxes` | `boxes:[{title, rows:[{label, path, format?}]}]` | 兩欄資訊框 |
+| `when` | `path`、`equals`、`then:[積木]`、`else:[積木]` | 依視圖欄位切換一組積木（例：自訂品項／自訂金額） |
+| `items_table` | `label`、`source`、`columns:[{title, path, align?, width?, format?}]`、`numbered`、`hide_when_empty?` | 品項表 |
+| `amount_box` | `label`、`path` | 單一金額框 |
+| `totals` | `rows:[{label, path, format, grand?}]` | 小計／稅／總額 |
+| `approval_sign` | — | 簽核紀錄（沿用 L1 分層簽核的呈現） |
+| `sign_boxes` | `boxes:[{label, name_path?, date_label, date_path?}]` | 手寫簽名框 |
+| `identity_footer` | — | 公司頁尾 |
+| `fit_a4` | — | 單頁 A4 自動縮放 |
+
+**格式（format）**：`text`（預設）、`money`（千分位、無小數）、`date10`（取前 10 字）、`mono`（Arial）、`spec_brand`（品名＋全形空白＋品牌）。**條件**：`{path, equals}`（相等）或 `{path, in:[…]}`；不支援任意運算式（公式另見 P8 的安全運算式）。
+
+**主題（theme）**：版面的 CSS 是整套主題（例：`voucher_standard`），v1 不開放逐條改 CSS；主題也登記在能力目錄。
+
+**驗收**
+1. 第一種單據（開票申請憑據）改為「視圖＋預設版型」，輸出的 HTML 與改版前的 builder **逐位元組相同**，涵蓋：自訂品項／自訂金額、已核准／預覽稿、有無報價品項、特殊字元跳脫、據點快照抬頭。舊 builder 凍結一份在測試裡，作為永久的正對照。
+2. 反向控制：版型改一個標籤、調換兩塊順序、拿掉一塊 ⇒ 輸出隨之改變，且其他塊不變；未知積木 ⇒ 明確錯誤；版型引用視圖沒有的欄位 ⇒ 空字串（跟既有 builder 對缺欄位的處理一致），並由版型驗證器事先列出。
+3. 版型本身是資料：可以序列化、比對、存進 P5 版面定義；預設版型的檔案位置由 `core.paths` 以外的程式目錄決定（隨程式出貨，不是使用者資料）。
+
+**不做（v1）**：Excel 版型（第二步，沿用 `helpers/xlsx_out`）、逐條 CSS、拖曳介面（P9）、覆寫版的儲存（P5）。
+
 ## 4. 不做的事（刻意）
 
 - 不讓使用者寫程式或腳本（裁示）。
