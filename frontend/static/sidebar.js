@@ -1164,6 +1164,9 @@ if (typeof module !== 'undefined' && module.exports) {
     'network-plans.html': { key: 'netplan', name: '網路規劃' },
     'network-plan-form.html': { key: 'netplan', name: '網路規劃' },
     'topology-quick.html': { key: 'netplan', name: '網路規劃' },
+    'contractors.html': { key: 'subcontract', name: '外包工班' },
+    'vendor-contractors.html': { key: 'subcontract', name: '外包工班' },
+    'contractor-voucher-approval-settings.html': { key: 'subcontract', name: '外包工班' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null
