@@ -106,6 +106,7 @@
   - core/events 13%、routers/cashier 16%、voucher.js 20%、tender_radar/match 20%；
   - **helpers/legal_params 74%、helpers/email_notify 81%、main.py 87%**。
   - 結論：模組與頁面的改動已經縮小；常用的 L1 helper 仍然幾乎等於全量，推測是選題沿著 main 的 import 閉包擴散。
+    - 〔更正（2026-09-26 02:25，B 量測 cf8c2871，PLAYBOOK §C-11 附錄 a）：上面的推測是錯的。main 是彙整點，helper 被改時擴散不會經過 main。實際成因有兩個：一是遞移（legal_params 距離 ≥2 的有 2,231 題，只選直接依賴就會降到 19.8%）；二是寬扇出（email_notify 被 26 個單位直接 import、auth 被 46 個、db 更多）。設計改為：直接依賴 → 介面不變就不遞移 → 名稱層級選題 → 模組題只載入 L1＋該模組 → 靠契約題守 → 每次記錄選題比例〕
   - 已派給 B：選題改成「直接依賴＋介面不變規則＋模組題只載入 L1＋該模組」，並記錄選題比例，目標是常用 helper 在 30% 以下。
   - C 的 D7 預演抓到正式機升級一定會碰到的阻擋點：啟動時會寫入兩個節流日期，被判成「改寫設定」。已在 wip/c-d7 修好。
 - 2026-09-26 02:18：A 完成 X06 題（cdf41cc0 已合回），信件收件設定做完（wip/a-mail，52 種信件類型登記、mail-settings.html、主旨與內文正式化、禁用詞守門，突變 11 全紅），要等 a-bonus 合回後 rebase，再跑全量。順帶發現 V9 的地圖額度警戒信從來沒寄出去 ⇒ U12。B 的 rebase-check 簿記檔規則完成（ccc474f7），排在 C1 之後跑全量。
