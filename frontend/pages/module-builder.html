@@ -13,8 +13,10 @@
     自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
     6 步：① 基本 ② 欄位 ③ 版面 ④ 流程 ⑤ 輸出 ⑥ 發布。
     - 定義存在定義文件庫（kind＝custom_module）：每次修改自動存成草稿（PUT …/draft），發布前看差異，發布後可還原任一版。
-    - 🔴 只從能力目錄（GET /api/custom-modules/catalog）挑：欄位型別、公式函式、參照對象、日期格式、資料分類、輸出積木。
-      目錄沒有提供的東西，畫面上不出現。
+    - 🔴 只從能力目錄（GET /api/custom-modules/catalog）挑：欄位型別、公式函式、參照對象、日期格式、資料分類、輸出積木
+      與其參數規格（outputBlockSpecs／outputBlockItemSpecs ⇒ ⑤ 的參數表單）、主題、欄位格式、輸出格式、簽核人來源（④）。
+      目錄沒有提供的東西，畫面上不出現；前端不留後備清單。
+    - 首頁列出全部模組（GET /api/definitions/custom_module，含只有草稿的），可刪草稿（二次確認）。
     - 版面（③）存在定義的 `ui` 鍵（引擎不讀），規則與編輯操作在 custom-layout.js（執行頁共用；P9 排版器抽離）。
     - 伺服器回的問題（problems[{path}]）依 path 標回對應的步驟與欄位。
   -->
@@ -118,11 +120,27 @@
           </div>
           <div class="mb-hint">代號只能用小寫英文、數字與底線，英文開頭（2～40 字）；建立後不能改（它是網址與權限的一部分）。</div>
           <div class="mb-bad" x-show="keyErr" x-text="keyErr"></div>
-          <div style="margin-top:12px" x-show="published.length">
-            <div class="mb-hint">已發布的模組：</div>
-            <template x-for="m in published" :key="m.key">
-              <button class="mb-chipbtn" :data-open-module="m.key" @click="openKey(m.key)" x-text="(m.name || m.key) + '（' + m.key + ' v' + m.version + '）'"></button>
-            </template>
+          <!-- 缺口 #5：全部模組（含只有草稿、從未發布的），GET /api/definitions/custom_module -->
+          <div style="margin-top:14px" id="mb-module-list" :data-loaded="defsLoaded ? '1' : '0'">
+            <div class="mb-hint" x-show="defsLoaded && !defs.length">還沒有任何自訂模組</div>
+            <table class="mb-table" x-show="defs.length">
+              <thead><tr><th>代號</th><th>名稱</th><th>最新發布</th><th>草稿</th><th>更新時間</th><th></th></tr></thead>
+              <tbody>
+                <template x-for="m in defs" :key="m.key">
+                  <tr :data-def-key="m.key" :data-has-draft="m.hasDraft ? '1' : '0'" :data-latest="m.latestVersion || 0">
+                    <td style="font-family:var(--font-en,monospace)" x-text="m.key"></td>
+                    <td x-text="moduleName(m.key)"></td>
+                    <td x-text="m.latestVersion ? '第 ' + m.latestVersion + ' 版' : '尚未發布'"></td>
+                    <td x-text="m.hasDraft ? '有草稿' : '—'"></td>
+                    <td x-text="(m.updatedAt || '').replace('T', ' ').slice(0, 16)"></td>
+                    <td style="white-space:nowrap">
+                      <button class="mb-chipbtn" :data-open-module="m.key" @click="openKey(m.key)">開啟</button>
+                      <button class="mb-chipbtn" x-show="m.hasDraft" :data-delete-draft="m.key" @click="deleteDraft(m)" :disabled="busy">刪除草稿</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
         </div>
       </template>
@@ -495,34 +513,39 @@
                         <template x-for="(a, ai) in tier.approvers" :key="ai">
                           <div class="mb-row" style="margin-top:5px" :data-approver-index="ai">
                             <select class="mb-in mb-in-s" data-k="approver-kind" :value="approverKind(a)" @change="tier.approvers.splice(ai, 1, newApprover($event.target.value))">
-                              <template x-for="k in APPROVER_KINDS" :key="k.value"><option :value="k.value" x-text="k.label" :selected="k.value === approverKind(a)"></option></template>
+                              <template x-for="k in approverSources()" :key="k.value"><option :value="k.value" x-text="k.label" :selected="k.value === approverKind(a)"></option></template>
                             </select>
-                            <template x-if="approverKind(a) === 'user'">
+                            <template x-if="approverParams(a).indexOf('username') >= 0">
                               <select class="mb-in mb-in-s" data-k="approver-user" :value="a.username || ''" @change="setApproverUser(tier, ai, $event.target.value)">
                                 <option value="">（選擇帳號）</option>
                                 <template x-for="u in users" :key="u.username"><option :value="u.username" x-text="u.displayName + '（' + u.username + '）'" :selected="u.username === a.username"></option></template>
                               </select>
                             </template>
-                            <template x-if="approverKind(a) === 'department_manager'">
+                            <template x-if="approverParams(a).indexOf('departmentId') >= 0">
                               <select class="mb-in mb-in-s" :value="a.departmentId || ''" @change="a.departmentId = Number($event.target.value) || null">
                                 <option value="">（選擇部門）</option>
                                 <template x-for="d in departments()" :key="d.id"><option :value="d.id" x-text="d.label" :selected="d.id === a.departmentId"></option></template>
                               </select>
                             </template>
-                            <template x-if="approverKind(a) === 'division_manager'">
+                            <template x-if="approverParams(a).indexOf('divisionId') >= 0">
                               <select class="mb-in mb-in-s" :value="a.divisionId || ''" @change="a.divisionId = Number($event.target.value) || null">
                                 <option value="">（選擇處）</option>
                                 <template x-for="d in orgTree" :key="d.id"><option :value="d.id" x-text="d.name" :selected="d.id === a.divisionId"></option></template>
                               </select>
+                            </template>
+                            <template x-for="pp in approverParams(a).filter(function (x) { return ['username', 'departmentId', 'divisionId'].indexOf(x) < 0 })" :key="pp">
+                              <input class="mb-in mb-in-s" type="number" :data-k="'approver-' + pp" :placeholder="pp" :value="a[pp] === undefined || a[pp] === null ? '' : a[pp]"
+                                     @input="a[pp] = $event.target.value === '' ? null : Number($event.target.value)">
                             </template>
                             <button class="mb-ib" @click="tier.approvers.splice(ai, 1)">✕</button>
                           </div>
                         </template>
                         <button class="mb-ib" style="margin-top:5px" data-k="add-approver" @click="tier.approvers.push(newApprover('user'))">＋ 簽核人</button>
                         <div class="mb-f" style="margin-top:6px" :class="{ 'is-bad': hasProblem('workflow.states[' + si + '].approval.tiers[' + ti + '].when') || (whenProblems[si + ':' + ti] || []).length }">
-                          <label>條件（空白＝一律要簽；不成立時這一層略過）</label>
+                          <label>條件（空白＝一律要簽；條件明確不成立時這一層略過）</label>
                           <input class="mb-in" data-k="when" :value="tier.when || ''" placeholder="例：total > 10000" style="font-family:var(--font-en,monospace)"
                                  @input="setWhen(tier, $event.target.value); queueWhenCheck(si, ti)">
+                          <div class="mb-hint" data-when-failsafe>條件算不出來（空值或出錯）時，這一層照樣要簽核。</div>
                           <div :data-when-state="whenState[si + ':' + ti] || ''">
                             <template x-for="(p, pi) in (whenProblems[si + ':' + ti] || [])" :key="pi">
                               <div :data-pos="p.pos"><div class="mb-fx"><span x-text="tier.when"></span>
@@ -602,29 +625,159 @@
                         <button class="mb-ib" @click="moveBlock(bi, 1)">↓</button>
                         <button class="mb-ib" @click="def.output.template.blocks.splice(bi, 1)">✕</button>
                       </div>
-                      <template x-if="b.type === 'identity_header'">
-                        <div class="mb-f"><label>標題</label><input class="mb-in" data-k="title" x-model="b.title"></div>
-                      </template>
-                      <template x-if="b.type === 'banner'">
-                        <div class="mb-f"><label>文字（可用 {recordNo} 這類佔位）</label><input class="mb-in" data-k="text" x-model="b.text"></div>
-                      </template>
-                      <template x-if="b.type === 'meta'">
-                        <div>
-                          <template x-for="(r, ri) in b.fields" :key="ri">
-                            <div class="mb-row" style="margin-top:4px" :data-meta-row="ri">
-                              <input class="mb-in mb-in-s" data-k="label" x-model="r.label" placeholder="標籤">
-                              <select class="mb-in mb-in-s" data-k="path" x-model="r.path">
-                                <template x-for="p in viewPaths()" :key="p.value"><option :value="p.value" x-text="p.label" :selected="p.value === r.path"></option></template>
-                              </select>
-                              <select class="mb-in mb-in-s" data-k="format" :value="r.format || 'text'" @change="r.format = $event.target.value">
-                                <template x-for="fm in outputFormats()" :key="fm"><option :value="fm" x-text="formatLabel(fm)" :selected="fm === (r.format || 'text')"></option></template>
-                              </select>
-                              <button class="mb-ib" @click="moveMeta(b, ri, -1)">↑</button>
-                              <button class="mb-ib" @click="moveMeta(b, ri, 1)">↓</button>
-                              <button class="mb-ib" @click="b.fields.splice(ri, 1)">✕</button>
+                      <!-- 缺口 #4：參數表單依目錄的 outputBlockSpecs／outputBlockItemSpecs 產生（型別 text／int／bool／path／cond／list:<子項>／blocks）；
+                           「程式沒有提供」的參數不會出現。子項裡的清單再展開一層（目錄目前最深兩層）。 -->
+                      <div class="mb-hint" x-show="blockSpec(b.type).desc" x-text="blockSpec(b.type).desc"></div>
+                      <template x-for="pk in paramKeys(blockSpec(b.type).params)" :key="pk">
+                        <div class="mb-f" style="margin-top:6px" :data-param="pk" :data-param-type="ps(b.type, pk).type"
+                             :class="{ 'is-bad': hasProblem('output.template.blocks[' + bi + '].' + pk) }">
+                          <label><span x-text="paramLabel(pk)"></span><span class="mb-bad" x-show="ps(b.type, pk).required"> *</span>
+                            <span class="mb-hint" x-show="ps(b.type, pk).desc" x-text="'（' + ps(b.type, pk).desc + '）'"></span></label>
+                          <template x-if="isScalar(ps(b.type, pk).type)">
+                            <div>
+                              <template x-if="ps(b.type, pk).type === 'text' && !isFormatSelect('', pk)">
+                                <input class="mb-in mb-in-s" :data-k="pk" :value="val(b, pk)" :placeholder="ps(b.type, pk).desc || ''" @input="setParam(b, pk, $event.target.value, ps(b.type, pk))">
+                              </template>
+                              <template x-if="ps(b.type, pk).type === 'text' && isFormatSelect('', pk)">
+                                <select class="mb-in mb-in-s" :data-k="pk" @change="setParam(b, pk, $event.target.value, ps(b.type, pk))">
+                                  <option value="">（預設）</option>
+                                  <template x-for="fm in fieldFormats()" :key="fm"><option :value="fm" x-text="formatLabel(fm)" :selected="fm === b[pk]"></option></template>
+                                </select>
+                              </template>
+                              <template x-if="ps(b.type, pk).type === 'int'">
+                                <input class="mb-in mb-in-s" type="number" step="1" :data-k="pk" :value="val(b, pk)"
+                                       @input="setParam(b, pk, $event.target.value === '' ? null : Math.trunc(Number($event.target.value)), ps(b.type, pk))">
+                              </template>
+                              <template x-if="ps(b.type, pk).type === 'bool'">
+                                <!-- 布林下拉：寫死 value＋x-model.boolean；「（未設定）」＝拿掉這個參數 -->
+                                <select class="mb-in mb-in-s" :data-k="pk" x-model.boolean="b[pk]" @change="if (b[pk] === null || b[pk] === undefined) delete b[pk]">
+                                  <option value="">（未設定）</option><option value="true">是</option><option value="false">否</option>
+                                </select>
+                              </template>
+                              <template x-if="ps(b.type, pk).type === 'path'">
+                                <select class="mb-in mb-in-s" :data-k="pk" @change="setParam(b, pk, $event.target.value, ps(b.type, pk))">
+                                  <option value="">（請選擇）</option>
+                                  <template x-for="p in viewPaths()" :key="p.value"><option :value="p.value" x-text="p.label" :selected="p.value === b[pk]"></option></template>
+                                </select>
+                              </template>
+                              <template x-if="!isScalar(ps(b.type, pk).type) && !itemName(ps(b.type, pk).type)">
+                                <span class="mb-hint" :data-unsupported="pk">（此參數建構器暫不提供編輯；內容會保留）</span>
+                              </template>
                             </div>
                           </template>
-                          <button class="mb-ib" style="margin-top:5px" data-k="add-meta" @click="b.fields.push({ label: '', path: 'recordNo', format: 'text' })">＋ 一列</button>
+                          <template x-if="ps(b.type, pk).type === 'cond'">
+                            <div class="mb-row" :data-k="pk">
+                              <select class="mb-in mb-in-s" data-k="cond-path" @change="setCond(b, pk, 'path', $event.target.value)">
+                                <option value="">（不設條件）</option>
+                                <template x-for="p in viewPaths()" :key="p.value"><option :value="p.value" x-text="p.label" :selected="p.value === (b[pk] || {}).path"></option></template>
+                              </select>
+                              <span class="mb-hint">等於</span>
+                              <input class="mb-in mb-in-s" data-k="cond-equals" :value="val(b[pk] || {}, 'equals')" @input="setCond(b, pk, 'equals', $event.target.value)">
+                            </div>
+                          </template>
+                          <template x-if="ps(b.type, pk).type === 'list:text'">
+                            <textarea class="mb-in" rows="3" :data-k="pk" :value="(b[pk] || []).join('\n')" placeholder="一行一個"
+                                      @input="setParam(b, pk, $event.target.value.split('\n').map(s => s.trim()).filter(s => s), ps(b.type, pk))"></textarea>
+                          </template>
+                          <template x-if="ps(b.type, pk).type === 'blocks'">
+                            <div class="mb-hint" :data-nested-blocks="pk" x-text="'巢狀積木 ' + (b[pk] || []).length + ' 個（建構器暫不提供編輯；內容會保留）'"></div>
+                          </template>
+                          <template x-if="li(b.type, pk)">
+                            <div :data-list="pk">
+                              <template x-for="(it, ri) in (b[pk] || [])" :key="ri">
+                                <div class="mb-sub" :data-item-row="ri">
+                                  <div class="mb-row">
+                                    <template x-for="ik in paramKeys(itemSpec(li(b.type, pk)))" :key="ik">
+                                      <template x-if="!li2(b.type, pk, ik)">
+                                        <span class="mb-f" :data-param="ik">
+                                          <label><span x-text="paramLabel(ik)"></span><span class="mb-bad" x-show="isp(li(b.type, pk), ik).required"> *</span></label>
+                                          <template x-if="isp(li(b.type, pk), ik).type === 'text' && !isFormatSelect(li(b.type, pk), ik)">
+                                            <input class="mb-in mb-in-s" :data-k="ik" :value="val(it, ik)" :placeholder="isp(li(b.type, pk), ik).desc || ''" @input="setParam(it, ik, $event.target.value, isp(li(b.type, pk), ik))">
+                                          </template>
+                                          <template x-if="isp(li(b.type, pk), ik).type === 'text' && isFormatSelect(li(b.type, pk), ik)">
+                                            <select class="mb-in mb-in-s" :data-k="ik" @change="setParam(it, ik, $event.target.value, isp(li(b.type, pk), ik))">
+                                              <option value="">（預設）</option>
+                                              <template x-for="fm in fieldFormats()" :key="fm"><option :value="fm" x-text="formatLabel(fm)" :selected="fm === it[ik]"></option></template>
+                                            </select>
+                                          </template>
+                                          <template x-if="isp(li(b.type, pk), ik).type === 'int'">
+                                            <input class="mb-in mb-in-s" type="number" step="1" :data-k="ik" :value="val(it, ik)"
+                                                   @input="setParam(it, ik, $event.target.value === '' ? null : Math.trunc(Number($event.target.value)), isp(li(b.type, pk), ik))">
+                                          </template>
+                                          <template x-if="isp(li(b.type, pk), ik).type === 'bool'">
+                                            <!-- 布林下拉：寫死 value＋x-model.boolean；「（未設定）」＝拿掉這個參數 -->
+                                            <select class="mb-in mb-in-s" :data-k="ik" x-model.boolean="it[ik]" @change="if (it[ik] === null || it[ik] === undefined) delete it[ik]">
+                                              <option value="">（未設定）</option><option value="true">是</option><option value="false">否</option>
+                                            </select>
+                                          </template>
+                                          <template x-if="isp(li(b.type, pk), ik).type === 'path'">
+                                            <select class="mb-in mb-in-s" :data-k="ik" @change="setParam(it, ik, $event.target.value, isp(li(b.type, pk), ik))">
+                                              <option value="">（請選擇）</option>
+                                              <template x-for="p in viewPaths()" :key="p.value"><option :value="p.value" x-text="p.label" :selected="p.value === it[ik]"></option></template>
+                                            </select>
+                                          </template>
+                                          <template x-if="!isScalar(isp(li(b.type, pk), ik).type) && !itemName(isp(li(b.type, pk), ik).type)">
+                                            <span class="mb-hint" :data-unsupported="ik">（此參數建構器暫不提供編輯；內容會保留）</span>
+                                          </template>
+                                        </span>
+                                      </template>
+                                    </template>
+                                    <span style="margin-left:auto"></span>
+                                    <button class="mb-ib" @click="b[pk] = L.move(b[pk], ri, -1)">↑</button>
+                                    <button class="mb-ib" @click="b[pk] = L.move(b[pk], ri, 1)">↓</button>
+                                    <button class="mb-ib" :data-remove-item="ri" @click="b[pk].splice(ri, 1)">✕</button>
+                                  </div>
+                                  <template x-for="ik in paramKeys(itemSpec(li(b.type, pk)))" :key="'l' + ik">
+                                    <template x-if="li2(b.type, pk, ik)">
+                                      <div :data-list="ik" style="margin-top:4px">
+                                        <div class="mb-hint" x-text="paramLabel(ik)"></div>
+                                        <template x-for="(sub, si2) in (it[ik] || [])" :key="si2">
+                                          <div class="mb-row" style="margin-top:3px" :data-item-row="si2">
+                                            <template x-for="sk in paramKeys(itemSpec(li2(b.type, pk, ik)))" :key="sk">
+                                              <span class="mb-f" :data-param="sk">
+                                                <label><span x-text="paramLabel(sk)"></span><span class="mb-bad" x-show="isp(li2(b.type, pk, ik), sk).required"> *</span></label>
+                                                <template x-if="isp(li2(b.type, pk, ik), sk).type === 'text' && !isFormatSelect(li2(b.type, pk, ik), sk)">
+                                                  <input class="mb-in mb-in-s" :data-k="sk" :value="val(sub, sk)" :placeholder="isp(li2(b.type, pk, ik), sk).desc || ''" @input="setParam(sub, sk, $event.target.value, isp(li2(b.type, pk, ik), sk))">
+                                                </template>
+                                                <template x-if="isp(li2(b.type, pk, ik), sk).type === 'text' && isFormatSelect(li2(b.type, pk, ik), sk)">
+                                                  <select class="mb-in mb-in-s" :data-k="sk" @change="setParam(sub, sk, $event.target.value, isp(li2(b.type, pk, ik), sk))">
+                                                    <option value="">（預設）</option>
+                                                    <template x-for="fm in fieldFormats()" :key="fm"><option :value="fm" x-text="formatLabel(fm)" :selected="fm === sub[sk]"></option></template>
+                                                  </select>
+                                                </template>
+                                                <template x-if="isp(li2(b.type, pk, ik), sk).type === 'int'">
+                                                  <input class="mb-in mb-in-s" type="number" step="1" :data-k="sk" :value="val(sub, sk)"
+                                                         @input="setParam(sub, sk, $event.target.value === '' ? null : Math.trunc(Number($event.target.value)), isp(li2(b.type, pk, ik), sk))">
+                                                </template>
+                                                <template x-if="isp(li2(b.type, pk, ik), sk).type === 'bool'">
+                                                  <!-- 布林下拉：寫死 value＋x-model.boolean；「（未設定）」＝拿掉這個參數 -->
+                                                  <select class="mb-in mb-in-s" :data-k="sk" x-model.boolean="sub[sk]" @change="if (sub[sk] === null || sub[sk] === undefined) delete sub[sk]">
+                                                    <option value="">（未設定）</option><option value="true">是</option><option value="false">否</option>
+                                                  </select>
+                                                </template>
+                                                <template x-if="isp(li2(b.type, pk, ik), sk).type === 'path'">
+                                                  <select class="mb-in mb-in-s" :data-k="sk" @change="setParam(sub, sk, $event.target.value, isp(li2(b.type, pk, ik), sk))">
+                                                    <option value="">（請選擇）</option>
+                                                    <template x-for="p in viewPaths()" :key="p.value"><option :value="p.value" x-text="p.label" :selected="p.value === sub[sk]"></option></template>
+                                                  </select>
+                                                </template>
+                                                <template x-if="!isScalar(isp(li2(b.type, pk, ik), sk).type) && !itemName(isp(li2(b.type, pk, ik), sk).type)">
+                                                  <span class="mb-hint" :data-unsupported="sk">（此參數建構器暫不提供編輯；內容會保留）</span>
+                                                </template>
+                                              </span>
+                                            </template>
+                                            <button class="mb-ib" @click="it[ik].splice(si2, 1)">✕</button>
+                                          </div>
+                                        </template>
+                                        <button class="mb-ib" style="margin-top:3px" :data-add-item="ik" @click="addItem(it, ik, li2(b.type, pk, ik))">＋ 一列</button>
+                                      </div>
+                                    </template>
+                                  </template>
+                                </div>
+                              </template>
+                              <button class="mb-ib" style="margin-top:5px" :data-add-item="pk" @click="addItem(b, pk, li(b.type, pk))">＋ 一列</button>
+                            </div>
+                          </template>
                         </div>
                       </template>
                     </div>
@@ -643,6 +796,9 @@
                 <h3 style="margin:0">預覽（樣本資料）</h3>
                 <button class="btn btn-ghost btn-sm" id="mb-preview-btn" @click="previewOutput()" :disabled="previewBusy">重新預覽</button>
                 <span class="mb-hint" id="mb-preview-state" :data-state="previewState" x-text="previewState === 'ok' ? '已更新' : (previewState === 'bad' ? '版型有問題' : '')"></span>
+                <!-- 缺口 #7：同一份草稿定義要 PDF（output/preview?format=pdf），另開分頁顯示 -->
+                <button class="btn btn-ghost btn-sm" id="mb-preview-pdf" x-show="canPdf()" @click="previewPdf()" :disabled="pdfBusy">PDF 預覽</button>
+                <span class="mb-hint" id="mb-pdf-state" :data-state="pdfState" :data-bytes="pdfBytes" x-text="pdfState === 'pending' ? 'PDF 產生中…' : (pdfState === 'bad' ? 'PDF 產生失敗' : '')"></span>
               </div>
               <template x-for="(p, pi) in previewProblems" :key="pi"><div class="mb-bad" :data-problem-path="p.path" x-text="(p.path || '') + '：' + p.message"></div></template>
               <iframe class="mb-frame" id="mb-preview" sandbox="" :srcdoc="previewHtml" title="輸出預覽"></iframe>
@@ -722,17 +878,17 @@
       var FIELD_KEY_RE = /^[a-z][a-z0-9_]{0,39}$/
       //: 顯示名稱（型別本身一律來自目錄；沒有對照的就顯示原代號）
       var TYPE_LABELS = { text: '文字', number: '數字', date: '日期', select: '下拉選單', checkbox: '勾選（是／否）', formula: '公式（唯讀）', ref: '參照' }
+      //: 積木與參數的顯示名稱（只影響畫面文字；有哪些積木、哪些參數一律來自目錄 outputBlockSpecs／outputBlockItemSpecs）
       var BLOCK_LABELS = { identity_header: '抬頭（公司身分＋標題）', accent_bar: '色條', meta: '資料列', banner: '提示橫幅',
-                           approval_sign: '簽核欄', identity_footer: '頁尾（公司身分）' }
-      //: 前端有編輯器的積木（實際可選＝這份 ∩ 目錄 outputBlocks）
-      var BLOCK_DEFAULTS = {
-        identity_header: function (d) { return { type: 'identity_header', title: d.name || '' } },
-        accent_bar: function () { return { type: 'accent_bar' } },
-        meta: function () { return { type: 'meta', fields: [{ label: '編號', path: 'recordNo', format: 'text' }] } },
-        banner: function () { return { type: 'banner', text: '' } },
-        approval_sign: function () { return { type: 'approval_sign' } },
-        identity_footer: function () { return { type: 'identity_footer' } },
-      }
+                           approval_sign: '簽核欄', identity_footer: '頁尾（公司身分）', watermark: '浮水印', boxes: '資訊框',
+                           when: '條件分支', items_table: '明細表', amount_box: '金額框', totals: '合計表', sign_boxes: '手寫簽名欄',
+                           doc_header: '文件抬頭', section_title: '段落標題', part: '分段', kv_table: '欄位表', footer_text: '頁尾文字', text_page: '文字頁' }
+      var PARAM_LABELS = { title: '標題', label: '標籤', path: '資料', format: '格式', text: '文字', small: '小字', count: '重複次數',
+                           unless: '條件成立就不印', fields: '資料列', boxes: '資訊框', rows: '列', columns: '欄', source: '清單',
+                           hide_when_empty: '沒有資料就不印', equals: '等於', in: '屬於其中之一', then: '成立時', else: '不成立時',
+                           row_label: '列標籤', style: '樣式', align: '對齊', width: '寬度', brand_path: '品牌', grand: '總計列',
+                           date_label: '日期標籤', name_path: '簽名人', date_path: '日期', subtitle_path: '副標題', info: '資訊列',
+                           name: '名稱', class: '樣式類別', page_break: '另起一頁', cells: '格', th: '欄名', colspan: '跨欄', tag: '標籤樣式', when: '條件' }
       var FORMAT_LABELS = { text: '文字', str: '原樣', money: '金額', date10: '日期' }
       var STEPS = [{ n: 1, label: '基本' }, { n: 2, label: '欄位' }, { n: 3, label: '版面' }, { n: 4, label: '流程' }, { n: 5, label: '輸出' }, { n: 6, label: '發布' }]
 
@@ -740,10 +896,6 @@
 
       return {
         L: window.MotrixCustomLayout, STEPS: STEPS, DEFAULT_GROUP: '自訂模組',
-        APPROVER_KINDS: [
-          { value: 'user', label: '指定帳號' }, { value: 'department_manager', label: '部門主管' },
-          { value: 'division_manager', label: '處主管' }, { value: 'submitter_manager', label: '申請人的主管' },
-        ],
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, sel: null, dragOver: false,
@@ -753,6 +905,7 @@
         fxProblems: {}, fxState: {}, _fxTimers: {}, whenProblems: {}, whenState: {}, _whenTimers: {},
         previewHtml: '', previewProblems: [], previewState: '', previewBusy: false,
         diff: [], diffLoaded: false, publishNote: '', busy: false, _initDone: false,
+        defs: [], defsLoaded: false, pdfBusy: false, pdfState: '', pdfBytes: 0,
 
         _hdr() {
           var s = {}
@@ -786,6 +939,33 @@
           this.ready = true
           var k = new URLSearchParams(location.search).get('key')
           if (k) await this.openKey(k)
+          else await this.loadDefs()
+        },
+        // ── 首頁：全部模組（含只有草稿的）與刪草稿（缺口 #5）──
+        async loadDefs() {
+          var r = await this.api('GET', '/api/definitions/custom_module')
+          if (r.ok) this.defs = (r.data || []).filter(function (d) { return d.scope === 'company' })
+          else this.errMsg = '讀取模組清單失敗：' + ((r.data && r.data.detail) || r.status)
+          this.defsLoaded = true
+        },
+        moduleName(k) { var m = this.published.find(function (x) { return x.key === k }); return m ? (m.name || '') : '' },
+        async deleteDraft(m) {
+          if (this.busy || !m.hasDraft) return
+          var msg = m.latestVersion
+            ? '刪除「' + m.key + '」的草稿？未發布的修改會消失；已發布的第 ' + m.latestVersion + ' 版不受影響。'
+            : '刪除「' + m.key + '」的草稿？這個模組從未發布，刪除後整個模組會從清單消失。'
+          var ok = window.MotrixUI ? await window.MotrixUI.confirm(msg, { danger: true, okText: '刪除草稿' }) : window.confirm(msg)
+          if (!ok) return
+          this.busy = true; this.errMsg = ''
+          try {
+            var r = await this.api('DELETE', '/api/definitions/custom_module/' + encodeURIComponent(m.key) + '/draft?scope=company')
+            if (!r.ok) { this.errMsg = '刪除草稿失敗：' + ((r.data && r.data.detail) || r.status); return }
+            window.MotrixUI && window.MotrixUI.toast('已刪除 ' + m.key + ' 的草稿', { kind: 'ok' })
+          } finally {
+            this.busy = false
+            this.defsLoaded = false
+            await this.loadDefs()
+          }
         },
         readMenuGroups() {
           // 選單位置只能選目前主選單已有的分組（程式提供的），或另開「自訂模組」
@@ -841,10 +1021,13 @@
           this.$nextTick(() => { this._loading = false; this.queueNumbering(); this.checkAllFormulas() })
           if (r.data.draft) this.validateNow()
         },
-        closeModule() {
-          if (this.dirty) this.saveDraft()
+        async closeModule() {
+          var pending = this.dirty ? this.saveDraft() : null
           this.def = null; this.key = ''; this.keyInput = ''
           try { history.replaceState(null, '', location.pathname) } catch (e) {}
+          this.defsLoaded = false
+          if (pending) await pending
+          await this.loadDefs()
         },
 
         // ── 自動存檔 ──
@@ -1134,12 +1317,22 @@
           else delete s.approval
           this.def.workflow.states.splice(si, 1, s)
         },
+        // 簽核人來源一律取自目錄 approverSources（sourceType 空字串＝指定帳號）
+        approverSources() {
+          return (this.catalog.approverSources || []).map(function (x) { return { value: x.sourceType || 'user', label: x.label || x.sourceType, params: x.params || [] } })
+        },
         approverKind(a) { return (a && a.sourceType) || 'user' },
+        approverParams(a) {
+          var k = this.approverKind(a)
+          var src = this.approverSources().find(function (x) { return x.value === k })
+          return src ? src.params : []
+        },
         newApprover(kind) {
-          if (kind === 'department_manager') return { sourceType: 'department_manager', departmentId: null }
-          if (kind === 'division_manager') return { sourceType: 'division_manager', divisionId: null }
-          if (kind === 'submitter_manager') return { sourceType: 'submitter_manager' }
-          return { username: '' }
+          var src = this.approverSources().find(function (x) { return x.value === kind })
+          if (!src || src.value === 'user') return { username: '' }
+          var o = { sourceType: src.value }
+          src.params.forEach(function (p) { o[p] = null })
+          return o
         },
         setApproverUser(tier, ai, username) {
           var u = this.users.find(function (x) { return x.username === username })
@@ -1185,10 +1378,73 @@
 
         // ── ⑤ 輸出 ──
         hasCustomOutput() { return !!(this.def.output && this.def.output.template) },
-        outputThemes() { return this.catalog.outputThemes || ['voucher_standard'] },
-        outputFormats() { return this.catalog.outputFormats || ['text', 'str', 'money', 'date10'] },
+        // 主題、欄位格式、輸出格式、積木與參數：全部取自目錄（沒有前端後備值；目錄沒給就沒有選項）
+        outputThemes() { return this.catalog.outputThemes || [] },
+        fieldFormats() { return this.catalog.fieldFormats || [] },
+        canPdf() { return (this.catalog.outputFormats || []).indexOf('pdf') >= 0 },
         formatLabel(f) { return FORMAT_LABELS[f] || f },
-        editableBlocks() { return (this.catalog.outputBlocks || []).filter(function (b) { return BLOCK_DEFAULTS[b] }) },
+        blockSpec(t) { return ((this.catalog.outputBlockSpecs || {})[t]) || { params: {} } },
+        itemSpec(name) { return ((this.catalog.outputBlockItemSpecs || {})[name]) || {} },
+        paramKeys(params) { return Object.keys(params || {}) },
+        ps(t, k) { return (this.blockSpec(t).params || {})[k] || {} },
+        isp(item, k) { return this.itemSpec(item)[k] || {} },
+        //: `list:<子項>` ⇒ 子項名稱（`list:text` 是字串清單，不是子項）
+        itemName(type) { type = String(type || ''); return type.indexOf('list:') === 0 && type !== 'list:text' ? type.slice(5) : '' },
+        li(t, k) { return this.itemName(this.ps(t, k).type) },
+        li2(t, k, ik) { return this.itemName(this.isp(this.li(t, k), ik).type) },
+        isScalar(type) { return ['text', 'int', 'bool', 'path'].indexOf(type) >= 0 },
+        //: 資料列（field）的 format 用目錄的 fieldFormats 下拉；其他子項的 format（例：表格欄另有 index）照目錄說明手填
+        isFormatSelect(item, k) { return item === 'field' && k === 'format' },
+        paramLabel(k) { return PARAM_LABELS[k] || k },
+        val(o, k) { return !o || o[k] === undefined || o[k] === null ? '' : o[k] },
+        setParam(o, k, v, sp) {
+          if ((v === '' || v === null || v === undefined || (typeof v === 'number' && isNaN(v))) && !(sp && sp.required)) { delete o[k]; return }
+          o[k] = (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) ? '' : v
+        },
+        setCond(b, k, part, v) {
+          var c = Object.assign({}, b[k] || {})
+          if (v === '') delete c[part]; else c[part] = v
+          if (!c.path && c.equals === undefined) delete b[k]; else b[k] = c
+        },
+        defaultValue(type, k, blockType) {
+          if (type === 'text') return (blockType === 'identity_header' && k === 'title') ? (this.def.name || '') : ''
+          if (type === 'path') return k === 'source' ? '' : 'recordNo'
+          if (type === 'int') return 0
+          if (type === 'bool') return false
+          if (type === 'blocks' || type === 'list:text') return []
+          var item = this.itemName(type)
+          if (item) return [this.defaultItem(item)]
+          return undefined
+        },
+        defaultItem(item) {
+          var o = {}, spec = this.itemSpec(item), self = this
+          Object.keys(spec).forEach(function (k) {
+            if (!spec[k].required) return
+            var v = self.defaultValue(spec[k].type, k, '')
+            if (v !== undefined) o[k] = v
+          })
+          return o
+        },
+        defaultBlock(t) {
+          var o = { type: t }, params = this.blockSpec(t).params || {}, self = this
+          Object.keys(params).forEach(function (k) {
+            if (!params[k].required) return
+            var v = self.defaultValue(params[k].type, k, t)
+            if (v !== undefined) o[k] = v
+          })
+          return o
+        },
+        addItem(o, k, item) { if (!Array.isArray(o[k])) o[k] = []; o[k].push(this.defaultItem(item)) },
+        //: 可加入的積木＝目錄 outputBlocks 裡有參數規格、而且沒有巢狀積木參數的（巢狀積木建構器暫不提供編輯）
+        editableBlocks() {
+          var self = this
+          return (this.catalog.outputBlocks || []).filter(function (t) {
+            var sp = (self.catalog.outputBlockSpecs || {})[t]
+            if (!sp) return false
+            var ps = sp.params || {}
+            return !Object.keys(ps).some(function (k) { return ps[k].type === 'blocks' })
+          })
+        },
         blockLabel(t) { return BLOCK_LABELS[t] || t },
         viewPaths() {
           var out = [{ value: 'recordNo', label: '編號' }, { value: 'statusLabel', label: '狀態' }, { value: 'createdBy', label: '建立者' },
@@ -1206,13 +1462,18 @@
         useCustomOutput() {
           if (this.hasCustomOutput()) return
           var d = this.def
-          var fmt = { date: 'date10' }
+          var ff = this.fieldFormats()
+          var fmt = function (f) {
+            var want = f.type === 'date' ? 'date10' : (f.type === 'text' || f.type === 'select' ? 'text' : 'str')
+            return ff.indexOf(want) >= 0 ? want : undefined
+          }
+          var row = function (label, path, format) { var r = { label: label, path: path }; if (format && ff.indexOf(format) >= 0) r.format = format; return r }
           var blocks = []
           var avail = this.editableBlocks()
-          if (avail.indexOf('identity_header') >= 0) blocks.push(BLOCK_DEFAULTS.identity_header(d))
-          if (avail.indexOf('meta') >= 0) blocks.push({ type: 'meta', fields: [{ label: '編號', path: 'recordNo', format: 'text' }, { label: '狀態', path: 'statusLabel', format: 'text' },
-            { label: '建立者', path: 'createdBy', format: 'text' }, { label: '建立時間', path: 'createdAt', format: 'date10' }]
-            .concat(d.fields.map(function (f) { return { label: f.label || f.key, path: 'fields.' + f.key, format: fmt[f.type] || (f.type === 'text' || f.type === 'select' ? 'text' : 'str') } })) })
+          if (avail.indexOf('identity_header') >= 0) blocks.push(this.defaultBlock('identity_header'))
+          if (avail.indexOf('meta') >= 0) blocks.push({ type: 'meta', fields: [row('編號', 'recordNo', 'text'), row('狀態', 'statusLabel', 'text'),
+            row('建立者', 'createdBy', 'text'), row('建立時間', 'createdAt', 'date10')]
+            .concat(d.fields.map(function (f) { return row(f.label || f.key, 'fields.' + f.key, fmt(f)) })) })
           if (avail.indexOf('approval_sign') >= 0) blocks.push({ type: 'approval_sign' })
           if (avail.indexOf('identity_footer') >= 0) blocks.push({ type: 'identity_footer' })
           this.def.output = { template: { key: 'custom_' + this.key, version: 1, theme: this.outputThemes()[0],
@@ -1220,11 +1481,10 @@
           this.previewOutput()
         },
         addBlock(t) {
-          if (!t || !BLOCK_DEFAULTS[t]) return
-          this.def.output.template.blocks.push(BLOCK_DEFAULTS[t](this.def))
+          if (!t || this.editableBlocks().indexOf(t) < 0) return
+          this.def.output.template.blocks.push(this.defaultBlock(t))
         },
         moveBlock(bi, dir) { this.def.output.template.blocks = this.L.move(this.def.output.template.blocks, bi, dir) },
-        moveMeta(b, ri, dir) { b.fields = this.L.move(b.fields, ri, dir) },
         queuePreview() {
           clearTimeout(this._pvTimer)
           this._pvTimer = setTimeout(() => this.previewOutput(), 600)
@@ -1243,6 +1503,36 @@
               this.previewState = 'bad'
             }
           } finally { this.previewBusy = false }
+        },
+
+        async previewPdf() {
+          if (!this.def || this.pdfBusy) return
+          // 先開分頁（在使用者點擊的當下開，才不會被擋），PDF 回來再把網址換過去
+          var w = window.open('', '_blank')
+          this.pdfBusy = true; this.pdfState = 'pending'; this.pdfBytes = 0
+          try {
+            var r = await fetch('/api/custom-modules/' + encodeURIComponent(this.key) + '/output/preview?format=pdf',
+                                { method: 'POST', headers: this._hdr(), body: JSON.stringify({ body: this.def }) })
+            var ct = r.headers.get('content-type') || ''
+            if (r.ok && ct.indexOf('application/pdf') === 0) {
+              var blob = await r.blob()
+              this.pdfBytes = blob.size
+              var url = URL.createObjectURL(blob)
+              if (w) w.location.href = url
+              else { var a = document.createElement('a'); a.href = url; a.download = (this.key || 'preview') + '.pdf'; document.body.appendChild(a); a.click(); a.remove() }
+              setTimeout(function () { URL.revokeObjectURL(url) }, 60000)
+              this.pdfState = 'ok'
+            } else {
+              if (w) w.close()
+              var d = null
+              try { d = await r.json() } catch (e) {}
+              this.previewProblems = (d && d.problems) || [{ path: '', message: (d && d.detail) || ('PDF 預覽失敗（' + r.status + '）') }]
+              this.pdfState = 'bad'
+            }
+          } catch (e) {
+            if (w) w.close()
+            this.pdfState = 'bad'
+          } finally { this.pdfBusy = false }
         },
 
         // ── ⑥ 發布 ──
