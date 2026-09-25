@@ -2,6 +2,14 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.99 — 2026-09-26（C）
+> C（P8 前端缺口 #3～#7、P2 開票憑據稅別依據、P2 第二份單據勞務報酬單＋R3 個資告知）。
+- L1（新增）：串接點 IP-10 `approval.queue_items`——「待我簽核」佇列與角標收其他模組的待簽項目（M01 取用；L1 自訂模組引擎提供 `custom_modules.queue_items`）；自訂模組通知的 ref_id＝`custom:<模組>:<單號>`（`notify_ref`）
+- L1（新增）：`core.definitions.list_definitions`／`delete_draft`；API `GET /api/definitions/{kind}`、`DELETE /api/definitions/{kind}/{key}/draft`
+- L1（新增）：`helpers.doc_template.BLOCK_SPECS`／`BLOCK_ITEM_SPECS`／`FORMATS`／`COLUMN_FORMATS`（建構器的積木參數規格）；積木 `doc_header`、`section_title`、`part`、`kv_table`、`footer_text`、`text_page`；`sign_boxes` 的 `variant: named`；格式 `ntd`；條件 `present`；主題可自帶外框（`frame`）與 `after_root`；主題 `payslip`
+- L1（新增）：`helpers.custom_modules.ref_options`／`APPROVER_SOURCES`；API `GET /api/custom/{key}/ref-options/{field}`；能力目錄補積木規格、主題、輸出格式、欄位格式、簽核人來源；自訂模組與輸出版型預覽可 `?format=pdf`
+- L1（行為）：開票申請憑據印出零稅率／免稅依據（R2）；勞務報酬單改由版型產生（`helpers/output_templates/payslip.json`，可覆寫與預覽），並加個資蒐集告知（R3：已告知印時間與人員，否則附告知事項全文）
+
 ## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
 > rebase 時 1.8、1.9 已被 X-9b、A 使用 ⇒ 1.10（PLAYBOOK §C-7）。只有新增。
 - L1（新增）：`core.pages` 頁面對照與提供（階段 C／C1，STAGE-C-DESIGN §3）——`collect`／`build_page_map`／`lookup`／`resolve`／`page_response`／`notice_kind`／`notice_html`／`read_manifests`／`check_and_register`／`valid_name`／`PageConflict`／`PAGE_NAME`／`NOTICE`
