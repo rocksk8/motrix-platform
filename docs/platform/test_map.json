@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 495,
+  "tests": 502,
   "unmapped": 9,
   "kinds": {
-   "api": 262,
-   "e2e": 119,
+   "api": 265,
+   "e2e": 122,
    "unit": 45,
-   "audit": 69
+   "audit": 70
   },
-  "routes": 509
+  "routes": 515
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -813,6 +813,23 @@
     ]
    }
   },
+  "backend/tests/platform/test_legal_params_single_source.py": {
+   "kind": "audit",
+   "units": [
+    "helper:legal_params",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "backend/helpers/legal_params.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_module_boundaries.py": {
    "kind": "audit",
    "units": [
@@ -1080,12 +1097,10 @@
    "kind": "audit",
    "units": [
     "dir:backend/modules/",
-    "dir:tools/platform/",
-    "file:backend/conftest.py"
+    "dir:tools/platform/"
    ],
    "evidence": {
     "path": [
-     "backend/conftest.py",
      "backend/modules/",
      "tools/platform/"
     ]
@@ -3327,9 +3342,12 @@
    "units": [
     "core:network_plan_export",
     "core:pdf_gen",
+    "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
+    "helper:auth",
     "helper:company_identity",
     "helper:settings",
+    "page:pages/users.html",
     "plat:__init__",
     "plat:upgrade",
     "router:reports"
@@ -3339,13 +3357,19 @@
      "backend/core/__init__.py",
      "backend/core/upgrade.py",
      "backend/helpers/__init__.py",
+     "backend/helpers/auth.py",
      "backend/helpers/company_identity.py",
      "backend/helpers/settings.py",
      "backend/network_plan_export.py",
      "backend/pdf_gen.py"
     ],
+    "page": [
+     "frontend/pages/users.html"
+    ],
     "path": [
-     "backend/routers/reports.py"
+     "backend/routers/reports.py",
+     "frontend/pages/",
+     "frontend/pages/users.html"
     ]
    }
   },
@@ -5104,6 +5128,30 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_legal_params_r1_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "page:pages/legal-params.html",
+    "page:pages/payslip-form.html",
+    "router:payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py"
+    ],
+    "api": [
+     "backend/routers/payslips.py"
+    ],
+    "page": [
+     "frontend/pages/legal-params.html",
+     "frontend/pages/payslip-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_login_enter_submits_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -5424,6 +5472,41 @@
     ]
    }
   },
+  "backend/tests/test_e2e_privacy_notice_r3_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "helper:settings",
+    "page:pages/company-profile-settings.html",
+    "page:pages/contractors.html",
+    "page:pages/payslip-form.html",
+    "router:contractors",
+    "router:payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/contractors.py",
+     "backend/routers/payslips.py"
+    ],
+    "page": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/contractors.html",
+     "frontend/pages/payslip-form.html"
+    ],
+    "path": [
+     "frontend/pages/company-profile-settings.html",
+     "frontend/pages/contractors.html",
+     "frontend/pages/payslip-form.html"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_e2e_quote_list_search_link_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -5704,6 +5787,28 @@
     ],
     "path": [
      "frontend/pages/cashier.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
+    "page:pages/case-management.html",
+    "page:pages/quotation-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/quotation-form.html"
+    ],
+    "path": [
+     "frontend/pages/quotation-form.html"
     ]
    }
   },
@@ -6926,6 +7031,30 @@
      "frontend/static/sidebar.js"
     ]
    }
+  },
+  "backend/tests/test_legal_params_r1_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "helper:settings",
+    "router:legal_params",
+    "router:payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/routers/legal_params.py",
+     "backend/routers/payslips.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_licensing_core_2026_09_21.py": {
    "kind": "api",
@@ -8307,6 +8436,32 @@
     ]
    }
   },
+  "backend/tests/test_privacy_notice_r3_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "router:contractors",
+    "router:legal_params",
+    "router:payslips",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/routers/contractors.py",
+     "backend/routers/legal_params.py",
+     "backend/routers/payslips.py",
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/test_procurement_leadtime_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -9437,6 +9592,30 @@
      "backend/routers/contractor_vouchers.py",
      "backend/routers/quotations.py",
      "backend/routers/vendor_contractors.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/test_tax_basis_r2_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
+    "helper:legal_params",
+    "router:invoice_vouchers",
+    "router:legal_params",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/legal_params.py",
+     "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
+    ],
+    "api": [
+     "backend/routers/invoice_vouchers.py",
+     "backend/routers/legal_params.py",
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
