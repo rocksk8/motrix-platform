@@ -399,6 +399,7 @@
    "imports": [
     "core:db",
     "helper:company_identity",
+    "helper:doc_template",
     "helper:email_notify",
     "helper:quotations",
     "helper:settings",
@@ -638,6 +639,19 @@
    "imports": [],
    "kind": "helper",
    "path": "backend/helpers/dates.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "helper:doc_template": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "plat:paths"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/doc_template.py",
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [],
