@@ -78,6 +78,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-25 21:58 C：D6 稽核完成（反向控制實跑 14 項＋正對照 4 項）。`audit/AUDIT-C-host-D3D5.md`：必修 D-1（D3 列表讀根目錄的 lock，打包寫在 backend/ ⇒ 新包全顯示「沒有清單」，測試自擺同一錯位置）、D-2（D5 非預期型別 ⇒ prod-health 500、前次通過仍有效）；建議 4、觀察 3。`audit/AUDIT-C-B-guards.md`：必修 G-1（G1 不看底線開頭的跨模組 API，刪 `_require_user` 的 module 參數仍綠）、P-1（9c① 驗包放過無 module.json 的模組資料夾與 helpers/__init__.py）；建議 5、觀察 4。C 回 P4／P5。
 - 2026-09-25 21:51 使用者表單裁示 U1～U9（見 §4 裁示結果）；U10 待回來。
 - 2026-09-25 21:50 巡視：沒有新的合回。B 在 .venv 上跑全量（死線 22:01），C 做 P2。D6 覆蓋缺口：§9d 原本分給 A 的（9b／paths／個資）與分給 B 的（IP-1～4／row_access）還沒有稽核 ⇒ 各派一個獨立代理。IMPROVEMENT-REPORT 骨架已建（覆蓋表）。
 - 2026-09-25 21:40 B：專案 .venv 做好（Python 3.13.3，wip/b-venv 210ef6b3）。乾淨環境抓到三個缺口：httpx2、cv2／numpy 沒列在 requirements，以及 BK19 誤擋 .venv 的 __pycache__；都已補齊。新守門 test_requirements_cover_imports；project_env check 會比對 prod_env.json（正式機環境還沒取得，見 U10）。發現：hermes 是 starlette 1.0.1，.venv 是 1.7 ⇒ 過去一直在舊版上測。全量 21:35 開跑，死線 22:01，全綠就合回，接著做 ④ P7。
