@@ -32,6 +32,11 @@ MUTATIONS = [
      "    return dict(row)", "    return {k: v for k, v in dict(row).items() if k != 'modules'}",
      "backend/tests/platform/test_auth_user_contract.py",
      "回傳形狀改變（2026-09-26 反向控制：沒選中的出納 e2e 2 題紅 ⇒ 補的契約題）"),
+    ("email_notify._users_emails 不再過濾個人退訂", "backend/helpers/email_notify.py",
+     '        return [r["email"] for r in rows if _pref_enabled(r["notification_muted"], event_key)]',
+     '        return [r["email"] for r in rows]',
+     "backend/tests/test_notification_prefs_coverage.py",
+     "私有函式、第二個模組的閉包（稽核 D 關閉確認時的新真突變：選中約 89%，抓得到的題都選到且紅）"),
 ]
 
 
