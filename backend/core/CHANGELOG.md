@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（P9 拖曳排版器，wip/h-p9；⚠ 暫用號：列車上依 origin 重定）
+## 1.21 — 2026-09-26（P9 拖曳排版器，wip/h-p9；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.99 → 1.21〕
 > 只有新增。
 - L1（新增）：定義文件庫 `layout` kind 的驗證器與程式預設（`routers/definitions.py`）——key＝`module:<模組>`、body＝`{"ops": [...]}`；發布／還原前經 `core.catalog.check_layout`（P3 排版守門第一個產品呼叫者），問題路徑 `ops[i].…`；程式預設＝`{"ops": []}`（模組未載入 ⇒ 沒有預設）
 - L1（新增）：端點 `GET /api/layout/{module}`——任何登入者讀自己角色的版面（`resolve`：角色 ＞ 公司 ＞ 程式預設）＋該模組的可自訂點；`?role=` 僅超級管理員（排版器的「以某角色預覽」）；現在不合法的已發布操作不套用、列在 `dropped`；讀定義失敗 ⇒ 程式預設＋`error`
