@@ -65,3 +65,10 @@
 
 - **CA-O2　守門的兩個盲點**：①表名放在變數裡（`t="quotations"; f"… FROM {t}"`）；②大小寫不同（`FROM Quotations`，SQLite 視為同一張表）。這兩種寫法 `access()` 都回空。①是靜態掃描本來就做不到的；②建議在 `dep_scan.sql_tables` 比對時忽略大小寫（會影響 dep_graph，由 B 決定）。
 - **CA-O3　模組 import 成功但 spec 驗證失敗的情形**：M01 搬進 modules/ 之後，如果仍然在 import 時登記 `case.present`，那麼「import 成功、`MODULE` 缺漏或 key 不符 ⇒ STATE_FAILED」的時候，登記已經留下了 ⇒ `case_module_present()` 會回 True。IP-15 已寫明「改寫進 `ModuleSpec.providers`」，照這樣做就沒有這個問題；M01 搬遷的稽核會驗這一點。
+
+## 5. c-case-access-3 複核（D，2026-09-26 07:58）
+
+- 對象：`origin/wip/c-case-access-3` `0da9d647`。主持裁示只留一個訊號：`case_module_present()` 改看 A 的 `case.access`（`helpers/quotations.py:556` 登記），`case.present`（IP-15）刪除；新增 `test_both_paths_agree_when_m01_is_absent`（L1 guard 與網路規劃書路徑同為 404）。
+- D 突變：`case_module_present` 恆 True、空登記當在 ⇒ 兩項都紅（2 failed：原 404 題＋兩條路一致題）⇒ **CA-M1 維持關閉**。
+- **CA-O4（觀察，CA-O3 變成必要條件）**：`case.access` 在 `helpers/quotations.py` 匯入時登記，而這支檔案被 L1 的 `pdf_gen.py`、`routers/system.py`（以及 M05、M08 的 router）匯入 ⇒ 只要這些檔被載入，訊號就一定亮。現在 M01 拿不掉，所以沒有影響；但 M01 搬遷時必須①改由 `ModuleSpec.providers` 登記（CA-O3），②切斷 L1 對 `helpers.quotations` 的匯入，否則「M01 不在 ⇒ 404」會退回 CA-M1 修正前的狀態（照擁有者規則放行）。建議併入 ROADMAP 的 M01 條目。
+

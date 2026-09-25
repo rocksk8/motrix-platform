@@ -123,6 +123,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 07:58 D：h-hist 必修 H-M1——讀取端（/api/history、15 分鐘失敗警告）沒拿 _history_lock ⇒ Windows 上 os.replace 丟 PermissionError，真實程式實測 300 寫 145 例外掉筆（修正前 0）；07:52 已建議下第五班。h-u14 必修 0、建議 U-S1（存檔後 canEdit 缺欄位路徑無題）。c-case-access-3 0da9d647 複核：CA-M1 維持關閉（突變 2/2 紅）；CA-O4：case.access 在 helpers/quotations 匯入時登記、L1 也匯入它 ⇒ M01 搬遷時須改 ModuleSpec 登記並切斷 L1 匯入。
 - 2026-09-26 07:53 主持：第五班列車長（c-m02-2、c-m02-s2、h-hist）與 M08 稽核 ⑰ 子代理出發；U14 前端完成（wip/h-u14 6639ea8d，交 D 稽核）。裁示 D ⑮ O-1：privacy_notice_acks 維持 L1 共用表。M04-M1＋S1～S3 交 C 在 c-m04-2 修。PLAYBOOK §G3 補兩條（列車長要等到結果行、反向控制前清 __pycache__ 殘留模組夾）。C：c-case-access-3（0da9d647）與 c-m04-2（26ff8a50）差異題中，約 08:30 推；M07 搬遷完成、剩 6 道共用守門改 module_installed。hichan-f9 07:2x 詢問未回。
 - 2026-09-26 07:46 D：⑮ M04（`AUDIT-D-C-M04-move.md`，c-m04 dd6f1550）：必修 M04-M1——真刪 subcontract，tests/platform＋49 檔 1273 過／77 紅／2 檔收集失敗（模組在時 1411 全過）；扣允許 2、已知已分派 4、第四班已修 1 ⇒ 70 題＋2 檔需要 M04 留在模組外（c-m04-2 重上車時一併修）。建議：IP-1／12／14 提供方路徑少了 `api/`（登記表守門不驗路徑存在）。O-1 privacy_notice_acks 改模組表延後需主持確認。
 - 2026-09-26 07:44 主持：**第四班列車合回 427c8be9**（c-module-files、a-m10〔M12＋M10〕、h-p9、h-p8-gaps、c-audit-d-2〔C-M4〕、c-refopt；CORE 1.24～1.29；IP daily.check＝IP-11、case.access＝IP-12）。全量（892ea49a）非 e2e 4642 過 4 紅、e2e 434 過 0 紅；4 紅皆交會：daily_tasks／netplan 缺 customization＋列車 IP 定號動了模組碼沒有版號條目（補空類別、升 1.0.1／1.0.2）；兩題用 layout 驗儲存語意，同 worker 先 import routers.definitions（P9 驗證器）就擋（補 delitem）。修後相關 272 題＋rebase 後讀文件的 52 檔 806 題綠。D 的 O-1（netplan 告知端點）列車上已搬。列車長在等待中結束回合，主持接手；之後它復活並核對同一修正（1396 題綠），推送由主持做。另：history.json 殘字＝產品競態，wip/h-hist 修。
