@@ -63,6 +63,7 @@
 
 1. M11 標案雷達 — ✅ 後端完成；剩地圖 provider（等 M08）與前端頁面
 2. M12 每日任務 — 需要 A11（case_stage_tasks）與 §4 的 system_settings、user_request_log
+   - **搬遷前必修**（稽核 X-C-batch1 B-1）：IP-5 的 `notice` 要在前端顯示（取消勾選時要明說「沒有收回」、不留舊任務與 id）；未修不准搬。
 3. M10 網路規劃 — 依賴 M01 的路由前綴，需要 A10
 4. M02 業務開發 — 需要 A3、§4 的 dev_cases
 5. M04 外包工班 — 需要 A6
