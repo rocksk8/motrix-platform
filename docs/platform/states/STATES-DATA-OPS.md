@@ -122,3 +122,4 @@
 
 - 受影響題目（備份／告警／升級／email 相關 47 檔＋`tests/platform`）：901 passed。
 - 行為變更（已同步調整既有測試）：`test_backup_retention_policy_2026_09_14` 的 `arch` 與 `test_cloud_storage_2026_09_07` 的 S3 清理題把底線設為 1／0，因為它們守的是日期規則、每題只造兩三個資料夾。
+- **S-CU12 已修（X-O9，2026-09-26）**：`.build_commit` 從 `core.upgrade.CONFIG_FILES` 拿掉 ⇒ 歸類成程式，轉換隨新版包安裝、兩種回滾還原成 V9 那一份（V9 沒有這個檔 ⇒ 回滾後也沒有）。守門 `tests/platform/test_core_upgrade.py::test_cu12_*`（打 `/api/build-info` 看 `disk_commit`）；突變：放回 `CONFIG_FILES` ⇒ 3 紅。**更正**：§1 該列的【推論】寫「`/api/system/version` 回舊 SHA」——原句保留；該端點讀 `version_manifest.json`（屬程式，本來就隨新版更新），回 commit 的是 `/api/build-info`。

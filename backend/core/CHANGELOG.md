@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.8 — 2026-09-26
+> rebase 時 1.7 已被 R 使用 ⇒ 1.8。稽核 X-9b O-9（使用者表單裁示）與 STATES-DATA-OPS S-CU12。介面不變，只有行為。
+- L1（修改行為，介面不變）：`archive._F2_FIELDS` 加 `協力廠商`（`vendor_contractors.data_json` 的戶名／帳號／存摺影像），`承攬付款憑據` 另加 `snapshot_json` 最上層同三鍵——協力廠商（承攬商本身）的帳戶一律當個資：一般每日／月 JSON 拿掉，完整列只進個資資料夾（O-9）
+- L0（修改行為，介面不變）：`core.upgrade.CONFIG_FILES` 拿掉 `.build_commit` ⇒ 歸類成程式：轉換隨新版包安裝、兩種回滾還原成 V9 那一份；原本轉換後版本端點仍回 V9 的 commit（S-CU12）
+
 ## 1.7 — 2026-09-25（R）
 > `core.registry.CORE_VERSION` 1.6 → 1.7（G1 快照要求升次版號；R 對 `core/registry.py` 只改這一行）。
 - L1（新增）：`helpers.legal_params` 法規參數服務（R1，CUSTOMIZATION-SPEC §9.1）——`load_versions`／`save_versions`／`rules_for_date`／`rules_by_version`／`validate_version(s)`／`frozen_changes`／`year_status`／`minimum_wage_mismatch`／`today`；零稅率／免稅依據 `TAX_BASIS_OPTIONS`／`tax_basis_error`／`tax_basis_label`（R2，§9.2）

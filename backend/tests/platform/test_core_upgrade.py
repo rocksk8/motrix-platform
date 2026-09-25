@@ -81,6 +81,8 @@ def new_src(tmp_path):
     ("backend/.env.local", "config"), ("backend/heartbeat_config.json", "config"), (".no_email_send", "config"),
     ("backend/autostart.bat", "config"),                  # 稽核 X-9b M-4：機器設定（對外連線總開關）
     ("backend/restart.bat", "program"),
+    ("backend/.build_commit", "program"),                 # S-CU12：打包 commit 跟著程式走
+    ("backend/.deployed_commit.json", "config"),          # 部署工具寫的「這台機器套用過什麼」
     ("backend/__pycache__/x.pyc", "skip"),
 ])
 def test_classify(rel, kind):
@@ -807,3 +809,61 @@ def test_o1_logical_digest_ignores_header_counters(tmp_path):
     c.commit()
     c.close()
     assert U.logical_digest(src) != U.logical_digest(dst)
+
+
+# ── S-CU12：`.build_commit` 是程式——轉換隨新版安裝，回滾還原成 V9 的 ─────────────────
+
+_V9_SHA = "c83dae6e" + "9" * 32
+_NEW_SHA = "0ddba11c" + "1" * 32
+
+
+@pytest.fixture()
+def auth(client, make_user):
+    u, p = make_user("cu12_user", "Cu12-Pass-123", role="admin")[:2]
+    tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
+    return {"Authorization": "Bearer " + tok}
+
+
+def _disk_commit(client, auth, monkeypatch, inst):
+    """真的打版本端點（`/api/build-info` 的 `disk_commit`＝磁碟上是哪個 commit）。
+    正式機沒有 `.git` ⇒ git 那一路換成不可得，端點只能讀安裝目錄的 `.build_commit`。
+    沒有這個檔 ⇒ 回 None。"""
+    from helpers import build_info as B
+    monkeypatch.setattr(B, "_BUILD_FILE", os.path.join(inst, "backend", ".build_commit"))
+    monkeypatch.setattr(B, "_from_git", lambda: (None, "正式機沒有 .git"))
+    r = client.get("/api/build-info", headers=auth)
+    assert r.status_code == 200, r.text
+    j = r.json()
+    if not j["disk_commit"]:
+        return None
+    assert j["disk_commit_source"] == ".build_commit", j
+    return j["disk_commit"]
+
+
+@pytest.mark.parametrize("mode", ["code", "full"])
+def test_cu12_build_commit_follows_the_program(inst, new_src, tmp_path, monkeypatch, client, auth, mode):
+    """轉換後版本端點回新版的 commit；回滾（兩種模式）後回 V9 的 commit。
+    修正前：歸類成設定 ⇒ 轉換不帶新包的 `.build_commit`，轉換後仍回 V9。"""
+    _write(inst, "backend/.build_commit", _V9_SHA.encode())
+    _write(new_src, "backend/.build_commit", _NEW_SHA.encode())
+    T = _tool(monkeypatch)
+    bd = str(tmp_path / "bk")
+    _backup_verified(T, inst, bd)
+    m = U.load_manifest(bd)
+    assert _disk_commit(client, auth, monkeypatch, inst) == _V9_SHA          # 前提
+    T.convert(inst, bd, new_src)
+    assert U.verify_conversion(inst, m) == []
+    assert _disk_commit(client, auth, monkeypatch, inst) == _NEW_SHA         # 端點本身先說話
+    assert U.rollback(inst, bd, mode) == []
+    assert _disk_commit(client, auth, monkeypatch, inst) == _V9_SHA
+    assert "backend/.build_commit" in m["program"] and "backend/.build_commit" not in m["config"]
+
+
+def test_cu12_v9_without_build_commit_rolls_back_to_none(inst, new_src, tmp_path, monkeypatch, client, auth):
+    """V9 安裝沒有 `.build_commit`（舊包）⇒ code 回滾後不可以留著新版那一份（否則版本端點說是新版）。"""
+    _write(new_src, "backend/.build_commit", _NEW_SHA.encode())
+    bd = str(tmp_path / "bk")
+    _convert(inst, new_src, bd)
+    assert _disk_commit(client, auth, monkeypatch, inst) == _NEW_SHA
+    assert U.rollback(inst, bd, "code") == []
+    assert _disk_commit(client, auth, monkeypatch, inst) is None

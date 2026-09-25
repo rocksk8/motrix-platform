@@ -57,6 +57,7 @@
 - 開發機、demo、測試一律不上傳（沿用 `.no_cloud_archive`、所有權標記、demo 隔離）。
 - 寫進個資資料夾時，**只准在它底下逐層建子資料夾**（`archive._pii_ensure_dir`／`_pii_copy_file`：`os.mkdir`，不用 `makedirs`）；根目錄在寫入當下不存在 ⇒ 失敗並告警，不建回來（稽核 X-9b S-5：「先檢查、再 makedirs」在兩步之間資料夾消失時會把它建回來）。守門：`test_pii_archive_mirror_2026_09_25.py` 的 `*vanishing*` 四題。⚠ 未守門：**新增**的個資寫入路徑有沒有走這兩支 helper（ROADMAP G6b）。
 - **F2 值被複製進別的表**（例：建立單據時把外包人員帳戶凍結進 `snapshot_json`）⇒ 那張表也是含 F2 的表，要在 `archive._F2_FIELDS` 宣告（`columns`／`json`／`json_list`），一般份拿掉、完整列進個資資料夾（稽核 X-9b M-3）。守門：`test_general_tree_has_no_f2_copied_into_other_tables`——走真正的建立 API → 每日＋週備份 → 掃一般樹：哨兵值不可以出現；所有 JSON 欄位裡 F2 鍵名有值的位置，都要在測試的允許清單裡（有人決定過），而且清單每一條都要真的出現。
+- **協力廠商（承攬商本身）的銀行帳戶一律當個資（F2）**（稽核 X-9b O-9，2026-09-25 使用者表單裁示「當成個資分流」；CORE-SPEC 使用者裁示表）：對象可能是個人工作室，不逐筆判斷。範圍＝戶名、帳號、存摺影像（`vendor_contractors.data_json` 與承攬付款憑據 `snapshot_json` 最上層）；銀行代碼／名稱／分行是機構資訊，留在一般份。守門同上一條：哨兵值（外包人員與協力廠商帳戶）走真實 API → 每日＋週＋月備份 → 掃一般樹，不可以出現（與允許清單無關）；允許清單目前是空的。突變：放回允許清單、拿掉宣告 ⇒ 皆紅。
 
 ### 3.3 資料表分類
 

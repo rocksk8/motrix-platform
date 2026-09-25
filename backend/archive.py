@@ -2165,6 +2165,9 @@ def backed_up_table_names() -> set:
 # 完整列（含 F2）只寫到 `系統存檔_個資/每日備份/{date}/`，資料夾規則同勞報單（人建、程式不建）。
 # 還原：`merge_general_and_pii()` 把兩份合回原表（DR-SOP「個資欄位合回」）。
 # 守門：tests/test_pii_archive_mirror_2026_09_25.py（一般份不可出現 F2 欄位與 data:image）。
+#: 協力廠商（承攬商本身）帳戶在 JSON 裡的鍵：vendor_contractors.data_json 與憑據快照最上層同名（稽核 X-9b O-9）
+_VENDOR_ACCOUNT_KEYS = ("bankAccountName", "bankAccountNumber", "bankPassbookImage")
+
 _F2_FIELDS = {
     # 範圍＝所有個人識別／聯絡／帳戶欄位（使用者裁示①「含個資的表改備份到個資資料夾，一般備份排除」，
     # 主持 2026-09-25 釐清：不只三個影像欄）。銀行代碼／銀行名稱／分行是機構資訊，不列入。
@@ -2179,19 +2182,24 @@ _F2_FIELDS = {
     # 稽核 X-9b M-3：建立承攬付款憑據時，從 contractors 把外包**個人**的帳戶凍結進
     # snapshot_json.personnel[]（routers/contractor_vouchers.py）⇒ 同一個 F2 值換一張表存放。
     # "json_list"＝(欄位, 陣列鍵, [鍵…])：一般份把陣列裡每一個物件拿掉這幾個鍵。
-    # ⚠ 最上層的 bankAccountName／bankAccountNumber 是**協力廠商**（承攬商本身）的帳戶，
-    #    是否屬個資待裁示（稽核 O-9，與 vendor_contractors 一起決定），目前照一般表匯出。
+    # 稽核 X-9b O-9（2026-09-25 使用者表單裁示「當成個資分流」）：最上層的帳戶是**協力廠商**
+    # （承攬商本身）的，建立憑據時從 vendor_contractors.data_json 凍結進來 ⇒ 同樣屬 F2（"json"）。
     "承攬付款憑據": {"table": "contractor_payment_vouchers",
+                     "json": ("snapshot_json", _VENDOR_ACCOUNT_KEYS),
                      "json_list": ("snapshot_json", "personnel",
                                    ("bankAccountName", "bankAccountNumber", "bankPassbookImage"))},
+    # 稽核 X-9b O-9：協力廠商（承攬商本身）的帳戶。對象可能是個人工作室 ⇒ 一律當個資。
+    # 銀行代碼／名稱／分行是機構資訊，不列入（同外包人員）。
+    "協力廠商": {"table": "vendor_contractors",
+                 "json": ("data_json", _VENDOR_ACCOUNT_KEYS)},
 }
 #: data_json 解析不了時一般份放這個——**不可以原樣照放**（那等於把個資原樣帶進一般份）
 _F2_UNPARSEABLE = "<含個資欄位且無法解析，僅收錄於個資備份>"
 
 
 def _f2_json_columns(spec: dict) -> list:
-    """這張表裡含 F2 內容的 JSON 欄位（還原時整欄取個資份）。"""
-    return [spec[k][0] for k in ("json", "json_list") if k in spec]
+    """這張表裡含 F2 內容的 JSON 欄位（還原時整欄取個資份）；同一欄同時有 json 與 json_list 只列一次。"""
+    return list(dict.fromkeys(spec[k][0] for k in ("json", "json_list") if k in spec))
 
 
 def _strip_json_f2(raw, list_key, keys):

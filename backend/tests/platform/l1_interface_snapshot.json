@@ -1,5 +1,5 @@
 {
- "core_version": "1.7",
+ "core_version": "1.8",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",

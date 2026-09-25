@@ -64,11 +64,14 @@ CONFIG_FILES = tuple(sorted({
     _rel(_p.INITIAL_ADMIN_CREDENTIALS),
     _rel(_p.INITIAL_DEMO_CREDENTIALS),
     _rel(_p.DEPLOYED_COMMIT_FILE),
-    _rel(_p.BUILD_COMMIT_FILE),
     _rel(_p.NO_CLOUD_MARKER),
     _rel(_p.NO_EMAIL_SEND_MARKER),
     _rel(_p.AUTOSTART_BAT),
 }))
+# ⚠ `.build_commit`（`_p.BUILD_COMMIT_FILE`）**不是**設定：它是打包時寫下「這份程式碼是哪個 commit」，
+#   跟著程式走 ⇒ 歸類成程式（classify 的預設）：轉換時隨新版包安裝、兩種回滾都還原成 V9 的那一份。
+#   歸成設定的話轉換後版本端點仍回 V9 的 commit（STATES-DATA-OPS S-CU12）。
+#   `.deployed_commit.json` 是部署工具寫的「這台機器套用過什麼」，仍屬設定。
 CONFIG_DIRS = (_rel(_p.CERTS_DIR),)
 #: 設定類、但部署包也帶一份預設的檔（稽核 X-9b M-4）。`autostart.bat` 裡有這台機器的對外連線總開關
 #: （MOTRIX_TENDER_RADAR／MOTRIX_GEO），被新版包覆蓋 ＝ 在沒有人知道的情況下改變機器設定。

@@ -249,6 +249,7 @@ import json as _json
 
 _P_ACCT, _P_NAME = "555000999888SENTINEL", "外包哨兵戶名"
 _V_ACCT = "VENDOR-ACCT-424242"
+_V_NAME = "協力哨兵戶名"          # 稽核 X-9b O-9：協力廠商（承攬商本身）的帳戶也是 F2
 
 
 def _f2_json_keys():
@@ -272,10 +273,8 @@ def _f2_json_keys():
 #: 一般份裡**有人決定過**可以留著的 F2 鍵名位置：(檔名, 欄位.路徑) → 理由。
 #: 每一條都必須在本題的資料裡真的出現（沒出現 ⇒ 紅：這張清單不可以變成「全部寫進來就綠」）。
 _F2_KEY_ALLOWED = {
-    ("協力廠商", "data_json.bankAccountNumber"): "協力廠商（承攬商本身）的帳戶；是否屬個資待裁示（稽核 X-9b O-9）",
-    ("協力廠商", "data_json.bankAccountName"): "同上（O-9）",
-    ("承攬付款憑據", "snapshot_json.bankAccountNumber"): "凍結的協力廠商帳戶（最上層，不是 personnel[]）；待裁示（O-9）",
-    ("承攬付款憑據", "snapshot_json.bankAccountName"): "同上（O-9）",
+    # 稽核 X-9b O-9（2026-09-25 使用者表單裁示「當成個資分流」）：協力廠商（承攬商本身）的帳戶
+    # 原本列在這裡照一般表匯出，裁示後移出、改宣告在 `_F2_FIELDS`。目前沒有任何一條例外。
 }
 _PLACEHOLDERS = {archive._IMAGE_PLACEHOLDER, archive._F2_UNPARSEABLE}
 
@@ -335,7 +334,8 @@ def _voucher_via_api(client, make_user):
     h = {"Authorization": "Bearer " + client.post("/api/auth/login",
                                                   json={"username": u, "password": p}).json()["token"]}
     r = client.post("/api/vendor-contractors", headers=h,
-                    json={"name": "哨兵工作室", "data": {"bankAccountNumber": _V_ACCT, "bankAccountName": "哨兵工作室"}})
+                    json={"name": "哨兵工作室", "data": {"bankCode": "812", "bankAccountNumber": _V_ACCT,
+                                                       "bankAccountName": _V_NAME}})
     assert r.status_code == 201, r.text
     r = client.post("/api/contractor-dispatches", headers=h, json={
         "quote_no": "MQ-X9B-M3", "vendor_id": r.json()["id"], "status": "completed",
@@ -351,20 +351,25 @@ def _voucher_via_api(client, make_user):
     finally:
         conn.close()
     assert _P_ACCT in snap, "前提：產品把外包人員帳號凍結進了快照（這題要驗的傳遞路徑）"
+    assert _V_ACCT in snap and _V_NAME in snap, "前提：產品把協力廠商帳戶凍結進了快照最上層（O-9）"
     return snap
 
 
 def test_voucher_snapshot_personnel_accounts_are_f2(client):
-    snap = _json.dumps({"vendorName": "V", "bankAccountNumber": _V_ACCT,
+    snap = _json.dumps({"vendorName": "V", "bankCode": "812", "bankAccountNumber": _V_ACCT,
+                        "bankAccountName": _V_NAME, "bankPassbookImage": _IMG,
                         "personnel": [{"id": 1, "name": "外包", "bankCode": "812",
                                        "bankAccountName": _P_NAME, "bankAccountNumber": _P_ACCT,
                                        "bankPassbookImage": _IMG}]}, ensure_ascii=False)
     row = {"id": 7, "voucher_no": "CV-1", "snapshot_json": snap}
     g = archive._general_row("承攬付款憑據", dict(row))
-    assert _P_ACCT not in str(g) and _P_NAME not in str(g) and "data:image" not in str(g)
+    for bad in (_P_ACCT, _P_NAME, _V_ACCT, _V_NAME, "data:image"):
+        assert bad not in str(g), bad
     gs = _json.loads(g["snapshot_json"])
     assert gs["personnel"][0] == {"id": 1, "name": "外包", "bankCode": "812"}   # 機構資訊與其餘欄位留著
-    assert gs["bankAccountNumber"] == _V_ACCT                                   # 最上層＝協力廠商（O-9 待裁示）
+    # 最上層＝協力廠商（承攬商本身）：O-9 裁示屬 F2 ⇒ 帳戶三鍵拿掉，機構資訊留著
+    assert {k: gs[k] for k in ("vendorName", "bankCode")} == {"vendorName": "V", "bankCode": "812"}
+    assert not {"bankAccountNumber", "bankAccountName", "bankPassbookImage"} & set(gs)
     merged, missing = archive.merge_general_and_pii("承攬付款憑據", [g], [row])
     assert missing == [] and merged == [row]
     assert archive._general_row("承攬付款憑據", {"id": 1, "snapshot_json": "{broken"})["snapshot_json"] \
@@ -372,8 +377,8 @@ def test_voucher_snapshot_personnel_accounts_are_f2(client):
 
 
 def test_general_tree_has_no_f2_copied_into_other_tables(client, make_user, isolated_archive, monkeypatch):
-    """🔴 守門（稽核 X-9b M-3）：走真正的建立憑據 API → 每日＋週備份 → 掃一般樹。
-    ① 哨兵值不可以出現在一般樹的任何檔案；
+    """🔴 守門（稽核 X-9b M-3、O-9）：走真正的建立 API（協力廠商、憑據）→ 每日＋週＋月備份 → 掃一般樹。
+    ① 哨兵值（外包人員帳戶、協力廠商帳戶）不可以出現在一般樹的任何檔案——**與允許清單無關**；
     ② 所有 JSON 欄位（快照等）裡，F2 鍵名有值的位置都必須在 `_F2_KEY_ALLOWED`（有人決定過），
        而且清單裡的每一條都要真的出現（反向控制：不可以靠把位置全寫進清單變綠）。"""
     pii_root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
@@ -383,21 +388,29 @@ def test_general_tree_has_no_f2_copied_into_other_tables(client, make_user, isol
     archive._daily_backup()
     archive._weekly_backup()
 
+    from datetime import date as _d
+    # 正對照：一般樹確實有每日、月備份的協力廠商與憑據 JSON（掃描有對象；週備份不含這兩張表）
+    for layer in ("每日備份", "月備份"):
+        found = [p for p in _walk_files(isolated_archive)
+                 if layer in p and os.path.basename(p) in ("協力廠商.json", "承攬付款憑據.json")]
+        assert len(found) == 2, (layer, found)
     for path in _walk_files(isolated_archive):
         with open(path, "rb") as fh:
             blob = fh.read().decode("utf-8", "replace")
-        for s in (_P_ACCT, _P_NAME):
-            assert s not in blob, "一般雲端目錄的 %s 含外包人員帳戶 %r" % (path, s)
+        for s in (_P_ACCT, _P_NAME, _V_ACCT, _V_NAME):
+            assert s not in blob, "一般雲端目錄的 %s 含帳戶哨兵 %r" % (path, s)
     hits = _general_f2_key_hits(isolated_archive)
     undecided = {h for h in hits if h not in _F2_KEY_ALLOWED}
     assert not undecided, "一般份的 JSON 欄位裡有 F2 鍵名且有值、沒有人決定過：%s" % sorted(undecided)
     unused = set(_F2_KEY_ALLOWED) - hits
     assert not unused, "允許清單裡這幾條本題沒有出現（過期或寫錯，清單不可以只增不減）：%s" % sorted(unused)
 
-    # 正對照：個資資料夾收到了完整快照
-    from datetime import date as _d
-    pii_file = os.path.join(pii_root, "每日備份", _d.today().isoformat(), "承攬付款憑據.json")
-    assert _P_ACCT in open(pii_file, encoding="utf-8").read()
+    # 正對照：個資資料夾收到了完整快照與協力廠商完整列
+    pii_day = os.path.join(pii_root, "每日備份", _d.today().isoformat())
+    voucher_blob = open(os.path.join(pii_day, "承攬付款憑據.json"), encoding="utf-8").read()
+    assert _P_ACCT in voucher_blob and _V_ACCT in voucher_blob and _V_NAME in voucher_blob
+    vendor_blob = open(os.path.join(pii_day, "協力廠商.json"), encoding="utf-8").read()
+    assert _V_ACCT in vendor_blob and _V_NAME in vendor_blob
     assert _json.loads(snap)["personnel"][0]["bankAccountNumber"] == _P_ACCT
 
 
