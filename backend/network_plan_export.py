@@ -14,10 +14,9 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from helpers import _get_edge_path, run_edge_pdf
-from helpers.company_identity import company_name
+from helpers.company_identity import company_name, contact_line, footer_line, location_identity, name_pair
 from network_plan_topology import build_topology_svg, build_topology_text_summary_html
 
-_COMPANY2 = "MOTRIX Synergy Integration Corp."
 
 # (data_json key, 章節/分頁標題, 欄位 [(key, 中文表頭), ...]) —— 與
 # network-plan-form.html::DATA_TABS 一一對應。
@@ -197,7 +196,7 @@ def build_plan_excel(plan: dict) -> bytes:
     # 公司名空白時寫 None 不寫 ""：openpyxl 的空字串會產生非法的空 inlineStr（Excel 開檔要修復）
     ws["A1"] = company_name() or None
     ws["A1"].font = Font(bold=True, size=14)
-    ws["A2"] = _COMPANY2
+    ws["A2"] = location_identity()["company_name_en"] or None   # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
     ws["A2"].font = Font(size=9, color="6B7280")
     ws["A3"] = "網路架構規劃書"
     ws["A3"].font = Font(bold=True, size=12)
@@ -366,8 +365,8 @@ def build_plan_html(plan: dict) -> str:
         "</style>\n</head>\n<body>\n<div id=\"root\">\n"
         '<div class="accent-bar"></div>\n'
         f'<div class="header">\n  <div>\n    <div class="co-name">{_esc(company_name())}</div>\n'
-        f'    <div class="co-sub">{_esc(_COMPANY2)}</div>\n'
-        '    <div class="co-sub" style="margin-top:3px">統一編號：60575481　｜　電話：04-3610-6566　｜　info@miactw.com</div>\n'
+        f'    <div class="co-sub">{_esc(location_identity()["company_name_en"])}</div>\n'
+        f'    <div class="co-sub" style="margin-top:3px">{_esc(contact_line("　｜　", "統一編號：", "電話："))}</div>\n'
         '  </div>\n  <div>\n    <div class="doc-title">網路架構規劃書</div>\n  </div>\n</div>\n'
         '<div class="meta">\n'
         f'  <div><span>規劃書編號：</span>{_esc(plan.get("planNo", ""))}</div>\n'
@@ -378,7 +377,7 @@ def build_plan_html(plan: dict) -> str:
         f"{topo_html}"
         f"{sections_html}"
         f"{rev_html}"
-        f'<div class="footer">{_esc(_COMPANY2)} 允碩整合集創 ｜ info@miactw.com ｜ Tel: 04-3610-6566 ｜ 統一編號: 60575481　｜　產製時間：{datetime.now().strftime("%Y-%m-%d %H:%M")}</div>\n'
+        f'<div class="footer">{_esc(footer_line() + "　｜　" if footer_line() else "")}產製時間：{datetime.now().strftime("%Y-%m-%d %H:%M")}</div>\n'
         "</div>\n</body>\n</html>"
     )
 
@@ -479,7 +478,8 @@ def build_topology_only_html(data: dict, title: str = "", floor_tag: str = "", f
             mod_tag = (mod_tag + "　" if mod_tag else "") + "(" + " + ".join(spec_bits) + ")"
     mod_tag_html = f'<span class="tag mod">{_esc(mod_tag)}</span>' if mod_tag else ""
     floor_tag_html = f'<span class="tag">{_esc(floor_tag)}</span>' if (floor_tag or "").strip() else ""
-    footer_text = (footer or "").strip() or f"{_COMPANY2} 允碩整合集創 ｜ 產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    _np = name_pair()
+    footer_text = (footer or "").strip() or f"{_np + ' ｜ ' if _np else ''}產製時間：{datetime.now().strftime('%Y-%m-%d %H:%M')}"
     return (
         '<!DOCTYPE html>\n<html lang="zh-Hant">\n<head>\n<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'

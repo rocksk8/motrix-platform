@@ -27,7 +27,7 @@ from helpers import (
 from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
 from helpers.financial_mask import money_visible
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
-from helpers.company_identity import company_heading
+from helpers.company_identity import company_heading, contact_line
 from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
     normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
     extra_entries, recognition_flags,
@@ -63,7 +63,6 @@ def _require_reports_access(u: dict) -> None:
         raise HTTPException(403, "僅管理員、或具『營運報表』／『應收帳款』模組的使用者可存取報表")
 
 
-_COMPANY2 = "統一編號 60575481 ｜ Tel: 04-3610-6566 ｜ info@miactw.com"
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -710,7 +709,7 @@ def _build_excel(data: dict, period_label: str, gen_at: str) -> bytes:
 
     ws1.merge_cells("A2:D2")
     c = ws1["A2"]
-    c.value = _COMPANY2
+    c.value = contact_line() or None      # A8c：空白寫 None（openpyxl 空字串會產生非法 inlineStr）
     c.font  = mk(size=9, color="9CA3AF")
     c.fill  = fill(C_DARK)
     c.alignment = al("center")
@@ -2117,7 +2116,7 @@ tr.in-period{{background:#EFF6FF}}
 </style></head><body>
 
 <h1>{company_heading("營運報表", sep=" ")}</h1>
-<div class="sub">{_COMPANY2} ｜ 期間：{period_label} ｜ 產製：{gen_at}</div>
+<div class="sub">{contact_line() + " ｜ " if contact_line() else ""}期間：{period_label} ｜ 產製：{gen_at}</div>
 
 <!-- 摘要 -->
 <div class="section-title" style="background:#1F2937">執行摘要 (Executive Summary)</div>

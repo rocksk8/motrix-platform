@@ -48,7 +48,8 @@
 | A7 | `bonus_vouchers` → M06「建立傳票草稿」連接器 | §3 #18 #19 | ⏳ |
 | A8 | Excel 樣式與匯出速率限制下沉 L1 輸出（`helpers/xlsx_out.py`）；`_COMPANY` → company_identity；`PART_CATEGORIES` → `helpers/part_catalog.py` | §3 #10 #12 #13 #17 | ✅ C |
 | A8b | 待辦：`_collect_tax_invoices`（→ M05 連接器）、`_collect_income_items`（→ M05 連接器）——資料擁有權，A8 未動 | §3 #11 #14 | ⏳ |
-| A8c | 待辦：寫死的公司聯絡資料 `reports._COMPANY2`（統編／電話／email）、`network_plan_export._COMPANY2` 與 PDF 頁尾 → company_identity | A8 發現 | ⏳ |
+| A8c | 寫死的公司聯絡資料 `reports._COMPANY2`、`network_plan_export._COMPANY2` 與頁尾 → company_identity（`contact_line`／`footer_line`／`name_pair`／`short_name`） | A8 發現 | ✅ C |
+| A8d | 待辦（A8c 盤點發現，不在 A8c 範圍）：前端寫死的公司名／統編（`frontend/index.html:827-828`、`pages/login.html:203,303`）；`helpers/auth.py:29` 預設解鎖密碼含統編；`helpers/startup.py:112,130` 初始帳號種子寫死特定人員 email；設定頁 placeholder 用本公司資料 | A8c 發現 | ⏳ |
 | A9 | system 指名 L2（tender／bonus／quote_terms）→ 模組登錄表 | §3 #26 #27 #28 | 🔄 tender 已完成；bonus、quote_terms 尚未 |
 | A10 | 案件聚合（vouchers_by_case、list_dispatches、list_shipping_notes）→ L1「案件關聯資料提供者」 | §3 #20–22 | ⏳ |
 | A11 | google_calendar、case_stage_tasks 跨領域寫入 → 連接器 IP-5 `daily_task.external`、IP-6 `calendar.writeback` | §3.1 | ✅ C（L1 行事曆仍直接讀 5 張表，見 IP-6「尚未處理」） |

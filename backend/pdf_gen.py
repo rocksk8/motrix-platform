@@ -568,15 +568,8 @@ def _identity_foot_short(ident: dict) -> str:
         _short_name(ident.get("company_name", "")))
 
 
-#: 頁尾短名要去掉的尾綴。**只有這幾種，不做更聰明的猜測。**
-_NAME_SUFFIXES = ("股份有限公司", "有限公司", "企業社", "工作室")
-
-
-def _short_name(name: str) -> str:
-    for suffix in _NAME_SUFFIXES:
-        if name.endswith(suffix):
-            return name[: -len(suffix)]
-    return name
+#: 頁尾短名（2026-09-25 A8c：移到 helpers/company_identity.short_name，唯一來源）
+from helpers.company_identity import short_name as _short_name  # noqa: E402
 
 
 def _build_payslip_html(d: dict) -> str:

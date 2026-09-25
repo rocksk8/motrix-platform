@@ -119,6 +119,48 @@ def company_heading(text: str, sep: str = " — ") -> str:
     return f"{name}{sep}{text}" if name else text
 
 
+#: 頁尾短名要去掉的尾綴。**只有這幾種，不做更聰明的猜測。**（2026-09-25 A8c 自 pdf_gen 移來，唯一來源）
+NAME_SUFFIXES = ("股份有限公司", "有限公司", "企業社", "工作室")
+
+
+def short_name(name: str) -> str:
+    for suffix in NAME_SUFFIXES:
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def contact_line(sep: str = " ｜ ", tax_label: str = "統一編號 ", phone_label: str = "Tel: ",
+                 ident: dict = None) -> str:
+    """統編／電話／email 串成一行（ROADMAP A8c：取代 reports／network_plan_export 寫死的聯絡資料）。
+    空的欄位整段略過，不留孤立的分隔符；全部空白 ⇒ `""`。"""
+    ident = ident if ident is not None else location_identity()
+    parts = []
+    if ident.get("tax_id"):
+        parts.append(tax_label + ident["tax_id"])
+    if ident.get("phone"):
+        parts.append(phone_label + ident["phone"])
+    if ident.get("email"):
+        parts.append(ident["email"])
+    return sep.join(parts)
+
+
+def name_pair(ident: dict = None) -> str:
+    """`英文名 短名`（空的略過）。"""
+    ident = ident if ident is not None else location_identity()
+    return " ".join(x for x in (ident.get("company_name_en", ""), short_name(ident.get("company_name", ""))) if x)
+
+
+def footer_line(ident: dict = None) -> str:
+    """頁尾完整版：`英文名 短名 ｜ email ｜ Tel: 電話 ｜ 統一編號: 統編`（全部有值時與 pdf_gen 單據頁尾同格式）；
+    空的欄位整段略過，不留孤立的分隔符。"""
+    ident = ident if ident is not None else location_identity()
+    parts = [name_pair(ident), ident.get("email", ""),
+             ("Tel: " + ident["phone"]) if ident.get("phone") else "",
+             ("統一編號: " + ident["tax_id"]) if ident.get("tax_id") else ""]
+    return " ｜ ".join(x for x in parts if x)
+
+
 def _location_of(payload) -> str:
     """這份單據屬於哪一個據點。回 `""` ⇒ 主要據點。
 
