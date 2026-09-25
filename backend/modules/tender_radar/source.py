@@ -999,7 +999,7 @@ def _notify_health(result, previous):
 
     三種事件各自一個 key、各自邊緣觸發。**任何情況都不把例外往外丟。**
     """
-    from helpers import email_notify
+    from modules.tender_radar import notify as tender_notify
 
     failed = result.get("error") is not None or result.get("recognised") is None
     if failed:
@@ -1007,14 +1007,14 @@ def _notify_health(result, previous):
         # 準位觸發的話，站台掛一週就是七封信——**狼來了的告警等於沒有告警**。
         if not previous["failed"]:
             try:
-                email_notify.notify_tender_fetch_failed(result.get("error") or "")
+                tender_notify.notify_tender_fetch_failed(result.get("error") or "")
             except Exception:  # noqa: BLE001
                 logger.exception("notify_tender_fetch_failed failed")
         return
 
     if result.get("suspect_redesign") and not previous["suspected"]:
         try:
-            email_notify.notify_tender_source_changed(
+            tender_notify.notify_tender_source_changed(
                 result.get("parsed", 0), result.get("dropped", 0))
         except Exception:  # noqa: BLE001
             logger.exception("notify_tender_source_changed failed")
@@ -1032,7 +1032,7 @@ def _notify_found(result=None):
     📌 `result` 可以是 `None`：寄信時段不一定跟著一次抓取
     （設定成「抓 9／寄 18」時，18 點根本沒有 `result`）。
     """
-    from helpers import email_notify
+    from modules.tender_radar import notify as tender_notify
 
     # ⚠️ 疑似改版時**仍然照常通知解析成功的那幾筆**：它們通過了形狀驗證，
     # 是真的標案。因為版面有疑慮就整批不通知的話，**會漏掉真的標案**，
@@ -1063,7 +1063,7 @@ def _notify_found(result=None):
         if not tenders:
             return False
     try:
-        email_notify.notify_tender_found(
+        tender_notify.notify_tender_found(
             tenders, watch_names,
             announce_quiet_period=announce,
             no_watches=not has_watches)

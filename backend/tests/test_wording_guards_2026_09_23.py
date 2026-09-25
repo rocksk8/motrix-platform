@@ -53,7 +53,8 @@ TEXT_KWARGS = ("intro", "note", "title")
 GW1_BASELINE = 0
 
 #: 掃描範圍：會送出文案的那幾支。⚠️ **不是**「檔名含 notify」。
-SCAN_FILES = ("helpers/email_notify.py",)
+#: 模組搬出去的通知一併列入（守門對象不可以被搬走）。
+SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py")
 
 #: `GW2`：異常／失敗類通知要答的四個問題。
 FOUR_FIELDS = ("what", "impact", "system", "action")

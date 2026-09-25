@@ -53,22 +53,36 @@ def test_every_event_key_used_in_email_notify_is_registered():
     import ast
     import pathlib
 
-    src_path = pathlib.Path(__file__).resolve().parent.parent / "helpers" / "email_notify.py"
-    tree = ast.parse(src_path.read_text(encoding="utf-8"))
+    from core import source_tree
+
+    # 模組搬出去的通知（例：modules/tender_radar/notify.py）以 `_en._admin_emails(...)`
+    # 呼叫 ⇒ 掃描範圍含模組檔，且 Name／Attribute 兩種呼叫形式都算。
+    src_paths = [pathlib.Path(__file__).resolve().parent.parent / "helpers" / "email_notify.py"]
+    src_paths += [p for p in source_tree.logic_files() if source_tree.rel(p).startswith("modules/")]
+
+    def _callee(func):
+        if isinstance(func, ast.Name):
+            return func.id
+        if isinstance(func, ast.Attribute):
+            return func.attr
+        return None
 
     recipient_fns = {"_admin_emails", "_superadmin_emails"}
     used = {}  # event_key -> 呼叫它的函式名稱（錯誤訊息用）
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        for inner in ast.walk(node):
-            if (isinstance(inner, ast.Call)
-                    and isinstance(inner.func, ast.Name)
-                    and inner.func.id in recipient_fns
-                    and inner.args
-                    and isinstance(inner.args[0], ast.Constant)
-                    and isinstance(inner.args[0].value, str)):
-                used.setdefault(inner.args[0].value, node.name)
+    for src_path in src_paths:
+        tree = ast.parse(src_path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for inner in ast.walk(node):
+                if (isinstance(inner, ast.Call)
+                        and _callee(inner.func) in recipient_fns
+                        and inner.args
+                        and isinstance(inner.args[0], ast.Constant)
+                        and isinstance(inner.args[0].value, str)):
+                    used.setdefault(inner.args[0].value, node.name)
+    # 正對照：搬出去的那三個 key 一定要掃得到，否則守門的對象已經被搬走了
+    assert {"tender_found", "tender_fetch_failed", "tender_source_changed"} <= set(used), sorted(used)
 
     assert used, "沒有掃到任何 event key，掃描邏輯可能已與 email_notify.py 的寫法脫節"
     missing = {k: fn for k, fn in used.items() if k not in EVENT_KEYS}

@@ -47,7 +47,8 @@ from tests._timefreeze import freeze_slot
 # ── 契約 ─────────────────────────────────────────────────────────────────────
 
 import modules.tender_radar.source as ts  # noqa: E402  第 4 輪已存在
-import helpers.email_notify as en   # noqa: E402  既有模組
+import helpers.email_notify as en   # noqa: E402  L1 寄信原語（_send_raising 等觀測點）
+import modules.tender_radar.notify as tn  # noqa: E402  三支 notify_tender_*（2026-09-25 自 en 搬入）
 import helpers.notification_prefs as np  # noqa: E402  既有模組
 
 NOTIFY_FOUND = "notify_tender_found"
@@ -570,8 +571,8 @@ def test_n6_suspected_redesign_is_a_different_event(
     """
     from tests.test_tender_match_2026_09_21 import HTML_MOSTLY_DROPPED
     _seed_log([])
-    changed = _spy(monkeypatch, en, NOTIFY_CHANGED)
-    failed = _spy(monkeypatch, en, NOTIFY_FAILED)
+    changed = _spy(monkeypatch, tn, NOTIFY_CHANGED)
+    failed = _spy(monkeypatch, tn, NOTIFY_FAILED)
     _run(monkeypatch, page=HTML_MOSTLY_DROPPED)
     assert len(changed) == 1, f"疑似改版要通知一次，實際 {len(changed)} 次"
     assert len(failed) == 0, "疑似改版不可以走「抓不到」那個事件 key —— 處置不同"
