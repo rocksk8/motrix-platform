@@ -133,3 +133,14 @@ def test_stale_health_expires(client, monkeypatch):
     import time
     monkeypatch.setattr(dd, "_last_health", {"at": time.time() - dd.HEALTH_VALID_SECONDS - 5, "ok": True})
     assert client.post("/api/deploy", json=BODY).status_code == 409
+
+
+def test_remote_failure_shows_stderr_not_just_a_generic_message():
+    # 2026-09-25 使用者實跑：畫面只有「連線失敗」，真正的原因在 stderr 被丟掉
+    import types
+    p = types.SimpleNamespace(returncode=1, stdout="", stderr="Connecting to remote server 172.16.10.177 failed: Access is denied.")
+    assert "Access is denied" in dd._remote_error(p)
+    p = types.SimpleNamespace(returncode=1, stdout="[FAIL] 某原因", stderr="")
+    assert dd._remote_error(p) == "[FAIL] 某原因"
+    p = types.SimpleNamespace(returncode=5, stdout="", stderr="")
+    assert "exit 5" in dd._remote_error(p)

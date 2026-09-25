@@ -632,6 +632,15 @@ def _run_job(job_id: str, action: str, cmd: list, input_text: str = None):
                     _active_job_id = None
 
 
+def _remote_error(proc) -> str:
+    """遠端腳本失敗時給畫面的訊息：stdout 與 stderr 都要帶。
+    2026-09-25 使用者實跑只看到「連線失敗」——PowerShell 未攔截的例外只寫 stderr，原本整段被丟掉。"""
+    out = (proc.stdout or "").strip()
+    err = (proc.stderr or "").strip()
+    parts = [x[-1500:] for x in (out, err) if x]
+    return "\n".join(parts) if parts else f"連線失敗（exit {proc.returncode}，沒有任何輸出）"
+
+
 def _ps_cmd(script_path: Path, named_args: dict = None) -> list:
     """組出呼叫某支 .ps1 的 powershell 指令列表，並強制 Console 輸出用 UTF-8
     （這台機器的預設主控台編碼不是 UTF-8，Write-Host 的中文字不強制轉碼會
@@ -1117,7 +1126,7 @@ def list_snapshots(body: SnapshotsIn):
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
 
     if proc.returncode != 0:
-        return JSONResponse(status_code=502, content={"detail": proc.stdout.strip() or "連線失敗"})
+        return JSONResponse(status_code=502, content={"detail": _remote_error(proc)})
 
     # 輸出裡混著「連線正式機...」這類 Write-Host 進度行，且 ConvertTo-Json
     # 預設會跨多行印出——_dashboard_remote.ps1 在 JSON 前印了固定的
@@ -1152,7 +1161,7 @@ def _run_remote_json(action: str, username: str, password: str, timeout=90):
     except subprocess.TimeoutExpired:
         return None, "連線正式機逾時"
     if proc.returncode != 0:
-        return None, proc.stdout.strip() or "連線失敗"
+        return None, _remote_error(proc)
     marker = "===JSON==="
     if marker not in proc.stdout:
         return None, "正式機回傳內容沒有 JSON 區塊"
@@ -1410,7 +1419,7 @@ def log_tail(body: LogTailIn):
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
 
     if proc.returncode != 0:
-        return JSONResponse(status_code=502, content={"detail": proc.stdout.strip() or "連線失敗"})
+        return JSONResponse(status_code=502, content={"detail": _remote_error(proc)})
 
     marker = "===JSON==="
     if marker in proc.stdout:
@@ -1447,7 +1456,7 @@ def check_only(body: CheckOnlyIn):
         return JSONResponse(status_code=504, content={"detail": "連線正式機逾時"})
 
     if proc.returncode != 0:
-        return JSONResponse(status_code=502, content={"detail": proc.stdout.strip() or "連線失敗"})
+        return JSONResponse(status_code=502, content={"detail": _remote_error(proc)})
 
     marker = "===JSON==="
     if marker in proc.stdout:
