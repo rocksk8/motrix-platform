@@ -4,6 +4,7 @@
   python tools/platform/modtest.py                     工作樹相對 HEAD 的改動（含未追蹤）
   python tools/platform/modtest.py --base <SHA>        git diff --name-only <SHA>
   python tools/platform/modtest.py --commit <SHA>      該 commit 本身的改動（<SHA>^..<SHA>）
+  python tools/platform/modtest.py --changed-since <SHA>  <SHA> 之後到 HEAD 的已提交改動（不含工作樹）
   python tools/platform/modtest.py --files a.py b.html 直接指定改動檔
   --dry-run   只印受影響單位、測試清單與題數（collect-only 全部一次再篩），不執行
   --full      跑全量（basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖）
@@ -17,7 +18,7 @@
   3. 測試的 units 與受影響單位相交 ⇒ 選；dir: 單位涵蓋其下任一改動檔。
   4. 改動的測試檔本身必選；改到 fixture 層（conftest／pytest.ini／requirements）⇒ 必須全量，拒絕縮小。
   5. core:main 經 client／live_server fixture 被所有 api／e2e 測試隱含依賴 ⇒ 一併選入。
-  6. 契約測試（backend/tests/platform/、core/tests/、modules/*/tests/ 中的 contract）每次必跑（目前不存在則略過並註明）。
+  6. 契約測試（backend/tests/platform/、backend/core/tests/ 下所有 test_*.py）每次必跑；目錄不存在則略過並註明。
 
 暫存：basetemp＝%TEMP%/motrix-pytest-<window>-modtest-<隨機>；結束（綠／紅／Ctrl-C）一律刪除，只刪這一個目錄。
 """
@@ -51,7 +52,7 @@ FIXTURE_LAYER = (
 #: api／e2e 測試經 fixture 隱含依賴的單位
 FIXTURE_IMPLIED = {"core:main"}
 #: 契約測試所在（存在才算）
-CONTRACT_DIRS = ("backend/tests/platform", "core/tests")
+CONTRACT_DIRS = ("backend/tests/platform", "backend/core/tests")
 TEMP_PREFIX = "motrix-pytest-"
 
 
@@ -63,11 +64,15 @@ def git(*args):
 def changed_files(a):
     if a.files:
         return sorted({f.replace("\\", "/") for f in a.files})
+    # --no-renames：搬檔時新舊路徑都要算（舊路徑的單位才對得到既有測試）
     if a.commit:
-        out = git("diff-tree", "--no-commit-id", "--name-only", "-r", "--root", a.commit)
-        return sorted(set(out.split()))
+        out = git("diff-tree", "--no-commit-id", "--name-only", "--no-renames", "-r", "--root", a.commit)
+        return sorted(set(l for l in out.splitlines() if l.strip()))
+    if a.changed_since:
+        out = git("diff", "--name-only", "--no-renames", a.changed_since, "HEAD")
+        return sorted(set(l for l in out.splitlines() if l.strip()))
     base = a.base or "HEAD"
-    out = git("diff", "--name-only", base)
+    out = git("diff", "--name-only", "--no-renames", base)
     if not a.base:
         out += git("ls-files", "--others", "--exclude-standard")
     return sorted(set(l for l in out.splitlines() if l.strip()))
@@ -328,6 +333,7 @@ def main(argv=None):
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--base")
     g.add_argument("--commit")
+    g.add_argument("--changed-since", metavar="SHA", help="SHA 之後（不含）到 HEAD 的已提交改動")
     g.add_argument("--files", nargs="+")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true")

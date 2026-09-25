@@ -164,7 +164,7 @@ def main(argv):
             return 1
         _write(BASELINE, "edges", edges, "L2 跨組 import 邊的基線：只准變少。新增⇒守門紅；消失⇒用 --prune 刪除。")
         _write(EXCEPTIONS, "exceptions",
-               [{"table": w.split(" <- ")[0], "writer": w.split(" <- ")[1], "ref": ""} for w in writes],
+               [{"table": w.split(" <- ")[0], "writer": w.split(" <- ")[1], "ref": "", "kind": ""} for w in writes],
                "L2 表被非擁有組直接寫入的例外：只准變少；ref 寫出處（DEPENDENCY-MAP §4 等）。")
         print("建立：%d 條邊、%d 筆例外" % (len(edges), len(writes)))
         return 0

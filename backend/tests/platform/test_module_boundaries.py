@@ -104,6 +104,13 @@ def test_write_exceptions_cite_a_source(exceptions):
     assert not missing, "白名單每一筆都要寫出處（ref）：" + _fmt(missing)
 
 
+def test_write_exceptions_are_classified(exceptions):
+    """kind=frozen：凍結 migration（只有 core:db），永久保留；kind=debt：拆模組時逐筆清掉。"""
+    bad = ["%s <- %s kind=%r" % (e["table"], e["writer"], e.get("kind")) for e in exceptions
+           if e.get("kind") not in ("frozen", "debt") or (e.get("kind") == "frozen") != (e["writer"] == "core:db")]
+    assert not bad, "kind 必須是 frozen（僅 core:db 凍結 migration）或 debt：" + _fmt(bad)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # 反向控制：每一條斷言用的判定函式，在突變後必須報出突變
 # ══════════════════════════════════════════════════════════════════════════
