@@ -95,9 +95,9 @@
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；privacy_notice_acks 在 M04 搬遷時改用模組自己的表。
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
   - C｜`wip/c-d7`｜afccc3b8｜tests/platform＋test_upgrade_drill＋test_states_data_ops：623 過（-m not e2e）｜🔴 動到 L0（`core/upgrade.py`：RUNTIME_STATE_SETTINGS，D7 預演抓到的升級阻擋點）；fixture 層／main.py：無；CHANGELOG 段落暫用號，core_bump 已在本地套用（列車上請再依 origin 重新取號）｜⛔ **退回（2026-09-26 03:05）：D 必修 K-M1**，完整回滾沒有驗到用第一份備份還原成原始的 V9 庫；修好後重新登記
-  - wip/x-r-fix｜8cc2dd29｜差異題綠（R 系列＋新題 136、e2e 25、修補後 70）；曾在 2c8ff4d3 跑全量：非 e2e 4100 綠 2 紅（報價表單版號、全站用詞＝本包自己的，已於 8cc2dd29 修好）、e2e 389 綠｜不動 fixture 層／main；L1 新增（暫 CORE 1.12，需 core_bump）、version_manifest 加「勞報單 2026-09-26c」並在「報價單 2026-09-25r」句尾加一句（VR3）｜登記 02:38 X-R
-  - X-UC｜`wip/x-unitcard`｜14ee6bc9｜tests/platform＋契約題 2 檔：637 過（-n 2、低優先權）；突變 12 全紅｜fixture 層／main：無；動 L0 `core/*.py` 9 檔但**只改模組 docstring**（AST 去掉 docstring 後與 origin 相同、G1 快照不變、core_bump：不用升版）；新增 tools/platform/unit_index.py、tests/platform/test_unit_cards.py、docs/platform/UNIT-INDEX.md｜登記 2026-09-26 02:56 X-UC
-  - A｜`wip/a-mail`｜29f863c4｜合回閘門（tests/platform＋tender_radar 模組題＋所有碰信件程式／users.html 的題＋信件 e2e，-n 2）：1217 過、2 紅（本包自己的：EM1 長訊息清單、角色字串守門），修好後該 4 檔 45 過；突變 11＋e2e 1 全紅｜🔴 **動 L1 與 main.py**：新增 `helpers/mail_types.py`、`routers/mail_settings.py`（main 掛載）、`email_notify` 收件人與內文格式；fixture 層：無。CHANGELOG 段落暫用號（本地 core_bump 暫取 1.13，列車上請再依 origin 取號）；已 rebase 到 55acc94e（a-bonus 合回後）｜登記 2026-09-26 03:12 A
+  - wip/x-r-fix｜8cc2dd29｜差異題綠（R 系列＋新題 136、e2e 25、修補後 70）；曾在 2c8ff4d3 跑全量：非 e2e 4100 綠 2 紅（報價表單版號、全站用詞＝本包自己的，已於 8cc2dd29 修好）、e2e 389 綠｜不動 fixture 層／main；L1 新增（暫 CORE 1.12，需 core_bump）、version_manifest 加「勞報單 2026-09-26c」並在「報價單 2026-09-25r」句尾加一句（VR3）｜登記 02:38 X-R｜🚆 已上車（第一班，2026-09-26 03:17）
+  - X-UC｜`wip/x-unitcard`｜14ee6bc9｜tests/platform＋契約題 2 檔：637 過（-n 2、低優先權）；突變 12 全紅｜fixture 層／main：無；動 L0 `core/*.py` 9 檔但**只改模組 docstring**（AST 去掉 docstring 後與 origin 相同、G1 快照不變、core_bump：不用升版）；新增 tools/platform/unit_index.py、tests/platform/test_unit_cards.py、docs/platform/UNIT-INDEX.md｜登記 2026-09-26 02:56 X-UC｜🚆 已上車（第一班，2026-09-26 03:17）
+  - A｜`wip/a-mail`｜29f863c4｜合回閘門（tests/platform＋tender_radar 模組題＋所有碰信件程式／users.html 的題＋信件 e2e，-n 2）：1217 過、2 紅（本包自己的：EM1 長訊息清單、角色字串守門），修好後該 4 檔 45 過；突變 11＋e2e 1 全紅｜🔴 **動 L1 與 main.py**：新增 `helpers/mail_types.py`、`routers/mail_settings.py`（main 掛載）、`email_notify` 收件人與內文格式；fixture 層：無。CHANGELOG 段落暫用號（本地 core_bump 暫取 1.13，列車上請再依 origin 取號）；已 rebase 到 55acc94e（a-bonus 合回後）｜登記 2026-09-26 03:12 A｜🚆 已上車（第一班，2026-09-26 03:17）
 - **全量名額排隊**（更新 2026-09-26 02:43）：§G3 生效後，新的全量改由列車統一跑。仍在跑、而且依規定跑完就直接合回的有：B 的 C1（合回閘門約 02:52）、C 的第二批全量。A 的 a-bonus 走合回閘門，不經過測試鎖。⚠ A 有一支孤兒 pytest（pid 53300），停不掉，已請使用者處理。**第一班列車預計約 03:15 發車**，要等月台上至少有 3 包（目前只有 x-r-fix 1 包）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
@@ -111,6 +111,11 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 03:17：**第一班列車發車**（train/0926-0313，worktree D:\MOTRIX-PLATFORM-TRAIN）。
+  - 上車：a-mail（車頭，動到 L1 與 main）、x-r-fix、x-unitcard。
+  - 列車上取號：a-mail 1.14、x-r-fix 1.15（core_bump）。版本紀錄方面，勞報單改用 26d（26c 已被獎金分潤用掉）、系統 26a 採用 origin 版。INTEGRATION-POINTS 與 MODULE-GUIDE 兩邊的內容都保留。UNIT-INDEX 已重產；CHANGELOG 沒有重複段落。
+  - 全量開跑（-n 4），預估 55 分鐘，死線約 04:40。
+  - ⚠ 主持的錯誤：解 x-r-fix 的衝突時，腳本的斷言擋下了，但同一個指令照樣把帶衝突標記的 version_manifest 加進 commit，列車上的 3ade2ad2 因此含有衝突標記。下一個 commit 已修正，列車最終的內容是乾淨的；中間那個 commit 不改寫。教訓：解衝突的腳本和 git add 不可以寫在同一個指令裡。
 - 2026-09-26 03:15 D：⑦ wip/a-mail 合回前稽核（`AUDIT-D-A-mail-settings.md`）：必修 M-M1（找不到超級管理員時不退回一般管理員——行為正確但無題目，突變存活）；grep＋AST 查過所有寄信呼叫點，沒有未登記的寄送路徑。
 - 2026-09-26 03:10：
   - B 的 C1（core.pages）已合回（8235c8ed＋97192db6，CORE 1.13；閘門 650 綠）。守門補上第三種寫死頁面路徑的寫法（基線 79 檔 138 處），順手修了 a-bonus 自己拼頁面路徑的 3 處。
