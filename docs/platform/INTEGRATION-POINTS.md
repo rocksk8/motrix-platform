@@ -192,6 +192,42 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-13　`quotation.append_items`：把外部品項附加到草稿報價單（M01 → M04）
+
+對應 l2_import_baseline `M04 router:vendor_contractors -> M01 helper:quotations`。原本 M04「派工品項匯入報價單」自己讀 `quotations`、組報價品項、呼叫 M01 的 `save_quotation_json` 寫回。報價單的格式與寫入歸 M01。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`routers/quotations.py::_append_items_to_quotation` |
+| 使用方 | M04 `routers/vendor_contractors.py::import_dispatch_to_quote`（`POST /api/contractor-dispatches/{did}/import-to-quote`） |
+| 形式 | provider，單一提供者；要與呼叫端同一筆交易（呼叫端已拿寫鎖）⇒ 不用事件 |
+| 語法 | 提供：`_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)`<br>取用：`append = registry.single_provider("quotation.append_items")`；`None` ⇒ 退化。`append(conn, quote_no, header, items, now) -> now`；`items`＝`[{description, qty, unit, cost, note}]` |
+| 回傳 | 在呼叫端連線上寫、不 commit。報價單不存在 ⇒ `HTTPException(404)`；不是草稿 ⇒ `409`（原本在 M04 的規則逐字搬來）。品項換成報價品項：成本＝cost、毛利 30%、售價由報價單自己算；前面加一列區段標題 |
+| 對方不在時 | 匯入端點回 `409`＋`QUOTE_IMPORT_UNAVAILABLE`（「案件模組未安裝：無法把派工品項匯入報價單」），派工本身不動 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_subcontract_connectors.py` |
+
+---
+
+## IP-14　`contractor_voucher.public`：承攬商匯款申請的對外形狀（M04 → M05 出納、M06 會計匯出）
+
+對應 l2_import_baseline `M05 router:cashier -> M04 router:contractor_vouchers`、`M06 router:accounting_export -> M04 router:contractor_vouchers`。原本兩處直接 import `_voucher_public`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M04 外包工班：`routers/contractor_vouchers.py::_voucher_public` |
+| 使用方 | M05 `routers/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
+| 形式 | provider，單一提供者 |
+| 語法 | 提供：`_registry.provide("contractor_voucher.public", "subcontract", _voucher_public)`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
+| 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
+| 對方不在時 | 出納待付款：`404`＋`CONTRACTOR_MISSING`（「外包工班模組未安裝：出納頁不顯示承攬商匯款」），頁面顯示這一句；執行歷史：`outgoing` 空、`contractorNotice` 明說，Excel「已匯款明細」第一列寫同一句；T100 預覽：`notice`＝`T100_CONTRACTOR_MISSING`（匯出的 Excel 是 T100 匯入檔，不加說明列）。皆不丟例外 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_subcontract_connectors.py` |
+
+**尚未處理**：M01／M05／M06／M08 與 L1（封存、PDF、報表、傳票附件）仍**直接讀** `contractor_payment_vouchers`、`contractor_dispatches`、`vendor_contractors`、`contractors`；M04 不在時表仍在（凍結 migration），讀取不會壞。讀取連接器另開題。
+
+---
+
 ## U4 撥付時的扣繳與補充保費：使用 IP-7（L1 法規參數服務，R1）
 
 不是新的串接點（M07 → L1 是合法相依，直接 `from helpers import legal_params as lp`）；寫在這裡，是因為它決定了「參數讀不到時」獎金撥付的行為。IP-7 的六項見 R1 的條目，以下是 M07 這一側的使用契約。

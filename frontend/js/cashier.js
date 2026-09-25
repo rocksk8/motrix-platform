@@ -86,6 +86,8 @@ function cashierApp() {
     cashierHistoryBonusTotal: 0,
     cashierHistoryBonusVisible: false,
     cashierHistoryBonusNotice: '',
+    payableNotice: '',                   // IP-14：外包工班模組不在時的說明
+    cashierHistoryContractorNotice: '',
     // 原 cashier.js 叫 exporting，這裡本來就有同名的「exporting」給財務報表
     // 匯出用（見 exportFile()），改名避免互踩
     cashierExporting: false,
@@ -183,8 +185,9 @@ function cashierApp() {
     async loadPayable() {
       try {
         const r = await fetch('/api/cashier/payable-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
-        if (r.ok) this.payable = await r.json()
+        if (r.ok) { this.payable = await r.json(); this.payableNotice = '' }
         else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+        else if (r.status === 404) { this.payable = []; this.payableNotice = ((await r.json().catch(() => ({}))).detail) || '' }
       } catch (e) { console.error(e) }
     },
 
@@ -211,6 +214,7 @@ function cashierApp() {
           this.cashierHistoryBonusTotal = d.bonusPaidTotal || 0
           this.cashierHistoryBonusVisible = !!d.bonusVisible
           this.cashierHistoryBonusNotice = d.bonusNotice || ''
+          this.cashierHistoryContractorNotice = d.contractorNotice || ''
         }
       } catch (e) { console.error(e) }
       this.cashierHistoryLoading = false
