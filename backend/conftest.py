@@ -94,6 +94,25 @@ def _bk19_write_allowed(path) -> bool:
             return True
         except ValueError:
             continue
+    return _bk19_interpreter_bytecode_cache(resolved)
+
+
+def _bk19_interpreter_bytecode_cache(resolved) -> bool:
+    """直譯器自己的位元組碼快取：執行中環境（sys.prefix／base_prefix）底下的 `__pycache__`。
+
+    2026-09-25（B，專案 .venv）：第一次 import `starlette.testclient` 時 Python 會在
+    `.venv/Lib/site-packages/anyio/__pycache__` 建目錄 ⇒ 從 worktree 跑時 .venv 在「repo 外」⇒ 被當成事故。
+    ⚠ 只放行 `__pycache__`（名字與位置都要對），環境底下其他任何寫入照樣擋。
+    """
+    import sys as _sys
+    if "__pycache__" not in resolved.parts:
+        return False
+    for prefix in {_sys.prefix, _sys.base_prefix}:
+        try:
+            resolved.relative_to(_Bk19Path(prefix).resolve())
+            return True
+        except (ValueError, OSError):
+            continue
     return False
 
 

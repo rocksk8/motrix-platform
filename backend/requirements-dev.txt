@@ -25,3 +25,12 @@ requests>=2.31.0
 # paths/ports) holds up under multiple worker processes -- sequential and
 # -n auto runs produced identical pass/fail results.
 pytest-xdist>=3.5.0
+
+# 2026-09-25 (project .venv): found by running the suite in a clean venv built
+# only from requirements*.txt -- the shared python on this machine happened to
+# have them, so nobody noticed they were never declared.
+# httpx2: starlette>=1.x TestClient requires it (plain httpx is deprecated there).
+httpx2>=2.0
+# opencv/numpy: QR decoding in test_no_credentials_in_query (TOTP setup image).
+opencv-python-headless>=4.8
+numpy>=1.24

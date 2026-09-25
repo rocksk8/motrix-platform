@@ -39,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_map import REPO, build as build_map, unit_name  # noqa: E402
+import project_env  # noqa: E402
 
 BACKEND = REPO / "backend"
 MAP_PATH = REPO / "docs" / "platform" / "test_map.json"
@@ -269,11 +270,28 @@ def _remove_basetemp(p):
         print("[暫存] %s 仍有檔案刪不掉（被占用），請手動刪除（只刪這一個）" % p)
 
 
+#: 跑 pytest 用的直譯器：預設主工作樹的專案 .venv（照 requirements 安裝）；由 main() 決定
+PYEXE = None
+
+
+def resolve_python(explicit=None):
+    """--python 指定 ⇒ 用它；否則專案 .venv；都沒有 ⇒ **明確警告**再退回目前的直譯器（不默默退）。"""
+    if explicit:
+        return explicit
+    py = project_env.venv_python()
+    if py is not None:
+        return str(py)
+    print("⚠ 找不到專案 .venv（%s）⇒ 這一輪改用 %s，套件版本不一定等於 requirements.txt。"
+          "\n  建立：python tools/platform/project_env.py create" % (project_env.main_worktree_root() / ".venv",
+                                                                    sys.executable))
+    return sys.executable
+
+
 def run_pytest(targets, extra, window, full, collect_only=False):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。"""
     bt = _new_basetemp(window, full)
     rel = [str(Path(t).relative_to("backend")) if t.startswith("backend/") else t for t in targets]
-    cmd = [sys.executable, "-m", "pytest", *rel, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
+    cmd = [PYEXE or sys.executable, "-m", "pytest", *rel, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
     if collect_only:
         cmd += ["--collect-only", "-q"]
     cmd += extra
@@ -408,6 +426,9 @@ def run_full(extra, a):
         "started": _now(), "finished": None,
         "passed": None, "failed": None, "errors": None, "skipped": None,
         "e2e": None, "ok": False, "interrupted": False,
+        "python": PYEXE or sys.executable,
+        "python_version": subprocess.run([PYEXE or sys.executable, "-c", "import sys;print(sys.version.split()[0])"],
+                                         capture_output=True, text=True).stdout.strip(),
     }
     stages = [("main", ["-m", "not e2e", "-n", str(a.workers)], a.window),
               ("e2e", ["-m", "e2e", "-n", str(a.e2e_workers)], a.window + "e2e")]
@@ -449,6 +470,7 @@ def main(argv=None):
     ap.add_argument("--e2e-workers", type=int, default=4, help="--full e2e 段的 xdist worker 數")
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
+    ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
     ap.add_argument("--list", action="store_true", help="dry-run 另列每個測試檔與原因")
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -459,6 +481,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not re.fullmatch(r"[A-Za-z0-9_]+", a.window):
         ap.error("--window 只能是英數底線")
+    global PYEXE
+    PYEXE = resolve_python(a.python)
 
     if a.full:
         if a.dry_run:

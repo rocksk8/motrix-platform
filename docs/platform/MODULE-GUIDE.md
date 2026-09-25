@@ -148,6 +148,8 @@ modules/<key>/
 - 改 L1 ⇒ 範圍接近全量，是結構造成的，就接受全量。
 - 動到 fixture 層（conftest、pytest.ini、requirements）⇒ 一律全量。
 - pytest 一律帶自己的 `--basetemp`，跑完刪掉。
+- 測試一律跑在主工作樹的專案 `.venv`（只照 `backend/requirements*.txt` 安裝；`python tools/platform/project_env.py create`）；`modtest` 預設用它，找不到會警告。與正式機環境的差異用 `project_env.py check`（讀 `backend/tools/prod_env.json`）。
+- 守門：`tests/platform/test_requirements_cover_imports.py`——產品碼 import 的第三方套件要能從 requirements.txt 裝到；測試要能從 requirements＋requirements-dev 裝到（含相依）。
 - 測試函式不要取成 `test_<字母><數字>_…` 這種形式（例：`test_l2_…`）：`test_spec_coverage` 會把它當成規格條件編號。
 - 守門的正對照不可以綁在特定的 L2 模組上（拿掉那個模組，守門就會失效）；改用合成的假模組，或「任取一個已載入的模組」。
   - 子行程要換模組樹：在 `import main` 之前改 `core.loader.MODULES_DIR`／`MODULES_PACKAGE`（`load_all()` 在呼叫當下才讀；例：`tests/platform/child_module_gate.py`）。「任取」找不到時用 `pytest.skip` 說明原因，不可以紅。
