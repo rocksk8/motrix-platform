@@ -14,8 +14,8 @@
 import pytest
 
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
-from tests._bonus_insure import insure_all  # noqa: E402
     people, _seed_case, _create, _members_spec, _auth)
+from tests._bonus_insure import insure_all  # noqa: E402
 
 ACCOUNTS = "/api/bonus/cases/voucher-accounts"
 
