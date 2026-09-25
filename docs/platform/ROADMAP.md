@@ -75,7 +75,8 @@
 9. M03 採購庫存出貨 — 需要 §4 的 stock_items
 10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
-   - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
+   - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider）
+   - 每日工作頁「進行中案件」依賴 `/api/sales-orders`（2026-09-26 自 M08 移入 routers/quotations.py）；M01 不在時，每日工作頁要明說「需要案件模組」，不可以留空清單（主持 2026-09-26 裁示），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
 
 ## 階段 G：準則的守門（MODULE-GUIDE 標「⚠ 未守門」的項目）
 

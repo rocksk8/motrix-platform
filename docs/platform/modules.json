@@ -231,7 +231,8 @@
     "/api/case-changes",
     "/api/completion-notes",
     "/api/next-quote-no",
-    "/api/quotations"
+    "/api/quotations",
+    "/api/sales-orders"
    ]
   },
   "M02": {
@@ -457,8 +458,7 @@
     "/api/dashboard",
     "/api/devices",
     "/api/materials-summary",
-    "/api/reports",
-    "/api/sales-orders"
+    "/api/reports"
    ]
   },
   "M10": {

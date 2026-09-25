@@ -22,6 +22,8 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from db import get_db, spawn_bg_thread
+from db import db_conn  # /api/sales-orders（M08 搬遷移入）
+from helpers.quotations import payment_item_amounts  # 同上
 from helpers import row_access
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
@@ -6901,3 +6903,79 @@ def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -
 
 _registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
 _registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)
+
+
+# ── /api/sales-orders：已成案／已結案案件清單（2026-09-26 自 routers/dashboard.py 移入，M08 搬遷，主持裁示 a）──
+# 資料屬於 M01（quotations／case_stages）；唯一的使用者是 M12 每日工作頁的「進行中案件」。URL、權限不變，本體逐字搬來。
+
+@router.get("/api/sales-orders")
+def list_sales_orders(authorization: str = Header(None)):
+    """已成案／已結案案件清單（含金額與毛利率）。
+
+    2026-09-13（模組權限稽核）：原本只要求登入。這支回的是全公司成案金額與
+    **毛利率**，而它的頁面 `sales-orders.html` 在 2026-08-31（`87e16cb`）就已退役
+    ——端點卻留著沒有任何模組檢查，等於任何登入者（含 viewer、automation 服務
+    帳號）都撈得到。依使用者裁示補上兩道：①`finance` 模組或 admin+（比照
+    `cashier.py::_require_view_access()`，`finance` 這個模組的標籤本來就是
+    「應收帳款／銷售訂單」）②財務金額可視（viewer／engineer 不該看到金額）。
+    """
+    user = _require_user(authorization)
+    if user["role"] not in ("superadmin", "admin") and not user_has_module(user, "finance"):
+        raise HTTPException(403, "僅管理員或具『應收帳款／銷售訂單』模組的使用者可查閱")
+    if not can_see_financial(user):
+        raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+    with db_conn() as conn:
+        rows = conn.execute("""
+            SELECT quote_no, customer_name, project_name, total, pretax, quote_date, sales_person,
+                   net_margin_pct,
+                   COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '')         AS deal_tag,
+                   json_extract(data_json,'$.caseRecord')      AS case_record_json,
+                   json_extract(data_json,'$.deliveryTerms')   AS delivery_terms,
+                   json_extract(data_json,'$.deliveryAddress') AS delivery_address,
+                   (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no)
+                       AS stages_count,
+                   (SELECT COUNT(*) FROM case_stages cs WHERE cs.quote_no = quotations.quote_no AND cs.done=1)
+                       AS stages_done
+            FROM quotations
+            WHERE COALESCE(NULLIF(deal_tag,''), json_extract(data_json,'$.dealTag'), '') IN ('已成案','已結案')
+            ORDER BY quote_date DESC
+        """).fetchall()
+
+    items = []
+    for r in rows:
+        cr = {}
+        if r["case_record_json"]:
+            try: cr = json.loads(r["case_record_json"])
+            except Exception: pass
+
+        pay_items = (cr.get("payment") or {}).get("items", [])
+        total = r["total"] or 0
+        recv_amount = 0
+        if pay_items:
+            amounts = payment_item_amounts(total, pay_items, r["pretax"])
+            for i, p in enumerate(pay_items):
+                amt = amounts[i]
+                if p.get("received"):
+                    recv_amount += amt
+
+        # Phase 5（2026-08-23）：progress_pct/stagesCount 改用 case_stages 表的 SQL
+        # 聚合子查詢（見上面 SELECT），取代解析 caseRecord.stages JSON 陣列——
+        # payment.items 仍需要整包 caseRecord JSON（跟 stages 無關，不在這次範圍）。
+        stages_count = r["stages_count"] or 0
+        progress_pct = round(r["stages_done"] / stages_count * 100) if stages_count else 0
+
+        items.append({
+            "quoteNo":        r["quote_no"],
+            "customer":       r["customer_name"] or "",
+            "projectName":    r["project_name"] or "",
+            "dealTag":        r["deal_tag"] or "",
+            "total":          total,
+            "receivedAmount": recv_amount,
+            "quoteDate":      r["quote_date"] or "",
+            "salesPerson":    r["sales_person"] or "",
+            "netMarginPct":   r["net_margin_pct"],
+            "deliveryTerms":  r["delivery_terms"] or "",
+            "progressPct":    progress_pct,
+            "stagesCount":    stages_count,
+        })
+    return {"items": items, "total": len(items)}
