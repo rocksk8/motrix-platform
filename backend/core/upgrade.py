@@ -182,6 +182,75 @@ def online_backup(src: str, dst: str) -> None:
         s.close()
 
 
+# ── 安裝目錄以外的 PDF 存檔目錄（system_settings 的 *_pdf_base_path）──────────
+#
+# 主持裁示（2026-09-25）：納入，但**只記清單不算雜湊**（網路碟整個算雜湊太慢，也可能讓升級卡在網路上）。
+# 記路徑、檔案數、總大小、最新 mtime；驗證只比「檔案數與總大小沒有變少」。
+# 連不到 ⇒ 標「無法確認」＝警告，不擋升級。
+EXTERNAL_SCAN_TIMEOUT = 60.0
+
+
+def external_pdf_dirs(root: str, settings: dict) -> dict:
+    """{設定鍵: 絕對路徑}：設定了、而且不在安裝目錄內的 PDF 存檔目錄。"""
+    out = {}
+    for _k, (key, _default) in _p.PDF_ARCHIVES.items():
+        raw = settings.get(key)
+        try:
+            val = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:                                    # noqa: BLE001
+            val = raw
+        if isinstance(val, str) and val.strip() and os.path.isabs(val.strip())                 and not _inside(val.strip(), root):
+            out[key] = val.strip()
+    return out
+
+
+def external_summary(path: str, timeout: float = None) -> dict:
+    """{path, status: ok／unreachable, files, bytes, latest_mtime}；逾時或讀不到 ⇒ unreachable。"""
+    import threading
+    timeout = EXTERNAL_SCAN_TIMEOUT if timeout is None else timeout
+    res = {"path": path, "status": "unreachable", "files": None, "bytes": None, "latest_mtime": None}
+
+    def scan():
+        if not os.path.isdir(path):
+            return
+        n = b = 0
+        latest = 0.0
+        for dp, _dn, fns in os.walk(path):
+            for fn in fns:
+                st = os.stat(os.path.join(dp, fn))
+                n += 1
+                b += st.st_size
+                latest = max(latest, st.st_mtime)
+        res.update(status="ok", files=n, bytes=b,
+                   latest_mtime=datetime.fromtimestamp(latest).isoformat(timespec="seconds") if n else None)
+
+    t = threading.Thread(target=scan, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return {"path": path, "status": "unreachable", "files": None, "bytes": None, "latest_mtime": None,
+                "reason": "逾時 %.0f 秒" % timeout}
+    return res
+
+
+def verify_external(manifest: dict, warnings: list = None) -> list:
+    """外部 PDF 目錄：檔案數與總大小不可以變少（problems）；連不到 ⇒ 只記 warnings。"""
+    problems = []
+    warnings = [] if warnings is None else warnings
+    for key, before in (manifest.get("external_dirs") or {}).items():
+        if before["status"] != "ok":
+            warnings.append("無法確認（備份時就連不到）：%s %s" % (key, before["path"]))
+            continue
+        now = external_summary(before["path"])
+        if now["status"] != "ok":
+            warnings.append("無法確認（現在連不到）：%s %s" % (key, before["path"]))
+            continue
+        if now["files"] < before["files"] or now["bytes"] < before["bytes"]:
+            problems.append("外部 PDF 目錄變少：%s %s（檔案 %d → %d，大小 %d → %d）"
+                            % (key, before["path"], before["files"], now["files"], before["bytes"], now["bytes"]))
+    return problems
+
+
 # ── 階段 0：預檢 ──────────────────────────────────────────────────────────
 
 def preflight(root: str, *, v9_port_open: bool, today: date = None, require_no_dev_markers: bool = True) -> dict:
@@ -214,6 +283,11 @@ def preflight(root: str, *, v9_port_open: bool, today: date = None, require_no_d
         facts.update(db_bytes=size, free_bytes=free)
         if free < size * 3:
             problems.append("磁碟空間不足：剩 %d bytes，需要至少 DB×3＝%d" % (free, size * 3))
+    if os.path.isfile(db):
+        try:
+            facts["external_pdf_dirs"] = external_pdf_dirs(root, settings_rows(db))
+        except Exception:                                    # noqa: BLE001
+            facts["external_pdf_dirs"] = "讀不到 system_settings"
     # 健康
     backups = os.path.join(root, _rel(_p.LOCAL_DB_BACKUP_DIR))
     latest = None
@@ -277,8 +351,10 @@ def backup(root: str, backup_dir: str) -> dict:
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(full, dst)
             m[kind][rel] = sha256_file(dst)
-    # ④ 資料目錄清單（原地不動）
+    # ④ 資料目錄清單（原地不動）；安裝目錄以外的 PDF 目錄只記摘要
     m["data_inventory"] = inventory(root, kinds=("data",))
+    m["external_dirs"] = {k: external_summary(v)
+                          for k, v in external_pdf_dirs(root, m["pre"]["settings"]).items()}
     # ⑤ manifest：每個備份檔的 SHA256
     for rel, full in walk(backup_dir):
         if rel != MANIFEST_NAME:
@@ -393,9 +469,9 @@ def add_missing_settings(db_path: str, new_settings: dict = None) -> dict:
 
 # ── 階段 3：驗證（不含啟動伺服器）─────────────────────────────────────────
 
-def verify_conversion(root: str, manifest: dict) -> list:
-    """列數、既有設定、資料目錄清單都要與轉換前相同；新版只准新增。"""
-    problems = []
+def verify_conversion(root: str, manifest: dict, warnings: list = None) -> list:
+    """列數、既有設定、資料目錄清單都要與轉換前相同；新版只准新增。外部 PDF 目錄見 verify_external。"""
+    problems = verify_external(manifest, warnings)
     main = os.path.join(root, DB_FILES[0])
     after = table_counts(main)
     for t, n in manifest["pre"]["counts"].items():

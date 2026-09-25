@@ -293,3 +293,62 @@ def test_backup_and_source_must_live_outside_the_install(inst, new_src):
         U.backup(inst, os.path.join(inst, "upgrade_backup"))
     with pytest.raises(RuntimeError):
         U.replace_program(inst, os.path.join(inst, "backend"))
+
+
+# ── 安裝目錄以外的 PDF 目錄（只記摘要；變少才算錯；連不到只警告）─────────────
+
+def _set_pdf_base(inst, path):
+    c = sqlite3.connect(os.path.join(inst, "backend", "motrix_erp.db"))
+    c.execute("INSERT OR REPLACE INTO system_settings VALUES ('pdf_base_path', ?, '')", (json.dumps(path),))
+    c.commit()
+    c.close()
+
+
+def test_external_pdf_dir_is_summarised_not_hashed(inst, tmp_path):
+    ext = str(tmp_path / "netshare_pdf")
+    _write(ext, "Q-1.pdf", b"%PDF 1")
+    _write(ext, "sub/Q-2.pdf", b"%PDF 22")
+    _set_pdf_base(inst, ext)
+    m = U.backup(inst, str(tmp_path / "bk"))
+    e = m["external_dirs"]["pdf_base_path"]
+    assert e["status"] == "ok" and e["files"] == 2 and e["bytes"] == 13 and e["latest_mtime"]
+    assert "sha256" not in json.dumps(e)
+    assert U.preflight(inst, v9_port_open=False)["facts"]["external_pdf_dirs"] == {"pdf_base_path": ext}
+
+
+def test_external_growth_is_fine_shrink_is_a_problem(inst, tmp_path):
+    ext = str(tmp_path / "netshare_pdf")
+    _write(ext, "Q-1.pdf", b"%PDF 1")
+    _set_pdf_base(inst, ext)
+    m = U.backup(inst, str(tmp_path / "bk"))
+    _write(ext, "Q-new.pdf", b"%PDF new")                  # 轉換期間多了檔：可以
+    assert U.verify_external(m) == []
+    os.remove(os.path.join(ext, "Q-1.pdf"))
+    os.remove(os.path.join(ext, "Q-new.pdf"))              # 變少：錯
+    assert any("變少" in p for p in U.verify_external(m))
+
+
+def test_unreachable_external_dir_only_warns(inst, tmp_path):
+    ext = str(tmp_path / "netshare_pdf")
+    _write(ext, "Q-1.pdf", b"%PDF 1")
+    _set_pdf_base(inst, ext)
+    m = U.backup(inst, str(tmp_path / "bk"))
+    shutil.rmtree(ext)                                     # 模擬網路碟掛不上
+    warnings = []
+    assert U.verify_external(m, warnings) == []
+    assert warnings and "無法確認" in warnings[0]
+
+
+def test_external_scan_times_out_as_unreachable(tmp_path, monkeypatch):
+    import time as _t
+    ext = str(tmp_path / "slow")
+    _write(ext, "a.pdf")
+    real_walk = os.walk
+    monkeypatch.setattr(U.os, "walk", lambda p: (_t.sleep(2), real_walk(p))[1])
+    r = U.external_summary(ext, timeout=0.2)
+    assert r["status"] == "unreachable" and "逾時" in r["reason"]
+
+
+def test_default_pdf_dirs_inside_install_are_not_external(inst):
+    assert U.external_pdf_dirs(inst, {"pdf_base_path": json.dumps(os.path.join(inst, "報價單PDF")),
+                                      "shipping_pdf_base_path": json.dumps("")}) == {}

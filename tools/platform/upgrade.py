@@ -141,9 +141,10 @@ def cmd_convert(a):
     return 0
 
 
-def verify(root: str, backup_dir: str, port: int) -> list:
+def verify(root: str, backup_dir: str, port: int, warnings: list = None) -> list:
     m = U.load_manifest(backup_dir)
-    problems = U.verify_conversion(root, m)          # 先比資料（伺服器啟動前）
+    warnings = [] if warnings is None else warnings
+    problems = U.verify_conversion(root, m, warnings)          # 先比資料（伺服器啟動前）
     if not problems:
         r = start_and_ping(root, port)
         if not r["ok"]:
@@ -153,12 +154,15 @@ def verify(root: str, backup_dir: str, port: int) -> list:
         changed = [k for k, v in m["pre"]["settings"].items() if after.get(k) != v]
         if changed:
             problems.append("新版啟動後改寫了既有設定：%s" % changed)
-    _write_log(backup_dir, "verify_log.json", {"problems": problems})
+    _write_log(backup_dir, "verify_log.json", {"problems": problems, "warnings": warnings})
     return problems
 
 
 def cmd_verify(a):
-    p = verify(a.root, a.backup_dir, a.port)
+    w = []
+    p = verify(a.root, a.backup_dir, a.port, w)
+    for x in w:
+        print("警告（不擋升級）：" + x)
     print("驗證通過" if not p else "驗證不通過：\n  " + "\n  ".join(p))
     return 0 if not p else 3
 

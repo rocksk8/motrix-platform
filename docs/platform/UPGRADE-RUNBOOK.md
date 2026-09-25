@@ -14,9 +14,52 @@
 | 0.4 | 確認 `<ROOT>` **沒有** `.no_email_send`、`.no_cloud_archive` | 有的話轉換後不寄信／不上雲（預檢會擋） |
 | 0.5 | 確認 V9 最近一次每日備份正常（本機 `backend\db_backups\<今天或昨天>\.done`）、`backup_alerts\BACKUP_ALERT.txt` 不存在 | 〈出修補包前先查正式機健康〉：有問題先處理，不要疊在升級上 |
 
-## 1. 停服務
+## 1. 停服務（轉換與回滾都用這一段）
 
-停掉 V9（排程工作的自動重啟也要停），確認正式 port 沒有人在聽。
+排程工作（docs/quick §1.1）：`MOTRIX ERP Server Autostart`、`MOTRIX ERP Daily Backup`、`MOTRIX ERP Heartbeat`。
+
+- **Heartbeat 也要停**：轉換期間它會把「服務沒有回應」當成故障發告警。
+- 只 Disable 不夠：Autostart 的執行個體是一個「掛掉 5 秒後重啟」的迴圈，要 `Stop-ScheduledTask` 結束它。
+- 行程只停 python 系列（比照 `restart.bat`：停正在聽 port 的那一個）。
+
+以系統管理員身分開 PowerShell：
+
+```powershell
+$Tasks = @('MOTRIX ERP Server Autostart', 'MOTRIX ERP Daily Backup', 'MOTRIX ERP Heartbeat')
+$Port  = 666
+
+# ① 停排程（先 Disable 防止再被觸發，再 Stop 結束正在跑的執行個體）
+foreach ($t in $Tasks) {
+    Disable-ScheduledTask -TaskName $t | Out-Null
+    Stop-ScheduledTask    -TaskName $t -ErrorAction SilentlyContinue
+}
+Get-ScheduledTask -TaskName $Tasks | Select-Object TaskName, State      # 三個都要是 Disabled
+
+# ② 停掉仍在聽 port 的 python 行程（只停 python 系列）
+$c = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+foreach ($p in ($c.OwningProcess | Sort-Object -Unique)) {
+    $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
+    if ($proc -and $proc.ProcessName -match '^(python|pythonw|uvicorn)') { Stop-Process -Id $p -Force }
+    elseif ($proc) { Write-Warning "port $Port 由 $($proc.ProcessName)（PID $p）佔用，不是 python —— 先確認再處理" }
+}
+Start-Sleep 3
+if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) { Write-Warning "port $Port 仍被佔用" }
+```
+
+### 1b. 恢復服務（轉換驗證通過後，或回滾驗證通過後）
+
+```powershell
+$Tasks = @('MOTRIX ERP Server Autostart', 'MOTRIX ERP Daily Backup', 'MOTRIX ERP Heartbeat')
+# 依序：先服務、再備份、最後心跳（服務沒起來前先開心跳會誤報）
+foreach ($t in $Tasks) {
+    Enable-ScheduledTask -TaskName $t | Out-Null
+    if ($t -like '*Autostart*') { Start-ScheduledTask -TaskName $t; Start-Sleep 20 }
+}
+Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:666/api/ping" | Select-Object StatusCode   # 200（HTTPS 安裝改 https://）
+Get-ScheduledTaskInfo -TaskName 'MOTRIX ERP Heartbeat' | Select-Object LastRunTime, LastTaskResult
+```
+
+- 最後確認 **Heartbeat 打卡恢復**：下一個週期後 `LastRunTime` 更新、`LastTaskResult` 為 0，外部監控（healthchecks 類）顯示恢復。
 
 ## 2. 預檢（不改任何東西）
 
@@ -26,7 +69,7 @@ python <NEW>\tools\platform\upgrade.py preflight --root <ROOT> --v9-port <正式
 
 - 輸出 `"ok": true` 才往下。任一 `problems` ⇒ 處理後重跑。
 - 檢查項目：安裝目錄結構、主庫存在、`schema_version ≤ 116`、磁碟空間 ≥ DB×3、最近快照 `.done`（今天或昨天）、無備份告警、服務已停、無開發機標記。
-- ⚠️ 若 `system_settings` 的 `*_pdf_base_path` 指到安裝目錄以外（例如網路碟），那些目錄**不在**清單比對範圍內：本工具不讀也不寫它們，升級前後也不需要動。
+- `system_settings` 的 `*_pdf_base_path` 指到安裝目錄以外（例如網路碟）時，預檢的 `facts.external_pdf_dirs` 會列出來。這些目錄**只記摘要不算雜湊**（路徑、檔案數、總大小、最新 mtime；主持裁示 2026-09-25），工具不寫它們。
 
 ## 3. 備份（＋自動試還原）
 
@@ -57,6 +100,7 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 ```
 
 - 先比資料：各表列數與轉換前相同、既有設定逐項相同、只多出宣告過的新設定鍵、資料目錄清單相同。
+- 外部 PDF 目錄：只比「檔案數與總大小沒有變少」（變多可以）。連不到 ⇒ 印「警告（不擋升級）：無法確認…」，記在 `verify_log.json` 的 `warnings`；人工確認網路碟恢復後再看一次即可。
 - 再在**非正式 port** 啟動新版、`/api/ping` 200、停掉；啟動後既有設定仍不得被改寫。
 - 通過 ⇒ 用正常方式在正式 port 啟動新版（排程工作）。不通過 ⇒ exit 3 ⇒ 進 §6。
 
@@ -69,7 +113,8 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 
 - 完整回滾前工具會列出「轉換後新增的列數」；沒有 `--yes` 不執行。**那些列會消失。**
 - 兩種模式都會逐檔比對雜湊（程式；完整回滾另比 DB 與設定），不一致 ⇒ exit 5。
-- 回滾完：在非正式 port 啟動 V9 確認 `/api/ping` 200，再恢復正式服務。
+- 回滾前：服務必須是 §1 停止後的狀態（轉換失敗時通常還是；若已經 §1b 恢復過，先再做一次 §1）。
+- 回滾完：在非正式 port 啟動 V9 確認 `/api/ping` 200，再做 §1b 恢復服務，最後確認 Heartbeat 打卡恢復。
 - 「只回程式」成立的前提：新版對 DB 只做新增（CORE-SPEC §6）。演練已驗證 V9 讀得了新版寫過的庫並正常啟動。
 
 ## 7. 事後
