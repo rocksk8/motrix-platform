@@ -1167,7 +1167,6 @@ if (typeof module !== 'undefined' && module.exports) {
     'dev-crm.html': { key: 'crm', name: '業務開發' },
     'contractors.html': { key: 'subcontract', name: '外包工班' },
     'vendor-contractors.html': { key: 'subcontract', name: '外包工班' },
-    'contractor-voucher-approval-settings.html': { key: 'subcontract', name: '外包工班' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

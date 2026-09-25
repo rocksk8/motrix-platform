@@ -97,13 +97,20 @@ def _observe():
     }
 
 
+def _drop_dispatch_row(monkeypatch):
+    """拿掉 dispatch.row：legacy 登記與已載入模組的 ModuleSpec.providers 兩處都要處理（M04 搬進 modules/ 後在後者）。"""
+    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
+                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+    orig = registry.providers
+    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "dispatch.row" else orig(cap))
+
+
 def test_consumers_degrade_when_provider_is_absent(client, monkeypatch):
     _seed()
     with_provider = _observe()
     assert with_provider == {"recognition_dispatch": 1, "reports_contractor": 1, "vouchers_dispatch": 1,
                              "vouchers_extra_still_there": True}, with_provider   # 正對照：派工確實在
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+    _drop_dispatch_row(monkeypatch)
     assert registry.single_provider("dispatch.row") is None
     without = _observe()                                   # 不丟例外 = 仍然可用
     assert without == {"recognition_dispatch": 0, "reports_contractor": 0, "vouchers_dispatch": 0,
@@ -145,8 +152,7 @@ def test_absence_is_said_in_report_flags_and_voucher_sources(client, make_user, 
     assert rep["unavailable"] == [] and rep["expenses"]["unavailable"] == []
     assert [e for e in rep["expenses"]["details"]["contractor"] if e["quoteNo"] == QNO]
     assert src["unavailable"] == []
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+    _drop_dispatch_row(monkeypatch)
     rep, cash, src = _responses(client, h)
     # 營運報表／月支出＋待補登（同一份回應）
     assert [u["category"] for u in rep["unavailable"]] == ["contractor"]
