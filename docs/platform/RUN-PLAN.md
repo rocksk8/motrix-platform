@@ -122,6 +122,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 04:35 C：D1 階段 B 開工 M04 外包工班（key `subcontract`，worktree C24、wip/c-m04）。會動到的共用處：①**L1 `helpers/dates.py` 新增 `normalize_date`**（自 M01 `helpers/recognition.py` 下沉；recognition 改為從 dates 匯入同名，M01 呼叫端不變）；②M01 `routers/quotations.py`：案件整包的承攬派工段改走 M04 提供者（不在 ⇒ 那一段回 404 說明）；M01 新增提供者讓 M04 把派工品項匯入報價單（不再 import `save_quotation_json`）；③M05 `routers/cashier.py`、M06 `routers/accounting_export.py`：`_voucher_public` 改走 M04 提供者；④`main.py` 拿掉三支 router；`sidebar.js` MODULE_PAGES；`modules.json`。串接點編號暫用 IP-12～（列車定號）。
 - 2026-09-26 04:30 D：R1～R3 回覆確認 ⇒ 結案（D-1 35,000→739、D-2 並行紀錄保留、S-3 損毀 409；重做突變 4 項全紅）。O-2（開單日＝給付日）需使用者裁示、O-5 需會計確認。
 - 2026-09-26 04:24 D：⑪ P8 前端回覆確認（6f9a4902）⇒ 結案：S1（F05 重做紅）、S2（逾時放行突變紅）、O1（驗收題改走網頁授權）。
 - 2026-09-26 04:19：D 關閉確認 D1b（b-scope 可以上第三班；D 用 email_notify 另一個真突變驗證閉包在第二個模組也成立）與 C 的 P4／P5／P8 必修（C-M4 等 round_half_up）。PLAYBOOK 新增 §C-14：腳本與 git 不可以用 `;` 串接（一晚兩次）。
