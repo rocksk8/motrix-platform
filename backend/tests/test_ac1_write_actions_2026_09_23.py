@@ -99,7 +99,6 @@ READ_ONLY_PAGES = {
         "**沒有任何對應的寫入端點** ⇒ 頁面唯讀與後端一致。",
     "receivables.html": "應收帳款：純報表，沖銷動作在出納那一頁。",
     "sales-orders.html": "銷貨單清單：純查詢，建立與修改在報價單那一邊。",
-    "selection-db-overview.html": "選型資料庫總覽：純查詢，維護在各分類頁。",
     "shipping-export-history.html": "出貨匯出歷程：純查詢，匯出動作在出貨單那一頁。",
 }
 

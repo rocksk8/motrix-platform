@@ -384,7 +384,7 @@
    ]
   },
   "M11": {
-   "key": "tender",
+   "key": "tender_radar",
    "name": "標案雷達",
    "units": [
     "helper:tender_match",
@@ -425,23 +425,7 @@
    "key": "selection_guide",
    "name": "選型知識庫",
    "decision": "2026-09-25 使用者裁示遺棄；表只留在凍結的 V9 migration（CORE-SPEC.md「使用者裁示」）",
-   "units": [
-    "page:pages/access-guide.html",
-    "page:pages/automation-guide.html",
-    "page:pages/env-guide.html",
-    "page:pages/gateway-guide.html",
-    "page:pages/monitor-guide.html",
-    "page:pages/netarch-guide.html",
-    "page:pages/selection-db-overview.html",
-    "page:pages/switch-guide.html",
-    "router:access_guide",
-    "router:automation_guide",
-    "router:env_guide",
-    "router:gateway_guide",
-    "router:monitor_guide",
-    "router:netarch_guide",
-    "router:switch_guide"
-   ],
+   "units": [],
    "tables": [
     "access_categories",
     "access_fit",

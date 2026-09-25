@@ -106,7 +106,7 @@ def test_newly_created_keys_are_grantable_in_the_catalogue():
     from helpers.module_registry import MODULE_KEYS as catalogue
 
     for k in ("netplan", "audit_log", "shipping_export_log",
-              "module_versions", "selection_overview"):
+              "module_versions"):
         assert k in catalogue, f"{k} 後端會擋，但權限目錄裡勾不到"
 
 

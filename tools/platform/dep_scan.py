@@ -29,7 +29,7 @@ FRONTEND = ROOT / "frontend"
 OUT = ROOT / "docs" / "platform" / "dep_graph.json"
 
 # backend 頂層非 router／helper 的模組中，屬於執行期共用能力者（腳本／種子檔不列）
-CORE_SKIP_PREFIX = ("sync_", "switch_guide_patch", "create_", "fix_", "issue_")
+CORE_SKIP_PREFIX = ("sync_", "create_", "fix_", "issue_")
 CORE_SKIP_SUFFIX = ("_seed.py",)
 
 HTTP_METHODS = {"get", "post", "put", "delete", "patch", "api_route"}

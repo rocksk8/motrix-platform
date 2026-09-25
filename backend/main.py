@@ -25,7 +25,7 @@ import trail
 from helpers import licensing as license_core
 from helpers import geo as geo_core
 from core import loader as module_loader, registry as module_registry
-from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, env_guide, netarch_guide, switch_guide, shipping_notes, inventory, search, monitor_guide, access_guide, gateway_guide, automation_guide, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
+from routers import auth, quotations, customers, suppliers, parts, dashboard, system, reports, contractors, payslips, daily_tasks, module_versions, vendor_contractors, dev_crm, shipping_notes, inventory, search, contractor_vouchers, invoice_vouchers, org_structure, payment_requests, list_prefs, case_action_items, uploads, network_plans, network_plans_quick, approval_delegates, cashier, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, bonus, vouchers
 from routers import item_reads
 from routers import modules
 
@@ -646,13 +646,6 @@ app.include_router(daily_tasks.router)
 app.include_router(module_versions.router)
 app.include_router(vendor_contractors.router)
 app.include_router(dev_crm.router, prefix="/api")
-app.include_router(env_guide.router)
-app.include_router(netarch_guide.router)
-app.include_router(switch_guide.router)
-app.include_router(monitor_guide.router)
-app.include_router(access_guide.router)
-app.include_router(gateway_guide.router)
-app.include_router(automation_guide.router)
 app.include_router(shipping_notes.router)
 app.include_router(completion_notes.router)
 app.include_router(inventory.router)

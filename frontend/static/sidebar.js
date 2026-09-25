@@ -470,8 +470,8 @@ if (typeof module !== 'undefined' && module.exports) {
   // 後那三項會停在舊值。收斂成一支 computeFlags()，兩邊共用。
   var sa, ad, has
   var cQ, cCu, cPr, cFi, cCash, cCM, cEq, cInv, cRpt, cWL, cDT, cDev, cCon, cPay
-  var cEnvG, cNetG, cSwitchG, cMonitorG, cAccessG, cGatewayG, cAutomationG, cNetPlan
-  var cAudit, cShipLog, cVer, cOvw, cSet, canDash
+  var cNetPlan
+  var cAudit, cShipLog, cVer, cSet, canDash
 
   function computeFlags() {
     sa  = role === 'superadmin'
@@ -495,13 +495,6 @@ if (typeof module !== 'undefined' && module.exports) {
     cMap = has('map')            // 地圖是共用能力，刻意不綁 tender_radar
     cCon = has('contractor_list')
     cPay = has('payslip')
-    cEnvG = has('env_guide')
-    cNetG = has('netarch_guide')
-    cSwitchG = has('switch_guide')
-    cMonitorG = has('monitor_guide')
-    cAccessG = has('access_guide')
-    cGatewayG = has('gateway_guide')
-    cAutomationG = has('automation_guide')
     // 檢視或編輯任一即可看到入口（編輯權當然也看得到）
     cNetPlan = has('netplan') || has('netplan_edit')
     // 四個原本沒有模組 key、只能靠角色寫死的稽核／維運頁（2026-09-14 使用者裁示
@@ -509,7 +502,6 @@ if (typeof module !== 'undefined' && module.exports) {
     cAudit = has('audit_log')
     cShipLog = has('shipping_export_log')
     cVer = has('module_versions')
-    cOvw = has('selection_overview')
     cSet = has('settings')
 
     canDash = has('dashboard') || has('finance') || has('quotation')
@@ -546,13 +538,6 @@ if (typeof module !== 'undefined' && module.exports) {
     vend:  '<path d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>',
     contl: '<path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0"/>',
     paysl: '<path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>',
-    envg:  '<path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
-    netg:  '<path d="M12 20h.01M8.5 16.5a5 5 0 017 0M5 12.859a10 10 0 0114 0M1.5 9.5a15 15 0 0121 0"/>',
-    switchg: '<rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 6h.01M6 18h.01"/>',
-    monitorg: '<path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>',
-    accessg: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>',
-    automationg: '<rect x="3" y="11" width="18" height="8" rx="2"/><circle cx="7.5" cy="7" r="2.5"/><circle cx="16.5" cy="7" r="2.5"/><path d="M7.5 9.5v1.5M16.5 9.5v1.5"/>',
-    ovg: '<path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-2.8-2.8L7 14"/>',
     schema: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.657 4.03 3 9 3s9-1.343 9-3V5"/><path d="M3 11v6c0 1.657 4.03 3 9 3s9-1.343 9-3v-6"/>',
     gcal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     netplan: '<rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M12 12H5v4M12 12h7v4"/>',
@@ -589,14 +574,6 @@ if (typeof module !== 'undefined' && module.exports) {
     'reports.html':            'finance',
     'work-log.html':           'work_log',
     'daily-tasks.html':        'daily_task',
-    'env-guide.html':          'env_guide',
-    'netarch-guide.html':      'netarch_guide',
-    'switch-guide.html':       'switch_guide',
-    'monitor-guide.html':      'monitor_guide',
-    'access-guide.html':       'access_guide',
-    'gateway-guide.html':      'gateway_guide',
-    'automation-guide.html':   'automation_guide',
-    'selection-db-overview.html': 'selection_db_overview',
   }
 
   var _SB_BADGE_STYLE = 'display:none;background:var(--accent);color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 5px;border-radius:8px;margin-left:auto;min-width:16px;text-align:center;line-height:1.6'
@@ -798,17 +775,7 @@ if (typeof module !== 'undefined' && module.exports) {
          '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
       ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
       ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
-      // ⚠️ UI8：少了 `cOvw`（涵蓋度總覽）—— 同上。
-      sec('選型資料庫', cEnvG || cNetG || cSwitchG || cMonitorG || cAccessG || cGatewayG || cAutomationG || cOvw),
-      ni(pg('env-guide.html'),      'envg',    '場域選型導覽',     ['env-guide.html'],     cEnvG),
-      ni(pg('netarch-guide.html'),  'netg',    '網路架構選型導覽', ['netarch-guide.html'], cNetG),
-      ni(pg('switch-guide.html'),   'switchg', '交換器選型導覽',   ['switch-guide.html'],  cSwitchG),
-      ni(pg('monitor-guide.html'),  'monitorg', '監控系統選型導覽', ['monitor-guide.html'], cMonitorG),
-      ni(pg('access-guide.html'),   'accessg',  '門禁系統選型導覽', ['access-guide.html'],  cAccessG),
-      ni(pg('gateway-guide.html'),  'gwg',      '閘道器與控制器選型導覽', ['gateway-guide.html'], cGatewayG),
-      ni(pg('automation-guide.html'), 'automationg', '自動化系統選型導覽', ['automation-guide.html'], cAutomationG),
-      ni(pg('selection-db-overview.html'), 'ovg', '涵蓋度總覽', ['selection-db-overview.html'], cOvw),
-      // ⚠️ UI8：這一處是**多**不是少 —— `cOvw`／`cSet` 底下**沒有任何一個 `ni()`**
+      // ⚠️ UI8：這一處是**多**不是少 —— `cSet` 底下**沒有任何一個 `ni()`**
       //    用它們 ⇒ 只有那個權限的人會看到一個**空的分組標題**。
       //    🔑 方向與前三處相反，而成因相同：條件與項目各自演進，沒有東西在比對。
       sec('系統', sa || cAudit || cShipLog || cVer),

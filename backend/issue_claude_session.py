@@ -3,7 +3,7 @@
 用途：`create_claude_account.py` 只建立帳號，密碼僅供留存記錄、不透過一般登入流程使用
 （見該檔案 docstring）。這支腳本直接在 sessions 表插入一筆綁定 claude 帳號的 token，
 比照一般登入的 30 天效期（routers/auth.py auth_login()），執行後印出 token，供後續
-API 呼叫使用（例如 backend/tools/check_guide_sync.py 的雙機選型資料庫內容核對）。
+API 呼叫使用。
 
 冪等：每次執行都會先清掉該帳號現有的 session 再核發一筆新的，避免閒置 token 堆積；
 不影響其他使用者的 session。兩台機器（開發機／正式機）都要各自在其 backend/ 目錄下

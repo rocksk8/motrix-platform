@@ -45,36 +45,21 @@ GOLDEN_MODULES = [
     ("daily_task", "每日工作事項", "工作"),
     ("contractor_list", "外包名冊", "勞務"),
     ("payslip", "勞報單", "勞務"),
-    ("env_guide", "場域選型導覽－檢視", "選型資料庫"),
-    ("env_guide_edit", "場域選型導覽－新增修改刪除", "選型資料庫"),
-    ("netarch_guide", "網路架構選型導覽－檢視", "選型資料庫"),
-    ("netarch_guide_edit", "網路架構選型導覽－新增修改刪除", "選型資料庫"),
-    ("switch_guide", "交換器選型導覽－檢視", "選型資料庫"),
-    ("switch_guide_edit", "交換器選型導覽－新增修改刪除", "選型資料庫"),
-    ("monitor_guide", "監控系統選型導覽－檢視", "選型資料庫"),
-    ("monitor_guide_edit", "監控系統選型導覽－新增修改刪除", "選型資料庫"),
-    ("access_guide", "門禁系統選型導覽－檢視", "選型資料庫"),
-    ("access_guide_edit", "門禁系統選型導覽－新增修改刪除", "選型資料庫"),
-    ("gateway_guide", "閘道器與控制器選型導覽－檢視", "選型資料庫"),
-    ("gateway_guide_edit", "閘道器與控制器選型導覽－新增修改刪除", "選型資料庫"),
-    ("automation_guide", "自動化系統選型導覽－檢視", "選型資料庫"),
-    ("automation_guide_edit", "自動化系統選型導覽－新增修改刪除", "選型資料庫"),
     ("settings", "系統設定", "系統"),
     ("audit_log", "歷史紀錄（全系統操作軌跡）", "系統"),
     ("shipping_export_log", "出貨單歷史紀錄", "系統"),
     ("module_versions", "版本紀錄", "系統"),
-    ("selection_overview", "選型資料庫涵蓋度總覽", "系統"),
 ]
 
 GOLDEN_ROLE_TEMPLATES = {
-    "superadmin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions", "selection_overview"],
-    "admin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "cashier"],
+    "superadmin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier", "netplan", "audit_log", "shipping_export_log", "module_versions"],
+    "admin": ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "cashier"],
     "sales": ["dashboard", "quotation", "case_manage", "customer", "financial_view", "project_approve_biz", "work_log", "daily_task", "map"],
     "engineer": ["dashboard", "case_manage", "project_approve_eng", "equipment", "work_log", "daily_task"],
     "viewer": ["dashboard"],
 }
 
-GOLDEN_SUPERADMIN = ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "cashier", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "env_guide", "netarch_guide", "switch_guide", "monitor_guide", "access_guide", "gateway_guide", "automation_guide", "netplan", "audit_log", "shipping_export_log", "module_versions", "selection_overview"]
+GOLDEN_SUPERADMIN = ["dashboard", "quotation", "case_manage", "customer", "procurement", "inventory", "equipment", "finance", "reports", "cashier", "settings", "project_approve_eng", "project_approve_biz", "financial_view", "work_log", "daily_task", "netplan", "audit_log", "shipping_export_log", "module_versions"]
 
 
 def test_catalogue_is_unchanged_key_label_group_and_order():

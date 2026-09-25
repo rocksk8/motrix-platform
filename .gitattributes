@@ -127,18 +127,6 @@ docs/PLATFORM-FOUNDATION.md export-ignore
 /WEEKLY-AUDIT-2026-09-07_2026-09-10.md export-ignore
 /LETSENCRYPT-PUBLIC-CERT-PLAN.md export-ignore
 
-# 根目錄：選型研究材料（已查證不被任何 runtime 程式碼讀取，
-# 種子資料是對應 *_seed.py 裡的 Python 字面值，.md 只是當初的研究參考）
-/ACCESS-GUIDE-CONTENT.md export-ignore
-/AUTOMATION-GUIDE-CONTENT.md export-ignore
-/ENV-GUIDE-CONTENT.md export-ignore
-/GATEWAY-GUIDE-CONTENT.md export-ignore
-/MONITOR-GUIDE-CONTENT.md export-ignore
-/NETARCH-GUIDE-CONTENT.md export-ignore
-/SWITCH-GUIDE-CONTENT.md export-ignore
-/SWITCH-BRAND-REFERENCE.md export-ignore
-/SELECTION-DB-INDEX.md export-ignore
-
 # 三件裁決（SCOPE.md「三件裁決」節）
 /CHANGELOG.md export-ignore
 /PASSKEY-CA-ROLLOUT.md export-ignore
@@ -170,7 +158,6 @@ backend/tools/_e2e_gate.ps1 export-ignore
 backend/tools/check_approval_queue_coverage.py export-ignore
 backend/tools/check_double_init.py export-ignore
 backend/tools/check_endpoint_entrypoints.py export-ignore
-backend/tools/check_guide_sync.py export-ignore
 backend/tools/check_prod_drift.ps1 export-ignore
 backend/tools/check_version_sync.py export-ignore
 backend/tools/code_health.py export-ignore

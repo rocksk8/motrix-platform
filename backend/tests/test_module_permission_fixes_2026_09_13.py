@@ -265,11 +265,11 @@ def test_case_execution_face_blocks_account_without_the_module(client, make_user
 # ── 6. 16 個「後端不讀」的模組現在真的會擋 ──────────────────────────────────
 
 def test_modules_without_backend_checks_now_block(client, make_user):
-    """只有 `dashboard` 的帳號打不開料號／客戶／每日工作事項／選型導覽。"""
+    """只有 `dashboard` 的帳號打不開料號／客戶／每日工作事項。"""
     u, p = make_user(username="mod_none", role="viewer", modules=["dashboard"])
     tok = _login(client, u, p)
     for path in ("/api/parts", "/api/parts/categories", "/api/customers",
-                 "/api/daily-tasks", "/api/switch-guide/scenarios", "/api/devices"):
+                 "/api/daily-tasks", "/api/devices"):
         r = client.get(path, headers=_auth(tok))
         assert r.status_code == 403, f"{path} 沒有擋：{r.status_code}"
 
@@ -289,16 +289,6 @@ def test_cross_module_consumers_are_not_broken(client, make_user):
     tok2 = _login(client, u2, p2)
     assert client.get("/api/parts", headers=_auth(tok2)).status_code == 200
     assert client.get("/api/suppliers", headers=_auth(tok2)).status_code == 200
-
-
-def test_guide_edit_module_alone_still_grants_read(client, make_user):
-    """只有 `*_guide_edit` 的帳號（正式機的 `claude` 帳號就是這樣）仍讀得到導覽。
-
-    少了這條，會出現「改得動卻讀不到」的荒謬狀態。
-    """
-    u, p = make_user(username="g_editor", role="viewer", modules=["switch_guide_edit"])
-    tok = _login(client, u, p)
-    assert client.get("/api/switch-guide/scenarios", headers=_auth(tok)).status_code == 200
 
 
 # ── 7. /api/sales-orders ────────────────────────────────────────────────────

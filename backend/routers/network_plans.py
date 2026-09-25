@@ -15,8 +15,8 @@ push 一筆新紀錄（例如使用者按下「記錄本次修訂」），後端
 樂觀鎖（`_expectedUpdatedAt`，比照 quotations.py::update_case_record 的作法），
 不強制介入。
 
-編輯權限：superadmin/admin 或具 `netplan_edit` 模組者（比照 netarch_guide.py
-的 netarch_guide_edit 模式，讓 admin 之後可以個別授權給特定工程師帳號）；
+編輯權限：superadmin/admin 或具 `netplan_edit` 模組者（檢視／編輯分成兩把 key，
+讓 admin 之後可以個別授權給特定工程師帳號）；
 檢視為任何登入者皆可。刪除限定 superadmin，且只有「規劃中」狀態可刪。
 """
 import json

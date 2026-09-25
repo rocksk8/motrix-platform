@@ -12,7 +12,7 @@
     python tools/check_dependencies.py --prod-only    # 只掃 requirements.txt
 
 不是排程工具，沒有自動跑的機制——建議之後每次升級套件版本、或間隔性（例如每季）
-手動跑一次即可，比照 check_guide_sync.py 這類「需要時才手動執行」的既有工具慣例。
+手動跑一次即可，屬於「需要時才手動執行」的工具。
 """
 import argparse
 import os

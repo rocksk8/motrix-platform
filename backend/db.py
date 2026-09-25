@@ -2202,7 +2202,7 @@ def _m065_automation_guide(conn):
         conn.commit()
         return
 
-    from automation_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.automation_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, s in enumerate(json.loads(SCENARIOS_JSON)):
         conn.execute(
@@ -2634,7 +2634,7 @@ def _m030_env_guide(conn):
         conn.commit()
         return
 
-    from env_guide_seed import ENV_JSON, REC_JSON, LINKS_JSON
+    from migrations_frozen.v9_selection_guide.env_guide_seed import ENV_JSON, REC_JSON, LINKS_JSON
     now = datetime.now().isoformat()
     for i, e in enumerate(json.loads(ENV_JSON)):
         conn.execute(
@@ -2707,7 +2707,7 @@ def _m031_netarch_guide(conn):
         conn.commit()
         return
 
-    from netarch_guide_seed import FAMILIES_JSON, GENERATIONS_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.netarch_guide_seed import FAMILIES_JSON, GENERATIONS_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, f in enumerate(json.loads(FAMILIES_JSON)):
         conn.execute(
@@ -2796,7 +2796,7 @@ def _m032_switch_guide(conn):
         conn.commit()
         return
 
-    from switch_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.switch_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, s in enumerate(json.loads(SCENARIOS_JSON)):
         conn.execute(
@@ -3079,7 +3079,7 @@ def _m039_monitor_guide(conn):
         conn.commit()
         return
 
-    from monitor_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.monitor_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, s in enumerate(json.loads(SCENARIOS_JSON)):
         conn.execute(
@@ -3166,7 +3166,7 @@ def _m040_access_guide(conn):
         conn.commit()
         return
 
-    from access_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.access_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, s in enumerate(json.loads(SCENARIOS_JSON)):
         conn.execute(
@@ -3256,7 +3256,7 @@ def _m041_gateway_guide(conn):
         conn.commit()
         return
 
-    from gateway_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
+    from migrations_frozen.v9_selection_guide.gateway_guide_seed import SCENARIOS_JSON, CATEGORIES_JSON, FIT_JSON, PRODUCTS_JSON
     now = datetime.now().isoformat()
     for i, s in enumerate(json.loads(SCENARIOS_JSON)):
         conn.execute(

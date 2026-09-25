@@ -46,10 +46,6 @@ _FORBIDDEN_WITHOUT_MODULES = (
     "設備", "設備登載", "保固追蹤", "網路架構規劃書",
     # 勞務管理
     "勞務管理", "外包名冊", "勞報單",
-    # 選型資料庫
-    "選型資料庫", "場域選型導覽", "網路架構選型導覽", "交換器選型導覽",
-    "監控系統選型導覽", "門禁系統選型導覽", "閘道器與控制器選型導覽",
-    "自動化系統選型導覽",
     # 財務（單項分組 ⇒ 平常渲染成項目名）
     "營運報表",
 )
@@ -212,7 +208,7 @@ def test_superadmin_still_sees_everything(live_server, make_user, e2e_browser):
     page.goto(f"{live_server}/index.html")   # PERF #5：注入登入不經 index，這一題要的是 index 上的東西
     page.wait_for_selector(".mnav .mnav__top", timeout=10000)
     names = _nav_vocabulary(page)
-    for expect in ("業務", "案件", "營運報表", "廠商與採購", "選型資料庫", "系統"):
+    for expect in ("業務", "案件", "營運報表", "廠商與採購", "系統"):
         assert expect in names, f"superadmin 看不到「{expect}」：{names}"
 
     # 📏 **這是 `_FORBIDDEN_WITHOUT_MODULES` 的正對照，兩題必須成對。**

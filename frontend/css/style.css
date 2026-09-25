@@ -1081,19 +1081,6 @@ body {
 .chip:hover { border-color: var(--ghost-hover-border); }
 .chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-/* 選型導覽頁（netarch-guide/env-guide/switch-guide）共用的小型外框按鈕，
-   取代 3 頁各自重複定義的 .mibtn（行內小按鈕）/.mbtn（Modal 按鈕） */
-.mibtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:11px; font-weight:600; padding:5px 12px; border-radius:var(--radius); cursor:pointer; }
-.mibtn:hover { border-color:var(--accent); color:var(--accent); }
-.mibtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; margin-left:auto; }
-.mibtn.pri:hover { background:var(--accent-hover); color:#fff; }
-.mibtn.danger { color:var(--danger); border-color:var(--danger); }
-.mbtn { border:1px solid var(--border-light); background:#fff; color:var(--text-secondary); font:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; border-radius:var(--radius); cursor:pointer; }
-.mbtn:hover { color:var(--text-primary); border-color:var(--accent); }
-.mbtn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
-.mbtn.pri:hover { background:var(--accent-hover); }
-.mbtn:disabled { opacity:.6; cursor:default; }
-
 /* ─── PAYMENT STATUS ─── */
 .pay-status {
   display: flex;

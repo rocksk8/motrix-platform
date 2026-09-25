@@ -51,23 +51,15 @@ from tests._ports import free_safe_port
 # 正確的當對照組。側欄退役後這份清單量的是各頁的頂欄與主導覽列——頁面本身
 # 仍然是有意義的抽樣（它們是當初唯一出過事的那批頁面結構）。
 SAMPLE_PAGES = [
-    "access-guide.html",
-    "automation-guide.html",
     "case-management.html",
     "dev-crm.html",
-    "env-guide.html",
-    "gateway-guide.html",
     "inventory.html",
-    "monitor-guide.html",
-    "netarch-guide.html",
     "parts.html",
     "procurement.html",
     "reports.html",
     # sales-orders.html 當天稍晚被改成導向頁（模組權限稽核，見
     # MODULE-AUDIT-2026-09-13.md），已經沒有側欄可以量——留在清單裡的話，
     # 測試會在導向後量到 case-management 的側欄，然後綠燈給一個根本沒測到的頁面。
-    "selection-db-overview.html",
-    "switch-guide.html",
     "customers.html",            # 對照組：一直都是 body 直下
 ]
 

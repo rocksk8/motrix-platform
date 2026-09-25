@@ -13,12 +13,6 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 # 頁面 → (篩選欄 x-model 名稱, 反向控制：會存檔的欄位 x-model 名稱)
 PAGES = {
-    "access-guide":      (["globalSearch", "productSearch[c.code]", "compareShowUniform"], "modal.name"),
-    "automation-guide":  (["globalSearch", "productSearch[c.code]", "compareShowUniform"], "modal.name"),
-    "gateway-guide":     (["globalSearch", "productSearch[c.code]", "compareShowUniform"], "modal.name"),
-    "monitor-guide":     (["globalSearch", "productSearch[c.code]", "compareShowUniform"], "modal.name"),
-    "switch-guide":      (["globalSearch", "productSearch[c.code]", "compareShowUniform"], "modal.name"),
-    "netarch-guide":     (["globalSearch"], "modal.name"),
     "dev-crm":           (["filterPerson", "sortPref.sortMode", "filterYear", "filterMonth"], "caseForm.case_name"),
     "tender-radar":      (["watchFilter"], "scanHoursText"),
     "case-stage-board":  (["departmentId", "salesFilter", "searchQ"], None),
