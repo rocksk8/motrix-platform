@@ -222,9 +222,9 @@
         <input type="text" x-model="createForm.contactPhone">
       </div>
       <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
-      <div data-privacy-card style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light, #E5E7EB);border-radius:6px">
+      <div data-privacy-card style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
         <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-        <div style="font-size:11px;color:var(--text-dim, #6B7280);margin-bottom:8px;line-height:1.6">
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
           案場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。勾選後於建立時一併記錄；沒有記錄不影響建立。
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
@@ -237,7 +237,7 @@
           </label>
         </div>
         <div x-show="pnSubject() && !privacyAckRequested" data-privacy-missing
-             style="margin-top:6px;font-size:11px;color:var(--warning, #D97706)">尚未記錄個資告知</div>
+             style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
       </div>
 
       <div x-show="createErr" style="color:var(--danger);font-size:12px;margin-bottom:10px" x-text="createErr"></div>

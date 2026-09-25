@@ -686,33 +686,6 @@
                     <input class="fi" type="text" placeholder="電話" x-model="cr.caseRecord.contract.contactPhone" @input="setDirty()">
                   </div>
                 </div>
-                <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
-                <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.selected && s.selected.quote_no ? '/api/quotations/' + encodeURIComponent(s.selected.quote_no) : null, s => s.cr && s.cr.caseRecord && s.cr.caseRecord.contract && s.cr.caseRecord.contract.contactPerson, { role: 'site' })"
-                     x-init="pnLoadNotice(); pnRefresh(); $watch('selected', () => pnRefresh())"
-                     style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light, #E5E7EB);border-radius:6px">
-                  <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
-                  <div style="font-size:11px;color:var(--text-dim, #6B7280);margin-bottom:8px;line-height:1.6">
-                    現場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
-                  </div>
-                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                    <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
-                            :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
-                    <template x-if="pnAck()">
-                      <span data-privacy-acked style="font-size:12px;color:var(--success, #16A34A)"
-                            x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
-                    </template>
-                    <template x-if="!pnAck()">
-                      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
-                        <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
-                               @change="pnCheck($event.target.checked)" style="width:auto">
-                        已告知當事人（記錄時間與人員）
-                      </label>
-                    </template>
-                  </div>
-                  <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
-                       style="margin-top:6px;font-size:11px;color:var(--warning, #D97706)">尚未記錄個資告知</div>
-                  <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger, #DC2626)" x-text="privacyErr"></div>
-                </div>
                 <div class="fi-group" style="margin-bottom:18px">
                   <label class="fi-label">合約備註</label>
                   <textarea class="fi" rows="2" placeholder="合約特殊條款、注意事項..." x-model="cr.caseRecord.contract.contractNote" @input="setDirty()" style="resize:vertical;line-height:1.6"></textarea>
@@ -773,6 +746,33 @@
                 <div x-show="cr.caseRecord.projectTimeline.endDate && cr.dealTag !== '已結案'" style="font-size:12px;padding:10px;background:var(--tone-success-bg);border-radius:var(--radius);color:var(--tone-success-fg);margin-bottom:12px">
                   <span x-show="daysUntilDeadline() > 0" x-text="'剩餘 ' + daysUntilDeadline() + ' 天'"></span>
                   <span x-show="daysUntilDeadline() <= 0" x-text="'已超期 ' + Math.abs(daysUntilDeadline()) + ' 天'" style="color:var(--tone-danger-fg);background:var(--tone-danger-bg)"></span>
+                </div>
+                <!-- 個資蒐集告知（個資法 §8 I；CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：手動輸入的聯絡人也要告知） -->
+                <div data-privacy-card x-data="MotrixPrivacyNotice.subjectState('contact', s => s.selected && s.selected.quote_no ? '/api/quotations/' + encodeURIComponent(s.selected.quote_no) : null, s => s.cr && s.cr.caseRecord && s.cr.caseRecord.contract && s.cr.caseRecord.contract.contactPerson, { role: 'site' })"
+                     x-init="pnLoadNotice(); pnRefresh(); $watch('selected && selected.quote_no', () => pnRefresh())"
+                     style="margin:10px 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
+                  <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知</div>
+                  <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;line-height:1.6">
+                    現場聯絡人的姓名、電話屬個人資料，蒐集時須告知蒐集目的、類別、利用方式與當事人權利。先儲存單據，再列印告知書或勾選；換了聯絡人要重新告知。沒有記錄不影響存檔。
+                  </div>
+                  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button type="button" class="btn btn-ghost btn-sm" data-print-notice @click="pnPrint()"
+                            :disabled="!privacyNotice || !pnSubject()">列印告知書</button>
+                    <template x-if="pnAck()">
+                      <span data-privacy-acked style="font-size:12px;color:var(--success)"
+                            x-text="'✓ 已告知 ' + pnSubject() + '：' + (pnAck().at || '').replace('T', ' ').slice(0, 16) + '　' + (pnAck().by || '')"></span>
+                    </template>
+                    <template x-if="!pnAck()">
+                      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;margin:0">
+                        <input type="checkbox" data-privacy-ack :checked="privacyAckRequested" :disabled="!pnSubject()"
+                               @change="pnCheck($event.target.checked)" style="width:auto">
+                        已告知當事人（記錄時間與人員）
+                      </label>
+                    </template>
+                  </div>
+                  <div x-show="pnSubject() && !pnAck() && !privacyAckRequested" data-privacy-missing
+                       style="margin-top:6px;font-size:11px;color:var(--warning)">尚未記錄個資告知</div>
+                  <div x-show="privacyErr" data-privacy-error style="margin-top:6px;font-size:11px;color:var(--danger)" x-text="privacyErr"></div>
                 </div>
                 </fieldset><!-- /CM14b -->
                 <div x-show="caseReadOnly()" class="fi-label" style="margin-bottom:10px;color:var(--tone-warning-fg)">您不是這個案件的成員，以出納身分開啟：只能登錄收款（在「財務」分頁），其他內容唯讀。</div>
