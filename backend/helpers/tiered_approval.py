@@ -519,7 +519,7 @@ def resolve_display_names(conn, slots):
        （模組開頭的原則：純邏輯，可以直接餵值問它，不必先造一個 DB）。
 
     🔴 `BN7` 沿用：這支對 `slots` 的形狀（`{格名: {by, at}}`）沒有任何
-    傳票專屬的假設，`helpers/bonus_pdf.py` 直接 import 這一支處理
+    傳票專屬的假設，`modules/payroll/bonus_pdf.py` 直接 import 這一支處理
     `bonus_signatures_of()` 的輸出，不重寫一份——原本的底線 `_` 已拿掉
     （原本只有一個呼叫端，現在是共用工具，保留底線會誤導成「模組內部
     專用，不可外部 import」）。

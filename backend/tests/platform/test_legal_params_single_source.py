@@ -2,7 +2,7 @@
 """守門（MODULE-GUIDE §11；CUSTOMIZATION-SPEC §9.1）：法規數字只能出現在 L1 法規參數服務。
 
 扣繳起扣標準、補充保費費率、最低工資每年會變；寫死在模組裡 ⇒ 跨年時只改到一處（BENCHMARK §7 第一項的成因：
-勞報單的規則原本寫死在 `routers/payslips.py`，修改舊單還會用當下的規則重算）。
+勞報單的規則原本寫死在 `modules/payroll/api/payslips.py`，修改舊單還會用當下的規則重算）。
 
 - 範圍：`core.source_tree.product_files()`（全部產品碼）＋ frontend 的 .html／.js。
 - 允許：`helpers/legal_params.py`（唯一來源）、`db.py`（V9 凍結的種子 `tax_rules`，只准新增、不改）。

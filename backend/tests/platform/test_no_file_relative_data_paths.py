@@ -133,6 +133,6 @@ def test_product_code_has_no_file_relative_data_paths():
 def test_scan_covers_the_known_callers():
     """範圍守門：被改掉的那幾個檔必須在掃描範圍內（守門對象被搬走時這裡先紅）。"""
     rels = {source_tree.rel(p) for p in source_tree.product_files()}
-    for must in ("db.py", "archive.py", "pdf_gen.py", "photos.py", "routers/payslips.py",
+    for must in ("db.py", "archive.py", "pdf_gen.py", "photos.py", "modules/payroll/api/payslips.py",
                  "helpers/system_checks.py", "helpers/uploads.py", "core/paths.py"):
         assert must in rels, must

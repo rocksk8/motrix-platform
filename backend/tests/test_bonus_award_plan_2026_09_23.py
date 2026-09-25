@@ -12,7 +12,7 @@ POST /api/bonus/awards 要 allocations[].person_pct = { username: pct }
 
 資料前端拿得到（案件 API 有 `assignedTo`），**而那是把同一條規則抄到第二個地方**。
 ```
-helpers/bonus.py:141 已標「已知的未來來源 quotations.assigned_user_ids」
+modules/payroll/bonus.py:141 已標「已知的未來來源 quotations.assigned_user_ids」
 ⇒ 加它的那天：後端改、JS 不會跟
 ⇒ 症狀是**少發一個人，而總額對得起來**
 ```
@@ -58,7 +58,7 @@ PLAN = "/api/bonus/awards/plan/%s"
 #: —— 這個 repo 裡「端點不存在」有三種臉。
 OK_CODES = (200, 400, 403)
 
-#: `helpers/bonus.py:152`。
+#: `modules/payroll/bonus.py:152`。
 NO_ELIGIBLE_PEOPLE = "無可發放對象"
 
 #: 基點。
@@ -323,7 +323,7 @@ def test_bn1_the_base_comes_from_the_same_place_as_the_base_endpoint(
     ⚙️ 改法用**第三點**（B 給的三條路裡的第二條）：兩邊都比對 `base_amount_for()`
       的實算值 ⇒ **兩邊一起漂移時也抓得到**（只比對彼此的話，一起錯就一起綠）。
     """
-    from helpers.bonus import base_amount_for
+    from modules.payroll.bonus import base_amount_for
 
     net = 123456
     _seed_case("MQ-BN1-BASE", net_profit=net, sales_person="alice")
@@ -378,7 +378,7 @@ def test_bn1_the_plan_really_calls_base_amount_for(client, make_user,
     ```
     📌 這個哨兵值同時是**呼叫次數**的證據：沒被呼叫就取不到 `77`。
     """
-    import routers.bonus as rb
+    import modules.payroll.api.bonus as rb
 
     net, sentinel = 123456, 77
     _seed_case("MQ-BN1-SRC", net_profit=net, sales_person="alice")
@@ -449,7 +449,7 @@ def test_bn1_the_remainder_cannot_see_a_total_that_is_too_big():
       否則它會反過來**擋住修好它的那個改動** —— 而那時它看起來像一道正當的守門。
       而改期望值是最省力的動作，所以要明著禁止它。
     """
-    from helpers.bonus import pool_for, remainder_of, split_award
+    from modules.payroll.bonus import pool_for, remainder_of, split_award
 
     base = 123456
     for total in (BP * 2, -5000):
@@ -482,7 +482,7 @@ def test_bn1_the_unit_is_basis_points_in_both_directions(base):
       `pool` 是整數無條件捨去，7 個 base 有 4 個會紅，
       **而紅燈指向 `split_award()`，那支是對的**。
     """
-    from helpers.bonus import pool_for
+    from modules.payroll.bonus import pool_for
 
     assert pool_for(base, BP) == base, (
         "`pool_for(%d, 10000)` = %r，應該等於 `base` 本身。\n"

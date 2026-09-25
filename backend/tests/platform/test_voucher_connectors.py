@@ -143,7 +143,7 @@ def test_m07_does_not_import_m06_anywhere():
     import ast
     m06 = set(_group_py_files("M06"))
     m07 = _group_py_files("M07")
-    assert "helpers.bonus_pdf" in m07 and "routers.bonus" in m07          # 正對照：真的掃到了
+    assert "modules.payroll.bonus_pdf" in m07 and "modules.payroll.api.bonus" in m07          # 正對照：真的掃到了
     bad = []
     for mod, path in m07.items():
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
@@ -162,7 +162,7 @@ def test_the_page_shows_the_voucher_notice():
 
 
 def test_m07_pdf_parts_work_without_m06_files(tmp_path):
-    """反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，`routers.bonus` 照常載入，
+    """反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，`modules.payroll.api.bonus` 照常載入，
     獎金分潤單預覽／PDF 用的四樣元件（L1）照樣拿得到（2026-09-26 之前這裡會說「會計模組未安裝」）。"""
     import subprocess
     import sys
@@ -172,8 +172,8 @@ def test_m07_pdf_parts_work_without_m06_files(tmp_path):
         "import sys\n"
         "sys.modules['helpers.voucher'] = None\n"
         "sys.modules['helpers.voucher_pdf'] = None\n"
-        "import routers.bonus as b\n"
-        "from helpers import bonus_pdf\n"
+        "import modules.payroll.api.bonus as b\n"
+        "from modules.payroll import bonus_pdf\n"
         "resolve, company, render, money = bonus_pdf._pdf_parts()\n"
         "print('PARTS:' + ','.join(f.__module__ for f in (resolve, company, render, money)))\n"
         "print('MONEY:' + money(1234) + '|' + money(0) + '|')\n"
@@ -191,7 +191,7 @@ def test_preview_works_even_if_the_accounting_helpers_are_gone(client, people, m
     """M06 的 `helpers.voucher_pdf` 被拿掉（這裡以把它的函式換成會爆的替身模擬），獎金分潤單預覽照樣組得出來
     ——證明預覽走的是 L1，不是 M06。"""
     import helpers.voucher_pdf as vp
-    from helpers import bonus_pdf
+    from modules.payroll import bonus_pdf
 
     def _boom(*a, **k):
         raise AssertionError("不應該用到 M06 的 voucher_pdf")

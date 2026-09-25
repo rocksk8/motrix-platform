@@ -15,7 +15,7 @@ import io
 import pytest
 
 from core import registry
-from helpers import bonus_deductions as bd
+from modules.payroll import bonus_deductions as bd
 from helpers import legal_params as lp
 from tests._bonus_insure import insure_all
 from tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401

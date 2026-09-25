@@ -247,7 +247,7 @@ def test_bn5_no_profit_and_no_settlement_are_two_different_reasons(client,
        他會以為那個案子就是不能發，而其實他只要去按一次儲存。
     ⚙️ 而訊息要**用既有那一句**，不可以自己寫一句新的（規則只有一份）。
     """
-    from helpers.bonus import LEGACY_SETTLEMENT_MESSAGE
+    from modules.payroll.bonus import LEGACY_SETTLEMENT_MESSAGE
 
     _seed_case("MQ-BN5-LOSS", 0)
     _seed_case("MQ-BN5-NOSUM", 0)
@@ -321,7 +321,7 @@ def test_bn3_the_existing_sources_do_not_change_behaviour(client, make_user):
        那會讓既有來源在新表為空時回 `(False, [], …)` ⇒ **全部發不出去**。
     ⚙️ 這一題不碰新表，直接走既有的 `sales_person` 那一條。
     """
-    from helpers.bonus import people_for_item
+    from modules.payroll.bonus import people_for_item
 
     ok, people, note = people_for_item(
         {"person_source": "sales_person"}, {"sales_person": "alice"})
@@ -344,7 +344,7 @@ def test_bn3_the_existing_sources_do_not_change_behaviour(client, make_user):
 #: `BN4` 的白名單（hichan-61 2026-09-24，使用者裁「現在做完；白名單逐檔改」）。
 #: 該改的：獎金模組五檔 ＋ 兩支共用 helper 裡**只在註解**提到它的兩檔。
 _BN4_TARGETS = (
-    "backend/helpers/bonus.py", "backend/routers/bonus.py", "backend/helpers/bonus_pdf.py",
+    "backend/modules/payroll/bonus.py", "backend/modules/payroll/api/bonus.py", "backend/modules/payroll/bonus_pdf.py",
     "frontend/js/bonus.js", "frontend/pages/bonus.html",
     "backend/helpers/edit_log.py", "backend/helpers/tiered_approval.py",
 )
@@ -357,7 +357,7 @@ _BN4_UNTOUCHED = {"backend/archive.py": 2, "backend/db.py": 6}
 #: 2026-09-24：11 → 3。減少的 8 處全部來自被改寫的舊 `frontend/js/bonus.js`（3）與
 #: `frontend/pages/bonus.html`（5）——SPEC-BONUS §十一 把頁面整頁換成以案件為中心的新頁面，
 #: 舊頁面裡引用使用者原話的註解隨舊頁面一起移除（不是把原話裡的「獎金單」改掉）。
-#: `routers/bonus.py` 的 3 處不變。以同一個掃描器比對 master（f57740b）與分支得出。
+#: `modules/payroll/api/bonus.py` 的 3 處不變。以同一個掃描器比對 master（f57740b）與分支得出。
 _BN4_VERBATIM_QUOTES = 3
 
 
@@ -397,7 +397,7 @@ def test_bn4_the_user_facing_name_changed_everywhere(client, make_user):
     不該改的   ① 使用者原話裡的             => 恰好 `_BN4_VERBATIM_QUOTES` 處
                ② archive.py（資料鍵）／db.py（鎖定檔、凍住的歷史）=> 次數不變
     ```
-    ⚠️ `routers/bonus.py` 的稽核訊息寫進 `audit_log` ⇒ **既有紀錄不回頭改**
+    ⚠️ `modules/payroll/api/bonus.py` 的稽核訊息寫進 `audit_log` ⇒ **既有紀錄不回頭改**
        （那是改寫稽核紀錄）—— 這一題只看原始碼。
     """
     import pathlib

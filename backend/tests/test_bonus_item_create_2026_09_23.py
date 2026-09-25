@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`POST /api/bonus/items` —— **空狀態唯一的出路，而它現在一打就 500。**
 
-B 2026-09-23 找到，我複查成立（`routers/bonus.py:103`／`:119`）：
+B 2026-09-23 找到，我複查成立（`modules/payroll/api/bonus.py:103`／`:119`）：
 ```
 _require_user(authorization, require_superadmin=True)   <= **回傳值丟掉了**
 …
@@ -45,7 +45,7 @@ ITEMS = "/api/bonus/items"
 #: `§166`：走到端點才會出現的狀態碼。**500 不在裡面** —— 它不是「被擋」。
 OK_CODES = (200, 400, 403)
 
-#: `helpers/bonus.py` 的 `PERSON_SOURCES` 之一（`_case_people` 拿得到的那個）。
+#: `modules/payroll/bonus.py` 的 `PERSON_SOURCES` 之一（`_case_people` 拿得到的那個）。
 GOOD_SOURCE = "sales_person"
 
 
@@ -63,7 +63,7 @@ def _post(client, hdr, **body):
             "`POST %s` 回 **%s**：%s\n" % (ITEMS, r.status_code, r.text[:200])
             + "☠️ 它是空狀態**唯一的出路** —— 新客戶第一天按下「新增獎金項目」\n"
               "   看到的就是這個。\n"
-            + "🔑 `routers/bonus.py:103` 把 `_require_user()` 的回傳值丟掉了，\n"
+            + "🔑 `modules/payroll/api/bonus.py:103` 把 `_require_user()` 的回傳值丟掉了，\n"
               "   而 `:119` 的 `_user_name(user)` 要用它 ⇒ `NameError`。")
     if r.status_code in (404, 405, 422):
         pytest.fail("`POST %s` 走不到（回 %s）。" % (ITEMS, r.status_code))

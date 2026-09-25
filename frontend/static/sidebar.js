@@ -1165,6 +1165,9 @@ if (typeof module !== 'undefined' && module.exports) {
     'network-plan-form.html': { key: 'netplan', name: '網路規劃' },
     'topology-quick.html': { key: 'netplan', name: '網路規劃' },
     'dev-crm.html': { key: 'crm', name: '業務開發' },
+    'payslips.html': { key: 'payroll', name: '薪資獎金' },
+    'payslip-form.html': { key: 'payroll', name: '薪資獎金' },
+    'bonus.html': { key: 'payroll', name: '薪資獎金' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

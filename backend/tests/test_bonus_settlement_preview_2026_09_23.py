@@ -10,7 +10,7 @@
 # 🔴 `BN6` 一個數字都不要算
 
 10%／1% 只寫在 `settlement.html`；再算一次就是**第三份實作**
-（`helpers/bonus.py` 模組 docstring 已寫死這條）。本檔的每一題釘的都是
+（`modules/payroll/bonus.py` 模組 docstring 已寫死這條）。本檔的每一題釘的都是
 「有沒有把既有的值原樣帶出來」，不是「數字對不對」。
 
 # ⚠️ 本檔只涵蓋 `§6` 後端 ①～⑤（`BN6`）
@@ -51,7 +51,7 @@ import json
 
 import pytest
 
-from helpers.bonus import LEGACY_SETTLEMENT_MESSAGE, remainder_of, split_award
+from modules.payroll.bonus import LEGACY_SETTLEMENT_MESSAGE, remainder_of, split_award
 
 PLAN = "/api/bonus/awards/plan/%s"
 
@@ -239,7 +239,7 @@ def test_bn6_plan_does_not_recompute_the_ten_percent(client, make_user):
         "存的 `adminCost` 是 1（刻意不符合 10% 公式），\n"
         "回應卻是 %r。\n" % settlement.get("adminCost")
         + "☠️ 這代表 `plan` 自己重算了管銷分攤，而不是原樣帶出 `settlement` 的值\n"
-          "   —— `helpers/bonus.py` 模組 docstring 明著禁止**第三份實作**。")
+          "   —— `modules/payroll/bonus.py` 模組 docstring 明著禁止**第三份實作**。")
 
 
 # ══════════════════════════════════════════════════════════════════════

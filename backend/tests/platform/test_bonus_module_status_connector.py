@@ -1,9 +1,9 @@
 """IP-16 `bonus.module_status`（M07 → L1 `/api/system/bonus-module-status`，2026-09-26 M07 搬遷前置，DEPENDENCY-MAP #27）。
 
-L1 system 原本直接 import M07 的 `helpers.bonus.bonus_module_on`。
+L1 system 原本直接 import M07 的 `modules.payroll.bonus.bonus_module_on`。
 ① 正對照：M07 在 ⇒ 回的是 M07 的開關（`BONUS_MODULE_ENABLED=0` 關、預設開）
 ② 反向控制：M07 不在（拿掉提供者）⇒ 200、`enabled: false`、`notice` 明說；不是 500
-③ L1 system 不再 import helpers.bonus
+③ L1 system 不再 import modules.payroll.bonus
 """
 from core import registry, source_tree
 
@@ -32,4 +32,4 @@ def test_without_payroll_it_is_off_and_says_why(client, make_user, monkeypatch):
 
 def test_system_does_not_import_the_payroll_helper():
     src = (source_tree.BACKEND / "routers" / "system.py").read_text(encoding="utf-8")
-    assert "from helpers import bonus" not in src and "helpers.bonus" not in src
+    assert "from helpers import bonus" not in src and "modules.payroll.bonus" not in src

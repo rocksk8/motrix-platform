@@ -52,7 +52,7 @@ POST /api/bonus/awards                 真的產生（③ⓒ 凍結那一題需�
 # 🔴 一個做了但尚未證實的假設：**自動計算比例在後端算，不是前端**
 
 `_plan_allocations()` 今天**一律**從呼叫端拿 `person_pct`
-（`alloc.get("person_pct") or {}`，`routers/bonus.py:596`）——目前**沒有
+（`alloc.get("person_pct") or {}`，`modules/payroll/api/bonus.py:596`）——目前**沒有
 任何一個來源**做自動均分，連 `case_stages.assigned_to`（本來就可能是
 多人）也是前端自己組好送進來。
 
@@ -235,7 +235,7 @@ def test_bn14_the_group_tables_and_column_exist(client):
 
 def test_bn14_person_sources_includes_group():
     """🔴 **`PERSON_SOURCES` 要多一個 `\"group\"` 值。**"""
-    from helpers.bonus import PERSON_SOURCES
+    from modules.payroll.bonus import PERSON_SOURCES
     assert "group" in PERSON_SOURCES, (
         "`PERSON_SOURCES` 現在是 %r，沒有 `\"group\"`。" % (PERSON_SOURCES,))
 

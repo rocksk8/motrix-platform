@@ -1,6 +1,6 @@
 """`BN10` · 點開一張獎金分潤單要有完整詳細內容（精算明細＋拆發明細＋簽核狀態）。
 
-端點：`GET /api/bonus/awards/{id}`（`routers/bonus.py::get_award`）。
+端點：`GET /api/bonus/awards/{id}`（`modules/payroll/api/bonus.py::get_award`）。
 驗：
 ① 一次拿齊三件：`settlement`／`lines`／`signatures`
 ② `settlement` 是精算**存值原樣帶出**（刻意種一組不符 10%／1% 係數的值；重算就對不上）
