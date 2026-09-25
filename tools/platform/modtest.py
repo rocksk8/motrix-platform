@@ -93,25 +93,34 @@ def _names(repo, *diff_args):
     return set(l for l in out.splitlines() if l.strip())
 
 
-def rebase_check(green, onto, repo=None):
+def rebase_check(green, onto, repo=None, head="HEAD"):
     """PLAYBOOK §C-11：全量綠在 green（rebase 前的分支尖端）之後 rebase 到 onto，要不要重跑全量。
 
     帶進來的＝merge-base..onto；本分支的＝merge-base..green。
     - 帶進來的碰到 FIXTURE_LAYER ⇒ 全量
     - 兩邊改了同一個程式檔 ⇒ 全量（以「同檔」近似「程式碼衝突」：比 git 文字衝突寬，寧可多跑）
     - 兩邊改了同一個 .md ⇒ 只列出、不觸發全量（讀文件的守門在 tests/platform，差異題本來就會跑）
-    - 都沒有 ⇒ `modtest --changed-since <green>`（green 與 HEAD 兩棵樹的差＝帶進來的＋全量之後才改的；本分支已在全量驗過的 fixture 層不會被算進去）
+    - 都沒有 ⇒ 只跑 after_green（全量之後本分支才改的檔）的差異題＋tests/platform：`modtest --files <after_green>`
+      after_green＝(green 與 head 兩棵樹的差) − 帶進來的檔；帶進來的已由對方自己的全量驗過（§C-11 補充）。
+      ☠️ 不建議 `--changed-since <green>`：它把帶進來的也算進去，對方改到 L0 時會挑出九成（2026-09-26 實測 90.7%）；
+         也不建議 `--base <onto>`：本分支自己改過 fixture 層時一定被拒（同日實測）。
+    - 帶進來的檔在 head 上又被本分支改過（head 與 onto 的內容不同）⇒ 視為程式碼衝突
     ⚠ 只看「帶進來的」：本分支自己改的 fixture 層由它自己的全量負責（§C-4），不在這裡判定。
+    ⚠ 要在 rebase **之後**跑（head 已經在 onto 上）；rebase 之前跑，after_green 永遠是空的。
     """
     repo = repo or REPO
     mb = subprocess.run(["git", "-C", str(repo), "merge-base", green, onto], capture_output=True, text=True,
                         encoding="utf-8", check=True).stdout.strip()
     incoming, mine = _names(repo, mb, onto), _names(repo, mb, green)
+    since_green = _names(repo, green, head)
+    touched_again = {f for f in incoming & since_green if _names(repo, onto, head, "--", f)}
     fixture = sorted(f for f in incoming if f in FIXTURE_LAYER)
-    both = incoming & mine
+    both = (incoming & mine) | touched_again
     overlap = sorted(f for f in both if not f.endswith(".md"))
-    return {"green": green, "onto": onto, "merge_base": mb,
+    rebased = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor", onto, head]).returncode == 0
+    return {"green": green, "onto": onto, "head": head, "merge_base": mb, "rebased": rebased,
             "incoming": sorted(incoming), "mine": sorted(mine),
+            "after_green": sorted(since_green - incoming),
             "fixture_layer": fixture, "overlap": overlap, "overlap_docs": sorted(both - set(overlap)),
             "need_full": bool(fixture or overlap)}
 
@@ -125,9 +134,13 @@ def print_rebase_check(r):
         print("兩邊都改的文件（不觸發全量）：%s" % "、".join(r["overlap_docs"]))
     if r["need_full"]:
         print("🔴 判定：重跑全量（§C-11 例外）")
+    elif not r["rebased"]:
+        print("⚠ %s 還沒 rebase 到 %s ⇒ 全量之後改了什麼算不出來；先 rebase 再跑本判定" % (r["head"], r["onto"]))
     else:
-        print("✓ 判定：rebase 後跑 `modtest --changed-since %s`（含 tests/platform）；回報寫「全量在 %s，差異題在 %s」"
-              % (r["green"], r["green"], r["onto"]))
+        ag = r["after_green"]
+        cmd = "modtest --files %s" % " ".join(ag) if ag else "tests/platform（全量之後本分支沒有再改）"
+        print("✓ 判定：跑 `%s`（modtest 另帶 tests/platform）；回報寫「全量在 %s，差異題在 %s」"
+              % (cmd, r["green"], r["onto"]))
 
 
 def load_map(refresh):
@@ -566,7 +579,7 @@ def main(argv=None):
             sys.stdout.buffer.write((json.dumps(r, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
         else:
             print_rebase_check(r)
-        return 3 if r["need_full"] else 0
+        return 3 if r["need_full"] else (0 if r["rebased"] else 2)
     global PYEXE
     PYEXE = resolve_python(a.python)
 

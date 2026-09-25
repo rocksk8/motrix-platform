@@ -102,12 +102,56 @@ def test_cli_exit_code_follows_the_verdict(repo, monkeypatch, capsys):
     assert "重跑全量" in capsys.readouterr().out
 
 
-def test_cli_recommends_changed_since_green(repo, monkeypatch, capsys):
-    """不需全量時建議 `--changed-since <green>`：`--base <onto>` 在本分支自己改過 fixture 層時會被 modtest 拒絕
-    （2026-09-26 實際踩到）。"""
+def _rebased(r, green, after=()):
+    """模擬 rebase：從 platform 開 `rebased` 分支、疊上 green 的改動，再疊 after＝[(路徑, 內容)]（全量之後才改的）。"""
+    _git(r, "checkout", "-q", "-b", "rebased", "platform")
+    _git(r, "cherry-pick", green)
+    for rel, text in after:
+        _write_commit(r, rel, text, "全量之後又改")
+    return _git(r, "rev-parse", "HEAD")
+
+
+def test_after_green_is_only_my_changes_since_the_full(repo):
+    """after_green＝全量之後本分支才改的檔；帶進來的（已由對方驗過）與全量裡驗過的都不在其中。"""
+    r, green = repo
+    _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
+    head = _rebased(r, green, after=[("backend/tests/test_x.py", "t = 1\n")])
+    res = MT.rebase_check(green, "platform", repo=r, head=head)
+    assert res["need_full"] is False
+    assert res["after_green"] == ["backend/tests/test_x.py"]
+
+
+def test_rc_incoming_file_touched_again_after_green_needs_full(repo):
+    """反向控制：全量之後本分支又改了一個帶進來的檔 ⇒ 那是沒被任何人驗過的組合 ⇒ 全量。"""
+    r, green = repo
+    _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
+    head = _rebased(r, green, after=[("backend/modules/n/api.py", "z = 2\n")])
+    res = MT.rebase_check(green, "platform", repo=r, head=head)
+    assert res["need_full"] is True and res["overlap"] == ["backend/modules/n/api.py"]
+
+
+def test_rc_before_rebase_gives_no_recommendation(repo, monkeypatch, capsys):
+    """反向控制：rebase 之前跑（head 還是 green）⇒ after_green 必然是空的、不可信 ⇒ 不給建議、exit 2。"""
     r, green = repo
     monkeypatch.setattr(MT, "REPO", r)
     _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
+    res = MT.rebase_check(green, "platform", repo=r, head=green)
+    assert res["rebased"] is False
+    _git(r, "checkout", "-q", "mine")
+    assert MT.main(["--rebase-check", green, "--onto", "platform"]) == 2
+    out = capsys.readouterr().out
+    assert "先 rebase" in out and "判定：跑" not in out
+
+
+def test_cli_recommends_files_after_green(repo, monkeypatch, capsys):
+    """不需全量時建議 `modtest --files <after_green>`。
+    ☠️ `--base <onto>`：本分支自己改過 fixture 層時一定被 modtest 拒絕；`--changed-since <green>`：把帶進來的也算進去，
+    對方改到 L0 時挑出九成（2026-09-26 兩者都實際踩到）。"""
+    r, green = repo
+    monkeypatch.setattr(MT, "REPO", r)
+    _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
+    _rebased(r, green, after=[("backend/tests/test_x.py", "t = 1\n")])
     assert MT.main(["--rebase-check", green, "--onto", "platform"]) == 0
     out = capsys.readouterr().out
-    assert "modtest --changed-since %s" % green in out and "--base" not in out
+    assert "modtest --files backend/tests/test_x.py" in out
+    assert "--base" not in out and "--changed-since" not in out
