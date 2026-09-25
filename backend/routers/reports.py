@@ -3661,6 +3661,21 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             "category": e["category"],   # `AC2`：首頁儀表板 otherBreakdown 用
         })
 
+    # ── 其他模組登記的支出（IP-8 expense.entries；目前：獎金分潤以發放日列支出，
+    # 權責與現金兩種口徑相同）。提供者不在 ⇒ 少這一類，其餘照常。併入「其他支出」，category 區分。
+    from core import registry
+    for _name, fn in sorted(registry.providers("expense.entries").items()):
+        for e in fn(conn, d0, d1):
+            mo = (e["date"] or "")[:7]
+            if mo not in monthly or not _quote_in_department(e["quoteNo"]):
+                continue
+            monthly[mo]["other"] += e["amount"]
+            details["other"].append({
+                "date": e["date"], "quoteNo": e["quoteNo"], "desc": e["desc"], "amount": round(e["amount"]),
+                "files": [], "pending": False, "taxNote": "", "provisional": False,
+                "category": e["category"],
+            })
+
     if own_conn:
         conn.close()
 

@@ -310,6 +310,10 @@
               <button class="ctab" :class="{on: cashierSub==='receivable'}" @click="cashierSub='receivable'">
                 待收款<span class="tab__cnt" x-text="receivable.filter(i=>!i.received).length"></span>
               </button>
+              <!-- 獎金分潤待發放（IP-7；只給最高管理者與出納，財務看不到——SPEC-BONUS C1） -->
+              <button class="ctab" x-show="bonusQueue.visible" :class="{on: cashierSub==='bonus'}" @click="cashierSub='bonus'" data-testid="cashier-bonus-tab">
+                獎金待發放<span class="tab__cnt" x-text="bonusQueue.items.length"></span>
+              </button>
               <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
               <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
               <!-- `FN3`：T100 匯出從報表頁搬進來，成為第 5 個子頁籤。
@@ -342,6 +346,43 @@
                           <td class="c">
                             <button x-show="canExecuteCashier()" class="action-btn pay" @click="openPayVoucherModal(v)">標記已匯款</button>
                             <span x-show="!canExecuteCashier()" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- 獎金分潤待發放（CORE-SPEC 獎金分潤：送交出納）。「標記已發放」打的是獎金頁同一支 API -->
+            <div x-show="cashierSub==='bonus'" data-testid="cashier-bonus">
+              <div class="alert-bar" x-show="bonusPayNotice" x-text="bonusPayNotice" data-testid="cashier-bonus-result"></div>
+              <div class="alert-bar" x-show="bonusQueue.notice" data-testid="cashier-bonus-notice">
+                <span x-text="bonusQueue.notice"></span>
+              </div>
+              <template x-if="bonusQueue.available && bonusQueue.items.length===0">
+                <div class="empty-state">目前沒有待發放的獎金分潤</div>
+              </template>
+              <template x-if="bonusQueue.items.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>案件號</th><th>客戶</th><th class="c">人數</th>
+                      <th class="r">發放總額</th><th class="c">核准日</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="b in bonusQueue.items" :key="b.quoteNo">
+                        <tr :data-testid="'cashier-bonus-row-' + b.quoteNo">
+                          <td class="mono"><a :href="'bonus.html?q=' + encodeURIComponent(b.quoteNo)" x-text="b.quoteNo"></a></td>
+                          <td x-text="b.customer"></td>
+                          <td class="c mono" x-text="b.people"></td>
+                          <td class="r mono" x-text="fmt(b.total)"></td>
+                          <td class="c mono" x-text="b.approvedAt"></td>
+                          <td class="c">
+                            <button x-show="bonusQueue.canMarkPaid" class="action-btn pay" @click="openBonusPayModal(b)"
+                                    :data-testid="'cashier-bonus-pay-' + b.quoteNo">標記已發放</button>
+                            <span x-show="!bonusQueue.canMarkPaid" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
                         </tr>
                       </template>
@@ -465,6 +506,39 @@
                           </template>
                         </tbody>
                       </table>
+                    </div>
+                  </template>
+
+                  <template x-if="cashierHistoryBonusVisible">
+                    <div data-testid="cashier-history-bonus">
+                      <div class="stl-section">獎金分潤發放（共 <span x-text="cashierHistoryBonus.length"></span> 筆，合計 <span x-text="fmt(cashierHistoryBonusTotal)"></span>）</div>
+                      <div class="alert-bar" x-show="cashierHistoryBonusNotice" x-text="cashierHistoryBonusNotice"></div>
+                      <template x-if="cashierHistoryBonus.length===0 && !cashierHistoryBonusNotice">
+                        <div class="empty-state">此區間沒有獎金分潤發放紀錄</div>
+                      </template>
+                      <template x-if="cashierHistoryBonus.length>0">
+                        <div class="panel" style="margin-bottom:20px">
+                          <table class="data-table">
+                            <thead><tr><th>案件號</th><th>客戶</th><th class="c">人數</th><th class="r">發放總額</th>
+                              <th class="r">代扣稅款</th><th class="r">補充保費</th><th class="r">實發</th><th class="c">發放日</th></tr></thead>
+                            <tbody>
+                              <template x-for="b in cashierHistoryBonus" :key="b.quoteNo">
+                                <tr>
+                                  <td class="mono" x-text="b.quoteNo"></td>
+                                  <td x-text="b.customer"></td>
+                                  <td class="c mono" x-text="b.people"></td>
+                                  <td class="r mono" x-text="fmt(b.total)"></td>
+                                  <!-- null＝發放時沒有計算（法規參數接上前），顯示「未計算」不是 0 -->
+                                  <td class="r mono" x-text="b.withholding === null ? '未計算' : fmt(b.withholding)"></td>
+                                  <td class="r mono" x-text="b.nhiPremium === null ? '未計算' : fmt(b.nhiPremium)"></td>
+                                  <td class="r mono" x-text="b.net === null ? '未計算' : fmt(b.net)"></td>
+                                  <td class="c mono" x-text="b.paidAt"></td>
+                                </tr>
+                              </template>
+                            </tbody>
+                          </table>
+                        </div>
+                      </template>
                     </div>
                   </template>
 
@@ -814,6 +888,53 @@
           <button @click="confirmPayVoucher()" :disabled="payVoucherSaving || !payVoucherDate"
                   style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
                   x-text="payVoucherSaving ? '處理中…' : '確認標記已匯款'"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 獎金分潤標記已發放（與獎金頁的按鈕同一支 API：POST /api/bonus/cases/{單號}/mark-paid） -->
+  <div x-show="bonusPay.show" class="modal-overlay" @click.self="bonusPay.show=false" data-testid="cashier-bonus-modal">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-hd">
+        <div class="modal-title" x-text="'獎金分潤標記已發放' + (bonusPay.quoteNo ? '　' + bonusPay.quoteNo : '')"></div>
+        <button class="modal-close" @click="bonusPay.show=false">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-bar" x-show="bonusPay.error" x-text="bonusPay.error"></div>
+        <template x-if="bonusPay.detail">
+          <div>
+            <table class="data-table" style="margin-bottom:12px">
+              <thead><tr><th>人員</th><th class="r">發放</th><th class="r">代扣稅款</th><th class="r">補充保費</th><th class="r">實發</th></tr></thead>
+              <tbody>
+                <template x-for="l in bonusPayRows()" :key="l.username">
+                  <tr>
+                    <td x-text="l.displayName"></td>
+                    <td class="r mono" x-text="fmt(l.gross)"></td>
+                    <td class="r mono" x-text="l.withholding === null || l.withholding === undefined ? '—' : fmt(l.withholding)"></td>
+                    <td class="r mono" x-text="l.nhiPremium === null || l.nhiPremium === undefined ? '—' : fmt(l.nhiPremium)"></td>
+                    <td class="r mono" x-text="l.net === null || l.net === undefined ? '—' : fmt(l.net)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="alert-bar" x-show="bonusPay.detail.deductionNotice" x-text="bonusPay.detail.deductionNotice" data-testid="cashier-bonus-deduction-notice"></div>
+            <label class="field-label">付款銀行（支出傳票草稿的貸方科目）</label>
+            <select class="field-input" x-model="bonusPay.bank" data-testid="cashier-bonus-bank">
+              <option value="">（獎金設定的銀行科目）</option>
+              <template x-for="b in (bonusPay.detail.bankAccounts || [])" :key="b.acctCode">
+                <option :value="b.acctCode" x-text="b.name + '（' + b.acctCode + '）'"></option>
+              </template>
+            </select>
+            <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px" x-show="bonusPay.detail.voucherNotice" x-text="bonusPay.detail.voucherNotice"></div>
+          </div>
+        </template>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button @click="bonusPay.show=false" :disabled="bonusPay.saving"
+                  style="padding:7px 16px;border:1px solid var(--border-light);border-radius:var(--radius);font-size:13px;font-family:var(--font-zh);background:#fff;cursor:pointer">取消</button>
+          <button @click="confirmBonusPaid()" :disabled="bonusPay.saving || !bonusPay.detail" data-testid="cashier-bonus-confirm"
+                  style="padding:7px 16px;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font-zh);background:#059669;color:#fff;cursor:pointer"
+                  x-text="bonusPay.saving ? '處理中…' : '確認標記已發放'"></button>
         </div>
       </div>
     </div>

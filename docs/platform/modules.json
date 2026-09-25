@@ -362,7 +362,9 @@
    "units": [
     "helper:bonus",
     "helper:bonus_case",
+    "helper:bonus_deductions",
     "helper:bonus_pdf",
+    "helper:bonus_payouts",
     "helper:bonus_vouchers",
     "js:js/bonus.js",
     "page:pages/bonus.html",

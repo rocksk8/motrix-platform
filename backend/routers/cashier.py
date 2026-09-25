@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
 
+from core import registry
 from db import get_db
 from helpers import _require_user, user_has_module, payment_item_amounts
 from routers.contractor_vouchers import _voucher_public
@@ -38,6 +39,26 @@ def _require_view_access(user: dict) -> None:
             and not user_has_module(user, "cashier")
             and not user_has_module(user, "finance")):
         raise HTTPException(403, "僅管理員、出納或財務可查閱")
+
+
+# ── 獎金分潤（IP-7 bonus.payouts，INTEGRATION-POINTS.md）───────────────────────
+#: 薪資獎金模組（M07）不在時對使用者說的話（不可以默默略過）
+BONUS_MISSING = "薪資獎金模組未安裝：出納頁不顯示獎金分潤"
+
+
+def _bonus_visible(user: dict) -> bool:
+    """獎金金額只給最高管理者與出納（SPEC-BONUS C1）；本頁的財務（finance）可以看其他頁籤，但看不到獎金。"""
+    return user.get("role") == "superadmin" or user_has_module(user, "cashier")
+
+
+def _bonus_payouts(user: dict):
+    """回 `(provider | None, notice)`。M07 不在 ⇒ `(None, BONUS_MISSING)`；沒有權限 ⇒ `(None, "")`（不顯示該區）。"""
+    if not _bonus_visible(user):
+        return None, ""
+    p = registry.single_provider("bonus.payouts")
+    if p is None:
+        return None, BONUS_MISSING
+    return p, ""
 
 
 def _payable_queue(conn) -> list:
@@ -141,6 +162,24 @@ def get_receivable_queue(status: str = Query("unreceived"), authorization: str =
         conn.close()
 
 
+@router.get("/api/cashier/bonus-queue")
+def get_bonus_queue(authorization: str = Header(None)):
+    """獎金分潤待發放（CORE-SPEC 獎金分潤：送交出納）。「標記已發放」打的是獎金那一支
+    `POST /api/bonus/cases/{單號}/mark-paid`——同一個動作，不在這裡另寫一份。"""
+    user = _require_user(authorization)
+    _require_view_access(user)
+    p, notice = _bonus_payouts(user)
+    if p is None:
+        return {"available": False, "visible": _bonus_visible(user), "notice": notice, "items": []}
+    conn = get_db()
+    try:
+        items = p.pending(conn)
+    finally:
+        conn.close()
+    return {"available": True, "visible": True, "notice": "", "items": items,
+            "canMarkPaid": user.get("role") == "superadmin" or user_has_module(user, "cashier")}
+
+
 # ── 執行歷史（已匯款／已收款彙整）＋ Excel 匯出 ─────────────────────────────
 
 def _default_month_range():
@@ -150,7 +189,7 @@ def _default_month_range():
     return d0, d1
 
 
-def _execution_history(conn, start: str, end: str) -> dict:
+def _execution_history(conn, start: str, end: str, user: dict = None) -> dict:
     outgoing_rows = conn.execute("""
         SELECT * FROM contractor_payment_vouchers
         WHERE is_paid=1 AND paid_at BETWEEN ? AND ?
@@ -158,11 +197,17 @@ def _execution_history(conn, start: str, end: str) -> dict:
     """, (start, end)).fetchall()
     outgoing = [_voucher_public(r, include_snapshot=False) for r in outgoing_rows]
     incoming = _collect_income_items(start, end)
-    return {
+    out = {
         "start": start, "end": end,
         "outgoing": outgoing, "outgoingTotal": sum(v["grandTotal"] for v in outgoing),
         "incoming": incoming, "incomingTotal": sum(i["amount"] for i in incoming),
     }
+    # 獎金分潤發放紀錄（IP-7）：只給看得到獎金的人；M07 不在 ⇒ 空清單＋明說
+    p, notice = _bonus_payouts(user or {})
+    bonus = p.paid(conn, start, end) if p is not None else []
+    out.update({"bonusVisible": _bonus_visible(user or {}), "bonusNotice": notice,
+                "bonusPaid": bonus, "bonusPaidTotal": sum(b["total"] for b in bonus)})
+    return out
 
 
 @router.get("/api/cashier/execution-history")
@@ -174,7 +219,7 @@ def get_execution_history(start: str = Query(None), end: str = Query(None), auth
     end = end or d1
     conn = get_db()
     try:
-        return _execution_history(conn, start, end)
+        return _execution_history(conn, start, end, user)
     finally:
         conn.close()
 
@@ -191,7 +236,7 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
     end = end or d1
     conn = get_db()
     try:
-        data = _execution_history(conn, start, end)
+        data = _execution_history(conn, start, end, user)
     finally:
         conn.close()
 
@@ -254,6 +299,41 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
              font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
              aligns=[al("left")], height=20)
     ws2.cell(row=r, column=5).number_format = '#,##0'
+
+    if data["bonusVisible"]:
+        ws3 = wb.create_sheet("獎金發放明細")
+        ws3.sheet_view.showGridLines = False
+        hdrs3 = ["案件號", "客戶", "人數", "發放總額", "代扣稅款", "補充保費", "實發", "發放日", "經辦"]
+        for i, w in enumerate([14, 18, 6, 12, 12, 12, 12, 12, 10], 1):
+            ws3.column_dimensions[chr(64 + i)].width = w
+        ws3.merge_cells("A1:I1")
+        c = ws3["A1"]
+        c.value = f"出納執行紀錄 — 獎金分潤發放（{start} ~ {end}）"
+        c.font = mk(bold=True, size=12, color=C_WHITE)
+        c.fill = fill(C_DARK)
+        c.alignment = al("center")
+        ws3.row_dimensions[1].height = 24
+        set_row(ws3, 2, hdrs3, font=mk(bold=True, size=9, color=C_WHITE), fill=fill("374151"), border=BD,
+                aligns=[al("center")], height=20)
+        r = 3
+        if data["bonusNotice"]:
+            set_row(ws3, r, [data["bonusNotice"]] + [""] * 8, font=mk(size=9), border=BD,
+                    aligns=[al("left")], height=18)
+            r += 1
+        for b in data["bonusPaid"]:
+            # 扣繳快照不存在（法規參數接上前發放的）⇒ 留空，不寫 0
+            set_row(ws3, r, [b["quoteNo"], b["customer"], b["people"], b["total"],
+                             "" if b["withholding"] is None else b["withholding"],
+                             "" if b["nhiPremium"] is None else b["nhiPremium"],
+                             "" if b["net"] is None else b["net"], b["paidAt"], b["paidBy"]],
+                    font=mk(size=9), border=BD, aligns=[al("left")], height=18)
+            for col in (4, 5, 6, 7):
+                ws3.cell(row=r, column=col).number_format = '#,##0'
+            r += 1
+        set_row(ws3, r, ["合計", "", "", data["bonusPaidTotal"], "", "", "", "", ""],
+                font=mk(bold=True, size=9, color=C_WHITE), fill=fill(C_DARK), border=BD,
+                aligns=[al("left")], height=20)
+        ws3.cell(row=r, column=4).number_format = '#,##0'
 
     buf = io.BytesIO()
     wb.save(buf)

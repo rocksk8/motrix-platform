@@ -37,6 +37,8 @@ EVENT_GROUPS = [
         ("payment_request_next_tier","請款單進入下一層審核"),
         ("payment_request_approved", "請款單審核完成"),
         ("payment_request_returned", "請款單退回修改"),
+        ("bonus_submitted",   "獎金分潤待審核通知（輪到我簽，含代理；信中不含金額）"),
+        ("bonus_payout_ready","獎金分潤核准待發放（出納；信中不含金額）"),
         ("approval_reminder", "簽核逾期催辦提醒（工作日 1/3/5 天分級升級，含報價單／匯款申請／開票申請憑據／請款單）"),
     ]),
     ("工作事項", [

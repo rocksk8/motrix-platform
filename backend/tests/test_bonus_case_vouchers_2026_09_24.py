@@ -197,7 +197,7 @@ def test_accounts_default_and_are_superadmin_only(client, people):
     r = client.get(ACCOUNTS, headers=_auth(people["bc_sa"]))
     assert r.status_code == 200, r.text
     assert r.json()["accounts"] == {"expense": "6111", "payable": "2191",
-                                    "withholding": "2252", "bank": "1113"}
+                                    "withholding": "2252", "nhi": "2252", "bank": "1113"}
     assert client.get(ACCOUNTS, headers=_auth(people["bc_cash"])).status_code == 403
     assert client.put(ACCOUNTS, headers=_auth(people["bc_cash"]),
                       json={"payable": "2191"}).status_code == 403

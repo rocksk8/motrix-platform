@@ -78,6 +78,14 @@ function cashierApp() {
     cashierHistoryIncoming:     [],
     cashierHistoryOutgoingTotal: 0,
     cashierHistoryIncomingTotal: 0,
+    // 獎金分潤（IP-7）：待發放清單、發放紀錄、標記已發放的對話框
+    bonusQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
+    bonusPay: { show: false, quoteNo: '', detail: null, bank: '', saving: false, error: '' },
+    bonusPayNotice: '',
+    cashierHistoryBonus: [],
+    cashierHistoryBonusTotal: 0,
+    cashierHistoryBonusVisible: false,
+    cashierHistoryBonusNotice: '',
     // 原 cashier.js 叫 exporting，這裡本來就有同名的「exporting」給財務報表
     // 匯出用（見 exportFile()），改名避免互踩
     cashierExporting: false,
@@ -168,7 +176,7 @@ function cashierApp() {
       const today = new Date()
       this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
       this.cashierHistoryEnd = this._localDateStr(today)
-      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory()])
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue()])
       this.cashierLoaded = true
     },
 
@@ -199,9 +207,60 @@ function cashierApp() {
           this.cashierHistoryIncoming = d.incoming || []
           this.cashierHistoryOutgoingTotal = d.outgoingTotal || 0
           this.cashierHistoryIncomingTotal = d.incomingTotal || 0
+          this.cashierHistoryBonus = d.bonusPaid || []
+          this.cashierHistoryBonusTotal = d.bonusPaidTotal || 0
+          this.cashierHistoryBonusVisible = !!d.bonusVisible
+          this.cashierHistoryBonusNotice = d.bonusNotice || ''
         }
       } catch (e) { console.error(e) }
       this.cashierHistoryLoading = false
+    },
+
+    async loadBonusQueue() {
+      try {
+        const r = await fetch('/api/cashier/bonus-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) this.bonusQueue = await r.json()
+      } catch (e) { console.error(e) }
+    },
+
+    // 明細（每人金額、扣繳試算、可選的付款銀行）走獎金那一支：出納（C1）看得到整張、看不到淨利
+    async openBonusPayModal(b) {
+      this.bonusPay = { show: true, quoteNo: b.quoteNo, detail: null, bank: '', saving: false, error: '' }
+      try {
+        const r = await fetch('/api/bonus/cases/' + encodeURIComponent(b.quoteNo), { headers: { Authorization: 'Bearer ' + this._token() } })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.bonusPay.error = d.detail || ('載入失敗（HTTP ' + r.status + '）'); return }
+        this.bonusPay.detail = d
+        this.bonusPay.bank = d.defaultBankAccountCode || ''
+      } catch (e) { this.bonusPay.error = '載入獎金明細失敗：' + e.message }
+    },
+    bonusPayRows() {
+      const d = this.bonusPay.detail || {}
+      if (d.deductions && d.deductions.lines) return d.deductions.lines
+      const merged = {}
+      for (const l of (d.lines || [])) {
+        const m = merged[l.username] || (merged[l.username] = { username: l.username, displayName: l.display_name_snapshot || l.username, gross: 0 })
+        m.gross += l.amount
+      }
+      return Object.values(merged)
+    },
+    async confirmBonusPaid() {
+      this.bonusPay.saving = true
+      this.bonusPay.error = ''
+      try {
+        const r = await fetch('/api/bonus/cases/' + encodeURIComponent(this.bonusPay.quoteNo) + '/mark-paid', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify(this.bonusPay.bank ? { bank_account_code: this.bonusPay.bank } : {}),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.bonusPay.error = d.detail || ('操作失敗（HTTP ' + r.status + '）'); return }
+        this.bonusPay.show = false
+        // notice（未產生傳票、未計算扣繳…）一定要讓人看到
+        this.bonusPayNotice = (d.notice || '') ? ('已標記 ' + this.bonusPay.quoteNo + ' 已發放。' + d.notice) : ('已標記 ' + this.bonusPay.quoteNo + ' 已發放。')
+        await Promise.all([this.loadBonusQueue(), this.loadCashierHistory()])
+      } catch (e) { this.bonusPay.error = '標記已發放失敗：' + e.message }
+      finally { this.bonusPay.saving = false }
     },
 
     async exportCashierHistory() {

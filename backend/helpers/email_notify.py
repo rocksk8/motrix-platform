@@ -750,6 +750,43 @@ def notify_payment_request_returned(request_no: str, customer: str, note: str,
     _async_send(to, f"【MOTRIX】請款單已退回 — {request_no}（{customer}）", html)
 
 
+def notify_bonus_submitted(quote_no: str, customer: str, approver_usernames: list) -> None:
+    """獎金分潤送審／換人簽 → 通知現在輪到的簽核人（含代理人；CORE-SPEC 獎金分潤：通知）。
+    🔴 信裡不放金額（屬敏感資訊）；名單上的成員不會因為在名單上而收到。"""
+    to = _lookup_emails(approver_usernames, "bonus_submitted")
+    if not to:
+        logger.warning("notify_bonus_submitted: 簽核人 %s 皆無設定 email（quote_no=%r）",
+                       approver_usernames, quote_no)
+        return
+    page = f"{_base_url()}/pages/bonus.html?q={quote_no}"
+    html = _build_html(
+        "獎金分潤簽核申請", "待您審核", "#2F6FD6",
+        [("案件單號", quote_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下案件的獎金分潤已送審，敬請於系統中完成審核作業（金額請登入後查看）。",
+        button_text="前往審核",
+    )
+    _async_send(to, f"【MOTRIX】獎金分潤待審核 — {quote_no}（{customer}）", html)
+
+
+def notify_bonus_payout_ready(quote_no: str, customer: str, cashier_usernames: list) -> None:
+    """獎金分潤核准、進入待發放 → 通知出納。🔴 信裡不放金額。"""
+    to = _lookup_emails(cashier_usernames, "bonus_payout_ready")
+    if not to:
+        logger.warning("notify_bonus_payout_ready: 出納 %s 皆無設定 email（quote_no=%r）",
+                       cashier_usernames, quote_no)
+        return
+    page = f"{_base_url()}/pages/cashier.html"
+    html = _build_html(
+        "獎金分潤待發放", "待發放", "#16A34A",
+        [("案件單號", quote_no), ("客戶名稱", customer)],
+        "", page,
+        intro="您好，以下案件的獎金分潤已核准，請於出納頁「獎金待發放」處理（金額請登入後查看）。",
+        button_text="前往出納頁",
+    )
+    _async_send(to, f"【MOTRIX】獎金分潤待發放 — {quote_no}（{customer}）", html)
+
+
 def notify_approval_reminder(doc_type_label: str, doc_no: str, desc: str, days_elapsed: int,
                              approver_usernames: list, also_superadmin: bool = False) -> str:
     """簽核逾期催辦（2026-08-21，2026-08-24 補上出貨單，2026-08-25 收斂收件人）：

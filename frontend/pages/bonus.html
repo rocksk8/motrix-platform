@@ -76,6 +76,7 @@
           <div class="bn-title">獎金分潤</div>
           <span class="bn-note" x-show="!isSuper">只顯示您在發放名單上、且已核准待發放或已發放的案件，金額只顯示您自己的部分。</span>
           <button class="bn-btn bn-btn--ghost" x-show="isSuper && settings" @click="settingsOpen = !settingsOpen" style="margin-left:auto">預設比例設定</button>
+          <button class="bn-btn bn-btn--ghost" x-show="isSuper" @click="toggleInsurance()" data-testid="bn-insurance-open">投保金額與全年累計</button>
         </div>
 
         <!-- 全域預設（最高管理者）：比率 10%、業務 50／專案 30／後勤 20，草稿可逐案覆寫 -->
@@ -92,7 +93,7 @@
           <template x-if="voucherAccounts">
             <div data-testid="bn-voucher-accounts">
               <div class="bn-sec" style="margin-top:12px">傳票科目（進入待發放、標記已發放時自動開立傳票草稿用）</div>
-              <template x-for="k in ['expense', 'payable', 'withholding', 'bank']" :key="k">
+              <template x-for="k in ['expense', 'payable', 'withholding', 'nhi', 'bank']" :key="k">
                 <div class="bn-row">
                   <span x-text="voucherAccounts.labels[k]"></span>
                   <input class="bn-in" style="width:90px" x-model="voucherAcctEdit[k]" :data-testid="'bn-acct-' + k">
@@ -102,6 +103,30 @@
               <div class="bn-actions"><button class="bn-btn" @click="saveVoucherAccounts()" data-testid="bn-acct-save">儲存傳票科目</button></div>
             </div>
           </template>
+        </div>
+        </template>
+
+        <!-- U4：員工投保金額與全年累計（補充保費門檻＝投保金額 × 倍數；最高管理者） -->
+        <template x-if="isSuper && insuranceOpen">
+        <div class="bn-card" data-testid="bn-insurance">
+          <div class="bn-sec">投保金額與全年累計（<input class="bn-in" style="width:64px" x-model.number="insuranceYear" @change="loadInsurance()"> 年）</div>
+          <div class="bn-note">補充保費：全年累計獎金超過「投保金額 × 倍數」的部分計收；倍數與費率依法規參數版本。
+            「MOTRIX 以外」填同一年由其他管道（例如薪資系統）已發的獎金。沒有設定投保金額的人，獎金無法標記已發放。</div>
+          <table class="bn-table" style="width:100%;font-size:13px;margin-top:8px">
+            <thead><tr><th style="text-align:left">人員</th><th>投保金額</th><th>MOTRIX 以外</th><th>MOTRIX 已發放</th><th>全年累計</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="it in insurance" :key="it.username">
+                <tr :data-testid="'bn-ins-' + it.username">
+                  <td x-text="it.displayName"></td>
+                  <td><input class="bn-in" style="width:90px" x-model="it._insured" placeholder="未設定" :data-testid="'bn-ins-amount-' + it.username"></td>
+                  <td><input class="bn-in" style="width:90px" x-model="it._external" :data-testid="'bn-ins-ext-' + it.username"></td>
+                  <td style="text-align:right" x-text="money(it.ytdMotrix)"></td>
+                  <td style="text-align:right" x-text="money(it.ytdTotal)" :data-testid="'bn-ins-total-' + it.username"></td>
+                  <td><button class="bn-btn bn-btn--ghost" :disabled="busy" @click="saveInsurance(it)" :data-testid="'bn-ins-save-' + it.username">儲存</button></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
         </div>
         </template>
 
@@ -272,6 +297,33 @@
                       </div>
                     </template>
                     <div class="bn-ok" x-show="detail.award.paid_at" x-text="'已發放：' + (detail.award.paid_at || '').slice(0, 10)"></div>
+
+                    <!-- U4：扣繳與補充保費（待發放＝以今天試算；已發放＝發放當時的快照）。最高管理者與出納 -->
+                    <template x-if="detail.scope !== 'self' && (detail.status === '待發放' || detail.status === '已發放')">
+                      <div data-testid="bn-deductions" style="margin-top:10px">
+                        <div class="bn-sec" x-text="detail.status === '待發放' ? '扣繳與補充保費（以今天為發放日試算）' : '扣繳與補充保費（發放時）'"></div>
+                        <div class="bn-err" x-show="detail.deductionNotice" x-text="detail.deductionNotice" data-testid="bn-deduction-notice"></div>
+                        <template x-if="detail.deductions">
+                          <div>
+                            <div class="bn-note" x-show="detail.deductions.version" x-text="'法規參數版本：' + detail.deductions.version"></div>
+                            <template x-for="d in detail.deductions.lines" :key="d.username">
+                              <div class="bn-row" :data-testid="'bn-ded-' + d.username">
+                                <span class="who" x-text="d.displayName"></span>
+                                <span x-show="d.withholding === null" class="bn-err">未設定投保金額</span>
+                                <span x-show="d.withholding !== null" style="color:var(--text-dim)"
+                                      x-text="'扣繳 ' + money(d.withholding) + '・補充保費 ' + money(d.nhiPremium) + '・累計 ' + money(d.ytdAfter)"></span>
+                                <span class="amt" x-text="d.net === null ? '—' : '實發 ' + money(d.net)"></span>
+                              </div>
+                            </template>
+                            <div class="bn-row" style="font-weight:600">
+                              <span class="who">合計</span>
+                              <span x-text="'扣繳 ' + money(detail.deductions.totals.withholding) + '・補充保費 ' + money(detail.deductions.totals.nhiPremium)"></span>
+                              <span class="amt" x-text="'實發 ' + money(detail.deductions.totals.net)" data-testid="bn-ded-net"></span>
+                            </div>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
 
                     <div class="bn-actions">
                       <!-- 簽核（簽核人只能是最高管理者） -->

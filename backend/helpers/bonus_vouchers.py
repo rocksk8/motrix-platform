@@ -3,13 +3,14 @@
 
 ```
 進入待發放   轉帳傳票草稿：借 費用（6111）／貸 應付（2191）
-標記已發放   支出傳票草稿：借 應付／貸 銀行（出納選，預設 1113）＋「代扣稅款（如適用）」貸 2252、金額 0
+標記已發放   支出傳票草稿：借 應付／貸 銀行（實發，出納選，預設 1113）＋貸 代扣稅款、代收補充保費（U4 自動計算）
 退回         轉帳草稿還是「草稿」⇒ 作廢；已送審 ⇒ 不動，回一句提示
 ```
 - 只產生**草稿**：之後走傳票自己的簽核（JV30），不自動過帳。
 - 科目**不寫死**：存在 `system_settings`，預設值只是初值；以 `account_items` 為準。
 - 科目有問題（不存在／已停用）⇒ **不產生傳票、回提示**，不猜科目，也**不擋**獎金本身的狀態轉換。
 - 全部在呼叫端的交易裡做，**不 commit**：狀態與傳票連結一起成功、一起失敗。
+- 每一行都帶摘要來源 `case`＝案件單號（JV36）⇒ 案件頁「相關傳票」看得到（CORE-SPEC 獎金分潤：財務報表）。
 - 會計模組（M06）經連接器取用（INTEGRATION-POINTS.md IP-2）；**M06 不在 ⇒ 獎金照常，
   不產生傳票，回明確提示 `ACCOUNTING_MISSING`**——不可以默默略過。
 """
@@ -25,6 +26,7 @@ ACCOUNT_SLOTS = {
     "expense":     ("bonus_case_voucher_expense_code",     "6111", "費用（薪資支出）"),
     "payable":     ("bonus_case_voucher_payable_code",     "2191", "應付（應付薪資）"),
     "withholding": ("bonus_case_voucher_withholding_code", "2252", "代扣稅款"),
+    "nhi":         ("bonus_case_voucher_nhi_code",         "2252", "代收補充保費"),
     "bank":        ("bonus_case_voucher_bank_code",        "1113", "銀行存款"),
 }
 
@@ -80,6 +82,8 @@ def _make(conn, award, kind, lines, summary, who, now):
             problems.append(err)
     if problems:
         return None, "未產生傳票草稿：%s（請到獎金設定改選科目後，由會計手動開立）。" % "；".join(problems)
+    # JV36：每一行掛案件來源 ⇒ 案件頁的相關傳票（vouchers_by_case）找得到獎金傳票
+    lines = [dict(ln, source_type="case", source_key=award["quote_no"]) for ln in lines]
     v = registry.single_provider("voucher.draft")(
         conn, voucher_date=now[:10], summary=summary, lines=lines, created_by=who, now=now)
     vid, no = v["id"], v["voucher_no"]
@@ -109,18 +113,33 @@ def create_accrual(conn, award, who, now):
     ], text + "（應付）", who, now)
 
 
-def create_payment(conn, award, who, now, bank_code):
-    """標記已發放：借 應付／貸 銀行，另留一行代扣稅款（金額 0，由出納填）。"""
+def create_payment(conn, award, who, now, bank_code, deductions=None):
+    """標記已發放：借 應付（總額）／貸 銀行（實發）＋貸 代扣稅款＋貸 代收補充保費。
+
+    `deductions`＝`bonus_deductions.compute_bonus_deductions()` 的 totals（U4）。
+    None ⇒ 法規參數還沒接上：照舊留一行金額 0 的代扣稅款由出納填（呼叫端另有 notice 明說沒算）。"""
     total = _paid_total(conn, award["id"])
     if total <= 0:
         return None, "發放合計為 0，未產生傳票草稿。"
     acc = configured_accounts(conn)
     text = "獎金分潤 %s" % award["quote_no"]
-    return _make(conn, award, "payment", [
+    if deductions is None:
+        return _make(conn, award, "payment", [
+            {"account_code": acc["payable"], "summary": text + " 發放", "debit": total, "credit": 0},
+            {"account_code": bank_code or acc["bank"], "summary": text + " 發放", "debit": 0, "credit": total},
+            {"account_code": acc["withholding"], "summary": "代扣稅款（如適用）", "debit": 0, "credit": 0},
+        ], text + "（發放）", who, now)
+    wh, nhi = int(deductions["withholding"]), int(deductions["nhiPremium"])
+    lines = [
         {"account_code": acc["payable"], "summary": text + " 發放", "debit": total, "credit": 0},
-        {"account_code": bank_code or acc["bank"], "summary": text + " 發放", "debit": 0, "credit": total},
-        {"account_code": acc["withholding"], "summary": "代扣稅款（如適用）", "debit": 0, "credit": 0},
-    ], text + "（發放）", who, now)
+        {"account_code": bank_code or acc["bank"], "summary": text + " 實發", "debit": 0,
+         "credit": total - wh - nhi},
+        {"account_code": acc["withholding"], "summary": text + " 代扣稅款", "debit": 0, "credit": wh},
+    ]
+    if nhi:
+        lines.append({"account_code": acc["nhi"], "summary": text + " 代收二代健保補充保費",
+                      "debit": 0, "credit": nhi})
+    return _make(conn, award, "payment", lines, text + "（發放）", who, now)
 
 
 def withdraw_accrual(conn, award, who, now, reason):

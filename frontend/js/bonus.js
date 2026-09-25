@@ -59,6 +59,10 @@ function bonusPage() {
     voucherAcctEdit: {},
     bankAccounts: [],
     payBank: '',
+    // U4：投保金額與全年累計
+    insuranceOpen: false,
+    insurance: [],
+    insuranceYear: new Date().getFullYear(),
     statuses: BN_STATUSES,
     cats: BN_CATS,
     catLabels: { sales: '業務', project: '專案', admin: '後勤' },
@@ -390,6 +394,35 @@ function bonusPage() {
     async markPaid() {
       const d = await this._post('/mark-paid', this.payBank ? { bank_account_code: this.payBank } : {})
       if (d) await this._refresh(this._withNotice('已標記發放', d))
+    },
+
+    async toggleInsurance() {
+      this.insuranceOpen = !this.insuranceOpen
+      if (this.insuranceOpen) await this.loadInsurance()
+    },
+    async loadInsurance() {
+      try {
+        const r = await fetch('/api/bonus/insurance?year=' + encodeURIComponent(this.insuranceYear), { headers: this._auth() })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.msg = d.detail || ('投保金額載入失敗（HTTP ' + r.status + '）'); return }
+        // null＝未設定（顯示空白），0 是另一件事——後端不接受 0
+        this.insurance = (d.items || []).map(it => Object.assign(it, {
+          _insured: it.insuredAmount === null || it.insuredAmount === undefined ? '' : String(it.insuredAmount),
+          _external: String(it.ytdExternal || 0) }))
+      } catch (e) { this.msg = '網路錯誤：' + e.message }
+    },
+    async saveInsurance(it) {
+      this.busy = true
+      try {
+        const r = await fetch('/api/bonus/insurance/' + encodeURIComponent(it.username), { method: 'PUT',
+          headers: this._jsonAuth(),
+          body: JSON.stringify({ insuredAmount: it._insured.trim(), year: Number(this.insuranceYear),
+                                 ytdExternal: it._external.trim() }) })
+        const d = await r.json().catch(() => ({}))
+        this.msg = r.ok ? ('已儲存 ' + it.displayName + ' 的投保金額與全年累計') : ('儲存失敗：' + (d.detail || r.status))
+        if (r.ok) await this.loadInsurance()
+      } catch (e) { this.msg = '網路錯誤：' + e.message }
+      finally { this.busy = false }
     },
 
     async saveSettings() {

@@ -151,3 +151,63 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 對方不在時 | 不適用（L1）。日期沒有適用版本 ⇒ 使用方**拒絕產生並說明**（不猜、不送 0） |
 | 契約版本 | 1（2026-09-25，CORE_VERSION 1.5）。欄位只准加；再加欄位時照 MODULE-GUIDE §2 升次版號 |
 | 守門 | `tests/test_legal_params_r1_2026_09_25.py`（選版、凍結、門檻＝最低工資）；`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params）；`tests/platform/test_l1_interface_snapshot.py`（介面變動要升版） |
+
+---
+
+## IP-7　`bonus.payouts`：獎金分潤待發放與發放紀錄（M07 → M05 出納）
+
+對應 CORE-SPEC「使用者裁示」獎金分潤：送交出納（RUN-PLAN §5 A 線 ③）。出納頁（M05）原本沒有獎金分潤；
+不 import M07，改由 M07 公開這一個讀取連接器。**「標記已發放」不經連接器**：出納頁直接打獎金那一支
+`POST /api/bonus/cases/{單號}/mark-paid`（同一個動作只有一份實作；M07 不在時那支端點本來就不存在，出納頁也不會出現按鈕）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`helpers/bonus_payouts.py::_Payouts`（`pending`／`paid`） |
+| 使用方 | M05 `routers/cashier.py`：`GET /api/cashier/bonus-queue`（出納頁「獎金待發放」子頁籤）、`_execution_history`（執行歷史「獎金分潤發放」區塊）、`GET /api/cashier/export`（Excel 第三張「獎金發放明細」）；頁面 `pages/cashier.html`、`js/cashier.js` |
+| 形式 | provider，單一提供者（`core.registry`；M07 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
+| 語法 | 提供：`registry.provide("bonus.payouts", "payroll", _Payouts)`<br>取用：`p = registry.single_provider("bonus.payouts")`；`None` ⇒ 退化。`p.pending(conn)`；`p.paid(conn, start, end)`（YYYY-MM-DD，含首尾，比發放日） |
+| 回傳 | `pending`：`[{quoteNo, customer, project, total, people, approvedAt}]`（舊的在前）。`paid`：`[{quoteNo, customer, project, total, people, paidAt, paidBy, withholding, nhiPremium, net}]`；扣繳快照不存在（U4 接上前發放的）⇒ 後三者 **`None`（不是 0）**。只回案件合計與人數，**不回個人金額**（個人明細在獎金頁，C1 可見範圍） |
+| 對方不在時 | `bonus-queue` 回 200 `{"available": false, "visible": true, "notice": "薪資獎金模組未安裝：出納頁不顯示獎金分潤", "items": []}`，頁面顯示那一句；執行歷史 `bonusPaid: []`＋`bonusNotice`；Excel 第三張只有那一句。待付款／待收款／匯出其餘照常。**可見範圍**：只有最高管理者與出納（cashier）看得到獎金；出納頁的財務（finance）`visible: false`、不顯示該子頁籤、Excel 沒有第三張 |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | `backend/tests/platform/test_bonus_payout_connectors.py`：`test_cashier_queue_mark_paid_is_the_same_action_and_history`（佇列→同一支 mark-paid→離開佇列、進執行歷史與 Excel；財務看不到）、`test_cashier_page_binds_bonus_mark_paid`（頁面綁定）、`test_reverse_without_payroll_cashier_still_works_and_says_so`（**反向控制**）。突變：M07 不在時默默略過、財務看得到獎金 ⇒ 皆轉紅 |
+
+---
+
+## IP-8　`expense.entries`：其他模組登記的支出（M07 → M08 報表）
+
+對應 CORE-SPEC「使用者裁示」獎金分潤：財務報表——以**發放日**列為支出，進營運報表與月支出。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M07 薪資獎金：`helpers/bonus_payouts.py::_expense_entries`（名稱 `bonus`） |
+| 使用方 | M08 `routers/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
+| 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
+| 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
+| 回傳 | `[{date, quoteNo, desc, amount, category}]`；`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
+| 對方不在時 | 沒有提供者 ⇒ 支出少了獎金這一類，其餘照常，不丟例外。**不另加提示**：M07 不在時獎金分潤這個功能不存在，沒有應列而未列的支出（⚠ 例外：M07 曾經安裝、之後被停用而資料還在 ⇒ 報表少列那些已發放的獎金。觀察項，見 RUN-PLAN §6 本項回報） |
+| 契約版本 | 1（2026-09-25） |
+| 守門 | 同上測試檔：`test_report_counts_bonus_on_paid_date`（待發放不算、發放後出現在發放月、月合計差額＝發放總額）、`test_reverse_without_payroll_report_still_works`（**反向控制**）。突變：報表不讀提供者 ⇒ 轉紅 |
+
+**案件頁相關傳票（同一項裁示）**：不新增串接點。獎金產生的兩張傳票草稿，每一行都帶摘要來源 `source_type="case"`、`source_key=案件單號`（JV36），經 IP-2 `voucher.draft` 寫入；案件頁的 `GET /api/vouchers/by-case/{單號}` 本來就依這個來源找。IP-2 的 `lines` 因此多了兩個**選填**欄位（只加不改，契約版本不變）。守門：`test_case_page_related_vouchers_show_bonus_vouchers`；突變：拿掉來源 ⇒ 轉紅。⚠ 這次之前已產生的獎金傳票沒有來源、不回填（開發機測試資料）。
+
+---
+
+## IP-9　`legal.rules_for_date`：撥付日適用的法規參數（L1 法規參數服務 → M07）
+
+對應 CORE-SPEC「使用者裁示」U4（獎金分潤撥付時自動計算扣繳與二代健保補充保費）。門檻與費率**不寫死**，走 R1 法規參數版本；
+R1（`wip/r-legal`，`helpers/legal_params.py`）尚未合回 ⇒ **本項先定契約與使用方，提供方待 R1 合回時登記**（不另建參數表）。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | L1 法規參數服務（R1）：⏳ 待登記。預定一行：`registry.provide("legal.rules_for_date", "legal", lambda on: rules_for_date(load_versions(), on))` |
+| 使用方 | M07 `helpers/bonus_deductions.py::legal_params_for` → `deductions_for_award`（`routers/bonus.py` 的 `mark-paid` 與明細的試算） |
+| 形式 | provider，單一提供者 |
+| 語法 | 取用：`fn = registry.single_provider("legal.rules_for_date")`；`fn(on_date: "YYYY-MM-DD") -> R1 的一版 dict`；沒有適用版本 ⇒ 丟 `ValueError`（R1 的 `NoApplicableRules`） |
+| 回傳 | 使用方讀：`version`、`resident["50"].tax_rate`／`tax_threshold`（非每月給付薪資扣繳 5%、起扣標準）、`nhi.rate`、`nhi.max_single_payment`、**`nhi.bonus_insured_multiple`**（獎金超過投保金額的倍數，法規為 4）。⚠ **R1 目前的版本結構沒有 `bonus_insured_multiple`**：合回時要在版本結構與設定頁補上這個欄位；缺的話使用方拒絕計算並說明「法規參數缺少：nhi_bonus_multiple」，**不猜 4** |
+| 對方不在時 | 撥付**照舊**：傳票保留一行金額 0 的「代扣稅款（如適用）」由出納填（這是本項之前的既有行為），回應 `notice` 與明細 `deductionNotice`＝「未計算扣繳與補充保費：法規參數服務尚未接上（R1）」，出納頁執行紀錄的扣繳欄顯示「未計算」（值 `None`，不是 0）。**有提供者而算不出來**（沒有適用版本、欄位缺）⇒ 同樣不計算並寫明原因。**有提供者、參數齊，而有人沒有投保金額** ⇒ `mark-paid` 回 409 列出名字，狀態不變（不以 0 計算） |
+| 契約版本 | 1（2026-09-25）；使用方已完成，提供方待 R1 |
+| 守門 | 同上測試檔（以測試提供者代替 R1）：純函式邊界（起扣 90,500／90,501、同一人跨類別先合併、4 倍門檻跨越與已超過、單次上限、四捨五入、缺投保金額≠0、參數缺欄位不猜）、`test_mark_paid_refuses_without_insured_amount`、`test_mark_paid_computes_and_books_deductions`（傳票：借 應付＝貸 實發＋代扣稅款＋代收補充保費）、`test_ytd_external_counts_toward_cap`、`test_reverse_without_legal_params_pays_but_says_not_computed`、`test_reverse_without_accounting_still_computes_and_pays`（**反向控制**：會計模組不在 ⇒ 照算、照發、沒有傳票並明說）。突變 9 種皆轉紅 |
+
+**投保金額與全年累計**存在 `system_settings["payroll_insurance_profiles"]`＝`{username: {insuredAmount, ytdExternal: {年: 金額}}}`；
+全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。不新增資料表：模組 migration 執行器尚未實作（MODULE-GUIDE §4），V9 基準 v116 凍結。
+⚠ 投保金額屬薪資等級資訊，端點只給最高管理者；而 `system_settings` 會進一般每日 JSON——資料分類（MODULE-GUIDE §3.2 是否列 F2）待 C 判定，見 RUN-PLAN §6 本項回報。

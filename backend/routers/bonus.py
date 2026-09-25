@@ -1632,6 +1632,8 @@ from helpers.tiered_approval import (  # noqa: E402
 )
 from helpers.auth import user_has_module  # noqa: E402
 from helpers import bonus_vouchers  # noqa: E402  `AC3`：狀態轉換 → 傳票草稿
+from helpers import bonus_payouts  # noqa: E402  IP-7／IP-8 提供者＋通知對象（import 即登記）
+from helpers import bonus_deductions  # noqa: E402  U4 扣繳與補充保費
 
 _CASE_DEAL_TAGS = ("已成案", "已結案")
 _RATE_KEY = "bonus_case_default_rate_bp"
@@ -1880,6 +1882,21 @@ def put_case_bonus_settings(body: dict = Body(...), authorization: str = Header(
     return {"ok": True}
 
 
+def _deduction_view(conn, award, lines):
+    """U4：待發放 ⇒ 以今天為撥付日試算；已發放 ⇒ 標記當時存下的快照。只給最高管理者與出納（C1）。"""
+    if award["status"] == "待發放":
+        ded, why = bonus_deductions.deductions_for_award(conn, award, lines, datetime.now().date().isoformat())
+        out = {"deductions": ded, "deductionNotice": why}
+        if ded is not None and ded["missing"]:
+            out["deductionNotice"] = "有人沒有設定投保金額，無法標記已發放（請先設定投保金額）。"
+        return out
+    if award["status"] == "已發放":
+        snap = bonus_payouts.paid_snapshot(conn, award["id"])
+        return {"deductions": snap,
+                "deductionNotice": "" if snap else "這一筆發放時沒有計算扣繳與補充保費（法規參數未接上）。"}
+    return {}
+
+
 def _payout_bank_choices(award):
     """`AC3`：待發放時給出納選付款銀行（支出傳票草稿的貸方）。
 
@@ -2019,6 +2036,8 @@ def get_case_bonus(quote_no: str, authorization: str = Header(None)):
         if view is None:
             raise HTTPException(404, "找不到這個案件的獎金分潤。")
         out = {"case": case, "status": award["status"], "scope": view["scope"], "lines": view["lines"]}
+        if view["scope"] in ("cashier", "all"):
+            out.update(_deduction_view(conn, award, lines))
         if view["scope"] == "cashier":
             out["award"] = view["award"]
             out["summary"] = view["summary"]
@@ -2157,6 +2176,42 @@ def update_case_bonus(quote_no: str, body: dict = Body(...), authorization: str 
     return {"ok": True, "status": award["status"], "voidedCount": len(voided), "voided": voided}
 
 
+def _notify_safely(fn, *args):
+    """通知寄不出去不可以讓簽核／狀態回滾——記下原因就好（寄信本身是背景執行緒）。"""
+    try:
+        fn(*args)
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("獎金分潤通知失敗（%s）：%s", getattr(fn, "__name__", fn), exc)
+
+
+def _notify_after(quote_no, status):
+    """送審／簽核之後：待審核 ⇒ 輪到的簽核人（含代理人）；待發放 ⇒ 出納。名單成員不會因為在名單上而收到。"""
+    from helpers import email_notify
+    conn = get_db()
+    try:
+        award, _lines = _load_case_award(conn, quote_no)
+        if award is None:
+            return
+        row = conn.execute("SELECT COALESCE(customer_name, '') AS c FROM quotations WHERE quote_no = ?",
+                           (quote_no,)).fetchone()
+        cust = row["c"] if row else ""
+        if status == "待審核":
+            appr = json.loads(award["approval_json"] or "{}") or {}
+            who = bonus_payouts.approver_recipients(conn, award, appr, appr.get("requestedBy") or "")
+            fn = email_notify.notify_bonus_submitted
+        elif status == "待發放":
+            who = bonus_payouts.cashier_recipients(conn, award)
+            fn = email_notify.notify_bonus_payout_ready
+        else:
+            return
+    finally:
+        conn.close()
+    if not who:
+        logger.warning("獎金分潤 %s（%s）沒有可通知的對象", quote_no, status)
+        return
+    _notify_safely(fn, quote_no, cust, who)
+
+
 def _resolve_bonus_tiers(conn, requester_username):
     """依現行設定解析獎金分潤簽核鏈（送審與「簽核中改動 ⇒ 重簽」共用）。
     鏈上出現非最高管理者（含代理人解析）⇒ 400（W1）。"""
@@ -2244,6 +2299,7 @@ def submit_case_bonus(quote_no: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.submit", "bonus_case_awards", quote_no, "獎金分潤送審")
+    _notify_after(quote_no, "待審核")
     return {"ok": True, "status": "待審核"}
 
 
@@ -2297,6 +2353,7 @@ def approve_case_bonus(quote_no: str, authorization: str = Header(None)):
     finally:
         conn.close()
     _audit(_tok(authorization), "bonus.case.approve", "bonus_case_awards", quote_no, "獎金分潤簽核：%s" % nxt)
+    _notify_after(quote_no, nxt)
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 進入待發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
@@ -2390,10 +2447,19 @@ def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authoriza
             if err:
                 raise HTTPException(400, "銀行科目：%s" % err)
         now = datetime.now().isoformat()
+        # U4：撥付日的扣繳與補充保費。參數接不上 ⇒ 照舊（代扣稅款行 0）並明說；
+        # 參數接上而有人沒有投保金額 ⇒ **拒絕**、狀態不變（不以 0 計算）。
+        ded, ded_notice = bonus_deductions.deductions_for_award(conn, award, _lines, now[:10])
+        if ded is not None and ded["missing"]:
+            names = {l["username"]: l["display_name_snapshot"] or l["username"] for l in _lines}
+            raise HTTPException(409, "無法計算補充保費：%s 沒有設定投保金額，請先到「獎金分潤 → 投保金額與全年累計」設定。"
+                                % "、".join(names.get(u, u) for u in ded["missing"]))
         conn.execute("UPDATE bonus_case_awards SET status='已發放', paid_by=?, paid_at=?, updated_by=?,"
                      " updated_at=? WHERE id=?", (_user_name(user), now, _user_name(user), now, award["id"]))
-        _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now})
-        voucher, notice = bonus_vouchers.create_payment(conn, award, _user_name(user), now, bank)
+        _case_log(conn, award["id"], user, "mark_paid", {"paid_at": now, "deductions": ded,
+                                                         "deductionNotice": ded_notice})
+        voucher, notice = bonus_vouchers.create_payment(conn, award, _user_name(user), now, bank,
+                                                        ded["totals"] if ded else None)
         conn.commit()
     finally:
         conn.close()
@@ -2401,4 +2467,92 @@ def mark_case_bonus_paid(quote_no: str, body: dict = Body(default={}), authoriza
     if voucher:
         _audit(_tok(authorization), "voucher.create", "vouchers", str(voucher["id"]),
                "獎金分潤 %s 已發放，產生傳票草稿：%s" % (quote_no, voucher["voucher_no"]))
-    return {"ok": True, "status": "已發放", "voucher": voucher, "notice": notice}
+    if ded_notice:
+        notice = (notice + " " if notice else "") + ded_notice + "（代扣稅款請出納確認）。"
+    return {"ok": True, "status": "已發放", "voucher": voucher, "notice": notice, "deductions": ded}
+
+
+# ── U4：員工投保金額與全年累計（最高管理者）──────────────────────────────────────
+
+@router.get("/insurance")
+def get_insurance_profiles(year: int = 0, authorization: str = Header(None)):
+    """在職帳號的投保金額、MOTRIX 以外已發的獎金（該年）、MOTRIX 內已發放的獎金（該年）、全年累計。
+    ⚠️ 投保金額是薪資等級資訊 ⇒ 只給最高管理者。"""
+    _require_user(authorization, require_superadmin=True)
+    year = year or datetime.now().year
+    conn = get_db()
+    try:
+        prof = bonus_deductions.load_profiles(conn)
+        motrix = bonus_deductions.ytd_in_motrix(conn, year)
+        ext = bonus_deductions.ytd_external(prof, year)
+        users = [dict(r) for r in conn.execute(
+            "SELECT username, COALESCE(display_name, '') AS display_name FROM users WHERE active = 1"
+            " ORDER BY id")]
+    finally:
+        conn.close()
+    items = []
+    for u in users:
+        n = u["username"]
+        items.append({"username": n, "displayName": u["display_name"] or n,
+                      "insuredAmount": (prof.get(n) or {}).get("insuredAmount"),
+                      "ytdExternal": ext.get(n, 0), "ytdMotrix": motrix.get(n, 0),
+                      "ytdTotal": ext.get(n, 0) + motrix.get(n, 0)})
+    return {"year": year, "items": items}
+
+
+def _nonneg_int(v, label):
+    """整數（可帶千分位逗號）且 ≥ 0；空 ⇒ None。不接受小數、布林。"""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    if isinstance(v, bool) or isinstance(v, float):
+        raise HTTPException(400, "%s 必須是整數" % label)
+    try:
+        n = int(str(v).replace(",", "").strip())
+    except ValueError:
+        raise HTTPException(400, "%s 必須是整數" % label)
+    if n < 0:
+        raise HTTPException(400, "%s 不可以是負數" % label)
+    return n
+
+
+@router.put("/insurance/{username}")
+def put_insurance_profile(username: str, body: dict = Body(...), authorization: str = Header(None)):
+    """body：`insuredAmount`（空＝清除；否則正整數）、`year`＋`ytdExternal`（該年 MOTRIX 以外已發的獎金，≥ 0）。
+    只改有給的鍵。"""
+    _require_user(authorization, require_superadmin=True)
+    body = body or {}
+    conn = get_db()
+    try:
+        if conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone() is None:
+            raise HTTPException(404, "找不到這個帳號。")
+        prof = bonus_deductions.load_profiles(conn)
+    finally:
+        conn.close()
+    cur = dict(prof.get(username) or {})
+    changes = {}
+    if "insuredAmount" in body:
+        v = _nonneg_int(body.get("insuredAmount"), "投保金額")
+        if v == 0:
+            raise HTTPException(400, "投保金額必須大於 0（沒有投保請留空）。")
+        if v is None:
+            cur.pop("insuredAmount", None)
+        else:
+            cur["insuredAmount"] = v
+        changes["insuredAmount"] = v
+    if "ytdExternal" in body:
+        year = body.get("year")
+        if not isinstance(year, int) or isinstance(year, bool) or not 2000 <= year <= 2100:
+            raise HTTPException(400, "year 必須是西元年（例：2026）。")
+        v = _nonneg_int(body.get("ytdExternal"), "MOTRIX 以外已發獎金")
+        ext = dict(cur.get("ytdExternal") or {})
+        ext[str(year)] = v or 0
+        cur["ytdExternal"] = ext
+        changes["ytdExternal"] = {str(year): v or 0}
+    if not changes:
+        raise HTTPException(400, "沒有要修改的欄位。")
+    prof[username] = cur
+    from helpers.settings import _set_setting
+    _set_setting(bonus_deductions.PROFILE_KEY, prof)
+    _audit(_tok(authorization), "bonus.insurance", "settings", username,
+           "投保金額／全年累計：%s" % json.dumps(changes, ensure_ascii=False))
+    return {"ok": True, "profile": cur}
