@@ -460,7 +460,10 @@
    "ROLE_TEMPLATES": "const",
    "SUPERADMIN_DEFAULT": "const",
    "catalog": "def()",
-   "refuse_unknown_new_keys": "def(new_modules, existing_modules=…)"
+   "dynamic_modules": "def()",
+   "known_keys": "def()",
+   "refuse_unknown_new_keys": "def(new_modules, existing_modules=…)",
+   "register_key_source": "def(fn)"
   },
   "helper:module_switches": {
    "DisabledList": "class",
