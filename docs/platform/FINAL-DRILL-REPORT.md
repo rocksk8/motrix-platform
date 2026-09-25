@@ -48,6 +48,8 @@
 
 ## 正式 D7 待辦
 
+> 前提（稽核 D K-O1）：演練目錄的舊每日快照資料夾有 `.done` 卻沒有 `.db`（複製時略過所有 .db），工具只補了今天的快照 ⇒ 碰舊快照的行為（備份清理「至少保留最新 7 份」等）在演練裡面對的目錄與正式機不同，演練結果不涵蓋這一段。
+
 1. D1～D6 完成、第二批與 wip/c-d7 合回後，用 `build_deploy_package.ps1` 打包，`--package` 指向部署包。
 2. 停掉 V9 開發機伺服器（工具會檢查 port 666）。
 3. `python tools/platform/final_drill.py --package <部署包>`；`source-backup` 保留到使用者回來。

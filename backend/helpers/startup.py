@@ -321,6 +321,19 @@ def init_unlock_passwords() -> None:
         pass
 
 
+def _prune_login_locks() -> None:
+    """清掉已過期的登入鎖定（`login_rate_limit`）。原本在 `routers/auth.init_rate_limiting` 裡；
+    CORE-SPEC 裁示 K-O2：啟動時的寫入只能經本檔（守門 tests/platform/test_startup_writes_only_via_startup.py）。"""
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM login_rate_limit WHERE locked_until <= ?", (datetime.now().isoformat(),))
+        conn.commit()
+    except Exception:
+        logger.exception("_prune_login_locks failed")
+    finally:
+        conn.close()
+
+
 def _cleanup_sessions() -> None:
     conn = get_db()
     try:

@@ -78,7 +78,7 @@ def _rl_db_clear(ip: str) -> None:
 
 
 def init_rate_limiting() -> None:
-    """Reload persisted IP lockouts from DB into memory on startup."""
+    """Reload persisted IP lockouts from DB into memory on startup（只讀；過期列由 `helpers.startup._prune_login_locks` 清）。"""
     try:
         conn = get_db()
         rows = conn.execute("SELECT ip, locked_until FROM login_rate_limit").fetchall()
@@ -94,13 +94,6 @@ def init_rate_limiting() -> None:
                         _rl_state[row["ip"]] = {"fails": 0, "locked_until": now_mono + delta}
                 except Exception:
                     pass
-        try:
-            conn2 = get_db()
-            conn2.execute("DELETE FROM login_rate_limit WHERE locked_until <= ?", (now_wall.isoformat(),))
-            conn2.commit()
-            conn2.close()
-        except Exception:
-            pass
     except Exception:
         logger.warning("init_rate_limiting: could not load from DB")
 
