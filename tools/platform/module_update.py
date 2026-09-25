@@ -211,7 +211,8 @@ def apply(root, pkg, allow_downgrade=False):
     inst_lock = json.loads(inst_lock_p.read_text(encoding="utf-8"))
     record = {"key": key, "from_version": inst_ver, "to_version": lock["modules"][key]["version"],
               "built_from": lock.get("built_from"), "files_before": before,
-              "lock_entry_before": (inst_lock.get("modules") or {}).get(key), "applied_at": stamp}
+              "lock_entry_before": (inst_lock.get("modules") or {}).get(key),
+              "excluded_before": list(inst_lock.get("excluded", [])), "applied_at": stamp}
     # 替換：先刪舊模組與舊頁面，再放新的
     old_mdir = backend / "modules" / key
     if old_mdir.exists():
@@ -268,6 +269,8 @@ def rollback(root, key, stamp=None):
         inst_lock.get("modules", {}).pop(key, None)
     else:
         inst_lock.setdefault("modules", {})[key] = rec["lock_entry_before"]
+    if "excluded_before" in rec:
+        inst_lock["excluded"] = rec["excluded_before"]
     inst_lock_p.write_text(json.dumps(inst_lock, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     after = _tree_hashes(root, key)
     if after != rec["files_before"]:

@@ -89,7 +89,8 @@ def test_fresh_install_then_rollback_removes_it(src, tmp_path):
     assert json.loads((root / "backend" / "modules.lock.json").read_text(encoding="utf-8"))["modules"]["zz"]["version"] == "1.0.0"
     MU.rollback(root, "zz")
     assert MU._tree_hashes(root, "zz") == before == {}
-    assert "zz" not in json.loads((root / "backend" / "modules.lock.json").read_text(encoding="utf-8"))["modules"]
+    lock = json.loads((root / "backend" / "modules.lock.json").read_text(encoding="utf-8"))
+    assert "zz" not in lock["modules"] and lock["excluded"] == ["zz"], "lock 要還原成套用前（含 excluded）"
     assert (root / "frontend" / "pages" / "index.html").is_file(), "其他頁面不可以被動到"
 
 
