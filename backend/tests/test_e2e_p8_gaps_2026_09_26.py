@@ -167,3 +167,87 @@ def test_notification_click_opens_the_custom_record(live_server, make_user, new_
         const d = await r.json(); return d.items.some(i => i.id === %d && i.is_read) }""" % nid)
     assert _q("SELECT is_read FROM notifications WHERE id=?", (nid,))[0]["is_read"] == 1
     assert not errors, errors
+
+
+# ── #6 參照欄：ref-options 下拉＋搜尋；403 才退回手動輸入 ─────────────────────────
+
+def _ref_module(key):
+    return {"name": "參照測試", "permission": "custom.%s" % key, "numbering": {"prefix": "RF", "date": "", "digits": 3},
+            "fields": [{"key": "a", "label": "甲", "type": "text", "dataClass": "T1"},
+                       {"key": "who", "label": "對象", "type": "ref", "target": "users", "dataClass": "T1"}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿"}, {"key": "done", "label": "完成", "final": True}],
+                         "transitions": [{"key": "go", "label": "完成", "from": "draft", "to": "done"}]}}
+
+
+def _server_ref_values(client, h, key, q):
+    r = client.get("/api/custom/%s/ref-options/who" % key, params={"q": q, "limit": 50}, headers=h)
+    assert r.status_code == 200, r.text
+    return [str(o["value"]) for o in r.json()]
+
+
+OPTS = "() => Array.from(document.querySelectorAll('#cr-in-who option')).map(o => o.value).filter(v => v !== '')"
+
+
+@pytest.mark.e2e
+def test_ref_field_lists_ref_options_and_searches(live_server, make_user, new_context, client):
+    key = "ref_pick"
+    admin = make_user(username="p8g_r_admin", role="superadmin")
+    user = make_user(username="p8g_r_user", role="viewer", modules=["custom.%s" % key])
+    make_user(username="p8g_r_alice", role="viewer", modules=[])
+    make_user(username="p8g_r_bob", role="viewer", modules=[])
+    _publish(client, _h(client, admin), key, _ref_module(key))
+    uh = _h(client, user)
+    all_values = _server_ref_values(client, uh, key, "")
+    narrowed = _server_ref_values(client, uh, key, "p8g_r_b")
+    assert "p8g_r_alice" in all_values and "p8g_r_bob" in all_values
+    assert narrowed == ["p8g_r_bob"], narrowed
+
+    errors = []
+    page = _page(new_context, live_server, user, errors)
+    page.goto("%s/pages/custom-records.html?key=%s" % (live_server, key))
+    page.click("#cr-new")
+    page.wait_for_selector('[data-ref-field="who"][data-ref-state="ok"]')
+    assert page.evaluate(OPTS) == all_values, "下拉要列出伺服器 ref-options 給的選項"
+    with page.expect_response(lambda r: "/ref-options/who" in r.url and "q=p8g_r_b" in r.url) as resp:
+        page.fill("#cr-ref-q-who", "p8g_r_b")
+    assert resp.value.status == 200
+    page.wait_for_function("(want) => JSON.stringify((%s)()) === JSON.stringify(want)" % OPTS, arg=narrowed)
+    page.select_option("#cr-in-who", "p8g_r_bob")
+    page.fill("#cr-in-a", "x")
+    page.click("#cr-save")
+    page.wait_for_selector('#cr-record[data-record-no][data-busy="0"]')
+    no = page.get_attribute("#cr-record", "data-record-no")
+    assert _record(key, no)["data"]["who"] == "p8g_r_bob"
+    assert not errors, errors
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("status", [403, 500])
+def test_ref_field_falls_back_to_manual_input_only_on_403(live_server, make_user, new_context, client, status):
+    """403 ⇒ 手動輸入代號＋說明原因，伺服器照樣存；其他失敗（500）⇒ 仍是下拉、標錯誤，不默默改成自由輸入。"""
+    key = "ref_denied"
+    admin = make_user(username="p8g_rd_admin", role="superadmin")
+    user = make_user(username="p8g_rd_user", role="viewer", modules=["custom.%s" % key])
+    make_user(username="p8g_rd_bob", role="viewer", modules=[])
+    _publish(client, _h(client, admin), key, _ref_module(key))
+
+    errors = []
+    page = _page(new_context, live_server, user, errors)
+    page.route(re.compile(r".*/api/custom/%s/ref-options/who.*" % key),
+               lambda r: r.fulfill(status=status, content_type="application/json", body=json.dumps({"detail": "x"})))
+    page.goto("%s/pages/custom-records.html?key=%s" % (live_server, key))
+    page.click("#cr-new")
+    if status == 403:
+        page.wait_for_selector('[data-ref-field="who"][data-ref-state="denied"] [data-ref-why="who"]', state="visible")
+        assert page.eval_on_selector("#cr-in-who", "e => e.tagName") == "INPUT"
+        page.fill("#cr-in-who", "p8g_rd_bob")
+        page.fill("#cr-in-a", "x")
+        page.click("#cr-save")
+        page.wait_for_selector('#cr-record[data-record-no][data-busy="0"]')
+        no = page.get_attribute("#cr-record", "data-record-no")
+        assert _record(key, no)["data"]["who"] == "p8g_rd_bob"
+    else:
+        page.wait_for_selector('[data-ref-field="who"][data-ref-state="error"]')
+        assert page.eval_on_selector("#cr-in-who", "e => e.tagName") == "SELECT"
+        assert page.locator('[data-ref-why="who"]').count() == 0
+    assert not errors, errors

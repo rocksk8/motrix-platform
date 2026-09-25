@@ -14,7 +14,9 @@
     - 表單與列表完全由 `GET /api/custom/{key}/meta` 的定義產生（欄位、分組、列表欄 ⇒ custom-layout.js，與建構器同一份規則）。
     - 單據凍結在建立時的定義版本：顯示用單據自己的那一版（與目前版不同時，以伺服器依那一版產生的輸出為準）。
     - 公式欄唯讀（伺服器計算）；400 的 problems[{key}] 標回對應欄位。
-    - 簽核人不需要模組權限（伺服器規則）：沒有列表權限時，仍可用 `&no=` 開自己要簽的單據。
+    - 簽核人不需要模組權限（伺服器規則）：沒有列表權限時，仍可用 `&no=` 開自己要簽的單據
+      （「待我簽核」與通知中心會帶好 key 與 no，不必手打）。
+    - 參照欄的選項走 `GET /api/custom/{key}/ref-options/{欄位}?q=`（可搜尋）；403 才退回手動輸入代號。
   -->
   <style>
     .cr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
@@ -59,6 +61,8 @@
     .cr-tier .n { font-weight: 700; color: var(--text-secondary); min-width: 46px; }
     .cr-tier .ok { color: var(--success); }
     .cr-tier .cur { color: var(--accent); font-weight: 700; }
+    .cr-ref-q { margin-bottom: 4px; }
+    .cr-ref-why { font-size: 11.5px; color: var(--text-secondary); margin-top: 3px; line-height: 1.5; }
     .cr-log { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
     .cr-frame { width: 100%; height: 520px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; }
     @media (max-width: 767px) {
@@ -164,17 +168,29 @@
                       </select>
                     </template>
                     <template x-if="f.type === 'ref'">
-                      <div>
-                        <template x-if="refOptions[f.target] && refOptions[f.target].length">
-                          <select :id="'cr-in-' + f.key" x-model="values[f.key]">
-                            <option value="">（未選）</option>
-                            <template x-for="o in refOptions[f.target]" :key="o.value">
-                              <option :value="o.value" x-text="o.label"></option>
-                            </template>
-                          </select>
+                      <!-- 參照欄：選項來自 GET …/ref-options/{欄位}（可搜尋）；403 才退回手動輸入並說明原因 -->
+                      <div class="cr-ref" :data-ref-field="f.key" :data-ref-state="refState[f.key] || 'loading'">
+                        <template x-if="refState[f.key] === 'denied'">
+                          <div>
+                            <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]" :placeholder="refHint(f.target)">
+                            <div class="cr-ref-why" :data-ref-why="f.key">您沒有讀取這個參照清單的權限，請直接輸入代號；儲存時由系統檢查是否存在。</div>
+                          </div>
                         </template>
-                        <template x-if="!(refOptions[f.target] && refOptions[f.target].length)">
-                          <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]" :placeholder="refHint(f.target)">
+                        <template x-if="refState[f.key] !== 'denied'">
+                          <div>
+                            <input type="search" class="cr-ref-q" :id="'cr-ref-q-' + f.key" :value="refQuery[f.key] || ''"
+                                   placeholder="搜尋…" @input="searchRef(f.key, $event.target.value)">
+                            <select :id="'cr-in-' + f.key" x-model="values[f.key]">
+                              <option value="">（未選）</option>
+                              <template x-for="o in refChoices(f.key)" :key="String(o.value)">
+                                <option :value="String(o.value)" x-text="o.label" :selected="String(o.value) === String(values[f.key])"></option>
+                              </template>
+                            </select>
+                            <div class="cr-ferr" x-show="refState[f.key] === 'error'">
+                              <span x-text="'讀取選項失敗（' + (refErr[f.key] || '') + '）'"></span>
+                              <a href="javascript:void(0)" @click="fetchRefOptions(f.key, refQuery[f.key] || '')">重試</a>
+                            </div>
+                          </div>
                         </template>
                       </div>
                     </template>
@@ -292,7 +308,7 @@
         key: '', loading: true, errMsg: '', def: null, metaVersion: 0, listDenied: false,
         records: [], listLoading: false, statusFilter: '',
         mode: 'list', record: null, recDef: null, formDef: {}, values: {}, fieldErr: {}, dropped: [],
-        refOptions: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
+        refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
 
         _hdr() {
           var s = {}
@@ -362,26 +378,46 @@
           } finally { this.listLoading = false }
         },
 
-        // ── 參照選項（能讀到的才列；讀不到就讓使用者輸入代號，由伺服器檢查存不存在）──
-        async loadRefOptions(def) {
+        // ── 參照選項（缺口 #6）：GET …/ref-options/{欄位}?q=&limit= ⇒ [{value, label}]，依欄位（不是依對象）──
+        //   403（沒有讀清單的權限）⇒ 退回手動輸入代號並說明原因，由伺服器在儲存時檢查存不存在；
+        //   其他失敗 ⇒ 仍是下拉，標出錯誤可重試（不默默改成自由輸入）。
+        //   搜尋：每個欄位一個序號，較晚送出的查詢才算數（慢回來的舊結果不蓋掉新結果）。
+        loadRefOptions(def) {
           var self = this
-          var targets = {}
-          ;(def.fields || []).forEach(function (f) { if (f.type === 'ref' && f.target) targets[f.target] = 1 })
-          for (var t in targets) {
-            if (self.refOptions[t]) continue
-            var opts = null
-            if (t === 'users') {
-              var r = await self.api('GET', '/api/users')
-              if (r.ok) opts = (r.data || []).filter(function (u) { return u.active !== 0 }).map(function (u) { return { value: u.username, label: (u.displayName || u.username) + '（' + u.username + '）' } })
-            } else if (t === 'customers') {
-              var c = await self.api('GET', '/api/customers')
-              if (c.ok) opts = (c.data || []).map(function (x) { return { value: String(x.id), label: x.name + (x.code ? '（' + x.code + '）' : '') } })
-            } else if (t.indexOf('custom:') === 0) {
-              var cr = await self.api('GET', '/api/custom/' + encodeURIComponent(t.slice(7)) + '/records')
-              if (cr.ok) opts = (cr.data || []).map(function (x) { return { value: x.record_no, label: x.record_no } })
-            }
-            self.refOptions = Object.assign({}, self.refOptions, (function () { var o = {}; o[t] = opts || []; return o })())
+          ;((def && def.fields) || []).forEach(function (f) {
+            if (f.type === 'ref' && !self.refState[f.key]) self.fetchRefOptions(f.key, '')
+          })
+        },
+        _setMap(name, k, v) { var o = Object.assign({}, this[name]); o[k] = v; this[name] = o },
+        async fetchRefOptions(fk, q) {
+          var seq = (this._refSeq[fk] || 0) + 1
+          this._refSeq[fk] = seq
+          if (!this.refState[fk]) this._setMap('refState', fk, 'loading')
+          var r = await this.api('GET', this.base() + '/ref-options/' + encodeURIComponent(fk) + '?q=' + encodeURIComponent(q || '') + '&limit=50')
+          if (this._refSeq[fk] !== seq) return
+          if (r.ok) {
+            this._setMap('refOptions', fk, Array.isArray(r.data) ? r.data : [])
+            this._setMap('refState', fk, 'ok')
+          } else if (r.status === 403) {
+            this._setMap('refState', fk, 'denied')
+          } else {
+            this._setMap('refErr', fk, String(r.status))
+            this._setMap('refState', fk, 'error')
           }
+        },
+        searchRef(fk, q) {
+          this._setMap('refQuery', fk, q)
+          clearTimeout(this._refTimers[fk])
+          this._refTimers[fk] = setTimeout(() => this.fetchRefOptions(fk, q), 250)
+        },
+        // 目前的值不在這次搜尋結果裡 ⇒ 仍列出來（不然下拉會顯示成「未選」，存檔時卻送出原值）
+        refChoices(fk) {
+          var opts = this.refOptions[fk] || []
+          var v = this.values[fk]
+          if (v !== '' && v !== null && v !== undefined && !opts.some(function (o) { return String(o.value) === String(v) })) {
+            return [{ value: v, label: String(v) }].concat(opts)
+          }
+          return opts
         },
         refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
 
@@ -399,6 +435,7 @@
           this.formDef = this.def
           this.values = this.blankValues(this.def)
           this.fieldErr = {}; this.dropped = []
+          this.loadRefOptions(this.def)
           this.mode = 'new'
           this.$nextTick(function () { var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
         },
@@ -410,6 +447,7 @@
           Object.keys(v).forEach(function (k) { if (data[k] !== undefined && data[k] !== null) v[k] = data[k] })
           this.values = v
           this.fieldErr = {}; this.dropped = []
+          this.loadRefOptions(this.recDef)
           this.mode = 'edit'
         },
         cancelForm() { this.mode = this.record ? 'view' : 'list' },
@@ -421,6 +459,11 @@
             var v = self.values[f.key]
             if (v === '' || v === undefined) v = null
             if (f.type === 'number' && v !== null && typeof v === 'string') { var n = Number(v); v = isNaN(n) ? v : n }
+            // 下拉的值是字串 ⇒ 換回伺服器給的原值（客戶的 id 是數字）
+            if (f.type === 'ref' && v !== null) {
+              var hit = (self.refOptions[f.key] || []).find(function (o) { return String(o.value) === String(v) })
+              if (hit) v = hit.value
+            }
             out[f.key] = v
           })
           return out
