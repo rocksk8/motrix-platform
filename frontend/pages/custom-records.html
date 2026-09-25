@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>自訂模組 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    自訂模組的執行頁（CUSTOMIZATION-SPEC §3.7、P8）：所有自訂模組共用這一頁，`?key=<模組>`（可加 `&no=<單號>` 直接開單據）。
+    - 表單與列表完全由 `GET /api/custom/{key}/meta` 的定義產生（欄位、分組、列表欄 ⇒ custom-layout.js，與建構器同一份規則）。
+    - 單據凍結在建立時的定義版本：顯示用單據自己的那一版（與目前版不同時，以伺服器依那一版產生的輸出為準）。
+    - 公式欄唯讀（伺服器計算）；400 的 problems[{key}] 標回對應欄位。
+    - 簽核人不需要模組權限（伺服器規則）：沒有列表權限時，仍可用 `&no=` 開自己要簽的單據。
+  -->
+  <style>
+    .cr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 36px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .cr-wrap { max-width: 1180px; }
+    .cr-err { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: var(--tone-danger-bg);
+      border: 1px solid var(--tone-danger-border); color: var(--tone-danger-fg); font-size: 13px; line-height: 1.6; }
+    .cr-note { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--tone-info-bg);
+      border: 1px solid var(--tone-info-border); color: var(--tone-info-fg); font-size: 12.5px; line-height: 1.6; }
+    .cr-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 18px 0 12px; }
+    .cr-bar .grow { flex: 1; }
+    .cr-card { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface, #fff); }
+    .cr-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .cr-table th, .cr-table td { padding: 9px 12px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .cr-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; background: var(--surface-muted, #FAFAF8); }
+    .cr-table tbody tr { cursor: pointer; }
+    .cr-table tbody tr:hover td { background: var(--surface-muted, #FAFAF8); }
+    .cr-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
+    .cr-status { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--border-light); color: var(--text-secondary); white-space: nowrap; }
+    .cr-panel { margin-top: 18px; border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; background: var(--surface, #fff); }
+    .cr-panel h2 { font-size: 16px; font-weight: 700; margin: 0 0 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .cr-sub { font-size: 12px; color: var(--text-secondary); }
+    .cr-sec { margin-top: 16px; }
+    .cr-sec__t { font-size: 11px; font-weight: 700; color: var(--text-secondary); letter-spacing: .08em; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px; }
+    .cr-sec__t::after { content: ""; flex: 1; height: 1px; background: var(--border-light); }
+    .cr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
+    .cr-f label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .cr-f label .req { color: var(--danger); margin-left: 2px; }
+    .cr-f input, .cr-f select, .cr-note-in { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--white); color: var(--text-main, inherit); }
+    .cr-f.is-bad input, .cr-f.is-bad select { border-color: var(--danger); }
+    .cr-f .cr-ferr { color: var(--danger); font-size: 11.5px; margin-top: 3px; }
+    .cr-f .cr-ro { padding: 7px 9px; border: 1px dashed var(--border); border-radius: 6px; font-size: 13px; min-height: 34px;
+      background: var(--surface-muted, #FAFAF8); color: var(--text-secondary); }
+    .cr-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px 16px; }
+    .cr-kv div span { display: block; font-size: 11px; color: var(--text-secondary); }
+    .cr-kv div b { font-weight: 500; font-size: 13.5px; word-break: break-word; }
+    .cr-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+    .cr-tiers { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; }
+    .cr-tier { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .cr-tier .n { font-weight: 700; color: var(--text-secondary); min-width: 46px; }
+    .cr-tier .ok { color: var(--success); }
+    .cr-tier .cur { color: var(--accent); font-weight: 700; }
+    .cr-log { font-size: 12px; color: var(--text-secondary); line-height: 1.8; }
+    .cr-frame { width: 100%; height: 520px; border: 1px solid var(--border-light); border-radius: 8px; background: #fff; }
+    @media (max-width: 767px) {
+      .cr-main { margin-left: 0; padding: 18px 14px 48px; }
+      /* 手機：列表改成一列一張卡（每格帶欄名） */
+      .cr-table thead { display: none; }
+      .cr-table, .cr-table tbody, .cr-table tr, .cr-table td { display: block; width: 100%; box-sizing: border-box; }
+      .cr-table tr { border-bottom: 1px solid var(--border); padding: 6px 0; }
+      .cr-table td { border: none; padding: 3px 12px; display: flex; gap: 10px; }
+      .cr-table td::before { content: attr(data-label); flex: 0 0 84px; color: var(--text-secondary); font-size: 11.5px; }
+      .cr-panel { padding: 14px; }
+      .cr-grid, .cr-kv { grid-template-columns: 1fr; }
+      .cr-frame { height: 420px; }
+    }
+  </style>
+</head>
+<body x-data="customRecordsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="cr-main">
+    <div class="cr-wrap">
+      <div class="pg">
+        <div class="pg__l">
+          <div class="pg__eyebrow">自訂模組</div>
+          <h1 class="pg__t" id="cr-title" x-text="def ? def.name : (loading ? '載入中…' : '自訂模組')"></h1>
+          <p class="pg__s" x-show="def">
+            定義第 <span id="cr-def-version" x-text="metaVersion"></span> 版。已建立的單據維持建立當時的版本。
+          </p>
+        </div>
+      </div>
+
+      <div class="cr-err" id="cr-error" x-show="errMsg" x-text="errMsg"></div>
+      <div class="cr-note" x-show="listDenied && def === null && record">
+        您沒有這個模組的列表權限；以簽核人身分開啟這張單據。
+      </div>
+
+      <!-- 列表 -->
+      <template x-if="def">
+        <div>
+          <div class="cr-bar">
+            <button class="chip" :class="{ active: statusFilter === '' }" data-status-filter="" @click="setFilter('')">全部</button>
+            <template x-for="st in def.workflow.states" :key="st.key">
+              <button class="chip" :class="{ active: statusFilter === st.key }" :data-status-filter="st.key"
+                      @click="setFilter(st.key)" x-text="st.label"></button>
+            </template>
+            <span class="grow"></span>
+            <button class="btn btn-primary" id="cr-new" @click="startNew()">＋ 新增</button>
+          </div>
+          <div class="cr-card">
+            <table class="cr-table" id="cr-list">
+              <thead><tr><template x-for="c in columns" :key="c.key"><th x-text="c.label"></th></template></tr></thead>
+              <tbody>
+                <template x-for="r in records" :key="r.record_no">
+                  <tr :data-record-no="r.record_no" @click="openRecord(r.record_no)">
+                    <template x-for="c in columns" :key="c.key">
+                      <td :data-label="c.label">
+                        <span :class="c.key === '$status' ? 'cr-status' : ''" x-text="cell(r, c.key)"></span>
+                      </td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+            <div class="cr-empty" x-show="!listLoading && !records.length">沒有單據</div>
+            <div class="cr-empty" x-show="listLoading">載入中…</div>
+          </div>
+        </div>
+      </template>
+
+      <!-- 新增／編輯 -->
+      <template x-if="mode === 'new' || mode === 'edit'">
+        <section class="cr-panel" id="cr-form">
+          <h2 x-text="mode === 'new' ? '新增' + (formDef.name || '') : '編輯 ' + (record ? record.record_no : '')"></h2>
+          <template x-for="(sec, si) in sections(formDef)" :key="si">
+            <div class="cr-sec">
+              <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
+              <div class="cr-grid">
+                <template x-for="f in sec.fields" :key="f.key">
+                  <div class="cr-f" :class="{ 'is-bad': fieldErr[f.key] }" :data-field="f.key">
+                    <label :for="'cr-in-' + f.key"><span x-text="f.label || f.key"></span><span class="req" x-show="f.required">*</span></label>
+                    <template x-if="f.type === 'text'">
+                      <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                    </template>
+                    <template x-if="f.type === 'number'">
+                      <input type="number" step="any" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                    </template>
+                    <template x-if="f.type === 'date'">
+                      <input type="date" :id="'cr-in-' + f.key" x-model="values[f.key]">
+                    </template>
+                    <template x-if="f.type === 'select'">
+                      <select :id="'cr-in-' + f.key" x-model="values[f.key]">
+                        <option value="">（未選）</option>
+                        <template x-for="o in (f.options || [])" :key="o"><option :value="o" x-text="o"></option></template>
+                      </select>
+                    </template>
+                    <template x-if="f.type === 'checkbox'">
+                      <!-- 布林：寫死 value＋x-model.boolean（空字串＝沒填） -->
+                      <select :id="'cr-in-' + f.key" x-model.boolean="values[f.key]">
+                        <option value="">（未選）</option>
+                        <option value="true">是</option>
+                        <option value="false">否</option>
+                      </select>
+                    </template>
+                    <template x-if="f.type === 'ref'">
+                      <div>
+                        <template x-if="refOptions[f.target] && refOptions[f.target].length">
+                          <select :id="'cr-in-' + f.key" x-model="values[f.key]">
+                            <option value="">（未選）</option>
+                            <template x-for="o in refOptions[f.target]" :key="o.value">
+                              <option :value="o.value" x-text="o.label"></option>
+                            </template>
+                          </select>
+                        </template>
+                        <template x-if="!(refOptions[f.target] && refOptions[f.target].length)">
+                          <input type="text" :id="'cr-in-' + f.key" x-model="values[f.key]" :placeholder="refHint(f.target)">
+                        </template>
+                      </div>
+                    </template>
+                    <template x-if="f.type === 'formula'">
+                      <div class="cr-ro" :id="'cr-in-' + f.key" data-formula
+                           x-text="(record && record.data[f.key] !== undefined && record.data[f.key] !== null) ? fmt(record.data[f.key]) : '（儲存後由系統計算）'"></div>
+                    </template>
+                    <div class="cr-ferr" :data-field-error="f.key" x-show="fieldErr[f.key]" x-text="fieldErr[f.key]"></div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+          <div class="cr-actions">
+            <button class="btn btn-primary" id="cr-save" :disabled="busy" @click="save()">儲存</button>
+            <button class="btn btn-ghost" @click="cancelForm()" :disabled="busy">取消</button>
+            <span class="cr-sub" x-show="dropped.length" x-text="'未定義的欄位已略過：' + dropped.join('、')"></span>
+          </div>
+        </section>
+      </template>
+
+      <!-- 單據 -->
+      <template x-if="mode === 'view' && record">
+        <section class="cr-panel" id="cr-record" :data-record-no="record.record_no" :data-status="record.status" :data-busy="busy ? '1' : '0'">
+          <h2>
+            <span x-text="record.record_no"></span>
+            <span class="cr-status" id="cr-record-status" x-text="record.view.statusLabel"></span>
+          </h2>
+          <div class="cr-sub">
+            <span x-text="record.view.moduleName"></span> · 定義第 <span id="cr-record-version" x-text="record.def_version"></span> 版
+            · <span x-text="record.created_by"></span> 建立於 <span x-text="(record.created_at || '').replace('T', ' ').slice(0, 16)"></span>
+          </div>
+          <div class="cr-note" x-show="recDef === null">
+            這張單據用的是較早的定義版本；內容以下方「依建立時版本的輸出」為準。
+          </div>
+
+          <template x-if="recDef">
+            <div>
+              <template x-for="(sec, si) in sections(recDef)" :key="si">
+                <div class="cr-sec">
+                  <div class="cr-sec__t" x-show="sec.title" x-text="sec.title"></div>
+                  <div class="cr-kv">
+                    <template x-for="f in sec.fields" :key="f.key">
+                      <div :data-view-field="f.key"><span x-text="f.label || f.key"></span><b x-text="fmt(record.data[f.key]) || '—'"></b></div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <div class="cr-sec" x-show="tiers().length">
+            <div class="cr-sec__t">簽核</div>
+            <div class="cr-tiers">
+              <template x-for="(t, ti) in tiers()" :key="ti">
+                <div class="cr-tier">
+                  <span class="n" x-text="'第 ' + (ti + 1) + ' 層'"></span>
+                  <template x-for="a in (t.approvers || [])" :key="a.username">
+                    <span :class="a.status === 'approved' ? 'ok' : (ti === record.approval.currentTier && inApproval() ? 'cur' : '')"
+                          x-text="(a.displayName || a.username) + (a.status === 'approved' ? '（已核准）' : (ti === record.approval.currentTier && inApproval() ? '（待簽）' : ''))"></span>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <div class="cr-actions">
+            <template x-if="canEdit()">
+              <button class="btn btn-ghost" id="cr-edit" @click="startEdit()" :disabled="busy">編輯</button>
+            </template>
+            <template x-for="t in availableTransitions()" :key="t.key">
+              <button class="btn btn-primary" :data-transition="t.key" @click="doTransition(t)" :disabled="busy" x-text="t.label"></button>
+            </template>
+            <button class="btn btn-ghost" id="cr-out-html" @click="openOutput()" :disabled="busy">輸出 HTML</button>
+            <button class="btn btn-ghost" id="cr-out-pdf" @click="downloadPdf()" :disabled="busy">下載 PDF</button>
+          </div>
+
+          <template x-if="canDecide()">
+            <div class="cr-sec" id="cr-decide">
+              <div class="cr-sec__t">簽核（第 <span x-text="record.approval.currentTier + 1"></span> 層）</div>
+              <textarea class="cr-note-in" id="cr-decide-note" rows="2" x-model="note" placeholder="備註（退回時請說明原因）"></textarea>
+              <div class="cr-actions">
+                <button class="btn btn-approve" id="cr-approve" @click="decide(true)" :disabled="busy">核准</button>
+                <button class="btn btn-reject" id="cr-reject" @click="decide(false)" :disabled="busy">退回</button>
+              </div>
+            </div>
+          </template>
+
+          <div class="cr-sec">
+            <div class="cr-sec__t">依建立時版本的輸出</div>
+            <iframe class="cr-frame" id="cr-output-frame" sandbox="" :srcdoc="outputHtml" title="單據輸出"></iframe>
+          </div>
+
+          <div class="cr-sec" x-show="(record.log || []).length">
+            <div class="cr-sec__t">紀錄</div>
+            <div class="cr-log">
+              <template x-for="(l, li) in record.log" :key="li">
+                <div x-text="(l.at || '').replace('T', ' ').slice(0, 16) + '　' + l.by_user + '　' + actionLabel(l) + (l.note ? '（' + l.note + '）' : '')"></div>
+              </template>
+            </div>
+          </div>
+        </section>
+      </template>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script src="../static/ui.js"></script>
+  <script src="../static/custom-layout.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function customRecordsPage() {
+      var L = window.MotrixCustomLayout
+      return {
+        key: '', loading: true, errMsg: '', def: null, metaVersion: 0, listDenied: false,
+        records: [], listLoading: false, statusFilter: '',
+        mode: 'list', record: null, recDef: null, formDef: {}, values: {}, fieldErr: {}, dropped: [],
+        refOptions: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
+
+        _hdr() {
+          var s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        async api(method, url, body) {
+          var r = await fetch(url, { method: method, headers: this._hdr(), body: body === undefined ? undefined : JSON.stringify(body) })
+          var text = await r.text()
+          var data = null
+          try { data = text ? JSON.parse(text) : null } catch (e) { data = text }
+          return { ok: r.ok, status: r.status, data: data }
+        },
+        base() { return '/api/custom/' + encodeURIComponent(this.key) },
+
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
+          var q = new URLSearchParams(location.search)
+          this.key = q.get('key') || ''
+          if (!this.key) { this.loading = false; this.errMsg = '網址缺少模組代號（?key=）'; return }
+          var m = await this.api('GET', this.base() + '/meta')
+          this.loading = false
+          if (m.ok) {
+            this.def = m.data.definition
+            this.metaVersion = m.data.version
+            this._defCache[m.data.version] = m.data.definition
+            document.title = (this.def.name || this.key) + ' — MOTRIX 專案管理系統'
+            this.loadRefOptions(this.def)
+            await this.loadList()
+          } else if (m.status === 403) {
+            this.listDenied = true
+          } else {
+            this.errMsg = m.status === 404 ? '這個自訂模組不存在或尚未發布' : '讀取失敗：' + this.detail(m)
+          }
+          var no = q.get('no')
+          if (no) await this.openRecord(no)
+          else if (this.listDenied) this.errMsg = '您沒有這個模組的權限'
+        },
+        detail(res) {
+          var d = res.data
+          if (d && typeof d === 'object') return d.detail || JSON.stringify(d)
+          return String(d || res.status)
+        },
+
+        // ── 列表 ──
+        get columns() { return this.def ? L.listColumns(this.def) : [] },
+        stateLabels(def) {
+          var out = {}
+          ;((def && def.workflow && def.workflow.states) || []).forEach(function (s) { out[s.key] = s.label })
+          return out
+        },
+        cell(r, k) { return L.cellValue(r, k, this.stateLabels(this.def)) },
+        sections(def) { return L.formSections(def || {}) },
+        async setFilter(st) { this.statusFilter = st; await this.loadList() },
+        async loadList() {
+          this.listLoading = true
+          try {
+            var url = this.base() + '/records' + (this.statusFilter ? '?status=' + encodeURIComponent(this.statusFilter) : '')
+            var r = await this.api('GET', url)
+            if (r.ok) this.records = r.data || []
+            else this.errMsg = '讀取列表失敗：' + this.detail(r)
+          } finally { this.listLoading = false }
+        },
+
+        // ── 參照選項（能讀到的才列；讀不到就讓使用者輸入代號，由伺服器檢查存不存在）──
+        async loadRefOptions(def) {
+          var self = this
+          var targets = {}
+          ;(def.fields || []).forEach(function (f) { if (f.type === 'ref' && f.target) targets[f.target] = 1 })
+          for (var t in targets) {
+            if (self.refOptions[t]) continue
+            var opts = null
+            if (t === 'users') {
+              var r = await self.api('GET', '/api/users')
+              if (r.ok) opts = (r.data || []).filter(function (u) { return u.active !== 0 }).map(function (u) { return { value: u.username, label: (u.displayName || u.username) + '（' + u.username + '）' } })
+            } else if (t === 'customers') {
+              var c = await self.api('GET', '/api/customers')
+              if (c.ok) opts = (c.data || []).map(function (x) { return { value: String(x.id), label: x.name + (x.code ? '（' + x.code + '）' : '') } })
+            } else if (t.indexOf('custom:') === 0) {
+              var cr = await self.api('GET', '/api/custom/' + encodeURIComponent(t.slice(7)) + '/records')
+              if (cr.ok) opts = (cr.data || []).map(function (x) { return { value: x.record_no, label: x.record_no } })
+            }
+            self.refOptions = Object.assign({}, self.refOptions, (function () { var o = {}; o[t] = opts || []; return o })())
+          }
+        },
+        refHint(t) { return t === 'users' ? '輸入帳號' : (t === 'customers' ? '輸入客戶編號' : '輸入單號') },
+
+        // ── 新增／編輯 ──
+        blankValues(def) {
+          var v = {}
+          ;(def.fields || []).forEach(function (f) {
+            if (f.type === 'formula') return
+            v[f.key] = (f.default !== undefined && f.default !== null) ? f.default : ''
+          })
+          return v
+        },
+        startNew() {
+          this.record = null; this.recDef = null
+          this.formDef = this.def
+          this.values = this.blankValues(this.def)
+          this.fieldErr = {}; this.dropped = []
+          this.mode = 'new'
+          this.$nextTick(function () { var el = document.getElementById('cr-form'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
+        },
+        startEdit() {
+          if (!this.record || !this.recDef) return
+          this.formDef = this.recDef
+          var v = this.blankValues(this.recDef)
+          var data = this.record.data || {}
+          Object.keys(v).forEach(function (k) { if (data[k] !== undefined && data[k] !== null) v[k] = data[k] })
+          this.values = v
+          this.fieldErr = {}; this.dropped = []
+          this.mode = 'edit'
+        },
+        cancelForm() { this.mode = this.record ? 'view' : 'list' },
+        payload() {
+          var out = {}
+          var self = this
+          ;(this.formDef.fields || []).forEach(function (f) {
+            if (f.type === 'formula') return
+            var v = self.values[f.key]
+            if (v === '' || v === undefined) v = null
+            if (f.type === 'number' && v !== null && typeof v === 'string') { var n = Number(v); v = isNaN(n) ? v : n }
+            out[f.key] = v
+          })
+          return out
+        },
+        async save() {
+          if (this.busy) return
+          this.busy = true; this.fieldErr = {}; this.errMsg = ''
+          try {
+            var isNew = this.mode === 'new'
+            var r = isNew
+              ? await this.api('POST', this.base() + '/records', { values: this.payload() })
+              : await this.api('PUT', this.base() + '/records/' + encodeURIComponent(this.record.record_no), { values: this.payload() })
+            if (!r.ok) {
+              var probs = (r.data && r.data.problems) || []
+              var fe = {}
+              probs.forEach(function (p) { if (p.key) fe[p.key] = p.message })
+              this.fieldErr = fe
+              this.errMsg = (r.data && r.data.detail) || ('儲存失敗（' + r.status + '）')
+              return
+            }
+            this.dropped = r.data.dropped || []
+            window.MotrixUI && window.MotrixUI.toast(isNew ? '已建立 ' + r.data.record_no : '已儲存', { kind: 'ok' })
+            await this.showRecord(r.data)
+            if (this.def) await this.loadList()
+          } finally { this.busy = false }
+        },
+
+        // ── 單據 ──
+        async defFor(version) {
+          if (this._defCache[version]) return this._defCache[version]
+          if (this.me.role === 'superadmin') {
+            var r = await this.api('GET', '/api/definitions/custom_module/' + encodeURIComponent(this.key) + '/versions/' + version)
+            if (r.ok && r.data && r.data.body) { this._defCache[version] = r.data.body; return r.data.body }
+          }
+          return null
+        },
+        async openRecord(no) {
+          this.errMsg = ''
+          var r = await this.api('GET', this.base() + '/records/' + encodeURIComponent(no))
+          if (!r.ok) { this.errMsg = r.status === 404 ? '找不到單據 ' + no : '讀取單據失敗：' + this.detail(r); return }
+          await this.showRecord(r.data)
+        },
+        async showRecord(rec) {
+          this.record = rec
+          this.recDef = await this.defFor(rec.def_version)
+          this.note = ''
+          this.mode = 'view'
+          try {
+            var q = new URLSearchParams(location.search); q.set('no', rec.record_no)
+            history.replaceState(null, '', location.pathname + '?' + q.toString())
+          } catch (e) {}
+          this.loadOutput()
+          this.$nextTick(function () { var el = document.getElementById('cr-record'); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' }) })
+        },
+        async loadOutput() {
+          var no = this.record.record_no
+          var r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output', { headers: this._hdr() })
+          if (this.record && this.record.record_no === no) this.outputHtml = r.ok ? await r.text() : ''
+        },
+        wfDef() { return this.recDef || this.def || { workflow: { transitions: [], states: [] } } },
+        tiers() { return (this.record && this.record.approval && this.record.approval.tiers) || [] },
+        inApproval() {
+          var a = this.record && this.record.approval
+          if (!a || !a.tiers || a.state !== this.record.status) return false
+          return (a.currentTier || 0) < a.tiers.length
+        },
+        canDecide() {
+          if (!this.inApproval()) return false
+          if (this.me.role === 'superadmin') return true
+          var t = this.record.approval.tiers[this.record.approval.currentTier] || {}
+          var me = this.me.username
+          return (t.approvers || []).some(function (a) { return a.username === me && a.status !== 'approved' })
+        },
+        canEdit() {
+          var d = this.recDef
+          return !!(d && this.def && this.record.status === d.workflow.initial)
+        },
+        availableTransitions() {
+          if (!this.record || this.inApproval()) return []
+          var st = this.record.status
+          var me = this.me
+          var rec = this.record
+          return ((this.wfDef().workflow || {}).transitions || []).filter(function (t) {
+            var frs = Array.isArray(t.from) ? t.from : [t.from]
+            if (frs.indexOf(st) < 0) return false
+            if (t.requester_only && me.username !== rec.created_by && me.role !== 'superadmin') return false
+            return true
+          })
+        },
+        async afterAction(r, okMsg) {
+          if (!r.ok) {
+            window.MotrixUI && window.MotrixUI.toast((r.data && r.data.detail) || ('失敗（' + r.status + '）'), { kind: 'error' })
+            this.errMsg = (r.data && r.data.detail) || ('失敗（' + r.status + '）')
+            return
+          }
+          var extra = (r.data.notices || []).join('；')
+          window.MotrixUI && window.MotrixUI.toast(okMsg + (extra ? '：' + extra : ''), { kind: 'ok' })
+          await this.showRecord(r.data)
+          if (this.def) await this.loadList()
+        },
+        async doTransition(t) {
+          if (this.busy) return
+          this.busy = true; this.errMsg = ''
+          try {
+            var r = await this.api('POST', this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/transitions/' + encodeURIComponent(t.key), { note: '' })
+            await this.afterAction(r, t.label + '完成')
+          } finally { this.busy = false }
+        },
+        async decide(approve) {
+          if (this.busy) return
+          if (!approve && !String(this.note || '').trim()) {
+            window.MotrixUI && window.MotrixUI.toast('退回請填寫原因', { kind: 'error' })
+            return
+          }
+          this.busy = true; this.errMsg = ''
+          try {
+            var r = await this.api('POST', this.base() + '/records/' + encodeURIComponent(this.record.record_no) + (approve ? '/approve' : '/reject'), { note: this.note || '' })
+            await this.afterAction(r, approve ? '已核准' : '已退回')
+          } finally { this.busy = false }
+        },
+        async openOutput() {
+          var w = window.open('', '_blank')
+          var r = await fetch(this.base() + '/records/' + encodeURIComponent(this.record.record_no) + '/output', { headers: this._hdr() })
+          var html = r.ok ? await r.text() : '<p>輸出失敗（' + r.status + '）</p>'
+          if (w) { w.document.open(); w.document.write(html); w.document.close() }
+        },
+        async downloadPdf() {
+          if (this.busy) return
+          this.busy = true
+          try {
+            var no = this.record.record_no
+            var r = await fetch(this.base() + '/records/' + encodeURIComponent(no) + '/output?format=pdf', { headers: this._hdr() })
+            if (!r.ok) { window.MotrixUI && window.MotrixUI.toast('PDF 產生失敗（' + r.status + '）', { kind: 'error' }); return }
+            var blob = await r.blob()
+            var a = document.createElement('a')
+            a.href = URL.createObjectURL(blob)
+            a.download = no + '.pdf'
+            document.body.appendChild(a); a.click(); a.remove()
+            setTimeout(function () { URL.revokeObjectURL(a.href) }, 30000)
+          } finally { this.busy = false }
+        },
+        actionLabel(l) {
+          var labels = this.stateLabels(this.wfDef())
+          var names = { create: '建立', update: '修改', approve: '核准', approve_tier: '核准（本層）', reject: '退回', auto_approve: '條件不成立，自動通過' }
+          var t = ((this.wfDef().workflow || {}).transitions || []).find(function (x) { return x.key === l.action })
+          var what = names[l.action] || (t ? t.label : l.action)
+          return what + (l.to_state && l.to_state !== l.from_state ? ' → ' + (labels[l.to_state] || l.to_state) : '')
+        },
+        fmt(v) {
+          if (v === null || v === undefined) return ''
+          if (v === true) return '是'
+          if (v === false) return '否'
+          return String(v)
+        },
+      }
+    }
+  </script>
+</body>
+</html>
