@@ -64,11 +64,18 @@ MINIMAL_INPUT = {
 }
 
 
+#: builder 不在 pdf_gen 的（樣板已搬回擁有模組）：名稱 → 模組名
+BUILDER_HOME = {"_build_completion_html": "completion_pdf"}
+
+
+def builder(name):
+    import importlib
+    return getattr(importlib.import_module(BUILDER_HOME.get(name, "pdf_gen")), name, None)
+
+
 def render(name):
     """跑一支 builder，回傳整份 HTML。"""
-    import pdf_gen
-
-    fn = getattr(pdf_gen, name)
+    fn = builder(name)
     payload = dict(MINIMAL_INPUT.get(name, {}))
     required = [p for p in inspect.signature(fn).parameters.values()
                 if p.default is inspect.Parameter.empty]

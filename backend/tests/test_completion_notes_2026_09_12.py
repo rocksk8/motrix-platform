@@ -515,7 +515,7 @@ def test_pdf_uses_custom_labels_and_hides_warranty(client, make_user):
     直接組 HTML 檢查字串，不跑 Edge——這裡要驗的是內容有沒有換掉，不是 PDF 產得出來
     （產得出來由 test_cn_pdf 那支實跑驗證）。
     """
-    from pdf_gen import _build_completion_html, _completion_note_dict
+    from completion_pdf import _build_completion_html, _completion_note_dict
     import db
 
     username, password = make_user(username="cn_l7", role="admin")

@@ -136,6 +136,7 @@
    "key": "case",
    "name": "案件",
    "units": [
+    "core:completion_pdf",
     "helper:case_stage_tasks",
     "helper:quotations",
     "helper:quote_terms",

@@ -40,7 +40,7 @@ from helpers import (
     save_document_files, delete_document_file,
     guard_case_access, require_any_module,
 )
-from pdf_gen import generate_completion_pdf_bytes
+from completion_pdf import generate_completion_pdf_bytes
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
