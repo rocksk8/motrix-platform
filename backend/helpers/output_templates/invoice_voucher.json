@@ -1,0 +1,65 @@
+{
+  "key": "invoice_voucher",
+  "version": 1,
+  "theme": "voucher_standard",
+  "title": {"path": "voucherNo", "suffix": " 開票申請憑據"},
+  "blocks": [
+    {"type": "watermark", "unless": {"path": "status", "equals": "已核准"}, "text": "憑據預覽稿", "small": "尚未正式核准", "count": 12},
+    {"type": "accent_bar"},
+    {"type": "identity_header", "title": "開票申請憑據"},
+    {"type": "meta", "fields": [
+      {"label": "憑據單號：", "path": "voucherNo", "style": "strong_mono"},
+      {"label": "建立日期：", "path": "createdAt", "format": "date10"},
+      {"label": "關聯案件：", "path": "quoteNo"}
+    ]},
+    {"type": "banner", "unless": {"path": "status", "equals": "已核准"},
+     "text": "⚠ 此為開票申請憑據預覽稿（目前狀態：{status|草稿}），尚未正式核准，請勿提供財務單位辦理開票"},
+    {"type": "boxes", "boxes": [
+      {"title": "一、客戶資訊", "rows": [
+        {"label": "客戶名稱", "path": "customerName"},
+        {"label": "統一編號", "path": "customerTaxId"}
+      ]},
+      {"title": "二、案件資訊", "rows": [
+        {"label": "案件名稱", "path": "projectName"},
+        {"label": "申請範圍", "path": "scopeLabel"}
+      ]}
+    ]},
+    {"type": "when", "path": "scope", "equals": "items",
+     "then": [
+       {"type": "items_table", "label": "三、申請品項明細（未稅，稅額另計，見下方總額）", "source": "selectedItems", "columns": [
+         {"title": "#", "format": "index", "width": "24px"},
+         {"title": "品名 / 規格", "path": "description", "format": "spec_brand"},
+         {"title": "數量", "path": "qty", "format": "str", "align": "right", "width": "44px"},
+         {"title": "單位", "path": "unit", "width": "40px"},
+         {"title": "單價（未稅）", "path": "unitPrice", "format": "money", "align": "right", "width": "70px"},
+         {"title": "金額（未稅）", "path": "amount", "format": "money", "align": "right", "width": "90px"}
+       ]}
+     ],
+     "else": [
+       {"type": "amount_box", "label": "三、申請金額", "row_label": "申請金額（含稅）", "path": "amount"}
+     ]},
+    {"type": "totals", "rows": [
+      {"label": "未稅小計", "path": "pretaxAmount"},
+      {"label": "營業稅", "path": "taxAmount"},
+      {"label": "申請開票總額（含稅）", "path": "amount", "grand": true}
+    ]},
+    {"type": "when", "path": "scope", "equals": "items",
+     "then": [],
+     "else": [
+       {"type": "items_table", "label": "四、開票品項參考（報價單內容）", "source": "quoteItems", "hide_when_empty": true, "columns": [
+         {"title": "#", "format": "index", "width": "24px"},
+         {"title": "品名 / 規格", "path": "description", "format": "spec_brand"},
+         {"title": "數量", "path": "qty", "format": "str", "align": "right", "width": "44px"},
+         {"title": "單位", "path": "unit", "width": "40px"},
+         {"title": "單價", "path": "unitPrice", "format": "money", "align": "right", "width": "70px"},
+         {"title": "金額", "path": "amount", "format": "money", "align": "right", "width": "90px"}
+       ]}
+     ]},
+    {"type": "approval_sign"},
+    {"type": "sign_boxes", "boxes": [
+      {"label": "財務單位 · 開票確認", "date_label": "開票日期："},
+      {"label": "申請人 · 經手人", "name_path": "applicantName", "date_label": "申請日期：", "date_path": "applicantDate"}
+    ]},
+    {"type": "identity_footer"}
+  ]
+}

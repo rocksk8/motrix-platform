@@ -17,6 +17,7 @@
    "helper:case_roles",
    "helper:company_identity",
    "helper:dates",
+   "helper:doc_template",
    "helper:edit_log",
    "helper:email_notify",
    "helper:errors",
