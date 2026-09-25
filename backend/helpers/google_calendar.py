@@ -341,7 +341,7 @@ def push_event_for_quotation_won(quote_no: str) -> None:
         )
         # 2026-09-25 lost update（C 組）：上面建事件是一次網路請求（最慢的一段），期間別人可能已存了這張單
         # ⇒ 不可以用一開始讀到的 data_json 整包寫回；事件建好之後才拿寫鎖、重讀，只寫入 event id。
-        from helpers.quotations import write_txn
+        from core.txn import write_txn
         with write_txn(conn):
             cur = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
             d = json.loads((cur["data_json"] if cur else None) or "{}")

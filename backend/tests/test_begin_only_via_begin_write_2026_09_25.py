@@ -13,7 +13,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 #: (相對路徑, 函式名) -> 理由。新增一筆＝有人決定了「這裡不用 begin_write 也安全」，要寫出為什麼。
 ALLOWED = {
-    ("helpers/quotations.py", "begin_write"): "唯一合法的 BEGIN IMMEDIATE 出處",
+    ("core/txn.py", "begin_write"): "唯一合法的 BEGIN IMMEDIATE 出處（2026-09-25 自 helpers/quotations.py 下沉 L1）",
     ("pdf_gen.py", "_record_doc_version"): "單據版本號；try/finally 關連線，不讀 quotations.data_json",
     ("routers/bonus.py", "create_case_bonus"): "獎金分潤表；try/finally 關連線，不經 save_quotation_json",
     ("routers/bonus.py", "update_case_bonus"): "同上",
@@ -73,7 +73,7 @@ def _all_sites():
 
 def test_begin_appears_only_in_begin_write_or_the_allowlist():
     bad = [s for s in _all_sites() if (s[0], s[1]) not in ALLOWED]
-    assert not bad, ("新的 BEGIN 出處（請改用 helpers.quotations.begin_write／write_txn）：%s" % bad)
+    assert not bad, ("新的 BEGIN 出處（請改用 core.txn.begin_write／write_txn）：%s" % bad)
 
 
 def test_every_allowlisted_site_still_exists_and_is_protected():

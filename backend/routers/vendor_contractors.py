@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from db import get_db, next_entity_code
 from helpers import _require_user, _tok, _audit, notify_module_activity, require_any_module
-from helpers.quotations import begin_write, save_quotation_json, write_txn
+from core.txn import begin_write, write_txn
+from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
 from helpers.recognition import normalize_date  # `AC2`
 from routers.contractors import _stamp_passbook

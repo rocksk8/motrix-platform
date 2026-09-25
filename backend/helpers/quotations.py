@@ -8,6 +8,8 @@ from datetime import date, datetime
 
 from fastapi import HTTPException
 
+from core import txn as _txn
+
 
 # Prefer real columns; fall back to data_json for rows not yet re-saved (pre-v6 backward compat).
 # IMPORTANT: never use bare `SELECT deal_tag` — always use SQL_DEAL_TAG to correctly read pre-v6 rows.
@@ -39,13 +41,6 @@ def _check_quotation_owner(row, user: dict) -> None:
         owns = user["id"] in assigned
     if not owns:
         raise HTTPException(403, "無權限存取其他業務的報價單")
-
-
-def _safe_close(conn) -> None:
-    try:
-        conn.close()
-    except Exception:
-        pass
 
 
 def is_document_approver(data_json: str, user: dict, conn) -> bool:
@@ -100,7 +95,7 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
         "FROM quotations WHERE quote_no=?", (quote_no,)
     ).fetchone()
     if not q:
-        _safe_close(conn)
+        _txn.safe_close(conn)
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
         _check_quotation_owner(q, user)
@@ -109,7 +104,7 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
         allowed = ((allow_module and user_has_module(user, allow_module))
                    or (allow_approver and is_document_approver(q["data_json"], user, conn)))
         if not allowed:
-            _safe_close(conn)
+            _txn.safe_close(conn)
             raise
     return q
 
@@ -541,102 +536,28 @@ def quote_hot_fields(q: dict) -> tuple:
 
 _log = logging.getLogger(__name__)
 
-def _strict_db_guards() -> bool:
-    """資料庫結構守門違規時要不要 raise。
-
-    🔴 預設**不** raise（記 ERROR＋堆疊、照寫）：產品會賣給客戶自架，不可以用安裝路徑猜「這是不是正式機」——
-    原本比照 email_notify 只認 \\V9.0\\ 路徑，客戶裝在別處就會被當成開發環境而 raise，直接擋住客戶存檔（2026-09-25 裁示）。
-    只有明確設了 MOTRIX_STRICT_DB_GUARDS=1 才 raise：conftest 在測試啟動時設（漏網之魚在題目裡就紅）；
-    開發機要嚴格可自行設。每次呼叫才讀，測試可以用 monkeypatch 切換。"""
-    return os.environ.get("MOTRIX_STRICT_DB_GUARDS") == "1"
-
-#: begin_write 開的寫交易：id(conn) -> {"conn": conn, "read": 拿鎖之後是否讀過 quotations.data_json}
-#: ⚠️ sqlite3.Connection 不能掛屬性、也不支援弱參照 ⇒ 以 id 為鍵並保留連線本身比對（避免 id 重用誤判），
-#:    每次 begin_write 時清掉已關閉的連線。
-_WRITE_TXNS = {}
-
-
-def _prune_write_txns():
-    for k, st in list(_WRITE_TXNS.items()):
-        try:
-            st["conn"].total_changes          # 已關閉 ⇒ ProgrammingError
-        except Exception:                      # noqa: BLE001
-            _WRITE_TXNS.pop(k, None)
-
-
-def begin_write(conn) -> bool:
-    """讀 data_json 之前先拿寫鎖（還不在交易裡才 `BEGIN IMMEDIATE`）；回傳這裡有沒有開交易。
-
-    🔴 2026-09-25 lost update 稽核：`save_quotation_json` 是**整包**寫回、不比對 updated_at。
-    sqlite3 不為 SELECT 開交易 ⇒ 交易外讀到的 data_json 是快照，讀與寫之間別人 commit 的修改
-    （例如案件頁每 1.5 秒的自動存檔）會被整包蓋回。⇒ 凡是「讀 data_json → 改 → 整包寫回」的路徑，
-    讀之前都要先呼叫這裡；已在交易裡的呼叫端（自己先拿過鎖）行為不變。
-    ⚠️ 拿著寫鎖時不可以 await 慢動作（例如寫上傳檔）：那段時間所有寫入都會被卡住 ⇒ 先做完慢動作，
-    再拿鎖、重讀、只套用自己的那一筆修改。"""
-    if conn.in_transaction:
-        return False
-    conn.execute("BEGIN IMMEDIATE")
-    _prune_write_txns()
-    st = {"conn": conn, "read": False}
-    _WRITE_TXNS[id(conn)] = st
-
-    def _trace(sql, _st=st):
-        # 拿鎖之後讀了 data_json ⇒ 之後的整包寫回是以鎖內的最新資料為底（save_quotation_json 的守門看這個）
-        if not _st["read"] and "data_json" in sql and "quotations" in sql and sql.lstrip()[:6].upper() == "SELECT":
-            _st["read"] = True
-    conn.set_trace_callback(_trace)
-    return True
+# 寫鎖本體在 L1 core.txn（2026-09-25 下沉）；這裡只登記案件自己要觀測的讀取：
+# 拿鎖之後讀過 quotations.data_json ⇒ 之後的整包寫回是以鎖內最新資料為底。
+_QUOTE_READ = "quotations.data_json"
+_txn.watch_reads(_QUOTE_READ, lambda sql: "data_json" in sql and "quotations" in sql
+                 and sql.lstrip()[:6].upper() == "SELECT")
 
 
 def _check_read_under_write_lock(conn, quote_no):
     """save_quotation_json 的結構守門（2026-09-25 lost update 稽核後開啟）。
 
-    放行條件：這條連線的寫交易是 begin_write 開的，而且**拿鎖之後**讀過 quotations.data_json。
-    ⇒ 擋得住「交易外讀 → 整包寫回」，也擋得住「交易外讀、中途寫了別的表（交易被隱式開啟）→ 整包寫回」
-       與「先讀、再 begin_write、沒重讀就寫回」。
+    放行條件：這條連線的寫交易是 core.txn.begin_write 開的，而且**拿鎖之後**讀過 quotations.data_json。
     ⚠️ 仍有的盲點：不比對讀的是不是**同一張**單、也不比對讀的是不是**這一次**要寫回的那份資料。
-    違規：預設記 ERROR（含呼叫堆疊）並照寫，不因為守門本身擋住使用者；
-    設了 MOTRIX_STRICT_DB_GUARDS=1（測試環境）才 raise——見 _strict_db_guards。"""
-    st = _WRITE_TXNS.get(id(conn))
-    ok = bool(st and st["conn"] is conn and conn.in_transaction and st["read"])
-    if ok:
+    違規：預設記 ERROR（含呼叫堆疊）並照寫；設了 MOTRIX_STRICT_DB_GUARDS=1（測試環境）才 raise。"""
+    if _txn.read_under_lock(conn, _QUOTE_READ):
         return
+    in_lock, st = _txn.lock_state(conn)
     why = ("不在寫交易內" if not conn.in_transaction else
-           "寫交易不是 begin_write 開的" if not (st and st["conn"] is conn) else "拿鎖之後沒有讀過 data_json")
+           "寫交易不是 begin_write 開的" if st is None else "拿鎖之後沒有讀過 data_json")
     msg = f"save_quotation_json({quote_no!r})：{why}——讀 data_json 之前要先 begin_write／write_txn（lost update）"
-    if _strict_db_guards():
+    if _txn.strict_db_guards():
         raise RuntimeError(msg)
     _log.error("%s" + chr(10) + "%s", msg, "".join(traceback.format_stack(limit=8)))
-
-
-class write_txn:
-    """`with write_txn(conn): ...` ＝ begin_write ＋「區塊內任何例外 ⇒ rollback 並關閉連線」。
-
-    🔴 2026-09-25（bf 3b3504ba 抓到的那一型）：拿了寫鎖之後的路徑丟例外（HTTPException 或任何沒預期的錯）
-    而沒關連線 ⇒ 寫鎖留到連線被回收，其他人的寫入卡 30 秒後 500「database is locked」。
-    逐處在 raise 前手寫 conn.close() 會漏（被呼叫的函式丟出來的例外看不到）⇒ 用區塊保證。
-    正常離開區塊時什麼都不做：commit／close 照舊由呼叫端決定（同一條連線之後可能還要用）。"""
-
-    def __init__(self, conn):
-        self.conn = conn
-
-    def __enter__(self):
-        begin_write(self.conn)
-        return self.conn
-
-    def __exit__(self, exc_type, exc, tb):
-        if exc_type is not None:
-            # ⚠️ 收尾絕不可以蓋掉原本的例外：很多路徑在 raise 4xx 之前已經自己 conn.close()，
-            #    對已關閉的連線讀 in_transaction／rollback 會丟 ProgrammingError（2026-09-25 回歸實測 17 題）。
-            try:
-                self.conn.rollback()
-            except Exception:         # noqa: BLE001  已關閉／沒有交易 ⇒ 沒有鎖要放
-                pass
-            try:
-                self.conn.close()     # 已關過也無妨
-            except Exception:         # noqa: BLE001
-                pass
-        return False
 
 
 def save_quotation_json(

@@ -63,6 +63,7 @@
    "plat:paths",
    "plat:registry",
    "plat:source_tree",
+   "plat:txn",
    "router:approval_delegates",
    "router:auth",
    "router:customers",

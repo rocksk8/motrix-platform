@@ -10,6 +10,7 @@ import logging
 import pytest
 
 import helpers.quotations as hq
+from core import txn  # 寫鎖 2026-09-25 下沉 L1
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
 
 
@@ -55,7 +56,7 @@ def test_reading_before_begin_write_without_rereading_is_refused(client, strict)
     conn = db.get_db()
     try:
         d = _read(conn)                      # 鎖外讀
-        hq.begin_write(conn)                 # 之後才拿鎖、沒重讀
+        txn.begin_write(conn)                 # 之後才拿鎖、沒重讀
         with pytest.raises(RuntimeError, match="拿鎖之後沒有讀過"):
             hq.save_quotation_json(conn, NO, d)
     finally:
@@ -67,7 +68,7 @@ def test_read_under_the_write_lock_is_allowed(client):
     _seed(assigned=[])
     conn = db.get_db()
     try:
-        hq.begin_write(conn)
+        txn.begin_write(conn)
         d = _read(conn)
         d["_ok"] = 1
         hq.save_quotation_json(conn, NO, d)

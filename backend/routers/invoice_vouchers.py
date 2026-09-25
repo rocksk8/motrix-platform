@@ -26,7 +26,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from db import get_db, next_entity_code, spawn_bg_thread
-from helpers.quotations import begin_write, write_txn
+from core.txn import begin_write, write_txn
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
     notify_module_activity, notify_invoice_voucher_submitted, notify_invoice_voucher_next_tier,

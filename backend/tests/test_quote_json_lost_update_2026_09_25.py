@@ -328,7 +328,7 @@ def test_write_txn_never_masks_the_original_error(client):
     """很多路徑在 raise 4xx 之前自己先 conn.close()；write_txn 的收尾不可以把它變成 ProgrammingError。"""
     import db
     from fastapi import HTTPException
-    from helpers.quotations import write_txn
+    from core.txn import write_txn
     conn = db.get_db()
     with pytest.raises(HTTPException) as e:
         with write_txn(conn):
