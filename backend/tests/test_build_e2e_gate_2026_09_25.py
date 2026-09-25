@@ -71,3 +71,15 @@ def test_the_build_script_parses_and_no_longer_lets_timeouts_through():
     assert "_e2e_gate.ps1" in src and "Get-E2eGateResult" in src
     assert "e2eTimeoutOnly" not in src and "繼續打包，建議事後單獨重跑" not in src, "舊的逾時放行路徑還在"
     assert GATE.read_bytes()[:3] == b"\xef\xbb\xbf" and BUILD.read_bytes()[:3] == b"\xef\xbb\xbf", ".ps1 要有 BOM"
+
+
+def test_a_hard_cap_kill_is_listed_as_a_timeout_only_once():
+    """逐題上限（conftest `_e2e_hard_cap`）結束 worker 時，輸出有兩行 FAILED：xdist 自己那行（被截成 `- w...`、
+    不含 Timeout）＋主控補的 `- Timeout: e2e 逐題上限…`。同一題只能算一次，而且要算在「逾時」。"""
+    xd = "FAILED tests/test_e2e_z.py::test_stuck - w..."
+    cap = "FAILED tests/test_e2e_z.py::test_stuck - Timeout: e2e 逐題上限 120s（堆疊見上方）"
+    r = _gate(1, [cap, "=== short test summary info ===", xd, "1 failed, 5 passed"])
+    assert r["Ok"] is False
+    assert r["Timeouts"] == ["tests/test_e2e_z.py::test_stuck"], r
+    assert r["Failures"] in ([], None), "同一題被逐題上限結束，不可以再算成斷言失敗：%r" % r
+    assert "\n".join(r["Message"]).count('py -m pytest "tests/test_e2e_z.py::test_stuck" -v') == 1

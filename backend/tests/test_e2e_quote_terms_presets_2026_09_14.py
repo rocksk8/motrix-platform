@@ -63,8 +63,11 @@ def test_default_preset_is_applied_to_a_new_quotation(live_server, client, make_
     _login(page, live_server, u, p)
     page.goto(f"{live_server}/pages/quotation-form.html")
     page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等 init 把預設條款組套用完（新增模式：isNewRecord 設好之後同一段同步套用）
+    # 📌 更正留著（2026-09-25，-n 4 五輪中一輪紅）：第一版等 `_termsDefaultsLoaded`——那是 init **前段**預設條款載完，
+    #    套用預設組在 init 後段（還要先 await 取號）⇒ 負載下讀到空字串。等的點選錯了，不是產品競態。
+    page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                           " return d._termsDefaultsLoaded && d.isNewRecord }",
                            timeout=15000)
     _rendered(page)
     val = page.eval_on_selector(
@@ -86,8 +89,11 @@ def test_clicking_a_block_swaps_all_five_fields(live_server, client, make_user, 
     _login(page, live_server, u, p)
     page.goto(f"{live_server}/pages/quotation-form.html")
     page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等 init 把預設條款組套用完（新增模式：isNewRecord 設好之後同一段同步套用）
+    # 📌 更正留著（2026-09-25，-n 4 五輪中一輪紅）：第一版等 `_termsDefaultsLoaded`——那是 init **前段**預設條款載完，
+    #    套用預設組在 init 後段（還要先 await 取號）⇒ 負載下讀到空字串。等的點選錯了，不是產品競態。
+    page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                           " return d._termsDefaultsLoaded && d.isNewRecord }",
                            timeout=15000)
     _rendered(page)
 
@@ -121,8 +127,11 @@ def test_switching_preset_does_not_raise_a_false_approval_warning(live_server, c
     _login(page, live_server, u, p)
     page.goto(f"{live_server}/pages/quotation-form.html")
     page.wait_for_selector('button:has-text("純購料")', timeout=15000)
-    # PERF #6：原本固定等 0.4 秒 ⇒ 等後端預設條款載完（N13：唯一來源在後端）＋畫面更新
-    page.wait_for_function("() => Alpine.$data(document.querySelector('[x-data]'))._termsDefaultsLoaded",
+    # PERF #6：原本固定等 0.4 秒 ⇒ 等 init 把預設條款組套用完（新增模式：isNewRecord 設好之後同一段同步套用）
+    # 📌 更正留著（2026-09-25，-n 4 五輪中一輪紅）：第一版等 `_termsDefaultsLoaded`——那是 init **前段**預設條款載完，
+    #    套用預設組在 init 後段（還要先 await 取號）⇒ 負載下讀到空字串。等的點選錯了，不是產品競態。
+    page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]'));"
+                           " return d._termsDefaultsLoaded && d.isNewRecord }",
                            timeout=15000)
     _rendered(page)
     page.click('button:has-text("純購料")')

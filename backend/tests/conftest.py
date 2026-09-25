@@ -950,6 +950,10 @@ def pytest_configure(config):
     那時候已經來不及了。
     """
     global _lock_taken_by_me
+    # e2e 逐題上限（檔尾那一段）：主控在 worker 起來之前寫好本次執行的目錄 id，worker 繼承同一個值
+    if not hasattr(config, "workerinput"):
+        import uuid as _uuid
+        os.environ["MOTRIX_E2E_HARDCAP_RUN"] = _uuid.uuid4().hex[:12]
 
     basetemp = config.option.basetemp
     if basetemp is None:
@@ -1638,3 +1642,100 @@ def login_as(client):
         ctx.add_init_script(session_init_script(sess))
         return sess
     return _login
+
+
+# ══ e2e 逐題上限（PLAN-TEST-PERF §3.2，建包 e2e -n 4 的前置條件；hichan-8d 2026-09-25）════════════
+#
+# 一題卡住（例如 page.evaluate 等一個沒人回答的對話框）會拖住一個 worker 直到整輪逾時，而最後只看得到
+# 「整輪逾時」。⇒ 每一題 e2e 設上限（預設 120s，MOTRIX_E2E_HARD_CAP 覆寫）：超過就把所有執行緒的堆疊
+# 寫下來（卡在哪一行）。不裝 pytest-timeout，用標準庫 faulthandler。
+# - 在 xdist worker 裡 ⇒ 寫完結束那個 worker：xdist 判那題失敗、換新 worker 接著跑（共用瀏覽器與伺服器
+#   由新 worker 按需重建）。☠️ worker 的 stderr 不會轉回主控 ⇒ 堆疊寫到**檔案**，主控在最後的摘要印出，
+#   並補一行 `FAILED <題> - Timeout…`（xdist 自己那行被截成 `- w...`，建包閘門認不出是逾時）。
+# - 單程序（沒有 -n）⇒ 只寫堆疊、不結束（結束會讓整個 pytest 停掉、剩下的題全都不跑——a3 提醒）；
+#   題目收尾時若已超過上限，摘要照樣印出堆疊當警告（那一題本身沒有失敗，結束碼不變）。
+# - 題目正常結束一定取消計時器，否則上限會累計到下一題。
+# - autouse、最早建立 ⇒ 最晚拆掉：題目本體與收尾（含共用伺服器的排空）都在範圍內。
+_E2E_HARD_CAP_DEFAULT = 120
+
+
+def _e2e_hard_cap_seconds():
+    try:
+        return float(os.environ.get("MOTRIX_E2E_HARD_CAP") or _E2E_HARD_CAP_DEFAULT)
+    except ValueError:
+        return float(_E2E_HARD_CAP_DEFAULT)
+
+
+def _e2e_hard_cap_dir():
+    """同一次執行（主控＋所有 worker）共用一個目錄；不同視窗的執行互不相干。"""
+    import tempfile
+    # 主控在 pytest_configure（worker 起來之前）寫好 MOTRIX_E2E_HARDCAP_RUN，worker 繼承同一個值。
+    # ⚠️ 不用 PYTEST_XDIST_TESTRUNUID：那個只有 worker 有，主控算出來的目錄會對不上（實測：摘要什麼都沒印）。
+    run = os.environ.get("MOTRIX_E2E_HARDCAP_RUN") or ("pid%d" % os.getpid())
+    return os.path.join(tempfile.gettempdir(), "motrix-e2e-hardcap-" + run)
+
+
+@pytest.fixture(autouse=True)
+def _e2e_hard_cap(request):
+    if request.node.get_closest_marker("e2e") is None:
+        yield
+        return
+    import faulthandler
+    import time as _t
+    import uuid as _uuid
+    cap = _e2e_hard_cap_seconds()
+    d = _e2e_hard_cap_dir()
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "%s.txt" % _uuid.uuid4().hex)
+    fh = open(path, "w", encoding="utf-8")
+    fh.write(request.node.nodeid + "\n")
+    fh.flush()
+    faulthandler.dump_traceback_later(cap, exit=bool(os.environ.get("PYTEST_XDIST_WORKER")), file=fh)
+    t0 = _t.monotonic()
+    try:
+        yield
+    finally:
+        faulthandler.cancel_dump_traceback_later()
+        fh.close()
+        if _t.monotonic() - t0 < cap:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """主控（或單程序）收尾：把逐題上限留下的堆疊印出來。"""
+    if hasattr(config, "workerinput"):
+        return
+    import glob as _g
+    d = _e2e_hard_cap_dir()
+    files = sorted(_g.glob(os.path.join(d, "*.txt")))
+    if not files:
+        return
+    cap = _e2e_hard_cap_seconds()
+    tr = terminalreporter
+    tr.section("e2e 逐題上限 %gs：超過上限的題（堆疊＝卡在哪一行）" % cap, red=True)
+    worker_run = bool(getattr(config.option, "numprocesses", None))
+    killed = []
+    for f in files:
+        try:
+            body = open(f, encoding="utf-8", errors="replace").read()
+        finally:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        nodeid, _, stack = body.partition("\n")
+        tr.write_line("── %s" % nodeid)
+        for line in stack.rstrip().splitlines():
+            tr.write_line("   " + line)
+        killed.append(nodeid)
+    if worker_run:
+        # 給建包閘門（_e2e_gate.ps1 認 `FAILED … Timeout`）；xdist 自己那行會被截斷、也不含 Timeout
+        for nodeid in killed:
+            tr.write_line("FAILED %s - Timeout: e2e 逐題上限 %gs（堆疊見上方）" % (nodeid, cap))
+    try:
+        os.rmdir(d)
+    except OSError:
+        pass

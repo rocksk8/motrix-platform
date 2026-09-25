@@ -15,6 +15,10 @@ function Get-E2eGateResult {
     for ($i = 0; $i -lt $failed.Count; $i++) {
         if ($failed[$i] -match 'Timeout') { $timeouts.Add($ids[$i]) } else { $asserts.Add($ids[$i]) }
     }
+    # 2026-09-25（PERF #3）：e2e 逐題上限（conftest `_e2e_hard_cap`）結束 worker 時，同一題有兩行 FAILED——
+    # xdist 自己那行（被截成 `- w...`、不含 Timeout）＋主控補的 `- Timeout: e2e 逐題上限…` ⇒ 只算逾時、各只列一次。
+    $timeouts = @($timeouts | Select-Object -Unique)
+    $asserts = @($asserts | Where-Object { $timeouts -notcontains $_ } | Select-Object -Unique)
     $ok = ($ExitCode -eq 0)
     $msg = New-Object System.Collections.Generic.List[string]
     if (-not $ok) {
