@@ -93,6 +93,28 @@ def versions(conn, kind, key, scope) -> list:
     return [dict(r) for r in rows]
 
 
+def list_definitions(conn, kind) -> list:
+    """同一 kind 的所有定義（含只有草稿、還沒發布過的）：`[{key, scope, latestVersion, hasDraft, updatedAt}]`。"""
+    if kind not in KINDS:
+        raise DefinitionError("未知的定義種類：%r（可用：%s）" % (kind, "、".join(KINDS)))
+    rows = conn.execute(
+        "SELECT key, scope, MAX(CASE WHEN status='published' THEN version END) AS latest, "
+        "MAX(CASE WHEN status='draft' THEN 1 ELSE 0 END) AS has_draft, "
+        "MAX(CASE WHEN status='published' THEN published_at ELSE created_at END) AS updated "
+        "FROM ui_definitions WHERE kind=? GROUP BY key, scope ORDER BY key, scope", (kind,)).fetchall()
+    return [{"key": r["key"], "scope": r["scope"], "latestVersion": r["latest"], "hasDraft": bool(r["has_draft"]),
+             "updatedAt": r["updated"] or ""} for r in rows]
+
+
+def delete_draft(conn, kind, key, scope) -> bool:
+    """刪掉草稿（只有草稿可以刪；已發布的版本不可刪）。回有沒有刪到。"""
+    _check(kind, key, scope)
+    n = conn.execute("DELETE FROM ui_definitions WHERE kind=? AND key=? AND scope=? AND version=0 AND status='draft'",
+                     (kind, key, scope)).rowcount
+    conn.commit()
+    return n > 0
+
+
 def _next_version(conn, kind, key, scope) -> int:
     r = conn.execute("SELECT MAX(version) FROM ui_definitions WHERE kind=? AND key=? AND scope=?",
                      (kind, key, scope)).fetchone()

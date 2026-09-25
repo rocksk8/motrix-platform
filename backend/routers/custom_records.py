@@ -221,7 +221,9 @@ def custom_module_catalog(authorization: str = Header(None)):
     from helpers import doc_template as dt
     return {"fieldTypes": list(CM.FIELD_TYPES), "formulaFunctions": list(FX.FUNCTIONS), "refTargets": CM.ref_targets(),
             "numberingDateFormats": [k for k in CM.DATE_FORMATS], "outputBlocks": sorted(dt.BLOCKS),
-            "dataClasses": ["T1"]}
+            "outputBlockSpecs": dt.BLOCK_SPECS, "outputBlockItemSpecs": dt.BLOCK_ITEM_SPECS,
+            "outputThemes": sorted(dt.THEMES), "outputFormats": ["html", "pdf"], "fieldFormats": list(dt.FORMATS),
+            "approverSources": CM.APPROVER_SOURCES, "dataClasses": ["T1"]}
 
 
 @router.post("/api/custom-modules/formula/check")
@@ -242,8 +244,24 @@ def preview_custom_numbering(payload: dict = Body(...), authorization: str = Hea
     return {"example": CM.format_number(n, date.today(), 1)}
 
 
+@router.get("/api/custom/{key}/ref-options/{field}")
+def custom_ref_options(key: str, field: str, q: str = Query(""), limit: int = Query(50), authorization: str = Header(None)):
+    """參照欄的選項 `[{value, label}]`（主持 P8 缺口 #6）。有該自訂模組權限的人才能查；`q` 以標籤或值模糊比對。"""
+    u = _require_user(authorization)
+    conn = get_db()
+    try:
+        d = _can_use(conn, u, key)
+        f = next((x for x in d["body"].get("fields", []) if x.get("key") == field and x.get("type") == "ref"), None)
+        if f is None:
+            raise HTTPException(404, "沒有這個參照欄位")
+        return CM.ref_options(conn, f["target"], q, max(1, min(int(limit), 200)))
+    finally:
+        conn.close()
+
+
 @router.post("/api/custom-modules/{key}/output/preview")
-def preview_custom_output(key: str, payload: dict = Body(...), authorization: str = Header(None)):
+def preview_custom_output(key: str, payload: dict = Body(...), format: str = Query("html"),
+                          authorization: str = Header(None)):
     """用樣本資料預覽輸出（建構器 ⑤）。body＝整份模組定義（草稿）。"""
     _require_user(authorization, require_superadmin=True)
     body = payload.get("body")
@@ -252,4 +270,8 @@ def preview_custom_output(key: str, payload: dict = Body(...), authorization: st
     problems = [p for p in CM.validate_module(body, key) if p["path"].startswith(("output", "numbering")) or p["path"] == "fields"]
     if problems:
         return JSONResponse(status_code=422, content={"detail": "定義有問題", "problems": problems})
-    return HTMLResponse(CM.render_view(body, CM.sample_view(body)))
+    html = CM.render_view(body, CM.sample_view(body))
+    if format == "pdf":
+        import pdf_gen
+        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf")
+    return HTMLResponse(html)

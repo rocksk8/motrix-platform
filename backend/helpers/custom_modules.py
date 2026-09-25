@@ -38,6 +38,15 @@ class CustomModuleError(ValueError):
         self.status = status
 
 
+#: 簽核人的來源目錄（同 helpers.tiered_approval）：建構器的簽核層編輯器只能從這裡挑
+APPROVER_SOURCES = [
+    {"sourceType": "", "label": "指定帳號", "params": ["username"]},
+    {"sourceType": "department_manager", "label": "部門主管", "params": ["departmentId"]},
+    {"sourceType": "division_manager", "label": "處主管", "params": ["divisionId"]},
+    {"sourceType": "submitter_manager", "label": "申請人的主管", "params": []},
+]
+
+
 def register_ref_target(key: str, table: str, label_column: str, id_column: str = "id") -> None:
     _REF_TARGETS[key] = (table, label_column, id_column)
 
@@ -285,6 +294,28 @@ def _ref_exists(conn, target, value) -> bool:
                             (target[7:], str(value))).fetchone() is not None
     table, _label, idc = _REF_TARGETS[target]
     return conn.execute("SELECT 1 FROM %s WHERE %s=?" % (table, idc), (value,)).fetchone() is not None
+
+
+def ref_options(conn, target: str, q: str = "", limit: int = 50) -> list:
+    """參照欄的選項 `[{value, label}]`。內建對象依登記的表與欄位；`custom:<模組>` ⇒ 該模組的單號（標籤＝單號＋第一個文字欄）。"""
+    like = "%" + (q or "") + "%"
+    if target.startswith("custom:"):
+        rows = conn.execute("SELECT record_no, data_json FROM custom_records WHERE module_key=? AND record_no LIKE ? "
+                            "ORDER BY id DESC LIMIT ?", (target[7:], like, limit)).fetchall()
+        out = []
+        for r in rows:
+            data = json.loads(r["data_json"] or "{}")
+            first = next((v for v in data.values() if isinstance(v, str) and v), "")
+            out.append({"value": r["record_no"], "label": (r["record_no"] + " " + first).strip()})
+        return out
+    if target not in _REF_TARGETS:
+        raise CustomModuleError("不認得的參照對象 %r" % target, status=404)
+    table, label, idc = _REF_TARGETS[target]
+    extra = " AND active=1" if table == "users" else ""
+    sql = ("SELECT {i} AS v, {l} AS l FROM {t} WHERE ({l} LIKE ? OR CAST({i} AS TEXT) LIKE ?){x} ORDER BY {l} LIMIT ?"
+           .format(i=idc, l=label, t=table, x=extra))
+    rows = conn.execute(sql, (like, like, limit)).fetchall()
+    return [{"value": r["v"], "label": r["l"] or str(r["v"])} for r in rows]
 
 
 def compute(body: dict, values: dict) -> tuple:

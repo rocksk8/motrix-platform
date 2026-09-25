@@ -69,6 +69,37 @@ def _err(e: D.DefinitionError, status=400):
     return JSONResponse(status_code=status, content={"detail": str(e), "problems": e.problems})
 
 
+@router.get("/api/definitions/{kind}")
+def list_definitions(kind: str, authorization: str = Header(None)):
+    """同一 kind 的所有定義（含只有草稿的）——建構器的模組清單（主持 P8 缺口 #5）。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        return D.list_definitions(conn, kind)
+    except D.DefinitionError as e:
+        return _err(e)
+    finally:
+        conn.close()
+
+
+@router.delete("/api/definitions/{kind}/{key}/draft")
+def delete_definition_draft(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
+    """刪草稿（已發布的版本不可刪；要回到舊版用 restore）。"""
+    _require_user(authorization, require_superadmin=True)
+    conn = get_db()
+    try:
+        deleted = D.delete_draft(conn, kind, key, scope)
+    except D.DefinitionError as e:
+        return _err(e)
+    finally:
+        conn.close()
+    if not deleted:
+        raise HTTPException(404, "沒有草稿")
+    _audit(_tok(authorization), "definitions.delete_draft", "ui_definition", "%s/%s/%s" % (kind, key, scope),
+           "刪 %s %s（%s）草稿" % (kind, key, scope), {})
+    return {"ok": True}
+
+
 @router.get("/api/definitions/{kind}/{key}")
 def get_definition(kind: str, key: str, scope: str = Query("company"), authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
@@ -193,7 +224,8 @@ def resolve_definition(kind: str, key: str, role: str = Query(None), authorizati
 
 
 @router.post("/api/definitions/output_template/{key}/preview")
-def preview_output_template(key: str, payload: dict = Body(...), authorization: str = Header(None)):
+def preview_output_template(key: str, payload: dict = Body(...), format: str = Query("html"),
+                            authorization: str = Header(None)):
     """用樣本資料預覽輸出（HTML；前端可以直接顯示，也可以另外要 PDF）。版型錯誤回 422 並附問題。"""
     _require_user(authorization, require_superadmin=True)
     from helpers import doc_template as dt
@@ -207,4 +239,8 @@ def preview_output_template(key: str, payload: dict = Body(...), authorization: 
     if problems:
         return JSONResponse(status_code=422, content={"detail": "版型有問題", "problems": problems})
     import pdf_gen
-    return HTMLResponse(pdf_gen._build_invoice_voucher_html(json.loads(json.dumps(sample())), template=body))
+    html = pdf_gen._build_invoice_voucher_html(json.loads(json.dumps(sample())), template=body)
+    if format == "pdf":
+        from fastapi.responses import Response
+        return Response(pdf_gen.html_to_pdf_bytes(html), media_type="application/pdf")
+    return HTMLResponse(html)
