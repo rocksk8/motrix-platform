@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.99 — 2026-09-26（C，M07 搬遷前置）
+> M07 薪資獎金搬進 modules/ 的前置：切斷 M07 → M06 與 L1 → M07。只有新增。
+- L1（新增）：`helpers.tiered_approval.resolve_display_names`（自 M06 `helpers/voucher.py` 下沉，簽核格帳號 → 顯示名稱；voucher 保留同名匯入）、`pdf_gen.fmt_money_blank_zero`（自 M06 `helpers/voucher_pdf.py._fmt_money` 下沉，0 印空白）
+- L1（行為）：`/api/system/bonus-module-status` 改走新串接點 IP-16 `bonus.module_status`（M07 → L1；編號暫定，列車定號）；M07 不在 ⇒ `{"enabled": false, "notice": …}`
+- M07（行為）：獎金分潤單預覽／PDF 不再需要 M06（原本 M06 不在回 503「會計模組未安裝」）；公司抬頭改用 L1 `company_identity.company_name()`（主要據點名稱，QL8；原本讀 `company_profile.name`，設了據點的安裝抬頭會改成主要據點的公司名）
+- 守門（PLAYBOOK §B-11）：begin_write 白名單、頁面路徑基線、資料路徑已知呼叫端、D7 冒煙清單在模組不在時不算過期（判準 `source_tree.module_installed`）；D7 冒煙加回定義文件庫
+
 ## 1.29 — 2026-09-26（C，參照選項權限）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.29〕
 > P8 前端代理回報：參照欄選項只檢查目前模組的權限。只有新增與收緊。
 - L1（新增）：`helpers.custom_modules.register_ref_target(..., modules=)`（讀這個對象需要的權限）、`ref_target_modules(target)`

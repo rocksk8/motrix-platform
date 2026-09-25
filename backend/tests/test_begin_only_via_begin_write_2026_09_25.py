@@ -78,7 +78,9 @@ def test_begin_appears_only_in_begin_write_or_the_allowlist():
 
 def test_every_allowlisted_site_still_exists_and_is_protected():
     sites = {(s[0], s[1]): s for s in _all_sites()}
-    stale = [k for k in ALLOWED if k not in sites]
+    from core import source_tree
+    # 模組被拿掉（選配／反向控制，PLAYBOOK §B-11）⇒ 它的出處本來就不在，不算過期
+    stale = [k for k in ALLOWED if k not in sites and source_tree.module_installed(k[0])]
     assert not stale, "白名單裡已不存在的出處（只准變少：請刪掉這一筆）：%s" % stale
     unprotected = [sites[k] for k in ALLOWED if k in sites and k[1] != "begin_write" and not sites[k][3]]
     assert not unprotected, "白名單的出處拿鎖後不再受 try/finally 保護：%s" % unprotected

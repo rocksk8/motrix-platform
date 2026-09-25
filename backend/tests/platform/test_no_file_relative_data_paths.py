@@ -135,4 +135,4 @@ def test_scan_covers_the_known_callers():
     rels = {source_tree.rel(p) for p in source_tree.product_files()}
     for must in ("db.py", "archive.py", "pdf_gen.py", "photos.py", "modules/payroll/api/payslips.py",
                  "helpers/system_checks.py", "helpers/uploads.py", "core/paths.py"):
-        assert must in rels, must
+        assert must in rels or not source_tree.module_installed(must), must      # 模組被拿掉 ⇒ 那一檔本來就不在
