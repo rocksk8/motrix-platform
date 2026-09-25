@@ -3069,3 +3069,14 @@ def generate_project_execution_report_pdf_bytes(quote_no: str) -> bytes:
             if p:
                 try: os.unlink(p)
                 except Exception: pass
+
+
+# 2026-09-26 自 M06 helpers/voucher_pdf.py 下沉（傳票與獎金分潤單共用）
+def fmt_money_blank_zero(n):
+    """金額。**0 印空白不印 0** —— 使用者的實例上，借方有數字時貸方那一格是留白的。
+
+    ☠️ 印 0 的話，一張三行的傳票看起來像有六個金額；
+       而「0」在會計上是一個**有意義的數字**，不等於「沒有填」。
+    """
+    v = int(n or 0)
+    return "{:,}".format(v) if v else ""

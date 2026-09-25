@@ -137,16 +137,16 @@ def _group_py_files(group):
     return out
 
 
-def test_m07_does_not_import_m06_at_load_time():
-    """M07 的每一支檔（modules.json 取）在**模組層**不可以 import M06；只准在函式內延遲載入並處理 ImportError
-    （helpers/bonus_pdf.py::_m06）。模組層 import ⇒ M06 不在包裡時整個 M07 載不起來（稽核 Y-2 實測）。"""
+def test_m07_does_not_import_m06_anywhere():
+    """M07 的每一支檔（modules.json 取）**任何一層**都不 import M06（2026-09-26：原本 bonus_pdf 在函式內延遲載入
+    helpers.voucher／voucher_pdf，稽核 Y-2；現在那四樣都在 L1）。"""
     import ast
     m06 = set(_group_py_files("M06"))
     m07 = _group_py_files("M07")
     assert "helpers.bonus_pdf" in m07 and "routers.bonus" in m07          # 正對照：真的掃到了
     bad = []
     for mod, path in m07.items():
-        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom) and node.module in m06:
                 bad.append((mod, node.module))
             if isinstance(node, ast.Import):
@@ -161,9 +161,9 @@ def test_the_page_shows_the_voucher_notice():
     assert 'x-text="detail.voucherNotice"' in html
 
 
-def test_m07_loads_without_m06_files_and_says_so(tmp_path):
-    """稽核 Y-2 反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，
-    `routers.bonus` 照常載入；獎金分潤單預覽／PDF 用的元件明說「會計模組未安裝」。"""
+def test_m07_pdf_parts_work_without_m06_files(tmp_path):
+    """反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，`routers.bonus` 照常載入，
+    獎金分潤單預覽／PDF 用的四樣元件（L1）照樣拿得到（2026-09-26 之前這裡會說「會計模組未安裝」）。"""
     import subprocess
     import sys
     from pathlib import Path
@@ -174,31 +174,28 @@ def test_m07_loads_without_m06_files_and_says_so(tmp_path):
         "sys.modules['helpers.voucher_pdf'] = None\n"
         "import routers.bonus as b\n"
         "from helpers import bonus_pdf\n"
-        "try:\n"
-        "    bonus_pdf._m06()\n"
-        "    print('M06-PRESENT')\n"
-        "except bonus_pdf.AccountingPdfMissing as e:\n"
-        "    print('MISSING:' + str(e))\n"
+        "resolve, company, render, money = bonus_pdf._pdf_parts()\n"
+        "print('PARTS:' + ','.join(f.__module__ for f in (resolve, company, render, money)))\n"
+        "print('MONEY:' + money(1234) + '|' + money(0) + '|')\n"
         "print('ROUTES:%d' % len(b.router.routes))\n")
     r = subprocess.run([sys.executable, "-B", "-c", code], cwd=str(backend), capture_output=True, text=True,
                        encoding="utf-8", errors="replace", timeout=120,
                        env=dict(__import__("os").environ, PYTHONIOENCODING="utf-8"))
     assert r.returncode == 0, r.stderr[-2000:]
-    assert "MISSING:會計模組未安裝" in r.stdout, r.stdout
+    assert "PARTS:helpers.tiered_approval,helpers.company_identity,pdf_gen,pdf_gen" in r.stdout, r.stdout
+    assert "MONEY:1,234||" in r.stdout, r.stdout                          # 0 印空白（傳票同一條規則）
     assert int(r.stdout.split("ROUTES:")[1]) > 10
 
 
-def test_preview_and_pdf_say_accounting_missing(client, people, monkeypatch):
-    """M06 不在時：組版面丟 AccountingPdfMissing（不是 ImportError）；預覽與匯出端點回 503 並說明（不是 500）。"""
-    import pytest
+def test_preview_works_even_if_the_accounting_helpers_are_gone(client, people, monkeypatch):
+    """M06 的 `helpers.voucher_pdf` 被拿掉（這裡以把它的函式換成會爆的替身模擬），獎金分潤單預覽照樣組得出來
+    ——證明預覽走的是 L1，不是 M06。"""
+    import helpers.voucher_pdf as vp
     from helpers import bonus_pdf
-    import routers.bonus as rb
 
-    def _gone():
-        raise bonus_pdf.AccountingPdfMissing(bonus_pdf.ACCOUNTING_PDF_MISSING)
-    monkeypatch.setattr(bonus_pdf, "_m06", _gone)
-    with pytest.raises(bonus_pdf.AccountingPdfMissing):
-        bonus_pdf.build_award_html({"id": 1}, [], [], {}, "2026-09-25 00:00")
-    monkeypatch.setattr(rb, "preview_award_html", lambda award_id: _gone())
-    r = client.get("/api/bonus/awards/1/preview", headers=_auth(people["bc_sa"]))
-    assert r.status_code == 503 and "會計模組未安裝" in r.json()["detail"], r.text
+    def _boom(*a, **k):
+        raise AssertionError("不應該用到 M06 的 voucher_pdf")
+    for name in ("_company_name", "_render", "_fmt_money"):
+        monkeypatch.setattr(vp, name, _boom)
+    html = bonus_pdf.build_award_html({"id": 1}, [], [], {}, "2026-09-25 00:00")
+    assert isinstance(html, str) and html
