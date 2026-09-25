@@ -1,5 +1,5 @@
 {
- "core_version": "1.21",
+ "core_version": "1.22",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -201,6 +201,7 @@
    "KEY_RE": "const",
    "PREFIX_RE": "const",
    "STATE_KEY_RE": "const",
+   "can_edit_draft": "def(rec, body, user)",
    "clean_values": "def(conn, body, values)",
    "compute": "def(body, values)",
    "create_record": "def(conn, module_key, values, user)",
@@ -221,6 +222,7 @@
    "register_ref_target": "def(key, table, label_column, id_column=…)",
    "render_output": "def(conn, module_key, record_no)",
    "render_view": "def(body, view)",
+   "sample_values": "def(body)",
    "sample_view": "def(body)",
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",

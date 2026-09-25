@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.22 — 2026-09-26（C，稽核 D 修正）〔core_bump：暫用 1.99 → 1.15〕〔core_bump：暫用 1.15 → 1.22〕
+> C（AUDIT-D-C-P4P5P8 必修 C-M3／C-M5、建議 C-S1～S5、觀察 C-O1、使用者裁示 U14）。只有新增與收緊驗證。
+- L1（新增）：`helpers.custom_modules.sample_values`（發布時試算用的樣本值）、`can_edit_draft(rec, body, user)`（U14：草稿只有建立者與超級管理員可以修改、送出）；讀單回 `canEdit`
+- L1（行為）：自訂模組發布驗證多擋 on_approved 循環、起始狀態掛簽核、permission 用內建 key 或與已發布模組共用、公式與條件的樣本試算錯誤；執行時自動通過最多連跳 20 次（超過 409）；數字欄位拒收 NaN／inf（寫入時 `allow_nan=False` 第二道），舊資料讀出為空值；代理人可讀單與輸出；別人的草稿 update／transition 回 403
+- L1（行為）：`core.definitions.publish`／`restore` 先拿寫鎖（`begin_write`）；`restore` 回傳多 `draftPending`（C-O1）
+
 ## 1.21 — 2026-09-26（C，K-O2 wip/c-ko2；列車取號）〔core_bump：暫用 1.99 → 1.21〕
 > 原寫在 1.14（D7）段落內；D7 已於第二班以 1.17 合回，不改寫 ⇒ 另立一段。
 - L1（新增）：`helpers.startup._prune_login_locks`（自 `routers/auth.init_rate_limiting` 移入，後者改為只讀）——CORE-SPEC 裁示 K-O2：啟動時寫 DB 只能經 `helpers/startup.py`；守門 `tests/platform/test_startup_writes_only_via_startup.py` 實際啟動兩次、記下每句寫入的呼叫堆疊（工具 `tools/platform/startup_writes.py`）
