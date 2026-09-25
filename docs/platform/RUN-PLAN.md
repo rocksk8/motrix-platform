@@ -122,6 +122,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 07:46 D：⑮ M04（`AUDIT-D-C-M04-move.md`，c-m04 dd6f1550）：必修 M04-M1——真刪 subcontract，tests/platform＋49 檔 1273 過／77 紅／2 檔收集失敗（模組在時 1411 全過）；扣允許 2、已知已分派 4、第四班已修 1 ⇒ 70 題＋2 檔需要 M04 留在模組外（c-m04-2 重上車時一併修）。建議：IP-1／12／14 提供方路徑少了 `api/`（登記表守門不驗路徑存在）。O-1 privacy_notice_acks 改模組表延後需主持確認。
 - 2026-09-26 07:44 主持：**第四班列車合回 427c8be9**（c-module-files、a-m10〔M12＋M10〕、h-p9、h-p8-gaps、c-audit-d-2〔C-M4〕、c-refopt；CORE 1.24～1.29；IP daily.check＝IP-11、case.access＝IP-12）。全量（892ea49a）非 e2e 4642 過 4 紅、e2e 434 過 0 紅；4 紅皆交會：daily_tasks／netplan 缺 customization＋列車 IP 定號動了模組碼沒有版號條目（補空類別、升 1.0.1／1.0.2）；兩題用 layout 驗儲存語意，同 worker 先 import routers.definitions（P9 驗證器）就擋（補 delitem）。修後相關 272 題＋rebase 後讀文件的 52 檔 806 題綠。D 的 O-1（netplan 告知端點）列車上已搬。列車長在等待中結束回合，主持接手；之後它復活並核對同一修正（1396 題綠），推送由主持做。另：history.json 殘字＝產品競態，wip/h-hist 修。
 - 2026-09-26 07:11 D：**M02-M1、M02-S1 關閉**（c-m02-2 9840974b）：真刪 crm 1251 passed／4 failed＝允許 2＋待 a-m10 合回 2；模組內 34 passed；條件：第四班 a-m10＋c-m02-2 同車時列車上真刪 crm 只剩允許 2 題。新建議 M02-S2（修改業務開發案件的列權限無題，突變存活；搬遷前既有）。
 - 2026-09-26 07:05 C：D1 階段 B 開工 M07 薪資獎金（key `payroll`，worktree C28、wip/c-m07；M05 等 B 的 M08、M06 等 M04／M08 合回，先做 M07）。會動到的共用處：①L1 `routers/system.py` 的 `/api/system/bonus-module-status` 改走 M07 提供者（不再 import `helpers.bonus`，DEPENDENCY-MAP #27）；②`helpers/bonus_pdf.py` 不再借 M06 的 `voucher`／`voucher_pdf`：公司抬頭改用 L1 `company_identity.company_name`、HTML→PDF 改用 L1 `pdf_gen.html_to_pdf_bytes`（Edge 參數相同）、`resolve_display_names`（簽核格的帳號→顯示名稱）與 `_fmt_money` 下沉 L1（M06 保留同名匯入）；③`main.py` 拿掉兩支 router；`sidebar.js`、`modules.json`。
