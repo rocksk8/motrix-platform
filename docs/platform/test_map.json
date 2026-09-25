@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 554,
+  "tests": 565,
   "unmapped": 9,
   "kinds": {
-   "api": 290,
-   "e2e": 134,
-   "unit": 50,
+   "api": 296,
+   "unit": 51,
+   "e2e": 138,
    "audit": 80
   },
   "routes": 568
@@ -24,6 +24,290 @@
   "backend/tests/test_netguard_2026_09_21.py"
  ],
  "tests": {
+  "backend/modules/crm/tests/test_crm_api_integration.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "helper:auth",
+    "mod:crm/api",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/auth.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_crm_feed_attachments_2026_09_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "helper:uploads",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_crm_item_reads_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "router:item_reads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/item_reads.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_crm_quote_deleted_provider.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "plat:__init__",
+    "plat:registry",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_crm_row_access_rule.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/crm/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_row_access_2026_09_25.py",
+    "helper:row_access",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/row_access.py",
+     "backend/modules/crm/api.py",
+     "backend/tests/test_row_access_2026_09_25.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_row_access_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_soft_delete_guard_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/crm/",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_dev_case_write_access_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "mod:crm/api"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_e2e_crm_dark_mode_2026_09_13.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/crm/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "file:frontend/css/style.css",
+    "js:static/sidebar.js",
+    "page:pages/case-management.html",
+    "page:pages/customers.html",
+    "page:pages/dev-crm.html",
+    "page:pages/inventory.html",
+    "page:pages/parts.html",
+    "page:pages/procurement.html",
+    "page:pages/reports.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/css/style.css",
+     "frontend/pages/case-management.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/dev-crm.html",
+     "frontend/pages/inventory.html",
+     "frontend/pages/parts.html",
+     "frontend/pages/procurement.html",
+     "frontend/pages/reports.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "frontend/pages/dev-crm.html"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_e2e_crm_feed_attachment_render_2026_09_15.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "mod:crm/api",
+    "page:pages/dev-crm.html",
+    "router:uploads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py",
+     "backend/routers/uploads.py"
+    ],
+    "page": [
+     "frontend/pages/dev-crm.html"
+    ],
+    "path": [
+     "frontend/pages/dev-crm.html"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_e2e_crm_unread_marks_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "page:index.html",
+    "page:pages/customers.html",
+    "page:pages/dev-crm.html",
+    "router:item_reads"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+    ],
+    "api": [
+     "backend/routers/item_reads.py"
+    ],
+    "page": [
+     "frontend/index.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/dev-crm.html"
+    ],
+    "path": [
+     "frontend/index.html",
+     "frontend/pages/dev-crm.html"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
+   "module": "crm"
+  },
   "backend/modules/daily_tasks/tests/test_case_stage_done_daily_task.py": {
    "kind": "api",
    "units": [
@@ -1097,6 +1381,35 @@
     ]
    }
   },
+  "backend/tests/platform/test_crm_quote_deleted_connector.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "file:backend/routers/__init__.py",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/crm/"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_daily_checks_connector.py": {
    "kind": "api",
    "units": [
@@ -1262,8 +1575,7 @@
     "file:docs/platform/modules.json",
     "page:pages/dev-crm.html",
     "plat:loader",
-    "router:auth",
-    "router:dev_crm"
+    "router:auth"
    ],
    "evidence": {
     "page": [
@@ -1274,7 +1586,6 @@
      "backend/core/loader.py",
      "backend/db.py",
      "backend/routers/auth.py",
-     "backend/routers/dev_crm.py",
      "docs/platform/modules.json",
      "frontend/pages/dev-crm.html"
     ]
@@ -2313,9 +2624,9 @@
     "core:db",
     "core:main",
     "helper:auth",
+    "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:dev_crm",
     "router:inventory",
     "router:parts",
     "router:quotations",
@@ -2331,9 +2642,9 @@
      "backend/routers/parts.py"
     ],
     "api": [
+     "backend/modules/crm/api.py",
      "backend/routers/auth.py",
      "backend/routers/customers.py",
-     "backend/routers/dev_crm.py",
      "backend/routers/inventory.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py",
@@ -4901,34 +5212,6 @@
     ]
    }
   },
-  "backend/tests/test_dev_case_row_access_2026_09_25.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:dev_crm"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/dev_crm.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_dev_case_soft_delete_guard_2026_08_28.py": {
-   "kind": "api",
-   "units": [
-    "router:dev_crm"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/dev_crm.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_dispatch_edit_guard_2026_08_28.py": {
    "kind": "api",
    "units": [
@@ -6102,9 +6385,6 @@
      "frontend/pages/procurement.html",
      "frontend/pages/reports.html",
      "frontend/static/sidebar.js"
-    ],
-    "path": [
-     "frontend/pages/dev-crm.html"
     ]
    }
   },
@@ -6177,7 +6457,6 @@
     "file:backend/tests/_ports.py",
     "page:pages/case-management.html",
     "page:pages/dev-crm.html",
-    "router:dev_crm",
     "router:quotations",
     "router:uploads"
    ],
@@ -6188,15 +6467,11 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/dev_crm.py",
      "backend/routers/quotations.py",
      "backend/routers/uploads.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
-     "frontend/pages/dev-crm.html"
-    ],
-    "path": [
      "frontend/pages/dev-crm.html"
     ]
    },
@@ -6919,6 +7194,32 @@
    },
    "login_fixture": true
   },
+  "backend/tests/test_e2e_quote_delete_crm_absent_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "page:pages/quotations.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/quotations.html"
+    ],
+    "path": [
+     "frontend/pages/quotations.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_quote_list_search_link_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -7468,6 +7769,7 @@
    "kind": "audit",
    "units": [
     "helper:module_registry",
+    "mod:crm/api",
     "mod:daily_tasks/api",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
@@ -7483,7 +7785,6 @@
     "router:completion_notes",
     "router:contractor_vouchers",
     "router:dashboard",
-    "router:dev_crm",
     "router:inventory",
     "router:invoice_vouchers",
     "router:map_points",
@@ -7507,6 +7808,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
@@ -7517,7 +7819,6 @@
      "backend/routers/completion_notes.py",
      "backend/routers/contractor_vouchers.py",
      "backend/routers/dashboard.py",
-     "backend/routers/dev_crm.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/map_points.py",
@@ -7719,7 +8020,7 @@
    "units": [
     "core:db",
     "helper:uploads",
-    "router:dev_crm",
+    "mod:crm/api",
     "router:uploads"
    ],
    "evidence": {
@@ -7728,7 +8029,7 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/dev_crm.py",
+     "backend/modules/crm/api.py",
      "backend/routers/uploads.py"
     ]
    },
@@ -7739,7 +8040,7 @@
    "units": [
     "core:db",
     "helper:uploads",
-    "router:dev_crm",
+    "mod:crm/api",
     "router:quotations"
    ],
    "evidence": {
@@ -7748,7 +8049,7 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/dev_crm.py",
+     "backend/modules/crm/api.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -8842,6 +9143,7 @@
     "helper:auth",
     "helper:module_registry",
     "js:static/sidebar.js",
+    "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "page:index.html",
@@ -8858,7 +9160,6 @@
     "router:custom_records",
     "router:customers",
     "router:dashboard",
-    "router:dev_crm",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
@@ -8883,6 +9184,7 @@
      "backend/helpers/module_registry.py"
     ],
     "api": [
+     "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/routers/account_items.py",
@@ -8894,7 +9196,6 @@
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/dashboard.py",
-     "backend/routers/dev_crm.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
@@ -9588,12 +9889,12 @@
     "core:db",
     "core:trail",
     "helper:system_checks",
+    "mod:crm/api",
     "page:pages/customers.html",
     "router:auth",
     "router:completion_notes",
     "router:contractors",
     "router:customers",
-    "router:dev_crm",
     "router:list_prefs",
     "router:parts",
     "router:quotations",
@@ -9607,11 +9908,11 @@
      "backend/trail.py"
     ],
     "api": [
+     "backend/modules/crm/api.py",
      "backend/routers/auth.py",
      "backend/routers/completion_notes.py",
      "backend/routers/contractors.py",
      "backend/routers/customers.py",
-     "backend/routers/dev_crm.py",
      "backend/routers/list_prefs.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py",
@@ -9881,7 +10182,7 @@
     "core:db",
     "core:photos",
     "helper:uploads",
-    "router:dev_crm"
+    "mod:crm/api"
    ],
    "evidence": {
     "import": [
@@ -9890,7 +10191,7 @@
      "backend/photos.py"
     ],
     "api": [
-     "backend/routers/dev_crm.py"
+     "backend/modules/crm/api.py"
     ]
    },
    "login_fixture": true
@@ -9940,6 +10241,7 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:tender_radar/api",
@@ -9956,7 +10258,6 @@
     "router:customers",
     "router:dashboard",
     "router:definitions",
-    "router:dev_crm",
     "router:inventory",
     "router:invoice_vouchers",
     "router:item_reads",
@@ -9990,6 +10291,7 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
+     "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
      "backend/modules/tender_radar/api.py",
@@ -10006,7 +10308,6 @@
      "backend/routers/customers.py",
      "backend/routers/dashboard.py",
      "backend/routers/definitions.py",
-     "backend/routers/dev_crm.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
@@ -10733,7 +11034,6 @@
     "helper:quotations",
     "helper:row_access",
     "router:dashboard",
-    "router:dev_crm",
     "router:quotations",
     "router:search"
    ],
@@ -10743,7 +11043,6 @@
      "backend/helpers/__init__.py",
      "backend/helpers/quotations.py",
      "backend/helpers/row_access.py",
-     "backend/routers/dev_crm.py",
      "backend/tests/test_row_access_2026_09_25.py"
     ],
     "api": [

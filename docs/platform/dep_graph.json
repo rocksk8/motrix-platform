@@ -1,6 +1,6 @@
 {
  "generated_by": "tools/platform/dep_scan.py",
- "root": "MOTRIX-PLATFORM-TRAIN4",
+ "root": "MOTRIX-PLATFORM-TRAIN5",
  "units": {
   "core:archive": {
    "api_prefixes": [],
@@ -343,7 +343,6 @@
     "router:customers",
     "router:dashboard",
     "router:definitions",
-    "router:dev_crm",
     "router:inventory",
     "router:invoice_vouchers",
     "router:item_reads",
@@ -2031,6 +2030,215 @@
    "tables_r": [],
    "tables_w": []
   },
+  "mod:crm/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:crm/api",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "crm",
+   "path": "backend/modules/crm/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:crm/api": {
+   "api_prefixes": [
+    "/api/dev-cases",
+    "/api/dev-crm",
+    "/api/dev-logs"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:google_calendar",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:uploads"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:google_calendar",
+    "helper:row_access",
+    "helper:settings",
+    "helper:uploads"
+   ],
+   "kind": "mod",
+   "module_key": "crm",
+   "path": "backend/modules/crm/api.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_dev_cases",
+     "line": 271,
+     "method": "GET",
+     "path": "/api/dev-cases"
+    },
+    {
+     "func": "create_dev_case",
+     "line": 300,
+     "method": "POST",
+     "path": "/api/dev-cases"
+    },
+    {
+     "func": "get_dev_case",
+     "line": 337,
+     "method": "GET",
+     "path": "/api/dev-cases/{case_id}"
+    },
+    {
+     "func": "update_dev_case",
+     "line": 352,
+     "method": "PUT",
+     "path": "/api/dev-cases/{case_id}"
+    },
+    {
+     "func": "request_dev_case_delete",
+     "line": 391,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/request-delete"
+    },
+    {
+     "func": "cancel_dev_case_delete",
+     "line": 426,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/cancel-delete"
+    },
+    {
+     "func": "approve_dev_case_delete",
+     "line": 459,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/approve-delete"
+    },
+    {
+     "func": "update_dev_case_status",
+     "line": 507,
+     "method": "PATCH",
+     "path": "/api/dev-cases/{case_id}/status"
+    },
+    {
+     "func": "mark_converted",
+     "line": 537,
+     "method": "PATCH",
+     "path": "/api/dev-cases/{case_id}/convert"
+    },
+    {
+     "func": "request_dev_case_relink",
+     "line": 576,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/request-relink-quote"
+    },
+    {
+     "func": "cancel_dev_case_relink",
+     "line": 621,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
+    },
+    {
+     "func": "approve_dev_case_relink",
+     "line": 654,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/approve-relink-quote"
+    },
+    {
+     "func": "list_pending_logs",
+     "line": 712,
+     "method": "GET",
+     "path": "/api/dev-logs/pending"
+    },
+    {
+     "func": "dev_crm_activity_stats",
+     "line": 728,
+     "method": "GET",
+     "path": "/api/dev-crm/activity-stats"
+    },
+    {
+     "func": "list_dev_logs",
+     "line": 806,
+     "method": "GET",
+     "path": "/api/dev-cases/{case_id}/logs"
+    },
+    {
+     "func": "create_dev_log",
+     "line": 826,
+     "method": "POST",
+     "path": "/api/dev-cases/{case_id}/logs"
+    },
+    {
+     "func": "update_dev_log",
+     "line": 908,
+     "method": "PUT",
+     "path": "/api/dev-logs/{log_id}"
+    },
+    {
+     "func": "delete_dev_log",
+     "line": 940,
+     "method": "DELETE",
+     "path": "/api/dev-logs/{log_id}"
+    },
+    {
+     "func": "delete_dev_log_file",
+     "line": 970,
+     "method": "DELETE",
+     "path": "/api/dev-logs/{log_id}/files/{file_id}"
+    },
+    {
+     "func": "approve_dev_log",
+     "line": 998,
+     "method": "PATCH",
+     "path": "/api/dev-logs/{log_id}/approve"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations",
+    "users"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "case_stages",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "invoice_vouchers",
+    "payment_requests",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "audit_log",
+    "customers",
+    "dev_cases",
+    "dev_logs"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "customers",
+    "dev_cases",
+    "dev_logs",
+    "notifications",
+    "system_settings"
+   ]
+  },
   "mod:daily_tasks/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -3327,15 +3535,15 @@
    "kind": "page",
    "path": "frontend/pages/dev-crm.html",
    "routers_called": [
+    "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:dev_crm",
     "router:uploads"
    ],
    "routers_called_effective": [
+    "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:dev_crm",
     "router:uploads"
    ],
    "tables_r": [],
@@ -6948,197 +7156,6 @@
     "system_settings"
    ]
   },
-  "router:dev_crm": {
-   "api_prefixes": [
-    "/api/dev-cases",
-    "/api/dev-crm",
-    "/api/dev-logs"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:google_calendar",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:row_access",
-    "helper:settings",
-    "helper:tiered_approval",
-    "helper:uploads"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:google_calendar",
-    "helper:row_access",
-    "helper:settings",
-    "helper:uploads"
-   ],
-   "kind": "router",
-   "path": "backend/routers/dev_crm.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_dev_cases",
-     "line": 268,
-     "method": "GET",
-     "path": "/api/dev-cases"
-    },
-    {
-     "func": "create_dev_case",
-     "line": 297,
-     "method": "POST",
-     "path": "/api/dev-cases"
-    },
-    {
-     "func": "get_dev_case",
-     "line": 334,
-     "method": "GET",
-     "path": "/api/dev-cases/{case_id}"
-    },
-    {
-     "func": "update_dev_case",
-     "line": 349,
-     "method": "PUT",
-     "path": "/api/dev-cases/{case_id}"
-    },
-    {
-     "func": "request_dev_case_delete",
-     "line": 388,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/request-delete"
-    },
-    {
-     "func": "cancel_dev_case_delete",
-     "line": 423,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/cancel-delete"
-    },
-    {
-     "func": "approve_dev_case_delete",
-     "line": 456,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/approve-delete"
-    },
-    {
-     "func": "update_dev_case_status",
-     "line": 504,
-     "method": "PATCH",
-     "path": "/api/dev-cases/{case_id}/status"
-    },
-    {
-     "func": "mark_converted",
-     "line": 534,
-     "method": "PATCH",
-     "path": "/api/dev-cases/{case_id}/convert"
-    },
-    {
-     "func": "request_dev_case_relink",
-     "line": 573,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/request-relink-quote"
-    },
-    {
-     "func": "cancel_dev_case_relink",
-     "line": 618,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/cancel-relink-quote"
-    },
-    {
-     "func": "approve_dev_case_relink",
-     "line": 651,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/approve-relink-quote"
-    },
-    {
-     "func": "list_pending_logs",
-     "line": 709,
-     "method": "GET",
-     "path": "/api/dev-logs/pending"
-    },
-    {
-     "func": "dev_crm_activity_stats",
-     "line": 725,
-     "method": "GET",
-     "path": "/api/dev-crm/activity-stats"
-    },
-    {
-     "func": "list_dev_logs",
-     "line": 803,
-     "method": "GET",
-     "path": "/api/dev-cases/{case_id}/logs"
-    },
-    {
-     "func": "create_dev_log",
-     "line": 823,
-     "method": "POST",
-     "path": "/api/dev-cases/{case_id}/logs"
-    },
-    {
-     "func": "update_dev_log",
-     "line": 905,
-     "method": "PUT",
-     "path": "/api/dev-logs/{log_id}"
-    },
-    {
-     "func": "delete_dev_log",
-     "line": 937,
-     "method": "DELETE",
-     "path": "/api/dev-logs/{log_id}"
-    },
-    {
-     "func": "delete_dev_log_file",
-     "line": 967,
-     "method": "DELETE",
-     "path": "/api/dev-logs/{log_id}/files/{file_id}"
-    },
-    {
-     "func": "approve_dev_log",
-     "line": 995,
-     "method": "PATCH",
-     "path": "/api/dev-logs/{log_id}/approve"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "quotations",
-    "users"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "case_stages",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "invoice_vouchers",
-    "payment_requests",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "audit_log",
-    "customers",
-    "dev_cases",
-    "dev_logs"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "customers",
-    "dev_cases",
-    "dev_logs",
-    "notifications",
-    "system_settings"
-   ]
-  },
   "router:inventory": {
    "api_prefixes": [
     "/api/inventory"
@@ -8707,319 +8724,319 @@
     },
     {
      "func": "unlock_case",
-     "line": 2477,
+     "line": 2476,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2526,
+     "line": 2525,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2642,
+     "line": 2641,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 2958,
+     "line": 2957,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 2981,
+     "line": 2980,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3029,
+     "line": 3028,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3263,
+     "line": 3262,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3281,
+     "line": 3280,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3310,
+     "line": 3309,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3364,
+     "line": 3363,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3405,
+     "line": 3404,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3429,
+     "line": 3428,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3457,
+     "line": 3456,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3480,
+     "line": 3479,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3513,
+     "line": 3512,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3539,
+     "line": 3538,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3570,
+     "line": 3569,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3593,
+     "line": 3592,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3682,
+     "line": 3681,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 3794,
+     "line": 3793,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 3837,
+     "line": 3836,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 3877,
+     "line": 3876,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 3916,
+     "line": 3915,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 3941,
+     "line": 3940,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 3982,
+     "line": 3981,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4007,
+     "line": 4006,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4039,
+     "line": 4038,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4068,
+     "line": 4067,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_settlement",
-     "line": 4113,
+     "line": 4112,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 4137,
+     "line": 4136,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "get_finance_summary",
-     "line": 4200,
+     "line": 4199,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "get_approval_queue",
-     "line": 4429,
+     "line": 4428,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 4944,
+     "line": 4943,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approve_quotation",
-     "line": 5059,
+     "line": 5058,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5172,
+     "line": 5171,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5257,
+     "line": 5256,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5322,
+     "line": 5321,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5458,
+     "line": 5457,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5540,
+     "line": 5539,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5571,
+     "line": 5570,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5602,
+     "line": 5601,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5643,
+     "line": 5642,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5701,
+     "line": 5700,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5766,
+     "line": 5765,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5807,
+     "line": 5806,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5843,
+     "line": 5842,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_queue_detail",
-     "line": 6197,
+     "line": 6196,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 6484,
+     "line": 6483,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     },
     {
      "func": "approval_history",
-     "line": 6623,
+     "line": 6622,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6743,
+     "line": 6742,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6810,
+     "line": 6809,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6927,
+     "line": 6926,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6941,
+     "line": 6940,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     }
@@ -9043,6 +9060,7 @@
     "contractor_payment_vouchers",
     "daily_task_completions",
     "daily_tasks",
+    "dev_cases",
     "dev_logs",
     "invoice_vouchers",
     "payment_requests",
@@ -9085,7 +9103,6 @@
     "case_stage_visits",
     "case_stages",
     "case_updates",
-    "dev_cases",
     "quotations",
     "quote_seq",
     "stock_items",
@@ -9097,7 +9114,6 @@
     "case_stage_visits",
     "case_stages",
     "case_updates",
-    "dev_cases",
     "notifications",
     "quotations",
     "quote_seq",
@@ -10710,8 +10726,8 @@
     "helper:audit",
     "helper:geo",
     "helper:startup",
-    "router:auth",
-    "router:dev_crm"
+    "mod:crm/api",
+    "router:auth"
    ]
   },
   "table:automation_categories": {
@@ -11272,8 +11288,8 @@
    "tables_w": [],
    "writers": [
     "core:db",
-    "router:customers",
-    "router:dev_crm"
+    "mod:crm/api",
+    "router:customers"
    ]
   },
   "table:daily_task_completions": {
@@ -11369,13 +11385,13 @@
     "helper:google_calendar",
     "router:dashboard",
     "router:item_reads",
+    "router:quotations",
     "router:search"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:dev_crm",
-    "router:quotations"
+    "mod:crm/api"
    ]
   },
   "table:dev_logs": {
@@ -11395,7 +11411,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:dev_crm"
+    "mod:crm/api"
    ]
   },
   "table:divisions": {
@@ -11945,6 +11961,7 @@
     "helper:google_calendar",
     "helper:recognition",
     "helper:voucher_attachments",
+    "mod:crm/api",
     "router:bonus",
     "router:case_action_items",
     "router:case_extra_expenses",
@@ -11952,7 +11969,6 @@
     "router:completion_notes",
     "router:contractor_vouchers",
     "router:dashboard",
-    "router:dev_crm",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:map_points",
@@ -12371,13 +12387,13 @@
     "helper:system_checks",
     "helper:tiered_approval",
     "helper:voucher",
+    "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:tender_radar/api",
     "router:approval_delegates",
     "router:bonus",
     "router:case_action_items",
     "router:dashboard",
-    "router:dev_crm",
     "router:mail_settings",
     "router:org_structure",
     "router:quotations",
