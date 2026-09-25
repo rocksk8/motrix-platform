@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 484,
+  "tests": 485,
   "unmapped": 9,
   "kinds": {
    "api": 258,
    "e2e": 119,
    "unit": 44,
-   "audit": 63
+   "audit": 64
   },
   "routes": 509
  },
@@ -876,6 +876,47 @@
      "backend/tools/apply_update.ps1",
      "backend/tools/check_prod_drift.ps1",
      "backend/tools/rollback_update.ps1"
+    ]
+   }
+  },
+  "backend/tests/platform/test_product_select.py": {
+   "kind": "audit",
+   "units": [
+    "core:main",
+    "dir:backend/helpers/",
+    "dir:backend/modules/",
+    "dir:frontend/pages/",
+    "dir:product/",
+    "dir:tools/platform/",
+    "file:backend/modules/tender_radar/module.json",
+    "file:docs/platform/modules.json",
+    "file:product/core-only.json",
+    "file:tools/platform/product_select.py",
+    "file:tools/platform/upgrade.py",
+    "helper:auth",
+    "mod:tender_radar/api",
+    "page:index.html",
+    "plat:registry"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "backend/core/registry.py",
+     "backend/helpers/",
+     "backend/helpers/auth.py",
+     "backend/main.py",
+     "backend/modules/",
+     "backend/modules/tender_radar/api.py",
+     "backend/modules/tender_radar/module.json",
+     "docs/platform/modules.json",
+     "frontend/pages/",
+     "product/",
+     "product/core-only.json",
+     "tools/platform/",
+     "tools/platform/product_select.py",
+     "tools/platform/upgrade.py"
     ]
    }
   },
