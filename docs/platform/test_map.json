@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 492,
+  "tests": 493,
   "unmapped": 9,
   "kinds": {
    "api": 262,
    "e2e": 119,
    "unit": 44,
-   "audit": 67
+   "audit": 68
   },
   "routes": 509
  },
@@ -924,6 +924,37 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_module_update.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/core/",
+    "dir:backend/modules/",
+    "dir:frontend/pages/",
+    "dir:tools/platform/",
+    "file:backend/modules/tender_radar/SPEC.md",
+    "file:backend/modules/tender_radar/module.json",
+    "file:tools/platform/module_update.py",
+    "mod:tender_radar/api",
+    "page:index.html",
+    "plat:registry"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "backend/core/",
+     "backend/core/registry.py",
+     "backend/modules/",
+     "backend/modules/tender_radar/SPEC.md",
+     "backend/modules/tender_radar/api.py",
+     "backend/modules/tender_radar/module.json",
+     "frontend/pages/",
+     "tools/platform/",
+     "tools/platform/module_update.py"
+    ]
+   }
   },
   "backend/tests/platform/test_no_file_relative_data_paths.py": {
    "kind": "audit",
