@@ -131,6 +131,17 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = _paths.DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
 # v116: CM3 案件角色改存帳號（caseRecord.roles → {username, display}；先推先拿，順延自 v115）
 CURRENT_VERSION = 116
 
+#: 🔴 V9 原版 migration 的凍結基準（CORE-SPEC「使用者裁示」③）。
+#: 新版的 `_MIGRATIONS` 就是 V9 的 v1~v116；新 schema 一律走各模組 migration
+#: （`module_schema_versions`），**不再往這串後面接**。
+#: V9 維護期新增的 migration 必須同號同內容追進來，並把這裡與 CURRENT_VERSION 一起加一。
+#: 守門：tests/platform/test_v9_baseline.py
+V9_BASELINE = 116
+
+
+class SchemaNewerThanBaseline(RuntimeError):
+    """資料庫的 `schema_version` 比新版認得的 V9 基準新 ⇒ 拒絕升級。"""
+
 # Set True (per-request, via ContextVar — safe across FastAPI's async/threadpool
 # execution model) whenever the current request is authenticated as the 'demo'
 # account, so get_db() transparently redirects ALL queries — including the
@@ -360,6 +371,7 @@ DEMO_CLEARED_TABLES = frozenset((
     "env_guide_recommendations", "gateway_categories", "gateway_fit",
     "gateway_products", "gateway_scenarios", "geocode_cache",
     "geocode_usage", "invoice_vouchers", "item_reads", "login_rate_limit",
+    "module_schema_versions",   # 2026-09-25 模組 migration 版本表；比照 schema_version（清掉 ⇒ init_db 重跑）
     "module_versions", "monitor_categories", "monitor_fit",
     "monitor_products", "monitor_scenarios", "netarch_families",
     "netarch_generations", "netarch_products", "network_plans",
@@ -729,7 +741,12 @@ def init_db(path: str = None):
         CREATE INDEX IF NOT EXISTS idx_mv_module
             ON module_versions(module, updated_at);
     """)
-    _run_migrations(conn)
+    try:
+        _run_migrations(conn)
+    except SchemaNewerThanBaseline:
+        conn.close()                    # 拒絕＝不留連線（Windows 上開著的連線會鎖住庫檔）
+        raise
+    _ensure_module_schema_versions(conn)
     _seed_setting(conn, "edge_path", "")
     # `WL7` §5⓪①：全新安裝的出廠值改成空字串，不是我們的公司資料。
     # ⚠️ `_seed_setting` 是 `DO NOTHING`（key 已存在就不覆寫），
@@ -836,6 +853,23 @@ def _get_version(conn) -> int:
     return row["version"] if row else 0
 
 
+def _ensure_module_schema_versions(conn) -> None:
+    """各模組 migration 的版本表（CORE-SPEC §6）。
+
+    ⚠️ 刻意**不是** V9 的一支 migration：加成 v117 會讓 V9 基準本身變動。
+    ⚠️ 名稱與 V9 的單列表 `schema_version` 刻意拉開（不是 `schema_versions`），避免手寫 SQL 只差一個 s。
+    V9 程式碼回退時不認得這張表 ⇒ 不讀，不影響。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS module_schema_versions (
+            module     TEXT    PRIMARY KEY,
+            version    INTEGER NOT NULL DEFAULT 0,
+            applied_at TEXT    NOT NULL DEFAULT ''
+        )
+    """)
+    conn.commit()
+
+
 def _set_version(conn, version: int) -> None:
     conn.execute(
         "INSERT INTO schema_version (id, version, applied_at) VALUES (1, ?, ?) "
@@ -847,41 +881,22 @@ def _set_version(conn, version: int) -> None:
 
 def _run_migrations(conn) -> None:
     current = _get_version(conn)
+    if current > V9_BASELINE:
+        # 🔴 **資料庫比新版認得的 V9 基準新 ⇒ 拒絕**（CORE-SPEC「使用者裁示」③，2026-09-25）。
+        # V9 原版的引擎在這裡只記 WARNING（A 裁定：程式碼回退時不可以起不來）。
+        # 新版的前提不同：基準 v1~v116 凍結、新 schema 走模組 migration ⇒
+        # `schema_version` 超過基準**只可能是 V9 原版後來又加了 migration、而沒有追進新版**。
+        # 那些欄位新版不認得，接著跑模組 migration 會建在一個不知道的 schema 上 ⇒ 不猜，停下。
+        # ⚠️ 兩個數字都要印；**不可以把 `schema_version` 改小**（U5b）。
+        logger.error(
+            "資料庫 schema 版本是 v%d，比新版認得的 V9 基準 v%d 新 —— 拒絕升級。"
+            "（成因：V9 原版新增了 migration 而未同號追進新版；處置：把那幾支追進 db._MIGRATIONS，"
+            "或換回 V9 程式碼）",
+            current, V9_BASELINE,
+        )
+        raise SchemaNewerThanBaseline(
+            "資料庫 schema v%d 比新版認得的 V9 基準 v%d 新，拒絕升級" % (current, V9_BASELINE))
     if current >= CURRENT_VERSION:
-        if current > CURRENT_VERSION:
-            # 🔴 **資料庫比程式碼新。** 這不是假想：
-            # 「部署新版 → 發現問題 → 回退程式碼」之後就是這個狀態。
-            #
-            # ⚠️ **記 WARNING，不丟例外**（A 裁定）。丟例外會讓回退**直接起不來**，
-            # 那是把「新版有一個 bug」變成「什麼都跑不起來」——**嚴格更糟**。
-            # 而靜默 return 的代價是：不認識的欄位會在執行期以各種奇怪的方式冒出來，
-            # **而沒有人會聯想到版本**。⇒ 留痕跡，但不要擋路。
-            #
-            # ⚠️ **兩個數字都要印。** 只印一個的話讀的人無從判斷差多少、
-            # 也無從判斷該往前升還是該把程式碼換回去。
-            #
-            # 🔴 **不可以把 `schema_version` 改小去「修好」它**（U5b 釘這個）。
-            # 那之後就再也看不出這個庫跑過更新的 schema 了——
-            # **把證據改掉比留著問題更糟。**
-            #
-            # 🔑 **而「只記 log 就好」這個裁決有一個前提**：
-            # 目前每一支 migration 都**只加不改**（新增欄位／新增表），
-            # 所以舊程式碼讀不到的新欄位，它就是不讀，不會壞。
-            # ⚠️ **那是 migration 的性質，不是這個引擎的性質。**
-            # 哪天有人寫了 `DROP COLUMN`／`RENAME`，這裡就必須重新裁決——
-            # 守門見 `tests/test_spec_debts_2026_09_22.py`
-            # `::test_u5c_no_migration_makes_a_column_disappear`。
-            # ⚠️ **這一行原本指向 `test_upgrade_path_2026_09_21.py::test_u5c`，
-            # 而那個檔裡沒有那支測試**——它 2026-09-22 才被寫出來，
-            # 寫這句話的當下**那個守門的人不存在**。
-            # 🔑 一句「已經有人在守」的話，本身不是守門；
-            # 而它比沒有註解更糟，因為下一個人讀到它就不會再去確認。
-            logger.warning(
-                "資料庫 schema 版本是 v%d，比這份程式碼認得的 v%d 新 —— "
-                "有些欄位是這份程式碼不認識的。"
-                "（常見成因：部署新版後回退了程式碼，而資料庫已經升上去了）",
-                current, CURRENT_VERSION,
-            )
         return
     for i, fn in enumerate(_MIGRATIONS, start=1):
         if i <= current:

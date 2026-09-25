@@ -403,7 +403,10 @@ def test_u5_a_newer_database_is_not_silently_downgraded(tmp_path):
     logging.getLogger().addHandler(handler)
     logging.getLogger().setLevel(logging.DEBUG)
     try:
-        db.init_db(str(path))
+        # 2026-09-25 使用者裁示③：新版遇到比 V9 基準新的庫 ⇒ 拒絕升級（不再只記 log）。
+        # log 仍必須講出兩個版本號——拒絕的理由要看得見。
+        with pytest.raises(db.SchemaNewerThanBaseline):
+            db.init_db(str(path))
     finally:
         logging.getLogger().removeHandler(handler)
 
@@ -436,7 +439,8 @@ def test_u5b_the_version_is_not_rewound(tmp_path):
     finally:
         conn.close()
 
-    db.init_db(str(path))
+    with pytest.raises(db.SchemaNewerThanBaseline):      # 裁示③：拒絕，但不可以改寫證據
+        db.init_db(str(path))
     assert _version_of(path) == newer, (
         f"版本號被改成 {_version_of(path)} 了（原本 {newer}）—— "
         "那讓「這個庫跑過更新的 schema」這件事再也看不出來"

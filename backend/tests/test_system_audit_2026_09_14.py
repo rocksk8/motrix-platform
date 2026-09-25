@@ -90,6 +90,7 @@ _NOT_IN_JSON_BACKUP = {
     "login_rate_limit": "登入態與鎖，還原後本來就該是空的",
     "edit_presence": "登入態與鎖，還原後本來就該是空的",
     "schema_version": "由 migration 自己寫，抄舊值反而會讓 migration 不跑",
+    "module_schema_versions": "同 schema_version：模組 migration 自己寫（2026-09-25）",
     "quote_seq": "流水號，整庫還原時跟著單據一起回來；"
                  "走到 JSON 重建那一層時要人工對一次最後號碼（單據 JSON 裡看得到）",
     "payslip_seq": "流水號，同 quote_seq",

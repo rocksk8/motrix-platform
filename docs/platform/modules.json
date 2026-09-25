@@ -90,6 +90,7 @@
    "geocode_usage",
    "item_reads",
    "login_rate_limit",
+   "module_schema_versions",
    "module_versions",
    "notifications",
    "parts",
