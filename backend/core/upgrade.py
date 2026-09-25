@@ -741,10 +741,26 @@ def _fill_only_json_change(before: str, after: str, fill: dict) -> bool:
     return True
 
 
+#: 啟動時就會更新的執行期狀態（每日掃描的節流日期，helpers/startup.py）。新版一啟動就寫今天的日期 ⇒
+#: 不算「改寫既有設定」，但**只接受日期往後走**（值必須是 ISO 日期、不早於轉換前）。
+#: D7 預演抓到（2026-09-26）：真實的庫裡這兩個鍵是舊日期 ⇒ 啟動後驗證判定改寫 ⇒ 正式機升級會被判失敗而回滾；
+#: 合成演練的庫是新建的、日期本來就是今天，所以一直沒看到。守門：tests/platform/test_core_upgrade.py 要求
+#: startup.py 裡每一個寫入的設定鍵都在這份清單（新增寫入點要有人決定它算不算執行期狀態）。
+RUNTIME_STATE_SETTINGS = frozenset({"security.last_weak_pw_scan", "security.last_unlock_pw_scan"})
+
+
+def _date_moved_forward(old_json, new_json) -> bool:
+    try:
+        old, new = json.loads(old_json), json.loads(new_json)
+        return date.fromisoformat(str(new)[:10]) >= date.fromisoformat(str(old)[:10])
+    except (TypeError, ValueError):
+        return False
+
+
 def settings_changes(before: dict, after: dict) -> list:
     """`before` 的既有設定鍵，在 `after` 被改寫或刪除的鍵（排序）。
 
-    唯一的例外：`company_profile` 只做了「補空值」（fill_company_profile_blanks）。
+    例外：`company_profile` 只做了「補空值」（fill_company_profile_blanks）；`RUNTIME_STATE_SETTINGS` 的日期往後走。
     轉換後驗證（verify_conversion）與新版啟動後的比對（tools/platform/upgrade.py verify）**共用這一支**
     ——稽核 X-9b M-1：啟動後那一份自己逐鍵比、沒有這個例外，只要補過欄位驗證就一定不過。
     """
@@ -754,6 +770,8 @@ def settings_changes(before: dict, after: dict) -> list:
             continue
         if k == "company_profile" and after.get(k) is not None \
                 and _fill_only_json_change(v, after[k], V9_COMPANY_DEFAULTS):
+            continue
+        if k in RUNTIME_STATE_SETTINGS and after.get(k) is not None and _date_moved_forward(v, after[k]):
             continue
         changed.append(k)
     return sorted(changed)

@@ -867,3 +867,32 @@ def test_cu12_v9_without_build_commit_rolls_back_to_none(inst, new_src, tmp_path
     assert _disk_commit(client, auth, monkeypatch, inst) == _NEW_SHA
     assert U.rollback(inst, bd, "code") == []
     assert _disk_commit(client, auth, monkeypatch, inst) is None
+
+
+# ── 啟動時的執行期狀態（D7 預演抓到，2026-09-26）──────────────────────────────
+
+def test_startup_throttle_dates_moving_forward_are_not_rewrites():
+    """真實庫裡的每日掃描節流日期是舊的 ⇒ 新版一啟動就寫今天 ⇒ 不算改寫；日期往回或值不是日期 ⇒ 仍算改寫。"""
+    before = {"security.last_weak_pw_scan": '"2026-09-20"', "security.last_unlock_pw_scan": '"2026-09-20"',
+              "company_profile": '{"name": "甲"}'}
+    fwd = dict(before, **{"security.last_weak_pw_scan": '"2026-09-26"', "security.last_unlock_pw_scan": '"2026-09-26"'})
+    assert U.settings_changes(before, fwd) == []
+    back = dict(before, **{"security.last_weak_pw_scan": '"2026-09-01"'})
+    assert U.settings_changes(before, back) == ["security.last_weak_pw_scan"]
+    junk = dict(before, **{"security.last_unlock_pw_scan": '"not a date"'})
+    assert U.settings_changes(before, junk) == ["security.last_unlock_pw_scan"]
+    gone = {k: v for k, v in before.items() if k != "security.last_weak_pw_scan"}
+    assert U.settings_changes(before, gone) == ["security.last_weak_pw_scan"]           # 刪掉仍算
+    other = dict(fwd, company_profile='{"name": "乙"}')
+    assert U.settings_changes(before, other) == ["company_profile"]                      # 其他鍵照舊逐一比
+
+
+def test_every_setting_written_at_startup_is_classified():
+    """守門：helpers/startup.py 啟動時寫入的每一個設定鍵，都必須在 RUNTIME_STATE_SETTINGS（有人決定過它算執行期狀態）；
+    否則新版一啟動就改到它，升級驗證會判失敗而回滾。"""
+    import re
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "helpers" / "startup.py").read_text(encoding="utf-8")
+    written = set(re.findall(r'_set_setting\(\s*"([^"]+)"', src))
+    assert written, "掃不到任何寫入（正對照：至少有每日掃描的節流日期）"
+    assert written <= U.RUNTIME_STATE_SETTINGS, "啟動時寫入、卻沒有分類的設定鍵：%s" % sorted(written - U.RUNTIME_STATE_SETTINGS)
