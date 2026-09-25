@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 457,
-  "unmapped": 5,
+  "tests": 459,
+  "unmapped": 6,
   "kinds": {
    "api": 247,
-   "unit": 36,
+   "unit": 38,
    "audit": 58,
    "e2e": 116
   },
@@ -17,7 +17,8 @@
   "backend/tests/test_bonus_award_export_watermark_2026_09_23.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
-  "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py"
+  "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py",
+  "backend/tests/test_netguard_2026_09_21.py"
  ],
  "tests": {
   "backend/modules/tender_radar/tests/test_tender_columns_stored_2026_09_23.py": {
@@ -199,6 +200,22 @@
    },
    "module": "tender_radar"
   },
+  "backend/modules/tender_radar/tests/test_tender_netguard_2026_09_21.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/tender_radar/source.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
+   "module": "tender_radar"
+  },
   "backend/modules/tender_radar/tests/test_tender_notify_2026_09_21.py": {
    "kind": "api",
    "units": [
@@ -311,6 +328,24 @@
     ]
    },
    "login_fixture": true,
+   "module": "tender_radar"
+  },
+  "backend/modules/tender_radar/tests/test_tender_spec_debts_2026_09_22.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/tender_radar/",
+    "mod:tender_radar/__init__",
+    "mod:tender_radar/source"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/tender_radar/__init__.py",
+     "backend/modules/tender_radar/source.py"
+    ],
+    "module_dir": [
+     "backend/modules/tender_radar/"
+    ]
+   },
    "module": "tender_radar"
   },
   "backend/modules/tender_radar/tests/test_tender_startup_log_2026_09_21.py": {
@@ -7020,14 +7055,8 @@
   },
   "backend/tests/test_netguard_2026_09_21.py": {
    "kind": "unit",
-   "units": [
-    "mod:tender_radar/source"
-   ],
-   "evidence": {
-    "import": [
-     "backend/modules/tender_radar/source.py"
-    ]
-   }
+   "units": [],
+   "evidence": {}
   },
   "backend/tests/test_network_plan_topology.py": {
    "kind": "api",
@@ -8456,15 +8485,11 @@
    "kind": "unit",
    "units": [
     "core:db",
-    "file:backend/tests/test_upgrade_path_2026_09_21.py",
-    "mod:tender_radar/__init__",
-    "mod:tender_radar/source"
+    "file:backend/tests/test_upgrade_path_2026_09_21.py"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/tender_radar/__init__.py",
-     "backend/modules/tender_radar/source.py",
      "backend/tests/test_upgrade_path_2026_09_21.py"
     ]
    }
