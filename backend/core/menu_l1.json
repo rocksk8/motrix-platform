@@ -362,6 +362,13 @@
   },
   {
    "group": "system",
+   "href": "mail-settings.html",
+   "label": "信件與通知收件設定",
+   "order": 45,
+   "perm": "superadmin"
+  },
+  {
+   "group": "system",
    "href": "google-calendar-settings.html",
    "label": "Google 行事曆設定",
    "order": 50,

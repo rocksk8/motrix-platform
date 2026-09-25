@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """能力目錄（CUSTOMIZATION-SPEC P1；CORE-SPEC §7 端點登錄表的擴充）。
 
+[單位] plat:catalog    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] CATALOG_VERSION, EXPECTED_SECTIONS, build, check_layout, endpoint_problems, layout_points, module_endpoints,
+    output_problems, register_section, restore, section, snapshot
+[不變式] 目錄不擁有清單，只收集（模組路由、module.json 可自訂點、registry 提供者、事件宣告）
+[契約題] tests/platform/test_platform_catalog.py
+[注意] 建構器與排版器只從這裡挑
+
 **唯一來源**：自訂模組建構器（P8）、排版器（P9）、內建模組都只從這裡挑。
 目錄本身不擁有任何清單，只**收集**：
 

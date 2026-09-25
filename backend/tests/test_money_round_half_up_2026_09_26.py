@@ -472,7 +472,8 @@ def _js(kind, target, factory, body):
 
 
 def _page(name, factory, body):
-    return _js("page", str(FRONTEND / "pages" / name), factory, body)
+    from core import source_tree   # 頁面位置一律經 page_file（C1；列車 train/0926-0415 交會）
+    return _js("page", str(source_tree.page_file(name)), factory, body)
 
 
 def _cm(body):

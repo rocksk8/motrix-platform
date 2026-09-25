@@ -225,7 +225,7 @@ def test_invoice_quote_and_payment_amounts_use_the_shared_half_up():
 
 def test_pages_using_the_shared_rounding_load_legal_round_js():
     js_texts = {p.name: p.read_text(encoding="utf-8") for p in (FRONTEND / "js").glob("*.js")}
-    pages = sorted((FRONTEND / "pages").glob("*.html"))
+    pages = source_tree.page_files()   # 頁面位置一律經 source_tree（C1；列車 train/0926-0415 交會）
     assert pages
     bad = [p.name for p in pages
            if page_needs_legal_round(p.read_text(encoding="utf-8"), js_texts)

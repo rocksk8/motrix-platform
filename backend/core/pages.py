@@ -2,8 +2,8 @@
 """頁面對照與提供（階段 C／C1，docs/platform/STAGE-C-DESIGN.md §3）：`/pages/<檔名>` ⇒ 實體檔、提示頁或 404。
 
 [單位] plat:pages    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] NOTICE, PAGE_NAME, PageConflict, build_page_map, check_and_register, collect, lookup, notice_html, notice_kind,
-    page_response, read_manifests, resolve, valid_name
+[公開介面] L1_PAGES_FILE, NOTICE, PAGE_NAME, PageConflict, build_page_map, check_and_register, collect, load_l1_pages,
+    lookup, notice_html, notice_kind, page_response, read_manifests, resolve, valid_name
 [不變式] 對外 URL 一律 /pages/x.html；模組沒載入 ⇒ 404＋提示頁，頁面本體不送出；頁名比對不分大小寫；撞名或宣告 L1 頁面 ⇒ 該模組 failed
 [契約題] tests/platform/test_core_pages.py
 [注意] 在 mount_modules 之前 check_and_register、在 StaticFiles 之前註冊 /pages 路由（順序有守門）

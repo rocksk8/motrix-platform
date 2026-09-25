@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。
 
+[單位] plat:menu    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] ITEM_KEYS, MENU_L1, build, denied, load_l1, module_items, validate, visible
+[不變式] 選單項只來自 core/menu_l1.json 與已載入模組的 pages[].menu；群組固定鍵、模組不可自開群組；群組顯示＝底下至少一項可見
+[契約題] tests/platform/test_menu_parity.py
+[注意] C3 期間與 sidebar.js 舊選單並行，兩邊都要改（對等守門）
+
 來源：
   - `core/menu_l1.json`：群組（固定鍵，裁示 D4：模組不可以自己開群組）＋ L1 頁面的選單項
   - 已載入模組的 module.json `pages[].menu`：`{group, label, order, perm, active?, badge?, extra_badge?}`

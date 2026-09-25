@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """L0 模組描述：可自訂點（CUSTOMIZATION-SPEC P3；§8.2 排版器需求）。
 
+[單位] plat:customization    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
+[公開介面] EXPORT_FORMATS, MOVE_DEST_KINDS, OPS_BY_KIND, OPS_CORE_FIELD, OPS_DISPLAY_FIELD, OP_KEYS, PAGE_KINDS,
+    SCHEMA_VERSIONS, core_fields, endpoint_parts, require_valid, validate_manifest
+[不變式] customization 格式錯誤 ⇒ loader 不載入該模組（failed）；不認得的鍵一律是問題
+[契約題] tests/platform/test_platform_catalog.py
+[注意] 只用標準函式庫（loader 在 import 模組前驗 module.json）
+
 模組在 `module.json` 的 `customization` 登記「排版器可以動的點」：列表欄位、表單區塊、按鈕、
 選單（按鈕群組）、匯出按鈕、輸出版型；欄位分「核心」（不可移除、不可改名，只能移動位置）與
 「可顯示」（可以隱藏、改標籤、移動）。排版器（P9）**只能**動這裡登記的點。
