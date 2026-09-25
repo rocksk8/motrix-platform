@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.27 — 2026-09-26（P9 拖曳排版器，wip/h-p9；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.27〕
+> 只有新增。
+- L1（新增）：定義文件庫 `layout` kind 的驗證器與程式預設（`routers/definitions.py`）——key＝`module:<模組>`、body＝`{"ops": [...]}`；發布／還原前經 `core.catalog.check_layout`（P3 排版守門第一個產品呼叫者），問題路徑 `ops[i].…`；程式預設＝`{"ops": []}`（模組未載入 ⇒ 沒有預設）
+- L1（新增）：端點 `GET /api/layout/{module}`——任何登入者讀自己角色的版面（`resolve`：角色 ＞ 公司 ＞ 程式預設）＋該模組的可自訂點；`?role=` 僅超級管理員（排版器的「以某角色預覽」）；現在不合法的已發布操作不套用、列在 `dropped`；讀定義失敗 ⇒ 程式預設＋`error`
+- L1（新增，前端）：`static/custom-layout.js` 排版模型（`MotrixCustomLayout.pageModel／applyOps／compileOps／describeDiff／applyPersonal`）、`static/layout-runtime.js`（Alpine store `layout`：執行時套用＋個人層）、`static/layout-editor.js`（同頁編輯模式）
+
 ## 1.26 — 2026-09-26（A，M10 搬遷；列車上 core_bump 取號）〔core_bump：暫用 1.96 → 1.17〕〔core_bump：暫用 1.17 → 1.26〕
 - L0（新增）：`core.source_tree.module_installed(path)`——守門判斷「清單上的模組檔所屬模組在不在」的唯一實作（模組被拿掉時，它的條目不算幽靈；PLAYBOOK §B 步驟 11）
 
