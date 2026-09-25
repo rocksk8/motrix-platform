@@ -73,6 +73,10 @@
 | 主持 | 8d | P6 事件匯流排（從 A 的佇列移過來，主持現在有空檔）；儀表板 D3（選配打包）、D5（模組狀態）、P7 的操作介面；P9 拖曳排版器（與 C 的 P5 串接）；P8 建構介面的前端；D8 缺口分派；彙整稽核、IMPROVEMENT-REPORT、RETROSPECTIVE |
 
 - **全量名額排隊**（PLAYBOOK §C-13，全機同時最多 2 組）：目前佔用＝R（wip/r-legal）、C（wip/c-fix-x1 e2e 段，23:25 起；B 的 3.12 全量 23:22 結束後交棒）。排隊：① A wip/a-bonus 全量（動到 L1 email_notify／notification_prefs；R 合回並 rebase 之後）② B 修好 hard_cap／shared_fixtures 兩題後補一輪全量。名額一空出來，主持就通知下一位，並更新這一行。
+- **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
+  - O1：`test_archive_isolation` 在滿載的全量中紅 1 題（A2，23:0x；題名沒有留下），單檔與循序跑 670 題都是綠的。
+  - O2：`test_bonus_case_multi_approver_tier` 之後卡住十幾分鐘（A2，約 22:50，滿載時；沒有 dump），停在 multi_approver 之後、vouchers 的第一題；連跑三檔、開 faulthandler 都無法重現。
+  - O3／O4：`test_e2e_hard_cap` 的單程序題、`test_e2e_shared_fixtures` 的 login_as（B 負責修，已知原因＝滿載時的時序）。
 - 稽核：每一項完成、合回之後，照 CORE-SPEC §9d 的分配交叉稽核（A 審 C、B 審 A、C 審 B 與主持）；新的工作線也照這個輪替。
 - 視窗上下文：各視窗會自動摘要，不會因為太長而中斷。若某個視窗出現重複、迷失或品質下降，就不再派工給它，改用新的子代理（獨立 worktree）接手；派工內容一律寫成自足的說明，並引用本檔與 PLAYBOOK，不依賴對話記憶。
 - 巡視：主持每 30 分鐘（每小時 :13、:43）自動巡視一次；排程 7 天後自動失效，到期前重新建立，內容包括看各視窗狀態、看 git log、派出下一項、更新 §4／§5 與桌面交接檔。
