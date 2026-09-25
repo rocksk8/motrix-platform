@@ -1153,8 +1153,14 @@ def get_last_received_bank_account(customerName: Optional[str] = None, authoriza
     有值，很多舊案件是純打字輸入客戶名稱），這裡直接用 quotations 熱路徑欄位
     customer_name 比對——跟其他所有「依客戶彙總」的既有邏輯（如 §7 帳齡分析／
     客戶歷史）用的是同一個欄位，口徑一致。全表掃描 data_json 找收款品項，比照
-    reports.py::_collect_tax_invoices() 同一套既有做法，這個資料量級可接受。"""
-    _require_user(authorization)
+    reports.py::_collect_tax_invoices() 同一套既有做法，這個資料量級可接受。
+
+    權限（稽核 Y-1，2026-09-25）：只給「執行得了標記收款」的人（admin+ 或出納模組，與出納頁
+    `canExecuteCashier()` 同一條）。回的是本公司收款帳戶，但可以依客戶名稱探測「這個客戶有沒有已收款案件」。
+    （V9 有同一支端點、同一個缺口：只記錄，不修 V9。）"""
+    user = _require_user(authorization)
+    if user.get("role") not in ("superadmin", "admin") and not user_has_module(user, "cashier"):
+        raise HTTPException(403, "只有出納或管理員可以查詢收款帳戶")
     if not customerName:
         return {"name": "", "acctCode": ""}
     conn = get_db()
