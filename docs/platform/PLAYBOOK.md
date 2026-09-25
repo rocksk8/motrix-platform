@@ -69,6 +69,7 @@
 | 10 | 不連線、不寫入正式機；正式機的動作一律由使用者執行 |
 | 11 | **不要追著 platform 跑全量**（2026-09-25）：分支在基準 X 上跑過全綠的全量之後，rebase 到 Y 時，如果帶進來的 commit 都已經各自驗證過，而且程式碼沒有衝突，就只跑 `modtest --changed-since X` 加 `tests/platform`，然後合回；回報時寫明「全量在 X，差異題在 Y」。例外：差異裡有 fixture 層，或有程式碼衝突 ⇒ 重跑全量。**補充（B 提出）**：rebase 帶進來的別人的差異，已在對方自己的全量驗過，而且和本分支的檔案不重疊 ⇒ 只跑「本分支自己的差異題」（`modtest --base platform`）加 `tests/platform`，不用照字面跑 `--changed-since`（字面上可能等於全量）。發行前的全量照 §D，另外在發行的那個 commit 上跑 |
 | 12 | **刪除共用目錄之前先查占用**（2026-09-25，B 弄壞 `.venv` 之後）：venv、主工作樹、暫存、部署包目錄都可能有別的 session 在用。刪之前先查（`Get-CimInstance Win32_Process | ? { $_.ExecutablePath -like '<路徑>*' -or $_.CommandLine -like '*<路徑>*' }`，或 `handle.exe <路徑>`）；有人在用就不刪，改用新路徑。⚠ 遞迴刪除「失敗」時，失敗點之前的檔案**已經刪掉了**：報錯後第一件事是盤點剩下什麼，並通知可能受影響的一方 |
+| 13 | **全機測試負載上限**（2026-09-25 23:15，使用者回報 CPU 100%：同時 7 組 pytest、49 個 python、70 個 headless 瀏覽器）：①整台機器同時最多 **2 組全量**（全量開跑前先查 `Get-CimInstance Win32_Process -Filter "Name='python.exe'" \| ? CommandLine -match 'pytest'`，已有 2 組就排隊並回報）②差異題或單檔一律 `-n 2` 以下，全量 `-n 4` 以下（機器 12 邏輯核，要留給使用者與正式開發）③測試行程以低優先權執行（`start /BELOWNORMAL` 或啟動後設 `PriorityClass=BelowNormal`）④卡住超過 10 分鐘的題目先抓 dump 再停掉，不讓它空轉佔核 |
 
 ---
 
