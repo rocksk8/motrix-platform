@@ -254,7 +254,16 @@ def custom_ref_options(key: str, field: str, q: str = Query(""), limit: int = Qu
         f = next((x for x in d["body"].get("fields", []) if x.get("key") == field and x.get("type") == "ref"), None)
         if f is None:
             raise HTTPException(404, "沒有這個參照欄位")
-        return CM.ref_options(conn, f["target"], q, max(1, min(int(limit), 200)))
+        # 被參照的那一方也要有讀取權限（否則有 A 模組權限的人，可以經 A 的參照欄讀到 B 模組或客戶的清單）
+        target = f["target"]
+        if target.startswith("custom:"):
+            _can_use(conn, u, target[len("custom:"):])                 # 沒有權限 ⇒ 403；模組未發布 ⇒ 404
+        else:
+            need = CM.ref_target_modules(target)
+            if need and u["role"] != "superadmin":
+                from helpers import require_any_module
+                require_any_module(u, need, "參照對象")               # 沒有任一權限 ⇒ 403
+        return CM.ref_options(conn, target, q, max(1, min(int(limit), 200)))
     finally:
         conn.close()
 

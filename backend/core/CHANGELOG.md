@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.21 — 2026-09-26（C，參照選項權限）〔core_bump：暫用 1.99 → 1.21〕
+> P8 前端代理回報：參照欄選項只檢查目前模組的權限。只有新增與收緊。
+- L1（新增）：`helpers.custom_modules.register_ref_target(..., modules=)`（讀這個對象需要的權限）、`ref_target_modules(target)`
+- L1（行為）：`GET /api/custom/{key}/ref-options/{field}` 也檢查被參照那一方的讀取權限：`custom:<模組>` 要有該模組權限、`customers` 要有客戶相關權限；沒有 ⇒ 403
+
 ## 1.20 — 2026-09-26（P1／P3，wip/cloud-p1p3＋稽核修正 wip/x-p1p3-fix；⚠ 暫用號：列車上依 origin 重定）〔core_bump：暫用 1.8 → 1.15〕〔core_bump：暫用 1.15 → 1.20〕
 > `core.registry.CORE_VERSION` 1.19 → 1.20（只有新增）。
 - L0（新增）：`core.customization`——module.json 可自訂點（P3）：`SCHEMA_VERSIONS`／`PAGE_KINDS`／`OPS_*`／`EXPORT_FORMATS`、`OP_KEYS`／`MOVE_DEST_KINDS`、`validate_manifest(manifest)`、`require_valid(manifest)`、`core_fields(manifest)`、`endpoint_parts(spec)`。攤平與排版檢查是私有的（`_raw_points`、`_check_ops`），對外只經 `core.catalog`（稽核 P-M1）

@@ -47,15 +47,27 @@ APPROVER_SOURCES = [
 ]
 
 
-def register_ref_target(key: str, table: str, label_column: str, id_column: str = "id") -> None:
+def register_ref_target(key: str, table: str, label_column: str, id_column: str = "id", modules=None) -> None:
+    """`modules`：讀這個對象需要的模組權限（任一即可）；None ＝登入即可。參照選項端點照這個擋（被參照的對象也要有讀取權限）。"""
     _REF_TARGETS[key] = (table, label_column, id_column)
+    _REF_TARGET_MODULES[key] = tuple(modules) if modules else None
+
+
+#: 參照對象 → 讀取它需要的模組權限（None ＝登入即可）
+_REF_TARGET_MODULES = {}
+
+
+def ref_target_modules(target: str):
+    """內建參照對象的讀取權限（任一）；None ＝登入即可。`custom:<模組>` 不在這裡（由呼叫端檢查該模組的權限）。"""
+    return _REF_TARGET_MODULES.get(target)
 
 
 def ref_targets() -> dict:
     return {k: {"table": t, "label": l} for k, (t, l, _i) in sorted(_REF_TARGETS.items())}
 
 
-register_ref_target("customers", "customers", "name")
+# 與 routers/customers.py 的讀取權限相同：不可以經參照欄讀到自己沒有權限看的客戶清單
+register_ref_target("customers", "customers", "name", modules=("customer", "case_manage", "dev_crm", "procurement"))
 register_ref_target("users", "users", "display_name", "username")
 
 

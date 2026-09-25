@@ -187,7 +187,7 @@
 
 | 項目 | 規則 |
 |---|---|
-| 欄位型別 | `text`／`number`／`date`／`select`／`checkbox`（同 §3.6）＋`formula`（唯讀，由公式算）＋`ref`（`target`：參照目錄 `users`、`customers`，或 `custom:<模組>`） |
+| 欄位型別 | `text`／`number`／`date`／`select`／`checkbox`（同 §3.6）＋`formula`（唯讀，由公式算）＋`ref`（`target`：參照目錄 `users`、`customers`，或 `custom:<模組>`）。**參照選項端點也檢查被參照那一方的讀取權限**：`custom:<模組>` 要有該模組的權限、`customers` 要有客戶相關權限（同 `routers/customers.py`）、`users` 登入即可；沒有 ⇒ 403（2026-09-26） |
 | 公式 | `helpers.formula`：數字、字串、欄位 key、`+ - * / %`、比較、`and／or／not`、`if(條件, 是, 否)`、`round`、`min`、`max`、`sum`、`abs`、`coalesce`、`days_between`。只能一行，最長 500 字。**空值不等於 0**（`coalesce(x, 0)` 才當 0）；除以 0 ⇒ 那一欄空值並回報。循環引用在發布前擋下 |
 | 資料分類 | 只收 T1。**F2（個資）欄位一律拒絕**，直到個資分流接上自訂模組（單據是整份 JSON，分流要另外做） |
 | 流程 | 起始狀態、終點（`final`）至少一個；每個狀態都要從起始狀態走得到；非終點狀態要有出路；終點不可以再轉出。轉換可以設 `requester_only` |
