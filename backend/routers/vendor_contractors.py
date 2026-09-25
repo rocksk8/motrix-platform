@@ -13,7 +13,7 @@ from core.txn import begin_write, write_txn
 from core import registry as _registry
 from helpers.quotations import save_quotation_json
 from helpers.uploads import save_document_files, delete_document_file
-from helpers.recognition import normalize_date  # `AC2`
+from helpers.dates import normalize_date  # `AC2`（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from routers.contractors import _stamp_passbook

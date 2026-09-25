@@ -23,6 +23,7 @@ from datetime import date
 
 from fastapi import HTTPException
 
+from helpers.dates import normalize_date  # noqa: F401  2026-09-26 下沉 L1（M04 搬遷）；本檔與 M01 呼叫端照舊從這裡取
 from helpers.quotations import round_half_up, quote_tax_type
 
 _log = logging.getLogger(__name__)
@@ -72,24 +73,6 @@ def normalize_basis(v):
     if v not in BASES:
         raise HTTPException(400, "basis 只能是 accrual（權責）或 cash（現金）")
     return v
-
-
-def normalize_date(v, label="日期"):
-    """'' ＝未登錄；否則必須是 YYYY-MM-DD 的真實日期。回正規化後的字串。"""
-    if v is None:
-        return ""
-    if not isinstance(v, str):
-        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
-    v = v.strip()
-    # 日期欄可能是 datetime 字串以外的東西；只接受整 10 碼的日期
-    if v == "":
-        return ""
-    if len(v) != 10:
-        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
-    try:
-        return date.fromisoformat(v).isoformat()
-    except ValueError:
-        raise HTTPException(400, "%s格式不正確，需為 YYYY-MM-DD" % label)
 
 
 def normalize_ratio_bp(v):
