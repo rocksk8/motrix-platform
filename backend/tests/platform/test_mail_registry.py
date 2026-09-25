@@ -347,6 +347,5 @@ def test_monthly_report_has_one_recipient_source(client, staff):
 
 
 def test_settings_page_shows_no_recipient_and_elsewhere():
-    from pathlib import Path
-    page = (Path(__file__).resolve().parents[3] / "frontend" / "pages" / "mail-settings.html").read_text(encoding="utf-8")
+    page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
     assert 'x-show="t.noRecipient"' in page and "t.managedElsewhere" in page
