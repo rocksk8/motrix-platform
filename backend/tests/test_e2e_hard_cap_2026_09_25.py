@@ -51,10 +51,9 @@ def probe():
 
 
 def _pytest(args, cap, tmp_path, tag):
-    # 子 pytest 不可以繼承外層的 xdist／本次執行狀態（這一題自己在 -n 下跑時，外層是 worker）
-    env = {k: v for k, v in os.environ.items()
-           if not k.startswith("PYTEST_XDIST_") and k not in ("PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN")}
-    env.update(MOTRIX_E2E_HARD_CAP=str(cap), PYTHONIOENCODING="utf-8")
+    # 子 pytest 不可以繼承外層的 xdist／本次執行狀態（這一題自己在 -n 下跑時，外層是 worker）——由 utf8_env 統一剔除
+    from tests._subproc import utf8_env
+    env = utf8_env(MOTRIX_E2E_HARD_CAP=cap)
     t0 = time.time()
     r = subprocess.run([sys.executable, "-m", "pytest", *args, "-q", "-rf", "-p", "no:cacheprovider",
                         "--basetemp", str(tmp_path / tag)],

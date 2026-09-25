@@ -57,11 +57,15 @@ def utf8_env(**extra):
     `extra` 裡的值優先（要刪掉某個變數請傳 `None`）。
     """
     env = {**os.environ, **_FORCE_UTF8}
-    # 建包腳本在外層 pytest 設了獨佔旗標；子行程的 pytest（守門題自己起的）不可繼承，
-    # 否則它們也會當成建包、去搶或等待獨佔 ⇒ 只在建包時紅（2026-09-25 實際發生）。
-    # 題目要測獨佔時會在 extra 明著傳入。
-    env.pop("MOTRIX_PYTEST_EXCLUSIVE", None)
-    env.pop("MOTRIX_PYTEST_EXCLUSIVE_OWNER", None)
+    # 子行程不可以繼承「外層這一次測試執行」的狀態（題目要測這些時在 extra 明著傳入）：
+    # ① 獨佔旗標：建包在外層設的；子 pytest 繼承了也會當成建包去搶／等獨佔 ⇒ 只在建包時紅（8e96f8b0）
+    # ② PYTEST_XDIST_*：在 worker 裡起的子 pytest 以為自己是 worker（a3044dcc：逐題上限誤結束行程）
+    # ③ PYTEST_CURRENT_TEST、MOTRIX_E2E_HARDCAP_RUN：外層這一題／這一次執行的識別，子行程不是它
+    # 🔑 同一類第三次出現時收斂成這一處（2026-09-25）；起子 pytest 的題一律經過這裡（test_subproc_helper 守門）。
+    for key in [k for k in env if k.startswith("PYTEST_XDIST_")] + [
+            "PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN",
+            "MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER"]:
+        env.pop(key, None)
     for key, value in extra.items():
         if value is None:
             env.pop(key, None)

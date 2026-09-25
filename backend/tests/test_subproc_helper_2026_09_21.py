@@ -268,3 +268,51 @@ def test_child_pytest_does_not_inherit_the_build_exclusive_flag(monkeypatch):
     env = utf8_env()
     assert "MOTRIX_PYTEST_EXCLUSIVE" not in env and "MOTRIX_PYTEST_EXCLUSIVE_OWNER" not in env
     assert utf8_env(MOTRIX_PYTEST_EXCLUSIVE="1")["MOTRIX_PYTEST_EXCLUSIVE"] == "1"
+
+
+def test_child_does_not_inherit_the_outer_run_state(monkeypatch):
+    """子行程不可以繼承「外層這一次測試執行」的狀態——第三次同一類（2026-09-25）：
+    ① 獨佔旗標（8e96f8b0）② PYTEST_XDIST_WORKER（a3044dcc：子 pytest 以為自己是 xdist worker）
+    ⇒ 收斂成 utf8_env 預設剔除一整類，不再一個變數一個變數補。題目要測這些時在 extra 明著傳入。"""
+    from tests._subproc import utf8_env
+    for k in ("PYTEST_XDIST_WORKER", "PYTEST_XDIST_WORKER_COUNT", "PYTEST_XDIST_TESTRUNUID",
+              "PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN",
+              "MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER"):
+        monkeypatch.setenv(k, "x")
+    env = utf8_env()
+    leaked = sorted(k for k in env if k.startswith("PYTEST_XDIST_") or k in (
+        "PYTEST_CURRENT_TEST", "MOTRIX_E2E_HARDCAP_RUN", "MOTRIX_PYTEST_EXCLUSIVE", "MOTRIX_PYTEST_EXCLUSIVE_OWNER"))
+    assert not leaked, leaked
+    assert utf8_env(PYTEST_XDIST_WORKER="gw9")["PYTEST_XDIST_WORKER"] == "gw9", "明著傳入的要照給"
+
+
+def _spawns_pytest(tree):
+    """AST：有沒有一個呼叫的參數串列裡，連著出現常數 "-m"、"pytest"（真的起子 pytest，不是只在字串裡提到）。"""
+    import ast
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.List, ast.Tuple)):
+            vals = [e.value if isinstance(e, ast.Constant) else None for e in n.elts]
+            if any(a == "-m" and b == "pytest" for a, b in zip(vals, vals[1:])):
+                return True
+    return False
+
+
+def test_every_test_that_spawns_pytest_builds_its_env_with_utf8_env():
+    """守門：起子 pytest 的測試一律經過 utf8_env——手拼環境的那一支會各自漏掉下一個新變數。"""
+    import ast
+    import glob
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    bad = []
+    for f in sorted(glob.glob(os.path.join(here, "test_*.py"))):
+        src = open(f, encoding="utf-8").read()
+        if _spawns_pytest(ast.parse(src)) and "utf8_env(" not in src:
+            bad.append(os.path.basename(f))
+    assert not bad, "這些測試起了子 pytest，但沒有用 tests._subproc.utf8_env 組環境：%s" % bad
+
+
+def test_the_spawn_detector_sees_what_it_should():
+    import ast
+    assert _spawns_pytest(ast.parse('subprocess.run([sys.executable, "-m", "pytest", f])'))
+    assert _spawns_pytest(ast.parse('run_python(["-m", "pytest", "-q"], cwd=x)'))
+    assert not _spawns_pytest(ast.parse('msg = "py -m pytest x -v"'))
