@@ -16,7 +16,7 @@ import pytest
 
 import routers.material_orders as mo
 import routers.quotations as q
-import routers.vendor_contractors as vc  # noqa: F401  端點仍在 M04；寫回改由 M01（IP-13）
+import modules.subcontract.api.vendor_contractors as vc  # noqa: F401  端點仍在 M04；寫回改由 M01（IP-13）
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 
 

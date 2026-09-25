@@ -1,6 +1,7 @@
-"""M04 外包工班搬遷前置的三個串接點（2026-09-26）：IP-12 `dispatch.list_for_case`、IP-13 `quotation.append_items`、
-IP-14 `contractor_voucher.public`。每一個都驗：提供者已登記、正對照、**反向控制**（拿掉提供者 ⇒ 照常回應並明說）。
-另驗 M04 不再 import M01（save_quotation_json）、M01／M05／M06 不再 import M04。
+"""M04 外包工班的串接點，**取用方這一側、M04 不在也要成立的題**（2026-09-26）：
+IP-12 `dispatch.list_for_case`（M01 案件整包）、IP-14 `contractor_voucher.public`（M05 出納、M06 T100 匯出）
+拿掉提供者 ⇒ 照常回應並明說；M01／M05／M06 不再直接 import M04。
+提供方的登記與正對照在 `modules/subcontract/tests/test_subcontract_providers.py`（隨模組搬走）。
 """
 import json
 import re
@@ -57,50 +58,12 @@ def _items():
         conn.close()
 
 
-def test_providers_are_registered(client):
-    assert set(registry.providers("dispatch.list_for_case")) == {"subcontract"}
-    assert set(registry.providers("quotation.append_items")) == {"quotations"}
-    assert set(registry.providers("contractor_voucher.public")) == {"subcontract"}
+# ── IP-12（M04 不在）─────────────────────────────────────────────────────────
 
-
-# ── IP-13 ─────────────────────────────────────────────────────────────────────
-
-def test_import_to_quote_goes_through_m01(client, make_user):
-    h = _hdr(client, make_user)
-    did = _seed()
-    r = client.post("/api/contractor-dispatches/%d/import-to-quote" % did, headers=h)
-    assert r.status_code == 200 and r.json()["imported"] == 1, r.text
-    items = _items()
-    assert items[0]["id"] == "orig" and items[1]["type"] == "header" and "外包承攬" in items[1]["description"]
-    assert {k: items[2][k] for k in ("description", "qty", "unit", "cost", "margin", "notes")} == \
-        {"description": "配線", "qty": 3.0, "unit": "式", "cost": 1200.0, "margin": 0.30, "notes": "n"}
-
-
-def test_import_to_quote_refuses_non_draft(client, make_user):
-    h = _hdr(client, make_user)
-    did = _seed(status="已送出")
-    r = client.post("/api/contractor-dispatches/%d/import-to-quote" % did, headers=h)
-    assert r.status_code == 409 and "解鎖" in r.json()["detail"] and len(_items()) == 1
-
-
-def test_import_to_quote_without_m01_is_409_and_touches_nothing(client, make_user, monkeypatch):
-    from routers import vendor_contractors as vc
-    h = _hdr(client, make_user)
-    did = _seed()
-    _without(monkeypatch, "quotation.append_items")
-    r = client.post("/api/contractor-dispatches/%d/import-to-quote" % did, headers=h)
-    assert r.status_code == 409 and r.json()["detail"] == vc.QUOTE_IMPORT_UNAVAILABLE
-    assert len(_items()) == 1
-
-
-# ── IP-12 ─────────────────────────────────────────────────────────────────────
-
-def test_case_bundle_dispatches_part(client, make_user, monkeypatch):
+def test_case_bundle_without_m04(client, make_user, monkeypatch):
     from routers import quotations as q
     h = _hdr(client, make_user)
     _seed()
-    got = client.get("/api/quotations/%s/case-bundle" % QNO, headers=h).json()["parts"]["dispatches"]
-    assert got["ok"] is True and [d["quoteNo"] for d in got["data"]] == [QNO]
     _without(monkeypatch, "dispatch.list_for_case")
     r = client.get("/api/quotations/%s/case-bundle" % QNO, headers=h)
     assert r.status_code == 200
@@ -108,19 +71,12 @@ def test_case_bundle_dispatches_part(client, make_user, monkeypatch):
     assert r.json()["parts"]["updates"]["ok"] is True                     # 其他段照常
 
 
-# ── IP-14 ─────────────────────────────────────────────────────────────────────
+# ── IP-14（M04 不在）─────────────────────────────────────────────────────────
 
-def test_cashier_and_t100_with_and_without_m04(client, make_user, monkeypatch):
+def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     from routers import accounting_export as ae, cashier as ca
     h = _hdr(client, make_user)
     _seed()
-    r = client.get("/api/cashier/payable-queue", headers=h)
-    assert r.status_code == 200 and [v["voucherNo"] for v in r.json()] == ["CV-S04-1"]
-    hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h).json()
-    assert hist["contractorNotice"] == ""
-    prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()
-    assert prev["notice"] == ""
-
     _without(monkeypatch, "contractor_voucher.public")
     r = client.get("/api/cashier/payable-queue", headers=h)
     assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
@@ -136,13 +92,12 @@ def test_cashier_and_t100_with_and_without_m04(client, make_user, monkeypatch):
     assert ws.cell(row=3, column=1).value == ca.CONTRACTOR_MISSING
 
 
-# ── 相依已切斷 ─────────────────────────────────────────────────────────────────
+# ── 相依已切斷（M01／M05／M06 這一側）────────────────────────────────────────────
 
 @pytest.mark.parametrize("rel,pattern", [
-    ("routers/vendor_contractors.py", r"save_quotation_json|helpers\.recognition"),
-    ("routers/quotations.py", r"from routers\.vendor_contractors import"),
-    ("routers/cashier.py", r"from routers\.contractor_vouchers import"),
-    ("routers/accounting_export.py", r"from routers\.contractor_vouchers import"),
+    ("routers/quotations.py", r"from (routers|modules\.subcontract)[\w.]* import .*(list_dispatches|vendor_contractors)"),
+    ("routers/cashier.py", r"contractor_vouchers import|_voucher_public"),
+    ("routers/accounting_export.py", r"contractor_vouchers import|_voucher_public"),
 ])
 def test_no_direct_imports_across(rel, pattern):
     text = (source_tree.BACKEND / rel).read_text(encoding="utf-8")
