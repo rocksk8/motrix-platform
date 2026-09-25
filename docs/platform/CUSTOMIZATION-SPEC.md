@@ -151,6 +151,65 @@
 - **送審時凍結**：單據記下 `customFieldsVersion`（定義的發布版本號）；之後定義改了，舊單據仍依它自己的版本顯示與輸出。
 - 輸出版型（P2）以 `customFields.<key>` 引用；驗證器會檢查引用的欄位是否存在於該版定義。
 
+### 3.7 自訂模組引擎（P8 後端，C 2026-09-25；前端建構器由主持依 §8.1 做）
+
+**定義**＝定義文件庫的 `custom_module` kind，key＝模組 key（`[a-z][a-z0-9_]{1,39}`），scope 一律 `company`。草稿、發布、差異、還原走 `/api/definitions/custom_module/{key}/…`（§3.5）；發布前跑 `helpers.custom_modules.validate_module`，每個問題帶 `path`。
+
+```json
+{
+  "name": "測試用設備借用單", "icon": "box", "menu": {"group": "…", "order": 10},
+  "permission": "custom.equipment_loan",
+  "numbering": {"prefix": "EL", "date": "YYYYMMDD", "digits": 4},
+  "fields": [
+    {"key": "qty", "label": "數量", "type": "number", "required": true},
+    {"key": "total", "label": "總值", "type": "formula", "formula": "qty * unit_value"},
+    {"key": "borrower", "label": "借用人", "type": "ref", "target": "users"}
+  ],
+  "workflow": {
+    "initial": "draft",
+    "states": [
+      {"key": "draft", "label": "草稿"},
+      {"key": "pending", "label": "簽核中", "approval": {
+        "tiers": [{"approvers": [{"username": "mgr"}]}, {"approvers": [{"sourceType": "division_manager", "divisionId": 3}], "when": "total > 10000"}],
+        "on_approved": "approved", "on_rejected": "rejected"}},
+      {"key": "approved", "label": "已核准", "notify": {"requester": true}},
+      {"key": "returned", "label": "已歸還", "final": true}
+    ],
+    "transitions": [{"key": "submit", "label": "送審", "from": "draft", "to": "pending"}]
+  },
+  "output": {"template": {"theme": "voucher_standard", "blocks": ["…doc_template 積木…"]}}
+}
+```
+
+| 項目 | 規則 |
+|---|---|
+| 欄位型別 | `text`／`number`／`date`／`select`／`checkbox`（同 §3.6）＋`formula`（唯讀，由公式算）＋`ref`（`target`：參照目錄 `users`、`customers`，或 `custom:<模組>`） |
+| 公式 | `helpers.formula`：數字、字串、欄位 key、`+ - * / %`、比較、`and／or／not`、`if(條件, 是, 否)`、`round`、`min`、`max`、`sum`、`abs`、`coalesce`、`days_between`。只能一行，最長 500 字。**空值不等於 0**（`coalesce(x, 0)` 才當 0）；除以 0 ⇒ 那一欄空值並回報。循環引用在發布前擋下 |
+| 資料分類 | 只收 T1。**F2（個資）欄位一律拒絕**，直到個資分流接上自訂模組（單據是整份 JSON，分流要另外做） |
+| 流程 | 起始狀態、終點（`final`）至少一個；每個狀態都要從起始狀態走得到；非終點狀態要有出路；終點不可以再轉出。轉換可以設 `requester_only` |
+| 簽核 | 掛在**狀態**上：進入該狀態就展開簽核層（沿用 `helpers.tiered_approval`：依序、代理人、當層任一人可退回；簽核人可以是帳號、部門主管、處主管、申請人主管）。層可以帶條件 `when`（公式），條件不成立那一層就不列入；全部不成立 ⇒ 直接視為通過。簽核中的狀態**不能用轉換跳過簽核** |
+| 通知與事件 | 狀態的 `notify`：`requester`、`users`。進入簽核狀態時通知第一位簽核人，每過一層通知下一位。每次狀態改變發事件 `custom_module.transitioned`（`module, recordNo, from, to, action, by`）。**通知與事件都在 commit 之後才送** |
+| 編號 | `前綴-日期-流水號`；日期格式 `YYYYMMDD`（每日重新計）、`YYYYMM`（每月）、空白（不分期）；位數 3～8 |
+| 輸出 | `output.template` 是 doc_template 版型（§3.4），視圖欄位：`recordNo`、`status`、`statusLabel`、`createdBy`、`createdAt`、`moduleName`、`fields.<key>`（也可以直接寫 `<key>`）、`approval`。沒有指定版型 ⇒ 通用版型（抬頭、編號、狀態、每個欄位一列、簽核欄、頁尾） |
+| 凍結 | 單據建立時記下 `def_version`；之後的修改、流程與輸出都用那一版。起始狀態以外不能改內容 |
+| 權限 | 超級管理員，或使用者的模組清單裡有 `permission`（預設 `custom.<key>`）。簽核人不需要模組權限，也能讀單據、簽自己那一層 |
+| 儲存 | 表 `custom_records`（每筆一份 JSON）、`custom_record_values`（欄位索引，可由 JSON 重建，不匯出）、`custom_record_counters`、`custom_record_log`。由 core 的第 2 支模組 migration 建立；T1，每日 JSON 匯出、demo 清空 |
+
+**API**
+
+| 用途 | 端點 |
+|---|---|
+| 側欄清單（使用者看得到的已發布模組） | `GET /api/custom-modules` |
+| 表單與列表要的定義 | `GET /api/custom/{key}/meta` |
+| 單據 | `GET／POST /api/custom/{key}/records`（列表可用 `status`、`field`＋`value` 篩選）、`GET／PUT /api/custom/{key}/records/{no}` |
+| 流程 | `POST …/records/{no}/transitions/{t}`、`POST …/records/{no}/approve`、`POST …/records/{no}/reject`（body 可帶 `note`） |
+| 輸出 | `GET …/records/{no}/output`（HTML）、`?format=pdf` |
+| 建構器（僅超級管理員） | `GET /api/custom-modules/catalog`（欄位型別、公式函式、參照對象、日期格式、輸出積木）、`POST /api/custom-modules/formula/check`（`{formula, fields}` ⇒ `problems[{pos, message}]`）、`POST /api/custom-modules/numbering/preview`、`POST /api/custom-modules/{key}/output/preview`（整份草稿定義 ⇒ 用樣本資料的 HTML） |
+
+錯誤：欄位值不對 ⇒ 400 `problems[{key, message}]`；定義問題 ⇒ 422 `problems[{path, message}]`；狀態不對 ⇒ 409；沒權限 ⇒ 403；模組沒發布 ⇒ 404。
+
+**未做（P8 後續）**：流程圖的視覺化資料（座標）由前端自己存在定義裡的 `ui` 鍵（引擎不讀它）；列表的排序與分頁；附件欄位；`custom:<模組>` 參照的顯示名稱；個資分流；自訂模組的授權與啟停（§9c 的 license_key）。
+
 ## 4. 不做的事（刻意）
 
 - 不讓使用者寫程式或腳本（裁示）。
