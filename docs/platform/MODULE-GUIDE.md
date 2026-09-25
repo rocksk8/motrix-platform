@@ -112,6 +112,8 @@ modules/<key>/
   tests/           本模組測試（modtest 以此為邊界）
   README.md        給使用者與開發者看：功能、端點、資料分類、串接點、對方不在時的行為
   CHANGELOG.md     本模組自己的更新紀錄
+  SPEC.md          規格條件（機器讀）：## 規格條件（編號宣告，格式同 STATE.md）／## 範圍（### THIS／NEXT／EXEMPT）／
+                   ## 登記（C_OWNED／KNOWN／AMBIGUOUS_ACK）；test_spec_coverage 讀它，拿掉模組時跟著消失
 ```
 
 ## 6. 更新紀錄與版本（各模組獨立）

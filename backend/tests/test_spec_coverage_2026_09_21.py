@@ -62,6 +62,62 @@ SCOPE = REPO / "docs" / "windows" / "SCOPE.md"
 TESTS = Path(__file__).resolve().parent
 
 # ══════════════════════════════════════════════════════════════════════
+# 2026-09-25（B）：規格編號分到各模組（MODULE-GUIDE §5 `modules/<key>/SPEC.md`）
+#
+# 規格來源＝`STATE.md` ＋ 各模組 `SPEC.md` 的 `## 規格條件`；範圍另加各模組的 `## 範圍`；
+# 測試來源＝`tests/` ＋ 各模組 `tests/`；三張登記表另加各模組的 `## 登記`。
+# 🔑 拿掉一個模組時，它的規格、範圍、登記與測試一起消失 ⇒ 這道閘門不會因為「測試不見了」而紅，
+#    也不會因為「規格還留在共用檔裡」而紅。
+# ══════════════════════════════════════════════════════════════════════
+MODULES_DIR = REPO / "backend" / "modules"
+
+
+def _module_specs():
+    return sorted(MODULES_DIR.glob("*/SPEC.md"))
+
+
+def _md_section(text, title):
+    """`## <title>` 到下一個 `## ` 之間的內容（不含標題行）。"""
+    out, on = [], False
+    for line in text.splitlines():
+        if line.startswith("## "):
+            on = line[3:].strip() == title
+            continue
+        if on:
+            out.append(line)
+    return "\n".join(out)
+
+
+def _spec_texts():
+    """[(標記, 宣告文字)]：`STATE.md` 全文，加各模組 SPEC.md 的 `## 規格條件`。"""
+    out = [("STATE.md", SPEC.read_text(encoding="utf-8"))]
+    for p in _module_specs():
+        out.append((p.relative_to(REPO).as_posix(), _md_section(p.read_text(encoding="utf-8"), "規格條件")))
+    return out
+
+
+def _test_files():
+    files = sorted(TESTS.glob("test_*.py"))
+    for d in sorted(MODULES_DIR.glob("*/tests")):
+        files += sorted(d.glob("test_*.py"))
+    return files
+
+
+def _module_registrations():
+    """各模組 SPEC.md 的 `## 登記`：{表名: {編號: 理由}}。"""
+    reg = defaultdict(dict)
+    for p in _module_specs():
+        in_block = False
+        for line in _md_section(p.read_text(encoding="utf-8"), "登記").splitlines():
+            if line.strip().startswith("```"):
+                in_block = not in_block
+                continue
+            if in_block and line.strip():
+                parts = line.split(None, 2)
+                reg[parts[0]][parts[1].upper()] = parts[2] if len(parts) > 2 else ""
+    return reg
+
+# ══════════════════════════════════════════════════════════════════════
 # 🔴 2026-09-22 第三次大改：閘門只看 `SCOPE.md` 的 `THIS`
 # ══════════════════════════════════════════════════════════════════════
 #
@@ -137,8 +193,18 @@ def _scope_sections():
     （`THIS`／`NEXT`／`EXEMPT` 各一次）之後，其餘所有 `## ` 一律判
     `current = None`，筆記段的內容不再被算進任何區塊。
     """
-    text = SCOPE.read_text(encoding="utf-8")
     sections = {"THIS": set(), "NEXT": set(), "EXEMPT": set()}
+    _parse_scope(SCOPE.read_text(encoding="utf-8"), sections)
+    for p in _module_specs():
+        # 模組 SPEC.md 的 `## 範圍` 底下用 `### THIS／NEXT／EXEMPT` ⇒ 升一級後用同一套解析
+        block = _md_section(p.read_text(encoding="utf-8"), "範圍")
+        _parse_scope("\n".join(("## " + l[4:]) if l.startswith("### ") else l for l in block.splitlines()),
+                     sections)
+    return sections
+
+
+def _parse_scope(text, sections):
+    """一份範圍文字 → 併入 sections（規則見 `_scope_sections`）。"""
     current = None
     in_block = False
     seen = set()
@@ -159,7 +225,6 @@ def _scope_sections():
         if current and in_block and stripped:
             for num in _SCOPE_NUM.findall(strip_inline_marks(line)):
                 sections[current].add(num.upper())
-    return sections
 
 #: 規格裡宣告一條驗收條件的樣子：`- **SL3.**` / `- N1. 🔴 ...`
 # ⚠️ 粗體是**可有可無**的：規格裡兩種寫法都有。
@@ -689,7 +754,7 @@ PENDING = {
 #:    在那之前，這張表讓「守門分辨不出來」這件事**不是安靜的**。
 AMBIGUOUS_ACK = {
     "G1", "G2", "M1", "M2", "M3", "M4", "M5", "M6",
-    "P1", "P2", "P3", "P4", "R1", "R2", "SL19",
+    "P1", "P2", "P3", "R1", "R2",   # P4／SL19 → modules/tender_radar/SPEC.md
     "T1", "T2", "T3", "T4", "T5", "U8", "U9",
     "V1", "V2", "V3",
     # 📌 `§18 放行判準`曾經用 `G1`–`G10`，與 `§3` 的 G 系列撞號。
@@ -732,7 +797,7 @@ AMBIGUOUS_ACK = {
     #       BR1–BR4  STATE:356–366（§5 據點）vs 29079–29135（總表，「跑的是哪一版」）
     #       SL1      STATE:1659（排程同時段只抓一次）vs 29106（精算頁毛利差異過期）
     #    ⚠️ 真正的修法是規格改成全域唯一編號（A 的地盤）；這裡只讓「分辨不出來」不安靜。
-    "BR1", "BR2", "BR3", "BR4", "SL1",
+    "BR1", "BR2", "BR3", "BR4",   # SL1 → modules/tender_radar/SPEC.md
 }
 
 #: 🔴 **被不相干的測試「認領」的編號 —— 撞名偵測抓不到這一類。**
@@ -752,7 +817,7 @@ MISCREDITED = {
 }
 
 #: 已知存在過的編號（反向控制用）。**只增不減。**
-KNOWN = {"SL1", "SL3", "SL16", "SL17", "SL18", "SL19", "D20", "M1", "U1"}
+KNOWN = {"M1", "U1"}   # M11 的 SL1／SL3／SL16～19／D20 登記在 modules/tender_radar/SPEC.md
 
 #: C 自己發明的編號：規格沒有，而我認為必要。**每一個都要寫出理由。**
 #: ⚠️ 沒有這張表的話，最後一題只能用一個「差集不可以大於 25」的魔術數字，
@@ -764,11 +829,8 @@ C_OWNED = {
     #    這是我今天第三次**憑印象填清單**（前兩次：A1–A10 填成欠帳、`LK1`／`LK2`），
     #    三次都是同一個動作：**列一張表的時候，用回想代替查。**
     # 🔑 〈主持人的記憶是負債〉：恢復靠清單不靠記憶，**而清單自己也要用查的。**
-    "SL20": "排程時段的對照組，規格只宣告到 SL19",
-    "SL23": "同上", "SL24": "同上", "SL25": "同上",
-    "SL26": "同上", "SL27": "同上", "SL28": "同上",
     "U0":   "量尺：先證明 v84 合成資料庫真的是 v84（不然整組 U 是空綠）",
-    "L0":   "量尺：先證明收集器收得到 import main 期間的 log",
+    # M11 的 SL20／SL23～28／L0 登記在 modules/tender_radar/SPEC.md（2026-09-25）
     "A15C": "§3o 的對照組（規格寫到 A15b）",
     # §3u／§3v 的對照組與量尺（規格宣告到 UA5／UB5／VB7）。
     # ⚠️ **UA5 本身也還沒寫進 STATE.md**（grep 不到）——
@@ -841,6 +903,12 @@ C_OWNED = {
 }
 
 
+_REG = _module_registrations()
+C_OWNED.update(_REG.get("C_OWNED", {}))
+KNOWN |= set(_REG.get("KNOWN", {}))
+AMBIGUOUS_ACK |= set(_REG.get("AMBIGUOUS_ACK", {}))
+
+
 def _headings_to_ignore():
     """哪些「有編號的標題」**不算**一次新的宣告。兩種：
 
@@ -852,7 +920,7 @@ def _headings_to_ignore():
     ☠️ 而它們其實只被宣告過一次 —— **守門會因為自己看重了而失去分辨能力。**
     📌 ①的判準是「有沒有子編號」，**不是「我覺得它像不像群組」**。
     """
-    text = SPEC.read_text(encoding="utf-8")
+    text = "\n".join(t for _, t in _spec_texts())
     leaf = set()
     text = strip_inline_marks(text)
     for rx in (_DECLARED_BULLET, _DECLARED_TABLE):
@@ -891,16 +959,17 @@ def _declared_where():
     📌 兩件事被我混成一件，而混在一起之後**七道檢查同時紅**。
     ⇒ 範圍只套在 `test_every_declared_condition_has_a_test` 的缺題計算上。
     """
-    text = SPEC.read_text(encoding="utf-8")
     where = defaultdict(list)
     ignore = _headings_to_ignore()
-    text = strip_inline_marks(text)
-    for rx in (_DECLARED_BULLET, _DECLARED_TABLE, _DECLARED_HEADING):
-        for m in rx.finditer(text):
-            num = m.group(1).upper()
-            if rx is _DECLARED_HEADING and num in ignore:
-                continue
-            where[num].append(text.count("\n", 0, m.start()) + 1)
+    for label, text in _spec_texts():
+        text = strip_inline_marks(text)
+        for rx in (_DECLARED_BULLET, _DECLARED_TABLE, _DECLARED_HEADING):
+            for m in rx.finditer(text):
+                num = m.group(1).upper()
+                if rx is _DECLARED_HEADING and num in ignore:
+                    continue
+                line = text.count("\n", 0, m.start()) + 1
+                where[num].append(line if label == "STATE.md" else "%s:%d" % (label, line))
     return where
 
 
@@ -911,7 +980,7 @@ def _declared():
 def _implemented_where():
     """每個編號 → 寫著它的測試檔清單。"""
     where = defaultdict(set)
-    for path in sorted(TESTS.glob("test_*.py")):
+    for path in _test_files():
         src = path.read_text(encoding="utf-8")
         for m in _IMPLEMENTED_HEAD.finditer(src):
             for num in _IMPLEMENTED_ONE.findall(m.group(1)):
@@ -1460,7 +1529,7 @@ def test_gt1_the_named_elsewhere_table_points_at_real_functions():
     for num, fname in NAMED_ELSEWHERE.items():
         hit = any(re.search(r"^def %s\b" % re.escape(fname),
                             p.read_text(encoding="utf-8"), re.M)
-                  for p in sorted(TESTS.glob("test_*.py")))
+                  for p in _test_files())
         if not hit:
             missing.append("%s -> %s" % (num, fname))
     assert not missing, (

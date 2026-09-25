@@ -12,7 +12,8 @@ from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa
 
 
 @pytest.mark.e2e
-def test_mp1_tender_radar_case_link_marks_the_row_and_links_back(live_server, make_user, _geo, e2e_browser):
+def test_tender_case_link_marks_the_row_and_links_back(live_server, make_user, _geo, e2e_browser):
+    # 原 MP1 的一部分（編號由 tests/test_mp1_… 承擔，這裡不重複認領）。
     # `_geo`：標案雷達頁會畫自己的小地圖，後端會探測圖磚——換掉，不對外連線（NETGUARD）。
     import db
     conn = db.get_db()

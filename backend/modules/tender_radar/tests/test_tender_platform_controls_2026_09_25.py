@@ -67,8 +67,10 @@ def test_nav_messages_in_this_module_do_not_drop():
     assert len(hits) >= _NAV_BASELINE, hits
 
 
-def test_em10_tender_radar_health_message_points_to_a_findable_label():
-    """🔴🔴 **`②` `email_notify.py`：訊息說去看「雷達健康狀態」，畫面上沒有這五個字。**
+def test_tender_radar_health_message_points_to_a_findable_label():
+    """（原 EM10 的一部分，2026-09-25 自 tests/test_navigation_destination 拆出；編號由原檔承擔，這裡不重複認領）
+
+    🔴🔴 **`②` `email_notify.py`：訊息說去看「雷達健康狀態」，畫面上沒有這五個字。**
 
     `tender-radar.html` 那個健康區塊的標題是 `x-text="healthText"`——
     動態文字，沒有固定的「雷達健康狀態」這個標籤。
