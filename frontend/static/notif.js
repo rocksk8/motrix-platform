@@ -366,9 +366,28 @@ function notifStore() {
       this.unread = this.items.filter(i => !i.is_read).length
     },
 
-    /** 點一則：當下先改畫面，再送出（keepalive、不等回應）。 */
+    /** 通知指向的頁面；認不得的 ref_id ⇒ null（只標已讀、不換頁，跟原本一樣）。
+     *  P8：自訂模組單據的 ref_id＝`custom:<模組 key>:<單號>`（helpers.custom_modules.notify_ref）
+     *  ⇒ 開執行頁的那一張（單號可能含冒號：只切前兩段）。 */
+    refHref(item) {
+      const ref = String((item && item.ref_id) || '')
+      if (ref.indexOf('custom:') !== 0) return null
+      const rest = ref.slice(7)
+      const i = rest.indexOf(':')
+      if (i <= 0 || i === rest.length - 1) return null
+      const page = window.location.pathname.includes('/pages/') ? 'custom-records.html' : 'pages/custom-records.html'
+      return page + '?key=' + encodeURIComponent(rest.slice(0, i)) + '&no=' + encodeURIComponent(rest.slice(i + 1))
+    },
+
+    /** 點一則：當下先改畫面，再送出（keepalive、不等回應）；有對應頁面就開過去。 */
     markOne(item) {
       if (!item || !this._sess?.token) return
+      const href = this.refHref(item)
+      this._markOneRead(item)
+      if (href) { this.open = false; window.location.href = href }
+    },
+
+    _markOneRead(item) {
       if (!item.is_read) {
         item.is_read = 1
         this.unread = Math.max(0, this.unread - 1)
