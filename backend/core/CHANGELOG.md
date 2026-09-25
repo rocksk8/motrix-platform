@@ -2,13 +2,20 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.13（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
-> `core.registry.CORE_VERSION` 1.12 → 1.13（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12，版號由 core_bump 依 origin 取）。
+## 1.14（暫用號，合回時對照 origin 再定；PLAYBOOK §C-7）— 2026-09-26（cloud-pii）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕〔core_bump：暫用 1.13 → 1.14〕
+> `core.registry.CORE_VERSION` 1.13 → 1.14（G1 快照要求升次版號；只有新增。分支先後暫用 1.8、1.10、1.12、1.13，版號由 core_bump 依 origin 取）。
 - L1（相容擴充）：`static/privacy-notice.js` 新增 `subjectState()`——單據上手動輸入的聯絡人（報價單、案件、完工單、網路規劃書）的告知狀態；紀錄鍵含聯絡人姓名，伺服器只接受已存檔的那一位（2026-09-26 主持裁示）
 - L1（新增）：`helpers.privacy_notice` 個資蒐集告知擴大到其他表單（CUSTOMIZATION-SPEC §9.3）——`CONTACT_TEMPLATE`／`USER_TEMPLATE`／`PURPOSES`／`purpose_template_for`／`purpose_notice_text`／`current_purpose_notice`／`record_purpose_ack`／`acks_with_prefix`；既有函式簽章不變
 - L1（相容擴充）：`GET /api/legal-params/privacy-notice?purpose=contractor|contact|user`（沒帶＝`contractor`，與 1.7 相同；不認得的用途 400）；前端元件 `static/privacy-notice.js` 的 `load(token, purpose?)`、新增 `contactsState()`
 - L1（新增欄位）：`company_profile.privacy_notice_contact`、`company_profile.privacy_notice_user`；設定鍵 `privacy_notice_acks` 新增鍵形 `customer_contact:`／`supplier_contact:`／`vendor_contractor:`／`user:`
 - 清單 `docs/platform/pii_forms.json`＋守門 `tests/platform/test_pii_forms_notice.py`（MODULE-GUIDE §11）
+
+## 1.13 — 2026-09-26（B）〔core_bump：暫用 1.10 → 1.12〕〔core_bump：暫用 1.12 → 1.13〕
+> rebase 時 1.8、1.9 已被 X-9b、A 使用 ⇒ 1.10（PLAYBOOK §C-7）。只有新增。
+- L1（新增）：`core.pages` 頁面對照與提供（階段 C／C1，STAGE-C-DESIGN §3）——`collect`／`build_page_map`／`lookup`／`resolve`／`page_response`／`notice_kind`／`notice_html`／`read_manifests`／`check_and_register`／`valid_name`／`PageConflict`／`PAGE_NAME`／`NOTICE`
+- L0（新增）：`core.paths.FRONTEND_PAGES_DIR`
+- 行為（main.py）：`GET|HEAD /pages/{name}` 由 `core.pages` 提供（StaticFiles 之前）——模組已載入 ⇒ 檔案；沒有載入 ⇒ **HTTP 404＋伺服器提示頁**（停用／未授權／失敗／未安裝，裁示 D2 選項 A，與 P-FE-03 並存）；頁面衝突比照 P-LD-07：在 `mount_modules` 之前檢查，後到的模組整個記 failed、不掛
+- L0（新增）：`core.source_tree.FRONTEND_PAGES`／`page_file(name)`／`page_files()`——讀頁面原始碼的唯一入口（C2，頁面搬進模組資料夾後照樣找得到；守門 tests/platform/test_page_paths_centralized.py）
 
 ## 1.12 — 2026-09-26（A，獎金分潤）〔core_bump：暫用 1.10 → 1.12〕
 - L1（新增）：`helpers.email_notify.notify_bonus_submitted`（獎金分潤輪到的簽核人＋代理人）、`notify_bonus_payout_ready`（核准待發放 → 出納）；信中不含金額。通知設定新增 `bonus_submitted`、`bonus_payout_ready` 兩個可個別關閉的事件（CORE-SPEC「使用者裁示」獎金分潤：通知）
