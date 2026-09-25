@@ -26,19 +26,19 @@
    "scope": "module"
   },
   {
-   "file": "routers/bonus.py",
+   "file": "modules/payroll/api/bonus.py",
    "path": "/awards/plan/{quote_no}",
    "handler": "plan_award",
    "scope": "own_rule"
   },
   {
-   "file": "routers/bonus.py",
+   "file": "modules/payroll/api/bonus.py",
    "path": "/base/{quote_no}",
    "handler": "get_bonus_base",
    "scope": "own_rule"
   },
   {
-   "file": "routers/bonus.py",
+   "file": "modules/payroll/api/bonus.py",
    "path": "/cases/{quote_no}",
    "handler": "get_case_bonus",
    "scope": "own_rule"

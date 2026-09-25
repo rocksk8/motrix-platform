@@ -134,6 +134,13 @@ def _group_py_files(group):
         kind, name = u.split(":", 1)
         if kind in ("router", "helper"):
             out["%ss.%s" % (kind, name)] = root / "backend" / ("routers" if kind == "router" else "helpers") / (name + ".py")
+        elif kind == "mod":                                 # mod:<key>/<相對路徑>（模組搬進 modules/ 之後）
+            key, rel = name.split("/", 1)
+            path = root / "backend" / "modules" / key / (rel + ".py")
+            dotted = ".".join(["modules", key] + rel.split("/"))
+            mod = dotted[:-len(".__init__")] if dotted.endswith(".__init__") else dotted
+            if path.is_file():
+                out[mod] = path
     return out
 
 

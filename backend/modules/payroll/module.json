@@ -12,7 +12,7 @@
   "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。勞報單的身分證號、地址等個資欄位由 archive._F2_FIELDS 分流",
   "data": {
     "tables": [
-      {"name": "payslips", "class": "T1"}, {"name": "payslip_seq", "class": "T1"},
+      {"name": "payslips", "class": "T1"}, {"name": "payslip_seq", "class": "T3"},
       {"name": "bonus_items", "class": "T1"}, {"name": "bonus_item_people", "class": "T1"},
       {"name": "bonus_groups", "class": "T1"}, {"name": "bonus_group_members", "class": "T1"},
       {"name": "bonus_awards", "class": "T1"}, {"name": "bonus_award_lines", "class": "T1"},

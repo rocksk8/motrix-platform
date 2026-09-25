@@ -1,8 +1,8 @@
 {
  "backend/conftest.py": 1,
  "backend/db.py": 1,
- "backend/helpers/bonus.py": 1,
  "backend/helpers/notification_prefs.py": 1,
+ "backend/modules/payroll/bonus.py": 1,
  "backend/modules/tender_radar/tests/test_tender_detail_2026_09_21.py": 1,
  "backend/modules/tender_radar/tests/test_tender_list_order_and_links_2026_09_22.py": 1,
  "backend/routers/material_orders.py": 1,
