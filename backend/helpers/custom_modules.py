@@ -531,6 +531,24 @@ class _Effects:
                 logging.getLogger(__name__).exception("自訂模組：交易後的通知／事件失敗")
 
 
+def _tier_applies(tier, data, notices) -> bool:
+    """這一層要不要簽。**只有條件明確不成立才跳過**（False 或數字 0）；
+    算出空值（引用的欄位沒填）或公式執行時出錯（例：除以 0）⇒ **照簽**（fail-safe），並在回應裡說明。
+    原本：空值被當成不成立而跳過（fail-open）、出錯直接 500（稽核 D 事前提示，2026-09-26）。"""
+    cond = tier.get("when")
+    if not cond:
+        return True
+    try:
+        v = _fx.evaluate(cond, data)
+    except _fx.FormulaError as e:
+        notices.append("簽核條件「%s」無法計算（%s）⇒ 這一層照簽" % (cond, e))
+        return True
+    if v is None:
+        notices.append("簽核條件「%s」算不出來（有欄位沒填）⇒ 這一層照簽" % cond)
+        return True
+    return not (v is False or (isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0))
+
+
 def _enter_state(conn, body, rec, to_state, user, action, note, notices):
     """改狀態：寫紀錄、進入有簽核的狀態就展開簽核層；所有層的條件都不成立 ⇒ 直接當作通過。"""
     from helpers import tiered_approval as ta
@@ -540,7 +558,7 @@ def _enter_state(conn, body, rec, to_state, user, action, note, notices):
     approval = rec.get("approval") or {}
     if st.get("approval"):
         cfg = st["approval"]
-        tiers = [t for t in cfg.get("tiers", []) if not t.get("when") or _fx.evaluate(t["when"], rec["data"])]
+        tiers = [t for t in cfg.get("tiers", []) if _tier_applies(t, rec["data"], notices)]
         try:
             active = ta.setting_to_active_tiers({"includeSubmitterManagerTier": bool(cfg.get("includeSubmitterManagerTier")),
                                                  "tiers": tiers}, conn, rec["created_by"])
