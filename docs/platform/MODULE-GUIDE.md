@@ -133,6 +133,7 @@ modules/<key>/
                    ↑ README／CHANGELOG／module.json 的 data 與 license_key 由 test_module_package_files.py（G2）守門
   SPEC.md          規格條件（機器讀）：## 規格條件（編號宣告，格式同 STATE.md）／## 範圍（### THIS／NEXT／EXEMPT）／
                    ## 登記（C_OWNED／KNOWN／AMBIGUOUS_ACK）；test_spec_coverage 讀它，拿掉模組時跟著消失
+                   ↑ 每個模組都要有（主持裁示 2026-09-26）；沒有專屬編號也要在「## 規格條件」寫明「本模組沒有專屬編號」（G2 守門）
 ```
 
 **可自訂點（CUSTOMIZATION-SPEC P3，§3.9；2026-09-26）**
