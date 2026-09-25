@@ -32,7 +32,7 @@
 
 ### 建議
 
-- **P8F-S1　執行頁的布林欄位（checkbox）沒有任何題目**：CR:158-164 的寫法是對的（`x-model.boolean`，「（未選）」＝`null`），但 E2E 的設備借用單沒有 checkbox 欄位，拿掉 `.boolean` 照樣綠（F05）。這是記憶〈Alpine `:value="false"` 布林下拉〉的原型：存「否」回 200、畫面說已儲存，而 DB 裡是字串 `"false"`（truthy）。後端會不會擋字串，屬於 C 的 `custom_fields.clean`，但前端這一側要有題目守。建議在 E2E 或一支小的 e2e 補一個 checkbox 欄位，驗三件事：存「否」後 DB 是 `false`（不是 `"false"`）、重新開單畫面顯示「否」、再存一次仍然是 `false`。
+- **P8F-S1　執行頁的布林欄位（checkbox）沒有任何題目**：CR:158-164 的寫法是對的（`x-model.boolean`，「（未選）」＝`null`），但 E2E 的設備借用單沒有 checkbox 欄位，拿掉 `.boolean` 照樣綠（F05）。這是記憶〈Alpine `:value="false"` 布林下拉〉的原型：存「否」回 200、畫面說已儲存，而 DB 裡是字串 `"false"`（truthy）。〔補充 2026-09-26 02:46，D 審 C 時查明〕後端 `custom_fields._coerce` 只收布林（`"false"` ⇒ 400「必須是勾選」），所以漏掉 `.boolean` 的後果是**存檔被拒**，不是靜默存錯；前端這一側仍然要有題目守。建議在 E2E 或一支小的 e2e 補一個 checkbox 欄位，驗三件事：存「否」後 DB 是 `false`（不是 `"false"`）、重新開單畫面顯示「否」、再存一次仍然是 `false`。
 - **P8F-S2　`flushSave` 以 100 ms 輪詢等存檔完成**：MB:882-892。這是產品碼不是測試，也有 `error` 出口，但有兩點：
   - 迴圈沒有上限：伺服器一直回成功、使用者又一直在打字時，發布按鈕會一直等。
   - 等待條件是「沒有 dirty」而不是「這一次存檔的回應」。
