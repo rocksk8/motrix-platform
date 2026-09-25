@@ -27,6 +27,7 @@
    "helper:module_registry",
    "helper:notification_prefs",
    "helper:procurement",
+   "helper:row_access",
    "helper:settings",
    "helper:startup",
    "helper:tiered_approval",
