@@ -42,10 +42,21 @@ def doc_capabilities(text):
 
 
 def _row_paths(sec, label):
-    """一節裡**每一列** `| <label> |` 反引號內、含 `/` 的路徑（`::` 之後的名稱去掉）。"""
+    """一節裡**每一列** `| <label> |` 反引號內、含 `/` 的路徑（`::` 之後的名稱去掉）。
+
+    只認以 `.py` 結尾的那一段（第十班列車 core-only 反向控制實測 IP-93：`提供方` 列除了
+    4 個模組檔還夾帶一句共用 L1 helper 的行內說明 `helpers/approval_queue.snapshot_doc_
+    detail(row)`——含 `/`、沒有 `::`、也不是檔案路徑，被當成第 5 個提供方 ⇒ `absent_module_
+    capabilities` 判斷「全部提供方都是模組路徑」失真，模組真的都不在時這個 capability 誤判
+    成程式碼沒有提供）。"""
     out = []
     for row in re.finditer(r"^\| %s \|([^\n]*)" % re.escape(label), sec, re.M):
-        out += [c.split("::")[0] for c in re.findall(r"`([^`]+)`", row.group(1)) if "/" in c]
+        for c in re.findall(r"`([^`]+)`", row.group(1)):
+            if "/" not in c:
+                continue
+            head = c.split("::")[0]
+            if head.endswith(".py"):
+                out.append(head)
     return out
 
 

@@ -61,7 +61,14 @@ def test_t100_preview_without_m05(client, make_user, monkeypatch):
     assert prev.status_code == 200, prev.text
     assert ae.T100_RECEIVABLES_MISSING in prev.json()["notice"].split("；")
     # 兩個都缺 ⇒ 兩句並列（IP-14 的承攬商＋本串接點的收款事件；T100 預覽讀的是 paid_between，不是 public——
-    # 稽核 D IP-M1 之後 T100 改看 paid_between，這一題原本只監控 public，沒有跟著換 ⇒ 第十班列車交會紅）
+    # 稽核 D IP-M1 之後 T100 改看 paid_between，這一題原本只監控 public，沒有跟著換 ⇒ 第十班列車交會紅）。
+    # IP-20（M03 採購・庫存・出貨）也是 T100 的第三個缺席來源：正常安裝包 M03 都在、不會多這一句；
+    # core-only 反向控制把全部模組拿掉時 M03 也真的不在，notice 會多出它自己的那一句 ⇒ 期望值改用
+    # 真實登記狀態算，不寫死成固定兩句（第十班列車 core-only 反向控制實測）。
     _drop(monkeypatch, "contractor_voucher.paid_between")
-    both = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()["notice"].split("；")
-    assert set(both) == {ae.T100_RECEIVABLES_MISSING, ae.T100_CONTRACTOR_MISSING}, both
+    both = set(client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30",
+                          headers=h).json()["notice"].split("；"))
+    want = {ae.T100_RECEIVABLES_MISSING, ae.T100_CONTRACTOR_MISSING}
+    if registry.single_provider("inventory.paid_batches") is None:   # M03 真的不在（不是本題模擬的）
+        want.add(ae.T100_INVENTORY_MISSING)
+    assert both == want, both
