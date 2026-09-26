@@ -183,9 +183,10 @@ A 發現：案件端點對「看不到」回 403、對「不存在」回 404 ⇒
 | test_approval_parse_l1 | test_m01_approval_queue_no_longer_imports_m06 | 掃 M01 自己的原始碼 |
 | test_l1_does_not_load_m01 | test_rc_the_probe_reports_m01_when_it_is_imported | 反向控制要 import M01 本身 |
 | test_case_access_l1 | test_same_rule_everywhere | 驗 M01 保留的同名別名 |
+| test_case_stage_connectors | M12 不在時的 4 題、M01／L1 不寫別組表、行事曆回寫 4 題 | 端點或回寫對象屬 M01 案件階段／報價單；掃 M01 原始碼 |
 | test_m01_sink2_contract、test_tax_calc_contract | 別名參數（`modules.case.*` 那幾個） | 驗 M01 保留的同名別名 |
 
 **C 改成驗 M01 不在時的行為（不略過）**：test_case_access_l1 的「沒有 M01 ⇒ 404」與「兩條路一致」（正對照只在 M01 在時跑）；test_receivables_absent（權責口徑說明依 M01 在不在）；test_case_recognition 的報表題與純度題；test_m01_l1_providers 兩題；test_module_boundaries 的掃描器正對照；test_core_loader；test_deprecations（登記在 L2 模組檔裡的名稱，模組不在就不比對）；pii_forms.json 的 M01 三頁宣告 `api_module: case`；test_case_stage_connectors 的夾具。
 
-**允許（§B-11）**：test_generated_maps 三題、test_unit_index_is_current、test_modules_json_lists_only_existing_units。
+**sparse 真刪 M01 後 tests/platform：1171＋ 過、紅只剩允許的 5 題**。**允許（§B-11）**：test_generated_maps 三題、test_unit_index_is_current、test_modules_json_lists_only_existing_units。
 
