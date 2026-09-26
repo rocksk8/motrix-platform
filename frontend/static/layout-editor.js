@@ -47,9 +47,10 @@
 '   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()" :disabled="loading">' +
 '    <option value="">（編輯中的草稿）</option><template x-for="r in roles" :key="r.key"><option :value="r.key" x-text="r.label"></option></template></select>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-close" @click="close()">關閉</button></span></div>' +
-'  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()">' +
+'  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()" :disabled="busy">' +
 '   <option value="company">公司預設</option><template x-for="r in roles" :key="r.key"><option :value="\'role:\' + r.key" x-text="\'角色：\' + r.label"></option></template></select>' +
-'   <span class="ml-ed__sub" x-text="startNote"></span></div>' +
+'   <span class="ml-ed__sub" x-text="startNote"></span>' +
+'   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-retry" x-show="loadError" @click="loadScope()">重試</button></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="\'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
 ' </div>' +
 ' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
@@ -222,7 +223,7 @@
         } catch (e) {
           if (seq !== this._scopeSeq) return
           this.state = 'error'
-          this.loadError = '讀取「' + want + '」的版面失敗（' + (e && e.message || e) + '），編輯已鎖定；請重新選擇範圍再試'
+          this.loadError = '讀取「' + want + '」的版面失敗（' + (e && e.message || e) + '），編輯已鎖定；按「重試」再載入一次'
           this.msg = this.loadError
           // loading 維持 true：編輯區保持 inert、發布不可按——讀不到不等於沒有
         } finally {
@@ -301,7 +302,18 @@
         this.generalProblems = general
         this.state = (problems && problems.length) ? 'problems' : this.state
       },
-      async saveDraft() {
+      // AUDIT-B-host-O7 S-3：動作一律 try/finally 解鎖；例外（斷線、reload 丟出）要說明。
+      // 發布／還原的請求可能已在伺服器成功、只是回應沒回來 ⇒ 說「結果不明」，不說「失敗」。
+      async _guard(fn, unknownMsg) {
+        try { return await fn() }
+        catch (e) { this.state = 'error'; this.msg = unknownMsg + '（' + (e && e.message || e) + '）'; return false }
+        finally { this.busy = false }
+      },
+      saveDraft() { var self = this; return this._guard(function () { return self._saveDraft() }, '存草稿失敗：連線中斷，請再按一次存草稿') },
+      publish() { var self = this; return this._guard(function () { return self._publish() }, '發布結果不明：伺服器可能已經發布，請關閉排版器再打開、看版本清單確認後再決定') },
+      restore(v) { var self = this; return this._guard(function () { return self._restore(v) }, '還原結果不明：請關閉排版器再打開、看版本清單確認') },
+      discard() { var self = this; return this._guard(function () { return self._discard() }, '捨棄草稿結果不明：請關閉排版器再打開確認') },
+      async _saveDraft() {
         this.busy = true
         this.lastOps = L.compileOps(this._pts(), this._page(), this.work)
         var r = await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope),
@@ -322,7 +334,7 @@
         this.diffLines = L.describeDiff(L.applyOps(this._pts(), this._page(), latest).state, this.work)
         this.diffShown = true
       },
-      async publish() {
+      async _publish() {
         this.showDiff()
         if (!(await this.saveDraft())) return
         this.busy = true
@@ -350,7 +362,7 @@
         this.msg = '已發布第 ' + r.d.version + ' 版（' + this.scopeLabel() + '）'
         this.state = 'published'
       },
-      async restore(version) {
+      async _restore(version) {
         if (this.defs.draft && !confirm('還原會捨棄這個範圍目前的草稿，確定要還原第 ' + version + ' 版？')) return
         this.busy = true
         var r = await this._j(this._base() + '/restore/' + version + '?scope=' + encodeURIComponent(this.scope),
@@ -364,7 +376,7 @@
         this.msg = '已把第 ' + version + ' 版還原成第 ' + r.d.version + ' 版'
         this.state = 'restored'
       },
-      async discard() {
+      async _discard() {
         this.busy = true
         await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
         await this.loadScope()
