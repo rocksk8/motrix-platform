@@ -62,12 +62,30 @@ SMOKE = [
 ]
 
 
-def smoke_plan(backend_dir: str) -> list:
-    """SMOKE ⇒ [(名稱, 方法, 路徑, 略過原因或 None)]；略過原因只有「模組不在包內」一種。"""
+#: 模組 key 的登記表（repo 層級，與「這棵樹裡有沒有那個資料夾」無關）
+MODULES_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                            "docs", "platform", "modules.json")
+UNREGISTERED = "未在 docs/platform/modules.json 登記"
+
+
+def registered_module_keys(path=None) -> set:
+    with open(path or MODULES_JSON, encoding="utf-8") as f:
+        data = json.load(f)
+    return {g.get("key") for g in (data.get("modules") or {}).values() if g.get("key")}
+
+
+def smoke_plan(backend_dir: str, registered=None) -> list:
+    """SMOKE ⇒ [(名稱, 方法, 路徑, 略過原因或 None)]。
+    略過原因：①模組不在安裝包（合法）；②模組 key 未在 modules.json 登記（打錯字或改名——稽核 ⑰ S-1：
+    原本打錯的 key 也只是「不在包內」而永遠略過，演練照綠）。②由 smoke() 判不過。"""
+    registered = registered_module_keys() if registered is None else registered
     plan = []
     for entry in SMOKE:
         name, method, path = entry[:3]
         key = entry[3] if len(entry) > 3 else None
+        if key and key not in registered:
+            plan.append((name, method, path, "模組 key %s %s" % (key, UNREGISTERED)))
+            continue
         absent = key and not os.path.isfile(os.path.join(backend_dir, "modules", key, "module.json"))
         plan.append((name, method, path, ("模組 %s 不在安裝包" % key) if absent else None))
     return plan
@@ -270,8 +288,16 @@ def smoke(install: str) -> dict:
     finally:
         T._stop(proc)
         log.close()
-    out["ok"] = bool(out["checks"]) and all(c["ok"] for c in out["checks"])
+    out["ok"] = smoke_ok(out)
     return out
+
+
+def smoke_ok(out) -> bool:
+    """有檢查、每一項 200、而且沒有因為「key 未登記」被略過的條目（那不是合法的略過，是打錯字）。"""
+    bad = [s for s in out.get("skipped", []) if UNREGISTERED in s.get("reason", "")]
+    if bad:
+        out["unregistered_skips"] = bad
+    return bool(out["checks"]) and all(c["ok"] for c in out["checks"]) and not bad
 
 
 #: 第一份備份＝轉換前的原始 V9 庫（完整回滾唯一正確的基準，稽核 D K-M1）；第二份＝再轉換前的狀態（只回程式用）
