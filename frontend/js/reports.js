@@ -1383,6 +1383,7 @@ function reportsApp() {
         const r = await fetch('/api/cashier/payable-queue', { headers: { Authorization: 'Bearer ' + this._token() } })
         if (r.ok) this.payable = await r.json()
         else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+        else if (r.status === 404) this.payableSnapMissing = await this._missingReason(r)   // 稽核 D M5-S1：出納頁籤路徑也不畫 NT$ 0
       } catch (e) { console.error(e) }
     },
 
@@ -1391,6 +1392,7 @@ function reportsApp() {
         const r = await fetch('/api/cashier/receivable-queue?status=all', { headers: { Authorization: 'Bearer ' + this._token() } })
         if (r.ok) this.receivable = await r.json()
         else if (r.status === 403) this.error = '僅管理員、出納或財務可存取出納功能'
+        else if (r.status === 404) this.payableSnapMissing = this.payableSnapMissing || await this._missingReason(r)
       } catch (e) { console.error(e) }
     },
 
