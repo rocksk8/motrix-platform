@@ -476,6 +476,8 @@ def _add_case_update_file(quote_no):
 def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
     """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
     那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
+    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
+        pytest.skip("應收應付不在這個安裝包 ⇒ /api/invoice-vouchers 端點不存在")
     import db
     h = _hdr(client, make_user, "att_ap_one", "engineer", ["case_manage", "finance"])
     appr = json.dumps({"approval": {"tiers": [{"approvers": [{"username": "att_ap_one"}]}]}})
