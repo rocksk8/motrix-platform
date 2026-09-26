@@ -6,6 +6,7 @@
 ## 0. 結論
 
 - **必修 2、建議 1**。函式本身正確；兩項必修都在「實際跑起來拿到幾個 worker」這一層。
+- 複核 -2（1cb53e52）：**WK-M1、WK-S1 關閉**；新守門在 -3 沒改 run_train 時會先紅（§3）。WK-M2 待 -3。
 
 ## 1. 實測
 
@@ -35,3 +36,19 @@
 **WK-S1（建議）　呼叫端守門是字串比對**
 - `test_no_call_site_caps_with_the_bare_constant` 驗的是原始碼裡出現 `cap_workers(default_workers(extra, cap), cap)`。補完預設後丟掉、另用原 extra 的寫法（MW3c）會存活。
 - 建議改成行為題：攔截 `run_pytest`，跑 `main(["--files", …])`，斷言拿到的 extra 含 `-n <上限>`。D 的探針就是這樣寫的，可以直接拿去用。
+
+## 3. 複核（wip/b-modtest-workers-2 1cb53e52）（D，2026-09-27 02:07）
+
+> 只看 WK-M1、WK-S1 與新守門。WK-M2 等 -3（第十一班合回後 rebase）再看。
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| 相關題 | test_env_and_load_guards＋test_modtest_batches：61 過 | 成立 |
+| WK-M1：E2E 明確設定就直接用 | 題 `test_explicit_e2e_cap_is_used_as_is`（經 `main`、只設 E2E=3 ⇒ `-n 3`）。突變 WM1「明確設定時仍取 min」⇒ **紅** | **WK-M1 關閉** |
+| WK-S1：行為題 | `test_main_partial_run_actually_passes_n` 攔截 `run_pytest`。突變 WS1「補完又丟掉」（上一輪存活的 MW3c）⇒ **紅**；WS2「不補預設」⇒ 紅；WS3「不壓上限」⇒ 紅；WG1「改用關鍵字參數、自己組參數」⇒ 紅 | **WK-S1 關閉** |
+| 新守門 `test_every_partial_run_goes_through_partial_pytest_args` | 拿 TR11 真實的 modtest.py 跑同一個 offenders：第 744 行（run_train ①）與第 1260 行（main）都被列出。把 TR11 的 `run_train` 原樣接到本包的 modtest.py（模擬 -3 沒改）⇒ 列出 1 處；改成 `partial_pytest_args(extra, picked, tmap)` ⇒ 0 處 | **成立：-3 若沒改 run_train，這道守門會先紅；改了就轉綠** |
+
+- 觀察 **WK2-O1（射程）**：新守門只認「第一個位置參數叫 `picked`、第二個是位置參數」的呼叫。改用關鍵字（`extra=`）或換變數名稱就看不到。
+  - 對 main，行為題補得住（WG1 紅是行為題抓到的，不是新守門）。
+  - 對 run_train，只有這道結構守門。-3 若照 TR11 現有寫法（位置參數、`picked`）會被抓到；若順手改了寫法就不會。-3 複核時 D 會直接驗 run_train 實際傳出的參數。
+- 觀察 **WK2-O2（等價突變）**：WM2「選到 e2e 一律用 E2E 上限」、WM3「沒設 E2E 也當成明確設定」⇒ 存活。只有在 PARTIAL 小於 E2E 預設（2）時結果才會不同，例如 PARTIAL=1、選到 e2e：應為 1，突變後是 2。要鎖住就補「PARTIAL=1、未設 E2E、選到 e2e ⇒ -n 1」一題。現行上限都 ≥2，列觀察。
