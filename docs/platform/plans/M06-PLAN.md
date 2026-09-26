@@ -103,7 +103,8 @@ M06 搬進模組後，下列三類讀取暫時保留（沒有 import 邊，只�
 | # | 檔（搬遷後） | 讀的表（擁有者） | 到期條件（提供者） | 裁示 |
 |---|---|---|---|---|
 | a | `modules/accounting/api/vouchers.py` | `quotations`、`case_extra_expenses`（M01） | M01 提供 `case.summary`、`case.extra_expenses` | M06-a |
-| b | `modules/accounting/voucher_attachments.py` | `case_extra_expenses`、`case_updates`、`quotations`（M01）、`contractor_dispatches`（M04）、`invoice_vouchers`（M05） | 各擁有者提供 `attachments.for_document`（獨立一包，排在 M01 前置） | M06-b |
+| ~~b~~ | ~~`modules/accounting/voucher_attachments.py`~~ | ~~`case_extra_expenses`、`case_updates`、`quotations`（M01）、`contractor_dispatches`（M04）、`invoice_vouchers`（M05）~~ | ~~各擁有者提供 `attachments.for_document`（獨立一包，排在 M01 前置）~~ | ~~M06-b~~ |
+| | 〔更正（稽核 D AT-S1，2026-09-26）：`wip/a-attachments`（afcfb513）已把 b 列的讀取全部改走 `attachments.for_document`（IP-21），voucher_attachments 對別組表的 SQL＝0（守門 `test_voucher_attachments_reads_no_foreign_tables`）⇒ b 列已到期，建 `test_accounting_foreign_reads.py` 時**不列這一筆**〕 | | |
 | d | `modules/accounting/api/accounting_export.py` | `contractor_payment_vouchers`（M04） | M04 的 IP-14 加 `paid_between(start, end)` | M06-d |
 
 守門：`backend/tests/platform/test_accounting_foreign_reads.py`（L1 守門，M06 不在時照跑：檔案不在 ⇒ 那一筆不比，`module_installed`）

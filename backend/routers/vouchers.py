@@ -653,7 +653,8 @@ def summary_sources(q: str = "", quote_no: str = "",
     ⚠️ 不回這個頁籤的話，畫面上就少一個選項，而**沒有人會發現一個從來不出現的東西**；
        ⇒ 回一個空清單 ＋ 一句「為什麼是空的」，讓它是**看得見的未完成**。
     """
-    _require_voucher_access(_require_user(authorization))
+    user = _require_user(authorization)
+    _require_voucher_access(user)
     like = "%" + (q or "").strip() + "%"
     conn = get_db()
     try:
@@ -673,7 +674,7 @@ def summary_sources(q: str = "", quote_no: str = "",
     if picked:
         conn2 = get_db()
         try:
-            files = case_attachments(conn2, picked)
+            files = case_attachments(conn2, picked, user)
         finally:
             conn2.close()
         if not files:
@@ -756,7 +757,7 @@ def line_source_files_endpoint(source_type: str = "", ref: str = "",
     _require_voucher_access(user)
     conn = get_db()
     try:
-        files = line_source_files(conn, source_type, ref)
+        files = line_source_files(conn, source_type, ref, user)
     finally:
         conn.close()
     # 附件來源的模組不在（attachments.for_document，主持裁示 M06-b）⇒ 那幾類整個沒有列出，要明說（案件那一欄才會涵蓋多個模組）
@@ -782,12 +783,12 @@ def line_source_file_endpoint(source_type: str = "", ref: str = "",
     fid = str(file_id or "").strip()
     conn = get_db()
     try:
-        files = line_source_files(conn, source_type, ref)
+        files = line_source_files(conn, source_type, ref, user)
         hit = next((f for f in files if f["fileId"] == fid), None) if fid else None
         if hit is None:
             raise HTTPException(404, "在這個來源裡找不到這個檔案。")
         item = resolve_picks(conn, [{"type": hit["type"], "docNo": hit["docNo"],
-                                     "fileId": hit["fileId"]}])[0]
+                                     "fileId": hit["fileId"]}], user)[0]
     finally:
         conn.close()
     return FileResponse(item["src"], media_type="application/octet-stream",
@@ -1475,7 +1476,7 @@ async def add_voucher_attachments(voucher_id: int, request: Request,
             if not picks:
                 raise HTTPException(400, "請至少選擇一個檔案或一筆來源。")
             # 🔴 **全部檢查完才開始複製**（見 docstring）。
-            resolved = resolve_picks(conn, picks)
+            resolved = resolve_picks(conn, picks, user)
             for item in resolved:
                 meta = item["meta"]
                 name = meta.get("filename") or meta.get("name") or "附件"

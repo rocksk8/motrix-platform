@@ -167,6 +167,10 @@ class AttachmentSourceError(Exception):
     取用方原樣回 400。⚠️ 不可以吞成空清單：「這裡沒有附件」與「這裡的資料壞了」在畫面上會一模一樣。"""
 
 
+class AttachmentNotVisible(Exception):
+    """使用者看不到這筆附件的原單據（稽核 D AT-M1，主持裁示 (b)）：取用方列清單時不列、帶入／預覽時回 403。"""
+
+
 def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> list:
     """`SELECT <col> FROM <table> WHERE <key_col>=?` 的 JSON 陣列（`save_document_files` 的 metadata）。
     列不存在 ⇒ []；JSON 壞掉 ⇒ raise AttachmentSourceError。表名／欄名由呼叫端寫死（不接使用者輸入）。"""

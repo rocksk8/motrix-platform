@@ -4588,7 +4588,8 @@
     "plat:registry",
     "plat:source_tree",
     "router:invoice_vouchers",
-    "router:quotations"
+    "router:quotations",
+    "router:vouchers"
    ],
    "evidence": {
     "import": [
@@ -4601,6 +4602,9 @@
      "backend/helpers/voucher_attachments.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
+    "api": [
+     "backend/routers/vouchers.py"
+    ],
     "path": [
      "backend/helpers/voucher_attachments.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
@@ -4610,7 +4614,8 @@
      "docs/platform/modules.json",
      "tools/platform/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_auth_login_contract.py": {
    "kind": "api",
@@ -7196,14 +7201,22 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/subcontract/",
     "helper:uploads",
-    "helper:voucher_attachments"
+    "helper:voucher_attachments",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/uploads.py",
      "backend/helpers/voucher_attachments.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ]
    }
   },

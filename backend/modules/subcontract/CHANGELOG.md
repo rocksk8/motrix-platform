@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.7 — 2026-09-26
+- 附件來源提供者加權限（稽核 D AT-M1，主持裁示 (b)）：`files`／`doc_nos_for_case` 多帶 `user`，看不到派工單所屬案件的人 ⇒ `AttachmentNotVisible`（同派工單清單的讀取規則）
+
 ## 1.0.6 — 2026-09-26
 - 提供 `attachments.for_document`（IP-21 暫定號，主持裁示 M06-b）：派工單與承攬商發票的已上傳檔案（`attachments.py`）；M06 傳票帶入附件不再直讀 `contractor_dispatches`。本模組不在時，傳票頁明說「外包工班模組未安裝：派工單、承攬商發票的附件沒有列出」、帶入 400 並說明
 
