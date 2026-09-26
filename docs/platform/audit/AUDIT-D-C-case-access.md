@@ -72,3 +72,18 @@
 - D 突變：`case_module_present` 恆 True、空登記當在 ⇒ 兩項都紅（2 failed：原 404 題＋兩條路一致題）⇒ **CA-M1 維持關閉**。
 - **CA-O4（觀察，CA-O3 變成必要條件）**：`case.access` 在 `helpers/quotations.py` 匯入時登記，而這支檔案被 L1 的 `pdf_gen.py`、`routers/system.py`（以及 M05、M08 的 router）匯入 ⇒ 只要這些檔被載入，訊號就一定亮。現在 M01 拿不掉，所以沒有影響；但 M01 搬遷時必須①改由 `ModuleSpec.providers` 登記（CA-O3），②切斷 L1 對 `helpers.quotations` 的匯入，否則「M01 不在 ⇒ 404」會退回 CA-M1 修正前的狀態（照擁有者規則放行）。建議併入 ROADMAP 的 M01 條目。
 
+## 6. 事後稽核：第六班列車在 L1 讀 quotations 基線加的兩筆（D，2026-09-26 12:38）
+
+對象：`test_case_access_l1.KNOWN_L1` 新增 `helpers/receivables.py`、`routers/map_points.py`（列車 a51bf3b9；主持裁示「有到期條件的例外」，RUN-PLAN §6 12:25）。
+
+**①是不是原有讀取改了歸屬：是。**
+- `receivables.py`：與第五班合回點 a6dc4be6 的 `routers/reports.py`（M08）逐函式比對：`collect_income_items` **完全相同**；`collect_tax_invoices` 只差一行四捨五入函式名（`_round_half_up` → `round_half_up_invoice`），讀 quotations 的查詢不變。
+- `map_points.py`：a6dc4be6 與現在的 quotations SQL **完全相同**（3 行）；modules.json 歸屬由 **M08 → L1**（地圖歸 L1 的使用者裁示）。
+⇒ 兩筆都是既有讀取；因為歸屬改成 L1，才進入這道守門的掃描範圍。
+
+**②到期條件夠不夠具體：不夠（建議 CA-S3）。**
+- 裁示說兩個到期條件「寫進 ROADMAP 的 M05、M01 條目」：D 查 origin/platform 73d8ba63 的 ROADMAP，receivables 在 A8b／M01 條目有提到（「M05 搬遷時收回」），但**沒有「移出本基線」**；map_points 與 `case.summary` 在 ROADMAP **完全沒有**。
+- `case.summary`（M01-PLAN §3-4）：**M01-PLAN 不在 repo 裡**（只在 RUN-PLAN 提到「C 的 M01-PLAN §3 順序」），到期條件指向一份看不到的文件。
+- **沒有機械式的到期**：`excess()` 只擋「新增」；基線條目的檔案不再讀 quotations（或不再是 L1 檔）時，這一筆會安靜留在基線上。M05 收回 receivables、M01 公開 case.summary 之後，沒有任何守門會紅，只能靠有人記得。
+- **CA-S3（建議）**：①兩個到期條件寫進 ROADMAP 的 M05、M01 條目，寫明「完成後自 `test_case_access_l1.KNOWN_L1` 刪除」；②`case.summary` 的定義寫進 INTEGRATION-POINTS（預留 IP）或 ROADMAP，不要只指向 M01-PLAN；③守門加一條「基線條目必須仍是 L1 檔、而且仍讀或寫 quotations」，過期即紅（比照 core-only 已知紅清單的「轉綠未刪 ⇒ 紅」）——這樣到期條件就會自己觸發。
+
