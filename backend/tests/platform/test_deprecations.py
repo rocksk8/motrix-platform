@@ -17,10 +17,17 @@ MARK = "淘汰"
 
 
 def top_level_names(src):
+    """頂層名稱，外加類別的成員寫成 `Class.member`（淘汰的可以是一個方法，例：IP-12 的 `_CaseAccess.summary`）。"""
     names = set()
     for n in ast.parse(src).body:
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(n.name)
+        if isinstance(n, ast.ClassDef):
+            for m in n.body:
+                if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    names.add("%s.%s" % (n.name, m.name))
+                elif isinstance(m, ast.Assign):
+                    names |= {"%s.%s" % (n.name, t.id) for t in m.targets if isinstance(t, ast.Name)}
         elif isinstance(n, ast.Assign):
             names |= {t.id for t in n.targets if isinstance(t, ast.Name)}
         elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
@@ -105,6 +112,14 @@ def test_rc_expiry_turns_red_at_the_next_major():
     assert expired(e, "1.99", read) == []                       # 還沒到
     assert len(expired(e, "2.0", read)) == 1                    # 主版號到了而名稱還在 ⇒ 紅
     assert expired(e, "2.0", lambda f: "NEW = 1\n") == []      # 刪掉了 ⇒ 綠
+
+
+def test_rc_class_member_names():
+    src = "class K:\n    def gone(self):\n        pass\n"
+    e = [{"file": "helpers/k.py", "name": "K.gone", "since_core": "1.37", "remove_at_major": 2, "replacement": "x"}]
+    read = lambda f: src
+    assert invalid(e, read) == [] and len(expired(e, "2.0", read)) == 1
+    assert len(invalid([dict(e[0], name="K.typo")], read)) == 1
 
 
 def test_rc_unregistered_marker_and_invalid_entry():
