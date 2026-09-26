@@ -1,5 +1,5 @@
 {
- "core_version": "1.34",
+ "core_version": "1.35",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -689,6 +689,7 @@
    "EXPECTED_SECTIONS": "const",
    "build": "def()",
    "check_layout": "def(module_key, ops)",
+   "effective_layout_ops": "def(conn, module_key, role)",
    "endpoint_problems": "def(pts, endpoints)",
    "layout_points": "def(module_key=…)",
    "module_endpoints": "def(spec)",
@@ -758,10 +759,12 @@
   "plat:menu": {
    "ITEM_KEYS": "const",
    "MENU_L1": "const",
+   "apply_layout": "def(groups, ops)",
    "build": "def(l1, mod_items, modules, superadmin)",
    "denied": "def(l1, mod_items, modules, superadmin)",
    "load_l1": "def(path=…)",
    "module_items": "def(manifests)",
+   "sidebar_point_id": "def(item)",
    "validate": "def(l1, mod_items=…)",
    "visible": "def(perm, modules, superadmin)"
   },
