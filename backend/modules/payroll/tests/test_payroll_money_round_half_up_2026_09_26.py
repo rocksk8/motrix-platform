@@ -74,11 +74,12 @@ _ITEMS = [{"id": 1, "type": "item", "description": "設備", "qty": 10, "unitPri
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 請款單（routers/payment_requests.py）
+# 請款單（M05 modules/arap/api/payment_requests.py；M05 不在 ⇒ 這一段 skip）
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _calc(scope, quote_total, quote_pretax, ratio=None, amount=None, items=None, data_items=None):
-    from routers.payment_requests import _calc_scope_amount, RequestItemIn
+    _pr = pytest.importorskip("modules.arap.api.payment_requests")   # M05 不在這個安裝包 ⇒ skip（PLAYBOOK §B-11）
+    _calc_scope_amount, RequestItemIn = _pr._calc_scope_amount, _pr.RequestItemIn
     data = {"items": data_items or _ITEMS}
     remaining = {"items": [{"itemId": it["id"], "remainingQty": it["qty"]} for it in data["items"]]}
     items_in = [RequestItemIn(**x) for x in items] if items else None

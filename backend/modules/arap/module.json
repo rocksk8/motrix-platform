@@ -1,0 +1,24 @@
+{
+  "key": "arap",
+  "name": "應收應付",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "arap",
+  "permissions": ["cashier", "finance"],
+  "tables": ["invoice_vouchers", "payment_requests"],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。收款明細本身存在 M01 報價單的 data_json（caseRecord.payment），本模組只讀（receivables.py）",
+  "data": {
+    "tables": [
+      {"name": "invoice_vouchers", "class": "T1"},
+      {"name": "payment_requests", "class": "T1"}
+    ],
+    "files": []
+  },
+  "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
+  "provides": {"api_prefixes": ["/api/cashier", "/api/invoice-vouchers", "/api/payment-requests", "/api/reports"],
+               "probes": ["/api/cashier/receivable-queue", "/api/invoice-vouchers", "/api/payment-requests"]},
+  "provides_note": "`/api/reports` 只有一支 `POST /api/reports/bank-reconcile`（銀行對帳，自 M08 收回、路徑不變）；前綴本身屬 M08。主持裁示（M06-PLAN）：之後 modules.json 可明列個別路由歸屬、優先於前綴（check_modules 支援由 B 做），屆時改成明列。probes 不含 /api/cashier/payable-queue：它在 M04 不在時依設計回 404",
+  "pages": [{"path": "cashier.html"}, {"path": "receivables.html"}, {"path": "payment-request-form.html"}],
+  "pages_note": "選單項（pages[].menu）交 B 的 C4 一併處理（sidebar 凍結中）"
+}

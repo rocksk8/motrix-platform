@@ -19,7 +19,10 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
 import json
 from datetime import date
 
-from fastapi import APIRouter, Header, HTTPException, Query
+import csv
+from typing import Optional
+
+from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
@@ -27,7 +30,9 @@ from urllib.parse import quote as _url_quote
 from core import registry
 from db import get_db
 from helpers import _require_user, user_has_module, payment_item_amounts
-from helpers.receivables import collect_income_items as _collect_income_items  # §3 #14：M08 搬遷 ③ 下沉 L1（ROADMAP A8b，M05 搬遷時收回）
+from modules.arap.receivables import collect_income_items as _collect_income_items  # 本模組（ROADMAP A8b 已收回）
+from helpers.legal_params import round_half_up          # bank-reconcile（金額四捨五入唯一來源）
+from helpers import _audit, _tok                         # bank-reconcile 的稽核
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 
 router = APIRouter()
@@ -354,3 +359,135 @@ def export_execution_history(start: str = Query(None), end: str = Query(None), a
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{_url_quote(fname)}"},
     )
+
+
+# ── 銀行對帳單比對（承攬商匯款申請）───────────────────────────────────────────
+
+_BANK_DATE_ALIASES   = ["交易日期", "日期", "過帳日", "轉帳日期", "交易日", "date", "Date"]
+_BANK_AMOUNT_ALIASES = ["金額", "提出金額", "支出金額", "轉出金額", "付款金額", "提款金額",
+                         "amount", "Amount", "Debit", "withdrawal"]
+_BANK_DESC_ALIASES   = ["摘要", "備註", "說明", "對方戶名", "附言", "memo", "Description", "Memo"]
+
+
+def _pick_csv_header(fieldnames: list, aliases: list) -> Optional[str]:
+    """依常見銀行匯出欄位別名找出對應欄位——各家銀行 CSV 標頭不統一，這裡先精準比對，
+    找不到再退而求其次找含該關鍵字的欄位，仍找不到就回傳 None（呼叫端自行決定要不要擋）。"""
+    clean = [fn for fn in fieldnames if fn]
+    for a in aliases:
+        for fn in clean:
+            if fn.strip() == a:
+                return fn
+    for a in aliases:
+        for fn in clean:
+            if a in fn:
+                return fn
+    return None
+
+
+def _parse_bank_csv(raw: bytes) -> list:
+    """解析銀行對帳單 CSV。不同銀行匯出的編碼／欄位命名差異很大，這裡採寬鬆偵測：
+    依序嘗試常見編碼、依別名清單找日期/金額/摘要欄位，只有金額欄位是必要的。"""
+    text = None
+    for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
+        try:
+            text = raw.decode(enc)
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if text is None:
+        raise HTTPException(400, "CSV 編碼無法辨識，請確認匯出檔案格式（支援 UTF-8 / Big5）")
+
+    reader = csv.DictReader(io.StringIO(text))
+    fieldnames = reader.fieldnames or []
+    date_col = _pick_csv_header(fieldnames, _BANK_DATE_ALIASES)
+    amt_col  = _pick_csv_header(fieldnames, _BANK_AMOUNT_ALIASES)
+    desc_col = _pick_csv_header(fieldnames, _BANK_DESC_ALIASES)
+    if not amt_col:
+        raise HTTPException(400, f"CSV 找不到可辨識的金額欄位，偵測到的欄位為：{'、'.join(fieldnames) or '（無）'}")
+
+    rows = []
+    for r in reader:
+        raw_amt = (r.get(amt_col) or "").replace(",", "").replace("NT$", "").strip()
+        if not raw_amt:
+            continue
+        try:
+            amt = abs(float(raw_amt))
+        except ValueError:
+            continue
+        if amt <= 0:
+            continue
+        rows.append({
+            "date":   (r.get(date_col) or "").strip() if date_col else "",
+            "amount": amt,
+            "desc":   (r.get(desc_col) or "").strip() if desc_col else "",
+        })
+    return rows
+
+
+@router.post("/api/reports/bank-reconcile")
+async def bank_reconcile(file: UploadFile = File(...), authorization: str = Header(None)):
+    """銀行對帳單比對：上傳 CSV，依金額比對目前「已核准未匯款」的承攬商匯款申請。
+
+    只做金額比對（同金額只配對一次，避免一筆申請被重複配對到多筆銀行紀錄），純供人工
+    複核用途——回傳配對建議，不會自動標記已匯款，實際標記仍走既有 paid-toggle 端點，
+    避免比對誤判（例如剛好同金額但其實是不同筆款項）被誤當正式入帳紀錄。"""
+    u = _require_user(authorization)
+    if u["role"] not in ("superadmin", "admin") and not user_has_module(u, "cashier"):
+        raise HTTPException(403, "僅管理員或出納可查閱")
+    if registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）：比對對象全是承攬商匯款申請
+        raise HTTPException(404, CONTRACTOR_MISSING)
+
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(400, "檔案過大（上限 5MB）")
+    bank_rows = _parse_bank_csv(raw)
+
+    conn = get_db()
+    voucher_rows = conn.execute("""
+        SELECT v.voucher_no, v.quote_no, v.snapshot_json, v.updated_at, q.customer_name
+        FROM contractor_payment_vouchers v
+        LEFT JOIN quotations q ON q.quote_no = v.quote_no
+        WHERE v.status='已核准' AND v.is_paid=0
+    """).fetchall()
+    conn.close()
+
+    vouchers = []
+    for r in voucher_rows:
+        snap = {}
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            pass
+        vouchers.append({
+            "voucherNo":  r["voucher_no"],
+            "quoteNo":    r["quote_no"] or "",
+            "customer":   r["customer_name"] or "",
+            "vendorName": snap.get("vendorName") or "",
+            "amount":     round_half_up(float(snap.get("grandTotal") or 0)),
+        })
+
+    matched_voucher_nos = set()
+    bank_results = []
+    for br in bank_rows:
+        amt_r = round_half_up(br["amount"])
+        candidate = next(
+            (v for v in vouchers if round_half_up(v["amount"]) == amt_r and v["voucherNo"] not in matched_voucher_nos),
+            None,
+        )
+        if candidate:
+            matched_voucher_nos.add(candidate["voucherNo"])
+        bank_results.append({**br, "match": candidate})
+
+    unmatched_vouchers = [v for v in vouchers if v["voucherNo"] not in matched_voucher_nos]
+
+    _audit(_tok(authorization), "reports.bank_reconcile", "reports", "bank-reconcile",
+           f"銀行對帳單比對（上傳 {len(bank_rows)} 筆，配對成功 {len(matched_voucher_nos)} 筆）",
+           {"bankRowCount": len(bank_rows), "matchedCount": len(matched_voucher_nos)})
+    return {
+        "bankRows":           bank_results,
+        "matchedCount":       len(matched_voucher_nos),
+        "unmatchedBankCount": sum(1 for r in bank_results if not r["match"]),
+        "unmatchedVouchers":  unmatched_vouchers,
+        "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
+                "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
+    }
