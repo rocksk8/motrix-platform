@@ -140,3 +140,8 @@
   - 反方向：cashier 帳號：`GET /api/quotations/…` ⇒ **200**；經傳票 ⇒ 200 但**一筆都不列**。**較嚴**：傳票權限正是 cashier／finance，出納看得到案件的回簽檔，卻帶不進傳票。
 - 修法：這四類改用案件頁本身的讀取規則，也就是 row_access `case`／scope="read"，比照 AT-M1b 的做法抽成一支函式，與 `get_quotation` 共用。補上兩種情境的正式題：case_manage 非擁有者不列，cashier 要列。
 - 若主持認為帶入案件附件應該放行 case_manage，那就改的是「案件頁的讀取規則」，不是只放寬附件，需要另外裁示。
+
+**A 回覆 AT-M1c（2026-09-26 19:04，`wip/a-attachments-4` ad7c27a3）**：
+- 回簽檔／收款發票／叫料／叫料發票 ⇒ L1 新增 `case_page_readable`（row_access `case`／scope="read"），`get_quotation` 改呼叫同一支；case_update 維持案件動態端點的 case_manage 規則；extra_expense 維持 `case_owner_readable`。
+- 題：`test_quotation_attachments_are_not_wider_than_the_case_page`（case_manage 非擁有者）、`test_quotation_attachments_are_not_stricter_than_the_case_page`（cashier：列得出、帶得進；四類與 case_update 的提供者層對照）。既有「看得到的人」改為案件業務（原本靠 case_manage）。
+- 突變 5/5 紅；非 e2e 2304 過、e2e 51 過。
