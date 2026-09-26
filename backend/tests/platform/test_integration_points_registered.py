@@ -22,10 +22,16 @@ DOC = Path(__file__).resolve().parents[3] / "docs" / "platform" / "INTEGRATION-P
 _CAP = re.compile(r"`([a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+)`")
 
 
+def _sections(text):
+    """以每一個 `## ` 標題切節。〔2026-09-26 M07-S1：原本只切 `## IP-` ⇒ `## U4` 這類說明節併進前一個 IP 節，
+    它的「提供方」「守門」列被算成前一個 IP 的（讀全部列時會讓前一個 IP 的模組豁免失效）〕"""
+    return re.split(r"\n(?=## )", text)
+
+
 def doc_capabilities(text):
     """各節（`## IP-…`）中「形式」列以 provider 開頭者，標題列反引號內的 capability。"""
     caps = set()
-    for sec in re.split(r"\n(?=## IP-)", text):
+    for sec in _sections(text):
         if not sec.startswith("## IP-"):
             continue
         head = sec.splitlines()[0]
@@ -35,12 +41,21 @@ def doc_capabilities(text):
     return caps
 
 
+def _row_paths(sec, label):
+    """一節裡**每一列** `| <label> |` 反引號內、含 `/` 的路徑（`::` 之後的名稱去掉）。"""
+    out = []
+    for row in re.finditer(r"^\| %s \|([^\n]*)" % re.escape(label), sec, re.M):
+        out += [c.split("::")[0] for c in re.findall(r"`([^`]+)`", row.group(1)) if "/" in c]
+    return out
+
+
 def _provider_paths(sec):
-    """一節「提供方」列裡反引號內、含 `/` 的路徑（`::` 之後的名稱去掉）。"""
-    row = re.search(r"^\| 提供方 \|([^\n]*)", sec, re.M)
-    if not row:
-        return []
-    return [c.split("::")[0] for c in re.findall(r"`([^`]+)`", row.group(1)) if "/" in c]
+    """一節「提供方」列的路徑。"""
+    return _row_paths(sec, "提供方")
+
+
+#: 路徑會隨搬遷過期的欄位（稽核 D M07-S1：原本只驗提供方，使用方／守門／單據凍結 6 處指向已搬走的檔也不紅）
+PATH_ROWS = ("提供方", "使用方", "守門", "單據凍結")
 
 
 def _module_key(path):
@@ -54,7 +69,7 @@ def _module_key(path):
 def absent_module_capabilities(text, installed=source_tree.module_installed):
     """提供方全部寫成 `modules/<key>/…` 且那些模組都不在的節 ⇒ 它標題列的 capability（可以沒有人提供）。"""
     caps = set()
-    for sec in re.split(r"\n(?=## IP-)", text):
+    for sec in _sections(text):
         if not sec.startswith("## IP-"):
             continue
         paths = _provider_paths(sec)
@@ -214,17 +229,21 @@ def test_registry_matches_code():
 # ── 稽核 D M04-S1（2026-09-26）：模組在的時候，登記表寫的提供方檔案必須真的存在 ─────────────
 # X-2 豁免只看 `modules/<key>` 資料夾在不在；路徑寫錯（例：漏了 `api/`）時守門不會紅。
 
-def missing_provider_files(text, installed=source_tree.module_installed, backend=source_tree.BACKEND):
-    """各節「提供方」列的 `.py` 路徑：所屬模組在（或不是模組路徑）而檔案不存在 ⇒ 列出。"""
+def missing_provider_files(text, installed=source_tree.module_installed, backend=source_tree.BACKEND, rows=PATH_ROWS):
+    """各節 `rows` 各列的 `.py` 路徑：所屬模組在（或不是模組路徑）而檔案不存在 ⇒ 列出（`<節>：<欄>：<路徑>`）。
+
+    路徑以 backend 為根（可帶 `backend/` 前綴）。模組不在這個安裝包 ⇒ 那個模組的路徑不算（PLAYBOOK §B-11）。"""
     out = []
-    for sec in re.split(r"\n(?=## IP-)", text):
-        if not sec.startswith("## IP-"):
+    # 以每一個 `## ` 標題切節：只切 `## IP-` 時，`## U4` 這類說明節會併進上一節，而且舊版只讀每節第一列 ⇒ 它的守門列看不到
+    for sec in _sections(text):
+        if not sec.startswith("## "):
             continue
-        for p in _provider_paths(sec):
-            rel = p.replace(chr(92), "/")
-            rel = rel[len("backend/"):] if rel.startswith("backend/") else rel
-            if rel.endswith(".py") and installed(rel) and not (backend / rel).is_file():
-                out.append("%s：%s" % (sec.splitlines()[0][:40], p))
+        for label in rows:
+            for p in _row_paths(sec, label):
+                rel = p.replace(chr(92), "/")
+                rel = rel[len("backend/"):] if rel.startswith("backend/") else rel
+                if rel.endswith(".py") and installed(rel) and not (backend / rel).is_file():
+                    out.append("%s：%s：%s" % (sec.splitlines()[0][:40], label, p))
     return out
 
 
@@ -235,9 +254,34 @@ def test_missing_provider_files_positive_and_reverse_controls(tmp_path):
            "## IP-2　`c.d`：乙\n| 提供方 | `modules/zz/wrong.py::g` |\n"
            "## IP-3　`e.f`：丙\n| 提供方 | `modules/gone/api.py::h` |\n")
     got = missing_provider_files(doc, installed=lambda p: "gone" not in p, backend=tmp_path)
-    assert got == ["## IP-2　`c.d`：乙：modules/zz/wrong.py"]       # 路徑寫錯的被抓到；模組不在的不算
+    assert got == ["## IP-2　`c.d`：乙：提供方：modules/zz/wrong.py"]       # 路徑寫錯的被抓到；模組不在的不算
+
+
+def test_missing_registry_files_checks_consumer_guard_and_freeze_rows(tmp_path):
+    """M07-S1：使用方／守門／單據凍結欄的路徑也要存在；非 .py、沒有 `/` 的名稱不算；模組不在的不算。"""
+    (tmp_path / "routers").mkdir()
+    (tmp_path / "routers" / "ok.py").write_text("x", encoding="utf-8")
+    (tmp_path / "tests" / "platform").mkdir(parents=True)
+    (tmp_path / "tests" / "platform" / "test_ok.py").write_text("x", encoding="utf-8")
+    doc = ("## IP-1　`a.b`：甲\n"
+           "| 提供方 | `routers/ok.py::f` |\n"
+           "| 使用方 | `routers/moved.py::g`、`routers/ok.py::h`、`_bare_name`、`pages/x.html` |\n"
+           "| 守門 | `backend/tests/platform/test_gone.py`、`backend/tests/platform/test_ok.py` |\n"
+           "| 單據凍結 | 見 `routers/frozen.py::snap` |\n"
+           "| 對方不在時 | `routers/not_checked.py` |\n"
+           "| 守門 | 第二列：`routers/second_row_gone.py` |\n"
+           "## IP-2　`c.d`：乙\n| 使用方 | `modules/gone/api.py::x` |\n"
+           "## U9 說明節（不是 IP-）\n| 守門 | `backend/tests/platform/test_u9_gone.py` |\n")
+    got = missing_provider_files(doc, installed=lambda p: "gone/" not in p or "tests/" in p, backend=tmp_path)
+    assert got == ["## IP-1　`a.b`：甲：使用方：routers/moved.py",
+                   "## IP-1　`a.b`：甲：守門：backend/tests/platform/test_gone.py",
+                   "## IP-1　`a.b`：甲：守門：routers/second_row_gone.py",           # 同一節的第二個守門列
+                   "## IP-1　`a.b`：甲：單據凍結：routers/frozen.py",
+                   "## U9 說明節（不是 IP-）：守門：backend/tests/platform/test_u9_gone.py"], got   # 非 IP- 的說明節
+    # 反向控制：只看提供方（舊行為）⇒ 這三處全部漏掉
+    assert missing_provider_files(doc, installed=lambda p: True, backend=tmp_path, rows=("提供方",)) == []
 
 
 def test_every_provider_file_in_the_registry_exists():
     bad = missing_provider_files(DOC.read_text(encoding="utf-8"))
-    assert not bad, "INTEGRATION-POINTS 的提供方檔案不存在（路徑寫錯？）：\n  " + "\n  ".join(bad)
+    assert not bad, "INTEGRATION-POINTS 的提供方／使用方／守門／單據凍結檔案不存在（路徑寫錯或已搬走？）：\n  " + "\n  ".join(bad)

@@ -6,7 +6,7 @@
 - 正對照②（使用者 2026-09-26 指定）：承攬人員名冊（R3 已有告知）要被掃到，而且決定是 notice。
 - 反向控制：把所有決定都改成「非自然人」或「由別頁涵蓋」⇒ 轉紅；拿掉某一頁的告知區塊 ⇒ 轉紅；
   豁免頁多一個個資欄位 ⇒ 轉紅；過期的決定 ⇒ 轉紅；可以手打的欄位用 covered_by ⇒ 轉紅；
-  `api_module` 的模組在 ⇒ 端點照驗（不在才免驗端點，PLAYBOOK §B-11）。
+  `api_module` 的模組在 ⇒ 端點照驗（不在才免驗端點，PLAYBOOK §B-11），而且要在那個模組自己的 router 裡（M07-S2）。
 """
 import copy
 import shutil
@@ -115,6 +115,33 @@ def test_api_module_only_waives_the_endpoint_when_that_module_is_absent(tmp_path
     f.write_text(f.read_text(encoding="utf-8").replace("data-privacy-card", "data-x"), encoding="utf-8")
     assert any("data-privacy-card" in e
                for e in mine(pf.violations(reg, pages=_pages(d), router_text=routers))), "模組不在時告知區塊仍要驗"
+
+
+def test_api_module_must_own_the_endpoint(tmp_path, monkeypatch):
+    """M07-S2：模組在時，ack_api 要出現在宣告的那個模組自己的 router 裡——宣告錯模組 ⇒ 紅；宣告對 ⇒ 綠。"""
+    from core import source_tree
+    d = _copies(tmp_path)
+    reg = copy.deepcopy(pf.load_registry())
+    real = [p for p, v in reg["forms"].items() if "notice" in v and v["notice"].get("api_module")
+            and source_tree.module_installed("modules/%s/" % v["notice"]["api_module"])]
+    if not real:
+        pytest.skip("宣告 api_module 的模組都不在這個安裝包（PLAYBOOK §B-11）⇒ 沒有真實的正對照可用；⚠ skip 不是驗過")
+    page = real[0]
+    apis = reg["forms"][page]["notice"]["ack_api"]
+    mine = lambda errs: [e for e in errs if e.startswith(page + "：")]
+    monkeypatch.setattr(source_tree, "module_installed", lambda p: True)
+    # 正對照：真實的宣告 ⇒ 端點在那個模組自己的 router 裡
+    assert not mine(pf.violations(reg, pages=_pages(d)))
+    # 反向控制：宣告成另一個模組（它的 router 沒有這支端點）⇒ 紅，而全站 router 裡照樣找得到（舊判準會放過）
+    reg["forms"][page]["notice"]["api_module"] = "zz_not_the_owner"
+    errs = mine(pf.violations(reg, pages=_pages(d), module_router_text=lambda m: ""))
+    assert errs and all("宣告的 api_module" in e for e in errs) and any(apis[0] in e for e in errs), errs
+    # 預設的 module_router_text 真的只讀那個模組：宣告模組的端點在、L1 的端點（客戶告知）不在
+    mod = pf.load_registry()["forms"][page]["notice"]["api_module"]
+    own = pf.module_router_text(mod)
+    assert f'"{apis[0]}"' in own
+    l1 = pf.load_registry()["forms"]["customers.html"]["notice"]["ack_api"][0]
+    assert f'"{l1}"' in pf.product_router_text() and f'"{l1}"' not in own
 
 
 def test_reverse_control_new_field_on_exempt_page_turns_red(tmp_path):

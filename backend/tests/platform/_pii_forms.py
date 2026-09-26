@@ -4,7 +4,8 @@
 機器可讀的清單：`docs/platform/pii_forms.json`（鍵＝頁面檔名，頁面可能在 L1 或模組資料夾，位置一律問
 `core.source_tree.page_files()`）。每一張「有個資輸入欄位」的頁面都要在清單上有一個決定：
   - `notice`：頁面有告知區塊（列印告知書＋「已告知當事人」＋「尚未記錄個資告知」），並有伺服器端的紀錄端點。
-    端點由 L2 模組提供時寫 `api_module`：那個模組不在這個安裝包 ⇒ 不比對端點（PLAYBOOK §B-11）；模組在 ⇒ 照常比對。
+    端點由 L2 模組提供時寫 `api_module`：那個模組不在這個安裝包 ⇒ 不比對端點（PLAYBOOK §B-11）；模組在 ⇒ 照常比對，
+    **而且端點要出現在那個模組自己的 router 檔裡**（稽核 D M07-S2：否則宣告錯模組也能拿到「模組不在就免驗」）。
   - `covered_by`：這頁的個資是從另一張有告知的主檔帶進來、而且**不能手打**（輸入元素是 readonly／disabled）。
     主持裁示 2026-09-26：可以手動輸入的聯絡人就是在蒐集個資 ⇒ 要 `notice`。
   - `not_natural_person`：欄位屬於法人（公司本身），不是自然人。
@@ -51,6 +52,14 @@ def product_router_text():
     return "\n".join(p.read_text(encoding="utf-8") for p in source_tree.router_files())
 
 
+def module_router_text(mod):
+    """模組 `mod` 自己的 router 檔（`modules/<mod>/api.py` 或 `api/`）的原始碼。"""
+    from core import source_tree
+    root = (source_tree.BACKEND / "modules" / mod).resolve()
+    return "\n".join(p.read_text(encoding="utf-8") for p in source_tree.router_files()
+                     if root in p.resolve().parents)
+
+
 def _suffix_of(binding):
     last = re.split(r"[.\[\]]", binding.strip())
     last = [x for x in last if x]
@@ -93,7 +102,7 @@ def load_registry(path=REGISTRY):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def violations(registry=None, pages=None, router_text=None):
+def violations(registry=None, pages=None, router_text=None, module_router_text=module_router_text):
     """清單與頁面對不上的地方（空清單＝全部有人決定過，而且決定還成立）。"""
     reg = registry if registry is not None else load_registry()
     forms = reg.get("forms", {})
@@ -132,13 +141,18 @@ def violations(registry=None, pages=None, router_text=None):
             if routers is None:
                 routers = product_router_text()
             mod = n.get("api_module")
+            own = None
             if mod is not None:
                 from core import source_tree
                 if not source_tree.module_installed("modules/%s/" % mod):
                     apis = []                        # 端點的模組不在這個安裝包（PLAYBOOK §B-11）
+                else:
+                    own = module_router_text(mod)    # M07-S2：宣告的模組要真的擁有這支端點
             for a in apis:
                 if f'"{a}"' not in routers:
                     errs.append(f"{page}：ack_api {a} 在 router 裡找不到")
+                elif own is not None and f'"{a}"' not in own:
+                    errs.append(f"{page}：ack_api {a} 不在宣告的 api_module「{mod}」自己的 router 裡（宣告錯模組？）")
             continue
         if not str(dec.get("reason") or "").strip():
             errs.append(f"{page}：{kind} 要寫 reason（誰決定、為什麼）")
