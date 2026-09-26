@@ -32,6 +32,9 @@ function voucherPage() {
     //: ☠️ 一進來就是空白表單的話，使用者以為自己在建一張單，打了一半離開，
     //:    **而什麼都沒有被建出來**。
     editing: false,
+    //: O9-2：開單序號。深連結（?id=）、點清單、按新增都會開一張；**只有最後開的那一次可以寫進畫面**，較早送出而較晚回來的丟掉
+    //: （比照 layout-editor 的 `_scopeSeq`）。完成時在 <body data-voucher-open-seq> 寫下序號＝e2e 的等待終點。
+    _openSeq: 0,
 
     // ── 清單 ──
     list: [],
@@ -856,14 +859,19 @@ function voucherPage() {
     //: ⚙️ 從清單點開另一張時**不傳它**（要清掉上一張的訊息）。
     async open(vid, keepMsg) {
       if (!keepMsg) this._clearMsg()
+      const my = ++this._openSeq
       try {
         const r = await fetch('/api/vouchers/' + vid, { headers: this._auth() })
         const d = await r.json().catch(function () { return {} })
+        // O9-2 ☠️ 深連結的那一趟可能在使用者點了另一張之後才回來 ⇒ 不丟掉的話，畫面被換回舊的那一張
+        if (my !== this._openSeq) return
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
         this._apply(d)
       } catch (e) {
+        if (my !== this._openSeq) return
         this.actionErr = e.message
       }
+      this.$nextTick(function () { document.body.setAttribute('data-voucher-open-seq', String(my)) })
     },
 
     _apply(d) {
@@ -989,6 +997,7 @@ function voucherPage() {
 
     newVoucher() {
       this._clearMsg()
+      this._openSeq++            // O9-2：還在路上的開單回應作廢（按了新增就是要空白單）
       this.editing = true
       this.id = 0
       this.voucherNo = ''

@@ -10898,7 +10898,8 @@
     "page": [
      "frontend/pages/voucher.html"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_voucher_summary_panel_side_by_side_2026_09_25.py": {
    "kind": "e2e",

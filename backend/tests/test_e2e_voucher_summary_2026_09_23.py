@@ -169,12 +169,14 @@ def _saved(page, do):
 
 
 def _opened(page, do):
-    """從清單點開一張（原本固定等 1 秒）：等 GET /api/vouchers/{id} 回來＋畫面更新。"""
-    one = re.compile(r"^/api/vouchers/\d+$")
-    with page.expect_response(lambda r: r.request.method == "GET" and one.match(urlparse(r.url).path),
-                              timeout=15000):
-        do()
-    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+    """從清單點開一張：等**這一次點開**的終點——開單序號（`_openSeq`）完成並渲染（<body data-voucher-open-seq>）。
+    〔O9-2：原本等「任一個 GET /api/vouchers/{id} 回來」＋一次 nextTick。重整後網址帶 ?id=，頁面自己也在開同一張
+      （深連結）⇒ 等到的可能是深連結那一趟，點開的那一趟還在路上，下一步的可見性檢查就早了（時間線實測：兩趟 GET 交錯、
+      失敗當下只回來一趟）。改等本次點擊的序號，不等某一趟請求（〈e2e 等待的終點〉）〕"""
+    do()
+    target = page.evaluate("() => %s._openSeq" % VC)
+    page.wait_for_function("(n) => Number(document.body.getAttribute('data-voucher-open-seq') || 0) >= n",
+                           arg=target, timeout=15000)
 
 
 def _open_editor(page):
@@ -337,3 +339,48 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_bro
         "  重整後  %r\n" % (edited, after)
         + "☠️ 存的是**來源 id**、開啟時再組一次 ⇒ 使用者改的東西沒有被存下來。\n"
         + "🔑 `§164`：帶入只是**省打字**，最終值是使用者打的那個。")
+
+
+#: 深連結那一張的 GET 回應延後——.json() 慢 1.5 秒（放行由時間，但斷言等的是「它被讀到」，不靠時間差）
+_SLOW_FIRST_OPEN = """
+(function () {
+  var real = Response.prototype.json, done = false
+  Response.prototype.json = function () {
+    var self = this
+    if (!done && /\\/api\\/vouchers\\/\\d+$/.test(new URL(self.url).pathname)) {
+      done = true
+      return new Promise(function (res) { setTimeout(res, 1500) })
+        .then(function () { window.__staleRead = true; return real.call(self) })
+    }
+    return real.call(self)
+  }
+})()
+"""
+
+
+@pytest.mark.e2e
+def test_o92_late_deep_link_response_does_not_replace_the_clicked_voucher(live_server, make_user, e2e_browser, client):
+    """O9-2 產品競態：網址帶 ?id=A（深連結正在開 A、回應慢），使用者從清單點開 B ⇒ 畫面是 B；A 晚到的回應要丟掉。
+    突變：open() 拿掉序號檢查 ⇒ 畫面被換回 A ⇒ 紅。"""
+    username, password = make_user(username="e2e_o92", role="superadmin", modules=["cashier"])
+    tok = client.post("/api/auth/login", json={"username": username, "password": password}).json()["token"]
+    h = {"Authorization": "Bearer " + tok}
+    line = [{"account_code": "1113", "summary": "x", "debit": 100, "credit": 0},
+            {"account_code": "2171", "summary": "x", "debit": 0, "credit": 100}]
+    a = client.post("/api/vouchers", headers=h, json={"summary": "O92-A", "lines": line}).json()
+    b = client.post("/api/vouchers", headers=h, json={"summary": "O92-B", "lines": line}).json()
+    ida, idb = a.get("id"), b.get("id")
+    assert ida and idb and ida != idb, (a, b)
+    page = e2e_browser.new_page()
+    _login(page, live_server, username, password)
+    page.add_init_script(_SLOW_FIRST_OPEN)
+    page.goto("%s/pages/voucher.html?id=%d" % (live_server, ida))
+    _ready(page)
+    row_b = page.locator(HOOKS["row"]).filter(has_text=b.get("voucher_no") or "O92-B").first
+    _opened(page, lambda: row_b.click())
+    assert page.evaluate("() => %s.id" % VC) == idb, "點開的是 B"
+    page.wait_for_function("window.__staleRead === true", timeout=15000)     # 深連結 A 的回應被讀到了
+    page.evaluate("() => new Promise(r => setTimeout(() => setTimeout(r, 0), 0))")
+    assert page.evaluate("() => %s.id" % VC) == idb, "A 晚到的回應把畫面換回 A（沒有丟掉過期回應）"
+    assert page.evaluate("() => %s.note" % VC) == "O92-B"
+
