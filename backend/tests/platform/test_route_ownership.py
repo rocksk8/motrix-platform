@@ -137,3 +137,22 @@ def test_real_tree_has_no_route_ownership_errors():
     """真實的樹：每一條路由都有歸屬（明列或前綴）。"""
     g = D.build()
     assert D.check_route_ownership(g["units"]) == []
+
+
+def test_migrated_groups_have_keys():
+    """真實的樹：每個已搬進 modules/ 的群組都寫了 key、且與 mod: 單位一致。"""
+    assert D.check_group_keys() == []
+
+
+def test_rc_migrated_group_without_key_is_an_error(tmp_path):
+    """反向控制（D 觀察）：合成一個沒寫 key 的已搬遷群組 ⇒ 紅；key 與 mod: 單位不一致 ⇒ 紅；沒搬遷的群組沒寫 key ⇒ 不報。"""
+    m = {"L1": {"units": []}, "modules": {
+        "M06": {"units": ["mod:acc/api"], "api_prefixes": []},
+        "M07": {"key": "pay", "units": ["mod:payroll/api"], "api_prefixes": []},
+        "M01": {"units": ["router:quotations"], "api_prefixes": []}}}
+    p = tmp_path / "modules.json"
+    p.write_text(json.dumps(m), encoding="utf-8")
+    errs = D.check_group_keys(p)
+    assert any(e.startswith("M06") and "沒有寫 key" in e for e in errs), errs
+    assert any(e.startswith("M07") and "payroll" in e for e in errs), errs
+    assert not any(e.startswith("M01") for e in errs), errs
