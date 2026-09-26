@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 631,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 336,
+   "api": 337,
    "unit": 55,
    "e2e": 154
   },
@@ -5207,6 +5207,34 @@
      "frontend/static/sidebar.js"
     ]
    }
+  },
+  "backend/tests/platform/test_menu_layout.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "plat:__init__",
+    "plat:catalog",
+    "plat:definitions",
+    "plat:menu",
+    "plat:registry",
+    "router:definitions",
+    "router:platform_menu"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/catalog.py",
+     "backend/core/definitions.py",
+     "backend/core/menu.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py",
+     "backend/routers/platform_menu.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_menu_parity.py": {
    "kind": "api",

@@ -6124,6 +6124,7 @@
    "dynamic_sql": false,
    "imports": [
     "plat:customization",
+    "plat:definitions",
     "plat:events",
     "plat:registry"
    ],
@@ -7753,7 +7754,7 @@
     },
     {
      "func": "preview_output_template",
-     "line": 319,
+     "line": 304,
      "method": "POST",
      "path": "/api/definitions/output_template/{key}/preview"
     }
@@ -9007,7 +9008,9 @@
     "helper:module_registry"
    ],
    "imports": [
+    "core:db",
     "helper:auth",
+    "plat:catalog",
     "plat:menu",
     "plat:registry"
    ],
@@ -9017,7 +9020,7 @@
    "routes": [
     {
      "func": "platform_menu",
-     "line": 19,
+     "line": 45,
      "method": "GET",
      "path": "/api/platform/menu"
     }
