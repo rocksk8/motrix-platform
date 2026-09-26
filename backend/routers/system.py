@@ -17,7 +17,7 @@ from helpers import (
     _require_user, _tok, _audit, _get_setting, _set_setting, _get_edge_path,
     _filter_live_notifications, notify_module_activity, APPROVAL_DOC_TYPES, DEFAULT_UNIFIED_DOC_TYPES,
     APPROVAL_DOC_TYPE_LABELS, require_any_module)
-from helpers.quotations import _steps_to_tiers
+from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers   # M01-PLAN §3-2：L1
 from helpers.errors import trace_id
 from photos import _process_project_photo, _photo_root
 import trail

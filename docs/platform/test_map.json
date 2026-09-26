@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 631,
+  "tests": 632,
   "unmapped": 7,
   "kinds": {
-   "audit": 86,
+   "audit": 87,
    "api": 336,
    "unit": 55,
    "e2e": 154
@@ -5162,6 +5162,25 @@
     ],
     "path": [
      "backend/helpers/legal_params.py"
+    ]
+   }
+  },
+  "backend/tests/platform/test_m01_sink2_contract.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/tests/platform/test_tax_calc_contract.py",
+    "helper:dates",
+    "helper:tiered_approval",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/dates.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/tests/platform/test_tax_calc_contract.py"
+    ],
+    "path": [
+     "backend/routers/system.py"
     ]
    }
   },

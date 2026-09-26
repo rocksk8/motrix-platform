@@ -1,5 +1,5 @@
 {
- "core_version": "1.35",
+ "core_version": "1.36",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -247,6 +247,7 @@
    "_add_months": "def(d, months)",
    "_warranty_expiry": "def(warranty_start, warranty_months)",
    "_workdays_elapsed": "def(start_date, end_date)",
+   "norm_at": "def(s)",
    "normalize_date": "def(v, label=…)"
   },
   "helper:doc_template": {
@@ -678,6 +679,7 @@
    "resolve_tier_approvers": "def(conn, tier_setting, requester_username=…)",
    "setting_to_active_tiers": "def(setting, conn, requester_username=…)",
    "sign_first_pending": "def(tier, user, now, conn=…)",
+   "steps_to_tiers": "def(steps)",
    "submitter_manager_tiers": "def(conn, requester_username)"
   },
   "helper:uploads": {

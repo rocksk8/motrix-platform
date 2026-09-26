@@ -540,3 +540,20 @@ def resolve_display_names(conn, slots):
             cell["by"] = names.get(by, by)
         out[label] = cell
     return out
+
+
+def steps_to_tiers(steps: list) -> list:
+    """Convert old single-approver steps list to modern tiers list (no status fields).
+
+    2026-09-26 自 M01 helpers/quotations._steps_to_tiers 下沉（M01-PLAN §3-2）；舊名在 quotations 保留為別名。"""
+    return [
+        {
+            "order": i,
+            "approvers": [{
+                "userId":      s.get("userId", 0),
+                "username":    s.get("username", ""),
+                "displayName": s.get("displayName", s.get("username", "")),
+            }],
+        }
+        for i, s in enumerate(steps)
+    ]

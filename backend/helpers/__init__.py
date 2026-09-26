@@ -32,13 +32,15 @@ from .settings import _get_setting, _set_setting
 from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
                     notify_org_chain_notice)
 from .quotations import (
-    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers,
+    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json,
+    _steps_to_tiers,   # M01 的舊名（別名＝L1 tiered_approval.steps_to_tiers 同一物件）；L1 用公開名 steps_to_tiers。
+                       # 不從 tiered_approval 以底線名轉出：那會讓 L1 的公開函式以底線名被 L2 使用（b-g1 守門）
     summarize_payment_items, case_extra_expenses,
-    quote_won_month_map, norm_at, validate_invoice_no, validate_invoice_amounts, validate_quote_tax,
+    quote_won_month_map, validate_invoice_no, validate_invoice_amounts, validate_quote_tax,
 )
 from .case_access import guard_case_access, is_document_approver  # L1（2026-09-26 自 quotations 下沉）
 from .tax_calc import payment_item_amounts          # T（2026-09-26）：稅額純函式在 L1
-from .dates import _add_months, _warranty_expiry, _workdays_elapsed
+from .dates import _add_months, _warranty_expiry, _workdays_elapsed, norm_at   # norm_at：M01-PLAN §3-2 下沉
 from .tiered_approval import (
     active_tiers, current_tier_idx, setting_to_active_tiers,
     first_pending_approver, check_approve_permission, check_reject_permission,
