@@ -93,6 +93,37 @@ def set_mail_recipients(key: str, body: dict = Body(...), authorization: str = H
     return {"ok": True, "override": o.get(key) or {"mode": "default", "users": [], "roles": []}}
 
 
+def last_superadmin_blockers(conn, user_id, new_muted) -> list:
+    """U15（使用者 2026-09-26 表單）：超級管理員可以退訂系統技術類信件，但**不可以是最後一位收得到的超管**。
+
+    回傳「這次退訂之後，就沒有任何啟用中、有 Email、未退訂的超級管理員收得到」的系統技術類型名稱（空＝放行）。
+    判準與寄信端一致（email_notify._users_emails：active=1、email 非空、notification_prefs.is_enabled）。
+    只看收件人仍是超管的類型（覆寫為 custom 的由指定名單負責，不在此擋）；本來就收不到的人（沒 Email、停用）退訂不擋。"""
+    import json
+    from helpers.notification_prefs import is_enabled
+    me = conn.execute("SELECT role, active, email, notification_muted FROM users WHERE id=?", (user_id,)).fetchone()
+    if me is None or me["role"] != "superadmin" or not me["active"] or not (me["email"] or "").strip():
+        return []
+    others = conn.execute("SELECT notification_muted FROM users WHERE active=1 AND role='superadmin' "
+                          "AND email IS NOT NULL AND email != '' AND id != ?", (user_id,)).fetchall()
+    new_json = json.dumps(list(new_muted or []), ensure_ascii=False)
+    o = _overrides()
+    out = []
+    for t in mt.all_types():
+        if t.category != "system" or t.event or t.key in mt.MANAGED_ELSEWHERE:
+            continue
+        if (o.get(t.key) or {}).get("mode", "default") == "custom":
+            continue
+        if not is_enabled(me["notification_muted"], t.key):
+            continue                      # 本來就退訂了：這次不是「把最後一位拿掉」
+        if is_enabled(new_json, t.key):
+            continue                      # 這次沒有退訂這一類
+        if any(is_enabled(r["notification_muted"], t.key) for r in others):
+            continue
+        out.append(t.name)
+    return sorted(out)
+
+
 def receivable(t, o, username, role):
     """這位使用者**可能**收到這類信嗎（退訂清單只列這些）。"""
     ov = o.get(t.key) or {}
