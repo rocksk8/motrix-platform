@@ -82,20 +82,20 @@ def _ver(v):
 
 def test_registry_both_only_bump_version_is_not_a_conflict(repo):
     res = _check(repo, {REG: _edit(REG, _ver("1.10"))}, {REG: _edit(REG, _ver("1.10"))})
-    assert res["need_full"] is False and res["bookkeeping"][REG]["conflict"] is False
+    assert res["high_impact"] is False and res["bookkeeping"][REG]["conflict"] is False
 
 
 def test_registry_other_change_on_one_side_only_is_not_a_conflict(repo):
     mine = _edit(REG, lambda t: _ver("1.10")(t).replace("return 1", "return 2"))
     res = _check(repo, {REG: mine}, {REG: _edit(REG, _ver("1.10"))})
-    assert res["need_full"] is False
+    assert res["high_impact"] is False
 
 
 def test_rc_registry_other_change_on_both_sides_is_a_conflict(repo):
     mine = _edit(REG, lambda t: t.replace("return 1", "return 2"))
     theirs = _edit(REG, lambda t: t + "\nX = 1\n")
     res = _check(repo, {REG: mine}, {REG: theirs})
-    assert res["need_full"] is True and REG in res["overlap"]
+    assert res["high_impact"] is True and REG in res["overlap"]
 
 
 # ── G1 快照 ──────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ def test_snapshot_different_units_is_not_a_conflict(repo):
         o["core_version"] = "1.10"
         o["interface"]["plat:c"] = {"z": "def()"}
     res = _check(repo, {SNAP: _edit(SNAP, mine)}, {SNAP: _edit(SNAP, theirs)})
-    assert res["need_full"] is False and res["bookkeeping"][SNAP]["conflict"] is False
+    assert res["high_impact"] is False and res["bookkeeping"][SNAP]["conflict"] is False
 
 
 def test_rc_snapshot_same_name_changed_on_both_sides_is_a_conflict(repo):
@@ -119,7 +119,7 @@ def test_rc_snapshot_same_name_changed_on_both_sides_is_a_conflict(repo):
     def theirs(o):
         o["interface"]["plat:a"]["x"] = "def(b)"
     res = _check(repo, {SNAP: _edit(SNAP, mine)}, {SNAP: _edit(SNAP, theirs)})
-    assert res["need_full"] is True and SNAP in res["overlap"]
+    assert res["high_impact"] is True and SNAP in res["overlap"]
 
 
 # ── version_manifest ─────────────────────────────────────────────────────
@@ -127,14 +127,14 @@ def test_rc_snapshot_same_name_changed_on_both_sides_is_a_conflict(repo):
 def test_manifest_different_entries_is_not_a_conflict(repo):
     res = _check(repo, {MAN: _edit(MAN, lambda o: o.insert(0, {"module": "傳票", "version": "2026-09-26b", "content": "m"}))},
                  {MAN: _edit(MAN, lambda o: o.insert(0, {"module": "地圖", "version": "2026-09-26c", "content": "t"}))})
-    assert res["need_full"] is False
+    assert res["high_impact"] is False
 
 
 def test_rc_manifest_same_entry_changed_on_both_sides_is_a_conflict(repo):
     """VR3：同一模組併進同一筆 ⇒ 兩邊都改 26a 的 content ⇒ 衝突。"""
     res = _check(repo, {MAN: _edit(MAN, lambda o: o[0].update(content="a；mine"))},
                  {MAN: _edit(MAN, lambda o: o[0].update(content="a；theirs"))})
-    assert res["need_full"] is True and MAN in res["overlap"]
+    assert res["high_impact"] is True and MAN in res["overlap"]
 
 
 # ── modules.json ─────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ def test_rc_manifest_same_entry_changed_on_both_sides_is_a_conflict(repo):
 def test_modules_json_different_new_units_is_not_a_conflict(repo):
     res = _check(repo, {MODS: _edit(MODS, lambda o: o["L1"]["units"].append("plat:menu"))},
                  {MODS: _edit(MODS, lambda o: o["L1"]["units"].append("plat:pages"))})
-    assert res["need_full"] is False
+    assert res["high_impact"] is False
 
 
 def test_rc_modules_json_same_unit_on_both_sides_is_a_conflict(repo):
@@ -152,7 +152,7 @@ def test_rc_modules_json_same_unit_on_both_sides_is_a_conflict(repo):
         o["modules"]["M01"]["units"].append("plat:b")
 
     res = _check(repo, {MODS: _edit(MODS, mine)}, {MODS: _edit(MODS, lambda o: o["L1"]["units"].remove("plat:b"))})
-    assert res["need_full"] is True and MODS in res["overlap"]
+    assert res["high_impact"] is True and MODS in res["overlap"]
 
 
 # ── rebase 之後才改的（core_bump）與保守判定 ─────────────────────────────
@@ -167,7 +167,7 @@ def test_version_bump_after_rebase_is_not_a_conflict(repo):
     _git(repo, "cherry-pick", green)
     _commit(repo, {REG: _edit(REG, _ver("1.11"))}, "core_bump 1.11")
     res = MT.rebase_check(green, "platform", repo=repo, head=_git(repo, "rev-parse", "HEAD"))
-    assert res["need_full"] is False and res["bookkeeping"][REG]["conflict"] is False
+    assert res["high_impact"] is False and res["bookkeeping"][REG]["conflict"] is False
 
 
 def test_rc_unreadable_side_is_conservatively_a_conflict(repo):
@@ -175,10 +175,10 @@ def test_rc_unreadable_side_is_conservatively_a_conflict(repo):
     _git(repo, "rm", "-q", "--", MAN)
     _git(repo, "commit", "-q", "-m", "drop manifest")
     res = _check(repo, {MAN: "[]"}, {MAN: "[]\n"})
-    assert res["need_full"] is True and "保守" in res["bookkeeping"][MAN]["detail"]
+    assert res["high_impact"] is True and "保守" in res["bookkeeping"][MAN]["detail"]
 
 
 def test_rc_non_bookkeeping_file_still_counts_as_file_overlap(repo):
     """反向控制：其他程式檔照舊（同檔就判衝突），不受簿記檔規則影響。"""
     res = _check(repo, {"backend/y.py": "a = 1\n"}, {"backend/y.py": "b = 1\n"})
-    assert res["need_full"] is True and res["overlap"] == ["backend/y.py"]
+    assert res["high_impact"] is True and res["overlap"] == ["backend/y.py"]

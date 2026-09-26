@@ -7,7 +7,8 @@
   python tools/platform/modtest.py --changed-since <SHA>  <SHA> 之後到 HEAD 的已提交改動（不含工作樹）
   python tools/platform/modtest.py --files a.py b.html 直接指定改動檔
   python tools/platform/modtest.py --rebase-check <GREEN> [--onto origin/platform]
-              §C-11 判定：帶進來的有 fixture 層或兩邊改同檔 ⇒ 全量（exit 3），否則差異題＋tests/platform（exit 0）
+              §C-11 判定：帶進來的有 fixture 層或兩邊改同檔 ⇒ 影響大（exit 3）：差異題擴大到那些檔＋tests/platform＋改到頁面的 e2e，
+              **全量交給列車**（§G3：各線不跑全量）並在月台註明；否則差異題＋tests/platform（exit 0）
   --dry-run   只印受影響單位、測試清單與題數（collect-only 全部一次再篩），不執行
   --full      跑全量：非 e2e（-n --workers）＋ e2e（-n --e2e-workers）兩段；basetemp 以 -full 結尾 ⇒ 由 conftest 搶全機鎖；
               結果（含失敗、中斷，ok=false）原子寫入主工作樹 tools/platform/full_results/<commit>.json（儀表板閘門讀這個；
@@ -20,7 +21,7 @@
   2. 有 docs/platform/dep_graph.json ⇒ 沿 imports／routers_called 反向遞移擴大（改 core:* 自動擴到所有依賴者）；
      沒有 ⇒ 只用直接對應，並在輸出註明。
   3. 測試的 units 與受影響單位相交 ⇒ 選；dir: 單位涵蓋其下任一改動檔。
-  4. 改動的測試檔本身必選；改到 fixture 層（conftest／pytest.ini／requirements）⇒ 必須全量，拒絕縮小。
+  4. 改動的測試檔本身必選；改到 fixture 層（conftest／pytest.ini／requirements）⇒ 差異題照跑，**全量交給列車**（§G3），閘門過了回 exit 3＝月台要註明、排車頭。
   5. core:main 經 client／live_server fixture 被所有 api／e2e 測試隱含依賴 ⇒ 一併選入。
   6. 契約測試（backend/tests/platform/、backend/core/tests/ 下所有 test_*.py）每次必跑；目錄不存在則略過並註明。
 
@@ -169,17 +170,21 @@ def bookkeeping_overlap(repo, rel, mine_pair, incoming_pair):
 
 
 def rebase_check(green, onto, repo=None, head="HEAD"):
-    """PLAYBOOK §C-11：全量綠在 green（rebase 前的分支尖端）之後 rebase 到 onto，要不要重跑全量。
+    """PLAYBOOK §C-11：全量綠在 green（rebase 前的分支尖端）之後 rebase 到 onto，要跑哪些題。
+
+    🔴 2026-09-26 起**不再判「重跑全量」**（§G3：全量只由列車跑一次；C 因為本判定同時起跑兩輪全量，全機 3 組，超過 §C-13）：
+       原本判全量的情形改成 `high_impact`＝差異題擴大到帶進來的衝突檔＋tests/platform＋改到頁面的 e2e，全量交給列車，
+       月台登記時註明（fixture 層那一包要排在列車最前面，§G3 例外條）。
 
     帶進來的＝merge-base..onto；本分支的＝merge-base..green。
-    - 帶進來的碰到 FIXTURE_LAYER ⇒ 全量
-    - 兩邊改了同一個程式檔 ⇒ 全量（以「同檔」近似「程式碼衝突」：比 git 文字衝突寬，寧可多跑）
-    - 兩邊改了同一個 .md ⇒ 只列出、不觸發全量（讀文件的守門在 tests/platform，差異題本來就會跑）
+    - 帶進來的碰到 FIXTURE_LAYER ⇒ 影響大
+    - 兩邊改了同一個程式檔 ⇒ 影響大（以「同檔」近似「程式碼衝突」：比 git 文字衝突寬，寧可多選）
+    - 兩邊改了同一個 .md ⇒ 只列出、不算影響大（讀文件的守門在 tests/platform，差異題本來就會跑）
     - 都沒有 ⇒ 只跑 after_green（全量之後本分支才改的檔）的差異題＋tests/platform：`modtest --files <after_green>`
       after_green＝(green 與 head 兩棵樹的差) − 帶進來的檔；帶進來的已由對方自己的全量驗過（§C-11 補充）。
       ☠️ 不建議 `--changed-since <green>`：它把帶進來的也算進去，對方改到 L0 時會挑出九成（2026-09-26 實測 90.7%）；
          也不建議 `--base <onto>`：本分支自己改過 fixture 層時一定被拒（同日實測）。
-    - 帶進來的檔在 head 上又被本分支改過（head 與 onto 的內容不同）⇒ 視為程式碼衝突
+    - 帶進來的檔在 head 上又被本分支改過（head 與 onto 的內容不同）⇒ 視為程式碼衝突（影響大）
     - 例外：簿記檔（BOOKKEEPING：registry／G1 快照／version_manifest／modules.json）只在**同一個項目**被兩邊改時才算衝突
     ⚠ 只看「帶進來的」：本分支自己改的 fixture 層由它自己的全量負責（§C-4），不在這裡判定。
     ⚠ 要在 rebase **之後**跑（head 已經在 onto 上）；rebase 之前跑，after_green 永遠是空的。
@@ -211,7 +216,15 @@ def rebase_check(green, onto, repo=None, head="HEAD"):
             "fixture_layer": fixture, "overlap": overlap,
             "overlap_docs": sorted(f for f in both - set(overlap) if f.endswith(".md")),
             "bookkeeping": bookkeeping,
-            "need_full": bool(fixture or overlap)}
+            "high_impact": bool(fixture or overlap),
+            "suggest": suggest_command(sorted(since_green - incoming), overlap)}
+
+
+def suggest_command(after_green, overlap):
+    """建議的差異題指令（永遠不是全量）：`modtest --files <全量之後本分支改的＋兩邊都改的程式檔>`；
+    fixture 層檔不放進 --files——它們由列車的全量負責。"""
+    files = sorted(f for f in set(after_green) | set(overlap) if f not in FIXTURE_LAYER)
+    return "modtest --files %s" % " ".join(files) if files else "modtest --files <無：只跑 tests/platform>"
 
 
 def print_rebase_check(r):
@@ -223,15 +236,15 @@ def print_rebase_check(r):
         print("兩邊都改的文件（不觸發全量）：%s" % "、".join(r["overlap_docs"]))
     for f, v in sorted(r.get("bookkeeping", {}).items()):
         print("簿記檔 %s：%s（%s）" % (f, "🔴 衝突" if v["conflict"] else "不重疊", v["detail"]))
-    if r["need_full"]:
-        print("🔴 判定：重跑全量（§C-11 例外）")
-    elif not r["rebased"]:
+    if not r["rebased"]:
         print("⚠ %s 還沒 rebase 到 %s ⇒ 全量之後改了什麼算不出來；先 rebase 再跑本判定" % (r["head"], r["onto"]))
     else:
-        ag = r["after_green"]
-        cmd = "modtest --files %s" % " ".join(ag) if ag else "tests/platform（全量之後本分支沒有再改）"
-        print("✓ 判定：跑 `%s`（modtest 另帶 tests/platform）；回報寫「全量在 %s，差異題在 %s」"
-              % (cmd, r["green"], r["onto"]))
+        print("✓ 判定：跑 `%s`（modtest 另帶 tests/platform）＋改到頁面的 e2e；回報寫「全量在 %s，差異題在 %s」"
+              % (r["suggest"], r["green"], r["onto"]))
+        if r["high_impact"]:
+            what = "、".join(r["fixture_layer"] + r["overlap"])
+            print("⚠ 影響大（帶進 fixture 層或兩邊改同檔：%s）⇒ **不要自己跑全量**：全量交給列車（PLAYBOOK §G3）；"
+                  "月台登記時註明這幾個檔%s" % (what, "，帶進 fixture 層的包排在列車最前面" if r["fixture_layer"] else ""))
 
 
 def load_map(refresh):
@@ -932,7 +945,7 @@ def main(argv=None):
     g.add_argument("--commit")
     g.add_argument("--changed-since", metavar="SHA", help="SHA 之後（不含）到 HEAD 的已提交改動")
     g.add_argument("--files", nargs="+")
-    g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後要不要重跑全量（只判定、不執行）")
+    g.add_argument("--rebase-check", metavar="GREEN", help="§C-11：全量綠在 GREEN，rebase 到 --onto 之後該跑哪些題（只判定、不執行；永遠不建議各線跑全量，§G3）")
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
@@ -958,7 +971,7 @@ def main(argv=None):
             sys.stdout.buffer.write((json.dumps(r, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
         else:
             print_rebase_check(r)
-        return 3 if r["need_full"] else (0 if r["rebased"] else 2)
+        return 2 if not r["rebased"] else (3 if r["high_impact"] else 0)   # 3＝影響大（差異題擴大＋月台註明），不是「跑全量」
     global PYEXE
     PYEXE = resolve_python(a.python)
 
@@ -1003,7 +1016,8 @@ def main(argv=None):
         if rep["unmapped_changes"]:
             print("⚠ 無測試對應的改動檔 %d：%s" % (len(rep["unmapped_changes"]), ", ".join(rep["unmapped_changes"])))
         if rep["need_full"]:
-            print("🔴 改到 fixture 層（%s）⇒ 須全量（--full）；不縮小" % ", ".join(rep["need_full"]))
+            print("⚠ 改到 fixture 層（%s）⇒ 差異題照跑（另帶 tests/platform）＋改到頁面的 e2e；**不要自己跑全量**："
+                  "全量交給列車（PLAYBOOK §G3），月台登記註明 fixture 層、排在列車最前面" % ", ".join(rep["need_full"]))
         print("挑出測試檔 %d／%d" % (len(picked), len(tmap["tests"])))
         if a.dry_run:
             if summary is None:
@@ -1027,13 +1041,13 @@ def main(argv=None):
     if a.dry_run:
         record_stats(changed, picked, tmap, rep, n_items, full_n, None, dry_run=True)
         return 0
-    if rep["need_full"]:
-        return 3
     if not picked:
         print("沒有受影響的測試。")
-        return 0
+        return 3 if rep["need_full"] else 0
     code, _ = run_pytest(picked, cap_workers(extra, PARTIAL_MAX_WORKERS), a.window, full=False)
     record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
+    if code == 0 and rep["need_full"]:
+        return 3          # 閘門過了，但動到 fixture 層：月台要註明、排車頭（全量由列車跑，§G3）
     return code
 
 
