@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.5 — 2026-09-26（A，因權限沒列出的附件要明說；主持裁示；第十一班列車取號）
+- `api/invoice_vouchers.py::_InvoiceVoucherAttachments.doc_nos_for_case`：逐張過濾時讀不到的附件改算進沒列出的**個數**（`AttachmentNotVisible(visible=readable, hidden=N)`，只有數字，不帶單號、檔名、金額）
+
 ## 1.0.4 — 2026-09-26（A，IP-21 attachments.for_document；第十班列車取號）
 - `api/invoice_vouchers.py` 新增 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者，開票申請的已上傳檔案來源）
 - 抽出 `_voucher_readable`（案件層＋金額層，含本單簽核人例外），與 `_guard_voucher` 共用；`doc_nos_for_case` 逐張過濾（讀不到的不列，整張案件讀不到 raise `AttachmentNotVisible`）
