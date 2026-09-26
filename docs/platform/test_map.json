@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 633,
+  "tests": 634,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
    "api": 337,
    "unit": 56,
-   "e2e": 155
+   "e2e": 156
   },
   "routes": 568
  },
@@ -9193,6 +9193,29 @@
      "frontend/index.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_inflight_report_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/conftest.py",
+    "file:frontend/static/favicon.png",
+    "router:auth"
+   ],
+   "evidence": {
+    "import": [
+     "backend/conftest.py"
+    ],
+    "api": [
+     "backend/routers/auth.py"
+    ],
+    "path": [
+     "frontend/static/favicon.png"
+    ]
+   },
+   "unresolved_api": [
+    "/api/o5-hang",
+    "/api/slow"
+   ]
   },
   "backend/tests/test_e2e_jv22_edit_history_page_2026_09_24.py": {
    "kind": "e2e",

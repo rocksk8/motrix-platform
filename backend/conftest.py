@@ -1442,6 +1442,44 @@ def _font_stub_hook(ctx, request):
 
 E2E_CONTEXT_HOOKS.append(_font_stub_hook)
 
+# ── O5-S2：e2e 逾時時，把「已發出而未完成的請求」附進失敗報告 ──────────────────────────────────────
+# O5 在 D 能製造的負載下沒重現，只證明了「load 被字型綁住」；下次紅的時候要直接看到是哪一支卡著，不是再猜一次。
+# 每個 context 記帳（request 進、requestfinished／requestfailed 出），掛在這一題的 item 上；
+# pytest_runtest_makereport：call 階段失敗、而且是逾時（例外型別名含 Timeout）⇒ 加一段報告。
+
+
+def _inflight_hook(ctx, request):
+    book = request.node.__dict__.setdefault("_e2e_inflight", {})
+    ctx.on("request", lambda r: book.__setitem__(r, (time.monotonic(), r.method, r.url)))
+    ctx.on("requestfinished", lambda r: book.pop(r, None))
+    ctx.on("requestfailed", lambda r: book.pop(r, None))
+
+
+def inflight_text(item):
+    """這一題目前未完成的請求 ⇒ 多行文字（最久的在前）；沒有 ⇒ 說沒有（「沒有」也是證據）。"""
+    book = getattr(item, "_e2e_inflight", None)
+    if book is None:
+        return "（這一題沒有經 new_context 開 context，沒有記帳）"
+    now = time.monotonic()
+    rows = sorted(book.values(), key=lambda v: v[0])
+    if not rows:
+        return "（沒有未完成的請求）"
+    return "\n".join("  %6.1fs  %s %s" % (now - t0, m, u) for t0, m, u in rows)
+
+
+E2E_CONTEXT_HOOKS.append(_inflight_hook)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    if rep.when != "call" or not rep.failed or call.excinfo is None:
+        return
+    if "Timeout" not in call.excinfo.typename:
+        return
+    rep.sections.append(("e2e 逾時時未完成的請求（O5-S2）", inflight_text(item)))
+
 _PW = {"pw": None, "browser": None}
 
 
