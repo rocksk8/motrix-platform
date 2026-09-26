@@ -15,7 +15,6 @@
   "L1 core:pdf_gen -> M01 helper:quotations",
   "L1 helper:receivables -> M01 helper:quotations",
   "L1 router:system -> M01 helper:quotations",
-  "L1 router:system -> M01 helper:quote_terms",
-  "L1 router:system -> M07 helper:bonus"
+  "L1 router:system -> M01 helper:quote_terms"
  ]
 }
