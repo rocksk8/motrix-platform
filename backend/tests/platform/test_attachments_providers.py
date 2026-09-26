@@ -503,7 +503,7 @@ def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_us
     那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
     if not source_tree.module_installed("modules/accounting/"):
         pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
-    if not source_tree.module_installed(ARAP):
+    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
         pytest.skip("應收應付（M05）不在：沒有開票申請")
     import db
     h = _hdr(client, make_user, "att_ap_one", "engineer", ["case_manage", "finance"])

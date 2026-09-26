@@ -26,7 +26,7 @@
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::_dispatch_row` |
-| 使用方 | M01 `helpers/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）；M06 `modules/accounting/api/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工） |
+| 使用方 | M01 `helpers/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）〔更正（2026-09-26 A，M06 a' 例外到期）：~~M06 `modules/accounting/api/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工）~~ 改走 IP-15 `dispatch.cost_for_case`〕 |
 | 形式 | provider，單一提供者（`core.registry`）。2026-09-26 M04 搬進 `modules/subcontract/`，改由 `ModuleSpec.providers` 宣告（模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("dispatch.row", "subcontract"): vendor_contractors._dispatch_row})`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
 | 回傳 | `fn(row: sqlite3.Row) -> dict`。`row` 是 `contractor_dispatches` 一列（可 JOIN `vendor_contractors.name AS vendor_name`）。使用方讀的欄位：`id`、`quoteNo`、`vendorName`、`scope`、`items`、`personnel`、`totalAmount`、`personnelTotal`、`grandTotal`（含稅承攬商費用＋外包人員）、`invoiceNo`、`acceptedAt` |
@@ -208,7 +208,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 對方不在時 | 整包照常回；`parts.dispatches`＝`{"ok": false, "status": 404, "detail": DISPATCHES_UNAVAILABLE}`（「外包工班模組未安裝：沒有承攬派工資料」），前端照「那一段回非 2xx」處理 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | 提供方（隨模組搬走）`backend/modules/subcontract/tests/test_subcontract_providers.py`：登記、正對照；取用方（外包工班不在也成立）`backend/tests/platform/test_subcontract_connectors.py`：拿掉提供者 ⇒ 整包照回、那一段 404 說明、其他段照常。突變：整包不看提供者、不登記 ⇒ 紅 |
-| 追加：成本檢視（2026-09-26，B；主持派工） | `dispatch.cost_for_case`：提供方 `modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`；`fn(quote_no, authorization) -> list`；權限 finance／cashier／procurement／case_manage／contractor_list 任一（否則 403）；回 `[{id, quoteNo, vendorName, scope, invoiceNo, dispatchDate, invoiceDate, payableDate, amount(=grandTotal), totalWithTax, personnelTotal, personnelCount, items:[{description, amount}]}]`（scope、invoiceNo 主持裁示加入：會計資料、不是個資）——**不回外包人員姓名、personnel、其他派工細節**（notes、files、狀態、建立／驗收者）。使用方：M06 `vouchers._case_expense_sources`（JV21；第三層人員改顯示「外包人員 N 人」）。**對方不在時**（照 IP-14 的做法明說）：取用方拿到 None ⇒ 那一段不列，回應／畫面帶 `notice`「外包工班模組未安裝：傳票不含承攬商派工支出」，不可以靜默少列。契約版本 1；守門：`backend/modules/subcontract/tests/test_dispatch_cost_view.py`（登記、權限、白名單、任何層無姓名欄位、金額同 grandTotal、IP-15 既有回應不變） |
+| 追加：成本檢視（2026-09-26，B；主持派工） | 使用方：M06 `modules/accounting/api/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工）、`vouchers_by_case`（案件的傳票：派工那一段）。`dispatch.cost_for_case`：提供方 `modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`；`fn(quote_no, authorization) -> list`；權限 finance／cashier／procurement／case_manage／contractor_list 任一（否則 403）；回 `[{id, quoteNo, vendorName, scope, invoiceNo, dispatchDate, invoiceDate, payableDate, amount(=grandTotal), totalWithTax, personnelTotal, personnelCount, items:[{description, amount}]}]`（scope、invoiceNo 主持裁示加入：會計資料、不是個資）——**不回外包人員姓名、personnel、其他派工細節**（notes、files、狀態、建立／驗收者）。使用方：M06 `vouchers._case_expense_sources`（JV21；第三層人員改顯示「外包人員 N 人」）。**對方不在時**（照 IP-14 的做法明說）：取用方拿到 None ⇒ 那一段不列，回應／畫面帶 `notice`「外包工班模組未安裝：傳票不含承攬商派工支出」，不可以靜默少列。契約版本 1；守門：`backend/modules/subcontract/tests/test_dispatch_cost_view.py`（登記、權限、白名單、任何層無姓名欄位、金額同 grandTotal、IP-15 既有回應不變） |
 
 ---
 
@@ -326,7 +326,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `routers/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
 | 使用方 | M01 `routers/quotations.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源） |
 | 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
 | 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
@@ -359,7 +359,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`routers/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`routers/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
+| 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`routers/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`modules/accounting/api/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
 | 使用方 | M01 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則、reassignLog、audit、通知都在 M01）；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.reassign")`，以類型名取一個） |
 | 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 M01 的寫鎖內呼叫、M01 commit） |

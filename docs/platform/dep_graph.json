@@ -327,8 +327,6 @@
     "plat:pages",
     "plat:paths",
     "plat:registry",
-    "router:account_items",
-    "router:accounting_export",
     "router:approval_delegates",
     "router:auth",
     "router:case_action_items",
@@ -354,8 +352,7 @@
     "router:quotations",
     "router:search",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "kind": "core",
    "path": "backend/main.py",
@@ -1165,74 +1162,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "helper:voucher": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:tiered_approval"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/voucher.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "account_items",
-    "voucher_attachments"
-   ],
-   "tables_w": [
-    "voucher_lines",
-    "vouchers_all"
-   ]
-  },
-  "helper:voucher_attachments": {
-   "api_prefixes": [],
-   "dynamic_sql": true,
-   "imports": [
-    "helper:uploads",
-    "plat:registry"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/voucher_attachments.py",
-   "tables_ddl": [],
-   "tables_named": [
-    "voucher_attachments"
-   ],
-   "tables_r": [
-    "vouchers_all"
-   ],
-   "tables_w": []
-  },
-  "helper:voucher_pdf": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "core:db",
-    "core:pdf_gen",
-    "helper:settings",
-    "helper:startup",
-    "helper:voucher",
-    "helper:voucher_attachments"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/voucher_pdf.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "voucher_attachments"
-   ],
-   "tables_w": []
-  },
-  "helper:voucher_template": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [],
-   "kind": "helper",
-   "path": "backend/helpers/voucher_template.py",
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_w": []
-  },
   "helper:xlsx_out": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -1257,7 +1186,7 @@
    "kind": "js",
    "path": "frontend/js/account-items.js",
    "routers_called": [
-    "router:account_items"
+    "mod:accounting/api/account_items"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1321,13 +1250,13 @@
    "kind": "js",
    "path": "frontend/js/case-management-close.js",
    "routers_called": [
+    "mod:accounting/api/vouchers",
     "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
     "router:quotations",
-    "router:system",
-    "router:vouchers"
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1424,10 +1353,10 @@
    "kind": "js",
    "path": "frontend/js/case-management-dispatch.js",
    "routers_called": [
+    "mod:accounting/api/accounting_export",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
-    "mod:subcontract/api/vendor_contractors",
-    "router:accounting_export"
+    "mod:subcontract/api/vendor_contractors"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1653,10 +1582,10 @@
    "kind": "js",
    "path": "frontend/js/cashier.js",
    "routers_called": [
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
-    "router:accounting_export",
     "router:quotations"
    ],
    "tables_r": [],
@@ -1728,9 +1657,9 @@
    "kind": "js",
    "path": "frontend/js/voucher.js",
    "routers_called": [
-    "router:account_items",
-    "router:system",
-    "router:vouchers"
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -1990,6 +1919,477 @@
    "kind": "js",
    "path": "frontend/static/ui.js",
    "routers_called": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:accounting/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:accounting/api/account_items": {
+   "api_prefixes": [
+    "/api/account-items"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/api/account_items.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_account_items",
+     "line": 142,
+     "method": "GET",
+     "path": "/api/account-items"
+    },
+    {
+     "func": "extend_account_item",
+     "line": 223,
+     "method": "POST",
+     "path": "/api/account-items"
+    },
+    {
+     "func": "set_account_item_active",
+     "line": 308,
+     "method": "PATCH",
+     "path": "/api/account-items/{code}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "account_items"
+   ],
+   "tables_w_transitive": [
+    "account_items",
+    "audit_log",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:accounting/api/accounting_export": {
+   "api_prefixes": [
+    "/api/reports",
+    "/api/settings"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:company_identity",
+    "helper:legal_params",
+    "helper:module_registry",
+    "helper:part_catalog",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:xlsx_out"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:company_identity",
+    "helper:legal_params",
+    "helper:part_catalog",
+    "helper:settings",
+    "helper:xlsx_out",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/api/accounting_export.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "get_t100_export_config",
+     "line": 213,
+     "method": "GET",
+     "path": "/api/settings/t100-export-config"
+    },
+    {
+     "func": "set_t100_export_config",
+     "line": 230,
+     "method": "PUT",
+     "path": "/api/settings/t100-export-config"
+    },
+    {
+     "func": "t100_export_vouchers",
+     "line": 476,
+     "method": "GET",
+     "path": "/api/reports/t100-export/vouchers"
+    },
+    {
+     "func": "t100_export_preview",
+     "line": 500,
+     "method": "GET",
+     "path": "/api/reports/t100-export/preview"
+    },
+    {
+     "func": "t100_export_confirm",
+     "line": 529,
+     "method": "POST",
+     "path": "/api/reports/t100-export/confirm"
+    },
+    {
+     "func": "t100_export_confirmed_list",
+     "line": 556,
+     "method": "GET",
+     "path": "/api/reports/t100-export/confirmed"
+    },
+    {
+     "func": "t100_export_unconfirm",
+     "line": 590,
+     "method": "POST",
+     "path": "/api/reports/t100-export/unconfirm"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "account_items"
+   ],
+   "tables_r_transitive": [
+    "account_items",
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "t100_export_confirmations"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "system_settings",
+    "t100_export_confirmations"
+   ]
+  },
+  "mod:accounting/api/vouchers": {
+   "api_prefixes": [
+    "/api/vouchers"
+   ],
+   "dynamic_sql": true,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:edit_log",
+    "helper:module_registry",
+    "helper:row_access",
+    "helper:settings",
+    "helper:startup",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_attachments",
+    "mod:accounting/voucher_pdf"
+   ],
+   "imports": [
+    "core:db",
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:edit_log",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_attachments",
+    "mod:accounting/voucher_pdf",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/api/vouchers.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "create_voucher",
+     "line": 353,
+     "method": "POST",
+     "path": "/api/vouchers"
+    },
+    {
+     "func": "list_vouchers",
+     "line": 404,
+     "method": "GET",
+     "path": "/api/vouchers"
+    },
+    {
+     "func": "vouchers_by_case",
+     "line": 628,
+     "method": "GET",
+     "path": "/api/vouchers/by-case/{quote_no}"
+    },
+    {
+     "func": "summary_sources",
+     "line": 655,
+     "method": "GET",
+     "path": "/api/vouchers/summary-sources"
+    },
+    {
+     "func": "line_source_files_endpoint",
+     "line": 786,
+     "method": "GET",
+     "path": "/api/vouchers/line-source-files"
+    },
+    {
+     "func": "line_source_file_endpoint",
+     "line": 813,
+     "method": "GET",
+     "path": "/api/vouchers/line-source-file"
+    },
+    {
+     "func": "read_voucher",
+     "line": 846,
+     "method": "GET",
+     "path": "/api/vouchers/{voucher_id}"
+    },
+    {
+     "func": "voucher_edit_log",
+     "line": 906,
+     "method": "GET",
+     "path": "/api/vouchers/{voucher_id}/edit-log"
+    },
+    {
+     "func": "submit_voucher",
+     "line": 941,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/submit"
+    },
+    {
+     "func": "approve_voucher",
+     "line": 1007,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/approve"
+    },
+    {
+     "func": "send_back_voucher",
+     "line": 1091,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/send-back"
+    },
+    {
+     "func": "void_voucher",
+     "line": 1165,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/void"
+    },
+    {
+     "func": "post_voucher_endpoint",
+     "line": 1239,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/post"
+    },
+    {
+     "func": "update_voucher",
+     "line": 1274,
+     "method": "PUT",
+     "path": "/api/vouchers/{voucher_id}"
+    },
+    {
+     "func": "add_voucher_attachments",
+     "line": 1457,
+     "method": "POST",
+     "path": "/api/vouchers/{voucher_id}/attachments"
+    },
+    {
+     "func": "delete_voucher_attachment",
+     "line": 1565,
+     "method": "DELETE",
+     "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
+    },
+    {
+     "func": "download_voucher_attachment",
+     "line": 1634,
+     "method": "GET",
+     "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
+    },
+    {
+     "func": "download_voucher_pdf",
+     "line": 1737,
+     "method": "GET",
+     "path": "/api/vouchers/{voucher_id}/pdf-download"
+    },
+    {
+     "func": "preview_voucher",
+     "line": 1810,
+     "method": "GET",
+     "path": "/api/vouchers/{voucher_id}/preview"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [
+    "voucher_edit_log",
+    "vouchers"
+   ],
+   "tables_r": [
+    "case_extra_expenses",
+    "users",
+    "voucher_edit_log",
+    "vouchers"
+   ],
+   "tables_r_transitive": [
+    "account_items",
+    "approval_delegates",
+    "case_extra_expenses",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users",
+    "voucher_attachments",
+    "voucher_edit_log",
+    "vouchers",
+    "vouchers_all"
+   ],
+   "tables_w": [
+    "voucher_attachments",
+    "voucher_lines",
+    "vouchers_all"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "login_rate_limit",
+    "module_versions",
+    "notifications",
+    "sessions",
+    "system_settings",
+    "users",
+    "voucher_attachments",
+    "voucher_lines",
+    "vouchers_all"
+   ]
+  },
+  "mod:accounting/voucher": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:tiered_approval"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/voucher.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "account_items",
+    "voucher_attachments"
+   ],
+   "tables_w": [
+    "voucher_lines",
+    "vouchers_all"
+   ]
+  },
+  "mod:accounting/voucher_attachments": {
+   "api_prefixes": [],
+   "dynamic_sql": true,
+   "imports": [
+    "helper:case_access",
+    "helper:uploads",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/voucher_attachments.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "voucher_attachments"
+   ],
+   "tables_r": [
+    "vouchers_all"
+   ],
+   "tables_w": []
+  },
+  "mod:accounting/voucher_pdf": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:settings",
+    "helper:startup",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_attachments"
+   ],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/voucher_pdf.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "voucher_attachments"
+   ],
+   "tables_w": []
+  },
+  "mod:accounting/voucher_template": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "mod",
+   "module_key": "accounting",
+   "path": "backend/modules/accounting/voucher_template.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
    "tables_r": [],
    "tables_w": []
   },
@@ -5134,7 +5534,7 @@
    "path": "frontend/pages/account-items.html",
    "routers_called": [],
    "routers_called_effective": [
-    "router:account_items"
+    "mod:accounting/api/account_items"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5247,6 +5647,7 @@
    "kind": "page",
    "path": "frontend/pages/approval-queue.html",
    "routers_called": [
+    "mod:accounting/api/vouchers",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:payroll/api/bonus",
@@ -5256,10 +5657,10 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:quotations",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "routers_called_effective": [
+    "mod:accounting/api/vouchers",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:payroll/api/bonus",
@@ -5269,8 +5670,7 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:quotations",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5402,6 +5802,8 @@
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:daily_tasks/api",
@@ -5411,7 +5813,6 @@
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/inventory",
     "mod:supply/api/shipping_notes",
-    "router:accounting_export",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
@@ -5422,8 +5823,7 @@
     "router:parts",
     "router:quotations",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5478,10 +5878,10 @@
    "path": "frontend/pages/cashier.html",
    "routers_called": [],
    "routers_called_effective": [
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
-    "router:accounting_export",
     "router:quotations"
    ],
    "tables_r": [],
@@ -5929,16 +6329,16 @@
    "kind": "page",
    "path": "frontend/pages/inventory.html",
    "routers_called": [
+    "mod:accounting/api/accounting_export",
     "mod:supply/api/inventory",
     "mod:supply/api/suppliers",
-    "router:accounting_export",
     "router:auth",
     "router:parts"
    ],
    "routers_called_effective": [
+    "mod:accounting/api/accounting_export",
     "mod:supply/api/inventory",
     "mod:supply/api/suppliers",
-    "router:accounting_export",
     "router:auth",
     "router:parts"
    ],
@@ -6993,9 +7393,9 @@
    "path": "frontend/pages/voucher.html",
    "routers_called": [],
    "routers_called_effective": [
-    "router:account_items",
-    "router:system",
-    "router:vouchers"
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": []
@@ -7231,174 +7631,6 @@
    ],
    "tables_w": [
     "system_settings"
-   ]
-  },
-  "router:account_items": {
-   "api_prefixes": [
-    "/api/account-items"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:module_registry",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth"
-   ],
-   "kind": "router",
-   "path": "backend/routers/account_items.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_account_items",
-     "line": 142,
-     "method": "GET",
-     "path": "/api/account-items"
-    },
-    {
-     "func": "extend_account_item",
-     "line": 223,
-     "method": "POST",
-     "path": "/api/account-items"
-    },
-    {
-     "func": "set_account_item_active",
-     "line": 308,
-     "method": "PATCH",
-     "path": "/api/account-items/{code}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "account_items"
-   ],
-   "tables_w_transitive": [
-    "account_items",
-    "audit_log",
-    "notifications",
-    "system_settings"
-   ]
-  },
-  "router:accounting_export": {
-   "api_prefixes": [
-    "/api/reports",
-    "/api/settings"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:company_identity",
-    "helper:legal_params",
-    "helper:module_registry",
-    "helper:part_catalog",
-    "helper:settings",
-    "helper:tiered_approval",
-    "helper:xlsx_out"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:company_identity",
-    "helper:legal_params",
-    "helper:part_catalog",
-    "helper:settings",
-    "helper:xlsx_out",
-    "plat:registry"
-   ],
-   "kind": "router",
-   "path": "backend/routers/accounting_export.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "get_t100_export_config",
-     "line": 213,
-     "method": "GET",
-     "path": "/api/settings/t100-export-config"
-    },
-    {
-     "func": "set_t100_export_config",
-     "line": 230,
-     "method": "PUT",
-     "path": "/api/settings/t100-export-config"
-    },
-    {
-     "func": "t100_export_vouchers",
-     "line": 476,
-     "method": "GET",
-     "path": "/api/reports/t100-export/vouchers"
-    },
-    {
-     "func": "t100_export_preview",
-     "line": 500,
-     "method": "GET",
-     "path": "/api/reports/t100-export/preview"
-    },
-    {
-     "func": "t100_export_confirm",
-     "line": 529,
-     "method": "POST",
-     "path": "/api/reports/t100-export/confirm"
-    },
-    {
-     "func": "t100_export_confirmed_list",
-     "line": 556,
-     "method": "GET",
-     "path": "/api/reports/t100-export/confirmed"
-    },
-    {
-     "func": "t100_export_unconfirm",
-     "line": 590,
-     "method": "POST",
-     "path": "/api/reports/t100-export/unconfirm"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "account_items"
-   ],
-   "tables_r_transitive": [
-    "account_items",
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "t100_export_confirmations"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "system_settings",
-    "t100_export_confirmations"
    ]
   },
   "router:approval_delegates": {
@@ -9552,8 +9784,7 @@
     "plat:txn",
     "router:case_extra_expenses",
     "router:completion_notes",
-    "router:item_reads",
-    "router:vouchers"
+    "router:item_reads"
    ],
    "kind": "router",
    "path": "backend/routers/quotations.py",
@@ -9657,343 +9888,343 @@
     },
     {
      "func": "case_close_gates",
-     "line": 2248,
+     "line": 2251,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2287,
+     "line": 2290,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2366,
+     "line": 2369,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2465,
+     "line": 2468,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2514,
+     "line": 2517,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2630,
+     "line": 2633,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 2951,
+     "line": 2954,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 2974,
+     "line": 2977,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3022,
+     "line": 3025,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3256,
+     "line": 3259,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3274,
+     "line": 3277,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3303,
+     "line": 3306,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3357,
+     "line": 3360,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3398,
+     "line": 3401,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3422,
+     "line": 3425,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3450,
+     "line": 3453,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3473,
+     "line": 3476,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3506,
+     "line": 3509,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3532,
+     "line": 3535,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3563,
+     "line": 3566,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3586,
+     "line": 3589,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3675,
+     "line": 3678,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 3787,
+     "line": 3790,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 3830,
+     "line": 3833,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 3870,
+     "line": 3873,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 3909,
+     "line": 3912,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 3934,
+     "line": 3937,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 3975,
+     "line": 3978,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4000,
+     "line": 4003,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4032,
+     "line": 4035,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4061,
+     "line": 4064,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_settlement",
-     "line": 4106,
+     "line": 4109,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 4130,
+     "line": 4133,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "get_finance_summary",
-     "line": 4193,
+     "line": 4196,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "get_approval_queue",
-     "line": 4421,
+     "line": 4424,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 4666,
+     "line": 4669,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approve_quotation",
-     "line": 4753,
+     "line": 4756,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4866,
+     "line": 4869,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4951,
+     "line": 4954,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5016,
+     "line": 5019,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5152,
+     "line": 5155,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5234,
+     "line": 5237,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5265,
+     "line": 5268,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5296,
+     "line": 5299,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5337,
+     "line": 5340,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5395,
+     "line": 5398,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5460,
+     "line": 5463,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5501,
+     "line": 5504,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5537,
+     "line": 5540,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_queue_detail",
-     "line": 5864,
+     "line": 5867,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 6126,
+     "line": 6129,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     },
     {
      "func": "approval_history",
-     "line": 6241,
+     "line": 6244,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6361,
+     "line": 6364,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6428,
+     "line": 6431,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6585,
+     "line": 6588,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6599,
+     "line": 6602,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6630,
+     "line": 6633,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -10706,211 +10937,6 @@
     "system_settings"
    ]
   },
-  "router:vouchers": {
-   "api_prefixes": [
-    "/api/vouchers"
-   ],
-   "dynamic_sql": true,
-   "helpers_transitive": [
-    "helper:approval_queue",
-    "helper:audit",
-    "helper:auth",
-    "helper:edit_log",
-    "helper:module_registry",
-    "helper:settings",
-    "helper:startup",
-    "helper:tiered_approval",
-    "helper:uploads",
-    "helper:voucher",
-    "helper:voucher_attachments",
-    "helper:voucher_pdf"
-   ],
-   "imports": [
-    "core:db",
-    "helper:approval_queue",
-    "helper:audit",
-    "helper:auth",
-    "helper:edit_log",
-    "helper:settings",
-    "helper:tiered_approval",
-    "helper:uploads",
-    "helper:voucher",
-    "helper:voucher_attachments",
-    "helper:voucher_pdf",
-    "plat:registry",
-    "router:accounting_export"
-   ],
-   "kind": "router",
-   "path": "backend/routers/vouchers.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "create_voucher",
-     "line": 352,
-     "method": "POST",
-     "path": "/api/vouchers"
-    },
-    {
-     "func": "list_vouchers",
-     "line": 403,
-     "method": "GET",
-     "path": "/api/vouchers"
-    },
-    {
-     "func": "vouchers_by_case",
-     "line": 607,
-     "method": "GET",
-     "path": "/api/vouchers/by-case/{quote_no}"
-    },
-    {
-     "func": "summary_sources",
-     "line": 632,
-     "method": "GET",
-     "path": "/api/vouchers/summary-sources"
-    },
-    {
-     "func": "line_source_files_endpoint",
-     "line": 750,
-     "method": "GET",
-     "path": "/api/vouchers/line-source-files"
-    },
-    {
-     "func": "line_source_file_endpoint",
-     "line": 775,
-     "method": "GET",
-     "path": "/api/vouchers/line-source-file"
-    },
-    {
-     "func": "read_voucher",
-     "line": 806,
-     "method": "GET",
-     "path": "/api/vouchers/{voucher_id}"
-    },
-    {
-     "func": "voucher_edit_log",
-     "line": 866,
-     "method": "GET",
-     "path": "/api/vouchers/{voucher_id}/edit-log"
-    },
-    {
-     "func": "submit_voucher",
-     "line": 901,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/submit"
-    },
-    {
-     "func": "approve_voucher",
-     "line": 967,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/approve"
-    },
-    {
-     "func": "send_back_voucher",
-     "line": 1051,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/send-back"
-    },
-    {
-     "func": "void_voucher",
-     "line": 1125,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/void"
-    },
-    {
-     "func": "post_voucher_endpoint",
-     "line": 1199,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/post"
-    },
-    {
-     "func": "update_voucher",
-     "line": 1234,
-     "method": "PUT",
-     "path": "/api/vouchers/{voucher_id}"
-    },
-    {
-     "func": "add_voucher_attachments",
-     "line": 1417,
-     "method": "POST",
-     "path": "/api/vouchers/{voucher_id}/attachments"
-    },
-    {
-     "func": "delete_voucher_attachment",
-     "line": 1525,
-     "method": "DELETE",
-     "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
-    },
-    {
-     "func": "download_voucher_attachment",
-     "line": 1594,
-     "method": "GET",
-     "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
-    },
-    {
-     "func": "download_voucher_pdf",
-     "line": 1697,
-     "method": "GET",
-     "path": "/api/vouchers/{voucher_id}/pdf-download"
-    },
-    {
-     "func": "preview_voucher",
-     "line": 1770,
-     "method": "GET",
-     "path": "/api/vouchers/{voucher_id}/preview"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [
-    "voucher_edit_log",
-    "vouchers"
-   ],
-   "tables_r": [
-    "case_extra_expenses",
-    "contractor_dispatches",
-    "quotations",
-    "users",
-    "vendor_contractors",
-    "voucher_edit_log",
-    "vouchers"
-   ],
-   "tables_r_transitive": [
-    "account_items",
-    "approval_delegates",
-    "case_extra_expenses",
-    "contractor_dispatches",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users",
-    "vendor_contractors",
-    "voucher_attachments",
-    "voucher_edit_log",
-    "vouchers",
-    "vouchers_all"
-   ],
-   "tables_w": [
-    "voucher_attachments",
-    "voucher_lines",
-    "vouchers_all"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "login_rate_limit",
-    "module_versions",
-    "notifications",
-    "sessions",
-    "system_settings",
-    "users",
-    "voucher_attachments",
-    "voucher_lines",
-    "vouchers_all"
-   ]
-  },
   "table:access_categories": {
    "api_prefixes": [],
    "imports": [],
@@ -10971,14 +10997,14 @@
    "path": "backend/db.py:4290",
    "readers": [
     "core:archive",
-    "helper:voucher",
-    "router:accounting_export"
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/voucher"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "core:db",
-    "router:account_items"
+    "mod:accounting/api/account_items"
    ]
   },
   "table:approval_delegates": {
@@ -11337,8 +11363,8 @@
     "helper:case_attachments",
     "helper:quotations",
     "helper:recognition",
-    "router:quotations",
-    "router:vouchers"
+    "mod:accounting/api/vouchers",
+    "router:quotations"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -11441,8 +11467,7 @@
     "core:pdf_gen",
     "helper:recognition",
     "mod:analytics/api/reports",
-    "mod:subcontract/attachments",
-    "router:vouchers"
+    "mod:subcontract/attachments"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12274,8 +12299,7 @@
     "router:item_reads",
     "router:material_orders",
     "router:search",
-    "router:system",
-    "router:vouchers"
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12514,7 +12538,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:accounting_export"
+    "mod:accounting/api/accounting_export"
    ]
   },
   "table:tender_fetch_log": {
@@ -12677,6 +12701,7 @@
     "helper:recognition",
     "helper:system_checks",
     "helper:tiered_approval",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:arap/receivables",
@@ -12691,8 +12716,7 @@
     "router:mail_settings",
     "router:org_structure",
     "router:quotations",
-    "router:system",
-    "router:vouchers"
+    "router:system"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12717,8 +12741,7 @@
     "core:pdf_gen",
     "helper:recognition",
     "mod:analytics/api/reports",
-    "mod:subcontract/api/contractor_vouchers",
-    "router:vouchers"
+    "mod:subcontract/api/contractor_vouchers"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12732,18 +12755,18 @@
    "kind": "table",
    "named_by": [
     "core:db",
-    "helper:voucher_attachments"
+    "mod:accounting/voucher_attachments"
    ],
    "path": "backend/db.py:5098",
    "readers": [
     "core:archive",
-    "helper:voucher",
-    "helper:voucher_pdf"
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_pdf"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:vouchers"
+    "mod:accounting/api/vouchers"
    ]
   },
   "table:voucher_edit_log": {
@@ -12752,12 +12775,12 @@
    "kind": "table",
    "named_by": [
     "helper:edit_log",
-    "router:vouchers"
+    "mod:accounting/api/vouchers"
    ],
    "path": "backend/db.py:5588",
    "readers": [
     "core:archive",
-    "router:vouchers"
+    "mod:accounting/api/vouchers"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12776,8 +12799,8 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:voucher",
-    "router:vouchers"
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
    ]
   },
   "table:voucher_template_versions": {
@@ -12816,13 +12839,13 @@
    "kind": "table",
    "named_by": [
     "core:trail",
+    "mod:accounting/api/vouchers",
     "mod:payroll/api/bonus",
-    "router:quotations",
-    "router:vouchers"
+    "router:quotations"
    ],
    "path": "backend/db.py:5552",
    "readers": [
-    "router:vouchers"
+    "mod:accounting/api/vouchers"
    ],
    "tables_r": [],
    "tables_w": [],
@@ -12837,13 +12860,13 @@
    "readers": [
     "core:archive",
     "core:db",
-    "helper:voucher_attachments"
+    "mod:accounting/voucher_attachments"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "helper:voucher",
-    "router:vouchers"
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
    ]
   },
   "table:webauthn_credentials": {

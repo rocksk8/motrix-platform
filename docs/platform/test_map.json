@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 680,
-  "unmapped": 7,
+  "tests": 688,
+  "unmapped": 8,
   "kinds": {
-   "audit": 89,
-   "api": 370,
-   "unit": 57,
-   "e2e": 164
+   "api": 375,
+   "e2e": 164,
+   "audit": 90,
+   "unit": 59
   },
   "routes": 571
  },
@@ -19,9 +19,1562 @@
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py",
-  "backend/tests/test_netguard_2026_09_21.py"
+  "backend/tests/test_netguard_2026_09_21.py",
+  "backend/tests/test_stock_batch_payment_2026_09_01.py"
  ],
  "tests": {
+  "backend/modules/accounting/tests/test_account_tree_page_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/data/account_items_112.json",
+    "mod:accounting/api/account_items",
+    "page:pages/account-items.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/accounting/api/account_items.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/account_items.py"
+    ],
+    "page": [
+     "frontend/pages/account-items.html"
+    ],
+    "path": [
+     "backend/data/account_items_112.json"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_approval_settings_unify_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/test_approval_settings_unify_2026_09_23.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/test_approval_settings_unify_2026_09_23.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_as3_voucher_approval_queue_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "router:quotations",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/routers/quotations.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_case_attachments_scope_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/subcontract/",
+    "helper:uploads",
+    "mod:accounting/voucher_attachments",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/voucher_attachments.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_case_attachments_used_marker_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher_attachments"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/voucher_attachments.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_case_cross_module_links_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/test_case_cross_module_links_2026_09_24.py",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_case_cross_module_links_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_custom_account_items_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
+    "dir:frontend/js/",
+    "js:js/account-items.js",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/accounting_export.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/account_items.py"
+    ],
+    "page": [
+     "frontend/js/account-items.js"
+    ],
+    "path": [
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/account_items.py",
+     "frontend/js/",
+     "frontend/js/account-items.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_account_tree_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "js:js/account-items.js",
+    "page:pages/account-items.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/js/account-items.js",
+     "frontend/pages/account-items.html"
+    ],
+    "path": [
+     "frontend/pages/account-items.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/modules/payroll/",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_jv22_edit_history_page_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "helper:uploads",
+    "mod:accounting/tests/test_e2e_voucher_source_block_below_2026_09_25",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_feedback_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "js:static/sidebar.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html",
+     "frontend/static/sidebar.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_source_block_below_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_summary_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_voucher_summary_panel_side_by_side_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_em5_voucher_chain_unreadable_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_journal_voucher_create_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_journal_voucher_flow_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv13_voucher_signature_display_names_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv22_voucher_edit_history_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv24_void_reopen_lineage_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher_attachments"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/voucher_attachments.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "path": [
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv26_voucher_lines_inserts_agree_2026_09_24.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv28_voucher_attachment_preview_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv29_voucher_category_auto_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/voucher.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv30_voucher_approval_permission_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv31_voucher_posting_signature_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv32_voucher_amount_input_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv33_voucher_summary_panel_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/tests/test_jv28_voucher_attachment_preview_2026_09_24"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/tests/test_jv28_voucher_attachment_preview_2026_09_24.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv34_voucher_input_and_print_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv35_voucher_reassign_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
+    "mod:accounting/api/vouchers",
+    "page:pages/approval-queue.html",
+    "router:quotations",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/routers/quotations.py",
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv36_voucher_line_source_files_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "helper:uploads",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_jv4_voucher_page_under_cashier_2026_09_24.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
+    "file:backend/tests/_menu_decl.py",
+    "js:js/voucher.js",
+    "js:static/sidebar.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/cashier.html",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/_menu_decl.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/cashier.html",
+     "frontend/pages/voucher.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_module_history_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_routes.py",
+    "file:backend/tests/test_module_history_2026_09_23.py",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_routes.py",
+     "backend/tests/test_module_history_2026_09_23.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_money_round_half_up_2026_09_26.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/accounting_export.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_stock_batch_payment_2026_09_01.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/accounting_export"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/accounting_export.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_t100_config_complete_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
+    "helper:part_catalog",
+    "js:js/cashier.js",
+    "mod:accounting/api/accounting_export",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/part_catalog.py",
+     "backend/modules/accounting/api/accounting_export.py"
+    ],
+    "page": [
+     "frontend/js/cashier.js",
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/accounting_export.py",
+     "frontend/js/cashier.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_t100_export_2026_09_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/accounting_export",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_attachment_download_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_attachment_list_in_modal_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "dir:frontend/js/",
+    "js:js/voucher.js",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_attachments_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:frontend/js/",
+    "helper:uploads",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_attachments",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/uploads.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py",
+     "backend/modules/accounting/voucher_attachments.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_edit_lines_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:frontend/js/",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_expense_brought_in_once_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/tests/test_jv36_voucher_line_source_files_2026_09_24",
+    "mod:accounting/voucher_attachments"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/tests/test_jv36_voucher_line_source_files_2026_09_24.py",
+     "backend/modules/accounting/voucher_attachments.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_export_gate_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_export_only_in_preview_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "js:js/voucher.js",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_export_watermark_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_freeze_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_no_category_selector_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_pdf_export_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:frontend/js/",
+    "helper:uploads",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/uploads.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_preview_export_feedback_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_preview_iframe_height_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:frontend/css/style.css",
+    "mod:accounting/api/vouchers"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/css/style.css"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_revision_no_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_state_machine_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_summary_length_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/pages/voucher.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_summary_sources_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:frontend/js/",
+    "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
+    "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/voucher.js",
+     "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/voucher.js"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_template_placeholders_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_template"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/accounting/voucher.py",
+     "backend/modules/accounting/voucher_template.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_voucher_voided_filter_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_xlsx_out_l1_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "file:backend/tests/test_xlsx_out_l1_2026_09_25.py",
+    "helper:company_identity",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/company_identity.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/tests/test_xlsx_out_l1_2026_09_25.py"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "module": "accounting"
+  },
   "backend/modules/analytics/tests/test_bonus_award_2026_09_23.py": {
    "kind": "audit",
    "units": [
@@ -1232,33 +2785,6 @@
    },
    "module": "arap"
   },
-  "backend/modules/arap/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "dir:backend/modules/arap/",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/cashier.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
-    ],
-    "module_dir": [
-     "backend/modules/arap/"
-    ]
-   },
-   "module": "arap"
-  },
   "backend/modules/arap/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -1480,16 +3006,17 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/arap/",
-    "file:backend/routers/__init__.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
     "mod:analytics/api/reports",
     "mod:arap/__init__",
     "mod:arap/receivables",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:accounting_export"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -1497,16 +3024,17 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/arap/__init__.py",
-     "backend/modules/arap/receivables.py",
-     "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/arap/receivables.py"
     ],
     "api": [
-     "backend/modules/analytics/api/reports.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/analytics/api/reports.py"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/analytics/"
     ],
     "module_dir": [
@@ -1560,14 +3088,15 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
-    "file:backend/routers/__init__.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/__init__",
     "mod:arap/api/cashier",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:accounting_export"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -1575,14 +3104,17 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/arap/api/__init__.py",
-     "backend/modules/arap/api/cashier.py",
-     "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/arap/api/cashier.py"
     ],
     "api": [
-     "backend/modules/arap/api/cashier.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/arap/"
@@ -1921,7 +3453,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "page:index.html",
     "page:pages/customers.html",
     "page:pages/dev-crm.html",
@@ -1930,7 +3462,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -2269,12 +3801,16 @@
     "core:db",
     "dir:backend/modules/payroll/",
     "dir:backend/modules/payroll/api/",
+    "mod:accounting/api/vouchers",
     "mod:payroll/api/bonus",
-    "router:system",
-    "router:vouchers"
+    "plat:__init__",
+    "plat:source_tree",
+    "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
@@ -2282,10 +3818,10 @@
      "backend/routers/system.py"
     ],
     "path": [
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/payroll/",
      "backend/modules/payroll/api/",
-     "backend/modules/payroll/api/bonus.py",
-     "backend/routers/vouchers.py"
+     "backend/modules/payroll/api/bonus.py"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -2830,6 +4366,7 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "dir:backend/modules/payroll/api/",
     "dir:frontend/pages/",
@@ -2841,11 +4378,16 @@
     "mod:payroll/bonus",
     "page:pages/account-items.html",
     "page:pages/bonus.html",
+    "page:pages/parts.html",
     "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/modules/payroll/bonus.py",
      "backend/tests/_menu_decl.py"
     ],
@@ -2856,11 +4398,13 @@
      "frontend/js/bonus.js",
      "frontend/pages/account-items.html",
      "frontend/pages/bonus.html",
+     "frontend/pages/parts.html",
      "frontend/pages/voucher.html",
      "frontend/static/sidebar.js"
     ],
     "path": [
      "backend/modules/",
+     "backend/modules/accounting/",
      "backend/modules/payroll/",
      "backend/modules/payroll/api/",
      "backend/modules/payroll/api/bonus.py",
@@ -2906,6 +4450,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
     "dir:backend/modules/payroll/",
     "file:backend/helpers/__init__.py",
@@ -2915,6 +4460,7 @@
     "helper:notification_prefs",
     "js:js/bonus.js",
     "js:js/cashier.js",
+    "mod:accounting/api/vouchers",
     "mod:arap/api/cashier",
     "mod:payroll/__init__",
     "mod:payroll/api/bonus",
@@ -2927,8 +4473,7 @@
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:mail_settings",
-    "router:vouchers"
+    "router:mail_settings"
    ],
    "evidence": {
     "import": [
@@ -2947,10 +4492,10 @@
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/arap/api/cashier.py",
      "backend/modules/payroll/api/bonus.py",
-     "backend/routers/mail_settings.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/mail_settings.py"
     ],
     "page": [
      "frontend/js/bonus.js",
@@ -2960,6 +4505,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/arap/",
      "frontend/js/bonus.js",
      "frontend/js/cashier.js"
@@ -3178,38 +4724,6 @@
      "backend/modules/payroll/"
     ]
    },
-   "module": "payroll"
-  },
-  "backend/modules/payroll/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "dir:backend/modules/payroll/",
-    "mod:payroll/api/bonus",
-    "mod:payroll/tests/_bonus_insure",
-    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
-    "page:pages/bonus.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/payroll/tests/_bonus_insure.py",
-     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py"
-    ],
-    "api": [
-     "backend/modules/payroll/api/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "frontend/pages/bonus.html"
-    ],
-    "module_dir": [
-     "backend/modules/payroll/"
-    ]
-   },
-   "login_fixture": true,
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_e2e_payroll_legal_params_r1_2026_09_25.py": {
@@ -3559,11 +5073,13 @@
    "units": [
     "core:db",
     "dir:backend/modules/",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "dir:docs/platform/",
     "dir:frontend/pages/",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
     "file:docs/platform/modules.json",
-    "helper:voucher_pdf",
+    "mod:accounting/voucher_pdf",
     "mod:payroll/__init__",
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_pdf",
@@ -3571,19 +5087,22 @@
     "mod:payroll/tests/test_bonus_case_api_2026_09_24",
     "page:pages/bonus.html",
     "plat:__init__",
-    "plat:registry"
+    "plat:registry",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/helpers/voucher_pdf.py",
+     "backend/modules/accounting/voucher_pdf.py",
      "backend/modules/payroll/__init__.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/payroll/bonus_pdf.py",
      "backend/modules/payroll/tests/_bonus_insure.py",
-     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
      "backend/modules/payroll/api/bonus.py"
@@ -3593,6 +5112,7 @@
     ],
     "path": [
      "backend/modules/",
+     "backend/modules/accounting/",
      "docs/platform/",
      "docs/platform/modules.json",
      "frontend/pages/",
@@ -3932,22 +5452,28 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/subcontract/",
     "helper:recognition",
+    "mod:accounting/api/vouchers",
     "plat:__init__",
     "plat:registry",
-    "router:vouchers"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/recognition.py",
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py"
     ],
     "api": [
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4223,9 +5749,9 @@
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_map_cache_warm.py",
     "file:backend/tests/_map_tiles.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:geo",
     "js:static/record-link.js",
     "page:pages/case-management.html",
@@ -4245,9 +5771,9 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py",
      "backend/tests/_map_cache_warm.py",
-     "backend/tests/_map_tiles.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_map_tiles.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
@@ -4308,6 +5834,8 @@
     "dir:backend/modules/subcontract/",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
@@ -4320,7 +5848,6 @@
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
-    "router:account_items",
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
@@ -4334,8 +5861,7 @@
     "router:quotations",
     "router:search",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "evidence": {
     "import": [
@@ -4344,6 +5870,8 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
@@ -4356,7 +5884,6 @@
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
-     "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
@@ -4370,8 +5897,7 @@
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
-     "backend/routers/uploads.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/uploads.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4457,17 +5983,18 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/subcontract/api/",
-    "file:backend/routers/__init__.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "mod:subcontract/api/__init__",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:accounting_export",
     "router:quotations"
    ],
    "evidence": {
@@ -4476,18 +6003,19 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/subcontract/api/__init__.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "api": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/arap/api/cashier.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/quotations.py"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/arap/",
      "backend/modules/subcontract/",
      "backend/modules/subcontract/api/",
@@ -4504,24 +6032,28 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "mod:accounting/api/accounting_export",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
-    "plat:source_tree",
-    "router:accounting_export"
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/arap/"
     ],
     "module_dir": [
@@ -4732,26 +6264,34 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/supply/",
     "file:backend/tests/test_stock_batch_payment_2026_09_01.py",
+    "mod:accounting/api/accounting_export",
     "mod:supply/api/__init__",
     "mod:supply/api/inventory",
     "mod:supply/api/suppliers",
-    "router:accounting_export",
+    "plat:__init__",
+    "plat:source_tree",
     "router:parts"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/supply/api/__init__.py",
      "backend/modules/supply/api/inventory.py",
      "backend/tests/test_stock_batch_payment_2026_09_01.py"
     ],
     "api": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/supply/api/inventory.py",
      "backend/modules/supply/api/suppliers.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/parts.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/supply/"
@@ -5055,18 +6595,18 @@
    "units": [
     "core:db",
     "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_map_tiles.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/map.html",
     "page:pages/tender-radar.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_e2e_login.py",
      "backend/tests/_map_tiles.py",
-     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
     ],
     "page": [
      "frontend/pages/map.html",
@@ -5327,30 +6867,92 @@
    },
    "module": "tender_radar"
   },
+  "backend/tests/platform/test_accounting_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_accounting_foreign_reads.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/accounting/",
+    "dir:tools/platform/",
+    "file:backend/tests/platform/test_integration_points_registered.py",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/platform/test_integration_points_registered.py"
+    ],
+    "path": [
+     "backend/modules/accounting/",
+     "tools/platform/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/vouchers.py"
+   ]
+  },
   "backend/tests/platform/test_approval_parse_l1.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
     "dir:docs/platform/",
     "file:backend/helpers/__init__.py",
     "file:docs/platform/modules.json",
     "helper:quotations",
     "helper:tiered_approval",
-    "helper:voucher",
-    "router:quotations",
-    "router:vouchers"
+    "mod:accounting/__init__",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/quotations.py",
      "backend/helpers/tiered_approval.py",
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/__init__.py",
+     "backend/modules/accounting/voucher.py"
     ],
     "path": [
      "backend/helpers/tiered_approval.py",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/routers/quotations.py",
-     "backend/routers/vouchers.py",
      "docs/platform/",
      "docs/platform/modules.json"
     ]
@@ -5394,21 +6996,22 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:docs/platform/",
     "dir:tools/platform/",
-    "file:backend/helpers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "file:docs/platform/modules.json",
     "helper:uploads",
-    "helper:voucher_attachments",
+    "mod:accounting/__init__",
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher_attachments",
     "mod:arap/api/invoice_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
     "router:case_extra_expenses",
-    "router:quotations",
-    "router:vouchers"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
@@ -5416,19 +7019,20 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/helpers/__init__.py",
      "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py",
+     "backend/modules/accounting/__init__.py",
+     "backend/modules/accounting/voucher_attachments.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/routers/case_extra_expenses.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/quotations.py"
     ],
     "path": [
-     "backend/helpers/voucher_attachments.py",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/voucher_attachments.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/quotations.py",
@@ -6153,22 +7757,25 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "js:js/reports.js",
     "js:js/voucher.js",
+    "mod:accounting/api/vouchers",
     "page:pages/reports.html",
     "page:pages/voucher.html",
     "plat:__init__",
     "plat:registry",
-    "router:vouchers"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py"
     ],
     "page": [
      "frontend/js/reports.js",
@@ -6177,6 +7784,7 @@
      "frontend/pages/voucher.html"
     ],
     "path": [
+     "backend/modules/accounting/",
      "frontend/js/reports.js",
      "frontend/js/voucher.js",
      "frontend/pages/reports.html",
@@ -6255,6 +7863,8 @@
     "dir:tools/platform/",
     "file:backend/tests/_routes.py",
     "file:docs/platform/modules.json",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
@@ -6269,7 +7879,6 @@
     "mod:supply/api/suppliers",
     "page:index.html",
     "page:pages/bonus.html",
-    "router:account_items",
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
@@ -6284,14 +7893,15 @@
     "router:quotations",
     "router:search",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "evidence": {
     "import": [
      "backend/tests/_routes.py"
     ],
     "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
@@ -6304,7 +7914,6 @@
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
-     "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
@@ -6319,8 +7928,7 @@
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
-     "backend/routers/uploads.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/uploads.py"
     ],
     "page": [
      "frontend/index.html",
@@ -7240,29 +8848,30 @@
    "units": [
     "dir:backend/modules/analytics/",
     "dir:backend/modules/arap/",
-    "file:backend/routers/__init__.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
     "mod:analytics/api/__init__",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:accounting_export"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/core/source_tree.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/analytics/api/__init__.py",
-     "backend/modules/analytics/api/reports.py",
-     "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/analytics/api/reports.py"
     ],
     "api": [
-     "backend/modules/analytics/api/reports.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/analytics/api/reports.py"
     ],
     "path": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/analytics/",
      "backend/modules/arap/"
     ]
@@ -7313,19 +8922,19 @@
    "units": [
     "dir:tools/platform/",
     "file:docs/platform/modules.json",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
-    "router:accounting_export",
-    "router:system",
-    "router:vouchers"
+    "router:system"
    ],
    "evidence": {
     "api": [
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/arap/api/cashier.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/system.py"
     ],
     "path": [
      "docs/platform/modules.json",
@@ -7394,11 +9003,11 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:accounting_export",
     "router:quotations"
    ],
    "evidence": {
@@ -7414,8 +9023,8 @@
      "backend/routers/quotations.py"
     ],
     "path": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/arap/api/cashier.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -7425,29 +9034,35 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "file:backend/routers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
+    "mod:accounting/api/__init__",
+    "mod:accounting/api/accounting_export",
     "plat:__init__",
     "plat:registry",
-    "router:accounting_export",
+    "plat:source_tree",
     "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/accounting/api/__init__.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/quotations.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
-     "backend/routers/accounting_export.py",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/routers/quotations.py"
     ],
     "path": [
-     "backend/routers/accounting_export.py",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -7567,31 +9182,6 @@
      "backend/db.py"
     ]
    }
-  },
-  "backend/tests/test_account_tree_page_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/data/account_items_112.json",
-    "page:pages/account-items.html",
-    "router:account_items"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/account_items.py"
-    ],
-    "api": [
-     "backend/routers/account_items.py"
-    ],
-    "page": [
-     "frontend/pages/account-items.html"
-    ],
-    "path": [
-     "backend/data/account_items_112.json"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_alpine_double_init_2026_09_23.py": {
    "kind": "audit",
@@ -7724,15 +9314,19 @@
    "units": [
     "helper:custom_modules",
     "helper:tiered_approval",
-    "router:vouchers"
+    "mod:accounting/api/vouchers",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/tiered_approval.py"
     ],
     "path": [
      "backend/helpers/custom_modules.py",
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py"
     ]
    }
   },
@@ -7878,38 +9472,30 @@
   "backend/tests/test_approval_settings_unify_2026_09_23.py": {
    "kind": "api",
    "units": [
-    "core:db",
     "dir:frontend/js/",
     "dir:frontend/pages/",
     "helper:tiered_approval",
+    "mod:accounting/api/accounting_export",
     "page:pages/approval-settings.html",
-    "page:pages/voucher.html",
-    "router:accounting_export",
-    "router:system",
-    "router:vouchers"
+    "router:system"
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
      "backend/helpers/tiered_approval.py"
     ],
     "api": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/routers/system.py"
     ],
     "page": [
-     "frontend/pages/approval-settings.html",
-     "frontend/pages/voucher.html"
+     "frontend/pages/approval-settings.html"
     ],
     "path": [
      "frontend/js/",
      "frontend/pages/",
-     "frontend/pages/approval-settings.html",
-     "frontend/pages/voucher.html"
+     "frontend/pages/approval-settings.html"
     ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_archive_isolation_2026_09_22.py": {
    "kind": "audit",
@@ -7938,26 +9524,6 @@
      "backend/archive.py"
     ]
    }
-  },
-  "backend/tests/test_as3_voucher_approval_queue_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:quotations",
-    "router:system",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/quotations.py",
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_audit_account_permissions_2026_08_28.py": {
    "kind": "api",
@@ -8280,49 +9846,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_case_attachments_scope_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:backend/modules/subcontract/",
-    "helper:uploads",
-    "helper:voucher_attachments",
-    "plat:__init__",
-    "plat:source_tree"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/source_tree.py",
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
-    ],
-    "path": [
-     "backend/modules/subcontract/"
-    ]
-   }
-  },
-  "backend/tests/test_case_attachments_used_marker_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:uploads",
-    "helper:voucher_attachments",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_case_batch_ops_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -8343,24 +9866,24 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:accounting/api/vouchers",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
     "router:case_extra_expenses",
     "router:completion_notes",
-    "router:quotations",
-    "router:vouchers"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8443,17 +9966,18 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "file:backend/modules/payroll/module.json",
     "file:backend/tests/_e2e_login.py",
     "js:js/bonus.js",
+    "mod:accounting/api/vouchers",
     "page:pages/bonus.html",
     "page:pages/case-management.html",
     "page:pages/map.html",
     "page:pages/voucher.html",
     "plat:__init__",
-    "plat:source_tree",
-    "router:vouchers"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -8463,7 +9987,7 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
-     "backend/routers/vouchers.py"
+     "backend/modules/accounting/api/vouchers.py"
     ],
     "page": [
      "frontend/js/bonus.js",
@@ -8473,6 +9997,7 @@
      "frontend/pages/voucher.html"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/payroll/",
      "backend/modules/payroll/module.json"
     ]
@@ -8967,15 +10492,15 @@
     "js:js/reports.js",
     "js:static/auth-guard.js",
     "js:static/sidebar.js",
+    "mod:accounting/api/accounting_export",
     "mod:arap/api/cashier",
     "page:pages/cashier.html",
-    "page:pages/reports.html",
-    "router:accounting_export"
+    "page:pages/reports.html"
    ],
    "evidence": {
     "api": [
-     "backend/modules/arap/api/cashier.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/arap/api/cashier.py"
     ],
     "page": [
      "frontend/css/style.css",
@@ -9082,19 +10607,29 @@
   "backend/tests/test_comment_reintroduces_guarded_literal_2026_09_23.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
     "dir:frontend/js/",
     "dir:frontend/pages/",
-    "helper:voucher",
     "js:js/account-items.js",
-    "router:vouchers"
+    "mod:accounting/api/vouchers",
+    "mod:accounting/voucher",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "page": [
      "frontend/js/account-items.js"
     ],
     "path": [
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/vouchers.py",
+     "backend/modules/accounting/voucher.py",
      "frontend/js/",
      "frontend/pages/"
     ]
@@ -9289,34 +10824,6 @@
      "frontend/pages/tender-radar.html"
     ]
    }
-  },
-  "backend/tests/test_custom_account_items_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/js/",
-    "js:js/account-items.js",
-    "router:account_items",
-    "router:accounting_export"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/accounting_export.py"
-    ],
-    "api": [
-     "backend/routers/account_items.py"
-    ],
-    "page": [
-     "frontend/js/account-items.js"
-    ],
-    "path": [
-     "backend/routers/account_items.py",
-     "frontend/js/",
-     "frontend/js/account-items.js"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_custom_modules_engine_2026_09_25.py": {
    "kind": "api",
@@ -9591,28 +11098,6 @@
     ]
    },
    "login_fixture": true
-  },
-  "backend/tests/test_e2e_account_tree_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "js:js/account-items.js",
-    "page:pages/account-items.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/js/account-items.js",
-     "frontend/pages/account-items.html"
-    ],
-    "path": [
-     "frontend/pages/account-items.html"
-    ]
-   }
   },
   "backend/tests/test_e2e_approval_history_2026_09_14.py": {
    "kind": "e2e",
@@ -9956,13 +11441,13 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10621,7 +12106,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "js:static/sidebar.js",
     "page:pages/approval-queue.html",
     "page:pages/case-management.html",
@@ -10631,7 +12116,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html",
@@ -10759,28 +12244,6 @@
     "/api/o9-hang",
     "/api/slow"
    ]
-  },
-  "backend/tests/test_e2e_jv22_edit_history_page_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_e2e_legal_params_r1_2026_09_25.py": {
    "kind": "e2e",
@@ -11569,13 +13032,13 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -11657,7 +13120,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/customers.html",
@@ -11667,7 +13130,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -11704,137 +13167,28 @@
     ]
    }
   },
-  "backend/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py": {
-   "kind": "e2e",
+  "backend/tests/test_edge_profile_2026_09_25.py": {
+   "kind": "api",
    "units": [
-    "dir:backend/modules/subcontract/",
-    "file:backend/tests/platform/test_case_stage_connectors.py",
-    "file:backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
-    "helper:uploads",
+    "core:pdf_gen",
+    "dir:backend/modules/accounting/",
+    "file:backend/helpers/__init__.py",
+    "helper:startup",
+    "mod:accounting/voucher_pdf",
     "plat:__init__",
-    "plat:registry",
     "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/registry.py",
      "backend/core/source_tree.py",
-     "backend/helpers/uploads.py",
-     "backend/tests/platform/test_case_stage_connectors.py",
-     "backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py"
-    ],
-    "path": [
-     "backend/modules/subcontract/"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_voucher_feedback_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "js:static/sidebar.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html",
-     "frontend/static/sidebar.js"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "helper:uploads",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/tests/_e2e_login.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_e2e_voucher_summary_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_voucher_summary_panel_side_by_side_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_edge_profile_2026_09_25.py": {
-   "kind": "api",
-   "units": [
-    "core:pdf_gen",
-    "file:backend/helpers/__init__.py",
-    "helper:startup",
-    "helper:voucher_pdf"
-   ],
-   "evidence": {
-    "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/startup.py",
-     "backend/helpers/voucher_pdf.py",
+     "backend/modules/accounting/voucher_pdf.py",
      "backend/pdf_gen.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ]
    }
   },
@@ -11931,22 +13285,6 @@
      "backend/routers/auth.py"
     ]
    }
-  },
-  "backend/tests/test_em5_voucher_chain_unreadable_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_em6_machine_id_unreadable_2026_09_24.py": {
    "kind": "unit",
@@ -12485,348 +13823,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_journal_voucher_create_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "helper:voucher",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_journal_voucher_flow_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "router:vouchers"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv13_voucher_signature_display_names_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:voucher",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/voucher.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv22_voucher_edit_history_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_journal_voucher_flow_2026_09_23.py",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_journal_voucher_flow_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   }
-  },
-  "backend/tests/test_jv24_void_reopen_lineage_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:uploads",
-    "helper:voucher_attachments",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "path": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv26_voucher_lines_inserts_agree_2026_09_24.py": {
-   "kind": "audit",
-   "units": [
-    "dir:backend/routers/",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "path": [
-     "backend/routers/",
-     "backend/routers/vouchers.py"
-    ]
-   }
-  },
-  "backend/tests/test_jv28_voucher_attachment_preview_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "helper:uploads",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv29_voucher_category_auto_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "helper:voucher",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/voucher.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv30_voucher_approval_permission_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:system",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv31_voucher_posting_signature_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "page:pages/voucher.html",
-    "router:system",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv32_voucher_amount_input_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv33_voucher_summary_panel_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_jv28_voucher_attachment_preview_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_jv28_voucher_attachment_preview_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   }
-  },
-  "backend/tests/test_jv34_voucher_input_and_print_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv35_voucher_reassign_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
-    "page:pages/approval-queue.html",
-    "router:quotations",
-    "router:system",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
-    ],
-    "api": [
-     "backend/routers/quotations.py",
-     "backend/routers/system.py",
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/approval-queue.html"
-    ],
-    "path": [
-     "frontend/pages/approval-queue.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "helper:uploads",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_jv4_voucher_page_under_cashier_2026_09_24.py": {
-   "kind": "audit",
-   "units": [
-    "dir:backend/routers/",
-    "dir:frontend/pages/",
-    "file:backend/tests/_menu_decl.py",
-    "js:js/voucher.js",
-    "js:static/sidebar.js",
-    "page:pages/cashier.html",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_menu_decl.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/cashier.html",
-     "frontend/pages/voucher.html",
-     "frontend/static/sidebar.js"
-    ],
-    "path": [
-     "backend/routers/",
-     "backend/routers/vouchers.py",
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   }
-  },
   "backend/tests/test_last_received_bank_account_access_2026_09_25.py": {
    "kind": "api",
    "units": [
@@ -13169,18 +14165,16 @@
    "login_fixture": true
   },
   "backend/tests/test_module_history_2026_09_23.py": {
-   "kind": "api",
+   "kind": "audit",
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/subcontract/api/",
-    "file:backend/tests/_routes.py",
     "helper:audit",
     "helper:edit_log",
     "mod:subcontract/api/contractor_vouchers",
     "plat:__init__",
-    "plat:source_tree",
-    "router:vouchers"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -13188,11 +14182,7 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/audit.py",
-     "backend/helpers/edit_log.py",
-     "backend/tests/_routes.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
+     "backend/helpers/edit_log.py"
     ],
     "path": [
      "backend/helpers/edit_log.py",
@@ -13200,8 +14190,7 @@
      "backend/modules/subcontract/api/",
      "backend/modules/subcontract/api/contractor_vouchers.py"
     ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_module_keys_consistency_2026_09_13.py": {
    "kind": "api",
@@ -13209,6 +14198,8 @@
     "helper:auth",
     "helper:module_registry",
     "js:static/sidebar.js",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
@@ -13226,7 +14217,6 @@
     "page:pages/users.html",
     "plat:__init__",
     "plat:source_tree",
-    "router:account_items",
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
@@ -13240,8 +14230,7 @@
     "router:quotations",
     "router:search",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "evidence": {
     "import": [
@@ -13251,6 +14240,8 @@
      "backend/helpers/module_registry.py"
     ],
     "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
@@ -13263,7 +14254,6 @@
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
-     "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
@@ -13277,8 +14267,7 @@
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
-     "backend/routers/uploads.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/uploads.py"
     ],
     "page": [
      "frontend/index.html",
@@ -13376,7 +14365,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "helper:auth",
     "helper:module_registry",
     "helper:settings",
@@ -13394,7 +14383,7 @@
      "backend/helpers/module_registry.py",
      "backend/helpers/settings.py",
      "backend/routers/system.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "api": [
      "backend/routers/auth.py",
@@ -13432,7 +14421,6 @@
     "page:pages/settlement.html",
     "plat:__init__",
     "plat:source_tree",
-    "router:accounting_export",
     "router:case_extra_expenses"
    ],
    "evidence": {
@@ -13445,7 +14433,6 @@
      "backend/helpers/quotations.py",
      "backend/helpers/recognition.py",
      "backend/modules/arap/api/payment_requests.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/case_extra_expenses.py"
     ],
     "api": [
@@ -13504,14 +14491,14 @@
   "backend/tests/test_mp0_map_popup_escapes_external_text_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_map_tiles.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/map.html"
    ],
    "evidence": {
     "import": [
-     "backend/tests/_map_tiles.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_map_tiles.py"
     ],
     "page": [
      "frontend/pages/map.html"
@@ -13572,9 +14559,9 @@
     "core:db",
     "dir:frontend/pages/",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_map_cache_warm.py",
     "file:backend/tests/_map_tiles.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:geo",
     "js:static/record-link.js",
     "page:pages/case-management.html",
@@ -13587,9 +14574,9 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py",
      "backend/tests/_map_cache_warm.py",
-     "backend/tests/_map_tiles.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_map_tiles.py"
     ],
     "api": [
      "backend/routers/map_points.py"
@@ -13615,7 +14602,7 @@
     "dir:frontend/static/vendor/",
     "dir:frontend/static/vendor/leaflet.markercluster-1.5.3/",
     "file:backend/helpers/__init__.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "file:backend/tests/_e2e_login.py",
     "helper:geo",
     "page:pages/map.html"
    ],
@@ -13623,7 +14610,7 @@
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py"
     ],
     "page": [
      "frontend/pages/map.html"
@@ -13641,8 +14628,8 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/map.html",
     "router:map_points"
    ],
@@ -13651,8 +14638,8 @@
      "backend/db.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
-     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
     ],
     "api": [
      "backend/routers/map_points.py"
@@ -13668,14 +14655,14 @@
   "backend/tests/test_mp4_map_list_sync_search_nearby_nav_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/map.html"
    ],
    "evidence": {
     "import": [
-     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
     ],
     "page": [
      "frontend/pages/map.html"
@@ -13688,14 +14675,14 @@
   "backend/tests/test_mp5_map_fullscreen_and_mobile_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/map.html"
    ],
    "evidence": {
     "import": [
-     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
     ],
     "page": [
      "frontend/pages/map.html"
@@ -13710,8 +14697,8 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:quotations",
     "page:pages/case-management.html",
     "page:pages/map.html",
@@ -13723,8 +14710,8 @@
      "backend/helpers/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
-     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
     ],
     "api": [
      "backend/routers/map_points.py"
@@ -13744,9 +14731,9 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_map_cache_warm.py",
     "file:backend/tests/_map_tiles.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:geo",
     "page:pages/map.html",
     "router:map_points"
@@ -13756,9 +14743,9 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
+     "backend/tests/_e2e_login.py",
      "backend/tests/_map_cache_warm.py",
-     "backend/tests/_map_tiles.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+     "backend/tests/_map_tiles.py"
     ],
     "api": [
      "backend/routers/map_points.py"
@@ -13790,8 +14777,7 @@
     "page:pages/receivables.html",
     "page:pages/users.html",
     "plat:__init__",
-    "plat:source_tree",
-    "router:accounting_export"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -13813,7 +14799,6 @@
      "backend/helpers/startup.py",
      "backend/modules/arap/",
      "backend/routers/",
-     "backend/routers/accounting_export.py",
      "frontend/",
      "frontend/pages/"
     ]
@@ -14203,6 +15188,9 @@
     "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
@@ -14222,8 +15210,6 @@
     "mod:tender_radar/api",
     "plat:__init__",
     "plat:source_tree",
-    "router:account_items",
-    "router:accounting_export",
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
@@ -14246,8 +15232,7 @@
     "router:quotations",
     "router:search",
     "router:system",
-    "router:uploads",
-    "router:vouchers"
+    "router:uploads"
    ],
    "evidence": {
     "import": [
@@ -14258,6 +15243,9 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
+     "backend/modules/accounting/api/account_items.py",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/arap/api/cashier.py",
@@ -14275,8 +15263,6 @@
      "backend/modules/supply/api/shipping_notes.py",
      "backend/modules/supply/api/suppliers.py",
      "backend/modules/tender_radar/api.py",
-     "backend/routers/account_items.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
@@ -14299,8 +15285,7 @@
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
-     "backend/routers/uploads.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/uploads.py"
     ],
     "path": [
      "backend/modules/supply/"
@@ -15223,14 +16208,8 @@
   },
   "backend/tests/test_stock_batch_payment_2026_09_01.py": {
    "kind": "api",
-   "units": [
-    "router:accounting_export"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/accounting_export.py"
-    ]
-   },
+   "units": [],
+   "evidence": {},
    "login_fixture": true
   },
   "backend/tests/test_subproc_helper_2026_09_21.py": {
@@ -15288,54 +16267,6 @@
      "backend/version_manifest.json"
     ]
    }
-  },
-  "backend/tests/test_t100_config_complete_2026_09_23.py": {
-   "kind": "audit",
-   "units": [
-    "core:db",
-    "helper:part_catalog",
-    "js:js/cashier.js",
-    "page:pages/cashier.html",
-    "router:accounting_export"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/part_catalog.py",
-     "backend/routers/accounting_export.py"
-    ],
-    "page": [
-     "frontend/js/cashier.js",
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "backend/routers/accounting_export.py",
-     "frontend/js/cashier.js",
-     "frontend/pages/cashier.html"
-    ]
-   }
-  },
-  "backend/tests/test_t100_export_2026_09_01.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors",
-    "router:accounting_export",
-    "router:quotations"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_tax_basis_r2_2026_09_25.py": {
    "kind": "api",
@@ -15711,306 +16642,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_voucher_attachment_download_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_attachment_list_in_modal_2026_09_23.py": {
-   "kind": "audit",
-   "units": [
-    "dir:frontend/js/",
-    "dir:frontend/pages/",
-    "js:js/voucher.js",
-    "page:pages/voucher.html"
-   ],
-   "evidence": {
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/voucher.js",
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_attachments_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:archive",
-    "core:db",
-    "dir:frontend/js/",
-    "dir:frontend/pages/",
-    "helper:uploads",
-    "helper:voucher",
-    "helper:voucher_attachments",
-    "js:js/voucher.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/archive.py",
-     "backend/db.py",
-     "backend/helpers/uploads.py",
-     "backend/helpers/voucher.py",
-     "backend/helpers/voucher_attachments.py",
-     "backend/routers/vouchers.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/voucher.js",
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_edit_lines_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/js/",
-    "js:js/voucher.js",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/voucher.js"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_expense_brought_in_once_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py",
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "helper:voucher_attachments",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/voucher_attachments.py",
-     "backend/routers/vouchers.py",
-     "backend/tests/test_jv36_voucher_line_source_files_2026_09_24.py",
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_export_gate_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/pages/",
-    "js:js/voucher.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_export_only_in_preview_2026_09_23.py": {
-   "kind": "audit",
-   "units": [
-    "dir:frontend/pages/",
-    "js:js/voucher.js",
-    "page:pages/voucher.html"
-   ],
-   "evidence": {
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_export_watermark_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "router:vouchers"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_freeze_2026_09_23.py": {
-   "kind": "audit",
-   "units": [
-    "core:db",
-    "dir:backend/helpers/",
-    "dir:backend/routers/",
-    "helper:voucher",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py"
-    ],
-    "path": [
-     "backend/helpers/",
-     "backend/routers/"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_no_category_selector_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/pages/",
-    "js:js/voucher.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_pdf_export_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/js/",
-    "helper:uploads",
-    "js:js/voucher.js",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/uploads.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/voucher.js"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "dir:frontend/pages/",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "js:js/voucher.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_preview_iframe_height_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "file:frontend/css/style.css",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/css/style.css"
-    ]
-   }
-  },
   "backend/tests/test_voucher_referenced_code_2026_09_23.py": {
    "kind": "unit",
    "units": [
@@ -16022,93 +16653,6 @@
     ]
    }
   },
-  "backend/tests/test_voucher_revision_no_2026_09_23.py": {
-   "kind": "unit",
-   "units": [
-    "helper:voucher",
-    "router:quotations",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/voucher.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vouchers.py"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_state_machine_2026_09_23.py": {
-   "kind": "unit",
-   "units": [
-    "helper:voucher",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_summary_length_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_summary_sources_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/js/",
-    "dir:frontend/pages/",
-    "js:js/voucher.js",
-    "page:pages/voucher.html",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/voucher.js",
-     "frontend/pages/voucher.html"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/voucher.js",
-     "frontend/pages/",
-     "frontend/pages/voucher.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_voucher_template_placeholders_2026_09_23.py": {
-   "kind": "unit",
-   "units": [
-    "helper:voucher",
-    "helper:voucher_template"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/voucher.py",
-     "backend/helpers/voucher_template.py"
-    ]
-   }
-  },
   "backend/tests/test_voucher_view_acceptance_2026_09_23.py": {
    "kind": "unit",
    "units": [
@@ -16117,21 +16661,6 @@
    "evidence": {
     "import": [
      "backend/db.py"
-    ]
-   }
-  },
-  "backend/tests/test_voucher_voided_filter_2026_09_23.py": {
-   "kind": "unit",
-   "units": [
-    "core:db",
-    "helper:voucher",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/voucher.py",
-     "backend/routers/vouchers.py"
     ]
    }
   },
@@ -16385,17 +16914,16 @@
    "kind": "api",
    "units": [
     "file:backend/helpers/__init__.py",
-    "file:backend/routers/__init__.py",
     "helper:company_identity",
     "helper:part_catalog",
     "helper:settings",
     "helper:xlsx_out",
+    "mod:accounting/api/accounting_export",
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:netplan/export",
     "plat:__init__",
     "plat:source_tree",
-    "router:accounting_export",
     "router:parts"
    ],
    "evidence": {
@@ -16408,15 +16936,13 @@
      "backend/helpers/settings.py",
      "backend/helpers/xlsx_out.py",
      "backend/modules/analytics/api/reports.py",
-     "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py",
      "backend/routers/parts.py"
     ],
     "path": [
+     "backend/modules/accounting/api/accounting_export.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/arap/api/cashier.py",
-     "backend/modules/netplan/export.py",
-     "backend/routers/accounting_export.py"
+     "backend/modules/netplan/export.py"
     ]
    }
   }

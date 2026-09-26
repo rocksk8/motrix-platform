@@ -77,15 +77,16 @@ def _seed():
         conn.close()
 
 
-def _observe():
-    """三個使用方各呼叫一次，回傳 (派工那一類的筆數, 其他類是否照常)。"""
+def _observe(authorization=None):
+    """三個使用方各呼叫一次，回傳 (派工那一類的筆數, 其他類是否照常)。
+    傳票那一方 2026-09-26 起經 IP-15 成本檢視（要授權）⇒ 帶一個看得到成本的登入。"""
     import db
     from helpers.recognition import dispatch_entries
     from modules.accounting.api.vouchers import _case_expense_sources
     conn = db.get_db()
     try:
         rec = dispatch_entries(conn, "accrual")
-        vou = _case_expense_sources(conn, QNO)
+        vou = _case_expense_sources(conn, QNO, authorization)
     finally:
         conn.close()
     kinds = [x["kind"] for x in vou]
@@ -98,22 +99,25 @@ def _observe():
 
 def _drop_dispatch_row(monkeypatch):
     """拿掉 dispatch.row：legacy 登記與已載入模組的 ModuleSpec.providers 兩處都要處理（本模組搬進 modules/ 後在後者）。"""
+    # M04 不在＝它的提供者都不在：dispatch.row（營運報表）與 dispatch.cost_for_case（傳票摘要，2026-09-26 起）
+    gone = ("dispatch.row", "dispatch.cost_for_case")
     monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] not in gone})
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "dispatch.row" else orig(cap))
+    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap in gone else orig(cap))
 
 
-def test_consumers_degrade_when_provider_is_absent(client, monkeypatch):
+def test_consumers_degrade_when_provider_is_absent(client, make_user, monkeypatch):
     if not source_tree.module_installed("modules/accounting/"):
         pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed()
-    with_provider = _observe()
+    h = _sa(client, make_user)["Authorization"]
+    with_provider = _observe(h)
     assert with_provider == {"recognition_dispatch": 1, "vouchers_dispatch": 1,
                              "vouchers_extra_still_there": True}, with_provider   # 正對照：派工確實在
     _drop_dispatch_row(monkeypatch)
     assert registry.single_provider("dispatch.row") is None
-    without = _observe()                                   # 不丟例外 = 仍然可用
+    without = _observe(h)                                  # 不丟例外 = 仍然可用
     assert without == {"recognition_dispatch": 0, "vouchers_dispatch": 0,
                        "vouchers_extra_still_there": True}, without
 

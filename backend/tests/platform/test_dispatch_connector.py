@@ -35,10 +35,12 @@ def _seed():
 
 
 def _drop_dispatch_row(monkeypatch):
+    # M04 不在＝它的提供者都不在：dispatch.row（營運報表）與 dispatch.cost_for_case（傳票摘要，2026-09-26 起）
+    gone = ("dispatch.row", "dispatch.cost_for_case")
     monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] != "dispatch.row"})
+                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] not in gone})
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "dispatch.row" else orig(cap))
+    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap in gone else orig(cap))
 
 
 def _sa(client, make_user):

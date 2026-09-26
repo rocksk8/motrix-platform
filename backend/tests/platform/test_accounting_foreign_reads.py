@@ -27,16 +27,16 @@ MODULE = "modules/accounting"
 
 #: 檔（相對 backend）⇒ {別組的表: (擁有的模組 key, 到期的 capability)}。只准變少。
 #: a：M06-a（M01 提供 case.summary／case.extra_expenses 前）
+#:    〔2026-09-26 quotations 到期刪除：M01 的 case.summary（IP-96）在第十班合回，本守門的到期題觸發 ⇒ 案件搜尋改走它；
+#:     case_extra_expenses 仍等 case.extra_expenses〕
 #: d（accounting_export 讀 contractor_payment_vouchers）2026-09-26 到期刪除：c-ip14-paid 的 paid_between 已帶入本疊（本守門的到期題觸發）
 #: a'：vouchers.py 的 JV21 支出來源與 by-case 派工段讀 M04 的派工表。主持裁示（2026-09-26）：IP-15 走派工清單的模組權限，
 #:     只持 finance 的會計會悄悄少列 ⇒ 由 C 在 IP-15 新增「成本檢視」（放行 finance／cashier，只回金額、日期、案件、廠商名稱）；
 #:     做好之前保留直讀。到期能力名暫記 `dispatch.cost_for_case`，C 定名後同步改這裡（M06-PLAN §5 a' 列）
+#:     〔2026-09-26 到期刪除：B 的 b-ip15-cost（afbb1b8d）提供 dispatch.cost_for_case，本疊疊在它上面、兩處讀取改走它（主持裁示同包處理）〕
 KNOWN_FOREIGN_READS = {
     MODULE + "/api/vouchers.py": {
-        "quotations": ("case", "case.summary"),
         "case_extra_expenses": ("case", "case.extra_expenses"),
-        "contractor_dispatches": ("subcontract", "dispatch.cost_for_case"),
-        "vendor_contractors": ("subcontract", "dispatch.cost_for_case"),
     },
 }
 
@@ -118,15 +118,15 @@ def test_accounting_foreign_reads_expire_when_the_provider_exists():
 
 # ── 反向控制（合成資料；M06 在不在都照跑）─────────────────────────────────────
 
-_K = {"quotations", "vouchers_all", "users", "payslips", "case_updates"}
+_K = {"case_extra_expenses", "vouchers_all", "users", "payslips", "case_updates"}
 
 
 def test_positive_and_reverse_control_of_the_scan():
     f = MODULE + "/api/vouchers.py"
-    base = {f: 'conn.execute("SELECT * FROM quotations q JOIN vouchers_all v ON v.id=q.id")\n'
+    base = {f: 'conn.execute("SELECT * FROM case_extra_expenses e JOIN vouchers_all v ON v.id=e.id")\n'
                'conn.execute("SELECT name FROM users")\n'}
     found = foreign_reads(base, {"vouchers_all"}, _K)
-    assert found == {f: {"quotations"}}, found                    # 自己的表、L1 的表不算
+    assert found == {f: {"case_extra_expenses"}}, found                    # 自己的表、L1 的表不算
     assert excess(found) == []                                    # 在基線 ⇒ 過
     more = dict(base)
     more[f] += 'conn.execute("SELECT * FROM payslips")\n'
@@ -137,13 +137,13 @@ def test_positive_and_reverse_control_of_the_scan():
 
 def test_positive_and_reverse_control_of_stale_and_expiry():
     f = MODULE + "/api/vouchers.py"
-    found = {f: {"quotations", "case_extra_expenses", "contractor_dispatches", "vendor_contractors"}}
+    found = {f: {"case_extra_expenses"}}
     assert stale(found, set(found)) == []
-    shrunk = dict(found, **{f: found[f] - {"quotations"}})
-    assert stale(shrunk, set(found)) == ["%s 已不讀 quotations ⇒ 自基線刪除" % f]
+    shrunk = dict(found, **{f: set()})
+    assert stale(shrunk, set(found)) == ["%s 已不讀 case_extra_expenses ⇒ 自基線刪除" % f]
     assert stale(found, set()) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
     assert expired(set()) == []
-    got = expired({"dispatch.cost_for_case"})
-    assert len(got) == 2 and all("dispatch.cost_for_case" in g for g in got), got
-    provided, _ = code_capabilities({"x.py": 'registry.provide("case.summary", "case", X)\n'})
-    assert [g for g in expired(provided) if "quotations" in g], "code_capabilities 的提供者要能觸發到期"
+    got = expired({"case.extra_expenses"})
+    assert len(got) == 1 and "case_extra_expenses" in got[0], got
+    provided, _ = code_capabilities({"x.py": 'registry.provide("case.extra_expenses", "case", X)\n'})
+    assert [g for g in expired(provided) if "case_extra_expenses" in g], "code_capabilities 的提供者要能觸發到期"

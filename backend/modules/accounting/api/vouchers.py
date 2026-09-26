@@ -31,7 +31,8 @@ from db import get_db
 #    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
 from modules.accounting.api.accounting_export import validate_account_code
 # `JV21`：承攬商派工的 grandTotal（含稅費用＋外包人員）算法**只有一份**——在 M04，
-# 經連接器 `dispatch.row` 取用（INTEGRATION-POINTS.md IP-1），不 import M04 的私有函式。
+# 經 IP-15 成本檢視 `dispatch.cost_for_case` 取用（2026-09-26 起；原本經 IP-1 `dispatch.row`＋自己讀派工表），
+# 不 import M04 的私有函式、不讀 M04 的表。
 # ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
 from core import registry as _registry
 from helpers import _require_user, _tok, _audit, require_any_module
@@ -429,6 +430,12 @@ def list_vouchers(include_voided: bool = False,
 #: 決定它的格式。
 SUMMARY_TABS = ("案件", "已上傳檔案", "支出項")
 
+#: 案件頁籤的範圍說明（2026-09-26：改走 M01 的 case.summary 之後，只列這個人看得到的案件——與案件頁同一條可見性；
+#: 原本直讀 quotations、有傳票權限就列出全部案件，比案件頁寬。範圍變窄要明說，不可以跟「沒有這個案件」長得一樣）
+CASES_SCOPE_NOTE = "只列出你有權限查看的案件（與案件頁相同）；找不到的案件可能是沒有權限，不一定不存在。"
+#: M01 不在（沒有 case.summary）時的說明
+CASES_UNAVAILABLE = "案件模組未安裝：無法從案件帶入摘要。"
+
 #: 清單長度上限。案件會一直長，而這是一個**選單**不是報表。
 _SOURCE_LIMIT = 50
 
@@ -481,7 +488,7 @@ def _fmt_money(n):
     return ("%.2f" % n).rstrip("0").rstrip(".")
 
 
-def _dispatch_expense_entry(row, dispatch_row):
+def _dispatch_expense_entry(d):
     """`JV21` §3b①：一筆承攬商派工——第二層（派工本身）＋ 第三層（品項／人員）。
 
     ⚠️ 金額**借用 M04 連接器 `dispatch.row` 的 `grandTotal`**（含稅承攬商費用＋外包
@@ -501,17 +508,18 @@ def _dispatch_expense_entry(row, dispatch_row):
     （`6800` 與 `"12000"` 都出現過），會算的話要先擋空字串，這裡沒有這個
     必要就不引入這個風險。
     """
-    d = dispatch_row(row)
+    # 2026-09-26（主持裁示）：輸入是 IP-15 成本檢視 `dispatch.cost_for_case` 的一筆（不再自己讀 M04 的表）。
+    # 成本檢視不回外包人員姓名與 personnel ⇒ 第三層原本逐人列姓名的位置改成一行「外包人員 N 人」（金額＝人員合計）。
     vendor = (d.get("vendorName") or "").strip()
     scope = (d.get("scope") or "").strip()
     head = "－".join(p for p in (vendor, scope) if p)
-    summary = "%s　NT$ %s" % (head or "承攬商派工", _fmt_money(d.get("grandTotal")))
+    summary = "%s　NT$ %s" % (head or "承攬商派工", _fmt_money(d.get("amount")))
     if d.get("invoiceNo"):
         summary += "　發票：%s" % d["invoiceNo"]
 
     prefix = (vendor + "－") if vendor else ""
     children = []
-    for idx, it in enumerate(d.get("items") or []):
+    for idx, it in enumerate(d.get("items") or []):       # 成本檢視已只留有描述的品項
         desc = str(it.get("description") or "").strip()
         if not desc:
             continue
@@ -520,14 +528,12 @@ def _dispatch_expense_entry(row, dispatch_row):
             "description": desc, "amount": it.get("amount") or 0,
             "summary": "%s%s　NT$ %s" % (prefix, desc, _fmt_money(it.get("amount"))),
         })
-    for idx, p in enumerate(d.get("personnel") or []):
-        name = str(p.get("name") or "").strip()
-        if not name:
-            continue
+    n = int(d.get("personnelCount") or 0)
+    if n:
         children.append({
-            "kind": "dispatch_personnel", "index": idx,
-            "name": name, "amount": p.get("amount") or 0,
-            "summary": "%s%s　NT$ %s" % (prefix, name, _fmt_money(p.get("amount"))),
+            "kind": "dispatch_personnel", "index": 0,
+            "name": "外包人員 %d 人" % n, "count": n, "amount": d.get("personnelTotal") or 0,
+            "summary": "%s外包人員 %d 人　NT$ %s" % (prefix, n, _fmt_money(d.get("personnelTotal"))),
         })
 
     return {
@@ -535,7 +541,7 @@ def _dispatch_expense_entry(row, dispatch_row):
         "id": d["id"],
         "vendorName": vendor,
         "scope": scope,
-        "amount": d.get("grandTotal") or 0,
+        "amount": d.get("amount") or 0,
         "invoiceNo": d.get("invoiceNo") or "",
         "summary": summary,
         "items": children,
@@ -567,7 +573,26 @@ def _extra_expense_entry(row):
     }
 
 
-def _case_expense_sources(conn, quote_no):
+#: IP-15 成本檢視拒絕這個人（403）時的說明（主持裁示：任何來源因權限沒列出都要明說）
+DISPATCH_COST_FORBIDDEN = "你沒有權限查看承攬商派工的成本：派工支出沒有列出（不是沒有）"
+#: IP-15 成本檢視不在（M04 未安裝）時的說明
+DISPATCH_COST_UNAVAILABLE = "外包工班模組未安裝：承攬商派工無法作為支出來源"
+
+
+def _dispatch_costs(quote_no, authorization):
+    """IP-15 `dispatch.cost_for_case` ⇒ (清單, 說明)。提供者不在 ⇒ ([], UNAVAILABLE)；403 ⇒ ([], FORBIDDEN)。"""
+    fn = _registry.single_provider("dispatch.cost_for_case")
+    if fn is None:
+        return [], DISPATCH_COST_UNAVAILABLE
+    try:
+        return list(fn(quote_no, authorization)), ""
+    except HTTPException as e:
+        if e.status_code == 403:
+            return [], DISPATCH_COST_FORBIDDEN
+        raise
+
+
+def _case_expense_sources(conn, quote_no, authorization=None):
     """`JV21` §2/§3：案件底下「有金額有發票」的支出項——目前兩種來源。
 
     ⚠️ **不是** `SOURCE_TYPES` 的逐種列舉：那份清單回答的是「附件能不能被
@@ -578,14 +603,10 @@ def _case_expense_sources(conn, quote_no):
     這裡——那是開給客戶的票，不是我們的支出。
     """
     out = []
-    # M04 不在 ⇒ 沒有 dispatch.row ⇒ 少了承攬商派工這一類來源，額外支出照常（IP-1）
-    dispatch_row = _registry.single_provider("dispatch.row")
-    if dispatch_row is not None:
-        for row in conn.execute(
-                "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
-                "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
-                "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)):
-            out.append(_dispatch_expense_entry(row, dispatch_row))
+    # 承攬商派工：IP-15 成本檢視（M04 提供；不在或讀不到 ⇒ 這一類不列、呼叫端明說，額外支出照常）
+    costs, _note = _dispatch_costs(quote_no, authorization)
+    for d in costs:
+        out.append(_dispatch_expense_entry(d))
     for row in conn.execute(
             "SELECT * FROM case_extra_expenses WHERE quote_no=? ORDER BY id",
             (quote_no,)):
@@ -612,6 +633,9 @@ def vouchers_by_case(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     _require_voucher_access(user)
     no = (quote_no or "").strip()
+    # 承攬派工的 id 經 IP-15 成本檢視取得（不再自己讀 M04 的表）；不在或讀不到 ⇒ 派工那一段不比
+    dids = [str(d["id"]) for d in _dispatch_costs(no, authorization)[0]]
+    marks = ",".join("?" * len(dids)) or "NULL"
     conn = get_db()
     try:
         rows = [dict(r) for r in conn.execute(
@@ -620,9 +644,8 @@ def vouchers_by_case(quote_no: str, authorization: str = Header(None)):
             " WHERE (l.source_type = 'case' AND l.source_key = ?)"
             "    OR (l.source_type = 'extra_expense' AND l.source_key IN"
             "        (SELECT CAST(id AS TEXT) FROM case_extra_expenses WHERE quote_no = ?))"
-            "    OR (l.source_type = 'contractor_dispatch' AND l.source_key IN"
-            "        (SELECT CAST(id AS TEXT) FROM contractor_dispatches WHERE quote_no = ?))"
-            " ORDER BY v.id DESC", (no, no, no))]
+            "    OR (l.source_type = 'contractor_dispatch' AND l.source_key IN (%s))"
+            " ORDER BY v.id DESC" % marks, (no, no, *dids))]
     finally:
         conn.close()
     return {"vouchers": rows}
@@ -655,17 +678,21 @@ def summary_sources(q: str = "", quote_no: str = "",
     """
     user = _require_user(authorization)
     _require_voucher_access(user)
-    like = "%" + (q or "").strip() + "%"
-    conn = get_db()
-    try:
-        # ⚠️ 只取要用的四欄，**不要 `SELECT *`** —— `quotations` 有 data_json
-        #    那種整包欄位，而下一個人加欄位時不會回來看這支端點回給誰。
-        rows = [dict(r) for r in conn.execute(
-            "SELECT quote_no, customer_name, project_name, status"
-            " FROM quotations WHERE quote_no LIKE ? OR customer_name LIKE ?"
-            " ORDER BY id DESC LIMIT ?", (like, like, _SOURCE_LIMIT))]
-    finally:
-        conn.close()
+    # 案件清單：M01 的 IP-96 `case.summary`（2026-09-26 起；原本直讀 quotations ⇒ 到期守門 a 列觸發）。
+    # 只回這個人看得到的案件（row_access case／read，新到舊）；比對單號或客戶名稱（不分大小寫，同原本 LIKE）。
+    summary = _registry.single_provider("case.summary")
+    needle = (q or "").strip().lower()
+    rows, note1 = [], CASES_UNAVAILABLE
+    if summary is not None:
+        note1 = CASES_SCOPE_NOTE
+        conn = get_db()
+        try:
+            visible = summary(conn, user)
+        finally:
+            conn.close()
+        rows = [r for r in visible
+                if not needle or needle in (r["quote_no"] or "").lower()
+                or needle in (r["customer_name"] or "").lower()][:_SOURCE_LIMIT]
 
     # ── 頁籤②：這個案件底下可帶入的憑證（`JV3` 與 `JV7` 共用同一支端點）──
     files = []
@@ -696,7 +723,7 @@ def summary_sources(q: str = "", quote_no: str = "",
     if picked:
         conn3 = get_db()
         try:
-            expenses = _case_expense_sources(conn3, picked)
+            expenses = _case_expense_sources(conn3, picked, authorization)
             # `JV21`：前端標紅字要的資料——這一筆被哪幾張未作廢的傳票帶入過
             uses = expense_line_uses(conn3)
             for e in expenses:
@@ -704,9 +731,12 @@ def summary_sources(q: str = "", quote_no: str = "",
         finally:
             conn3.close()
         note3 = "" if expenses else "案件「%s」底下目前沒有支出項。" % picked
-    # 稽核 X-1：承攬商派工這一類整個缺（IP-1 提供者不在）⇒ 明說，不可以跟「沒有派工」長得一樣
-    unavailable = [] if _registry.single_provider("dispatch.row") is not None else [
-        {"category": "contractor_dispatch", "reason": "外包工班模組未安裝：承攬商派工無法作為支出來源"}]
+    # 稽核 X-1：承攬商派工這一類整個缺（IP-15 成本檢視不在）或因權限讀不到 ⇒ 明說，不可以跟「沒有派工」長得一樣
+    unavailable = []
+    if _registry.single_provider("dispatch.cost_for_case") is None:
+        unavailable.append({"category": "contractor_dispatch", "reason": DISPATCH_COST_UNAVAILABLE})
+    elif picked and _dispatch_costs(picked, authorization)[1]:
+        unavailable.append({"category": "contractor_dispatch", "reason": DISPATCH_COST_FORBIDDEN})
 
     cases = []
     for r in rows:
@@ -727,6 +757,7 @@ def summary_sources(q: str = "", quote_no: str = "",
             SUMMARY_TABS[2]: expenses,
         },
         "notes": {
+            SUMMARY_TABS[0]: note1,
             SUMMARY_TABS[1]: note2,
             SUMMARY_TABS[2]: note3,
         },

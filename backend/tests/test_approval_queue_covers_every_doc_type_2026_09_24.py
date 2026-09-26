@@ -75,7 +75,10 @@ def test_the_real_provider_scan_finds_the_owner_modules():
     """量尺：真的登記處掃得到各單據模組的提供者（掃不到 ⇒ 每一種都判成漏掉，或只靠 M01 源碼殘留才綠）。"""
     from check_approval_queue_coverage import _provider_sources
     labels = {lbl.replace("\\", "/") for lbl, src in _provider_sources() if src}
-    for f in ("routers/vouchers.py", "helpers/custom_modules.py"):
+    from core import source_tree
+    for f in ("modules/accounting/api/vouchers.py", "helpers/custom_modules.py"):   # 傳票 2026-09-26 隨 M06 搬進模組
+        if not source_tree.module_installed(f):
+            continue                                  # 模組不在（選配／反向控制）⇒ 它的提供者本來就不在
         assert f in labels, (f, sorted(labels))
 
 
