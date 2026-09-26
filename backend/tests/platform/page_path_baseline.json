@@ -62,7 +62,6 @@
  "backend/tests/test_site_wording_2026_09_24.py": 2,
  "backend/tests/test_t100_config_complete_2026_09_23.py": 1,
  "backend/tests/test_version_manifest_2026_09_22.py": 1,
- "backend/tests/test_view_filter_marking_2026_09_25.py": 1,
  "backend/tests/test_voucher_attachment_list_in_modal_2026_09_23.py": 1,
  "backend/tests/test_voucher_attachments_2026_09_23.py": 1,
  "backend/tests/test_voucher_export_gate_2026_09_23.py": 1,

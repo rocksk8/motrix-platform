@@ -84,8 +84,9 @@ def _items():
 
 # ══════════════════════════════════════════════════════════════════════
 
-_SCAN_DIRS = ("backend/routers", "backend/helpers")
-_SCAN_FILES = ("backend/main.py",)
+#: 掃描範圍：`core.source_tree.router_files()`＋`logic_files()`＋`main.py`（見 `_scan_files()`）。
+#: 〔主持派工 wip/b-scan-modules：原本寫死 `backend/routers`、`backend/helpers`——bonus.py 搬進
+#:   `modules/payroll/api/` 之後，這一題**自己的對象**與全部模組端點都不在範圍，而 scanned>40 照過〕
 
 #: 今天的基準。⚠️ 修好 `create_bonus_item` 之後它要變 **0**。
 _UNBOUND_BASELINE = ("bonus.py", "create_bonus_item")
@@ -171,6 +172,25 @@ def test_the_unbound_user_detector_is_neither_too_wide_nor_too_narrow():
         + "⚠️ 那是 A-2 第二版多出來的那 2 個。")
 
 
+def _scan_files():
+    from core import source_tree
+    return (list(source_tree.router_files()) + list(source_tree.logic_files())
+            + [source_tree.BACKEND / "main.py"])
+
+
+def test_the_scan_covers_the_file_it_was_written_for():
+    """⚙️ **正對照：它自己的對象（payroll 的 bonus.py）必須在掃描集合裡**（〈守門守的對象被搬走〉）。
+
+    ☠️ `scanned > 40` 不是正對照：對象搬走之後檔數照樣過 40。
+    📌 本檔在 `modules/payroll/tests/` ⇒ 跑得到這一題時 payroll 一定在。"""
+    from core import source_tree
+    rels = {source_tree.rel(p) for p in _scan_files()}
+    assert "modules/payroll/api/bonus.py" in rels, (
+        "bonus.py 不在掃描範圍 —— 這道守門守的對象被搬走了：%s" % sorted(r for r in rels if "bonus" in r))
+    assert any(r.startswith("modules/") and r != "modules/payroll/api/bonus.py" for r in rels), \
+        "其他模組的端點／邏輯檔一個都沒掃到"
+
+
 def test_no_endpoint_uses_a_user_it_never_bound():
     """🔴 **頂層 `def` 讀 `user`，就必須在同一個 `def` 裡綁它。**
 
@@ -190,12 +210,8 @@ def test_no_endpoint_uses_a_user_it_never_bound():
     ⚠️ **射程**：只認頂層 `def`、只認 `user` 這個名字、不進巢狀作用域。
        ⇒ 抓不到「巢狀 def 讀一個外層也沒綁的 `user`」。
     """
-    import pathlib
-    root = pathlib.Path(__file__).resolve().parents[4]
-    files = []
-    for d in _SCAN_DIRS:
-        files += sorted((root / d).glob("*.py"))
-    files += [root / f for f in _SCAN_FILES]
+    from core import source_tree
+    files = _scan_files()
 
     scanned = 0
     bad = []
@@ -205,7 +221,7 @@ def test_no_endpoint_uses_a_user_it_never_bound():
         scanned += 1
         for name, line in _unbound_user(
                 p.read_text(encoding="utf-8", errors="replace")):
-            bad.append("%s:%d  def %s" % (p.name, line, name))
+            bad.append("%s:%d  def %s" % (source_tree.rel(p), line, name))
 
     assert scanned > 40, (
         "只掃到 %d 個檔 —— **尺量不到東西**，下面的斷言會無條件通過。" % scanned)
