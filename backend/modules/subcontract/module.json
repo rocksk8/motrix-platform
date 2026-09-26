@@ -1,7 +1,7 @@
 {
   "key": "subcontract",
   "name": "外包工班",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "core": ">=1.0,<2.0",
   "license_key": "subcontract",
   "permissions": ["contractor_list"],
@@ -18,7 +18,8 @@
   },
   "customization": {"schema": 1, "fields": {}, "pages": [], "outputs": []},
   "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
-  "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers"]},
+  "provides": {"api_prefixes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers"],
+               "probes": ["/api/contractors", "/api/vendor-contractors", "/api/contractor-dispatches", "/api/contractor-vouchers"]},
   "pages": [{"path": "contractors.html"}, {"path": "vendor-contractors.html"}],
   "pages_note": "contractor-voucher-approval-settings.html 是已廢棄的舊入口（AS4：簽核設定已移到統一的簽核設定頁），不列入側欄"
 }
