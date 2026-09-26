@@ -1992,7 +1992,7 @@
                 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
                 <!-- M05 應收應付不在：開票申請與請款單整段不提供（明說，不是空清單） -->
                 <div x-show="arapMissing" data-testid="arap-missing"
-                     style="margin-top:18px;padding:10px 14px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;font-size:12px;color:#991B1B;font-family:var(--font-zh)"
+                     style="margin-top:18px;padding:10px 14px;border:1px solid var(--tone-danger-border);border-radius:8px;background:var(--tone-danger-bg);font-size:12px;color:var(--tone-danger-fg);font-family:var(--font-zh)"
                      x-text="arapMissing"></div>
                 <!-- 開票申請憑據列表 -->
                 <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
