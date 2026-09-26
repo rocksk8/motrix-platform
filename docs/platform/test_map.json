@@ -4990,8 +4990,10 @@
    "units": [
     "core:main",
     "dir:backend/modules/",
+    "dir:docs/platform/",
     "dir:tools/platform/",
     "file:backend/tests/_routes.py",
+    "file:docs/platform/modules.json",
     "mod:analytics/api/dashboard",
     "mod:crm/api",
     "mod:daily_tasks/api",
@@ -5066,6 +5068,8 @@
     "path": [
      "backend/main.py",
      "backend/modules/",
+     "docs/platform/",
+     "docs/platform/modules.json",
      "frontend/index.html",
      "tools/platform/"
     ]
