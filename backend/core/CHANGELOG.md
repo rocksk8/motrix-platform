@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.33 — 2026-09-26（B，M08 搬遷；暫用號，合回時 core_bump 依 origin 取號）〔core_bump：暫用 1.30 → 1.33〕
+> M08 搬遷 ③（主持裁示 a）：應收收入與銷項發票的資料收集自 routers/reports.py 下沉 L1。`core.registry.CORE_VERSION` 1.29 → 1.30（只有新增）。
+- L1（新增）：`helpers.receivables`——`collect_income_items`／`collect_tax_invoices`／`round_half_up_invoice`（函式本體與原本逐字相同）；M05 cashier、M06 accounting_export 改從這裡取，不再 import M08（ROADMAP A8b 中繼，M05 搬遷時收回）
+- L1（新增）：`routers/company_lookup.py`——`/api/now`、`/api/company/tax/{tax_id}`、`/api/company/search`（GCIS 統編／公司名稱查詢）自 `routers/dashboard.py` 拆出（路徑、權限、額度設定鍵不變；M08 搬遷 ②）
+
 ## 1.32 — 2026-09-26（C，M07 搬遷前置）〔core_bump：暫用 1.99 → 1.30〕〔core_bump：暫用 1.30 → 1.32〕
 > M07 薪資獎金搬進 modules/ 的前置：切斷 M07 → M06 與 L1 → M07。只有新增。
 - L1（新增）：`helpers.tiered_approval.resolve_display_names`（自 M06 `helpers/voucher.py` 下沉，簽核格帳號 → 顯示名稱；voucher 保留同名匯入）、`pdf_gen.fmt_money_blank_zero`（自 M06 `helpers/voucher_pdf.py._fmt_money` 下沉，0 印空白）

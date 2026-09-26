@@ -1,5 +1,5 @@
 {
- "core_version": "1.32",
+ "core_version": "1.33",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -587,6 +587,11 @@
    "resolve_lead_time": "def(part_lead_time, supplier_lead_time)",
    "today": "def()",
    "validate_transition": "def(current, target)"
+  },
+  "helper:receivables": {
+   "collect_income_items": "def(d0, d1, department_id=…)",
+   "collect_tax_invoices": "def(year=…, month=…)",
+   "round_half_up_invoice": "def(n)"
   },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
