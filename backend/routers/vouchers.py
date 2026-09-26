@@ -47,7 +47,7 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources,
+    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources, CaseNotVisible, CASE_NOT_FOUND,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -673,12 +673,17 @@ def summary_sources(q: str = "", quote_no: str = "",
     picked = (quote_no or "").strip()
     hidden = {}                     # 因權限沒列出的附件：類別 ⇒ 個數（明說，不可以靜默少列）
     if picked:
+        not_found = False
         conn2 = get_db()
         try:
             files = case_attachments(conn2, picked, user, hidden)
+        except CaseNotVisible:
+            files, not_found = [], True   # 不存在與整個看不到同一句（不可以讓人探知案件編號）
         finally:
             conn2.close()
-        if not files and hidden:
+        if not_found:
+            note2 = CASE_NOT_FOUND % picked + "。"
+        elif not files and hidden:
             note2 = "案件「%s」底下沒有你有權限查看的憑證。" % picked
         elif not files:
             note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
@@ -763,6 +768,8 @@ def line_source_files_endpoint(source_type: str = "", ref: str = "",
     try:
         hidden = {}
         files = line_source_files(conn, source_type, ref, user, hidden)
+    except CaseNotVisible:
+        raise HTTPException(404, CASE_NOT_FOUND % (ref or "").strip())   # 同案件不存在（主持裁示：不回個數）
     finally:
         conn.close()
     # 附件來源的模組不在（attachments.for_document，主持裁示 M06-b）⇒ 那幾類整個沒有列出，要明說（案件那一欄才會涵蓋多個模組）
@@ -796,6 +803,8 @@ def line_source_file_endpoint(source_type: str = "", ref: str = "",
             raise HTTPException(404, "在這個來源裡找不到這個檔案。")
         item = resolve_picks(conn, [{"type": hit["type"], "docNo": hit["docNo"],
                                      "fileId": hit["fileId"]}], user)[0]
+    except CaseNotVisible:
+        raise HTTPException(404, CASE_NOT_FOUND % (ref or "").strip())   # 同案件不存在（主持裁示）
     finally:
         conn.close()
     return FileResponse(item["src"], media_type="application/octet-stream",
