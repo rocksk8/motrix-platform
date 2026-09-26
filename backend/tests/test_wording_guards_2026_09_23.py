@@ -54,7 +54,18 @@ GW1_BASELINE = 0
 
 #: 掃描範圍：會送出文案的那幾支。⚠️ **不是**「檔名含 notify」。
 #: 模組搬出去的通知一併列入（守門對象不可以被搬走）。
-SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py")
+SCAN_FILES = ("helpers/email_notify.py", "modules/tender_radar/notify.py",
+              # 〔主持派工 wip/b-scan-modules：「送信檔都要有人歸類」題第一次跑出來的三支——寄給客戶端的
+              #   管理員（不是維護者）⇒ 依本檔「寫給誰看的」那條線在範圍〕
+              "archive.py",            # 備份失敗告警信
+              "routers/system.py",     # 寄信設定的測試信
+              "helpers/geo.py")        # 地理編碼告警信
+
+#: 有送信、而**刻意不掃**的檔：`{路徑: 理由}`。理由不可以空白；清單裡的檔必須仍是送信檔（過期要刪）。
+#: 📌 與 SCAN_FILES 合起來＝「送信檔都有人決定過」（`test_every_mail_sender_is_classified`）。
+NOT_SCANNED = {
+    # helpers/email_notify.py 以外的送信原語都在它裡面；目前沒有刻意不掃的檔
+}
 
 #: `GW2`：異常／失敗類通知要答的四個問題。
 FOUR_FIELDS = ("what", "impact", "system", "action")
@@ -282,3 +293,90 @@ def test_gw2_clearing_a_field_really_turns_it_red():
     blank = {"x": dict(full["x"], action="   ")}
     assert _check(blank, ["x"]) == ["x.action"], (
         "只填空白的 `action` 被當成有寫 —— 空白不是答案。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# GW1 的範圍：送信檔都要有人歸類（主持派工 wip/b-scan-modules）
+# ══════════════════════════════════════════════════════════════════
+#
+# 🔑 守門驗「有沒有人做過決定」，不是比對內容：backend＋modules 裡**會送信的檔**，每一支都要在
+#    SCAN_FILES（掃文案）或 NOT_SCANNED（附理由）裡。新增的送信檔沒有歸類 ⇒ 紅。
+# 「送信」＝呼叫 `helpers/email_notify.py` 的送信／組信原語（`_send*`、`_async_send*`、`_build_html`，
+#    從它的 AST **算出來**，新增一支 `_send_xxx` 自動算進來），或 import smtplib。
+
+def _mail_primitives():
+    src = (ROOT / "helpers" / "email_notify.py").read_text(encoding="utf-8")
+    return {n.name for n in ast.parse(src).body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and (n.name.startswith(("_send", "_async_send")) or n.name == "_build_html")}
+
+
+def _mail_senders(files, prims, rel):
+    out = set()
+    for p in files:
+        tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Call):
+                f = n.func
+                if (getattr(f, "id", None) or getattr(f, "attr", None)) in prims:
+                    out.add(rel(p))
+                    break
+            if isinstance(n, (ast.Import, ast.ImportFrom)):
+                names = [a.name for a in n.names] + [getattr(n, "module", None) or ""]
+                if any(x.split(".")[0] == "smtplib" for x in names if x):
+                    out.add(rel(p))
+                    break
+    return out
+
+
+def _unclassified(senders):
+    return sorted(set(senders) - set(SCAN_FILES) - set(NOT_SCANNED))
+
+
+def _real_senders():
+    from core import source_tree
+    return _mail_senders(source_tree.product_files(), _mail_primitives(), source_tree.rel)
+
+
+def test_every_mail_sender_is_classified():
+    """🔴 送信檔都要在 SCAN_FILES 或 NOT_SCANNED（附理由）裡。"""
+    bad = _unclassified(_real_senders())
+    assert not bad, (
+        "這些檔會送信，而沒有人決定要不要掃它們的文案：%s\n" % bad
+        + "📌 寄給非維護者的 ⇒ 加進 SCAN_FILES；刻意不掃 ⇒ 加進 NOT_SCANNED 並寫理由。")
+
+
+def test_the_sender_scan_sees_the_known_senders():
+    """⚙️ 正對照：email_notify 與 tender_radar/notify 必須被掃到（模組不在時後者不比）。"""
+    from core import source_tree
+    prims = _mail_primitives()
+    assert {"_build_html", "_send_raising"} <= prims, sorted(prims)
+    senders = _real_senders()
+    want = {"helpers/email_notify.py"}
+    if source_tree.module_installed("modules/tender_radar/"):
+        want.add("modules/tender_radar/notify.py")
+    assert want <= senders, "已知的送信檔沒有被掃到：%s（掃到 %s）" % (sorted(want - senders), sorted(senders))
+
+
+def test_a_new_sender_without_a_decision_is_red(tmp_path):
+    """⚙️ 反向控制（主持裁示）：沙盒新增一支送信檔（呼叫原語或 import smtplib）⇒ 未歸類 ⇒ 紅；不送信的檔不算。"""
+    a = tmp_path / "new_alert.py"
+    a.write_text("from helpers import email_notify\n"
+                 "def f():\n    email_notify._send_raising(['x'], 's', '<p>hi</p>')\n", encoding="utf-8")
+    b = tmp_path / "raw_smtp.py"
+    b.write_text("import smtplib\n", encoding="utf-8")
+    c = tmp_path / "quiet.py"
+    c.write_text("def f():\n    return 1\n", encoding="utf-8")
+    senders = _mail_senders([a, b, c], _mail_primitives(), lambda p: p.name)
+    assert senders == {"new_alert.py", "raw_smtp.py"}, senders
+    assert _unclassified(senders) == ["new_alert.py", "raw_smtp.py"]
+
+
+def test_not_scanned_entries_have_reasons_and_are_still_senders():
+    """⚙️ 排除清單不可以拿來把守門弄綠：每一筆要有理由、而且仍是送信檔（不是送信檔 ⇒ 過期，刪掉）。"""
+    senders = _real_senders()
+    assert all(str(v).strip() for v in NOT_SCANNED.values()), "NOT_SCANNED 有空白理由"
+    stale = sorted(set(NOT_SCANNED) - senders)
+    assert not stale, "NOT_SCANNED 裡這些已經不送信：%s" % stale
+    both = sorted(set(NOT_SCANNED) & set(SCAN_FILES))
+    assert not both, "同時在 SCAN_FILES 與 NOT_SCANNED：%s" % both

@@ -75,6 +75,21 @@ def say(line=""):
 PAGES_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "..", "..", "frontend", "pages", "*.html")
 
+#: 模組頁面（階段 C：頁面搬進 `modules/<key>/pages/`，對外 URL 仍是 /pages/x.html）。
+#: 〔主持派工 wip/b-scan-modules：只 glob 上面那一個目錄的話，搬走的頁面會**安靜地少掃**〕
+#: 判準同 `core.source_tree.page_files()`：模組資料夾要有 module.json（守門：頁面集合與 page_files() 相等）。
+MODULE_PAGES_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "..", "modules", "*", "pages", "*.html")
+
+
+def _page_paths():
+    """頁面母體的取檔：PAGES_GLOB ∪ 各模組的 pages/（有 module.json 的才算）。"""
+    out = sorted(glob.glob(PAGES_GLOB))
+    for p in sorted(glob.glob(MODULE_PAGES_GLOB)):
+        if os.path.isfile(os.path.join(os.path.dirname(os.path.dirname(p)), "module.json")):
+            out.append(p)
+    return out
+
 
 def _read(path):
     return io.open(path, encoding="utf-8", errors="replace").read()
@@ -89,6 +104,11 @@ def _linked_js(page_src, page_path):
         if "vendor" in src or src.startswith("http"):
             continue
         cand = os.path.normpath(os.path.join(os.path.dirname(page_path), src))
+        if not os.path.exists(cand):
+            # 模組頁面的 URL 仍在 /pages/ ⇒ `../static/x.js` 指的是 frontend/static，不是模組資料夾
+            alt = os.path.normpath(os.path.join(os.path.dirname(PAGES_GLOB), src))
+            if os.path.exists(alt):
+                cand = alt
         if os.path.exists(cand):
             out.append(cand)
     return out
@@ -119,7 +139,7 @@ def shared_js():
     ⚙️ 今天實算是 7 支；那個數字**不寫死**，只拿來對照。
     """
     count = {}
-    for p in sorted(glob.glob(PAGES_GLOB)):
+    for p in _page_paths():
         for j in _linked_js(_read(p), p):
             count[j] = count.get(j, 0) + 1
     return {j for j, n in count.items() if n > 1}
@@ -135,6 +155,9 @@ def shared_js():
 #:    注入型宣告會**被排除得到、而數不到** ⇒ 靜默無守衛、無回報。
 STATIC_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "..", "..", "frontend", "**", "*.js")
+#: 模組專屬 js（階段 C：`modules/<key>/js/`，URL 仍是 /js/x.js）——預設範圍一併掃（wip/b-scan-modules）
+MODULE_JS_GLOB = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "..", "modules", "*", "js", "**", "*.js")
 
 
 def _js_files(pattern=None):
@@ -155,7 +178,10 @@ def _js_files(pattern=None):
        `pages/vendor-contractors.html` 這種名字不可以被順手掃掉。
     """
     out = []
-    for p in sorted(glob.glob(pattern or STATIC_GLOB, recursive=True)):
+    found = glob.glob(pattern or STATIC_GLOB, recursive=True)
+    if pattern is None:
+        found += glob.glob(MODULE_JS_GLOB, recursive=True)
+    for p in sorted(found):
         parts = os.path.normpath(p).replace("\\", "/").split("/")
         if "vendor" in parts:
             continue
@@ -264,7 +290,7 @@ def _guarded_if_shared_counted():
     ⚙️ 這裡用 `"".join` 而不是換行接 —— 它只拿去做子字串比對，接什麼都一樣。
     """
     n = 0
-    for p in sorted(glob.glob(PAGES_GLOB)):
+    for p in _page_paths():
         src = _read(p)
         if not _DECL_RE.search(src):
             continue
@@ -277,7 +303,7 @@ def _guarded_if_shared_counted():
 def scan():
     rows = []
     shared = shared_js()
-    for p in sorted(glob.glob(PAGES_GLOB)):
+    for p in _page_paths():
         s = _read(p)
         if not _DECL_RE.search(s):
             continue

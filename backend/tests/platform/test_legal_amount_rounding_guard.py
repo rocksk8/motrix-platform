@@ -61,10 +61,30 @@ def _py_scope():
             and _PY_READS_RULES.search(p.read_text(encoding="utf-8"))]
 
 
+def _js_rel(p):
+    """frontend 底下 ⇒ 相對 frontend（JS_ALLOWED 的寫法）；模組底下 ⇒ `backend/modules/…`。"""
+    try:
+        return p.relative_to(FRONTEND).as_posix()
+    except ValueError:
+        return "backend/" + source_tree.rel(p)
+
+
+def _js_files():
+    """frontend 的 .html／.js ＋ 模組頁面（`source_tree.page_files()`）＋ 模組 js（`modules/<key>/js/`）。
+    〔主持派工 wip/b-scan-modules：頁面與模組 js 搬進 modules/<key>/ 之後，只 rglob frontend 會安靜地少掃〕"""
+    files = {}
+    for p in list(FRONTEND.rglob("*.html")) + list(FRONTEND.rglob("*.js")) + list(source_tree.page_files()):
+        files.setdefault(p.resolve(), p)
+    for d in source_tree.module_dirs():
+        for p in (d / "js").rglob("*.js"):
+            files.setdefault(p.resolve(), p)
+    return sorted(files.values(), key=_js_rel)
+
+
 def _js_scope():
     out = []
-    for p in sorted(list(FRONTEND.rglob("*.html")) + list(FRONTEND.rglob("*.js"))):
-        rel = p.relative_to(FRONTEND).as_posix()
+    for p in _js_files():
+        rel = _js_rel(p)
         if "vendor" in p.parts or rel in JS_ALLOWED:
             continue
         t = p.read_text(encoding="utf-8", errors="replace")
@@ -102,6 +122,28 @@ def test_positive_and_reverse_control_js():
         "`https://` 之後的程式碼也要看得到"
 
 
+def test_module_pages_and_js_are_in_scope(tmp_path, monkeypatch):
+    """⚙️ 反向控制（主持裁示）：沙盒 modules/x/pages 一頁、modules/x/js 一支讀法規參數又 Math.round ⇒ 在範圍且被抓到。"""
+    import sys
+    backend = (tmp_path / "backend").resolve()
+    fe = (tmp_path / "fe").resolve()
+    (fe / "pg").mkdir(parents=True)
+    m = backend / "modules" / "x"
+    (m / "pages").mkdir(parents=True)
+    (m / "js").mkdir()
+    (m / "module.json").write_text("{}", encoding="utf-8")
+    bad = "fetch('/api/tax-rules')\nconst n = Math.round(gross * rate)\n"
+    mp = m / "pages"
+    (mp / "x-pay.html").write_text(bad, encoding="utf-8")
+    (m / "js" / "x-pay.js").write_text(bad, encoding="utf-8")
+    monkeypatch.setattr(source_tree, "BACKEND", backend)
+    monkeypatch.setattr(source_tree, "FRONTEND_PAGES", fe / "pg")
+    monkeypatch.setattr(sys.modules[__name__], "FRONTEND", fe)
+    scope = dict(_js_scope())
+    assert set(scope) == {"backend/modules/x/pages/x-pay.html", "backend/modules/x/js/x-pay.js"}, sorted(scope)
+    assert all(js_hits(t) for t in scope.values())
+
+
 def test_scope_is_not_empty():
     """讀法規參數的檔案一個都掃不到 ⇒ 守門失去對象，不可以默默變綠（不綁特定模組）。"""
     assert _py_scope(), "找不到任何呼叫 rules_for_date／load_versions 的產品碼"
@@ -117,7 +159,7 @@ def test_legal_amounts_are_rounded_only_by_the_legal_params_service():
             bad.append(f"backend/{source_tree.rel(p)}:{ln}: {s}")
     for rel, t in _js_scope():
         for ln, s in js_hits(t):
-            bad.append(f"frontend/{rel}:{ln}: {s}")
+            bad.append(f"{rel if rel.startswith('backend/') else 'frontend/' + rel}:{ln}: {s}")
     assert not bad, ("法規金額要用 helpers.legal_params.round_half_up／floor_amount（前端 MotrixLegalRound），"
                      "不可以直接 round()／math.floor()／Math.round()：\n" + "\n".join(bad))
 

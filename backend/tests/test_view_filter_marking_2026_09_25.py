@@ -10,9 +10,11 @@
   看不像的靠各頁 e2e（test_e2e_view_filters_not_dirty_2026_09_25.py）。
 """
 import re
-from pathlib import Path
 
-PAGES = Path(__file__).resolve().parents[2] / "frontend" / "pages"
+from core import source_tree
+
+#: 範圍：`core.source_tree.page_files()`（L1 頁面目錄 ∪ 各模組的 pages/）。
+#: 〔主持派工 wip/b-scan-modules：原本只 glob L1 頁面目錄——頁面搬進 modules/<key>/pages/ 之後會安靜地少掃〕
 
 NAME = re.compile(r"(filter|search|keyword|kw|(^|\.)q$|query|dateFrom|dateTo|sort|year|month|period|range|scope"
                   r"|view|mode|show|tab|page|layer|near|status)", re.I)
@@ -43,14 +45,19 @@ def undecided(html):
     return out
 
 
-def test_every_filter_like_binding_has_a_decision():
+def _undecided_pages(files):
     bad = {}
-    for f in sorted(PAGES.glob("*.html")):
+    for f in files:
         if f.name in PENDING:
             continue
         u = undecided(f.read_text(encoding="utf-8"))
         if u:
             bad[f.name] = u
+    return bad
+
+
+def test_every_filter_like_binding_has_a_decision():
+    bad = _undecided_pages(source_tree.page_files())
     assert not bad, ("這些欄位名字像篩選，但沒有標 class=\"filter\"（看法類）或 data-saved-field（存檔欄位）："
                      "%s" % bad)
 
@@ -70,5 +77,40 @@ def test_the_guard_sees_what_it_should():
 
 def test_pending_pages_only_shrink_and_still_exist():
     assert len(PENDING) <= _PENDING_AT_START
-    missing = [p for p in PENDING if not (PAGES / p).exists()]
+    missing = [p for p in PENDING if not _page_exists(p)]
     assert not missing, "PENDING 裡的頁面不存在（改名了？）：%s" % missing
+
+
+def _page_exists(name):
+    try:
+        source_tree.page_file(name)
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def _sandbox_with_module_page(tmp_path, monkeypatch, html):
+    """沙盒：L1 頁面目錄一頁乾淨的＋modules/x/pages 一頁指定內容；source_tree 指到沙盒。"""
+    backend = (tmp_path / "backend").resolve()
+    pages = (tmp_path / "fe" / "pg").resolve()
+    pages.mkdir(parents=True)
+    (pages / "l1-clean.html").write_text('<input class="filter" x-model="year">', encoding="utf-8")
+    mod = backend / "modules" / "x"
+    (mod / "pages").mkdir(parents=True)
+    (mod / "module.json").write_text("{}", encoding="utf-8")
+    mp = mod / "pages"
+    (mp / "x-view.html").write_text(html, encoding="utf-8")
+    monkeypatch.setattr(source_tree, "BACKEND", backend)
+    monkeypatch.setattr(source_tree, "FRONTEND_PAGES", pages)
+
+
+def test_a_module_page_is_in_scope(tmp_path, monkeypatch):
+    """⚙️ 反向控制（主持裁示）：模組頁面（modules/x/pages）有未標的篩選欄 ⇒ 要被抓到；標了 ⇒ 放過。"""
+    _sandbox_with_module_page(tmp_path, monkeypatch, '<select x-model="year">')
+    assert {p.name for p in source_tree.page_files()} == {"l1-clean.html", "x-view.html"}
+    assert _undecided_pages(source_tree.page_files()) == {"x-view.html": [(1, "year")]}
+
+
+def test_a_marked_module_page_passes(tmp_path, monkeypatch):
+    _sandbox_with_module_page(tmp_path, monkeypatch, '<select class="filter" x-model="year">')
+    assert _undecided_pages(source_tree.page_files()) == {}

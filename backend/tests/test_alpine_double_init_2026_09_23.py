@@ -167,6 +167,7 @@ def test_al1_the_scanner_would_notice_a_missing_guard(tmp_path, monkeypatch):
         "</script></body>", encoding="utf-8")
 
     monkeypatch.setattr(mod, "PAGES_GLOB", str(tmp_path / "*.html"))
+    monkeypatch.setattr(mod, "MODULE_PAGES_GLOB", str(tmp_path / "_no_modules" / "*" / "pages" / "*.html"))
     rows = {r["page"]: r for r in mod.scan()}
 
     assert set(rows) == {"al1_guarded.html", "al1_bare.html"}, (
@@ -313,6 +314,7 @@ def test_al1_the_exclusion_still_works_on_an_unguarded_page(tmp_path,
             "</body>", encoding="utf-8")
 
     monkeypatch.setattr(mod, "PAGES_GLOB", str(pages / "*.html"))
+    monkeypatch.setattr(mod, "MODULE_PAGES_GLOB", str(tmp_path / "_no_modules" / "*" / "pages" / "*.html"))
     rows = mod.scan()
     assert len(rows) == 2, "合成的兩頁沒有被完整掃到：%r" % rows
 
@@ -714,3 +716,43 @@ def test_al1_my_function_slicer_does_not_run_past_the_next_function():
     assert b is not None and "_initDone" in b, (
         "`beta()` 裡找不到它自己的 `_initDone`：%r\n" % b
         + "☠️ 尺切太短 ⇒ 會去指控一個修好的檔。")
+
+
+# ══════════════════════════════════════════════════════════════════
+# 模組頁面（主持派工 wip/b-scan-modules）
+# ══════════════════════════════════════════════════════════════════
+
+def test_al1_the_page_population_is_drawn_from_page_files():
+    """⚙️ 頁面母體的範圍＝`core.source_tree.page_files()`（L1 頁面目錄 ∪ 各模組的 pages/）。
+
+    `PAGE_POPULATION` 數的是「會跑兩遍的頁」，不是頁面總數 ⇒ 它仍是一個決定過的數字；
+    這一題釘的是**它從哪裡數**：工具的取檔與 page_files() 不一致 ⇒ 紅（不再各自寫死路徑）。"""
+    import os
+    from core import source_tree
+    mod = _tool()
+    tool = sorted(os.path.basename(p).lower() for p in mod._page_paths())
+    central = sorted(p.name.lower() for p in source_tree.page_files())
+    assert tool == central, ("工具的頁面母體與 page_files() 不同：只在工具 %s；只在 page_files %s"
+                             % (sorted(set(tool) - set(central)), sorted(set(central) - set(tool))))
+
+
+def test_al1_a_module_page_that_double_inits_is_seen(tmp_path, monkeypatch):
+    """⚙️ 反向控制（主持裁示）：modules/x/pages 放一頁會跑兩遍、沒有守衛 ⇒ scan() 要列出它、判成未修；
+    沒有 module.json 的資料夾不算模組（判準同 page_files()）。"""
+    mod = _tool()
+    pages = tmp_path / "fe" / "pg"
+    pages.mkdir(parents=True)
+    body = '<body x-data="demoPage()" x-init="init()">\n<script>function demoPage(){return{init(){}}}</script></body>'
+    (pages / "al1_l1.html").write_text(body.replace("init(){}", "_initDone:false,init(){}"), encoding="utf-8")
+    mods = tmp_path / "backend" / "modules"
+    xp, gp = mods / "x" / "pages", mods / "ghost" / "pages"
+    xp.mkdir(parents=True)
+    (mods / "x" / "module.json").write_text("{}", encoding="utf-8")
+    (xp / "al1_mod.html").write_text(body, encoding="utf-8")
+    gp.mkdir(parents=True)                                               # 沒有 module.json
+    (gp / "al1_ghost.html").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(mod, "PAGES_GLOB", str(pages / "*.html"))
+    monkeypatch.setattr(mod, "MODULE_PAGES_GLOB", str(mods / "*" / "pages" / "*.html"))
+    rows = {r["page"]: r for r in mod.scan()}
+    assert set(rows) == {"al1_l1.html", "al1_mod.html"}, sorted(rows)
+    assert rows["al1_mod.html"]["guarded"] is False and rows["al1_l1.html"]["guarded"] is True
