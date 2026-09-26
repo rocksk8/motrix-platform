@@ -104,3 +104,25 @@ def test_reports_page_says_income_and_cashier_queues_are_missing(live_server, ma
     page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
     assert page.evaluate(f"() => {d}.payableKnown") is False
     assert page.evaluate(f"() => {d}.payableSnapMissing") == "應收應付模組未安裝"
+
+
+@pytest.mark.e2e
+def test_reports_snapshot_shows_the_payable_queues_own_reason(live_server, make_user, e2e_browser):
+    """只有待付款 404 並帶說明（M04 外包工班不在 ⇒ 依設計 404＋CONTRACTOR_MISSING），待收款照常 ⇒
+    快照顯示那一句、不畫 NT$ 0（兩支分開驗，否則任一支的處理都會讓另一支的缺陷看不見）。"""
+    from core import source_tree
+    if not source_tree.module_installed("modules/analytics/"):
+        pytest.skip("M08 營運分析不在這個安裝包 ⇒ 報表頁本來就不在（PLAYBOOK §B-11）")
+    reason = "外包工班模組未安裝：出納頁不顯示承攬商匯款"
+    u = make_user(username="arapabs_sa2", role="superadmin")
+    page = e2e_browser.new_context().new_page()
+    page.route("**/api/cashier/payable-queue**", lambda r: r.fulfill(
+        status=404, body=json.dumps({"detail": reason}, ensure_ascii=False), content_type="application/json"))
+    _login(page, live_server, *u)
+    page.goto(f"{live_server}/pages/reports.html")
+    page.wait_for_selector(".period-bar", timeout=20000)
+    d = "Alpine.$data(document.querySelector('[x-data]'))"
+    page.evaluate(f"() => {{ {d}.payableSnapLoaded = false; {d}.payableSnapMissing = ''; return {d}._loadPayableSnapshot() }}")
+    page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
+    assert page.evaluate(f"() => {d}.payableSnapMissing") == reason
+    assert page.evaluate(f"() => {d}.payableKnown") is False
