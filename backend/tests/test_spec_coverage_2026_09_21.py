@@ -907,6 +907,13 @@ C_OWNED = {
     # 引用（§2、§3）——改名字會讓稽核紀錄對不上，不改名，改登記在這裡。
     "O11":  "RUN-PLAN 的操作追蹤序號（B 的 e2e 逾時證據不外洩），不是 SPEC 驗收條件；"
             "測試名稱與 docs/platform/audit/AUDIT-D-B-o11.md 逐字對應，不改名",
+    # 🔴 第十一班列車發現：`O92` 同樣不是 SPEC 驗收條件編號，是 RUN-PLAN.md／
+    # `docs/platform/audit/AUDIT-D-B-o9-2.md` 自己的觀察追蹤序號（O9 的第二輪 →「O9-2」→
+    # 稽核裡簡寫成 `O92-S1`／`O92-S2`），字面剛好符合這支守門認的規格編號樣式。
+    # 這兩個字串寫在 `backend/tests/test_e2e_voucher_summary_2026_09_23.py` 的註解與
+    # 突變說明裡，與 AUDIT-D-B-o9-2.md §3「複核」逐字對應，不改字，登記在這裡。
+    "O92":  "RUN-PLAN／稽核檔的觀察追蹤序號（b-o9-3 深連結序號題），不是 SPEC 驗收條件；"
+            "與 docs/platform/audit/AUDIT-D-B-o9-2.md §3 逐字對應，不改字",
 }
 
 
