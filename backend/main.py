@@ -237,6 +237,12 @@ async def no_cache_static(request: Request, call_next):
     if p.startswith("/static/vendor/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
+    # 2026-09-26（D 調查 O5）：字型 4 支 otf 共約 21 MB，原本沒有任何快取表頭 ⇒ 每開一頁都可能重抓，
+    # 首頁的 load 事件被兩支約 5 MB 的字型綁住。字型檔名沒有帶版本號（換字型不一定換檔名）⇒ 不用 immutable，
+    # 給 7 天、到期用 ETag／Last-Modified 重新驗證（StaticFiles 本來就帶）。
+    if p.startswith("/fonts/"):
+        response.headers["Cache-Control"] = "public, max-age=604800"
+        return response
     if p.endswith((".html", ".css", ".js")) or p in ("/", ""):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
