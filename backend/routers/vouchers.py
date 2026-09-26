@@ -1830,6 +1830,8 @@ def _provide_voucher_status(conn, voucher_id):
 
 
 _registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)
+# IP-22（暫定號）：M01 案件整包的傳票段；同一份授權、權限判斷與單獨打 /api/vouchers/by-case/{no} 逐字相同
+_registry.provide("voucher.by_case", "accounting", vouchers_by_case)
 _registry.provide("voucher.status", "accounting", _provide_voucher_status)
 
 

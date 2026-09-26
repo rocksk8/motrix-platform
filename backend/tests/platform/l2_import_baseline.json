@@ -1,7 +1,6 @@
 {
  "_doc": "L2 跨組 import 邊的基線：只准變少。新增⇒守門紅；消失⇒用 --prune 刪除。",
  "edges": [
-  "M01 router:quotations -> M06 router:vouchers",
   "M08 mod:analytics/api/reports -> M01 helper:quotations"
  ],
  "_doc_l1_to_l2": "L1 → L2 的 import 邊（逆向依賴）：只准變少（稽核 ⑰ S-7）。扣掉 core:main → router:（載入器）。",

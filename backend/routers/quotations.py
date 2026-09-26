@@ -2205,7 +2205,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     - 其餘（應收應付、開票／請款／匯款憑據、叫料、今日工作）改由前端點到該分頁時才載入。
     - 不加快取（hichan-0a 裁 D3）：資料都是即時的，只合併請求。
     """
-    from routers.vouchers import vouchers_by_case
+    list_vouchers = _registry.single_provider("voucher.by_case")             # IP-22（M06，暫定號）
     list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-15（M04）
     list_shipping = _registry.single_provider("shipping.list_for_case")      # IP-18（M03，暫定號）
     from routers.completion_notes import list_completion_notes
@@ -2224,7 +2224,8 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
         "quotation": quotation,
         "parts": {
             "health":          part(case_close_gates, quote_no, authorization=authorization),
-            "vouchers":        part(vouchers_by_case, quote_no, authorization=authorization),
+            "vouchers":        (part(list_vouchers, quote_no, authorization=authorization)
+                                if list_vouchers else {"ok": False, "status": 404, "detail": VOUCHERS_UNAVAILABLE}),
             "dispatches":      (part(list_dispatches, quote_no=quote_no, authorization=authorization)
                                 if list_dispatches else {"ok": False, "status": 404, "detail": DISPATCHES_UNAVAILABLE}),
             "shippingNotes":   (part(list_shipping, quote_no=quote_no, authorization=authorization)
@@ -2236,6 +2237,8 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     }
 
 
+#: IP-22（暫定號）對方不在時：案件整包的傳票段回這一句（前端照「那一段回非 2xx」處理：不列傳票連結）
+VOUCHERS_UNAVAILABLE = "會計傳票模組未安裝：沒有傳票資料"
 #: IP-15 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
 DISPATCHES_UNAVAILABLE = "外包工班模組未安裝：沒有承攬派工資料"
 #: IP-18 對方不在時：案件整包的出貨單段回這一句（前端出貨單分頁顯示它，不顯示「尚未建立」）
