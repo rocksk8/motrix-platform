@@ -24,7 +24,7 @@ def _open_cashier(live_server, make_user, new_page, login_as, name):
 
 @pytest.mark.e2e
 def test_payable_tab_says_why_when_subcontract_is_absent(live_server, make_user, new_page, login_as, monkeypatch):
-    from routers import cashier as ca
+    from modules.arap.api import cashier as ca
     orig = registry.providers
     monkeypatch.setattr(registry, "providers", lambda c: {} if c == "contractor_voucher.public" else orig(c))
     page = _open_cashier(live_server, make_user, new_page, login_as, "e2e_ip14_absent")

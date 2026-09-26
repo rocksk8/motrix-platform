@@ -68,13 +68,13 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/invoice_vouchers.py",
+   "file": "modules/arap/api/invoice_vouchers.py",
    "path": "/api/invoice-vouchers",
    "handler": "list_invoice_vouchers",
    "scope": "row_access"
   },
   {
-   "file": "routers/invoice_vouchers.py",
+   "file": "modules/arap/api/invoice_vouchers.py",
    "path": "/api/invoice-vouchers/remaining",
    "handler": "get_invoice_voucher_remaining",
    "scope": "row_access"
@@ -92,13 +92,13 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/payment_requests.py",
+   "file": "modules/arap/api/payment_requests.py",
    "path": "/api/payment-requests",
    "handler": "list_payment_requests",
    "scope": "row_access"
   },
   {
-   "file": "routers/payment_requests.py",
+   "file": "modules/arap/api/payment_requests.py",
    "path": "/api/payment-requests/remaining",
    "handler": "get_payment_request_remaining",
    "scope": "row_access"

@@ -22,7 +22,7 @@ def _drop(monkeypatch, *caps):
 
 
 def test_cashier_and_report_without_payroll(client, make_user, monkeypatch):
-    from routers import cashier
+    from modules.arap.api import cashier
     h = _sa(client, make_user)
     _drop(monkeypatch, "bonus.payouts", "expense.entries")
     q = client.get("/api/cashier/bonus-queue", headers=h)

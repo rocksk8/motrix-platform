@@ -1,5 +1,9 @@
 # 營運分析 更新紀錄
 
+## 1.0.4 — 2026-09-26（C，M05；第九班之後 rebase 重編，原暫用 1.0.2，列車取號）
+- M05 搬遷：`POST /api/reports/bank-reconcile` 收回 M05（`modules/arap/api/cashier.py`，路徑不變），本模組只留一行指路註解；它的 8 題隨之搬進 `modules/arap/tests`
+- 收款／銷項發票改取 M05 provider（`receivables.income_items`／`receivables.tax_invoices`）；M05 不在 ⇒ 現金口徑收入附 `incomeNotice`（PDF 空表說明同句）、稅務匯出 404 並明說——不是「這個月沒有收款」
+
 ## 1.0.3 — 2026-09-26（列車取號；原暫用 1.0.2，與 c-tax-calc-2 的 1.0.2 交會，本段改 1.0.3）
 - `_compute_achievement(…, name_to_id=None)`：名字⇒帳號對照可由呼叫端給；沒給才查 `users`（行為不變）。原本無條件查資料庫 ⇒ `test_achievement_uses_same_attribution_as_performance` 不帶 client 單獨跑就紅（A 在 M03 反向控制查到，主持轉 M08）；該題改給空對照，另加「給了對照就用 id 比對」一題（含解析不到的正對照）
 

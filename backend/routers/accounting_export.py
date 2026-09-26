@@ -74,7 +74,13 @@ from pydantic import BaseModel
 from db import get_db
 from core import registry as _registry
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
-from helpers.receivables import collect_tax_invoices as _collect_tax_invoices  # §3 #11：M08 搬遷 ③ 下沉 L1（ROADMAP A8b）
+#: 收款事件（銷項）的資料屬 M05 應收應付（ROADMAP A8b 已收回模組）：經 provider 取用；M05 不在 ⇒ 沒有收款事件並明說
+T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收款事件（銷項）"
+
+
+def _collect_tax_invoices(year=None, month=None):
+    p = _registry.single_provider("receivables.tax_invoices")
+    return [] if p is None else p(year, month)
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading
 from helpers.part_catalog import PART_CATEGORIES
@@ -238,12 +244,14 @@ T100_INVENTORY_MISSING = "採購・庫存・出貨模組未安裝：本次匯出
 
 
 def _t100_notice() -> str:
-    """預覽要明說少了哪幾類付款傳票（對方模組不在）；都在 ⇒ 空字串。"""
+    """預覽要明說少了哪幾類傳票（對方模組不在：付款類 M04／M03、收款事件 M05）；都在 ⇒ 空字串。"""
     missing = []
     if _registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）
         missing.append(T100_CONTRACTOR_MISSING)
     if _registry.single_provider("inventory.paid_batches") is None:        # IP-20（M03）
         missing.append(T100_INVENTORY_MISSING)
+    if _registry.single_provider("receivables.tax_invoices") is None:      # M05：收款事件（銷項）
+        missing.append(T100_RECEIVABLES_MISSING)
     return "；".join(missing)
 
 
@@ -508,7 +516,7 @@ def t100_export_preview(
     _validate_range(start, end)
     events = _collect_t100_events(start, end)
     return {
-        # IP-14／IP-20 對方不在時：預覽明說少了哪幾類付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
+        # IP-14／IP-20／receivables.tax_invoices 對方不在時：預覽明說少了哪幾類（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
         "notice": _t100_notice(),
         "count": len(events),
         "totalAmount": sum(e["amount"] for e in events),
