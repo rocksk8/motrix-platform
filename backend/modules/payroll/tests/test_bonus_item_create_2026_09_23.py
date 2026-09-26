@@ -191,7 +191,7 @@ def test_no_endpoint_uses_a_user_it_never_bound():
        ⇒ 抓不到「巢狀 def 讀一個外層也沒綁的 `user`」。
     """
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     files = []
     for d in _SCAN_DIRS:
         files += sorted((root / d).glob("*.py"))

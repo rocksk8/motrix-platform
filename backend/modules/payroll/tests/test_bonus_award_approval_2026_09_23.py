@@ -389,7 +389,7 @@ def test_bn8_the_migration_only_adds_a_column(client, make_user):
        找不到而直接說「沒有 UPDATE」是〈我找不到 X〉的第一種壞法。
     """
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[1]
+    root = pathlib.Path(__file__).resolve().parents[3]
     src = (root / "db.py").read_text(encoding="utf-8", errors="replace")
 
     hits = [m for m in re.finditer(

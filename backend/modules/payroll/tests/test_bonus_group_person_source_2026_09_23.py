@@ -339,7 +339,7 @@ def test_bn14_the_group_source_check_is_not_scattered_across_the_codebase():
     判紅；本題印出所有命中位置供人工核對。
     """
     import ast
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[4]
     hits = []
     for py in (root / "backend").rglob("*.py"):
         parts = py.relative_to(root).parts

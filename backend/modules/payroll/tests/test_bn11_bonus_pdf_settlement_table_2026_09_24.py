@@ -15,7 +15,7 @@
 import re
 from pathlib import Path
 
-FRONTEND = Path(__file__).resolve().parent.parent.parent / "frontend" / "pages"
+FRONTEND = Path(__file__).resolve().parents[4] / "frontend" / "pages"
 
 #: 每一格都不同、且**不符合** 10%／1% 係數 ⇒ 若實作重算，數字會對不上。
 _SETTLE = {"summary": {

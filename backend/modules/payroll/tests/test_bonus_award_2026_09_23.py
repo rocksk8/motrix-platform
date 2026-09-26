@@ -29,7 +29,7 @@ import pytest
 
 import db
 
-_BACKEND = Path(__file__).resolve().parent.parent
+_BACKEND = Path(__file__).resolve().parents[3]
 _FRONTEND = _BACKEND.parent / "frontend"
 
 _MODULES = ("modules.payroll.bonus", "modules.payroll.api.bonus", "helpers.bonus_award",
