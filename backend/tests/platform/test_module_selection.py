@@ -398,11 +398,12 @@ def test_every_module_page_is_declared_in_sidebar(client):
     head = client.get("/static/sidebar.js").text.partition("\n")[0]
     assert head.startswith("window.MOTRIX_MENU = ")
     declared = {p: v["key"] for p, v in json.loads(head[len("window.MOTRIX_MENU = "):].rstrip(";"))["pageModules"].items()}
+    # 〔C4-O3 主持裁示：未登入的宣告只放**已載入**模組的頁 ⇒ 比對對象改成已載入模組（原本是安裝目錄裡所有 module.json）〕
+    from core import registry
     want = {}
-    for mj in sorted((BACKEND / "modules").glob("*/module.json")):
-        man = json.loads(mj.read_text(encoding="utf-8"))
-        for pg in man.get("pages") or []:
-            want[pg["path"]] = man["key"]
+    for m in registry.loaded():
+        for pg in (m.manifest or {}).get("pages") or []:
+            want[pg["path"]] = m.key
     # 〔更正：第一版無條件斷言 pageModules 非空當正對照 ⇒ core-only 反向控制（沒有任何模組）紅。
     #   沒有模組宣告頁面時，空的才是對的；而多出來的一樣要紅（不屬於任何已裝模組的頁不可以列進去）〕
     if want:
@@ -410,6 +411,22 @@ def test_every_module_page_is_declared_in_sidebar(client):
     assert not _page_mismatches(declared, want), "MODULE_PAGES 缺少或 key 不符：%s" % _page_mismatches(declared, want)
     extra = sorted(set(declared) - set(want))
     assert not extra, "pageModules 列了沒有任何已裝模組宣告的頁：%s" % extra
+
+
+def test_every_installed_module_page_is_mapped_after_login(client, make_user):
+    """完整的頁面⇒模組對照（含已安裝未載入）改在登入後的 /api/platform/menu 給（C4-O3）：
+    每個 modules/*/module.json 的 pages 都要在裡面、key 對得上——前端藏頁內連結、直接打網址的後備提示靠它。"""
+    want = {}
+    for mj in sorted((BACKEND / "modules").glob("*/module.json")):
+        man = json.loads(mj.read_text(encoding="utf-8"))
+        for pg in man.get("pages") or []:
+            want[pg["path"]] = man["key"]
+    u, pw = make_user(username="ms_pm_sa", role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    got = {p: v["key"] for p, v in client.get("/api/platform/menu", headers=h).json()["pageModules"].items()}
+    if want:
+        assert got, "正對照：有模組宣告頁面，登入後的 pageModules 卻是空的"
+    assert not _page_mismatches(got, want), "登入後的 pageModules 缺少或 key 不符：%s" % _page_mismatches(got, want)
 
 
 def test_every_module_page_guard_negative_control():

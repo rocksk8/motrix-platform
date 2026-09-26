@@ -4967,7 +4967,8 @@
     "plat:__init__",
     "plat:definitions",
     "plat:registry",
-    "router:definitions"
+    "router:definitions",
+    "router:platform_menu"
    ],
    "evidence": {
     "import": [
@@ -4977,7 +4978,8 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/definitions.py"
+     "backend/routers/definitions.py",
+     "backend/routers/platform_menu.py"
     ],
     "page": [
      "frontend/index.html"
@@ -5561,6 +5563,7 @@
     "plat:menu",
     "plat:paths",
     "plat:registry",
+    "router:platform_menu",
     "router:system"
    ],
    "evidence": {
@@ -5577,6 +5580,7 @@
      "backend/tests/_subproc.py"
     ],
     "api": [
+     "backend/routers/platform_menu.py",
      "backend/routers/system.py"
     ],
     "page": [

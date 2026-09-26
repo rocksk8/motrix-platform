@@ -66,19 +66,28 @@ def test_declaration_matches_platform_menu_for_the_same_user(client, make_user):
     assert _filter(menu["groups"], [], True) == client.get("/api/platform/menu", headers=h).json()["groups"]
 
 
-def test_unloaded_module_items_leave_but_its_pages_stay_mapped(client, monkeypatch):
+def test_unloaded_module_leaves_no_trace_in_the_public_declaration(client, make_user, monkeypatch):
+    """模組沒載入 ⇒ 未登入拿得到的宣告裡**項目與頁面都不列**（稽核 X C4-O3 主持裁示：不可以從 groups 與 pageModules 的差
+    推出哪些模組停用／未授權）。登入後的 /api/platform/menu pageModules 仍有完整對照（前端藏連結、後備提示用）。
+    〔更正：原題名 test_unloaded_module_items_leave_but_its_pages_stay_mapped，斷言頁面**仍在**——那正是 O3 的外洩〕"""
     _r, before, _b = _served(client)
     key = next((it["module"] for g in before["groups"] for it in g["items"] if it.get("module")), None)
     if key is None:
         pytest.skip("沒有已載入、宣告選單項的模組 ⇒ 無對象")
     pages = sorted(p for p, v in before["pageModules"].items() if v["key"] == key)
-    assert pages, "正對照：它的頁面在 pageModules 裡"
+    assert pages, "正對照：載入時它的頁面在 pageModules 裡"
     real = registry.loaded
     monkeypatch.setattr(registry, "loaded", lambda: [m for m in real() if m.key != key])
     _r, after, _b = _served(client)
     assert not any(it.get("module") == key for g in after["groups"] for it in g["items"])
-    assert sorted(p for p, v in after["pageModules"].items() if v["key"] == key) == pages
+    assert not [p for p, v in after["pageModules"].items() if v["key"] == key], "沒載入的模組頁不可以列在未登入的宣告裡"
     assert all(g["items"] for g in after["groups"]), "不可以留空群組"
+    loaded_keys = {m.key for m in registry.loaded()}
+    assert {v["key"] for v in after["pageModules"].values()} <= loaded_keys, "pageModules 只可以有已載入的模組"
+    u, pw = make_user(username="c4_o3_sa", role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    full = client.get("/api/platform/menu", headers=h).json()["pageModules"]
+    assert sorted(p for p, v in full.items() if v["key"] == key) == pages, "登入後的完整對照要有它（含沒載入的）"
 
 
 def test_js_literal_cannot_break_out_of_the_script():
@@ -118,8 +127,8 @@ def _leaks(text):
 def test_motrix_menu_contains_no_database_strings(client, make_user):
     _plant_db_strings(client, make_user)
     r = client.get("/static/sidebar.js")          # 不帶 token
-    head = r.text.partition("\n")[0]
-    assert head.startswith(PREFIX) and _leaks(head) == [], _leaks(head)
+    # 判準對「未登入就拿得到的整份回應」，不是只看第一行（稽核 X C4-S3：放在第二行的外洩原本抓不到）
+    assert r.text.startswith(PREFIX) and _leaks(r.text) == [], _leaks(r.text)
 
 
 def test_rc_database_string_leak_would_be_caught(client, make_user, monkeypatch):
@@ -138,5 +147,23 @@ def test_rc_database_string_leak_would_be_caught(client, make_user, monkeypatch)
             conn.close()
         return d
     monkeypatch.setattr(PM, "menu_declaration", leaky)
-    head = client.get("/static/sidebar.js").text.partition("\n")[0]
-    assert _SENTINEL_MOD in _leaks(head)
+    assert _SENTINEL_MOD in _leaks(client.get("/static/sidebar.js").text)
+
+
+def test_rc_leak_outside_the_first_line_is_caught(client, make_user, monkeypatch):
+    """反向控制（稽核 X9）：資料庫字串放在宣告以外的行（例 `window.MOTRIX_CUSTOM = …`）⇒ 判準也要抓到。"""
+    _plant_db_strings(client, make_user)
+    real = PM.sidebar_js_source
+
+    def leaky(page_map, frontend_dir):
+        from db import get_db
+        from helpers import custom_modules as CM
+        conn = get_db()
+        try:
+            extra = "window.MOTRIX_CUSTOM = %s;" % PM._js_literal(CM.published_modules(conn))
+        finally:
+            conn.close()
+        head, _, body = real(page_map, frontend_dir).partition(chr(10))
+        return head + chr(10) + extra + chr(10) + body
+    monkeypatch.setattr(PM, "sidebar_js_source", leaky)
+    assert _SENTINEL_MOD in _leaks(client.get("/static/sidebar.js").text)

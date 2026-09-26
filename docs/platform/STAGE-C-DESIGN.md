@@ -80,6 +80,7 @@ GET /pages/{name}.html
   〔更正（主持裁示 2026-09-26，選 A；C4 第一個 commit）：P9 的角色版面（側欄點的 hide／move index）跟使用者角色有關，而載入 `<script src=sidebar.js>` 的請求沒有 Bearer token ⇒ 伺服器在注入處算不出角色。改為三點：
   ① **`MOTRIX_MENU` 只放與使用者無關的宣告**（L1＋已載入模組~~＋已發布自訂模組~~的項目，含 `perm`；每個請求現查模組狀態）；首屏照舊同步渲染、權限同步過濾（`has()`），時序不變、HTML 不用改。
      〔更正（B，2026-09-26 12:57，C4 步驟 ② 實作時；主持確認）：**自訂模組與模組狀態不放進 `MOTRIX_MENU`**——`/static/sidebar.js` 不需登入就拿得到，自訂模組名稱是公司資料、模組狀態原本在要登入的 `/api/system/modules/availability`；兩者改在 ② 的 `/api/platform/menu` 階段出現（自訂模組原本就是非同步追加，無退步）。實際內容 `{v, groups, pageModules}`（`routers.platform_menu.menu_declaration`）。
+     〔更正（B，2026-09-26 15:18，稽核 X C4-O3 主持裁示）：`pageModules` **只含已載入模組的頁**——原本含已安裝未載入的，未登入者比對 groups 與 pageModules 就推得出哪些模組停用／未授權，等於把「模組狀態」放了進去。完整對照改由登入後的 `/api/platform/menu` 的 `pageModules` 給（前端藏頁內連結、直接打網址的後備提示用）。題：`test_menu_inject::test_unloaded_module_leaves_no_trace_in_the_public_declaration`〕
      **主持判定**：`MOTRIX_MENU` 讓未登入的人讀得到「這套安裝有哪些模組」（L1＋已載入模組的標籤與 perm）——**可以接受**：登入頁本身就顯示產品，而這是程式宣告、不是資料。界線是**不含任何來自資料庫的字串**（自訂模組、公司名稱等）；守門 `tests/platform/test_menu_inject.py::test_motrix_menu_contains_no_database_strings`（先寫入哨兵字串並以登入 API 讀回當正對照），反向控制 `test_rc_database_string_leak_would_be_caught`（宣告併入已發布自訂模組 ⇒ 判準要抓到）。〕
   ② **session 取回之後**打 `GET /api/platform/menu`（回「已套角色 layout 的結果」）**再重排一次**；讀失敗 ⇒ 保留宣告版，而且要明說（console 一筆＋側欄 data 屬性），不可以靜默。
   ③ 這是「先渲染、再非同步套用」＝〈先渲染再非同步載入＝競態〉那一型，守三件事：

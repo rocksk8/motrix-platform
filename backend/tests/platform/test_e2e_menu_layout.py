@@ -35,6 +35,29 @@ def _state(page, want, timeout=10000):
     page.wait_for_selector("html[data-menu-state='%s']" % want, state="attached", timeout=timeout)
 
 
+def _seq(page, n, state, timeout=10000):
+    """等第 n 輪完成（C4-S1：第二輪以後不能只等 data-menu-state——上一輪留下的 layout 會讓它立刻成立）。"""
+    page.wait_for_selector("html[data-menu-seq='%d'][data-menu-state='%s']" % (n, state), state="attached", timeout=timeout)
+
+
+_DELAY_FIRST = """
+  (function () {
+    var real = window.fetch, n = 0
+    window.fetch = function (url, opt) {
+      if (String(url).indexOf('/api/platform/menu') >= 0 && ++n === 1) {
+        return new Promise(function (res) {
+          setTimeout(function () {
+            window.__staleDelivered = true
+            res(new Response(%s, {status: %d, headers: {'Content-Type': 'application/json'}}))
+          }, 1500)
+        })
+      }
+      return real.apply(this, arguments)
+    }
+  })()
+"""
+
+
 def _publish_hide(role, key, href):
     import db
     from core import definitions as D
@@ -102,7 +125,7 @@ def test_layout_failure_keeps_declared_menu_and_says_so(live_server, make_user, 
     page.goto(f"{live_server}/index.html")
     _state(page, "layout-failed")
     assert label in _vocab(page), "讀版面失敗 ⇒ 宣告版要留著"
-    assert any("[menu]" in t and "保留宣告版" in t for t in logs), logs
+    assert any("[menu]" in t and "保留宣告版" in t and "自訂模組暫不顯示" in t for t in logs), logs   # C4-S4：講清楚少了什麼
 
 
 def test_stale_layout_response_is_dropped(live_server, make_user, new_page, login_as):
@@ -128,12 +151,13 @@ def test_stale_layout_response_is_dropped(live_server, make_user, new_page, logi
       })()
     """)
     page.goto(f"{live_server}/index.html")
-    page.wait_for_selector("html[data-menu-state='declared']", state="attached", timeout=10000)
-    page.evaluate("window.MotrixMenu.refresh()")
-    _state(page, "layout")
+    page.wait_for_selector("html[data-menu-state='pending']", state="attached", timeout=10000)
+    assert page.evaluate("window.MotrixMenu.refresh()") == 2
+    _seq(page, 2, "layout")
     page.wait_for_function("window.__staleDelivered === true", timeout=10000)
     page.wait_for_timeout(100)
     assert label in _vocab(page), "晚到的舊回應（空選單）不可以蓋掉新的"
+    assert page.get_attribute("html", "data-menu-seq") == "2"
 
 
 def test_custom_module_appears_after_layout(live_server, make_user, new_page, login_as, client):
@@ -152,3 +176,50 @@ def test_custom_module_appears_after_layout(live_server, make_user, new_page, lo
     v = _vocab(page)
     assert "C4瀏覽器自訂" in v and "模組建構器" in v, v
     assert page.locator("script[data-custom-modules-nav]").count() == 0, "custom-modules-nav.js 已退場"
+
+
+def test_refresh_resets_the_wait_point(live_server, make_user, new_page, login_as):
+    """稽核 X C4-S1：第一輪完成後再 refresh ⇒ 狀態先回到 pending，第二輪完成時 data-menu-seq=2。
+    突變：_applyLayout 不設 pending ⇒ 「refresh 後立刻是 pending」紅。"""
+    u, p = make_user(username="c4e_s1", role="superadmin", modules=[])
+    page = new_page()
+    login_as(page, (u, p))
+    page.goto(f"{live_server}/index.html")
+    _seq(page, 1, "layout")
+    assert page.evaluate("window.MotrixMenu.refresh()") == 2
+    assert page.get_attribute("html", "data-menu-state") == "pending", "refresh 之後等待點要重設"
+    _seq(page, 2, "layout")
+
+
+def test_stale_failed_response_is_dropped(live_server, make_user, new_page, login_as):
+    """稽核 X C4-S2：第一趟晚回來而且失敗（500），第二趟先成功 ⇒ 最後狀態仍是 layout（不可以被舊的失敗改成 layout-failed）。"""
+    _key, _href, label = _pick()
+    u, p = make_user(username="c4e_s2", role="superadmin", modules=[])
+    page = new_page()
+    login_as(page, (u, p))
+    logs = []
+    page.on("console", lambda m: logs.append(m.text))
+    page.add_init_script(_DELAY_FIRST % ("'{}'", 500))
+    page.goto(f"{live_server}/index.html")
+    page.wait_for_selector("html[data-menu-state='pending']", state="attached", timeout=10000)
+    assert page.evaluate("window.MotrixMenu.refresh()") == 2
+    _seq(page, 2, "layout")
+    page.wait_for_function("window.__staleDelivered === true", timeout=10000)
+    page.wait_for_timeout(100)
+    assert page.get_attribute("html", "data-menu-state") == "layout", "晚到的舊失敗不可以蓋掉新的成功"
+    assert label in _vocab(page)
+    assert not any("讀不到 /api/platform/menu" in t for t in logs), logs
+
+
+def test_menu_api_is_called_once_per_page_load(live_server, make_user, new_page, login_as):
+    """稽核 X C4-O2：session 沒變時，每次載入頁面只打一次 /api/platform/menu（golden 忽略它，重複或迴圈打要有人守）。"""
+    u, p = make_user(username="c4e_o2", role="superadmin", modules=[])
+    page = new_page()
+    login_as(page, (u, p))
+    calls = []
+    page.on("request", lambda r: calls.append(r.url) if "/api/platform/menu" in r.url else None)
+    page.goto(f"{live_server}/index.html")
+    _seq(page, 1, "layout")
+    page.wait_for_timeout(1500)                       # 給重複／迴圈呼叫一個出現的機會
+    assert len(calls) == 1, calls
+

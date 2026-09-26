@@ -713,6 +713,7 @@ app.include_router(platform_catalog.router)
 #    記 failed＋原因。排程與啟動提示只取「掛上之後」仍在 registry.loaded() 裡的模組。
 # 頁面衝突比照路由衝突（階段 C／C1）：**在 mount_modules 之前**檢查，衝突的模組改記 failed ⇒ 路由、排程都不掛。
 _PAGE_MAP = module_pages.check_and_register(module_loader.MODULES_DIR, _paths.FRONTEND_PAGES_DIR)
+platform_menu.set_page_map(_PAGE_MAP)          # /api/platform/menu 的完整 pageModules（登入後；C4-O3）
 module_loader.mount_modules(app)
 if os.getenv("MOTRIX_DISABLE_SCHEDULERS") != "1":
     # 例：標案雷達；關著時 run_scan() 立刻返回、不對外連線。只跑 registry.loaded() 的

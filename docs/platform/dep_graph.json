@@ -9015,7 +9015,7 @@
    "routes": [
     {
      "func": "platform_menu",
-     "line": 89,
+     "line": 114,
      "method": "GET",
      "path": "/api/platform/menu"
     }
