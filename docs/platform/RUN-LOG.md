@@ -2,6 +2,7 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 16:30 D：c-m01-s3-2 dbd07633 複核：**CS-S1 關閉**；CS-M1 靜態掃描通過（R2／R3 紅），但執行期新題 `test_runtime_refuses_system_from_an_l2_module` 不帶 client 夾具⇒單跑紅（no such table），**CS-M1 未關**，待加夾具後重跑 R1。
 - 2026-09-26 16:27 D：h-roleguard d10fc8e9 抽查通過，**T8-O1 關閉**：24 過、突變 RG1 紅；新 AST 64 筆 ⊇ 舊正則的真實比對；觀察 RG-O1（SQL 內角色字面值 9 檔無人驗）。
 - 2026-09-26 16:23 D：b-o5-s1 4e6d97d3 通過（必修 0）：golden Referer 過濾**未變寬**（G1 案件頁多一支 GET⇒紅；首頁 load 後的 GET 在 origin 真字型下也抓不到＝本來就不在範圍；G4 拿掉過濾⇒API 清單紅 2/3）；替身兩突變紅。MT-O1 關閉（fb3c687f）。列車 07547758／cf7c3bb3 事後抽查通過，觀察 T8-O1。
 - 2026-09-26 16:16 A：開工 wip/a-attachments（`attachments.for_document`，裁示 M06-b；步驟表 docs/platform/plans/ATTACHMENTS-PLAN.md）。**會改到 C 的模組**：`modules/subcontract/`（新增 attachments.py、ModuleSpec.providers 加一列）；M05 未合回 ⇒ `routers/invoice_vouchers.py` 旁以 registry.provide 登記（arap 搬遷時改宣告）；M01 新增 `helpers/case_attachments.py`。M06-PLAN 補 §4 JV 清單、§5 到期守門。
