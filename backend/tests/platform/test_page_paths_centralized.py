@@ -68,7 +68,10 @@ def problems(found, baseline, allowed=ALLOWED):
 
 
 def test_page_paths_only_decrease():
-    baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    from core import source_tree
+    # 模組被拿掉（PLAYBOOK §B-11）⇒ 它的檔案本來就不在，基線那一筆不算「降到 0」
+    baseline = {f: n for f, n in json.loads(BASELINE.read_text(encoding="utf-8")).items()
+                if source_tree.module_installed(f)}
     msgs = problems(scan(), baseline)
     assert not msgs, "\n".join(msgs)
 
