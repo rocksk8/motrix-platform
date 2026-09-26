@@ -506,7 +506,7 @@ def t100_export_preview(
     events = _collect_t100_events(start, end)
     return {
         # IP-14 對方不在時：預覽明說少了承攬商付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
-        "notice": "" if _registry.single_provider("contractor_voucher.public") else T100_CONTRACTOR_MISSING,
+        "notice": "" if _registry.single_provider("contractor_voucher.paid_between") else T100_CONTRACTOR_MISSING,   # T100 用的就是它（IP-14）
         "count": len(events),
         "totalAmount": sum(e["amount"] for e in events),
         "events": [
