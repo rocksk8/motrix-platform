@@ -529,8 +529,7 @@
     "daily_tasks"
    ],
    "api_prefixes": [
-    "/api/daily-tasks",
-    "/api/settings"
+    "/api/daily-tasks"
    ]
   }
  },

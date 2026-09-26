@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 566,
+  "tests": 567,
   "unmapped": 9,
   "kinds": {
    "api": 296,
    "unit": 51,
    "e2e": 139,
-   "audit": 80
+   "audit": 81
   },
   "routes": 568
  },
@@ -1718,6 +1718,25 @@
    "unresolved_api": [
     "/api/voucher"
    ]
+  },
+  "backend/tests/platform/test_generated_maps.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/tests/platform/__init__.py",
+    "file:backend/tests/platform/_boundaries.py",
+    "file:docs/platform/test_map.json"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/__init__.py",
+     "backend/tests/platform/_boundaries.py"
+    ],
+    "path": [
+     "docs/platform/test_map.json",
+     "tools/platform/"
+    ]
+   }
   },
   "backend/tests/platform/test_integration_points_registered.py": {
    "kind": "audit",
