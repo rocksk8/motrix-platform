@@ -390,13 +390,14 @@ function voucherPage() {
     async loadLineFiles(st, key) {
       if (!st || !key) return
       const k = this._srcKey(st, key)
-      this.lineSrc = Object.assign({}, this.lineSrc, { [k]: { loading: true, files: [], err: '' } })
+      this.lineSrc = Object.assign({}, this.lineSrc, { [k]: { loading: true, files: [], err: '', unavailable: [] } })
       try {
         const r = await fetch('/api/vouchers/line-source-files?source_type=' + encodeURIComponent(st)
                               + '&ref=' + encodeURIComponent(key), { headers: this._auth() })
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
-        this.lineSrc = Object.assign({}, this.lineSrc, { [k]: { loading: false, files: d.files || [], err: '' } })
+        this.lineSrc = Object.assign({}, this.lineSrc,
+          { [k]: { loading: false, files: d.files || [], err: '', unavailable: d.unavailable || [] } })
       } catch (e) {
         this.lineSrc = Object.assign({}, this.lineSrc,
           { [k]: { loading: false, files: [], err: '來源檔案載入失敗（' + e.message + '）。' } })

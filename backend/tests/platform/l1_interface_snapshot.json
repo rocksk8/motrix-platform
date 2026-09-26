@@ -1,5 +1,5 @@
 {
- "core_version": "1.39",
+ "core_version": "1.40",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -167,7 +167,10 @@
    "CASE_ACCESS": "const",
    "CASE_PRESENT": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
+   "case_documents_readable": "def(conn, quote_no, user)",
    "case_module_present": "def()",
+   "case_owner_readable": "def(conn, quote_no, user)",
+   "case_page_readable": "def(conn, quote_no, user)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
    "is_document_approver": "def(data_json, user, conn)"
   },
@@ -688,9 +691,12 @@
    "submitter_manager_tiers": "def(conn, requester_username)"
   },
   "helper:uploads": {
+   "AttachmentNotVisible": "class",
+   "AttachmentSourceError": "class",
    "UPLOADS_ROOT": "const",
    "_effective_subfolder": "def(subfolder)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",
+   "files_from_json_column": "def(conn, table, key_col, key, col)",
    "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)"
   },
   "helper:xlsx_out": {

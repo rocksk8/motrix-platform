@@ -14,5 +14,7 @@ MODULE = ModuleSpec(
         ("receivables.income_items", "arap"): receivables.collect_income_items,
         # 銷項發票清單（已填發票號碼的收款品項）：M08 稅務匯出、M06 T100 收款事件
         ("receivables.tax_invoices", "arap"): receivables.collect_tax_invoices,
+        # 開票申請的已上傳檔案（IP-21）：M06 傳票帶入附件；依開票申請自己的讀取規則（案件層＋金額層）
+        ("attachments.for_document", "arap"): invoice_vouchers._InvoiceVoucherAttachments,
     },
 )

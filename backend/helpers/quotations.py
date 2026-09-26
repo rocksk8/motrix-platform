@@ -416,3 +416,4 @@ class _CaseAccess:
 
 from core import registry as _registry  # noqa: E402
 _registry.provide("case.access", "case", _CaseAccess)
+from helpers import case_attachments as _case_attachments  # noqa: E402,F401  登記 attachments.for_document（M01）

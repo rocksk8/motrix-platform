@@ -39,6 +39,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from helpers import row_access
+from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
 from helpers.recognition import normalize_date  # `AC2`
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
@@ -149,14 +150,17 @@ def _load(conn, quote_no: str, exp_id: int):
 
 
 def _guard_case(conn, quote_no: str, user: dict):
-    """報價單存在＋擁有者檢查。`quote_no` 可列舉，不擋就是 IDOR。"""
+    """報價單存在＋擁有者檢查。`quote_no` 可列舉，不擋就是 IDOR。
+    准不准只看 L1 `case_owner_readable`（附件提供者用同一支，稽核 D AT-M1b）；這裡只負責說出原因。"""
     q = conn.execute(
         "SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no=?",
         (quote_no,)
     ).fetchone()
     if not q:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    row_access.require("case", user, q)
+    if not case_owner_readable(conn, quote_no, user):
+        row_access.require("case", user, q)
+        raise HTTPException(403, "無權限存取這筆資料")
 
 
 def _can_modify(row, user: dict) -> bool:

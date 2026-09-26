@@ -131,3 +131,40 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
         _txn.safe_close(conn)
         raise HTTPException(403, CASE_ACCESS.deny_message)
     return q
+
+
+def case_page_readable(conn, quote_no: str, user: dict) -> bool:
+    """案件頁（報價單本體）的**讀取規則**：row_access `case`／scope="read"（擁有者、admin+，或持 cashier，CM14b；
+    **不放行 case_manage**）。
+
+    `routers/quotations.py::get_quotation`（`GET /api/quotations/{q}`）與存在報價單上的附件（回簽檔、收款發票、叫料、
+    叫料發票）的提供者共用這一支（稽核 D AT-M1c：可見範圍＝原單據，不寬也不嚴）。案件不存在或 M01 不在 ⇒ False。"""
+    if not quote_no or not case_module_present():
+        return False
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no = ?",
+                     (quote_no,)).fetchone()
+    return bool(q) and row_access.visible("case", user, q, scope="read")
+
+
+def case_owner_readable(conn, quote_no: str, user: dict) -> bool:
+    """案件的**擁有者規則**：row_access `case`／scope="owner"（案件業務／協作者、admin+），**不放行任何模組**。
+
+    案件額外支出的各端點（`routers/case_extra_expenses.py::_guard_case`）與它的附件提供者共用這一支
+    （稽核 D AT-M1b：附件的可見範圍不可以比原單據寬）。案件不存在或 M01 不在 ⇒ False。"""
+    if not quote_no or not case_module_present():
+        return False
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no = ?",
+                     (quote_no,)).fetchone()
+    return bool(q) and row_access.visible("case", user, q, scope="owner")
+
+
+def case_documents_readable(conn, quote_no: str, user: dict) -> bool:
+    """這個人看不看得到某張案件**底下的單據**（出貨單、派工單、開票申請、案件附件…）。
+
+    與各單據清單的讀取規則同一份：`case_access_allowed(..., allow_module="case_manage")`（案件業務／協作者、
+    admin+，或持有案件管理模組）。案件不存在或 M01 不在 ⇒ False。給 `attachments.for_document` 的提供者用
+    （稽核 D AT-M1，主持裁示 (b)：只列、只預覽、只帶入看得到原單據的附件）。"""
+    if not quote_no:
+        return False
+    q = conn.execute("SELECT * FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    return bool(q) and case_access_allowed(conn, q, user, allow_module="case_manage")

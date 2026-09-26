@@ -25,6 +25,7 @@ from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
 from helpers.quotations import payment_item_amounts  # 同上
 from helpers import row_access
+from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from helpers import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications,
@@ -1274,11 +1275,11 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     # CM14b（2026-09-24 使用者裁示）：持 cashier 模組者讀得到任何案件 ⇒ scope="read"
-    try:
-        row_access.require("case", user, row, scope="read")
-    except HTTPException:
+    # 准不准只看 L1 `case_page_readable`（報價單上附件的提供者用同一支，AT-M1c）；require 只負責說出原因
+    if not case_page_readable(conn, quote_no, user):
         conn.close()
-        raise
+        row_access.require("case", user, row, scope="read")
+        raise HTTPException(403, "無權限存取這筆資料")
     # 不是案件成員、靠 cashier 例外讀到的 ⇒ 案件頁除收款外全唯讀（寫入面後端另擋，見 update_case_record）
     cashier_read_only = not _is_case_member(conn, quote_no, row, user)
     conn.close()

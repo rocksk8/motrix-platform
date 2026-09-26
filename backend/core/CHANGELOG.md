@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.40 — 2026-09-26（A，IP-21 attachments.for_document 整疊〔a-attachments-4 的 1.37～1.40 併成一段〕帶入 M06 基底；列車上 core_bump 取號）
+- L1（新增）：`helpers.uploads.AttachmentSourceError`（附件來源解析不了；訊息給使用者，取用方原樣回 400，不吞成空清單）、`files_from_json_column(conn, table, key_col, key, col)`（某表某列 JSON 欄的檔案清單；列不存在 ⇒ []、壞掉 ⇒ 丟）。給各單據模組實作 `attachments.for_document` 提供者用（主持裁示 M06-b）〔a-attachments 原 1.37〕
+- L1（新增）：`helpers.uploads.AttachmentNotVisible`（使用者看不到附件的原單據；取用方列清單時不列、帶入／預覽 403）、`helpers.case_access.case_documents_readable(conn, quote_no, user)`（案件底下的單據准不准讀：與各單據清單同一份規則，`case_access_allowed(..., allow_module="case_manage")`；案件不存在 ⇒ False）〔a-attachments 原 1.38〕
+- L1（新增）：`helpers.case_access.case_owner_readable(conn, quote_no, user)`（案件擁有者規則，不放行任何模組；案件額外支出各端點與它的附件提供者共用同一支，附件的可見範圍不可以比原單據寬）〔a-attachments 原 1.39〕
+- L1（新增）：`helpers.case_access.case_page_readable(conn, quote_no, user)`（案件頁 `GET /api/quotations/{q}` 的讀取規則：row_access `case`／scope="read"，放行 cashier、不放行 case_manage；`get_quotation` 與回簽檔／收款發票／叫料／叫料發票的附件提供者共用同一支）〔a-attachments 原 1.40〕
+
 ## 1.39 — 2026-09-26（C，M05 應收應付搬遷；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕〔core_bump：暫用 1.36 → 1.39〕
 > 介面只有新增（`RECEIVABLES_MISSING`）；`helpers.receivables` 的三支函式名稱與簽章不變，行為改成轉呼叫 M05 的 provider。
 - L1（行為）：`helpers.receivables` 改為**薄殼**（淘汰中，**下一個主版號刪除**：`collect_income_items`、`collect_tax_invoices`、`round_half_up_invoice`、`RECEIVABLES_MISSING`）——函式本體收回 `modules/arap/receivables.py`（ROADMAP A8b），殼只轉呼叫 provider `receivables.income_items`／`receivables.tax_invoices`；M05 不在 ⇒ `collect_income_items` 回 `[]`、`collect_tax_invoices` 404「應收應付模組未安裝…」（主持裁示 (a)：直接刪＝主版號，牽動全部模組的 core 範圍）
