@@ -341,15 +341,16 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_bro
         + "🔑 `§164`：帶入只是**省打字**，最終值是使用者打的那個。")
 
 
-#: 深連結那一張的 GET 回應延後——.json() 慢 1.5 秒（放行由時間，但斷言等的是「它被讀到」，不靠時間差）
-_SLOW_FIRST_OPEN = """
+#: 深連結那一張的 GET 回應扣住，直到題目呼叫 window.__releaseFirst() 才交出（O92-S1：不靠時間窗——負載下突變也一定紅）；
+#: 產品讀到它時設 window.__staleRead
+_HOLD_FIRST_OPEN = """
 (function () {
-  var real = Response.prototype.json, done = false
+  var real = Response.prototype.json, held = false
   Response.prototype.json = function () {
     var self = this
-    if (!done && /\\/api\\/vouchers\\/\\d+$/.test(new URL(self.url).pathname)) {
-      done = true
-      return new Promise(function (res) { setTimeout(res, 1500) })
+    if (!held && /\\/api\\/vouchers\\/\\d+$/.test(new URL(self.url).pathname)) {
+      held = true
+      return new Promise(function (res) { window.__releaseFirst = res })
         .then(function () { window.__staleRead = true; return real.call(self) })
     }
     return real.call(self)
@@ -358,29 +359,57 @@ _SLOW_FIRST_OPEN = """
 """
 
 
-@pytest.mark.e2e
-def test_o92_late_deep_link_response_does_not_replace_the_clicked_voucher(live_server, make_user, e2e_browser, client):
-    """O9-2 產品競態：網址帶 ?id=A（深連結正在開 A、回應慢），使用者從清單點開 B ⇒ 畫面是 B；A 晚到的回應要丟掉。
-    突變：open() 拿掉序號檢查 ⇒ 畫面被換回 A ⇒ 紅。"""
-    username, password = make_user(username="e2e_o92", role="superadmin", modules=["cashier"])
+def _two_vouchers(client, make_user, name):
+    username, password = make_user(username=name, role="superadmin", modules=["cashier"])
     tok = client.post("/api/auth/login", json={"username": username, "password": password}).json()["token"]
     h = {"Authorization": "Bearer " + tok}
     line = [{"account_code": "1113", "summary": "x", "debit": 100, "credit": 0},
             {"account_code": "2171", "summary": "x", "debit": 0, "credit": 100}]
     a = client.post("/api/vouchers", headers=h, json={"summary": "O92-A", "lines": line}).json()
     b = client.post("/api/vouchers", headers=h, json={"summary": "O92-B", "lines": line}).json()
-    ida, idb = a.get("id"), b.get("id")
-    assert ida and idb and ida != idb, (a, b)
+    assert a.get("id") and b.get("id") and a["id"] != b["id"], (a, b)
+    return username, password, a, b
+
+
+def _open_page_holding_the_deep_link(e2e_browser, live_server, username, password, vid):
     page = e2e_browser.new_page()
     _login(page, live_server, username, password)
-    page.add_init_script(_SLOW_FIRST_OPEN)
-    page.goto("%s/pages/voucher.html?id=%d" % (live_server, ida))
+    page.add_init_script(_HOLD_FIRST_OPEN)
+    page.goto("%s/pages/voucher.html?id=%d" % (live_server, vid))
     _ready(page)
+    page.wait_for_function("typeof window.__releaseFirst === 'function'", timeout=15000)   # 深連結那一趟確實扣在手上
+    return page
+
+
+def _release_and_settle(page):
+    page.evaluate("window.__releaseFirst()")
+    page.wait_for_function("window.__staleRead === true", timeout=15000)
+    page.evaluate("() => new Promise(r => setTimeout(() => setTimeout(r, 0), 0))")
+
+
+@pytest.mark.e2e
+def test_o92_late_deep_link_response_does_not_replace_the_clicked_voucher(live_server, make_user, e2e_browser, client):
+    """O9-2 產品競態：網址帶 ?id=A（深連結正在開 A、回應被扣住），使用者從清單點開 B ⇒ 畫面是 B；放行 A 之後要丟掉。
+    突變：open() 拿掉序號檢查 ⇒ 畫面被換回 A ⇒ 紅（O92-S1：由題目放行，不靠 1.5 秒時間窗）。"""
+    username, password, a, b = _two_vouchers(client, make_user, "e2e_o92")
+    page = _open_page_holding_the_deep_link(e2e_browser, live_server, username, password, a["id"])
     row_b = page.locator(HOOKS["row"]).filter(has_text=b.get("voucher_no") or "O92-B").first
     _opened(page, lambda: row_b.click())
-    assert page.evaluate("() => %s.id" % VC) == idb, "點開的是 B"
-    page.wait_for_function("window.__staleRead === true", timeout=15000)     # 深連結 A 的回應被讀到了
-    page.evaluate("() => new Promise(r => setTimeout(() => setTimeout(r, 0), 0))")
-    assert page.evaluate("() => %s.id" % VC) == idb, "A 晚到的回應把畫面換回 A（沒有丟掉過期回應）"
+    assert page.evaluate("() => %s.id" % VC) == b["id"], "點開的是 B"
+    _release_and_settle(page)
+    assert page.evaluate("() => %s.id" % VC) == b["id"], "A 晚到的回應把畫面換回 A（沒有丟掉過期回應）"
     assert page.evaluate("() => %s.note" % VC) == "O92-B"
+
+
+@pytest.mark.e2e
+def test_o92_new_voucher_cancels_the_open_in_flight(live_server, make_user, e2e_browser, client):
+    """O92-S2：深連結正在開 A（回應扣住），使用者按「＋新增傳票」⇒ 空白新單；放行 A 之後仍是新單（在途的開單已作廢）。
+    突變：newVoucher 拿掉 `_openSeq++` ⇒ A 晚到的回應把新單換成 A ⇒ 紅。"""
+    username, password, a, _b = _two_vouchers(client, make_user, "e2e_o92n")
+    page = _open_page_holding_the_deep_link(e2e_browser, live_server, username, password, a["id"])
+    _need(page, HOOKS["new"], "「＋新增傳票」按鈕").first.click()
+    page.wait_for_function("() => %s.editing === true && %s.id === 0" % (VC, VC), timeout=15000)
+    _release_and_settle(page)
+    assert page.evaluate("() => %s.id" % VC) == 0, "按了新增之後，A 晚到的回應把畫面換成 A（在途的開單沒有作廢）"
+    assert page.evaluate("() => %s.note" % VC) != "O92-A"
 
