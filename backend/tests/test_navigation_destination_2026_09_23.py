@@ -177,6 +177,8 @@ def _system_settings_pages():
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
 _BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+#: 〔2026-09-26 已由 `_BASELINE_BY_GROUP["_outside"]` 取代、不再被讀（B 審查建議）；原數字與下面的調整紀錄照留，
+#:   要調基準請改 `_BASELINE_BY_GROUP`〕
 #: 〔2026-09-26 第十班列車：139 → 138。cashier.html／receivables.html／payment-request-form.html（arap，
 #:   實體不歸 modules/ 管，不在「排除 modules/」的判準內）改列進 `_MODULE_OWNED_FRONTEND_PAGES`
 #:   一起排除——這 3 頁裡剛好有 1 句導航語氣字串，換位置＝這一題的排除範圍換了，不是被刪；
@@ -216,7 +218,9 @@ def _page_owners():
     for d in source_tree.module_dirs():
         m = json.loads((d / "module.json").read_text(encoding="utf-8"))
         for pg in m.get("pages", []):
-            out[str(pg.get("path", "")).replace("\\", "/").rsplit("/", 1)[-1]] = m.get("key") or d.name
+            # 組名一律用資料夾名：installed() 與 modules/<x> 路徑都是資料夾名；key 若不同，那一組會被默默跳過（B 審查建議）
+            assert (m.get("key") or d.name) == d.name, "module.json 的 key %r 與資料夾名 %r 不一致" % (m.get("key"), d.name)
+            out[str(pg.get("path", "")).replace("\\", "/").rsplit("/", 1)[-1]] = d.name
     return out
 
 
@@ -269,7 +273,7 @@ def test_em10_page_ownership_comes_from_module_json():
         assert {pg: owners.get(pg) for pg in _MODULE_OWNED_FRONTEND_PAGES} == \
             {pg: "arap" for pg in _MODULE_OWNED_FRONTEND_PAGES}, owners
     assert _group_of("backend/modules/accounting/api/vouchers.py", {}) == "accounting"
-    assert _group_of("frontend/pages/voucher.html", {"voucher.html": "accounting"}) == "accounting"
+    assert _group_of("pages/voucher.html", {"voucher.html": "accounting"}) == "accounting"
     assert _group_of("backend\\routers\\quotations.py", {}) == "_outside"
 
 
