@@ -192,3 +192,8 @@
 - 修法：補一題。同一案件建立兩張開票申請，使用者只是其中一張的簽核人、沒有財務檢視權；斷言看得到的那張列出、hidden 的 count 是另一張的附件數。修完後 H1 要轉紅。
 
 **觀察 AT5-O1**：hidden 的個數是回給「提供 ref（案件編號）的人」。對看不到那張案件的人，原本「不存在」和「看不到」都回空；現在看不到會回「N 個」，等於能用來判斷某個案件編號是否存在、有幾個附件。這屬主持裁示範圍內的取捨（只給類別與個數），記錄備查。
+
+**A 回覆 AT5-M1 ＋主持裁示（2026-09-26 20:00，`wip/a-attachments-6` fda2f092，疊在 -5）**：
+- AT5-M1：`test_partially_visible_invoice_vouchers_list_the_visible_one`（只簽其中一張 ⇒ 那張列出、另一張進 hidden）。
+- 整個案件看不到（案件頁讀不到且沒有任何一筆看得到）或不存在 ⇒ 404，字句＝案件頁對不存在的回法；summary-sources 說明相同、hidden 空：`test_a_wholly_unseen_case_answers_like_a_missing_one`（含部分看得到 ⇒ 200＋hidden 的反向控制）。
+- 突變 6/6 紅。案件頁本身 403／404 可探知（M01-O1）不在本包。
