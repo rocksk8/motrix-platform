@@ -1176,6 +1176,8 @@ def pytest_unconfigure(config):
     **把持有者的鎖刪掉** —— 那道守門就只對第一個人有效。
     """
     global _lock_taken_by_me
+    if not hasattr(config, "workerinput"):
+        _cleanup_hard_cap_dir()           # 主控：本次執行的 e2e 逐題上限目錄，空的就刪（worker 不刪）
     if not _lock_taken_by_me:
         return
     paths = _lock_taken_by_me         # 拿到的是哪幾格（獨佔時含登記檔）就還哪幾格
@@ -1764,6 +1766,17 @@ def pytest_runtest_teardown(item, nextitem):
         yield
 
 
+def _cleanup_hard_cap_dir():
+    """主控收尾：本次執行的逐題上限目錄**空的就刪**（每題的 __exit__ 只刪自己的檔，目錄一直留著 ⇒ %TEMP% 累積上千個）；
+    有逾時堆疊檔 ⇒ 保留（摘要已印出路徑）。只刪這一次執行自己的目錄（路徑由本次的 MOTRIX_E2E_HARDCAP_RUN 決定），不碰別人的。"""
+    d = _e2e_hard_cap_dir()
+    try:
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+    except OSError:
+        pass                              # 別的行程剛好在用 ⇒ 留著，不影響結果
+
+
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """主控（或單程序）收尾：把逐題上限留下的堆疊印出來。"""
     if hasattr(config, "workerinput"):
@@ -1779,13 +1792,8 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     worker_run = bool(getattr(config.option, "numprocesses", None))
     killed = []
     for f in files:
-        try:
-            body = open(f, encoding="utf-8", errors="replace").read()
-        finally:
-            try:
-                os.remove(f)
-            except OSError:
-                pass
+        # 〔主持派工 wip/b-hardcap-dir：堆疊檔**保留**（原本印完就刪）——摘要被截斷或沒人看時還有原檔可查；目錄因此留著〕
+        body = open(f, encoding="utf-8", errors="replace").read()
         head, _, stack = body.partition("\n")
         nodeid, _, phase = head.partition(" [")
         phase = phase.rstrip("]") or "?"
@@ -1794,6 +1802,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
             tr.write_line("   " + line)
         if nodeid not in killed:
             killed.append(nodeid)
+    tr.write_line("堆疊檔保留在：%s（看完請手動刪除這一個目錄；沒有逾時的執行，收尾時會自動刪掉空目錄）" % d)
     if worker_run:
         # 給建包閘門（_e2e_gate.ps1 認 `FAILED … Timeout`）；xdist 自己那行會被截斷、也不含 Timeout
         for nodeid in killed:
