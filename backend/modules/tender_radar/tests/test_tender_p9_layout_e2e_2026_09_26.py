@@ -207,8 +207,9 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]").check()
     _publish(boss, ed, "地點打開")
     assert [v for v, _ in _rows("company")] == [1, 2]
-    # O7：只看「多了一版」不夠——第 2 版的內容必須真的是「地點打開」，不能是與第 1 版相同的空發布
-    assert {"op": "hide", "target": COL + "location"} not in _rows("company")[1][1]["ops"], _rows("company")[1][1]["ops"]
+    # O7：只看「多了一版」不夠——第 2 版必須恰好是「第 1 版拿掉地點的 hide」（擋「與第 1 版相同」也擋「整個空了」，AUDIT-B-host-O7 S-2）
+    want_v2 = [o for o in ops if o != {"op": "hide", "target": COL + "location"}]
+    assert _rows("company")[1][1]["ops"] == want_v2, _rows("company")[1][1]["ops"]
     sales.reload()
     sales.wait_for_function(READY)
     assert "location" in sales.evaluate(HEADS)
@@ -365,7 +366,9 @@ def test_editor_is_not_editable_while_a_scope_is_loading(live_server, make_user,
     boss.wait_for_function("() => document.getElementById('ml-editor').dataset.busy === '1'")
     box = _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]")
     before = box.is_checked()
-    with pytest.raises(Exception):                      # 載入中：點不到（inert），不可以改到即將被覆蓋的舊狀態
+    assert box.is_visible() and boss.evaluate("() => document.querySelector('#ml-editor .ml-ed__body').inert") is True
+    from playwright.sync_api import TimeoutError as PwTimeout
+    with pytest.raises(PwTimeout):                      # 載入中：點不到（inert），不可以改到即將被覆蓋的舊狀態
         box.click(timeout=1500)
     release()
     boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
@@ -394,3 +397,45 @@ def test_a_late_response_for_an_earlier_scope_does_not_overwrite_the_later_choic
     st = boss.evaluate(ED_ATTR)
     assert st["scope"] == "company" and st["loaded"] == "company" and st["busy"] == "0", st
     assert "以程式預設為起點" in ed.inner_text()          # 公司還沒有版面 ⇒ 程式預設；不是「以公司預設為起點」（角色的起點說明）
+
+
+
+@pytest.mark.e2e
+def test_role_preview_cannot_unlock_the_editor_while_a_scope_is_loading(live_server, make_user, no_tile_probe, e2e_browser):
+    """AUDIT-B-host-O7 M-1：載入與預覽原本共用一個 busy ⇒ 載入中切「以角色預覽」，預覽結束就解鎖，O7 重開。"""
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    held, release = _hold(boss, "role:admin")
+    ed.get_by_test_id("ml-scope").select_option("role:admin")
+    boss.wait_for_function("() => document.getElementById('ml-editor').dataset.busy === '1'")
+    assert ed.get_by_test_id("ml-preview-role").is_disabled()          # 載入中不能切預覽
+    # 就算繞過畫面直接呼叫預覽（例如舊版的事件已排入），也不可以解鎖
+    boss.evaluate("""async () => { const c = Alpine.$data(document.getElementById('ml-editor'));
+        c.previewRole = 'sales'; await c.previewAs(); c.previewRole = '' }""")
+    st = boss.evaluate(ED_ATTR)
+    assert st["busy"] == "1" and boss.evaluate("() => document.querySelector('#ml-editor .ml-ed__body').inert") is True, st
+    assert ed.get_by_test_id("ml-publish").is_disabled()
+    release()
+    boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
+                           " return e.dataset.busy === '0' && e.dataset.loadedScope === 'role:admin' }")
+
+
+@pytest.mark.e2e
+def test_a_failed_scope_load_keeps_the_editor_locked_and_says_so(live_server, make_user, no_tile_probe, e2e_browser):
+    """AUDIT-B-host-O7 S-1：讀不到 ≠ 沒有版面——不可以顯示程式預設讓人照樣發布；鎖住並說明。"""
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    n0 = boss.evaluate(ED_ATTR)["done"]
+    boss.route(lambda url: "/api/definitions/layout/" in url and "scope=role%3Aadmin" in url,
+               lambda route: route.fulfill(status=500, body='{"detail":"x"}', content_type="application/json"))
+    ed.get_by_test_id("ml-scope").select_option("role:admin")
+    boss.wait_for_function("(n) => +document.getElementById('ml-editor').dataset.loadsDone >= n + 1", arg=n0)
+    e = boss.evaluate("() => { const e = document.getElementById('ml-editor'); return {err: e.dataset.loadError, busy: e.dataset.busy,"
+                      " inert: e.querySelector('.ml-ed__body').inert, state: e.dataset.state} }")
+    assert e == {"err": "1", "busy": "1", "inert": True, "state": "error"}, e
+    assert ed.get_by_test_id("ml-publish").is_disabled()
+    assert "讀取「role:admin」的版面失敗" in ed.inner_text()
