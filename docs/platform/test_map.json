@@ -6828,16 +6828,17 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "file:backend/routers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "plat:__init__",
-    "plat:registry",
+    "plat:source_tree",
     "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/routers/__init__.py",
      "backend/routers/quotations.py",
@@ -6845,6 +6846,9 @@
     ],
     "api": [
      "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ]
    },
    "login_fixture": true
