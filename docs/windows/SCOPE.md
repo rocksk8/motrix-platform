@@ -17,6 +17,7 @@
 ## ✅ THIS — 這一包要全綠
 
 > 📌 2026-09-26（C，M07 搬遷）：`BN1`～`BN19`、`QS1a` 的範圍（THIS／NEXT／EXEMPT）移到 `backend/modules/payroll/SPEC.md` 的 `## 範圍`：拿掉 M07 時範圍與條件、題一起消失。
+> 📌 2026-09-26（A，M06 搬遷）：`JV1`～`JV36` 的範圍（THIS 35 條、NEXT 的 `JV6` 與其註記）移到 `backend/modules/accounting/SPEC.md` 的 `## 範圍`：拿掉 M06 時範圍與條件、題一起消失。
 
 ```
 VR(10): VR1 VR2 VR3 VR4 VR5 VR6 VR7 VR8 VR9 VR10
@@ -32,7 +33,6 @@ VP(1):  VP1
 UI(4):  UI6 UI8 UI9 UI10
 DM(1):  DM1
 MG(1):  MG1
-JV(24): JV1 JV2 JV3 JV4 JV5 JV7 JV9 JV10 JV11 JV12 JV13 JV14 JV15 JV16 JV17 JV18 JV19 JV20 JV21 JV22 JV23 JV24 JV25 JV26
 AC(2): AC1 AC2
 AR(1): AR1
 SP(1): SP1
@@ -44,18 +44,7 @@ WD(1): WD1
 BR(4): BR1 BR2 BR3 BR4
 EM(8): EM1 EM3 EM5 EM6 EM8 EM9 EM10 EM11
 PX(1): PX1
-JV(1): JV8
 AL(1): AL1
-JV(1): JV27
-JV(1): JV28
-JV(1): JV30
-JV(1): JV32
-JV(1): JV35
-JV(1): JV29
-JV(1): JV31
-JV(1): JV33
-JV(1): JV34
-JV(1): JV36
 MP(11): MP0 MP0b MP0c MP0d MP8 MP1 MP2 MP3 MP4 MP5 MP6
 ```
 
@@ -134,7 +123,6 @@ EM(1):  EM4
 RT(1):  RT1
 PK(2):  PK1 PK2
 QE(1):  QE1
-JV(1):  JV6
 EM(3):  EM2 EM7 EM13
 
 ```
@@ -144,12 +132,6 @@ EM(3):  EM2 EM7 EM13
 > ——「其餘」指當時列給使用者的 L 級四項（EM2／EM7／EM13／JV22）去掉 JV22。
 > 🔑 三項都沒有題可以搬（`backend/tests/` 以 `(?<![0-9A-Za-z])(EM2|EM7|EM13)(?![0-9])` 掃 0 筆；
 >    同一支掃描器對 `EM11` 命中 10 筆當正對照）⇒ 只搬規格的範圍，規格本文不動。
-
-> 📌 `JV6` 從 `THIS` 移到 `NEXT`（hichan-61 2026-09-24，A 裁「照 `ab5ba88` 移到 NEXT，出處附使用者原話」）。
-> 使用者原話**只在 commit 訊息裡**，docs/ 內 0 筆（`grep -rn 剩最後跑驗收 docs/` 回 0）：
-> `e8108b7` 訊息逐字：「token有限…如視窗已結束就讓他休息，剩下最後跑驗收跟輸出的」
-> （引號內的「…」是原訊息就有的省略，不是我截的）；同一則訊息寫的處置是「JV6 / JV26 / UP1 / EM13 / BN20 全部不做」。
-> ⚠️ 這句裁示在 2026-09-23 20:35，早於 2026-09-24 使用者「甲類全部做完」的表單作答 —— 兩者範圍重疊（JV26／EM13），**待 A 對齊**。
 
 > 📌 `VP`（verify package）＝ `backend/tools/verify_package.py` 四項，
 > 內容由 D 量測、**編號由 A 發**（`STATE.md §50c`）。
