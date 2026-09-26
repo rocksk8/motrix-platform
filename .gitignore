@@ -63,6 +63,8 @@ backend/.deployed_commit.json
 # STATES-PLATFORM P-SW-05：停用清單快取（F4，主庫旁，core.paths.modules_disabled_cache）
 backend/*.modules_disabled.json
 backend/tools/deploy_dashboard_history.json
+backend/tools/deploy_dashboard_history.pending.jsonl
+backend/tools/deploy_dashboard_history.json.corrupt-*
 backend/tools/upgrade_session.json
 backend/tools/upgrade_session.json.tmp
 backend/tools/upgrade_session.corrupt-*.json
