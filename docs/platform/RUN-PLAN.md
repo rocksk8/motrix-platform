@@ -110,6 +110,8 @@
   - C：M02 crm／dev_crm（進行中，wip/c-m02）→ M04 → M05 → M06 → M07
   - 搬遷順序依 ROADMAP 階段 B 的相依；兩邊要動同一個 L1 helper 時，先在 RUN-PLAN §6 講一聲再動
 - **列車月台**（PLAYBOOK §G3；各線登記：分支｜HEAD｜差異題結果｜是否動 fixture 層／main）：
+  - C｜`wip/c-m01-s2`（M01-PLAN §3-8 ②：M01 本體 11 支檔 git mv 進 `modules/case/`，main 不再掛、載入器依 ModuleSpec 掛載；5 個選單項移進 case 的 module.json；全庫改路徑、不留相容殼；**以第十班 8151bdc6 為基底，含 c-m01-3 的 ①**）｜**cefc5ecd**｜modtest 選題 94%：非 e2e 3200 過 1 紅（第十班交會：arap 題只拿掉 IP-14 的 public，T100 缺口說明已改看 paid_between——origin 上同樣紅，已修）、e2e 1970 過；突變 3/3 紅；sparse 真刪 M01 抽樣（tests/platform）1145 過／71 紅＝允許 5＋66 題待 ④ 搬移（M01-PLAN ④(c)）｜CORE 1.47／1.48（列車取號）；case 1.0.0；`helper:case_attachments` 暫留 M01 成員（③ 隨 ATT 移入）〔C 登記〕
+  - C｜`wip/c-case404`（M01-O1，主持裁示；M01-PLAN §5-4：案件逐案拒絕一律 404、訊息與查無相同，audit 記真正原因；L1 `case_access` 集中判定；A 的 AT-M1c／M1b 判定保留為唯一判定、被拒改走 `deny_case`；**疊在 c-m01-s2 之上**）｜**f743662b**｜改前後同一組 47 檔 559／559 過；加上附件題共 680 過；31＋2 行 403 斷言機械替換；test_case404 7 題；突變 7/7 紅｜CORE 1.49；case 1.0.1；權限類 ⇒ D 完整稽核〔C 登記〕
   - C｜`wip/c-m01-3`（疊在 c-approval-3 6cdc0ed0 之上：M01 本體 ① CA-O4）｜**b3b3b9aa**｜m05b-3／m01-s3-3／m01-rec-3／approval-3 整疊已隨第十班列車合回（platform，CORE 1.39～1.42）；本分支只剩 M01 本體 ①，未上車，待 rebase 到 platform 後再送〔第十班列車長 2026-09-26 21:xx 註記〕
   - 〔已由 c-approval-3 6cdc0ed0 取代（第九班之後 rebase）〕C｜`wip/c-approval-2`（主持裁示：/detail 接著做、排在 M01 本體之前——`approval.detail`（IP-93 暫定）：簽核佇列詳情裡其他模組單據（承攬商匯款申請、開票申請、請款單、出貨單）的內容由擁有模組提供，M01 只做每案權限、案件抬頭、金額遮蔽；**c-approval 299aed61 之上 fast-forward 兩個 commit**，D 稽核 c-approval 可直接接著看 299aed61..49dcb781）｜49dcb781｜tests/platform＋佇列／詳情／轉簽相關＋M04／M05 非 e2e＋出貨單相關：1781 過（紅 1＝sidebar，等 C4）後修 3 紅（契約題缺案件種子、IP-93 路徑寫成萬用字元、UNIT-INDEX），修後受影響題過；開簽核佇列頁的 e2e 24 過；契約題 +3；突變 6/6 紅（首輪兩項綠 ⇒ 補「鏈上一般使用者看得到內容與金額、外人 403」一題）｜CORE 1.39 同段補兩個名稱；subcontract 1.0.6、arap 1.0.2（列車取號）〔C 登記〕
   - 〔已由 c-approval-3 6cdc0ed0 取代（第九班之後 rebase）〕C｜`wip/c-approval`（M01-PLAN §3-7，主持裁示 M06 ①：`approval.reassign`（IP-94 暫定）＋`approval.queue_items`（IP-10）——轉簽與待我簽核／角標改由各單據模組提供，M01 只彙整；L1 新增 `helpers/approval_queue`；**疊在 c-m01-rec-2 之上**）｜299aed61｜tests/platform＋佇列／轉簽相關＋M04／M05／M07 非 e2e 與傳票／出貨單相關題：2153 過（紅 1＝sidebar，等 C4）；開簽核佇列頁的 e2e 6 檔 24 過；契約題 6＋覆蓋率 2；突變 8/8 紅｜CORE 暫 1.39；動 subcontract 1.0.5、arap 1.0.1、payroll 1.0.3（與 c-ip14-paid／b-c4 版號交會，列車取號）、A 的 M03 `routers/shipping_notes.py`（origin 已搬 modules/supply，rebase 時跟著搬）、M06 `routers/vouchers.py`（與 a-approval-parse 同檔不同段）；§6 已宣告〔C 登記〕
@@ -159,6 +161,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 23:57 C：月台登記 wip/c-m01-s2 cefc5ecd（M01 ②，第十班之後）與 wip/c-case404 f743662b（M01-O1，疊在 ② 上）。A 的 a-m06-5（case.summary purpose）已對齊：以搬遷後路徑為準、函式加在 case_access 檔尾、題另開新檔、排在這兩包之後。附件-6 的「整案看不到 ⇒ 404」不在本基底，合回後再核對一致性；傳票帶入附件的 403 屬傳票權限範圍（AT6-O1 界線），不改。
 - 2026-09-26 23:56 D：**MB-M1 關閉（b-modtest-batch-2 f3be5cd2）**：沙盒 5 種 playwright 寫法（from／import／importorskip／函式內／helper import_module）無 marker 皆紅，模組層 import 未用不列；MB4、MB5 突變紅。主持問的跨檔 fixture：conftest 的 new_page／e2e_browser 都依賴 new_context，執行期守門抓得到；真實 repo 0 檔誤判；射程限制＝日後不經 new_context 的瀏覽器 fixture。
 - 2026-09-26 23:53 D：**M06-M3b 關閉（a-m06-7 d8a6068b）**：purpose 位置傳／登錄表不查／** 不查三突變紅；KNOWN_STAR_KWARGS 6 處（S3、subprocess、浮水印、case_bundle 的 part 轉呼叫——7 個呼叫點無 case.summary）皆無關。建議 M06-S3：清單加一筆就綠（過期檢查只管變少），加總數上限。
 - 2026-09-26 23:41 D：a-m06-6 00f5f0a6 複核 M06-M3：**kwargs 帶字面值（dict 字面值／變數／dict()）皆擋；但從 SUMMARY_PURPOSE_MODULES 取值、以位置參數或 ** 傳 ⇒ 漏 ⇒ **M06-M3b（必修）**：禁止 case_access 以外引用登錄表＋位置參數／非字面值 ** 也禁。
