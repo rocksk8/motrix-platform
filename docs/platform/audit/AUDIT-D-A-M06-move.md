@@ -150,3 +150,21 @@
 - 射程：`"".join`、`getattr` 拼名、從設定讀用途這類刻意混淆寫進守門 docstring，不追（主持裁示）。
 - 突變 5/5 紅：purpose 可位置傳、登錄表誰都能引用、** 不擋、真實原始碼在 supply 引用登錄表、真實原始碼新增非字面值 **。
 
+
+## 6. 複核：wip/a-m06-7 d8a6068b（M06-M3b；D 23:53）
+
+- 修法：
+  - `case_summary(conn, user, quote_nos=None, *, purpose=None)`，purpose 只能用關鍵字傳，位置參數在執行期丟 TypeError。
+  - `SUMMARY_PURPOSE_MODULES` 以名稱、屬性、import、同名字串任何形式出現，只准在 case_access。
+  - 非字面值的 `**` 全面禁止，既有的列在 `KNOWN_STAR_KWARGS`，附過期檢查。
+  - 本檔 11 過。
+- 突變 K1「purpose 改回可用位置參數」、K2「登錄表不查」、K3「非字面值 `**` 不查」⇒ 3/3 紅。
+- §5 的兩條繞法（從登錄表取值後用位置參數或 `**` 傳）現在分別被 K1 與 K2／K3 的守門擋下。
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| KNOWN_STAR_KWARGS 那 6 處都與 case.summary 無關 | 逐一列出呼叫：`cloud_storage` 兩處 `client.list_objects_v2(**kwargs)`（S3 分頁參數）、`helpers/licensing._run` 的 `subprocess.run(..., **kwargs)`、`pdf_gen` 兩處 `**_quote_watermark_kwargs(...)`（浮水印）、`routers/quotations.py::part` 的 `fn(*args, **kwargs)`（案件整包的通用轉呼叫：7 個呼叫點分別是 case_close_gates、vouchers、dispatches、shipping、completion、updates、extra_expenses，**沒有一個是 case.summary**） | 成立 |
+| 這份清單不能被拿來加新項目變綠 | 實測：沙盒新增一處 `s(conn, user, **kw)` ⇒ 紅；把 `("modules/supply/api/x.py", "f"): 1` 加進清單 ⇒ **綠** | **不成立**：過期檢查只保證既有項目只能變少，不擋新增 |
+
+⇒ **M06-M3b 關閉（d8a6068b）**。依主持約定（這一輪之後同類繞過一律列建議），清單可被加項這一點列為：
+- **建議 M06-S3**：比照其他「只准變少」的基線，加一個總數上限，例如 `sum(KNOWN_STAR_KWARGS.values()) <= 6`，並寫明「調高要主持裁示」。這樣新增一筆就必須同時改上限，在 diff 裡看得見。這與 repo 其他基線檔一樣，最後仍要靠審查擋；這一點無法完全靠題目做到。

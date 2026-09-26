@@ -159,6 +159,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 23:53 D：**M06-M3b 關閉（a-m06-7 d8a6068b）**：purpose 位置傳／登錄表不查／** 不查三突變紅；KNOWN_STAR_KWARGS 6 處（S3、subprocess、浮水印、case_bundle 的 part 轉呼叫——7 個呼叫點無 case.summary）皆無關。建議 M06-S3：清單加一筆就綠（過期檢查只管變少），加總數上限。
 - 2026-09-26 23:41 D：a-m06-6 00f5f0a6 複核 M06-M3：**kwargs 帶字面值（dict 字面值／變數／dict()）皆擋；但從 SUMMARY_PURPOSE_MODULES 取值、以位置參數或 ** 傳 ⇒ 漏 ⇒ **M06-M3b（必修）**：禁止 case_access 以外引用登錄表＋位置參數／非字面值 ** 也禁。
 - 2026-09-26 23:38 D：b-modtest-batch f0fe645e **必修 MB-M1**：沙盒「用 playwright 而無 marker」4 種寫法只抓到 from-import 一種（import 模組、importorskip、函式內 import 皆漏；file_is_e2e 對 importorskip 判非 e2e）。其餘成立：任一批紅／無摘要／選到的檔無結果 ⇒ 紅（3 突變紅）、最後一行是合計。
 - 2026-09-26 23:36 D：a-m06-5 37e59697 **M06-M1／M2／S1／S2 關閉**：D2 再真刪 accounting ⇒ 只剩允許 5 紅、e2e 40 過 0 紅；EM10 分組基準（刪 accounting 一句 ⇒ 紅）；a' 欄位前後對照只把姓名換成人數。-5：未登錄用途、不看模組、放寬回完整列三突變皆紅。**新必修 M06-M3**：purpose="voucher_link" 沒有守門限制呼叫端（任何端點都能借用，目前只有 accounting 在用）。
