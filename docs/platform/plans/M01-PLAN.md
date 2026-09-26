@@ -149,3 +149,19 @@ import 對照（測試與模組內部一律改成新路徑，**不留 L1 相容�
 
 - ATT（⑤）：見上。
 - §2-B 的讀取者（L1 archive、search、item_reads、map_points、audit，以及 M07、M08 的報表直讀 quotations）不在本包範圍，照 §2-B 的三類登記；本包不新增任何讀取。
+
+### 5-4 c-case404（M01-O1，主持裁示 2026-09-26 20:04；排在 ② 之後、③ 之前，獨立一小包 `wip/c-case404`）
+
+A 發現：案件端點對「看不到」回 403、對「不存在」回 404 ⇒ 可以探知案件編號是否存在。
+
+| 項 | 內容 |
+|---|---|
+| 判定位置 | L1 `helpers/case_access` 集中判定：案件規則拒絕 ⇒ **404**，訊息與「查無案件」**逐字相同**；audit 記真正原因（拒絕／查無）。`row_access.require` 不全面改 |
+| 必含 | `row_access.require("case")` 的 16 處改走同一判定（否則留一條 403 的路）；M01 `_guard_case`、M03／M04／M05／M10 經 `guard_case_access` 的路徑同一份 |
+| 守門 | 掃描「案件判定路徑之外沒有對逐案拒絕回 403」＋反向控制（植入一處 403 ⇒ 紅）。掃描對象是**案件判定路徑**；傳票 summary-sources 的「案件」頁籤（JV7）不在其中，**不為了讓守門變綠而把它排除** |
+| 題 | 看不到與不存在：狀態碼＋回應內容完全相同；audit 原因不同；模組權限的 403（cashier／reports）不受影響；既有 43 檔約 62 處 403 斷言機械替換成 404，改前後各跑一次、對照題數 |
+| 一致性 | A 的 `case_access.case_documents_readable()` 與附件-6 的「整案看不到 ⇒ 404」：guard 改成 404 之後訊息與狀態碼仍要一致；不一致算本包 |
+| 規格界線（D AT6-O1） | 傳票 summary-sources 的「案件」頁籤（JV7）照舊對 cashier／finance 列出全部案件，本包不過濾。「看不到＝不存在」**只保護沒有傳票權限的角色，不保證對 finance 隱藏案件是否存在**——寫進 `case_access` 說明與 ROADMAP |
+| 交會 | A 的 wip/a-m06 在 `case_access.py` 檔尾新增 `case_documents_readable()`；誰後上車誰解那一處（逐 hunk、解完 ast.parse、重跑 case_access 題＋A 的附件題與 M06 題＋case404 題；rebase 與 push 分開） |
+| 稽核 | 權限類 ⇒ D 完整稽核 |
+
