@@ -453,3 +453,31 @@ def test_corrupt_profiles_are_never_overwritten(client, people):
     r = client.post("/api/bonus/cases/MQ-BP-Y2/mark-paid", headers=_auth(people["bc_cash"]), json={})
     assert r.status_code == 409 and "損毀" in r.json()["detail"], r.text
     assert _q("SELECT value_json FROM system_settings WHERE key=?", (bd.PROFILE_KEY,))[0]["value_json"] == before
+
+
+# ── IP-9 expense.entries 形狀契約（稽核 ⑰ S-3：營運報表那一側搬進模組後，tests/platform 沒有任何題碰到它）─────────
+
+#: 使用方（營運分析月支出，modules/analytics/api/reports.py::_collect_expenses）實際讀的欄位
+EXPENSE_ENTRY_KEYS = {"date", "quoteNo", "desc", "amount", "category"}
+
+
+def test_expense_entries_contract_shape(client, people):
+    """直接呼叫每一個 expense.entries 提供者：發放後回來的每一筆都有使用方讀的欄位、型別對（不需要營運分析模組）。"""
+    insure_all()
+    _to_payout(client, people, "MQ-BP-C1")
+    r = client.post("/api/bonus/cases/MQ-BP-C1/mark-paid", headers=_auth(people["bc_cash"]), json={})
+    assert r.status_code == 200, r.text
+    paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-C1'")[0]["paid_at"][:10]
+    providers = registry.providers("expense.entries")
+    assert "bonus" in providers, "獎金分潤沒有登記 expense.entries（helpers/bonus_payouts 匯入時應 provide）"
+    conn = _db()
+    try:
+        rows = providers["bonus"](conn, paid, paid)
+    finally:
+        conn.close()
+    mine = [e for e in rows if e["quoteNo"] == "MQ-BP-C1"]
+    assert len(mine) == 1, rows                                    # 正對照：真的有這一筆
+    e = mine[0]
+    assert EXPENSE_ENTRY_KEYS <= set(e), EXPENSE_ENTRY_KEYS - set(e)
+    assert e["date"] == paid and isinstance(e["amount"], (int, float)) and e["amount"] > 0
+    assert isinstance(e["desc"], str) and e["desc"] and isinstance(e["category"], str) and e["category"]
