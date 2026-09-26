@@ -854,3 +854,22 @@ def _queue_items(conn) -> list:
 
 #: `approval.reassign`：簽核鏈在 shipping_notes.data_json.$.approval（ModuleSpec 宣告，見 modules/supply/__init__.py）
 REASSIGN = _aq.DataJsonApproval("shipping_notes", "note_no")
+
+
+def _queue_detail(conn, doc_no):
+    """`approval.detail`（shipping_note）：簽核佇列詳情的單據內容；權限、案件抬頭、金額遮蔽在 M01。"""
+    r = conn.execute("SELECT * FROM shipping_notes WHERE note_no=?", (doc_no,)).fetchone()
+    if not r:
+        return None
+    try:
+        items = json.loads(r["items_json"] or "[]")
+    except Exception:
+        items = []
+    return {"quoteNo": r["quote_no"], "approvalRaw": r["data_json"], "title": "出貨單 " + r["note_no"],
+            "fields": [
+                {"label": "出貨日期", "value": r["ship_date"] or "—"},
+                {"label": "收件人", "value": r["recipient"] or "—"},
+                {"label": "送貨地址", "value": r["delivery_address"] or "—"},
+                {"label": "備註", "value": r["notes"] or "—"},
+            ],
+            "items": items, "files": _aq.file_entries(r["signed_files_json"])}

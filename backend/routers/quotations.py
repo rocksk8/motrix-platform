@@ -5586,35 +5586,8 @@ def _tagged_file_entries(raw, tag) -> list:
     return out
 
 
-def _file_entries(raw) -> list:
-    """把各表存的檔案 JSON 正規化成前端可預覽的格式。
-
-    各模組的檔案結構不完全一樣（有的 `filename` 有的 `name`，路徑鍵也不同），
-    這裡統一成 `{name, path, kind}`；`kind` 讓前端決定是直接內嵌預覽（圖片）、
-    開新分頁（PDF）還是只給下載連結。
-    """
-    try:
-        arr = json.loads(raw or "[]")
-    except Exception:
-        return []
-    if not isinstance(arr, list):
-        return []
-    out = []
-    for f in arr:
-        if not isinstance(f, dict):
-            continue
-        name = f.get("filename") or f.get("name") or ""
-        path = f.get("path") or f.get("filePath") or ""
-        if not path:
-            continue
-        low = (name or path).lower()
-        kind = ("image" if low.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))
-                else "pdf" if low.endswith(".pdf") else "file")
-        out.append({"id": f.get("id") or path, "name": name or path.split("/")[-1],
-                    "path": path, "kind": kind,
-                    "uploadedBy": f.get("uploadedBy") or f.get("by") or "",
-                    "uploadedAt": f.get("uploadedAt") or f.get("at") or ""})
-    return out
+# 檔案 JSON 正規化：2026-09-26 下沉 L1 `helpers/approval_queue.file_entries`（各單據模組的詳情提供者共用），保留同名別名
+from helpers.approval_queue import file_entries as _file_entries  # noqa: E402
 
 
 def _case_header(conn, quote_no: str) -> dict:
@@ -6005,69 +5978,6 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
             out["changes"] = _summarize_case_change(
                 r["action_type"] or "", payload, _cr_now, _staged)
 
-        elif type in ("invoice_voucher", "payment_request", "contractor_voucher"):
-            table, key = {
-                "invoice_voucher":    ("invoice_vouchers", "voucher_no"),
-                "payment_request":    ("payment_requests", "request_no"),
-                "contractor_voucher": ("contractor_payment_vouchers", "voucher_no"),
-            }[type]
-            r = conn.execute("SELECT * FROM " + table + " WHERE " + key + "=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "單據不存在")
-            keys = r.keys()
-            approval_raw = r["data_json"] if "data_json" in keys else None
-            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
-            out["case"] = _case_header(conn, r["quote_no"])
-            try:
-                snap = json.loads(r["snapshot_json"] or "{}")
-            except Exception:
-                snap = {}
-            amount = r["amount"] if "amount" in keys and r["amount"] is not None else (snap.get("grandTotal") or 0)
-            out["fields"] = [
-                {"label": "金額", "value": format(amount or 0, ",.0f")},
-                {"label": "範圍", "value": (r["scope"] if "scope" in keys else "") or "—"},
-                {"label": "建立者", "value": r["created_by"] or "—"},
-                {"label": "建立時間", "value": r["created_at"] or "—"},
-            ]
-            if "stage" in keys and r["stage"]:
-                out["fields"].append({"label": "請款範圍", "value": r["stage"]})
-            if snap.get("vendorName"):
-                out["fields"].insert(0, {"label": "承攬商", "value": snap["vendorName"]})
-            out["items"] = snap.get("items") or []
-            files = []
-            if "issued_files_json" in keys:
-                files += _file_entries(r["issued_files_json"])
-            files += _file_entries(json.dumps(snap.get("invoiceFiles") or []))
-            passbook = snap.get("bankPassbookImage") or ""
-            # 只接受 data:image/ ——這個欄位是建立單據時由前端送進來的字串，
-            # 若混進 `javascript:` 之類的 scheme，簽核人點下去就是在本站原點執行腳本
-            # （2026-09-14 自動安全掃描 finding #2；前端也擋一次，兩邊都擋）
-            if isinstance(passbook, str) and passbook.lower().startswith("data:image/"):
-                files.append({"id": "passbook", "name": "存簿封面", "kind": "image",
-                              "path": "", "dataUrl": passbook,
-                              "uploadedBy": "", "uploadedAt": ""})
-            out["files"] = files
-
-        elif type == "shipping_note":
-            r = conn.execute("SELECT * FROM shipping_notes WHERE note_no=?", (id,)).fetchone()
-            if not r:
-                raise HTTPException(404, "出貨單不存在")
-            approval_raw = r["data_json"]
-            _guard_queue_detail(conn, user, r["quote_no"], approval_raw)
-            out["case"] = _case_header(conn, r["quote_no"])
-            out["title"] = "出貨單 " + r["note_no"]
-            out["fields"] = [
-                {"label": "出貨日期", "value": r["ship_date"] or "—"},
-                {"label": "收件人", "value": r["recipient"] or "—"},
-                {"label": "送貨地址", "value": r["delivery_address"] or "—"},
-                {"label": "備註", "value": r["notes"] or "—"},
-            ]
-            try:
-                out["items"] = json.loads(r["items_json"] or "[]")
-            except Exception:
-                out["items"] = []
-            out["files"] = _file_entries(r["signed_files_json"])
-
         elif type == "quotation":
             r = conn.execute(
                 "SELECT quote_no, customer_name, project_name, total, quote_date, sales_person, "
@@ -6127,7 +6037,23 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
                     "before": None,
                 }
         else:
-            raise HTTPException(400, "不支援的類型：" + str(type))
+            # 其他模組的單據（承攬商匯款申請 M04、開票申請／請款單 M05、出貨單 M03）由擁有模組提供內容
+            # （`approval.detail`，M01-PLAN §3-7）；這裡只做每案權限、案件抬頭與金額遮蔽。
+            from core import registry as _reg
+            prov = _reg.providers("approval.detail").get(type)
+            if prov is None:
+                raise HTTPException(400, "不支援的類型（或該單據的模組未安裝）：" + str(type))
+            d = prov(conn, id)
+            if not d:
+                raise HTTPException(404, "單據不存在")
+            approval_raw = d.get("approvalRaw")
+            _guard_queue_detail(conn, user, d["quoteNo"], approval_raw)
+            out["case"] = _case_header(conn, d["quoteNo"])
+            if d.get("title"):
+                out["title"] = d["title"]
+            out["fields"] = list(d.get("fields") or [])
+            out["items"] = list(d.get("items") or [])
+            out["files"] = list(d.get("files") or [])
 
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
         if not _can_see_queue_money(conn, user, approval_raw):
