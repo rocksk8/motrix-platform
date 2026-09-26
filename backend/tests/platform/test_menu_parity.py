@@ -30,7 +30,9 @@ def _legacy_installed():
     """舊選單扣掉「所屬模組不在這棵樹」的項目（sidebar.js `MODULE_PAGES` 的頁面 ⇒ 模組 key）。
 
     舊選單在執行期由 `_moduleLoaded()` 藏起未載入模組的入口；宣告式選單則根本沒有那個模組的 module.json。
-    兩邊比的是「這棵樹裝了的」——M08 反向控制：拿掉模組之後對等題不可以因為舊選單寫死了它的項目而紅。"""
+    兩邊比的是「這棵樹裝了的」——M08 反向控制：拿掉模組之後對等題不可以因為舊選單寫死了它的項目而紅。
+    ⚠ 依賴 `MODULE_PAGES` 的 key 寫對：key 打錯時，對等兩題會把那一項從兩邊一起濾掉而轉綠——
+    由 `test_module_selection::test_every_module_page_is_declared_in_sidebar`（key 必須對得上 module.json）補住（稽核 ⑰ O-1 實測）。"""
     import re
     from core import source_tree
     src = L.SIDEBAR.read_text(encoding="utf-8")
