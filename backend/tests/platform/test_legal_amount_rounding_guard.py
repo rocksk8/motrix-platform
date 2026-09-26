@@ -208,26 +208,29 @@ def _module_absent(f):
     return not source_tree.module_installed(f)
 
 
-#: MONEY_JS_FILES 裡屬於模組自己宣告的頁面（module.json 的 `pages[]`）；頁面實體仍在 frontend/pages/，
-#: 不是 `modules/<key>/…` 形狀 ⇒ `_module_absent` 判斷不到，模組真的被拿掉時這裡會誤判成「清單過期」
-#: （第十班列車 arap 真刪反向控制實測）。用同一份 `module_installed` 判準，只是換一個問法：問它宣告的模組在不在。
+#: MONEY_JS_FILES 裡屬於模組自己宣告的頁面（module.json 的 `pages[]`）；頁面實體仍不歸
+#: `modules/<key>/…` 管，`_module_absent` 判斷不到，模組真的被拿掉時這裡會誤判成「清單過期」
+#: （第十班列車 arap 真刪反向控制實測）。用同一份 `module_installed` 判準，只是換一個問法：
+#: 問它宣告的模組在不在（鍵是裸檔名，不含目錄，見 test_page_paths_centralized.py 的棘輪）。
 _PAGE_OWNER_MODULE = {
-    "pages/payment-request-form.html": "arap",
+    "payment-request-form.html": "arap",
 }
 
 
 def _page_absent(f):
-    owner = _PAGE_OWNER_MODULE.get(f)
+    owner = _PAGE_OWNER_MODULE.get(f.rsplit("/", 1)[-1])
     return owner is not None and _module_absent("modules/%s/" % owner)
 
 
 def test_page_absent_matches_module_presence(monkeypatch):
-    """正對照：擁有的模組在場 ⇒ 不算缺席；反向控制：換成一個真的不在的模組 key ⇒ 算缺席；
-    不在對照表裡的頁面一律不算缺席（不可以隨便就被豁免）。"""
-    assert _page_absent("pages/payment-request-form.html") is False, "本題跑在 arap 完整安裝的樹 ⇒ 不算缺席"
+    """正對照：擁有的模組在場 ⇒ 不算缺席；反向控制：模組不在 ⇒ 算缺席；不在對照表裡的頁面一律
+    不算缺席（不可以隨便就被豁免）。用 monkeypatch 把「模組在不在」釘死，不依賴這一輪測試環境
+    本身 arap 有沒有被真的拿掉（本檔也會在 PLAYBOOK §B-11 反向控制的樹上跑，那裡 arap 真的不在）。"""
+    monkeypatch.setattr(source_tree, "module_installed", lambda p: True)
+    assert _page_absent("pages/payment-request-form.html") is False, "模組在場 ⇒ 不算缺席"
     assert _page_absent("pages/quotation-form.html") is False, "沒登記在對照表 ⇒ 不給豁免"
-    monkeypatch.setitem(_PAGE_OWNER_MODULE, "pages/payment-request-form.html", "__no_such_module_key__")
-    assert _page_absent("pages/payment-request-form.html") is True, "換一個真的不在的模組 key ⇒ 該算缺席"
+    monkeypatch.setattr(source_tree, "module_installed", lambda p: False)
+    assert _page_absent("pages/payment-request-form.html") is True, "模組不在 ⇒ 該算缺席"
 
 
 def test_money_scope_files_exist():

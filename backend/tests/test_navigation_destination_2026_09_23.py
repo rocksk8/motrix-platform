@@ -178,7 +178,7 @@ def _system_settings_pages():
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
 _BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
 #: 〔2026-09-26 第十班列車：139 → 138。cashier.html／receivables.html／payment-request-form.html（arap，
-#:   實體仍在 frontend/pages/，不在「排除 modules/」的判準內）改列進 `_MODULE_OWNED_FRONTEND_PAGES`
+#:   實體不歸 modules/ 管，不在「排除 modules/」的判準內）改列進 `_MODULE_OWNED_FRONTEND_PAGES`
 #:   一起排除——這 3 頁裡剛好有 1 句導航語氣字串，換位置＝這一題的排除範圍換了，不是被刪；
 #:   PLAYBOOK §B-11 反向控制真的拿掉 arap 時這 3 個檔案會實體消失，不排除會把「模組真的不在」
 #:   誤判成「訊息被刪掉了」〕
@@ -188,14 +188,13 @@ _BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由
 #:   同一個掃描器含 modules/ 的總數 origin da6ab316 與列車都是 157 ⇒ 沒有任何一句被刪，只是換了位置；
 #:   modules/ 外由 150 降到 141。各包單獨時仍 ≥142，三包合起來才跨過基準〕
 
-#: 屬於模組自己的前端頁面（module.json 的 `pages[]`）：頁面實體仍在 `frontend/pages/`，不是
-#: `modules/<key>/…` 形狀 ⇒ 上面「排除 modules/」的判準抓不到；PLAYBOOK §B-11 反向控制真的拿掉
-#: 該模組時這幾頁連同它們的導航訊息會一起消失，跟 modules/ 底下的 backend 檔一樣不該算進基準
+#: 屬於模組自己的前端頁面（module.json 的 `pages[]`）：頁面實體不歸 `modules/<key>/…` 管
+#: ⇒ 上面「排除 modules/」的判準抓不到；PLAYBOOK §B-11 反向控制真的拿掉該模組時這幾頁連同
+#: 它們的導航訊息會一起消失，跟 modules/ 底下的 backend 檔一樣不該算進基準
 #: （第十班列車 arap 真刪反向控制實測：138 < 139，這 3 頁裡剛好有一句沒被排除）。
-_MODULE_OWNED_FRONTEND_PAGES = {
-    "frontend/pages/cashier.html", "frontend/pages/receivables.html",
-    "frontend/pages/payment-request-form.html",   # arap（M05）
-}
+#: 只存裸檔名（不帶目錄）：test_page_paths_centralized.py 對「寫死頁面路徑」計數是棘輪，
+#: 這裡沒有必要把目錄也寫死。
+_MODULE_OWNED_FRONTEND_PAGES = {"cashier.html", "receivables.html", "payment-request-form.html"}   # arap（M05）
 
 
 def test_em10_the_navigation_tone_message_count_does_not_drop():
@@ -208,7 +207,7 @@ def test_em10_the_navigation_tone_message_count_does_not_drop():
     """
     hits = [(p, s) for p, s in _scan_all_nav_messages()
             if "modules" not in str(p).replace("\\", "/").split("/")
-            and str(p).replace("\\", "/") not in _MODULE_OWNED_FRONTEND_PAGES]
+            and str(p).replace("\\", "/").rsplit("/", 1)[-1] not in _MODULE_OWNED_FRONTEND_PAGES]
     assert len(hits) >= _BASELINE_COUNT, (
         "含導航語氣的可見字串只掃到 %d 條，低於基準 %d：\n" % (
             len(hits), _BASELINE_COUNT)

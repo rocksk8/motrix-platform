@@ -70,7 +70,7 @@ def test_providers_cover_the_whitelist_without_overlap(client):
             assert st in va.SOURCE_TYPES, "%s 提供了白名單外的類型 %s" % (name, st)
             assert st not in seen, "%s 同時由 %s 與 %s 提供" % (st, seen[st], name)
             seen[st] = name
-    owner_path = {"case": "routers/quotations.py", "arap": "routers/invoice_vouchers.py",
+    owner_path = {"case": "routers/quotations.py", "arap": "modules/arap/api/invoice_vouchers.py",
                   "subcontract": "modules/subcontract/api/vendor_contractors.py"}
     want = {st for st, (key, _l, _w) in va._SOURCE_OWNERS.items() if source_tree.module_installed(owner_path[key])}
     assert set(seen) == want, "在場的提供者沒有涵蓋該在的類型：少 %s" % sorted(want - set(seen))
@@ -101,6 +101,8 @@ def test_everything_present_means_nothing_unavailable(client):
     from helpers import voucher_attachments as va
     if not source_tree.module_installed("modules/subcontract/api/vendor_contractors.py"):
         pytest.skip("外包工班不在這個安裝包 ⇒ 本來就會有一筆缺席說明")
+    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
+        pytest.skip("應收應付不在這個安裝包 ⇒ 本來就會有一筆缺席說明")
     assert va.unavailable_sources() == []
 
 
@@ -110,6 +112,8 @@ def test_l1_side_providers_refuse_to_swallow_broken_json(client, name):
     AT-S2：案件動態（多列併起來）與 caseRecord 內的三類（payment_item、material、material_invoice）都要驗。"""
     import db
     from helpers.uploads import AttachmentSourceError
+    if name == "arap" and not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
+        pytest.skip("應收應付不在這個安裝包 ⇒ 沒有這個提供者")
     prov = registry.providers(CAP).get(name)
     assert prov is not None, "%s 的提供者沒有登記" % name
     conn = db.get_db()
@@ -284,6 +288,8 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
     自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
     持有 financial_view 的人兩邊都放行（正對照）。"""
+    if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
+        pytest.skip("應收應付不在這個安裝包 ⇒ /api/invoice-vouchers 端點不存在")
     import db
     from helpers.uploads import AttachmentNotVisible
     conn = db.get_db()

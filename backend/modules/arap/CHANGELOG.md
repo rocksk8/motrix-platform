@@ -1,5 +1,10 @@
 # 應收應付 更新紀錄
 
+## 1.0.4 — 2026-09-26（A，IP-21 attachments.for_document；第十班列車取號）
+- `api/invoice_vouchers.py` 新增 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者，開票申請的已上傳檔案來源）
+- 抽出 `_voucher_readable`（案件層＋金額層，含本單簽核人例外），與 `_guard_voucher` 共用；`doc_nos_for_case` 逐張過濾（讀不到的不列，整張案件讀不到 raise `AttachmentNotVisible`）
+- 附件的可見範圍不可以比原單據寬（稽核 D AT-M1、AT-M1b）
+
 ## 1.0.3 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.2，列車取號）
 - 簽核佇列詳情（M01-PLAN §3-7，c-approval-2）：單據內容改由本模組提供 `approval.detail`（共同段用 L1 `helpers/approval_queue.snapshot_doc_detail`）；M01 詳情端點不再直讀本模組的表，只做每案權限、案件抬頭、金額遮蔽。本模組不在 ⇒ 詳情 400 並明說
 
