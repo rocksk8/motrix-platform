@@ -9020,7 +9020,7 @@
    "routes": [
     {
      "func": "platform_menu",
-     "line": 45,
+     "line": 73,
      "method": "GET",
      "path": "/api/platform/menu"
     }
