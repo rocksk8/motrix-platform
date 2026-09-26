@@ -60,12 +60,6 @@
    "writer": "core:db",
    "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入",
    "kind": "frozen"
-  },
-  {
-   "table": "vouchers_all",
-   "writer": "router:quotations",
-   "ref": "DEPENDENCY-MAP §4",
-   "kind": "debt"
   }
  ]
 }
