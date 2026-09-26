@@ -175,12 +175,40 @@ def _cross_edge_candidates(units, groups):
     return starts, ends
 
 
+def _candidate_problems(starts, ends):
+    """候選來源的正對照判定 ⇒ 問題清單（空＝候選夠用）。"""
+    out = []
+    if not starts:
+        out.append("掃不到任何 L2 router（起點候選）")
+    if not any(n.startswith("mod:") for _g, n in ends):
+        out.append("掃不到任何 L2 模組單位（終點候選）")
+    if not ({g for g, _n in ends} - {g for g, _n in starts}):
+        out.append("終點候選沒有起點以外的組 ⇒ 配不出跨組的邊")
+    return out
+
+
 def test_rc_cross_edge_candidates_are_scanned(units, groups):
     """正對照：候選來源（routers/ 的 L2 router、modules/ 的模組單位）都掃得到——掃不到時反向控制會失去意義。"""
-    starts, ends = _cross_edge_candidates(units, groups)
-    assert starts, "掃不到任何 L2 router（起點候選）"
-    assert any(n.startswith("mod:") for _g, n in ends), "掃不到任何 L2 模組單位（終點候選）"
-    assert {g for g, _n in ends} - {g for g, _n in starts}, "終點候選沒有起點以外的組 ⇒ 配不出跨組的邊"
+    bad = _candidate_problems(*_cross_edge_candidates(units, groups))
+    assert not bad, bad
+
+
+def test_rc_candidate_check_and_exhausted_starts_really_fail(units, groups, baseline, monkeypatch):
+    """稽核 D M06-S1：「起點耗盡要 fail」要有題走到——現在 routers/ 還有 M01 的 router，真實資料走不到那條分支。
+    ① 正對照的判定對空的起點要報問題（不可以放行）；② 起點耗盡時 `_pick_new_cross_edge` 丟的是 **fail**，不是 skip
+    （skip 不會被 pytest.raises(Failed) 接住、題目會變成略過而不是紅 ⇒ 用 BaseException 接住再比類型）。"""
+    assert _candidate_problems([], [("M02", "mod:crm/__init__")]) == ["掃不到任何 L2 router（起點候選）"]
+    assert _candidate_problems([("M01", "router:x")], [("M01", "router:y")]) != []
+    import sys
+    monkeypatch.setattr(sys.modules[__name__], "_cross_edge_candidates",
+                        lambda _u, _g: ([], [("M02", "mod:crm/__init__")]))
+    got = None
+    try:
+        _pick_new_cross_edge(units, groups, baseline)
+    except BaseException as e:           # noqa: B036 —— 要分辨 fail 與 skip
+        got = e
+    assert type(got) is pytest.fail.Exception, "起點耗盡要 fail（反向控制無法成立），實際：%r" % (got,)
+    assert "沒有可用的起點候選" in str(got)
 
 
 def _pick_new_cross_edge(units, groups, baseline):

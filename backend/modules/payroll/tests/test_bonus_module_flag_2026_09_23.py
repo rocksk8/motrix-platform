@@ -229,10 +229,9 @@ def test_hiding_the_bonus_entry_does_not_hide_its_neighbours():
     """
     from tests._menu_decl import item
     bonus = item(ENTRY_HREF)
-    siblings = _installed_siblings()
-    if not siblings:
-        pytest.skip("財務組沒有與獎金相鄰的入口（會計模組不在）：沒有鄰居可以被一起藏掉")
-    for sibling in siblings:
+    # 鄰居識別字那一段依 M06（傳票、會計科目是 M06 的入口）；M06 不在時沒有鄰居可比，
+    # 但下面「隱藏函式不可以往上爬」不依賴 M06，一律照跑（稽核 D M06-S2）
+    for sibling in _installed_siblings():
         it = item(sibling)
         assert it is not None and bonus is not None and it["group"] == bonus["group"], (
             "選單宣告裡找不到與獎金同一組的入口 `%s` —— 它被一起拿掉了（或換了組）。"
