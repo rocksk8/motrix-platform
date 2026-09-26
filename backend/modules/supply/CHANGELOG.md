@@ -1,5 +1,8 @@
 # 採購・庫存・出貨 更新紀錄
 
+## 1.0.2 — 2026-09-26
+- 出貨單收件人的個資蒐集告知（稽核 D PN-M1；主持裁示：比照手動輸入的聯絡人）：`GET`／`POST /api/shipping-notes/{note_no}/privacy-notice(/ack)`，只接受已存檔的收件人、鍵含姓名（換人要重新告知）、權限同出貨單清單
+
 ## 1.0.1 — 2026-09-26
 - 提供 IP-20 `inventory.paid_batches`：M06 T100 付款傳票的料件進貨段（會計匯出不再直讀庫存表；本模組不在時 T100 預覽明說）
 - `provides.probes`（產品演練用的 GET 端點）、`customization` 空段

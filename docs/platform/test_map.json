@@ -2,15 +2,15 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 638,
+  "tests": 642,
   "unmapped": 7,
   "kinds": {
    "audit": 86,
-   "api": 341,
+   "api": 343,
    "unit": 55,
-   "e2e": 156
+   "e2e": 158
   },
-  "routes": 568
+  "routes": 570
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
@@ -3813,6 +3813,64 @@
    },
    "module": "supply"
   },
+  "backend/modules/supply/tests/test_e2e_privacy_notice_forms_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/supply/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_e2e_privacy_notice_forms_2026_09_26.py",
+    "helper:privacy_notice",
+    "mod:supply/api/suppliers",
+    "page:pages/suppliers.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py",
+     "backend/tests/test_e2e_privacy_notice_forms_2026_09_26.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/suppliers.py"
+    ],
+    "page": [
+     "frontend/pages/suppliers.html"
+    ],
+    "path": [
+     "frontend/pages/suppliers.html"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_e2e_shipping_recipient_privacy_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/supply/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_privacy_notice_forms_2026_09_26.py",
+    "mod:supply/api/shipping_notes",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_privacy_notice_forms_2026_09_26.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/shipping_notes.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
   "backend/modules/supply/tests/test_em8_message_points_to_existing_place_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -3826,6 +3884,50 @@
     ],
     "api": [
      "backend/modules/supply/api/inventory.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_money_round_half_up_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/supply/",
+    "mod:supply/api/inventory",
+    "router:parts"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/routers/parts.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_privacy_notice_forms_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/supply/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/test_privacy_notice_forms_2026_09_26.py",
+    "helper:privacy_notice",
+    "mod:supply/api/shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py",
+     "backend/tests/test_privacy_notice_forms_2026_09_26.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/shipping_notes.py"
     ],
     "module_dir": [
      "backend/modules/supply/"
@@ -5822,6 +5924,7 @@
     "page:pages/contractors.html",
     "page:pages/customers.html",
     "page:pages/payslip-form.html",
+    "page:pages/users.html",
     "plat:__init__",
     "plat:source_tree"
    ],
@@ -5835,12 +5938,17 @@
     "page": [
      "frontend/pages/contractors.html",
      "frontend/pages/customers.html",
-     "frontend/pages/payslip-form.html"
+     "frontend/pages/payslip-form.html",
+     "frontend/pages/users.html"
     ],
     "path": [
      "backend/modules/payroll/"
     ]
-   }
+   },
+   "unresolved_api": [
+    "/api/a/ack",
+    "/api/b/ack"
+   ]
   },
   "backend/tests/platform/test_platform_catalog.py": {
    "kind": "api",

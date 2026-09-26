@@ -4100,6 +4100,7 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
+    "helper:privacy_notice",
     "helper:row_access",
     "helper:settings",
     "helper:tiered_approval",
@@ -4114,6 +4115,7 @@
     "helper:email_notify",
     "helper:errors",
     "helper:google_calendar",
+    "helper:privacy_notice",
     "helper:tiered_approval",
     "helper:uploads",
     "plat:txn"
@@ -4143,74 +4145,86 @@
      "path": "/api/shipping-notes/{note_no}"
     },
     {
+     "func": "get_shipping_recipient_privacy_acks",
+     "line": 197,
+     "method": "GET",
+     "path": "/api/shipping-notes/{note_no}/privacy-notice"
+    },
+    {
+     "func": "ack_shipping_recipient_privacy_notice",
+     "line": 207,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/privacy-notice/ack"
+    },
+    {
      "func": "create_shipping_note",
-     "line": 184,
+     "line": 225,
      "method": "POST",
      "path": "/api/shipping-notes"
     },
     {
      "func": "update_shipping_note",
-     "line": 217,
+     "line": 258,
      "method": "PUT",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "delete_shipping_note",
-     "line": 243,
+     "line": 284,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}"
     },
     {
      "func": "submit_shipping_note",
-     "line": 268,
+     "line": 309,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/submit"
     },
     {
      "func": "approve_shipping_note",
-     "line": 333,
+     "line": 374,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/approve"
     },
     {
      "func": "revoke_shipping_note_approval",
-     "line": 482,
+     "line": 523,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/revoke-approval"
     },
     {
      "func": "reject_shipping_note",
-     "line": 543,
+     "line": 584,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/reject"
     },
     {
      "func": "download_shipping_pdf",
-     "line": 587,
+     "line": 628,
      "method": "GET",
      "path": "/api/shipping-notes/{note_no}/pdf-download"
     },
     {
      "func": "record_shipping_export",
-     "line": 612,
+     "line": 653,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/export"
     },
     {
      "func": "toggle_signed",
-     "line": 643,
+     "line": 684,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-toggle"
     },
     {
      "func": "upload_shipping_signed_files",
-     "line": 700,
+     "line": 741,
      "method": "POST",
      "path": "/api/shipping-notes/{note_no}/signed-files"
     },
     {
      "func": "delete_shipping_signed_file",
-     "line": 725,
+     "line": 766,
      "method": "DELETE",
      "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
     }
@@ -4840,10 +4854,12 @@
   },
   "page:pages/case-management.html": {
    "api_calls": [
-    "/api/quotations/"
+    "/api/quotations/",
+    "/api/shipping-notes/"
    ],
    "api_prefixes": [
-    "/api/quotations"
+    "/api/quotations",
+    "/api/shipping-notes"
    ],
    "api_unmatched": [],
    "imports": [
@@ -4872,6 +4888,7 @@
    "path": "frontend/pages/case-management.html",
    "routers_called": [
     "mod:netplan/api",
+    "mod:supply/api/shipping_notes",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
