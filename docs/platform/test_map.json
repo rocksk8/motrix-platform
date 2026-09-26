@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 631,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 336,
+   "api": 337,
    "unit": 55,
    "e2e": 154
   },
@@ -5657,6 +5657,38 @@
     "/api/zz-syn/docs",
     "/api/zz-syn/docs/{}",
     "/api/zz-syn/export"
+   ],
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_probe_side_effects.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/tests/platform/test_product_drill_probes.py",
+    "file:tools/platform/final_drill.py",
+    "file:tools/platform/product_drill.py",
+    "mod:crm/api",
+    "mod:subcontract/api/contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/platform/test_product_drill_probes.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py",
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "path": [
+     "tools/platform/final_drill.py",
+     "tools/platform/product_drill.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/zz-probe-rc",
+    "/api/zz-probe-rc/clean",
+    "/api/zz-probe-rc/leaky",
+    "/api/zz-probe-rc/spawner"
    ],
    "login_fixture": true
   },
