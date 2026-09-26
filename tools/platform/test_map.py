@@ -36,11 +36,13 @@ _FMT_RE = re.compile(r"%[sdr]|\{[^/{}]*\}")
 _ASSET_RE = re.compile(r"[\w\-./]*?[\w\-]+\.(?:html|js|css)\b")
 
 
-def tracked_files():
-    """已追蹤＋未追蹤但沒被 .gitignore 排除的檔（新測試檔還沒 git add 時，modtest 現場選題也要看得到它——
-    2026-09-26 B 在 b-o5-s2 踩到：新檔沒 add ⇒ test_map 不含它 ⇒ 選題漏掉）。"""
-    out = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-                         capture_output=True, check=True).stdout
+def tracked_files(include_untracked=False):
+    """已追蹤的檔；include_untracked ⇒ 另含未追蹤但沒被 .gitignore 排除的檔。
+    - 寫進提交的 test_map（與 --check 比對）只看已追蹤的——工作樹裡暫時多一個檔（題目自己建的暫存檔、還沒 add 的草稿）
+      不可以讓提交的檔內容跟著變（2026-09-26 modtest --train 實跑：GF-M2 的題在 -n 4 下暫時建檔 ⇒ 同時跑的 --check 判過期）
+    - modtest 現場選題才含未追蹤的（新測試檔還沒 git add 時也要選得到——B 在 b-o5-s2 踩到）"""
+    args = ["git", "-C", str(REPO), "ls-files", "-z", "--cached"] + (["--others", "--exclude-standard"] if include_untracked else [])
+    out = subprocess.run(args, capture_output=True, check=True).stdout
     return sorted({p for p in out.decode("utf-8").split("\0") if p})
 
 
@@ -471,8 +473,8 @@ def scan_test(path, R):
     return out
 
 
-def build():
-    files = tracked_files()
+def build(include_untracked=False):
+    files = tracked_files(include_untracked)
     R = Resolver(files)
     tests = sorted(p for p in files if (p.startswith(TESTS_DIR + "/") or _MOD_TEST_RE.match(p))
                    and re.search(r"/test_[^/]*\.py$", p))
@@ -518,13 +520,6 @@ def main(argv=None):
             print("test_map.json 與現況不一致，請重跑 tools/platform/test_map.py")
             return 1
         return 0
-    untracked = [p for p in subprocess.run(["git", "-C", str(REPO), "ls-files", "-z", "--others", "--exclude-standard"],
-                                          capture_output=True, check=True).stdout.decode("utf-8").split("\0") if p]
-    if untracked:
-        # 現場選題要看得到未追蹤的新檔（tracked_files 含它們），但**寫進提交的檔**不可以含——列車樹是乾淨的；
-        # 髒樹重產會把別人看不到的檔寫進 test_map（D 稽核 b-genfiles 觀察）
-        print("工作樹有未追蹤的檔，拒絕重產 test_map.json（先 git add 或移走）：%s" % ", ".join(untracked[:10]))
-        return 2
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8", newline="\n")
     s = data["summary"]

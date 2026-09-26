@@ -263,9 +263,9 @@ def load_map(use_files=False):
     讀檔會漏掉新增／搬家的測試檔，回放最多漏 13 檔）。use_files ⇒ 讀 docs/platform/test_map.json（除錯用）。
     現場算失敗 ⇒ 說出來、退回讀檔（不可以靜默變成「不選題」）。"""
     if use_files:
-        return _read_map_file() or build_map()
+        return _read_map_file() or build_map(include_untracked=True)
     try:
-        return build_map()
+        return build_map(include_untracked=True)   # 現場選題含還沒 git add 的新檔
     except Exception as e:                                   # noqa: BLE001 退回讀檔並明說
         _say("[modtest] ⚠ 現場建 test_map 失敗（%r）⇒ 退回讀 %s（可能漏掉本分支新增的測試檔）" % (e, MAP_PATH.name))
         return _read_map_file()
