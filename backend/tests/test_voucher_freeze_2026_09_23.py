@@ -488,10 +488,9 @@ def test_no_voucher_print_path_joins_account_items_for_the_name():
     ⚠️ 指名的是**函式名不是行號**：改名時 `grep` 會找不到，
        而那比「指到別的東西」好（〈不要用會動的名字〉）。
     """
-    cands = [p for p in (_BACKEND / "routers").glob("*.py")
-             if p.stem in ("vouchers", "voucher")]
-    cands += [p for p in (_BACKEND / "helpers").glob("*.py")
-              if p.stem in ("vouchers", "voucher")]
+    # M06 搬遷（2026-09-26）：傳票的 router／helper 在 modules/accounting/（含 api/）
+    cands = [p for p in (_BACKEND / "modules" / "accounting").rglob("*.py")
+             if p.stem in ("vouchers", "voucher") and "tests" not in p.parts]
     assert cands, (
         "找不到傳票的 router／helper（找過 `routers/vouchers.py`、"
         "`helpers/voucher.py` …）——\n"

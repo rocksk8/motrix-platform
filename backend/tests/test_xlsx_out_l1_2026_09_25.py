@@ -24,7 +24,7 @@ def _imports_from(rel, module):
             for a in n.names}
 
 
-@pytest.mark.parametrize("rel", ["routers/accounting_export.py", "modules/arap/api/cashier.py"])   # 出納 2026-09-26 搬進 M05
+@pytest.mark.parametrize("rel", ["modules/accounting/api/accounting_export.py", "modules/arap/api/cashier.py"])   # 出納 2026-09-26 搬進 M05
 def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel):
     from core import source_tree
     if not source_tree.module_installed(rel):
@@ -36,12 +36,15 @@ def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel
 
 
 def test_accounting_export_takes_part_categories_from_l1():
-    assert "PART_CATEGORIES" not in _imports_from("routers/accounting_export.py", "routers.parts")
-    assert "PART_CATEGORIES" in _imports_from("routers/accounting_export.py", "helpers.part_catalog")
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/api/accounting_export.py"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
+    assert "PART_CATEGORIES" not in _imports_from("modules/accounting/api/accounting_export.py", "routers.parts")
+    assert "PART_CATEGORIES" in _imports_from("modules/accounting/api/accounting_export.py", "helpers.part_catalog")
 
 
 def test_no_hardcoded_company_name_left():
-    for rel in ("modules/analytics/api/reports.py", "routers/accounting_export.py", "modules/netplan/export.py"):
+    for rel in ("modules/analytics/api/reports.py", "modules/accounting/api/accounting_export.py", "modules/netplan/export.py"):
         from core import source_tree
         if not source_tree.module_installed(rel):
             continue                                  # 模組未安裝（選配／反向控制）

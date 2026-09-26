@@ -58,8 +58,8 @@ GUARDED = {
 #: 那幾道守門**實際掃描**的檔案。註解裡寫那個字面值只有在這些檔裡才有後果。
 SCANNED = {
     "JOIN account_items": [
-        _BACKEND / "helpers" / "voucher.py",
-        _BACKEND / "routers" / "vouchers.py",
+        _BACKEND / "modules" / "accounting" / "voucher.py",          # M06 搬遷（2026-09-26）
+        _BACKEND / "modules" / "accounting" / "api" / "vouchers.py",
     ],
     "localStorage.getItem('token')": (
         sorted((_ROOT / "frontend" / "js").glob("*.js"))
@@ -220,7 +220,10 @@ def test_qa2_the_guard_cannot_tell_compliance_from_self_censorship():
         "`GUARDED` 與 `SCANNED` 的鍵對不上：%s vs %s\n"
         % (sorted(GUARDED), sorted(SCANNED))
         + "☠️ 列了一個字面值而沒說它掃哪些檔 ⇒ **那一筆永遠是綠的**。")
+    from core import source_tree
     for literal, files in SCANNED.items():
+        if files and not any(source_tree.module_installed(p) for p in files):
+            continue                                  # 掃的檔全在一個沒安裝的模組裡（選配／反向控制）：那道守門本來就不在
         assert any(p.exists() for p in files), (
             "`%r` 宣稱掃的檔案一個都不存在：%s\n"
             % (literal, [p.name for p in files])
