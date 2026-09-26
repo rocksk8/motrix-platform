@@ -103,7 +103,8 @@ M06 搬進模組後，下列三類讀取暫時保留（沒有 import 邊，只�
 | # | 檔（搬遷後） | 讀的表（擁有者） | 到期條件（提供者） | 裁示 |
 |---|---|---|---|---|
 | a | `modules/accounting/api/vouchers.py` | `quotations`、`case_extra_expenses`（M01） | M01 提供 `case.summary`、`case.extra_expenses` | M06-a |
-| a' | 〃 | `contractor_dispatches`、`vendor_contractors`（M04） | M04 提供 `dispatch.by_case`（**新 IP，待主持裁示**：JV21 支出來源 `_case_expense_sources` 與 `vouchers_by_case` 的派工段） | 〔更正（A 2026-09-26 盤點，dep_scan 實掃）：原表漏列；守門基線已列入〕 |
+| ~~a'~~ | ~~〃~~ | ~~`contractor_dispatches`、`vendor_contractors`（M04）~~ | ~~M04 提供 `dispatch.by_case`（新 IP，待主持裁示）~~ | 〔更正（A 2026-09-26 盤點，dep_scan 實掃）：原表漏列〕 |
+| | 〔主持裁示（2026-09-26 18:45）：不開新 IP，先核對 IP-15 `dispatch.list_for_case`。**A 核對結果：資料涵蓋，a' 不需要例外**——IP-15 回 `[_dispatch_row(r)]`（SQL 已 join `vendor_contractors.name` ⇒ `vendorName`），與 `_dispatch_expense_entry` 經 IP-1 `dispatch.row` 算出的 `d` 同一個形狀；用到的 id／vendorName／scope／grandTotal／invoiceNo／items／personnel 全在 ⇒ **不必擴充 IP-15**。搬遷時：JV21 `_case_expense_sources` 改呼叫 IP-15（不再經 `dispatch.row` 自己轉）；`vouchers_by_case` 的派工段改成先取 IP-15 的 id 再 `IN (…)`。⚠ **差別在權限不在欄位**：IP-15 簽名是 `fn(quote_no, authorization)`，照 M04 派工清單的模組檢查（procurement／case_manage／contractor_list）⇒ 只持 finance 的傳票使用者看不到派工支出來源（今天看得到）。取用方把 403 當「不列」（同 AT-M1b：可見範圍不比原單據寬），**這個行為變更待主持確認**〕 | | |
 | b | `modules/accounting/voucher_attachments.py` | `case_extra_expenses`、`case_updates`、`quotations`（M01）、`contractor_dispatches`（M04）、`invoice_vouchers`（M05） | 各擁有者提供 `attachments.for_document`（獨立一包，排在 M01 前置） | M06-b |
 | d | `modules/accounting/api/accounting_export.py` | `contractor_payment_vouchers`（M04） | M04 的 IP-14 加 `paid_between(start, end)` | M06-d |
 
