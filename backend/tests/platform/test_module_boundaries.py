@@ -70,10 +70,23 @@ def test_baseline_has_no_vanished_edges(units, groups, baseline):
 
 def test_edges_of_modules_not_installed_are_not_vanished(units, groups, baseline):
     """反向控制：來源是沒裝的模組（`mod:<不存在的 key>/…`）⇒ 不算消失；來源是一般單位 ⇒ 照報（合成邊，不綁真實模組）。"""
-    fake_mod = "M99 mod:zz_not_installed/api -> M01 helper:quotations"
     fake_router = "M99 router:zz_not_there -> M01 helper:quotations"
-    _, gone = B.check_import_baseline(units, groups, list(baseline) + [fake_mod, fake_router])
+    # 登記過、沒裝 ⇒ 不算消失（借一個登記過的 key，但它在這棵樹不存在時才有意義；用 monkeypatch 讓它「沒裝」）
+    key = sorted(B._registered_module_keys())[0]
+    fake_mod = "M99 mod:%s/zz_api -> M01 helper:quotations" % key
+    from core import source_tree
+    import pytest as _pt
+    mp = _pt.MonkeyPatch()
+    try:
+        mp.setattr(source_tree, "module_dirs", lambda: [])
+        _, gone = B.check_import_baseline(units, groups, list(baseline) + [fake_mod, fake_router])
+    finally:
+        mp.undo()
     assert fake_mod not in gone and fake_router in gone, gone
+    # O-2：key 沒登記（改名後的殘留）⇒ 照報消失
+    ghost = "M99 mod:zz_never_registered/api -> M01 helper:quotations"
+    _, gone = B.check_import_baseline(units, groups, list(baseline) + [ghost])
+    assert ghost in gone, gone
 
 
 # ── ② ─────────────────────────────────────────────────────────────────────

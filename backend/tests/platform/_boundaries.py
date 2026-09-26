@@ -96,6 +96,14 @@ def l2_import_edges(units, groups):
     return edges
 
 
+def _registered_module_keys():
+    """docs/platform/modules.json 登記的模組 key（repo 層級，與這棵樹裝了什麼無關）。"""
+    import json
+    from pathlib import Path
+    p = Path(__file__).resolve().parents[3] / "docs" / "platform" / "modules.json"
+    return {g.get("key") for g in json.loads(p.read_text(encoding="utf-8")).get("modules", {}).values() if g.get("key")}
+
+
 def check_import_baseline(units, groups, baseline):
     """(新增的邊, 基線裡已消失的邊)
 
@@ -105,10 +113,15 @@ def check_import_baseline(units, groups, baseline):
     cur = l2_import_edges(units, groups)
     base = set(baseline)
     installed = {d.name for d in source_tree.module_dirs()}
+    registered = _registered_module_keys()
 
     def _not_installed(edge):
+        # 只有「登記過、但這棵樹沒裝」才算沒裝；key 在 modules.json 根本沒登記（改名後的殘留）⇒ 照報消失（稽核 ⑰ O-2）
         src = edge.split(" -> ", 1)[0].split(" ", 1)[-1]
-        return src.startswith("mod:") and src[4:].split("/", 1)[0] not in installed
+        if not src.startswith("mod:"):
+            return False
+        key = src[4:].split("/", 1)[0]
+        return key not in installed and key in registered
     return sorted(cur - base), sorted(e for e in base - cur if not _not_installed(e))
 
 
