@@ -49,7 +49,7 @@ def test_unrelated_incoming_needs_only_diff_tests(repo):
     r, green = repo
     _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
     res = MT.rebase_check(green, "platform", repo=r)
-    assert res["need_full"] is False and res["fixture_layer"] == [] and res["overlap"] == []
+    assert res["high_impact"] is False and res["fixture_layer"] == [] and res["overlap"] == []
     assert res["incoming"] == ["backend/modules/n/api.py"]
     assert res["mine"] == ["backend/modules/m/api.py"]
 
@@ -60,7 +60,7 @@ def test_rc_incoming_fixture_layer_needs_full(repo, rel):
     r, green = repo
     _write_commit(r, rel, "# changed\n", "他人改 fixture 層")
     res = MT.rebase_check(green, "platform", repo=r)
-    assert res["need_full"] is True and res["fixture_layer"] == [rel]
+    assert res["high_impact"] is True and res["fixture_layer"] == [rel]
 
 
 def test_rc_same_file_on_both_sides_needs_full(repo):
@@ -68,7 +68,7 @@ def test_rc_same_file_on_both_sides_needs_full(repo):
     r, green = repo
     _write_commit(r, "backend/modules/m/api.py", "x = 1\n# 他人加註解\n", "他人改同檔")
     res = MT.rebase_check(green, "platform", repo=r)
-    assert res["need_full"] is True and res["overlap"] == ["backend/modules/m/api.py"]
+    assert res["high_impact"] is True and res["overlap"] == ["backend/modules/m/api.py"]
 
 
 def test_same_doc_on_both_sides_is_listed_but_not_full(repo):
@@ -79,7 +79,7 @@ def test_same_doc_on_both_sides_is_listed_but_not_full(repo):
     _git(r, "checkout", "-q", "platform")
     _write_commit(r, "docs/SPEC.md", "theirs\n", "他人改文件")
     res = MT.rebase_check(green, "platform", repo=r)
-    assert res["need_full"] is False and res["overlap_docs"] == ["docs/SPEC.md"] and res["overlap"] == []
+    assert res["high_impact"] is False and res["overlap_docs"] == ["docs/SPEC.md"] and res["overlap"] == []
 
 
 def test_my_own_fixture_change_is_not_counted_as_incoming(repo):
@@ -90,7 +90,7 @@ def test_my_own_fixture_change_is_not_counted_as_incoming(repo):
     _git(r, "checkout", "-q", "platform")
     _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
     res = MT.rebase_check(green2, "platform", repo=r)
-    assert res["need_full"] is False
+    assert res["high_impact"] is False
     assert "backend/conftest.py" in res["mine"]
 
 
@@ -99,7 +99,8 @@ def test_cli_exit_code_follows_the_verdict(repo, monkeypatch, capsys):
     monkeypatch.setattr(MT, "REPO", r)
     _write_commit(r, "backend/pytest.ini", "[pytest]\n", "他人改 pytest.ini")
     assert MT.main(["--rebase-check", green, "--onto", "platform"]) == 3
-    assert "重跑全量" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "全量交給列車" in out and "§G3" in out, out
 
 
 def _rebased(r, green, after=()):
@@ -117,7 +118,7 @@ def test_after_green_is_only_my_changes_since_the_full(repo):
     _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
     head = _rebased(r, green, after=[("backend/tests/test_x.py", "t = 1\n")])
     res = MT.rebase_check(green, "platform", repo=r, head=head)
-    assert res["need_full"] is False
+    assert res["high_impact"] is False
     assert res["after_green"] == ["backend/tests/test_x.py"]
 
 
@@ -127,7 +128,7 @@ def test_rc_incoming_file_touched_again_after_green_needs_full(repo):
     _write_commit(r, "backend/modules/n/api.py", "z = 1\n", "他人")
     head = _rebased(r, green, after=[("backend/modules/n/api.py", "z = 2\n")])
     res = MT.rebase_check(green, "platform", repo=r, head=head)
-    assert res["need_full"] is True and res["overlap"] == ["backend/modules/n/api.py"]
+    assert res["high_impact"] is True and res["overlap"] == ["backend/modules/n/api.py"]
 
 
 def test_rc_before_rebase_gives_no_recommendation(repo, monkeypatch, capsys):
@@ -155,3 +156,34 @@ def test_cli_recommends_files_after_green(repo, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "modtest --files backend/tests/test_x.py" in out
     assert "--base" not in out and "--changed-since" not in out
+
+
+def test_rebase_check_never_tells_a_line_to_run_the_full_suite(repo, capsys):
+    """§G3（主持 2026-09-26）：全量只由列車跑。影響大（fixture 層＋同檔）時也只建議差異題，輸出不出現「重跑全量」、建議指令不帶 --full。"""
+    r, green = repo
+    fx = MT.FIXTURE_LAYER[0]
+    _write_commit(r, fx, "# changed\n", "他人改 fixture 層")
+    _write_commit(r, "backend/modules/m/api.py", "x = 3\n", "他人改同檔")
+    res = MT.rebase_check(green, "platform", repo=r)
+    assert res["high_impact"] is True and res["fixture_layer"] == [fx]
+    assert "--full" not in res["suggest"] and "--files" in res["suggest"]
+    assert fx not in res["suggest"], "fixture 層檔放進 --files 會讓 modtest 拒絕縮小"
+    assert "backend/modules/m/api.py" in res["suggest"], "兩邊都改的檔要進差異題"
+    MT.print_rebase_check(dict(res, rebased=True))
+    out = capsys.readouterr().out
+    assert "重跑全量" not in out and "--full" not in out, out
+    assert "不要自己跑全量" in out and "全量交給列車" in out, out
+
+
+def test_own_fixture_layer_change_runs_the_diff_and_does_not_ask_for_full(monkeypatch, capsys):
+    """§G3：本分支自己動到 fixture 層 ⇒ 差異題照跑、輸出不叫人跑全量；閘門過了回 3（月台要註明、排車頭）。"""
+    ran = []
+    monkeypatch.setattr(MT, "run_pytest", lambda picked, *a, **k: (ran.append(list(picked)) or 0, None))
+    monkeypatch.setattr(MT, "record_stats", lambda *a, **k: None)
+    monkeypatch.setattr(MT, "resolve_python", lambda *a, **k: sys.executable)
+    code = MT.main(["--files", MT.FIXTURE_LAYER[0], "backend/core/menu.py"])
+    out = capsys.readouterr().out
+    assert ran, "差異題沒有跑"
+    assert "--full" not in out and "須全量" not in out, out
+    assert "全量交給列車" in out and "§G3" in out, out
+    assert code == 3
