@@ -6962,6 +6962,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
@@ -6984,6 +6985,7 @@
      "backend/routers/quotations.py"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/arap/",
      "backend/modules/subcontract/",
      "backend/modules/supply/",
@@ -12106,15 +12108,20 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "file:backend/tests/_e2e_login.py",
     "js:static/sidebar.js",
     "page:pages/approval-queue.html",
     "page:pages/case-management.html",
     "page:pages/cashier.html",
-    "page:pages/quotation-form.html"
+    "page:pages/quotation-form.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py"
     ],
@@ -12126,6 +12133,7 @@
      "frontend/static/sidebar.js"
     ],
     "path": [
+     "backend/modules/accounting/",
      "frontend/pages/approval-queue.html"
     ]
    }

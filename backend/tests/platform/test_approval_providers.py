@@ -40,7 +40,9 @@ def test_m01_endpoints_do_not_touch_other_modules_tables():
 
 
 def _expected_reassign_types():
-    out = {"quotation", "completion_note", "voucher"}                     # M01 本身、仍在 routers/ 的 M06
+    out = {"quotation", "completion_note"}                                # M01 本身
+    if source_tree.module_installed("modules/accounting/"):                  # M06（2026-09-26 搬進模組）
+        out.add("voucher")
     if source_tree.module_installed("modules/supply/"):
         out.add("shipping_note")
     if source_tree.module_installed("modules/subcontract/"):

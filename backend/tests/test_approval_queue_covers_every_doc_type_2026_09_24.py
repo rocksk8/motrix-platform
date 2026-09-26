@@ -43,7 +43,8 @@ def test_an_unmapped_doc_type_is_reported():
 def test_a_mapped_type_missing_from_both_endpoints_is_reported():
     r = check_approval_queue_coverage(doc_types=["voucher"],
                                       queue_source="def f():\n    pass\n",
-                                      count_source="def g():\n    pass\n", provider_sources=[])
+                                      count_source="def g():\n    pass\n", provider_sources=[],
+                                      installed=lambda _k: True)   # 合成：量掃描器，不看安裝包
     assert r["missing_from_queue"] == ["voucher"] and r["missing_from_count"] == ["voucher"]
 
 
@@ -53,10 +54,10 @@ def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_provider
     prov = [("modules/x/api.py", 'def queue_items(conn):\n    conn.execute("SELECT 1 FROM vouchers_all")\n'
                                  '    return [{"type": "voucher"}]\n')]
     ok = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
-                                       count_source="items += _queue_provider_items(conn)")
+                                       count_source="items += _queue_provider_items(conn)", installed=lambda _k: True)
     assert is_clean(ok)
     no_agg = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
-                                           count_source="def g():\n    pass\n")
+                                           count_source="def g():\n    pass\n", installed=lambda _k: True)
     assert no_agg["missing_from_queue"] == [] and no_agg["missing_from_count"] == ["voucher"]
 
 

@@ -79,6 +79,7 @@ _OWNER_MODULE = {
     "payment_request":    "arap",
     "bonus":              "payroll",
     "shipping":           "supply",
+    "voucher":            "accounting",     # M06（2026-09-26 搬進 modules/accounting）
 }
 
 
@@ -231,7 +232,8 @@ def _self_check():
     #    不必真的去改 quotations.py。
     r = check_approval_queue_coverage(
         doc_types=["voucher"], queue_source="def f():\n    pass\n",
-        count_source="def g():\n    pass\n", provider_sources=[])
+        count_source="def g():\n    pass\n", provider_sources=[],
+        installed=lambda _k: True)   # 自檢量的是掃描器，不看安裝包
     if "voucher" not in r["missing_from_queue"] or "voucher" not in r["missing_from_count"]:
         say("   NG  正對照(2)：空白源碼沒有被判定為漏掉 => 這支尺本身壞了")
         bad += 1

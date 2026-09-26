@@ -41,12 +41,33 @@ def _rendered(page):
 
 def _page(p_, live_server, make_user, zoom, uname):
     u, pw_ = make_user(username=uname, role="superadmin", modules=["cashier"])
-    _pending_voucher(u)
+    _pending_item(u)
     browser = p_   # PERF #5：共用瀏覽器（e2e_browser 外殼）
     page = browser.new_page(viewport={"width": W, "height": H})
     page.add_init_script("localStorage.setItem('motrix_font_zoom', '%s')" % zoom)
     _login(page, live_server, u, pw_)
     return browser, page
+
+
+def _pending_item(username):
+    """佇列裡要有一筆可以點開的待簽單（本檔量的是版面，不是哪一種單據）：M06 在 ⇒ 傳票；
+    M06 不在（PLAYBOOK §B-11）⇒ 同單號的待審核報價單（M01 一定在）。"""
+    from core import source_tree
+    if source_tree.module_installed("modules/accounting/"):
+        return _pending_voucher(username)
+    import datetime as _dt
+    import db
+    now = _dt.datetime.now().isoformat()
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO quotations (quote_no, status, customer_name, data_json, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?)",
+            ("FZ-0001", "待審核", "字級測試", '{"approval": {"tiers": [], "currentTier": 0, "requestedBy": "%s"}}'
+             % username, now, now))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _pending_voucher(username):
