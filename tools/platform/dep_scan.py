@@ -832,7 +832,8 @@ def main() -> int:
     if not a.check:
         out = Path(a.out)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(g, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        out.write_text(json.dumps(g, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8",
+                       newline="\n")   # 固定 LF：Windows 預設寫成 CRLF（誰重產就換一次行尾）
         print(f"寫出 {out}")
     return 0
 

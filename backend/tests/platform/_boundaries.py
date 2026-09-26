@@ -26,7 +26,16 @@ BASELINE = HERE / "l2_import_baseline.json"
 EXCEPTIONS = HERE / "table_write_exceptions.json"
 
 #: 每個都必須剛好歸屬一組（mod＝backend/modules/<key>/ 內的檔、plat＝backend/core/ 的 L0 平台）
-OWNED_KINDS = ("router", "helper", "page", "mod", "plat")
+#: 單一定義：取 dep_scan 的 ASSIGNED_KINDS（2026-09-26：這裡原本少了 js、core ⇒ 三支未歸屬的 js 跟著列車合回、兩班全量都綠）
+def _assigned_kinds():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools" / "platform"))
+    import dep_scan
+    return tuple(dep_scan.ASSIGNED_KINDS)
+
+
+OWNED_KINDS = _assigned_kinds()
 
 
 def load_dep_scan():
