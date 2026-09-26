@@ -173,3 +173,18 @@ def test_whitespace_only_email_counts_as_having_one_like_the_sender(client, two_
     h = _make_last(client, boss, key)
     r = client.put("/api/users/%d" % _id("u15_b"), json={"email": "   "}, headers=h)
     assert r.status_code == 200, r.text
+
+
+
+def test_already_unreachable_types_do_not_block_unrelated_fixes(client, two_superadmins):
+    """D 稽核 S-3：某類信件在修改「之前」就已經沒人收（舊資料裡所有超管都退訂）⇒ 不可以因此擋住任何修改，
+    否則連修正都做不到（判準是「從有人變成沒人」，不是「修改後沒人」）。"""
+    import json as _json
+    boss, key = two_superadmins
+    h = _h(client, boss)
+    for u in ("u15_boss", "u15_a", "u15_b"):
+        _exec("UPDATE users SET notification_muted=? WHERE username=?", (_json.dumps([key]), u))
+    r = client.put("/api/users/%d" % _id("u15_b"), json={"email": "u15_b2@example.test"}, headers=h)
+    assert r.status_code == 200, r.text
+    r = client.put("/api/users/%d" % _id("u15_a"), json={"notification_muted": []}, headers=h)
+    assert r.status_code == 200, r.text                      # 修正：重新訂閱一定要能做
