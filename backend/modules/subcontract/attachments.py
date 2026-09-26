@@ -20,10 +20,12 @@ class _SubcontractAttachments:
     def doc_nos_for_case(conn, source_type, quote_no, user):
         if source_type not in _COLUMNS:
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
-        if not case_documents_readable(conn, quote_no, user):        # 同派工單清單的讀取規則（AT-M1）
-            raise AttachmentNotVisible()
-        return [str(r["k"]) for r in conn.execute(
+        docs = [str(r["k"]) for r in conn.execute(
             "SELECT id AS k FROM contractor_dispatches WHERE quote_no = ? ORDER BY id", (quote_no,))]
+        if not case_documents_readable(conn, quote_no, user):        # 同派工單清單的讀取規則（AT-M1）
+            # 只回「沒列出幾個附件」（數字），不帶單號與內容（主持裁示 2026-09-26）
+            raise AttachmentNotVisible(hidden=sum(_count(conn, source_type, d) for d in docs))
+        return docs
 
     @staticmethod
     def files(conn, source_type, doc_no, user):
@@ -35,3 +37,11 @@ class _SubcontractAttachments:
         if not case_documents_readable(conn, row["quote_no"], user):
             raise AttachmentNotVisible()
         return files_from_json_column(conn, "contractor_dispatches", "id", doc_no, _COLUMNS[source_type])
+
+
+def _count(conn, source_type, doc_no):
+    """看不到的那一筆有幾個附件（只給 hidden 的數字用；壞資料算 1）。"""
+    try:
+        return len(files_from_json_column(conn, "contractor_dispatches", "id", doc_no, _COLUMNS[source_type]) or [])
+    except AttachmentSourceError:
+        return 1

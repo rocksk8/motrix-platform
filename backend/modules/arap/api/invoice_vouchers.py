@@ -878,13 +878,26 @@ class _InvoiceVoucherAttachments:
 
     @staticmethod
     def doc_nos_for_case(conn, source_type, quote_no, user):
-        from helpers.uploads import AttachmentSourceError
+        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
         if source_type != "invoice_voucher":
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
-        # 逐張用開票申請自己的讀取規則（案件層＋金額層，含本單簽核人例外；AT-M1b）：讀不到的不列
-        return [str(r["voucher_no"]) for r in conn.execute(
-            "SELECT voucher_no, quote_no, data_json FROM invoice_vouchers WHERE quote_no = ? ORDER BY id", (quote_no,))
-            if _voucher_readable(conn, r, user)]
+        # 逐張用開票申請自己的讀取規則（案件層＋金額層，含本單簽核人例外；AT-M1b）：讀不到的不列，
+        # 但要讓取用方知道沒列出幾個附件（只有數字，不帶單號與內容；主持裁示 2026-09-26）
+        rows = conn.execute("SELECT voucher_no, quote_no, data_json FROM invoice_vouchers WHERE quote_no = ? ORDER BY id",
+                            (quote_no,)).fetchall()
+        readable, hidden = [], 0
+        for r in rows:
+            if _voucher_readable(conn, r, user):
+                readable.append(str(r["voucher_no"]))
+                continue
+            try:
+                hidden += len(files_from_json_column(conn, "invoice_vouchers", "voucher_no", r["voucher_no"],
+                                                     "issued_files_json") or [])
+            except AttachmentSourceError:
+                hidden += 1
+        if hidden:
+            raise AttachmentNotVisible(visible=readable, hidden=hidden)
+        return readable
 
     @staticmethod
     def files(conn, source_type, doc_no, user):

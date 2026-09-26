@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.3 — 2026-09-26（a-attachments-5 帶入 M06 基底）
+- 開票申請附件提供者：逐張過濾有讀不到的 ⇒ `AttachmentNotVisible(visible=看得到的, hidden=沒列出的附件個數)`，不再靜默只回看得到的（主持裁示：因權限沒列出要明說，只准類別＋個數）
+
 ## 1.0.2 — 2026-09-26（A 的 a-attachments 整疊帶入 M06 基底；列車取號）
 - 提供 IP-21 `attachments.for_document`（`invoice_voucher` 一類，`ModuleSpec.providers`）：開票申請的已上傳檔案；讀取規則與開票申請自己的端點同一支 `_voucher_readable`（案件層＋金額層，含本單簽核人例外；稽核 D AT-M1b），`_guard_voucher` 改呼叫它（拒絕訊息不變）
 

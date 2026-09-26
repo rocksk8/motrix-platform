@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.41 — 2026-09-26（A，a-attachments-5 帶入 M06 基底：因權限沒列出的附件要明說；列車上 core_bump 取號）
+- L1（新增）：`helpers.uploads.AttachmentNotVisible(visible=None, hidden=0)` 多兩個可選參數：`visible`（逐張過濾時看得到的那幾張）、`hidden`（沒列出的**附件個數**，只有數字；主持裁示：明說只准類別＋個數）；既有 `raise AttachmentNotVisible()` 寫法不變
+
 ## 1.40 — 2026-09-26（A，IP-21 attachments.for_document 整疊〔a-attachments-4 的 1.37～1.40 併成一段〕帶入 M06 基底；列車上 core_bump 取號）
 - L1（新增）：`helpers.uploads.AttachmentSourceError`（附件來源解析不了；訊息給使用者，取用方原樣回 400，不吞成空清單）、`files_from_json_column(conn, table, key_col, key, col)`（某表某列 JSON 欄的檔案清單；列不存在 ⇒ []、壞掉 ⇒ 丟）。給各單據模組實作 `attachments.for_document` 提供者用（主持裁示 M06-b）〔a-attachments 原 1.37〕
 - L1（新增）：`helpers.uploads.AttachmentNotVisible`（使用者看不到附件的原單據；取用方列清單時不列、帶入／預覽 403）、`helpers.case_access.case_documents_readable(conn, quote_no, user)`（案件底下的單據准不准讀：與各單據清單同一份規則，`case_access_allowed(..., allow_module="case_manage")`；案件不存在 ⇒ False）〔a-attachments 原 1.38〕

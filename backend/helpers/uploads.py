@@ -168,7 +168,16 @@ class AttachmentSourceError(Exception):
 
 
 class AttachmentNotVisible(Exception):
-    """使用者看不到這筆附件的原單據（稽核 D AT-M1，主持裁示 (b)）：取用方列清單時不列、帶入／預覽時回 403。"""
+    """使用者看不到這筆附件的原單據（稽核 D AT-M1，主持裁示 (b)）：取用方列清單時不列、帶入／預覽時回 403。
+
+    `visible`：逐張過濾的提供者（`doc_nos_for_case`）只看得到其中幾張時，帶上看得到的那幾張（其餘不列）。
+    `hidden`：因此沒列出的**附件個數**（只有數字）。取用方**一律明說**「某類 N 個附件因權限無法顯示」
+    （主持裁示 2026-09-26：不可以靜默少列；也不可以帶出單號、檔名、金額或任何內容，否則明說本身就是外洩）。"""
+
+    def __init__(self, visible=None, hidden=0):
+        super().__init__()
+        self.visible = list(visible or [])
+        self.hidden = int(hidden or 0)
 
 
 def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> list:

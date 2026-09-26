@@ -1,5 +1,5 @@
 {
- "core_version": "1.40",
+ "core_version": "1.41",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -692,6 +692,7 @@
   },
   "helper:uploads": {
    "AttachmentNotVisible": "class",
+   "AttachmentNotVisible.__init__": "def(self, visible=…, hidden=…)",
    "AttachmentSourceError": "class",
    "UPLOADS_ROOT": "const",
    "_effective_subfolder": "def(subfolder)",

@@ -160,7 +160,8 @@ function voucherPage() {
         if (quote !== this.sourceQuote) return
         this.sources = d.tabs || {}
         this.sourceNotes = d.notes || {}
-        this.sourceUnavailable = d.unavailable || []
+        // 模組不在（unavailable）與因權限沒列出（hidden）都要明說，不可以跟「沒有」長得一樣
+        this.sourceUnavailable = (d.unavailable || []).concat(d.hidden || [])
         this.sourcesLoaded = true
       } catch (e) {
         if (quote !== this.sourceQuote) return
@@ -397,7 +398,7 @@ function voucherPage() {
         const d = await r.json().catch(function () { return {} })
         if (!r.ok) throw new Error(d.detail || ('HTTP ' + r.status))
         this.lineSrc = Object.assign({}, this.lineSrc,
-          { [k]: { loading: false, files: d.files || [], err: '', unavailable: d.unavailable || [] } })
+          { [k]: { loading: false, files: d.files || [], err: '', unavailable: (d.unavailable || []).concat(d.hidden || []) } })
       } catch (e) {
         this.lineSrc = Object.assign({}, this.lineSrc,
           { [k]: { loading: false, files: [], err: '來源檔案載入失敗（' + e.message + '）。' } })

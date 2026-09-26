@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.9 — 2026-09-26（a-attachments-5 帶入 M06 基底）
+- 附件來源看不到時說出沒列出幾個附件（`AttachmentNotVisible(hidden=N)`，只有數字；主持裁示：因權限沒列出要明說，不可以帶出單號與內容）
+
 ## 1.0.8 — 2026-09-26（C 的 c-ip14-paid 帶入 M06 基底；原 1.0.5；列車定號）
 - IP-14 加第二個能力 `contractor_voucher.paid_between(start, end)`：區間內已付款的承攬商匯款申請（形狀同 `contractor_voucher.public`）；M06 會計匯出的 T100 付款傳票改走它，不再自己讀本模組的表（主持派工，A 的 M06 搬遷前置）。M04 不在 ⇒ 會計匯出沒有承攬付款、預覽 notice 照舊明說
 
