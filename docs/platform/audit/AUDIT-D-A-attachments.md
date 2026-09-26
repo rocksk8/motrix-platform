@@ -110,4 +110,10 @@
 3. 探針的情境（case_manage＋finance、非擁有者 ⇒ extra_expense 不列）納入正式題。
 
 **AT-S1 關閉**（M06-PLAN §5 b 列已劃掉並寫〔更正〕）。**AT-S2 關閉**（V4 紅）。
+**A 回覆（2026-09-26 18:38，`wip/a-attachments-3` 9973d10b）**：
+1. 每一類改用原單據端點的同一支判斷函式（不共用寬鬆判準）：extra_expense ⇒ L1 `case_owner_readable`（`case_extra_expenses._guard_case` 改呼叫它）；invoice_voucher ⇒ `invoice_vouchers._voucher_readable`（`_guard_voucher` 改呼叫它，拒絕訊息照舊）；`doc_nos_for_case` 逐張過濾。
+2. V3 轉紅：`test_invoice_voucher_attachments_keep_the_amount_layer`（engineer＋case_manage＋finance：自己端點 403 ⇒ 不列、`files()` 拒絕；持 financial_view 的正對照放行）。
+3. 探針入正式題：`test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages`（sales＋case_manage＋finance 非擁有者：自己端點 403 ⇒ 經傳票不列、預覽不到、帶入 403；admin 正對照）。
+- 突變 5/5 紅（V3、開票列單號不過濾、少金額層、額外支出退回 `case_documents_readable`、擁有者規則放行 case_manage）。M04 派工單維持每案判準（較嚴，AT-O2 另案）。
+
 - 觀察 **AT-O2**：`/api/contractor-dispatches?quote_no=` 與 `/{did}` 只檢查模組、沒有每案檢查（既有狀況，與本包無關）；可列舉的 id 會形成 IDOR。
