@@ -131,10 +131,12 @@ def test_smoke_plan_derives_module_checks_from_the_package(tmp_path):
     """合成樹（不綁真實模組）：包內模組 ⇒ 打它宣告的 probes 與頁面；登記了卻不在包內 ⇒ 明列「不在安裝包」；共用清單照跑。"""
     backend = tmp_path / "backend"
     _mod(backend, "aa", probes=["/api/aa/list"], pages=["aa.html"])
-    plan = FD.smoke_plan(str(backend), registered={"aa", "bb"})
+    plan = FD.smoke_plan(str(backend), registered={"aa", "bb", "cc"}, migrated={"aa", "bb"})
     rows = {(p[2], p[3]) for p in plan}
     assert ("/api/aa/list", None) in rows and ("/pages/aa.html", None) in rows
     assert ("modules/bb", "模組 bb %s" % FD.ABSENT) in rows
+    # D 稽核 S-1：有 key 但還沒搬遷（沒有 mod: 單位）的，說成「尚未搬遷」，不是「不在安裝包」（報告讀者會以為少了功能）
+    assert ("modules/cc", "模組 cc %s" % FD.NOT_MIGRATED) in rows
     assert all(p[3] is None for p in plan[:len(FD.SMOKE)])
     out = {"checks": [{"name": "x", "ok": True}],
            "skipped": [{"name": n, "path": pa, "reason": r} for n, _m, pa, r in plan if r]}
@@ -279,3 +281,14 @@ def test_report_names_the_kept_directories(tmp_path):
     assert "保留" in text and str(tmp_path / "v9-install") in text
 
 
+
+
+
+def test_migrated_keys_follow_modules_json_mod_units():
+    """真實登記表：已搬遷＝群組含 mod: 單位；有 key 還沒搬的不在裡面（與 check_group_keys 同判準）。"""
+    import json
+    groups = json.loads((REPO / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))["modules"].values()
+    want = {g["key"] for g in groups if g.get("key") and any(str(u).startswith("mod:") for u in g.get("units") or [])}
+    got = FD.migrated_module_keys()
+    assert got == want and got, got
+    assert got < FD.registered_module_keys() or got == FD.registered_module_keys()
