@@ -146,6 +146,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
 - 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。
 - 2026-09-26 17:33 主持：使用者表單「全量開發完成才跑」⇒ 第十班起列車不跑全量（PLAYBOOK §G4 第 4 步更正、CORE-SPEC 裁示表）；第九班已在跑的全量照跑完。裁示 B：①產生檔提案採 §7 合一方案（分支不動產生檔、modtest 現場產生、「是否最新」三題只在列車跑）交 B 實作；②e2e 每題加死線（永不回應的 promise 會等到 renderer crash 50～400 秒）交 B。交互紅紀錄：第四班 4、第五班 2、第六班 5、第七班 2、第八班 1（全量抓到、分支沒抓到）。
@@ -165,5 +166,3 @@
 - 2026-09-26 15:58 D：**M5-M1／M5-M2／M5-S1 關閉（c5484962）、IP-M1 關閉（9623f1be）**：MB8、S1、P5 重跑皆紅；e2e 連跑 5 次全綠。交會：a-approval-parse 的 voucher.py／tiered_approval.py 含「淘汰」未登記 ⇒ 兩包都合回時反掃必紅，後進的補登記。
 - 2026-09-26 15:58 主持：使用者表單定本輪範圍——授權機制不做、M01 已知例外可接受（D7 報告列出＋到期守門）、不安排人工驗收（CORE-SPEC 裁示表）。預估完工 9/29（±1 天）。
 - 2026-09-26 15:51 D：b-m08-attr 52178979、b-modtest-env bf4abacb 抽查（`AUDIT-D-B-attr-modtestenv.md`）皆通過、必修 0；突變 4/4 紅；觀察 MT-O1（差異題的 e2e 無獨立上限）。
-- 2026-09-26 15:47 D：c-ip14-paid 6c8406c5（`AUDIT-D-C-ip14-paid.md`）**必修 IP-M1**：test_cashier_and_t100_without_m04 只拿掉 contractor_voucher.public，T100 資料已改走 paid_between ⇒ 拿掉 None 防護（真 M04 不在會 500）照綠；其餘突變 4/4 紅、基準 97 過。
-- 2026-09-26 15:38 D：c-m05b b17e5296（`AUDIT-D-C-M05-move.md`）**必修 2**：M5-M1 薄殼「下一個主版號刪除」無觸發（CORE 升 2.0 守門照綠）；M5-M2 `test_e2e_arap_absent_notices` 不關 context＋route.fetch ⇒ 同 worker 下一題偶發紅（未突變 1/3，基準 golden 紅同因）。§B-11 通過（5 紅皆允許、1486 收集無錯、端點 404）；突變 7/7 紅。

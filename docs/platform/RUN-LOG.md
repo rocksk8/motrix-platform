@@ -2,6 +2,8 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 15:47 D：c-ip14-paid 6c8406c5（`AUDIT-D-C-ip14-paid.md`）**必修 IP-M1**：test_cashier_and_t100_without_m04 只拿掉 contractor_voucher.public，T100 資料已改走 paid_between ⇒ 拿掉 None 防護（真 M04 不在會 500）照綠；其餘突變 4/4 紅、基準 97 過。
+- 2026-09-26 15:38 D：c-m05b b17e5296（`AUDIT-D-C-M05-move.md`）**必修 2**：M5-M1 薄殼「下一個主版號刪除」無觸發（CORE 升 2.0 守門照綠）；M5-M2 `test_e2e_arap_absent_notices` 不關 context＋route.fetch ⇒ 同 worker 下一題偶發紅（未突變 1/3，基準 golden 紅同因）。§B-11 通過（5 紅皆允許、1486 收集無錯、端點 404）；突變 7/7 紅。
 - 2026-09-26 15:16 D：h-fonts-woff2 94a78b4c 抽查（`AUDIT-D-host-fonts-woff2.md`）通過、必修 0：CSS 無殘留 otf 引用、突變 FW1 紅；觀察 woff2 Content-Type＝octet-stream（不影響載入）、test_map 過期交列車。
 - 2026-09-26 15:13 D：a-approval-parse 708dbe0d（`AUDIT-D-A-approval-parse.md`）通過、必修 0：fail-closed／別名同類別／doc_label 突變皆紅；M01→M06 邊確實消失；建議 AP-S1（轉簽讀不出來⇒400 無題驗）；test_map 過期交列車。
 - 2026-09-26 15:06 主持：**§6 舊紀錄封存**（使用者裁示省 token）：第 21 筆以後（共 172 筆）原文搬到 `RUN-LOG.md`，本節只留最新 20 筆；查歷史請讀 RUN-LOG.md。

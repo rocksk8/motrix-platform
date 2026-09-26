@@ -41,3 +41,24 @@
 
 閘門：全部 e2e（-n 2）460 過；tests/platform（-n 4）1086 過。
 
+
+## 4. S2-S1 複核：wip/b-o5-s2-2 fd5af159（D 17:46）
+
+主持要求真的造一個 Playwright 失敗。B 的反向控制是把錯誤文字手動餵給 `_drive`，D 另外寫了一支**完整走 pytest 回報流程**的探針：3 題真的失敗，秘密字串設成 `DSECRETX1`，分別跑 `-n 0` 與 `-n 2`，輸出加上 `-rA -l` 與 `--junitxml`，再搜尋 log 與 xml。
+
+| 題（真的失敗） | 秘密出現的位置 | 結果 |
+|---|---|---|
+| `page.request.get(...?pt=DSECRETX1&q=DSECRETX1, headers={Authorization: Bearer DSECRETX1})` 回 404 | Playwright 的錯誤文字與 call log | **0 外洩**（log 與 xml） |
+| `extra_http_headers` 帶 Bearer，逾時 | call log＋逾時報告段 | **0 外洩** |
+| `assert tok == ...`，訊息與區域變數帶秘密；另一題 `print` 秘密 | assert 訊息、`-l` 印出的區域變數、Captured stdout | 5 處外洩（`-n 0` 與 `-n 2` 相同） |
+
+- 已知形狀全部遮到：Bearer、authorization、`?pt=`、`?q=`，而且 xdist 也一樣。
+- 外洩的 5 處都是**沒有鍵名的裸值**，規則式遮蔽原理上認不出來，不歸本包。記為 **O5S2-O3**：題目本身不要把權杖放進 assert 訊息或 print。
+- 突變 S22「不遮 longrepr」⇒ 紅（`test_rc_a_real_playwright_failure_leaks_nothing`）。
+⇒ **S2-S1 關閉（fd5af159）**；**O5S2-O1** 同時處理完畢。
+
+**O5S2-O2 更正（原句保留在 §3）**：D 探針卡死的原因已查到，是**探針自己的錯**，不是 fixture：
+- `page.evaluate("fetch('/api/…').catch(() => {})")` 的回傳值就是那個永遠不 resolve 的 promise，evaluate 會一直等它。
+- B 的題用分號接第二個會完成的 fetch，所以能過。
+- 在 b-o9 上用 20 秒的看門狗重跑，照樣卡住 240 秒：卡在題目本體，不在 teardown。
+- 這就是〈探針與被測對象糾纏〉。
