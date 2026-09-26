@@ -30,7 +30,7 @@ def _funcs(src, names):
             if isinstance(n, ast.FunctionDef) and n.name in names}
 
 
-def test_m01_endpoints_do_not_touch_other_modules_tables():
+def test_case_endpoints_do_not_touch_other_modules_tables():
     src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     found = _funcs(src, M01_FUNCS)
     assert set(found) == set(M01_FUNCS), sorted(found)
@@ -247,7 +247,7 @@ def test_unreadable_chain_is_refused(client, iv_setup):
 
 # ── ⑤ M01 補案件名稱 ─────────────────────────────────────────────────────────
 
-def test_m01_fills_case_names_only_when_missing(client, monkeypatch):
+def test_case_names_are_filled_only_when_missing(client, monkeypatch):
     import db
     from modules.case.api import quotations as q
     conn = db.get_db()
