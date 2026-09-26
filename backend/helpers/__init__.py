@@ -33,10 +33,11 @@ from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifica
                     notify_org_chain_notice)
 from .quotations import (
     SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers,
-    payment_item_amounts, summarize_payment_items, case_extra_expenses,
+    summarize_payment_items, case_extra_expenses,
     quote_won_month_map, norm_at, validate_invoice_no, validate_invoice_amounts, validate_quote_tax,
 )
 from .case_access import guard_case_access, is_document_approver  # L1（2026-09-26 自 quotations 下沉）
+from .tax_calc import payment_item_amounts          # T（2026-09-26）：稅額純函式在 L1
 from .dates import _add_months, _warranty_expiry, _workdays_elapsed
 from .tiered_approval import (
     active_tiers, current_tier_idx, setting_to_active_tiers,

@@ -31,7 +31,7 @@ def main():
     import db as dbmod
     if args.db:
         dbmod.DB_PATH = args.db
-    from helpers.quotations import payment_item_amounts
+    from helpers.tax_calc import payment_item_amounts
 
     conn = dbmod.get_db()
     try:

@@ -29,6 +29,7 @@
    "helper:financial_mask",
    "helper:geo",
    "helper:legal_params",
+   "helper:tax_calc",
    "helper:google_calendar",
    "helper:licensing",
    "helper:mail_types",
