@@ -166,9 +166,16 @@ B 報「66.8%→23.3%（3265→1141 題）」。前半逐字重現。後半差 8
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | 稽核確認 |
 |---|---|---|---|
-| M-1 | | | |
-| M-2 | | | |
-| M-3 | | | |
-| M-4 | | | |
+| M-1 | （B 以 commit／月台登記回覆）帳本改在 `sqlite3.connect` 層（`tests/_db_ledger.py`），以呼叫堆疊經過端點原始檔歸屬；GCIS 兩支移到 DB_PATHS | wip/b-m08-2 f7463dfa | ✅ 09:29 D 複核：MX-NOW-a（經 helper）／b（端點內 db.get_db）／c（模組層 `from db import get_db` 綁名）／d（開了不關）全紅；突變 LD1「中介層的連線也算到端點頭上」⇒ 豁免題與帳本反向控制 2 紅 ⇒ 中介層確實不算、且有題守 ⇒ **關閉** |
+| M-2 | `_router_files()` 真實樹改走 `source_tree.router_files()`；合成樹正對照 | wip/b-m08-2 f7463dfa | ✅ 09:29 D：原稿 MX-CRED（`get_ar_aging` 加 `token: Query`）⇒ 紅；退回只掃 `routers/` ⇒ `test_scan_covers_module_routers`、`test_rc_a_module_route_with_a_query_token_is_caught` 紅 ⇒ **關閉** |
+| M-3 | `provides.probes` 由模組宣告；沒宣告列 `undeclared_probes` | wip/b-m08-2 f7463dfa | ✅ 09:29 D：probe 寫成前綴 ⇒ 2 紅（不是真路由、不回 200）；沒宣告不列 ⇒ 紅；退回用 api_prefixes ⇒ 紅 ⇒ **關閉**（見 §10 觀察 X-O10） |
+| M-4 | 兩格模組不在時顯示「—」＋明說；e2e 攔 `/api/dashboard/**` 全部 | wip/b-m08-2 f7463dfa | ✅ 09:29 D：將屆格、保固格各自退回顯示數字 ⇒ 各紅 ⇒ **關閉** |
 | S-1～S-8 | | | |
 | O-1～O-9 | | | |
+
+## 10. D 複核（2026-09-26 09:29，wip/b-m08-2 f7463dfa）
+
+- **§B-11 獨立重做**：D 在自己的稽核樹 `rm -rf backend/modules/analytics`（D 的權限沒有擋；未改用 sparse checkout，因為在 worktree 啟用 sparse 會把 `extensions.worktreeConfig` 寫進共用的 `.git/config`），跑 tests/platform＋20 個提到營運分析的檔：**1264 passed、2 failed（皆 §B-11 允許）、3 skipped**；`--collect-only` 不加旗標 1269 題、exit 0（無收集錯誤）。模組在時同範圍＋`modules/analytics/tests`：**1459 passed**。與 B 登記的「1862 過 3 紅（允許 2＋已修 1）」一致（範圍不同：B 93 檔）。
+- 突變合計 14 項全紅：M-1 5（含 LD1）、M-2 2、M-3 3、M-4 2（另 D 在 b-g1 的 core-only 實跑）。
+- **X-O10（觀察）　tender_radar 的演練端點檢查在改版後消失**：舊版 product_drill 對 tender_radar 寫死 `/api/tender_radar/tenders`；新版只看 `provides.probes`，而目前只有 analytics 宣告 ⇒ tender_radar、daily_tasks、netplan 列在 `undeclared_probes`、不打端點（主持過渡裁示允許）。建議各模組補一行 probes（成本很低），否則演練對它們只驗頁面。
+

@@ -131,6 +131,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 09:29 D：⑰ M08 必修 M-1～M-4 **全部關閉**（b-m08-2 f7463dfa；突變 14 項全紅）。§B-11 D 獨立重做：真刪 analytics 1264 過／2 紅皆允許、收集無錯誤；模組在 1459 過。觀察 X-O10：tender_radar 等未宣告 probes ⇒ 演練不再打它們的端點。
 - 2026-09-26 09:27 B（記錄主持裁示，AUDIT-D-B-G1 G-M1）：**core-only 已知紅清單**首批（`tools/platform/core_only_known_red.json`；列車判定＝紅燈 ⊆ §B-11 允許＋本清單；清單只准縮短，新增一筆要在本檔寫一行帶錨點的主持裁示）：
   - `CORE-ONLY-KR-1` test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared（case_read_scope）：擁有者 A（暫記主持），修復分支 wip/h-corered 3710f462
   - `CORE-ONLY-KR-2` test_absent_module_green_present_module_still_red（IP 登記表）：擁有者 A（暫記主持），修復分支 wip/h-corered 3710f462
