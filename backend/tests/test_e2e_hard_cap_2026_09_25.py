@@ -20,8 +20,10 @@ import pytest
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 探針要吃到 backend/conftest.py（2026-09-25 自 tests/ 上移）⇒ 放在 backend/ 底下任何位置都可以；每一題各自一個目錄（-n 下三題同時跑，共用會互刪）。
 # O6（2026-09-26）：原本放在 tests/ 底下 ⇒ 別的題的子 pytest 收集時，這個目錄被本題同時刪掉 ⇒ FileNotFoundError（第二班列車全量紅 1 次）。
-# 改放 backend/ 根的「.」開頭目錄：pytest 遞迴收集與掃 tests/ 的工具都不會進去；本題以明確路徑指定檔案，照樣收集得到。
-PROBE_ROOT = BACKEND
+# ~~改放 backend/ 根的「.」開頭目錄~~〔更正（稽核 D O6-M1）：backend/ 根會被十多道「rglob 整個 backend、排除 tests/」的產品碼掃描看到
+# （edge_profile、begin_write、requirements、_l1_interface、dep_scan…；實測 20 次掃描 3 次 FileNotFoundError）〕
+# ⇒ 放 backend/tests/ 底下的「.」開頭目錄：產品碼掃描排除 tests/ 碰不到；pytest 遞迴收集不進「.」開頭的目錄；本題以明確路徑指定檔案，照樣收集得到。
+PROBE_ROOT = os.path.join(BACKEND, "tests")
 PROBE_PREFIX = ".hardcap_probe_"
 
 SRC = '''import time
@@ -50,7 +52,24 @@ def probe():
         open(f, "w", encoding="utf-8").write(SRC % {"sleep": sleep})
         return f
     yield _write
-    shutil.rmtree(d, ignore_errors=True)
+    _remove_probe(d)
+
+
+def _remove_probe(d):
+    """刪探針目錄：刪不掉（別的行程正在讀）⇒ 記錄並等一下重試一次；仍刪不掉 ⇒ 發 warning 寫出路徑（不靜默忽略，稽核 D O6-M1）。"""
+    import warnings
+    for attempt in (1, 2):
+        try:
+            shutil.rmtree(d)
+            return
+        except FileNotFoundError:
+            return
+        except OSError as e:
+            if attempt == 1:
+                print("[hard_cap] 探針目錄刪不掉（%s）：%s ⇒ 1 秒後重試" % (e, d))
+                time.sleep(1)
+            else:
+                warnings.warn("hard_cap 探針目錄重試後仍刪不掉，請手動刪除：%s（%s）" % (d, e))
 
 
 def _pytest(args, cap, tmp_path, tag):
@@ -121,9 +140,24 @@ def test_a_quick_e2e_leaves_nothing_behind(probe, tmp_path):
     assert "e2e 逐題上限" not in out, out[-800:]
 
 
-def test_probe_dir_is_outside_collected_trees():
-    """O6：探針目錄不可以在會被收集／掃描的 tests/、modules/ 底下，且要「.」開頭（pytest 遞迴收集不進去）。"""
+def test_probe_dir_is_outside_product_scans_and_pytest_collection():
+    """O6／O6-M1（靜態守門）：探針目錄在 backend/tests/ 底下、「.」開頭——
+    產品碼掃描（core.source_tree 的 product_files／logic_files／router_files，以及「rglob 整個 backend、排除 tests」的守門）碰不到；
+    pytest 遞迴收集不進「.」開頭的目錄。"""
+    from core import source_tree
     probe_dir = os.path.join(PROBE_ROOT, PROBE_PREFIX + "x")
     rel = os.path.relpath(probe_dir, BACKEND).replace("\\", "/")
-    assert rel.startswith(".") and "/" not in rel, rel
-    assert not rel.startswith(("tests/", "modules/")), rel
+    parts = rel.split("/")
+    assert parts[0] == "tests" and len(parts) == 2 and parts[1].startswith("."), rel
+    assert "tests" in source_tree._NON_PRODUCT_DIRS          # 產品碼掃描排除的目錄名（單一定義）
+    # 實際建一個探針目錄與檔案，產品碼清單裡找不到它
+    import uuid
+    d = os.path.join(PROBE_ROOT, PROBE_PREFIX + "static_" + uuid.uuid4().hex[:6])
+    os.makedirs(d)
+    try:
+        open(os.path.join(d, "test_zz_hardcap_probe.py"), "w", encoding="utf-8").write("x = 1\n")
+        for lister in (source_tree.product_files, source_tree.logic_files, source_tree.router_files):
+            hits = [str(f) for f in lister() if PROBE_PREFIX in str(f)]
+            assert not hits, (lister.__name__, hits)
+    finally:
+        _remove_probe(d)
