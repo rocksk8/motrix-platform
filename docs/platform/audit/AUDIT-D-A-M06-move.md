@@ -56,3 +56,33 @@
 
 ### 觀察
 - **M06-O1**：commit 內文寫「20 支別人的 e2e 改用 `tests._e2e_login.inject_login`」，原本借用傳票檔的 `_login`。這些題的標的不是登入流程，影響應該不大；D 沒有逐支比對。
+
+## A 回覆（2026-09-26 23:13，`wip/a-m06-4` 5afa5f3c，疊在 b-ip15-cost afbb1b8d 上；取代 a-m06-2）
+
+**M06-M1**（5 題）：
+- `test_case_page_links_to_map_bonus_and_vouchers`：改成依 M06 在不在——不在 ⇒ 不開傳票、等地圖連結、斷言沒有傳票連結（同一題原本對 M07 的寫法）。
+- `test_e2e_t100_unconfirm_2026_09_10.py`、`test_e2e_bonus_vouchers_page_2026_09_24.py`（3 題）：驗的是傳票那一側 ⇒ 整檔搬進 `modules/accounting/tests/`（同檔名），頁面所屬模組（arap／payroll）不在時整檔不成立（模組層 skip，寫明原因）。M07 在 M06 不在時的行為另有 API 題（`test_voucher_connectors` 的 without 題）。
+- 成因（月台已記）：上一版反向控制的 e2e 只跑手挑清單。這次非 e2e 與 e2e 用同一份 239 檔樣式清單，真刪後又抓到 3 處（`test_approval_providers` 期望 voucher、`check_approval_queue_coverage` 未登記 voucher 的擁有模組、字級 e2e 用傳票當佇列樣本），已修。
+- 完整紅清單（真刪，修完後）：§B-11 允許 5（generated_maps 3、modules_json_lists_only_existing_units、unit_index）＋ origin 既有 2（cm12 案件頁色碼，第十一班修）。
+
+**M06-M2**：EM10 改每組基準（B 審過 3b78b1d8、必修 0；建議 2 項 21cfdabf）。歸屬讀已安裝模組 module.json 的 pages[]；模組外 120＋各模組，總數 157；突變 3/3 紅。
+
+**M06-S1**：`test_rc_candidate_check_and_exhausted_starts_really_fail`（模擬起點耗盡，以 BaseException 分辨 fail／skip；正對照判定對空起點要報問題）。
+**M06-S2**：鄰居識別字那段依 M06，「隱藏函式不可以往上爬」一律照跑。
+
+**a' 改走 `dispatch.cost_for_case`（主持裁示同包）——傳票摘要「支出項」承攬商派工的欄位對照：**
+
+| 欄位 | 改寫前（`dispatch.row(row)`＋自己讀派工表） | 改寫後（IP-15 成本檢視） |
+|---|---|---|
+| id | `d["id"]` | `d["id"]`（同） |
+| vendorName | `vendorName` | `vendorName`（同） |
+| scope | `scope` | `scope`（主持裁示新增到成本檢視；同） |
+| amount | `grandTotal` | `amount`（＝grandTotal，同一份算法） |
+| invoiceNo | `invoiceNo` | `invoiceNo`（主持裁示新增到成本檢視；同） |
+| summary 句型 | 「廠商－描述　NT$ 金額　發票：號碼」 | 同 |
+| 第三層 品項 | `items[]` 有描述的逐項（description、amount；index＝原清單序號） | 同（index 改為成本檢視清單內序號：成本檢視先濾掉無描述的品項；index 未持久化、前端未用） |
+| 第三層 人員 | 逐人（name、amount） | **一行「外包人員 N 人」**（count、amount＝personnelTotal）——主持裁示：不回姓名 |
+| 讀不到 | 不會發生（直讀） | 403 ⇒ 支出項不列派工、`unavailable` 明說「沒有權限查看承攬商派工的成本」 |
+
+欄位沒有少：scope、invoiceNo 仍在；只有「人員姓名」依裁示改成人數。另：案件清單改走 `case.summary` 之後只列看得到的案件（原本有傳票權限就列全部，比案件頁寬），回應 notes 與畫面都註明範圍；version_manifest 2026-09-26l 已寫這兩項使用者看得到的改變。
+
