@@ -243,3 +243,38 @@ def test_deadline_report_section_names_the_limit_and_the_requests():
     title, body = rep.sections[0]
     assert "死線 7 秒" in title and "/api/slow?q=***" in body and "SECRET5" not in body, rep.sections
 
+
+# ── D 稽核 E2D-M1：軟上限一律在硬上限－30 以下 ──────────────────────────────────────────────
+
+def _marker_item(name=None, value=None):
+    def gcm(n):
+        return types.SimpleNamespace(args=(value,)) if n == name else None
+    return types.SimpleNamespace(nodeid="t::lim", get_closest_marker=gcm)
+
+
+def test_soft_limits_stay_below_the_hard_cap(monkeypatch, capsys):
+    """預設、標記、環境變數、teardown 上限：全部 ≤ 硬上限－30；超過的被夾住並說出來。突變 DL1（預設改成＋30）⇒ 紅。"""
+    import conftest as cf
+    monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", "120")
+    monkeypatch.delenv("MOTRIX_E2E_TEST_LIMIT", raising=False)
+    ceiling = 120 - cf.SOFT_MARGIN
+    assert cf._e2e_limit_of(_marker_item()) == ceiling, "預設要等於硬上限－30"
+    assert cf._e2e_limit_of(_marker_item("e2e_limit", 500)) == ceiling
+    assert cf._e2e_limit_of(_marker_item("e2e_limit", 5)) == 5, "比上限小的標記照用"
+    monkeypatch.setenv("MOTRIX_E2E_TEST_LIMIT", "999")
+    assert cf._e2e_limit_of(_marker_item()) == ceiling
+    assert cf._teardown_limit_of(_marker_item("e2e_teardown_limit", 400)) == ceiling
+    monkeypatch.setattr(cf, "E2E_TEARDOWN_LIMIT", 400.0)
+    assert cf._teardown_limit_of(_marker_item()) == ceiling, "teardown 上限（環境變數）也要夾"
+    err = capsys.readouterr().err
+    assert err.count("[e2e 上限]") >= 4 and "MOTRIX_E2E_TEST_LIMIT" in err, err
+
+
+def test_soft_ceiling_follows_the_hard_cap(monkeypatch):
+    import conftest as cf
+    monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", "60")
+    monkeypatch.delenv("MOTRIX_E2E_TEST_LIMIT", raising=False)
+    assert cf._e2e_limit_of(_marker_item()) == 30
+    monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", "20")
+    assert cf._e2e_limit_of(_marker_item()) == 10, "下限 10 秒"
+
