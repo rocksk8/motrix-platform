@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.37 — 2026-09-26（C，M01-PLAN §3-4：case.summary／case.locations）〔core_bump：暫用 1.99 → 1.35〕〔core_bump：暫用 1.35 → 1.37〕
+## 1.40 — 2026-09-26（C，M01-PLAN §3-4：case.summary／case.locations）〔core_bump：暫用 1.99 → 1.35〕〔core_bump：暫用 1.35 → 1.37〕〔core_bump：暫用 1.37 → 1.40〕
 > 介面只有新增。
 - L1（新增）：`helpers.case_access.SYSTEM`——L1 背景工作取案件資料時的身分（不做逐案權限過濾）；只准 L1 使用（守門 `tests/platform/test_case_summary_locations.py`）
 - L1（行為）：`routers/map_points.py` 改走 M01 的 `case.locations`，不再讀 `quotations`（KNOWN_L1 刪 map_points；到期題由紅轉綠）；M01 不在 ⇒ 案件來源 `skipped: module_absent` 並明說（`CASES_MODULE_ABSENT`）
