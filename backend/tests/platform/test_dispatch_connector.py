@@ -77,5 +77,6 @@ def test_pages_render_the_absence():
     fe = Path(__file__).resolve().parents[3] / "frontend"
     assert "(this.expensesData || {}).unavailable" in (fe / "js" / "reports.js").read_text(encoding="utf-8")
     assert 'data-testid="expense-unavailable"' in (fe / "pages" / "reports.html").read_text(encoding="utf-8")
-    assert "this.sourceUnavailable = d.unavailable" in (fe / "js" / "voucher.js").read_text(encoding="utf-8")
+    # 2026-09-26（A）：與因權限沒列出的 hidden 並列顯示 ⇒ unavailable 仍在最前面
+    assert "this.sourceUnavailable = (d.unavailable || []).concat(d.hidden || [])" in (fe / "js" / "voucher.js").read_text(encoding="utf-8")
     assert 'data-testid="source-unavailable"' in (fe / "pages" / "voucher.html").read_text(encoding="utf-8")

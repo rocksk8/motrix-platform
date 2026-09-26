@@ -47,7 +47,7 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources,
+    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -671,13 +671,16 @@ def summary_sources(q: str = "", quote_no: str = "",
     files = []
     note2 = "請先選一個案件，才看得到它底下可以帶入的憑證。"
     picked = (quote_no or "").strip()
+    hidden = {}                     # 因權限沒列出的附件：類別 ⇒ 個數（明說，不可以靜默少列）
     if picked:
         conn2 = get_db()
         try:
-            files = case_attachments(conn2, picked, user)
+            files = case_attachments(conn2, picked, user, hidden)
         finally:
             conn2.close()
-        if not files:
+        if not files and hidden:
+            note2 = "案件「%s」底下沒有你有權限查看的憑證。" % picked
+        elif not files:
             note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
         else:
             note2 = ""
@@ -723,6 +726,7 @@ def summary_sources(q: str = "", quote_no: str = "",
             SUMMARY_TABS[2]: note3,
         },
         "unavailable": unavailable,
+        "hidden": hidden_sources(hidden),
     }
 
 
@@ -757,11 +761,14 @@ def line_source_files_endpoint(source_type: str = "", ref: str = "",
     _require_voucher_access(user)
     conn = get_db()
     try:
-        files = line_source_files(conn, source_type, ref, user)
+        hidden = {}
+        files = line_source_files(conn, source_type, ref, user, hidden)
     finally:
         conn.close()
     # 附件來源的模組不在（attachments.for_document，主持裁示 M06-b）⇒ 那幾類整個沒有列出，要明說（案件那一欄才會涵蓋多個模組）
-    return {"files": files, "unavailable": unavailable_sources() if source_type == "case" else []}
+    # 因權限沒列出的附件類別 ⇒ 也要明說（主持裁示 2026-09-26）
+    return {"files": files, "unavailable": unavailable_sources() if source_type == "case" else [],
+            "hidden": hidden_sources(hidden)}
 
 
 @router.get("/line-source-file")

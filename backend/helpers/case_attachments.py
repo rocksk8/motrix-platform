@@ -88,7 +88,14 @@ class _CaseAttachments:
 
     @staticmethod
     def doc_nos_for_case(conn, source_type, quote_no, user):
-        _require_readable(conn, source_type, quote_no, user)
+        docs = _CaseAttachments._docs(conn, source_type, quote_no)
+        if not _READ_RULE.get(source_type, case_documents_readable)(conn, quote_no, user):
+            # 看不到：只回「沒列出幾個附件」（數字），不帶單號與內容（主持裁示 2026-09-26）
+            raise AttachmentNotVisible(hidden=sum(_count(conn, source_type, d) for d in docs))
+        return docs
+
+    @staticmethod
+    def _docs(conn, source_type, quote_no):
         if source_type in ("quotation_signed", "case_update"):
             return [quote_no]
         if source_type in _INDEXED:
@@ -105,28 +112,41 @@ class _CaseAttachments:
         if quote_no is None or conn.execute("SELECT 1 FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone() is None:
             return []                                     # 來源不存在（契約：[]）
         _require_readable(conn, source_type, quote_no, user)
-        if source_type == "quotation_signed":
-            return files_from_json_column(conn, "quotations", "quote_no", doc_no, "signed_files_json")
-        if source_type == "case_update":
-            out = []
-            for row in conn.execute("SELECT files_json FROM case_updates WHERE quote_no = ?", (doc_no,)):
-                try:
-                    out += json.loads(row["files_json"] or "[]") or []
-                except (TypeError, ValueError):
-                    raise AttachmentSourceError("案件動態的附件資料格式不正確，無法帶入。")
-            return out
-        if source_type in _INDEXED:
-            quote_no, idx = _quote_and_index(doc_no)
-            if idx is None:
-                raise AttachmentSourceError("來源編號「%s」缺少項目索引（應為「案件編號_序號」）。" % doc_no)
-            outer, key, fkey = _INDEXED[source_type]
-            arr = _items(_case_record(conn, quote_no), outer, key)
-            if idx < 0 or idx >= len(arr):
-                return []
-            return (arr[idx] or {}).get(fkey) or []
-        if source_type == "extra_expense":
-            return files_from_json_column(conn, "case_extra_expenses", "id", doc_no, "files_json")
-        raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        return _read(conn, source_type, doc_no)
+
+
+def _count(conn, source_type, doc_no):
+    """看不到的那一筆有幾個附件（只給 hidden 的數字用；壞資料算 1：至少有東西沒列出）。"""
+    try:
+        return len(_read(conn, source_type, doc_no) or [])
+    except AttachmentSourceError:
+        return 1
+
+
+def _read(conn, source_type, doc_no):
+    """讀一筆來源的附件 metadata（**不查權限**：只給已查過權限的 `files()` 與只算數字的 `_count()` 用）。"""
+    if source_type == "quotation_signed":
+        return files_from_json_column(conn, "quotations", "quote_no", doc_no, "signed_files_json")
+    if source_type == "case_update":
+        out = []
+        for row in conn.execute("SELECT files_json FROM case_updates WHERE quote_no = ?", (doc_no,)):
+            try:
+                out += json.loads(row["files_json"] or "[]") or []
+            except (TypeError, ValueError):
+                raise AttachmentSourceError("案件動態的附件資料格式不正確，無法帶入。")
+        return out
+    if source_type in _INDEXED:
+        quote_no, idx = _quote_and_index(doc_no)
+        if idx is None:
+            raise AttachmentSourceError("來源編號「%s」缺少項目索引（應為「案件編號_序號」）。" % doc_no)
+        outer, key, fkey = _INDEXED[source_type]
+        arr = _items(_case_record(conn, quote_no), outer, key)
+        if idx < 0 or idx >= len(arr):
+            return []
+        return (arr[idx] or {}).get(fkey) or []
+    if source_type == "extra_expense":
+        return files_from_json_column(conn, "case_extra_expenses", "id", doc_no, "files_json")
+    raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
 
 
 from core import registry as _registry  # noqa: E402

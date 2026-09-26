@@ -257,16 +257,19 @@ def copy_into(voucher_id, src_abs, filename, subfolder="voucher_attachments"):
 _CASE_SCOPED = tuple(SOURCE_TYPES)
 
 
-def _case_doc_nos(conn, source_type, quote_no, user, providers=None):
+def _case_doc_nos(conn, source_type, quote_no, user, providers=None, hidden=None):
     """這一類在這個案件底下有哪些 `doc_no`；提供者不在 ⇒ []（缺席由 `unavailable_sources()` 另外說）；
-    看不到那張案件的單據 ⇒ []（不列，AT-M1）。"""
+    看不到（全部或部分）⇒ 只回看得到的，並把「這一類沒列出幾個附件」加進 `hidden`（dict：類別 ⇒ 個數），
+    由 `hidden_sources()` 明說（不可以靜默少列）。"""
     prov = (providers if providers is not None else _providers()).get(source_type)
     if prov is None:
         return []
     try:
         return prov.doc_nos_for_case(conn, source_type, quote_no, user)
-    except _uploads.AttachmentNotVisible:
-        return []
+    except _uploads.AttachmentNotVisible as e:
+        if hidden is not None and e.hidden:
+            hidden[source_type] = hidden.get(source_type, 0) + e.hidden
+        return e.visible
     except _uploads.AttachmentSourceError as e:
         raise HTTPException(400, str(e))
 
@@ -347,7 +350,17 @@ def expense_line_uses(conn):
         extra_where="vl.source_type IN (%s)" % types)
 
 
-def case_attachments(conn, quote_no, user):
+def hidden_sources(hidden):
+    """因權限沒列出的附件 ⇒ 畫面要顯示的說明（形狀同 `unavailable_sources()` 再加 `count`；主持裁示 2026-09-26）：
+    任何來源因權限沒列出都要明說（會計不可以以為「沒有」而漏掉），但**只說類別與個數**——
+    不帶單號、檔名、金額或任何內容，否則明說本身就是外洩。"""
+    return [{"category": "hidden:" + st,          # 前綴：與 unavailable 並列顯示時 key 不撞
+             "count": n,
+             "reason": "%s：%d 個附件因權限無法顯示（不是沒有）。" % (_SOURCE_OWNERS.get(st, ("", st, st))[2], n)}
+            for st, n in (hidden or {}).items() if n]
+
+
+def case_attachments(conn, quote_no, user, hidden=None):
     """一個案件底下所有**可帶入**的憑證。回 `[{type, docNo, fileId, filename, …}]`。
 
     ⚠️ 實體檔不存在的那幾筆**照樣列出來並標記** ——
@@ -363,6 +376,8 @@ def case_attachments(conn, quote_no, user):
     **已使用的排在清單最後**，依 `usedAt` 新到舊；未使用的維持原有順序。
     ⚠️ 這裡**只標記，不擋**——已計算的憑證仍然可以再被帶入（使用者原話
     是「備註」不是「擋住」，擋住會把作廢重開那條合法路踩死）。
+
+    `hidden`（dict）：因權限沒列出的附件個數（類別 ⇒ 個數）記在這裡，呼叫端用 `hidden_sources()` 明說。
     """
     used_map = _used_map(conn)
     providers = _providers()
@@ -370,7 +385,7 @@ def case_attachments(conn, quote_no, user):
     for st in _CASE_SCOPED:
         if st not in providers:
             continue                      # 模組不在：這一類不列，`unavailable_sources()` 說明（不跟「沒有」混在一起）
-        for doc_no in _case_doc_nos(conn, st, quote_no, user, providers):
+        for doc_no in _case_doc_nos(conn, st, quote_no, user, providers, hidden):
             for meta in source_files(conn, st, doc_no, user) or ():
                 out.append(_candidate(st, doc_no, meta, used_map))
     return _unused_first(out)
@@ -420,7 +435,7 @@ def _unused_first(out):
 LINE_SOURCES = ("case", "extra_expense", "contractor_dispatch")
 
 
-def line_source_files(conn, source_type, source_key, user):
+def line_source_files(conn, source_type, source_key, user, hidden=None):
     """`JV36`：某一行摘要的來源 XXX「本身的已上傳檔案」。
 
     🔴 範圍**逐字等於** `resolve_picks()` 帶得進來的範圍（A 裁示：不可以更寬）——
@@ -437,7 +452,7 @@ def line_source_files(conn, source_type, source_key, user):
     if not key:
         raise HTTPException(400, "缺少摘要來源的編號。")
     if source_type == "case":
-        return case_attachments(conn, key, user)
+        return case_attachments(conn, key, user, hidden)
     pairs = ([("extra_expense", key)] if source_type == "extra_expense"
              else [("contractor_dispatch", key), ("contractor_invoice", key)])
     used_map = _used_map(conn)
