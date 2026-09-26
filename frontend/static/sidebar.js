@@ -634,7 +634,8 @@ if (typeof module !== 'undefined' && module.exports) {
       var anyActive = g.items.some(function (it) { return it.active })
       if (g.items.length === 1) {
         var it0 = g.items[0]
-        return '<a class="mnav__top' + (it0.active ? ' is-on' : '') + '" href="' + it0.href + '">'
+        return '<a class="mnav__top' + (it0.active ? ' is-on' : '') + '"'
+          + (it0.customKey ? ' data-custom-nav="' + esc(it0.customKey) + '"' : '') + ' href="' + it0.href + '">'
           + esc(it0.label) + '</a>'
       }
       // 一欄最多 6 項，超過就分欄——欄數自適應，不用寫死
@@ -643,7 +644,8 @@ if (typeof module !== 'undefined' && module.exports) {
       for (var i = 0; i < g.items.length; i += per) cols.push(g.items.slice(i, i + per))
       var panel = '<div class="mnav__panel"><div class="mnav__cols">' + cols.map(function (col) {
         return '<div class="mnav__col">' + col.map(function (it) {
-          return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '" href="' + it.href + '">'
+          return '<a class="mnav__item' + (it.active ? ' is-on' : '') + '"'
+            + (it.customKey ? ' data-custom-nav="' + esc(it.customKey) + '"' : '') + ' href="' + it.href + '">'
             + '<span>' + esc(it.label) + '</span>'
             + (it.badgeId ? '<span id="' + it.badgeId + '" style="' + _SB_BADGE_STYLE + '"></span>' : '')
             + it.extraBadge
@@ -726,7 +728,11 @@ if (typeof module !== 'undefined' && module.exports) {
       sec(g.label, true)
       g.items.forEach(function (it) {
         ni(_hrefOf(it.href), '', it.label, it.custom ? [] : (it.active || []), true, it.badge || '', _extraBadge(it.extra_badge))
-        if (it.custom) _curGroup.items[_curGroup.items.length - 1].active = (file === 'custom-records.html' && _curKey === it.custom)
+        if (it.custom) {
+          var rec = _curGroup.items[_curGroup.items.length - 1]
+          rec.active = (file === 'custom-records.html' && _curKey === it.custom)
+          rec.customKey = it.custom
+        }
       })
     })
 
@@ -1018,10 +1024,24 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // 重建選單：清掉上一輪累積的分組與被擋頁面清單（否則新舊選單接在一起），重畫後重套事後的隱藏
   function _rebuildMenu() {
+    // 徽章（sb-mod-*、sb-dt-badge、sb-approval-badge…）的顯示與數字由 notif.js 事後寫進去；重建會把元素換成新的
+    // （display:none、空白）⇒ 先記下選單裡每個有 id 的元素的狀態，重建後還原。
+    // 〔C4 全部 e2e 抓到：套角色版面每頁都會重建一次 ⇒ 紅點在 notif.js 下一輪輪詢前消失（unread_marks 那題）〕
+    var kept = {}
+    var bar0 = document.getElementById('app-mainnav')
+    if (bar0) bar0.querySelectorAll('[id]').forEach(function (el) {
+      kept[el.id] = { display: el.style.display, text: el.textContent }
+    })
     _navGroups = []
     _curGroup = null
     _deniedPages = []
     buildSidebar()
+    Object.keys(kept).forEach(function (id) {
+      var el = document.getElementById(id)
+      if (!el) return
+      el.style.display = kept[id].display
+      el.textContent = kept[id].text
+    })
     _applyUnavailablePages()
     _applyBonusHidden()
   }
