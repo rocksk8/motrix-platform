@@ -162,6 +162,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 00:24 D：c-m01-s2 cefc5ecd 必修 0：題目 0 消失、API 路由搬遷前後 566 相同、plat 探測突變紅；真刪 M01 tests/platform 非允許 66→75 項（+9 主要是第十班合進的 test_attachments_providers），skip 3 種皆有理由。c-case404 f743662b **必修 CR-M1**：全 repo 含 403 斷言 126 檔跑一遍 ⇒ 3 紅（主持已知 approval_providers 1＋queue_detail_authz、case_approver_single_rule 各 1），base 皆過；替換無誤換模組 403、CZ1～3 突變紅、無排除清單；建議 CR-S1 掃描器漏 visible／case_*_readable→403。
 - 2026-09-26 23:57 C：月台登記 wip/c-m01-s2 cefc5ecd（M01 ②，第十班之後）與 wip/c-case404 f743662b（M01-O1，疊在 ② 上）。A 的 a-m06-5（case.summary purpose）已對齊：以搬遷後路徑為準、函式加在 case_access 檔尾、題另開新檔、排在這兩包之後。附件-6 的「整案看不到 ⇒ 404」不在本基底，合回後再核對一致性；傳票帶入附件的 403 屬傳票權限範圍（AT6-O1 界線），不改。
 - 2026-09-26 23:56 D：**MB-M1 關閉（b-modtest-batch-2 f3be5cd2）**：沙盒 5 種 playwright 寫法（from／import／importorskip／函式內／helper import_module）無 marker 皆紅，模組層 import 未用不列；MB4、MB5 突變紅。主持問的跨檔 fixture：conftest 的 new_page／e2e_browser 都依賴 new_context，執行期守門抓得到；真實 repo 0 檔誤判；射程限制＝日後不經 new_context 的瀏覽器 fixture。
 - 2026-09-26 23:53 D：**M06-M3b 關閉（a-m06-7 d8a6068b）**：purpose 位置傳／登錄表不查／** 不查三突變紅；KNOWN_STAR_KWARGS 6 處（S3、subprocess、浮水印、case_bundle 的 part 轉呼叫——7 個呼叫點無 case.summary）皆無關。建議 M06-S3：清單加一筆就綠（過期檢查只管變少），加總數上限。
