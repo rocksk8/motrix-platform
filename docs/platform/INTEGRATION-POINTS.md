@@ -336,6 +336,22 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-93　`approval.detail`：簽核佇列詳情的單據內容（各單據模組 → M01 詳情端點）
+
+M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之前）。原本 `routers/quotations.py::approval_queue_detail` 直讀 `invoice_vouchers`／`payment_requests`／`contractor_payment_vouchers`／`shipping_notes`。**編號暫定（93），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | 提供者名稱＝單據類型：M04 `contractor_voucher`（`modules/subcontract/api/contractor_vouchers.py::queue_detail`）、M05 `invoice_voucher`（`modules/arap/api/invoice_vouchers.py::queue_detail`）、`payment_request`（`modules/arap/api/payment_requests.py::queue_detail`）、M03 `shipping_note`（`routers/shipping_notes.py::_queue_detail`）。付款／開票類共用 L1 `helpers/approval_queue.snapshot_doc_detail(row)`（含存簿圖片只收 `data:image/` 的安全過濾） |
+| 使用方 | M01 `GET /api/approval-queue/detail?type=&id=`：M01 自己的報價單、完工單、額外支出、已結案變更在端點內；其他類型取提供者，再由 M01 做每案權限（`_guard_queue_detail`）、案件抬頭（`_case_header`）、金額遮蔽（`_can_see_queue_money`／`_mask_money`） |
+| 形式 | provider，多個提供者（`core.registry.providers("approval.detail")`，以類型名取一個） |
+| 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files"} \| None` |
+| 對方不在時 | 沒有該類型的提供者 ⇒ 400「不支援的類型（或該單據的模組未安裝）」；提供者回 None ⇒ 404「單據不存在」 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_approval_providers.py`（M01 詳情端點不直讀其他模組的表、每種類型一個提供者、正對照 200＋拿掉 ⇒ 400）；既有 `test_approval_queue_detail_2026_09_14.py`、`test_approval_queue_detail_authz_2026_09_14.py` 行為不變 |
+
+---
+
 ## IP-94　`approval.reassign`：轉簽時讀寫單據的簽核鏈（各單據模組 → M01 轉簽端點）
 
 M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）。原本 `routers/quotations.py::reassign_approval` 以 `_REASSIGN_TABLES` 逐表直寫六種單據（含 M06 的 `vouchers_all`）。**編號暫定（94），列車定號。**

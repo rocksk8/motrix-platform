@@ -1,7 +1,7 @@
 # 應收應付 更新紀錄
 
 ## 1.0.2 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.1，列車取號）
-- 待我簽核與轉簽（M01-PLAN §3-7）：本模組提供 `approval.queue_items`（開票申請、請款單的待簽項目，欄位同原 M01 佇列）與 `approval.reassign`（`invoice_voucher`、`payment_request`：`data_json.$.approval` 的讀寫）；M01 佇列、角標、轉簽不再直讀直寫本模組的表。本模組不在 ⇒ 佇列不列、不給轉簽
+- 待我簽核與轉簽（M01-PLAN §3-7）：本模組提供 `approval.queue_items`（開票申請、請款單的待簽項目，欄位同原 M01 佇列）與 `approval.reassign`（`invoice_voucher`、`payment_request`：`data_json.$.approval` 的讀寫）；M01 佇列、角標、轉簽不再直讀直寫本模組的表。本模組不在 ⇒ 佇列不列、不給轉簽；佇列詳情的單據內容改由本模組提供（`approval.detail`）（不在 ⇒ 詳情 400 並明說）
 
 ## 1.0.1 — 2026-09-26（第九班之後 rebase；列車取號）
 - 選單（C4 之後）：「出納」項自 L1 `core/menu_l1.json` 移進本模組 `module.json` 的 pages[].menu（模組不在 ⇒ 側欄不出現）

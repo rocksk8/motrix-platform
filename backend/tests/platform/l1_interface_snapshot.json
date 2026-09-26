@@ -143,6 +143,8 @@
    "active_tiers": "def(appr)",
    "base_item": "def(type_, doc_no, f, **fields)",
    "current_tier_idx": "def(appr)",
+   "file_entries": "def(raw)",
+   "snapshot_doc_detail": "def(r)",
    "tier_fields": "def(approval_json_raw)"
   },
   "helper:audit": {
