@@ -15,6 +15,7 @@ import deploy_dashboard as dd  # noqa: E402
 @pytest.fixture
 def env(monkeypatch, tmp_path):
     monkeypatch.setattr(dd, "HISTORY_PATH", tmp_path / "history.json")
+    monkeypatch.setattr(dd, "HISTORY_PENDING_PATH", tmp_path / "history.pending.jsonl")
     monkeypatch.setattr(dd, "DEPLOY_LOGS_DIR", tmp_path / "logs")
     monkeypatch.setattr(dd, "_active_job_id", None)
     return tmp_path
@@ -158,3 +159,36 @@ def test_unreadable_history_is_reported_not_treated_as_no_failure(env):
     (env / "history.json").write_text("{殘字", encoding="utf-8")
     assert "讀不到" in dd._recent_failure_warning()
     assert dd.get_history() == []
+
+
+def test_busy_history_is_not_overwritten_as_empty(env, monkeypatch):
+    """D 稽核 H-S1：讀檔被占用（PermissionError）時，不可以當成空清單寫回蓋掉既有紀錄；那一筆另存、警告說出來。"""
+    for i in range(20):
+        dd._append_history("old%d" % i, "j", True)
+    real = type(dd.HISTORY_PATH).read_text
+
+    def busy(self, *a, **k):
+        if self == dd.HISTORY_PATH:
+            raise PermissionError("locked by another process")
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(type(dd.HISTORY_PATH), "read_text", busy)
+    monkeypatch.setattr(dd.time, "sleep", lambda s: None)
+    dd._append_history("new", "j", False)
+    monkeypatch.undo()
+    monkeypatch.setattr(dd, "HISTORY_PATH", env / "history.json")
+    monkeypatch.setattr(dd, "HISTORY_PENDING_PATH", env / "history.pending.jsonl")
+    assert len(_hist(env)) == 20, "既有 20 筆不可以被蓋掉"
+    pending = (env / "history.pending.jsonl").read_text(encoding="utf-8").splitlines()
+    assert [json.loads(l)["action"] for l in pending] == ["new"]
+    assert "被占用" in dd._recent_failure_warning()
+
+
+def test_corrupt_history_is_archived_before_starting_over(env):
+    """讀得到但不是合法 JSON：先封存壞檔（不丟內容），新檔第一筆說明發生什麼事。"""
+    (env / "history.json").write_text('[{"action": "a"}]殘字', encoding="utf-8")
+    dd._append_history("new", "j", True)
+    archived = list(env.glob("history.json.corrupt-*"))
+    assert len(archived) == 1 and archived[0].read_text(encoding="utf-8") == '[{"action": "a"}]殘字'
+    h = _hist(env)
+    assert h[0]["action"] == "new" and "封存" in h[1]["action"]
