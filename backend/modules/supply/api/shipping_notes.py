@@ -180,6 +180,47 @@ def get_shipping_note(note_no: str, authorization: str = Header(None)):
     return _note_public(row, include_items=True)
 
 
+# ── 個資蒐集告知：收件人（稽核 D PN-M1；主持裁示 2026-09-26：比照手動輸入的聯絡人，要告知）──────────
+# 紀錄存在 L1 設定鍵 `privacy_notice_acks`，鍵＝`shipping_recipient:<出貨單號>:<收件人姓名>`（換了收件人＝另一個人，要重新告知）。
+# 伺服器只接受「已存檔的那位收件人」；時間、人員、告知文字雜湊由伺服器蓋，已記錄的不覆蓋。沒有紀錄不擋存檔。
+
+def _note_for_privacy(conn, note_no: str, user: dict):
+    row = conn.execute("SELECT note_no, quote_no, recipient FROM shipping_notes WHERE note_no=?", (note_no,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, f"出貨單 {note_no} 不存在")
+    guard_case_access(conn, row["quote_no"], user, allow_module="case_manage")   # 同出貨單清單：讀某張案件的單據
+    return row
+
+
+@router.get("/api/shipping-notes/{note_no}/privacy-notice")
+def get_shipping_recipient_privacy_acks(note_no: str, authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    conn = get_db()
+    _note_for_privacy(conn, note_no, user)
+    conn.close()
+    return {"acks": _pn.acks_with_prefix("shipping_recipient", note_no)}
+
+
+@router.post("/api/shipping-notes/{note_no}/privacy-notice/ack")
+def ack_shipping_recipient_privacy_notice(note_no: str, body: dict = Body(...), authorization: str = Header(None)):
+    from helpers import privacy_notice as _pn
+    user = _require_user(authorization)
+    _require_admin(user)                                      # 同建立／編輯出貨單
+    subject = str((body or {}).get("subject") or "").strip()
+    conn = get_db()
+    row = _note_for_privacy(conn, note_no, user)
+    conn.close()
+    if not subject or subject != (row["recipient"] or "").strip():
+        raise HTTPException(409, "收件人與已儲存的不同，請先儲存出貨單再勾選")
+    rec, created = _pn.record_purpose_ack("shipping_recipient", f"{note_no}:{subject}", user, "contact")
+    if created:
+        _audit(_tok(authorization), "shipping_note.privacy_notice_ack", "shipping_note", note_no,
+               f"{note_no}／{subject}", {"noticeHash": rec.get("noticeHash")})
+    return {"ack": rec, "created": created}
+
+
 @router.post("/api/shipping-notes", status_code=201)
 def create_shipping_note(body: ShippingNoteIn, authorization: str = Header(None)):
     user = _require_user(authorization)
