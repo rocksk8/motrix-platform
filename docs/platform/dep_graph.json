@@ -923,6 +923,7 @@
     "helper:case_access",
     "helper:dates",
     "helper:legal_params",
+    "helper:recognition",
     "helper:row_access",
     "helper:tax_calc",
     "helper:tiered_approval",
@@ -974,6 +975,7 @@
    "imports": [
     "helper:dates",
     "helper:quotations",
+    "helper:recognition_basis",
     "plat:registry"
    ],
    "kind": "helper",
@@ -989,6 +991,17 @@
     "users",
     "vendor_contractors"
    ],
+   "tables_w": []
+  },
+  "helper:recognition_basis": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/recognition_basis.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
    "tables_w": []
   },
   "helper:row_access": {
@@ -2106,6 +2119,7 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -2124,7 +2138,7 @@
     "helper:financial_mask",
     "helper:legal_params",
     "helper:quotations",
-    "helper:recognition",
+    "helper:recognition_basis",
     "helper:settings",
     "helper:startup",
     "helper:tax_calc",
@@ -2139,67 +2153,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2307,
+     "line": 2314,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2320,
+     "line": 2327,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2355,
+     "line": 2362,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2474,
+     "line": 2481,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2535,
+     "line": 2542,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2602,
+     "line": 2609,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2636,
+     "line": 2643,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2884,
+     "line": 2891,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3103,
+     "line": 3110,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3425,
+     "line": 3439,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3612,
+     "line": 3626,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -7784,6 +7798,7 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8934,6 +8949,7 @@
     "helper:module_registry",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -9418,6 +9434,7 @@
     "helper:quotations",
     "helper:quote_terms",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -10056,6 +10073,8 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:quote_terms",
+    "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -10522,6 +10541,8 @@
     "audit_log",
     "case_extra_expenses",
     "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -10536,6 +10557,7 @@
     "user_activity_daily",
     "user_request_log",
     "users",
+    "vendor_contractors",
     "webauthn_credentials"
    ],
    "tables_w": [

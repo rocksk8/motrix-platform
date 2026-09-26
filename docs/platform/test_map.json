@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 673,
+  "tests": 674,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 365,
+   "api": 366,
    "unit": 57,
    "e2e": 162
   },
@@ -401,7 +401,9 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "helper:recognition",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:source_tree"
@@ -411,6 +413,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recognition.py",
      "backend/modules/analytics/api/reports.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
@@ -1404,9 +1408,10 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:frontend/js/",
+    "file:backend/helpers/__init__.py",
+    "helper:recognition",
     "js:js/case-management-core.js",
     "js:static/legal-round.js",
-    "mod:analytics/api/reports",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:subcontract/api/vendor_contractors",
@@ -1418,7 +1423,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/analytics/api/reports.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recognition.py",
      "backend/modules/arap/api/payment_requests.py"
     ],
     "api": [
@@ -5416,6 +5422,45 @@
     "/api/y",
     "/api/zz/{}"
    ]
+  },
+  "backend/tests/platform/test_case_recognition.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_tax_calc_contract.py",
+    "helper:recognition",
+    "helper:recognition_basis",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/recognition.py",
+     "backend/helpers/recognition_basis.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/platform/test_tax_calc_contract.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/helpers/recognition_basis.py",
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_case_stage_connectors.py": {
    "kind": "api",

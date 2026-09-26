@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.38 — 2026-09-26（C，M01-PLAN §3-6：case.recognition；疊在 c-m01-s3-2）〔core_bump：暫用 1.99 → 1.38〕
+## 1.41 — 2026-09-26（C，M01-PLAN §3-6：case.recognition；疊在 c-m01-s3-2）〔core_bump：暫用 1.99 → 1.38〕〔core_bump：暫用 1.38 → 1.41〕
 > 介面只有新增。
 - L1（新增）：`helpers.recognition_basis`——`BASES`、`BASIS_NOTES`、`normalize_basis`（自 M01 `helpers/recognition.py` 逐字下沉；recognition 保留同名別名）
 - M01（新增，暫以 import 時登記）：`case.recognition`（IP-95 暫定）——六個計算方法轉呼叫 `helpers.recognition`；M08 營運報表改經它
