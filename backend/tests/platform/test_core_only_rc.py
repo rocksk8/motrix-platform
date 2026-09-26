@@ -43,10 +43,13 @@ def test_classify_splits_allowed_from_unexpected():
 
 
 def test_allowed_is_exactly_the_playbook_b11_list():
-    """允許清單只有 §B-11 那兩題；加一題要先改 PLAYBOOK（本題與它一起改）。"""
+    """允許清單＝§B-11 那兩題＋產生檔一致性三題（BM-M2）；加一題要先改 PLAYBOOK §B-11（本題與它一起改）。"""
     assert C.ALLOWED == {
         "tests/platform/test_module_boundaries.py::test_modules_json_lists_only_existing_units",
         "tests/platform/test_unit_cards.py::test_unit_index_is_current",
+        "tests/platform/test_generated_maps.py::test_dep_graph_json_is_current",
+        "tests/platform/test_generated_maps.py::test_test_map_json_is_current",
+        "tests/platform/test_generated_maps.py::test_modules_json_has_no_ownership_errors",
     }
     playbook = (REPO / "docs" / "platform" / "PLAYBOOK.md").read_text(encoding="utf-8")
     assert "test_unit_index_is_current" in playbook and "modules.json 列了但掃描不到" in playbook
