@@ -387,17 +387,14 @@ def test_hc1c_the_dashboard_cannot_be_mounted_into_the_erp(dash):
 
     backend = Path(__file__).resolve().parent.parent
     importers = []
-    for path in backend.rglob("*.py"):
-        parts = set(path.parts)
-        if parts & {"rollback_snapshots", "deploy_packages", "__pycache__"}:
-            continue
+    for path, text in _scan_py_sources(backend):
         if path.name.startswith("test_deploy_dashboard"):
             continue          # 本檔用 importlib 讀路徑，不是 import 陳述句
         if path.name == "deploy_dashboard.py":
             continue
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except (SyntaxError, UnicodeDecodeError):
+            tree = ast.parse(text)
+        except SyntaxError:
             continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -429,3 +426,44 @@ def test_hc1a_an_unknown_path_is_refused_before_it_is_matched(dash):
         f"未知路徑回了 {r.status_code} 而不是 403 ——\n"
         "⇒ 守門掛在路由比對**之後**，新增的路由要各自記得掛上它。"
     )
+
+
+def _scan_py_sources(root):
+    """掃 root 底下所有 .py（刻意含 tests/：要抓「有沒有任何檔案 import 儀表板」）⇒ (路徑, 內容)。
+
+    D 稽核 O6-S1：跳過「.」開頭的目錄——並行的測試會在 backend/tests/.hardcap_probe_* 建了又刪，
+    rglob 列到、讀的時候已經不在 ⇒ FileNotFoundError（實測 20 次 1 次）。讀的瞬間檔案消失也算略過；
+    其他 OSError（權限等）照樣丟出，不靜默。"""
+    for path in root.rglob("*.py"):
+        rel = path.relative_to(root).parts
+        if any(p.startswith(".") for p in rel[:-1]):
+            continue
+        if set(rel) & {"rollback_snapshots", "deploy_packages", "__pycache__"}:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            continue
+        except UnicodeDecodeError:
+            continue
+        yield path, text
+
+
+def test_import_scan_skips_dot_dirs_and_vanished_files(tmp_path, monkeypatch):
+    """O6-S1 的可重現版：「.」開頭的目錄不掃；列到之後才消失的檔案略過；一般檔照掃（正對照）。"""
+    (tmp_path / "tests" / ".hardcap_probe_x").mkdir(parents=True)
+    (tmp_path / "tests" / ".hardcap_probe_x" / "p.py").write_text("import deploy_dashboard\n", encoding="utf-8")
+    (tmp_path / "routers").mkdir()
+    (tmp_path / "routers" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    gone = tmp_path / "routers" / "gone.py"
+    gone.write_text("y = 2\n", encoding="utf-8")
+    real = Path.read_text
+
+    def vanishing(self, *a, **k):
+        if self == gone:
+            raise FileNotFoundError(str(self))
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_text", vanishing)
+    got = sorted(p.relative_to(tmp_path).as_posix() for p, _ in _scan_py_sources(tmp_path))
+    assert got == ["routers/ok.py"], got
