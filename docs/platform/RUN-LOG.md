@@ -2,6 +2,11 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 15:16 D：h-fonts-woff2 94a78b4c 抽查（`AUDIT-D-host-fonts-woff2.md`）通過、必修 0：CSS 無殘留 otf 引用、突變 FW1 紅；觀察 woff2 Content-Type＝octet-stream（不影響載入）、test_map 過期交列車。
+- 2026-09-26 15:13 D：a-approval-parse 708dbe0d（`AUDIT-D-A-approval-parse.md`）通過、必修 0：fail-closed／別名同類別／doc_label 突變皆紅；M01→M06 邊確實消失；建議 AP-S1（轉簽讀不出來⇒400 無題驗）；test_map 過期交列車。
+- 2026-09-26 15:06 主持：**§6 舊紀錄封存**（使用者裁示省 token）：第 21 筆以後（共 172 筆）原文搬到 `RUN-LOG.md`，本節只留最新 20 筆；查歷史請讀 RUN-LOG.md。
+- 2026-09-26 15:0x A：wip/a-approval-parse 上月台（708dbe0d，第九班）。M06-PLAN 的 JV 清單與到期守門兩節已起草，第八班帶進 plans/M06-PLAN.md 之後寫入。
+- 2026-09-26 14:48 D：**PN-M1、PN-S1～S3、O-1～O-4 關閉**（a-pn-m1 7c11091b）：逐欄決定＋新增個資欄位即紅（突變 PNF 紅）、PN8／PN9／PNJS 皆紅、出貨單告知延遲載入無新空窗。更正：D 第一次 PNJS 選錯題檔誤判存活。
 - 2026-09-26 14:40 主持：**第八班發車**（列車長子代理）：h-fonts、a-m03（M03）、c-tax-calc-2、c-m01-sink2-3、c-m07-s12b、c-probes、h-smoke-probes（與 c-probes 同班）、h-u15-2。第九班候選：b-c4-2（獨立稽核中 AUDIT-X-B-C4）、a-pn-m1（D 複核中）、a-approval-parse、C 的 M05。D 關閉 a-m03（必修 0，§B-11 獨立重做 1291 過只紅允許題）與 h-smoke-probes S-1。
 - 2026-09-26 14:38 D：a-m03 b2e5f7e4（`AUDIT-D-A-M03-move.md`）通過、必修 0：§B-11 刪 supply 1291 過／5 紅皆允許、收集無錯；模組在 1352 過（紅 1＝test_map 過期，列車重產）；IP-20 突變 3/3 紅；IP-18～20 不撞號。
 - 2026-09-26 14:4x A：PN-M1 上月台（wip/a-pn-m1 7c11091b，第九班，疊在 a-m03 上）；M06 五題裁示收到，等 C 的 M05 合回後開工。

@@ -144,6 +144,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。
 - 2026-09-26 17:33 主持：使用者表單「全量開發完成才跑」⇒ 第十班起列車不跑全量（PLAYBOOK §G4 第 4 步更正、CORE-SPEC 裁示表）；第九班已在跑的全量照跑完。裁示 B：①產生檔提案採 §7 合一方案（分支不動產生檔、modtest 現場產生、「是否最新」三題只在列車跑）交 B 實作；②e2e 每題加死線（永不回應的 promise 會等到 renderer crash 50～400 秒）交 B。交互紅紀錄：第四班 4、第五班 2、第六班 5、第七班 2、第八班 1（全量抓到、分支沒抓到）。
 - 2026-09-26 17:23 C：wip/c-approval 299aed61 上月台（§3-7；疊在 c-m01-rec-2）。出貨單（M03）一併改成提供者（原派工未列 M03；origin 已搬 modules/supply，列車 rebase 時跟著搬）。自訂模組單據維持只有佇列、不支援轉簽（原本就不支援）。簽核佇列詳情端點 `/api/approval-queue/detail` 仍直讀各單據表，未在本包範圍。
 - 2026-09-26 17:17 A：開工 wip/a-analytics-dispatch（主持派工）：**會改 B 的 `modules/analytics/tests/test_reports_dispatch_connector_2026_09_26.py`**，兩題「提供者在」改成依 M04 在不在（§B-11）；只動測試，analytics 版號由列車取號。
@@ -163,8 +164,3 @@
 - 2026-09-26 15:51 D：b-m08-attr 52178979、b-modtest-env bf4abacb 抽查（`AUDIT-D-B-attr-modtestenv.md`）皆通過、必修 0；突變 4/4 紅；觀察 MT-O1（差異題的 e2e 無獨立上限）。
 - 2026-09-26 15:47 D：c-ip14-paid 6c8406c5（`AUDIT-D-C-ip14-paid.md`）**必修 IP-M1**：test_cashier_and_t100_without_m04 只拿掉 contractor_voucher.public，T100 資料已改走 paid_between ⇒ 拿掉 None 防護（真 M04 不在會 500）照綠；其餘突變 4/4 紅、基準 97 過。
 - 2026-09-26 15:38 D：c-m05b b17e5296（`AUDIT-D-C-M05-move.md`）**必修 2**：M5-M1 薄殼「下一個主版號刪除」無觸發（CORE 升 2.0 守門照綠）；M5-M2 `test_e2e_arap_absent_notices` 不關 context＋route.fetch ⇒ 同 worker 下一題偶發紅（未突變 1/3，基準 golden 紅同因）。§B-11 通過（5 紅皆允許、1486 收集無錯、端點 404）；突變 7/7 紅。
-- 2026-09-26 15:16 D：h-fonts-woff2 94a78b4c 抽查（`AUDIT-D-host-fonts-woff2.md`）通過、必修 0：CSS 無殘留 otf 引用、突變 FW1 紅；觀察 woff2 Content-Type＝octet-stream（不影響載入）、test_map 過期交列車。
-- 2026-09-26 15:13 D：a-approval-parse 708dbe0d（`AUDIT-D-A-approval-parse.md`）通過、必修 0：fail-closed／別名同類別／doc_label 突變皆紅；M01→M06 邊確實消失；建議 AP-S1（轉簽讀不出來⇒400 無題驗）；test_map 過期交列車。
-- 2026-09-26 15:06 主持：**§6 舊紀錄封存**（使用者裁示省 token）：第 21 筆以後（共 172 筆）原文搬到 `RUN-LOG.md`，本節只留最新 20 筆；查歷史請讀 RUN-LOG.md。
-- 2026-09-26 15:0x A：wip/a-approval-parse 上月台（708dbe0d，第九班）。M06-PLAN 的 JV 清單與到期守門兩節已起草，第八班帶進 plans/M06-PLAN.md 之後寫入。
-- 2026-09-26 14:48 D：**PN-M1、PN-S1～S3、O-1～O-4 關閉**（a-pn-m1 7c11091b）：逐欄決定＋新增個資欄位即紅（突變 PNF 紅）、PN8／PN9／PNJS 皆紅、出貨單告知延遲載入無新空窗。更正：D 第一次 PNJS 選錯題檔誤判存活。

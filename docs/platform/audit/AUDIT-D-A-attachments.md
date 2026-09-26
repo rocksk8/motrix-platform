@@ -1,0 +1,64 @@
+# 稽核：A 的 IP-21 attachments.for_document（wip/a-attachments afcfb513；合回前）（D 稽核，2026-09-26 17:34）
+
+> 完整稽核：動到 C 的 subcontract、M06 讀附件的程式、L1 uploads。稽核者 D 沒有寫過任何受稽核的程式碼。
+> 對象：`fdddb641`、`1ae7c870`、`afcfb513`。內容：
+> - 九類附件來源改由擁有模組提供：M01 案件 6 類（`helpers/case_attachments.py`）、M05 開票申請 1 類（`routers/invoice_vouchers.py`）、M04 派工單與承攬商發票 2 類（`modules/subcontract/attachments.py`）。
+> - `voucher_attachments` 不再讀別組的表。
+> - 模組不在時，候選清單回 `unavailable`，帶入與列檔回 400 並明說。
+
+## 0. 結論
+
+- **必修 1（待主持裁示）、建議 2、觀察 1**。
+
+## 1. 實測
+
+| 項目 | 結果 |
+|---|---|
+| 基準：tests/platform＋subcontract 題＋引用附件的 28 檔（`-n 4`） | 1490 過、1 紅（test_map 過期，交列車） |
+| 基準：相關 e2e 4 檔（`-n 2`） | 15 過 |
+| §B-11：D2 刪 `modules/subcontract`；tests/platform＋38 檔 | 非 e2e：1451 過、25 skip、**5 紅＝允許 2＋產生檔 3**；e2e：12 過、3 skip；不帶旗標的 `--collect-only`：1496 題、無收集錯誤 |
+| 主持重點①：M04 不在 | 候選清單有 `unavailable`：「外包工班模組未安裝：派工單、承攬商發票的附件沒有列出」；帶入與列檔回 400：「外包工班模組未安裝，無法帶入…」。突變 AT1、AT2、AT6 都紅 |
+| 主持重點②：已帶入的附件不受影響 | 本包沒有這一題，**D 自寫探針驗證**：先帶入報價單回簽檔，再拿掉**全部**的 `attachments.for_document` 提供者 ⇒ 下載 200（15 bytes）、傳票明細照常列出；重新帶入 ⇒ 400「案件模組未安裝，無法帶入報價單回簽檔附件。」 |
+| 主持重點③：M06-PLAN §5 b 列的到期 | 見 §3 AT-S1 |
+| 主持重點④：附件權限 | 見 §3 AT-M1 |
+| voucher_attachments 殘留的 SQL | 只剩 `voucher_attachments`、`vouchers_all`、`voucher_lines`（M06 自己的表） |
+
+## 2. 突變
+
+| # | 突變 | 結果 |
+|---|---|---|
+| AT1 | 提供者不在時回空清單 | 紅 |
+| AT2 | `unavailable_sources` 恆空 | 紅（2） |
+| AT3 | 承攬商發票改讀派工單的欄位 | 紅（3） |
+| AT4 | 案件編號與索引改從左切 | 存活。**等價突變**：案件編號只含 `-` 不含 `_`，從左或從右切結果相同 |
+| AT5 | 案件動態的附件 JSON 壞掉時吞成空清單 | **存活** ⇒ AT-S2 |
+| AT6 | 列檔端點不帶 `unavailable` | 紅（e2e） |
+
+## 3. 發現
+
+### 必修（待主持裁示）
+
+**AT-M1　「只有能看到原單據的人才能列出或下載附件」：目前不成立，新契約也做不到**
+- 列出候選（`/api/vouchers/line-source-files`）、預覽來源檔、帶入，都只檢查 `_require_voucher_access`：有傳票相關模組就行，不看使用者能不能看那張案件或派工單。
+- 這是 JV36／JV28 起就有的狀況，不是本包造成的。
+- 但本包新定的 IP-21 契約是 `files(conn, source_type, doc_no)`／`doc_nos_for_case(conn, source_type, quote_no)`，**沒有 user 參數**，擁有模組就算要擋也沒有依據。之後再補參數，等於改 L1 契約。
+- 兩條路，請主持裁示：
+  - (a) 裁定「傳票模組權限就足以看所有來源附件」（會計需要），寫進 IP-21，本項結案。
+  - (b) 契約現在就加 `user`，由各提供者用自己的可見性判斷（M01 用 row_access `case`）。
+- D 建議 (b)：現在加是新增參數，之後加是改契約。
+
+### 建議
+
+**AT-S1　M06-PLAN §5 的 b 列：這包已經達成，但計畫表沒有更新，而它的到期守門還不存在**
+- `test_accounting_foreign_reads.py` 還沒寫，計畫在 M06 搬遷時才建，所以目前沒有東西會「觸發」。
+- 本包已經把 b 列列出的讀表全部拿掉（見 §1 殘留 SQL），b 列實質上已到期。
+- 建議在本包或下一班把 §5 的 b 列劃掉並寫上 SHA，否則之後照表建守門時，基線會多出一筆已經不存在的讀取。依計畫寫的「檔已不讀那張表 ⇒ 紅」，到時會觸發，但那是事後才發現。
+
+**AT-S2　案件動態（`case_update`）的附件 JSON 壞掉時被吞成空清單，沒有題驗**
+- `test_l1_side_providers_refuse_to_swallow_broken_json` 只參數化 `case`／`arap` 走 `files_from_json_column` 的那幾類。
+- `case_update` 迴圈與 `_case_record`（payment_item、material 類）的壞 JSON 路徑沒有題。
+- 建議各補一筆合成壞資料。
+
+### 觀察
+
+- **AT-O1**：AT4 是等價突變；如果之後案件編號允許 `_`，右切是唯一正確的做法，現有題會照綠。
