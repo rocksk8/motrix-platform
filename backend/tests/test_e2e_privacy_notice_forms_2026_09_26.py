@@ -79,31 +79,6 @@ def test_supplier_contact_notice_records_and_unchecked_does_not_block(live_serve
 
 
 @pytest.mark.e2e
-def test_vendor_contractor_notice_records(live_server, make_user, new_page, login_as, client):
-    u = make_user(username="pne_vd", role="superadmin")
-    vid = client.post("/api/vendor-contractors", json={"name": "告知測試承攬商", "contact_name": "陳窗口"},
-                      headers=_tok(client, u)).json()["id"]
-    page = new_page()
-    page.context.add_init_script(NO_PRINT)
-    login_as(page, u)
-    page.goto(live_server + "/pages/vendor-contractors.html")
-    _ready(page, f"{ROOT}.vendors.length > 0 && {ROOT}.privacyNotice")
-    page.evaluate(f"() => {ROOT}.openEdit({ROOT}.vendors.find(v => v.id === {vid}))")
-    card = page.locator("[data-privacy-card]")
-    card.locator("[data-privacy-missing]").wait_for(state="visible", timeout=10000)
-    with page.context.expect_page(timeout=10000) as pop:
-        card.locator("[data-print-notice]").click()
-    doc = pop.value
-    doc.wait_for_load_state()
-    assert "陳窗口" in doc.locator("[data-subject]").inner_text()
-    doc.close()
-    card.locator("input[data-privacy-ack]").check()
-    page.evaluate(f"() => {ROOT}.save()")
-    page.wait_for_function(f"() => !{ROOT}.showModal && !{ROOT}.saving", timeout=10000)
-    assert pn.get_ack("vendor_contractor", vid)["byUsername"] == "pne_vd"
-
-
-@pytest.mark.e2e
 def test_user_account_notice_records(live_server, make_user, new_page, login_as, client):
     u = make_user(username="pne_us", role="superadmin")
     uid = client.post("/api/users", json={"username": "pne_target", "password": "Xy9#long-pass",

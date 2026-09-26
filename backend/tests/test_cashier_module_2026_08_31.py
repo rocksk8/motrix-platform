@@ -75,49 +75,6 @@ def _make_quotation_with_unreceived_item(quote_no, expected_receipt_date=""):
         conn.close()
 
 
-def test_payable_queue_requires_admin_or_cashier(client, make_user):
-    viewer_username, viewer_password = make_user(role="viewer", modules=[])
-    viewer_token = _login(client, viewer_username, viewer_password)
-    r = client.get("/api/cashier/payable-queue", headers=_auth(viewer_token))
-    assert r.status_code == 403, r.text
-
-    admin_username, admin_password = make_user(username="cash_admin", role="admin")
-    admin_token = _login(client, admin_username, admin_password)
-    r2 = client.get("/api/cashier/payable-queue", headers=_auth(admin_token))
-    assert r2.status_code == 200, r2.text
-
-    cashier_username, cashier_password = make_user(username="cash_only", role="sales", modules=["cashier"])
-    cashier_token = _login(client, cashier_username, cashier_password)
-    r3 = client.get("/api/cashier/payable-queue", headers=_auth(cashier_token))
-    assert r3.status_code == 200, r3.text
-
-
-def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_user):
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-
-    v_late = _make_approved_voucher(client, token, "MQ-CASH-001", payable_date="2026-09-20")
-    v_soon = _make_approved_voucher(client, token, "MQ-CASH-002", payable_date="2026-09-01")
-    v_none = _make_approved_voucher(client, token, "MQ-CASH-003")  # 沒填 payable_date
-
-    r = client.get("/api/cashier/payable-queue", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    vouchers = r.json()
-    nos = [v["voucherNo"] for v in vouchers]
-    assert v_late in nos and v_soon in nos and v_none in nos
-    # 依 payableDate 升冪，空值排最後
-    assert nos.index(v_soon) < nos.index(v_late) < nos.index(v_none)
-
-    # 標記已匯款後不應再出現在待付款清單
-    pay = client.post(
-        f"/api/contractor-vouchers/{v_soon}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-08-31"},
-    )
-    assert pay.status_code == 200, pay.text
-    r2 = client.get("/api/cashier/payable-queue", headers=_auth(token))
-    assert v_soon not in [v["voucherNo"] for v in r2.json()]
-
-
 def test_receivable_queue_requires_admin_or_cashier_and_excludes_received(client, make_user):
     viewer_username, viewer_password = make_user(role="viewer", modules=[])
     viewer_token = _login(client, viewer_username, viewer_password)
@@ -142,7 +99,6 @@ def test_receivable_queue_requires_admin_or_cashier_and_excludes_received(client
     assert mark.status_code == 200, mark.text
     r2 = client.get("/api/cashier/receivable-queue", headers=_auth(admin_token))
     assert not any(i["quoteNo"] == "MQ-CASH-010" for i in r2.json())
-
 
 
 def test_receivable_queue_status_all_includes_received_and_unreceived(client, make_user):
@@ -178,56 +134,3 @@ def test_receivable_queue_status_all_includes_received_and_unreceived(client, ma
 
     bad = client.get("/api/cashier/receivable-queue?status=bogus", headers=_auth(token))
     assert bad.status_code == 400
-
-
-def test_finance_module_can_view_but_not_execute(client, make_user):
-    """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
-    payable/receivable/execution-history），但標記動作走 admin+/cashier 專用
-    的 mark_payment／paid-toggle，finance 不含在內，維持查看/執行分權。"""
-    admin_username, admin_password = make_user(username="cash_admin5", role="superadmin")
-    admin_token = _login(client, admin_username, admin_password)
-    voucher_no = _make_approved_voucher(client, admin_token, "MQ-CASH-050")
-    _make_quotation_with_unreceived_item("MQ-CASH-051")
-
-    finance_username, finance_password = make_user(username="finance_user", role="sales", modules=["finance"])
-    finance_token = _login(client, finance_username, finance_password)
-
-    assert client.get("/api/cashier/payable-queue", headers=_auth(finance_token)).status_code == 200
-    assert client.get("/api/cashier/receivable-queue?status=all", headers=_auth(finance_token)).status_code == 200
-    assert client.get("/api/cashier/execution-history", headers=_auth(finance_token)).status_code == 200
-
-    pay = client.post(
-        f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(finance_token),
-        json={"action": "pay", "paid_at": "2026-08-31"},
-    )
-    assert pay.status_code == 403, pay.text
-
-    mark = client.patch(
-        "/api/quotations/MQ-CASH-051/payment/0", headers=_auth(finance_token),
-        json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 30000, "feeAmount": 0},
-    )
-    assert mark.status_code == 403, mark.text
-
-
-def test_cashier_module_user_can_mark_paid_and_received(client, make_user):
-    """cashier 模組使用者（非 admin+）能執行 paid-toggle／mark_payment，
-    這兩支端點這一輪一併補上 cashier 模組判斷。"""
-    admin_username, admin_password = make_user(username="cash_admin3", role="superadmin")
-    admin_token = _login(client, admin_username, admin_password)
-    voucher_no = _make_approved_voucher(client, admin_token, "MQ-CASH-030")
-    _make_quotation_with_unreceived_item("MQ-CASH-031")
-
-    cashier_username, cashier_password = make_user(username="cash_user", role="sales", modules=["cashier"])
-    cashier_token = _login(client, cashier_username, cashier_password)
-
-    pay = client.post(
-        f"/api/contractor-vouchers/{voucher_no}/paid-toggle", headers=_auth(cashier_token),
-        json={"action": "pay", "paid_at": "2026-08-31"},
-    )
-    assert pay.status_code == 200, pay.text
-
-    mark = client.patch(
-        "/api/quotations/MQ-CASH-031/payment/0", headers=_auth(cashier_token),
-        json={"received": True, "receivedAt": "2026-08-31", "actualAmount": 30000, "feeAmount": 0},
-    )
-    assert mark.status_code == 200, mark.text

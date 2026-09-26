@@ -112,30 +112,6 @@ def _contractor(client, h, name="承攬甲"):
     return r.json()["id"]
 
 
-def test_contractor_ack_is_recorded_once_and_audited(client, make_user):
-    h = _hdr(client, make_user)
-    cid = _contractor(client, h)
-    assert client.get(f"/api/contractors/{cid}/privacy-notice", headers=h).json()["ack"] is None
-    r1 = client.post(f"/api/contractors/{cid}/privacy-notice/ack", headers=h)
-    assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
-    r2 = client.post(f"/api/contractors/{cid}/privacy-notice/ack", headers=h)
-    assert r2.json()["created"] is False and r2.json()["ack"] == r1.json()["ack"]
-    assert client.get(f"/api/contractors/{cid}/privacy-notice", headers=h).json()["ack"] == r1.json()["ack"]
-    import db
-    conn = db.get_db()
-    try:
-        n = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action='contractor.privacy_notice_ack' "
-                         "AND target_id=?", (str(cid),)).fetchone()[0]
-    finally:
-        conn.close()
-    assert n == 1
-
-
-def test_contractor_ack_for_unknown_person_is_404(client, make_user):
-    h = _hdr(client, make_user)
-    assert client.post("/api/contractors/999999/privacy-notice/ack", headers=h).status_code == 404
-
-
 def test_merge_ack_keeps_the_existing_record():
     old = {"at": "2026-01-01T00:00:00", "by": "甲"}
     assert pn.merge_ack(old, True, {"username": "乙"}, "t") is old

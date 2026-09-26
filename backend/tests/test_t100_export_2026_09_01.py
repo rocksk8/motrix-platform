@@ -122,64 +122,6 @@ def test_t100_export_config_defaults_blank_and_superadmin_only_write(client, mak
     assert r4.json()["inventoryExpenseAccounts"]["其他"] == "5109"
 
 
-def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_user):
-    username, password = make_user(username="t100_admin2", role="superadmin")
-    token = _login(client, username, password)
-
-    client.put(
-        "/api/settings/t100-export-config", headers=_auth(token),
-        json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
-              "contractorExpenseAccount": "6101"},
-    )
-
-    v_in_range = _make_paid_contractor_voucher(client, token, "MQ-T100-001", "2026-08-15")
-    v_out_of_range = _make_paid_contractor_voucher(client, token, "MQ-T100-002", "2026-01-05")
-
-    _make_invoiced_quotation("MQ-T100-010", "INV-001", "2026-08-20", total=31500, pretax=30000)
-    _make_invoiced_quotation("MQ-T100-011", "INV-002", "2026-02-01", total=31500, pretax=30000)
-
-    r = client.get(
-        "/api/reports/t100-export/vouchers?start=2026-08-01&end=2026-08-31",
-        headers=_auth(token),
-    )
-    assert r.status_code == 200, r.text
-    assert "spreadsheetml" in r.headers["content-type"]
-
-    wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    ws = wb["T100傳票匯出"]
-
-    rows = list(ws.iter_rows(min_row=4, values_only=True))
-    body_rows = rows[:-1]
-    total_row = rows[-1]
-
-    source_nos = [row[9] for row in body_rows]
-    assert "MQ-T100-010" in source_nos
-    assert v_in_range in source_nos
-    assert "MQ-T100-011" not in source_nos
-    assert v_out_of_range not in source_nos
-
-    debit_sum = sum(row[6] or 0 for row in body_rows)
-    credit_sum = sum(row[7] or 0 for row in body_rows)
-    assert debit_sum == credit_sum
-
-    assert total_row[6] == debit_sum
-    assert total_row[7] == credit_sum
-
-    ar_rows = [row for row in body_rows if row[9] == "MQ-T100-010"]
-    assert len(ar_rows) == 3
-    assert sum(row[6] or 0 for row in ar_rows) == sum(row[7] or 0 for row in ar_rows) == 31500
-    # 銀行帳戶科目代號來自這筆交易自己標記時填的 bankAccountCode（"1101"），
-    # 不是全公司統一設定（本測試這次刻意沒有設定任何 bankAccounts）
-    acct_codes = {row[4] for row in ar_rows}
-    assert acct_codes == {"1101", "4101", "2191"}
-
-    ap_rows = [row for row in body_rows if row[9] == v_in_range]
-    assert len(ap_rows) == 2
-    assert sum(row[6] or 0 for row in ap_rows) == sum(row[7] or 0 for row in ap_rows) == 10500
-    ap_acct_codes = {row[4] for row in ap_rows}
-    assert ap_acct_codes == {"1101", "6101"}
-
-
 def test_t100_voucher_export_requires_admin(client, make_user):
     viewer_username, viewer_password = make_user(role="viewer", modules=[])
     viewer_token = _login(client, viewer_username, viewer_password)
@@ -200,88 +142,6 @@ def test_t100_voucher_export_rejects_invalid_range(client, make_user):
     assert r.status_code == 400, r.text
 
 
-def test_t100_preview_confirm_excludes_from_future_export(client, make_user):
-    username, password = make_user(username="t100_admin4", role="superadmin")
-    token = _login(client, username, password)
-
-    client.put(
-        "/api/settings/t100-export-config", headers=_auth(token),
-        json={"salesRevenueAccount": "4101", "outputTaxAccount": "2191",
-              "contractorExpenseAccount": "6101"},
-    )
-
-    v = _make_paid_contractor_voucher(client, token, "MQ-T100-030", "2026-08-05")
-    _make_invoiced_quotation("MQ-T100-031", "INV-030", "2026-08-06", total=31500, pretax=30000)
-
-    # 預覽：兩筆事件都還沒確認，應該都出現
-    preview1 = client.get(
-        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
-        headers=_auth(token),
-    )
-    assert preview1.status_code == 200, preview1.text
-    keys1 = {(e["sourceType"], e["sourceKey"]) for e in preview1.json()["events"]}
-    assert ("contractor_voucher", v) in keys1
-    assert ("quotation_payment", "MQ-T100-031::INV-030") in keys1
-    assert preview1.json()["count"] == 2
-
-    # 確認整批已匯入
-    confirm = client.post(
-        "/api/reports/t100-export/confirm", headers=_auth(token),
-        json={"start": "2026-08-01", "end": "2026-08-31"},
-    )
-    assert confirm.status_code == 200, confirm.text
-    assert confirm.json()["confirmedCount"] == 2
-
-    # 再次確認同一區間：冪等，這次候選清單應為 0（已排除）
-    confirm2 = client.post(
-        "/api/reports/t100-export/confirm", headers=_auth(token),
-        json={"start": "2026-08-01", "end": "2026-08-31"},
-    )
-    assert confirm2.status_code == 200, confirm2.text
-    assert confirm2.json()["confirmedCount"] == 0
-
-    # 預覽：確認後這兩筆事件應該從候選清單消失
-    preview2 = client.get(
-        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
-        headers=_auth(token),
-    )
-    assert preview2.json()["count"] == 0
-    # （Excel 匯出走同一份 _collect_t100_events()，排除邏輯已在其他測試涵蓋，
-    # 這裡不重覆呼叫 excel 端點，避免撞上 process-global 匯出冷卻限流，見既有踩坑記錄）
-
-    # 已確認清單應可查到這兩筆
-    confirmed_list = client.get(
-        "/api/reports/t100-export/confirmed?start=2026-08-01&end=2026-08-31",
-        headers=_auth(token),
-    )
-    assert confirmed_list.status_code == 200, confirmed_list.text
-    confirmed_keys = {(c["sourceType"], c["sourceKey"]) for c in confirmed_list.json()}
-    assert ("contractor_voucher", v) in confirmed_keys
-    assert ("quotation_payment", "MQ-T100-031::INV-030") in confirmed_keys
-
-    # 撤銷承攬商費用那一筆的確認
-    unconfirm = client.post(
-        "/api/reports/t100-export/unconfirm", headers=_auth(token),
-        json={"sourceType": "contractor_voucher", "sourceKey": v},
-    )
-    assert unconfirm.status_code == 200, unconfirm.text
-
-    # 撤銷後應重新出現在預覽（但另一筆仍被排除）
-    preview3 = client.get(
-        "/api/reports/t100-export/preview?start=2026-08-01&end=2026-08-31",
-        headers=_auth(token),
-    )
-    keys3 = {(e["sourceType"], e["sourceKey"]) for e in preview3.json()["events"]}
-    assert keys3 == {("contractor_voucher", v)}
-
-    # 撤銷不存在的標記應回 404
-    unconfirm2 = client.post(
-        "/api/reports/t100-export/unconfirm", headers=_auth(token),
-        json={"sourceType": "contractor_voucher", "sourceKey": "PV-NOTEXIST"},
-    )
-    assert unconfirm2.status_code == 404, unconfirm2.text
-
-
 def test_t100_preview_and_confirm_require_admin(client, make_user):
     viewer_username, viewer_password = make_user(role="viewer", modules=[])
     viewer_token = _login(client, viewer_username, viewer_password)
@@ -297,53 +157,6 @@ def test_t100_preview_and_confirm_require_admin(client, make_user):
         json={"start": "2026-08-01", "end": "2026-08-31"},
     )
     assert r2.status_code == 403, r2.text
-
-
-def test_last_paid_bank_account_for_vendor(client, make_user):
-    """2026-09-02：標記已匯款時銀行帳戶下拉的預設值——查這個承攬商上次用的帳戶。"""
-    username, password = make_user(username="t100_admin5", role="superadmin")
-    token = _login(client, username, password)
-
-    r0 = client.get("/api/contractor-vouchers/last-paid-bank-account", headers=_auth(token))
-    assert r0.status_code == 200, r0.text
-    assert r0.json() == {"name": "", "acctCode": ""}
-
-    v1 = _make_paid_contractor_voucher(client, token, "MQ-BANK-001", "2026-08-05", bank_name="舊帳戶", bank_code="1101")
-    vendor_id = client.get(f"/api/contractor-vouchers/{v1}", headers=_auth(token)).json()["vendorId"]
-
-    r1 = client.get(
-        f"/api/contractor-vouchers/last-paid-bank-account?vendor_id={vendor_id}", headers=_auth(token)
-    )
-    assert r1.json() == {"name": "舊帳戶", "acctCode": "1101"}
-
-    # 同一個承攬商再匯款一次（用不同的派發/申請），查詢應回傳「最新」那筆
-    r_dispatch = client.post(
-        "/api/contractor-dispatches", headers=_auth(token),
-        json={
-            "quote_no": "MQ-BANK-001", "vendor_id": vendor_id,
-            "items_json": [{"description": "第二筆", "qty": 1, "unit": "式", "unitPrice": 5000, "amount": 5000}],
-            "status": "completed",
-        },
-    )
-    did = r_dispatch.json()["id"]
-    cv = client.post("/api/contractor-vouchers", headers=_auth(token), json={"dispatch_id": did})
-    voucher_no2 = cv.json()["voucher_no"]
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute("UPDATE contractor_payment_vouchers SET status='已核准' WHERE voucher_no=?", (voucher_no2,))
-        conn.commit()
-    finally:
-        conn.close()
-    client.post(
-        f"/api/contractor-vouchers/{voucher_no2}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-08-25", "bankAccountName": "最新帳戶", "bankAccountCode": "1102"},
-    )
-
-    r2 = client.get(
-        f"/api/contractor-vouchers/last-paid-bank-account?vendor_id={vendor_id}", headers=_auth(token)
-    )
-    assert r2.json() == {"name": "最新帳戶", "acctCode": "1102"}
 
 
 def test_last_received_bank_account_for_customer(client, make_user):

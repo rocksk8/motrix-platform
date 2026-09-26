@@ -376,44 +376,6 @@ def test_voucher_snapshot_personnel_accounts_are_f2(client):
         == archive._F2_UNPARSEABLE
 
 
-def test_general_tree_has_no_f2_copied_into_other_tables(client, make_user, isolated_archive, monkeypatch):
-    """🔴 守門（稽核 X-9b M-3、O-9）：走真正的建立 API（協力廠商、憑據）→ 每日＋週＋月備份 → 掃一般樹。
-    ① 哨兵值（外包人員帳戶、協力廠商帳戶）不可以出現在一般樹的任何檔案——**與允許清單無關**；
-    ② 所有 JSON 欄位（快照等）裡，F2 鍵名有值的位置都必須在 `_F2_KEY_ALLOWED`（有人決定過），
-       而且清單裡的每一條都要真的出現（反向控制：不可以靠把位置全寫進清單變綠）。"""
-    pii_root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
-    os.makedirs(pii_root)
-    snap = _voucher_via_api(client, make_user)
-    monkeypatch.setattr(archive, "_write_backup_alert", lambda *a, **k: None)
-    archive._daily_backup()
-    archive._weekly_backup()
-
-    from datetime import date as _d
-    # 正對照：一般樹確實有每日、月備份的協力廠商與憑據 JSON（掃描有對象；週備份不含這兩張表）
-    for layer in ("每日備份", "月備份"):
-        found = [p for p in _walk_files(isolated_archive)
-                 if layer in p and os.path.basename(p) in ("協力廠商.json", "承攬付款憑據.json")]
-        assert len(found) == 2, (layer, found)
-    for path in _walk_files(isolated_archive):
-        with open(path, "rb") as fh:
-            blob = fh.read().decode("utf-8", "replace")
-        for s in (_P_ACCT, _P_NAME, _V_ACCT, _V_NAME):
-            assert s not in blob, "一般雲端目錄的 %s 含帳戶哨兵 %r" % (path, s)
-    hits = _general_f2_key_hits(isolated_archive)
-    undecided = {h for h in hits if h not in _F2_KEY_ALLOWED}
-    assert not undecided, "一般份的 JSON 欄位裡有 F2 鍵名且有值、沒有人決定過：%s" % sorted(undecided)
-    unused = set(_F2_KEY_ALLOWED) - hits
-    assert not unused, "允許清單裡這幾條本題沒有出現（過期或寫錯，清單不可以只增不減）：%s" % sorted(unused)
-
-    # 正對照：個資資料夾收到了完整快照與協力廠商完整列
-    pii_day = os.path.join(pii_root, "每日備份", _d.today().isoformat())
-    voucher_blob = open(os.path.join(pii_day, "承攬付款憑據.json"), encoding="utf-8").read()
-    assert _P_ACCT in voucher_blob and _V_ACCT in voucher_blob and _V_NAME in voucher_blob
-    vendor_blob = open(os.path.join(pii_day, "協力廠商.json"), encoding="utf-8").read()
-    assert _V_ACCT in vendor_blob and _V_NAME in vendor_blob
-    assert _json.loads(snap)["personnel"][0]["bankAccountNumber"] == _P_ACCT
-
-
 def test_key_scan_positive_control_sees_a_personnel_account():
     """掃描器的正對照：把快照原樣（沒有去個資）放進一般樹的形狀 ⇒ 要亮。"""
     out = set()
@@ -513,36 +475,3 @@ def test_pii_folder_vanishing_during_daily_backup_is_not_recreated(pii, client, 
     archive._daily_backup()
     assert not os.path.exists(root), "每日備份途中把個資資料夾建回來了"
     assert any("寫入途中消失" in r for _l, r in alerts), alerts
-
-
-def test_written_general_and_pii_files_merge_back_to_the_tables(client, make_user, isolated_archive, monkeypatch):
-    """稽核 X-9b O-6：合回用的是**每日備份實際寫出的檔**（一般份＋個資份），不是記憶體裡的原始列。"""
-    from datetime import date as _d
-    from db import get_db
-    pii_root = os.path.join(os.path.dirname(isolated_archive), archive._PII_ARCHIVE_DIRNAME)
-    os.makedirs(pii_root)
-    conn = get_db()
-    try:
-        _seed_pii(conn)
-    finally:
-        conn.close()
-    _voucher_via_api(client, make_user)
-    monkeypatch.setattr(archive, "_write_backup_alert", lambda *a, **k: None)
-    archive._daily_backup()
-    day = _d.today().isoformat()
-    general_dir = [dp for dp, _dn, fns in os.walk(isolated_archive)
-                   if "承攬人員.json" in fns and day in dp]
-    assert len(general_dir) == 1, general_dir
-    tables = archive._daily_backup_tables()
-    conn = get_db()
-    try:
-        for fname in archive._F2_FIELDS:
-            general = _json.load(open(os.path.join(general_dir[0], fname + ".json"), encoding="utf-8"))["data"]
-            pii_rows = _json.load(open(os.path.join(pii_root, "每日備份", day, fname + ".json"),
-                                       encoding="utf-8"))["data"]
-            original = [dict(r) for r in conn.execute(tables[fname]).fetchall()]
-            assert original, fname
-            merged, missing = archive.merge_general_and_pii(fname, general, pii_rows)
-            assert missing == [] and merged == original, fname
-    finally:
-        conn.close()

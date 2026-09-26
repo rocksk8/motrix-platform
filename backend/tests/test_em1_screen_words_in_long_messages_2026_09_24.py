@@ -137,7 +137,10 @@ def _all_details(rel):
 
 
 def test_em1_the_five_messages_speak_the_screen_words_not_the_code_words():
+    from core import source_tree
     for rel, _fn, anchor, banned, screen, page in CASES:
+        if not source_tree.module_installed(rel):
+            continue                      # 模組被拿掉（選配／反向控制）：它的訊息本來就不在
         hits = [d for d in _all_details(rel) if anchor in d]
         assert hits, "%s 找不到含「%s」的訊息 —— 退回改錨點" % (rel, anchor)
         for msg in hits:

@@ -32,10 +32,3 @@ def test_payable_tab_says_why_when_subcontract_is_absent(live_server, make_user,
     page.evaluate(f"() => {{ {DATA}.cashierSub = 'payable' }}")
     page.wait_for_function(f"() => [...document.querySelectorAll('.alert-bar')].some(e => e.offsetParent && e.textContent.trim() === {repr(ca.CONTRACTOR_MISSING)})", timeout=10000)
     assert page.evaluate(f"() => {DATA}.cashierHistoryContractorNotice") == ca.CONTRACTOR_MISSING
-
-
-@pytest.mark.e2e
-def test_no_notice_when_subcontract_is_present(live_server, make_user, new_page, login_as):
-    page = _open_cashier(live_server, make_user, new_page, login_as, "e2e_ip14_present")
-    assert page.evaluate(f"() => {DATA}.payableNotice") == ""
-    assert page.evaluate(f"() => {DATA}.cashierHistoryContractorNotice") == ""

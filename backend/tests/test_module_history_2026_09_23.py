@@ -94,6 +94,9 @@ def test_the_unpay_precedent_really_does_both_layers():
     ```
     ☠️ 少了這一題，`§四` 那整段（合併會失去什麼）建立在**一段我沒有讀過的描述**上。
     """
+    from core import source_tree
+    if not source_tree.module_installed("modules/subcontract/"):
+        pytest.skip("前例在外包工班（M04），模組不在這個安裝包（PLAYBOOK §B-11）")
     src = (_BACKEND / "modules" / "subcontract" / "api" / "contractor_vouchers.py").read_text(encoding="utf-8")
     assert '"action": "paid" if action == "pay" else "unpaid"' in src, (
         "`contractor_vouchers.py` 不再把 `unpaid` append 進 `paid_log` ——\n"
