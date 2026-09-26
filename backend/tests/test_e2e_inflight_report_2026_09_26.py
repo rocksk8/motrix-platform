@@ -176,24 +176,29 @@ def test_plain_one_after():
 
 
 def _run_probe(tmp_name, xdist, basetemp):
+    """〔主持派工 wip/b-probe-tmp：探針原本寫在 tests/（`here / tmp_name`）⇒ 這一輪被砍掉時殘檔留在受測樹、被別的 worker 收集成紅
+      （D 觀察）。改寫到 basetemp 旁的 probe/，子 pytest 經 probe_pytest_args 吃 backend 的 conftest；finally 刪整個目錄〕"""
     import os
+    import shutil
     import subprocess
     import sys
     from pathlib import Path as _P
-    here = _P(__file__).resolve().parent
-    f = here / tmp_name
+    from tests._subproc import BACKEND_DIR, probe_pytest_args, utf8_env
+    d = _P(basetemp).parent / "probe"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / tmp_name
     f.write_text(_HANG_IN_TEARDOWN, encoding="utf-8")
     try:
         cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp", str(basetemp),
-               str(f.relative_to(here.parent)).replace(os.sep, "/")]
+               *probe_pytest_args(f)]
         if xdist:
             cmd[6:6] = ["-n", "2"]
-        env = dict(os.environ, MOTRIX_E2E_TEST_LIMIT="60")
-        r = subprocess.run(cmd, cwd=str(here.parent), capture_output=True, text=True, encoding="utf-8",
+        env = utf8_env(MOTRIX_E2E_TEST_LIMIT="60")          # 子 pytest 不繼承外層這一輪的狀態（xdist 等）
+        r = subprocess.run(cmd, cwd=BACKEND_DIR, capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=240, env=env)
         return r.returncode, r.stdout + r.stderr
     finally:
-        f.unlink()
+        shutil.rmtree(d, ignore_errors=True)
 
 
 @pytest.mark.e2e

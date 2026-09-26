@@ -89,3 +89,22 @@ def run_python(args, *, cwd, timeout=240, env=None, **extra_env):
         encoding="utf-8", errors="replace",
         timeout=timeout,
     )
+
+
+#: backend/（子 pytest 的 cwd；`-p conftest` 從這裡載入 backend/conftest.py）
+BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def probe_pytest_args(probe_file):
+    """探針檔（**寫在 tmp_path，不寫進 tests/**）⇒ 子 pytest 要帶的參數：吃 backend/pytest.ini 與 backend/conftest.py。
+
+    〔主持派工 wip/b-probe-tmp：探針寫進 tests/ ⇒ 被砍掉的一輪留下殘檔、被別的 worker／別輪收集成紅（D 觀察 inflight 探針）〕
+    - `--rootdir` 設在探針目錄：否則 pytest 會往上把 %TEMP% 整個列舉，碰到別的行程正在建立／刪除的目錄 ⇒ FileNotFoundError
+      （2026-09-27 實測：rootdir＝backend 時收集就紅）。
+    - `--confcutdir` 也設在探針目錄：否則 pytest 會從磁碟根一路列舉每一層祖先目錄（%TEMP% 此機 9 萬多個項目）⇒ 每次啟動 ~40 秒
+      （實測：加了之後 0.35 秒）；backend/conftest.py 由 `-p conftest` 載入，不受 confcutdir 影響。
+    - 子行程 cwd 要是 BACKEND_DIR（`python -m pytest` 把 cwd 放進 sys.path，`-p conftest` 才載得到）。
+    - 探針目錄由呼叫端在 finally 刪掉。"""
+    d = os.path.dirname(os.path.abspath(str(probe_file)))
+    return ["-c", os.path.join(BACKEND_DIR, "pytest.ini"), "--rootdir", d, "--confcutdir", d, "-p", "conftest",
+            os.path.abspath(str(probe_file))]

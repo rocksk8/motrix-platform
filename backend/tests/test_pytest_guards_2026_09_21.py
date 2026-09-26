@@ -88,7 +88,11 @@ def test_fx6a_netguard_blocks_a_real_smtp_connection(tmp_path):
     # 而 -n 並行時其他題（spec_coverage 等）會 glob tests/test_*.py 再逐檔讀 ——
     # 列到之後、讀之前被這裡刪掉 ⇒ FileNotFoundError（2026-09-24 全量偶發）。
     # 命令列明指的檔案 pytest 一律收集，不受 python_files 樣式限制。
-    probe = BACKEND / "tests" / "_ng1_probe_tmp.py"
+    # 〔更正 wip/b-probe-tmp：~~放在 tests/ 底下才吃得到 conftest~~ ⇒ 寫到 tmp_path，經 probe_pytest_args 吃 backend/conftest.py；
+    #   不寫進受測樹（被砍掉的一輪會留下殘檔）〕
+    from tests._subproc import probe_pytest_args
+    (tmp_path / "ng1").mkdir()
+    probe = tmp_path / "ng1" / "_ng1_probe_tmp.py"
     probe.write_text(
         "import smtplib\n"
         "def test_probe():\n"
@@ -99,12 +103,13 @@ def test_fx6a_netguard_blocks_a_real_smtp_connection(tmp_path):
         encoding="utf-8")
     try:
         proc = run_python(
-            ["-m", "pytest", str(probe), "-q", "-p", "no:randomly",
+            ["-m", "pytest", *probe_pytest_args(probe), "-q", "-p", "no:randomly",
              "--basetemp", str(tmp_path / "bt")],
             cwd=BACKEND, env=utf8_env(MOTRIX_PYTEST_LOCK=str(tmp_path / "lk")),
             timeout=180)
     finally:
-        probe.unlink(missing_ok=True)
+        import shutil
+        shutil.rmtree(probe.parent, ignore_errors=True)
 
     out = proc.stdout + proc.stderr
     assert proc.returncode != 0, (

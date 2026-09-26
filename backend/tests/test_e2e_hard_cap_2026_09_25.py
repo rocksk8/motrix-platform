@@ -23,7 +23,10 @@ BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # ~~改放 backend/ 根的「.」開頭目錄~~〔更正（稽核 D O6-M1）：backend/ 根會被十多道「rglob 整個 backend、排除 tests/」的產品碼掃描看到
 # （edge_profile、begin_write、requirements、_l1_interface、dep_scan…；實測 20 次掃描 3 次 FileNotFoundError）〕
 # ⇒ 放 backend/tests/ 底下的「.」開頭目錄：產品碼掃描排除 tests/ 碰不到；pytest 遞迴收集不進「.」開頭的目錄；本題以明確路徑指定檔案，照樣收集得到。
-PROBE_ROOT = os.path.join(BACKEND, "tests")
+# ~~PROBE_ROOT = os.path.join(BACKEND, "tests")~~
+# 〔更正 wip/b-probe-tmp（主持派工）：探針一律寫到 tmp_path，不寫進受測樹——被砍掉的一輪會留下殘檔（D 觀察 inflight 探針）；
+#   子 pytest 以 tests._subproc.probe_pytest_args 吃 backend/conftest.py（rootdir＝探針目錄）。上面 O6／O6-M1 的顧慮
+#   （產品碼掃描、pytest 遞迴收集看得到）在 tmp 底下都不成立〕
 PROBE_PREFIX = ".hardcap_probe_"
 
 SRC = '''import time
@@ -42,9 +45,9 @@ def test_quick():
 
 
 @pytest.fixture
-def probe():
+def probe(tmp_path):
     import uuid
-    d = os.path.join(PROBE_ROOT, PROBE_PREFIX + uuid.uuid4().hex[:8])
+    d = os.path.join(str(tmp_path), PROBE_PREFIX + uuid.uuid4().hex[:8])
     os.makedirs(d)
     f = os.path.join(d, "test_zz_hardcap_probe.py")
 
@@ -74,7 +77,8 @@ def _remove_probe(d):
 
 def _pytest(args, cap, tmp_path, tag, temp_dir=None):
     # 子 pytest 不可以繼承外層的 xdist／本次執行狀態（這一題自己在 -n 下跑時，外層是 worker）——由 utf8_env 統一剔除
-    from tests._subproc import utf8_env
+    from tests._subproc import probe_pytest_args, utf8_env
+    args = probe_pytest_args(args[0]) + list(args[1:])        # 第一個參數是 tmp 裡的探針檔
     env = utf8_env(MOTRIX_E2E_HARD_CAP=cap)
     if temp_dir is not None:
         # 子行程的暫存目錄指到本題自己的資料夾 ⇒ 逐題上限目錄（tempfile.gettempdir() 底下）看得到、也不會碰到真的 %TEMP%
@@ -143,29 +147,13 @@ def test_a_quick_e2e_leaves_nothing_behind(probe, tmp_path):
     assert "e2e 逐題上限" not in out, out[-800:]
 
 
-def test_probe_dir_is_outside_product_scans_and_pytest_collection():
-    """O6／O6-M1（靜態守門）：探針目錄在 backend/tests/ 底下、「.」開頭——
-    產品碼掃描（core.source_tree 的 product_files／logic_files／router_files，以及「rglob 整個 backend、排除 tests」的守門）碰不到；
-    pytest 遞迴收集不進「.」開頭的目錄。
-    ⚠ 本題只驗 core.source_tree 的清單；**自己寫 rglob 的掃描**（掃整個 backend 的守門）靠各自排除 tests/ 來保證——
-    2026-09-26 稽核 D 逐行查 13 道，12 道有排除、剩下 1 道已修（h-o6s1）；新增這類掃描時要自己排除 tests/（稽核 D O6-S1）。"""
-    from core import source_tree
-    probe_dir = os.path.join(PROBE_ROOT, PROBE_PREFIX + "x")
-    rel = os.path.relpath(probe_dir, BACKEND).replace("\\", "/")
-    parts = rel.split("/")
-    assert parts[0] == "tests" and len(parts) == 2 and parts[1].startswith("."), rel
-    assert "tests" in source_tree._NON_PRODUCT_DIRS          # 產品碼掃描排除的目錄名（單一定義）
-    # 實際建一個探針目錄與檔案，產品碼清單裡找不到它
-    import uuid
-    d = os.path.join(PROBE_ROOT, PROBE_PREFIX + "static_" + uuid.uuid4().hex[:6])
-    os.makedirs(d)
-    try:
-        open(os.path.join(d, "test_zz_hardcap_probe.py"), "w", encoding="utf-8").write("x = 1\n")
-        for lister in (source_tree.product_files, source_tree.logic_files, source_tree.router_files):
-            hits = [str(f) for f in lister() if PROBE_PREFIX in str(f)]
-            assert not hits, (lister.__name__, hits)
-    finally:
-        _remove_probe(d)
+def test_probe_dir_is_outside_the_repo(probe):
+    """探針在 tmp_path，不在 repo 底下（產品碼掃描、pytest 遞迴收集、別的 worker 都碰不到；殘檔不會留在受測樹）。
+    〔更正 wip/b-probe-tmp：原題 test_probe_dir_is_outside_product_scans_and_pytest_collection 驗的是「tests/ 底下的「.」開頭目錄」
+      那個做法（O6／O6-M1）；探針搬出 repo 之後改驗「不在 repo 底下」〕"""
+    f = probe(0)
+    repo = os.path.dirname(BACKEND)
+    assert not os.path.abspath(f).lower().startswith(os.path.abspath(repo).lower() + os.sep), f
 
 
 # ── 每次執行的逐題上限目錄要收掉（主持派工 wip/b-hardcap-dir：%TEMP% 累積 1055 個）────────────────────
