@@ -14,7 +14,6 @@ BACKEND = Path(__file__).resolve().parents[1]
 #: (相對路徑, 函式名) -> 理由。新增一筆＝有人決定了「這裡不用 begin_write 也安全」，要寫出為什麼。
 ALLOWED = {
     ("core/txn.py", "begin_write"): "唯一合法的 BEGIN IMMEDIATE 出處（2026-09-25 自 helpers/quotations.py 下沉 L1）",
-    ("pdf_gen.py", "_record_doc_version"): "單據版本號；try/finally 關連線，不讀 quotations.data_json",
     ("modules/payroll/api/bonus.py", "create_case_bonus"): "獎金分潤表；try/finally 關連線，不經 save_quotation_json",
     ("modules/payroll/api/bonus.py", "update_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "submit_case_bonus"): "同上",
