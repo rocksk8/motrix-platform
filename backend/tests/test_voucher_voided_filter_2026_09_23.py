@@ -49,7 +49,7 @@ import pytest
 
 import db
 
-_HELPER_MODULES = ("helpers.voucher", "helpers.vouchers", "routers.vouchers")
+_HELPER_MODULES = ("modules.accounting.voucher", "helpers.vouchers", "modules.accounting.api.vouchers")
 _HELPER_NAMES = ("active_vouchers", "list_vouchers", "query_vouchers",
                  "list_active_vouchers")
 

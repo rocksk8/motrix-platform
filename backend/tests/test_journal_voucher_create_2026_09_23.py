@@ -402,14 +402,14 @@ def test_jv1_the_api_really_goes_through_the_balance_helper(client, make_user,
     ⇒ 兩份會分岔，而分岔之後**沒有人知道哪一份是真的** ——
       而它**一開始是綠的**（兩份剛寫好時算出同一個答案）。
 
-    ⚙️ 做法：把 `helpers.voucher` 的檢查換成一個**會留下指紋**的替身。
+    ⚙️ 做法：把 `modules.accounting.voucher` 的檢查換成一個**會留下指紋**的替身。
        ```
        替身被呼叫 => 端點的拒絕訊息裡會出現那個指紋
        替身沒被呼叫 => 指紋不在 => **它自己算了一份**
        ```
     🔑 而指紋挑一個**不可能自然出現**的字串 —— 否則「碰巧包含」也會讓它綠。
     """
-    import helpers.voucher as hv
+    import modules.accounting.voucher as hv
 
     FINGERPRINT = "\u2603JV1-HELPER-WAS-CALLED\u2603"
     called = {"n": 0}
@@ -421,7 +421,7 @@ def test_jv1_the_api_really_goes_through_the_balance_helper(client, make_user,
         return (out + FINGERPRINT) if out else out
 
     monkeypatch.setattr(hv, "describe_balance", _spy)
-    for mod_name in ("routers.vouchers",):
+    for mod_name in ("modules.accounting.api.vouchers",):
         try:
             mod = __import__(mod_name, fromlist=["x"])
         except Exception:                                  # noqa: BLE001
@@ -445,7 +445,7 @@ def test_jv1_the_api_really_goes_through_the_balance_helper(client, make_user,
         pytest.fail("找不到過帳端點 —— 見 `JV1③`。")
 
     assert called["n"] > 0, (
-        "過帳被處理了，而 `helpers.voucher.describe_balance` **一次都沒被呼叫**。\n"
+        "過帳被處理了，而 `modules.accounting.voucher.describe_balance` **一次都沒被呼叫**。\n"
         + "☠️ 那表示端點**自己寫了一份**平衡檢查 ⇒ 兩份會分岔，\n"
           "   而分岔之後沒有人知道哪一份是真的 —— **它一開始是綠的**。\n"
         + "✅ 叫 `helpers/voucher.py` 那一支：差額那句話它已經算好了。")

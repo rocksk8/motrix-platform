@@ -54,7 +54,7 @@ STATUSES = ("草稿", "待審核", "簽核中", "已核准", "已過帳")
 #: 施工圖 `§一`「可編輯 **只有 "草稿"**」／`STATE.md §103e`：選甲之後只有一個值。
 EDITABLE = ("草稿",)
 
-_SEAM_MODULES = ("helpers.voucher", "helpers.vouchers", "routers.vouchers")
+_SEAM_MODULES = ("modules.accounting.voucher", "helpers.vouchers", "modules.accounting.api.vouchers")
 
 
 def _voucher_module():

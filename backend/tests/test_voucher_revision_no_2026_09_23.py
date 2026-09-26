@@ -41,8 +41,8 @@ import pytest
 #: 我釘的接縫。名字要改**退回給我**，不要自己改題。
 _SEAMS = (
     ("helpers.voucher_no", "next_revision_no"),
-    ("helpers.voucher", "next_revision_no"),
-    ("routers.vouchers", "_next_revision_no"),
+    ("modules.accounting.voucher", "next_revision_no"),
+    ("modules.accounting.api.vouchers", "_next_revision_no"),
 )
 
 #: 三種起始單號 —— **格式刻意不同**，而它們必須得到同樣的升版行為。

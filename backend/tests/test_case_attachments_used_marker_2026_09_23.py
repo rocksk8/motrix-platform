@@ -101,7 +101,7 @@ def _seed_invoice_voucher_candidate(conn, quote_no, file_id, voucher_no=None):
 
 def _case_attachments(quote_no):
     import db
-    import helpers.voucher_attachments as va
+    import modules.accounting.voucher_attachments as va
     conn = db.get_db()
     try:
         return va.case_attachments(conn, quote_no, {"id": 0, "username": "att_test_root", "role": "superadmin", "modules": []})  # 驗清單內容，不是權限（權限見 test_attachments_providers）

@@ -222,7 +222,7 @@ def test_fn5_a_code_that_is_not_in_the_account_tree_is_refused(fresh_db):
     """
     import importlib
     mod = None
-    for name in ("routers.accounting_export", "helpers.t100_config"):
+    for name in ("modules.accounting.api.accounting_export", "helpers.t100_config"):
         try:
             mod = importlib.import_module(name)
             break

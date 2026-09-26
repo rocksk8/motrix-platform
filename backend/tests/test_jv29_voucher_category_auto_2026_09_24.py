@@ -56,7 +56,7 @@ def _create(client, hdr, lines, **extra):
 def test_jv29_the_cash_family_is_found_by_walking_parent_codes(client):
     """量尺：現金類清單就是上面那六個——用結構（parent_code）判，不是前綴。"""
     import db
-    from helpers.voucher import cash_account_codes
+    from modules.accounting.voucher import cash_account_codes
     conn = db.get_db()
     try:
         got = cash_account_codes(conn)

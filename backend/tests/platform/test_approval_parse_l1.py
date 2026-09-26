@@ -1,8 +1,8 @@
 """簽核鏈 approval_json 的解析在 L1（主持裁示 M06-c，2026-09-26）。
 
 - 契約：`helpers/tiered_approval.py` 不 import 任何 L2（routers／modules／歸在 L2 組的 helper）。
-- M06 `helpers.voucher` 的同名別名（淘汰中）指向 L1 的**同一個**物件：`except VoucherChainUnreadable` 一定接得到 L1 丟的例外。
-- M01 的簽核佇列不再 import M06（`helpers.voucher`）。
+- M06 `modules.accounting.voucher` 的同名別名（淘汰中）指向 L1 的**同一個**物件：`except VoucherChainUnreadable` 一定接得到 L1 丟的例外。
+- M01 的簽核佇列不再 import M06（`modules.accounting.voucher`）。
 正對照／反向控制用合成原始碼，不綁任何 L2 模組。
 """
 import ast
@@ -62,7 +62,7 @@ def test_tiered_approval_imports_no_l2():
 
 def test_voucher_aliases_are_the_l1_objects():
     from helpers import tiered_approval as ta
-    from helpers import voucher
+    from modules.accounting import voucher
     assert voucher.VoucherChainUnreadable is ta.ApprovalChainUnreadable      # 同一個類別，不是另一個同名類別
     assert voucher.parse_approval_json({"id": 1}) == {} == ta.parse_approval_json({"id": 1})
     assert voucher.parse_approval_json({"approval_json": '{"tiers": []}'}) == {"tiers": []}
@@ -76,5 +76,5 @@ def test_voucher_aliases_are_the_l1_objects():
 
 def test_m01_approval_queue_no_longer_imports_m06():
     src = (BACKEND / "routers" / "quotations.py").read_text(encoding="utf-8")
-    assert "from helpers.voucher import parse_approval_json" not in src
+    assert "from modules.accounting.voucher import parse_approval_json" not in src
     assert "from helpers.tiered_approval import parse_approval_json" in src

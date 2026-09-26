@@ -1,0 +1,96 @@
+{
+  "key": "accounting",
+  "name": "會計",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "accounting",
+  "permissions": [
+    "cashier",
+    "finance"
+  ],
+  "tables": [
+    "account_items",
+    "t100_export_confirmations",
+    "voucher_attachments",
+    "voucher_edit_log",
+    "voucher_lines",
+    "vouchers_all"
+  ],
+  "views": [
+    "vouchers"
+  ],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。`views`：`vouchers` 是只露出未作廢傳票的 VIEW（不是表：不備份、不分類；備份的是 vouchers_all）",
+  "data": {
+    "tables": [
+      {
+        "name": "account_items",
+        "class": "T1"
+      },
+      {
+        "name": "t100_export_confirmations",
+        "class": "T1"
+      },
+      {
+        "name": "voucher_attachments",
+        "class": "T1"
+      },
+      {
+        "name": "voucher_edit_log",
+        "class": "T1"
+      },
+      {
+        "name": "voucher_lines",
+        "class": "T1"
+      },
+      {
+        "name": "vouchers_all",
+        "class": "T1"
+      }
+    ],
+    "files": []
+  },
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  },
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
+  "provides": {
+    "api_prefixes": [
+      "/api/account-items",
+      "/api/reports",
+      "/api/settings",
+      "/api/vouchers"
+    ],
+    "probes": [
+      "/api/vouchers",
+      "/api/account-items"
+    ]
+  },
+  "provides_note": "`/api/reports` 只有 `/api/reports/t100-export*`（T100 傳票匯出，5 支）、`/api/settings` 只有 `/api/settings/t100-export-config`；前綴本身分屬 M08／L1。之後 modules.json 明列個別路由歸屬時改成明列（同 arap 的註記）",
+  "pages": [
+    {
+      "path": "voucher.html",
+      "menu": {
+        "group": "finance",
+        "label": "傳票",
+        "order": 30,
+        "perm": [
+          "cashier"
+        ]
+      }
+    },
+    {
+      "path": "account-items.html",
+      "menu": {
+        "group": "finance",
+        "label": "會計科目",
+        "order": 40,
+        "perm": [
+          "cashier"
+        ]
+      }
+    }
+  ]
+}

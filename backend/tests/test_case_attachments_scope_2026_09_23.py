@@ -64,7 +64,7 @@ _NEEDS_M04 = pytest.mark.skipif(not _subcontract_installed(), reason="外包工�
 
 
 def _helpers():
-    import helpers.voucher_attachments as va
+    import modules.accounting.voucher_attachments as va
     return va
 
 

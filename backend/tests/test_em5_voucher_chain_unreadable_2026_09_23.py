@@ -39,7 +39,7 @@ A 的裁示逐字：「釘行為，不要釘那段文字——釘文字的話，
 
 # ✅ 牙齒已驗證（方式：突變驗證／live，非常設）
 
-monkeypatch `helpers.voucher._chain_tiers`，讓它在解析失敗時回 `[]`
+monkeypatch `modules.accounting.voucher._chain_tiers`，讓它在解析失敗時回 `[]`
 （模擬修復被回退成「解析失敗當沒有簽核鏈」，這是 EM5 描述的真實失效
 模式，不是改斷言）：
 ① 匯出閘門那題從「擋下來、訊息說讀不出來」變成「依內建兩格判斷還差誰

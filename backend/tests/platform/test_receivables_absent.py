@@ -54,13 +54,16 @@ def test_reports_income_notice_is_empty_when_m05_is_present(client, make_user):
 
 
 def test_t100_preview_without_m05(client, make_user, monkeypatch):
-    from routers import accounting_export as ae
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/api/accounting_export.py"):
+        pytest.skip("會計（M06）不在：沒有 T100 匯出")
+    from modules.accounting.api import accounting_export as ae
     h = _sa(client, make_user)
     _drop(monkeypatch, *CAPS)
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
     assert prev.status_code == 200, prev.text
     assert ae.T100_RECEIVABLES_MISSING in prev.json()["notice"].split("；")
     # 兩個都缺 ⇒ 兩句並列（IP-14 的承攬商＋本串接點的收款事件）
-    _drop(monkeypatch, "contractor_voucher.public")
+    _drop(monkeypatch, "contractor_voucher.public", "contractor_voucher.paid_between")   # M04 不在＝兩個能力都沒有
     both = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()["notice"].split("；")
     assert set(both) == {ae.T100_RECEIVABLES_MISSING, ae.T100_CONTRACTOR_MISSING}, both

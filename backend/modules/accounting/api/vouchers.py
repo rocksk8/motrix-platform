@@ -14,7 +14,7 @@ routers/vouchers.py  **不存在** => 沒有任何人在「改」的時候叫它
 
 # ⚠️ 本輪只做「讀」與「改草稿」
 
-過帳、送審、退回、作廢那幾條走 `helpers.voucher` 的純邏輯，
+過帳、送審、退回、作廢那幾條走 `modules.accounting.voucher` 的純邏輯，
 而它們的端點**沒有派工** ⇒ 不在這裡順手加。
 """
 import datetime as _dt
@@ -29,7 +29,7 @@ from urllib.parse import quote
 from db import get_db
 # 🔑 科目代號的規則**只有一份** —— 借用既有那一支，不在這裡再寫。
 #    （router 互相 import 在這個 repo 是既有做法，實查 7 處。）
-from routers.accounting_export import validate_account_code
+from modules.accounting.api.accounting_export import validate_account_code
 # `JV21`：承攬商派工的 grandTotal（含稅費用＋外包人員）算法**只有一份**——在 M04，
 # 經連接器 `dispatch.row` 取用（INTEGRATION-POINTS.md IP-1），不 import M04 的私有函式。
 # ⚠️ **不要自己重算**：`total_amount` 少了稅、也少了外包人員費用，`ACC-BN6 §3` 已經踩過這個坑。
@@ -42,14 +42,14 @@ from helpers.tiered_approval import (
 )
 from helpers import _get_setting
 from helpers.uploads import save_document_files
-from helpers.voucher_pdf import (
+from modules.accounting.voucher_pdf import (
     export_voucher_pdf, preview_html, classify_attachment_kind,
 )
-from helpers.voucher_attachments import (
+from modules.accounting.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources,
+    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources, hidden_sources, CaseNotVisible, CASE_NOT_FOUND,
 )
-from helpers.voucher import (
+from modules.accounting.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
     next_voucher_no, post_voucher, can_send_back, next_revision_no,
     diff_lines, approval_done, parse_approval_json, VoucherChainUnreadable,
@@ -150,7 +150,7 @@ def _category_update(conn, voucher_id, current, body, new_lines, line_changes):
 
 
 def _amount_lines(lines):
-    """`JV32`：金額正規化；有問題 ⇒ 422 並指出第幾行（`helpers.voucher.normalize_amount_lines`）。"""
+    """`JV32`：金額正規化；有問題 ⇒ 422 並指出第幾行（`modules.accounting.voucher.normalize_amount_lines`）。"""
     out, problems = normalize_amount_lines(lines)
     if problems:
         raise HTTPException(422, "。".join(problems) + "。")
@@ -221,7 +221,7 @@ def _check_account_codes(conn, lines):
 
     ## 🔑 規則**借用既有那一份**，不在這裡再寫一次
 
-    `routers.accounting_export.validate_account_code()` 已經定義了同一條規則，
+    `modules.accounting.api.accounting_export.validate_account_code()` 已經定義了同一條規則，
     而且分得出「找不到」與「已停用」——兩者的下一步不同：
     ```
     找不到  打錯字
@@ -673,12 +673,17 @@ def summary_sources(q: str = "", quote_no: str = "",
     picked = (quote_no or "").strip()
     hidden = {}                     # 因權限沒列出的附件：類別 ⇒ 個數（明說，不可以靜默少列）
     if picked:
+        not_found = False
         conn2 = get_db()
         try:
             files = case_attachments(conn2, picked, user, hidden)
+        except CaseNotVisible:
+            files, not_found = [], True   # 不存在與整個看不到同一句（不可以讓人探知案件編號）
         finally:
             conn2.close()
-        if not files and hidden:
+        if not_found:
+            note2 = CASE_NOT_FOUND % picked + "。"
+        elif not files and hidden:
             note2 = "案件「%s」底下沒有你有權限查看的憑證。" % picked
         elif not files:
             note2 = "案件「%s」底下目前沒有可帶入的憑證。" % picked
@@ -763,6 +768,8 @@ def line_source_files_endpoint(source_type: str = "", ref: str = "",
     try:
         hidden = {}
         files = line_source_files(conn, source_type, ref, user, hidden)
+    except CaseNotVisible:
+        raise HTTPException(404, CASE_NOT_FOUND % (ref or "").strip())   # 同案件不存在（主持裁示：不回個數）
     finally:
         conn.close()
     # 附件來源的模組不在（attachments.for_document，主持裁示 M06-b）⇒ 那幾類整個沒有列出，要明說（案件那一欄才會涵蓋多個模組）
@@ -796,6 +803,8 @@ def line_source_file_endpoint(source_type: str = "", ref: str = "",
             raise HTTPException(404, "在這個來源裡找不到這個檔案。")
         item = resolve_picks(conn, [{"type": hit["type"], "docNo": hit["docNo"],
                                      "fileId": hit["fileId"]}], user)[0]
+    except CaseNotVisible:
+        raise HTTPException(404, CASE_NOT_FOUND % (ref or "").strip())   # 同案件不存在（主持裁示）
     finally:
         conn.close()
     return FileResponse(item["src"], media_type="application/octet-stream",
@@ -1200,7 +1209,7 @@ def post_voucher_endpoint(voucher_id: int, body: dict = Body(default={}),
                           authorization: str = Header(None)):
     """過帳（`JV1`，A `§162` 從 `JV2` 移進來）。
 
-    ## 🔴 這一支是 `helpers.voucher.post_voucher()` 的**薄包裝**
+    ## 🔴 這一支是 `modules.accounting.voucher.post_voucher()` 的**薄包裝**
 
     ☠️ 在這裡再寫一份平衡檢查的話，就是**第二份判準** ——
        而兩份會分岔，分岔之後沒有人知道哪一份是真的，
@@ -1801,7 +1810,7 @@ def _provide_voucher_draft(conn, *, voucher_date, summary, lines, created_by, no
     return {"id": vid, "voucher_no": no}
 
 
-_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.draft）
 
 
 # ── 連接器 IP-4 voucher.void_draft／voucher.status（INTEGRATION-POINTS.md，契約版本 1）────
@@ -1829,7 +1838,7 @@ def _provide_voucher_status(conn, voucher_id):
     return {"id": v["id"], "voucher_no": v["voucher_no"], "status": v["status"], "voided": bool(v["voided_at"])}
 
 
-_registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.void_draft）
 # IP-22（暫定號）：M01 案件整包的傳票段；同一份授權、權限判斷與單獨打 /api/vouchers/by-case/{no} 逐字相同
-_registry.provide("voucher.by_case", "accounting", vouchers_by_case)
-_registry.provide("voucher.status", "accounting", _provide_voucher_status)
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.by_case）
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.status）

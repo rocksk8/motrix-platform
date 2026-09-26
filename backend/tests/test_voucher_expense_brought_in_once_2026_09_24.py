@@ -104,7 +104,7 @@ def test_expense_sources_say_which_voucher_already_took_them(client, make_user, 
     no = _voucher_no(client, hdr, vid)
     r = client.get("%s/summary-sources?quote_no=%s" % (VOUCHERS, QUOTE), headers=hdr)
     assert r.status_code == 200, r.text[:200]
-    from routers.vouchers import SUMMARY_TABS
+    from modules.accounting.api.vouchers import SUMMARY_TABS
     exp = {(x["kind"], str(x["id"])): x for x in r.json()["tabs"][SUMMARY_TABS[2]]}
     assert [u["voucherNo"] for u in exp[("extra_expense", str(e1))]["usedBy"]] == [no]
     assert exp[("extra_expense", str(e2))]["usedBy"] == []
@@ -115,7 +115,7 @@ def test_expense_sources_say_which_voucher_already_took_them(client, make_user, 
 def test_attachment_red_mark_output_is_unchanged(client):
     """`_used_map` 的輸出形狀與規則（作廢不算、軟刪不算、三欄空字串不算）照舊。"""
     import db
-    from helpers.voucher_attachments import _used_map
+    from modules.accounting.voucher_attachments import _used_map
     conn = db.get_db()
     try:
         def v(no, voided=""):

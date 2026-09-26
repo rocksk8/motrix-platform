@@ -609,7 +609,7 @@ def t100_export_unconfirm(body: T100UnconfirmBody, authorization: str = Header(N
 
 # ── 連接器（docs/platform/INTEGRATION-POINTS.md，契約版本 1）──────────────────────────────
 # IP-2 voucher.account_check：科目代號有效性（與設定頁同一條規則）。回 (ok, err)。
-_registry.provide("voucher.account_check", "accounting", validate_account_code)
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：voucher.account_check）
 
 
 # IP-3 accounting.settings：只公開別組需要的那一小塊（付款銀行清單與預設），不給整份 T100 設定。
@@ -620,4 +620,4 @@ def _provide_accounting_settings() -> dict:
             "defaultBankAccountCode": cfg.get("defaultBankAccountCode") or ""}
 
 
-_registry.provide("accounting.settings", "accounting", _provide_accounting_settings)
+# （提供者改由 modules/accounting/__init__.py 的 ModuleSpec.providers 宣告：accounting.settings）

@@ -26,7 +26,8 @@ import dep_scan  # noqa: E402
 MODULE = "modules/accounting"
 
 #: 檔（相對 backend）⇒ {別組的表: (擁有的模組 key, 到期的 capability)}。只准變少。
-#: a：M06-a（M01 提供 case.summary／case.extra_expenses 前）；d：M06-d（C 的 c-ip14-paid 合回前）
+#: a：M06-a（M01 提供 case.summary／case.extra_expenses 前）
+#: d（accounting_export 讀 contractor_payment_vouchers）2026-09-26 到期刪除：c-ip14-paid 的 paid_between 已帶入本疊（本守門的到期題觸發）
 #: a'：vouchers.py 的 JV21 支出來源與 by-case 派工段讀 M04 的派工表。主持裁示（2026-09-26）：IP-15 走派工清單的模組權限，
 #:     只持 finance 的會計會悄悄少列 ⇒ 由 C 在 IP-15 新增「成本檢視」（放行 finance／cashier，只回金額、日期、案件、廠商名稱）；
 #:     做好之前保留直讀。到期能力名暫記 `dispatch.cost_for_case`，C 定名後同步改這裡（M06-PLAN §5 a' 列）
@@ -37,9 +38,6 @@ KNOWN_FOREIGN_READS = {
         "contractor_dispatches": ("subcontract", "dispatch.cost_for_case"),
         "vendor_contractors": ("subcontract", "dispatch.cost_for_case"),
     },
-    MODULE + "/api/accounting_export.py": {
-        "contractor_payment_vouchers": ("subcontract", "contractor_voucher.paid_between"),
-    },
 }
 
 #: L1 的表（任何模組都可以讀）。只放 M06 真的在讀的，新增要有理由。
@@ -47,8 +45,10 @@ L1_TABLES = {"users"}
 
 
 def own_tables(module_dir):
-    data = json.loads((Path(module_dir) / "module.json").read_text(encoding="utf-8")).get("data") or {}
-    return {t["name"] for t in data.get("tables", [])} | {v["name"] for v in data.get("views", [])}
+    """本模組自己的表：module.json 的 `data.tables`（有分類的）＋頂層 `tables`＋`views`（VIEW 不分類）。"""
+    m = json.loads((Path(module_dir) / "module.json").read_text(encoding="utf-8"))
+    data = m.get("data") or {}
+    return {t["name"] for t in data.get("tables", [])} | set(m.get("tables", [])) | set(m.get("views", []))
 
 
 def foreign_reads(sources, own, known, l1=L1_TABLES):
@@ -137,14 +137,13 @@ def test_positive_and_reverse_control_of_the_scan():
 
 def test_positive_and_reverse_control_of_stale_and_expiry():
     f = MODULE + "/api/vouchers.py"
-    found = {f: {"quotations", "case_extra_expenses", "contractor_dispatches", "vendor_contractors"},
-             MODULE + "/api/accounting_export.py": {"contractor_payment_vouchers"}}
+    found = {f: {"quotations", "case_extra_expenses", "contractor_dispatches", "vendor_contractors"}}
     assert stale(found, set(found)) == []
     shrunk = dict(found, **{f: found[f] - {"quotations"}})
     assert stale(shrunk, set(found)) == ["%s 已不讀 quotations ⇒ 自基線刪除" % f]
-    assert stale(found, {f}) == ["%s/api/accounting_export.py：檔案不在 ⇒ 自基線刪除" % MODULE]
+    assert stale(found, set()) == ["%s：檔案不在 ⇒ 自基線刪除" % f]
     assert expired(set()) == []
-    got = expired({"contractor_voucher.paid_between"})
-    assert len(got) == 1 and "contractor_payment_vouchers" in got[0], got
+    got = expired({"dispatch.cost_for_case"})
+    assert len(got) == 2 and all("dispatch.cost_for_case" in g for g in got), got
     provided, _ = code_capabilities({"x.py": 'registry.provide("case.summary", "case", X)\n'})
     assert [g for g in expired(provided) if "quotations" in g], "code_capabilities 的提供者要能觸發到期"

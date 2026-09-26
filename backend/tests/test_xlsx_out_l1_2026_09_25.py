@@ -86,7 +86,7 @@ def test_heading_uses_company_profile(client):
 
 def test_empty_company_prints_no_dangling_separator(client):
     from helpers.company_identity import company_heading
-    from routers import accounting_export as ae
+    from modules.accounting.api import accounting_export as ae
     _set_company("")
     assert company_heading("營運報表") == "營運報表"
     xlsx = ae._build_t100_voucher_excel([], "2026-09-01", "2026-09-30", ae._t100_config(), "2026-09-25 12:00")

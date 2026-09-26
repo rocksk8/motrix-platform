@@ -49,6 +49,6 @@ def test_positive_control_both_providers_list_the_paid_invoiced_item(client, mak
         assert r["incomeNotice"] == "" and [i["quoteNo"] for i in r["monthIncomeItems"]] == [no]
         assert client.get("/api/reports/tax-export?year=2026&month=9", headers=h).status_code == 200
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()
-    from routers import accounting_export as ae
+    from modules.accounting.api import accounting_export as ae
     assert ae.T100_RECEIVABLES_MISSING not in prev["notice"]
     assert any(e["sourceType"] == "quotation_payment" for e in prev["events"]), prev["events"]

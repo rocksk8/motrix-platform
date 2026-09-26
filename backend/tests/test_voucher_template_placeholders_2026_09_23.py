@@ -49,9 +49,9 @@ PLACEHOLDERS = (
 WRAP = "{%s}"
 
 _SEAM_MODULES = (
-    "helpers.voucher_template",
+    "modules.accounting.voucher_template",
     "helpers.voucher_templates",
-    "helpers.voucher",
+    "modules.accounting.voucher",
     "routers.voucher_templates",
 )
 

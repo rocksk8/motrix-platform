@@ -146,7 +146,7 @@ def _group_py_files(group):
 
 def test_payroll_does_not_import_m06_anywhere():
     """M07 的每一支檔（modules.json 取）**任何一層**都不 import M06（2026-09-26：原本 bonus_pdf 在函式內延遲載入
-    helpers.voucher／voucher_pdf，稽核 Y-2；現在那四樣都在 L1）。"""
+    modules.accounting.voucher／voucher_pdf，稽核 Y-2；現在那四樣都在 L1）。"""
     import ast
     m06 = set(_group_py_files("M06"))
     m07 = _group_py_files("M07")
@@ -177,8 +177,8 @@ def test_payroll_pdf_parts_work_without_m06_files(tmp_path):
     backend = Path(__file__).resolve().parents[3]
     code = (
         "import sys\n"
-        "sys.modules['helpers.voucher'] = None\n"
-        "sys.modules['helpers.voucher_pdf'] = None\n"
+        "sys.modules['modules.accounting.voucher'] = None\n"
+        "sys.modules['modules.accounting.voucher_pdf'] = None\n"
         "import modules.payroll.api.bonus as b\n"
         "from modules.payroll import bonus_pdf\n"
         "resolve, company, render, money = bonus_pdf._pdf_parts()\n"
@@ -195,9 +195,9 @@ def test_payroll_pdf_parts_work_without_m06_files(tmp_path):
 
 
 def test_preview_works_even_if_the_accounting_helpers_are_gone(client, people, monkeypatch):
-    """M06 的 `helpers.voucher_pdf` 被拿掉（這裡以把它的函式換成會爆的替身模擬），獎金分潤單預覽照樣組得出來
+    """M06 的 `modules.accounting.voucher_pdf` 被拿掉（這裡以把它的函式換成會爆的替身模擬），獎金分潤單預覽照樣組得出來
     ——證明預覽走的是 L1，不是 M06。"""
-    import helpers.voucher_pdf as vp
+    import modules.accounting.voucher_pdf as vp
     from modules.payroll import bonus_pdf
 
     def _boom(*a, **k):
