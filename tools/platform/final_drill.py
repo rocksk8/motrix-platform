@@ -45,27 +45,33 @@ _SKIP_DIRS = {".git", "node_modules", "__pycache__", "deploy_packages", ".pytest
 _DB_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal")
 DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")
 
-#: 冒煙：(名稱, 方法, 路徑[, 模組 key])。200 才算過；頁面用 GET。
-#: 帶模組 key 的條目：該模組不在安裝包（`backend/modules/<key>/module.json` 不存在）⇒ 記成「略過：模組不在包內」，
-#: 明寫在結果裡，不算過也不算不過（M08 反向控制：產品選配拿掉某模組時，演練不可以因為它而紅，也不可以默默少一項）。
-#: 尚未搬進 modules/ 的功能不帶 key（它們一定在包內）；搬遷時補上。
+#: 冒煙（D7-CHECKLIST §4，主持 2026-09-26）：分兩部分。
+#: ①**共用清單** SMOKE：只放 L1 與「還沒搬進 modules/」的功能（它們一定在包內），(名稱, 方法, 路徑)，200 才算過；
+#:   不可以放任何已搬遷模組的路徑（守門：test_smoke_core_has_no_paths_of_migrated_modules——原本寫死的
+#:   /pages/bonus.html 沒帶 key，payroll 搬走後 core-only 必紅，第 7 次前哨抓到）。功能搬進模組時，把它的條目從這裡拿掉、
+#:   改在該模組的 module.json 宣告 provides.probes。
+#: ②**模組部分**由安裝包裡的 modules/<key>/module.json 產生：provides.probes（GET）＋pages（/pages/<path>）。
+#:   modules.json 登記了、包裡沒有 ⇒「不在安裝包」（合法略過，明列）；包裡有、沒宣告 probes ⇒ 判不過
+#:   （沒宣告的模組不可以進正式 D7）；包裡有、key 沒登記 ⇒ 判不過（打錯字或改名）。
 SMOKE = [
     ("首頁", "GET", "/"), ("登入頁", "GET", "/pages/login.html"),
     ("報價單列表", "GET", "/api/quotations"), ("案件管理頁", "GET", "/pages/case-management.html"),
     ("傳票列表", "GET", "/api/vouchers"), ("傳票頁", "GET", "/pages/voucher.html"),
-    ("獎金分潤項目", "GET", "/api/bonus/items", "payroll"), ("獎金分潤頁", "GET", "/pages/bonus.html"),
-    ("出納待付", "GET", "/api/cashier/payable-queue"), ("請款單列表", "GET", "/api/payment-requests"),
-    ("營運報表", "GET", "/api/reports/financial", "analytics"), ("營運報表頁", "GET", "/pages/reports.html", "analytics"),
+    ("請款單列表", "GET", "/api/payment-requests"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),
     ("定義文件庫", "GET", "/api/definitions/custom_module"),         # 第二批（P8 缺口 #5）已合回
 ]
+# 〔更正 2026-09-26 主持〕原本的「出納待付 /api/cashier/payable-queue」拿掉：它在 M04 不在時依 IP-14 設計回 404
+# （附 CONTRACTOR_MISSING 說明），不是「一定 200」的共用項；M05 搬遷時由 M05 宣告自己的 probes。
 
 
 #: 模組 key 的登記表（repo 層級，與「這棵樹裡有沒有那個資料夾」無關）
 MODULES_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                             "docs", "platform", "modules.json")
 UNREGISTERED = "未在 docs/platform/modules.json 登記"
+UNDECLARED = "沒有宣告 provides.probes（不可以進正式 D7，D7-CHECKLIST §4）"
+ABSENT = "不在安裝包"
 
 
 def registered_module_keys(path=None) -> set:
@@ -75,19 +81,28 @@ def registered_module_keys(path=None) -> set:
 
 
 def smoke_plan(backend_dir: str, registered=None) -> list:
-    """SMOKE ⇒ [(名稱, 方法, 路徑, 略過原因或 None)]。
-    略過原因：①模組不在安裝包（合法）；②模組 key 未在 modules.json 登記（打錯字或改名——稽核 ⑰ S-1：
-    原本打錯的 key 也只是「不在包內」而永遠略過，演練照綠）。②由 smoke() 判不過。"""
-    registered = registered_module_keys() if registered is None else registered
-    plan = []
-    for entry in SMOKE:
-        name, method, path = entry[:3]
-        key = entry[3] if len(entry) > 3 else None
-        if key and key not in registered:
-            plan.append((name, method, path, "模組 key %s %s" % (key, UNREGISTERED)))
+    """⇒ [(名稱, 方法, 路徑, 略過原因或 None)]：共用清單 SMOKE＋包內每個模組的 probes 與頁面＋登記了卻不在包內的模組。
+    略過原因含 UNREGISTERED 或 UNDECLARED 的，smoke_ok 判不過（不是合法的略過）；含 ABSENT 的是合法略過（明列）。"""
+    registered = registered_module_keys() if registered is None else set(registered)
+    plan = [(name, method, path, None) for name, method, path in SMOKE]
+    mods = os.path.join(backend_dir, "modules")
+    present = sorted(d for d in (os.listdir(mods) if os.path.isdir(mods) else [])
+                     if os.path.isfile(os.path.join(mods, d, "module.json")))
+    for key in present:
+        if key not in registered:
+            plan.append(("模組 %s" % key, "GET", "modules/%s" % key, "模組 key %s %s" % (key, UNREGISTERED)))
             continue
-        absent = key and not os.path.isfile(os.path.join(backend_dir, "modules", key, "module.json"))
-        plan.append((name, method, path, ("模組 %s 不在安裝包" % key) if absent else None))
+        with open(os.path.join(mods, key, "module.json"), encoding="utf-8") as f:
+            m = json.load(f)
+        probes = (m.get("provides") or {}).get("probes") or []
+        if not probes:
+            plan.append(("模組 %s" % key, "GET", "modules/%s" % key, "模組 %s %s" % (key, UNDECLARED)))
+        for path in probes:
+            plan.append(("%s：%s" % (key, path), "GET", path, None))
+        for pg in m.get("pages") or []:
+            plan.append(("%s 頁面 %s" % (key, pg["path"]), "GET", "/pages/" + pg["path"], None))
+    for key in sorted(registered - set(present)):
+        plan.append(("模組 %s" % key, "GET", "modules/%s" % key, "模組 %s %s" % (key, ABSENT)))
     return plan
 
 
@@ -293,8 +308,8 @@ def smoke(install: str) -> dict:
 
 
 def smoke_ok(out) -> bool:
-    """有檢查、每一項 200、而且沒有因為「key 未登記」被略過的條目（那不是合法的略過，是打錯字）。"""
-    bad = [s for s in out.get("skipped", []) if UNREGISTERED in s.get("reason", "")]
+    """有檢查、每一項 200、而且沒有「key 未登記」或「沒宣告 probes」的條目（那不是合法的略過）。"""
+    bad = [s for s in out.get("skipped", []) if UNREGISTERED in s.get("reason", "") or UNDECLARED in s.get("reason", "")]
     if bad:
         out["unregistered_skips"] = bad
     return bool(out["checks"]) and all(c["ok"] for c in out["checks"]) and not bad

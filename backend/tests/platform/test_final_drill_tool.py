@@ -116,21 +116,88 @@ def test_smoke_paths_are_real_routes_or_pages(client):
     assert not missing, "冒煙清單裡不存在的路徑：%s" % missing
 
 
-def test_smoke_plan_skips_only_entries_of_absent_modules(tmp_path):
-    """帶模組 key 的條目：模組不在包內 ⇒ 略過且寫出原因；在 ⇒ 照跑；不帶 key 的永遠照跑（合成樹，不綁真實模組）。"""
-    keyed = [e for e in FD.SMOKE if len(e) > 3]
-    if not keyed:
-        pytest.skip("SMOKE 目前沒有帶模組 key 的條目 ⇒ 無對象")
-    key = keyed[0][3]
+def _mod(backend, key, probes=None, pages=()):
+    import json
+    d = backend / "modules" / key
+    d.mkdir(parents=True)
+    prov = {"api_prefixes": ["/api/" + key]}
+    if probes is not None:
+        prov["probes"] = probes
+    (d / "module.json").write_text(json.dumps({"key": key, "provides": prov, "pages": [{"path": p} for p in pages]}),
+                                   encoding="utf-8")
+
+
+def test_smoke_plan_derives_module_checks_from_the_package(tmp_path):
+    """合成樹（不綁真實模組）：包內模組 ⇒ 打它宣告的 probes 與頁面；登記了卻不在包內 ⇒ 明列「不在安裝包」；共用清單照跑。"""
     backend = tmp_path / "backend"
-    (backend / "modules").mkdir(parents=True)
-    absent = FD.smoke_plan(str(backend))
-    assert [p[3] for p in absent if p[3]] and all(key in p[3] for p in absent if p[0] == keyed[0][0])
-    assert all(p[3] is None for p, e in zip(absent, FD.SMOKE) if len(e) == 3)
-    (backend / "modules" / key).mkdir()
-    (backend / "modules" / key / "module.json").write_text("{}", encoding="utf-8")
-    present = FD.smoke_plan(str(backend))
-    assert all(p[3] is None for p, e in zip(present, FD.SMOKE) if len(e) == 3 or e[3] == key)
+    _mod(backend, "aa", probes=["/api/aa/list"], pages=["aa.html"])
+    plan = FD.smoke_plan(str(backend), registered={"aa", "bb"})
+    rows = {(p[2], p[3]) for p in plan}
+    assert ("/api/aa/list", None) in rows and ("/pages/aa.html", None) in rows
+    assert ("modules/bb", "模組 bb %s" % FD.ABSENT) in rows
+    assert all(p[3] is None for p in plan[:len(FD.SMOKE)])
+    out = {"checks": [{"name": "x", "ok": True}],
+           "skipped": [{"name": n, "path": pa, "reason": r} for n, _m, pa, r in plan if r]}
+    assert FD.smoke_ok(out) is True                    # 只有「不在安裝包」的略過 ⇒ 合法
+
+
+def test_rc_a_module_without_probes_fails_the_smoke(tmp_path):
+    """反向控制：包內模組沒宣告 probes ⇒ 判不過（沒宣告的模組不可以進正式 D7）。"""
+    backend = tmp_path / "backend"
+    _mod(backend, "aa")
+    plan = FD.smoke_plan(str(backend), registered={"aa"})
+    reasons = [p[3] for p in plan if p[3]]
+    assert reasons and FD.UNDECLARED in reasons[0], plan
+    out = {"checks": [{"name": "x", "ok": True}], "skipped": [{"name": "aa", "path": "modules/aa", "reason": reasons[0]}]}
+    assert FD.smoke_ok(out) is False
+
+
+def test_rc_an_unregistered_module_in_the_package_fails_the_smoke(tmp_path):
+    """反向控制：包內模組的 key 沒在 modules.json 登記（打錯字或改名）⇒ 判不過，而不是當成合法略過。"""
+    backend = tmp_path / "backend"
+    _mod(backend, "analytcs", probes=["/api/analytcs/x"])
+    plan = FD.smoke_plan(str(backend), registered={"analytics"})
+    reasons = [p[3] for p in plan if p[3] and "analytcs" in p[3]]
+    assert reasons and FD.UNREGISTERED in reasons[0], plan
+    out = {"checks": [{"name": "x", "ok": True}], "skipped": [{"name": "x", "path": "modules/analytcs", "reason": reasons[0]}]}
+    assert FD.smoke_ok(out) is False
+
+
+def _migrated_claims():
+    """repo 裡已搬遷模組宣告的前綴、明列路由與頁面（module.json）。"""
+    import json
+    prefixes, pages = [], set()
+    for mj in (REPO / "backend" / "modules").glob("*/module.json"):
+        m = json.loads(mj.read_text(encoding="utf-8"))
+        prov = m.get("provides") or {}
+        prefixes += [(mj.parent.name, p.rstrip("/")) for p in prov.get("api_prefixes") or []]
+        pages |= {"/pages/" + pg["path"] for pg in m.get("pages") or []}
+    return prefixes, pages
+
+
+def core_violations(smoke, prefixes, pages):
+    bad = []
+    for name, _m, path in smoke:
+        if path in pages:
+            bad.append("%s %s：是模組頁面" % (name, path))
+        for key, pre in prefixes:
+            if path == pre or path.startswith(pre + "/"):
+                bad.append("%s %s：在模組 %s 的前綴 %s 底下" % (name, path, key, pre))
+    return bad
+
+
+def test_smoke_core_has_no_paths_of_migrated_modules():
+    """共用清單不可以放已搬遷模組的路徑（否則那個模組不在時必紅，例：/pages/bonus.html 在 payroll 搬走後）。"""
+    prefixes, pages = _migrated_claims()
+    assert prefixes, "正對照：repo 裡應該有已搬遷的模組"
+    bad = core_violations(FD.SMOKE, prefixes, pages)
+    assert not bad, "共用冒煙清單混進了模組的路徑（改由模組宣告 provides.probes）：\n  " + "\n  ".join(bad)
+
+
+def test_rc_core_violation_is_caught():
+    assert core_violations([("x", "GET", "/pages/zz.html"), ("y", "GET", "/api/zz/list"), ("ok", "GET", "/api/zzz")],
+                           [("zz", "/api/zz")], {"/pages/zz.html"}) == [
+        "x /pages/zz.html：是模組頁面", "y /api/zz/list：在模組 zz 的前綴 /api/zz 底下"]
 
 
 def test_logical_digest_ignores_bytes_but_not_content(tmp_path):
@@ -212,22 +279,3 @@ def test_report_names_the_kept_directories(tmp_path):
     assert "保留" in text and str(tmp_path / "v9-install") in text
 
 
-def test_every_smoke_module_key_is_registered():
-    """稽核 ⑰ S-1：SMOKE 條目帶的模組 key 必須在 modules.json 登記（用 repo 的登記表，不用「樹上有沒有」判斷）。"""
-    keys = {e[3] for e in FD.SMOKE if len(e) > 3}
-    assert keys and keys <= FD.registered_module_keys(), keys - FD.registered_module_keys()
-
-
-def test_rc_a_misspelled_smoke_key_is_not_a_legitimate_skip(tmp_path, monkeypatch):
-    """反向控制：key 打錯（analytcs）⇒ smoke_plan 標成「未登記」而不是「不在包內」；smoke_ok 判不過。"""
-    real = [e for e in FD.SMOKE if len(e) > 3][0]
-    monkeypatch.setattr(FD, "SMOKE", [("首頁", "GET", "/"), (real[0], real[1], real[2], real[3] + "_typo")])
-    plan = FD.smoke_plan(str(tmp_path), registered=FD.registered_module_keys())
-    reasons = [p[3] for p in plan if p[3]]
-    assert reasons and FD.UNREGISTERED in reasons[0], plan
-    out = {"checks": [{"name": "首頁", "ok": True}],
-           "skipped": [{"name": real[0], "path": real[2], "reason": reasons[0]}]}
-    assert FD.smoke_ok(out) is False and out["unregistered_skips"]
-    ok = {"checks": [{"name": "首頁", "ok": True}],
-          "skipped": [{"name": real[0], "path": real[2], "reason": "模組 %s 不在安裝包" % real[3]}]}
-    assert FD.smoke_ok(ok) is True                     # 正對照：真的不在包內的略過是合法的
