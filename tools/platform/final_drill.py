@@ -72,6 +72,7 @@ MODULES_JSON = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.p
 UNREGISTERED = "未在 docs/platform/modules.json 登記"
 UNDECLARED = "沒有宣告 provides.probes（不可以進正式 D7，D7-CHECKLIST §4）"
 ABSENT = "不在安裝包"
+NOT_MIGRATED = "尚未搬進 modules/（以 L1 形式在包內，由共用清單涵蓋）"
 
 
 def registered_module_keys(path=None) -> set:
@@ -80,7 +81,16 @@ def registered_module_keys(path=None) -> set:
     return {g.get("key") for g in (data.get("modules") or {}).values() if g.get("key")}
 
 
-def smoke_plan(backend_dir: str, registered=None) -> list:
+def migrated_module_keys(path=None) -> set:
+    """已搬進 modules/ 的模組 key：modules.json 群組有 key、而且單位含 `mod:`（與 check_group_keys 同判準）。
+    有 key 但還沒有 mod: 單位的（M01、M03、M05、M06 在搬遷前）是「尚未搬遷」，不是「不在安裝包」（D 稽核 S-1）。"""
+    with open(path or MODULES_JSON, encoding="utf-8") as f:
+        data = json.load(f)
+    return {g.get("key") for g in (data.get("modules") or {}).values()
+            if g.get("key") and any(str(u).startswith("mod:") for u in g.get("units") or [])}
+
+
+def smoke_plan(backend_dir: str, registered=None, migrated=None) -> list:
     """⇒ [(名稱, 方法, 路徑, 略過原因或 None)]：共用清單 SMOKE＋包內每個模組的 probes 與頁面＋登記了卻不在包內的模組。
     略過原因含 UNREGISTERED 或 UNDECLARED 的，smoke_ok 判不過（不是合法的略過）；含 ABSENT 的是合法略過（明列）。"""
     registered = registered_module_keys() if registered is None else set(registered)
@@ -101,8 +111,10 @@ def smoke_plan(backend_dir: str, registered=None) -> list:
             plan.append(("%s：%s" % (key, path), "GET", path, None))
         for pg in m.get("pages") or []:
             plan.append(("%s 頁面 %s" % (key, pg["path"]), "GET", "/pages/" + pg["path"], None))
+    migrated = migrated_module_keys() if migrated is None else set(migrated)
     for key in sorted(registered - set(present)):
-        plan.append(("模組 %s" % key, "GET", "modules/%s" % key, "模組 %s %s" % (key, ABSENT)))
+        why = ABSENT if key in migrated else NOT_MIGRATED
+        plan.append(("模組 %s" % key, "GET", "modules/%s" % key, "模組 %s %s" % (key, why)))
     return plan
 
 
