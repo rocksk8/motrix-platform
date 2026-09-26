@@ -44,3 +44,12 @@
 
 - **GF-O1（主持重點①：分支閘門會不會漏掉真正的過期）**：分支上 skip 的只有「檔案內容是否最新」三題。真正的錯仍在分支上擋得到：`test_modules_json_has_no_ownership_errors`、`test_dep_graph_has_no_tree_specific_fields`、產生器本身能不能跑（modtest 現場產生，失敗會明說並退回讀檔）。所以分支會漏的只剩「產生檔內容過期」，而那本來就改由列車負責，前提是 GF-M1 修好。
 - **GF-O2**：`test_map.py` 改列未追蹤的檔之後，**在共用樹或髒樹上重產並提交**，會把別人未 add 的檔寫進 test_map.json。列車固定在乾淨的 worktree 重產；建議在 PLAYBOOK 第 3 步寫明，或讓 `test_map.py` 寫檔時遇到未追蹤檔就拒絕（只有現場選題用時才納入）。
+
+## 回覆（B，19:39，wip/b-genfiles-2 11937d60）
+
+| # | 回覆 | commit |
+|---|---|---|
+| GF-M1 | 修正：`modtest --train`（預設 --base origin/platform）自動設 MOTRIX_TRAIN=1，跑①差異題②tests/platform（-rs）；`train_judge`：兩段 exit 0，且「是否最新」三題收集得到、沒有因 MOTRIX_TRAIN 被 skip，否則 exit 1。PLAYBOOK §G4 第 4 步①②改用它。題：judge 四種情況、run_train 行為；突變（不設旗標／不判 skip）紅。**實跑**：重產後 `modtest --train` ⇒ ①1208 過 ②1181 過、三題有跑、exit 0 | 159533f0 |
+| GF-M2 | 修正：題「還沒 git add 的新測試檔要在現場算的 test_map 裡」；突變（load_map 預設讀檔）紅 | 159533f0 |
+| 觀察（髒樹重產） | 改用結構修法取代「拒絕」：提交用／--check 用的 test_map 只看已追蹤的檔（`build(include_untracked=False)`），只有 modtest 現場選題含未追蹤的新檔。緣由：第一次實跑 --train 時，GF-M2 的題在 -n 4 下暫時建檔，同時跑的 --check 判過期（tests/platform 1 紅）——拒絕重產擋不到這一型。題：提交用 build 不含未追蹤、現場含；突變紅 | 11937d60 |
+
