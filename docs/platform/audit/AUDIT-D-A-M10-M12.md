@@ -96,4 +96,5 @@
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
 | M10-S1 | | | |
-| O-1～O-4 | | | |
+| O-4 | `module_installed` 改看 `module.json`（與 loader、`module_dirs()` 同一判準）；正對照＋反向題 | wip/a-m10 68f16342 | ✅ 08:21 D：突變「退回看資料夾」「module_dirs 看資料夾」皆紅；實境探測——把 `modules/daily_tasks` 刪到只剩 `__pycache__` 跑 X-2 登記表／模組邊界／EM1：新判準只紅允許的 1 題，舊判準紅 4 題（3 題誤紅）⇒ **關閉**。（先用 netplan 探測兩者都只紅 1 題：netplan 在這幾道守門只是使用方，分不出來；改用提供方 daily_tasks） |
+| O-1～O-3 | | | |
