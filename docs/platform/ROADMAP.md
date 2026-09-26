@@ -62,7 +62,7 @@
 
 建議順序，理由是阻擋它的逆向依賴或共用表最少：
 
-1. M11 標案雷達 — ✅ 後端完成；剩地圖 provider（等 M08）與前端頁面
+1. M11 標案雷達 — ✅ 後端完成；~~剩地圖 provider（等 M08）與前端頁面~~〔更正（2026-09-26，稽核 ⑰ S-6）：地圖歸 L1（使用者 2026-09-21 裁示「共用能力」），不等 M08；M11 已在 modules/tender_radar（含頁面）〕
 2. M12 每日任務 — ✅ A 2026-09-26 搬進 `modules/daily_tasks`（wip/a-m10，第四班列車；稽核 AUDIT-D-A-M12-move）。系統健康檢查下沉 L1（`helpers/system_checks.py`），模組檢查走 IP-11 `daily.check`
    - ~~**搬遷前必修**（稽核 X-C-batch1 B-1）：IP-5 的 `notice` 要在前端顯示（取消勾選時要明說「沒有收回」、不留舊任務與 id）；未修不准搬。~~
      ✅ 2026-09-26：勾選／取消勾選／刪除各自一句（「未建立」「未收回」），案件頁以提示顯示（e2e `test_e2e_case_stage_daily_task_notice_2026_09_26.py`）。〔更正（主持裁示 2026-09-26）：原句「不留舊任務與 id」不採用——M12 不在時 M01 不可以寫 M12 的表，任務本來就收不回；id 保留，M12 裝回後再勾選會收斂到同一筆〕
@@ -75,7 +75,10 @@
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
 9. M03 採購庫存出貨 — 需要 §4 的 stock_items（🔄 A 2026-09-26 開工，wip/a-m03）
-10. M08 分析（唯讀）— 改走各模組的讀取連接器；地圖 provider（分給 B，主持 2026-09-26）〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
+10. ✅ M08 分析（唯讀）— **已搬進 `modules/analytics`**（wip/b-m08-3，第六班；稽核 ⑰ 必修已關閉）。— 改走各模組的讀取連接器；地圖 provider（分給 B，主持 2026-09-26）〔更正（2026-09-26）：地圖歸 L1，不隨 M08 搬（2026-09-21 使用者裁示「共用能力」，主持確認）〕
+   - 待辦（B）：`customization` 可自訂點盤點（目前 schema＋空清單；五頁的列表欄位、表單區塊、按鈕、匯出）——稽核 ⑰ S-6
+   - 待辦（C，M04 擁有者）：公開「有效派工列表」提供者；M08 的精算快照過期檢查目前仍直讀 `contractor_dispatches`、`vendor_contractors`（唯讀；只有「列→金額」經 IP-1）——稽核 ⑰ S-4
+   - ✅ SPEC.md 規格編號：拿掉本模組時 test_spec_coverage 仍綠 ⇒「本模組沒有專屬編號」（2026-09-26 驗）
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
    - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider）
    - 每日工作頁「進行中案件」依賴 `/api/sales-orders`（2026-09-26 自 M08 移入 routers/quotations.py）；M01 不在時，每日工作頁要明說「需要案件模組」，不可以留空清單（主持 2026-09-26 裁示），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
