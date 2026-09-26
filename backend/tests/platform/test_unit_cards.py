@@ -115,6 +115,8 @@ def test_existing_cards_are_valid(snapshot):
         "  %s\n    %s" % (u, "\n    ".join(p)) for u, p in sorted(bad.items()))
 
 
+@pytest.mark.skipif(__import__("os").environ.get("MOTRIX_TRAIN") != "1",
+                    reason="產生檔只由列車提交（PLAYBOOK §G3）：UNIT-INDEX 是否最新只在 MOTRIX_TRAIN=1 驗")
 def test_unit_index_is_current():
     assert U.main(["--check"]) == 0, "docs/platform/UNIT-INDEX.md 過期 ⇒ python tools/platform/unit_index.py 重產"
 

@@ -247,17 +247,41 @@ def print_rebase_check(r):
                   "月台登記時註明這幾個檔%s" % (what, "，帶進 fixture 層的包排在列車最前面" if r["fixture_layer"] else ""))
 
 
-def load_map(refresh):
-    if refresh or not MAP_PATH.exists():
-        return build_map()
-    return json.loads(MAP_PATH.read_text(encoding="utf-8"))
+def _read_map_file():
+    return json.loads(MAP_PATH.read_text(encoding="utf-8")) if MAP_PATH.exists() else None
 
 
-def load_graph():
+def _read_graph_file():
     if not GRAPH_PATH.exists():
         return None
     g = json.loads(GRAPH_PATH.read_text(encoding="utf-8"))
     return g.get("units", g)
+
+
+def load_map(use_files=False):
+    """test_map：預設**現場算**（產生檔只由列車提交，分支上的檔是 origin 版——GENERATED-FILES-PROPOSAL §2：
+    讀檔會漏掉新增／搬家的測試檔，回放最多漏 13 檔）。use_files ⇒ 讀 docs/platform/test_map.json（除錯用）。
+    現場算失敗 ⇒ 說出來、退回讀檔（不可以靜默變成「不選題」）。"""
+    if use_files:
+        return _read_map_file() or build_map()
+    try:
+        return build_map()
+    except Exception as e:                                   # noqa: BLE001 退回讀檔並明說
+        _say("[modtest] ⚠ 現場建 test_map 失敗（%r）⇒ 退回讀 %s（可能漏掉本分支新增的測試檔）" % (e, MAP_PATH.name))
+        return _read_map_file()
+
+
+def load_graph(use_files=False):
+    """dep_graph：預設**現場算**（dep_scan.build()）；回放顯示只換 test_map 仍會漏題（改動沿反向 import 擴散靠它）。"""
+    if use_files:
+        return _read_graph_file()
+    try:
+        import dep_scan
+        g = dep_scan.build()
+        return g.get("units", g)
+    except Exception as e:                                   # noqa: BLE001 退回讀檔並明說
+        _say("[modtest] ⚠ 現場建 dep_graph 失敗（%r）⇒ 退回讀 %s（反向遞移可能不準）" % (e, GRAPH_PATH.name))
+        return _read_graph_file()
 
 
 #: 彙整點：它 import 所有 router，被它依賴不代表它的依賴者受影響；只有它本身被改才往上傳
@@ -1043,7 +1067,9 @@ def main(argv=None):
     _e2e = e2e_max_workers()
     ap.add_argument("--e2e-workers", type=int, default=_e2e,
                     help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_e2e, E2E_ENV))
-    ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
+    ap.add_argument("--refresh-map", action="store_true", help="（已是預設：現場算 test_map 與 dep_graph；保留相容，無作用）")
+    ap.add_argument("--use-files", action="store_true",
+                    help="讀已提交的 test_map.json／dep_graph.json，不現場算（除錯用；分支上的檔是 origin 版，會漏題）")
     ap.add_argument("--no-durations", dest="durations", action="store_false",
                     help="--full 不記最慢 %d 題（預設會記，寫進 full_results/<commit>.json 的 slowest）" % DURATIONS)
     ap.add_argument("--window", default="modtest")
@@ -1077,8 +1103,8 @@ def main(argv=None):
         return run_full(extra, a)
 
     changed = changed_files(a)
-    tmap = load_map(a.refresh_map)
-    graph = load_graph()
+    tmap = load_map(a.use_files)
+    graph = load_graph(a.use_files)
     t0 = time.monotonic()
     picked, rep = select(changed, tmap, graph, None if a.transitive else iface_checker(a))
 

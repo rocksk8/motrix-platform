@@ -20,6 +20,12 @@ import pytest
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "tools" / "platform"))
 import dep_scan as D  # noqa: E402
+import os  # noqa: E402
+
+#: 產生檔只由列車提交（GENERATED-FILES-PROPOSAL §0，主持裁示；PLAYBOOK §G3）⇒「檔案是否最新」只在列車（MOTRIX_TRAIN=1）驗。
+#: 分支上的檔是 origin 版，現場產生的內容必定不同 ⇒ 分支上 skip 並寫明。反向控制：列車清單核對這三題是 passed 不是 skipped。
+train_only = pytest.mark.skipif(os.environ.get("MOTRIX_TRAIN") != "1",
+                                reason="產生檔只由列車提交（PLAYBOOK §G3）：是否最新只在 MOTRIX_TRAIN=1 驗")
 import test_map as TM  # noqa: E402
 
 
@@ -39,6 +45,7 @@ def dep_graph_is_current(graph, path=None):
     return _graph_text(graph) == committed
 
 
+@train_only
 def test_dep_graph_json_is_current(graph):
     assert dep_graph_is_current(graph), "docs/platform/dep_graph.json 過期 ⇒ python tools/platform/dep_scan.py 重產後提交"
 
@@ -48,6 +55,7 @@ def test_dep_graph_has_no_tree_specific_fields(graph):
     assert "root" not in graph and REPO.name not in _graph_text(graph)
 
 
+@train_only
 def test_test_map_json_is_current():
     assert TM.main(["--check"]) == 0, "docs/platform/test_map.json 過期 ⇒ python tools/platform/test_map.py 重產後提交"
 
@@ -115,3 +123,59 @@ def test_rc_the_three_guards_do_go_red_on_a_full_tree(graph, tmp_path, monkeypat
                                                   "imports": [], "routers_called": []}
     with pytest.raises(AssertionError):
         test_modules_json_has_no_ownership_errors(g)
+
+
+# ── 分支不動產生檔（GENERATED-FILES-PROPOSAL §4-3，主持裁示）────────────────────────────────────
+
+GENERATED = ("docs/platform/UNIT-INDEX.md", "docs/platform/dep_graph.json", "docs/platform/test_map.json")
+
+
+def branch_touched_generated(repo, base_ref="origin/platform"):
+    """工作樹（含未提交）相對 merge-base(base_ref, HEAD) 改了哪幾個產生檔 ⇒ 清單；沒有 base_ref ⇒ None（判不出來）。"""
+    import subprocess
+    mb = subprocess.run(["git", "-C", str(repo), "merge-base", base_ref, "HEAD"], capture_output=True, text=True)
+    if mb.returncode != 0 or not mb.stdout.strip():
+        return None
+    out = subprocess.run(["git", "-C", str(repo), "diff", "--name-only", mb.stdout.strip(), "--", *GENERATED],
+                         capture_output=True, text=True, check=True).stdout
+    return sorted(x for x in out.splitlines() if x.strip())
+
+
+@pytest.mark.skipif(os.environ.get("MOTRIX_TRAIN") == "1", reason="列車本來就要重產並提交產生檔")
+def test_branch_does_not_touch_generated_files():
+    """分支不改 UNIT-INDEX／dep_graph.json／test_map.json——它們只由列車重產提交（每次 rebase 幾乎都在這三檔衝突，
+    而列車最後照樣再重產一次；24 小時 60 個 commit 動它們、+29,687／−13,743 行，GENERATED-FILES-PROPOSAL §1）。
+    modtest 現場產生，不需要分支上的新版。"""
+    touched = branch_touched_generated(REPO)
+    if touched is None:
+        pytest.skip("沒有 origin/platform（不是開發 repo 的樹）⇒ 判不出分支改了什麼")
+    assert not touched, (
+        "這個分支改了產生檔：%s\n⇒ `git checkout origin/platform -- <檔>` 還原（改用 merge-base 版亦可），列車會重產。"
+        % ", ".join(touched))
+
+
+def test_rc_branch_check_sees_a_touched_generated_file(tmp_path):
+    """反向控制：合成一個 repo——base 之後改了 test_map.json ⇒ 抓得到；只改別的檔 ⇒ 空清單。"""
+    import subprocess
+
+    def g(*a):
+        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
+    g("init", "-q")
+    g("config", "user.email", "t@example.invalid")
+    g("config", "user.name", "t")
+    (tmp_path / "docs" / "platform").mkdir(parents=True)
+    for f in GENERATED:
+        (tmp_path / f).write_text("v1\n", encoding="utf-8")
+    (tmp_path / "x.txt").write_text("a\n", encoding="utf-8")
+    g("add", "-A")
+    g("commit", "-q", "-m", "base")
+    g("branch", "base")
+    (tmp_path / "x.txt").write_text("b\n", encoding="utf-8")
+    g("commit", "-q", "-am", "other")
+    assert branch_touched_generated(tmp_path, "base") == []
+    (tmp_path / "docs/platform/test_map.json").write_text("v2\n", encoding="utf-8")
+    assert branch_touched_generated(tmp_path, "base") == ["docs/platform/test_map.json"], "未提交的改動也要抓到"
+    g("commit", "-q", "-am", "touch map")
+    assert branch_touched_generated(tmp_path, "base") == ["docs/platform/test_map.json"]
+    assert branch_touched_generated(tmp_path, "no-such-ref") is None
+
