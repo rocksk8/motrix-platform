@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.38 — 2026-09-26（A，M06 前置：簽核鏈解析下沉 L1；列車上 core_bump 取號）〔core_bump：暫用 1.35 → 1.38〕
+- L1（新增）：`helpers.tiered_approval.ApprovalChainUnreadable`、`parse_approval_json(record, *, doc_label="單據")`——單據 `approval_json` 的唯一解析入口（`JV27`），讀不出來 ⇒ 丟（fail-closed，不回 `[]`）。自 M06 `helpers/voucher` 下沉（主持裁示 M06-c），M01 簽核佇列改從 L1 取，不再 import M06；`helpers.voucher` 的 `VoucherChainUnreadable`／`parse_approval_json` 保留為同名別名（淘汰中；例外是同一個類別）
+
 ## 1.37 — 2026-09-26（B，C4 選單切換；暫用號，合回時 core_bump 依 origin 取號）〔core_bump：暫用 1.35 → 1.37〕
 > STAGE-C C4（主持裁示 A）：選單套用使用者角色的版面。`core.registry.CORE_VERSION` 1.34 → 1.35（只有新增）。
 - L1（新增）：`core.catalog.effective_layout_ops(conn, module_key, role)`——resolve（角色＞公司＞預設）＋逐筆 `check_layout`，`GET /api/layout/{module}` 與選單共用這一份

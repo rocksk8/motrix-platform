@@ -9373,8 +9373,7 @@
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
-    "helper:uploads",
-    "helper:voucher"
+    "helper:uploads"
    ],
    "imports": [
     "core:archive",
@@ -9399,7 +9398,6 @@
     "helper:settings",
     "helper:tiered_approval",
     "helper:uploads",
-    "helper:voucher",
     "plat:registry",
     "plat:txn",
     "router:case_extra_expenses",
@@ -9879,7 +9877,6 @@
     "work_logs"
    ],
    "tables_r_transitive": [
-    "account_items",
     "approval_delegates",
     "audit_log",
     "bonus_awards",
@@ -9903,7 +9900,6 @@
     "shipping_notes",
     "users",
     "vendor_contractors",
-    "voucher_attachments",
     "voucher_lines",
     "work_logs"
    ],
@@ -9926,7 +9922,6 @@
     "quotations",
     "quote_seq",
     "system_settings",
-    "voucher_lines",
     "vouchers_all"
    ]
   },

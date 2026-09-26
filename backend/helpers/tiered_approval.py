@@ -19,10 +19,14 @@ MOTRIX-ERP-QUICK.md 2026-08-22 changelog）——邏輯重複四份、改一個�
 「這裡不碰 FastAPI、不做 side effect」的既有分工，不要把組織架構查詢邏輯
 直接寫進四個 router 裡。
 """
+import json
+import logging
 from datetime import date
 from typing import Optional
 
 from .settings import _get_setting
+
+_logger = logging.getLogger(__name__)
 
 # 文件類型可選擇「走統一流程」或「獨立設定」（2026-08-28 新增，見
 # system.py 的 approval_flow_scope 設定＋前端 approval-settings.html 多選選單）。
@@ -557,3 +561,37 @@ def steps_to_tiers(steps: list) -> list:
         }
         for i, s in enumerate(steps)
     ]
+
+
+# ── 簽核鏈 approval_json 的解析（2026-09-26 自 M06 helpers/voucher 下沉，主持裁示 M06-c）─────────────
+# M01 的簽核佇列也要讀傳票的簽核鏈；解析放在 M06 就是 M01 → M06 的 import（M06 搬進模組後成為 L2 邊）。
+# 這是純解析、沒有資料相依 ⇒ 放在 L1。helpers.voucher 保留同名別名（淘汰中）。
+
+class ApprovalChainUnreadable(Exception):
+    """簽核鏈存在而**讀不出來**。與「沒有簽核鏈」是兩件事。
+
+    ☠️ 這兩者折疊在一起的後果不是版面錯，是**閘門靜默放行**：
+    讀取失敗 -> 回 [] -> 讀起來就是「這張單不需要簽核」-> 閘門判「沒有需要簽核的關卡」-> **判定已完成** -> 放行。
+    ⇒ 所以這裡**丟**，不回 `[]`、也不回 `None`（回 None 只是把同一個問題往下移一層：呼叫端一個 `or []` 就又折回去了）。
+    """
+
+
+def parse_approval_json(record, *, doc_label="單據"):
+    """`approval_json` 的原始解析（整包 dict，含 `tiers`／`currentTier`）；單據的唯一解析入口（`JV27`）。
+
+    ```
+    沒有 approval_json   => **回 {}**（明確的「沒有設定簽核流程」）
+    有而解析失敗          => **raise ApprovalChainUnreadable**（fail-closed：一律視為未簽核完成）
+    ```
+    `doc_label` 只用在訊息（例：「傳票」）。"""
+    raw = record.get("approval_json")
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw) or {}
+    except (TypeError, ValueError) as exc:
+        # 訊息寫出**哪一個動作**失敗，以及 **fail-closed 這個選擇本身**
+        _logger.warning("%s %s 的簽核鏈解析失敗（fail-closed：一律視為**未簽核完成**）：%s",
+                        doc_label, record.get("id"), exc)
+        raise ApprovalChainUnreadable(
+            "這張%s的簽核資料讀不出來，無法判斷是否已完成簽核。" % doc_label) from exc
