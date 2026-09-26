@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 676,
+  "tests": 677,
   "unmapped": 7,
   "kinds": {
    "audit": 90,
-   "api": 366,
+   "api": 367,
    "unit": 57,
    "e2e": 163
   },
@@ -5265,6 +5265,31 @@
     ]
    },
    "module": "tender_radar"
+  },
+  "backend/tests/platform/test_accounting_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "plat:__init__",
+    "plat:registry",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_accounting_foreign_reads.py": {
    "kind": "audit",

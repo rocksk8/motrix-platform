@@ -408,6 +408,23 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 
 ---
 
+## IP-22　`voucher.by_case`：案件整包的傳票段（M06 → M01）
+
+對應 M06-PLAN §1-C #7、l2_import_baseline `M01 router:quotations -> M06 router:vouchers`（M06 搬遷前置，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vouchers.vouchers_by_case`。寫法同 IP-15／IP-18。編號為暫定，由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計傳票：`vouchers_by_case`（`GET /api/vouchers/by-case/{quote_no}` 的端點函式；搬進 `modules/accounting/api/vouchers.py` 後由 `ModuleSpec.providers` 宣告） |
+| 使用方 | M01 `routers/quotations.py::case_bundle` 的 `parts.vouchers` |
+| 形式 | provider，單一提供者（`core.registry`） |
+| 語法 | 取用：`fn = registry.single_provider("voucher.by_case")`；`None` ⇒ 退化。`fn(quote_no, authorization=…) -> {"vouchers": [...]}`（同一份授權，權限判斷與單獨打端點逐字相同） |
+| 回傳 | `{"vouchers": [{id, voucher_no, voucher_date, status, summary}]}`（作廢單不列）；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
+| 對方不在時 | 整包照常回；`parts.vouchers`＝`{"ok": false, "status": 404, "detail": VOUCHERS_UNAVAILABLE}`（「會計傳票模組未安裝：沒有傳票資料」）。案件頁的傳票連結不列（M06 不在時產品沒有傳票，沒有列才是對的） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_accounting_connectors.py`（M06 不在的一側） |
+
+---
+
 ## IP-19　`stock.serial`：案件設備序號認領／釋放庫存（M03 → M01）
 
 對應 DEPENDENCY-MAP §4 `stock_items`（M01 `routers/quotations.py::_sync_device_stock` 直寫）、`table_write_exceptions` 的 debt（已刪）。M03 搬遷前置，2026-09-26。編號為暫定。
