@@ -383,9 +383,9 @@
     "helper:email_notify",
     "helper:legal_params",
     "helper:privacy_notice",
-    "helper:quotations",
     "helper:settings",
     "helper:startup",
+    "helper:tax_calc",
     "plat:definitions",
     "plat:paths"
    ],
@@ -926,6 +926,7 @@
     "helper:case_access",
     "helper:legal_params",
     "helper:row_access",
+    "helper:tax_calc",
     "plat:registry",
     "plat:txn"
    ],
@@ -960,7 +961,7 @@
    "imports": [
     "core:db",
     "helper:legal_params",
-    "helper:quotations"
+    "helper:tax_calc"
    ],
    "kind": "helper",
    "path": "backend/helpers/receivables.py",
@@ -1075,6 +1076,19 @@
     "system_settings",
     "user_request_log"
    ]
+  },
+  "helper:tax_calc": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:legal_params"
+   ],
+   "kind": "helper",
+   "path": "backend/helpers/tax_calc.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
   },
   "helper:tiered_approval": {
    "api_prefixes": [],
@@ -1993,6 +2007,7 @@
     "helper:quotations",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -2003,6 +2018,7 @@
     "helper:quotations",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "mod:analytics/api/reports"
    ],
    "kind": "mod",
@@ -2123,6 +2139,7 @@
     "helper:row_access",
     "helper:settings",
     "helper:startup",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -2141,6 +2158,7 @@
     "helper:recognition",
     "helper:settings",
     "helper:startup",
+    "helper:tax_calc",
     "helper:xlsx_out",
     "plat:registry"
    ],
@@ -6783,15 +6801,13 @@
    "helpers_transitive": [
     "helper:audit",
     "helper:auth",
-    "helper:case_access",
     "helper:company_identity",
     "helper:legal_params",
     "helper:module_registry",
     "helper:part_catalog",
-    "helper:quotations",
     "helper:receivables",
-    "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -6863,8 +6879,6 @@
    "tables_r_transitive": [
     "account_items",
     "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
     "contractor_payment_vouchers",
     "daily_tasks",
     "departments",
@@ -6882,7 +6896,6 @@
    "tables_w_transitive": [
     "audit_log",
     "notifications",
-    "quotations",
     "system_settings",
     "t100_export_confirmations"
    ]
@@ -7360,6 +7373,7 @@
     "helper:recognition",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads"
    ],
@@ -7523,21 +7537,18 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
-    "helper:case_access",
     "helper:legal_params",
     "helper:module_registry",
-    "helper:quotations",
     "helper:receivables",
-    "helper:row_access",
     "helper:settings",
-    "helper:tiered_approval",
+    "helper:tax_calc",
     "helper:xlsx_out"
    ],
    "imports": [
     "core:db",
     "helper:auth",
-    "helper:quotations",
     "helper:receivables",
+    "helper:tax_calc",
     "helper:xlsx_out",
     "plat:registry"
    ],
@@ -7583,19 +7594,13 @@
     "quotations"
    ],
    "tables_r_transitive": [
-    "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
     "contractor_payment_vouchers",
-    "departments",
-    "divisions",
     "quotations",
     "sessions",
     "users"
    ],
    "tables_w": [],
    "tables_w_transitive": [
-    "quotations",
     "system_settings"
    ]
   },
@@ -8209,9 +8214,9 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
-    "helper:quotations",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads"
    ],
@@ -8225,7 +8230,7 @@
     "helper:errors",
     "helper:google_calendar",
     "helper:legal_params",
-    "helper:quotations",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
     "plat:registry",
@@ -8322,8 +8327,6 @@
    ],
    "tables_r_transitive": [
     "approval_delegates",
-    "audit_log",
-    "case_extra_expenses",
     "case_stages",
     "customers",
     "daily_tasks",
@@ -8345,7 +8348,6 @@
     "audit_log",
     "invoice_vouchers",
     "notifications",
-    "quotations",
     "system_settings"
    ]
   },
@@ -8743,6 +8745,7 @@
     "helper:recognition",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval"
    ],
    "imports": [
@@ -9341,6 +9344,7 @@
     "helper:recognition",
     "helper:row_access",
     "helper:settings",
+    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:uploads",
     "helper:voucher"
@@ -9984,6 +9988,7 @@
     "helper:settings",
     "helper:startup",
     "helper:system_checks",
+    "helper:tax_calc",
     "helper:tiered_approval"
    ],
    "imports": [

@@ -1,5 +1,5 @@
 {
- "core_version": "1.34",
+ "core_version": "1.35",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -641,6 +641,17 @@
    "reminder_send_failures": "def()",
    "reminder_stages_at_or_below": "def(days)",
    "run_all": "def(prune=…)"
+  },
+  "helper:tax_calc": {
+   "LEGACY_TAX_NOTE": "const",
+   "LEGAL_TAX_RATE": "const",
+   "TAX_TYPES": "const",
+   "TAX_TYPE_LABELS": "const",
+   "_invoice_amount": "def(v)",
+   "invoice_amounts": "def(item)",
+   "payment_item_amounts": "def(total, pay_items, pretax=…, apply_tax_exempt=…)",
+   "quote_tax_type": "def(data)",
+   "tax_split": "def(sales, tax_type)"
   },
   "helper:tiered_approval": {
    "APPROVAL_DOC_TYPES": "const",
