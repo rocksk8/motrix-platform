@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.5 — 2026-09-26
+- D7 演練：`module.json` 宣告 `provides.probes`（`/api/contractors`、`/api/vendor-contractors`、`/api/contractor-dispatches`、`/api/contractor-vouchers`）——純讀的 GET、在本模組前綴下、模組在時回 200（守門 `tests/platform/test_product_drill_probes.py`、`test_probe_side_effects.py`：不寫表、不寄信、不排程、不把回應值寫進 log）
+
 ## 1.0.4 — 2026-09-26
 - 第六班列車：IP 定號（`dispatch.list_for_case` IP-12→IP-15、`quotation.append_items` IP-13→IP-17；origin 已用 IP-12 `case.access`、IP-13 `crm.quote_deleted`；`contractor_voucher.public` 維持 IP-14）；只改註解與文件
 
