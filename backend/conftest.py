@@ -2052,3 +2052,56 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         os.rmdir(d)
     except OSError:
         pass
+
+
+# ── 探針不可以留在受測樹（主持派工 wip/b-probe-tmp；D 觀察：inflight 探針殘留被別的 worker 收集成紅）──────────
+# 一輪開始時記下 tests/ 與 modules/*/tests/ 底下（含「.」開頭目錄）所有 test_*.py；結束時多出來的 ⇒ 列出並把這一輪判紅。
+# 探針一律寫到 tmp_path（tests._subproc.probe_pytest_args）。只在主控跑（xdist worker 不做）。
+# 射程：這一輪期間別的視窗在同一棵樹新增的測試檔也會被列出（共用工作樹時），訊息寫明怎麼分辨。
+_PROBE_LEAK_ROOTS_ENV = "MOTRIX_PROBE_LEAK_ROOTS"      # 反向控制用：以 os.pathsep 分隔的目錄清單，取代預設範圍
+
+
+def _probe_leak_roots():
+    raw = os.environ.get(_PROBE_LEAK_ROOTS_ENV)
+    if raw:
+        return [Path(x) for x in raw.split(os.pathsep) if x]
+    here = Path(__file__).resolve().parent
+    return [here / "tests"] + sorted((here / "modules").glob("*/tests"))
+
+
+def _test_file_snapshot(roots):
+    out = set()
+    for r in roots:
+        if r.is_dir():
+            for p in r.rglob("test_*.py"):
+                if "__pycache__" not in p.parts:
+                    out.add(str(p))
+    return out
+
+
+@pytest.hookimpl(specname="pytest_sessionstart")
+def pytest_probe_leak_sessionstart(session):
+    if hasattr(session.config, "workerinput"):
+        return
+    session.config._motrix_test_files_at_start = _test_file_snapshot(_probe_leak_roots())
+
+
+@pytest.hookimpl(specname="pytest_sessionfinish", tryfirst=True)
+def pytest_probe_leak_sessionfinish(session, exitstatus):
+    if hasattr(session.config, "workerinput"):
+        return
+    before = getattr(session.config, "_motrix_test_files_at_start", None)
+    if before is None:
+        return
+    new = sorted(_test_file_snapshot(_probe_leak_roots()) - before)
+    if not new:
+        return
+    msg = ("🔴 這一輪結束時受測樹多出 %d 個 test_*.py（探針要寫到 tmp_path、用 tests._subproc.probe_pytest_args 跑，"
+           "不可以留在 tests/）：\n  %s\n（若是別的視窗在同一棵樹新增的測試檔，確認後重跑即可）" % (len(new), "\n  ".join(new)))
+    tr = session.config.pluginmanager.get_plugin("terminalreporter")
+    if tr is not None:
+        tr.write_line(msg)
+    else:
+        print(msg)
+    if session.exitstatus == 0:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
