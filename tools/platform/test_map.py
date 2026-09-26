@@ -226,7 +226,7 @@ class _Scan(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_arg(self, node):
-        if node.arg in ("client", "admin_client", "live_server", "page", "browser"):
+        if node.arg in ("client", "admin_client", "live_server", "page", "browser", "e2e_browser", "new_context"):
             self.flags.add("fixture_" + node.arg)
 
     def visit_Name(self, node):
@@ -373,12 +373,32 @@ def _api_segments(parts, consts):
     return segs
 
 
+#: e2e 的判定（**不看檔名**；wip/b-modtest-batch 主持派工）：e2e marker、瀏覽器夾具（live_server、e2e_browser、
+#: new_context）、import playwright、page.goto。有 36 個 e2e 檔不叫 test_e2e_*（2026-09-26 實數），檔名判定會把它們
+#: 當成非 e2e（-n 4、沒有 e2e 上限）。守門：backend/tests/platform/test_e2e_classification.py。
+E2E_FLAGS = frozenset({"mark_e2e", "fixture_live_server", "fixture_sync_playwright", "goto",
+                       "fixture_e2e_browser", "fixture_new_context", "imports_playwright"})
+
+
+def _scan_flags(tree):
+    sc = _Scan()
+    sc.visit(tree)
+    if any(m == "playwright" or m.startswith("playwright.") for m in sc.imports):
+        sc.flags.add("imports_playwright")
+    return sc
+
+
+def file_is_e2e(path) -> bool:
+    """單一測試檔是不是 e2e（與 test_map 的 kind＝e2e 同判準；不需要路由解析，給 test_map 沒有那一檔時用）。"""
+    tree = _parse(path)
+    return tree is not None and bool(_scan_flags(tree).flags & E2E_FLAGS)
+
+
 def scan_test(path, R):
     tree = _parse(path)
     if tree is None:
         return {"kind": "unit", "units": [], "evidence": {}, "error": "parse"}
-    sc = _Scan()
-    sc.visit(tree)
+    sc = _scan_flags(tree)
     ev = {"import": set(), "api": set(), "page": set(), "path": set()}
     unresolved_api = set()
 
@@ -445,7 +465,7 @@ def scan_test(path, R):
                 ev["path"].add(u)
 
     f = sc.flags
-    if f & {"mark_e2e", "fixture_live_server", "fixture_sync_playwright", "goto"}:
+    if f & E2E_FLAGS:
         kind = "e2e"
     elif f & {"fixture_client", "fixture_admin_client", "testclient"} or ev["api"]:
         kind = "api"
