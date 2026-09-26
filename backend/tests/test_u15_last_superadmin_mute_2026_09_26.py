@@ -146,3 +146,30 @@ def test_custom_override_for_a_system_type_must_reach_someone(client, two_supera
     r = client.put("/api/mail-types/%s/recipients" % key, json={"mode": "custom", "users": ["u15_b"]}, headers=h)
     assert r.status_code == 200, r.text
     assert client.put("/api/mail-types/%s/recipients" % key, json={"mode": "default"}, headers=h).status_code == 200
+
+
+
+def test_custom_list_cannot_silently_become_empty_later(client, two_superadmins):
+    """D 稽核 O-2：custom 名單在存檔時有人收得到，之後名單上唯一的人退訂或清空 Email ⇒ 一樣要擋。"""
+    boss, key = two_superadmins
+    h = _h(client, boss)
+    assert client.put("/api/mail-types/%s/recipients" % key, json={"mode": "custom", "users": ["u15_a"]},
+                      headers=h).status_code == 200
+    try:
+        r = client.put("/api/users/%d" % _id("u15_a"), json={"notification_muted": [key]}, headers=h)
+        assert r.status_code == 400, r.text
+        r = client.put("/api/users/%d" % _id("u15_a"), json={"email": ""}, headers=h)
+        assert r.status_code == 400, r.text
+        # 正對照：名單外的超管（boss、b）退訂不受 custom 名單影響
+        assert client.put("/api/users/%d" % _id("u15_b"), json={"notification_muted": [key]}, headers=h).status_code == 200
+    finally:
+        client.put("/api/mail-types/%s/recipients" % key, json={"mode": "default"}, headers=h)
+
+
+def test_whitespace_only_email_counts_as_having_one_like_the_sender(client, two_superadmins):
+    """D 稽核 V5：寄信端 SQL 是 email != ''，只含空白的 Email 也算「有」⇒ 判準要一致（不 strip）。
+    b 是最後一位時把 Email 改成空白：寄信端仍會嘗試寄給它 ⇒ 不擋（與寄信端一致，是否要擋空白 Email 另屬格式驗證）。"""
+    boss, key = two_superadmins
+    h = _make_last(client, boss, key)
+    r = client.put("/api/users/%d" % _id("u15_b"), json={"email": "   "}, headers=h)
+    assert r.status_code == 200, r.text
