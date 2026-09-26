@@ -23,9 +23,9 @@
 | 方向 | 串接點 | 說明 |
 |---|---|---|
 | 提供 | IP-1 `dispatch.row` | 派工單列序列化（M01 應計派工成本、M06 傳票摘要來源） |
-| 提供 | IP-12 `dispatch.list_for_case` | M01 案件整包的承攬派工段 |
+| 提供 | IP-15 `dispatch.list_for_case` | M01 案件整包的承攬派工段 |
 | 提供 | IP-14 `contractor_voucher.public` | M05 出納（待付、執行歷史）、M06 T100 匯出讀匯款申請 |
-| 取用 | IP-13 `quotation.append_items`（M01） | 派工品項匯入草稿報價單 |
+| 取用 | IP-17 `quotation.append_items`（M01） | 派工品項匯入草稿報價單 |
 
 ## 本模組不在時
 

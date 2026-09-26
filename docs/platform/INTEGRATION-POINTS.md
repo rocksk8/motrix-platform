@@ -192,9 +192,9 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-12　`dispatch.list_for_case`：案件整包的承攬派工段（M04 → M01）
+## IP-15　`dispatch.list_for_case`：案件整包的承攬派工段（M04 → M01）
 
-對應 l2_import_baseline `M01 router:quotations -> M04 router:vendor_contractors`（M04 搬遷，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vendor_contractors.list_dispatches`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+對應 l2_import_baseline `M01 router:quotations -> M04 router:vendor_contractors`（M04 搬遷，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vendor_contractors.list_dispatches`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕
 
 | 欄位 | 內容 |
 |---|---|
@@ -209,9 +209,9 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-13　`quotation.append_items`：把外部品項附加到草稿報價單（M01 → M04）
+## IP-17　`quotation.append_items`：把外部品項附加到草稿報價單（M01 → M04）
 
-對應 l2_import_baseline `M04 router:vendor_contractors -> M01 helper:quotations`。原本 M04「派工品項匯入報價單」自己讀 `quotations`、組報價品項、呼叫 M01 的 `save_quotation_json` 寫回。報價單的格式與寫入歸 M01。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+對應 l2_import_baseline `M04 router:vendor_contractors -> M01 helper:quotations`。原本 M04「派工品項匯入報價單」自己讀 `quotations`、組報價品項、呼叫 M01 的 `save_quotation_json` 寫回。報價單的格式與寫入歸 M01。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕
 
 | 欄位 | 內容 |
 |---|---|
@@ -228,7 +228,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ## IP-14　`contractor_voucher.public`：承攬商匯款申請的對外形狀（M04 → M05 出納、M06 會計匯出）
 
-對應 l2_import_baseline `M05 router:cashier -> M04 router:contractor_vouchers`、`M06 router:accounting_export -> M04 router:contractor_vouchers`。原本兩處直接 import `_voucher_public`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。
+對應 l2_import_baseline `M05 router:cashier -> M04 router:contractor_vouchers`、`M06 router:accounting_export -> M04 router:contractor_vouchers`。原本兩處直接 import `_voucher_public`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕
 
 | 欄位 | 內容 |
 |---|---|

@@ -2226,7 +2226,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     - 不加快取（hichan-0a 裁 D3）：資料都是即時的，只合併請求。
     """
     from routers.vouchers import vouchers_by_case
-    list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-12（M04）
+    list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-15（M04）
     from routers.shipping_notes import list_shipping_notes
     from routers.completion_notes import list_completion_notes
     from routers.case_extra_expenses import list_extra_expenses
@@ -2255,7 +2255,7 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     }
 
 
-#: IP-12 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
+#: IP-15 對方不在時：案件整包的承攬派工段回這一句（前端照「那一段回非 2xx」處理）
 DISPATCHES_UNAVAILABLE = "外包工班模組未安裝：沒有承攬派工資料"
 
 
@@ -6910,7 +6910,7 @@ def _calendar_writeback_case_stage(stage_id, event_id: str, slot: str = "due") -
 
 
 def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, now: str) -> str:
-    """IP-13 `quotation.append_items`（M01 → M04）：把外部品項附加到**草稿**報價單。
+    """IP-17 `quotation.append_items`（M01 → M04）：把外部品項附加到**草稿**報價單。
 
     在呼叫端的連線與交易內執行（呼叫端已拿寫鎖）、不 commit。`items`＝`[{description, qty, unit, cost, note}]`，
     換成報價品項（成本＝cost，毛利 30%，售價由報價單自己算）；前面加一列區段標題 `header`。

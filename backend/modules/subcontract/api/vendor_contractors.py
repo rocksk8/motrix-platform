@@ -857,7 +857,7 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
     if not drow:
         conn.close()
         raise HTTPException(404, "派發紀錄不存在")
-    # 報價單的格式與寫入歸 M01（IP-13 `quotation.append_items`）：本模組只交出中性的品項，
+    # 報價單的格式與寫入歸 M01（IP-17 `quotation.append_items`）：本模組只交出中性的品項，
     # M01 在同一筆交易內（本函式已拿寫鎖）讀單、檢查草稿、換成報價品項並存檔。M01 不在 ⇒ 409 明說。
     append = _registry.single_provider("quotation.append_items")
     if append is None:
@@ -887,10 +887,10 @@ def import_dispatch_to_quote(did: int, authorization: str = Header(None)):
         return {"ok": True, "imported": len(dispatch_items), "updated_at": now}
 
 
-#: IP-13 對方不在時的說明
+#: IP-17 對方不在時的說明
 QUOTE_IMPORT_UNAVAILABLE = "案件模組未安裝：無法把派工品項匯入報價單"
 
 
 def list_dispatches_for_case(quote_no: str, authorization: str) -> list:
-    """IP-12 `dispatch.list_for_case`：M01 案件整包的承攬派工段；授權與權限判斷與 `list_dispatches` 同一份。"""
+    """IP-15 `dispatch.list_for_case`：M01 案件整包的承攬派工段；授權與權限判斷與 `list_dispatches` 同一份。"""
     return list_dispatches(quote_no=quote_no, authorization=authorization)

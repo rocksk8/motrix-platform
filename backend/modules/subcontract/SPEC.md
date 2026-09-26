@@ -14,7 +14,7 @@
 |---|---|
 | **EM12** | 🔴 **跨 fetch 的假保護**：同一支函式裡兩支以上 fetch，**而只有第一支被檢查**；☠️ `vendor-contractors` 的**銀行存摺影本**沒存進去而畫面說成功（落在個資那條線上）；🔑 `EM9` 的判準**抓不到**（那支函式「有」失敗分支）；⚠️ **不知道還有幾個** |
 
-行為的依據是本模組的測試（`modules/subcontract/tests/`；稽核 D M04-S3）與串接點 IP-1／IP-12／IP-13／IP-14（`docs/platform/INTEGRATION-POINTS.md`）。
+行為的依據是本模組的測試（`modules/subcontract/tests/`；稽核 D M04-S3）與串接點 IP-1／IP-14／IP-15／IP-17（`docs/platform/INTEGRATION-POINTS.md`）。
 
 ## 範圍
 

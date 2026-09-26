@@ -1,5 +1,5 @@
 """外包工班 外包工班的串接點，**取用方這一側、外包工班 不在也要成立的題**（2026-09-26）：
-IP-12 `dispatch.list_for_case`（M01 案件整包）、IP-14 `contractor_voucher.public`（M05 出納、M06 T100 匯出）
+IP-15 `dispatch.list_for_case`（M01 案件整包）、IP-14 `contractor_voucher.public`（M05 出納、M06 T100 匯出）
 拿掉提供者 ⇒ 照常回應並明說；M01／M05／M06 不再直接 import 外包工班。
 提供方的登記與正對照在 `modules/subcontract/tests/test_subcontract_providers.py`（隨模組搬走）。
 """
@@ -58,7 +58,7 @@ def _items():
         conn.close()
 
 
-# ── IP-12（外包工班 不在）─────────────────────────────────────────────────────────
+# ── IP-15（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_case_bundle_without_m04(client, make_user, monkeypatch):
     from routers import quotations as q

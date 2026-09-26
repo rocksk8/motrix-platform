@@ -10,7 +10,7 @@ MODULE = ModuleSpec(
     providers={
         # IP-1：派工單列序列化（M01 應計派工成本、M06 傳票摘要來源）
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,
-        # IP-12：M01 案件整包的承攬派工段
+        # IP-15：M01 案件整包的承攬派工段
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
         # IP-14：M05 出納與 M06 會計匯出讀付款憑據的形狀
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,

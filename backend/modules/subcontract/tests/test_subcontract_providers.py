@@ -1,5 +1,5 @@
 """外包工班的串接點，**需要本模組在的題**（拿掉本模組時跟著消失）：
-提供者已登記（IP-1／12／14）、IP-12／IP-14 正對照、IP-13 `quotation.append_items`（M01 → 本模組；含 M01 不在 ⇒ 409）、
+提供者已登記（IP-1／14／15）、IP-15／IP-14 正對照、IP-17 `quotation.append_items`（M01 → 本模組；含 M01 不在 ⇒ 409）、
 本模組不再 import M01。本模組不在時的反向控制在 `tests/platform/test_subcontract_connectors.py`。
 """
 import json
@@ -64,7 +64,7 @@ def test_providers_are_registered(client):
     assert set(registry.providers("contractor_voucher.public")) == {"subcontract"}
 
 
-# ── IP-13 ─────────────────────────────────────────────────────────────────────
+# ── IP-17 ─────────────────────────────────────────────────────────────────────
 
 def test_import_to_quote_goes_through_m01(client, make_user):
     h = _hdr(client, make_user)
@@ -94,7 +94,7 @@ def test_import_to_quote_without_m01_is_409_and_touches_nothing(client, make_use
     assert len(_items()) == 1
 
 
-# ── IP-12（本模組在）───────────────────────────────────────────────────────────
+# ── IP-15（本模組在）───────────────────────────────────────────────────────────
 
 def test_case_bundle_dispatches_part(client, make_user):
     h = _hdr(client, make_user)
