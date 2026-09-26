@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.36 — 2026-09-26（C，M01-PLAN §3-2：兩支通用函式下沉 L1；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
+> 介面只有新增；舊位置保留同名別名（同一物件）。
+- L1（新增）：`helpers.dates.norm_at`、`helpers.tiered_approval.steps_to_tiers`（自 M01 `helpers/quotations.py` 的 `norm_at`、`_steps_to_tiers` 逐字搬入）
+- L1（改 import 來源）：`helpers.norm_at` 改自 L1 再匯出（~~`helpers._steps_to_tiers` 也改自 L1 再匯出~~〔更正（rebase 到第六班後）：以底線名轉出 L1 的公開函式會被 b-g1 守門判為未宣告的底線名稱 ⇒ `helpers._steps_to_tiers` 照舊由 M01 的別名轉出（同一物件）〕）；`routers/system` 改自 tiered_approval import ⇒ system 對 M01 只剩 `quote_terms.DEFAULT_TERMS`（CA-O4）
+- 守門：`tests/platform/test_m01_sink2_contract.py`（別名同一物件、L1 檔不 import M01、system 不為此 import quotations；突變：別名換複本、system 改回 ⇒ 皆紅）
+
 ## 1.35 — 2026-09-26（C，T：稅額純函式下沉 L1；主持核准，M01 步驟表 §3-1）〔core_bump：暫用 1.99 → 1.30〕〔core_bump：暫用 1.30 → 1.35〕
 > 介面只有新增；舊位置 `helpers.quotations` 保留同名別名（同一物件），呼叫端不必改。
 - L1（新增）：`helpers.tax_calc`——`TAX_TYPES`、`TAX_TYPE_LABELS`、`LEGAL_TAX_RATE`、`LEGACY_TAX_NOTE`、`quote_tax_type`、`tax_split`、`invoice_amounts`、`payment_item_amounts`（自 M01 `helpers/quotations.py` 逐字搬入）

@@ -924,9 +924,11 @@
    "dynamic_sql": false,
    "imports": [
     "helper:case_access",
+    "helper:dates",
     "helper:legal_params",
     "helper:row_access",
     "helper:tax_calc",
+    "helper:tiered_approval",
     "plat:registry",
     "plat:txn"
    ],
@@ -2000,22 +2002,18 @@
    "dynamic_sql": false,
    "helpers_transitive": [
     "helper:auth",
-    "helper:case_access",
     "helper:dates",
     "helper:legal_params",
     "helper:module_registry",
-    "helper:quotations",
     "helper:row_access",
     "helper:settings",
-    "helper:tax_calc",
-    "helper:tiered_approval"
+    "helper:tax_calc"
    ],
    "imports": [
     "core:db",
     "helper:auth",
     "helper:dates",
     "helper:legal_params",
-    "helper:quotations",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -2092,15 +2090,11 @@
     "work_logs"
    ],
    "tables_r_transitive": [
-    "approval_delegates",
     "audit_log",
-    "case_extra_expenses",
     "case_updates",
     "customers",
-    "departments",
     "dev_cases",
     "dev_logs",
-    "divisions",
     "projects",
     "quotations",
     "sessions",
@@ -2111,7 +2105,6 @@
    ],
    "tables_w": [],
    "tables_w_transitive": [
-    "quotations",
     "system_settings"
    ]
   },
@@ -9359,6 +9352,7 @@
     "helper:case_roles",
     "helper:case_stage_tasks",
     "helper:company_identity",
+    "helper:dates",
     "helper:email_notify",
     "helper:errors",
     "helper:financial_mask",
@@ -10009,7 +10003,6 @@
     "helper:mail_types",
     "helper:module_registry",
     "helper:module_switches",
-    "helper:quotations",
     "helper:quote_terms",
     "helper:settings",
     "helper:startup",
