@@ -4989,10 +4989,39 @@
    "kind": "api",
    "units": [
     "core:main",
+    "dir:backend/modules/",
     "dir:tools/platform/",
     "file:backend/tests/_routes.py",
+    "mod:analytics/api/dashboard",
+    "mod:crm/api",
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "page:index.html",
+    "page:pages/bonus.html",
+    "router:account_items",
+    "router:approval_delegates",
+    "router:auth",
+    "router:company_lookup",
+    "router:completion_notes",
+    "router:custom_records",
+    "router:customers",
     "router:definitions",
+    "router:invoice_vouchers",
+    "router:item_reads",
+    "router:mail_settings",
+    "router:module_versions",
+    "router:parts",
+    "router:payment_requests",
+    "router:quotations",
+    "router:search",
+    "router:shipping_notes",
+    "router:suppliers",
+    "router:system",
+    "router:uploads",
     "router:vouchers"
    ],
    "evidence": {
@@ -5000,20 +5029,54 @@
      "backend/tests/_routes.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/crm/api.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/account_items.py",
+     "backend/routers/approval_delegates.py",
+     "backend/routers/auth.py",
+     "backend/routers/company_lookup.py",
+     "backend/routers/completion_notes.py",
+     "backend/routers/custom_records.py",
+     "backend/routers/customers.py",
      "backend/routers/definitions.py",
+     "backend/routers/invoice_vouchers.py",
+     "backend/routers/item_reads.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/module_versions.py",
+     "backend/routers/parts.py",
+     "backend/routers/payment_requests.py",
+     "backend/routers/quotations.py",
+     "backend/routers/search.py",
+     "backend/routers/shipping_notes.py",
+     "backend/routers/suppliers.py",
+     "backend/routers/system.py",
+     "backend/routers/uploads.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
-     "frontend/index.html"
+     "frontend/index.html",
+     "frontend/pages/bonus.html"
     ],
     "path": [
      "backend/main.py",
+     "backend/modules/",
      "frontend/index.html",
      "tools/platform/"
     ]
    },
    "unresolved_api": [
-    "/api/voucher"
+    "/api/aa/list",
+    "/api/analytcs/x",
+    "/api/voucher",
+    "/api/zz",
+    "/api/zz/list",
+    "/api/zzz"
    ]
   },
   "backend/tests/platform/test_generated_maps.py": {
