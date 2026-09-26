@@ -9,7 +9,16 @@ from tests.test_e2e_report_recognition_2026_09_24 import (  # noqa: E402,F401  �
     _page,
 )
 
+from core import source_tree as _source_tree
 
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
+#: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
+
+
+@needs_subcontract
 @pytest.mark.e2e
 def test_report_shows_basis_note_and_flag_list_and_switches_basis(live_server, make_user, e2e_browser):
     _case("MQ-RBE-001")

@@ -7,8 +7,18 @@ from tests.test_visual_management_2026_08_28 import (  # noqa: E402,F401  含 fi
     _login,
     _make_dept_setup,
 )
+import pytest
+
+from core import source_tree as _source_tree
+
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
+#: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
 
 
+
+@needs_subcontract
 def test_expenses_monthly_filters_contractor_and_material_by_department(client, make_user):
     admin_user, admin_pw = make_user(role="admin")
     token = _login(client, admin_user, admin_pw)

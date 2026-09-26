@@ -5,7 +5,8 @@
 
 ① 契約形狀：使用方實際讀的欄位全部都在（欄位改名／刪除 ⇒ 這題紅 ⇒ 要升契約版本）
 ② registry 規則：重複登記不同函式報錯；多個提供者報錯；沒有 ⇒ None
-③ 反向控制：拿掉提供者後，recognition／reports／vouchers 三處照常回結果，只少派工那一類
+③ 反向控制：拿掉提供者後，recognition／vouchers 照常回結果，只少派工那一類
+   （營運報表那一處在 modules/analytics/tests/test_reports_dispatch_row_consumer.py；第六班列車交會 M04×M08）
    ——同一批資料、同一個呼叫，有提供者時派工那一類必須非空（否則「少了」是假的）
 """
 import json
@@ -79,19 +80,16 @@ def _observe():
     """三個使用方各呼叫一次，回傳 (派工那一類的筆數, 其他類是否照常)。"""
     import db
     from helpers.recognition import dispatch_entries
-    from routers.reports import _collect_expenses
     from routers.vouchers import _case_expense_sources
     conn = db.get_db()
     try:
         rec = dispatch_entries(conn, "accrual")
-        rep = _collect_expenses(YEAR, basis="accrual", conn=conn)
         vou = _case_expense_sources(conn, QNO)
     finally:
         conn.close()
     kinds = [x["kind"] for x in vou]
     return {
         "recognition_dispatch": len([e for e in rec if e["quoteNo"] == QNO]),
-        "reports_contractor": len([e for e in rep["details"]["contractor"] if e["quoteNo"] == QNO]),
         "vouchers_dispatch": kinds.count("contractor_dispatch"),
         "vouchers_extra_still_there": kinds.count("extra_expense") == 1,
     }
@@ -108,12 +106,12 @@ def _drop_dispatch_row(monkeypatch):
 def test_consumers_degrade_when_provider_is_absent(client, monkeypatch):
     _seed()
     with_provider = _observe()
-    assert with_provider == {"recognition_dispatch": 1, "reports_contractor": 1, "vouchers_dispatch": 1,
+    assert with_provider == {"recognition_dispatch": 1, "vouchers_dispatch": 1,
                              "vouchers_extra_still_there": True}, with_provider   # 正對照：派工確實在
     _drop_dispatch_row(monkeypatch)
     assert registry.single_provider("dispatch.row") is None
     without = _observe()                                   # 不丟例外 = 仍然可用
-    assert without == {"recognition_dispatch": 0, "reports_contractor": 0, "vouchers_dispatch": 0,
+    assert without == {"recognition_dispatch": 0, "vouchers_dispatch": 0,
                        "vouchers_extra_still_there": True}, without
 
 
@@ -125,31 +123,20 @@ def _sa(client, make_user):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _responses(client, h):
-    rep = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03", headers=h)
-    cash = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03&basis=cash", headers=h)
+def _sources(client, h):
     src = client.get(f"/api/vouchers/summary-sources?quote_no={QNO}", headers=h)
-    for r in (rep, cash, src):
-        assert r.status_code == 200, r.text
-    return rep.json(), cash.json(), src.json()
+    assert src.status_code == 200, src.text
+    return src.json()
 
 
-def test_absence_is_said_in_report_flags_and_voucher_sources(client, make_user, monkeypatch):
+def test_absence_is_said_in_voucher_sources(client, make_user, monkeypatch):
+    """營運報表那一半在 modules/analytics/tests/test_reports_dispatch_row_consumer.py（第六班列車交會 M04×M08）。"""
     _seed()
     h = _sa(client, make_user)
-    rep, cash, src = _responses(client, h)
-    # 正對照：提供者在 ⇒ 沒有 unavailable，而且派工確實算進來了
-    assert rep["unavailable"] == [] and rep["expenses"]["unavailable"] == []
-    assert [e for e in rep["expenses"]["details"]["contractor"] if e["quoteNo"] == QNO]
-    assert src["unavailable"] == []
+    src = _sources(client, h)
+    assert src["unavailable"] == []                        # 正對照：提供者在 ⇒ 不說缺
     _drop_dispatch_row(monkeypatch)
-    rep, cash, src = _responses(client, h)
-    # 營運報表／月支出＋待補登（同一份回應）
-    assert [u["category"] for u in rep["unavailable"]] == ["contractor"]
-    assert "未安裝" in rep["unavailable"][0]["reason"]
-    assert rep["expenses"]["unavailable"] == rep["unavailable"]
-    # 現金口徑讀匯款申請快照，不受影響 ⇒ 不說缺
-    assert cash["unavailable"] == []
+    src = _sources(client, h)
     # 傳票摘要來源：額外支出照常，派工那一類明說缺
     assert [u["category"] for u in src["unavailable"]] == ["contractor_dispatch"]
     assert [e["kind"] for e in src["tabs"]["支出項"]] == ["extra_expense"]

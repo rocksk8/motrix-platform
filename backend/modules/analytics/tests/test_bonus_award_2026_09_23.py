@@ -6,10 +6,9 @@ import sqlite3
 from pathlib import Path
 import pytest
 import db
-from tests.test_bonus_award_2026_09_23 import (  # noqa: E402,F401  含 fixture
-    _BACKEND,
-    _FRONTEND,
-)
+
+_BACKEND = Path(__file__).resolve().parents[3]      # 原本自 tests.test_bonus_award 匯入；該檔已隨 M07 搬進 modules/payroll（第六班列車交會）
+_FRONTEND = _BACKEND.parent / "frontend"
 
 
 def test_reports_has_no_second_copy_of_the_bonus_coefficients():

@@ -3,7 +3,12 @@
 拿掉本模組 ⇒ 本檔一起消失；tests/platform 那一份只驗 L1 recognition 與 M06 傳票兩個使用方。
 """
 from core import registry
-from tests.platform.test_dispatch_connector import QNO, YEAR, _sa, _seed, drop_dispatch_provider
+from core import source_tree
+from tests.platform.test_dispatch_connector import QNO, YEAR, _sa, _seed
+from tests.platform.test_dispatch_connector import _drop_dispatch_row as drop_dispatch_provider
+
+#: 正對照（提供者在 ⇒ 派工確實算進來）需要外包工班；不在時只驗缺席那一半（第六班列車交會，M04×M08）
+_M04 = source_tree.module_installed("modules/subcontract/")
 
 
 def _contractor_rows():
@@ -19,7 +24,8 @@ def _contractor_rows():
 
 def test_report_degrades_when_provider_is_absent(client, monkeypatch):
     _seed()
-    assert len(_contractor_rows()) == 1                    # 正對照：派工確實在
+    if _M04:
+        assert len(_contractor_rows()) == 1                # 正對照：派工確實在
     drop_dispatch_provider(monkeypatch)
     assert registry.single_provider("dispatch.row") is None
     assert _contractor_rows() == []                        # 不丟例外，只少派工那一類
@@ -37,9 +43,10 @@ def test_absence_is_said_in_report_flags(client, make_user, monkeypatch):
     _seed()
     h = _sa(client, make_user)
     rep, cash = _reports(client, h)
-    # 正對照：提供者在 ⇒ 沒有 unavailable，而且派工確實算進來了
-    assert rep["unavailable"] == [] and rep["expenses"]["unavailable"] == []
-    assert [e for e in rep["expenses"]["details"]["contractor"] if e["quoteNo"] == QNO]
+    if _M04:
+        # 正對照：提供者在 ⇒ 沒有 unavailable，而且派工確實算進來了
+        assert rep["unavailable"] == [] and rep["expenses"]["unavailable"] == []
+        assert [e for e in rep["expenses"]["details"]["contractor"] if e["quoteNo"] == QNO]
     drop_dispatch_provider(monkeypatch)
     rep, cash = _reports(client, h)
     # 營運報表／月支出＋待補登（同一份回應）

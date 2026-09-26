@@ -1,6 +1,15 @@
 """營運報表「月支出金額及明細」（2026-08-26）API 層測試——
 routers/reports.py::_collect_expenses()/GET /api/reports/expenses-monthly。"""
 import json
+import pytest
+
+from core import source_tree as _source_tree
+
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
+#: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
 
 
 def _sync_extra_to_table(conn, quote_no):
@@ -114,3 +123,35 @@ def test_settlement_extra_item_counted_as_other(client, make_user):
     july = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-07")
     assert july["other"] == 2500
     assert any(d["quoteNo"] == "MQ-EXP-002" and d["amount"] == 2500 for d in body["expenses"]["details"]["other"])
+
+
+@needs_subcontract
+def test_contractor_dispatch_counted(client, make_user):
+    username, password = make_user(role="admin")
+    token = _login(client, username, password)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO vendor_contractors (name, active, created_at) VALUES (?,1,?)",
+            ("測試承攬商", "2026-01-01T00:00:00"),
+        )
+        vendor_id = conn.execute("SELECT id FROM vendor_contractors WHERE name='測試承攬商'").fetchone()["id"]
+        conn.execute(
+            "INSERT INTO contractor_dispatches (quote_no, vendor_id, dispatch_date, scope, items_json, "
+            "total_amount, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            ("MQ-EXP-001", vendor_id, "2026-03-15", "amount", "[]", 10000, "confirmed",
+             "2026-03-15T00:00:00", "2026-03-15T00:00:00"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.get("/api/reports/expenses-monthly?year=2026", headers=_auth(token))
+    body = r.json()
+    march = next(m for m in body["expenses"]["monthly"] if m["month"] == "2026-03")
+    # 2026-09-24 AC2（使用者裁示）：預設權責口徑＝未稅（原本 10500 含稅）；沒登錄發票日、
+    # 沒有驗收日 ⇒ 暫用派工月（仍是 3 月）。現金口徑的含稅金額見 test_report_recognition_basis。
+    assert march["contractor"] == 10000
+    assert body["expenses"]["totals"]["contractor"] == 10000
+    assert any(d["desc"] == "測試承攬商" and d["amount"] == 10000 for d in body["expenses"]["details"]["contractor"])

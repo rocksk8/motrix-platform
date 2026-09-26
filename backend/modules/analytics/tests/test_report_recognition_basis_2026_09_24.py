@@ -17,6 +17,14 @@ from tests.test_report_recognition_basis_2026_09_24 import (  # noqa: E402,F401 
     sa,
 )
 
+from core import source_tree as _source_tree
+
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
+#: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
+
 
 def test_accrual_income_is_pretax_by_stage_month_and_cash_income_is_received(client, sa):
     data = {"caseRecord": {"payment": {"items": [
@@ -40,6 +48,7 @@ def test_bad_basis_is_refused(client, sa):
     assert client.get(URL + "?year=2026&basis=foo", headers=sa).status_code == 400
 
 
+@needs_subcontract
 def test_dispatch_accrual_uses_invoice_month_and_pretax(client, sa):
     _case("MQ-RB-010")
     _dispatch("MQ-RB-010", total=10000, dispatch_date="2026-03-15", invoice_date="2026-05-03")
@@ -48,6 +57,7 @@ def test_dispatch_accrual_uses_invoice_month_and_pretax(client, sa):
     assert _month(body, "2026-03", "contractor") == 0
 
 
+@needs_subcontract
 def test_dispatch_without_invoice_falls_back_and_is_flagged_until_entered(client, sa):
     _case("MQ-RB-011")
     did = _dispatch("MQ-RB-011", dispatch_date="2026-03-15", accepted_at="2026-04-02T10:00:00")
@@ -163,6 +173,7 @@ def test_legacy_tax_rate_case_is_flagged_until_changed(client, sa):
     assert "MQ-RB-050" not in _flag_quotes(_report(client, sa), "legacy_tax")
 
 
+@needs_subcontract
 def test_flag_amounts_are_hidden_without_financial_view(client, make_user):
     _case("MQ-RB-060")
     _dispatch("MQ-RB-060")
@@ -177,6 +188,7 @@ def test_flag_amounts_are_hidden_without_financial_view(client, make_user):
     assert mine[0]["amount"] == 10000
 
 
+@needs_subcontract
 def test_every_flag_kind_has_a_label_and_a_link(client, sa):
     _case("MQ-RB-070")
     _dispatch("MQ-RB-070")
@@ -222,6 +234,7 @@ def test_material_invoice_date_can_be_entered_on_a_closed_case_without_touching_
     assert "MQ-RB-022" not in _flag_quotes(_report(client, sa), "material_no_invoice")
 
 
+@needs_subcontract
 def test_dashboard_expenses_equal_the_report_accrual_numbers(client, sa, seed_extra_expense):
     from datetime import date
     today = date.today()

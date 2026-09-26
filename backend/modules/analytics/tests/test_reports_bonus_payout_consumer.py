@@ -3,7 +3,16 @@
 `expense.entries` 串接點：發放後以發放日計入月支出的「其他」；拿掉提供者 ⇒ 報表照常、只少這一筆。
 拿掉本模組 ⇒ 本檔一起消失。
 """
-from tests.platform.test_bonus_payout_connectors import (  # noqa: F401  people、_legal（autouse）是 fixture
+import pytest
+
+from core import source_tree as _source_tree
+
+#: 夾具與串接點題已隨 M07 搬進 modules/payroll/tests（第六班列車交會）：薪資獎金不在 ⇒ 沒有發放可以算進報表，整檔略過
+#: （那時報表照常、只少這一類，由 payroll 缺席時的 tests/platform 題負責）
+if not _source_tree.module_installed("modules/payroll/"):
+    pytest.skip("需要薪資獎金模組（M07）", allow_module_level=True)
+
+from modules.payroll.tests.test_bonus_payout_connectors import (  # noqa: F401  people、_legal（autouse）是 fixture
     _auth, _drop, _insure_all, _legal, _q, _to_payout, _with_legal, insure_all, people)
 
 

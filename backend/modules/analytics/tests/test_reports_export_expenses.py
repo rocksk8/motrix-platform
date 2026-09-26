@@ -7,6 +7,15 @@ import io
 import json
 
 import openpyxl
+import pytest
+
+from core import source_tree as _source_tree
+
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
+#: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
 
 
 def _login(client, username, password):
@@ -48,6 +57,7 @@ def _make_case_with_expense(quote_no, month):
         conn.close()
 
 
+@needs_subcontract
 def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -77,6 +87,7 @@ def test_excel_export_includes_expenses_sheet_and_month_grouped_cases(client, ma
     assert any(v and "2026年7月" in str(v) for v in all_col_a)
 
 
+@needs_subcontract
 def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     """不走 _html_to_pdf()（需要 Edge headless），直接呼叫 _build_report_html()
     驗證 HTML 字串本身正確組裝。"""
