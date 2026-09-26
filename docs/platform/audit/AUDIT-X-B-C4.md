@@ -136,15 +136,22 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | X 確認 |
 |---|---|---|---|
-| C4-M1 | 修正：admin 只帶該項 perm；`_gated_target` 先找一支「沒權限 403、有權限 200」的 probe（兩者都成立才是對象；有 probes 卻找不到 ⇒ fail，core-only 才 skip）；發布 admin 角色 hide ⇒ 仍 200。X8 突變（require_any_module 非超管＋角色版面有 hide ⇒ 403）⇒ 本題紅 | 7f52389e | |
-| C4-S1 | 修正：送出時 `data-menu-state=pending`、完成時寫 `data-menu-seq`；`refresh()` 回傳序號；題 `test_refresh_resets_the_wait_point`。突變（不設 pending）紅 3 | 7f52389e | |
-| C4-S2 | 修正：題 `test_stale_failed_response_is_dropped`（第一趟晚到且 500、第二趟先成功 ⇒ 最後 layout、console 無失敗訊息）。X2 紅 | 7f52389e | |
-| C4-S3 | 修正：外洩題掃未登入整份回應；反向控制 `test_rc_leak_outside_the_first_line_is_caught`（第二行 `window.MOTRIX_CUSTOM`）紅 | 7f52389e | |
-| C4-S4 | 修正兩側：伺服器版面段丟例外 ⇒ 宣告版＋自訂模組照給、errors 明說（題 `test_layout_crash_still_returns_custom_modules_and_says_so`）；前端失敗訊息寫明「角色版面與自訂模組暫不顯示」並分「保留宣告版／上一輪版面」（兼 O1） | 7f52389e | |
-| C4-S5 | 修正：crm 1.0.7、payroll 1.0.4、subcontract 1.0.6（module.json＋CHANGELOG 段落標題加註） | 7f52389e | |
-| C4-O3 | 主持裁示「只放已載入」⇒ 修正：`MOTRIX_MENU.pageModules` 只含已載入模組；完整對照改由登入後 `/api/platform/menu` 的 `pageModules`（前端換上 MODULE_PAGES）；題 `test_unloaded_module_leaves_no_trace_in_the_public_declaration`（原題斷言頁面仍在，已反轉並留更正）；STAGE-C 記更正 | 7f52389e | |
+| C4-M1 | 修正：admin 只帶該項 perm；`_gated_target` 先找一支「沒權限 403、有權限 200」的 probe（兩者都成立才是對象；有 probes 卻找不到 ⇒ fail，core-only 才 skip）；發布 admin 角色 hide ⇒ 仍 200。X8 突變（require_any_module 非超管＋角色版面有 hide ⇒ 403）⇒ 本題紅 | 7f52389e | ✅ 15:40 X：X8 重跑紅（`test_hide_is_display_only_not_permission`）。新題用 admin，只帶該項 perm；端點要先證明「沒權限 403、有權限 200」才當對象，走的是 require_any_module。基準 106 passed、0 skip ⇒ **關閉（7f52389e）** |
+| C4-S1 | 修正：送出時 `data-menu-state=pending`、完成時寫 `data-menu-seq`；`refresh()` 回傳序號；題 `test_refresh_resets_the_wait_point`。突變（不設 pending）紅 3 | 7f52389e | ✅ 15:40 X：突變「不設 pending」紅 3（含 `test_refresh_resets_the_wait_point`）⇒ **關閉** |
+| C4-S2 | 修正：題 `test_stale_failed_response_is_dropped`（第一趟晚到且 500、第二趟先成功 ⇒ 最後 layout、console 無失敗訊息）。X2 紅 | 7f52389e | ✅ 15:40 X：X2（失敗路徑拿掉序號）紅，最後狀態是 layout-failed 而非 layout ⇒ **關閉** |
+| C4-S3 | 修正：外洩題掃未登入整份回應；反向控制 `test_rc_leak_outside_the_first_line_is_caught`（第二行 `window.MOTRIX_CUSTOM`）紅 | 7f52389e | ✅ 15:40 X：X9（第二行放資料庫字串）這次外洩題本身紅（`test_motrix_menu_contains_no_database_strings`）⇒ **關閉** |
+| C4-S4 | 修正兩側：伺服器版面段丟例外 ⇒ 宣告版＋自訂模組照給、errors 明說（題 `test_layout_crash_still_returns_custom_modules_and_says_so`）；前端失敗訊息寫明「角色版面與自訂模組暫不顯示」並分「保留宣告版／上一輪版面」（兼 O1） | 7f52389e | ✅ 15:40 X：突變「版面段的例外改成往外丟」紅（`test_layout_crash_still_returns_custom_modules_and_says_so`）⇒ **關閉** |
+| C4-S5 | 修正：crm 1.0.7、payroll 1.0.4、subcontract 1.0.6（module.json＋CHANGELOG 段落標題加註） | 7f52389e | ✅ 15:40 X：確認版號 1.0.7／1.0.4／1.0.6。突變「crm 段落標題改成重號 1.0.5」紅（`test_changelog_sections`）⇒ **關閉**。前提是 c-probes 先上車；若 C4 先上，會空出 1.0.6／1.0.3／1.0.5（無害），發車順序請列車長確認 |
+| C4-O3 | 主持裁示「只放已載入」⇒ 修正：`MOTRIX_MENU.pageModules` 只含已載入模組；完整對照改由登入後 `/api/platform/menu` 的 `pageModules`（前端換上 MODULE_PAGES）；題 `test_unloaded_module_leaves_no_trace_in_the_public_declaration`（原題斷言頁面仍在，已反轉並留更正）；STAGE-C 記更正 | 7f52389e | ✅ 15:40 X：突變「公開 pageModules 改回完整 page_map」紅（`test_unloaded_module_leaves_no_trace_in_the_public_declaration`）。未登入可見的 groups 與 pageModules 都只含已載入模組，比對兩者推不出停用或未授權的模組 ⇒ **關閉** |
 
 另（觀察）：O1 見 S4；O2 加題 `test_menu_api_is_called_once_per_page_load`；O4 docstring 已隨 O3 改寫；O5 已通知 C（C 回覆 M05 會 rebase 到 C4 並搬 cashier 選單）；O6（`_FILE_MODULE`／`_MOD_BADGES`）不在本包，列後續；O7 外觀差異不修。驗證：rebase 後非 e2e 1857 過、e2e 子集 97 過（-n 2）。分支 `wip/b-c4-3` 7f52389e（取代 b-c4-2）。
+
+**X 複核（15:40，wip/b-c4-3 7f52389e）**：
+- range-diff 對照 dd20cc5d：原 9 個 commit 全部「=」（rebase 到 089eb516，內容不變），只多一個 7f52389e。
+- 基準：非 e2e 5 檔 106 passed、0 skip（-n 4）；e2e 選單＋unread_marks 16 passed（-n 2）。
+- 突變抽查 7 項全紅，逐項見上表。
+- ⇒ **M1、S1～S5、O3 全部關閉**，可以合回。
+- 稽核樹用完已還原並確認乾淨；basetemp 只刪 X 自己的 `bt_xc4`。
 
 ## 6. 自查
 
