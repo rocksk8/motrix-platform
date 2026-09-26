@@ -339,7 +339,6 @@
     "router:custom_records",
     "router:customers",
     "router:definitions",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:legal_params",
@@ -357,8 +356,6 @@
     "router:platform_menu",
     "router:quotations",
     "router:search",
-    "router:shipping_notes",
-    "router:suppliers",
     "router:system",
     "router:uploads",
     "router:vouchers"
@@ -1543,10 +1540,10 @@
    "kind": "js",
    "path": "frontend/js/case-management-shipping.js",
    "routers_called": [
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
     "router:customers",
-    "router:inventory",
-    "router:parts",
-    "router:shipping_notes"
+    "router:parts"
    ],
    "tables_r": [],
    "tables_w": []
@@ -3932,6 +3929,426 @@
     "vendor_contractors"
    ]
   },
+  "mod:supply/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:supply/api/inventory": {
+   "api_prefixes": [
+    "/api/inventory"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:procurement",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:legal_params",
+    "helper:procurement"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/api/inventory.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "parts_summary",
+     "line": 52,
+     "method": "GET",
+     "path": "/api/inventory/parts-summary"
+    },
+    {
+     "func": "purchase_suggestions",
+     "line": 139,
+     "method": "GET",
+     "path": "/api/inventory/purchase-suggestions"
+    },
+    {
+     "func": "set_purchase_suggestion_status",
+     "line": 277,
+     "method": "POST",
+     "path": "/api/inventory/purchase-suggestions/{part_no}/status"
+    },
+    {
+     "func": "list_stock_items",
+     "line": 353,
+     "method": "GET",
+     "path": "/api/inventory/stock-items"
+    },
+    {
+     "func": "get_last_paid_bank_account",
+     "line": 390,
+     "method": "GET",
+     "path": "/api/inventory/batches/last-paid-bank-account"
+    },
+    {
+     "func": "create_batch",
+     "line": 411,
+     "method": "POST",
+     "path": "/api/inventory/batches"
+    },
+    {
+     "func": "list_batches",
+     "line": 485,
+     "method": "GET",
+     "path": "/api/inventory/batches"
+    },
+    {
+     "func": "get_batch",
+     "line": 510,
+     "method": "GET",
+     "path": "/api/inventory/batches/{batch_no}"
+    },
+    {
+     "func": "update_batch_header",
+     "line": 524,
+     "method": "PUT",
+     "path": "/api/inventory/batches/{batch_no}"
+    },
+    {
+     "func": "toggle_batch_paid",
+     "line": 563,
+     "method": "POST",
+     "path": "/api/inventory/batches/{batch_no}/paid-toggle"
+    },
+    {
+     "func": "adjust_stock_item",
+     "line": 611,
+     "method": "POST",
+     "path": "/api/inventory/stock-items/{item_id}/adjust"
+    },
+    {
+     "func": "delete_stock_item",
+     "line": 665,
+     "method": "DELETE",
+     "path": "/api/inventory/stock-items/{item_id}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "parts",
+    "suppliers"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "parts",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "suppliers",
+    "users"
+   ],
+   "tables_w": [
+    "purchase_suggestion_status",
+    "stock_batches",
+    "stock_items"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "purchase_suggestion_status",
+    "stock_batches",
+    "stock_items",
+    "system_settings"
+   ]
+  },
+  "mod:supply/api/shipping_notes": {
+   "api_prefixes": [
+    "/api/shipping-notes"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval",
+    "helper:uploads"
+   ],
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/api/shipping_notes.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_shipping_notes",
+     "line": 97,
+     "method": "GET",
+     "path": "/api/shipping-notes"
+    },
+    {
+     "func": "list_shipping_export_history",
+     "line": 122,
+     "method": "GET",
+     "path": "/api/shipping-notes/export-history"
+    },
+    {
+     "func": "get_shipping_note",
+     "line": 173,
+     "method": "GET",
+     "path": "/api/shipping-notes/{note_no}"
+    },
+    {
+     "func": "create_shipping_note",
+     "line": 184,
+     "method": "POST",
+     "path": "/api/shipping-notes"
+    },
+    {
+     "func": "update_shipping_note",
+     "line": 217,
+     "method": "PUT",
+     "path": "/api/shipping-notes/{note_no}"
+    },
+    {
+     "func": "delete_shipping_note",
+     "line": 243,
+     "method": "DELETE",
+     "path": "/api/shipping-notes/{note_no}"
+    },
+    {
+     "func": "submit_shipping_note",
+     "line": 268,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/submit"
+    },
+    {
+     "func": "approve_shipping_note",
+     "line": 333,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/approve"
+    },
+    {
+     "func": "revoke_shipping_note_approval",
+     "line": 482,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/revoke-approval"
+    },
+    {
+     "func": "reject_shipping_note",
+     "line": 543,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/reject"
+    },
+    {
+     "func": "download_shipping_pdf",
+     "line": 587,
+     "method": "GET",
+     "path": "/api/shipping-notes/{note_no}/pdf-download"
+    },
+    {
+     "func": "record_shipping_export",
+     "line": 612,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/export"
+    },
+    {
+     "func": "toggle_signed",
+     "line": 643,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/signed-toggle"
+    },
+    {
+     "func": "upload_shipping_signed_files",
+     "line": 700,
+     "method": "POST",
+     "path": "/api/shipping-notes/{note_no}/signed-files"
+    },
+    {
+     "func": "delete_shipping_signed_file",
+     "line": 725,
+     "method": "DELETE",
+     "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "case_stages",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "invoice_vouchers",
+    "payment_requests",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "shipping_notes",
+    "stock_items"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "shipping_notes",
+    "stock_items",
+    "system_settings"
+   ]
+  },
+  "mod:supply/api/suppliers": {
+   "api_prefixes": [
+    "/api/suppliers"
+   ],
+   "dynamic_sql": true,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:privacy_notice",
+    "helper:procurement",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:archive",
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:privacy_notice",
+    "helper:procurement"
+   ],
+   "kind": "mod",
+   "module_key": "supply",
+   "path": "backend/modules/supply/api/suppliers.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_suppliers",
+     "line": 34,
+     "method": "GET",
+     "path": "/api/suppliers"
+    },
+    {
+     "func": "create_supplier",
+     "line": 61,
+     "method": "POST",
+     "path": "/api/suppliers"
+    },
+    {
+     "func": "update_supplier",
+     "line": 97,
+     "method": "PUT",
+     "path": "/api/suppliers/{sid}"
+    },
+    {
+     "func": "delete_supplier",
+     "line": 123,
+     "method": "DELETE",
+     "path": "/api/suppliers/{sid}"
+    },
+    {
+     "func": "update_supplier_visits",
+     "line": 143,
+     "method": "PATCH",
+     "path": "/api/suppliers/{sid}/visits"
+    },
+    {
+     "func": "get_supplier_contact_privacy_acks",
+     "line": 196,
+     "method": "GET",
+     "path": "/api/suppliers/{sid}/privacy-notice"
+    },
+    {
+     "func": "ack_supplier_contact_privacy_notice",
+     "line": 210,
+     "method": "POST",
+     "path": "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "suppliers"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "suppliers",
+    "system_settings"
+   ]
+  },
   "mod:tender_radar/__init__": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -4311,26 +4728,26 @@
    "routers_called": [
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
     "router:auth",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:invoice_vouchers",
     "router:payment_requests",
     "router:quotations",
-    "router:shipping_notes",
     "router:uploads",
     "router:vouchers"
    ],
    "routers_called_effective": [
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
     "router:auth",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:invoice_vouchers",
     "router:payment_requests",
     "router:quotations",
-    "router:shipping_notes",
     "router:uploads",
     "router:vouchers"
    ],
@@ -4466,20 +4883,20 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
     "router:accounting_export",
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:customers",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:legal_params",
     "router:material_orders",
     "router:parts",
     "router:payment_requests",
     "router:quotations",
-    "router:shipping_notes",
     "router:system",
     "router:uploads",
     "router:vouchers"
@@ -4803,16 +5220,16 @@
    "kind": "page",
    "path": "frontend/pages/customers.html",
    "routers_called": [
+    "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:suppliers"
+    "router:customers"
    ],
    "routers_called_effective": [
+    "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:suppliers"
+    "router:customers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -4989,18 +5406,18 @@
    "kind": "page",
    "path": "frontend/pages/inventory.html",
    "routers_called": [
+    "mod:supply/api/inventory",
+    "mod:supply/api/suppliers",
     "router:accounting_export",
     "router:auth",
-    "router:inventory",
-    "router:parts",
-    "router:suppliers"
+    "router:parts"
    ],
    "routers_called_effective": [
+    "mod:supply/api/inventory",
+    "mod:supply/api/suppliers",
     "router:accounting_export",
     "router:auth",
-    "router:inventory",
-    "router:parts",
-    "router:suppliers"
+    "router:parts"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5255,11 +5672,11 @@
    "path": "frontend/pages/network-plan-form.html",
    "routers_called": [
     "mod:netplan/api",
-    "router:inventory"
+    "mod:supply/api/inventory"
    ],
    "routers_called_effective": [
     "mod:netplan/api",
-    "router:inventory"
+    "mod:supply/api/inventory"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5412,13 +5829,13 @@
    "kind": "page",
    "path": "frontend/pages/parts.html",
    "routers_called": [
+    "mod:supply/api/inventory",
     "router:auth",
-    "router:inventory",
     "router:parts"
    ],
    "routers_called_effective": [
+    "mod:supply/api/inventory",
     "router:auth",
-    "router:inventory",
     "router:parts"
    ],
    "tables_r": [],
@@ -5801,10 +6218,10 @@
    "kind": "page",
    "path": "frontend/pages/shipping-export-history.html",
    "routers_called": [
-    "router:shipping_notes"
+    "mod:supply/api/shipping_notes"
    ],
    "routers_called_effective": [
-    "router:shipping_notes"
+    "mod:supply/api/shipping_notes"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5830,12 +6247,12 @@
    "kind": "page",
    "path": "frontend/pages/supplier-log.html",
    "routers_called": [
-    "router:auth",
-    "router:suppliers"
+    "mod:supply/api/suppliers",
+    "router:auth"
    ],
    "routers_called_effective": [
-    "router:auth",
-    "router:suppliers"
+    "mod:supply/api/suppliers",
+    "router:auth"
    ],
    "tables_r": [],
    "tables_w": []
@@ -5868,16 +6285,16 @@
    "kind": "page",
    "path": "frontend/pages/suppliers.html",
    "routers_called": [
+    "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:suppliers"
+    "router:customers"
    ],
    "routers_called_effective": [
+    "mod:supply/api/suppliers",
     "router:auth",
     "router:company_lookup",
-    "router:customers",
-    "router:suppliers"
+    "router:customers"
    ],
    "tables_r": [],
    "tables_w": []
@@ -6408,31 +6825,31 @@
     },
     {
      "func": "t100_export_vouchers",
-     "line": 481,
+     "line": 476,
      "method": "GET",
      "path": "/api/reports/t100-export/vouchers"
     },
     {
      "func": "t100_export_preview",
-     "line": 505,
+     "line": 500,
      "method": "GET",
      "path": "/api/reports/t100-export/preview"
     },
     {
      "func": "t100_export_confirm",
-     "line": 534,
+     "line": 529,
      "method": "POST",
      "path": "/api/reports/t100-export/confirm"
     },
     {
      "func": "t100_export_confirmed_list",
-     "line": 561,
+     "line": 556,
      "method": "GET",
      "path": "/api/reports/t100-export/confirmed"
     },
     {
      "func": "t100_export_unconfirm",
-     "line": 595,
+     "line": 590,
      "method": "POST",
      "path": "/api/reports/t100-export/unconfirm"
     }
@@ -6441,10 +6858,7 @@
    "tables_named": [],
    "tables_r": [
     "account_items",
-    "contractor_payment_vouchers",
-    "parts",
-    "stock_batches",
-    "stock_items"
+    "contractor_payment_vouchers"
    ],
    "tables_r_transitive": [
     "account_items",
@@ -6456,13 +6870,10 @@
     "departments",
     "dev_cases",
     "divisions",
-    "parts",
     "projects",
     "quotations",
     "sessions",
     "shipping_notes",
-    "stock_batches",
-    "stock_items",
     "users"
    ],
    "tables_w": [
@@ -7782,142 +8193,6 @@
     "system_settings"
    ]
   },
-  "router:inventory": {
-   "api_prefixes": [
-    "/api/inventory"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:legal_params",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:procurement",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:legal_params",
-    "helper:procurement"
-   ],
-   "kind": "router",
-   "path": "backend/routers/inventory.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "parts_summary",
-     "line": 52,
-     "method": "GET",
-     "path": "/api/inventory/parts-summary"
-    },
-    {
-     "func": "purchase_suggestions",
-     "line": 139,
-     "method": "GET",
-     "path": "/api/inventory/purchase-suggestions"
-    },
-    {
-     "func": "set_purchase_suggestion_status",
-     "line": 277,
-     "method": "POST",
-     "path": "/api/inventory/purchase-suggestions/{part_no}/status"
-    },
-    {
-     "func": "list_stock_items",
-     "line": 353,
-     "method": "GET",
-     "path": "/api/inventory/stock-items"
-    },
-    {
-     "func": "get_last_paid_bank_account",
-     "line": 390,
-     "method": "GET",
-     "path": "/api/inventory/batches/last-paid-bank-account"
-    },
-    {
-     "func": "create_batch",
-     "line": 411,
-     "method": "POST",
-     "path": "/api/inventory/batches"
-    },
-    {
-     "func": "list_batches",
-     "line": 485,
-     "method": "GET",
-     "path": "/api/inventory/batches"
-    },
-    {
-     "func": "get_batch",
-     "line": 510,
-     "method": "GET",
-     "path": "/api/inventory/batches/{batch_no}"
-    },
-    {
-     "func": "update_batch_header",
-     "line": 524,
-     "method": "PUT",
-     "path": "/api/inventory/batches/{batch_no}"
-    },
-    {
-     "func": "toggle_batch_paid",
-     "line": 563,
-     "method": "POST",
-     "path": "/api/inventory/batches/{batch_no}/paid-toggle"
-    },
-    {
-     "func": "adjust_stock_item",
-     "line": 611,
-     "method": "POST",
-     "path": "/api/inventory/stock-items/{item_id}/adjust"
-    },
-    {
-     "func": "delete_stock_item",
-     "line": 665,
-     "method": "DELETE",
-     "path": "/api/inventory/stock-items/{item_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "parts",
-    "suppliers"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "parts",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "suppliers",
-    "users"
-   ],
-   "tables_w": [
-    "purchase_suggestion_status",
-    "stock_batches",
-    "stock_items"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "purchase_suggestion_status",
-    "stock_batches",
-    "stock_items",
-    "system_settings"
-   ]
-  },
   "router:invoice_vouchers": {
    "api_prefixes": [
     "/api/invoice-vouchers"
@@ -9098,7 +9373,6 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:item_reads",
-    "router:shipping_notes",
     "router:vouchers"
    ],
    "kind": "router",
@@ -9203,343 +9477,343 @@
     },
     {
      "func": "case_close_gates",
-     "line": 2265,
+     "line": 2270,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/close-gates"
     },
     {
      "func": "update_deal_tag",
-     "line": 2304,
+     "line": 2309,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/deal-tag"
     },
     {
      "func": "delete_quotation",
-     "line": 2383,
+     "line": 2388,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}"
     },
     {
      "func": "unlock_case",
-     "line": 2483,
+     "line": 2487,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-unlock"
     },
     {
      "func": "lock_case",
-     "line": 2532,
+     "line": 2536,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/case-lock"
     },
     {
      "func": "update_case_record",
-     "line": 2648,
+     "line": 2652,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/case-record"
     },
     {
      "func": "get_case_change_request",
-     "line": 2964,
+     "line": 2973,
      "method": "GET",
      "path": "/api/case-changes/{change_id}"
     },
     {
      "func": "approve_case_change",
-     "line": 2987,
+     "line": 2996,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/approve"
     },
     {
      "func": "reject_case_change",
-     "line": 3035,
+     "line": 3044,
      "method": "POST",
      "path": "/api/case-changes/{change_id}/reject"
     },
     {
      "func": "list_case_stages_normalized",
-     "line": 3269,
+     "line": 3278,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "create_case_stage",
-     "line": 3287,
+     "line": 3296,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages"
     },
     {
      "func": "update_case_stage",
-     "line": 3316,
+     "line": 3325,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "delete_case_stage",
-     "line": 3370,
+     "line": 3379,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}"
     },
     {
      "func": "reorder_case_stages",
-     "line": 3411,
+     "line": 3420,
      "method": "PATCH",
      "path": "/api/quotations/{quote_no}/stages/reorder"
     },
     {
      "func": "add_stage_assignee",
-     "line": 3435,
+     "line": 3444,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees"
     },
     {
      "func": "remove_stage_assignee",
-     "line": 3463,
+     "line": 3472,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/assignees/{username}"
     },
     {
      "func": "toggle_stage_dependency",
-     "line": 3486,
+     "line": 3495,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/depends-on/{candidate_id}"
     },
     {
      "func": "add_stage_visit",
-     "line": 3519,
+     "line": 3528,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits"
     },
     {
      "func": "update_stage_visit",
-     "line": 3545,
+     "line": 3554,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "delete_stage_visit",
-     "line": 3576,
+     "line": 3585,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/stages/{stage_id}/visits/{visit_id}"
     },
     {
      "func": "record_export",
-     "line": 3599,
+     "line": 3608,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/export"
     },
     {
      "func": "mark_payment",
-     "line": 3688,
+     "line": 3697,
      "method": "PATCH",
      "path": "/api/quotations/{no}/payment/{idx}"
     },
     {
      "func": "upload_payment_item_invoice_files",
-     "line": 3800,
+     "line": 3809,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files"
     },
     {
      "func": "delete_payment_item_invoice_file",
-     "line": 3843,
+     "line": 3852,
      "method": "DELETE",
      "path": "/api/quotations/{no}/payment/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "upload_material_files",
-     "line": 3883,
+     "line": 3892,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/files"
     },
     {
      "func": "delete_material_file",
-     "line": 3922,
+     "line": 3931,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/files/{file_id}"
     },
     {
      "func": "upload_material_invoice_files",
-     "line": 3947,
+     "line": 3956,
      "method": "POST",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files"
     },
     {
      "func": "delete_material_invoice_file",
-     "line": 3988,
+     "line": 3997,
      "method": "DELETE",
      "path": "/api/quotations/{no}/materials/{idx}/invoice-files/{file_id}"
     },
     {
      "func": "request_payment_writeoff",
-     "line": 4013,
+     "line": 4022,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/request-writeoff"
     },
     {
      "func": "cancel_payment_writeoff",
-     "line": 4045,
+     "line": 4054,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/cancel-writeoff"
     },
     {
      "func": "approve_payment_writeoff",
-     "line": 4074,
+     "line": 4083,
      "method": "POST",
      "path": "/api/quotations/{no}/payment/{idx}/approve-writeoff"
     },
     {
      "func": "get_settlement",
-     "line": 4119,
+     "line": 4128,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "update_settlement",
-     "line": 4143,
+     "line": 4152,
      "method": "PUT",
      "path": "/api/quotations/{quote_no}/settlement"
     },
     {
      "func": "get_finance_summary",
-     "line": 4206,
+     "line": 4215,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
      "func": "get_approval_queue",
-     "line": 4435,
+     "line": 4444,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 4950,
+     "line": 4959,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approve_quotation",
-     "line": 5065,
+     "line": 5074,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 5178,
+     "line": 5187,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 5263,
+     "line": 5272,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5328,
+     "line": 5337,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5464,
+     "line": 5473,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5546,
+     "line": 5555,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5577,
+     "line": 5586,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5608,
+     "line": 5617,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5649,
+     "line": 5658,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5707,
+     "line": 5716,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5772,
+     "line": 5781,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5813,
+     "line": 5822,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5849,
+     "line": 5858,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_queue_detail",
-     "line": 6203,
+     "line": 6212,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 6490,
+     "line": 6499,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     },
     {
      "func": "approval_history",
-     "line": 6629,
+     "line": 6638,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6749,
+     "line": 6758,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6816,
+     "line": 6825,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6973,
+     "line": 6982,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6987,
+     "line": 6996,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 7018,
+     "line": 7027,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -9608,7 +9882,6 @@
     "case_updates",
     "quotations",
     "quote_seq",
-    "stock_items",
     "vouchers_all"
    ],
    "tables_w_transitive": [
@@ -9620,7 +9893,6 @@
     "notifications",
     "quotations",
     "quote_seq",
-    "stock_items",
     "system_settings",
     "voucher_lines",
     "vouchers_all"
@@ -9677,267 +9949,6 @@
    ],
    "tables_w": [],
    "tables_w_transitive": []
-  },
-  "router:shipping_notes": {
-   "api_prefixes": [
-    "/api/shipping-notes"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:row_access",
-    "helper:settings",
-    "helper:tiered_approval",
-    "helper:uploads"
-   ],
-   "imports": [
-    "core:db",
-    "core:pdf_gen",
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:tiered_approval",
-    "helper:uploads",
-    "plat:registry",
-    "plat:txn"
-   ],
-   "kind": "router",
-   "path": "backend/routers/shipping_notes.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_shipping_notes",
-     "line": 97,
-     "method": "GET",
-     "path": "/api/shipping-notes"
-    },
-    {
-     "func": "list_shipping_export_history",
-     "line": 122,
-     "method": "GET",
-     "path": "/api/shipping-notes/export-history"
-    },
-    {
-     "func": "get_shipping_note",
-     "line": 173,
-     "method": "GET",
-     "path": "/api/shipping-notes/{note_no}"
-    },
-    {
-     "func": "create_shipping_note",
-     "line": 184,
-     "method": "POST",
-     "path": "/api/shipping-notes"
-    },
-    {
-     "func": "update_shipping_note",
-     "line": 217,
-     "method": "PUT",
-     "path": "/api/shipping-notes/{note_no}"
-    },
-    {
-     "func": "delete_shipping_note",
-     "line": 243,
-     "method": "DELETE",
-     "path": "/api/shipping-notes/{note_no}"
-    },
-    {
-     "func": "submit_shipping_note",
-     "line": 268,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/submit"
-    },
-    {
-     "func": "approve_shipping_note",
-     "line": 333,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/approve"
-    },
-    {
-     "func": "revoke_shipping_note_approval",
-     "line": 482,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/revoke-approval"
-    },
-    {
-     "func": "reject_shipping_note",
-     "line": 543,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/reject"
-    },
-    {
-     "func": "download_shipping_pdf",
-     "line": 587,
-     "method": "GET",
-     "path": "/api/shipping-notes/{note_no}/pdf-download"
-    },
-    {
-     "func": "record_shipping_export",
-     "line": 612,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/export"
-    },
-    {
-     "func": "toggle_signed",
-     "line": 643,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/signed-toggle"
-    },
-    {
-     "func": "upload_shipping_signed_files",
-     "line": 700,
-     "method": "POST",
-     "path": "/api/shipping-notes/{note_no}/signed-files"
-    },
-    {
-     "func": "delete_shipping_signed_file",
-     "line": 725,
-     "method": "DELETE",
-     "path": "/api/shipping-notes/{note_no}/signed-files/{file_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "case_stages",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "invoice_vouchers",
-    "payment_requests",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "shipping_notes",
-    "stock_items"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "shipping_notes",
-    "stock_items",
-    "system_settings"
-   ]
-  },
-  "router:suppliers": {
-   "api_prefixes": [
-    "/api/suppliers"
-   ],
-   "dynamic_sql": true,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:privacy_notice",
-    "helper:procurement",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:archive",
-    "core:db",
-    "helper:audit",
-    "helper:auth",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:privacy_notice",
-    "helper:procurement"
-   ],
-   "kind": "router",
-   "path": "backend/routers/suppliers.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_suppliers",
-     "line": 34,
-     "method": "GET",
-     "path": "/api/suppliers"
-    },
-    {
-     "func": "create_supplier",
-     "line": 61,
-     "method": "POST",
-     "path": "/api/suppliers"
-    },
-    {
-     "func": "update_supplier",
-     "line": 97,
-     "method": "PUT",
-     "path": "/api/suppliers/{sid}"
-    },
-    {
-     "func": "delete_supplier",
-     "line": 123,
-     "method": "DELETE",
-     "path": "/api/suppliers/{sid}"
-    },
-    {
-     "func": "update_supplier_visits",
-     "line": 143,
-     "method": "PATCH",
-     "path": "/api/suppliers/{sid}/visits"
-    },
-    {
-     "func": "get_supplier_contact_privacy_acks",
-     "line": 196,
-     "method": "GET",
-     "path": "/api/suppliers/{sid}/privacy-notice"
-    },
-    {
-     "func": "ack_supplier_contact_privacy_notice",
-     "line": 210,
-     "method": "POST",
-     "path": "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "suppliers"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "suppliers",
-    "system_settings"
-   ]
   },
   "router:system": {
    "api_prefixes": [
@@ -11916,8 +11927,7 @@
    "readers": [
     "core:archive",
     "mod:analytics/api/reports",
-    "router:accounting_export",
-    "router:inventory",
+    "mod:supply/api/inventory",
     "router:search"
    ],
    "tables_r": [],
@@ -12046,7 +12056,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:inventory"
+    "mod:supply/api/inventory"
    ]
   },
   "table:quotations": {
@@ -12079,6 +12089,7 @@
     "mod:payroll/bonus_payouts",
     "mod:payroll/bonus_pdf",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:cashier",
@@ -12089,7 +12100,6 @@
     "router:material_orders",
     "router:payment_requests",
     "router:search",
-    "router:shipping_notes",
     "router:system",
     "router:vouchers"
    ],
@@ -12176,7 +12186,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:shipping_notes"
+    "mod:supply/api/shipping_notes"
    ]
   },
   "table:stock_batches": {
@@ -12186,14 +12196,13 @@
    "named_by": [],
    "path": "backend/db.py:2465",
    "readers": [
-    "core:archive",
-    "router:accounting_export"
+    "core:archive"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
     "core:db",
-    "router:inventory"
+    "mod:supply/api/inventory"
    ]
   },
   "table:stock_items": {
@@ -12209,15 +12218,13 @@
     "core:db",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
-    "router:accounting_export",
     "router:parts"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:inventory",
-    "router:quotations",
-    "router:shipping_notes"
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes"
    ]
   },
   "table:suppliers": {
@@ -12232,13 +12239,13 @@
    "path": "backend/db.py:516",
    "readers": [
     "core:archive",
-    "router:inventory",
+    "mod:supply/api/inventory",
     "router:search"
    ],
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:suppliers"
+    "mod:supply/api/suppliers"
    ]
   },
   "table:switch_categories": {

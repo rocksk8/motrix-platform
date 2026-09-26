@@ -386,3 +386,20 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 | 對方不在時 | 案件存檔照常；序號不同步庫存；有序號變動時回應帶 `stockNotice`＝「設備序號未同步庫存：採購・庫存・出貨模組未安裝」，案件頁存檔狀態列顯示「已儲存；…」；沒有序號變動就不帶 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側隨模組 |
+
+---
+
+## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）
+
+主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `routers/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::paid_batches` |
+| 使用方 | M06 `routers/accounting_export.py::_collect_paid_stock_batches`（T100 付款傳票：借 料件設備成本／貸 銀行存款） |
+| 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
+| 語法 | 提供：`ModuleSpec(providers={("inventory.paid_batches", "supply"): inventory.paid_batches})`<br>取用：`fn = registry.single_provider("inventory.paid_batches")`；`None` ⇒ 退化。`fn(start, end) -> list[dict]` |
+| 回傳 | 每批一列：`batch_no`、`part_no`、`supplier_name`、`invoice_no`、`paid_at`、`paid_bank_account_name`、`paid_bank_account_code`、`category`（料件分類，無則空字串）、`total_cost`（即時由 `stock_items.cost` 加總）；依 `paid_at` 排序。唯讀 |
+| 對方不在時 | T100 匯出照常，不含料件進貨的付款傳票；預覽回應 `notice` 含「採購・庫存・出貨模組未安裝：本次匯出不含料件設備進貨的付款傳票」（與 IP-14 的說明以「；」並列），出納頁的 T100 區塊顯示 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側 `backend/modules/supply/tests/test_stock_batch_payment.py`（批次流進 T100 匯出並可確認） |

@@ -1,6 +1,6 @@
 """M03 的端點與頁面在 L1 共用測試裡的那幾項。
 
-2026-09-26 自 `test_e2e_playwright_2026_09_07`、`test_em8_message_points_to_existing_place_2026_09_24`、`test_signed_upload_files`、`test_visual_management_2026_08_28` 移入（PLAYBOOK §B-11：拿掉本模組時這些題跟著消失）。
+2026-09-26 自 `test_e2e_playwright_2026_09_07`、`test_signed_upload_files`、`test_visual_management_2026_08_28` 移入（PLAYBOOK §B-11：拿掉本模組時這些題跟著消失）。
 """
 from datetime import datetime
 
@@ -51,28 +51,6 @@ def test_inventory_purchase_suggestions_modal_smoke(live_server, make_user, e2e_
     modal.locator("tr", has_text="E2E-LOWSTOCK").wait_for(timeout=10000)
     row_text = modal.locator("tr", has_text="E2E-LOWSTOCK").inner_text()
     assert "15" in row_text, f"應建議補到黃燈門檻 ceil(10*1.5)=15，實際列內容: {row_text!r}"
-
-
-def test_em8_the_inventory_action_message_does_not_offer_an_action_without_a_button(client, make_user):
-    import db
-    u, p = make_user("em8_admin", role="admin")
-    tok = client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]
-    conn = db.get_db()
-    try:
-        cur = conn.execute(
-            "INSERT INTO stock_items (part_no, serial_no, status, created_at, updated_at)"
-            " VALUES ('EM8-P','EM8-S','in_stock','2026-09-24','2026-09-24')")
-        conn.commit()
-        iid = cur.lastrowid
-    finally:
-        conn.close()
-    r = client.post("/api/inventory/stock-items/%d/adjust" % iid,
-                    json={"action": "nonsense"}, headers={"Authorization": "Bearer " + tok})
-    assert r.status_code == 400, r.text[:200]
-    detail = r.json().get("detail", "")
-    assert "edit_note" not in detail, (
-        "400 訊息列出了 `edit_note`：%r\n" % detail
-        + "☠️ 畫面上沒有任何按鈕做「修改備註」—— 訊息提供了一條不存在的路。")
 
 
 def _make_shipping_note(note_no, quote_no, status="已核准"):

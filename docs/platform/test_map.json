@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 637,
   "unmapped": 7,
   "kinds": {
-   "audit": 85,
-   "api": 336,
+   "audit": 86,
+   "api": 340,
    "unit": 55,
-   "e2e": 154
+   "e2e": 156
   },
   "routes": 568
  },
@@ -3504,6 +3504,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_map_cache_warm.py",
     "file:backend/tests/_map_tiles.py",
@@ -3516,10 +3517,14 @@
     "page:pages/map.html",
     "page:pages/suppliers.html",
     "page:pages/tender-radar.html",
-    "page:pages/vendor-contractors.html"
+    "page:pages/vendor-contractors.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/geo.py",
@@ -3538,6 +3543,7 @@
      "frontend/static/record-link.js"
     ],
     "path": [
+     "backend/modules/supply/",
      "frontend/pages/map.html"
     ],
     "module_dir": [
@@ -3593,6 +3599,8 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
     "router:account_items",
     "router:approval_delegates",
     "router:auth",
@@ -3608,8 +3616,6 @@
     "router:payment_requests",
     "router:quotations",
     "router:search",
-    "router:shipping_notes",
-    "router:suppliers",
     "router:system",
     "router:uploads",
     "router:vouchers"
@@ -3629,6 +3635,8 @@
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/modules/supply/api/suppliers.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
@@ -3644,8 +3652,6 @@
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
-     "backend/routers/shipping_notes.py",
-     "backend/routers/suppliers.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
      "backend/routers/vouchers.py"
@@ -3774,6 +3780,192 @@
    },
    "login_fixture": true,
    "module": "subcontract"
+  },
+  "backend/modules/supply/tests/test_e2e_boolean_status_select_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:supply/api/suppliers",
+    "page:pages/suppliers.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/suppliers.py"
+    ],
+    "page": [
+     "frontend/pages/suppliers.html"
+    ],
+    "path": [
+     "frontend/pages/suppliers.html"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_procurement_leadtime_api.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/test_procurement_leadtime_2026_09_21.py",
+    "mod:supply/api/inventory"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_procurement_leadtime_2026_09_21.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_purchase_suggestions_2026_09_07.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "mod:supply/api/inventory",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/routers/parts.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_stock_batch_payment.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/test_stock_batch_payment_2026_09_01.py",
+    "mod:supply/api/__init__",
+    "mod:supply/api/inventory",
+    "mod:supply/api/suppliers",
+    "router:accounting_export",
+    "router:parts"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/supply/api/__init__.py",
+     "backend/modules/supply/api/inventory.py",
+     "backend/tests/test_stock_batch_payment_2026_09_01.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/modules/supply/api/suppliers.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/parts.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_supply_calendar_writeback.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/supply/",
+    "file:backend/tests/platform/test_case_stage_connectors.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_supply_moved_guards.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/test_e2e_playwright_2026_09_07.py",
+    "file:backend/tests/test_module_no_admin_bypass_2026_09_14.py",
+    "file:backend/tests/test_signed_upload_files.py",
+    "file:backend/tests/test_visual_management_2026_08_28.py",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
+    "page:pages/inventory.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_e2e_playwright_2026_09_07.py",
+     "backend/tests/test_module_no_admin_bypass_2026_09_14.py",
+     "backend/tests/test_signed_upload_files.py",
+     "backend/tests/test_visual_management_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/modules/supply/api/suppliers.py"
+    ],
+    "page": [
+     "frontend/pages/inventory.html"
+    ],
+    "path": [
+     "frontend/pages/inventory.html"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_supply_stock_and_shipping.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "file:backend/tests/test_api_integration.py",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_api_integration.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "module": "supply"
   },
   "backend/modules/tender_radar/tests/test_tender_columns_stored_2026_09_23.py": {
    "kind": "api",
@@ -4448,17 +4640,19 @@
     "file:backend/routers/__init__.py",
     "helper:case_stage_tasks",
     "helper:google_calendar",
+    "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:registry",
+    "plat:source_tree",
     "router:invoice_vouchers",
     "router:payment_requests",
-    "router:quotations",
-    "router:shipping_notes"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/case_stage_tasks.py",
@@ -4466,15 +4660,18 @@
      "backend/routers/__init__.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
-     "backend/routers/quotations.py",
-     "backend/routers/shipping_notes.py"
+     "backend/routers/quotations.py"
     ],
     "api": [
      "backend/routers/quotations.py"
     ],
     "path": [
      "backend/helpers/case_stage_tasks.py",
-     "backend/helpers/google_calendar.py"
+     "backend/helpers/google_calendar.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/invoice_vouchers.py",
+     "backend/routers/payment_requests.py",
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -5824,6 +6021,38 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_supply_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "plat:__init__",
+    "plat:registry",
+    "router:accounting_export",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/quotations.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "api": [
+     "backend/routers/accounting_export.py",
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/routers/accounting_export.py",
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_unit_cards.py": {
    "kind": "audit",
    "units": [
@@ -5986,10 +6215,8 @@
     "mod:crm/api",
     "router:auth",
     "router:customers",
-    "router:inventory",
     "router:parts",
     "router:quotations",
-    "router:shipping_notes",
     "router:system",
     "router:uploads"
    ],
@@ -6003,10 +6230,8 @@
      "backend/modules/crm/api.py",
      "backend/routers/auth.py",
      "backend/routers/customers.py",
-     "backend/routers/inventory.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py",
-     "backend/routers/shipping_notes.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py"
     ],
@@ -6552,6 +6777,7 @@
     "helper:tiered_approval",
     "js:static/approval-cascade.js",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:source_tree",
     "router:case_extra_expenses"
@@ -6570,6 +6796,7 @@
     ],
     "path": [
      "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_extra_expenses.py",
      "frontend/static/",
      "frontend/static/approval-cascade.js"
@@ -6669,10 +6896,10 @@
    "units": [
     "core:db",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/shipping_notes",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:quotations",
-    "router:shipping_notes",
     "router:vouchers"
    ],
    "evidence": {
@@ -6681,10 +6908,10 @@
     ],
     "api": [
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
      "backend/routers/quotations.py",
-     "backend/routers/shipping_notes.py",
      "backend/routers/vouchers.py"
     ]
    },
@@ -6970,10 +7197,15 @@
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ui_dialogs.py",
     "js:static/ui.js",
-    "page:pages/case-management.html"
+    "mod:supply/api/shipping_notes",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ui_dialogs.py"
@@ -6983,6 +7215,7 @@
      "frontend/static/ui.js"
     ],
     "path": [
+     "backend/modules/supply/api/shipping_notes.py",
      "frontend/js/",
      "frontend/pages/",
      "frontend/pages/case-management.html"
@@ -8043,32 +8276,6 @@
    "units": [],
    "evidence": {}
   },
-  "backend/tests/test_e2e_boolean_status_select_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_mapiso.py",
-    "page:pages/suppliers.html",
-    "router:suppliers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_mapiso.py"
-    ],
-    "api": [
-     "backend/routers/suppliers.py"
-    ],
-    "page": [
-     "frontend/pages/suppliers.html"
-    ],
-    "path": [
-     "frontend/pages/suppliers.html"
-    ]
-   }
-  },
   "backend/tests/test_e2e_case_all_done_inline_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -8432,6 +8639,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "mod:supply/api/shipping_notes",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/login.html",
@@ -8463,6 +8671,7 @@
     ],
     "path": [
      "backend/modules/subcontract/",
+     "backend/modules/supply/api/shipping_notes.py",
      "frontend/index.html",
      "frontend/pages/case-management.html",
      "frontend/pages/login.html"
@@ -8718,6 +8927,29 @@
      "frontend/pages/case-management.html"
     ],
     "path": [
+     "frontend/pages/case-management.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_case_without_supply_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
+    "page:pages/case-management.html",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
+    ],
+    "page": [
      "frontend/pages/case-management.html"
     ]
    }
@@ -9501,7 +9733,6 @@
     "file:backend/tests/_ports.py",
     "page:index.html",
     "page:pages/case-management.html",
-    "page:pages/inventory.html",
     "page:pages/login-qr-approve.html",
     "page:pages/login.html",
     "page:pages/quotation-form.html",
@@ -9521,14 +9752,12 @@
     "page": [
      "frontend/index.html",
      "frontend/pages/case-management.html",
-     "frontend/pages/inventory.html",
      "frontend/pages/login-qr-approve.html",
      "frontend/pages/login.html",
      "frontend/pages/quotation-form.html"
     ],
     "path": [
      "frontend/index.html",
-     "frontend/pages/inventory.html",
      "frontend/pages/login.html",
      "frontend/pages/quotation-form.html"
     ]
@@ -9602,13 +9831,13 @@
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
     "helper:settings",
+    "mod:supply/api/suppliers",
     "page:pages/company-profile-settings.html",
     "page:pages/customers.html",
     "page:pages/suppliers.html",
     "page:pages/users.html",
     "router:auth",
-    "router:customers",
-    "router:suppliers"
+    "router:customers"
    ],
    "evidence": {
     "import": [
@@ -9617,9 +9846,9 @@
      "backend/helpers/settings.py"
     ],
     "api": [
+     "backend/modules/supply/api/suppliers.py",
      "backend/routers/auth.py",
-     "backend/routers/customers.py",
-     "backend/routers/suppliers.py"
+     "backend/routers/customers.py"
     ],
     "page": [
      "frontend/pages/company-profile-settings.html",
@@ -10207,6 +10436,8 @@
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
     "page:pages/users.html",
@@ -10218,13 +10449,11 @@
     "router:case_extra_expenses",
     "router:cashier",
     "router:completion_notes",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:map_points",
     "router:org_structure",
     "router:payment_requests",
     "router:quotations",
-    "router:shipping_notes",
     "router:system"
    ],
    "evidence": {
@@ -10245,19 +10474,19 @@
      "backend/modules/payroll/api/bonus.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/inventory.py",
+     "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/cashier.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/map_points.py",
      "backend/routers/org_structure.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
-     "backend/routers/shipping_notes.py",
      "backend/routers/system.py",
      "frontend/pages/case-management.html",
      "frontend/pages/company-profile-settings.html",
@@ -10310,26 +10539,17 @@
    }
   },
   "backend/tests/test_em8_message_points_to_existing_place_2026_09_24.py": {
-   "kind": "api",
+   "kind": "audit",
    "units": [
-    "core:db",
     "dir:frontend/",
-    "router:company_lookup",
-    "router:inventory"
+    "router:company_lookup"
    ],
    "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/inventory.py"
-    ],
     "path": [
      "backend/routers/company_lookup.py",
      "frontend/"
     ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_em9_silent_write_failure_2026_09_23.py": {
    "kind": "audit",
@@ -11554,6 +11774,8 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
     "page:index.html",
     "page:pages/inventory.html",
     "page:pages/users.html",
@@ -11574,8 +11796,6 @@
     "router:payment_requests",
     "router:quotations",
     "router:search",
-    "router:shipping_notes",
-    "router:suppliers",
     "router:system",
     "router:uploads",
     "router:vouchers"
@@ -11596,6 +11816,8 @@
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/modules/supply/api/suppliers.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
@@ -11611,8 +11833,6 @@
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
-     "backend/routers/shipping_notes.py",
-     "backend/routers/suppliers.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
      "backend/routers/vouchers.py"
@@ -11639,7 +11859,6 @@
     "page:pages/users.html",
     "router:module_versions",
     "router:parts",
-    "router:shipping_notes",
     "router:system"
    ],
    "evidence": {
@@ -11650,7 +11869,6 @@
     "api": [
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/shipping_notes.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -11664,22 +11882,21 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "dir:backend/modules/supply/",
     "helper:email_notify",
     "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:source_tree",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:customers",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:parts",
     "router:payment_requests",
     "router:quotations",
-    "router:search",
-    "router:shipping_notes",
-    "router:suppliers"
+    "router:search"
    ],
    "evidence": {
     "import": [
@@ -11691,21 +11908,20 @@
     ],
     "api": [
      "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
      "backend/routers/customers.py",
-     "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
-     "backend/routers/search.py",
-     "backend/routers/shipping_notes.py",
-     "backend/routers/suppliers.py"
+     "backend/routers/search.py"
     ],
     "path": [
-     "backend/modules/subcontract/"
+     "backend/modules/subcontract/",
+     "backend/modules/supply/"
     ]
    },
    "login_fixture": true
@@ -11764,6 +11980,7 @@
     "js:static/legal-round.js",
     "mod:analytics/api/reports",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/inventory",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
@@ -11771,7 +11988,6 @@
     "plat:source_tree",
     "router:accounting_export",
     "router:case_extra_expenses",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:parts",
     "router:payment_requests"
@@ -11792,7 +12008,7 @@
     ],
     "api": [
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/inventory.py",
+     "backend/modules/supply/api/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py"
@@ -12562,6 +12778,9 @@
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
+    "mod:supply/api/inventory",
+    "mod:supply/api/shipping_notes",
+    "mod:supply/api/suppliers",
     "mod:tender_radar/api",
     "router:account_items",
     "router:accounting_export",
@@ -12573,7 +12792,6 @@
     "router:custom_records",
     "router:customers",
     "router:definitions",
-    "router:inventory",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:legal_params",
@@ -12590,8 +12808,6 @@
     "router:platform_menu",
     "router:quotations",
     "router:search",
-    "router:shipping_notes",
-    "router:suppliers",
     "router:system",
     "router:uploads",
     "router:vouchers"
@@ -12613,6 +12829,9 @@
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/modules/supply/api/inventory.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/modules/supply/api/suppliers.py",
      "backend/modules/tender_radar/api.py",
      "backend/routers/account_items.py",
      "backend/routers/accounting_export.py",
@@ -12624,7 +12843,6 @@
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/definitions.py",
-     "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/legal_params.py",
@@ -12641,8 +12859,6 @@
      "backend/routers/platform_menu.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
-     "backend/routers/shipping_notes.py",
-     "backend/routers/suppliers.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
      "backend/routers/vouchers.py"
@@ -12677,8 +12893,8 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:licensing",
+    "mod:supply/api/inventory",
     "router:customers",
-    "router:inventory",
     "router:parts"
    ],
    "evidence": {
@@ -12688,26 +12904,8 @@
      "backend/helpers/licensing.py"
     ],
     "api": [
+     "backend/modules/supply/api/inventory.py",
      "backend/routers/customers.py",
-     "backend/routers/inventory.py",
-     "backend/routers/parts.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_purchase_suggestions_2026_09_07.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:inventory",
-    "router:parts"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/inventory.py",
      "backend/routers/parts.py"
     ]
    },
@@ -13376,8 +13574,7 @@
    "units": [
     "core:db",
     "router:invoice_vouchers",
-    "router:quotations",
-    "router:shipping_notes"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
@@ -13385,8 +13582,7 @@
     ],
     "api": [
      "backend/routers/invoice_vouchers.py",
-     "backend/routers/quotations.py",
-     "backend/routers/shipping_notes.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -13571,17 +13767,11 @@
   "backend/tests/test_stock_batch_payment_2026_09_01.py": {
    "kind": "api",
    "units": [
-    "router:accounting_export",
-    "router:inventory",
-    "router:parts",
-    "router:suppliers"
+    "router:accounting_export"
    ],
    "evidence": {
     "api": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/inventory.py",
-     "backend/routers/parts.py",
-     "backend/routers/suppliers.py"
+     "backend/routers/accounting_export.py"
     ]
    },
    "login_fixture": true
@@ -14029,7 +14219,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:inventory",
     "router:parts",
     "router:quotations"
    ],
@@ -14038,7 +14227,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/inventory.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py"
     ]
