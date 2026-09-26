@@ -4587,6 +4587,7 @@
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
+    "router:case_extra_expenses",
     "router:invoice_vouchers",
     "router:quotations",
     "router:vouchers"
@@ -4603,6 +4604,8 @@
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
+     "backend/routers/case_extra_expenses.py",
+     "backend/routers/invoice_vouchers.py",
      "backend/routers/vouchers.py"
     ],
     "path": [

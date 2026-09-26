@@ -52,6 +52,24 @@ from helpers.legal_params import round_half_up
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+def _voucher_readable(conn, row, user) -> bool:
+    """開票申請單筆准不准讀（`row` 需含 quote_no、data_json）：案件層＋金額層，規則見 `_guard_voucher`。
+
+    `_guard_voucher` 與附件提供者 `_InvoiceVoucherAttachments` 共用這一支（稽核 D AT-M1b：附件的可見範圍
+    不可以比原單據寬）。不關連線、不丟例外。"""
+    from helpers.case_access import case_access_allowed
+    q = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone()
+    if q:
+        case_ok = case_access_allowed(conn, q, user, allow_module="case_manage", allow_approver=True)
+    else:
+        try:
+            require_any_module(user, ('case_manage', 'finance', 'cashier', 'quotation'), "開票憑證")
+            case_ok = True
+        except HTTPException:
+            case_ok = False
+    return case_ok and (can_see_financial(user) or is_document_approver(row["data_json"], user, conn))
+
+
 def _guard_voucher(conn, row, user):
     """單據層級守門（2026-09-13 模組權限稽核第四輪）。
 
@@ -65,6 +83,9 @@ def _guard_voucher(conn, row, user):
        金額）。**本單簽核人例外**：看不到金額就沒辦法判斷該不該簽，擋他等於讓
        簽核流程停擺。
     """
+    # 准不准只看 `_voucher_readable`（附件提供者用同一支）；以下只負責依原本的順序說出原因（訊息不變）。
+    if _voucher_readable(conn, row, user):
+        return
     # 找不到母案件時不要變成 404：單據本身存在、只是母案件被刪或資料異常，
     # 對使用者顯示「報價單不存在」只會更難查。退回模組層級判斷。
     if conn.execute("SELECT 1 FROM quotations WHERE quote_no=?", (row["quote_no"],)).fetchone():
@@ -78,6 +99,11 @@ def _guard_voucher(conn, row, user):
         except Exception:
             pass
         raise HTTPException(403, "此帳號沒有檢視財務金額的權限（需要「財務金額可視」模組）")
+    try:
+        conn.close()
+    except Exception:
+        pass
+    raise HTTPException(403, "無權限存取這筆資料")
 
 
 def _visible_rows(rows, user, conn):
@@ -852,25 +878,23 @@ class _InvoiceVoucherAttachments:
 
     @staticmethod
     def doc_nos_for_case(conn, source_type, quote_no, user):
-        from helpers.case_access import case_documents_readable
-        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError
+        from helpers.uploads import AttachmentSourceError
         if source_type != "invoice_voucher":
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
-        if not case_documents_readable(conn, quote_no, user):        # 同開票申請清單的讀取規則（AT-M1）
-            raise AttachmentNotVisible()
-        return [str(r["k"]) for r in conn.execute(
-            "SELECT voucher_no AS k FROM invoice_vouchers WHERE quote_no = ? ORDER BY id", (quote_no,))]
+        # 逐張用開票申請自己的讀取規則（案件層＋金額層，含本單簽核人例外；AT-M1b）：讀不到的不列
+        return [str(r["voucher_no"]) for r in conn.execute(
+            "SELECT voucher_no, quote_no, data_json FROM invoice_vouchers WHERE quote_no = ? ORDER BY id", (quote_no,))
+            if _voucher_readable(conn, r, user)]
 
     @staticmethod
     def files(conn, source_type, doc_no, user):
-        from helpers.case_access import case_documents_readable
         from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
         if source_type != "invoice_voucher":
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
-        row = conn.execute("SELECT quote_no FROM invoice_vouchers WHERE voucher_no = ?", (doc_no,)).fetchone()
+        row = conn.execute("SELECT quote_no, data_json FROM invoice_vouchers WHERE voucher_no = ?", (doc_no,)).fetchone()
         if row is None:
             return []
-        if not case_documents_readable(conn, row["quote_no"], user):
+        if not _voucher_readable(conn, row, user):                   # 同開票申請自己的讀取規則（AT-M1b）
             raise AttachmentNotVisible()
         return files_from_json_column(conn, "invoice_vouchers", "voucher_no", doc_no, "issued_files_json")
 

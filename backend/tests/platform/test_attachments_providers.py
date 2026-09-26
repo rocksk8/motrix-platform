@@ -201,7 +201,8 @@ def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_
 
 
 def test_each_provider_refuses_a_reader_who_cannot_see_the_case(client):
-    """每個在場的提供者：看不到案件的人 ⇒ AttachmentNotVisible（不是回空清單冒充「沒有附件」）。"""
+    """每個在場的提供者：看不到案件的人 ⇒ AttachmentNotVisible（不是回空清單冒充「沒有附件」）；
+    列單號時逐張過濾的提供者（開票申請）可以回「不列」。"""
     import db
     from helpers.uploads import AttachmentNotVisible
     _seed_case_with_file("ATT-PERM-2")
@@ -210,9 +211,112 @@ def test_each_provider_refuses_a_reader_who_cannot_see_the_case(client):
     try:
         for name, prov in registry.providers(CAP).items():
             for st in prov.SOURCE_TYPES:
-                with pytest.raises(AttachmentNotVisible):
-                    prov.doc_nos_for_case(conn, st, "ATT-PERM-2", nobody)
+                try:
+                    got = prov.doc_nos_for_case(conn, st, "ATT-PERM-2", nobody)
+                except AttachmentNotVisible:
+                    continue
+                # 逐張依原單據規則過濾的提供者（開票申請，AT-M1b）：讀不到的不列
+                assert got == [], (name, st, got)
         with pytest.raises(AttachmentNotVisible):
             registry.providers(CAP)["case"].files(conn, "quotation_signed", "ATT-PERM-2", nobody)
+    finally:
+        conn.close()
+
+
+# ── AT-M1b（稽核 D 複核）：每一類用原單據**自己的**讀取規則，附件的可見範圍不可以比原單據寬 ─────────
+
+def _seed_extra_expense_file(quote_no):
+    import db
+    import os
+    import helpers.uploads as up
+    rel = "att_perm/%s-ee.png" % quote_no
+    full = os.path.join(up.UPLOADS_ROOT, rel)
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "wb") as f:
+        f.write(b"x")
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
+                     " VALUES (?,?,?,?,?)", (quote_no, "已送出", "{}", "2026-01-01", "2026-01-01"))
+        eid = conn.execute("INSERT INTO case_extra_expenses (quote_no, files_json) VALUES (?, ?)",
+                           (quote_no, json.dumps([{"id": "e1", "filename": "ee.png", "path": rel}]))).lastrowid
+        conn.commit()
+        return str(eid)
+    finally:
+        conn.close()
+
+
+def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(client, make_user):
+    """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
+    經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
+    eid = _seed_extra_expense_file("ATT-EE-1")
+    probe = _hdr(client, make_user, "att_ee_probe", "sales", ["case_manage", "finance"])
+    own = client.get("/api/quotations/ATT-EE-1/extra-expenses", headers=probe)
+    assert own.status_code == 403, ("前提：額外支出自己的端點擋這個人", own.status_code)
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-EE-1", headers=probe)
+    assert got.status_code == 200, got.text[:200]
+    assert [f for f in got.json()["files"] if f.get("type") == "extra_expense"] == [], got.json()["files"]
+    prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-EE-1&file_id=e1", headers=probe)
+    assert prev.status_code in (403, 404), prev.status_code
+    lines = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
+             {"account_code": "1113", "debit": 0, "credit": 100, "summary": "b"}]
+    v = client.post("/api/vouchers", headers=probe, json={"summary": "AT-M1b", "lines": lines})
+    assert v.status_code == 200, v.text[:200]
+    r = client.post("/api/vouchers/%s/attachments" % v.json()["id"], headers=probe,
+                    json={"picks": [{"type": "extra_expense", "docNo": eid, "fileId": "e1"}]})
+    assert r.status_code == 403, (r.status_code, r.text[:200])
+    # 正對照：額外支出自己的端點放行的人（admin），經傳票也列得出
+    import db
+    _hdr(client, make_user, "att_ee_admin", "admin", None)
+    admin = _user("att_ee_admin")
+    conn = db.get_db()
+    try:
+        prov = registry.providers(CAP)["case"]
+        assert prov.doc_nos_for_case(conn, "extra_expense", "ATT-EE-1", admin) == [eid]
+        assert [m["id"] for m in prov.files(conn, "extra_expense", eid, admin)] == ["e1"]
+    finally:
+        conn.close()
+
+
+def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
+    """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
+    自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
+    持有 financial_view 的人兩邊都放行（正對照）。"""
+    import db
+    from helpers.uploads import AttachmentNotVisible
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
+                     " VALUES ('ATT-IV-P','已送出','{}','2026-01-01','2026-01-01')")
+        conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, issued_files_json, created_at, updated_at)"
+                     " VALUES ('IV-ATT-P','ATT-IV-P',?,'2026-01-01','2026-01-01')",
+                     (json.dumps([{"id": "i1", "filename": "iv.pdf", "path": "att_perm/iv.pdf"}]),))
+        conn.commit()
+    finally:
+        conn.close()
+    no_amt = _hdr(client, make_user, "att_iv_noamt", "engineer", ["case_manage", "finance"])
+    amt = _hdr(client, make_user, "att_iv_amt", "engineer", ["case_manage", "finance", "financial_view"])
+    assert client.get("/api/invoice-vouchers/IV-ATT-P", headers=no_amt).status_code == 403, "前提：自己的端點擋金額層"
+    assert client.get("/api/invoice-vouchers/IV-ATT-P", headers=amt).status_code == 200
+    u_no, u_amt = _user("att_iv_noamt"), _user("att_iv_amt")   # 與登入後 _require_user 同一份欄位（modules 是 JSON 字串）
+    prov = registry.providers(CAP)["arap"]
+    conn = db.get_db()
+    try:
+        assert prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_no) == []
+        with pytest.raises(AttachmentNotVisible):
+            prov.files(conn, "invoice_voucher", "IV-ATT-P", u_no)
+        assert prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_amt) == ["IV-ATT-P"]
+        assert [m["id"] for m in prov.files(conn, "invoice_voucher", "IV-ATT-P", u_amt)] == ["i1"]
+    finally:
+        conn.close()
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=no_amt)
+    assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "invoice_voucher"] == []
+
+
+def _user(username):
+    import db
+    conn = db.get_db()
+    try:
+        return dict(conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone())
     finally:
         conn.close()

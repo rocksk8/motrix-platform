@@ -133,6 +133,18 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     return q
 
 
+def case_owner_readable(conn, quote_no: str, user: dict) -> bool:
+    """案件的**擁有者規則**：row_access `case`／scope="owner"（案件業務／協作者、admin+），**不放行任何模組**。
+
+    案件額外支出的各端點（`routers/case_extra_expenses.py::_guard_case`）與它的附件提供者共用這一支
+    （稽核 D AT-M1b：附件的可見範圍不可以比原單據寬）。案件不存在或 M01 不在 ⇒ False。"""
+    if not quote_no or not case_module_present():
+        return False
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no = ?",
+                     (quote_no,)).fetchone()
+    return bool(q) and row_access.visible("case", user, q, scope="owner")
+
+
 def case_documents_readable(conn, quote_no: str, user: dict) -> bool:
     """這個人看不看得到某張案件**底下的單據**（出貨單、派工單、開票申請、案件附件…）。
 
