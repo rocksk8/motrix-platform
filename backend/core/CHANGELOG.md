@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.30 — 2026-09-26（C，T：稅額純函式下沉 L1；主持核准，M01 步驟表 §3-1）〔core_bump：暫用 1.99 → 1.30〕
+> 介面只有新增；舊位置 `helpers.quotations` 保留同名別名（同一物件），呼叫端不必改。
+- L1（新增）：`helpers.tax_calc`——`TAX_TYPES`、`TAX_TYPE_LABELS`、`LEGAL_TAX_RATE`、`LEGACY_TAX_NOTE`、`quote_tax_type`、`tax_split`、`invoice_amounts`、`payment_item_amounts`（自 M01 `helpers/quotations.py` 逐字搬入）
+- L1（改 import 來源，行為不變）：`helpers.payment_item_amounts` 改自 tax_calc 再匯出；`pdf_gen`、`routers/invoice_vouchers`、`routers/reports`、`tools/list_payment_anomalies` 改自 tax_calc import ⇒ 這幾支對 M01 的相依只剩別的名稱（CA-O4 的一半）
+- L1（修正）：`tax_split` 的錯誤訊息 `1～4%` 沒跳脫 ⇒ 原本丟 TypeError 而不是 ValueError；呼叫端都先排除 legacy，行為面無影響
+- 守門：`tests/platform/test_tax_calc_contract.py`（不讀表、不 import M01、別名是同一物件；掃描器正對照；突變：別名指錯、換成複本、函式讀表、延遲 import M01 ⇒ 皆紅）
+
 ## 1.29 — 2026-09-26（C，參照選項權限）〔core_bump：暫用 1.99 → 1.21〕〔core_bump：暫用 1.21 → 1.29〕
 > P8 前端代理回報：參照欄選項只檢查目前模組的權限。只有新增與收緊。
 - L1（新增）：`helpers.custom_modules.register_ref_target(..., modules=)`（讀這個對象需要的權限）、`ref_target_modules(target)`

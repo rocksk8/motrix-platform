@@ -24,7 +24,7 @@ from helpers import (
     payment_item_amounts, summarize_payment_items, case_extra_expenses, quote_won_month_map,
     user_has_module, run_edge_pdf,
 )
-from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts
+from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers.financial_mask import money_visible

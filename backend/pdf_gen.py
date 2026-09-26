@@ -79,7 +79,7 @@ def _get_case_closing_pdf_base() -> str:
 
 def _tax_line_label(q: dict) -> str:
     """報價 PDF 稅額那一行的標籤（AC1）：依稅別；舊 1～4% 單照舊寫稅率。"""
-    from helpers.quotations import quote_tax_type
+    from helpers.tax_calc import quote_tax_type
     kind = quote_tax_type(q)
     if kind == "zero":
         return "營業稅（零稅率）"
