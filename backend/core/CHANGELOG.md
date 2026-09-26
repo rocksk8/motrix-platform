@@ -7,6 +7,8 @@
 - L1（新增）：`core.catalog.effective_layout_ops(conn, module_key, role)`——resolve（角色＞公司＞預設）＋逐筆 `check_layout`，`GET /api/layout/{module}` 與選單共用這一份
 - L1（新增）：`core.menu.apply_layout(groups, ops)`、`core.menu.sidebar_point_id(item)`——側欄點的 hide／show／move{index}；hide 只是顯示、不是權限
 - L1（相容擴充）：`GET /api/platform/menu` 多回 `layout`（已套使用者角色版面的選單＋applied／skipped／dropped／errors／sources）；`groups`／`denied` 維持宣告版
+- L1（新增）：`core.menu.declaration(l1, mod_items)`——與使用者無關的選單宣告（build 的排序、不過濾、每項帶 perm）；過濾後＝build（同一使用者）
+- L1（新增）：`GET /static/sidebar.js` 前置 `window.MOTRIX_MENU = {v, groups, pageModules}`（`routers.platform_menu.sidebar_js_source`；模組狀態與自訂模組不放：要登入才拿得到）
 
 ## 1.34 — 2026-09-26（A，稽核 D O-4，wip/a-m10 68f16342；第六班列車取號）〔core_bump：暫用 1.99 → 1.34〕
 > 介面不變。原 commit 改寫的是 1.17（今 1.26）段落那一行；列車上改為新增本段、不改寫已合回的歷史段落。

@@ -6,8 +6,14 @@ L1 項目（core/menu_l1.json）＋**已載入**模組的 module.json `pages[].m
 - `layout`（C4，STAGE-C L79 更正 ②）：套上**使用者角色**版面之後的選單；sidebar.js 在 session 取回後讀它重排。
   每個有側欄點的已載入模組各 resolve 一次（`core.catalog.effective_layout_ops`，與 GET /api/layout/{module} 同一份）；
   hide 只是顯示、不是權限（`denied` 不因版面改變）。讀版面失敗 ⇒ 該模組用程式預設，錯誤列在 `layout.errors`。
+
+`sidebar_js_source()`（C4，STAGE-C L79 更正 ①）：`/static/sidebar.js` 前置 `window.MOTRIX_MENU`——**與使用者無關**的宣告
+（那個請求不帶 token）：`groups`（L1＋已載入模組，每項帶 perm，declaration()）、`pageModules`（頁面 ⇒ 所屬模組，含沒載入的，
+給直接打網址的後備提示用）。模組狀態（停用／未授權）與自訂模組**不放**：前者是 /api/system/modules/availability、
+後者是公司資料（名稱），都要登入才拿得到。每次請求現組（模組狀態會變），不快取（no_cache_static 對 .js 設 no-store）。
 """
 import json
+from pathlib import Path
 
 from fastapi import APIRouter, Header
 
@@ -39,6 +45,28 @@ def _layout_for(user, groups, mod_items):
     new_groups, applied, skipped = core_menu.apply_layout(groups, ops)
     return {"groups": new_groups, "applied": applied, "skipped": skipped, "dropped": dropped,
             "errors": errors, "sources": sources, "role": role}
+
+
+def menu_declaration(page_map):
+    """⇒ MOTRIX_MENU（dict）。page_map：core.pages 的 {頁名: (模組key, 路徑)}（main.py 啟動時組好的那一份）。"""
+    mod_items = core_menu.module_items({m.key: m.manifest for m in registry.loaded()})
+    names = {s["key"]: s.get("name") or s["key"] for s in registry.module_states()}
+    return {"v": 1,
+            "groups": core_menu.declaration(core_menu.load_l1(), mod_items),
+            "pageModules": {name: {"key": key, "name": names.get(key, key)}
+                            for name, (key, _path) in sorted((page_map or {}).items())}}
+
+
+def _js_literal(obj):
+    """JSON ⇒ 可以安全放進 JS 原始碼的字面值（</ 與 U+2028／2029 跳脫）。"""
+    s = json.dumps(obj, ensure_ascii=False, sort_keys=True)
+    return s.replace("</", "<" + chr(92) + "/").replace(chr(0x2028), chr(92) + "u2028").replace(chr(0x2029), chr(92) + "u2029")
+
+
+def sidebar_js_source(page_map, frontend_dir):
+    """`/static/sidebar.js` 的內容：`window.MOTRIX_MENU = {...};` ＋ 檔案本體（原樣）。"""
+    body = (Path(frontend_dir) / "static" / "sidebar.js").read_text(encoding="utf-8")
+    return "window.MOTRIX_MENU = %s;" % _js_literal(menu_declaration(page_map)) + chr(10) + body
 
 
 @router.get("/api/platform/menu")

@@ -2,7 +2,8 @@
 """選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。
 
 [單位] plat:menu    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ITEM_KEYS, MENU_L1, build, denied, load_l1, module_items, validate, visible
+[公開介面] ITEM_KEYS, MENU_L1, apply_layout, build, declaration, denied, load_l1, module_items, sidebar_point_id,
+    validate, visible
 [不變式] 選單項只來自 core/menu_l1.json 與已載入模組的 pages[].menu；群組固定鍵、模組不可自開群組；群組顯示＝底下至少一項可見
 [契約題] tests/platform/test_menu_parity.py
 [注意] C3 期間與 sidebar.js 舊選單並行，兩邊都要改（對等守門）
@@ -89,23 +90,37 @@ def denied(l1, mod_items, modules, superadmin):
     return sorted(set(out))
 
 
-def build(l1, mod_items, modules, superadmin):
-    """⇒ [{"key", "label", "items": [{"href", "label", "active", "badge", "extra_badge", "module"}]}]（只含有可見項目的群組）。
-    mod_items 只該含**已載入**模組的項目（呼叫端負責）。"""
-    modules = set(modules or [])
+def _grouped(l1, mod_items, keep, with_perm):
     by = {g["key"]: [] for g in l1["groups"]}
     for it in list(l1["items"]) + list(mod_items):
-        if it["group"] in by and visible(it["perm"], modules, superadmin):
+        if it["group"] in by and keep(it):
             by[it["group"]].append(it)
     out = []
     for g in l1["groups"]:
         items = sorted(by[g["key"]], key=lambda it: (it["order"], it["href"]))
         if items:
-            out.append({"key": g["key"], "label": g["label"], "items": [
-                {"href": it["href"], "label": it["label"], "active": list(it.get("active") or [it["href"]]),
-                 "badge": it.get("badge"), "extra_badge": it.get("extra_badge"), "module": it.get("module")}
-                for it in items]})
+            rows = []
+            for it in items:
+                row = {"href": it["href"], "label": it["label"], "active": list(it.get("active") or [it["href"]]),
+                       "badge": it.get("badge"), "extra_badge": it.get("extra_badge"), "module": it.get("module")}
+                if with_perm:
+                    row["perm"] = it["perm"]
+                rows.append(row)
+            out.append({"key": g["key"], "label": g["label"], "items": rows})
     return out
+
+
+def build(l1, mod_items, modules, superadmin):
+    """⇒ [{"key", "label", "items": [{"href", "label", "active", "badge", "extra_badge", "module"}]}]（只含有可見項目的群組）。
+    mod_items 只該含**已載入**模組的項目（呼叫端負責）。"""
+    modules = set(modules or [])
+    return _grouped(l1, mod_items, lambda it: visible(it["perm"], modules, superadmin), False)
+
+
+def declaration(l1, mod_items):
+    """與使用者無關的選單宣告（C4：sidebar.js 前置的 `window.MOTRIX_MENU.groups`）：build() 的排序，**不過濾**、每一項帶 perm；
+    前端用 session 的模組權限同步過濾（規則同 visible）。過濾後必須等於 build(同一個使用者)——test_menu_inject 守。"""
+    return _grouped(l1, mod_items, lambda it: True, True)
 
 
 def sidebar_point_id(item):
