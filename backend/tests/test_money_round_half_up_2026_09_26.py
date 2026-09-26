@@ -246,17 +246,6 @@ def _insert_dispatch_row(quote_no, total_amount, personnel=None):
         conn.close()
 
 
-def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
-    import modules.analytics.api.reports as rp
-
-    def _mk(rows, **extra):
-        return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",
-                                      "provisional": False}, **extra) for d, amt in rows]
-    monkeypatch.setattr(rp, "dispatch_entries", _mk(contractor))
-    monkeypatch.setattr(rp, "material_entries", _mk(material))
-    monkeypatch.setattr(rp, "extra_entries", _mk(other, files=[], pending=False, category="其他"))
-
-
 def _stock(part_no, cost, created, category="其他"):
     import db
     conn = db.get_db()

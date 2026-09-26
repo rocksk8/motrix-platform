@@ -75,10 +75,25 @@ def _last_literal_segment(path: str) -> str:
     return segs[-1] if segs else ""
 
 
+def router_files(routers_dir: Path):
+    """端點檔清單：能載入 core.source_tree 就用它（routers/*.py ＋ 各模組 api.py／api/，稽核 ⑰ O-7：原本只掃 routers/，
+    模組的端點不在報告裡）；載入不了（在別的環境單獨執行）才退回只掃 routers/，並印出說明。"""
+    import sys
+    backend = routers_dir.parent
+    if str(backend) not in sys.path:
+        sys.path.insert(0, str(backend))
+    try:
+        from core import source_tree
+        return list(source_tree.router_files())
+    except Exception as e:                                  # noqa: BLE001
+        print("[入口檢查] 讀不到 core.source_tree（%s）⇒ 只掃 routers/，模組端點不在範圍內" % e)
+        return sorted(routers_dir.glob("*.py"))
+
+
 def collect_routes(routers_dir: Path):
     """回傳 {片段: set(來源檔名)}。"""
     found = {}
-    for py in sorted(routers_dir.glob("*.py")):
+    for py in router_files(routers_dir):
         if py.name == "__init__.py":
             continue
         text = py.read_text(encoding="utf-8", errors="replace")
@@ -87,7 +102,8 @@ def collect_routes(routers_dir: Path):
             # 太短的片段拿去比對只會全部命中，沒有鑑別度
             if len(seg) < 3:
                 continue
-            found.setdefault(seg, set()).add(py.name)
+            found.setdefault(seg, set()).add(py.name if py.parent.name == "routers" else
+                                            "/".join(py.parts[py.parts.index("modules"):]))
     return found
 
 

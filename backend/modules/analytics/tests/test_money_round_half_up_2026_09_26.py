@@ -8,9 +8,20 @@ import pytest
 from tests.test_money_round_half_up_2026_09_26 import (  # noqa: E402,F401  含 fixture
     _hdr,
     _insert_dispatch_row,
-    _patch_entries,
     _stock,
 )
+
+
+# 稽核 ⑰ O-6：只有本模組的題用它，而它 import 營運分析 ⇒ 放在模組這一側（原本在 L1 測試檔，下一個人一呼叫就綁上 M08）
+def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
+    import modules.analytics.api.reports as rp
+
+    def _mk(rows, **extra):
+        return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",
+                                      "provisional": False}, **extra) for d, amt in rows]
+    monkeypatch.setattr(rp, "dispatch_entries", _mk(contractor))
+    monkeypatch.setattr(rp, "material_entries", _mk(material))
+    monkeypatch.setattr(rp, "extra_entries", _mk(other, files=[], pending=False, category="其他"))
 
 
 def test_live_dispatch_total_tax_rounds_half_up(client):
