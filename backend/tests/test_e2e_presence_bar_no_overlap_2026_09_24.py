@@ -12,6 +12,9 @@ pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, NO, _login, _seed  # noqa: F401
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 HIT_JS = """(sel) => {
   const b = document.querySelector(sel)
   if (!b) return 'missing'

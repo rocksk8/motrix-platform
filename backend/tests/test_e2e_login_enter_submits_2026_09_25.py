@@ -5,6 +5,8 @@
 """
 import pytest
 
+from tests._e2e_login import wait_logged_in
+
 pytest.importorskip("playwright.sync_api")
 
 
@@ -89,7 +91,7 @@ def test_enter_logs_in(live_server, make_user, scenario, webauthn, e2e_browser):
     if webauthn:
         assert page.locator("button:has-text('Passkey')").is_visible(), "前提：Passkey 鈕要出現"
     SCENARIOS[scenario](page, u, pw)
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    wait_logged_in(page, timeout=8000)
 
 
 # ── 顯式 Enter 處理（使用者 2026-09-25：自己打字後按 Enter「完全沒反應」，正式機與開發機都一樣）──
@@ -116,7 +118,7 @@ def test_a_page_level_enter_keydown_submits(live_server, make_user, field, e2e_b
     page.fill(U, u); page.fill(P, pw)
     page.evaluate(KEY, [field, "keydown", False])
     page.evaluate(KEY, [field, "keyup", False])
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    wait_logged_in(page, timeout=8000)
     assert len(posts) == 1, posts
 
 
@@ -128,7 +130,7 @@ def test_enter_that_only_reaches_the_page_as_keyup_still_submits(live_server, ma
     page, posts = _open_login(browser, live_server)
     page.fill(U, u); page.fill(P, pw)
     page.evaluate(KEY, [U, "keyup", False])
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    wait_logged_in(page, timeout=8000)
     assert len(posts) == 1, posts
 
 
@@ -141,7 +143,7 @@ def test_pressing_enter_repeatedly_sends_one_login(live_server, make_user, e2e_b
     page.fill(U, u); page.click(P); page.keyboard.type(pw)
     for _ in range(3):
         page.keyboard.press("Enter")
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=8000)
+    wait_logged_in(page, timeout=8000)
     assert len(posts) == 1, posts
 
 

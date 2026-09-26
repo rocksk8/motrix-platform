@@ -17,6 +17,9 @@ pytest.importorskip("playwright.sync_api")
 from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E402,F401
     _login)
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 W, H = 1366, 768
 N_CASES = 40
 

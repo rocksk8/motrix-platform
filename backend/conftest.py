@@ -1424,6 +1424,24 @@ def _browser_netguard(request, monkeypatch):
 
 E2E_CONTEXT_HOOKS = []
 
+# ── O5-S1：/fonts/* 換成極小的替身（INVESTIGATION-D-O5-index-load.md）───────────────────────────────
+# 每題新 context、快取不跨題 ⇒ 每題打到頁面就下載兩支 otf（約 10.7 MB），全量合計約 4.5 GB，都由該 worker 的
+# live_server 送出；頁面的 load 事件也被它們綁住（D 實測：字型延遲多久 load 就延後多久）。行為題不需要真字型。
+# 替身是能解碼的最小 TrueType（tests/_assets/font_stub.ttf，648 bytes，由 tools/platform/make_font_stub.py 從零產生、不取自真字型）——空檔或 204 會讓
+# 瀏覽器在 console 印 decode 失敗，而不少 e2e 在收 console 錯誤。
+# 要量版面／字級的題標 `@pytest.mark.real_fonts` ⇒ 照舊拿真字型（替身的字寬不同，量出來的數字沒有意義）。
+FONT_STUB = Path(__file__).resolve().parent / "tests" / "_assets" / "font_stub.ttf"
+
+
+def _font_stub_hook(ctx, request):
+    if request.node.get_closest_marker("real_fonts"):
+        return
+    body = FONT_STUB.read_bytes()
+    ctx.route("**/fonts/*", lambda route: route.fulfill(status=200, body=body, content_type="font/ttf"))
+
+
+E2E_CONTEXT_HOOKS.append(_font_stub_hook)
+
 _PW = {"pw": None, "browser": None}
 
 

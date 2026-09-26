@@ -22,6 +22,14 @@ def session_init_script(sess):
     return "try { localStorage.setItem('motrix_session', %s); %s } catch (e) {}" % (json.dumps(json.dumps(sess)), flags)
 
 
+def wait_logged_in(page, timeout=10000):
+    """登入成功後等「應用就緒」：網址到 /index.html（只等 DOMContentLoaded）＋ sidebar.js 已畫出頂欄（#app-topbar）。
+    〔O5-S1：原本 `wait_for_url(...)` 預設等 `load`，而 load 被兩支約 5 MB 的字型綁住——這幾題要驗的是「有沒有登入成功」，
+      不是子資源有沒有下載完（INVESTIGATION-D-O5 §3）〕"""
+    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=timeout, wait_until="domcontentloaded")
+    page.wait_for_selector("#app-topbar", state="attached", timeout=timeout)
+
+
 def inject_login(page_or_context, base_url, username, password):
     ctx = getattr(page_or_context, "context", page_or_context)
     r = ctx.request.post(f"{base_url}/api/auth/login", data={"username": username, "password": password})

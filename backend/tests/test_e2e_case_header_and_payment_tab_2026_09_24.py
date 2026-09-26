@@ -16,6 +16,9 @@ from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (liv
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
 from tests._ui_dialogs import DIALOG, forbid_native_dialogs
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 
 def _open(browser, base, user, tab=""):
     page = browser.new_context(viewport={"width": 1400, "height": 1000}).new_page()

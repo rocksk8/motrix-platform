@@ -7,6 +7,8 @@
 import pyotp
 import pytest
 
+from tests._e2e_login import wait_logged_in
+
 pytest.importorskip("playwright.sync_api")
 
 U = "input[x-model='username']"
@@ -42,7 +44,7 @@ def _to_totp_step(page, user):
 
 
 def _logged_in(page):
-    page.wait_for_url(lambda url: url.endswith("/index.html"), timeout=10000)
+    wait_logged_in(page, timeout=10000)          # O5-S1：等應用就緒，不等 load
 
 
 @pytest.mark.e2e

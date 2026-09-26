@@ -19,6 +19,9 @@ pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_e2e_case_page_golden_2026_09_24 import NO, _seed  # noqa: F401  (live_server 是 fixture)
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_theme_2026_09_24.json")
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
