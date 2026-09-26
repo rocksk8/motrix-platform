@@ -30,7 +30,7 @@ _COMMA_JOIN = re.compile(r"\bFROM\s+[^;()]*?,\s*\"?%s\"?\b" % TABLE, re.I | re.S
 #: 2026-09-26 下沉當下，L1／L0 已經在讀（r）／寫（w）quotations 的檔案（DEPENDENCY-MAP §3.2：相依待各自切斷）。
 #: 只准變少：拿掉某一檔的讀或寫時把這裡改小；新檔案不可以加進來——要讀案件資料，經 M01 的提供者或 case_access。
 KNOWN_L1 = {
-    "archive.py": "r", "db.py": "rw", "pdf_gen.py": "rw",
+    "archive.py": "r", "db.py": "rw", "pdf_gen.py": "r",   # CA-O4（M01-PLAN §3-8 ①）：版本紀錄改經 case.doc_version ⇒ 只剩讀
     "helpers/audit.py": "r", "helpers/company_identity.py": "r", "helpers/google_calendar.py": "r",
     "routers/item_reads.py": "r", "routers/search.py": "r", "routers/system.py": "r",
     # 第六班列車交會（c-case-access × b-m08-3，2026-09-26）：以下兩檔不是新增的讀取，是既有讀取換了歸屬——
