@@ -83,6 +83,7 @@
 | M06-M3b 複核（A，wip/a-m06-7 d8a6068b） | D | `AUDIT-D-A-M06-move.md` §6 | 複核（2026-09-26 23:53）：**M06-M3b 關閉**（keyword-only、登錄表、** 三突變紅；6 處既有 ** 皆與 case.summary 無關）；建議 M06-S3：KNOWN_STAR_KWARGS 可加項變綠，加總數上限 |
 | MB-M1 複核（B，wip/b-modtest-batch-2 f3be5cd2） | D | `AUDIT-D-B-modtest-batch.md` §3 | 複核（2026-09-26 23:56）：**MB-M1 關閉**——沙盒 5 種寫法皆抓到、MB4／MB5 紅；conftest 跨檔 fixture 經 new_context 依賴展開，目前無漏；射程：日後不經 new_context 的瀏覽器 fixture |
 | M01 ②（C，wip/c-m01-s2 cefc5ecd）＋case404（C，wip/c-case404 f743662b） | D | `AUDIT-D-C-m01-s2.md`、`AUDIT-D-C-case404.md` | 完成（2026-09-27 00:24）：② 必修 0（題目 0 消失、路由 566⇔566、真刪 M01 需要 M01 的 66→75 項——增量是第十班附件題、無默默略過）；case404 **必修 1**（全 repo 403 斷言跑一遍：選題外還漏 2 處＋主持已知 1 處）、建議 1（掃描器漏 L1 判定函式→403 等寫法） |
+| M01 ③（C，wip/c-m01-ca3 8999d769）＋case404 複核（6ddb817c） | D | `AUDIT-D-C-m01-ca3.md`、`AUDIT-D-C-case404.md` §3 | 完成（2026-09-27 01:40）：case404 **CR-M1 關閉**（CR-S1 縮小為 visible→403 一種寫法）；③ **必修 1**：modtest 選題 609 檔（4941 過／3 紅）裡的 netplan 反向題仍從 `_LEGACY_PROVIDERS` 拿掉 case.access ⇒ KeyError，基底過；另外 2 紅是量測裝置與基底既有 vr1。宣告 13⇔刪除 13、執行期提供者相同、突變 2/2 紅、真刪 M01 紅 80＝② |
 | 瀏覽器 fixture 一律經 new_context（B，wip/b-newctx-rule ca1b84b6，輕量） | D | `AUDIT-D-B-newctx-rule.md` | 抽查完成（2026-09-27 00:25）：通過；三種寫法反向控制在、NC1 紅；建議 NC-S1（別名 import、async_playwright 漏） |
 | M06-S3 複核（A，wip/a-m06-8 b33aab7d） | D | `AUDIT-D-A-M06-move.md` §7 | 複核（2026-09-27 00:33）：**M06-S3 關閉**（加一筆紅）；建議 M06-S4：上限用 ≤，刪一筆後可再補一筆不紅，改成 == |
 | NC-S1 複核（B，wip/b-newctx-rule-2 d28c7c1d） | D | `AUDIT-D-B-newctx-rule.md` | 複核（2026-09-27 00:35）：**NC-S1 關閉**——別名／async／async 別名／helper 別名皆抓到、非 playwright 來源不算、NC2 紅 |

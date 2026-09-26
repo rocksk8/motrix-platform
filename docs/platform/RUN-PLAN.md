@@ -165,6 +165,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 01:40 D：c-case404 6ddb817c **CR-M1 關閉**（3 題改 404，21 過；掃描器認 L1 判定函式→403；CR-S1 剩 visible('case')→403）。c-m01-ca3 8999d769 **必修 CA3-M1**：modtest 選題（609 檔、2 批、-n 2、新版判讀）4941 過 3 紅——`modules/netplan/tests/test_netplan_case_access.py` 的 `_drop` 仍 delitem `_LEGACY_PROVIDERS[(case.access, case)]` ⇒ KeyError（基底過，tests/platform 以外所以 C 沒看到），改用 test_case_stage_connectors 的 `_without`；另 2 紅不歸本包（D 疊新版 modtest 配舊題；vr1 基底即紅）。宣告 13⇔刪 13、執行期提供者相同、突變 2/2 紅、真刪 M01 紅 80 與 ② 同。建議 CA3-S1 共用 drop_provider 夾具；觀察：modtest 差異題不帶 -n 即串行。
 - 2026-09-27 00:53 主持：使用者裁示第十二班 e2e 平行數試 3（CORE-SPEC 裁示表「e2e 平行數試跑」）；使用者問換 CPU 是否大幅加快——答：瓶頸不在 CPU（列車中 CPU 40～52%），換 5950X＋64 GB 估每輪測試約減半、整體專案只省數小時，建議 D7 後再換。
 - 2026-09-27 00:46 C：c-case404 → 6ddb817c（CR-M1）；月台登記 c-m01-ca3 8999d769（③）。④ 進行中（死線 04:30）：SO 提示＋e2e、D 兩項補題已完成；75 題搬移進行中。
 - 2026-09-27 00:35 D：**NC-S1 關閉（b-newctx-rule-2 d28c7c1d）**：sp 別名、async_playwright（含別名、async fixture）、helper 別名皆抓到，非 playwright 來源的同名別名不列；不認別名突變紅。

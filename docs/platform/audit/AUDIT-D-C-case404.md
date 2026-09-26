@@ -6,6 +6,7 @@
 ## 0. 結論
 
 - **必修 1、建議 1、待驗 1**。
+- 複核（6ddb817c）：**CR-M1 關閉**；CR-S1 縮小為 `visible('case')`→403 一種寫法（§3）。
 
 ## 1. 主持重點
 
@@ -37,3 +38,13 @@
 - 真實程式目前 **0 處**有這些寫法，所以列建議。但「用 L1 的判定函式判斷，然後回 403」是之後最自然會出現的寫法，建議至少把 L1 的四個判定函式加進掃描。
 
 - 觀察：`test_denied_and_missing_look_the_same` 只參數化 2 個端點；13 處轉換的一致性主要靠靜態掃描與 `deny_case` 集中保證。
+
+## 3. 複核 CR-M1（wip/c-case404 6ddb817c）（D，2026-09-27 01:40）
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| 3 處 403 斷言 | `test_approval_providers`、`test_approval_queue_detail_authz_2026_09_14`、`test_case_approver_single_rule_2026_09_25` 改成 404；連同 `test_case404`、`test_case_read_scope` 一起跑：21 過 | **CR-M1 關閉** |
+| 選題依據 | C 改用「全 repo 含 403 斷言」的 132 檔整批跑（非 e2e 2546、e2e 29，0 紅），D 在 f743662b 用的是同一個判準 | 成立 |
+| 掃描器（CR-S1） | 沙盒驗證：`case_page_readable`／`case_owner_readable`／`case_documents_readable` 判定後回 403 ⇒ **抓到**；alias 的 require ⇒ **抓到**；`if not row_access.visible('case', …): raise HTTPException(403)` ⇒ **仍然漏** | CR-S1 縮小為這一種寫法，維持建議（真實程式 0 處） |
+
+- 附件 -6 的一致性維持**待驗**，合回後再核對。
