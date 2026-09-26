@@ -108,25 +108,138 @@ def test_inflight_text_itself_hides_query_values():
 
 # ── O9 附註：關 context 的死線（conftest `_TeardownWatchdog`）────────────────────────────────
 
-def test_teardown_watchdog_says_why_and_exits():
-    """超過上限 ⇒ 寫出原因（含未完成的請求）並 exit_fn(3)。突變：不啟動計時器 ⇒ 紅。"""
+def test_teardown_watchdog_says_why_and_closes_the_browser():
+    """超過上限 ⇒ fired、寫出原因（含未完成的請求），並在瀏覽器的事件迴圈上排程關閉；**不結束行程**。"""
+    import asyncio
     import io
+    import threading
     import time
     import conftest as cf
-    item = types.SimpleNamespace(nodeid="t::x", _e2e_inflight={object(): (time.monotonic(), "GET", "http://x/api/o9-hang")})
-    out, fired = io.StringIO(), []
-    with cf._TeardownWatchdog(item, 0.2, exit_fn=fired.append, out=out):
+    loop = asyncio.new_event_loop()
+    t = threading.Thread(target=loop.run_forever, daemon=True)
+    t.start()
+    closed = []
+
+    class _Impl:
+        _loop = loop
+
+        async def close(self):
+            closed.append(1)
+    br = types.SimpleNamespace(_impl_obj=_Impl())
+    item = types.SimpleNamespace(nodeid="t::x", _e2e_inflight={object(): (time.monotonic(), "GET", "http://x/api/o9-hang?pt=S")})
+    out = io.StringIO()
+    wd = cf._TeardownWatchdog(item, 0.2, lambda: [br], out=out)
+    with wd:
         time.sleep(0.8)
+    loop.call_soon_threadsafe(loop.stop)
+    t.join(2)
+    assert wd.fired and closed == [1], (wd.fired, closed)
     text = out.getvalue()
-    assert fired == [3], (fired, text)
-    assert "t::x" in text and "/api/o9-hang" in text and "route" in text, text
+    assert "t::x" in text and "/api/o9-hang" in text and "route" in text and "pt=S" not in text, text
 
 
 def test_teardown_watchdog_is_silent_when_close_is_quick():
     import io
     import conftest as cf
-    out, fired = io.StringIO(), []
-    with cf._TeardownWatchdog(types.SimpleNamespace(nodeid="t::y"), 5, exit_fn=fired.append, out=out):
+    out = io.StringIO()
+    wd = cf._TeardownWatchdog(types.SimpleNamespace(nodeid="t::y"), 5, lambda: [], out=out)
+    with wd:
         pass
-    assert fired == [] and out.getvalue() == ""
+    assert not wd.fired and out.getvalue() == ""
+
+
+# ── 反向控制（主持：-n 0 與 -n 2 各一）：teardown 真的卡住時，只有那一題 error，其他題照跑、行程不被結束 ─────
+
+_HANG_IN_TEARDOWN = """
+import pytest
+
+
+@pytest.mark.e2e
+@pytest.mark.e2e_teardown_limit(3)
+def test_hangs_in_teardown(live_server, new_page):
+    page = new_page()
+    page.context.route("**/api/td-hang", lambda route: None)
+    page.goto(live_server + "/static/favicon.png")
+    # 模擬「close() 永遠不回來」：teardown 呼叫到的 close 其實在等一個 route 不回應的 fetch
+    page.context.close = lambda: page.evaluate("fetch('/api/td-hang').catch(() => {})")
+
+
+@pytest.mark.e2e
+def test_next_e2e_still_gets_a_browser(live_server, new_page):
+    page = new_page()
+    page.goto(live_server + "/static/favicon.png")
+
+
+def test_plain_one_after():
+    assert True
+"""
+
+
+def _run_probe(tmp_name, xdist, basetemp):
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+    here = _P(__file__).resolve().parent
+    f = here / tmp_name
+    f.write_text(_HANG_IN_TEARDOWN, encoding="utf-8")
+    try:
+        cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--basetemp", str(basetemp),
+               str(f.relative_to(here.parent)).replace(os.sep, "/")]
+        if xdist:
+            cmd[6:6] = ["-n", "2"]
+        env = dict(os.environ, MOTRIX_E2E_TEST_LIMIT="60")
+        r = subprocess.run(cmd, cwd=str(here.parent), capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=240, env=env)
+        return r.returncode, r.stdout + r.stderr
+    finally:
+        f.unlink()
+
+
+@pytest.mark.e2e
+@pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n2"])
+def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
+    """子行程跑三題：第一題 teardown 卡住 ⇒ 那一題另記一個 error（訊息含原因），三題本體都 passed（第二題是 e2e，要新瀏覽器），
+    行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程卡到 240 秒逾時（TimeoutExpired）⇒ 紅。"""
+    import uuid
+    code, out = _run_probe("test_zz_td_probe_%s.py" % uuid.uuid4().hex[:8], xdist, tmp_path / "bt")
+    # teardown error 的那一題本體算 passed ⇒ 三題都 passed＋一個 error（實測 -n 0：3 passed, 1 error in 13s）
+    assert "3 passed" in out and "1 error" in out, out[-1500:]
+    assert "[e2e teardown]" in out and "td-hang" in out, out[-1500:]
+
+
+
+# ── e2e 每題死線（conftest pytest_runtest_call＋_close_contexts_threadsafe）─────────────────────
+
+@pytest.mark.e2e
+@pytest.mark.e2e_limit(4)
+def test_deadline_breaks_a_never_settling_evaluate(live_server, new_page, request):
+    """evaluate 等 route 不回應的 fetch promise（原本要等 renderer crash，50～400 秒以上）⇒ 死線（這題 4 秒）一到就丟例外。
+    突變：不啟動計時器 ⇒ 這一題卡死（由外層 timeout 判紅）。"""
+    import time
+    import conftest as cf
+    page = new_page()
+    page.context.route("**/api/deadline-hang", lambda route: None)
+    page.goto(f"{live_server}/static/favicon.png")
+    t0 = time.monotonic()
+    with pytest.raises(Exception):
+        page.evaluate("fetch('/api/deadline-hang').catch(() => {})")
+    took = time.monotonic() - t0
+    assert took < 20, "死線 4 秒，卻等了 %.1f 秒" % took
+    assert getattr(request.node, "_e2e_deadline_hit", False), "死線沒有觸發（例外是別的原因丟的）"
+    assert "/api/deadline-hang" in cf.inflight_text(request.node)
+
+
+def test_deadline_report_section_names_the_limit_and_the_requests():
+    import conftest as cf
+    rep = types.SimpleNamespace(when="call", failed=True, sections=[], longrepr="TargetClosedError")
+    call = types.SimpleNamespace(excinfo=types.SimpleNamespace(typename="TargetClosedError"))
+    item = types.SimpleNamespace(_e2e_inflight={object(): (0.0, "GET", "http://x/api/slow?q=SECRET5")}, _e2e_deadline_hit=True,
+                                 get_closest_marker=lambda name: types.SimpleNamespace(args=(7,)) if name == "e2e_limit" else None)
+    gen = cf.pytest_runtest_makereport(item, call)
+    next(gen)
+    with pytest.raises(StopIteration):
+        gen.send(types.SimpleNamespace(get_result=lambda: rep))
+    title, body = rep.sections[0]
+    assert "死線 7 秒" in title and "/api/slow?q=***" in body and "SECRET5" not in body, rep.sections
 

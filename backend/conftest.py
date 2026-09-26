@@ -1505,29 +1505,114 @@ E2E_CONTEXT_HOOKS.append(_inflight_hook)
 E2E_TEARDOWN_LIMIT = float(os.environ.get("MOTRIX_E2E_TEARDOWN_LIMIT", "60"))
 
 
-class _TeardownWatchdog:
-    """with 區塊超過 seconds 秒 ⇒ 說出原因並 exit_fn(3)。exit_fn／out 可注入（題目用）。"""
+# ── e2e 每題死線（主持裁示 2026-09-26；O9 後續）────────────────────────────────────────────────
+# 題目本體卡在「等一個永不回來的東西」（例：evaluate 回傳 route 不回應的 fetch promise）時，Playwright 的 evaluate
+# 沒有逾時 ⇒ 原本要等到 renderer crash（50～400 秒以上）才動，而且之後 close 也卡。
+# 做法：每題（有開 context 的 e2e）起一個計時器；到了就在 Playwright 自己的事件迴圈上（call_soon_threadsafe——同步 API
+# 不是執行緒安全的，這是唯一安全的入口）關掉這一題的 context ⇒ 卡住的那個呼叫丟 TargetClosedError ⇒ **這一題失敗**
+# （不是整個 worker 結束），報告附「超過死線」一段＋未完成的請求。
+# 與下方既有的「e2e 逐題上限」（MOTRIX_E2E_HARD_CAP，預設 120s：寫堆疊、xdist 下結束 worker）的分工：這支是**軟上限**，
+# 讓這一題以失敗收場並說出卡在哪個請求；硬上限留作最後一道。⇒ 軟上限預設＝硬上限－30 秒（必須先到）。
+# 上限：`@pytest.mark.e2e_limit(秒)` ＞ MOTRIX_E2E_TEST_LIMIT ＞ 硬上限－30（最少 10）。
 
-    def __init__(self, item, seconds, exit_fn=None, out=None):
+
+def _e2e_limit_of(item):
+    m = item.get_closest_marker("e2e_limit") if hasattr(item, "get_closest_marker") else None
+    if m and m.args:
+        return float(m.args[0])
+    env = os.environ.get("MOTRIX_E2E_TEST_LIMIT")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    return max(10.0, _e2e_hard_cap_seconds() - 30)
+
+
+def _schedule_close(loop, impl):
+    """在 impl 自己的事件迴圈上排程 close()，並把結果的例外吃掉（否則 asyncio 會印「exception was never retrieved」）。"""
+    import asyncio
+
+    def _go():
+        fut = asyncio.ensure_future(impl.close())
+        fut.add_done_callback(lambda f: f.cancelled() or f.exception())
+    loop.call_soon_threadsafe(_go)
+
+
+def _close_contexts_threadsafe(item):
+    """死線到了（計時器執行緒）：在各 context 自己的事件迴圈上排程 close。"""
+    import asyncio
+    item._e2e_deadline_hit = True
+    for ctx in list(getattr(item, "_e2e_contexts", []) or []):
+        impl = getattr(ctx, "_impl_obj", None)
+        loop = getattr(impl, "_loop", None)
+        if impl is None or loop is None:
+            continue
+        _schedule_close(loop, impl)
+
+
+# ⚠ 名字不可以是 pytest_runtest_call：本檔下面已有同名的 hookwrapper（Python 後定義的會蓋掉先定義的 ⇒ 這支會靜默不生效）；
+#   也不可以是不以 pytest_ 開頭的名字：pytest 只收 pytest_ 開頭的函式當 hook（實測 _e2e_deadline_call 完全沒被呼叫）⇒ 用 specname
+@pytest.hookimpl(hookwrapper=True, specname="pytest_runtest_call")
+def pytest_e2e_deadline_call(item):
+    import threading
+    timer = None
+    if item.get_closest_marker("e2e"):
+        timer = threading.Timer(_e2e_limit_of(item), _close_contexts_threadsafe, args=(item,))
+        timer.daemon = True
+        timer.start()
+    try:
+        yield
+    finally:
+        if timer is not None:
+            timer.cancel()
+
+
+def _teardown_limit_of(item):
+    m = item.get_closest_marker("e2e_teardown_limit") if hasattr(item, "get_closest_marker") else None
+    return float(m.args[0]) if m and m.args else E2E_TEARDOWN_LIMIT
+
+
+def _stop_shared_browser_quietly():
+    """共用瀏覽器被看門狗強制關掉之後：丟掉參照並停掉 playwright，下一題由 _shared_browser() 重開。"""
+    try:
+        _stop_shared_browser()
+    except Exception:                                        # noqa: BLE001 已關的瀏覽器 close 會丟；照樣清掉
+        _PW["pw"] = _PW["browser"] = None
+
+
+class _TeardownWatchdog:
+    """with 區塊（關 context）超過 seconds 秒 ⇒ 說出原因，並在瀏覽器自己的事件迴圈上關掉瀏覽器——卡住的 close() 因此丟例外、
+    teardown 繼續往下走。**不結束行程**（主持：-n 0 時 os._exit 會把整個 pytest 主行程連同其他題的結果一起結束）。
+    browsers_fn：到點時要關的瀏覽器（同步 API 物件）；out 可注入（題目用）。fired＝有沒有觸發（呼叫端據此讓這一題失敗）。"""
+
+    def __init__(self, item, seconds, browsers_fn, out=None):
         import threading
-        self.item, self.seconds = item, seconds
-        self.exit_fn = exit_fn or os._exit
+        self.item, self.seconds, self.browsers_fn = item, seconds, browsers_fn
         self.out = out or sys.stderr
+        self.fired = False
         self.timer = threading.Timer(seconds, self._fire)
         self.timer.daemon = True
 
-    def _fire(self):
-        o = self.out
-        o.write("\n[e2e teardown] 關閉 %s 的瀏覽器 context 超過 %d 秒，結束這個 worker（不讓它永遠卡住）。\n"
+    def reason(self):
+        return ("關閉 %s 的瀏覽器 context 超過 %d 秒，已強制關閉瀏覽器讓 teardown 繼續（下一題會重開）。\n"
                 "常見原因：route 攔下請求而沒有回應，頁面又在等它 ⇒ renderer crash 後 close() 不回來（RUN-PLAN O9）。\n"
-                "未完成的請求：\n%s\n" % (getattr(self.item, "nodeid", "?"), self.seconds, inflight_text(self.item)))
+                "未完成的請求：\n%s" % (getattr(self.item, "nodeid", "?"), self.seconds, inflight_text(self.item)))
+
+    def _fire(self):
+        import asyncio
+        self.fired = True
         try:
-            import faulthandler
-            faulthandler.dump_traceback(file=o, all_threads=True)
-        except Exception:                                    # noqa: BLE001 沒有真的 fd（題目的 StringIO）⇒ 略過堆疊
+            self.out.write("\n[e2e teardown] " + self.reason() + "\n")
+            self.out.flush()
+        except Exception:                                    # noqa: BLE001 寫不出去也要照樣關
             pass
-        o.flush()
-        self.exit_fn(3)
+        for br in list(self.browsers_fn() or []):
+            impl = getattr(br, "_impl_obj", None)
+            loop = getattr(impl, "_loop", None)
+            if impl is None or loop is None:
+                continue
+            _schedule_close(loop, impl)
 
     def __enter__(self):
         self.timer.start()
@@ -1544,7 +1629,10 @@ def pytest_runtest_makereport(item, call):
     rep = outcome.get_result()
     if not rep.failed:
         return
-    if rep.when == "call" and call.excinfo is not None and "Timeout" in call.excinfo.typename:
+    if rep.when == "call" and getattr(item, "_e2e_deadline_hit", False):
+        rep.sections.append(("e2e 超過每題死線 %d 秒：已關閉這一題的瀏覽器 context（MOTRIX_E2E_TEST_LIMIT／@pytest.mark.e2e_limit）"
+                             % _e2e_limit_of(item), inflight_text(item)))
+    elif rep.when == "call" and call.excinfo is not None and "Timeout" in call.excinfo.typename:
         rep.sections.append(("e2e 逾時時未完成的請求（O5-S2）", inflight_text(item)))
     # e2e 的失敗文字整段遮蔽（任何階段）：Playwright 的錯誤訊息自帶請求標頭（Bearer）與完整網址（?pt=、?q=）
     is_e2e = getattr(item, "get_closest_marker", None) and item.get_closest_marker("e2e")
@@ -1714,22 +1802,42 @@ def new_context(request):
         for hook in E2E_CONTEXT_HOOKS:
             hook(ctx, request)
         opened.append(ctx)
+        request.node.__dict__.setdefault("_e2e_contexts", []).append(ctx)
         return ctx
 
     yield _make
-    with _TeardownWatchdog(request.node, E2E_TEARDOWN_LIMIT):       # O9：close() 可能永遠不回來
+    def _browsers():
+        out = []
         for ctx in opened:
             try:
-                ctx.close()
-            except Exception:
-                pass
-        if own:
-            try:
-                own["browser"].close()
-            finally:
-                own["pw"].stop()
-    # 頁面都關了 ⇒ 不會再有新請求；等處理中的跑完，才輪到 monkeypatch 還原與下一題換庫
-    _drain_servers()
+                br = ctx.browser
+            except Exception:                                # noqa: BLE001 已經關掉的 context
+                br = None
+            if br is not None and br not in out:
+                out.append(br)
+        return out
+    wd = _TeardownWatchdog(request.node, _teardown_limit_of(request.node), _browsers)
+    try:
+        with wd:                                             # O9：close() 可能永遠不回來
+            for ctx in opened:
+                try:
+                    ctx.close()
+                except Exception:
+                    pass
+            if own:
+                try:
+                    own["browser"].close()
+                except Exception:
+                    pass
+                finally:
+                    own["pw"].stop()
+        if wd.fired:
+            _stop_shared_browser_quietly()                 # 瀏覽器已被強制關閉 ⇒ 下一題重開
+    finally:
+        # 頁面都關了 ⇒ 不會再有新請求；等處理中的跑完，才輪到 monkeypatch 還原與下一題換庫
+        _drain_servers()
+    if wd.fired:
+        raise RuntimeError("[e2e teardown] " + wd.reason())     # 只讓這一題失敗（teardown error），不結束行程
 
 
 @pytest.fixture()
