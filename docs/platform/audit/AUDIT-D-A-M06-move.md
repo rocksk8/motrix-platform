@@ -116,3 +116,29 @@
 - 反向控制（沙盒原始碼）：別的模組帶用途、用變數傳、`"voucher_" + "link"` 串接 ⇒ 紅；docstring 提到不算。
 - 突變 3/3 紅：在 modules/supply 加一個 `purpose="voucher_link"`、會計改成用變數傳、守門允許清單放寬。M06 不在時本檔照跑（端到端題略過）。
 
+
+## 5. 複核：wip/a-m06-6 00f5f0a6（只看 M06-M3；D 23:41）
+
+- 守門 `purpose_violations`：
+  - ① 字面值 `voucher_link`（排除 docstring；相鄰字串與 `+` 串接先合併再比）只准出現在 `helpers/case_access.py`、`modules/accounting/api/vouchers.py`。
+  - ② 任何呼叫的 `purpose=` 關鍵字必須是字串字面值。
+  - 基準：本檔 8 過。
+- D 用 A 的 `purpose_violations` 直接測沙盒（檔案放在 `modules/supply/api/x.py`）：
+
+| 寫法 | 結果 |
+|---|---|
+| `s(conn, user, **{"purpose": "voucher_link"})`（主持指定：`**` 字典字面值） | 抓到 |
+| `k = {"purpose": "voucher_link"}; s(conn, user, **k)`（主持指定：`**` 變數） | 抓到 |
+| `s(conn, user, **dict(purpose="voucher_link"))` | 抓到 |
+| `from helpers.case_access import SUMMARY_PURPOSE_MODULES; k = {"purpose": next(iter(SUMMARY_PURPOSE_MODULES))}; s(conn, user, **k)` | **漏** |
+| 同上取值，用第 4 個位置參數 `s(conn, user, None, p)` | **漏** |
+| `"".join(["vou","cher_","link"])` 拼出後用位置參數傳 | 漏（刻意混淆，列為射程限制） |
+
+⇒ **M06-M3 未完全關閉，改列 M06-M3b（必修）**：
+- `**` 帶字面值（主持指定的兩種）已擋。
+- 但「不寫字面值、從登錄表 `SUMMARY_PURPOSE_MODULES` 取值」可以繞過，而且②只檢查關鍵字參數，不檢查位置參數與非字面值的 `**`。
+- 修法（小）：
+  - (a) `SUMMARY_PURPOSE_MODULES` 只准 `helpers/case_access.py` 引用；目前確實只有它自己在用。
+  - (b) ②擴充：case.summary 的第 4 個位置參數，以及 `**` 展開的非字面值字典，一律禁止。
+  - 兩項各補一個反向控制。
+- 射程限制（join、eval 等刻意混淆）寫進說明即可。
