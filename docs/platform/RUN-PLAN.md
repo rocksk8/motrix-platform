@@ -136,6 +136,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 11:00 D：c-tax-calc a1d7ba4a、c-m01-sink2-2 77b9a672 必修 0（突變 5/5 紅）；觀察：c-tax-calc 改 routers/reports.py import，b-m08-2 會搬走該檔，後上車者 rebase 時要把新位置的 import 一起改。
 - 2026-09-26 10:57 D：b-o6 a8f60a28（`AUDIT-D-B-o6.md`）必修 O6-M1：競態從收集 tests/ 搬到產品碼掃描（實測新位置 3/20 FileNotFoundError、舊位置 0）；建議 backend/tests/.hardcap_probe_*（在 tests 內＋點開頭）。
 - 2026-09-26 10:55 D：R-M1 關閉（b-rebasecheck-2 16150027）；觀察：PLAYBOOK :119、:188 的「fixture 層 ⇒ 全量」沒寫由列車跑。R-S1 仍開。
 - 2026-09-26 10:55 D：**b-g1-2 19dc327c**：range-diff 前三個 commit 相同；G-S2、G-O3、G-O4、G-O5 關閉（突變 3 項紅）；G-M1 仍為條件式（同班）。**b-maps-2 c8c69c79**：BM-M1（D2 樹 9 過）、BM-M2（與 b-g1-2 cfe4e914 同班）、BM-S1 關閉。兩包可上第六班，須同車。

@@ -38,6 +38,7 @@
 | 產生檔一致性守門（B，wip/b-maps d25f7ef3，合回前） | D | `AUDIT-D-B-maps.md` | 稽核完成（2026-09-26 10:34）：**必修 2**（BM-M1 dep_graph.json 內含工作樹名 `root` ⇒ 模組全在時 D 樹也紅；BM-M2 拿掉任一模組三題全紅、不在允許清單 ⇒ 第一班 core-only 即紅）、建議 1（dep_graph 過期反向控制不走實際比對）；OWNED_KINDS 單一定義成立 |
 | modtest --rebase-check 不叫各線跑全量（B，wip/b-rebasecheck e0137ddc，合回前） | D | `AUDIT-D-B-rebasecheck.md` | 稽核完成（2026-09-26 10:40）：**必修 1**（R-M1 PLAYBOOK §C-11 本文仍寫「fixture 層或程式碼衝突 ⇒ 重跑全量」，與新行為矛盾）、建議 1（fixture 不進 --files 只在他人改 fixture 情境有題，RB1 存活）；基準 28 過，突變 3 項 2 紅 |
 | O6 hard_cap 探針移出 tests/（B，wip/b-o6 a8f60a28，合回前） | D | `AUDIT-D-B-o6.md` | 稽核完成（2026-09-26 10:57）：**必修 1**（O6-M1 搬到 backend/.hardcap_probe_* 後，十多道「rglob backend、排除 tests」的產品碼掃描看得到它；實測新位置 20 次掃描 FileNotFoundError 3 次（另有 PermissionError），舊位置 0；建議改放 backend/tests/.hardcap_probe_*） |
+| T 稅額純函式下沉 L1（C，wip/c-tax-calc a1d7ba4a）＋M01 下沉第二批（wip/c-m01-sink2-2 77b9a672） | D | `AUDIT-D-C-tax-sink2.md` | 稽核完成（2026-09-26 11:00）：必修 0；AST 比對 4 支逐字搬移、tax_split 只差 % 修正；突變 5/5 紅；觀察：c-tax-calc 改 routers/reports.py 的 import，與 b-m08-2 搬檔交會 |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事
