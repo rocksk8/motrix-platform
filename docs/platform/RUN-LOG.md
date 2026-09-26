@@ -2,6 +2,7 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-27 04:35 B：**D7 前哨第 8 次**（第十一班合回後，`git archive origin/platform` 953013da，不是部署包；工具＝現行 final_drill，冒煙讀 probes）：**run8-full 11 步全過、約 70 秒**（冒煙 59 項全 200；accounting（M06）、case（M01）判「尚未搬進 modules/」＝正確歸類、不是失敗；6a 邏輯內容＝原始庫、V9 ping 200；6c V9 ping 200）。**run8-core**（git_export＋`product_select apply --product core-only`，check 一致）：1～4d、5、6a～6c 全過（冒煙 10 項全 200；9 個已搬遷模組判「不在安裝包」、M06／M01 判尚未搬遷；6a 邏輯內容＝原始庫、V9 ping 200）⇒ **0 項回歸**。V9 開發目錄 git status 乾淨、演練期間無新 -wal／-shm；無殘留行程；`D:\MOTRIX-DRILLSun8-20260927-043138` 用完已刪（深一層可刪）。觀察：core-only 的「不在安裝包」模組只列為合法略過，工具沒有實際打它們的 probes 驗 404（D7-CHECKLIST §3 要求 404）——正式 D7 前要補或由主持裁示。
 - 2026-09-26 22:33 D：b-scan-modules 64c3a9f6 **必修 SM-M1**：view_filter 的沙盒題直接呼叫 _undecided_pages(page_files())，真正那一題改回 L1 glob 照綠（B2 存活）。其餘成立：① bonus.py 正對照（B1 紅）、③ 送信歸類（B4 紅、沙盒新增未歸類紅、排除清單不能變綠）、alpine 模組頁（B3 紅）；建議 SM-S1 送信偵測 alias／getattr 漏抓。
 - 2026-09-26 22:09 D：b-ip15-cost afbb1b8d 通過、必修 0：白名單無人名（多回 notes／回姓名突變紅）、finance 可看（拿掉 finance 紅）、只新增（list_for_case 不變有題）、不註冊紅；93 過。注意：合回後 M06 的 a' 到期守門會紅（預期中）。
 - 2026-09-26 22:06 D：a-m06-2 25408f3f **必修 2**：M06-M1 D2 真刪 modules/accounting ⇒ 5 題非允許紅（case_cross_module_links 1、t100_unconfirm e2e 1、bonus_vouchers_page e2e 3；M06 在時皆過）；M06-M2 EM10 139→135 是移出計數範圍，掃描器 157 中 modules/ 22 條只有 tender_radar 有守門（accounting 4＋既有 11 條無人守）。通過項：題目 0 消失、搬題 29 本體只改路徑、M07 兩支兩邊實質、a' 到期守門紅、IP-22 兩側有題；建議：邊界「起點耗盡 fail」無題、bonus flag 往上爬檢查在 M06 不在時被一起 skip。
