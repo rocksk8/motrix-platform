@@ -16233,7 +16233,8 @@
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/source_tree.py"
+     "backend/core/source_tree.py",
+     "backend/helpers/email_notify.py"
     ],
     "path": [
      "backend/helpers/email_notify.py",

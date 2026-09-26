@@ -105,12 +105,17 @@ def _sandbox_with_module_page(tmp_path, monkeypatch, html):
 
 
 def test_a_module_page_is_in_scope(tmp_path, monkeypatch):
-    """⚙️ 反向控制（主持裁示）：模組頁面（modules/x/pages）有未標的篩選欄 ⇒ 要被抓到；標了 ⇒ 放過。"""
+    """⚙️ 反向控制（主持裁示）：模組頁面（modules/x/pages）有未標的篩選欄 ⇒ **真正那一題**要紅；標了 ⇒ 綠。
+
+    〔稽核 D SM-M1：原本這裡直接呼叫 `_undecided_pages(page_files())`——真正那一題改回只 glob L1 頁面目錄時照綠。
+      改成在沙盒裡跑真正那一題的本體：它用哪一個頁面集合，這一題就驗到哪一個〕"""
+    import pytest
     _sandbox_with_module_page(tmp_path, monkeypatch, '<select x-model="year">')
     assert {p.name for p in source_tree.page_files()} == {"l1-clean.html", "x-view.html"}
-    assert _undecided_pages(source_tree.page_files()) == {"x-view.html": [(1, "year")]}
+    with pytest.raises(AssertionError, match="x-view.html"):
+        test_every_filter_like_binding_has_a_decision()
 
 
 def test_a_marked_module_page_passes(tmp_path, monkeypatch):
     _sandbox_with_module_page(tmp_path, monkeypatch, '<select class="filter" x-model="year">')
-    assert _undecided_pages(source_tree.page_files()) == {}
+    test_every_filter_like_binding_has_a_decision()
