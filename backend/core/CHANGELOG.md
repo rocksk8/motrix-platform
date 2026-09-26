@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.45 — 2026-09-26（C，c-case404：M01-O1 看不到＝不存在；疊在 M01 ②）〔core_bump：暫用 1.99 → 1.45〕
+> 介面只有新增。
+- L1（新增）：`helpers.case_access.case_not_found_message`、`deny_case`、`require_case`、`CASE_DENIAL_AUDIT`——案件逐案拒絕一律 404、訊息與查無相同；audit_log 記真正原因（`case.access_denied`，detail.reason＝denied／not_found；背景執行緒寫，避開呼叫端的寫鎖與 rollback）
+- L1（行為）：`guard_case_access` 被拒 403 → 404（M03／M04／M05／M10 經它的路徑一併改變）；模組權限的 403 不變
+- 規格界線（稽核 D AT6-O1）：只保護沒有傳票權限的角色；傳票 summary-sources 的「案件」頁籤（JV7）照舊對 cashier／finance 列出全部案件
+- 守門：`tests/platform/test_case404.py`（同一個回應、audit 原因、正對照、模組權限 403 不變、案件判定之外無逐案 403＋反向控制）；既有 403 斷言 31 行機械替換成 404（改前後同為 559 過）
+
 ## 1.48 — 2026-09-26（C，M01-PLAN §3-8 ② M01 本體搬進 modules/case；疊在 c-m01-3）〔core_bump：暫用 1.99 → 1.44〕〔core_bump：暫用 1.44 → 1.48〕
 > 介面沒有變（搬走的全是 M01 的檔，不在 L1 介面裡）。
 - L1（移出）：`routers/quotations.py`、`case_action_items.py`、`case_extra_expenses.py`、`completion_notes.py`、`material_orders.py`、`helpers/quotations.py`、`quote_terms.py`、`recognition.py`、`case_deadlines.py`、`case_stage_tasks.py`、`completion_pdf.py` 搬進 `modules/case/`；`main.py` 不再掛這五支 router（載入器依 ModuleSpec 掛載，順序同前）

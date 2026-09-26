@@ -141,4 +141,4 @@ def test_upload_requires_case_access(client, make_user, seed_extra_expense):
 
     token = _login(client, outsider, outsider_pw)
     r = _upload(client, token, exp_id)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, r.text   # M01-O1：看不到＝不存在（同一個 404）

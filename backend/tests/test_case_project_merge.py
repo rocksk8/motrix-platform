@@ -96,7 +96,7 @@ def test_action_item_two_stage_approval(client, make_user):
     r = client.post("/api/quotations/MQ-PJM-001/action-items",
                      headers=_auth(_login(client, nobody, nobody_pw)),
                      json={"text": "路人甲"})
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, r.text   # M01-O1：看不到＝不存在（同一個 404）
 
     # 業務主管不能先簽第二階段
     r = client.patch(f"/api/quotations/MQ-PJM-001/action-items/{item_id}/approve",
@@ -180,7 +180,7 @@ def test_assigned_user_can_see_case_visibility(client, make_user):
     assert "MQ-PJM-VIS" not in [i["quote_no"] for i in r.json()["items"]]
 
     r = client.get("/api/quotations/MQ-PJM-VIS", headers=_auth(outsider_token))
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, r.text   # M01-O1：看不到＝不存在（同一個 404）
 
     # admin 分配 outsider 進 assigned_user_ids
     r = client.patch("/api/quotations/MQ-PJM-VIS/assigned-users", headers=_auth(admin_token),

@@ -145,9 +145,9 @@ def test_other_salespersons_case_is_not_accessible(client, make_user):
 
     other = _login(client, other_name, other_pw)
     assert client.get("/api/quotations/MQ-MO-005/material-orders",
-                      headers=_auth(other)).status_code == 403
+                      headers=_auth(other)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     assert client.patch("/api/quotations/MQ-MO-005/material-orders", headers=_auth(other),
-                        json={"materialOrders": [_order()]}).status_code == 403
+                        json={"materialOrders": [_order()]}).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
     owner = _login(client, owner_name, owner_pw)
     assert client.get("/api/quotations/MQ-MO-005/material-orders",

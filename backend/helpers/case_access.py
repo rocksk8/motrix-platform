@@ -6,6 +6,13 @@
 ⚠ 已知例外（DEPENDENCY-MAP §3.2）：本檔讀 M01 的 `quotations` 表；L1 其他檔新增讀寫這張表會被
 `tests/platform/test_case_access_l1.py` 擋下（既有的讀寫列在基線、只准變少）。
 M01 不在 ⇒ `guard_case_access` 一律 404、`case_access_allowed` 一律 False，不放行。
+
+**看不到＝不存在（M01-O1，主持裁示 2026-09-26）**：逐案判定被拒一律回 404，狀態碼與訊息和「查無此案」逐字相同
+（`case_not_found_message`），不讓人用 403／404 的差別探知案件編號存不存在；audit 另記真正原因（`CASE_DENIAL_AUDIT`，
+detail.reason＝denied／not_found）。判定只在這裡：`guard_case_access`、`require_case`、`deny_case`；M01 的 `_guard_case`
+也呼叫 `deny_case`。守門 tests/platform/test_case404.py 掃「案件判定路徑之外對逐案拒絕回 403」。
+⚠ 規格界線（稽核 D AT6-O1，主持裁示）：這**只保護沒有傳票權限的角色**——傳票 summary-sources 的「案件」頁籤（JV7）
+照舊對 cashier／finance 列出全部案件，**不保證對 finance 隱藏案件是否存在**。模組權限的 403（沒有該模組）不在此列。
 「M01 在不在」看它提供的 `case.access`（`case_module_present()`），**不看表**：V9 基準的 `init_db` 在每個安裝都建 `quotations`，
 M01 停用、未授權或不在安裝包時，表與資料照樣在（稽核 D CA-M1）。
 """
@@ -17,6 +24,55 @@ from fastapi import HTTPException
 from core import registry as _registry
 from core import txn as _txn
 from helpers import row_access
+
+#: 逐案拒絕與查無案件的 audit action；detail = {"reason": "denied"|"not_found"}（對外兩者是同一個 404）
+CASE_DENIAL_AUDIT = "case.access_denied"
+
+
+def case_not_found_message(quote_no: str) -> str:
+    """查無案件與逐案拒絕共用的訊息（M01-O1：兩者逐字相同）。"""
+    return f"報價單 {quote_no} 不存在"
+
+
+def _audit_case_denial(user: dict, quote_no: str, reason: str) -> None:
+    """記真正原因。背景執行緒寫：呼叫端可能正拿著寫鎖、或例外之後會 rollback（同一條連線寫 audit 會一起消失）。"""
+    from db import get_db, spawn_bg_thread
+    from datetime import datetime
+
+    def _write(uid, uname, dname):
+        try:
+            c = get_db()
+            try:
+                c.execute("INSERT INTO audit_log (at,user_id,username,display_name,action,target_type,target_id,target_label,detail) "
+                          "VALUES (?,?,?,?,?,?,?,?,?)",
+                          (datetime.now().isoformat(), uid, uname, dname, CASE_DENIAL_AUDIT, "quotation", quote_no, "",
+                           json.dumps({"reason": reason}, ensure_ascii=False)))
+                c.commit()
+            finally:
+                c.close()
+        except Exception:                                    # noqa: BLE001  記錄失敗不影響回應
+            pass
+    u = user or {}
+    spawn_bg_thread(_write, args=(u.get("id"), u.get("username") or "", u.get("display_name") or ""))
+
+
+def deny_case(conn, quote_no: str, user: dict, reason: str):
+    """逐案拒絕／查無案件：關連線（有給的話）、記 audit（真正原因）、丟 404（訊息同查無）。`reason`：denied／not_found。"""
+    assert reason in ("denied", "not_found"), reason
+    if conn is not None:
+        _txn.safe_close(conn)
+    _audit_case_denial(user, quote_no, reason)
+    raise HTTPException(404, case_not_found_message(quote_no))
+
+
+def require_case(user: dict, row, quote_no: str, *, scope: str = "owner"):
+    """`row_access.require("case", …)` 的案件版（M01-O1）：`row` 為 None ⇒ 查無；不可見 ⇒ 同一個 404。
+    不關連線（呼叫端各自處理，同原 require）。"""
+    if row is None:
+        deny_case(None, quote_no, user, "not_found")
+    if not row_access.visible("case", user, row, scope=scope):
+        deny_case(None, quote_no, user, "denied")
+
 
 #: M01 案件模組「在不在」的訊號＝它提供的 `case.access`（INTEGRATION-POINTS IP-12，A 的 M10 搬遷前置）。
 #: 主持裁示只留一個訊號：別組經 IP-12 `case.access.guard` 走到的也是本檔的 `guard_case_access`，
@@ -139,11 +195,9 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
             raise
         q = None
     if not q:
-        _txn.safe_close(conn)
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        deny_case(conn, quote_no, user, "not_found")
     if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
-        _txn.safe_close(conn)
-        raise HTTPException(403, CASE_ACCESS.deny_message)
+        deny_case(conn, quote_no, user, "denied")          # M01-O1：看不到＝不存在（同一個 404）
     return q
 
 

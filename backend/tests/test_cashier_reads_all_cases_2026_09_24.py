@@ -71,7 +71,7 @@ def test_non_member_without_cashier_still_cannot_read(client, make_user):
     _seed()
     h = _login(client, *u)
     assert not _listed(client, h)
-    assert client.get(f"/api/quotations/{NO}", headers=h).status_code == 403
+    assert client.get(f"/api/quotations/{NO}", headers=h).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_reading_does_not_open_other_writes(client, make_user):
@@ -86,9 +86,9 @@ def test_reading_does_not_open_other_writes(client, make_user):
     finally:
         conn.close()
     h = _login(client, *u)
-    assert client.put(f"/api/quotations/{NO}", headers=h, json={"data": {"items": []}}).status_code == 403
+    assert client.put(f"/api/quotations/{NO}", headers=h, json={"data": {"items": []}}).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     assert client.patch(f"/api/quotations/{NO}/material-orders", headers=h,
-                        json={"materialOrders": []}).status_code == 403
+                        json={"materialOrders": []}).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_map_case_layer_matches_list_visibility_for_cashier(client, make_user, _geo):

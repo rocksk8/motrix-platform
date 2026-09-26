@@ -47,7 +47,7 @@ def test_with_m01_binding_and_per_case_access(client, make_user):
     plan = client.get("/api/network-plans/%d" % r.json()["id"], headers=sa).json()
     assert plan["siteName"] == "規劃客戶" and plan["quoteNo"] == "MQ-NP-0926"      # summary 帶出客戶名
     assert client.get("/api/quotations/MQ-NP-0926/network-plan", headers=sa).status_code == 200
-    assert client.get("/api/quotations/MQ-NP-0926/network-plan", headers=out).status_code == 403
+    assert client.get("/api/quotations/MQ-NP-0926/network-plan", headers=out).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_reverse_without_m01_plans_work_but_cannot_bind(client, make_user, monkeypatch):

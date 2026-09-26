@@ -160,7 +160,7 @@ def test_permission_matches_pdf_download_for_existing_quote(client, make_user, c
         pdf = client.get(f"/api/quotations/{QUOTE_NO}/pdf-download{qs}", headers=_auth(tok)).status_code
         pv = _preview(client, tok, internal=internal).status_code
         assert pv == pdf, (user, internal, pv, pdf)
-    assert _preview(client, _login(client, other, xp), internal=internal).status_code == 403, \
+    assert _preview(client, _login(client, other, xp), internal=internal).status_code == 404, \
         "不是這張單的人不可以看到預覽（內部版含成本）"
 
 

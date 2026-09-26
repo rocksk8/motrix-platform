@@ -54,6 +54,6 @@ def test_shipping_recipient_privacy_endpoints_refuse_outsiders(client, make_user
     u, p = make_user(username="pn_ship_out", role="engineer", modules=["dashboard"])
     out = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
     base = f"/api/shipping-notes/{no}/privacy-notice"
-    assert client.get(base, headers=out).status_code == 403
+    assert client.get(base, headers=out).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     assert client.post(base + "/ack", json={"subject": "丙收件"}, headers=out).status_code == 403
     assert pn.get_ack("shipping_recipient", f"{no}:丙收件") in (None, {})

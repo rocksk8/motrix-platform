@@ -229,7 +229,7 @@ from helpers.approval_queue import (  # noqa: E402
 # 案件可見性（原 `_visible_case_filter_sql()`／`_check_quotation_owner()` 兩份）已合併為
 # L1 `helpers/row_access` 的 `case`，規則宣告在 modules/case/quotations.py 的 `CASE_ACCESS`。
 #   清單／批次 ⇒ row_access.filter_sql("case", user, scope="read")
-#   單筆      ⇒ row_access.require("case", user, row)（scope="owner"；GET 單筆用 "read"）
+#   單筆      ⇒ require_case(user, row, quote_no)（scope="owner"；GET 單筆用 "read"）
 
 
 # ── Case semi-unlock / change-request helpers (2026-08-26) ────────────────────
@@ -351,6 +351,7 @@ def _safe_close(conn) -> None:
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
 from modules.case.quotations import (  # noqa: E402
     is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
+from helpers.case_access import deny_case, require_case  # noqa: E402  M01-O1：逐案拒絕＝查無（同一個 404）
 
 
 def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False,
@@ -386,8 +387,7 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
         # 擋下來時由這裡負責關連線：呼叫端清一色是「conn = get_db() → 一連串操作
         # → conn.close()」的直線寫法，沒有 try/finally，守門若直接往外丟例外，
         # 那條連線要等 GC 才會被回收。集中在這裡處理，28 個呼叫端就不必各自包一層。
-        _safe_close(conn)
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        deny_case(conn, quote_no, user, "not_found")        # 關連線＋audit＋404（M01-O1）
     # 2026-09-13（使用者裁示）：**已結案且半解鎖**的案件上，誰都可以改動——因為
     # 半解鎖期間的每一筆變更/上傳都會排進待審核、由 superadmin 決定要不要套用
     # （`_gate_case_edit()`／`_check_case_gate()`）。把關在審核，不在入口。
@@ -398,8 +398,7 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
     # 稽核 Y-5：放行規則與 modules.case.quotations.guard_case_access 同一份（case_access_allowed）；
     # 這裡只多「已結案半解鎖」的例外與回傳欄位（deal_tag、case_semi_unlocked）。
     if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
-        _safe_close(conn)
-        raise HTTPException(403, CASE_ACCESS.deny_message)
+        deny_case(conn, quote_no, user, "denied")           # M01-O1：看不到＝不存在（同一個 404）
     return q
 
 
@@ -413,11 +412,8 @@ def _is_case_member(conn, quote_no: str, row, user: dict) -> bool:
     """
     if user["role"] in ("superadmin", "admin"):
         return True
-    try:
-        row_access.require("case", user, row)       # 業務（id／舊資料顯示名稱）＋ assigned_user_ids
+    if row_access.visible("case", user, row):        # 業務（id／舊資料顯示名稱）＋ assigned_user_ids（布林判斷，不丟例外）
         return True
-    except HTTPException:
-        pass
     try:
         roles = ((json.loads(row["data_json"] or "{}").get("caseRecord") or {}).get("roles") or {})
     except Exception:
@@ -1242,15 +1238,11 @@ def get_quotation(quote_no: str, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
     row  = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
     # CM14b（2026-09-24 使用者裁示）：持 cashier 模組者讀得到任何案件 ⇒ scope="read"
-    # 准不准只看 L1 `case_page_readable`（報價單上附件的提供者用同一支，AT-M1c）；require 只負責說出原因
+    # 准不准只看 L1 `case_page_readable`（報價單上附件的提供者用同一支，AT-M1c）；
+    # 被拒與查無是同一個 404（M01-O1），audit 記真正原因
     if not case_page_readable(conn, quote_no, user):
-        conn.close()
-        row_access.require("case", user, row, scope="read")
-        raise HTTPException(403, "無權限存取這筆資料")
+        deny_case(conn, quote_no, user, "not_found" if row is None else "denied")
     # 不是案件成員、靠 cashier 例外讀到的 ⇒ 案件頁除收款外全唯讀（寫入面後端另擋，見 update_case_record）
     cashier_read_only = not _is_case_member(conn, quote_no, row, user)
     conn.close()
@@ -1711,7 +1703,7 @@ def update_quotation(quote_no: str, body: QuotationIn, authorization: str = Head
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        row_access.require("case", user, existing)
+        require_case(user, existing, quote_no)
     except HTTPException:
         conn.close()
         raise
@@ -2251,7 +2243,7 @@ def case_close_gates(quote_no: str, authorization: str = Header(None)):
         row = conn.execute("SELECT * FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
         if not row:
             raise HTTPException(404, f"報價單 {quote_no} 不存在")
-        row_access.require("case", user, row)
+        require_case(user, row, quote_no)
         d = json.loads(row["data_json"] or "{}")
         gates = _case_close_gates(conn, quote_no, d)
         for g in gates:
@@ -2368,7 +2360,7 @@ def delete_quotation(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        row_access.require("case", user, row)
+        require_case(user, row, quote_no)
     except HTTPException:
         conn.close()
         raise
@@ -4112,7 +4104,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    row_access.require("case", user, row)
+    require_case(user, row, quote_no)
     _require_financial_view(user)
     data = json.loads(row["data_json"] or "{}")
     return {"settlement": data.get("settlement", None), "items": data.get("items", []),
@@ -4138,7 +4130,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
         # 才收斂成「僅 superadmin」。這是全系統唯一一個「寫入」層級的缺口，補上與
         # GET 相同的擁有者檢查。
         try:
-            row_access.require("case", user, row)
+            require_case(user, row, quote_no)
             _require_financial_view(user)
         except HTTPException:
             conn.close()
@@ -4217,7 +4209,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
         conn.close()
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
     try:
-        row_access.require("case", user, row)
+        require_case(user, row, quote_no)
         _require_financial_view(user)
     except HTTPException:
         conn.close()
@@ -6585,7 +6577,7 @@ def get_quotation_privacy_acks(quote_no: str, role: str = "contact", authorizati
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    row_access.require("case", user, row, scope="read")
+    require_case(user, row, quote_no, scope="read")
     return {"acks": _pn.acks_with_prefix(kind, quote_no)}
 
 
@@ -6601,7 +6593,7 @@ def ack_quotation_privacy_notice(quote_no: str, body: dict = Body(...), authoriz
     conn.close()
     if not row:
         raise HTTPException(404, f"報價單 {quote_no} 不存在")
-    row_access.require("case", user, row)
+    require_case(user, row, quote_no)
     try:
         cur = json.loads(row["data_json"] or "{}")
     except ValueError:

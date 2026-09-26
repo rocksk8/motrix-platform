@@ -120,9 +120,9 @@ def test_remaining_quota_endpoints_are_guarded(client, make_user):
     _make_case("MQ-SWEEP-004", sales_person="sw_owner")
     tok = _outsider(client, make_user, "sw_v4")
     assert client.get("/api/invoice-vouchers/remaining?quote_no=MQ-SWEEP-004",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     assert client.get("/api/payment-requests/remaining?quote_no=MQ-SWEEP-004",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 # test_case_network_plan_lookup_is_guarded （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
@@ -159,9 +159,9 @@ def test_voucher_detail_is_not_readable_by_outsiders(client, make_user):
     _mk_invoice_voucher("IV-2026-001", "MQ-VCH-001")
     tok = _outsider(client, make_user, "vch_out")
     assert client.get("/api/invoice-vouchers/IV-2026-001",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     assert client.get("/api/invoice-vouchers/IV-2026-001/pdf-download",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_voucher_list_hides_amounts_from_non_financial_users(client, make_user):

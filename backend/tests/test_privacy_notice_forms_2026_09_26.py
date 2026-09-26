@@ -232,9 +232,9 @@ def test_quotation_privacy_endpoints_refuse_non_members(client, make_user, role)
     _insert_quote(no)
     h = _hdr(client, make_user, username="pn_out_" + role, role="engineer")
     base = f"/api/quotations/{no}/privacy-notice"
-    assert client.get(base + "?role=" + role, headers=h).status_code == 403
+    assert client.get(base + "?role=" + role, headers=h).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     name = "林聯絡" if role == "contact" else "趙現場"
     r = client.post(base + "/ack", json={"role": role, "subject": name}, headers=h)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, r.text   # M01-O1：看不到＝不存在（同一個 404）
     kind = "quote_contact" if role == "contact" else "case_site_contact"
     assert pn.get_ack(kind, f"{no}:{name}") in (None, {}), "被擋下的請求不可以留下紀錄"
