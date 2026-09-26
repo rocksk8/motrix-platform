@@ -492,3 +492,30 @@ def test_every_partial_run_goes_through_partial_pytest_args():
     bad = "def run_train(picked, tmap, extra, a):\n    run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window)\n"
     assert offenders(bad) == [2]
 
+
+def test_train_partial_run_actually_passes_n(_no_cap_env, monkeypatch):
+    """稽核 D WK-M2（主持：不只靠字面守門）：跑 run_train（--train 的入口），攔 run_pytest，
+    驗 ① 差異題**實際傳出**的參數帶 -n <上限>；自己帶的 -n 壓到上限；② tests/platform 照舊 -n <full 上限>。"""
+    import types
+    seen = []
+    monkeypatch.setenv("MOTRIX_TRAIN", "0")                       # run_train 會設 1；monkeypatch 收尾還原
+    monkeypatch.setattr(MT, "run_pytest", lambda targets, extra, *_a, **_k: (seen.append((list(targets), list(extra))) or 0, ""))
+    monkeypatch.setattr(MT, "train_judge", lambda *_a, **_k: (True, []))
+    tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
+    a = types.SimpleNamespace(window="wk")
+    assert MT.run_train(["backend/tests/test_a.py"], tmap, [], a) == 0
+    first = seen[0]
+    assert first[0] == ["backend/tests/test_a.py"] and first[1][-2:] == ["-n", str(MT.partial_max_workers())], seen
+    seen.clear()
+    monkeypatch.setenv(MT.E2E_ENV, "3")
+    monkeypatch.setattr(MT.os, "cpu_count", lambda: 16)
+    MT.run_train(["backend/tests/test_a.py", "backend/tests/test_b.py"], tmap, ["-n", "8"], a)
+    assert seen[0][1] == ["-n", "3"], "E2E 明設 3、選到 e2e、自己帶 -n 8 ⇒ -n 3：%r" % (seen[0],)
+
+
+def test_partial_one_without_e2e_setting_stays_one(_no_cap_env, monkeypatch):
+    """稽核 D 觀察（等價突變）：PARTIAL=1、未設 E2E、選到 e2e ⇒ -n 1（取較小者；不可以因 e2e 上限預設 2 而變 2）。"""
+    monkeypatch.setenv(MT.PARTIAL_ENV, "1")
+    tmap = {"tests": {"backend/tests/test_b.py": {"kind": "e2e"}}}
+    assert MT.partial_pytest_args([], ["backend/tests/test_b.py"], tmap) == ["-n", "1"]
+

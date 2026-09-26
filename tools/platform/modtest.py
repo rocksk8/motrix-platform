@@ -741,7 +741,8 @@ def run_train(picked, tmap, extra, a):
     code1 = None
     if picked:
         _say("[train] ① 差異題 %d 檔" % len(picked))
-        code1, _ = run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window, full=False)
+        # 〔稽核 D WK-M2：原本 cap_workers(extra, partial_cap(...)) ⇒ 沒帶 -n 時列車差異題串行（第十一班實查）〕
+        code1, _ = run_pytest(picked, partial_pytest_args(extra, picked, tmap), a.window, full=False)
     else:
         _say("[train] ① 沒有受影響的測試")
     _say("[train] ② tests/platform（MOTRIX_TRAIN=1）")
