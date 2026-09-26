@@ -100,6 +100,7 @@
 - **D1 階段 B 模組搬遷分工**（2026-09-26 03:30，使用者裁示「轉移優先」；每個模組都照 PLAYBOOK §B，搬完記選題比例（D1b），上月台）：
   - A：M12 每日任務（完成，搭第三班）→ M10（進行中）→ M03 → M01
   - 〔主持裁示 2026-09-26 09:33，M01 改派〕A（hichan-f9）自 07:07 無回應（U18），M01 由 **C** 接手，照 C 的 M01-PLAN §3 順序：**T**（稅額純函式 payment_item_amounts／quote_tax_type／tax_split／invoice_amounts／LEGACY_TAX_NOTE 下沉 L1 `helpers/tax_calc.py`，舊位置留同名別名；**核准立刻開工**，以 origin/platform 為基底，第七班）→ 小型下沉 → case_access 匯入改位置 → 讀取連接器 case.summary → M05 → case.recognition（M01 提供者，配契約題）→ approval-queue 改各單據模組提供待簽項目、M01 只彙整 → M01 本體（含 CA-O3、CA-O4，及 **pdf_gen.py:442 寫 quotations 表**要改由 M01 提供）。M01 的反向控制「提到 M01 的測試檔」≈ 全量 ⇒ 改由列車的全量兼任：M01 本體上車那一班，列車長在 sparse（不取出 M01）樹上另跑一次全量，紅必須 ⊆ §B-11 允許＋已知紅清單。A 回來後：M03（A11 的 wip/a-m03 b9ac9ce9，未推）照舊歸 A；M01 不收回。
+  - 〔主持裁示 2026-09-26 11:16，M06 步驟表（C）〕① **轉簽直寫各單據表**（routers/quotations.py:6597 `reassign_approval`，`_REASSIGN_TABLES` 逐表直寫六種單據，含 M06 的 vouchers_all）：獨立成一包 `approval.reassign`，每種單據由擁有模組提供，並和 `approval.queue_items` 一起做，併入 M01-PLAN §3-7；不在 M06 裡只修傳票一種。② **前綴歸屬**（M06 的 /api/reports/t100-export*、/api/settings/t100-export-config 掛在 M08 與 L1 的前綴底下）：**不改網址**（改網址會破壞相容性：V9 轉移、書籤、外部呼叫）。改由 modules.json 允許「個別路由明列歸屬、優先於前綴」，B 的 check_modules 要支援這種寫法，並附反向控制（明列的路由不在該模組 ⇒ 紅）。③ 新串接點 `inventory.paid_batches`（M03 提供，accounting_export 使用）核准，號碼由列車定。④ 順序：M05 → M06（accounting_export 對 receivables 的相依要等 M05 收回）。M06 由 C 做，排在 M05 之後。
   - B：M08（2026-09-26 04:47 從 A 移過來；C4 開工時暫停）〔2026-09-26 05:39 佇列：M08 → dep_graph／test_map 一致性守門（比照 UNIT-INDEX --check，附反向控制）→ O6 → C4（開工時主持宣布凍結）。M08 要排在 c-module-files 之後上車〕
   - C：M02 crm／dev_crm（進行中，wip/c-m02）→ M04 → M05 → M06 → M07
   - 搬遷順序依 ROADMAP 階段 B 的相依；兩邊要動同一個 L1 helper 時，先在 RUN-PLAN §6 講一聲再動
@@ -136,6 +137,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 11:16 主持：裁示 M06 步驟表四點（轉簽獨立成 approval.reassign 並併入 M01 §3-7；前綴歸屬不改網址，改成 modules.json 可明列個別路由、交 B 支援；inventory.paid_batches 核准；M05 先、M06 後）。
 - 2026-09-26 11:13 巡視：第六班組車完成、在列車上修交會紅（71ab31d0）。B、C、D 三窗閒置 ⇒ 派工：B 處理 ⑰ 的 S-1～S-8 與 O 項回覆（C4 等第六班）；C 寫 M06 步驟表（第六班合回後依序做 c-m07-s12 → tax-calc 的 import → M05 → M01）；D 做 D7 前哨第 6 次（origin 第五班之後、開發資料、-n 1）。第七班候選：c-tax-calc、c-m01-sink2-2、h-o7-3、h-o6s1、b-o6-2、b-rebasecheck-2（D 都已關閉或審過）。A（hichan-f9）仍然無回應（U18）。
 - 2026-09-26 11:04 D：O6-S1 掃描那一半關閉（h-o6s1 e2c8fdbd，突變「不跳點目錄」紅）；小建議：「刻意含 tests」沒有正對照（突變連 tests 也跳過照綠）。
 - 2026-09-26 11:02 D：**O6-M1 關閉（b-o6-2 31d0033d）**：新位置 edge_profile 式掃描 20 次 0 例外、突變 2/2 紅；13 道自寫 rglob 掃描逐行查 12 道排除 tests，只剩 deploy_dashboard_local_only（原本就暴露，1/20）⇒ 建議 O6-S1。R-O1 結案（0f1d8e0a）。
