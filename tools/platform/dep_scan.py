@@ -762,15 +762,48 @@ def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
 
 
 def _route_matches(pattern: str, route: str) -> bool:
-    """明列的寫法：完整路徑（`/api/settings/t100-export-config`），或結尾 `*` 的前綴（`/api/reports/t100-export*`）。"""
-    return route.startswith(pattern[:-1]) if pattern.endswith("*") else route == pattern
+    """明列的寫法：完整路徑（`/api/settings/t100-export-config`），或結尾 `/*`＝那個路徑本身與它底下的整棵子樹
+    （`/api/reports/t100-export/*` 吃得到 `/api/reports/t100-export/vouchers`，吃不到 `/api/reports/t100-export-x`）。"""
+    if pattern.endswith("/*"):
+        base = pattern[:-2]
+        return route == base or route.startswith(base + "/")
+    return route == pattern
 
 
-def check_route_ownership(U: dict, path: Path = MODULES) -> list[str]:
+def route_pattern_problem(pattern: str):
+    """明列寫法的格式檢查（稽核 RT-S1，主持裁示）⇒ 問題說明或 None。
+    - `*` 只能以 `/*` 出現在結尾（`t100-export*` 會跨過路徑分界吃到 `t100-export-x`）
+    - `/*` 前面至少要到第三層（`/api/x/y/*`）：`/api/*`、`/api/reports/*` 等於整個前綴，範圍太寬——整個前綴請寫 api_prefixes"""
+    if not isinstance(pattern, str) or not pattern.startswith("/api/"):
+        return "要以 /api/ 開頭"
+    if "*" in pattern and not pattern.endswith("/*"):
+        return "萬用字元只能以「/*」出現在結尾（例：/api/reports/t100-export/*）；「…export*」會跨過路徑分界"
+    if pattern.count("*") > 1:
+        return "只能有一個萬用字元"
+    if pattern.endswith("/*") and len([x for x in pattern[:-2].split("/") if x]) < 3:
+        return "「/*」前面至少要到第三層；整個前綴請寫在 api_prefixes"
+    return None
+
+
+def _installed_groups(groups: dict, backend: Path = None) -> set:
+    """這棵樹裝了的群組：L1、還沒搬進 modules/ 的群組（單位不含 mod:，一定在），以及資料夾在 backend/modules/<key>/ 的模組。
+    ⚠ 已搬進 modules/、而資料夾不在的 ⇒ 沒裝（core-only、產品選配、§B-11 反向控制）。"""
+    backend = BACKEND if backend is None else Path(backend)
+    out = set()
+    for gid, gr in groups.items():
+        migrated = any(u.startswith("mod:") for u in gr.get("units", []))
+        key = gr.get("key")
+        if gid == "L1" or not migrated or (key and (backend / "modules" / key / "module.json").is_file()):
+            out.add(gid)
+    return out
+
+
+def check_route_ownership(U: dict, path: Path = MODULES, backend: Path = None) -> list[str]:
     """路由歸屬（主持裁示：modules.json 可「個別路由明列歸屬」，**優先於前綴**）。
     群組可寫 `"routes": ["/api/x/y", "/api/z*"]`。判定順序：先看有沒有被明列，沒有才看前綴。錯誤：
       ① 同一條路由被兩個群組明列
-      ② 明列的寫法在該群組自己的 router 裡一條都對不到（寫錯或路由已不在）
+      ② 明列的寫法在該群組自己的 router 裡一條都對不到（寫錯或路由已不在）——只看**已安裝**的群組（RT-M1）
+      ⑤ 明列的寫法不合格（萬用字元只能 `/*` 結尾、要到第三層；RT-S1）
       ③ 明列的路由其實在別的群組的 router 裡（明列不可以把別人的路由搶過來）
       ④ 路由沒有被明列，而它的前綴也不在自己群組的 api_prefixes（歸屬不明）
     """
@@ -779,6 +812,7 @@ def check_route_ownership(U: dict, path: Path = MODULES) -> list[str]:
     groups.update(m["modules"])
     u2g, _, _ = load_groups(path)
     explicit = [(gid, pat) for gid, gr in groups.items() for pat in gr.get("routes", [])]
+    installed = _installed_groups(groups, backend)
     prefixes = {gid: set(gr.get("api_prefixes", [])) for gid, gr in groups.items()}
     routes = []                                                   # (群組, 單位, 路徑)
     for n, u in sorted(U.items()):
@@ -789,11 +823,16 @@ def check_route_ownership(U: dict, path: Path = MODULES) -> list[str]:
             routes.append((gs[0], n, r["path"]))
     errors = []
     for gid, pat in explicit:
+        bad = route_pattern_problem(pat)
+        if bad:
+            errors.append(f"{gid} 明列的寫法 {pat!r} 不合格：{bad}")
+            continue
         own = [x for x in routes if x[0] == gid and _route_matches(pat, x[2])]
         other = sorted({f"{x[0]} {x[1]}" for x in routes if x[0] != gid and _route_matches(pat, x[2])})
         if other:
             errors.append(f"{gid} 明列的路由 {pat!r} 在別的群組的 router 裡：{other}（明列不可以把別人的路由搶過來）")
-        elif not own:
+        elif not own and gid in installed:
+            # 群組沒裝（產品選配／反向控制拿掉了那個模組）⇒ 它的路由本來就不在，不是「寫錯」（稽核 RT-M1）
             errors.append(f"{gid} 明列的路由 {pat!r} 在該群組的 router 裡不存在（寫錯或路由已搬走）")
     for (routeg, n, rp) in {(x[0], x[1], x[2]) for x in routes}:
         claim = sorted({gid for gid, pat in explicit if _route_matches(pat, rp)})
