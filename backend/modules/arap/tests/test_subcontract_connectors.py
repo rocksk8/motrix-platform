@@ -23,9 +23,13 @@ def _hdr(client, make_user, name="s04_super"):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _without(monkeypatch, cap):
+def _without(monkeypatch, *caps):
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda c: {} if c == cap else orig(c))
+    monkeypatch.setattr(registry, "providers", lambda c: {} if c in caps else orig(c))
+
+
+#: M04 不在＝它提供的兩個 IP-14 能力都不在（T100 付款傳票用 paid_between；稽核 D IP-M1，第十班交會）
+M04_CAPS = ("contractor_voucher.public", "contractor_voucher.paid_between")
 
 
 def _seed(status="草稿"):
@@ -71,7 +75,7 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     from modules.arap.api import cashier as ca
     h = _hdr(client, make_user)
     _seed()
-    _without(monkeypatch, "contractor_voucher.public")
+    _without(monkeypatch, *M04_CAPS)
     r = client.get("/api/cashier/payable-queue", headers=h)
     assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
     hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h)
