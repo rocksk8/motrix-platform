@@ -30,7 +30,7 @@
 
 或當函式庫用：`check_approval_queue_coverage(doc_types=[...])`——`doc_types`／
 `queue_source`／`count_source` 留空時分別讀真正的 `APPROVAL_DOC_TYPES`／
-`routers/quotations.py` 的兩支端點原始碼，測試可以三個都自己傳，不必
+`modules/case/api/quotations.py` 的兩支端點原始碼，測試可以三個都自己傳，不必
 monkeypatch 任何模組屬性。
 """
 import ast
@@ -49,7 +49,7 @@ def say(text):
 
 _TOOLS_DIR     = os.path.dirname(os.path.abspath(__file__))
 _BACKEND_DIR   = os.path.dirname(_TOOLS_DIR)
-_QUOTATIONS_PY = os.path.join(_BACKEND_DIR, "routers", "quotations.py")
+_QUOTATIONS_PY = os.path.join(_BACKEND_DIR, "modules", "case", "api", "quotations.py")   # M01 ②
 
 #: doc_type（`APPROVAL_DOC_TYPES` 用的鍵）-> (佇列 `type` 欄位的字面值,
 #: count 端點 SQL 裡的資料表名)。兩者不是同一組字串
@@ -79,6 +79,10 @@ _OWNER_MODULE = {
     "payment_request":    "arap",
     "bonus":              "payroll",
     "shipping":           "supply",
+    # M01 自己的單據（M01 ② 起在 modules/case）：案件模組不在 ⇒ 不適用
+    "quotation":          "case",
+    "extra_expense":      "case",
+    "completion":         "case",
 }
 
 
@@ -187,6 +191,10 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
     missing_from_map, missing_from_queue, missing_from_count = [], [], []
     for dt in doc_types:
         owner = _OWNER_MODULE.get(dt)
+        if not installed("case"):
+            # 兩支佇列端點本身屬 M01：案件模組不在 ⇒ 每一種都不適用（沒有佇列可以漏）
+            not_applicable[dt] = "案件模組 case 不在這個安裝包（簽核佇列端點不存在）"
+            continue
         if owner and not installed(owner):
             not_applicable[dt] = "擁有模組 %s 不在這個安裝包（它的單據不存在）" % owner
             continue

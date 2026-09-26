@@ -29,7 +29,7 @@ def _login(page, base_url, username, password):
 
 def _seed_presets():
     import db
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     preset = dict(DEFAULT_TERMS, key="p1", name="純購料", afterSales="購料不含售後", deliveryTerms="自取")
     conn = db.get_db()
     try:
@@ -45,7 +45,7 @@ def _seed_presets():
 
 
 def _cases():
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     # 每一組都帶齊判準會讀到的欄位——前端是蓋在既有的 q 上，缺欄位會沿用上一組的值
     t = dict(DEFAULT_TERMS, validDays=30, taxRate=5, showDiscount=False, discount=0, termsPresetKey="")
     items = [{"type": "header", "description": "區段"},
@@ -65,7 +65,7 @@ def _cases():
 
 @pytest.mark.e2e
 def test_frontend_and_backend_reasons_are_identical(live_server, make_user, e2e_browser):
-    from helpers.quote_terms import DEFAULT_TERMS, compute_approval_reasons
+    from modules.case.quote_terms import DEFAULT_TERMS, compute_approval_reasons
     username, password = make_user(username="e2e_n13a", role="superadmin")
     presets = _seed_presets()
     browser = e2e_browser
@@ -86,7 +86,7 @@ def test_frontend_and_backend_reasons_are_identical(live_server, make_user, e2e_
 
 @pytest.mark.e2e
 def test_new_quote_terms_come_from_backend(live_server, make_user, e2e_browser):
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     username, password = make_user(username="e2e_n13b", role="superadmin")
     browser = e2e_browser
     page = browser.new_page()
@@ -126,7 +126,7 @@ def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user,
     """N13 回歸：沒存過條款的舊報價單打開時要帶入預設條款（N13 之前 data() 預設值就是如此）；
     存成空字串的（使用者清掉的）不動。"""
     import db
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     username, password = make_user(username="e2e_n13d", role="superadmin")
     conn = db.get_db()
     try:

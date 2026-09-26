@@ -8,7 +8,7 @@ commit（`2b8e7ad`）拉回開發機，沒有補上專屬測試檔——`backend
 `/stages` 路徑的地方（`test_case_semi_unlock.py`）測的是「已結案案件鎖定」情境，不是這批端點
 本身的 CRUD 正確性。這是目前案件管理模組測試覆蓋最薄的一塊，見 MOTRIX-ERP-QUICK.md §11。
 
-各端點對應的實際程式碼位置與 docstring 見 `backend/routers/quotations.py` 2042-2316 行。
+各端點對應的實際程式碼位置與 docstring 見 `backend/modules/case/api/quotations.py` 2042-2316 行。
 """
 import json
 

@@ -208,7 +208,7 @@ def _by_identity(entries):
 #: 是這批端點裡最穩定的識別方式（一個端點一個函式，不會因為上面多了
 #: 幾行程式碼就變成另一個端點）。
 _BASELINE_A = {
-    ("backend\\routers\\completion_notes.py", "download_completion_pdf"),
+    ("backend\\modules\\case\\api\\completion_notes.py", "download_completion_pdf"),
     ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "download_contractor_voucher_pdf"),
     ("backend\\routers\\customers.py", "create_customer"),
     ("backend\\modules\\arap\\api\\invoice_vouchers.py", "download_invoice_voucher_pdf"),
@@ -218,10 +218,10 @@ _BASELINE_A = {
     ("backend\\modules\\arap\\api\\payment_requests.py", "download_payment_request_pdf"),
     ("backend\\modules\\payroll\\api\\payslips.py", "get_archive_pdf"),
     ("backend\\modules\\payroll\\api\\payslips.py", "pdf_download"),
-    ("backend\\routers\\quotations.py", "create_quotation"),
-    ("backend\\routers\\quotations.py", "download_quotation_pdf"),
-    ("backend\\routers\\quotations.py", "download_case_closing_report_pdf"),
-    ("backend\\routers\\quotations.py", "download_project_execution_report_pdf"),
+    ("backend\\modules\\case\\api\\quotations.py", "create_quotation"),
+    ("backend\\modules\\case\\api\\quotations.py", "download_quotation_pdf"),
+    ("backend\\modules\\case\\api\\quotations.py", "download_case_closing_report_pdf"),
+    ("backend\\modules\\case\\api\\quotations.py", "download_project_execution_report_pdf"),
     ("backend\\modules\\supply\\api\\shipping_notes.py", "download_shipping_pdf"),
     ("backend\\modules\\supply\\api\\suppliers.py", "create_supplier"),
     ("backend\\routers\\system.py", "test_google_calendar"),
@@ -232,7 +232,7 @@ _BASELINE_A = {
 #: 的（`SPEC-EM3.md §6c` 授權「B 開工時決定，規格不猜」）。
 #:
 #: ```
-#: routers/quotations.py::create_quotation
+#: modules/case/api/quotations.py::create_quotation
 #:   except Exception as e:
 #:       ...
 #:       if isinstance(e, UnresolvedManagerError):
@@ -247,24 +247,24 @@ _BASELINE_A = {
 #: 這一處分岔：**不要為了這一處把判準寫得更細**（再細只會更難懂、更
 #: 容易誤報），正確處置是承認例外並具名。
 _BASELINE_A_NAMED_EXCEPTION = {
-    ("backend\\routers\\quotations.py", "create_quotation"),
+    ("backend\\modules\\case\\api\\quotations.py", "create_quotation"),
 }
 
 #: B 組基準（**不要動**的 17 處）。
 _BASELINE_B = {
     ("backend\\modules\\payroll\\api\\bonus.py", "submit_award"),
-    ("backend\\routers\\case_extra_expenses.py", "submit_extra_expense"),
-    ("backend\\routers\\case_extra_expenses.py", "submit_change_request"),
-    ("backend\\routers\\completion_notes.py", "submit_completion_note"),
-    ("backend\\routers\\completion_notes.py", "approve_completion_note"),
+    ("backend\\modules\\case\\api\\case_extra_expenses.py", "submit_extra_expense"),
+    ("backend\\modules\\case\\api\\case_extra_expenses.py", "submit_change_request"),
+    ("backend\\modules\\case\\api\\completion_notes.py", "submit_completion_note"),
+    ("backend\\modules\\case\\api\\completion_notes.py", "approve_completion_note"),
     ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "submit_contractor_voucher"),
     ("backend\\modules\\subcontract\\api\\contractor_vouchers.py", "approve_contractor_voucher"),
     ("backend\\modules\\arap\\api\\invoice_vouchers.py", "submit_invoice_voucher"),
     ("backend\\modules\\arap\\api\\invoice_vouchers.py", "approve_invoice_voucher"),
     ("backend\\modules\\arap\\api\\payment_requests.py", "submit_payment_request"),
     ("backend\\modules\\arap\\api\\payment_requests.py", "approve_payment_request"),
-    ("backend\\routers\\quotations.py", "update_quotation"),
-    ("backend\\routers\\quotations.py", "approve_quotation"),
+    ("backend\\modules\\case\\api\\quotations.py", "update_quotation"),
+    ("backend\\modules\\case\\api\\quotations.py", "approve_quotation"),
     ("backend\\modules\\supply\\api\\shipping_notes.py", "submit_shipping_note"),
     ("backend\\modules\\supply\\api\\shipping_notes.py", "approve_shipping_note"),
     ("backend\\routers\\vouchers.py", "submit_voucher"),
@@ -504,7 +504,7 @@ def test_em3_pdf_failure_shows_a_trace_code_not_the_raw_exception(
     在畫面上的內容**（假造的暫存檔路徑）的例外，驗收畫面上完全看不到
     這段內容，只看得到一個 8 碼 hex 代碼。
     """
-    import routers.completion_notes as mod
+    import modules.case.api.completion_notes as mod
     note_no = _seed_completion_note("EM3-EXC-001")
     hdr = _hdr(client, make_user, "em3_pdf_fail")
 
@@ -542,7 +542,7 @@ def test_em3_the_trace_code_is_findable_in_the_log_with_the_full_exception_text(
     直接讀檔案風險是量到別人那一份的內容或搶不到鎖；`caplog` 攔的是
     **這個測試行程自己**呼叫 `logging` 的紀錄，不受這個影響。
     """
-    import routers.completion_notes as mod
+    import modules.case.api.completion_notes as mod
     note_no = _seed_completion_note("EM3-EXC-002")
     hdr = _hdr(client, make_user, "em3_pdf_log")
 
@@ -579,7 +579,7 @@ def test_em3_two_consecutive_failures_get_different_trace_codes(
     （流水號可猜，而且洩漏系統出過幾次錯——`§6a` 已經裁定要用
     `secrets.token_hex`）。
     """
-    import routers.completion_notes as mod
+    import modules.case.api.completion_notes as mod
     note_no = _seed_completion_note("EM3-EXC-003")
     hdr = _hdr(client, make_user, "em3_pdf_twice")
 

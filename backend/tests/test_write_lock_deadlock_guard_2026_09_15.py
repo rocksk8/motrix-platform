@@ -168,7 +168,7 @@ def test_no_cross_connection_write_while_holding_write_lock():
         "SQLite 同時只允許一個 writer，第二條連線會等滿 30 秒 busy_timeout，"
         "而且例外被吞掉——症狀是「卡住十幾秒然後顯示成功，但紀錄不見了」。\n"
         "修法：把那些呼叫延後到 conn.commit() 之後"
-        "（見 routers/quotations.py::approve_case_change 的 deferred_audits）。\n"
+        "（見 modules/case/api/quotations.py::approve_case_change 的 deferred_audits）。\n"
         "確定安全的請加進本檔 _ALLOWED 並寫明理由。\n\n  "
         + "\n  ".join(offenders))
 

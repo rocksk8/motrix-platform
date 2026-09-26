@@ -12,7 +12,7 @@ import threading
 import pytest
 
 import db as _db
-import routers.quotations as q
+import modules.case.api.quotations as q
 from tests.test_case_money_mask_2026_09_24 import NO, _login, _seed
 
 _REAL_GET_DB = _db.get_db

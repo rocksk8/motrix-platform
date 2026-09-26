@@ -40,7 +40,7 @@ from pydantic import BaseModel
 from db import get_db
 from helpers import row_access
 from helpers.auth import user_has_module
-from helpers.recognition import normalize_date  # `AC2`
+from modules.case.recognition import normalize_date  # `AC2`
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers import (

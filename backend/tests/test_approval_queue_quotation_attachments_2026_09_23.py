@@ -4,7 +4,7 @@
 # 🔴 為什麼是「補題」不是「派工」
 
 A-2 規格覆蓋率盤點（`0c6ae2f`）發現 `AT1` 沒有規格、沒有題、沒有任何
-測試檔提到它——而查證 `routers/quotations.py:5646` 的實作**已經在了**
+測試檔提到它——而查證 `modules/case/api/quotations.py:5646` 的實作**已經在了**
 （B 做過，commit 訊息與程式碼裡的 `AT1` 註解都在），只是**產品碼已經
 出貨而沒有任何東西守著它**：`SCOPE.md` 的 `THIS` 要求「這一包要全綠」，
 而一個沒有題的編號**不可能是綠的，它只是不紅**——打包關門分不出這
@@ -23,7 +23,7 @@ A-2 規格覆蓋率盤點（`0c6ae2f`）發現 `AT1` 沒有規格、沒有題、
 # ⚙️ 三個來源，逐一分開驗
 
 ```
-routers/quotations.py:5646 附近：
+modules/case/api/quotations.py:5646 附近：
   materials[i].files          "材料 %d" 前綴
   materials[i].invoiceFiles   "材料 %d 發票" 前綴
   payment.items[i].invoiceFiles  "請款 %d" 前綴
@@ -34,7 +34,7 @@ routers/quotations.py:5646 附近：
 
 # ✅ 牙齒已驗證（方式：突變驗證／live，非常設）
 
-monkeypatch `routers.quotations._tagged_file_entries` 成一律回 `[]`
+monkeypatch `modules.case.api.quotations._tagged_file_entries` 成一律回 `[]`
 （模擬「三段迴圈用的那支 helper 被拿掉」），①②③三題**真的會紅**；
 負對照（既有客戶回簽檔，走不同的 `_file_entries()`）**仍然是綠的**，
 證明這道守門真的分辨得出「哪一段壞了」而不是全部混在一起判斷。

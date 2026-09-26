@@ -122,7 +122,7 @@ def test_consecutive_revisions_are_numbered_r1_r2_r3(
 def test_the_revision_numbering_is_not_borrowed_from_quotations():
     """🔴 **那支函式不可以就是 `quotations.py` 的那一支。**
 
-    ⚠️ 上一題有一種**過得去而錯的**實作方式：直接 `from routers.quotations import
+    ⚠️ 上一題有一種**過得去而錯的**實作方式：直接 `from modules.case.api.quotations import
     _next_revision_no` —— 而它對 `MQ-…` 是對的、對另外兩種是錯的 ⇒
     上一題會紅，**而紅的原因看起來像「還沒實作」**。
     🔑 這一題把那個可能性單獨講出來，**讓訊息指得準**。
@@ -132,9 +132,9 @@ def test_the_revision_numbering_is_not_borrowed_from_quotations():
     """
     where, fn = _next_revision_no()
     try:
-        import routers.quotations as q
+        import modules.case.api.quotations as q
     except Exception:                                      # noqa: BLE001
-        pytest.skip("`routers.quotations` 載不進來，這一題的比較對象不存在。")
+        pytest.skip("`modules.case.api.quotations` 載不進來，這一題的比較對象不存在。")
 
     borrowed = getattr(q, "_next_revision_no", None)
     assert borrowed is not None, (
@@ -158,7 +158,7 @@ def test_the_quotation_helper_really_does_have_this_defect():
        而報價單的單號一律是那個格式。**它在自己的地盤上沒有壞。**
     📌 〈同一段碼在新脈絡下的風險不同〉：問題是**借用它**，不是它本身。
     """
-    import routers.quotations as q
+    import modules.case.api.quotations as q
     fn = getattr(q, "_next_revision_no", None)
     if fn is None:
         pytest.skip("`quotations._next_revision_no` 不存在。")

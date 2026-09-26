@@ -33,7 +33,7 @@ def _rendered(page):
     page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
 
 def test_mp6_case_address_prefers_the_contract_address():
-    from helpers.quotations import case_delivery_address as _case_address   # 2026-09-26 規則搬到 M01（case.locations）
+    from modules.case.quotations import case_delivery_address as _case_address   # 2026-09-26 規則搬到 M01（case.locations）
     both = json.dumps({"deliveryLocation": "台中市南屯區",
                        "caseRecord": {"contract": {"deliveryAddress": "台中市西屯區"}}})
     assert _case_address(both) == "台中市西屯區"

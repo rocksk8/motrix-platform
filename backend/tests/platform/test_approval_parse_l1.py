@@ -49,7 +49,7 @@ def test_positive_and_reverse_control_of_the_scanner():
     for src, want in (("from routers.vouchers import a\n", "routers.vouchers"),
                       ("import modules.accounting.voucher\n", "modules.accounting.voucher"),
                       ("from .voucher import parse_approval_json\n", "helpers.voucher"),
-                      ("from helpers.quotations import guard\n", "helpers.quotations")):
+                      ("from modules.case.quotations import guard\n", "modules.case.quotations")):
         assert l2_imports(src, l1) == [want], src
 
 
@@ -75,7 +75,7 @@ def test_voucher_aliases_are_the_l1_objects():
 
 
 def test_m01_approval_queue_no_longer_imports_m06():
-    src = (BACKEND / "routers" / "quotations.py").read_text(encoding="utf-8")
+    src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     assert "from helpers.voucher import parse_approval_json" not in src
     # 〔更正（C，M01-PLAN §3-7 c-approval）：~~M01 改自 L1 tiered_approval 解析~~ 轉簽的傳票簽核鏈改由 M06 的
     #  `approval.reassign` 提供者讀寫，M01 不再解析傳票；該提供者用的是 L1 的解析〕

@@ -29,7 +29,7 @@ from .auth import (
 from .settings import _get_setting, _set_setting
 from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
                     notify_org_chain_notice)
-# M01 的 helpers.quotations／case_stage_tasks 不再從這裡再匯出（M01-PLAN §3-8 CA-O4：`import helpers` 不可以載入 M01）。
+# M01 的 modules.case.quotations／case_stage_tasks 不再從這裡再匯出（M01-PLAN §3-8 CA-O4：`import helpers` 不可以載入 M01）。
 # 純函式已在 L1：norm_at（dates，§3-2）、summarize_payment_items（tax_calc，CA-O4）、steps_to_tiers（tiered_approval，§3-2；直接 import 那裡）。
 from .tax_calc import summarize_payment_items  # noqa: E402
 from .case_access import guard_case_access, is_document_approver  # L1（2026-09-26 自 quotations 下沉）

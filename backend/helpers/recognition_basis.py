@@ -1,4 +1,4 @@
-"""權責／現金口徑的純標籤（L1；2026-09-26 自 M01 helpers/recognition.py 下沉，M01-PLAN §3-6）。
+"""權責／現金口徑的純標籤（L1；2026-09-26 自 M01 modules/case/recognition.py 下沉，M01-PLAN §3-6）。
 
 為什麼在 L1：M08 營運報表要解析 `basis` 參數、印口徑說明——M01 不在時也要（那時權責口徑的收入沒有資料來源，
 要說出原因，而不是 400）。本檔不讀表、不 import M01。計算（認列、支出歸月、待補登）仍在 M01，經 `case.recognition`。

@@ -1421,7 +1421,7 @@ def notify_case_close_blocked(quote_no: str, customer: str, project: str,
 def notify_case_change_requested(quote_no: str, customer: str, project: str,
                                  summary: str, requester_display: str) -> None:
     """已結案案件半解鎖期間的變更/上傳請求（2026-08-26）→ 通知最高管理員審核
-    （routers/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
+    （modules/case/api/quotations.py 新增的 8 個「暫存待審」端點共用這支）。只寄
     superadmin，跟 notify_case_closing_report 一樣的收件範圍取捨——已結案
     案件的異動審核屬於高權限操作，不比照一般附件上傳（任何人可傳）發給全部
     admin。"""

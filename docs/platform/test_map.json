@@ -401,10 +401,10 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
-    "file:backend/helpers/__init__.py",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
-    "helper:recognition",
     "mod:analytics/api/reports",
+    "mod:case/__init__",
+    "mod:case/recognition",
     "plat:__init__",
     "plat:source_tree"
    ],
@@ -413,9 +413,9 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/recognition.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "path": [
@@ -562,32 +562,32 @@
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
-    "helper:recognition",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations",
+    "mod:case/recognition",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/case-management.html",
     "plat:__init__",
-    "plat:source_tree",
-    "router:case_extra_expenses",
-    "router:material_orders",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
-     "backend/helpers/recognition.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/recognition.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -1120,10 +1120,10 @@
     "core:db",
     "dir:backend/modules/arap/",
     "mod:arap/api/cashier",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
-    "page:pages/receivables.html",
-    "router:quotations"
+    "page:pages/receivables.html"
    ],
    "evidence": {
     "import": [
@@ -1131,9 +1131,9 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
@@ -1343,11 +1343,11 @@
     "dir:backend/modules/subcontract/",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
-    "plat:source_tree",
-    "router:completion_notes"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -1358,9 +1358,9 @@
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/completion_notes.py"
+     "backend/modules/supply/api/shipping_notes.py"
     ],
     "path": [
      "backend/modules/subcontract/"
@@ -1408,12 +1408,12 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:frontend/js/",
-    "file:backend/helpers/__init__.py",
-    "helper:recognition",
     "js:js/case-management-core.js",
     "js:static/legal-round.js",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/__init__",
+    "mod:case/recognition",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:source_tree"
@@ -1423,9 +1423,9 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/recognition.py",
-     "backend/modules/arap/api/payment_requests.py"
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -1453,7 +1453,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "mod:arap/api/payment_requests",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
@@ -1462,7 +1462,7 @@
     ],
     "api": [
      "backend/modules/arap/api/payment_requests.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ],
     "module_dir": [
@@ -1641,8 +1641,8 @@
     "core:db",
     "dir:backend/modules/crm/",
     "helper:auth",
-    "mod:crm/api",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:crm/api"
    ],
    "evidence": {
     "import": [
@@ -1650,8 +1650,8 @@
      "backend/helpers/auth.py"
     ],
     "api": [
-     "backend/modules/crm/api.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/crm/api.py"
     ],
     "module_dir": [
      "backend/modules/crm/"
@@ -1709,9 +1709,9 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
+    "mod:case/api/quotations",
     "plat:__init__",
-    "plat:registry",
-    "router:quotations"
+    "plat:registry"
    ],
    "evidence": {
     "import": [
@@ -1720,7 +1720,7 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/crm/"
@@ -1890,15 +1890,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
-    "file:backend/routers/__init__.py",
-    "page:pages/quotations.html",
-    "router:quotations"
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "page:pages/quotations.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/quotations.html"
@@ -1952,22 +1952,22 @@
     "core:db",
     "dir:backend/modules/daily_tasks/",
     "file:backend/tests/test_case_stage_done_calendar_2026_09_11.py",
-    "helper:case_stage_tasks",
+    "mod:case/api/quotations",
+    "mod:case/case_stage_tasks",
     "mod:daily_tasks/__init__",
-    "mod:daily_tasks/api",
-    "router:quotations"
+    "mod:daily_tasks/api"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/case_stage_tasks.py",
+     "backend/modules/case/case_stage_tasks.py",
      "backend/modules/daily_tasks/__init__.py",
      "backend/modules/daily_tasks/api.py",
      "backend/tests/test_case_stage_done_calendar_2026_09_11.py"
     ],
     "api": [
-     "backend/modules/daily_tasks/api.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/daily_tasks/api.py"
     ],
     "module_dir": [
      "backend/modules/daily_tasks/"
@@ -2023,22 +2023,22 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/daily_tasks/",
-    "file:backend/routers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "plat:__init__",
-    "plat:registry",
-    "router:quotations"
+    "plat:registry"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "module_dir": [
      "backend/modules/daily_tasks/"
@@ -2513,9 +2513,9 @@
    "units": [
     "core:db",
     "dir:backend/modules/payroll/",
+    "mod:case/api/quotations",
     "mod:payroll/api/bonus",
-    "mod:payroll/tests/_bonus_insure",
-    "router:quotations"
+    "mod:payroll/tests/_bonus_insure"
    ],
    "evidence": {
     "import": [
@@ -2523,8 +2523,8 @@
      "backend/modules/payroll/tests/_bonus_insure.py"
     ],
     "api": [
-     "backend/modules/payroll/api/bonus.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/payroll/api/bonus.py"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -3643,16 +3643,16 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
-    "mod:subcontract/api/vendor_contractors",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -3668,10 +3668,10 @@
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "mod:arap/api/cashier",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -3680,9 +3680,9 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "path": [
      "backend/modules/arap/"
@@ -3701,11 +3701,11 @@
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "mod:arap/api/cashier",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/receivables.html",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -3714,9 +3714,9 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
@@ -3738,10 +3738,10 @@
     "core:pdf_gen",
     "dir:backend/modules/subcontract/",
     "dir:frontend/pages/",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractors",
     "page:pages/approval-queue.html",
-    "page:pages/contractors.html",
-    "router:quotations"
+    "page:pages/contractors.html"
    ],
    "evidence": {
     "import": [
@@ -3749,8 +3749,8 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/contractors.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html",
@@ -3856,15 +3856,15 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/subcontract/",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors",
-    "router:quotations"
+    "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -3878,7 +3878,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
-    "helper:recognition",
+    "mod:case/recognition",
     "plat:__init__",
     "plat:registry",
     "router:vouchers"
@@ -3888,7 +3888,7 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
-     "backend/helpers/recognition.py",
+     "backend/modules/case/recognition.py",
      "backend/routers/vouchers.py"
     ],
     "api": [
@@ -4074,12 +4074,12 @@
     "dir:backend/modules/subcontract/",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
-    "page:pages/case-management.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
@@ -4256,6 +4256,8 @@
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -4269,14 +4271,12 @@
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
-    "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:quotations",
     "router:search",
     "router:system",
     "router:uploads",
@@ -4292,6 +4292,8 @@
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -4305,14 +4307,12 @@
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
@@ -4354,20 +4354,20 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
-    "helper:recognition",
     "mod:analytics/api/reports",
-    "mod:subcontract/api/vendor_contractors",
-    "router:material_orders"
+    "mod:case/api/material_orders",
+    "mod:case/recognition",
+    "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/recognition.py"
+     "backend/modules/case/recognition.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/material_orders.py"
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4385,13 +4385,13 @@
     "dir:backend/modules/subcontract/api/",
     "file:backend/routers/__init__.py",
     "mod:arap/api/cashier",
+    "mod:case/api/quotations",
     "mod:subcontract/api/__init__",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:accounting_export",
-    "router:quotations"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
@@ -4406,9 +4406,9 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
+     "backend/routers/accounting_export.py"
     ],
     "path": [
      "backend/modules/arap/",
@@ -4743,9 +4743,9 @@
     "core:db",
     "dir:backend/modules/supply/",
     "file:backend/tests/test_api_integration.py",
+    "mod:case/api/quotations",
     "mod:supply/api/inventory",
-    "mod:supply/api/shipping_notes",
-    "router:quotations"
+    "mod:supply/api/shipping_notes"
    ],
    "evidence": {
     "import": [
@@ -4753,9 +4753,9 @@
      "backend/tests/test_api_integration.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/supply/api/inventory.py",
-     "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/quotations.py"
+     "backend/modules/supply/api/shipping_notes.py"
     ],
     "module_dir": [
      "backend/modules/supply/"
@@ -5253,26 +5253,30 @@
   "backend/tests/platform/test_approval_parse_l1.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
     "dir:docs/platform/",
     "file:backend/helpers/__init__.py",
     "file:docs/platform/modules.json",
-    "helper:quotations",
     "helper:tiered_approval",
     "helper:voucher",
-    "router:quotations",
+    "mod:case/api/quotations",
+    "mod:case/quotations",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
-     "backend/helpers/quotations.py",
      "backend/helpers/tiered_approval.py",
      "backend/helpers/voucher.py",
+     "backend/modules/case/quotations.py",
      "backend/routers/vouchers.py"
     ],
     "path": [
      "backend/helpers/tiered_approval.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/vouchers.py",
      "docs/platform/",
      "docs/platform/modules.json"
@@ -5284,13 +5288,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
-    "file:backend/routers/__init__.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -5298,17 +5304,19 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "path": [
      "backend/modules/arap/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/",
-     "backend/modules/supply/",
-     "backend/routers/quotations.py"
+     "backend/modules/supply/"
     ]
    },
    "login_fixture": true
@@ -5385,8 +5393,9 @@
     "helper:case_access",
     "helper:company_identity",
     "helper:google_calendar",
-    "helper:quotations",
     "helper:row_access",
+    "mod:case/__init__",
+    "mod:case/quotations",
     "mod:netplan/__init__",
     "mod:netplan/api",
     "plat:__init__",
@@ -5404,8 +5413,9 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/case_access.py",
-     "backend/helpers/quotations.py",
      "backend/helpers/row_access.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/quotations.py",
      "backend/modules/netplan/__init__.py",
      "backend/modules/netplan/api.py"
     ],
@@ -5465,10 +5475,11 @@
     "dir:backend/modules/analytics/api/",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/platform/test_tax_calc_contract.py",
-    "helper:recognition",
     "helper:recognition_basis",
     "mod:analytics/api/__init__",
     "mod:analytics/api/reports",
+    "mod:case/__init__",
+    "mod:case/recognition",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree"
@@ -5479,10 +5490,11 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/recognition.py",
      "backend/helpers/recognition_basis.py",
      "backend/modules/analytics/api/__init__.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/recognition.py",
      "backend/tests/platform/test_tax_calc_contract.py"
     ],
     "api": [
@@ -5503,16 +5515,16 @@
     "core:db",
     "dir:backend/modules/arap/",
     "file:backend/helpers/__init__.py",
-    "file:backend/routers/__init__.py",
-    "helper:case_stage_tasks",
     "helper:google_calendar",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "mod:case/case_stage_tasks",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -5521,22 +5533,22 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/case_stage_tasks.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "path": [
-     "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
      "backend/modules/arap/",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
-     "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/case_stage_tasks.py",
+     "backend/modules/supply/api/shipping_notes.py"
     ]
    },
    "login_fixture": true
@@ -5550,7 +5562,7 @@
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "file:docs/platform/modules.json",
     "helper:case_access",
-    "helper:quotations",
+    "mod:case/quotations",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
@@ -5572,7 +5584,7 @@
     ],
     "path": [
      "backend/helpers/case_access.py",
-     "backend/helpers/quotations.py",
+     "backend/modules/case/quotations.py",
      "backend/routers/map_points.py",
      "docs/platform/",
      "docs/platform/modules.json"
@@ -5631,11 +5643,11 @@
    "kind": "api",
    "units": [
     "core:main",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:loader",
     "plat:registry",
     "plat:source_tree",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -5647,7 +5659,7 @@
     ],
     "path": [
      "backend/main.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -5793,11 +5805,11 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
-    "file:backend/routers/__init__.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -5805,11 +5817,11 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "path": [
      "backend/modules/crm/"
@@ -6132,6 +6144,8 @@
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -6147,7 +6161,6 @@
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
-    "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:definitions",
@@ -6155,7 +6168,6 @@
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:quotations",
     "router:search",
     "router:system",
     "router:uploads",
@@ -6169,6 +6181,8 @@
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -6182,7 +6196,6 @@
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/definitions.py",
@@ -6190,7 +6203,6 @@
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
@@ -6274,8 +6286,8 @@
     "file:backend/tests/_db_ledger.py",
     "file:backend/tests/_routes.py",
     "helper:settings",
-    "router:company_lookup",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:company_lookup"
    ],
    "evidence": {
     "import": [
@@ -6287,8 +6299,8 @@
      "backend/tests/_routes.py"
     ],
     "api": [
-     "backend/routers/company_lookup.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/company_lookup.py"
     ]
    },
    "unresolved_api": [
@@ -6302,14 +6314,14 @@
     "dir:docs/platform/",
     "file:docs/platform/modules.json",
     "helper:dates",
-    "helper:quotations",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:case/quotations"
    ],
    "evidence": {
     "import": [
      "backend/helpers/dates.py",
-     "backend/helpers/quotations.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/quotations.py"
     ],
     "path": [
      "docs/platform/",
@@ -6343,7 +6355,6 @@
    "units": [
     "dir:frontend/js/",
     "helper:legal_params",
-    "helper:quotations",
     "js:js/case-management-dispatch.js",
     "js:js/case-management-exec.js",
     "js:js/case-management-fin.js",
@@ -6352,6 +6363,7 @@
     "js:static/legal-round.js",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
@@ -6378,9 +6390,9 @@
     ],
     "path": [
      "backend/helpers/legal_params.py",
-     "backend/helpers/quotations.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "frontend/js/",
@@ -6418,12 +6430,12 @@
     "core:db",
     "core:pdf_gen",
     "dir:backend/modules/analytics/",
-    "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
-    "helper:quotations",
-    "helper:quote_terms",
     "mod:analytics/api/__init__",
     "mod:analytics/api/reports",
+    "mod:case/__init__",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
@@ -6435,11 +6447,11 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/quotations.py",
-     "backend/helpers/quote_terms.py",
      "backend/modules/analytics/api/__init__.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/quotations.py",
+     "backend/modules/case/quote_terms.py",
      "backend/pdf_gen.py",
      "backend/routers/__init__.py",
      "backend/routers/system.py"
@@ -7332,13 +7344,13 @@
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/routers/__init__.py",
     "mod:arap/api/cashier",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:accounting_export",
-    "router:quotations"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
@@ -7346,16 +7358,16 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "path": [
      "backend/modules/arap/api/cashier.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/accounting_export.py"
     ]
    },
    "login_fixture": true
@@ -7364,30 +7376,36 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
     "file:backend/routers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
-    "router:accounting_export",
-    "router:quotations"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/accounting_export.py"
     ],
     "path": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/accounting_export.py"
     ]
    },
    "login_fixture": true
@@ -7396,24 +7414,26 @@
    "kind": "audit",
    "units": [
     "file:backend/helpers/__init__.py",
-    "helper:case_deadlines",
-    "helper:case_stage_tasks",
-    "helper:quotations",
-    "helper:quote_terms",
-    "helper:recognition",
     "helper:tax_calc",
-    "router:quotations"
+    "mod:case/__init__",
+    "mod:case/api/quotations",
+    "mod:case/case_deadlines",
+    "mod:case/case_stage_tasks",
+    "mod:case/quotations",
+    "mod:case/quote_terms",
+    "mod:case/recognition"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
-     "backend/helpers/case_deadlines.py",
-     "backend/helpers/case_stage_tasks.py",
-     "backend/helpers/quotations.py",
-     "backend/helpers/quote_terms.py",
-     "backend/helpers/recognition.py",
      "backend/helpers/tax_calc.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/case_deadlines.py",
+     "backend/modules/case/case_stage_tasks.py",
+     "backend/modules/case/quotations.py",
+     "backend/modules/case/quote_terms.py",
+     "backend/modules/case/recognition.py"
     ],
     "path": [
      "backend/helpers/tax_calc.py"
@@ -7577,11 +7597,11 @@
     "core:db",
     "core:main",
     "helper:auth",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "router:auth",
     "router:customers",
     "router:parts",
-    "router:quotations",
     "router:system",
     "router:uploads"
    ],
@@ -7592,11 +7612,11 @@
      "backend/routers/parts.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/routers/auth.py",
      "backend/routers/customers.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py"
     ],
@@ -7612,16 +7632,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:approval_delegates",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:approval_delegates"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/approval_delegates.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_delegates.py"
     ]
    },
    "login_fixture": true
@@ -7642,15 +7662,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "page:pages/approval-queue.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/approval-queue.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html"
@@ -7679,14 +7699,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -7695,14 +7715,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -7711,16 +7731,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:auth",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:auth"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/auth.py"
     ]
    }
   },
@@ -7728,14 +7748,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -7744,14 +7764,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -7882,7 +7902,7 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:system",
     "router:vouchers"
    ],
@@ -7891,7 +7911,7 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ]
@@ -8048,11 +8068,11 @@
   "backend/tests/test_begin_only_via_begin_write_2026_09_25.py": {
    "kind": "audit",
    "units": [
+    "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "plat:__init__",
     "plat:source_tree",
-    "plat:txn",
-    "router:quotations"
+    "plat:txn"
    ],
    "evidence": {
     "import": [
@@ -8061,8 +8081,8 @@
     ],
     "path": [
      "backend/core/txn.py",
-     "backend/modules/payroll/api/bonus.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/payroll/api/bonus.py"
     ]
    }
   },
@@ -8146,6 +8166,8 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
     "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/_delegates.py",
@@ -8153,11 +8175,13 @@
     "js:static/approval-cascade.js",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
-    "plat:source_tree",
-    "router:case_extra_expenses"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -8174,9 +8198,13 @@
     "path": [
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/case_extra_expenses.py",
      "frontend/static/",
      "frontend/static/approval-cascade.js"
     ]
@@ -8186,16 +8214,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:case_action_items",
-    "router:quotations"
+    "mod:case/api/case_action_items",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/case_action_items.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8204,17 +8232,17 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:quotations",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:case/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quotations.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8258,14 +8286,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8274,11 +8302,11 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors",
     "mod:supply/api/shipping_notes",
-    "router:case_extra_expenses",
-    "router:completion_notes",
-    "router:quotations",
     "router:vouchers"
    ],
    "evidence": {
@@ -8286,11 +8314,11 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/completion_notes.py",
-     "backend/routers/quotations.py",
      "backend/routers/vouchers.py"
     ]
    },
@@ -8300,14 +8328,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8316,15 +8344,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8335,8 +8363,8 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ui_dialogs.py",
-    "page:pages/case-management.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
@@ -8345,7 +8373,7 @@
      "backend/tests/_ui_dialogs.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -8414,16 +8442,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:case_extra_expenses",
-    "router:quotations"
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8432,16 +8460,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "mod:subcontract/api/vendor_contractors",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ]
    },
    "login_fixture": true
@@ -8450,15 +8478,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8467,14 +8495,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8483,14 +8511,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8499,16 +8527,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:item_reads",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:item_reads"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/item_reads.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/item_reads.py"
     ]
    },
    "login_fixture": true
@@ -8517,14 +8545,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8533,16 +8561,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:quotations",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:case/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quotations.py"
+     "backend/modules/case/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8551,16 +8579,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:material_orders",
-    "router:quotations"
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8668,14 +8696,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8685,8 +8713,8 @@
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:case_action_items",
-    "router:quotations",
+    "mod:case/api/case_action_items",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
@@ -8695,8 +8723,8 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/case_action_items.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -8706,14 +8734,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:case_deadlines",
-    "helper:settings"
+    "helper:settings",
+    "mod:case/case_deadlines"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/case_deadlines.py",
-     "backend/helpers/settings.py"
+     "backend/helpers/settings.py",
+     "backend/modules/case/case_deadlines.py"
     ]
    }
   },
@@ -8721,14 +8749,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8737,15 +8765,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "page:pages/receivables.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/receivables.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
@@ -8757,14 +8785,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8773,15 +8801,15 @@
    "kind": "api",
    "units": [
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    }
   },
@@ -8789,18 +8817,18 @@
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/routers/__init__.py",
-    "router:quotations",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -8810,7 +8838,7 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
@@ -8818,7 +8846,7 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -8829,20 +8857,20 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
-    "file:backend/routers/__init__.py",
     "helper:google_calendar",
-    "router:quotations"
+    "mod:case/api/__init__",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/google_calendar.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -8851,15 +8879,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "page:pages/quotation-form.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -8872,8 +8900,8 @@
    "units": [
     "core:db",
     "file:backend/tests/test_mp6_map_case_locations_2026_09_24.py",
-    "router:material_orders",
-    "router:quotations"
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
@@ -8881,8 +8909,8 @@
      "backend/tests/test_mp6_map_case_locations_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -9149,19 +9177,19 @@
   "backend/tests/test_completion_notes_2026_09_12.py": {
    "kind": "api",
    "units": [
-    "core:completion_pdf",
     "core:db",
-    "router:completion_notes",
-    "router:quotations"
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
+    "mod:case/completion_pdf"
    ],
    "evidence": {
     "import": [
-     "backend/completion_pdf.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/modules/case/completion_pdf.py"
     ],
     "api": [
-     "backend/routers/completion_notes.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -9172,16 +9200,16 @@
     "core:archive",
     "core:main",
     "helper:auth",
-    "helper:quotations",
-    "router:quotations",
+    "mod:case/api/quotations",
+    "mod:case/quotations",
     "router:uploads"
    ],
    "evidence": {
     "import": [
      "backend/archive.py",
      "backend/helpers/auth.py",
-     "backend/helpers/quotations.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/case/quotations.py",
      "backend/routers/uploads.py"
     ],
     "path": [
@@ -9261,6 +9289,7 @@
     "helper:formula",
     "helper:module_registry",
     "helper:tiered_approval",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:definitions",
     "plat:events",
@@ -9270,8 +9299,7 @@
     "router:auth",
     "router:custom_records",
     "router:definitions",
-    "router:modules",
-    "router:quotations"
+    "router:modules"
    ],
    "evidence": {
     "import": [
@@ -9292,11 +9320,11 @@
      "backend/pdf_gen.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py",
-     "backend/routers/modules.py",
-     "backend/routers/quotations.py"
+     "backend/routers/modules.py"
     ]
    }
   },
@@ -9509,16 +9537,16 @@
    "units": [
     "core:db",
     "core:pdf_gen",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -9975,9 +10003,9 @@
    "units": [
     "core:db",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "mod:case/api/quotations",
     "mod:daily_tasks/api",
-    "page:pages/case-management.html",
-    "router:quotations"
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
@@ -9985,8 +10013,8 @@
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "api": [
-     "backend/modules/daily_tasks/api.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/daily_tasks/api.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -9999,6 +10027,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "mod:case/api/quotations",
     "mod:supply/api/shipping_notes",
     "page:index.html",
     "page:pages/case-management.html",
@@ -10009,7 +10038,6 @@
     "router:custom_records",
     "router:item_reads",
     "router:platform_menu",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -10019,11 +10047,11 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/item_reads.py",
      "backend/routers/platform_menu.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -10298,17 +10326,17 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/routers/__init__.py",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
-    "page:pages/case-management.html",
-    "router:quotations"
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
@@ -10342,9 +10370,9 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "mod:case/api/quotations",
     "page:pages/company-profile-settings.html",
-    "page:pages/completion-note-form.html",
-    "router:quotations"
+    "page:pages/completion-note-form.html"
    ],
    "evidence": {
     "import": [
@@ -10353,7 +10381,7 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/company-profile-settings.html",
@@ -10483,9 +10511,9 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "mod:case/api/quotations",
     "page:pages/case-management.html",
     "page:pages/dev-crm.html",
-    "router:quotations",
     "router:uploads"
    ],
    "evidence": {
@@ -10495,7 +10523,7 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/uploads.py"
     ],
     "page": [
@@ -10806,8 +10834,8 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
-    "page:pages/case-management.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
@@ -10816,7 +10844,7 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10928,12 +10956,12 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "mod:case/api/quotations",
     "page:pages/approval-queue.html",
     "page:pages/custom-records.html",
     "page:pages/module-builder.html",
     "router:custom_records",
-    "router:definitions",
-    "router:quotations"
+    "router:definitions"
    ],
    "evidence": {
     "import": [
@@ -10941,9 +10969,9 @@
      "backend/tests/_e2e_login.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/routers/custom_records.py",
-     "backend/routers/definitions.py",
-     "backend/routers/quotations.py"
+     "backend/routers/definitions.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html",
@@ -11058,13 +11086,13 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "mod:case/api/quotations",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/login-qr-approve.html",
     "page:pages/login.html",
     "page:pages/quotation-form.html",
-    "router:auth",
-    "router:quotations"
+    "router:auth"
    ],
    "evidence": {
     "import": [
@@ -11073,8 +11101,8 @@
      "backend/tests/_ports.py"
     ],
     "api": [
-     "backend/routers/auth.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/auth.py"
     ],
     "page": [
      "frontend/index.html",
@@ -11121,13 +11149,13 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:case/api/completion_notes",
     "mod:netplan/api",
     "page:pages/case-management.html",
     "page:pages/completion-note-form.html",
     "page:pages/network-plan-form.html",
     "page:pages/network-plans.html",
-    "page:pages/quotation-form.html",
-    "router:completion_notes"
+    "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
@@ -11136,8 +11164,8 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
-     "backend/modules/netplan/api.py",
-     "backend/routers/completion_notes.py"
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/netplan/api.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
@@ -11212,19 +11240,19 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/routers/__init__.py",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
     "page:pages/quotations.html",
     "plat:__init__",
-    "plat:registry",
-    "router:quotations"
+    "plat:registry"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/quotations.html"
@@ -11304,14 +11332,14 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
-    "helper:quote_terms",
+    "mod:case/quote_terms",
     "page:pages/quotation-form.html",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quote_terms.py",
+     "backend/modules/case/quote_terms.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py"
     ],
@@ -11732,6 +11760,10 @@
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:payroll/api/bonus",
@@ -11746,12 +11778,8 @@
     "plat:source_tree",
     "router:approval_delegates",
     "router:auth",
-    "router:case_action_items",
-    "router:case_extra_expenses",
-    "router:completion_notes",
     "router:map_points",
     "router:org_structure",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -11770,6 +11798,10 @@
      "backend/modules/arap/api/cashier.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/payroll/api/bonus.py",
@@ -11779,12 +11811,8 @@
      "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
-     "backend/routers/case_action_items.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/map_points.py",
      "backend/routers/org_structure.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py",
      "frontend/pages/case-management.html",
      "frontend/pages/company-profile-settings.html",
@@ -11888,19 +11916,19 @@
    "units": [
     "core:db",
     "dir:backend/routers/",
+    "mod:case/api/completion_notes",
     "plat:__init__",
-    "plat:source_tree",
-    "router:completion_notes"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/completion_notes.py"
+     "backend/modules/case/api/completion_notes.py"
     ],
     "api": [
-     "backend/routers/completion_notes.py"
+     "backend/modules/case/api/completion_notes.py"
     ],
     "path": [
      "backend/routers/"
@@ -11938,16 +11966,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:case_extra_expenses",
-    "router:quotations"
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -11988,8 +12016,8 @@
    "units": [
     "core:db",
     "helper:uploads",
-    "mod:crm/api",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:crm/api"
    ],
    "evidence": {
     "import": [
@@ -11997,8 +12025,8 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/modules/crm/api.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/crm/api.py"
     ]
    },
    "login_fixture": true
@@ -12294,9 +12322,9 @@
    "units": [
     "core:main",
     "helper:settings",
+    "mod:case/api/quotations",
     "router:auth",
     "router:company_lookup",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -12306,9 +12334,9 @@
      "backend/routers/company_lookup.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
    }
@@ -12328,14 +12356,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -12624,8 +12652,8 @@
    "units": [
     "core:db",
     "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
+    "mod:case/api/quotations",
     "page:pages/approval-queue.html",
-    "router:quotations",
     "router:system",
     "router:vouchers"
    ],
@@ -12635,7 +12663,7 @@
      "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ],
@@ -12706,14 +12734,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -12942,14 +12970,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -12958,14 +12986,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:material_orders"
+    "mod:case/api/material_orders"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/material_orders.py"
+     "backend/modules/case/api/material_orders.py"
     ]
    },
    "login_fixture": true
@@ -13087,6 +13115,8 @@
     "mod:analytics/api/dashboard",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -13105,14 +13135,12 @@
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
-    "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:quotations",
     "router:search",
     "router:system",
     "router:uploads",
@@ -13129,6 +13157,8 @@
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -13142,14 +13172,12 @@
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
@@ -13205,16 +13233,16 @@
     "helper:email_notify",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:source_tree",
-    "router:case_action_items",
-    "router:case_extra_expenses",
-    "router:completion_notes",
     "router:customers",
     "router:parts",
-    "router:quotations",
     "router:search"
    ],
    "evidence": {
@@ -13223,19 +13251,19 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/email_notify.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/case_action_items.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/customers.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/search.py"
     ],
     "path": [
@@ -13292,22 +13320,23 @@
     "dir:frontend/js/",
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
-    "helper:quotations",
-    "helper:recognition",
     "js:js/case-management-core.js",
     "js:js/case-management-exec.js",
     "js:js/reports.js",
     "js:static/legal-round.js",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/__init__",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/quotations",
+    "mod:case/recognition",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
     "plat:__init__",
     "plat:source_tree",
-    "router:accounting_export",
-    "router:case_extra_expenses"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
@@ -13316,11 +13345,12 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py",
-     "backend/helpers/quotations.py",
-     "backend/helpers/recognition.py",
      "backend/modules/arap/api/payment_requests.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/case_extra_expenses.py"
+     "backend/modules/case/__init__.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/quotations.py",
+     "backend/modules/case/recognition.py",
+     "backend/routers/accounting_export.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -13585,7 +13615,7 @@
     "file:backend/routers/__init__.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
-    "helper:quotations",
+    "mod:case/quotations",
     "page:pages/case-management.html",
     "page:pages/map.html",
     "router:map_points"
@@ -13593,7 +13623,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quotations.py",
+     "backend/modules/case/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
      "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
@@ -13808,16 +13838,16 @@
     "core:db",
     "core:trail",
     "helper:system_checks",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/customers.html",
     "router:auth",
-    "router:completion_notes",
     "router:customers",
     "router:list_prefs",
     "router:parts",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -13827,15 +13857,15 @@
      "backend/trail.py"
     ],
     "api": [
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/auth.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/customers.py",
      "backend/routers/list_prefs.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -13848,7 +13878,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
@@ -13856,7 +13886,7 @@
      "backend/helpers/__init__.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -13931,14 +13961,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -13948,14 +13978,14 @@
    "units": [
     "core:db",
     "js:js/cashier.js",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/js/cashier.js"
@@ -14069,6 +14099,8 @@
     "mod:arap/api/cashier",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/completion_notes",
+    "mod:case/api/quotations",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -14088,7 +14120,6 @@
     "router:approval_delegates",
     "router:auth",
     "router:company_lookup",
-    "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:definitions",
@@ -14104,7 +14135,6 @@
     "router:parts",
     "router:platform_catalog",
     "router:platform_menu",
-    "router:quotations",
     "router:search",
     "router:system",
     "router:uploads",
@@ -14124,6 +14154,8 @@
      "backend/modules/arap/api/cashier.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/api/completion_notes.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -14141,7 +14173,6 @@
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/definitions.py",
@@ -14157,7 +14188,6 @@
      "backend/routers/parts.py",
      "backend/routers/platform_catalog.py",
      "backend/routers/platform_menu.py",
-     "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
@@ -14284,16 +14314,16 @@
    "units": [
     "core:db",
     "mod:analytics/api/dashboard",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14302,14 +14332,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14318,14 +14348,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14338,19 +14368,19 @@
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_org_chain_approval_2026_09_15.py",
     "helper:google_calendar",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/google_calendar.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_org_chain_approval_2026_09_15.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    }
   },
@@ -14362,13 +14392,13 @@
     "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
     "file:backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors",
     "mod:subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23",
     "plat:__init__",
     "plat:source_tree",
-    "plat:txn",
-    "router:material_orders",
-    "router:quotations"
+    "plat:txn"
    ],
    "evidence": {
     "import": [
@@ -14376,17 +14406,17 @@
      "backend/core/source_tree.py",
      "backend/core/txn.py",
      "backend/db.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
      "backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "path": [
      "backend/modules/subcontract/"
@@ -14400,7 +14430,7 @@
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
     "helper:company_identity",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
@@ -14411,7 +14441,7 @@
      "backend/tests/_pdf_identity.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    },
@@ -14443,10 +14473,10 @@
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
     "file:backend/tests/test_quote_location_2026_09_22.py",
+    "mod:case/api/quotations",
     "page:pages/approval-queue.html",
     "page:pages/case-management.html",
     "page:pages/quotation-form.html",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -14457,7 +14487,7 @@
      "backend/tests/test_quote_location_2026_09_22.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -14472,7 +14502,7 @@
    "units": [
     "core:db",
     "file:backend/tests/test_quote_location_2026_09_22.py",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
@@ -14481,7 +14511,7 @@
      "backend/tests/test_quote_location_2026_09_22.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ]
    }
@@ -14490,15 +14520,15 @@
    "kind": "api",
    "units": [
     "core:db",
-    "page:pages/quotation-form.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -14511,12 +14541,12 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "mod:case/api/case_action_items",
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations",
     "mod:netplan/api",
-    "page:pages/quotation-form.html",
-    "router:case_action_items",
-    "router:case_extra_expenses",
-    "router:material_orders",
-    "router:quotations"
+    "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
@@ -14524,11 +14554,11 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/modules/netplan/api.py",
-     "backend/routers/case_action_items.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_action_items.py",
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/netplan/api.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -14541,19 +14571,19 @@
    "units": [
     "core:db",
     "dir:frontend/pages/",
-    "helper:quote_terms",
+    "mod:case/api/quotations",
+    "mod:case/quote_terms",
     "page:pages/quotation-form.html",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quote_terms.py",
+     "backend/modules/case/quote_terms.py",
      "backend/routers/system.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/system.py"
     ],
     "page": [
@@ -14586,14 +14616,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14615,22 +14645,22 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:recognition",
     "mod:analytics/api/reports",
-    "router:case_extra_expenses",
-    "router:material_orders",
-    "router:quotations"
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/material_orders",
+    "mod:case/api/quotations",
+    "mod:case/recognition"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/recognition.py"
+     "backend/modules/case/recognition.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/material_orders.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/material_orders.py",
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14657,14 +14687,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14699,21 +14729,21 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/test_row_access_2026_09_25.py",
-    "helper:quotations",
     "helper:row_access",
-    "router:quotations",
+    "mod:case/api/quotations",
+    "mod:case/quotations",
     "router:search"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/quotations.py",
      "backend/helpers/row_access.py",
+     "backend/modules/case/quotations.py",
      "backend/tests/test_row_access_2026_09_25.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/search.py"
     ]
    },
@@ -14748,7 +14778,7 @@
    "units": [
     "core:db",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
-    "helper:quotations",
+    "mod:case/quotations",
     "plat:__init__",
     "plat:txn"
    ],
@@ -14757,7 +14787,7 @@
      "backend/core/__init__.py",
      "backend/core/txn.py",
      "backend/db.py",
-     "backend/helpers/quotations.py",
+     "backend/modules/case/quotations.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ]
    }
@@ -14893,14 +14923,14 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -14910,12 +14940,14 @@
    "units": [
     "dir:backend/",
     "dir:backend/helpers/",
-    "dir:backend/routers/",
+    "dir:backend/modules/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
     "dir:frontend/",
     "helper:legal_params",
+    "mod:case/api/case_action_items",
     "page:pages/parts.html",
-    "page:pages/vendor-contractors.html",
-    "router:case_action_items"
+    "page:pages/vendor-contractors.html"
    ],
    "evidence": {
     "import": [
@@ -14929,8 +14961,10 @@
      "backend/",
      "backend/helpers/",
      "backend/helpers/legal_params.py",
-     "backend/routers/",
-     "backend/routers/case_action_items.py",
+     "backend/modules/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/case_action_items.py",
      "frontend/",
      "frontend/pages/parts.html",
      "frontend/pages/vendor-contractors.html"
@@ -14942,8 +14976,8 @@
    "units": [
     "core:db",
     "core:main",
-    "page:pages/login.html",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "page:pages/login.html"
    ],
    "evidence": {
     "import": [
@@ -14951,7 +14985,7 @@
      "backend/main.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ],
     "page": [
      "frontend/pages/login.html"
@@ -15002,15 +15036,15 @@
    "kind": "api",
    "units": [
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    }
   },
@@ -15110,11 +15144,11 @@
    "units": [
     "core:archive",
     "core:db",
+    "mod:case/api/quotations",
     "plat:__init__",
     "plat:source_tree",
     "router:auth",
     "router:company_lookup",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -15125,10 +15159,13 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/modules/case/api/quotations.py"
     ]
    }
   },
@@ -15180,20 +15217,20 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
-    "router:accounting_export",
-    "router:quotations"
+    "router:accounting_export"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/quotations.py"
+     "backend/routers/accounting_export.py"
     ]
    },
    "login_fixture": true
@@ -15206,8 +15243,8 @@
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
     "helper:legal_params",
     "mod:arap/api/invoice_vouchers",
-    "router:legal_params",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:legal_params"
    ],
    "evidence": {
     "import": [
@@ -15218,8 +15255,8 @@
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
-     "backend/routers/legal_params.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/legal_params.py"
     ]
    },
    "login_fixture": true
@@ -15229,23 +15266,23 @@
    "units": [
     "core:db",
     "core:pdf_gen",
-    "helper:quotations",
-    "helper:quote_terms",
     "helper:receivables",
     "mod:arap/api/invoice_vouchers",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "mod:case/quotations",
+    "mod:case/quote_terms"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quotations.py",
-     "backend/helpers/quote_terms.py",
      "backend/helpers/receivables.py",
+     "backend/modules/case/quotations.py",
+     "backend/modules/case/quote_terms.py",
      "backend/pdf_gen.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -15384,7 +15421,7 @@
     "core:db",
     "helper:auth",
     "helper:uploads",
-    "router:quotations"
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
@@ -15393,7 +15430,7 @@
      "backend/helpers/uploads.py"
     ],
     "api": [
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py"
     ]
    },
    "login_fixture": true
@@ -15558,16 +15595,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:parts",
-    "router:quotations"
+    "mod:case/api/quotations",
+    "router:parts"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/parts.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/parts.py"
     ]
    },
    "login_fixture": true
@@ -15887,13 +15924,13 @@
    "kind": "unit",
    "units": [
     "helper:voucher",
-    "router:quotations",
+    "mod:case/api/quotations",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
      "backend/helpers/voucher.py",
-     "backend/routers/quotations.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/vouchers.py"
     ]
    }
@@ -16002,9 +16039,9 @@
     "dir:frontend/js/",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "helper:module_registry",
-    "helper:recognition",
     "js:js/case-management-core.js",
     "mod:analytics/api/reports",
+    "mod:case/recognition",
     "page:pages/case-management.html",
     "page:pages/customers.html",
     "page:pages/reports.html"
@@ -16012,7 +16049,7 @@
    "evidence": {
     "import": [
      "backend/helpers/module_registry.py",
-     "backend/helpers/recognition.py",
+     "backend/modules/case/recognition.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py"
     ],
     "api": [
@@ -16141,6 +16178,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:case/api/quotations",
     "mod:netplan/api",
     "mod:payroll/api/bonus",
     "plat:__init__",
@@ -16151,7 +16189,6 @@
     "router:definitions",
     "router:item_reads",
     "router:list_prefs",
-    "router:quotations",
     "router:system"
    ],
    "evidence": {
@@ -16161,6 +16198,7 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/netplan/api.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
@@ -16168,10 +16206,10 @@
      "backend/routers/definitions.py",
      "backend/routers/item_reads.py",
      "backend/routers/list_prefs.py",
-     "backend/routers/quotations.py",
      "backend/routers/system.py"
     ],
     "path": [
+     "backend/modules/case/api/quotations.py",
      "backend/modules/netplan/api.py",
      "backend/modules/payroll/api/bonus.py",
      "backend/routers/auth.py"
@@ -16201,10 +16239,10 @@
     "core:db",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
+    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "plat:__init__",
-    "plat:source_tree",
-    "router:quotations"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -16213,14 +16251,14 @@
      "backend/db.py",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
     ]
    },
    "login_fixture": true
@@ -16229,16 +16267,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:case_extra_expenses",
-    "router:quotations"
+    "mod:case/api/case_extra_expenses",
+    "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/quotations.py"
+     "backend/modules/case/api/case_extra_expenses.py",
+     "backend/modules/case/api/quotations.py"
     ]
    }
   },

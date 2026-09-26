@@ -32,11 +32,11 @@ def pdf_jobs(monkeypatch):
     """攔下 PDF 產生（測試環境不保證有 Edge，而且不該真的跑 headless 瀏覽器），
     記錄下「誰被要求存了什麼事件的 PDF」。
 
-    patch 的是 `routers.quotations` 上綁好的那個名字，不是 pdf_gen 原始出處——
+    patch 的是 `modules.case.api.quotations` 上綁好的那個名字，不是 pdf_gen 原始出處——
     router 是 `from pdf_gen import _generate_quotation_pdf`，patch 出處不會影響
     它已經綁定的參照。
     """
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     calls = []
     monkeypatch.setattr(rq, "_generate_quotation_pdf",
                         lambda quote_no, actor='', action_type='簽核':
@@ -241,7 +241,7 @@ def test_edit_history_records_who(client, su, pdf_jobs, make_user):
 
 def test_versions_endpoint_returns_both_timelines(client, su, pdf_jobs, tmp_path, monkeypatch):
     import pdf_gen
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     # 兩個模組各自綁了一份 _get_pdf_base 參照（router 是 from pdf_gen import ...），
     # 只 patch 其中一邊，端點解析到的會是真實設定路徑、檔案當然找不到
     monkeypatch.setattr(pdf_gen, "_get_pdf_base", lambda: str(tmp_path))
@@ -272,7 +272,7 @@ def test_version_marked_unavailable_when_file_is_gone(client, su, pdf_jobs, tmp_
     """PDF 存檔目錄是可設定的路徑，可能被搬走或清理。索引還在但檔案沒了要
     誠實標示，不能讓人點下去才發現。"""
     import pdf_gen
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     monkeypatch.setattr(pdf_gen, "_get_pdf_base", lambda: str(tmp_path))
     monkeypatch.setattr(rq, "_get_pdf_base", lambda: str(tmp_path))
 
@@ -292,7 +292,7 @@ def test_download_returns_the_archived_file_not_a_fresh_render(client, su, pdf_j
                                                                 tmp_path, monkeypatch):
     """這是整個功能的重點：要拿到的是**當時那一份**，不是用現在的內容重新產生。"""
     import pdf_gen
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     monkeypatch.setattr(pdf_gen, "_get_pdf_base", lambda: str(tmp_path))
     monkeypatch.setattr(rq, "_get_pdf_base", lambda: str(tmp_path))
 
@@ -324,7 +324,7 @@ def test_version_path_traversal_is_rejected(client, su, pdf_jobs, tmp_path, monk
     """docVersions 的值是系統自己寫的，但會經過 data_json（備份、還原、人工
     修過的資料都可能經手）。照 routers/uploads.py `_resolve_upload_path()`
     的既有慣例一律驗界。"""
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     monkeypatch.setattr(rq, "_get_pdf_base", lambda: str(tmp_path))
 
     no = _create(client, su)

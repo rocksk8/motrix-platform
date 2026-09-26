@@ -3,7 +3,7 @@
 
 內建 `round()` 是銀行家捨入（.5 取偶數：round(1250.5) == 1250）；前端 `Math.round(a * b)` 在浮點乘積
 落在 x.4999… 時少 1 元、負數 -1.5 取 -1。共用函式：後端 L1 `helpers.legal_params.round_half_up`
-（`helpers.quotations.round_half_up` 轉呼叫它），前端 `static/legal-round.js` 的 `MotrixLegalRound.halfUp`。
+（`modules.case.quotations.round_half_up` 轉呼叫它），前端 `static/legal-round.js` 的 `MotrixLegalRound.halfUp`。
 
 每一處修改一題：挑會出現 .5 的金額，改之前會紅（註明舊值）；另有正對照（改前改後都一樣的值，
 證明題目本身沒有把「正常的金額」也算錯）。守門：tests/platform/test_legal_amount_rounding_guard.py。
@@ -27,19 +27,19 @@ FRONTEND = ROOT / "frontend"
 
 def test_quotations_round_half_up_forwards_to_the_legal_params_service():
     from helpers import legal_params as lp
-    from helpers.quotations import round_half_up
+    from modules.case.quotations import round_half_up
     assert round_half_up(1250.5) == 1251 and round_half_up(1250.4) == 1250      # 正對照＋.5
     assert round_half_up(1251, 0.05) == lp.round_half_up(1251, 0.05) == 63      # 62.55
     assert round_half_up(-2.5) == -3, "負數遠離 0（Decimal ROUND_HALF_UP）"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 報價：收款期別金額（helpers/quotations.py::payment_item_amounts）
+# 報價：收款期別金額（modules/case/quotations.py::payment_item_amounts）
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_payment_items_by_pct_round_half_up():
     """10,015 × 30% ＝ 3,004.5 ⇒ 3,005（舊：3,004；畫面 Math.round 一直是 3,005 ⇒ 前後端差 1 元）。"""
-    from helpers.quotations import payment_item_amounts
+    from modules.case.quotations import payment_item_amounts
     # 第 2 期由 pct 算（L329）；第 1 期＝總額 − 其他期（其他期也由 pct 算，L319）
     assert payment_item_amounts(10015, [{"pct": 70}, {"pct": 30}]) == [7010, 3005]
     # 正對照：沒有 .5 的比例
@@ -48,7 +48,7 @@ def test_payment_items_by_pct_round_half_up():
 
 def test_tax_exempt_item_converts_to_pretax_half_up():
     """沖銷免稅期別：含稅 24 × 未稅 30／含稅 32 ＝ 22.5 ⇒ 23（舊：22）。L331"""
-    from helpers.quotations import payment_item_amounts
+    from modules.case.quotations import payment_item_amounts
     assert payment_item_amounts(32, [{"amount": 24, "taxExempt": True}], pretax=30) == [23]
     assert payment_item_amounts(32, [{"amount": 16, "taxExempt": True}], pretax=30) == [15]    # 正對照
 
@@ -141,7 +141,7 @@ def _insert_dispatch_row(quote_no, total_amount, personnel=None):
 
 
 def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
-    from helpers import recognition as rp   # 2026-09-26：M08 經 case.recognition，提供者轉呼叫這裡的函式
+    from modules.case import recognition as rp   # 2026-09-26：M08 經 case.recognition，提供者轉呼叫這裡的函式
 
     def _mk(rows, **extra):
         return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",
@@ -174,7 +174,7 @@ def test_accounting_voucher_line_rounds_half_up():
 
 def test_recognition_flag_amount_rounds_half_up():
     """待補登標註的金額：10.5 ⇒ 11（舊：10）。recognition L339"""
-    from helpers.recognition import _flag_item
+    from modules.case.recognition import _flag_item
     assert _flag_item("Q", "c", "d", "x", 10.5, "2026-01-01", True, "extra_no_invoice")["amount"] == 11
     assert _flag_item("Q", "c", "d", "x", None, "2026-01-01", True, "extra_no_invoice")["amount"] is None
 
@@ -183,7 +183,7 @@ def test_extra_expense_total_rounds_half_up_to_cents(client):
     """額外支出小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊：round(0.145, 2)＝0.14）。
     case_extra_expenses L172（_recalc）、L725（核准變更 _apply_change）"""
     import db
-    from routers.case_extra_expenses import ExtraExpenseIn, _recalc, _apply_change
+    from modules.case.api.case_extra_expenses import ExtraExpenseIn, _recalc, _apply_change
     assert _recalc(ExtraExpenseIn(qty=1, unitCost=0.145)) == 0.15
     assert _recalc(ExtraExpenseIn(qty=3, unitCost=100.1)) == 300.3                         # 正對照
     conn = db.get_db()

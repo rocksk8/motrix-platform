@@ -27,7 +27,7 @@ def _auth(token):
 
 
 def _terms():
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     return dict(DEFAULT_TERMS)
 
 
@@ -138,7 +138,7 @@ def test_terms_changed_against_backend_defaults_and_presets(client, token):
 # ── 唯一來源 ───────────────────────────────────────────────────────────────
 
 def test_terms_defaults_endpoint_is_the_single_source(client, token):
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     import routers.system as system
     r = client.get("/api/settings/quote-terms-defaults", headers=_auth(token))
     assert r.status_code == 200 and r.json() == DEFAULT_TERMS
@@ -150,7 +150,7 @@ def test_terms_defaults_endpoint_is_the_single_source(client, token):
 def test_frontend_no_longer_carries_its_own_copy():
     """前端不可以再有一份預設條款的內容（兩份分岔沒有任何地方會報錯）。"""
     from pathlib import Path
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     src = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "quotation-form.html").read_text(encoding="utf-8")
     for k, v in DEFAULT_TERMS.items():
         first_line = v.splitlines()[0]
@@ -161,5 +161,5 @@ def test_frontend_no_longer_carries_its_own_copy():
 
 @pytest.mark.parametrize("x,expected", [(28.125, "28.13"), (10.0, "10.00"), (29.995, "30.00"), (0.1 * 100, "10.00")])
 def test_to_fixed_matches_js(x, expected):
-    from helpers.quote_terms import _js_to_fixed
+    from modules.case.quote_terms import _js_to_fixed
     assert _js_to_fixed(x, 2) == expected

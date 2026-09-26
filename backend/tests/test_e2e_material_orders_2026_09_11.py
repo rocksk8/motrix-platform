@@ -1,6 +1,6 @@
 """瀏覽器層級端對端測試：案件管理「財務」分頁的叫料（材料訂購）清單。
 
-**為什麼非得用真實瀏覽器**：`routers/material_orders.py` 的兩支端點在
+**為什麼非得用真實瀏覽器**：`modules/case/api/material_orders.py` 的兩支端點在
 2026-09-10 就上線、也被 `test_material_orders_2026_09_10.py` 測到 7 題全綠，
 但整整一天沒有任何前端呼叫得到它們——全 repo grep `material-orders` 只命中
 後端與測試自己。純 API 測試對這種「後端好好的、只是沒有入口」的缺陷完全無感，
@@ -193,7 +193,7 @@ def test_material_orders_panel_round_trip(live_server, make_user, e2e_browser):
 def test_material_orders_paid_status_rules_enforced_in_ui(live_server, make_user, e2e_browser):
     """付款狀態的三條規則在畫面上就要成立，不能讓使用者撞到後端原始 400。
 
-    後端規則（`routers/material_orders.py` 第 5 步）：
+    後端規則（`modules/case/api/material_orders.py` 第 5 步）：
       pending → 已付金額必須 0、日期必須空
       paid    → 已付金額 = 小計
       partial/paid → 日期必填

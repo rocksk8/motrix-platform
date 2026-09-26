@@ -274,7 +274,7 @@ _REV_SUFFIX = re.compile(r"^(?P<base>.+?)-R(?P<n>\d+)$")
 def next_revision_no(voucher_no):
     """`X` → `X-R1`；`X-R1` → `X-R2`。**尾碼永遠只有一段。**
 
-    ⚠️ 這一支**不可以** `from routers.quotations import _next_revision_no`。
+    ⚠️ 這一支**不可以** `from modules.case.api.quotations import _next_revision_no`。
     📌 理由不是「不要重用程式碼」，是相依方向：
        傳票依賴報價單的內部函式 ⇒ **改報價單的單號格式會靜默改掉傳票的。**
     🔑 而 `quotations` 那一支在**它自己的地盤上沒有壞**（報價單一律 `MQ-` 格式）

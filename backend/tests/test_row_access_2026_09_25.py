@@ -106,7 +106,7 @@ def test_positive_control_sets_are_not_trivial():
 
 # ── ② 新介面 == 舊實作（原封凍結，2026-09-25 自 HEAD 複製，只改函式名）────────────
 
-def _OLD_visible_case_filter_sql(user, prefix=""):     # routers/quotations.py:251
+def _OLD_visible_case_filter_sql(user, prefix=""):     # modules/case/api/quotations.py:251
     if json.loads(user.get("modules") or "[]").count("cashier"):
         return ("", [])
     return (
@@ -116,7 +116,7 @@ def _OLD_visible_case_filter_sql(user, prefix=""):     # routers/quotations.py:2
     )
 
 
-def _OLD_check_quotation_owner(row, user):               # helpers/quotations.py:20
+def _OLD_check_quotation_owner(row, user):               # modules/case/quotations.py:20
     if user["role"] in ("superadmin", "admin"):
         return
     sp_id = row["sales_person_id"] if "sales_person_id" in row.keys() else None

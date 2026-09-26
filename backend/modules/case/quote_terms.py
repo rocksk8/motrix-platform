@@ -165,7 +165,7 @@ def compute_approval_reasons(q: dict, presets: list, default_payment_terms: str)
     tax_rate = q["taxRate"] if "taxRate" in q else 5
     if _js_num(tax_rate) < 5:
         # AC1：零稅率／免稅是法定稅別，原因寫稅別；舊 1～4% 單維持原文字（前端同一份，parity 題守）。
-        from helpers.quotations import quote_tax_type, TAX_TYPE_LABELS
+        from modules.case.quotations import quote_tax_type, TAX_TYPE_LABELS
         kind = quote_tax_type(q)
         if kind in ("zero", "exempt"):
             reasons.append(f"稅別為{TAX_TYPE_LABELS[kind]}（非應稅 5%）")

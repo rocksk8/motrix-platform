@@ -1,6 +1,6 @@
 """案件存取守門下沉 L1 `helpers/case_access.py`（主持裁示 2026-09-26，DEPENDENCY-MAP §3.2；稽核 D AUDIT-D-C-case-access）。
 
-① 同一份規則：helpers.quotations 的同名匯入就是 L1 那一份，row_access 登錄的也是它
+① 同一份規則：modules.case.quotations 的同名匯入就是 L1 那一份，row_access 登錄的也是它
 ② 已知例外只有一個：L1（含 L0 core/）新增讀寫 M01 `quotations` 表的檔案 ⇒ 紅；既有的讀寫列在基線、只准變少。
    判準用 dep_scan 的 SQL 解析（與 dep_graph 同一份，CA-S1），另補逗號 join。f-string 插入的表名靜態無從得知（已知限制）。
 ③ 反向控制（CA-M1）：**表在、資料在、M01 沒載入** ⇒ `guard_case_access` 404、`case_access_allowed` False，連超級管理員也一樣。
@@ -102,7 +102,8 @@ def test_known_l1_baseline_is_not_stale():
 
 
 def test_same_rule_everywhere():
-    from helpers import case_access as ca, quotations as hq, row_access as ra
+    from helpers import case_access as ca, row_access as ra
+    from modules.case import quotations as hq
     import helpers
     assert hq.CASE_ACCESS is ca.CASE_ACCESS and ra._REGISTRY["case"] is ca.CASE_ACCESS
     assert hq.guard_case_access is ca.guard_case_access is helpers.guard_case_access

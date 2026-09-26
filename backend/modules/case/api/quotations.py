@@ -23,9 +23,9 @@ from pydantic import BaseModel, Field
 
 from db import get_db, spawn_bg_thread
 from db import db_conn  # /api/sales-orders（M08 搬遷移入）
-from helpers.quotations import payment_item_amounts  # 同上
+from modules.case.quotations import payment_item_amounts  # 同上
 from helpers import row_access
-from helpers import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
+from modules.case import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
     _require_user, _tok, _audit, _notify, _purge_notifications, notify_approval_request,
     notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
@@ -39,9 +39,9 @@ from helpers import (
 )
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
-from helpers.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
-from helpers.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
-from helpers.quotations import validate_tax_basis
+from modules.case.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
+from modules.case.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
+from modules.case.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display
 from helpers.financial_mask import (
@@ -50,7 +50,7 @@ from helpers.financial_mask import (
 )
 import helpers.uploads as _uploads_mod
 from helpers.uploads import _effective_subfolder
-from helpers.recognition import normalize_ratio_bp  # `AC2`
+from modules.case.recognition import normalize_ratio_bp  # `AC2`
 from helpers.errors import trace_id
 from archive import _backup_quotation
 from pdf_gen import (
@@ -226,7 +226,7 @@ from helpers.approval_queue import (  # noqa: E402
 
 
 # 案件可見性（原 `_visible_case_filter_sql()`／`_check_quotation_owner()` 兩份）已合併為
-# L1 `helpers/row_access` 的 `case`，規則宣告在 helpers/quotations.py 的 `CASE_ACCESS`。
+# L1 `helpers/row_access` 的 `case`，規則宣告在 modules/case/quotations.py 的 `CASE_ACCESS`。
 #   清單／批次 ⇒ row_access.filter_sql("case", user, scope="read")
 #   單筆      ⇒ row_access.require("case", user, row)（scope="owner"；GET 單筆用 "read"）
 
@@ -348,7 +348,7 @@ def _safe_close(conn) -> None:
 
 # 稽核 Y-5（2026-09-25）：簽核人放行只留一份規則——helpers 版 `is_document_approver`。
 # 原本 router 自己一份，漂移成「不認沒有外層 approval 的 approval_json」⇒ 額外支出的簽核人在簽核佇列被 403。
-from helpers.quotations import (  # noqa: E402
+from modules.case.quotations import (  # noqa: E402
     is_document_approver as _is_case_approver, case_access_allowed, CASE_ACCESS)
 
 
@@ -394,7 +394,7 @@ def _guard_case(conn, quote_no: str, user: dict, *, allow_approver: bool = False
     if (skip_if_semi_unlocked and (q["deal_tag"] or "") == "已結案"
             and q["case_semi_unlocked"]):
         return q
-    # 稽核 Y-5：放行規則與 helpers.quotations.guard_case_access 同一份（case_access_allowed）；
+    # 稽核 Y-5：放行規則與 modules.case.quotations.guard_case_access 同一份（case_access_allowed）；
     # 這裡只多「已結案半解鎖」的例外與回傳欄位（deal_tag、case_semi_unlocked）。
     if not case_access_allowed(conn, q, user, allow_approver=allow_approver, allow_module=allow_module):
         _safe_close(conn)
@@ -1399,9 +1399,9 @@ def delete_quotation_signed_file(quote_no: str, file_id: str, authorization: str
 
 def _apply_server_submit_reasons(q: dict, user: dict) -> None:
     """N13（使用者 2026-09-24「要，後端重算」）：送審時 approval.reasons 由後端依
-    helpers/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
+    modules/case/quote_terms.py 重算並**覆蓋**前端送來的內容——簽核人看到的特殊條件
     不能由送件人決定（原本直接打 API 不帶 reasons 就能讓簽核人看不到低毛利）。"""
-    from helpers.quote_terms import DEFAULT_TERMS, submit_reasons
+    from modules.case.quote_terms import DEFAULT_TERMS, submit_reasons
     from helpers.settings import _get_setting
     raw = _get_setting("quote_terms_presets", {}) or {}
     presets = raw.get("presets") if isinstance(raw, dict) else None
@@ -2201,8 +2201,8 @@ def case_bundle(quote_no: str, authorization: str = Header(None)):
     from routers.vouchers import vouchers_by_case
     list_dispatches = _registry.single_provider("dispatch.list_for_case")    # IP-15（M04）
     list_shipping = _registry.single_provider("shipping.list_for_case")      # IP-18（M03，暫定號）
-    from routers.completion_notes import list_completion_notes
-    from routers.case_extra_expenses import list_extra_expenses
+    from modules.case.api.completion_notes import list_completion_notes
+    from modules.case.api.case_extra_expenses import list_extra_expenses
 
     _require_user(authorization)          # get_quotation 也會驗；這裡先驗，登入失效時不必進任何一段
     quotation = get_quotation(quote_no, authorization)
@@ -2290,7 +2290,7 @@ def update_deal_tag(quote_no: str, body: QuotationDealTagUpdate, authorization: 
     if body.deal_tag == "已結案" and user["role"] != "superadmin":
         raise HTTPException(403, "僅最高管理者可結案")
     conn = get_db()
-    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
             "SELECT data_json, customer_name, project_name, status FROM quotations WHERE quote_no=?", (quote_no,)
         ).fetchone()
@@ -4101,7 +4101,7 @@ def get_settlement(quote_no: str, authorization: str = Header(None)):
     # （MQ-YYYYMM-NNN），等於任何已登入帳號都能讀到**任何**案件的成本、毛利
     # 與精算明細——跟 2026-08-24 修掉的報價單 IDOR 是同一種洞，只是漏在這支。
     # 改用跟同一批資料既有端點一致的擁有者規則（admin+ 直通、否則必須是
-    # 該案業務或被指派的協作者），見 helpers/quotations.py::CASE_ACCESS。
+    # 該案業務或被指派的協作者），見 modules/case/quotations.py::CASE_ACCESS。
     user = _require_user(authorization)
     conn = get_db()
     row = conn.execute(
@@ -4124,7 +4124,7 @@ def update_settlement(quote_no: str, body: SettlementIn, authorization: str = He
     user = _require_user(authorization)
     now  = datetime.now().isoformat()
     conn = get_db()
-    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
             "SELECT data_json, customer_name, sales_person_id, sales_person, assigned_user_ids "
             "FROM quotations WHERE quote_no=?", (quote_no,)
@@ -4341,7 +4341,7 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 #
 # 原本這裡有 `_load_settlement_extra_item()` ＋ `/settlement/extra/{idx}/files`
 # 上傳與刪除兩支端點。額外支出搬到 `case_extra_expenses` 表（DB v75）之後，
-# 對應端點改在 `routers/case_extra_expenses.py`，並且**改用資料列 id 定位而不是
+# 對應端點改在 `modules/case/api/case_extra_expenses.py`，並且**改用資料列 id 定位而不是
 # 陣列索引**——舊版用 idx，額外支出一旦新增/刪除/重排，索引就會指到別筆去。
 # 附件實體檔案的分類也從 "quotation_settlement_extra" 改成 "case_extra_expense"。
 
@@ -4746,7 +4746,7 @@ def get_approval_queue_count(authorization: str = Header(None)):
 def approve_quotation(quote_no: str, body: ApprovalActionBody, authorization: str = Header(None)):
     user = _require_user(authorization)
     conn = get_db()
-    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
             "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
             (quote_no,)
@@ -4945,7 +4945,7 @@ def reject_final_quotation(quote_no: str, body: ApprovalActionBody, authorizatio
     """拒絕結案：永久鎖定，不可再修改或送審。"""
     user = _require_user(authorization)
     conn = get_db()
-    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
+    with write_txn(conn):   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）；區塊內任何例外 ⇒ rollback＋關連線（不留寫鎖）
         row = conn.execute(
             "SELECT data_json, customer_name FROM quotations WHERE quote_no=? AND status IN ('待審核','簽核中')",
             (quote_no,)

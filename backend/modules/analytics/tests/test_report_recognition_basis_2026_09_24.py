@@ -193,7 +193,7 @@ def test_every_flag_kind_has_a_label_and_a_link(client, sa):
     _case("MQ-RB-070")
     _dispatch("MQ-RB-070")
     body = _report(client, sa)
-    from helpers.recognition import FLAG_LABELS
+    from modules.case.recognition import FLAG_LABELS
     assert set(body["recognitionFlags"]) == set(FLAG_LABELS)
     it = [i for i in body["recognitionFlags"]["dispatch_no_invoice"]["items"] if i["quoteNo"] == "MQ-RB-070"][0]
     assert it["link"] == "case-management.html?q=MQ-RB-070&tab=dispatch"   # 2026-09-24 使用者裁：開對應分頁
@@ -208,7 +208,7 @@ def test_exports_label_tax_basis_and_carry_the_note(client, sa, basis, label):
     ws = openpyxl.load_workbook(io.BytesIO(r.content))["當月收支"]
     cells = [str(c.value) for row in ws.iter_rows() for c in row if c.value is not None]
     assert label in cells
-    from helpers.recognition import BASIS_NOTES
+    from modules.case.recognition import BASIS_NOTES
     assert BASIS_NOTES[basis] in cells
 
     from modules.analytics.api.reports import (_augment_with_targets, _build_income_expense_scopes, _build_report_html,

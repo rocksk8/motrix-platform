@@ -424,7 +424,7 @@ def test_login_qr_approve_smoke(live_server, make_user, e2e_browser, client):
 @pytest.mark.e2e
 def test_case_finance_summary_smoke(live_server, make_user, e2e_browser):
     """案件管理－財務 Tab「應收應付總覽」smoke test（2026-09-09，見
-    routers/quotations.py::get_finance_summary()）。後端彙總邏輯已有
+    modules/case/api/quotations.py::get_finance_summary()）。後端彙總邏輯已有
     test_case_finance_summary_2026_09_09.py 完整涵蓋，這裡只驗證前端這一區
     真的渲染得出來——新增的 Alpine getter（finReceivable()/finPayable()）在
     financeSummary 還是 null 時被 template 讀到會直接整頁炸掉，這正是純 API

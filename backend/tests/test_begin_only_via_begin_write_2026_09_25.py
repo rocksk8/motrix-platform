@@ -1,4 +1,4 @@
-"""靜態守門：`BEGIN …` 只准出現在 helpers.quotations.begin_write 裡（2026-09-25 lost update／寫鎖稽核後）。
+"""靜態守門：`BEGIN …` 只准出現在 modules.case.quotations.begin_write 裡（2026-09-25 lost update／寫鎖稽核後）。
 
 理由：直接 `conn.execute("BEGIN IMMEDIATE")` 的路徑，拿了寫鎖之後若沒被保護，丟例外 ⇒ 寫鎖留到連線被回收
 （他人寫入卡 30 秒後 500，W-6）；也繞過 save_quotation_json 守門需要的登記。新程式一律用 begin_write／write_txn。
@@ -13,7 +13,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 
 #: (相對路徑, 函式名) -> 理由。新增一筆＝有人決定了「這裡不用 begin_write 也安全」，要寫出為什麼。
 ALLOWED = {
-    ("core/txn.py", "begin_write"): "唯一合法的 BEGIN IMMEDIATE 出處（2026-09-25 自 helpers/quotations.py 下沉 L1）",
+    ("core/txn.py", "begin_write"): "唯一合法的 BEGIN IMMEDIATE 出處（2026-09-25 自 modules/case/quotations.py 下沉 L1）",
     ("modules/payroll/api/bonus.py", "create_case_bonus"): "獎金分潤表；try/finally 關連線，不經 save_quotation_json",
     ("modules/payroll/api/bonus.py", "update_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "submit_case_bonus"): "同上",
@@ -21,7 +21,7 @@ ALLOWED = {
     ("modules/payroll/api/bonus.py", "reject_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "return_case_bonus"): "同上",
     ("modules/payroll/api/bonus.py", "mark_case_bonus_paid"): "同上",
-    ("routers/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
+    ("modules/case/api/quotations.py", "case_batch_assign"): "批次指派；讀前已拿鎖、try/finally 關連線（lost update C 組判讀）",
 }
 
 

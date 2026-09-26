@@ -21,7 +21,7 @@ BACKEND = Path(__file__).resolve().parents[2]
 @pytest.fixture(autouse=True)
 def _inline_bg(monkeypatch):
     """端點的背景同步改成當場執行（斷言看得到結果；不留執行緒）。"""
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
 
 
@@ -82,7 +82,7 @@ def _tick(client, h, no, done=True):
 
 def test_daily_task_connector_without_m12_stage_still_saves_and_says_so(client, make_user, monkeypatch):
     """反向控制：拿掉 M12 ⇒ 勾選照常存檔、零筆每日任務、回應明說原因。"""
-    from helpers.case_stage_tasks import NOTICE_NO_DAILY_TASKS
+    from modules.case.case_stage_tasks import NOTICE_NO_DAILY_TASKS
     _without(monkeypatch, "daily_task.external", "daily_tasks")
     u, h = _login(client, make_user, "ip5_off")
     _case("MQ-IP5-OFF")
@@ -110,7 +110,7 @@ def test_without_m12_uncheck_says_the_old_task_was_not_withdrawn(client, make_us
     """B-1（AUDIT-X-C-batch1）：M12 不在時取消勾選，原本有任務 ⇒ 明說「沒有收回」，不能說成「沒有建立」。
 
     任務 id 留著：M12 裝回來後再勾選／取消勾選，會收斂到同一筆任務（見 NOTICE_NOT_WITHDRAWN 註解）。"""
-    from helpers.case_stage_tasks import NOTICE_NOT_WITHDRAWN
+    from modules.case.case_stage_tasks import NOTICE_NOT_WITHDRAWN
     _without(monkeypatch, "daily_task.external", "daily_tasks")
     u, h = _login(client, make_user, "ip5_unchk")
     _case("MQ-IP5-UNCHK")
@@ -132,7 +132,7 @@ def test_without_m12_uncheck_with_no_task_says_nothing(client, make_user, monkey
 
 
 def test_without_m12_deleting_a_stage_with_a_task_says_so(client, make_user, monkeypatch):
-    from helpers.case_stage_tasks import NOTICE_NOT_WITHDRAWN
+    from modules.case.case_stage_tasks import NOTICE_NOT_WITHDRAWN
     _without(monkeypatch, "daily_task.external", "daily_tasks")
     u, h = _login(client, make_user, "ip5_del")
     _case("MQ-IP5-DEL")
@@ -156,7 +156,7 @@ def _sql_writes(rel):
 
 
 def test_m01_and_l1_no_longer_write_foreign_tables():
-    assert not ({"daily_tasks", "daily_task_completions"} & _sql_writes("helpers/case_stage_tasks.py"))
+    assert not ({"daily_tasks", "daily_task_completions"} & _sql_writes("modules/case/case_stage_tasks.py"))
     assert not ({"case_stages", "invoice_vouchers", "payment_requests", "shipping_notes", "quotations"}
                 & _sql_writes("helpers/google_calendar.py"))
 
@@ -168,14 +168,14 @@ IP6_OWNERS = {
     "invoice_voucher": "modules/arap/api/invoice_vouchers.py",
     "payment_request": "modules/arap/api/payment_requests.py",
     "shipping_note": "modules/supply/api/shipping_notes.py",
-    "quotation": "routers/quotations.py",
-    "case_stage": "routers/quotations.py",
+    "quotation": "modules/case/api/quotations.py",
+    "case_stage": "modules/case/api/quotations.py",
 }
 
 
 def test_calendar_writeback_every_owner_registers_its_writeback(client):
     """client 夾具＝載入器掛好已安裝的模組（ModuleSpec.providers 在那時登記）。"""
-    import routers.quotations  # noqa: F401  （M05 的兩支由載入器掛載）
+    import modules.case.api.quotations  # noqa: F401  （M05 的兩支由載入器掛載）
     want = {k for k, f in IP6_OWNERS.items() if source_tree.module_installed(f)}
     assert "quotation" in want and set(registry.providers("calendar.writeback")) == want
 
@@ -305,7 +305,7 @@ def test_calendar_writeback_without_owner_event_is_created_but_nothing_is_writte
 
 
 def test_calendar_writeback_unknown_stage_slot_is_refused():
-    import routers.quotations  # noqa: F401
+    import modules.case.api.quotations  # noqa: F401
     fn = registry.providers("calendar.writeback")["case_stage"]
     with pytest.raises(KeyError):
         fn(1, "evt", "guessed_slot")
