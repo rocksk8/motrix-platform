@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 672,
+  "tests": 673,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 364,
+   "api": 365,
    "unit": 57,
    "e2e": 162
   },
@@ -5352,7 +5352,6 @@
     "plat:registry",
     "plat:source_tree",
     "router:item_reads",
-    "router:map_points",
     "router:search",
     "router:system"
    ],
@@ -5380,7 +5379,6 @@
      "backend/helpers/google_calendar.py",
      "backend/modules/netplan/",
      "backend/routers/item_reads.py",
-     "backend/routers/map_points.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "docs/platform/",
@@ -5459,6 +5457,45 @@
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_case_summary_locations.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:docs/platform/",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+    "file:docs/platform/modules.json",
+    "helper:case_access",
+    "helper:quotations",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/case_access.py",
+     "backend/routers/__init__.py",
+     "backend/routers/map_points.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py"
+    ],
+    "path": [
+     "backend/helpers/case_access.py",
+     "backend/helpers/quotations.py",
+     "backend/routers/map_points.py",
+     "docs/platform/",
+     "docs/platform/modules.json"
     ]
    },
    "login_fixture": true
@@ -13397,6 +13434,7 @@
     "file:backend/routers/__init__.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "helper:quotations",
     "page:pages/case-management.html",
     "page:pages/map.html",
     "router:map_points"
@@ -13404,6 +13442,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/helpers/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
      "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
