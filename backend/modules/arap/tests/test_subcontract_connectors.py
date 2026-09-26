@@ -87,3 +87,16 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
 
 
 # ── 相依已切斷（M01／M05／M06 這一側）────────────────────────────────────────────
+
+
+def test_bank_reconcile_without_m04_says_why(client, make_user, monkeypatch):
+    """銀行對帳（2026-09-26 自 M08 收回 M05）比對的是承攬商匯款申請 ⇒ M04 不在：404＋CONTRACTOR_MISSING（同待付款），
+    不回一份「全部未配對」的結果假裝比對過。正對照：M04 在 ⇒ 200。"""
+    from modules.arap.api import cashier as ca
+    h = _hdr(client, make_user, "s04_bank")
+    csv = ("日期,金額\n2026-09-01,100\n").encode("utf-8")
+    ok = client.post("/api/reports/bank-reconcile", headers=h, files={"file": ("b.csv", csv, "text/csv")})
+    assert ok.status_code == 200, ok.text
+    _without(monkeypatch, "contractor_voucher.public")
+    r = client.post("/api/reports/bank-reconcile", headers=h, files={"file": ("b.csv", csv, "text/csv")})
+    assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
