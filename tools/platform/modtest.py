@@ -687,7 +687,9 @@ def partial_cap(picked, tmap):
     """差異題的 worker 上限：選到的題裡有 e2e ⇒ 取 partial 與 e2e 上限較小者（D 抽查 MT-O1：設 PARTIAL=4 時 e2e 會用 -n 4 跑）。
     e2e 的判定：test_map 的 kind＝e2e；test_map 沒有那一檔時用同一個判準現場看檔案內容（test_map.file_is_e2e）。
     〔wip/b-modtest-batch：原本退回看檔名（test_e2e_*），而且與 kind 取聯集——36 個 e2e 檔不叫 test_e2e_*，
-      不在 map 裡時會被當成非 e2e；**不看檔名**〕"""
+      不在 map 裡時會被當成非 e2e；**不看檔名**〕
+    〔稽核 D WK-M1（主持裁示）：**MOTRIX_E2E_MAX_WORKERS 有明確設定**時，選到 e2e 就直接用它（不再與 partial 取較小者）——
+      第十二班只設 E2E=3 時原本實得 -n 2；沒有明確設定時照舊取較小者（MT-O1：PARTIAL=4 時 e2e 不可以 -n 4）〕"""
     cap = partial_max_workers()
     tests = (tmap or {}).get("tests") or {}
 
@@ -696,8 +698,27 @@ def partial_cap(picked, tmap):
             return (tests.get(t) or {}).get("kind") == "e2e"
         return file_is_e2e(REPO / t)
     if any(is_e2e(t) for t in picked):
-        cap = min(cap, e2e_max_workers())
+        explicit = _env_explicit(E2E_ENV)
+        cap = explicit if explicit is not None else min(cap, e2e_max_workers())
     return cap
+
+
+def _env_explicit(name):
+    """環境變數有明確、合法的設定（1～CPU 數的整數）⇒ 那個值；沒設或不合法 ⇒ None。"""
+    raw = (os.environ.get(name) or "").strip()
+    if not raw.isdigit():
+        return None
+    n = int(raw)
+    return n if 1 <= n <= (os.cpu_count() or 1) else None
+
+
+def partial_pytest_args(extra, picked, tmap):
+    """差異題傳給 pytest 的參數：沒帶 -n ⇒ 補預設上限；帶了 ⇒ 壓到上限（上限＝partial_cap）。
+    **所有**跑差異題的入口（main、列車 run_train ①）一律經這裡〔稽核 D WK-M2：run_train ① 原本自己寫
+    `cap_workers(extra, partial_cap(...))`，沒經 default_workers ⇒ 第十一班差異題串行〕；守門：
+    test_env_and_load_guards::test_every_partial_run_goes_through_partial_pytest_args。"""
+    cap = partial_cap(picked, tmap)
+    return cap_workers(default_workers(extra, cap), cap)
 
 
 def partial_max_workers():
@@ -1298,8 +1319,7 @@ def main(argv=None):
     if not picked:
         print("沒有受影響的測試。")
         return 3 if rep["need_full"] else 0
-    cap = partial_cap(picked, tmap)
-    code, _ = run_pytest(picked, cap_workers(default_workers(extra, cap), cap), a.window, full=False)
+    code, _ = run_pytest(picked, partial_pytest_args(extra, picked, tmap), a.window, full=False)
     record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
     if code == 0 and rep["need_full"]:
         return 3          # 閘門過了，但動到 fixture 層：月台要註明、排車頭（全量由列車跑，§G3）

@@ -211,8 +211,11 @@ def test_no_call_site_caps_with_the_bare_constant():
     assert not re.search(r"cap_workers\([^)]*,\s*(FULL|PARTIAL)_MAX_WORKERS\)", src)
     # ~~assert "cap_workers(extra, partial_cap(picked, tmap))" in src~~
     # 〔更正 wip/b-modtest-workers：差異題沒帶 -n 時先補預設上限（default_workers），上限仍經 partial_cap〕
-    assert "cap = partial_cap(picked, tmap)" in src
-    assert "cap_workers(default_workers(extra, cap), cap)" in src
+    # ~~assert "cap = partial_cap(picked, tmap)" in src~~
+    # ~~assert "cap_workers(default_workers(extra, cap), cap)" in src~~
+    # 〔更正 wip/b-modtest-workers-2（稽核 D WK-S1）：字串守門抓不到「補完預設又丟掉」——改成行為題
+    #   test_main_partial_run_actually_passes_n；這裡只留「經 partial_pytest_args」的結構守門〕
+    assert "partial_pytest_args(extra, picked, tmap)" in src
 
 
 def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatch):
@@ -362,4 +365,67 @@ def test_partial_run_default_follows_the_e2e_cap(_no_cap_env, monkeypatch):
     cap = MT.partial_cap(["backend/tests/test_a.py"], tmap)
     assert MT.cap_workers(MT.default_workers([], cap), cap) == ["-n", "4"]
     assert MT.cap_workers(MT.default_workers(["-n", "8"], cap), cap) == ["-n", "4"]
+
+
+def _run_main_capturing(monkeypatch, picked, tmap, argv):
+    """跑 modtest.main（差異題那條路），攔 run_pytest，回傳它**實際收到**的 pytest 參數。"""
+    seen = []
+    rep = {"affected_units": [], "conservative": [], "contract_dirs_present": True, "unmapped_changes": [],
+           "need_full": [], "reasons": {t: ["x"] for t in picked}}
+    monkeypatch.setattr(MT, "resolve_python", lambda *_a, **_k: sys.executable)
+    monkeypatch.setattr(MT, "changed_files", lambda a: ["backend/helpers/x.py"])
+    monkeypatch.setattr(MT, "load_map", lambda *_a: tmap)
+    monkeypatch.setattr(MT, "load_graph", lambda *_a: None)
+    monkeypatch.setattr(MT, "iface_checker", lambda a: None)
+    monkeypatch.setattr(MT, "select", lambda *_a, **_k: (list(picked), dict(rep)))
+    monkeypatch.setattr(MT, "load_groups", lambda *_a: (None, {}))
+    monkeypatch.setattr(MT, "record_stats", lambda *_a, **_k: None)
+    monkeypatch.setattr(MT, "run_pytest", lambda targets, extra, *_a, **_k: (seen.append(list(extra)) or 0, ""))
+    assert MT.main(argv) == 0
+    assert len(seen) == 1, seen
+    return seen[0]
+
+
+def test_main_partial_run_actually_passes_n(_no_cap_env, monkeypatch):
+    """稽核 D WK-S1：攔 run_pytest 驗**實際傳出**的參數——不帶 -n ⇒ 有 -n <上限>；「補完預設又丟掉」的突變要紅。"""
+    tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
+    args = _run_main_capturing(monkeypatch, ["backend/tests/test_a.py"], tmap, ["--window", "wk"])
+    assert args[-2:] == ["-n", str(MT.partial_max_workers())], args
+    args = _run_main_capturing(monkeypatch, ["backend/tests/test_a.py"], tmap, ["--window", "wk", "--", "-n", "9"])
+    assert args == ["-n", str(MT.partial_max_workers())], "自己帶的 -n 壓到上限：%r" % args
+
+
+def test_explicit_e2e_cap_is_used_as_is(_no_cap_env, monkeypatch):
+    """稽核 D WK-M1（主持裁示）：只設 MOTRIX_E2E_MAX_WORKERS=3、選到 e2e ⇒ -n 3（不與 partial 預設 2 取較小者）；
+    沒明確設定 ⇒ 照舊取較小者（MT-O1）；E2E 設了但沒選到 e2e ⇒ 照 partial。"""
+    monkeypatch.setattr(MT.os, "cpu_count", lambda: 16)
+    tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
+    both = ["backend/tests/test_a.py", "backend/tests/test_b.py"]
+    monkeypatch.setenv(MT.E2E_ENV, "3")
+    assert _run_main_capturing(monkeypatch, both, tmap, ["--window", "wk"])[-2:] == ["-n", "3"]
+    assert MT.partial_cap(["backend/tests/test_a.py"], tmap) == MT.partial_max_workers()
+    monkeypatch.delenv(MT.E2E_ENV)
+    monkeypatch.setenv(MT.PARTIAL_ENV, "4")
+    assert MT.partial_cap(both, tmap) == min(4, MT.E2E_MAX_WORKERS), "沒明確設定 E2E ⇒ 取較小者（MT-O1）"
+
+
+def test_every_partial_run_goes_through_partial_pytest_args():
+    """稽核 D WK-M2（前置）：modtest.py 裡每一個 `run_pytest(picked, <參數>, …)`（跑差異題）的參數都要是
+    `partial_pytest_args(...)`——列車 run_train ① 併進來時若仍自己組參數 ⇒ 紅。反向控制：合成一個自己組參數的呼叫 ⇒ 列出。"""
+    import ast as _ast
+
+    def offenders(src):
+        out = []
+        for n in _ast.walk(_ast.parse(src)):
+            if (isinstance(n, _ast.Call) and getattr(n.func, "id", None) == "run_pytest" and len(n.args) >= 2
+                    and isinstance(n.args[0], _ast.Name) and n.args[0].id == "picked"):
+                a1 = n.args[1]
+                if not (isinstance(a1, _ast.Call) and getattr(a1.func, "id", None) == "partial_pytest_args"):
+                    out.append(n.lineno)
+        return out
+    src = (REPO / "tools" / "platform" / "modtest.py").read_text(encoding="utf-8")
+    assert "run_pytest(picked," in src, "正對照：差異題的呼叫點找不到——守門量不到東西"
+    assert offenders(src) == [], "這些差異題入口沒經 partial_pytest_args（沒帶 -n 會串行）：第 %s 行" % offenders(src)
+    bad = "def run_train(picked, tmap, extra, a):\n    run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window)\n"
+    assert offenders(bad) == [2]
 
