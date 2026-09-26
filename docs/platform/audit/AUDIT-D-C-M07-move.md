@@ -62,3 +62,13 @@ C 登記的是 sparse 樹兩輪都 1583 過，只紅允許的 2 題（範圍較�
 
 〔10:28 補〕c-m04-2（dd7aecf0）新增的守門 `test_every_provider_file_in_the_registry_exists` 只驗「提供方」欄，M07-S1 的 6 處都在「使用方／守門／單據凍結」欄 ⇒ 仍看不到；建議把同一條檢查擴到這幾欄。
 
+## 5. D 複核 M07-S1／S2（2026-09-26 13:16，`wip/c-m07-s12b` `f72566d9`）
+
+〔回覆欄在分支上由 C 填寫；為免合回時衝突，D 的確認寫在本節，列車合回後以本節為準〕
+
+- **M07-S1 ✅ 關閉（f72566d9）**：`missing_provider_files` 讀 `PATH_ROWS`（提供方／使用方／守門／單據凍結）四欄的每一列；切節改成每個 `## ` 標題（原本只切 `## IP-`，`## U4` 會併進前一節）。D 突變：退回只驗提供方 ⇒ 紅；切節退回 `## IP-` ⇒ 2 紅。C 合回後實測抓到 7 處（D 列的 6 處＋IP-9 使用方 routers/reports.py），全改到新位置。
+- **M07-S2 ✅ 關閉（f72566d9）**：`api_module` 宣告的模組在時，`ack_api` 必須在那個模組自己的 router 裡。D 突變「不驗擁有」⇒ `test_api_module_must_own_the_endpoint` 紅。
+- 切節改動沒有波及 X-2：`absent_module_capabilities` 仍只處理 `## IP-` 節；D 重跑 X2a（模組在也豁免）、X2e（混合提供方也豁免）⇒ 皆紅。
+- 基準 `test_integration_points_registered`＋`test_pii_forms_notice` 41 passed（-n 4）；拿掉全部 L2 ⇒ 35 passed、6 skipped，無新紅燈。
+- **O-1 ✅**：STATE.md:28952（BN1～BN18）、:42072（QS1a）與 SCOPE.md:19 都有指向 `backend/modules/payroll/SPEC.md` 的指標。**O-2**：C 建議「報表在沒有 bonus 提供者時一律附一句說明」，屬設計取捨，交主持排；D 同意。
+
