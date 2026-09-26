@@ -370,6 +370,24 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 **L1 案件存取守門也以本串接點為「M01 在不在」的訊號**（主持裁示 2026-09-26，只留一個訊號；原本 C 另立的 `case.present` 已刪）：`helpers.case_access.case_module_present()` ＝ 有沒有 `case.access` 提供者；沒有 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣（稽核 D CA-M1）。守門 `tests/platform/test_case_access_l1.py`：拿掉 `case.access` ⇒ L1 守門 404，且取用方（網路規劃書）明說「案件模組未安裝」——兩條路結果一致。
 
 
+
+---
+
+## IP-95　`case.recognition`：收入認列、支出歸月與待補登（M01 → M08 營運報表）
+
+M01-PLAN §3-6（主持派工 2026-09-26）。M08 原本直接 import M01 的 `helpers/recognition.py` 八個名稱；口徑的純標籤（BASES／BASIS_NOTES／normalize_basis）下沉 L1 `helpers/recognition_basis.py`，其餘六個計算改經本串接點。**編號暫定（95），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`helpers/quotations.py::_CaseRecognition`（延遲 import `helpers.recognition`；暫以 import 時登記，M01 本體搬遷時改 ModuleSpec） |
+| 使用方 | M08 `modules/analytics/api/reports.py`：`_build_income_expense_scopes`（權責口徑收入、待補登）、`_collect_expenses`（派工、叫料、額外支出的歸月；缺派工時的說明） |
+| 形式 | provider，單一提供者 |
+| 語法 | 取用：`rec = registry.single_provider("case.recognition")`；`rec.accrual_income_items(conn, d0, d1, department_id=None)`、`rec.dispatch_entries(conn, basis)`、`rec.material_entries(conn, basis, department_id=None)`、`rec.extra_entries(conn, basis)`、`rec.recognition_flags(conn, year, department_id=None, money_ok=True)`、`rec.dispatch_unavailable(basis)` |
+| 回傳 | 與 `helpers/recognition.py` 同名函式相同（簽章即契約） |
+| 對方不在時 | M08：權責口徑收入空，`incomeNotice`＝`CASE_RECOGNITION_MISSING`（「案件模組未安裝：權責口徑收入（依階段完成）不提供」）；支出的 `unavailable` 列出 `CASE_EXPENSES_UNAVAILABLE`（叫料、額外支出、派工沒有列入，不是 0 筆）；待補登 `{}` |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_case_recognition.py`（六個方法轉呼叫與參數、M08 不直接 import、L1 recognition_basis 純度與別名、M01 不在的報表行為＋正對照） |
+
 ---
 
 ## IP-96　`case.summary`：案件摘要（M01 → L1 與其他模組）

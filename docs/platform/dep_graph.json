@@ -925,6 +925,7 @@
    "imports": [
     "helper:case_access",
     "helper:legal_params",
+    "helper:recognition",
     "helper:row_access",
     "helper:tax_calc",
     "plat:registry",
@@ -975,6 +976,7 @@
    "imports": [
     "helper:dates",
     "helper:quotations",
+    "helper:recognition_basis",
     "plat:registry"
    ],
    "kind": "helper",
@@ -990,6 +992,17 @@
     "users",
     "vendor_contractors"
    ],
+   "tables_w": []
+  },
+  "helper:recognition_basis": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [],
+   "kind": "helper",
+   "path": "backend/helpers/recognition_basis.py",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
    "tables_w": []
   },
   "helper:row_access": {
@@ -2000,6 +2013,8 @@
     "helper:legal_params",
     "helper:module_registry",
     "helper:quotations",
+    "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -2090,7 +2105,10 @@
     "approval_delegates",
     "audit_log",
     "case_extra_expenses",
+    "case_stages",
     "case_updates",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
     "customers",
     "departments",
     "dev_cases",
@@ -2102,6 +2120,7 @@
     "shipping_notes",
     "stock_items",
     "users",
+    "vendor_contractors",
     "work_logs"
    ],
    "tables_w": [],
@@ -2130,6 +2149,7 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -2148,7 +2168,7 @@
     "helper:financial_mask",
     "helper:legal_params",
     "helper:quotations",
-    "helper:recognition",
+    "helper:recognition_basis",
     "helper:settings",
     "helper:startup",
     "helper:tax_calc",
@@ -2163,67 +2183,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2303,
+     "line": 2310,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2316,
+     "line": 2323,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2351,
+     "line": 2358,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2470,
+     "line": 2477,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2531,
+     "line": 2538,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2598,
+     "line": 2605,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "customer_history",
-     "line": 2632,
+     "line": 2639,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2880,
+     "line": 2887,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3099,
+     "line": 3106,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3421,
+     "line": 3435,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3608,
+     "line": 3622,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -7375,6 +7395,7 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -8660,6 +8681,7 @@
     "helper:module_registry",
     "helper:quotations",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -9116,6 +9138,7 @@
     "helper:quotations",
     "helper:quote_terms",
     "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:tax_calc",
@@ -10022,6 +10045,8 @@
     "helper:notification_prefs",
     "helper:quotations",
     "helper:quote_terms",
+    "helper:recognition",
+    "helper:recognition_basis",
     "helper:row_access",
     "helper:settings",
     "helper:startup",
@@ -10489,6 +10514,8 @@
     "audit_log",
     "case_extra_expenses",
     "case_stages",
+    "contractor_dispatches",
+    "contractor_payment_vouchers",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -10503,6 +10530,7 @@
     "user_activity_daily",
     "user_request_log",
     "users",
+    "vendor_contractors",
     "webauthn_credentials"
    ],
    "tables_w": [
