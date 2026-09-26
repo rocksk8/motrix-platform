@@ -2,6 +2,8 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 13:00 主持：**全速模式**（使用者：「放寬，我人不在，可以讓電腦全速」）：MOTRIX_PYTEST_SLOTS=4、閘門 -n 4、不必低優先權；全量維持 -n 4。機器 12 邏輯核心／32 GB／C 341 GB、D 893 GB 可用。已通知 A、B、C、D 與第七班列車長；使用者回來說恢復即回到 §C-13 原值（CORE-SPEC 使用者裁示表）。
+- 2026-09-26 12:54 主持：使用者表單裁示 U13（會計已確認照現行，結案）、U15（至少保留一位超管，實作歸主持）、U16（維持現狀）、U17（整份覆寫）；已寫進 CORE-SPEC 使用者裁示表。A 恢復：M03 閘門 2250 過 3 紅修正中；a-m10 其實第四班就已合回，A 的資訊停在 6 小時前，已請它 rebase a-m03 到最新 origin 並對齊新規則；M01 已改派 C，A 做完 M03 接 PN-M1。C 的 c-probes 已登記（第八班）；case.summary 四點裁示寫在 §5 D1 段（ROADMAP 的 case.summary 定義在 h-cas3，第七班合回後由主持把這四點併進 ROADMAP）。
 - 2026-09-26 12:48 D：h-probes d56c5fc6 通過（必修 0）：四支 probe 實跑前後比對全部表，只有中介層操作軌跡 `user_request_log` 變動（非副作用），`/api/daily-tasks` 讀時不產生當天任務；前綴與版號守門突變皆紅。
 - 2026-09-26 12:43 主持：**第七班發車**（列車長子代理）：b-m08-s-2、b-routes-3、b-o6-3、b-rebasecheck-3、h-o7-4、h-o6s1-2、h-cas3、h-probes*（*D 稽核中，未關閉就下車）。C 的 c-tax-calc、c-m01-sink2-2、c-m07-s12、probes 排第八班。B 做 C4（步驟 2，死線約 14:10）；C 做 probes＋步驟表進 repo；D 審 h-probes。A 仍無回應（U18，約 6 小時）。
 - 2026-09-26 12:38 D：**D7 前哨第 7 次**（第六班合回後，`git archive origin/platform`，不是部署包；工具＝現行 final_drill，**冒煙＝寫死清單**）：**run7-full 11 步全過、約 86 秒**（冒煙 16 項全 200；6a 邏輯內容＝原始庫、V9 ping 200；6c V9 ping 200）。**run7-core**（git_export＋`product_select apply --product core-only`：排除 analytics、crm、daily_tasks、netplan、payroll、subcontract、tender_radar，移除 16 頁；lock 一致）：1～4d、6a～6c 全過（6a 邏輯內容＝原始庫、V9 ping 200），**只有冒煙判失敗、2 項皆為模組缺席的預期 404**：`/pages/bonus.html`（payroll 不在、頁面被移除；寫死清單這一項沒標模組 key，同模組的 `/api/bonus/items` 有標而正確略過）、`/api/cashier/payable-queue`（M04 不在 ⇒ IP-14 設計的 404＋CONTRACTOR_MISSING 明說）⇒ **0 項回歸**。這兩項正是 D7-CHECKLIST §4「冒煙改讀 probes」要解決的。演練目錄 `D:\MOTRIX-DRILLS\run7-*` 用完已刪（深一層可刪）；final_drill.json 另存 D 的 scratchpad。

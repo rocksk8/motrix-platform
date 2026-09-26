@@ -44,6 +44,7 @@
 | D7 probes（crm／subcontract／payroll）＋probe 無副作用守門（C，wip/c-probes b2ef6439） | D | `AUDIT-D-C-probes.md` | 稽核完成（2026-09-26 13:08）：必修 0、建議 2（允許分支窄度無題、外洩比對文字主題與反向控制各一份）；突變 5 項：3 紅、2 存活（即兩項建議）；另有時序驗證 3 項（預期不紅，確認超過 30 秒仍成立） |
 | U15 系統技術類信件不可讓最後一位超管退訂（主持，wip/h-u15 2f79d454） | D | `AUDIT-D-host-U15.md` | 稽核完成（2026-09-26 13:31）：**必修 1**（清空 Email／改角色可繞過）、建議 2、觀察 1；判準與寄信端一致；突變 3 項 2 紅 |
 | M03 採購・庫存・出貨搬進 modules/supply（A，wip/a-m03 b2e5f7e4，合回前） | D | `AUDIT-D-A-M03-move.md` | 稽核完成（2026-09-26 14:38）：必修 0；§B-11 D 刪資料夾重做 1291 過、5 紅皆允許、收集無錯；IP-20 突變 3/3 紅；觀察：分支 test_map.json 過期（列車重產） |
+| 簽核 JSON 解析下沉 L1（A，wip/a-approval-parse 708dbe0d，合回前） | D | `AUDIT-D-A-approval-parse.md` | 稽核完成（2026-09-26 15:13）：必修 0、建議 1（M01 轉簽讀不出來⇒400 無題驗，突變 AP3 存活）、觀察 1（test_map 過期，列車重產）；fail-open／別名子類別／doc_label 三突變皆紅 |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事
