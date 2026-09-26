@@ -447,6 +447,18 @@ def published_modules(conn) -> list:
     return out
 
 
+def visible_to(mods, user) -> list:
+    """published_modules() 的結果 ⇒ 這位使用者看得到的（最高管理者全部；其他人要有該模組的 permission）。
+    唯一一份：`GET /api/custom-modules` 與 `GET /api/platform/menu`（C4 選單）共用。"""
+    if user.get("role") == "superadmin":
+        return list(mods)
+    try:
+        mine = set(json.loads(user.get("modules") or "[]"))
+    except (TypeError, ValueError):
+        mine = set()
+    return [m for m in mods if m.get("permission") in mine]
+
+
 def permission_of(module_key, body) -> str:
     return body.get("permission") or "custom.%s" % module_key
 

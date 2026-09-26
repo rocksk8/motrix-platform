@@ -79,10 +79,7 @@ def list_custom_modules(authorization: str = Header(None)):
         mods = CM.published_modules(conn)
     finally:
         conn.close()
-    if u["role"] == "superadmin":
-        return mods
-    mine = set(json.loads(u.get("modules") or "[]"))
-    return [m for m in mods if m["permission"] in mine]
+    return CM.visible_to(mods, u)
 
 
 @router.get("/api/custom/{key}/meta")

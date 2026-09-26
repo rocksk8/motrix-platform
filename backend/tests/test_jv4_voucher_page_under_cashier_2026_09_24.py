@@ -14,23 +14,18 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
-def _nav_lines():
-    src = (ROOT / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
-    return [l.strip() for l in src.splitlines() if l.strip().startswith("ni(pg(")]
-
-
 def test_jv4_the_voucher_entry_sits_right_after_cashier_with_the_same_flag():
-    lines = _nav_lines()
-    idx = {i: l for i, l in enumerate(lines)}
-    cash = [i for i, l in idx.items() if "pg('cashier.html')" in l]
-    vouch = [i for i, l in idx.items() if "pg('voucher.html')" in l]
+    """C4：讀選單宣告（tests/_menu_decl.py），不再解析 sidebar.js 的 ni() 行；原本的旗標 `cCash`＝perm ["cashier"]。"""
+    from tests._menu_decl import declared_items
+    items = declared_items()
+    cash = [i for i, it in enumerate(items) if it["href"] == "cashier.html"]
+    vouch = [i for i, it in enumerate(items) if it["href"] == "voucher.html"]
     assert len(cash) == 1 and len(vouch) == 1, (
-        "側欄的出納／傳票入口各應恰好一個：cashier %r、voucher %r" % (cash, vouch))
-    assert vouch[0] == cash[0] + 1, (
-        "傳票入口不在出納的下一個：出納 #%d、傳票 #%d\n%s" % (cash[0], vouch[0], idx[vouch[0]]))
-    flag = lambda l: l.rstrip("),").split(",")[-1].strip()
-    assert flag(idx[vouch[0]]) == flag(idx[cash[0]]) == "cCash", (
-        "傳票與出納的顯示旗標不同：%r vs %r" % (flag(idx[vouch[0]]), flag(idx[cash[0]])))
+        "選單的出納／傳票入口各應恰好一個：cashier %r、voucher %r" % (cash, vouch))
+    assert vouch[0] == cash[0] + 1 and items[vouch[0]]["group"] == items[cash[0]]["group"], (
+        "傳票入口不在出納的下一個：出納 #%d、傳票 #%d" % (cash[0], vouch[0]))
+    assert items[vouch[0]]["perm"] == items[cash[0]]["perm"] == ["cashier"], (
+        "傳票與出納的權限不同：%r vs %r" % (items[vouch[0]]["perm"], items[cash[0]]["perm"]))
 
 
 def test_jv4_the_backend_module_gate_accepts_the_cashier_module():

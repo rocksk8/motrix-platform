@@ -387,26 +387,18 @@ def test_availability_lists_package_modules_only(client, make_user, monkeypatch)
     assert old.status_code == 200 and isinstance(old.json()["pages"], list)
 
 
-_MODULE_PAGES_RE = r"var MODULE_PAGES = \{(.*?)\n  \}"
-_MODULE_PAGE_ROW_RE = r"'([^']+\.html)':\s*\{\s*key:\s*'([^']+)'"
-
-
-def _declared_module_pages(js):
-    import re
-    block = re.search(_MODULE_PAGES_RE, js, re.S)
-    return dict(re.findall(_MODULE_PAGE_ROW_RE, block.group(1))) if block else None
-
-
 def _page_mismatches(declared, want):
     return {p: k for p, k in want.items() if declared.get(p) != k}
 
 
-def test_every_module_page_is_declared_in_sidebar():
+def test_every_module_page_is_declared_in_sidebar(client):
     """sidebar.js 的 MODULE_PAGES 必須涵蓋每個 modules/*/module.json 的 pages，key 對得上——
-    否則那一頁的入口不會跟著模組狀態藏起來、直接打網址也不會有提示頁。不綁特定 L2 模組。"""
-    sb = (BACKEND.parent / "frontend" / "static" / "sidebar.js").read_text(encoding="utf-8")
-    declared = _declared_module_pages(sb)
-    assert declared, "正對照：解析不到 MODULE_PAGES 或任何一列（解析器壞了）"
+    否則那一頁的入口不會跟著模組狀態藏起來、直接打網址也不會有提示頁。不綁特定 L2 模組。
+    C4：MODULE_PAGES 不再寫死，取伺服器前置的 `MOTRIX_MENU.pageModules` ⇒ 這裡驗**送出去的那一份**。"""
+    head = client.get("/static/sidebar.js").text.partition("\n")[0]
+    assert head.startswith("window.MOTRIX_MENU = ")
+    declared = {p: v["key"] for p, v in json.loads(head[len("window.MOTRIX_MENU = "):].rstrip(";"))["pageModules"].items()}
+    assert declared, "正對照：pageModules 是空的"
     want = {}
     for mj in sorted((BACKEND / "modules").glob("*/module.json")):
         man = json.loads(mj.read_text(encoding="utf-8"))
@@ -416,10 +408,8 @@ def test_every_module_page_is_declared_in_sidebar():
 
 
 def test_every_module_page_guard_negative_control():
-    """反向控制：同一個解析器與比對，少一列、key 不符都要報出來。"""
-    fake = "var MODULE_PAGES = {\n    'a.html': { key: 'a', name: 'A' },\n  }\n"
-    declared = _declared_module_pages(fake)
-    assert declared == {"a.html": "a"}
+    """反向控制：同一個比對，少一列、key 不符都要報出來。"""
+    declared = {"a.html": "a"}
     assert _page_mismatches(declared, {"a.html": "a", "b.html": "b"}) == {"b.html": "b"}
     assert _page_mismatches(declared, {"a.html": "x"}) == {"a.html": "x"}
 
@@ -534,8 +524,10 @@ def test_page_and_sidebar_wiring():
     assert not re.search(r"fetch\([^)]*restart", page, re.I)                        # 不打任何重啟端點
     assert not re.search(r"<button[^>]*>[^<]*重(新)?啟", page)                        # 沒有重啟按鈕
     sb = (fe / "static" / "sidebar.js").read_text(encoding="utf-8")
-    assert "/api/system/modules/availability" in sb and "module-settings.html" in sb
-    assert sb.count("_applyUnavailablePages()") >= 2                                  # 選單重建後再套用
+    assert "/api/system/modules/availability" in sb
+    from core import menu as M                                                         # C4：選單宣告在 menu_l1.json
+    assert any(it["href"] == "module-settings.html" for it in M.load_l1()["items"])
+    assert re.search(r"function _rebuildMenu\(\)[^}]*_applyUnavailablePages\(\)", sb)  # 選單重建後再套用
 
 
 # ── E 子行程＝真的重啟 ────────────────────────────────────────────────────────

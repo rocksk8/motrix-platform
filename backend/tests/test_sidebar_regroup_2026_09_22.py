@@ -17,7 +17,7 @@
 
 ---
 
-# ⚠️ 這個檔的射程：它讀的是 `sidebar.js` 的原始碼
+# ⚠️ 這個檔的射程：它讀的是選單**宣告**（C4 起：core/menu_l1.json＋module.json；原本讀 `sidebar.js` 原始碼）
 
 它答的是「**那三項被寫在哪一組底下**」，不是「瀏覽器渲染出來長怎樣」。
 📌 擋得住：搬錯組、漏搬、順手改權限條件、忘了改返回連結。
@@ -49,56 +49,24 @@ MOVED_PAGES = ("approval-history.html", "approval-queue.html",
 
 @pytest.fixture(scope="module")
 def sidebar():
-    assert SIDEBAR.exists(), f"找不到 {SIDEBAR}"
-    return SIDEBAR.read_text(encoding="utf-8")
+    """C4：選單宣告（依渲染順序的扁平清單，tests/_menu_decl.py）。原本是 sidebar.js 原始碼；
+    `\\uXXXX` 逃脫序列、`sec()` 分界那些解析問題隨寫死清單一起消失。"""
+    from tests._menu_decl import declared_items
+    return declared_items()
 
 
-def _decode_escapes(text):
-    r"""只把 `\uXXXX` 還原成字元，**其他一個字都不動**。
-
-    ## ☠️ 我第一版寫的是 `text.encode("utf-8").decode("unicode_escape")`
-
-    那是經典陷阱：`unicode_escape` 按 **latin-1** 解位元組，
-    ⇒ 檔案裡**真的中文**（多位元組 UTF-8）會被拆成一堆亂碼。
-    🔑 **而症狀是「找不到那一項」** —— 看起來就像那一項不存在，
-    📌 於是五題同時紅，而紅的理由跟選單搬家完全無關。
-
-    ⚠️ 我修的是「逃脫序列的中文讀不到」，**而修法把「沒有逃脫的中文」弄壞了**
-    ⇒ 〈防護的副作用落在盲側〉：**我看的是我修的那一半。**
-    """
-    return re.sub(r"\\u([0-9a-fA-F]{4})",
-                  lambda m: chr(int(m.group(1), 16)), text)
-
-
-def _groups(text):
-    """`{群組名: 那一組底下的原始碼}`。
-
-    ⚠️ 用 `sec('名字', 條件)` 當分界，而**不是**用行號或字元數 ——
-    🔑 那正是 `FX9` 今天換掉的那種判準（〈一個會被註解長度左右的守門，
-    量的是排版不是行為〉）。
-    """
-    marks = [(m.start(), m.group(1))
-             for m in re.finditer(r"sec\(\s*'([^']+)'", text)]
-    assert marks, "`sidebar.js` 裡找不到任何 `sec('…')` —— 這個檔的結構變了"
+def _groups(items):
+    """`{群組名: [項目名…]}`。"""
     out = {}
-    for i, (pos, name) in enumerate(marks):
-        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
-        out[name] = text[pos:end]
+    for it in items:
+        out.setdefault(it["group_label"], []).append(it["label"])
+    assert out, "選單宣告是空的 —— 讀法壞了"
     return out
 
 
-def _group_holding(text, label):
-    """哪一個群組底下寫著這一項。找不到回 `None`。
-
-    ⚠️ 選單項目的中文可能寫成 `\\uXXXX` 逃脫序列（`簽核佇列` 就是），
-    ☠️ 而只比對中文字面的話會**漏掉那一項而不報錯** ——
-    🔑 那是〈判準的寬窄都會騙人〉的窄那一側：它會說「沒有人在用它」。
-    ⇒ 先把逃脫序列還原再比對。
-    """
-    for name, body in _groups(_decode_escapes(text)).items():
-        if label in body:
-            return name
-    return None
+def _group_holding(items, label):
+    """哪一個群組底下有這一項。找不到回 `None`。"""
+    return next((it["group_label"] for it in items if it["label"] == label), None)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -115,7 +83,7 @@ def test_mn1_the_three_items_live_in_the_work_group(sidebar, label):
     """
     group = _group_holding(sidebar, label)
     assert group is not None, (
-        f"`sidebar.js` 裡找不到「{label}」—— 它被刪掉了嗎？")
+        f"選單宣告裡找不到「{label}」—— 它被刪掉了嗎？")
     assert group != "業務", (
         f"「{label}」還在「業務」那一組底下 —— 使用者要它搬到工作內容那一組。")
 
@@ -127,8 +95,7 @@ def test_mn4_the_three_items_are_gone_from_the_sales_group(sidebar, label):
     ☠️ 少了這一半，一個「複製過去而忘了刪掉原本那三行」的實作會綠 ——
     而使用者會在兩個地方各看到一次同樣的東西。
     """
-    decoded = _decode_escapes(sidebar)
-    sales = _groups(decoded).get("業務", "")
+    sales = _groups(sidebar).get("業務", [])
     assert label not in sales, (
         f"「{label}」仍然出現在「業務」那一組裡 —— 搬家只做了一半。")
 
@@ -141,12 +108,12 @@ def test_mn4_the_permission_condition_is_unchanged(sidebar):
     📌 改了的話，一批人會忽然看不到簽核佇列，
     而那個症狀離「選單重整」這件事非常遠。
     """
-    decoded = _decode_escapes(sidebar)
+    # C4：原本的旗標 `cQ` ＝ 宣告的 perm ["quotation"]
     for label in MOVED:
-        line = next((ln for ln in decoded.splitlines() if label in ln), None)
-        assert line is not None, f"找不到「{label}」那一行"
-        assert re.search(r"\bcQ\b", line), (
-            f"「{label}」的顯示條件不再是 `cQ`：\n  {line.strip()[:140]}\n"
+        it = next((x for x in sidebar if x["label"] == label), None)
+        assert it is not None, f"找不到「{label}」那一項"
+        assert it["perm"] == ["quotation"], (
+            f"「{label}」的顯示條件不再是 `cQ`（perm [\"quotation\"]）：{it['perm']!r}\n"
             "☠️ 搬家不可以順手改權限 —— 一批人會忽然看不到它，"
             "而那個症狀離「選單重整」非常遠。")
 
@@ -158,9 +125,10 @@ def test_mn4_the_routes_are_unchanged(sidebar):
     ☠️ 而「搬家時順手改了檔名」會讓使用者收到 404，
     🔑 **而書籤與既有的連結全部失效** —— 那比看不到選單更糟。
     """
+    hrefs = {it["href"] for it in sidebar}
     for page in MOVED_PAGES:
-        assert page in sidebar, (
-            f"`sidebar.js` 裡找不到 `{page}` —— 路由被改掉了，"
+        assert page in hrefs, (
+            f"選單宣告裡找不到 `{page}` —— 路由被改掉了，"
             "而書籤與既有連結會全部失效。")
 
 
@@ -227,8 +195,7 @@ def test_mn2_the_group_is_renamed_to_the_name_the_user_picked(sidebar):
     **主語是使用者自己，不是模組類型。**
     ☠️ 「工作內容」描述的是**資料**，而簽核佇列不是資料，**是一件要你去做的事。**
     """
-    decoded = _decode_escapes(sidebar)
-    names = set(_groups(decoded))
+    names = set(_groups(sidebar))
     assert "我的工作" in names, (
         f"那一組還不叫「我的工作」，現有分組：{sorted(names)}\n"
         "⇒ 使用者裁示的名字是「我的工作」。")
@@ -257,11 +224,14 @@ def test_mn2_the_group_is_renamed_to_the_name_the_user_picked(sidebar):
 # ☠️ **不會有人報修一個他以為被移除的功能。**
 
 
-def _section_condition(text, label):
-    """`sec('<label>', …)` 的第二個引數（原始字串）。找不到回 `None`。"""
-    m = re.search(r"sec\(\s*'" + re.escape(label) + r"'\s*,\s*([^)]*)\)",
-                  _decode_escapes(text))
-    return m.group(1).strip() if m else None
+def _visible_labels(modules):
+    """只有這些模組權限的人（非最高管理者）看到的 {群組名: [項目名…]}（core.menu.build，與伺服器同一份判準）。"""
+    from core import loader
+    from core import menu as M
+    from core import pages as Pg
+    mans = {k: v[0] for k, v in Pg.read_manifests(loader.MODULES_DIR).items()}
+    return {g["label"]: [it["label"] for it in g["items"]]
+            for g in M.build(M.load_l1(), M.module_items(mans), modules, False)}
 
 
 def test_mn6_the_group_condition_is_the_union_of_its_items(sidebar):
@@ -275,14 +245,11 @@ def test_mn6_the_group_condition_is_the_union_of_its_items(sidebar):
     一個**有報價單權限、沒有工作日誌／每日工作事項權限**的人
     （**業務人員很可能就是**），搬家後在選單裡**找不到那三項**。
     """
-    condition = _section_condition(sidebar, "我的工作")
-    assert condition is not None, (
-        "找不到 `sec('我的工作', …)` —— 見 `MN2`（改名）。\n"
-        "📌 搜尋範圍：`frontend/static/sidebar.js` 全文的 `sec('…', …)`。")
-    missing = [name for name in ("cWL", "cDT", "cQ")
-               if not re.search(r"\b%s\b" % name, condition)]
-    assert not missing, (
-        f"「我的工作」的分組條件是 `{condition}`，少了：{'、'.join(missing)}\n"
+    # 〔C4 更正：原本解析 `sec('我的工作', cWL || cDT || cQ)` 的條件字串。C4 起群組沒有自己的條件——
+    #   群組顯示＝底下至少一項可見（core.menu），「條件是聯集」由結構保證 ⇒ 改驗行為：只有報價單權限的人看得到那一組〕
+    got = _visible_labels(["quotation"])
+    assert "我的工作" in got, (
+        f"只有 quotation 權限的人看不到「我的工作」：{sorted(got)}\n"
         "☠️ 少了 `cQ` ⇒ 有報價單權限而沒有工作日誌權限的人（業務很可能就是），"
         "整組看不到 —— 而那三項是他每天要用的。")
 
@@ -306,14 +273,9 @@ def test_mn7_a_quote_only_role_can_still_see_the_three_items(sidebar):
     🔑 而那兩件合起來仍然不等於「使用者看得到」。
     📌 真正的驗收是目視，而這句話寫在這裡，不寫在豁免表裡。
     """
-    condition = _section_condition(sidebar, "我的工作")
-    assert condition is not None, "找不到 `sec('我的工作', …)`（見 MN2）"
-    assert re.search(r"\bcQ\b", condition), (
-        f"「我的工作」的分組條件 `{condition}` 不含 `cQ` ——\n"
-        "☠️ 只有報價單權限的人整組看不到，而那三項是他每天要用的。")
-
-    decoded = _decode_escapes(sidebar)
-    group = _groups(decoded).get("我的工作", "")
+    got = _visible_labels(["quotation"])
+    assert "我的工作" in got, f"只有 quotation 權限的人看不到「我的工作」：{sorted(got)}"
+    group = got["我的工作"]
     for label in MOVED:
         assert label in group, (
             f"「{label}」不在「我的工作」那一組裡。\n"
