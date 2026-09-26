@@ -146,6 +146,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 17:54 C：**M01 本體開工宣告**（wip/c-m01，疊 c-approval-2；主持核准五段計畫、死線 02:10）。①CA-O4 現在做，會動：L1 `helpers/__init__.py`（撤 M01 再匯出）、`helpers/dates.py`／`helpers/tax_calc.py`／`helpers/tiered_approval.py`（只新增：norm_at、summarize_payment_items、steps_to_tiers 逐字下沉；tiered_approval 與 A 的 a-approval-parse 同檔不同段）、`routers/system.py`（條款改經 M01 provider）、`pdf_gen.py`（版本紀錄改經 M01 provider）；**B 的 M08** `modules/analytics/api/reports.py`（成案月份改經 case.recognition）；M01 自己的 routers。② 大搬遷等第九班合回後、整疊 rebase 再開始（主持裁示）。
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
 - 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。
