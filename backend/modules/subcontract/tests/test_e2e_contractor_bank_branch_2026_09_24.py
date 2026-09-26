@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import _login  # noqa: F401
-from tests.test_contractor_bank_branch_2026_09_24 import _add_contractor, _contractor, _seed_voucher, _xlsx
+from modules.subcontract.tests.test_contractor_bank_branch_2026_09_24 import _add_contractor, _contractor, _seed_voucher, _xlsx
 
 
 @pytest.mark.e2e
