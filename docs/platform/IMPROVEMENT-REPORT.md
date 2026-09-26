@@ -36,6 +36,7 @@
 | M07 薪資獎金搬進 modules/payroll（C，wip/c-m07 4a731b1f，合回前） | D | `AUDIT-D-C-M07-move.md` | 稽核完成（2026-09-26 09:53）：**必修 0**——§B-11 首次提交即過（D 真刪 payroll：1193 過、2 紅皆允許、收集無錯誤；模組在 1512 過）；建議 2（IP 登記表結構化欄位 6 處指向搬走的路徑，與 M04-S1 同類第二次；api_module 豁免只信宣告）、觀察 2；突變 4/4 紅 |
 | 主持 h-corered（core-only 已知紅兩題改合成模組，wip/h-corered-2 b682b9bf） | D | `AUDIT-D-host-corered.md` | 稽核完成（2026-09-26 10:30）：必修 0；拿掉全部 L2 兩檔 11 過（舊版紅 2）；突變 2/2 紅；另以 range-diff 確認 h-hist-4、h-u14-2 與審過版本相同 |
 | 產生檔一致性守門（B，wip/b-maps d25f7ef3，合回前） | D | `AUDIT-D-B-maps.md` | 稽核完成（2026-09-26 10:34）：**必修 2**（BM-M1 dep_graph.json 內含工作樹名 `root` ⇒ 模組全在時 D 樹也紅；BM-M2 拿掉任一模組三題全紅、不在允許清單 ⇒ 第一班 core-only 即紅）、建議 1（dep_graph 過期反向控制不走實際比對）；OWNED_KINDS 單一定義成立 |
+| modtest --rebase-check 不叫各線跑全量（B，wip/b-rebasecheck e0137ddc，合回前） | D | `AUDIT-D-B-rebasecheck.md` | 稽核完成（2026-09-26 10:40）：**必修 1**（R-M1 PLAYBOOK §C-11 本文仍寫「fixture 層或程式碼衝突 ⇒ 重跑全量」，與新行為矛盾）、建議 1（fixture 不進 --files 只在他人改 fixture 情境有題，RB1 存活）；基準 28 過，突變 3 項 2 紅 |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事

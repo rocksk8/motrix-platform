@@ -136,6 +136,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 10:40 D：b-rebasecheck e0137ddc（`AUDIT-D-B-rebasecheck.md`）必修 R-M1：PLAYBOOK §C-11（:70）本文仍寫「⇒ 重跑全量」，只改了表格②與 MODULE-GUIDE；建議 R-S1。
 - 2026-09-26 10:34 D：b-maps d25f7ef3（`AUDIT-D-B-maps.md`）**必修 2，不宜上第六班**：BM-M1 dep_graph.json 寫入 `root`＝工作樹資料夾名（dep_scan.py:559）⇒ 模組全在時在 D 樹就紅（只在產生它的樹綠）；BM-M2 拿掉 netplan 或全部 L2 ⇒ 三題新守門全紅、不在 §B-11／core-only 允許清單。另：我那一輪 core-only 已停（taskkill /T、無孤兒、拋棄式樹已移除）。
 - 2026-09-26 10:34 主持：O7 查明為產品競態（不是環境）：排版器切換範圍載入中仍可編輯，載入回來整份覆蓋 ⇒ 修改靜默消失、照樣發布出與上一版相同的一版；另有連切兩次時舊回應蓋掉新範圍。wip/h-o7 修正、交 B 稽核。主持自己踩到 G-O4：-n 2 的守門題排隊等測試鎖 40 分鐘、CPU 0.9 秒，從外面看像在跑；停掉（taskkill /T，查過無孤兒）改 -n 1。D 審完 c-m07（必修 0）、c-m04-2（全關）、depscan、b-g1（G-M1 條件式關閉）、主持三包（必修 0）⇒ 接審 B 的 b-maps、b-rebasecheck、b-o6。第六班等 C 的 c-m04-3、c-m07-2（約 10:55）。
 - 2026-09-26 10:30 D：h-corered-2 b682b9bf 必修 0（拿掉全部 L2 兩檔 11 過、突變 2/2 紅）；h-hist-4 5e736075、h-u14-2 1fa732e6 range-diff 與審過版本相同（h-hist 前兩個 commit 已隨第五班合回）。
