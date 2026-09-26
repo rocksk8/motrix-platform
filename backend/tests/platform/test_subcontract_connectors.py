@@ -83,7 +83,7 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h)
     assert hist.status_code == 200 and hist.json()["outgoing"] == [] and hist.json()["contractorNotice"] == ca.CONTRACTOR_MISSING
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
-    assert prev.status_code == 200 and prev.json()["notice"] == ae.T100_CONTRACTOR_MISSING
+    assert prev.status_code == 200 and ae.T100_CONTRACTOR_MISSING in prev.json()["notice"].split("；")   # 其他來源的說明可能並列（IP-20）
     x = client.get("/api/cashier/export?start=2026-09-01&end=2026-09-30", headers=h)
     assert x.status_code == 200
     import io

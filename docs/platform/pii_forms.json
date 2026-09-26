@@ -31,7 +31,8 @@
       "notice": {
         "purpose": "contact",
         "ack_kind": "supplier_contact:<供應商id>:<聯絡人id>",
-        "ack_api": ["/api/suppliers/{sid}/privacy-notice", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"]
+        "ack_api": ["/api/suppliers/{sid}/privacy-notice", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"],
+        "api_module": "supply"
       },
       "since": "2026-09-26"
     },

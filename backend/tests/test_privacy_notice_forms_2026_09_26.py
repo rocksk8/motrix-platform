@@ -63,8 +63,15 @@ def test_company_can_customize_each_purpose(client, make_user, purpose, key):
 
 # ── ② 客戶／供應商的聯絡人 ─────────────────────────────────────────────────────
 
+def _supply_installed():
+    from core import source_tree
+    return source_tree.module_installed("modules/supply/")
+
+
 _CONTACT_KINDS = [("customers", "customer_contact", "customer.privacy_notice_ack"),
-                  ("suppliers", "supplier_contact", "supplier.privacy_notice_ack")]
+                  # 供應商的端點在 M03（modules/supply）：模組不在時端點本來就不在（PLAYBOOK §B-11）
+                  pytest.param("suppliers", "supplier_contact", "supplier.privacy_notice_ack",
+                               marks=pytest.mark.skipif(not _supply_installed(), reason="M03 不在這個安裝包"))]
 
 
 def _with_contacts(client, h, base):
