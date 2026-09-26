@@ -12,3 +12,15 @@
 - **建議 NC-S1**（依主持約定，同類繞過列建議）：函式名稱比對改成「從 import 綁定反查」，讓別名也算；另外把 `async_playwright` 加進去。
 
 ⇒ 通過、必修 0。
+
+## 複核：wip/b-newctx-rule-2 d28c7c1d（NC-S1；D 00:35）
+
+- D 用 `fixtures_starting_playwright` 直接測沙盒：
+  - `sync_playwright as sp` ⇒ 抓到
+  - `async_playwright`（async fixture）⇒ 抓到
+  - `async_playwright as ap` ⇒ 抓到
+  - 經同檔 helper 的別名 ⇒ 抓到
+  - 模組別名 `pa.sync_playwright()` ⇒ 抓到
+  - **來源不是 playwright** 的同名別名 ⇒ 不列（正確）
+- 本檔 8 過。突變 NC2「不認別名」⇒ 紅。
+⇒ **NC-S1 關閉（d28c7c1d）**。

@@ -164,6 +164,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 00:35 D：**NC-S1 關閉（b-newctx-rule-2 d28c7c1d）**：sp 別名、async_playwright（含別名、async fixture）、helper 別名皆抓到，非 playwright 來源的同名別名不列；不認別名突變紅。
 - 2026-09-27 00:33 D：**M06-S3 關閉（a-m06-8 b33aab7d）**：往清單加一筆 ⇒ 紅。建議 M06-S4（交主持）：上限是 ≤，合法刪一筆之後再加一筆新的照綠；改成 total == cap。
 - 2026-09-27 00:32 主持：**使用者要求減少視窗**：A 收尾停止（a-m06-8 b33aab7d，M06-S3 交 D；rebase 交列車長照月台列說明；A25 樹合回後主持移除）；B 於 D7 前哨＋NC-S1 後停；C 於 M01 ④（75 項，死線 04:30）＋CR-M1 後停；D 保留到最後；之後全量與 D7 由主持以子代理執行。D：c-m01-s2 通過、c-case404 必修 CR-M1（選題外漏 2 處 403 斷言，改以全 126 檔驗）、b-newctx-rule 通過（建議 NC-S1）、b-modtest-batch-2 與 M06-M3b 關閉。第十一班 e2e 段進行中。
 - 2026-09-27 00:25 D：b-newctx-rule ca1b84b6（輕量）通過：直接／helper／屬性三種寫法反向控制皆在、突變紅；建議 NC-S1 別名 import 與 async_playwright 漏抓。
