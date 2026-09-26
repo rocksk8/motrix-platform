@@ -175,6 +175,9 @@ def test_missing_table_is_404_and_a_locked_database_is_not(monkeypatch):
 def test_both_paths_agree_when_m01_is_absent(client, make_user, monkeypatch):
     """主持裁示：M01 不在時，L1 案件存取守門與經 IP-12 `case.access` 的取用方（網路規劃書）結果一致——都不放行。
     兩條路看同一個訊號（`case.access`），拿掉它 ⇒ L1 的 guard 404，規劃書依案件查詢也 404 並明說「案件模組未安裝」。"""
+    from core import source_tree
+    if not source_tree.module_installed("modules/netplan/"):   # 第六班列車 core-only 反向控制：取用方（網路規劃書）不在 ⇒ 無對象；
+        pytest.skip("需要網路規劃模組（取用方）；L1 那一半由 test_without_m01_access_is_404_even_though_the_table_and_row_exist 負責")   # L1 guard 404 另有題
     import db
     from helpers.case_access import guard_case_access
     from modules.netplan import api as netplan

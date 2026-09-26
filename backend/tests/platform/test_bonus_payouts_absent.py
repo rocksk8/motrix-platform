@@ -31,4 +31,7 @@ def test_cashier_and_report_without_payroll(client, make_user, monkeypatch):
     hist = client.get("/api/cashier/execution-history", headers=h)
     assert hist.status_code == 200 and hist.json()["bonusNotice"] == cashier.BONUS_MISSING and hist.json()["bonusPaid"] == []
     assert client.get("/api/cashier/export", headers=h).status_code == 200
-    assert client.get("/api/reports/expenses-monthly?year=2026", headers=h).status_code == 200
+    # 營運報表屬 M08（modules/analytics）：在 ⇒ 照常 200；不在 ⇒ 端點本來就不在（第六班列車 core-only 反向控制，M07×M08 交會）
+    from core import source_tree
+    want = 200 if source_tree.module_installed("modules/analytics/") else 404
+    assert client.get("/api/reports/expenses-monthly?year=2026", headers=h).status_code == want

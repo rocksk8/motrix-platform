@@ -13,10 +13,17 @@ from tests.platform import _menu_legacy as L
 
 
 def _declared():
-    """宣告式選單：L1 ＋ 安裝目錄每一個模組（不論載入與否——對等比的是「全部都裝、都開」的情況）。"""
+    """宣告式選單：L1 ＋ 安裝目錄每一個模組（不論載入與否——對等比的是「全部都裝、都開」的情況）。
+
+    L1 選單裡指向「所屬模組不在這棵樹」的頁面（sidebar.js `MODULE_PAGES`）一併扣掉，與 `_legacy_installed()` 同一個判準
+    （第六班列車 core-only 反向控制抓到：例 dev-crm.html 的選單項仍在 menu_l1.json，舊選單那邊扣了、宣告這邊沒扣）。"""
     from core import source_tree
     manifests = {d.name: json.loads((d / "module.json").read_text(encoding="utf-8")) for d in source_tree.module_dirs()}
-    return M.load_l1(), M.module_items(manifests)
+    l1 = M.load_l1()
+    _, page_key = _legacy_installed()
+    installed = {d.name for d in source_tree.module_dirs()}
+    l1["items"] = [it for it in l1["items"] if page_key.get(it["href"]) in (None, *installed)]
+    return l1, M.module_items(manifests)
 
 
 def _legacy_installed():
