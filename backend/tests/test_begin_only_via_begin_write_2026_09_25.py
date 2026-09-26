@@ -61,7 +61,7 @@ def _all_sites():
     sites = []
     for f in sorted(BACKEND.rglob("*.py")):
         rel = f.relative_to(BACKEND).as_posix()
-        if rel.startswith(("tests/", "venv", ".venv")) or "/site-packages/" in rel:
+        if rel.startswith(("tests/", "venv", ".venv")) or "/site-packages/" in rel or "/tests/" in rel:   # 模組自己的 tests/ 也不是產品碼
             continue
         try:
             src = io.open(f, encoding="utf-8").read()

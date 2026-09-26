@@ -143,7 +143,7 @@ def _counts():
 import ast
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
 def test_bn18_the_override_branch_reads_the_named_flag_not_peoples_truthiness():

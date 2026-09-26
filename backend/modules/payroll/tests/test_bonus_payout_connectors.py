@@ -190,7 +190,7 @@ def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, 
 
 def test_cashier_page_binds_bonus_mark_paid():
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[3] / "frontend"
+    root = pathlib.Path(__file__).resolve().parents[4] / "frontend"
     js = (root / "js" / "cashier.js").read_text(encoding="utf-8")
     from core import source_tree
     html = source_tree.page_file("cashier.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）
@@ -393,7 +393,7 @@ def test_insurance_endpoints_validate_and_are_superadmin_only(client, people):
 
 def test_bonus_page_binds_insurance_and_deductions():
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[3] / "frontend"
+    root = pathlib.Path(__file__).resolve().parents[4] / "frontend"
     js = (root / "js" / "bonus.js").read_text(encoding="utf-8")
     from core import source_tree
     html = source_tree.page_file("bonus.html").read_text(encoding="utf-8")   # 頁面位置一律經 page_file（階段 C）

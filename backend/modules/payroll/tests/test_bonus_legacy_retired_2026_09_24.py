@@ -55,7 +55,7 @@ def test_legacy_read_and_group_endpoints_still_work(client, make_user):
 def test_new_page_does_not_call_legacy_write_endpoints():
     """新頁面只打 /api/bonus/cases（與群組、使用者清單），不再打舊的寫入端點。"""
     from pathlib import Path
-    js = (Path(__file__).resolve().parents[2] / "frontend" / "js" / "bonus.js").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[4] / "frontend" / "js" / "bonus.js").read_text(encoding="utf-8")
     for old in ("/api/bonus/awards", "/api/bonus/items"):
         assert old not in js, f"新頁面還在打舊端點 {old}"
     assert "/api/bonus/cases" in js

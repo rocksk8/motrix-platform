@@ -145,7 +145,7 @@ def test_bn17_no_code_path_deletes_from_the_edit_log():
     產品碼裡的真實案例——那天產品碼修好了，正對照也會跟著失效）。
     """
     import re
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[4]
     pattern = re.compile(r"DELETE\s+FROM\s+bonus_award_edit_log", re.I)
 
     synthetic = "conn.execute(\"DELETE FROM bonus_award_edit_log WHERE 1=1\")"

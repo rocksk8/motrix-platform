@@ -151,7 +151,7 @@ def test_qs1a_the_quotation_pdf_still_shows_the_display_name_not_username():
     來源），不整份跑 PDF 產生——那條路徑很重，這裡只驗「還沒有人把
     它改掉」。
     """
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[4]
     src = (root / "backend" / "pdf_gen.py").read_text(
         encoding="utf-8", errors="replace")
     import re

@@ -50,7 +50,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_draft`、`routers/accounting_export.py::validate_account_code` |
-| 使用方 | M07 `helpers/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`routers/bonus.py`（標記已發放時驗出納選的銀行科目） |
+| 使用方 | M07 `modules/payroll/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`routers/bonus.py`（標記已發放時驗出納選的銀行科目） |
 | 形式 | provider，單一提供者（`core.registry`；M06 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
 | 語法 | 提供：`_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)`、`_registry.provide("voucher.account_check", "accounting", validate_account_code)`<br>取用：`registry.single_provider("voucher.draft")(conn, voucher_date=…, summary=…, lines=[{account_code, summary, debit, credit}], created_by=…, now=…)`；`registry.single_provider("voucher.account_check")(conn, code)` |
 | 回傳 | draft：`{"id": int, "voucher_no": str}`；在呼叫端的交易裡寫入 `vouchers_all`＋`voucher_lines`，**不 commit**（呼叫端的狀態與傳票連結一起成功、一起失敗）。分錄正規化與傳票類別由 M06 決定。<br>account_check：`(ok: bool, err: str)` |
@@ -72,7 +72,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M06 會計：`routers/accounting_export.py::_provide_accounting_settings` |
-| 使用方 | M07 `routers/bonus.py::_payout_bank_choices`（待發放時給出納選付款銀行） |
+| 使用方 | M07 `modules/payroll/api/bonus.py::_payout_bank_choices`（待發放時給出納選付款銀行） |
 | 形式 | provider，單一提供者（同 IP-2） |
 | 語法 | 提供：`_registry.provide("accounting.settings", "accounting", _provide_accounting_settings)`<br>取用：`registry.single_provider("accounting.settings")()` |
 | 回傳 | `{"bankAccounts": [{"name", "acctCode"}], "defaultBankAccountCode": str}`——**只公開這一小塊**，不給整份 T100 設定（其餘是會計內部設定） |
@@ -90,7 +90,7 @@ M06 的 `vouchers_all`。
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_void_draft`、`_provide_voucher_status` |
-| 使用方 | M07 `helpers/bonus_vouchers.py`：`withdraw_accrual`（獎金退回 ⇒ 作廢未送審的轉帳草稿）、`linked_vouchers`（明細列出連結的傳票）、`create_accrual`（殘留草稿防護） |
+| 使用方 | M07 `modules/payroll/bonus_vouchers.py`：`withdraw_accrual`（獎金退回 ⇒ 作廢未送審的轉帳草稿）、`linked_vouchers`（明細列出連結的傳票）、`create_accrual`（殘留草稿防護） |
 | 形式 | provider，單一提供者（同 IP-2） |
 | 語法 | 提供：`_registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)`、`_registry.provide("voucher.status", "accounting", _provide_voucher_status)`<br>取用：`registry.single_provider("voucher.void_draft")(conn, voucher_id, voided_by=…, now=…, reason=…)`；`registry.single_provider("voucher.status")(conn, voucher_id)` |
 | 回傳 | void_draft：`{"result": "voided"｜"not_draft"｜"gone", "voucher_no", "status"}`——只作廢「草稿」；已送審 ⇒ `not_draft` 不動；不存在或早已作廢 ⇒ `gone`。status：`{"id", "voucher_no", "status", "voided"}`，不存在 ⇒ `None`。兩者都在呼叫端的交易裡，**不 commit** |
@@ -162,7 +162,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`helpers/bonus_payouts.py::_Payouts`（`pending`／`paid`） |
+| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_Payouts`（`pending`／`paid`） |
 | 使用方 | M05 `routers/cashier.py`：`GET /api/cashier/bonus-queue`（出納頁「獎金待發放」子頁籤）、`_execution_history`（執行歷史「獎金分潤發放」區塊）、`GET /api/cashier/export`（Excel 第三張「獎金發放明細」）；頁面 `pages/cashier.html`、`js/cashier.js` |
 | 形式 | provider，單一提供者（`core.registry`；M07 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
 | 語法 | 提供：`registry.provide("bonus.payouts", "payroll", _Payouts)`<br>取用：`p = registry.single_provider("bonus.payouts")`；`None` ⇒ 退化。`p.pending(conn)`；`p.paid(conn, start, end)`（YYYY-MM-DD，含首尾，比發放日） |
@@ -179,7 +179,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`helpers/bonus_payouts.py::_expense_entries`（名稱 `bonus`） |
+| 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`） |
 | 使用方 | M08 `routers/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
 | 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
@@ -251,10 +251,10 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M07 薪資獎金：`helpers/bonus.py::bonus_module_on`（匯入時登記；搬進 `modules/` 後改寫進 `ModuleSpec.providers`） |
+| 提供方 | M07 薪資獎金：`modules/payroll/bonus.py::bonus_module_on`（`ModuleSpec.providers` 宣告；模組沒載入就沒有登記） |
 | 使用方 | L1 `routers/system.py::get_bonus_module_status`（`GET /api/system/bonus-module-status`；側欄、`bonus.html`、案件結案頁都問它） |
 | 形式 | provider，單一提供者 |
-| 語法 | 提供：`_registry.provide("bonus.module_status", "payroll", bonus_module_on)`<br>取用：`fn = registry.single_provider("bonus.module_status")`；`None` ⇒ 退化。`fn() -> bool` |
+| 語法 | 提供：`ModuleSpec(providers={("bonus.module_status", "payroll"): bonus.bonus_module_on})`<br>取用：`fn = registry.single_provider("bonus.module_status")`；`None` ⇒ 退化。`fn() -> bool` |
 | 回傳 | 開著沒（`BONUS_MODULE_ENABLED`：`"0"` 關、預設開） |
 | 對方不在時 | 200、`{"enabled": false, "notice": BONUS_MODULE_ABSENT}`（「薪資獎金模組未安裝：獎金分潤不提供」）⇒ 入口隱藏、頁面顯示暫停，與模組沒載入同一個結果。不丟例外 |
 | 契約版本 | 1（2026-09-26） |
@@ -269,7 +269,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | L1 `helpers/legal_params.py`（R1，IP-7） |
-| 使用方 | M07 `helpers/bonus_deductions.py::legal_params_for` → `deductions_for_award`：`POST /api/bonus/cases/{單號}/mark-paid`（撥付）、`GET /api/bonus/cases/{單號}`（待發放試算；已發放顯示快照）；頁面 `pages/bonus.html`「扣繳與補充保費」、`pages/cashier.html` 標記已發放對話框 |
+| 使用方 | M07 `modules/payroll/bonus_deductions.py::legal_params_for` → `deductions_for_award`：`POST /api/bonus/cases/{單號}/mark-paid`（撥付）、`GET /api/bonus/cases/{單號}`（待發放試算；已發放顯示快照）；頁面 `pages/bonus.html`「扣繳與補充保費」、`pages/cashier.html` 標記已發放對話框 |
 | 形式 | L1 函式直接呼叫（非 provider） |
 | 語法 | `params_from_legal_version(lp.rules_for_date(lp.load_versions(), 撥付日))` |
 | 回傳 | 讀一版的 `version`、`resident["50"].tax_rate`／`tax_threshold`（非每月給付薪資扣繳 5%、起扣標準）、`nhi.rate`、`nhi.max_single_payment`、`nhi.bonus_insured_multiple`（獎金超過投保金額的倍數；主持裁示由 R 在合回前加入並列為必填）。轉成 `bonus_deductions.PARAM_KEYS` 五個鍵；計算結果連同 **`version` 與參數快照**存進 `mark_paid` 那一筆編寫紀錄（長期記憶、不可改刪），已發放的單一律顯示快照，不再依現行參數重算 |
