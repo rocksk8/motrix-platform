@@ -646,10 +646,14 @@ PYEXE = None
 #: 這兩個是**預設值**；實際上限由 full_max_workers()／partial_max_workers() 決定（可用環境變數覆寫，見下）
 FULL_MAX_WORKERS = 4
 PARTIAL_MAX_WORKERS = 2
+#: e2e 每個 worker 各開 headless 瀏覽器＋測試伺服器 ⇒ 記憶體比 CPU 先滿（2026-09-26 13:2x 全部 e2e -n 4 被記憶體不足停掉；
+#: 主持修正「e2e 一律 -n 2」）⇒ --full 的 e2e 段另有上限，不跟全量上限走
+E2E_MAX_WORKERS = 2
 #: 覆寫用的環境變數（2026-09-26 使用者裁示「離開期間可以全速」，CORE-SPEC 使用者裁示表）：
 #: 全速時設定、使用者回來後拿掉即恢復——不必改程式。值必須是 1～CPU 數的整數；其他值不採用、說出來、用預設
 FULL_ENV = "MOTRIX_FULL_MAX_WORKERS"
 PARTIAL_ENV = "MOTRIX_PARTIAL_MAX_WORKERS"
+E2E_ENV = "MOTRIX_E2E_MAX_WORKERS"
 
 
 def _env_cap(name, default):
@@ -672,6 +676,11 @@ def _env_cap(name, default):
 def full_max_workers():
     """全量的 worker 上限：環境變數 MOTRIX_FULL_MAX_WORKERS，沒設（或不合法）⇒ FULL_MAX_WORKERS。每次呼叫現讀。"""
     return _env_cap(FULL_ENV, FULL_MAX_WORKERS)
+
+
+def e2e_max_workers():
+    """--full e2e 段的 worker 上限：環境變數 MOTRIX_E2E_MAX_WORKERS，沒設（或不合法）⇒ E2E_MAX_WORKERS。"""
+    return _env_cap(E2E_ENV, E2E_MAX_WORKERS)
 
 
 def partial_max_workers():
@@ -934,7 +943,7 @@ def run_full(extra, a):
     }
     cap = full_max_workers()
     stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], cap), a.window),
-              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], cap), a.window + "e2e")]
+              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], e2e_max_workers()), a.window + "e2e")]
     extra = cap_workers(extra, cap)
     codes = {}
     try:
@@ -985,8 +994,9 @@ def main(argv=None):
     _full = full_max_workers()
     ap.add_argument("--workers", type=int, default=_full,
                     help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_full, FULL_ENV))
-    ap.add_argument("--e2e-workers", type=int, default=_full,
-                    help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_full, FULL_ENV))
+    _e2e = e2e_max_workers()
+    ap.add_argument("--e2e-workers", type=int, default=_e2e,
+                    help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_e2e, E2E_ENV))
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
