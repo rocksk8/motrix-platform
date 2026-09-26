@@ -79,6 +79,7 @@
    - 待辦（B）：`customization` 可自訂點盤點（目前 schema＋空清單；五頁的列表欄位、表單區塊、按鈕、匯出）——稽核 ⑰ S-6
    - 待辦（C，M04 擁有者）：公開「有效派工列表」提供者；M08 的精算快照過期檢查目前仍直讀 `contractor_dispatches`、`vendor_contractors`（唯讀；只有「列→金額」經 IP-1）——稽核 ⑰ S-4
    - ✅ SPEC.md 規格編號：拿掉本模組時 test_spec_coverage 仍綠 ⇒「本模組沒有專屬編號」（2026-09-26 驗）
+   - 待辦（B，第六、七班合回後）：把模組題共用的種資料抽到 `tests/_*.py`——`tests/platform/test_dispatch_connector.py`（`_seed`、`_sa`、`QNO`、`YEAR`、`drop_dispatch_provider`）與獎金發放種資料（`test_bonus_payout_connectors` 的 fixture 與 `_to_payout` 等），平台題與 modules/analytics/tests 都從那裡取（稽核 ⑰ O-9；暫緩理由：c-m04-2、c-m07 同時在改那兩個檔）
 11. M01 案件 — 最後搬，此時其他模組已不依賴它的內部實作
    - 搬遷時公開 provider（`payment_item_amounts`、`tax_split`、`invoice_amounts`、`recognition` 的收入認列；另有 L1 `helpers/receivables.py` 也用到 `payment_item_amounts`／`quote_tax_type`／`tax_split`／`invoice_amounts` 與 quotations 表，一併改用 provider）
    - 每日工作頁「進行中案件」依賴 `/api/sales-orders`（2026-09-26 自 M08 移入 routers/quotations.py）；M01 不在時，每日工作頁要明說「需要案件模組」，不可以留空清單（主持 2026-09-26 裁示），並拿掉 l2_import_baseline 裡 analytics → M01 的 3 條（M08 搬遷時保留、只改單位名，主持 2026-09-26 裁示）
