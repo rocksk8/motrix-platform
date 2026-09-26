@@ -83,6 +83,15 @@ D 的突變（`tests/platform/test_l1_interface_snapshot.py`，24 題）：
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| G-M1 | | | |
-| G-S1～S2 | | | |
+| G-M1 | （B 以 commit 回覆，未填本欄）已知紅清單 `tools/platform/core_only_known_red.json`＋判定「紅 ⊆ 允許 ∪ 清單、清單轉綠未刪 ⇒ 不過」；4 題的修正分別在 h-corered、c-coreonly-depscan（2784140e）、c-m07（4a731b1f）；清單從空開始 | wip/b-g1 6e7ba250（range-diff：舊兩個 commit 內容不變、新增 6e7ba250） | ✅ 10:28 條件式關閉：D 突變 KR3（不看裁示）、KR4（不驗題存在）、KR2（轉綠不報）皆紅；dep_scan 那題 D 另驗 2784140e（DS1 只掃第一層、DS2 tests 也算 ⇒ 皆紅）；pii 那題 D 在 c-m07 驗（P7c／P7d 皆紅）。**條件**：b-g1 必須與 h-corered、c-coreonly-depscan、c-m07、b-m08-2 同一班，否則清單為空而 4 題仍紅 ⇒ 第一班擋車（主持已排） |
+| G-S1 | exit 5 或 0 題 ⇒ 不過 | 6e7ba250 | ✅ 10:28 關閉（D 突變 KR1 ⇒ 3 紅） |
+| G-S2 | | | 未處理（宣告不存在的名稱仍靜默忽略），維持開著 |
 | O-1～O-2 | | | |
+
+## 6. 6e7ba250 複核（D，2026-09-26 10:28）
+
+- ③ sparse 拋棄式樹：D 實際執行 `core_only_rc.py --commit 6e7ba250`，執行中查看 `%TEMP%/motrix-coreonly-6e7ba250/backend/modules` ⇒ **只有 `__init__.py`**，三個 L2 從頭沒取出；`module_keys_at` 讀 git 而非工作樹；取出後斷言 `main.py` 在、`module_dirs()` 為空。
+- **G-O3（觀察）　judge 只擋 exit 5**：pytest 異常結束（exit 2 中斷、3 內部錯誤、4 用法錯誤）而 junit 仍有部分結果時，只要紅燈 ⊆ 允許 ∪ 清單就判過。建議 `pytest_exit not in (0, 1)` 一律不過。
+- **G-O4（觀察）　排隊時完全沒有輸出**：工具以 `capture_output` 跑 pytest，而 conftest 的全量測試鎖在別的視窗占用時會排隊等待（`[測試鎖] … 排隊中` 那一句也被收起來）。D 這一輪在 09:54 起跑，10:26 查時主 pytest 只用了 0.8 秒 CPU、沒有 worker——是在排隊，不是當掉，但從外面分不出來（MEMORY〈長時間沒有輸出的動作要有死線〉）。建議把 pytest 的 stderr 即時轉印，或者起跑前先印出鎖的持有者。
+- **G-O5（觀察）　「只准縮短」實際是「新增要有 RUN-PLAN 裁示行」**：裁示行是 RUN-PLAN 裡的一行文字，被稽核者自己也寫得出來；守門驗的是「有沒有這一行」，不是「是不是主持寫的」。這是〈守門驗的是有沒有人做過決定〉的設計，可以接受；列車長合回時要看新增的那一行是誰寫的。
+
