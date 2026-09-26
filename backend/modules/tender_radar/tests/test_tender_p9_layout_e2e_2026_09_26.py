@@ -13,6 +13,7 @@
 - 等待一律等終點狀態（<html data-layout-state>、#ml-editor 的 data-busy／data-state、面板 data-busy），不用 sleep。
 """
 import json
+import re
 
 import pytest
 
@@ -477,7 +478,8 @@ def test_scope_cannot_be_switched_while_an_action_is_running(live_server, make_u
     held[0].continue_()
     boss.wait_for_function(ED_STATE, arg="published", timeout=15000)
     assert not ed.get_by_test_id("ml-scope").is_disabled()
-    assert "公司預設" in ed.inner_text()
+    # 讀動作的結果訊息（不讀整個面板：範圍下拉的選項文字本來就有「公司預設」，永遠成立，AUDIT-B-host-O7 O-4）
+    assert re.match(r"^已發布第 \d+ 版（公司預設）$", ed.get_by_test_id("ml-msg").inner_text()), ed.get_by_test_id("ml-msg").inner_text()
 
 
 @pytest.mark.e2e
