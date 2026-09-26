@@ -95,10 +95,18 @@ def _scope_routes():
     return installed_routes(json.loads(SCOPE.read_text(encoding="utf-8"))["routes"])
 
 
-def test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared():
-    mods = source_tree.module_dirs()
-    assert mods, "沒有任何已安裝的模組 ⇒『模組在』那一半無對象"
-    here = "modules/%s/api.py" % mods[0].name
+def _synthetic_backend(monkeypatch, tmp_path, key="zz_here"):
+    """「模組在」的正對照不綁真實 L2（core-only 反向控制時一個模組都沒有，D 稽核 G-M1）：
+    source_tree.BACKEND 指到暫存樹，放一個合成模組（有 module.json），module_installed 照常判定。"""
+    d = tmp_path / "backend" / "modules" / key
+    d.mkdir(parents=True)
+    (d / "module.json").write_text('{"key": "%s"}' % key, encoding="utf-8")
+    monkeypatch.setattr(source_tree, "BACKEND", tmp_path / "backend")
+    return key
+
+
+def test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared(monkeypatch, tmp_path):
+    here = "modules/%s/api.py" % _synthetic_backend(monkeypatch, tmp_path)
     routes = [{"file": "modules/zz_absent/api/x.py", "path": "/api/zz/{quote_no}", "handler": "zz", "scope": "module"},
               {"file": here, "path": "/api/here/{quote_no}", "handler": "h", "scope": "module"},
               {"file": "routers/zz_gone.py", "path": "/api/old/{quote_no}", "handler": "o", "scope": "module"}]
