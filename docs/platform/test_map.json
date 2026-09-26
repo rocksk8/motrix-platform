@@ -3588,6 +3588,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/netplan/",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:netplan/api",
     "plat:__init__",
     "plat:registry"
@@ -3596,7 +3597,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
      "backend/modules/netplan/api.py"
