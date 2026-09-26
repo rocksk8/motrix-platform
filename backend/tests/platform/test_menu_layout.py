@@ -63,9 +63,18 @@ def _pick():
     pytest.skip("沒有已載入、宣告選單項的模組 ⇒ 無對象")
 
 
-def _login(client, make_user, name, role):
-    u, pw = make_user(username=name, role=role)
+def _login(client, make_user, name, role, modules=None):
+    u, pw = make_user(username=name, role=role, **({"modules": modules} if modules is not None else {}))[:2]
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+
+
+def _perm_of(man, href):
+    """選單項的模組權限（清單）；非清單（any／superadmin）⇒ []。"""
+    for p in man.get("pages") or []:
+        if isinstance(p, dict) and p.get("path") == href and p.get("menu"):
+            perm = p["menu"]["perm"]
+            return list(perm) if isinstance(perm, list) else []
+    return []
 
 
 def _publish_role_layout(role, key, ops):
@@ -84,8 +93,10 @@ def _flat(groups):
 
 
 def test_menu_layout_applies_the_users_role_only(client, make_user):
-    key, href, _m = _pick()
-    h_admin = _login(client, make_user, "c4_admin", "admin")
+    key, href, man = _pick()
+    # 〔更正：原本 admin 不帶模組權限——任取到的模組若要權限（例 crm 的 dev_crm；C4 把 7 項選單搬進模組後才會取到它），
+    #   正對照那一行就紅；admin 要帶那一項的權限，否則「看不到」與版面無關〕
+    h_admin = _login(client, make_user, "c4_admin", "admin", modules=_perm_of(man, href))
     h_sa = _login(client, make_user, "c4_sa", "superadmin")
     before = client.get("/api/platform/menu", headers=h_admin).json()
     assert href in _flat(before["groups"]) and href in _flat(before["layout"]["groups"])   # 正對照：還沒有版面
