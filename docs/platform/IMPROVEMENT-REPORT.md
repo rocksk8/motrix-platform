@@ -48,6 +48,7 @@
 | 字型 otf→woff2＋/fonts/ 快取（主持，wip/h-fonts-woff2 94a78b4c，合回前，抽查） | D | `AUDIT-D-host-fonts-woff2.md` | 抽查完成（2026-09-26 15:16）：必修 0、觀察 2（woff2 送 octet-stream＋nosniff 但字型不受擋、test_map 過期交列車）；突變 FW1 紅 |
 | M05 應收應付搬進 modules/arap（C，wip/c-m05b b17e5296，合回前） | D | `AUDIT-D-C-M05-move.md` | 稽核完成（2026-09-26 15:38）：**必修 2**（M5-M1 L1 薄殼無到期觸發，突變 CORE 2.0 存活；M5-M2 新 e2e 不關 context ⇒ 下一題偶發紅）、建議 1（報表快照經 cashierLoaded 略過 404）、觀察 3；§B-11 刪 arap 5 紅皆允許、收集無錯；突變 7/7 紅 |
 | IP-14 contractor_voucher.paid_between（C，wip/c-ip14-paid 6c8406c5，合回前） | D | `AUDIT-D-C-ip14-paid.md` | 稽核完成（2026-09-26 15:47）：**必修 1**（IP-M1「M04 不在」模擬只拿掉 public，新資料路徑未模擬；突變拿掉 None 防護存活）、觀察 1；邏輯搬移逐字相同、突變 4/4 紅 |
+| B 的 b-m08-attr 52178979＋b-modtest-env bf4abacb（抽查） | D | `AUDIT-D-B-attr-modtestenv.md` | 抽查完成（2026-09-26 15:51）：兩包必修 0；突變 A1、E1～E3 皆紅；觀察 MT-O1（差異題含 e2e 時沒有 e2e 上限，設 PARTIAL=4 會讓 e2e -n 4） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事
