@@ -304,7 +304,9 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     prov = registry.providers(CAP)["arap"]
     conn = db.get_db()
     try:
-        assert prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_no) == []
+        with pytest.raises(AttachmentNotVisible) as ei:
+            prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_no)
+        assert ei.value.visible == [] and ei.value.hidden == 1, "讀不到的那張不列，但要說出沒列出幾個附件"
         with pytest.raises(AttachmentNotVisible):
             prov.files(conn, "invoice_voucher", "IV-ATT-P", u_no)
         assert prov.doc_nos_for_case(conn, "invoice_voucher", "ATT-IV-P", u_amt) == ["IV-ATT-P"]
@@ -313,6 +315,10 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
         conn.close()
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=no_amt)
     assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "invoice_voucher"] == []
+    assert _hidden(got).get("hidden:invoice_voucher") == 1, "因權限沒列出要明說（主持裁示），不可以跟「沒有」長得一樣"
+    _no_identifiers(got, "IV-ATT-P", "iv.pdf", "att_perm/iv.pdf", "ATT-IV-P")
+    ok = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-IV-P", headers=amt)
+    assert "hidden:invoice_voucher" not in _hidden(ok), "看得到的人不該被告知有沒列出的"
 
 
 def _user(username):
@@ -344,6 +350,10 @@ def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_use
     assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 403, "前提：案件頁擋 case_manage 非擁有者"
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-1", headers=h)
     assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "quotation_signed"] == [], got.text
+    assert _hidden(got).get("hidden:quotation_signed") == 1, got.json().get("hidden")
+    ss = client.get("/api/vouchers/summary-sources?quote_no=ATT-QP-1", headers=h)
+    assert ss.status_code == 200 and _hidden(ss).get("hidden:quotation_signed") == 1, ss.json().get("hidden")
+    _no_identifiers(got, "sign.png", "att_perm/ATT-QP-1.png", "f1")
     prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-QP-1&file_id=f1", headers=h)
     assert prev.status_code in (403, 404), prev.status_code
     assert _pick(client, h, "ATT-QP-1").status_code == 403
@@ -375,3 +385,62 @@ def test_quotation_attachments_are_not_stricter_than_the_case_page(client, make_
             prov.doc_nos_for_case(conn, "case_update", "ATT-QP-2", cash)
     finally:
         conn.close()
+
+
+def _hidden(resp):
+    """回應裡因權限沒列出的附件：{類別: 個數}（主持裁示 2026-09-26：明說，不可以靜默少列）。
+    每一筆只准有 category／count／reason 三個鍵（只說類別與個數）。"""
+    got = resp.json().get("hidden")
+    assert isinstance(got, list), "回應要有 hidden 欄位"
+    for h in got:
+        assert set(h) == {"category", "count", "reason"}, ("hidden 只准回類別與個數", h)
+        assert h["reason"] and str(h["count"]) in h["reason"], h
+    return {h["category"]: h["count"] for h in got}
+
+
+def _no_identifiers(resp, *secrets):
+    """反向控制（主持裁示）：hidden 裡不可以出現看不到的那張單據的任何識別字串（單號、檔名、路徑、檔案 id）。"""
+    text = json.dumps(resp.json().get("hidden"), ensure_ascii=False)
+    leaked = [x for x in secrets if x in text]
+    assert not leaked, ("「明說」本身不可以外洩", leaked, text)
+
+
+def test_nothing_hidden_means_hidden_is_empty(client, make_user):
+    """正對照：看得到全部原單據的人（案件業務）⇒ hidden 是空清單（不是每次都亮的警告）。"""
+    h = _hdr(client, make_user, "att_hid_own", "engineer", ["finance"])
+    _seed_case_with_file("ATT-HID-1", owner_id=_user("att_hid_own")["id"])
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-HID-1", headers=h)
+    assert got.status_code == 200 and [f["fileId"] for f in got.json()["files"]] == ["f1"]
+    assert _hidden(got) == {}
+
+
+def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make_user):
+    """反向控制：看不到的單據帶著一眼認得出來的單號、檔名、路徑、金額 ⇒ hidden 只剩類別與個數，這些字串一個都不出現；
+    正對照：同一個回應的 files（看得到的那些）照常帶檔名，證明掃描的字串確實存在於資料裡。"""
+    import db
+    import os
+    import helpers.uploads as up
+    owner = _hdr(client, make_user, "att_leak_own", "engineer", ["finance"])
+    other = _hdr(client, make_user, "att_leak_other", "engineer", ["finance", "case_manage"])
+    rel = "att_perm/LEAK-SECRET-9f3.png"
+    os.makedirs(os.path.join(up.UPLOADS_ROOT, "att_perm"), exist_ok=True)
+    open(os.path.join(up.UPLOADS_ROOT, rel), "wb").write(b"x")
+    meta = [{"id": "fid-LEAK-77", "filename": "機密合約-LEAK.png", "path": rel},
+            {"id": "fid-LEAK-78", "filename": "第二張-LEAK.png", "path": rel}]
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, data_json, signed_files_json, created_at, updated_at,"
+                     " sales_person_id, customer_name) VALUES (?,?,?,?,?,?,?,?)",
+                     ("MQ-LEAK-001", "已送出", json.dumps({"total": 8765432}), json.dumps(meta), "2026-01-01",
+                      "2026-01-01", _user("att_leak_own")["id"], "機密客戶LEAK"))
+        conn.commit()
+    finally:
+        conn.close()
+    url = "/api/vouchers/line-source-files?source_type=case&ref=MQ-LEAK-001"
+    seen = client.get(url, headers=owner)
+    assert "機密合約-LEAK.png" in json.dumps(seen.json()["files"], ensure_ascii=False), "正對照：看得到的人拿得到檔名"
+    got = client.get(url, headers=other)
+    assert got.status_code == 200 and got.json()["files"] == []
+    assert _hidden(got) == {"hidden:quotation_signed": 2}, got.json()["hidden"]
+    _no_identifiers(got, "MQ-LEAK-001", "機密合約-LEAK.png", "第二張-LEAK.png", "LEAK-SECRET-9f3", "fid-LEAK-77",
+                    "fid-LEAK-78", "8765432", "機密客戶LEAK", "LEAK")
