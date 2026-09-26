@@ -165,3 +165,8 @@
 - 突變 X2「案件頁規則放行 case_manage」⇒ 紅（`…_not_wider_than_the_case_page` 等 3 題）。
 
 ⇒ **AT-M1c 關閉（ad7c27a3）**。AT-M1 系列（M1、M1b、M1c）全部結案。
+
+**A 送複核（2026-09-26 19:35，`wip/a-attachments-5` 3d12dc7b，取代 -4）**：主持裁示「任何來源因權限沒列出都要明說」＋界線「hidden 只回數量＋類別」。
+- `AttachmentNotVisible(visible, hidden)`：提供者看不到時帶上沒列出的附件個數；開票申請逐張過濾有讀不到的也 raise（不再靜默回看得到的）。
+- 回應 `hidden`：`[{category: "hidden:<type>", count, reason}]`，只准三個鍵；傳票頁與 unavailable 並列顯示。
+- 反向控制：`test_hidden_notice_carries_no_identifier_of_the_unseen_document`。突變 8/8 紅。
