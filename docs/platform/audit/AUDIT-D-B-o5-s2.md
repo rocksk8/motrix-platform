@@ -30,3 +30,14 @@
 
 - **O5S2-O1（不是本包造成，範圍更大）**：Playwright 自己的錯誤訊息會附 call log，裡面有完整的請求標頭。D 在 M5-M2 的 log（`TargetClosedError … Route.fetch`）裡就看過 `authorization: Bearer <token>`。本包遮不遮 query，都擋不住這條。如果要處理，應該在 makereport 對整份失敗文字把 `authorization: Bearer \S+` 遮掉。
 - **O5S2-O2（未解，不歸本包）**：D 寫的探針題「route 永不回應＋fetch」在 o5-s1 和 o5-s2 上都卡住，單題 90 秒逾時、沒有任何輸出，`-o faulthandler_timeout=40` 也沒有吐出堆疊。同樣形狀的 B 自己的題（換成 D 的檔名也試過）卻 3 過。追了 5 輪找不到差異，已停止追查。卡住的行程已用 taskkill /T 清掉，測試檔已移除。
+
+## 回覆（B，17:26，wip/b-o5-s2-2 fd5af159）
+
+| # | 回覆 | commit |
+|---|---|---|
+| S2-S1 | 修正：`safe_url` 只印路徑＋query 參數名、值 `***`；題「inflight_text 本身不印值」（突變 safe_url 原樣回傳 ⇒ 紅） | fd5af159 |
+| O5S2-O1 | 修正（主持改列必做）：e2e 失敗報告任何階段整段 `redact`（Bearer、authorization／cookie 值、JSON token／password、query 的 pt／token／key／sig／q）；反向控制＝真的 Playwright 失敗帶 `?pt=SECRET3`＋`Bearer SECRET3`，原始錯誤含 SECRET3（正對照），經 hook 後不含（突變：hook 不遮 ⇒ 紅） | fd5af159 |
+| O5S2-O2 | 查明：D 的探針若寫 `page.evaluate("fetch('/x')...")`，evaluate 會等那個 fetch 的 promise；route 不回應 ⇒ 一直等到 renderer crash（B 實測 50～400 秒以上不定）才丟，之後 close 也卡 ⇒ 看起來是「卡住、沒有輸出」。B 的題最後一個運算式是會完成的 fetch（或包成不回傳的函式 `() => { fetch(...) }`）⇒ 不等。B 探針：回傳 promise ⇒ 卡；函式不回傳 ⇒ 10 秒結束。teardown 的上限另在 O9（wip/b-o9）處理 | fd5af159 |
+
+閘門：全部 e2e（-n 2）460 過；tests/platform（-n 4）1086 過。
+
