@@ -103,6 +103,7 @@ M06 搬進模組後，下列三類讀取暫時保留（沒有 import 邊，只�
 | # | 檔（搬遷後） | 讀的表（擁有者） | 到期條件（提供者） | 裁示 |
 |---|---|---|---|---|
 | a | `modules/accounting/api/vouchers.py` | `quotations`、`case_extra_expenses`（M01） | M01 提供 `case.summary`、`case.extra_expenses` | M06-a |
+| a' | 〃 | `contractor_dispatches`、`vendor_contractors`（M04） | M04 提供 `dispatch.by_case`（**新 IP，待主持裁示**：JV21 支出來源 `_case_expense_sources` 與 `vouchers_by_case` 的派工段） | 〔更正（A 2026-09-26 盤點，dep_scan 實掃）：原表漏列；守門基線已列入〕 |
 | b | `modules/accounting/voucher_attachments.py` | `case_extra_expenses`、`case_updates`、`quotations`（M01）、`contractor_dispatches`（M04）、`invoice_vouchers`（M05） | 各擁有者提供 `attachments.for_document`（獨立一包，排在 M01 前置） | M06-b |
 | d | `modules/accounting/api/accounting_export.py` | `contractor_payment_vouchers`（M04） | M04 的 IP-14 加 `paid_between(start, end)` | M06-d |
 
@@ -127,3 +128,19 @@ KNOWN_ACCOUNTING_FOREIGN_READS = {
 - 到期觸發的是**提供者出現**，不是日期：C 的 M01 前置合回（`case.summary`）那一班，這一題就會紅，改走提供者的是 M06 擁有者（A）。
 - 刪除條目的 commit 要引用觸發它的那一班列車（RUN-PLAN §6 記一筆），比照 CA-S3。
 - `parse_approval_json` 不在本表：裁示 M06-c 已下沉 L1（`wip/a-approval-parse`），M01 不再 import M06。
+- 〔2026-09-26 A〕守門已寫：`wip/a-m06` 的 `backend/tests/platform/test_accounting_foreign_reads.py`（KNOWN_FOREIGN_READS＝a、a'、d；自己的表取 `module.json` 的 `data.tables`／`views`，L1 表只列 `users`）。M06 搬遷前三題略過、兩支反向控制照跑；用今天的七支檔映射到搬遷後路徑實掃：多出＝0、過期＝0。
+
+## 6. 搬移清單（A 2026-09-26；`grep` 實掃 import，樹＝wip/a-m06 49ac9ffd）
+
+| 檔（現在） | 搬遷後 | 產品碼的呼叫端（要改） | 測試的呼叫端 |
+|---|---|---|---|
+| `routers/vouchers.py` | `modules/accounting/api/vouchers.py` | main.py；M01 `routers/quotations.py`（`vouchers_by_case`，§1 #7 新 IP `voucher.by_case`） | 8 支 M06 題（隨模組搬）；M04 `modules/subcontract/tests/test_dispatch_row_provider.py:83`（`_case_expense_sources`，要依 module_installed 略過） |
+| `routers/accounting_export.py` | `modules/accounting/api/accounting_export.py` | main.py；`routers/vouchers.py`（同模組，改相對 import） | M06 題 3 支（隨模組）；**別人的題**：`tests/platform/test_subcontract_connectors.py:77,100`、`tests/platform/test_supply_connectors.py:93,104`、`modules/subcontract/tests/test_subcontract_providers.py:116`、`tests/test_xlsx_out_l1_2026_09_25.py:27,36,41,86`、`tests/test_money_round_half_up_2026_09_26.py:243` ⇒ 路徑改走 `source_tree`、import 改依 module_installed 略過（動 B／C 的檔，RUN-PLAN §6 先講） |
+| `routers/account_items.py` | `modules/accounting/api/account_items.py` | main.py | `test_account_tree_page`（隨模組） |
+| `helpers/voucher.py` | `modules/accounting/voucher.py` | `helpers/voucher_pdf.py`、`routers/vouchers.py`（同模組）；M01 `routers/quotations.py`（`parse_approval_json` 已下沉 L1，改 import L1 即切斷，§1 #8） | 12 支 M06 題（隨模組）；M07 `modules/payroll/tests/test_voucher_connectors.py:180,200`（驗「M06 不在也能跑」，改成模組路徑） |
+| `helpers/voucher_pdf.py` | `modules/accounting/voucher_pdf.py` | `routers/vouchers.py`（同模組）；M07 `bonus_pdf.py` 只剩註解（c-m07 已切斷） | `tests/test_edge_profile_2026_09_25.py:12`（L1 題 import M06 ⇒ 改依 module_installed） |
+| `helpers/voucher_template.py` | `modules/accounting/voucher_template.py` | 無 | `test_voucher_template_placeholders`（隨模組） |
+| `helpers/voucher_attachments.py` | `modules/accounting/voucher_attachments.py` | `helpers/voucher_pdf.py`、`routers/vouchers.py`（同模組） | 5 支 M06 題（隨模組）；`tests/platform/test_attachments_providers.py`（M06 是取用方 ⇒ 取用方那幾題依 module_installed 略過） |
+
+- 題檔搬遷：命名 JV 的題全部隨模組（§4）；`test_approval_settings_unify_2026_09_23.py` 只搬 JV8 段（行 478 起），沿用原檔名。
+- 別人的檔共 8 支（上表粗體那格＋M04／M07 各一），搬遷當天在 RUN-PLAN §6 列出再動。
