@@ -421,11 +421,22 @@ _CASE_VIS_COLS = "sales_person_id, sales_person, assigned_user_ids"
 
 
 def _caller_is_system(user) -> bool:
-    """`user`：一般使用者 dict，或 L1 背景工作的 `helpers.case_access.SYSTEM`。`None` ⇒ 拒絕（不猜身分）。"""
+    """`user`：一般使用者 dict，或 L1 背景工作的 `helpers.case_access.SYSTEM`。`None` ⇒ 拒絕（不猜身分）。
+    執行期第二道（稽核 D CS-M1）：傳 SYSTEM 的呼叫端在 `backend/modules/`（L2）⇒ PermissionError；第一道是靜態掃描守門。"""
     from helpers.case_access import SYSTEM
     if user is None:
         raise TypeError("case.summary／case.locations：user 必填；L1 背景工作請傳 helpers.case_access.SYSTEM")
-    return user is SYSTEM
+    if user is not SYSTEM:
+        return False
+    import sys
+    here = __file__.replace("\\", "/")
+    f = sys._getframe(1)
+    while f is not None and f.f_code.co_filename.replace("\\", "/") == here:
+        f = f.f_back                                                     # 跳過本檔（case_summary、_CaseLocations、IP-12 轉呼叫）
+    caller = (f.f_code.co_filename if f is not None else "").replace("\\", "/")
+    if "/backend/modules/" in caller:
+        raise PermissionError("helpers.case_access.SYSTEM 只准 L1 背景呼叫端使用（呼叫端：%s）" % caller)
+    return True
 
 
 def _visible(user, system, row) -> bool:
