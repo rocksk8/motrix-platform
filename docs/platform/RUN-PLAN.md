@@ -136,6 +136,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 10:34 D：b-maps d25f7ef3（`AUDIT-D-B-maps.md`）**必修 2，不宜上第六班**：BM-M1 dep_graph.json 寫入 `root`＝工作樹資料夾名（dep_scan.py:559）⇒ 模組全在時在 D 樹就紅（只在產生它的樹綠）；BM-M2 拿掉 netplan 或全部 L2 ⇒ 三題新守門全紅、不在 §B-11／core-only 允許清單。另：我那一輪 core-only 已停（taskkill /T、無孤兒、拋棄式樹已移除）。
 - 2026-09-26 10:34 主持：O7 查明為產品競態（不是環境）：排版器切換範圍載入中仍可編輯，載入回來整份覆蓋 ⇒ 修改靜默消失、照樣發布出與上一版相同的一版；另有連切兩次時舊回應蓋掉新範圍。wip/h-o7 修正、交 B 稽核。主持自己踩到 G-O4：-n 2 的守門題排隊等測試鎖 40 分鐘、CPU 0.9 秒，從外面看像在跑；停掉（taskkill /T，查過無孤兒）改 -n 1。D 審完 c-m07（必修 0）、c-m04-2（全關）、depscan、b-g1（G-M1 條件式關閉）、主持三包（必修 0）⇒ 接審 B 的 b-maps、b-rebasecheck、b-o6。第六班等 C 的 c-m04-3、c-m07-2（約 10:55）。
 - 2026-09-26 10:30 D：h-corered-2 b682b9bf 必修 0（拿掉全部 L2 兩檔 11 過、突變 2/2 紅）；h-hist-4 5e736075、h-u14-2 1fa732e6 range-diff 與審過版本相同（h-hist 前兩個 commit 已隨第五班合回）。
 - 2026-09-26 10:28 D：**M04-M1、S1～S3、O 關閉**（c-m04-2 dd7aecf0：真刪 1459 過／3 紅＝允許 2＋G1 快照 1；條件與 b-g1 同車）。**G-M1 條件式關閉、G-S1 關閉**（b-g1 6e7ba250：突變 KR1～4 皆紅；sparse 樹實查 modules 只剩 __init__.py；條件：與 h-corered、c-coreonly-depscan、c-m07、b-m08-2 同班）；G-S2 仍開。c-coreonly-depscan 2784140e 突變 2/2 紅。觀察：judge 只擋 exit 5、排隊時無輸出。
