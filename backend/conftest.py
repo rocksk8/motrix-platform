@@ -1448,6 +1448,34 @@ E2E_CONTEXT_HOOKS.append(_font_stub_hook)
 # pytest_runtest_makereport：call 階段失敗、而且是逾時（例外型別名含 Timeout）⇒ 加一段報告。
 
 
+def safe_url(url):
+    """網址 ⇒ 路徑＋query 的**參數名**，值一律遮成 `***`（與 redact 同一個記號）（D 稽核 S2-S1：`?pt=` 是短效簽章、`?q=` 可能是客戶名稱）。"""
+    from urllib.parse import parse_qsl, urlsplit
+    try:
+        u = urlsplit(url)
+    except ValueError:
+        return "<網址無法解析>"
+    names = [k for k, _v in parse_qsl(u.query, keep_blank_values=True)]
+    return u.path + ("?" + "&".join("%s=***" % k for k in names) if names else "")
+
+
+#: e2e 失敗文字的遮蔽規則（O5S2-O1：Playwright 自己的 call log 會印 `authorization: Bearer …`，不只我們附加的那段）
+_REDACT = [
+    (r"(?i)\bBearer\s+[A-Za-z0-9._~+/=\-]+", "Bearer ***"),
+    (r"(?i)((?:authorization|cookie|set-cookie|x-api-key)[\"']?\s*[:=]\s*[\"']?)[^\s\"',}]+", r"\1***"),
+    (r"(?i)([\"'](?:token|access_token|refresh_token|password|secret|pt)[\"']\s*:\s*[\"'])[^\"']*", r"\1***"),
+    (r"(?i)([?&](?:pt|token|access_token|key|sig|signature|q|password)=)[^&\s\"'#<>]+", r"\1***"),
+]
+
+
+def redact(text):
+    """失敗文字 ⇒ 遮掉權杖、簽章、query 值（〈外洩的出口不一定是你寫的〉：失敗訊息常被貼進稽核檔、RUN-PLAN、跨視窗訊息）。"""
+    import re
+    for pat, rep in _REDACT:
+        text = re.sub(pat, rep, text)
+    return text
+
+
 def _inflight_hook(ctx, request):
     book = request.node.__dict__.setdefault("_e2e_inflight", {})
     ctx.on("request", lambda r: book.__setitem__(r, (time.monotonic(), r.method, r.url)))
@@ -1464,7 +1492,7 @@ def inflight_text(item):
     rows = sorted(book.values(), key=lambda v: v[0])
     if not rows:
         return "（沒有未完成的請求）"
-    return "\n".join("  %6.1fs  %s %s" % (now - t0, m, u) for t0, m, u in rows)
+    return "\n".join("  %6.1fs  %s %s" % (now - t0, m, safe_url(u)) for t0, m, u in rows)
 
 
 E2E_CONTEXT_HOOKS.append(_inflight_hook)
@@ -1474,11 +1502,16 @@ E2E_CONTEXT_HOOKS.append(_inflight_hook)
 def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
-    if rep.when != "call" or not rep.failed or call.excinfo is None:
+    if not rep.failed:
         return
-    if "Timeout" not in call.excinfo.typename:
-        return
-    rep.sections.append(("e2e 逾時時未完成的請求（O5-S2）", inflight_text(item)))
+    if rep.when == "call" and call.excinfo is not None and "Timeout" in call.excinfo.typename:
+        rep.sections.append(("e2e 逾時時未完成的請求（O5-S2）", inflight_text(item)))
+    # e2e 的失敗文字整段遮蔽（任何階段）：Playwright 的錯誤訊息自帶請求標頭（Bearer）與完整網址（?pt=、?q=）
+    is_e2e = getattr(item, "get_closest_marker", None) and item.get_closest_marker("e2e")
+    if is_e2e or hasattr(item, "_e2e_inflight"):
+        if rep.longrepr is not None:
+            rep.longrepr = redact(str(rep.longrepr))
+        rep.sections = [(title, redact(body)) for title, body in rep.sections]
 
 _PW = {"pw": None, "browser": None}
 
