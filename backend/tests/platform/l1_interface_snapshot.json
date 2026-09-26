@@ -80,6 +80,7 @@
    "no_cache_static": "async def(request, call_next)",
    "root": "def()",
    "security_headers": "async def(request, call_next)",
+   "sidebar_js": "def()",
    "slow_request_log": "async def(request, call_next)"
   },
   "core:pdf_gen": {
@@ -761,6 +762,7 @@
    "MENU_L1": "const",
    "apply_layout": "def(groups, ops)",
    "build": "def(l1, mod_items, modules, superadmin)",
+   "declaration": "def(l1, mod_items)",
    "denied": "def(l1, mod_items, modules, superadmin)",
    "load_l1": "def(path=…)",
    "module_items": "def(manifests)",
