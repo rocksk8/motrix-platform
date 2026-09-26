@@ -20,7 +20,9 @@ CALLERS = ["completion_notes.py", "contractor_vouchers.py", "invoice_vouchers.py
            "payment_requests.py", "quotations.py", "shipping_notes.py"]
 #: 端點檔在 L2 模組裡的（檔名 → 模組路徑）：模組不在這個安裝包時不算（PLAYBOOK §B-11）
 CALLER_MODULES = {"contractor_vouchers.py": "modules/subcontract/api/contractor_vouchers.py",
-                  "shipping_notes.py": "modules/supply/api/shipping_notes.py"}
+                  "shipping_notes.py": "modules/supply/api/shipping_notes.py",
+                  "invoice_vouchers.py": "modules/arap/api/invoice_vouchers.py",       # 2026-09-26 M05
+                  "payment_requests.py": "modules/arap/api/payment_requests.py"}
 
 
 def _old_cascade_self_tiers(tiers, ct_idx, username, now, conn=None):

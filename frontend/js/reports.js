@@ -219,6 +219,8 @@ function reportsApp() {
     get isAccrual()        { return ((this.expensesData || {}).basis || this.expensesBasis) === 'accrual' },
     // 稽核 X-1：某一類整個沒算（模組未安裝）⇒ 頁面明說
     get expenseUnavailable() { return (this.expensesData || {}).unavailable || [] },
+    // M05 應收應付不在 ⇒ 現金口徑收入沒有資料來源（後端 incomeNotice）；不是「這期沒有收款」
+    get incomeNotice()     { return (this.expensesData || {}).incomeNotice || '' },
     get recognitionFlags() {
       var f = (this.expensesData || {}).recognitionFlags || {}
       return Object.keys(f).map(function (k) { return Object.assign({ kind: k }, f[k]) })
@@ -633,6 +635,9 @@ function reportsApp() {
     // 同樣不能假裝是 0。
     payableSnapLoaded: false,
     payableSnapDenied: false,
+    // 404（2026-09-26 M05 搬遷）：出納佇列屬 M05 應收應付；M05 不在 ⇒ 路由不存在（"Not Found"），
+    // M04 外包工班不在 ⇒ 待付款依設計 404 並帶說明。兩者都不能畫成 NT$ 0（同上：那會被讀成「這期沒有應付」）
+    payableSnapMissing: '',
 
     async _loadPayableSnapshot() {
       if (this.payableSnapLoaded || this.cashierLoaded) return
@@ -650,14 +655,23 @@ function reportsApp() {
         ])
         if (rp.ok) this.payable = await rp.json()
         else if (rp.status === 403) this.payableSnapDenied = true
+        else if (rp.status === 404) this.payableSnapMissing = await this._missingReason(rp)
         if (rr.ok) this.receivable = await rr.json()
         else if (rr.status === 403) this.payableSnapDenied = true
+        else if (rr.status === 404) this.payableSnapMissing = this.payableSnapMissing || await this._missingReason(rr)
       } catch (e) { console.error('payable snapshot:', e) }
       this.payableSnapLoaded = true
     },
 
     get netPosition() { return this.kpiReceivableTotal - this.kpiPayableTotal },
-    get payableKnown() { return !this.payableSnapDenied && (this.payableSnapLoaded || this.cashierLoaded) },
+    get payableKnown() { return !this.payableSnapDenied && !this.payableSnapMissing && (this.payableSnapLoaded || this.cashierLoaded) },
+
+    // 404 的原因：端點帶了說明（例：外包工班模組未安裝）就用它；路由不存在（"Not Found"）⇒ 本功能的模組未安裝
+    async _missingReason(res) {
+      var j = await res.json().catch(function () { return {} })
+      var d = j.detail || ''
+      return (d && d !== 'Not Found') ? d : '應收應付模組未安裝'
+    },
 
     // 長條各自對「自己這一組」的最大值縮放。收支（流量）與應收應付（存量）
     // 是兩種不同量綱，共用同一個比例尺會讓其中一組永遠貼著邊——同一張圖上

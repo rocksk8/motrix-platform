@@ -9,6 +9,11 @@
 一併補上 cashier 判斷的 paid-toggle／mark_payment／bank-reconcile 一致。
 """
 import json
+import pytest
+
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
 
 
 def _login(client, username, password):
@@ -78,6 +83,7 @@ def _make_quotation_with_unreceived_item(quote_no, expected_receipt_date=""):
         conn.close()
 
 
+@_NEEDS_ARAP
 def test_payable_queue_requires_admin_or_cashier(client, make_user):
     viewer_username, viewer_password = make_user(role="viewer", modules=[])
     viewer_token = _login(client, viewer_username, viewer_password)
@@ -95,6 +101,7 @@ def test_payable_queue_requires_admin_or_cashier(client, make_user):
     assert r3.status_code == 200, r3.text
 
 
+@_NEEDS_ARAP
 def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -121,6 +128,7 @@ def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_
     assert v_soon not in [v["voucherNo"] for v in r2.json()]
 
 
+@_NEEDS_ARAP
 def test_finance_module_can_view_but_not_execute(client, make_user):
     """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
     payable/receivable/execution-history），但標記動作走 admin+/cashier 專用

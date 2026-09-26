@@ -10,6 +10,11 @@ import io
 import json
 
 import openpyxl
+import pytest
+
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
 
 
 def _login(client, username, password):
@@ -79,6 +84,7 @@ def _make_quotation_with_unreceived_item(quote_no, expected_receipt_date=""):
         conn.close()
 
 
+@_NEEDS_ARAP
 def test_execution_history_date_range_filters_outgoing_and_incoming(client, make_user):
     username, password = make_user(username="hist_admin1", role="superadmin")
     token = _login(client, username, password)
@@ -129,6 +135,7 @@ def test_execution_history_date_range_filters_outgoing_and_incoming(client, make
     )
 
 
+@_NEEDS_ARAP
 def test_export_excel_has_both_sheets_with_data(client, make_user):
     username, password = make_user(username="hist_admin2", role="superadmin")
     token = _login(client, username, password)

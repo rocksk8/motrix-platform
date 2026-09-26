@@ -7,8 +7,6 @@
 """
 import pytest
 
-import routers.invoice_vouchers as iv
-import routers.payment_requests as pr
 import routers.quotations as q
 
 
@@ -45,10 +43,10 @@ def _lock_is_free():
 CASES = {
     # 外包工班的端點以模組路徑字串登記：模組不在這個安裝包時不 import（PLAYBOOK §B-11，稽核 D M04-M1）
     "contractor_voucher_create": ("modules.subcontract.api.contractor_vouchers", "post", "/api/contractor-vouchers", {"dispatch_id": 1}),
-    "invoice_voucher_create": (iv, "post", "/api/invoice-vouchers", {"quote_no": "MQ-X", "scope": "amount", "amount": 100}),
-    "payment_request_create": (pr, "post", "/api/payment-requests",
+    "invoice_voucher_create": ("modules.arap.api.invoice_vouchers", "post", "/api/invoice-vouchers", {"quote_no": "MQ-X", "scope": "amount", "amount": 100}),
+    "payment_request_create": ("modules.arap.api.payment_requests", "post", "/api/payment-requests",
                                {"quote_no": "MQ-X", "scope": "amount", "stage": "full", "amount": 100}),
-    "payment_request_update": (pr, "put", "/api/payment-requests/PR-X", {"scope": "amount", "stage": "full", "amount": 100}),
+    "payment_request_update": ("modules.arap.api.payment_requests", "put", "/api/payment-requests/PR-X", {"scope": "amount", "stage": "full", "amount": 100}),
     # lost update C 組新包進 write_txn 的三支（讀之前就拿鎖 ⇒ 拿鎖後出錯也要放）
     "quotation_status": (q, "patch", "/api/quotations/MQ-X/status", {"status": "已送出"}),
     "quotation_recall": (q, "post", "/api/quotations/MQ-X/recall", None),

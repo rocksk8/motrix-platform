@@ -13,6 +13,10 @@ pytest.importorskip("playwright.sync_api")
 
 from core import registry  # noqa: E402
 
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
+
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
@@ -25,6 +29,7 @@ def _open_cashier(live_server, make_user, new_page, login_as, name):
     return page
 
 
+@_NEEDS_ARAP
 @pytest.mark.e2e
 def test_no_notice_when_subcontract_is_present(live_server, make_user, new_page, login_as):
     page = _open_cashier(live_server, make_user, new_page, login_as, "e2e_ip14_present")

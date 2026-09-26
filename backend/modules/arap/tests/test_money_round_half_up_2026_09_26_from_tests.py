@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""金額捨入統一四捨五入（X-VAT，2026-09-26；R 稽核修正帶出：開票申請的營業稅用內建 round()）。
+"""需要應收應付（M05）的題：刪掉 modules/arap 時隨模組消失（PLAYBOOK §B-11）。
+
+（2026-09-26 自 tests/test_money_round_half_up_2026_09_26.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
+金額捨入統一四捨五入（X-VAT，2026-09-26；R 稽核修正帶出：開票申請的營業稅用內建 round()）。
 
 內建 `round()` 是銀行家捨入（.5 取偶數：round(1250.5) == 1250）；前端 `Math.round(a * b)` 在浮點乘積
 落在 x.4999… 時少 1 元、負數 -1.5 取 -1。共用函式：後端 L1 `helpers.legal_params.round_half_up`
@@ -17,7 +20,7 @@ from datetime import datetime
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 FRONTEND = ROOT / "frontend"
 
 
@@ -25,32 +28,10 @@ FRONTEND = ROOT / "frontend"
 # 共用函式
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_quotations_round_half_up_forwards_to_the_legal_params_service():
-    from helpers import legal_params as lp
-    from helpers.quotations import round_half_up
-    assert round_half_up(1250.5) == 1251 and round_half_up(1250.4) == 1250      # 正對照＋.5
-    assert round_half_up(1251, 0.05) == lp.round_half_up(1251, 0.05) == 63      # 62.55
-    assert round_half_up(-2.5) == -3, "負數遠離 0（Decimal ROUND_HALF_UP）"
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 報價：收款期別金額（helpers/quotations.py::payment_item_amounts）
 # ══════════════════════════════════════════════════════════════════════════════
-
-def test_payment_items_by_pct_round_half_up():
-    """10,015 × 30% ＝ 3,004.5 ⇒ 3,005（舊：3,004；畫面 Math.round 一直是 3,005 ⇒ 前後端差 1 元）。"""
-    from helpers.quotations import payment_item_amounts
-    # 第 2 期由 pct 算（L329）；第 1 期＝總額 − 其他期（其他期也由 pct 算，L319）
-    assert payment_item_amounts(10015, [{"pct": 70}, {"pct": 30}]) == [7010, 3005]
-    # 正對照：沒有 .5 的比例
-    assert payment_item_amounts(10000, [{"pct": 70}, {"pct": 30}]) == [7000, 3000]
-
-
-def test_tax_exempt_item_converts_to_pretax_half_up():
-    """沖銷免稅期別：含稅 24 × 未稅 30／含稅 32 ＝ 22.5 ⇒ 23（舊：22）。L331"""
-    from helpers.quotations import payment_item_amounts
-    assert payment_item_amounts(32, [{"amount": 24, "taxExempt": True}], pretax=30) == [23]
-    assert payment_item_amounts(32, [{"amount": 16, "taxExempt": True}], pretax=30) == [15]    # 正對照
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -92,20 +73,106 @@ def _voucher(client, h, body):
 _ITEMS = [{"id": 1, "type": "item", "description": "設備", "qty": 10, "unitPrice": 1000, "amount": 10000}]
 
 
+def test_invoice_by_amount_converts_to_pretax_half_up(client, make_user):
+    """應稅報價 未稅 10,004／含稅 10,504（稅 500.2⇒500）：申請 1,313 ⇒ 未稅 1,313×10,004／10,504＝1,250.5
+    ⇒ 1,251（舊：1,250）⇒ 稅額 round_half_up(62.55)＝63、含稅 1,314（舊：1,250／63／1,313）。L336"""
+    h = _hdr(client, make_user)
+    _quote("MQ-VAT-A1", 10004, 10504, {"taxRate": 5, "taxType": "taxable", "items": _ITEMS})
+    assert _voucher(client, h, {"quote_no": "MQ-VAT-A1", "scope": "amount", "amount": 1313}) == (1251, 63, 1314)
+    # 正對照：換算結果不是 .5
+    assert _voucher(client, h, {"quote_no": "MQ-VAT-A1", "scope": "amount", "amount": 1050}) == (1000, 50, 1050)
+
+
+def test_invoice_by_items_on_a_legacy_quote_grosses_up_half_up(client, make_user):
+    """舊 3% 報價（未稅 10,000／含稅 10,300）依品項：未稅 150 ⇒ 含稅 154.5 ⇒ 155（舊：154）。L369"""
+    h = _hdr(client, make_user)
+    _quote("MQ-VAT-A2", 10000, 10300, {"taxRate": 3, "items": _ITEMS})
+    assert _voucher(client, h, {"quote_no": "MQ-VAT-A2", "scope": "items",
+                                "items": [{"itemId": 1, "qty": 1, "amount": 150}]}) == (150, 5, 155)
+    assert _voucher(client, h, {"quote_no": "MQ-VAT-A2", "scope": "items",
+                                "items": [{"itemId": 1, "qty": 1, "amount": 100}]}) == (100, 3, 103)   # 正對照
+
+
+def test_invoice_snapshot_pretax_and_tax_round_half_up(client, make_user):
+    """舊 3% 報價依品項 未稅 82.5：含稅 round_half_up(84.975)＝85；快照未稅 82.5⇒83（舊：82）、
+    稅額 85−82.5＝2.5⇒3（舊：2）。L406、L407"""
+    h = _hdr(client, make_user)
+    _quote("MQ-VAT-A3", 10000, 10300, {"taxRate": 3, "items": _ITEMS})
+    assert _voucher(client, h, {"quote_no": "MQ-VAT-A3", "scope": "items",
+                                "items": [{"itemId": 1, "qty": 1, "amount": 82.5}]}) == (83, 3, 85)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 請款單（routers/payment_requests.py）
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _calc(scope, quote_total, quote_pretax, ratio=None, amount=None, items=None, data_items=None):
-    from modules.arap.api.payment_requests import _calc_scope_amount, RequestItemIn   # M05（2026-09-26）
+    from modules.arap.api.payment_requests import _calc_scope_amount, RequestItemIn
     data = {"items": data_items or _ITEMS}
     remaining = {"items": [{"itemId": it["id"], "remainingQty": it["qty"]} for it in data["items"]]}
     items_in = [RequestItemIn(**x) for x in items] if items else None
     return _calc_scope_amount(data, remaining, quote_total, quote_pretax, scope, ratio, amount, items_in)[:4]
 
 
+def test_payment_request_by_ratio_rounds_half_up():
+    """含稅 10,015 × 30% ＝ 3,004.5 ⇒ 3,005（舊：3,004）。L258"""
+    req, _pre, _tax, pct = _calc("amount", 10015, 9538, ratio=30)
+    assert (req, pct) == (3005, 30)
+    assert _calc("amount", 10000, 9524, ratio=30)[0] == 3000                         # 正對照
+
+
+def test_payment_request_ratio_pct_rounds_half_up_to_two_decimals():
+    """10 ／ 8,000 ＝ 0.125% ⇒ 0.13（舊：round(0.125, 2)＝0.12）。L261（建立）與 L297（依品項）"""
+    assert _calc("amount", 8000, 7619, amount=10)[3] == 0.13
+    assert _calc("items", 8000, 8000, items=[{"itemId": 1, "qty": 1, "amount": 10}])[3] == 0.13
+    assert _calc("amount", 8000, 7619, amount=12)[3] == 0.15                          # 正對照（0.15%）
+
+
+def test_payment_request_by_amount_converts_to_pretax_half_up():
+    """含稅 1,313 × 10,004／10,504 ＝ 1,250.5 ⇒ 1,251（舊：1,250）。L266"""
+    req, pre, tax, _pct = _calc("amount", 10504, 10004, amount=1313)
+    assert (req, pre, tax) == (1313, 1251, 62)
+    assert _calc("amount", 10504, 10004, amount=10504)[:3] == (10504, 10004, 500)     # 正對照
+
+
+def test_payment_request_by_items_grosses_up_half_up():
+    """未稅 10 × 21,000／20,000 ＝ 10.5 ⇒ 11（舊：10）。L296"""
+    req, pre, tax, _pct = _calc("items", 21000, 20000, items=[{"itemId": 1, "qty": 1, "amount": 10}])
+    assert (req, pre, tax) == (11, 10, 1)
+    assert _calc("items", 21000, 20000, items=[{"itemId": 1, "qty": 1, "amount": 20}])[:3] == (21, 20, 1)
+
+
 def _pr_body(scope, **kw):
     return dict({"scope": scope, "stage": "deposit"}, **kw)
+
+
+def test_payment_request_snapshot_rounds_half_up_on_create_and_update(client, make_user):
+    """快照的未稅／稅額（L428／L429 建立、L531／L532 更新）。
+    - 依金額 34.5（含稅 3,200／未稅 3,000）：未稅 round_half_up(32.34375)＝32、稅額 2.5 ⇒ 3（舊：2）
+    - 依品項 82.5：含稅 round_half_up(88.0)＝88、未稅 82.5 ⇒ 83（舊：82）"""
+    h = _hdr(client, make_user)
+    _quote("MQ-VAT-P1", 3000, 3200, {"items": _ITEMS})
+    r = client.post("/api/payment-requests", headers=h,
+                    json=_pr_body("amount", quote_no="MQ-VAT-P1", amount=34.5))
+    assert r.status_code == 201, r.text
+    no = r.json()["request_no"]
+    d = client.get("/api/payment-requests/" + no, headers=h).json()
+    assert (d["pretaxAmount"], d["taxAmount"]) == (32, 3)
+    r = client.post("/api/payment-requests", headers=h,
+                    json=_pr_body("items", quote_no="MQ-VAT-P1", items=[{"itemId": 1, "qty": 1, "amount": 82.5}]))
+    assert r.status_code == 201, r.text
+    d = client.get("/api/payment-requests/" + r.json()["request_no"], headers=h).json()
+    assert (d["amount"], d["pretaxAmount"]) == (88, 83)
+    # 更新（同一張單改成依品項 82.5、再改回依金額 34.5）
+    r = client.put("/api/payment-requests/" + no, headers=h,
+                   json=_pr_body("items", items=[{"itemId": 1, "qty": 1, "amount": 82.5}]))
+    assert r.status_code == 200, r.text
+    d = client.get("/api/payment-requests/" + no, headers=h).json()
+    assert (d["amount"], d["pretaxAmount"]) == (88, 83)
+    r = client.put("/api/payment-requests/" + no, headers=h, json=_pr_body("amount", amount=34.5))
+    assert r.status_code == 200, r.text
+    d = client.get("/api/payment-requests/" + no, headers=h).json()
+    assert (d["pretaxAmount"], d["taxAmount"]) == (32, 3)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -140,6 +207,17 @@ def _insert_dispatch_row(quote_no, total_amount, personnel=None):
         conn.close()
 
 
+def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
+    import modules.analytics.api.reports as rp
+
+    def _mk(rows, **extra):
+        return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",
+                                      "provisional": False}, **extra) for d, amt in rows]
+    monkeypatch.setattr(rp, "dispatch_entries", _mk(contractor))
+    monkeypatch.setattr(rp, "material_entries", _mk(material))
+    monkeypatch.setattr(rp, "extra_entries", _mk(other, files=[], pending=False, category="其他"))
+
+
 def _stock(part_no, cost, created, category="其他"):
     import db
     conn = db.get_db()
@@ -150,42 +228,6 @@ def _stock(part_no, cost, created, category="其他"):
         conn.commit()
     finally:
         conn.close()
-
-
-def test_accounting_voucher_line_rounds_half_up():
-    """傳票匯出的借貸金額：10.5 ⇒ 11（舊：10）、12.5 ⇒ 13（舊：12）。accounting_export L251"""
-    from routers.accounting_export import _voucher_line
-    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 10.5, 12.5, "", "", "")
-    assert (ln["debit"], ln["credit"]) == (11, 13)
-    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 11.5, 0, "", "", "")      # 正對照
-    assert (ln["debit"], ln["credit"]) == (12, 0)
-
-
-def test_recognition_flag_amount_rounds_half_up():
-    """待補登標註的金額：10.5 ⇒ 11（舊：10）。recognition L339"""
-    from helpers.recognition import _flag_item
-    assert _flag_item("Q", "c", "d", "x", 10.5, "2026-01-01", True, "extra_no_invoice")["amount"] == 11
-    assert _flag_item("Q", "c", "d", "x", None, "2026-01-01", True, "extra_no_invoice")["amount"] is None
-
-
-def test_extra_expense_total_rounds_half_up_to_cents(client):
-    """額外支出小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊：round(0.145, 2)＝0.14）。
-    case_extra_expenses L172（_recalc）、L725（核准變更 _apply_change）"""
-    import db
-    from routers.case_extra_expenses import ExtraExpenseIn, _recalc, _apply_change
-    assert _recalc(ExtraExpenseIn(qty=1, unitCost=0.145)) == 0.15
-    assert _recalc(ExtraExpenseIn(qty=3, unitCost=100.1)) == 300.3                         # 正對照
-    conn = db.get_db()
-    try:
-        conn.execute("INSERT INTO case_extra_expenses (quote_no, description, qty, unit_cost, total_cost) "
-                     "VALUES (?,?,?,?,?)", ("MQ-VAT-X1", "x", 1, 1, 1))
-        row = conn.execute("SELECT * FROM case_extra_expenses WHERE quote_no='MQ-VAT-X1'").fetchone()
-        total = _apply_change(conn, row, {"qty": 1, "unitCost": 0.145, "description": "x"}, "主管",
-                              datetime.now().isoformat())
-        conn.rollback()
-    finally:
-        conn.close()
-    assert total == 0.15
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -247,119 +289,3 @@ def _cm(body):
     parts = sorted((FRONTEND / "js").glob("case-management-*.js"))
     parts.sort(key=lambda p: p.name != "case-management-core.js")
     return _js("cm", "|".join(str(p) for p in parts), "", body)
-
-
-@needs_node
-def test_frontend_quotation_item_amount_and_charity_round_half_up():
-    """報價表單：數量 0.7 × 單價 45 ＝ 31.5 ⇒ 32（舊 Math.round(0.7*45)＝31，浮點 31.499…）；
-    直接利潤 −150 的公益 1% ＝ −1.5 ⇒ −2（舊 Math.round(−1.5)＝−1）；稅額 9,810 × 5% ⇒ 491（正對照）。"""
-    got = _page("quotation-form.html", "quotationForm", """
-        const it = { type: 'item', qty: 0.7, unitPrice: 45, cost: 0, unitPriceOverride: true }
-        o.q = { items: [it], discount: 0, freight: 0, taxRate: 5 }
-        o.calcItem(it)
-        const a = it.amount
-        o.q = { items: [{ type: 'item', qty: 1, unitPrice: 100, amount: 100, cost: 238 }], discount: 0, freight: 0, taxRate: 5 }
-        o.calcTotals()
-        const t1 = o.tot
-        o.q = { items: [{ type: 'item', qty: 1, unitPrice: 9810, amount: 9810, cost: 0 }], discount: 0, freight: 0, taxRate: 5 }
-        o.calcTotals()
-        return { a, directProfit: t1.directProfit, charity: t1.charityDonation, tax: o.tot.tax, total: o.tot.total }""")
-    assert got == {"a": 32, "directProfit": -150, "charity": -2, "tax": 491, "total": 10301}
-
-
-@needs_node
-def test_frontend_payment_request_form_matches_the_backend():
-    """請款單頁：品項 0.7 × 45 ⇒ 32（舊 31）；依金額 3,939 的未稅試算 3,939×10,004／10,504＝3,751.5 ⇒ 3,752
-    （舊 3,939／(10,504／10,004) 浮點 3,751.4999… ⇒ 3,751）；比例 30% of 10,015 ⇒ 3,005（正對照）。"""
-    got = _page("payment-request-form.html", "paymentRequestForm", """
-        o.toggleItem({ itemId: 1, remainingQty: 0.7, unitPrice: 45 })
-        const a = o.itemSelections[1].amount
-        o.remaining = { quoteTotal: 10504, quotePretax: 10004 }
-        o.q.scope = 'amount'; o.ratioInput = 0; o.amountInput = 3939
-        const pre = o.currentPretax()
-        o.remaining = { quoteTotal: 10015, quotePretax: 9538 }; o.ratioInput = 30
-        return { a, pre, ratio: o.ratioToAmount() }""")
-    assert got == {"a": 32, "pre": 3752, "ratio": 3005}
-
-
-@needs_node
-def test_frontend_case_finance_matches_the_backend():
-    """案件財務（開票申請試算）：品項 0.7 × 45 ⇒ 32（舊 31）；依金額未稅 3,939 ⇒ 3,752（舊 3,751）；
-    收款期別 10,015 × 30% ⇒ 3,005（正對照；後端舊值 3,004 見上面的題）。"""
-    got = _cm("""
-        o.ivItemSelections = {}
-        o.ivToggleItem({ itemId: 1, remainingQty: 0.7, unitPrice: 45 })
-        o.ivRemaining = { quoteTotal: 10504, quotePretax: 10004 }; o.ivAmountInput = 3939
-        o.selected = { total: 10015, pretax: 9538 }
-        o.paymentItems = () => [{ pct: 70 }, { pct: 30 }]
-        return { a: o.ivItemSelections[1].amount, pre: o.ivAmountPretax(), p2: o.itemAmountWithTax(1) }""")
-    assert got == {"a": 32, "pre": 3752, "p2": 3005}
-
-
-@needs_node
-def test_frontend_dispatch_and_extra_expense_match_the_backend():
-    """派工品項 0.7 × 45 ⇒ 32（舊 31）；派工稅額 10,010 × 5% ⇒ 501（正對照，後端舊值 500）；
-    額外支出 1 × 0.145 ⇒ 0.15（舊 Math.round(14.499…)／100＝0.14）——與後端 _recalc 一致。"""
-    got = _cm("""
-        o._recalcDispatchTotal = () => {}
-        o.dispatchForm = { items: [{ qty: 0.7, unitPrice: 45 }], tax_rate: 0.05 }
-        o.onDispatchItemPrice(0)
-        const a = o.dispatchForm.items[0].amount
-        o.dispatchForm = { items: [{ amount: 10010 }], tax_rate: 0.05 }
-        const tax = o._dispatchTaxAmount()
-        o.xe = { items: [{ qty: 1, unitCost: 0.145, change: { qty: 1, unitCost: 0.145 } }], msg: '' }
-        o.xeRecalc(0); o.xeChangeRecalc(0)
-        return { a, tax, x: o.xe.items[0].totalCost, c: o.xe.items[0].change.totalCost }""")
-    assert got == {"a": 32, "tax": 501, "x": 0.15, "c": 0.15}
-
-
-@needs_node
-def test_frontend_settlement_rounds_half_up():
-    """成本精算：實際 0.7 × 45 ⇒ 32（舊 31）；毛利 −150 的公益 1% ⇒ −2（舊 −1）；管理費 10% of 105 ⇒ 11（正對照）。"""
-    got = _page("settlement.html", "settlementPage", """
-        const it = { actualQty: 0.7, actualUnitCost: 45, actualCostTaxMode: 'untaxed' }
-        o.calcItemCost(it)
-        o._origTot = { pretax: 105, total: 110 }
-        o.settlement = { items: [] }
-        o.xeTotal = 255
-        o.dispatchTotal = () => 0
-        o.calcSummary()
-        return { a: it.actualTotalCost, gross: o.summary.grossProfit, charity: o.summary.charityDonation,
-                 admin: o.summary.adminCost }""")
-    assert got == {"a": 32, "gross": -150, "charity": -2, "admin": 11}
-
-
-@needs_node
-def test_frontend_material_order_amounts_round_half_up_to_cents():
-    """叫料小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊 Math.round(0.145*100)/100＝0.14，浮點 14.499…）；
-    部分付款 0.145 ⇒ 0.15（同上）；2 × 100.1 ⇒ 200.2（正對照）。case-management-exec.js moRecalc／moSave"""
-    got = _cm("""
-        o.materialOrders = [{ quantity: 1, unitPrice: 0.145, paidStatus: 'paid' }, { quantity: 2, unitPrice: 100.1 }]
-        o.moRecalc(0); o.moRecalc(1)
-        return [o.materialOrders[0].totalPrice, o.materialOrders[0].paidAmount, o.materialOrders[1].totalPrice]""")
-    assert got == [0.15, 0.15, 200.2]
-
-
-@needs_node
-def test_frontend_material_order_save_payload_rounds_half_up_to_cents():
-    """送出前的正規化：小計 1 × 0.145 ⇒ 0.15、部分付款 0.145 ⇒ 0.15（舊 0.14／0.14）。moSave"""
-    got = _cm("""
-        let sent = null
-        o.selected = { quote_no: 'Q' }; o.session = { token: 't' }
-        o.materialOrders = [{ itemName: '線材', quantity: 1, unitPrice: 0.145, paidStatus: 'partial', paidAmount: 0.145, paidDate: '2026-09-26' }]
-        const realFetch = globalThis.fetch
-        globalThis.fetch = (url, opt) => { sent = JSON.parse(opt.body); return new Promise(() => {}) }
-        o.moSave()
-        globalThis.fetch = realFetch
-        const m = sent && sent.materialOrders[0]
-        return m ? [m.totalPrice, m.paidAmount] : ['no-payload', o.moMsg || '']""")
-    assert got == [0.15, 0.15]
-
-
-@needs_node
-def test_frontend_reports_estimated_profit_rounds_half_up():
-    """營運報表頁的預估淨利＝未稅 × 淨利率：100 × −1.5% ＝ −1.5 ⇒ −2（舊 Math.round(−1.5)＝−1）；
-    10,000 × 12.3% ⇒ 1,230（正對照）。reports.js estGrossProfit"""
-    got = _js("js", str(FRONTEND / "js" / "reports.js"), "reportsApp", """
-        return [o.estGrossProfit({ pretax: 100, netMarginPct: -1.5 }), o.estGrossProfit({ pretax: 10000, netMarginPct: 12.3 })]""")
-    assert got == [-2, 1230]
