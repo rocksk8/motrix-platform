@@ -14,5 +14,8 @@ MODULE = ModuleSpec(
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
         # IP-14：M05 出納與 M06 會計匯出讀付款憑據的形狀
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
+        # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的承攬商匯款申請
+        ("approval.queue_items", "subcontract"): contractor_vouchers.queue_items,
+        ("approval.reassign", "contractor_voucher"): contractor_vouchers.REASSIGN,
     },
 )

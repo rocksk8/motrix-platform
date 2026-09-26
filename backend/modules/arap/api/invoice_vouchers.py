@@ -842,3 +842,37 @@ def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
 
 
 _registry.provide("calendar.writeback", "invoice_voucher", _calendar_writeback)
+
+
+# ── 待我簽核與轉簽（M01-PLAN §3-7，2026-09-26）：本模組提供自己的待簽項目與簽核鏈讀寫，M01 佇列只彙整 ──
+from helpers import approval_queue as _aq  # noqa: E402
+
+#: `approval.reassign`：簽核鏈在 invoice_vouchers.data_json.$.approval
+REASSIGN = _aq.DataJsonApproval("invoice_vouchers", "voucher_no")
+
+
+def queue_items(conn) -> list:
+    """`approval.queue_items`：待審核／簽核中的開票申請憑據（`type`＝`invoice_voucher`）。"""
+    rows = conn.execute("""
+        SELECT voucher_no, quote_no, amount, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM invoice_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    out = []
+    for r in rows:
+        f = _aq.tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        out.append(_aq.base_item(
+            "invoice_voucher", r["voucher_no"], f,
+            customer=snap.get("customerName") or "",
+            projectName=snap.get("projectName") or f"關聯案件 {r['quote_no']}",
+            total=r["amount"] or 0,
+            quoteDate=(r["created_at"] or "")[:10],
+            linkedQuoteNo=r["quote_no"],
+        ))
+    return out

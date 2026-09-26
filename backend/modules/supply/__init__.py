@@ -16,5 +16,8 @@ MODULE = ModuleSpec(
         ("stock.serial", "supply"): inventory._StockSerials,
         # IP-20：M06 T100 付款傳票的料件進貨段
         ("inventory.paid_batches", "supply"): inventory.paid_batches,
+        # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的出貨單
+        ("approval.queue_items", "shipping_note"): shipping_notes._queue_items,
+        ("approval.reassign", "shipping_note"): shipping_notes.REASSIGN,
     },
 )

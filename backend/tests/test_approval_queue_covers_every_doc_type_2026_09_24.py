@@ -43,8 +43,29 @@ def test_an_unmapped_doc_type_is_reported():
 def test_a_mapped_type_missing_from_both_endpoints_is_reported():
     r = check_approval_queue_coverage(doc_types=["voucher"],
                                       queue_source="def f():\n    pass\n",
-                                      count_source="def g():\n    pass\n")
+                                      count_source="def g():\n    pass\n", provider_sources=[])
     assert r["missing_from_queue"] == ["voucher"] and r["missing_from_count"] == ["voucher"]
+
+
+def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_providers():
+    """M01-PLAN §3-7：型別由 `approval.queue_items` 提供者列出 ⇒ 佇列算涵蓋；count 端點沒呼叫 `_queue_provider_items(`
+    ⇒ count 仍算漏掉（提供者的項目只有經彙整才進角標）。"""
+    prov = [("modules/x/api.py", 'def queue_items(conn):\n    conn.execute("SELECT 1 FROM vouchers_all")\n'
+                                 '    return [{"type": "voucher"}]\n')]
+    ok = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
+                                       count_source="items += _queue_provider_items(conn)")
+    assert is_clean(ok)
+    no_agg = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
+                                           count_source="def g():\n    pass\n")
+    assert no_agg["missing_from_queue"] == [] and no_agg["missing_from_count"] == ["voucher"]
+
+
+def test_the_real_provider_scan_finds_the_owner_modules():
+    """量尺：真的登記處掃得到各單據模組的提供者（掃不到 ⇒ 每一種都判成漏掉，或只靠 M01 源碼殘留才綠）。"""
+    from check_approval_queue_coverage import _provider_sources
+    labels = {lbl.replace("\\", "/") for lbl, src in _provider_sources() if src}
+    for f in ("routers/vouchers.py", "helpers/custom_modules.py"):
+        assert f in labels, (f, sorted(labels))
 
 
 def test_a_covered_type_is_not_reported():

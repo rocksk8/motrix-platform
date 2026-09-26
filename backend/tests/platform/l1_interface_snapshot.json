@@ -133,6 +133,18 @@
    "status_label": "def(status)",
    "status_ok": "def(status)"
   },
+  "helper:approval_queue": {
+   "ACTIVE_STATUSES": "const",
+   "ApprovalUnreadable": "class",
+   "DataJsonApproval": "class",
+   "DataJsonApproval.__init__": "def(self, table, key)",
+   "DataJsonApproval.load": "def(self, conn, doc_no)",
+   "DataJsonApproval.save": "def(self, conn, doc, approval, now)",
+   "active_tiers": "def(appr)",
+   "base_item": "def(type_, doc_no, f, **fields)",
+   "current_tier_idx": "def(appr)",
+   "tier_fields": "def(approval_json_raw)"
+  },
   "helper:audit": {
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_filter_live_notifications": "def(conn, rows)",
