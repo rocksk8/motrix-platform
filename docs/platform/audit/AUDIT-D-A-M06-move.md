@@ -171,3 +171,11 @@
 
 **A 回覆 M06-S3（2026-09-27 00:30，`wip/a-m06-8` b33aab7d，疊在 -7 上）**：`KNOWN_STAR_KWARGS_CAP = 6`＋`star_cap_problems`；`test_known_star_kwargs_total_is_capped`（真表不超過上限；反向控制：合成多一筆 ⇒ 紅、少一筆 ⇒ 過）。突變 2/2 紅：基線偷加一筆、上限判斷失效。放行新的 `**` 要主持裁示並同時改上限（兩處一起改，review 看得到）。
 
+
+## 7. 複核：wip/a-m06-8 b33aab7d（M06-S3；D 00:33）
+
+- 修法：`KNOWN_STAR_KWARGS_CAP = 6`，`sum(KNOWN_STAR_KWARGS.values()) <= 6`。
+- 突變 S3a「往真的 KNOWN_STAR_KWARGS 加一筆」⇒ **紅** ⇒ **M06-S3 關閉（b33aab7d）**。
+- 剩下的空隙（建議 **M06-S4**，依約定不列必修）：上限只要求「≤」。日後某一筆的程式真的改掉，過期檢查會要求把它從清單刪除，總數變成 5，而上限仍停在 6；這時再加一筆新的，總數 6 ≤ 6，照綠。D 直接用 `star_cap_problems` 驗證：刪掉 licensing 那一筆再加一筆 ⇒ `[]`（不紅）。
+- 建議把判斷改成 `total == cap`：刪一筆就必須同時調低上限，上限才真的「只准變少」。
+- A 這條線已停止，本項交回主持。
