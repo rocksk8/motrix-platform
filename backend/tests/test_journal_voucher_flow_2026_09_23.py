@@ -486,7 +486,7 @@ def test_jv2_this_file_never_calls_the_helper_directly():
 
     A-2 實查：**8 支傳票測試有 7 支打 0 個 API** ——
     直接叫 `helpers/voucher.py` ⇒ 規則全綠而**沒有一條路走得到**。
-    🔑 ⇒ 這一題釘的是**我自己**：本檔不可以 `from helpers.voucher import …`。
+    🔑 ⇒ 這一題釘的是**我自己**：本檔不可以 `from modules.accounting.voucher import …`。
     ⚠️ 而它擋不住「別的檔那樣做」—— 那是另一題，不在 `JV2` 範圍。
     """
     from pathlib import Path
@@ -495,5 +495,5 @@ def test_jv2_this_file_never_calls_the_helper_directly():
                      if not l.lstrip().startswith("#"))
     bad = re.findall(r"^\s*(?:from|import)\s+helpers\.voucher\b", code, re.M)
     assert not bad, (
-        "本檔直接 import 了 `helpers.voucher`：%s\n" % bad
+        "本檔直接 import 了 `modules.accounting.voucher`：%s\n" % bad
         + "☠️ 那條路繞過 router ⇒ **規則全綠而沒有一條路走得到**。")

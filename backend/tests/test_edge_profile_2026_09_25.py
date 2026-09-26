@@ -9,7 +9,7 @@ from pathlib import Path
 
 import helpers
 import helpers.startup as startup
-import helpers.voucher_pdf as voucher_pdf
+import modules.accounting.voucher_pdf as voucher_pdf
 import pdf_gen
 
 BACKEND = Path(__file__).resolve().parents[1]

@@ -145,7 +145,7 @@ def test_cashier_and_t100_with_m04(client, make_user):
     hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h).json()
     assert hist["contractorNotice"] == ""
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()
-    from routers import accounting_export as ae
+    from modules.accounting.api import accounting_export as ae
     assert ae.T100_CONTRACTOR_MISSING not in prev["notice"].split("；")   # M04 在；其他模組（IP-20 M03）不在時的說明可能並列
 
 

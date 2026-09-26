@@ -370,17 +370,18 @@
    "key": "accounting",
    "name": "會計",
    "units": [
-    "helper:voucher",
-    "helper:voucher_attachments",
-    "helper:voucher_pdf",
-    "helper:voucher_template",
+    "mod:accounting/__init__",
+    "mod:accounting/voucher",
+    "mod:accounting/voucher_attachments",
+    "mod:accounting/voucher_pdf",
+    "mod:accounting/voucher_template",
     "js:js/account-items.js",
     "js:js/voucher.js",
     "page:pages/account-items.html",
     "page:pages/voucher.html",
-    "router:account_items",
-    "router:accounting_export",
-    "router:vouchers"
+    "mod:accounting/api/account_items",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers"
    ],
    "tables": [
     "account_items",
@@ -388,7 +389,6 @@
     "voucher_attachments",
     "voucher_edit_log",
     "voucher_lines",
-    "vouchers",
     "vouchers_all"
    ],
    "api_prefixes": [

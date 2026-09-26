@@ -121,24 +121,6 @@
    "badge": "sb-mod-parts"
   },
   {
-   "group": "finance",
-   "href": "voucher.html",
-   "label": "傳票",
-   "order": 30,
-   "perm": [
-    "cashier"
-   ]
-  },
-  {
-   "group": "finance",
-   "href": "account-items.html",
-   "label": "會計科目",
-   "order": 40,
-   "perm": [
-    "cashier"
-   ]
-  },
-  {
    "group": "mywork",
    "href": "work-log.html",
    "label": "工作日誌",

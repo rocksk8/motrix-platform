@@ -2,6 +2,7 @@
 
 M03 在的一側（整包帶出出貨單、序號認領／衝突／釋放）隨模組的測試。本檔在 M03 不在時也要綠。
 """
+import pytest
 import re
 from pathlib import Path
 
@@ -90,7 +91,7 @@ def test_without_m03_no_serial_change_means_no_notice(client, make_user, monkeyp
 
 def test_without_m03_t100_preview_says_stock_batches_are_missing(client, make_user, monkeypatch):
     """IP-20：M03 不在 ⇒ T100 預覽照常、不含料件付款傳票，notice 明說；其他來源的說明照舊並列。"""
-    from routers import accounting_export as ae
+    from modules.accounting.api import accounting_export as ae
     _without(monkeypatch, "inventory.paid_batches", "supply")
     h = _login(client, make_user, "sup_t100")
     r = client.get("/api/reports/t100-export/preview?start=2026-01-01&end=2026-12-31", headers=h)
@@ -101,7 +102,11 @@ def test_without_m03_t100_preview_says_stock_batches_are_missing(client, make_us
 
 def test_m06_no_longer_reads_stock_tables():
     """IP-20 之後會計匯出不直讀 M03 的庫存表。正對照：同一個檔仍讀得到 M06 自己的表。"""
-    src = (BACKEND / "routers" / "accounting_export.py").read_text(encoding="utf-8")
+    from core import source_tree
+    rel = "modules/accounting/api/accounting_export.py"                  # M06 搬遷（2026-09-26）
+    if not source_tree.module_installed(rel):
+        pytest.skip("會計（M06）不在：沒有取用方")
+    src = (BACKEND / rel).read_text(encoding="utf-8")
     assert "t100_export_confirmations" in src
     assert not re.search(r"\b(FROM|JOIN)\s+(stock_batches|stock_items)\b", src)
 

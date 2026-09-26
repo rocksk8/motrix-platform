@@ -67,7 +67,7 @@ SNAPSHOT_COLUMNS = (
     "source_amount_snapshot",
 )
 
-_SEAM_MODULES = ("helpers.voucher", "helpers.vouchers", "routers.vouchers")
+_SEAM_MODULES = ("modules.accounting.voucher", "helpers.vouchers", "modules.accounting.api.vouchers")
 
 
 def _voucher_module():

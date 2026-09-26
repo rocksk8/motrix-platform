@@ -671,8 +671,8 @@ def test_jv3_the_source_type_list_is_exactly_the_nine_plus_the_copy_one():
     import importlib
 
     mod = None
-    for name in ("helpers.voucher_attachments", "helpers.voucher",
-                 "routers.vouchers"):
+    for name in ("modules.accounting.voucher_attachments", "modules.accounting.voucher",
+                 "modules.accounting.api.vouchers"):
         try:
             mod = importlib.import_module(name)
         except ImportError:
@@ -695,8 +695,8 @@ def test_jv3_the_source_type_list_is_exactly_the_nine_plus_the_copy_one():
                 return
     pytest.fail(
         "找不到來源型別的白名單常數。\n"
-        + "📌 我找過 `helpers.voucher_attachments`／`helpers.voucher`／\n"
-          "   `routers.vouchers` 裡的 `SOURCE_TYPES`／`ATTACHMENT_SOURCES`／\n"
+        + "📌 我找過 `modules.accounting.voucher_attachments`／`modules.accounting.voucher`／\n"
+          "   `modules.accounting.api.vouchers` 裡的 `SOURCE_TYPES`／`ATTACHMENT_SOURCES`／\n"
           "   `PICK_SOURCES`。**用別的名字退回給我。**\n"
         + "⚠️ 而它必須是**一份可以數的清單**，不可以散在 if/elif 裡 ——\n"
           "   散著的話「少一類」永遠不會有人發現。")

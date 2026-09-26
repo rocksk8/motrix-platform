@@ -81,7 +81,7 @@ def test_case_bundle_without_m04(client, make_user, monkeypatch):
 @pytest.mark.parametrize("rel,pattern", [
     ("routers/quotations.py", r"from (routers|modules\.subcontract)[\w.]* import .*(list_dispatches|vendor_contractors)"),
     ("modules/arap/api/cashier.py", r"contractor_vouchers import|_voucher_public"),     # 2026-09-26 出納搬進 M05
-    ("routers/accounting_export.py", r"contractor_vouchers import|_voucher_public"),
+    ("modules/accounting/api/accounting_export.py", r"contractor_vouchers import|_voucher_public"),   # M06 搬遷
 ])
 def test_no_direct_imports_across(rel, pattern):
     if not source_tree.module_installed(rel):
@@ -92,7 +92,10 @@ def test_no_direct_imports_across(rel, pattern):
 
 def test_accounting_export_no_longer_reads_the_subcontract_tables():
     """IP-14 paid_between（2026-09-26）：M06 的 T100 匯出不再自己讀 contractor_payment_vouchers（只經 provider）。"""
-    text = (source_tree.BACKEND / "routers" / "accounting_export.py").read_text(encoding="utf-8")
+    rel = "modules/accounting/api/accounting_export.py"
+    if not source_tree.module_installed(rel):
+        pytest.skip("會計（M06）不在：沒有取用方")
+    text = (source_tree.BACKEND / rel).read_text(encoding="utf-8")
     import ast as _ast
     sql = [n.value for n in _ast.walk(_ast.parse(text)) if isinstance(n, _ast.Constant) and isinstance(n.value, str)
            and "contractor_payment_vouchers" in n.value and ("SELECT" in n.value.upper() or "FROM" in n.value.upper())]

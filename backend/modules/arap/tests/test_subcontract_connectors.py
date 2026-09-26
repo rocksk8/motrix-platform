@@ -67,7 +67,7 @@ def _items():
 # ── IP-14（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
-    from routers import accounting_export as ae
+    from modules.accounting.api import accounting_export as ae
     from modules.arap.api import cashier as ca
     h = _hdr(client, make_user)
     _seed()

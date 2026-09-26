@@ -48,8 +48,8 @@ import tempfile
 
 from db import get_db
 from helpers import _get_edge_path, _get_setting, run_edge_pdf
-from helpers.voucher import CATEGORY_TITLES, approval_done, get_voucher
-from helpers.voucher_attachments import abs_path
+from modules.accounting.voucher import CATEGORY_TITLES, approval_done, get_voucher
+from modules.accounting.voucher_attachments import abs_path
 
 logger = logging.getLogger(__name__)
 

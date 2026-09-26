@@ -167,12 +167,15 @@ def test_write_exceptions_are_classified(exceptions):
 # ══════════════════════════════════════════════════════════════════════════
 
 def _pick_new_cross_edge(units, groups, baseline):
-    """找一對 L2 router（不同組），其間目前沒有邊。"""
-    routers = sorted((groups.owner(n), n) for n, u in units.items()
-                     if u["kind"] == "router" and groups.owner(n) in groups.l2)
+    """找一對 L2 單位（不同組），其間目前沒有邊：起點是 routers/ 底下的 router（端到端題要在它的原始碼加一行），
+    終點可以是 router 或已搬進 modules/ 的單位（2026-09-26 A：M06 搬遷後 routers/ 只剩 M01，不同組的 router 對已經不存在）。"""
+    starts = sorted((groups.owner(n), n) for n, u in units.items()
+                    if u["kind"] == "router" and groups.owner(n) in groups.l2)
+    ends = sorted((groups.owner(n), n) for n, u in units.items()
+                  if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2)
     base = set(baseline)
-    for g1, r1 in routers:
-        for g2, r2 in routers:
+    for g1, r1 in starts:
+        for g2, r2 in ends:
             if g1 != g2 and "%s %s -> %s %s" % (g1, r1, g2, r2) not in base:
                 return g1, r1, g2, r2
     pytest.fail("找不到可突變的 router 對")
@@ -259,7 +262,7 @@ def test_rc_end_to_end_through_real_source(tmp_path, dep_scan, groups, baseline)
     """
     root = B.REPO
     sandbox = tmp_path / "repo"
-    for sub, pats in (("backend", ("*.py", "routers/*.py", "helpers/*.py")),
+    for sub, pats in (("backend", ("*.py", "routers/*.py", "helpers/*.py", "modules/**/*.py")),
                       ("frontend", ("**/*.html", "**/*.js"))):
         for pat in pats:
             for p in (root / sub).glob(pat):
@@ -272,9 +275,10 @@ def test_rc_end_to_end_through_real_source(tmp_path, dep_scan, groups, baseline)
     units0 = B.scan_units(dep_scan)
     g1, r1, g2, r2 = _pick_new_cross_edge(units0, groups, baseline)
     src_file = sandbox / units0[r1]["path"]
-    src_file.write_text(src_file.read_text(encoding="utf-8-sig")
-                        + "\nfrom routers import %s as _zz_mutant  # noqa\n" % r2.split(":", 1)[1],
-                        encoding="utf-8")
+    kind2, name2 = r2.split(":", 1)
+    line = ("from routers import %s as _zz_mutant" % name2 if kind2 == "router"
+            else "import modules.%s as _zz_mutant" % name2.replace("/", "."))
+    src_file.write_text(src_file.read_text(encoding="utf-8-sig") + "\n%s  # noqa\n" % line, encoding="utf-8")
     (sandbox / "backend" / "routers" / "zz_mutant.py").write_text(
         "from fastapi import APIRouter\nrouter = APIRouter()\n", encoding="utf-8")
 

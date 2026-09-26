@@ -54,7 +54,7 @@ def test_jv13_an_unknown_username_falls_back_to_the_username_not_blank(client):
     ⚠️ `client` 不可以拿掉：DB 隔離是它建起來的，少了它 `db.get_db()` 會指到真的資料庫。
     """
     import db
-    from helpers.voucher import resolve_display_names
+    from modules.accounting.voucher import resolve_display_names
     conn = db.get_db()
     try:
         out = resolve_display_names(conn, {"製票": {"by": "no_such_user_jv13", "at": "x"}})

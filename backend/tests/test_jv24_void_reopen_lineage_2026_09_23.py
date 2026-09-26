@@ -26,7 +26,7 @@ B 沒有帶測試（協定：B 不寫測試，C 才寫）。B 自己的探針
 # ✅ 牙齒已驗證（方式：歷史真碼／常設）
 
 ```
-①③（used）  monkeypatch routers.vouchers._copy_attachments_to 換成
+①③（used）  monkeypatch modules.accounting.api.vouchers._copy_attachments_to 換成
              abf4b60~1 那個真實的「修復前」版本（改寫 source_type 成
              "voucher"＋舊傳票 id），直接對本檔的 test_jv24_a_used_
              candidate_stays_used_after_void_and_reopen 與 test_jv24_
@@ -92,7 +92,7 @@ def _seed_invoice_voucher_candidate(conn, quote_no, file_id):
 
 def _case_attachments(quote_no):
     import db
-    import helpers.voucher_attachments as va
+    import modules.accounting.voucher_attachments as va
     conn = db.get_db()
     try:
         return va.case_attachments(conn, quote_no, {"id": 0, "username": "att_test_root", "role": "superadmin", "modules": []})  # 驗清單內容，不是權限（權限見 test_attachments_providers）

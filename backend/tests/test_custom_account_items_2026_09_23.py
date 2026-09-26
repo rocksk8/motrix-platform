@@ -504,7 +504,7 @@ def test_ca1_disabling_a_custom_code_makes_it_unusable(client, make_user):
     assert _extend(client, hdr).status_code == 200
     child = "%s-1" % PARENT
 
-    from routers.accounting_export import validate_account_code
+    from modules.accounting.api.accounting_export import validate_account_code
     import db
 
     conn = db.get_db()
@@ -558,7 +558,7 @@ def test_ca1_re_enabling_makes_it_usable_again_without_reusing_its_number(
         assert _extend(client, hdr, name="第 %d 個" % (i + 1)).status_code == 200
     target = "%s-2" % PARENT
 
-    from routers.accounting_export import validate_account_code
+    from modules.accounting.api.accounting_export import validate_account_code
     import db
 
     assert _set_active(client, hdr, target, False).status_code == 200

@@ -66,7 +66,7 @@ SOURCES = ("statutory", "system_default", "custom")
 EMPTY_L2 = ["86", "88"]
 
 #: 我釘的接縫。名字要換 **退回給我**，不要自己改題。
-_ROUTER_MODULES = ("routers.account_items", "routers.accounts",
+_ROUTER_MODULES = ("modules.accounting.api.account_items", "routers.accounts",
                    "routers.account_tree")
 #: 頁面檔名候選。
 _PAGE_NAMES = ("account-items.html", "accounts.html", "account-tree.html",
