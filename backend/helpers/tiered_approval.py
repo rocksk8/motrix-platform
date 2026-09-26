@@ -565,7 +565,7 @@ def steps_to_tiers(steps: list) -> list:
 
 # ── 簽核鏈 approval_json 的解析（2026-09-26 自 M06 helpers/voucher 下沉，主持裁示 M06-c）─────────────
 # M01 的簽核佇列也要讀傳票的簽核鏈；解析放在 M06 就是 M01 → M06 的 import（M06 搬進模組後成為 L2 邊）。
-# 這是純解析、沒有資料相依 ⇒ 放在 L1。helpers.voucher 保留同名別名（淘汰中）。
+# 這是純解析、沒有資料相依 ⇒ 放在 L1。helpers.voucher 保留同名別名（登記在 docs/platform/deprecations.json，file＝helpers/voucher.py）。
 
 class ApprovalChainUnreadable(Exception):
     """簽核鏈存在而**讀不出來**。與「沒有簽核鏈」是兩件事。

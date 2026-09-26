@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 654,
+  "tests": 672,
   "unmapped": 7,
   "kinds": {
-   "audit": 88,
-   "api": 349,
+   "audit": 89,
+   "api": 364,
    "unit": 57,
-   "e2e": 160
+   "e2e": 162
   },
   "routes": 571
  },
@@ -255,13 +255,16 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
     "js:js/reports.js",
-    "page:pages/reports.html"
+    "page:pages/reports.html",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py"
@@ -271,6 +274,7 @@
      "frontend/pages/reports.html"
     ],
     "path": [
+     "backend/modules/arap/",
      "frontend/pages/reports.html"
     ],
     "module_dir": [
@@ -300,14 +304,20 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
-    "mod:analytics/api/reports"
+    "dir:backend/modules/arap/",
+    "mod:analytics/api/reports",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/analytics/"
@@ -403,9 +413,6 @@
      "backend/db.py",
      "backend/modules/analytics/api/reports.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
-    ],
-    "api": [
-     "backend/modules/analytics/api/reports.py"
     ],
     "path": [
      "backend/modules/subcontract/"
@@ -796,17 +803,23 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
     "mod:analytics/api/__init__",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/analytics/api/__init__.py",
      "backend/modules/analytics/api/reports.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/analytics/"
@@ -1018,6 +1031,603 @@
     ]
    },
    "module": "analytics"
+  },
+  "backend/modules/arap/tests/test_bonus_payouts_absent.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "mod:analytics/api/reports",
+    "mod:arap/api/__init__",
+    "mod:arap/api/cashier",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "path": [
+     "backend/modules/analytics/"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_case_management_logic_fixes_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_cashier_execution_history_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/cashier",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_cashier_module_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/cashier",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/receivables.html",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/receivables.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_cashier_bank_reconcile_module_absent_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:arap/api/__init__",
+    "mod:arap/api/cashier",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_cashier_receive_amount_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_cashier_subcontract_absent_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/arap/",
+    "mod:arap/api/__init__",
+    "mod:arap/api/cashier",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_finance_advisory_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_invoice_date_and_case_record_validation_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_module_permission_fixes_2026_09_13.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/arap/",
+    "file:backend/tests/test_module_permission_fixes_2026_09_13.py",
+    "mod:arap/api/cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_module_permission_fixes_2026_09_13.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_module_permission_fixes_2026_09_13_from_tests.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/subcontract/",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:supply/api/shipping_notes",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:completion_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/supply/api/shipping_notes.py",
+     "backend/routers/completion_notes.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_money_round_half_up_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "mod:arap/api/cashier",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/test_money_round_half_up_2026_09_26.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_money_round_half_up_2026_09_26_from_tests.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:frontend/js/",
+    "js:js/case-management-core.js",
+    "js:static/legal-round.js",
+    "mod:analytics/api/reports",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/payment_requests.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/static/legal-round.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/static/legal-round.js"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_payment_requests.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/payment_requests",
+    "router:quotations",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/routers/quotations.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_receivables_providers.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "file:backend/routers/__init__.py",
+    "mod:analytics/api/reports",
+    "mod:arap/__init__",
+    "mod:arap/receivables",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/arap/__init__.py",
+     "backend/modules/arap/receivables.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "path": [
+     "backend/modules/analytics/"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_reports_tax_compliance_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_signed_upload_files.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_subcontract_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/routers/__init__.py",
+    "mod:arap/api/__init__",
+    "mod:arap/api/cashier",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/arap/api/__init__.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_tax_basis_r2_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
+    "helper:legal_params",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/legal_params.py",
+     "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_tax_by_law_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
   },
   "backend/modules/crm/tests/test_crm_api_integration.py": {
    "kind": "api",
@@ -2262,6 +2872,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/payroll/",
     "file:backend/helpers/__init__.py",
     "helper:email_notify",
@@ -2270,6 +2881,7 @@
     "helper:notification_prefs",
     "js:js/bonus.js",
     "js:js/cashier.js",
+    "mod:arap/api/cashier",
     "mod:payroll/__init__",
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_deductions",
@@ -2281,7 +2893,6 @@
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:cashier",
     "router:mail_settings",
     "router:vouchers"
    ],
@@ -2302,8 +2913,8 @@
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/payroll/api/bonus.py",
-     "backend/routers/cashier.py",
      "backend/routers/mail_settings.py",
      "backend/routers/vouchers.py"
     ],
@@ -2315,6 +2926,7 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/arap/",
      "frontend/js/bonus.js",
      "frontend/js/cashier.js"
     ],
@@ -2468,15 +3080,18 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/payroll/",
     "file:backend/tests/_e2e_login.py",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/_bonus_insure",
     "page:pages/bonus.html",
-    "page:pages/cashier.html"
+    "page:pages/cashier.html",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/payroll/tests/_bonus_insure.py",
      "backend/tests/_e2e_login.py"
@@ -2489,6 +3104,7 @@
      "frontend/pages/cashier.html"
     ],
     "path": [
+     "backend/modules/arap/",
      "frontend/pages/bonus.html",
      "frontend/pages/cashier.html"
     ],
@@ -2753,24 +3369,24 @@
     "dir:frontend/js/",
     "js:js/case-management-core.js",
     "js:static/legal-round.js",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:payroll/bonus_pdf",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
-    "plat:source_tree",
-    "router:invoice_vouchers",
-    "router:payment_requests"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/payroll/bonus_pdf.py",
-     "backend/routers/payment_requests.py"
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/payroll/bonus_pdf.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/invoice_vouchers.py"
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/js/case-management-core.js",
@@ -3043,21 +3659,27 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "mod:arap/api/cashier",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
-    "router:cashier",
+    "plat:source_tree",
     "router:quotations"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -3070,25 +3692,31 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "mod:arap/api/cashier",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/receivables.html",
-    "router:cashier",
+    "plat:source_tree",
     "router:quotations"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -3296,20 +3924,24 @@
   "backend/modules/subcontract/tests/test_e2e_cashier_subcontract_absent_notice_2026_09_26.py": {
    "kind": "e2e",
    "units": [
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "page:pages/cashier.html",
     "plat:__init__",
-    "plat:registry"
+    "plat:registry",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
-     "backend/core/registry.py"
+     "backend/core/registry.py",
+     "backend/core/source_tree.py"
     ],
     "page": [
      "frontend/pages/cashier.html"
     ],
     "path": [
+     "backend/modules/arap/",
      "frontend/pages/cashier.html"
     ],
     "module_dir": [
@@ -3489,24 +4121,24 @@
     "dir:frontend/js/",
     "js:js/case-management-core.js",
     "js:static/legal-round.js",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
-    "plat:source_tree",
-    "router:invoice_vouchers",
-    "router:payment_requests"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/payment_requests.py"
+     "backend/modules/arap/api/payment_requests.py"
     ],
     "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/invoice_vouchers.py"
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/js/case-management-core.js",
@@ -3616,6 +4248,8 @@
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
     "mod:analytics/api/dashboard",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -3632,12 +4266,10 @@
     "router:completion_notes",
     "router:custom_records",
     "router:customers",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:payment_requests",
     "router:quotations",
     "router:search",
     "router:system",
@@ -3652,6 +4284,8 @@
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -3668,12 +4302,10 @@
      "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
@@ -3742,16 +4374,17 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/subcontract/api/",
     "file:backend/routers/__init__.py",
+    "mod:arap/api/cashier",
     "mod:subcontract/api/__init__",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
     "router:accounting_export",
-    "router:cashier",
     "router:quotations"
    ],
    "evidence": {
@@ -3766,12 +4399,13 @@
      "backend/routers/accounting_export.py"
     ],
     "api": [
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
     ],
     "path": [
+     "backend/modules/arap/",
      "backend/modules/subcontract/",
      "backend/modules/subcontract/api/",
      "backend/modules/subcontract/api/vendor_contractors.py"
@@ -3787,19 +4421,25 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
+    "plat:source_tree",
     "router:accounting_export"
    ],
    "evidence": {
     "import": [
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/accounting_export.py"
+    ],
+    "path": [
+     "backend/modules/arap/"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4690,35 +5330,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/platform/test_bonus_payouts_absent.py": {
-   "kind": "api",
-   "units": [
-    "dir:backend/modules/analytics/",
-    "file:backend/routers/__init__.py",
-    "mod:analytics/api/reports",
-    "plat:__init__",
-    "plat:registry",
-    "plat:source_tree",
-    "router:cashier"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/core/source_tree.py",
-     "backend/routers/__init__.py",
-     "backend/routers/cashier.py"
-    ],
-    "api": [
-     "backend/modules/analytics/api/reports.py",
-     "backend/routers/cashier.py"
-    ],
-    "path": [
-     "backend/modules/analytics/"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/platform/test_case_access_l1.py": {
    "kind": "api",
    "units": [
@@ -4734,7 +5345,6 @@
     "helper:company_identity",
     "helper:google_calendar",
     "helper:quotations",
-    "helper:receivables",
     "helper:row_access",
     "mod:netplan/__init__",
     "mod:netplan/api",
@@ -4768,7 +5378,6 @@
      "backend/helpers/case_access.py",
      "backend/helpers/company_identity.py",
      "backend/helpers/google_calendar.py",
-     "backend/helpers/receivables.py",
      "backend/modules/netplan/",
      "backend/routers/item_reads.py",
      "backend/routers/map_points.py",
@@ -4814,16 +5423,17 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "file:backend/helpers/__init__.py",
     "file:backend/routers/__init__.py",
     "helper:case_stage_tasks",
     "helper:google_calendar",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:invoice_vouchers",
-    "router:payment_requests",
     "router:quotations"
    ],
    "evidence": {
@@ -4836,8 +5446,6 @@
      "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
      "backend/routers/__init__.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ],
     "api": [
@@ -4846,9 +5454,10 @@
     "path": [
      "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py",
+     "backend/modules/arap/",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/supply/api/shipping_notes.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -5274,6 +5883,29 @@
     ]
    }
   },
+  "backend/tests/platform/test_deprecations.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:docs/platform/deprecations.json",
+    "helper:receivables",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "backend/helpers/receivables.py",
+     "docs/platform/",
+     "docs/platform/deprecations.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_dispatch_connector.py": {
    "kind": "api",
    "units": [
@@ -5381,6 +6013,8 @@
     "file:backend/tests/_routes.py",
     "file:docs/platform/modules.json",
     "mod:analytics/api/dashboard",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -5400,12 +6034,10 @@
     "router:custom_records",
     "router:customers",
     "router:definitions",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:payment_requests",
     "router:quotations",
     "router:search",
     "router:system",
@@ -5418,6 +6050,8 @@
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -5435,12 +6069,10 @@
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/definitions.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
@@ -5580,15 +6212,15 @@
     "js:js/case-management-list.js",
     "js:js/case-management-xexp.js",
     "js:static/legal-round.js",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
     "plat:__init__",
-    "plat:source_tree",
-    "router:invoice_vouchers",
-    "router:payment_requests"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -5609,10 +6241,10 @@
     "path": [
      "backend/helpers/legal_params.py",
      "backend/helpers/quotations.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py",
      "frontend/js/",
      "frontend/js/case-management-dispatch.js",
      "frontend/js/case-management-exec.js",
@@ -6360,6 +6992,66 @@
     ]
    }
   },
+  "backend/tests/platform/test_receivables_absent.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "file:backend/routers/__init__.py",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_receivables_shim.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/arap/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/platform/test_tax_calc_contract.py",
+    "helper:receivables",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/receivables.py",
+     "backend/tests/platform/test_tax_calc_contract.py"
+    ],
+    "path": [
+     "backend/helpers/receivables.py",
+     "backend/modules/arap/"
+    ]
+   }
+  },
   "backend/tests/platform/test_requirements_cover_imports.py": {
    "kind": "audit",
    "units": [
@@ -6379,6 +7071,7 @@
     "dir:tools/platform/",
     "file:docs/platform/modules.json",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "router:accounting_export",
     "router:system",
     "router:vouchers"
@@ -6386,6 +7079,7 @@
    "evidence": {
     "api": [
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/routers/accounting_export.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
@@ -6457,11 +7151,11 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
+    "mod:arap/api/cashier",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
     "router:accounting_export",
-    "router:cashier",
     "router:quotations"
    ],
    "evidence": {
@@ -6471,18 +7165,14 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
     ],
     "path": [
+     "backend/modules/arap/api/cashier.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -6555,14 +7245,12 @@
     "dir:tools/platform/",
     "file:docs/platform/UNIT-INDEX.md",
     "file:tools/platform/unit_index.py",
-    "plat:events",
-    "router:cashier"
+    "plat:events"
    ],
    "evidence": {
     "path": [
      "backend/core/",
      "backend/core/events.py",
-     "backend/routers/cashier.py",
      "docs/platform/UNIT-INDEX.md",
      "tools/platform/",
      "tools/platform/unit_index.py"
@@ -7275,6 +7963,8 @@
     "file:backend/tests/_delegates.py",
     "helper:tiered_approval",
     "js:static/approval-cascade.js",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
@@ -7294,6 +7984,8 @@
      "frontend/static/approval-cascade.js"
     ],
     "path": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_extra_expenses.py",
@@ -7654,14 +8346,12 @@
    "units": [
     "core:db",
     "helper:quotations",
-    "helper:receivables",
     "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/quotations.py",
-     "backend/helpers/receivables.py"
+     "backend/helpers/quotations.py"
     ],
     "api": [
      "backend/routers/quotations.py"
@@ -7989,52 +8679,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_cashier_execution_history_2026_08_31.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors",
-    "router:cashier"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/cashier.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_cashier_module_2026_08_31.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors",
-    "page:pages/receivables.html",
-    "router:cashier",
-    "router:quotations"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/cashier.py",
-     "backend/routers/quotations.py"
-    ],
-    "page": [
-     "frontend/pages/receivables.html"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_cashier_reads_all_cases_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -8066,15 +8710,15 @@
     "js:js/reports.js",
     "js:static/auth-guard.js",
     "js:static/sidebar.js",
+    "mod:arap/api/cashier",
     "page:pages/cashier.html",
     "page:pages/reports.html",
-    "router:accounting_export",
-    "router:cashier"
+    "router:accounting_export"
    ],
    "evidence": {
     "api": [
-     "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py"
+     "backend/modules/arap/api/cashier.py",
+     "backend/routers/accounting_export.py"
     ],
     "page": [
      "frontend/css/style.css",
@@ -8760,6 +9404,34 @@
     ]
    }
   },
+  "backend/tests/test_e2e_arap_absent_notices_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "page:pages/case-management.html",
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "frontend/pages/reports.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py": {
    "kind": "unit",
    "units": [],
@@ -9137,6 +9809,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "mod:supply/api/shipping_notes",
     "page:index.html",
@@ -9171,6 +9844,7 @@
      "frontend/pages/login.html"
     ],
     "path": [
+     "backend/modules/arap/",
      "backend/modules/subcontract/",
      "backend/modules/supply/api/shipping_notes.py",
      "frontend/index.html",
@@ -9455,24 +10129,6 @@
     ]
    }
   },
-  "backend/tests/test_e2e_cashier_bank_reconcile_without_analytics_2026_09_26.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "page:pages/cashier.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
-    ]
-   }
-  },
   "backend/tests/test_e2e_cashier_read_only_case_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -9489,52 +10145,6 @@
     ],
     "page": [
      "frontend/pages/case-management.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_cashier_receive_amount_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/cashier.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_cashier_subcontract_absent_notice_2026_09_26.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/routers/__init__.py",
-    "page:pages/cashier.html",
-    "plat:__init__",
-    "plat:registry",
-    "router:cashier"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/routers/__init__.py",
-     "backend/routers/cashier.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
     ]
    }
   },
@@ -10647,34 +11257,11 @@
     ]
    }
   },
-  "backend/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/cashier.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
-    ]
-   }
-  },
   "backend/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
    "kind": "e2e",
    "units": [
     "core:db",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
-    "page:pages/case-management.html",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
@@ -10683,7 +11270,6 @@
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ],
     "page": [
-     "frontend/pages/case-management.html",
      "frontend/pages/quotation-form.html"
     ],
     "path": [
@@ -10955,6 +11541,9 @@
    "units": [
     "helper:module_registry",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:payroll/api/bonus",
@@ -10971,12 +11560,9 @@
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
-    "router:cashier",
     "router:completion_notes",
-    "router:invoice_vouchers",
     "router:map_points",
     "router:org_structure",
-    "router:payment_requests",
     "router:quotations",
     "router:system"
    ],
@@ -10993,6 +11579,9 @@
     ],
     "path": [
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/payroll/api/bonus.py",
@@ -11004,12 +11593,9 @@
      "backend/routers/auth.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
-     "backend/routers/cashier.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/map_points.py",
      "backend/routers/org_structure.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py",
      "frontend/pages/case-management.html",
@@ -11554,13 +12140,11 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:receivables",
     "router:quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
-     "backend/helpers/receivables.py"
+     "backend/db.py"
     ],
     "api": [
      "backend/routers/quotations.py"
@@ -12313,6 +12897,8 @@
     "helper:module_registry",
     "js:static/sidebar.js",
     "mod:analytics/api/dashboard",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -12334,12 +12920,10 @@
     "router:completion_notes",
     "router:custom_records",
     "router:customers",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
-    "router:payment_requests",
     "router:quotations",
     "router:search",
     "router:system",
@@ -12355,6 +12939,8 @@
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -12371,12 +12957,10 @@
      "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
@@ -12427,9 +13011,12 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
     "helper:email_notify",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "plat:__init__",
@@ -12438,9 +13025,7 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:customers",
-    "router:invoice_vouchers",
     "router:parts",
-    "router:payment_requests",
     "router:quotations",
     "router:search"
    ],
@@ -12453,19 +13038,20 @@
      "backend/routers/quotations.py"
     ],
     "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/supply/api/shipping_notes.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
      "backend/routers/customers.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py"
     ],
     "path": [
+     "backend/modules/arap/",
      "backend/modules/subcontract/",
      "backend/modules/supply/"
     ]
@@ -12524,6 +13110,8 @@
     "js:js/case-management-exec.js",
     "js:js/reports.js",
     "js:static/legal-round.js",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
@@ -12531,9 +13119,7 @@
     "plat:__init__",
     "plat:source_tree",
     "router:accounting_export",
-    "router:case_extra_expenses",
-    "router:invoice_vouchers",
-    "router:payment_requests"
+    "router:case_extra_expenses"
    ],
    "evidence": {
     "import": [
@@ -12544,14 +13130,13 @@
      "backend/helpers/legal_params.py",
      "backend/helpers/quotations.py",
      "backend/helpers/recognition.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/case_extra_expenses.py",
-     "backend/routers/payment_requests.py"
+     "backend/routers/case_extra_expenses.py"
     ],
     "api": [
-     "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py"
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
     ],
     "page": [
      "frontend/js/case-management-core.js",
@@ -13188,26 +13773,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_payment_requests.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:payment_requests",
-    "router:quotations",
-    "router:system"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/payment_requests.py",
-     "backend/routers/quotations.py",
-     "backend/routers/system.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_pdf_archive_mirror_2026_09_07.py": {
    "kind": "api",
    "units": [
@@ -13311,6 +13876,9 @@
     "helper:privacy_notice",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
@@ -13329,13 +13897,11 @@
     "router:accounting_export",
     "router:approval_delegates",
     "router:auth",
-    "router:cashier",
     "router:company_lookup",
     "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:definitions",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:legal_params",
     "router:licensing",
@@ -13346,7 +13912,6 @@
     "router:modules",
     "router:org_structure",
     "router:parts",
-    "router:payment_requests",
     "router:platform_catalog",
     "router:platform_menu",
     "router:quotations",
@@ -13366,6 +13931,9 @@
     "api": [
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
@@ -13382,13 +13950,11 @@
      "backend/routers/accounting_export.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
-     "backend/routers/cashier.py",
      "backend/routers/company_lookup.py",
      "backend/routers/completion_notes.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
      "backend/routers/definitions.py",
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/legal_params.py",
      "backend/routers/licensing.py",
@@ -13399,7 +13965,6 @@
      "backend/routers/modules.py",
      "backend/routers/org_structure.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/platform_catalog.py",
      "backend/routers/platform_menu.py",
      "backend/routers/quotations.py",
@@ -13902,13 +14467,11 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:receivables",
     "router:quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
-     "backend/helpers/receivables.py"
+     "backend/db.py"
     ],
     "api": [
      "backend/routers/quotations.py"
@@ -14140,7 +14703,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:invoice_vouchers",
     "router:quotations"
    ],
    "evidence": {
@@ -14148,7 +14710,6 @@
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/invoice_vouchers.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -14454,7 +15015,7 @@
     "file:backend/helpers/__init__.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
     "helper:legal_params",
-    "router:invoice_vouchers",
+    "mod:arap/api/invoice_vouchers",
     "router:legal_params",
     "router:quotations"
    ],
@@ -14466,7 +15027,7 @@
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ],
     "api": [
-     "backend/routers/invoice_vouchers.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
      "backend/routers/legal_params.py",
      "backend/routers/quotations.py"
     ]
@@ -14481,7 +15042,7 @@
     "helper:quotations",
     "helper:quote_terms",
     "helper:receivables",
-    "router:invoice_vouchers",
+    "mod:arap/api/invoice_vouchers",
     "router:quotations"
    ],
    "evidence": {
@@ -14493,7 +15054,7 @@
      "backend/pdf_gen.py"
     ],
     "api": [
-     "backend/routers/invoice_vouchers.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -15448,11 +16009,11 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:subcontract/api/contractor_vouchers",
     "plat:__init__",
     "plat:source_tree",
-    "router:invoice_vouchers",
-    "router:payment_requests",
     "router:quotations"
    ],
    "evidence": {
@@ -15460,15 +16021,15 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ],
     "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/routers/invoice_vouchers.py",
-     "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -15501,11 +16062,11 @@
     "helper:settings",
     "helper:xlsx_out",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:netplan/export",
     "plat:__init__",
     "plat:source_tree",
     "router:accounting_export",
-    "router:cashier",
     "router:parts"
    ],
    "evidence": {
@@ -15524,9 +16085,9 @@
     ],
     "path": [
      "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/cashier.py",
      "backend/modules/netplan/export.py",
-     "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py"
+     "backend/routers/accounting_export.py"
     ]
    }
   }
