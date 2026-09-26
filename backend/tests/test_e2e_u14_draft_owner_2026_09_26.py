@@ -95,3 +95,23 @@ def test_owner_and_superadmin_can_edit_and_submit(live_server, make_user, new_co
     page.wait_for_selector('#cr-record[data-status="sent"][data-busy="0"]')
     assert _status(no) == "sent"
     assert not errors, errors
+
+
+@pytest.mark.e2e
+def test_owner_can_still_submit_right_after_saving_without_reload(live_server, make_user, new_context, client):
+    """D 稽核 U-S1：存檔後頁面用 PUT 的回應重畫單據，而回應不帶 canEdit ⇒「缺欄位」不可以被當成「不能改」。"""
+    _, owner, _, no = _setup(client, make_user)
+    errors = []
+    page = _open(new_context, live_server, owner, no, errors)
+    page.click("#cr-edit")
+    page.fill("#cr-in-a", "改過")
+    page.click("#cr-save")
+    page.wait_for_function("""() => { const e = document.getElementById('cr-record');
+        return !!e && e.dataset.busy === '0' && !document.getElementById('cr-save') }""")
+    rows = _q("SELECT data_json FROM custom_records WHERE module_key=? AND record_no=?", (KEY, no))
+    assert json.loads(rows[0]["data_json"])["a"] == "改過"
+    page.wait_for_selector('[data-transition="submit"]', state="visible")
+    page.click('[data-transition="submit"]')
+    page.wait_for_selector('#cr-record[data-status="sent"][data-busy="0"]')
+    assert _status(no) == "sent"
+    assert not errors, errors
