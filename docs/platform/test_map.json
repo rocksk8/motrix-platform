@@ -13814,7 +13814,8 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:mail_types",
-    "router:auth"
+    "router:auth",
+    "router:mail_settings"
    ],
    "evidence": {
     "import": [
@@ -13823,7 +13824,8 @@
      "backend/helpers/mail_types.py"
     ],
     "api": [
-     "backend/routers/auth.py"
+     "backend/routers/auth.py",
+     "backend/routers/mail_settings.py"
     ]
    }
   },
