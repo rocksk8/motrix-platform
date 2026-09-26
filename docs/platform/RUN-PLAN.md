@@ -136,6 +136,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 11:04 D：O6-S1 掃描那一半關閉（h-o6s1 e2c8fdbd，突變「不跳點目錄」紅）；小建議：「刻意含 tests」沒有正對照（突變連 tests 也跳過照綠）。
 - 2026-09-26 11:02 D：**O6-M1 關閉（b-o6-2 31d0033d）**：新位置 edge_profile 式掃描 20 次 0 例外、突變 2/2 紅；13 道自寫 rglob 掃描逐行查 12 道排除 tests，只剩 deploy_dashboard_local_only（原本就暴露，1/20）⇒ 建議 O6-S1。R-O1 結案（0f1d8e0a）。
 - 2026-09-26 11:00 D：c-tax-calc a1d7ba4a、c-m01-sink2-2 77b9a672 必修 0（突變 5/5 紅）；觀察：c-tax-calc 改 routers/reports.py import，b-m08-2 會搬走該檔，後上車者 rebase 時要把新位置的 import 一起改。
 - 2026-09-26 10:57 D：b-o6 a8f60a28（`AUDIT-D-B-o6.md`）必修 O6-M1：競態從收集 tests/ 搬到產品碼掃描（實測新位置 3/20 FileNotFoundError、舊位置 0）；建議 backend/tests/.hardcap_probe_*（在 tests 內＋點開頭）。
