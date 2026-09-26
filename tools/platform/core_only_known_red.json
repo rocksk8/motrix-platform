@@ -1,0 +1,4 @@
+{
+ "_doc": "core-only 反向控制的已知紅清單（AUDIT-D-B-G1 G-M1，主持裁示）。列車判定：紅燈必須 ⊆ §B-11 允許兩題 ∪ 本清單；本清單上的題已轉綠卻還留著 ⇒ 判失敗（要刪掉那一筆）。只准縮短：新增一筆必須先在 docs/platform/RUN-PLAN.md 寫一行主持裁示，帶 ruling 欄的錨點並寫出題名（守門 test_core_only_rc.py 驗；欄位：test、owner、fix_branch、registered_at、ruling）。首批 CORE-ONLY-KR-1～4 的修正都已在月台（h-corered、c-coreonly-depscan、c-m07），主持裁示第六班帶齊後清單從空開始。",
+ "entries": []
+}

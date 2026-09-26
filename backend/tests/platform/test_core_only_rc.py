@@ -4,6 +4,8 @@
 那一輪的綠是假的（例：收集錯誤沒被算成失敗 ⇒ import 不到的整檔看起來像「沒有紅」）。
 """
 import sys
+
+import pytest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
@@ -57,3 +59,63 @@ def test_module_dirs_only_counts_folders_with_module_json(tmp_path):
     (m / "b").mkdir()                                      # 沒有 module.json ⇒ 不是模組
     (m / "__init__.py").write_text("", encoding="utf-8")
     assert [d.name for d in C.module_dirs(tmp_path / "backend")] == ["a"]
+
+
+# ── 已知紅清單（AUDIT-D-B-G1 G-M1）與判定 ─────────────────────────────────────
+
+def test_judge_known_red_is_tolerated_unexpected_is_not():
+    known = {"tests/platform/test_a.py::test_k"}
+    ok = C.judge({"tests/platform/test_a.py::test_k"} | C.ALLOWED, 100, 1, known)
+    assert ok["ok"] and ok["known_hit"] == ["tests/platform/test_a.py::test_k"], ok
+    bad = C.judge({"tests/platform/test_a.py::test_new"}, 100, 1, known)
+    assert not bad["ok"] and bad["unexpected"] == ["tests/platform/test_a.py::test_new"], bad
+
+
+def test_judge_known_red_that_turned_green_fails():
+    """清單上的題已經綠了還留著 ⇒ 不算過（避免退化成「全寫進清單就變綠」）。"""
+    res = C.judge(set(), 100, 0, {"tests/platform/test_a.py::test_k"})
+    assert not res["ok"] and res["stale_known"] == ["tests/platform/test_a.py::test_k"], res
+
+
+@pytest.mark.parametrize("total,exit_code", [(0, 0), (0, 5), (12, 5)])
+def test_judge_no_tests_ran_is_not_a_pass(total, exit_code):
+    """G-S1：一題都沒跑（exit 5 或 0 題）⇒ ok=False；「沒有紅」不等於「驗過了」。"""
+    assert not C.judge(set(), total, exit_code, set())["ok"]
+
+
+def test_real_known_red_list_is_valid():
+    """清單每一筆：欄位齊、題存在、RUN-PLAN 有一行同時寫著裁示錨點與題名（新增要先有主持裁示）。"""
+    import json
+    entries = json.loads((REPO / C.KNOWN_RED_REL).read_text(encoding="utf-8"))["entries"]
+    runplan = (REPO / "docs" / "platform" / "RUN-PLAN.md").read_text(encoding="utf-8")
+    assert C.validate_known(entries, runplan, REPO / "backend") == []
+
+
+def test_rc_known_red_entry_without_a_ruling_or_a_real_test_is_refused(tmp_path):
+    """反向控制（合成）：沒有裁示行的、題不存在的、缺欄位的、重複的 ⇒ 都報；有裁示且題存在的 ⇒ 不報。"""
+    b = tmp_path / "backend"
+    (b / "tests" / "platform").mkdir(parents=True)
+    (b / "tests" / "platform" / "test_x.py").write_text("def test_real():\n    pass\n", encoding="utf-8")
+    good = {"test": "tests/platform/test_x.py::test_real", "owner": "C", "fix_branch": "wip/c-x",
+            "registered_at": "2026-09-26", "ruling": "CORE-ONLY-KR-9"}
+    runplan = "- `CORE-ONLY-KR-9` test_real：擁有者 C\n"
+    assert C.validate_known([good], runplan, b) == []
+    assert C.validate_known([good], "- 沒有裁示\n", b)                                   # 沒有主持裁示 ⇒ 不准加
+    assert C.validate_known([dict(good, test="tests/platform/test_x.py::test_gone")],
+                            "- `CORE-ONLY-KR-9` test_gone\n", b)                       # 題不存在
+    assert C.validate_known([dict(good, owner="")], runplan, b)                         # 缺欄位
+    assert C.validate_known([good, good], runplan, b)                                   # 重複
+
+
+def test_known_red_list_only_shrinks_against_origin():
+    """只准縮短：比 origin/platform 那一版多出來的每一筆，都必須在本分支的 RUN-PLAN 有裁示行（由上一題的驗證涵蓋）；
+    這裡另驗「多出來的」確實都帶了錨點——合回之後 origin 那一版就是新的基準。"""
+    import json
+    import subprocess
+    cur = json.loads((REPO / C.KNOWN_RED_REL).read_text(encoding="utf-8"))["entries"]
+    r = subprocess.run(["git", "-C", str(REPO), "show", "origin/platform:" + C.KNOWN_RED_REL],
+                       capture_output=True, text=True, encoding="utf-8")
+    base = {e["test"] for e in json.loads(r.stdout)["entries"]} if r.returncode == 0 else set()
+    added = [e for e in cur if e["test"] not in base]
+    runplan = (REPO / "docs" / "platform" / "RUN-PLAN.md").read_text(encoding="utf-8")
+    assert C.validate_known(added, runplan, REPO / "backend") == []

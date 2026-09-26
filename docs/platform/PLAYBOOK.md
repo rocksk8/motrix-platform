@@ -231,7 +231,7 @@
 - **每一班列車疊完之後，都要重產三份產生檔**（2026-09-26 05:39，C 發現 dep_graph.json、test_map.json 從 01:02 之後就沒有重產，modtest 選題會漏掉新搬的模組檔）：UNIT-INDEX.md、dep_graph.json、test_map.json，單獨一個 commit，再跑全量。B 會補守門，讓它們過期時轉紅。
 - **列車長要等到全量兩段都有結果行才結束回合**（2026-09-26 07:53，第四班列車長在「正在等」時結束回合，主持接手）：用背景 until 迴圈盯 pid，不用命令列字串比對。
 - **做反向控制之前，先清掉只剩 `__pycache__`、沒有 `module.json` 的模組資料夾**（2026-09-26 07:53，D 的 O-4：切換分支後常留下這種資料夾，`module_installed` 會把它當成模組存在 ⇒ 假綠；A 的 O-4 改看 module.json 合回之後這一條可刪）。
-- **每一班列車都跑一次 core-only 反向控制**（2026-09-26，主持派工 B）：`python tools/platform/core_only_rc.py --commit <列車 HEAD>`——拋棄式工作樹拿掉 `backend/modules/` 全部 L2 模組，跑 tests/platform（-n 2、低優先權、`--continue-on-collection-errors`）；除了 §B-11 允許的兩題（modules.json 列了但掃描不到、UNIT-INDEX）以外必須全綠。紅了 ⇒ 那是「守門的結果隨裝了哪些模組而改變」，照失敗題找改到它的那一包退回。可以和全量同時跑（不同 basetemp，不搶 -full 鎖）。起因：G1 快照原本依「L2 有沒有在用」決定 L1 公開介面，拿掉 M04 就報刪除——每搬一個模組才抓到一題太慢。
+- **每一班列車都跑一次 core-only 反向控制**（2026-09-26，主持派工 B）：`python tools/platform/core_only_rc.py --commit <列車 HEAD>`——拋棄式工作樹（`git worktree add --no-checkout` ＋ sparse-checkout 排除每個 `backend/modules/<key>/`，**不刪檔**）跑 tests/platform（-n 2、低優先權、`--continue-on-collection-errors`）；紅燈必須 ⊆ §B-11 允許的兩題（modules.json 列了但掃描不到、UNIT-INDEX）∪ 已知紅清單 `tools/platform/core_only_known_red.json`（新增一筆要在 RUN-PLAN 寫帶錨點的主持裁示；清單上的題轉綠未刪、或一題都沒跑 ⇒ 不過；AUDIT-D-B-G1 G-M1）。紅了 ⇒ 那是「守門的結果隨裝了哪些模組而改變」，照失敗題找改到它的那一包退回。可以和全量同時跑（不同 basetemp，不搶 -full 鎖）。起因：G1 快照原本依「L2 有沒有在用」決定 L1 公開介面，拿掉 M04 就報刪除——每搬一個模組才抓到一題太慢。
 - **全量跑的期間不可以改列車的樹**（2026-09-26 05:06，第二班列車長的自我回報）：交會問題的修正要等全量跑完才能 commit；想提早動手，就另開一棵 worktree 準備，全量跑完再搬過來。否則全量驗到的不是同一個樹的狀態。
 
 （2026-09-26 02:31 主持）
