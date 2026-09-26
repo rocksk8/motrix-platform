@@ -8856,17 +8856,20 @@
    "dynamic_sql": true,
    "helpers_transitive": [
     "helper:auth",
+    "helper:case_access",
     "helper:email_notify",
     "helper:geo",
     "helper:mail_types",
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:row_access",
-    "helper:settings"
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
     "helper:auth",
+    "helper:case_access",
     "helper:geo",
     "helper:row_access",
     "helper:settings",
@@ -8879,7 +8882,7 @@
    "routes": [
     {
      "func": "map_points",
-     "line": 488,
+     "line": 470,
      "method": "GET",
      "path": "/api/map/points"
     }
@@ -8896,11 +8899,12 @@
    ],
    "tables_r": [
     "geocode_cache",
-    "quotations",
     "tenders"
    ],
    "tables_r_transitive": [
+    "approval_delegates",
     "departments",
+    "divisions",
     "geocode_cache",
     "quotations",
     "sessions",
@@ -12169,7 +12173,6 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:item_reads",
-    "router:map_points",
     "router:material_orders",
     "router:search",
     "router:system",

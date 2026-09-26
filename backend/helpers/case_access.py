@@ -48,6 +48,20 @@ CASE_ACCESS = row_access.OwnerRule(
 row_access.register("case", CASE_ACCESS)
 
 
+class _SystemCaller:
+    """L1 背景工作取案件資料時的身分（不做逐案權限過濾）。主持裁示（2026-09-26）：只准 L1 背景呼叫端使用——
+    守門 tests/platform/test_case_summary_locations.py 掃出每一個引用 `SYSTEM` 的檔，必須是 modules.json 的 L1 單位。
+    用哨兵而不是 `user=None`：守門找得到一個名字的每一個引用，找不到一個 `None`（`user=None` 一律拒絕）。"""
+    __slots__ = ()
+
+    def __repr__(self):
+        return "helpers.case_access.SYSTEM"
+
+
+#: 見 `_SystemCaller`。
+SYSTEM = _SystemCaller()
+
+
 def is_document_approver(data_json: str, user: dict, conn) -> bool:
     """這個人是否在這張單的簽核名單裡（任何一層），或本人就是送審申請人。
 
