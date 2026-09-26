@@ -154,7 +154,7 @@ def test_case_update_broken_json_is_said_not_swallowed(client):
 
 # ── 權限（稽核 D AT-M1，主持裁示 (b)）──────────────────────────────────────────
 
-def _seed_case_with_file(quote_no):
+def _seed_case_with_file(quote_no, owner_id=None):
     import db
     import os
     import helpers.uploads as up
@@ -166,8 +166,9 @@ def _seed_case_with_file(quote_no):
     meta = [{"id": "f1", "filename": "sign.png", "path": rel}]
     conn = db.get_db()
     try:
-        conn.execute("INSERT INTO quotations (quote_no, status, data_json, signed_files_json, created_at, updated_at)"
-                     " VALUES (?,?,?,?,?,?)", (quote_no, "已送出", "{}", json.dumps(meta), "2026-01-01", "2026-01-01"))
+        conn.execute("INSERT INTO quotations (quote_no, status, data_json, signed_files_json, created_at, updated_at,"
+                     " sales_person_id) VALUES (?,?,?,?,?,?,?)",
+                     (quote_no, "已送出", "{}", json.dumps(meta), "2026-01-01", "2026-01-01", owner_id))
         conn.commit()
     finally:
         conn.close()
@@ -179,9 +180,10 @@ def _hdr(client, make_user, name, role, modules):
 
 
 def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_user):
-    """同樣有傳票權限（finance）：看得到案件的人列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。"""
-    _seed_case_with_file("ATT-PERM-1")
-    inside = _hdr(client, make_user, "att_in", "engineer", ["finance", "case_manage"])
+    """同樣有傳票權限（finance）：看得到案件的人（案件業務）列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。
+    （AT-M1c 前「看得到」用 case_manage 充當；回簽檔改用案件頁的規則後 case_manage 不再放行，改用擁有者。）"""
+    inside = _hdr(client, make_user, "att_in", "engineer", ["finance"])
+    _seed_case_with_file("ATT-PERM-1", owner_id=_user("att_in")["id"])
     outside = _hdr(client, make_user, "att_out", "engineer", ["finance"])
     url = "/api/vouchers/line-source-files?source_type=case&ref=ATT-PERM-1"
     got_in = client.get(url, headers=inside)
@@ -318,5 +320,58 @@ def _user(username):
     conn = db.get_db()
     try:
         return dict(conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone())
+    finally:
+        conn.close()
+
+
+# ── AT-M1c（稽核 D 複核）：存在報價單上的四類用案件頁的讀取規則——不寬也不嚴 ─────────────────
+
+_LINES = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
+          {"account_code": "1113", "debit": 0, "credit": 100, "summary": "b"}]
+
+
+def _pick(client, h, quote_no):
+    v = client.post("/api/vouchers", headers=h, json={"summary": "AT-M1c", "lines": _LINES})
+    assert v.status_code == 200, v.text[:200]
+    return client.post("/api/vouchers/%s/attachments" % v.json()["id"], headers=h,
+                       json={"picks": [{"type": "quotation_signed", "docNo": quote_no, "fileId": "f1"}]})
+
+
+def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
+    """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
+    _seed_case_with_file("ATT-QP-1")
+    h = _hdr(client, make_user, "att_qp_cm", "engineer", ["case_manage", "finance"])
+    assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 403, "前提：案件頁擋 case_manage 非擁有者"
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-1", headers=h)
+    assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "quotation_signed"] == [], got.text
+    prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-QP-1&file_id=f1", headers=h)
+    assert prev.status_code in (403, 404), prev.status_code
+    assert _pick(client, h, "ATT-QP-1").status_code == 403
+
+
+def test_quotation_attachments_are_not_stricter_than_the_case_page(client, make_user):
+    """嚴（D 實測出納帶不進）：cashier 非擁有者 ⇒ 案件頁 200（CM14b）⇒ 經傳票列得出回簽檔、帶入 200。"""
+    _seed_case_with_file("ATT-QP-2")
+    h = _hdr(client, make_user, "att_qp_cash", "engineer", ["cashier", "finance"])
+    assert client.get("/api/quotations/ATT-QP-2", headers=h).status_code == 200, "前提：案件頁放行 cashier"
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-2", headers=h)
+    assert got.status_code == 200, got.text[:200]
+    assert [f["fileId"] for f in got.json()["files"] if f.get("type") == "quotation_signed"] == ["f1"], got.json()["files"]
+    assert _pick(client, h, "ATT-QP-2").status_code == 200
+    # 四類都走案件頁規則（不只回簽檔）：提供者層直接驗
+    import db
+    from helpers.uploads import AttachmentNotVisible
+    make_user(username="att_qp_cm2", role="engineer", modules=["case_manage"])
+    cash, cm = _user("att_qp_cash"), _user("att_qp_cm2")
+    prov = registry.providers(CAP)["case"]
+    conn = db.get_db()
+    try:
+        for st in ("quotation_signed", "payment_item", "material", "material_invoice"):
+            prov.doc_nos_for_case(conn, st, "ATT-QP-2", cash)                   # 不丟 ⇒ 放行
+            with pytest.raises(AttachmentNotVisible):
+                prov.doc_nos_for_case(conn, st, "ATT-QP-2", cm)
+        prov.doc_nos_for_case(conn, "case_update", "ATT-QP-2", cm)              # 案件動態維持 case_manage 規則
+        with pytest.raises(AttachmentNotVisible):
+            prov.doc_nos_for_case(conn, "case_update", "ATT-QP-2", cash)
     finally:
         conn.close()

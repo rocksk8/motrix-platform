@@ -147,6 +147,19 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     return q
 
 
+def case_page_readable(conn, quote_no: str, user: dict) -> bool:
+    """案件頁（報價單本體）的**讀取規則**：row_access `case`／scope="read"（擁有者、admin+，或持 cashier，CM14b；
+    **不放行 case_manage**）。
+
+    `routers/quotations.py::get_quotation`（`GET /api/quotations/{q}`）與存在報價單上的附件（回簽檔、收款發票、叫料、
+    叫料發票）的提供者共用這一支（稽核 D AT-M1c：可見範圍＝原單據，不寬也不嚴）。案件不存在或 M01 不在 ⇒ False。"""
+    if not quote_no or not case_module_present():
+        return False
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids FROM quotations WHERE quote_no = ?",
+                     (quote_no,)).fetchone()
+    return bool(q) and row_access.visible("case", user, q, scope="read")
+
+
 def case_owner_readable(conn, quote_no: str, user: dict) -> bool:
     """案件的**擁有者規則**：row_access `case`／scope="owner"（案件業務／協作者、admin+），**不放行任何模組**。
 
