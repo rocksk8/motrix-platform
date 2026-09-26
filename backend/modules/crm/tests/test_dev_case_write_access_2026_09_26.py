@@ -3,13 +3,14 @@
 同模組、同角色的外人（不是建立者、不在業務人員／規劃人員名單）：
 - `PUT /api/dev-cases/{id}`（改內容）、`PATCH …/status`、`PATCH …/convert`、`POST …/logs`（新增開發記錄）⇒ 403，資料不變
 - 刪除申請／核准、重新連結申請／核准：只准管理員（角色）⇒ 業務 403
+  〔更正（稽核 D M02-S2 觀察）：本題只打了兩個**申請**端點，核准端點沒有外人題，也沒有「管理員成功」的正對照（分不出 403 是角色還是列權限）⇒ 補在 `test_request_and_approve_are_gated_by_role_not_row_access`〕
 正對照：建立者做同樣的事 ⇒ 成功。觀測點打在資料庫（`dev_cases`／`dev_logs`），不打回應文字。
 """
 from datetime import date
 
 
 def _login(client, make_user, username, role="sales", modules=("dev_crm",)):
-    name, pw = make_user(username=username, role=role, modules=list(modules))
+    name, pw = make_user(username=username, role=role, modules=None if modules is None else list(modules))  # None＝角色樣板
     r = client.post("/api/auth/login", json={"username": name, "password": pw})
     assert r.status_code == 200, r.text
     return {"Authorization": "Bearer " + r.json()["token"]}
@@ -78,3 +79,53 @@ def test_outsider_cannot_change_a_dev_case(client, make_user):
     assert all(200 <= c < 300 for c in got.values()), got
     after, logs = _case(cid)
     assert after["case_name"] == "改名" and after["converted_quote_no"] == "MQ-S2-0926" and logs == before[1] + 1
+
+
+def _flags(cid):
+    import db
+    conn = db.get_db()
+    try:
+        return dict(conn.execute("SELECT pending_delete, is_deleted, pending_relink, converted_quote_no"
+                                 " FROM dev_cases WHERE id=?", (cid,)).fetchone())
+    finally:
+        conn.close()
+
+
+def test_request_and_approve_are_gated_by_role_not_row_access(client, make_user):
+    """申請＝管理員以上、核准＝最高管理者（角色）；與列權限無關（稽核 D M02-S2 觀察，2026-09-26）。
+
+    分辨「角色」與「列權限」：建立者（業務，有列權限）申請 ⇒ 403；管理員（不是建立者、不在名單）申請 ⇒ 成功。
+    核准端點：外人／建立者／管理員 ⇒ 403 且資料不變；最高管理者 ⇒ 成功（正對照）。觀測點打在 `dev_cases`。
+    """
+    owner = _login(client, make_user, "dca_owner")
+    out = _login(client, make_user, "dca_out")
+    admin = _login(client, make_user, "dca_admin", role="admin", modules=None)
+    sup = _login(client, make_user, "dca_sup", role="superadmin", modules=None)
+    cid = client.post("/api/dev-cases", headers=owner, json={"case_name": "案", "customer_name": "稽核客戶"}).json()["id"]
+    _seed_quote("MQ-S2-A")
+    _seed_quote("MQ-S2-B")
+    assert client.patch(f"/api/dev-cases/{cid}/convert", headers=owner, json={"quote_no": "MQ-S2-A"}).status_code == 200
+
+    # 重新連結
+    relink = {"quote_no": "MQ-S2-B", "reason": "x"}
+    assert client.post(f"/api/dev-cases/{cid}/request-relink-quote", headers=owner, json=relink).status_code == 403
+    assert _flags(cid)["pending_relink"] == 0                           # 有列權限的建立者也不行 ⇒ 擋的是角色
+    assert client.post(f"/api/dev-cases/{cid}/request-relink-quote", headers=admin, json=relink).status_code == 200
+    assert _flags(cid)["pending_relink"] == 1                           # 管理員不在名單也可以 ⇒ 不看列權限
+    for who, h in (("外人", out), ("建立者", owner), ("管理員", admin)):
+        assert client.post(f"/api/dev-cases/{cid}/approve-relink-quote", headers=h,
+                           json={"approve": True}).status_code == 403, who
+        assert _flags(cid)["pending_relink"] == 1 and _flags(cid)["converted_quote_no"] == "MQ-S2-A", who
+    assert client.post(f"/api/dev-cases/{cid}/approve-relink-quote", headers=sup, json={"approve": True}).status_code == 200
+    assert _flags(cid)["pending_relink"] == 0 and _flags(cid)["converted_quote_no"] == "MQ-S2-B"
+
+    # 刪除
+    assert client.post(f"/api/dev-cases/{cid}/request-delete", headers=owner, json={"reason": "x"}).status_code == 403
+    assert _flags(cid)["pending_delete"] == 0
+    assert client.post(f"/api/dev-cases/{cid}/request-delete", headers=admin, json={"reason": "x"}).status_code == 200
+    assert _flags(cid)["pending_delete"] == 1
+    for who, h in (("外人", out), ("建立者", owner), ("管理員", admin)):
+        assert client.post(f"/api/dev-cases/{cid}/approve-delete", headers=h, json={"approve": True}).status_code == 403, who
+        assert _flags(cid)["is_deleted"] == 0 and _flags(cid)["pending_delete"] == 1, who
+    assert client.post(f"/api/dev-cases/{cid}/approve-delete", headers=sup, json={"approve": True}).status_code == 200
+    assert _flags(cid)["is_deleted"] == 1
