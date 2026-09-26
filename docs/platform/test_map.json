@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 631,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
    "api": 336,
-   "unit": 55,
+   "unit": 56,
    "e2e": 154
   },
   "routes": 568
@@ -354,6 +354,28 @@
      "backend/tests/test_module_permission_fixes_2026_09_13.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_module_wiring.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "mod:analytics/__init__",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/analytics/__init__.py",
+     "backend/modules/analytics/api/__init__.py",
      "backend/modules/analytics/api/dashboard.py",
      "backend/modules/analytics/api/reports.py"
     ],
@@ -5329,10 +5351,14 @@
    "units": [
     "dir:backend/routers/",
     "file:backend/tests/platform/__init__.py",
-    "file:backend/tests/platform/_boundaries.py"
+    "file:backend/tests/platform/_boundaries.py",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/platform/__init__.py",
      "backend/tests/platform/_boundaries.py"
     ],
@@ -11762,7 +11788,6 @@
     "js:js/case-management-exec.js",
     "js:js/reports.js",
     "js:static/legal-round.js",
-    "mod:analytics/api/reports",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
@@ -11785,7 +11810,6 @@
      "backend/helpers/legal_params.py",
      "backend/helpers/quotations.py",
      "backend/helpers/recognition.py",
-     "backend/modules/analytics/api/reports.py",
      "backend/routers/accounting_export.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/payment_requests.py"
