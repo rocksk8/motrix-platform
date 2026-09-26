@@ -66,16 +66,19 @@
   },
   "pages": [
     {
-      "path": "suppliers.html"
+      "path": "suppliers.html",
+      "menu": {"group": "supply", "label": "供應商管理", "order": 20, "perm": ["procurement"], "active": ["suppliers.html", "supplier-log.html"], "badge": "sb-mod-suppliers"}
     },
     {
       "path": "supplier-log.html"
     },
     {
-      "path": "inventory.html"
+      "path": "inventory.html",
+      "menu": {"group": "supply", "label": "庫存管理", "order": 50, "perm": ["inventory"], "badge": "sb-mod-inventory"}
     },
     {
-      "path": "shipping-export-history.html"
+      "path": "shipping-export-history.html",
+      "menu": {"group": "system", "label": "出貨單歷史紀錄", "order": 100, "perm": ["shipping_export_log"]}
     }
   ]
 }

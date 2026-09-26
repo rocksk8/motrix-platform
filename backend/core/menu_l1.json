@@ -112,20 +112,6 @@
   },
   {
    "group": "supply",
-   "href": "suppliers.html",
-   "label": "供應商管理",
-   "order": 20,
-   "perm": [
-    "procurement"
-   ],
-   "active": [
-    "suppliers.html",
-    "supplier-log.html"
-   ],
-   "badge": "sb-mod-suppliers"
-  },
-  {
-   "group": "supply",
    "href": "parts.html",
    "label": "料號主檔",
    "order": 40,
@@ -133,16 +119,6 @@
     "procurement"
    ],
    "badge": "sb-mod-parts"
-  },
-  {
-   "group": "supply",
-   "href": "inventory.html",
-   "label": "庫存管理",
-   "order": 50,
-   "perm": [
-    "inventory"
-   ],
-   "badge": "sb-mod-inventory"
   },
   {
    "group": "finance",
@@ -289,15 +265,6 @@
    "order": 90,
    "perm": [
     "audit_log"
-   ]
-  },
-  {
-   "group": "system",
-   "href": "shipping-export-history.html",
-   "label": "出貨單歷史紀錄",
-   "order": 100,
-   "perm": [
-    "shipping_export_log"
    ]
   },
   {

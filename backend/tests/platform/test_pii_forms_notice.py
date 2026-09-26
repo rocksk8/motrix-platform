@@ -160,7 +160,15 @@ def test_api_module_must_own_the_endpoint(tmp_path, monkeypatch):
     mod = pf.load_registry()["forms"][page]["notice"]["api_module"]
     own = pf.module_router_text(mod)
     assert f'"{apis[0]}"' in own
-    l1 = pf.load_registry()["forms"]["customers.html"]["notice"]["ack_api"][0]
+    customers_dec = pf.load_registry()["forms"]["customers.html"]
+    if "notice" in customers_dec:
+        l1 = customers_dec["notice"]["ack_api"][0]
+    else:
+        # PN-M1（2026-09-26）：customers.html 改用 notices（逐欄，客戶聯絡人＋主檔 not_natural_person）；
+        # 取第一個「真的有告知」的對象（排除 covered_by／not_natural_person）的 ack_api
+        told = next(n for n in customers_dec["notices"]
+                    if not ({"covered_by", "not_natural_person"} & set(n)))
+        l1 = told["ack_api"][0]
     assert f'"{l1}"' in pf.product_router_text() and f'"{l1}"' not in own
 
 
