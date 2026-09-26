@@ -137,6 +137,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 16:30 D：c-m01-s3-2 dbd07633 複核：**CS-S1 關閉**；CS-M1 靜態掃描通過（R2／R3 紅），但執行期新題 `test_runtime_refuses_system_from_an_l2_module` 不帶 client 夾具⇒單跑紅（no such table），**CS-M1 未關**，待加夾具後重跑 R1。
 - 2026-09-26 16:27 D：h-roleguard d10fc8e9 抽查通過，**T8-O1 關閉**：24 過、突變 RG1 紅；新 AST 64 筆 ⊇ 舊正則的真實比對；觀察 RG-O1（SQL 內角色字面值 9 檔無人驗）。
 - 2026-09-26 16:23 D：b-o5-s1 4e6d97d3 通過（必修 0）：golden Referer 過濾**未變寬**（G1 案件頁多一支 GET⇒紅；首頁 load 後的 GET 在 origin 真字型下也抓不到＝本來就不在範圍；G4 拿掉過濾⇒API 清單紅 2/3）；替身兩突變紅。MT-O1 關閉（fb3c687f）。列車 07547758／cf7c3bb3 事後抽查通過，觀察 T8-O1。
 - 2026-09-26 16:16 A：開工 wip/a-attachments（`attachments.for_document`，裁示 M06-b；步驟表 docs/platform/plans/ATTACHMENTS-PLAN.md）。**會改到 C 的模組**：`modules/subcontract/`（新增 attachments.py、ModuleSpec.providers 加一列）；M05 未合回 ⇒ `routers/invoice_vouchers.py` 旁以 registry.provide 登記（arap 搬遷時改宣告）；M01 新增 `helpers/case_attachments.py`。M06-PLAN 補 §4 JV 清單、§5 到期守門。
@@ -156,4 +157,3 @@
 - 2026-09-26 14:40 主持：**第八班發車**（列車長子代理）：h-fonts、a-m03（M03）、c-tax-calc-2、c-m01-sink2-3、c-m07-s12b、c-probes、h-smoke-probes（與 c-probes 同班）、h-u15-2。第九班候選：b-c4-2（獨立稽核中 AUDIT-X-B-C4）、a-pn-m1（D 複核中）、a-approval-parse、C 的 M05。D 關閉 a-m03（必修 0，§B-11 獨立重做 1291 過只紅允許題）與 h-smoke-probes S-1。
 - 2026-09-26 14:38 D：a-m03 b2e5f7e4（`AUDIT-D-A-M03-move.md`）通過、必修 0：§B-11 刪 supply 1291 過／5 紅皆允許、收集無錯；模組在 1352 過（紅 1＝test_map 過期，列車重產）；IP-20 突變 3/3 紅；IP-18～20 不撞號。
 - 2026-09-26 14:4x A：PN-M1 上月台（wip/a-pn-m1 7c11091b，第九班，疊在 a-m03 上）；M06 五題裁示收到，等 C 的 M05 合回後開工。
-- 2026-09-26 14:27 D：h-fonts 7728934b 通過（/fonts/ 7 天快取；突變 2/2 紅）；提醒：對 e2e 的 O5 無幫助（context 不共用快取），測試側靠 O5-S1。
