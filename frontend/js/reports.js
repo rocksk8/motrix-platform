@@ -544,7 +544,11 @@ function reportsApp() {
         var res = await fetch('/api/quotations/' + quoteNo + '/settlement', {
           headers: { Authorization: 'Bearer ' + this._token() }
         })
-        if (!res.ok) throw new Error('載入精算失敗')
+        if (!res.ok) {
+          // M01-PLAN ④（稽核 D M4-M2）：精算資料在 M01 的案件裡；M01 不在 ⇒ 路由不存在（404＋"Not Found"）⇒ 說出原因
+          var ed = await res.json().catch(function () { return {} })
+          throw new Error(res.status === 404 && ed.detail === 'Not Found' ? '案件模組未安裝：精算資料在案件裡' : '載入精算失敗')
+        }
         var d = await res.json()
         this.settlement = Object.assign({ quoteNo: quoteNo }, d)
       } catch (e) {

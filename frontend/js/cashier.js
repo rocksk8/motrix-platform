@@ -28,6 +28,15 @@
 // >   說一百多萬**。」
 // ⇒ 這一頁與 `reports.html` 的「資金水位」**必須讀同一組端點**。
 
+// M01-PLAN ④（稽核 D M4-M2）：收款／發票紀錄存在 M01 的案件上。M01 不在 ⇒ 路由不存在（404＋"Not Found"）⇒ 說出原因，
+// 不是一句「Not Found」。其他 404（例：看不到或不存在的案件，c-case404 之後同一個 404）照後端的說明顯示。
+const CASE_MODULE_MISSING_CASHIER = '案件模組未安裝：收款與發票紀錄存在案件裡，無法登錄'
+async function _caseActionError(r) {
+  const d = await r.json().catch(() => ({}))
+  if (r.status === 404 && d.detail === 'Not Found') return CASE_MODULE_MISSING_CASHIER
+  return d.detail || '操作失敗'
+}
+
 function cashierApp() {
   return {
     // ── 頁面狀態 ───────────────────────────────────────────
@@ -398,7 +407,7 @@ function cashierApp() {
             bankAccountCode: this.receiveBankAcctCode, bankAccountName: this._t100BankName(this.receiveBankAcctCode),
           })
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); this.receiveSaving = false; return }
+        if (!r.ok) { alert(await _caseActionError(r)); this.receiveSaving = false; return }
         this.receiveModal = false
         this.receiveTarget = null
         await Promise.all([this.loadReceivable(), this.loadCashierHistory()])
@@ -414,7 +423,7 @@ function cashierApp() {
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
           body: JSON.stringify({ received, receivedAt: '', receivedBy: '', ...(item.itemId != null ? { itemId: item.itemId } : {}) })
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        if (!r.ok) { alert(await _caseActionError(r)); return }
         await this.loadReceivable()
       } catch (e) { alert('更新收款狀態失敗：' + e.message) }
     },
@@ -432,7 +441,7 @@ function cashierApp() {
           headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
           body: JSON.stringify({ invoiceNo: this.invoiceModal.no.trim(), invoiceDate: this.invoiceModal.date || '' })
         })
-        if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || '操作失敗'); return }
+        if (!r.ok) { alert(await _caseActionError(r)); return }
         item.invoiceNo = this.invoiceModal.no.trim()
         item.invoiceDate = this.invoiceModal.date || ''
         this.invoiceModal.show = false

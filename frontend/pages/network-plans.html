@@ -187,7 +187,7 @@
           </template>
           <template x-if="!createForm.quoteNo">
             <div>
-              <input class="filter" type="text" x-model="caseSearch" placeholder="搜尋案件編號／客戶名稱／案件名稱…"
+              <input class="filter" type="text" x-model="caseSearch" placeholder="搜尋案件編號／客戶名稱／案件名稱…" :disabled="!!caseOptionsNotice"
                      style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;outline:none;box-sizing:border-box">
               <div style="max-height:220px;overflow-y:auto;margin-top:6px;border:1px solid var(--border-light);border-radius:6px" x-show="caseOptionsLoading || filteredCaseOptions().length">
                 <div x-show="caseOptionsLoading" style="padding:10px;font-size:12px;color:var(--text-dim)">載入案件中…</div>
@@ -201,9 +201,12 @@
                   </div>
                 </template>
               </div>
-              <div x-show="!caseOptionsLoading && filteredCaseOptions().length===0" style="font-size:12px;color:var(--text-dim);margin-top:6px">
+              <div x-show="!caseOptionsLoading && !caseOptionsNotice && filteredCaseOptions().length===0" style="font-size:12px;color:var(--text-dim);margin-top:6px">
                 無符合案件，或已成案/已結案案件皆已建立過規劃書
               </div>
+              <!-- M01-PLAN ④（稽核 D M4-M2）：案件模組不在 ⇒ 說出原因，不是「無符合案件」 -->
+              <div data-testid="case-options-unavailable" x-show="caseOptionsNotice" x-text="caseOptionsNotice"
+                   style="font-size:12px;color:var(--text-dim);margin-top:6px"></div>
             </div>
           </template>
         </div>
@@ -282,6 +285,7 @@
       caseOptions: [],
       caseOptionsLoaded: false,
       caseOptionsLoading: false,
+      caseOptionsNotice: '',   // M01 不在（路由不存在）⇒ 說出原因（M01-PLAN ④，稽核 D M4-M2）
 
       // 🔴 Alpine 3 看到資料物件有 init() 就會**自己叫一次**，
       //    而 body 上那個明著呼叫初始化的屬性會再叫一次 ⇒ **跑兩遍**。
@@ -355,6 +359,10 @@
             const d = await r.json()
             this.caseOptions = d.items || []
             this.caseOptionsLoaded = true
+            this.caseOptionsNotice = ''
+          } else if (r.status === 404 && (await r.json().catch(() => ({}))).detail === 'Not Found') {
+            this.caseOptions = []
+            this.caseOptionsNotice = '案件模組未安裝：無法綁定案件（規劃書本身照常可建立）'
           }
         } catch (e) {}
         this.caseOptionsLoading = false
