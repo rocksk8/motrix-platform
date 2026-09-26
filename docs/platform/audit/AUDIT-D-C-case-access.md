@@ -86,4 +86,5 @@
 - `case.summary`（M01-PLAN §3-4）：**M01-PLAN 不在 repo 裡**（只在 RUN-PLAN 提到「C 的 M01-PLAN §3 順序」），到期條件指向一份看不到的文件。
 - **沒有機械式的到期**：`excess()` 只擋「新增」；基線條目的檔案不再讀 quotations（或不再是 L1 檔）時，這一筆會安靜留在基線上。M05 收回 receivables、M01 公開 case.summary 之後，沒有任何守門會紅，只能靠有人記得。
 - **CA-S3（建議）**：①兩個到期條件寫進 ROADMAP 的 M05、M01 條目，寫明「完成後自 `test_case_access_l1.KNOWN_L1` 刪除」；②`case.summary` 的定義寫進 INTEGRATION-POINTS（預留 IP）或 ROADMAP，不要只指向 M01-PLAN；③守門加一條「基線條目必須仍是 L1 檔、而且仍讀或寫 quotations」，過期即紅（比照 core-only 已知紅清單的「轉綠未刪 ⇒ 紅」）——這樣到期條件就會自己觸發。
+- 〔12:42 D 確認：wip/h-cas3 02f8f521 加 `stale()`＋`test_known_l1_baseline_is_not_stale`（不再是 L1 檔／不再讀寫／權限縮小 ⇒ 紅）＋ROADMAP 寫明兩筆到期條件與 case.summary 定義。基準 17 passed；D 突變 ST1（stale 恆空）、ST2（不檢非 L1）、ST3（基線加不存在的檔）、ST4（權限寫大）⇒ 皆紅 ⇒ **CA-S3 關閉（02f8f521）**。M01-PLAN 等步驟表由 C 放進 docs/platform/plans/（主持已派）〕
 
