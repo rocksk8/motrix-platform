@@ -166,13 +166,31 @@ def test_write_exceptions_are_classified(exceptions):
 # 反向控制：每一條斷言用的判定函式，在突變後必須報出突變
 # ══════════════════════════════════════════════════════════════════════════
 
-def _pick_new_cross_edge(units, groups, baseline):
-    """找一對 L2 單位（不同組），其間目前沒有邊：起點是 routers/ 底下的 router（端到端題要在它的原始碼加一行），
-    終點可以是 router 或已搬進 modules/ 的單位（2026-09-26 A：M06 搬遷後 routers/ 只剩 M01，不同組的 router 對已經不存在）。"""
+def _cross_edge_candidates(units, groups):
+    """反向控制配對的候選：起點＝routers/ 底下的 L2 router；終點＝L2 的 router 或模組單位（mod）。"""
     starts = sorted((groups.owner(n), n) for n, u in units.items()
                     if u["kind"] == "router" and groups.owner(n) in groups.l2)
     ends = sorted((groups.owner(n), n) for n, u in units.items()
                   if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2)
+    return starts, ends
+
+
+def test_rc_cross_edge_candidates_are_scanned(units, groups):
+    """正對照：候選來源（routers/ 的 L2 router、modules/ 的模組單位）都掃得到——掃不到時反向控制會失去意義。"""
+    starts, ends = _cross_edge_candidates(units, groups)
+    assert starts, "掃不到任何 L2 router（起點候選）"
+    assert any(n.startswith("mod:") for _g, n in ends), "掃不到任何 L2 模組單位（終點候選）"
+    assert {g for g, _n in ends} - {g for g, _n in starts}, "終點候選沒有起點以外的組 ⇒ 配不出跨組的邊"
+
+
+def _pick_new_cross_edge(units, groups, baseline):
+    """找一對 L2 單位（不同組），其間目前沒有邊：起點是 routers/ 底下的 router（端到端題要在它的原始碼加一行），
+    終點可以是 router 或已搬進 modules/ 的單位（2026-09-26 A：M06 搬遷後 routers/ 只剩 M01，不同組的 router 對已經不存在）。"""
+    starts, ends = _cross_edge_candidates(units, groups)
+    if not starts:
+        # routers/ 底下已經沒有 L2 router（M01 也搬進 modules/ 之後）⇒ 紅，不可以 skip：
+        # 反向控制 skip＝守門沒被驗證而閘門照綠（B／主持 2026-09-26）。屆時起點改用模組單位、端到端題改寫模組檔。
+        pytest.fail("沒有可用的起點候選，反向控制無法成立（routers/ 底下沒有 L2 router）")
     base = set(baseline)
     for g1, r1 in starts:
         for g2, r2 in ends:
