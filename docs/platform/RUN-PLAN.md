@@ -147,6 +147,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 18:12 D：c-approval-2 49dcb781 **必修 2**：AP-M1 `test_every_approval_doc_type_is_in_both_queue_endpoints` 在刪 arap 時紅（佇列 SQL 移入 arap 提供者後，覆蓋檢查依賴 L2 在不在；列車 core-only／真刪會紅）；AP-M2 拿掉存簿過濾 70 題照綠（F2）。轉簽權限未放寬（AP1 紅）、角標與清單同源（AP5 紅）、每案權限／金額遮蔽／data:image 皆有題。
 - 2026-09-26 17:54 C：**M01 本體開工宣告**（wip/c-m01，疊 c-approval-2；主持核准五段計畫、死線 02:10）。①CA-O4 現在做，會動：L1 `helpers/__init__.py`（撤 M01 再匯出）、`helpers/dates.py`／`helpers/tax_calc.py`／`helpers/tiered_approval.py`（只新增：norm_at、summarize_payment_items、steps_to_tiers 逐字下沉；tiered_approval 與 A 的 a-approval-parse 同檔不同段）、`routers/system.py`（條款改經 M01 provider）、`pdf_gen.py`（版本紀錄改經 M01 provider）；**B 的 M08** `modules/analytics/api/reports.py`（成案月份改經 case.recognition）；M01 自己的 routers。② 大搬遷等第九班合回後、整疊 rebase 再開始（主持裁示）。
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
@@ -166,5 +167,3 @@
 - 2026-09-26 16:07 D：c-m01-s3-2 d93a792a（`AUDIT-D-C-m01-s3.md`）**必修 CS-M1**：SYSTEM 只准 L1 的掃描器漏 alias／dotted／star／getattr／_SystemCaller 6 種寫法；可見性、None 拒絕、M01 不在、指紋突變 5/5 紅；基準 1137＋274 過（紅 1＝sidebar 已知）。
 - 2026-09-26 16:00 C：**M01-PLAN §3-6 case.recognition 開工宣告**（wip/c-m01-rec，疊在 c-m01-s3-2）。會動：**B 的 M08** `modules/analytics/api/reports.py`（recognition.* 改取 M01 provider、M01 不在時明說）、`helpers/recognition.py`（M01）、INTEGRATION-POINTS（新 IP，列車定號）。不動 sidebar。
 - 2026-09-26 15:58 D：**M5-M1／M5-M2／M5-S1 關閉（c5484962）、IP-M1 關閉（9623f1be）**：MB8、S1、P5 重跑皆紅；e2e 連跑 5 次全綠。交會：a-approval-parse 的 voucher.py／tiered_approval.py 含「淘汰」未登記 ⇒ 兩包都合回時反掃必紅，後進的補登記。
-- 2026-09-26 15:58 主持：使用者表單定本輪範圍——授權機制不做、M01 已知例外可接受（D7 報告列出＋到期守門）、不安排人工驗收（CORE-SPEC 裁示表）。預估完工 9/29（±1 天）。
-- 2026-09-26 15:51 D：b-m08-attr 52178979、b-modtest-env bf4abacb 抽查（`AUDIT-D-B-attr-modtestenv.md`）皆通過、必修 0；突變 4/4 紅；觀察 MT-O1（差異題的 e2e 無獨立上限）。
