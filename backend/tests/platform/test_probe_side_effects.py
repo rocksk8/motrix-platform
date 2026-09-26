@@ -153,6 +153,56 @@ def _trail_rows():
     finally:
         conn.close()
 
+def trail_change_ok(trail_before, trail_after, uid, path):
+    """user_request_log 的改動是不是「中介層那一列」：舊列全在＋恰好多一列（本人、GET、這支 probe、200）。
+
+    main.py `_record_request_trail` 對**每一個**請求記操作軌跡——那不是 probe 路由的副作用；
+    但只准這一列，改舊列、多列、別的路徑／狀態都算（稽核 D S-1：窄度由 test_rc_trail_allowance_is_narrow 鎖住）。"""
+    new = [r for r in trail_after if r not in trail_before]
+    return all(r in trail_after for r in trail_before) and len(new) == 1 and new[0][1:] == (uid, "GET", path, 200), new
+
+
+def captured_text(caplog, captured):
+    """這一次請求期間 app 印出來的全部文字：logging（caplog）＋stdout／stderr（capsys）。
+    主題題與反向控制共用（稽核 D S-2：反向控制另組文字時，拿掉主題那一份的 caplog 照樣會過）。"""
+    return "\n".join(rec.getMessage() for rec in caplog.records) + "\n" + captured.out + "\n" + captured.err
+
+
+def measure(client, h, path, fx, uid, caplog, capsys):
+    """打一次 path，回 (response, [問題])。問題：寫了表（軌跡那一列除外）、寄信、起背景工作、回應值進了 log。"""
+    _clear_trail(uid)            # 每支都從「沒有這個人的軌跡」開始 ⇒ 中介層一定寫恰好一列（不靠 30 秒去重的運氣）
+    before = db_fingerprint()
+    trail_before = _trail_rows()
+    caplog.clear()
+    capsys.readouterr()
+    n_smtp, n_thr = len(fx.smtp), len(fx.threads)
+    with caplog.at_level(logging.DEBUG):
+        r = client.get(path, headers=h)
+    out = capsys.readouterr()
+    problems = []
+    ch = changed_tables(before, db_fingerprint())
+    if "user_request_log" in ch:
+        ok, new = trail_change_ok(trail_before, _trail_rows(), uid, path)
+        if ok:
+            ch.remove("user_request_log")
+        else:
+            problems.append("user_request_log 的改動不是中介層那一列：新增 %s" % new)
+    if ch:
+        problems.append("寫了表 %s" % ch)
+    if len(fx.smtp) > n_smtp:
+        problems.append("嘗試寄信")
+    if len(fx.threads) > n_thr:
+        problems.append("起了背景工作 %s" % fx.threads[n_thr:])
+    try:
+        body = r.json()
+    except ValueError:
+        body = r.text
+    lk = leaked(string_values(body), captured_text(caplog, out))
+    if lk:
+        problems.append("回應值出現在 log：%s" % lk[:5])
+    return r, problems
+
+
 def test_declared_probes_are_read_only_and_do_not_log_their_responses(client, make_user, monkeypatch, caplog, capsys):
     probes = _installed_probes()
     if not probes:
@@ -166,42 +216,14 @@ def test_declared_probes_are_read_only_and_do_not_log_their_responses(client, ma
     # 對照組：中介層不記軌跡的端點（trail.should_skip）⇒ 整個庫一列都不能變（含 user_request_log）
     import trail
     assert trail.should_skip(CONTROL_PATH), CONTROL_PATH
-    _clear_trail(uid)
-    before = db_fingerprint()
-    assert client.get(CONTROL_PATH, headers=h).status_code == 200
-    assert changed_tables(before, db_fingerprint()) == [], "對照組（不記軌跡的端點）也讓庫變了 ⇒ 比對器或環境有問題"
+    r, pr = measure(client, h, CONTROL_PATH, fx, uid, caplog, capsys)
+    assert r.status_code == 200 and pr == [], ("對照組（不記軌跡的端點）也有問題 ⇒ 比對器或環境有問題", pr)
+    assert _trail_rows() == [t for t in _trail_rows() if t[1] != uid], "對照組留下了本人的軌跡 ⇒ should_skip 失效"
     problems = []
     for key, path, _x in probes:
-        _clear_trail(uid)            # 每支都從「沒有這個人的軌跡」開始 ⇒ 中介層一定寫恰好一列（不靠 30 秒去重的運氣）
-        before = db_fingerprint()
-        trail_before = _trail_rows()
-        caplog.clear()
-        capsys.readouterr()
-        n_smtp, n_thr = len(fx.smtp), len(fx.threads)
-        with caplog.at_level(logging.DEBUG):
-            r = client.get(path, headers=h)
-        out = capsys.readouterr()
+        r, pr = measure(client, h, path, fx, uid, caplog, capsys)
         assert r.status_code == 200, (key, path, r.status_code)
-        ch = changed_tables(before, db_fingerprint())
-        # user_request_log：中介層（main.py `_record_request_trail`）對**每一個**請求記的操作軌跡——不是 probe 路由的副作用。
-        # 只允許「恰好多一列：本人、GET、這支 probe 的路徑、200」，其他任何改動（改舊列、多列、別的路徑）照樣算。
-        if "user_request_log" in ch:
-            new = [r_ for r_ in _trail_rows() if r_ not in trail_before]
-            old_kept = all(r_ in _trail_rows() for r_ in trail_before)
-            if old_kept and len(new) == 1 and new[0][1:] == (uid, "GET", path, 200):
-                ch.remove("user_request_log")
-            else:
-                problems.append("%s %s：user_request_log 的改動不是中介層那一列：新增 %s" % (key, path, new))
-        if ch:
-            problems.append("%s %s：寫了表 %s" % (key, path, ch))
-        if len(fx.smtp) > n_smtp:
-            problems.append("%s %s：嘗試寄信" % (key, path))
-        if len(fx.threads) > n_thr:
-            problems.append("%s %s：起了背景工作 %s" % (key, path, fx.threads[n_thr:]))
-        text = "\n".join(rec.getMessage() for rec in caplog.records) + "\n" + out.out + "\n" + out.err
-        lk = leaked(string_values(r.json()), text)
-        if lk:
-            problems.append("%s %s：回應值出現在 log：%s" % (key, path, lk[:5]))
+        problems += ["%s %s：%s" % (key, path, p) for p in pr]
     assert not problems, "probe 必須純讀且不 log 回應內容（換一支 probe，或修掉路由的副作用）：\n  " + "\n  ".join(problems)
 
 
@@ -224,8 +246,21 @@ def test_rc_fingerprint_sees_a_write_and_nothing_else(client):
     assert changed_tables(a, db_fingerprint()) != []
 
 
+_RC = "/api/zz-probe-rc/"
+
+
+def _mount(app, routes):
+    for name, fn in routes.items():
+        app.add_api_route(_RC + name, fn, methods=["GET"])
+        app.router.routes.insert(0, app.router.routes.pop())      # 排在萬用路由（/api/{…}、靜態檔）之前
+
+
+def _unmount(app):
+    app.router.routes[:] = [r for r in app.router.routes if not getattr(r, "path", "").startswith(_RC)]
+
+
 def test_rc_log_leak_and_thread_are_caught(client, make_user, monkeypatch, caplog, capsys):
-    """合成路由：一支把回應值 log 出來、一支起背景執行緒、一支乾淨 ⇒ 前兩支被抓到、第三支不報。"""
+    """合成路由經**同一個 measure()**：把回應值 log／print 出來、起背景執行緒 ⇒ 被抓到；乾淨的 ⇒ 不報。"""
     app = client.app
     log = logging.getLogger("zz.probe.rc")
 
@@ -233,6 +268,10 @@ def test_rc_log_leak_and_thread_are_caught(client, make_user, monkeypatch, caplo
         body = {"name": "外洩的姓名值", "items": [{"phone": "0987654321"}], "n": 12345}
         log.info("回傳 %s", json.dumps(body, ensure_ascii=False))
         return body
+
+    async def printer():
+        print("回傳 印出來的地址值")
+        return {"addr": "印出來的地址值"}
 
     async def spawner():
         import db
@@ -242,30 +281,80 @@ def test_rc_log_leak_and_thread_are_caught(client, make_user, monkeypatch, caplo
     async def clean():
         return {"name": "乾淨的姓名值", "n": 1}
 
-    for p, fn in (("/api/zz-probe-rc/leaky", leaky), ("/api/zz-probe-rc/spawner", spawner), ("/api/zz-probe-rc/clean", clean)):
-        app.add_api_route(p, fn, methods=["GET"])
-        app.router.routes.insert(0, app.router.routes.pop())      # 排在萬用路由（/api/{…}、靜態檔）之前
+    _mount(app, {"leaky": leaky, "printer": printer, "spawner": spawner, "clean": clean})
     h = _login(client, make_user)
+    uid = _uid("probe_se_sa")
     try:
         fx = _SideEffects(monkeypatch)
-        got = {}
-        for p in ("/api/zz-probe-rc/leaky", "/api/zz-probe-rc/spawner", "/api/zz-probe-rc/clean"):
-            caplog.clear()
-            capsys.readouterr()
-            n_thr = len(fx.threads)
-            with caplog.at_level(logging.DEBUG):
-                r = client.get(p, headers=h)
-            out = capsys.readouterr()
-            assert r.status_code == 200, (p, r.status_code, r.text[:120])
-            text = "\n".join(rec.getMessage() for rec in caplog.records) + out.out + out.err
-            got[p] = (leaked(string_values(r.json()), text), len(fx.threads) > n_thr)
-        assert got["/api/zz-probe-rc/leaky"][0] == ["0987654321", "外洩的姓名值"], got
-        assert got["/api/zz-probe-rc/spawner"][1] is True, got
-        assert got["/api/zz-probe-rc/clean"] == ([], False), got
+        got = {n: measure(client, h, _RC + n, fx, uid, caplog, capsys)[1] for n in ("leaky", "printer", "spawner", "clean")}
+        assert got["leaky"] == ["回應值出現在 log：['0987654321', '外洩的姓名值']"], got
+        assert got["printer"] == ["回應值出現在 log：['印出來的地址值']"], got          # capsys 那一半
+        assert len(got["spawner"]) == 1 and got["spawner"][0].startswith("起了背景工作"), got
+        assert got["clean"] == [], got
         assert string_values({"a": "abc", "b": 12345, "c": ["abcd"]}) == {"abcd"}       # 短字串、數字不比
     finally:
-        app.router.routes[:] = [r for r in app.router.routes
-                                     if not getattr(r, "path", "").startswith("/api/zz-probe-rc/")]
+        _unmount(app)
+
+
+def test_rc_trail_allowance_is_narrow(client, make_user, monkeypatch, caplog, capsys):
+    """稽核 D S-1：允許分支只准「恰好一列、本人、GET、這支路徑、200」——放寬成「至少一列、不看內容」要紅。
+
+    合成路由各自多寫一列**同形**（同一張表、同樣欄位）而內容不對的軌跡：別的路徑、別的狀態、別人、第二列同路徑、改舊列。"""
+    import db
+    app = client.app
+    uid_box = {}
+
+    def _ins(user_id, method, path, status):
+        conn = db.get_db()
+        try:
+            conn.execute("INSERT INTO user_request_log (user_id, at, method, path, page, status) VALUES (?,?,?,?,?,?)",
+                         (user_id, "2026-09-26T00:00:00", method, path, "", status))
+            conn.commit()
+        finally:
+            conn.close()
+
+    async def other_path():
+        _ins(uid_box["u"], "GET", "/api/zz-other", 200)
+        return {"x": 1}
+
+    async def other_status():
+        _ins(uid_box["u"], "GET", _RC + "other_status", 500)
+        return {"x": 1}
+
+    async def other_user():
+        _ins(uid_box["u"] + 999, "GET", _RC + "other_user", 200)
+        return {"x": 1}
+
+    async def duplicate():
+        _ins(uid_box["u"], "GET", _RC + "duplicate", 200)          # 與中介層那一列完全同形 ⇒ 兩列
+        return {"x": 1}
+
+    async def edits_old():
+        conn = db.get_db()
+        try:
+            conn.execute("UPDATE user_request_log SET status=299 WHERE user_id<>?", (uid_box["u"],))
+            conn.commit()
+        finally:
+            conn.close()
+        return {"x": 1}
+
+    async def fine():
+        return {"x": 1}
+
+    _mount(app, {"other_path": other_path, "other_status": other_status, "other_user": other_user,
+                 "duplicate": duplicate, "edits_old": edits_old, "fine": fine})
+    h = _login(client, make_user)
+    uid_box["u"] = uid = _uid("probe_se_sa")
+    _ins(uid + 1, "GET", "/api/zz-someone-else", 200)          # 一列別人的舊軌跡（給 edits_old 改）
+    try:
+        fx = _SideEffects(monkeypatch)
+        got = {n: measure(client, h, _RC + n, fx, uid, caplog, capsys)[1]
+               for n in ("other_path", "other_status", "other_user", "duplicate", "edits_old", "fine")}
+        for n in ("other_path", "other_status", "other_user", "duplicate", "edits_old"):
+            assert any(p.startswith("user_request_log 的改動不是中介層那一列") for p in got[n]), (n, got[n])
+        assert got["fine"] == [], got                                # 正對照：只有中介層那一列 ⇒ 不報
+    finally:
+        _unmount(app)
 
 
 # ── ③ 演練工具只記狀態碼 ──────────────────────────────────────────────────────
