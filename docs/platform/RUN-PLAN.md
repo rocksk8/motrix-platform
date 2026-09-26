@@ -129,6 +129,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 09:14 巡視：第五班列車長在跑 crm 真刪反向控制；B 的 M08 必修已修（b-m08-2 f7463dfa）⇒ D 複核中；C 的 c-m07 約 09:20、c-m04-2 約 09:50；A（hichan-f9）仍無回應（U18）。主持：IMPROVEMENT-REPORT 補 M08 稽核列與 5 條系統性問題（觀測點綁名字、掃描範圍寫死舊目錄、修並發只驗一個方向、刪資料夾被擋改用 sparse checkout、主持自己違反 rebase／push 分開）。
 - 2026-09-26 09:01 主持：D 稽核 b-g1（AUDIT-D-B-G1）必修 G-M1：core-only 反向控制跑出 4 題非預期紅，§G3 規定全綠，第一班就會擋車。裁示：工具加「已知紅」清單（題名、擁有者、修復分支；只准縮短、已轉綠還留著也紅、新增要附主持裁示），交 B 在 M08 必修之後做。4 題中歸 A 的 2 題由主持在 wip/h-corered 修掉（正對照改用合成模組）；C 的 2 題（dep_scan 一致性、pii_forms netplan）交 C。G-S1（0 題判 ok）交 B。做法說明：要「只剩底層」的樹時用 sparse checkout 不取出 modules，不刪資料夾（刪資料夾會被權限擋，也不應該繞過）。
 - 2026-09-26 08:58 D：b-g1（`AUDIT-D-B-G1.md`，6b0c8fdd）：必修 G-M1——D 實跑 core_only_rc 在 B 自己的 commit 上 8 failed／989 passed，扣允許 2、b-m08 已修 2（menu_parity），**另 4 題沒處理也沒分派**（case_read_scope 反向控制、IP 登記表 present-still-red、dep_scan 一致性、pii_forms——正對照需要一個在的模組／netplan 告知端點）⇒ 照 §G3 第一班就擋車。建議：exit 5／0 題也判 ok（實測）、宣告不存在名稱靜默忽略。宣告機制突變 4/4 紅。
 - 2026-09-26 08:43 巡視：第五班全量跑完（f5e7eeee），列車長在修交互紅（07f81ed3 crm 版號、fa713fac h-hist-2）；D 關閉 O-4、M02-S2（含 s2b）⇒ 派審 B 的 wip/b-g1；B 在修 M08 必修（死線 10:20）；C 的 c-m04-2 晚於預估的 08:30（在等反向控制結果）、M07 預計 10:00 回報；A（hichan-f9）仍然無回應（U18）。主持自己更正：這幾輪推文件時，rebase 與 push 寫在同一個指令（違反 PLAYBOOK／〈rebase 之後先重跑再推〉），帶進來的都只有文件、沒有造成影響；之後分成兩個指令。
