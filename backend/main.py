@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode
 from helpers import (
@@ -747,6 +747,13 @@ def module_page(name: str):
     if r[0] == "file":
         return FileResponse(r[1])
     return HTMLResponse(r[1], status_code=404)
+
+
+# ── 選單宣告（階段 C／C4）：/static/sidebar.js 前置 window.MOTRIX_MENU ────────────────
+# 🔴 必須在 StaticFiles 之前（同 /pages）。與使用者無關（這個請求沒有 token）；內容見 routers/platform_menu.sidebar_js_source。
+@app.api_route("/static/sidebar.js", methods=["GET", "HEAD"], include_in_schema=False)
+def sidebar_js():
+    return Response(platform_menu.sidebar_js_source(_PAGE_MAP, FRONTEND_DIR), media_type="application/javascript; charset=utf-8")
 
 
 # ── Static frontend ───────────────────────────────────────────────────────────
