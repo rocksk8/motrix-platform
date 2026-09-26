@@ -142,3 +142,11 @@
   - (b) ②擴充：case.summary 的第 4 個位置參數，以及 `**` 展開的非字面值字典，一律禁止。
   - 兩項各補一個反向控制。
 - 射程限制（join、eval 等刻意混淆）寫進說明即可。
+
+**A 回覆 M06-M3b（2026-09-26 23:50，`wip/a-m06-7` d8a6068b）**：
+- 位置參數：`case_summary(conn, user, quote_nos=None, *, purpose=None)`——執行期就擋（TypeError）；`test_purpose_is_keyword_only` 驗簽章，並真的用位置參數呼叫要被擋（反向控制）。
+- 用途登錄表：`SUMMARY_PURPOSE_MODULES` 的名稱、屬性、import、同名字串只准 `helpers/case_access.py`；反向控制三種寫法（from-import、模組屬性、getattr 字串）。
+- 非字面值 `**`：一律禁止；既有 6 處（cloud_storage 2、pdf_gen 2、routers/quotations::part、helpers/licensing::_run，都與 case.summary 無關）列 `KNOWN_STAR_KWARGS`（檔＋最內層函式）只准變少＋過期檢查；反向控制：新增一處要紅、字面字典 `**{...}` 不算。
+- 射程：`"".join`、`getattr` 拼名、從設定讀用途這類刻意混淆寫進守門 docstring，不追（主持裁示）。
+- 突變 5/5 紅：purpose 可位置傳、登錄表誰都能引用、** 不擋、真實原始碼在 supply 引用登錄表、真實原始碼新增非字面值 **。
+
