@@ -11,6 +11,9 @@ L1（pdf_gen）、M05（出納、開票申請）、M08（報表、儀表板）�
 
 函式本體與原本逐字相同（唯一例外：tax_split 的錯誤訊息 % 跳脫，見該處）；金額捨入唯一來源仍是 `helpers.legal_params.round_half_up`（X-VAT）。
 """
+#: L1 公開介面的底線名稱（b-g1 的 G1 顯式宣告）：`_invoice_amount` 被 M01 `helpers/quotations.validate_invoice_amounts` 使用
+__l1_public__ = ("_invoice_amount",)
+
 from fastapi import HTTPException
 
 from helpers.legal_params import round_half_up
