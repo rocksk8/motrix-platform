@@ -27,13 +27,11 @@ MODULE = "modules/accounting"
 
 #: 檔（相對 backend）⇒ {別組的表: (擁有的模組 key, 到期的 capability)}。只准變少。
 #: a：M06-a（M01 提供 case.summary／case.extra_expenses 前）；d：M06-d（C 的 c-ip14-paid 合回前）
-#: a'：〔2026-09-26 A 盤點補列〕vouchers.py 的 JV21 支出來源與 by-case 還讀 M04 的派工表（M06-PLAN §5 原本漏列）
+#: a'（vouchers.py 讀 M04 派工表）不列：主持裁示走 IP-15 `dispatch.list_for_case`，資料涵蓋（M06-PLAN §5 a' 列），M06 搬遷時改掉
 KNOWN_FOREIGN_READS = {
     MODULE + "/api/vouchers.py": {
         "quotations": ("case", "case.summary"),
         "case_extra_expenses": ("case", "case.extra_expenses"),
-        "contractor_dispatches": ("subcontract", "dispatch.by_case"),
-        "vendor_contractors": ("subcontract", "dispatch.by_case"),
     },
     MODULE + "/api/accounting_export.py": {
         "contractor_payment_vouchers": ("subcontract", "contractor_voucher.paid_between"),
@@ -135,7 +133,7 @@ def test_positive_and_reverse_control_of_the_scan():
 
 def test_positive_and_reverse_control_of_stale_and_expiry():
     f = MODULE + "/api/vouchers.py"
-    found = {f: {"quotations", "case_extra_expenses", "contractor_dispatches", "vendor_contractors"},
+    found = {f: {"quotations", "case_extra_expenses"},
              MODULE + "/api/accounting_export.py": {"contractor_payment_vouchers"}}
     assert stale(found, set(found)) == []
     shrunk = dict(found, **{f: found[f] - {"quotations"}})
