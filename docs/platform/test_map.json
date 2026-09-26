@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 567,
-  "unmapped": 9,
+  "tests": 630,
+  "unmapped": 7,
   "kinds": {
-   "api": 296,
-   "unit": 51,
-   "e2e": 139,
-   "audit": 81
+   "audit": 85,
+   "api": 336,
+   "unit": 55,
+   "e2e": 154
   },
   "routes": 568
  },
@@ -16,14 +16,971 @@
   "backend/tests/platform/test_deploy_dashboard_gates.py",
   "backend/tests/platform/test_deploy_dashboard_health.py",
   "backend/tests/platform/test_deploy_dashboard_jobs.py",
-  "backend/tests/test_bn16_award_status_filter_2026_09_24.py",
-  "backend/tests/test_bonus_award_export_watermark_2026_09_23.py",
   "backend/tests/test_e2e_bn12_award_preview_recall_page_2026_09_24.py",
   "backend/tests/test_e2e_bn3_manual_people_page_2026_09_24.py",
   "backend/tests/test_e2e_bn4_bonus_page_name_2026_09_24.py",
   "backend/tests/test_netguard_2026_09_21.py"
  ],
  "tests": {
+  "backend/modules/analytics/tests/test_bonus_award_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_case_closing_pdf_taxexempt_2026_09_10.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_case_closing_pdf_taxexempt_2026_09_10.py",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/pdf_gen.py",
+     "backend/tests/test_case_closing_pdf_taxexempt_2026_09_10.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_case_management_logic_fixes_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_case_roles_username_2026_09_24.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_core.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_core.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_core.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_dashboard_connections_2026_09_22.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_db_ledger.py",
+    "mod:analytics/api/dashboard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_db_ledger.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_dashboard_monthly_dealtag_fallback_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/dashboard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_e2e_index_without_analytics_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/test_e2e_index_without_analytics_2026_09_26.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/test_e2e_index_without_analytics_2026_09_26.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_e2e_report_recognition_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
+    "file:backend/tests/test_e2e_report_recognition_2026_09_24.py",
+    "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
+    "page:pages/case-management.html",
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/test_e2e_material_orders_2026_09_11.py",
+     "backend/tests/test_e2e_report_recognition_2026_09_24.py",
+     "backend/tests/test_report_recognition_basis_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/subcontract/",
+     "frontend/pages/reports.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_e2e_reports_period_select_matches_model_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_e2e_select_model.py",
+    "mod:analytics/api/reports",
+    "page:pages/reports.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_e2e_select_model.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "page": [
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "frontend/pages/reports.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_e2e_reports_period_sync_2026_09_10.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "js:js/reports.js",
+    "page:pages/reports.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/js/reports.js",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "frontend/pages/reports.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_e2e_view_filters_not_dirty_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_e2e_view_filters_not_dirty_2026_09_25.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_e2e_view_filters_not_dirty_2026_09_25.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_finance_advisory_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_module_history_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "file:backend/tests/test_module_history_2026_09_23.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_module_history_2026_09_23.py"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_module_permission_fixes_2026_09_13.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_module_permission_fixes_2026_09_13.py",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_module_permission_fixes_2026_09_13.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_money_round_half_up_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_money_round_half_up_2026_09_26.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_money_round_half_up_2026_09_26.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_monthly_report_period_scoping_2026_09_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "helper:email_notify",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/email_notify.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_navigation_destination_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/analytics/api/",
+    "file:backend/tests/test_navigation_destination_2026_09_23.py",
+    "mod:analytics/api/reports",
+    "page:pages/reports.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_navigation_destination_2026_09_23.py"
+    ],
+    "page": [
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/analytics/",
+     "backend/modules/analytics/api/",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_payment_anomalies_2026_09_11.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_pdf_concurrency_2026_09_07.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/helpers/__init__.py",
+    "helper:startup",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/startup.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_queue_and_feed_scoping_2026_09_15.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_queue_and_feed_scoping_2026_09_15.py"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_queue_and_feed_scoping_2026_09_15.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_receivables_by_receipt_date_2026_09_12.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_report_recognition_basis_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
+    "helper:recognition",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/case-management.html",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:case_extra_expenses",
+    "router:material_orders",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/helpers/recognition.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_report_recognition_basis_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/case_extra_expenses.py",
+     "backend/routers/material_orders.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_bonus_payout_consumer.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/payroll/",
+    "mod:analytics/api/reports",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/test_bonus_payout_connectors",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/modules/payroll/tests/test_bonus_payout_connectors.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/modules/payroll/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_bugfix_2026_08_30.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_dispatch_connector_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports",
+    "mod:analytics/tests/test_reports_logic_fixes_2026_08_28",
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/analytics/tests/test_reports_logic_fixes_2026_08_28.py"
+    ],
+    "page": [
+     "frontend/pages/reports.html"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_dispatch_row_consumer.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/platform/test_dispatch_connector.py",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/platform/test_dispatch_connector.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_expenses.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_export_expenses.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_logic_fixes_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_quarter_scope_2026_09_10.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/__init__",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/__init__.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_receivables_monthly.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_review_fixes_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_reports_review_fixes_2026_09_02.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_reports_review_fixes_2026_09_02.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_sales_owner_2026_09_14.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_reports_tax_compliance_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_reports_tax_compliance_2026_09_02.py",
+    "mod:analytics/api/reports",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_reports_tax_compliance_2026_09_02.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_row_access_callers_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_row_access_2026_09_25.py",
+    "file:backend/tests/test_row_access_callers_2026_09_25.py",
+    "mod:analytics/api/dashboard"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_row_access_2026_09_25.py",
+     "backend/tests/test_row_access_callers_2026_09_25.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_settlement_extra_expenses_pending_2026_09_09.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_settlement_extra_files_in_exports_2026_09_01.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_tax_by_law_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_tax_by_law_2026_09_24.py",
+    "mod:analytics/api/reports"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/test_tax_by_law_2026_09_24.py"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
+  "backend/modules/analytics/tests/test_visual_management_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_visual_management_2026_08_28.py",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/test_visual_management_2026_08_28.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/analytics/"
+    ]
+   },
+   "module": "analytics"
+  },
   "backend/modules/crm/tests/test_crm_api_integration.py": {
    "kind": "api",
    "units": [
@@ -577,6 +1534,2229 @@
    "login_fixture": true,
    "module": "netplan"
   },
+  "backend/modules/payroll/tests/test_bn10_award_detail_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bn11_bonus_pdf_settlement_table_2026_09_24.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "dir:frontend/pages/",
+    "mod:payroll/bonus",
+    "mod:payroll/bonus_pdf",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/bonus.py",
+     "backend/modules/payroll/bonus_pdf.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bn12_award_preview_and_recall_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bn16_award_status_filter_2026_09_24.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bn17_award_reject_record_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/payroll/api/",
+    "mod:payroll/api/bonus",
+    "router:system",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/modules/payroll/",
+     "backend/modules/payroll/api/",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bn18_manual_override_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/payroll/api/",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/modules/payroll/",
+     "backend/modules/payroll/api/",
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "path": [
+     "backend/db.py",
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_approval_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "helper:tiered_approval",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_customer_name_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_export_watermark_2026_09_23.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_pdf_export_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "router:system"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_plan_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_reject_edit_log_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/",
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "path": [
+     "backend/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_award_visibility_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "js:js/bonus.js",
+    "mod:payroll/api/bonus",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/js/bonus.js",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_allocation_2026_09_24.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/bonus_case"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/bonus_case.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_edit_log_trigger_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_live_recalc_and_resign_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_multi_approver_tier_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_case_vouchers_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_empty_state_2026_09_23.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "dir:frontend/js/",
+    "dir:frontend/pages/",
+    "js:js/bonus.js",
+    "js:static/notif.js",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/js/bonus.js",
+     "frontend/pages/bonus.html",
+     "frontend/static/notif.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/bonus.js",
+     "frontend/pages/",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_group_person_source_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_item_create_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:main",
+    "dir:backend/helpers/",
+    "dir:backend/modules/payroll/",
+    "dir:backend/routers/",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/helpers/",
+     "backend/main.py",
+     "backend/routers/"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_items_visibility_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_legacy_retired_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:frontend/js/",
+    "js:js/bonus.js",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/js/bonus.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/js/bonus.js"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_manual_and_picker_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "helper:edit_log",
+    "helper:tiered_approval",
+    "js:js/bonus.js",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus",
+    "mod:payroll/bonus_pdf",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/js/bonus.js",
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/archive.py",
+     "backend/db.py",
+     "backend/helpers/edit_log.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/bonus.py",
+     "backend/modules/payroll/bonus_pdf.py",
+     "frontend/js/bonus.js",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_module_flag_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/modules/payroll/",
+    "dir:backend/modules/payroll/api/",
+    "dir:frontend/pages/",
+    "dir:frontend/static/",
+    "js:js/bonus.js",
+    "js:static/sidebar.js",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus",
+    "page:pages/account-items.html",
+    "page:pages/bonus.html",
+    "page:pages/voucher.html",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "page": [
+     "frontend/js/bonus.js",
+     "frontend/pages/account-items.html",
+     "frontend/pages/bonus.html",
+     "frontend/pages/voucher.html",
+     "frontend/static/sidebar.js"
+    ],
+    "path": [
+     "backend/modules/",
+     "backend/modules/payroll/",
+     "backend/modules/payroll/api/",
+     "backend/modules/payroll/api/bonus.py",
+     "frontend/js/bonus.js",
+     "frontend/pages/",
+     "frontend/pages/bonus.html",
+     "frontend/static/",
+     "frontend/static/sidebar.js"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_module_status_provider.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_payout_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:email_notify",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:notification_prefs",
+    "js:js/bonus.js",
+    "js:js/cashier.js",
+    "mod:payroll/__init__",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus_deductions",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "page:pages/bonus.html",
+    "page:pages/cashier.html",
+    "page:pages/users.html",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:cashier",
+    "router:mail_settings",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/email_notify.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/mail_types.py",
+     "backend/helpers/notification_prefs.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/bonus_deductions.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/cashier.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/vouchers.py"
+    ],
+    "page": [
+     "frontend/js/bonus.js",
+     "frontend/js/cashier.js",
+     "frontend/pages/bonus.html",
+     "frontend/pages/cashier.html",
+     "frontend/pages/users.html"
+    ],
+    "path": [
+     "frontend/js/bonus.js",
+     "frontend/js/cashier.js"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_sales_person_uses_username_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/pdf_gen.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_bonus_settlement_preview_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus",
+    "page:pages/settlement.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/bonus.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/settlement.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_empty_state_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "mod:payroll/bonus",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/bonus.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_live_recalc_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/_ui_dialogs.py",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py",
+     "backend/tests/_ui_dialogs.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_payout_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/_e2e_login.py",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "page:pages/bonus.html",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html",
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/bonus.html",
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_queue_no_cascade_promise_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "page:pages/approval-queue.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
+    "page:pages/bonus.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_payroll_legal_params_r1_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "mod:payroll/api/payslips",
+    "page:pages/legal-params.html",
+    "page:pages/payslip-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "page": [
+     "frontend/pages/legal-params.html",
+     "frontend/pages/payslip-form.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_payroll_legal_round_d1_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "js:static/legal-round.js",
+    "mod:payroll/api/payslips",
+    "page:pages/payslip-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "page": [
+     "frontend/pages/payslip-form.html",
+     "frontend/static/legal-round.js"
+    ],
+    "path": [
+     "frontend/pages/payslip-form.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_e2e_payroll_privacy_notice_r3_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:payroll/api/payslips",
+    "page:pages/payslip-form.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "page": [
+     "frontend/pages/payslip-form.html"
+    ],
+    "path": [
+     "frontend/pages/payslip-form.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payroll_case_roles_username_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/bonus"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payroll_legal_audit_d_r1_r3_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "helper:privacy_notice",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractors",
+    "router:legal_params",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/privacy_notice.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/routers/legal_params.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payroll_legal_params_r1_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "mod:payroll/api/payslips",
+    "router:legal_params"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py",
+     "backend/routers/legal_params.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payroll_money_round_half_up_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:frontend/js/",
+    "js:js/case-management-core.js",
+    "js:static/legal-round.js",
+    "mod:payroll/bonus_pdf",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:invoice_vouchers",
+    "router:payment_requests"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/payroll/bonus_pdf.py",
+     "backend/routers/payment_requests.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/invoice_vouchers.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/static/legal-round.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/static/legal-round.js"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payroll_privacy_notice_r3_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractors",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_archive_path_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "helper:settings",
+    "mod:payroll/api/__init__",
+    "mod:payroll/api/payslips",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/helpers/settings.py",
+     "backend/modules/payroll/api/__init__.py",
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_calc.py": {
+   "kind": "unit",
+   "units": [
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_edit_guard_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/payslips"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_payslip_template_p2_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:pdf_gen",
+    "dir:backend/modules/payroll/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_frozen/legacy_payslip_html.py",
+    "helper:doc_template",
+    "helper:settings",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/doc_template.py",
+     "backend/helpers/settings.py",
+     "backend/pdf_gen.py",
+     "backend/tests/_frozen/legacy_payslip_html.py"
+    ],
+    "api": [
+     "backend/routers/definitions.py"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_voucher_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/",
+    "dir:backend/modules/payroll/",
+    "dir:docs/platform/",
+    "dir:frontend/pages/",
+    "file:docs/platform/modules.json",
+    "helper:voucher_pdf",
+    "mod:payroll/__init__",
+    "mod:payroll/api/bonus",
+    "mod:payroll/bonus_pdf",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/voucher_pdf.py",
+     "backend/modules/payroll/__init__.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/bonus_pdf.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/modules/",
+     "docs/platform/",
+     "docs/platform/modules.json",
+     "frontend/pages/",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/payroll/tests/test_voucher_status_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/payroll/",
+    "dir:frontend/pages/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "mod:payroll/tests/test_voucher_connectors",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/modules/payroll/tests/test_voucher_connectors.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/payroll/"
+    ]
+   },
+   "module": "payroll"
+  },
+  "backend/modules/subcontract/tests/test_api_integration.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "helper:auth",
+    "mod:crm/api",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/auth.py"
+    ],
+    "api": [
+     "backend/modules/crm/api.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_case_finance_summary_2026_09_09.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_cashier_execution_history_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "router:cashier",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_cashier_module_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/receivables.html",
+    "router:cashier",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/receivables.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_contractor_bank_branch_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/subcontract/",
+    "dir:frontend/pages/",
+    "mod:subcontract/api/contractors",
+    "page:pages/approval-queue.html",
+    "page:pages/contractors.html",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/contractors.html"
+    ],
+    "path": [
+     "frontend/pages/",
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/contractors.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_contractor_voucher_paid_date_2026_08_31.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "core:pdf_gen",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/pdf_gen.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_edit_guard_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_file_uploads.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/vendor_contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_invoice_payable_date_2026_08_30.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "router:quotations"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_row_provider.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "helper:recognition",
+    "plat:__init__",
+    "plat:registry",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py",
+     "backend/helpers/recognition.py",
+     "backend/routers/vouchers.py"
+    ],
+    "api": [
+     "backend/routers/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_case_open_requests_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "mod:daily_tasks/api",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/daily_tasks/api.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_cashier_subcontract_absent_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_contractor_bank_branch_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "mod:subcontract/tests/test_contractor_bank_branch_2026_09_24",
+    "page:pages/approval-queue.html",
+    "page:pages/contractors.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/modules/subcontract/tests/test_contractor_bank_branch_2026_09_24.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/contractors.html"
+    ],
+    "path": [
+     "frontend/pages/approval-queue.html",
+     "frontend/pages/contractors.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_contractor_pii_upload_failure_2026_09_23.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "page:pages/contractors.html",
+    "page:pages/vendor-contractors.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/contractors.html",
+     "frontend/pages/vendor-contractors.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_privacy_notice_forms_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:subcontract/api/vendor_contractors",
+    "page:pages/vendor-contractors.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/pages/vendor-contractors.html"
+    ],
+    "path": [
+     "frontend/pages/vendor-contractors.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_privacy_notice_r3_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:subcontract/api/contractors",
+    "page:pages/contractors.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "page": [
+     "frontend/pages/contractors.html"
+    ],
+    "path": [
+     "frontend/pages/contractors.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_e2e_report_recognition_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/subcontract/",
+    "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
+    "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
+    "page:pages/case-management.html",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/routers/quotations.py",
+     "backend/tests/test_e2e_material_orders_2026_09_11.py",
+     "backend/tests/test_report_recognition_basis_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_legal_audit_d_r1_r3_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "helper:legal_params",
+    "helper:privacy_notice",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractors",
+    "router:legal_params",
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/legal_params.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/routers/legal_params.py",
+     "backend/routers/system.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_money_round_half_up_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "dir:frontend/js/",
+    "js:js/case-management-core.js",
+    "js:static/legal-round.js",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:invoice_vouchers",
+    "router:payment_requests"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/payment_requests.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/invoice_vouchers.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/static/legal-round.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/static/legal-round.js"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_mp1_map_points_link_to_records_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/_map_cache_warm.py",
+    "file:backend/tests/_map_tiles.py",
+    "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "helper:geo",
+    "js:static/record-link.js",
+    "page:pages/case-management.html",
+    "page:pages/contractors.html",
+    "page:pages/customers.html",
+    "page:pages/map.html",
+    "page:pages/suppliers.html",
+    "page:pages/tender-radar.html",
+    "page:pages/vendor-contractors.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/geo.py",
+     "backend/tests/_map_cache_warm.py",
+     "backend/tests/_map_tiles.py",
+     "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/contractors.html",
+     "frontend/pages/customers.html",
+     "frontend/pages/map.html",
+     "frontend/pages/suppliers.html",
+     "frontend/pages/tender-radar.html",
+     "frontend/pages/vendor-contractors.html",
+     "frontend/static/record-link.js"
+    ],
+    "path": [
+     "frontend/pages/map.html"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_pii_archive_mirror_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:archive",
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "helper:settings",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:paths"
+   ],
+   "evidence": {
+    "import": [
+     "backend/archive.py",
+     "backend/core/__init__.py",
+     "backend/core/paths.py",
+     "backend/db.py",
+     "backend/helpers/settings.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_privacy_notice_forms_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:analytics/api/dashboard",
+    "mod:crm/api",
+    "mod:daily_tasks/api",
+    "mod:netplan/api",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
+    "router:account_items",
+    "router:approval_delegates",
+    "router:auth",
+    "router:company_lookup",
+    "router:completion_notes",
+    "router:custom_records",
+    "router:customers",
+    "router:invoice_vouchers",
+    "router:item_reads",
+    "router:mail_settings",
+    "router:module_versions",
+    "router:parts",
+    "router:payment_requests",
+    "router:quotations",
+    "router:search",
+    "router:shipping_notes",
+    "router:suppliers",
+    "router:system",
+    "router:uploads",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/crm/api.py",
+     "backend/modules/daily_tasks/api.py",
+     "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/account_items.py",
+     "backend/routers/approval_delegates.py",
+     "backend/routers/auth.py",
+     "backend/routers/company_lookup.py",
+     "backend/routers/completion_notes.py",
+     "backend/routers/custom_records.py",
+     "backend/routers/customers.py",
+     "backend/routers/invoice_vouchers.py",
+     "backend/routers/item_reads.py",
+     "backend/routers/mail_settings.py",
+     "backend/routers/module_versions.py",
+     "backend/routers/parts.py",
+     "backend/routers/payment_requests.py",
+     "backend/routers/quotations.py",
+     "backend/routers/search.py",
+     "backend/routers/shipping_notes.py",
+     "backend/routers/suppliers.py",
+     "backend/routers/system.py",
+     "backend/routers/uploads.py",
+     "backend/routers/vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_privacy_notice_r3_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "file:backend/helpers/__init__.py",
+    "helper:privacy_notice",
+    "mod:subcontract/api/contractors"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/privacy_notice.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_report_recognition_basis_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "helper:recognition",
+    "mod:analytics/api/reports",
+    "mod:subcontract/api/vendor_contractors",
+    "router:material_orders"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/recognition.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/material_orders.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_subcontract_providers.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "dir:backend/modules/subcontract/api/",
+    "mod:subcontract/api/__init__",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:accounting_export",
+    "router:cashier",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/subcontract/api/__init__.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/",
+     "backend/modules/subcontract/api/",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_t100_export_2026_09_01.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "router:accounting_export"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/accounting_export.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
   "backend/modules/tender_radar/tests/test_tender_columns_stored_2026_09_23.py": {
    "kind": "api",
    "units": [
@@ -644,16 +3824,16 @@
    "units": [
     "core:db",
     "dir:backend/modules/tender_radar/",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_mapiso.py",
-    "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
     "mod:tender_radar/api",
     "page:pages/tender-radar.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_mapiso.py",
-     "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_mapiso.py"
     ],
     "api": [
      "backend/modules/tender_radar/api.py"
@@ -1094,31 +4274,80 @@
     ]
    }
   },
-  "backend/tests/platform/test_bonus_payout_connectors.py": {
+  "backend/tests/platform/test_bonus_module_status_connector.py": {
    "kind": "api",
    "units": [
-    "core:db",
-    "file:backend/helpers/__init__.py",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "helper:bonus_deductions",
-    "helper:email_notify",
-    "helper:legal_params",
-    "helper:mail_types",
-    "helper:notification_prefs",
-    "js:js/bonus.js",
-    "js:js/cashier.js",
-    "page:pages/bonus.html",
-    "page:pages/cashier.html",
-    "page:pages/users.html",
+    "file:backend/routers/__init__.py",
+    "mod:payroll/bonus",
     "plat:__init__",
     "plat:registry",
     "plat:source_tree",
-    "router:bonus",
-    "router:cashier",
-    "router:mail_settings",
-    "router:reports",
-    "router:vouchers"
+    "router:system"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/modules/payroll/bonus.py",
+     "backend/routers/__init__.py",
+     "backend/routers/system.py"
+    ],
+    "api": [
+     "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_bonus_payouts_absent.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:registry",
+    "router:cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/cashier.py"
+    ],
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/cashier.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_case_access_l1.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/core/",
+    "dir:docs/platform/",
+    "dir:tools/platform/",
+    "file:backend/helpers/__init__.py",
+    "file:docs/platform/modules.json",
+    "helper:audit",
+    "helper:case_access",
+    "helper:company_identity",
+    "helper:google_calendar",
+    "helper:quotations",
+    "helper:row_access",
+    "mod:netplan/__init__",
+    "mod:netplan/api",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:item_reads",
+    "router:search",
+    "router:system"
    ],
    "evidence": {
     "import": [
@@ -1127,37 +4356,35 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/bonus_deductions.py",
-     "backend/helpers/email_notify.py",
-     "backend/helpers/legal_params.py",
-     "backend/helpers/mail_types.py",
-     "backend/helpers/notification_prefs.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
+     "backend/helpers/case_access.py",
+     "backend/helpers/quotations.py",
+     "backend/helpers/row_access.py",
+     "backend/modules/netplan/__init__.py",
+     "backend/modules/netplan/api.py"
     ],
     "api": [
-     "backend/routers/bonus.py",
-     "backend/routers/cashier.py",
-     "backend/routers/mail_settings.py",
-     "backend/routers/reports.py",
-     "backend/routers/vouchers.py"
-    ],
-    "page": [
-     "frontend/js/bonus.js",
-     "frontend/js/cashier.js",
-     "frontend/pages/bonus.html",
-     "frontend/pages/cashier.html",
-     "frontend/pages/users.html"
+     "backend/modules/netplan/api.py"
     ],
     "path": [
-     "frontend/js/bonus.js",
-     "frontend/js/cashier.js"
+     "backend/core/",
+     "backend/helpers/audit.py",
+     "backend/helpers/case_access.py",
+     "backend/helpers/company_identity.py",
+     "backend/helpers/google_calendar.py",
+     "backend/routers/item_reads.py",
+     "backend/routers/search.py",
+     "backend/routers/system.py",
+     "docs/platform/",
+     "docs/platform/modules.json",
+     "tools/platform/"
     ]
-   }
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_case_read_scope.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/",
     "dir:docs/platform/",
     "file:docs/platform/case_read_scope.json",
     "plat:__init__",
@@ -1169,6 +4396,7 @@
      "backend/core/source_tree.py"
     ],
     "path": [
+     "backend/modules/",
      "docs/platform/",
      "docs/platform/case_read_scope.json"
     ]
@@ -1306,6 +4534,27 @@
     "/api/zzy/1",
     "/api/zzy/{}"
    ]
+  },
+  "backend/tests/platform/test_core_only_rc.py": {
+   "kind": "audit",
+   "units": [
+    "dir:backend/modules/",
+    "dir:backend/tests/platform/",
+    "dir:docs/platform/",
+    "dir:tools/platform/",
+    "file:docs/platform/PLAYBOOK.md",
+    "file:docs/platform/RUN-PLAN.md"
+   ],
+   "evidence": {
+    "path": [
+     "backend/modules/",
+     "backend/tests/platform/",
+     "docs/platform/",
+     "docs/platform/PLAYBOOK.md",
+     "docs/platform/RUN-PLAN.md",
+     "tools/platform/"
+    ]
+   }
   },
   "backend/tests/platform/test_core_pages.py": {
    "kind": "audit",
@@ -1480,6 +4729,7 @@
   "backend/tests/platform/test_dep_scan_module_files.py": {
    "kind": "unit",
    "units": [
+    "dir:backend/modules/",
     "dir:tools/platform/",
     "plat:__init__",
     "plat:source_tree"
@@ -1490,6 +4740,7 @@
      "backend/core/source_tree.py"
     ],
     "path": [
+     "backend/modules/",
      "tools/platform/"
     ]
    }
@@ -1622,27 +4873,21 @@
    "kind": "api",
    "units": [
     "core:db",
-    "helper:recognition",
     "js:js/reports.js",
     "js:js/voucher.js",
     "page:pages/reports.html",
     "page:pages/voucher.html",
     "plat:__init__",
     "plat:registry",
-    "router:reports",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
-     "backend/db.py",
-     "backend/helpers/recognition.py",
-     "backend/routers/reports.py",
-     "backend/routers/vouchers.py"
+     "backend/db.py"
     ],
     "api": [
-     "backend/routers/reports.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -1747,6 +4992,7 @@
   "backend/tests/platform/test_integration_points_registered.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/",
     "dir:docs/platform/",
     "file:docs/platform/INTEGRATION-POINTS.md",
     "plat:__init__",
@@ -1758,15 +5004,47 @@
      "backend/core/source_tree.py"
     ],
     "path": [
+     "backend/modules/",
      "docs/platform/",
      "docs/platform/INTEGRATION-POINTS.md"
     ]
    }
   },
+  "backend/tests/platform/test_l1_connections.py": {
+   "kind": "api",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "file:backend/tests/__init__.py",
+    "file:backend/tests/_db_ledger.py",
+    "file:backend/tests/_routes.py",
+    "helper:settings",
+    "router:company_lookup",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/settings.py",
+     "backend/routers/company_lookup.py",
+     "backend/tests/__init__.py",
+     "backend/tests/_db_ledger.py",
+     "backend/tests/_routes.py"
+    ],
+    "api": [
+     "backend/routers/company_lookup.py",
+     "backend/routers/quotations.py"
+    ]
+   },
+   "unresolved_api": [
+    "/api/__ledger_probe_helper"
+   ],
+   "login_fixture": true
+  },
   "backend/tests/platform/test_l1_interface_snapshot.py": {
    "kind": "audit",
    "units": [
     "dir:docs/platform/",
+    "file:backend/helpers/__init__.py",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_l1_interface.py",
     "file:docs/platform/MODULE-GUIDE.md"
@@ -1777,6 +5055,7 @@
      "backend/tests/platform/_l1_interface.py"
     ],
     "path": [
+     "backend/helpers/__init__.py",
      "docs/platform/",
      "docs/platform/MODULE-GUIDE.md"
     ]
@@ -1794,15 +5073,15 @@
     "js:js/case-management-list.js",
     "js:js/case-management-xexp.js",
     "js:static/legal-round.js",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
     "plat:__init__",
     "plat:source_tree",
-    "router:contractor_vouchers",
     "router:invoice_vouchers",
-    "router:payment_requests",
-    "router:vendor_contractors"
+    "router:payment_requests"
    ],
    "evidence": {
     "import": [
@@ -1823,10 +5102,10 @@
     "path": [
      "backend/helpers/legal_params.py",
      "backend/helpers/quotations.py",
-     "backend/routers/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
-     "backend/routers/vendor_contractors.py",
      "frontend/js/",
      "frontend/js/case-management-dispatch.js",
      "frontend/js/case-management-exec.js",
@@ -1906,7 +5185,6 @@
     "file:backend/tests/platform/_menu_legacy.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "js:static/sidebar.js",
-    "page:pages/tender-radar.html",
     "page:pages/users.html",
     "plat:__init__",
     "plat:menu",
@@ -1928,7 +5206,6 @@
      "backend/routers/platform_menu.py"
     ],
     "page": [
-     "frontend/pages/tender-radar.html",
      "frontend/pages/users.html",
      "frontend/static/sidebar.js"
     ]
@@ -2177,10 +5454,10 @@
    "units": [
     "helper:system_checks",
     "helper:uploads",
+    "mod:payroll/api/payslips",
     "plat:__init__",
     "plat:paths",
-    "plat:source_tree",
-    "router:payslips"
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
@@ -2191,7 +5468,7 @@
      "backend/core/paths.py",
      "backend/helpers/system_checks.py",
      "backend/helpers/uploads.py",
-     "backend/routers/payslips.py"
+     "backend/modules/payroll/api/payslips.py"
     ]
    }
   },
@@ -2247,6 +5524,7 @@
   "backend/tests/platform/test_page_paths_centralized.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/",
     "dir:frontend/pages/",
     "file:backend/tests/platform/test_core_paths.py",
     "file:tools/platform/product_select.py",
@@ -2272,6 +5550,7 @@
      "backend/core/pages.py",
      "backend/core/paths.py",
      "backend/core/source_tree.py",
+     "backend/modules/",
      "backend/tests/platform/test_core_paths.py",
      "backend/tests/platform/test_page_paths_centralized.py",
      "frontend/index.html",
@@ -2282,16 +5561,21 @@
    }
   },
   "backend/tests/platform/test_pii_forms_notice.py": {
-   "kind": "unit",
+   "kind": "audit",
    "units": [
+    "dir:backend/modules/payroll/",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_pii_forms.py",
     "page:pages/contractors.html",
     "page:pages/customers.html",
-    "page:pages/payslip-form.html"
+    "page:pages/payslip-form.html",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/platform/__init__.py",
      "backend/tests/platform/_pii_forms.py"
     ],
@@ -2299,6 +5583,9 @@
      "frontend/pages/contractors.html",
      "frontend/pages/customers.html",
      "frontend/pages/payslip-form.html"
+    ],
+    "path": [
+     "backend/modules/payroll/"
     ]
    }
   },
@@ -2338,6 +5625,31 @@
     "/api/zz-syn/docs",
     "/api/zz-syn/docs/{}",
     "/api/zz-syn/export"
+   ],
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_product_drill_probes.py": {
+   "kind": "api",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/tests/_routes.py",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/tests/_routes.py"
+    ],
+    "path": [
+     "tools/platform/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/aa",
+    "/api/aa/list",
+    "/api/zz"
    ],
    "login_fixture": true
   },
@@ -2444,6 +5756,42 @@
     ]
    }
   },
+  "backend/tests/platform/test_subcontract_connectors.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/routers/__init__.py",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:accounting_export",
+    "router:cashier",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ],
+    "api": [
+     "backend/routers/accounting_export.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/routers/accounting_export.py",
+     "backend/routers/cashier.py",
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_unit_cards.py": {
    "kind": "audit",
    "units": [
@@ -2473,79 +5821,6 @@
    "evidence": {
     "import": [
      "backend/db.py"
-    ]
-   }
-  },
-  "backend/tests/platform/test_voucher_connectors.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:docs/platform/",
-    "dir:frontend/pages/",
-    "file:backend/helpers/__init__.py",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "file:docs/platform/modules.json",
-    "helper:bonus_pdf",
-    "page:pages/bonus.html",
-    "plat:__init__",
-    "plat:registry",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/db.py",
-     "backend/helpers/__init__.py",
-     "backend/helpers/bonus_pdf.py",
-     "backend/routers/bonus.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "docs/platform/",
-     "docs/platform/modules.json",
-     "frontend/pages/",
-     "frontend/pages/bonus.html"
-    ]
-   }
-  },
-  "backend/tests/platform/test_voucher_status_connectors.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/pages/",
-    "file:backend/tests/platform/test_voucher_connectors.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "page:pages/bonus.html",
-    "plat:__init__",
-    "plat:registry",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/db.py",
-     "backend/tests/platform/test_voucher_connectors.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/bonus.html"
     ]
    }
   },
@@ -2684,8 +5959,7 @@
     "router:quotations",
     "router:shipping_notes",
     "router:system",
-    "router:uploads",
-    "router:vendor_contractors"
+    "router:uploads"
    ],
    "evidence": {
     "import": [
@@ -2702,8 +5976,7 @@
      "backend/routers/quotations.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/system.py",
-     "backend/routers/uploads.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/uploads.py"
     ],
     "path": [
      "backend/main.py"
@@ -3143,14 +6416,20 @@
   "backend/tests/test_begin_only_via_begin_write_2026_09_25.py": {
    "kind": "audit",
    "units": [
+    "mod:payroll/api/bonus",
+    "plat:__init__",
+    "plat:source_tree",
     "plat:txn",
-    "router:bonus",
     "router:quotations"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "path": [
      "backend/core/txn.py",
-     "backend/routers/bonus.py",
+     "backend/modules/payroll/api/bonus.py",
      "backend/routers/quotations.py"
     ]
    }
@@ -3180,579 +6459,6 @@
      "backend/conftest.py"
     ]
    }
-  },
-  "backend/tests/test_bn10_award_detail_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_bonus_award_approval_2026_09_23.py"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_bonus_award_approval_2026_09_23.py"
-    ]
-   }
-  },
-  "backend/tests/test_bn11_bonus_pdf_settlement_table_2026_09_24.py": {
-   "kind": "audit",
-   "units": [
-    "dir:frontend/pages/",
-    "helper:bonus",
-    "helper:bonus_pdf",
-    "page:pages/settlement.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/bonus.py",
-     "backend/helpers/bonus_pdf.py"
-    ],
-    "page": [
-     "frontend/pages/settlement.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/settlement.html"
-    ]
-   }
-  },
-  "backend/tests/test_bn12_award_preview_and_recall_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_bonus_award_approval_2026_09_23.py"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_bonus_award_approval_2026_09_23.py"
-    ]
-   }
-  },
-  "backend/tests/test_bn16_award_status_filter_2026_09_24.py": {
-   "kind": "unit",
-   "units": [],
-   "evidence": {}
-  },
-  "backend/tests/test_bn17_award_reject_record_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:bonus",
-    "router:system",
-    "router:vouchers"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py",
-     "backend/routers/system.py"
-    ],
-    "path": [
-     "backend/routers/bonus.py",
-     "backend/routers/vouchers.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bn18_manual_override_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "path": [
-     "backend/routers/bonus.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_award_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:bonus",
-    "page:pages/settlement.html",
-    "router:bonus",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py",
-     "backend/routers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/settlement.html"
-    ],
-    "path": [
-     "backend/db.py",
-     "backend/routers/reports.py",
-     "frontend/pages/settlement.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_award_approval_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:bonus",
-    "helper:tiered_approval",
-    "router:bonus",
-    "router:system"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py",
-     "backend/helpers/tiered_approval.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py",
-     "backend/routers/system.py"
-    ],
-    "path": [
-     "backend/db.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_award_customer_name_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_bonus_award_approval_2026_09_23.py",
-    "page:pages/bonus.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_bonus_award_approval_2026_09_23.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_award_export_watermark_2026_09_23.py": {
-   "kind": "unit",
-   "units": [],
-   "evidence": {}
-  },
-  "backend/tests/test_bonus_award_pdf_export_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "file:backend/tests/test_bonus_award_approval_2026_09_23.py",
-    "router:bonus",
-    "router:system"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/test_bonus_award_approval_2026_09_23.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py",
-     "backend/routers/system.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_award_plan_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:bonus",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py",
-     "backend/routers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_award_reject_edit_log_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "dir:backend/",
-    "file:backend/tests/test_bonus_award_approval_2026_09_23.py"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/test_bonus_award_approval_2026_09_23.py"
-    ],
-    "path": [
-     "backend/"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_award_visibility_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "js:js/bonus.js",
-    "page:pages/bonus.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/js/bonus.js",
-     "frontend/pages/bonus.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_case_allocation_2026_09_24.py": {
-   "kind": "unit",
-   "units": [
-    "helper:bonus_case"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/bonus_case.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_case_api_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "router:bonus",
-    "router:quotations"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py",
-     "backend/routers/quotations.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_case_edit_log_trigger_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_case_live_recalc_and_resign_2026_09_25.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_case_multi_approver_tier_2026_09_25.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_case_vouchers_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_empty_state_2026_09_23.py": {
-   "kind": "audit",
-   "units": [
-    "dir:frontend/js/",
-    "dir:frontend/pages/",
-    "js:js/bonus.js",
-    "js:static/notif.js",
-    "page:pages/bonus.html"
-   ],
-   "evidence": {
-    "page": [
-     "frontend/js/bonus.js",
-     "frontend/pages/bonus.html",
-     "frontend/static/notif.js"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/bonus.js",
-     "frontend/pages/",
-     "frontend/pages/bonus.html"
-    ]
-   }
-  },
-  "backend/tests/test_bonus_group_person_source_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:backend/",
-    "helper:bonus",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "path": [
-     "backend/"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_item_create_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "core:main",
-    "dir:backend/helpers/",
-    "dir:backend/routers/",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "path": [
-     "backend/helpers/",
-     "backend/main.py",
-     "backend/routers/"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_items_visibility_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_legacy_retired_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:frontend/js/",
-    "js:js/bonus.js",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/js/bonus.js"
-    ],
-    "path": [
-     "frontend/js/",
-     "frontend/js/bonus.js"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_manual_and_picker_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:archive",
-    "core:db",
-    "helper:bonus",
-    "helper:bonus_pdf",
-    "helper:edit_log",
-    "helper:tiered_approval",
-    "js:js/bonus.js",
-    "page:pages/bonus.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/js/bonus.js",
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "backend/archive.py",
-     "backend/db.py",
-     "backend/helpers/bonus.py",
-     "backend/helpers/bonus_pdf.py",
-     "backend/helpers/edit_log.py",
-     "backend/helpers/tiered_approval.py",
-     "backend/routers/bonus.py",
-     "frontend/js/bonus.js",
-     "frontend/pages/bonus.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_module_flag_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "dir:backend/routers/",
-    "dir:frontend/pages/",
-    "dir:frontend/static/",
-    "helper:bonus",
-    "js:js/bonus.js",
-    "js:static/sidebar.js",
-    "page:pages/account-items.html",
-    "page:pages/bonus.html",
-    "page:pages/voucher.html",
-    "router:bonus",
-    "router:system"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/system.py"
-    ],
-    "page": [
-     "frontend/js/bonus.js",
-     "frontend/pages/account-items.html",
-     "frontend/pages/bonus.html",
-     "frontend/pages/voucher.html",
-     "frontend/static/sidebar.js"
-    ],
-    "path": [
-     "backend/routers/",
-     "backend/routers/bonus.py",
-     "frontend/js/bonus.js",
-     "frontend/pages/",
-     "frontend/pages/bonus.html",
-     "frontend/static/",
-     "frontend/static/sidebar.js"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_sales_person_uses_username_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "core:pdf_gen",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "path": [
-     "backend/pdf_gen.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_bonus_settlement_preview_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:bonus",
-    "page:pages/settlement.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/bonus.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/settlement.html"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_browser_netguard_2026_09_25.py": {
    "kind": "e2e",
@@ -3810,22 +6516,28 @@
     "core:db",
     "dir:frontend/static/",
     "file:backend/helpers/__init__.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
+    "file:backend/tests/_delegates.py",
     "helper:tiered_approval",
     "js:static/approval-cascade.js",
+    "mod:subcontract/api/contractor_vouchers",
+    "plat:__init__",
+    "plat:source_tree",
     "router:case_extra_expenses"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/tiered_approval.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py"
+     "backend/tests/_delegates.py"
     ],
     "page": [
      "frontend/static/approval-cascade.js"
     ],
     "path": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/case_extra_expenses.py",
      "frontend/static/",
      "frontend/static/approval-cascade.js"
@@ -3924,11 +6636,11 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:subcontract/api/vendor_contractors",
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:quotations",
     "router:shipping_notes",
-    "router:vendor_contractors",
     "router:vouchers"
    ],
    "evidence": {
@@ -3936,11 +6648,11 @@
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
      "backend/routers/quotations.py",
      "backend/routers/shipping_notes.py",
-     "backend/routers/vendor_contractors.py",
      "backend/routers/vouchers.py"
     ]
    },
@@ -4010,16 +6722,12 @@
    "kind": "api",
    "units": [
     "core:db",
-    "core:pdf_gen",
-    "file:backend/routers/__init__.py",
-    "router:reports"
+    "core:pdf_gen"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py",
-     "backend/routers/__init__.py",
-     "backend/routers/reports.py"
+     "backend/pdf_gen.py"
     ]
    },
    "login_fixture": true
@@ -4028,16 +6736,22 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/payroll/",
+    "file:backend/modules/payroll/module.json",
     "file:backend/tests/_e2e_login.py",
     "js:js/bonus.js",
     "page:pages/bonus.html",
     "page:pages/case-management.html",
     "page:pages/map.html",
     "page:pages/voucher.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py"
     ],
@@ -4050,6 +6764,10 @@
      "frontend/pages/case-management.html",
      "frontend/pages/map.html",
      "frontend/pages/voucher.html"
+    ],
+    "path": [
+     "backend/modules/payroll/",
+     "backend/modules/payroll/module.json"
     ]
    },
    "login_fixture": true
@@ -4076,16 +6794,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations",
-    "router:vendor_contractors"
+    "mod:subcontract/api/vendor_contractors",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -4178,14 +6896,14 @@
    "units": [
     "core:db",
     "helper:quotations",
-    "router:quotations",
-    "router:reports"
+    "helper:receivables",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/quotations.py",
-     "backend/routers/reports.py"
+     "backend/helpers/receivables.py"
     ],
     "api": [
      "backend/routers/quotations.py"
@@ -4430,18 +7148,14 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
-    "router:bonus",
     "router:quotations",
-    "router:reports",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/routers/__init__.py",
-     "backend/routers/bonus.py",
-     "backend/routers/quotations.py",
-     "backend/routers/reports.py"
+     "backend/routers/quotations.py"
     ],
     "api": [
      "backend/routers/quotations.py",
@@ -4515,20 +7229,18 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:cashier",
-    "router:contractor_vouchers",
-    "router:quotations",
-    "router:vendor_contractors"
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
+    "router:cashier"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
-     "backend/routers/cashier.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/cashier.py"
     ]
    },
    "login_fixture": true
@@ -4537,21 +7249,21 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/receivables.html",
     "router:cashier",
-    "router:contractor_vouchers",
-    "router:quotations",
-    "router:vendor_contractors"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/cashier.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/quotations.py"
     ],
     "page": [
      "frontend/pages/receivables.html"
@@ -4732,6 +7444,7 @@
     "helper:auth",
     "helper:company_identity",
     "helper:settings",
+    "mod:analytics/api/reports",
     "mod:netplan/export",
     "page:index.html",
     "page:pages/login.html",
@@ -4739,8 +7452,7 @@
     "plat:__init__",
     "plat:source_tree",
     "plat:upgrade",
-    "router:auth",
-    "router:reports"
+    "router:auth"
    ],
    "evidence": {
     "import": [
@@ -4762,8 +7474,8 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/analytics/api/reports.py",
      "backend/modules/netplan/export.py",
-     "backend/routers/reports.py",
      "frontend/pages/",
      "frontend/pages/login.html",
      "frontend/pages/users.html"
@@ -4858,58 +7570,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_contractor_bank_branch_2026_09_24.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "core:pdf_gen",
-    "dir:frontend/pages/",
-    "page:pages/approval-queue.html",
-    "page:pages/contractors.html",
-    "router:contractors",
-    "router:quotations"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/pdf_gen.py"
-    ],
-    "api": [
-     "backend/routers/contractors.py",
-     "backend/routers/quotations.py"
-    ],
-    "page": [
-     "frontend/pages/approval-queue.html",
-     "frontend/pages/contractors.html"
-    ],
-    "path": [
-     "frontend/pages/",
-     "frontend/pages/approval-queue.html",
-     "frontend/pages/contractors.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_contractor_voucher_paid_date_2026_08_31.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "core:pdf_gen",
-    "router:contractor_vouchers",
-    "router:vendor_contractors"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/pdf_gen.py"
-    ],
-    "api": [
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/vendor_contractors.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_core.py": {
    "kind": "audit",
    "units": [
@@ -4917,9 +7577,7 @@
     "core:main",
     "helper:auth",
     "helper:quotations",
-    "router:payslips",
     "router:quotations",
-    "router:reports",
     "router:uploads"
    ],
    "evidence": {
@@ -4927,9 +7585,7 @@
      "backend/archive.py",
      "backend/helpers/auth.py",
      "backend/helpers/quotations.py",
-     "backend/routers/payslips.py",
      "backend/routers/quotations.py",
-     "backend/routers/reports.py",
      "backend/routers/uploads.py"
     ],
     "path": [
@@ -5096,23 +7752,6 @@
     ]
    }
   },
-  "backend/tests/test_dashboard_connections_2026_09_22.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:dashboard"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/dashboard.py"
-    ],
-    "api": [
-     "backend/routers/dashboard.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_dashboard_empty_state_2026_09_23.py": {
    "kind": "audit",
    "units": [
@@ -5126,22 +7765,6 @@
      "frontend/index.html"
     ]
    }
-  },
-  "backend/tests/test_dashboard_monthly_dealtag_fallback_2026_08_31.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:dashboard"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/dashboard.py"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_dashboard_stats_merge_2026_09_22.py": {
    "kind": "audit",
@@ -5263,66 +7886,6 @@
      "backend/routers/auth.py"
     ]
    }
-  },
-  "backend/tests/test_dispatch_edit_guard_2026_08_28.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:vendor_contractors"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vendor_contractors.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_dispatch_file_uploads.py": {
-   "kind": "api",
-   "units": [
-    "router:vendor_contractors"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/vendor_contractors.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_dispatch_import_to_quote_persists_2026_09_23.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:vendor_contractors"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/vendor_contractors.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_dispatch_invoice_payable_date_2026_08_30.py": {
-   "kind": "api",
-   "units": [
-    "router:contractor_vouchers",
-    "router:quotations",
-    "router:vendor_contractors"
-   ],
-   "evidence": {
-    "api": [
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
-    ]
-   },
-   "login_fixture": true
   },
   "backend/tests/test_doc_template_p2_2026_09_25.py": {
    "kind": "api",
@@ -5448,176 +8011,20 @@
    "units": [],
    "evidence": {}
   },
-  "backend/tests/test_e2e_bonus_case_page_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/bonus.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "frontend/pages/bonus.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_e2e_bonus_empty_state_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "helper:bonus",
-    "page:pages/bonus.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/bonus.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_bonus_live_recalc_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_ui_dialogs.py",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "file:backend/tests/test_e2e_bonus_case_page_2026_09_24.py",
-    "page:pages/bonus.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_ui_dialogs.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py",
-     "backend/tests/test_e2e_bonus_case_page_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_bonus_payout_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/_e2e_login.py",
-    "page:pages/bonus.html",
-    "page:pages/cashier.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/_e2e_login.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html",
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/bonus.html",
-     "frontend/pages/cashier.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_e2e_bonus_queue_no_cascade_promise_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
-    "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
-    "page:pages/approval-queue.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py",
-     "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/approval-queue.html"
-    ],
-    "path": [
-     "frontend/pages/approval-queue.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_bonus_insure.py",
-    "file:backend/tests/test_e2e_bonus_case_page_2026_09_24.py",
-    "page:pages/bonus.html",
-    "router:bonus"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_bonus_insure.py",
-     "backend/tests/test_e2e_bonus_case_page_2026_09_24.py"
-    ],
-    "api": [
-     "backend/routers/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "frontend/pages/bonus.html"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_e2e_boolean_status_select_2026_09_25.py": {
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_mapiso.py",
-    "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
     "page:pages/suppliers.html",
     "router:suppliers"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_mapiso.py",
-     "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_mapiso.py"
     ],
     "api": [
      "backend/routers/suppliers.py"
@@ -5992,9 +8399,12 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/subcontract/",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/login.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:auth",
     "router:custom_records",
     "router:item_reads",
@@ -6003,6 +8413,8 @@
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py"
     ],
     "api": [
@@ -6018,6 +8430,7 @@
      "frontend/pages/login.html"
     ],
     "path": [
+     "backend/modules/subcontract/",
      "frontend/index.html",
      "frontend/pages/case-management.html",
      "frontend/pages/login.html"
@@ -6277,6 +8690,24 @@
     ]
    }
   },
+  "backend/tests/test_e2e_cashier_bank_reconcile_without_analytics_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/cashier.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_cashier_read_only_case_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -6318,6 +8749,30 @@
     ]
    }
   },
+  "backend/tests/test_e2e_cashier_subcontract_absent_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/routers/__init__.py",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:registry",
+    "router:cashier"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/routers/__init__.py",
+     "backend/routers/cashier.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "frontend/pages/cashier.html"
+    ]
+   }
+  },
   "backend/tests/test_e2e_completion_form_2026_09_12.py": {
    "kind": "e2e",
    "units": [
@@ -6343,48 +8798,6 @@
     ],
     "path": [
      "frontend/pages/completion-note-form.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_contractor_bank_branch_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/test_contractor_bank_branch_2026_09_24.py",
-    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
-    "page:pages/approval-queue.html",
-    "page:pages/contractors.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/test_contractor_bank_branch_2026_09_24.py",
-     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
-    ],
-    "page": [
-     "frontend/pages/approval-queue.html",
-     "frontend/pages/contractors.html"
-    ],
-    "path": [
-     "frontend/pages/approval-queue.html",
-     "frontend/pages/contractors.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_contractor_pii_upload_failure_2026_09_23.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/contractors.html",
-    "page:pages/vendor-contractors.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/contractors.html",
-     "frontend/pages/vendor-contractors.html"
     ]
    }
   },
@@ -6618,12 +9031,12 @@
     "page:pages/customers.html",
     "page:pages/suppliers.html",
     "page:pages/vendor-contractors.html",
-    "router:dashboard"
+    "router:company_lookup"
    ],
    "evidence": {
     "import": [
      "backend/routers/__init__.py",
-     "backend/routers/dashboard.py",
+     "backend/routers/company_lookup.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py"
     ],
@@ -6643,6 +9056,24 @@
    "evidence": {
     "import": [
      "backend/tests/_subproc.py"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_index_without_analytics_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "file:backend/tests/_e2e_login.py",
+    "page:index.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
+    "page": [
+     "frontend/index.html"
+    ],
+    "path": [
+     "frontend/index.html"
     ]
    }
   },
@@ -6673,51 +9104,17 @@
    "units": [
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
-    "page:pages/legal-params.html",
-    "page:pages/payslip-form.html",
-    "router:payslips"
+    "page:pages/legal-params.html"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py"
     ],
-    "api": [
-     "backend/routers/payslips.py"
-    ],
     "page": [
-     "frontend/pages/legal-params.html",
-     "frontend/pages/payslip-form.html"
+     "frontend/pages/legal-params.html"
     ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_e2e_legal_round_d1_2026_09_26.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/helpers/__init__.py",
-    "helper:legal_params",
-    "js:static/legal-round.js",
-    "page:pages/payslip-form.html",
-    "router:payslips"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/__init__.py",
-     "backend/helpers/legal_params.py"
-    ],
-    "api": [
-     "backend/routers/payslips.py"
-    ],
-    "page": [
-     "frontend/pages/payslip-form.html",
-     "frontend/static/legal-round.js"
-    ],
-    "path": [
-     "frontend/pages/payslip-form.html"
-    ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_e2e_login_enter_submits_2026_09_25.py": {
    "kind": "e2e",
@@ -6914,16 +9311,16 @@
    "kind": "e2e",
    "units": [
     "core:db",
-    "file:backend/tests/test_e2e_reports_period_select_matches_model_2026_09_25.py",
-    "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_e2e_select_model.py",
     "page:pages/org-structure.html",
     "page:pages/users.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_e2e_reports_period_select_matches_model_2026_09_25.py",
-     "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_e2e_select_model.py"
     ],
     "page": [
      "frontend/pages/org-structure.html",
@@ -7177,11 +9574,9 @@
     "page:pages/customers.html",
     "page:pages/suppliers.html",
     "page:pages/users.html",
-    "page:pages/vendor-contractors.html",
     "router:auth",
     "router:customers",
-    "router:suppliers",
-    "router:vendor_contractors"
+    "router:suppliers"
    ],
    "evidence": {
     "import": [
@@ -7192,22 +9587,19 @@
     "api": [
      "backend/routers/auth.py",
      "backend/routers/customers.py",
-     "backend/routers/suppliers.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/suppliers.py"
     ],
     "page": [
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/customers.html",
      "frontend/pages/suppliers.html",
-     "frontend/pages/users.html",
-     "frontend/pages/vendor-contractors.html"
+     "frontend/pages/users.html"
     ],
     "path": [
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/customers.html",
      "frontend/pages/suppliers.html",
-     "frontend/pages/users.html",
-     "frontend/pages/vendor-contractors.html"
+     "frontend/pages/users.html"
     ]
    }
   },
@@ -7217,11 +9609,7 @@
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
     "helper:settings",
-    "page:pages/company-profile-settings.html",
-    "page:pages/contractors.html",
-    "page:pages/payslip-form.html",
-    "router:contractors",
-    "router:payslips"
+    "page:pages/company-profile-settings.html"
    ],
    "evidence": {
     "import": [
@@ -7229,22 +9617,13 @@
      "backend/helpers/privacy_notice.py",
      "backend/helpers/settings.py"
     ],
-    "api": [
-     "backend/routers/contractors.py",
-     "backend/routers/payslips.py"
-    ],
     "page": [
-     "frontend/pages/company-profile-settings.html",
-     "frontend/pages/contractors.html",
-     "frontend/pages/payslip-form.html"
+     "frontend/pages/company-profile-settings.html"
     ],
     "path": [
-     "frontend/pages/company-profile-settings.html",
-     "frontend/pages/contractors.html",
-     "frontend/pages/payslip-form.html"
+     "frontend/pages/company-profile-settings.html"
     ]
-   },
-   "login_fixture": true
+   }
   },
   "backend/tests/test_e2e_quote_delete_crm_absent_notice_2026_09_26.py": {
    "kind": "e2e",
@@ -7415,68 +9794,15 @@
    "units": [
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
-    "page:pages/case-management.html",
-    "page:pages/reports.html",
-    "router:quotations"
+    "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
-     "backend/routers/quotations.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
     "page": [
-     "frontend/pages/case-management.html",
-     "frontend/pages/reports.html"
-    ],
-    "path": [
-     "frontend/pages/reports.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_reports_period_select_matches_model_2026_09_25.py": {
-   "kind": "e2e",
-   "units": [
-    "file:backend/tests/test_e2e_reports_period_sync_2026_09_10.py",
-    "page:pages/reports.html",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/tests/test_e2e_reports_period_sync_2026_09_10.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ],
-    "page": [
-     "frontend/pages/reports.html"
-    ],
-    "path": [
-     "frontend/pages/reports.html"
-    ]
-   }
-  },
-  "backend/tests/test_e2e_reports_period_sync_2026_09_10.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "js:js/reports.js",
-    "page:pages/reports.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/js/reports.js",
-     "frontend/pages/reports.html"
-    ],
-    "path": [
-     "frontend/pages/reports.html"
+     "frontend/pages/case-management.html"
     ]
    }
   },
@@ -7623,6 +9949,30 @@
      "frontend/pages/change-password.html"
     ]
    }
+  },
+  "backend/tests/test_e2e_u14_draft_owner_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "file:backend/tests/_e2e_login.py",
+    "page:pages/custom-records.html",
+    "router:custom_records",
+    "router:definitions"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/tests/_e2e_login.py"
+    ],
+    "api": [
+     "backend/routers/custom_records.py",
+     "backend/routers/definitions.py"
+    ],
+    "page": [
+     "frontend/pages/custom-records.html"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/test_e2e_ui_dialogs_2026_09_24.py": {
    "kind": "e2e",
@@ -7793,16 +10143,14 @@
     "core:pdf_gen",
     "file:backend/helpers/__init__.py",
     "helper:startup",
-    "helper:voucher_pdf",
-    "router:reports"
+    "helper:voucher_pdf"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/startup.py",
      "backend/helpers/voucher_pdf.py",
-     "backend/pdf_gen.py",
-     "backend/routers/reports.py"
+     "backend/pdf_gen.py"
     ]
    }
   },
@@ -7821,8 +10169,12 @@
    "kind": "audit",
    "units": [
     "helper:module_registry",
+    "mod:analytics/api/reports",
     "mod:crm/api",
     "mod:daily_tasks/api",
+    "mod:payroll/api/bonus",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/case-management.html",
     "page:pages/company-profile-settings.html",
     "page:pages/users.html",
@@ -7830,23 +10182,18 @@
     "plat:source_tree",
     "router:approval_delegates",
     "router:auth",
-    "router:bonus",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:cashier",
     "router:completion_notes",
-    "router:contractor_vouchers",
-    "router:dashboard",
     "router:inventory",
     "router:invoice_vouchers",
     "router:map_points",
     "router:org_structure",
     "router:payment_requests",
     "router:quotations",
-    "router:reports",
     "router:shipping_notes",
-    "router:system",
-    "router:vendor_contractors"
+    "router:system"
    ],
    "evidence": {
     "import": [
@@ -7860,27 +10207,26 @@
      "frontend/pages/users.html"
     ],
     "path": [
+     "backend/modules/analytics/api/reports.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
-     "backend/routers/bonus.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/cashier.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/dashboard.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/map_points.py",
      "backend/routers/org_structure.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
-     "backend/routers/reports.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/system.py",
-     "backend/routers/vendor_contractors.py",
      "frontend/pages/case-management.html",
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/users.html"
@@ -7936,7 +10282,7 @@
    "units": [
     "core:db",
     "dir:frontend/",
-    "router:dashboard",
+    "router:company_lookup",
     "router:inventory"
    ],
    "evidence": {
@@ -7947,7 +10293,7 @@
      "backend/routers/inventory.py"
     ],
     "path": [
-     "backend/routers/dashboard.py",
+     "backend/routers/company_lookup.py",
      "frontend/"
     ]
    },
@@ -8027,13 +10373,13 @@
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/tests/test_bonus_case_api_2026_09_24.py",
+    "file:backend/tests/_delegates.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/tests/_delegates.py",
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ]
    }
@@ -8103,22 +10449,6 @@
     "api": [
      "backend/modules/crm/api.py",
      "backend/routers/quotations.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_finance_advisory_2026_08_28.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
     ]
    },
    "login_fixture": true
@@ -8394,7 +10724,7 @@
     "core:main",
     "helper:settings",
     "router:auth",
-    "router:dashboard",
+    "router:company_lookup",
     "router:quotations",
     "router:system"
    ],
@@ -8402,11 +10732,11 @@
     "import": [
      "backend/helpers/settings.py",
      "backend/main.py",
-     "backend/routers/dashboard.py"
+     "backend/routers/company_lookup.py"
     ],
     "api": [
      "backend/routers/auth.py",
-     "backend/routers/dashboard.py",
+     "backend/routers/company_lookup.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
@@ -8427,13 +10757,13 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations",
-    "router:reports"
+    "helper:receivables",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/reports.py"
+     "backend/helpers/receivables.py"
     ],
     "api": [
      "backend/routers/quotations.py"
@@ -8823,28 +11153,15 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
-    "file:backend/routers/__init__.py",
     "helper:legal_params",
-    "helper:privacy_notice",
-    "router:contractors",
-    "router:legal_params",
-    "router:payslips",
-    "router:system"
+    "helper:privacy_notice"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py",
-     "backend/helpers/privacy_notice.py",
-     "backend/routers/__init__.py",
-     "backend/routers/payslips.py"
-    ],
-    "api": [
-     "backend/routers/contractors.py",
-     "backend/routers/legal_params.py",
-     "backend/routers/payslips.py",
-     "backend/routers/system.py"
+     "backend/helpers/privacy_notice.py"
     ]
    },
    "login_fixture": true
@@ -8852,23 +11169,19 @@
   "backend/tests/test_legal_params_r1_2026_09_25.py": {
    "kind": "api",
    "units": [
-    "core:db",
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
     "helper:settings",
-    "router:legal_params",
-    "router:payslips"
+    "router:legal_params"
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py",
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/legal_params.py",
-     "backend/routers/payslips.py"
+     "backend/routers/legal_params.py"
     ]
    },
    "login_fixture": true
@@ -9164,15 +11477,20 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/subcontract/",
+    "dir:backend/modules/subcontract/api/",
     "file:backend/tests/_routes.py",
     "helper:audit",
     "helper:edit_log",
-    "router:contractor_vouchers",
-    "router:reports",
+    "mod:subcontract/api/contractor_vouchers",
+    "plat:__init__",
+    "plat:source_tree",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/audit.py",
      "backend/helpers/edit_log.py",
@@ -9183,8 +11501,9 @@
     ],
     "path": [
      "backend/helpers/edit_log.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/reports.py"
+     "backend/modules/subcontract/",
+     "backend/modules/subcontract/api/",
+     "backend/modules/subcontract/api/contractor_vouchers.py"
     ]
    },
    "login_fixture": true
@@ -9195,9 +11514,14 @@
     "helper:auth",
     "helper:module_registry",
     "js:static/sidebar.js",
+    "mod:analytics/api/dashboard",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "page:index.html",
     "page:pages/inventory.html",
     "page:pages/users.html",
@@ -9206,26 +11530,22 @@
     "router:account_items",
     "router:approval_delegates",
     "router:auth",
+    "router:company_lookup",
     "router:completion_notes",
-    "router:contractor_vouchers",
-    "router:contractors",
     "router:custom_records",
     "router:customers",
-    "router:dashboard",
     "router:invoice_vouchers",
     "router:item_reads",
     "router:mail_settings",
     "router:module_versions",
     "router:parts",
     "router:payment_requests",
-    "router:payslips",
     "router:quotations",
     "router:search",
     "router:shipping_notes",
     "router:suppliers",
     "router:system",
     "router:uploads",
-    "router:vendor_contractors",
     "router:vouchers"
    ],
    "evidence": {
@@ -9236,32 +11556,33 @@
      "backend/helpers/module_registry.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
+     "backend/routers/company_lookup.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/contractors.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/dashboard.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/item_reads.py",
      "backend/routers/mail_settings.py",
      "backend/routers/module_versions.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
-     "backend/routers/payslips.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/suppliers.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
-     "backend/routers/vendor_contractors.py",
      "backend/routers/vouchers.py"
     ],
     "page": [
@@ -9310,45 +11631,49 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/subcontract/",
     "helper:email_notify",
+    "mod:subcontract/api/contractor_vouchers",
+    "plat:__init__",
+    "plat:source_tree",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:completion_notes",
-    "router:contractor_vouchers",
     "router:customers",
-    "router:dashboard",
     "router:inventory",
     "router:invoice_vouchers",
     "router:parts",
     "router:payment_requests",
     "router:quotations",
-    "router:reports",
     "router:search",
     "router:shipping_notes",
     "router:suppliers"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/email_notify.py",
      "backend/routers/quotations.py"
     ],
     "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/case_action_items.py",
      "backend/routers/case_extra_expenses.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/contractor_vouchers.py",
      "backend/routers/customers.py",
-     "backend/routers/dashboard.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py",
-     "backend/routers/reports.py",
      "backend/routers/search.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/suppliers.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ]
    },
    "login_fixture": true
@@ -9398,7 +11723,6 @@
     "core:db",
     "dir:frontend/js/",
     "file:backend/helpers/__init__.py",
-    "helper:bonus_pdf",
     "helper:legal_params",
     "helper:quotations",
     "helper:recognition",
@@ -9406,6 +11730,8 @@
     "js:js/case-management-exec.js",
     "js:js/reports.js",
     "js:static/legal-round.js",
+    "mod:analytics/api/reports",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
@@ -9413,13 +11739,10 @@
     "plat:source_tree",
     "router:accounting_export",
     "router:case_extra_expenses",
-    "router:contractor_vouchers",
     "router:inventory",
     "router:invoice_vouchers",
     "router:parts",
-    "router:payment_requests",
-    "router:reports",
-    "router:vendor_contractors"
+    "router:payment_requests"
    ],
    "evidence": {
     "import": [
@@ -9427,23 +11750,20 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/bonus_pdf.py",
      "backend/helpers/legal_params.py",
      "backend/helpers/quotations.py",
      "backend/helpers/recognition.py",
+     "backend/modules/analytics/api/reports.py",
      "backend/routers/accounting_export.py",
      "backend/routers/case_extra_expenses.py",
-     "backend/routers/payment_requests.py",
-     "backend/routers/reports.py"
+     "backend/routers/payment_requests.py"
     ],
     "api": [
-     "backend/routers/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/parts.py",
-     "backend/routers/payment_requests.py",
-     "backend/routers/reports.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/payment_requests.py"
     ],
     "page": [
      "frontend/js/case-management-core.js",
@@ -9472,21 +11792,6 @@
     "import": [
      "backend/archive.py",
      "backend/db.py"
-    ]
-   }
-  },
-  "backend/tests/test_monthly_report_period_scoping_2026_09_01.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "helper:email_notify",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/helpers/email_notify.py",
-     "backend/routers/reports.py"
     ]
    }
   },
@@ -9585,12 +11890,8 @@
     "helper:geo",
     "js:static/record-link.js",
     "page:pages/case-management.html",
-    "page:pages/contractors.html",
     "page:pages/customers.html",
     "page:pages/map.html",
-    "page:pages/suppliers.html",
-    "page:pages/tender-radar.html",
-    "page:pages/vendor-contractors.html",
     "router:map_points"
    ],
    "evidence": {
@@ -9607,12 +11908,8 @@
     ],
     "page": [
      "frontend/pages/case-management.html",
-     "frontend/pages/contractors.html",
      "frontend/pages/customers.html",
      "frontend/pages/map.html",
-     "frontend/pages/suppliers.html",
-     "frontend/pages/tender-radar.html",
-     "frontend/pages/vendor-contractors.html",
      "frontend/static/record-link.js"
     ],
     "path": [
@@ -9798,10 +12095,8 @@
     "page:pages/company-profile-settings.html",
     "page:pages/daily-tasks.html",
     "page:pages/notification-settings.html",
-    "page:pages/reports.html",
     "page:pages/users.html",
-    "router:accounting_export",
-    "router:reports"
+    "router:accounting_export"
    ],
    "evidence": {
     "page": [
@@ -9809,7 +12104,6 @@
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/daily-tasks.html",
      "frontend/pages/notification-settings.html",
-     "frontend/pages/reports.html",
      "frontend/pages/users.html"
     ],
     "path": [
@@ -9818,7 +12112,6 @@
      "backend/helpers/startup.py",
      "backend/routers/",
      "backend/routers/accounting_export.py",
-     "backend/routers/reports.py",
      "frontend/",
      "frontend/pages/"
     ]
@@ -9833,16 +12126,26 @@
    "kind": "api",
    "units": [
     "page:pages/login-qr-approve.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:auth",
+    "router:company_lookup",
     "router:uploads"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "api": [
      "backend/routers/auth.py",
      "backend/routers/uploads.py"
     ],
     "page": [
      "frontend/pages/login-qr-approve.html"
+    ],
+    "path": [
+     "backend/routers/company_lookup.py"
     ]
    },
    "unresolved_api": [
@@ -9853,7 +12156,8 @@
     "/api/probe/post",
     "/api/probe/query",
     "/api/probe/unused",
-    "/api/probe/{}"
+    "/api/probe/{}",
+    "/api/zz-probe/export"
    ]
   },
   "backend/tests/test_notification_prefs_coverage.py": {
@@ -9942,16 +12246,16 @@
     "core:trail",
     "helper:system_checks",
     "mod:crm/api",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "page:pages/customers.html",
     "router:auth",
     "router:completion_notes",
-    "router:contractors",
     "router:customers",
     "router:list_prefs",
     "router:parts",
     "router:quotations",
-    "router:system",
-    "router:vendor_contractors"
+    "router:system"
    ],
    "evidence": {
     "import": [
@@ -9961,15 +12265,15 @@
     ],
     "api": [
      "backend/modules/crm/api.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/auth.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/contractors.py",
      "backend/routers/customers.py",
      "backend/routers/list_prefs.py",
      "backend/routers/parts.py",
      "backend/routers/quotations.py",
-     "backend/routers/system.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/system.py"
     ],
     "page": [
      "frontend/pages/customers.html"
@@ -10060,22 +12364,6 @@
     ]
    }
   },
-  "backend/tests/test_payment_anomalies_2026_09_11.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_payment_item_and_material_uploads.py": {
    "kind": "api",
    "units": [
@@ -10132,65 +12420,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_payslip_archive_path_2026_09_25.py": {
-   "kind": "api",
-   "units": [
-    "file:backend/routers/__init__.py",
-    "helper:settings",
-    "plat:__init__",
-    "plat:paths",
-    "router:payslips"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/paths.py",
-     "backend/helpers/settings.py",
-     "backend/routers/__init__.py",
-     "backend/routers/payslips.py"
-    ]
-   }
-  },
-  "backend/tests/test_payslip_edit_guard_2026_08_28.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:payslips"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/payslips.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_payslip_template_p2_2026_09_26.py": {
-   "kind": "e2e",
-   "units": [
-    "core:pdf_gen",
-    "file:backend/helpers/__init__.py",
-    "file:backend/tests/_frozen/legacy_payslip_html.py",
-    "helper:doc_template",
-    "helper:settings",
-    "router:definitions"
-   ],
-   "evidence": {
-    "import": [
-     "backend/helpers/__init__.py",
-     "backend/helpers/doc_template.py",
-     "backend/helpers/settings.py",
-     "backend/pdf_gen.py",
-     "backend/tests/_frozen/legacy_payslip_html.py"
-    ],
-    "api": [
-     "backend/routers/definitions.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_pdf_archive_mirror_2026_09_07.py": {
    "kind": "api",
    "units": [
@@ -10213,15 +12442,13 @@
    "units": [
     "core:pdf_gen",
     "file:backend/helpers/__init__.py",
-    "helper:startup",
-    "router:reports"
+    "helper:startup"
    ],
    "evidence": {
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/startup.py",
-     "backend/pdf_gen.py",
-     "backend/routers/reports.py"
+     "backend/pdf_gen.py"
     ],
     "path": [
      "backend/helpers/startup.py"
@@ -10254,11 +12481,11 @@
     "core:archive",
     "core:db",
     "helper:settings",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
     "plat:paths",
-    "router:contractor_vouchers",
-    "router:system",
-    "router:vendor_contractors"
+    "router:system"
    ],
    "evidence": {
     "import": [
@@ -10269,9 +12496,9 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/system.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/system.py"
     ]
    },
    "login_fixture": true
@@ -10293,22 +12520,26 @@
     "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:netplan/api",
+    "mod:payroll/api/bonus",
+    "mod:payroll/api/payslips",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/contractors",
+    "mod:subcontract/api/vendor_contractors",
     "mod:tender_radar/api",
     "router:account_items",
     "router:accounting_export",
     "router:approval_delegates",
     "router:auth",
-    "router:bonus",
     "router:cashier",
+    "router:company_lookup",
     "router:completion_notes",
-    "router:contractor_vouchers",
-    "router:contractors",
     "router:custom_records",
     "router:customers",
-    "router:dashboard",
     "router:definitions",
     "router:inventory",
     "router:invoice_vouchers",
@@ -10323,17 +12554,14 @@
     "router:org_structure",
     "router:parts",
     "router:payment_requests",
-    "router:payslips",
     "router:platform_catalog",
     "router:platform_menu",
     "router:quotations",
-    "router:reports",
     "router:search",
     "router:shipping_notes",
     "router:suppliers",
     "router:system",
     "router:uploads",
-    "router:vendor_contractors",
     "router:vouchers"
    ],
    "evidence": {
@@ -10343,22 +12571,26 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
+     "backend/modules/analytics/api/dashboard.py",
+     "backend/modules/analytics/api/reports.py",
      "backend/modules/crm/api.py",
      "backend/modules/daily_tasks/api.py",
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bonus.py",
+     "backend/modules/payroll/api/payslips.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/modules/tender_radar/api.py",
      "backend/routers/account_items.py",
      "backend/routers/accounting_export.py",
      "backend/routers/approval_delegates.py",
      "backend/routers/auth.py",
-     "backend/routers/bonus.py",
      "backend/routers/cashier.py",
+     "backend/routers/company_lookup.py",
      "backend/routers/completion_notes.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/contractors.py",
      "backend/routers/custom_records.py",
      "backend/routers/customers.py",
-     "backend/routers/dashboard.py",
      "backend/routers/definitions.py",
      "backend/routers/inventory.py",
      "backend/routers/invoice_vouchers.py",
@@ -10373,17 +12605,14 @@
      "backend/routers/org_structure.py",
      "backend/routers/parts.py",
      "backend/routers/payment_requests.py",
-     "backend/routers/payslips.py",
      "backend/routers/platform_catalog.py",
      "backend/routers/platform_menu.py",
      "backend/routers/quotations.py",
-     "backend/routers/reports.py",
      "backend/routers/search.py",
      "backend/routers/shipping_notes.py",
      "backend/routers/suppliers.py",
      "backend/routers/system.py",
      "backend/routers/uploads.py",
-     "backend/routers/vendor_contractors.py",
      "backend/routers/vouchers.py"
     ]
    }
@@ -10391,24 +12620,20 @@
   "backend/tests/test_privacy_notice_r3_2026_09_25.py": {
    "kind": "api",
    "units": [
-    "core:db",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
-    "router:contractors",
+    "mod:subcontract/api/contractors",
     "router:legal_params",
-    "router:payslips",
     "router:system"
    ],
    "evidence": {
     "import": [
-     "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
-     "backend/routers/contractors.py",
+     "backend/modules/subcontract/api/contractors.py",
      "backend/routers/legal_params.py",
-     "backend/routers/payslips.py",
      "backend/routers/system.py"
     ]
    },
@@ -10525,7 +12750,7 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:dashboard",
+    "mod:analytics/api/dashboard",
     "router:quotations"
    ],
    "evidence": {
@@ -10534,7 +12759,7 @@
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/dashboard.py",
+     "backend/modules/analytics/api/dashboard.py",
      "backend/routers/quotations.py"
     ]
    },
@@ -10600,31 +12825,38 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/subcontract/",
     "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
     "file:backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
-    "file:backend/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
+    "mod:subcontract/api/vendor_contractors",
+    "mod:subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23",
+    "plat:__init__",
+    "plat:source_tree",
     "plat:txn",
     "router:material_orders",
-    "router:quotations",
-    "router:vendor_contractors"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/core/txn.py",
      "backend/db.py",
+     "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
      "backend/routers/material_orders.py",
      "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
      "backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
-     "backend/tests/test_case_money_mask_2026_09_24.py",
-     "backend/tests/test_dispatch_import_to_quote_persists_2026_09_23.py"
+     "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/material_orders.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ]
    }
   },
@@ -10817,22 +13049,6 @@
    },
    "login_fixture": true
   },
-  "backend/tests/test_receivables_by_receipt_date_2026_09_12.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_received_installment_lock_2026_09_24.py": {
    "kind": "api",
    "units": [
@@ -10867,129 +13083,21 @@
    "units": [
     "core:db",
     "helper:recognition",
-    "page:pages/case-management.html",
+    "mod:analytics/api/reports",
     "router:case_extra_expenses",
-    "router:dashboard",
     "router:material_orders",
-    "router:quotations",
-    "router:reports",
-    "router:vendor_contractors"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/recognition.py",
-     "backend/routers/reports.py"
+     "backend/helpers/recognition.py"
     ],
     "api": [
+     "backend/modules/analytics/api/reports.py",
      "backend/routers/case_extra_expenses.py",
-     "backend/routers/dashboard.py",
      "backend/routers/material_orders.py",
-     "backend/routers/quotations.py",
-     "backend/routers/reports.py",
-     "backend/routers/vendor_contractors.py"
-    ],
-    "page": [
-     "frontend/pages/case-management.html"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_bugfix_2026_08_30.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_expenses.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_export_expenses.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_logic_fixes_2026_08_28.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_quarter_scope_2026_09_10.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "file:backend/routers/__init__.py",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/__init__.py",
-     "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_receivables_monthly.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -10999,35 +13107,15 @@
    "units": [
     "core:db",
     "helper:xlsx_out",
-    "router:reports",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/xlsx_out.py",
-     "backend/routers/reports.py"
+     "backend/helpers/xlsx_out.py"
     ],
     "api": [
-     "backend/routers/reports.py",
      "backend/routers/system.py"
-    ]
-   },
-   "login_fixture": true
-  },
-  "backend/tests/test_reports_sales_owner_2026_09_14.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/routers/reports.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
     ]
    },
    "login_fixture": true
@@ -11036,19 +13124,16 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:quotations",
-    "router:reports",
-    "router:system"
+    "helper:receivables",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/routers/reports.py"
+     "backend/helpers/receivables.py"
     ],
     "api": [
-     "backend/routers/quotations.py",
-     "backend/routers/reports.py",
-     "backend/routers/system.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -11085,7 +13170,6 @@
     "file:backend/tests/test_row_access_2026_09_25.py",
     "helper:quotations",
     "helper:row_access",
-    "router:dashboard",
     "router:quotations",
     "router:search"
    ],
@@ -11098,7 +13182,6 @@
      "backend/tests/test_row_access_2026_09_25.py"
     ],
     "api": [
-     "backend/routers/dashboard.py",
      "backend/routers/quotations.py",
      "backend/routers/search.py"
     ]
@@ -11181,39 +13264,17 @@
     ]
    }
   },
-  "backend/tests/test_settlement_extra_expenses_pending_2026_09_09.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "router:dashboard",
-    "router:reports"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py"
-    ],
-    "api": [
-     "backend/routers/dashboard.py",
-     "backend/routers/reports.py"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py": {
    "kind": "api",
    "units": [
     "core:db",
     "core:pdf_gen",
-    "page:pages/settlement.html",
-    "router:reports"
+    "page:pages/settlement.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/pdf_gen.py"
-    ],
-    "api": [
-     "backend/routers/reports.py"
     ],
     "page": [
      "frontend/pages/settlement.html"
@@ -11512,7 +13573,7 @@
     "plat:__init__",
     "plat:source_tree",
     "router:auth",
-    "router:dashboard",
+    "router:company_lookup",
     "router:quotations",
     "router:system"
    ],
@@ -11525,7 +13586,7 @@
     ],
     "api": [
      "backend/routers/auth.py",
-     "backend/routers/dashboard.py",
+     "backend/routers/company_lookup.py",
      "backend/routers/quotations.py",
      "backend/routers/system.py"
     ]
@@ -11579,20 +13640,20 @@
    "kind": "api",
    "units": [
     "core:db",
+    "mod:subcontract/api/contractor_vouchers",
+    "mod:subcontract/api/vendor_contractors",
     "router:accounting_export",
-    "router:contractor_vouchers",
-    "router:quotations",
-    "router:vendor_contractors"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py"
     ],
     "api": [
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/contractor_vouchers.py",
-     "backend/routers/quotations.py",
-     "backend/routers/vendor_contractors.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -11630,17 +13691,17 @@
     "core:pdf_gen",
     "helper:quotations",
     "helper:quote_terms",
+    "helper:receivables",
     "router:invoice_vouchers",
-    "router:quotations",
-    "router:reports"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/helpers/quotations.py",
      "backend/helpers/quote_terms.py",
-     "backend/pdf_gen.py",
-     "backend/routers/reports.py"
+     "backend/helpers/receivables.py",
+     "backend/pdf_gen.py"
     ],
     "api": [
      "backend/routers/invoice_vouchers.py",
@@ -11938,8 +13999,7 @@
     "core:db",
     "router:inventory",
     "router:parts",
-    "router:quotations",
-    "router:reports"
+    "router:quotations"
    ],
    "evidence": {
     "import": [
@@ -11948,8 +14008,7 @@
     "api": [
      "backend/routers/inventory.py",
      "backend/routers/parts.py",
-     "backend/routers/quotations.py",
-     "backend/routers/reports.py"
+     "backend/routers/quotations.py"
     ]
    },
    "login_fixture": true
@@ -12386,10 +14445,10 @@
     "helper:module_registry",
     "helper:recognition",
     "js:js/case-management-core.js",
+    "mod:analytics/api/reports",
     "page:pages/case-management.html",
     "page:pages/customers.html",
-    "page:pages/reports.html",
-    "router:reports"
+    "page:pages/reports.html"
    ],
    "evidence": {
     "import": [
@@ -12398,7 +14457,7 @@
      "backend/tests/test_e2e_material_orders_2026_09_11.py"
     ],
     "api": [
-     "backend/routers/reports.py"
+     "backend/modules/analytics/api/reports.py"
     ],
     "page": [
      "frontend/js/case-management-core.js",
@@ -12524,6 +14583,7 @@
    "units": [
     "core:db",
     "mod:netplan/api",
+    "mod:payroll/api/bonus",
     "plat:__init__",
     "plat:source_tree",
     "router:approval_delegates",
@@ -12554,6 +14614,7 @@
     ],
     "path": [
      "backend/modules/netplan/api.py",
+     "backend/modules/payroll/api/bonus.py",
      "backend/routers/auth.py"
     ]
    }
@@ -12579,21 +14640,25 @@
    "kind": "api",
    "units": [
     "core:db",
-    "router:contractor_vouchers",
+    "mod:subcontract/api/contractor_vouchers",
+    "plat:__init__",
+    "plat:source_tree",
     "router:invoice_vouchers",
     "router:payment_requests",
     "router:quotations"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
     ],
     "api": [
-     "backend/routers/contractor_vouchers.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/routers/invoice_vouchers.py",
      "backend/routers/payment_requests.py",
      "backend/routers/quotations.py"
@@ -12627,13 +14692,13 @@
     "helper:part_catalog",
     "helper:settings",
     "helper:xlsx_out",
+    "mod:analytics/api/reports",
     "mod:netplan/export",
     "plat:__init__",
     "plat:source_tree",
     "router:accounting_export",
     "router:cashier",
-    "router:parts",
-    "router:reports"
+    "router:parts"
    ],
    "evidence": {
     "import": [
@@ -12644,16 +14709,16 @@
      "backend/helpers/part_catalog.py",
      "backend/helpers/settings.py",
      "backend/helpers/xlsx_out.py",
+     "backend/modules/analytics/api/reports.py",
      "backend/routers/__init__.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/parts.py",
-     "backend/routers/reports.py"
+     "backend/routers/parts.py"
     ],
     "path": [
+     "backend/modules/analytics/api/reports.py",
      "backend/modules/netplan/export.py",
      "backend/routers/accounting_export.py",
-     "backend/routers/cashier.py",
-     "backend/routers/reports.py"
+     "backend/routers/cashier.py"
     ]
    }
   }
