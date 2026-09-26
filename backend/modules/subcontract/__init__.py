@@ -17,5 +17,7 @@ MODULE = ModuleSpec(
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
         # IP-21（暫定號）：M06 傳票帶入附件的來源（派工單、承攬商發票）
         ("attachments.for_document", "subcontract"): attachments._SubcontractAttachments,
+        # IP-14（同一串接點的第二個能力）：區間內已付款的憑據（M06 T100 付款傳票；不再自己讀本模組的表）
+        ("contractor_voucher.paid_between", "subcontract"): contractor_vouchers._paid_between,
     },
 )

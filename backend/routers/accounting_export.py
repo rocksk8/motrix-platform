@@ -246,7 +246,7 @@ T100_INVENTORY_MISSING = "採購・庫存・出貨模組未安裝：本次匯出
 def _t100_notice() -> str:
     """預覽要明說少了哪幾類傳票（對方模組不在：付款類 M04／M03、收款事件 M05）；都在 ⇒ 空字串。"""
     missing = []
-    if _registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）
+    if _registry.single_provider("contractor_voucher.paid_between") is None:   # IP-14（M04）：T100 用的就是它
         missing.append(T100_CONTRACTOR_MISSING)
     if _registry.single_provider("inventory.paid_batches") is None:        # IP-20（M03）
         missing.append(T100_INVENTORY_MISSING)
@@ -256,19 +256,11 @@ def _t100_notice() -> str:
 
 
 def _collect_paid_contractor_vouchers(start: str, end: str) -> list:
-    pub = _registry.single_provider("contractor_voucher.public")       # IP-14（M04）
-    if pub is None:
-        return []                                                     # M04 不在 ⇒ 沒有承攬付款傳票可匯
-    conn = get_db()
-    try:
-        rows = conn.execute("""
-            SELECT * FROM contractor_payment_vouchers
-            WHERE is_paid=1 AND paid_at BETWEEN ? AND ?
-            ORDER BY paid_at
-        """, (start + "T00:00:00", end + "T23:59:59")).fetchall()
-        return [pub(r, include_snapshot=False) for r in rows]
-    finally:
-        conn.close()
+    """區間內已付款的承攬商匯款申請 ⇒ IP-14 `contractor_voucher.paid_between`（M04）；本檔不讀 M04 的表（2026-09-26）。"""
+    paid = _registry.single_provider("contractor_voucher.paid_between")   # IP-14（M04）
+    if paid is None:
+        return []                                                     # M04 不在 ⇒ 沒有承攬付款傳票可匯（預覽 notice 明說）
+    return paid(start, end)
 
 
 def _voucher_line(d, category, summary, acct_code, acct_name, debit, credit, dept, source_no, counterparty):

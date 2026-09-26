@@ -3907,85 +3907,85 @@
    "routes": [
     {
      "func": "get_last_paid_bank_account",
-     "line": 172,
+     "line": 186,
      "method": "GET",
      "path": "/api/contractor-vouchers/last-paid-bank-account"
     },
     {
      "func": "list_contractor_vouchers",
-     "line": 195,
+     "line": 209,
      "method": "GET",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "get_contractor_voucher",
-     "line": 221,
+     "line": 235,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "create_contractor_voucher",
-     "line": 234,
+     "line": 248,
      "method": "POST",
      "path": "/api/contractor-vouchers"
     },
     {
      "func": "delete_contractor_voucher",
-     "line": 356,
+     "line": 370,
      "method": "DELETE",
      "path": "/api/contractor-vouchers/{voucher_no}"
     },
     {
      "func": "submit_contractor_voucher",
-     "line": 381,
+     "line": 395,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/submit"
     },
     {
      "func": "approve_contractor_voucher",
-     "line": 443,
+     "line": 457,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/approve"
     },
     {
      "func": "revoke_contractor_voucher_approval",
-     "line": 552,
+     "line": 566,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/revoke-approval"
     },
     {
      "func": "reject_contractor_voucher",
-     "line": 595,
+     "line": 609,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/reject"
     },
     {
      "func": "download_contractor_voucher_pdf",
-     "line": 642,
+     "line": 656,
      "method": "GET",
      "path": "/api/contractor-vouchers/{voucher_no}/pdf-download"
     },
     {
      "func": "record_contractor_voucher_export",
-     "line": 670,
+     "line": 684,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/export"
     },
     {
      "func": "toggle_paid",
-     "line": 698,
+     "line": 712,
      "method": "POST",
      "path": "/api/contractor-vouchers/{voucher_no}/paid-toggle"
     },
     {
      "func": "get_contractor_voucher_approval_flow",
-     "line": 777,
+     "line": 791,
      "method": "GET",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     },
     {
      "func": "set_contractor_voucher_approval_flow",
-     "line": 794,
+     "line": 808,
      "method": "PUT",
      "path": "/api/contractor-vouchers/settings/approval-flow"
     }
@@ -7292,31 +7292,31 @@
     },
     {
      "func": "t100_export_vouchers",
-     "line": 484,
+     "line": 476,
      "method": "GET",
      "path": "/api/reports/t100-export/vouchers"
     },
     {
      "func": "t100_export_preview",
-     "line": 508,
+     "line": 500,
      "method": "GET",
      "path": "/api/reports/t100-export/preview"
     },
     {
      "func": "t100_export_confirm",
-     "line": 537,
+     "line": 529,
      "method": "POST",
      "path": "/api/reports/t100-export/confirm"
     },
     {
      "func": "t100_export_confirmed_list",
-     "line": 564,
+     "line": 556,
      "method": "GET",
      "path": "/api/reports/t100-export/confirmed"
     },
     {
      "func": "t100_export_unconfirm",
-     "line": 598,
+     "line": 590,
      "method": "POST",
      "path": "/api/reports/t100-export/unconfirm"
     }
@@ -7324,13 +7324,11 @@
    "tables_ddl": [],
    "tables_named": [],
    "tables_r": [
-    "account_items",
-    "contractor_payment_vouchers"
+    "account_items"
    ],
    "tables_r_transitive": [
     "account_items",
     "approval_delegates",
-    "contractor_payment_vouchers",
     "daily_tasks",
     "departments",
     "dev_cases",
@@ -11410,7 +11408,6 @@
     "mod:analytics/api/reports",
     "mod:arap/api/cashier",
     "mod:subcontract/api/vendor_contractors",
-    "router:accounting_export",
     "router:quotations"
    ],
    "tables_r": [],

@@ -20,9 +20,11 @@ def _hdr(client, make_user, name="s04_super"):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _without(monkeypatch, cap):
+def _without(monkeypatch, *caps):
+    """拿掉提供者。模擬「M04 不在」時要拿掉 M04 的**全部**能力（稽核 D IP-M1：只拿掉 public 時，T100 已改走的
+    paid_between 還在 ⇒ 取用方的降級判斷拿掉也照綠）。"""
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda c: {} if c == cap else orig(c))
+    monkeypatch.setattr(registry, "providers", lambda c: {} if c in caps else orig(c))
 
 
 def _seed(status="草稿"):
@@ -86,3 +88,13 @@ def test_no_direct_imports_across(rel, pattern):
         pytest.skip("%s 的模組不在這個安裝包（PLAYBOOK §B-11）" % rel)
     text = (source_tree.BACKEND / rel).read_text(encoding="utf-8")
     assert not re.search(pattern, text), "%s 仍直接引用：%s" % (rel, pattern)
+
+
+def test_accounting_export_no_longer_reads_the_subcontract_tables():
+    """IP-14 paid_between（2026-09-26）：M06 的 T100 匯出不再自己讀 contractor_payment_vouchers（只經 provider）。"""
+    text = (source_tree.BACKEND / "routers" / "accounting_export.py").read_text(encoding="utf-8")
+    import ast as _ast
+    sql = [n.value for n in _ast.walk(_ast.parse(text)) if isinstance(n, _ast.Constant) and isinstance(n.value, str)
+           and "contractor_payment_vouchers" in n.value and ("SELECT" in n.value.upper() or "FROM" in n.value.upper())]
+    assert sql == [], sql
+    assert 'single_provider("contractor_voucher.paid_between")' in text

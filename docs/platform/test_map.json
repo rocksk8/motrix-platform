@@ -10,7 +10,7 @@
    "unit": 57,
    "e2e": 163
   },
-  "routes": 571
+  "routes": 585
  },
  "unmapped": [
   "backend/tests/platform/test_deploy_dashboard_gates.py",
