@@ -331,6 +331,20 @@ def test_committed_test_map_ignores_untracked_files():
         f.unlink()
 
 
+# ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
+
+def test_rerun_keeps_history_and_gate_reports_earlier_reds(tmp_path):
+    sys.path.insert(0, str(REPO / "backend" / "tools"))
+    import deploy_insights as di
+    sha = "a" * 40
+    MT.write_last_full({"commit": sha, "dirty": False, "ok": False, "failed": 3}, root=tmp_path)
+    per = MT.write_last_full({"commit": sha, "dirty": False, "ok": True, "failed": 0}, root=tmp_path)
+    rec = json.loads(per.read_text(encoding="utf-8"))
+    assert rec["ok"] is True and [h["ok"] for h in rec["history"]] == [False]
+    g = di.last_full(per, sha)
+    assert g["state"] == "ok" and g["red_runs"] == 1 and "紅過 1 次" in g["detail"]
+
+
 # ── B-M2：project_env create 不覆寫（突變：拿掉存在檢查）───────────────────────
 
 def test_venv_dir_follows_python_version(monkeypatch):
