@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.35 — 2026-09-26（C，M01-PLAN §3-4：case.summary／case.locations）〔core_bump：暫用 1.99 → 1.35〕
+> 介面只有新增。
+- L1（新增）：`helpers.case_access.SYSTEM`——L1 背景工作取案件資料時的身分（不做逐案權限過濾）；只准 L1 使用（守門 `tests/platform/test_case_summary_locations.py`）
+- L1（行為）：`routers/map_points.py` 改走 M01 的 `case.locations`，不再讀 `quotations`（KNOWN_L1 刪 map_points；到期題由紅轉綠）；M01 不在 ⇒ 案件來源 `skipped: module_absent` 並明說（`CASES_MODULE_ABSENT`）
+- M01（新增，暫以 import 時登記）：`case.summary`（IP-96 暫定）、`case.locations`（IP-97 暫定）；IP-12 `summary` 轉呼叫 case.summary（淘汰中）
+
 ## 1.34 — 2026-09-26（A，稽核 D O-4，wip/a-m10 68f16342；第六班列車取號）〔core_bump：暫用 1.99 → 1.34〕
 > 介面不變。原 commit 改寫的是 1.17（今 1.26）段落那一行；列車上改為新增本段、不改寫已合回的歷史段落。
 - L0（行為）：`core.source_tree.module_installed(path)` 的「在」改為 `modules/<key>/module.json` 存在（與載入器、`module_dirs()` 同一個判準）；只剩 `__pycache__` 的空資料夾不算在；`modules/`（沒有 key）一律 True

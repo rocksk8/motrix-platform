@@ -4394,7 +4394,6 @@
     "plat:registry",
     "plat:source_tree",
     "router:item_reads",
-    "router:map_points",
     "router:search",
     "router:system"
    ],
@@ -4423,7 +4422,6 @@
      "backend/helpers/receivables.py",
      "backend/modules/netplan/",
      "backend/routers/item_reads.py",
-     "backend/routers/map_points.py",
      "backend/routers/search.py",
      "backend/routers/system.py",
      "docs/platform/",
@@ -12121,6 +12119,7 @@
     "file:backend/routers/__init__.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
+    "helper:quotations",
     "page:pages/case-management.html",
     "page:pages/map.html",
     "router:map_points"
@@ -12128,6 +12127,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/helpers/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
      "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",

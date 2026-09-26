@@ -335,6 +335,41 @@ M10 網路規劃搬遷前置（PLAYBOOK §B 步驟 3）。原本 `routers/networ
 
 **L1 案件存取守門也以本串接點為「M01 在不在」的訊號**（主持裁示 2026-09-26，只留一個訊號；原本 C 另立的 `case.present` 已刪）：`helpers.case_access.case_module_present()` ＝ 有沒有 `case.access` 提供者；沒有 ⇒ `guard_case_access` 404、`case_access_allowed` False，表與資料在、超級管理員也一樣（稽核 D CA-M1）。守門 `tests/platform/test_case_access_l1.py`：拿掉 `case.access` ⇒ L1 守門 404，且取用方（網路規劃書）明說「案件模組未安裝」——兩條路結果一致。
 
+
+---
+
+## IP-96　`case.summary`：案件摘要（M01 → L1 與其他模組）
+
+M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotations 拿案件名稱」；IP-12 的 `summary` 轉呼叫本串接點並標淘汰。**編號暫定（96），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`helpers/quotations.py::case_summary`（暫以 import 時登記，同 IP-12；M01 本體搬遷時改 `ModuleSpec.providers`，CA-O3） |
+| 使用方 | M01 自己的 IP-12 `summary` 轉呼叫（淘汰中）；其他使用方逐步改用（company_identity、google_calendar、bonus_pdf、vouchers，見 M01-PLAN §2-B 第 2 類） |
+| 形式 | provider，單一提供者 |
+| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]` |
+| 回傳 | `quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到且存在的。可見性＝row_access `case`／scope="read"。`user=None` ⇒ TypeError；`helpers.case_access.SYSTEM` ⇒ 不過濾，**只准 L1 背景呼叫端**（守門） |
+| 對方不在時 | 呼叫端要能處理「沒有提供者」與「某筆不在回應裡」並明說（不是空白） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_case_summary_locations.py`（欄位、可見性、清單過濾、None 拒絕、SYSTEM 只准 L1＋掃描器反向控制、IP-12 轉呼叫） |
+
+---
+
+## IP-97　`case.locations`：案件交貨地點（M01 → L1 地圖）
+
+主持裁示：地址不放進 summary，另開本串接點。L1 `routers/map_points.py` 改走它、不再讀 quotations（KNOWN_L1 已刪該筆）。**編號暫定（97），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`helpers/quotations.py::_CaseLocations`（`list`／`fingerprint`；地址規則 `case_delivery_address`：合約交貨地址優先，其次報價交貨地點） |
+| 使用方 | L1 `routers/map_points.py`：`_case_points`（使用者本人）、背景預熱地址清單（`SYSTEM`）、回應快取指紋（`fingerprint`） |
+| 形式 | provider，單一提供者 |
+| 語法 | 取用：`loc = registry.single_provider("case.locations")`；`loc.list(conn, user) -> [ {quote_no, customer_name, project_name, deal_tag, address} ]`；`loc.fingerprint(conn) -> str` |
+| 回傳 | 可見性同 IP-96；`address` 可能是空字串（報價階段沒填） |
+| 對方不在時 | 地圖回 200，案件來源 `skipped: "module_absent"`＋`CASES_MODULE_ABSENT`（「案件模組未安裝：地圖上不會顯示案件交貨地點」）；沒有案件點、不預熱案件地址 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | 同 IP-96；地圖行為 `backend/tests/test_mp6_map_case_locations_2026_09_24.py` |
+
 ---
 
 ## IP-13　`crm.quote_deleted`：報價單刪除時解除業務開發案件的轉建連結（M02 → M01）

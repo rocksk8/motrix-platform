@@ -536,6 +536,86 @@ def save_quotation_json(
 # ── 串接點 IP-12 `case.access`（INTEGRATION-POINTS；2026-09-26 M10 搬遷前置）──────────
 # 別組（目前是 M10 網路規劃書）要「確認這個人能不能看這個案件」「讀案件的客戶／專案名稱」時走這裡，
 # 不 import 本檔、也不直接讀 quotations。M01 不在 ⇒ 沒有提供者，使用方明說「案件模組未安裝」。
+def case_delivery_address(data_json) -> str:
+    """一個案件的交貨地點：案件合約的交貨地址優先，其次報價單的交貨地點。**一案一點。**
+    （2026-09-26 自 L1 routers/map_points.py `_case_address` 搬來：資料屬 M01，對外經 `case.locations`）
+
+    📌 合約的交貨地址是成案後填的、比較準；報價時的「交貨地點」可能只是說明文字。
+    ⚠️ 讀不到／壞掉的 JSON ⇒ 回空字串（那一筆算「沒有地點」，不拖垮其他筆）。
+    """
+    try:
+        data = json.loads(data_json or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    contract = ((data.get("caseRecord") or {}).get("contract") or {}) \
+        if isinstance(data.get("caseRecord"), dict) else {}
+    addr = str((contract.get("deliveryAddress") if isinstance(contract, dict) else "") or "").strip()
+    return addr or str(data.get("deliveryLocation") or "").strip()
+
+
+_CASE_VIS_COLS = "sales_person_id, sales_person, assigned_user_ids"
+
+
+def _caller_is_system(user) -> bool:
+    """`user`：一般使用者 dict，或 L1 背景工作的 `helpers.case_access.SYSTEM`。`None` ⇒ 拒絕（不猜身分）。"""
+    from helpers.case_access import SYSTEM
+    if user is None:
+        raise TypeError("case.summary／case.locations：user 必填；L1 背景工作請傳 helpers.case_access.SYSTEM")
+    return user is SYSTEM
+
+
+def _visible(user, system, row) -> bool:
+    return system or row_access.visible("case", user, row, scope="read")
+
+
+def case_summary(conn, user, quote_nos=None) -> list:
+    """`case.summary`（M01 提供；主持裁示 2026-09-26）：案件摘要 `{quote_no, customer_name, project_name, status,
+    sales_person_id}`。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
+    呼叫端要能處理缺席並明說）。只讀。可見性＝`row_access` 的 `case`／scope="read"（同案件列表、地圖）。"""
+    system = _caller_is_system(user)
+    cols = "quote_no, customer_name, project_name, status, " + _CASE_VIS_COLS
+    if quote_nos is None:
+        rows = conn.execute("SELECT %s FROM quotations ORDER BY id DESC" % cols).fetchall()
+    else:
+        qs = [str(x) for x in quote_nos]
+        if not qs:
+            return []
+        rows = conn.execute("SELECT %s FROM quotations WHERE quote_no IN (%s) ORDER BY id DESC"
+                            % (cols, ",".join("?" * len(qs))), qs).fetchall()
+    return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
+             "project_name": r["project_name"] or "", "status": r["status"] or "",
+             "sales_person_id": r["sales_person_id"]}
+            for r in rows if _visible(user, system, r)]
+
+
+class _CaseLocations:
+    """`case.locations`（M01 提供；主持裁示 2026-09-26：地址不放進 summary，另開這一個）。"""
+
+    @staticmethod
+    def list(conn, user) -> list:
+        """這個人看得到的案件的交貨地點 `{quote_no, customer_name, project_name, deal_tag, address}`（address 可能是空字串）。"""
+        system = _caller_is_system(user)
+        rows = conn.execute(
+            "SELECT id, quote_no, customer_name, project_name, deal_tag, data_json, %s FROM quotations ORDER BY id DESC"
+            % _CASE_VIS_COLS).fetchall()
+        return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
+                 "project_name": r["project_name"] or "", "deal_tag": r["deal_tag"] or "",
+                 "address": case_delivery_address(r["data_json"])}
+                for r in rows if _visible(user, system, r)]
+
+    @staticmethod
+    def fingerprint(conn) -> str:
+        """會影響地點與可見性的欄位的雜湊（地圖快取失效用；不含整張 data_json）。"""
+        import hashlib
+        h = hashlib.sha256()
+        for row in conn.execute("SELECT quote_no, updated_at, deal_tag, customer_name, project_name, %s "
+                                "FROM quotations ORDER BY id" % _CASE_VIS_COLS):
+            h.update(repr(tuple(row)).encode("utf-8", "replace"))
+        return h.hexdigest()
+
+
 class _CaseAccess:
     @staticmethod
     def guard(conn, quote_no, user, allow_module=None):
@@ -544,13 +624,17 @@ class _CaseAccess:
 
     @staticmethod
     def summary(conn, quote_no):
-        """{customer, project}；案件不存在 ⇒ None。"""
-        row = conn.execute("SELECT customer_name, project_name FROM quotations WHERE quote_no=?",
-                           (quote_no,)).fetchone()
-        if row is None:
+        """{customer, project}；案件不存在 ⇒ None。
+        〔淘汰（主持裁示 2026-09-26）：正式版是 `case.summary`；這裡轉呼叫它（系統身分＝原本就不驗權限，行為不變）。
+          新程式不要用；使用方（M10 綁定案件）改用 case.summary 後刪除〕"""
+        from helpers.case_access import SYSTEM
+        got = case_summary(conn, SYSTEM, [quote_no])
+        if not got:
             return None
-        return {"customer": row["customer_name"] or "", "project": row["project_name"] or ""}
+        return {"customer": got[0]["customer_name"], "project": got[0]["project_name"]}
 
 
 from core import registry as _registry  # noqa: E402
 _registry.provide("case.access", "case", _CaseAccess)
+_registry.provide("case.summary", "case", case_summary)          # 2026-09-26 M01-PLAN §3-4（IP 號碼由列車定）
+_registry.provide("case.locations", "case", _CaseLocations)
