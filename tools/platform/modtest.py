@@ -761,41 +761,78 @@ def resolve_python(explicit=None):
     return sys.executable
 
 
+#: Windows CreateProcess 命令列總長度上限約 32767 字元；選題檔數一多（保守擴大或動到 fixture 層）
+#: 逐檔列進 argv 會撞到 WinError 206「檔名或副檔名太長」（第十班列車實測 644 檔）。留安全邊界分批。
+_ARGV_SAFE_CHARS = 20000
+
+
+def _batches_by_length(rel, budget=_ARGV_SAFE_CHARS):
+    """把 rel（相對路徑清單）依累積字元數切成多批，每批命令列長度控制在安全範圍內；單一項目過長也自成一批（讓 pytest 自己報錯）。"""
+    out, cur, cur_len = [], [], 0
+    for r in rel:
+        add = len(r) + 1
+        if cur and cur_len + add > budget:
+            out.append(cur)
+            cur, cur_len = [], 0
+        cur.append(r)
+        cur_len += add
+    if cur:
+        out.append(cur)
+    return out or [[]]
+
+
 def run_pytest(targets, extra, window, full, collect_only=False):
-    """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。"""
-    bt = _new_basetemp(window, full)
+    """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
+    targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
+    exit code 取「非 0 且非 5」優先，其餘皆 0／5 才回 5，都 0 才回 0）。"""
     rel = [str(Path(t).relative_to("backend")) if t.startswith("backend/") else t for t in targets]
-    cmd = [PYEXE or sys.executable, "-m", "pytest", *rel, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
-    if collect_only:
-        cmd += ["--collect-only", "-q"]
-    cmd += extra
-    proc = None
-    try:
+    batches = _batches_by_length(rel)
+    codes, tails = [], []
+    for batch in batches:
+        bt = _new_basetemp(window, full)
+        cmd = [PYEXE or sys.executable, "-m", "pytest", *batch, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
         if collect_only:
-            proc = subprocess.run(cmd, cwd=str(BACKEND), capture_output=True, text=True, encoding="utf-8",
-                                  errors="replace")
-            return proc.returncode, proc.stdout
-        proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                creationflags=_low_priority_flags())
-        tail = []
-        for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
-            line = raw.decode("utf-8", errors="replace")
-            sys.stdout.write(line)
-            sys.stdout.flush()
-            tail.append(line)
-            if len(tail) > 400:
-                del tail[:200]
-        return proc.wait(), "".join(tail)
-    except KeyboardInterrupt:
-        if proc is not None and hasattr(proc, "poll") and proc.poll() is None:
-            try:
-                proc.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
-                proc.wait()
-        raise
-    finally:
-        _remove_basetemp(bt)
+            cmd += ["--collect-only", "-q"]
+        cmd += extra
+        proc = None
+        try:
+            if collect_only:
+                proc = subprocess.run(cmd, cwd=str(BACKEND), capture_output=True, text=True, encoding="utf-8",
+                                      errors="replace")
+                codes.append(proc.returncode)
+                tails.append(proc.stdout)
+                continue
+            proc = subprocess.Popen(cmd, cwd=str(BACKEND), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    creationflags=_low_priority_flags())
+            tail = []
+            for raw in proc.stdout:                       # 照樣即時印出，另留尾段給摘要解析
+                line = raw.decode("utf-8", errors="replace")
+                sys.stdout.write(line)
+                sys.stdout.flush()
+                tail.append(line)
+                if len(tail) > 400:
+                    del tail[:200]
+            codes.append(proc.wait())
+            tails.append("".join(tail))
+        except KeyboardInterrupt:
+            if proc is not None and hasattr(proc, "poll") and proc.poll() is None:
+                try:
+                    proc.wait(timeout=30)
+                except subprocess.TimeoutExpired:
+                    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
+                    proc.wait()
+            raise
+        finally:
+            _remove_basetemp(bt)
+    if len(batches) > 1:
+        print("[modtest] 選題 %d 檔分 %d 批跑（命令列長度上限，PLAYBOOK §G3 列車實測）" % (len(rel), len(batches)))
+    non_zero = [c for c in codes if c != 0]
+    if not non_zero:
+        final = 0
+    else:
+        non_five = [c for c in non_zero if c != 5]
+        final = non_five[0] if non_five else 5
+    return final, "".join(tails)
 
 
 _COUNT_RE = re.compile(r"(\d+)\s+tests?\s+collected|collected\s+(\d+)\s+items?|^(\d+)\s+tests?\s+collected", re.M)
