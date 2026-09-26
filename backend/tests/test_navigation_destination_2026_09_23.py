@@ -177,38 +177,72 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 135   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
-#: 〔2026-09-26 M06 搬遷：139 → 135。會計的 4 條（voucher_pdf 的附件遺失提示、T100 科目代號、傳票附件兩條「請至少選擇」）
-#:   隨 routers／helpers 搬進 modules/accounting/；同一個掃描器含 modules/ 的總數搬遷前（00fd7643）後都是 157
-#:   ⇒ 沒有任何一句被刪，只是換了位置〕
-#: 〔2026-09-26 M05 搬遷：141 → 139。開票申請與請款單各 1 條「請至少選擇一項品項」隨 routers/ 搬進 modules/arap/api/；
-#:   同一個掃描器含 modules/ 的總數搬遷前後都是 157 ⇒ 沒有任何一句被刪，只是換了位置〕
-#: 〔2026-09-26 第六班列車：142 → 141。M04／M07／M08 同班搬進 modules/ 共 9 條（subcontract 2、payroll 4、analytics 3），
-#:   同一個掃描器含 modules/ 的總數 origin da6ab316 與列車都是 157 ⇒ 沒有任何一句被刪，只是換了位置；
-#:   modules/ 外由 150 降到 141。各包單獨時仍 ≥142，三包合起來才跨過基準〕
+_BASELINE_COUNT = 135   # 模組外（`_outside`）；各模組的基準在下面 _BASELINE_BY_GROUP
+#: 〔2026-09-26 M06 搬遷：139 → 135。會計的 4 條隨 routers／helpers 搬進 modules/accounting/；含 modules/ 的總數前後都是 157〕
+#: 〔2026-09-26 稽核 D M06-M2（主持重點）：上面那種調整只把條目**移出計數範圍**、沒有別的題接手 ⇒ 模組裡的 22 條
+#:   只有 tender_radar 有自己的守門。改成**每一組各自一個基準**：模組外一組、每個模組一組；每組都不可以低於基準，
+#:   模組不在就不比；總數由各組相加（157）。另一組多一條不可以補回被刪的那一組（所以不比總數，比各組）。〕
+
+#: 各組基準（2026-09-26 A 以本檔掃描器實量：模組外 135＋accounting 4＋analytics 3＋arap 2＋payroll 4＋subcontract 2＋tender_radar 7＝157）。
+#: 調整規則同上方註解：只能因新增／移除語氣詞、改變掃描範圍、或整個功能依使用者裁示被移除而調整，並寫理由；
+#: 條目搬家（例如搬進模組）⇒ 兩組一減一加，總數不變。
+_BASELINE_BY_GROUP = {"_outside": _BASELINE_COUNT, "accounting": 4, "analytics": 3, "arap": 2,
+                      "payroll": 4, "subcontract": 2, "tender_radar": 7}
+
+
+def _group_of(path):
+    parts = str(path).replace("\\", "/").split("/")
+    return parts[parts.index("modules") + 1] if "modules" in parts else "_outside"
+
+
+def em10_problems(counts, baseline, installed):
+    """counts／baseline：{組: 條數}；installed(組) ⇒ 模組在不在（`_outside` 永遠在）。回問題清單。"""
+    out = []
+    for g, want in sorted(baseline.items()):
+        if g != "_outside" and not installed(g):
+            continue                                   # 模組不在（選配／反向控制）⇒ 它的條目本來就不在
+        if counts.get(g, 0) < want:
+            out.append("%s：含導航語氣的可見字串 %d 條，低於基準 %d" % (g, counts.get(g, 0), want))
+    for g in sorted(set(counts) - set(baseline)):
+        out.append("%s：有 %d 條含導航語氣的字串而沒有基準 ⇒ 在 _BASELINE_BY_GROUP 登記（否則刪了沒有題會紅）"
+                   % (g, counts[g]))
+    return out
 
 
 def test_em10_the_navigation_tone_message_count_does_not_drop():
-    """🔴🔴 **反向控制：含導航語氣的可見字串總數不可以低於基準。**
+    """🔴🔴 **反向控制：含導航語氣的可見字串，每一組都不可以低於基準。**
 
     ☠️ 若沒有這一題，「兩層判準」的守門（要求訊息附上可比對的目的地）
     最省力的反應是**把整句導航直接刪掉**——刪掉之後判準全綠，而使用者
     連一個錯的指路牌都沒有了，比原本更糟。這一題釘住「訊息只能變得
     更可比對，不能就地消失」。
+    ⚙️ 2026-09-26（稽核 D M06-M2）：原本只算模組外 ⇒ 搬進模組的訊息沒有人守。改成每組一個基準。
     """
-    hits = [(p, s) for p, s in _scan_all_nav_messages()
-            if "modules" not in str(p).replace("\\", "/").split("/")]
-    assert len(hits) >= _BASELINE_COUNT, (
-        "含導航語氣的可見字串只掃到 %d 條，低於基準 %d：\n" % (
-            len(hits), _BASELINE_COUNT)
-        + "\n".join("  %s :: %r" % (p, s[:80]) for p, s in hits[:20])
-        + "\n☠️ 若是因為某次改動把導航語句直接刪掉才變少的，"
-          "那正是這一題要擋住的事。")
+    from core import source_tree
+    counts = {}
+    for p, _s in _scan_all_nav_messages():
+        g = _group_of(p)
+        counts[g] = counts.get(g, 0) + 1
+    bad = em10_problems(counts, _BASELINE_BY_GROUP, lambda g: source_tree.module_installed("modules/%s/" % g))
+    assert not bad, "\n".join(bad)
 
 
-# ══════════════════════════════════════════════════════════════════════
-# ② `§3` 的四條——個別釘死，目的地字串要對得上畫面
-# ══════════════════════════════════════════════════════════════════════
+def test_em10_reverse_control_each_group_is_held_on_its_own():
+    """反向控制（合成）：任一模組少一條 ⇒ 紅；別的組多一條補不回來；新的組沒登記 ⇒ 紅；模組不在 ⇒ 不比。"""
+    base = dict(_BASELINE_BY_GROUP)
+    everywhere = lambda g: True                        # noqa: E731
+    assert em10_problems(dict(base), base, everywhere) == []
+    for g in base:
+        fewer = dict(base, **{g: base[g] - 1})
+        assert em10_problems(fewer, base, everywhere) == [
+            "%s：含導航語氣的可見字串 %d 條，低於基準 %d" % (g, base[g] - 1, base[g])], g
+    swapped = dict(base, accounting=base["accounting"] - 1, payroll=base["payroll"] + 1)
+    assert len(em10_problems(swapped, base, everywhere)) == 1, "多的那一組不可以補回被刪的那一組"
+    assert em10_problems(dict(base, newmod=1), base, everywhere)[0].startswith("newmod：")
+    gone = {g: n for g, n in base.items() if g != "accounting"}
+    assert em10_problems(gone, base, lambda g: g != "accounting") == []
+    assert _group_of("backend/modules/accounting/api/vouchers.py") == "accounting"
+    assert _group_of("backend\\routers\\quotations.py") == "_outside"
 
 def test_em10_edge_path_message_points_to_a_findable_label():
     """🔴🔴 **`①` `startup.py:42`：訊息說「Edge 執行檔路徑」，畫面上沒有這個字。**
