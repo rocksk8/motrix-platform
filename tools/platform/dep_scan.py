@@ -786,6 +786,22 @@ def route_pattern_problem(pattern: str):
     return None
 
 
+def check_group_keys(path: Path = MODULES) -> list[str]:
+    """已搬進 modules/ 的群組（單位含 mod:<key>/…）必須寫 key，而且 key＝那些單位的 <key>。
+    沒寫 key ⇒ _installed_groups 會把它當成永遠沒裝 ⇒ 錯誤②對它靜默不報（稽核 D f0b68b7d 觀察：〈守門靜默跳過〉）。"""
+    m = json.loads(path.read_text(encoding="utf-8"))
+    errors = []
+    for gid, gr in sorted(m.get("modules", {}).items()):
+        keys = sorted({u[4:].split("/", 1)[0] for u in gr.get("units", []) if u.startswith("mod:")})
+        if not keys:
+            continue
+        if not gr.get("key"):
+            errors.append(f"{gid}：已搬進 modules/（單位 mod:{keys[0]}/…）卻沒有寫 key")
+        elif keys != [gr["key"]]:
+            errors.append(f"{gid}：key={gr['key']!r}，但 mod: 單位屬於 {keys}")
+    return errors
+
+
 def _installed_groups(groups: dict, backend: Path = None) -> set:
     """這棵樹裝了的群組：L1、還沒搬進 modules/ 的群組（單位不含 mod:，一定在），以及資料夾在 backend/modules/<key>/ 的模組。
     ⚠ 已搬進 modules/、而資料夾不在的 ⇒ 沒裝（core-only、產品選配、§B-11 反向控制）。"""
@@ -858,6 +874,7 @@ def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, l
             errors.append(f"{n}: modules.json 列了，但掃描不到（過期）")
     errors += check_module_folders(U, path)
     errors += check_route_ownership(U, path)
+    errors += check_group_keys(path)
 
     edges: dict[str, list[str]] = defaultdict(list)
     grp = lambda n: (u2g.get(n) or ["?"])[0]
