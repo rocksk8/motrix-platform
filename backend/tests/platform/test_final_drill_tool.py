@@ -166,15 +166,25 @@ def test_rc_an_unregistered_module_in_the_package_fails_the_smoke(tmp_path):
 
 
 def _migrated_claims():
-    """repo 裡已搬遷模組宣告的前綴、明列路由與頁面（module.json）。"""
+    """已搬遷模組的前綴與頁面：modules.json 裡已搬遷群組（FD.migrated_module_keys）的 api_prefixes，
+    加上樹上各模組 module.json 宣告的前綴與頁面。
+
+    〔第八班列車（core-only 反向控制抓到，2026-09-26）：原本只讀樹上的 module.json ⇒ 模組全拿掉的樹上前綴清單是空的，
+    正對照紅——正對照綁在 L2 模組在不在（§C-6 不准）。modules.json 在 L1、core-only 樹上也在 ⇒ 前綴檢查照常生效；
+    頁面只有 module.json 宣告，模組不在時頁面那一半沒有對象（該模組的頁面也不會被服務）〕"""
     import json
     prefixes, pages = [], set()
+    mods = json.loads((REPO / "docs" / "platform" / "modules.json").read_text(encoding="utf-8")).get("modules") or {}
+    migrated = FD.migrated_module_keys()
+    for g in mods.values():
+        if g.get("key") in migrated:
+            prefixes += [(g["key"], p.rstrip("/")) for p in g.get("api_prefixes") or []]
     for mj in (REPO / "backend" / "modules").glob("*/module.json"):
         m = json.loads(mj.read_text(encoding="utf-8"))
         prov = m.get("provides") or {}
         prefixes += [(mj.parent.name, p.rstrip("/")) for p in prov.get("api_prefixes") or []]
         pages |= {"/pages/" + pg["path"] for pg in m.get("pages") or []}
-    return prefixes, pages
+    return sorted(set(prefixes)), pages
 
 
 def core_violations(smoke, prefixes, pages):
