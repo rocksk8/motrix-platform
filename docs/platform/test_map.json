@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 679,
+  "tests": 680,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 369,
+   "api": 370,
    "unit": 57,
    "e2e": 164
   },
@@ -3789,6 +3789,27 @@
     "api": [
      "backend/modules/subcontract/api/contractor_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "module_dir": [
+     "backend/modules/subcontract/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "subcontract"
+  },
+  "backend/modules/subcontract/tests/test_dispatch_cost_view.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/subcontract/",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"

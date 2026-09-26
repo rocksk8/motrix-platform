@@ -894,3 +894,49 @@ QUOTE_IMPORT_UNAVAILABLE = "案件模組未安裝：無法把派工品項匯入�
 def list_dispatches_for_case(quote_no: str, authorization: str) -> list:
     """IP-15 `dispatch.list_for_case`：M01 案件整包的承攬派工段；授權與權限判斷與 `list_dispatches` 同一份。"""
     return list_dispatches(quote_no=quote_no, authorization=authorization)
+
+
+#: 成本檢視放行的模組：財務、出納（傳票要列承攬商支出）＋原本就看得到派工清單的三個（主持裁示 2026-09-26 19:09：
+#: 不同意「403 就不列」——會計會悄悄少列支出）
+COST_VIEW_MODULES = ("finance", "cashier", "procurement", "case_manage", "contractor_list")
+
+
+def dispatch_cost_view(d: dict) -> dict:
+    """`_dispatch_row` 的結果 ⇒ 成本檢視（純函式）。**白名單**：金額、日期、案件、廠商名稱、派工描述（scope）、發票號、
+    品項描述＋金額、外包人數。〔scope、invoiceNo 主持裁示加入（會計資料、不是個資；不加 ⇒ 傳票摘要靜默縮減）〕
+    不回外包人員姓名與 personnel、不回其他派工細節（notes、files、狀態、建立者、驗收者…）。
+    金額與 `dispatch.row` 同一份算法（grandTotal＝含稅承攬商費用＋外包人員）。"""
+    personnel = d.get("personnel") or []
+    return {
+        "id": d["id"],
+        "quoteNo": d.get("quoteNo") or "",
+        "vendorName": d.get("vendorName") or "",
+        "scope": d.get("scope") or "",
+        "invoiceNo": d.get("invoiceNo") or "",
+        "dispatchDate": d.get("dispatchDate") or "",
+        "invoiceDate": d.get("invoiceDate") or "",
+        "payableDate": d.get("payableDate") or "",
+        "amount": d.get("grandTotal") or 0,
+        "totalWithTax": d.get("totalWithTax") or 0,
+        "personnelTotal": d.get("personnelTotal") or 0,
+        "personnelCount": sum(1 for p in personnel if str((p or {}).get("name") or "").strip()),
+        "items": [{"description": str(it.get("description") or "").strip(), "amount": it.get("amount") or 0}
+                  for it in (d.get("items") or []) if isinstance(it, dict) and str(it.get("description") or "").strip()],
+    }
+
+
+def dispatch_cost_for_case(quote_no: str, authorization: str) -> list:
+    """IP-15 追加 `dispatch.cost_for_case`（契約版本 1）：一個案件的派工**成本檢視**（M06 傳票摘要的承攬商支出來源）。
+    權限：COST_VIEW_MODULES 任一（最高管理者一律可）；否則 403。回 `[dispatch_cost_view(...)]`，依 id 排序。
+    只新增：`dispatch.list_for_case` 的回應與權限不動。"""
+    user = _require_user(authorization)
+    require_any_module(user, COST_VIEW_MODULES, "承攬商派工成本")
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT d.*, v.name AS vendor_name FROM contractor_dispatches d "
+            "LEFT JOIN vendor_contractors v ON v.id=d.vendor_id "
+            "WHERE d.quote_no=? ORDER BY d.id", (quote_no,)).fetchall()
+    finally:
+        conn.close()
+    return [dispatch_cost_view(_dispatch_row(r)) for r in rows]

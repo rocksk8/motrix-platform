@@ -13,6 +13,8 @@ MODULE = ModuleSpec(
         ("dispatch.row", "subcontract"): vendor_contractors._dispatch_row,
         # IP-15：M01 案件整包的承攬派工段
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
+        # IP-15 追加：成本檢視（M06 傳票；只回金額、日期、案件、廠商、品項描述、外包人數，不回姓名）
+        ("dispatch.cost_for_case", "subcontract"): vendor_contractors.dispatch_cost_for_case,
         # IP-14：M05 出納與 M06 會計匯出讀付款憑據的形狀
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的承攬商匯款申請
