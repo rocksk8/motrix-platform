@@ -303,6 +303,10 @@ def test_gw2_clearing_a_field_really_turns_it_red():
 #    SCAN_FILES（掃文案）或 NOT_SCANNED（附理由）裡。新增的送信檔沒有歸類 ⇒ 紅。
 # 「送信」＝呼叫 `helpers/email_notify.py` 的送信／組信原語（`_send*`、`_async_send*`、`_build_html`，
 #    從它的 AST **算出來**，新增一支 `_send_xxx` 自動算進來），或 import smtplib。
+#    〔稽核 D SM-S1：另外兩種寫法也算——`from … import 原語 as 別名`（ImportFrom 了原語就算，不看別名）、
+#      字串常數等於原語名稱（`getattr(email_notify, "_send_raising")`）。**非常數**的 getattr 靜態抓不到
+#      ⇒ 改守「送信模組不准被非常數 getattr 取用」（`test_mail_modules_are_not_reached_by_dynamic_getattr`）〕
+#    射程：`importlib.import_module("helpers.email_notify")` 之類動態 import 抓不到。
 
 def _mail_primitives():
     src = (ROOT / "helpers" / "email_notify.py").read_text(encoding="utf-8")
@@ -321,6 +325,12 @@ def _mail_senders(files, prims, rel):
                 if (getattr(f, "id", None) or getattr(f, "attr", None)) in prims:
                     out.add(rel(p))
                     break
+            if isinstance(n, ast.ImportFrom) and any(a.name in prims for a in n.names):
+                out.add(rel(p))                 # `from … import _send_raising as s`：別名不影響
+                break
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in prims:
+                out.add(rel(p))                 # `getattr(email_notify, "_send_raising")`
+                break
             if isinstance(n, (ast.Import, ast.ImportFrom)):
                 names = [a.name for a in n.names] + [getattr(n, "module", None) or ""]
                 if any(x.split(".")[0] == "smtplib" for x in names if x):
@@ -380,3 +390,61 @@ def test_not_scanned_entries_have_reasons_and_are_still_senders():
     assert not stale, "NOT_SCANNED 裡這些已經不送信：%s" % stale
     both = sorted(set(NOT_SCANNED) & set(SCAN_FILES))
     assert not both, "同時在 SCAN_FILES 與 NOT_SCANNED：%s" % both
+
+
+#: 送信模組：被 import 成一個名字之後，不准用**非常數**的 getattr 取用（靜態看不出取的是不是送信原語）。
+_MAIL_MODULES = ("helpers.email_notify", "email_notify", "smtplib")
+
+
+def _dynamic_getattr_on_mail_modules(files, rel):
+    """⇒ [(檔, 行)]：`getattr(<送信模組>, <非字串常數>)`。送信模組＝本檔 import 進來的 email_notify／smtplib（含別名）。"""
+    out = []
+    for p in files:
+        tree = ast.parse(p.read_text(encoding="utf-8", errors="replace"))
+        bound = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                for a in n.names:
+                    if a.name in _MAIL_MODULES:
+                        bound.add(a.asname or a.name)
+            elif isinstance(n, ast.ImportFrom):
+                for a in n.names:
+                    if "%s.%s" % (n.module or "", a.name) in _MAIL_MODULES or a.name in ("email_notify",):
+                        bound.add(a.asname or a.name)
+        if not bound:
+            continue
+        for n in ast.walk(tree):
+            if (isinstance(n, ast.Call) and getattr(n.func, "id", None) == "getattr" and len(n.args) >= 2
+                    and ast.unparse(n.args[0]) in bound
+                    and not (isinstance(n.args[1], ast.Constant) and isinstance(n.args[1].value, str))):
+                out.append((rel(p), n.lineno))
+    return sorted(out)
+
+
+def test_mail_modules_are_not_reached_by_dynamic_getattr():
+    """🔴 SM-S1：送信模組不准被非常數 getattr 取用——否則「呼叫了哪個原語」靜態看不出來，歸類題會漏。"""
+    from core import source_tree
+    bad = _dynamic_getattr_on_mail_modules(source_tree.product_files(), source_tree.rel)
+    assert not bad, "這些地方用非常數 getattr 取送信模組的屬性：%s ⇒ 改成直接呼叫（名字寫出來）" % bad
+
+
+def test_the_sender_scan_sees_aliases_and_constant_getattr(tmp_path):
+    """⚙️ 反向控制（稽核 D SM-S1）：別名 import、常數 getattr 都算送信檔；非常數 getattr 被另一題擋。"""
+    alias = tmp_path / "alias.py"
+    alias.write_text("from helpers.email_notify import _send_raising as s\n"
+                     "def f():\n    s(['x'], 's', '<p/>')\n", encoding="utf-8")
+    const = tmp_path / "const_getattr.py"
+    const.write_text("from helpers import email_notify\n"
+                     "def f():\n    getattr(email_notify, '_send_raising')(['x'], 's', '<p/>')\n", encoding="utf-8")
+    dyn = tmp_path / "dyn_getattr.py"
+    dyn.write_text("from helpers import email_notify as en\nimport smtplib as sm\n"
+                   "def f(name):\n    getattr(en, name)(['x'], 's', '<p/>')\n"
+                   "def g(name):\n    return getattr(sm, name)\n"
+                   "def ok():\n    return getattr(en, 'SEND_SENT')\n", encoding="utf-8")
+    other = tmp_path / "other.py"
+    other.write_text("import json\ndef f(o, name):\n    return getattr(o, name)\n", encoding="utf-8")
+    name = lambda p: p.name                                    # noqa: E731
+    senders = _mail_senders([alias, const, other], _mail_primitives(), name)
+    assert senders == {"alias.py", "const_getattr.py"}, senders
+    assert _dynamic_getattr_on_mail_modules([alias, const, dyn, other], name) == [
+        ("dyn_getattr.py", 4), ("dyn_getattr.py", 6)]
