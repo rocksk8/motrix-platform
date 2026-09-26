@@ -71,6 +71,21 @@ _QUEUE_TYPE_FOR_DOC_TYPE = {
 }
 
 
+#: 送審單據類型 → 擁有它的 L2 模組（`modules/<key>/`）。模組不在這個安裝包 ⇒ 那一類「不適用」（它的單不存在），
+#: 不算漏掉（稽核 D AP-M1：列車 core-only／真刪時，覆蓋檢查掃不到已拿掉模組的提供者）。不在表上的類型屬 L1 或 M01。
+_OWNER_MODULE = {
+    "contractor_voucher": "subcontract",
+    "invoice_voucher":    "arap",
+    "payment_request":    "arap",
+    "bonus":              "payroll",
+}
+
+
+def _module_installed(key, backend_dir=None):
+    """看 module.json（不看資料夾：拿掉模組後殘留的 __pycache__ 會讓資料夾還在）。"""
+    return os.path.isfile(os.path.join(backend_dir or _BACKEND_DIR, "modules", key, "module.json"))
+
+
 def _default_doc_types():
     """真的 `APPROVAL_DOC_TYPES`（CLI 用；測試應該自己傳 `doc_types`，
     不必靠這支去 import 或 monkeypatch）。"""
@@ -138,7 +153,7 @@ def _has_literal(src, lit):
 
 
 def check_approval_queue_coverage(doc_types=None, queue_source=None,
-                                  count_source=None, provider_sources=None):
+                                  count_source=None, provider_sources=None, installed=None):
     """回傳一個 dict，三個鍵在完全涵蓋時都應該是空 list：
 
     ```
@@ -150,9 +165,14 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
     ```
     `provider_sources`：[(標籤, 原始碼)]；留空讀真的登記處（`_provider_sources()`）。提供者的項目同時餵兩支端點，
     所以提供者型別在 count 端看的是「count 端點呼叫 `_queue_provider_items(`」＋提供者源碼裡有那張表。
+    `installed`：`fn(module_key) -> bool`；留空看 `modules/<key>/module.json`。擁有模組不在的類型列在
+    `not_applicable`（{doc_type: 原因}），不算漏掉。
     """
     if provider_sources is None:
         provider_sources = _provider_sources()
+    if installed is None:
+        installed = _module_installed
+    not_applicable = {}
     if doc_types is None:
         doc_types = _default_doc_types()
     if queue_source is None or count_source is None:
@@ -165,6 +185,10 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
 
     missing_from_map, missing_from_queue, missing_from_count = [], [], []
     for dt in doc_types:
+        owner = _OWNER_MODULE.get(dt)
+        if owner and not installed(owner):
+            not_applicable[dt] = "擁有模組 %s 不在這個安裝包（它的單據不存在）" % owner
+            continue
         mapping = _QUEUE_TYPE_FOR_DOC_TYPE.get(dt)
         if mapping is None:
             missing_from_map.append(dt)
@@ -181,6 +205,7 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
         "missing_from_map":   sorted(missing_from_map),
         "missing_from_queue": sorted(missing_from_queue),
         "missing_from_count": sorted(missing_from_count),
+        "not_applicable":     not_applicable,
     }
 
 
@@ -246,6 +271,8 @@ def main():
 
     result = check_approval_queue_coverage()
     say("== AS3 完整性守門：APPROVAL_DOC_TYPES 的兩支佇列端點涵蓋 ==")
+    for dt, why in sorted(result["not_applicable"].items()):
+        say("   --  不適用 %s：%s" % (dt, why))
     if is_clean(result):
         say("   OK  全部涵蓋")
         sys.exit(0)
