@@ -287,19 +287,12 @@ _IMPLEMENTED_ONE = re.compile(r"([a-z]{1,2}\d{1,2}[a-z]?)_")
 #: ⚙️ 反向控制：下面那一題要求這裡的函式名**真的存在**（否則這張表會爛掉）。
 NAMED_ELSEWHERE = {
     "UI8": "test_every_section_condition_is_the_union_of_its_items",
-    # 🔴 `JV27`（2026-09-23，A-2 查出、A 核可）：題**存在**，只是掛在
-    #    別人名下 —— `4aef7fc` 補的 6 支題函式名全是 `test_em5_*`，而
-    #    `_implemented()` 從**題名**抽編號 ⇒ `JV27` 拿不到信用。
-    # ⚙️ 挑這一支的理由：它驗的正是 `JV27` 那一半（簽核動作 fail-closed），
-    #    而 `:227`／`:256` 是一對正負對照。
-    "JV27": "test_em5_approving_is_blocked_when_the_chain_is_unreadable",
+    # 📌 `JV27`、`JV21` 2026-09-26 移到 `modules/accounting/SPEC.md` 的 `## 登記`（M06 搬遷；理由原文照搬）。
     # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丙類**逐支打開**後
     #    只有這三個是真的在驗它（題也是綠的）；其餘丙類的命中只是註解引用，沒有登記。
     # ⚙️ `AI1`：題的 docstring 逐字「`§7⑧`（`AI1`）：停用之後 validate_account_code()
     #    要說它已停用」，走 PATCH 產品路徑。
     "AI1":  "test_ca1_disabling_a_custom_code_makes_it_unusable",
-    # ⚙️ `JV21`：斷言「恰好三個頁籤」，第三個就是 `JV21` 的「支出項」。
-    "JV21": "test_jv7_it_offers_exactly_the_three_declared_tabs",
     # ⚙️ `EM11`（2 處）：這一支守 `onDealTagChange`；另一處 exportCount 由同檔
     #    `test_em9_quotation_export_count_has_failure_handling` 守（表只收一支函式名）。
     "EM11": "test_em9_quotation_deal_tag_change_has_failure_handling",
@@ -320,10 +313,7 @@ EXEMPT = {
     #    **那不是一條豁免，那是一列多餘的資料。** 規格從未宣告它
     #    ⇒ 沒有任何東西需要被豁免，而它卻佔著一個「已處理」的位置。
     # 🔑 新加的過期檢查抓到的。**一張表的雜訊也會被讀成決定。**
-    # T1（2026-09-24）：GATE-BLOCK 把它列在丙類，而命中行逐字是「已結案：使用者目視確認紙本」
-    #    ⇒ 它是豁免的形狀，不是「題名不帶編號」。
-    "JV14": "目視：使用者 2026-09-23 確認紙本長摘要印得出來；pypdf 抽不到是抽取工具限制"
-            "（test_voucher_summary_length_2026_09_23.py:18／:103）",
+    # 📌 `JV14` 2026-09-26 移到 `modules/accounting/SPEC.md` 的 `## 登記`（M06 搬遷；理由原文照搬）。
     "M10":  "OSM 圖磚需要外網，是已知限制不是行為",
     "M11":  "距離只到縣市中心點 —— 畫面上的說明文字，人工驗收",
     "M15":  "Google Console 的來源限制提醒 —— 畫面文字，人工驗收",
@@ -792,7 +782,7 @@ AMBIGUOUS_ACK = {
     # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丁類。成因分兩種，理由分開寫：
     #    ① 題檔撞名（規格只宣告一次，而題在兩個以上的檔）：
     #       AC1（3 檔）／BN17／EM5／JV16／JV7（各 2 檔）
-    "EM5", "JV16", "JV7",   # AC1／BN17 → modules/payroll/SPEC.md 的 ## 登記（只在 M07 在時撞名，2026-09-26）
+    "EM5",   # AC1／BN17 → modules/payroll/SPEC.md、JV16／JV7 → modules/accounting/SPEC.md 的 ## 登記（2026-09-26）
     #    ② 規格宣告兩行（同一個編號被兩節各自使用）：
     #       BR1–BR4  STATE:356–366（§5 據點）vs 29079–29135（總表，「跑的是哪一版」）
     #       SL1      STATE:1659（排程同時段只抓一次）vs 29106（精算頁毛利差異過期）
@@ -907,6 +897,9 @@ _REG = _module_registrations()
 C_OWNED.update(_REG.get("C_OWNED", {}))
 KNOWN |= set(_REG.get("KNOWN", {}))
 AMBIGUOUS_ACK |= set(_REG.get("AMBIGUOUS_ACK", {}))
+# 2026-09-26（A，M06 搬遷）：模組的題名帶不了編號、或不是 pytest 驗的，也跟著模組走
+NAMED_ELSEWHERE.update(_REG.get("NAMED_ELSEWHERE", {}))
+EXEMPT.update(_REG.get("EXEMPT", {}))
 
 
 def _headings_to_ignore():
