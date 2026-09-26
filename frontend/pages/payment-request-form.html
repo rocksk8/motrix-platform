@@ -100,6 +100,9 @@
         <!-- 關聯報價單 -->
         <div class="card">
           <div class="card-title">一、關聯報價單</div>
+          <!-- M01-PLAN ④（稽核 D M4-M2）：案件模組不在 ⇒ 帶不進客戶、專案與條款，要說出原因 -->
+          <div data-testid="quote-info-unavailable" x-show="quoteInfoNotice" x-text="quoteInfoNotice"
+               style="font-size:12px;color:var(--text-dim);margin-bottom:8px"></div>
           <div class="form-row">
             <div class="form-group">
               <label>報價單號</label>
@@ -350,6 +353,7 @@ function paymentRequestForm() {
     errMsg: '',
     quoteNo: '',
     customerName: '',
+    quoteInfoNotice: '',   // M01 不在（路由不存在）⇒ 說出原因（M01-PLAN ④，稽核 D M4-M2）
     projectName: '',
     remaining: null,
     remainingLoading: false,
@@ -481,6 +485,9 @@ function paymentRequestForm() {
         const r = await fetch(`${API}/quotations/${encodeURIComponent(this.quoteNo)}`, {
           headers: { Authorization: 'Bearer ' + this.session.token }
         })
+        if (!r.ok && r.status === 404 && (await r.clone().json().catch(() => ({}))).detail === 'Not Found') {
+          this.quoteInfoNotice = '案件模組未安裝：無法帶入案件資料（客戶、專案名稱、請款條件）'
+        }
         if (r.ok) {
           const d = await r.json()
           this.customerName = d.customer_name || ''
