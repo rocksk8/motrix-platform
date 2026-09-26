@@ -164,6 +164,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 00:32 主持：**使用者要求減少視窗**：A 收尾停止（a-m06-8 b33aab7d，M06-S3 交 D；rebase 交列車長照月台列說明；A25 樹合回後主持移除）；B 於 D7 前哨＋NC-S1 後停；C 於 M01 ④（75 項，死線 04:30）＋CR-M1 後停；D 保留到最後；之後全量與 D7 由主持以子代理執行。D：c-m01-s2 通過、c-case404 必修 CR-M1（選題外漏 2 處 403 斷言，改以全 126 檔驗）、b-newctx-rule 通過（建議 NC-S1）、b-modtest-batch-2 與 M06-M3b 關閉。第十一班 e2e 段進行中。
 - 2026-09-27 00:25 D：b-newctx-rule ca1b84b6（輕量）通過：直接／helper／屬性三種寫法反向控制皆在、突變紅；建議 NC-S1 別名 import 與 async_playwright 漏抓。
 - 2026-09-27 00:24 D：c-m01-s2 cefc5ecd 必修 0：題目 0 消失、API 路由搬遷前後 566 相同、plat 探測突變紅；真刪 M01 tests/platform 非允許 66→75 項（+9 主要是第十班合進的 test_attachments_providers），skip 3 種皆有理由。c-case404 f743662b **必修 CR-M1**：全 repo 含 403 斷言 126 檔跑一遍 ⇒ 3 紅（主持已知 approval_providers 1＋queue_detail_authz、case_approver_single_rule 各 1），base 皆過；替換無誤換模組 403、CZ1～3 突變紅、無排除清單；建議 CR-S1 掃描器漏 visible／case_*_readable→403。
 - 2026-09-26 23:57 C：月台登記 wip/c-m01-s2 cefc5ecd（M01 ②，第十班之後）與 wip/c-case404 f743662b（M01-O1，疊在 ② 上）。A 的 a-m06-5（case.summary purpose）已對齊：以搬遷後路徑為準、函式加在 case_access 檔尾、題另開新檔、排在這兩包之後。附件-6 的「整案看不到 ⇒ 404」不在本基底，合回後再核對一致性；傳票帶入附件的 403 屬傳票權限範圍（AT6-O1 界線），不改。
