@@ -806,3 +806,54 @@ def set_contractor_voucher_approval_flow(body: ApprovalFlowSettings, authorizati
             "includeSubmitterManagerTier": body.includeSubmitterManagerTier})
     return {"ok": True}
 
+
+# ── 待我簽核與轉簽（M01-PLAN §3-7，2026-09-26）：本模組提供自己的待簽項目與簽核鏈讀寫，M01 佇列只彙整 ──
+from helpers import approval_queue as _aq  # noqa: E402
+
+#: `approval.reassign`：簽核鏈在 contractor_payment_vouchers.data_json.$.approval
+REASSIGN = _aq.DataJsonApproval("contractor_payment_vouchers", "voucher_no")
+
+
+def queue_items(conn) -> list:
+    """`approval.queue_items`：待審核／簽核中的承攬商匯款申請（`type`＝`contractor_voucher`）。"""
+    rows = conn.execute("""
+        SELECT voucher_no, quote_no, snapshot_json, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM contractor_payment_vouchers
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    out = []
+    for r in rows:
+        f = _aq.tier_fields(r["approval_json"])
+        try:
+            snap = json.loads(r["snapshot_json"] or "{}")
+        except Exception:
+            snap = {}
+        out.append(_aq.base_item(
+            "contractor_voucher", r["voucher_no"], f,
+            customer=snap.get("vendorName") or "外包人員點工",
+            projectName=f"關聯案件 {r['quote_no']}",
+            total=snap.get("grandTotal", 0),
+            quoteDate=(r["created_at"] or "")[:10],
+            linkedQuoteNo=r["quote_no"],
+            # 2026-08-30：使用者要求簽核佇列連同申請單本身都要顯示應付款日期／匯款帳戶／存簿圖檔／廠商發票，
+            # 直接從凍結快照帶出，不用簽核人員另外點開案件管理才看得到匯款要用的資訊。
+            payableDate=snap.get("payableDate") or "",
+            bankName=snap.get("bankName") or "",
+            bankBranch=snap.get("bankBranch") or "",
+            bankAccountName=snap.get("bankAccountName") or "",
+            bankAccountNumber=snap.get("bankAccountNumber") or "",
+            bankPassbookImage=snap.get("bankPassbookImage") or "",
+            # CT1（2026-09-24 使用者裁示 D2）：外包人員各自的匯款帳戶——來源是建立申請時凍結的 personnel 快照，
+            # 與上面承攬商那段同一份可見性。
+            personnelBanks=[
+                {"name": p.get("name") or "", "bankCode": p.get("bankCode") or "",
+                 "bankName": p.get("bankName") or "", "bankBranch": p.get("bankBranch") or "",
+                 "bankAccountName": p.get("bankAccountName") or "",
+                 "bankAccountNumber": p.get("bankAccountNumber") or ""}
+                for p in (snap.get("personnel") or []) if isinstance(p, dict)
+            ],
+            invoiceFiles=snap.get("invoiceFiles") or [],
+        ))
+    return out
