@@ -141,4 +141,4 @@ def module_installed(path) -> bool:
     i = parts.index("modules")
     if i + 1 >= len(parts) or not parts[i + 1]:
         return True
-    return (BACKEND / "modules" / parts[i + 1] / "module.json").is_file()
+    return any(d.name == parts[i + 1] for d in module_dirs())       # 與 module_dirs() 同一個判準（有 module.json）

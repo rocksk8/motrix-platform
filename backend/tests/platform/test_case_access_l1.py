@@ -33,6 +33,10 @@ KNOWN_L1 = {
     "archive.py": "r", "db.py": "rw", "pdf_gen.py": "rw",
     "helpers/audit.py": "r", "helpers/company_identity.py": "r", "helpers/google_calendar.py": "r",
     "routers/item_reads.py": "r", "routers/search.py": "r", "routers/system.py": "r",
+    # 第六班列車交會（c-case-access × b-m08-3，2026-09-26）：以下兩檔不是新增的讀取，是既有讀取換了歸屬——
+    # receivables.py＝M08 routers/reports.py 的應收收集逐字下沉 L1（主持裁示 a，ROADMAP A8b 中繼，M05 搬遷時收回）；
+    # map_points.py＝地圖依 2026-09-21 使用者裁示歸 L1（b-m08-3 6838ade7 改 modules.json 歸屬）。待主持／D 確認；切斷後自本基線刪除。
+    "helpers/receivables.py": "r", "routers/map_points.py": "r",
 }
 OWNER = "helpers/case_access.py"
 
