@@ -195,6 +195,7 @@ modules/<key>/
 - 產品設定檔 `product/<名稱>.json`：`{"name", "description", "modules": [...]}`；`["*"]`＝包裡現有的全部模組，`[]`＝只有 L0／L1。列了包裡沒有的模組 ⇒ 打包中止（不猜、不略過）。
 - 打包：`build_deploy_package.ps1 -Product <名稱>`（預設 full）。沒選到的 `backend/modules/<key>/` 整個資料夾與它 `module.json` 宣告的頁面（`pages[].path`）不進包；包內寫 `backend/modules.lock.json`（lock_version／kind／product／core_version／各模組 version、core、內容 sha256／excluded／removed_pages）。
 - 模組要能被選配，`module.json` 必須宣告 `version`、`core`、`pages`、`provides.api_prefixes`；另宣告 `provides.probes`（演練用的 GET 端點：真的路由、落在自己的前綴底下、模組在時最高管理者打它回 200）——`product_drill` 依 probes 驗證端點在或不在（2026-09-26 稽核 ⑰ M-3：原本拿前綴本身當端點打，前綴常常不是路由 ⇒ 完整產品假紅、排除時假綠）。沒宣告 probes 的模組：演練不打它的端點、不判紅，但列在輸出 `undeclared_probes`（主持過渡裁示；各模組擁有者補上）。守門：`tests/platform/test_product_drill_probes.py`。
+- **路由歸屬**（2026-09-26 主持裁示）：`docs/platform/modules.json` 的群組以 `api_prefixes` 認領路由；前綴屬於別人、而網址不能改（相容性）的少數路由，在群組寫 `"routes": ["/api/x/y", "/api/z*"]` **明列**（完整路徑或結尾 `*`）。判定順序：先看明列，沒有才看前綴。`dep_scan --check-modules`（`check_route_ownership`）報錯：同一條被兩個群組明列、明列的在該群組 router 裡對不到、明列的其實在別的群組、沒明列而前綴也不在自己群組（歸屬不明）。守門：`tests/platform/test_route_ownership.py`。
 - 守門：`verify_package.py` (7)＝`tools/platform/product_select.py check`（lock＝包內模組、版本與雜湊一致、L0／L1 必要檔齊全、`tools/platform/upgrade.py` 在包裡）；單元 `tests/platform/test_product_select.py`。
 - 演練：`python tools/platform/product_drill.py --pkg <包> --port <埠>`：暫存位置啟動、改掉臨時密碼、`/api/auth/me` 正對照、已安裝模組的端點與頁面 200、被排除的 404。
   ⚠ 它是**端點煙霧測試**，不跑 pytest（稽核 P-2）。「該組合的測試」另外跑：full＝打包時的全量；其他產品＝在 worktree 刪掉被排除的模組後跑全部測試（只剩「modules.json 列了但掃描不到」那一題紅是預期的）。由演練工具自動跑組合測試，列在 ROADMAP。
