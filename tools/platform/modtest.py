@@ -683,6 +683,16 @@ def e2e_max_workers():
     return _env_cap(E2E_ENV, E2E_MAX_WORKERS)
 
 
+def partial_cap(picked, tmap):
+    """差異題的 worker 上限：選到的題裡有 e2e ⇒ 取 partial 與 e2e 上限較小者（D 抽查 MT-O1：設 PARTIAL=4 時 e2e 會用 -n 4 跑）。
+    e2e 的判定：test_map 的 kind＝e2e；test_map 沒有那一檔時退回看檔名（test_e2e_*）。"""
+    cap = partial_max_workers()
+    tests = (tmap or {}).get("tests") or {}
+    if any((tests.get(t) or {}).get("kind") == "e2e" or Path(t).name.startswith("test_e2e") for t in picked):
+        cap = min(cap, e2e_max_workers())
+    return cap
+
+
 def partial_max_workers():
     """差異題的 worker 上限：環境變數 MOTRIX_PARTIAL_MAX_WORKERS，沒設（或不合法）⇒ PARTIAL_MAX_WORKERS。"""
     return _env_cap(PARTIAL_ENV, PARTIAL_MAX_WORKERS)
@@ -1090,7 +1100,7 @@ def main(argv=None):
     if not picked:
         print("沒有受影響的測試。")
         return 3 if rep["need_full"] else 0
-    code, _ = run_pytest(picked, cap_workers(extra, partial_max_workers()), a.window, full=False)
+    code, _ = run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window, full=False)
     record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
     if code == 0 and rep["need_full"]:
         return 3          # 閘門過了，但動到 fixture 層：月台要註明、排車頭（全量由列車跑，§G3）
