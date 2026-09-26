@@ -32,7 +32,7 @@
 | 對象 | 方式 |
 |---|---|
 | M01 案件 | `helpers.quotations`、`helpers.recognition` 的純計算（l2_import_baseline 保留 3 條；M01 搬遷時改用 provider，ROADMAP） |
-| M04 外包工班 | IP-1 `dispatch.row`（精算快照過期檢查；不在 ⇒ 明說無法檢查） |
+| M04 外包工班 | IP-1 `dispatch.row`（精算快照過期檢查的「列→金額」；不在 ⇒ 明說無法檢查）。⚠ 列出有效派工仍**直讀** `contractor_dispatches`、`vendor_contractors`（唯讀），待 M04 公開列表提供者（稽核 ⑰ S-4） |
 | M07 薪資獎金 | IP-9 `expense.entries`（支出） |
 | L1 | `helpers.receivables`、`helpers.xlsx_out`、`helpers.company_identity`、`helpers.row_access`、`routers.company_lookup`（統編查詢與 `/api/now`，已拆出） |
 
