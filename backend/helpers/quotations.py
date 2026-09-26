@@ -445,12 +445,12 @@ def _visible(user, system, row) -> bool:
     return system or row_access.visible("case", user, row, scope="read")
 
 
-def case_summary(conn, user, quote_nos=None, purpose=None) -> list:
+def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     """`case.summary`（M01 提供；主持裁示 2026-09-26）：案件摘要 `{quote_no, customer_name, project_name, status,
     sales_person_id}`。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
     呼叫端要能處理缺席並明說）。只讀。可見性＝`row_access` 的 `case`／scope="read"（同案件列表、地圖）。
 
-    `purpose`（2026-09-26 新增，選填）：用途。範圍由 L1 `helpers.case_access.case_summary_scope` 決定——
+    `purpose`（2026-09-26 新增，選填，**只能用關鍵字傳**——稽核 D M06-M3b）：用途。範圍由 L1 `helpers.case_access.case_summary_scope` 決定——
     `"all"` ⇒ 全部案件、**只回** `SUMMARY_LINK_FIELDS`（單號、客戶名、案名）；否則照上述可見性。"""
     system = _caller_is_system(user)
     from helpers.case_access import SUMMARY_LINK_FIELDS, case_summary_scope

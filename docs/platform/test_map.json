@@ -7319,10 +7319,12 @@
     "dir:backend/modules/accounting/",
     "dir:tools/platform/",
     "helper:case_access",
+    "helper:licensing",
     "mod:accounting/api/vouchers",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree"
+    "plat:source_tree",
+    "router:quotations"
    ],
    "evidence": {
     "import": [
@@ -7337,8 +7339,10 @@
     ],
     "path": [
      "backend/helpers/case_access.py",
+     "backend/helpers/licensing.py",
      "backend/modules/accounting/",
      "backend/modules/accounting/api/vouchers.py",
+     "backend/routers/quotations.py",
      "tools/platform/"
     ]
    },

@@ -5,6 +5,7 @@
 - 權限判斷在 L1 `helpers.case_access.case_summary_scope`，不在呼叫端（M06 只說用途）
 - 未登錄的用途 ⇒ ValueError（打錯字不可以默默變成「照可見性」）
 """
+import ast
 import json
 
 import pytest
@@ -107,10 +108,44 @@ PURPOSE = "voucher_link"
 PURPOSE_ALLOWED = {"helpers/case_access.py", "modules/accounting/api/vouchers.py"}
 
 
-def purpose_violations(sources, allowed=PURPOSE_ALLOWED):
+#: 用途登錄表只准 case_access 自己引用（別處拿到它就能不寫字面值取出用途值；稽核 D M06-M3b）
+PURPOSE_TABLE = "SUMMARY_PURPOSE_MODULES"
+PURPOSE_TABLE_OWNER = "helpers/case_access.py"
+#: 既有的非字面值 `**`（2026-09-26 實掃，與 case.summary 無關；只准變少）：(檔, 最內層函式) ⇒ 次數
+KNOWN_STAR_KWARGS = {
+    ("cloud_storage.py", "s3_list_prefixes"): 1, ("cloud_storage.py", "s3_delete_prefix"): 1,
+    ("pdf_gen.py", "build_quote_preview_html"): 1, ("pdf_gen.py", "generate_pdf_bytes"): 1,
+    ("routers/quotations.py", "part"): 1, ("helpers/licensing.py", "_run"): 1,
+}
+
+
+def _star_kwargs(rel, tree):
+    """(檔, 最內層函式) ⇒ 非字面值 `**` 的次數（`**{"a": 1}` 這種字面字典不算）。"""
+    out = {}
+
+    def visit(node, fn):
+        for ch in ast.iter_child_nodes(node):
+            name = ch.name if isinstance(ch, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+            if isinstance(ch, ast.Call):
+                for kw in ch.keywords:
+                    if kw.arg is None and not isinstance(kw.value, ast.Dict):
+                        out[(rel, name)] = out.get((rel, name), 0) + 1
+            visit(ch, name)
+    visit(tree, "<module>")
+    return out
+
+
+def purpose_violations(sources, allowed=PURPOSE_ALLOWED, known_star=None):
     """sources：{相對 backend 的路徑: 原始碼} ⇒ 問題清單。
     ① 字面值 "voucher_link"（不含 docstring；相鄰／`+` 串接先合併）只准出現在 allowed 的檔；
-    ② 任何呼叫的 `purpose=` 必須是字串字面值（用變數傳 ⇒ 靜態看不出是誰、帶什麼 ⇒ 一律禁止）。"""
+    ② 任何呼叫的 `purpose=` 必須是字串字面值（用變數傳 ⇒ 靜態看不出是誰、帶什麼 ⇒ 一律禁止）；
+    ③ 用途登錄表 `SUMMARY_PURPOSE_MODULES`（名稱、屬性、import、同名字串）只准 case_access 自己引用；
+    ④ 非字面值的 `**` 一律禁止（既有的列在 KNOWN_STAR_KWARGS、只准變少）。
+    〔位置參數由 `case_summary(..., *, purpose=None)` 在執行期擋（TypeError），見 test_purpose_is_keyword_only〕
+
+    ⚠ 射程（主持裁示 2026-09-26：擋的是「不小心借用」，不是蓄意繞過）：`"".join([...])`、`getattr(mod, "SUMMARY_" + x)`、
+      字元碼拼字串、從設定檔讀用途這類刻意混淆靜態看不出來，本守門不追。"""
+    known_star = KNOWN_STAR_KWARGS if known_star is None else known_star
     import ast
     import sys
     sys.path.insert(0, str(source_tree.BACKEND.parent / "tools" / "platform"))
@@ -125,6 +160,17 @@ def purpose_violations(sources, allowed=PURPOSE_ALLOWED):
                 for kw in node.keywords:
                     if kw.arg == "purpose" and not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
                         out.append("%s:%d：purpose= 不是字串字面值（禁止用變數傳用途）" % (rel, node.lineno))
+            if rel != PURPOSE_TABLE_OWNER and (
+                    (isinstance(node, ast.Name) and node.id == PURPOSE_TABLE)
+                    or (isinstance(node, ast.Attribute) and node.attr == PURPOSE_TABLE)
+                    or (isinstance(node, ast.alias) and node.name == PURPOSE_TABLE)
+                    or (isinstance(node, ast.Constant) and node.value == PURPOSE_TABLE)):
+                out.append("%s:%s：引用了用途登錄表 %s（只准 %s）" % (rel, getattr(node, "lineno", "?"), PURPOSE_TABLE,
+                                                                PURPOSE_TABLE_OWNER))
+        for key, n in sorted(_star_kwargs(rel, tree).items()):
+            if n > known_star.get(key, 0):
+                out.append("%s::%s：非字面值的 ** 呼叫 %d 處（基線 %d；禁止用 ** 傳參數，改寫成明列的關鍵字）"
+                           % (key[0], key[1], n, known_star.get(key, 0)))
     return out
 
 
@@ -160,3 +206,49 @@ def test_reverse_control_other_callers_and_variables_are_caught():
     assert purpose_violations(concat)[0].startswith("routers/y.py：帶了用途")
     doc_only = {"routers/z.py": '"""說明裡提到 voucher_link 不算"""\n'}
     assert purpose_violations(doc_only) == []
+
+
+def test_purpose_is_keyword_only():
+    """③b：case.summary 的 purpose 只能用關鍵字傳（位置參數 ⇒ TypeError）——反向控制：真的用位置參數傳要被擋。"""
+    import inspect
+    import db
+    fn = registry.single_provider("case.summary")
+    if fn is None:
+        pytest.skip("案件（M01）不在：沒有 case.summary")
+    assert inspect.signature(fn).parameters["purpose"].kind is inspect.Parameter.KEYWORD_ONLY
+    conn = db.get_db()
+    try:
+        with pytest.raises(TypeError):
+            fn(conn, {"id": 1, "role": "superadmin", "modules": "[]"}, None, "voucher_link")
+    finally:
+        conn.close()
+
+
+def test_known_star_kwargs_baseline_is_not_stale():
+    """④ 的基線只准變少：基線上某個函式已經沒有非字面值 ** ⇒ 從 KNOWN_STAR_KWARGS 刪掉。"""
+    import ast
+    found = {}
+    for rel, src in _product_sources().items():
+        found.update(_star_kwargs(rel, ast.parse(src)))
+    stale = sorted("%s::%s（基線 %d，實有 %d）" % (k[0], k[1], n, found.get(k, 0))
+                   for k, n in KNOWN_STAR_KWARGS.items()
+                   if found.get(k, 0) < n and source_tree.module_installed(k[0]))
+    assert not stale, "基線過期 ⇒ 自 KNOWN_STAR_KWARGS 刪除或改小：\n  " + "\n  ".join(stale)
+
+
+def test_reverse_control_table_star_kwargs_and_positional():
+    """反向控制（沙盒原始碼）：別處引用用途登錄表（名稱／屬性／import／字串）、新增非字面值 ** ⇒ 紅；字面字典 ** 與基線上的不算。"""
+    for src in ('from helpers.case_access import SUMMARY_PURPOSE_MODULES\n',
+                'import helpers.case_access as ca\nx = ca.SUMMARY_PURPOSE_MODULES\n',
+                'x = getattr(ca, "SUMMARY_PURPOSE_MODULES")\n'):
+        bad = purpose_violations({"modules/supply/api/x.py": src})
+        assert bad and all("用途登錄表" in b for b in bad), (src, bad)
+    assert purpose_violations({"helpers/case_access.py": "SUMMARY_PURPOSE_MODULES = {}\n"}) == []
+    star = {"modules/supply/api/x.py": "def f(kw):\n    return s(conn, user, **kw)\n"}
+    assert purpose_violations(star) == [
+        "modules/supply/api/x.py::f：非字面值的 ** 呼叫 1 處（基線 0；禁止用 ** 傳參數，改寫成明列的關鍵字）"]
+    assert purpose_violations({"modules/supply/api/x.py": 'def f():\n    return s(**{"a": 1})\n'}) == []
+    base = {"pdf_gen.py": "def generate_pdf_bytes(kw):\n    return g(**kw)\n"}
+    assert purpose_violations(base) == []
+    assert purpose_violations(base, known_star={})[0].startswith("pdf_gen.py::generate_pdf_bytes")
+
