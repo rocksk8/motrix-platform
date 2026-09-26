@@ -678,6 +678,7 @@
    "invoice_amounts": "def(item)",
    "payment_item_amounts": "def(total, pay_items, pretax=…, apply_tax_exempt=…)",
    "quote_tax_type": "def(data)",
+   "summarize_payment_items": "def(total, pay_items, pretax=…)",
    "tax_split": "def(sales, tax_type)"
   },
   "helper:tiered_approval": {

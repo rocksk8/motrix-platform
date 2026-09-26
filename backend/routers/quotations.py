@@ -28,26 +28,20 @@ from helpers import row_access
 from helpers.case_access import case_page_readable   # AT-M1c：與報價單上附件的提供者同一支
 from helpers import case_deadlines  # noqa: F401,E402  M01 的每日到期檢查（daily.check，import 即登記）
 from helpers import (
-    _require_user, _tok, _audit, _notify, _purge_notifications,
-    quote_hot_fields, save_quotation_json, _steps_to_tiers, SQL_DEAL_TAG, SQL_SETTLE_STATUS,
-    notify_approval_request, notify_next_tier, notify_approved,
-    notify_returned, notify_resubmit_requester, notify_settlement_finalized,
-    notify_module_activity, push_event_for_quotation_won, push_event_for_important_comment,
-    push_event_for_case_stage_due, push_event_delete_for_case_stage,
-    push_event_for_case_stage_done,
-    sync_daily_task_for_case_stage, delete_daily_task_for_case_stage,
-    daily_task_notice,
-    check_approve_permission, check_reject_permission, check_no_tier_self_approval,
-    resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
-    submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice,
-    save_document_files, delete_document_file,
-    notify_case_close_blocked, notify_case_change_requested,
-    norm_at, active_delegators_for, user_has_module, can_see_financial, require_any_module,
-    validate_invoice_no,
-    validate_invoice_amounts,
-    validate_quote_tax,
-    summarize_payment_items,
+    _require_user, _tok, _audit, _notify, _purge_notifications, notify_approval_request,
+    notify_next_tier, notify_approved, notify_returned, notify_resubmit_requester,
+    notify_settlement_finalized, notify_module_activity, push_event_for_quotation_won,
+    push_event_for_important_comment, push_event_for_case_stage_due, push_event_delete_for_case_stage,
+    push_event_for_case_stage_done, check_approve_permission, check_reject_permission,
+    check_no_tier_self_approval, resolve_tier_approvers, UnresolvedManagerError, resolve_active_flow_setting,
+    submitter_manager_tiers, cascade_self_tiers, notify_org_chain_notice, save_document_files,
+    delete_document_file, notify_case_close_blocked, notify_case_change_requested, norm_at,
+    active_delegators_for, user_has_module, can_see_financial, require_any_module, summarize_payment_items,
 )
+from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402  CA-O4：L1
+# M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
+from helpers.quotations import SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, validate_invoice_amounts, validate_invoice_no, validate_quote_tax  # noqa: E402
+from helpers.case_stage_tasks import daily_task_notice, delete_daily_task_for_case_stage, sync_daily_task_for_case_stage  # noqa: E402
 from helpers.quotations import validate_tax_basis
 from helpers.company_identity import snapshot_for, SNAPSHOT_KEY
 from helpers.case_roles import ROLE_KEYS, ROLE_LABELS, role_username, role_display

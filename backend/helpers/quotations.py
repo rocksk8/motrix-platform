@@ -26,10 +26,10 @@ from helpers.case_access import (  # noqa: E402,F401
 )
 
 
-# ── M01-PLAN §3-2（2026-09-26）：兩支通用函式下沉 L1，這裡保留同名別名（同一物件）──
-# norm_at（時間字串正規化）→ helpers/dates；_steps_to_tiers（舊單一簽核步驟 → 簽核層）→ helpers/tiered_approval.steps_to_tiers
+# 以下三個純函式 2026-09-26 下沉 L1（M01-PLAN §3-8 CA-O4：L1 不再 import M01）；這裡保留同名別名（同一物件）
 from helpers.dates import norm_at  # noqa: E402,F401
 from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402,F401
+from helpers.tax_calc import summarize_payment_items  # noqa: E402,F401
 
 
 # ── 營業稅（AC1，2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行，用現金折讓就好」）──
@@ -113,70 +113,6 @@ def validate_invoice_amounts(item: dict) -> None:
     t = _invoice_amount((item or {}).get("invoiceTax"))
     if (p is None) != (t is None):
         raise HTTPException(400, "發票未稅與稅額要一起填寫（只填一欄無法作為申報依據）")
-
-
-def summarize_payment_items(total: float, pay_items: list, pretax: float = None) -> dict:
-    """單一案件的應收／已收／未收彙總＋逐筆明細（2026-09-09 新增，供案件財務
-    「應收應付」總覽用）。
-
-    金額一律透過既有的 payment_item_amounts() 取得（含 taxExempt 沖銷折算），
-    **不要在呼叫端自己重寫 pct 反推公式**——「這個案件還有多少錢沒收」原本在
-    三個地方各自算過一次：case-management.js 的 receivedTotal()/feeTotal()/
-    netReceivedTotal()/outstandingTotal() 這組 getter、reports.py::_collect()、
-    以及案件財務總覽，這支函式是為了避免第三份實作而抽出來的。各欄位語意刻意
-    跟前端那組 getter 逐一對應（見下方註解），兩邊數字才會一致——財務 Tab 的
-    總覽跟「案件資訊」Tab 的款項明細顯示的是同一批款項，對不起來使用者會第一
-    眼就發現。
-
-    回傳 items[] 的欄位形狀比照 reports.py::_collect() 的收款明細（amount／
-    received／actualAmount／feeAmount／netAmount 同語意），日後若要把這裡的
-    結果餵進報表類的彙總，不需要再做一次欄位轉換。
-    """
-    amounts = payment_item_amounts(total, pay_items, pretax)
-    receivable = collected = fee_total = net_collected = outstanding = 0
-    items = []
-    for idx, pi in enumerate(pay_items or []):
-        amt  = amounts[idx]
-        rcvd = bool(pi.get("received"))
-        aa   = pi.get("actualAmount")
-        fee  = pi.get("feeAmount") or 0
-        # 已收款項的「實際入帳淨額」：有填實收金額就用實收（匯差/短收），
-        # 沒填就用應收金額，再扣掉手續費——對應前端 netReceivedTotal()。
-        net  = ((aa if aa is not None else amt) - fee) if rcvd else None
-        receivable += amt
-        if rcvd:
-            collected     += amt          # 對應前端 receivedTotal()（用應收金額，非實收）
-            fee_total     += fee          # 對應前端 feeTotal()
-            net_collected += net          # 對應前端 netReceivedTotal()
-        else:
-            outstanding   += amt          # 對應前端 outstandingTotal()
-        items.append({
-            "idx":          idx,
-            "type":         pi.get("type", f"第{idx + 1}期"),
-            "pct":          pi.get("pct") or 0,
-            "amount":       amt,
-            "received":     rcvd,
-            "receivedAt":   (pi.get("receivedAt") or "")[:10],
-            "receivedBy":   pi.get("receivedBy", ""),
-            "expectedReceiptDate": pi.get("expectedReceiptDate", ""),
-            "actualAmount": aa,
-            "feeAmount":    fee,
-            "netAmount":    net,
-            "invoiceNo":    pi.get("invoiceNo", ""),
-            "invoiceDate":  pi.get("invoiceDate", ""),
-            "feeNote":      pi.get("feeNote", ""),
-            "note":         pi.get("note", ""),
-            "taxExempt":    bool(pi.get("taxExempt")),
-        })
-    return {
-        "receivableTotal":  receivable,
-        "collectedTotal":   collected,
-        "feeTotal":         fee_total,
-        "netCollected":     net_collected,
-        # max(0, ...)：比照前端 outstandingTotal()，避免舊資料金額為負時顯示負的未收
-        "outstandingTotal": max(0, outstanding),
-        "items":            items,
-    }
 
 
 def case_extra_expenses(conn, quote_no: str) -> list:
@@ -549,6 +485,47 @@ class _CaseRecognition:
         from helpers import recognition as r
         return r.dispatch_unavailable(basis)
 
+    @staticmethod
+    def won_month_map(conn):
+        """{quote_no: 'YYYY-MM'}：案件歸入成案趨勢的月份（`quote_won_month_map`；CA-O4 起 M08 經本提供者取用）。"""
+        return quote_won_month_map(conn)
+
 
 _registry.provide("case.recognition", "case", _CaseRecognition)   # IP 號碼由列車定
 from helpers import case_attachments as _case_attachments  # noqa: E402,F401  登記 attachments.for_document（M01）
+
+
+def _default_terms() -> dict:
+    """`case.default_terms`（M01-PLAN §3-8 CA-O4）：報價單五欄預設條款（唯一來源 `helpers/quote_terms.DEFAULT_TERMS`）。
+    L1 `routers/system` 的條款端點經本提供者取用，不 import M01。回傳複本。"""
+    from helpers.quote_terms import DEFAULT_TERMS
+    return dict(DEFAULT_TERMS)
+
+
+def _record_doc_version(quote_no: str, entry: dict, keep: int) -> None:
+    """`case.doc_version`（M01-PLAN §3-8「pdf_gen W」）：把一筆 PDF 版本紀錄追加進 quotations.data_json 的 docVersions[]
+    （只留最後 `keep` 筆；`entry["seq"]` 由這裡依現有筆數編）。L1 `pdf_gen` 產生 PDF 後呼叫，不再自己寫 M01 的表。
+    併發：寫鎖（`core.txn.begin_write`）內「讀-改-寫」（原 pdf_gen 直接 BEGIN IMMEDIATE）。找不到單 ⇒ 不寫。"""
+    from db import get_db
+    conn = get_db()
+    try:
+        _txn.begin_write(conn)
+        row = conn.execute("SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
+        if not row:
+            conn.rollback()
+            return
+        data = json.loads(row["data_json"] or "{}")
+        versions = data.get("docVersions")
+        if not isinstance(versions, list):
+            versions = []
+        versions.append({"seq": len(versions) + 1, **entry})
+        data["docVersions"] = versions[-keep:]
+        conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
+                     (json.dumps(data, ensure_ascii=False), quote_no))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_registry.provide("case.default_terms", "case", _default_terms)      # IP 號碼由列車定
+_registry.provide("case.doc_version", "case", _record_doc_version)   # IP 號碼由列車定

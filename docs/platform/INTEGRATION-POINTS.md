@@ -336,6 +336,38 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
+## IP-91　`case.default_terms`：報價單五欄預設條款（M01 → L1 系統設定）
+
+M01-PLAN §3-8 ①（CA-O4：L1 不 import M01）。原本 L1 `routers/system.py` 直接 `from helpers.quote_terms import DEFAULT_TERMS`。**編號暫定（91），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `helpers/quotations.py::_default_terms`（唯一來源 `helpers/quote_terms.DEFAULT_TERMS`；暫以 import 時登記，M01 本體 ③ 改 ModuleSpec） |
+| 使用方 | L1 `routers/system.py`：`GET /api/settings/quote-terms-defaults`、`GET /api/settings/payment-terms`（未設定時的預設） |
+| 形式 | provider，單一提供者 |
+| 語法 | `registry.single_provider("case.default_terms")() -> dict`（複本；鍵同 DEFAULT_TERMS） |
+| 對方不在時 | 預設條款 404「案件模組未安裝：報價單預設條款不提供」（`system.QUOTE_TERMS_UNAVAILABLE`）；付款條件預設為空字串（已存的設定照回） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_m01_l1_providers.py`；`test_l1_does_not_load_m01.py`（載入全部 L1 不載入 M01＋正對照） |
+
+---
+
+## IP-92　`case.doc_version`：PDF 版本紀錄寫回報價單（M01 → L1 pdf_gen）
+
+M01-PLAN §3-8 ①「pdf_gen W」：L1 `pdf_gen._record_doc_version` 原本自己 `UPDATE quotations SET data_json`（L1 寫 L2 的表）。**編號暫定（92），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 `helpers/quotations.py::_record_doc_version`（寫鎖 `core.txn.begin_write` 內讀-改-寫，`seq` 由 M01 依現有筆數編，只留最後 `keep` 筆） |
+| 使用方 | L1 `pdf_gen._record_doc_version`（產生 PDF 後） |
+| 形式 | provider，單一提供者 |
+| 語法 | `registry.single_provider("case.doc_version")(quote_no, entry, keep)`；`entry`＝{at, event, by, file（相對路徑）, size} |
+| 對方不在時 | 不記版本、不丟例外（PDF 照存；沒有 M01 就沒有報價單） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/test_doc_versions_2026_09_14.py`（寫入）；`backend/tests/platform/test_m01_l1_providers.py`（pdf_gen 不寫 quotations、M01 不在時略過） |
+
+---
+
 ## IP-93　`approval.detail`：簽核佇列詳情的單據內容（各單據模組 → M01 詳情端點）
 
 M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之前）。原本 `routers/quotations.py::approval_queue_detail` 直讀 `invoice_vouchers`／`payment_requests`／`contractor_payment_vouchers`／`shipping_notes`。**編號暫定（93），列車定號。**
@@ -415,7 +447,7 @@ M01-PLAN §3-6（主持派工 2026-09-26）。M08 原本直接 import M01 的 `h
 | 提供方 | M01 案件：`helpers/quotations.py::_CaseRecognition`（延遲 import `helpers.recognition`；暫以 import 時登記，M01 本體搬遷時改 ModuleSpec） |
 | 使用方 | M08 `modules/analytics/api/reports.py`：`_build_income_expense_scopes`（權責口徑收入、待補登）、`_collect_expenses`（派工、叫料、額外支出的歸月；缺派工時的說明） |
 | 形式 | provider，單一提供者 |
-| 語法 | 取用：`rec = registry.single_provider("case.recognition")`；`rec.accrual_income_items(conn, d0, d1, department_id=None)`、`rec.dispatch_entries(conn, basis)`、`rec.material_entries(conn, basis, department_id=None)`、`rec.extra_entries(conn, basis)`、`rec.recognition_flags(conn, year, department_id=None, money_ok=True)`、`rec.dispatch_unavailable(basis)` |
+| 語法 | 取用：`rec = registry.single_provider("case.recognition")`；`rec.accrual_income_items(conn, d0, d1, department_id=None)`、`rec.dispatch_entries(conn, basis)`、`rec.material_entries(conn, basis, department_id=None)`、`rec.extra_entries(conn, basis)`、`rec.recognition_flags(conn, year, department_id=None, money_ok=True)`、`rec.dispatch_unavailable(basis)`、`rec.won_month_map(conn)`（CA-O4 加：成案月份 {quote_no: 'YYYY-MM'}；M01 不在 ⇒ M08 用 {}） |
 | 回傳 | 與 `helpers/recognition.py` 同名函式相同（簽章即契約） |
 | 對方不在時 | M08：權責口徑收入空，`incomeNotice`＝`CASE_RECOGNITION_MISSING`（「案件模組未安裝：權責口徑收入（依階段完成）不提供」）；支出的 `unavailable` 列出 `CASE_EXPENSES_UNAVAILABLE`（叫料、額外支出、派工沒有列入，不是 0 筆）；待補登 `{}` |
 | 契約版本 | 1（2026-09-26） |

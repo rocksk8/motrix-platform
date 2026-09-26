@@ -1408,10 +1408,17 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
 
 # ── Quotation default payment terms ───────────────────────────────────────────
 
-# 2026-09-24（N13）：內容搬到 helpers/quote_terms.py::DEFAULT_TERMS（唯一來源），
-# 這裡只引用——逐字相同，已在搬移時比對過。
-from helpers.quote_terms import DEFAULT_TERMS as _QUOTE_DEFAULT_TERMS   # noqa: E402
-DEFAULT_PAYMENT_TERMS = _QUOTE_DEFAULT_TERMS["paymentTerms"]
+# 2026-09-24（N13）：內容搬到 helpers/quote_terms.py::DEFAULT_TERMS（唯一來源）。
+# 2026-09-26（M01-PLAN §3-8 CA-O4）：那是 M01 的檔 ⇒ 改經 M01 提供者 `case.default_terms`，L1 不 import M01。
+#: M01 不在時條款端點的說明（§B-4：說出原因，不回空白條款）
+QUOTE_TERMS_UNAVAILABLE = "案件模組未安裝：報價單預設條款不提供"
+
+
+def _quote_default_terms():
+    """M01 的五欄預設條款（dict 複本）；M01 不在 ⇒ None。"""
+    from core import registry as _registry
+    prov = _registry.single_provider("case.default_terms")
+    return prov() if prov is not None else None
 
 
 class PaymentTermsBody(BaseModel):
@@ -1421,7 +1428,8 @@ class PaymentTermsBody(BaseModel):
 @router.get("/api/settings/payment-terms")
 def get_default_payment_terms(authorization: str = Header(None)):
     _require_user(authorization)
-    return {"text": _get_setting("default_payment_terms", DEFAULT_PAYMENT_TERMS)}
+    terms = _quote_default_terms()
+    return {"text": _get_setting("default_payment_terms", terms["paymentTerms"] if terms else "")}
 
 
 @router.put("/api/settings/payment-terms")
@@ -1842,7 +1850,10 @@ def get_quote_terms_defaults(authorization: str = Header(None)):
     """系統內建的五欄預設條款（唯一來源 helpers/quote_terms.py，N13）。
     與條款組同級：公司對外條款，登入即可讀。付款條件的「目前預設」另見 /api/settings/payment-terms。"""
     _require_user(authorization)
-    return dict(_QUOTE_DEFAULT_TERMS)
+    terms = _quote_default_terms()
+    if terms is None:
+        raise HTTPException(404, QUOTE_TERMS_UNAVAILABLE)
+    return terms
 
 
 @router.get("/api/settings/quote-terms-presets")

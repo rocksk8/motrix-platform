@@ -24,9 +24,10 @@ from db import get_db
 from helpers import row_access
 from core.txn import begin_write
 from helpers import (
-    _require_user, _tok, _audit, save_quotation_json, user_has_module,
-    SQL_DEAL_TAG,
+    _require_user, _tok, _audit, user_has_module,
 )
+# M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
+from helpers.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
 from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
 from helpers.recognition import normalize_date  # `AC2`
 
