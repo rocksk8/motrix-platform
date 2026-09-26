@@ -41,7 +41,7 @@
 
   function tpl() {
     return '' +
-'<div id="ml-editor" x-data="MotrixLayoutEditor.component()" x-show="open" x-cloak :data-busy="busy ? \'1\' : \'0\'" :data-state="state" :data-scope="scope">' +
+'<div id="ml-editor" x-data="MotrixLayoutEditor.component()" x-show="open" x-cloak :data-busy="busy ? \'1\' : \'0\'" :data-state="state" :data-scope="scope" :data-loaded-scope="loadedScope" :data-loads-done="loadsDone">' +
 ' <div class="ml-ed__head">' +
 '  <div class="ml-ed__row" style="justify-content:space-between"><strong>編輯版面</strong>' +
 '   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()">' +
@@ -52,7 +52,7 @@
 '   <span class="ml-ed__sub" x-text="startNote"></span></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="\'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
 ' </div>' +
-' <div class="ml-ed__body" x-show="work">' +
+' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy" :aria-busy="String(busy)">' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
 // 列表
 '  <template x-for="lk in listKeys()" :key="lk"><div class="ml-ed__sec" :data-testid="\'ml-list-\' + lk">' +
@@ -138,7 +138,7 @@
 
   function component() {
     return {
-      open: false, busy: false, state: 'idle', msg: '', note: '',
+      open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0,
       scope: 'company', roles: [], previewRole: '', startNote: '',
       defs: { draft: null, latest: null, versions: [] },
       work: null, lastOps: [], probs: {}, generalProblems: [],
@@ -187,22 +187,35 @@
       prob(id) { return this.probs[id] || '' },
 
       async loadScope() {
+        // e2e 等待終點：每一次 loadScope 結束（含被較新的切換取代而放棄）都 +1，可以等「那一趟確實處理完了」
+        try { await this._loadScope() } finally { this.loadsDone++ }
+      },
+      async _loadScope() {
+        // O7：每次切換範圍取一個序號；較早發出、較晚回來的回應不可以蓋掉後來選的範圍（連切兩次時）
+        var seq = ++this._scopeSeq
+        var want = this.scope
         this.busy = true
+        this.loadedScope = ''
         this.previewRole = ''
         this.probs = {}; this.generalProblems = []; this.diffShown = false; this.msg = ''
-        var r = await this._j(this._base() + '?scope=' + encodeURIComponent(this.scope))
-        this.defs = r.ok ? r.d : { draft: null, latest: null, versions: [] }
-        var ops = []
-        if (this.defs.draft) { ops = this.defs.draft.body.ops || []; this.startNote = '從草稿繼續' }
-        else if (this.defs.latest) { ops = this.defs.latest.body.ops || []; this.startNote = '從第 ' + this.defs.latest.version + ' 版開始' }
-        else if (this.scope !== 'company') {
+        var r = await this._j(this._base() + '?scope=' + encodeURIComponent(want))
+        if (seq !== this._scopeSeq) return
+        var defs = r.ok ? r.d : { draft: null, latest: null, versions: [] }
+        var ops = [], note
+        if (defs.draft) { ops = defs.draft.body.ops || []; note = '從草稿繼續' }
+        else if (defs.latest) { ops = defs.latest.body.ops || []; note = '從第 ' + defs.latest.version + ' 版開始' }
+        else if (want !== 'company') {
           var c = await this._j(this._base() + '?scope=company')
+          if (seq !== this._scopeSeq) return
           ops = (c.ok && c.d.latest) ? (c.d.latest.body.ops || []) : []
-          this.startNote = '這個角色還沒有覆寫：以公司預設為起點'
-        } else this.startNote = '以程式預設為起點'
+          note = '這個角色還沒有覆寫：以公司預設為起點'
+        } else note = '以程式預設為起點'
+        this.defs = defs
+        this.startNote = note
         this.work = L.applyOps(this._pts(), this._page(), ops).state
         this.sync()
         this.state = 'idle'
+        this.loadedScope = want
         this.busy = false
       },
       sync() { if (!this.previewRole) ML().show(L.clone(this.work), 'edit') },

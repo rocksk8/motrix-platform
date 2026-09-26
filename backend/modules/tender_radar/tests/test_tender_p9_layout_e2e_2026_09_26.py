@@ -113,8 +113,10 @@ def _relabel(loc, text):
 
 
 def _scope(page, ed, value):
+    # 等「這個範圍載入完成」本身（data-loaded-scope），不只等 busy＝0：busy 在切換的當下可能還沒翻成 1（O7）
     ed.get_by_test_id("ml-scope").select_option(value)
-    page.wait_for_function(IDLE)
+    page.wait_for_function("(v) => { const e = document.getElementById('ml-editor');"
+                           " return !!e && e.dataset.busy === '0' && e.dataset.loadedScope === v }", arg=value)
 
 
 def _publish(page, ed, note):
@@ -205,6 +207,8 @@ def test_layout_editor_role_override_and_restore(live_server, make_user, no_tile
     _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]").check()
     _publish(boss, ed, "地點打開")
     assert [v for v, _ in _rows("company")] == [1, 2]
+    # O7：只看「多了一版」不夠——第 2 版的內容必須真的是「地點打開」，不能是與第 1 版相同的空發布
+    assert {"op": "hide", "target": COL + "location"} not in _rows("company")[1][1]["ops"], _rows("company")[1][1]["ops"]
     sales.reload()
     sales.wait_for_function(READY)
     assert "location" in sales.evaluate(HEADS)
@@ -326,3 +330,67 @@ def test_page_fallback_columns_match_module_registration():
     # 每一個登記的欄都有畫法（x-if 分支），沒有登記的欄不會被畫
     for field in lists["tenders"]:
         assert "c.field === '%s'" % field in html, field
+
+
+# ── O7：切換範圍的載入期間（2026-09-26 第五班全量抓到：發布第 2 版後表頭仍是第 1 版）───────────────────
+# 成因：載入中編輯區仍可操作，載入回來整份覆蓋 ⇒ 修改靜默消失、照樣發布成與上一版相同的一版；
+#       連切兩次時，較早發出、較晚回來的回應蓋掉後來選的範圍。
+
+ED_ATTR = "() => { const e = document.getElementById('ml-editor'); return e ? {busy: e.dataset.busy, scope: e.dataset.scope," \
+          " loaded: e.dataset.loadedScope, done: +e.dataset.loadsDone} : null }"
+
+
+def _hold(page, scope):
+    """把 GET /api/definitions/layout/…?scope=<scope> 攔住，直到呼叫回傳的 release()。"""
+    held = []
+    enc = scope.replace(":", "%3A")
+    page.route(lambda url: "/api/definitions/layout/" in url and ("scope=" + enc) in url, lambda route: held.append(route))
+
+    def release():
+        while not held:
+            page.wait_for_timeout(50)
+        for r in held:
+            r.continue_()
+    return held, release
+
+
+@pytest.mark.e2e
+def test_editor_is_not_editable_while_a_scope_is_loading(live_server, make_user, no_tile_probe, e2e_browser):
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    held, release = _hold(boss, "role:admin")
+    ed.get_by_test_id("ml-scope").select_option("role:admin")
+    boss.wait_for_function("() => document.getElementById('ml-editor').dataset.busy === '1'")
+    box = _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]")
+    before = box.is_checked()
+    with pytest.raises(Exception):                      # 載入中：點不到（inert），不可以改到即將被覆蓋的舊狀態
+        box.click(timeout=1500)
+    release()
+    boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
+                           " return e.dataset.busy === '0' && e.dataset.loadedScope === 'role:admin' }")
+    assert box.is_checked() == before
+    box.click()                                         # 正對照：載入完成後可以改
+    assert box.is_checked() != before
+
+
+@pytest.mark.e2e
+def test_a_late_response_for_an_earlier_scope_does_not_overwrite_the_later_choice(live_server, make_user, no_tile_probe,
+                                                                                   e2e_browser):
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    n0 = boss.evaluate(ED_ATTR)["done"]
+    held, release = _hold(boss, "role:admin")
+    ed.get_by_test_id("ml-scope").select_option("role:admin")
+    boss.wait_for_function("() => document.getElementById('ml-editor').dataset.busy === '1'")
+    ed.get_by_test_id("ml-scope").select_option("company")
+    boss.wait_for_function("(n) => +document.getElementById('ml-editor').dataset.loadsDone >= n + 1", arg=n0)
+    assert boss.evaluate(ED_ATTR)["loaded"] == "company"
+    release()                                           # 較早的 role:admin 回應現在才回來
+    boss.wait_for_function("(n) => +document.getElementById('ml-editor').dataset.loadsDone >= n + 2", arg=n0)
+    st = boss.evaluate(ED_ATTR)
+    assert st["scope"] == "company" and st["loaded"] == "company" and st["busy"] == "0", st
+    assert "以程式預設為起點" in ed.inner_text()          # 公司還沒有版面 ⇒ 程式預設；不是「以公司預設為起點」（角色的起點說明）
