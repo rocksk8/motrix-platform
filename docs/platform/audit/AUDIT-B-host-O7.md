@@ -55,7 +55,21 @@
 
 | # | 回覆 | commit | 稽核確認 |
 |---|---|---|---|
-| M-1 | | | |
-| S-1 | | | |
-| S-2 | | | |
-| O-1 | | | |
+| M-1 | 範圍載入改用自己的 `loading` 旗標；鎖定處看 `busy \|\| loading`；載入中停用「以角色預覽」；新 e2e（含繞過畫面直接呼叫 previewAs 也不解鎖） | wip/h-o7-2 0738f4b7 | ✅ 關閉（B 複核：`inert`／頁尾／`data-busy` 都改看兩者；只有最新那一趟清 `loading`） |
+| S-1 | try／catch：讀不到（斷線、非 2xx）⇒ `state=error`、`loadError` 明說、`loading` 維持 true（鎖住）；`loadsDone` 在 finally；新 e2e（500） | 0738f4b7 | ✅ 關閉（被取代的那一趟在 catch 也先檢查序號，不會蓋掉新的狀態）；說明文字見 O-3 |
+| S-2 | 第 2 版比完整 ops（＝第 1 版扣掉那一筆 hide） | 0738f4b7 | ✅ 關閉 |
+| O-1 | 點之前斷言可見且 `inert === true`；例外收窄為 Playwright 逾時 | 0738f4b7 | ✅ 關閉 |
+
+## 4. 複核 wip/h-o7-2 0738f4b7 時的新發現（主持要求一併看：publish／restore／discard 改成各自解鎖）
+
+**S-3　動作的例外路徑仍會讓 `busy` 卡在 true、沒有說明**（讀碼，未實跑；與 S-1 同型，在動作那一側）
+- `saveDraft`／`publish`／`restore`／`discard` 都是「`busy = true` … 正常路徑最後 `busy = false`」，沒有 try／finally。`_j()` 用 `fetch`，斷線時 reject；`ML().reload()` 也可能丟出 ⇒ 例外往外傳，`busy` 永遠是 true，頁尾全部 disabled、編輯區 inert，`msg` 沒有變。
+- 這在 O7 之前就是這樣（原本靠 `loadScope` 結尾清 `busy`，而例外同樣走不到那裡）；這次改成「動作自己解鎖」，但只解了正常路徑。
+- 建議：四個動作各自 try／finally 清 `busy`，catch 時 `msg` 明說（「發布結果不明：請重新開啟排版器確認版本清單」——發布的請求可能已經成功，只是回應沒回來）。補一題：`page.route` 讓 `/publish` abort ⇒ 鎖解開、有說明。
+
+**O-2　動作進行中「套用範圍」下拉仍可切換 ⇒ 成功訊息可能標錯範圍**（讀碼）
+- 範圍下拉只在 `loading` 時不影響（它本身觸發 loading），`busy`（發布／還原進行中）時仍可切。發布中切到別的範圍 ⇒ `publish` 裡的 `await this.loadScope()` 被新的那一趟取代而提早 return ⇒ 接著 `busy = false`、`msg = '已發布第 N 版（' + scopeLabel() + '）'`——`scopeLabel()` 已經是**新**範圍，而發布的是舊範圍；`state = 'published'` 也會在新範圍還在載入時出現。
+- 建議：`busy` 時停用範圍下拉，或在動作開始時記下範圍標籤、訊息用記下的那一個。
+
+**O-3　錯誤說明寫「請重新選擇範圍再試」，但選同一個選項不會觸發 change**
+- 使用者要先切到別的範圍再切回來，或關閉再開（`start()` 會重新 `loadScope()`）。建議說明改成「請關閉排版器再開，或切到其他範圍再切回來」，或在錯誤狀態提供「重試」按鈕。
