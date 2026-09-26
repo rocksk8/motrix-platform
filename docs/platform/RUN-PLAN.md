@@ -144,6 +144,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 16:07 D：c-m01-s3-2 d93a792a（`AUDIT-D-C-m01-s3.md`）**必修 CS-M1**：SYSTEM 只准 L1 的掃描器漏 alias／dotted／star／getattr／_SystemCaller 6 種寫法；可見性、None 拒絕、M01 不在、指紋突變 5/5 紅；基準 1137＋274 過（紅 1＝sidebar 已知）。
 - 2026-09-26 16:00 C：**M01-PLAN §3-6 case.recognition 開工宣告**（wip/c-m01-rec，疊在 c-m01-s3-2）。會動：**B 的 M08** `modules/analytics/api/reports.py`（recognition.* 改取 M01 provider、M01 不在時明說）、`helpers/recognition.py`（M01）、INTEGRATION-POINTS（新 IP，列車定號）。不動 sidebar。
 - 2026-09-26 15:58 D：**M5-M1／M5-M2／M5-S1 關閉（c5484962）、IP-M1 關閉（9623f1be）**：MB8、S1、P5 重跑皆紅；e2e 連跑 5 次全綠。交會：a-approval-parse 的 voucher.py／tiered_approval.py 含「淘汰」未登記 ⇒ 兩包都合回時反掃必紅，後進的補登記。
 - 2026-09-26 15:58 主持：使用者表單定本輪範圍——授權機制不做、M01 已知例外可接受（D7 報告列出＋到期守門）、不安排人工驗收（CORE-SPEC 裁示表）。預估完工 9/29（±1 天）。
@@ -163,5 +164,3 @@
 - 2026-09-26 14:19 主持：A 的 a-m03 登記第八班（反向控制第一輪 16 紅已歸位；analytics 業績歸屬一題既有問題轉 B；p9 偶發記 O8）、PN-M1 完成（突變 14/14，D 原存活三項轉紅，第九班）；M06 五點裁示；O5-S3 第一步字型快取（h-fonts）；**U19 字型授權檔不在 repo**（記 §4，woff2 等確認）。
 - 2026-09-26 14:15 主持：D7 前置「冒煙改讀 probes」完成（wip/h-smoke-probes，待 D）；U15 全數關閉＋S-3（h-u15-2 f8a8156d）。D 的 O5 調查：index.html 的 load 被兩支約 5 MB 的 otf 字型綁住（因果實驗成立，負載下未重現逾時）⇒ S1／S2（e2e 字型替身、逾時附未完成請求）交 B（C4 之後），S3 產品字型由主持排：先轉 woff2 不做子集（子集會讓罕用字變方框）、/fonts/ 加長效快取。B 的 C4 全部 e2e 跑中。
 - 2026-09-26 14:1x A：a-m03（b2e5f7e4）上月台第八班，D 可開始稽核。PN-M1（wip/a-pn-m1，疊在 a-m03 上）後端、守門、畫面與突變 14/14 完成，閘門跑完即上第九班。M06-PLAN 已讀，問題另報主持。範圍外：analytics 業績歸屬一題不帶 client 夾具、單跑就紅（既有，交 M08 擁有者）。
-- 2026-09-26 14:06 D：O5 調查（`INVESTIGATION-D-O5-index-load.md`）：index.html 的 load 被兩個約 5 MB 的 otf 字型綁住（因果：字型延遲 20 秒 ⇒ load 延後到 40.3 秒、DCL 115 ms）；無外部資源、非離線依賴；在 platform -n 4＋e2e -n 2 負載下**未重現**逾時。建議：e2e hook 把字型換替身並改等應用就緒（B）、逾時時自動附未完成請求清單（B）、字型改 woff2 子集＋快取（產品）。
-- 2026-09-26 13:58 主持：h-u15 rebase 改名 h-u15-2（D 已關閉 M-1／S-1／S-2／O-1；O-2 custom 名單已修，待複核）；M05 裁示薄殼；PLAYBOOK 補 sparse 的 MSYS 陷阱。B 的 C4：7 項選單宣告搬進模組、凍結清單 e2e 79 題過，全部 e2e 與 core-only 跑中；D 查 O5。
