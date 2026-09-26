@@ -23,6 +23,9 @@ SYSTEM = Path(__file__).resolve().parents[2] / "routers" / "system.py"
     #  這個底線舊名只剩 M01 自己的 `modules.case.quotations._steps_to_tiers`（上一列）；見 test_helpers_package_no_longer_exports_m01_name〕
 ])
 def test_old_names_are_aliases_of_the_l1_objects(old, new):
+    from core import source_tree
+    if old.startswith("modules.case") and not source_tree.module_installed("modules/case/"):
+        pytest.skip("需要案件模組（M01）：驗 M01 保留的同名別名")   # M01 ④(c)
     import importlib
 
     def get(spec):

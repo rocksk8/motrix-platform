@@ -10,6 +10,13 @@ import json
 from pathlib import Path
 
 import pytest
+from core import source_tree  # noqa: E402
+
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
 
 BACKEND = Path(__file__).resolve().parents[2]
 MODULES_JSON = BACKEND.parent / "docs" / "platform" / "modules.json"
@@ -74,6 +81,7 @@ def test_voucher_aliases_are_the_l1_objects():
     assert "傳票" in str(ei.value)
 
 
+@needs_case('掃 M01 自己的原始碼')
 def test_m01_approval_queue_no_longer_imports_m06():
     src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     assert "from helpers.voucher import parse_approval_json" not in src

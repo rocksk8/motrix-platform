@@ -7,6 +7,14 @@ from pathlib import Path
 
 from core import registry
 from tests.platform.test_case_stage_connectors import _without
+import pytest
+from core import source_tree  # noqa: E402
+
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -51,6 +59,7 @@ def _q(sql, *args):
         conn.close()
 
 
+@needs_case('驗 M01 案件整包在 M03 不在時的行為（端點屬 M01）')
 def test_without_m03_case_bundle_says_there_are_no_shipping_notes(client, make_user, monkeypatch):
     from modules.case.api import quotations as q
     _without(monkeypatch, "shipping.list_for_case", "supply")
@@ -62,6 +71,7 @@ def test_without_m03_case_bundle_says_there_are_no_shipping_notes(client, make_u
     assert q.SHIPPING_UNAVAILABLE == "採購・庫存・出貨模組未安裝：沒有出貨單資料"
 
 
+@needs_case('驗 M01 案件設備登載在 M03 不在時的行為')
 def test_without_m03_device_serials_are_saved_but_not_synced_and_it_says_so(client, make_user, monkeypatch):
     from modules.case.api import quotations as q
     _without(monkeypatch, "stock.serial", "supply")
@@ -79,6 +89,7 @@ def test_without_m03_device_serials_are_saved_but_not_synced_and_it_says_so(clie
     assert dj["caseRecord"]["devices"] == [{"id": 1, "sn": "SN-SUP-1"}]
 
 
+@needs_case('驗 M01 案件設備登載（端點屬 M01）')
 def test_without_m03_no_serial_change_means_no_notice(client, make_user, monkeypatch):
     _without(monkeypatch, "stock.serial", "supply")
     h = _login(client, make_user, "sup_nochg")
@@ -111,6 +122,7 @@ def _sql_targets(rel):
     return set(re.findall(r"\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)", src, re.I))
 
 
+@needs_case('掃 M01 自己的原始碼')
 def test_m01_no_longer_writes_stock_items():
     """IP-19 之後 M01 不直寫 M03 的庫存表（table_write_exceptions 對應 debt 已刪）。正對照：同一個掃描抓得到 M01 自己的表。"""
     got = _sql_targets("modules/case/api/quotations.py")
@@ -118,6 +130,7 @@ def test_m01_no_longer_writes_stock_items():
     assert "stock_items" not in got
 
 
+@needs_case('掃 M01 自己的原始碼')
 def test_m01_does_not_import_m03_routers():
     src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     assert not re.search(r"from routers\.(shipping_notes|inventory|suppliers)\b|import (shipping_notes|inventory|suppliers)\b", src)

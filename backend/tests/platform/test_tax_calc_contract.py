@@ -83,6 +83,9 @@ def test_scanners_positive_control():
 
 @pytest.mark.parametrize("name", NAMES)
 def test_old_location_is_an_alias_of_the_l1_object(name):
+    from core import source_tree
+    if not source_tree.module_installed("modules/case/"):
+        pytest.skip("需要案件模組（M01）：驗 M01 保留的同名別名")   # M01 ④(c)
     from helpers import tax_calc
     from modules.case import quotations
     assert getattr(quotations, name) is getattr(tax_calc, name), name

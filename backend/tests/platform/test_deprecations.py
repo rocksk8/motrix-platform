@@ -95,6 +95,9 @@ def test_every_deprecation_marker_is_registered():
 
 def test_every_registration_points_at_a_real_name():
     entries, read, _files, _cv = _real()
+    # M01 ④(c)：登記在 L2 模組檔裡的名稱，模組不在這個安裝包 ⇒ 不比對（檔案本來就不在；模組在時照常比對）
+    from core import source_tree
+    entries = [e for e in entries if not (e["file"].startswith("modules/") and not source_tree.module_installed(e["file"]))]
     bad = invalid(entries, read)
     assert not bad, "\n".join(bad)
 

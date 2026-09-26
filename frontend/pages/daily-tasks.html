@@ -392,6 +392,7 @@
     }
     .dt-report-search:focus { outline: none; border-color: #7C3AED; }
     .dt-report-search-hint { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+    .dt-field-note { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
 
     /* Split panel */
     .dt-report-split {
@@ -2290,12 +2291,13 @@
       </div>
       <div class="dt-field">
         <label class="dt-field-label">關聯案件（選填）</label>
-        <select x-model="form.case_no" class="dt-input">
+        <select x-model="form.case_no" class="dt-input" :disabled="!!casesNotice">
           <option value="">— 不關聯案件 —</option>
           <template x-for="c in activeCases" :key="c.quoteNo">
             <option :value="c.quoteNo" x-text="c.quoteNo + '　' + c.customer + (c.projectName ? '　' + c.projectName : '')"></option>
           </template>
         </select>
+        <p class="dt-field-note" data-testid="cases-unavailable" x-show="casesNotice" x-text="casesNotice"></p>
       </div>
       <div class="dt-field">
         <label class="dt-field-label">工作說明</label>
@@ -2510,6 +2512,7 @@ function app() {
     reportFilterPerson: '',
 
     activeCases: [],
+    casesNotice: '',   // M01 不在（/api/sales-orders 404）⇒ 說出原因，不是「沒有已成案的案件」（M01-PLAN §5 ④ SO）
 
     showModal:  false,
     editingId:  null,
@@ -2583,6 +2586,10 @@ function app() {
         if (r.ok) {
           const d = await r.json()
           this.activeCases = (d.items || []).filter(c => c.dealTag === '已成案')
+          this.casesNotice = ''
+        } else if (r.status === 404) {
+          this.activeCases = []
+          this.casesNotice = '案件模組未安裝：無法關聯案件（其他欄位照常可填）'
         }
       } catch(e) {}
     },

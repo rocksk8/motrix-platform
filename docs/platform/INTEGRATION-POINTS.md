@@ -332,7 +332,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | 項目清單，形狀同佇列的其他類型：`type`（自訂模組＝`custom_record`）、`quoteNo`（單號）、`requestedBy`／`requestedByDisplay`／`requestedAt`、`tiers`／`currentTier`／`tierCount`／`currentApprovers`；自訂模組另帶 `moduleKey`、`moduleName`、`statusLabel`。共同欄位用 L1 `helpers/approval_queue.base_item()`／`tier_fields()` 組。項目沒給 `customer`／`projectName` 而有 `linkedQuoteNo` ⇒ M01 補案件的客戶與名稱（單據模組不讀 M01 的案件表）。**只列還沒簽完的**；誰看得到由使用方的 `_queue_visible_to` 決定（與其他類型同一條規則） |
 | 對方不在時 | 某個單據模組不在 ⇒ 那一類不列（它的單也不存在於這個安裝）；某個提供者丟例外 ⇒ 那一類不列、記 exception，佇列與角標照常 |
 | 契約版本 | 1（2026-09-26，CORE_VERSION 1.10 同一批）。欄位只准加 |
-| 守門 | `backend/tests/test_custom_modules_engine_2026_09_25.py`：①正對照：送審後出現在簽核人的佇列與角標、簽完就消失 ②非簽核人（一般使用者）看不到別人的 ③反向控制：提供者丟例外 ⇒ 佇列 200、內建單據照列。`backend/tests/platform/test_approval_providers.py`（M01-PLAN §3-7）：M01 佇列／角標／轉簽不再直讀或直寫各模組的單據表；每種單據類型各有一個提供者；拿掉一個提供者 ⇒ 那一類不列、角標跟著少、不給轉簽。`tools/check_approval_queue_coverage.py`（AS3）改成也認提供者 |
+| 守門 | `backend/tests/test_custom_modules_engine_2026_09_25.py`：①正對照：送審後出現在簽核人的佇列與角標、簽完就消失 ②非簽核人（一般使用者）看不到別人的 ③反向控制：提供者丟例外 ⇒ 佇列 200、內建單據照列。`backend/modules/case/tests/test_approval_providers.py`（M01-PLAN §3-7）：M01 佇列／角標／轉簽不再直讀或直寫各模組的單據表；每種單據類型各有一個提供者；拿掉一個提供者 ⇒ 那一類不列、角標跟著少、不給轉簽。`tools/check_approval_queue_coverage.py`（AS3）改成也認提供者 |
 
 ---
 
@@ -380,7 +380,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之�
 | 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files"} \| None` |
 | 對方不在時 | 沒有該類型的提供者 ⇒ 400「不支援的類型（或該單據的模組未安裝）」；提供者回 None ⇒ 404「單據不存在」 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_approval_providers.py`（M01 詳情端點不直讀其他模組的表、每種類型一個提供者、正對照 200＋拿掉 ⇒ 400）；既有 `test_approval_queue_detail_2026_09_14.py`、`test_approval_queue_detail_authz_2026_09_14.py` 行為不變 |
+| 守門 | `backend/modules/case/tests/test_approval_providers.py`（M01 詳情端點不直讀其他模組的表、每種類型一個提供者、正對照 200＋拿掉 ⇒ 400）；既有 `test_approval_queue_detail_2026_09_14.py`、`test_approval_queue_detail_authz_2026_09_14.py` 行為不變 |
 
 ---
 
@@ -396,7 +396,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）�
 | 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 M01 的寫鎖內呼叫、M01 commit） |
 | 對方不在時 | 沒有該類型的提供者 ⇒ 轉簽 400「此類型不支援轉簽（或該單據的模組未安裝）」，佇列 `reassignTypes` 不含它 ⇒ 前端不顯示按鈕 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_approval_providers.py`（M01 不再直寫各表、每種類型一個提供者、拿掉提供者 ⇒ 400 且 `reassignTypes` 不含、ApprovalUnreadable ⇒ 400）；既有 `test_approval_reassign_history_2026_09_14.py`、`test_jv35_voucher_reassign_2026_09_24.py` 行為不變 |
+| 守門 | `backend/modules/case/tests/test_approval_providers.py`（M01 不再直寫各表、每種類型一個提供者、拿掉提供者 ⇒ 400 且 `reassignTypes` 不含、ApprovalUnreadable ⇒ 400）；既有 `test_approval_reassign_history_2026_09_14.py`、`test_jv35_voucher_reassign_2026_09_24.py` 行為不變 |
 
 ---
 

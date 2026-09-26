@@ -11,6 +11,13 @@ import re
 import pytest
 
 from core import registry
+from core import source_tree  # noqa: E402
+
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
 
 QNO, OTHER = "MQ-IP11-0926", "MQ-IP11-OTHER"
 
@@ -49,6 +56,7 @@ def _cases():
         conn.close()
 
 
+@needs_case('刪報價單的端點屬 M01')
 def test_without_crm_the_quote_is_deleted_and_the_user_is_told(client, make_user, monkeypatch, caplog):
     h = _login(client, make_user)
     _seed()

@@ -10,6 +10,12 @@ import pytest
 
 from core import registry, source_tree
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 QNO = "MQ-202609-S04"
 
 
@@ -62,6 +68,7 @@ def _items():
 
 # ── IP-15（外包工班 不在）─────────────────────────────────────────────────────────
 
+@needs_case('驗 M01 案件整包在 M04 不在時的行為（端點屬 M01）')
 def test_case_bundle_without_m04(client, make_user, monkeypatch):
     from modules.case.api import quotations as q
     h = _hdr(client, make_user)

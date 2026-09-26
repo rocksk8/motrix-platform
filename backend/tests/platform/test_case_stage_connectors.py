@@ -21,6 +21,8 @@ BACKEND = Path(__file__).resolve().parents[2]
 @pytest.fixture(autouse=True)
 def _inline_bg(monkeypatch):
     """端點的背景同步改成當場執行（斷言看得到結果；不留執行緒）。"""
+    if not source_tree.module_installed("modules/case/"):
+        return                                         # M01 不在（④(c)）：沒有案件端點的背景同步可改
     from modules.case.api import quotations as q
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
 

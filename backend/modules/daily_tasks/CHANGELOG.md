@@ -1,5 +1,8 @@
 # 每日任務 更新紀錄
 
+## 1.0.4 — 2026-09-26（C，M01-PLAN §5 ④ SO；列車取號）
+- 頁面：案件模組（M01）不在 ⇒ `/api/sales-orders` 404 ⇒「關聯案件」選單停用並顯示「案件模組未安裝：無法關聯案件（其他欄位照常可填）」，不再是看起來沒有已成案案件的空清單；e2e `modules/daily_tasks/tests/test_e2e_daily_tasks_without_case_module.py`（攔截 404＋正對照）
+
 ## 1.0.3 — 2026-09-26
 - 選單宣告搬進本模組：`daily-tasks.html` 的 `pages[].menu`（原寫在 L1 的 `core/menu_l1.json`；group／order／perm／badge 原值照搬）。階段 C／C4（主持裁示 A）：本模組不在時它的入口隨宣告一起消失，不再靠前端寫死的頁面⇒模組對照表；〔rebase 到 origin：h-probes 已取 1.0.2 ⇒ 本段 1.0.3〕
 

@@ -24,6 +24,12 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "tools" / "platform"))
 import dep_scan  # noqa: E402
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 CAP = "attachments.for_document"
 ROOT = {"id": 0, "username": "att_root", "role": "superadmin", "modules": []}   # 驗清單內容用（權限另有題）
 
@@ -97,6 +103,7 @@ def test_absent_provider_is_named_not_silent(client, monkeypatch):
         assert "外包工班模組未安裝" in ei.value.detail
 
 
+@needs_case('前提是所有提供者都在（含 M01 的案件附件）')
 def test_everything_present_means_nothing_unavailable(client):
     from helpers import voucher_attachments as va
     if not source_tree.module_installed("modules/subcontract/api/vendor_contractors.py"):
@@ -106,6 +113,7 @@ def test_everything_present_means_nothing_unavailable(client):
     assert va.unavailable_sources() == []
 
 
+@needs_case('種子資料與 case 參數都是 M01 的報價單')
 @pytest.mark.parametrize("name", ["case", "arap"])
 def test_l1_side_providers_refuse_to_swallow_broken_json(client, name):
     """M01、M05 的提供者（M04 的在模組測試裡）：壞 JSON ⇒ AttachmentSourceError；單據不存在 ⇒ []。
@@ -183,6 +191,7 @@ def _hdr(client, make_user, name, role, modules):
     return {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
 
 
+@needs_case('驗 M01 案件附件依案件可見性')
 def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_user):
     """同樣有傳票權限（finance）：看得到案件的人（案件業務）列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。
     （AT-M1c 前「看得到」用 case_manage 充當；回簽檔改用案件頁的規則後 case_manage 不再放行，改用擁有者。）"""
@@ -206,6 +215,7 @@ def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_
         assert r.status_code == want, (want, r.status_code, r.text[:200])
 
 
+@needs_case('逐一驗含 M01 的每個提供者')
 def test_each_provider_refuses_a_reader_who_cannot_see_the_case(client):
     """每個在場的提供者：看不到案件的人 ⇒ AttachmentNotVisible（不是回空清單冒充「沒有附件」）；
     列單號時逐張過濾的提供者（開票申請）可以回「不列」。"""
@@ -252,6 +262,7 @@ def _seed_extra_expense_file(quote_no):
         conn.close()
 
 
+@needs_case('驗 M01 額外支出附件的可見範圍＝M01 額外支出頁')
 def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(client, make_user):
     """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
     經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
@@ -284,6 +295,7 @@ def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(cl
         conn.close()
 
 
+@needs_case('開票申請掛在 M01 案件上（前提用 M01 端點）')
 def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
     自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
@@ -343,6 +355,7 @@ def _pick(client, h, quote_no):
                        json={"picks": [{"type": "quotation_signed", "docNo": quote_no, "fileId": "f1"}]})
 
 
+@needs_case('驗 M01 報價單附件的可見範圍＝M01 案件頁')
 def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
     """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
     _seed_case_with_file("ATT-QP-1")
@@ -355,6 +368,7 @@ def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_use
     assert _pick(client, h, "ATT-QP-1").status_code == 403
 
 
+@needs_case('驗 M01 報價單附件的可見範圍＝M01 案件頁')
 def test_quotation_attachments_are_not_stricter_than_the_case_page(client, make_user):
     """嚴（D 實測出納帶不進）：cashier 非擁有者 ⇒ 案件頁 200（CM14b）⇒ 經傳票列得出回簽檔、帶入 200。"""
     _seed_case_with_file("ATT-QP-2")

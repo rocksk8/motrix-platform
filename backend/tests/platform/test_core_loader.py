@@ -262,7 +262,8 @@ def test_module_installed_positive_and_negative():
     for form in ("modules/%s/api.py" % k, "backend/modules/%s/x.py" % k, "backend" + chr(92) + "modules" + chr(92) + k + chr(92) + "x.py"):
         assert source_tree.module_installed(form) is True, form
     assert source_tree.module_installed("modules/zz_not_installed/api.py") is False
-    assert source_tree.module_installed("modules/case/api/quotations.py") is True
+    if (source_tree.BACKEND / "modules" / "case" / "module.json").is_file():          # M01 ④(c)：M01 不在的安裝包不綁它
+        assert source_tree.module_installed("modules/case/api/quotations.py") is True
 
 
 def test_module_installed_means_module_json_not_just_a_folder(tmp_path, monkeypatch):

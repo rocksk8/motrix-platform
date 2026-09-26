@@ -8,6 +8,14 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+import pytest
+from core import source_tree  # noqa: E402
+
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
 
 BACKEND = Path(__file__).resolve().parents[2]
 REPO = BACKEND.parent
@@ -69,6 +77,7 @@ def test_the_probe_covers_every_platform_core_unit(client):
     assert not out["failed"] and out["loaded"] == [], out
 
 
+@needs_case('反向控制要 import M01 本身')
 def test_rc_the_probe_reports_m01_when_it_is_imported(client):
     _l1, m01 = _groups()
     out = _probe(["helpers.dates", "modules.case.api.quotations"], m01)

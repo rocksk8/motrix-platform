@@ -23,6 +23,12 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "tools" / "platform"))
 import dep_scan  # noqa: E402
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 TABLE = "quotations"
 #: 逗號 join（`FROM cases c, quotations q`）dep_scan 目前不認得 ⇒ 補一條
 _COMMA_JOIN = re.compile(r"\bFROM\s+[^;()]*?,\s*\"?%s\"?\b" % TABLE, re.I | re.S)
@@ -101,6 +107,7 @@ def test_known_l1_baseline_is_not_stale():
     assert not bad, "KNOWN_L1 基線有過期條目（到期條件已觸發，請自基線刪除或縮小）：\n  " + "\n  ".join(bad)
 
 
+@needs_case('驗 M01 保留的同名別名是 L1 的同一個物件')
 def test_same_rule_everywhere():
     from helpers import case_access as ca, row_access as ra
     from modules.case import quotations as hq
@@ -170,10 +177,12 @@ def test_without_m01_access_is_404_even_though_the_table_and_row_exist(client, m
     conn.close()
     user = {"id": uid, "username": name, "role": "superadmin", "modules": []}
     _seed_case("MQ-CAM1-001", uid)
-    assert case_module_present() is True                                  # 正對照：M01 在
     conn = db.get_db()
-    q = guard_case_access(conn, "MQ-CAM1-001", user)
-    assert q is not None and case_access_allowed(conn, q, user) is True
+    if case_module_present():                                             # 正對照：M01 在（M01 ④(c)：不在的安裝包直接驗下半）
+        q = guard_case_access(conn, "MQ-CAM1-001", user)
+        assert q is not None and case_access_allowed(conn, q, user) is True
+    q = conn.execute("SELECT sales_person_id, sales_person, assigned_user_ids, data_json FROM quotations "
+                     "WHERE quote_no='MQ-CAM1-001'").fetchone()
     conn.close()
 
     _without_m01(monkeypatch)
@@ -225,8 +234,10 @@ def test_both_paths_agree_when_m01_is_absent(client, make_user, monkeypatch):
     au, apw = make_user(username="ca_both_api", role="superadmin")[:2]
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": au, "password": apw}).json()["token"]}
     url = "/api/quotations/MQ-CABOTH-01/network-plan"
-    assert client.get(url, headers=h).status_code in (200, 404)          # 正對照：M01 在時是否有規劃書與本題無關，只要不是「未安裝」
-    assert netplan.CASE_MISSING not in client.get(url, headers=h).text
+    from helpers.case_access import case_module_present
+    if case_module_present():                                             # 正對照只在 M01 在時跑（M01 ④(c)）
+        assert client.get(url, headers=h).status_code in (200, 404)      # M01 在時是否有規劃書與本題無關，只要不是「未安裝」
+        assert netplan.CASE_MISSING not in client.get(url, headers=h).text
 
     _without_m01(monkeypatch)
     conn = db.get_db()

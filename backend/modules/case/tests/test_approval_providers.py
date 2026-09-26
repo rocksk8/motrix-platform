@@ -16,7 +16,7 @@ import pytest
 
 from core import registry, source_tree
 
-BACKEND = Path(__file__).resolve().parents[2]
+BACKEND = Path(__file__).resolve().parents[3]   # M01 ④：隨模組搬進 modules/case/tests
 #: 別的模組的單據表（2026-09-26 前 M01 的三支端點逐表直寫的那些）
 FOREIGN_TABLES = ("contractor_payment_vouchers", "invoice_vouchers", "payment_requests", "shipping_notes",
                   "vouchers_all", "voucher_lines", "bonus_awards", "bonus_case_awards")

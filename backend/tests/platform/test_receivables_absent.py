@@ -40,7 +40,9 @@ def test_reports_without_m05(client, make_user, monkeypatch):
     assert r.status_code == 200, r.text
     assert r.json()["incomeNotice"] == rp.RECEIVABLES_MISSING and r.json()["monthIncomeItems"] == []
     acc = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&basis=accrual", headers=h)
-    assert acc.status_code == 200 and acc.json()["incomeNotice"] == ""          # 權責口徑的收入來自 M01 的階段，不受影響
+    # 權責口徑的收入來自 M01 的階段，不受 M05 影響；M01 也不在時是 M01 那一句（M01 ④(c)）
+    want = "" if source_tree.module_installed("modules/case/") else rp.CASE_RECOGNITION_MISSING
+    assert acc.status_code == 200 and acc.json()["incomeNotice"] == want
     t = client.get("/api/reports/tax-export?year=2026&month=9", headers=h)
     assert t.status_code == 404 and t.json()["detail"] == rp.RECEIVABLES_MISSING
 

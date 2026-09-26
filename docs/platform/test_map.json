@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 683,
+  "tests": 685,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 373,
+   "api": 374,
    "unit": 57,
-   "e2e": 164
+   "e2e": 165
   },
   "routes": 571
  },
@@ -1639,6 +1639,73 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/case/tests/test_approval_detail_and_reassign_edges.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/case/",
+    "mod:case/api/quotations",
+    "plat:__init__",
+    "plat:registry"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
+  "backend/modules/case/tests/test_approval_providers.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
+    "dir:backend/modules/case/api/",
+    "dir:backend/modules/subcontract/",
+    "dir:backend/modules/supply/",
+    "mod:case/api/__init__",
+    "mod:case/api/quotations",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "backend/modules/case/",
+     "backend/modules/case/api/",
+     "backend/modules/case/api/quotations.py",
+     "backend/modules/subcontract/",
+     "backend/modules/supply/"
+    ],
+    "module_dir": [
+     "backend/modules/case/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "case"
+  },
   "backend/modules/crm/tests/test_crm_api_integration.py": {
    "kind": "api",
    "units": [
@@ -2021,6 +2088,29 @@
     ]
    },
    "login_fixture": true,
+   "module": "daily_tasks"
+  },
+  "backend/modules/daily_tasks/tests/test_e2e_daily_tasks_without_case_module.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/daily_tasks/",
+    "mod:case/api/quotations",
+    "page:pages/daily-tasks.html"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/daily-tasks.html"
+    ],
+    "path": [
+     "frontend/pages/daily-tasks.html"
+    ],
+    "module_dir": [
+     "backend/modules/daily_tasks/"
+    ]
+   },
    "module": "daily_tasks"
   },
   "backend/modules/daily_tasks/tests/test_ip5_daily_task_external.py": {
@@ -5288,10 +5378,14 @@
     "helper:voucher",
     "mod:case/api/quotations",
     "mod:case/quotations",
+    "plat:__init__",
+    "plat:source_tree",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/tiered_approval.py",
      "backend/helpers/voucher.py",
@@ -5309,48 +5403,11 @@
     ]
    }
   },
-  "backend/tests/platform/test_approval_providers.py": {
-   "kind": "api",
-   "units": [
-    "core:db",
-    "dir:backend/modules/arap/",
-    "dir:backend/modules/case/",
-    "dir:backend/modules/case/api/",
-    "dir:backend/modules/subcontract/",
-    "dir:backend/modules/supply/",
-    "mod:case/api/__init__",
-    "mod:case/api/quotations",
-    "plat:__init__",
-    "plat:registry",
-    "plat:source_tree"
-   ],
-   "evidence": {
-    "import": [
-     "backend/core/__init__.py",
-     "backend/core/registry.py",
-     "backend/core/source_tree.py",
-     "backend/db.py",
-     "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
-    ],
-    "api": [
-     "backend/modules/case/api/quotations.py"
-    ],
-    "path": [
-     "backend/modules/arap/",
-     "backend/modules/case/",
-     "backend/modules/case/api/",
-     "backend/modules/case/api/quotations.py",
-     "backend/modules/subcontract/",
-     "backend/modules/supply/"
-    ]
-   },
-   "login_fixture": true
-  },
   "backend/tests/platform/test_attachments_providers.py": {
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
     "dir:docs/platform/",
     "dir:tools/platform/",
     "file:backend/helpers/__init__.py",
@@ -5387,6 +5444,7 @@
     "path": [
      "backend/helpers/voucher_attachments.py",
      "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/case/",
      "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "docs/platform/",
@@ -5490,6 +5548,7 @@
    "units": [
     "core:db",
     "dir:backend/core/",
+    "dir:backend/modules/case/",
     "dir:backend/modules/netplan/",
     "dir:docs/platform/",
     "dir:tools/platform/",
@@ -5534,6 +5593,7 @@
      "backend/helpers/case_access.py",
      "backend/helpers/company_identity.py",
      "backend/helpers/google_calendar.py",
+     "backend/modules/case/",
      "backend/modules/netplan/",
      "backend/routers/item_reads.py",
      "backend/routers/search.py",
@@ -5600,6 +5660,7 @@
    "units": [
     "dir:backend/modules/analytics/",
     "dir:backend/modules/analytics/api/",
+    "dir:backend/modules/case/",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/platform/test_tax_calc_contract.py",
     "helper:recognition_basis",
@@ -5631,7 +5692,8 @@
      "backend/helpers/recognition_basis.py",
      "backend/modules/analytics/",
      "backend/modules/analytics/api/",
-     "backend/modules/analytics/api/reports.py"
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/case/"
     ]
    },
    "login_fixture": true
@@ -5641,6 +5703,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
     "file:backend/helpers/__init__.py",
     "helper:google_calendar",
     "mod:arap/api/invoice_vouchers",
@@ -5673,6 +5736,7 @@
      "backend/modules/arap/",
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/case/",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/case_stage_tasks.py",
      "backend/modules/supply/api/shipping_notes.py"
@@ -5684,6 +5748,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
     "dir:docs/platform/",
     "file:backend/routers/__init__.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
@@ -5711,6 +5776,7 @@
     ],
     "path": [
      "backend/helpers/case_access.py",
+     "backend/modules/case/",
      "backend/modules/case/quotations.py",
      "backend/routers/map_points.py",
      "docs/platform/",
@@ -5770,6 +5836,8 @@
    "kind": "api",
    "units": [
     "core:main",
+    "dir:backend/modules/case/",
+    "file:backend/modules/case/module.json",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:loader",
@@ -5786,7 +5854,9 @@
     ],
     "path": [
      "backend/main.py",
+     "backend/modules/case/",
      "backend/modules/case/api/quotations.py",
+     "backend/modules/case/module.json",
      "backend/routers/system.py"
     ]
    },
@@ -5931,6 +6001,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
     "dir:backend/modules/crm/",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
@@ -5951,6 +6022,7 @@
      "backend/modules/case/api/quotations.py"
     ],
     "path": [
+     "backend/modules/case/",
      "backend/modules/crm/"
     ]
    },
@@ -5959,17 +6031,20 @@
   "backend/tests/platform/test_daily_checks_connector.py": {
    "kind": "api",
    "units": [
+    "dir:backend/modules/case/",
     "file:backend/helpers/__init__.py",
     "helper:daily_checks",
     "helper:system_checks",
     "plat:__init__",
     "plat:registry",
+    "plat:source_tree",
     "router:system"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/daily_checks.py",
      "backend/helpers/system_checks.py",
@@ -5977,6 +6052,9 @@
     ],
     "api": [
      "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/modules/case/"
     ]
    },
    "login_fixture": true
@@ -6438,19 +6516,25 @@
   "backend/tests/platform/test_l1_does_not_load_m01.py": {
    "kind": "api",
    "units": [
+    "dir:backend/modules/case/",
     "dir:docs/platform/",
     "file:docs/platform/modules.json",
     "helper:dates",
     "mod:case/api/quotations",
-    "mod:case/quotations"
+    "mod:case/quotations",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/dates.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/quotations.py"
     ],
     "path": [
+     "backend/modules/case/",
      "docs/platform/",
      "docs/platform/modules.json"
     ]
@@ -6557,6 +6641,7 @@
     "core:db",
     "core:pdf_gen",
     "dir:backend/modules/analytics/",
+    "dir:backend/modules/case/",
     "file:backend/routers/__init__.py",
     "mod:analytics/api/__init__",
     "mod:analytics/api/reports",
@@ -6588,6 +6673,7 @@
     ],
     "path": [
      "backend/modules/analytics/",
+     "backend/modules/case/",
      "backend/pdf_gen.py"
     ]
    },
@@ -6596,20 +6682,28 @@
   "backend/tests/platform/test_m01_sink2_contract.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/case/",
     "file:backend/helpers/__init__.py",
     "file:backend/tests/platform/test_tax_calc_contract.py",
     "helper:dates",
     "helper:tiered_approval",
+    "mod:case/__init__",
+    "plat:__init__",
+    "plat:source_tree",
     "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/dates.py",
      "backend/helpers/tiered_approval.py",
+     "backend/modules/case/__init__.py",
      "backend/tests/platform/test_tax_calc_contract.py"
     ],
     "path": [
+     "backend/modules/case/",
      "backend/routers/system.py"
     ]
    }
@@ -7318,6 +7412,7 @@
    "units": [
     "dir:backend/modules/analytics/",
     "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
     "file:backend/routers/__init__.py",
     "mod:analytics/api/__init__",
     "mod:analytics/api/reports",
@@ -7342,7 +7437,8 @@
     ],
     "path": [
      "backend/modules/analytics/",
-     "backend/modules/arap/"
+     "backend/modules/arap/",
+     "backend/modules/case/"
     ]
    },
    "login_fixture": true
@@ -7471,6 +7567,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/case/",
     "mod:arap/api/cashier",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
@@ -7493,6 +7590,7 @@
     ],
     "path": [
      "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/",
      "backend/modules/case/api/quotations.py",
      "backend/routers/accounting_export.py"
     ]
@@ -7511,12 +7609,14 @@
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
+    "plat:source_tree",
     "router:accounting_export"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
@@ -7540,6 +7640,7 @@
   "backend/tests/platform/test_tax_calc_contract.py": {
    "kind": "audit",
    "units": [
+    "dir:backend/modules/case/",
     "file:backend/helpers/__init__.py",
     "helper:tax_calc",
     "mod:case/__init__",
@@ -7548,10 +7649,14 @@
     "mod:case/case_stage_tasks",
     "mod:case/quotations",
     "mod:case/quote_terms",
-    "mod:case/recognition"
+    "mod:case/recognition",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/helpers/__init__.py",
      "backend/helpers/tax_calc.py",
      "backend/modules/case/__init__.py",
@@ -7563,7 +7668,8 @@
      "backend/modules/case/recognition.py"
     ],
     "path": [
-     "backend/helpers/tax_calc.py"
+     "backend/helpers/tax_calc.py",
+     "backend/modules/case/"
     ]
    }
   },
