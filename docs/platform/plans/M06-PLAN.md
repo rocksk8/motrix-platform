@@ -78,3 +78,52 @@
 - **#9 轉簽直寫** 是跨六種單據的共通問題，不是 M06 專屬；單獨在 M06 修會做出只有傳票走 provider、其他五種仍直寫的中間態 ⇒ 建議主持排成獨立一包（approval.reassign＋approval.queue_items）
 - **JV 系列規格**：傳票相關的 JV1～JV36 是 STATE／SCOPE 裡數量最多的一組，搬遷量可能比 M07 的 BN 大
 - 預估：3 router、4 helper、7 表、12 條接點 ⇒ 約 6～8 小時（不含 #8／#9 的共通包）；開工時回報死線
+
+## 4. JV 系列規格搬進 `modules/accounting/SPEC.md`（主持裁示 M06-e，比照 M07 的 BN；A 2026-09-26）
+
+> 量測：`test_spec_coverage_2026_09_21.py` 的 `_declared_where()`／`_implemented_where()`／`_scope_sections()`，樹＝origin/platform（第七班後）。
+> 判定「只由 M06 的題命名」＝命名它的每一個測試檔都需要 M06 才能跑。下表「候選」欄先以內容判斷（檔內打 `/api/vouchers`、`helpers.voucher`、`routers.vouchers`、`accounting_export`、`/api/account-items`、T100），
+> **最後以 §B-11 反向控制定案**：拿掉 `modules/accounting` 後 `test_spec_coverage` 報「宣告了沒人管」的編號＝要搬的（BN 的做法）。
+
+JV 共 36 條，全部宣告在 `docs/windows/STATE.md`；範圍 THIS 35 條、NEXT 1 條（JV6）。
+
+| 類 | 編號 | 命名它的測試檔 | 處置 |
+|---|---|---|---|
+| 候選搬遷（檔案都是 M06 題） | JV1、JV2、JV3、JV5、JV7、JV9、JV10、JV11、JV12、JV13、JV15、JV16、JV17、JV18、JV19、JV20、JV21、JV22、JV23、JV24、JV25、JV27、JV28、JV29、JV30、JV31、JV32、JV33、JV34、JV35、JV36 | 各自一到兩支 `test_*voucher*`／`test_jvNN_*`（搬遷時隨題一起進 `modules/accounting/tests/`，同檔名） | 宣告原文照搬到 SPEC.md「## 規格條件」（表格列 `\| **JVn** \| …`），`## 範圍` THIS 列入；STATE.md 那一列刪除並留一行指向 |
+| 要個別判斷 | JV4（`test_jv4_voucher_page_under_cashier`：出納頁底下的傳票入口 ⇒ 若驗的是 M05 出納頁 ⇒ 留 STATE.md，題改依 module_installed）、JV8（`test_approval_settings_unify`：L1 簽核設定頁列出傳票 ⇒ 可能是 L1 題）、JV26（`test_jv26_voucher_lines_inserts_agree`：掃 db.py migration 與 M06 的 INSERT 是否一致 ⇒ 可能是 L1 守門） | 見左 | 反向控制時看它們紅不紅：紅 ⇒ 搬（題與宣告一起）；綠 ⇒ 留 STATE.md |
+| 沒有題 | JV14（EXEMPT，寫明驗法）、JV6（NEXT） | — | EXEMPT／NEXT 隨宣告一起搬進 SPEC.md 的 `## 範圍` 對應段；EXEMPT 的理由原文照抄 |
+
+⚠ 撞名：STATE.md 其他節若也有 JVn（`_declared_where` 會列出行號），只搬傳票那一行；兩處都在 ⇒ 加 `AMBIGUOUS_ACK` 前先問主持。
+⚠ 題與宣告要同一個 commit 搬（否則中間態：宣告在 SPEC.md、題在 tests/ ⇒ 模組不在時「有題無宣告」）。
+
+## 5. 已知例外與到期守門（主持裁示 M06-a、b、d；比照 `tests/platform/test_case_access_l1.py` 的 KNOWN_L1）
+
+M06 搬進模組後，下列三類讀取暫時保留（沒有 import 邊，只有 SQL 讀別人的表），**每一筆寫明到期條件，到期不靠人記**：
+
+| # | 檔（搬遷後） | 讀的表（擁有者） | 到期條件（提供者） | 裁示 |
+|---|---|---|---|---|
+| a | `modules/accounting/api/vouchers.py` | `quotations`、`case_extra_expenses`（M01） | M01 提供 `case.summary`、`case.extra_expenses` | M06-a |
+| b | `modules/accounting/voucher_attachments.py` | `case_extra_expenses`、`case_updates`、`quotations`（M01）、`contractor_dispatches`（M04）、`invoice_vouchers`（M05） | 各擁有者提供 `attachments.for_document`（獨立一包，排在 M01 前置） | M06-b |
+| d | `modules/accounting/api/accounting_export.py` | `contractor_payment_vouchers`（M04） | M04 的 IP-14 加 `paid_between(start, end)` | M06-d |
+
+守門：`backend/tests/platform/test_accounting_foreign_reads.py`（L1 守門，M06 不在時照跑：檔案不在 ⇒ 那一筆不比，`module_installed`）
+
+```python
+#: 表 ⇒ (擁有的模組 key, 到期的 capability)
+KNOWN_ACCOUNTING_FOREIGN_READS = {
+    "modules/accounting/api/vouchers.py": {"quotations": ("case", "case.summary"),
+                                           "case_extra_expenses": ("case", "case.extra_expenses")},
+    "modules/accounting/voucher_attachments.py": {t: (o, "attachments.for_document") for t, o in (...)},
+    "modules/accounting/api/accounting_export.py": {"contractor_payment_vouchers": ("subcontract", "contractor_voucher.paid_between")},
+}
+```
+
+| 題名 | 做什麼 | 反向控制（合成資料） |
+|---|---|---|
+| `test_accounting_reads_of_other_modules_only_shrink` | 掃 `modules/accounting/**`（`source_tree.module_files`，排除 tests）的 SQL（`dep_scan.sql_tables`，與 dep_graph 同一份）：讀到別組的表而不在基線 ⇒ 紅 | 合成檔多讀一張別組表 ⇒ 紅；讀自己的表 ⇒ 綠 |
+| `test_accounting_foreign_reads_expire_when_the_provider_exists` | 基線每一筆：到期 capability 已被程式碼提供（`test_integration_points_registered.code_capabilities` 同一個掃描）⇒ 紅「提供者已在，改走它並自基線刪除」；檔已不讀那張表 ⇒ 紅「過期，自基線刪除」 | 合成 capability 出現 ⇒ 紅；合成檔不再讀 ⇒ 紅；兩者都沒有 ⇒ 綠 |
+| （既有）`test_integration_points_registered` | 新 capability 要登記 INTEGRATION-POINTS | — |
+
+- 到期觸發的是**提供者出現**，不是日期：C 的 M01 前置合回（`case.summary`）那一班，這一題就會紅，改走提供者的是 M06 擁有者（A）。
+- 刪除條目的 commit 要引用觸發它的那一班列車（RUN-PLAN §6 記一筆），比照 CA-S3。
+- `parse_approval_json` 不在本表：裁示 M06-c 已下沉 L1（`wip/a-approval-parse`），M01 不再 import M06。
