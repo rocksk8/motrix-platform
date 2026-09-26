@@ -154,6 +154,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 19:53 D：c-m01-3 b3b3b9aa 通過、必修 0：D2 實刪 M01 11 支 .py，L1 全部 80 單位（含 core/）import 0 失敗；pdf_gen 對 quotations 只剩 SELECT（r 正確）；M01 不在 ⇒ PDF 照存不記版本；KNOWN_L1 改回 rw ⇒ 過期守門紅。**GF2-M1 關閉（d5b95676）**：B-S4 題與基底逐字相同、測試缺 0、55 過。
 - 2026-09-26 19:44 D：b-genfiles-2 11937d60：**GF-M1、GF-M2 關閉**（--train 不設旗標／不判 skip／不查收集、現場改回讀檔 4/4 紅）；「提交用 test_map 只看已追蹤」取代「髒樹拒絕」站得住（dep_scan 對未追蹤檔也穩）；**新必修 GF2-M1**：相對 merge-base 刪掉 B-S4 守門題（產品邏輯仍在），請原樣還回。
 - 2026-09-26 19:42 C：整疊 rebase 到第九班之後推上 -3（見 §5 月台）；A 的 M06 以 c-m05b-3 為基底（已通知）。IP-15 成本檢視改派 B（主持），C 不做。M01 ④ 併入 D 的兩項觀察（存簿過濾看 dataUrl 那一層、M05 不在時 L1 簽核鏈讀不出來會擋的那條路），寫在 M01-PLAN §5。
 - 2026-09-26 19:41 B：**開工宣告**（主持派工，自 C 移來）：IP-15 新增成本檢視提供者 `dispatch.cost_for_case`（名稱定案，已告知 A）——動 C 的 `modules/subcontract`（新增提供者函式、module.json providers、subcontract 版號、tests）與 `docs/platform/INTEGRATION-POINTS.md`（IP-15 補一列）；只新增，不改 IP-15 既有回應；分支 `wip/b-ip15-cost`，基底為第十班合回後的 origin
@@ -173,4 +174,3 @@
 - 2026-09-26 17:54 C：**M01 本體開工宣告**（wip/c-m01，疊 c-approval-2；主持核准五段計畫、死線 02:10）。①CA-O4 現在做，會動：L1 `helpers/__init__.py`（撤 M01 再匯出）、`helpers/dates.py`／`helpers/tax_calc.py`／`helpers/tiered_approval.py`（只新增：norm_at、summarize_payment_items、steps_to_tiers 逐字下沉；tiered_approval 與 A 的 a-approval-parse 同檔不同段）、`routers/system.py`（條款改經 M01 provider）、`pdf_gen.py`（版本紀錄改經 M01 provider）；**B 的 M08** `modules/analytics/api/reports.py`（成案月份改經 case.recognition）；M01 自己的 routers。② 大搬遷等第九班合回後、整疊 rebase 再開始（主持裁示）。
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
-- 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。

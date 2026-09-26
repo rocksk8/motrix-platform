@@ -68,3 +68,10 @@
 - 修法：把那一題原樣還回來。
 
 **觀察 GF-O3**：「忘了 `--train`」和原本「忘了 `MOTRIX_TRAIN=1`」是同一類問題，只是入口從一個環境變數收斂成一個旗標，比較不容易忘；PLAYBOOK §G4 第 4 步已寫明用 `--train`。若要讓它由工具保證，可以讓列車長的固定腳本只呼叫 `--train`。不擋。
+
+## 4. GF2-M1 複核：wip/b-genfiles-3 d5b95676（D 19:53）
+
+- 用 AST 取出函式本體比對：`test_rerun_keeps_history_and_gate_reports_earlier_reds` 在合併基底 `9bb0fb90` 與 d5b95676 **逐字相同**。
+- 本分支改到的測試檔逐一比對 `def test_*`，相對合併基底缺 0。
+- `test_env_and_load_guards.py` 55 過。
+⇒ **GF2-M1 關閉（d5b95676）**。成因：修檔腳本用三連換行當結束錨點，越過了只有兩個換行的標題。這與〈大檔錨點批次取代前先印出範圍〉是同一類問題。
