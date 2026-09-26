@@ -98,3 +98,65 @@ def test_the_voucher_case_tab_lists_every_case_for_voucher_users(client, make_us
     assert r.status_code == 200, r.text[:200]
     assert [c["quote_no"] for c in r.json()["tabs"]["案件"]] == ["CSP-OTHER-4"]
     assert r.json()["notes"]["案件"] == "", "範圍沒有縮窄 ⇒ 不該有範圍說明"
+
+
+# ── 稽核 D M06-M3：誰可以帶這個用途（比照 SYSTEM 的靜態守門）────────────────────────────────
+#: `voucher_link` 會把範圍放寬到全部案件 ⇒ 只准 M06（傳票摘要）帶；新增呼叫者要主持裁示，改這張表。
+#: helpers/case_access.py 是登錄處（SUMMARY_PURPOSE_MODULES 的鍵），不是呼叫者。
+PURPOSE = "voucher_link"
+PURPOSE_ALLOWED = {"helpers/case_access.py", "modules/accounting/api/vouchers.py"}
+
+
+def purpose_violations(sources, allowed=PURPOSE_ALLOWED):
+    """sources：{相對 backend 的路徑: 原始碼} ⇒ 問題清單。
+    ① 字面值 "voucher_link"（不含 docstring；相鄰／`+` 串接先合併）只准出現在 allowed 的檔；
+    ② 任何呼叫的 `purpose=` 必須是字串字面值（用變數傳 ⇒ 靜態看不出是誰、帶什麼 ⇒ 一律禁止）。"""
+    import ast
+    import sys
+    sys.path.insert(0, str(source_tree.BACKEND.parent / "tools" / "platform"))
+    import dep_scan
+    out = []
+    for rel, src in sorted(sources.items()):
+        tree = ast.parse(src)
+        if rel not in allowed and any(c.strip() == PURPOSE for c in dep_scan.string_chunks(tree)):
+            out.append("%s：帶了用途 %r（只准 %s；新增要主持裁示）" % (rel, PURPOSE, sorted(allowed)))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                for kw in node.keywords:
+                    if kw.arg == "purpose" and not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
+                        out.append("%s:%d：purpose= 不是字串字面值（禁止用變數傳用途）" % (rel, node.lineno))
+    return out
+
+
+def _product_sources():
+    return {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.product_files()}
+
+
+def test_only_the_voucher_module_passes_the_voucher_link_purpose():
+    bad = purpose_violations(_product_sources())
+    assert not bad, "\n".join(bad)
+
+
+def test_the_guard_sees_the_real_caller():
+    """正對照：M06 在時，accounting 的實際呼叫點要被掃到（掃不到 ⇒ 守門空轉）。"""
+    srcs = _product_sources()
+    if source_tree.module_installed("modules/accounting/"):
+        assert 'purpose="voucher_link"' in srcs["modules/accounting/api/vouchers.py"]
+        assert purpose_violations(srcs, allowed={"helpers/case_access.py"}) == [
+            "modules/accounting/api/vouchers.py：帶了用途 'voucher_link'（只准 ['helpers/case_access.py']；新增要主持裁示）"]
+    assert "helpers/case_access.py" in srcs and PURPOSE in srcs["helpers/case_access.py"]
+
+
+def test_reverse_control_other_callers_and_variables_are_caught():
+    """反向控制（沙盒原始碼）：別的模組帶這個用途、用變數傳、拆字串串接 ⇒ 都紅；允許的檔照過。"""
+    ok = {"modules/accounting/api/vouchers.py": 's(conn, user, purpose="voucher_link")\n'}
+    assert purpose_violations(ok) == []
+    other = {"modules/supply/api/x.py": 's(conn, user, purpose="voucher_link")\n'}
+    assert purpose_violations(other) == [
+        "modules/supply/api/x.py：帶了用途 'voucher_link'（只准 %s；新增要主持裁示）" % sorted(PURPOSE_ALLOWED)]
+    var = {"modules/accounting/api/vouchers.py": 'p = "x"\ns(conn, user, purpose=p)\n'}
+    assert purpose_violations(var) == ["modules/accounting/api/vouchers.py:2：purpose= 不是字串字面值（禁止用變數傳用途）"]
+    concat = {"routers/y.py": 'P = "voucher_" + "link"\ns(conn, user, None, P)\n'}
+    assert purpose_violations(concat)[0].startswith("routers/y.py：帶了用途")
+    doc_only = {"routers/z.py": '"""說明裡提到 voucher_link 不算"""\n'}
+    assert purpose_violations(doc_only) == []

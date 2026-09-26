@@ -7317,6 +7317,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/accounting/",
+    "dir:tools/platform/",
     "helper:case_access",
     "mod:accounting/api/vouchers",
     "plat:__init__",
@@ -7335,7 +7336,10 @@
      "backend/modules/accounting/api/vouchers.py"
     ],
     "path": [
-     "backend/modules/accounting/"
+     "backend/helpers/case_access.py",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/vouchers.py",
+     "tools/platform/"
     ]
    },
    "login_fixture": true
