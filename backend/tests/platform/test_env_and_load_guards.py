@@ -209,7 +209,10 @@ def test_no_call_site_caps_with_the_bare_constant():
     src = (REPO / "tools" / "platform" / "modtest.py").read_text(encoding="utf-8")
     import re
     assert not re.search(r"cap_workers\([^)]*,\s*(FULL|PARTIAL)_MAX_WORKERS\)", src)
-    assert "cap_workers(extra, partial_cap(picked, tmap))" in src
+    # ~~assert "cap_workers(extra, partial_cap(picked, tmap))" in src~~
+    # 〔更正 wip/b-modtest-workers：差異題沒帶 -n 時先補預設上限（default_workers），上限仍經 partial_cap〕
+    assert "cap = partial_cap(picked, tmap)" in src
+    assert "cap_workers(default_workers(extra, cap), cap)" in src
 
 
 def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatch):
@@ -336,3 +339,27 @@ def test_build_script_workers_within_full_limit():
     caps = re.findall(r"\$workers\s*=\s*\[Math\]::Max\(\s*\d+\s*,\s*\[Math\]::Min\(\s*\$physCores\s*,\s*(\d+)\s*\)\s*\)", src)
     assert caps, "找不到建包的 worker 計算式（改寫了就要一起改這題）"
     assert all(int(c) <= MT.FULL_MAX_WORKERS for c in caps), caps
+
+
+def test_partial_run_defaults_to_the_worker_cap_when_no_n_is_given():
+    """D 觀察（主持派工）：差異題不帶 -n ⇒ 補 -n <上限>；自己帶 -n（含 -n 0、-n4、--numprocesses=2）或 -p no:xdist ⇒ 不動。
+    反向控制：拿掉 default_workers ⇒ 第一條紅。"""
+    assert MT.default_workers(["-q"], 4) == ["-q", "-n", "4"]
+    assert MT.default_workers([], 2) == ["-n", "2"]
+    for given in (["-n", "0"], ["-n4"], ["-n=3"], ["--numprocesses", "2"], ["--numprocesses=2"],
+                  ["-p", "no:xdist"], ["-pno:xdist"]):
+        assert MT.default_workers(given, 4) == given, given
+    assert MT.default_workers(["--no-header"], 4) == ["--no-header", "-n", "4"], "--no-… 不是 -n"
+
+
+def test_partial_run_default_follows_the_e2e_cap(_no_cap_env, monkeypatch):
+    """選到 e2e ⇒ 補的是 e2e 上限（partial_cap 取較小者）；上限壓過自己帶的 -n。"""
+    monkeypatch.setenv(MT.PARTIAL_ENV, "4")
+    monkeypatch.setenv(MT.E2E_ENV, "2")
+    tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
+    cap = MT.partial_cap(["backend/tests/test_a.py", "backend/tests/test_b.py"], tmap)
+    assert MT.cap_workers(MT.default_workers([], cap), cap) == ["-n", "2"]
+    cap = MT.partial_cap(["backend/tests/test_a.py"], tmap)
+    assert MT.cap_workers(MT.default_workers([], cap), cap) == ["-n", "4"]
+    assert MT.cap_workers(MT.default_workers(["-n", "8"], cap), cap) == ["-n", "4"]
+

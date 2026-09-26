@@ -750,6 +750,21 @@ def cap_workers(extra, limit):
     return out
 
 
+def _has_workers_arg(extra):
+    return any(a in ("-n", "--numprocesses") or a.startswith(("-n=", "--numprocesses=")) or
+               (a.startswith("-n") and len(a) > 2) for a in extra)
+
+
+def default_workers(extra, limit):
+    """差異題沒帶 -n ⇒ 補上 `-n <上限>`（上限＝partial_cap：選到 e2e 時已取 e2e 上限）。
+    〔D 觀察，主持派工 wip/b-modtest-workers：原本不帶 -n 就串行——609 檔 7 分鐘只跑 8%〕
+    自己帶了 -n（含 -n 0）或 `-p no:xdist` ⇒ 照原樣。"""
+    if _has_workers_arg(extra) or any(a == "no:xdist" or a == "-pno:xdist" for a in extra):
+        return list(extra)
+    _say("差異題沒有指定 -n ⇒ 預設 -n %d（MOTRIX_PARTIAL_MAX_WORKERS／選到 e2e 時 MOTRIX_E2E_MAX_WORKERS）" % limit)
+    return list(extra) + ["-n", str(limit)]
+
+
 def _low_priority_flags():
     """Windows：低優先權（子行程——xdist worker、瀏覽器——會繼承）。"""
     return getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if os.name == "nt" else 0
@@ -1283,7 +1298,8 @@ def main(argv=None):
     if not picked:
         print("沒有受影響的測試。")
         return 3 if rep["need_full"] else 0
-    code, _ = run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window, full=False)
+    cap = partial_cap(picked, tmap)
+    code, _ = run_pytest(picked, cap_workers(default_workers(extra, cap), cap), a.window, full=False)
     record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
     if code == 0 and rep["need_full"]:
         return 3          # 閘門過了，但動到 fixture 層：月台要註明、排車頭（全量由列車跑，§G3）
