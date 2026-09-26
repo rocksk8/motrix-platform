@@ -20,6 +20,7 @@ V3.1 → V3.2）。最下面的**靜態守門**釘住「前端沒有裸的 Nvh�
 
 「標」（1.0）字級下，現有版面尺寸不變：彈窗高＝0.9×視窗高、側邊清單（詳情抽屜）高＝視窗高。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -28,6 +29,7 @@ from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 W, H = 1366, 768
 ZOOMS = (0.85, 1.0, 1.15, 1.3)

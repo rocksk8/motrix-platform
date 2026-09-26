@@ -3,6 +3,7 @@
 「多選」⇒ 卡片出現勾選框；勾兩件、選執行負責、套用 ⇒ 資料庫兩件都改；匯出 ⇒ 下載 xlsx 且只含勾選的。
 非管理員看不到批次改負責人／成員（只剩匯出）。觀測點：資料庫落地值、下載檔內容。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 import threading
@@ -12,6 +13,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 

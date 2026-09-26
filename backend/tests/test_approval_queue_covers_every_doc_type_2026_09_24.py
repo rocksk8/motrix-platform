@@ -8,6 +8,7 @@
 
 判斷邏輯仍在工具裡（單一來源），這支只負責「每次都跑」與正對照。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import os
 import sys
 
@@ -16,6 +17,7 @@ import pytest
 BE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BE, "tools"))
 from check_approval_queue_coverage import check_approval_queue_coverage, is_clean  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def test_every_approval_doc_type_is_in_both_queue_endpoints():

@@ -4,11 +4,13 @@
 - 勾「已告知收件人」再存檔 ⇒ 伺服器記錄的是**存檔後**那一位；重新打開顯示已告知
 觀測點：伺服器的紀錄（API）與區塊上的 data-privacy-missing／data-privacy-acked。點的是真正的欄位、勾選框與儲存鈕。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_privacy_notice_forms_2026_09_26 import _insert_quote  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "PN-SH-E2E"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

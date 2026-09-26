@@ -1,4 +1,6 @@
 """Unit tests for pure business-logic functions (no DB required)."""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import pytest
 
 from modules.case.quotations import _steps_to_tiers, payment_item_amounts
@@ -6,6 +8,7 @@ from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LE
 from modules.case.api.quotations import _active_tiers, _current_tier_idx
 from routers.uploads import _resolve_upload_path, UPLOADS_ROOT
 import archive
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 # ── _parse_period ─────────────────────────────────────────────────────────────

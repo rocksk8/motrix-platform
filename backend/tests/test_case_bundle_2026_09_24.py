@@ -3,9 +3,11 @@
 每一段都是直接呼叫既有端點函式 ⇒ 內容與權限必須與分開打逐字相同。這裡用「分開打一次、合併打一次、
 比對」驗，不重寫預期值（預期值寫死的話，端點改了兩邊一起錯也看不出來）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-BUNDLE-001"
 PARTS = {

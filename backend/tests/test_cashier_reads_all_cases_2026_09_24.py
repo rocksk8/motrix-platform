@@ -5,6 +5,7 @@
 - 寫入面不變：CM14 已擋（只放行 payment 分段）；報價單、叫料等仍走擁有者檢查。
 - 沒有 cashier 的非成員：照舊看不到（403／清單沒有）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from tests.test_mp6_map_case_locations_2026_09_24 import (  # noqa: F401（_geo 是 fixture）
     CASE_A, CASE_ASSIGNED, CASE_B, CASE_QUOTE_ONLY, _cases, _geo, _seed as _mp6_seed, _uid,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-CASHRD-001"
 

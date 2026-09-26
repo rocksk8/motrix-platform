@@ -5,7 +5,9 @@
 找不到（尚未存檔或已被刪除）⇒ 409，不寫入。不帶 itemId 維持舊行為（早期沒有 id 的資料）。
 半解鎖排進審核的變更也記 itemId，核准時以 id 套用。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-BYID-001"
 PDF = ("a.pdf", b"%PDF-1.4 fake", "application/pdf")

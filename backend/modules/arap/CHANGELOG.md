@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.5 — 2026-09-27（C，M01-PLAN §5 ④；列車取號）
+- 頁面（稽核 D M4-M2，M01-PLAN §5 ④）：案件模組（M01）不在 ⇒ 請款單「帶入案件資料」與出納「收款／發票登錄」明說原因（判斷＝M01 路由不存在：404＋Not Found；看不到的案件的 404 不算）；e2e `tests/test_e2e_pages_without_case_module_2026_09_27.py`（各含正對照）
+
 ## 1.0.4 — 2026-09-26（A，IP-21 attachments.for_document；第十班列車取號）
 - `api/invoice_vouchers.py` 新增 `_InvoiceVoucherAttachments`（`attachments.for_document` 提供者，開票申請的已上傳檔案來源）
 - 抽出 `_voucher_readable`（案件層＋金額層，含本單簽核人例外），與 `_guard_voucher` 共用；`doc_nos_for_case` 逐張過濾（讀不到的不列，整張案件讀不到 raise `AttachmentNotVisible`）

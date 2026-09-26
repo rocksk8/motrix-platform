@@ -11,8 +11,10 @@
 3. 項目有**完成狀態**（完成／部分完成／未施作）。完工不等於零缺失；允許填
    「未施作」才有辦法把缺失留在「遺留事項」而不是假裝做完了。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

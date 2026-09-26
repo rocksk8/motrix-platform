@@ -39,9 +39,11 @@ monkeypatch `modules.case.api.quotations._tagged_file_entries` 成一律回 `[]`
 負對照（既有客戶回簽檔，走不同的 `_file_entries()`）**仍然是綠的**，
 證明這道守門真的分辨得出「哪一段壞了」而不是全部混在一起判斷。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DETAIL = "/api/approval-queue/detail?type=quotation&id=%s"
 

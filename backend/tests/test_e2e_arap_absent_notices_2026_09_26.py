@@ -6,6 +6,7 @@
    報表的 JSON 用 page.route 回一份帶 incomeNotice 的內容（後端那一半由 tests/platform/test_receivables_absent.py 驗）
 正對照：端點正常回應時，兩頁都不出現這些提示。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import contextlib
 import json
 
@@ -14,6 +15,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, _login  # noqa: F401,E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-ARAPABS-001"
 

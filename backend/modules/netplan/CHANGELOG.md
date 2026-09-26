@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## 1.0.5 — 2026-09-27（C，M01-PLAN §5 ④；列車取號）
+- 頁面（稽核 D M4-M2，M01-PLAN §5 ④）：案件模組（M01）不在 ⇒ 新增規劃書的「綁定案件」停用並明說「案件模組未安裝：無法綁定案件（規劃書本身照常可建立）」，不再是空清單；e2e `tests/test_e2e_pages_without_case_module_2026_09_27.py`（含正對照）
+
 ## 1.0.4 — 2026-09-26
 - 選單宣告搬進本模組：`network-plans.html` 的 `pages[].menu`（原寫在 L1 的 `core/menu_l1.json`；group／order／perm／badge 原值照搬）。階段 C／C4（主持裁示 A）：本模組不在時它的入口隨宣告一起消失，不再靠前端寫死的頁面⇒模組對照表；〔rebase 到 origin：h-probes 已取 1.0.3 ⇒ 本段 1.0.4〕
 

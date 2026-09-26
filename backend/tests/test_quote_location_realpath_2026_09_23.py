@@ -50,6 +50,7 @@ B 修在那一個地方而不是 14 個呼叫點，理由是「逐點注入的�
 單據型別會漏，而漏掉的症狀是它印總公司抬頭，沒有人會報修」。
 ⇒ 釘的是不變量：**任何一支 builder，綁了據點就印那個據點。**
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import sys
 from pathlib import Path
@@ -363,6 +364,7 @@ def test_ql7_the_probe_goes_red_when_the_column_is_ignored(
 #    「八題全綠」這句話會被單獨引用。
 
 import _pdf_identity as I  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: `QL7` 接縫層的 8 支。📌 `payslip` 是第 9 支，走 `QL8` 那條路。
 QL7_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")

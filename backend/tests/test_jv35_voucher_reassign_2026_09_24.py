@@ -22,6 +22,7 @@ POST /api/approval-queue/reassign  type="voucher"、id=傳票號碼
 轉簽之後，原簽核人按核准 ⇒ 403
 ```
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -203,6 +204,7 @@ def test_jv35_an_unreadable_voucher_chain_refuses_reassign_with_its_own_reason(c
 
 pw = pytest.importorskip("playwright.sync_api")
 from tests.test_e2e_approval_reassign_ui_2026_09_14 import _login as _page_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.mark.e2e

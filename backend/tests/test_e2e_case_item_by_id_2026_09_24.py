@@ -3,6 +3,7 @@
 API 層見 test_case_item_by_id_2026_09_24.py。這裡驗頁面真的帶了 itemId、且新增未存的
 那一列在上傳前會先存檔（否則伺服器上沒有那一列）。觀測點打在資料庫落地值。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -12,6 +13,7 @@ pytest.importorskip("playwright.sync_api")
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
     DATA_JS, NO, _cr, _open, _seed,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 UPLOAD_JS = f"""async (idx) => {{
   const c = {DATA_JS}

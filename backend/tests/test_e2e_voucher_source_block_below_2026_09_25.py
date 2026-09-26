@@ -7,6 +7,7 @@
 附件區縮圖點開同一視窗（只看不帶入）。鍵盤比照 MotrixUI：Esc 關、焦點鎖在視窗內。
 觀測點：實際位置（getBoundingClientRect）、DOM、attachments 落地筆數。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import os
 
@@ -17,6 +18,7 @@ from tests._e2e_login import inject_login  # noqa: E402
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 QNO = "MQ-VCSRC-01"
 D = "Alpine.$data(document.querySelector('[x-data]'))"

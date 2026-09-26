@@ -3,10 +3,12 @@
 2026-09-26 自 tests/platform/test_case_stage_connectors.py 移入本模組（拿掉 M12 時這兩題一起消失）；
 「M12 不在時勾選照常、明說原因」那一題留在 tests/platform（它驗的是 M01 的退化，M12 不在時也要綠）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 from core import registry
 from tests.platform.test_case_stage_connectors import _login, _case, _q, _tick  # noqa: F401
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.fixture(autouse=True)

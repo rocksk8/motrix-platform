@@ -5,6 +5,7 @@
 但 approve_case_bonus 不處理 cascade ⇒ 實際只簽了一層，第二層還要再簽一次。
 hichan-0a 裁：最小修——佇列對獎金分潤不預告（前端與後端行為一致），不改獎金簽核本身。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -15,6 +16,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 from tests.test_e2e_approval_reassign_ui_2026_09_14 import _login  # noqa: E402,F401
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: E402,F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow)
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-BQC-001"
 

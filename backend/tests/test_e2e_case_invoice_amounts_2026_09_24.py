@@ -4,6 +4,7 @@
 合計與該期金額不同 ⇒ 只提示不擋。沒有財務檢視權 ⇒ 比照 CM13 不渲染（後端本來就不回這兩鍵）。
 觀測點打在資料庫落地值。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -12,6 +13,7 @@ from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (liv
     DATA_JS, NOTE_INPUT, _login,
 )
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _seed
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 PRETAX = '[data-testid="invoice-pretax"]'
 TAX = '[data-testid="invoice-tax"]'

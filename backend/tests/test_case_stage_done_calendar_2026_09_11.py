@@ -18,7 +18,9 @@
 `modules/daily_tasks/tests/test_case_stage_done_daily_task.py`（拿掉 M12 時一起消失；稽核 AUDIT-D-A-M12-move M-1）。
 M12 不在時 M01 照常存檔並回 notice 的反向控制在 `tests/platform/test_case_stage_connectors.py`。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.fixture(autouse=True)

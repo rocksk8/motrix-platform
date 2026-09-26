@@ -3,12 +3,14 @@
 .aq-sort 只在簽核佇列頁定義過，案件頁從來沒有 ⇒ 矩陣排序、「多選」、常用篩選都是瀏覽器原生的灰框按鈕。
 觀測點：計算後的樣式——不是瀏覽器預設（灰底 rgb(240,240,240)、直角）；選中（.on）時底色與字色對比足夠。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login  # noqa: E402
 from tests.test_e2e_case_page_golden_2026_09_24 import _seed  # noqa: F401  (live_server 是 fixture)
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 STYLE = """(sel) => { const e = document.querySelector(sel); const s = getComputedStyle(e);

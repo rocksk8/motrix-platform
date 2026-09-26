@@ -14,6 +14,7 @@ N12：選支出項時該行借貸都空白 ⇒ 金額帶入借方
   走 resolve_picks 白名單＋abs_path；_require_voucher_access（非傳票權限 403）
 ```
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import os
 
@@ -164,6 +165,7 @@ def test_jv36_lines_remember_their_source_and_bad_sources_are_refused(client, ma
 
 pw = pytest.importorskip("playwright.sync_api")
 from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 _D = "Alpine.$data(document.querySelector('[x-data]'))"
 

@@ -4,7 +4,9 @@
 早就被改過、根本沒被審過的情況。修正：內容真的有變動、且已進入/完成簽核流程時，
 一併把 status/兩階段簽核紀錄重置回 pending，需要重新走一次簽核。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

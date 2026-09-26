@@ -6,6 +6,8 @@
 2. **每日工作事項一定要有指派人**。空的那列只有 superadmin 看得到（`_user_filter_sql()`），等於做了一個使用者看不見的東西。
 3. **建立當下就要標成已完成**。否則隔天 `_check_overdue_and_notify()` 會對每個負責人寄一封「你逾期未完成」。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import json
 
 from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
@@ -13,6 +15,7 @@ from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
 from tests.test_case_stage_done_calendar_2026_09_11 import (  # noqa: F401
     _no_background_sync, _login, _auth, _make_case, _stage_row,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _tasks_for(quote_no):

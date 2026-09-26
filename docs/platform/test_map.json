@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 685,
+  "tests": 686,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
    "api": 374,
    "unit": 57,
-   "e2e": 165
+   "e2e": 166
   },
   "routes": 571
  },
@@ -109,12 +109,14 @@
    "kind": "unit",
    "units": [
     "dir:backend/modules/analytics/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_core.py",
     "mod:analytics/api/reports"
    ],
    "evidence": {
     "import": [
      "backend/modules/analytics/api/reports.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_core.py"
     ],
     "module_dir": [
@@ -191,6 +193,7 @@
    "units": [
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "file:backend/tests/test_e2e_report_recognition_2026_09_24.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
@@ -203,6 +206,7 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py",
      "backend/tests/test_e2e_report_recognition_2026_09_24.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
@@ -401,6 +405,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
     "mod:analytics/api/reports",
     "mod:case/__init__",
@@ -416,6 +421,7 @@
      "backend/modules/analytics/api/reports.py",
      "backend/modules/case/__init__.py",
      "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "path": [
@@ -561,6 +567,7 @@
    "units": [
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
@@ -579,6 +586,7 @@
      "backend/core/source_tree.py",
      "backend/modules/analytics/api/reports.py",
      "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
     "api": [
@@ -693,6 +701,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_dispatch_connector.py",
     "mod:analytics/api/reports",
     "plat:__init__",
@@ -706,6 +715,7 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_dispatch_connector.py"
     ],
     "api": [
@@ -726,6 +736,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:source_tree"
@@ -734,7 +745,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py"
@@ -755,6 +767,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:source_tree"
@@ -764,7 +777,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/analytics/api/reports.py"
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py"
@@ -785,6 +799,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:source_tree"
@@ -794,7 +809,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/analytics/api/reports.py"
+     "backend/modules/analytics/api/reports.py",
+     "backend/tests/_requires.py"
     ],
     "path": [
      "backend/modules/subcontract/"
@@ -862,6 +878,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_reports_review_fixes_2026_09_02.py",
     "mod:analytics/api/reports"
    ],
@@ -869,6 +886,7 @@
     "import": [
      "backend/db.py",
      "backend/modules/analytics/api/reports.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_reports_review_fixes_2026_09_02.py"
     ],
     "api": [
@@ -954,12 +972,14 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
@@ -976,11 +996,13 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/analytics/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py",
     "mod:analytics/api/reports"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_settlement_extra_files_in_exports_2026_09_01.py"
     ],
     "api": [
@@ -1016,6 +1038,7 @@
     "core:db",
     "dir:backend/modules/analytics/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_visual_management_2026_08_28.py",
     "mod:analytics/api/reports",
     "plat:__init__",
@@ -1026,6 +1049,7 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_visual_management_2026_08_28.py"
     ],
     "api": [
@@ -1123,6 +1147,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
@@ -1131,7 +1156,8 @@
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
@@ -1183,13 +1209,15 @@
     "dir:backend/modules/arap/",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/cashier.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/cashier.html"
@@ -1264,11 +1292,13 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -1345,6 +1375,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/completion_notes",
@@ -1357,7 +1388,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -1412,6 +1444,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:frontend/js/",
+    "file:backend/tests/_requires.py",
     "js:js/case-management-core.js",
     "js:static/legal-round.js",
     "mod:arap/api/invoice_vouchers",
@@ -1429,7 +1462,8 @@
      "backend/db.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/__init__.py",
-     "backend/modules/case/recognition.py"
+     "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -1456,13 +1490,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/payment_requests",
     "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/payment_requests.py",
@@ -1540,11 +1576,13 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/invoice_vouchers"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py"
@@ -1596,6 +1634,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
     "helper:legal_params",
     "mod:arap/api/invoice_vouchers"
@@ -1604,6 +1643,7 @@
     "import": [
      "backend/db.py",
      "backend/helpers/legal_params.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ],
     "api": [
@@ -1621,13 +1661,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/arap/",
+    "file:backend/tests/_requires.py",
     "helper:receivables",
     "mod:arap/api/invoice_vouchers"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/receivables.py"
+     "backend/helpers/receivables.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py"
@@ -1711,6 +1753,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
+    "file:backend/tests/_requires.py",
     "helper:auth",
     "mod:case/api/quotations",
     "mod:crm/api"
@@ -1718,7 +1761,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/auth.py"
+     "backend/helpers/auth.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -1780,6 +1824,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry"
@@ -1788,7 +1833,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -1961,6 +2007,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/crm/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "page:pages/quotations.html"
@@ -1969,7 +2016,8 @@
     "import": [
      "backend/db.py",
      "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotations.html"
@@ -2022,6 +2070,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/daily_tasks/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_stage_done_calendar_2026_09_11.py",
     "mod:case/api/quotations",
     "mod:case/case_stage_tasks",
@@ -2034,6 +2083,7 @@
      "backend/modules/case/case_stage_tasks.py",
      "backend/modules/daily_tasks/__init__.py",
      "backend/modules/daily_tasks/api.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_stage_done_calendar_2026_09_11.py"
     ],
     "api": [
@@ -2117,6 +2167,7 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/daily_tasks/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
@@ -2129,6 +2180,7 @@
      "backend/core/registry.py",
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
@@ -2145,6 +2197,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/netplan/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:netplan/api",
     "plat:__init__",
@@ -2155,6 +2208,7 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
@@ -2243,13 +2297,15 @@
    "units": [
     "core:db",
     "dir:backend/modules/netplan/",
+    "file:backend/tests/_requires.py",
     "mod:netplan/api",
     "mod:netplan/export"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/netplan/export.py"
+     "backend/modules/netplan/export.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/netplan/api.py"
@@ -2609,6 +2665,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/payroll/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/_bonus_insure"
@@ -2616,7 +2673,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/payroll/tests/_bonus_insure.py"
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -3222,6 +3280,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/payroll/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/test_bonus_case_api_2026_09_24",
@@ -3231,6 +3290,7 @@
     "import": [
      "backend/db.py",
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
     ],
     "api": [
@@ -3739,12 +3799,14 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -3763,6 +3825,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
@@ -3772,7 +3835,8 @@
    "evidence": {
     "import": [
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
@@ -3796,6 +3860,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
@@ -3806,7 +3871,8 @@
    "evidence": {
     "import": [
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
@@ -3834,6 +3900,7 @@
     "core:pdf_gen",
     "dir:backend/modules/subcontract/",
     "dir:frontend/pages/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractors",
     "page:pages/approval-queue.html",
@@ -3842,7 +3909,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -3932,11 +4000,13 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/subcontract/api/vendor_contractors.py"
@@ -3952,11 +4022,15 @@
    "kind": "api",
    "units": [
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
+    "import": [
+     "backend/tests/_requires.py"
+    ],
     "api": [
      "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
@@ -3974,6 +4048,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:case/recognition",
     "plat:__init__",
     "plat:registry",
@@ -3985,7 +4060,8 @@
      "backend/core/registry.py",
      "backend/db.py",
      "backend/modules/case/recognition.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/vouchers.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -4002,6 +4078,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "mod:daily_tasks/api",
     "page:pages/case-management.html"
@@ -4009,6 +4086,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "api": [
@@ -4056,6 +4134,7 @@
    "kind": "e2e",
    "units": [
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "mod:subcontract/tests/test_contractor_bank_branch_2026_09_24",
     "page:pages/approval-queue.html",
@@ -4064,6 +4143,7 @@
    "evidence": {
     "import": [
      "backend/modules/subcontract/tests/test_contractor_bank_branch_2026_09_24.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -4168,6 +4248,7 @@
    "kind": "e2e",
    "units": [
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
     "mod:case/api/quotations",
@@ -4176,6 +4257,7 @@
    "evidence": {
     "import": [
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
@@ -4477,6 +4559,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "plat:__init__",
     "plat:registry"
@@ -4486,7 +4569,8 @@
      "backend/core/__init__.py",
      "backend/core/registry.py",
      "backend/db.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4502,6 +4586,7 @@
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/subcontract/api/",
     "file:backend/routers/__init__.py",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/cashier",
     "mod:case/api/quotations",
     "mod:subcontract/api/__init__",
@@ -4520,7 +4605,8 @@
      "backend/modules/subcontract/api/__init__.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/__init__.py",
-     "backend/routers/accounting_export.py"
+     "backend/routers/accounting_export.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/cashier.py",
@@ -4637,6 +4723,7 @@
    "units": [
     "dir:backend/modules/supply/",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_privacy_notice_forms_2026_09_26.py",
     "mod:supply/api/shipping_notes",
     "page:pages/case-management.html"
@@ -4644,6 +4731,7 @@
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_privacy_notice_forms_2026_09_26.py"
     ],
     "api": [
@@ -4704,6 +4792,7 @@
    "units": [
     "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_privacy_notice_forms_2026_09_26.py",
     "helper:privacy_notice",
     "mod:supply/api/shipping_notes"
@@ -4712,6 +4801,7 @@
     "import": [
      "backend/helpers/__init__.py",
      "backend/helpers/privacy_notice.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_privacy_notice_forms_2026_09_26.py"
     ],
     "api": [
@@ -4860,6 +4950,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/supply/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_api_integration.py",
     "mod:case/api/quotations",
     "mod:supply/api/inventory",
@@ -4868,6 +4959,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_api_integration.py"
     ],
     "api": [
@@ -7831,6 +7923,7 @@
    "units": [
     "core:db",
     "core:main",
+    "file:backend/tests/_requires.py",
     "helper:auth",
     "mod:case/api/quotations",
     "mod:crm/api",
@@ -7844,7 +7937,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/auth.py",
-     "backend/routers/parts.py"
+     "backend/routers/parts.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -7867,12 +7961,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:approval_delegates"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -7897,12 +7993,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/approval-queue.html"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -7916,13 +8014,15 @@
   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py": {
    "kind": "unit",
    "units": [
+    "file:backend/tests/_requires.py",
     "helper:custom_modules",
     "helper:tiered_approval",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
-     "backend/helpers/tiered_approval.py"
+     "backend/helpers/tiered_approval.py",
+     "backend/tests/_requires.py"
     ],
     "path": [
      "backend/helpers/custom_modules.py",
@@ -7934,11 +8034,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -7950,11 +8052,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -7966,12 +8070,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:auth"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -7983,11 +8089,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -7999,11 +8107,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8137,13 +8247,15 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:system",
     "router:vouchers"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -8449,12 +8561,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_action_items",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_action_items.py",
@@ -8467,6 +8581,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:case/quotations"
    ],
@@ -8474,7 +8589,8 @@
     "import": [
      "backend/db.py",
      "backend/modules/case/api/quotations.py",
-     "backend/modules/case/quotations.py"
+     "backend/modules/case/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8487,6 +8603,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "helper:voucher_attachments",
     "plat:__init__",
@@ -8498,7 +8615,8 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
+     "backend/helpers/voucher_attachments.py",
+     "backend/tests/_requires.py"
     ],
     "path": [
      "backend/modules/subcontract/"
@@ -8509,6 +8627,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "helper:voucher_attachments",
     "router:vouchers"
@@ -8517,7 +8636,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
+     "backend/helpers/voucher_attachments.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -8529,11 +8649,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8545,6 +8667,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
@@ -8554,7 +8677,8 @@
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
@@ -8571,11 +8695,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8587,12 +8713,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8605,6 +8733,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "mod:case/api/quotations",
     "page:pages/case-management.html"
@@ -8613,6 +8742,7 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py"
     ],
     "api": [
@@ -8648,6 +8778,7 @@
     "dir:backend/modules/payroll/",
     "file:backend/modules/payroll/module.json",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "js:js/bonus.js",
     "page:pages/bonus.html",
     "page:pages/case-management.html",
@@ -8662,7 +8793,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -8685,12 +8817,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
@@ -8703,12 +8837,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:subcontract/api/vendor_contractors"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -8721,12 +8857,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8738,11 +8876,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8754,11 +8894,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8770,12 +8912,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -8788,11 +8932,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8804,13 +8950,15 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:case/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/quotations.py"
+     "backend/modules/case/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8822,12 +8970,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/material_orders",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/material_orders.py",
@@ -8843,6 +8993,7 @@
     "dir:frontend/js/",
     "dir:frontend/pages/",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "js:static/ui.js",
     "mod:supply/api/shipping_notes",
@@ -8856,6 +9007,7 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py"
     ],
     "page": [
@@ -8876,6 +9028,7 @@
     "core:db",
     "dir:docs/windows/",
     "dir:frontend/js/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "file:docs/windows/SPEC-CM12-P4-UI.md",
@@ -8884,6 +9037,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
@@ -8939,11 +9093,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -8956,6 +9112,7 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_action_items",
     "mod:case/api/quotations",
     "router:system"
@@ -8963,7 +9120,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_action_items.py",
@@ -8977,6 +9135,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "helper:settings",
     "mod:case/case_deadlines"
    ],
@@ -8984,7 +9143,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/settings.py",
-     "backend/modules/case/case_deadlines.py"
+     "backend/modules/case/case_deadlines.py",
+     "backend/tests/_requires.py"
     ]
    }
   },
@@ -8992,11 +9152,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9008,12 +9170,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/receivables.html"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9028,11 +9192,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9043,12 +9209,14 @@
   "backend/tests/test_case_record_validation_releases_lock_2026_09_25.py": {
    "kind": "api",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
@@ -9060,6 +9228,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "router:system"
@@ -9068,7 +9237,8 @@
     "import": [
      "backend/db.py",
      "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -9081,12 +9251,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:system"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -9100,6 +9272,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "helper:google_calendar",
     "mod:case/api/__init__",
     "mod:case/api/quotations"
@@ -9110,7 +9283,8 @@
      "backend/helpers/__init__.py",
      "backend/helpers/google_calendar.py",
      "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9122,12 +9296,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9142,6 +9318,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_mp6_map_case_locations_2026_09_24.py",
     "mod:case/api/material_orders",
     "mod:case/api/quotations"
@@ -9149,6 +9326,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_mp6_map_case_locations_2026_09_24.py"
     ],
     "api": [
@@ -9421,6 +9599,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
     "mod:case/completion_pdf"
@@ -9428,7 +9607,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/completion_pdf.py"
+     "backend/modules/case/completion_pdf.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/completion_notes.py",
@@ -9442,6 +9622,7 @@
    "units": [
     "core:archive",
     "core:main",
+    "file:backend/tests/_requires.py",
     "helper:auth",
     "mod:case/api/quotations",
     "mod:case/quotations",
@@ -9453,7 +9634,8 @@
      "backend/helpers/auth.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/case/quotations.py",
-     "backend/routers/uploads.py"
+     "backend/routers/uploads.py",
+     "backend/tests/_requires.py"
     ],
     "path": [
      "backend/main.py"
@@ -9527,6 +9709,7 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "helper:custom_modules",
     "helper:doc_template",
     "helper:formula",
@@ -9560,7 +9743,8 @@
      "backend/helpers/formula.py",
      "backend/helpers/module_registry.py",
      "backend/helpers/tiered_approval.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -9780,13 +9964,15 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/modules/case/api/quotations.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -9799,13 +9985,15 @@
    "units": [
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "js:js/account-items.js",
     "page:pages/account-items.html"
    ],
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/js/account-items.js",
@@ -9822,6 +10010,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:index.html",
     "page:pages/approval-history.html"
    ],
@@ -9829,7 +10018,8 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/index.html",
@@ -9847,13 +10037,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/approval-queue.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html"
@@ -9868,6 +10060,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html",
     "page:pages/reports.html",
@@ -9879,6 +10072,7 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -9911,12 +10105,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -9928,12 +10124,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -9948,13 +10146,15 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -9974,13 +10174,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -9992,12 +10194,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10013,6 +10217,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "js:static/edit-presence.js",
     "js:static/sidebar.js",
@@ -10026,6 +10231,7 @@
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py"
     ],
     "api": [
@@ -10046,6 +10252,7 @@
   "backend/tests/test_e2e_case_header_and_payment_tab_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
@@ -10053,6 +10260,7 @@
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
@@ -10067,12 +10275,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10082,12 +10292,14 @@
   "backend/tests/test_e2e_case_invoice_amounts_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
@@ -10100,11 +10312,13 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ]
    }
@@ -10114,12 +10328,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10134,13 +10350,15 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -10158,12 +10376,14 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "page": [
@@ -10179,13 +10399,15 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -10204,13 +10426,15 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html",
     "router:item_reads"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/item_reads.py"
@@ -10227,12 +10451,14 @@
   "backend/tests/test_e2e_case_money_mask_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
@@ -10245,6 +10471,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "mod:case/api/quotations",
     "mod:daily_tasks/api",
@@ -10253,6 +10480,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "api": [
@@ -10270,6 +10498,7 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:supply/api/shipping_notes",
     "page:index.html",
@@ -10287,7 +10516,8 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -10316,12 +10546,14 @@
    "kind": "e2e",
    "units": [
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_page_golden_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_page_golden_2026_09_24.py"
     ],
     "page": [
@@ -10333,12 +10565,14 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -10351,12 +10585,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10367,6 +10603,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html",
     "page:pages/users.html"
@@ -10374,6 +10611,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -10390,12 +10628,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10407,12 +10647,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10422,12 +10664,14 @@
   "backend/tests/test_e2e_case_save_mode_and_labels_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
@@ -10439,12 +10683,14 @@
   "backend/tests/test_e2e_case_save_queue_after_failure_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "file:backend/tests/test_e2e_case_invoice_amounts_2026_09_24.py"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
      "backend/tests/test_e2e_case_invoice_amounts_2026_09_24.py"
@@ -10454,11 +10700,13 @@
   "backend/tests/test_e2e_case_save_serialized_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -10471,12 +10719,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10491,12 +10741,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10511,6 +10763,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "page:pages/case-management.html"
    ],
@@ -10518,6 +10771,7 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "page": [
@@ -10530,12 +10784,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html"
@@ -10549,12 +10805,14 @@
    "kind": "e2e",
    "units": [
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_page_golden_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_page_golden_2026_09_24.py"
     ],
     "page": [
@@ -10570,6 +10828,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
@@ -10581,6 +10840,7 @@
      "backend/modules/case/api/__init__.py",
      "backend/modules/case/api/quotations.py",
      "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "page": [
@@ -10592,6 +10852,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_cashier_reads_all_cases_2026_09_24.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "page:pages/case-management.html"
@@ -10599,6 +10860,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_cashier_reads_all_cases_2026_09_24.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
@@ -10613,6 +10875,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/company-profile-settings.html",
     "page:pages/completion-note-form.html"
@@ -10621,7 +10884,8 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -10641,13 +10905,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -10693,13 +10959,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -10712,13 +10980,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -10731,6 +11001,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "page:pages/case-management.html",
     "page:pages/settlement.html"
@@ -10740,6 +11011,7 @@
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py"
     ],
     "page": [
@@ -10754,6 +11026,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/case-management.html",
     "page:pages/dev-crm.html",
@@ -10763,7 +11036,8 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -10823,6 +11097,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "js:static/sidebar.js",
     "page:pages/approval-queue.html",
@@ -10833,6 +11108,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "page": [
@@ -10937,13 +11213,15 @@
    "kind": "e2e",
    "units": [
     "file:backend/conftest.py",
+    "file:backend/tests/_requires.py",
     "file:frontend/static/favicon.png",
     "router:auth",
     "router:uploads"
    ],
    "evidence": {
     "import": [
-     "backend/conftest.py"
+     "backend/conftest.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/auth.py",
@@ -11106,6 +11384,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/case-management.html"
    ],
@@ -11113,7 +11392,8 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -11157,6 +11437,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "js:static/notif.js",
     "page:pages/case-management.html",
@@ -11165,6 +11446,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
     ],
     "page": [
@@ -11228,6 +11510,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/approval-queue.html",
     "page:pages/custom-records.html",
@@ -11238,7 +11521,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -11296,6 +11580,7 @@
    "units": [
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "file:frontend/css/style.css",
     "js:static/auth-guard.js",
     "js:static/sidebar.js",
@@ -11306,7 +11591,8 @@
    "evidence": {
     "import": [
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/css/style.css",
@@ -11319,6 +11605,41 @@
     "path": [
      "frontend/index.html",
      "frontend/pages/parts.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_pages_without_case_module_2026_09_27.py": {
+   "kind": "e2e",
+   "units": [
+    "dir:backend/modules/analytics/",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/netplan/",
+    "mod:case/api/quotations",
+    "page:pages/cashier.html",
+    "page:pages/network-plans.html",
+    "page:pages/payment-request-form.html",
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
+    "api": [
+     "backend/modules/case/api/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html",
+     "frontend/pages/network-plans.html",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "backend/modules/arap/",
+     "backend/modules/netplan/"
     ]
    }
   },
@@ -11359,6 +11680,7 @@
     "file:backend/conftest.py",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:index.html",
     "page:pages/case-management.html",
@@ -11372,7 +11694,8 @@
      "backend/conftest.py",
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -11395,6 +11718,7 @@
   "backend/tests/test_e2e_presence_bar_no_overlap_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
     "file:backend/tests/test_e2e_quote_number_input_2026_09_24.py",
     "js:static/edit-presence.js",
@@ -11404,6 +11728,7 @@
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
      "backend/tests/test_e2e_quote_number_input_2026_09_24.py"
     ],
@@ -11422,6 +11747,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "helper:privacy_notice",
     "mod:case/api/completion_notes",
     "mod:netplan/api",
@@ -11435,7 +11761,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/privacy_notice.py"
+     "backend/helpers/privacy_notice.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/completion_notes.py",
@@ -11514,6 +11841,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/__init__",
     "mod:case/api/quotations",
     "page:pages/quotations.html",
@@ -11526,7 +11854,8 @@
      "backend/core/registry.py",
      "backend/db.py",
      "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotations.html"
@@ -11542,6 +11871,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/case-management.html",
     "page:pages/quotation-form.html",
     "page:pages/quotations.html"
@@ -11550,7 +11880,8 @@
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/case-management.html",
@@ -11568,13 +11899,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -11587,13 +11920,15 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/quotation-form.html"
@@ -11606,6 +11941,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "mod:case/quote_terms",
     "page:pages/quotation-form.html",
     "router:system"
@@ -11615,7 +11951,8 @@
      "backend/db.py",
      "backend/modules/case/quote_terms.py",
      "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
+     "backend/tests/_ports.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/system.py"
@@ -11659,6 +11996,7 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_ports.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/_ui_dialogs.py",
     "page:pages/case-management.html"
    ],
@@ -11667,6 +12005,7 @@
      "backend/db.py",
      "backend/tests/_e2e_login.py",
      "backend/tests/_ports.py",
+     "backend/tests/_requires.py",
      "backend/tests/_ui_dialogs.py"
     ],
     "page": [
@@ -11677,12 +12016,14 @@
   "backend/tests/test_e2e_report_recognition_2026_09_24.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "file:backend/tests/test_report_recognition_basis_2026_09_24.py",
     "page:pages/case-management.html"
    ],
    "evidence": {
     "import": [
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py",
      "backend/tests/test_report_recognition_basis_2026_09_24.py"
     ],
@@ -11751,12 +12092,14 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ],
     "page": [
@@ -11771,12 +12114,14 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "page": [
@@ -11859,6 +12204,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "page:index.html",
     "page:pages/case-management.html",
@@ -11869,6 +12215,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
@@ -11910,6 +12257,7 @@
    "kind": "e2e",
    "units": [
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "file:backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
     "plat:__init__",
@@ -11919,6 +12267,7 @@
     "import": [
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
+     "backend/tests/_requires.py",
      "backend/tests/platform/test_case_stage_connectors.py",
      "backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py"
     ],
@@ -11955,6 +12304,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "page:pages/voucher.html",
     "router:vouchers"
@@ -11963,7 +12313,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/uploads.py",
-     "backend/tests/_e2e_login.py"
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -12211,6 +12562,7 @@
    "units": [
     "core:db",
     "dir:backend/routers/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/completion_notes",
     "plat:__init__",
     "plat:source_tree"
@@ -12220,7 +12572,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/case/api/completion_notes.py"
+     "backend/modules/case/api/completion_notes.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/completion_notes.py"
@@ -12234,11 +12587,13 @@
   "backend/tests/test_extra_expense_reject_permission_2026_09_24.py": {
    "kind": "api",
    "units": [
-    "core:db"
+    "core:db",
+    "file:backend/tests/_requires.py"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ]
    }
   },
@@ -12247,12 +12602,14 @@
    "units": [
     "core:db",
     "file:backend/tests/_delegates.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
      "backend/tests/_delegates.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ]
    }
@@ -12261,12 +12618,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
@@ -12310,6 +12669,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "mod:case/api/quotations",
     "mod:crm/api"
@@ -12317,7 +12677,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -12616,6 +12977,7 @@
    "kind": "api",
    "units": [
     "core:main",
+    "file:backend/tests/_requires.py",
     "helper:settings",
     "mod:case/api/quotations",
     "router:auth",
@@ -12626,7 +12988,8 @@
     "import": [
      "backend/helpers/settings.py",
      "backend/main.py",
-     "backend/routers/company_lookup.py"
+     "backend/routers/company_lookup.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -12651,11 +13014,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -12751,6 +13116,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "helper:voucher_attachments",
     "router:vouchers"
@@ -12759,7 +13125,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/uploads.py",
-     "backend/helpers/voucher_attachments.py"
+     "backend/helpers/voucher_attachments.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -12946,6 +13313,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py",
     "mod:case/api/quotations",
     "page:pages/approval-queue.html",
@@ -12955,6 +13323,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_approval_reassign_ui_2026_09_14.py"
     ],
     "api": [
@@ -12975,6 +13344,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "helper:uploads",
     "page:pages/voucher.html",
@@ -12984,6 +13354,7 @@
     "import": [
      "backend/db.py",
      "backend/helpers/uploads.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
     "api": [
@@ -13029,11 +13400,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -13265,11 +13638,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -13281,11 +13656,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/material_orders"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/material_orders.py"
@@ -13404,6 +13781,7 @@
   "backend/tests/test_module_keys_consistency_2026_09_13.py": {
    "kind": "api",
    "units": [
+    "file:backend/tests/_requires.py",
     "helper:auth",
     "helper:module_registry",
     "js:static/sidebar.js",
@@ -13446,7 +13824,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/helpers/auth.py",
-     "backend/helpers/module_registry.py"
+     "backend/helpers/module_registry.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
@@ -13525,6 +13904,7 @@
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
+    "file:backend/tests/_requires.py",
     "helper:email_notify",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
@@ -13546,7 +13926,8 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/email_notify.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -13615,6 +13996,7 @@
     "dir:backend/modules/arap/",
     "dir:frontend/js/",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "helper:legal_params",
     "js:js/case-management-core.js",
     "js:js/case-management-exec.js",
@@ -13646,7 +14028,8 @@
      "backend/modules/case/api/case_extra_expenses.py",
      "backend/modules/case/quotations.py",
      "backend/modules/case/recognition.py",
-     "backend/routers/accounting_export.py"
+     "backend/routers/accounting_export.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -13910,6 +14293,7 @@
    "units": [
     "core:db",
     "file:backend/routers/__init__.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "file:backend/tests/test_voucher_preview_export_feedback_2026_09_23.py",
     "mod:case/quotations",
@@ -13923,6 +14307,7 @@
      "backend/modules/case/quotations.py",
      "backend/routers/__init__.py",
      "backend/routers/map_points.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
      "backend/tests/test_voucher_preview_export_feedback_2026_09_23.py"
     ],
@@ -14146,6 +14531,7 @@
    "units": [
     "core:db",
     "core:trail",
+    "file:backend/tests/_requires.py",
     "helper:system_checks",
     "mod:case/api/completion_notes",
     "mod:case/api/quotations",
@@ -14163,6 +14549,7 @@
     "import": [
      "backend/db.py",
      "backend/helpers/system_checks.py",
+     "backend/tests/_requires.py",
      "backend/trail.py"
     ],
     "api": [
@@ -14187,12 +14574,14 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/helpers/__init__.py"
+     "backend/helpers/__init__.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14270,11 +14659,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14286,12 +14677,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "js:js/cashier.js",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14402,6 +14795,7 @@
     "core:db",
     "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "helper:privacy_notice",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
@@ -14455,7 +14849,8 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
-     "backend/helpers/privacy_notice.py"
+     "backend/helpers/privacy_notice.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
@@ -14622,13 +15017,15 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/dashboard",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
@@ -14641,11 +15038,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14657,11 +15056,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14673,6 +15074,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "file:backend/tests/test_org_chain_approval_2026_09_15.py",
@@ -14684,6 +15086,7 @@
      "backend/db.py",
      "backend/helpers/google_calendar.py",
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
      "backend/tests/test_case_money_mask_2026_09_24.py",
      "backend/tests/test_org_chain_approval_2026_09_15.py"
@@ -14698,6 +15101,7 @@
    "units": [
     "core:db",
     "dir:backend/modules/subcontract/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_approval_reassign_history_2026_09_14.py",
     "file:backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
@@ -14718,6 +15122,7 @@
      "backend/modules/case/api/material_orders.py",
      "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/tests/test_dispatch_import_to_quote_persists_2026_09_23.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_approval_reassign_history_2026_09_14.py",
      "backend/tests/test_case_change_approve_deadlock_2026_09_15.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
@@ -14738,6 +15143,7 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
+    "file:backend/tests/_requires.py",
     "helper:company_identity",
     "mod:case/api/quotations",
     "router:system"
@@ -14747,7 +15153,8 @@
      "backend/db.py",
      "backend/helpers/company_identity.py",
      "backend/pdf_gen.py",
-     "backend/tests/_pdf_identity.py"
+     "backend/tests/_pdf_identity.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -14762,6 +15169,7 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
+    "file:backend/tests/_requires.py",
     "helper:company_identity",
     "helper:settings"
    ],
@@ -14771,7 +15179,8 @@
      "backend/helpers/company_identity.py",
      "backend/helpers/settings.py",
      "backend/pdf_gen.py",
-     "backend/tests/_pdf_identity.py"
+     "backend/tests/_pdf_identity.py",
+     "backend/tests/_requires.py"
     ]
    }
   },
@@ -14781,6 +15190,7 @@
     "core:db",
     "core:pdf_gen",
     "file:backend/tests/_pdf_identity.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_quote_location_2026_09_22.py",
     "mod:case/api/quotations",
     "page:pages/approval-queue.html",
@@ -14793,6 +15203,7 @@
      "backend/db.py",
      "backend/pdf_gen.py",
      "backend/tests/_pdf_identity.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_quote_location_2026_09_22.py"
     ],
     "api": [
@@ -14810,6 +15221,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_quote_location_2026_09_22.py",
     "mod:case/api/quotations",
     "router:system"
@@ -14817,6 +15229,7 @@
    "evidence": {
     "import": [
      "backend/db.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_quote_location_2026_09_22.py"
     ],
     "api": [
@@ -14829,12 +15242,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/quotation-form.html"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14850,6 +15265,7 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_action_items",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
@@ -14860,7 +15276,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_action_items.py",
@@ -14880,6 +15297,7 @@
    "units": [
     "core:db",
     "dir:frontend/pages/",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:case/quote_terms",
     "page:pages/quotation-form.html",
@@ -14889,7 +15307,8 @@
     "import": [
      "backend/db.py",
      "backend/modules/case/quote_terms.py",
-     "backend/routers/system.py"
+     "backend/routers/system.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -14925,11 +15344,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -14954,6 +15375,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:analytics/api/reports",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/material_orders",
@@ -14963,7 +15385,8 @@
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/recognition.py"
+     "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py",
@@ -14996,11 +15419,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -15037,6 +15462,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_row_access_2026_09_25.py",
     "helper:row_access",
     "mod:case/api/quotations",
@@ -15049,6 +15475,7 @@
      "backend/helpers/__init__.py",
      "backend/helpers/row_access.py",
      "backend/modules/case/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_row_access_2026_09_25.py"
     ],
     "api": [
@@ -15086,6 +15513,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "mod:case/quotations",
     "plat:__init__",
@@ -15097,6 +15525,7 @@
      "backend/core/txn.py",
      "backend/db.py",
      "backend/modules/case/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ]
    }
@@ -15199,6 +15628,7 @@
    "units": [
     "dir:frontend/static/",
     "file:backend/tests/_menu_decl.py",
+    "file:backend/tests/_requires.py",
     "js:static/sidebar.js",
     "page:pages/approval-delegates.html",
     "page:pages/approval-history.html",
@@ -15214,7 +15644,8 @@
      "backend/core/loader.py",
      "backend/core/menu.py",
      "backend/core/pages.py",
-     "backend/tests/_menu_decl.py"
+     "backend/tests/_menu_decl.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/approval-delegates.html",
@@ -15232,11 +15663,13 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -15253,6 +15686,7 @@
     "dir:backend/modules/case/",
     "dir:backend/modules/case/api/",
     "dir:frontend/",
+    "file:backend/tests/_requires.py",
     "helper:legal_params",
     "mod:case/api/case_action_items",
     "page:pages/parts.html",
@@ -15260,7 +15694,8 @@
    ],
    "evidence": {
     "import": [
-     "backend/helpers/legal_params.py"
+     "backend/helpers/legal_params.py",
+     "backend/tests/_requires.py"
     ],
     "page": [
      "frontend/pages/parts.html",
@@ -15285,13 +15720,15 @@
    "units": [
     "core:db",
     "core:main",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "page:pages/login.html"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/main.py"
+     "backend/main.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -15344,12 +15781,14 @@
   "backend/tests/test_stage_sync_lost_update_2026_09_25.py": {
    "kind": "api",
    "units": [
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_money_mask_2026_09_24.py",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
      "backend/modules/case/api/quotations.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_money_mask_2026_09_24.py"
     ],
     "api": [
@@ -15526,6 +15965,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/vendor_contractors",
@@ -15533,7 +15973,8 @@
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -15549,6 +15990,7 @@
    "units": [
     "core:db",
     "file:backend/helpers/__init__.py",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
     "helper:legal_params",
     "mod:arap/api/invoice_vouchers",
@@ -15560,6 +16002,7 @@
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
     ],
     "api": [
@@ -15575,6 +16018,7 @@
    "units": [
     "core:db",
     "core:pdf_gen",
+    "file:backend/tests/_requires.py",
     "helper:receivables",
     "mod:arap/api/invoice_vouchers",
     "mod:case/api/quotations",
@@ -15587,7 +16031,8 @@
      "backend/helpers/receivables.py",
      "backend/modules/case/quotations.py",
      "backend/modules/case/quote_terms.py",
-     "backend/pdf_gen.py"
+     "backend/pdf_gen.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -15728,6 +16173,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "helper:auth",
     "helper:uploads",
     "mod:case/api/quotations"
@@ -15736,7 +16182,8 @@
     "import": [
      "backend/db.py",
      "backend/helpers/auth.py",
-     "backend/helpers/uploads.py"
+     "backend/helpers/uploads.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py"
@@ -15904,12 +16351,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
     "router:parts"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
@@ -15962,6 +16411,7 @@
     "core:db",
     "dir:frontend/js/",
     "dir:frontend/pages/",
+    "file:backend/tests/_requires.py",
     "helper:uploads",
     "helper:voucher",
     "helper:voucher_attachments",
@@ -15976,7 +16426,8 @@
      "backend/helpers/uploads.py",
      "backend/helpers/voucher.py",
      "backend/helpers/voucher_attachments.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/vouchers.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/routers/vouchers.py"
@@ -16232,6 +16683,7 @@
   "backend/tests/test_voucher_revision_no_2026_09_23.py": {
    "kind": "unit",
    "units": [
+    "file:backend/tests/_requires.py",
     "helper:voucher",
     "mod:case/api/quotations",
     "router:vouchers"
@@ -16240,7 +16692,8 @@
     "import": [
      "backend/helpers/voucher.py",
      "backend/modules/case/api/quotations.py",
-     "backend/routers/vouchers.py"
+     "backend/routers/vouchers.py",
+     "backend/tests/_requires.py"
     ]
    }
   },
@@ -16346,6 +16799,7 @@
    "kind": "e2e",
    "units": [
     "dir:frontend/js/",
+    "file:backend/tests/_requires.py",
     "file:backend/tests/test_e2e_material_orders_2026_09_11.py",
     "helper:module_registry",
     "js:js/case-management-core.js",
@@ -16359,6 +16813,7 @@
     "import": [
      "backend/helpers/module_registry.py",
      "backend/modules/case/recognition.py",
+     "backend/tests/_requires.py",
      "backend/tests/test_e2e_material_orders_2026_09_11.py"
     ],
     "api": [
@@ -16546,6 +17001,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/quotations",
@@ -16561,7 +17017,8 @@
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/quotations.py",
-     "backend/modules/subcontract/api/contractor_vouchers.py"
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",
@@ -16576,12 +17033,14 @@
    "kind": "api",
    "units": [
     "core:db",
+    "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
     "mod:case/api/quotations"
    ],
    "evidence": {
     "import": [
-     "backend/db.py"
+     "backend/db.py",
+     "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",

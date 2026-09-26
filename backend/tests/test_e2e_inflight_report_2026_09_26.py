@@ -4,9 +4,11 @@
 - 報告：逾時的失敗 ⇒ 加一段；不是逾時的失敗、通過的題 ⇒ 不加
 突變：拿掉 `rep.sections.append(...)` ⇒ 報告題紅；拿掉 `E2E_CONTEXT_HOOKS.append(_inflight_hook)` ⇒ 記帳題紅（見 commit）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import types
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.mark.e2e

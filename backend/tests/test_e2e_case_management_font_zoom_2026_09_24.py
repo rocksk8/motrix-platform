@@ -8,6 +8,7 @@
 ⚙️ 1366×768、字級 1.3（特）；對照組：字級 1.0（標）同樣要過。
 ⚙️ 「看得到最後一筆」＝把可捲動區捲到底之後，最後一個元素的底邊 ≤ 視窗高、頂邊 ≥ 0。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -19,6 +20,7 @@ from tests.test_voucher_preview_export_feedback_2026_09_23 import (  # noqa: E40
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 W, H = 1366, 768
 N_CASES = 40

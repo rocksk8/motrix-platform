@@ -4,6 +4,7 @@
 ② 正對照：綁定案件時帶出客戶名稱；依案件查詢有逐案權限（沒有案件權限的人 403）
 ③ 反向控制：拿掉提供者（＝M01 不在）⇒ 不綁案件的規劃書照常建立；綁案件 400、依案件查詢 404，訊息明說
 """
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 from core import registry
@@ -35,11 +36,13 @@ def _drop(monkeypatch):
     assert registry.single_provider("case.access") is None
 
 
+@requires_module("case", '正對照要 M01 的 case.access 提供者')
 def test_provider_is_registered(client):
     ca = registry.single_provider("case.access")
     assert ca is not None and callable(ca.guard) and callable(ca.summary)
 
 
+@requires_module("case", '驗 M01 在時的綁定與逐案權限')
 def test_with_m01_binding_and_per_case_access(client, make_user):
     sa = _tok(client, make_user, "np_sa", "superadmin")
     out = _tok(client, make_user, "np_out", "sales", ["netplan", "dashboard", "quotation"])

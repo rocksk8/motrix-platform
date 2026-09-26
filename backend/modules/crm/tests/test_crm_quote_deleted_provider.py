@@ -6,7 +6,9 @@
 """
 
 
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from core import registry
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QNO, OTHER = "MQ-IP11-0926", "MQ-IP11-OTHER"
 

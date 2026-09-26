@@ -1,7 +1,9 @@
 """已結案案件解鎖／半解鎖機制（2026-08-26）+ 完結案防呆機制（2026-08-25 提出）
 的 API 層整合測試。見 db.py::_m061_case_semi_unlock() 與
 modules/case/api/quotations.py::_gate_case_edit()/_case_close_block_reasons() docstring。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

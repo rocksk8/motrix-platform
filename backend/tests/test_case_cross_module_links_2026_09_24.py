@@ -7,12 +7,14 @@
 - 結案成功後留在案件頁（原本 800ms 後跳保固頁）
 沒有該頁權限的人不顯示連結。觀測點：API 回應、連結 href、頁面網址與資料庫 deal_tag。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
 
 import pytest
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-XLINK-001"
 OTHER = "MQ-XLINK-OTHER"

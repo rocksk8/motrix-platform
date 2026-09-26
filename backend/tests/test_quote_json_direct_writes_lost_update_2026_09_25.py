@@ -6,6 +6,8 @@ google_calendar.push_event_for_quotation_won（讀完 → 呼叫 Google 建事�
 照正確寫法拿寫鎖、在 data_json 加 `_probe`。以列 id 定位（reject 會改單號）。
   修正前 ⇒ 探針先寫進去，接著被整包蓋掉（紅）；修正後 ⇒ 探針卡在寫鎖上，之後才寫進去（綠）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import json
 import threading
 
@@ -14,6 +16,7 @@ import pytest
 import db as _db
 import modules.case.api.quotations as q
 from tests.test_case_money_mask_2026_09_24 import NO, _login, _seed
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 _REAL_GET_DB = _db.get_db
 

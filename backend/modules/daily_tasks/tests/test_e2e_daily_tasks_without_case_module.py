@@ -17,9 +17,12 @@ PICKER = "select[x-model='form.case_no']"
 def _open_form(live_server, make_user, new_page, login_as, name, route_404):
     user = make_user(username=name, role="superadmin")
     page = new_page()
+    # 兩種都用攔截：M01 不在的安裝包 /api/sales-orders 真的 404，正對照不可以靠它在（稽核 D M4-M1）
     if route_404:
-        page.route("**/api/sales-orders*", lambda route: route.fulfill(status=404, content_type="application/json",
-                                                                        body='{"detail":"Not Found"}'))
+        body, status = '{"detail":"Not Found"}', 404
+    else:
+        body, status = ('{"items":[{"quoteNo":"MQ-E2E-SO","customer":"客","projectName":"案","dealTag":"已成案"}]}', 200)
+    page.route("**/api/sales-orders*", lambda route: route.fulfill(status=status, content_type="application/json", body=body))
     login_as(page, tuple(user)[:2])
     with page.expect_response(lambda r: "/api/sales-orders" in r.url, timeout=20000):
         page.goto(f"{live_server}/pages/daily-tasks.html")
@@ -41,5 +44,6 @@ def test_case_picker_says_why_when_the_case_module_is_absent(live_server, make_u
 @pytest.mark.e2e
 def test_no_notice_when_the_case_module_answers(live_server, make_user, new_page, login_as):
     page = _open_form(live_server, make_user, new_page, login_as, "e2e_so_present", route_404=False)
+    page.wait_for_selector(PICKER + " option[value='MQ-E2E-SO']", state="attached", timeout=10000)   # 終點：選項已渲染
     assert not page.locator(NOTE).is_visible()
     assert page.locator(PICKER).is_enabled()

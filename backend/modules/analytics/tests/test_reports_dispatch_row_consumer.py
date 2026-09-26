@@ -2,10 +2,12 @@
 
 拿掉本模組 ⇒ 本檔一起消失；tests/platform 那一份只驗 L1 recognition 與 M06 傳票兩個使用方。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from core import registry
 from core import source_tree
 from tests.platform.test_dispatch_connector import QNO, YEAR, _sa, _seed
 from tests.platform.test_dispatch_connector import _drop_dispatch_row as drop_dispatch_provider
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 正對照（提供者在 ⇒ 派工確實算進來）需要外包工班；不在時只驗缺席那一半（第六班列車交會，M04×M08）
 _M04 = source_tree.module_installed("modules/subcontract/")

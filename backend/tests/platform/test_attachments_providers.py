@@ -113,7 +113,7 @@ def test_everything_present_means_nothing_unavailable(client):
     assert va.unavailable_sources() == []
 
 
-@needs_case('種子資料與 case 參數都是 M01 的報價單')
+@needs_case('case 參數是 M01 的提供者；arap 參數以 SQL 種報價單，M01 不在時開票申請提供者依 CA-M1 fail-closed（稽核 D M4-S1 建議另補題）')
 @pytest.mark.parametrize("name", ["case", "arap"])
 def test_l1_side_providers_refuse_to_swallow_broken_json(client, name):
     """M01、M05 的提供者（M04 的在模組測試裡）：壞 JSON ⇒ AttachmentSourceError；單據不存在 ⇒ []。
@@ -295,7 +295,7 @@ def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(cl
         conn.close()
 
 
-@needs_case('開票申請掛在 M01 案件上（前提用 M01 端點）')
+@needs_case('前提是 M05 的 /api/invoice-vouchers 與 L1 案件層守門放行；M01 不在時兩者依 CA-M1 條件 3 一律 404（fail-closed，由 test_case_access_l1 驗）')
 def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
     自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；

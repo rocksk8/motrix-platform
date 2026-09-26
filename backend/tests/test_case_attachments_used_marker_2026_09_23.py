@@ -38,10 +38,12 @@ out.append({
 （`{"picks": [...]}`）——那是唯一真的會產生 `source_*` 三元組的路徑，
 自己塞的話等於在驗證我自己造的資料格式對不對，不是驗證真實流程。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pathlib
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO_PREFIX = "MQ-JV18"
 

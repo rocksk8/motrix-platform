@@ -3,7 +3,9 @@
 外人（沒有出納模組的業務）依客戶名稱可以探測「這個客戶有沒有已收款案件」⇒ 403。
 出納與管理員照常拿到預帶值（正對照：值確實存在，不是空回應）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _tok(client, make_user, u, role, mods):

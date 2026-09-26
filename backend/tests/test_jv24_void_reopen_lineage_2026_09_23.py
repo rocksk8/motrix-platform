@@ -40,6 +40,7 @@ B 沒有帶測試（協定：B 不寫測試，C 才寫）。B 自己的探針
              文字差異，不需要另外執行去證明「舊版不會寫這一欄」。
 ```
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -319,6 +320,7 @@ def test_jv24_a_two_level_void_reopen_chain_stays_correct_at_both_levels(
 
 import ast
 import pathlib
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 

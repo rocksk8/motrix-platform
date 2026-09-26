@@ -3,11 +3,13 @@
 拿掉外包工班的提供者 ⇒ 點案件後右欄照常列出案件自己的檔案，另外顯示「外包工班模組未安裝：派工單、承攬商發票的附件沒有列出」。
 觀測點：`[data-testid=src-files-unavailable]` 的文字；對照組＝模組在時沒有這一行。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests.platform.test_case_stage_connectors import _without  # noqa: E402
 from tests.test_e2e_voucher_source_block_below_2026_09_25 import QNO, _open, _pick_case, _seed  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 UNAV = '[data-testid="src-files-unavailable"]'
 

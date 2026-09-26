@@ -9,7 +9,9 @@
 使用者不會知道業務開發案件的轉建連結沒有解除（ROADMAP 階段 B「搬遷前必修」IP-5 同一類問題）。
 正對照：M02 在 ⇒ 只顯示「報價單已刪除」，沒有 notice。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 pytest.importorskip("playwright.sync_api")
 

@@ -4,7 +4,9 @@
 那一段在資料庫的現值與呼叫端基準不同就整筆 409、不寫入。瀏覽器端對端見
 test_e2e_case_concurrent_edit_2026_09_24.py。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-SEG-001"
 

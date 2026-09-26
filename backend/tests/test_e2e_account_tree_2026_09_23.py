@@ -30,6 +30,7 @@ Alpine 綁定的識別字全部解析得到               未解析 **0** 個
 📌 ⇒ 缺的不是「再多一道靜態檢查」，**缺的是有人把它跑起來** ——
    而 `init()` 裡的 401 這種錯，靜態分析**結構上看不到**。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import threading
 import time
 
@@ -40,6 +41,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 

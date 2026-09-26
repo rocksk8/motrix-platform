@@ -22,10 +22,12 @@ FastAPI **先驗 body 才進函式** ⇒ **要測 403，body 必須是合法的*
 **而它證明的是「我的測試資料寫壞了」，不是「權限有被檢查」。**
 ⇒ 每一題都斷言**確切的狀態碼**。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import sys
 from pathlib import Path
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

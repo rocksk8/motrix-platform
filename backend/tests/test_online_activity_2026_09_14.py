@@ -9,8 +9,10 @@
    `last_active` 節流點累加（每 5 分鐘一次），沒有請求就不會累加
 3. **「在線」＝ 5 分鐘內有活動**，資料來源是 sessions.last_active，不另做心跳
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime, timedelta
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

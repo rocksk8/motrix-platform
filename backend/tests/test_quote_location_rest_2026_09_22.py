@@ -28,6 +28,7 @@ A 在派工訊息裡寫「`QL5`–`QL15` 是硬條件（使用者原話**「把�
 📌 那是 `reminder_stage()` 付過的學費：**我釘的接縫寫得好好的、
 題目全綠，而產品碼零呼叫者。**
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import re
 import sys
 from pathlib import Path
@@ -41,6 +42,7 @@ from test_quote_location_2026_09_22 import (  # noqa: E402,F401
     BRANCH, PRIMARY, _need, _set_locations, _superadmin, blank_profile,
     identity,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _frontend(*parts):

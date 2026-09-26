@@ -6,6 +6,7 @@ CM12 是純重構：拆檔、集中重設狀態、樣式抽離，不可以改變
 GOLDEN 檔在重構前的 master（58836e3）上錄：GOLDEN_WRITE=1 pytest …
 正規化：今天的日期、相對天數（N 天前／後、逾期 N 天）；請求的查詢參數排序。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import collections
 import json
 import os
@@ -17,6 +18,7 @@ from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, urlsplit
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 pytest.importorskip("playwright.sync_api")
 

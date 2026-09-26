@@ -34,12 +34,14 @@ assert r.status_code != 404   ⇒ **擋不到**（405 != 404）
 📌 而 `DELETE`／`POST` 那幾題**在 B 接上端點之前一定要先確認它們是紅的**，
    且紅的原因不可以是 405。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 import pathlib
 import re
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ATT = "/api/vouchers/%s/attachments"
 ATT_ONE = "/api/vouchers/%s/attachments/%s"

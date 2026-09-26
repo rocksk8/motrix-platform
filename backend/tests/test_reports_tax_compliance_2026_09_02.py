@@ -4,7 +4,9 @@
 ③稅額計算改用四捨五入（ROUND_HALF_UP），不用 Python 內建的銀行家捨入
 ④營運報表/銷項發票清單/銀行對帳單匯出補上稽核記錄
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

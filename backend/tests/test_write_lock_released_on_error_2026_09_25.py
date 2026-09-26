@@ -5,9 +5,12 @@
 探針：把模組裡的 get_db 換成代理連線，BEGIN IMMEDIATE 之後的**第一個** SQL 就丟例外
 （不必準備整套前置資料，只要通過拿鎖之前的驗證）。握著例外（traceback 還引用 frame）時，另一條連線 1 秒內要拿得到寫鎖。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import pytest
 
 import modules.case.api.quotations as q
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 class _BoomAfterBegin:

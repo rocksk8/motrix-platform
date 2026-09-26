@@ -2,6 +2,7 @@
 提供者已登記（IP-1／14／15）、IP-15／IP-14 正對照、IP-17 `quotation.append_items`（M01 → 本模組；含 M01 不在 ⇒ 409）、
 本模組不再 import M01。本模組不在時的反向控制在 `tests/platform/test_subcontract_connectors.py`。
 """
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import re
 
@@ -61,6 +62,7 @@ def _items():
         conn.close()
 
 
+@requires_module("case", '正對照含 M01 取用的提供者')
 def test_providers_are_registered(client):
     assert set(registry.providers("dispatch.row")) == {"subcontract"}
     assert set(registry.providers("dispatch.list_for_case")) == {"subcontract"}
@@ -97,6 +99,7 @@ def test_paid_between_lists_only_paid_vouchers_in_range_with_the_public_shape(cl
 
 # ── IP-17 ─────────────────────────────────────────────────────────────────────
 
+@requires_module("case", '派工品項匯入 M01 的報價單')
 def test_import_to_quote_goes_through_m01(client, make_user):
     h = _hdr(client, make_user)
     did = _seed()
@@ -108,6 +111,7 @@ def test_import_to_quote_goes_through_m01(client, make_user):
         {"description": "配線", "qty": 3.0, "unit": "式", "cost": 1200.0, "margin": 0.30, "notes": "n"}
 
 
+@requires_module("case", '派工品項匯入 M01 的報價單')
 def test_import_to_quote_refuses_non_draft(client, make_user):
     h = _hdr(client, make_user)
     did = _seed(status="已送出")
@@ -127,6 +131,7 @@ def test_import_to_quote_without_m01_is_409_and_touches_nothing(client, make_use
 
 # ── IP-15（本模組在）───────────────────────────────────────────────────────────
 
+@requires_module("case", '案件整包端點屬 M01')
 def test_case_bundle_dispatches_part(client, make_user):
     h = _hdr(client, make_user)
     _seed()

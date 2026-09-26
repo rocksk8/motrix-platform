@@ -38,10 +38,12 @@ contractor_invoice   -> contractor_dispatches.id -> invoice_files_json  ┘同�
 `SELECT id/voucher_no FROM <表> WHERE quote_no = ?` 就涵蓋全部九類
 ⇒ **不需要新的選取介面**。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pathlib
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO = "MQ-SP1-001"
 

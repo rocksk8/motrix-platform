@@ -67,6 +67,7 @@ pdf_gen.py:801   d = json.loads(row["data_json"] or "{}")
 📌 舊的 `GOLDEN` 快照因此**不再是驗收基準**，改當「這些字串不可以再
 出現」的歷史紀錄，見下面 `OLD_HARDCODED_IDENTITY` 的說明。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import sys
 from pathlib import Path
@@ -79,6 +80,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _pdf_identity as I  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 🔴 2026-09-22 用**改版前**的 `pdf_gen.py` 取得，當時是 `QL6` 的驗收
 #: 基準（「留空 ⇒ 逐字相同」）。**2026-09-23 `WL7` 裁定翻面**：這組值本身

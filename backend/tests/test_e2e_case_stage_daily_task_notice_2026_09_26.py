@@ -3,6 +3,7 @@
 API 早就回 `notice`，但 `updateStage` 只做 `Object.assign`、`removeStage` 不讀回應 ⇒ 使用者什麼都看不到。
 觀測點：畫面上的提示（`.mui-toast`）文字；點的是真正的勾選框與「×」，不是直接呼叫方法。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 from tests.platform.test_case_stage_connectors import _without  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-DTNOTICE-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

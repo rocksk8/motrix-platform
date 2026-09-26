@@ -3,6 +3,7 @@
 
 使用者（2026-09-24）逐字：「算了會計稅率1~4%取消，直接依法規進行，用現金折讓就好」。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
 
@@ -11,6 +12,7 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _ready(page):

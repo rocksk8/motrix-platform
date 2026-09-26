@@ -14,8 +14,10 @@
 觀測點一律挑「**清單裡到底有沒有那一筆**」，而且每一題都配一個看得到的正向控制
 （admin 或有模組的人）——只斷言「看不到」的話，端點整個壞掉、回空清單也會通過。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import date, timedelta
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

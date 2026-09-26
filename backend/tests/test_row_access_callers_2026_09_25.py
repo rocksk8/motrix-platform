@@ -4,10 +4,12 @@
 ② 行為變更（2026-09-25 主持裁示，使用者裁示「對齊列表」）：全域搜尋與首頁動態牆的案件可見性
    改成與案件列表同一套——被指派者（assigned_user_ids）與 cashier 現在也看得到；外人仍看不到。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import dataclasses
 import json
 
 from tests.test_row_access_2026_09_25 import CASE
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QNO = "MQ-RA-0925"
 

@@ -5,9 +5,11 @@ closing-report-pdf（結案報表：成本、毛利、收款）與 pdf-download?
 或 cashier 模組）或本單簽核人（使用者：「簽核人可以」）。對外版 pdf-download 不在範圍內。
 斷言只看「是不是被權限擋下（403）」——PDF 產生本身在測試環境可能因字型等原因回 5xx，與權限無關。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-PDFG-001"
 

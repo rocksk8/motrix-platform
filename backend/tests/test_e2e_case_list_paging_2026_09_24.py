@@ -4,6 +4,7 @@
 上方摘要數字是全部案件（不是已載入的那一頁）；深連結 ?q= 指向第一頁以外的案件也打得開。
 觀測點：清單卡片數、摘要數字、selected。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -12,6 +13,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 OLDEST = "MQ-PAGE-0000"

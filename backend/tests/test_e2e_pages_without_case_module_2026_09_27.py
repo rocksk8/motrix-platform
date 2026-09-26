@@ -32,6 +32,15 @@ def _page(live_server, make_user, new_page, login_as, name, path, pattern, detai
     return page
 
 
+def _wait_until(page, cond, timeout_ms=10000):
+    """等 Python 端的條件成立（dialog 在 Python 事件裡收集）；每 50ms 讓瀏覽器事件迴圈跑一次。"""
+    for _ in range(timeout_ms // 50):
+        if cond():
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError("等不到終點狀態")
+
+
 def _dialogs(page):
     seen = []
 
@@ -60,7 +69,7 @@ def test_network_plan_case_picker(live_server, make_user, new_page, login_as, de
         assert note.inner_text().strip() == "案件模組未安裝：無法綁定案件（規劃書本身照常可建立）"
         assert search.is_disabled()
     else:
-        page.wait_for_timeout(300)
+        page.wait_for_function(f"() => {DATA}.caseOptionsLoading === false", timeout=10000)   # 終點：載入結束
         assert not note.is_visible() and search.is_enabled()
 
 
@@ -82,7 +91,8 @@ def test_payment_request_form_quote_info(live_server, make_user, new_page, login
         note.wait_for(state="visible", timeout=10000)
         assert note.inner_text().strip() == "案件模組未安裝：無法帶入案件資料（客戶、專案名稱、請款條件）"
     else:
-        page.wait_for_timeout(300)
+        page.wait_for_function("() => document.readyState === 'complete'", timeout=10000)
+        page.wait_for_function(f"() => {DATA} && {DATA}.quoteNo === {NO!r}", timeout=10000)   # 終點：init 已跑完這支載入
         assert not note.is_visible()
 
 
@@ -98,8 +108,7 @@ def test_cashier_receipt_action(live_server, make_user, new_page, login_as, deta
     seen = _dialogs(page)
     with page.expect_response(lambda r: "/payment/" in r.url, timeout=15000):
         page.evaluate(f"() => {DATA}.toggleReceived({{quoteNo: '{NO}', idx: 0}}, true)")
-    page.wait_for_function(f"() => true", timeout=1000)
-    page.wait_for_timeout(300)
+    _wait_until(page, lambda: len(seen) >= 2)                     # 終點：confirm 之後的 alert 已出現
     alerts = [m for m in seen if "標記此款項" not in m]           # 第一個是 confirm
     want = "案件模組未安裝：收款與發票紀錄存在案件裡，無法登錄" if absent else detail
     assert alerts == [want], seen
@@ -117,6 +126,6 @@ def test_reports_settlement_drilldown(live_server, make_user, new_page, login_as
     seen = _dialogs(page)
     with page.expect_response(lambda r: "/settlement" in r.url, timeout=15000):
         page.evaluate(f"() => {DATA}.openSettlement('{NO}')")
-    page.wait_for_timeout(300)
+    _wait_until(page, lambda: len(seen) >= 1)                     # 終點：alert 已出現
     want = "載入精算資料失敗：" + ("案件模組未安裝：精算資料在案件裡" if absent else "載入精算失敗")
     assert seen == [want], seen

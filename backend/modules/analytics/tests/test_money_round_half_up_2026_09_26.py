@@ -1,4 +1,5 @@
 """自 `tests/test_money_round_half_up_2026_09_26.py` 拆出（M08 搬遷反向控制：這幾題需要營運分析模組，拿掉模組時一起消失）。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pathlib
 import shutil
@@ -12,6 +13,7 @@ from tests.test_money_round_half_up_2026_09_26 import (  # noqa: E402,F401  含 
 )
 
 from core import source_tree as _source_tree
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 # 稽核 ⑰ O-6：只有本模組的題用它，而它 import 營運分析 ⇒ 放在模組這一側（原本在 L1 測試檔，下一個人一呼叫就綁上 M08）
 def _patch_entries(monkeypatch, contractor=(), material=(), other=()):

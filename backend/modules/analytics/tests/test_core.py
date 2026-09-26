@@ -1,8 +1,11 @@
 """自 `tests/test_core.py` 拆出：營運報表的期別解析與達成率（M08 搬遷反向控制）。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import pytest  # noqa: F401
 
 from modules.analytics.api.reports import _parse_period, _compute_achievement
 from tests.test_core import _make_case  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 class TestParsePeriod:
