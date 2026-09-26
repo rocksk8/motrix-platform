@@ -28,6 +28,7 @@
    "since_core": "1.36",
    "remove_at_major": 2,
    "replacement": "各使用方自己的「應收應付模組未安裝」說明"
-  }
+  },
+  {"file": "helpers/quotations.py", "name": "_CaseAccess.summary", "since_core": "1.37", "remove_at_major": 2, "replacement": "registry.single_provider(\"case.summary\")（IP-96；M10 綁定案件改用後刪）"}
  ]
 }

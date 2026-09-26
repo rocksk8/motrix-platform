@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.37 — 2026-09-26（C，M01-PLAN §3-4：case.summary／case.locations）〔core_bump：暫用 1.99 → 1.35〕〔core_bump：暫用 1.35 → 1.37〕
+> 介面只有新增。
+- L1（新增）：`helpers.case_access.SYSTEM`——L1 背景工作取案件資料時的身分（不做逐案權限過濾）；只准 L1 使用（守門 `tests/platform/test_case_summary_locations.py`）
+- L1（行為）：`routers/map_points.py` 改走 M01 的 `case.locations`，不再讀 `quotations`（KNOWN_L1 刪 map_points；到期題由紅轉綠）；M01 不在 ⇒ 案件來源 `skipped: module_absent` 並明說（`CASES_MODULE_ABSENT`）
+- M01（新增，暫以 import 時登記）：`case.summary`（IP-96 暫定）、`case.locations`（IP-97 暫定）；IP-12 `summary` 轉呼叫 case.summary（淘汰中）
+- 淘汰登記：`helpers/quotations.py::_CaseAccess.summary` 進 `docs/platform/deprecations.json`（remove_at_major 2）；`test_deprecations` 的名稱支援 `Class.member`（合成反向控制）
+
 ## 1.36 — 2026-09-26（C，M05 應收應付搬遷；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
 > 介面只有新增（`RECEIVABLES_MISSING`）；`helpers.receivables` 的三支函式名稱與簽章不變，行為改成轉呼叫 M05 的 provider。
 - L1（行為）：`helpers.receivables` 改為**薄殼**（淘汰中，**下一個主版號刪除**：`collect_income_items`、`collect_tax_invoices`、`round_half_up_invoice`、`RECEIVABLES_MISSING`）——函式本體收回 `modules/arap/receivables.py`（ROADMAP A8b），殼只轉呼叫 provider `receivables.income_items`／`receivables.tax_invoices`；M05 不在 ⇒ `collect_income_items` 回 `[]`、`collect_tax_invoices` 404「應收應付模組未安裝…」（主持裁示 (a)：直接刪＝主版號，牽動全部模組的 core 範圍）
