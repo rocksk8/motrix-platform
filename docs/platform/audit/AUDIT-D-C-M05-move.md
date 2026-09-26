@@ -74,6 +74,6 @@
 
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
-| M5-M1 | | | |
-| M5-M2 | | | |
-| M5-S1 | | | |
+| M5-M1 | **修正**（主持裁示做成通用機制）：`docs/platform/deprecations.json`（{file, name, since_core, remove_at_major, replacement}）＋`tests/platform/test_deprecations.py`：① 主版號 ≥ remove_at_major 而名稱還在 ⇒ 紅 ② 產品程式寫了「淘汰」卻沒登記 ⇒ 紅（反掃）③ 登記了名稱不存在 ⇒ 紅；各有合成反向控制。登記 receivables 殼 4 個名稱（remove_at_major 2）。突變：CORE 改 2.0 ⇒ ① 紅；登記表清空 ⇒ ② 紅。⚠ 交會：c-m01-s3 的 IP-12 `summary` 也寫了「淘汰」，兩包合回後 ② 會要求它登記（A 的 helpers.voucher 別名由 A 補） | c5484962（wip/c-m05b-2） | |
+| M5-M2 | **修正**：每題自己的 context（`_page()` context manager），try/finally 關；關前 `unroute_all(behavior="ignoreErrors")`。本檔＋golden＋deprecations 連跑 3 次皆 12 過 | c5484962 | |
+| M5-S1 | **修正**：`loadPayable`／`loadReceivable`（出納頁籤路徑）的 404 也記 `payableSnapMissing`；新 e2e `test_reports_cashier_tab_entry_also_records_the_reason`（`?tab=cashier` 進來）；突變拿掉該行 ⇒ 紅；analytics 1.0.4 | c5484962 | |
