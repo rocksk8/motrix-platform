@@ -858,6 +858,36 @@ def module_summary(picked, reasons, per, owner):
 _SUMMARY_ITEM = re.compile(r"(\d+) (passed|failed|errors?|skipped|xfailed|xpassed|deselected|warnings?)")
 
 
+#: 全量記最慢幾題（IMPROVEMENT-REPORT §4-1：full_results 只有總數，看不出慢在哪）
+DURATIONS = 30
+#: pytest --durations 的每一行：`12.34s call     backend/tests/test_x.py::test_a[1]`
+_DURATION_LINE = re.compile(r"^\s*(\d+(?:\.\d+)?)s\s+(setup|call|teardown)\s+(\S.*?)\s*$")
+
+
+def parse_durations(out):
+    """pytest 輸出裡「slowest N durations」那一段 ⇒ [{"test", "seconds", "phase"}]（照輸出順序）；沒有那一段 ⇒ []。"""
+    rows, inside = [], False
+    for line in (out or "").splitlines():
+        if "slowest" in line and "durations" in line:
+            inside = True
+            continue
+        if not inside:
+            continue
+        m = _DURATION_LINE.match(line)
+        if m:
+            rows.append({"test": m.group(3), "seconds": float(m.group(1)), "phase": m.group(2)})
+        elif line.startswith("=") or (rows and not line.strip()):
+            if rows:
+                break
+    return rows
+
+
+def slowest(per_stage, n=DURATIONS):
+    """{段別: [durations]} ⇒ 兩段合併、依秒數由大到小取前 n，每筆帶 stage。"""
+    allrows = [dict(r, stage=stage) for stage, rows in per_stage.items() for r in rows]
+    return sorted(allrows, key=lambda r: -r["seconds"])[:n]
+
+
 def parse_summary(out):
     """pytest 最後的摘要行 ⇒ {passed, failed, errors, skipped, ...}；找不到摘要行 ⇒ None（不是 0）。"""
     for line in reversed(out.splitlines()):
@@ -955,11 +985,17 @@ def run_full(extra, a):
     stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], cap), a.window),
               ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], e2e_max_workers()), a.window + "e2e")]
     extra = cap_workers(extra, cap)
-    codes = {}
+    want_durations = getattr(a, "durations", True)
+    if want_durations:
+        extra = extra + ["--durations=%d" % DURATIONS]
+    codes, per_stage = {}, {}
     try:
         for name, args, window in stages:
             code, out = run_pytest(TEST_ROOTS, args + extra, window, full=True)
             codes[name] = code
+            if want_durations:
+                per_stage[name] = parse_durations(out)
+                result["slowest"] = slowest(per_stage)
             counts = parse_summary(out) or {"passed": None, "failed": None, "errors": None, "skipped": None}
             part = dict(counts, exit=code)
             if name == "main":
@@ -1008,6 +1044,8 @@ def main(argv=None):
     ap.add_argument("--e2e-workers", type=int, default=_e2e,
                     help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_e2e, E2E_ENV))
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
+    ap.add_argument("--no-durations", dest="durations", action="store_false",
+                    help="--full 不記最慢 %d 題（預設會記，寫進 full_results/<commit>.json 的 slowest）" % DURATIONS)
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
     ap.add_argument("--json", action="store_true", help="dry-run 以 JSON 輸出")
