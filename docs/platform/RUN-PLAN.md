@@ -140,6 +140,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 15:16 D：h-fonts-woff2 94a78b4c 抽查（`AUDIT-D-host-fonts-woff2.md`）通過、必修 0：CSS 無殘留 otf 引用、突變 FW1 紅；觀察 woff2 Content-Type＝octet-stream（不影響載入）、test_map 過期交列車。
 - 2026-09-26 15:13 D：a-approval-parse 708dbe0d（`AUDIT-D-A-approval-parse.md`）通過、必修 0：fail-closed／別名同類別／doc_label 突變皆紅；M01→M06 邊確實消失；建議 AP-S1（轉簽讀不出來⇒400 無題驗）；test_map 過期交列車。
 - 2026-09-26 15:06 主持：**§6 舊紀錄封存**（使用者裁示省 token）：第 21 筆以後（共 172 筆）原文搬到 `RUN-LOG.md`，本節只留最新 20 筆；查歷史請讀 RUN-LOG.md。
 - 2026-09-26 15:0x A：wip/a-approval-parse 上月台（708dbe0d，第九班）。M06-PLAN 的 JV 清單與到期守門兩節已起草，第八班帶進 plans/M06-PLAN.md 之後寫入。
@@ -159,4 +160,3 @@
 - 2026-09-26 13:41 C：**M05 開工宣告**（wip/c-m05b，疊在 c-tax-calc-2 上；死線 22:30）。會動到的共用檔／別人的模組：`backend/main.py`（拿掉 cashier／invoice_vouchers／payment_requests 三支 router）、`docs/platform/modules.json`（M05 單位改 mod:arap/…、helper:receivables 自 L1 移出）、`docs/platform/INTEGRATION-POINTS.md`（新 IP：receivables.income_items／receivables.tax_invoices，號碼由列車定）、**B 的 M08** `modules/analytics/api/reports.py`（改用上述 provider、M05 不在時 notice；`/api/reports/bank-reconcile` 端點搬進 M05，路徑不變）、**M06（改派 A）** `routers/accounting_export.py`（收款事件改 provider、M05 不在時 notice）。**不動** `frontend/static/sidebar.js`（凍結中）：M05 頁面只寫進 module.json `pages`，選單項交 B 的 C4 一併處理。
 - 2026-09-26 13:31 D：h-u15 2f79d454（`AUDIT-D-host-U15.md`）必修 M-1：同一支 PUT 清空 Email 或改角色 ⇒ 最後一位收得到的超管消失（實測 200、收件人 0）；刪除、停用原本就擋；建議：custom 名單也要至少一人收得到、業務類正對照沒打到（突變存活）。
 - 2026-09-26 13:24 主持：U15 實作完成（wip/h-u15，待 D）；A 的 wip/a-m03 已 rebase 到最新並首次推上（IP-18～20、inventory.paid_batches、probes），閘門與反向控制跑中、預計登記第八班；M06 改派 A；D 關閉 M07-S1／S2。
-- 2026-09-26 13:08 D：c-probes b2ef6439（`AUDIT-D-C-probes.md`）必修 0、建議 2：允許分支目前夠窄（PS2、PS3 紅）但沒有題鎖住（放寬成 ≥1 列存活）；主題的外洩比對拿掉 caplog 存活（反向控制各自組文字）；超過 30 秒成立（等 31 秒、甚至不清軌跡都過）；11 支實跑 200、純讀。
