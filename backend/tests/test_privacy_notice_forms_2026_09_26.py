@@ -122,22 +122,6 @@ def test_saving_without_ack_is_not_blocked_and_does_not_touch_acks(client, make_
 
 # ── ② 承攬商、使用者帳號 ──────────────────────────────────────────────────────
 
-def test_vendor_ack_is_recorded_once_and_needs_admin(client, make_user):
-    h = _hdr(client, make_user)
-    r = client.post("/api/vendor-contractors", json={"name": "承攬商甲", "contact_name": "陳窗口"}, headers=h)
-    assert r.status_code == 201, r.text
-    vid = r.json()["id"]
-    assert client.get(f"/api/vendor-contractors/{vid}/privacy-notice", headers=h).json()["ack"] is None
-    r1 = client.post(f"/api/vendor-contractors/{vid}/privacy-notice/ack", headers=h)
-    assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
-    assert r1.json()["ack"]["noticeHash"] == pn.notice_hash(pn.current_purpose_notice("contact"))
-    r2 = client.post(f"/api/vendor-contractors/{vid}/privacy-notice/ack", headers=h)
-    assert r2.json()["created"] is False and r2.json()["ack"] == r1.json()["ack"]
-    assert _audit_count("vendor.privacy_notice_ack", vid) == 1
-    assert client.post("/api/vendor-contractors/999999/privacy-notice/ack", headers=h).status_code == 404
-    hv = _hdr(client, make_user, "pn2_sales", role="sales")
-    assert client.post(f"/api/vendor-contractors/{vid}/privacy-notice/ack", headers=hv).status_code == 403
-
 
 def test_user_ack_is_recorded_once_and_needs_superadmin(client, make_user):
     h = _hdr(client, make_user)

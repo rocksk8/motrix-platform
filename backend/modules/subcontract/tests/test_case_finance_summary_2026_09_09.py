@@ -1,4 +1,7 @@
-"""2026-09-09：案件管理－財務 Tab 新增「應收應付總覽」。
+"""需要外包工班（M04）的題：刪掉 modules/subcontract 時隨模組消失（PLAYBOOK §B-11，稽核 D M04-M1）。
+
+（2026-09-26 自 tests/test_case_finance_summary_2026_09_09.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
+2026-09-09：案件管理－財務 Tab 新增「應收應付總覽」。
 
 GET /api/quotations/{quote_no}/finance-summary 把原本散在四個地方、從來沒有
 被並排看過的錢一次算完：應收（caseRecord.payment.items）、應付（承攬商匯款
@@ -94,98 +97,54 @@ def _make_voucher(client, token, quote_no, voucher_no, amount, status="已核准
         conn.close()
 
 
-def test_receivable_totals_match_payment_items(client, make_user):
-    """應收/已收/未收/手續費/實收淨額，語意要跟前端 case-management.js 的
-    receivedTotal()/feeTotal()/netReceivedTotal()/outstandingTotal() 一致。"""
+def test_payable_splits_paid_unpaid_and_pending(client, make_user):
+    """已核准未匯款＝真正該付而未付；已核准已匯款＝已付；還在簽核流程中的
+    只計筆數與參考金額，不混進未付合計（金額還可能被退回或改動）。"""
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
-    _make_quotation("MQ-FINSUM-001", pay_items=[
-        # 已收，有實收金額（短收 500）＋手續費 30
-        {"id": 1, "type": "訂金款", "pct": 30, "amount": 30000, "received": True,
-         "receivedAt": "2026-03-05T10:00:00", "actualAmount": 29500, "feeAmount": 30},
-        # 已收，沒填實收金額 → 以應收金額計
-        {"id": 2, "type": "交貨款", "pct": 40, "amount": 40000, "received": True,
-         "receivedAt": "2026-04-10T10:00:00", "actualAmount": None, "feeAmount": 0},
-        # 未收
-        {"id": 3, "type": "尾款", "pct": 30, "amount": 30000, "received": False},
-    ])
+    _make_quotation("MQ-FINSUM-002")
+    _make_voucher(client, token, "MQ-FINSUM-002", "PV-202601-001", 50000, status="已核准", is_paid=0)
+    _make_voucher(client, token, "MQ-FINSUM-002", "PV-202601-002", 30000, status="已核准", is_paid=1)
+    _make_voucher(client, token, "MQ-FINSUM-002", "PV-202601-003", 20000, status="簽核中", is_paid=0)
 
-    r = client.get("/api/quotations/MQ-FINSUM-001/finance-summary", headers=_auth(token))
+    r = client.get("/api/quotations/MQ-FINSUM-002/finance-summary", headers=_auth(token))
     assert r.status_code == 200, r.text
-    recv = r.json()["receivable"]
+    payable = r.json()["payable"]
 
-    assert recv["receivableTotal"] == 100000
-    assert recv["collectedTotal"] == 70000          # 應收金額口徑（非實收）
-    assert recv["outstandingTotal"] == 30000
-    assert recv["feeTotal"] == 30
-    assert recv["netCollected"] == 29500 - 30 + 40000  # 實收 - 手續費
-    assert len(recv["items"]) == 3
-    assert recv["items"][0]["receivedAt"] == "2026-03-05"   # 只留日期
-    assert recv["items"][2]["received"] is False
+    assert payable["approvedUnpaidTotal"] == 50000
+    assert payable["approvedPaidTotal"] == 30000
+    assert payable["pendingTotal"] == 20000
+    assert payable["pendingCount"] == 1
+    assert len(payable["vouchers"]) == 3
+    paid_row = next(v for v in payable["vouchers"] if v["voucherNo"] == "PV-202601-002")
+    assert paid_row["isPaid"] is True
+    assert paid_row["paidAt"] == "2026-02-01"
+    assert paid_row["vendorName"] == "測試承攬商"
 
 
-def test_related_documents_listed_but_not_summed_into_receivable(client, make_user):
-    """開票申請／請款單只是唯讀清單：它們跟收款排程的期別不是一對一對應，
-    併進應收會讓同一筆錢被算兩次。"""
+def test_settlement_extras_returned_with_doc_no_and_excluded_from_payable(client, make_user):
+    """精算「額外支出」只回小計供參考：這個清單沒有已付/未付狀態，當成應付
+    等於憑空發明一個系統從來沒追蹤過的狀態。順便驗證新增的單號欄位（docNo）
+    有原樣帶出來（後端對 settlement 不做欄位白名單，所以只要有存就會回）。"""
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
-    _make_quotation("MQ-FINSUM-003", pay_items=[
-        {"id": 1, "type": "全額", "pct": 100, "amount": 100000, "received": False},
-    ])
-    import db
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO invoice_vouchers (voucher_no, quote_no, scope, status, amount, "
-            "snapshot_json, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            ("IV-202601-001", "MQ-FINSUM-003", "amount", "已核准", 100000, "{}", "{}",
-             "2026-01-05T00:00:00", "2026-01-05T00:00:00"),
-        )
-        conn.execute(
-            "INSERT INTO payment_requests (request_no, quote_no, scope, stage, status, amount, "
-            "terms_json, snapshot_json, data_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            ("PR-202601-001", "MQ-FINSUM-003", "amount", "全額", "簽核中", 100000, "{}", "{}", "{}",
-             "2026-01-06T00:00:00", "2026-01-06T00:00:00"),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    _make_quotation("MQ-FINSUM-004", settlement={
+        "status": "draft",
+        "extraItems": [
+            {"category": "運費", "description": "吊車運費", "docNo": "AB12345678",
+             "totalCost": 8000, "expenseDate": "2026-03-01"},
+            {"category": "其他", "description": "臨時工資", "totalCost": 2000},
+        ],
+    })
+    _make_voucher(client, token, "MQ-FINSUM-004", "PV-202601-004", 50000, status="已核准", is_paid=0)
 
-    r = client.get("/api/quotations/MQ-FINSUM-003/finance-summary", headers=_auth(token))
+    r = client.get("/api/quotations/MQ-FINSUM-004/finance-summary", headers=_auth(token))
     assert r.status_code == 200, r.text
     body = r.json()
 
-    # 應收合計只認款項明細，不因為多了兩張單據就變成 30 萬
-    assert body["receivable"]["receivableTotal"] == 100000
-    assert body["receivable"]["outstandingTotal"] == 100000
-    docs = body["relatedDocuments"]
-    assert [d["voucherNo"] for d in docs["invoiceVouchers"]] == ["IV-202601-001"]
-    assert docs["invoiceVouchers"][0]["amount"] == 100000
-    assert [d["requestNo"] for d in docs["paymentRequests"]] == ["PR-202601-001"]
-    assert docs["paymentRequests"][0]["stage"] == "全額"
-
-
-def test_empty_case_returns_zeros_not_error(client, make_user):
-    """完全沒有款項/派發/單據的新案件不該報錯，全部回 0 就好。"""
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-    _make_quotation("MQ-FINSUM-005")
-
-    r = client.get("/api/quotations/MQ-FINSUM-005/finance-summary", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["receivable"]["receivableTotal"] == 0
-    assert body["receivable"]["items"] == []
-    assert body["payable"]["approvedUnpaidTotal"] == 0
-    assert body["settlementExtras"]["total"] == 0
-
-
-def test_unknown_quote_404_and_anonymous_401(client, make_user):
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-
-    r = client.get("/api/quotations/MQ-NOT-EXIST/finance-summary", headers=_auth(token))
-    assert r.status_code == 404, r.text
-
-    r = client.get("/api/quotations/MQ-NOT-EXIST/finance-summary")
-    assert r.status_code == 401, r.text
+    extras = body["settlementExtras"]
+    assert extras["total"] == 10000
+    assert extras["items"][0]["docNo"] == "AB12345678"
+    assert extras["items"][1]["docNo"] == ""          # 沒填就是空字串，不是 None
+    # 額外支出沒有被混進應付
+    assert body["payable"]["approvedUnpaidTotal"] == 50000

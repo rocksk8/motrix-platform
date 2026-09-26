@@ -4,6 +4,7 @@
 機器可讀的清單：`docs/platform/pii_forms.json`（鍵＝頁面檔名，頁面可能在 L1 或模組資料夾，位置一律問
 `core.source_tree.page_files()`）。每一張「有個資輸入欄位」的頁面都要在清單上有一個決定：
   - `notice`：頁面有告知區塊（列印告知書＋「已告知當事人」＋「尚未記錄個資告知」），並有伺服器端的紀錄端點。
+    端點由 L2 模組提供時寫 `api_module`：那個模組不在這個安裝包 ⇒ 不比對端點（PLAYBOOK §B-11）；模組在 ⇒ 照常比對。
   - `covered_by`：這頁的個資是從另一張有告知的主檔帶進來、而且**不能手打**（輸入元素是 readonly／disabled）。
     主持裁示 2026-09-26：可以手動輸入的聯絡人就是在蒐集個資 ⇒ 要 `notice`。
   - `not_natural_person`：欄位屬於法人（公司本身），不是自然人。
@@ -130,6 +131,11 @@ def violations(registry=None, pages=None, router_text=None):
                 errs.append(f"{page}：notice 要列出伺服器端的紀錄端點 ack_api")
             if routers is None:
                 routers = product_router_text()
+            mod = n.get("api_module")
+            if mod is not None:
+                from core import source_tree
+                if not source_tree.module_installed("modules/%s/" % mod):
+                    apis = []                        # 端點的模組不在這個安裝包（PLAYBOOK §B-11）
             for a in apis:
                 if f'"{a}"' not in routers:
                     errs.append(f"{page}：ack_api {a} 在 router 裡找不到")

@@ -208,26 +208,6 @@ def _dispatch(client, h, amount, no):
     return r.json()["id"]
 
 
-def test_dispatch_tax_rounds_half_up(client, make_user):
-    """10,010 × 5% ＝ 500.5 ⇒ 501（舊：500；畫面 Math.round 是 501 ⇒ 前後端差 1 元）。vendor_contractors L137"""
-    h = _hdr(client, make_user)
-    did = _dispatch(client, h, 10010, "MQ-VAT-D1")
-    d = client.get("/api/contractor-dispatches/%s" % did, headers=h).json()
-    assert (d["taxAmount"], d["totalWithTax"]) == (501, 10511)
-    did2 = _dispatch(client, h, 10000, "MQ-VAT-D2")                                       # 正對照
-    assert client.get("/api/contractor-dispatches/%s" % did2, headers=h).json()["taxAmount"] == 500
-
-
-def test_contractor_voucher_tax_rounds_half_up(client, make_user):
-    """同上，匯款申請建立當下凍結的快照。contractor_vouchers L282"""
-    h = _hdr(client, make_user)
-    did = _dispatch(client, h, 10010, "MQ-VAT-D3")
-    r = client.post("/api/contractor-vouchers", headers=h, json={"dispatch_id": did})
-    assert r.status_code == 201, r.text
-    v = client.get("/api/contractor-vouchers/" + r.json()["voucher_no"], headers=h).json()
-    assert v["snapshot"]["taxAmount"] == 501
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # 營運報表／首頁／會計匯出（顯示與比對用的整數化）
 # ══════════════════════════════════════════════════════════════════════════════

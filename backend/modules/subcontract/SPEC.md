@@ -6,4 +6,4 @@
 ## 規格條件
 
 本模組沒有專屬編號。搬遷時查過 `docs/windows/STATE.md`：外包相關的條件（派工、匯款申請、個資分流）都以跨模組編號記在 STATE.md（例如 AC2 日期欄、T9 匯入報價單、X-9b 個資），不是以本模組命名的編號，照舊留在 STATE.md。
-行為的依據是既有測試與串接點 IP-1／IP-12／IP-13／IP-14（`docs/platform/INTEGRATION-POINTS.md`）。
+行為的依據是本模組的測試（`modules/subcontract/tests/`；稽核 D M04-S3）與串接點 IP-1／IP-12／IP-13／IP-14（`docs/platform/INTEGRATION-POINTS.md`）。

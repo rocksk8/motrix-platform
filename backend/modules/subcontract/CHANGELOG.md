@@ -1,5 +1,10 @@
 # 外包工班 更新紀錄
 
+## 1.0.3 — 2026-09-26
+- 稽核 D M04-M1（§B-11 反向控制：刪掉本模組跑 tests/platform＋提到 M04 的所有題）：需要本模組的題搬進本模組 `tests/`（整檔 9、從 19 個混合檔拆出 36 題，同檔名）；留在外面的守門改以 `core.source_tree.module_installed` 判斷本模組在不在（連簽 helper、EM1 訊息、module_history 前例、案件單據端點、案件頁黃金錄製）；兩個模組層 import 改在題目裡 import
+- 承攬人員名冊、承攬商的個資告知端點登記 `api_module: subcontract`（`docs/platform/pii_forms.json`）：本模組不在時不比對端點，告知區塊照驗
+- M04-S1：`INTEGRATION-POINTS.md` 提供方路徑補 `api/`，並加守門「模組在時提供方檔案必須存在」；M04-S2：README 的 M01 不在判準改 `case.access`（IP-12）；M04-S3：SPEC.md 指向本模組 tests/；O-1：`privacy_notice_acks` 維持 L1 共用（主持裁示），README 劃掉並加〔更正〕
+
 ## 1.0.2 — 2026-09-26
 - `module.json` 補 `customization`（P3：目前沒有宣告可自訂點，寫出空的類別＝有人決定過）
 

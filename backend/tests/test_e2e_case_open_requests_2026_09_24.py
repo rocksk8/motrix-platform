@@ -89,46 +89,6 @@ def test_deep_link_tab_loads_its_data_immediately(live_server, make_user, e2e_br
 
 
 @pytest.mark.e2e
-def test_create_voucher_button_waits_for_voucher_list(live_server, make_user, e2e_browser):
-    """匯款憑據改成點進承攬商分頁才載入：載入完成前不可以顯示「產生匯款申請」（按了會重複建立）。"""
-    import db
-    u = make_user(username="or_admin3", role="admin")
-    _seed()
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO contractor_dispatches (quote_no, dispatch_date, scope, items_json, total_amount, status,"
-            " created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
-            (NO, "2026-01-01", "amount", "[]", 1000, "completed", "2026-01-01T00:00:00", "2026-01-01T00:00:00"))
-        conn.commit()
-    finally:
-        conn.close()
-    browser = e2e_browser
-    page = browser.new_context().new_page()
-    held = []
-    # 把憑據清單的請求扣住（handler 不回應 ⇒ 請求懸著），量「回應抵達之前」畫面長什麼樣子；
-    # 之後由主流程放行。handler 裡不可以 sleep——sync API 下會卡住事件迴圈。
-    page.route("**/api/contractor-vouchers**", lambda route: held.append(route))
-    _login(page, live_server, *u)
-    page.goto(f"{live_server}/pages/case-management.html?q={NO}")
-    page.wait_for_function(f"() => {DATA_JS}.selected && {DATA_JS}.selected.quote_no === '{NO}'", timeout=20000)
-    page.wait_for_function(f"() => {DATA_JS}.dispatches.length === 1", timeout=10000)
-    page.evaluate(f"() => {{ {DATA_JS}.activeTab = 'dispatch' }}")
-    for _ in range(100):
-        if held:
-            break
-        page.wait_for_timeout(50)
-    assert held, "量尺：點進承攬商分頁應該要發出憑據清單的請求"
-    btn = page.locator("button:has-text('產生匯款申請')")
-    assert page.evaluate(f"() => {DATA_JS}.contractorVouchersLoading") is True
-    assert btn.count() == 0 or not btn.first.is_visible(), "憑據還在載入就出現「產生匯款申請」"
-    for route in held:
-        route.fulfill(status=200, content_type="application/json", body="[]")
-    page.wait_for_function(f"() => !{DATA_JS}.contractorVouchersLoading", timeout=10000)
-    assert btn.first.is_visible(), "載入完成、沒有憑據時才出現"
-
-
-@pytest.mark.e2e
 def test_opening_fin_while_the_case_is_still_loading_loads_once_and_keeps_data(live_server, make_user, e2e_browser):
     """〈先渲染再非同步載入＝競態〉：selected 一設定分頁列就可以點，而 selectCase 後段還在建立預設階段
     （POST /stages ×5）。這段期間點開財務：只載一次、載好的資料不可以被後段的重設清掉。
