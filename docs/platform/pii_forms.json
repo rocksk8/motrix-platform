@@ -14,7 +14,8 @@
       "notice": {
         "purpose": "contractor",
         "ack_kind": "勞報單 data_json.privacyNotice（存檔時送 privacyNoticeAcked）",
-        "ack_api": ["/api/payslips", "/api/payslips/{slip_no}"]
+        "ack_api": ["/api/payslips", "/api/payslips/{slip_no}"],
+        "api_module": "payroll"
       },
       "since": "R3 2026-09-25"
     },
