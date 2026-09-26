@@ -29,5 +29,6 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| S-1 | **修正**。允許判斷抽成 `trail_change_ok()`；新題 `test_rc_trail_allowance_is_narrow`：合成路由各自多寫一列同形而內容不對的軌跡（別的路徑、別的狀態、別人、同路徑第二列、改舊列）⇒ 5 支都報；只有中介層那一列的合成路由 ⇒ 不報（正對照）。突變「放寬成至少一列、不看內容」⇒ 這一題紅。〔更正我在 b2ef6439 的說法：「中介層記的路徑不對」那項突變證明的是分支每支都走到，不是它夠窄——D 說得對〕 | 8c440c47 | |
-| S-2 | **修正**。量測整條抽成 `measure()`（清軌跡→指紋→打→trail_change_ok→`captured_text(caplog, capsys)`→外洩比對）；對照組、真實 probe、全部合成路由都經它，反向控制不再另組文字。另加一支 print 的合成路由（capsys 那一半）。突變：captured_text 拿掉 caplog ⇒ 紅、拿掉 capsys ⇒ 紅、measure 不清軌跡 ⇒ 紅 | 8c440c47 | |
+| S-1 | **修正**。允許判斷抽成 `trail_change_ok()`；新題 `test_rc_trail_allowance_is_narrow`：合成路由各自多寫一列同形而內容不對的軌跡（別的路徑、別的狀態、別人、同路徑第二列、改舊列）⇒ 5 支都報；只有中介層那一列的合成路由 ⇒ 不報（正對照）。突變「放寬成至少一列、不看內容」⇒ 這一題紅。〔更正我在 b2ef6439 的說法：「中介層記的路徑不對」那項突變證明的是分支每支都走到，不是它夠窄——D 說得對〕 | 8c440c47 || ✅ 13:24 D：8c440c47（快轉）重跑 PS1（放寬成至少一列、不看內容）⇒ `test_rc_trail_allowance_is_narrow` 紅 ⇒ **關閉（8c440c47）** |
+| S-2 | **修正**。量測整條抽成 `measure()`（清軌跡→指紋→打→trail_change_ok→`captured_text(caplog, capsys)`→外洩比對）；對照組、真實 probe、全部合成路由都經它，反向控制不再另組文字。另加一支 print 的合成路由（capsys 那一半）。突變：captured_text 拿掉 caplog ⇒ 紅、拿掉 capsys ⇒ 紅、measure 不清軌跡 ⇒ 紅 | 8c440c47 || ✅ 13:24 D：重跑 PS5（`captured_text` 拿掉 caplog）⇒ `test_rc_log_leak_and_thread_are_caught` 紅（主題與反向控制現在共用同一支）⇒ **關閉（8c440c47）**。更正 D 自己的一次誤判：第一次的突變字串把 `
+` 寫成真的換行、造成收集錯誤，mutate 判 ERROR 而非紅，已改用無跳脫字串重跑 |

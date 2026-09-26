@@ -35,3 +35,5 @@
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
 | — | 無待回覆項目（O-1 由列車處理） | | ✅ 11:00 |
+
+〔13:24 D 補：O-1 已處理——wip/c-tax-calc-2 c46647c8（rebase 到第六班之後）：`modules/analytics/api/reports.py:27`、`helpers/receivables.py:17` 都改自 `helpers.tax_calc` import；reports 仍經 `helpers` 套件取用 M01 的 `payment_item_amounts`、`quote_won_month_map` 等，所以 l2_import_baseline 那兩條 analytics → M01 的邊是真的；boundaries／tax_calc／changelog／package／G1 快照共 92 passed（-n 4）⇒ **O-1 結案（c46647c8）**〕
