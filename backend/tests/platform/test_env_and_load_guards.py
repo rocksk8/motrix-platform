@@ -222,6 +222,52 @@ def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatc
     monkeypatch.setenv(MT.E2E_ENV, "1")
     assert MT.partial_cap(["backend/tests/test_b.py"], tmap) == 1
 
+
+# ── 全量記最慢 30 題（IMPROVEMENT-REPORT §4-1）─────────────────────────────────────────
+
+_DUR_OUT = """
+============================= slowest 30 durations =============================
+41.20s call     backend/tests/test_e2e_a.py::test_slow_one
+3.50s setup    backend/tests/test_b.py::test_b[param-1]
+0.90s teardown backend/tests/test_c.py::test_c
+(12 durations < 0.005s hidden.  Use -vv to show these durations.)
+====================== 3 passed, 1 skipped in 45.10s ======================
+"""
+
+
+def test_parse_durations_reads_the_pytest_section():
+    rows = MT.parse_durations(_DUR_OUT)
+    assert [r["test"] for r in rows] == ["backend/tests/test_e2e_a.py::test_slow_one",
+                                         "backend/tests/test_b.py::test_b[param-1]", "backend/tests/test_c.py::test_c"]
+    assert rows[0]["seconds"] == 41.2 and rows[1]["phase"] == "setup"
+    assert MT.parse_durations("== 3 passed in 1.0s ==") == [], "沒有那一段 ⇒ 空清單，不猜"
+
+
+def test_run_full_records_the_slowest_with_stage(_no_cap_env, monkeypatch):
+    """全量結果帶 slowest（題名、秒數、階段、段別），兩段合併取前 30；pytest 參數有 --durations=30。
+    突變：run_full 不加 --durations 或不寫 slowest ⇒ 紅。"""
+    import types
+    seen, written = [], []
+    outs = {"not e2e": _DUR_OUT, "e2e": _DUR_OUT.replace("41.20s", "99.00s").replace("test_slow_one", "test_slowest")}
+    monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
+    monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, outs[args[args.index("-m") + 1]]))
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="t"))
+    assert all("--durations=30" in args for args in seen), seen
+    top = written[-1]["slowest"]
+    assert top[0] == {"test": "backend/tests/test_e2e_a.py::test_slowest", "seconds": 99.0, "phase": "call", "stage": "e2e"}
+    assert {r["stage"] for r in top} == {"main", "e2e"} and len(top) == 6
+
+
+def test_no_durations_flag_turns_it_off(_no_cap_env, monkeypatch):
+    import types
+    seen, written = [], []
+    monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
+    monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, _DUR_OUT))
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: written.append(dict(r)) or Path("x"))
+    MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="t", durations=False))
+    assert not any("--durations=30" in args for args in seen) and "slowest" not in written[-1]
+
 # ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
 
 def test_rerun_keeps_history_and_gate_reports_earlier_reds(tmp_path):
