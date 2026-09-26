@@ -44,3 +44,13 @@
 
 閘門：全部 e2e（-n 2）463 過；tests/platform（-n 4）1091 過。
 
+
+## 3. E2D-M1 複核：wip/b-e2e-deadline-2 78d372b9（D 18:55）
+
+- 修法：`_clamp_soft` 讓軟上限一律取 min(設定值, 硬上限 − `SOFT_MARGIN`＝30)，被夾住時寫 stderr。範圍包含 e2e_limit 標記、`MOTRIX_E2E_TEST_LIMIT`、e2e_teardown_limit 標記、`MOTRIX_E2E_TEARDOWN_LIMIT`。
+- 突變 4/4 紅（都在 `test_soft_limits_stay_below_the_hard_cap`）：
+  - E2D1：公式改成「＋30」
+  - E2D2：標記不夾
+  - E2D3：環境變數不夾
+  - E2D4：teardown 不夾
+⇒ **E2D-M1 關閉（78d372b9）**。

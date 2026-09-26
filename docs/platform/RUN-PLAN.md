@@ -147,6 +147,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 18:55 D：**E2D-M1 關閉（78d372b9，突變 4/4 紅）**。b-genfiles d78a7c94 **必修 2**：GF-M1 MOTRIX_TRAIN=1 無工具設也無工具驗（只在 PLAYBOOK 散文），列車忘開 ⇒ 三題 skip 照綠、過期產生檔進 origin；GF-M2 modtest 改回讀檔照綠（現場產生無題守）。D1b：未 add 新題現場選到、讀檔漏掉；代價每次約 +38 秒。
 - 2026-09-26 18:44 D：a-attachments-3 9973d10b 複核：①探針情境 extra_expense 已不列；②原單據端點行為未變（require 預設 owner；37 檔 409 過；W1／W2 突變紅）；③**AT-M1c**：報價單上四類附件仍用 case_manage 規則，而案件頁 GET /api/quotations/{q} 是 row_access read ⇒ case_manage 非擁有者經傳票看得到回簽檔（較寬），cashier 反而看不到（較嚴）。
 - 2026-09-26 18:39 D：b-o10 cc550c64 抽查通過：新題等 __staleRead＋兩個 macrotask，不等時間；D 外掛重現 logo 延後 2.5 秒 ⇒ 原題 2/2 紅、新題 2/2 過；拿掉 sidebar.js 兩處序號檢查，一般與延後負載下 4/4 紅。
 - 2026-09-26 18:32 主持：第九班合回 464a59bd（Sonnet 列車長首航，評估記 IMPROVEMENT §4-1、清單補第 10 條）。O10（menu-layout e2e）不接受判偶發 ⇒ B 查明為題目靠 1.5 秒時間差、產品正確（b-o10，D 抽查中）；O11 登記。待修：C 的 AP-M1／M2（c-approval）、A 的 AT-M1b（附件比原單據寬，實測外洩）、B 的 E2D-M1。C rebase 整疊中；A 等 C 後開 M06；C 的 M01 本體 ① 進行中。
@@ -166,4 +167,3 @@
 - 2026-09-26 16:33 C：**M01-PLAN §3-7 approval 開工宣告**（wip/c-approval，疊在 c-m01-rec-2 a56f33e4）。轉簽改成 `approval.reassign`（單據擁有者各自提供讀寫）、待我簽核與角標改成各模組提供 `approval.queue_items`，M01 只彙整。會動：M04 `modules/subcontract/api/contractor_vouchers.py`＋module.json；M05 `modules/arap/api/invoice_vouchers.py`、`payment_requests.py`＋module.json；**A 的 M03** `routers/shipping_notes.py`（origin 已搬到 `modules/supply/api/shipping_notes.py`，列車 rebase 時跟著搬）；**M06** `routers/vouchers.py`（A 的 M06 搬遷會同檔）；M07 `modules/payroll`（bonus_awards／bonus_case_awards 兩類待簽）；M01 `routers/quotations.py`、`routers/completion_notes.py`、`frontend/pages/approval-queue.html`；L1 新增 `helpers/approval_queue.py`；INTEGRATION-POINTS（新 IP，列車定號）。custom 模組引擎已是 `approval.queue_items` 提供者，不改。不動 sidebar、tiered_approval。
 - 2026-09-26 16:32 主持：第九班組車中（Sonnet 列車長）；D 關閉 CS-S1、T8-O1、b-o5-s1、MT-O1；C 做 approval（c-approval），A 做 attachments，B 做 O9＋產生檔提案。優化紀錄開在 IMPROVEMENT-REPORT §4-1（產生檔衝突、全量每題耗時）。
 - 2026-09-26 16:30 D：c-m01-s3-2 dbd07633 複核：**CS-S1 關閉**；CS-M1 靜態掃描通過（R2／R3 紅），但執行期新題 `test_runtime_refuses_system_from_an_l2_module` 不帶 client 夾具⇒單跑紅（no such table），**CS-M1 未關**，待加夾具後重跑 R1。
-- 2026-09-26 16:27 D：h-roleguard d10fc8e9 抽查通過，**T8-O1 關閉**：24 過、突變 RG1 紅；新 AST 64 筆 ⊇ 舊正則的真實比對；觀察 RG-O1（SQL 內角色字面值 9 檔無人驗）。

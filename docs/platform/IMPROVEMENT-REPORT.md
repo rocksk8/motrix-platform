@@ -61,6 +61,7 @@
 | e2e 每題死線（B，wip/b-e2e-deadline cccd80fc）＋modtest 最慢 30 題（B，wip/b-modtest-durations 5cbcd9b9，抽查） | D | `AUDIT-D-B-e2e-deadline.md`、`AUDIT-D-B-modtest-durations.md` | 完成（2026-09-26 18:25）：e2e-deadline **必修 1**（E2D-M1 軟上限先於硬上限無守門、marker／環境變數未夾，突變 DL1 存活）；-n 0／-n 2 反向控制成立、os._exit 已移除；durations 通過 |
 | O10 選單序號題（B，wip/b-o10 cc550c64，抽查） | D | `AUDIT-D-B-o10.md` | 抽查完成（2026-09-26 18:39）：通過；logo 延後 2.5 秒原題 2 紅、新題 2 過；產品序號突變一般／延後 4/4 紅 |
 | a-attachments-3 9973d10b 複核（A） | D | `AUDIT-D-A-attachments.md` §5 | 複核（2026-09-26 18:44）：extra_expense／invoice_voucher 已同原單據（探針不列、409 過、W1／W2 紅）；**AT-M1c**：報價單上四類（回簽、收款發票、叫料、叫料發票）原單據是 row_access read（不放行 case_manage、放行 cashier），附件用 case_manage ⇒ 探針：case_manage 非擁有者 403／經傳票列出 quotation_signed；cashier 200／經傳票不列 |
+| 產生檔由列車唯一提交（B，wip/b-genfiles d78a7c94）＋E2D-M1 複核（b-e2e-deadline-2 78d372b9） | D | `AUDIT-D-B-genfiles.md`、`AUDIT-D-B-e2e-deadline.md` §3 | 完成（2026-09-26 18:55）：genfiles **必修 2**（GF-M1 MOTRIX_TRAIN 忘開無人發現、只寫在散文；GF-M2 modtest 現場產生無題守，改回讀檔照綠）；D1b 現場產生比讀檔準（未 add 新題：現場選到、讀檔漏）；E2D-M1 關閉（突變 4/4 紅） |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
