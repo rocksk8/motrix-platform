@@ -765,6 +765,11 @@
                  style="margin-bottom:14px;padding:10px 14px;border:1px solid #BFDBFE;border-radius:8px;background:#EFF6FF;font-size:12px;line-height:1.7;color:#1E3A8A;font-family:var(--font-zh)"
                  x-text="basisNote"></div>
 
+            <!-- M05 搬遷：收入整個沒有資料來源（應收應付模組未安裝），不是 0（比照 X-1 的支出） -->
+            <div x-show="incomeNotice" data-testid="income-unavailable"
+                 style="margin-bottom:14px;padding:10px 14px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;font-size:12px;color:#991B1B;font-family:var(--font-zh)"
+                 x-text="incomeNotice + '；收入合計不含收款資料。'"></div>
+
             <!-- 稽核 X-1：某一類支出整個沒算（模組未安裝），不是 0 -->
             <template x-for="u in expenseUnavailable" :key="u.category">
               <div data-testid="expense-unavailable"
@@ -1549,7 +1554,7 @@
                   </span>
                   <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiReceivableTotal)"></span>
                   <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
-                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                        x-text="payableSnapDenied ? '無出納權限' : (payableSnapMissing || '載入中…')"></span>
                 </div>
                 <div class="fsnap__row">
                   <span class="fsnap__lbl">應付</span>
@@ -1561,7 +1566,7 @@
                        「這期沒有任何應付」，那是假資訊 -->
                   <span class="fsnap__v" x-show="payableKnown" x-text="fmt(kpiPayableTotal)"></span>
                   <span class="fsnap__v fsnap__v--na" x-show="!payableKnown"
-                        x-text="payableSnapDenied ? '無出納權限' : '載入中…'"></span>
+                        x-text="payableSnapDenied ? '無出納權限' : (payableSnapMissing || '載入中…')"></span>
                 </div>
                 <div class="fsnap__note" x-show="payableKnown"
                      x-text="'承攬商待匯款 ' + payable.length + ' 筆　·　客戶未收款 ' + receivable.filter(i => !i.received).length + ' 筆'"></div>

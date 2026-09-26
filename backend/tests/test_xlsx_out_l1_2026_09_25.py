@@ -24,8 +24,11 @@ def _imports_from(rel, module):
             for a in n.names}
 
 
-@pytest.mark.parametrize("rel", ["routers/accounting_export.py", "routers/cashier.py"])
+@pytest.mark.parametrize("rel", ["routers/accounting_export.py", "modules/arap/api/cashier.py"])   # 出納 2026-09-26 搬進 M05
 def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel):
+    from core import source_tree
+    if not source_tree.module_installed(rel):
+        pytest.skip("%s 的模組不在這個安裝包（PLAYBOOK §B-11）" % rel)
     got = _imports_from(rel, "routers.reports") | _imports_from(rel, "modules.analytics.api.reports")
     moved = {"_xl_style", "_set_row", "_check_export_rate", "_COMPANY",
              "xl_style", "set_row", "check_export_rate"}

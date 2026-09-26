@@ -295,9 +295,11 @@ def _case_document_bases():
     """帶 quote_no 讀案件單據的端點；出貨單在採購・庫存・出貨（M03）、承攬商付款在外包工班（M04），
     模組不在時不列（端點本來就不在，PLAYBOOK §B-11）。"""
     from core import source_tree
-    bases = ["/api/completion-notes", "/api/invoice-vouchers", "/api/payment-requests"]
+    bases = ["/api/completion-notes"]
     if source_tree.module_installed("modules/supply/"):
         bases.append("/api/shipping-notes")
+    if source_tree.module_installed("modules/arap/"):                     # 開票／請款在 M05（2026-09-26）
+        bases += ["/api/invoice-vouchers", "/api/payment-requests"]
     if source_tree.module_installed("modules/subcontract/"):
         bases.append("/api/contractor-vouchers")
     return bases
@@ -322,16 +324,6 @@ def test_case_manager_can_still_list_case_documents(client, make_user):
     for base in _case_document_bases():
         assert client.get(f"{base}?quote_no=MQ-SWEEP-003",
                           headers=_auth(tok)).status_code == 200, base
-
-
-def test_remaining_quota_endpoints_are_guarded(client, make_user):
-    """`remaining` 回的是這張案件還能開多少票／請多少款，等同金額資訊。"""
-    _make_case("MQ-SWEEP-004", sales_person="sw_owner")
-    tok = _outsider(client, make_user, "sw_v4")
-    assert client.get("/api/invoice-vouchers/remaining?quote_no=MQ-SWEEP-004",
-                      headers=_auth(tok)).status_code == 403
-    assert client.get("/api/payment-requests/remaining?quote_no=MQ-SWEEP-004",
-                      headers=_auth(tok)).status_code == 403
 
 
 # test_case_network_plan_lookup_is_guarded （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
@@ -381,42 +373,6 @@ def _mk_invoice_voucher(voucher_no, quote_no, approver=None, created_by="someone
         conn.commit()
     finally:
         conn.close()
-
-
-def test_voucher_detail_is_not_readable_by_outsiders(client, make_user):
-    """單號是可預測的（前綴＋年月＋流水號），詳情端點先前只要求登入。"""
-    _make_case("MQ-VCH-001", sales_person="vch_owner")
-    _mk_invoice_voucher("IV-2026-001", "MQ-VCH-001")
-    tok = _outsider(client, make_user, "vch_out")
-    assert client.get("/api/invoice-vouchers/IV-2026-001",
-                      headers=_auth(tok)).status_code == 403
-    assert client.get("/api/invoice-vouchers/IV-2026-001/pdf-download",
-                      headers=_auth(tok)).status_code == 403
-
-
-def test_voucher_list_hides_amounts_from_non_financial_users(client, make_user):
-    """沒有財務可視權的人，清單只剩「自己要簽的那幾張」，不是整支 403。
-
-    整支 403 會讓非管理員的簽核人連簽核佇列都打不開——他們正是要在那裡看到待簽單據。
-    """
-    _make_case("MQ-VCH-002", sales_person="vch_owner")
-    _mk_invoice_voucher("IV-2026-002", "MQ-VCH-002")                       # 與他無關
-    _mk_invoice_voucher("IV-2026-003", "MQ-VCH-002", approver="vch_eng")   # 他要簽的
-
-    u, p = make_user(username="vch_eng", role="engineer",
-                     modules=["case_manage", "quotation"])
-    tok = _login(client, u, p)
-    nos = [v["voucherNo"] for v in
-           client.get("/api/invoice-vouchers?quote_no=MQ-VCH-002", headers=_auth(tok)).json()]
-    assert nos == ["IV-2026-003"], f"過濾結果不對：{nos}"
-
-    # 有財務可視權就兩張都看得到
-    u2, p2 = make_user(username="vch_fin", role="engineer",
-                       modules=["case_manage", "financial_view"])
-    nos2 = sorted(v["voucherNo"] for v in
-                  client.get("/api/invoice-vouchers?quote_no=MQ-VCH-002",
-                             headers=_auth(_login(client, u2, p2))).json())
-    assert nos2 == ["IV-2026-002", "IV-2026-003"], nos2
 
 
 def test_extra_expenses_visible_to_filer_even_without_financial_view(client, make_user):

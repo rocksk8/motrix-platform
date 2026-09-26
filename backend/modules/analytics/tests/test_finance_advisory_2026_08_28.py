@@ -6,6 +6,11 @@ import io
 import json
 
 import openpyxl
+import pytest
+
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
 
 
 def _login(client, username, password):
@@ -109,6 +114,7 @@ def test_cash_position_requires_admin(client, make_user):
 
 # ── 稅務匯出（銷項發票清單）────────────────────────────────────────────────────
 
+@_NEEDS_ARAP
 def test_tax_export_lists_invoiced_items_with_tax_breakdown_and_year_filter(client, make_user):
     """單一呼叫涵蓋：已開發票品項正確列出＋稅額拆算正確／未開發票品項不列入／
     年份篩選排除不同年份資料——三個 tax-export 情境合併成一次匯出呼叫，避免連續
