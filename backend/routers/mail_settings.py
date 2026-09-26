@@ -103,40 +103,48 @@ def _has_email(v) -> bool:
 
 
 def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_role=None) -> list:
-    """U15（使用者 2026-09-26 表單）：系統技術類信件**永遠至少一位超級管理員收得到**。
+    """U15（使用者 2026-09-26 表單）：系統技術類信件**永遠至少有一人收得到**。
 
-    以「套用這個請求之後」的狀態判斷（D 稽核 M-1：原本只看退訂，同一支端點改 email 為空、改角色照樣讓最後一位消失）：
-    這位使用者套用 new_muted／new_email／new_role（None＝不變）之後，若某個系統技術類型從「有人收得到」變成
-    「沒有任何啟用中、有 Email、未退訂的超管收得到」⇒ 回傳該類型名稱（空＝放行）。
-    判準與寄信端一致（email_notify._users_emails）。覆寫為 custom 的類型由 set_mail_recipients 的檢查負責。"""
+    以「套用這個請求之後」的狀態判斷（D 稽核 M-1）：這位使用者套用 new_muted／new_email／new_role（None＝不變）
+    之後，某個系統技術類型的收件人若從「至少一人」變成「零人」⇒ 回傳該類型名稱（空＝放行）。
+    收件人依目前的覆寫計算，與寄信端（email_notify._group_emails）同一套規則：預設與 superadmin_only＝超級管理員；
+    custom＝指定的帳號與角色（D 稽核 O-2：custom 名單也會因為名單上的人退訂、清空 Email、改角色而變成沒人收得到）。
+    「收得到」＝啟用中、有 Email（與 SQL `email != ''` 同判準）、未退訂。"""
     import json
     from helpers.notification_prefs import is_enabled
-    me = conn.execute("SELECT role, active, email, notification_muted FROM users WHERE id=?", (user_id,)).fetchone()
+    me = conn.execute("SELECT username, role, active, email, notification_muted FROM users WHERE id=?",
+                      (user_id,)).fetchone()
     if me is None:
         return []
-    before_ok = me["role"] == "superadmin" and bool(me["active"]) and _has_email(me["email"])
-    after_role = me["role"] if new_role is None else new_role
-    after_email = me["email"] if new_email is None else new_email
-    after_muted = me["notification_muted"] if new_muted is None else json.dumps(list(new_muted), ensure_ascii=False)
-    after_ok = after_role == "superadmin" and bool(me["active"]) and _has_email(after_email)
-    if not before_ok:
-        return []                         # 本來就收不到：這次不是「把最後一位拿掉」
-    others = conn.execute("SELECT notification_muted FROM users WHERE active=1 AND role='superadmin' "
-                          "AND email IS NOT NULL AND email != '' AND id != ?", (user_id,)).fetchall()
+    after = {"role": me["role"] if new_role is None else new_role,
+             "email": me["email"] if new_email is None else new_email,
+             "muted": me["notification_muted"] if new_muted is None else json.dumps(list(new_muted), ensure_ascii=False)}
+    rows = conn.execute("SELECT id, username, role, active, email, notification_muted FROM users WHERE active=1").fetchall()
     o = _overrides()
+
+    def in_group(ov, username, role):
+        mode = ov.get("mode", "default")
+        if mode == "custom":
+            return username in (ov.get("users") or []) or role in (ov.get("roles") or [])
+        return role == "superadmin"          # 系統技術類的預設群組一律是僅超級管理員（mail_types.register 已守）
+
+    def receivers(key, ov, swap):
+        n = 0
+        for r in rows:
+            role, email, muted = r["role"], r["email"], r["notification_muted"]
+            if swap and r["id"] == user_id:
+                role, email, muted = after["role"], after["email"], after["muted"]
+            if in_group(ov, r["username"], role) and _has_email(email) and is_enabled(muted, key):
+                n += 1
+        return n
+
     out = []
     for t in mt.all_types():
         if t.category != "system" or t.event or t.key in mt.MANAGED_ELSEWHERE:
             continue
-        if (o.get(t.key) or {}).get("mode", "default") == "custom":
-            continue
-        if not is_enabled(me["notification_muted"], t.key):
-            continue                      # 本來就退訂了
-        if after_ok and is_enabled(after_muted, t.key):
-            continue                      # 套用之後自己仍收得到
-        if any(is_enabled(r["notification_muted"], t.key) for r in others):
-            continue
-        out.append(t.name)
+        ov = o.get(t.key) or {"mode": "default"}
+        if receivers(t.key, ov, False) > 0 and receivers(t.key, ov, True) == 0:
+            out.append(t.name)
     return sorted(out)
 
 
