@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 632,
+  "tests": 633,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 337,
+   "api": 338,
    "unit": 56,
    "e2e": 154
   },
@@ -13870,6 +13870,27 @@
     "api": [
      "backend/routers/auth.py",
      "backend/routers/system.py"
+    ]
+   }
+  },
+  "backend/tests/test_u15_last_superadmin_mute_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "file:backend/helpers/__init__.py",
+    "helper:mail_types",
+    "router:auth",
+    "router:mail_settings"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/__init__.py",
+     "backend/helpers/mail_types.py"
+    ],
+    "api": [
+     "backend/routers/auth.py",
+     "backend/routers/mail_settings.py"
     ]
    }
   },
