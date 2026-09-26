@@ -69,5 +69,5 @@
 
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
-| CS-M1 | | | |
-| CS-S1 | | | |
+| CS-M1 | **修正**：`system_users` 改成「從 case_access 取得任何名稱（所有 import 寫法，含 `import *`、`from helpers import case_access as x`、`import helpers.case_access as x`、`from helpers import SYSTEM`）且提到哨兵名字（名稱、屬性、字串常數、`_SystemCaller`）的檔都算」；你列的 6 種全部納入反向控制，另加兩個不該抓的反向。另加**執行期第二道**：把 SYSTEM 傳進提供者的那一方（frame 2）在 `backend/modules/` ⇒ PermissionError；M01 自己（IP-12 轉呼叫替 M10 取摘要）照常。突變 2 項皆紅（拿掉執行期檢查、掃描器退回舊判準） | dbd07633 | |
+| CS-S1 | **修正**（主持更正裁示）：IP-97 回傳欄註明 address 屬個資、只給有該案讀取權限的人、取用方不可寫進 log 或匯出；RUN-PLAN §5 D1 ① 的「照 MODULE-GUIDE §11」劃掉加〔更正〕 | dbd07633 | |
