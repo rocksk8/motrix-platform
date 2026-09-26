@@ -194,13 +194,13 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 ---
 
-## IP-15　`dispatch.list_for_case`：案件整包的承攬派工段（M04 → M01）
+## IP-15　`dispatch.list_for_case`＋`dispatch.cost_for_case`：案件整包的承攬派工段（M04 → M01）；派工成本檢視（M04 → M06 傳票）
 
 對應 l2_import_baseline `M01 router:quotations -> M04 router:vendor_contractors`（M04 搬遷，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vendor_contractors.list_dispatches`。編號為暫定（同時期 C 的 approval.queue_items、crm.quote_deleted 與 A 的 daily.check 也在暫用 IP-10、IP-11），由列車依合回順序定號。〔第六班列車定號（2026-09-26）：dispatch.list_for_case 暫用 IP-12→IP-15、quotation.append_items 暫用 IP-13→IP-17、contractor_voucher.public 維持 IP-14（origin 已用 IP-12 case.access、IP-13 crm.quote_deleted；IP-16＝M07 bonus.module_status）〕
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝） |
+| 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::list_dispatches_for_case`（`list_dispatches` 的包裝）、`modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`（`dispatch.cost_for_case`，2026-09-26 追加，見下方「追加：成本檢視」列） |
 | 使用方 | M01 `routers/quotations.py::case_bundle`（`GET /api/quotations/{no}/case-bundle`）的 `parts.dispatches` |
 | 形式 | provider，單一提供者（`core.registry`）；`ModuleSpec.providers` 宣告 |
 | 語法 | 提供：`ModuleSpec(providers={("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case})`<br>取用：`fn = registry.single_provider("dispatch.list_for_case")`；`None` ⇒ 退化。`fn(quote_no, authorization) -> list`（同一份授權、權限判斷與單獨打 `/api/contractor-dispatches?quote_no=` 逐字相同） |
@@ -208,6 +208,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 對方不在時 | 整包照常回；`parts.dispatches`＝`{"ok": false, "status": 404, "detail": DISPATCHES_UNAVAILABLE}`（「外包工班模組未安裝：沒有承攬派工資料」），前端照「那一段回非 2xx」處理 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | 提供方（隨模組搬走）`backend/modules/subcontract/tests/test_subcontract_providers.py`：登記、正對照；取用方（外包工班不在也成立）`backend/tests/platform/test_subcontract_connectors.py`：拿掉提供者 ⇒ 整包照回、那一段 404 說明、其他段照常。突變：整包不看提供者、不登記 ⇒ 紅 |
+| 追加：成本檢視（2026-09-26，B；主持派工） | `dispatch.cost_for_case`：提供方 `modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`；`fn(quote_no, authorization) -> list`；權限 finance／cashier／procurement／case_manage／contractor_list 任一（否則 403）；回 `[{id, quoteNo, vendorName, scope, invoiceNo, dispatchDate, invoiceDate, payableDate, amount(=grandTotal), totalWithTax, personnelTotal, personnelCount, items:[{description, amount}]}]`（scope、invoiceNo 主持裁示加入：會計資料、不是個資）——**不回外包人員姓名、personnel、其他派工細節**（notes、files、狀態、建立／驗收者）。使用方：M06 `vouchers._case_expense_sources`（JV21；第三層人員改顯示「外包人員 N 人」）。**對方不在時**（照 IP-14 的做法明說）：取用方拿到 None ⇒ 那一段不列，回應／畫面帶 `notice`「外包工班模組未安裝：傳票不含承攬商派工支出」，不可以靜默少列。契約版本 1；守門：`backend/modules/subcontract/tests/test_dispatch_cost_view.py`（登記、權限、白名單、任何層無姓名欄位、金額同 grandTotal、IP-15 既有回應不變） |
 
 ---
 
