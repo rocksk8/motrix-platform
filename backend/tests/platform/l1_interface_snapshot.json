@@ -1,5 +1,5 @@
 {
- "core_version": "1.38",
+ "core_version": "1.39",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -592,6 +592,7 @@
    "validate_transition": "def(current, target)"
   },
   "helper:receivables": {
+   "RECEIVABLES_MISSING": "const",
    "collect_income_items": "def(d0, d1, department_id=…)",
    "collect_tax_invoices": "def(year=…, month=…)",
    "round_half_up_invoice": "def(n)"
