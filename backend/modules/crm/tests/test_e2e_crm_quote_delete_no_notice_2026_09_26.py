@@ -1,17 +1,21 @@
-"""瀏覽器端對端：IP-13 對方不在時，刪報價單的 notice 要顯示在畫面上（M02 搬遷，2026-09-26）。
+"""瀏覽器端對端：IP-13 正對照——M02 在 ⇒ 刪報價單只顯示「報價單已刪除」，沒有 notice（M02 搬遷，2026-09-26）。
+
+自 `tests/test_e2e_quote_delete_crm_absent_notice_2026_09_26.py` 拆出：這一題需要本模組，拿掉模組時跟著消失（§B-11；
+第五班列車反向控制抓到）。反向控制那一題（M02 不在 ⇒ notice）留在模組外。
+
+以下為原檔說明：
 
 後端回 `{"ok": true, "notice": ...}`，畫面原本只看 r.ok、固定顯示「報價單已刪除」⇒ notice 被吞掉，
 使用者不會知道業務開發案件的轉建連結沒有解除（ROADMAP 階段 B「搬遷前必修」IP-5 同一類問題）。
-正對照（M02 在 ⇒ 只顯示「報價單已刪除」）需要本模組 ⇒ 在 `modules/crm/tests/test_e2e_crm_quote_delete_no_notice_2026_09_26.py`（第五班列車反向控制抓到，§B-11）。
+正對照：M02 在 ⇒ 只顯示「報價單已刪除」，沒有 notice。
 """
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from core import registry  # noqa: E402
 
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
-QNO = "MQ-202609-IP11"
+QNO = "MQ-202609-IP13P"
 
 
 def _seed():
@@ -43,10 +47,8 @@ def _delete_and_read_toasts(live_server, make_user, new_page, login_as, name):
 
 
 @pytest.mark.e2e
-def test_notice_is_shown_when_crm_is_absent(live_server, make_user, new_page, login_as, monkeypatch):
+def test_no_notice_when_crm_is_present(live_server, make_user, new_page, login_as):
     from routers import quotations
-    orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "crm.quote_deleted" else orig(cap))
-    toasts = _delete_and_read_toasts(live_server, make_user, new_page, login_as, "e2e_ip11_absent")
-    assert any(quotations.QUOTE_DELETED_CRM_ABSENT in t for t in toasts), toasts
-
+    toasts = _delete_and_read_toasts(live_server, make_user, new_page, login_as, "e2e_ip11_present")
+    assert toasts == ["報價單已刪除"], toasts
+    assert not any(quotations.QUOTE_DELETED_CRM_ABSENT in t for t in toasts)

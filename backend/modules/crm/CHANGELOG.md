@@ -1,5 +1,8 @@
 # 業務開發 更新紀錄
 
+## 1.0.4 — 2026-09-26
+- 第五班列車反向控制（§B-11）：刪報價單「M02 在 ⇒ 沒有 notice」的 e2e 正對照需要本模組，自模組外拆進 `modules/crm/tests/test_e2e_crm_quote_delete_no_notice_2026_09_26.py`
+
 ## 1.0.3 — 2026-09-26
 - 第五班列車：IP 定號（`crm.quote_deleted` IP-11→IP-13；origin 已用到 IP-12 `case.access`）
 
