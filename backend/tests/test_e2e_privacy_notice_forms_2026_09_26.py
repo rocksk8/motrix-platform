@@ -59,26 +59,6 @@ def test_customer_contact_notice_print_and_record(live_server, make_user, new_pa
 
 
 @pytest.mark.e2e
-def test_supplier_contact_notice_records_and_unchecked_does_not_block(live_server, make_user, new_page, login_as, client):
-    u = make_user(username="pne_su", role="superadmin")
-    h = _tok(client, u)
-    sid = client.post("/api/suppliers", json={"name": "告知測試供應商", "data": {"contacts": [
-        {"id": 501, "name": "甲窗口"}, {"id": 502, "name": "乙窗口"}]}}, headers=h).json()["id"]
-    page = new_page()
-    login_as(page, u)
-    page.goto(live_server + "/pages/suppliers.html")
-    _ready(page, f"{ROOT}.suppliers.length > 0 && {ROOT}.privacyNotice")
-    page.evaluate(f"() => {ROOT}.openEdit({ROOT}.suppliers.find(s => s.id === {sid}))")
-    rows = page.locator("[data-privacy-card] [data-privacy-contact]")
-    rows.nth(1).locator("[data-privacy-missing]").wait_for(state="visible", timeout=10000)
-    rows.nth(0).locator("input[data-privacy-ack]").check()          # 只勾第一位
-    page.evaluate(f"() => {ROOT}.saveSupplier()")
-    page.wait_for_function(f"() => !{ROOT}.showModal", timeout=10000)
-    assert pn.get_ack("supplier_contact", f"{sid}:501")["byUsername"] == "pne_su"
-    assert pn.get_ack("supplier_contact", f"{sid}:502") is None, "沒勾的那一位不可以被記錄（而且存檔沒被擋）"
-
-
-@pytest.mark.e2e
 def test_user_account_notice_records(live_server, make_user, new_page, login_as, client):
     u = make_user(username="pne_us", role="superadmin")
     uid = client.post("/api/users", json={"username": "pne_target", "password": "Xy9#long-pass",

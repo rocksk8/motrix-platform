@@ -109,7 +109,7 @@ def test_all_six_document_types_go_through_the_shared_helper():
             continue
         src = files[f].read_text(encoding="utf-8")
         assert re.search(r"cascade_self_tiers\(", src), f
-    xe = (root / "routers" / "case_extra_expenses.py").read_text(encoding="utf-8")
+    xe = (root / "case_extra_expenses.py").read_text(encoding="utf-8")
     assert xe.count("cascade_self_tiers(") == 2 and "tier_completes_on_first" not in xe
 
 

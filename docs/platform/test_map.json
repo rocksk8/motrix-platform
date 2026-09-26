@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 637,
+  "tests": 638,
   "unmapped": 7,
   "kinds": {
    "audit": 86,
-   "api": 340,
+   "api": 341,
    "unit": 55,
    "e2e": 156
   },
@@ -3720,6 +3720,7 @@
     "core:db",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/subcontract/api/",
+    "file:backend/routers/__init__.py",
     "mod:subcontract/api/__init__",
     "mod:subcontract/api/vendor_contractors",
     "plat:__init__",
@@ -3736,7 +3737,9 @@
      "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/subcontract/api/__init__.py",
-     "backend/modules/subcontract/api/vendor_contractors.py"
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/__init__.py",
+     "backend/routers/accounting_export.py"
     ],
     "api": [
      "backend/modules/subcontract/api/vendor_contractors.py",
@@ -3808,6 +3811,27 @@
      "backend/modules/supply/"
     ]
    },
+   "module": "supply"
+  },
+  "backend/modules/supply/tests/test_em8_message_points_to_existing_place_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/supply/",
+    "mod:supply/api/inventory"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/supply/api/inventory.py"
+    ],
+    "module_dir": [
+     "backend/modules/supply/"
+    ]
+   },
+   "login_fixture": true,
    "module": "supply"
   },
   "backend/modules/supply/tests/test_procurement_leadtime_api.py": {
@@ -9831,10 +9855,8 @@
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
     "helper:settings",
-    "mod:supply/api/suppliers",
     "page:pages/company-profile-settings.html",
     "page:pages/customers.html",
-    "page:pages/suppliers.html",
     "page:pages/users.html",
     "router:auth",
     "router:customers"
@@ -9846,20 +9868,17 @@
      "backend/helpers/settings.py"
     ],
     "api": [
-     "backend/modules/supply/api/suppliers.py",
      "backend/routers/auth.py",
      "backend/routers/customers.py"
     ],
     "page": [
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/customers.html",
-     "frontend/pages/suppliers.html",
      "frontend/pages/users.html"
     ],
     "path": [
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/customers.html",
-     "frontend/pages/suppliers.html",
      "frontend/pages/users.html"
     ]
    }
@@ -11980,7 +11999,6 @@
     "js:static/legal-round.js",
     "mod:analytics/api/reports",
     "mod:subcontract/api/vendor_contractors",
-    "mod:supply/api/inventory",
     "page:pages/payment-request-form.html",
     "page:pages/quotation-form.html",
     "page:pages/settlement.html",
@@ -11989,7 +12007,6 @@
     "router:accounting_export",
     "router:case_extra_expenses",
     "router:invoice_vouchers",
-    "router:parts",
     "router:payment_requests"
    ],
    "evidence": {
@@ -12008,9 +12025,7 @@
     ],
     "api": [
      "backend/modules/subcontract/api/vendor_contractors.py",
-     "backend/modules/supply/api/inventory.py",
      "backend/routers/invoice_vouchers.py",
-     "backend/routers/parts.py",
      "backend/routers/payment_requests.py"
     ],
     "page": [
@@ -12766,6 +12781,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/supply/",
     "file:backend/helpers/__init__.py",
     "helper:privacy_notice",
     "mod:analytics/api/dashboard",
@@ -12782,6 +12798,8 @@
     "mod:supply/api/shipping_notes",
     "mod:supply/api/suppliers",
     "mod:tender_radar/api",
+    "plat:__init__",
+    "plat:source_tree",
     "router:account_items",
     "router:accounting_export",
     "router:approval_delegates",
@@ -12814,6 +12832,8 @@
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/privacy_notice.py"
@@ -12862,6 +12882,9 @@
      "backend/routers/system.py",
      "backend/routers/uploads.py",
      "backend/routers/vouchers.py"
+    ],
+    "path": [
+     "backend/modules/supply/"
     ]
    }
   },
