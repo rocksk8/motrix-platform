@@ -170,6 +170,33 @@ def test_jv35_a_voucher_without_a_configured_flow_cannot_be_reassigned(client, m
     assert "分層簽核" in r.json().get("detail", ""), r.json()
 
 
+def test_jv35_an_unreadable_voucher_chain_refuses_reassign_with_its_own_reason(client, make_user):
+    """簽核資料讀不出來 ⇒ 400「格式不正確」（fail-closed，稽核 D AP-S1）。
+
+    ⚠️ 要驗訊息：若把讀不出來吞成空鏈（D 的突變 AP3），一樣是 400，只是變成「沒有分層簽核資料」——
+    那句話把「資料壞了」說成「沒有設定流程」，只驗狀態碼會照綠。"""
+    import db
+    su, sh = _login(client, make_user, "jv35u_su")
+    new, _nh = _login(client, make_user, "jv35u_new")
+    old, _oh = _login(client, make_user, "jv35u_old")
+    vid, no = _pending_voucher(client, sh, old)
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE vouchers_all SET approval_json=? WHERE id=?", ("{壞掉的簽核資料", vid))
+        conn.commit()
+    finally:
+        conn.close()
+    r = _reassign(client, sh, no, new)
+    assert r.status_code == 400, "%s %s" % (r.status_code, r.text[:200])
+    assert "格式不正確" in r.json().get("detail", ""), r.json()
+    conn = db.get_db()
+    try:
+        raw = conn.execute("SELECT approval_json FROM vouchers_all WHERE id=?", (vid,)).fetchone()[0]
+    finally:
+        conn.close()
+    assert raw == "{壞掉的簽核資料", "擋下來的轉簽不可以改寫簽核資料"
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 畫面：簽核佇列的傳票那一列要有轉簽鈕，按下去資料庫真的換人
 # ══════════════════════════════════════════════════════════════════════
