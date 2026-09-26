@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 680,
+  "tests": 681,
   "unmapped": 7,
   "kinds": {
-   "audit": 89,
+   "audit": 90,
    "api": 369,
    "unit": 58,
    "e2e": 164
@@ -6134,6 +6134,27 @@
    },
    "login_fixture": true
   },
+  "backend/tests/platform/test_e2e_classification.py": {
+   "kind": "audit",
+   "units": [
+    "dir:tools/platform/",
+    "file:backend/tests/_subproc.py",
+    "file:backend/tests/test_e2e_hard_cap_2026_09_25.py",
+    "file:tools/platform/modtest.py",
+    "mod:tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26"
+   ],
+   "evidence": {
+    "import": [
+     "backend/tests/_subproc.py"
+    ],
+    "path": [
+     "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py",
+     "backend/tests/test_e2e_hard_cap_2026_09_25.py",
+     "tools/platform/",
+     "tools/platform/modtest.py"
+    ]
+   }
+  },
   "backend/tests/platform/test_e2e_menu_layout.py": {
    "kind": "e2e",
    "units": [
@@ -6183,11 +6204,15 @@
    "units": [
     "dir:backend/tools/",
     "dir:tools/platform/",
+    "file:backend/tests/test_e2e_hard_cap_2026_09_25.py",
     "file:backend/tools/build_deploy_package.ps1",
-    "file:tools/platform/modtest.py"
+    "file:tools/platform/modtest.py",
+    "mod:tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26"
    ],
    "evidence": {
     "path": [
+     "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py",
+     "backend/tests/test_e2e_hard_cap_2026_09_25.py",
      "backend/tools/",
      "backend/tools/build_deploy_package.ps1",
      "tools/platform/",

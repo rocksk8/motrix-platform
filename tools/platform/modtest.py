@@ -42,7 +42,7 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_map import REPO, build as build_map, unit_name  # noqa: E402
+from test_map import REPO, build as build_map, file_is_e2e, unit_name  # noqa: E402
 import project_env  # noqa: E402
 
 BACKEND = REPO / "backend"
@@ -685,10 +685,17 @@ def e2e_max_workers():
 
 def partial_cap(picked, tmap):
     """差異題的 worker 上限：選到的題裡有 e2e ⇒ 取 partial 與 e2e 上限較小者（D 抽查 MT-O1：設 PARTIAL=4 時 e2e 會用 -n 4 跑）。
-    e2e 的判定：test_map 的 kind＝e2e；test_map 沒有那一檔時退回看檔名（test_e2e_*）。"""
+    e2e 的判定：test_map 的 kind＝e2e；test_map 沒有那一檔時用同一個判準現場看檔案內容（test_map.file_is_e2e）。
+    〔wip/b-modtest-batch：原本退回看檔名（test_e2e_*），而且與 kind 取聯集——36 個 e2e 檔不叫 test_e2e_*，
+      不在 map 裡時會被當成非 e2e；**不看檔名**〕"""
     cap = partial_max_workers()
     tests = (tmap or {}).get("tests") or {}
-    if any((tests.get(t) or {}).get("kind") == "e2e" or Path(t).name.startswith("test_e2e") for t in picked):
+
+    def is_e2e(t):
+        if t in tests:
+            return (tests.get(t) or {}).get("kind") == "e2e"
+        return file_is_e2e(REPO / t)
+    if any(is_e2e(t) for t in picked):
         cap = min(cap, e2e_max_workers())
     return cap
 
