@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 632,
+  "tests": 633,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 337,
+   "api": 338,
    "unit": 56,
    "e2e": 154
   },
@@ -4495,6 +4495,45 @@
     "path": [
      "backend/helpers/case_stage_tasks.py",
      "backend/helpers/google_calendar.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_case_summary_locations.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:docs/platform/",
+    "file:backend/routers/__init__.py",
+    "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
+    "file:docs/platform/modules.json",
+    "helper:case_access",
+    "helper:quotations",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:map_points"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/case_access.py",
+     "backend/routers/__init__.py",
+     "backend/routers/map_points.py",
+     "backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py"
+    ],
+    "api": [
+     "backend/routers/map_points.py"
+    ],
+    "path": [
+     "backend/helpers/case_access.py",
+     "backend/helpers/quotations.py",
+     "backend/routers/map_points.py",
+     "docs/platform/",
+     "docs/platform/modules.json"
     ]
    },
    "login_fixture": true
