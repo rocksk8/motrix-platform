@@ -30,4 +30,4 @@
 
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
-| S-1 | | | |
+| S-1 | 新增 `migrated_module_keys`（群組含 mod: 單位，與 check_group_keys 同判準）；有 key 未搬遷的寫「尚未搬進 modules/（以 L1 形式在包內，由共用清單涵蓋）」 | wip/h-smoke-probes ba29aa44 | ✅ 14:39 D：快轉確認；突變「一律寫不在安裝包」⇒ `test_smoke_plan_derives_module_checks_from_the_package` 紅 ⇒ **關閉（ba29aa44）** |
