@@ -107,13 +107,14 @@ def test_api_module_only_waives_the_endpoint_when_that_module_is_absent(tmp_path
     for a in apis:
         routers = routers.replace(f'"{a}"', '"/api/gone"')
     monkeypatch.setattr(source_tree, "module_installed", lambda p: True)
-    assert any(page in e and apis[0] in e for e in pf.violations(reg, pages=_pages(d), router_text=routers))
+    mine = lambda errs: [e for e in errs if e.startswith(page + "：")]   # 不用 `page in e`：contractors.html 是 vendor-contractors.html 的子字串
+    assert any(apis[0] in e for e in mine(pf.violations(reg, pages=_pages(d), router_text=routers)))
     monkeypatch.setattr(source_tree, "module_installed", lambda p: "modules/payroll/" not in str(p))
-    assert not [e for e in pf.violations(reg, pages=_pages(d), router_text=routers) if page in e]
+    assert not mine(pf.violations(reg, pages=_pages(d), router_text=routers))
     f = d / page
     f.write_text(f.read_text(encoding="utf-8").replace("data-privacy-card", "data-x"), encoding="utf-8")
-    assert any(page in e and "data-privacy-card" in e
-               for e in pf.violations(reg, pages=_pages(d), router_text=routers)), "模組不在時告知區塊仍要驗"
+    assert any("data-privacy-card" in e
+               for e in mine(pf.violations(reg, pages=_pages(d), router_text=routers))), "模組不在時告知區塊仍要驗"
 
 
 def test_reverse_control_new_field_on_exempt_page_turns_red(tmp_path):

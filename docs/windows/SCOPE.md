@@ -42,7 +42,7 @@ AT(1): AT1
 WD(1): WD1
 BR(4): BR1 BR2 BR3 BR4
 BN(15): BN2 BN3 BN4 BN5 BN6 BN7 BN8 BN9 BN10 BN11 BN12 BN14 BN15 BN17 BN18
-EM(9): EM1 EM3 EM5 EM6 EM8 EM9 EM10 EM11 EM12
+EM(8): EM1 EM3 EM5 EM6 EM8 EM9 EM10 EM11
 PX(1): PX1
 JV(1): JV8
 AL(1): AL1
@@ -91,6 +91,8 @@ MP(11): MP0 MP0b MP0c MP0d MP8 MP1 MP2 MP3 MP4 MP5 MP6
 > 理由全文在 `STATE.md §30a`（A 自己複驗過 `apply_update.ps1:532/:546`
 > 與 `deploy_dashboard.py:186`，不是照收轉述）。
 > ⚠️ `P0-1` 相依 `P0-2`（按鈕時間要算出來，資料來自 history）——順序不可對調。
+
+> 📌 2026-09-26（C，M04 搬遷）：`EM12` 的範圍（THIS）移到 `backend/modules/subcontract/SPEC.md` 的 `## 範圍`：拿掉 M04 時範圍與條件、題一起消失。
 
 ---
 
