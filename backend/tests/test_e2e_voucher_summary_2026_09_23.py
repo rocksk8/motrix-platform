@@ -168,13 +168,32 @@ def _saved(page, do):
     page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
 
 
+#: O9：單張傳票（GET /api/vouchers/{id}）的 .json() 延後 800ms——response 事件照常，畫面晚一步才開
+_SLOW_DETAIL_JSON = r"""
+(function () {
+  var real = Response.prototype.json
+  Response.prototype.json = function () {
+    var self = this
+    if (/\/api\/vouchers\/\d+$/.test(new URL(self.url).pathname)) {
+      return new Promise(function (res) { setTimeout(res, 800) }).then(function () { return real.call(self) })
+    }
+    return real.call(self)
+  }
+})()
+"""
+
+
 def _opened(page, do):
-    """從清單點開一張（原本固定等 1 秒）：等 GET /api/vouchers/{id} 回來＋畫面更新。"""
+    """從清單點開一張（原本固定等 1 秒）：等 GET /api/vouchers/{id} 回來，**再等編輯畫面真的出現**（摘要欄可見）。
+    〔O9（RUN-PLAN）：原本 response 到＋一次 nextTick 就算開好——response 事件在標頭到時就成立，頁面還要 r.json()
+      之後才設 editing ⇒ 下一步的可見性檢查偶爾早於 x-show 生效而紅（〈e2e 等待的終點〉：等終點狀態，不等某一趟請求）。
+      條件與 _open_editor 相同；逾時照樣放行，判決留給 _need 那句有說明的斷言〕"""
     one = re.compile(r"^/api/vouchers/\d+$")
     with page.expect_response(lambda r: r.request.method == "GET" and one.match(urlparse(r.url).path),
                               timeout=15000):
         do()
-    page.evaluate("() => new Promise(r => Alpine.nextTick(r))")
+    _soft_wait(page, "() => [...document.querySelectorAll('[x-model=\"l.summary\"]')]"
+               ".some(e => e.offsetParent !== null)")
 
 
 def _open_editor(page):
@@ -317,6 +336,9 @@ def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_bro
         pytest.fail("頁面上找不到「儲存」—— 摘要改了**存不下去**。")
     _saved(page, lambda: save.first.click())
 
+    # O9：讓「response 到」與「畫面開好」之間的空隙固定成 800ms（單張傳票的 .json() 延後）——
+    # 原本的 _opened（等 response＋一次 nextTick）在這裡必紅，等畫面終點的版本照樣過。偶發變成必然，這一題就守得住它。
+    page.add_init_script(_SLOW_DETAIL_JSON)
     page.reload()
     _ready(page)
     # 🔴 `JV8`：重整之後 `editing` 又回到 false

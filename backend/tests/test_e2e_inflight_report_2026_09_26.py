@@ -104,3 +104,29 @@ def test_inflight_text_itself_hides_query_values():
     item = types.SimpleNamespace(_e2e_inflight={object(): (time.monotonic(), "GET", "http://x/api/uploads/a.jpg?pt=SECRET4&q=客戶乙")})
     text = cf.inflight_text(item)
     assert "?pt=***&q=***" in text and "SECRET4" not in text and "客戶乙" not in text, text
+
+
+# ── O9 附註：關 context 的死線（conftest `_TeardownWatchdog`）────────────────────────────────
+
+def test_teardown_watchdog_says_why_and_exits():
+    """超過上限 ⇒ 寫出原因（含未完成的請求）並 exit_fn(3)。突變：不啟動計時器 ⇒ 紅。"""
+    import io
+    import time
+    import conftest as cf
+    item = types.SimpleNamespace(nodeid="t::x", _e2e_inflight={object(): (time.monotonic(), "GET", "http://x/api/o9-hang")})
+    out, fired = io.StringIO(), []
+    with cf._TeardownWatchdog(item, 0.2, exit_fn=fired.append, out=out):
+        time.sleep(0.8)
+    text = out.getvalue()
+    assert fired == [3], (fired, text)
+    assert "t::x" in text and "/api/o9-hang" in text and "route" in text, text
+
+
+def test_teardown_watchdog_is_silent_when_close_is_quick():
+    import io
+    import conftest as cf
+    out, fired = io.StringIO(), []
+    with cf._TeardownWatchdog(types.SimpleNamespace(nodeid="t::y"), 5, exit_fn=fired.append, out=out):
+        pass
+    assert fired == [] and out.getvalue() == ""
+

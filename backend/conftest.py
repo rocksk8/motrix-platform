@@ -1497,6 +1497,46 @@ def inflight_text(item):
 
 E2E_CONTEXT_HOOKS.append(_inflight_hook)
 
+# ── O9 附註：關 context 的死線 ────────────────────────────────────────────────────────────────────
+# 實測（2026-09-26 B）：route 攔下請求而不回應、頁面上又有東西在等它（例：evaluate 回傳那個 fetch 的 promise）⇒
+# 約 50～110 秒後 renderer crash（Target crashed），接著 context.close() 永遠不回來——worker 卡死、沒有任何訊息。
+# Playwright 的同步 close() 沒有逾時可設 ⇒ 用看門狗：超過上限就把原因、未完成的請求（O5-S2 的記帳）與所有執行緒的
+# 堆疊寫到 stderr，然後結束這個 worker（xdist 會報 worker crashed，訊息在它前面）。卡死比紅更貴：它不會被報修。
+E2E_TEARDOWN_LIMIT = float(os.environ.get("MOTRIX_E2E_TEARDOWN_LIMIT", "60"))
+
+
+class _TeardownWatchdog:
+    """with 區塊超過 seconds 秒 ⇒ 說出原因並 exit_fn(3)。exit_fn／out 可注入（題目用）。"""
+
+    def __init__(self, item, seconds, exit_fn=None, out=None):
+        import threading
+        self.item, self.seconds = item, seconds
+        self.exit_fn = exit_fn or os._exit
+        self.out = out or sys.stderr
+        self.timer = threading.Timer(seconds, self._fire)
+        self.timer.daemon = True
+
+    def _fire(self):
+        o = self.out
+        o.write("\n[e2e teardown] 關閉 %s 的瀏覽器 context 超過 %d 秒，結束這個 worker（不讓它永遠卡住）。\n"
+                "常見原因：route 攔下請求而沒有回應，頁面又在等它 ⇒ renderer crash 後 close() 不回來（RUN-PLAN O9）。\n"
+                "未完成的請求：\n%s\n" % (getattr(self.item, "nodeid", "?"), self.seconds, inflight_text(self.item)))
+        try:
+            import faulthandler
+            faulthandler.dump_traceback(file=o, all_threads=True)
+        except Exception:                                    # noqa: BLE001 沒有真的 fd（題目的 StringIO）⇒ 略過堆疊
+            pass
+        o.flush()
+        self.exit_fn(3)
+
+    def __enter__(self):
+        self.timer.start()
+        return self
+
+    def __exit__(self, *exc):
+        self.timer.cancel()
+        return False
+
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -1677,16 +1717,17 @@ def new_context(request):
         return ctx
 
     yield _make
-    for ctx in opened:
-        try:
-            ctx.close()
-        except Exception:
-            pass
-    if own:
-        try:
-            own["browser"].close()
-        finally:
-            own["pw"].stop()
+    with _TeardownWatchdog(request.node, E2E_TEARDOWN_LIMIT):       # O9：close() 可能永遠不回來
+        for ctx in opened:
+            try:
+                ctx.close()
+            except Exception:
+                pass
+        if own:
+            try:
+                own["browser"].close()
+            finally:
+                own["pw"].stop()
     # 頁面都關了 ⇒ 不會再有新請求；等處理中的跑完，才輪到 monkeypatch 還原與下一題換庫
     _drain_servers()
 
