@@ -23,9 +23,11 @@ def _hdr(client, make_user, name="s04_super"):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _without(monkeypatch, cap):
+def _without(monkeypatch, *caps):
+    """拿掉提供者。模擬「M04 不在」時要拿掉 M04 的**全部**能力（稽核 D IP-M1：只拿掉 public 時，T100 已改走的
+    paid_between 還在 ⇒ 取用方的降級判斷拿掉也照綠；比照 tests/platform/test_subcontract_connectors.py 的改法）。"""
     orig = registry.providers
-    monkeypatch.setattr(registry, "providers", lambda c: {} if c == cap else orig(c))
+    monkeypatch.setattr(registry, "providers", lambda c: {} if c in caps else orig(c))
 
 
 def _seed(status="草稿"):
@@ -71,7 +73,7 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     from modules.arap.api import cashier as ca
     h = _hdr(client, make_user)
     _seed()
-    _without(monkeypatch, "contractor_voucher.public")
+    _without(monkeypatch, "contractor_voucher.public", "contractor_voucher.paid_between")
     r = client.get("/api/cashier/payable-queue", headers=h)
     assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
     hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h)
