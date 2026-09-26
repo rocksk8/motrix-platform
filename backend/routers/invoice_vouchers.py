@@ -842,3 +842,28 @@ def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
 
 
 _registry.provide("calendar.writeback", "invoice_voucher", _calendar_writeback)
+
+
+class _InvoiceVoucherAttachments:
+    """M05 開票申請的附件來源（`attachments.for_document`，主持裁示 M06-b）：`invoice_vouchers.issued_files_json`，
+    `doc_no`＝開票單號。M05 搬進 modules/arap 時改寫進 `ModuleSpec.providers`。"""
+    LABEL = "應收應付"
+    SOURCE_TYPES = ("invoice_voucher",)
+
+    @staticmethod
+    def doc_nos_for_case(conn, source_type, quote_no):
+        from helpers.uploads import AttachmentSourceError
+        if source_type != "invoice_voucher":
+            raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        return [str(r["k"]) for r in conn.execute(
+            "SELECT voucher_no AS k FROM invoice_vouchers WHERE quote_no = ? ORDER BY id", (quote_no,))]
+
+    @staticmethod
+    def files(conn, source_type, doc_no):
+        from helpers.uploads import AttachmentSourceError, files_from_json_column
+        if source_type != "invoice_voucher":
+            raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        return files_from_json_column(conn, "invoice_vouchers", "voucher_no", doc_no, "issued_files_json")
+
+
+_registry.provide("attachments.for_document", "arap", _InvoiceVoucherAttachments)

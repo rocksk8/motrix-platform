@@ -1,5 +1,5 @@
 {
- "core_version": "1.36",
+ "core_version": "1.37",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -683,9 +683,11 @@
    "submitter_manager_tiers": "def(conn, requester_username)"
   },
   "helper:uploads": {
+   "AttachmentSourceError": "class",
    "UPLOADS_ROOT": "const",
    "_effective_subfolder": "def(subfolder)",
    "delete_document_file": "def(subfolder, doc_no, existing_files, file_id)",
+   "files_from_json_column": "def(conn, table, key_col, key, col)",
    "save_document_files": "async def(subfolder, doc_no, files, uploaded_by, watermark_by=…)"
   },
   "helper:xlsx_out": {

@@ -488,6 +488,10 @@
                     </button>
                   </template>
                 </div>
+                <!-- 附件來源的模組不在（attachments.for_document）：那幾類整個沒有列出，不是「沒有」 -->
+                <template x-for="u in (srcSel.key && !srcState().loading ? (srcState().unavailable || []) : [])" :key="u.category">
+                  <div class="vc-src__empty" data-testid="src-files-unavailable" style="color:#B91C1C" x-text="u.reason"></div>
+                </template>
                 <div class="vc-src__empty"
                      x-show="srcSel.key && !srcState().loading && !srcState().err && !srcFiles().length">
                   這個來源沒有已上傳檔案。</div>

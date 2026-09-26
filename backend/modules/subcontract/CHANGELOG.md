@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.6 — 2026-09-26
+- 提供 `attachments.for_document`（IP-21 暫定號，主持裁示 M06-b）：派工單與承攬商發票的已上傳檔案（`attachments.py`）；M06 傳票帶入附件不再直讀 `contractor_dispatches`。本模組不在時，傳票頁明說「外包工班模組未安裝：派工單、承攬商發票的附件沒有列出」、帶入 400 並說明
+
 ## 1.0.5 — 2026-09-26
 - D7 演練：`module.json` 宣告 `provides.probes`（`/api/contractors`、`/api/vendor-contractors`、`/api/contractor-dispatches`、`/api/contractor-vouchers`）——純讀的 GET、在本模組前綴下、模組在時回 200（守門 `tests/platform/test_product_drill_probes.py`、`test_probe_side_effects.py`：不寫表、不寄信、不排程、不把回應值寫進 log）
 

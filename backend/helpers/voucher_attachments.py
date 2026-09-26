@@ -24,7 +24,6 @@ account_items  刪除走 SQL        => CREATE TRIGGER … RAISE(ABORT) 擋得到
 📌 而 `PRAGMA table_info` 是權威，`db.py` 的原始碼不是：用 regex 開視窗掃
    原始碼會跨到隔壁的 `CREATE TABLE`，**拿到一份混了別張表而看起來很完整的清單**。
 """
-import json
 import os
 import shutil
 import uuid
@@ -81,95 +80,67 @@ EXCLUDED_SOURCES = ("completion_note", "shipping_note", "dev_log",
 _OPTIONAL_META = ("size", "mime", "uploadedBy", "uploadedAt")
 
 
-def _quote_and_index(doc_no):
-    """`{quote_no}_{idx}` 拆成 `(quote_no, idx)`。拆不出來回 `(doc_no, None)`。
-
-    ⚠️ 從**右邊**切：報價單號本身含 `-` 不含 `_`，而索引一定在最後一段。
-    """
-    base, sep, tail = (doc_no or "").rpartition("_")
-    if sep and tail.isdigit():
-        return base, int(tail)
-    return doc_no, None
-
-
-def _json_col(conn, table, key_col, key, col):
-    row = conn.execute("SELECT %s AS v FROM %s WHERE %s = ?" % (col, table, key_col),
-                       (key,)).fetchone()
-    if row is None:
-        return []
-    try:
-        return json.loads(row["v"] or "[]") or []
-    except (TypeError, ValueError):
-        # ⚠️ 壞掉的 JSON **不要吞成空清單** —— 吞掉之後「這裡沒有附件」與
-        #    「這裡的資料壞了」在畫面上一模一樣。
-        raise HTTPException(400, "來源「%s」的附件資料格式不正確，無法帶入。" % table)
+#: 每一類來源由哪一個模組提供（`attachments.for_document`，主持裁示 M06-b）——只用在「模組不在」時說出是誰不在。
+#: 誰在場以登錄表為準（`_providers()`）；這張表只負責缺席時的那一句話。
+_SOURCE_OWNERS = {
+    "quotation_signed": ("case", "案件", "報價單回簽檔"),
+    "case_update": ("case", "案件", "案件動態"),
+    "payment_item": ("case", "案件", "收款項目發票影本"),
+    "material": ("case", "案件", "叫料附件"),
+    "material_invoice": ("case", "案件", "叫料發票／包裝清單"),
+    "extra_expense": ("case", "案件", "額外支出"),
+    "invoice_voucher": ("arap", "應收應付", "開票申請"),
+    "contractor_dispatch": ("subcontract", "外包工班", "派工單"),
+    "contractor_invoice": ("subcontract", "外包工班", "承攬商發票"),
+}
 
 
-def _case_record(conn, quote_no):
-    row = conn.execute("SELECT data_json FROM quotations WHERE quote_no = ?",
-                       (quote_no,)).fetchone()
-    if row is None:
-        return {}
-    try:
-        return (json.loads(row["data_json"] or "{}") or {}).get("caseRecord") or {}
-    except (TypeError, ValueError):
-        raise HTTPException(400, "案件「%s」的資料格式不正確，無法帶入。" % quote_no)
+def _providers():
+    """在場的附件來源：{來源類型: 提供者}。每次呼叫都查登錄表（模組啟停後不留舊值）。"""
+    from core import registry
+    out = {}
+    for prov in registry.providers("attachments.for_document").values():
+        for st in getattr(prov, "SOURCE_TYPES", ()):
+            out[st] = prov
+    return out
+
+
+def _absent_message(st, action):
+    owner = _SOURCE_OWNERS.get(st, ("", st, st))
+    return "%s模組未安裝，%s%s附件。" % (owner[1], action, owner[2])
+
+
+def unavailable_sources():
+    """白名單裡、提供者不在的類型 ⇒ `[{category, reason}]`（每個缺席模組一筆；畫面照列，不跟「沒有附件」混在一起）。"""
+    present = _providers()
+    missing = {}
+    for st in SOURCE_TYPES:
+        if st not in present:
+            key, label, what = _SOURCE_OWNERS.get(st, (st, st, st))
+            missing.setdefault(key, (label, []))[1].append(what)
+    return [{"category": key, "reason": "%s模組未安裝：%s的附件沒有列出" % (label, "、".join(whats))}
+            for key, (label, whats) in sorted(missing.items())]
 
 
 def source_files(conn, source_type, doc_no):
-    """某一個來源底下的檔案 metadata 陣列。找不到來源就回空清單。
-
-    ## 🔴 三個來源在 `quotations.data_json` 的陣列**裡面**
+    """某一個來源底下的檔案 metadata 陣列（經擁有模組的 `attachments.for_document` 提供者）。
 
     ```
-    payment_item      caseRecord.payment.items[idx].invoiceFiles
-    material          caseRecord.materials[idx].files
-    material_invoice  caseRecord.materials[idx].invoiceFiles
+    提供者不在            => 400「XX模組未安裝，無法帶入YY附件」（不回空清單：那與「沒有附件」一模一樣）
+    來源資料壞掉／編號不全 => 400（提供者的 AttachmentSourceError，原句）
+    單據不存在            => []
     ```
-    ⚠️ 「購料」**不在** `material_orders`（那張表 0 處 `files_json`）——
-       它掛在報價單底下的材料明細。☠️ 找錯地方會做出一個**永遠是空的清單，
-       而它不會報錯**。
     """
-    if source_type == "quotation_signed":
-        return _json_col(conn, "quotations", "quote_no", doc_no,
-                         "signed_files_json")
-    if source_type == "case_update":
-        # 一個案件有很多則動態 ⇒ 全部併起來（`file_id` 本來就唯一）。
-        out = []
-        for row in conn.execute(
-                "SELECT files_json FROM case_updates WHERE quote_no = ?", (doc_no,)):
-            try:
-                out += json.loads(row["files_json"] or "[]") or []
-            except (TypeError, ValueError):
-                raise HTTPException(400, "案件動態的附件資料格式不正確，無法帶入。")
-        return out
-    if source_type in ("payment_item", "material", "material_invoice"):
-        quote_no, idx = _quote_and_index(doc_no)
-        if idx is None:
-            raise HTTPException(
-                400, "來源編號「%s」缺少項目索引（應為「案件編號_序號」）。" % doc_no)
-        cr = _case_record(conn, quote_no)
-        if source_type == "payment_item":
-            arr = ((cr.get("payment") or {}).get("items") or [])
-            key = "invoiceFiles"
-        else:
-            arr = cr.get("materials") or []
-            key = "files" if source_type == "material" else "invoiceFiles"
-        if idx < 0 or idx >= len(arr):
-            return []
-        return (arr[idx] or {}).get(key) or []
-    if source_type == "extra_expense":
-        return _json_col(conn, "case_extra_expenses", "id", doc_no, "files_json")
-    if source_type == "invoice_voucher":
-        return _json_col(conn, "invoice_vouchers", "voucher_no", doc_no,
-                         "issued_files_json")
-    if source_type == "contractor_dispatch":
-        return _json_col(conn, "contractor_dispatches", "id", doc_no, "files_json")
-    if source_type == "contractor_invoice":
-        return _json_col(conn, "contractor_dispatches", "id", doc_no,
-                         "invoice_files_json")
-    # 🔑 走到這裡代表白名單與這支 if 鏈分岔了 —— 讓它**吵**，不要回空清單。
-    raise HTTPException(400, "不支援的附件來源「%s」。" % source_type)
+    if source_type not in SOURCE_TYPES:
+        # 🔑 走到這裡代表白名單與呼叫端分岔了 —— 讓它**吵**，不要回空清單。
+        raise HTTPException(400, "不支援的附件來源「%s」。" % source_type)
+    prov = _providers().get(source_type)
+    if prov is None:
+        raise HTTPException(400, _absent_message(source_type, "無法帶入"))
+    try:
+        return prov.files(conn, source_type, doc_no)
+    except _uploads.AttachmentSourceError as e:
+        raise HTTPException(400, str(e))
 
 
 def abs_path(rel):
@@ -275,71 +246,23 @@ def copy_into(voucher_id, src_abs, filename, subfolder="voucher_attachments"):
     return uuid.uuid4().hex[:8], rel, os.path.getsize(os.path.join(dest_dir, fname))
 
 
-#: 一個案件底下，每一類的 `doc_no` **怎麼從案件編號查出來**。
-#:
-#: 🔴 四類的 `doc_no` **不是案件編號**，而這四類原本整個選不到：
-#: ```
-#: extra_expense        自己的 id
-#: invoice_voucher      開票申請單號
-#: contractor_dispatch  派工 id
-#: contractor_invoice   派工 id   <= **與上一個完全相同**
-#: ```
-#: ☠️ 選不到的症狀是「這個案件的**承攬商發票**帶不進來」，
-#:    而畫面上看起來只是「沒有那一類」—— **不像一個缺陷**。
-#: ✅ 而修法很便宜：那四類的表**都有 `quote_no` 欄** ⇒ 一句 SELECT 就涵蓋得到，
-#:    **不需要新的選取介面**。
-#:
-#: ⚠️ 最後兩類共用**同一個 `doc_no`**（同一張派工單的兩個欄位）
-#:    ⇒ 清單的鍵必須是 **`(type, docNo)`**，只用 `docNo` 去重會把兩組併成一組
-#:    ☠️ 而少的那一組不會報錯：那張派工單還在，**只是少了一半**。
-_CASE_DOC_NO_SQL = {
-    "extra_expense":
-        "SELECT id AS k FROM case_extra_expenses WHERE quote_no = ? ORDER BY id",
-    "invoice_voucher":
-        "SELECT voucher_no AS k FROM invoice_vouchers WHERE quote_no = ? ORDER BY id",
-    "contractor_dispatch":
-        "SELECT id AS k FROM contractor_dispatches WHERE quote_no = ? ORDER BY id",
-    "contractor_invoice":
-        "SELECT id AS k FROM contractor_dispatches WHERE quote_no = ? ORDER BY id",
-}
-
-#: `doc_no` **就是案件編號**的那幾類。
-_CASE_DOC_NO_IS_QUOTE = ("quotation_signed", "case_update")
-
-#: `doc_no` 是 `{案件編號}_{索引}` 的那幾類（項目在 `data_json` 的陣列裡）。
-_CASE_DOC_NO_INDEXED = {
-    "payment_item": ("payment", "items"),
-    "material": (None, "materials"),
-    "material_invoice": (None, "materials"),
-}
-
-#: 一個案件底下**找得到附件的那幾類** —— 現在是**全部九類**。
-#: ⚙️ 它是算出來的，而下面那個 assert 在 import 時就會吵：
-#:    三份對照表的聯集必須剛好等於 `SOURCE_TYPES`。
-#: 🔑 少一類的症狀是「那一類永遠是空的清單，**而它不會報錯**」
-#:    ⇒ 讓它在**載入模組**的時候就壞，不要等到使用者發現。
+#: 一個案件底下，每一類的 `doc_no` 怎麼從案件編號查出來 ⇒ 由該類的提供者回答（`doc_nos_for_case`）。
+#: ⚠️ `contractor_dispatch` 與 `contractor_invoice` 共用同一個 `doc_no`（同一張派工單的兩個欄位）
+#:    ⇒ 清單的鍵必須是 **`(type, docNo)`**，只用 `docNo` 去重會把兩組併成一組，而少的那一組不會報錯。
+#: 🔑 「白名單每一類都有人提供」原本是 import 時的 assert；改成守門題
+#:    `tests/platform/test_attachments_providers.py`（模組可以不在，不能在載入時就壞）。
 _CASE_SCOPED = tuple(SOURCE_TYPES)
-assert set(_CASE_SCOPED) == (set(_CASE_DOC_NO_IS_QUOTE)
-                             | set(_CASE_DOC_NO_INDEXED)
-                             | set(_CASE_DOC_NO_SQL)), (
-    "三份 doc_no 對照表的聯集與 SOURCE_TYPES 對不上。")
 
 
-def _case_doc_nos(conn, source_type, quote_no):
-    """這一類在這個案件底下有哪些 `doc_no`。
-
-    ⚠️ 三種形狀各走各的路，**而它們不可以合成一條** ——
-       合起來的話，加一類新來源時要先猜它屬於哪一種。
-    """
-    if source_type in _CASE_DOC_NO_IS_QUOTE:
-        return [quote_no]
-    if source_type in _CASE_DOC_NO_INDEXED:
-        outer, key = _CASE_DOC_NO_INDEXED[source_type]
-        cr = _case_record(conn, quote_no)
-        arr = (cr.get(outer) or {}).get(key) if outer else cr.get(key)
-        return ["%s_%d" % (quote_no, i) for i in range(len(arr or []))]
-    sql = _CASE_DOC_NO_SQL[source_type]
-    return [str(r["k"]) for r in conn.execute(sql, (quote_no,))]
+def _case_doc_nos(conn, source_type, quote_no, providers=None):
+    """這一類在這個案件底下有哪些 `doc_no`；提供者不在 ⇒ []（缺席由 `unavailable_sources()` 另外說）。"""
+    prov = (providers if providers is not None else _providers()).get(source_type)
+    if prov is None:
+        return []
+    try:
+        return prov.doc_nos_for_case(conn, source_type, quote_no)
+    except _uploads.AttachmentSourceError as e:
+        raise HTTPException(400, str(e))
 
 
 def _used_map(conn):
@@ -436,9 +359,12 @@ def case_attachments(conn, quote_no):
     是「備註」不是「擋住」，擋住會把作廢重開那條合法路踩死）。
     """
     used_map = _used_map(conn)
+    providers = _providers()
     out = []
     for st in _CASE_SCOPED:
-        for doc_no in _case_doc_nos(conn, st, quote_no):
+        if st not in providers:
+            continue                      # 模組不在：這一類不列，`unavailable_sources()` 說明（不跟「沒有」混在一起）
+        for doc_no in _case_doc_nos(conn, st, quote_no, providers):
             for meta in source_files(conn, st, doc_no) or ():
                 out.append(_candidate(st, doc_no, meta, used_map))
     return _unused_first(out)

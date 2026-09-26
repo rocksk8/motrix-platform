@@ -196,6 +196,7 @@
    "units": [
     "core:completion_pdf",
     "helper:case_deadlines",
+    "helper:case_attachments",
     "helper:case_stage_tasks",
     "helper:quotations",
     "helper:quote_terms",
@@ -297,6 +298,7 @@
    "name": "外包工班",
    "units": [
     "mod:subcontract/__init__",
+    "mod:subcontract/attachments",
     "mod:subcontract/api/contractor_vouchers",
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",

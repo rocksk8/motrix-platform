@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.37 — 2026-09-26（A，attachments.for_document；列車上 core_bump 取號）
+- L1（新增）：`helpers.uploads.AttachmentSourceError`（附件來源解析不了；訊息給使用者，取用方原樣回 400，不吞成空清單）、`files_from_json_column(conn, table, key_col, key, col)`（某表某列 JSON 欄的檔案清單；列不存在 ⇒ []、壞掉 ⇒ 丟）。給各單據模組實作 `attachments.for_document` 提供者用（主持裁示 M06-b）
+
 ## 1.36 — 2026-09-26（C，M01-PLAN §3-2：兩支通用函式下沉 L1；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
 > 介面只有新增；舊位置保留同名別名（同一物件）。
 - L1（新增）：`helpers.dates.norm_at`、`helpers.tiered_approval.steps_to_tiers`（自 M01 `helpers/quotations.py` 的 `norm_at`、`_steps_to_tiers` 逐字搬入）
