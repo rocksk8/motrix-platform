@@ -6994,7 +6994,8 @@
     "helper:notification_prefs",
     "helper:privacy_notice",
     "helper:settings",
-    "plat:paths"
+    "plat:paths",
+    "router:mail_settings"
    ],
    "kind": "router",
    "path": "backend/routers/auth.py",
@@ -7170,55 +7171,55 @@
     },
     {
      "func": "get_user_privacy_ack",
-     "line": 1603,
+     "line": 1611,
      "method": "GET",
      "path": "/api/users/{user_id}/privacy-notice"
     },
     {
      "func": "ack_user_privacy_notice",
-     "line": 1610,
+     "line": 1618,
      "method": "POST",
      "path": "/api/users/{user_id}/privacy-notice/ack"
     },
     {
      "func": "delete_user",
-     "line": 1627,
+     "line": 1635,
      "method": "DELETE",
      "path": "/api/users/{user_id}"
     },
     {
      "func": "toggle_user_active",
-     "line": 1661,
+     "line": 1669,
      "method": "PATCH",
      "path": "/api/users/{user_id}/active"
     },
     {
      "func": "users_selectable",
-     "line": 1684,
+     "line": 1692,
      "method": "GET",
      "path": "/api/users/selectable"
     },
     {
      "func": "verify_unlock",
-     "line": 1697,
+     "line": 1705,
      "method": "POST",
      "path": "/api/auth/verify-unlock"
     },
     {
      "func": "set_unlock_password",
-     "line": 1717,
+     "line": 1725,
      "method": "PATCH",
      "path": "/api/users/{user_id}/unlock-password"
     },
     {
      "func": "verify_daily_task_unlock",
-     "line": 1746,
+     "line": 1754,
      "method": "POST",
      "path": "/api/auth/verify-daily-task-unlock"
     },
     {
      "func": "set_daily_task_password",
-     "line": 1765,
+     "line": 1773,
      "method": "PATCH",
      "path": "/api/users/{user_id}/daily-task-password"
     }
@@ -8604,6 +8605,7 @@
     "helper:auth",
     "helper:email_notify",
     "helper:mail_types",
+    "helper:notification_prefs",
     "helper:settings"
    ],
    "kind": "router",
@@ -8624,7 +8626,7 @@
     },
     {
      "func": "list_receivable",
-     "line": 111,
+     "line": 178,
      "method": "GET",
      "path": "/api/mail-types/receivable"
     }
