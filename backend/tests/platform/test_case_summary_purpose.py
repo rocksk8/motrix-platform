@@ -117,6 +117,14 @@ KNOWN_STAR_KWARGS = {
     ("pdf_gen.py", "build_quote_preview_html"): 1, ("pdf_gen.py", "generate_pdf_bytes"): 1,
     ("routers/quotations.py", "part"): 1, ("helpers/licensing.py", "_run"): 1,
 }
+#: 上面那張表的總數上限（稽核 D M06-S3）：只准變少。往表裡加一筆來放行新的 ** ⇒ 超過上限 ⇒ 紅
+#: （放行新的要主持裁示，並同時調高這個數字——兩處一起改，review 看得到）
+KNOWN_STAR_KWARGS_CAP = 6
+
+
+def star_cap_problems(known, cap=KNOWN_STAR_KWARGS_CAP):
+    total = sum(known.values())
+    return [] if total <= cap else ["KNOWN_STAR_KWARGS 共 %d 處，超過上限 %d（只准變少；放行新的 ** 要主持裁示）" % (total, cap)]
 
 
 def _star_kwargs(rel, tree):
@@ -251,4 +259,15 @@ def test_reverse_control_table_star_kwargs_and_positional():
     base = {"pdf_gen.py": "def generate_pdf_bytes(kw):\n    return g(**kw)\n"}
     assert purpose_violations(base) == []
     assert purpose_violations(base, known_star={})[0].startswith("pdf_gen.py::generate_pdf_bytes")
+
+
+def test_known_star_kwargs_total_is_capped():
+    """M06-S3：基線總數不可以超過上限（加一筆就紅）；反向控制：合成多一筆 ⇒ 紅，少一筆 ⇒ 過。"""
+    assert star_cap_problems(KNOWN_STAR_KWARGS) == []
+    more = dict(KNOWN_STAR_KWARGS)
+    more[("modules/supply/api/x.py", "f")] = 1
+    assert star_cap_problems(more) == [
+        "KNOWN_STAR_KWARGS 共 %d 處，超過上限 %d（只准變少；放行新的 ** 要主持裁示）" % (KNOWN_STAR_KWARGS_CAP + 1, KNOWN_STAR_KWARGS_CAP)]
+    fewer = dict(list(KNOWN_STAR_KWARGS.items())[1:])
+    assert star_cap_problems(fewer) == []
 
