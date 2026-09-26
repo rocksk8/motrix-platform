@@ -197,3 +197,25 @@
 - AT5-M1：`test_partially_visible_invoice_vouchers_list_the_visible_one`（只簽其中一張 ⇒ 那張列出、另一張進 hidden）。
 - 整個案件看不到（案件頁讀不到且沒有任何一筆看得到）或不存在 ⇒ 404，字句＝案件頁對不存在的回法；summary-sources 說明相同、hidden 空：`test_a_wholly_unseen_case_answers_like_a_missing_one`（含部分看得到 ⇒ 200＋hidden 的反向控制）。
 - 突變 6/6 紅。案件頁本身 403／404 可探知（M01-O1）不在本包。
+
+## 8. 複核：wip/a-attachments-6 fda2f092（AT5-M1＋整案看不到 ⇒ 同「不存在」；D 20:04）
+
+- 修法：
+  - `case_attachments`：沒有任何一筆看得到，而且案件頁也讀不到（含不存在）⇒ `CaseNotVisible`。
+  - line-source-files 與 line-source-file（預覽）⇒ 404 `CASE_NOT_FOUND`（「報價單 X 不存在」）。
+  - summary-sources：hidden 清空，「已上傳檔案」的說明改成同一句。
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| AT5-M1 部分可見：只列看得到的那張，其餘算進 hidden | 新題 `test_partially_visible_invoice_vouchers_list_the_visible_one`；突變 H1b「部分可見時丟掉看得到的」 | 紅 ⇒ **AT5-M1 關閉** |
+| 整案看不到 ⇒ 404，字句與不存在逐字相同；summary-sources 的 hidden 為空 | D 探針（不提交）：只持 finance 的陌生人，查「存在但看不到」的 MQ-DPROBE-1 與「不存在」的 MQ-DPROBE-9；單號替換成 `<REF>` 後比對 | list：兩者都是 `404 {"detail":"報價單 <REF> 不存在"}`；預覽：同；summary-sources：`hidden: []`，`notes.已上傳檔案` 同為「報價單 <REF> 不存在。」⇒ **成立** |
+| 反向控制：部分可見仍回 200＋hidden | 突變 N1「只要案件頁讀不到就 404（不看有沒有看得到的）」 | 紅（6 題）⇒ 成立 |
+| （D 追加）整案看不到仍回 hidden | 突變 N2 | 紅（2 題） |
+
+**觀察 AT6-O1（既有設計，不歸本包；請主持判斷）**：summary-sources 的「案件」頁籤（JV7）用 `quote_no LIKE ? OR customer_name LIKE ?` 列出**所有**案件的單號、客戶名、專案名、狀態，閘門只有 `_require_voucher_access`（cashier／finance）。
+- D 的探針裡，只持 finance 的陌生人不論查哪個單號，都在這個頁籤看到 MQ-DPROBE-1（客「客」、專案「案」）。
+- 所以對有傳票權限的人來說，本包「看不到的案件與不存在的逐字相同」擋不住探知案件：他本來就能在這裡列出所有案件。
+- 程式註解寫的是「閘門與傳票其餘端點同一道」，屬 JV7 當時的設計（會計要能選任何案件）。
+- 若主持要讓「看不到＝不存在」在傳票路徑上真的成立，這個頁籤也要依 `case_page_readable` 過濾；這與 c-case404 的一致性相關，建議一併裁示。
+
+⇒ a-attachments-6 通過；**AT5-M1 關閉（fda2f092）**。

@@ -69,6 +69,7 @@
 | a-attachments-5 3d12dc7b（A，第十班條件包） | D | `AUDIT-D-A-attachments.md` §7 | 稽核完成（2026-09-26 19:41）：**必修 1**（AT5-M1 同類部分可見時看得到的沒題守，突變 H1 存活）；hidden 只帶類別＋個數（探針無檔名／單號，H3 紅）、明說不靜默（H2 紅）；觀察 AT5-O1 |
 | b-genfiles-2 11937d60 複核（B，GF-M1／GF-M2） | D | `AUDIT-D-B-genfiles.md` §3 | 複核（2026-09-26 19:44）：**GF-M1、GF-M2 關閉**（突變 4/4 紅）；「提交只看已追蹤」取代髒樹拒絕——站得住；**新必修 GF2-M1**：分支刪掉既有 B-S4 題 test_rerun_keeps_history_and_gate_reports_earlier_reds |
 | M01 ① CA-O4（C，wip/c-m01-3 b3b3b9aa）＋GF2-M1 複核（B，b-genfiles-3 d5b95676） | D | `AUDIT-D-C-m01-3.md`、`AUDIT-D-B-genfiles.md` §4 | 完成（2026-09-26 19:53）：c-m01-3 必修 0（實刪 M01 11 檔後 80 個 L1 單位 import 0 失敗；pdf_gen 只剩 SELECT；K1 過期守門紅；觀察 plat 單位未探）；**GF2-M1 關閉**（B-S4 題逐字還原） |
+| a-attachments-6 fda2f092 複核（A，AT5-M1＋整案 404） | D | `AUDIT-D-A-attachments.md` §8 | 複核（2026-09-26 20:04）：**AT5-M1 關閉**（H1b 紅）；整案看不到與不存在逐字相同（探針 list／預覽 404 同句、summary hidden 空）、N1／N2 紅；觀察 AT6-O1：summary-sources 案件頁籤對傳票權限者列出所有案件（既有 JV7 設計），使「看不到＝不存在」在傳票路徑上不成立 |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 

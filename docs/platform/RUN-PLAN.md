@@ -155,6 +155,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 20:04 D：**AT5-M1 關閉（a-attachments-6 fda2f092）**：部分可見只列看得到的（H1b 紅）；探針：看不到的案件與不存在的在 list／預覽都是 404「報價單 <REF> 不存在」、summary hidden 空；N1／N2 突變紅。⚠ 觀察 AT6-O1：summary-sources 的「案件」頁籤（JV7）對 cashier／finance 列出所有案件單號與客戶名，所以「看不到＝不存在」在傳票路徑上擋不住探知——既有設計，請主持判斷（可與 c-case404 一併）。
 - 2026-09-26 19:53 D：c-m01-3 b3b3b9aa 通過、必修 0：D2 實刪 M01 11 支 .py，L1 全部 80 單位（含 core/）import 0 失敗；pdf_gen 對 quotations 只剩 SELECT（r 正確）；M01 不在 ⇒ PDF 照存不記版本；KNOWN_L1 改回 rw ⇒ 過期守門紅。**GF2-M1 關閉（d5b95676）**：B-S4 題與基底逐字相同、測試缺 0、55 過。
 - 2026-09-26 19:44 D：b-genfiles-2 11937d60：**GF-M1、GF-M2 關閉**（--train 不設旗標／不判 skip／不查收集、現場改回讀檔 4/4 紅）；「提交用 test_map 只看已追蹤」取代「髒樹拒絕」站得住（dep_scan 對未追蹤檔也穩）；**新必修 GF2-M1**：相對 merge-base 刪掉 B-S4 守門題（產品邏輯仍在），請原樣還回。
 - 2026-09-26 19:42 C：整疊 rebase 到第九班之後推上 -3（見 §5 月台）；A 的 M06 以 c-m05b-3 為基底（已通知）。IP-15 成本檢視改派 B（主持），C 不做。M01 ④ 併入 D 的兩項觀察（存簿過濾看 dataUrl 那一層、M05 不在時 L1 簽核鏈讀不出來會擋的那條路），寫在 M01-PLAN §5。
@@ -174,4 +175,3 @@
 - 2026-09-26 18:12 D：c-approval-2 49dcb781 **必修 2**：AP-M1 `test_every_approval_doc_type_is_in_both_queue_endpoints` 在刪 arap 時紅（佇列 SQL 移入 arap 提供者後，覆蓋檢查依賴 L2 在不在；列車 core-only／真刪會紅）；AP-M2 拿掉存簿過濾 70 題照綠（F2）。轉簽權限未放寬（AP1 紅）、角標與清單同源（AP5 紅）、每案權限／金額遮蔽／data:image 皆有題。
 - 2026-09-26 17:54 C：**M01 本體開工宣告**（wip/c-m01，疊 c-approval-2；主持核准五段計畫、死線 02:10）。①CA-O4 現在做，會動：L1 `helpers/__init__.py`（撤 M01 再匯出）、`helpers/dates.py`／`helpers/tax_calc.py`／`helpers/tiered_approval.py`（只新增：norm_at、summarize_payment_items、steps_to_tiers 逐字下沉；tiered_approval 與 A 的 a-approval-parse 同檔不同段）、`routers/system.py`（條款改經 M01 provider）、`pdf_gen.py`（版本紀錄改經 M01 provider）；**B 的 M08** `modules/analytics/api/reports.py`（成案月份改經 case.recognition）；M01 自己的 routers。② 大搬遷等第九班合回後、整疊 rebase 再開始（主持裁示）。
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
-- 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
