@@ -267,8 +267,8 @@ _BASELINE_B = {
     ("backend\\routers\\quotations.py", "approve_quotation"),
     ("backend\\modules\\supply\\api\\shipping_notes.py", "submit_shipping_note"),
     ("backend\\modules\\supply\\api\\shipping_notes.py", "approve_shipping_note"),
-    ("backend\\routers\\vouchers.py", "submit_voucher"),
-    ("backend\\routers\\vouchers.py", "update_voucher"),
+    ("backend\\modules\\accounting\\api\\vouchers.py", "submit_voucher"),   # M06 搬遷（2026-09-26）
+    ("backend\\modules\\accounting\\api\\vouchers.py", "update_voucher"),
 }
 
 

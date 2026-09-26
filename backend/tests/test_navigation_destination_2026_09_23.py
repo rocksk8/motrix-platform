@@ -49,6 +49,7 @@ import pathlib
 import re
 
 import pytest
+from core import source_tree
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -176,7 +177,10 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 139   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+_BASELINE_COUNT = 135   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+#: 〔2026-09-26 M06 搬遷：139 → 135。會計的 4 條（voucher_pdf 的附件遺失提示、T100 科目代號、傳票附件兩條「請至少選擇」）
+#:   隨 routers／helpers 搬進 modules/accounting/；同一個掃描器含 modules/ 的總數搬遷前（00fd7643）後都是 157
+#:   ⇒ 沒有任何一句被刪，只是換了位置〕
 #: 〔2026-09-26 M05 搬遷：141 → 139。開票申請與請款單各 1 條「請至少選擇一項品項」隨 routers/ 搬進 modules/arap/api/；
 #:   同一個掃描器含 modules/ 的總數搬遷前後都是 157 ⇒ 沒有任何一句被刪，只是換了位置〕
 #: 〔2026-09-26 第六班列車：142 → 141。M04／M07／M08 同班搬進 modules/ 共 9 條（subcontract 2、payroll 4、analytics 3），
@@ -240,8 +244,10 @@ def test_em10_t100_account_code_message_points_to_the_wrong_place():
     # （`"…科目代號：" + "、".join(...) + "（請至系統設定…）"`），
     # `ast` 把它們拆成三個獨立的 `Constant` 節點——「科目代號」與
     # 「請至系統設定」不在同一個節點裡，錨點只能定在含語氣詞的那一段。
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     msg = next((s for s in _string_literals_in_py(
-                   ROOT / "backend" / "routers" / "accounting_export.py")
+                   ROOT / "backend" / "modules" / "accounting" / "api" / "accounting_export.py")
                if "匯入 T100" in s and _has_nav_tone(s)), None)
     assert msg is not None, "找不到 T100 那句導航訊息——退回改本檔的錨點。"
     assert "系統設定" not in msg, (

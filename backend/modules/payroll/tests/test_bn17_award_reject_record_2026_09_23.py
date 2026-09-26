@@ -225,6 +225,7 @@ def test_bn17_negative_control_an_award_never_rejected_has_no_last_reject(
 
 import ast
 import pathlib
+from core import source_tree
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 
@@ -270,7 +271,7 @@ def _extract_function_source(path, func_name):
 _REASON_GUARD_FAMILY = (
     ("modules/payroll/api/bonus.py", "reject_award"),
     ("modules/payroll/api/bonus.py", "mark_award_paid"),
-    ("routers/vouchers.py", "void_voucher"),
+    ("modules/accounting/api/vouchers.py", "void_voucher"),   # M06 搬遷（2026-09-26）；M06 不在時不比
 )
 
 
@@ -278,6 +279,8 @@ _REASON_GUARD_FAMILY = (
 def test_bn17_reason_guard_family_all_reject_empty_reason(relpath, func_name):
     """🔴🔴 **這一族裡每一支，讀了 `reason` 就要擋空字串——`reject_award`
     是本題新補上的第三支，另外兩支是既有的正對照。**"""
+    if not source_tree.module_installed(relpath):
+        pytest.skip("%s 的模組不在這個安裝包（PLAYBOOK §B-11）" % relpath)
     path = ROOT / relpath
     src = _extract_function_source(path, func_name)
     assert src is not None, "在 %s 裡找不到 %s()。" % (relpath, func_name)
