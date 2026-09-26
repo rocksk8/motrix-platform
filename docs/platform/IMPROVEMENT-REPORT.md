@@ -72,6 +72,7 @@
 | a-attachments-6 fda2f092 複核（A，AT5-M1＋整案 404） | D | `AUDIT-D-A-attachments.md` §8 | 複核（2026-09-26 20:04）：**AT5-M1 關閉**（H1b 紅）；整案看不到與不存在逐字相同（探針 list／預覽 404 同句、summary hidden 空）、N1／N2 紅；觀察 AT6-O1：summary-sources 案件頁籤對傳票權限者列出所有案件（既有 JV7 設計），使「看不到＝不存在」在傳票路徑上不成立 |
 | O9-2 傳票開單序號（B，wip/b-o9-2 ab182226） | D | `AUDIT-D-B-o9-2.md` | 稽核完成（2026-09-26 20:52）：必修 0、建議 2（新題交錯仍靠 1.5 秒窗；「新增作廢在途」無題）；拿掉序號 3/3 紅；其他 open() 路徑無誤丟 |
 | O92-S1／S2 複核（B，wip/b-o9-3 17c6adfe） | D | `AUDIT-D-B-o9-2.md` §3 | 複核（2026-09-26 20:58）：**O92-S1、S2 關閉**——拿掉序號＋點 B 前加等 3 秒仍紅（無時間窗）；新增作廢在途突變紅 |
+| e2e 逐題上限目錄收尾（B，wip/b-hardcap-dir 0eddad8d，輕量） | D | `AUDIT-D-B-hardcap-dir.md` | 完成（2026-09-26 21:28）：通過、必修 0（只主控、只 rmdir 空目錄、逾時檔保留、uuid 每次執行獨立；HC1／HC2 紅）；觀察：%TEMP% 已累積 1085 個舊 hardcap 目錄待清 |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 

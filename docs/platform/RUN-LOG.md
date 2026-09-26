@@ -2,6 +2,7 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 18:12 D：c-approval-2 49dcb781 **必修 2**：AP-M1 `test_every_approval_doc_type_is_in_both_queue_endpoints` 在刪 arap 時紅（佇列 SQL 移入 arap 提供者後，覆蓋檢查依賴 L2 在不在；列車 core-only／真刪會紅）；AP-M2 拿掉存簿過濾 70 題照綠（F2）。轉簽權限未放寬（AP1 紅）、角標與清單同源（AP5 紅）、每案權限／金額遮蔽／data:image 皆有題。
 - 2026-09-26 17:54 C：**M01 本體開工宣告**（wip/c-m01，疊 c-approval-2；主持核准五段計畫、死線 02:10）。①CA-O4 現在做，會動：L1 `helpers/__init__.py`（撤 M01 再匯出）、`helpers/dates.py`／`helpers/tax_calc.py`／`helpers/tiered_approval.py`（只新增：norm_at、summarize_payment_items、steps_to_tiers 逐字下沉；tiered_approval 與 A 的 a-approval-parse 同檔不同段）、`routers/system.py`（條款改經 M01 provider）、`pdf_gen.py`（版本紀錄改經 M01 provider）；**B 的 M08** `modules/analytics/api/reports.py`（成案月份改經 case.recognition）；M01 自己的 routers。② 大搬遷等第九班合回後、整疊 rebase 再開始（主持裁示）。
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
