@@ -127,7 +127,7 @@ M06 的 `vouchers_all`。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M05 `routers/invoice_vouchers.py`（`invoice_voucher`）、`routers/payment_requests.py`（`payment_request`）；M03 `modules/supply/api/shipping_notes.py`（`shipping_note`）；M01 `routers/quotations.py`（`quotation`、`case_stage`） |
+| 提供方 | M05 `modules/arap/api/invoice_vouchers.py`（`invoice_voucher`）、`modules/arap/api/payment_requests.py`（`payment_request`）；M03 `modules/supply/api/shipping_notes.py`（`shipping_note`）；M01 `routers/quotations.py`（`quotation`、`case_stage`） |
 | 使用方 | L1 `helpers/google_calendar.py::_write_back`（`push_event_for_invoice_voucher`／`payment_request`／`shipping_note`／`quotation_won`／`case_stage_due`／`case_stage_done`） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("calendar.writeback")[kind]`） |
 | 語法 | 提供：`_registry.provide("calendar.writeback", "<kind>", fn)`<br>取用：`registry.providers("calendar.writeback").get(kind)`；`None` ⇒ 退化。`fn(key, event_id, slot="default")`；`case_stage` 的 `slot` ∈ `due`（到期日事件）／`done`（完成日事件），其他值 ⇒ `KeyError`（不猜欄位） |
@@ -165,7 +165,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_Payouts`（`pending`／`paid`） |
-| 使用方 | M05 `routers/cashier.py`：`GET /api/cashier/bonus-queue`（出納頁「獎金待發放」子頁籤）、`_execution_history`（執行歷史「獎金分潤發放」區塊）、`GET /api/cashier/export`（Excel 第三張「獎金發放明細」）；頁面 `pages/cashier.html`、`js/cashier.js` |
+| 使用方 | M05 `modules/arap/api/cashier.py`：`GET /api/cashier/bonus-queue`（出納頁「獎金待發放」子頁籤）、`_execution_history`（執行歷史「獎金分潤發放」區塊）、`GET /api/cashier/export`（Excel 第三張「獎金發放明細」）；頁面 `pages/cashier.html`、`js/cashier.js` |
 | 形式 | provider，單一提供者（`core.registry`；M07 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
 | 語法 | 提供：`registry.provide("bonus.payouts", "payroll", _Payouts)`<br>取用：`p = registry.single_provider("bonus.payouts")`；`None` ⇒ 退化。`p.pending(conn)`；`p.paid(conn, start, end)`（YYYY-MM-DD，含首尾，比發放日） |
 | 回傳 | `pending`：`[{quoteNo, customer, project, total, people, approvedAt}]`（舊的在前）。`paid`：`[{quoteNo, customer, project, total, people, paidAt, paidBy, withholding, nhiPremium, net}]`；扣繳快照不存在（U4 接上前發放的）⇒ 後三者 **`None`（不是 0）**。只回案件合計與人數，**不回個人金額**（個人明細在獎金頁，C1 可見範圍） |
@@ -235,15 +235,50 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M04 外包工班：`modules/subcontract/api/contractor_vouchers.py::_voucher_public` |
-| 使用方 | M05 `routers/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
+| 使用方 | M05 `modules/arap/api/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
 | 形式 | provider，單一提供者 |
 | 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
 | 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
 | 對方不在時 | 出納待付款：`404`＋`CONTRACTOR_MISSING`（「外包工班模組未安裝：出納頁不顯示承攬商匯款」），頁面顯示這一句；執行歷史：`outgoing` 空、`contractorNotice` 明說，Excel「已匯款明細」第一列寫同一句；T100 預覽：`notice`＝`T100_CONTRACTOR_MISSING`（匯出的 Excel 是 T100 匯入檔，不加說明列）。皆不丟例外 |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | 提供方 `backend/modules/subcontract/tests/test_subcontract_providers.py`：正對照；取用方 `backend/tests/platform/test_subcontract_connectors.py`：待付 404＋原因、執行歷史 contractorNotice、Excel 第一列、T100 預覽 notice；畫面 `test_e2e_cashier_subcontract_absent_notice_2026_09_26`。突變：出納不看提供者、不說缺（兩處）、畫面吞掉 404 ⇒ 紅 |
+| 守門 | 提供方 `backend/modules/subcontract/tests/test_subcontract_providers.py`：正對照；取用方 `backend/modules/arap/tests/test_subcontract_connectors.py`（出納／T100 那一題，2026-09-26 隨 M05 搬）＋`backend/tests/platform/test_subcontract_connectors.py`（其餘）：待付 404＋原因、執行歷史 contractorNotice、Excel 第一列、T100 預覽 notice；畫面 `test_e2e_cashier_subcontract_absent_notice_2026_09_26`。突變：出納不看提供者、不說缺（兩處）、畫面吞掉 404 ⇒ 紅 |
 
 **尚未處理**：M01／M05／M06／M08 與 L1（封存、PDF、報表、傳票附件）仍**直接讀** `contractor_payment_vouchers`、`contractor_dispatches`、`vendor_contractors`、`contractors`；M04 不在時表仍在（凍結 migration），讀取不會壞。讀取連接器另開題。
+
+
+---
+
+## IP-98　`receivables.income_items`：收款明細（M05 → M08 現金口徑收入）
+
+對應 ROADMAP A8b（資料擁有權在 M05）。M08 搬遷 ③ 時先下沉 L1 `helpers/receivables.py` 當中繼；M05 搬遷（2026-09-26）收回 `modules/arap/receivables.py`，對外只經本串接點。**編號暫定（98），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M05 應收應付：`modules/arap/receivables.py::collect_income_items`（`ModuleSpec.providers`，模組沒載入就沒有登記） |
+| 使用方 | M08 `modules/analytics/api/reports.py::_build_income_expense_scopes`（現金口徑：當月／今年度／季收入；權責口徑不用它）；L1 殼 `helpers/receivables.py::collect_income_items`（淘汰中，下一個主版號刪除） |
+| 形式 | provider，單一提供者 |
+| 語法 | 提供：`ModuleSpec(providers={("receivables.income_items", "arap"): receivables.collect_income_items})`<br>取用：`p = registry.single_provider("receivables.income_items")`；`None` ⇒ 退化。`p(d0, d1, department_id=None) -> list` |
+| 回傳 | 已收款品項落在 `[d0, d1]` 的逐筆明細（欄位同 `collect_income_items` 的 docstring：quoteNo、customer、amount、netAmount、receivedAt…） |
+| 對方不在時 | M08：收入清單為空，回應附 `incomeNotice`＝`RECEIVABLES_MISSING`（「應收應付模組未安裝：收款與銷項發票資料不提供…」），PDF 的空表說明換成這一句——**不是**「這個月沒有收款」；L1 殼回 `[]` |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | 提供方 `backend/modules/arap/tests/test_receivables_providers.py`（登記＋正對照）；取用方 `backend/tests/platform/test_receivables_absent.py`（M05 不在：M08 incomeNotice、稅務匯出 404、T100 notice）；殼 `backend/tests/platform/test_receivables_shim.py` |
+
+---
+
+## IP-99　`receivables.tax_invoices`：銷項發票清單（M05 → M08 稅務匯出、M06 T100 收款事件）
+
+同 IP-98 的沿革。**編號暫定（99），列車定號。**
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M05 應收應付：`modules/arap/receivables.py::collect_tax_invoices` |
+| 使用方 | M08 `modules/analytics/api/reports.py::tax_export_excel`（`/api/reports/tax-export`）；M06 `routers/accounting_export.py::_collect_t100_events`（收款事件）；L1 殼 `helpers/receivables.py::collect_tax_invoices`（淘汰中） |
+| 形式 | provider，單一提供者 |
+| 語法 | 提供：`ModuleSpec(providers={("receivables.tax_invoices", "arap"): receivables.collect_tax_invoices})`<br>取用：`p = registry.single_provider("receivables.tax_invoices")`；`p(year=None, month=None) -> list` |
+| 回傳 | 已填發票號碼的收款品項（quoteNo、invoiceNo、date、invoiceDate、未稅／稅額／含稅…） |
+| 對方不在時 | M08 稅務匯出：404＋`RECEIVABLES_MISSING`（沒有資料來源，不回空的 Excel 假裝沒有發票）；M06 T100：收款事件略過，預覽 `notice` 列出 `T100_RECEIVABLES_MISSING`（「應收應付模組未安裝：T100 匯出不含收款事件（銷項）」），與 IP-14 的缺口並列；L1 殼 404 |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | 同 IP-98 |
 
 ---
 

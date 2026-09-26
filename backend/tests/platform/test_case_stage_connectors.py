@@ -165,8 +165,8 @@ def test_m01_and_l1_no_longer_write_foreign_tables():
 
 #: 各 kind 的提供方檔：已搬進 modules/ 的 kind 在模組不在時本來就不登記（PLAYBOOK §B-11）
 IP6_OWNERS = {
-    "invoice_voucher": "routers/invoice_vouchers.py",
-    "payment_request": "routers/payment_requests.py",
+    "invoice_voucher": "modules/arap/api/invoice_vouchers.py",
+    "payment_request": "modules/arap/api/payment_requests.py",
     "shipping_note": "modules/supply/api/shipping_notes.py",
     "quotation": "routers/quotations.py",
     "case_stage": "routers/quotations.py",
@@ -175,7 +175,7 @@ IP6_OWNERS = {
 
 def test_calendar_writeback_every_owner_registers_its_writeback(client):
     """client 夾具＝載入器掛好已安裝的模組（ModuleSpec.providers 在那時登記）。"""
-    import routers.invoice_vouchers, routers.payment_requests, routers.quotations  # noqa: F401,E401
+    import routers.quotations  # noqa: F401  （M05 的兩支由載入器掛載）
     want = {k for k, f in IP6_OWNERS.items() if source_tree.module_installed(f)}
     assert "quotation" in want and set(registry.providers("calendar.writeback")) == want
 

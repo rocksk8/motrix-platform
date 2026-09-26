@@ -31,7 +31,7 @@ _UNTOUCHED = (
      '這張獎金分潤單已經發放，不能直接作廢——錢已經出去了，請先開立沖銷傳票，沖銷完成後再處理這張單。'),
     ('routers/case_extra_expenses.py',
      '這筆額外支出已核准，附件已上鎖。要補憑證請按「編輯」提出變更申請，新附件會在簽核通過後一併生效'),
-    ('routers/cashier.py',
+    ('modules/arap/api/cashier.py',
      'status 必須為 unreceived／received／all'),
     ('routers/completion_notes.py',
      '已回簽（客戶已驗收）的完工單不可撤銷核准，請先取消回簽'),

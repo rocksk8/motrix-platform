@@ -452,10 +452,14 @@ function cashierApp() {
           headers: { Authorization: 'Bearer ' + this._token() },
           body: fd,
         })
-        // M08 搬遷（主持裁示 A）：銀行對帳目前由「營運報表」模組提供（M05 搬遷時收回，ROADMAP M05）。
-        // 模組不在 ⇒ 路由不存在：GET 會 404，POST 可能落到靜態檔 mount 而回 405 ⇒ 兩者都明說原因，不顯示 "Not Found"。
+        // 銀行對帳屬 M05 應收應付（2026-09-26 自 M08 收回，路徑不變）。
+        // ① 端點回 404 並帶說明（例：外包工班模組未安裝 ⇒ 沒有承攬商匯款申請可比對）⇒ 照伺服器的說明顯示
+        // ② 路由不存在（本模組不在）：404 "Not Found" 或 POST 落到靜態檔 mount 的 405 ⇒ 明說需要哪個模組，不顯示 "Not Found"
         if (res.status === 404 || res.status === 405) {
-          throw new Error('銀行對帳需要「營運報表」模組，目前未啟用；請洽管理者於「系統 → 模組管理」確認')
+          var nf = await res.json().catch(function () { return {} })
+          var d = nf.detail || ''
+          if (d && d !== 'Not Found' && d !== 'Method Not Allowed') throw new Error(d)
+          throw new Error('銀行對帳需要「應收應付」模組，目前未啟用；請洽管理者於「系統 → 模組管理」確認')
         }
         if (!res.ok) {
           var j = await res.json().catch(function () { return {} })
