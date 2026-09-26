@@ -14,10 +14,14 @@
 
 M01 尚未搬進 modules/ ⇒ 以 `registry.provide()` 在匯入時登記（同 `helpers/quotations.py` 的 case.access）；
 M01 搬遷時改寫進 `ModuleSpec.providers`（M01-PLAN，同 CA-O3）。
+
+權限（稽核 D AT-M1，主持裁示 (b)）：每一類都先確認使用者看得到那張案件（`case_documents_readable`），
+看不到 ⇒ raise `AttachmentNotVisible`（取用方：列清單時不列、帶入／預覽 403）。
 """
 import json
 
-from helpers.uploads import AttachmentSourceError, files_from_json_column
+from helpers.case_access import case_documents_readable
+from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
 
 
 def _quote_and_index(doc_no):
@@ -51,13 +55,31 @@ def _items(cr, outer, key):
     return ((cr.get(outer) or {}).get(key) if outer else cr.get(key)) or []
 
 
+def _quote_of(conn, source_type, doc_no):
+    """這一筆來源屬於哪一張案件；來源不存在 ⇒ None。"""
+    if source_type in ("quotation_signed", "case_update"):
+        return doc_no
+    if source_type in _INDEXED:
+        return _quote_and_index(doc_no)[0]
+    if source_type == "extra_expense":
+        row = conn.execute("SELECT quote_no FROM case_extra_expenses WHERE id = ?", (doc_no,)).fetchone()
+        return row["quote_no"] if row else None
+    raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+
+
+def _require_readable(conn, quote_no, user):
+    if not case_documents_readable(conn, quote_no, user):
+        raise AttachmentNotVisible()
+
+
 class _CaseAttachments:
     LABEL = "案件"
     SOURCE_TYPES = ("quotation_signed", "case_update", "payment_item", "material", "material_invoice",
                     "extra_expense")
 
     @staticmethod
-    def doc_nos_for_case(conn, source_type, quote_no):
+    def doc_nos_for_case(conn, source_type, quote_no, user):
+        _require_readable(conn, quote_no, user)
         if source_type in ("quotation_signed", "case_update"):
             return [quote_no]
         if source_type in _INDEXED:
@@ -69,7 +91,11 @@ class _CaseAttachments:
         raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
 
     @staticmethod
-    def files(conn, source_type, doc_no):
+    def files(conn, source_type, doc_no, user):
+        quote_no = _quote_of(conn, source_type, doc_no)
+        if quote_no is None or conn.execute("SELECT 1 FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone() is None:
+            return []                                     # 來源不存在（契約：[]）
+        _require_readable(conn, quote_no, user)
         if source_type == "quotation_signed":
             return files_from_json_column(conn, "quotations", "quote_no", doc_no, "signed_files_json")
         if source_type == "case_update":

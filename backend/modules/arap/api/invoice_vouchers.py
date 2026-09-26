@@ -891,18 +891,27 @@ class _InvoiceVoucherAttachments:
     SOURCE_TYPES = ("invoice_voucher",)
 
     @staticmethod
-    def doc_nos_for_case(conn, source_type, quote_no):
-        from helpers.uploads import AttachmentSourceError
+    def doc_nos_for_case(conn, source_type, quote_no, user):
+        from helpers.case_access import case_documents_readable
+        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError
         if source_type != "invoice_voucher":
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        if not case_documents_readable(conn, quote_no, user):        # 同開票申請清單的讀取規則（AT-M1）
+            raise AttachmentNotVisible()
         return [str(r["k"]) for r in conn.execute(
             "SELECT voucher_no AS k FROM invoice_vouchers WHERE quote_no = ? ORDER BY id", (quote_no,))]
 
     @staticmethod
-    def files(conn, source_type, doc_no):
-        from helpers.uploads import AttachmentSourceError, files_from_json_column
+    def files(conn, source_type, doc_no, user):
+        from helpers.case_access import case_documents_readable
+        from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
         if source_type != "invoice_voucher":
             raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
+        row = conn.execute("SELECT quote_no FROM invoice_vouchers WHERE voucher_no = ?", (doc_no,)).fetchone()
+        if row is None:
+            return []
+        if not case_documents_readable(conn, row["quote_no"], user):
+            raise AttachmentNotVisible()
         return files_from_json_column(conn, "invoice_vouchers", "voucher_no", doc_no, "issued_files_json")
 
 

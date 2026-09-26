@@ -145,3 +145,15 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
         _txn.safe_close(conn)
         raise HTTPException(403, CASE_ACCESS.deny_message)
     return q
+
+
+def case_documents_readable(conn, quote_no: str, user: dict) -> bool:
+    """這個人看不看得到某張案件**底下的單據**（出貨單、派工單、開票申請、案件附件…）。
+
+    與各單據清單的讀取規則同一份：`case_access_allowed(..., allow_module="case_manage")`（案件業務／協作者、
+    admin+，或持有案件管理模組）。案件不存在或 M01 不在 ⇒ False。給 `attachments.for_document` 的提供者用
+    （稽核 D AT-M1，主持裁示 (b)：只列、只預覽、只帶入看得到原單據的附件）。"""
+    if not quote_no:
+        return False
+    q = conn.execute("SELECT * FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
+    return bool(q) and case_access_allowed(conn, q, user, allow_module="case_manage")

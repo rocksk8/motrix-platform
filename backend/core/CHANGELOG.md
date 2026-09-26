@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.44 — 2026-09-26（A，attachments.for_document 加權限；稽核 D AT-M1，主持裁示 (b)；第十班列車取號，原暫用 1.38）
+- L1（新增）：`helpers.uploads.AttachmentNotVisible`（使用者看不到附件的原單據；取用方列清單時不列、帶入／預覽 403）、`helpers.case_access.case_documents_readable(conn, quote_no, user)`（案件底下的單據准不准讀：與各單據清單同一份規則，`case_access_allowed(..., allow_module="case_manage")`；案件不存在 ⇒ False）
+
 ## 1.43 — 2026-09-26（A，attachments.for_document；第十班列車取號，原暫用 1.37）
 - L1（新增）：`helpers.uploads.AttachmentSourceError`（附件來源解析不了；訊息給使用者，取用方原樣回 400，不吞成空清單）、`files_from_json_column(conn, table, key_col, key, col)`（某表某列 JSON 欄的檔案清單；列不存在 ⇒ []、壞掉 ⇒ 丟）。給各單據模組實作 `attachments.for_document` 提供者用（主持裁示 M06-b）
 

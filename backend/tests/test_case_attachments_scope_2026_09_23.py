@@ -161,7 +161,7 @@ def _listed(seeded_ignored=None):
     import db
     conn = db.get_db()
     try:
-        return _helpers().case_attachments(conn, QUOTE_NO)
+        return _helpers().case_attachments(conn, QUOTE_NO, {"id": 0, "username": "att_test_root", "role": "superadmin", "modules": []})  # 驗清單內容，不是權限（權限見 test_attachments_providers）
     finally:
         conn.close()
 

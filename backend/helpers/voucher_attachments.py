@@ -122,11 +122,12 @@ def unavailable_sources():
             for key, (label, whats) in sorted(missing.items())]
 
 
-def source_files(conn, source_type, doc_no):
+def source_files(conn, source_type, doc_no, user):
     """某一個來源底下的檔案 metadata 陣列（經擁有模組的 `attachments.for_document` 提供者）。
 
     ```
     提供者不在            => 400「XX模組未安裝，無法帶入YY附件」（不回空清單：那與「沒有附件」一模一樣）
+    看不到原單據          => 403（稽核 D AT-M1：只列、只預覽、只帶入使用者看得到的原單據的附件）
     來源資料壞掉／編號不全 => 400（提供者的 AttachmentSourceError，原句）
     單據不存在            => []
     ```
@@ -138,7 +139,9 @@ def source_files(conn, source_type, doc_no):
     if prov is None:
         raise HTTPException(400, _absent_message(source_type, "無法帶入"))
     try:
-        return prov.files(conn, source_type, doc_no)
+        return prov.files(conn, source_type, doc_no, user)
+    except _uploads.AttachmentNotVisible:
+        raise HTTPException(403, "你沒有權限查看這筆附件的原單據。")
     except _uploads.AttachmentSourceError as e:
         raise HTTPException(400, str(e))
 
@@ -166,7 +169,7 @@ def describe_missing(meta):
     return [k for k in _OPTIONAL_META if not (meta or {}).get(k)]
 
 
-def resolve_picks(conn, picks):
+def resolve_picks(conn, picks, user):
     """把 `[{type, docNo, fileId}]` 解析成可以複製的清單。
 
     ## 🔴 **先把全部來源檔檢查完，再開始複製**
@@ -194,7 +197,7 @@ def resolve_picks(conn, picks):
             raise HTTPException(400, "不支援的附件來源「%s」。" % st)
         if not doc_no or not file_id:
             raise HTTPException(400, "第 %d 筆帶入缺少來源編號或檔案編號。" % i)
-        files = source_files(conn, st, doc_no)
+        files = source_files(conn, st, doc_no, user)
         meta = next((f for f in files
                      if str((f or {}).get("id") or "") == file_id), None)
         if meta is None:
@@ -254,13 +257,16 @@ def copy_into(voucher_id, src_abs, filename, subfolder="voucher_attachments"):
 _CASE_SCOPED = tuple(SOURCE_TYPES)
 
 
-def _case_doc_nos(conn, source_type, quote_no, providers=None):
-    """這一類在這個案件底下有哪些 `doc_no`；提供者不在 ⇒ []（缺席由 `unavailable_sources()` 另外說）。"""
+def _case_doc_nos(conn, source_type, quote_no, user, providers=None):
+    """這一類在這個案件底下有哪些 `doc_no`；提供者不在 ⇒ []（缺席由 `unavailable_sources()` 另外說）；
+    看不到那張案件的單據 ⇒ []（不列，AT-M1）。"""
     prov = (providers if providers is not None else _providers()).get(source_type)
     if prov is None:
         return []
     try:
-        return prov.doc_nos_for_case(conn, source_type, quote_no)
+        return prov.doc_nos_for_case(conn, source_type, quote_no, user)
+    except _uploads.AttachmentNotVisible:
+        return []
     except _uploads.AttachmentSourceError as e:
         raise HTTPException(400, str(e))
 
@@ -341,7 +347,7 @@ def expense_line_uses(conn):
         extra_where="vl.source_type IN (%s)" % types)
 
 
-def case_attachments(conn, quote_no):
+def case_attachments(conn, quote_no, user):
     """一個案件底下所有**可帶入**的憑證。回 `[{type, docNo, fileId, filename, …}]`。
 
     ⚠️ 實體檔不存在的那幾筆**照樣列出來並標記** ——
@@ -364,8 +370,8 @@ def case_attachments(conn, quote_no):
     for st in _CASE_SCOPED:
         if st not in providers:
             continue                      # 模組不在：這一類不列，`unavailable_sources()` 說明（不跟「沒有」混在一起）
-        for doc_no in _case_doc_nos(conn, st, quote_no, providers):
-            for meta in source_files(conn, st, doc_no) or ():
+        for doc_no in _case_doc_nos(conn, st, quote_no, user, providers):
+            for meta in source_files(conn, st, doc_no, user) or ():
                 out.append(_candidate(st, doc_no, meta, used_map))
     return _unused_first(out)
 
@@ -414,7 +420,7 @@ def _unused_first(out):
 LINE_SOURCES = ("case", "extra_expense", "contractor_dispatch")
 
 
-def line_source_files(conn, source_type, source_key):
+def line_source_files(conn, source_type, source_key, user):
     """`JV36`：某一行摘要的來源 XXX「本身的已上傳檔案」。
 
     🔴 範圍**逐字等於** `resolve_picks()` 帶得進來的範圍（A 裁示：不可以更寬）——
@@ -431,10 +437,10 @@ def line_source_files(conn, source_type, source_key):
     if not key:
         raise HTTPException(400, "缺少摘要來源的編號。")
     if source_type == "case":
-        return case_attachments(conn, key)
+        return case_attachments(conn, key, user)
     pairs = ([("extra_expense", key)] if source_type == "extra_expense"
              else [("contractor_dispatch", key), ("contractor_invoice", key)])
     used_map = _used_map(conn)
     return _unused_first([_candidate(st, doc_no, meta, used_map)
                           for st, doc_no in pairs
-                          for meta in (source_files(conn, st, doc_no) or ())])
+                          for meta in (source_files(conn, st, doc_no, user) or ())])

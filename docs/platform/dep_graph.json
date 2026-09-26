@@ -533,6 +533,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:case_access",
     "helper:uploads",
     "plat:registry"
    ],
@@ -3962,6 +3963,7 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
+    "helper:case_access",
     "helper:uploads"
    ],
    "kind": "mod",
@@ -10637,91 +10639,91 @@
     },
     {
      "func": "line_source_files_endpoint",
-     "line": 745,
+     "line": 746,
      "method": "GET",
      "path": "/api/vouchers/line-source-files"
     },
     {
      "func": "line_source_file_endpoint",
-     "line": 767,
+     "line": 768,
      "method": "GET",
      "path": "/api/vouchers/line-source-file"
     },
     {
      "func": "read_voucher",
-     "line": 798,
+     "line": 799,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "voucher_edit_log",
-     "line": 858,
+     "line": 859,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/edit-log"
     },
     {
      "func": "submit_voucher",
-     "line": 893,
+     "line": 894,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/submit"
     },
     {
      "func": "approve_voucher",
-     "line": 959,
+     "line": 960,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/approve"
     },
     {
      "func": "send_back_voucher",
-     "line": 1043,
+     "line": 1044,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/send-back"
     },
     {
      "func": "void_voucher",
-     "line": 1117,
+     "line": 1118,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/void"
     },
     {
      "func": "post_voucher_endpoint",
-     "line": 1191,
+     "line": 1192,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/post"
     },
     {
      "func": "update_voucher",
-     "line": 1226,
+     "line": 1227,
      "method": "PUT",
      "path": "/api/vouchers/{voucher_id}"
     },
     {
      "func": "add_voucher_attachments",
-     "line": 1409,
+     "line": 1410,
      "method": "POST",
      "path": "/api/vouchers/{voucher_id}/attachments"
     },
     {
      "func": "delete_voucher_attachment",
-     "line": 1517,
+     "line": 1518,
      "method": "DELETE",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_attachment",
-     "line": 1586,
+     "line": 1587,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/attachments/{file_id}"
     },
     {
      "func": "download_voucher_pdf",
-     "line": 1689,
+     "line": 1690,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/pdf-download"
     },
     {
      "func": "preview_voucher",
-     "line": 1762,
+     "line": 1763,
      "method": "GET",
      "path": "/api/vouchers/{voucher_id}/preview"
     }
