@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.9 — 2026-09-26（第十班列車取號，原暫用 1.0.5）
+- IP-14 加第二個能力 `contractor_voucher.paid_between(start, end)`：區間內已付款的承攬商匯款申請（形狀同 `contractor_voucher.public`）；M06 會計匯出的 T100 付款傳票改走它，不再自己讀本模組的表（主持派工，A 的 M06 搬遷前置）。M04 不在 ⇒ 會計匯出沒有承攬付款、預覽 notice 照舊明說
+
 ## 1.0.8 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.6，列車取號）
 - 簽核佇列詳情（M01-PLAN §3-7，c-approval-2）：單據內容改由本模組提供 `approval.detail`（共同段用 L1 `helpers/approval_queue.snapshot_doc_detail`）；M01 詳情端點不再直讀本模組的表，只做每案權限、案件抬頭、金額遮蔽。本模組不在 ⇒ 詳情 400 並明說
 
@@ -9,7 +12,6 @@
 ## 1.0.6 — 2026-09-26〔稽核 X C4-S5：c-probes 先上第八班、用了 1.0.5 ⇒ 本段改 1.0.6〕
 - D7 演練：`module.json` 宣告 `provides.probes`（`/api/contractors`、`/api/vendor-contractors`、`/api/contractor-dispatches`、`/api/contractor-vouchers`）——純讀的 GET、在本模組前綴下、模組在時回 200（守門 `tests/platform/test_product_drill_probes.py`、`test_probe_side_effects.py`：不寫表、不寄信、不排程、不把回應值寫進 log）
 - 選單宣告搬進本模組：`contractors.html`、`vendor-contractors.html` 的 `pages[].menu`（原寫在 L1 的 `core/menu_l1.json`；group／order／perm／badge 原值照搬）。階段 C／C4（主持裁示 A）：本模組不在時它的入口隨宣告一起消失，不再靠前端寫死的頁面⇒模組對照表；版號與 c-probes／h-probes 交會，列車取號
-
 ## 1.0.4 — 2026-09-26
 - 第六班列車：IP 定號（`dispatch.list_for_case` IP-12→IP-15、`quotation.append_items` IP-13→IP-17；origin 已用 IP-12 `case.access`、IP-13 `crm.quote_deleted`；`contractor_voucher.public` 維持 IP-14）；只改註解與文件
 

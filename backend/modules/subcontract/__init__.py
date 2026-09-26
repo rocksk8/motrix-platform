@@ -18,5 +18,7 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "subcontract"): contractor_vouchers.queue_items,
         ("approval.reassign", "contractor_voucher"): contractor_vouchers.REASSIGN,
         ("approval.detail", "contractor_voucher"): contractor_vouchers.queue_detail,
+        # IP-14（同一串接點的第二個能力）：區間內已付款的憑據（M06 T100 付款傳票；不再自己讀本模組的表）
+        ("contractor_voucher.paid_between", "subcontract"): contractor_vouchers._paid_between,
     },
 )
