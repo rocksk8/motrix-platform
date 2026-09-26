@@ -7,7 +7,13 @@
 test_map 沒有那一檔時用 test_map.file_is_e2e 看內容）。這裡守：
 ① 執行期：用了瀏覽器夾具（new_context／e2e_browser）或模組 import playwright 的題，一定帶 e2e marker（否則沒有死線、全量跑在 -n 4 那段）；
 ② 有 e2e marker 的檔，test_map 判成 e2e；③ 判定與檔名無關（反向控制）。
+
+🔴 規則：**瀏覽器 fixture 一律經 `new_context`**（稽核 D MB-M1 的射程限制，主持採納）。①靠 `_BROWSER_FIXTURES`
+（new_context／e2e_browser）與 pytest 的 fixture 依賴展開認題；conftest 裡新增一個自己呼叫 `sync_playwright`、不經
+`new_context` 的 fixture，用它的題①認不得。⇒ ④ conftest 裡只有 `new_context`（連同它呼叫的同檔 helper）可以呼叫
+`sync_playwright`，其他 fixture 呼叫了 ⇒ 紅（`test_only_new_context_starts_playwright_in_conftest`）。MODULE-GUIDE §7 同一句。
 """
+import ast
 import importlib.util
 import json
 import subprocess
@@ -154,3 +160,80 @@ def test_modtest_cap_follows_content_not_name(monkeypatch):
     hard = "backend/tests/test_e2e_hard_cap_2026_09_25.py"
     assert MT.partial_cap([p9], {"tests": {}}) == MT.e2e_max_workers()
     assert MT.partial_cap([hard], {"tests": {}}) == 4
+
+
+# ── ④ 瀏覽器 fixture 一律經 new_context（主持採納 D 的射程限制）────────────────────────────
+
+_ENTRY = "new_context"
+
+
+def _conftests():
+    return [BACKEND / "conftest.py"] + sorted((BACKEND / "modules").glob("*/tests/conftest.py")) \
+        + sorted((BACKEND / "tests").glob("**/conftest.py"))
+
+
+def fixtures_starting_playwright(tree):
+    """⇒ 呼叫 `sync_playwright(...)`（直接，或經同檔 helper 遞移）的 fixture 名稱，`new_context` 除外。
+    helper 被 new_context 呼叫而同時被別的 fixture 呼叫 ⇒ 那個 fixture 也算（它自己起了一套）。"""
+    funcs = {}
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            funcs.setdefault(n.name, []).append(n)
+    starts, calls, fixtures = set(), {}, set()
+    for name, defs in funcs.items():
+        cs = set()
+        for d in defs:
+            body = ast.Module(body=d.body, type_ignores=[])
+            for x in ast.walk(body):
+                if isinstance(x, ast.Call):
+                    fn = getattr(x.func, "id", None) or getattr(x.func, "attr", None)
+                    if fn == "sync_playwright":
+                        starts.add(name)
+                    if isinstance(x.func, ast.Name):
+                        cs.add(x.func.id)
+            if any("fixture" in ast.unparse(dec) for dec in d.decorator_list):
+                fixtures.add(name)
+        calls[name] = (cs & set(funcs)) - {_ENTRY}                        # 經 new_context 是規則要的路，不往上傳
+    reach, changed = set(starts), True
+    while changed:
+        changed = False
+        for name, cs in calls.items():
+            if name not in reach and cs & reach:
+                reach.add(name)
+                changed = True
+    return sorted((reach & fixtures) - {_ENTRY})
+
+
+def test_only_new_context_starts_playwright_in_conftest():
+    """④ conftest 裡只有 new_context 起 playwright。正對照：new_context 本身確實（經 helper）呼叫到 sync_playwright。"""
+    import ast as _ast
+    main = _ast.parse((BACKEND / "conftest.py").read_text(encoding="utf-8"))
+    probe = fixtures_starting_playwright(_ast.parse(
+        (BACKEND / "conftest.py").read_text(encoding="utf-8").replace("def new_context(", "def _renamed_entry(")))
+    assert "_renamed_entry" in probe, "正對照：new_context 應該（經 helper）呼叫到 sync_playwright——量尺量不到東西"
+    bad = {str(p.relative_to(BACKEND)): fixtures_starting_playwright(_ast.parse(p.read_text(encoding="utf-8")))
+           for p in _conftests()}
+    bad = {k: v for k, v in bad.items() if v}
+    assert not bad, ("這些 fixture 自己起 playwright、不經 new_context（用它的題，守門①認不得、不會要求 e2e marker）："
+                     "%s ⇒ 改成依賴 new_context／e2e_browser／new_page" % bad)
+    assert main is not None
+
+
+def test_a_fixture_starting_its_own_playwright_is_caught():
+    """反向控制：直接呼叫、經 helper 呼叫、`playwright.sync_api.sync_playwright()` 屬性寫法 ⇒ 都列出；
+    依賴 new_context 的 fixture（含呼叫它的回傳值）、非 fixture 的 helper、new_context 自己 ⇒ 不列。"""
+    import ast as _ast
+    src = (
+        "import pytest\n"
+        "from playwright.sync_api import sync_playwright\n"
+        "import playwright.sync_api\n"
+        "def _launch():\n    return sync_playwright().start()\n"
+        "@pytest.fixture\ndef new_context():\n    return _launch()\n"
+        "@pytest.fixture\ndef direct():\n    with sync_playwright() as p:\n        yield p\n"
+        "@pytest.fixture\ndef via_helper():\n    return _launch()\n"
+        "@pytest.fixture()\ndef via_attr():\n    return playwright.sync_api.sync_playwright().start()\n"
+        "@pytest.fixture\ndef good(new_context):\n    return new_context\n"
+        "@pytest.fixture\ndef good_call(new_context):\n    return lambda **kw: new_context(**kw).new_page()\n"
+    )
+    assert fixtures_starting_playwright(_ast.parse(src)) == ["direct", "via_attr", "via_helper"]
+
