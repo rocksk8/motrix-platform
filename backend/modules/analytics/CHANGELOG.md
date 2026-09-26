@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.7 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.5，列車取號）
+- 收入認列、支出歸月、待補登改取 M01 的 `case.recognition`（M01-PLAN §3-6），口徑標籤改自 L1 `helpers.recognition_basis`——本模組不再 import M01 的 `helpers.recognition`。M01 不在 ⇒ 權責口徑收入附 `incomeNotice`、支出 `unavailable` 列出案件類（叫料／額外支出／派工），待補登為空；頁面的收入提示改為只顯示那一句（現金／權責兩種原因共用）
+
 ## 1.0.6 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.4，列車取號）
 - 稽核 D M5-S1：從 `reports.html?tab=cashier` 進來時，出納頁籤的待付款／待收款 404 也記原因（`payableSnapMissing`），快照不畫 NT$ 0
 

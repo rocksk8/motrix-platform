@@ -28,7 +28,8 @@ from helpers.quotations import round_half_up, quote_tax_type
 
 _log = logging.getLogger(__name__)
 
-BASES = ("accrual", "cash")
+# 口徑的純標籤（BASES／BASIS_NOTES／normalize_basis）2026-09-26 下沉 L1 helpers/recognition_basis.py；這裡保留同名別名
+from helpers.recognition_basis import BASES, BASIS_NOTES, normalize_basis  # noqa: E402,F401
 FULL_BP = 10000
 
 #: 待補登標註的種類 → 畫面標題
@@ -55,25 +56,6 @@ FLAG_TABS = {
     "case_incomplete":     "exec",
     "legacy_tax":          None,         # 稅率在報價單本身，案件頁沒有對應分頁
 }
-
-#: 報表頂端的口徑說明（使用者：「數字不同的部分，在營運報表內可註明並且標註」）
-BASIS_NOTES = {
-    "accrual": ("本報表預設採權責口徑：收入依案件階段完成月認列（未稅），支出依廠商發票月認列"
-                "（拆得出稅額的用未稅，拆不出的用全額並標示）；叫料已納入支出。"
-                "與舊版報表（收入依收款日、支出依派工日且未含叫料）數字不同屬正常。"
-                "尚未補登發票日期或階段比例的單據，會暫用其他日期並列在下方「待補登」清單。"),
-    "cash":    ("現金口徑：收入依實際收款日（含稅），支出依實際付款日（含稅）："
-                "派工以匯款申請的已匯款日為準，叫料以付款日為準，額外支出以付款日為準"
-                "（未登錄者暫用憑證日並標示）。"),
-}
-
-
-def normalize_basis(v):
-    v = (v or "accrual").strip()
-    if v not in BASES:
-        raise HTTPException(400, "basis 只能是 accrual（權責）或 cash（現金）")
-    return v
-
 
 def normalize_ratio_bp(v):
     """None／'' ⇒ None（未設）；否則 0～10000 的整數。"""
