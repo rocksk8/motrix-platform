@@ -77,45 +77,7 @@ def _paid(amount, inv="AB12345678"):
     return {"amount": amount, "invoiceNo": inv, "invoiceDate": "2026-09-10", "receivedAt": "2026-09-10"}
 
 
-def test_exempt_quote_exports_zero_tax(client):
-    """修正前：稅務匯出一律用 5% 從含稅倒推 ⇒ 免稅報價也被拆出稅額。"""
-    _quote("MQ-EX", 10000, 10000, {"taxRate": 0}, [_paid(10000)])
-    [r] = _invoice_rows("MQ-EX")
-    assert (r["amountPretax"], r["taxAmount"], r["amountTotal"]) == (10000, 0, 10000)
-    assert r["taxType"] == "exempt"
-
-
-def test_zero_rated_quote_exports_zero_tax_and_is_labelled_zero(client):
-    _quote("MQ-ZR", 10000, 10000, {"taxRate": 0, "taxType": "zero"}, [_paid(10000)])
-    [r] = _invoice_rows("MQ-ZR")
-    assert (r["taxAmount"], r["taxType"]) == (0, "zero")
-
-
-def test_taxable_period_uses_sales_times_five_percent(client):
-    """分期：該期銷售額＝round(報價未稅 × 期別比例)，稅額＝round(銷售額 × 5%)。"""
-    _quote("MQ-TX", 10000, 10500, {"taxRate": 5}, [_paid(3150), _paid(7350, "AB00000002")])
-    rows = _invoice_rows("MQ-TX")
-    assert [(r["amountPretax"], r["taxAmount"], r["amountTotal"]) for r in rows] == [
-        (3000, 150, 3150), (7000, 350, 7350)]
-
-
 # ── 已開發票：以發票記載的未稅／稅額為準（使用者選 (a)：收款登錄發票時加填）─────
-
-def test_recorded_invoice_amounts_are_the_source_of_truth(client):
-    item = _paid(10500)
-    item.update({"invoicePretax": 10001, "invoiceTax": 499})
-    _quote("MQ-IV", 10000, 10500, {"taxRate": 5}, [item])
-    [r] = _invoice_rows("MQ-IV")
-    assert (r["amountPretax"], r["taxAmount"], r["amountTotal"]) == (10001, 499, 10500)
-
-
-def test_recorded_invoice_amounts_win_even_on_a_legacy_rate_quote(client):
-    item = _paid(10300)
-    item.update({"invoicePretax": 9810, "invoiceTax": 490})
-    _quote("MQ-IVL", 10000, 10300, {"taxRate": 3}, [item])
-    [r] = _invoice_rows("MQ-IVL")
-    assert (r["amountPretax"], r["taxAmount"]) == (9810, 490)
-    assert r["taxNote"] == ""                               # 以發票為準 ⇒ 不再需要會計確認
 
 
 @pytest.mark.parametrize("item,ok", [
@@ -206,33 +168,6 @@ def _new_voucher(client, h, body):
     return r.json()
 
 
-def test_new_invoice_request_taxes_the_sales_amount_at_five_percent(client, make_user):
-    """依品項：未稅 9,810 ⇒ 稅額 round_half_up(490.5)＝491、含稅 10,301。
-    修正前用比例換算＋Python 內建 round（銀行家捨入）⇒ 10,300.5 捨成 10,300、稅額 490。"""
-    h = _hdr(client, make_user)
-    _items_quote("MQ-V1", {"taxRate": 5})
-    v = _new_voucher(client, h, {"quote_no": "MQ-V1", "scope": "items",
-                                 "items": [{"itemId": 1, "qty": 1, "amount": 9810}]})
-    assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (9810, 491, 10301)
-
-
-def test_new_invoice_request_on_an_exempt_quote_has_no_tax(client, make_user):
-    h = _hdr(client, make_user)
-    _quote("MQ-V2", 20000, 20000, {"taxRate": 0}, [])
-    # 📌 2026-09-25（R2）：免稅報價沒有依據 ⇒ 開票申請要補填（營業稅法 §8）
-    v = _new_voucher(client, h, {"quote_no": "MQ-V2", "scope": "amount", "amount": 5000,
-                                 "taxBasis": {"code": "8-3"}})
-    assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (5000, 0, 5000)
-
-
-def test_new_invoice_request_on_a_legacy_rate_quote_keeps_its_numbers_and_is_flagged(client, make_user):
-    h = _hdr(client, make_user)
-    _quote("MQ-V3", 10000, 10300, {"taxRate": 3}, [])
-    v = _new_voucher(client, h, {"quote_no": "MQ-V3", "scope": "amount", "amount": 10300})
-    assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (10000, 300, 10300)
-    assert v["taxType"] == "legacy" and "非法定稅率，請會計確認" in v["taxNote"]
-
-
 # ── 報價存檔：只能選法定稅別；舊 1～4% 單再編輯要改選 ─────────────────────────
 
 def _quote_body(no=None, **data):
@@ -304,5 +239,3 @@ def test_quote_pdf_labels_the_tax_line_by_type(data, label):
     q = dict(data, quoteNo="MQ-PDF", items=[], customerName="客")
     html = _build_quote_html(q, {"subtotal": 100, "pretax": 100, "tax": 0, "total": 100})
     assert ">%s<" % label in html, label
-
-

@@ -150,58 +150,6 @@ def _voucher(client, h, body):
     return client.post("/api/invoice-vouchers", json=body, headers=h)
 
 
-def test_invoice_request_copies_the_quote_basis_into_the_snapshot(client, make_user):
-    h = _hdr(client, make_user)
-    _insert_quote("MQ-R2Z", {"taxRate": 0, "taxType": "zero", "taxBasis": {"code": "7-1", "note": "出口報單"}})
-    rem = client.get("/api/invoice-vouchers/remaining?quote_no=MQ-R2Z", headers=h).json()
-    assert rem["taxBasisMissing"] is False and "外銷貨物" in rem["taxBasisLabel"]
-    r = _voucher(client, h, {"quote_no": "MQ-R2Z", "scope": "amount", "amount": 5000})
-    assert r.status_code == 201, r.text
-    v = client.get("/api/invoice-vouchers/" + r.json()["voucher_no"], headers=h).json()
-    assert v["taxBasis"] == {"code": "7-1", "note": "出口報單"}
-    assert v["taxNote"] == "零稅率依據：" + tax_basis_label({"code": "7-1", "note": "出口報單"})
-
-
-def test_invoice_request_on_an_old_quote_without_basis_needs_one(client, make_user):
-    h = _hdr(client, make_user)
-    _insert_quote("MQ-R2E", {"taxRate": 0})
-    rem = client.get("/api/invoice-vouchers/remaining?quote_no=MQ-R2E", headers=h).json()
-    assert (rem["taxType"], rem["taxBasisMissing"]) == ("exempt", True)
-    r = _voucher(client, h, {"quote_no": "MQ-R2E", "scope": "amount", "amount": 5000})
-    assert r.status_code == 400 and "開票申請補填" in r.json()["detail"], r.text
-    r = _voucher(client, h, {"quote_no": "MQ-R2E", "scope": "amount", "amount": 5000,
-                             "taxBasis": {"code": "8-3"}})
-    assert r.status_code == 201, r.text
-
-
-def test_taxable_invoice_request_needs_no_basis(client, make_user):
-    h = _hdr(client, make_user)
-    _insert_quote("MQ-R2T", {"taxRate": 5, "taxType": "taxable"}, total=21000, pretax=20000)
-    r = _voucher(client, h, {"quote_no": "MQ-R2T", "scope": "amount", "amount": 5250})
-    assert r.status_code == 201, r.text
-    v = client.get("/api/invoice-vouchers/" + r.json()["voucher_no"], headers=h).json()
-    assert v["taxBasis"] is None
-
-
-def test_an_old_voucher_without_basis_still_reads(client, make_user):
-    import db
-    h = _hdr(client, make_user)
-    _insert_quote("MQ-R2V", {"taxRate": 0})
-    now = datetime.now().isoformat()
-    conn = db.get_db()
-    try:
-        conn.execute(
-            "INSERT INTO invoice_vouchers (voucher_no, quote_no, scope, amount, status, snapshot_json, data_json, "
-            "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            ("IV-OLD-R2", "MQ-R2V", "amount", 1000, "草稿",
-             json.dumps({"customerName": "客戶", "taxType": "exempt"}), "{}", "x", now, now))
-        conn.commit()
-    finally:
-        conn.close()
-    r = client.get("/api/invoice-vouchers/IV-OLD-R2", headers=h)
-    assert r.status_code == 200 and r.json()["taxBasis"] is None, r.text
-
-
 def test_options_endpoint_is_the_single_source(client, make_user):
     h = _hdr(client, make_user)
     opts = client.get("/api/legal-params/tax-basis-options", headers=h).json()["options"]

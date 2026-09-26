@@ -14,6 +14,10 @@ pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
 
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
+
 NO = "MQ-E2EBP-001"
 CASHIER_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -64,6 +68,7 @@ def _users(make_user):
     return out
 
 
+@_NEEDS_ARAP
 @pytest.mark.e2e
 def test_cashier_marks_bonus_paid_from_cashier_page(client, live_server, make_user, e2e_browser):
     u = _users(make_user)
