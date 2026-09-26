@@ -186,7 +186,7 @@ B 報「66.8%→23.3%（3265→1141 題）」。前半逐字重現。後半差 8
 | O-6 | 採納：_patch_entries 搬到 modules/analytics/tests（只有它用、且 import 營運分析） | 60a31d9d || ✅ 11:38 `_patch_entries` 已移到 modules/analytics/tests ⇒ **關閉（943d0bfe）** |
 | O-7 | 採納：check_endpoint_entrypoints 改用 source_tree.router_files()（含模組端點；227→269 組片段，孤兒仍是原本 7 組）；讀不到 source_tree 才退回只掃 routers/ 並印出說明 | 60a31d9d || ✅ 11:38 `check_endpoint_entrypoints.py` 改用 `source_tree.router_files()` ⇒ **關閉（943d0bfe）** |
 | O-8 | 已處理：rebase 到 427c8be9（b-m08-2）、再到 a6dc4be6（b-m08-3，改名推）；CORE 暫取 1.30，列車 core_bump 重定 | b-m08-3 7f7cda39 || ✅ 11:38 已處理 ⇒ **關閉** |
-| O-9 | 暫緩（理由）：共用的種資料正被其他包同時改動——test_dispatch_connector 在 c-m04-2（M04 搬遷）、獎金發放種資料在 c-m07（M07 搬遷）；現在抽到 tests/_*.py 會與兩包文字衝突。第六、七班合回後由 B 抽出（共用 fixture 與種資料函式移到 tests/_dispatch_seed.py、tests/_bonus_payout_seed.py，平台題與模組題都從那裡取） | — || ⚠ 11:38 暫緩理由成立（與 c-m04、c-m07 的種資料文字衝突），**但這項暫緩只寫在本回覆欄，ROADMAP／RUN-PLAN 都沒有**（MEMORY〈要求寫在訊息裡等於沒下達〉）⇒ 維持開著，請寫進 ROADMAP 並附負責人（B）與時機（第六、七班合回後）再關 |
+| O-9 | 暫緩（理由）：共用的種資料正被其他包同時改動——test_dispatch_connector 在 c-m04-2（M04 搬遷）、獎金發放種資料在 c-m07（M07 搬遷）；現在抽到 tests/_*.py 會與兩包文字衝突。第六、七班合回後由 B 抽出（共用 fixture 與種資料函式移到 tests/_dispatch_seed.py、tests/_bonus_payout_seed.py，平台題與模組題都從那裡取） | — || ⚠ 11:38 暫緩理由成立（與 c-m04、c-m07 的種資料文字衝突），**但這項暫緩只寫在本回覆欄，ROADMAP／RUN-PLAN 都沒有**（MEMORY〈要求寫在訊息裡等於沒下達〉）⇒ 維持開著，請寫進 ROADMAP 並附負責人（B）與時機（第六、七班合回後）再關。〔11:39 補：b-m08-s 2141dec1（943d0bfe 的快轉）ROADMAP M08 段新增待辦（B，第六、七班合回後，列出要抽的種資料與目的地）⇒ ✅ **關閉（2141dec1）**〕 |
 
 （B 回覆 2026-09-26；分支 wip/b-m08-s（疊在 b-m08-3；第六班合回後 --onto rebase）。採納項目各附突變，見各列。）
 
