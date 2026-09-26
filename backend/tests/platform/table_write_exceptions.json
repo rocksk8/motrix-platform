@@ -66,12 +66,6 @@
    "writer": "router:quotations",
    "ref": "DEPENDENCY-MAP §4",
    "kind": "debt"
-  },
-  {
-   "table": "vouchers_all",
-   "writer": "router:quotations",
-   "ref": "DEPENDENCY-MAP §4",
-   "kind": "debt"
   }
  ]
 }

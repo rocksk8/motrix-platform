@@ -2,6 +2,13 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.39 — 2026-09-26（C，M01-PLAN §3-7：approval.queue_items／approval.reassign；疊在 c-m01-rec-2）〔core_bump：暫用 1.99 → 1.39〕
+> 介面只有新增。
+- L1（新增）：`helpers.approval_queue`——`ACTIVE_STATUSES`、`ApprovalUnreadable`、`active_tiers`／`current_tier_idx`（含舊 steps 相容；自 M01 `routers/quotations._active_tiers`／`_current_tier_idx` 逐字下沉，M01 保留同名別名）、`tier_fields`（原 M01 `_queue_tier_fields`）、`base_item`、`DataJsonApproval(table, key)`
+- 新串接點 `approval.reassign`（IP-94 暫定）：各單據模組提供轉簽時的簽核鏈讀寫；M01 轉簽端點不再以 `_REASSIGN_TABLES` 逐表直寫
+- IP-10 `approval.queue_items`：M04、M05、M03、M06、M07 各自提供待簽項目；M01 佇列與角標只彙整（佇列回應新增 `reassignTypes`）
+- 守門：`tests/platform/test_approval_providers.py`；`tools/check_approval_queue_coverage.py`（AS3）改成也認提供者
+
 ## 1.38 — 2026-09-26（C，M01-PLAN §3-6：case.recognition；疊在 c-m01-s3-2）〔core_bump：暫用 1.99 → 1.38〕
 > 介面只有新增。
 - L1（新增）：`helpers.recognition_basis`——`BASES`、`BASIS_NOTES`、`normalize_basis`（自 M01 `helpers/recognition.py` 逐字下沉；recognition 保留同名別名）

@@ -224,34 +224,11 @@ def _setting_to_active_tiers(setting: dict, conn, requester_username: str = None
     return result
 
 
-def _active_tiers(appr: dict) -> list:
-    """Read tiers from active approval object (backward-compat: old steps → single-approver tiers).
-    NOTE: parallel backward-compat logic exists in system.py _normalize_flow() for the
-    settings read path — keep both in sync when modifying tiers structure."""
-    tiers = appr.get("tiers") or []
-    if tiers:
-        return tiers
-    steps = appr.get("steps") or []
-    return [
-        {
-            "order": i,
-            "approvers": [{
-                "userId":      s.get("userId"),
-                "username":    s["username"],
-                "displayName": s.get("displayName", s["username"]),
-                "status":      s.get("status", "pending"),
-                "approvedAt":  s.get("approvedAt"),
-            }],
-        }
-        for i, s in enumerate(steps)
-    ]
-
-
-def _current_tier_idx(appr: dict) -> int:
-    ct = appr.get("currentTier")
-    if ct is None:
-        ct = appr.get("currentStep", 0)
-    return ct
+# 簽核鏈層級（含舊 steps 相容）與目前層：2026-09-26 下沉 L1 `helpers/approval_queue`（M01-PLAN §3-7：各單據模組的
+# 待簽項目與 M01 用同一份換算）；這裡保留同名別名。
+from helpers.approval_queue import (  # noqa: E402
+    active_tiers as _active_tiers, current_tier_idx as _current_tier_idx, tier_fields as _queue_tier_fields,
+)
 
 
 # 案件可見性（原 `_visible_case_filter_sql()`／`_check_quotation_owner()` 兩份）已合併為
@@ -4368,28 +4345,6 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 
 # ── Approval queue ────────────────────────────────────────────────────────────
 
-def _queue_tier_fields(approval_json_raw: str) -> dict:
-    """三種文件類型（報價單／承攬商匯款申請／開票申請憑據）的 approval 欄位
-    形狀完全相同（tiers/currentTier，見 §5.3／§5.9），可共用同一段換算邏輯。"""
-    try:
-        appr = json.loads(approval_json_raw or "{}")
-    except Exception:
-        appr = {}
-    tiers  = _active_tiers(appr)
-    ct_idx = _current_tier_idx(appr)
-    cur_tier_approvers = tiers[ct_idx].get("approvers") or [] if tiers and ct_idx < len(tiers) else []
-    return {
-        "appr":               appr,
-        "requestedBy":        appr.get("requestedBy") or "",
-        "requestedByDisplay": appr.get("requestedByDisplay") or appr.get("requestedBy") or "",
-        "requestedAt":        appr.get("requestedAt") or "",
-        "tiers":              tiers,
-        "currentTier":        ct_idx,
-        "tierCount":          len(tiers),
-        "currentApprovers":   cur_tier_approvers,
-    }
-
-
 def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
     """這一筆待簽核文件該不該讓這個人看到（2026-09-15 使用者要求）。
 
@@ -4421,6 +4376,9 @@ def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
 
 
 def _queue_provider_items(conn) -> list:
+    """IP-10 `approval.queue_items`：各單據模組提供自己的待簽項目（M01-PLAN §3-7）。提供者壞掉只少那一類（記 exception）；
+    模組不在 ⇒ 那一類不列。項目沒給 `customer`／`projectName` 而有 `linkedQuoteNo` ⇒ 這裡補案件的客戶與名稱
+    （案件表是 M01 的，單據模組不讀）。"""
     from core import registry as _reg
     out = []
     for name, fn in sorted(_reg.providers("approval.queue_items").items()):
@@ -4428,14 +4386,32 @@ def _queue_provider_items(conn) -> list:
             out.extend(fn(conn) or [])
         except Exception:                                    # noqa: BLE001
             logger.exception("待簽核佇列：提供者 %s 失敗（這一類不列出）", name)
+    need = sorted({it["linkedQuoteNo"] for it in out
+                   if it.get("linkedQuoteNo") and ("customer" not in it or "projectName" not in it)})
+    names = {}
+    for i in range(0, len(need), 500):
+        chunk = need[i:i + 500]
+        for r in conn.execute("SELECT quote_no, customer_name, project_name FROM quotations WHERE quote_no IN (%s)"
+                              % ",".join("?" * len(chunk)), chunk).fetchall():
+            names[r["quote_no"]] = r
+    for it in out:
+        q = names.get(it.get("linkedQuoteNo"))
+        it.setdefault("customer", (q["customer_name"] if q else "") or "")
+        it.setdefault("projectName", (q["project_name"] if q else "") or "")
     return out
+
+
+def _reassign_types() -> list:
+    """可以轉簽的單據類型＝有 `approval.reassign` 提供者的（模組不在 ⇒ 不給轉簽，前端不顯示按鈕）。"""
+    from core import registry as _reg
+    return sorted(_reg.providers("approval.reassign"))
 
 
 @router.get("/api/approval-queue")
 def get_approval_queue(authorization: str = Header(None)):
     """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
     憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）與請款單
-    （新增單據類型，見 routers/payment_requests.py）。刻意
+    （新增單據類型，M05）。2026-09-26 起其他模組的單據由各模組提供（IP-10，M01-PLAN §3-7）。刻意
     沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/quoteDate/
     salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
     `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
@@ -4486,279 +4462,8 @@ def get_approval_queue(authorization: str = Header(None)):
             "currentApprovers":    f["currentApprovers"],
         })
 
-    cv_rows = conn.execute("""
-        SELECT voucher_no, quote_no, snapshot_json, created_at,
-               json_extract(data_json,'$.approval') as approval_json
-        FROM contractor_payment_vouchers
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in cv_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        try:
-            snap = json.loads(r["snapshot_json"] or "{}")
-        except Exception:
-            snap = {}
-        items.append({
-            "type":                "contractor_voucher",
-            "quoteNo":             r["voucher_no"],
-            "customer":            snap.get("vendorName") or "外包人員點工",
-            "projectName":         f"關聯案件 {r['quote_no']}",
-            "total":               snap.get("grandTotal", 0),
-            "quoteDate":           (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         f["requestedBy"],
-            "requestedByDisplay":  f["requestedByDisplay"],
-            "requestedAt":         f["requestedAt"],
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-            # 2026-08-30：使用者要求簽核佇列連同申請單本身都要顯示應付款日期／
-            # 匯款帳戶／存簿圖檔／廠商發票，這裡直接從凍結快照帶出，不用簽核人員
-            # 另外點開案件管理才看得到匯款要用的資訊。
-            "payableDate":         snap.get("payableDate") or "",
-            "bankName":            snap.get("bankName") or "",
-            "bankBranch":          snap.get("bankBranch") or "",
-            "bankAccountName":     snap.get("bankAccountName") or "",
-            "bankAccountNumber":   snap.get("bankAccountNumber") or "",
-            "bankPassbookImage":   snap.get("bankPassbookImage") or "",
-            # CT1（2026-09-24 使用者裁示 D2）：外包人員各自的匯款帳戶——簽核人原本只看得到承攬商本身的帳戶。
-            # 來源是建立申請時凍結的 personnel 快照（contractor_vouchers.py），與上面承攬商那段同一份可見性。
-            "personnelBanks": [
-                {"name": p.get("name") or "", "bankCode": p.get("bankCode") or "",
-                 "bankName": p.get("bankName") or "", "bankBranch": p.get("bankBranch") or "",
-                 "bankAccountName": p.get("bankAccountName") or "",
-                 "bankAccountNumber": p.get("bankAccountNumber") or ""}
-                for p in (snap.get("personnel") or []) if isinstance(p, dict)
-            ],
-            "invoiceFiles":        snap.get("invoiceFiles") or [],
-        })
-
-    iv_rows = conn.execute("""
-        SELECT voucher_no, quote_no, amount, snapshot_json, created_at,
-               json_extract(data_json,'$.approval') as approval_json
-        FROM invoice_vouchers
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in iv_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        try:
-            snap = json.loads(r["snapshot_json"] or "{}")
-        except Exception:
-            snap = {}
-        items.append({
-            "type":                "invoice_voucher",
-            "quoteNo":             r["voucher_no"],
-            "customer":            snap.get("customerName") or "",
-            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
-            "total":               r["amount"] or 0,
-            "quoteDate":           (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         f["requestedBy"],
-            "requestedByDisplay":  f["requestedByDisplay"],
-            "requestedAt":         f["requestedAt"],
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-        })
-
-    sn_rows = conn.execute("""
-        SELECT note_no, quote_no, customer_name, project_name, items_json, ship_date, created_at,
-               json_extract(data_json,'$.approval') as approval_json
-        FROM shipping_notes
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in sn_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        try:
-            item_count = len(json.loads(r["items_json"] or "[]"))
-        except Exception:
-            item_count = 0
-        items.append({
-            "type":                "shipping_note",
-            "quoteNo":             r["note_no"],
-            "customer":            r["customer_name"] or "",
-            "projectName":         r["project_name"] or "",
-            "total":               item_count,
-            "quoteDate":           r["ship_date"] or (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         f["requestedBy"],
-            "requestedByDisplay":  f["requestedByDisplay"],
-            "requestedAt":         f["requestedAt"],
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-        })
-
-    pr_rows = conn.execute("""
-        SELECT request_no, quote_no, amount, snapshot_json, created_at,
-               json_extract(data_json,'$.approval') as approval_json
-        FROM payment_requests
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in pr_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        try:
-            snap = json.loads(r["snapshot_json"] or "{}")
-        except Exception:
-            snap = {}
-        items.append({
-            "type":                "payment_request",
-            "quoteNo":             r["request_no"],
-            "customer":            snap.get("customerName") or "",
-            "projectName":         snap.get("projectName") or f"關聯案件 {r['quote_no']}",
-            "total":               r["amount"] or 0,
-            "quoteDate":           (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         f["requestedBy"],
-            "requestedByDisplay":  f["requestedByDisplay"],
-            "requestedAt":         f["requestedAt"],
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-        })
-
-    # 會計傳票（`AS3`，`docs/windows/STATE.md` §236）：`vouchers.py:486` 送審、
-    # `APPROVAL_DOC_TYPES` 第八個就是 voucher（`AS2` 已落地），而這支端點原本
-    # 一直沒有它 —— 送審端點對、簽核端點對，而沒有人知道有單在等。
-    # ⚠️ 跟其餘七種不一樣：`approval_json` 是 `vouchers_all` 自己的**欄位**，
-    #    不是 `data_json.$.approval`（傳票沒有 `data_json`），所以是直接
-    #    `SELECT approval_json`，不必 `json_extract`。
-    # ⚠️ 傳票不掛在任何案件底下（一般分類帳憑證，不是報價流程的附屬文件），
-    #    `customer`／`projectName` 沒有東西可填，跟 `case_change` 一樣留空/留摘要。
-    v_rows = conn.execute("""
-        SELECT id, voucher_no, voucher_date, summary, submitted_by, submitted_at,
-               approval_json,
-               COALESCE((SELECT SUM(debit) FROM voucher_lines
-                         WHERE voucher_id = vouchers_all.id), 0) as total_debit
-        FROM vouchers_all
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in v_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        # 🔑 `submit_voucher()` 沒有設定過流程時 `tiers` 是空的，approval_json
-        #    仍然嵌著 requestedBy 三欄（`AS3` 一併補上）——但舊資料（這支上線
-        #    之前就送審的傳票）沒有，這裡退回讀 `submitted_by`／`submitted_at`
-        #    兩欄，不讓舊單在佇列上掛名空白。
-        requested_by = f["requestedBy"] or r["submitted_by"] or ""
-        items.append({
-            "type":                "voucher",
-            "quoteNo":             r["voucher_no"],
-            "customer":            "",
-            "projectName":         r["summary"] or "",
-            "total":               r["total_debit"] or 0,
-            "quoteDate":           r["voucher_date"] or "",
-            "salesPerson":         "",
-            "requestedBy":         requested_by,
-            "requestedByDisplay":  f["requestedByDisplay"] or requested_by,
-            "requestedAt":         f["requestedAt"] or r["submitted_at"] or "",
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            # 🔴 `apiBase(item)` 對其他型別是接 `item.quoteNo`（那些端點的路徑
-            #    參數吃的是人看的單號），但 `/api/vouchers/{voucher_id}/...`
-            #    吃的是**數字 id**——兩者是不同的識別碼，這裡兩個都給，
-            #    前端用哪一個視型別而定（見 approval-queue.html `itemPathId()`）。
-            "voucherId":           r["id"],
-        })
-
-    # 獎金分潤單（`BN8`）：跟傳票同一種形狀——approval_json 是
-    # bonus_awards 自己的欄位，不是 data_json.$.approval。獎金分潤單也
-    # 不掛在任何案件底下（`quote_no` 是關聯案件，不是佇列要導向的對象），
-    # customer/projectName 留空/留關聯案件字串，跟 voucher 一致。
-    # ⚠️ 沒有 submitted_by/at 這種獨立欄位（`SPEC-BN8.md §1`：一格投影
-    # 欄位都沒有）——requestedBy 直接用 created_by/created_at，不必像
-    # 傳票那樣在 JSON 裡另外嵌一份再退回欄位。
-    ba_rows = conn.execute("""
-        SELECT id, quote_no, base_amount, created_by, created_at, approval_json
-        FROM bonus_awards
-        WHERE status IN ('待審核','簽核中')
-        ORDER BY id DESC
-    """).fetchall()
-    for r in ba_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        items.append({
-            "type":                "bonus_award",
-            "quoteNo":             "獎金-%s" % r["id"],
-            "customer":            "",
-            "projectName":         "關聯案件 %s" % (r["quote_no"] or ""),
-            "total":               r["base_amount"] or 0,
-            "quoteDate":           (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         r["created_by"] or "",
-            "requestedByDisplay":  r["created_by"] or "",
-            "requestedAt":         r["created_at"] or "",
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-            # 🔴 與 voucher 同一個道理：`/api/bonus/awards/{award_id}/...`
-            #    吃數字 id，不是人看的單號（這裡連人看的單號都沒有）。
-            "awardId":             r["id"],
-        })
-
-    # 以案件為中心的獎金分潤（SPEC-BONUS §十一，2026-09-24）：approval_json 是自己的欄位；
-    # 端點吃案件單號（/api/bonus/cases/{quote_no}/approve），所以 quoteNo 直接給單號。
-    # 金額不放進佇列（total=0）：待發放前只有最高管理者看得到金額，而簽核人也只能是最高管理者
-    # （W1），明細到獎金分潤頁看。
-    bca_rows = conn.execute("""
-        SELECT b.quote_no, b.created_by, b.created_at, b.approval_json,
-               q.customer_name, q.project_name
-        FROM bonus_case_awards b LEFT JOIN quotations q ON q.quote_no = b.quote_no
-        WHERE b.status = '待審核'
-        ORDER BY b.id DESC
-    """).fetchall()
-    for r in bca_rows:
-        f = _queue_tier_fields(r["approval_json"])
-        try:
-            _req = (json.loads(r["approval_json"] or "{}") or {}).get("requestedBy") or r["created_by"]
-        except (TypeError, ValueError):
-            _req = r["created_by"]
-        items.append({
-            "type":                "bonus_case_award",
-            "quoteNo":             r["quote_no"],
-            "customer":            r["customer_name"] or "",
-            "projectName":         r["project_name"] or "",
-            "total":               0,
-            "quoteDate":           (r["created_at"] or "")[:10],
-            "salesPerson":         "",
-            "requestedBy":         _req or "",
-            "requestedByDisplay":  _req or "",
-            "requestedAt":         r["created_at"] or "",
-            "isEditApproval":      False,
-            "reasons":             [],
-            "tiers":               f["tiers"],
-            "currentTier":         f["currentTier"],
-            "tierCount":           f["tierCount"],
-            "currentApprovers":    f["currentApprovers"],
-            "linkedQuoteNo":       r["quote_no"],
-        })
+    # 承攬商匯款申請（M04）、開票申請／請款單（M05）、出貨單（M03）、會計傳票（M06）、獎金分潤（M07）：
+    # 2026-09-26 起由各模組提供（IP-10 `approval.queue_items`，M01-PLAN §3-7），見下方 `_queue_provider_items`。
 
     ccr_rows = conn.execute("""
         SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
@@ -4918,7 +4623,7 @@ def get_approval_queue(authorization: str = Header(None)):
             "pendingFileCount":    len(chg.get("addFiles") or []),
         })
 
-    # IP-10 `approval.queue_items`（2026-09-26，P8）：其他模組提供自己的待簽核項目（例：自訂模組單據），
+    # IP-10 `approval.queue_items`：其他模組提供自己的待簽核項目（單據模組、自訂模組引擎），
     # 形狀同上、`type` 各自不同。提供者壞掉只少那一類，佇列照常（記 exception）。
     items.extend(_queue_provider_items(conn))
     conn.close()
@@ -4943,7 +4648,8 @@ def get_approval_queue(authorization: str = Header(None)):
         })
     queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
 
-    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for}
+    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for,
+            "reassignTypes": _reassign_types()}
 
 
 @router.get("/api/approval-queue/count")
@@ -4964,39 +4670,10 @@ def get_approval_queue_count(authorization: str = Header(None)):
     approval_jsons = [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM quotations WHERE status IN ('待審核','簽核中')"
     ).fetchall()]
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM contractor_payment_vouchers "
-        "WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM invoice_vouchers WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM shipping_notes WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
     # 完工單（2026-09-12）：角標數字要跟佇列列表一致，漏掉就會變成「列得出來但
     # topbar 是 0」——兩邊矛盾比兩邊都沒有更難查
     approval_jsons += [r[0] for r in conn.execute(
         "SELECT json_extract(data_json,'$.approval') FROM completion_notes WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM payment_requests WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 會計傳票（`AS3`）：跟案件額外支出一樣，approval_json 是 vouchers_all
-    # 自己的欄位（沒有 data_json），直接取欄位。角標數字要跟佇列列表一致，
-    # 漏掉就是「列得出來但 topbar 是 0」——兩邊矛盾比兩邊都沒有更難查。
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT approval_json FROM vouchers_all WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 獎金分潤單（`BN8`）：跟傳票同一種形狀，approval_json 是 bonus_awards
-    # 自己的欄位。submit_award() 有嵌 requestedBy，沒有鏈時「自己送的
-    # 不算」判準才成立。
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT approval_json FROM bonus_awards WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 以案件為中心的獎金分潤（SPEC-BONUS §十一）：與上面佇列列表同一個條件，角標才對得起來。
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT approval_json FROM bonus_case_awards WHERE status = '待審核'"
     ).fetchall()]
     # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
     # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
@@ -5010,7 +4687,8 @@ def get_approval_queue_count(authorization: str = Header(None)):
         "SELECT change_approval_json FROM case_extra_expenses "
         "WHERE change_status IN ('待審核','簽核中')"
     ).fetchall()]
-    # IP-7：其他模組提供的待簽核項目（例：自訂模組單據）——角標要跟佇列列表一致
+    # IP-10：其他模組提供的待簽核項目（承攬商匯款申請、開票申請、請款單、出貨單、傳票、獎金分潤、自訂模組單據；
+    # M01-PLAN §3-7）——與佇列列表同一份來源，角標才對得起來
     approval_jsons += [json.dumps({"tiers": it["tiers"], "currentTier": it["currentTier"],
                                    "requestedBy": it["requestedBy"]}, ensure_ascii=False)
                        for it in _queue_provider_items(conn)]
@@ -6465,6 +6143,10 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
 # 權限變更。原因會寫進單據的 approval.reassignLog、audit_log，並顯示在簽核佇列詳情
 # 與簽核歷史裡——三個地方都看得到同一句話。
 
+from core import registry as _registry  # noqa: E402
+from helpers.approval_queue import ApprovalUnreadable, DataJsonApproval  # noqa: E402
+
+
 class ReassignIn(BaseModel):
     type: str
     id: str
@@ -6473,17 +6155,34 @@ class ReassignIn(BaseModel):
     from_username: Optional[str] = None
 
 
-_REASSIGN_TABLES = {
-    "quotation":          ("quotations", "quote_no"),
-    "contractor_voucher": ("contractor_payment_vouchers", "voucher_no"),
-    "invoice_voucher":    ("invoice_vouchers", "voucher_no"),
-    "payment_request":    ("payment_requests", "request_no"),
-    "shipping_note":      ("shipping_notes", "note_no"),
-    "completion_note":    ("completion_notes", "note_no"),
-    # `JV35`：傳票的簽核存在 `vouchers_all.approval_json`（不是 data_json.approval）
-    # ⇒ 讀寫走傳票自己的解析，見 `reassign_approval()` 裡 `is_voucher` 那兩段。
-    "voucher":            ("vouchers_all", "voucher_no"),
-}
+class _QuotationReassign:
+    """`approval.reassign`（M01 自己的報價單）：簽核鏈在 data_json.$.approval，寫回走 `save_quotation_json`。"""
+
+    @staticmethod
+    def load(conn, doc_no):
+        row = conn.execute("SELECT quote_no, status, data_json FROM quotations WHERE quote_no=?", (doc_no,)).fetchone()
+        if not row:
+            return None
+        try:
+            data = json.loads(row["data_json"] or "{}")
+        except (TypeError, ValueError):
+            raise ApprovalUnreadable(doc_no)
+        if not isinstance(data, dict) or not isinstance(data.get("approval") or {}, dict):
+            raise ApprovalUnreadable(doc_no)
+        return {"docNo": row["quote_no"], "quoteNo": row["quote_no"], "status": row["status"],
+                "approval": data.get("approval") or {}, "_data": data}
+
+    @staticmethod
+    def save(conn, doc, approval, now):
+        data = doc["_data"]
+        data["approval"] = approval
+        save_quotation_json(conn, doc["docNo"], data)
+
+
+# 其他單據類型的讀寫由擁有模組提供（M01-PLAN §3-7）：承攬商匯款申請 M04、開票申請／請款單 M05、出貨單 M03、
+# 傳票 M06（`JV35`，approval_json 是欄位）。完工單是 M01 的，簽核鏈在 completion_notes.data_json.$.approval。
+_registry.provide("approval.reassign", "quotation", _QuotationReassign)
+_registry.provide("approval.reassign", "completion_note", DataJsonApproval("completion_notes", "note_no"))
 
 
 @router.post("/api/approval-queue/reassign")
@@ -6501,13 +6200,14 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
     reason = (body.reason or "").strip()
     if not reason:
         raise HTTPException(400, "請填寫轉簽原因")
-    if body.type not in _REASSIGN_TABLES:
-        raise HTTPException(400, "此類型不支援轉簽：" + str(body.type))
+    store = _registry.providers("approval.reassign").get(body.type)
+    if store is None:
+        # 不支援的類型，或擁有該單據的模組沒有安裝（它的單也不會出現在佇列上）
+        raise HTTPException(400, "此類型不支援轉簽（或該單據的模組未安裝）：" + str(body.type))
     to_username = (body.to_username or "").strip()
     if not to_username:
         raise HTTPException(400, "請選擇要轉給誰")
 
-    table, key = _REASSIGN_TABLES[body.type]
     conn = get_db()
     try:
         begin_write(conn)   # lost update：各單據的 data_json／approval_json 在寫鎖內讀、整包寫回
@@ -6517,36 +6217,20 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         if not target:
             raise HTTPException(404, "找不到該使用者或帳號已停用")
 
-        is_voucher = body.type == "voucher"
-        if is_voucher:
-            # 📌 `quote_no` 欄位傳票沒有 ⇒ 以單號代入（通知的 ref_label 用它）。
-            #    作廢的傳票不算（它的狀態欄可能還停在簽核中）。
-            row = conn.execute(
-                "SELECT voucher_no AS doc_no, voucher_no AS quote_no, status, approval_json"
-                " FROM vouchers_all WHERE voucher_no=? AND COALESCE(voided_at, '')=''",
-                (body.id,)).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT " + key + " AS doc_no, quote_no, status, data_json FROM " + table +
-                " WHERE " + key + "=?", (body.id,)).fetchone()
+        # 單據的讀寫交給擁有模組（`approval.reassign`）；🔴 讀不出來要擋（fail-closed），不可以吞成空鏈——
+        # 那與「沒有設定流程」一模一樣。
+        try:
+            row = store.load(conn, body.id)
+        except ApprovalUnreadable:
+            raise HTTPException(400, "這張單的簽核資料格式不正確，無法轉簽。")
         if not row:
             raise HTTPException(404, "單據不存在")
         if (row["status"] or "") not in ("待審核", "簽核中"):
             raise HTTPException(409, "只有待審核／簽核中的單據可以轉簽（目前：" + (row["status"] or "") + "）")
-
-        if is_voucher:
-            # 🔴 讀不出來要擋（fail-closed，同 `routers/vouchers.py::_appr_of`），
-            #    不可以吞成空鏈——那與「沒有設定流程」一模一樣。
-            # 📌 就地 import：本段之外的 import 區不動（並行派工的檔案分界）。
-            from helpers.voucher import parse_approval_json, VoucherChainUnreadable
-            try:
-                appr = parse_approval_json(dict(row))
-            except VoucherChainUnreadable:
-                raise HTTPException(400, "這張傳票的簽核資料格式不正確，無法轉簽。")
-            data = None
-        else:
-            data = json.loads(row["data_json"] or "{}")
-            appr = data.get("approval") or {}
+        appr = row["approval"]
+        tiers = _active_tiers(appr)
+        if not tiers:
+            raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
         tiers = _active_tiers(appr)
         if not tiers:
             raise HTTPException(400, "這張單沒有分層簽核資料，無法轉簽")
@@ -6597,16 +6281,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
         appr["reassignLog"] = log
         appr["tiers"] = tiers
 
-        if is_voucher:
-            conn.execute("UPDATE vouchers_all SET approval_json=?, updated_at=? WHERE voucher_no=?",
-                         (json.dumps(appr, ensure_ascii=False), now, body.id))
-        elif table == "quotations":
-            data["approval"] = appr
-            save_quotation_json(conn, row["doc_no"], data)
-        else:
-            data["approval"] = appr
-            conn.execute("UPDATE " + table + " SET data_json=?, updated_at=? WHERE " + key + "=?",
-                         (json.dumps(data, ensure_ascii=False), now, body.id))
+        store.save(conn, row, appr, now)
         conn.commit()
     finally:
         conn.close()
@@ -6617,7 +6292,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
            {"from": old.get("username"), "to": to_username, "reason": reason,
             "tier": ct + 1, "docType": body.type})
     # 被轉到的人要知道自己多了一張要簽的單，否則這張會靜靜卡在他的佇列裡
-    _notify(to_username, "approval_request", body.id, row["quote_no"] or body.id,
+    _notify(to_username, "approval_request", body.id, row["quoteNo"] or body.id,
             actor + " 將「" + body.id + "」的簽核轉給你（原因：" + reason + "）")
 
     return {"ok": True, "to": to_username,

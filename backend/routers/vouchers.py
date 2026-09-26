@@ -1821,3 +1821,69 @@ def _provide_voucher_status(conn, voucher_id):
 
 _registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)
 _registry.provide("voucher.status", "accounting", _provide_voucher_status)
+
+
+# ── 待我簽核與轉簽（M01-PLAN §3-7，2026-09-26）：本模組提供自己的待簽項目與簽核鏈讀寫，M01 佇列只彙整 ──
+# ⚠️ 跟 data_json 類單據不同：approval_json 是 vouchers_all 自己的**欄位**（傳票沒有 data_json）。
+from helpers import approval_queue as _aq  # noqa: E402
+
+
+def _queue_items(conn) -> list:
+    """`approval.queue_items`：待審核／簽核中的會計傳票（`AS3`；`type`＝`voucher`）。
+    傳票不掛在任何案件底下（一般分類帳憑證），`customer` 留空、`projectName` 放摘要。"""
+    rows = conn.execute("""
+        SELECT id, voucher_no, voucher_date, summary, submitted_by, submitted_at,
+               approval_json,
+               COALESCE((SELECT SUM(debit) FROM voucher_lines
+                         WHERE voucher_id = vouchers_all.id), 0) as total_debit
+        FROM vouchers_all
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    out = []
+    for r in rows:
+        f = _aq.tier_fields(r["approval_json"])
+        # 🔑 舊資料（AS3 之前送審的）approval_json 沒嵌 requestedBy ⇒ 退回 submitted_by／submitted_at 兩欄
+        requested_by = f["requestedBy"] or r["submitted_by"] or ""
+        out.append(_aq.base_item(
+            "voucher", r["voucher_no"], f,
+            customer="",
+            projectName=r["summary"] or "",
+            total=r["total_debit"] or 0,
+            quoteDate=r["voucher_date"] or "",
+            requestedBy=requested_by,
+            requestedByDisplay=f["requestedByDisplay"] or requested_by,
+            requestedAt=f["requestedAt"] or r["submitted_at"] or "",
+            # 🔴 `/api/vouchers/{voucher_id}/...` 吃數字 id，不是人看的單號 ⇒ 兩個都給（approval-queue.html `itemPathId()`）
+            voucherId=r["id"],
+        ))
+    return out
+
+
+class _VoucherReassign:
+    """`approval.reassign`（`JV35`）：簽核鏈在 `vouchers_all.approval_json`；作廢的傳票不算（狀態欄可能還停在簽核中）。"""
+
+    @staticmethod
+    def load(conn, doc_no):
+        row = conn.execute(
+            "SELECT voucher_no, status, approval_json FROM vouchers_all"
+            " WHERE voucher_no=? AND COALESCE(voided_at, '')=''", (doc_no,)).fetchone()
+        if not row:
+            return None
+        # 🔴 讀不出來要擋（fail-closed，同 `_appr_of`），不可以吞成空鏈——那與「沒有設定流程」一模一樣
+        from helpers.voucher import parse_approval_json, VoucherChainUnreadable
+        try:
+            appr = parse_approval_json(dict(row))
+        except VoucherChainUnreadable:
+            raise _aq.ApprovalUnreadable(doc_no)
+        # 📌 傳票沒有 quote_no ⇒ 以單號代入（通知的 ref_label 用它）
+        return {"docNo": row["voucher_no"], "quoteNo": row["voucher_no"], "status": row["status"], "approval": appr}
+
+    @staticmethod
+    def save(conn, doc, approval, now):
+        conn.execute("UPDATE vouchers_all SET approval_json=?, updated_at=? WHERE voucher_no=?",
+                     (json.dumps(approval, ensure_ascii=False), now, doc["docNo"]))
+
+
+_registry.provide("approval.queue_items", "voucher", _queue_items)
+_registry.provide("approval.reassign", "voucher", _VoucherReassign)

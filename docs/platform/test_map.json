@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 651,
+  "tests": 652,
   "unmapped": 7,
   "kinds": {
    "audit": 87,
-   "api": 353,
+   "api": 354,
    "unit": 55,
    "e2e": 156
   },
@@ -4904,6 +4904,38 @@
    },
    "module": "tender_radar"
   },
+  "backend/tests/platform/test_approval_providers.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/subcontract/",
+    "file:backend/routers/__init__.py",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "backend/modules/subcontract/",
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
+  },
   "backend/tests/platform/test_auth_login_contract.py": {
    "kind": "api",
    "units": [
@@ -6867,11 +6899,19 @@
   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py": {
    "kind": "unit",
    "units": [
-    "helper:tiered_approval"
+    "helper:custom_modules",
+    "helper:tiered_approval",
+    "router:shipping_notes",
+    "router:vouchers"
    ],
    "evidence": {
     "import": [
      "backend/helpers/tiered_approval.py"
+    ],
+    "path": [
+     "backend/helpers/custom_modules.py",
+     "backend/routers/shipping_notes.py",
+     "backend/routers/vouchers.py"
     ]
    }
   },

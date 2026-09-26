@@ -3,7 +3,7 @@
 只 import core／helpers／db（L1），不 import 其他 L2 模組。"""
 from core.registry import ModuleSpec
 
-from modules.payroll import bonus, bonus_payouts
+from modules.payroll import bonus, bonus_payouts, bonus_queue
 from modules.payroll.api import bonus as bonus_api, payslips as payslips_api
 
 MODULE = ModuleSpec(
@@ -16,5 +16,7 @@ MODULE = ModuleSpec(
         ("expense.entries", "bonus"): bonus_payouts._expense_entries,
         # IP-16：L1 /api/system/bonus-module-status
         ("bonus.module_status", "payroll"): bonus.bonus_module_on,
+        # IP-10（M01-PLAN §3-7）：M01「待我簽核」佇列的獎金分潤單與案件獎金分潤
+        ("approval.queue_items", "payroll"): bonus_queue.queue_items,
     },
 )

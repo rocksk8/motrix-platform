@@ -90,18 +90,69 @@ def _func_body_text(source, func_name):
     return ""
 
 
+def _provider_sources(backend_dir=None):
+    """`approval.queue_items` 提供者的函式原始碼（M01-PLAN §3-7：單據模組自己提供待簽項目，M01 只彙整）。
+
+    靜態找兩種登記寫法（不 import 任何模組）：
+    - `registry.provide("approval.queue_items", "<名>", fn)` ⇒ 同檔的 `def fn`
+    - ModuleSpec 的 `providers={("approval.queue_items", "<名>"): mod.fn}` ⇒ 同一個模組套件裡 `mod.py`（或 `api/mod.py`）的 `def fn`
+    回傳 [(標籤, 原始碼), …]。"""
+    backend_dir = backend_dir or _BACKEND_DIR
+    files = {}
+    for root, dirs, names in os.walk(backend_dir):
+        dirs[:] = [d for d in dirs if d not in ("tests", "__pycache__", "tools", "node_modules")]
+        for n in names:
+            if n.endswith(".py"):
+                path = os.path.join(root, n)
+                with io.open(path, encoding="utf-8") as f:
+                    files[path] = f.read()
+
+    def _def_in(path, name):
+        src = files.get(path)
+        return _func_body_text(src, name) if src else ""
+
+    out = []
+    for path, src in files.items():
+        if "approval.queue_items" not in src:
+            continue
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.Call) and len(node.args) >= 3 \
+               and isinstance(node.args[0], ast.Constant) and node.args[0].value == "approval.queue_items" \
+               and isinstance(node.args[2], ast.Name):
+                out.append((os.path.relpath(path, backend_dir), _def_in(path, node.args[2].id)))
+            elif isinstance(node, ast.Dict):
+                for k, v in zip(node.keys, node.values):
+                    if isinstance(k, ast.Tuple) and k.elts and isinstance(k.elts[0], ast.Constant) \
+                       and k.elts[0].value == "approval.queue_items" \
+                       and isinstance(v, ast.Attribute) and isinstance(v.value, ast.Name):
+                        pkg = os.path.dirname(path)
+                        for cand in (os.path.join(pkg, v.value.id + ".py"),
+                                     os.path.join(pkg, "api", v.value.id + ".py")):
+                            if cand in files:
+                                out.append((os.path.relpath(cand, backend_dir), _def_in(cand, v.attr)))
+    return out
+
+
+def _has_literal(src, lit):
+    return ('"%s"' % lit) in src or ("'%s'" % lit) in src
+
+
 def check_approval_queue_coverage(doc_types=None, queue_source=None,
-                                  count_source=None):
+                                  count_source=None, provider_sources=None):
     """回傳一個 dict，三個鍵在完全涵蓋時都應該是空 list：
 
     ```
     missing_from_map    doc_type 沒有登記在 _QUEUE_TYPE_FOR_DOC_TYPE
-    missing_from_queue  登記了，而 get_approval_queue() 源碼裡找不到那個
-                         type 字面值
-    missing_from_count  登記了，而 get_approval_queue_count() 源碼裡找不到
-                         那個資料表名
+    missing_from_queue  登記了，而 get_approval_queue() 源碼與任何 `approval.queue_items`
+                         提供者都找不到那個 type 字面值
+    missing_from_count  登記了，而 get_approval_queue_count() 源碼裡找不到那個資料表名，
+                         也不是「提供者列出、count 端點彙整提供者」
     ```
+    `provider_sources`：[(標籤, 原始碼)]；留空讀真的登記處（`_provider_sources()`）。提供者的項目同時餵兩支端點，
+    所以提供者型別在 count 端看的是「count 端點呼叫 `_queue_provider_items(`」＋提供者源碼裡有那張表。
     """
+    if provider_sources is None:
+        provider_sources = _provider_sources()
     if doc_types is None:
         doc_types = _default_doc_types()
     if queue_source is None or count_source is None:
@@ -119,11 +170,11 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
             missing_from_map.append(dt)
             continue
         type_literal, table_name = mapping
-        has_type = (('"%s"' % type_literal) in queue_source
-                    or ("'%s'" % type_literal) in queue_source)
-        if not has_type:
+        owners = [src for _lbl, src in provider_sources if _has_literal(src, type_literal)]
+        if not (_has_literal(queue_source, type_literal) or owners):
             missing_from_queue.append(dt)
-        if table_name not in count_source:
+        via_provider = "_queue_provider_items(" in count_source and any(table_name in src for src in owners)
+        if not (table_name in count_source or via_provider):
             missing_from_count.append(dt)
 
     return {
@@ -154,7 +205,7 @@ def _self_check():
     #    不必真的去改 quotations.py。
     r = check_approval_queue_coverage(
         doc_types=["voucher"], queue_source="def f():\n    pass\n",
-        count_source="def g():\n    pass\n")
+        count_source="def g():\n    pass\n", provider_sources=[])
     if "voucher" not in r["missing_from_queue"] or "voucher" not in r["missing_from_count"]:
         say("   NG  正對照(2)：空白源碼沒有被判定為漏掉 => 這支尺本身壞了")
         bad += 1

@@ -1044,6 +1044,7 @@
         detail: null,
         detailLoading: false,
         reassignModal: false,
+        reassignTypes: [],
         reassignTo: '',
         reassignReason: '',
         reassignError: '',
@@ -1412,6 +1413,7 @@
             this.queue = d.queue || []
             this.totalPending = d.total || 0
             this.myDelegatedFor = d.myDelegatedFor || []
+            this.reassignTypes = Array.isArray(d.reassignTypes) ? d.reassignTypes : []
             // Keep selection in sync
             if (this.selected) {
               const key = this.itemKey(this.selected)
@@ -1433,10 +1435,8 @@
         canReassign(item) {
           if (!item) return false
           if (this.session.role !== 'superadmin') return false
-          // `JV35`：傳票也可以轉簽（後端 `_REASSIGN_TABLES` 同步加了 voucher）。
-          return ['quotation', 'contractor_voucher', 'invoice_voucher',
-                  'payment_request', 'shipping_note', 'completion_note',
-                  'voucher'].includes(item.type)
+          // M01-PLAN §3-7：可轉簽的類型由後端給（有 `approval.reassign` 提供者的單據；擁有的模組不在就沒有）。
+          return this.reassignTypes.includes(item.type)
         },
 
         async openReassign() {

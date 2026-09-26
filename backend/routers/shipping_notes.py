@@ -776,3 +776,38 @@ def _calendar_writeback(key: str, event_id: str, slot: str = "default") -> None:
 
 
 _registry.provide("calendar.writeback", "shipping_note", _calendar_writeback)
+
+
+# ── 待我簽核與轉簽（M01-PLAN §3-7，2026-09-26）：本模組提供自己的待簽項目與簽核鏈讀寫，M01 佇列只彙整 ──
+from helpers import approval_queue as _aq  # noqa: E402
+
+
+def _queue_items(conn) -> list:
+    """`approval.queue_items`：待審核／簽核中的出貨單（`type`＝`shipping_note`；`total` 放品項數）。"""
+    rows = conn.execute("""
+        SELECT note_no, quote_no, customer_name, project_name, items_json, ship_date, created_at,
+               json_extract(data_json,'$.approval') as approval_json
+        FROM shipping_notes
+        WHERE status IN ('待審核','簽核中')
+        ORDER BY id DESC
+    """).fetchall()
+    out = []
+    for r in rows:
+        f = _aq.tier_fields(r["approval_json"])
+        try:
+            item_count = len(json.loads(r["items_json"] or "[]"))
+        except Exception:
+            item_count = 0
+        out.append(_aq.base_item(
+            "shipping_note", r["note_no"], f,
+            customer=r["customer_name"] or "",
+            projectName=r["project_name"] or "",
+            total=item_count,
+            quoteDate=r["ship_date"] or (r["created_at"] or "")[:10],
+            linkedQuoteNo=r["quote_no"],
+        ))
+    return out
+
+
+_registry.provide("approval.queue_items", "shipping_note", _queue_items)
+_registry.provide("approval.reassign", "shipping_note", _aq.DataJsonApproval("shipping_notes", "note_no"))
