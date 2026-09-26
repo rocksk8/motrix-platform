@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.99 — 2026-09-26（A，稽核 D O-4，wip/a-m10 68f16342；第六班列車取號）
+## 1.34 — 2026-09-26（A，稽核 D O-4，wip/a-m10 68f16342；第六班列車取號）〔core_bump：暫用 1.99 → 1.34〕
 > 介面不變。原 commit 改寫的是 1.17（今 1.26）段落那一行；列車上改為新增本段、不改寫已合回的歷史段落。
 - L0（行為）：`core.source_tree.module_installed(path)` 的「在」改為 `modules/<key>/module.json` 存在（與載入器、`module_dirs()` 同一個判準）；只剩 `__pycache__` 的空資料夾不算在；`modules/`（沒有 key）一律 True
 
