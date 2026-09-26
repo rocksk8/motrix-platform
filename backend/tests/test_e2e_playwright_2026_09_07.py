@@ -48,26 +48,37 @@ def _login(page, base_url, username, password):
 
 
 def _create_diag(responses, sent, console, dialogs, state, now=None):
-    """建立端逾時的證據（O11）：送出但沒有回應的請求（最久的在前）、每一趟 next-quote-no／POST quotations 的狀態與回應開頭、
-    console、對話框、畫面狀態。純函式（題目用）。"""
+    """建立端逾時的證據（O11）：送出但沒有回應的請求（最久的在前）、next-quote-no／POST quotations 的**狀態碼與單號**、
+    console、對話框、畫面狀態。純函式（題目用）。
+    〔D 抽查 O11-S1（主持升必修）：原本印回應本文前 120 字與 console 原文 ⇒ 會帶出 token、客戶名、Bearer、?pt= 簽章。
+      改成：回應只印狀態碼＋單號（MQ-…）；網址只印路徑；console／對話框先過 conftest.redact（S2-S1 同一套）〕"""
+    import re
+    from conftest import redact
     now = time.time() if now is None else now
+
+    def path_only(u):
+        return u.split("?")[0].split("#")[0]
     done = {}
     for r in responses:
-        done.setdefault((r["method"], r["url"]), []).append(r)
+        done.setdefault((r["method"], path_only(r["url"])), []).append(r)
     pending = []
     for t0, m, u in sent:
-        lst = done.get((m, u))
+        lst = done.get((m, path_only(u)))
         if lst:
             lst.pop(0)
         else:
             pending.append((t0, m, u))
     lines = ["畫面狀態：%r" % (state,), "送出而沒有回應的請求（%d）：" % len(pending)]
-    lines += ["  %6.1fs  %s /api/%s" % (now - t0, m, u.split("?")[0]) for t0, m, u in sorted(pending)] or ["  （無）"]
-    lines.append("存檔相關回應：")
-    key = [r for r in responses if "next-quote-no" in r["url"] or r["url"].rstrip("/").endswith("quotations")]
-    lines += ["  %s /api/%s ⇒ %s %s" % (r["method"], r["url"].split("?")[0], r["status"], (r.get("resp") or "")[:120]) for r in key] or ["  （無）"]
-    lines.append("console：%s" % (console[-10:] or "（無）"))
-    lines.append("對話框：%s" % (dialogs or "（無）"))
+    lines += ["  %6.1fs  %s /api/%s" % (now - t0, m, path_only(u)) for t0, m, u in sorted(pending)] or ["  （無）"]
+    lines.append("存檔相關回應（只列狀態碼與單號）：")
+    key = [r for r in responses if "next-quote-no" in r["url"] or path_only(r["url"]).rstrip("/").endswith("quotations")]
+    for r in key:
+        nos = re.findall(r"MQ-\d{6}-\d+", r.get("resp") or "")
+        lines.append("  %s /api/%s ⇒ %s%s" % (r["method"], path_only(r["url"]), r["status"], ("  單號 %s" % nos[0]) if nos else ""))
+    if not key:
+        lines.append("  （無）")
+    lines.append("console：%s" % ([redact(c) for c in console[-10:]] or "（無）"))
+    lines.append("對話框：%s" % ([redact(d) for d in dialogs] or "（無）"))
     return "\n".join(lines)
 
 
@@ -559,12 +570,17 @@ def test_case_finance_summary_smoke(live_server, make_user, e2e_browser):
 
 
 def test_o11_create_diag_names_the_pending_request_and_the_post_result():
-    """O11：逾時證據要點名「送出沒回應的請求」與存檔 POST 的狀態。突變：_create_diag 回空字串 ⇒ 紅。"""
-    sent = [(100.0, "GET", "next-quote-no"), (101.0, "POST", "quotations"), (102.0, "GET", "notifications?x=1")]
-    responses = [{"method": "GET", "url": "next-quote-no", "status": 200, "resp": '{"no":"MQ-1"}'},
-                 {"method": "POST", "url": "quotations", "status": 500, "resp": "database is locked"}]
-    text = _create_diag(responses, sent, ["[error] boom"], [], {"isNewRecord": True}, now=150.0)
-    assert "GET /api/notifications" in text and "48.0s" in text, text
-    assert "POST /api/quotations ⇒ 500 database is locked" in text, text
-    assert "isNewRecord" in text and "boom" in text
-
+    """O11：逾時證據要點名「送出沒回應的請求」與存檔 POST 的結果——而且不外洩（O11-S1）：輸入帶 ?pt=、?q=、Bearer、
+    本文裡的 token 與客戶名，輸出一個都不可以出現。突變：回空字串 ⇒ 紅；拿掉去 query／不過 redact／印本文 ⇒ 紅。"""
+    sent = [(100.0, "GET", "next-quote-no?q=客戶甲"), (101.0, "POST", "quotations"),
+            (102.0, "GET", "uploads/a.jpg?pt=SECRETPT&q=客戶乙")]
+    responses = [{"method": "GET", "url": "next-quote-no?q=客戶甲", "status": 200, "resp": '{"quote_no":"MQ-202609-001"}'},
+                 {"method": "POST", "url": "quotations", "status": 500,
+                  "resp": '{"detail":"x","token":"SECRETTOKEN","customer":"客戶丙"}'}]
+    console = ["[error] GET /api/uploads/a.jpg?pt=SECRETPT failed", "[log] authorization: Bearer SECRETBEARER"]
+    text = _create_diag(responses, sent, console, ["客戶丁 Bearer SECRETBEARER"], {"isNewRecord": True}, now=150.0)
+    assert "GET /api/uploads/a.jpg" in text and "48.0s" in text, text
+    assert "POST /api/quotations ⇒ 500" in text and "GET /api/next-quote-no ⇒ 200  單號 MQ-202609-001" in text, text
+    for secret in ("SECRETPT", "SECRETTOKEN", "SECRETBEARER", "客戶甲", "客戶乙", "客戶丙"):
+        assert secret not in text, (secret, text)
+    assert "isNewRecord" in text
