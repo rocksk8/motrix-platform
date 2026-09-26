@@ -518,28 +518,6 @@
     "audit_log"
    ]
   },
-  "helper:case_attachments": {
-   "api_prefixes": [],
-   "dynamic_sql": false,
-   "imports": [
-    "helper:case_access",
-    "helper:uploads",
-    "plat:registry"
-   ],
-   "kind": "helper",
-   "path": "backend/helpers/case_attachments.py",
-   "tables_ddl": [],
-   "tables_named": [
-    "case_extra_expenses",
-    "quotations"
-   ],
-   "tables_r": [
-    "case_extra_expenses",
-    "case_updates",
-    "quotations"
-   ],
-   "tables_w": []
-  },
   "helper:case_roles": {
    "api_prefixes": [],
    "dynamic_sql": false,
@@ -2603,6 +2581,7 @@
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
     "mod:case/api/quotations",
+    "mod:case/attachments",
     "mod:case/case_deadlines",
     "mod:case/quotations",
     "plat:registry"
@@ -2612,7 +2591,9 @@
    "path": "backend/modules/case/__init__.py",
    "role": "init",
    "tables_ddl": [],
-   "tables_named": [],
+   "tables_named": [
+    "quotations"
+   ],
    "tables_r": [],
    "tables_w": []
   },
@@ -2716,7 +2697,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:case_attachments",
     "helper:dates",
     "helper:email_notify",
     "helper:legal_params",
@@ -2864,7 +2844,6 @@
     "audit_log",
     "case_extra_expenses",
     "case_stages",
-    "case_updates",
     "contractor_dispatches",
     "contractor_payment_vouchers",
     "daily_tasks",
@@ -3069,7 +3048,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:case_attachments",
     "helper:dates",
     "helper:financial_mask",
     "helper:legal_params",
@@ -3079,7 +3057,6 @@
     "helper:settings",
     "helper:tax_calc",
     "helper:tiered_approval",
-    "helper:uploads",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition"
@@ -3130,7 +3107,6 @@
     "audit_log",
     "case_extra_expenses",
     "case_stages",
-    "case_updates",
     "contractor_dispatches",
     "contractor_payment_vouchers",
     "daily_tasks",
@@ -3168,7 +3144,6 @@
     "helper:audit",
     "helper:auth",
     "helper:case_access",
-    "helper:case_attachments",
     "helper:case_roles",
     "helper:company_identity",
     "helper:dates",
@@ -3654,19 +3629,19 @@
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6571,
+     "line": 6568,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6585,
+     "line": 6582,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6616,
+     "line": 6613,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -3701,7 +3676,6 @@
     "audit_log",
     "case_extra_expenses",
     "case_stages",
-    "case_updates",
     "completion_notes",
     "contractor_dispatches",
     "contractor_payment_vouchers",
@@ -3740,6 +3714,30 @@
     "quote_seq",
     "system_settings"
    ]
+  },
+  "mod:case/attachments": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "helper:case_access",
+    "helper:uploads",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "case",
+   "path": "backend/modules/case/attachments.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [
+    "case_extra_expenses",
+    "quotations"
+   ],
+   "tables_r": [
+    "case_extra_expenses",
+    "case_updates",
+    "quotations"
+   ],
+   "tables_w": []
   },
   "mod:case/case_deadlines": {
    "api_prefixes": [],
@@ -3814,7 +3812,6 @@
    "imports": [
     "core:db",
     "helper:case_access",
-    "helper:case_attachments",
     "helper:dates",
     "helper:legal_params",
     "helper:row_access",
@@ -11356,14 +11353,14 @@
    "imports": [],
    "kind": "table",
    "named_by": [
-    "helper:case_attachments"
+    "mod:case/attachments"
    ],
    "path": "backend/db.py:3436",
    "readers": [
     "core:archive",
     "core:pdf_gen",
-    "helper:case_attachments",
     "mod:case/api/quotations",
+    "mod:case/attachments",
     "mod:case/quotations",
     "mod:case/recognition",
     "router:vouchers"
@@ -11425,8 +11422,8 @@
    "readers": [
     "core:archive",
     "core:pdf_gen",
-    "helper:case_attachments",
     "mod:analytics/api/dashboard",
+    "mod:case/attachments",
     "router:item_reads"
    ],
    "tables_r": [],
@@ -12269,8 +12266,9 @@
    "named_by": [
     "core:archive",
     "core:trail",
-    "helper:case_attachments",
     "helper:system_checks",
+    "mod:case/__init__",
+    "mod:case/attachments",
     "router:search"
    ],
    "path": "backend/db.py:454",
@@ -12279,7 +12277,6 @@
     "core:pdf_gen",
     "helper:audit",
     "helper:case_access",
-    "helper:case_attachments",
     "helper:company_identity",
     "helper:google_calendar",
     "mod:analytics/api/dashboard",
@@ -12292,6 +12289,7 @@
     "mod:case/api/case_extra_expenses",
     "mod:case/api/completion_notes",
     "mod:case/api/material_orders",
+    "mod:case/attachments",
     "mod:case/case_deadlines",
     "mod:case/case_stage_tasks",
     "mod:case/recognition",

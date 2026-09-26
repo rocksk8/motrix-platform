@@ -446,9 +446,6 @@ class _CaseAccess:
 
 
 from core import registry as _registry  # noqa: E402
-_registry.provide("case.access", "case", _CaseAccess)
-_registry.provide("case.summary", "case", case_summary)          # 2026-09-26 M01-PLAN §3-4（IP 號碼由列車定）
-_registry.provide("case.locations", "case", _CaseLocations)
 
 
 class _CaseRecognition:
@@ -491,8 +488,6 @@ class _CaseRecognition:
         return quote_won_month_map(conn)
 
 
-_registry.provide("case.recognition", "case", _CaseRecognition)   # IP 號碼由列車定
-from helpers import case_attachments as _case_attachments  # noqa: E402,F401  登記 attachments.for_document（M01）
 
 
 def _default_terms() -> dict:
@@ -527,5 +522,3 @@ def _record_doc_version(quote_no: str, entry: dict, keep: int) -> None:
         conn.close()
 
 
-_registry.provide("case.default_terms", "case", _default_terms)      # IP 號碼由列車定
-_registry.provide("case.doc_version", "case", _record_doc_version)   # IP 號碼由列車定

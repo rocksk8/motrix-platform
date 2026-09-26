@@ -6104,8 +6104,8 @@ class _QuotationReassign:
 
 # 其他單據類型的讀寫由擁有模組提供（M01-PLAN §3-7）：承攬商匯款申請 M04、開票申請／請款單 M05、出貨單 M03、
 # 傳票 M06（`JV35`，approval_json 是欄位）。完工單是 M01 的，簽核鏈在 completion_notes.data_json.$.approval。
-_registry.provide("approval.reassign", "quotation", _QuotationReassign)
-_registry.provide("approval.reassign", "completion_note", DataJsonApproval("completion_notes", "note_no"))
+#: `approval.reassign`（completion_note）：簽核鏈在 completion_notes.data_json.$.approval（ModuleSpec 宣告）
+COMPLETION_NOTE_REASSIGN = DataJsonApproval("completion_notes", "note_no")
 
 
 @router.post("/api/approval-queue/reassign")
@@ -6548,9 +6548,6 @@ def _append_items_to_quotation(conn, quote_no: str, header: str, items: list, no
     return now
 
 
-_registry.provide("calendar.writeback", "quotation", _calendar_writeback_quotation)
-_registry.provide("quotation.append_items", "quotations", _append_items_to_quotation)
-_registry.provide("calendar.writeback", "case_stage", _calendar_writeback_case_stage)
 
 
 # ── 個資蒐集告知（CUSTOMIZATION-SPEC §9.3；2026-09-26 主持裁示：單據上手動輸入的聯絡人也是蒐集個資）──

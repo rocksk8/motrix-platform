@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 682,
+  "tests": 683,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 372,
+   "api": 373,
    "unit": 57,
    "e2e": 164
   },
@@ -5544,6 +5544,27 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_case_module_spec.py": {
+   "kind": "api",
+   "units": [
+    "dir:backend/modules/case/",
+    "mod:case/__init__",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/modules/case/__init__.py"
+    ],
+    "path": [
+     "backend/modules/case/"
+    ]
+   }
   },
   "backend/tests/platform/test_case_read_scope.py": {
    "kind": "audit",

@@ -12,7 +12,7 @@
 | material_invoice | caseRecord.materials[i].invoiceFiles | `案件編號_i` |
 | extra_expense | `case_extra_expenses.files_json` | id |
 
-M01 尚未搬進 modules/ ⇒ 以 `registry.provide()` 在匯入時登記（同 `helpers/quotations.py` 的 case.access）；
+~~M01 尚未搬進 modules/ ⇒ 以 `registry.provide()` 在匯入時登記~~〔更正（M01-PLAN §3-8 ③）：M01 已搬進 modules/case，改由 ModuleSpec.providers 宣告〕；
 M01 搬遷時改寫進 `ModuleSpec.providers`（M01-PLAN，同 CA-O3）。
 
 權限（稽核 D AT-M1，主持裁示 (b)）：每一類都先確認使用者看得到那張案件（`case_documents_readable`），
@@ -130,4 +130,3 @@ class _CaseAttachments:
 
 
 from core import registry as _registry  # noqa: E402
-_registry.provide("attachments.for_document", "case", _CaseAttachments)
