@@ -5378,6 +5378,7 @@
     ],
     "path": [
      "backend/helpers/voucher_attachments.py",
+     "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
      "backend/routers/quotations.py",
      "docs/platform/",
@@ -13358,6 +13359,7 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/arap/",
     "dir:frontend/js/",
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
@@ -13405,6 +13407,7 @@
      "frontend/static/legal-round.js"
     ],
     "path": [
+     "backend/modules/arap/",
      "frontend/js/",
      "frontend/js/reports.js",
      "frontend/static/legal-round.js"
@@ -13719,6 +13722,7 @@
    "units": [
     "dir:backend/",
     "dir:backend/helpers/",
+    "dir:backend/modules/arap/",
     "dir:backend/routers/",
     "dir:frontend/",
     "dir:frontend/pages/",
@@ -13727,21 +13731,32 @@
     "page:pages/company-profile-settings.html",
     "page:pages/daily-tasks.html",
     "page:pages/notification-settings.html",
+    "page:pages/payment-request-form.html",
+    "page:pages/receivables.html",
     "page:pages/users.html",
+    "plat:__init__",
+    "plat:source_tree",
     "router:accounting_export"
    ],
    "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py"
+    ],
     "page": [
      "frontend/pages/cashier.html",
      "frontend/pages/company-profile-settings.html",
      "frontend/pages/daily-tasks.html",
      "frontend/pages/notification-settings.html",
+     "frontend/pages/payment-request-form.html",
+     "frontend/pages/receivables.html",
      "frontend/pages/users.html"
     ],
     "path": [
      "backend/",
      "backend/helpers/",
      "backend/helpers/startup.py",
+     "backend/modules/arap/",
      "backend/routers/",
      "backend/routers/accounting_export.py",
      "frontend/",
