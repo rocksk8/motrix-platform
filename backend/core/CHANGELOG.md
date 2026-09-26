@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.40 — 2026-09-26（C，M01-PLAN §3-8 ① CA-O4：L1 不再 import M01；疊在 c-approval-2）〔core_bump：暫用 1.99 → 1.40〕
+## 1.43 — 2026-09-26（C，M01-PLAN §3-8 ① CA-O4：L1 不再 import M01；疊在 c-approval-2）〔core_bump：暫用 1.99 → 1.40〕〔core_bump：暫用 1.40 → 1.43〕
 > 介面只有新增（刪掉的只有 `helpers` 套件對 M01 名稱的再匯出——那些名稱屬 M01，不是 L1 介面）。
 - L1（新增，逐字自 M01 `helpers/quotations.py` 下沉，M01 保留同名別名）：`helpers.tax_calc.summarize_payment_items`（`norm_at`、`steps_to_tiers` 已由 1.36 §3-2 下沉）
 - `helpers` 套件不再再匯出 M01 的 `SQL_DEAL_TAG`、`SQL_SETTLE_STATUS`、`quote_hot_fields`、`save_quotation_json`、`case_extra_expenses`、`quote_won_month_map`、`validate_invoice_no`／`_amounts`、`validate_quote_tax`、`sync_daily_task_for_case_stage`、`delete_daily_task_for_case_stage`、`daily_task_notice`（呼叫端只有 M01 自己，改 `from helpers.quotations／case_stage_tasks import`）
