@@ -143,7 +143,9 @@ def test_a_quick_e2e_leaves_nothing_behind(probe, tmp_path):
 def test_probe_dir_is_outside_product_scans_and_pytest_collection():
     """O6／O6-M1（靜態守門）：探針目錄在 backend/tests/ 底下、「.」開頭——
     產品碼掃描（core.source_tree 的 product_files／logic_files／router_files，以及「rglob 整個 backend、排除 tests」的守門）碰不到；
-    pytest 遞迴收集不進「.」開頭的目錄。"""
+    pytest 遞迴收集不進「.」開頭的目錄。
+    ⚠ 本題只驗 core.source_tree 的清單；**自己寫 rglob 的掃描**（掃整個 backend 的守門）靠各自排除 tests/ 來保證——
+    2026-09-26 稽核 D 逐行查 13 道，12 道有排除、剩下 1 道已修（h-o6s1）；新增這類掃描時要自己排除 tests/（稽核 D O6-S1）。"""
     from core import source_tree
     probe_dir = os.path.join(PROBE_ROOT, PROBE_PREFIX + "x")
     rel = os.path.relpath(probe_dir, BACKEND).replace("\\", "/")
