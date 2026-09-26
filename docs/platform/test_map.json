@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 632,
+  "tests": 633,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 337,
+   "api": 338,
    "unit": 56,
    "e2e": 154
   },
@@ -10551,6 +10551,25 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/test_font_cache_headers_2026_09_26.py": {
+   "kind": "api",
+   "units": [
+    "dir:frontend/fonts/",
+    "file:frontend/css/style.css",
+    "page:pages/login.html"
+   ],
+   "evidence": {
+    "page": [
+     "frontend/css/style.css",
+     "frontend/pages/login.html"
+    ],
+    "path": [
+     "frontend/css/style.css",
+     "frontend/fonts/",
+     "frontend/pages/login.html"
+    ]
+   }
   },
   "backend/tests/test_form_version_bumped_2026_09_24.py": {
    "kind": "audit",
