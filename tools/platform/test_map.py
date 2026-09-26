@@ -37,8 +37,11 @@ _ASSET_RE = re.compile(r"[\w\-./]*?[\w\-]+\.(?:html|js|css)\b")
 
 
 def tracked_files():
-    out = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z"], capture_output=True, check=True).stdout
-    return [p for p in out.decode("utf-8").split("\0") if p]
+    """已追蹤＋未追蹤但沒被 .gitignore 排除的檔（新測試檔還沒 git add 時，modtest 現場選題也要看得到它——
+    2026-09-26 B 在 b-o5-s2 踩到：新檔沒 add ⇒ test_map 不含它 ⇒ 選題漏掉）。"""
+    out = subprocess.run(["git", "-C", str(REPO), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                         capture_output=True, check=True).stdout
+    return sorted({p for p in out.decode("utf-8").split("\0") if p})
 
 
 def _parse(path):
