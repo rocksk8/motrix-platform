@@ -192,7 +192,7 @@ def test_rc_system_scanner_catches_an_l2_user():
                                   "modules/c3.py", "modules/c4.py", "modules/c5.py", "modules/c6.py"}
 
 
-def test_runtime_refuses_system_from_an_l2_module(tmp_path, monkeypatch):
+def test_runtime_refuses_system_from_an_l2_module(client):
     """執行期檢查（第二道）：呼叫端在 `backend/modules/` 底下卻傳 SYSTEM ⇒ PermissionError；L1 傳 ⇒ 照常。"""
     import sys
     from helpers.case_access import SYSTEM
