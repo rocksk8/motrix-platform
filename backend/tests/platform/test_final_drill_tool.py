@@ -210,3 +210,24 @@ def test_report_names_the_kept_directories(tmp_path):
     FD.write_report(rep, str(tmp_path / "r.md"))
     text = (tmp_path / "r.md").read_text(encoding="utf-8")
     assert "保留" in text and str(tmp_path / "v9-install") in text
+
+
+def test_every_smoke_module_key_is_registered():
+    """稽核 ⑰ S-1：SMOKE 條目帶的模組 key 必須在 modules.json 登記（用 repo 的登記表，不用「樹上有沒有」判斷）。"""
+    keys = {e[3] for e in FD.SMOKE if len(e) > 3}
+    assert keys and keys <= FD.registered_module_keys(), keys - FD.registered_module_keys()
+
+
+def test_rc_a_misspelled_smoke_key_is_not_a_legitimate_skip(tmp_path, monkeypatch):
+    """反向控制：key 打錯（analytcs）⇒ smoke_plan 標成「未登記」而不是「不在包內」；smoke_ok 判不過。"""
+    real = [e for e in FD.SMOKE if len(e) > 3][0]
+    monkeypatch.setattr(FD, "SMOKE", [("首頁", "GET", "/"), (real[0], real[1], real[2], real[3] + "_typo")])
+    plan = FD.smoke_plan(str(tmp_path), registered=FD.registered_module_keys())
+    reasons = [p[3] for p in plan if p[3]]
+    assert reasons and FD.UNREGISTERED in reasons[0], plan
+    out = {"checks": [{"name": "首頁", "ok": True}],
+           "skipped": [{"name": real[0], "path": real[2], "reason": reasons[0]}]}
+    assert FD.smoke_ok(out) is False and out["unregistered_skips"]
+    ok = {"checks": [{"name": "首頁", "ok": True}],
+          "skipped": [{"name": real[0], "path": real[2], "reason": "模組 %s 不在安裝包" % real[3]}]}
+    assert FD.smoke_ok(ok) is True                     # 正對照：真的不在包內的略過是合法的
