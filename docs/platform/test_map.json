@@ -14764,11 +14764,15 @@
    "units": [
     "dir:backend/",
     "dir:backend/helpers/",
+    "dir:backend/modules/",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/accounting/api/",
     "dir:backend/modules/arap/",
-    "dir:backend/routers/",
     "dir:frontend/",
     "dir:frontend/pages/",
     "helper:startup",
+    "mod:accounting/api/accounting_export",
+    "mod:accounting/api/vouchers",
     "page:pages/cashier.html",
     "page:pages/company-profile-settings.html",
     "page:pages/daily-tasks.html",
@@ -14776,6 +14780,7 @@
     "page:pages/payment-request-form.html",
     "page:pages/receivables.html",
     "page:pages/users.html",
+    "page:pages/voucher.html",
     "plat:__init__",
     "plat:source_tree"
    ],
@@ -14791,16 +14796,22 @@
      "frontend/pages/notification-settings.html",
      "frontend/pages/payment-request-form.html",
      "frontend/pages/receivables.html",
-     "frontend/pages/users.html"
+     "frontend/pages/users.html",
+     "frontend/pages/voucher.html"
     ],
     "path": [
      "backend/",
      "backend/helpers/",
      "backend/helpers/startup.py",
+     "backend/modules/",
+     "backend/modules/accounting/",
+     "backend/modules/accounting/api/",
+     "backend/modules/accounting/api/accounting_export.py",
+     "backend/modules/accounting/api/vouchers.py",
      "backend/modules/arap/",
-     "backend/routers/",
      "frontend/",
-     "frontend/pages/"
+     "frontend/pages/",
+     "frontend/pages/voucher.html"
     ]
    }
   },

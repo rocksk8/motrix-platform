@@ -196,24 +196,100 @@ _BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由
 #: 這裡沒有必要把目錄也寫死。
 _MODULE_OWNED_FRONTEND_PAGES = {"cashier.html", "receivables.html", "payment-request-form.html"}   # arap（M05）
 
+#: 〔2026-09-26 M06 搬遷＋稽核 D M06-M2（主持重點）：上面的做法只把模組的條目**移出計數範圍**，沒有題接手——
+#:   模組裡的訊息只有 tender_radar 自己有守。改成**每一組各自一個基準**：模組外一組（`_outside`）、每個已安裝模組一組；
+#:   每組都不可以低於基準；模組不在就不比；另一組多一條補不回被刪的那一組；有訊息而沒登記基準的新組 ⇒ 紅。
+#:   歸屬：`modules/<key>/…` 底下的檔歸 key；frontend 的頁面依**已安裝模組 module.json 的 `pages[]`** 歸該模組
+#:   （B 審查：不手列；`_MODULE_OWNED_FRONTEND_PAGES` 保留當正對照——這 3 頁要經 module.json 歸到 arap）。
+#:   基準（A 2026-09-26 在 wip/a-m06-4〔afbb1b8d 之上〕以本檔掃描器實量，總數 157 不變）：
+#:   模組外 120、accounting 4、analytics 8、arap 3、daily_tasks 3、netplan 1、payroll 6、subcontract 2、supply 2、tender_radar 8。
+#:   模組外由 138 變 120 不是刪訊息：各模組 pages[] 的頁面（報表、獎金、傳票…）改算進各自的組〕
+_BASELINE_BY_GROUP = {"_outside": 120, "accounting": 4, "analytics": 8, "arap": 3, "daily_tasks": 3,
+                      "netplan": 1, "payroll": 6, "subcontract": 2, "supply": 2, "tender_radar": 8}
+
+
+def _page_owners():
+    """frontend 頁面檔名 ⇒ 模組 key（已安裝模組的 module.json `pages[]`；模組不在 ⇒ 它的頁面不在這張表）。"""
+    import json
+    from core import source_tree
+    out = {}
+    for d in source_tree.module_dirs():
+        m = json.loads((d / "module.json").read_text(encoding="utf-8"))
+        for pg in m.get("pages", []):
+            out[str(pg.get("path", "")).replace("\\", "/").rsplit("/", 1)[-1]] = m.get("key") or d.name
+    return out
+
+
+def _group_of(path, owners):
+    parts = str(path).replace("\\", "/").split("/")
+    if "modules" in parts:
+        return parts[parts.index("modules") + 1]
+    return owners.get(parts[-1], "_outside")
+
+
+def em10_problems(hits_by_group, baseline, installed):
+    """hits_by_group：{組: [(檔, 字串)]}；installed(組) ⇒ 模組在不在（`_outside` 永遠在）。回問題清單（附該組前幾條命中）。"""
+    out = []
+    for g, want in sorted(baseline.items()):
+        if g != "_outside" and not installed(g):
+            continue                                   # 模組不在（選配／反向控制）⇒ 它的條目本來就不在
+        got = hits_by_group.get(g, [])
+        if len(got) < want:
+            out.append("%s：含導航語氣的可見字串 %d 條，低於基準 %d；目前命中的前幾條：\n%s" % (
+                g, len(got), want, "\n".join("    %s :: %r" % (pp, ss[:60]) for pp, ss in got[:8])))
+    for g in sorted(set(hits_by_group) - set(baseline)):
+        out.append("%s：有 %d 條含導航語氣的字串而沒有基準 ⇒ 在 _BASELINE_BY_GROUP 登記（否則刪了沒有題會紅）"
+                   % (g, len(hits_by_group[g])))
+    return out
+
 
 def test_em10_the_navigation_tone_message_count_does_not_drop():
-    """🔴🔴 **反向控制：含導航語氣的可見字串總數不可以低於基準。**
+    """🔴🔴 **反向控制：含導航語氣的可見字串，每一組都不可以低於基準。**
 
     ☠️ 若沒有這一題，「兩層判準」的守門（要求訊息附上可比對的目的地）
     最省力的反應是**把整句導航直接刪掉**——刪掉之後判準全綠，而使用者
     連一個錯的指路牌都沒有了，比原本更糟。這一題釘住「訊息只能變得
     更可比對，不能就地消失」。
+    ⚙️ 2026-09-26（稽核 D M06-M2）：原本只算模組外（模組的條目被排除之後沒有人守）⇒ 每組一個基準（見上方註記）。
     """
-    hits = [(p, s) for p, s in _scan_all_nav_messages()
-            if "modules" not in str(p).replace("\\", "/").split("/")
-            and str(p).replace("\\", "/").rsplit("/", 1)[-1] not in _MODULE_OWNED_FRONTEND_PAGES]
-    assert len(hits) >= _BASELINE_COUNT, (
-        "含導航語氣的可見字串只掃到 %d 條，低於基準 %d：\n" % (
-            len(hits), _BASELINE_COUNT)
-        + "\n".join("  %s :: %r" % (p, s[:80]) for p, s in hits[:20])
-        + "\n☠️ 若是因為某次改動把導航語句直接刪掉才變少的，"
-          "那正是這一題要擋住的事。")
+    from core import source_tree
+    owners = _page_owners()
+    by_group = {}
+    for pp, ss in _scan_all_nav_messages():
+        by_group.setdefault(_group_of(pp, owners), []).append((pp, ss))
+    bad = em10_problems(by_group, _BASELINE_BY_GROUP, lambda g: source_tree.module_installed("modules/%s/" % g))
+    assert not bad, "\n".join(bad) + "\n☠️ 若是因為某次改動把導航語句直接刪掉才變少的，那正是這一題要擋住的事。"
+
+
+def test_em10_page_ownership_comes_from_module_json():
+    """正對照：頁面歸屬讀 module.json（不手列）——原本手列的 arap 3 頁要經 module.json 歸到 arap；模組底下的檔歸模組。"""
+    from core import source_tree
+    owners = _page_owners()
+    if source_tree.module_installed("modules/arap/"):
+        assert {pg: owners.get(pg) for pg in _MODULE_OWNED_FRONTEND_PAGES} == \
+            {pg: "arap" for pg in _MODULE_OWNED_FRONTEND_PAGES}, owners
+    assert _group_of("backend/modules/accounting/api/vouchers.py", {}) == "accounting"
+    assert _group_of("frontend/pages/voucher.html", {"voucher.html": "accounting"}) == "accounting"
+    assert _group_of("backend\\routers\\quotations.py", {}) == "_outside"
+
+
+def test_em10_reverse_control_each_group_is_held_on_its_own():
+    """反向控制（合成）：任一組少一條 ⇒ 紅（訊息附該組命中）；別的組多一條補不回來；新的組沒登記 ⇒ 紅；模組不在 ⇒ 不比。"""
+    base = dict(_BASELINE_BY_GROUP)
+    everywhere = lambda g: True                        # noqa: E731
+
+    def hits(counts):
+        return {g: [("f_%s" % g, "x%d" % i) for i in range(n)] for g, n in counts.items()}
+    assert em10_problems(hits(base), base, everywhere) == []
+    for g in base:
+        bad = em10_problems(hits(dict(base, **{g: base[g] - 1})), base, everywhere)
+        assert len(bad) == 1 and bad[0].startswith("%s：" % g), (g, bad)
+        assert base[g] == 1 or "f_%s" % g in bad[0], ("失敗訊息要附該組剩下的命中", g, bad)
+    swapped = dict(base, accounting=base["accounting"] - 1, payroll=base["payroll"] + 1)
+    assert len(em10_problems(hits(swapped), base, everywhere)) == 1, "多的那一組不可以補回被刪的那一組"
+    assert em10_problems(hits(dict(base, newmod=1)), base, everywhere)[0].startswith("newmod：")
+    gone = {g: n for g, n in base.items() if g != "accounting"}
+    assert em10_problems(hits(gone), base, lambda g: g != "accounting") == []
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -260,8 +336,11 @@ def test_em10_t100_account_code_message_points_to_the_wrong_place():
     # （`"…科目代號：" + "、".join(...) + "（請至系統設定…）"`），
     # `ast` 把它們拆成三個獨立的 `Constant` 節點——「科目代號」與
     # 「請至系統設定」不在同一個節點裡，錨點只能定在含語氣詞的那一段。
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     msg = next((s for s in _string_literals_in_py(
-                   ROOT / "backend" / "routers" / "accounting_export.py")
+                   ROOT / "backend" / "modules" / "accounting" / "api" / "accounting_export.py")
                if "匯入 T100" in s and _has_nav_tone(s)), None)
     assert msg is not None, "找不到 T100 那句導航訊息——退回改本檔的錨點。"
     assert "系統設定" not in msg, (
