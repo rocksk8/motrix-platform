@@ -209,7 +209,18 @@ def test_no_call_site_caps_with_the_bare_constant():
     src = (REPO / "tools" / "platform" / "modtest.py").read_text(encoding="utf-8")
     import re
     assert not re.search(r"cap_workers\([^)]*,\s*(FULL|PARTIAL)_MAX_WORKERS\)", src)
-    assert "cap_workers(extra, partial_max_workers())" in src
+    assert "cap_workers(extra, partial_cap(picked, tmap))" in src
+
+
+def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatch):
+    """D 抽查 MT-O1：差異題選到 e2e ⇒ 上限取 e2e 的（記憶體）；沒選到 ⇒ 照 partial。突變：partial_cap 不看 e2e ⇒ 紅。"""
+    monkeypatch.setenv(MT.PARTIAL_ENV, "4")
+    tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
+    assert MT.partial_cap(["backend/tests/test_a.py"], tmap) == 4
+    assert MT.partial_cap(["backend/tests/test_a.py", "backend/tests/test_b.py"], tmap) == 2
+    assert MT.partial_cap(["backend/tests/test_e2e_new_2026.py"], tmap) == 2, "test_map 還沒有那一檔 ⇒ 看檔名"
+    monkeypatch.setenv(MT.E2E_ENV, "1")
+    assert MT.partial_cap(["backend/tests/test_b.py"], tmap) == 1
 
 # ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
 
