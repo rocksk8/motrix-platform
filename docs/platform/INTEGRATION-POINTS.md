@@ -524,3 +524,20 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 對方不在時 | T100 匯出照常，不含料件進貨的付款傳票；預覽回應 `notice` 含「採購・庫存・出貨模組未安裝：本次匯出不含料件設備進貨的付款傳票」（與 IP-14 的說明以「；」並列），出納頁的 T100 區塊顯示 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_supply_connectors.py`（M03 不在的一側）；M03 在的一側 `backend/modules/supply/tests/test_stock_batch_payment.py`（批次流進 T100 匯出並可確認） |
+
+---
+
+## IP-21　`attachments.for_document`：單據的已上傳檔案（M01／M04／M05 → M06 傳票帶入附件）
+
+主持裁示 M06-b（RUN-PLAN §5 D1 段），步驟表 `docs/platform/plans/ATTACHMENTS-PLAN.md`。原本 M06 `helpers/voucher_attachments.py` 直讀九類來源的四張別組表（quotations、case_updates、case_extra_expenses、invoice_vouchers、contractor_dispatches）。編號為暫定，由列車定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`helpers/case_attachments.py::_CaseAttachments`（6 類；M01 未搬 ⇒ `registry.provide()`，M01 搬遷時改 ModuleSpec，同 CA-O3）；M04 外包工班：`modules/subcontract/attachments.py::_SubcontractAttachments`（2 類，ModuleSpec）；M05 應收應付：`routers/invoice_vouchers.py::_InvoiceVoucherAttachments`（1 類；M05 未搬 ⇒ `registry.provide()`） |
+| 使用方 | M06 `helpers/voucher_attachments.py`（`source_files`、`case_attachments`、`resolve_picks`、`line_source_files`）；`routers/vouchers.py` 的 `line-source-files` 端點回 `unavailable` |
+| 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `SOURCE_TYPES`（兩兩不重疊、聯集 ⊆ M06 白名單） |
+| 語法 | 提供：`registry.provide("attachments.for_document", "<key>", Obj)` 或 `ModuleSpec(providers={("attachments.for_document", "<key>"): Obj})`；`Obj.SOURCE_TYPES`、`Obj.doc_nos_for_case(conn, source_type, quote_no) -> list[str]`、`Obj.files(conn, source_type, doc_no) -> list[dict]` |
+| 回傳 | `files`：`save_document_files` 的 metadata 陣列；單據不存在 ⇒ `[]`；資料壞掉或編號不全 ⇒ raise L1 `helpers.uploads.AttachmentSourceError`（取用方原樣 400）。唯讀、在呼叫端連線上 |
+| 對方不在時 | 那幾類不列；`line-source-files?source_type=case` 回 `unavailable=[{category, reason}]`，傳票頁已上傳檔案欄顯示「XX模組未安裝：……的附件沒有列出」；帶入或列該類檔案 ⇒ 400「XX模組未安裝，無法帶入……附件」。已帶入的附件不受影響（已複製進傳票） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_attachments_providers.py`（取用方只讀自己的表、覆蓋與不重疊、缺席明說、M01／M05 提供者壞 JSON）；`backend/modules/subcontract/tests/test_subcontract_attachments_provider.py`；e2e `backend/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py` |

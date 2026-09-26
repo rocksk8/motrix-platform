@@ -47,7 +47,7 @@ from helpers.voucher_pdf import (
 )
 from helpers.voucher_attachments import (
     resolve_picks, copy_into, abs_path, case_attachments,
-    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses,
+    line_source_files, LINE_SOURCES, EXPENSE_LINE_SOURCES, expense_line_uses, unavailable_sources,
 )
 from helpers.voucher import (
     EDITABLE_STATUSES, can_edit, describe_balance, get_voucher,
@@ -756,9 +756,11 @@ def line_source_files_endpoint(source_type: str = "", ref: str = "",
     _require_voucher_access(user)
     conn = get_db()
     try:
-        return {"files": line_source_files(conn, source_type, ref)}
+        files = line_source_files(conn, source_type, ref)
     finally:
         conn.close()
+    # 附件來源的模組不在（attachments.for_document，主持裁示 M06-b）⇒ 那幾類整個沒有列出，要明說（案件那一欄才會涵蓋多個模組）
+    return {"files": files, "unavailable": unavailable_sources() if source_type == "case" else []}
 
 
 @router.get("/line-source-file")

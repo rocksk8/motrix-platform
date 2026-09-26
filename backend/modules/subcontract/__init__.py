@@ -2,6 +2,7 @@
 """M04 外包工班（subcontract）：承攬人員、協力廠商與派工、承攬商匯款申請。只 import core／helpers／db（L1），不 import 其他 L2 模組。"""
 from core.registry import ModuleSpec
 
+from modules.subcontract import attachments
 from modules.subcontract.api import contractor_vouchers, contractors, vendor_contractors
 
 MODULE = ModuleSpec(
@@ -20,5 +21,7 @@ MODULE = ModuleSpec(
         ("approval.detail", "contractor_voucher"): contractor_vouchers.queue_detail,
         # IP-14（同一串接點的第二個能力）：區間內已付款的憑據（M06 T100 付款傳票；不再自己讀本模組的表）
         ("contractor_voucher.paid_between", "subcontract"): contractor_vouchers._paid_between,
+        # IP-21（暫定號）：M06 傳票帶入附件的來源（派工單、承攬商發票）
+        ("attachments.for_document", "subcontract"): attachments._SubcontractAttachments,
     },
 )

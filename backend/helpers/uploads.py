@@ -17,6 +17,7 @@ __l1_public__ = (
     "_effective_subfolder",
 )
 
+import json
 import os
 import uuid
 from datetime import datetime
@@ -155,3 +156,24 @@ def delete_document_file(subfolder: str, doc_no: str, existing_files: list, file
     except Exception:
         pass
     return [f for f in existing_files if f.get("id") != file_id]
+
+
+# ── 附件來源（`attachments.for_document`，主持裁示 M06-b，2026-09-26）──────────────────────────
+# 單據的已上傳檔案由各擁有模組提供（M01／M04／M05…），取用方（M06 傳票帶入）不直讀別組的表。
+# 這裡只放兩件沒有領域知識的共用件：錯誤型別，與「從某表某列的 JSON 欄讀檔案清單」。
+
+class AttachmentSourceError(Exception):
+    """附件來源解析不了（資料格式壞掉、來源編號缺少必要的部分…）。訊息是給使用者看的一句話，
+    取用方原樣回 400。⚠️ 不可以吞成空清單：「這裡沒有附件」與「這裡的資料壞了」在畫面上會一模一樣。"""
+
+
+def files_from_json_column(conn, table: str, key_col: str, key, col: str) -> list:
+    """`SELECT <col> FROM <table> WHERE <key_col>=?` 的 JSON 陣列（`save_document_files` 的 metadata）。
+    列不存在 ⇒ []；JSON 壞掉 ⇒ raise AttachmentSourceError。表名／欄名由呼叫端寫死（不接使用者輸入）。"""
+    row = conn.execute("SELECT %s AS v FROM %s WHERE %s = ?" % (col, table, key_col), (key,)).fetchone()
+    if row is None:
+        return []
+    try:
+        return json.loads(row["v"] or "[]") or []
+    except (TypeError, ValueError):
+        raise AttachmentSourceError("來源「%s」的附件資料格式不正確，無法帶入。" % table)

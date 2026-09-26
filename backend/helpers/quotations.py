@@ -551,3 +551,4 @@ class _CaseRecognition:
 
 
 _registry.provide("case.recognition", "case", _CaseRecognition)   # IP 號碼由列車定
+from helpers import case_attachments as _case_attachments  # noqa: E402,F401  登記 attachments.for_document（M01）
