@@ -246,7 +246,7 @@ T100_INVENTORY_MISSING = "採購・庫存・出貨模組未安裝：本次匯出
 def _t100_notice() -> str:
     """預覽要明說少了哪幾類傳票（對方模組不在：付款類 M04／M03、收款事件 M05）；都在 ⇒ 空字串。"""
     missing = []
-    if _registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）
+    if _registry.single_provider("contractor_voucher.paid_between") is None:   # IP-14（M04）：T100 用的就是它
         missing.append(T100_CONTRACTOR_MISSING)
     if _registry.single_provider("inventory.paid_batches") is None:        # IP-20（M03）
         missing.append(T100_INVENTORY_MISSING)
