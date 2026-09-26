@@ -96,6 +96,37 @@ def l2_import_edges(units, groups):
     return edges
 
 
+def l1_to_l2_edges(units, groups):
+    """{"L1 helper:receivables -> M01 helper:quotations", ...}：L1 單位 import L2 單位（逆向依賴，MODULE-GUIDE §1 禁止）。
+    扣掉 core:main → router:（載入器掛 router，隨模組搬遷自然消失；dep_scan 也另列為「預期」）。"""
+    edges = set()
+    for n, u in units.items():
+        if groups.owner(n) != "L1":
+            continue
+        for d in u.get("imports", []):
+            dst = groups.owner(d)
+            if dst in groups.l2 and not (n == "core:main" and d.startswith("router:")):
+                edges.add("L1 %s -> %s %s" % (n, dst, d))
+    return edges
+
+
+def check_l1_to_l2_baseline(units, groups, baseline):
+    """(新增的邊, 已消失的邊)。目標是沒裝的已登記模組（mod:<key>/…）⇒ 不算消失（同 check_import_baseline）。"""
+    from core import source_tree
+    cur = l1_to_l2_edges(units, groups)
+    base = set(baseline)
+    installed = {d.name for d in source_tree.module_dirs()}
+    registered = _registered_module_keys()
+
+    def _not_installed(edge):
+        dst = edge.split(" -> ", 1)[1].split(" ", 1)[-1]
+        if not dst.startswith("mod:"):
+            return False
+        key = dst[4:].split("/", 1)[0]
+        return key not in installed and key in registered
+    return sorted(cur - base), sorted(e for e in base - cur if not _not_installed(e))
+
+
 def _registered_module_keys():
     """docs/platform/modules.json 登記的模組 key（repo 層級，與這棵樹裝了什麼無關）。"""
     import json
@@ -199,13 +230,23 @@ def main(argv):
                "L2 表被非擁有組直接寫入的例外：只准變少；ref 寫出處（DEPENDENCY-MAP §4 等）。")
         print("建立：%d 條邊、%d 筆例外" % (len(edges), len(writes)))
         return 0
-    # --prune：只刪，不加
-    new_base = [e for e in base if e in set(edges)]
+    # --prune：只刪，不加。刪的是「消失」的邊——與守門同一個判定（check_*_baseline 的 gone），
+    # 所以「沒裝的已登記模組」的邊不會被刪；其他鍵（l1_to_l2 等）原樣保留。
+    # 〔更正（2026-09-26，稽核 ⑰ S-7 時查到）：之前這裡直接比 edges、整份只寫 _doc＋edges——
+    #   在拿掉模組的樹上 prune 會刪掉真實存在的邊（而 check_import_baseline 的說明寫著不會），也會把 l1_to_l2 整段洗掉〕
+    raw = json.loads(BASELINE.read_text(encoding="utf-8"))
+    _, gone = check_import_baseline(units, groups, raw["edges"])
+    raw["edges"] = [e for e in raw["edges"] if e not in set(gone)]
+    n_l1 = 0
+    if "l1_to_l2" in raw:
+        _, gone_l1 = check_l1_to_l2_baseline(units, groups, raw["l1_to_l2"])
+        n_l1 = len(gone_l1)
+        raw["l1_to_l2"] = [e for e in raw["l1_to_l2"] if e not in set(gone_l1)]
+    Path(BASELINE).write_text(json.dumps(raw, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
     raw_exc = json.loads(EXCEPTIONS.read_text(encoding="utf-8"))
     new_exc = [e for e in raw_exc["exceptions"] if "%s <- %s" % (e["table"], e["writer"]) in set(writes)]
-    _write(BASELINE, "edges", new_base, json.loads(BASELINE.read_text(encoding="utf-8"))["_doc"])
     _write(EXCEPTIONS, "exceptions", new_exc, raw_exc["_doc"])
-    print("刪除：%d 條邊、%d 筆例外" % (len(base) - len(new_base), len(raw_exc["exceptions"]) - len(new_exc)))
+    print("刪除：%d 條 L2 邊、%d 條 L1→L2 邊、%d 筆例外" % (len(gone), n_l1, len(raw_exc["exceptions"]) - len(new_exc)))
     return 0
 
 

@@ -9,5 +9,13 @@
   "M08 mod:analytics/api/dashboard -> M01 helper:quotations",
   "M08 mod:analytics/api/reports -> M01 helper:quotations",
   "M08 mod:analytics/api/reports -> M01 helper:recognition"
+ ],
+ "_doc_l1_to_l2": "L1 → L2 的 import 邊（逆向依賴）：只准變少（稽核 ⑰ S-7）。扣掉 core:main → router:（載入器）。",
+ "l1_to_l2": [
+  "L1 core:pdf_gen -> M01 helper:quotations",
+  "L1 helper:receivables -> M01 helper:quotations",
+  "L1 router:system -> M01 helper:quotations",
+  "L1 router:system -> M01 helper:quote_terms",
+  "L1 router:system -> M07 helper:bonus"
  ]
 }

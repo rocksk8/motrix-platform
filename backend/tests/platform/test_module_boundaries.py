@@ -68,6 +68,36 @@ def test_baseline_has_no_vanished_edges(units, groups, baseline):
                       + _fmt(gone))
 
 
+@pytest.fixture(scope="module")
+def l1_baseline():
+    return json.loads(B.BASELINE.read_text(encoding="utf-8"))["l1_to_l2"]
+
+
+def test_no_new_l1_to_l2_imports(units, groups, l1_baseline):
+    """稽核 ⑰ S-7：L1 import L2 只准變少（MODULE-GUIDE §1）。新的一條 ⇒ 改走 L1 下沉或提供者。"""
+    new, _ = B.check_l1_to_l2_baseline(units, groups, l1_baseline)
+    assert not new, "新增了 L1 → L2 的 import（逆向依賴）：" + _fmt(new)
+
+
+def test_l1_to_l2_baseline_has_no_vanished_edges(units, groups, l1_baseline):
+    _, gone = B.check_l1_to_l2_baseline(units, groups, l1_baseline)
+    assert not gone, "這些 L1 → L2 的邊已經不存在，請從基線 l1_to_l2 刪掉：" + _fmt(gone)
+
+
+def test_rc_a_new_l1_to_l2_import_is_caught(units, groups, l1_baseline):
+    """反向控制（合成）：一支 L1 helper 多 import 一個 L2 單位 ⇒ 報新增；載入器 core:main → router: 不算。"""
+    l2_unit = next(n for n in sorted(units) if groups.owner(n) in groups.l2)
+    l1_unit = next(n for n in sorted(units) if groups.owner(n) == "L1" and n != "core:main")
+    fake = dict(units)
+    fake[l1_unit] = dict(units[l1_unit], imports=list(units[l1_unit].get("imports", [])) + [l2_unit])
+    new, _ = B.check_l1_to_l2_baseline(fake, groups, l1_baseline)
+    assert new == ["L1 %s -> %s %s" % (l1_unit, groups.owner(l2_unit), l2_unit)], new
+    router = next(n for n in sorted(units) if n.startswith("router:") and groups.owner(n) in groups.l2)
+    fake2 = dict(units)
+    fake2["core:main"] = dict(units.get("core:main", {}), imports=list(units.get("core:main", {}).get("imports", [])) + [router])
+    assert B.check_l1_to_l2_baseline(fake2, groups, l1_baseline)[0] == []
+
+
 def test_edges_of_modules_not_installed_are_not_vanished(units, groups, baseline):
     """反向控制：來源是沒裝的模組（`mod:<不存在的 key>/…`）⇒ 不算消失；來源是一般單位 ⇒ 照報（合成邊，不綁真實模組）。"""
     fake_router = "M99 router:zz_not_there -> M01 helper:quotations"
@@ -262,3 +292,25 @@ def test_rc_end_to_end_through_real_source(tmp_path, dep_scan, groups, baseline)
     unowned, _, _ = B.check_ownership(mutated, groups)
     assert set(new) - set(new0) == {"%s %s -> %s %s" % (g1, r1, g2, r2)}
     assert set(unowned) - set(unowned0) == {"router:zz_mutant"}
+
+
+def test_prune_keeps_other_keys_and_edges_of_modules_not_installed(tmp_path, monkeypatch):
+    """--prune 只刪「消失」的邊（與守門同一個判定）：沒裝的已登記模組的邊不刪、l1_to_l2 整段保留；
+    沒登記的殘留照刪。在 tmp 的基線副本上跑，不動真檔。"""
+    from core import source_tree
+    real = json.loads(B.BASELINE.read_text(encoding="utf-8"))
+    key = sorted(B._registered_module_keys())[0]
+    keep = "M99 mod:%s/zz_api -> M01 helper:quotations" % key
+    drop = "M99 mod:zz_never_registered/api -> M01 helper:quotations"
+    data = dict(real, edges=list(real["edges"]) + [keep, drop])
+    bl = tmp_path / "baseline.json"
+    bl.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+    ex = tmp_path / "exceptions.json"
+    ex.write_text(B.EXCEPTIONS.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr(B, "BASELINE", bl)
+    monkeypatch.setattr(B, "EXCEPTIONS", ex)
+    monkeypatch.setattr(source_tree, "module_dirs", lambda: [])
+    assert B.main(["--prune"]) == 0
+    out = json.loads(bl.read_text(encoding="utf-8"))
+    assert keep in out["edges"] and drop not in out["edges"], out["edges"]
+    assert out.get("l1_to_l2") == real["l1_to_l2"], "prune 把 l1_to_l2 洗掉了"
