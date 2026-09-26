@@ -165,3 +165,27 @@ A 發現：案件端點對「看不到」回 403、對「不存在」回 404 ⇒
 | 交會 | A 的 wip/a-m06 在 `case_access.py` 檔尾新增 `case_documents_readable()`；誰後上車誰解那一處（逐 hunk、解完 ast.parse、重跑 case_access 題＋A 的附件題與 M06 題＋case404 題；rebase 與 push 分開） |
 | 稽核 | 權限類 ⇒ D 完整稽核 |
 
+### 5-5 ④(c) 拿掉 M01 之後 tests/platform 的處置清單（2026-09-27 00:57，wip/c-m01-4；稽核 D 重點）
+
+**A 搬進 modules/case/tests**：`test_approval_providers.py`（整檔都在驗 M01 的佇列／角標／轉簽／詳情彙整）。
+
+**B 略過（`needs_case(理由)`；題目本身就是驗 M01 的行為）**：
+
+| 檔 | 題 | 理由 |
+|---|---|---|
+| test_case_recognition | test_provider_forwards_to_the_m01_function_with_the_same_arguments（6 參數） | 驗 M01 的 case.recognition 提供者轉呼叫 M01 自己的 recognition 函式 |
+| test_case_summary_locations | summary_fields／locations_address_rule／ip12_summary_forwards／runtime_refuses_system | 驗 M01 的 case.summary、case.locations、IP-12 轉呼叫、提供者的 SYSTEM 執行期檢查 |
+| test_supply_connectors | case_bundle 無 M03、設備序號兩題、M01 不寫 stock_items、M01 不 import M03 | 端點屬 M01／掃 M01 自己的原始碼 |
+| test_subcontract_connectors | test_case_bundle_without_m04 | 案件整包端點屬 M01 |
+| test_attachments_providers | everything_present、refuse_to_swallow_broken_json、voucher_users_only_see…、each_provider_refuses…、extra_expense…、invoice_voucher…amount_layer、quotation…wider／stricter | 前提或種子資料是 M01 的案件／報價單／額外支出 |
+| test_crm_quote_deleted_connector | test_without_crm_the_quote_is_deleted… | 刪報價單的端點屬 M01 |
+| test_daily_checks_connector | test_case_deadlines_provider_is_registered | 驗 M01 的 daily.check 提供者 |
+| test_approval_parse_l1 | test_m01_approval_queue_no_longer_imports_m06 | 掃 M01 自己的原始碼 |
+| test_l1_does_not_load_m01 | test_rc_the_probe_reports_m01_when_it_is_imported | 反向控制要 import M01 本身 |
+| test_case_access_l1 | test_same_rule_everywhere | 驗 M01 保留的同名別名 |
+| test_m01_sink2_contract、test_tax_calc_contract | 別名參數（`modules.case.*` 那幾個） | 驗 M01 保留的同名別名 |
+
+**C 改成驗 M01 不在時的行為（不略過）**：test_case_access_l1 的「沒有 M01 ⇒ 404」與「兩條路一致」（正對照只在 M01 在時跑）；test_receivables_absent（權責口徑說明依 M01 在不在）；test_case_recognition 的報表題與純度題；test_m01_l1_providers 兩題；test_module_boundaries 的掃描器正對照；test_core_loader；test_deprecations（登記在 L2 模組檔裡的名稱，模組不在就不比對）；pii_forms.json 的 M01 三頁宣告 `api_module: case`；test_case_stage_connectors 的夾具。
+
+**允許（§B-11）**：test_generated_maps 三題、test_unit_index_is_current、test_modules_json_lists_only_existing_units。
+
