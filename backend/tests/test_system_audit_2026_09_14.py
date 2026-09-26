@@ -747,6 +747,53 @@ def test_destructive_routes_check_role_or_ownership():
 # D. 組織邏輯
 # ══════════════════════════════════════════════════════════════════════
 
+def _is_role_expr(node) -> bool:
+    """這個運算元是不是「角色」：變數 role、x.role、x["role"]、x.get("role")。"""
+    import ast
+    if isinstance(node, ast.Name):
+        return node.id == "role"
+    if isinstance(node, ast.Attribute):
+        return node.attr == "role"
+    if isinstance(node, ast.Subscript):
+        k = node.slice
+        return isinstance(k, ast.Constant) and k.value == "role"
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+        return bool(node.args) and isinstance(node.args[0], ast.Constant) and node.args[0].value == "role"
+    return False
+
+
+def role_compare_strings(src) -> set:
+    """原始碼裡「拿角色去比對」的字串常數（role == 'x'、role in ('a', 'b')、user["role"] != "x"…）。
+
+    用 AST，不用正則（第八班列車觀察 T8-O1：正則把 `role in (ov.get("roles") or [])` 的 "roles" 當成角色，
+    作者只好拆變數繞過——修的應該是守門）。只看比較運算式，而且其中一邊確實是角色。"""
+    import ast
+    out = set()
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Compare):
+            continue
+        operands = [node.left] + list(node.comparators)
+        if not any(_is_role_expr(o) for o in operands):
+            continue
+        for o in operands:
+            if _is_role_expr(o):
+                continue
+            items = o.elts if isinstance(o, (ast.Tuple, ast.List, ast.Set)) else [o]
+            out |= {e.value for e in items if isinstance(e, ast.Constant) and isinstance(e.value, str)}
+    return out
+
+
+def test_role_compare_strings_reverse_controls():
+    """反向控制：拼錯一定抓得到；不是角色比對的字串（dict 鍵、訊息）不算。"""
+    assert role_compare_strings("if role == 'superadmn': pass") == {"superadmn"}
+    assert role_compare_strings("ok = user['role'] in ('admin', 'salse')") == {"admin", "salse"}
+    assert role_compare_strings("ok = u.get('role') != 'viewr'") == {"viewr"}
+    assert role_compare_strings("ok = u.role not in {'engineer'}") == {"engineer"}
+    assert role_compare_strings('ok = role in (ov.get("roles") or [])') == set()      # T8-O1 的誤判
+    assert role_compare_strings("msg = 'role is ' + 'nobody'") == set()
+    assert role_compare_strings("ok = roles == 'x'") == set()
+
+
 _KNOWN_ROLES = {"superadmin", "admin", "sales", "engineer", "viewer"}
 
 
@@ -757,21 +804,16 @@ def test_no_unknown_role_strings_in_backend():
     ——也就是那道權限檢查靜悄悄地永遠放行或永遠擋下。
     """
     bad = {}
-    pat = re.compile(r"role.{0,20}?['\"]([a-z_]{3,20})['\"]")
+    seen = set()
     from core import source_tree
     for f in source_tree.router_files() + source_tree.logic_files():
-        src = f.read_text(encoding="utf-8")
-        for m in pat.finditer(src):
-            token = m.group(1)
-            # 只看真的在跟角色比對的位置，排除欄位名／訊息文字
-            if token in _KNOWN_ROLES or "_" in token:
-                continue
-            ctx = src[max(0, m.start() - 60):m.end() + 20]
-            if re.search(r"role\s*(==|!=|in\b|not in\b)", ctx):
-                bad.setdefault(f.name, set()).add(token)
-    assert not bad, (
-        f"疑似拼錯或未知的角色字串：{ {k: sorted(v) for k, v in bad.items()} }\n"
-        f"已知角色：{sorted(_KNOWN_ROLES)}")
+        found = role_compare_strings(f.read_text(encoding="utf-8"))
+        seen |= found
+        unknown = {t for t in found if t not in _KNOWN_ROLES}
+        if unknown:
+            bad[f.name] = sorted(unknown)
+    assert seen & _KNOWN_ROLES, "正對照：真實程式裡應該掃得到角色比對（掃描壞了會全部看不到）"
+    assert not bad, f"疑似拼錯或未知的角色字串：{bad}\n已知角色：{sorted(_KNOWN_ROLES)}"
 
 
 def test_user_role_column_only_holds_known_roles(client, make_user):
