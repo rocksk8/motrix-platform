@@ -398,13 +398,18 @@ def test_every_module_page_is_declared_in_sidebar(client):
     head = client.get("/static/sidebar.js").text.partition("\n")[0]
     assert head.startswith("window.MOTRIX_MENU = ")
     declared = {p: v["key"] for p, v in json.loads(head[len("window.MOTRIX_MENU = "):].rstrip(";"))["pageModules"].items()}
-    assert declared, "正對照：pageModules 是空的"
     want = {}
     for mj in sorted((BACKEND / "modules").glob("*/module.json")):
         man = json.loads(mj.read_text(encoding="utf-8"))
         for pg in man.get("pages") or []:
             want[pg["path"]] = man["key"]
+    # 〔更正：第一版無條件斷言 pageModules 非空當正對照 ⇒ core-only 反向控制（沒有任何模組）紅。
+    #   沒有模組宣告頁面時，空的才是對的；而多出來的一樣要紅（不屬於任何已裝模組的頁不可以列進去）〕
+    if want:
+        assert declared, "正對照：有模組宣告頁面，pageModules 卻是空的"
     assert not _page_mismatches(declared, want), "MODULE_PAGES 缺少或 key 不符：%s" % _page_mismatches(declared, want)
+    extra = sorted(set(declared) - set(want))
+    assert not extra, "pageModules 列了沒有任何已裝模組宣告的頁：%s" % extra
 
 
 def test_every_module_page_guard_negative_control():
