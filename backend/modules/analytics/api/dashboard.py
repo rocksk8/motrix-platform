@@ -1,8 +1,6 @@
-"""Dashboard stats, monthly chart, devices, receivables, GCIS lookup, sales orders, materials."""
+"""Dashboard stats, monthly chart, devices, receivables, materials（GCIS 查詢已拆到 L1 routers/company_lookup.py、sales orders 已移到 M01）。"""
 import json
 import logging
-import urllib.request
-import urllib.parse
 from datetime import datetime, date
 from typing import Optional
 
