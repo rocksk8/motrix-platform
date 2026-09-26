@@ -136,6 +136,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 10:55 D：R-M1 關閉（b-rebasecheck-2 16150027）；觀察：PLAYBOOK :119、:188 的「fixture 層 ⇒ 全量」沒寫由列車跑。R-S1 仍開。
 - 2026-09-26 10:55 D：**b-g1-2 19dc327c**：range-diff 前三個 commit 相同；G-S2、G-O3、G-O4、G-O5 關閉（突變 3 項紅）；G-M1 仍為條件式（同班）。**b-maps-2 c8c69c79**：BM-M1（D2 樹 9 過）、BM-M2（與 b-g1-2 cfe4e914 同班）、BM-S1 關閉。兩包可上第六班，須同車。
 - 2026-09-26 10:42 主持：**第六班發車**（列車長子代理）：c-case-access-4、c-m04-3、c-m07-2、b-m08-3、c-coreonly-depscan、b-g1-2*、b-maps-2*、h-hist-4、h-u14-2、h-corered-2、h-o7-2*、c-m02-s2b-2、a-m10 68f16342（O-4）；*＝合回前須稽核關閉，否則連同相依包下車。裁示 G-O5：主持裁示 commit 訊息帶 trailer「Ruling-By: 8d」，列車長以 git log -S <錨點> --format=%B 核對（作者欄都是 rocksk8，trailer 是可稽核的約定、不是防偽）。
 - 2026-09-26 10:40 D：b-rebasecheck e0137ddc（`AUDIT-D-B-rebasecheck.md`）必修 R-M1：PLAYBOOK §C-11（:70）本文仍寫「⇒ 重跑全量」，只改了表格②與 MODULE-GUIDE；建議 R-S1。
