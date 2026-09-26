@@ -81,7 +81,8 @@
       "notice": {
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>",
-        "ack_api": ["/api/network-plans/{plan_id}/privacy-notice", "/api/network-plans/{plan_id}/privacy-notice/ack"]
+        "ack_api": ["/api/network-plans/{plan_id}/privacy-notice", "/api/network-plans/{plan_id}/privacy-notice/ack"],
+        "api_module": "netplan"
       },
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：聯絡人是手動輸入，要有告知。"
@@ -90,7 +91,8 @@
       "notice": {
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>（建立時記錄）",
-        "ack_api": ["/api/network-plans/{plan_id}/privacy-notice/ack"]
+        "ack_api": ["/api/network-plans/{plan_id}/privacy-notice/ack"],
+        "api_module": "netplan"
       },
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：建立視窗的聯絡人是手動輸入，要有告知。"
