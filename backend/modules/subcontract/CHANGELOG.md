@@ -1,7 +1,10 @@
 # 外包工班 更新紀錄
 
+## 1.0.6 — 2026-09-26
+- 簽核佇列詳情（M01-PLAN §3-7，c-approval-2）：單據內容改由本模組提供 `approval.detail`（共同段用 L1 `helpers/approval_queue.snapshot_doc_detail`）；M01 詳情端點不再直讀本模組的表，只做每案權限、案件抬頭、金額遮蔽。本模組不在 ⇒ 詳情 400 並明說
+
 ## 1.0.5 — 2026-09-26
-- 待我簽核與轉簽（M01-PLAN §3-7）：本模組提供 `approval.queue_items`（承攬商匯款申請的待簽項目，欄位同原 M01 佇列）與 `approval.reassign`（`contractor_voucher`：`contractor_payment_vouchers.data_json.$.approval` 的讀寫）；M01 佇列、角標、轉簽不再直讀直寫本模組的表。本模組不在 ⇒ 佇列不列、不給轉簽；佇列詳情的單據內容改由本模組提供（`approval.detail`）（不在 ⇒ 詳情 400 並明說）
+- 待我簽核與轉簽（M01-PLAN §3-7）：本模組提供 `approval.queue_items`（承攬商匯款申請的待簽項目，欄位同原 M01 佇列）與 `approval.reassign`（`contractor_voucher`：`contractor_payment_vouchers.data_json.$.approval` 的讀寫）；M01 佇列、角標、轉簽不再直讀直寫本模組的表。本模組不在 ⇒ 佇列不列、不給轉簽
 
 ## 1.0.4 — 2026-09-26
 - 第六班列車：IP 定號（`dispatch.list_for_case` IP-12→IP-15、`quotation.append_items` IP-13→IP-17；origin 已用 IP-12 `case.access`、IP-13 `crm.quote_deleted`；`contractor_voucher.public` 維持 IP-14）；只改註解與文件
