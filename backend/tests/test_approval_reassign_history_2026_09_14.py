@@ -10,7 +10,9 @@
 **簽核歷史建在 `audit_log` 上**，不另開表——簽核動作本來就每一筆都寫了 audit，
 再開一張表等於同一件事記兩次，兩份紀錄遲早對不起來。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

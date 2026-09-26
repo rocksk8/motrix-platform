@@ -7,10 +7,12 @@ contractors 表與編輯表單早有 bank_branch（08-01），這裡補使用者
 ④ 名冊 Excel 匯入／匯出（D4）：匯出含分行與帳號、證件號碼只顯示末 4 碼、寫稽核；匯入以姓名＋證件號碼
    比對，舊檔沒有分行欄照樣可匯入；權限比照名冊編輯（superadmin 或 contractor_list 模組）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 PASSBOOK = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGA"
             "hKmMIQAAAABJRU5ErkJggg==")

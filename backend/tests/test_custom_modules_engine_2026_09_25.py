@@ -4,11 +4,13 @@
 範本是 D4 驗收的「測試用設備借用單」：欄位含公式與參照、兩層簽核（第二層有條件）、事件通知、輸出。
 **不改任何程式碼**：全部透過定義（資料）完成。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import copy
 import json
 from datetime import date
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 KEY = "equipment_loan"
 

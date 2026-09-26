@@ -5,9 +5,11 @@
 保留原字串並列在「使用者管理」頁的清單（GET /api/system/case-roles-unmapped，superadmin）。
 讀取端一律吃兩種形狀（物件、未轉換的舊字串）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-ROLES-001"
 

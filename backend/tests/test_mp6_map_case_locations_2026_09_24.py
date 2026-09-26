@@ -14,12 +14,14 @@
 ⚙️ 對照組：admin 看得到全部；沒有模組的人收到 `no_permission`（說出來，不是少一層點）；
    分配變了（assigned_user_ids）快取要失效。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
 
 from routers import map_points
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: F401
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 CASE_A = "MQ-MP6-001"      # 業務甲名下
 CASE_B = "MQ-MP6-002"      # 業務乙名下

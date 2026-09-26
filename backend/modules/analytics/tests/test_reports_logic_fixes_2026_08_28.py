@@ -3,10 +3,12 @@
 ②已成案缺收款期別會靜默消失於金額類統計（casesWithoutPaymentItems）
 ③年度目標達成率（_compute_achievement）改用 wonMonth 而非直接 quoteDate，
   跟 monthly_trend() 已經修過的 quote_won_month_map() 邏輯一致。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pytest
 
 from core import source_tree as _source_tree
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：M08 精算快照過期檢查改走 IP-1 dispatch.row，外包工班不在時明說無法檢查）：
 #: 同時需要外包工班；外包工班不在時略過（那時精算過期數回 None、報表明說無法檢查，由 M08 搬遷 ⑤ 456130ce 的缺席題負責）。

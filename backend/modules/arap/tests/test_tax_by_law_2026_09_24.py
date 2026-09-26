@@ -18,10 +18,12 @@
 - 沒有 `taxType` 的舊報價：稅率 0 ⇒ 免稅（照原本的選項標籤），其餘 ⇒ 應稅；不做 migration。
 - 已開發票（開票申請已核准）⇒ 以那張單記載的稅額為準。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 # ── 單一算法 ─────────────────────────────────────────────────────────────────

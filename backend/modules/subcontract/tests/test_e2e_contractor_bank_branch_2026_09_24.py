@@ -2,12 +2,14 @@
 
 API 與 PDF 見 test_contractor_bank_branch_2026_09_24.py。觀測點打在畫面上真的看得到的文字與資料庫落地值。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import _login  # noqa: F401
 from modules.subcontract.tests.test_contractor_bank_branch_2026_09_24 import _add_contractor, _contractor, _seed_voucher, _xlsx
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.mark.e2e

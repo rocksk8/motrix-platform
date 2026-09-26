@@ -52,6 +52,7 @@ B 把快照放在 `data_json` 的哪個鍵，題目都不必跟著改。
 凍結流程**的單（例如直接用 SQL 種一筆 status='已送出' 而沒有走 PATCH），
 印出來仍然要有內容，不可以是空白。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import sys
 from pathlib import Path
@@ -63,6 +64,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_quote_location_2026_09_22 import (  # noqa: E402
     BRANCH, PRIMARY, _set_locations, _superadmin,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: `§166`：走到端點才會出現的狀態碼。
 OK_CODES = (200, 400, 403)

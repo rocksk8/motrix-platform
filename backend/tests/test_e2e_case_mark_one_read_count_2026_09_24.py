@@ -3,6 +3,7 @@
 未讀件數讀的是伺服器件數 caseCounts.unread（CM7）；_markCaseRead() 只清了該筆的紅點，沒動件數 ⇒
 紅點消失、上方數字不變（3→3），要等下一次重抓件數才對。觀測點：畫面上的未讀列文字與 unreadCount()。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import time
 from datetime import datetime
@@ -11,6 +12,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 NOS = ("MQ-MARKONE-001", "MQ-MARKONE-002")

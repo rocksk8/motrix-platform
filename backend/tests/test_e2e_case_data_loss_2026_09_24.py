@@ -8,6 +8,7 @@
 
 裁示 F1～F3（hichan-0a 代裁，待使用者確認）。觀測點打在資料庫落地值。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -21,6 +22,7 @@ pytest.importorskip("playwright.sync_api")
 
 import uvicorn
 from tests._ports import free_safe_port
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NOTE_INPUT = 'input[placeholder="收款備註..."]'
 

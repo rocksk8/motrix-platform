@@ -4,9 +4,11 @@
 單價、成本；畫面顯示「—」。持有者（superadmin／admin／sales 或 financial_view 模組）照舊。
 最大風險在回寫：被遮蔽的欄位不可以被空值蓋掉（伺服器以資料庫現值補回）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-MASK-001"
 MONEY_COLS = ("total", "pretax", "direct_margin_pct", "net_margin_pct")

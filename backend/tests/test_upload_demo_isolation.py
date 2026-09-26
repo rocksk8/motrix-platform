@@ -4,9 +4,11 @@ of leaking into real permanent storage — matching the existing photos.py
 DEMO_PROJECT_PHOTOS_DIR pattern (see db.py's is_demo_mode()/reset_demo_db()
 docstring). This gap was found and fixed 2026-08-24: save_document_files()
 originally had no demo-mode awareness at all."""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 import os
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

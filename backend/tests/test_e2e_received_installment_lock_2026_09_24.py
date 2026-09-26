@@ -3,6 +3,7 @@
 後端擋下之後，前端原本只顯示「儲存失敗」，使用者看不出是哪一期、為什麼。
 這支題釘住：畫面上看得到「已收款，不可刪除」，而且資料庫裡那一期還在。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -16,6 +17,7 @@ pytest.importorskip("playwright.sync_api")
 
 import uvicorn
 from tests._ports import free_safe_port
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO = "MQ-E2ELOCK-001"
 

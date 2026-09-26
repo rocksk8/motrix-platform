@@ -10,7 +10,9 @@ commit（`2b8e7ad`）拉回開發機，沒有補上專屬測試檔——`backend
 
 各端點對應的實際程式碼位置與 docstring 見 `backend/modules/case/api/quotations.py` 2042-2316 行。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

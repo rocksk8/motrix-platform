@@ -1,7 +1,9 @@
 """2026-08-28 視覺化管理優化：部門篩選擴大到案件執行看板／月支出（承攬商/料件）、
 庫存水位燈號。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

@@ -5,6 +5,7 @@ selectCase 的案件層級重設集中到各模組的 _reset_<模組>(phase, dat
 頁面資料物件上所有非函式的欄位必須相同（清單／工作階段等與案件無關的欄位除外）。
 漏重設的欄位會帶著 A 的值出現在差異裡。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -13,6 +14,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 A = "MQ-SW-A"
 B = "MQ-SW-B"

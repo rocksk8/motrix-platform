@@ -5,8 +5,10 @@ get_approval_queue()（佇列列表）／get_approval_queue_count()（topbar 角
 原本只比對 currentApprovers 的 username 是否等於自己，代理人登入後完全看不到
 任何項目被標成「輪到我」，等於代理人設定了也沒用（除非剛好知道確切單號直接
 開頁面）。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import date, timedelta
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

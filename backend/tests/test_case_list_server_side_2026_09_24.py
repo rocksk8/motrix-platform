@@ -9,9 +9,11 @@ GET /api/quotations 新增（皆選填、舊呼叫端不受影響）：
 - counts=1：回 counts（進行中／已結案／待精算／逾期階段數），不受 q 與分頁影響
 edit_last 改在 SQL 取最後一筆，不再把整段 editHistory 撈回來。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 URL = "/api/quotations"
 BOTH = "已成案,已結案"

@@ -5,6 +5,7 @@
 這裡刻意只注入 session、**不**寫「已經過 index」的分頁旗標：要讓橫幅在目標頁上真的跳出來。
 觀測點：橫幅出現之後，按鈕中心的 elementFromPoint 必須是按鈕本身；橫幅每個分頁只出現一次、關掉後同分頁不再出現。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
 
@@ -16,6 +17,7 @@ from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, NO, _seed  #
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 HIT_JS = """(sel) => {
   const b = document.querySelector(sel)

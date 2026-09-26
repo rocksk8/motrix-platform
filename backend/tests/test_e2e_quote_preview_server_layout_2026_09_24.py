@@ -4,6 +4,7 @@
 - sandbox 只給 allow-scripts：pdf_gen 內建的 A4 縮放 script 要真的生效（長報價單）
 - 切換「對外／內部」會重取；開預覽不可以清掉離頁警告（那支是 POST）
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -15,6 +16,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO = "MQ-202609-082"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

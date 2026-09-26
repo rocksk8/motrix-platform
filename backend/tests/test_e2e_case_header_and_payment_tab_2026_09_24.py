@@ -6,6 +6,7 @@
   財務分頁其餘區塊（應收應付總覽）仍只給有財務檢視權的人
 - 案件健康總覽「收款」關卡的「前往」指到財務分頁
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -18,6 +19,7 @@ from tests._ui_dialogs import DIALOG, forbid_native_dialogs
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 
 def _open(browser, base, user, tab=""):

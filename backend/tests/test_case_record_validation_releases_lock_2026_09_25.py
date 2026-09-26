@@ -6,10 +6,13 @@
    以前 400 之後沒人立刻再寫所以看不出來；存檔排隊改成「失敗後仍以最新狀態重送」就撞上。
 量法：包住 get_db 追蹤這一次請求用的連線，400 回來時它必須已關閉（不在交易裡）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import sqlite3
 
 import modules.case.api.quotations as q
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 class _Tracked:

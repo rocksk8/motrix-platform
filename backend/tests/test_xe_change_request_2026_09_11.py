@@ -9,12 +9,14 @@
 人一按編輯，成本與報表數字當場就變了，簽核變成事後追認。所以下面每一個測試都在
 守同一條線：**核准之前，本體的金額與附件完全沒被動過**。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 
 from .test_case_extra_expenses_api_2026_09_11 import (  # noqa: F401  (fixtures reused)
     _auth, _base, _login, _make_case, _payload, _set_empty_approval_flow,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _cbase(exp_id, no="MQ-XE-001"):

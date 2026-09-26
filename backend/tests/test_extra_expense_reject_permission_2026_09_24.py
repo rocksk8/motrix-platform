@@ -7,6 +7,7 @@
 
 觀測點刻意打在**資料列狀態**而不只是 HTTP 碼：擋下來之後單據必須仍在簽核中。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 from .test_case_extra_expenses_api_2026_09_11 import (  # noqa: F401  (fixtures reused)
@@ -15,6 +16,7 @@ from .test_case_extra_expenses_api_2026_09_11 import (  # noqa: F401  (fixtures 
 from .test_xe_change_request_2026_09_11 import (
     _approved_expense, _cbase, _get_item, _single_tier_flow,
 )
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _put_pending(exp_id, approver_username):

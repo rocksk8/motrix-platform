@@ -23,9 +23,11 @@ GET  /api/approval-queue          傳票要以 type="voucher" 出現，
 無關，兩種情況都要寫」。本檔分開驗「沒有設定簽核流程」與「有設定」
 兩種情況，避免只驗其中一種、讓另一種的假綠燈漏網。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 VOUCHERS = "/api/vouchers"
 QUEUE = "/api/approval-queue"

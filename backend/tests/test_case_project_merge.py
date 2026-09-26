@@ -11,7 +11,9 @@ PDF 產生走 Edge headless（本機測試環境沒有，既有慣例見
 test_reports_export_expenses.py），這裡只測 _project_execution_report_data()/
 _build_project_execution_report_html() 純 Python 組裝部分。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

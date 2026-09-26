@@ -1,4 +1,5 @@
 """自 `tests/test_e2e_report_recognition_2026_09_24.py` 拆出（M08 搬遷反向控制：這幾題需要營運分析模組，拿掉模組時一起消失）。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pytest
 pytest.importorskip("playwright.sync_api")
@@ -10,6 +11,7 @@ from tests.test_e2e_report_recognition_2026_09_24 import (  # noqa: E402,F401  �
 )
 
 from core import source_tree as _source_tree
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
 #: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。

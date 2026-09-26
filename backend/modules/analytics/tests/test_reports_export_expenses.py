@@ -3,6 +3,7 @@ PDF 實際轉檔需要 Edge headless，本機測試環境沒有（既有已知�
 程式碼本來就沒有自動化測試覆蓋），這裡只測 _build_report_html() 產生的 HTML
 字串本身（純 Python 字串組裝，不需要 Edge）；Excel 因為是 openpyxl 純 Python
 產生，走完整 HTTP 端點也不需要外部依賴，直接測。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 
@@ -10,6 +11,7 @@ import openpyxl
 import pytest
 
 from core import source_tree as _source_tree
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
 #: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。

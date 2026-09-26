@@ -4,6 +4,8 @@
 違規時：預設記 ERROR＋堆疊並照寫（產品會賣給客戶自架，不可以用安裝路徑猜正式機而擋住客戶存檔）；
 設了 MOTRIX_STRICT_DB_GUARDS=1 才 raise（conftest 在測試啟動時設）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import json
 import logging
 
@@ -12,6 +14,7 @@ import pytest
 import modules.case.quotations as hq
 from core import txn  # 寫鎖 2026-09-25 下沉 L1
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 @pytest.fixture()

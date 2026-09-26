@@ -4,6 +4,7 @@ loadCaseCounts() 原本回應非 2xx 或例外時 catch {} 靜默吞掉：caseCo
 一直空白，畫面沒有任何說明。改為顯示「件數載入失敗」＋「重試」。
 觀測點：畫面上的失敗訊息；重試成功後訊息消失、數字出現。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -12,6 +13,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 ERR = "[data-testid=case-counts-error]"

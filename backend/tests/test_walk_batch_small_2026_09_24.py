@@ -5,11 +5,13 @@
 - 4.3：待補登連結改直接開對應分頁（使用者裁）：開「那筆資料實際登錄的分頁」。
 - 7-SL：業務預設開地圖模組（使用者裁；只影響新建帳號與角色樣板）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_material_orders_2026_09_11 import _login  # noqa: F401,E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 RPT = "Alpine.$data(document.querySelector('[x-data]'))"
 

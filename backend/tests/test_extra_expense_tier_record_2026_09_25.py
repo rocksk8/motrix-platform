@@ -11,12 +11,14 @@ approve 只寫 approvedAt／approvedByDisplay、**從來不寫 status**，而且
 
 兩條路都驗：額外支出本身（approval_json）與變更申請（change_approval_json）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
 
 from tests.test_case_extra_expenses_api_2026_09_11 import _login, _auth, _make_case, _base, _payload
 from tests._delegates import delegate as _delegate
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-XTR-001"
 

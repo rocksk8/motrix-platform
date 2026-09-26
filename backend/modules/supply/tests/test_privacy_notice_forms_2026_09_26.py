@@ -3,8 +3,10 @@
 需要 M03（出貨單端點）⇒ 放在模組裡、沿用原檔名（PLAYBOOK §B-11）。規則同報價單／完工單的告知：
 只接受已存檔的收件人（不同 ⇒ 409）、鍵含姓名（換人要重新告知）、紀錄只蓋一次、寫稽核；讀與寫都照出貨單的案件權限。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from helpers import privacy_notice as pn
 from tests.test_privacy_notice_forms_2026_09_26 import _audit_count, _hdr, _insert_quote
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _note(client, h, quote_no, recipient):

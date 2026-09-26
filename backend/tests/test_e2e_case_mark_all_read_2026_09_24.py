@@ -3,6 +3,7 @@
 markAllRead() 原本對每一筆送出已讀（不等回應）就重抓件數；件數先回來時，伺服器還沒記到已讀 ⇒
 未讀數又變 1、未讀列重新出現。觀測點：已讀請求刻意延後回應時，按下後未讀列不再出現、件數為 0。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time
@@ -12,6 +13,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-MARKALL-001"
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

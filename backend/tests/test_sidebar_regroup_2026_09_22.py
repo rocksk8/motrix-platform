@@ -31,10 +31,12 @@
 ⚠️ 那是**協定上的動作**，不是這裡的斷言 —— 我驗不到「有沒有人宣告過」。
 ⇒ 它在覆蓋率守門的 `EXEMPT` 裡，理由欄寫的是「它是怎麼被驗的」。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import re
 from pathlib import Path
 
 import pytest
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 SIDEBAR = (Path(__file__).resolve().parent.parent.parent
            / "frontend" / "static" / "sidebar.js")

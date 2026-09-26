@@ -1,12 +1,14 @@
 """API-level integration tests for 網路架構規劃書 (network_plans) — CRUD 層，
 見 routers/network_plans.py 與 NETWORK-PLAN-MODULE-DESIGN.md。匯出（Excel/PDF）
 與庫存挑選整合屬於後續施做步驟，尚未開發，不在此檔涵蓋範圍。"""
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 import re
 import zipfile
 
 import openpyxl
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):

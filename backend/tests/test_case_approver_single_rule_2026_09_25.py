@@ -4,7 +4,9 @@ router 版 `_is_case_approver` 與 helpers 版 `is_document_approver` 原本是�
 額外支出的 `approval_json` 沒有外層 `approval` 包裝，router 版認不得 ⇒ 額外支出的簽核人
 （不是案件成員）在簽核佇列打開詳情會被 403、也看不到金額。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _tok(client, make_user, u, role, mods):

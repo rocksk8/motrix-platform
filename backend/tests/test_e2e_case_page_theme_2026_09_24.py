@@ -7,6 +7,7 @@ P3 起案件頁讀語意 token、深色模式退出全站反轉（直接吃深�
    之後改樣式要有意識地重錄（GOLDEN_WRITE=1）
 種子資料與 golden 行為題相同（多狀態案件，每個分頁都有內容）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import os
 import pathlib
@@ -21,6 +22,7 @@ from tests.test_e2e_case_page_golden_2026_09_24 import NO, _seed  # noqa: F401  
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 GOLDEN = pathlib.Path(__file__).with_name("golden_case_page_theme_2026_09_24.json")
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"

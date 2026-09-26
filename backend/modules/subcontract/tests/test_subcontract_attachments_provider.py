@@ -2,9 +2,11 @@
 
 需要 M04 ⇒ 隨模組（PLAYBOOK §B-11）。兩類共用同一個派工單 id，內容來自不同欄位。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 from core import registry
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = {"id": 0, "username": "att_root", "role": "superadmin", "modules": []}
 

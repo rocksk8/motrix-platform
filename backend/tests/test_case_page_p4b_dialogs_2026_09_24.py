@@ -5,6 +5,7 @@
 - 既有缺陷（本次一併修）：6 個表單視窗是 x-show，隱藏時 @keydown.escape.window 仍在監聽 ⇒ 在頁面任何
   地方按 Esc 都會連問「表單尚未儲存」。原生 confirm 被 e2e 自動按掉所以一直沒被看見。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import re
 from pathlib import Path
@@ -88,6 +89,7 @@ pytest.importorskip("playwright.sync_api")
 
 from tests._ui_dialogs import DIALOG, answer_confirm, answer_prompt, forbid_native_dialogs  # noqa: E402
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import DATA_JS, _login  # noqa: E402,F401
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-P4B-001"
 

@@ -5,6 +5,7 @@
 
 觀測點打在資料庫落地值（補登欄位）與後端回應驅動的畫面（報表），不打在頁面寫死的文字。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
@@ -13,6 +14,7 @@ pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_material_orders_2026_09_11 import _login  # noqa: F401
 from tests.test_report_recognition_basis_2026_09_24 import _case, _stage, _dispatch, _db
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 RPT = "Alpine.$data(document.querySelector('[x-data]'))"
 

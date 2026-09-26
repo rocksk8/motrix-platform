@@ -8,11 +8,13 @@
 ②**逐字法條**（2026-09-26，稽核 S-4）：營業稅法 §8 的條文用的是「代辦」（政府委託代辦），不是「待辦」的錯字；
   只放過與 `helpers.legal_params.ARTICLE_8_ITEMS` 逐字相同的字串，改動過一個字就不算。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import ast
 import io
 import pathlib
 import re
 import tokenize
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 OLD_WORDS = {"代辦": "待辦", "備注": "備註", "完結案": "結案"}

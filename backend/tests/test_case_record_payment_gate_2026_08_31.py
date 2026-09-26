@@ -7,7 +7,9 @@ mark_payment（PATCH .../payment/{idx}，只有 receivables.html 在用）——
 且使用者不是 admin+/cashier 模組，整筆拒絕（不寫入任何欄位，包含同一次
 request 裡其他合法的材料/合約欄位也一併不寫，避免使用者誤以為部分成功）。
 """
+from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
+pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
