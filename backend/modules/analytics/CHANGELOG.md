@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.2 — 2026-09-26（第八班列車取號；原暫用 1.0.1）
+- 只改 import 來源（行為不變）：`api/reports.py` 的稅額函式（quote_tax_type、tax_split、LEGACY_TAX_NOTE、invoice_amounts）改自 L1 `helpers.tax_calc` import（C 的 T：稅額純函式自 M01 下沉 L1）⇒ 本模組對 M01 `helpers.quotations` 少一條相依
+
 ## 1.0.1 — 2026-09-26
 - 稽核 ⑰（AUDIT-X-B-M08-move）建議與觀察：
   - `sales-orders.html`（轉址到案件管理）改歸 M01：資料端點本來就在 M01，模組不在時舊書籤不應看到「需要營運分析」（S-8）
