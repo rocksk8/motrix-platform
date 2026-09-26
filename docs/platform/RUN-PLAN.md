@@ -99,6 +99,7 @@
 - **ROADMAP 待辦**（R 帶出）：R2 附件形式的依據；客戶聯絡人等其他個資表單的告知機制（MODULE-GUIDE §11 標「未守門」）；~~privacy_notice_acks 在 M04 搬遷時改用模組自己的表~~〔主持裁示 2026-09-26 07:53（D ⑮ O-1）：維持 L1 共用表——個資告知橫跨報價、網規、外包等多個模組，是共用能力，下沉資料層；不改模組表〕。
 - **D1 階段 B 模組搬遷分工**（2026-09-26 03:30，使用者裁示「轉移優先」；每個模組都照 PLAYBOOK §B，搬完記選題比例（D1b），上月台）：
   - A：M12 每日任務（完成，搭第三班）→ M10（進行中）→ M03 → M01
+  - 〔主持裁示 2026-09-26 09:33，M01 改派〕A（hichan-f9）自 07:07 無回應（U18），M01 由 **C** 接手，照 C 的 M01-PLAN §3 順序：**T**（稅額純函式 payment_item_amounts／quote_tax_type／tax_split／invoice_amounts／LEGACY_TAX_NOTE 下沉 L1 `helpers/tax_calc.py`，舊位置留同名別名；**核准立刻開工**，以 origin/platform 為基底，第七班）→ 小型下沉 → case_access 匯入改位置 → 讀取連接器 case.summary → M05 → case.recognition（M01 提供者，配契約題）→ approval-queue 改各單據模組提供待簽項目、M01 只彙整 → M01 本體（含 CA-O3、CA-O4，及 **pdf_gen.py:442 寫 quotations 表**要改由 M01 提供）。M01 的反向控制「提到 M01 的測試檔」≈ 全量 ⇒ 改由列車的全量兼任：M01 本體上車那一班，列車長在 sparse（不取出 M01）樹上另跑一次全量，紅必須 ⊆ §B-11 允許＋已知紅清單。A 回來後：M03（A11 的 wip/a-m03 b9ac9ce9，未推）照舊歸 A；M01 不收回。
   - B：M08（2026-09-26 04:47 從 A 移過來；C4 開工時暫停）〔2026-09-26 05:39 佇列：M08 → dep_graph／test_map 一致性守門（比照 UNIT-INDEX --check，附反向控制）→ O6 → C4（開工時主持宣布凍結）。M08 要排在 c-module-files 之後上車〕
   - C：M02 crm／dev_crm（進行中，wip/c-m02）→ M04 → M05 → M06 → M07
   - 搬遷順序依 ROADMAP 階段 B 的相依；兩邊要動同一個 L1 helper 時，先在 RUN-PLAN §6 講一聲再動
@@ -131,6 +132,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 09:33 主持：裁示 M01 改派 C（A 無回應）；核准 T 先做（稅額純函式下沉 L1，解掉 pdf_gen、M05、M08、receivables 對 M01 的相依，也是 CA-O4 的一半）；M01 反向控制由列車全量在 sparse 樹兼任。C 的更正：helpers/quotations 歸 M01 不是 L1（原句保留劃掉）。新發現：L1 pdf_gen 會寫 M01 的 quotations 表。
 - 2026-09-26 09:31 主持：D 關閉 ⑰ M08 必修 M-1～M-4（b-m08-2 f7463dfa，LD1＋§B-11 獨立重做：刪 analytics 後 1264 過、只紅允許 2）。D 指出：worktree 啟用 sparse checkout 會在共用 .git/config 寫入 `extensions.worktreeconfig=true`（主持的 Hcore、C 的 C29／C31／C33、B 的暫存樹都用過）。查證：各樹的 sparse 設定在自己的 config.worktree，主樹與其他樹不受影響。**裁示保留這一行**：拿掉的話，那幾棵樹的 sparse 設定會被忽略，下次 checkout 會把模組取回來，反向控制變成沒人察覺的假綠。兩種做法都接受（自己樹裡刪資料夾／sparse）。X-O10（演練只看 probes，未宣告的模組不再被打）：tender_radar 由主持在 b-m08-2 合回後補，daily_tasks／netplan 交給擁有者。C：M05 等第六班合回後以 origin 開工（先試合 b-m08-2＋c-m04-2 撞 13 檔，已 abort）；等待期間寫 M05 與 M01 步驟表（M01 可能從 A 轉給 C，待裁示）。
 - 2026-09-26 09:29 D：⑰ M08 必修 M-1～M-4 **全部關閉**（b-m08-2 f7463dfa；突變 14 項全紅）。§B-11 D 獨立重做：真刪 analytics 1264 過／2 紅皆允許、收集無錯誤；模組在 1459 過。觀察 X-O10：tender_radar 等未宣告 probes ⇒ 演練不再打它們的端點。
 - 2026-09-26 09:27 B（記錄主持裁示，AUDIT-D-B-G1 G-M1）：**core-only 已知紅清單**首批（`tools/platform/core_only_known_red.json`；列車判定＝紅燈 ⊆ §B-11 允許＋本清單；清單只准縮短，新增一筆要在本檔寫一行帶錨點的主持裁示）：
