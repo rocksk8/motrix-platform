@@ -20,7 +20,7 @@ M01 搬遷時改寫進 `ModuleSpec.providers`（M01-PLAN，同 CA-O3）。
 """
 import json
 
-from helpers.case_access import case_documents_readable
+from helpers.case_access import case_documents_readable, case_owner_readable
 from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
 
 
@@ -67,8 +67,14 @@ def _quote_of(conn, source_type, doc_no):
     raise AttachmentSourceError("不支援的附件來源「%s」。" % source_type)
 
 
-def _require_readable(conn, quote_no, user):
-    if not case_documents_readable(conn, quote_no, user):
+#: 每一類用**原單據自己的讀取規則**（稽核 D AT-M1b：附件的可見範圍不可以比原單據寬）
+#:   extra_expense ⇒ 額外支出各端點的 `_guard_case` ＝ `case_owner_readable`（不放行 case_manage）
+#:   其餘          ⇒ 案件頁與付款／叫料各端點的 `guard_case_access(allow_module="case_manage")`
+_READ_RULE = {"extra_expense": case_owner_readable}
+
+
+def _require_readable(conn, source_type, quote_no, user):
+    if not _READ_RULE.get(source_type, case_documents_readable)(conn, quote_no, user):
         raise AttachmentNotVisible()
 
 
@@ -79,7 +85,7 @@ class _CaseAttachments:
 
     @staticmethod
     def doc_nos_for_case(conn, source_type, quote_no, user):
-        _require_readable(conn, quote_no, user)
+        _require_readable(conn, source_type, quote_no, user)
         if source_type in ("quotation_signed", "case_update"):
             return [quote_no]
         if source_type in _INDEXED:
@@ -95,7 +101,7 @@ class _CaseAttachments:
         quote_no = _quote_of(conn, source_type, doc_no)
         if quote_no is None or conn.execute("SELECT 1 FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone() is None:
             return []                                     # 來源不存在（契約：[]）
-        _require_readable(conn, quote_no, user)
+        _require_readable(conn, source_type, quote_no, user)
         if source_type == "quotation_signed":
             return files_from_json_column(conn, "quotations", "quote_no", doc_no, "signed_files_json")
         if source_type == "case_update":

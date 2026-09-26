@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.45 — 2026-09-26（A，attachments.for_document 依原單據自己的讀取規則；稽核 D AT-M1b；第十班列車取號，原暫用 1.39）
+- L1（新增）：`helpers.case_access.case_owner_readable(conn, quote_no, user)`（案件擁有者規則，不放行任何模組；案件額外支出各端點與它的附件提供者共用同一支，附件的可見範圍不可以比原單據寬）
+
 ## 1.44 — 2026-09-26（A，attachments.for_document 加權限；稽核 D AT-M1，主持裁示 (b)；第十班列車取號，原暫用 1.38）
 - L1（新增）：`helpers.uploads.AttachmentNotVisible`（使用者看不到附件的原單據；取用方列清單時不列、帶入／預覽 403）、`helpers.case_access.case_documents_readable(conn, quote_no, user)`（案件底下的單據准不准讀：與各單據清單同一份規則，`case_access_allowed(..., allow_module="case_manage")`；案件不存在 ⇒ False）
 
