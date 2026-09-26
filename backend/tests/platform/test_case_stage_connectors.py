@@ -15,6 +15,12 @@ import pytest
 
 from core import registry, source_tree
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 BACKEND = Path(__file__).resolve().parents[2]
 
 
@@ -82,6 +88,7 @@ def _tick(client, h, no, done=True):
 
 
 
+@needs_case('驗 M01 案件階段在 M12 不在時的行為（端點屬 M01）')
 def test_daily_task_connector_without_m12_stage_still_saves_and_says_so(client, make_user, monkeypatch):
     """反向控制：拿掉 M12 ⇒ 勾選照常存檔、零筆每日任務、回應明說原因。"""
     from modules.case.case_stage_tasks import NOTICE_NO_DAILY_TASKS
@@ -108,6 +115,7 @@ def _stage_with_old_task(client, h, no, task_id=77):
     return sid
 
 
+@needs_case('驗 M01 案件階段在 M12 不在時的行為（端點屬 M01）')
 def test_without_m12_uncheck_says_the_old_task_was_not_withdrawn(client, make_user, monkeypatch):
     """B-1（AUDIT-X-C-batch1）：M12 不在時取消勾選，原本有任務 ⇒ 明說「沒有收回」，不能說成「沒有建立」。
 
@@ -123,6 +131,7 @@ def test_without_m12_uncheck_says_the_old_task_was_not_withdrawn(client, make_us
     assert _q("SELECT done, daily_task_id FROM case_stages WHERE id=?", sid)[0] == {"done": 0, "daily_task_id": 77}
 
 
+@needs_case('驗 M01 案件階段在 M12 不在時的行為（端點屬 M01）')
 def test_without_m12_uncheck_with_no_task_says_nothing(client, make_user, monkeypatch):
     """原本就沒有任務 ⇒ 沒有什麼沒收回，不出提示（提示只在真的少了一件事時出現）。"""
     _without(monkeypatch, "daily_task.external", "daily_tasks")
@@ -133,6 +142,7 @@ def test_without_m12_uncheck_with_no_task_says_nothing(client, make_user, monkey
     assert r.status_code == 200 and "notice" not in r.json(), r.json()
 
 
+@needs_case('驗 M01 案件階段在 M12 不在時的行為（端點屬 M01）')
 def test_without_m12_deleting_a_stage_with_a_task_says_so(client, make_user, monkeypatch):
     from modules.case.case_stage_tasks import NOTICE_NOT_WITHDRAWN
     _without(monkeypatch, "daily_task.external", "daily_tasks")
@@ -157,6 +167,7 @@ def _sql_writes(rel):
     return out
 
 
+@needs_case('掃 M01 自己的原始碼')
 def test_m01_and_l1_no_longer_write_foreign_tables():
     assert not ({"daily_tasks", "daily_task_completions"} & _sql_writes("modules/case/case_stage_tasks.py"))
     assert not ({"case_stages", "invoice_vouchers", "payment_requests", "shipping_notes", "quotations"}
@@ -175,6 +186,7 @@ IP6_OWNERS = {
 }
 
 
+@needs_case('正對照含 M01 的 quotation／case_stage 兩個回寫提供者')
 def test_calendar_writeback_every_owner_registers_its_writeback(client):
     """client 夾具＝載入器掛好已安裝的模組（ModuleSpec.providers 在那時登記）。"""
     import modules.case.api.quotations  # noqa: F401  （M05 的兩支由載入器掛載）
@@ -191,6 +203,7 @@ def fake_google(monkeypatch):
     return gc
 
 
+@needs_case('回寫對象是 M01 的報價單')
 def test_calendar_writeback_with_owner_event_id_is_written_back(client, make_user, fake_google):
     _case("MQ-IP6-ON")
     fake_google.push_event_for_quotation_won("MQ-IP6-ON")
@@ -216,6 +229,7 @@ def distinct_google(monkeypatch):
     return gc
 
 
+@needs_case('驗 M01 案件階段的回寫欄位')
 def test_calendar_writeback_case_stage_slots_are_separate(client, make_user, distinct_google):
     u, h = _login(client, make_user, "ip6_stage")
     _case("MQ-IP6-STG")
@@ -306,6 +320,7 @@ def test_calendar_writeback_without_owner_event_is_created_but_nothing_is_writte
     assert "擁有模組未安裝" in caplog.text
 
 
+@needs_case('驗 M01 案件階段的回寫欄位')
 def test_calendar_writeback_unknown_stage_slot_is_refused():
     import modules.case.api.quotations  # noqa: F401
     fn = registry.providers("calendar.writeback")["case_stage"]
