@@ -380,12 +380,82 @@ E2E_FLAGS = frozenset({"mark_e2e", "fixture_live_server", "fixture_sync_playwrig
                        "fixture_e2e_browser", "fixture_new_context", "imports_playwright"})
 
 
+def _is_pw(name) -> bool:
+    return isinstance(name, str) and (name == "playwright" or name.startswith("playwright."))
+
+
+def playwright_refs(tree):
+    """原始碼裡用到 playwright 的地方 ⇒ [(行號, 寫法)]，**任何層級**（模組層、函式內、類別內）。
+    〔稽核 D MB-M1：原本只認 `from playwright… import …`（而且只經 _Scan.imports）⇒ 下面其餘寫法都漏〕
+    寫法：`import playwright…`（含 as）、`from playwright… import …`、`pytest.importorskip("playwright…")`、
+    `importlib.import_module("playwright…")`／`__import__("playwright…")`。"""
+    out = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import) and any(_is_pw(a.name) for a in n.names):
+            out.append((n.lineno, "import"))
+        elif isinstance(n, ast.ImportFrom) and n.level == 0 and _is_pw(n.module):
+            out.append((n.lineno, "from-import"))
+        elif isinstance(n, ast.Call) and n.args and isinstance(n.args[0], ast.Constant) and _is_pw(n.args[0].value):
+            name = getattr(n.func, "attr", None) or getattr(n.func, "id", None)
+            if name in ("importorskip", "import_module", "__import__"):
+                out.append((n.lineno, name))
+    return out
+
+
 def _scan_flags(tree):
     sc = _Scan()
     sc.visit(tree)
-    if any(m == "playwright" or m.startswith("playwright.") for m in sc.imports):
+    if playwright_refs(tree):
         sc.flags.add("imports_playwright")
     return sc
+
+
+def file_uses_playwright(path) -> bool:
+    tree = _parse(path)
+    return tree is not None and bool(playwright_refs(tree))
+
+
+def playwright_functions(tree) -> set:
+    """同一檔裡**實際用到 playwright** 的函式名（任何層級的 def，含類別方法與 fixture），遞移經同檔呼叫（fixture 由守門以 pytest 的 fixturenames 交集判斷，已含 fixture 串接）。
+    用到＝函式本體裡有 playwright_refs 的寫法，或讀了模組層由 playwright 綁定的名字
+    （`import playwright.sync_api` ⇒ `playwright`、`from playwright… import X` ⇒ `X`、`pw = pytest.importorskip("playwright…")` ⇒ `pw`）。
+    給「用瀏覽器的題必有 e2e marker」守門用：只在模組層 import 而題目本身沒用到的，不算（混合檔裡的純單元題）。"""
+    bound = set()
+    for n in tree.body:
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if _is_pw(a.name):
+                    bound.add(a.asname or a.name.split(".")[0])
+        elif isinstance(n, ast.ImportFrom) and n.level == 0 and _is_pw(n.module):
+            bound.update(a.asname or a.name for a in n.names)
+        elif isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None:
+            if [1 for c in ast.walk(n.value) if isinstance(c, ast.Call) and c.args
+                    and isinstance(c.args[0], ast.Constant) and _is_pw(c.args[0].value)]:
+                tgts = n.targets if isinstance(n, ast.Assign) else [n.target]
+                bound.update(t.id for t in tgts if isinstance(t, ast.Name))
+    funcs = {}
+    for n in ast.walk(tree):
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            funcs.setdefault(n.name, []).append(n)
+    direct, calls = set(), {}
+    for name, defs in funcs.items():
+        used, callees = False, set()
+        for d in defs:
+            body = ast.Module(body=d.body, type_ignores=[])
+            if playwright_refs(body) or any(isinstance(x, ast.Name) and x.id in bound for x in ast.walk(body)):
+                used = True
+            callees.update(x.func.id for x in ast.walk(body) if isinstance(x, ast.Call) and isinstance(x.func, ast.Name))
+        if used:
+            direct.add(name)
+        calls[name] = callees & set(funcs)
+    out, changed = set(direct), True
+    while changed:
+        changed = False
+        for name, cs in calls.items():
+            if name not in out and cs & out:
+                out.add(name)
+                changed = True
+    return out
 
 
 def file_is_e2e(path) -> bool:

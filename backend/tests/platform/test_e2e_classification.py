@@ -21,16 +21,25 @@ import test_map as TM  # noqa: E402
 
 _BROWSER_FIXTURES = ("new_context", "e2e_browser")
 
-#: collect-only 探針（寫到 tmp，以 -p 載入）：每題 ⇒ 是否用瀏覽器、是否有 e2e marker
+#: collect-only 探針（寫到 tmp，以 -p 載入）：每題 ⇒ 是否用瀏覽器、是否有 e2e marker。
+#: 「用 playwright」看**原始碼 AST**（test_map.playwright_functions：import／from-import／importorskip／import_module，
+#: 任何層級），不看模組執行後留下的名字〔稽核 D MB-M1：原本看 vars(module) 的 __module__ ⇒ `import playwright.sync_api`、
+#: importorskip、函式內 import 都漏〕。粒度是**題**：題目本體、它呼叫的同檔 helper、它用的同檔 fixture 用到 playwright ⇒
+#: 要有 marker；只在模組層 import 而題目沒用到（混合檔裡測 e2e 工具的純單元題）不算。
 _PROBE = '''
-import json, os
+import json, os, sys
+sys.path.insert(0, os.environ["E2E_PROBE_TM"])
+from test_map import _parse, playwright_functions
 def pytest_collection_finish(session):
-    rows = []
+    rows, cache = [], {}
     for it in session.items:
         fx = set(getattr(it, "fixturenames", ()) or ())
-        mod = getattr(it, "module", None)
-        pw = bool(mod) and any(str(getattr(v, "__module__", "") or "").startswith("playwright")
-                               for v in vars(mod).values())
+        path = str(getattr(it, "path", None) or it.fspath)
+        if path not in cache:
+            tree = _parse(path)
+            cache[path] = playwright_functions(tree) if tree is not None else set()
+        name = getattr(it, "originalname", None) or it.name.split("[")[0]
+        pw = name in cache[path] or bool(fx & cache[path])
         rows.append({"nodeid": it.nodeid, "browser": bool(fx & set(%r)) or pw,
                      "marked": it.get_closest_marker("e2e") is not None})
     with open(os.environ["E2E_PROBE_OUT"], "w", encoding="utf-8") as f:
@@ -42,7 +51,7 @@ def _collect(tmp_path, cwd, args):
     from tests._subproc import utf8_env
     (tmp_path / "e2e_cls_probe.py").write_text(_PROBE, encoding="utf-8")
     out = tmp_path / "rows.json"
-    env = utf8_env(PYTHONPATH=str(tmp_path), E2E_PROBE_OUT=str(out))
+    env = utf8_env(PYTHONPATH=str(tmp_path), E2E_PROBE_OUT=str(out), E2E_PROBE_TM=str(REPO / "tools" / "platform"))
     r = subprocess.run([sys.executable, "-m", "pytest", *args, "--collect-only", "-q", "-p", "e2e_cls_probe",
                         "-p", "no:cacheprovider", "--basetemp=%s" % (tmp_path / "bt")],
                        cwd=str(cwd), env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
@@ -81,6 +90,40 @@ def test_an_unmarked_browser_test_is_caught(tmp_path):
         "def test_no_browser():\n    pass\n", encoding="utf-8")
     rows = _collect(tmp_path, root, ["."])
     assert _unmarked_browser(rows) == ["test_plain_name.py::test_uses_browser"], rows
+
+
+#: 稽核 D MB-M1：用 playwright 而沒有 marker 的五種寫法（importorskip 是 repo 常見寫法）
+_PW_WAYS = {
+    "test_pw_import.py": "import playwright.sync_api\ndef test_a():\n    playwright.sync_api.sync_playwright\n",
+    "test_pw_from.py": "from playwright.sync_api import sync_playwright\ndef test_a():\n    sync_playwright\n",
+    "test_pw_skip.py": "import pytest\npw = pytest.importorskip('playwright.sync_api')\ndef test_a():\n    pw.sync_playwright\n",
+    "test_pw_inner.py": "def _helper():\n    from playwright.sync_api import sync_playwright\n    return sync_playwright\n"
+                        "def test_a():\n    _helper()\n",
+    "test_pw_importlib.py": "import importlib\ndef test_a():\n    importlib.import_module('playwright.sync_api')\n",
+    "test_pw_fixture.py": "import pytest\n@pytest.fixture\ndef ctx():\n    from playwright.sync_api import sync_playwright\n"
+                          "    return sync_playwright\ndef test_a(ctx):\n    pass\n",
+}
+
+
+def test_every_way_of_using_playwright_without_a_marker_is_caught(tmp_path):
+    """反向控制（稽核 D MB-M1）：五種寫法（沙盒裡 playwright 真的有裝，importorskip 不會跳過）都沒有 marker ⇒ 每一種都被列出；
+    file_is_e2e 對每一種都判 e2e。加上 marker ⇒ 不列。"""
+    root = tmp_path / "suite"
+    root.mkdir()
+    (root / "conftest.py").write_text(
+        "def pytest_configure(config):\n    config.addinivalue_line('markers', 'e2e: x')\n", encoding="utf-8")
+    for name, src in _PW_WAYS.items():
+        (root / name).write_text(src, encoding="utf-8")
+        assert TM.file_is_e2e(root / name), name
+    (root / "test_pw_marked.py").write_text(
+        "import pytest\nimport playwright.sync_api\npytestmark = pytest.mark.e2e\ndef test_a():\n    pass\n",
+        encoding="utf-8")
+    (root / "test_plain.py").write_text("def test_a():\n    pass\n", encoding="utf-8")
+    (root / "test_pw_unused.py").write_text(                 # 模組層 import，題目沒用到 ⇒ 不算（混合檔的純單元題）
+        "import pytest\npytest.importorskip('playwright.sync_api')\nfrom playwright.sync_api import Page\n"
+        "def test_a():\n    assert 1\n", encoding="utf-8")
+    rows = _collect(tmp_path, root, ["."])
+    assert _unmarked_browser(rows) == sorted("%s::test_a" % n for n in _PW_WAYS), rows
 
 
 def test_classification_ignores_the_file_name(tmp_path):
