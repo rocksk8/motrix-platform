@@ -128,7 +128,8 @@
   - B｜`wip/b-o10`（O10：選單序號兩題改「題目放行第一趟」，不靠 1.5 秒時間差；放行後等產品讀到回應再斷言）｜cc550c64｜選單 e2e 8 過；重現（logo 延後 2.5 秒）原題 2/2 紅、改後 2/2 過；突變 2 紅｜不動 fixture〔18:28 B〕
   - B｜`wip/b-genfiles`（GENERATED-FILES-PROPOSAL 合一方案，主持裁示：modtest 預設現場算 test_map／dep_graph（--use-files 除錯）、test_map 含未 add 的新檔；「是否最新」三題只在 MOTRIX_TRAIN=1；新守門「分支不動產生檔」；PLAYBOOK §G3／§G4 寫明；**含 b-modtest-durations 的 commit**（它未合回，疊在同一分支）；⚠ 生效後各分支不可再提交三檔）｜d78a7c94｜tests/platform（-n 4）1168 過＋3 skip（即三題）；MOTRIX_TRAIN=1 重產後三題 passed、分支守門 skip；反向控制（合成 repo）；modtest 現場／讀檔選題同為 79 題｜不動 fixture／main；**列車長清單第 3 步起改用 MOTRIX_TRAIN=1**〔18:41 B〕
   - B｜`wip/b-e2e-deadline-2`（取代 b-e2e-deadline cccd80fc：D 稽核 E2D-M1——軟上限一律夾在硬上限－30、被夾時說出來；durations 實量無 90～120 秒的題；**疊在 b-o9 上**）｜78d372b9｜全部 e2e（-n 2）463 過；tests/platform 1091 過；DL1 突變紅｜**動 fixture 層 ⇒ 排車頭**〔18:46 B〕
-  - B｜`wip/b-o11`（O11：smoke 建立端逾時附請求時間線；更正「排程佔鎖」舊說明）｜55df4ed8｜smoke 過、診斷題＋突變紅；探針 POST 500 ⇒ 診斷逐項列出｜不動 fixture〔18:56 B〕
+  - 〔已由 b-o11-2 取代，不上車〕B｜`wip/b-o11`（O11：smoke 建立端逾時附請求時間線；更正「排程佔鎖」舊說明）｜55df4ed8｜smoke 過、診斷題＋突變紅；探針 POST 500 ⇒ 診斷逐項列出｜不動 fixture〔18:56 B〕
+  - B｜`wip/b-o11-2`（取代 b-o11：D 抽查 O11-S1（主持升必修）——逾時證據只印狀態碼＋單號、路徑、console／對話框過 redact；**基底 b-o5-s2-2，須與它同班或更晚**）｜4bcde01b｜本檔 e2e 全過；洩漏三條路各自突變紅｜不動 fixture〔19:03 B〕
 - **全量名額排隊**（更新 2026-09-26 02:43）：§G3 生效後，新的全量改由列車統一跑。仍在跑、而且依規定跑完就直接合回的有：B 的 C1（合回閘門約 02:52）、C 的第二批全量。A 的 a-bonus 走合回閘門，不經過測試鎖。⚠ A 有一支孤兒 pytest（pid 53300），停不掉，已請使用者處理。**第一班列車預計約 03:15 發車**，要等月台上至少有 3 包（目前只有 x-r-fix 1 包）。
 - **未結案的偶發失敗**（依〈偶發失敗先當產品競態〉，不以「單獨跑是綠的」結案；下次出現時第一件事是抓 dump，`faulthandler_timeout`／py-spy）：
   - O10（B，18:28，第九班全量）：`test_e2e_menu_layout::test_stale_layout_response_is_dropped` 逾時（等 pending）。**已查明並修（wip/b-o10）**：題目靠 1.5 秒時間差，負載下 goto 等 load 超過 1.5 秒 ⇒ 第一趟先回來被正常套用（產品正確）；重現：logo.png 延後 2.5 秒必紅。改為題目放行第一趟。O5-S2 附加段：該附加段（未完成的請求）尚未合回 origin，而 b-e2e-deadline 疊的是 C4 之前的基底 ⇒ 兩者同時存在的樹目前沒有，未能附上
