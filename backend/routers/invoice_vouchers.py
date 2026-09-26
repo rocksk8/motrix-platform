@@ -44,7 +44,7 @@ from helpers import (
 )
 from pdf_gen import generate_invoice_voucher_pdf_bytes, _generate_invoice_voucher_pdf
 from helpers.errors import trace_id
-from helpers.quotations import quote_tax_type, tax_split, LEGACY_TAX_NOTE
+from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE   # T：L1
 from helpers.legal_params import tax_basis_error, tax_basis_label   # R2（L1）
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）。守門 test_legal_amount_rounding_guard
 from helpers.legal_params import round_half_up
