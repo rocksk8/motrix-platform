@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.5 — 2026-09-26
+- IP-14 加第二個能力 `contractor_voucher.paid_between(start, end)`：區間內已付款的承攬商匯款申請（形狀同 `contractor_voucher.public`）；M06 會計匯出的 T100 付款傳票改走它，不再自己讀本模組的表（主持派工，A 的 M06 搬遷前置）。M04 不在 ⇒ 會計匯出沒有承攬付款、預覽 notice 照舊明說
+
 ## 1.0.4 — 2026-09-26
 - 第六班列車：IP 定號（`dispatch.list_for_case` IP-12→IP-15、`quotation.append_items` IP-13→IP-17；origin 已用 IP-12 `case.access`、IP-13 `crm.quote_deleted`；`contractor_voucher.public` 維持 IP-14）；只改註解與文件
 

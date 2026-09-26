@@ -62,6 +62,33 @@ def test_providers_are_registered(client):
     assert set(registry.providers("dispatch.list_for_case")) == {"subcontract"}
     assert set(registry.providers("quotation.append_items")) == {"quotations"}
     assert set(registry.providers("contractor_voucher.public")) == {"subcontract"}
+    assert set(registry.providers("contractor_voucher.paid_between")) == {"subcontract"}
+
+
+def test_paid_between_lists_only_paid_vouchers_in_range_with_the_public_shape(client):
+    """IP-14 paid_between：只回已付款、paid_at 在區間內（含頭尾兩天）的；形狀與 contractor_voucher.public 相同。"""
+    import db
+    _seed()
+    conn = db.get_db()
+    try:
+        for no, paid, at in (("CV-P-IN1", 1, "2026-09-01T09:00:00"), ("CV-P-IN2", 1, "2026-09-30T18:00:00"),
+                             ("CV-P-OUT", 1, "2026-10-01T00:00:01"), ("CV-P-UNPAID", 0, "2026-09-15T00:00:00")):
+            conn.execute("INSERT INTO contractor_dispatches (quote_no, dispatch_date, scope, items_json, total_amount, "
+                         "status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                         (QNO, "2026-09-01", "amount", "[]", 100, "completed", "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
+            d2 = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]     # 一張派工一張憑據（dispatch_id UNIQUE）
+            conn.execute("INSERT INTO contractor_payment_vouchers (voucher_no, dispatch_id, quote_no, status, snapshot_json, "
+                         "data_json, is_paid, paid_at, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                         (no, d2, QNO, "已核准", json.dumps({"vendorName": "乙", "grandTotal": 100}), "{}",
+                          paid, at, "2026-09-01T00:00:00", "2026-09-01T00:00:00"))
+        conn.commit()
+        rows = {r["voucher_no"]: r for r in conn.execute("SELECT * FROM contractor_payment_vouchers").fetchall()}
+    finally:
+        conn.close()
+    got = registry.single_provider("contractor_voucher.paid_between")("2026-09-01", "2026-09-30")
+    assert [v["voucherNo"] for v in got] == ["CV-P-IN1", "CV-P-IN2"], got
+    pub = registry.single_provider("contractor_voucher.public")
+    assert got[0] == pub(rows["CV-P-IN1"], include_snapshot=False)          # 同一個對外形狀
 
 
 # ── IP-17 ─────────────────────────────────────────────────────────────────────

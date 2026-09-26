@@ -14,5 +14,7 @@ MODULE = ModuleSpec(
         ("dispatch.list_for_case", "subcontract"): vendor_contractors.list_dispatches_for_case,
         # IP-14：M05 出納與 M06 會計匯出讀付款憑據的形狀
         ("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public,
+        # IP-14（同一串接點的第二個能力）：區間內已付款的憑據（M06 T100 付款傳票；不再自己讀本模組的表）
+        ("contractor_voucher.paid_between", "subcontract"): contractor_vouchers._paid_between,
     },
 )

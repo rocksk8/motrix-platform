@@ -126,6 +126,20 @@ def _require_admin(user: dict):
         raise HTTPException(403, "需要管理員權限")
 
 
+def _paid_between(start: str, end: str) -> list:
+    """IP-14 `contractor_voucher.paid_between`：已付款（`is_paid=1`）且 `paid_at` 落在 `[start, end]`（YYYY-MM-DD，含頭尾兩天）
+    的承攬商匯款申請，依 `paid_at` 排序；形狀＝`_voucher_public(row, include_snapshot=False)`。
+    M06 會計匯出（T100 付款傳票）用它，不再自己讀 `contractor_payment_vouchers`（2026-09-26 主持派工，A 的 M06 搬遷前置）。"""
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM contractor_payment_vouchers WHERE is_paid=1 AND paid_at BETWEEN ? AND ? ORDER BY paid_at",
+            (start + "T00:00:00", end + "T23:59:59")).fetchall()
+        return [_voucher_public(r, include_snapshot=False) for r in rows]
+    finally:
+        conn.close()
+
+
 def _voucher_public(row, include_snapshot: bool = True) -> dict:
     """一張承攬商匯款申請的對外形狀。IP-14 `contractor_voucher.public`（M05 出納、M06 會計匯出）也用這一支。"""
     d = dict(row)
