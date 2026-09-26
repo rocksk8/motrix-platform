@@ -12,6 +12,7 @@ import pytest
 
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _login)
+from core import source_tree
 
 
 def _db():
@@ -84,7 +85,8 @@ def test_both_approvers_in_one_tier_must_sign(client, people, sa3):
     a = _award(no)
     assert a["status"] == "待發放"
     assert all(x.get("status") == "approved" for x in a["appr"]["tiers"][0]["approvers"])
-    assert a["accrual_voucher_id"] and _vouchers_for(no) == 1, "簽完才開、而且只開一張"
+    m06 = source_tree.module_installed("modules/accounting/")   # M06 不在 ⇒ 不開傳票（獎金照常，另有說明）
+    assert bool(a["accrual_voucher_id"]) == m06 and _vouchers_for(no) == (1 if m06 else 0), "簽完才開、而且只開一張"
 
 
 def test_second_approver_cannot_sign_before_the_first(client, people, sa3):

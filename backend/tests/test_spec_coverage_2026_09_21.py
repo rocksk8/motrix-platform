@@ -290,9 +290,7 @@ NAMED_ELSEWHERE = {
     # 📌 `JV27`、`JV21` 2026-09-26 移到 `modules/accounting/SPEC.md` 的 `## 登記`（M06 搬遷；理由原文照搬）。
     # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丙類**逐支打開**後
     #    只有這三個是真的在驗它（題也是綠的）；其餘丙類的命中只是註解引用，沒有登記。
-    # ⚙️ `AI1`：題的 docstring 逐字「`§7⑧`（`AI1`）：停用之後 validate_account_code()
-    #    要說它已停用」，走 PATCH 產品路徑。
-    "AI1":  "test_ca1_disabling_a_custom_code_makes_it_unusable",
+    # 📌 `AI1` 2026-09-26 移到 `modules/accounting/SPEC.md` 的 `## 登記`（M06 搬遷；理由原文照搬）。
     # ⚙️ `EM11`（2 處）：這一支守 `onDealTagChange`；另一處 exportCount 由同檔
     #    `test_em9_quotation_export_count_has_failure_handling` 守（表只收一支函式名）。
     "EM11": "test_em9_quotation_deal_tag_change_has_failure_handling",
@@ -782,7 +780,7 @@ AMBIGUOUS_ACK = {
     # 🔴 T1（2026-09-24，hichan-61）：`GATE-BLOCK-2026-09-23.md` 丁類。成因分兩種，理由分開寫：
     #    ① 題檔撞名（規格只宣告一次，而題在兩個以上的檔）：
     #       AC1（3 檔）／BN17／EM5／JV16／JV7（各 2 檔）
-    "EM5",   # AC1／BN17 → modules/payroll/SPEC.md、JV16／JV7 → modules/accounting/SPEC.md 的 ## 登記（2026-09-26）
+    #    AC1／BN17 → modules/payroll/SPEC.md、EM5／JV16／JV7 → modules/accounting/SPEC.md 的 ## 登記（2026-09-26）
     #    ② 規格宣告兩行（同一個編號被兩節各自使用）：
     #       BR1–BR4  STATE:356–366（§5 據點）vs 29079–29135（總表，「跑的是哪一版」）
     #       SL1      STATE:1659（排程同時段只抓一次）vs 29106（精算頁毛利差異過期）

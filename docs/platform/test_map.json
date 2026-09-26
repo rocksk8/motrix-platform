@@ -2557,19 +2557,27 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/_bonus_insure",
-    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/payroll/tests/_bonus_insure.py",
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
      "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -2581,17 +2589,25 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "mod:payroll/api/bonus",
-    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
      "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -2603,19 +2619,27 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/_bonus_insure",
-    "mod:payroll/tests/test_bonus_case_api_2026_09_24"
+    "mod:payroll/tests/test_bonus_case_api_2026_09_24",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/payroll/tests/_bonus_insure.py",
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py"
     ],
     "api": [
      "backend/modules/payroll/api/bonus.py"
+    ],
+    "path": [
+     "backend/modules/accounting/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -3584,22 +3608,27 @@
    "kind": "api",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "dir:frontend/pages/",
+    "file:backend/tests/platform/test_case_stage_connectors.py",
     "mod:payroll/api/bonus",
     "mod:payroll/tests/test_bonus_case_api_2026_09_24",
     "mod:payroll/tests/test_voucher_connectors",
     "page:pages/bonus.html",
     "plat:__init__",
-    "plat:registry"
+    "plat:registry",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/payroll/tests/test_bonus_case_api_2026_09_24.py",
-     "backend/modules/payroll/tests/test_voucher_connectors.py"
+     "backend/modules/payroll/tests/test_voucher_connectors.py",
+     "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
      "backend/modules/payroll/api/bonus.py"
@@ -3608,6 +3637,7 @@
      "frontend/pages/bonus.html"
     ],
     "path": [
+     "backend/modules/accounting/",
      "frontend/pages/",
      "frontend/pages/bonus.html"
     ],
