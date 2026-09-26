@@ -51,13 +51,13 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_draft`、`routers/accounting_export.py::validate_account_code` |
-| 使用方 | M07 `modules/payroll/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`routers/bonus.py`（標記已發放時驗出納選的銀行科目） |
+| 使用方 | M07 `modules/payroll/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`modules/payroll/api/bonus.py`（標記已發放時驗出納選的銀行科目） |
 | 形式 | provider，單一提供者（`core.registry`；M06 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
 | 語法 | 提供：`_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)`、`_registry.provide("voucher.account_check", "accounting", validate_account_code)`<br>取用：`registry.single_provider("voucher.draft")(conn, voucher_date=…, summary=…, lines=[{account_code, summary, debit, credit}], created_by=…, now=…)`；`registry.single_provider("voucher.account_check")(conn, code)` |
 | 回傳 | draft：`{"id": int, "voucher_no": str}`；在呼叫端的交易裡寫入 `vouchers_all`＋`voucher_lines`，**不 commit**（呼叫端的狀態與傳票連結一起成功、一起失敗）。分錄正規化與傳票類別由 M06 決定。<br>account_check：`(ok: bool, err: str)` |
 | 對方不在時 | **獎金核准／標記已發放照常成立**，不產生傳票，而且明說：回傳 `notice`＝「未產生傳票：會計模組未安裝（獎金狀態照常更新；需要傳票請由會計手動開立）」（前端 `_withNotice` 顯示）。出納帶了銀行科目也不驗、不擋發放。科目設定：GET 的 `problems` 每一項為「會計模組未安裝，無法驗證科目」；PUT 回 400 並寫明原因，一個都不寫入（驗證不了就不存）。<br>**實體缺席（稽核 Y-2，2026-09-25）**：M07 的 `helpers/bonus_pdf.py` 組獎金分潤單預覽／PDF 要用 M06 的 `helpers.voucher`、`helpers.voucher_pdf`；已改成函式內延遲載入，M06 檔案不在包裡時 M07 照常載入，只有舊流程的預覽／PDF 端點回 503「會計模組未安裝：無法產生獎金分潤單預覽／PDF」。這仍是 M07 → M06 的相依（`l2_import_baseline` 兩筆），要清掉得把三支共用函式下沉 L1 |
 | 契約版本 | 1（2026-09-25） |
-| 守門 | `backend/tests/platform/test_voucher_connectors.py`：①提供者存在、draft 真的寫出草稿與分錄且不 commit、account_check 對錯都對 ②**反向控制**：同一條流程有 M06 時產生兩張草稿（正對照），拿掉提供者後獎金照走、零張傳票、notice／voucherNotice／problems 都有明確提示 ③M07 不再 import M06 ④頁面綁定 `detail.voucherNotice`。突變驗證：不查 M06、默默略過（notice 空）、仍驗銀行、銀行清單不處理缺席，四者皆轉紅 |
+| 守門 | `backend/modules/payroll/tests/test_voucher_connectors.py`：①提供者存在、draft 真的寫出草稿與分錄且不 commit、account_check 對錯都對 ②**反向控制**：同一條流程有 M06 時產生兩張草稿（正對照），拿掉提供者後獎金照走、零張傳票、notice／voucherNotice／problems 都有明確提示 ③M07 不再 import M06 ④頁面綁定 `detail.voucherNotice`。突變驗證：不查 M06、默默略過（notice 空）、仍驗銀行、銀行清單不處理缺席，四者皆轉紅 |
 
 **尚未處理（不在 A7 範圍）**：`helpers/bonus_vouchers.py::withdraw_accrual`（退回時作廢轉帳草稿）與
 `linked_vouchers`（明細列出連結的傳票）仍直接讀寫 M06 的 `vouchers_all`。M06 不在時表仍在（凍結 migration），
@@ -97,7 +97,7 @@ M06 的 `vouchers_all`。
 | 回傳 | void_draft：`{"result": "voided"｜"not_draft"｜"gone", "voucher_no", "status"}`——只作廢「草稿」；已送審 ⇒ `not_draft` 不動；不存在或早已作廢 ⇒ `gone`。status：`{"id", "voucher_no", "status", "voided"}`，不存在 ⇒ `None`。兩者都在呼叫端的交易裡，**不 commit** |
 | 對方不在時 | **退回照常**成立；不作廢、**保留連結**（之後查得到是哪一張），回傳 `notice`＝「未作廢傳票（#id）：會計模組未安裝；退回照常，請會計另行處理那一張傳票」。明細仍列出每一張連結的傳票，標 `unavailable` 與「會計模組未安裝，無法查詢狀態」，頁面不給連結（不讓傳票從畫面消失）。<br>**M06 回來後**：再次進入待發放時，若舊連結仍是未作廢的草稿 ⇒ 不另開、不覆蓋，notice 明說「上一張轉帳傳票草稿 … 尚未作廢」；舊連結已送審 ⇒ 照原行為另開新草稿 |
 | 契約版本 | 1（2026-09-25） |
-| 守門 | `backend/tests/platform/test_voucher_status_connectors.py`：①void_draft 三種結果＋status 形狀＋不 commit ②**反向控制**：有 M06 時退回會作廢（正對照）；拿掉後不作廢、有提示、連結保留、M06 的表沒被動、明細標無法查詢 ③M06 回來：殘留草稿不另開不覆蓋；已送審的舊連結照常另開 ④M07 原始碼不再出現 `vouchers_all`、頁面有 unavailable 分支。突變 5 種皆轉紅（默默略過、傳票從明細消失、拿掉殘留防護、防護放太寬擋到已送審、M06 不在仍解除連結） |
+| 守門 | `backend/modules/payroll/tests/test_voucher_status_connectors.py`：①void_draft 三種結果＋status 形狀＋不 commit ②**反向控制**：有 M06 時退回會作廢（正對照）；拿掉後不作廢、有提示、連結保留、M06 的表沒被動、明細標無法查詢 ③M06 回來：殘留草稿不另開不覆蓋；已送審的舊連結照常另開 ④M07 原始碼不再出現 `vouchers_all`、頁面有 unavailable 分支。突變 5 種皆轉紅（默默略過、傳票從明細消失、拿掉殘留防護、防護放太寬擋到已送審、M06 不在仍解除連結） |
 
 ---
 
@@ -148,7 +148,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 形式 | L1 函式（`from helpers import legal_params as lp`） |
 | 語法 | `versions = lp.load_versions()`（依 effectiveFrom 排序的清單）<br>`rules = lp.rules_for_date(versions, "YYYY-MM-DD" 或 date)`：`effectiveFrom ≤ 日期` 的最新一版（深拷貝）；沒有 ⇒ 丟 `lp.NoApplicableRules`（`ValueError` 子類，訊息可直接給使用者）<br>`lp.rules_by_version(versions, "2026")` ⇒ dict 或 `None`<br>`lp.today()`：「今天」的唯一來源（測試 monkeypatch 它）<br>**法規金額的捨入**（2026-09-26，稽核 D-1）：`lp.round_half_up(amount, rate)`＝四捨五入到元（補充保費，健保署「角以下 4 捨 5 入」）；`lp.floor_amount(amount, rate)`＝元以下捨去（扣繳稅額）。金額與費率轉十進位計算，不經浮點乘積；**不可以用內建 `round()`**（銀行家捨入）或 `math.floor(g * rate)`。前端同一套：`frontend/static/legal-round.js` 的 `MotrixLegalRound.halfUp／floor` |
 | 回傳 | 一版＝`{version, effectiveFrom, resident{50,9A,9B:{tax_rate,tax_threshold}}, non_resident{50:{tax_rate,tax_threshold,low_salary_rate},9A,9B}, nhi{rate, max_single_payment, thresholds{50,9A,9B}, bonus_insured_multiple}, minimum_wage{monthly}, sources[]}`。獎金（非每月薪資）扣繳用 `resident["50"]`（5%／起扣 90,501）；補充保費費率 `nhi.rate`、單次上限 `nhi.max_single_payment`；獎金補充保費門檻＝投保金額 × `nhi.bonus_insured_multiple`（115 年＝4，必填；舊資料讀取時補 4） |
-| 單據凍結 | 使用方存 `version` 與整份 `rules` 快照；修改舊單沿用快照，使用者明確選擇才重挑（勞報單的做法見 `routers/payslips.py::update_payslip`） |
+| 單據凍結 | 使用方存 `version` 與整份 `rules` 快照；修改舊單沿用快照，使用者明確選擇才重挑（勞報單的做法見 `modules/payroll/api/payslips.py::update_payslip`） |
 | 對方不在時 | 不適用（L1）。日期沒有適用版本 ⇒ 使用方**拒絕產生並說明**（不猜、不送 0） |
 | 契約版本 | 1.2（2026-09-26，CORE_VERSION 1.12）。1.1＝`nhi.bonus_insured_multiple`（R 後加的必填欄位，當時漏升，稽核 O-4 補記）；1.2＝`round_half_up`／`floor_amount`。欄位只准加；再加欄位時照 MODULE-GUIDE §2 升次版號。〔更正（X-R，2026-09-26，稽核 O-4）：原寫「1（2026-09-25，CORE_VERSION 1.5）」，R 實際合回在 **1.7**（`backend/core/CHANGELOG.md` 1.7 節），1.5 是寫文件當下的暫用號〕 |
 | 守門 | `tests/platform/test_legal_amount_rounding_guard.py`（讀法規參數的程式不可以直接 `round()`／`math.floor()`／`Math.round()`，一律走上面兩個函式）；`tests/test_legal_audit_d_r1_r3_2026_09_26.py`（20,000～2,000,000 逐元比對四捨五入）；`tests/test_legal_params_r1_2026_09_25.py`（選版、凍結、門檻＝最低工資）；`tests/platform/test_legal_params_single_source.py`（法規數字只能出現在 legal_params）；`tests/platform/test_l1_interface_snapshot.py`（介面變動要升版） |
@@ -170,7 +170,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | `pending`：`[{quoteNo, customer, project, total, people, approvedAt}]`（舊的在前）。`paid`：`[{quoteNo, customer, project, total, people, paidAt, paidBy, withholding, nhiPremium, net}]`；扣繳快照不存在（U4 接上前發放的）⇒ 後三者 **`None`（不是 0）**。只回案件合計與人數，**不回個人金額**（個人明細在獎金頁，C1 可見範圍） |
 | 對方不在時 | `bonus-queue` 回 200 `{"available": false, "visible": true, "notice": "薪資獎金模組未安裝：出納頁不顯示獎金分潤", "items": []}`，頁面顯示那一句；執行歷史 `bonusPaid: []`＋`bonusNotice`；Excel 第三張只有那一句。待付款／待收款／匯出其餘照常。**可見範圍**：只有最高管理者與出納（cashier）看得到獎金；出納頁的財務（finance）`visible: false`、不顯示該子頁籤、Excel 沒有第三張 |
 | 契約版本 | 1（2026-09-25） |
-| 守門 | `backend/tests/platform/test_bonus_payout_connectors.py`：`test_cashier_queue_mark_paid_is_the_same_action_and_history`（佇列→同一支 mark-paid→離開佇列、進執行歷史與 Excel；財務看不到）、`test_cashier_page_binds_bonus_mark_paid`（頁面綁定）、`test_reverse_without_payroll_cashier_still_works_and_says_so`（**反向控制**）。突變：M07 不在時默默略過、財務看得到獎金 ⇒ 皆轉紅 |
+| 守門 | `backend/modules/payroll/tests/test_bonus_payout_connectors.py`：`test_cashier_queue_mark_paid_is_the_same_action_and_history`（佇列→同一支 mark-paid→離開佇列、進執行歷史與 Excel；財務看不到）、`test_cashier_page_binds_bonus_mark_paid`（頁面綁定）、`test_reverse_without_payroll_cashier_still_works_and_says_so`（**反向控制**）。突變：M07 不在時默默略過、財務看得到獎金 ⇒ 皆轉紅 |
 
 ---
 
@@ -181,7 +181,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M07 薪資獎金：`modules/payroll/bonus_payouts.py::_expense_entries`（名稱 `bonus`） |
-| 使用方 | M08 `routers/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
+| 使用方 | M08 `modules/analytics/api/reports.py::_collect_expenses`（⇒ `/api/reports/expenses-monthly`、`/api/reports/financial`（JSON／Excel／PDF）、每月營運報表信、首頁儀表板支出） |
 | 形式 | provider，**多提供者、以名稱區分**（`registry.providers("expense.entries")`；依名稱排序逐一呼叫）。之後其他模組的支出（例：勞報單）可登記同一個名稱空間，報表不用改 |
 | 語法 | 提供：`registry.provide("expense.entries", "bonus", _expense_entries)`<br>取用：`for name, fn in sorted(registry.providers("expense.entries").items()): fn(conn, d0, d1)` |
 | 回傳 | `[{date, quoteNo, desc, amount, category}]`；`date`＝發放日（權責與現金兩種口徑相同），`category`＝`"獎金分潤"`。一案一筆，`desc`＝「獎金分潤（N 人）」，**不列個人**。報表把它併進「其他支出」（`details.other[].category` 區分；首頁 otherBreakdown 依 category 自動多一塊），部門篩選照 `quoteNo` 歸屬 |
@@ -276,7 +276,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 回傳 | 讀一版的 `version`、`resident["50"].tax_rate`／`tax_threshold`（非每月給付薪資扣繳 5%、起扣標準）、`nhi.rate`、`nhi.max_single_payment`、`nhi.bonus_insured_multiple`（獎金超過投保金額的倍數；主持裁示由 R 在合回前加入並列為必填）。轉成 `bonus_deductions.PARAM_KEYS` 五個鍵；計算結果連同 **`version` 與參數快照**存進 `mark_paid` 那一筆編寫紀錄（長期記憶、不可改刪），已發放的單一律顯示快照，不再依現行參數重算 |
 | 讀不到時 | **拒絕撥付**：沒有適用版本（`lp.NoApplicableRules`）、欄位不齊（`DeductionParamsError`，例如缺倍數）⇒ `mark-paid` 回 409「無法計算扣繳與補充保費：<原因>；未標記已發放。」，狀態不變；明細的 `deductionNotice` 同一句，兩頁都顯示、按鈕照常可按但後端會擋。名單上有人沒有投保金額 ⇒ 409 列出名字。**不以 0 或預設值代替**（主持裁示 2026-09-25）。會計模組（M06）不在時照算、照發，只是沒有傳票（IP-2 的退化） |
 | 契約版本 | 1（2026-09-25）；依 IP-7 的版本結構 |
-| 守門 | `backend/tests/platform/test_bonus_payout_connectors.py`：純函式邊界（起扣 90,500／90,501、同一人跨類別先合併、4 倍門檻跨越與已超過、單次上限、四捨五入、缺投保金額≠0、參數缺欄位不猜）、撥付拒絕（缺投保金額、沒有適用版本）、撥付入傳票（借 應付＝貸 實發＋代扣稅款＋代收補充保費）、MOTRIX 以外累計計入門檻、版本與參數快照存在單據上、會計模組不在時照算照發。突變 14 種皆轉紅 |
+| 守門 | `backend/modules/payroll/tests/test_bonus_payout_connectors.py`：純函式邊界（起扣 90,500／90,501、同一人跨類別先合併、4 倍門檻跨越與已超過、單次上限、四捨五入、缺投保金額≠0、參數缺欄位不猜）、撥付拒絕（缺投保金額、沒有適用版本）、撥付入傳票（借 應付＝貸 實發＋代扣稅款＋代收補充保費）、MOTRIX 以外累計計入門檻、版本與參數快照存在單據上、會計模組不在時照算照發。突變 14 種皆轉紅 |
 
 **投保金額與全年累計**存在 `system_settings["payroll_insurance_profiles"]`＝`{username: {insuredAmount, ytdExternal: {年: 金額}}}`；
 全年累計＝該年 MOTRIX 內已發放的獎金（依發放日）＋ `ytdExternal`（其他管道已發的）。端點 `GET /api/bonus/insurance`、`PUT /api/bonus/insurance/{username}`（最高管理者）；頁面在獎金頁「投保金額與全年累計」。
