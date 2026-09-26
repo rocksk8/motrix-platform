@@ -15,6 +15,12 @@ import threading
 import time
 
 import pytest
+from core import source_tree
+
+# 2026-09-26（A，M06 搬遷，稽核 D M06-M1）：本檔驗的是傳票那一側（M06），自 modules/arap/tests/ 搬入；
+# 頁面屬 應收應付（M05：T100 子頁籤在出納頁） ⇒ 那個模組不在時整檔不成立（這一行要在匯入它的測試工具之前）。
+if not source_tree.module_installed("modules/arap/"):
+    pytest.skip("應收應付（M05：T100 子頁籤在出納頁）不在這個安裝包：本檔的頁面不存在", allow_module_level=True)
 
 pytest.importorskip("playwright.sync_api")
 

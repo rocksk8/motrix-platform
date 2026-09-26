@@ -8,6 +8,12 @@
 import json
 
 import pytest
+from core import source_tree
+
+# 2026-09-26（A，M06 搬遷，稽核 D M06-M1）：本檔驗的是傳票那一側（M06），自 modules/payroll/tests/ 搬入；
+# 頁面屬 獎金分潤（M07） ⇒ 那個模組不在時整檔不成立（這一行要在匯入它的測試工具之前）。
+if not source_tree.module_installed("modules/payroll/"):
+    pytest.skip("獎金分潤（M07）不在這個安裝包：本檔的頁面不存在", allow_module_level=True)
 
 pytest.importorskip("playwright.sync_api")
 

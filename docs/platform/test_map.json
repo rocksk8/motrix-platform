@@ -249,6 +249,44 @@
    },
    "module": "accounting"
   },
+  "backend/modules/accounting/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/payroll/",
+    "mod:payroll/api/bonus",
+    "mod:payroll/tests/_bonus_insure",
+    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
+    "page:pages/bonus.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/payroll/tests/_bonus_insure.py",
+     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py"
+    ],
+    "api": [
+     "backend/modules/payroll/api/bonus.py"
+    ],
+    "page": [
+     "frontend/pages/bonus.html"
+    ],
+    "path": [
+     "backend/modules/payroll/",
+     "frontend/pages/bonus.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "accounting"
+  },
   "backend/modules/accounting/tests/test_e2e_jv22_edit_history_page_2026_09_24.py": {
    "kind": "e2e",
    "units": [
@@ -274,6 +312,39 @@
     ]
    },
    "login_fixture": true,
+   "module": "accounting"
+  },
+  "backend/modules/accounting/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/accounting/",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/_e2e_login.py",
+    "file:backend/tests/_ports.py",
+    "page:pages/cashier.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/_e2e_login.py",
+     "backend/tests/_ports.py"
+    ],
+    "page": [
+     "frontend/pages/cashier.html"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "frontend/pages/cashier.html"
+    ],
+    "module_dir": [
+     "backend/modules/accounting/"
+    ]
+   },
    "module": "accounting"
   },
   "backend/modules/accounting/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py": {
@@ -2706,33 +2777,6 @@
    },
    "module": "arap"
   },
-  "backend/modules/arap/tests/test_e2e_t100_unconfirm_2026_09_10.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "dir:backend/modules/arap/",
-    "file:backend/tests/_e2e_login.py",
-    "file:backend/tests/_ports.py",
-    "page:pages/cashier.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/tests/_e2e_login.py",
-     "backend/tests/_ports.py"
-    ],
-    "page": [
-     "frontend/pages/cashier.html"
-    ],
-    "path": [
-     "frontend/pages/cashier.html"
-    ],
-    "module_dir": [
-     "backend/modules/arap/"
-    ]
-   },
-   "module": "arap"
-  },
   "backend/modules/arap/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
    "kind": "e2e",
    "units": [
@@ -4670,38 +4714,6 @@
      "backend/modules/payroll/"
     ]
    },
-   "module": "payroll"
-  },
-  "backend/modules/payroll/tests/test_e2e_bonus_vouchers_page_2026_09_24.py": {
-   "kind": "e2e",
-   "units": [
-    "core:db",
-    "dir:backend/modules/payroll/",
-    "mod:payroll/api/bonus",
-    "mod:payroll/tests/_bonus_insure",
-    "mod:payroll/tests/test_e2e_bonus_case_page_2026_09_24",
-    "page:pages/bonus.html"
-   ],
-   "evidence": {
-    "import": [
-     "backend/db.py",
-     "backend/modules/payroll/tests/_bonus_insure.py",
-     "backend/modules/payroll/tests/test_e2e_bonus_case_page_2026_09_24.py"
-    ],
-    "api": [
-     "backend/modules/payroll/api/bonus.py"
-    ],
-    "page": [
-     "frontend/pages/bonus.html"
-    ],
-    "path": [
-     "frontend/pages/bonus.html"
-    ],
-    "module_dir": [
-     "backend/modules/payroll/"
-    ]
-   },
-   "login_fixture": true,
    "module": "payroll"
   },
   "backend/modules/payroll/tests/test_e2e_payroll_legal_params_r1_2026_09_25.py": {
@@ -9799,6 +9811,7 @@
    "kind": "e2e",
    "units": [
     "core:db",
+    "dir:backend/modules/accounting/",
     "dir:backend/modules/payroll/",
     "file:backend/modules/payroll/module.json",
     "file:backend/tests/_e2e_login.py",
@@ -9829,6 +9842,7 @@
      "frontend/pages/voucher.html"
     ],
     "path": [
+     "backend/modules/accounting/",
      "backend/modules/payroll/",
      "backend/modules/payroll/module.json"
     ]
