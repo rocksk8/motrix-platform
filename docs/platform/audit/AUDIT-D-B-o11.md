@@ -32,3 +32,20 @@ D 把 `_create_diag` 原樣抽出來，餵含秘密的輸入：
 | O11b | 拿掉時間線的去 query（`u.split("?")[0]` ⇒ `u`） | **存活**：題目的輸入沒有帶 query |
 
 ⇒ 通過；建議 O11-S1。
+
+## 3. O11-S1 複核：wip/b-o11-2 4bcde01b（主持升必修；D 19:16）
+
+- 本包已疊在 b-o5-s2-2（fd5af159）上，帶進了 `redact`，建議 (a) 的合回順序問題解決。
+- 修法：
+  - 回應只印狀態碼＋單號（`MQ-\d{6}-\d+`）。
+  - 網址只印路徑（去掉 query 與 fragment）。
+  - console 與對話框先經過 `conftest.redact`。
+  - 診斷題改用含 `?pt=`、`?q=`、Bearer、token、客戶名的輸入，斷言這些都不出現。
+- D 用 §1 的同一組秘密輸入重測：SECRETQ、SECRETR、SECRETC、王小明 **全部 ok**。console 輸出變成 `Bearer *** fetch /api/x?pt=***`；回應只剩 `POST /api/quotations ⇒ 200`。
+- 突變 3/3 紅（都是 `test_o11_create_diag_…`）：
+  - O11c：不去 query（原本存活的 O11b 現在有題守）
+  - O11d：console 不過 redact
+  - O11e：改回印回應本文
+- 限制（同 O5S2-O3）：對話框或 console 裡沒有鍵名的裸值（例如客戶名）`redact` 認不出來；本題的斷言也刻意沒有把對話框裡的「客戶丁」列入。
+
+⇒ **O11-S1 關閉（4bcde01b）**。

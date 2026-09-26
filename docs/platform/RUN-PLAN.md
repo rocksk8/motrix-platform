@@ -150,6 +150,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 19:16 D：**O11-S1 關閉（b-o11-2 4bcde01b）**：同一組秘密輸入（?pt=、Bearer、token、客戶名）重測 0 外洩；突變 3/3 紅（不去 query／console 不 redact／印本文）；已疊在 b-o5-s2-2 上。
 - 2026-09-26 19:06 D：**AT-M1c 關閉（ad7c27a3）**：探針 case_manage 非擁有者（案件頁 403／動態 200）⇒ 經傳票只列 case_update；cashier（案件頁 200／動態 403）⇒ 只列報價單四類——與原頁面完全一致；get_quotation 行為不變（98 過；X1、X2 突變連 get_quotation 題一起紅）。AT-M1 系列結案。
 - 2026-09-26 18:58 D：b-o11 55df4ed8 抽查通過、建議 O11-S1：時間線已去 query，但回應本文（含 token 值／客戶名）與 console（Bearer、?pt=）原樣印出，本包基底還沒有 S2-S1 的 redact ⇒ 須與 b-o5-s2-2 同班或之後合回；O11a 突變紅、O11b（不去 query）存活。
 - 2026-09-26 18:55 D：**E2D-M1 關閉（78d372b9，突變 4/4 紅）**。b-genfiles d78a7c94 **必修 2**：GF-M1 MOTRIX_TRAIN=1 無工具設也無工具驗（只在 PLAYBOOK 散文），列車忘開 ⇒ 三題 skip 照綠、過期產生檔進 origin；GF-M2 modtest 改回讀檔照綠（現場產生無題守）。D1b：未 add 新題現場選到、讀檔漏掉；代價每次約 +38 秒。
@@ -169,4 +170,3 @@
 - 2026-09-26 17:17 A：開工 wip/a-analytics-dispatch（主持派工）：**會改 B 的 `modules/analytics/tests/test_reports_dispatch_connector_2026_09_26.py`**，兩題「提供者在」改成依 M04 在不在（§B-11）；只動測試，analytics 版號由列車取號。
 - 2026-09-26 17:16 A：wip/a-attachments 上月台（afcfb513）。範圍外：analytics 派工連接器 2 題在 M04 不在時紅（既有）。
 - 2026-09-26 16:58 D：**CS-M1 關閉（88192c07，R1 重跑紅）**；c-m01-rec-2 a56f33e4 通過（必修 0，突變 5/5 紅）；b-o5-s2 c7940387 通過（必修 0）：標頭不印，但 URL 含 query（?pt= 短效簽章、?q= 搜尋字）照印 ⇒ 建議 S2-S1 遮值；觀察 Playwright call log 自己印 Authorization。
-- 2026-09-26 16:33 C：**M01-PLAN §3-7 approval 開工宣告**（wip/c-approval，疊在 c-m01-rec-2 a56f33e4）。轉簽改成 `approval.reassign`（單據擁有者各自提供讀寫）、待我簽核與角標改成各模組提供 `approval.queue_items`，M01 只彙整。會動：M04 `modules/subcontract/api/contractor_vouchers.py`＋module.json；M05 `modules/arap/api/invoice_vouchers.py`、`payment_requests.py`＋module.json；**A 的 M03** `routers/shipping_notes.py`（origin 已搬到 `modules/supply/api/shipping_notes.py`，列車 rebase 時跟著搬）；**M06** `routers/vouchers.py`（A 的 M06 搬遷會同檔）；M07 `modules/payroll`（bonus_awards／bonus_case_awards 兩類待簽）；M01 `routers/quotations.py`、`routers/completion_notes.py`、`frontend/pages/approval-queue.html`；L1 新增 `helpers/approval_queue.py`；INTEGRATION-POINTS（新 IP，列車定號）。custom 模組引擎已是 `approval.queue_items` 提供者，不改。不動 sidebar、tiered_approval。
