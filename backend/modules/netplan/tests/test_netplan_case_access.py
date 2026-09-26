@@ -29,7 +29,9 @@ def _case(no, customer="規劃客戶"):
 
 
 def _drop(monkeypatch):
-    monkeypatch.delitem(registry._LEGACY_PROVIDERS, ("case.access", "case"))
+    # 稽核 D CA3-M1：M01 ③ 起 case.access 由 ModuleSpec 宣告，不在 _LEGACY_PROVIDERS ⇒ 用兩處都處理的 _without
+    from tests.platform.test_case_stage_connectors import _without
+    _without(monkeypatch, "case.access", "case")
     assert registry.single_provider("case.access") is None
 
 
