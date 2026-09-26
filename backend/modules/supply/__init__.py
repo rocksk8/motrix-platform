@@ -14,5 +14,7 @@ MODULE = ModuleSpec(
         ("shipping.list_for_case", "supply"): shipping_notes.list_shipping_notes_for_case,
         # IP-19：M01 案件設備序號認領／釋放庫存
         ("stock.serial", "supply"): inventory._StockSerials,
+        # IP-20：M06 T100 付款傳票的料件進貨段
+        ("inventory.paid_batches", "supply"): inventory.paid_batches,
     },
 )

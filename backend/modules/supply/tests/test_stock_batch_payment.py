@@ -195,14 +195,42 @@ def test_unpaid_batch_excluded_from_t100_export(client, make_user):
     username, password = make_user(username="stk_admin6", role="superadmin")
     token = _login(client, username, password)
     _make_part(client, token, "STK-P6")
-    _make_batch(client, token, "STK-P6", cost=1000, qty=1)  # 未標記已付款
+    batch_no = _make_batch(client, token, "STK-P6", cost=1000, qty=1)  # 未標記已付款
 
     preview = client.get(
         "/api/reports/t100-export/preview?start=2026-01-01&end=2026-12-31",
         headers=_auth(token),
     )
     assert preview.status_code == 200, preview.text
-    assert all(e["sourceType"] != "stock_batch" or e["sourceKey"] != "STK-P6" for e in preview.json()["events"])
+    # 2026-09-26：原本比的是料號（sourceKey 是批次號）⇒ 永遠成立的假綠；改比批次號
+    assert not [e for e in preview.json()["events"] if e["sourceType"] == "stock_batch" and e["sourceKey"] == batch_no]
+
+
+def test_paid_batches_provider_requires_is_paid_not_just_a_paid_at(client, make_user):
+    """IP-20 提供者：`is_paid=0` 卻留著 `paid_at` 的列（舊資料／中途失敗）不可以進 T100 付款傳票。
+
+    經端點取消付款會一起清掉 paid_at，所以這個狀態只能直接寫表造出來；它是提供者自己的判準，不靠日期剛好擋住。"""
+    from modules.supply.api import inventory
+    username, password = make_user(username="stk_admin6b", role="superadmin")
+    token = _login(client, username, password)
+    _make_part(client, token, "STK-P6B")
+    batch_no = _make_batch(client, token, "STK-P6B", cost=800, qty=1)
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE stock_batches SET is_paid=0, paid_at='2026-05-01' WHERE batch_no=?", (batch_no,))
+        conn.commit()
+    finally:
+        conn.close()
+    assert batch_no not in [b["batch_no"] for b in inventory.paid_batches("2026-01-01", "2026-12-31")]
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE stock_batches SET is_paid=1 WHERE batch_no=?", (batch_no,))
+        conn.commit()
+    finally:
+        conn.close()
+    got = [b for b in inventory.paid_batches("2026-01-01", "2026-12-31") if b["batch_no"] == batch_no]
+    assert len(got) == 1 and got[0]["total_cost"] == 800 and got[0]["part_no"] == "STK-P6B", got
 
 
 def test_last_paid_bank_account_for_supplier(client, make_user):

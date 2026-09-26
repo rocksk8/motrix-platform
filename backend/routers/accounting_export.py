@@ -233,6 +233,18 @@ def set_t100_export_config(body: T100ExportConfigBody, authorization: str = Head
 
 #: IP-14 對方不在時（M04 外包工班）：T100 預覽的說明
 T100_CONTRACTOR_MISSING = "外包工班模組未安裝：本次匯出不含承攬商費用的付款傳票"
+#: IP-20 對方不在時（M03 採購・庫存・出貨）：T100 預覽的說明
+T100_INVENTORY_MISSING = "採購・庫存・出貨模組未安裝：本次匯出不含料件設備進貨的付款傳票"
+
+
+def _t100_notice() -> str:
+    """預覽要明說少了哪幾類付款傳票（對方模組不在）；都在 ⇒ 空字串。"""
+    missing = []
+    if _registry.single_provider("contractor_voucher.public") is None:     # IP-14（M04）
+        missing.append(T100_CONTRACTOR_MISSING)
+    if _registry.single_provider("inventory.paid_batches") is None:        # IP-20（M03）
+        missing.append(T100_INVENTORY_MISSING)
+    return "；".join(missing)
 
 
 def _collect_paid_contractor_vouchers(start: str, end: str) -> list:
@@ -261,27 +273,10 @@ def _voucher_line(d, category, summary, acct_code, acct_name, debit, credit, dep
 
 
 def _collect_paid_stock_batches(start: str, end: str) -> list:
-    """料件/設備進貨已付款批次（2026-09-01 同輪新增，見 db.py::_m070_stock_batches()）。
-    qty/total_cost 即時從 stock_items 群組加總（不信任任何快取值），比照
-    routers/inventory.py::list_batches() 同一套「即時算，不信任快取」原則。
-    額外 JOIN parts 取得料件分類，供 inventoryExpenseAccounts 依分類查科目代號。"""
-    conn = get_db()
-    try:
-        rows = conn.execute("""
-            SELECT sb.batch_no, sb.part_no, sb.supplier_name, sb.invoice_no, sb.paid_at,
-                   sb.paid_bank_account_name, sb.paid_bank_account_code,
-                   COALESCE(p.category, '') AS category,
-                   SUM(si.cost) AS total_cost
-            FROM stock_batches sb
-            JOIN stock_items si ON si.batch_no = sb.batch_no
-            LEFT JOIN parts p ON p.part_no = sb.part_no
-            WHERE sb.is_paid=1 AND sb.paid_at BETWEEN ? AND ?
-            GROUP BY sb.batch_no
-            ORDER BY sb.paid_at
-        """, (start, end)).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+    """料件/設備進貨已付款批次：經 IP-20 `inventory.paid_batches` 由 M03 提供（庫存表屬 M03）。
+    M03 不在 ⇒ 沒有料件付款傳票可匯；預覽的 notice 明說（`_t100_notice`）。"""
+    paid_batches = _registry.single_provider("inventory.paid_batches")    # IP-20（M03）
+    return paid_batches(start, end) if paid_batches else []
 
 
 def _confirmed_keys(conn) -> set:
@@ -513,8 +508,8 @@ def t100_export_preview(
     _validate_range(start, end)
     events = _collect_t100_events(start, end)
     return {
-        # IP-14 對方不在時：預覽明說少了承攬商付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
-        "notice": "" if _registry.single_provider("contractor_voucher.public") else T100_CONTRACTOR_MISSING,
+        # IP-14／IP-20 對方不在時：預覽明說少了哪幾類付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
+        "notice": _t100_notice(),
         "count": len(events),
         "totalAmount": sum(e["amount"] for e in events),
         "events": [

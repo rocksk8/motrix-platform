@@ -1,7 +1,7 @@
 {
   "key": "supply",
   "name": "採購・庫存・出貨",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "core": ">=1.0,<2.0",
   "license_key": "supply",
   "permissions": [
@@ -43,11 +43,25 @@
     ],
     "files": []
   },
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  },
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
   "provides": {
     "api_prefixes": [
       "/api/suppliers",
       "/api/inventory",
       "/api/shipping-notes"
+    ],
+    "probes": [
+      "/api/suppliers",
+      "/api/inventory/parts-summary",
+      "/api/inventory/batches",
+      "/api/shipping-notes",
+      "/api/shipping-notes/export-history"
     ]
   },
   "pages": [

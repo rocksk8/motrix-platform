@@ -682,6 +682,30 @@ def delete_stock_item(item_id: int, authorization: str = Header(None)):
     return {"ok": True}
 
 
+def paid_batches(start: str, end: str) -> list:
+    """IP-20 `inventory.paid_batches`：期間內已付款的進貨批次（M06 T100 付款傳票的料件段）。
+
+    qty／total_cost 即時從 stock_items 群組加總（不信任任何快取值），比照 list_batches() 同一套
+    「即時算，不信任快取」原則；JOIN parts 取料件分類，供會計依分類查科目代號。唯讀。"""
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT sb.batch_no, sb.part_no, sb.supplier_name, sb.invoice_no, sb.paid_at,
+                   sb.paid_bank_account_name, sb.paid_bank_account_code,
+                   COALESCE(p.category, '') AS category,
+                   SUM(si.cost) AS total_cost
+            FROM stock_batches sb
+            JOIN stock_items si ON si.batch_no = sb.batch_no
+            LEFT JOIN parts p ON p.part_no = sb.part_no
+            WHERE sb.is_paid=1 AND sb.paid_at BETWEEN ? AND ?
+            GROUP BY sb.batch_no
+            ORDER BY sb.paid_at
+        """, (start, end)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 class _StockSerials:
     """IP-19 `stock.serial`：案件（M01）的設備序號認領／釋放庫存序號（`modules/supply/__init__.py` 宣告）。
 
