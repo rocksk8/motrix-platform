@@ -145,3 +145,23 @@
 - 回簽檔／收款發票／叫料／叫料發票 ⇒ L1 新增 `case_page_readable`（row_access `case`／scope="read"），`get_quotation` 改呼叫同一支；case_update 維持案件動態端點的 case_manage 規則；extra_expense 維持 `case_owner_readable`。
 - 題：`test_quotation_attachments_are_not_wider_than_the_case_page`（case_manage 非擁有者）、`test_quotation_attachments_are_not_stricter_than_the_case_page`（cashier：列得出、帶得進；四類與 case_update 的提供者層對照）。既有「看得到的人」改為案件業務（原本靠 case_manage）。
 - 突變 5/5 紅；非 e2e 2304 過、e2e 51 過。
+
+## 6. 複核：wip/a-attachments-4 ad7c27a3（AT-M1c；D 19:06）
+
+- 修法：L1 新增 `case_page_readable`（row_access `case`／scope="read"）。`get_quotation` 與報價單上四類附件的提供者共用這一支；案件動態維持 `case_documents_readable`，額外支出維持 `case_owner_readable`。
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| get_quotation 行為沒變 | 讀 diff：改成「不可讀 ⇒ 照原本的 `row_access.require(…, scope="read")` 丟出原訊息」；引用 CM14b／cashierReadOnly／scope read 的 3 檔＋attachments＋l1 snapshot 共 98 過；突變 X1、X2 都讓 `test_cashier_reads_all_cases`（get_quotation 端）一起紅 ⇒ 兩邊確實共用同一支 | 成立 |
+| 四類附件的可見範圍與案件頁完全一致 | D 探針（不提交），逐身分比對「原頁面 ⇔ 經傳票列出的類型」 | 見下表，**完全一致** |
+| 案件動態、額外支出維持原規則 | 同一支探針；額外支出另見 §5 的 W2 | 成立 |
+
+| 身分 | `GET /api/quotations/{q}` | `GET …/updates` | 經傳票列出的類型 |
+|---|---|---|---|
+| case_manage＋finance、非擁有者 | 403 | 200 | `['case_update']` |
+| cashier | 200 | 403 | `['material', 'material_invoice', 'payment_item', 'quotation_signed']` |
+
+- 突變 X1「案件頁規則改成 owner」⇒ 紅（`test_quotation_attachments_are_not_stricter_than_the_case_page` 等 3 題）。
+- 突變 X2「案件頁規則放行 case_manage」⇒ 紅（`…_not_wider_than_the_case_page` 等 3 題）。
+
+⇒ **AT-M1c 關閉（ad7c27a3）**。AT-M1 系列（M1、M1b、M1c）全部結案。
