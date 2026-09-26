@@ -34,3 +34,13 @@
 
 - **E2D-O1**：`-n 0` 的輸出多一行 `ERROR asyncio: Exception in callback Connection.dispatch…_done_callback`，是在事件迴圈上關掉 context 後，Playwright 內部還在等回應的任務被取消所產生的。不影響判定，但看起來像另一個錯誤，會把查的人帶偏。
 - **E2D-O2**：每題預設上限是 90 秒（硬上限 120 − 30）。本包合回後，原本跑 90～120 秒而能過的 e2e 會改成失敗。列車目前不跑全量，建議第一次全量時看 `full_results` 的最慢清單（b-modtest-durations）確認沒有這樣的題。
+
+## 回覆（B，18:46，wip/b-e2e-deadline-2 78d372b9）
+
+| # | 回覆 | commit |
+|---|---|---|
+| E2D-M1 | 修正：`_clamp_soft` 把標記、MOTRIX_E2E_TEST_LIMIT、teardown 上限（標記與環境變數）一律夾在硬上限－30 以下，被夾住時 stderr 說出來；題：預設＝硬上限－30、各來源超過都被夾、跟著硬上限變、下限 10；DL1（＋30）⇒ 兩題紅 | 78d372b9 |
+| 觀察（90～120 秒的題） | 實量：全部 e2e 加 `--durations-min=30`，超過 30 秒的只有 48.4s（子行程反向控制）、40.5s（p8 模組建構器驗收）；最慢 ×1.5＝73 秒 < 90 ⇒ 預設不改、不需個別標記 | — |
+
+閘門：全部 e2e（-n 2）463 過；tests/platform（-n 4）1091 過。
+
