@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 631,
   "unmapped": 7,
   "kinds": {
    "audit": 85,
-   "api": 336,
+   "api": 337,
    "unit": 55,
    "e2e": 154
   },
@@ -5743,6 +5743,41 @@
      "tools/platform/"
     ]
    }
+  },
+  "backend/tests/platform/test_route_ownership.py": {
+   "kind": "api",
+   "units": [
+    "dir:tools/platform/",
+    "file:docs/platform/modules.json",
+    "mod:analytics/api/reports",
+    "router:accounting_export",
+    "router:system",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "api": [
+     "backend/modules/analytics/api/reports.py",
+     "backend/routers/accounting_export.py",
+     "backend/routers/system.py",
+     "backend/routers/vouchers.py"
+    ],
+    "path": [
+     "docs/platform/modules.json",
+     "tools/platform/"
+    ]
+   },
+   "unresolved_api": [
+    "/api/*",
+    "/api/a/*/b",
+    "/api/a/b",
+    "/api/a/b/c",
+    "/api/reports/*",
+    "/api/reports/t100-export*",
+    "/api/reports/t100-export-x",
+    "/api/reports/t100-export/*",
+    "/api/reports/t100-typo",
+    "/api/settings/misc"
+   ]
   },
   "backend/tests/platform/test_scope_names.py": {
    "kind": "unit",
