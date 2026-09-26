@@ -32,6 +32,11 @@ REPO = Path(__file__).resolve().parents[2]
 ALLOWED = frozenset({
     "tests/platform/test_module_boundaries.py::test_modules_json_lists_only_existing_units",
     "tests/platform/test_unit_cards.py::test_unit_index_is_current",
+    # 產生檔一致性三題（wip/b-maps-2；稽核 AUDIT-D-B-maps BM-M2，主持裁示 a）：同類——檢查產生檔與「完整的樹」一致；
+    # 過期檢查由模組全在的那一輪負責（test_generated_maps::test_rc_the_three_guards_do_go_red_on_a_full_tree 證明它們在那一輪會紅）
+    "tests/platform/test_generated_maps.py::test_dep_graph_json_is_current",
+    "tests/platform/test_generated_maps.py::test_test_map_json_is_current",
+    "tests/platform/test_generated_maps.py::test_modules_json_has_no_ownership_errors",
 })
 
 BELOW_NORMAL = 0x00004000   # Windows BELOW_NORMAL_PRIORITY_CLASS（PLAYBOOK §C-13 低優先權）
