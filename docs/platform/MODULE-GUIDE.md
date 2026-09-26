@@ -172,7 +172,7 @@ modules/<key>/
 
 - 改 L2 模組 ⇒ 只跑該模組的測試加契約測試：`python tools/platform/modtest.py`。
 - 改 L1 ⇒ 範圍接近全量，是結構造成的，就接受全量。
-- 動到 fixture 層（conftest、pytest.ini、requirements）⇒ 一律全量。
+- 動到 fixture 層（conftest、pytest.ini、requirements）⇒ ~~一律全量~~〔更正 2026-09-26（主持，§G3）：各線不自己跑全量——差異題＋tests/platform＋改到頁面的 e2e 照跑，**全量由列車跑一次**；月台登記註明 fixture 層、排在列車最前面。`modtest` 閘門過了回 exit 3＝要註明〕。
 - pytest 一律帶自己的 `--basetemp`，跑完刪掉。
 - 測試一律跑在主工作樹的專案 `.venv`（只照 `backend/requirements*.txt` 安裝；`python tools/platform/project_env.py create`）；`modtest` 預設用它，找不到會警告。與正式機環境的差異用 `project_env.py check`（讀 `backend/tools/prod_env.json`）。
 - 守門：`tests/platform/test_requirements_cover_imports.py`——產品碼 import 的第三方套件要能從 requirements.txt 裝到；測試要能從 requirements＋requirements-dev 裝到（含相依）。
