@@ -75,6 +75,7 @@
 | e2e 逐題上限目錄收尾（B，wip/b-hardcap-dir 0eddad8d，輕量） | D | `AUDIT-D-B-hardcap-dir.md` | 完成（2026-09-26 21:28）：通過、必修 0（只主控、只 rmdir 空目錄、逾時檔保留、uuid 每次執行獨立；HC1／HC2 紅）；觀察：%TEMP% 已累積 1085 個舊 hardcap 目錄待清 |
 | M06 會計搬進 modules/accounting（A，wip/a-m06-2 25408f3f） | D | `AUDIT-D-A-M06-move.md` | 稽核完成（2026-09-26 22:06）：**必修 2**（M06-M1 真刪 accounting 後 5 題非允許紅；M06-M2 EM10 4 條移出計數範圍、modules/ 內 15 條無任何計數守門）、建議 2；題目 0 消失、搬題 29 本體只改路徑、M07 兩支兩邊實質、a' 到期守門紅、IP-22 兩側有題 |
 | IP-15 dispatch.cost_for_case（B，wip/b-ip15-cost afbb1b8d） | D | `AUDIT-D-B-ip15-cost.md` | 稽核完成（2026-09-26 22:09）：通過、必修 0；突變 4/4 紅（多回欄位、回姓名、拿掉 finance、不註冊）；list_for_case 不變 |
+| 計數／棘輪守門補掃 modules/（B，wip/b-scan-modules 64c3a9f6） | D | `AUDIT-D-B-scan-modules.md` | 稽核完成（2026-09-26 22:33）：**必修 1**（SM-M1 view_filter 真正那一題改回只掃 L1 照綠）、建議 1（送信偵測 alias／getattr 漏）；①③成立（B1／B4 紅）、alpine B3 紅 |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
