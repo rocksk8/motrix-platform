@@ -95,4 +95,5 @@
 |---|---|---|---|
 | 2026-09-26 16:32 | **產生檔（UNIT-INDEX、dep_graph.json、test_map.json）反覆衝突** | 每個分支為了讓閘門綠都重產並 commit，rebase 幾乎每次都衝突，列車再重產一次（今天第五～八班都遇到） | 提案交 B 評估：GENERATED-FILES-PROPOSAL.md（分支不 commit／守門現場產生比對）|
 | 2026-09-26 16:32 | **全量沒有每題耗時** | full_results/<commit>.json 只記總數與起訖，看不出慢在哪；列車全量 15～40 分鐘（負載不同）| 提案交 B（排在 O9 與產生檔提案之後）：modtest --full 加 `--durations=30`，把最慢 30 題寫進 full_results；先量再決定要不要拆題或改 fixture |
+| 2026-09-26 18:32 | **Sonnet 列車長（第九班，第一次）** | 完成 7 包、合回成功、交會紅在車上修掉；但①全量跑到一半就結束回合一次（與第四班 Opus 同一個毛病，要主持叫醒）；②用了別的工具的 Python（hermes-agent venv）啟動 modtest（pytest 仍由 modtest 改用 .venv312，結果不受影響）；③把 C4 新功能的 e2e 紅判成偶發（主持退回，B 查明是題目靠時間差）| 維持 Sonnet（能完成、成本低）；列車長清單加三條：啟動一律用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`；等待用背景 until 迴圈、回合內等到結果行；**本班新功能的紅不可以判偶發**，一律交作者查 |
 
