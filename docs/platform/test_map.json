@@ -4975,13 +4975,15 @@
    "units": [
     "dir:backend/tools/",
     "dir:tools/platform/",
-    "file:backend/tools/build_deploy_package.ps1"
+    "file:backend/tools/build_deploy_package.ps1",
+    "file:tools/platform/modtest.py"
    ],
    "evidence": {
     "path": [
      "backend/tools/",
      "backend/tools/build_deploy_package.ps1",
-     "tools/platform/"
+     "tools/platform/",
+     "tools/platform/modtest.py"
     ]
    }
   },

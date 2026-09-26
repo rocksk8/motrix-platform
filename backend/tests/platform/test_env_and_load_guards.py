@@ -141,6 +141,55 @@ def test_rc_run_full_records_dirty_when_untracked_at_start(monkeypatch):
     assert rec["dirty"] is True
 
 
+
+# ── worker 上限可用環境變數覆寫（主持派工 2026-09-26：全速期間不改程式，使用者回來後拿掉即恢復）──────
+
+@pytest.fixture
+def _no_cap_env(monkeypatch):
+    """跑這幾題的人自己可能正設著覆寫（全速期間）⇒ 先清掉，否則「預設」那題會量到環境。"""
+    monkeypatch.delenv(MT.FULL_ENV, raising=False)
+    monkeypatch.delenv(MT.PARTIAL_ENV, raising=False)
+
+
+def test_caps_default_when_env_unset(_no_cap_env):
+    assert MT.full_max_workers() == MT.FULL_MAX_WORKERS == 4
+    assert MT.partial_max_workers() == MT.PARTIAL_MAX_WORKERS == 2
+
+
+def test_caps_follow_env(_no_cap_env, monkeypatch):
+    monkeypatch.setenv(MT.FULL_ENV, "3")
+    monkeypatch.setenv(MT.PARTIAL_ENV, "1")
+    assert MT.full_max_workers() == 3 and MT.partial_max_workers() == 1
+
+
+@pytest.mark.parametrize("raw", ["0", "-2", "abc", "4.5", str((os.cpu_count() or 1) + 1)])
+def test_rc_invalid_env_is_not_used_and_is_said(_no_cap_env, monkeypatch, capsys, raw):
+    """不合法 ⇒ 不猜、用預設、說出來（〈版本適配：算不出來就什麼都不做別猜〉）。"""
+    monkeypatch.setenv(MT.FULL_ENV, raw)
+    assert MT.full_max_workers() == MT.FULL_MAX_WORKERS
+    assert MT.FULL_ENV in capsys.readouterr().out
+
+
+def test_run_full_uses_the_env_cap(_no_cap_env, monkeypatch):
+    """行為題：全量把 -n 壓到環境變數給的上限（不是寫死的常數）。突變：run_full 改回常數 ⇒ 紅。"""
+    import types
+    monkeypatch.setenv(MT.FULL_ENV, "3")
+    seen = []
+    monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
+    monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, "== 1 passed in 1.0s =="))
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
+    MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=4, window="t"))
+    ns = [args[args.index("-n") + 1] for args in seen if "-n" in args]
+    assert ns and all(n == "3" for n in ns), seen
+
+
+def test_no_call_site_caps_with_the_bare_constant():
+    """差異題那條路（main 內）不好在單元題裡跑到 ⇒ 另守：cap_workers 的上限一律經函式（常數只當預設）。"""
+    src = (REPO / "tools" / "platform" / "modtest.py").read_text(encoding="utf-8")
+    import re
+    assert not re.search(r"cap_workers\([^)]*,\s*(FULL|PARTIAL)_MAX_WORKERS\)", src)
+    assert "cap_workers(extra, partial_max_workers())" in src
+
 # ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
 
 def test_rerun_keeps_history_and_gate_reports_earlier_reds(tmp_path):

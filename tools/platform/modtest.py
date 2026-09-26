@@ -643,8 +643,40 @@ def _remove_basetemp(p):
 #: 跑 pytest 用的直譯器：預設主工作樹的專案 .venv（照 requirements 安裝）；由 main() 決定
 PYEXE = None
 #: PLAYBOOK §C-13（2026-09-25 使用者回報 CPU 100%）：全量 -n 4 以下、差異題 -n 2 以下、低優先權
+#: 這兩個是**預設值**；實際上限由 full_max_workers()／partial_max_workers() 決定（可用環境變數覆寫，見下）
 FULL_MAX_WORKERS = 4
 PARTIAL_MAX_WORKERS = 2
+#: 覆寫用的環境變數（2026-09-26 使用者裁示「離開期間可以全速」，CORE-SPEC 使用者裁示表）：
+#: 全速時設定、使用者回來後拿掉即恢復——不必改程式。值必須是 1～CPU 數的整數；其他值不採用、說出來、用預設
+FULL_ENV = "MOTRIX_FULL_MAX_WORKERS"
+PARTIAL_ENV = "MOTRIX_PARTIAL_MAX_WORKERS"
+
+
+def _env_cap(name, default):
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        n = int(raw.strip())
+    except ValueError:
+        n = None
+    cpus = os.cpu_count() or 1
+    if n is None or n < 1 or n > cpus:
+        _say("[modtest] %s=%r 不採用（要 1～%d 的整數）⇒ 用預設 %d" % (name, raw, cpus, default))
+        return default
+    if n != default:
+        _say("[modtest] %s=%d（預設 %d）" % (name, n, default))
+    return n
+
+
+def full_max_workers():
+    """全量的 worker 上限：環境變數 MOTRIX_FULL_MAX_WORKERS，沒設（或不合法）⇒ FULL_MAX_WORKERS。每次呼叫現讀。"""
+    return _env_cap(FULL_ENV, FULL_MAX_WORKERS)
+
+
+def partial_max_workers():
+    """差異題的 worker 上限：環境變數 MOTRIX_PARTIAL_MAX_WORKERS，沒設（或不合法）⇒ PARTIAL_MAX_WORKERS。"""
+    return _env_cap(PARTIAL_ENV, PARTIAL_MAX_WORKERS)
 
 
 def _say(msg):
@@ -900,9 +932,10 @@ def run_full(extra, a):
         "python_version": subprocess.run([PYEXE or sys.executable, "-c", "import sys;print(sys.version.split()[0])"],
                                          capture_output=True, text=True).stdout.strip(),
     }
-    stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], FULL_MAX_WORKERS), a.window),
-              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], FULL_MAX_WORKERS), a.window + "e2e")]
-    extra = cap_workers(extra, FULL_MAX_WORKERS)
+    cap = full_max_workers()
+    stages = [("main", cap_workers(["-m", "not e2e", "-n", str(a.workers)], cap), a.window),
+              ("e2e", cap_workers(["-m", "e2e", "-n", str(a.e2e_workers)], cap), a.window + "e2e")]
+    extra = cap_workers(extra, cap)
     codes = {}
     try:
         for name, args, window in stages:
@@ -949,8 +982,11 @@ def main(argv=None):
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
-    ap.add_argument("--workers", type=int, default=FULL_MAX_WORKERS, help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
-    ap.add_argument("--e2e-workers", type=int, default=FULL_MAX_WORKERS, help="--full e2e 段的 xdist worker 數（上限 %d，§C-13）" % FULL_MAX_WORKERS)
+    _full = full_max_workers()
+    ap.add_argument("--workers", type=int, default=_full,
+                    help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_full, FULL_ENV))
+    ap.add_argument("--e2e-workers", type=int, default=_full,
+                    help="--full e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_full, FULL_ENV))
     ap.add_argument("--refresh-map", action="store_true", help="不讀 test_map.json，現場重算")
     ap.add_argument("--window", default="modtest")
     ap.add_argument("--python", help="指定跑 pytest 的直譯器（預設：主工作樹的專案 .venv）")
@@ -1044,7 +1080,7 @@ def main(argv=None):
     if not picked:
         print("沒有受影響的測試。")
         return 3 if rep["need_full"] else 0
-    code, _ = run_pytest(picked, cap_workers(extra, PARTIAL_MAX_WORKERS), a.window, full=False)
+    code, _ = run_pytest(picked, cap_workers(extra, partial_max_workers()), a.window, full=False)
     record_stats(changed, picked, tmap, rep, None, None, time.monotonic() - t0, dry_run=False, exit_code=code)
     if code == 0 and rep["need_full"]:
         return 3          # 閘門過了，但動到 fixture 層：月台要註明、排車頭（全量由列車跑，§G3）
