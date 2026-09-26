@@ -52,8 +52,11 @@ def test_scanner_sees_the_codebase(units):
     kinds = {u["kind"] for u in units.values()}
     assert {"router", "helper", "page", "table"} <= kinds
     # 正對照（M01 ② 起在 modules/case）：報價單 router import 報價單 helper、寫 quotations 表
-    assert "mod:case/quotations" in units["mod:case/api/quotations"]["imports"]
-    assert "quotations" in units["mod:case/api/quotations"]["tables_w"]
+    if "mod:case/api/quotations" in units:
+        assert "mod:case/quotations" in units["mod:case/api/quotations"]["imports"]
+        assert "quotations" in units["mod:case/api/quotations"]["tables_w"]
+    else:                                                               # M01 不在的安裝包（④(c)）：改看 L1 一定在的 router
+        assert any(u["kind"] == "router" and u["tables_r"] for u in units.values())
 
 
 # ── ① ─────────────────────────────────────────────────────────────────────

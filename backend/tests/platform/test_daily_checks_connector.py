@@ -12,6 +12,13 @@ import pytest
 
 from core import registry
 from helpers import daily_checks, system_checks
+from core import source_tree  # noqa: E402
+
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
 
 SYS = ("_check_backup_freshness", "_check_disk_space", "_check_temp_bloat", "_check_cert_expiry",
        "_check_approval_reminders", "_prune_request_log")
@@ -31,6 +38,7 @@ def sys_calls(monkeypatch):
     return called
 
 
+@needs_case('驗 M01 的 daily.check 提供者有登記')
 def test_case_deadlines_provider_is_registered(client):
     """M01 的案件類檢查一定在（M12 的那一支在 modules/daily_tasks/tests，拿掉 M12 時一起消失）。"""
     assert "case_deadlines" in registry.providers("daily.check")

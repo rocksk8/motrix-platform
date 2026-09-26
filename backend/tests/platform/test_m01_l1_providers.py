@@ -25,12 +25,13 @@ def _h(client, make_user):
 
 
 def test_default_terms_come_from_m01_and_say_when_absent(client, make_user, monkeypatch):
-    from modules.case.quote_terms import DEFAULT_TERMS
     from routers import system
     h = _h(client, make_user)
-    ok = client.get("/api/settings/quote-terms-defaults", headers=h)
-    assert ok.status_code == 200 and ok.json() == DEFAULT_TERMS
-    assert client.get("/api/settings/payment-terms", headers=h).json()["text"] == DEFAULT_TERMS["paymentTerms"]
+    if source_tree.module_installed("modules/case/"):                     # 正對照：M01 在（M01 ④(c)：不在的安裝包直接驗下半）
+        from modules.case.quote_terms import DEFAULT_TERMS
+        ok = client.get("/api/settings/quote-terms-defaults", headers=h)
+        assert ok.status_code == 200 and ok.json() == DEFAULT_TERMS
+        assert client.get("/api/settings/payment-terms", headers=h).json()["text"] == DEFAULT_TERMS["paymentTerms"]
     _hide(monkeypatch, "case.default_terms")
     r = client.get("/api/settings/quote-terms-defaults", headers=h)
     assert r.status_code == 404 and r.json()["detail"] == system.QUOTE_TERMS_UNAVAILABLE
@@ -68,12 +69,13 @@ def test_won_month_map_goes_through_case_recognition(client, monkeypatch):
     import db
     if not source_tree.module_installed("modules/analytics/"):
         return
-    from modules.case import quotations as q
     from modules.analytics.api import reports as rp
-    monkeypatch.setattr(q, "quote_won_month_map", lambda conn: {"MQ-X": "2026-09"})
     conn = db.get_db()
     try:
-        assert rp.quote_won_month_map(conn) == {"MQ-X": "2026-09"}
+        if source_tree.module_installed("modules/case/"):                 # 正對照：M01 在（M01 ④(c)）
+            from modules.case import quotations as q
+            monkeypatch.setattr(q, "quote_won_month_map", lambda conn: {"MQ-X": "2026-09"})
+            assert rp.quote_won_month_map(conn) == {"MQ-X": "2026-09"}
         _hide(monkeypatch, "case.recognition")
         assert rp.quote_won_month_map(conn) == {}
     finally:

@@ -14,6 +14,12 @@ import pytest
 from core import registry, source_tree
 from tests.platform.test_tax_calc_contract import m01_imports, table_access
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 BACKEND = Path(__file__).resolve().parents[2]
 METHODS = {
     "accrual_income_items": ("conn", "2026-01-01", "2026-01-31", 7),
@@ -25,6 +31,7 @@ METHODS = {
 }
 
 
+@needs_case('驗 M01 的 case.recognition 提供者轉呼叫 M01 自己的 recognition 函式')
 @pytest.mark.parametrize("name", sorted(METHODS))
 def test_provider_forwards_to_the_m01_function_with_the_same_arguments(name, monkeypatch):
     from modules.case import recognition as r
@@ -55,6 +62,8 @@ def test_recognition_basis_is_pure_l1_and_aliased():
     src = (BACKEND / "helpers" / "recognition_basis.py").read_text(encoding="utf-8")
     assert m01_imports(src) == [] and table_access(src) == []
     from helpers import recognition_basis
+    if not source_tree.module_installed("modules/case/"):
+        return                                     # 純度（上面）一律驗；下面的同名別名在 M01 裡（M01 ④(c)）
     from modules.case import recognition
     for n in ("BASES", "BASIS_NOTES", "normalize_basis"):
         assert getattr(recognition, n) is getattr(recognition_basis, n), n
@@ -76,8 +85,9 @@ def test_reports_without_m01_say_why(client, make_user, monkeypatch):
         pytest.skip("M08 不在這個安裝包 ⇒ 報表端點本來就不在（PLAYBOOK §B-11）")
     from modules.analytics.api import reports as rp
     h = _sa(client, make_user)
-    ok = _report(client, h, "accrual")                                    # 正對照：提供者在
-    assert ok["incomeNotice"] == "" and not [u for u in ok["unavailable"] if u["category"] == "case"]
+    if source_tree.module_installed("modules/case/"):                     # 正對照：提供者在（M01 ④(c)：不在的安裝包直接驗下半）
+        ok = _report(client, h, "accrual")
+        assert ok["incomeNotice"] == "" and not [u for u in ok["unavailable"] if u["category"] == "case"]
     orig = registry.single_provider
     monkeypatch.setattr(registry, "single_provider", lambda cap: None if cap == "case.recognition" else orig(cap))
     acc = _report(client, h, "accrual")

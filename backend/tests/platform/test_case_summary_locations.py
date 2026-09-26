@@ -16,6 +16,12 @@ import pytest
 from core import registry, source_tree
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: F401  （地理查詢換成查表，不連外）
 
+#: M01 ④(c)（主持裁示）：題目本身就是驗 M01（案件）的行為 ⇒ M01 不在的安裝包略過；理由逐題寫在 reason
+def needs_case(reason):
+    return pytest.mark.skipif(not source_tree.module_installed("modules/case/"),
+                              reason="需要案件模組（M01）：" + reason)
+
+
 
 def _q(no, owner_id=None, owner_name="", assigned=None, data=None, customer="客", project="案"):
     import db
@@ -46,6 +52,7 @@ def _conn():
     return db.get_db()
 
 
+@needs_case('驗 M01 的 case.summary 欄位與可見性')
 def test_summary_fields_visibility_and_filters(client, make_user):
     from helpers.case_access import SYSTEM
     a = _user(make_user, "cs_a")
@@ -71,6 +78,7 @@ def test_summary_fields_visibility_and_filters(client, make_user):
         conn.close()
 
 
+@needs_case('驗 M01 的 case.locations 地址規則')
 def test_locations_address_rule_visibility_and_fingerprint(client, make_user):
     from helpers.case_access import SYSTEM
     a = _user(make_user, "cl_a")
@@ -93,6 +101,7 @@ def test_locations_address_rule_visibility_and_fingerprint(client, make_user):
         conn.close()
 
 
+@needs_case('驗 M01 的 IP-12 轉呼叫')
 def test_ip12_summary_forwards_to_case_summary(client):
     _q("MQ-CS-IP12", customer="十二客", project="十二案")
     ca = registry.single_provider("case.access")
@@ -192,6 +201,7 @@ def test_rc_system_scanner_catches_an_l2_user():
                                   "modules/c3.py", "modules/c4.py", "modules/c5.py", "modules/c6.py"}
 
 
+@needs_case('驗 M01 提供者對 SYSTEM 的執行期檢查')
 def test_runtime_refuses_system_from_an_l2_module(client):
     """執行期檢查（第二道）：呼叫端在 `backend/modules/` 底下卻傳 SYSTEM ⇒ PermissionError；L1 傳 ⇒ 照常。"""
     import sys
