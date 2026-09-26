@@ -1,5 +1,5 @@
 {
- "core_version": "1.48",
+ "core_version": "1.49",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -179,15 +179,19 @@
   },
   "helper:case_access": {
    "CASE_ACCESS": "const",
+   "CASE_DENIAL_AUDIT": "const",
    "CASE_PRESENT": "const",
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_module_present": "def()",
+   "case_not_found_message": "def(quote_no)",
    "case_owner_readable": "def(conn, quote_no, user)",
    "case_page_readable": "def(conn, quote_no, user)",
+   "deny_case": "def(conn, quote_no, user, reason)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
-   "is_document_approver": "def(data_json, user, conn)"
+   "is_document_approver": "def(data_json, user, conn)",
+   "require_case": "def(user, row, quote_no, *, scope=…)"
   },
   "helper:case_roles": {
    "ROLE_KEYS": "const",

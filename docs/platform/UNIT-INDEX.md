@@ -26,7 +26,7 @@
 | `core:archive` | L1 | Google Drive archive helpers: real-time, daily, and weekly backups + local SQLite snapshots.（無單位卡） | 22 | 7 | — |
 | `core:backup_job` | L1 | MOTRIX ERP 獨立備份腳本（無單位卡） | 1 | 0 | — |
 | `core:cloud_storage` | L1 | Pluggable cloud backup storage backend (2026-09-07, architecture map §6.4).（無單位卡） | 9 | 2 | — |
-| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 28 | 65 | — |
+| `core:db` | L1 | DB connection factory, schema initialisation, and numbered migrations.（無單位卡） | 28 | 66 | — |
 | `core:heartbeat_job` | L1 | Independent heartbeat pinger: confirms local ERP is responding, then pings an（無單位卡） | 1 | 0 | — |
 | `core:main` | L1 | MOTRIX ERP — FastAPI 後端（無單位卡） | 9 | 0 | — |
 | `core:pdf_gen` | L1 | Server-side PDF generation via Edge headless print.（無單位卡） | 19 | 14 | — |
@@ -36,7 +36,7 @@
 | `helper:audit` | L1 | Audit log and in-app notification helpers.（無單位卡） | 5 | 39 | — |
 | `helper:auth` | L1 | Password hashing, session validation, weak-password detection.（無單位卡） | 16 | 51 | — |
 | `helper:build_info` | L1 | 這個**行程**載入的是哪一份程式碼（`BR1`）。（無單位卡） | 3 | 2 | — |
-| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 10 | 12 | — |
+| `helper:case_access` | L1 | L1 案件存取守門（主持裁示 2026-09-26，DEPENDENCY-MAP §3 #2「案件可見性規則 → L1 權限」）。（無單位卡） | 14 | 13 | — |
 | `helper:case_roles` | L1 | 案件角色（caseRecord.roles 的 filler／sales／executor）的兩種形狀（CM3，2026-09-24）。（無單位卡） | 5 | 3 | — |
 | `helper:company_identity` | L1 | §9 QL · 一份單據要印的「公司身分」。（無單位卡） | 14 | 7 | — |
 | `helper:custom_fields` | L1 | 自訂欄位命名空間（P4，CUSTOMIZATION-SPEC §3.6）。（無單位卡） | 5 | 2 | — |

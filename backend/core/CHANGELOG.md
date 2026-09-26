@@ -2,7 +2,7 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
-## 1.45 — 2026-09-26（C，c-case404：M01-O1 看不到＝不存在；疊在 M01 ②）〔core_bump：暫用 1.99 → 1.45〕
+## 1.49 — 2026-09-26（C，c-case404：M01-O1 看不到＝不存在；疊在 M01 ②）〔core_bump：暫用 1.99 → 1.45〕〔core_bump：暫用 1.45 → 1.49〕
 > 介面只有新增。
 - L1（新增）：`helpers.case_access.case_not_found_message`、`deny_case`、`require_case`、`CASE_DENIAL_AUDIT`——案件逐案拒絕一律 404、訊息與查無相同；audit_log 記真正原因（`case.access_denied`，detail.reason＝denied／not_found；背景執行緒寫，避開呼叫端的寫鎖與 rollback）
 - L1（行為）：`guard_case_access` 被拒 403 → 404（M03／M04／M05／M10 經它的路徑一併改變）；模組權限的 403 不變

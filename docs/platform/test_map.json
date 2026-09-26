@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 681,
+  "tests": 682,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 371,
+   "api": 372,
    "unit": 57,
    "e2e": 164
   },
@@ -5450,6 +5450,37 @@
     ],
     "path": [
      "backend/routers/system.py"
+    ]
+   },
+   "login_fixture": true
+  },
+  "backend/tests/platform/test_case404.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/case/",
+    "helper:case_access",
+    "mod:arap/api/cashier",
+    "mod:case/api/quotations",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/helpers/case_access.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/cashier.py",
+     "backend/modules/case/api/quotations.py"
+    ],
+    "path": [
+     "backend/helpers/case_access.py",
+     "backend/modules/arap/",
+     "backend/modules/case/"
     ]
    },
    "login_fixture": true
