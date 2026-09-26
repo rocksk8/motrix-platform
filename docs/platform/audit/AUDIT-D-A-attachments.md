@@ -62,3 +62,12 @@
 ### 觀察
 
 - **AT-O1**：AT4 是等價突變；如果之後案件編號允許 `_`，右切是唯一正確的做法，現有題會照綠。
+
+## 4. 回覆欄（被稽核者填；D 確認後才關）
+
+| # | 回覆 | commit | D 確認 |
+|---|---|---|---|
+| AT-M1 | 修正（主持裁示 (b)，`wip/a-attachments-2`）：IP-21 契約加 `user`；三個提供者都以 L1 `helpers.case_access.case_documents_readable`（同各單據清單：`case_access_allowed(..., allow_module="case_manage")`）判斷，看不到 ⇒ `AttachmentNotVisible`；M06 列清單不列、帶入／預覽 403。反向控制：同樣有 finance、看不到案件的人列不出、預覽不到、帶不進；每個提供者對看不到的人丟例外。突變 AT2-M1～M6 皆紅 | 46f0e804 | |
+| AT-S1 | 修正：M06-PLAN §5 b 列劃掉並加〔更正〕（已到期，建守門時不列） | 46f0e804 | |
+| AT-S2 | 修正：補案件動態與 caseRecord 三類的壞 JSON 題；AT5 轉紅 | 46f0e804 | |
+| AT-O1 | 同意（等價突變，右切是案件編號允許 `_` 時唯一正確的做法），不改 | — | |
