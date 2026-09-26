@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.8 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.6，列車取號）
+- 成案月份改取 M01 `case.recognition.won_month_map`（M01-PLAN §3-8 CA-O4：`helpers` 不再再匯出 M01 的 `quote_won_month_map`）；M01 不在 ⇒ {}。`norm_at`、`summarize_payment_items` 仍自 `helpers` 取用（已是 L1）
+
 ## 1.0.7 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.5，列車取號）
 - 收入認列、支出歸月、待補登改取 M01 的 `case.recognition`（M01-PLAN §3-6），口徑標籤改自 L1 `helpers.recognition_basis`——本模組不再 import M01 的 `helpers.recognition`。M01 不在 ⇒ 權責口徑收入附 `incomeNotice`、支出 `unavailable` 列出案件類（叫料／額外支出／派工），待補登為空；頁面的收入提示改為只顯示那一句（現金／權責兩種原因共用）
 

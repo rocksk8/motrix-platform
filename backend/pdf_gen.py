@@ -432,32 +432,19 @@ def _record_doc_version(quote_no: str, action_type: str, actor: str,
         except ValueError:          # 跨磁碟機時 relpath 會炸
             rel = os.path.basename(pdf_path)
 
-        conn = get_db()
-        try:
-            conn.execute("BEGIN IMMEDIATE")
-            row = conn.execute(
-                "SELECT data_json FROM quotations WHERE quote_no=?", (quote_no,)).fetchone()
-            if not row:
-                conn.rollback()
-                return
-            data = json.loads(row["data_json"] or "{}")
-            versions = data.get("docVersions")
-            if not isinstance(versions, list):
-                versions = []
-            versions.append({
-                "seq":       len(versions) + 1,
-                "at":        datetime.now().isoformat(),
-                "event":     action_type,
-                "by":        actor or "",
-                "file":      rel.replace("\\", "/"),
-                "size":      os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0,
-            })
-            data["docVersions"] = versions[-_DOC_VERSION_MAX:]
-            conn.execute("UPDATE quotations SET data_json=? WHERE quote_no=?",
-                         (json.dumps(data, ensure_ascii=False), quote_no))
-            conn.commit()
-        finally:
-            conn.close()
+        # 版本紀錄存在 M01 的 quotations.data_json ⇒ 由 M01 寫（`case.doc_version`，M01-PLAN §3-8）；L1 不寫 L2 的表。
+        # M01 不在 ⇒ 沒有報價單可記，PDF 照存、不記版本。
+        from core import registry as _registry
+        rec = _registry.single_provider("case.doc_version")
+        if rec is None:
+            return
+        rec(quote_no, {
+            "at":        datetime.now().isoformat(),
+            "event":     action_type,
+            "by":        actor or "",
+            "file":      rel.replace("\\", "/"),
+            "size":      os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0,
+        }, _DOC_VERSION_MAX)
     except Exception:
         logger.exception("_record_doc_version failed for %s", quote_no)
 

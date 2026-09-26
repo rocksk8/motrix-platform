@@ -142,7 +142,8 @@ def test_terms_defaults_endpoint_is_the_single_source(client, token):
     import routers.system as system
     r = client.get("/api/settings/quote-terms-defaults", headers=_auth(token))
     assert r.status_code == 200 and r.json() == DEFAULT_TERMS
-    assert system.DEFAULT_PAYMENT_TERMS is DEFAULT_TERMS["paymentTerms"]
+    # CA-O4（2026-09-26）：system 經 M01 提供者 case.default_terms 取用，不再持有自己的常數
+    assert system._quote_default_terms()["paymentTerms"] is DEFAULT_TERMS["paymentTerms"]
     assert client.get("/api/settings/quote-terms-defaults").status_code in (401, 403)
 
 

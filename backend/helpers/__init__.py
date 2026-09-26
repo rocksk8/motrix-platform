@@ -4,11 +4,9 @@ Submodules:
   auth        password hashing, session validation, weak-password policy
   settings    system_settings CRUD
   audit       audit log + in-app notifications
-  quotations  hot-path field sync for the quotations table
   dates       date arithmetic (_add_months, _warranty_expiry, _workdays_elapsed)
   tiered_approval  shared tiers 依序簽核純邏輯（2026-08-22，四個 router 共用）
   google_calendar  Google 行事曆 push 整合（2026-08-21）
-  case_stage_tasks 案件執行進度勾選完成 → 每日工作事項月曆（2026-09-11）
   startup     server startup checks, Edge path resolution
 """
 
@@ -31,13 +29,9 @@ from .auth import (
 from .settings import _get_setting, _set_setting
 from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
                     notify_org_chain_notice)
-from .quotations import (
-    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json,
-    _steps_to_tiers,   # M01 的舊名（別名＝L1 tiered_approval.steps_to_tiers 同一物件）；L1 用公開名 steps_to_tiers。
-                       # 不從 tiered_approval 以底線名轉出：那會讓 L1 的公開函式以底線名被 L2 使用（b-g1 守門）
-    summarize_payment_items, case_extra_expenses,
-    quote_won_month_map, validate_invoice_no, validate_invoice_amounts, validate_quote_tax,
-)
+# M01 的 helpers.quotations／case_stage_tasks 不再從這裡再匯出（M01-PLAN §3-8 CA-O4：`import helpers` 不可以載入 M01）。
+# 純函式已在 L1：norm_at（dates，§3-2）、summarize_payment_items（tax_calc，CA-O4）、steps_to_tiers（tiered_approval，§3-2；直接 import 那裡）。
+from .tax_calc import summarize_payment_items  # noqa: E402
 from .case_access import guard_case_access, is_document_approver  # L1（2026-09-26 自 quotations 下沉）
 from .tax_calc import payment_item_amounts          # T（2026-09-26）：稅額純函式在 L1
 from .dates import _add_months, _warranty_expiry, _workdays_elapsed, norm_at   # norm_at：M01-PLAN §3-2 下沉
@@ -108,10 +102,6 @@ from .google_calendar import (
     push_event_delete_for_case_stage,
     create_test_event as create_calendar_test_event,
 )
-from .case_stage_tasks import (
-    sync_daily_task_for_case_stage, daily_task_notice,
-    delete_daily_task_for_case_stage,
-)
 from .uploads import (
     save_document_files,
     delete_document_file,
@@ -140,10 +130,9 @@ __all__ = [
     "_get_setting", "_set_setting",
     # audit
     "_notify", "_audit", "_filter_live_notifications", "_purge_notifications",
-    # quotations
-    "SQL_DEAL_TAG", "SQL_SETTLE_STATUS", "quote_hot_fields", "save_quotation_json",
-    "payment_item_amounts", "summarize_payment_items", "case_extra_expenses",
-    "quote_won_month_map", "norm_at", "validate_invoice_no", "validate_invoice_amounts", "validate_quote_tax", "guard_case_access", "is_document_approver",
+    # 稅額／日期純函式（L1）、案件權限（L1 case_access）
+    "payment_item_amounts", "summarize_payment_items", "norm_at",
+    "guard_case_access", "is_document_approver",
     # dates
     "_add_months", "_warranty_expiry", "_workdays_elapsed",
     "active_tiers", "current_tier_idx", "setting_to_active_tiers",
@@ -179,8 +168,6 @@ __all__ = [
     "push_event_for_quotation_won", "create_calendar_test_event",
     "push_event_for_case_stage_due", "push_event_for_case_stage_done",
     "push_event_delete_for_case_stage",
-    # case_stage_tasks（執行進度 → 每日工作事項月曆）
-    "sync_daily_task_for_case_stage", "delete_daily_task_for_case_stage", "daily_task_notice",
     # uploads
     "save_document_files", "delete_document_file",
     # startup

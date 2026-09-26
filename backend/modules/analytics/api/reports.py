@@ -21,7 +21,7 @@ from fastapi.responses import StreamingResponse
 from db import get_db
 from helpers import (
     _require_user, _tok, _audit, _warranty_expiry, _get_edge_path, _get_setting, _set_setting,
-    payment_item_amounts, summarize_payment_items, case_extra_expenses, quote_won_month_map,
+    payment_item_amounts, summarize_payment_items,
     user_has_module, run_edge_pdf,
 )
 from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice_amounts   # T：L1
@@ -58,6 +58,12 @@ CASE_EXPENSES_UNAVAILABLE = {"category": "case",
 def _recognition():
     from core import registry
     return registry.single_provider("case.recognition")
+
+
+def quote_won_month_map(conn) -> dict:
+    """案件歸入成案趨勢的月份（M01 `case.recognition.won_month_map`；CA-O4）。M01 不在 ⇒ {}（沒有案件可歸月）。"""
+    rec = _recognition()
+    return rec.won_month_map(conn) if rec is not None else {}
 
 _log = logging.getLogger(__name__)
 

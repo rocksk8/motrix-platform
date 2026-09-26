@@ -50,12 +50,6 @@
    "kind": "frozen"
   },
   {
-   "table": "quotations",
-   "writer": "core:pdf_gen",
-   "ref": "DEPENDENCY-MAP §4（主持 2026-09-25 裁示補入）；§5「輸出：PDF」樣板回 M01 後消失",
-   "kind": "debt"
-  },
-  {
    "table": "stock_batches",
    "writer": "core:db",
    "ref": "CORE-SPEC §6：db.py v1~v84 凍結 migration 內的既有寫入",
