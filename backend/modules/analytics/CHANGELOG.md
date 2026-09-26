@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.4 — 2026-09-26
+- 稽核 D M5-S1：從 `reports.html?tab=cashier` 進來時，出納頁籤的待付款／待收款 404 也記原因（`payableSnapMissing`），快照不畫 NT$ 0
+
 ## 1.0.3 — 2026-09-26
 - 頁面（`frontend/pages/reports.html`、`js/reports.js`）：M05 不在 ⇒ 收支分頁顯示 `incomeNotice`（`data-testid=income-unavailable`，比照 X-1 的支出）；財務快照的應收應付在出納佇列 404 時顯示原因（端點帶的說明，或「應收應付模組未安裝」），不畫成 NT$ 0
 

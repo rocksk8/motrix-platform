@@ -73,7 +73,7 @@
 6. M05 應收應付 — 需要 A6、A8
    - 搬遷時把 `/api/reports/bank-reconcile` 收回 M05（業務語意屬於出納；M08 搬遷時暫留 M08，主持 2026-09-26 裁示）
    - ✅ 後端完成（C，2026-09-26，`modules/arap`，router 放 `api/`）：三支 router＋receivables 收回＋bank-reconcile 收回（路徑不變；M04 不在時 404 並明說）。剩：他模組直接讀 `invoice_vouchers`／`payment_requests`（M01 案件整包、簽核佇列、轉簽；L1 行事曆／附件／封存／PDF——讀取連接器另開題）、前端呼叫本模組端點得到 404 時的提示（M01 案件頁開票／請款段、簽核佇列、M08 報表出納兩區）、選單項移到 module.json（C4 之後）、頁面（階段 C）
-   - **淘汰（下一個主版號刪除）**：L1 薄殼 `helpers/receivables.py` 的 `collect_income_items`、`collect_tax_invoices`、`round_half_up_invoice`、`RECEIVABLES_MISSING`（主持裁示 2026-09-26 (a)；守門 `tests/platform/test_receivables_shim.py`：只准轉呼叫 provider、不 import modules.*、不讀表）
+   - **淘汰（下一個主版號刪除；登記 `docs/platform/deprecations.json`，到期由 `tests/platform/test_deprecations.py` 自動變紅）**：L1 薄殼 `helpers/receivables.py` 的 `collect_income_items`、`collect_tax_invoices`、`round_half_up_invoice`、`RECEIVABLES_MISSING`（主持裁示 2026-09-26 (a)；守門 `tests/platform/test_receivables_shim.py`：只准轉呼叫 provider、不 import modules.*、不讀表）
 7. M06 會計 — 需要 A7、A8
 8. M07 薪資獎金 — 需要 A7、A9
 9. M03 採購庫存出貨 — 需要 §4 的 stock_items（🔄 A 2026-09-26 開工，wip/a-m03）

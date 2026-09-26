@@ -1,7 +1,7 @@
 {
   "key": "analytics",
   "name": "營運分析",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "core": ">=1.0,<2.0",
   "license_key": "analytics",
   "permissions": ["dashboard", "reports"],

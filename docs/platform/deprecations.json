@@ -1,0 +1,33 @@
+{
+ "_說明": "淘汰中的公開名稱（主持裁示 2026-09-26，稽核 D M5-M1）：每一筆 {file（backend/ 之下的相對路徑）, name, since_core, remove_at_major, replacement}。守門 backend/tests/platform/test_deprecations.py：① CORE 主版號 ≥ remove_at_major 而名稱還在 ⇒ 紅；② 產品程式寫了「淘汰」卻沒有登記 ⇒ 紅（反掃）；③ 登記了但名稱不存在（打錯字／已刪卻沒拿掉登記）⇒ 紅。",
+ "entries": [
+  {
+   "file": "helpers/receivables.py",
+   "name": "collect_income_items",
+   "since_core": "1.36",
+   "remove_at_major": 2,
+   "replacement": "registry.single_provider(\"receivables.income_items\")（M05）"
+  },
+  {
+   "file": "helpers/receivables.py",
+   "name": "collect_tax_invoices",
+   "since_core": "1.36",
+   "remove_at_major": 2,
+   "replacement": "registry.single_provider(\"receivables.tax_invoices\")（M05）"
+  },
+  {
+   "file": "helpers/receivables.py",
+   "name": "round_half_up_invoice",
+   "since_core": "1.36",
+   "remove_at_major": 2,
+   "replacement": "helpers.legal_params.round_half_up"
+  },
+  {
+   "file": "helpers/receivables.py",
+   "name": "RECEIVABLES_MISSING",
+   "since_core": "1.36",
+   "remove_at_major": 2,
+   "replacement": "各使用方自己的「應收應付模組未安裝」說明"
+  }
+ ]
+}

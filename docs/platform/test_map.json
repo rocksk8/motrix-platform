@@ -2,13 +2,13 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 638,
+  "tests": 649,
   "unmapped": 7,
   "kinds": {
-   "audit": 86,
-   "api": 343,
+   "audit": 87,
+   "api": 351,
    "unit": 55,
-   "e2e": 154
+   "e2e": 156
   },
   "routes": 568
  },
@@ -1044,6 +1044,25 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_case_management_logic_fixes_2026_08_28.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_cashier_execution_history_2026_08_31.py": {
    "kind": "api",
    "units": [
@@ -1210,6 +1229,26 @@
    },
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_e2e_tax_basis_r2_2026_09_25.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "page:pages/case-management.html"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_finance_advisory_2026_08_28.py": {
    "kind": "api",
    "units": [
@@ -1223,6 +1262,25 @@
     ],
     "api": [
      "backend/modules/arap/api/cashier.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_invoice_date_and_case_record_validation_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
     ],
     "module_dir": [
      "backend/modules/arap/"
@@ -1249,6 +1307,43 @@
      "backend/modules/arap/"
     ]
    },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_module_permission_fixes_2026_09_13_from_tests.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/subcontract/",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:subcontract/api/contractor_vouchers",
+    "plat:__init__",
+    "plat:source_tree",
+    "router:completion_notes",
+    "router:shipping_notes"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/subcontract/api/contractor_vouchers.py",
+     "backend/routers/completion_notes.py",
+     "backend/routers/shipping_notes.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
    "module": "arap"
   },
   "backend/modules/arap/tests/test_money_round_half_up_2026_09_26.py": {
@@ -1279,6 +1374,49 @@
      "backend/modules/arap/"
     ]
    },
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_money_round_half_up_2026_09_26_from_tests.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:frontend/js/",
+    "js:js/case-management-core.js",
+    "js:static/legal-round.js",
+    "mod:analytics/api/reports",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:subcontract/api/vendor_contractors",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/modules/analytics/api/reports.py",
+     "backend/modules/arap/api/payment_requests.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py",
+     "backend/modules/arap/api/payment_requests.py",
+     "backend/modules/subcontract/api/vendor_contractors.py"
+    ],
+    "page": [
+     "frontend/js/case-management-core.js",
+     "frontend/static/legal-round.js"
+    ],
+    "path": [
+     "frontend/js/",
+     "frontend/static/legal-round.js"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
    "module": "arap"
   },
   "backend/modules/arap/tests/test_payment_requests.py": {
@@ -1346,6 +1484,46 @@
    "login_fixture": true,
    "module": "arap"
   },
+  "backend/modules/arap/tests/test_reports_tax_compliance_2026_09_02.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_signed_upload_files.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
   "backend/modules/arap/tests/test_subcontract_connectors.py": {
    "kind": "api",
    "units": [
@@ -1373,6 +1551,54 @@
     "api": [
      "backend/modules/arap/api/cashier.py",
      "backend/routers/accounting_export.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_tax_basis_r2_2026_09_25.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "file:backend/tests/test_case_extra_expenses_api_2026_09_11.py",
+    "helper:legal_params",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/legal_params.py",
+     "backend/tests/test_case_extra_expenses_api_2026_09_11.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
+    ],
+    "module_dir": [
+     "backend/modules/arap/"
+    ]
+   },
+   "login_fixture": true,
+   "module": "arap"
+  },
+  "backend/modules/arap/tests/test_tax_by_law_2026_09_24.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "helper:receivables",
+    "mod:arap/api/invoice_vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/helpers/receivables.py"
+    ],
+    "api": [
+     "backend/modules/arap/api/invoice_vouchers.py"
     ],
     "module_dir": [
      "backend/modules/arap/"
@@ -5286,6 +5512,29 @@
     ]
    }
   },
+  "backend/tests/platform/test_deprecations.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:docs/platform/deprecations.json",
+    "helper:receivables",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py"
+    ],
+    "path": [
+     "backend/helpers/receivables.py",
+     "docs/platform/",
+     "docs/platform/deprecations.json"
+    ]
+   }
+  },
   "backend/tests/platform/test_dispatch_connector.py": {
    "kind": "api",
    "units": [
@@ -8450,6 +8699,34 @@
     ],
     "path": [
      "frontend/pages/approval-queue.html"
+    ]
+   }
+  },
+  "backend/tests/test_e2e_arap_absent_notices_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/analytics/",
+    "file:backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py",
+    "page:pages/case-management.html",
+    "page:pages/reports.html",
+    "plat:__init__",
+    "plat:source_tree"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/tests/test_e2e_case_concurrent_edit_2026_09_24.py"
+    ],
+    "page": [
+     "frontend/pages/case-management.html",
+     "frontend/pages/reports.html"
+    ],
+    "path": [
+     "backend/modules/analytics/",
+     "frontend/pages/reports.html"
     ]
    }
   },
