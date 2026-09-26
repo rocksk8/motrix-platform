@@ -1,5 +1,5 @@
 {
- "core_version": "1.34",
+ "core_version": "1.35",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -645,6 +645,7 @@
   "helper:tiered_approval": {
    "APPROVAL_DOC_TYPES": "const",
    "APPROVAL_DOC_TYPE_LABELS": "const",
+   "ApprovalChainUnreadable": "class",
    "DEFAULT_UNIFIED_DOC_TYPES": "const",
    "ORG_ROLE_LABELS": "const",
    "UnresolvedManagerError": "class",
@@ -658,6 +659,7 @@
    "current_tier_idx": "def(appr)",
    "first_pending_approver": "def(tier)",
    "org_chain_notice_usernames": "def(conn, tiers, requester_username)",
+   "parse_approval_json": "def(record, *, doc_label=…)",
    "plan_self_cascade": "def(tiers, ct_idx, username, conn=…)",
    "resolve_active_flow_setting": "def(doc_type)",
    "resolve_department_manager": "def(conn, department_id)",

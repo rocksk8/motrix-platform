@@ -2,7 +2,6 @@
  "_doc": "L2 跨組 import 邊的基線：只准變少。新增⇒守門紅；消失⇒用 --prune 刪除。",
  "edges": [
   "M01 router:quotations -> M03 router:shipping_notes",
-  "M01 router:quotations -> M06 helper:voucher",
   "M01 router:quotations -> M06 router:vouchers",
   "M05 router:cashier -> M01 helper:quotations",
   "M05 router:invoice_vouchers -> M01 helper:quotations",

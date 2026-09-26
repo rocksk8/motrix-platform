@@ -467,46 +467,15 @@ _SIGNATURE_SLOTS = (
 _TIER_LABELS = ("覆核", "主管")
 
 
-class VoucherChainUnreadable(Exception):
-    """簽核鏈存在而**讀不出來**。與「沒有簽核鏈」是兩件事。
-
-    ☠️ 這兩者折疊在一起的後果不是版面錯，是**閘門靜默放行**：
-    ```
-    讀取失敗 -> 回 [] -> 讀起來就是「這張單不需要簽核」
-             -> 閘門判「沒有需要簽核的關卡」-> **判定已完成** -> 放行
-    ```
-    🔑 一個未簽核的傳票因此匯得出去，**而畫面上完全正常**。
-    ⇒ 所以這裡**丟**，不回 `[]`、也不回 `None`（回 None 只是把同一個問題
-      往下移一層：呼叫端一個 `or []` 就又折回去了）。
-    """
+# 淘汰中（2026-09-26，主持裁示 M06-c）：簽核鏈的解析與例外已下沉 L1 `helpers.tiered_approval`。
+# 這兩個名稱保留給 M06 自己（routers/vouchers）與舊呼叫端；新程式直接用 L1 的 `parse_approval_json`／`ApprovalChainUnreadable`。
+from helpers.tiered_approval import ApprovalChainUnreadable as VoucherChainUnreadable  # noqa: E402  同一個類別（不是子類別）
+from helpers import tiered_approval as _ta  # noqa: E402
 
 
 def parse_approval_json(voucher):
-    """`approval_json` 的原始解析（整包 dict，含 `tiers`／`currentTier`）。
-
-    **共用件**——`JV27`：`routers/vouchers.py` 原本自己重新 `json.loads`
-    了一次（`_appr_of()`），兩套解析各自維護、行為各自漂移。這裡是唯一
-    的解析入口，`_chain_tiers()` 疊在它上面；`routers/vouchers.py` 也
-    改叫這支，不再自己 parse。
-
-    ```
-    沒有 approval_json   => **回 {}**（明確的「沒有設定簽核流程」）
-    有而解析失敗          => **raise VoucherChainUnreadable**
-    ```
-    """
-    raw = voucher.get("approval_json")
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw) or {}
-    except (TypeError, ValueError) as exc:
-        # 📌 訊息裡寫出**哪一個動作**失敗，以及**fail-closed 這個選擇本身**
-        #    （比照 `archive.py:288` 那個寫法 —— 它連選擇都寫進訊息）。
-        logger.warning(
-            "傳票 %s 的簽核鏈解析失敗（fail-closed：一律視為**未簽核完成**）：%s",
-            voucher.get("id"), exc)
-        raise VoucherChainUnreadable(
-            "這張傳票的簽核資料讀不出來，無法判斷是否已完成簽核。") from exc
+    """淘汰中：同 L1 `helpers.tiered_approval.parse_approval_json`，訊息以「傳票」稱呼。"""
+    return _ta.parse_approval_json(voucher, doc_label="傳票")
 
 
 def _chain_tiers(voucher):

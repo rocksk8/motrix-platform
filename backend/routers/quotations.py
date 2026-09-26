@@ -6538,7 +6538,7 @@ def reassign_approval(body: ReassignIn, authorization: str = Header(None)):
             # 🔴 讀不出來要擋（fail-closed，同 `routers/vouchers.py::_appr_of`），
             #    不可以吞成空鏈——那與「沒有設定流程」一模一樣。
             # 📌 就地 import：本段之外的 import 區不動（並行派工的檔案分界）。
-            from helpers.voucher import parse_approval_json, VoucherChainUnreadable
+            from helpers.tiered_approval import parse_approval_json, ApprovalChainUnreadable as VoucherChainUnreadable  # L1（M06-c）
             try:
                 appr = parse_approval_json(dict(row))
             except VoucherChainUnreadable:
