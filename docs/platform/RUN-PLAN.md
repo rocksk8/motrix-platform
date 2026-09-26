@@ -139,6 +139,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 11:54 主持：**sparse 樹的 MSYS 陷阱**（B、C 各踩過一次）：在 Git Bash 下 `git sparse-checkout set '/*' '!/backend/…'`，參數會被轉成 Windows 路徑（例 `!C:/Program Files/Git/…`），排除失效、模組照樣取出 ⇒ 反向控制變成沒人察覺的假綠。對策：加 `MSYS_NO_PATHCONV=1`，或直接寫 info/sparse-checkout，或用 PowerShell／Python 呼叫；**建樹後一律 `ls backend/modules` 確認模組真的不在，再跑**。主持已核對 C29／C31／C33 皆正確；core_only_rc 用 Python subprocess 不受影響。**待辦（主持）**：第六班合回後，把這一條寫進 PLAYBOOK §B-11／§G3 的 sparse 做法段落（那一段在 b-g1-2，現在改會撞車）。另：第六班全量跑完，修交會紅中（71ab31d0、357304d0、1dacbfb0）；D 審 b-routes：必修 RT-M1、建議 RT-S1，B 已修成 b-routes-2（排第七班）。
 - 2026-09-26 11:45 D：b-routes ce329534（`AUDIT-D-B-routes.md`）必修 RT-M1：拿掉 netplan ⇒ `test_real_tree_has_no_route_ownership_errors` 紅（錯誤②），不在允許清單 ⇒ core-only 會紅；四種錯誤突變皆紅；萬用 * 無分界（建議）；五條路由歸屬正確。
 - 2026-09-26 11:38 D：⑰ M08 回覆 17 項複核（b-m08-s 943d0bfe）：16 項關閉、O-9 維持開著（暫緩只寫在回覆欄，未進 ROADMAP）；突變 6/6 紅；l2_import_baseline 差異逐條核對，無真實邊被 prune 洗掉。
 - 2026-09-26 11:22 主持：D7-CHECKLIST（D 起草，主持審過併入）。裁示：① 部署包同樣走 git archive ⇒ 驗「runtime 需要的沒被排掉」照清單 V3（逐檔）＋V4（source_tree 清單、啟動後 sys.modules、產品碼讀取的相對路徑）；② **正式 D7 的前置（擋 D7）**：final_drill 的 SMOKE 改成「L1 清單＋依 modules.lock 讀各模組 probes」，並補題——**主持做**（依賴 b-m08-3 的 probes 機制，第六班合回後）；probes 宣告：tender_radar、daily_tasks、netplan 由主持補（A 無回應），crm、subcontract、payroll 交 C；沒有宣告 probes 的模組不進正式 D7；③ E3（第 1 步記的是備份複本的雜湊）照清單警示。建包是使用者的動作（P5）。
