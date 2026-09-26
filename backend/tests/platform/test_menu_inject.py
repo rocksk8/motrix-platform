@@ -85,3 +85,58 @@ def test_js_literal_cannot_break_out_of_the_script():
     s = PM._js_literal({"a": "</script><b>", "b": "x" + chr(0x2028) + "y" + chr(0x2029)})
     assert "</" not in s and chr(0x2028) not in s and chr(0x2029) not in s
     assert json.loads(s) == {"a": "</script><b>", "b": "x" + chr(0x2028) + "y" + chr(0x2029)}
+
+
+# ── 主持判定（2026-09-26，STAGE-C L79 附註）：MOTRIX_MENU 不含任何來自資料庫的字串 ──────────────────
+# 透露「裝了哪些模組」可以接受（程式宣告、不是資料）；自訂模組名稱、公司名稱等**資料**不可以出現在不需登入的 js。
+
+_SENTINEL_MOD = "哨兵自訂模組ZQX7"
+_SENTINEL_CO = "哨兵公司名稱ZQX7"
+
+
+def _plant_db_strings(client, make_user):
+    u, pw = make_user(username="c4_inj_leak", role="superadmin")
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    body = {"name": _SENTINEL_MOD, "permission": "custom.c4_sentinel",
+            "numbering": {"prefix": "ZQ", "date": "YYYYMMDD", "digits": 4},
+            "fields": [{"key": "item", "label": "項目", "type": "text"}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿", "final": True}], "transitions": []}}
+    r = client.put("/api/definitions/custom_module/c4_sentinel/draft", headers=h, json={"body": body})
+    assert r.status_code == 200 and r.json()["problems"] == [], r.text
+    assert client.post("/api/definitions/custom_module/c4_sentinel/publish", headers=h, json={}).status_code == 200
+    assert client.put("/api/settings/company-profile", headers=h, json={"name": _SENTINEL_CO}).status_code == 200
+    # 正對照：兩個字串確實寫進資料庫、登入後拿得到（否則下面的「不含」是空轉）
+    assert any(m.get("name") == _SENTINEL_MOD for m in client.get("/api/custom-modules", headers=h).json())
+    assert client.get("/api/settings/company-profile", headers=h).json().get("name") == _SENTINEL_CO
+    return h
+
+
+def _leaks(text):
+    return [s for s in (_SENTINEL_MOD, _SENTINEL_CO, "c4_sentinel") if s in text]
+
+
+def test_motrix_menu_contains_no_database_strings(client, make_user):
+    _plant_db_strings(client, make_user)
+    r = client.get("/static/sidebar.js")          # 不帶 token
+    head = r.text.partition("\n")[0]
+    assert head.startswith(PREFIX) and _leaks(head) == [], _leaks(head)
+
+
+def test_rc_database_string_leak_would_be_caught(client, make_user, monkeypatch):
+    """反向控制：宣告若把已發布自訂模組併進去（最自然的錯法），上一題的判準要抓得到。"""
+    _plant_db_strings(client, make_user)
+    real = PM.menu_declaration
+
+    def leaky(page_map):
+        from db import get_db
+        from helpers import custom_modules as CM
+        d = real(page_map)
+        conn = get_db()
+        try:
+            d["custom"] = CM.published_modules(conn)
+        finally:
+            conn.close()
+        return d
+    monkeypatch.setattr(PM, "menu_declaration", leaky)
+    head = client.get("/static/sidebar.js").text.partition("\n")[0]
+    assert _SENTINEL_MOD in _leaks(head)

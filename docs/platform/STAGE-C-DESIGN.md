@@ -78,7 +78,9 @@ GET /pages/{name}.html
 〔更正（B，2026-09-26，主持裁示）：**不改成打 API 再畫**。舊選單是同步渲染，獎金入口隱藏、未載入模組入口隱藏、`_deniedPages` 無權限提示與大量 e2e 都假設選單已經在畫面上；改成非同步＝〈先渲染再非同步載入〉競態。改為：
 - ~~伺服器提供 `/static/sidebar.js` 時在最前面接上 `window.MOTRIX_MENU = {…}`（L1＋已載入模組的宣告，含 `perm`；與使用者無關、每個請求現查模組狀態）；前端用原本的 `has()` 同步過濾後交給 `sec()`／`ni()`，時序不變，HTML 不用改。~~
   〔更正（主持裁示 2026-09-26，選 A；C4 第一個 commit）：P9 的角色版面（側欄點的 hide／move index）跟使用者角色有關，而載入 `<script src=sidebar.js>` 的請求沒有 Bearer token ⇒ 伺服器在注入處算不出角色。改為三點：
-  ① **`MOTRIX_MENU` 只放與使用者無關的宣告**（L1＋已載入模組＋已發布自訂模組的項目，含 `perm`；每個請求現查模組狀態）；首屏照舊同步渲染、權限同步過濾（`has()`），時序不變、HTML 不用改。
+  ① **`MOTRIX_MENU` 只放與使用者無關的宣告**（L1＋已載入模組~~＋已發布自訂模組~~的項目，含 `perm`；每個請求現查模組狀態）；首屏照舊同步渲染、權限同步過濾（`has()`），時序不變、HTML 不用改。
+     〔更正（B，2026-09-26 12:57，C4 步驟 ② 實作時；主持確認）：**自訂模組與模組狀態不放進 `MOTRIX_MENU`**——`/static/sidebar.js` 不需登入就拿得到，自訂模組名稱是公司資料、模組狀態原本在要登入的 `/api/system/modules/availability`；兩者改在 ② 的 `/api/platform/menu` 階段出現（自訂模組原本就是非同步追加，無退步）。實際內容 `{v, groups, pageModules}`（`routers.platform_menu.menu_declaration`）。
+     **主持判定**：`MOTRIX_MENU` 讓未登入的人讀得到「這套安裝有哪些模組」（L1＋已載入模組的標籤與 perm）——**可以接受**：登入頁本身就顯示產品，而這是程式宣告、不是資料。界線是**不含任何來自資料庫的字串**（自訂模組、公司名稱等）；守門 `tests/platform/test_menu_inject.py::test_motrix_menu_contains_no_database_strings`（先寫入哨兵字串並以登入 API 讀回當正對照），反向控制 `test_rc_database_string_leak_would_be_caught`（宣告併入已發布自訂模組 ⇒ 判準要抓到）。〕
   ② **session 取回之後**打 `GET /api/platform/menu`（回「已套角色 layout 的結果」）**再重排一次**；讀失敗 ⇒ 保留宣告版，而且要明說（console 一筆＋側欄 data 屬性），不可以靜默。
   ③ 這是「先渲染、再非同步套用」＝〈先渲染再非同步載入＝競態〉那一型，守三件事：
      - 角色 layout 的 **hide 只是顯示、不是權限**：重排前被點到的項目本來就是使用者有權限的頁面 ⇒ 無害；伺服器端權限不看 layout（附題：hide 不影響伺服器端權限）
@@ -86,7 +88,8 @@ GET /pages/{name}.html
      - 重排以**序號**丟掉較晚回來的舊回應（同 O7）
   另：套用 layout 的 `apply_layout` 與 `GET /api/layout/{module}` 共用同一個 resolve＋`check_layout`（不複製）；U17 裁示前照「整份」resolve。〕
 - `GET /api/platform/menu`（伺服器端過濾）保留給其他使用端。
-- C4 同時把**已發布的自訂模組**（P8，`custom-modules-nav.js` 以 MutationObserver 在 `#app-mainnav` 追加）納入 `MOTRIX_MENU` 的來源，`custom-modules-nav.js` 退場 ⇒ 選單只有一個來源。
+- ~~C4 同時把**已發布的自訂模組**（P8，`custom-modules-nav.js` 以 MutationObserver 在 `#app-mainnav` 追加）納入 `MOTRIX_MENU` 的來源，`custom-modules-nav.js` 退場 ⇒ 選單只有一個來源。~~
+  〔更正（B，2026-09-26 12:57，同上）：自訂模組改由 session 之後的 `/api/platform/menu` 帶（依使用者權限過濾，規則與 `/api/custom-modules` 共用），sidebar.js 在套 layout 那一步一起渲染；`custom-modules-nav.js` 照樣退場 ⇒ 選單仍只有一個渲染者。〕
 - 時機：C1、C3、P8 前端合回之後；開工時主持通知各視窗凍結 sidebar.js 相關測試直到 C4 合回（約 15 個測試檔以靜態解析讀 `ni()`／`sec()`，要改讀 `core/menu_l1.json`）。C3 的對等守門在 C4 退場。〕
 
 ## 5. 轉換順序（每一步都可單獨合回、單獨回退）
