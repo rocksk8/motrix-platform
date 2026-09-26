@@ -43,6 +43,7 @@ from fastapi import HTTPException
 # 🔑 而正式機上同樣成立：任何**在執行期重新指定**那個常數的做法都會失效。
 # ⇒ 一律 `_uploads.UPLOADS_ROOT`，在**用到的那一刻**才取。
 import helpers.uploads as _uploads
+from helpers.case_access import case_page_readable   # L1：整個案件看不到時照「不存在」回（主持裁示）
 from helpers.uploads import _effective_subfolder
 
 #: 帶入來源的白名單。**一份可以數的清單**，不可以散在 if/elif 裡 ——
@@ -350,6 +351,17 @@ def expense_line_uses(conn):
         extra_where="vl.source_type IN (%s)" % types)
 
 
+class CaseNotVisible(Exception):
+    """整個案件都看不到（案件頁讀不到，而且沒有任何一筆附件看得到）或案件不存在。
+
+    主持裁示（2026-09-26，D 的觀察）：這時**不可以**回「N 個附件看不到」——那等於告訴人這個案件編號存在；
+    呼叫端照「不存在」回（與案件不存在逐字相同）。`hidden` 只用在「案件看得到，但其中部分附件看不到」。"""
+
+
+#: 案件不存在與整個看不到用同一句（不可以讓人分辨，否則可以探知案件編號）
+CASE_NOT_FOUND = "報價單 %s 不存在"
+
+
 def hidden_sources(hidden):
     """因權限沒列出的附件 ⇒ 畫面要顯示的說明（形狀同 `unavailable_sources()` 再加 `count`；主持裁示 2026-09-26）：
     任何來源因權限沒列出都要明說（會計不可以以為「沒有」而漏掉），但**只說類別與個數**——
@@ -378,6 +390,7 @@ def case_attachments(conn, quote_no, user, hidden=None):
     是「備註」不是「擋住」，擋住會把作廢重開那條合法路踩死）。
 
     `hidden`（dict）：因權限沒列出的附件個數（類別 ⇒ 個數）記在這裡，呼叫端用 `hidden_sources()` 明說。
+    整個案件看不到（或不存在）⇒ raise `CaseNotVisible`（不回個數）。
     """
     used_map = _used_map(conn)
     providers = _providers()
@@ -388,6 +401,11 @@ def case_attachments(conn, quote_no, user, hidden=None):
         for doc_no in _case_doc_nos(conn, st, quote_no, user, providers, hidden):
             for meta in source_files(conn, st, doc_no, user) or ():
                 out.append(_candidate(st, doc_no, meta, used_map))
+    if not out and not case_page_readable(conn, quote_no, user):
+        # 案件頁讀不到、也沒有任何一筆看得到（或案件不存在）⇒ 跟「不存在」一樣，不回個數
+        if hidden is not None:
+            hidden.clear()
+        raise CaseNotVisible(quote_no)
     return _unused_first(out)
 
 

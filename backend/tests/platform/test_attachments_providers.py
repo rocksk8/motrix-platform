@@ -189,7 +189,10 @@ def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_
     got_in = client.get(url, headers=inside)
     assert got_in.status_code == 200 and [f["fileId"] for f in got_in.json()["files"]] == ["f1"], got_in.text
     got_out = client.get(url, headers=outside)
-    assert got_out.status_code == 200 and got_out.json()["files"] == [], "看不到案件的人不可以列出它的附件"
+    none = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-PERM-NONE", headers=outside)
+    assert got_out.status_code == 404 and none.status_code == 404, (got_out.status_code, none.status_code)
+    assert got_out.json()["detail"].replace("ATT-PERM-1", "X") == none.json()["detail"].replace("ATT-PERM-NONE", "X"), \
+        "整個看不到與不存在要逐字相同（主持裁示：不可以讓人探知案件編號）"
     prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-PERM-1&file_id=f1", headers=outside)
     assert prev.status_code in (403, 404), prev.status_code
     lines = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
@@ -252,12 +255,14 @@ def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(cl
     """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
     經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
     eid = _seed_extra_expense_file("ATT-EE-1")
+    _add_case_update_file("ATT-EE-1")          # 案件動態 case_manage 看得到 ⇒ 案件「部分看得到」
     probe = _hdr(client, make_user, "att_ee_probe", "sales", ["case_manage", "finance"])
     own = client.get("/api/quotations/ATT-EE-1/extra-expenses", headers=probe)
     assert own.status_code == 403, ("前提：額外支出自己的端點擋這個人", own.status_code)
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-EE-1", headers=probe)
     assert got.status_code == 200, got.text[:200]
     assert [f for f in got.json()["files"] if f.get("type") == "extra_expense"] == [], got.json()["files"]
+    assert _hidden(got).get("hidden:extra_expense") == 1, got.json()["hidden"]
     prev = client.get("/api/vouchers/line-source-file?source_type=case&ref=ATT-EE-1&file_id=e1", headers=probe)
     assert prev.status_code in (403, 404), prev.status_code
     lines = [{"account_code": "6111", "debit": 100, "credit": 0, "summary": "a"},
@@ -296,6 +301,7 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
         conn.commit()
     finally:
         conn.close()
+    _add_case_update_file("ATT-IV-P")
     no_amt = _hdr(client, make_user, "att_iv_noamt", "engineer", ["case_manage", "finance"])
     amt = _hdr(client, make_user, "att_iv_amt", "engineer", ["case_manage", "finance", "financial_view"])
     assert client.get("/api/invoice-vouchers/IV-ATT-P", headers=no_amt).status_code == 403, "前提：自己的端點擋金額層"
@@ -346,6 +352,7 @@ def _pick(client, h, quote_no):
 def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
     """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
     _seed_case_with_file("ATT-QP-1")
+    _add_case_update_file("ATT-QP-1")
     h = _hdr(client, make_user, "att_qp_cm", "engineer", ["case_manage", "finance"])
     assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 403, "前提：案件頁擋 case_manage 非擁有者"
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-1", headers=h)
@@ -436,11 +443,77 @@ def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make
         conn.commit()
     finally:
         conn.close()
+    _add_case_update_file("MQ-LEAK-001")
     url = "/api/vouchers/line-source-files?source_type=case&ref=MQ-LEAK-001"
     seen = client.get(url, headers=owner)
     assert "機密合約-LEAK.png" in json.dumps(seen.json()["files"], ensure_ascii=False), "正對照：看得到的人拿得到檔名"
     got = client.get(url, headers=other)
-    assert got.status_code == 200 and got.json()["files"] == []
+    assert got.status_code == 200 and [f["type"] for f in got.json()["files"]] == ["case_update"]
     assert _hidden(got) == {"hidden:quotation_signed": 2}, got.json()["hidden"]
     _no_identifiers(got, "MQ-LEAK-001", "機密合約-LEAK.png", "第二張-LEAK.png", "LEAK-SECRET-9f3", "fid-LEAK-77",
                     "fid-LEAK-78", "8765432", "機密客戶LEAK", "LEAK")
+
+
+def _add_case_update_file(quote_no):
+    """案件動態一筆附件：case_manage 看得到（案件動態端點的規則）⇒ 讓案件「部分看得到」。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO case_updates (quote_no, author, content, files_json, created_at) VALUES (?,?,?,?,?)",
+                     (quote_no, "t", "t", json.dumps([{"id": "cu1", "filename": "update.png", "path": "att_perm/cu.png"}]),
+                      "2026-01-01"))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
+    """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
+    那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
+    import db
+    h = _hdr(client, make_user, "att_ap_one", "engineer", ["case_manage", "finance"])
+    appr = json.dumps({"approval": {"tiers": [{"approvers": [{"username": "att_ap_one"}]}]}})
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, data_json, created_at, updated_at)"
+                     " VALUES ('ATT-AP-2','已送出','{}','2026-01-01','2026-01-01')")
+        for no, data, fid in (("IV-AP-MINE", appr, "mine"), ("IV-AP-OTHER", "{}", "other")):
+            conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, data_json, issued_files_json, created_at,"
+                         " updated_at) VALUES (?,?,?,?,'2026-01-01','2026-01-01')",
+                         (no, "ATT-AP-2", data, json.dumps([{"id": fid, "filename": fid + ".pdf", "path": "att_perm/x.pdf"}])))
+        conn.commit()
+    finally:
+        conn.close()
+    assert client.get("/api/invoice-vouchers/IV-AP-MINE", headers=h).status_code == 200, "前提：簽核人讀得到自己要簽的那張"
+    assert client.get("/api/invoice-vouchers/IV-AP-OTHER", headers=h).status_code == 403, "前提：另一張看不到金額"
+    got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-AP-2", headers=h)
+    assert got.status_code == 200, got.text[:200]
+    assert [(f["type"], f["docNo"], f["fileId"]) for f in got.json()["files"]
+            if f["type"] == "invoice_voucher"] == [("invoice_voucher", "IV-AP-MINE", "mine")], got.json()["files"]
+    assert _hidden(got).get("hidden:invoice_voucher") == 1, got.json()["hidden"]
+    _no_identifiers(got, "IV-AP-OTHER", "other.pdf")
+
+
+def test_a_wholly_unseen_case_answers_like_a_missing_one(client, make_user):
+    """主持裁示（D 的觀察）：整個案件都看不到 ⇒ 照「不存在」回（404，逐字相同），不回「N 個附件看不到」
+    （否則可以探知案件編號是否存在）；summary-sources 的說明也逐字相同。反向控制：同一個人對看得到一部分的案件照常 200＋hidden。"""
+    _seed_case_with_file("ATT-WHOLE-1")
+    h = _hdr(client, make_user, "att_whole", "engineer", ["finance"])
+    base = "/api/vouchers/line-source-files?source_type=case&ref="
+    hid, none = client.get(base + "ATT-WHOLE-1", headers=h), client.get(base + "ATT-WHOLE-NONE", headers=h)
+    assert hid.status_code == none.status_code == 404, (hid.status_code, none.status_code)
+    assert "hidden" not in hid.json() and "count" not in hid.text, hid.text
+    assert hid.json()["detail"].replace("ATT-WHOLE-1", "X") == none.json()["detail"].replace("ATT-WHOLE-NONE", "X")
+    page = client.get("/api/quotations/ATT-WHOLE-NONE", headers=h)       # 原單據（案件頁）對不存在的回法
+    assert page.status_code == 404 and none.json()["detail"] == page.json()["detail"], (none.json(), page.json())
+    s1 = client.get("/api/vouchers/summary-sources?quote_no=ATT-WHOLE-1", headers=h).json()
+    s2 = client.get("/api/vouchers/summary-sources?quote_no=ATT-WHOLE-NONE", headers=h).json()
+    assert s1["hidden"] == s2["hidden"] == [], (s1["hidden"], s2["hidden"])
+    n1 = [v for v in s1["notes"].values() if "ATT-WHOLE-1" in v]
+    n2 = [v for v in s2["notes"].values() if "ATT-WHOLE-NONE" in v]
+    assert [x.replace("ATT-WHOLE-1", "X") for x in n1] == [x.replace("ATT-WHOLE-NONE", "X") for x in n2] != [], (n1, n2)
+    # 反向控制：案件動態看得到（case_manage）⇒ 部分看得到 ⇒ 200＋hidden
+    _add_case_update_file("ATT-WHOLE-1")
+    h2 = _hdr(client, make_user, "att_whole_cm", "engineer", ["finance", "case_manage"])
+    part = client.get(base + "ATT-WHOLE-1", headers=h2)
+    assert part.status_code == 200 and _hidden(part).get("hidden:quotation_signed") == 1, part.text[:300]
