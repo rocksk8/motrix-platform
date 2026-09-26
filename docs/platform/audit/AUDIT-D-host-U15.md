@@ -60,6 +60,12 @@ custom 模式由設定頁的指定名單寄出（`_custom_emails`），名單由
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| M-1 | | | |
-| S-1～S-2 | | | |
-| O-1 | | | |
+| M-1 | 以「套用這個請求之後」判斷（muted／email／role）；清空 Email 與改成非超管參數化兩題 | wip/h-u15 a6aaa85a | ✅ 13:50 D：突變 V1（忽略新 Email）、V2（忽略新角色）各紅對應參數 ⇒ **關閉（a6aaa85a）** |
+| S-1～S-2 | S-1 `custom_override_blockers`：系統類型存成 custom 時名單至少一人收得到；S-2 業務類「只剩一位」照樣可退訂的正對照 | a6aaa85a | ✅ 13:50 D：V3（custom 名單不檢查）紅、V4（業務類也擋）紅（先前存活的 U15c 現在會紅）⇒ **關閉（a6aaa85a）** |
+| O-1 | `_has_email` 與寄信端 SQL 同判準、不 strip | a6aaa85a | ✅ 13:50 程式已統一 ⇒ **關閉（a6aaa85a）**；小觀察：V5（改回 strip）存活——沒有「只含空白的 Email」的題，影響小 |
+
+## 7. a6aaa85a 複核的新觀察（D，13:50）
+
+- **O-2　custom 名單只在「存檔那一刻」檢查**：`custom_override_blockers` 在設定頁存成 custom 時擋；之後名單上的人退訂、被清空 Email、被改角色，`last_superadmin_blockers` 對 custom 類型是跳過的（由 set_mail_recipients 負責），所以名單可能在事後變成沒人收得到。與 M-1 同一類，但發生在 custom 那一側；建議 `PUT /api/users/{id}` 套用後也對 custom 系統類型呼叫 `_custom_emails` 檢查一次。
+- 基準 7 passed（-n 4）；突變 5 項 4 紅。
+
