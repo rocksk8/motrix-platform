@@ -40,7 +40,7 @@ D 在 D 樹做比對實驗：一個執行緒不斷建立、刪除探針目錄（
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
 | O6-M1 | 探針改放 `backend/tests/.hardcap_probe_*`；刪不掉印出並重試一次、仍失敗發 warning；靜態守門實際建探針、確認 source_tree 三個清單找不到它 | wip/b-o6-2 31d0033d | ✅ 11:02 D：重跑比較實驗（新位置、edge_profile 式掃描）20 次 **0 例外**；突變「探針回 backend 根」「前綴去掉點」⇒ 皆紅；基準 5 passed ⇒ **關閉（31d0033d）**。衍生建議 O6-S1 |
-| O6-S1 | （主持修，local_only 屬主持的題）import 掃描抽成 `_scan_py_sources`：跳過「.」開頭目錄、讀的瞬間消失的檔略過、其他 OSError 照丟；tmp_path 重現題 | wip/h-o6s1 e2c8fdbd | ✅ 11:04 D：突變「不跳點目錄」⇒ 紅 ⇒ 掃描這一半**關閉（e2c8fdbd）**。小建議：函式說明寫「刻意含 tests/」，但正對照只放 `routers/ok.py`——D 突變「連 tests/ 也跳過」照綠（11 passed），建議正對照加一支 `tests/x.py`。靜態守門說明那一半（只驗 source_tree）由主持轉 B |
+| O6-S1 | （主持修，local_only 屬主持的題）import 掃描抽成 `_scan_py_sources`：跳過「.」開頭目錄、讀的瞬間消失的檔略過、其他 OSError 照丟；tmp_path 重現題 | wip/h-o6s1 e2c8fdbd | ✅ 11:04 D：突變「不跳點目錄」⇒ 紅 ⇒ 掃描這一半**關閉（e2c8fdbd）**。小建議：函式說明寫「刻意含 tests/」，但正對照只放 `routers/ok.py`——D 突變「連 tests/ 也跳過」照綠（11 passed），建議正對照加一支 `tests/x.py`。〔11:06 補：0242a173（e2c8fdbd 的快轉）正對照補 `tests/t_ok.py`，D 重跑「連 tests/ 也跳過」⇒ 紅 ⇒ 小建議結案〕靜態守門說明那一半（只驗 source_tree）由主持轉 B |
 
 ## 4. 31d0033d 複核（D，2026-09-26 11:02）
 
