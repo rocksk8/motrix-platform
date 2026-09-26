@@ -455,6 +455,7 @@ def test_import_scan_skips_dot_dirs_and_vanished_files(tmp_path, monkeypatch):
     (tmp_path / "tests" / ".hardcap_probe_x" / "p.py").write_text("import deploy_dashboard\n", encoding="utf-8")
     (tmp_path / "routers").mkdir()
     (tmp_path / "routers" / "ok.py").write_text("x = 1\n", encoding="utf-8")
+    (tmp_path / "tests" / "t_ok.py").write_text("z = 3\n", encoding="utf-8")   # 刻意含 tests/ 的正對照（D 複核建議）
     gone = tmp_path / "routers" / "gone.py"
     gone.write_text("y = 2\n", encoding="utf-8")
     real = Path.read_text
@@ -466,4 +467,4 @@ def test_import_scan_skips_dot_dirs_and_vanished_files(tmp_path, monkeypatch):
 
     monkeypatch.setattr(Path, "read_text", vanishing)
     got = sorted(p.relative_to(tmp_path).as_posix() for p, _ in _scan_py_sources(tmp_path))
-    assert got == ["routers/ok.py"], got
+    assert got == ["routers/ok.py", "tests/t_ok.py"], got
