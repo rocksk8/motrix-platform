@@ -1,5 +1,8 @@
 # 網路規劃 更新紀錄
 
+## 1.0.3 — 2026-09-26
+- 宣告 `provides.probes`（D7 演練與產品演練打這幾支確認模組在；純讀、無副作用，D7-CHECKLIST §4）
+
 ## 1.0.2 — 2026-09-26
 - 第四班列車：IP 定號（`daily.check` IP-10→IP-11、`case.access` IP-11→IP-12，cb4667b1）
 - `module.json` 補 `customization`（本模組目前沒有可自訂點：寫出空類別＝有人決定過）
