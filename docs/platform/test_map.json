@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 630,
+  "tests": 631,
   "unmapped": 7,
   "kinds": {
-   "audit": 85,
+   "audit": 86,
    "api": 336,
    "unit": 55,
    "e2e": 154
@@ -5823,6 +5823,34 @@
     ]
    },
    "login_fixture": true
+  },
+  "backend/tests/platform/test_tax_calc_contract.py": {
+   "kind": "audit",
+   "units": [
+    "file:backend/helpers/__init__.py",
+    "helper:case_deadlines",
+    "helper:case_stage_tasks",
+    "helper:quotations",
+    "helper:quote_terms",
+    "helper:recognition",
+    "helper:tax_calc",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/case_deadlines.py",
+     "backend/helpers/case_stage_tasks.py",
+     "backend/helpers/quotations.py",
+     "backend/helpers/quote_terms.py",
+     "backend/helpers/recognition.py",
+     "backend/helpers/tax_calc.py",
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/helpers/tax_calc.py"
+    ]
+   }
   },
   "backend/tests/platform/test_unit_cards.py": {
    "kind": "audit",
