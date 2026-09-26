@@ -2,6 +2,8 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 16:00 C：**M01-PLAN §3-6 case.recognition 開工宣告**（wip/c-m01-rec，疊在 c-m01-s3-2）。會動：**B 的 M08** `modules/analytics/api/reports.py`（recognition.* 改取 M01 provider、M01 不在時明說）、`helpers/recognition.py`（M01）、INTEGRATION-POINTS（新 IP，列車定號）。不動 sidebar。
+- 2026-09-26 15:58 D：**M5-M1／M5-M2／M5-S1 關閉（c5484962）、IP-M1 關閉（9623f1be）**：MB8、S1、P5 重跑皆紅；e2e 連跑 5 次全綠。交會：a-approval-parse 的 voucher.py／tiered_approval.py 含「淘汰」未登記 ⇒ 兩包都合回時反掃必紅，後進的補登記。
 - 2026-09-26 15:58 主持：使用者表單定本輪範圍——授權機制不做、M01 已知例外可接受（D7 報告列出＋到期守門）、不安排人工驗收（CORE-SPEC 裁示表）。預估完工 9/29（±1 天）。
 - 2026-09-26 15:51 D：b-m08-attr 52178979、b-modtest-env bf4abacb 抽查（`AUDIT-D-B-attr-modtestenv.md`）皆通過、必修 0；突變 4/4 紅；觀察 MT-O1（差異題的 e2e 無獨立上限）。
 - 2026-09-26 15:47 D：c-ip14-paid 6c8406c5（`AUDIT-D-C-ip14-paid.md`）**必修 IP-M1**：test_cashier_and_t100_without_m04 只拿掉 contractor_voucher.public，T100 資料已改走 paid_between ⇒ 拿掉 None 防護（真 M04 不在會 500）照綠；其餘突變 4/4 紅、基準 97 過。
