@@ -152,6 +152,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 19:41 B：**開工宣告**（主持派工，自 C 移來）：IP-15 新增成本檢視提供者 `dispatch.cost_for_case`（名稱定案，已告知 A）——動 C 的 `modules/subcontract`（新增提供者函式、module.json providers、subcontract 版號、tests）與 `docs/platform/INTEGRATION-POINTS.md`（IP-15 補一列）；只新增，不改 IP-15 既有回應；分支 `wip/b-ip15-cost`，基底為第十班合回後的 origin
 - 2026-09-26 19:41 D：a-attachments-5 3d12dc7b **必修 AT5-M1**：開票申請同案件部分可見（visible＋hidden）時，突變「丟掉看得到的」照綠。其餘成立：探針 hidden 只有類別＋個數、無檔名／單號（H3 紅）；hidden 恆空 ⇒ H2 紅；跨類別部分可見照常列出。觀察：hidden 個數可用來探知案件編號存在（裁示範圍內的取捨）。
 - 2026-09-26 19:36 D：C 整疊 range-diff 對照審過版本——差異只有 rebase 衝突解法（supply 搬遷、IP-20 併入）與 cashier 選單移進 arap module.json（＋A 淘汰別名登記）；**AP-M1、AP-M2 關閉**（刪 arap 覆蓋檢查 16 過 5 skip 不紅；AP1b、AP2b 突變紅）。第十班可發車。
 - 2026-09-26 19:16 D：**O11-S1 關閉（b-o11-2 4bcde01b）**：同一組秘密輸入（?pt=、Bearer、token、客戶名）重測 0 外洩；突變 3/3 紅（不去 query／console 不 redact／印本文）；已疊在 b-o5-s2-2 上。
