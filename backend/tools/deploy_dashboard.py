@@ -721,6 +721,9 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
                 pass
             history = [{"time": entry["time"], "action": f"歷史紀錄讀不懂，已封存為 {HISTORY_PATH.name}.corrupt-{stamp}，從這一筆重新開始",
                         "success": False, "logPath": ""}]
+        # pending 的落點（D 稽核 H-S2）：主檔讀得到的下一次寫入就依時間併回，寫成功後刪檔
+        had_pending = HISTORY_PENDING_PATH.exists()
+        history = _merge_pending(history, _read_pending_locked())
         history.insert(0, entry)
         text = json.dumps(history[:200], ensure_ascii=False, indent=2)
         tmp = HISTORY_PATH.with_name(f"{HISTORY_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
@@ -728,14 +731,20 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
         for attempt in range(5):
             try:
                 os.replace(tmp, HISTORY_PATH)
-                return
+                break
             except PermissionError:
                 time.sleep(0.05 * (attempt + 1))
-        HISTORY_PATH.write_text(text, encoding="utf-8")
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
+        else:
+            HISTORY_PATH.write_text(text, encoding="utf-8")
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        if had_pending:
+            try:
+                HISTORY_PENDING_PATH.unlink()
+            except OSError:
+                pass        # 刪不掉 ⇒ 下次再併一次；_merge_pending 去重，不會重複列
 
 
 _UNREADABLE_BUSY = object()     # 被別的行程占用、重試後仍讀不到（內容未知，不可以當成空的覆寫）
@@ -762,11 +771,44 @@ def _read_history_locked():
     return data if isinstance(data, list) else None
 
 
+def _read_pending_locked() -> list:
+    """呼叫端必須持有 _history_lock。主檔被占用時另存的紀錄（一行一筆 JSON）；沒有 ⇒ []。"""
+    if not HISTORY_PENDING_PATH.exists():
+        return []
+    out = []
+    try:
+        lines = HISTORY_PENDING_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    for line in lines:
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            out.append(e)
+    return out
+
+
+def _merge_pending(history: list, pending: list) -> list:
+    """pending 放在最前面（新到舊）：主檔每次寫入都先併掉 pending，所以 pending 裡的一定比主檔裡的新；
+    不依 time 排序（秒級時間戳在同一秒會並列，排不出先後）。同一筆（時間＋動作＋結果＋log 都相同）只留一份——pending 刪不掉時下次再併也不會重複。"""
+    if not pending:
+        return history
+    def k(e):
+        return (e.get("time"), e.get("action"), e.get("success"), e.get("logPath"))
+    seen = {k(e) for e in history}
+    extra = [e for e in pending if k(e) not in seen]
+    return list(reversed(extra)) + history
+
+
 def _read_history():
-    """讀取端用：讀不到（占用或壞檔）一律 None。"""
+    """讀取端用：讀不到（占用或壞檔）一律 None；還沒併回的 pending 一併列出（畫面與警告看到的是完整的紀錄）。"""
     with _history_lock:
         h = _read_history_locked()
-    return None if h is _UNREADABLE_BUSY else h
+        if h is _UNREADABLE_BUSY or h is None:
+            return None
+        return _merge_pending(h, _read_pending_locked())
 
 
 def _try_acquire_job_lock(job_id: str) -> bool:
@@ -785,8 +827,6 @@ def _recent_failure_warning() -> str:
     """檢查最近一筆部署/回滾歷史紀錄，如果是 15 分鐘內的失敗，回傳一段
     警告文字給前端的二次確認卡片顯示——2026-09-08 當晚實際發生連續三次
     盲目重試都沒先看清楚上一次到底發生什麼事，這裡至少在畫面上提醒一次。"""
-    if HISTORY_PENDING_PATH.exists():
-        return "⚠ 有部署歷史紀錄因檔案被占用而另存於 %s，尚未併回；請先看該檔與 deploy_logs 再決定是否執行。" % HISTORY_PENDING_PATH.name
     history = _read_history()
     if history is None:
         # 讀不到不等於「沒有失敗」：說出來，不靜默放行（唯讀動作的缺口要輸出）
