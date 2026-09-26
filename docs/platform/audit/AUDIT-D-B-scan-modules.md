@@ -27,3 +27,13 @@
 - 建議：ImportFrom 了任一原語（不看 alias）就算送信檔；字串常數等於原語名稱也算。
 
 - 觀察：email_notify 的公開函式（`notify_*`）都是各自組好內文的領域通知，文案本身在 email_notify 裡，已在掃描範圍內，沒有「任意主旨＋內文」的公開送信口。
+
+## 3. 複核：wip/b-scan-modules-2 06af0830（SM-M1／S1；D 22:45）
+
+- 基準：view_filter＋wording_guards，14 過（3 xfail 是既有的）。
+- **SM-M1**：沙盒題改成直接跑真正那一題（`test_every_filter_like_binding_has_a_decision()`）。D 重跑突變 B2b「真正那一題改回只 glob L1」⇒ **紅**（`test_a_module_page_is_in_scope`）⇒ **關閉**。
+- **SM-S1**：`_mail_senders` 把「ImportFrom 了原語（不看別名）」與「字串常數等於原語名稱」都算作送信；非常數的 getattr 則另外禁止（`test_mail_modules_are_not_reached_by_dynamic_getattr`，現況 0 處）。
+  - D 用 §2 的同一組探針重測：alias.py、getattr.py **都抓到**。
+  - 突變 S1a「不認別名 import」、S1b「不認常數 getattr」⇒ 都紅。
+  - ⇒ **關閉**。
+- 射程（B 已寫明）：`importlib.import_module("helpers.email_notify")` 這類動態 import 抓不到。

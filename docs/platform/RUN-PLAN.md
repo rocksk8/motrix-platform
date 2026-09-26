@@ -153,6 +153,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 22:45 D：**SM-M1、SM-S1 關閉（b-scan-modules-2 06af0830）**：view_filter 沙盒改跑真正那一題（B2b 紅）；送信偵測補別名 import／常數 getattr（探針兩者皆抓到，S1a／S1b 紅），非常數 getattr 另守。
 - 2026-09-26 22:33 D：b-scan-modules 64c3a9f6 **必修 SM-M1**：view_filter 的沙盒題直接呼叫 _undecided_pages(page_files())，真正那一題改回 L1 glob 照綠（B2 存活）。其餘成立：① bonus.py 正對照（B1 紅）、③ 送信歸類（B4 紅、沙盒新增未歸類紅、排除清單不能變綠）、alpine 模組頁（B3 紅）；建議 SM-S1 送信偵測 alias／getattr 漏抓。
 - 2026-09-26 22:09 D：b-ip15-cost afbb1b8d 通過、必修 0：白名單無人名（多回 notes／回姓名突變紅）、finance 可看（拿掉 finance 紅）、只新增（list_for_case 不變有題）、不註冊紅；93 過。注意：合回後 M06 的 a' 到期守門會紅（預期中）。
 - 2026-09-26 22:06 D：a-m06-2 25408f3f **必修 2**：M06-M1 D2 真刪 modules/accounting ⇒ 5 題非允許紅（case_cross_module_links 1、t100_unconfirm e2e 1、bonus_vouchers_page e2e 3；M06 在時皆過）；M06-M2 EM10 139→135 是移出計數範圍，掃描器 157 中 modules/ 22 條只有 tender_radar 有守門（accounting 4＋既有 11 條無人守）。通過項：題目 0 消失、搬題 29 本體只改路徑、M07 兩支兩邊實質、a' 到期守門紅、IP-22 兩側有題；建議：邊界「起點耗盡 fail」無題、bonus flag 往上爬檢查在 M06 不在時被一起 skip。
