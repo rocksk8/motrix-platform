@@ -65,56 +65,6 @@ def _seam(mod, where, *names):
 # ⚙️ 不碰獎金模組的三題 —— **現在就該綠**
 # ══════════════════════════════════════════════════════════════════════
 
-def test_the_net_profit_formula_lives_in_exactly_one_place():
-    """⚙️ **那兩個係數只寫在一個地方 —— 而獎金模組不可以變成第二份。**
-
-    ```
-    settlement.html:946  adminCost       = Math.round(quotedPretax * 0.10)
-    settlement.html:947  charityDonation = Math.round(grossProfit * 0.01)
-    ```
-    🔑 `adminCost` 是**該案報價未稅的 10%** ⇒ 完全是案件本身的函數，
-       與公司當期花了多少錢無關（這一點被講錯過一次，所以貼原始碼）。
-    ⚙️ 這一題是下面那條禁令的**前提**：若係數本來就散在三個地方，
-       「不可以再加一份」這句話就沒有意義了。
-    """
-    html = (_FRONTEND / "pages" / "settlement.html").read_text(encoding="utf-8")
-    # 〔X-VAT，2026-09-26：算式改成 MotrixLegalRound.halfUp(quotedPretax, 0.10)／halfUp(grossProfit, 0.01)
-    #   （四捨五入與後端一致；係數仍只在這裡）。原斷言："quotedPretax * 0.10"、"grossProfit * 0.01"〕
-    assert "halfUp(quotedPretax, 0.10)" in html and "halfUp(grossProfit, 0.01)" in html, (
-        "`settlement.html` 裡找不到那兩個係數 ——\n"
-        + "🔑 算式搬家了 ⇒ **本檔引用的行號與禁令都要重寫**。")
-
-    # 後端**不可以**有第二份乘法（它們只讀已存值）。
-    hits = []
-    for rel in ("pdf_gen.py", "routers/reports.py"):
-        src = (_BACKEND / rel).read_text(encoding="utf-8")
-        for i, line in enumerate(src.splitlines(), 1):
-            # X-VAT：也抓 round_half_up(x, 0.10) 這種寫法（乘法搬進捨入函式的參數）
-            if re.search(r"\*\s*0\.10\b|\*\s*0\.01\b|,\s*0\.10\s*\)|,\s*0\.01\s*\)", line):
-                hits.append("%s:%d %s" % (rel, i, line.strip()[:60]))
-    assert not hits, (
-        "後端已經有第二份係數：\n  " + "\n  ".join(hits)
-        + "\n☠️ 那表示「只有一份實作」這個前提已經不成立了。")
-
-
-def test_the_reports_fallback_to_gross_profit_really_exists():
-    """⚙️ **證明「退回用毛利」那個前例是真的** —— 它是 `FN2` 禁令二的理由。
-
-    ```
-    routers/reports.py:340
-      int(settle.get("netProfit") or settle.get("grossProfit") or 0)
-    ```
-    ☠️ 少了這一題，禁令二建立在**一段我沒有跑過的描述**上。
-    🔑 而它同時說明為什麼那個禁令難守：**那個 fallback 對報表是合理的** ——
-       它不是一段爛碼，它是一段**在別的脈絡下正確**的碼。
-    📌 〈同一段碼在新脈絡下的風險不同〉。
-    """
-    src = (_BACKEND / "routers" / "reports.py").read_text(encoding="utf-8")
-    assert re.search(r'settle\.get\("netProfit"\)\s*or\s*settle\.get\("grossProfit"\)',
-                     src), (
-        "`reports.py` 裡找不到 `netProfit or grossProfit` 的 fallback ——\n"
-        + "🔑 它被改掉了 ⇒ **禁令二的理由要重寫**（那是好消息）。")
-
 
 def test_case_stage_assignees_default_to_an_empty_json_array():
     """⚙️ **`case_stages.assigned_to` 的預設是 `'[]'`** —— `§四①` 的前提。
@@ -637,3 +587,35 @@ def test_the_awards_endpoint_actually_filters_by_viewer(client, make_user):
         "管理者只看到 %d 列（預期 2）——\n"
         % len(r3.json()["awards"][0]["lines"])
         + "⚙️ 正對照：少了它，一個「永遠只回自己那列」的實作也會讓上面綠。")
+
+
+def test_the_net_profit_formula_lives_in_exactly_one_place():
+    """⚙️ **那兩個係數只寫在一個地方 —— 而獎金模組不可以變成第二份。**
+
+    ```
+    settlement.html:946  adminCost       = Math.round(quotedPretax * 0.10)
+    settlement.html:947  charityDonation = Math.round(grossProfit * 0.01)
+    ```
+    🔑 `adminCost` 是**該案報價未稅的 10%** ⇒ 完全是案件本身的函數，
+       與公司當期花了多少錢無關（這一點被講錯過一次，所以貼原始碼）。
+    ⚙️ 這一題是下面那條禁令的**前提**：若係數本來就散在三個地方，
+       「不可以再加一份」這句話就沒有意義了。
+    """
+    html = (_FRONTEND / "pages" / "settlement.html").read_text(encoding="utf-8")
+    # 〔X-VAT，2026-09-26：算式改成 MotrixLegalRound.halfUp(quotedPretax, 0.10)／halfUp(grossProfit, 0.01)
+    #   （四捨五入與後端一致；係數仍只在這裡）。原斷言："quotedPretax * 0.10"、"grossProfit * 0.01"〕
+    assert "halfUp(quotedPretax, 0.10)" in html and "halfUp(grossProfit, 0.01)" in html, (
+        "`settlement.html` 裡找不到那兩個係數 ——\n"
+        + "🔑 算式搬家了 ⇒ **本檔引用的行號與禁令都要重寫**。")
+
+    # 後端**不可以**有第二份乘法（它們只讀已存值）。
+    hits = []
+    for rel in ("pdf_gen.py",):   # 營運報表那一份在 modules/analytics/tests/test_bonus_award_2026_09_23.py
+        src = (_BACKEND / rel).read_text(encoding="utf-8")
+        for i, line in enumerate(src.splitlines(), 1):
+            # X-VAT：也抓 round_half_up(x, 0.10) 這種寫法（乘法搬進捨入函式的參數）
+            if re.search(r"\*\s*0\.10\b|\*\s*0\.01\b|,\s*0\.10\s*\)|,\s*0\.01\s*\)", line):
+                hits.append("%s:%d %s" % (rel, i, line.strip()[:60]))
+    assert not hits, (
+        "後端已經有第二份係數：\n  " + "\n  ".join(hits)
+        + "\n☠️ 那表示「只有一份實作」這個前提已經不成立了。")

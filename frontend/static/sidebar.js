@@ -1164,6 +1164,11 @@ if (typeof module !== 'undefined' && module.exports) {
     'network-plans.html': { key: 'netplan', name: '網路規劃' },
     'network-plan-form.html': { key: 'netplan', name: '網路規劃' },
     'topology-quick.html': { key: 'netplan', name: '網路規劃' },
+    'reports.html':      { key: 'analytics', name: '營運分析' },
+    'devices.html':      { key: 'analytics', name: '營運分析' },
+    'warranty.html':     { key: 'analytics', name: '營運分析' },
+    'procurement.html':  { key: 'analytics', name: '營運分析' },
+    'sales-orders.html': { key: 'analytics', name: '營運分析' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

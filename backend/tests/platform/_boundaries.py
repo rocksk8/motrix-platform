@@ -88,10 +88,19 @@ def l2_import_edges(units, groups):
 
 
 def check_import_baseline(units, groups, baseline):
-    """(新增的邊, 基線裡已消失的邊)"""
+    """(新增的邊, 基線裡已消失的邊)
+
+    來源單位是 `mod:<key>/…` 而該模組不在這棵樹（反向控制、產品選配）⇒ 那條邊不是「消失」，是「沒裝」：
+    不報、`--prune` 也不刪（M08 反向控制：否則在拿掉模組的樹上 prune 會把基線裡真實存在的邊刪掉）。"""
+    from core import source_tree
     cur = l2_import_edges(units, groups)
     base = set(baseline)
-    return sorted(cur - base), sorted(base - cur)
+    installed = {d.name for d in source_tree.module_dirs()}
+
+    def _not_installed(edge):
+        src = edge.split(" -> ", 1)[0].split(" ", 1)[-1]
+        return src.startswith("mod:") and src[4:].split("/", 1)[0] not in installed
+    return sorted(cur - base), sorted(e for e in base - cur if not _not_installed(e))
 
 
 # ── ② 歸屬 ──────────────────────────────────────────────────────────────

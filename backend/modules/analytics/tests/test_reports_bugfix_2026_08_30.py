@@ -34,7 +34,7 @@ def test_income_html_shows_zero_net_amount_not_actual_amount(client, make_user):
     """netAmount 合法為 0（手續費剛好等於實收金額）時，《當月收入明細》的
     「實收淨額」欄要顯示 NT$ 0，不是誤退回顯示實收金額。"""
     from datetime import datetime
-    from routers.reports import _augment_with_targets, _build_income_expense_scopes, _build_report_html, _collect, _parse_period
+    from modules.analytics.api.reports import _augment_with_targets, _build_income_expense_scopes, _build_report_html, _collect, _parse_period
 
     username, password = make_user(role="admin")
     _login(client, username, password)
