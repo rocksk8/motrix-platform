@@ -78,6 +78,7 @@
 | 計數／棘輪守門補掃 modules/（B，wip/b-scan-modules 64c3a9f6） | D | `AUDIT-D-B-scan-modules.md` | 稽核完成（2026-09-26 22:33）：**必修 1**（SM-M1 view_filter 真正那一題改回只掃 L1 照綠）、建議 1（送信偵測 alias／getattr 漏）；①③成立（B1／B4 紅）、alpine B3 紅 |
 | SM-M1／S1 複核（B，wip/b-scan-modules-2 06af0830） | D | `AUDIT-D-B-scan-modules.md` §3 | 複核（2026-09-26 22:45）：**SM-M1、SM-S1 關閉**——B2b／S1a／S1b 突變皆紅；探針 alias／getattr 皆抓到 |
 | M06 複核（A，wip/a-m06-5 37e59697） | D | `AUDIT-D-A-M06-move.md` §4 | 複核（2026-09-26 23:36）：**M06-M1／M2／S1／S2 關閉**（再真刪只剩允許 5 紅、e2e 0 紅；EM10 分組刪一句紅；G1b 紅）；a' 欄位只少不多；-5 突變 3/3 紅；**新必修 M06-M3**：voucher_link 用途無呼叫端守門 |
+| modtest 分批彙總＋e2e 判定（B，wip/b-modtest-batch f0fe645e） | D | `AUDIT-D-B-modtest-batch.md` | 稽核完成（2026-09-26 23:38）：**必修 1**（MB-M1 playwright 無 marker 只抓到 1／4 種寫法；file_is_e2e 認不得 importorskip）；彙總三突變紅、最後一行合計成立 |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 

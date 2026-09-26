@@ -156,6 +156,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 23:38 D：b-modtest-batch f0fe645e **必修 MB-M1**：沙盒「用 playwright 而無 marker」4 種寫法只抓到 from-import 一種（import 模組、importorskip、函式內 import 皆漏；file_is_e2e 對 importorskip 判非 e2e）。其餘成立：任一批紅／無摘要／選到的檔無結果 ⇒ 紅（3 突變紅）、最後一行是合計。
 - 2026-09-26 23:36 D：a-m06-5 37e59697 **M06-M1／M2／S1／S2 關閉**：D2 再真刪 accounting ⇒ 只剩允許 5 紅、e2e 40 過 0 紅；EM10 分組基準（刪 accounting 一句 ⇒ 紅）；a' 欄位前後對照只把姓名換成人數。-5：未登錄用途、不看模組、放寬回完整列三突變皆紅。**新必修 M06-M3**：purpose="voucher_link" 沒有守門限制呼叫端（任何端點都能借用，目前只有 accounting 在用）。
 - 2026-09-26 23:32 主持：**第十班假綠**（B 查明）：modtest 分批、列車長只讀最後一批摘要，exit=1 未讀；B 在 8151bdc6 重跑第 1 批非 e2e 330 檔 3124 過／4 紅，其中 3 紅在 origin（cm12 兩題：ea9a3e35 寫死色碼；arap test_subcontract_connectors::test_cashier_and_t100_without_m04：e00fdf41 改看 paid_between、arap 份題漏改）＝交第十一班在車上修；第 4 題 tender_p9_layout_e2e 單跑過，登記 **O12**（先當產品競態）；第 1 批 39 個 e2e 檔 B 補跑中。處置：PLAYBOOK §G4 第 11 條、IMPROVEMENT §4-1；B 修 wip/b-modtest-batch（彙總、沒結果＝紅、e2e 判定改看 fixture 不看檔名＋守門）排第十二班車頭；D7 前哨第 8 次延到其後。其他裁示：EM10 方向更正（保留錯句：原寫「157 只准變少／加一條要紅」，正確為各組下限、刪一條要紅；A 採各模組一組基準）；b-scan-modules-2 通過（③ 三支送信檔歸入 SCAN_FILES）；b-ip15-cost 通過；M06：a-m06-4 將傳票案件清單縮成可見範圍＝牴觸 AT6-O1 ⇒ 退回，a-m06-5 以 IP-96 `purpose="voucher_link"`（L1 判定、只回單號／客戶名／案名）還原，D 完整複核中；上車順序 M01 ②→c-case404→M06。
 - 2026-09-26 22:45 D：**SM-M1、SM-S1 關閉（b-scan-modules-2 06af0830）**：view_filter 沙盒改跑真正那一題（B2b 紅）；送信偵測補別名 import／常數 getattr（探針兩者皆抓到，S1a／S1b 紅），非常數 getattr 另守。
