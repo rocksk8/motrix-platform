@@ -83,6 +83,7 @@
 | M06-M3b 複核（A，wip/a-m06-7 d8a6068b） | D | `AUDIT-D-A-M06-move.md` §6 | 複核（2026-09-26 23:53）：**M06-M3b 關閉**（keyword-only、登錄表、** 三突變紅；6 處既有 ** 皆與 case.summary 無關）；建議 M06-S3：KNOWN_STAR_KWARGS 可加項變綠，加總數上限 |
 | MB-M1 複核（B，wip/b-modtest-batch-2 f3be5cd2） | D | `AUDIT-D-B-modtest-batch.md` §3 | 複核（2026-09-26 23:56）：**MB-M1 關閉**——沙盒 5 種寫法皆抓到、MB4／MB5 紅；conftest 跨檔 fixture 經 new_context 依賴展開，目前無漏；射程：日後不經 new_context 的瀏覽器 fixture |
 | M01 ②（C，wip/c-m01-s2 cefc5ecd）＋case404（C，wip/c-case404 f743662b） | D | `AUDIT-D-C-m01-s2.md`、`AUDIT-D-C-case404.md` | 完成（2026-09-27 00:24）：② 必修 0（題目 0 消失、路由 566⇔566、真刪 M01 需要 M01 的 66→75 項——增量是第十班附件題、無默默略過）；case404 **必修 1**（全 repo 403 斷言跑一遍：選題外還漏 2 處＋主持已知 1 處）、建議 1（掃描器漏 L1 判定函式→403 等寫法） |
+| 瀏覽器 fixture 一律經 new_context（B，wip/b-newctx-rule ca1b84b6，輕量） | D | `AUDIT-D-B-newctx-rule.md` | 抽查完成（2026-09-27 00:25）：通過；三種寫法反向控制在、NC1 紅；建議 NC-S1（別名 import、async_playwright 漏） |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
