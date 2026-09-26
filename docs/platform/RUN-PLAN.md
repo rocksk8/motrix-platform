@@ -139,6 +139,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 16:32 主持：第九班組車中（Sonnet 列車長）；D 關閉 CS-S1、T8-O1、b-o5-s1、MT-O1；C 做 approval（c-approval），A 做 attachments，B 做 O9＋產生檔提案。優化紀錄開在 IMPROVEMENT-REPORT §4-1（產生檔衝突、全量每題耗時）。
 - 2026-09-26 16:30 D：c-m01-s3-2 dbd07633 複核：**CS-S1 關閉**；CS-M1 靜態掃描通過（R2／R3 紅），但執行期新題 `test_runtime_refuses_system_from_an_l2_module` 不帶 client 夾具⇒單跑紅（no such table），**CS-M1 未關**，待加夾具後重跑 R1。
 - 2026-09-26 16:27 D：h-roleguard d10fc8e9 抽查通過，**T8-O1 關閉**：24 過、突變 RG1 紅；新 AST 64 筆 ⊇ 舊正則的真實比對；觀察 RG-O1（SQL 內角色字面值 9 檔無人驗）。
 - 2026-09-26 16:23 D：b-o5-s1 4e6d97d3 通過（必修 0）：golden Referer 過濾**未變寬**（G1 案件頁多一支 GET⇒紅；首頁 load 後的 GET 在 origin 真字型下也抓不到＝本來就不在範圍；G4 拿掉過濾⇒API 清單紅 2/3）；替身兩突變紅。MT-O1 關閉（fb3c687f）。列車 07547758／cf7c3bb3 事後抽查通過，觀察 T8-O1。
