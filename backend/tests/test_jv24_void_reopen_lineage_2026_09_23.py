@@ -324,7 +324,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 def _copy_attachments_source():
-    src = (ROOT / "routers" / "vouchers.py").read_text(encoding="utf-8")
+    src = (ROOT / "modules" / "accounting" / "api" / "vouchers.py").read_text(encoding="utf-8")   # M06 搬遷
     tree = ast.parse(src)
     fn = next((n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef)

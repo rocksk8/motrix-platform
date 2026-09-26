@@ -29,7 +29,7 @@ def test_jv4_the_voucher_entry_sits_right_after_cashier_with_the_same_flag():
 
 
 def test_jv4_the_backend_module_gate_accepts_the_cashier_module():
-    src = (ROOT / "backend" / "routers" / "vouchers.py").read_text(encoding="utf-8")
+    src = (ROOT / "backend" / "modules" / "accounting" / "api" / "vouchers.py").read_text(encoding="utf-8")   # M06 搬遷
     m = re.search(r"_VOUCHER_MODULES\s*=\s*\(([^)]*)\)", src)
     assert m, "找不到 `_VOUCHER_MODULES` —— 退回改本檔的錨點。"
     assert "'cashier'" in m.group(1) or '"cashier"' in m.group(1), (

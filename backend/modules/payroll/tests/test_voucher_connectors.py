@@ -48,8 +48,10 @@ def _to_payout(client, people, no):
 
 
 def _drop_accounting(monkeypatch):
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] not in CAPS})
+    # M06 搬遷後提供者在 accounting 的 ModuleSpec.providers（原本在 _LEGACY_PROVIDERS）
+    from tests.platform.test_case_stage_connectors import _without
+    for cap in CAPS:
+        _without(monkeypatch, cap, "accounting")
     assert all(registry.single_provider(c) is None for c in CAPS)
 
 

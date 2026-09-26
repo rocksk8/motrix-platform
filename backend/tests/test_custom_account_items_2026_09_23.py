@@ -235,8 +235,8 @@ def test_ca1_the_insert_must_not_paper_over_a_collision():
     import re
 
     p = (pathlib.Path(__file__).resolve().parents[1]
-         / "routers" / "account_items.py")
-    assert p.is_file(), "`routers/account_items.py` 不見了 —— **退回給我**。"
+         / "modules" / "accounting" / "api" / "account_items.py")   # M06 搬遷（2026-09-26）
+    assert p.is_file(), "`modules/accounting/api/account_items.py` 不見了 —— **退回給我**。"
     src = p.read_text(encoding="utf-8", errors="replace")
 
     # ⚙️ 先剝註解與字串外的說明？—— 不剝：SQL **本來就寫在字串裡**。
@@ -244,7 +244,7 @@ def test_ca1_the_insert_must_not_paper_over_a_collision():
     bad = re.findall(
         r"INSERT\s+OR\s+(IGNORE|REPLACE)\s+INTO\s+account_items", src, re.I)
     assert not bad, (
-        "`routers/account_items.py` 用了 `INSERT OR %s`：\n" % bad[0]
+        "`modules/accounting/api/account_items.py` 用了 `INSERT OR %s`：\n" % bad[0]
         + "☠️ `OR IGNORE` ⇒ 使用者按了「建立」而**什麼都沒發生**；\n"
           "   `OR REPLACE` ⇒ **覆蓋掉舊的那一列**，而它可能已被傳票引用。\n"
         + "🔑 取號寫錯時我要它**吵** —— 撞號要炸出來，不要被抹平。\n"

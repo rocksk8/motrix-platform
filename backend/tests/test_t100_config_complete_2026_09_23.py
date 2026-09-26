@@ -87,7 +87,7 @@ def test_the_export_really_reads_the_inventory_accounts():
     🔑 而 `.get(category, "")` 那個 `""` 正是「不報錯」的來源：
        **查不到就給空字串** ⇒ 匯出照樣產生，只是那一欄是空的。
     """
-    src = (_BACKEND / "routers" / "accounting_export.py").read_text(encoding="utf-8")
+    src = (_BACKEND / "modules" / "accounting" / "api" / "accounting_export.py").read_text(encoding="utf-8")   # M06 搬遷
     assert re.search(
         r'inventoryExpenseAccounts.*?\)\s*\.get\(\s*category', src, re.S), (
         "`accounting_export.py` 沒有用 `inventoryExpenseAccounts` 查 category ——\n"
