@@ -170,3 +170,25 @@
 - `AttachmentNotVisible(visible, hidden)`：提供者看不到時帶上沒列出的附件個數；開票申請逐張過濾有讀不到的也 raise（不再靜默回看得到的）。
 - 回應 `hidden`：`[{category: "hidden:<type>", count, reason}]`，只准三個鍵；傳票頁與 unavailable 並列顯示。
 - 反向控制：`test_hidden_notice_carries_no_identifier_of_the_unseen_document`。突變 8/8 紅。
+
+## 7. 稽核：wip/a-attachments-5 3d12dc7b（因權限沒列出的附件要明說；第十班條件包；D 19:41）
+
+- 內容：
+  - `AttachmentNotVisible(visible=…, hidden=N)`：提供者只回看得到的單號，另外回沒列出的**附件個數**。
+  - `hidden_sources()` 回 `{category: "hidden:<類別>", count, reason: "<類別>：N 個附件因權限無法顯示（不是沒有）。"}`。
+  - line-source-files、summary-sources 都帶 `hidden`，傳票頁把它和 `unavailable` 一起顯示。
+- 基準：attachments、subcontract provider、absent-source e2e、jv36、voucher_attachments、dispatch_connector、l1 snapshot，77 過。
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| hidden 不帶識別資訊（反向控制有效） | D 探針（不提交）：檔名改成 `SECRETFILE-*`，逐身分取 line-source-files 與 summary-sources。突變 H3「hidden 的鍵帶上單號」 | case_manage 非擁有者：hidden 只有 4 筆「類別＋1 個」，回應中沒有 SECRETFILE，也沒有 MQ 單號。H3 ⇒ 紅（`test_hidden_notic…` 等 4 題）⇒ **成立** |
+| 明說不可以靜默 | 突變 H2「hidden 恆空」 | 紅（4 題）⇒ 成立 |
+| **部分看不到時，看得到的照常列出** | 同一支探針：同一案件裡「案件動態看得到、報價單四類看不到」的身分 | 跨類別的部分可見**照常**：case_update 照列、四類走 hidden |
+| 同一類裡部分可見（開票申請逐張過濾：`raise AttachmentNotVisible(visible=readable, hidden=…)`） | 突變 H1：`_case_doc_nos` 收到例外時回 `[]`，不回 `e.visible` | **存活**（45 過）⇒ AT5-M1 |
+
+**AT5-M1（必修）　同一類「部分可見」時，看得到的那幾張沒有題守**
+- 只有開票申請提供者會帶 `visible`：同一個案件有兩張開票申請，使用者只能看其中一張，例如他是那張的簽核人、但沒有財務檢視權。
+- H1 把看得到的那張也丟掉，畫面只會顯示「N 個因權限無法顯示」，而看得到的那張不見了，沒有任何題紅。這正是主持要確認的「看得到的照常列出」。
+- 修法：補一題。同一案件建立兩張開票申請，使用者只是其中一張的簽核人、沒有財務檢視權；斷言看得到的那張列出、hidden 的 count 是另一張的附件數。修完後 H1 要轉紅。
+
+**觀察 AT5-O1**：hidden 的個數是回給「提供 ref（案件編號）的人」。對看不到那張案件的人，原本「不存在」和「看不到」都回空；現在看不到會回「N 個」，等於能用來判斷某個案件編號是否存在、有幾個附件。這屬主持裁示範圍內的取捨（只給類別與個數），記錄備查。

@@ -2,6 +2,7 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 17:16 A：wip/a-attachments 上月台（afcfb513）。範圍外：analytics 派工連接器 2 題在 M04 不在時紅（既有）。
 - 2026-09-26 16:58 D：**CS-M1 關閉（88192c07，R1 重跑紅）**；c-m01-rec-2 a56f33e4 通過（必修 0，突變 5/5 紅）；b-o5-s2 c7940387 通過（必修 0）：標頭不印，但 URL 含 query（?pt= 短效簽章、?q= 搜尋字）照印 ⇒ 建議 S2-S1 遮值；觀察 Playwright call log 自己印 Authorization。
 - 2026-09-26 16:33 C：**M01-PLAN §3-7 approval 開工宣告**（wip/c-approval，疊在 c-m01-rec-2 a56f33e4）。轉簽改成 `approval.reassign`（單據擁有者各自提供讀寫）、待我簽核與角標改成各模組提供 `approval.queue_items`，M01 只彙整。會動：M04 `modules/subcontract/api/contractor_vouchers.py`＋module.json；M05 `modules/arap/api/invoice_vouchers.py`、`payment_requests.py`＋module.json；**A 的 M03** `routers/shipping_notes.py`（origin 已搬到 `modules/supply/api/shipping_notes.py`，列車 rebase 時跟著搬）；**M06** `routers/vouchers.py`（A 的 M06 搬遷會同檔）；M07 `modules/payroll`（bonus_awards／bonus_case_awards 兩類待簽）；M01 `routers/quotations.py`、`routers/completion_notes.py`、`frontend/pages/approval-queue.html`；L1 新增 `helpers/approval_queue.py`；INTEGRATION-POINTS（新 IP，列車定號）。custom 模組引擎已是 `approval.queue_items` 提供者，不改。不動 sidebar、tiered_approval。
 - 2026-09-26 16:32 主持：第九班組車中（Sonnet 列車長）；D 關閉 CS-S1、T8-O1、b-o5-s1、MT-O1；C 做 approval（c-approval），A 做 attachments，B 做 O9＋產生檔提案。優化紀錄開在 IMPROVEMENT-REPORT §4-1（產生檔衝突、全量每題耗時）。

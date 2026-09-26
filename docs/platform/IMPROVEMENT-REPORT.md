@@ -66,6 +66,7 @@
 | a-attachments-4 ad7c27a3 複核（A，AT-M1c） | D | `AUDIT-D-A-attachments.md` §6 | 複核（2026-09-26 19:06）：**AT-M1c 關閉**——探針逐身分原頁面⇔經傳票完全一致；get_quotation 共用同一支（98 過、X1／X2 突變連 get_quotation 題一起紅） |
 | O11-S1 複核（B，wip/b-o11-2 4bcde01b） | D | `AUDIT-D-B-o11.md` §3 | 複核（2026-09-26 19:16）：**O11-S1 關閉**——同一組秘密輸入 0 外洩、突變 3/3 紅；已疊 b-o5-s2-2 |
 | C 整疊 rebase（c-m05b-3／m01-s3-3／m01-rec-3／approval-3 6cdc0ed0）range-diff＋AP-M1／M2 複核 | D | `AUDIT-D-C-approval.md` §4 | 完成（2026-09-26 19:36）：range-diff 差異僅 rebase 衝突解法＋cashier 選單進 arap；**AP-M1、AP-M2 關閉**（刪 arap 覆蓋檢查不紅、突變紅）；觀察 AP-O2／O3 |
+| a-attachments-5 3d12dc7b（A，第十班條件包） | D | `AUDIT-D-A-attachments.md` §7 | 稽核完成（2026-09-26 19:41）：**必修 1**（AT5-M1 同類部分可見時看得到的沒題守，突變 H1 存活）；hidden 只帶類別＋個數（探針無檔名／單號，H3 紅）、明說不靜默（H2 紅）；觀察 AT5-O1 |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 

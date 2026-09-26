@@ -152,6 +152,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 19:41 D：a-attachments-5 3d12dc7b **必修 AT5-M1**：開票申請同案件部分可見（visible＋hidden）時，突變「丟掉看得到的」照綠。其餘成立：探針 hidden 只有類別＋個數、無檔名／單號（H3 紅）；hidden 恆空 ⇒ H2 紅；跨類別部分可見照常列出。觀察：hidden 個數可用來探知案件編號存在（裁示範圍內的取捨）。
 - 2026-09-26 19:36 D：C 整疊 range-diff 對照審過版本——差異只有 rebase 衝突解法（supply 搬遷、IP-20 併入）與 cashier 選單移進 arap module.json（＋A 淘汰別名登記）；**AP-M1、AP-M2 關閉**（刪 arap 覆蓋檢查 16 過 5 skip 不紅；AP1b、AP2b 突變紅）。第十班可發車。
 - 2026-09-26 19:16 D：**O11-S1 關閉（b-o11-2 4bcde01b）**：同一組秘密輸入（?pt=、Bearer、token、客戶名）重測 0 外洩；突變 3/3 紅（不去 query／console 不 redact／印本文）；已疊在 b-o5-s2-2 上。
 - 2026-09-26 19:06 D：**AT-M1c 關閉（ad7c27a3）**：探針 case_manage 非擁有者（案件頁 403／動態 200）⇒ 經傳票只列 case_update；cashier（案件頁 200／動態 403）⇒ 只列報價單四類——與原頁面完全一致；get_quotation 行為不變（98 過；X1、X2 突變連 get_quotation 題一起紅）。AT-M1 系列結案。
@@ -171,4 +172,3 @@
 - 2026-09-26 17:33 主持：使用者表單「全量開發完成才跑」⇒ 第十班起列車不跑全量（PLAYBOOK §G4 第 4 步更正、CORE-SPEC 裁示表）；第九班已在跑的全量照跑完。裁示 B：①產生檔提案採 §7 合一方案（分支不動產生檔、modtest 現場產生、「是否最新」三題只在列車跑）交 B 實作；②e2e 每題加死線（永不回應的 promise 會等到 renderer crash 50～400 秒）交 B。交互紅紀錄：第四班 4、第五班 2、第六班 5、第七班 2、第八班 1（全量抓到、分支沒抓到）。
 - 2026-09-26 17:23 C：wip/c-approval 299aed61 上月台（§3-7；疊在 c-m01-rec-2）。出貨單（M03）一併改成提供者（原派工未列 M03；origin 已搬 modules/supply，列車 rebase 時跟著搬）。自訂模組單據維持只有佇列、不支援轉簽（原本就不支援）。簽核佇列詳情端點 `/api/approval-queue/detail` 仍直讀各單據表，未在本包範圍。
 - 2026-09-26 17:17 A：開工 wip/a-analytics-dispatch（主持派工）：**會改 B 的 `modules/analytics/tests/test_reports_dispatch_connector_2026_09_26.py`**，兩題「提供者在」改成依 M04 在不在（§B-11）；只動測試，analytics 版號由列車取號。
-- 2026-09-26 17:16 A：wip/a-attachments 上月台（afcfb513）。範圍外：analytics 派工連接器 2 題在 M04 不在時紅（既有）。
