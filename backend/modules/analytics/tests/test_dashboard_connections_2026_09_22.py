@@ -77,7 +77,7 @@ def _auth(client, make_user):
 def test_the_endpoint_closes_every_connection_it_opens(client, make_user, ledger, path):
     """🔴 打一次端點，整個請求開出去的連線要全部被關回來；前提：**端點自己**真的開了至少一個。"""
     hdr = _auth(client, make_user)
-    L.reset(ledger)
+    L.reset_book(ledger)
     r = client.get(path, headers=hdr)
     assert r.status_code in (200, 404), f"{path} 回 {r.status_code}：{r.text[:200]}"
     assert L.opened_from(ledger, DASH_FILE) >= 1, f"{path} 自己一個連線都沒開 —— 前提不成立（它沒有查資料庫？）"
@@ -88,7 +88,7 @@ def test_the_endpoint_closes_every_connection_it_opens(client, make_user, ledger
 def test_repeated_calls_do_not_accumulate_connections(client, make_user, ledger):
     """🔴 連打十次，未關閉的連線數不成長（洩漏是斜率不是截距）。"""
     hdr = _auth(client, make_user)
-    L.reset(ledger)
+    L.reset_book(ledger)
     for _ in range(10):
         client.get("/api/dashboard/expenses-monthly", headers=hdr)
     assert L.opened_from(ledger, DASH_FILE) >= 10
@@ -100,7 +100,7 @@ def test_a_failure_midway_still_closes_the_connection(client, make_user, ledger,
     """🔴🔴 端點自己的查詢中途丟例外時，連線仍然要被關（只炸堆疊經過 dashboard.py 的查詢；中介層照常）。"""
     hdr = _auth(client, make_user)
     L.explode_in(monkeypatch, ledger, DASH_FILE)
-    L.reset(ledger)
+    L.reset_book(ledger)
     try:
         client.get(path, headers=hdr)
     except Exception:            # noqa: BLE001  端點可能把它往外丟

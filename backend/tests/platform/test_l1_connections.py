@@ -72,7 +72,7 @@ def _hit(client, ledger, path, hdr):
     """打一次端點 ⇒ (回應, 端點自己開的, 整個請求開的, 整個請求關的)。"""
     src = _endpoint_file(client.app, path)
     assert src, "找不到 %s 的端點函式" % path
-    L.reset(ledger)
+    L.reset_book(ledger)
     r = client.get(_url(path), headers=hdr)
     return r, L.opened_from(ledger, src), ledger["open"], ledger["closed"]
 
@@ -143,7 +143,7 @@ def test_rc_ledger_sees_connections_opened_by_a_helper_that_binds_get_db(client,
     _add_front(app, probe, _probe)
     try:
         hdr = _auth(client, make_user)
-        L.reset(ledger)
+        L.reset_book(ledger)
         r = client.get(probe, headers=hdr)
         own = L.opened_from(ledger, __file__)
         assert r.status_code == 200, r.text[:200]

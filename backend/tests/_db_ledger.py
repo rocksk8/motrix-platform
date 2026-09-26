@@ -45,7 +45,7 @@ def install(monkeypatch):
     return book
 
 
-def reset(book):
+def reset_book(book):
     book["open"] = book["closed"] = 0
     book["stacks"] = []
     book.pop("exploded", None)

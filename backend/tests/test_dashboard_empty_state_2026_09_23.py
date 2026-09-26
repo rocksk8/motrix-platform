@@ -278,6 +278,7 @@ Object.assign(raw, {
   departmentId: '',
   onboardingDismissed: false,
   followUpQuotes: [],
+  analyticsMissing: false,   // index.html 的初始值（M08 首頁在營運分析不在時的明說；第六班列車全量抓到）
   loading: true,
 });
 

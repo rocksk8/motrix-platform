@@ -4305,22 +4305,28 @@
   "backend/tests/platform/test_bonus_payouts_absent.py": {
    "kind": "api",
    "units": [
+    "dir:backend/modules/analytics/",
     "file:backend/routers/__init__.py",
     "mod:analytics/api/reports",
     "plat:__init__",
     "plat:registry",
+    "plat:source_tree",
     "router:cashier"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
      "backend/core/registry.py",
+     "backend/core/source_tree.py",
      "backend/routers/__init__.py",
      "backend/routers/cashier.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py",
      "backend/routers/cashier.py"
+    ],
+    "path": [
+     "backend/modules/analytics/"
     ]
    },
    "login_fixture": true
@@ -4330,6 +4336,7 @@
    "units": [
     "core:db",
     "dir:backend/core/",
+    "dir:backend/modules/netplan/",
     "dir:docs/platform/",
     "dir:tools/platform/",
     "file:backend/helpers/__init__.py",
@@ -4374,6 +4381,7 @@
      "backend/helpers/company_identity.py",
      "backend/helpers/google_calendar.py",
      "backend/helpers/receivables.py",
+     "backend/modules/netplan/",
      "backend/routers/item_reads.py",
      "backend/routers/map_points.py",
      "backend/routers/search.py",
@@ -5189,6 +5197,7 @@
     "file:backend/tests/platform/_menu_legacy.py",
     "file:backend/tests/test_mp1_map_points_link_to_records_2026_09_24.py",
     "js:static/sidebar.js",
+    "page:pages/dev-crm.html",
     "page:pages/users.html",
     "plat:__init__",
     "plat:menu",
@@ -5210,6 +5219,7 @@
      "backend/routers/platform_menu.py"
     ],
     "page": [
+     "frontend/pages/dev-crm.html",
      "frontend/pages/users.html",
      "frontend/static/sidebar.js"
     ]
