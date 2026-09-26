@@ -72,10 +72,13 @@ def _remove_probe(d):
                 warnings.warn("hard_cap 探針目錄重試後仍刪不掉，請手動刪除：%s（%s）" % (d, e))
 
 
-def _pytest(args, cap, tmp_path, tag):
+def _pytest(args, cap, tmp_path, tag, temp_dir=None):
     # 子 pytest 不可以繼承外層的 xdist／本次執行狀態（這一題自己在 -n 下跑時，外層是 worker）——由 utf8_env 統一剔除
     from tests._subproc import utf8_env
     env = utf8_env(MOTRIX_E2E_HARD_CAP=cap)
+    if temp_dir is not None:
+        # 子行程的暫存目錄指到本題自己的資料夾 ⇒ 逐題上限目錄（tempfile.gettempdir() 底下）看得到、也不會碰到真的 %TEMP%
+        env = dict(env, TEMP=str(temp_dir), TMP=str(temp_dir))
     t0 = time.time()
     r = subprocess.run([sys.executable, "-m", "pytest", *args, "-q", "-rf", "-p", "no:cacheprovider",
                         "--basetemp", str(tmp_path / tag)],
@@ -163,3 +166,34 @@ def test_probe_dir_is_outside_product_scans_and_pytest_collection():
             assert not hits, (lister.__name__, hits)
     finally:
         _remove_probe(d)
+
+
+# ── 每次執行的逐題上限目錄要收掉（主持派工 wip/b-hardcap-dir：%TEMP% 累積 1055 個）────────────────────
+
+def _run_dirs(temp_dir):
+    return sorted(p for p in os.listdir(temp_dir) if p.startswith("motrix-e2e-hardcap-"))
+
+
+@pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n1"])
+def test_normal_run_leaves_no_run_dir(probe, tmp_path, xdist):
+    """沒有逾時 ⇒ 收尾後本次執行的目錄不存在（單程序與 xdist 都是）。反向控制：拿掉 _cleanup_hard_cap_dir 的刪除 ⇒ 紅。"""
+    f = probe(0)
+    t = tmp_path / "tmp_env"
+    t.mkdir()
+    r, took, out = _pytest([f] + (["-n", "1"] if xdist else []), 30, tmp_path, "c" + str(int(xdist)), temp_dir=t)
+    assert r.returncode == 0 and "2 passed" in out, out[-800:]
+    assert _run_dirs(t) == [], "收尾後還留著：%s" % _run_dirs(t)
+
+
+def test_timeout_keeps_the_run_dir_and_prints_its_path(probe, tmp_path):
+    """有逾時 ⇒ 堆疊檔與目錄保留，摘要印出路徑（單程序：只寫堆疊、不結束）。"""
+    f = probe(6)
+    t = tmp_path / "tmp_env"
+    t.mkdir()
+    r, took, out = _pytest([f], 2, tmp_path, "k", temp_dir=t)
+    dirs = _run_dirs(t)
+    assert len(dirs) == 1, (dirs, out[-800:])
+    kept = os.path.join(str(t), dirs[0])
+    assert any(n.endswith(".txt") for n in os.listdir(kept)), "堆疊檔要留著"
+    assert "堆疊檔保留在：" in out and dirs[0] in out, out[-800:]
+
