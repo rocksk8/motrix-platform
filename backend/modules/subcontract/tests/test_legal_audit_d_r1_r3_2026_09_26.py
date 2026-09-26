@@ -102,26 +102,3 @@ def test_corrupted_acks_are_refused_not_overwritten(client, make_user, raw):
 
 
 # ── S-5 告知全文 ────────────────────────────────────────────────────────────────
-
-def test_the_acknowledged_text_can_be_looked_up_after_the_notice_changes(client, make_user):
-    h = _hdr(client, make_user)
-    assert client.put("/api/settings/company-profile", json={"privacy_notice": "第一版告知全文"},
-                      headers=h).status_code == 200
-    no = client.post("/api/payslips", json={"data": _data(privacyNoticeAcked=True)}, headers=h).json()["slip_no"]
-    h1 = client.get("/api/payslips/" + no, headers=h).json()["data"]["privacyNotice"]["noticeHash"]
-    assert client.put("/api/settings/company-profile", json={"privacy_notice": "第二版告知全文"},
-                      headers=h).status_code == 200
-    cid = client.post("/api/contractors", json={"name": "承攬全文"}, headers=h).json()["id"]
-    h2 = client.post(f"/api/contractors/{cid}/privacy-notice/ack", headers=h).json()["ack"]["noticeHash"]
-    assert h1 != h2
-    r1 = client.get("/api/legal-params/privacy-notice/texts/" + h1, headers=h)
-    r2 = client.get("/api/legal-params/privacy-notice/texts/" + h2, headers=h)
-    assert (r1.status_code, r2.status_code) == (200, 200), (r1.text, r2.text)
-    assert r1.json()["text"] == "第一版告知全文" and r2.json()["text"] == "第二版告知全文"
-    assert client.get("/api/legal-params/privacy-notice/texts/0000000000000000", headers=h).status_code == 404
-    assert client.get("/api/legal-params/privacy-notice/texts/..%2F..", headers=h).status_code == 404
-    # 只增不改：同一版再記一次不改第一次存的時間
-    first = json.loads(_raw_setting(pn.TEXTS_KEY))[h2]["firstAckAt"]
-    cid2 = client.post("/api/contractors", json={"name": "承攬全文二"}, headers=h).json()["id"]
-    client.post(f"/api/contractors/{cid2}/privacy-notice/ack", headers=h)
-    assert json.loads(_raw_setting(pn.TEXTS_KEY))[h2]["firstAckAt"] == first

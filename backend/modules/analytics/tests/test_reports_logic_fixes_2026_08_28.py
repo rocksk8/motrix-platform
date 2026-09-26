@@ -4,6 +4,15 @@
 ③年度目標達成率（_compute_achievement）改用 wonMonth 而非直接 quoteDate，
   跟 monthly_trend() 已經修過的 quote_won_month_map() 邏輯一致。"""
 import json
+import pytest
+
+from core import source_tree as _source_tree
+
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：M08 精算快照過期檢查改走 IP-1 dispatch.row，外包工班不在時明說無法檢查）：
+#: 同時需要外包工班；外包工班不在時略過（那時精算過期數回 None、報表明說無法檢查，由 M08 搬遷 ⑤ 456130ce 的缺席題負責）。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
 
 
 def _login(client, username, password):
@@ -70,6 +79,7 @@ def _insert_won_audit_event(quote_no, at_iso):
 
 # ── ①精算快照過期全域計數 ─────────────────────────────────────────────────────
 
+@needs_subcontract
 def test_stale_settlement_count_detects_mismatch(client, make_user):
     from modules.analytics.api.reports import _collect
     _insert_case(
@@ -84,6 +94,7 @@ def test_stale_settlement_count_detects_mismatch(client, make_user):
     assert data["summary"]["staleSettlementCount"] == 1
 
 
+@needs_subcontract
 def test_stale_settlement_count_zero_when_matching(client, make_user):
     from modules.analytics.api.reports import _collect
     # 快照跟即時值一致（無承攬商派發，dispatchTotal=0）

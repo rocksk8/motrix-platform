@@ -12,7 +12,16 @@ from tests.test_money_round_half_up_2026_09_26 import (  # noqa: E402,F401  含 
     _stock,
 )
 
+from core import source_tree as _source_tree
 
+#: 跨 M04×M08 的題（2026-09-26 第六班列車交會：M08 精算快照過期檢查改走 IP-1 dispatch.row，外包工班不在時明說無法檢查）：
+#: 同時需要外包工班；外包工班不在時略過（那時精算過期數回 None、報表明說無法檢查，由 M08 搬遷 ⑤ 456130ce 的缺席題負責）。
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
+
+
+@needs_subcontract
 def test_live_dispatch_total_tax_rounds_half_up(client):
     """精算過期比對用的即時派工含稅：10,010 ⇒ 10,010＋501＝10,511（舊：10,510）。reports L130"""
     import db
@@ -27,6 +36,7 @@ def test_live_dispatch_total_tax_rounds_half_up(client):
     assert (t["MQ-VAT-R1"], t["MQ-VAT-R2"]) == (10511, 10500)
 
 
+@needs_subcontract
 def test_stale_settlement_compare_rounds_half_up(client):
     """精算快照 dispatchTotal 10,510.5（前端加總外包人員 .5）vs 即時 10,511 ⇒ 一致、不算過期
     （舊：round(10,510.5)＝10,510 ≠ 10,511 ⇒ 誤報過期）。reports L481"""

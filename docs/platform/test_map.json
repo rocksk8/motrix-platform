@@ -368,17 +368,25 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
+    "dir:backend/modules/subcontract/",
     "file:backend/tests/test_money_round_half_up_2026_09_26.py",
-    "mod:analytics/api/reports"
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/analytics/api/reports.py",
      "backend/tests/test_money_round_half_up_2026_09_26.py"
     ],
     "api": [
      "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ],
     "module_dir": [
      "backend/modules/analytics/"
@@ -739,12 +747,20 @@
    "units": [
     "core:db",
     "dir:backend/modules/analytics/",
-    "mod:analytics/api/reports"
+    "dir:backend/modules/subcontract/",
+    "mod:analytics/api/reports",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/modules/analytics/api/reports.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ],
     "module_dir": [
      "backend/modules/analytics/"
@@ -2639,17 +2655,22 @@
    "units": [
     "core:db",
     "dir:backend/modules/payroll/",
+    "dir:backend/modules/subcontract/",
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
     "helper:privacy_notice",
     "mod:payroll/api/__init__",
     "mod:payroll/api/payslips",
     "mod:subcontract/api/contractors",
+    "plat:__init__",
+    "plat:source_tree",
     "router:legal_params",
     "router:system"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/db.py",
      "backend/helpers/__init__.py",
      "backend/helpers/legal_params.py",
@@ -2662,6 +2683,9 @@
      "backend/modules/subcontract/api/contractors.py",
      "backend/routers/legal_params.py",
      "backend/routers/system.py"
+    ],
+    "path": [
+     "backend/modules/subcontract/"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -3414,10 +3438,7 @@
     "file:backend/helpers/__init__.py",
     "helper:legal_params",
     "helper:privacy_notice",
-    "mod:payroll/api/payslips",
-    "mod:subcontract/api/contractors",
-    "router:legal_params",
-    "router:system"
+    "mod:subcontract/api/contractors"
    ],
    "evidence": {
     "import": [
@@ -3427,10 +3448,7 @@
      "backend/helpers/privacy_notice.py"
     ],
     "api": [
-     "backend/modules/payroll/api/payslips.py",
-     "backend/modules/subcontract/api/contractors.py",
-     "backend/routers/legal_params.py",
-     "backend/routers/system.py"
+     "backend/modules/subcontract/api/contractors.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"

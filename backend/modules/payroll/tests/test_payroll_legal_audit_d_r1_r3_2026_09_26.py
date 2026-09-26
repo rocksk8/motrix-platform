@@ -22,6 +22,13 @@ import pytest
 from helpers import legal_params as lp
 from helpers import privacy_notice as pn
 
+from core import source_tree as _source_tree
+
+#: 跨 M04×M07 的題（2026-09-26 第六班列車交會：兩包都把它拆進自己的 tests/，只留這一份）：同時需要外包工班（承攬商告知）
+needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("modules/subcontract/"),
+                                       reason="需要外包工班模組（M04）")
+
+
 FROZEN_TODAY = date(2026, 9, 25)
 
 
@@ -238,6 +245,7 @@ def test_corrupted_text_archive_refuses_the_ack_but_not_the_save(client, make_us
 
 # ── S-5 告知全文 ────────────────────────────────────────────────────────────────
 
+@needs_subcontract
 def test_the_acknowledged_text_can_be_looked_up_after_the_notice_changes(client, make_user):
     h = _hdr(client, make_user)
     assert client.put("/api/settings/company-profile", json={"privacy_notice": "第一版告知全文"},
