@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.40 — 2026-09-26（A，報價單上的附件用案件頁的讀取規則；稽核 D AT-M1c；列車上 core_bump 取號）
+- L1（新增）：`helpers.case_access.case_page_readable(conn, quote_no, user)`（案件頁 `GET /api/quotations/{q}` 的讀取規則：row_access `case`／scope="read"，放行 cashier、不放行 case_manage；`get_quotation` 與回簽檔／收款發票／叫料／叫料發票的附件提供者共用同一支）
+
 ## 1.39 — 2026-09-26（A，attachments.for_document 依原單據自己的讀取規則；稽核 D AT-M1b；列車上 core_bump 取號）
 - L1（新增）：`helpers.case_access.case_owner_readable(conn, quote_no, user)`（案件擁有者規則，不放行任何模組；案件額外支出各端點與它的附件提供者共用同一支，附件的可見範圍不可以比原單據寬）
 

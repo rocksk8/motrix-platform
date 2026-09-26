@@ -4606,6 +4606,7 @@
     "api": [
      "backend/routers/case_extra_expenses.py",
      "backend/routers/invoice_vouchers.py",
+     "backend/routers/quotations.py",
      "backend/routers/vouchers.py"
     ],
     "path": [

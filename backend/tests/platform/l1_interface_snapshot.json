@@ -1,5 +1,5 @@
 {
- "core_version": "1.39",
+ "core_version": "1.40",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -169,6 +169,7 @@
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_module_present": "def()",
    "case_owner_readable": "def(conn, quote_no, user)",
+   "case_page_readable": "def(conn, quote_no, user)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
    "is_document_approver": "def(data_json, user, conn)"
   },

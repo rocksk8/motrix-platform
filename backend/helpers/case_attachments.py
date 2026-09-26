@@ -20,7 +20,7 @@ M01 搬遷時改寫進 `ModuleSpec.providers`（M01-PLAN，同 CA-O3）。
 """
 import json
 
-from helpers.case_access import case_documents_readable, case_owner_readable
+from helpers.case_access import case_documents_readable, case_owner_readable, case_page_readable
 from helpers.uploads import AttachmentNotVisible, AttachmentSourceError, files_from_json_column
 
 
@@ -69,8 +69,11 @@ def _quote_of(conn, source_type, doc_no):
 
 #: 每一類用**原單據自己的讀取規則**（稽核 D AT-M1b：附件的可見範圍不可以比原單據寬）
 #:   extra_expense ⇒ 額外支出各端點的 `_guard_case` ＝ `case_owner_readable`（不放行 case_manage）
-#:   其餘          ⇒ 案件頁與付款／叫料各端點的 `guard_case_access(allow_module="case_manage")`
-_READ_RULE = {"extra_expense": case_owner_readable}
+#:   存在報價單上的四類 ⇒ 案件頁 `get_quotation` 的 `case_page_readable`（scope="read"：放行 cashier、不放行 case_manage；AT-M1c）
+#:   case_update   ⇒ 案件動態端點的 `guard_case_access(allow_module="case_manage")` ＝ `case_documents_readable`
+_READ_RULE = {"extra_expense": case_owner_readable,
+              "quotation_signed": case_page_readable, "payment_item": case_page_readable,
+              "material": case_page_readable, "material_invoice": case_page_readable}
 
 
 def _require_readable(conn, source_type, quote_no, user):
