@@ -17,6 +17,7 @@
 |---|---|---|---|
 | CA-O3 | `case.access`（IP-12；c-case-access-3 起也是「M01 在不在」唯一訊號）改由 M01 的 `ModuleSpec.providers` 登記，不在 import 時登記 | `modules/case/__init__.py` 的 ModuleSpec 列 `case.access`；刪 helpers/quotations 裡 import 時的 `register_provider` | 模組載入失敗 ⇒ 登記不殘留（突變：改回 import 時登記 ⇒ 題紅） |
 | CA-O4 | 切斷 L1 對 `helpers.quotations` 的匯入（否則 M01 拿掉時 L1 仍載入它、登記仍在） | L1 使用者見 §2-A 表：`pdf_gen`（payment_item_amounts、quote_tax_type）、`routers/system`（`_steps_to_tiers`、`quote_terms.DEFAULT_TERMS`）、`helpers/receivables`（M05 收回後消失）、`helpers/__init__` 的 18 個再匯出 | 真刪 M01 後 `case.access` 不在登記表；`import main` 不載入 `helpers.quotations`（sys.modules 斷言） |
+| ATT | A 的 `attachments.for_document`：M01 的附件提供者先放在 L1 `helpers/case_attachments.py`（主持 2026-09-26） | M01 本體搬遷時改由 M01 的 `ModuleSpec.providers` 宣告（與 CA-O3 的 `case.access` 同一件事），L1 那一支移出 | 真刪 M01 後 `attachments.for_document` 沒有 M01 的提供者 |
 | SO | `/api/sales-orders` 已歸 M01（routers/quotations.py）；每日工作頁（M12）依賴它 | M01 不在 ⇒ 每日工作頁明說「需要案件模組」，不留空清單（主持裁示）；拿掉 l2_import_baseline 裡 analytics → M01 的 3 條 | e2e：M01 不在時每日工作頁出現提示；突變拿掉判斷 ⇒ 紅 |
 | pdf_gen W | `core:pdf_gen` **寫** quotations 表（pdf_gen.py:442 `UPDATE quotations SET data_json=?`） | 查這一筆是什麼（推測：PDF 產生時回寫快照）⇒ 移回 M01 或改 M01 provider；L1 不可以寫 L2 的表（table_write_exceptions 有沒有登記要查） | dep_scan：core:pdf_gen 不再 W quotations |
 
