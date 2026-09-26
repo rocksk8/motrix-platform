@@ -2,10 +2,10 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 632,
+  "tests": 633,
   "unmapped": 7,
   "kinds": {
-   "audit": 85,
+   "audit": 86,
    "api": 337,
    "unit": 56,
    "e2e": 154
@@ -4283,6 +4283,34 @@
     ]
    },
    "module": "tender_radar"
+  },
+  "backend/tests/platform/test_approval_parse_l1.py": {
+   "kind": "audit",
+   "units": [
+    "dir:docs/platform/",
+    "file:backend/helpers/__init__.py",
+    "file:docs/platform/modules.json",
+    "helper:quotations",
+    "helper:tiered_approval",
+    "helper:voucher",
+    "router:quotations",
+    "router:vouchers"
+   ],
+   "evidence": {
+    "import": [
+     "backend/helpers/__init__.py",
+     "backend/helpers/quotations.py",
+     "backend/helpers/tiered_approval.py",
+     "backend/helpers/voucher.py",
+     "backend/routers/vouchers.py"
+    ],
+    "path": [
+     "backend/helpers/tiered_approval.py",
+     "backend/routers/quotations.py",
+     "docs/platform/",
+     "docs/platform/modules.json"
+    ]
+   }
   },
   "backend/tests/platform/test_auth_login_contract.py": {
    "kind": "api",
