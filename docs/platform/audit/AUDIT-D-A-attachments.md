@@ -117,3 +117,26 @@
 - 突變 5/5 紅（V3、開票列單號不過濾、少金額層、額外支出退回 `case_documents_readable`、擁有者規則放行 case_manage）。M04 派工單維持每案判準（較嚴，AT-O2 另案）。
 
 - 觀察 **AT-O2**：`/api/contractor-dispatches?quote_no=` 與 `/{did}` 只檢查模組、沒有每案檢查（既有狀況，與本包無關）；可列舉的 id 會形成 IDOR。
+
+## 5. 複核：wip/a-attachments-3 9973d10b（AT-M1b；D 18:44）
+
+- 修法：
+  - 額外支出改用 L1 新增的 `case_owner_readable`（row_access `case`／owner，不放行模組），與 `case_extra_expenses._guard_case` 共用。
+  - 開票申請抽出 `_voucher_readable`（案件層＋金額層），與 `_guard_voucher` 共用；`doc_nos_for_case` 逐張過濾。
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| ① 探針情境現在 403 或不列 | 同一支探針（case_manage＋finance、非擁有者） | 經傳票列出的來源**已經沒有 `extra_expense`** ⇒ 成立 |
+| ② 原單據端點的拒絕行為沒變 | `row_access.require` 的預設 scope 就是 `"owner"` ⇒ `case_owner_readable` 與原本的判準相同；引用額外支出或開票申請端點的 37 檔＋A 的新題 | 409 過；突變 W1「開票不看金額層」、W2「擁有者規則放行 case_manage」都紅 |
+| ③ 還有沒有第三類比原單據寬 | 逐類比對原單據端點，並擴充探針 | **有，見下** |
+
+**AT-M1c（必修）　存在報價單上的四類附件，判準仍然比原單據寬**
+- quotation_signed、payment_item、material、material_invoice 都存在 `quotations`（`signed_files_json`、`data_json` 的 caseRecord）。
+  - 原單據端點是 `GET /api/quotations/{q}`：`row_access.require("case", user, row, scope="read")`，也就是擁有者、協作者、admin+、**cashier**，**不放行 case_manage**。
+  - 附件提供者仍用 `case_documents_readable`，也就是放行 case_manage。
+- 只有 case_update 的原單據端點（`list_case_updates`）真的是 `_guard_case(allow_module="case_manage")`，這一類一致。
+- **D 實測**：
+  - 非擁有者 case_manage＋finance：`GET /api/quotations/MQ-DPROBE-1` ⇒ **403**；經傳票 ⇒ **200，列出 `quotation_signed`**。**較寬**。
+  - 反方向：cashier 帳號：`GET /api/quotations/…` ⇒ **200**；經傳票 ⇒ 200 但**一筆都不列**。**較嚴**：傳票權限正是 cashier／finance，出納看得到案件的回簽檔，卻帶不進傳票。
+- 修法：這四類改用案件頁本身的讀取規則，也就是 row_access `case`／scope="read"，比照 AT-M1b 的做法抽成一支函式，與 `get_quotation` 共用。補上兩種情境的正式題：case_manage 非擁有者不列，cashier 要列。
+- 若主持認為帶入案件附件應該放行 case_manage，那就改的是「案件頁的讀取規則」，不是只放寬附件，需要另外裁示。
