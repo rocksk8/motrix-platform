@@ -399,7 +399,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 使用方 | L1 `routers/map_points.py`：`_case_points`（使用者本人）、背景預熱地址清單（`SYSTEM`）、回應快取指紋（`fingerprint`） |
 | 形式 | provider，單一提供者 |
 | 語法 | 取用：`loc = registry.single_provider("case.locations")`；`loc.list(conn, user) -> [ {quote_no, customer_name, project_name, deal_tag, address} ]`；`loc.fingerprint(conn) -> str` |
-| 回傳 | 可見性同 IP-96；`address` 可能是空字串（報價階段沒填） |
+| 回傳 | 可見性同 IP-96；`address` 可能是空字串（報價階段沒填）。⚠ **`address` 屬個資**（工地／住家地址可能指向自然人；稽核 D CS-S1、主持裁示 2026-09-26）：只給有該案件讀取權限的人（`SYSTEM` 身分只准 L1 背景工作，且不回給任何人）；**取用方不可以把它寫進 log，也不可以寫進匯出** |
 | 對方不在時 | 地圖回 200，案件來源 `skipped: "module_absent"`＋`CASES_MODULE_ABSENT`（「案件模組未安裝：地圖上不會顯示案件交貨地點」）；沒有案件點、不預熱案件地址 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | 同 IP-96；地圖行為 `backend/tests/test_mp6_map_case_locations_2026_09_24.py` |

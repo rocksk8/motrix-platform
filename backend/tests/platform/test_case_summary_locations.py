@@ -106,15 +106,46 @@ def test_ip12_summary_forwards_to_case_summary(client):
 
 # ── ③ SYSTEM 只准 L1 ─────────────────────────────────────────────────────────
 
+_SENTINEL_NAMES = {"SYSTEM", "_SystemCaller"}
+
+
+def _touches_case_access(tree):
+    """這個檔有沒有從 case_access 取得任何名稱（任何 import 寫法：from helpers.case_access import …／import *、
+    from helpers import case_access [as x]、import helpers.case_access [as x]、from helpers import SYSTEM）。"""
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom):
+            if n.module == "helpers.case_access":
+                return True
+            if n.module == "helpers" and any(a.name in ({"case_access"} | _SENTINEL_NAMES) for a in n.names):
+                return True
+        elif isinstance(n, ast.Import) and any(a.name == "helpers.case_access" for a in n.names):
+            return True
+    return False
+
+
+def _mentions_sentinel(tree):
+    """名稱、屬性、字串常數（getattr(x, "SYSTEM")）任一處出現哨兵的名字；`from helpers.case_access import *` 也算
+    （看不出拿了什麼 ⇒ 保守當作有）。"""
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Name) and n.id in _SENTINEL_NAMES:
+            return True
+        if isinstance(n, ast.Attribute) and n.attr in _SENTINEL_NAMES:
+            return True
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in _SENTINEL_NAMES:
+            return True
+        if isinstance(n, ast.alias) and n.name in (_SENTINEL_NAMES | {"*"}):
+            return True
+    return False
+
+
 def system_users(files_src):
-    """{相對路徑: 原始碼} ⇒ 引用 helpers.case_access.SYSTEM 的檔（import 了它，或寫 case_access.SYSTEM）。"""
+    """{相對路徑: 原始碼} ⇒ 可能取用系統身分的檔：從 case_access 取得任何名稱、而且提到哨兵的名字（稽核 D CS-M1：
+    只比對 `from helpers.case_access import SYSTEM` 與 `case_access.SYSTEM` 兩種寫法時，6 種常見寫法全部漏抓）。"""
     out = set()
     for rel, src in files_src.items():
-        for n in ast.walk(ast.parse(src)):
-            if isinstance(n, ast.ImportFrom) and n.module == "helpers.case_access" and any(a.name == "SYSTEM" for a in n.names):
-                out.add(rel)
-            elif isinstance(n, ast.Attribute) and n.attr == "SYSTEM" and isinstance(n.value, ast.Name) and n.value.id == "case_access":
-                out.add(rel)
+        tree = ast.parse(src)
+        if _touches_case_access(tree) and _mentions_sentinel(tree):
+            out.add(rel)
     return out
 
 
@@ -147,8 +178,36 @@ def test_system_caller_is_used_only_by_l1():
 def test_rc_system_scanner_catches_an_l2_user():
     srcs = {"modules/zz/api.py": "from helpers.case_access import SYSTEM\nx = SYSTEM\n",
             "routers/zz.py": "from helpers import case_access\ny = case_access.SYSTEM\n",
-            "routers/clean.py": "from helpers.case_access import guard_case_access\n"}
-    assert system_users(srcs) == {"modules/zz/api.py", "routers/zz.py"}
+            # 稽核 D CS-M1 列的 6 種寫法
+            "modules/c1.py": "from helpers import case_access as ca\nx = ca.SYSTEM\n",
+            "modules/c2.py": "import helpers.case_access as ca\nx = ca.SYSTEM\n",
+            "modules/c3.py": "import helpers.case_access\nx = helpers.case_access.SYSTEM\n",
+            "modules/c4.py": "from helpers.case_access import *\nx = 1\n",
+            "modules/c5.py": "from helpers import case_access\nx = getattr(case_access, 'SYSTEM')\n",
+            "modules/c6.py": "from helpers.case_access import _SystemCaller\nx = _SystemCaller()\n",
+            # 反向控制：只用 guard 的、或提到 SYSTEM 但跟 case_access 無關的，不算
+            "routers/clean.py": "from helpers.case_access import guard_case_access\n",
+            "routers/other.py": "from core import registry\nSYSTEM = 'x'\n"}
+    assert system_users(srcs) == {"modules/zz/api.py", "routers/zz.py", "modules/c1.py", "modules/c2.py",
+                                  "modules/c3.py", "modules/c4.py", "modules/c5.py", "modules/c6.py"}
+
+
+def test_runtime_refuses_system_from_an_l2_module(tmp_path, monkeypatch):
+    """執行期檢查（第二道）：呼叫端在 `backend/modules/` 底下卻傳 SYSTEM ⇒ PermissionError；L1 傳 ⇒ 照常。"""
+    import sys
+    from helpers.case_access import SYSTEM
+    s = registry.single_provider("case.summary")
+    fake = source_tree.BACKEND / "modules" / "zz_probe" / "api.py"
+    code = compile("def call(s, conn, user):\n    return s(conn, user)\n", str(fake), "exec")
+    ns = {}
+    exec(code, ns)
+    conn = _conn()
+    try:
+        with pytest.raises(PermissionError):
+            ns["call"](s, conn, SYSTEM)
+        assert isinstance(s(conn, SYSTEM), list)                                  # 本檔（tests，不在 modules/）照常
+    finally:
+        conn.close()
 
 
 # ── ⑤ M01 不在 ─────────────────────────────────────────────────────────────
