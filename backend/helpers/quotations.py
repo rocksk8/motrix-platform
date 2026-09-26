@@ -453,10 +453,12 @@ def _caller_is_system(user) -> bool:
         return False
     import sys
     here = __file__.replace("\\", "/")
-    f = sys._getframe(1)
-    while f is not None and f.f_code.co_filename.replace("\\", "/") == here:
-        f = f.f_back                                                     # 跳過本檔（case_summary、_CaseLocations、IP-12 轉呼叫）
+    # frame(1)＝提供者本身（case_summary／_CaseLocations.list）；frame(2)＝**把 SYSTEM 傳進來的那一方**。
+    # 那一方是 M01 自己（例：IP-12 summary 轉呼叫——它替 M10 取摘要，本來就不驗權限）⇒ 照常；在 backend/modules/ ⇒ 拒絕。
+    f = sys._getframe(2)
     caller = (f.f_code.co_filename if f is not None else "").replace("\\", "/")
+    if caller == here:
+        return True
     if "/backend/modules/" in caller:
         raise PermissionError("helpers.case_access.SYSTEM 只准 L1 背景呼叫端使用（呼叫端：%s）" % caller)
     return True
