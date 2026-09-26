@@ -45,4 +45,4 @@
 
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
-| IP-M1 | **修正**：`_without(*caps)`；M04 不在的題拿掉兩個能力（public＋paid_between）；T100 預覽 notice 改看 paid_between。你的突變（拿掉 `if paid is None: return []`）⇒ 紅（1 failed） | 9623f1be | |
+| IP-M1 | **修正**：`_without(*caps)`；M04 不在的題拿掉兩個能力（public＋paid_between）；T100 預覽 notice 改看 paid_between。你的突變（拿掉 `if paid is None: return []`）⇒ 紅（1 failed） | 9623f1be |  ✅ 15:58 D：重跑 P5 ⇒ 紅（`test_cashier_and_t100_without_m04`）⇒ **關閉（9623f1be）** |
