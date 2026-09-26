@@ -262,3 +262,31 @@ def restore(state):
     with _lock:
         _SECTIONS.clear()
         _SECTIONS.update(state)
+
+
+def effective_layout_ops(conn, module_key, role):
+    """某角色在某模組實際生效的版面操作：`resolve(layout, module:<key>, 角色)`（角色 ＞ 公司 ＞ 程式預設），
+    每一筆再過 `check_layout`——之後模組拿掉了某個點 ⇒ 那一筆不套用、列在 dropped（不讓整頁壞、也不悄悄略過）。
+    ⇒ {"ops": [...], "dropped": [{"index", "op", "message"}], "source", "error"}。
+    讀定義失敗 ⇒ 程式預設（ops 空）＋error（覆寫層出錯不可以讓頁面或選單消失）。
+    唯一一份：`GET /api/layout/{module}` 與 `GET /api/platform/menu` 都呼叫它（C4；STAGE-C L79 更正）。"""
+    import logging
+    from core import definitions as D
+    key = "module:%s" % module_key
+    error = None
+    try:
+        body, source = D.resolve(conn, "layout", key, role)
+    except Exception as e:                                   # noqa: BLE001 覆寫層出錯 ⇒ 程式預設
+        logging.getLogger(__name__).warning("讀版面定義失敗 %s（%s）⇒ 用程式預設：%s", key, role, e)
+        body, source, error = {"ops": []}, "default", "讀版面定義失敗，已改用程式預設"
+    ops = (body or {}).get("ops") if isinstance(body, dict) else None
+    kept, dropped = [], []
+    for i, op in enumerate(ops if isinstance(ops, list) else []):
+        probs = check_layout(module_key, [op])
+        if probs:
+            dropped.append({"index": i, "op": op, "message": probs[0]["message"]})
+        else:
+            kept.append(op)
+    if ops is not None and not isinstance(ops, list):
+        dropped.append({"index": None, "op": ops, "message": "ops 不是清單"})
+    return {"ops": kept, "dropped": dropped, "source": source, "error": error}

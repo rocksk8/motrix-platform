@@ -106,3 +106,57 @@ def build(l1, mod_items, modules, superadmin):
                  "badge": it.get("badge"), "extra_badge": it.get("extra_badge"), "module": it.get("module")}
                 for it in items]})
     return out
+
+
+def sidebar_point_id(item):
+    """選單項 ⇒ 它的 P9 側欄點 id（`<模組>:<頁面>/sidebar`，core.customization 衍生的同一個格式）；L1 項 ⇒ None。"""
+    return "%s:%s/sidebar" % (item["module"], item["href"]) if item.get("module") else None
+
+
+def apply_layout(groups, ops):
+    """build() 的結果 ＋ 角色版面操作（只認 sidebar 點的 hide／show／move{index}）⇒ (新 groups, 套用的, 略過的)。
+    - hide：那一項不顯示（**只是顯示，不是權限**——伺服器端權限不看版面；STAGE-C L79 更正 ③）
+    - move：群組內第 index 項（0 起算；超出範圍 ⇒ 放最後），不換群組（§3.9：側欄 move 不可以帶 to）
+    - 不是 sidebar 點的操作、target 不在選單上的 ⇒ 略過並列出（不猜）
+    純函式；不改傳入的 groups。群組被 hide 到空 ⇒ 整個群組不出現（不留空標題）。"""
+    by_id = {}
+    out = []
+    for g in groups:
+        items = [dict(it) for it in g["items"]]
+        out.append(dict(g, items=items))
+        for it in items:
+            pid = sidebar_point_id(it)
+            if pid:
+                by_id[pid] = (out[-1], it)
+    applied, skipped = [], []
+    hidden = set()
+    for op in ops or []:
+        tgt = (op or {}).get("target")
+        if not isinstance(tgt, str) or not tgt.endswith("/sidebar") or op.get("op") not in ("hide", "show", "move"):
+            skipped.append({"op": op, "reason": "不是側欄點的操作"})
+            continue
+        if tgt not in by_id:
+            skipped.append({"op": op, "reason": "選單上沒有這一項（模組未載入或使用者沒有權限）"})
+            continue
+        if op["op"] == "hide":
+            hidden.add(tgt)
+        elif op["op"] == "show":
+            hidden.discard(tgt)
+        applied.append(op)
+    for op in applied:
+        if op["op"] != "move":
+            continue
+        g, it = by_id[op["target"]]
+        if op["target"] in hidden:
+            continue
+        idx = op.get("index")
+        if not isinstance(idx, int) or idx < 0:
+            continue
+        g["items"].remove(it)
+        g["items"].insert(min(idx, len(g["items"])), it)
+    final = []
+    for g in out:
+        g["items"] = [it for it in g["items"] if sidebar_point_id(it) not in hidden]
+        if g["items"]:
+            final.append(g)
+    return final, applied, skipped
