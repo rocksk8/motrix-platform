@@ -46,6 +46,7 @@
 | M03 採購・庫存・出貨搬進 modules/supply（A，wip/a-m03 b2e5f7e4，合回前） | D | `AUDIT-D-A-M03-move.md` | 稽核完成（2026-09-26 14:38）：必修 0；§B-11 D 刪資料夾重做 1291 過、5 紅皆允許、收集無錯；IP-20 突變 3/3 紅；觀察：分支 test_map.json 過期（列車重產） |
 | 簽核 JSON 解析下沉 L1（A，wip/a-approval-parse 708dbe0d，合回前） | D | `AUDIT-D-A-approval-parse.md` | 稽核完成（2026-09-26 15:13）：必修 0、建議 1（M01 轉簽讀不出來⇒400 無題驗，突變 AP3 存活）、觀察 1（test_map 過期，列車重產）；fail-open／別名子類別／doc_label 三突變皆紅 |
 | 字型 otf→woff2＋/fonts/ 快取（主持，wip/h-fonts-woff2 94a78b4c，合回前，抽查） | D | `AUDIT-D-host-fonts-woff2.md` | 抽查完成（2026-09-26 15:16）：必修 0、觀察 2（woff2 送 octet-stream＋nosniff 但字型不受擋、test_map 過期交列車）；突變 FW1 紅 |
+| M05 應收應付搬進 modules/arap（C，wip/c-m05b b17e5296，合回前） | D | `AUDIT-D-C-M05-move.md` | 稽核完成（2026-09-26 15:38）：**必修 2**（M5-M1 L1 薄殼無到期觸發，突變 CORE 2.0 存活；M5-M2 新 e2e 不關 context ⇒ 下一題偶發紅）、建議 1（報表快照經 cashierLoaded 略過 404）、觀察 3；§B-11 刪 arap 5 紅皆允許、收集無錯；突變 7/7 紅 |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事
