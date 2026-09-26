@@ -2,12 +2,12 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 565,
+  "tests": 566,
   "unmapped": 9,
   "kinds": {
    "api": 296,
    "unit": 51,
-   "e2e": 138,
+   "e2e": 139,
    "audit": 80
   },
   "routes": 568
@@ -272,6 +272,33 @@
     ]
    },
    "login_fixture": true,
+   "module": "crm"
+  },
+  "backend/modules/crm/tests/test_e2e_crm_quote_delete_no_notice_2026_09_26.py": {
+   "kind": "e2e",
+   "units": [
+    "core:db",
+    "dir:backend/modules/crm/",
+    "file:backend/routers/__init__.py",
+    "page:pages/quotations.html",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py"
+    ],
+    "page": [
+     "frontend/pages/quotations.html"
+    ],
+    "path": [
+     "frontend/pages/quotations.html"
+    ],
+    "module_dir": [
+     "backend/modules/crm/"
+    ]
+   },
    "module": "crm"
   },
   "backend/modules/crm/tests/test_e2e_crm_unread_marks_2026_09_24.py": {
