@@ -53,6 +53,16 @@ NOT_CASE_SCOPED = ("extra_expense", "invoice_voucher",
 SAME_DOC_NO = ("contractor_dispatch", "contractor_invoice")
 
 
+def _subcontract_installed():
+    from core import source_tree
+    return source_tree.module_installed("modules/subcontract/")
+
+
+#: 派工單兩類由外包工班（M04）的 `attachments.for_document` 提供：模組不在時那兩類本來就不列
+#: （傳票頁另外明說，見 tests/platform/test_attachments_providers.py），驗它們的題跟著略過（PLAYBOOK §B-11）
+_NEEDS_M04 = pytest.mark.skipif(not _subcontract_installed(), reason="外包工班（M04）不在這個安裝包：派工單兩類不提供")
+
+
 def _helpers():
     import helpers.voucher_attachments as va
     return va
@@ -160,7 +170,8 @@ def _listed(seeded_ignored=None):
 # ① 四類都要看得到
 # ══════════════════════════════════════════════════════════════════════
 
-@pytest.mark.parametrize("source_type", NOT_CASE_SCOPED)
+@pytest.mark.parametrize("source_type", [
+    t if t not in SAME_DOC_NO else pytest.param(t, marks=_NEEDS_M04) for t in NOT_CASE_SCOPED])
 def test_sp1_a_case_scoped_list_includes_the_four_missing_types(
         seeded, source_type):
     """🔴 **選一個案件，那四類憑證要出現在清單裡。**（%s）
@@ -214,6 +225,7 @@ def test_sp1_the_list_covers_every_declared_source_type(seeded):
 # ② 核心：兩類共用同一個 docNo
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M04
 def test_sp1_two_types_that_share_a_doc_no_both_show_up(seeded):
     """🔴🔴 **同一個 `docNo` 的兩類要**各自出現**，不是併成一列。**
 
@@ -256,6 +268,7 @@ def test_sp1_two_types_that_share_a_doc_no_both_show_up(seeded):
           "   **筆數對而內容是另一種單據的附件**（`§193` 的同族）。")
 
 
+@_NEEDS_M04
 def test_sp1_deduping_by_doc_no_alone_would_lose_one(seeded):
     """⚙️ **反向控制：證明「只用 `docNo` 去重」真的會少一組。**
 
