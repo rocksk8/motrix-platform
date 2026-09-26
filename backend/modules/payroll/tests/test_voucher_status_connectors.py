@@ -13,6 +13,8 @@ from pathlib import Path
 from core import registry
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
+from core import source_tree
+import pytest
 
 CAPS = ("voucher.draft", "voucher.account_check", "accounting.settings", "voucher.void_draft", "voucher.status")
 
@@ -60,14 +62,18 @@ def _return(client, people, no):
 
 
 def _drop_accounting(monkeypatch):
-    monkeypatch.setattr(registry, "_LEGACY_PROVIDERS",
-                        {k: v for k, v in registry._LEGACY_PROVIDERS.items() if k[0] not in CAPS})
+    # M06 搬遷後提供者在 accounting 的 ModuleSpec.providers（原本在 _LEGACY_PROVIDERS）
+    from tests.platform.test_case_stage_connectors import _without
+    for cap in CAPS:
+        _without(monkeypatch, cap, "accounting")
     assert all(registry.single_provider(c) is None for c in CAPS)
 
 
 # ── ① 契約 ──────────────────────────────────────────────────────────────────
 
 def test_contract_void_draft_and_status(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-IP4-001")
     vid = _accrual_id("MQ-IP4-001")
     void, status = registry.single_provider("voucher.void_draft"), registry.single_provider("voucher.status")
@@ -93,6 +99,8 @@ def test_contract_void_draft_and_status(client, people):
 
 def test_with_accounting_return_voids_the_draft(client, people):
     """正對照：同一條流程在 M06 在時確實作廢——否則「沒作廢」的斷言沒有意義。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-IP4-010")
     vid = _accrual_id("MQ-IP4-010")
     r = _return(client, people, "MQ-IP4-010")
@@ -102,6 +110,8 @@ def test_with_accounting_return_voids_the_draft(client, people):
 
 
 def test_without_accounting_return_keeps_the_link_and_says_so(client, people, monkeypatch):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-IP4-011")                          # M06 在時產生草稿
     vid = _accrual_id("MQ-IP4-011")
     assert vid
@@ -121,6 +131,8 @@ def test_without_accounting_return_keeps_the_link_and_says_so(client, people, mo
 # ── ③ M06 回來後 ─────────────────────────────────────────────────────────────
 
 def test_leftover_draft_is_not_orphaned_when_accounting_returns(client, people, monkeypatch):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-IP4-020")
     vid = _accrual_id("MQ-IP4-020")
     with monkeypatch.context() as m:
@@ -137,6 +149,8 @@ def test_leftover_draft_is_not_orphaned_when_accounting_returns(client, people, 
 
 def test_submitted_old_link_still_gets_a_fresh_draft(client, people):
     """原行為不變：舊連結已送審（不會被作廢）⇒ 再次進入待發放照常另開新草稿。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-IP4-021")
     first = _accrual_id("MQ-IP4-021")
     _exec("UPDATE vouchers_all SET status='待審核' WHERE id=?", first)

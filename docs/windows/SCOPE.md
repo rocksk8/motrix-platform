@@ -17,6 +17,7 @@
 ## ✅ THIS — 這一包要全綠
 
 > 📌 2026-09-26（C，M07 搬遷）：`BN1`～`BN19`、`QS1a` 的範圍（THIS／NEXT／EXEMPT）移到 `backend/modules/payroll/SPEC.md` 的 `## 範圍`：拿掉 M07 時範圍與條件、題一起消失。
+> 📌 2026-09-26（A，M06 搬遷，反向控制定案）：`AC2`、`SP1`、`AI1`、`CA1`、`AS3` 的範圍也移到 `backend/modules/accounting/SPEC.md`（命名它們的題都需要 M06）。
 > 📌 2026-09-26（A，M06 搬遷）：`JV1`～`JV36` 的範圍（THIS 35 條、NEXT 的 `JV6` 與其註記）移到 `backend/modules/accounting/SPEC.md` 的 `## 範圍`：拿掉 M06 時範圍與條件、題一起消失。
 
 ```
@@ -33,12 +34,9 @@ VP(1):  VP1
 UI(4):  UI6 UI8 UI9 UI10
 DM(1):  DM1
 MG(1):  MG1
-AC(2): AC1 AC2
+AC(1): AC1
 AR(1): AR1
-SP(1): SP1
-AI(1): AI1  <= **併進 CA1**
-CA(1): CA1
-AS(4): AS1 AS2 AS3 AS4
+AS(3): AS1 AS2 AS4
 AT(1): AT1
 WD(1): WD1
 BR(4): BR1 BR2 BR3 BR4

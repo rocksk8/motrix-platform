@@ -58,6 +58,16 @@
 - **JV34.** 傳票輸入與列印：科目可搜尋選單（含停用標示）＋名稱唯讀；最後一行 Enter 新增；補平差額（目前行借貸空白、差額≠0 才可按，填較少側）；PDF 表頭「附件 N 張」、頁碼「第 x／y 頁」（@page 頁邊框，需 Edge 131+，只編本體）、跨頁重印表頭；清單關鍵字／日期／狀態篩選；作廢並重開。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV34＋A 裁示；題 `test_jv34_*`。
 - **JV36.** 傳票摘要連帶來源的已上傳檔案（取代 JV33 的；接續）：面板選案件／支出項 ⇒ 該行摘要覆蓋＋記住來源（voucher_lines.source_type／source_key，v111）；該行下方列出來源檔案，可預覽、勾選才帶入；重開依來源重新帶出；N12 空白行金額帶入借方；預覽端點限三種來源、只在該來源清單找檔。原文 `SPEC-JV28-ATTACHMENT-PREVIEW.md` JV36＋A 裁示；題 `test_jv36_*`。
 
+### 來源：STATE.md〈總表〉AC2、SP1、AI1、CA1、AS3（2026-09-26 M06 搬遷的反向控制定案：命名它們的題都需要 M06；原文照搬，順序照原檔）
+
+| 編號 | 條件 |
+|---|---|
+| **AC2** | **動作要有可見的回饋** —— 觀測點是**渲染之後畫面上的文字**，不是變數被設定過；範圍＝每一個會寫入的動作；⚙️ 反向控制＝故意讓訊息被後續動作清掉必須紅 |
+| **SP1** | **4 類**（D 複核：B 漏了 `extra_expense`）的 `doc_no` 不是案件編號 ⇒ 「選一個案件」看不到它們；✅ **那四類的表都有 `quote_no` 欄** ⇒ `case_attachments()` 多一個 SELECT 即可，**不需要新的選取介面**；⚠️ 畫面要讓 `contractor_dispatch`／`contractor_invoice` 出現**兩列**（`docNo` 相同） |
+| **AI1** | `account_items.is_active` 有欄位（v96）而 `routers/account_items.py` **只有一支 GET** ⇒ **沒有端點也沒有 UI，停不掉任何科目**；與 v93「註解說得出而沒有欄位」是同一種，往前走了一格 |
+| **CA1** | **自訂科目樹**（使用者點名，`STATE:16674`）：新增／編輯自訂科目，`AI1`（停用）**併入本項**；✅ 實查無 `BEFORE INSERT` TRIGGER ⇒ 新增不被擋；🔴 而 547 筆全 `statutory` ⇒ `PATCH is_active` **對現有每一筆都會被 TRIGGER 擋**；⚠️ 層級深度與編碼規則**要問使用者** |
+| **AS3** | ☠️ **傳票送審後簽核人在佇列上看不到它**（`vouchers_all` 在兩支佇列端點命中 **0**）：① `bonus_awards` 進兩支 ② **`voucher` 也補** ③ 加一道**完整性**守門（有 submit 端點的每個 type 都要涵蓋；正對照＝拿掉一個必須紅）；🔑 既有那支是**一致性**守門 ⇒ **兩邊都沒有就 `0 == 0` 綠** |
+
 ## 範圍
 
 （2026-09-26 自 `docs/windows/SCOPE.md` 移入，編號照搬；原檔 THIS 分 12 行，這裡併成一行）
@@ -65,6 +75,11 @@
 ### THIS
 
 ```
+AC(1): AC2
+SP(1): SP1
+AI(1): AI1  <= **併進 CA1**
+CA(1): CA1
+AS(1): AS3
 JV(35): JV1 JV2 JV3 JV4 JV5 JV7 JV9 JV10 JV11 JV12 JV13 JV14 JV15 JV16 JV17 JV18 JV19 JV20 JV21 JV22 JV23 JV24 JV25 JV26 JV8 JV27 JV28 JV30 JV32 JV35 JV29 JV31 JV33 JV34 JV36
 ```
 
@@ -87,10 +102,13 @@ AMBIGUOUS_ACK JV7 題檔撞名（test_e2e_voucher_summary／test_voucher_summary
 AMBIGUOUS_ACK JV16 題檔撞名（test_voucher_attachment_download／test_voucher_attachment_list_in_modal，都在本模組）
 NAMED_ELSEWHERE JV27 test_em5_approving_is_blocked_when_the_chain_is_unreadable
 NAMED_ELSEWHERE JV21 test_jv7_it_offers_exactly_the_three_declared_tabs
+NAMED_ELSEWHERE AI1 test_ca1_disabling_a_custom_code_makes_it_unusable
+AMBIGUOUS_ACK EM5 題檔撞名（test_em5_reload_flag 在 tests/、test_em5_voucher_chain_unreadable 在本模組）；本模組不在時只剩 1 檔、不再撞名
 EXEMPT JV14 目視：使用者 2026-09-23 確認紙本長摘要印得出來；pypdf 抽不到是抽取工具限制（test_voucher_summary_length_2026_09_23.py:18／:103）
 ```
 
 > 📌 `## 登記` 的理由原文在覆蓋率守門原位置的註解（2026-09-26 移出前）：
 > `JV27`：題存在，掛在 `test_em5_*` 名下（`4aef7fc`），挑的這一支驗的正是 JV27 那一半（簽核動作 fail-closed）；
 > `JV21`：斷言「恰好三個頁籤」，第三個就是 JV21 的「支出項」；
+> `AI1`（2026-09-26 自覆蓋率守門移入）：題的 docstring 逐字「`§7⑧`（`AI1`）：停用之後 validate_account_code() 要說它已停用」，走 PATCH 產品路徑；
 > `JV14`：GATE-BLOCK 丙類，命中行逐字是「已結案：使用者目視確認紙本」⇒ 豁免的形狀，不是題名不帶編號。

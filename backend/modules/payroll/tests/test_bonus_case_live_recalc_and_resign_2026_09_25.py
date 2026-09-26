@@ -14,6 +14,7 @@ import pytest
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _login, _set_flow)
 from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
+from core import source_tree
 
 SPLIT = {"sales": 5000, "project": 3000, "admin": 2000}
 
@@ -222,8 +223,9 @@ def test_confirmed_edit_voids_signatures_and_restarts_the_chain(client, people, 
     assert _award(no)["status"] == "待審核"
     assert client.post("/api/bonus/cases/%s/approve" % no, headers=_auth(sa3)).status_code == 200
     a = _award(no)
-    assert a["status"] == "待發放" and a["accrual_voucher_id"]
-    assert _voucher_count() == vouchers_before + 1
+    m06 = source_tree.module_installed("modules/accounting/")   # M06 不在 ⇒ 不開傳票
+    assert a["status"] == "待發放" and bool(a["accrual_voucher_id"]) == m06
+    assert _voucher_count() == vouchers_before + (1 if m06 else 0)
 
 
 def test_unchanged_save_in_review_keeps_signatures(client, people, sa3):
@@ -272,7 +274,7 @@ def test_payout_and_paid_are_not_editable(client, people):
     assert _put(client, people["bc_sa"], no, rate_bp=1200, confirmResetApprovals=True).status_code == 409
     assert client.post("/api/bonus/cases/%s/mark-paid" % no, headers=_auth(people["bc_cash"])).status_code == 200
     assert _put(client, people["bc_sa"], no, rate_bp=1200, confirmResetApprovals=True).status_code == 409
-    assert _voucher_count() == n + 1          # 只有 mark-paid 那一張，PUT 沒有碰傳票
+    assert _voucher_count() == n + (1 if source_tree.module_installed("modules/accounting/") else 0)   # 只有 mark-paid 那一張（M06 在時），PUT 沒有碰傳票
 
 
 def test_in_review_with_a_voucher_is_refused(client, people, sa3):
