@@ -6,6 +6,7 @@
    報表的 JSON 用 page.route 回一份帶 incomeNotice 的內容（後端那一半由 tests/platform/test_receivables_absent.py 驗）
 正對照：端點正常回應時，兩頁都不出現這些提示。
 """
+import contextlib
 import json
 
 import pytest
@@ -34,6 +35,21 @@ def _seed():
         conn.close()
 
 
+@contextlib.contextmanager
+def _page(browser):
+    """每題自己的 context，結束一定關（稽核 D M5-M2：沒關 context、又用了 route.fetch ⇒ 同一 worker 的下一題偶發
+    TargetClosedError）。關閉前先 unroute_all(ignoreErrors)，讓還在飛的 route 處理器不會對已關的 context 回應。"""
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    try:
+        yield page
+    finally:
+        try:
+            page.unroute_all(behavior="ignoreErrors")
+        finally:
+            ctx.close()
+
+
 def _not_found(route):
     route.fulfill(status=404, body='{"detail":"Not Found"}', content_type="application/json")
 
@@ -50,28 +66,28 @@ def _open_fin(page, live_server):
 def test_case_page_says_arap_is_missing_and_hides_the_request_buttons(live_server, make_user, e2e_browser):
     u = make_user(username="arapabs_admin", role="admin")
     _seed()
-    page = e2e_browser.new_context().new_page()
-    page.route("**/api/invoice-vouchers**", _not_found)
-    page.route("**/api/payment-requests**", _not_found)
-    _login(page, live_server, *u)
-    _open_fin(page, live_server)
-    note = page.locator("[data-testid=arap-missing]")
-    assert note.is_visible() and "應收應付模組未安裝" in note.inner_text()
-    assert page.locator("button:text-is('申請開立發票')").is_hidden()
-    assert page.locator("button:text-is('申請請款單')").is_hidden()
+    with _page(e2e_browser) as page:
+        page.route("**/api/invoice-vouchers**", _not_found)
+        page.route("**/api/payment-requests**", _not_found)
+        _login(page, live_server, *u)
+        _open_fin(page, live_server)
+        note = page.locator("[data-testid=arap-missing]")
+        assert note.is_visible() and "應收應付模組未安裝" in note.inner_text()
+        assert page.locator("button:text-is('申請開立發票')").is_hidden()
+        assert page.locator("button:text-is('申請請款單')").is_hidden()
 
 
 @pytest.mark.e2e
 def test_case_page_positive_control_no_notice_when_endpoints_answer(live_server, make_user, e2e_browser):
     u = make_user(username="arapok_admin", role="admin")
     _seed()
-    page = e2e_browser.new_context().new_page()
-    page.route("**/api/invoice-vouchers?quote_no=**", lambda r: r.fulfill(status=200, body="[]", content_type="application/json"))
-    page.route("**/api/payment-requests?quote_no=**", lambda r: r.fulfill(status=200, body="[]", content_type="application/json"))
-    _login(page, live_server, *u)
-    _open_fin(page, live_server)
-    assert page.locator("[data-testid=arap-missing]").is_hidden()
-    assert page.locator("button:text-is('申請開立發票')").is_visible()
+    with _page(e2e_browser) as page:
+        page.route("**/api/invoice-vouchers?quote_no=**", lambda r: r.fulfill(status=200, body="[]", content_type="application/json"))
+        page.route("**/api/payment-requests?quote_no=**", lambda r: r.fulfill(status=200, body="[]", content_type="application/json"))
+        _login(page, live_server, *u)
+        _open_fin(page, live_server)
+        assert page.locator("[data-testid=arap-missing]").is_hidden()
+        assert page.locator("button:text-is('申請開立發票')").is_visible()
 
 
 @pytest.mark.e2e
@@ -80,30 +96,30 @@ def test_reports_page_says_income_and_cashier_queues_are_missing(live_server, ma
     if not source_tree.module_installed("modules/analytics/"):
         pytest.skip("M08 營運分析不在這個安裝包 ⇒ 報表頁本來就不在（PLAYBOOK §B-11）")
     u = make_user(username="arapabs_sa", role="superadmin")
-    page = e2e_browser.new_context().new_page()
-    page.route("**/api/cashier/**", _not_found)
+    with _page(e2e_browser) as page:
+        page.route("**/api/cashier/**", _not_found)
 
-    def _expenses(route):
-        resp = route.fetch()
-        data = resp.json()
-        data["incomeNotice"] = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
-        route.fulfill(response=resp, body=json.dumps(data, ensure_ascii=False), content_type="application/json")
-    page.route("**/api/reports/expenses-monthly**", _expenses)
-    _login(page, live_server, *u)
-    page.goto(f"{live_server}/pages/reports.html")
-    page.wait_for_selector(".period-bar", timeout=20000)
-    page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).setBasis('cash')")
-    page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return d.expensesData && d.incomeNotice }",
-                           timeout=20000)
-    page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).activeTab = 'expenses' }")   # 收支分頁
-    note = page.locator("[data-testid=income-unavailable]")
-    note.wait_for(state="visible", timeout=10000)
-    assert "應收應付模組未安裝" in note.inner_text()
-    d = "Alpine.$data(document.querySelector('[x-data]'))"
-    page.evaluate(f"() => {d}._loadPayableSnapshot()")
-    page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
-    assert page.evaluate(f"() => {d}.payableKnown") is False
-    assert page.evaluate(f"() => {d}.payableSnapMissing") == "應收應付模組未安裝"
+        def _expenses(route):
+            resp = route.fetch()
+            data = resp.json()
+            data["incomeNotice"] = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
+            route.fulfill(response=resp, body=json.dumps(data, ensure_ascii=False), content_type="application/json")
+        page.route("**/api/reports/expenses-monthly**", _expenses)
+        _login(page, live_server, *u)
+        page.goto(f"{live_server}/pages/reports.html")
+        page.wait_for_selector(".period-bar", timeout=20000)
+        page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).setBasis('cash')")
+        page.wait_for_function("() => { const d = Alpine.$data(document.querySelector('[x-data]')); return d.expensesData && d.incomeNotice }",
+                               timeout=20000)
+        page.evaluate("() => { Alpine.$data(document.querySelector('[x-data]')).activeTab = 'expenses' }")   # 收支分頁
+        note = page.locator("[data-testid=income-unavailable]")
+        note.wait_for(state="visible", timeout=10000)
+        assert "應收應付模組未安裝" in note.inner_text()
+        d = "Alpine.$data(document.querySelector('[x-data]'))"
+        page.evaluate(f"() => {d}._loadPayableSnapshot()")
+        page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
+        assert page.evaluate(f"() => {d}.payableKnown") is False
+        assert page.evaluate(f"() => {d}.payableSnapMissing") == "應收應付模組未安裝"
 
 
 @pytest.mark.e2e
@@ -115,14 +131,32 @@ def test_reports_snapshot_shows_the_payable_queues_own_reason(live_server, make_
         pytest.skip("M08 營運分析不在這個安裝包 ⇒ 報表頁本來就不在（PLAYBOOK §B-11）")
     reason = "外包工班模組未安裝：出納頁不顯示承攬商匯款"
     u = make_user(username="arapabs_sa2", role="superadmin")
-    page = e2e_browser.new_context().new_page()
-    page.route("**/api/cashier/payable-queue**", lambda r: r.fulfill(
-        status=404, body=json.dumps({"detail": reason}, ensure_ascii=False), content_type="application/json"))
-    _login(page, live_server, *u)
-    page.goto(f"{live_server}/pages/reports.html")
-    page.wait_for_selector(".period-bar", timeout=20000)
-    d = "Alpine.$data(document.querySelector('[x-data]'))"
-    page.evaluate(f"() => {{ {d}.payableSnapLoaded = false; {d}.payableSnapMissing = ''; return {d}._loadPayableSnapshot() }}")
-    page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
-    assert page.evaluate(f"() => {d}.payableSnapMissing") == reason
-    assert page.evaluate(f"() => {d}.payableKnown") is False
+    with _page(e2e_browser) as page:
+        page.route("**/api/cashier/payable-queue**", lambda r: r.fulfill(
+            status=404, body=json.dumps({"detail": reason}, ensure_ascii=False), content_type="application/json"))
+        _login(page, live_server, *u)
+        page.goto(f"{live_server}/pages/reports.html")
+        page.wait_for_selector(".period-bar", timeout=20000)
+        d = "Alpine.$data(document.querySelector('[x-data]'))"
+        page.evaluate(f"() => {{ {d}.payableSnapLoaded = false; {d}.payableSnapMissing = ''; return {d}._loadPayableSnapshot() }}")
+        page.wait_for_function(f"() => {d}.payableSnapLoaded", timeout=20000)
+        assert page.evaluate(f"() => {d}.payableSnapMissing") == reason
+        assert page.evaluate(f"() => {d}.payableKnown") is False
+
+
+@pytest.mark.e2e
+def test_reports_cashier_tab_entry_also_records_the_reason(live_server, make_user, e2e_browser):
+    """稽核 D M5-S1：從 reports.html?tab=cashier 進來 ⇒ 出納頁籤先載（cashierLoaded），快照略過自己的載入；
+    那條路徑的 404 也要記原因，否則快照畫出 NT$ 0。"""
+    from core import source_tree
+    if not source_tree.module_installed("modules/analytics/"):
+        pytest.skip("M08 營運分析不在這個安裝包 ⇒ 報表頁本來就不在（PLAYBOOK §B-11）")
+    u = make_user(username="arapabs_sa3", role="superadmin")
+    with _page(e2e_browser) as page:
+        page.route("**/api/cashier/payable-queue**", _not_found)
+        _login(page, live_server, *u)
+        page.goto(f"{live_server}/pages/reports.html?tab=cashier")
+        d = "Alpine.$data(document.querySelector('[x-data]'))"
+        page.wait_for_function(f"() => {d} && {d}.cashierLoaded", timeout=20000)
+        assert page.evaluate(f"() => {d}.payableSnapMissing") == "應收應付模組未安裝"
+        assert page.evaluate(f"() => {d}.payableKnown") is False
