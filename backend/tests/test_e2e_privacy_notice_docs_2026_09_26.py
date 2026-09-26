@@ -40,8 +40,8 @@ def _insert_quote(no, contact="林聯絡", site="趙現場"):
         conn.close()
 
 
-def _check_and_expect_ack(page, name, user):
-    card = page.locator("[data-privacy-card]")
+def _check_and_expect_ack(page, name, user, card_sel="[data-privacy-card]"):
+    card = page.locator(card_sel)
     card.locator("[data-privacy-missing]").wait_for(state="visible", timeout=20000)
     card.locator("input[data-privacy-ack]").check()
     acked = card.locator("[data-privacy-acked]")
@@ -69,7 +69,8 @@ def test_case_site_contact_notice(live_server, make_user, new_page, login_as):
     page.on("dialog", lambda d: d.accept())
     login_as(page, u)
     page.goto(live_server + "/pages/case-management.html?q=PND-C-001")
-    _check_and_expect_ack(page, "趙現場", "pnd_c")
+    # 案件頁有兩個告知對象（合約現場聯絡人、出貨單收件人；稽核 D PN-M1）⇒ 指定這一個
+    _check_and_expect_ack(page, "趙現場", "pnd_c", '[data-privacy-card][data-privacy-subject="case_site_contact"]')
     assert pn.get_ack("case_site_contact", "PND-C-001:趙現場")["byUsername"] == "pnd_c"
 
 

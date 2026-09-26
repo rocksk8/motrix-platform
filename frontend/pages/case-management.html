@@ -3739,7 +3739,7 @@
       <!-- 個資蒐集告知：收件人（稽核 D PN-M1；主持裁示：比照手動輸入的聯絡人，要告知）-->
       <div data-privacy-card data-privacy-subject="shipping_recipient"
            x-data="MotrixPrivacyNotice.subjectState('contact', s => s.editShippingNoteNo ? '/api/shipping-notes/' + encodeURIComponent(s.editShippingNoteNo) : null, s => s.shippingForm && s.shippingForm.recipient, { deferred: true })"
-           x-init="pnLoadNotice(); pnRefresh(); $watch('showShippingModal', v => v && pnRefresh()); $watch('editShippingNoteNo', () => pnRefresh())"
+           x-init="$watch('showShippingModal', v => { if (v) { if (!privacyNotice) pnLoadNotice(); pnRefresh() } }); $watch('editShippingNoteNo', () => showShippingModal && pnRefresh())"
            @shipping-saved.window="privacyAckRequested && $event.detail.waits.push(pnRecord('/api/shipping-notes/' + encodeURIComponent($event.detail.noteNo)))"
            style="margin:0 0 14px;padding:10px 12px;border:1px solid var(--border-light);border-radius:6px">
         <div style="font-size:12px;font-weight:600;margin-bottom:4px">個資蒐集告知（收件人）</div>
