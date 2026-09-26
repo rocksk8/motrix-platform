@@ -279,4 +279,3 @@ def run_daily_checks(mode: str = "daily") -> None:
 
 
 from core import registry as _registry  # noqa: E402
-_registry.provide("daily.check", "case_deadlines", run_daily_checks)
