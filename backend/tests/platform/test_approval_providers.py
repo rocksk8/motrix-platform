@@ -199,6 +199,40 @@ def test_detail_keeps_m01_access_and_money_rules_for_provider_types(client, iv_s
     assert _detail(client, _login(client, ou, op), "IV-AQP-5").status_code == 403
 
 
+def test_case_sales_without_money_rights_gets_no_passbook(client, make_user):
+    """稽核 D AP-M2：該案業務（非財務、非簽核人）打得開承攬商匯款申請的詳情，但拿不到存簿封面（沒有 passbook、沒有任何 dataUrl）；
+    正對照：本單簽核人（同樣非財務）看得到。"""
+    import db
+    if not source_tree.module_installed("modules/subcontract/"):
+        pytest.skip("M04 不在這個安裝包 ⇒ 承攬商匯款申請本來就不存在（PLAYBOOK §B-11）")
+    su, sp = make_user(username="apm2_sales", role="viewer", modules=["dashboard"])[:2]
+    au, ap = make_user(username="apm2_appr", role="viewer", modules=["dashboard"])[:2]
+    snap = {"grandTotal": 5000, "vendorName": "測試承攬商", "bankPassbookImage": "data:image/png;base64,AAAA"}
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, "
+                     "deal_tag, sales_person, assigned_user_ids) VALUES ('MQ-APM2-1','已送出','客','案','{}','2026-09-26',"
+                     "'2026-09-26','已成案','apm2_sales','[]')")
+        conn.execute("INSERT INTO contractor_dispatches (id, quote_no, dispatch_date, scope, items_json, personnel_json, "
+                     "total_amount, tax_rate, status, notes, created_by, created_at, updated_at, files_json, invoice_files_json) "
+                     "VALUES (99102,'MQ-APM2-1','2026-09-01','x','[]','[]',5000,0,'已完成','','x','2026-09-26','2026-09-26','[]','[]')")
+        conn.execute("INSERT INTO contractor_payment_vouchers (voucher_no, quote_no, dispatch_id, status, snapshot_json, data_json, "
+                     "created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                     ("CV-APM2-1", "MQ-APM2-1", 99102, "待審核", json.dumps(snap),
+                      json.dumps({"approval": {"currentTier": 0, "tiers": [{"approvers": [{"username": "apm2_appr", "status": "pending"}]}]}}),
+                      "x", "2026-09-26", "2026-09-26"))
+        conn.commit()
+    finally:
+        conn.close()
+    url = "/api/approval-queue/detail?type=contractor_voucher&id=CV-APM2-1"
+    sales = client.get(url, headers=_login(client, su, sp))
+    assert sales.status_code == 200, sales.text
+    assert sales.json().get("moneyMasked") is True
+    assert not [f for f in sales.json()["files"] if f.get("id") == "passbook" or f.get("dataUrl")], sales.json()["files"]
+    appr = client.get(url, headers=_login(client, au, ap)).json()
+    assert [f for f in appr["files"] if f.get("id") == "passbook" and f.get("dataUrl", "").startswith("data:image/")]
+
+
 def test_unreadable_chain_is_refused(client, iv_setup):
     sh, _ah = iv_setup
     _seed_iv("IV-AQP-3", "aqp_old", data_json="{not json")

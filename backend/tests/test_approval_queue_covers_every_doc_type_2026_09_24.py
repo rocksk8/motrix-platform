@@ -60,6 +60,17 @@ def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_provider
     assert no_agg["missing_from_queue"] == [] and no_agg["missing_from_count"] == ["voucher"]
 
 
+def test_a_type_whose_owner_module_is_absent_is_not_applicable_not_missing():
+    """稽核 D AP-M1：擁有模組不在 ⇒ 「不適用」並說明原因（列車 core-only／真刪不紅）；模組在而掃不到 ⇒ 仍報漏掉（正對照）。"""
+    absent = check_approval_queue_coverage(doc_types=["invoice_voucher", "quotation"], provider_sources=[],
+                                           installed=lambda key: False)
+    assert is_clean(absent) and "arap" in absent["not_applicable"]["invoice_voucher"]
+    assert "quotation" not in absent["not_applicable"]
+    present = check_approval_queue_coverage(doc_types=["invoice_voucher"], queue_source="", count_source="",
+                                            provider_sources=[], installed=lambda key: True)
+    assert present["missing_from_queue"] == ["invoice_voucher"] and present["not_applicable"] == {}
+
+
 def test_the_real_provider_scan_finds_the_owner_modules():
     """量尺：真的登記處掃得到各單據模組的提供者（掃不到 ⇒ 每一種都判成漏掉，或只靠 M01 源碼殘留才綠）。"""
     from check_approval_queue_coverage import _provider_sources

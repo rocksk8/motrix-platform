@@ -6049,7 +6049,8 @@ def approval_queue_detail(type: str, id: str, authorization: str = Header(None))
         # 金額遮蔽：規則與憑證流一致（見 _can_see_queue_money）
         if not _can_see_queue_money(conn, user, approval_raw):
             _mask_money(out)
-            out["files"] = [f for f in out["files"] if f.get("id") != "passbook"]
+            # 內嵌影像（dataUrl：存簿封面）一律拿掉——看的是「有沒有內嵌內容」，不只看 id 字串（稽核 D AP-M2）
+            out["files"] = [f for f in out["files"] if not f.get("dataUrl") and f.get("id") != "passbook"]
 
         return out
     finally:
