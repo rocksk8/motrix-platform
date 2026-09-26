@@ -37,7 +37,7 @@ def test_extra_expense_approver_opens_queue_detail_and_sees_money(client, make_u
     vals = {f["label"]: f["value"] for f in r.json()["fields"]}
     assert vals.get("小計") == "1,234", vals                         # 簽核人看得到金額
     # 反向：不在簽核名單、也不是案件成員 ⇒ 仍然擋
-    assert client.get("/api/approval-queue/detail?type=extra_expense&id=%d" % eid, headers=out).status_code == 403
+    assert client.get("/api/approval-queue/detail?type=extra_expense&id=%d" % eid, headers=out).status_code == 404   # M01-O1
 
 
 def test_router_uses_the_helper_rule():

@@ -70,7 +70,7 @@ def test_outsider_cannot_open_queue_detail(client, make_user):
     u, p = make_user(username="aqz_outsider", role="viewer", modules=["dashboard"])
     r = client.get("/api/approval-queue/detail?type=completion_note&id=CN-AQZ-001",
                    headers=_auth(_login(client, u, p)))
-    assert r.status_code == 403, f"外人看得到送審內容：{r.status_code} {r.text}"
+    assert r.status_code == 404, f"外人看得到送審內容：{r.status_code} {r.text}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_document_approver_can_open_detail(client, make_user):

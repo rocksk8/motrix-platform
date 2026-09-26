@@ -200,7 +200,7 @@ def test_detail_keeps_m01_access_and_money_rules_for_provider_types(client, iv_s
     assert r.status_code == 200, r.text
     assert not r.json().get("moneyMasked") and any(f["label"] == "金額" and f["value"] != "（無財務檢視權限）"
                                                    for f in r.json()["fields"])
-    assert _detail(client, _login(client, ou, op), "IV-AQP-5").status_code == 403
+    assert _detail(client, _login(client, ou, op), "IV-AQP-5").status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_case_sales_without_money_rights_gets_no_passbook(client, make_user):

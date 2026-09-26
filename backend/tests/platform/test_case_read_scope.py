@@ -21,6 +21,7 @@ CLASSES = {"row_access", "module", "own_rule"}
 #: 逐案守門的呼叫（直接或經共用守門）
 CASE_GUARDS = ("row_access.", "_guard_case(", "guard_case_access(", "_guard_queue_detail(",
                "_guard_action_item_case(", "get_quotation(",
+               "require_case(", "deny_case(",   # M01-O1：L1 case_access 的逐案判定（被拒＝查無，同一個 404）
                ".guard(conn, quote_no")      # IP-12 case.access（M01 提供；別組經它做逐案檢查）
 
 
