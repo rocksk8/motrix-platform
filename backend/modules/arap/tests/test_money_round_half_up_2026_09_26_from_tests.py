@@ -208,7 +208,7 @@ def _insert_dispatch_row(quote_no, total_amount, personnel=None):
 
 
 def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
-    import modules.analytics.api.reports as rp
+    from helpers import recognition as rp   # 2026-09-26：M08 經 case.recognition，提供者轉呼叫這裡的函式
 
     def _mk(rows, **extra):
         return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",

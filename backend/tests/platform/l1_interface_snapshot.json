@@ -598,6 +598,11 @@
    "collect_tax_invoices": "def(year=…, month=…)",
    "round_half_up_invoice": "def(n)"
   },
+  "helper:recognition_basis": {
+   "BASES": "const",
+   "BASIS_NOTES": "const",
+   "normalize_basis": "def(v)"
+  },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
    "OwnerRule": "class",

@@ -513,3 +513,41 @@ from core import registry as _registry  # noqa: E402
 _registry.provide("case.access", "case", _CaseAccess)
 _registry.provide("case.summary", "case", case_summary)          # 2026-09-26 M01-PLAN §3-4（IP 號碼由列車定）
 _registry.provide("case.locations", "case", _CaseLocations)
+
+
+class _CaseRecognition:
+    """`case.recognition`（M01 提供；M01-PLAN §3-6）：收入認列、支出歸月與待補登標註——資料在 M01（階段、叫料、額外支出、
+    報價），M08 營運報表經本提供者取用，不直接 import `helpers.recognition`。簽章與 `helpers.recognition` 同名函式相同。"""
+
+    @staticmethod
+    def accrual_income_items(conn, d0, d1, department_id=None):
+        from helpers import recognition as r
+        return r.accrual_income_items(conn, d0, d1, department_id)
+
+    @staticmethod
+    def dispatch_entries(conn, basis):
+        from helpers import recognition as r
+        return r.dispatch_entries(conn, basis)
+
+    @staticmethod
+    def material_entries(conn, basis, department_id=None):
+        from helpers import recognition as r
+        return r.material_entries(conn, basis, department_id)
+
+    @staticmethod
+    def extra_entries(conn, basis):
+        from helpers import recognition as r
+        return r.extra_entries(conn, basis)
+
+    @staticmethod
+    def recognition_flags(conn, year, department_id=None, money_ok=True):
+        from helpers import recognition as r
+        return r.recognition_flags(conn, year, department_id, money_ok)
+
+    @staticmethod
+    def dispatch_unavailable(basis="accrual"):
+        from helpers import recognition as r
+        return r.dispatch_unavailable(basis)
+
+
+_registry.provide("case.recognition", "case", _CaseRecognition)   # IP 號碼由列車定

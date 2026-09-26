@@ -47,10 +47,17 @@ def _collect_tax_invoices(year=None, month=None):
     return p(year, month)
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
-from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
-    normalize_basis, BASIS_NOTES, accrual_income_items, dispatch_entries, material_entries,
-    extra_entries, recognition_flags, dispatch_unavailable,
-)
+from helpers.recognition_basis import normalize_basis, BASIS_NOTES   # `AC2`：口徑的純標籤（L1）
+
+#: 收入認列、支出歸月、待補登屬 M01 案件（`case.recognition`，M01-PLAN §3-6）；M01 不在 ⇒ 明說（§B-4），不是 0
+CASE_RECOGNITION_MISSING = "案件模組未安裝：權責口徑收入（依階段完成）不提供"
+CASE_EXPENSES_UNAVAILABLE = {"category": "case",
+                             "reason": "案件模組未安裝：叫料、額外支出與承攬商派工的支出沒有列入（不是 0 筆）"}
+
+
+def _recognition():
+    from core import registry
+    return registry.single_provider("case.recognition")
 
 _log = logging.getLogger(__name__)
 
@@ -3184,16 +3191,22 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
 
     basis = normalize_basis(basis)
     # `AC2`：收入依口徑取——權責＝階段完成月（未稅）；現金＝收款日（含稅，既有那一支）
+    rec = _recognition()
     if basis == "accrual":
         def _income(a, b, dept):
+            if rec is None:
+                return []                                   # M01 不在 ⇒ 權責口徑收入沒有資料來源（incomeNotice 明說）
             conn = get_db()
             try:
-                return accrual_income_items(conn, a, b, dept)
+                return rec.accrual_income_items(conn, a, b, dept)
             finally:
                 conn.close()
     else:
         _income = _collect_income_items
-    income_notice = "" if (basis == "accrual" or _registry.single_provider("receivables.income_items")) else RECEIVABLES_MISSING
+    if basis == "accrual":
+        income_notice = "" if rec is not None else CASE_RECOGNITION_MISSING
+    else:
+        income_notice = "" if _registry.single_provider("receivables.income_items") else RECEIVABLES_MISSING
     expenses_annual = _collect_expenses(year, department_id, basis)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)
@@ -3234,7 +3247,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
 
     conn = get_db()
     try:
-        flags = recognition_flags(conn, year, department_id, money_ok)
+        flags = rec.recognition_flags(conn, year, department_id, money_ok) if rec is not None else {}
     finally:
         conn.close()
     return {
@@ -3310,8 +3323,9 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
             return True
         return bool(quote_no) and dept_by_quote.get(quote_no) == department_id
 
-    # ── 承攬商派發（`AC2`：口徑由 helpers.recognition 決定——權責＝發票日、未稅；現金＝已匯款日、含稅）
-    for e in dispatch_entries(conn, basis):
+    rec = _recognition()                                   # M01 的 case.recognition；不在 ⇒ 下面三類整個缺（unavailable 明說）
+    # ── 承攬商派發（`AC2`：口徑由 M01 決定——權責＝發票日、未稅；現金＝已匯款日、含稅）
+    for e in (rec.dispatch_entries(conn, basis) if rec is not None else []):
         mo = (e["date"] or "")[:7]
         if mo not in monthly or not _quote_in_department(e["quoteNo"]):
             continue
@@ -3322,7 +3336,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         })
 
     # ── 叫料（`AC2`：原本完全沒算進支出；併入「料件」類，不會寫入 stock_items ⇒ 不重複）
-    for e in material_entries(conn, basis, department_id):
+    for e in (rec.material_entries(conn, basis, department_id) if rec is not None else []):
         mo = (e["date"] or "")[:7]
         if mo not in monthly:
             continue
@@ -3366,7 +3380,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
     # ── 其他支出（額外支出逐筆）──────────────────────────────────────────────
     # 2026-09-09 起「只要填了就算」、送審中照樣計入並標 pending——規則不變。
     # `AC2`：歸月改由 helpers.recognition 決定（權責＝發票日→核准日→憑證日；現金＝付款日→憑證日）。
-    for e in extra_entries(conn, basis):
+    for e in (rec.extra_entries(conn, basis) if rec is not None else []):
         mo = (e["date"] or "")[:7]
         if mo not in monthly or not _quote_in_department(e["quoteNo"]):
             continue
@@ -3418,7 +3432,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
 
     # 稽核 X-1：某一類整個沒算（例如 IP-1 提供者不在）⇒ 明說，不可以跟「這期 0 元」長得一樣
     return {"monthly": monthly_items, "totals": totals, "details": details,
-            "unavailable": dispatch_unavailable(basis)}
+            "unavailable": rec.dispatch_unavailable(basis) if rec is not None else [dict(CASE_EXPENSES_UNAVAILABLE)]}
 
 
 @router.get("/api/reports/expenses-monthly")

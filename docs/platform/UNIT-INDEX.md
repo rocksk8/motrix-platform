@@ -6,7 +6,7 @@
 - 介面＝G1 快照中的頂層公開名稱數；使用者＝dep_scan import 圖中直接 import 它的單位數（不含測試）。
 - 用途標「（無單位卡）」＝取自 docstring 第一行，尚未補卡；改到該檔時守門會要求補上。
 
-單位 58 個；有單位卡 13 個。
+單位 59 個；有單位卡 13 個。
 
 | 單位 | 層 | 用途 | 介面 | 使用者 | 契約題 |
 |---|---|---|---:|---:|---|
@@ -60,6 +60,7 @@
 | `helper:privacy_notice` | L1 | L1 個資蒐集告知（R3；規格 CUSTOMIZATION-SPEC §9.3；個人資料保護法 §8 I）。（無單位卡） | 23 | 12 | — |
 | `helper:procurement` | L1 | 採購前置時間與採購建議狀態的判定（2026-09-21，第 3 輪）。（無單位卡） | 11 | 3 | — |
 | `helper:receivables` | L1 | L1 薄殼（淘汰中）：收款明細與銷項發票清單——**資料在 M05 應收應付**，這裡只轉呼叫它的 provider。（無單位卡） | 4 | 0 | — |
+| `helper:recognition_basis` | L1 | 權責／現金口徑的純標籤（L1；2026-09-26 自 M01 helpers/recognition.py 下沉，M01-PLAN §3-6）。（無單位卡） | 3 | 2 | — |
 | `helper:row_access` | L1 | L1 資料列權限（row-level access）：一份宣告，同時產生「單筆判斷」與「SQL 過濾」。（無單位卡） | 8 | 10 | — |
 | `helper:settings` | L1 | System settings CRUD (system_settings table).（無單位卡） | 2 | 34 | — |
 | `helper:startup` | L1 | Server startup checks: admin seed, weak-password scan, session cleanup, Edge path.（無單位卡） | 16 | 8 | — |
