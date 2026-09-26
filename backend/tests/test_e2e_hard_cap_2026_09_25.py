@@ -18,8 +18,11 @@ import time
 import pytest
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 探針要吃到 tests/conftest.py ⇒ 放在 tests/ 底下；每一題各自一個目錄（-n 下三題同時跑，共用會互刪）
-PROBE_ROOT = os.path.join(BACKEND, "tests")
+# 探針要吃到 backend/conftest.py（2026-09-25 自 tests/ 上移）⇒ 放在 backend/ 底下任何位置都可以；每一題各自一個目錄（-n 下三題同時跑，共用會互刪）。
+# O6（2026-09-26）：原本放在 tests/ 底下 ⇒ 別的題的子 pytest 收集時，這個目錄被本題同時刪掉 ⇒ FileNotFoundError（第二班列車全量紅 1 次）。
+# 改放 backend/ 根的「.」開頭目錄：pytest 遞迴收集與掃 tests/ 的工具都不會進去；本題以明確路徑指定檔案，照樣收集得到。
+PROBE_ROOT = BACKEND
+PROBE_PREFIX = ".hardcap_probe_"
 
 SRC = '''import time
 import pytest
@@ -39,7 +42,7 @@ def test_quick():
 @pytest.fixture
 def probe():
     import uuid
-    d = os.path.join(PROBE_ROOT, "_hardcap_probe_%s" % uuid.uuid4().hex[:8])
+    d = os.path.join(PROBE_ROOT, PROBE_PREFIX + uuid.uuid4().hex[:8])
     os.makedirs(d)
     f = os.path.join(d, "test_zz_hardcap_probe.py")
 
@@ -116,3 +119,11 @@ def test_a_quick_e2e_leaves_nothing_behind(probe, tmp_path):
     r, took, out = _pytest([f, "-n", "1"], 30, tmp_path, "q")
     assert r.returncode == 0 and "2 passed" in out, out[-800:]
     assert "e2e 逐題上限" not in out, out[-800:]
+
+
+def test_probe_dir_is_outside_collected_trees():
+    """O6：探針目錄不可以在會被收集／掃描的 tests/、modules/ 底下，且要「.」開頭（pytest 遞迴收集不進去）。"""
+    probe_dir = os.path.join(PROBE_ROOT, PROBE_PREFIX + "x")
+    rel = os.path.relpath(probe_dir, BACKEND).replace("\\", "/")
+    assert rel.startswith(".") and "/" not in rel, rel
+    assert not rel.startswith(("tests/", "modules/")), rel
