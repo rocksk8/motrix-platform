@@ -36,9 +36,10 @@ def test_case_bundle_without_m06(client, make_user, monkeypatch):
 
 
 def test_case_bundle_with_m06_lists_vouchers(client, make_user):
-    """正對照：提供者在 ⇒ 傳票段 ok（空案件 ⇒ 空清單）。"""
-    from core import registry
-    if registry.single_provider("voucher.by_case") is None:
+    """正對照：M06 在 ⇒ 提供者一定在、傳票段 ok（空案件 ⇒ 空清單）。
+    略過的判準是「模組在不在」，不是「提供者在不在」——後者正是要驗的東西（漏宣告時要紅，不是略過）。"""
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/"):
         import pytest
         pytest.skip("M06 不在")
     h = _hdr(client, make_user)
