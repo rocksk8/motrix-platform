@@ -11680,13 +11680,17 @@
     "dir:backend/modules/subcontract/",
     "file:backend/tests/platform/test_case_stage_connectors.py",
     "file:backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py",
+    "helper:uploads",
     "plat:__init__",
+    "plat:registry",
     "plat:source_tree"
    ],
    "evidence": {
     "import": [
      "backend/core/__init__.py",
+     "backend/core/registry.py",
      "backend/core/source_tree.py",
+     "backend/helpers/uploads.py",
      "backend/tests/platform/test_case_stage_connectors.py",
      "backend/tests/test_e2e_voucher_source_block_below_2026_09_25.py"
     ],

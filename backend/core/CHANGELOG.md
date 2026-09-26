@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.47 — 2026-09-26（A，a-attachments-5 帶入 M06 基底：因權限沒列出的附件要明說；列車取號）
+- L1（新增）：`helpers.uploads.AttachmentNotVisible(visible=None, hidden=0)` 多兩個可選參數：`visible`（逐張過濾時看得到的那幾張）、`hidden`（沒列出的**附件個數**，只有數字；主持裁示：明說只准類別＋個數）；既有 `raise AttachmentNotVisible()` 寫法不變
+
 ## 1.46 — 2026-09-26（A，報價單上的附件用案件頁的讀取規則；稽核 D AT-M1c；第十班列車取號，原暫用 1.40）
 - L1（新增）：`helpers.case_access.case_page_readable(conn, quote_no, user)`（案件頁 `GET /api/quotations/{q}` 的讀取規則：row_access `case`／scope="read"，放行 cashier、不放行 case_manage；`get_quotation` 與回簽檔／收款發票／叫料／叫料發票的附件提供者共用同一支）
 
