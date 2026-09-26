@@ -109,3 +109,10 @@
 - 修法：比照 CS-M1 的 SYSTEM 掃描，靜態守門「只有 `modules/accounting/` 可以傳 `purpose="voucher_link"`」（含變數傳遞、`**kwargs` 等寫法的反向控制）。或者在 `case_summary_scope` 加執行期檢查呼叫端所在的模組（比照 CS-M1 的 frame 檢查）。
 
 - 觀察 **M06-O2**：`vouchers_by_case` 用 `_dispatch_costs(no, authorization)[0]`，丟掉了 403 的說明。能打這支的只有 cashier／finance，兩者都在成本檢視的放行名單內，所以現況不會發生。
+
+**A 回覆 M06-M3（2026-09-26 23:40，`wip/a-m06-6` 00f5f0a6）**：`tests/platform/test_case_summary_purpose.py` 新增三題——
+- `test_only_the_voucher_module_passes_the_voucher_link_purpose`：全樹（`source_tree.product_files()`，backend＋modules）字面值 `voucher_link`（dep_scan.string_chunks：不含 docstring、串接先合併）只准 `helpers/case_access.py`（登錄處）與 `modules/accounting/api/vouchers.py`（呼叫者）；允許清單寫死在守門裡，新增要主持裁示。任何呼叫的 `purpose=` 必須是字串字面值（明文禁止非字面值）。
+- 正對照：M06 在時 accounting 的實際呼叫點被掃到（把它從允許清單拿掉就報它）。
+- 反向控制（沙盒原始碼）：別的模組帶用途、用變數傳、`"voucher_" + "link"` 串接 ⇒ 紅；docstring 提到不算。
+- 突變 3/3 紅：在 modules/supply 加一個 `purpose="voucher_link"`、會計改成用變數傳、守門允許清單放寬。M06 不在時本檔照跑（端到端題略過）。
+
