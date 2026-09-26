@@ -176,12 +176,26 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 139   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+_BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+#: 〔2026-09-26 第十班列車：139 → 138。cashier.html／receivables.html／payment-request-form.html（arap，
+#:   實體仍在 frontend/pages/，不在「排除 modules/」的判準內）改列進 `_MODULE_OWNED_FRONTEND_PAGES`
+#:   一起排除——這 3 頁裡剛好有 1 句導航語氣字串，換位置＝這一題的排除範圍換了，不是被刪；
+#:   PLAYBOOK §B-11 反向控制真的拿掉 arap 時這 3 個檔案會實體消失，不排除會把「模組真的不在」
+#:   誤判成「訊息被刪掉了」〕
 #: 〔2026-09-26 M05 搬遷：141 → 139。開票申請與請款單各 1 條「請至少選擇一項品項」隨 routers/ 搬進 modules/arap/api/；
 #:   同一個掃描器含 modules/ 的總數搬遷前後都是 157 ⇒ 沒有任何一句被刪，只是換了位置〕
 #: 〔2026-09-26 第六班列車：142 → 141。M04／M07／M08 同班搬進 modules/ 共 9 條（subcontract 2、payroll 4、analytics 3），
 #:   同一個掃描器含 modules/ 的總數 origin da6ab316 與列車都是 157 ⇒ 沒有任何一句被刪，只是換了位置；
 #:   modules/ 外由 150 降到 141。各包單獨時仍 ≥142，三包合起來才跨過基準〕
+
+#: 屬於模組自己的前端頁面（module.json 的 `pages[]`）：頁面實體仍在 `frontend/pages/`，不是
+#: `modules/<key>/…` 形狀 ⇒ 上面「排除 modules/」的判準抓不到；PLAYBOOK §B-11 反向控制真的拿掉
+#: 該模組時這幾頁連同它們的導航訊息會一起消失，跟 modules/ 底下的 backend 檔一樣不該算進基準
+#: （第十班列車 arap 真刪反向控制實測：138 < 139，這 3 頁裡剛好有一句沒被排除）。
+_MODULE_OWNED_FRONTEND_PAGES = {
+    "frontend/pages/cashier.html", "frontend/pages/receivables.html",
+    "frontend/pages/payment-request-form.html",   # arap（M05）
+}
 
 
 def test_em10_the_navigation_tone_message_count_does_not_drop():
@@ -193,7 +207,8 @@ def test_em10_the_navigation_tone_message_count_does_not_drop():
     更可比對，不能就地消失」。
     """
     hits = [(p, s) for p, s in _scan_all_nav_messages()
-            if "modules" not in str(p).replace("\\", "/").split("/")]
+            if "modules" not in str(p).replace("\\", "/").split("/")
+            and str(p).replace("\\", "/") not in _MODULE_OWNED_FRONTEND_PAGES]
     assert len(hits) >= _BASELINE_COUNT, (
         "含導航語氣的可見字串只掃到 %d 條，低於基準 %d：\n" % (
             len(hits), _BASELINE_COUNT)
@@ -235,7 +250,13 @@ def test_em10_t100_account_code_message_points_to_the_wrong_place():
     `FN3` 把這個功能從報表頁搬到出納頁，訊息沒有跟著搬——同一個成因，
     `③` 是搬家前的舊指標，這一題是搬家前的另一個舊指標。核心斷言與
     `③` 同一種形狀：訊息不可以再提「系統設定」，下面兩段是佐證。
+
+    出納頁（cashier.html）屬於 M05 應收應付（arap），該模組不在這個安裝包時本題最後一段驗證的
+    對象不存在（PLAYBOOK §B-11 反向控制；第十班列車 arap 真刪實測發現：本題原本沒有這一道略過）。
     """
+    from core import source_tree
+    if not source_tree.module_installed("modules/arap/"):
+        pytest.skip("應收應付模組未安裝：cashier.html 不存在，本題最後一段驗證的正是這一頁")
     # ⚠️ 這句訊息在原始碼裡是三段字串常數用 `+` 接起來的
     # （`"…科目代號：" + "、".join(...) + "（請至系統設定…）"`），
     # `ast` 把它們拆成三個獨立的 `Constant` 節點——「科目代號」與

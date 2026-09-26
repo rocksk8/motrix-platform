@@ -281,7 +281,13 @@ def test_frontend_quotation_item_amount_and_charity_round_half_up():
 @needs_node
 def test_frontend_payment_request_form_matches_the_backend():
     """請款單頁：品項 0.7 × 45 ⇒ 32（舊 31）；依金額 3,939 的未稅試算 3,939×10,004／10,504＝3,751.5 ⇒ 3,752
-    （舊 3,939／(10,504／10,004) 浮點 3,751.4999… ⇒ 3,751）；比例 30% of 10,015 ⇒ 3,005（正對照）。"""
+    （舊 3,939／(10,504／10,004) 浮點 3,751.4999… ⇒ 3,751）；比例 30% of 10,015 ⇒ 3,005（正對照）。
+
+    請款單頁屬於 M05 應收應付（arap），該模組不在這個安裝包時本題連驗證對象都不存在
+    （PLAYBOOK §B-11 反向控制；第十班列車 arap 真刪實測發現：本題原本沒有這一道略過）。"""
+    from core import source_tree
+    if not source_tree.module_installed("modules/arap/"):
+        pytest.skip("應收應付模組未安裝：payment-request-form.html 不存在，本題驗證的正是這一頁")
     got = _page("payment-request-form.html", "paymentRequestForm", """
         o.toggleItem({ itemId: 1, remainingQty: 0.7, unitPrice: 45 })
         const a = o.itemSelections[1].amount

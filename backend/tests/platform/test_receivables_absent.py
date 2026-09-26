@@ -60,7 +60,8 @@ def test_t100_preview_without_m05(client, make_user, monkeypatch):
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
     assert prev.status_code == 200, prev.text
     assert ae.T100_RECEIVABLES_MISSING in prev.json()["notice"].split("；")
-    # 兩個都缺 ⇒ 兩句並列（IP-14 的承攬商＋本串接點的收款事件）
-    _drop(monkeypatch, "contractor_voucher.public")
+    # 兩個都缺 ⇒ 兩句並列（IP-14 的承攬商＋本串接點的收款事件；T100 預覽讀的是 paid_between，不是 public——
+    # 稽核 D IP-M1 之後 T100 改看 paid_between，這一題原本只監控 public，沒有跟著換 ⇒ 第十班列車交會紅）
+    _drop(monkeypatch, "contractor_voucher.paid_between")
     both = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()["notice"].split("；")
     assert set(both) == {ae.T100_RECEIVABLES_MISSING, ae.T100_CONTRACTOR_MISSING}, both

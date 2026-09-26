@@ -208,10 +208,33 @@ def _module_absent(f):
     return not source_tree.module_installed(f)
 
 
+#: MONEY_JS_FILES 裡屬於模組自己宣告的頁面（module.json 的 `pages[]`）；頁面實體仍在 frontend/pages/，
+#: 不是 `modules/<key>/…` 形狀 ⇒ `_module_absent` 判斷不到，模組真的被拿掉時這裡會誤判成「清單過期」
+#: （第十班列車 arap 真刪反向控制實測）。用同一份 `module_installed` 判準，只是換一個問法：問它宣告的模組在不在。
+_PAGE_OWNER_MODULE = {
+    "pages/payment-request-form.html": "arap",
+}
+
+
+def _page_absent(f):
+    owner = _PAGE_OWNER_MODULE.get(f)
+    return owner is not None and _module_absent("modules/%s/" % owner)
+
+
+def test_page_absent_matches_module_presence(monkeypatch):
+    """正對照：擁有的模組在場 ⇒ 不算缺席；反向控制：換成一個真的不在的模組 key ⇒ 算缺席；
+    不在對照表裡的頁面一律不算缺席（不可以隨便就被豁免）。"""
+    assert _page_absent("pages/payment-request-form.html") is False, "本題跑在 arap 完整安裝的樹 ⇒ 不算缺席"
+    assert _page_absent("pages/quotation-form.html") is False, "沒登記在對照表 ⇒ 不給豁免"
+    monkeypatch.setitem(_PAGE_OWNER_MODULE, "pages/payment-request-form.html", "__no_such_module_key__")
+    assert _page_absent("pages/payment-request-form.html") is True, "換一個真的不在的模組 key ⇒ 該算缺席"
+
+
 def test_money_scope_files_exist():
     missing = [f"backend/{f}" for f in MONEY_PY_FILES
                if not (source_tree.BACKEND / f).exists() and not _module_absent(f)]
-    missing += [f"frontend/{f}" for f in MONEY_JS_FILES if not (FRONTEND / f).exists()]
+    missing += [f"frontend/{f}" for f in MONEY_JS_FILES
+                if not (FRONTEND / f).exists() and not _page_absent(f)]
     assert not missing, "守門清單裡的檔不見了（搬進模組了？請同步更新 MONEY_*_FILES）：\n" + "\n".join(missing)
 
 
@@ -224,6 +247,8 @@ def test_invoice_quote_and_payment_amounts_use_the_shared_half_up():
         for ln in money_py_hits(p.read_text(encoding="utf-8")):
             bad.append(f"backend/{f}:{ln}")
     for f in MONEY_JS_FILES:
+        if _page_absent(f):
+            continue
         for ln, s in money_js_hits((FRONTEND / f).read_text(encoding="utf-8")):
             bad.append(f"frontend/{f}:{ln}: {s}")
     assert not bad, ("開票／請款／報價／外包稅額／成本精算的金額要用 legal_params.round_half_up"

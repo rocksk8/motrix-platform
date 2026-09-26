@@ -533,7 +533,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M01 案件：`helpers/case_attachments.py::_CaseAttachments`（6 類；M01 未搬 ⇒ `registry.provide()`，M01 搬遷時改 ModuleSpec，同 CA-O3）；M04 外包工班：`modules/subcontract/attachments.py::_SubcontractAttachments`（2 類，ModuleSpec）；M05 應收應付：`routers/invoice_vouchers.py::_InvoiceVoucherAttachments`（1 類；M05 未搬 ⇒ `registry.provide()`） |
+| 提供方 | M01 案件：`helpers/case_attachments.py::_CaseAttachments`（6 類；M01 未搬 ⇒ `registry.provide()`，M01 搬遷時改 ModuleSpec，同 CA-O3）；M04 外包工班：`modules/subcontract/attachments.py::_SubcontractAttachments`（2 類，ModuleSpec）；M05 應收應付：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherAttachments`（1 類；第十班列車 M05 搬遷之後路徑更新，登記仍是模組層 `registry.provide()`，未併入 ModuleSpec） |
 | 使用方 | M06 `helpers/voucher_attachments.py`（`source_files`、`case_attachments`、`resolve_picks`、`line_source_files`）；`routers/vouchers.py` 的 `line-source-files` 端點回 `unavailable` |
 | 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `SOURCE_TYPES`（兩兩不重疊、聯集 ⊆ M06 白名單） |
 | 語法 | 提供：`registry.provide("attachments.for_document", "<key>", Obj)` 或 `ModuleSpec(providers={("attachments.for_document", "<key>"): Obj})`；`Obj.SOURCE_TYPES`、`Obj.doc_nos_for_case(conn, source_type, quote_no, user) -> list[str]`、`Obj.files(conn, source_type, doc_no, user) -> list[dict]`〔更正（稽核 D AT-M1，主持裁示 (b)，2026-09-26）：原契約沒有 `user`，提供者無從依原單據權限過濾 ⇒ 加上（未發版，契約版本仍為 1）〕 |
