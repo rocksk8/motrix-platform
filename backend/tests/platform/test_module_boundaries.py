@@ -313,4 +313,6 @@ def test_prune_keeps_other_keys_and_edges_of_modules_not_installed(tmp_path, mon
     assert B.main(["--prune"]) == 0
     out = json.loads(bl.read_text(encoding="utf-8"))
     assert keep in out["edges"] and drop not in out["edges"], out["edges"]
-    assert out.get("l1_to_l2") == real["l1_to_l2"], "prune 把 l1_to_l2 洗掉了"
+    _, gone_l1 = B.check_l1_to_l2_baseline(B.scan_units(), B.Groups.load(), real["l1_to_l2"])
+    assert "l1_to_l2" in out, "prune 把 l1_to_l2 整段洗掉了"
+    assert out["l1_to_l2"] == [e for e in real["l1_to_l2"] if e not in set(gone_l1)], out["l1_to_l2"]
