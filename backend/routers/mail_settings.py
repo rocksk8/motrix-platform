@@ -125,7 +125,8 @@ def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_
     def in_group(ov, username, role):
         mode = ov.get("mode", "default")
         if mode == "custom":
-            return username in (ov.get("users") or []) or role in (ov.get("roles") or [])
+            custom_roles = ov.get("roles") or []
+            return username in (ov.get("users") or []) or role in custom_roles
         return role == "superadmin"          # 系統技術類的預設群組一律是僅超級管理員（mail_types.register 已守）
 
     def receivers(key, ov, swap):
