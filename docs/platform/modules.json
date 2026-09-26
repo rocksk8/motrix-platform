@@ -156,9 +156,11 @@
    "/api/custom-modules",
    "/api/custom",
    "/api/edit-presence",
+   "/api/layout",
    "/api/legal-params",
    "/api/license",
    "/api/list-prefs",
+   "/api/mail-types",
    "/api/module-versions",
    "/api/modules",
    "/api/notifications",
@@ -482,6 +484,9 @@
    ],
    "tables": [
     "network_plans"
+   ],
+   "routes": [
+    "/api/quotations/{quote_no}/network-plan"
    ],
    "api_prefixes": [
     "/api/network-plans",

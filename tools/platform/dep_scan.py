@@ -761,6 +761,49 @@ def check_module_folders(U: dict, path: Path = MODULES) -> list[str]:
     return errors
 
 
+def _route_matches(pattern: str, route: str) -> bool:
+    """明列的寫法：完整路徑（`/api/settings/t100-export-config`），或結尾 `*` 的前綴（`/api/reports/t100-export*`）。"""
+    return route.startswith(pattern[:-1]) if pattern.endswith("*") else route == pattern
+
+
+def check_route_ownership(U: dict, path: Path = MODULES) -> list[str]:
+    """路由歸屬（主持裁示：modules.json 可「個別路由明列歸屬」，**優先於前綴**）。
+    群組可寫 `"routes": ["/api/x/y", "/api/z*"]`。判定順序：先看有沒有被明列，沒有才看前綴。錯誤：
+      ① 同一條路由被兩個群組明列
+      ② 明列的寫法在該群組自己的 router 裡一條都對不到（寫錯或路由已不在）
+      ③ 明列的路由其實在別的群組的 router 裡（明列不可以把別人的路由搶過來）
+      ④ 路由沒有被明列，而它的前綴也不在自己群組的 api_prefixes（歸屬不明）
+    """
+    m = json.loads(path.read_text(encoding="utf-8"))
+    groups = {"L1": m["L1"]}
+    groups.update(m["modules"])
+    u2g, _, _ = load_groups(path)
+    explicit = [(gid, pat) for gid, gr in groups.items() for pat in gr.get("routes", [])]
+    prefixes = {gid: set(gr.get("api_prefixes", [])) for gid, gr in groups.items()}
+    routes = []                                                   # (群組, 單位, 路徑)
+    for n, u in sorted(U.items()):
+        gs = u2g.get(n, [])
+        if len(gs) != 1:
+            continue                                              # 未歸屬／重複歸屬另有錯誤
+        for r in u.get("routes") or []:
+            routes.append((gs[0], n, r["path"]))
+    errors = []
+    for gid, pat in explicit:
+        own = [x for x in routes if x[0] == gid and _route_matches(pat, x[2])]
+        other = sorted({f"{x[0]} {x[1]}" for x in routes if x[0] != gid and _route_matches(pat, x[2])})
+        if other:
+            errors.append(f"{gid} 明列的路由 {pat!r} 在別的群組的 router 裡：{other}（明列不可以把別人的路由搶過來）")
+        elif not own:
+            errors.append(f"{gid} 明列的路由 {pat!r} 在該群組的 router 裡不存在（寫錯或路由已搬走）")
+    for (routeg, n, rp) in {(x[0], x[1], x[2]) for x in routes}:
+        claim = sorted({gid for gid, pat in explicit if _route_matches(pat, rp)})
+        if len(claim) > 1:
+            errors.append(f"{rp}（{n}）被多個群組明列：{claim}")
+        elif not claim and api_prefix(rp) not in prefixes.get(routeg, set()):
+            errors.append(f"{rp}（{n}）：沒有明列，前綴 {api_prefix(rp)} 也不在 {routeg} 的 api_prefixes（歸屬不明）")
+    return sorted(set(errors))
+
+
 def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, list[str]]]:
     """①歸屬檢查（錯誤）②跨群組邊清單（只列，不失敗）。"""
     U = g["units"]
@@ -774,6 +817,7 @@ def check_modules(g: dict, path: Path = MODULES) -> tuple[list[str], dict[str, l
         if n not in U:
             errors.append(f"{n}: modules.json 列了，但掃描不到（過期）")
     errors += check_module_folders(U, path)
+    errors += check_route_ownership(U, path)
 
     edges: dict[str, list[str]] = defaultdict(list)
     grp = lambda n: (u2g.get(n) or ["?"])[0]
