@@ -1,0 +1,100 @@
+"""IP-96 `case.summary` 的用途參數（2026-09-26 A；主持裁示對齊 AT6-O1／JV7）。
+
+- `purpose="voucher_link"` ＋ 有傳票權限（cashier／finance）⇒ 全部案件、只回摘要欄位（單號、客戶名、案名；不回地址等個資）
+- 同一個用途、沒有傳票權限 ⇒ 照案件可見性過濾（「看不到＝不存在」只保護沒有傳票權限的角色）
+- 權限判斷在 L1 `helpers.case_access.case_summary_scope`，不在呼叫端（M06 只說用途）
+- 未登錄的用途 ⇒ ValueError（打錯字不可以默默變成「照可見性」）
+"""
+import json
+
+import pytest
+
+from core import registry, source_tree
+
+ADDR = "臺北市中正區測試路 1 號"
+
+
+def _seed(no, owner_id=None):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at,"
+                     " updated_at, sales_person_id) VALUES (?,?,?,?,?,?,?,?)",
+                     (no, "已送出", "客戶" + no, "案名" + no,
+                      json.dumps({"deliveryLocation": ADDR, "caseRecord": {"contract": {"deliveryAddress": ADDR}}}),
+                      "2026-01-01", "2026-01-01", owner_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _user(make_user, name, role, modules):
+    import db
+    make_user(username=name, role=role, modules=modules)
+    conn = db.get_db()
+    try:
+        return dict(conn.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone())
+    finally:
+        conn.close()
+
+
+def _summary(user, purpose=None):
+    import db
+    fn = registry.single_provider("case.summary")
+    if fn is None:
+        pytest.skip("案件（M01）不在：沒有 case.summary")
+    conn = db.get_db()
+    try:
+        return fn(conn, user, purpose=purpose)
+    finally:
+        conn.close()
+
+
+def test_voucher_users_see_every_case_with_summary_fields_only(client, make_user):
+    """有傳票權限（finance）＋ voucher_link ⇒ 別人的案件也列出；每筆只有三個摘要欄位、沒有地址。"""
+    _seed("CSP-OTHER-1")
+    fin = _user(make_user, "csp_fin", "engineer", ["finance"])
+    got = {r["quote_no"]: r for r in _summary(fin, "voucher_link")}
+    assert "CSP-OTHER-1" in got, "有傳票權限的人要列得到別人的案件（JV7／AT6-O1）"
+    assert all(set(r) == {"quote_no", "customer_name", "project_name"} for r in got.values()), list(got.values())[:2]
+    assert ADDR not in json.dumps(list(got.values()), ensure_ascii=False), "摘要不可以帶地址"
+    cash = _user(make_user, "csp_cash", "engineer", ["cashier"])
+    assert "CSP-OTHER-1" in {r["quote_no"] for r in _summary(cash, "voucher_link")}
+
+
+def test_without_voucher_rights_the_purpose_changes_nothing(client, make_user):
+    """沒有傳票權限的人帶同一個用途 ⇒ 照案件可見性過濾（看不到的案件不列）；看得到自己的案件（正對照）。"""
+    eng = _user(make_user, "csp_eng", "engineer", ["case_manage"])
+    _seed("CSP-OTHER-2")
+    _seed("CSP-MINE-2", owner_id=eng["id"])
+    got = {r["quote_no"] for r in _summary(eng, "voucher_link")}
+    assert "CSP-OTHER-2" not in got, "沒有傳票權限 ⇒ 用途不放寬"
+    assert "CSP-MINE-2" in got, "正對照：自己的案件照常列出"
+    assert got == {r["quote_no"] for r in _summary(eng)}, "沒有傳票權限時，帶用途與不帶用途要一樣"
+
+
+def test_without_a_purpose_voucher_users_are_filtered_as_before(client, make_user):
+    """同一個有傳票權限的人不帶用途 ⇒ 照可見性（用途要明說才放寬，不是看角色就全開）。"""
+    _seed("CSP-OTHER-3")
+    fin = _user(make_user, "csp_fin3", "engineer", ["finance"])
+    assert "CSP-OTHER-3" not in {r["quote_no"] for r in _summary(fin)}
+
+
+def test_unknown_purpose_is_refused():
+    from helpers.case_access import case_summary_scope
+    with pytest.raises(ValueError):
+        case_summary_scope({"role": "engineer", "modules": "[]"}, "voucher-link")   # 打錯字
+    assert case_summary_scope({"role": "engineer", "modules": "[]"}) == "visible"
+
+
+def test_the_voucher_case_tab_lists_every_case_for_voucher_users(client, make_user):
+    """端到端：傳票摘要來源的「案件」頁籤，finance 看得到別人的案件（JV7 照現行），而且沒有範圍縮窄的註明。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
+    _seed("CSP-OTHER-4")
+    u, p = make_user(username="csp_fin4", role="engineer", modules=["finance"])
+    h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}
+    r = client.get("/api/vouchers/summary-sources?q=CSP-OTHER-4", headers=h)
+    assert r.status_code == 200, r.text[:200]
+    assert [c["quote_no"] for c in r.json()["tabs"]["案件"]] == ["CSP-OTHER-4"]
+    assert r.json()["notes"]["案件"] == "", "範圍沒有縮窄 ⇒ 不該有範圍說明"

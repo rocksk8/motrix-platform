@@ -182,3 +182,31 @@ def case_documents_readable(conn, quote_no: str, user: dict) -> bool:
         return False
     q = conn.execute("SELECT * FROM quotations WHERE quote_no = ?", (quote_no,)).fetchone()
     return bool(q) and case_access_allowed(conn, q, user, allow_module="case_manage")
+
+
+# ── IP-96 `case.summary` 的用途範圍（2026-09-26 A，主持裁示對齊 AT6-O1／JV7）──────────────────────
+#: 用途 ⇒ 可以看「全部案件摘要」的模組。只有登錄在這裡的用途才可能放寬；其餘一律照案件可見性過濾。
+#: `voucher_link`：傳票摘要從案件帶入（JV7）。有傳票權限（cashier／finance）的人列全部案件——AT6-O1 界線：
+#: 「看不到＝不存在」只保護沒有傳票權限的角色；會計確認照現行（U13）。
+SUMMARY_PURPOSE_MODULES = {"voucher_link": ("cashier", "finance")}
+#: 放寬到全部案件時只回的欄位（摘要；地址等個資與業務欄位一律不回）
+SUMMARY_LINK_FIELDS = ("quote_no", "customer_name", "project_name")
+
+
+def case_summary_scope(user, purpose=None) -> str:
+    """`case.summary` 這一次要回的範圍：`"all"`（全部案件、只回 SUMMARY_LINK_FIELDS）或 `"visible"`（照案件可見性）。
+
+    權限判斷在 L1（主持裁示），不在呼叫端模組：M06 只說用途，准不准由這裡依使用者的模組決定。
+    用途未登錄 ⇒ ValueError（打錯字不可以默默變成「照可見性」而看起來像沒資料）；`purpose=None` ⇒ "visible"。"""
+    if purpose is None:
+        return "visible"
+    mods = SUMMARY_PURPOSE_MODULES.get(purpose)
+    if mods is None:
+        raise ValueError("case.summary：未登錄的用途 %r（登錄在 helpers.case_access.SUMMARY_PURPOSE_MODULES）" % (purpose,))
+    if user is SYSTEM or not isinstance(user, dict):
+        return "visible"
+    if user.get("role") == "superadmin":
+        return "all"
+    from helpers.auth import user_has_module
+    return "all" if any(user_has_module(user, m) for m in mods) else "visible"
+

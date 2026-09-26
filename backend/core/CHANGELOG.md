@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.48 — 2026-09-26（A，IP-96 case.summary 的用途範圍；主持裁示對齊 AT6-O1／JV7；列車上 core_bump 取號）
+- L1（新增）：`helpers.case_access.case_summary_scope(user, purpose=None)`（用途 ⇒ "all"／"visible"；權限判斷在 L1）、`SUMMARY_PURPOSE_MODULES`（`voucher_link` ⇒ cashier／finance）、`SUMMARY_LINK_FIELDS`（放寬時只回的摘要欄位）
+
 ## 1.47 — 2026-09-26（A，a-attachments-5 帶入 M06 基底：因權限沒列出的附件要明說；列車取號）
 - L1（新增）：`helpers.uploads.AttachmentNotVisible(visible=None, hidden=0)` 多兩個可選參數：`visible`（逐張過濾時看得到的那幾張）、`hidden`（沒列出的**附件個數**，只有數字；主持裁示：明說只准類別＋個數）；既有 `raise AttachmentNotVisible()` 寫法不變
 

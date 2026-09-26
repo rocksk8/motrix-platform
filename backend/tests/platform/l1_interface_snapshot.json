@@ -1,5 +1,5 @@
 {
- "core_version": "1.47",
+ "core_version": "1.48",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -180,12 +180,15 @@
   "helper:case_access": {
    "CASE_ACCESS": "const",
    "CASE_PRESENT": "const",
+   "SUMMARY_LINK_FIELDS": "const",
+   "SUMMARY_PURPOSE_MODULES": "const",
    "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_module_present": "def()",
    "case_owner_readable": "def(conn, quote_no, user)",
    "case_page_readable": "def(conn, quote_no, user)",
+   "case_summary_scope": "def(user, purpose=…)",
    "guard_case_access": "def(conn, quote_no, user, *, allow_approver=…, allow_module=…)",
    "is_document_approver": "def(data_json, user, conn)"
   },

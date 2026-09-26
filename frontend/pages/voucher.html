@@ -422,7 +422,7 @@
                   </button>
                 </template>
                 <div class="vc-src__empty" x-show="!panelCases().length">目前沒有可選的案件。</div>
-                <!-- 案件清單只列看得到的（case.summary）；範圍要明說（2026-09-26） -->
+                <!-- 案件清單的說明（M01 不在時：案件模組未安裝） -->
                 <div class="vc-src__empty" data-testid="source-cases-scope" x-show="(sourceNotes || {})['案件']"
                      x-text="(sourceNotes || {})['案件']"></div>
               </div>

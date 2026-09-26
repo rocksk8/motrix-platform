@@ -430,9 +430,6 @@ def list_vouchers(include_voided: bool = False,
 #: 決定它的格式。
 SUMMARY_TABS = ("案件", "已上傳檔案", "支出項")
 
-#: 案件頁籤的範圍說明（2026-09-26：改走 M01 的 case.summary 之後，只列這個人看得到的案件——與案件頁同一條可見性；
-#: 原本直讀 quotations、有傳票權限就列出全部案件，比案件頁寬。範圍變窄要明說，不可以跟「沒有這個案件」長得一樣）
-CASES_SCOPE_NOTE = "只列出你有權限查看的案件（與案件頁相同）；找不到的案件可能是沒有權限，不一定不存在。"
 #: M01 不在（沒有 case.summary）時的說明
 CASES_UNAVAILABLE = "案件模組未安裝：無法從案件帶入摘要。"
 
@@ -679,15 +676,16 @@ def summary_sources(q: str = "", quote_no: str = "",
     user = _require_user(authorization)
     _require_voucher_access(user)
     # 案件清單：M01 的 IP-96 `case.summary`（2026-09-26 起；原本直讀 quotations ⇒ 到期守門 a 列觸發）。
-    # 只回這個人看得到的案件（row_access case／read，新到舊）；比對單號或客戶名稱（不分大小寫，同原本 LIKE）。
+    # 範圍照 JV7／AT6-O1 裁示：有傳票權限就列全部案件——由 L1 依 purpose="voucher_link" 判斷（只回摘要欄位）；
+    # 新到舊，比對單號或客戶名稱（不分大小寫，同原本 LIKE）。
     summary = _registry.single_provider("case.summary")
     needle = (q or "").strip().lower()
     rows, note1 = [], CASES_UNAVAILABLE
     if summary is not None:
-        note1 = CASES_SCOPE_NOTE
+        note1 = ""
         conn = get_db()
         try:
-            visible = summary(conn, user)
+            visible = summary(conn, user, purpose="voucher_link")
         finally:
             conn.close()
         rows = [r for r in visible
@@ -744,7 +742,7 @@ def summary_sources(q: str = "", quote_no: str = "",
             "quote_no": r["quote_no"],
             "customer_name": r["customer_name"] or "",
             "project_name": r["project_name"] or "",
-            "status": r["status"] or "",
+            "status": r.get("status") or "",          # 用途 voucher_link 放寬到全部案件時只回摘要欄位（沒有狀態）
             "summary": case_summary(r["customer_name"], r["quote_no"]),
         })
     return {

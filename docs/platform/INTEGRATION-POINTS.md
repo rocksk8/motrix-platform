@@ -433,7 +433,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M01 案件：`helpers/quotations.py::case_summary`（暫以 import 時登記，同 IP-12；M01 本體搬遷時改 `ModuleSpec.providers`，CA-O3） |
 | 使用方 | M01 自己的 IP-12 `summary` 轉呼叫（淘汰中）；其他使用方逐步改用（company_identity、google_calendar、bonus_pdf、vouchers，見 M01-PLAN §2-B 第 2 類） |
 | 形式 | provider，單一提供者 |
-| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]` |
+| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]`〔2026-09-26 A 追加（只新增參數，契約版本不變）：`s(conn, user, quote_nos=None, purpose=None)`。`purpose="voucher_link"`（M06 傳票摘要從案件帶入，JV7）＋使用者有傳票權限（cashier／finance，或最高管理者）⇒ **全部案件、只回 `{quote_no, customer_name, project_name}`**（不回地址等個資與其他欄位）；沒有傳票權限 ⇒ 照可見性過濾。**權限判斷在 L1** `helpers.case_access.case_summary_scope`（呼叫端只說用途）；未登錄的用途 ⇒ ValueError。界線（AT6-O1，386cb0e1）：「看不到＝不存在」只保護沒有傳票權限的角色。守門 `backend/tests/platform/test_case_summary_purpose.py`〕 |
 | 回傳 | `quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到且存在的。可見性＝row_access `case`／scope="read"。`user=None` ⇒ TypeError；`helpers.case_access.SYSTEM` ⇒ 不過濾，**只准 L1 背景呼叫端**（守門） |
 | 對方不在時 | 呼叫端要能處理「沒有提供者」與「某筆不在回應裡」並明說（不是空白） |
 | 契約版本 | 1（2026-09-26） |
