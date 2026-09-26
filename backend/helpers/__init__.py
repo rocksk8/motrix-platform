@@ -32,12 +32,13 @@ from .settings import _get_setting, _set_setting
 from .audit import (_notify, _audit, _filter_live_notifications, _purge_notifications,
                     notify_org_chain_notice)
 from .quotations import (
-    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json, _steps_to_tiers,
+    SQL_DEAL_TAG, SQL_SETTLE_STATUS, quote_hot_fields, save_quotation_json,
     summarize_payment_items, case_extra_expenses,
-    quote_won_month_map, norm_at, validate_invoice_no, validate_invoice_amounts, validate_quote_tax, guard_case_access, is_document_approver,
+    quote_won_month_map, validate_invoice_no, validate_invoice_amounts, validate_quote_tax, guard_case_access, is_document_approver,
 )
 from .tax_calc import payment_item_amounts          # T（2026-09-26）：稅額純函式在 L1
-from .dates import _add_months, _warranty_expiry, _workdays_elapsed
+from .dates import _add_months, _warranty_expiry, _workdays_elapsed, norm_at   # norm_at：M01-PLAN §3-2 下沉
+from .tiered_approval import steps_to_tiers as _steps_to_tiers                  # M01-PLAN §3-2 下沉（舊名）
 from .tiered_approval import (
     active_tiers, current_tier_idx, setting_to_active_tiers,
     first_pending_approver, check_approve_permission, check_reject_permission,

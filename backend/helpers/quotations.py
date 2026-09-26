@@ -110,33 +110,10 @@ def guard_case_access(conn, quote_no: str, user: dict, *, allow_approver: bool =
     return q
 
 
-def norm_at(s: str) -> str:
-    """統一時間格式（部分表用 'YYYY-MM-DDTHH:MM:SS[.ffffff]'，部分用空白分隔且無
-    微秒），確保跨來源合併排序正確。2026-08-28：抽成共用函式——原本 dashboard.py
-    的活動動態（首頁）跟 quotations.py::list_case_updates()（案件管理「動態」Tab）
-    是同一種「合併多張表、依 created_at 字串排序」的動態牆邏輯，前者已經套用這個
-    正規化，後者原本只對其中一個來源（audit_log）做了同樣的處理、其餘四個來源
-    （case_updates／work_logs／daily_task_completions／dev_logs）維持各自原始格式
-    直接排序——dev_logs 存的是空白分隔格式，跟其餘多數來源的 'T' 分隔格式排序時
-    永遠排在同一天其他來源之前（ASCII 空白 0x20 < 'T' 0x54），不管實際時間點是
-    幾點，導致同一天有業務開發記錄時動態牆順序會錯亂。兩處統一改呼叫這支共用
-    函式，不要再各自處理一部分來源就以為排序沒問題。"""
-    return (s or "").replace("T", " ")[:19]
-
-
-def _steps_to_tiers(steps: list) -> list:
-    """Convert old single-approver steps list to modern tiers list (no status fields)."""
-    return [
-        {
-            "order": i,
-            "approvers": [{
-                "userId":      s.get("userId", 0),
-                "username":    s.get("username", ""),
-                "displayName": s.get("displayName", s.get("username", "")),
-            }],
-        }
-        for i, s in enumerate(steps)
-    ]
+# ── M01-PLAN §3-2（2026-09-26）：兩支通用函式下沉 L1，這裡保留同名別名（同一物件）──
+# norm_at（時間字串正規化）→ helpers/dates；_steps_to_tiers（舊單一簽核步驟 → 簽核層）→ helpers/tiered_approval.steps_to_tiers
+from helpers.dates import norm_at  # noqa: E402,F401
+from helpers.tiered_approval import steps_to_tiers as _steps_to_tiers  # noqa: E402,F401
 
 
 # ── 營業稅（AC1，2026-09-24 使用者：「會計稅率1~4%取消，直接依法規進行，用現金折讓就好」）──
