@@ -532,7 +532,9 @@ def test_page_and_sidebar_wiring():
     assert "/api/system/modules/availability" in sb
     from core import menu as M                                                         # C4：選單宣告在 menu_l1.json
     assert any(it["href"] == "module-settings.html" for it in M.load_l1()["items"])
-    assert re.search(r"function _rebuildMenu\(\)[^}]*_applyUnavailablePages\(\)", sb)  # 選單重建後再套用
+    # 選單重建後再套用。〔更正：原本用 `[^}]*` 取函式本體——函式裡一出現 `{}`（保留徽章的 closure）就截斷而紅；改取到函式結尾的縮排 `}`〕
+    body = re.search(r"\n  function _rebuildMenu\(\) \{\n(.*?)\n  \}\n", sb, re.S)
+    assert body and "_applyUnavailablePages()" in body.group(1)
 
 
 # ── E 子行程＝真的重啟 ────────────────────────────────────────────────────────
