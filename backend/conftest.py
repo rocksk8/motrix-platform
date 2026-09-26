@@ -1516,17 +1516,36 @@ E2E_TEARDOWN_LIMIT = float(os.environ.get("MOTRIX_E2E_TEARDOWN_LIMIT", "60"))
 # 上限：`@pytest.mark.e2e_limit(秒)` ＞ MOTRIX_E2E_TEST_LIMIT ＞ 硬上限－30（最少 10）。
 
 
+#: 軟上限與硬上限之間至少留這麼多秒：軟上限先到，硬上限（寫堆疊、xdist 下結束 worker）才是最後一道
+SOFT_MARGIN = 30
+
+
+def _soft_ceiling():
+    return max(10.0, _e2e_hard_cap_seconds() - SOFT_MARGIN)
+
+
+def _clamp_soft(value, what, item=None):
+    """軟上限 ⇒ min(設定值, 硬上限－SOFT_MARGIN)；被夾住時說出來（D 稽核 E2D-M1：標記、環境變數、teardown 上限原本都沒夾）。"""
+    ceiling = _soft_ceiling()
+    if value > ceiling:
+        sys.stderr.write("[e2e 上限] %s＝%g 秒超過「硬上限（MOTRIX_E2E_HARD_CAP＝%g）－%d」⇒ 改用 %g 秒%s\n"
+                         % (what, value, _e2e_hard_cap_seconds(), SOFT_MARGIN, ceiling,
+                            "（%s）" % getattr(item, "nodeid", "") if item is not None else ""))
+        return ceiling
+    return value
+
+
 def _e2e_limit_of(item):
     m = item.get_closest_marker("e2e_limit") if hasattr(item, "get_closest_marker") else None
     if m and m.args:
-        return float(m.args[0])
+        return _clamp_soft(float(m.args[0]), "@pytest.mark.e2e_limit", item)
     env = os.environ.get("MOTRIX_E2E_TEST_LIMIT")
     if env:
         try:
-            return float(env)
+            return _clamp_soft(float(env), "MOTRIX_E2E_TEST_LIMIT", item)
         except ValueError:
             pass
-    return max(10.0, _e2e_hard_cap_seconds() - 30)
+    return _soft_ceiling()
 
 
 def _schedule_close(loop, impl):
@@ -1570,7 +1589,9 @@ def pytest_e2e_deadline_call(item):
 
 def _teardown_limit_of(item):
     m = item.get_closest_marker("e2e_teardown_limit") if hasattr(item, "get_closest_marker") else None
-    return float(m.args[0]) if m and m.args else E2E_TEARDOWN_LIMIT
+    if m and m.args:
+        return _clamp_soft(float(m.args[0]), "@pytest.mark.e2e_teardown_limit", item)
+    return _clamp_soft(E2E_TEARDOWN_LIMIT, "MOTRIX_E2E_TEARDOWN_LIMIT", item)
 
 
 def _stop_shared_browser_quietly():
