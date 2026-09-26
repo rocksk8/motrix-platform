@@ -631,7 +631,7 @@ _PUBLIC_ROUTES = {
     ("auth.py", "GET", "/api/system/deployed-version"),
     ("system.py", "GET", "/api/system/webauthn-config-status"),
     # 伺服器時間：前端對時用，不含任何公司資料
-    ("dashboard.py", "GET", "/api/now"),
+    ("company_lookup.py", "GET", "/api/now"),   # M08 搬遷 ②：自 dashboard.py 拆到 L1
     # ⚠️ 2026-09-22 §4 YD：兩支 GCIS 代理（`/api/company/tax/{tax_id}` 與
     #    `/api/company/search`）**已經自己有守門了**，不再是公開路由
     #    ⇒ 它們從這張表移除。

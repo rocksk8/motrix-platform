@@ -501,17 +501,19 @@
             <div class="h-band__t">簽核佇列</div>
             <p class="h-band__p" x-text="stats.waitingForMe > 0 ? '停在您這一關，處理完會自動往下一層送。' : (statsLoaded ? '目前沒有待您簽核的單據。' : (analyticsMissing ? '首頁的統計、圖表與待辦摘要需要「營運分析」模組，目前未啟用；其他功能照常可用。' : '讀不到待簽核清單（可能是連線或伺服器正在重啟），這裡的數字暫時不準。'))"></p>
           </a>
-          <a href="pages/quotations.html" class="h-band__c">
+          <!-- 這兩格的資料來自營運分析模組（/api/dashboard/funnel、/stats）；模組不在 ⇒ 顯示「—」＋明說，
+               不可以顯示 0＋「沒有…」（那跟真的 0 筆長得一樣，稽核 ⑰ M-4、MODULE-GUIDE §1） -->
+          <a href="pages/quotations.html" class="h-band__c" data-testid="band-expiring">
             <div class="h-band__k">有效期將屆</div>
-            <div class="h-band__n" x-text="expiringQuotes.length"></div>
+            <div class="h-band__n" x-text="analyticsMissing ? '—' : expiringQuotes.length"></div>
             <div class="h-band__t">報價單</div>
-            <p class="h-band__p" x-text="followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '沒有需要追蹤的報價單。'"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (followUpQuotes.length > 0 ? ('其中 ' + followUpQuotes.length + ' 張送出後超過 14 天未收到回應。') : '沒有需要追蹤的報價單。')"></p>
           </a>
-          <a href="pages/warranty.html" class="h-band__c">
+          <a href="pages/warranty.html" class="h-band__c" data-testid="band-warranty">
             <div class="h-band__k">90 天內到期</div>
-            <div class="h-band__n" x-text="(stats.warrantyWarnings || []).length"></div>
+            <div class="h-band__n" x-text="analyticsMissing ? '—' : (stats.warrantyWarnings || []).length"></div>
             <div class="h-band__t">設備保固</div>
-            <p class="h-band__p" x-text="overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '沒有已過保的設備。'"></p>
+            <p class="h-band__p" x-text="analyticsMissing ? '需要「營運分析」模組（目前未啟用），這裡沒有資料可顯示。' : (overdueWarranty > 0 ? (overdueWarranty + ' 台已過保。') : '沒有已過保的設備。')"></p>
           </a>
         </div>
       </div>

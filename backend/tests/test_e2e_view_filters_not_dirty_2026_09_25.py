@@ -99,9 +99,18 @@ def _open(page, base, pg):
     _rendered(page)   # PERF #6：原本固定等 300ms
 
 
+#: 營運報表（reports）那一頁需要營運分析模組 ⇒ 那一個參數在 modules/analytics/tests/test_e2e_view_filters_not_dirty_2026_09_25.py
+MODULE_PAGES_HERE = {"reports": "analytics"}
+L1_PAGES = [p for p in PAGES if p[0] not in MODULE_PAGES_HERE]
+
+
 @pytest.mark.e2e
-@pytest.mark.parametrize("pg,filters,saved,setup", PAGES, ids=[p[0] for p in PAGES])
+@pytest.mark.parametrize("pg,filters,saved,setup", L1_PAGES, ids=[p[0] for p in L1_PAGES])
 def test_changing_a_view_filter_does_not_arm_the_leave_warning(live_server, make_user, request, pg, filters, saved, setup, e2e_browser):
+    check_view_filters(live_server, make_user, request, pg, filters, saved, setup, e2e_browser)
+
+
+def check_view_filters(live_server, make_user, request, pg, filters, saved, setup, e2e_browser):
     if pg == "map":
         request.getfixturevalue("no_tile_probe")
     u = make_user(username="w8_" + pg.replace("-", "_"), role="superadmin")

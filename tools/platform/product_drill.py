@@ -5,8 +5,11 @@
 輸出一份 JSON（stdout 最後一行），並以 exit code 表示成敗。
 判定：
   - /api/ping 在時限內回 200
-  - 讀包內 backend/modules.lock.json：列了的模組 ⇒ 它 provides.api_prefixes 的端點不是 404；
-    沒列（被排除）的模組 ⇒ 端點回 404，頁面（removed_pages）回 404
+  - 讀包內 backend/modules.lock.json：列了的模組 ⇒ 它 module.json `provides.probes` 列的 GET 端點回 200；
+    沒列（被排除）的模組 ⇒ 那些端點回 404，頁面（removed_pages）回 404
+  - `provides.probes` 是模組**自己宣告**的演練端點（真的 GET 路由，模組在時回 200）。不用 api_prefixes 的前綴本身：
+    前綴常常不是端點（`/api/dashboard`、`/api/reports` 在模組在時也 404）⇒ 完整產品假紅、排除時假綠（稽核 ⑰ M-3）
+  - 沒宣告 probes 的模組：不打端點、不判紅，但列在輸出 `undeclared_probes`（缺口要看得到；主持 2026-09-26 過渡裁示）
   - 登入用新庫自動建立的 superadmin 臨時密碼（backend/.initial_admin_credentials.txt）
 隔離：複製到暫存位置後才啟動；根目錄放 .no_email_send、.no_cloud_archive；MOTRIX_DISABLE_SCHEDULERS=1；
       MOTRIX_CREATE_NEW_DB=1（全新空庫）；只綁 127.0.0.1。結束一律關閉服務、刪暫存（--keep 保留）。
@@ -55,6 +58,23 @@ def _kill_tree(proc):
             proc.wait(timeout=20)
         except subprocess.TimeoutExpired:
             pass
+
+
+def probe_plan(mods_src, lock):
+    """⇒ ([(模組, 在不在包內, "GET"／"page", 路徑)], [沒宣告 provides.probes 的模組])。純函式（不連線）。"""
+    plan, undeclared = [], []
+    installed = lock.get("modules") or {}
+    for d in sorted(p for p in Path(mods_src).iterdir() if (p / "module.json").is_file()):
+        m = json.loads((d / "module.json").read_text(encoding="utf-8"))
+        present = d.name in installed
+        probes = (m.get("provides") or {}).get("probes")
+        if not probes:
+            undeclared.append(d.name)
+        for path in probes or []:
+            plan.append((d.name, present, "GET", path))
+        for page in m.get("pages", []):
+            plan.append((d.name, present, "page", page["path"]))
+    return plan, undeclared
 
 
 def drill(pkg, port, keep=False):
@@ -114,22 +134,16 @@ def drill(pkg, port, keep=False):
             return result
         all_ok = True
         mods_src = Path(__file__).resolve().parents[2] / "backend" / "modules"
-        for d in sorted(p for p in mods_src.iterdir() if (p / "module.json").is_file()):
-            m = json.loads((d / "module.json").read_text(encoding="utf-8"))
-            present = d.name in (lock.get("modules") or {})
-            for prefix in (m.get("provides") or {}).get("api_prefixes", []):
-                # 任取該前綴底下一支 GET 端點：前綴本身常常不是端點 ⇒ 用 module.json 宣告的第一個 GET（沒有就用前綴＋/）
-                path = prefix.rstrip("/") + "/tenders" if d.name == "tender_radar" else prefix
+        plan, undeclared = probe_plan(mods_src, lock)
+        result["undeclared_probes"] = undeclared
+        for mod, present, kind, path in plan:
+            if kind == "GET":
                 st, _ = _req(base + path, token=token)
-                ok = (st == 404) if not present else (st == 200)
-                all_ok &= ok
-                result["checks"].append({"module": d.name, "installed": present, "GET": path, "status": st, "ok": ok})
-            for page in m.get("pages", []):
-                st, _ = _req(base + "/pages/" + page["path"])
-                ok = (st == 404) if not present else (st == 200)
-                all_ok &= ok
-                result["checks"].append({"module": d.name, "installed": present, "page": page["path"],
-                                         "status": st, "ok": ok})
+            else:
+                st, _ = _req(base + "/pages/" + path)
+            ok = (st == 404) if not present else (st == 200)
+            all_ok &= ok
+            result["checks"].append({"module": mod, "installed": present, kind: path, "status": st, "ok": ok})
         result["ok"] = all_ok and bool(result["checks"])
         return result
     finally:

@@ -59,10 +59,9 @@ def test_pdf_gen_and_network_plan_export_share_the_same_runner():
     改比對那支函式。
     """
     import pdf_gen
-    import routers.reports as reports_module
 
     assert pdf_gen.run_edge_pdf is run_edge_pdf
-    assert reports_module.run_edge_pdf is run_edge_pdf
+    # 營運報表那一處：modules/analytics/tests/test_pdf_concurrency_2026_09_07.py
     # 網路規劃（modules/netplan/export.py）那一處 （2026-09-26 移到 modules/netplan/tests/test_netplan_moved_guards.py：拿掉 netplan 時那一項跟著消失，PLAYBOOK §B-11）
 
 

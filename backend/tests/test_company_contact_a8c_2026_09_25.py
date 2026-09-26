@@ -16,7 +16,7 @@ OURS = {"company_name": "允碩整合集創股份有限公司", "company_name_en
         "tax_id": "60575481", "phone": "04-3610-6566", "email": "info@miactw.com"}
 
 
-@pytest.mark.parametrize("rel", ["routers/reports.py", "modules/netplan/export.py", "pdf_gen.py"])
+@pytest.mark.parametrize("rel", ["modules/analytics/api/reports.py", "modules/netplan/export.py", "pdf_gen.py"])
 def test_no_hardcoded_company_contacts_left(rel):
     from core import source_tree
     if not source_tree.module_installed(rel):

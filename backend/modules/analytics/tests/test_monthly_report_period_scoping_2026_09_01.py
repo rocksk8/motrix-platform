@@ -41,7 +41,7 @@ def test_monthly_report_kpis_not_zeroed_when_no_new_cases_this_month(client, mon
         "MQ-MRPT-001", quote_date="2026-07-10", received_at="2026-08-15",
     )
 
-    import routers.reports as reports
+    import modules.analytics.api.reports as reports
     captured = {}
 
     def fake_build_excel(data, label, gen_at):
@@ -86,7 +86,7 @@ def test_monthly_report_period_received_matches_actual_month(client, monkeypatch
         "MQ-MRPT-002", quote_date="2026-06-01", received_at="2026-07-20",
     )
 
-    import routers.reports as reports
+    import modules.analytics.api.reports as reports
     captured = {}
     monkeypatch.setattr(reports, "_build_excel", lambda data, label, gen_at: captured.setdefault("excel_data", data) or b"x")
     monkeypatch.setattr(reports, "_html_to_pdf", lambda html: b"x")
