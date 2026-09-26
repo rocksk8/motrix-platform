@@ -85,7 +85,7 @@ D 的突變（`tests/platform/test_l1_interface_snapshot.py`，24 題）：
 |---|---|---|---|
 | G-M1 | （B 以 commit 回覆，未填本欄）已知紅清單 `tools/platform/core_only_known_red.json`＋判定「紅 ⊆ 允許 ∪ 清單、清單轉綠未刪 ⇒ 不過」；4 題的修正分別在 h-corered、c-coreonly-depscan（2784140e）、c-m07（4a731b1f）；清單從空開始 | wip/b-g1 6e7ba250（range-diff：舊兩個 commit 內容不變、新增 6e7ba250） | ✅ 10:28 條件式關閉：D 突變 KR3（不看裁示）、KR4（不驗題存在）、KR2（轉綠不報）皆紅；dep_scan 那題 D 另驗 2784140e（DS1 只掃第一層、DS2 tests 也算 ⇒ 皆紅）；pii 那題 D 在 c-m07 驗（P7c／P7d 皆紅）。**條件**：b-g1 必須與 h-corered、c-coreonly-depscan、c-m07、b-m08-2 同一班，否則清單為空而 4 題仍紅 ⇒ 第一班擋車（主持已排） |
 | G-S1 | exit 5 或 0 題 ⇒ 不過 | 6e7ba250 | ✅ 10:28 關閉（D 突變 KR1 ⇒ 3 紅） |
-| G-S2 | | | 未處理（宣告不存在的名稱仍靜默忽略），維持開著 |
+| G-S2 | 宣告的每個名稱要在檔案頂層有定義，否則 ValueError | wip/b-g1-2 09271a8e（分支頭 19dc327c） | ✅ 10:55 D：突變「不驗宣告存在」⇒ 2 紅 ⇒ **關閉**（關閉於 19dc327c）。小觀察：「只在函式內」那一例用的是函式內的賦值；函式內的 `def` 沒有題（D 突變 GS2b 存活，影響小） |
 | O-1～O-2 | | | |
 
 ## 6. 6e7ba250 複核（D，2026-09-26 10:28）
@@ -94,4 +94,11 @@ D 的突變（`tests/platform/test_l1_interface_snapshot.py`，24 題）：
 - **G-O3（觀察）　judge 只擋 exit 5**：pytest 異常結束（exit 2 中斷、3 內部錯誤、4 用法錯誤）而 junit 仍有部分結果時，只要紅燈 ⊆ 允許 ∪ 清單就判過。建議 `pytest_exit not in (0, 1)` 一律不過。
 - **G-O4（觀察）　排隊時完全沒有輸出**：工具以 `capture_output` 跑 pytest，而 conftest 的全量測試鎖在別的視窗占用時會排隊等待（`[測試鎖] … 排隊中` 那一句也被收起來）。D 這一輪在 09:54 起跑，10:26 查時主 pytest 只用了 0.8 秒 CPU、沒有 worker——是在排隊，不是當掉，但從外面分不出來（MEMORY〈長時間沒有輸出的動作要有死線〉）。建議把 pytest 的 stderr 即時轉印，或者起跑前先印出鎖的持有者。
 - **G-O5（觀察）　「只准縮短」實際是「新增要有 RUN-PLAN 裁示行」**：裁示行是 RUN-PLAN 裡的一行文字，被稽核者自己也寫得出來；守門驗的是「有沒有這一行」，不是「是不是主持寫的」。這是〈守門驗的是有沒有人做過決定〉的設計，可以接受；列車長合回時要看新增的那一行是誰寫的。
+
+## 7. b-g1-2 複核（D，2026-09-26 10:55，分支頭 `19dc327c`）
+
+- `git range-diff`：前三個 commit 與 D 審過的 `2111b98e`、`9b08641a`、`6e7ba250` **完全相同（=）**；新增 `09271a8e`（G-S2、G-O3、G-O4、G-O5）、`cfe4e914`（ALLOWED 加產生檔一致性三題，BM-M2）、`19dc327c`（G-O5 裁示格式 trailer `Ruling-By: 8d`）。
+- 基準：`test_core_only_rc.py`＋`test_l1_interface_snapshot.py` 47 passed。
+- D 突變：GS2（不驗宣告存在）紅 2；GO3（異常結束照判）紅 3；GO4（排隊行不解析）紅 2；GS2b 存活（見 G-S2 列）。
+- G-O3、G-O4、G-O5 **關閉（19dc327c）**。G-M1 維持「條件式關閉」：條件（與 h-corered、c-coreonly-depscan、c-m07、b-m08-2 同一班）由列車長核對。
 

@@ -59,6 +59,6 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| BM-M1 | | | |
-| BM-M2 | | | |
-| BM-S1 | | | |
+| BM-M1 | dep_scan 不再輸出 `root`；新題：圖裡不可以有工作樹名稱 | wip/b-maps-2 c8c69c79 | ✅ 10:55 D：在另一棵名字不同的樹（D2）上跑 `test_generated_maps.py` ⇒ **9 passed**（修正前 D 樹紅 1）；突變「寫回 root」⇒ 2 紅 ⇒ **關閉（c8c69c79）** |
+| BM-M2 | 主持裁示 (a)：三題列入 §B-11 允許清單（PLAYBOOK，本包）＋`core_only_rc.ALLOWED`（b-g1-2 cfe4e914）；另補「模組全在時三題會紅」的反向控制 | c8c69c79＋cfe4e914 | ✅ 10:55 **關閉（c8c69c79＋cfe4e914，兩包須同一班）**：D 讀 ALLOWED 確認三題已列；BMS1 突變使反向控制 `test_rc_the_three_guards_do_go_red_on_a_full_tree` 紅 |
+| BM-S1 | 過期偵測改走 `dep_graph_is_current(graph, path)` 讀檔比對，附正對照 | c8c69c79 | ✅ 10:55 D：突變「比對恆真」⇒ 2 紅 ⇒ **關閉（c8c69c79）** |
