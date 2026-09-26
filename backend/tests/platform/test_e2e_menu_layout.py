@@ -40,22 +40,38 @@ def _seq(page, n, state, timeout=10000):
     page.wait_for_selector("html[data-menu-seq='%d'][data-menu-state='%s']" % (n, state), state="attached", timeout=timeout)
 
 
-_DELAY_FIRST = """
+#: 第一趟 /api/platform/menu 扣住，直到題目呼叫 window.__releaseFirst() 才回——**不靠時間差**。
+#: 〔O10（第九班全量紅）：原本 setTimeout 1500ms 放行；負載下 goto 等 load 超過 1.5 秒 ⇒ 舊回應在第二趟之前就回來、
+#:   沒有更新的序號可以比 ⇒ 被正常套用（產品行為正確）⇒ 題目等不到 pending 而逾時。題目的等待終點錯了，產品的序號沒有空窗〕
+#: 回應物件讀到時設 window.__staleRead（ok 或 json() 被碰到＝產品已經在處理這一趟），題目再等兩個 macrotask 讓 then 鏈跑完。
+_HOLD_FIRST = """
   (function () {
     var real = window.fetch, n = 0
     window.fetch = function (url, opt) {
       if (String(url).indexOf('/api/platform/menu') >= 0 && ++n === 1) {
         return new Promise(function (res) {
-          setTimeout(function () {
+          window.__releaseFirst = function () {
             window.__staleDelivered = true
-            res(new Response(%s, {status: %d, headers: {'Content-Type': 'application/json'}}))
-          }, 1500)
+            res({ get ok() { window.__staleRead = true; return %(ok)s }, status: %(status)d,
+                  json: function () { window.__staleRead = true; return Promise.resolve(%(body)s) } })
+          }
         })
       }
       return real.apply(this, arguments)
     }
   })()
 """
+
+
+def _hold_first(page, ok, status, body):
+    page.add_init_script(_HOLD_FIRST % {"ok": "true" if ok else "false", "status": status, "body": body})
+
+
+def _release_first_and_settle(page):
+    """放行第一趟，等產品讀到它，再等兩個 macrotask（then／catch 鏈跑完）——不用 wait_for_timeout。"""
+    page.evaluate("window.__releaseFirst()")
+    page.wait_for_function("window.__staleRead === true", timeout=10000)
+    page.evaluate("() => new Promise(r => setTimeout(() => setTimeout(r, 0), 0))")
 
 
 def _publish_hide(role, key, href):
@@ -129,35 +145,22 @@ def test_layout_failure_keeps_declared_menu_and_says_so(live_server, make_user, 
 
 
 def test_stale_layout_response_is_dropped(live_server, make_user, new_page, login_as):
-    """第一趟 /api/platform/menu 故意晚回來、而且內容是空選單；第二趟（refresh）先回來。晚到的第一趟要被丟掉。"""
+    """第一趟 /api/platform/menu 扣住、內容是空選單；第二趟（refresh）先回來。放行第一趟之後它要被丟掉（序號）。
+    O10：第一趟由題目放行，第一趟送出後狀態一定停在 pending（不再靠 1.5 秒的時間差）。突變：成功路徑拿掉序號檢查 ⇒ 紅。"""
     _key, _href, label = _pick()
     u, p = make_user(username="c4e_seq", role="superadmin", modules=[])
     page = new_page()
     login_as(page, (u, p))
-    page.add_init_script("""
-      (function () {
-        var real = window.fetch, n = 0
-        window.fetch = function (url, opt) {
-          if (String(url).indexOf('/api/platform/menu') >= 0 && ++n === 1) {
-            return new Promise(function (res) {
-              setTimeout(function () {
-                window.__staleDelivered = true
-                res(new Response(JSON.stringify({layout: {groups: [], errors: []}}), {status: 200, headers: {'Content-Type': 'application/json'}}))
-              }, 1500)
-            })
-          }
-          return real.apply(this, arguments)
-        }
-      })()
-    """)
-    page.goto(f"{live_server}/index.html")
-    page.wait_for_selector("html[data-menu-state='pending']", state="attached", timeout=10000)
+    _hold_first(page, True, 200, "{layout: {groups: [], errors: []}}")
+    page.goto(f"{live_server}/index.html", wait_until="domcontentloaded")
+    page.wait_for_function("typeof window.__releaseFirst === 'function'", timeout=10000)
+    assert page.get_attribute("html", "data-menu-state") == "pending", "第一趟扣住時狀態要是 pending"
     assert page.evaluate("window.MotrixMenu.refresh()") == 2
     _seq(page, 2, "layout")
-    page.wait_for_function("window.__staleDelivered === true", timeout=10000)
-    page.wait_for_timeout(100)
+    _release_first_and_settle(page)
     assert label in _vocab(page), "晚到的舊回應（空選單）不可以蓋掉新的"
     assert page.get_attribute("html", "data-menu-seq") == "2"
+    assert page.get_attribute("html", "data-menu-state") == "layout"
 
 
 def test_custom_module_appears_after_layout(live_server, make_user, new_page, login_as, client):
@@ -192,20 +195,20 @@ def test_refresh_resets_the_wait_point(live_server, make_user, new_page, login_a
 
 
 def test_stale_failed_response_is_dropped(live_server, make_user, new_page, login_as):
-    """稽核 X C4-S2：第一趟晚回來而且失敗（500），第二趟先成功 ⇒ 最後狀態仍是 layout（不可以被舊的失敗改成 layout-failed）。"""
+    """稽核 X C4-S2：第一趟扣住、放行時是 500；第二趟先成功 ⇒ 最後狀態仍是 layout（不可以被舊的失敗改成 layout-failed）。
+    O10：同上改成題目放行。突變：失敗路徑拿掉序號檢查 ⇒ 紅。"""
     _key, _href, label = _pick()
     u, p = make_user(username="c4e_s2", role="superadmin", modules=[])
     page = new_page()
     login_as(page, (u, p))
     logs = []
     page.on("console", lambda m: logs.append(m.text))
-    page.add_init_script(_DELAY_FIRST % ("'{}'", 500))
-    page.goto(f"{live_server}/index.html")
-    page.wait_for_selector("html[data-menu-state='pending']", state="attached", timeout=10000)
+    _hold_first(page, False, 500, "{}")
+    page.goto(f"{live_server}/index.html", wait_until="domcontentloaded")
+    page.wait_for_function("typeof window.__releaseFirst === 'function'", timeout=10000)
     assert page.evaluate("window.MotrixMenu.refresh()") == 2
     _seq(page, 2, "layout")
-    page.wait_for_function("window.__staleDelivered === true", timeout=10000)
-    page.wait_for_timeout(100)
+    _release_first_and_settle(page)
     assert page.get_attribute("html", "data-menu-state") == "layout", "晚到的舊失敗不可以蓋掉新的成功"
     assert label in _vocab(page)
     assert not any("讀不到 /api/platform/menu" in t for t in logs), logs
