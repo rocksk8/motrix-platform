@@ -41,10 +41,10 @@
 
   function tpl() {
     return '' +
-'<div id="ml-editor" x-data="MotrixLayoutEditor.component()" x-show="open" x-cloak :data-busy="busy ? \'1\' : \'0\'" :data-state="state" :data-scope="scope" :data-loaded-scope="loadedScope" :data-loads-done="loadsDone">' +
+'<div id="ml-editor" x-data="MotrixLayoutEditor.component()" x-show="open" x-cloak :data-busy="(busy || loading) ? \'1\' : \'0\'" :data-state="state" :data-scope="scope" :data-loaded-scope="loadedScope" :data-loads-done="loadsDone" :data-load-error="loadError ? \'1\' : \'0\'">' +
 ' <div class="ml-ed__head">' +
 '  <div class="ml-ed__row" style="justify-content:space-between"><strong>編輯版面</strong>' +
-'   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()">' +
+'   <span class="ml-ed__row"><label>以角色預覽</label><select data-testid="ml-preview-role" x-model="previewRole" @change="previewAs()" :disabled="loading">' +
 '    <option value="">（編輯中的草稿）</option><template x-for="r in roles" :key="r.key"><option :value="r.key" x-text="r.label"></option></template></select>' +
 '   <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-close" @click="close()">關閉</button></span></div>' +
 '  <div class="ml-ed__row"><label>套用範圍</label><select data-testid="ml-scope" x-model="scope" @change="loadScope()">' +
@@ -52,7 +52,7 @@
 '   <span class="ml-ed__sub" x-text="startNote"></span></div>' +
 '  <div class="ml-ed__banner" x-show="previewRole" x-text="\'以「\' + roleLabel(previewRole) + \'」預覽已發布的版面（唯讀）\'"></div>' +
 ' </div>' +
-' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy" :aria-busy="String(busy)">' +
+' <div class="ml-ed__body" x-show="work" x-effect="$el.inert = busy || loading" :aria-busy="String(busy || loading)">' +
 '  <template x-if="generalProblems.length"><div class="ml-ed__prob" data-testid="ml-problems"><template x-for="p in generalProblems"><div x-text="p"></div></template></div></template>' +
 // 列表
 '  <template x-for="lk in listKeys()" :key="lk"><div class="ml-ed__sec" :data-testid="\'ml-list-\' + lk">' +
@@ -124,13 +124,13 @@
 '   <div class="ml-ed__sub" x-show="!published().length">還沒有發布過（目前是程式預設）。</div>' +
 '   <template x-for="v in published()" :key="v.version"><div class="ml-ed__ver" :data-version="v.version">' +
 '    <span x-text="\'第 \' + v.version + \' 版 \' + (v.published_at || \'\').slice(0, 16).replace(\'T\', \' \') + (v.note ? \'・\' + v.note : \'\')"></span>' +
-'    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy">還原</button></div></template></div>' +
+'    <button type="button" class="btn btn-ghost btn-sm" @click="restore(v.version)" :disabled="busy || loading">還原</button></div></template></div>' +
 ' </div>' +
 ' <div class="ml-ed__foot"><div class="ml-ed__row">' +
-'  <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-save" @click="saveDraft()" :disabled="busy || !!previewRole">存草稿</button>' +
-'  <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-diff-btn" @click="showDiff()" :disabled="busy">看差異</button>' +
-'  <button type="button" class="btn btn-primary btn-sm" data-testid="ml-publish" @click="publish()" :disabled="busy || !!previewRole">發布</button>' +
-'  <button type="button" class="btn btn-ghost btn-sm" x-show="defs.draft" @click="discard()" :disabled="busy">捨棄草稿</button></div>' +
+'  <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-save" @click="saveDraft()" :disabled="busy || loading || !!previewRole">存草稿</button>' +
+'  <button type="button" class="btn btn-ghost btn-sm" data-testid="ml-diff-btn" @click="showDiff()" :disabled="busy || loading">看差異</button>' +
+'  <button type="button" class="btn btn-primary btn-sm" data-testid="ml-publish" @click="publish()" :disabled="busy || loading || !!previewRole">發布</button>' +
+'  <button type="button" class="btn btn-ghost btn-sm" x-show="defs.draft" @click="discard()" :disabled="busy || loading">捨棄草稿</button></div>' +
 '  <div class="ml-ed__row" style="margin-top:6px"><input type="text" data-testid="ml-note" x-model="note" placeholder="發布說明（選填）" style="flex:1;font-size:12px;padding:3px 6px">' +
 '  </div><div style="margin-top:6px" data-testid="ml-msg" x-text="msg"></div></div>' +
 '</div>'
@@ -138,7 +138,7 @@
 
   function component() {
     return {
-      open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0,
+      open: false, busy: false, state: 'idle', msg: '', note: '', loadedScope: '', _scopeSeq: 0, loadsDone: 0, loading: false, loadError: '',
       scope: 'company', roles: [], previewRole: '', startNote: '',
       defs: { draft: null, latest: null, versions: [] },
       work: null, lastOps: [], probs: {}, generalProblems: [],
@@ -187,36 +187,47 @@
       prob(id) { return this.probs[id] || '' },
 
       async loadScope() {
-        // e2e 等待終點：每一次 loadScope 結束（含被較新的切換取代而放棄）都 +1，可以等「那一趟確實處理完了」
-        try { await this._loadScope() } finally { this.loadsDone++ }
-      },
-      async _loadScope() {
-        // O7：每次切換範圍取一個序號；較早發出、較晚回來的回應不可以蓋掉後來選的範圍（連切兩次時）
+        // O7：每次切換範圍取一個序號；較早發出、較晚回來的回應不可以蓋掉後來選的範圍（連切兩次時）。
+        // 載入用自己的旗標 loading（不共用 busy，AUDIT-B-host-O7 M-1）；只有最新那一趟可以清掉它。
+        // 讀不到（斷線、非 2xx）⇒ 明說並維持鎖定，不可以當成「沒有版面」顯示程式預設讓人照樣發布（S-1）。
+        // e2e 等待終點：每一趟結束（含被較新的切換取代而放棄、含失敗）loadsDone 都 +1。
         var seq = ++this._scopeSeq
         var want = this.scope
-        this.busy = true
+        this.loading = true
+        this.loadError = ''
         this.loadedScope = ''
         this.previewRole = ''
         this.probs = {}; this.generalProblems = []; this.diffShown = false; this.msg = ''
-        var r = await this._j(this._base() + '?scope=' + encodeURIComponent(want))
-        if (seq !== this._scopeSeq) return
-        var defs = r.ok ? r.d : { draft: null, latest: null, versions: [] }
-        var ops = [], note
-        if (defs.draft) { ops = defs.draft.body.ops || []; note = '從草稿繼續' }
-        else if (defs.latest) { ops = defs.latest.body.ops || []; note = '從第 ' + defs.latest.version + ' 版開始' }
-        else if (want !== 'company') {
-          var c = await this._j(this._base() + '?scope=company')
+        try {
+          var r = await this._j(this._base() + '?scope=' + encodeURIComponent(want))
           if (seq !== this._scopeSeq) return
-          ops = (c.ok && c.d.latest) ? (c.d.latest.body.ops || []) : []
-          note = '這個角色還沒有覆寫：以公司預設為起點'
-        } else note = '以程式預設為起點'
-        this.defs = defs
-        this.startNote = note
-        this.work = L.applyOps(this._pts(), this._page(), ops).state
-        this.sync()
-        this.state = 'idle'
-        this.loadedScope = want
-        this.busy = false
+          if (!r.ok) throw new Error('HTTP ' + r.status)
+          var defs = r.d, ops = [], note
+          if (defs.draft) { ops = defs.draft.body.ops || []; note = '從草稿繼續' }
+          else if (defs.latest) { ops = defs.latest.body.ops || []; note = '從第 ' + defs.latest.version + ' 版開始' }
+          else if (want !== 'company') {
+            var c = await this._j(this._base() + '?scope=company')
+            if (seq !== this._scopeSeq) return
+            if (!c.ok) throw new Error('公司預設 HTTP ' + c.status)
+            ops = c.d.latest ? (c.d.latest.body.ops || []) : []
+            note = '這個角色還沒有覆寫：以公司預設為起點'
+          } else note = '以程式預設為起點'
+          this.defs = defs
+          this.startNote = note
+          this.work = L.applyOps(this._pts(), this._page(), ops).state
+          this.sync()
+          this.state = 'idle'
+          this.loadedScope = want
+          this.loading = false
+        } catch (e) {
+          if (seq !== this._scopeSeq) return
+          this.state = 'error'
+          this.loadError = '讀取「' + want + '」的版面失敗（' + (e && e.message || e) + '），編輯已鎖定；請重新選擇範圍再試'
+          this.msg = this.loadError
+          // loading 維持 true：編輯區保持 inert、發布不可按——讀不到不等於沒有
+        } finally {
+          this.loadsDone++
+        }
       },
       sync() { if (!this.previewRole) ML().show(L.clone(this.work), 'edit') },
       mv(arr, i, dir) {
@@ -334,6 +345,8 @@
         this.note = ''
         await ML().reload()
         await this.loadScope()
+        this.busy = false               // loadScope 不再清 busy（它用自己的 loading）⇒ 動作自己解鎖
+        if (this.loadError) return      // 發布成功但重新載入失敗：狀態留在 error（已說明），不標成已發布的乾淨狀態
         this.msg = '已發布第 ' + r.d.version + ' 版（' + this.scopeLabel() + '）'
         this.state = 'published'
       },
@@ -346,6 +359,8 @@
         if (this.defs.draft) await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
         await ML().reload()
         await this.loadScope()
+        this.busy = false
+        if (this.loadError) return
         this.msg = '已把第 ' + version + ' 版還原成第 ' + r.d.version + ' 版'
         this.state = 'restored'
       },
@@ -353,6 +368,8 @@
         this.busy = true
         await this._j(this._base() + '/draft?scope=' + encodeURIComponent(this.scope), { method: 'DELETE' })
         await this.loadScope()
+        this.busy = false
+        if (this.loadError) return
         this.msg = '草稿已捨棄'
       },
       async previewAs() {
