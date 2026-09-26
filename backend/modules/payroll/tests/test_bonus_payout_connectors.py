@@ -216,40 +216,6 @@ def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people,
 
 # ── ③ 報表（IP-9）與案件頁相關傳票 ──────────────────────────────────────────
 
-def _year_other(client, tok, year):
-    r = client.get("/api/reports/expenses-monthly?year=%s" % year, headers=_auth(tok))
-    assert r.status_code == 200, r.text
-    return r.json()["expenses"]
-
-
-def test_report_counts_bonus_on_paid_date(client, people):
-    insure_all()
-    _to_payout(client, people, "MQ-BP-R1")
-    total = _q("SELECT SUM(l.amount) AS s FROM bonus_case_award_lines l JOIN bonus_case_awards a"
-               " ON a.id=l.award_id WHERE a.quote_no='MQ-BP-R1'")[0]["s"]
-    before = _year_other(client, people["bc_sa"], 2026)
-    assert not [e for e in before["details"]["other"] if e["quoteNo"] == "MQ-BP-R1"]   # 待發放不算
-    client.post("/api/bonus/cases/MQ-BP-R1/mark-paid", headers=_auth(people["bc_cash"]), json={})
-    paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-R1'")[0]["paid_at"][:10]
-    exp = _year_other(client, people["bc_sa"], int(paid[:4]))
-    rows = [e for e in exp["details"]["other"] if e["quoteNo"] == "MQ-BP-R1"]
-    assert rows == [dict(rows[0], date=paid, amount=total, category="獎金分潤")]
-    month = next(m for m in exp["monthly"] if m["month"] == paid[:7])
-    month_before = next(m for m in before["monthly"] if m["month"] == paid[:7])
-    assert month["other"] - month_before["other"] == total
-
-
-def test_reverse_without_payroll_report_still_works(client, people, monkeypatch):
-    insure_all()
-    _to_payout(client, people, "MQ-BP-R2")
-    client.post("/api/bonus/cases/MQ-BP-R2/mark-paid", headers=_auth(people["bc_cash"]), json={})
-    paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-R2'")[0]["paid_at"][:4]
-    assert [e for e in _year_other(client, people["bc_sa"], paid)["details"]["other"] if e["quoteNo"] == "MQ-BP-R2"]
-    _drop(monkeypatch, "expense.entries")
-    exp = _year_other(client, people["bc_sa"], paid)
-    assert not [e for e in exp["details"]["other"] if e["quoteNo"] == "MQ-BP-R2"]
-
-
 def test_case_page_related_vouchers_show_bonus_vouchers(client, people):
     insure_all()
     _to_payout(client, people, "MQ-BP-V1")
@@ -445,10 +411,8 @@ def test_reverse_without_accounting_still_computes_and_pays(client, people, monk
     assert r.json()["deductions"]["totals"]["nhiPremium"] == 422
     assert _q("SELECT payment_voucher_id FROM bonus_case_awards WHERE quote_no='MQ-BP-A1'")[0][
         "payment_voucher_id"] == 0
-    # 出納頁、報表照常
+    # 出納頁照常（報表那一段在 modules/analytics/tests/test_reports_bonus_payout_consumer.py）
     assert client.get("/api/cashier/bonus-queue", headers=_auth(people["bc_cash"])).status_code == 200
-    paid = _q("SELECT paid_at FROM bonus_case_awards WHERE quote_no='MQ-BP-A1'")[0]["paid_at"][:4]
-    assert [e for e in _year_other(client, people["bc_sa"], paid)["details"]["other"] if e["quoteNo"] == "MQ-BP-A1"]
 
 
 # ── 稽核 D（AUDIT-D-A-bonus-U4）建議 ─────────────────────────────────────────────

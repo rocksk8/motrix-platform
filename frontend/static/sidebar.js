@@ -1170,6 +1170,11 @@ if (typeof module !== 'undefined' && module.exports) {
     'payslips.html': { key: 'payroll', name: '薪資獎金' },
     'payslip-form.html': { key: 'payroll', name: '薪資獎金' },
     'bonus.html': { key: 'payroll', name: '薪資獎金' },
+    'reports.html':      { key: 'analytics', name: '營運分析' },
+    'devices.html':      { key: 'analytics', name: '營運分析' },
+    'warranty.html':     { key: 'analytics', name: '營運分析' },
+    'procurement.html':  { key: 'analytics', name: '營運分析' },
+    'sales-orders.html': { key: 'analytics', name: '營運分析' },
   }
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

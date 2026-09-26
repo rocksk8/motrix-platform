@@ -6,8 +6,8 @@
   "M01 router:quotations -> M06 router:vouchers",
   "M05 router:cashier -> M01 helper:quotations",
   "M05 router:invoice_vouchers -> M01 helper:quotations",
-  "M08 router:dashboard -> M01 helper:quotations",
-  "M08 router:reports -> M01 helper:quotations",
-  "M08 router:reports -> M01 helper:recognition"
+  "M08 mod:analytics/api/dashboard -> M01 helper:quotations",
+  "M08 mod:analytics/api/reports -> M01 helper:quotations",
+  "M08 mod:analytics/api/reports -> M01 helper:recognition"
  ]
 }

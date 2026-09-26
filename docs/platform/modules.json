@@ -462,8 +462,9 @@
     "page:pages/reports.html",
     "page:pages/sales-orders.html",
     "page:pages/warranty.html",
-    "router:dashboard",
-    "router:reports"
+    "mod:analytics/__init__",
+    "mod:analytics/api/dashboard",
+    "mod:analytics/api/reports"
    ],
    "tables": [],
    "api_prefixes": [

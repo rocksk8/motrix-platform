@@ -55,6 +55,26 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROUTERS = Path(__file__).resolve().parent.parent / "routers"
+_REAL_ROUTERS = ROUTERS
+
+#: 標籤（`routers/x.py`、`modules/analytics/api/reports.py`；合成樹時是檔名）⇒ 實體路徑
+_FILE_OF = {}
+
+
+def _router_files():
+    """要掃的端點檔 ⇒ [(標籤, 路徑)]。
+
+    真實樹：`core.source_tree.router_files()`——`routers/*.py` ＋ 各模組的 `api.py`／`api/`
+    （稽核 ⑰ M-2：原本只掃 `routers/*.py`，營運分析搬進 modules/analytics/api 的 19 支 GET 就出了範圍——§B-9〈守門的對象被搬走〉）。
+    合成樹（題目把 `ROUTERS` 換成 tmp_path）：只掃那個資料夾。
+    """
+    if ROUTERS == _REAL_ROUTERS:
+        from core import source_tree
+        files = [(source_tree.rel(f), f) for f in source_tree.router_files()]
+    else:
+        files = [(f.name, f) for f in sorted(Path(ROUTERS).glob("*.py"))]
+    _FILE_OF.update(files)
+    return files
 
 #: 參數名裡出現這些字樣 ⇒ 它是憑證類的東西。
 #: ⚠️ 刻意用**子字串**比對而不是完全相等：`access_token`／`api_key`／
@@ -94,7 +114,7 @@ def _routes():
     而今天 A 因為 grep 吃到註解誤報過三次、我因為它誤報過一次（U5c）。
     """
     out = []
-    for path in sorted(ROUTERS.glob("*.py")):
+    for label, path in _router_files():
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -107,7 +127,7 @@ def _routes():
                 if not (deco.args and isinstance(deco.args[0], ast.Constant)
                         and isinstance(deco.args[0].value, str)):
                     continue
-                out.append((path.name, deco.args[0].value, node))
+                out.append((label, deco.args[0].value, node))
     return out
 
 
@@ -272,7 +292,7 @@ def _authority_flows():
     local_auth = {}
     for filename, route, fn, name in _query_params():
         if filename not in local_auth:
-            local_auth[filename] = _locals_raising_auth(ROUTERS / filename)
+            local_auth[filename] = _locals_raising_auth(_FILE_OF[filename])
         for node in ast.walk(fn):
             if not isinstance(node, ast.Call):
                 continue
@@ -599,7 +619,7 @@ def test_fx21c_the_signed_preview_path_is_still_there():
     🔑 這一題是〈已知的代價 vs 要修的東西〉的反面：
     **一個看起來像同一類問題的東西，其實是那個問題的正確解。**
     """
-    src = (ROUTERS / "uploads.py").read_text(encoding="utf-8")
+    src = (_REAL_ROUTERS / "uploads.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     names = {a.arg
              for node in ast.walk(tree)
@@ -895,3 +915,34 @@ def test_fx22c_a_challenge_in_the_query_string_is_refused(client):
         assert "header" in body.lower() or "body" in body.lower(), (
             f"422 的訊息沒有指路（該走 header 還是 body？）：{body[:200]}"
         )
+
+
+def test_scan_covers_module_routers():
+    """正對照（稽核 ⑰ M-2）：掃描範圍＝source_tree.router_files()——每個已安裝模組的端點檔都在裡面
+    （模組不在時沒有對象 ⇒ 只驗 routers/ 那一半，不綁特定 L2）。"""
+    from core import source_tree
+    labels = {label for label, _p in _router_files()}
+    assert "routers/company_lookup.py" in labels
+    for f in source_tree.router_files():
+        assert source_tree.rel(f) in labels, source_tree.rel(f)
+    scanned = {f for f, _r, _fn in _routes()}
+    mods = [source_tree.rel(f) for f in source_tree.router_files() if source_tree.rel(f).startswith("modules/")]
+    assert not mods or scanned & set(mods), "模組的端點檔在清單上卻一支路由都沒掃到：%s" % mods
+
+
+def test_rc_a_module_route_with_a_query_token_is_caught(tmp_path, monkeypatch):
+    """反向控制：合成模組（modules/zz_probe/api.py）放一支帶 `token` query 的 GET ⇒ 要被抓到（不綁真實模組）。"""
+    from core import source_tree
+    probe = tmp_path / "api.py"
+    probe.write_text(
+        "from fastapi import APIRouter, Query\n"
+        "router = APIRouter()\n"
+        "@router.get('/api/zz-probe/export')\n"
+        "def export(token: str = Query(None)):\n"
+        "    return {}\n", encoding="utf-8")
+    real = source_tree.router_files
+    monkeypatch.setattr(source_tree, "router_files", lambda: list(real()) + [probe])
+    monkeypatch.setattr(source_tree, "rel", lambda f: "modules/zz_probe/api.py" if Path(f) == probe
+                        else Path(f).resolve().relative_to(source_tree.BACKEND).as_posix())
+    found = {(r, n) for _f, r, n, _k in _query_credentials()}
+    assert ("/api/zz-probe/export", "token") in found, found

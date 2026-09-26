@@ -19,6 +19,41 @@ def _declared():
     return M.load_l1(), M.module_items(manifests)
 
 
+def _legacy_installed():
+    """舊選單扣掉「所屬模組不在這棵樹」的項目（sidebar.js `MODULE_PAGES` 的頁面 ⇒ 模組 key）。
+
+    舊選單在執行期由 `_moduleLoaded()` 藏起未載入模組的入口；宣告式選單則根本沒有那個模組的 module.json。
+    兩邊比的是「這棵樹裝了的」——M08 反向控制：拿掉模組之後對等題不可以因為舊選單寫死了它的項目而紅。"""
+    import re
+    from core import source_tree
+    src = L.SIDEBAR.read_text(encoding="utf-8")
+    block = src[src.index("var MODULE_PAGES = {"):]
+    block = block[:block.index("window.MOTRIX_MODULE_PAGES")]
+    page_key = dict(re.findall(r"'([\w.-]+\.html)':\s*\{\s*key:\s*'(\w+)'", block))
+    assert page_key, "sidebar.js 的 MODULE_PAGES 讀不到任何頁面 ⇒ 改本檔的解析"
+    installed = {d.name for d in source_tree.module_dirs()}
+    legacy = L.legacy_menu()
+    for g in legacy["groups"]:
+        g["items"] = [it for it in g["items"] if page_key.get(it["href"]) in (None, *installed)]
+    return legacy, page_key
+
+
+def test_legacy_filter_drops_only_pages_of_modules_not_installed(monkeypatch):
+    """反向控制：假裝一個模組都沒裝 ⇒ 被扣掉的恰好是 MODULE_PAGES 裡的頁面、其餘一項不少；
+    全部都裝（每個 MODULE_PAGES 的 key 都在）⇒ 一項不扣。"""
+    from core import source_tree
+    full = [it["href"] for g in L.legacy_menu()["groups"] for it in g["items"]]
+    monkeypatch.setattr(source_tree, "module_dirs", lambda: [])
+    none_installed, page_key = _legacy_installed()
+    kept = [it["href"] for g in none_installed["groups"] for it in g["items"]]
+    assert kept == [h for h in full if h not in page_key]
+    assert set(full) - set(kept) == set(page_key) & set(full)
+    fake = [type("D", (), {"name": k})() for k in set(page_key.values())]
+    monkeypatch.setattr(source_tree, "module_dirs", lambda: fake)
+    all_installed, _ = _legacy_installed()
+    assert [it["href"] for g in all_installed["groups"] for it in g["items"]] == full
+
+
 def _norm(it):
     return {"href": it["href"], "label": it["label"], "perm": it["perm"],
             "active": list(it.get("active") or [it["href"]]), "badge": it.get("badge"),
@@ -41,7 +76,7 @@ def test_declarations_are_valid():
 
 def test_every_legacy_item_is_declared_identically():
     """逐項：同一群組、同一順序、同一權限／active／徽章。"""
-    legacy = L.legacy_menu()
+    legacy, _ = _legacy_installed()
     l1, mods = _declared()
     labels = {g["key"]: g["label"] for g in l1["groups"]}
     assert [g["label"] for g in legacy["groups"]] == [g["label"] for g in l1["groups"]]
@@ -75,7 +110,7 @@ def _legacy_visible(legacy, modules, superadmin):
 
 def test_rendered_menu_matches_for_every_single_permission():
     """最高管理者、沒有任何權限、以及每一個單一模組權限：新舊渲染出的群組與項目（含順序）完全相同。"""
-    legacy = L.legacy_menu()
+    legacy, _ = _legacy_installed()
     l1, mods = _declared()
     cases = [([], True), ([], False)] + [([k], False) for k in _all_keys(legacy)]
     for modules, sa in cases:

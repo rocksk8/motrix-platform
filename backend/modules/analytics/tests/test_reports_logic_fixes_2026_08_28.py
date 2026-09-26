@@ -71,7 +71,7 @@ def _insert_won_audit_event(quote_no, at_iso):
 # ── ①精算快照過期全域計數 ─────────────────────────────────────────────────────
 
 def test_stale_settlement_count_detects_mismatch(client, make_user):
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     _insert_case(
         "MQ-STALE-001", deal_tag="已結案",
         settlement={"status": "finalized", "summary": {
@@ -85,7 +85,7 @@ def test_stale_settlement_count_detects_mismatch(client, make_user):
 
 
 def test_stale_settlement_count_zero_when_matching(client, make_user):
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     # 快照跟即時值一致（無承攬商派發，dispatchTotal=0）
     _insert_case(
         "MQ-STALE-002", deal_tag="已結案",
@@ -100,7 +100,7 @@ def test_stale_settlement_count_zero_when_matching(client, make_user):
 # ── ②已成案缺收款期別 ────────────────────────────────────────────────────────
 
 def test_missing_payment_items_listed_and_excluded_from_money_totals(client, make_user):
-    from routers.reports import _collect
+    from modules.analytics.api.reports import _collect
     _insert_case("MQ-NOPAY-001", payment_items=None, total=500000)  # 完全沒有 caseRecord
     _insert_case("MQ-NOPAY-002", payment_items=[
         {"type": "全額", "amount": 100000, "received": False},
@@ -120,7 +120,7 @@ def test_missing_payment_items_listed_and_excluded_from_money_totals(client, mak
 # ── ③年度目標達成率改用 wonMonth ────────────────────────────────────────────
 
 def test_achievement_includes_case_with_missing_quote_date_via_audit_fallback(client, make_user):
-    from routers.reports import _collect, _compute_achievement
+    from modules.analytics.api.reports import _collect, _compute_achievement
     _insert_case("MQ-WON-001", quote_date="", total=200000)
     _insert_won_audit_event("MQ-WON-001", "2026-03-15T10:00:00")
 
@@ -135,7 +135,7 @@ def test_achievement_reattributes_future_dated_quote_via_audit_fallback(client, 
     """quote_date 誤填成未來日期（例如業務員手誤）時，quote_won_month_map() 會
     退回用 audit_log 實際成案時間戳，不該把這筆案子的業績算進 quote_date 那個
     （通常還沒到）的未來年度。"""
-    from routers.reports import _collect, _compute_achievement
+    from modules.analytics.api.reports import _collect, _compute_achievement
     _insert_case("MQ-WON-002", quote_date="2099-01-01", total=300000)
     _insert_won_audit_event("MQ-WON-002", "2026-02-10T00:00:00")
 

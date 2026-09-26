@@ -37,12 +37,11 @@ def _capture(monkeypatch, delay=0.0):
 
 def test_every_import_site_uses_the_wrapper_and_the_product_function_is_untouched(client, monkeypatch):
     import sys
-    import routers.reports as reports_module
     w = pdf_gen.run_edge_pdf
     assert all(getattr(m, "run_edge_pdf") is w
-               for m in (startup, helpers, voucher_pdf, reports_module)), \
+               for m in (startup, helpers, voucher_pdf)), \
         "有一處呼叫端沒換到（依值綁定的 import 要逐一換）"
-    # 模組的呼叫端（例：modules/netplan/export.py）由下面的 sys.modules 掃描一併涵蓋；模組自己的測試另有逐處斷言
+    # 模組的呼叫端（例：modules/netplan/export.py、modules/analytics/api/reports.py）由下面的 sys.modules 掃描一併涵蓋；模組自己的測試另有逐處斷言
     # 第一版寫死 5 處、漏了 routers/reports ⇒ 直接驗「沒有任何已載入模組還綁著原函式」
     stale = [name for name, m in list(sys.modules.items())
              if getattr(m, "run_edge_pdf", None) is w.__wrapped__]

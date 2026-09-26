@@ -1,6 +1,7 @@
 """IP-1 `dispatch.row` 取用方這一側：**外包工班不在也要成立**的題（2026-09-26 自 test_dispatch_connector 拆出）。
 
-拿掉提供者（或外包工班根本沒裝）⇒ 營運報表／月支出／待補登與傳票摘要來源照常回應，並明說少了派工那一類；
+拿掉提供者（或外包工班根本沒裝）⇒ 傳票摘要來源照常回應，並明說少了派工那一類；
+（營運報表／月支出／待補登那一處在 `modules/analytics/tests/test_reports_dispatch_row_consumer.py`，營運分析模組拿掉就一起拿掉；第六班列車交會）
 頁面讀得到那個說明；產品碼沒有人 import 外包工班的私有序列化函式。
 正對照（提供者在時派工確實算進來）與契約形狀在 `modules/subcontract/tests/test_dispatch_row_provider.py`（隨模組搬走）。
 """
@@ -44,26 +45,18 @@ def _sa(client, make_user):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-def _responses(client, h):
-    rep = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03", headers=h)
-    cash = client.get(f"/api/reports/expenses-monthly?year={YEAR}&month={YEAR}-03&basis=cash", headers=h)
+def _sources(client, h):
     src = client.get(f"/api/vouchers/summary-sources?quote_no={QNO}", headers=h)
-    for r in (rep, cash, src):
-        assert r.status_code == 200, r.text
-    return rep.json(), cash.json(), src.json()
+    assert src.status_code == 200, src.text
+    return src.json()
 
 
-def test_absence_is_said_in_report_flags_and_voucher_sources(client, make_user, monkeypatch):
+def test_absence_is_said_in_voucher_sources(client, make_user, monkeypatch):
+    """營運報表那一半在 modules/analytics/tests/test_reports_dispatch_row_consumer.py。"""
     _seed()
     h = _sa(client, make_user)
     _drop_dispatch_row(monkeypatch)
-    rep, cash, src = _responses(client, h)
-    # 營運報表／月支出＋待補登（同一份回應）
-    assert [u["category"] for u in rep["unavailable"]] == ["contractor"]
-    assert "未安裝" in rep["unavailable"][0]["reason"]
-    assert rep["expenses"]["unavailable"] == rep["unavailable"]
-    # 現金口徑讀匯款申請快照，不受影響 ⇒ 不說缺
-    assert cash["unavailable"] == []
+    src = _sources(client, h)
     # 傳票摘要來源：額外支出照常，派工那一類明說缺
     assert [u["category"] for u in src["unavailable"]] == ["contractor_dispatch"]
     assert [e["kind"] for e in src["tabs"]["支出項"]] == ["extra_expense"]

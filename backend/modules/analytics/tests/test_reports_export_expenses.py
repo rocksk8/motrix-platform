@@ -81,7 +81,7 @@ def test_pdf_html_includes_expenses_and_month_grouped_cases(client, make_user):
     """不走 _html_to_pdf()（需要 Edge headless），直接呼叫 _build_report_html()
     驗證 HTML 字串本身正確組裝。"""
     from datetime import datetime
-    from routers.reports import (
+    from modules.analytics.api.reports import (
         _augment_with_targets, _build_income_expense_scopes, _build_report_html, _collect,
         _compute_ar_aging, _parse_period,
     )

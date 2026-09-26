@@ -45,21 +45,32 @@ _SKIP_DIRS = {".git", "node_modules", "__pycache__", "deploy_packages", ".pytest
 _DB_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal")
 DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")
 
-#: 冒煙：(名稱, 方法, 路徑)。200 才算過；頁面用 GET。
+#: 冒煙：(名稱, 方法, 路徑[, 模組 key])。200 才算過；頁面用 GET。
+#: 帶模組 key 的條目：該模組不在安裝包（`backend/modules/<key>/module.json` 不存在）⇒ 記成「略過：模組不在包內」，
+#: 明寫在結果裡，不算過也不算不過（M08 反向控制：產品選配拿掉某模組時，演練不可以因為它而紅，也不可以默默少一項）。
+#: 尚未搬進 modules/ 的功能不帶 key（它們一定在包內）；搬遷時補上。
 SMOKE = [
     ("首頁", "GET", "/"), ("登入頁", "GET", "/pages/login.html"),
     ("報價單列表", "GET", "/api/quotations"), ("案件管理頁", "GET", "/pages/case-management.html"),
     ("傳票列表", "GET", "/api/vouchers"), ("傳票頁", "GET", "/pages/voucher.html"),
-    ("獎金分潤項目", "GET", "/api/bonus/items"), ("獎金分潤頁", "GET", "/pages/bonus.html"),
+    ("獎金分潤項目", "GET", "/api/bonus/items", "payroll"), ("獎金分潤頁", "GET", "/pages/bonus.html"),
     ("出納待付", "GET", "/api/cashier/payable-queue"), ("請款單列表", "GET", "/api/payment-requests"),
-    ("營運報表", "GET", "/api/reports/financial"), ("營運報表頁", "GET", "/pages/reports.html"),
+    ("營運報表", "GET", "/api/reports/financial", "analytics"), ("營運報表頁", "GET", "/pages/reports.html", "analytics"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),
     ("定義文件庫", "GET", "/api/definitions/custom_module"),         # 第二批（P8 缺口 #5）已合回
 ]
 
-#: 屬於 L2 模組的冒煙項（名稱 → 模組 key）：那個模組不在這個安裝包時，冒煙與守門都不算它（PLAYBOOK §B-11）
-SMOKE_MODULES = {"獎金分潤項目": "payroll"}
+
+def smoke_plan(backend_dir: str) -> list:
+    """SMOKE ⇒ [(名稱, 方法, 路徑, 略過原因或 None)]；略過原因只有「模組不在包內」一種。"""
+    plan = []
+    for entry in SMOKE:
+        name, method, path = entry[:3]
+        key = entry[3] if len(entry) > 3 else None
+        absent = key and not os.path.isfile(os.path.join(backend_dir, "modules", key, "module.json"))
+        plan.append((name, method, path, ("模組 %s 不在安裝包" % key) if absent else None))
+    return plan
 
 
 def sha256(path: str) -> str:
@@ -244,10 +255,9 @@ def smoke(install: str) -> dict:
                                      data=json.dumps({"username": DRILL_ADMIN[0], "password": DRILL_ADMIN[1]}).encode(),
                                      headers={"Content-Type": "application/json"})
         token = json.loads(urllib.request.urlopen(req, timeout=10).read())["token"]
-        for name, method, path in SMOKE:
-            key = SMOKE_MODULES.get(name)
-            if key and not os.path.isfile(os.path.join(install, "backend", "modules", key, "module.json")):
-                out["checks"].append({"name": name, "path": path, "skipped": "模組 %s 不在這個安裝包" % key, "ok": True})
+        for name, method, path, skipped in smoke_plan(os.path.join(install, "backend")):
+            if skipped:
+                out["skipped"] = out.get("skipped", []) + [{"name": name, "path": path, "reason": skipped}]
                 continue
             r = urllib.request.Request(base + path, method=method, headers={"Authorization": "Bearer " + token})
             try:

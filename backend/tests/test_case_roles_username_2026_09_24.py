@@ -123,20 +123,6 @@ def test_member_check_by_username_ignores_same_display_name(client, make_user):
     assert r.status_code == 403, r.text
 
 
-def test_reports_sales_owner_uses_username():
-    from routers import reports as rp
-    users = {1: {"displayName": "同名", "username": "a"}, 2: {"displayName": "同名", "username": "b"}}
-    name_index = rp._build_name_index(users)
-    row = {"sales_person_id": None, "sales_person": ""}
-
-    class R(dict):
-        def keys(self):
-            return super().keys()
-    key, label = rp._case_sales_owner({"roles": {"sales": {"username": "b", "display": "同名"}}}, R(row),
-                                      name_index, users)
-    assert key == ("id", 2) and label == "同名"
-
-
 def test_change_history_and_summary_show_display_not_dict():
     from routers import quotations as q
     assert q._fmt_change_value({"username": "a", "display": "王小美"}) == "王小美"

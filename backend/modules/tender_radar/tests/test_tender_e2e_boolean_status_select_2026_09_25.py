@@ -18,7 +18,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_e2e_reports_period_sync_2026_09_10 import _login  # noqa: E402,F401
+from tests._e2e_login import inject_login as _login  # noqa: E402,F401
 from tests._mapiso import no_tile_probe  # noqa: E402,F401  （tender-radar 會載地圖 ⇒ 後端探測底圖伺服器）
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"

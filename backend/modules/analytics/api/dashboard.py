@@ -362,7 +362,7 @@ def dashboard_expenses_monthly(department_id: Optional[int] = Query(None), autho
     if role not in ("superadmin", "admin") and "finance" not in mods:
         return {"items": [], "otherBreakdown": {}}
 
-    from routers.reports import _collect_expenses
+    from modules.analytics.api.reports import _collect_expenses
 
     today = date.today()
     month_list = []
