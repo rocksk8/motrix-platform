@@ -857,3 +857,9 @@ def queue_items(conn) -> list:
             invoiceFiles=snap.get("invoiceFiles") or [],
         ))
     return out
+
+
+def queue_detail(conn, doc_no):
+    """`approval.detail`（contractor_voucher）：簽核佇列詳情的單據內容；權限、案件抬頭、金額遮蔽在 M01。"""
+    r = conn.execute("SELECT * FROM contractor_payment_vouchers WHERE voucher_no=?", (doc_no,)).fetchone()
+    return _aq.snapshot_doc_detail(r) if r else None

@@ -7,6 +7,9 @@
   `load(conn, doc_no) -> dict | None`：{"docNo", "quoteNo", "status", "approval"}；找不到 ⇒ None；
       簽核資料讀不出來 ⇒ raise `ApprovalUnreadable`（fail-closed：不可以吞成空鏈，那與「沒設定流程」一樣）
   `save(conn, doc, approval, now)`：`doc` 是 `load` 的回傳值；寫回整個 approval。
+- `approval.detail`（新 IP，列車定號）：provider 名稱＝單據類型，`fn(conn, doc_no) -> dict | None`：
+  {"quoteNo", "approvalRaw"（含 approval 的原始 JSON，給 M01 判斷可見性與金額遮蔽）, "title"（可省）, "fields", "items", "files"}；
+  找不到 ⇒ None。每案權限、案件抬頭、金額遮蔽都在 M01（`/api/approval-queue/detail`）。
   權限、原因必填、換人規則、audit、通知都在 M01；擁有者只負責「讀出簽核鏈、寫回簽核鏈」。
   沒有提供者的類型 ⇒ 不給轉簽（佇列回 `reassignTypes`，前端據此顯示按鈕）。
 
@@ -126,3 +129,69 @@ class DataJsonApproval:
         data["approval"] = approval
         conn.execute("UPDATE " + self.table + " SET data_json=?, updated_at=? WHERE " + self.key + "=?",
                      (json.dumps(data, ensure_ascii=False), now, doc["docNo"]))
+
+
+def file_entries(raw) -> list:
+    """把各表存的檔案 JSON 正規化成前端可預覽的格式（2026-09-26 自 M01 `routers/quotations._file_entries` 逐字下沉）。
+
+    各模組的檔案結構不完全一樣（有的 `filename` 有的 `name`，路徑鍵也不同），
+    這裡統一成 `{name, path, kind}`；`kind` 讓前端決定是直接內嵌預覽（圖片）、
+    開新分頁（PDF）還是只給下載連結。
+    """
+    try:
+        arr = json.loads(raw or "[]")
+    except Exception:
+        return []
+    if not isinstance(arr, list):
+        return []
+    out = []
+    for f in arr:
+        if not isinstance(f, dict):
+            continue
+        name = f.get("filename") or f.get("name") or ""
+        path = f.get("path") or f.get("filePath") or ""
+        if not path:
+            continue
+        low = (name or path).lower()
+        kind = ("image" if low.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))
+                else "pdf" if low.endswith(".pdf") else "file")
+        out.append({"id": f.get("id") or path, "name": name or path.split("/")[-1],
+                    "path": path, "kind": kind,
+                    "uploadedBy": f.get("uploadedBy") or f.get("by") or "",
+                    "uploadedAt": f.get("uploadedAt") or f.get("at") or ""})
+    return out
+
+
+def snapshot_doc_detail(r) -> dict:
+    """憑快照建立的付款／開票類單據（承攬商匯款申請、開票申請、請款單）共用的詳情內容：`r` 是該表 `SELECT *` 的一列。
+    （2026-09-26 自 M01 `approval_queue_detail` 三表共用段逐字下沉；欄位有沒有依 `r.keys()` 判斷。）"""
+    keys = r.keys()
+    try:
+        snap = json.loads(r["snapshot_json"] or "{}")
+    except Exception:
+        snap = {}
+    amount = r["amount"] if "amount" in keys and r["amount"] is not None else (snap.get("grandTotal") or 0)
+    fields = [
+        {"label": "金額", "value": format(amount or 0, ",.0f")},
+        {"label": "範圍", "value": (r["scope"] if "scope" in keys else "") or "—"},
+        {"label": "建立者", "value": r["created_by"] or "—"},
+        {"label": "建立時間", "value": r["created_at"] or "—"},
+    ]
+    if "stage" in keys and r["stage"]:
+        fields.append({"label": "請款範圍", "value": r["stage"]})
+    if snap.get("vendorName"):
+        fields.insert(0, {"label": "承攬商", "value": snap["vendorName"]})
+    files = []
+    if "issued_files_json" in keys:
+        files += file_entries(r["issued_files_json"])
+    files += file_entries(json.dumps(snap.get("invoiceFiles") or []))
+    passbook = snap.get("bankPassbookImage") or ""
+    # 只接受 data:image/ ——這個欄位是建立單據時由前端送進來的字串，
+    # 若混進 `javascript:` 之類的 scheme，簽核人點下去就是在本站原點執行腳本
+    # （2026-09-14 自動安全掃描 finding #2；前端也擋一次，兩邊都擋）
+    if isinstance(passbook, str) and passbook.lower().startswith("data:image/"):
+        files.append({"id": "passbook", "name": "存簿封面", "kind": "image",
+                      "path": "", "dataUrl": passbook,
+                      "uploadedBy": "", "uploadedAt": ""})
+    return {"quoteNo": r["quote_no"], "approvalRaw": r["data_json"] if "data_json" in keys else None,
+            "fields": fields, "items": snap.get("items") or [], "files": files}

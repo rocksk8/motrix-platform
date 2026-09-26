@@ -19,5 +19,7 @@ MODULE = ModuleSpec(
         ("approval.queue_items", "payment_request"): payment_requests.queue_items,
         ("approval.reassign", "invoice_voucher"): invoice_vouchers.REASSIGN,
         ("approval.reassign", "payment_request"): payment_requests.REASSIGN,
+        ("approval.detail", "invoice_voucher"): invoice_vouchers.queue_detail,
+        ("approval.detail", "payment_request"): payment_requests.queue_detail,
     },
 )

@@ -7,6 +7,8 @@
 - L1（新增）：`helpers.approval_queue`——`ACTIVE_STATUSES`、`ApprovalUnreadable`、`active_tiers`／`current_tier_idx`（含舊 steps 相容；自 M01 `routers/quotations._active_tiers`／`_current_tier_idx` 逐字下沉，M01 保留同名別名）、`tier_fields`（原 M01 `_queue_tier_fields`）、`base_item`、`DataJsonApproval(table, key)`
 - 新串接點 `approval.reassign`（IP-94 暫定）：各單據模組提供轉簽時的簽核鏈讀寫；M01 轉簽端點不再以 `_REASSIGN_TABLES` 逐表直寫
 - IP-10 `approval.queue_items`：M04、M05、M03、M06、M07 各自提供待簽項目；M01 佇列與角標只彙整（佇列回應新增 `reassignTypes`）
+- 新串接點 `approval.detail`（IP-93 暫定，c-approval-2）：簽核佇列詳情裡其他模組單據（承攬商匯款申請、開票申請、請款單、出貨單）的內容由擁有模組提供；M01 只做每案權限、案件抬頭、金額遮蔽
+- L1（新增，c-approval-2）：`helpers.approval_queue.file_entries`（自 M01 `_file_entries` 逐字下沉，M01 保留別名）、`snapshot_doc_detail(row)`（付款／開票類單據共用的詳情內容，自 M01 詳情端點三表共用段下沉）
 - 守門：`tests/platform/test_approval_providers.py`；`tools/check_approval_queue_coverage.py`（AS3）改成也認提供者
 
 ## 1.38 — 2026-09-26（C，M01-PLAN §3-6：case.recognition；疊在 c-m01-s3-2）〔core_bump：暫用 1.99 → 1.38〕

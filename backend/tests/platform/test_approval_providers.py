@@ -5,6 +5,8 @@
 ③ 拿掉一個單據模組的提供者 ⇒ 那一類不列、角標跟著少、`reassignTypes` 不含、轉簽 400；正對照：提供者在時全部都有
 ④ 簽核資料讀不出來 ⇒ 轉簽 400（fail-closed），不是 500、也不是當成空鏈
 ⑤ 提供者沒給 `customer`／`projectName` ⇒ M01 依 `linkedQuoteNo` 補；給了（含空字串）不覆寫
+⑥ 佇列詳情（`approval.detail`，c-approval-2）：其他模組單據的內容由擁有模組提供；拿掉 ⇒ 400「模組未安裝」；
+   正對照：提供者在時 200、欄位與檔案來自提供者、案件抬頭由 M01 補
 """
 import ast
 import json
@@ -18,7 +20,8 @@ BACKEND = Path(__file__).resolve().parents[2]
 #: 別的模組的單據表（2026-09-26 前 M01 的三支端點逐表直寫的那些）
 FOREIGN_TABLES = ("contractor_payment_vouchers", "invoice_vouchers", "payment_requests", "shipping_notes",
                   "vouchers_all", "voucher_lines", "bonus_awards", "bonus_case_awards")
-M01_FUNCS = ("get_approval_queue", "get_approval_queue_count", "reassign_approval", "_queue_provider_items")
+M01_FUNCS = ("get_approval_queue", "get_approval_queue_count", "reassign_approval", "_queue_provider_items",
+             "approval_queue_detail")
 
 
 def _funcs(src, names):
@@ -50,6 +53,17 @@ def test_every_reassign_type_has_one_provider(client):
     assert set(got) == _expected_reassign_types(), sorted(got)
     for name, obj in got.items():
         assert callable(getattr(obj, "load", None)) and callable(getattr(obj, "save", None)), name
+
+
+def test_every_foreign_detail_type_has_one_provider(client):
+    """M01 自己的四種（報價單、完工單、額外支出、已結案變更）在端點內；其他模組的單據各有一個 `approval.detail`。"""
+    want = {"shipping_note"}
+    if source_tree.module_installed("modules/subcontract/"):
+        want.add("contractor_voucher")
+    if source_tree.module_installed("modules/arap/"):
+        want |= {"invoice_voucher", "payment_request"}
+    got = registry.providers("approval.detail")
+    assert set(got) == want and all(callable(f) for f in got.values()), sorted(got)
 
 
 # ── 行為：以開票申請（M05）為例 ─────────────────────────────────────────────
@@ -87,7 +101,7 @@ def _without(monkeypatch, name):
 
     def fake(cap):
         got = orig(cap)
-        if cap in ("approval.queue_items", "approval.reassign"):
+        if cap in ("approval.queue_items", "approval.reassign", "approval.detail"):
             got = {k: v for k, v in got.items() if k != name}
         return got
     monkeypatch.setattr(registry, "providers", fake)
@@ -137,6 +151,52 @@ def test_owner_absent_hides_the_type_everywhere(client, iv_setup, monkeypatch):
                     json={"type": "invoice_voucher", "id": "IV-AQP-2", "to_username": "aqp_new", "reason": "請假"})
     assert r.status_code == 400 and "未安裝" in r.json()["detail"], r.text
     assert _iv_approval("IV-AQP-2")["tiers"][0]["approvers"][0]["username"] == "aqp_old"
+
+
+def _detail(client, h, no):
+    return client.get("/api/approval-queue/detail?type=invoice_voucher&id=" + no, headers=h)
+
+
+def test_detail_comes_from_the_owner_and_says_when_it_is_absent(client, iv_setup, monkeypatch):
+    import db
+    sh, _ah = iv_setup
+    conn = db.get_db()
+    try:                                                   # 詳情的每案權限要案件存在（M01 `_guard_queue_detail`，行為同前）
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, "
+                     "assigned_user_ids) VALUES ('MQ-AQP-1','成交','甲客戶','乙專案','{}','2026-09-26','2026-09-26','[]')")
+        conn.commit()
+    finally:
+        conn.close()
+    _seed_iv("IV-AQP-4", "aqp_old")
+    ok = _detail(client, sh, "IV-AQP-4")
+    assert ok.status_code == 200, ok.text
+    d = ok.json()
+    assert d["case"]["customerName"] == "甲客戶" and any(f["label"] == "建立時間" for f in d["fields"])
+    assert _detail(client, sh, "IV-NONE").status_code == 404
+    _without(monkeypatch, "invoice_voucher")
+    r = _detail(client, sh, "IV-AQP-4")
+    assert r.status_code == 400 and "未安裝" in r.json()["detail"], r.text
+
+
+def test_detail_keeps_m01_access_and_money_rules_for_provider_types(client, iv_setup, make_user):
+    """每案權限與金額遮蔽仍由 M01 判斷，依據是提供者給的 `approvalRaw`：鏈上的一般使用者（非該案、無財務權）看得到內容與金額；
+    不在鏈上的外人 403。"""
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at, "
+                     "assigned_user_ids) VALUES ('MQ-AQP-1','成交','甲客戶','乙專案','{}','2026-09-26','2026-09-26','[]')")
+        conn.commit()
+    finally:
+        conn.close()
+    au, ap = make_user(username="aqp_chain", role="viewer", modules=["dashboard"])[:2]
+    ou, op = make_user(username="aqp_outsider", role="viewer", modules=["dashboard"])[:2]
+    _seed_iv("IV-AQP-5", "aqp_chain")
+    r = _detail(client, _login(client, au, ap), "IV-AQP-5")
+    assert r.status_code == 200, r.text
+    assert not r.json().get("moneyMasked") and any(f["label"] == "金額" and f["value"] != "（無財務檢視權限）"
+                                                   for f in r.json()["fields"])
+    assert _detail(client, _login(client, ou, op), "IV-AQP-5").status_code == 403
 
 
 def test_unreadable_chain_is_refused(client, iv_setup):

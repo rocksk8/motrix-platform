@@ -17,5 +17,6 @@ MODULE = ModuleSpec(
         # IP-10／approval.reassign（M01-PLAN §3-7）：M01「待我簽核」佇列與轉簽的承攬商匯款申請
         ("approval.queue_items", "subcontract"): contractor_vouchers.queue_items,
         ("approval.reassign", "contractor_voucher"): contractor_vouchers.REASSIGN,
+        ("approval.detail", "contractor_voucher"): contractor_vouchers.queue_detail,
     },
 )
