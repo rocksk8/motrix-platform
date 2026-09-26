@@ -268,6 +268,67 @@ def test_no_durations_flag_turns_it_off(_no_cap_env, monkeypatch):
     MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=2, window="t", durations=False))
     assert not any("--durations=30" in args for args in seen) and "slowest" not in written[-1]
 
+
+# ── GENERATED-FILES（D 稽核 b-genfiles）：GF-M1 列車入口、GF-M2 現場產生 ────────────────────────────
+
+def test_train_judge_needs_the_three_guards_run_not_skipped():
+    """GF-M1：三題被 skip（MOTRIX_TRAIN 沒生效）或收集不到 ⇒ 紅；都在而且沒 skip、兩段 exit 0 ⇒ 綠。"""
+    all3 = set(MT.TRAIN_GUARDS)
+    assert MT.train_judge(0, 0, "== 1000 passed ==", all3) == (True, [])
+    assert MT.train_judge(None, 0, "", all3)[0], "沒選到差異題不算紅"
+    skip = "SKIPPED [1] tests/platform/test_generated_maps.py:48: 產生檔只由列車提交：是否最新只在 MOTRIX_TRAIN=1 驗"
+    ok, why = MT.train_judge(0, 0, skip, all3)
+    assert not ok and "skip" in why[0]
+    ok, why = MT.train_judge(0, 0, "", all3 - {MT.TRAIN_GUARDS[0]})
+    assert not ok and "收集不到" in why[0]
+    assert not MT.train_judge(1, 0, "", all3)[0] and not MT.train_judge(0, 1, "", all3)[0]
+
+
+def test_run_train_sets_the_flag_and_fails_on_a_skip(monkeypatch):
+    """GF-M1 行為題：--train 設 MOTRIX_TRAIN=1；tests/platform 輸出有三題 skip ⇒ exit 1。突變：run_train 不設旗標或不判 skip ⇒ 紅。"""
+    import types
+    monkeypatch.delenv("MOTRIX_TRAIN", raising=False)
+    seen_env = []
+
+    def fake_run(targets, extra, window, full, collect_only=False):
+        seen_env.append(os.environ.get("MOTRIX_TRAIN"))
+        if collect_only:
+            return 0, "\n".join(MT.TRAIN_GUARDS)
+        return 0, "SKIPPED [1] x.py:1: 是否最新只在 MOTRIX_TRAIN=1 驗" if targets == ["backend/tests/platform"] else ""
+    monkeypatch.setattr(MT, "run_pytest", fake_run)
+    code = MT.run_train([], {"tests": {}}, [], types.SimpleNamespace(window="t"))
+    assert seen_env and all(v == "1" for v in seen_env), seen_env
+    assert code == 1
+
+
+def test_live_map_sees_an_untracked_new_test(tmp_path):
+    """GF-M2：modtest 預設現場算 test_map——一個還沒 git add 的新測試檔要在裡面。突變：load_map 預設讀檔 ⇒ 紅。"""
+    import uuid
+    name = "test_zz_gf_live_%s.py" % uuid.uuid4().hex[:8]
+    f = REPO / "backend" / "tests" / name
+    f.write_text("def test_x():\n    assert True\n", encoding="utf-8")
+    try:
+        tmap = MT.load_map()
+        keys = set((tmap or {}).get("tests") or {})
+        assert "backend/tests/" + name in keys, "現場算的 test_map 看不到未追蹤的新檔"
+    finally:
+        f.unlink()
+
+
+def test_test_map_refuses_to_write_on_a_dirty_tree(monkeypatch, tmp_path):
+    """觀察：工作樹有未追蹤的檔 ⇒ test_map.py 重產拒絕（exit 2），不寫檔。"""
+    import uuid
+    TMm = _load("test_map")
+    wrote = []
+    monkeypatch.setattr(TMm, "OUT", tmp_path / "test_map.json")
+    f = REPO / "backend" / "tests" / ("test_zz_gf_dirty_%s.py" % uuid.uuid4().hex[:8])
+    f.write_text("def test_y():\n    pass\n", encoding="utf-8")
+    try:
+        assert TMm.main([]) == 2
+        assert not (tmp_path / "test_map.json").exists()
+    finally:
+        f.unlink()
+
 # ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
 
 def test_rerun_keeps_history_and_gate_reports_earlier_reds(tmp_path):
