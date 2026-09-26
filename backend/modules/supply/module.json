@@ -1,7 +1,7 @@
 {
   "key": "supply",
   "name": "採購・庫存・出貨",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "core": ">=1.0,<2.0",
   "license_key": "supply",
   "permissions": [
