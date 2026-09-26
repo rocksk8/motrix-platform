@@ -101,3 +101,48 @@ def test_a_superadmin_without_email_does_not_count(client, two_superadmins):
     _exec("UPDATE users SET email='' WHERE username='u15_a'")
     assert client.put("/api/users/%d" % _id("u15_boss"), json={"notification_muted": [key]}, headers=h).status_code == 200
     assert client.put("/api/users/%d" % _id("u15_b"), json={"notification_muted": [key]}, headers=h).status_code == 400
+
+
+
+def _make_last(client, boss, key):
+    """boss、a 退訂 ⇒ b 是最後一位收得到的超管。"""
+    h = _h(client, boss)
+    assert client.put("/api/users/%d" % _id("u15_boss"), json={"notification_muted": [key]}, headers=h).status_code == 200
+    assert client.put("/api/users/%d" % _id("u15_a"), json={"notification_muted": [key]}, headers=h).status_code == 200
+    return h
+
+
+@pytest.mark.parametrize("change", [{"email": ""}, {"role": "admin"}])
+def test_the_last_receiving_superadmin_cannot_lose_email_or_role_either(client, two_superadmins, change):
+    """D 稽核 M-1：同一支端點清空 Email、改成非超管，一樣會讓最後一位消失 ⇒ 擋，DB 不變。"""
+    boss, key = two_superadmins
+    h = _make_last(client, boss, key)
+    r = client.put("/api/users/%d" % _id("u15_b"), json=change, headers=h)
+    assert r.status_code == 400 and "沒有任何超級管理員" in r.json()["detail"], r.text
+    row = _q("SELECT email, role FROM users WHERE username='u15_b'")[0]
+    assert row == {"email": "u15_b@example.test", "role": "superadmin"}, row
+
+
+def test_business_types_are_never_blocked_even_for_the_last_one(client, two_superadmins):
+    """D 稽核 S-2：業務類處在「只剩一位」時照樣可以退訂（原本的正對照從沒處在這個狀態 ⇒ 突變「業務類也擋」存活）。"""
+    from helpers import mail_types as mt
+    boss, _key = two_superadmins
+    h = _h(client, boss)
+    biz = sorted(t.key for t in mt.all_types() if t.category != "system" and not t.event)[0]
+    for u in ("u15_boss", "u15_a"):
+        assert client.put("/api/users/%d" % _id(u), json={"notification_muted": [biz]}, headers=h).status_code == 200
+    r = client.put("/api/users/%d" % _id("u15_b"), json={"notification_muted": [biz]}, headers=h)
+    assert r.status_code == 200, r.text
+    assert _muted("u15_b") == [biz]
+
+
+def test_custom_override_for_a_system_type_must_reach_someone(client, two_superadmins):
+    """D 稽核 S-1：系統類型存成 custom 覆寫，名單上沒有人收得到 ⇒ 拒絕；有人收得到 ⇒ 放行（正對照）。"""
+    boss, key = two_superadmins
+    h = _h(client, boss)
+    _exec("UPDATE users SET email='' WHERE username='u15_a'")
+    r = client.put("/api/mail-types/%s/recipients" % key, json={"mode": "custom", "users": ["u15_a"]}, headers=h)
+    assert r.status_code == 400 and "系統技術類" in r.json()["detail"], r.text
+    r = client.put("/api/mail-types/%s/recipients" % key, json={"mode": "custom", "users": ["u15_b"]}, headers=h)
+    assert r.status_code == 200, r.text
+    assert client.put("/api/mail-types/%s/recipients" % key, json={"mode": "default"}, headers=h).status_code == 200
