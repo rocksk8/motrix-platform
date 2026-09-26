@@ -1,7 +1,7 @@
 {
   "key": "daily_tasks",
   "name": "每日任務",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "core": ">=1.0,<2.0",
   "license_key": "daily_tasks",
   "permissions": [
@@ -38,7 +38,8 @@
   },
   "pages": [
     {
-      "path": "daily-tasks.html"
+      "path": "daily-tasks.html",
+      "menu": {"group": "mywork", "label": "每日工作事項", "order": 20, "perm": ["daily_task"], "badge": "sb-mod-daily-task", "extra_badge": {"id": "sb-dt-badge", "color": "#7C3AED"}}
     }
   ],
   "customization": {

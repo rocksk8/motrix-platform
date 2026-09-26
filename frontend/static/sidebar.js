@@ -623,7 +623,12 @@ if (typeof module !== 'undefined' && module.exports) {
   // 只有一個子項的分組（例如「主選單／儀表板」）直接當成連結，不開面板。
   function renderMainNav() {
     var groups = _navGroups.filter(function (g) { return g.items.length > 0 })
-    if (!groups.length) return
+    if (!groups.length) {
+      // 重建成空的（權限被拿光、版面全部 hide）⇒ 要清掉上一輪畫的，不可以留著舊選單（C4 突變測試抓到）
+      var old = document.getElementById('app-mainnav')
+      if (old) old.innerHTML = ''
+      return
+    }
 
     var html = '<div class="mnav__in">' + groups.map(function (g, gi) {
       var anyActive = g.items.some(function (it) { return it.active })
@@ -665,145 +670,65 @@ if (typeof module !== 'undefined' && module.exports) {
   }
 
 
+  // ── 選單來源（階段 C／C4，STAGE-C L79 更正）──────────────────────────────────
+  // ① 首屏：`window.MOTRIX_MENU.groups`（伺服器在這支檔案最前面接上的宣告：L1＋已載入模組，每項帶 perm，
+  //    與使用者無關）⇒ 用 session 的模組權限**同步**過濾（_permOk，規則同 core.menu.visible）⇒ 時序不變
+  // ② session 取回後打 /api/platform/menu，拿 `layout.groups`（已套使用者角色版面＋自訂模組，伺服器已過濾）重排
+  // ③ `_deniedPages`（站在沒權限的頁上 ⇒ 顯示沒有權限）**永遠由宣告＋權限算**：版面的 hide 只是顯示、不是權限
+  // 選單項的歷史註解（UI6／UI8／UI9／UI10／VC4a／FN1／FN2／AS4 等）隨寫死清單移除，見 git 歷史；宣告在
+  // backend/core/menu_l1.json 與各模組 module.json pages[].menu。
+  var _layoutGroups = null     // ② 的結果；null ⇒ 用宣告版
+  var _menuSeq = 0             // ② 的序號：較晚回來的舊回應丟掉（同 O7）
+  var _curKey = ''
+  try { _curKey = new URLSearchParams(location.search).get('key') || '' } catch (e) { _curKey = '' }
+
+  function _declaredGroups() {
+    var M = window.MOTRIX_MENU
+    if (!M || !Array.isArray(M.groups)) {
+      // 伺服器沒有接上宣告（直接以靜態檔開啟、或路由順序被改壞）⇒ 明說，不靜默畫出空選單
+      if (!_declaredGroups._warned) { console.error('[menu] window.MOTRIX_MENU 不存在：選單無法渲染（/static/sidebar.js 應由伺服器前置宣告）'); _declaredGroups._warned = true }
+      return []
+    }
+    return M.groups
+  }
+
+  function _permOk(perm) {
+    if (perm === 'any') return true
+    if (perm === 'superadmin') return !!sa
+    if (!Array.isArray(perm)) return false
+    for (var i = 0; i < perm.length; i++) if (has(perm[i])) return true
+    return false
+  }
+
+  // 宣告的 href：'/x.html' ＝網站根目錄的頁（儀表板 /index.html）；其他 ＝ /pages/ 底下的頁
+  function _hrefOf(h) { return h.charAt(0) === '/' ? up + h.slice(1) : pg(h) }
+
+  function _extraBadge(x) {
+    if (!x || !x.id) return ''
+    return '<span id="' + esc(x.id) + '" style="display:none;background:' + esc(x.color || 'var(--accent)')
+      + ';color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'
+  }
+
+  function _setMenuState(st) { document.documentElement.setAttribute('data-menu-state', st) }
+
   function buildSidebar() {
-    var html = [
-      sec('主選單', canDash),
-      ni(up + 'index.html',          'dash',  '儀表板',   ['index.html', ''],                       canDash),
-      // 2026-09-14：只留真正的業務項目（開發、報價、簽核）。
-      // 案件管理拆到下方獨立分組，理由見那邊註解。
-      // ⚠️ UI8：少了 `cMap` ⇒ 只有地圖權限的人會看到「地圖」掛在一個
-      //    **不顯示的分組標題**底下。分組條件必須是底下每一項條件的聯集。
-      sec('業務', cDev || cQ || cTdr || cMap),
-      ni(pg('dev-crm.html'),         'bdev',  '業務開發', ['dev-crm.html'],                          cDev, 'sb-mod-dev-crm'),
-      ni(pg('tender-radar.html'),    'radar', '標案雷達', ['tender-radar.html'],                     cTdr, 'sb-mod-tender-radar'),
-      ni(pg('map.html'),             'radar', '地圖',     ['map.html'],                              cMap),
-      ni(pg('quotations.html'),      'quote', '報價單',   ['quotations.html', 'quotation-form.html'], cQ,   'sb-mod-quotation'),
-      // ── 案件：成案之後的執行與財務（2026-09-14 從「業務」拆出來）──
-      // 拆出來的原因：cCM 包含 eng（工程師），而 cQ / cDev 不包含。
-      // 舊分法下，一個沒有任何模組的工程師會看到一個叫「業務」的分組，
-      // 裡面只有這兩項——名叫業務卻沒有半個業務項目。
-      sec('案件', cCM),
-      ni(pg('case-management.html'), 'case_', '案件管理', ['case-management.html'],                   cCM,  'sb-mod-case'),
-      ni(pg('case-stage-board.html'),'case_', '案件執行看板', ['case-stage-board.html'],               cCM),
-      // ⚠️ UI8：少了 `cInv`（庫存管理）—— 同上。
-      sec('廠商與採購', cCu || cPr || cInv),
-      ni(pg('customers.html'),       'cust',  '客戶管理', ['customers.html', 'customer-log.html'],   cCu,  'sb-mod-customer'),
-      ni(pg('suppliers.html'),          'supp',  '供應商管理', ['suppliers.html', 'supplier-log.html'],    cPr,  'sb-mod-suppliers'),
-      ni(pg('vendor-contractors.html'), 'vend',  '承攬商管理', ['vendor-contractors.html'],               cPr,  'sb-mod-vendor'),
-      ni(pg('parts.html'),              'part',  '料號主檔',  ['parts.html'],                            cPr,  'sb-mod-parts'),
-      ni(pg('inventory.html'),          'inv',   '庫存管理',  ['inventory.html'],                        cInv, 'sb-mod-inventory'),
-      ni(pg('procurement.html'),        'proc',  '採購管理',  ['procurement.html'],                      cPr,  'sb-mod-procurement'),
-      sec('設備', cEq || cNetPlan),
-      ni(pg('devices.html'),         'dev',   '設備登載', ['devices.html'],  cEq,  'sb-mod-equipment'),
-      ni(pg('warranty.html'),        'warr',  '保固追蹤', ['warranty.html'], cEq,  'sb-mod-warranty'),
-      ni(pg('network-plans.html'),   'netplan', '網路架構規劃書', ['network-plans.html', 'network-plan-form.html', 'topology-quick.html'], cNetPlan, 'sb-mod-netplan'),
-      // 分組條件＝底下各項條件的聯集（test_sidebar_finance 守）：`true` 是獎金分潤那一項
-      // （2026-09-24 任何登入者可開，見下方 bonus.html 那一列）
-      sec('財務', cFi || cRpt || cCash || true),
-      // 2026-09-13（模組權限稽核）：補上 badge id。`finance` 模組的紅點原本掛在
-      // 'sb-mod-finance' / 'sb-mod-sales-orders' 這兩個 id 上，而它們所屬的
-      // 應收帳款／銷售訂單兩個側欄項目在 2026-08-31（87e16cb）退役後就不再渲染
-      // ——後端 `_MODULE_ACTION_PREFIXES['finance']` 照樣在算 payment./sales_order./
-      // settlement. 三種異動的數量，前端卻永遠找不到元素可以顯示，等於這個模組的
-      // 通知數字靜靜消失了。那些內容現在都在營運報表頁，紅點就掛回這裡。
-      // ⚠️ `UI9`（2026-09-23）：`'cashier.html'` 從這裡**拿掉**了。
-      //    它在 `UI6` 時代要留著，因為那時 cashier.html 是一頁轉址存根、
-      //    出納的內容在本頁的一個頁籤裡。出納拆回獨立頁之後**它換了主人**。
-      //    🔑 兩項條件不同（`cCash` vs `cRpt||cCash||cFi`）而同時宣告同一個
-      //       檔名的話，`_deniedPages` 會讓其中一邊把另一邊的人鎖在門外。
-      // 🔴 `UI10`（2026-09-23）：`cCash` 從這裡**拿掉** —— 這就是 `§46b`。
-      //    只有 `cashier` 權限的人原本會看到一個叫「營運報表」的項目，
-      //    而那一頁的內容他一格都看不到（12 個頁籤只給 admin+）。
-      // ⚠️ `§65` 當時**擋下**了同一個改動，而那個理由現在不成立了：
-      //    當時出納沒有自己的檔名，拿掉 `cCash` 會讓 `_deniedPages` 把
-      //    只有出納權限的人鎖在 `reports.html` 外面 —— 原本是「看得到一個
-      //    不屬於他的項目」，改完變成「點不進自己的頁」。
-      //    🔑 `UI9` 之後出納有了 `cashier.html`，那條路不再經過這一頁。
-      // 📌 ⇒ **推翻一個改動的理由，不等於那個改動永遠不能做。**
-      //    理由消失的那一天要有人回來看它 —— 這一次是守門把它叫回來的。
-      ni(pg('reports.html'),         'rpt',   '營運報表', ['reports.html'],                          cRpt || cFi, 'sb-mod-finance'),
-      // 🔴 UI6（使用者 2026-09-23）：出納在側欄上原本**沒有任何入口** ——
-      // 只有 `cashier` 權限的人看得到一個叫「營運報表」的項目，
-      // 而他被授權的那一頁點不到。
-      //
-      // 🔑 `UI9`（同日）把出納**拆回獨立頁面** ⇒ 這裡從
-      //    `reports.html?tab=cashier` 改成 `cashier.html`，而 `activeNames`
-      //    從空的變成 `['cashier.html']` —— 它現在是這個檔案的主人。
-      // ⚠️ `UI6` 當時 `activeNames` 刻意留空，理由是 `act()` 只比對檔名、
-      //    query 不在 `location.pathname` 裡 ⇒ 那一項**永遠不會亮**。
-      //    拆成獨立頁之後那個限制連同 `§46b` 一起消失了 —— **同一個根因
-      //    （兩個功能共用一頁）的三個出口一起關掉。**
-      ni(pg('cashier.html'),         'cash',  '出納',     ['cashier.html'],                          cCash),
-      // 🔑 `VC4a`（2026-09-23）：傳票。放在「出納」後面 —— 使用者原話
-      //    「要由**出納獨立作業**還有送審流程跟編號」⇒ 它是出納的作業，
-      //    不是另一個部門的東西。權限沿用 `cCash`（與後端的
-      //    `routers/vouchers.py::_VOUCHER_MODULES` 對得上：cashier／finance）。
-      // ⚠️ 而**看得到入口 ≠ 改得動** —— 後端另有 `can_edit(status)`：只有草稿可改。
-      ni(pg('voucher.html'),         'vouch', '傳票',     ['voucher.html'],                          cCash),
-      // 🔑 `FN1`（2026-09-23）：會計科目樹。放在出納後面，因為它是**出納與
-      //    傳票挑科目時的那份清單**，不是一個獨立的業務流程。
-      // ⚠️ 權限沿用 `cCash`：它目前是唯讀的參考資料，而會看它的正是出納。
-      //    ⇒ 日後要開放給更多人時，這裡與 `_deniedPages` 要一起改。
-      ni(pg('account-items.html'),   'acct',  '會計科目', ['account-items.html'],                     cCash),
-      // 🔑 `FN2`：獎金分潤。使用者原話「一樣加在營運報表那個模組獨立」
-      //    ⇒ 它與出納、營運報表並列在「財務」這一組，**不是獨立分組**。
-      // 🔴 2026-09-24 使用者裁示：「任何登入者都能打開，內容照規則過濾」（SPEC-BONUS M1）
-      //    ⇒ 不再沿用 `cRpt`（營運報表）：受獎人多半沒有營運報表權限，沿用的話他們看不到自己的獎金。
-      //    🔑 看得到入口 ≠ 看得到金額 —— 後端（/api/bonus/cases）過濾：最高管理者看全部、
-      //       出納看待發放／已發放整張金額、名單上的人只看自己那一列、其餘看到空狀態。
-      ni(pg('bonus.html'),           'bonus', '獎金分潤', ['bonus.html'],                              true),
-      sec('勞務管理', cCon || cPay),
-      ni(pg('contractors.html'),     'contl', '外包名冊', ['contractors.html'],                      cCon),
-      ni(pg('payslips.html'),        'paysl', '勞報單',   ['payslips.html', 'payslip-form.html'],    cPay),
-      // 🔑 2026-09-22 使用者裁示：「工作內容」改名為「我的工作」，
-      //    並把簽核相關的三項從「業務」搬進來（見下方 ⬇️ 那一段）。
-      // ⚠️ 這裡**刻意不逐一列出那三項的名稱**：一段複述項目名稱的註解，
-      //    在有人改名的那天就會變成兩個說法，而讀的人不知道哪個是真的。
-      //    理由（使用者的話轉述）：搬完之後這一組全部是**「等我處理」或
-      //    「我做過的」** —— 主語是使用者自己，不是模組類型。
-      //    「工作內容」描述的是資料，而一張等你簽的單不是資料，
-      //    是一件要你去做的事。
-      // ⚠️ 顯示條件加上 `cQ`：三項的條件是 `cQ`，而**分組的條件必須是
-      //    底下每一項條件的聯集** —— 漏掉的話，一個只有 `cQ` 沒有
-      //    `cWL`／`cDT` 的人會看到三個項目掛在一個不顯示的標題底下。
-      sec('我的工作', cWL || cDT || cQ),
-      ni(pg('work-log.html'),        'wlog',  '工作日誌',   ['work-log.html'],                         cWL,  'sb-mod-worklog'),
-      ni(pg('daily-tasks.html'), 'dtask', '\u6bcf\u65e5\u5de5\u4f5c\u4e8b\u9805', ['daily-tasks.html'], cDT, 'sb-mod-daily-task',
-         '<span id="sb-dt-badge" style="display:none;background:#7C3AED;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
-      // ⬇️ 2026-09-22 從「業務」搬過來的三項。**條件仍然是 `cQ`，一個字沒改。**
-      ni(pg('approval-queue.html'), 'appr', '\u7c3d\u6838\u4f47\u5217', ['approval-queue.html'], cQ, '',
-         '<span id="sb-approval-badge" style="display:none;background:#DC2626;color:#fff;font-size:9px;font-weight:700;font-family:LINE Seed TW_OTF, sans-serif;padding:1px 6px;border-radius:9px;margin-left:auto"></span>'),
-      ni(pg('approval-delegates.html'), 'appr', '簽核代理人', ['approval-delegates.html'], cQ),
-      ni(pg('approval-history.html'), 'apprhist', '簽核歷史', ['approval-history.html'], cQ),
-      // ⚠️ UI8：這一處是**多**不是少 —— `cSet` 底下**沒有任何一個 `ni()`**
-      //    用它們 ⇒ 只有那個權限的人會看到一個**空的分組標題**。
-      //    🔑 方向與前三處相反，而成因相同：條件與項目各自演進，沒有東西在比對。
-      sec('系統', sa || cAudit || cShipLog || cVer),
-      ni(pg('users.html'),             'users', '使用者管理', ['users.html'],             sa),
-      ni(pg('org-structure.html'),     'org',   '組織架構設定', ['org-structure.html'],   sa),
-      // 🔴 `AS4`（2026-09-23）：「匯款申請簽核設定」這個獨立入口拿掉了——
-      //    使用者原話：「匯款申請會簽整合進簽核設定，但系統內仍然有一個
-      //    匯款申請簽核設定的選項」。舊頁與新的「簽核設定」寫的是**同一把
-      //    key**（contractor_voucher_approval_flow），而舊頁不知道
-      //    「統一／獨立」那個開關存在 ⇒ 範圍是統一流程時，舊頁存的設定
-      //    永遠不會被用到，而舊頁的說明承諾了一件它做不到的事。
-      //    舊頁本身**沒有刪**（書籤／收藏的連結還在，見該頁的導向說明），
-      //    只是拿掉側欄入口，不讓人再從這裡點進去設一個不會生效的東西。
-      ni(pg('approval-settings.html'),      'sett',  '簽核設定',   ['approval-settings.html'],      sa),
-      ni(pg('notification-settings.html'), 'ntfy',  '通知設定',   ['notification-settings.html'],  sa),
-      // CORE-SPEC「信件與通知的收件人、用語」：每一種信件指定收件人（僅超級管理員）
-      ni(pg('mail-settings.html'),   'ntfy',  '信件與通知收件設定', ['mail-settings.html'],   sa),
-      ni(pg('google-calendar-settings.html'), 'gcal', 'Google 行事曆設定', ['google-calendar-settings.html'], sa),
-      ni(pg('company-profile-settings.html'), 'co',   '公司資料設定',   ['company-profile-settings.html'], sa),
-      // CORE-SPEC §9c：模組啟停／授權狀態（啟停重啟後生效）
-      ni(pg('module-settings.html'),   'sett',  '模組管理',   ['module-settings.html'],   sa),
-      ni(pg('legal-params.html'),      'sett',  '法規參數設定', ['legal-params.html'],     sa),
-      ni(pg('audit-log.html'),         'hist',  '歷史紀錄',   ['audit-log.html'],         cAudit),
-      ni(pg('shipping-export-history.html'), 'hist', '出貨單歷史紀錄', ['shipping-export-history.html'], cShipLog),
-      ni(pg('module-versions.html'),  'ver',   '版本紀錄',   ['module-versions.html'],               cVer),
-      ni(pg('online-stats.html'),     'hist',  '在線時數統計', ['online-stats.html'],              sa),
-      ni(pg('schema-status.html'),    'schema', 'Schema 狀態', ['schema-status.html'],               sa),
-    ].filter(Boolean).join('')
+    var decl = _declaredGroups()
+    decl.forEach(function (g) {
+      g.items.forEach(function (it) {
+        if (!_permOk(it.perm)) _deniedPages = _deniedPages.concat(it.active || [])
+      })
+    })
+    var groups = _layoutGroups || decl.map(function (g) {
+      return { label: g.label, items: g.items.filter(function (it) { return _permOk(it.perm) }) }
+    })
+    groups.forEach(function (g) {
+      if (!g.items || !g.items.length) return          // 群組顯示＝底下至少一項可見（不留空標題）
+      sec(g.label, true)
+      g.items.forEach(function (it) {
+        ni(_hrefOf(it.href), '', it.label, it.custom ? [] : (it.active || []), true, it.badge || '', _extraBadge(it.extra_badge))
+        if (it.custom) _curGroup.items[_curGroup.items.length - 1].active = (file === 'custom-records.html' && _curKey === it.custom)
+      })
+    })
 
     // 側欄已退役：html 現在恆為空字串，元素留著也不渲染任何東西。
     var el = document.getElementById('app-sidebar')
@@ -1082,6 +1007,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
     buildTopbar()
     buildSidebar()
+    _setMenuState('declared')
     // Defensively clear this module's badge immediately after DOM creation,
     // so it's hidden even if _fetchModuleCounts() hasn't resolved yet.
     if (_curMod) _clearModBadge(_curMod)
@@ -1089,6 +1015,42 @@ if (typeof module !== 'undefined' && module.exports) {
     bindMobileToggle()
     bindNavGuard()
   }
+
+  // 重建選單：清掉上一輪累積的分組與被擋頁面清單（否則新舊選單接在一起），重畫後重套事後的隱藏
+  function _rebuildMenu() {
+    _navGroups = []
+    _curGroup = null
+    _deniedPages = []
+    buildSidebar()
+    _applyUnavailablePages()
+    _applyBonusHidden()
+  }
+
+  // ── 角色版面（C4，STAGE-C L79 更正 ②③）：session 取回後打 /api/platform/menu 套 layout 再重排 ─────────
+  // 讀失敗 ⇒ 保留宣告版，console 一筆＋`data-menu-state="layout-failed"`（不靜默）。
+  // `data-menu-state`（<html> 上）：declared → layout ／ layout-failed ——e2e 的等待終點。
+  // 序號：session 變動會再打一次；較晚回來的舊回應丟掉。
+  function _applyLayout() {
+    if (!s || !s.token) return
+    var my = ++_menuSeq
+    fetch('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
+      .then(function (d) {
+        if (my !== _menuSeq) return
+        if (!d || !d.layout || !Array.isArray(d.layout.groups)) throw new Error('回應缺 layout.groups')
+        if (d.layout.errors && d.layout.errors.length) console.warn('[menu] 角色版面部分讀取失敗（該部分用程式預設）：', d.layout.errors)
+        _layoutGroups = d.layout.groups
+        _rebuildMenu()
+        _setMenuState('layout')
+      })
+      .catch(function (e) {
+        if (my !== _menuSeq) return
+        console.warn('[menu] 套用角色版面失敗，保留宣告版：', e)
+        _setMenuState('layout-failed')
+      })
+  }
+  // 重新套一次版面（P9 發布後、或 e2e 驗序號用）；回傳值無意義，等 data-menu-state
+  window.MotrixMenu = { refresh: _applyLayout }
 
   // ── Async session refresh（背景刷新模組權限，有變動立即重建 sidebar）──────────
   function _refreshSession() {
@@ -1116,12 +1078,11 @@ if (typeof module !== 'undefined' && module.exports) {
         // 這裡再判一次的話就又變成「兩個地方各自判斷同一件事」。
         mods = d.modules
         computeFlags()
-        // 重建前要清掉上一輪累積的分組與被擋頁面清單，否則重建會把新舊選單接在一起
-        _navGroups = []
-        _curGroup = null
-        _deniedPages = []
-        buildSidebar()
-        _applyUnavailablePages()
+        // 權限變了 ⇒ 舊的版面結果作廢（它是用舊權限過濾的），先回宣告版，再重打一次版面
+        _layoutGroups = null
+        _rebuildMenu()
+        _setMenuState('declared')
+        _applyLayout()
         var dnEl = document.getElementById('tb-display-name')
         if (dnEl) dnEl.textContent = esc(d.displayName || d.username || '')
       })
@@ -1134,18 +1095,24 @@ if (typeof module !== 'undefined' && module.exports) {
   // ⚠️ 不把它織進 `ni()`／`buildSidebar()` 的同步流程——那個流程是同步的，
   //    而這支旗標要打一次後端才知道。改成事後找到已經渲染好的連結直接藏起來，
   //    不動 build() 本身的邏輯，風險最小（今晚其餘 60+ 支既有測試都靠它穩定）。
+  var _bonusHidden = false
+  function _applyBonusHidden() {
+    if (!_bonusHidden) return
+    // ⚠️ 只藏這個 `<a>` 本身——不可以藏它的 `.mnav__grp` 祖先：
+    //    那個 div 是整個下拉面板（財務那一組），連出納／傳票／會計科目
+    //    都在裡面，藏了祖先會把整組一起藏掉。
+    document.querySelectorAll('a[href$="bonus.html"]').forEach(function (a) {
+      a.style.display = 'none'
+    })
+  }
   function _hideBonusEntryIfModuleDisabled() {
     if (!s || !s.token) return
     fetch('/api/system/bonus-module-status', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (d) {
         if (!d || d.enabled) return
-        // ⚠️ 只藏這個 `<a>` 本身——不可以藏它的 `.mnav__grp` 祖先：
-        //    那個 div 是整個下拉面板（財務那一組），連出納／傳票／會計科目
-        //    都在裡面，藏了祖先會把整組一起藏掉。
-        document.querySelectorAll('a[href$="bonus.html"]').forEach(function (a) {
-          a.style.display = 'none'
-        })
+        _bonusHidden = true
+        _applyBonusHidden()
       })
       .catch(function () {})
   }
@@ -1153,28 +1120,14 @@ if (typeof module !== 'undefined' && module.exports) {
   // ── CORE-SPEC §9c／STATES-PLATFORM P-FE-02・03：模組頁面的入口與直接打網址 ──────────────
   //
   // 狀態要後端給（`/api/system/modules/availability`，來源是載入器這次啟動的結果），不寫死在這裡；
-  // 寫死的只有「哪一頁屬於哪個模組」（守門：每個 modules/*/module.json 的 pages 都要在這張表裡、key 對得上）。
+  // 「哪一頁屬於哪個模組」由伺服器宣告（MOTRIX_MENU.pageModules，C4）。
   // 🔴 入口只在狀態是 loaded 時顯示：**清單裡沒有這個 key ＝不在安裝包**，也要藏（P-FE-02；原本只藏
   //    「列為未載入」的頁面，不在包內的模組永遠列不進去，入口照樣出現）。
   // ⚠️ 清單取不到（網路、後端錯）⇒ 入口照常顯示（P-FE-04：API 仍會 404，不會越權）。
   // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把結果留著）。
-  var MODULE_PAGES = {
-    'tender-radar.html': { key: 'tender_radar', name: '標案雷達' },
-    'daily-tasks.html': { key: 'daily_tasks', name: '每日任務' },
-    'network-plans.html': { key: 'netplan', name: '網路規劃' },
-    'network-plan-form.html': { key: 'netplan', name: '網路規劃' },
-    'topology-quick.html': { key: 'netplan', name: '網路規劃' },
-    'dev-crm.html': { key: 'crm', name: '業務開發' },
-    'contractors.html': { key: 'subcontract', name: '外包工班' },
-    'vendor-contractors.html': { key: 'subcontract', name: '外包工班' },
-    'payslips.html': { key: 'payroll', name: '薪資獎金' },
-    'payslip-form.html': { key: 'payroll', name: '薪資獎金' },
-    'bonus.html': { key: 'payroll', name: '薪資獎金' },
-    'reports.html':      { key: 'analytics', name: '營運分析' },
-    'devices.html':      { key: 'analytics', name: '營運分析' },
-    'warranty.html':     { key: 'analytics', name: '營運分析' },
-    'procurement.html':  { key: 'analytics', name: '營運分析' },
-  }
+  // C4：「哪一頁屬於哪個模組」改由伺服器宣告（MOTRIX_MENU.pageModules，來源是各模組 module.json pages[]；
+  // 含沒載入的模組——直接打網址的後備提示要知道頁面屬於誰）。原本寫死在這裡的表與守門它的對照題一起退場。
+  var MODULE_PAGES = (window.MOTRIX_MENU && window.MOTRIX_MENU.pageModules) || {}
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null
   function _moduleLoaded(pgName) {
@@ -1241,23 +1194,16 @@ if (typeof module !== 'undefined' && module.exports) {
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      build(); _refreshSession(); _hideBonusEntryIfModuleDisabled(); _hideUnavailableModulePages()
+      build(); _refreshSession(); _hideBonusEntryIfModuleDisabled(); _hideUnavailableModulePages(); _applyLayout()
     })
   } else {
     build()
     _refreshSession()
     _hideBonusEntryIfModuleDisabled()
     _hideUnavailableModulePages()
+    _applyLayout()
   }
 })()
 
-// ── P8：已發布的自訂模組併進主選單（CUSTOMIZATION-SPEC §3.7）──────────────────────────
-// 🔴 疊加點只有這一段：選單邏輯全在 custom-modules-nav.js（在已渲染的 #app-mainnav 上追加項目），
-//    上面的 buildSidebar()／renderMainNav() 不動。階段 C 改由 /api/platform/menu 產生選單時，把這段搬走即可。
-;(function () {
-  if (document.querySelector('script[data-custom-modules-nav]')) return
-  var el = document.createElement('script')
-  el.src = (location.pathname.indexOf('/pages/') >= 0 ? '../' : '') + 'static/custom-modules-nav.js'
-  el.setAttribute('data-custom-modules-nav', '')
-  document.head.appendChild(el)
-})()
+// P8 的自訂模組選單（原 custom-modules-nav.js 以 MutationObserver 追加）自 C4 起由 /api/platform/menu 的
+// layout.groups 帶（core.menu.merge_custom），與其他項目同一個渲染者；該檔已刪除。

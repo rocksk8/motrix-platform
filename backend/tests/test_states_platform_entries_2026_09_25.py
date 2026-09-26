@@ -102,11 +102,12 @@ def test_sidebar_hides_entry_of_module_not_in_package(live_server, make_user, e2
 
     _unload_tender_radar(monkeypatch, state=None)
     page.reload()
-    page.wait_for_function(f"() => document.querySelector(\"{_LINK}\")", timeout=15000)
+    # C4：選單宣告只含**已載入**模組 ⇒ 入口根本不渲染（比「渲染後藏起來」更早）；等選單終點狀態再看
+    page.wait_for_selector("html[data-menu-state='layout']", state="attached", timeout=15000)
     _availability_loaded(page)
     assert "tender_radar" not in page.evaluate("() => window.MOTRIX_MODULE_AVAILABILITY")
-    page.wait_for_function(_HIDDEN, timeout=10000)
-    assert page.evaluate(_HIDDEN) is True
+    assert page.locator(".mnav .mnav__top").count() > 0, "選單要在（否則下一行的「沒有」是空轉）"
+    assert page.evaluate(_HIDDEN) is None, "模組不在安裝包 ⇒ 入口不可以出現"
 
 
 @pytest.mark.e2e

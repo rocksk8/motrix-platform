@@ -57,13 +57,9 @@ grep children|submenu|collapse|accordion  在 sidebar.js ⇒ **0 處**
    本檔 `..._never_claimed_by_items_with_different_conditions` 會自動逼出這件事：
    兩項條件不同（`cCash` vs `cRpt||cCash||cFi`）而同時宣告同一個檔名 ⇒ 紅。
 """
-import re
-from pathlib import Path
 
 import pytest
 
-SIDEBAR = (Path(__file__).resolve().parent.parent.parent
-           / "frontend" / "static" / "sidebar.js")
 
 #: 🔴 `UI9` 之後出納是**一個獨立頁面**，沿用舊檔名。
 #: ```
@@ -79,192 +75,32 @@ SIDEBAR = (Path(__file__).resolve().parent.parent.parent
 CASHIER_TARGET = "cashier.html"
 
 
-def _decode_escapes(text):
-    r"""只把 `\uXXXX` 還原成字元，**其他一個字都不動**。
-
-    ☠️ 不可以用 `text.encode("utf-8").decode("unicode_escape")` ——
-    它會把原本就是中文的字元一併拆成 latin-1 再解，整份檔案的中文會變成亂碼，
-    而症狀是「找不到那個標籤」，看起來像是那一項不見了。
-    """
-    return re.sub(r"\\u([0-9a-fA-F]{4})",
-                  lambda m: chr(int(m.group(1), 16)), text)
-
-
-def _split_args(inner):
-    """把一串 JS 引數依頂層逗號切開（括號／方括號／引號內的逗號不算）。"""
-    out, buf, depth, quote = [], [], 0, None
-    for ch in inner:
-        if quote:
-            buf.append(ch)
-            if ch == quote:
-                quote = None
-            continue
-        if ch in "'\"":
-            quote = ch
-            buf.append(ch)
-            continue
-        if ch in "([{":
-            depth += 1
-        elif ch in ")]}":
-            depth -= 1
-        if ch == "," and depth == 0:
-            out.append("".join(buf).strip())
-            buf = []
-            continue
-        buf.append(ch)
-    if "".join(buf).strip():
-        out.append("".join(buf).strip())
-    return out
-
-
-def _blank_js_comments(src):
-    """把 `//` 與 `/* */` 註解**換成等長的空白**（不是刪掉）。
-
-    🔴 **為什麼需要它**：`sidebar.js` 的註解裡寫了 `sec()`／`ni()`
-    （`:600`／`:607`／`:635`／`:776` 四處），而掃描器分不出
-    「一個呼叫」與「一段解釋那個呼叫的註解」。
-    ☠️ 第一版因此抓到 6 個 0 引數的「呼叫」，`_groups()` 當場 `IndexError`。
-
-    🔑 **同一天第二次**：B 的絆線 `grep` 也被自己寫的註解騙過
-    （那裡的解法是 `tokenize` 剝掉 `COMMENT`）。
-    📌 共同形狀：**寫得好的註解會讓粗糙的比對產生假陽性**，
-       而受害者通常是寫那段註解的人。
-
-    ⚠️ **換成等長空白而不是刪掉**：本檔靠「原始碼位移」排 `sec`／`ni` 的先後，
-       刪掉會讓位移左移 ⇒ 分組歸屬錯亂，**而那不會報錯**。
-    ⚠️ 引號內的 `//` 不算註解（`'https://…'`）—— 下面逐字元掃就是為了這個。
-    """
-    out, i, n = [], 0, len(src)
-    while i < n:
-        c = src[i]
-        if c in "'\"`":
-            q = c
-            out.append(c)
-            i += 1
-            while i < n and src[i] != q:
-                if src[i] == "\\" and i + 1 < n:
-                    out.append(src[i])
-                    out.append(src[i + 1])
-                    i += 2
-                    continue
-                out.append(src[i])
-                i += 1
-            if i < n:
-                out.append(src[i])
-                i += 1
-            continue
-        if c == "/" and i + 1 < n and src[i + 1] == "/":
-            while i < n and src[i] != "\n":
-                out.append(" ")
-                i += 1
-            continue
-        if c == "/" and i + 1 < n and src[i + 1] == "*":
-            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
-                out.append("\n" if src[i] == "\n" else " ")
-                i += 1
-            out.append("  ")
-            i += 2
-            continue
-        out.append(c)
-        i += 1
-    blanked = "".join(out)
-    assert len(blanked) == len(src), (
-        "剝註解之後長度變了（%d → %d）—— 位移會錯位，而分組歸屬會**安靜地**錯。"
-        % (len(src), len(blanked)))
-    return blanked
-
-
-def _calls(src, name):
-    """掃出所有 `name(...)` 呼叫，回傳 `(起始位移, [引數字串])`。
-
-    ⚠️ **跳過 `function name(...)` 那一個** —— 定義不是呼叫。
-    ⚠️ 呼叫端要先過 `_blank_js_comments()` —— 註解裡也寫著 `sec()`／`ni()`。
-    📌 用括號配對而不是正則：`ni()` 有跨行的（帶 badge 的那幾個），
-       而「一行一個呼叫」這個假設在這個檔裡不成立。
-    """
-    out = []
-    for m in re.finditer(r"\b%s\s*\(" % re.escape(name), src):
-        before = src[max(0, m.start() - 12):m.start()]
-        if before.rstrip().endswith("function"):
-            continue
-        i, depth = m.end(), 1
-        while i < len(src) and depth:
-            c = src[i]
-            if c in "'\"":
-                q = c
-                i += 1
-                while i < len(src) and src[i] != q:
-                    i += 2 if src[i] == "\\" else 1
-            elif c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-            i += 1
-        out.append((m.start(), _split_args(src[m.end():i - 1])))
-    return out
-
-
-#: JS 字面值／關鍵字 —— 它們不是權限旗標。
-_NOT_A_FLAG = frozenset(("true", "false", "null", "undefined"))
-
-
-def _flags(expr):
-    """從一個顯示條件式裡抽出旗標識別字。
-
-    ⚠️ **v1 寫成 `c[A-Z]\\w*`，太窄** —— 它看不見 `sa`（superadmin），
-    而「系統」那一組十二項裡有**八項**的條件就是 `sa`。
-    ⇒ v2 抓**所有識別字**再扣掉 JS 字面值：寧可多抓一個名字，
-      也不要因為它不合我想像的命名慣例就看不見它。
-
-    📌 **而我要更正自己一句話**：我原本判斷「系統那一條漂移是 v1 太窄造成的
-    假陽性」，**查了之後是錯的** —— `cSet` 實查只出現在 `:464` 宣告、`:503` 指派、
-    `:750` 的 `sec('系統', …)` 三處，**沒有任何 `ni()` 用它**。
-    ⇒ v1 與 v2 對那一組給出**同樣的結論**，而那個結論是對的。
-    🔑 換句話說：**這次修的是判準的正確性，不是結論。**
-       〈推翻的證據不會自動支持替代方案〉的鄰居 ——
-       **我先有了「這是假陽性」的假設，然後差一點用它去撤掉一個真發現。**
-    """
-    names = re.findall(r"\b[A-Za-z_$][A-Za-z0-9_$]*\b", expr or "")
-    return set(n for n in names if n not in _NOT_A_FLAG)
+def _perm_set(perm):
+    """宣告的 perm ⇒ 權限集合（C4；原本是從 JS 條件式抽旗標名稱的 `_flags()`）。
+    "superadmin" ⇒ {"sa"}（沿用舊旗標名）；"any" ⇒ 空集合（同舊的 `true`）；清單 ⇒ 那些模組 key。"""
+    if perm == "superadmin":
+        return {"sa"}
+    if perm == "any":
+        return set()
+    return set(perm or [])
 
 
 @pytest.fixture(scope="module")
 def nav():
-    """`[(kind, 位移, args)]`，依原始碼順序 —— `sec` 與 `ni` 交錯。"""
-    assert SIDEBAR.exists(), "找不到 %s" % SIDEBAR
-    raw = _decode_escapes(SIDEBAR.read_text(encoding="utf-8"))
-    src = _blank_js_comments(raw)
-
-    # ⚙️ 剝註解的正對照（兩個方向都要，否則「剝過頭」與「沒剝到」都看不出來）：
-    assert "sec('財務'" in src, (
-        "剝掉註解之後連 `sec('財務'` 都不見了 —— **剝過頭**，"
-        "而這個檔的每一題都會因為量不到而綠。")
-    assert "sec()/ni() 仍然照舊被呼叫" not in src, (
-        "註解沒有被剝掉 —— 掃描器會把註解裡的 `sec()`／`ni()` 當成呼叫，"
-        "而它們是 0 引數的，`_groups()` 會 `IndexError`。")
-
-    items = ([("sec", p, a) for p, a in _calls(src, "sec")]
-             + [("ni", p, a) for p, a in _calls(src, "ni")])
-    items.sort(key=lambda t: t[1])
-    assert items, "`sidebar.js` 裡一個 `sec()`／`ni()` 都沒抓到 —— **儀器失效**。"
+    """C4：選單宣告（tests/_menu_decl.py；依渲染順序）。原本是 sidebar.js 原始碼的 `sec()`／`ni()` 呼叫。"""
+    from tests._menu_decl import declared_items
+    items = declared_items()
+    assert any(it["group_label"] == "財務" for it in items), "宣告裡沒有「財務」組 —— **儀器失效**。"
     return items
 
 
 def _groups(nav):
-    """`{分組標籤: (分組條件, [(項目標籤, href, activeNames, 條件)])}`。"""
-    out, cur = {}, None
-    for kind, _pos, args in nav:
-        if kind == "sec":
-            label = args[0].strip("'\" ")
-            cond = args[1] if len(args) > 1 else "true"
-            cur = (label, cond, [])
-            out[label] = cur
-        elif cur is not None:
-            href = args[0] if args else ""
-            label = args[2].strip("'\" ") if len(args) > 2 else ""
-            names = args[3] if len(args) > 3 else "[]"
-            cond = args[4] if len(args) > 4 else "true"
-            cur[2].append((label, href, names, cond))
+    """`{分組標籤: (分組標籤, None, [(項目標籤, href, activeNames, 權限集合)])}`。
+    C4：群組沒有自己的條件了（群組顯示＝底下至少一項可見，core.menu）⇒ 第二欄恆為 None。"""
+    out = {}
+    for it in nav:
+        g = out.setdefault(it["group_label"], (it["group_label"], None, []))
+        g[2].append((it["label"], it["href"], list(it["active"] or [it["href"]]), _perm_set(it["perm"])))
     return out
 
 
@@ -287,24 +123,14 @@ def test_ui6_finance_has_a_cashier_entry(nav):
     只有 cashier 權限的人，現在側欄上**沒有任何地方**可以到他被授權的頁。
     """
     groups = _groups(nav)
-    assert "財務" in groups, (
-        "`sidebar.js` 裡沒有 `sec('財務', …)` —— **儀器失效**，不是「沒有財務組」。\n"
-        "（抓到的分組：%s）" % sorted(groups))
-
+    assert "財務" in groups, "宣告裡沒有「財務」組 —— **儀器失效**（抓到的分組：%s）" % sorted(groups)
     _label, _cond, items = groups["財務"]
     labels = [it[0] for it in items]
     assert "出納" in labels, (
         "財務組底下沒有「出納」，現在只有：%s\n" % labels
-        + "☠️ 只有 cashier 權限的人，側欄上**沒有任何地方**可以到他被授權的頁。\n"
-        "🔑 使用者兩次說「財務底下沒看到別的項目」——他要的就是這一項。\n"
-        "📌 做完會是 **2 項不是 5 項**（會計科目／傳票／獎金分潤都還不存在）。")
-
+        + "☠️ 只有 cashier 權限的人，選單上**沒有任何地方**可以到他被授權的頁。")
     cashier = next(it for it in items if it[0] == "出納")
-    href = cashier[1]
-    assert CASHIER_TARGET in href and "?tab=" not in href, (
-        "「出納」的 href 是 %r，應該指向 `%s`。\n" % (cashier[1], CASHIER_TARGET)
-        + "☠️ 指向 `cashier.html` 的話那是一頁**轉址存根**（1,198 bytes），\n"
-          "   使用者會先落在它上面再被 JS 轉走。")
+    assert cashier[1] == CASHIER_TARGET, "「出納」的 href 是 %r，應該是 `%s`。" % (cashier[1], CASHIER_TARGET)
 
 
 def test_ui6_the_cashier_entry_is_shown_to_cashiers(nav):
@@ -321,9 +147,8 @@ def test_ui6_the_cashier_entry_is_shown_to_cashiers(nav):
     _label, _cond, items = _groups(nav)["財務"]
     cashier = [it for it in items if it[0] == "出納"]
     assert cashier, "財務組底下沒有「出納」—— 見上一題。"
-    cond = cashier[0][3]
-    assert "cCash" in _flags(cond), (
-        "「出納」的顯示條件是 `%s`，裡面沒有 `cCash`。\n" % cond
+    assert "cashier" in cashier[0][3], (
+        "「出納」的權限是 %s，裡面沒有 `cashier`（原旗標 `cCash`）。\n" % sorted(cashier[0][3])
         + "☠️ 有出納權限的人看不到出納入口 —— 這一題整個沒有意義了。")
 
 
@@ -351,36 +176,28 @@ def test_every_section_condition_is_the_union_of_its_items(nav):
        🔑 它真正的價值在 `UI6` 加「出納」那一刻：
        忘了把 `cCash` 併進 `sec('財務')` 的話，它當場紅。
     """
+    # 〔C4 更正：原本比對 `sec('組', 條件)` 與底下 `ni()` 條件的旗標集合。C4 起群組沒有自己的條件——
+    #   群組顯示＝底下至少一項可見（core.menu.build 與 sidebar.js buildSidebar 同一條規則）⇒ 改驗行為：
+    #   對每一個單一權限，渲染出的每一組都至少有一項（不會有空標題），而每一個看得到的項目它的組都在（不會掛在不顯示的標題下）〕
+    from core import loader
+    from core import menu as M
+    from core import pages as Pg
+    mans = {k: v[0] for k, v in Pg.read_manifests(loader.MODULES_DIR).items()}
+    l1, mi = M.load_l1(), M.module_items(mans)
     groups = _groups(nav)
-    assert len(groups) >= 5, (
-        "只抓到 %d 個分組 —— **儀器失效**，這一題會因為量不到而綠。"
-        "（抓到：%s）" % (len(groups), sorted(groups)))
-
+    assert len(groups) >= 5, "只抓到 %d 個分組 —— **儀器失效**。（抓到：%s）" % (len(groups), sorted(groups))
+    keys = sorted({k for it in nav if isinstance(it["perm"], list) for k in it["perm"]})
     problems = []
-    for label, (_l, cond, items) in groups.items():
-        if not items:
-            continue
-        sec_flags = _flags(cond)
-        item_flags = set()
-        for it in items:
-            item_flags |= _flags(it[3])
-        if not item_flags:
-            continue                     # 整組都是無條件項目，略過
-        missing = item_flags - sec_flags
-        extra = sec_flags - item_flags
+    for k in keys:
+        built = M.build(l1, mi, [k], False)
+        empty = [g["label"] for g in built if not g["items"]]
+        if empty:
+            problems.append("只有 %s 權限 ⇒ 空的分組標題 %s" % (k, empty))
+        want = {it["group_label"] for it in nav if isinstance(it["perm"], list) and k in it["perm"]}
+        missing = want - {g["label"] for g in built}
         if missing:
-            problems.append(
-                "分組 `%s` 的條件少了 %s ⇒ 只有那個權限的人，"
-                "會看到項目掛在一個**不顯示的標題**底下"
-                % (label, sorted(missing)))
-        if extra:
-            problems.append(
-                "分組 `%s` 的條件多了 %s ⇒ 有那個權限而沒有任何項目權限的人，"
-                "會看到一個**空的分組標題**"
-                % (label, sorted(extra)))
-    assert not problems, (
-        "分組條件與項目條件對不上：\n  " + "\n  ".join(problems)
-        + "\n🔑 `sidebar.js:730` 已經寫過這條規則，而它只寫在註解裡。")
+            problems.append("只有 %s 權限 ⇒ 看得到的項目所在的組 %s 沒有出現" % (k, sorted(missing)))
+    assert not problems, "分組顯示與項目顯示對不上：\n  " + "\n  ".join(problems)
 
 
 def test_the_section_union_check_can_actually_fail(nav):
@@ -395,21 +212,13 @@ def test_the_section_union_check_can_actually_fail(nav):
     `_calls()`／`_groups()`，分辨的是「解析器抓不到東西」。
     📌 **兩個分辨的不是同一件事，刪掉任何一個都會少一種辨識力。**
     """
-    assert "sa" in _flags("sa"), (
-        "`_flags()` 抓不到 `sa` —— 那正是 v1 太窄的地方（「系統」那一組"
-        "十二項裡有八項的條件就是它）。")
-    assert _flags("true") == set(), "`_flags()` 把 JS 字面值當成旗標。"
-    assert _flags("cRpt || cCash || cFi") == {"cRpt", "cCash", "cFi"}, (
-        "`_flags()` 抽不出旗標 —— **量法壞了**，上一題會永遠綠。")
-    assert _flags("cWL || cDT") != _flags("cWL || cDT || cQ"), (
-        "`_flags()` 對兩個不同的條件式回傳相同結果 —— 它沒有辨識力。")
-
-    groups = _groups(nav)
-    _l, cond, items = groups["財務"]
-    assert _flags(cond), (
-        "`sec('財務', …)` 的條件抽不出任何旗標：%r\n" % cond
-        + "🔑 **儀器失效** —— 不是「財務組沒有條件」。")
+    assert _perm_set("superadmin") == {"sa"}, "`_perm_set()` 抓不到最高管理者"
+    assert _perm_set("any") == set(), "`_perm_set()` 把「任何人」當成權限"
+    assert _perm_set(["reports", "finance"]) == {"reports", "finance"}, "`_perm_set()` 抽不出權限 —— **量法壞了**"
+    assert _perm_set(["work_log"]) != _perm_set(["work_log", "quotation"]), "`_perm_set()` 沒有辨識力"
+    _l, _cond, items = _groups(nav)["財務"]
     assert items, "財務組底下一個項目都沒抓到 —— **儀器失效**。"
+    assert any(it[3] for it in items), "財務組的項目一個權限都抽不出來 —— **儀器失效**。"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -457,9 +266,7 @@ def test_ui6_finance_has_enough_items_to_render_a_dropdown(nav):
     _l, _c, items = _groups(nav)["財務"]
     assert len(items) >= 2, (
         "財務組底下只有 %d 項：%s\n" % (len(items), [it[0] for it in items])
-        + "☠️ `sidebar.js:643` 的 `if (g.items.length === 1)` 會把它渲染成"
-          "**純連結**，沒有面板也沒有箭頭 ——\n"
-        "🔑 那就是使用者兩次說的「沒看到下拉式選單」。")
+        + "☠️ renderMainNav 的 `if (g.items.length === 1)` 會把它渲染成**純連結**，沒有面板也沒有箭頭。")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -479,15 +286,13 @@ def test_ui6_finance_has_enough_items_to_render_a_dropdown(nav):
 
 
 def _target_file(href_expr):
-    """`pg('reports.html?tab=cashier')` → `'reports.html'`（`act()` 看到的那個）。"""
-    m = re.search(r"['\"]([^'\"]+)['\"]", href_expr or "")
-    if not m:
-        return None
-    return m.group(1).split("/")[-1].split("?")[0].split("#")[0]
+    """宣告的 href ⇒ 檔名（去掉路徑、query、hash）。"""
+    return (href_expr or "").split("/")[-1].split("?")[0].split("#")[0] or None
 
 
 def _active_names(expr):
-    return re.findall(r"['\"]([^'\"]+)['\"]", expr or "")
+    """C4：宣告裡 active 已經是清單。"""
+    return list(expr or [])
 
 
 def _all_items(nav):
@@ -524,7 +329,7 @@ def test_a_visible_item_never_points_at_a_page_someone_else_denied(nav):
     by_active = {}
     for label, _href, names, cond in items:
         for f in _active_names(names):
-            by_active.setdefault(f, []).append((label, _flags(cond)))
+            by_active.setdefault(f, []).append((label, cond))
 
     problems = []
     for label, href, _names, cond in items:
@@ -534,11 +339,11 @@ def test_a_visible_item_never_points_at_a_page_someone_else_denied(nav):
         for other_label, other_flags in by_active.get(tgt, []):
             if other_label == label:
                 continue
-            if not _flags(cond) <= other_flags:
+            if not cond <= other_flags:
                 problems.append(
                     "「%s」(href→%s, %s) 顯示時，「%s」(%s) 可能是隱藏的 "
                     "⇒ `%s` 會進 `_deniedPages` ⇒ 點下去看到「沒有權限」"
-                    % (label, tgt, sorted(_flags(cond)), other_label,
+                    % (label, tgt, sorted(cond), other_label,
                        sorted(other_flags), tgt))
     assert not problems, (
         "有顯示中的項目會指向一個被列入黑名單的檔名：\n  "
@@ -569,7 +374,7 @@ def test_a_page_name_is_never_claimed_by_items_with_different_conditions(nav):
     by_active = {}
     for label, _href, names, cond in _all_items(nav):
         for f in _active_names(names):
-            by_active.setdefault(f, {})[label] = frozenset(_flags(cond))
+            by_active.setdefault(f, {})[label] = frozenset(cond)
 
     problems = []
     for f, owners in sorted(by_active.items()):
@@ -624,8 +429,8 @@ def test_ui10_the_reports_item_is_not_shown_to_cashier_only_users(nav):
     rpt = [it for it in items if it[0] == "營運報表"]
     assert rpt, "財務組底下沒有「營運報表」—— **儀器失效**。"
 
-    flags = _flags(rpt[0][3])
-    assert "cCash" not in flags, (
+    flags = rpt[0][3]
+    assert "cashier" not in flags, (
         "「營運報表」的顯示條件是 `%s`（旗標 %s），裡面還有 `cCash` ——\n"
         % (rpt[0][3], sorted(flags))
         + "☠️ 只有出納權限的人會看到「營運報表」，而**點進去是空的**"
@@ -633,7 +438,7 @@ def test_ui10_the_reports_item_is_not_shown_to_cashier_only_users(nav):
           "**是一個死連結**。\n"
         "🔑 `§65` 當初不修的理由（兩項同檔名會鎖門）在 `UI9` 之後**已經消失**。")
 
-    assert "cRpt" in flags, (
+    assert "reports" in flags, (
         "「營運報表」的條件裡沒有 `cRpt`（%s）——\n" % sorted(flags)
         + "⚙️ 這是**正對照**：少了它，一個「把條件整個清空」的實作"
           "會讓上面那個斷言綠，而**有報表權限的人也看不到報表了**。")
@@ -663,7 +468,7 @@ def test_ui10_the_cashier_item_still_reaches_its_own_page(nav):
         "「出納」的 href 解析到 `%s` ——\n" % tgt
         + "☠️ 與「營運報表」同檔名 ⇒ 後者收窄成 `cRpt||cFi` 之後，"
           "只有出納權限的人會被 `_deniedPages` 擋在門外。")
-    assert "cCash" in _flags(cond), (
+    assert "cashier" in cond, (
         "「出納」的條件是 `%s`，沒有 `cCash` —— 有出納權限的人看不到它。" % cond)
     assert tgt in _active_names(names), (
         "「出納」的 `activeNames` 是 %s，裡面沒有 `%s` ——\n"

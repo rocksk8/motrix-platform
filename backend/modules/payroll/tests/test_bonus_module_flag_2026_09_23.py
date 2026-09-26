@@ -195,12 +195,13 @@ def test_the_sidebar_entry_is_only_hidden_not_deleted():
     它會在**有人把那一行刪掉**的那天第一次變紅——那正是它存在的理由。
     牙齒證明過：把那一行從來源字串裡拿掉（只留註解），這一題會紅。
     """
-    src = _strip_js_comments(_sidebar())
-    assert ENTRY_HREF in src, (
-        "`sidebar.js` 的**程式碼**裡找不到 `%s`（註解不算）——\n" % ENTRY_HREF
+    # C4：入口宣告在 modules/payroll/module.json pages[].menu（讀宣告，不讀 sidebar.js 原始碼）
+    from tests._menu_decl import item
+    it = item(ENTRY_HREF)
+    assert it is not None, (
+        "選單宣告裡找不到 `%s`——\n" % ENTRY_HREF
         + "☠️ 入口被整段刪掉了。使用者要的是**暫停**，不是移除。")
-    assert ENTRY_LABEL in src, (
-        "`sidebar.js` 的程式碼裡找不到入口名稱「%s」。" % ENTRY_LABEL)
+    assert it["label"] == ENTRY_LABEL, "入口名稱不是「%s」：%r" % (ENTRY_LABEL, it["label"])
 
 
 def test_hiding_the_bonus_entry_does_not_hide_its_neighbours():
@@ -220,16 +221,19 @@ def test_hiding_the_bonus_entry_does_not_hide_its_neighbours():
     📌 ⇒ 判準寫成「隱藏函式的本體裡不可以出現往上爬的動作」，
       並把兩個相鄰入口的識別字也一起釘住（它們被刪掉時也要紅）。
     """
-    src = _sidebar()
+    from tests._menu_decl import item
+    bonus = item(ENTRY_HREF)
     for sibling in SIBLING_ENTRIES:
-        assert sibling in src, (
-            "`sidebar.js` 裡找不到同一組的入口 `%s` —— 它被一起拿掉了。"
+        it = item(sibling)
+        assert it is not None and bonus is not None and it["group"] == bonus["group"], (
+            "選單宣告裡找不到與獎金同一組的入口 `%s` —— 它被一起拿掉了（或換了組）。"
             % sibling)
 
-    m = re.search(r"function\s+_hideBonusEntryIfModuleDisabled\s*\(\)\s*\{",
-                  src)
+    src = _sidebar()
+    # C4：真正做隱藏的是 `_applyBonusHidden()`（選單重建後要重套，所以從 _hideBonusEntryIfModuleDisabled 抽出來）
+    m = re.search(r"function\s+_applyBonusHidden\s*\(\)\s*\{", src)
     assert m is not None, (
-        "找不到 `_hideBonusEntryIfModuleDisabled()` —— 隱藏邏輯不在了，\n"
+        "找不到 `_applyBonusHidden()` —— 隱藏邏輯不在了，\n"
         + "或是改了名字（改名的話這一題要跟著改，不要直接刪掉它）。")
     # 🔴 **一定要剝註解**：B 在這個函式裡寫了三行註解解釋「不可以藏
     #    `.mnav__grp` 祖先」——不剝的話，這道守門會亮在**那段解釋**上，
@@ -326,9 +330,11 @@ def test_the_scanner_itself_can_see_an_entry_that_is_definitely_there():
     ⚙️ 誘餌挑 `voucher.html`：它與獎金入口在同一個函式、同一種寫法
     （`ni(pg('…'), …)`）——**走的是同一條量測路徑**。
     """
+    from tests._menu_decl import item
+    assert item("voucher.html") is not None, (
+        "正對照失敗：選單宣告裡連傳票入口都找不到 ——\n"
+        + "**壞掉的是這個檔案的讀法，不是選單。**")
     src = _strip_js_comments(_sidebar())
-    assert "voucher.html" in src, (
-        "正對照失敗：剝完註解之後連傳票入口都找不到 ——\n"
-        + "**壞掉的是這個檔案的掃描方式，不是 `sidebar.js`。**")
+    assert "_applyBonusHidden" in src, "正對照失敗：剝完註解找不到隱藏函式（剝過頭了）"
     assert len(src) > 10000, (
         "正對照失敗：剝完註解只剩 %d 個字元，剝過頭了。" % len(src))

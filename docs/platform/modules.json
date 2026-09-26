@@ -49,7 +49,6 @@
    "js:static/approval-cascade.js",
    "js:static/auth-guard.js",
    "js:static/custom-layout.js",
-   "js:static/custom-modules-nav.js",
    "js:static/edit-presence.js",
    "js:static/gov-lookup.js",
    "js:static/layout-editor.js",

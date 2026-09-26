@@ -1,7 +1,7 @@
 {
   "key": "netplan",
   "name": "網路規劃",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "core": ">=1.0,<2.0",
   "license_key": "netplan",
   "permissions": [
@@ -30,7 +30,8 @@
   },
   "pages": [
     {
-      "path": "network-plans.html"
+      "path": "network-plans.html",
+      "menu": {"group": "device", "label": "網路架構規劃書", "order": 30, "perm": ["netplan", "netplan_edit"], "active": ["network-plans.html", "network-plan-form.html", "topology-quick.html"], "badge": "sb-mod-netplan"}
     },
     {
       "path": "network-plan-form.html"

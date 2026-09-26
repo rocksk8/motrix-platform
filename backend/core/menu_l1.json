@@ -56,16 +56,6 @@
   },
   {
    "group": "business",
-   "href": "dev-crm.html",
-   "label": "業務開發",
-   "order": 10,
-   "perm": [
-    "dev_crm"
-   ],
-   "badge": "sb-mod-dev-crm"
-  },
-  {
-   "group": "business",
    "href": "map.html",
    "label": "地圖",
    "order": 30,
@@ -136,16 +126,6 @@
   },
   {
    "group": "supply",
-   "href": "vendor-contractors.html",
-   "label": "承攬商管理",
-   "order": 30,
-   "perm": [
-    "procurement"
-   ],
-   "badge": "sb-mod-vendor"
-  },
-  {
-   "group": "supply",
    "href": "parts.html",
    "label": "料號主檔",
    "order": 40,
@@ -163,22 +143,6 @@
     "inventory"
    ],
    "badge": "sb-mod-inventory"
-  },
-  {
-   "group": "device",
-   "href": "network-plans.html",
-   "label": "網路架構規劃書",
-   "order": 30,
-   "perm": [
-    "netplan",
-    "netplan_edit"
-   ],
-   "active": [
-    "network-plans.html",
-    "network-plan-form.html",
-    "topology-quick.html"
-   ],
-   "badge": "sb-mod-netplan"
   },
   {
    "group": "finance",
@@ -208,35 +172,6 @@
    ]
   },
   {
-   "group": "finance",
-   "href": "bonus.html",
-   "label": "獎金分潤",
-   "order": 50,
-   "perm": "any"
-  },
-  {
-   "group": "payroll",
-   "href": "contractors.html",
-   "label": "外包名冊",
-   "order": 10,
-   "perm": [
-    "contractor_list"
-   ]
-  },
-  {
-   "group": "payroll",
-   "href": "payslips.html",
-   "label": "勞報單",
-   "order": 20,
-   "perm": [
-    "payslip"
-   ],
-   "active": [
-    "payslips.html",
-    "payslip-form.html"
-   ]
-  },
-  {
    "group": "mywork",
    "href": "work-log.html",
    "label": "工作日誌",
@@ -245,20 +180,6 @@
     "work_log"
    ],
    "badge": "sb-mod-worklog"
-  },
-  {
-   "group": "mywork",
-   "href": "daily-tasks.html",
-   "label": "每日工作事項",
-   "order": 20,
-   "perm": [
-    "daily_task"
-   ],
-   "badge": "sb-mod-daily-task",
-   "extra_badge": {
-    "id": "sb-dt-badge",
-    "color": "#7C3AED"
-   }
   },
   {
    "group": "mywork",
@@ -290,6 +211,13 @@
    "perm": [
     "quotation"
    ]
+  },
+  {
+   "group": "system",
+   "href": "module-builder.html",
+   "label": "模組建構器",
+   "order": 5,
+   "perm": "superadmin"
   },
   {
    "group": "system",
