@@ -53,3 +53,18 @@
 | GF-M2 | 修正：題「還沒 git add 的新測試檔要在現場算的 test_map 裡」；突變（load_map 預設讀檔）紅 | 159533f0 |
 | 觀察（髒樹重產） | 改用結構修法取代「拒絕」：提交用／--check 用的 test_map 只看已追蹤的檔（`build(include_untracked=False)`），只有 modtest 現場選題含未追蹤的新檔。緣由：第一次實跑 --train 時，GF-M2 的題在 -n 4 下暫時建檔，同時跑的 --check 判過期（tests/platform 1 紅）——拒絕重產擋不到這一型。題：提交用 build 不含未追蹤、現場含；突變紅 | 11937d60 |
 
+
+## 3. 複核：wip/b-genfiles-2 11937d60（159533f0＋11937d60；D 19:44）
+
+| 主持的問題 | D 的驗證 | 結果 |
+|---|---|---|
+| `--train` 一定跑那三題、skip 就判紅 | `run_train`：設 `MOTRIX_TRAIN=1` ⇒ 差異題 ⇒ tests/platform（`-rs`）⇒ 三題 collect-only；`train_judge` 遇到「三題 skip」或「收集不到」⇒ 紅。突變 GFa「不設旗標」、GFb「不判 skip」、GFd「不檢查收集」 | 3/3 紅 ⇒ **GF-M1 關閉** |
+| 現場產生有題守 | 突變 GFc「現場改回讀檔」 | 紅（`test_live_map_sees_an_untracked_new_test`）⇒ **GF-M2 關閉** |
+| 「提交的 test_map 只看已追蹤檔」能不能取代 D 建議的「髒樹拒絕重產」 | 讀 diff：`tracked_files(include_untracked=False)` 是提交與 `--check` 的預設，只有 modtest 現場選題才傳 True；新題 `test_committed_test_map_ignores_untracked_files` 守住。D 另在 11937d60 放未追蹤的 `backend/tests/*.py` 與 `backend/helpers/*.py`，跑 `dep_scan.py --check` ⇒ 都 rc=0（dep_graph 不受未追蹤檔影響） | **站得住**：它從結構上讓未追蹤檔進不了提交的檔，比「髒樹就拒絕」更根本；B 實跑時發現的問題（題目在 -n 4 下暫時建檔，讓同時跑的 --check 判過期）也一併解掉 |
+
+**GF2-M1（必修，新）　本分支刪掉了既有的 B-S4 守門題**
+- 合併基底 `9bb0fb90` 有 `test_env_and_load_guards.py::test_rerun_keeps_history_and_gate_reports_earlier_reds`（57e2f3ee 加的：同一個 commit 保留歷次紀錄、閘門顯示紅過幾次），11937d60 沒有。D 對本分支改到的測試檔逐一比對 `def test_*`，只少了這一題。
+- 產品邏輯 `write_last_full` 的 history 仍在，只是守它的題不見了。推測是解衝突時，新題取代了同一段而把它蓋掉。
+- 修法：把那一題原樣還回來。
+
+**觀察 GF-O3**：「忘了 `--train`」和原本「忘了 `MOTRIX_TRAIN=1`」是同一類問題，只是入口從一個環境變數收斂成一個旗標，比較不容易忘；PLAYBOOK §G4 第 4 步已寫明用 `--train`。若要讓它由工具保證，可以讓列車長的固定腳本只呼叫 `--train`。不擋。

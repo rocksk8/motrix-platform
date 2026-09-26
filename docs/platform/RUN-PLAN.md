@@ -153,6 +153,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 19:44 D：b-genfiles-2 11937d60：**GF-M1、GF-M2 關閉**（--train 不設旗標／不判 skip／不查收集、現場改回讀檔 4/4 紅）；「提交用 test_map 只看已追蹤」取代「髒樹拒絕」站得住（dep_scan 對未追蹤檔也穩）；**新必修 GF2-M1**：相對 merge-base 刪掉 B-S4 守門題（產品邏輯仍在），請原樣還回。
 - 2026-09-26 19:42 C：整疊 rebase 到第九班之後推上 -3（見 §5 月台）；A 的 M06 以 c-m05b-3 為基底（已通知）。IP-15 成本檢視改派 B（主持），C 不做。M01 ④ 併入 D 的兩項觀察（存簿過濾看 dataUrl 那一層、M05 不在時 L1 簽核鏈讀不出來會擋的那條路），寫在 M01-PLAN §5。
 - 2026-09-26 19:41 B：**開工宣告**（主持派工，自 C 移來）：IP-15 新增成本檢視提供者 `dispatch.cost_for_case`（名稱定案，已告知 A）——動 C 的 `modules/subcontract`（新增提供者函式、module.json providers、subcontract 版號、tests）與 `docs/platform/INTEGRATION-POINTS.md`（IP-15 補一列）；只新增，不改 IP-15 既有回應；分支 `wip/b-ip15-cost`，基底為第十班合回後的 origin
 - 2026-09-26 19:41 D：a-attachments-5 3d12dc7b **必修 AT5-M1**：開票申請同案件部分可見（visible＋hidden）時，突變「丟掉看得到的」照綠。其餘成立：探針 hidden 只有類別＋個數、無檔名／單號（H3 紅）；hidden 恆空 ⇒ H2 紅；跨類別部分可見照常列出。觀察：hidden 個數可用來探知案件編號存在（裁示範圍內的取捨）。
@@ -172,6 +173,3 @@
 - 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
 - 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。
-- 2026-09-26 17:33 主持：使用者表單「全量開發完成才跑」⇒ 第十班起列車不跑全量（PLAYBOOK §G4 第 4 步更正、CORE-SPEC 裁示表）；第九班已在跑的全量照跑完。裁示 B：①產生檔提案採 §7 合一方案（分支不動產生檔、modtest 現場產生、「是否最新」三題只在列車跑）交 B 實作；②e2e 每題加死線（永不回應的 promise 會等到 renderer crash 50～400 秒）交 B。交互紅紀錄：第四班 4、第五班 2、第六班 5、第七班 2、第八班 1（全量抓到、分支沒抓到）。
-- 2026-09-26 17:23 C：wip/c-approval 299aed61 上月台（§3-7；疊在 c-m01-rec-2）。出貨單（M03）一併改成提供者（原派工未列 M03；origin 已搬 modules/supply，列車 rebase 時跟著搬）。自訂模組單據維持只有佇列、不支援轉簽（原本就不支援）。簽核佇列詳情端點 `/api/approval-queue/detail` 仍直讀各單據表，未在本包範圍。
-- 2026-09-26 17:17 A：開工 wip/a-analytics-dispatch（主持派工）：**會改 B 的 `modules/analytics/tests/test_reports_dispatch_connector_2026_09_26.py`**，兩題「提供者在」改成依 M04 在不在（§B-11）；只動測試，analytics 版號由列車取號。
