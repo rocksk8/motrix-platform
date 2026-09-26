@@ -28,3 +28,8 @@
 - 預設是 2，沒有問題。
 - 但全速時如果設 `MOTRIX_PARTIAL_MAX_WORKERS=4`，被選進來的 e2e 會以 `-n 4` 跑，違反主持的「e2e 一律 -n 2」。這是 13:2x 記憶體不足停掉的同一種情形。
 - 要處理的話：差異題含 e2e 時取 `min(partial, e2e_max_workers())`，或者把 e2e 拆成另一段。
+
+## 3. MT-O1 複核（fb3c687f，D 16:23）
+
+- 修法：`partial_cap(picked, tmap)` 在選到 e2e 時取 partial 與 e2e 上限的較小值。判定 e2e 看 test_map 的 kind；test_map 裡還沒有那一檔時，退回看檔名。
+- 突變 E4「partial_cap 不看 e2e」⇒ 紅（`test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked`）⇒ **MT-O1 關閉（fb3c687f）**。

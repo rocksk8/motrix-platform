@@ -50,6 +50,7 @@
 | IP-14 contractor_voucher.paid_between（C，wip/c-ip14-paid 6c8406c5，合回前） | D | `AUDIT-D-C-ip14-paid.md` | 稽核完成（2026-09-26 15:47）：**必修 1**（IP-M1「M04 不在」模擬只拿掉 public，新資料路徑未模擬；突變拿掉 None 防護存活）、觀察 1；邏輯搬移逐字相同、突變 4/4 紅 |
 | B 的 b-m08-attr 52178979＋b-modtest-env bf4abacb（抽查） | D | `AUDIT-D-B-attr-modtestenv.md` | 抽查完成（2026-09-26 15:51）：兩包必修 0；突變 A1、E1～E3 皆紅；觀察 MT-O1（差異題含 e2e 時沒有 e2e 上限，設 PARTIAL=4 會讓 e2e -n 4） |
 | case.summary／case.locations、SYSTEM 哨兵（C，wip/c-m01-s3-2 d93a792a，合回前） | D | `AUDIT-D-C-m01-s3.md` | 稽核完成（2026-09-26 16:07）：**必修 1**（CS-M1 SYSTEM 掃描器漏 6 種寫法，含 repo 慣用的 from helpers import case_access as ca）、建議 1（IP-97 address 資料性質）；突變 5/5 紅 |
+| B 的 b-o5-s1 4e6d97d3（完整）＋b-modtest-env fb3c687f（MT-O1 複核）＋第八班列車改主持兩處（事後抽查） | D | `AUDIT-D-B-o5-s1.md`、`AUDIT-D-B-attr-modtestenv.md` §3、`AUDIT-D-host-train8.md` | 完成（2026-09-26 16:23）：o5-s1 必修 0（golden Referer 過濾未變寬：案件頁多一支 GET 紅、首頁的請求改動前也不在 golden 範圍、拿掉過濾 2/3 紅）；MT-O1 關閉；列車兩處通過，觀察 T8-O1（角色字串守門誤判 .get("roles")） |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
