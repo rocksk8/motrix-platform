@@ -2149,73 +2149,73 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2290,
+     "line": 2294,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2303,
+     "line": 2307,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2338,
+     "line": 2342,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2457,
+     "line": 2461,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2518,
+     "line": 2522,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2585,
+     "line": 2589,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
      "func": "bank_reconcile",
-     "line": 2677,
+     "line": 2681,
      "method": "POST",
      "path": "/api/reports/bank-reconcile"
     },
     {
      "func": "customer_history",
-     "line": 2746,
+     "line": 2750,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2994,
+     "line": 2998,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3213,
+     "line": 3217,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3533,
+     "line": 3537,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3720,
+     "line": 3724,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }

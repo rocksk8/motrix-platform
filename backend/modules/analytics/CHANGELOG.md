@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.3 — 2026-09-26（列車取號；原暫用 1.0.2，與 c-tax-calc-2 的 1.0.2 交會，本段改 1.0.3）
+- `_compute_achievement(…, name_to_id=None)`：名字⇒帳號對照可由呼叫端給；沒給才查 `users`（行為不變）。原本無條件查資料庫 ⇒ `test_achievement_uses_same_attribution_as_performance` 不帶 client 單獨跑就紅（A 在 M03 反向控制查到，主持轉 M08）；該題改給空對照，另加「給了對照就用 id 比對」一題（含解析不到的正對照）
+
 ## 1.0.2 — 2026-09-26（第八班列車取號；原暫用 1.0.1）
 - 只改 import 來源（行為不變）：`api/reports.py` 的稅額函式（quote_tax_type、tax_split、LEGACY_TAX_NOTE、invoice_amounts）改自 L1 `helpers.tax_calc` import（C 的 T：稅額純函式自 M01 下沉 L1）⇒ 本模組對 M01 `helpers.quotations` 少一條相依
 
