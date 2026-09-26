@@ -127,7 +127,7 @@ def _group_py_files(group):
     """modules.json 裡某一組的 router／helper 單位 → 檔案（稽核 Y-2：不寫死檔名，M07 新增檔案也掃得到）。"""
     import json
     from pathlib import Path
-    root = Path(__file__).resolve().parents[3]
+    root = Path(__file__).resolve().parents[4]
     units = json.loads((root / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))["modules"][group]["units"]
     out = {}
     for u in units:
@@ -144,7 +144,7 @@ def _group_py_files(group):
     return out
 
 
-def test_m07_does_not_import_m06_anywhere():
+def test_payroll_does_not_import_m06_anywhere():
     """M07 的每一支檔（modules.json 取）**任何一層**都不 import M06（2026-09-26：原本 bonus_pdf 在函式內延遲載入
     helpers.voucher／voucher_pdf，稽核 Y-2；現在那四樣都在 L1）。"""
     import ast
@@ -164,17 +164,17 @@ def test_m07_does_not_import_m06_anywhere():
 def test_the_page_shows_the_voucher_notice():
     """「畫面要明確告知」：API 帶了 voucherNotice，頁面必須真的綁上去，不然使用者看不到。"""
     from pathlib import Path
-    html = (Path(__file__).resolve().parents[3] / "frontend" / "pages" / "bonus.html").read_text(encoding="utf-8")
+    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "bonus.html").read_text(encoding="utf-8")
     assert 'x-text="detail.voucherNotice"' in html
 
 
-def test_m07_pdf_parts_work_without_m06_files(tmp_path):
+def test_payroll_pdf_parts_work_without_m06_files(tmp_path):
     """反向控制（實體缺席，不是只拿掉提供者）：子行程裡讓 M06 的兩個 helper 無法匯入，`modules.payroll.api.bonus` 照常載入，
     獎金分潤單預覽／PDF 用的四樣元件（L1）照樣拿得到（2026-09-26 之前這裡會說「會計模組未安裝」）。"""
     import subprocess
     import sys
     from pathlib import Path
-    backend = Path(__file__).resolve().parents[2]
+    backend = Path(__file__).resolve().parents[3]
     code = (
         "import sys\n"
         "sys.modules['helpers.voucher'] = None\n"

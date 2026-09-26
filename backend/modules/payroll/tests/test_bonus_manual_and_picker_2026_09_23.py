@@ -401,7 +401,7 @@ def test_bn4_the_user_facing_name_changed_everywhere(client, make_user):
        （那是改寫稽核紀錄）—— 這一題只看原始碼。
     """
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     stale, quoted = [], []
     for rel in _BN4_TARGETS:
         assert (root / rel).is_file(), "`%s` 不見了 —— **退回給我**。" % rel

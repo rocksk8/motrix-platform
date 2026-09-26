@@ -20,7 +20,7 @@ from datetime import datetime
 
 import pytest
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 FRONTEND = ROOT / "frontend"
 
 

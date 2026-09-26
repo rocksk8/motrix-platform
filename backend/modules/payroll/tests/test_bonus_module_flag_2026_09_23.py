@@ -50,7 +50,7 @@ SIBLING_ENTRIES = ("voucher.html", "account-items.html")
 
 
 def _root():
-    return pathlib.Path(__file__).resolve().parents[2]
+    return pathlib.Path(__file__).resolve().parents[4]
 
 
 def _sidebar():

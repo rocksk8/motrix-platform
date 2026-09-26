@@ -226,7 +226,7 @@ def test_bn17_negative_control_an_award_never_rejected_has_no_last_reject(
 import ast
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
 def _guards_empty_reason(func_src):
