@@ -113,7 +113,7 @@ def test_approval_queue_voucher_lists_each_personnel_bank_with_branch(client, ma
 def test_approval_queue_page_renders_personnel_bank_rows():
     """頁面要把 personnelBanks 畫出來（每人一列，含分行）。"""
     from pathlib import Path
-    html = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "approval-queue.html").read_text(encoding="utf-8")
+    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "approval-queue.html").read_text(encoding="utf-8")
     assert 'x-for="pb in (selected?.personnelBanks' in html
     assert "pb.bankBranch" in html and "pb.bankAccountNumber" in html
 
@@ -123,7 +123,7 @@ def test_approval_queue_page_renders_personnel_bank_rows():
 def test_contractor_list_has_a_branch_column():
     from pathlib import Path
     import re
-    html = (Path(__file__).resolve().parents[2] / "frontend" / "pages" / "contractors.html").read_text(encoding="utf-8")
+    html = (Path(__file__).resolve().parents[4] / "frontend" / "pages" / "contractors.html").read_text(encoding="utf-8")
     heads = re.findall(r"<th[^>]*>([^<]*)</th>", html)
     assert "分行" in heads, heads
     assert "c.bank_branch" in html, "清單列要顯示每個人的分行"

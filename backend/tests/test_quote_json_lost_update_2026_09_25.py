@@ -188,7 +188,10 @@ def _c_stage_create(client, h):
 
 
 def _c_dispatch_import(client, h):
-    from tests.test_dispatch_import_to_quote_persists_2026_09_23 import _insert_draft_quote_and_dispatch
+    from core import source_tree
+    if not source_tree.module_installed("modules/subcontract/"):
+        pytest.skip("外包工班不在這個安裝包（PLAYBOOK §B-11）：派工匯入報價單的端點在那個模組")
+    from modules.subcontract.tests.test_dispatch_import_to_quote_persists_2026_09_23 import _insert_draft_quote_and_dispatch
     did = _insert_draft_quote_and_dispatch("MQ-LU-DISP")
     return None, lambda: client.post(f"/api/contractor-dispatches/{did}/import-to-quote", headers=h),         lambda d: "配線施工" in [it.get("description") for it in d.get("items") or []]
 
