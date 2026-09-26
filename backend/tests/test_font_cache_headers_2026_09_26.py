@@ -22,3 +22,16 @@ def test_pages_css_js_are_still_not_cached(client):
         r = client.get(path)
         assert r.status_code == 200, path
         assert "no-store" in r.headers.get("cache-control", ""), (path, r.headers.get("cache-control"))
+
+
+
+def test_css_references_only_existing_fonts_and_license_ships_with_them():
+    """U19（使用者表單：確認 OFL）：CSS 引用的字型檔都存在；字型隨附 OFL.txt（OFL §2 散布時必須附上授權）。"""
+    import re as _re
+    css = (FONTS.parent / "css" / "style.css").read_text(encoding="utf-8")
+    refs = _re.findall(r"url\('\.\./fonts/([^']+)'\)", css)
+    assert refs, "正對照：style.css 要有 @font-face"
+    missing = [r for r in refs if not (FONTS / r).is_file()]
+    assert not missing, missing
+    lic = (FONTS / "OFL.txt").read_text(encoding="utf-8")
+    assert "SIL OPEN FONT LICENSE Version 1.1" in lic and "LY Corporation" in lic
