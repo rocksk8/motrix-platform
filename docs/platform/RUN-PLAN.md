@@ -130,6 +130,12 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 09:27 B（記錄主持裁示，AUDIT-D-B-G1 G-M1）：**core-only 已知紅清單**首批（`tools/platform/core_only_known_red.json`；列車判定＝紅燈 ⊆ §B-11 允許＋本清單；清單只准縮短，新增一筆要在本檔寫一行帶錨點的主持裁示）：
+  - `CORE-ONLY-KR-1` test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared（case_read_scope）：擁有者 A（暫記主持），修復分支 wip/h-corered 3710f462
+  - `CORE-ONLY-KR-2` test_absent_module_green_present_module_still_red（IP 登記表）：擁有者 A（暫記主持），修復分支 wip/h-corered 3710f462
+  - `CORE-ONLY-KR-3` test_dep_scan_and_source_tree_agree_on_module_files（dep_scan 一致性）：擁有者 C，修復分支待 C 指定
+  - `CORE-ONLY-KR-4` test_every_pii_form_has_a_decision_and_it_still_holds（pii_forms 的 netplan 告知端點）：擁有者 C，修復分支 c-m07 816101b2（api_module）
+  - 另 menu_parity 兩題（test_every_legacy_item_is_declared_identically、test_rendered_menu_matches_for_every_single_permission）由 wip/b-m08-2 修，不進清單（同一班列車帶上即綠）。
 - 2026-09-26 09:14 巡視：第五班列車長在跑 crm 真刪反向控制；B 的 M08 必修已修（b-m08-2 f7463dfa）⇒ D 複核中；C 的 c-m07 約 09:20、c-m04-2 約 09:50；A（hichan-f9）仍無回應（U18）。主持：IMPROVEMENT-REPORT 補 M08 稽核列與 5 條系統性問題（觀測點綁名字、掃描範圍寫死舊目錄、修並發只驗一個方向、刪資料夾被擋改用 sparse checkout、主持自己違反 rebase／push 分開）。
 - 2026-09-26 09:01 主持：D 稽核 b-g1（AUDIT-D-B-G1）必修 G-M1：core-only 反向控制跑出 4 題非預期紅，§G3 規定全綠，第一班就會擋車。裁示：工具加「已知紅」清單（題名、擁有者、修復分支；只准縮短、已轉綠還留著也紅、新增要附主持裁示），交 B 在 M08 必修之後做。4 題中歸 A 的 2 題由主持在 wip/h-corered 修掉（正對照改用合成模組）；C 的 2 題（dep_scan 一致性、pii_forms netplan）交 C。G-S1（0 題判 ok）交 B。做法說明：要「只剩底層」的樹時用 sparse checkout 不取出 modules，不刪資料夾（刪資料夾會被權限擋，也不應該繞過）。
 - 2026-09-26 08:58 D：b-g1（`AUDIT-D-B-G1.md`，6b0c8fdd）：必修 G-M1——D 實跑 core_only_rc 在 B 自己的 commit 上 8 failed／989 passed，扣允許 2、b-m08 已修 2（menu_parity），**另 4 題沒處理也沒分派**（case_read_scope 反向控制、IP 登記表 present-still-red、dep_scan 一致性、pii_forms——正對照需要一個在的模組／netplan 告知端點）⇒ 照 §G3 第一班就擋車。建議：exit 5／0 題也判 ok（實測）、宣告不存在名稱靜默忽略。宣告機制突變 4/4 紅。
