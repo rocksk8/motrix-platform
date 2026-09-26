@@ -121,6 +121,38 @@ def _seed(client, h):
 
 # ── ①② 真實 probe ────────────────────────────────────────────────────────────
 
+#: 對照組：中介層不記軌跡的端點（`trail.SKIP_PREFIXES`）。稽核 D（h-probes）：沒有對照組時，
+#: 操作軌跡 `user_request_log` 會讓每一支 probe 都「有副作用」——解法是精確認出那一列，不是把整張表排除。
+CONTROL_PATH = "/api/system/version"
+
+
+def _uid(username):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone()["id"]
+    finally:
+        conn.close()
+
+
+def _clear_trail(uid):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("DELETE FROM user_request_log WHERE user_id=?", (uid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _trail_rows():
+    import db
+    conn = db.get_db()
+    try:
+        return [tuple(r) for r in conn.execute("SELECT id, user_id, method, path, status FROM user_request_log ORDER BY id")]
+    finally:
+        conn.close()
+
 def test_declared_probes_are_read_only_and_do_not_log_their_responses(client, make_user, monkeypatch, caplog, capsys):
     probes = _installed_probes()
     if not probes:
@@ -130,9 +162,19 @@ def test_declared_probes_are_read_only_and_do_not_log_their_responses(client, ma
     for _k, path, _x in probes:                                   # 暖機（懶初始化）
         assert client.get(path, headers=h).status_code == 200, path
     fx = _SideEffects(monkeypatch)
+    uid = _uid("probe_se_sa")
+    # 對照組：中介層不記軌跡的端點（trail.should_skip）⇒ 整個庫一列都不能變（含 user_request_log）
+    import trail
+    assert trail.should_skip(CONTROL_PATH), CONTROL_PATH
+    _clear_trail(uid)
+    before = db_fingerprint()
+    assert client.get(CONTROL_PATH, headers=h).status_code == 200
+    assert changed_tables(before, db_fingerprint()) == [], "對照組（不記軌跡的端點）也讓庫變了 ⇒ 比對器或環境有問題"
     problems = []
     for key, path, _x in probes:
+        _clear_trail(uid)            # 每支都從「沒有這個人的軌跡」開始 ⇒ 中介層一定寫恰好一列（不靠 30 秒去重的運氣）
         before = db_fingerprint()
+        trail_before = _trail_rows()
         caplog.clear()
         capsys.readouterr()
         n_smtp, n_thr = len(fx.smtp), len(fx.threads)
@@ -141,6 +183,15 @@ def test_declared_probes_are_read_only_and_do_not_log_their_responses(client, ma
         out = capsys.readouterr()
         assert r.status_code == 200, (key, path, r.status_code)
         ch = changed_tables(before, db_fingerprint())
+        # user_request_log：中介層（main.py `_record_request_trail`）對**每一個**請求記的操作軌跡——不是 probe 路由的副作用。
+        # 只允許「恰好多一列：本人、GET、這支 probe 的路徑、200」，其他任何改動（改舊列、多列、別的路徑）照樣算。
+        if "user_request_log" in ch:
+            new = [r_ for r_ in _trail_rows() if r_ not in trail_before]
+            old_kept = all(r_ in _trail_rows() for r_ in trail_before)
+            if old_kept and len(new) == 1 and new[0][1:] == (uid, "GET", path, 200):
+                ch.remove("user_request_log")
+            else:
+                problems.append("%s %s：user_request_log 的改動不是中介層那一列：新增 %s" % (key, path, new))
         if ch:
             problems.append("%s %s：寫了表 %s" % (key, path, ch))
         if len(fx.smtp) > n_smtp:
