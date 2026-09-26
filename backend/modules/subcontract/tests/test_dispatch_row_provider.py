@@ -15,6 +15,7 @@ import sqlite3
 import pytest
 
 from core import registry
+from core import source_tree
 
 QNO = "MQ-IP1-0925"
 YEAR = 2026
@@ -104,6 +105,8 @@ def _drop_dispatch_row(monkeypatch):
 
 
 def test_consumers_degrade_when_provider_is_absent(client, monkeypatch):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed()
     with_provider = _observe()
     assert with_provider == {"recognition_dispatch": 1, "vouchers_dispatch": 1,
@@ -131,6 +134,8 @@ def _sources(client, h):
 
 def test_absence_is_said_in_voucher_sources(client, make_user, monkeypatch):
     """營運報表那一半在 modules/analytics/tests/test_reports_dispatch_row_consumer.py（第六班列車交會 M04×M08）。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed()
     h = _sa(client, make_user)
     src = _sources(client, h)

@@ -67,7 +67,6 @@ def _items():
 # ── IP-14（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
-    from modules.accounting.api import accounting_export as ae
     from modules.arap.api import cashier as ca
     h = _hdr(client, make_user)
     _seed()
@@ -76,8 +75,10 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
     assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
     hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h)
     assert hist.status_code == 200 and hist.json()["outgoing"] == [] and hist.json()["contractorNotice"] == ca.CONTRACTOR_MISSING
-    prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
-    assert prev.status_code == 200 and ae.T100_CONTRACTOR_MISSING in prev.json()["notice"].split("；")   # 其他來源的說明可能並列（IP-20）
+    if source_tree.module_installed("modules/accounting/"):                  # T100 那一段要 M06（2026-09-26 搬遷）
+        from modules.accounting.api import accounting_export as ae
+        prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
+        assert prev.status_code == 200 and ae.T100_CONTRACTOR_MISSING in prev.json()["notice"].split("；")   # 其他來源的說明可能並列（IP-20）
     x = client.get("/api/cashier/export?start=2026-09-01&end=2026-09-30", headers=h)
     assert x.status_code == 200
     import io

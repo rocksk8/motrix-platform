@@ -7,7 +7,7 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests.platform.test_case_stage_connectors import _without  # noqa: E402
-from tests.test_e2e_voucher_source_block_below_2026_09_25 import QNO, _open, _pick_case, _seed  # noqa: E402
+from modules.accounting.tests.test_e2e_voucher_source_block_below_2026_09_25 import QNO, _open, _pick_case, _seed  # noqa: E402
 
 UNAV = '[data-testid="src-files-unavailable"]'
 

@@ -124,7 +124,7 @@ def test_jv32_editing_an_existing_draft_applies_the_same_rules(client, make_user
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 
 def _fill_new_voucher(page, base, d1, c2):

@@ -36,7 +36,7 @@ iframe 加上附件清單，內容高度很容易超過可視範圍，而**附�
 ## 🔴 成功訊息（`attMsg`）：情境**甲**，比失敗訊息更嚴重——**根本沒有渲染點**
 
 ```
-frontend/pages/voucher.html
+pages/voucher.html
   主頁面（396-400）  <template x-if="attErr">…</template>
                      <template x-if="attMsg">…</template>   <= 兩個都有
   modal 內（518-541） <template x-if="attErr">…</template>  <= 只有這一個
@@ -71,6 +71,7 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
+from core import source_tree
 
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
          {"account_code": "4111", "debit": 0, "credit": 1000}]
@@ -170,7 +171,7 @@ def test_jv19_export_success_message_is_visible_inside_the_preview(
     """🔴🔴 **`②`：成功那一側也要看得到，不只驗失敗。**
 
     ```
-    frontend/pages/voucher.html 518-541（modal 內）
+    pages/voucher.html 518-541（modal 內）
       只有 <template x-if="attErr"> ，**沒有對應 attMsg 的節點**
     ```
     ⚙️ 這一題比上一題更基本：失敗訊息至少**渲染了**（只是捲不到），
@@ -237,8 +238,7 @@ def test_jv19_the_main_page_feedback_slots_are_not_removed():
     會無家可歸——那是另一個新洞，不是這次要修的範圍。
     """
     import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2]
-           / "frontend" / "pages" / "voucher.html").read_text(
+    html = source_tree.page_file("voucher.html").read_text(
         encoding="utf-8", errors="replace")
     modal_start = html.index('x-show="previewOpen"')
     outside = html[:modal_start]

@@ -37,6 +37,7 @@ import pathlib
 import re
 
 import pytest
+from core import source_tree
 
 PDF = "/api/vouchers/%s/pdf-download"
 
@@ -443,8 +444,8 @@ def test_jv10_the_with_attachments_button_says_why_it_is_disabled():
     含附件（沒附件）  **停用而看得見** —— 它提醒使用者「這裡可以放附件」
     ```
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    html = (root / "frontend" / "pages" / "voucher.html").read_text(
+    root = pathlib.Path(__file__).resolve().parents[4]
+    html = source_tree.page_file("voucher.html").read_text(
         encoding="utf-8", errors="replace")
     html = re.sub(r"<!--.*?-->", lambda m: " " * len(m.group(0)), html,
                   flags=re.S)

@@ -234,7 +234,7 @@ def test_ca1_the_insert_must_not_paper_over_a_collision():
     import pathlib
     import re
 
-    p = (pathlib.Path(__file__).resolve().parents[1]
+    p = (pathlib.Path(__file__).resolve().parents[3]
          / "modules" / "accounting" / "api" / "account_items.py")   # M06 搬遷（2026-09-26）
     assert p.is_file(), "`modules/accounting/api/account_items.py` 不見了 —— **退回給我**。"
     src = p.read_text(encoding="utf-8", errors="replace")
@@ -652,7 +652,7 @@ def test_ca1_the_page_has_both_write_actions():
     import pathlib
     import re
 
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     js = (root / "frontend" / "js" / "account-items.js").read_text(
         encoding="utf-8", errors="replace")
 

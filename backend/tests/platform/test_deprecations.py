@@ -58,6 +58,9 @@ def invalid(entries, read):
         if missing:
             out.append("%s：缺欄位 %s" % (e, missing))
             continue
+        from core import source_tree
+        if not source_tree.module_installed(e["file"]):
+            continue                              # 那個檔在一個沒安裝的模組裡（選配／反向控制）：登記照留，不比
         src = read(e["file"])
         if src is None or e["name"] not in top_level_names(src):
             out.append("%s::%s：登記了但該檔頂層沒有這個名稱" % (e["file"], e["name"]))

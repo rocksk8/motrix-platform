@@ -141,7 +141,7 @@ def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_u
 
 pw = pytest.importorskip("playwright.sync_api")
 from tests._map_tiles import block_tiles  # noqa: E402
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 

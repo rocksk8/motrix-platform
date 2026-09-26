@@ -1,4 +1,4 @@
-"""`JV4` · 傳票頁 `frontend/pages/voucher.html`：出納底下的獨立頁（`STATE.md` 總表 `JV4`）。
+"""`JV4` · 傳票頁 `pages/voucher.html`：出納底下的獨立頁（`STATE.md` 總表 `JV4`）。
 
 驗三件事（結構層；執行期那一半由 `test_e2e_voucher_feedback_2026_09_23.py` 真的開頁存檔）：
 ① 側欄入口緊接在「出納」之後，**用同一個旗標** `cCash`（使用者原話「要由出納獨立作業」）
@@ -10,8 +10,9 @@
 """
 import pathlib
 import re
+from core import source_tree
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 
 
 def test_jv4_the_voucher_entry_sits_right_after_cashier_with_the_same_flag():
@@ -37,7 +38,7 @@ def test_jv4_the_backend_module_gate_accepts_the_cashier_module():
 
 
 def test_jv4_the_page_is_a_standalone_form_that_can_save_and_submit():
-    page = (ROOT / "frontend" / "pages" / "voucher.html").read_text(encoding="utf-8")
+    page = source_tree.page_file("voucher.html").read_text(encoding="utf-8")
     assert 'x-data="voucherPage()"' in page, "voucher.html 不是自己的 Alpine 元件"
     assert '@click="save()"' in page, "voucher.html 沒有儲存"
     assert '@click="submit()"' in page, "voucher.html 沒有送出審核"

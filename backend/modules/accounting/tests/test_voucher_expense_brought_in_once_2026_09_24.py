@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-from tests.test_jv36_voucher_line_source_files_2026_09_24 import (  # noqa: F401
+from modules.accounting.tests.test_jv36_voucher_line_source_files_2026_09_24 import (  # noqa: F401
     _seed, _hdr, _LINES, VOUCHERS, QUOTE)
 
 
@@ -151,8 +151,8 @@ def test_attachment_red_mark_output_is_unchanged(client):
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
-from tests.test_jv36_voucher_line_source_files_2026_09_24 import _open_with_case, _D  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402,F401
+from modules.accounting.tests.test_jv36_voucher_line_source_files_2026_09_24 import _open_with_case, _D  # noqa: E402
 
 
 @pytest.mark.e2e

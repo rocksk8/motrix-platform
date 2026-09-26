@@ -14,6 +14,7 @@ from core import registry
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
 from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
+from core import source_tree
 
 CAPS = ("voucher.draft", "voucher.account_check", "accounting.settings")
 MISSING = "未產生傳票：會計模組未安裝"
@@ -58,6 +59,8 @@ def _drop_accounting(monkeypatch):
 # ── ① 契約 ──────────────────────────────────────────────────────────────────
 
 def test_contract_providers_exist_and_draft_really_writes(client):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     for c in CAPS:
         assert registry.single_provider(c) is not None, c
     ok, err = registry.single_provider("voucher.account_check")(_db(), "6111")
@@ -85,6 +88,8 @@ def test_contract_providers_exist_and_draft_really_writes(client):
 
 def test_with_accounting_the_flow_makes_vouchers(client, people):
     """正對照：同一條流程在 M06 在時確實產生兩張草稿——否則「沒產生」的斷言沒有意義。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     before = _voucher_count()
     r = _to_payout(client, people, "MQ-IP2-001")
@@ -199,12 +204,15 @@ def test_payroll_pdf_parts_work_without_m06_files(tmp_path):
 def test_preview_works_even_if_the_accounting_helpers_are_gone(client, people, monkeypatch):
     """M06 的 `modules.accounting.voucher_pdf` 被拿掉（這裡以把它的函式換成會爆的替身模擬），獎金分潤單預覽照樣組得出來
     ——證明預覽走的是 L1，不是 M06。"""
-    import modules.accounting.voucher_pdf as vp
+    from core import source_tree
     from modules.payroll import bonus_pdf
+    if source_tree.module_installed("modules/accounting/"):
+        import modules.accounting.voucher_pdf as vp
 
-    def _boom(*a, **k):
-        raise AssertionError("不應該用到 M06 的 voucher_pdf")
-    for name in ("_company_name", "_render", "_fmt_money"):
-        monkeypatch.setattr(vp, name, _boom)
+        def _boom(*a, **k):
+            raise AssertionError("不應該用到 M06 的 voucher_pdf")
+        for name in ("_company_name", "_render", "_fmt_money"):
+            monkeypatch.setattr(vp, name, _boom)
+    # M06 真的不在（反向控制）⇒ 沒有東西可以替換，直接跑：預覽照樣組得出來就是證明
     html = bonus_pdf.build_award_html({"id": 1}, [], [], {}, "2026-09-25 00:00")
     assert isinstance(html, str) and html

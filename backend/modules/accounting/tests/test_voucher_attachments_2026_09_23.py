@@ -40,6 +40,7 @@ import pathlib
 import re
 
 import pytest
+from core import source_tree
 
 ATT = "/api/vouchers/%s/attachments"
 ATT_ONE = "/api/vouchers/%s/attachments/%s"
@@ -751,7 +752,7 @@ def test_jv3_the_page_can_upload_bring_in_and_delete(client, make_user):
 
     ⚠️ 判準是**會送出的那一個動作**，不是數 `<button>`。
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     js = (root / "frontend" / "js" / "voucher.js").read_text(
         encoding="utf-8", errors="replace")
 
@@ -776,8 +777,8 @@ def test_jv3_the_delete_button_is_absent_not_disabled_when_locked():
     ⚙️ 而 B 的傳票按鈕目前用 `x-show`（元素留在 DOM）——
        那對**其他按鈕**沒問題，對這一個不行。
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
-    html = (root / "frontend" / "pages" / "voucher.html").read_text(
+    root = pathlib.Path(__file__).resolve().parents[4]
+    html = source_tree.page_file("voucher.html").read_text(
         encoding="utf-8", errors="replace")
     import re
     html = re.sub(r"<!--.*?-->", lambda m: " " * len(m.group(0)), html,

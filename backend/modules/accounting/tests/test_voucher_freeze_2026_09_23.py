@@ -54,7 +54,7 @@ import pytest
 
 import db
 
-_BACKEND = Path(__file__).resolve().parent.parent
+_BACKEND = Path(__file__).resolve().parents[3]
 
 CHILD = "voucher_lines"
 

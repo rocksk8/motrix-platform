@@ -163,7 +163,7 @@ def test_jv36_lines_remember_their_source_and_bad_sources_are_refused(client, ma
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 _D = "Alpine.$data(document.querySelector('[x-data]'))"
 

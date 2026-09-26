@@ -71,8 +71,9 @@ grep -c "vouchers_all" routers/accounting_export.py  =>  **0**
 """
 import pathlib
 import re
+from core import source_tree
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 
 _LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
          {"account_code": "4111", "debit": 0, "credit": 1000}]
@@ -115,7 +116,7 @@ def test_jv20_the_category_selector_is_removed_from_the_page():
     ⚠️ 仍然先剝掉 `<!--…-->` 註解再比對（下面的誘餌題鎖住那個修法）。
     """
     html = _strip_html_comments(
-        (ROOT / "frontend" / "pages" / "voucher.html").read_text(
+        source_tree.page_file("voucher.html").read_text(
             encoding="utf-8", errors="replace"))
     m = re.search(r'<select[^>]*data-testid="voucher-kind-select"[^>]*>(.*?)</select>', html, re.S)
     assert m, "`voucher.html` 裡找不到傳票類別選單（`voucher-kind-select`）——N6 要能手動改。"

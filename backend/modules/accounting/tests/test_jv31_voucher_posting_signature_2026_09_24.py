@@ -96,7 +96,7 @@ def test_jv31_a_posted_voucher_carries_the_bookkeeper_signature(client, make_use
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login  # noqa: E402
+from tests._e2e_login import inject_login as _page_login  # noqa: E402
 
 
 def _user_id(username):

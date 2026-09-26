@@ -7,6 +7,8 @@ import io
 import openpyxl
 
 from tests.test_stock_batch_payment_2026_09_01 import _auth, _login
+from core import source_tree
+import pytest
 
 
 def _make_part(client, token, part_no):
@@ -133,6 +135,8 @@ def test_update_batch_header_edits_supplier_and_invoice(client, make_user):
 
 
 def test_stock_batch_flows_into_t100_export_and_can_be_confirmed(client, make_user):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     username, password = make_user(username="stk_admin5", role="superadmin")
     token = _login(client, username, password)
 
@@ -192,6 +196,8 @@ def test_stock_batch_flows_into_t100_export_and_can_be_confirmed(client, make_us
 
 
 def test_unpaid_batch_excluded_from_t100_export(client, make_user):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     username, password = make_user(username="stk_admin6", role="superadmin")
     token = _login(client, username, password)
     _make_part(client, token, "STK-P6")

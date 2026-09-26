@@ -8,6 +8,8 @@
 import json
 
 from core import registry
+from core import source_tree
+import pytest
 
 QNO = "MQ-IP1-0925"
 YEAR = 2026
@@ -53,6 +55,8 @@ def _sources(client, h):
 
 def test_absence_is_said_in_voucher_sources(client, make_user, monkeypatch):
     """營運報表那一半在 modules/analytics/tests/test_reports_dispatch_row_consumer.py。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed()
     h = _sa(client, make_user)
     _drop_dispatch_row(monkeypatch)

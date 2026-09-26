@@ -294,7 +294,7 @@ def test_the_page_actually_sends_the_lines_when_saving(client, make_user):
     import pathlib
     import re
 
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     js = (root / "frontend" / "js" / "voucher.js").read_text(
         encoding="utf-8", errors="replace")
 
@@ -332,7 +332,7 @@ def test_the_page_no_longer_tells_the_user_to_void_and_reopen(client,
     """
     import pathlib
 
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     js = (root / "frontend" / "js" / "voucher.js").read_text(
         encoding="utf-8", errors="replace")
 

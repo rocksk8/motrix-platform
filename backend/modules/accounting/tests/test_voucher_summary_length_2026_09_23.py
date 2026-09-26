@@ -6,7 +6,7 @@
 # 🔴 動工前查過：編輯畫面**已經有**自動長高，這不是使用者在講的那件事
 
 ```
-frontend/pages/voucher.html:251-253
+pages/voucher.html:251-253
   <textarea x-model="l.summary" ...
       x-effect="l.summary; $nextTick(() => {
           $el.style.height = 'auto'
