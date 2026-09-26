@@ -333,13 +333,11 @@
     "router:auth",
     "router:case_action_items",
     "router:case_extra_expenses",
-    "router:cashier",
     "router:company_lookup",
     "router:completion_notes",
     "router:custom_records",
     "router:customers",
     "router:definitions",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:legal_params",
     "router:licensing",
@@ -351,7 +349,6 @@
     "router:modules",
     "router:org_structure",
     "router:parts",
-    "router:payment_requests",
     "router:platform_catalog",
     "router:platform_menu",
     "router:quotations",
@@ -961,18 +958,14 @@
    "api_prefixes": [],
    "dynamic_sql": false,
    "imports": [
-    "core:db",
     "helper:legal_params",
-    "helper:tax_calc"
+    "plat:registry"
    ],
    "kind": "helper",
    "path": "backend/helpers/receivables.py",
    "tables_ddl": [],
    "tables_named": [],
-   "tables_r": [
-    "quotations",
-    "users"
-   ],
+   "tables_r": [],
    "tables_w": []
   },
   "helper:recognition": {
@@ -1497,9 +1490,9 @@
    "kind": "js",
    "path": "frontend/js/case-management-fin.js",
    "routers_called": [
-    "router:invoice_vouchers",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "router:legal_params",
-    "router:payment_requests",
     "router:quotations"
    ],
    "tables_r": [],
@@ -1621,11 +1614,10 @@
    "kind": "js",
    "path": "frontend/js/cashier.js",
    "routers_called": [
-    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "router:accounting_export",
-    "router:cashier",
     "router:quotations"
    ],
    "tables_r": [],
@@ -1664,10 +1656,10 @@
    "path": "frontend/js/reports.js",
    "routers_called": [
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
-    "router:cashier",
     "router:company_lookup",
     "router:material_orders",
     "router:org_structure",
@@ -2113,7 +2105,6 @@
     "helper:module_registry",
     "helper:notification_prefs",
     "helper:quotations",
-    "helper:receivables",
     "helper:recognition",
     "helper:row_access",
     "helper:settings",
@@ -2133,7 +2124,6 @@
     "helper:financial_mask",
     "helper:legal_params",
     "helper:quotations",
-    "helper:receivables",
     "helper:recognition",
     "helper:settings",
     "helper:startup",
@@ -2149,73 +2139,67 @@
    "routes": [
     {
      "func": "report_json",
-     "line": 2294,
+     "line": 2307,
      "method": "GET",
      "path": "/api/reports/financial"
     },
     {
      "func": "report_excel",
-     "line": 2307,
+     "line": 2320,
      "method": "GET",
      "path": "/api/reports/financial/excel"
     },
     {
      "func": "report_pdf",
-     "line": 2342,
+     "line": 2355,
      "method": "GET",
      "path": "/api/reports/financial/pdf"
     },
     {
      "func": "get_ar_aging",
-     "line": 2461,
+     "line": 2474,
      "method": "GET",
      "path": "/api/reports/ar-aging"
     },
     {
      "func": "get_cash_position",
-     "line": 2522,
+     "line": 2535,
      "method": "GET",
      "path": "/api/reports/cash-position"
     },
     {
      "func": "tax_export_excel",
-     "line": 2589,
+     "line": 2602,
      "method": "GET",
      "path": "/api/reports/tax-export"
     },
     {
-     "func": "bank_reconcile",
-     "line": 2681,
-     "method": "POST",
-     "path": "/api/reports/bank-reconcile"
-    },
-    {
      "func": "customer_history",
-     "line": 2750,
+     "line": 2636,
      "method": "GET",
      "path": "/api/reports/customer-history"
     },
     {
      "func": "monthly_trend",
-     "line": 2998,
+     "line": 2884,
      "method": "GET",
      "path": "/api/reports/monthly-trend"
     },
     {
      "func": "report_payment_anomalies",
-     "line": 3217,
+     "line": 3103,
      "method": "GET",
      "path": "/api/reports/payment-anomalies"
     },
     {
      "func": "report_expenses_monthly",
-     "line": 3537,
+     "line": 3425,
      "method": "GET",
      "path": "/api/reports/expenses-monthly"
     },
     {
      "func": "report_receivables_monthly",
-     "line": 3724,
+     "line": 3612,
      "method": "GET",
      "path": "/api/reports/receivables-monthly"
     }
@@ -2265,6 +2249,441 @@
     "system_settings",
     "users"
    ]
+  },
+  "mod:arap/__init__": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:arap/receivables",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/__init__.py",
+   "role": "init",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_w": []
+  },
+  "mod:arap/api/cashier": {
+   "api_prefixes": [
+    "/api/cashier",
+    "/api/reports"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:legal_params",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tax_calc",
+    "helper:tiered_approval",
+    "helper:xlsx_out",
+    "mod:arap/receivables"
+   ],
+   "imports": [
+    "core:db",
+    "helper:audit",
+    "helper:auth",
+    "helper:legal_params",
+    "helper:tax_calc",
+    "helper:xlsx_out",
+    "mod:arap/receivables",
+    "plat:registry"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/api/cashier.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "get_payable_queue",
+     "line": 151,
+     "method": "GET",
+     "path": "/api/cashier/payable-queue"
+    },
+    {
+     "func": "get_receivable_queue",
+     "line": 162,
+     "method": "GET",
+     "path": "/api/cashier/receivable-queue"
+    },
+    {
+     "func": "get_bonus_queue",
+     "line": 175,
+     "method": "GET",
+     "path": "/api/cashier/bonus-queue"
+    },
+    {
+     "func": "get_execution_history",
+     "line": 225,
+     "method": "GET",
+     "path": "/api/cashier/execution-history"
+    },
+    {
+     "func": "export_execution_history",
+     "line": 239,
+     "method": "GET",
+     "path": "/api/cashier/export"
+    },
+    {
+     "func": "bank_reconcile",
+     "line": 428,
+     "method": "POST",
+     "path": "/api/reports/bank-reconcile"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "contractor_payment_vouchers",
+    "quotations"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "contractor_payment_vouchers",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:arap/api/invoice_vouchers": {
+   "api_prefixes": [
+    "/api/invoice-vouchers"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tax_calc",
+    "helper:tiered_approval",
+    "helper:uploads"
+   ],
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:legal_params",
+    "helper:tax_calc",
+    "helper:tiered_approval",
+    "helper:uploads",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/api/invoice_vouchers.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_invoice_vouchers",
+     "line": 212,
+     "method": "GET",
+     "path": "/api/invoice-vouchers"
+    },
+    {
+     "func": "get_invoice_voucher_remaining",
+     "line": 235,
+     "method": "GET",
+     "path": "/api/invoice-vouchers/remaining"
+    },
+    {
+     "func": "get_invoice_voucher",
+     "line": 256,
+     "method": "GET",
+     "path": "/api/invoice-vouchers/{voucher_no}"
+    },
+    {
+     "func": "create_invoice_voucher",
+     "line": 271,
+     "method": "POST",
+     "path": "/api/invoice-vouchers"
+    },
+    {
+     "func": "delete_invoice_voucher",
+     "line": 434,
+     "method": "DELETE",
+     "path": "/api/invoice-vouchers/{voucher_no}"
+    },
+    {
+     "func": "submit_invoice_voucher",
+     "line": 459,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/submit"
+    },
+    {
+     "func": "approve_invoice_voucher",
+     "line": 520,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/approve"
+    },
+    {
+     "func": "revoke_invoice_voucher_approval",
+     "line": 629,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/revoke-approval"
+    },
+    {
+     "func": "reject_invoice_voucher",
+     "line": 669,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/reject"
+    },
+    {
+     "func": "download_invoice_voucher_pdf",
+     "line": 715,
+     "method": "GET",
+     "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
+    },
+    {
+     "func": "record_invoice_voucher_export",
+     "line": 742,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/export"
+    },
+    {
+     "func": "upload_invoice_voucher_issued_files",
+     "line": 770,
+     "method": "POST",
+     "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
+    },
+    {
+     "func": "delete_invoice_voucher_issued_file",
+     "line": 799,
+     "method": "DELETE",
+     "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "customers",
+    "quotations"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "case_stages",
+    "customers",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "invoice_vouchers",
+    "payment_requests",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "invoice_vouchers"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "invoice_vouchers",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "mod:arap/api/payment_requests": {
+   "api_prefixes": [
+    "/api/payment-requests"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:legal_params",
+    "helper:mail_types",
+    "helper:module_registry",
+    "helper:notification_prefs",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "core:pdf_gen",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:email_notify",
+    "helper:errors",
+    "helper:google_calendar",
+    "helper:legal_params",
+    "helper:tiered_approval",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/api/payment_requests.py",
+   "registered": "loader",
+   "role": "router",
+   "routes": [
+    {
+     "func": "list_payment_requests",
+     "line": 308,
+     "method": "GET",
+     "path": "/api/payment-requests"
+    },
+    {
+     "func": "get_payment_request_remaining",
+     "line": 331,
+     "method": "GET",
+     "path": "/api/payment-requests/remaining"
+    },
+    {
+     "func": "get_payment_request",
+     "line": 348,
+     "method": "GET",
+     "path": "/api/payment-requests/{request_no}"
+    },
+    {
+     "func": "create_payment_request",
+     "line": 363,
+     "method": "POST",
+     "path": "/api/payment-requests"
+    },
+    {
+     "func": "update_payment_request",
+     "line": 455,
+     "method": "PUT",
+     "path": "/api/payment-requests/{request_no}"
+    },
+    {
+     "func": "delete_payment_request",
+     "line": 553,
+     "method": "DELETE",
+     "path": "/api/payment-requests/{request_no}"
+    },
+    {
+     "func": "submit_payment_request",
+     "line": 578,
+     "method": "POST",
+     "path": "/api/payment-requests/{request_no}/submit"
+    },
+    {
+     "func": "approve_payment_request",
+     "line": 639,
+     "method": "POST",
+     "path": "/api/payment-requests/{request_no}/approve"
+    },
+    {
+     "func": "revoke_payment_request_approval",
+     "line": 747,
+     "method": "POST",
+     "path": "/api/payment-requests/{request_no}/revoke-approval"
+    },
+    {
+     "func": "reject_payment_request",
+     "line": 787,
+     "method": "POST",
+     "path": "/api/payment-requests/{request_no}/reject"
+    },
+    {
+     "func": "download_payment_request_pdf",
+     "line": 833,
+     "method": "GET",
+     "path": "/api/payment-requests/{request_no}/pdf-download"
+    },
+    {
+     "func": "record_payment_request_export",
+     "line": 860,
+     "method": "POST",
+     "path": "/api/payment-requests/{request_no}/export"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "customers",
+    "quotations"
+   ],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "case_stages",
+    "customers",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "invoice_vouchers",
+    "payment_requests",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [
+    "payment_requests"
+   ],
+   "tables_w_transitive": [
+    "audit_log",
+    "notifications",
+    "payment_requests",
+    "system_settings"
+   ]
+  },
+  "mod:arap/receivables": {
+   "api_prefixes": [],
+   "dynamic_sql": false,
+   "imports": [
+    "core:db",
+    "helper:legal_params",
+    "helper:tax_calc"
+   ],
+   "kind": "mod",
+   "module_key": "arap",
+   "path": "backend/modules/arap/receivables.py",
+   "role": "helper",
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [
+    "quotations",
+    "users"
+   ],
+   "tables_w": []
   },
   "mod:crm/__init__": {
    "api_prefixes": [],
@@ -4737,27 +5156,27 @@
    "kind": "page",
    "path": "frontend/pages/approval-queue.html",
    "routers_called": [
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "router:auth",
     "router:case_extra_expenses",
     "router:completion_notes",
-    "router:invoice_vouchers",
-    "router:payment_requests",
     "router:quotations",
     "router:uploads",
     "router:vouchers"
    ],
    "routers_called_effective": [
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
     "router:auth",
     "router:case_extra_expenses",
     "router:completion_notes",
-    "router:invoice_vouchers",
-    "router:payment_requests",
     "router:quotations",
     "router:uploads",
     "router:vouchers"
@@ -4892,6 +5311,8 @@
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "mod:daily_tasks/api",
     "mod:netplan/api",
     "mod:subcontract/api/contractor_vouchers",
@@ -4905,11 +5326,9 @@
     "router:case_extra_expenses",
     "router:completion_notes",
     "router:customers",
-    "router:invoice_vouchers",
     "router:legal_params",
     "router:material_orders",
     "router:parts",
-    "router:payment_requests",
     "router:quotations",
     "router:system",
     "router:uploads",
@@ -4968,11 +5387,10 @@
    "path": "frontend/pages/cashier.html",
    "routers_called": [],
    "routers_called_effective": [
-    "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "router:accounting_export",
-    "router:cashier",
     "router:quotations"
    ],
    "tables_r": [],
@@ -5884,19 +6302,19 @@
    "kind": "page",
    "path": "frontend/pages/payment-request-form.html",
    "routers_called": [
+    "mod:arap/api/payment_requests",
     "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:payment_requests",
     "router:quotations"
    ],
    "routers_called_effective": [
+    "mod:arap/api/payment_requests",
     "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
     "router:material_orders",
-    "router:payment_requests",
     "router:quotations"
    ],
    "tables_r": [],
@@ -6125,10 +6543,10 @@
    "routers_called": [],
    "routers_called_effective": [
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:netplan/api",
     "router:case_action_items",
     "router:case_extra_expenses",
-    "router:cashier",
     "router:company_lookup",
     "router:material_orders",
     "router:org_structure",
@@ -6802,9 +7220,7 @@
     "helper:legal_params",
     "helper:module_registry",
     "helper:part_catalog",
-    "helper:receivables",
     "helper:settings",
-    "helper:tax_calc",
     "helper:tiered_approval",
     "helper:xlsx_out"
    ],
@@ -6815,7 +7231,6 @@
     "helper:company_identity",
     "helper:legal_params",
     "helper:part_catalog",
-    "helper:receivables",
     "helper:settings",
     "helper:xlsx_out",
     "plat:registry"
@@ -6826,43 +7241,43 @@
    "routes": [
     {
      "func": "get_t100_export_config",
-     "line": 207,
+     "line": 213,
      "method": "GET",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "set_t100_export_config",
-     "line": 224,
+     "line": 230,
      "method": "PUT",
      "path": "/api/settings/t100-export-config"
     },
     {
      "func": "t100_export_vouchers",
-     "line": 476,
+     "line": 484,
      "method": "GET",
      "path": "/api/reports/t100-export/vouchers"
     },
     {
      "func": "t100_export_preview",
-     "line": 500,
+     "line": 508,
      "method": "GET",
      "path": "/api/reports/t100-export/preview"
     },
     {
      "func": "t100_export_confirm",
-     "line": 529,
+     "line": 537,
      "method": "POST",
      "path": "/api/reports/t100-export/confirm"
     },
     {
      "func": "t100_export_confirmed_list",
-     "line": 556,
+     "line": 564,
      "method": "GET",
      "path": "/api/reports/t100-export/confirmed"
     },
     {
      "func": "t100_export_unconfirm",
-     "line": 590,
+     "line": 598,
      "method": "POST",
      "path": "/api/reports/t100-export/unconfirm"
     }
@@ -7528,80 +7943,6 @@
     "system_settings"
    ]
   },
-  "router:cashier": {
-   "api_prefixes": [
-    "/api/cashier"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:auth",
-    "helper:legal_params",
-    "helper:module_registry",
-    "helper:receivables",
-    "helper:settings",
-    "helper:tax_calc",
-    "helper:xlsx_out"
-   ],
-   "imports": [
-    "core:db",
-    "helper:auth",
-    "helper:receivables",
-    "helper:tax_calc",
-    "helper:xlsx_out",
-    "plat:registry"
-   ],
-   "kind": "router",
-   "path": "backend/routers/cashier.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "get_payable_queue",
-     "line": 146,
-     "method": "GET",
-     "path": "/api/cashier/payable-queue"
-    },
-    {
-     "func": "get_receivable_queue",
-     "line": 157,
-     "method": "GET",
-     "path": "/api/cashier/receivable-queue"
-    },
-    {
-     "func": "get_bonus_queue",
-     "line": 170,
-     "method": "GET",
-     "path": "/api/cashier/bonus-queue"
-    },
-    {
-     "func": "get_execution_history",
-     "line": 220,
-     "method": "GET",
-     "path": "/api/cashier/execution-history"
-    },
-    {
-     "func": "export_execution_history",
-     "line": 234,
-     "method": "GET",
-     "path": "/api/cashier/export"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "contractor_payment_vouchers",
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "contractor_payment_vouchers",
-    "quotations",
-    "sessions",
-    "users"
-   ],
-   "tables_w": [],
-   "tables_w_transitive": [
-    "system_settings"
-   ]
-  },
   "router:company_lookup": {
    "api_prefixes": [
     "/api/company",
@@ -8192,159 +8533,6 @@
    "tables_w": [],
    "tables_w_transitive": [
     "audit_log",
-    "notifications",
-    "system_settings"
-   ]
-  },
-  "router:invoice_vouchers": {
-   "api_prefixes": [
-    "/api/invoice-vouchers"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:legal_params",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:row_access",
-    "helper:settings",
-    "helper:tax_calc",
-    "helper:tiered_approval",
-    "helper:uploads"
-   ],
-   "imports": [
-    "core:db",
-    "core:pdf_gen",
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:legal_params",
-    "helper:tax_calc",
-    "helper:tiered_approval",
-    "helper:uploads",
-    "plat:registry",
-    "plat:txn"
-   ],
-   "kind": "router",
-   "path": "backend/routers/invoice_vouchers.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_invoice_vouchers",
-     "line": 212,
-     "method": "GET",
-     "path": "/api/invoice-vouchers"
-    },
-    {
-     "func": "get_invoice_voucher_remaining",
-     "line": 235,
-     "method": "GET",
-     "path": "/api/invoice-vouchers/remaining"
-    },
-    {
-     "func": "get_invoice_voucher",
-     "line": 256,
-     "method": "GET",
-     "path": "/api/invoice-vouchers/{voucher_no}"
-    },
-    {
-     "func": "create_invoice_voucher",
-     "line": 271,
-     "method": "POST",
-     "path": "/api/invoice-vouchers"
-    },
-    {
-     "func": "delete_invoice_voucher",
-     "line": 434,
-     "method": "DELETE",
-     "path": "/api/invoice-vouchers/{voucher_no}"
-    },
-    {
-     "func": "submit_invoice_voucher",
-     "line": 459,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/submit"
-    },
-    {
-     "func": "approve_invoice_voucher",
-     "line": 520,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/approve"
-    },
-    {
-     "func": "revoke_invoice_voucher_approval",
-     "line": 629,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/revoke-approval"
-    },
-    {
-     "func": "reject_invoice_voucher",
-     "line": 669,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/reject"
-    },
-    {
-     "func": "download_invoice_voucher_pdf",
-     "line": 715,
-     "method": "GET",
-     "path": "/api/invoice-vouchers/{voucher_no}/pdf-download"
-    },
-    {
-     "func": "record_invoice_voucher_export",
-     "line": 742,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/export"
-    },
-    {
-     "func": "upload_invoice_voucher_issued_files",
-     "line": 770,
-     "method": "POST",
-     "path": "/api/invoice-vouchers/{voucher_no}/issued-files"
-    },
-    {
-     "func": "delete_invoice_voucher_issued_file",
-     "line": 799,
-     "method": "DELETE",
-     "path": "/api/invoice-vouchers/{voucher_no}/issued-files/{file_id}"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "customers",
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "case_stages",
-    "customers",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "invoice_vouchers",
-    "payment_requests",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "invoice_vouchers"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "invoice_vouchers",
     "notifications",
     "system_settings"
    ]
@@ -9092,149 +9280,6 @@
     "audit_log",
     "notifications",
     "parts",
-    "system_settings"
-   ]
-  },
-  "router:payment_requests": {
-   "api_prefixes": [
-    "/api/payment-requests"
-   ],
-   "dynamic_sql": false,
-   "helpers_transitive": [
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:legal_params",
-    "helper:mail_types",
-    "helper:module_registry",
-    "helper:notification_prefs",
-    "helper:row_access",
-    "helper:settings",
-    "helper:tiered_approval"
-   ],
-   "imports": [
-    "core:db",
-    "core:pdf_gen",
-    "helper:audit",
-    "helper:auth",
-    "helper:case_access",
-    "helper:email_notify",
-    "helper:errors",
-    "helper:google_calendar",
-    "helper:legal_params",
-    "helper:tiered_approval",
-    "plat:registry",
-    "plat:txn"
-   ],
-   "kind": "router",
-   "path": "backend/routers/payment_requests.py",
-   "registered": true,
-   "routes": [
-    {
-     "func": "list_payment_requests",
-     "line": 308,
-     "method": "GET",
-     "path": "/api/payment-requests"
-    },
-    {
-     "func": "get_payment_request_remaining",
-     "line": 331,
-     "method": "GET",
-     "path": "/api/payment-requests/remaining"
-    },
-    {
-     "func": "get_payment_request",
-     "line": 348,
-     "method": "GET",
-     "path": "/api/payment-requests/{request_no}"
-    },
-    {
-     "func": "create_payment_request",
-     "line": 363,
-     "method": "POST",
-     "path": "/api/payment-requests"
-    },
-    {
-     "func": "update_payment_request",
-     "line": 455,
-     "method": "PUT",
-     "path": "/api/payment-requests/{request_no}"
-    },
-    {
-     "func": "delete_payment_request",
-     "line": 553,
-     "method": "DELETE",
-     "path": "/api/payment-requests/{request_no}"
-    },
-    {
-     "func": "submit_payment_request",
-     "line": 578,
-     "method": "POST",
-     "path": "/api/payment-requests/{request_no}/submit"
-    },
-    {
-     "func": "approve_payment_request",
-     "line": 639,
-     "method": "POST",
-     "path": "/api/payment-requests/{request_no}/approve"
-    },
-    {
-     "func": "revoke_payment_request_approval",
-     "line": 747,
-     "method": "POST",
-     "path": "/api/payment-requests/{request_no}/revoke-approval"
-    },
-    {
-     "func": "reject_payment_request",
-     "line": 787,
-     "method": "POST",
-     "path": "/api/payment-requests/{request_no}/reject"
-    },
-    {
-     "func": "download_payment_request_pdf",
-     "line": 833,
-     "method": "GET",
-     "path": "/api/payment-requests/{request_no}/pdf-download"
-    },
-    {
-     "func": "record_payment_request_export",
-     "line": 860,
-     "method": "POST",
-     "path": "/api/payment-requests/{request_no}/export"
-    }
-   ],
-   "tables_ddl": [],
-   "tables_named": [],
-   "tables_r": [
-    "customers",
-    "quotations"
-   ],
-   "tables_r_transitive": [
-    "approval_delegates",
-    "case_stages",
-    "customers",
-    "daily_tasks",
-    "departments",
-    "dev_cases",
-    "divisions",
-    "invoice_vouchers",
-    "payment_requests",
-    "projects",
-    "quotations",
-    "sessions",
-    "shipping_notes",
-    "users"
-   ],
-   "tables_w": [
-    "payment_requests"
-   ],
-   "tables_w_transitive": [
-    "audit_log",
-    "notifications",
-    "payment_requests",
     "system_settings"
    ]
   },
@@ -11315,9 +11360,9 @@
     "core:pdf_gen",
     "helper:recognition",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
     "mod:subcontract/api/vendor_contractors",
     "router:accounting_export",
-    "router:cashier",
     "router:quotations"
    ],
    "tables_r": [],
@@ -11429,8 +11474,8 @@
    "readers": [
     "core:archive",
     "mod:analytics/api/dashboard",
-    "router:invoice_vouchers",
-    "router:payment_requests",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
     "router:search"
    ],
    "tables_r": [],
@@ -11744,7 +11789,7 @@
    "tables_w": [],
    "writers": [
     "core:db",
-    "router:invoice_vouchers"
+    "mod:arap/api/invoice_vouchers"
    ]
   },
   "table:item_reads": {
@@ -11981,7 +12026,7 @@
    "tables_r": [],
    "tables_w": [],
    "writers": [
-    "router:payment_requests"
+    "mod:arap/api/payment_requests"
    ]
   },
   "table:payslip_seq": {
@@ -12106,11 +12151,14 @@
     "helper:case_stage_tasks",
     "helper:company_identity",
     "helper:google_calendar",
-    "helper:receivables",
     "helper:recognition",
     "helper:voucher_attachments",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:arap/receivables",
     "mod:crm/api",
     "mod:payroll/api/bonus",
     "mod:payroll/bonus_payouts",
@@ -12119,13 +12167,10 @@
     "mod:supply/api/shipping_notes",
     "router:case_action_items",
     "router:case_extra_expenses",
-    "router:cashier",
     "router:completion_notes",
-    "router:invoice_vouchers",
     "router:item_reads",
     "router:map_points",
     "router:material_orders",
-    "router:payment_requests",
     "router:search",
     "router:system",
     "router:vouchers"
@@ -12527,12 +12572,12 @@
     "helper:case_deadlines",
     "helper:email_notify",
     "helper:google_calendar",
-    "helper:receivables",
     "helper:recognition",
     "helper:system_checks",
     "helper:tiered_approval",
     "mod:analytics/api/dashboard",
     "mod:analytics/api/reports",
+    "mod:arap/receivables",
     "mod:crm/api",
     "mod:daily_tasks/api",
     "mod:payroll/api/bonus",

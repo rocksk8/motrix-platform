@@ -12,7 +12,6 @@ import pytest
 from tests.test_money_round_half_up_2026_09_26 import (  # noqa: E402,F401  含 fixture
     _hdr,
     _insert_dispatch_row,
-    _patch_entries,
     _stock,
 )
 
