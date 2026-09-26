@@ -2,6 +2,7 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 17:46 D：**S2-S1 關閉（fd5af159）**：真 Playwright 失敗走完整 pytest 回報（-rA -l、junitxml、-n 0／-n 2）⇒ Bearer／authorization／?pt=／?q= 0 外洩，只剩無鍵名裸值（assert 訊息／print／-l 區域變數）。O5S2-O2 更正：D 探針卡死是 evaluate 等永不 resolve 的 promise（探針自身錯）。b-o9 79b89eef 通過：O9a／O9b 突變紅；觀察看門狗不涵蓋題目本體。
 - 2026-09-26 17:46 C：wip/c-approval-2 49dcb781 上月台（/detail 改 `approval.detail`）；ROADMAP P8 記「自訂模組單據轉簽本輪不加」（7e739035）。M01 詳情端點剩下的直讀只有 M01 自己的表（quotations、completion_notes、case_extra_expenses、case_change_requests）。
 - 2026-09-26 17:34 D：a-attachments afcfb513 **AT-M1 待主持裁示**（列出／預覽／帶入只看傳票模組權限、不看原單據可見性；IP-21 契約無 user 參數，建議現在加）；M04 不在的 notice／400 突變紅、已帶入附件 D 探針不受影響、§B-11 5 紅皆允許；建議 AT-S1（M06-PLAN §5 b 列已達成、守門檔尚未存在）、AT-S2（case_update 壞 JSON 吞成空無題）。a-analytics-dispatch ef3b9f60 抽查通過（skip 是真的需要 M04、原因寫明、M04 在時照跑）。
 - 2026-09-26 17:33 主持：使用者表單「全量開發完成才跑」⇒ 第十班起列車不跑全量（PLAYBOOK §G4 第 4 步更正、CORE-SPEC 裁示表）；第九班已在跑的全量照跑完。裁示 B：①產生檔提案採 §7 合一方案（分支不動產生檔、modtest 現場產生、「是否最新」三題只在列車跑）交 B 實作；②e2e 每題加死線（永不回應的 promise 會等到 renderer crash 50～400 秒）交 B。交互紅紀錄：第四班 4、第五班 2、第六班 5、第七班 2、第八班 1（全量抓到、分支沒抓到）。
