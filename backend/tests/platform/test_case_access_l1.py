@@ -35,9 +35,11 @@ KNOWN_L1 = {
     "routers/item_reads.py": "r", "routers/search.py": "r", "routers/system.py": "r",
     # 第六班列車交會（c-case-access × b-m08-3，2026-09-26）：以下兩檔不是新增的讀取，是既有讀取換了歸屬——
     # receivables.py＝M08 routers/reports.py 的應收收集逐字下沉 L1（主持裁示 a，ROADMAP A8b 中繼，M05 搬遷時收回）；
-    # map_points.py＝地圖依 2026-09-21 使用者裁示歸 L1（b-m08-3 6838ade7 改 modules.json 歸屬）。待主持／D 確認；切斷後自本基線刪除。
+    # map_points.py＝地圖依 2026-09-21 使用者裁示歸 L1（b-m08-3 6838ade7 改 modules.json 歸屬）。
+    # 主持裁示（RUN-PLAN §6，2026-09-26）：接受為有到期條件的例外；D 稽核確認是歸屬改變（AUDIT-D-C-case-access §6）。
+    # 到期不靠人記：test_known_l1_baseline_is_not_stale（CA-S3）。兩筆都已到期、已刪：
     # 〔2026-09-26 M05 搬遷：receivables 收回 modules/arap，L1 只剩轉呼叫 provider 的殼、不再讀 quotations ⇒ 自本基線刪除〕
-    "routers/map_points.py": "r",
+    # 〔2026-09-26 M01-PLAN §3-4：map_points 改走 M01 的 case.locations、不再讀 quotations ⇒ 自本基線刪除（到期題由紅轉綠）〕
 }
 OWNER = "helpers/case_access.py"
 

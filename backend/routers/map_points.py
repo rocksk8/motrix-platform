@@ -25,6 +25,7 @@ import copy
 import datetime
 import hashlib
 import json
+from helpers.case_access import SYSTEM   # L1 背景預熱用的系統身分（case.locations）
 import logging
 import threading
 import time
@@ -170,10 +171,10 @@ def _map_geocode_backlog():
 
         # `MP6`：案件交貨地點也進背景預熱（規格：走既有地址定位階梯與背景預熱）。
         #   📌 這裡不看權限——它只決定「先查哪些地址」，讀出來時照樣過 `_case_points` 的篩選。
-        for r in conn.execute("SELECT data_json FROM quotations").fetchall():
-            addr = _case_address(r["data_json"])
-            if addr:
-                out.append(addr)
+        #   2026-09-26：經 M01 的 `case.locations`（系統身分：只決定預熱順序，不回給任何人）；M01 不在 ⇒ 沒有案件地址
+        loc = _case_locations()
+        if loc is not None:
+            out += [c["address"] for c in loc.list(conn, SYSTEM) if c["address"]]
     return out
 
 
@@ -319,21 +320,14 @@ CASE_MODULES = ("case_manage", "quotation")
 CASE_LABEL = "案件地點"
 
 
-def _case_address(data_json):
-    """一個案件的交貨地點：案件合約的交貨地址優先，其次報價單的交貨地點。**一案一點。**
+#: M01 不在時對使用者說的話（地圖的來源說明）
+CASES_MODULE_ABSENT = "案件模組未安裝：地圖上不會顯示案件交貨地點"
 
-    📌 合約的交貨地址是成案後填的、比較準；報價時的「交貨地點」可能只是說明文字。
-    ⚠️ 讀不到／壞掉的 JSON ⇒ 回空字串（那一筆算「沒有地點」，不拖垮其他筆）。
-    """
-    try:
-        data = json.loads(data_json or "{}")
-    except (TypeError, ValueError):
-        return ""
-    if not isinstance(data, dict):
-        return ""
-    contract = ((data.get("caseRecord") or {}).get("contract") or {})         if isinstance(data.get("caseRecord"), dict) else {}
-    addr = str((contract.get("deliveryAddress") if isinstance(contract, dict) else "") or "").strip()
-    return addr or str(data.get("deliveryLocation") or "").strip()
+
+def _case_locations():
+    """M01 的 `case.locations`（2026-09-26 起地圖不直接讀 quotations）；None ⇒ 案件模組未安裝。"""
+    from core import registry
+    return registry.single_provider("case.locations")
 
 
 def _may_see_cases(user) -> bool:
@@ -348,29 +342,17 @@ def _may_see_cases(user) -> bool:
     return any(m in mods for m in CASE_MODULES)
 
 
-def _case_rows_visible_to(user, rows):
-    """🔴 **逐筆**套用案件可見性：非 admin／superadmin 只看得到自己名下或被分配的案件。
-
-    ☠️ 只擋模組的話，有 `case_manage` 的業務會在地圖上看到**別的業務的客戶與工地地址**——
-       而案件管理頁刻意不給他看（`list_quotations` 的過濾）。
-    🔑 判準與列表是同一份：L1 `row_access` 的 `case`，scope="read"（admin+／擁有者／
-       被分配／cashier，CM14b）。以前這裡自己再寫一次 admin 與 cashier 例外——兩套規則會
-       漂移，而漂移的那一天沒有任何題會紅（search 與動態牆就是這樣漂掉的）。
-    """
-    return [r for r in rows if row_access.visible("case", user or {}, r, scope="read")]
-
-
 def _case_points(user, located, budget=None):
     """案件地點。回 `(points, 沒有地點或定位不到的筆數)`——兩者都只算**這個人看得到的**案件。"""
+    loc = _case_locations()
+    if loc is None:
+        return [], 0                          # M01 不在 ⇒ 沒有案件點（呼叫端在 source_info 帶 module_absent 並明說）
     with db_conn() as conn:
-        rows = conn.execute(
-            "SELECT id, quote_no, customer_name, project_name, deal_tag, data_json, "
-            "sales_person_id, sales_person, assigned_user_ids FROM quotations ORDER BY id DESC").fetchall()
-    rows = _case_rows_visible_to(user, rows)
+        rows = loc.list(conn, user)           # 可見性由 M01 判（row_access `case`／read，同案件列表）
     budget = budget or _GeocodeBudget()
     points, missing = [], 0
     for r in rows:
-        addr = _case_address(r["data_json"])
+        addr = r["address"]
         if not addr:
             continue          # 沒填交貨地點的案件很多（報價階段）——不算「定位不到」
         found = budget.locate(addr)
@@ -611,10 +593,8 @@ def _data_fingerprint():
                 h.update(("missing:" + t).encode())
         # `MP6`：案件只取會影響地圖的欄位（整張 data_json 太大）；可見性欄位也在內（分配變了要失效）。
         #   ⚠️ 只改 data_json 而沒動 updated_at 的寫入點，最多晚 60 秒（TTL）反映。
-        for row in conn.execute("SELECT quote_no, updated_at, deal_tag, customer_name, project_name, "
-                                "sales_person_id, sales_person, assigned_user_ids "
-                                "FROM quotations ORDER BY id"):
-            h.update(repr(tuple(row)).encode("utf-8", "replace"))
+        loc = _case_locations()
+        h.update((loc.fingerprint(conn) if loc is not None else "missing:cases").encode())
         row = conn.execute("SELECT COUNT(*), MAX(id), MAX(created_at) FROM geocode_cache").fetchone()
         h.update(repr(tuple(row)).encode())
     h.update(json.dumps(_company_profile(), sort_keys=True, ensure_ascii=False,
@@ -683,6 +663,10 @@ def _build_points(user, wanted):
         if not _may_see_cases(user):
             source_info.append({"source": "cases", "skipped": "no_permission", "count": 0,
                                 "note": f"沒有「{CASE_LABEL}」的權限，地圖上不會顯示這一類"})
+        elif _case_locations() is None:
+            # M01 不在（case.locations 沒有提供者）⇒ 明說，不是「0 筆」
+            source_info.append({"source": "cases", "skipped": "module_absent", "count": 0,
+                                "note": CASES_MODULE_ABSENT})
         else:
             pts, missing = _case_points(user, located, budget)
             for pt in pts:
