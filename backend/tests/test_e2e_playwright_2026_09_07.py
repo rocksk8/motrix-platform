@@ -50,6 +50,30 @@ def _login(page, base_url, username, password):
     return inject_login(page, base_url, username, password)
 
 
+def _create_diag(responses, sent, console, dialogs, state, now=None):
+    """建立端逾時的證據（O11）：送出但沒有回應的請求（最久的在前）、每一趟 next-quote-no／POST quotations 的狀態與回應開頭、
+    console、對話框、畫面狀態。純函式（題目用）。"""
+    now = time.time() if now is None else now
+    done = {}
+    for r in responses:
+        done.setdefault((r["method"], r["url"]), []).append(r)
+    pending = []
+    for t0, m, u in sent:
+        lst = done.get((m, u))
+        if lst:
+            lst.pop(0)
+        else:
+            pending.append((t0, m, u))
+    lines = ["畫面狀態：%r" % (state,), "送出而沒有回應的請求（%d）：" % len(pending)]
+    lines += ["  %6.1fs  %s /api/%s" % (now - t0, m, u.split("?")[0]) for t0, m, u in sorted(pending)] or ["  （無）"]
+    lines.append("存檔相關回應：")
+    key = [r for r in responses if "next-quote-no" in r["url"] or r["url"].rstrip("/").endswith("quotations")]
+    lines += ["  %s /api/%s ⇒ %s %s" % (r["method"], r["url"].split("?")[0], r["status"], (r.get("resp") or "")[:120]) for r in key] or ["  （無）"]
+    lines.append("console：%s" % (console[-10:] or "（無）"))
+    lines.append("對話框：%s" % (dialogs or "（無）"))
+    return "\n".join(lines)
+
+
 @pytest.mark.e2e
 def test_login_create_submit_approve_smoke(live_server, make_user, e2e_browser):
     """golden path：建立者登入 → 新增報價單（客戶/案件/一項品項）→ 送出審核
@@ -150,16 +174,32 @@ def test_login_create_submit_approve_smoke(live_server, make_user, e2e_browser):
     # 45 秒不是隨便給的：db.py 的 `sqlite3.connect(timeout=30)` 表示任何一次
     # 寫入在鎖被佔住時最多會等 30 秒。建立報價單在 commit 之後還要再寫
     # notification／audit_log／module activity 各自開新連線，只要此時有背景
-    # 排程（月報、逾期檢查等，整個 pytest session 期間都在跑）正在寫，
+    # ~~排程（月報、逾期檢查等，整個 pytest session 期間都在跑）~~正在寫，
     # 這支 POST 就會卡滿一輪 30 秒才回來。時限必須容得下它，否則測試會在
     # 「其實只是慢」的情況下報失敗。
-    page1.wait_for_function(
-        "() => { const el = document.querySelector('[x-data]');"
-        " const d = el && window.Alpine && Alpine.$data(el);"
-        " return d && d.isNewRecord === false"
-        "   && (d.q && d.q.quoteNo || '').includes('MQ-'); }",
-        timeout=45000,
-    )
+    # 〔更正（B，2026-09-26，O11）：測試期間背景排程**是關的**（conftest 設 MOTRIX_DISABLE_SCHEDULERS=1、main.py 整批略過）
+    #   ⇒ 「排程寫入佔住 sqlite 鎖」在測試裡不會發生，第九班列車長據此判「已知等待」不成立。
+    #   鎖的來源若存在，只剩同一行程裡的其他寫入（其他頁面的輪詢、_async_send 的寄信紀錄等）。
+    #   在 -n 2 e2e 負載下重跑 6 次皆過（16～26 秒）、未重現 ⇒ 逾時時改成把建立端的請求時間線一起印出來（下面的 _create_diag），
+    #   下次紅就有直接證據：POST 有沒有送出、回了什麼、哪一支還沒回〕
+    try:
+        page1.wait_for_function(
+            "() => { const el = document.querySelector('[x-data]');"
+            " const d = el && window.Alpine && Alpine.$data(el);"
+            " return d && d.isNewRecord === false"
+            "   && (d.q && d.q.quoteNo || '').includes('MQ-'); }",
+            timeout=45000,
+        )
+    except Exception as _wait_err:                            # noqa: BLE001 逾時要帶證據（O11）
+        try:
+            _state_now = page1.evaluate(
+                "() => { const el = document.querySelector('[x-data]');"
+                " const d = el && window.Alpine && Alpine.$data(el); if (!d) return null;"
+                " return { quoteNo: d.q && d.q.quoteNo, isNewRecord: d.isNewRecord, saving: d.saving }; }")
+        except Exception as _e:                              # noqa: BLE001
+            _state_now = "<讀取失敗 %s>" % _e
+        pytest.fail("建立端等「存檔完成」逾時（O11）：%s\n%s"
+                    % (type(_wait_err).__name__, _create_diag(_p1, _p1_sent, _p1_console, _p1_dialogs, _state_now)))
 
     quote_no = page1.locator(".form-quote-no").inner_text().strip()
     # ctx1 等一下就關了，先把建立端的最終狀態留下來給診斷用
@@ -556,3 +596,15 @@ def test_case_finance_summary_smoke(live_server, make_user, e2e_browser):
     detail_text = overview.inner_text()
     assert "AB12345678" in detail_text, \
         f"草稿精算的額外支出單號要顯示，實際總覽文字: {detail_text!r}"
+
+
+def test_o11_create_diag_names_the_pending_request_and_the_post_result():
+    """O11：逾時證據要點名「送出沒回應的請求」與存檔 POST 的狀態。突變：_create_diag 回空字串 ⇒ 紅。"""
+    sent = [(100.0, "GET", "next-quote-no"), (101.0, "POST", "quotations"), (102.0, "GET", "notifications?x=1")]
+    responses = [{"method": "GET", "url": "next-quote-no", "status": 200, "resp": '{"no":"MQ-1"}'},
+                 {"method": "POST", "url": "quotations", "status": 500, "resp": "database is locked"}]
+    text = _create_diag(responses, sent, ["[error] boom"], [], {"isNewRecord": True}, now=150.0)
+    assert "GET /api/notifications" in text and "48.0s" in text, text
+    assert "POST /api/quotations ⇒ 500 database is locked" in text, text
+    assert "isNewRecord" in text and "boom" in text
+
