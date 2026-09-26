@@ -325,7 +325,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `routers/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `routers/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `routers/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
 | 使用方 | M01 `routers/quotations.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源） |
 | 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
 | 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
@@ -342,7 +342,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | 提供者名稱＝單據類型：M04 `contractor_voucher`（`modules/subcontract/api/contractor_vouchers.py::queue_detail`）、M05 `invoice_voucher`（`modules/arap/api/invoice_vouchers.py::queue_detail`）、`payment_request`（`modules/arap/api/payment_requests.py::queue_detail`）、M03 `shipping_note`（`routers/shipping_notes.py::_queue_detail`）。付款／開票類共用 L1 `helpers/approval_queue.snapshot_doc_detail(row)`（含存簿圖片只收 `data:image/` 的安全過濾） |
+| 提供方 | 提供者名稱＝單據類型：M04 `contractor_voucher`（`modules/subcontract/api/contractor_vouchers.py::queue_detail`）、M05 `invoice_voucher`（`modules/arap/api/invoice_vouchers.py::queue_detail`）、`payment_request`（`modules/arap/api/payment_requests.py::queue_detail`）、M03 `shipping_note`（`modules/supply/api/shipping_notes.py::_queue_detail`）。付款／開票類共用 L1 `helpers/approval_queue.snapshot_doc_detail(row)`（含存簿圖片只收 `data:image/` 的安全過濾） |
 | 使用方 | M01 `GET /api/approval-queue/detail?type=&id=`：M01 自己的報價單、完工單、額外支出、已結案變更在端點內；其他類型取提供者，再由 M01 做每案權限（`_guard_queue_detail`）、案件抬頭（`_case_header`）、金額遮蔽（`_can_see_queue_money`／`_mask_money`） |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.detail")`，以類型名取一個） |
 | 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files"} \| None` |

@@ -77,4 +77,8 @@ def test_voucher_aliases_are_the_l1_objects():
 def test_m01_approval_queue_no_longer_imports_m06():
     src = (BACKEND / "routers" / "quotations.py").read_text(encoding="utf-8")
     assert "from helpers.voucher import parse_approval_json" not in src
-    assert "from helpers.tiered_approval import parse_approval_json" in src
+    # 〔更正（C，M01-PLAN §3-7 c-approval）：~~M01 改自 L1 tiered_approval 解析~~ 轉簽的傳票簽核鏈改由 M06 的
+    #  `approval.reassign` 提供者讀寫，M01 不再解析傳票；該提供者用的是 L1 的解析〕
+    assert "parse_approval_json" not in src
+    vsrc = (BACKEND / "routers" / "vouchers.py").read_text(encoding="utf-8")
+    assert "from helpers.tiered_approval import parse_approval_json, ApprovalChainUnreadable" in vsrc

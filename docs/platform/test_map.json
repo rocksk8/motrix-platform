@@ -2,11 +2,11 @@
  "generated_by": "tools/platform/test_map.py",
  "note": "units 命名同 dep_graph.json（router:/helper:/core:/page:/js:），其餘 file:<路徑>、dir:<目錄>/（該目錄下任一檔）；evidence 為 repo 路徑。靜態分析，對不到的列 unmapped 不猜。",
  "summary": {
-  "tests": 674,
+  "tests": 675,
   "unmapped": 7,
   "kinds": {
    "audit": 89,
-   "api": 366,
+   "api": 367,
    "unit": 57,
    "e2e": 162
   },
@@ -5273,10 +5273,45 @@
     "path": [
      "backend/helpers/tiered_approval.py",
      "backend/routers/quotations.py",
+     "backend/routers/vouchers.py",
      "docs/platform/",
      "docs/platform/modules.json"
     ]
    }
+  },
+  "backend/tests/platform/test_approval_providers.py": {
+   "kind": "api",
+   "units": [
+    "core:db",
+    "dir:backend/modules/arap/",
+    "dir:backend/modules/subcontract/",
+    "dir:backend/modules/supply/",
+    "file:backend/routers/__init__.py",
+    "plat:__init__",
+    "plat:registry",
+    "plat:source_tree",
+    "router:quotations"
+   ],
+   "evidence": {
+    "import": [
+     "backend/core/__init__.py",
+     "backend/core/registry.py",
+     "backend/core/source_tree.py",
+     "backend/db.py",
+     "backend/routers/__init__.py",
+     "backend/routers/quotations.py"
+    ],
+    "api": [
+     "backend/routers/quotations.py"
+    ],
+    "path": [
+     "backend/modules/arap/",
+     "backend/modules/subcontract/",
+     "backend/modules/supply/",
+     "backend/routers/quotations.py"
+    ]
+   },
+   "login_fixture": true
   },
   "backend/tests/platform/test_auth_login_contract.py": {
    "kind": "api",
@@ -7561,11 +7596,17 @@
   "backend/tests/test_approval_queue_covers_every_doc_type_2026_09_24.py": {
    "kind": "unit",
    "units": [
-    "helper:tiered_approval"
+    "helper:custom_modules",
+    "helper:tiered_approval",
+    "router:vouchers"
    ],
    "evidence": {
     "import": [
      "backend/helpers/tiered_approval.py"
+    ],
+    "path": [
+     "backend/helpers/custom_modules.py",
+     "backend/routers/vouchers.py"
     ]
    }
   },

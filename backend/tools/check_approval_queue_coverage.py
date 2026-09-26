@@ -78,6 +78,7 @@ _OWNER_MODULE = {
     "invoice_voucher":    "arap",
     "payment_request":    "arap",
     "bonus":              "payroll",
+    "shipping":           "supply",
 }
 
 
