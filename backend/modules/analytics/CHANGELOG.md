@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.2 — 2026-09-26
+- `_compute_achievement(…, name_to_id=None)`：名字⇒帳號對照可由呼叫端給；沒給才查 `users`（行為不變）。原本無條件查資料庫 ⇒ `test_achievement_uses_same_attribution_as_performance` 不帶 client 單獨跑就紅（A 在 M03 反向控制查到，主持轉 M08）；該題改給空對照，另加「給了對照就用 id 比對」一題（含解析不到的正對照）
+
 ## 1.0.1 — 2026-09-26
 - 稽核 ⑰（AUDIT-X-B-M08-move）建議與觀察：
   - `sales-orders.html`（轉址到案件管理）改歸 M01：資料端點本來就在 M01，模組不在時舊書籤不應看到「需要營運分析」（S-8）

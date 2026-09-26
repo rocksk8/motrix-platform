@@ -115,10 +115,24 @@ def test_achievement_uses_same_attribution_as_performance():
          "salesPerson": "黃玉龍", "salesPersonId": 2,
          "ownerKey": ["name", "高晟耀"], "ownerName": "高晟耀"},
     ]
-    r = rp._compute_achievement(2026, targets, cases)
+    # 純函式用法：名字⇒帳號對照由呼叫端給（空的＝目標設定的名字都解析不到帳號 ⇒ 比名字）。
+    # 〔原本不給 ⇒ 函式自己查 users ⇒ 單獨跑這一題就紅（沒有建庫）；見 _compute_achievement 的說明〕
+    r = rp._compute_achievement(2026, targets, cases, name_to_id={})
     sp = {s["name"]: s for s in r["salesperson"]}
     assert sp["高晟耀"]["ytdCases"] == 1, sp
     assert sp["高晟耀"]["ytdRevenue"] == 300_000
+
+
+def test_achievement_matches_by_id_when_the_name_resolves():
+    """給了對照：目標設定的名字解析到帳號 ⇒ 用 id 比對（業務員改名後舊案件仍算得到）。純函式、不碰資料庫。"""
+    targets = {"year": 2026, "annual": {}, "salesperson": [{"name": "新名字", "revenue": 100_000, "cases": 1}]}
+    cases = [{"total": 80_000, "pretax": 80_000, "receivedAmount": 0, "settleStatus": "finalized", "grossProfit": 0,
+              "actualMarginPct": 0.0, "quoteDate": "2026-03-01", "wonMonth": "2026-03",
+              "salesPerson": "舊名字", "salesPersonId": 42, "ownerKey": ["id", 42], "ownerName": "舊名字"}]
+    got = {s["name"]: s for s in rp._compute_achievement(2026, targets, cases, name_to_id={"新名字": 42})["salesperson"]}
+    assert got["新名字"]["ytdRevenue"] == 80_000
+    miss = {s["name"]: s for s in rp._compute_achievement(2026, targets, cases, name_to_id={})["salesperson"]}
+    assert miss["新名字"]["ytdRevenue"] == 0, "正對照：解析不到帳號 ⇒ 名字對不上就不算"
 
 
 def test_owner_key_fallback_keeps_legacy_callers_working():

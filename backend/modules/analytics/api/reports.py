@@ -559,7 +559,7 @@ def _owner_key_of(c: dict) -> tuple:
     return ("name", c.get("salesPerson") or "（未指定）")
 
 
-def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
+def _compute_achievement(year: int, targets: dict, cases_all: list, name_to_id: dict = None) -> dict:
     """Compute YTD metrics vs annual targets for a given year.
 
     案件歸入哪一年用 c['wonMonth']（_collect() 算好的，見 quote_won_month_map()
@@ -616,9 +616,13 @@ def _compute_achievement(year: int, targets: dict, cases_all: list) -> dict:
     # 這裡把目標設定的名字解析成目前對應的 user id，案件比對優先用
     # salesPersonId（穩定 FK，不受改名影響）；查無對應使用者（名字打錯字、
     # 離職刪除帳號等）才退回原本的名字字串比對，不砍歷史涵蓋範圍。
-    conn4 = get_db()
-    name_to_id = {r["display_name"]: r["id"] for r in conn4.execute("SELECT id, display_name FROM users").fetchall()}
-    conn4.close()
+    # name_to_id 可由呼叫端給（純函式用法、單元題）；沒給才查 users。
+    # 〔2026-09-26 A 在 M03 反向控制查到：這裡原本無條件查資料庫 ⇒ 不帶 client 夾具單獨跑就 `no such table: users`，
+    #   只有排在建庫的題後面才綠——而這支函式被當成純函式呼叫（test_reports_sales_owner 的說明就這麼寫）〕
+    if name_to_id is None:
+        conn4 = get_db()
+        name_to_id = {r["display_name"]: r["id"] for r in conn4.execute("SELECT id, display_name FROM users").fetchall()}
+        conn4.close()
 
     sp_acv = []
     for sp_t in (targets.get("salesperson") or []):
