@@ -2,6 +2,7 @@
 
 ## 1.0.6 — 2026-09-26
 - D7 演練：`module.json` 宣告 `provides.probes`（`/api/dev-cases`、`/api/dev-logs/pending`、`/api/dev-crm/activity-stats`）——純讀的 GET、在本模組前綴下、模組在時回 200（守門 `tests/platform/test_product_drill_probes.py`、`test_probe_side_effects.py`：不寫表、不寄信、不排程、不把回應值寫進 log）
+- 選單宣告搬進本模組：`dev-crm.html` 的 `pages[].menu`（原寫在 L1 的 `core/menu_l1.json`；group／order／perm／badge 原值照搬）。階段 C／C4（主持裁示 A）：本模組不在時它的入口隨宣告一起消失，不再靠前端寫死的頁面⇒模組對照表；版號與 c-probes／h-probes 交會，列車取號
 
 ## 1.0.5 — 2026-09-26
 - 稽核 D M02-S2 觀察：補核准端點（刪除／重新連結）的外人題，並分開角色與列權限——建立者（有列權限）申請 403、管理員（不在名單）申請成功；外人／建立者／管理員核准 403 且資料不變，最高管理者核准成功；突變（兩個核准放寬成管理員、兩個申請不擋角色）皆紅〔原為 1.0.3（wip/c-m02-s2b 6e2e15a7）；第五班定 1.0.4 之後改號〕

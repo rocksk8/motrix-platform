@@ -9,6 +9,11 @@
 - L1（相容擴充）：`GET /api/platform/menu` 多回 `layout`（已套使用者角色版面的選單＋applied／skipped／dropped／errors／sources）；`groups`／`denied` 維持宣告版
 - L1（新增）：`core.menu.declaration(l1, mod_items)`——與使用者無關的選單宣告（build 的排序、不過濾、每項帶 perm）；過濾後＝build（同一使用者）
 - L1（新增）：`GET /static/sidebar.js` 前置 `window.MOTRIX_MENU = {v, groups, pageModules}`（`routers.platform_menu.sidebar_js_source`；模組狀態與自訂模組不放：要登入才拿得到）
+- L1（新增）：`core.menu.merge_custom(groups, customs)`、`core.menu.CUSTOM_DEFAULT_GROUP`——已發布自訂模組併進選單（依 menu.group 顯示名稱併組，否則新開組）
+- L1（新增）：`helpers.custom_modules.visible_to(mods, user)`——自訂模組可見性唯一一份；`GET /api/custom-modules` 與選單共用
+- L1（相容擴充）：`GET /api/platform/menu` 的 `layout.groups` 併入使用者看得到的自訂模組，另回 `layout.custom`（key 清單）；讀自訂模組失敗 ⇒ 列在 `layout.errors`
+- L1（宣告）：`core/menu_l1.json` 系統組新增「模組建構器」（module-builder.html，superadmin；原由 custom-modules-nav.js 追加）
+- 前端：`sidebar.js` 改讀 `MOTRIX_MENU`（首屏同步、權限同步過濾），session 後套 `layout`；`<html data-menu-state>`＝declared／layout／layout-failed；序號丟舊回應；`window.MotrixMenu.refresh()`；寫死的選單清單與 `MODULE_PAGES` 表移除；`custom-modules-nav.js` 刪除
 
 ## 1.36 — 2026-09-26（C，M01-PLAN §3-2：兩支通用函式下沉 L1；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
 > 介面只有新增；舊位置保留同名別名（同一物件）。

@@ -141,3 +141,64 @@ def test_menu_layout_error_is_reported_not_silent(client, make_user, monkeypatch
     menu = client.get("/api/platform/menu", headers=h).json()
     assert href in _flat(menu["layout"]["groups"])
     assert any(e["module"] == key for e in menu["layout"]["errors"]), menu["layout"]
+
+
+# ── 自訂模組併進 layout（C4 步驟 ③；STAGE-C L79 更正 ①：自訂模組是資料，只在登入後出現）────────────────
+
+def test_merge_custom_groups_order_and_no_mutation():
+    src = _groups()
+    customs = [{"key": "k_b", "name": "乙", "menu": {"group": "G", "order": 20}},
+               {"key": "k_a", "name": "甲", "menu": {"group": "G", "order": 10}},
+               {"key": "k c", "name": "丙", "menu": {}},
+               {"key": "k_d", "name": "丁", "menu": {"group": "新組", "order": 2000}}]
+    out = M.merge_custom(src, customs)
+    assert _hrefs(src) == _hrefs(_groups()), "不可以改到傳入的 groups"
+    g = {x["label"]: x for x in out}
+    assert [it["label"] for it in g["G"]["items"]][-2:] == ["甲", "乙"], "同名群組 ⇒ 併進去、排在最後、依 order"
+    assert [it["label"] for it in g[M.CUSTOM_DEFAULT_GROUP]["items"]] == ["丙"]
+    assert g[M.CUSTOM_DEFAULT_GROUP]["items"][0]["href"] == "custom-records.html?key=k%20c"
+    assert [x["label"] for x in out][-2:] == [M.CUSTOM_DEFAULT_GROUP, "新組"], "新開的組依第一次出現的順序排在最後"
+    assert all(it["custom"] and it["module"] is None for gg in out for it in gg["items"] if "custom" in it)
+
+
+def _publish_custom(client, h, key, name):
+    body = {"name": name, "permission": "custom.%s" % key,
+            "numbering": {"prefix": "ZQ", "date": "YYYYMMDD", "digits": 4},
+            "fields": [{"key": "item", "label": "項目", "type": "text"}],
+            "workflow": {"initial": "draft", "states": [{"key": "draft", "label": "草稿", "final": True}], "transitions": []}}
+    r = client.put("/api/definitions/custom_module/%s/draft" % key, headers=h, json={"body": body})
+    assert r.status_code == 200 and r.json()["problems"] == [], r.text
+    assert client.post("/api/definitions/custom_module/%s/publish" % key, headers=h, json={}).status_code == 200
+
+
+def _custom_labels(menu):
+    return [it["label"] for g in menu["layout"]["groups"] for it in g["items"] if it.get("custom")]
+
+
+def test_platform_menu_layout_carries_only_the_custom_modules_the_user_may_see(client, make_user):
+    h_sa = _login(client, make_user, "c4_cm_sa", "superadmin")
+    _publish_custom(client, h_sa, "c4_cm", "C4自訂甲")
+    assert "C4自訂甲" in _custom_labels(client.get("/api/platform/menu", headers=h_sa).json())
+    u, pw = make_user(username="c4_cm_no", role="engineer", modules=["dashboard"])
+    h_no = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    assert "C4自訂甲" not in _custom_labels(client.get("/api/platform/menu", headers=h_no).json())
+    u, pw = make_user(username="c4_cm_yes", role="engineer", modules=["dashboard", "custom.c4_cm"])
+    h_yes = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": pw}).json()["token"]}
+    menu = client.get("/api/platform/menu", headers=h_yes).json()
+    assert "C4自訂甲" in _custom_labels(menu)
+    # 與 /api/custom-modules 同一份過濾（helpers.custom_modules.visible_to）
+    for h in (h_sa, h_no, h_yes):
+        want = sorted(m["key"] for m in client.get("/api/custom-modules", headers=h).json())
+        assert sorted(client.get("/api/platform/menu", headers=h).json()["layout"]["custom"]) == want
+
+
+def test_custom_module_read_failure_is_reported_not_silent(client, make_user, monkeypatch):
+    from helpers import custom_modules as CM
+
+    def boom(conn):
+        raise RuntimeError("讀不到")
+    monkeypatch.setattr(CM, "published_modules", boom)
+    h = _login(client, make_user, "c4_cm_err", "superadmin")
+    menu = client.get("/api/platform/menu", headers=h).json()
+    assert menu["layout"]["groups"], "選單照常"
+    assert any(e["module"] is None and "自訂模組" in e["error"] for e in menu["layout"]["errors"]), menu["layout"]["errors"]

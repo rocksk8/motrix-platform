@@ -2,11 +2,11 @@
 """選單由登錄表產生（階段 C／C3，docs/platform/STAGE-C-DESIGN.md §4）。
 
 [單位] plat:menu    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ITEM_KEYS, MENU_L1, apply_layout, build, declaration, denied, load_l1, module_items, sidebar_point_id,
-    validate, visible
+[公開介面] CUSTOM_DEFAULT_GROUP, ITEM_KEYS, MENU_L1, apply_layout, build, check_l1_pages, declaration, denied, load_l1,
+    merge_custom, module_items, sidebar_point_id, validate, visible
 [不變式] 選單項只來自 core/menu_l1.json 與已載入模組的 pages[].menu；群組固定鍵、模組不可自開群組；群組顯示＝底下至少一項可見
-[契約題] tests/platform/test_menu_parity.py
-[注意] C3 期間與 sidebar.js 舊選單並行，兩邊都要改（對等守門）
+[契約題] tests/platform/test_menu.py
+[注意] C4 起 sidebar.js 讀 MOTRIX_MENU（declaration）與 /api/platform/menu 的 layout；選單不再有第二份定義
 
 來源：
   - `core/menu_l1.json`：群組（固定鍵，裁示 D4：模組不可以自己開群組）＋ L1 頁面的選單項
@@ -71,6 +71,14 @@ def validate(l1, mod_items=()):
         seen[it.get("href")] = where
     return problems
 
+
+
+def check_l1_pages(l1, module_pages):
+    """L1 選單項不可以指向**模組**宣告的頁面（STAGE-C L63：menu_l1 只放 L1 頁面）⇒ 問題清單。
+    module_pages：{頁名: 模組key}（各 module.json pages[].path；repo 層級的守門用 docs/platform/modules.json 登記的頁面）。
+    寫在 L1 的話，那個模組不在時入口照樣出現（C4 發現 7 項，主持裁示 A 搬回模組）。"""
+    return ["L1 選單項 %s 指向模組 %s 的頁面——選單要宣告在該模組 module.json 的 pages[].menu" % (it["href"], module_pages[it["href"].lstrip("/")])
+            for it in l1.get("items") or [] if it.get("href", "").lstrip("/") in module_pages]
 
 def visible(perm, modules, superadmin):
     if perm == "any":
@@ -175,3 +183,35 @@ def apply_layout(groups, ops):
         if g["items"]:
             final.append(g)
     return final, applied, skipped
+
+
+#: 自訂模組沒寫 menu.group 時的分組名稱（同原 custom-modules-nav.js）
+CUSTOM_DEFAULT_GROUP = "自訂模組"
+
+
+def merge_custom(groups, customs):
+    """已發布、使用者看得到的自訂模組（published_modules 的形狀）併進選單 ⇒ 新 groups（不改傳入值）。
+    - 分組：`menu.group` 與既有群組的**顯示名稱**相同 ⇒ 併進那一組（排在該組最後）；否則新開一組（鍵 `custom:<名稱>`），
+      沒寫 ⇒ CUSTOM_DEFAULT_GROUP。新開的組依第一次出現的順序排在最後（同原 custom-modules-nav.js）
+    - 同組內依 `menu.order`（沒寫 ⇒ 1000）再依名稱
+    - 項目：`href`＝custom-records.html?key=…、`custom`＝模組 key（前端用它判斷目前頁面，active 留空）；不是 P9 側欄點
+    自訂模組是**資料**：只在登入後的 /api/platform/menu 出現，不進 MOTRIX_MENU（STAGE-C L79 更正 ①）。"""
+    from urllib.parse import quote
+    out = [dict(g, items=list(g["items"])) for g in groups]
+    by_label = {g["label"]: g for g in out}
+    rows = []
+    for m in customs or []:
+        menu = m.get("menu") if isinstance(m.get("menu"), dict) else {}
+        order = menu.get("order")
+        rows.append((order if isinstance(order, (int, float)) and not isinstance(order, bool) else 1000,
+                     str(m.get("name") or m.get("key")), (str(menu.get("group") or "").strip() or CUSTOM_DEFAULT_GROUP), m))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    for _order, label, glabel, m in rows:
+        g = by_label.get(glabel)
+        if g is None:
+            g = {"key": "custom:%s" % glabel, "label": glabel, "items": []}
+            out.append(g)
+            by_label[glabel] = g
+        g["items"].append({"href": "custom-records.html?key=%s" % quote(str(m["key"]), safe=""), "label": label,
+                           "active": [], "badge": None, "extra_badge": None, "module": None, "custom": m["key"]})
+    return out

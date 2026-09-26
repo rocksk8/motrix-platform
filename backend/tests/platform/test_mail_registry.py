@@ -279,7 +279,9 @@ def test_pages_bind_the_registry():
     assert "{key:'approval_request'" not in users              # 不再有寫死的副本
     page = source_tree.page_file("mail-settings.html").read_text(encoding="utf-8")
     assert "'/api/mail-types/' + encodeURIComponent(t.key) + '/recipients'" in page
-    assert "mail-settings.html" in (fe / "static" / "sidebar.js").read_text(encoding="utf-8")
+    # C4：選單宣告在 core/menu_l1.json（sidebar.js 不再寫死清單）
+    from core import menu as M
+    assert any(it["href"] == "mail-settings.html" for it in M.load_l1()["items"])
 
 
 # ── 稽核 D（AUDIT-D-A-mail-settings）────────────────────────────────────────────

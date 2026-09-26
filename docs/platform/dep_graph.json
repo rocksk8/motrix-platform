@@ -1743,23 +1743,6 @@
    "tables_r": [],
    "tables_w": []
   },
-  "js:static/custom-modules-nav.js": {
-   "api_calls": [
-    "/api/custom-modules"
-   ],
-   "api_prefixes": [
-    "/api/custom-modules"
-   ],
-   "api_unmatched": [],
-   "imports": [],
-   "kind": "js",
-   "path": "frontend/static/custom-modules-nav.js",
-   "routers_called": [
-    "router:custom_records"
-   ],
-   "tables_r": [],
-   "tables_w": []
-  },
   "js:static/edit-presence.js": {
    "api_calls": [
     "/api/edit-presence"
@@ -1941,6 +1924,7 @@
     "/api/build-info",
     "/api/edit-presence",
     "/api/online-users",
+    "/api/platform/menu",
     "/api/reads",
     "/api/system/bonus-module-status",
     "/api/system/modules/availability"
@@ -1950,6 +1934,7 @@
     "/api/build-info",
     "/api/edit-presence",
     "/api/online-users",
+    "/api/platform",
     "/api/reads",
     "/api/system"
    ],
@@ -1960,6 +1945,7 @@
    "routers_called": [
     "router:auth",
     "router:item_reads",
+    "router:platform_menu",
     "router:system"
    ],
    "tables_r": [],
@@ -7852,85 +7838,85 @@
     },
     {
      "func": "custom_module_meta",
-     "line": 89,
+     "line": 86,
      "method": "GET",
      "path": "/api/custom/{key}/meta"
     },
     {
      "func": "list_custom_records",
-     "line": 106,
+     "line": 103,
      "method": "GET",
      "path": "/api/custom/{key}/records"
     },
     {
      "func": "create_custom_record",
-     "line": 118,
+     "line": 115,
      "method": "POST",
      "path": "/api/custom/{key}/records"
     },
     {
      "func": "get_custom_record",
-     "line": 133,
+     "line": 130,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}"
     },
     {
      "func": "update_custom_record",
-     "line": 151,
+     "line": 148,
      "method": "PUT",
      "path": "/api/custom/{key}/records/{record_no}"
     },
     {
      "func": "transition_custom_record",
-     "line": 166,
+     "line": 163,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/transitions/{tkey}"
     },
     {
      "func": "approve_custom_record",
-     "line": 189,
+     "line": 186,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/approve"
     },
     {
      "func": "reject_custom_record",
-     "line": 203,
+     "line": 200,
      "method": "POST",
      "path": "/api/custom/{key}/records/{record_no}/reject"
     },
     {
      "func": "output_custom_record",
-     "line": 217,
+     "line": 214,
      "method": "GET",
      "path": "/api/custom/{key}/records/{record_no}/output"
     },
     {
      "func": "custom_module_catalog",
-     "line": 241,
+     "line": 238,
      "method": "GET",
      "path": "/api/custom-modules/catalog"
     },
     {
      "func": "check_custom_formula",
-     "line": 253,
+     "line": 250,
      "method": "POST",
      "path": "/api/custom-modules/formula/check"
     },
     {
      "func": "preview_custom_numbering",
-     "line": 261,
+     "line": 258,
      "method": "POST",
      "path": "/api/custom-modules/numbering/preview"
     },
     {
      "func": "custom_ref_options",
-     "line": 271,
+     "line": 268,
      "method": "GET",
      "path": "/api/custom/{key}/ref-options/{field}"
     },
     {
      "func": "preview_custom_output",
-     "line": 295,
+     "line": 292,
      "method": "POST",
      "path": "/api/custom-modules/{key}/output/preview"
     }
@@ -9277,12 +9263,21 @@
    ],
    "dynamic_sql": false,
    "helpers_transitive": [
+    "helper:audit",
     "helper:auth",
-    "helper:module_registry"
+    "helper:custom_fields",
+    "helper:custom_modules",
+    "helper:doc_template",
+    "helper:formula",
+    "helper:legal_params",
+    "helper:module_registry",
+    "helper:settings",
+    "helper:tiered_approval"
    ],
    "imports": [
     "core:db",
     "helper:auth",
+    "helper:custom_modules",
     "plat:catalog",
     "plat:menu",
     "plat:registry"
@@ -9293,7 +9288,7 @@
    "routes": [
     {
      "func": "platform_menu",
-     "line": 73,
+     "line": 89,
      "method": "GET",
      "path": "/api/platform/menu"
     }
@@ -9302,11 +9297,28 @@
    "tables_named": [],
    "tables_r": [],
    "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
     "sessions",
+    "shipping_notes",
+    "ui_definitions",
     "users"
    ],
    "tables_w": [],
-   "tables_w_transitive": []
+   "tables_w_transitive": [
+    "audit_log",
+    "custom_record_counters",
+    "custom_record_log",
+    "custom_record_values",
+    "custom_records",
+    "notifications",
+    "system_settings"
+   ]
   },
   "router:quotations": {
    "api_prefixes": [

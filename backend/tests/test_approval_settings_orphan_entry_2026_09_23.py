@@ -74,9 +74,11 @@ def test_as4_the_old_entry_is_gone_from_the_sidebar():
     ⚠️ 釘**檔名**不釘中文標籤 —— 中文標籤會被 `WD1`／`EM1` 這類措辭守門改掉，
        釘了字串會在別人做對的事情時紅。
     """
-    src = _read("frontend/static/sidebar.js")
+    # C4：選單宣告不在 sidebar.js 了 ⇒ 兩邊都查（宣告＋前端程式碼）
+    from tests._menu_decl import declared_items
+    src = _read("frontend/static/sidebar.js") + "\n".join(it["href"] for it in declared_items())
     assert OLD_PAGE not in src, (
-        "`sidebar.js` 裡還找得到 `%s`：\n" % OLD_PAGE
+        "選單宣告或 `sidebar.js` 裡還找得到 `%s`：\n" % OLD_PAGE
         + "☠️ 舊入口還在 ⇒ 使用者又會走到一個「設了也不一定生效」的頁面。")
 
 
@@ -86,9 +88,10 @@ def test_as4_the_detector_actually_works_on_a_real_entry():
     ☠️ 少了它，`sidebar.js` 若被整個清空、或這支測試的路徑指到空檔案，
        上一題會**無條件綠** —— 「找不到」與「檔案讀錯了」分不出來。
     """
-    src = _read("frontend/static/sidebar.js")
+    from tests._menu_decl import declared_items
+    src = _read("frontend/static/sidebar.js") + "\n".join(it["href"] for it in declared_items())
     assert NEW_PAGE in src, (
-        "`sidebar.js` 裡找不到 `%s`（新的「簽核設定」入口）。\n" % NEW_PAGE
+        "選單宣告裡找不到 `%s`（新的「簽核設定」入口）。\n" % NEW_PAGE
         + "☠️ 若連這個都找不到，代表讀到的不是真正的 `sidebar.js`，\n"
           "   上一題的『找不到舊入口』就沒有意義。")
 

@@ -3,7 +3,8 @@
 
 L1 項目（core/menu_l1.json）＋**已載入**模組的 module.json `pages[].menu`，依使用者的模組權限過濾。
 - `groups`／`denied`：宣告版（與 P9 排版器面板預覽讀的是同一份，不套版面——面板自己疊要預覽的操作）
-- `layout`（C4，STAGE-C L79 更正 ②）：套上**使用者角色**版面之後的選單；sidebar.js 在 session 取回後讀它重排。
+- `layout`（C4，STAGE-C L79 更正 ②）：套上**使用者角色**版面之後的選單，再併入使用者看得到的已發布自訂模組
+  （core.menu.merge_custom；過濾與 /api/custom-modules 同一份 helpers.custom_modules.visible_to）；sidebar.js 在 session 取回後讀它重排。
   每個有側欄點的已載入模組各 resolve 一次（`core.catalog.effective_layout_ops`，與 GET /api/layout/{module} 同一份）；
   hide 只是顯示、不是權限（`denied` 不因版面改變）。讀版面失敗 ⇒ 該模組用程式預設，錯誤列在 `layout.errors`。
 
@@ -21,6 +22,7 @@ from core import catalog, registry
 from core import menu as core_menu
 from db import get_db
 from helpers import _require_user
+from helpers import custom_modules as CM
 
 router = APIRouter()
 
@@ -43,8 +45,22 @@ def _layout_for(user, groups, mod_items):
         finally:
             conn.close()
     new_groups, applied, skipped = core_menu.apply_layout(groups, ops)
-    return {"groups": new_groups, "applied": applied, "skipped": skipped, "dropped": dropped,
-            "errors": errors, "sources": sources, "role": role}
+    customs, custom_error = [], None
+    try:
+        conn = get_db()
+        try:
+            customs = CM.visible_to(CM.published_modules(conn), user)
+        finally:
+            conn.close()
+    except Exception as e:                                   # noqa: BLE001 自訂模組讀失敗 ⇒ 選單照常、錯誤列出
+        import logging
+        logging.getLogger(__name__).warning("讀自訂模組失敗 ⇒ 選單不含自訂模組：%s", e)
+        custom_error = "讀自訂模組失敗，選單暫不含自訂模組"
+    if custom_error:
+        errors.append({"module": None, "error": custom_error})
+    return {"groups": core_menu.merge_custom(new_groups, customs), "applied": applied, "skipped": skipped,
+            "dropped": dropped, "errors": errors, "sources": sources, "role": role,
+            "custom": [m["key"] for m in customs]}
 
 
 def menu_declaration(page_map):

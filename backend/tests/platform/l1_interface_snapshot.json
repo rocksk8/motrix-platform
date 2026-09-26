@@ -237,7 +237,8 @@
    "sample_view": "def(body)",
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
-   "validate_module": "def(body, key=…)"
+   "validate_module": "def(body, key=…)",
+   "visible_to": "def(mods, user)"
   },
   "helper:daily_checks": {
    "run_module_checks": "def(mode)",
@@ -771,13 +772,16 @@
    "start_schedulers": "def()"
   },
   "plat:menu": {
+   "CUSTOM_DEFAULT_GROUP": "const",
    "ITEM_KEYS": "const",
    "MENU_L1": "const",
    "apply_layout": "def(groups, ops)",
    "build": "def(l1, mod_items, modules, superadmin)",
+   "check_l1_pages": "def(l1, module_pages)",
    "declaration": "def(l1, mod_items)",
    "denied": "def(l1, mod_items, modules, superadmin)",
    "load_l1": "def(path=…)",
+   "merge_custom": "def(groups, customs)",
    "module_items": "def(manifests)",
    "sidebar_point_id": "def(item)",
    "validate": "def(l1, mod_items=…)",
