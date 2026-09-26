@@ -30,6 +30,7 @@ modules/payroll/api/bonus.py      **零改動** —— 140+ 支既有獎金測�
 """
 import pathlib
 import re
+import pytest
 
 #: B 定的端點（`routers/system.py`）。⚠️ 它**要登入**，沒進
 #: `main.py::_PUBLIC_API_PATHS`。
@@ -46,7 +47,12 @@ ENTRY_LABEL = "獎金分潤"
 
 #: 與獎金**同一組**（財務）的其他入口。B 自己抓到並修掉的那個 bug：
 #: 藏 `.mnav__grp` 祖先會把整個財務下拉面板一起藏掉。
-SIBLING_ENTRIES = ("voucher.html", "account-items.html")
+SIBLING_ENTRIES = ("voucher.html", "account-items.html")   # M06 的入口（2026-09-26 起隨模組；不在時不比）
+
+
+def _installed_siblings():
+    from core import source_tree
+    return [h for h in SIBLING_ENTRIES if source_tree.module_installed("modules/accounting/")]
 
 
 def _root():
@@ -223,7 +229,10 @@ def test_hiding_the_bonus_entry_does_not_hide_its_neighbours():
     """
     from tests._menu_decl import item
     bonus = item(ENTRY_HREF)
-    for sibling in SIBLING_ENTRIES:
+    siblings = _installed_siblings()
+    if not siblings:
+        pytest.skip("財務組沒有與獎金相鄰的入口（會計模組不在）：沒有鄰居可以被一起藏掉")
+    for sibling in siblings:
         it = item(sibling)
         assert it is not None and bonus is not None and it["group"] == bonus["group"], (
             "選單宣告裡找不到與獎金同一組的入口 `%s` —— 它被一起拿掉了（或換了組）。"
@@ -331,7 +340,8 @@ def test_the_scanner_itself_can_see_an_entry_that_is_definitely_there():
     （`ni(pg('…'), …)`）——**走的是同一條量測路徑**。
     """
     from tests._menu_decl import item
-    assert item("voucher.html") is not None, (
+    bait = "voucher.html" if _installed_siblings() else "parts.html"   # 會計不在 ⇒ 改用 L1 的入口（同一份選單宣告）
+    assert item(bait) is not None, (
         "正對照失敗：選單宣告裡連傳票入口都找不到 ——\n"
         + "**壞掉的是這個檔案的讀法，不是選單。**")
     src = _strip_js_comments(_sidebar())

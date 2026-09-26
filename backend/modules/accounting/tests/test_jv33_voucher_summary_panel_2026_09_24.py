@@ -22,8 +22,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
-from tests.test_jv28_voucher_attachment_preview_2026_09_24 import (  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402,F401
+from modules.accounting.tests.test_jv28_voucher_attachment_preview_2026_09_24 import (  # noqa: E402
     _png_bytes, _upload, _open_page)
 
 QUOTE = "MQ-JV33-001"

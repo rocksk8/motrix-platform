@@ -6,6 +6,7 @@
 import json
 
 from core import registry
+import pytest
 
 
 def _sa(client, make_user):
@@ -48,7 +49,8 @@ def test_positive_control_both_providers_list_the_paid_invoiced_item(client, mak
         r = client.get("/api/reports/expenses-monthly?year=2026&month=2026-09&basis=cash", headers=h).json()
         assert r["incomeNotice"] == "" and [i["quoteNo"] for i in r["monthIncomeItems"]] == [no]
         assert client.get("/api/reports/tax-export?year=2026&month=9", headers=h).status_code == 200
-    prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()
-    from modules.accounting.api import accounting_export as ae
-    assert ae.T100_RECEIVABLES_MISSING not in prev["notice"]
-    assert any(e["sourceType"] == "quotation_payment" for e in prev["events"]), prev["events"]
+    if source_tree.module_installed("modules/accounting/"):                  # T100 那一段要 M06（2026-09-26 搬遷）
+        prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h).json()
+        from modules.accounting.api import accounting_export as ae
+        assert ae.T100_RECEIVABLES_MISSING not in prev["notice"]
+        assert any(e["sourceType"] == "quotation_payment" for e in prev["events"]), prev["events"]

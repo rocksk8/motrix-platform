@@ -219,7 +219,7 @@ def test_users_page_builds_its_module_list_from_the_catalog(live_server, make_us
     """行為不變守門（誠實記錄：用整併前的 users.html 跑也綠——值本來就相同）。
     先紅的是 `test_users_page_has_no_hardcoded_module_lists`。"""
     pytest.importorskip("playwright.sync_api")
-    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login
+    from tests._e2e_login import inject_login as _login
     u, pw = make_user(username="root", role="superadmin")
     browser = e2e_browser
     page = browser.new_page()

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core import registry
 from tests.platform.test_case_stage_connectors import _without
+from core import source_tree
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -91,6 +92,8 @@ def test_without_m03_no_serial_change_means_no_notice(client, make_user, monkeyp
 
 def test_without_m03_t100_preview_says_stock_batches_are_missing(client, make_user, monkeypatch):
     """IP-20：M03 不在 ⇒ T100 預覽照常、不含料件付款傳票，notice 明說；其他來源的說明照舊並列。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     from modules.accounting.api import accounting_export as ae
     _without(monkeypatch, "inventory.paid_batches", "supply")
     h = _login(client, make_user, "sup_t100")

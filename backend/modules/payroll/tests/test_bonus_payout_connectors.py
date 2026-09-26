@@ -20,6 +20,7 @@ from helpers import legal_params as lp
 from modules.payroll.tests._bonus_insure import insure_all
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow, _delegate)
+from core import source_tree
 
 #: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
 _NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
@@ -223,6 +224,8 @@ def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people,
 # ── ③ 報表（IP-9）與案件頁相關傳票 ──────────────────────────────────────────
 
 def test_case_page_related_vouchers_show_bonus_vouchers(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     insure_all()
     _to_payout(client, people, "MQ-BP-V1")
     client.post("/api/bonus/cases/MQ-BP-V1/mark-paid", headers=_auth(people["bc_cash"]), json={})
@@ -307,6 +310,8 @@ def test_mark_paid_refuses_without_insured_amount(client, people, monkeypatch):
 
 
 def test_mark_paid_computes_and_books_deductions(client, people, monkeypatch):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _with_legal(monkeypatch)
     _insure_all(client, people, bc_s1=20000)
     _to_payout(client, people, "MQ-BP-U2")          # 淨利 2,000,000 ⇒ 業務 100,000

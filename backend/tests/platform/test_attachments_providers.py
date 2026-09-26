@@ -65,6 +65,8 @@ def _present():
 
 def test_providers_cover_the_whitelist_without_overlap(client):
     """client 夾具＝載入器已掛好在場的模組。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     from modules.accounting import voucher_attachments as va
     assert set(va._SOURCE_OWNERS) == set(va.SOURCE_TYPES), "缺席說明的對照表要涵蓋整份白名單"
     seen = {}
@@ -86,6 +88,8 @@ def _dispatch_types():
 
 def test_absent_provider_is_named_not_silent(client, monkeypatch):
     """合成：拿掉外包工班的提供者 ⇒ 候選不列那兩類、`unavailable_sources` 說出是誰、帶入與列檔 400 並說明。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     from modules.accounting import voucher_attachments as va
     _without(monkeypatch, CAP, "subcontract")
     assert not set(_dispatch_types()) & set(va._providers())
@@ -101,6 +105,8 @@ def test_absent_provider_is_named_not_silent(client, monkeypatch):
 
 
 def test_everything_present_means_nothing_unavailable(client):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     from modules.accounting import voucher_attachments as va
     if not source_tree.module_installed("modules/subcontract/api/vendor_contractors.py"):
         pytest.skip("外包工班不在這個安裝包 ⇒ 本來就會有一筆缺席說明")
@@ -145,6 +151,8 @@ def test_l1_side_providers_refuse_to_swallow_broken_json(client, name):
 
 def test_case_update_broken_json_is_said_not_swallowed(client):
     """AT-S2（D 的突變 AT5 原本存活）：案件動態的附件資料壞掉 ⇒ 帶入端 400 並說出是哪一類，不是空清單。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     import db
     from modules.accounting import voucher_attachments as va
     conn = db.get_db()
@@ -189,6 +197,8 @@ def _hdr(client, make_user, name, role, modules):
 def test_voucher_users_only_see_attachments_of_cases_they_can_read(client, make_user):
     """同樣有傳票權限（finance）：看得到案件的人（案件業務）列得出、帶得進；看不到的人列不出、預覽不到、帶不進（403）。
     （AT-M1c 前「看得到」用 case_manage 充當；回簽檔改用案件頁的規則後 case_manage 不再放行，改用擁有者。）"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     inside = _hdr(client, make_user, "att_in", "engineer", ["finance"])
     _seed_case_with_file("ATT-PERM-1", owner_id=_user("att_in")["id"])
     outside = _hdr(client, make_user, "att_out", "engineer", ["finance"])
@@ -261,6 +271,8 @@ def _seed_extra_expense_file(quote_no):
 def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(client, make_user):
     """D 的探針（AT-M1b）：非擁有者、持有 case_manage＋finance 的業務 ⇒ 額外支出自己的端點 403，
     經傳票也列不出、預覽不到、帶不進那一筆附件（原本：自己端點 403、經傳票 200 且列出）。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     eid = _seed_extra_expense_file("ATT-EE-1")
     _add_case_update_file("ATT-EE-1")          # 案件動態 case_manage 看得到 ⇒ 案件「部分看得到」
     probe = _hdr(client, make_user, "att_ee_probe", "sales", ["case_manage", "finance"])
@@ -296,6 +308,8 @@ def test_invoice_voucher_attachments_keep_the_amount_layer(client, make_user):
     """開票申請自己的規則多一道金額層（AT-M1b）：看得到案件、但看不到金額的人（engineer，case_manage＋finance）
     自己的端點 403 ⇒ 提供者不列、`files()` 拒絕（D 的 V3：拿掉 `files()` 的檢查要轉紅）；
     持有 financial_view 的人兩邊都放行（正對照）。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     if not source_tree.module_installed("modules/arap/api/invoice_vouchers.py"):
         pytest.skip("應收應付不在這個安裝包 ⇒ /api/invoice-vouchers 端點不存在")
     import db
@@ -360,6 +374,8 @@ def _pick(client, h, quote_no):
 
 def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_user):
     """寬（D 實測外洩）：case_manage 非擁有者 ⇒ 案件頁 403 ⇒ 經傳票不列回簽檔、預覽不到、帶入 403。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed_case_with_file("ATT-QP-1")
     _add_case_update_file("ATT-QP-1")
     h = _hdr(client, make_user, "att_qp_cm", "engineer", ["case_manage", "finance"])
@@ -377,6 +393,8 @@ def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_use
 
 def test_quotation_attachments_are_not_stricter_than_the_case_page(client, make_user):
     """嚴（D 實測出納帶不進）：cashier 非擁有者 ⇒ 案件頁 200（CM14b）⇒ 經傳票列得出回簽檔、帶入 200。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed_case_with_file("ATT-QP-2")
     h = _hdr(client, make_user, "att_qp_cash", "engineer", ["cashier", "finance"])
     assert client.get("/api/quotations/ATT-QP-2", headers=h).status_code == 200, "前提：案件頁放行 cashier"
@@ -423,6 +441,8 @@ def _no_identifiers(resp, *secrets):
 
 def test_nothing_hidden_means_hidden_is_empty(client, make_user):
     """正對照：看得到全部原單據的人（案件業務）⇒ hidden 是空清單（不是每次都亮的警告）。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     h = _hdr(client, make_user, "att_hid_own", "engineer", ["finance"])
     _seed_case_with_file("ATT-HID-1", owner_id=_user("att_hid_own")["id"])
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-HID-1", headers=h)
@@ -433,6 +453,8 @@ def test_nothing_hidden_means_hidden_is_empty(client, make_user):
 def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make_user):
     """反向控制：看不到的單據帶著一眼認得出來的單號、檔名、路徑、金額 ⇒ hidden 只剩類別與個數，這些字串一個都不出現；
     正對照：同一個回應的 files（看得到的那些）照常帶檔名，證明掃描的字串確實存在於資料裡。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     import db
     import os
     import helpers.uploads as up
@@ -479,6 +501,8 @@ def _add_case_update_file(quote_no):
 def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
     """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
     那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     if not source_tree.module_installed(ARAP):
         pytest.skip("應收應付（M05）不在：沒有開票申請")
     import db
@@ -508,6 +532,8 @@ def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_us
 def test_a_wholly_unseen_case_answers_like_a_missing_one(client, make_user):
     """主持裁示（D 的觀察）：整個案件都看不到 ⇒ 照「不存在」回（404，逐字相同），不回「N 個附件看不到」
     （否則可以探知案件編號是否存在）；summary-sources 的說明也逐字相同。反向控制：同一個人對看得到一部分的案件照常 200＋hidden。"""
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _seed_case_with_file("ATT-WHOLE-1")
     h = _hdr(client, make_user, "att_whole", "engineer", ["finance"])
     base = "/api/vouchers/line-source-files?source_type=case&ref="

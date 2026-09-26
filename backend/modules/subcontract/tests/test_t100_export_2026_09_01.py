@@ -15,6 +15,7 @@ import json
 
 import openpyxl
 import pytest
+from core import source_tree
 
 #: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
 _NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
@@ -96,6 +97,8 @@ def _make_invoiced_quotation(quote_no, invoice_no, received_at, total=31500, pre
 
 @_NEEDS_ARAP
 def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_user):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     username, password = make_user(username="t100_admin2", role="superadmin")
     token = _login(client, username, password)
 
@@ -155,6 +158,8 @@ def test_t100_voucher_export_balances_and_excludes_out_of_range(client, make_use
 
 @_NEEDS_ARAP
 def test_t100_preview_confirm_excludes_from_future_export(client, make_user):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     username, password = make_user(username="t100_admin4", role="superadmin")
     token = _login(client, username, password)
 

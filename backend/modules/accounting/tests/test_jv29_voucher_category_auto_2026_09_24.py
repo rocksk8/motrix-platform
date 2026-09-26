@@ -147,7 +147,7 @@ def test_jv29_the_pdf_layout_prints_the_voucher_name(client, make_user, lines, t
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 
 @pytest.mark.e2e

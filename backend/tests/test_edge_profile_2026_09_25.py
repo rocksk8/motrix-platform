@@ -9,7 +9,12 @@ from pathlib import Path
 
 import helpers
 import helpers.startup as startup
-import modules.accounting.voucher_pdf as voucher_pdf
+from core import source_tree
+try:                                                   # M06 是選配模組（2026-09-26 搬遷）：不在時不量它
+    import modules.accounting.voucher_pdf as voucher_pdf
+except ImportError:
+    voucher_pdf = None
+    assert not source_tree.module_installed("modules/accounting/"), "會計模組在，卻匯入不了 voucher_pdf"
 import pdf_gen
 
 BACKEND = Path(__file__).resolve().parents[1]
@@ -39,7 +44,7 @@ def test_every_import_site_uses_the_wrapper_and_the_product_function_is_untouche
     import sys
     w = pdf_gen.run_edge_pdf
     assert all(getattr(m, "run_edge_pdf") is w
-               for m in (startup, helpers, voucher_pdf)), \
+               for m in (startup, helpers, voucher_pdf) if m is not None), \
         "有一處呼叫端沒換到（依值綁定的 import 要逐一換）"
     # 模組的呼叫端（例：modules/netplan/export.py、modules/analytics/api/reports.py）由下面的 sys.modules 掃描一併涵蓋；模組自己的測試另有逐處斷言
     # 第一版寫死 5 處、漏了 routers/reports ⇒ 直接驗「沒有任何已載入模組還綁著原函式」

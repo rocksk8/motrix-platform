@@ -692,7 +692,7 @@ def test_jv5_the_page_has_both_export_actions(client, make_user):
     ⚠️ 判準是**會送出的那一個動作**（`AC1`），而匯出是 `GET`
        ⇒ 這裡看的是「有沒有打到那支端點」，不是 `method: 'POST'`。
     """
-    root = pathlib.Path(__file__).resolve().parents[2]
+    root = pathlib.Path(__file__).resolve().parents[4]
     js = (root / "frontend" / "js" / "voucher.js").read_text(
         encoding="utf-8", errors="replace")
     assert "pdf-download" in js, (

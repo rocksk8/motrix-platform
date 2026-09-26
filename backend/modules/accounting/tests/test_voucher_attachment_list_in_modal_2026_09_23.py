@@ -25,12 +25,13 @@ session 值接進 `attachments/.../` 這個路徑的字串組合。
 """
 import pathlib
 import re
+from core import source_tree
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 
 
 def _voucher_html():
-    return (ROOT / "frontend" / "pages" / "voucher.html").read_text(
+    return source_tree.page_file("voucher.html").read_text(
         encoding="utf-8", errors="replace")
 
 

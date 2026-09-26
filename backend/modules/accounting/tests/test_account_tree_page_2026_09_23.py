@@ -11,7 +11,7 @@ A 派工 `a751377`，依據使用者原話：
 # ⚠️ 弱紅聲明：**頁面與 API 都還不存在**
 
 ```
-frontend/pages/     沒有任何 account／科目 的頁面
+pages/     沒有任何 account／科目 的頁面
 routers/            沒有任何 account_items 的端點
 ```
 ⇒ 本檔多題會紅在同一個地方。⚠️ 而**前兩題不碰產品碼**（只讀靜態資料集），
@@ -53,8 +53,9 @@ import re
 from pathlib import Path
 
 import pytest
+from core import source_tree
 
-_BACKEND = Path(__file__).resolve().parent.parent
+_BACKEND = Path(__file__).resolve().parents[3]
 _FRONTEND = _BACKEND.parent / "frontend"
 STATIC_JSON = _BACKEND / "data" / "account_items_112.json"
 
@@ -236,7 +237,7 @@ def _router():
 
 def _page():
     for name in _PAGE_NAMES:
-        p = _FRONTEND / "pages" / name
+        p = source_tree.page_file(name)
         if p.exists():
             return p
     pytest.fail(

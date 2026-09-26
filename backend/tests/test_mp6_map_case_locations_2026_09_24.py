@@ -165,7 +165,7 @@ _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 @pytest.mark.e2e
 def test_mp6_the_case_layer_is_on_by_default_and_links_to_the_case(live_server, make_user, _geo, e2e_browser):
     pytest.importorskip("playwright.sync_api")
-    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login as _page_login
+    from tests._e2e_login import inject_login as _page_login
     u, p = make_user(username="mp6_page", role="superadmin")
     body = {"points": [{"dataset": "cases", "sourceKey": "cases", "recordId": "MQ-202609-007",
                         "quoteNo": "MQ-202609-007", "name": "某工地專案", "org": "某客戶",

@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import pytest
+from core import source_tree
 
 BACKEND = Path(__file__).resolve().parents[2]
 MODULES_JSON = BACKEND.parent / "docs" / "platform" / "modules.json"
@@ -61,6 +62,8 @@ def test_tiered_approval_imports_no_l2():
 
 
 def test_voucher_aliases_are_the_l1_objects():
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     from helpers import tiered_approval as ta
     from modules.accounting import voucher
     assert voucher.VoucherChainUnreadable is ta.ApprovalChainUnreadable      # 同一個類別，不是另一個同名類別

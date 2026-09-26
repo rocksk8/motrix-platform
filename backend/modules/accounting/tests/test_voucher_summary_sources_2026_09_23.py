@@ -45,6 +45,7 @@ import json
 import re
 
 import pytest
+from core import source_tree
 
 #: `§160` 定案的路徑。⚠️ 改了 **退回給我**。
 ENDPOINT = "/api/vouchers/summary-sources"
@@ -348,8 +349,8 @@ def test_jv7_a_missing_piece_is_omitted_not_padded(client, make_user):
 
 def _voucher_page():
     import pathlib
-    root = pathlib.Path(__file__).resolve().parents[2]
-    return (root / "frontend" / "pages" / "voucher.html",
+    root = pathlib.Path(__file__).resolve().parents[4]
+    return (source_tree.page_file("voucher.html"),
             root / "frontend" / "js" / "voucher.js")
 
 

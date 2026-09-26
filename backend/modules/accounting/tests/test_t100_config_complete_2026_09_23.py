@@ -45,8 +45,9 @@ from pathlib import Path
 import pytest
 
 import db
+from core import source_tree
 
-_BACKEND = Path(__file__).resolve().parent.parent
+_BACKEND = Path(__file__).resolve().parents[3]
 _FRONTEND = _BACKEND.parent / "frontend"
 CASHIER_JS = _FRONTEND / "js" / "cashier.js"
 
@@ -284,7 +285,7 @@ def _pair(out):
 # 🔴 重心二：可發現性（A 2026-09-23 重新定義）
 # ══════════════════════════════════════════════════════════════════════
 
-CASHIER_HTML = _FRONTEND / "pages" / "cashier.html"
+CASHIER_HTML = source_tree.page_file("cashier.html")
 
 
 def test_fn5_the_warning_says_where_to_go():

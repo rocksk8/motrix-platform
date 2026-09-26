@@ -113,7 +113,7 @@ def test_jv34_a_multi_page_pdf_numbers_its_pages_and_repeats_the_header(client, 
 # ══════════════════════════════════════════════════════════════════════
 
 pw = pytest.importorskip("playwright.sync_api")
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 _D = "() => Alpine.$data(document.querySelector('[x-data]'))"
 

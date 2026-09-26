@@ -320,7 +320,7 @@ def test_jv24_a_two_level_void_reopen_chain_stays_correct_at_both_levels(
 import ast
 import pathlib
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
 def _copy_attachments_source():

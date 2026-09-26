@@ -106,7 +106,7 @@ def _seed():
 def _page_deps():
     pytest.importorskip("playwright.sync_api")
     from tests._map_tiles import block_tiles
-    from tests.test_voucher_preview_export_feedback_2026_09_23 import _login
+    from tests._e2e_login import inject_login as _login
     return block_tiles, _login
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""

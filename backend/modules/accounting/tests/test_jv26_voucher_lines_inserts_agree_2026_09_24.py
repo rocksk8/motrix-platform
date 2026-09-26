@@ -12,7 +12,7 @@ import ast
 import pathlib
 import re
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
+ROOT = pathlib.Path(__file__).resolve().parents[4]
 _INS = re.compile(r"INSERT\s+INTO\s+voucher_lines\s*\(([^)]*)\)", re.I)
 
 
@@ -32,7 +32,7 @@ def _disagree(sets):
 
 
 def test_jv26_the_three_voucher_lines_inserts_write_the_same_columns():
-    sets = _column_sets((ROOT / "backend" / "routers" / "vouchers.py").read_text(encoding="utf-8"))
+    sets = _column_sets((ROOT / "backend" / "modules" / "accounting" / "api" / "vouchers.py").read_text(encoding="utf-8"))
     assert len(sets) == 3, (
         "`vouchers.py` 裡 `INSERT INTO voucher_lines` 有 %d 句，規格記的是 3 句" % len(sets)
         + "（create／作廢重開／update）。多了或少了都要先看是哪一支，再更新本題。")
