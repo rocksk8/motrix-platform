@@ -11,6 +11,9 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import mimetypes
+# D 稽核（h-fonts-woff2 觀察 1）：Windows 的 mimetypes 登錄表常沒有 .woff2 ⇒ StaticFiles 回 application/octet-stream；固定成標準型別
+mimetypes.add_type("font/woff2", ".woff2")
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from db import get_db, init_db, DEMO_DB_PATH, set_demo_mode

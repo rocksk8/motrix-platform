@@ -35,3 +35,12 @@ def test_css_references_only_existing_fonts_and_license_ships_with_them():
     assert not missing, missing
     lic = (FONTS / "OFL.txt").read_text(encoding="utf-8")
     assert "SIL OPEN FONT LICENSE Version 1.1" in lic and "LY Corporation" in lic
+
+
+
+def test_woff2_is_served_as_font_woff2(client):
+    """D 稽核觀察 1：woff2 的 Content-Type 固定為 font/woff2（不依賴主機的 mimetypes 登錄表）。"""
+    names = sorted(p.name for p in FONTS.iterdir() if p.suffix == ".woff2")
+    assert names, "正對照：要有 woff2"
+    for n in names:
+        assert client.get("/fonts/" + n).headers.get("content-type", "").startswith("font/woff2"), n
