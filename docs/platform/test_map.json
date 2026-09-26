@@ -1725,14 +1725,20 @@
     "dir:tools/platform/",
     "file:backend/tests/platform/__init__.py",
     "file:backend/tests/platform/_boundaries.py",
-    "file:docs/platform/test_map.json"
+    "file:docs/platform/dep_graph.json",
+    "file:docs/platform/test_map.json",
+    "plat:__init__",
+    "plat:source_tree"
    ],
    "evidence": {
     "import": [
+     "backend/core/__init__.py",
+     "backend/core/source_tree.py",
      "backend/tests/platform/__init__.py",
      "backend/tests/platform/_boundaries.py"
     ],
     "path": [
+     "docs/platform/dep_graph.json",
      "docs/platform/test_map.json",
      "tools/platform/"
     ]

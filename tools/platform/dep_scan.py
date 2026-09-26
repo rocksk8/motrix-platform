@@ -556,7 +556,8 @@ def build() -> dict:
             u["tables_w_transitive"] = sorted(set(u["tables_w"]).union(*[units[h]["tables_w"] for h in hs]))
             u["tables_r_transitive"] = sorted(set(u["tables_r"]).union(*[units[h]["tables_r"] for h in hs]))
 
-    return {"generated_by": "tools/platform/dep_scan.py", "root": ROOT.name, "units": units}
+    # 不寫 root（工作樹資料夾名）：寫了之後只有產生它的那一棵樹比得過（稽核 AUDIT-D-B-maps BM-M1）
+    return {"generated_by": "tools/platform/dep_scan.py", "units": units}
 
 
 @contextlib.contextmanager
