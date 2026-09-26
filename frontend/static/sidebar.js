@@ -1048,29 +1048,44 @@ if (typeof module !== 'undefined' && module.exports) {
 
   // ── 角色版面（C4，STAGE-C L79 更正 ②③）：session 取回後打 /api/platform/menu 套 layout 再重排 ─────────
   // 讀失敗 ⇒ 保留宣告版，console 一筆＋`data-menu-state="layout-failed"`（不靜默）。
-  // `data-menu-state`（<html> 上）：declared → layout ／ layout-failed ——e2e 的等待終點。
+  // `data-menu-state`（<html> 上）：declared → pending → layout ／ layout-failed ——e2e 的等待終點；
+  // 第二輪以後請等 `data-menu-seq`（完成的是第幾輪）。
   // 序號：session 變動會再打一次；較晚回來的舊回應丟掉。
+  // 狀態：送出時 `pending`，完成時 `layout`／`layout-failed` 並寫 `data-menu-seq`＝這一輪的序號。
+  // 〔稽核 X C4-S1：原本 refresh() 不重設狀態 ⇒ 第一輪完成後再 refresh，等 `layout` 會立刻成立（等到的是上一輪）。
+  //   等「第 N 輪」請等 `data-menu-seq="N"`〕
   function _applyLayout() {
     if (!s || !s.token) return
     var my = ++_menuSeq
+    _setMenuState('pending')
     fetch('/api/platform/menu', { headers: { Authorization: 'Bearer ' + s.token } })
       .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json() })
       .then(function (d) {
         if (my !== _menuSeq) return
         if (!d || !d.layout || !Array.isArray(d.layout.groups)) throw new Error('回應缺 layout.groups')
-        if (d.layout.errors && d.layout.errors.length) console.warn('[menu] 角色版面部分讀取失敗（該部分用程式預設）：', d.layout.errors)
+        if (d.layout.errors && d.layout.errors.length) console.warn('[menu] 選單部分讀取失敗（該部分用程式預設或暫不顯示）：', d.layout.errors)
+        // 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：未登入的宣告只有已載入模組的頁
+        if (d.pageModules && typeof d.pageModules === 'object') {
+          MODULE_PAGES = d.pageModules
+          window.MOTRIX_MODULE_PAGES = MODULE_PAGES
+        }
         _layoutGroups = d.layout.groups
         _rebuildMenu()
+        _showModuleNotice()
         _setMenuState('layout')
+        document.documentElement.setAttribute('data-menu-seq', String(my))
       })
       .catch(function (e) {
         if (my !== _menuSeq) return
-        console.warn('[menu] 套用角色版面失敗，保留宣告版：', e)
+        // 講清楚少了什麼（C4-S4）：角色版面與自訂模組都只在這支回應裡；保留的是上一輪版面還是宣告版（C4-O1）
+        console.warn('[menu] 讀不到 /api/platform/menu，' + (_layoutGroups ? '保留上一輪的版面' : '保留宣告版')
+          + '；角色版面' + (_layoutGroups ? '可能不是最新，' : '與自訂模組暫不顯示，') + '請重新整理再試：', e)
         _setMenuState('layout-failed')
+        document.documentElement.setAttribute('data-menu-seq', String(my))
       })
   }
-  // 重新套一次版面（P9 發布後、或 e2e 驗序號用）；回傳值無意義，等 data-menu-state
-  window.MotrixMenu = { refresh: _applyLayout }
+  // 重新套一次版面（P9 發布後、或 e2e 驗序號用）；回傳這一輪的序號，等 `data-menu-seq` 等於它
+  window.MotrixMenu = { refresh: function () { _applyLayout(); return _menuSeq } }
 
   // ── Async session refresh（背景刷新模組權限，有變動立即重建 sidebar）──────────
   function _refreshSession() {
@@ -1147,6 +1162,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // ⚠️ 選單會被 `_refreshSession()` 重建 ⇒ 重建後要再套用一次（所以把結果留著）。
   // C4：「哪一頁屬於哪個模組」改由伺服器宣告（MOTRIX_MENU.pageModules，來源是各模組 module.json pages[]；
   // 含沒載入的模組——直接打網址的後備提示要知道頁面屬於誰）。原本寫死在這裡的表與守門它的對照題一起退場。
+  // 未登入的宣告只有已載入模組的頁（C4-O3）；登入後 _applyLayout() 換成 /api/platform/menu 的完整對照
   var MODULE_PAGES = (window.MOTRIX_MENU && window.MOTRIX_MENU.pageModules) || {}
   window.MOTRIX_MODULE_PAGES = MODULE_PAGES
   var _moduleAvailability = null

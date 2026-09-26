@@ -9,7 +9,9 @@ L1 項目（core/menu_l1.json）＋**已載入**模組的 module.json `pages[].m
   hide 只是顯示、不是權限（`denied` 不因版面改變）。讀版面失敗 ⇒ 該模組用程式預設，錯誤列在 `layout.errors`。
 
 `sidebar_js_source()`（C4，STAGE-C L79 更正 ①）：`/static/sidebar.js` 前置 `window.MOTRIX_MENU`——**與使用者無關**的宣告
-（那個請求不帶 token）：`groups`（L1＋已載入模組，每項帶 perm，declaration()）、`pageModules`（頁面 ⇒ 所屬模組，含沒載入的，
+（那個請求不帶 token）：`groups`（L1＋已載入模組，每項帶 perm，declaration()）、`pageModules`（頁面 ⇒ 所屬模組；
+〔稽核 X C4-O3 主持裁示：**只放已載入模組的頁**——原本含已安裝未載入的，未登入者比對 groups 與 pageModules 就推得出哪些模組
+停用／未授權，違反「模組狀態不放」。完整對照改由登入後的 /api/platform/menu `pageModules` 給〕（原寫：含沒載入的，
 給直接打網址的後備提示用）。模組狀態（停用／未授權）與自訂模組**不放**：前者是 /api/system/modules/availability、
 後者是公司資料（名稱），都要登入才拿得到。每次請求現組（模組狀態會變），不快取（no_cache_static 對 .js 設 no-store）。
 """
@@ -32,19 +34,26 @@ def _layout_for(user, groups, mod_items):
     role = user.get("role")
     keys = sorted({it["module"] for it in mod_items if it.get("module")})
     ops, dropped, errors, sources = [], [], [], {}
-    if keys:
-        conn = get_db()
-        try:
-            for key in keys:
-                eff = catalog.effective_layout_ops(conn, key, role)
-                ops += [op for op in eff["ops"] if str((op or {}).get("target", "")).endswith("/sidebar")]
-                dropped += [dict(d, module=key) for d in eff["dropped"]]
-                sources[key] = eff["source"]
-                if eff["error"]:
-                    errors.append({"module": key, "error": eff["error"]})
-        finally:
-            conn.close()
-    new_groups, applied, skipped = core_menu.apply_layout(groups, ops)
+    new_groups, applied, skipped = groups, [], []
+    try:
+        if keys:
+            conn = get_db()
+            try:
+                for key in keys:
+                    eff = catalog.effective_layout_ops(conn, key, role)
+                    ops += [op for op in eff["ops"] if str((op or {}).get("target", "")).endswith("/sidebar")]
+                    dropped += [dict(d, module=key) for d in eff["dropped"]]
+                    sources[key] = eff["source"]
+                    if eff["error"]:
+                        errors.append({"module": key, "error": eff["error"]})
+            finally:
+                conn.close()
+        new_groups, applied, skipped = core_menu.apply_layout(groups, ops)
+    except Exception as e:                                   # noqa: BLE001 版面出錯 ⇒ 宣告版，自訂模組照樣給（稽核 X C4-S4）
+        import logging
+        logging.getLogger(__name__).warning("套用角色版面失敗 ⇒ 選單用宣告版：%s", e)
+        new_groups, applied, skipped = groups, [], []
+        errors.append({"module": None, "error": "套用角色版面失敗，選單用宣告版"})
     customs, custom_error = [], None
     try:
         conn = get_db()
@@ -63,14 +72,30 @@ def _layout_for(user, groups, mod_items):
             "custom": [m["key"] for m in customs]}
 
 
-def menu_declaration(page_map):
-    """⇒ MOTRIX_MENU（dict）。page_map：core.pages 的 {頁名: (模組key, 路徑)}（main.py 啟動時組好的那一份）。"""
-    mod_items = core_menu.module_items({m.key: m.manifest for m in registry.loaded()})
+#: main.py 啟動時組好的 core.pages page_map（{頁名: (模組key, 路徑)}）；/api/platform/menu 的完整 pageModules 用
+PAGE_MAP = {}
+
+
+def set_page_map(page_map):
+    """main.py 在 check_and_register 之後呼叫一次（與 /pages 路由同一份）。"""
+    PAGE_MAP.clear()
+    PAGE_MAP.update(page_map or {})
+
+
+def _page_modules(page_map, only_keys=None):
     names = {s["key"]: s.get("name") or s["key"] for s in registry.module_states()}
+    return {name: {"key": key, "name": names.get(key, key)}
+            for name, (key, _path) in sorted((page_map or {}).items()) if only_keys is None or key in only_keys}
+
+
+def menu_declaration(page_map):
+    """⇒ MOTRIX_MENU（dict）。page_map：core.pages 的 {頁名: (模組key, 路徑)}（main.py 啟動時組好的那一份）。
+    **只含已載入模組**（groups 與 pageModules 都是）——未登入者不可以從兩者的差推出哪些模組沒載入（C4-O3）。"""
+    loaded = registry.loaded()
+    mod_items = core_menu.module_items({m.key: m.manifest for m in loaded})
     return {"v": 1,
             "groups": core_menu.declaration(core_menu.load_l1(), mod_items),
-            "pageModules": {name: {"key": key, "name": names.get(key, key)}
-                            for name, (key, _path) in sorted((page_map or {}).items())}}
+            "pageModules": _page_modules(page_map, {m.key for m in loaded})}
 
 
 def _js_literal(obj):
@@ -97,4 +122,6 @@ def platform_menu(authorization: str = Header(None)):
     groups = core_menu.build(l1, mod_items, modules, sa)
     return {"groups": groups,
             "denied": core_menu.denied(l1, mod_items, modules, sa),
-            "layout": _layout_for(user, groups, mod_items)}
+            "layout": _layout_for(user, groups, mod_items),
+            # 完整的頁面⇒模組（含已安裝未載入；登入後才給，C4-O3）：前端藏頁內連結、直接打網址的後備提示用
+            "pageModules": _page_modules(PAGE_MAP)}

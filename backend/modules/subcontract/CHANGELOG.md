@@ -1,6 +1,6 @@
 # 外包工班 更新紀錄
 
-## 1.0.5 — 2026-09-26
+## 1.0.6 — 2026-09-26〔稽核 X C4-S5：c-probes 先上第八班、用了 1.0.5 ⇒ 本段改 1.0.6〕
 - D7 演練：`module.json` 宣告 `provides.probes`（`/api/contractors`、`/api/vendor-contractors`、`/api/contractor-dispatches`、`/api/contractor-vouchers`）——純讀的 GET、在本模組前綴下、模組在時回 200（守門 `tests/platform/test_product_drill_probes.py`、`test_probe_side_effects.py`：不寫表、不寄信、不排程、不把回應值寫進 log）
 - 選單宣告搬進本模組：`contractors.html`、`vendor-contractors.html` 的 `pages[].menu`（原寫在 L1 的 `core/menu_l1.json`；group／order／perm／badge 原值照搬）。階段 C／C4（主持裁示 A）：本模組不在時它的入口隨宣告一起消失，不再靠前端寫死的頁面⇒模組對照表；版號與 c-probes／h-probes 交會，列車取號
 

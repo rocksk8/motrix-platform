@@ -109,17 +109,41 @@ def test_menu_layout_applies_the_users_role_only(client, make_user):
     assert href in _flat(other["layout"]["groups"]), "別的角色不受 admin 的版面影響"
 
 
+def _gated_target(client, make_user):
+    """找一個「選單項＋會檢查該模組權限的端點」：admin 沒有那項 perm ⇒ 403、有 ⇒ 200（兩個都要先成立，否則不是對象）。
+    候選：已載入、有選單項（perm 是模組清單）的模組所宣告的 probes。
+    〔稽核 X C4-M1：原題用 superadmin（require_any_module 第一行直通）打 /api/dashboard/stats（不檢查模組）⇒ 伺服器改成
+      「hide ⇒ 403」照樣綠。這裡先證明端點真的會擋，再驗 hide 不改變它〕"""
+    n = 0
+    for m in registry.loaded():
+        probes = ((m.manifest or {}).get("provides") or {}).get("probes") or []
+        for p in (m.manifest or {}).get("pages") or []:
+            perm = (p.get("menu") or {}).get("perm") if isinstance(p, dict) else None
+            if not isinstance(perm, list) or not probes:
+                continue
+            for url in probes:
+                n += 1
+                h_with = _login(client, make_user, "c4g_w%d" % n, "admin", modules=list(perm))
+                h_none = _login(client, make_user, "c4g_n%d" % n, "admin", modules=[])
+                if client.get(url, headers=h_with).status_code == 200 and client.get(url, headers=h_none).status_code == 403:
+                    return m.key, p["path"], url, h_with
+    return None
+
+
 def test_hide_is_display_only_not_permission(client, make_user):
-    """STAGE-C L79 ③：版面把項目藏起來，伺服器端照樣准許那個模組的端點（權限不看版面）。"""
-    key, href, man = _pick()
-    probes = (man.get("provides") or {}).get("probes") or []
-    if not probes:
-        pytest.skip("任取到的模組 %s 沒有宣告 probes ⇒ 無可打的端點" % key)
-    h = _login(client, make_user, "c4_sa2", "superadmin")
-    assert client.get(probes[0], headers=h).status_code == 200                     # 正對照
-    _publish_role_layout("superadmin", key, [{"op": "hide", "target": "%s:%s/sidebar" % (key, href)}])
-    assert href not in _flat(client.get("/api/platform/menu", headers=h).json()["layout"]["groups"])
-    assert client.get(probes[0], headers=h).status_code == 200, "藏起來之後伺服器端權限不可以跟著變"
+    """STAGE-C L79 ③：版面把項目藏起來，伺服器端照樣准許那個模組的端點（權限不看版面）。
+    非最高管理者（admin）只帶該項的模組權限；端點先證明會擋（沒權限 403、有權限 200），再發布 admin 角色的 hide ⇒ 仍 200。
+    反向控制：helpers.auth.require_any_module 改成「非超管且角色版面有 hide ⇒ 403」⇒ 本題紅（稽核 X8；見 commit）。"""
+    found = _gated_target(client, make_user)
+    if found is None:
+        if not any(((m.manifest or {}).get("provides") or {}).get("probes") for m in registry.loaded()):
+            pytest.skip("沒有已載入、宣告 probes 的模組（core-only 反向控制）⇒ 無對象")
+        pytest.fail("有已載入模組宣告 probes，卻沒有一支「沒權限 403、有權限 200」——無法驗 hide 不是權限（候選見 _gated_target）")
+    key, href, url, h = found
+    assert href in _flat(client.get("/api/platform/menu", headers=h).json()["layout"]["groups"]), "正對照：還沒 hide 時看得到"
+    _publish_role_layout("admin", key, [{"op": "hide", "target": "%s:%s/sidebar" % (key, href)}])
+    assert href not in _flat(client.get("/api/platform/menu", headers=h).json()["layout"]["groups"]), "版面 hide 要生效"
+    assert client.get(url, headers=h).status_code == 200, "藏起來之後伺服器端權限不可以跟著變（%s）" % url
 
 
 def test_layout_endpoint_and_menu_share_one_resolver(client, make_user, monkeypatch):
@@ -213,3 +237,21 @@ def test_custom_module_read_failure_is_reported_not_silent(client, make_user, mo
     menu = client.get("/api/platform/menu", headers=h).json()
     assert menu["layout"]["groups"], "選單照常"
     assert any(e["module"] is None and "自訂模組" in e["error"] for e in menu["layout"]["errors"]), menu["layout"]["errors"]
+
+
+def test_layout_crash_still_returns_custom_modules_and_says_so(client, make_user, monkeypatch):
+    """稽核 X C4-S4：套版面那一段丟非預期例外 ⇒ 仍 200、選單用宣告版、自訂模組照樣在、errors 明說（原本整支 500 ⇒ 自訂模組整批消失）。"""
+    from core import menu as core_menu
+    h = _login(client, make_user, "c4_s4_sa", "superadmin")
+    _publish_custom(client, h, "c4_s4", "C4崩潰仍在")
+
+    def boom(*a, **k):
+        raise RuntimeError("版面壞了")
+    monkeypatch.setattr(core_menu, "apply_layout", boom)
+    r = client.get("/api/platform/menu", headers=h)
+    assert r.status_code == 200, r.text
+    lay = r.json()["layout"]
+    assert "C4崩潰仍在" in _custom_labels(r.json())
+    assert any(e["module"] is None and "版面" in e["error"] for e in lay["errors"]), lay["errors"]
+    assert _flat(lay["groups"]), "宣告版照常"
+
