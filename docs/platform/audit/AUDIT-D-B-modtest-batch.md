@@ -33,3 +33,25 @@
   - 探針改看原始碼 AST：任何 `import playwright…`、`from playwright…`、`importorskip("playwright…")`，不分模組層或函式內，都算用了瀏覽器。
   - `file_is_e2e` 也認得 `importorskip("playwright…")`。
   - 反向控制把上表四種寫法都放進去。
+
+## 3. MB-M1 複核：wip/b-modtest-batch-2 f3be5cd2（D 23:56）
+
+- 修法：`playwright_refs` 看原始碼 AST（import、from-import、importorskip、import_module／`__import__`，任何層級）；`playwright_functions` 以「題」為粒度，經同檔 helper 與 fixture 遞移；`file_is_e2e` 用同一套判斷。基準 10 過。
+- D 用 B 的 collect-only 探針重跑沙盒，每題本體都真的用到 playwright：
+
+| 寫法（都沒有 marker） | 執行期守門 | `file_is_e2e` |
+|---|---|---|
+| from-import | 抓到 | e2e |
+| `import playwright.sync_api` | 抓到 | e2e |
+| 模組層 `importorskip` | 抓到 | e2e |
+| 函式內 import | 抓到 | e2e |
+| 經同檔 helper 的 `import_module` | 抓到 | e2e |
+| 只在模組層 import、題目本身沒用到 | 不列（依設計：純單元題） | e2e（保守方向） |
+
+- 突變 MB4「不認 importorskip」、MB5「不做同檔 helper 遞移」⇒ 都紅（`test_every_way_of_using_playwright_without_a_marker_is_caught`）。
+- **主持的問題：playwright 藏在跨檔 fixture（conftest）時，會不會被判成非 e2e？**
+  - 執行期守門：conftest 裡碰到 playwright 的 fixture 有 `_browser_netguard`、`new_context`、`e2e_browser`、`new_page`。後兩者依賴 `new_context`，pytest 的 fixturenames 會展開依賴，所以「用 `new_page` 而沒有 marker」一樣會紅。**目前沒有漏洞。**
+  - 靜態 `file_is_e2e`：夾具清單沒有 `new_page`；只用 `new_page` 的沙盒檔判成非 e2e。但真實 repo 用瀏覽器夾具的檔**全部 0 個判錯**，因為都另外用了 live_server 或 e2e_browser。而且執行期守門會要求這種題帶 marker，一帶 marker 靜態也就判成 e2e，兩道合起來是閉環。
+  - **射程限制（寫進說明即可）**：日後在 conftest 新增一個直接呼叫 `sync_playwright`、而**不依賴 `new_context`** 的 fixture，執行期守門（依名稱 `_BROWSER_FIXTURES`）認不得。建議把 `_BROWSER_FIXTURES` 改由 conftest 的 `playwright_functions` 算出來，或者要求 conftest 的瀏覽器 fixture 一律經 `new_context`。
+
+⇒ **MB-M1 關閉（f3be5cd2）**。

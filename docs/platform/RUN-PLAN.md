@@ -159,6 +159,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 23:56 D：**MB-M1 關閉（b-modtest-batch-2 f3be5cd2）**：沙盒 5 種 playwright 寫法（from／import／importorskip／函式內／helper import_module）無 marker 皆紅，模組層 import 未用不列；MB4、MB5 突變紅。主持問的跨檔 fixture：conftest 的 new_page／e2e_browser 都依賴 new_context，執行期守門抓得到；真實 repo 0 檔誤判；射程限制＝日後不經 new_context 的瀏覽器 fixture。
 - 2026-09-26 23:53 D：**M06-M3b 關閉（a-m06-7 d8a6068b）**：purpose 位置傳／登錄表不查／** 不查三突變紅；KNOWN_STAR_KWARGS 6 處（S3、subprocess、浮水印、case_bundle 的 part 轉呼叫——7 個呼叫點無 case.summary）皆無關。建議 M06-S3：清單加一筆就綠（過期檢查只管變少），加總數上限。
 - 2026-09-26 23:41 D：a-m06-6 00f5f0a6 複核 M06-M3：**kwargs 帶字面值（dict 字面值／變數／dict()）皆擋；但從 SUMMARY_PURPOSE_MODULES 取值、以位置參數或 ** 傳 ⇒ 漏 ⇒ **M06-M3b（必修）**：禁止 case_access 以外引用登錄表＋位置參數／非字面值 ** 也禁。
 - 2026-09-26 23:38 D：b-modtest-batch f0fe645e **必修 MB-M1**：沙盒「用 playwright 而無 marker」4 種寫法只抓到 from-import 一種（import 模組、importorskip、函式內 import 皆漏；file_is_e2e 對 importorskip 判非 e2e）。其餘成立：任一批紅／無摘要／選到的檔無結果 ⇒ 紅（3 突變紅）、最後一行是合計。

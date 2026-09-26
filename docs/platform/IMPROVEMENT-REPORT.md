@@ -81,6 +81,7 @@
 | modtest 分批彙總＋e2e 判定（B，wip/b-modtest-batch f0fe645e） | D | `AUDIT-D-B-modtest-batch.md` | 稽核完成（2026-09-26 23:38）：**必修 1**（MB-M1 playwright 無 marker 只抓到 1／4 種寫法；file_is_e2e 認不得 importorskip）；彙總三突變紅、最後一行合計成立 |
 | M06-M3 複核（A，wip/a-m06-6 00f5f0a6） | D | `AUDIT-D-A-M06-move.md` §5 | 複核（2026-09-26 23:41）：**未完全關閉 ⇒ M06-M3b**：** 字面值（主持指定）擋得住；從 SUMMARY_PURPOSE_MODULES 取值再以位置參數或 ** 傳可繞過 |
 | M06-M3b 複核（A，wip/a-m06-7 d8a6068b） | D | `AUDIT-D-A-M06-move.md` §6 | 複核（2026-09-26 23:53）：**M06-M3b 關閉**（keyword-only、登錄表、** 三突變紅；6 處既有 ** 皆與 case.summary 無關）；建議 M06-S3：KNOWN_STAR_KWARGS 可加項變綠，加總數上限 |
+| MB-M1 複核（B，wip/b-modtest-batch-2 f3be5cd2） | D | `AUDIT-D-B-modtest-batch.md` §3 | 複核（2026-09-26 23:56）：**MB-M1 關閉**——沙盒 5 種寫法皆抓到、MB4／MB5 紅；conftest 跨檔 fixture 經 new_context 依賴展開，目前無漏；射程：日後不經 new_context 的瀏覽器 fixture |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
