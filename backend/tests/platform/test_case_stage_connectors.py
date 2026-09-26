@@ -167,8 +167,14 @@ IP6_KINDS = {"invoice_voucher", "payment_request", "shipping_note", "quotation",
 
 
 def test_calendar_writeback_every_owner_registers_its_writeback():
-    import routers.invoice_vouchers, routers.payment_requests, routers.shipping_notes, routers.quotations  # noqa: F401,E401
-    assert set(registry.providers("calendar.writeback")) == IP6_KINDS
+    import routers.shipping_notes, routers.quotations  # noqa: F401,E401
+    from core import source_tree
+    want = set(IP6_KINDS)
+    if source_tree.module_installed("modules/arap/"):
+        import modules.arap.api.invoice_vouchers, modules.arap.api.payment_requests  # noqa: F401,E401
+    else:
+        want -= {"invoice_voucher", "payment_request"}          # M05 不在這個安裝包（PLAYBOOK §B-11）
+    assert set(registry.providers("calendar.writeback")) == want
 
 
 @pytest.fixture()

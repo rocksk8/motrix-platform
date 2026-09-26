@@ -28,10 +28,23 @@ from helpers.tax_calc import quote_tax_type, tax_split, LEGACY_TAX_NOTE, invoice
 # X-VAT（2026-09-26）：金額一律四捨五入（內建 round() 是銀行家捨入：.5 取偶數）
 from helpers.legal_params import round_half_up
 from helpers.financial_mask import money_visible
-from helpers.receivables import (  # M08 搬遷 ③：下沉 L1（M05／M06 不再 import M08）
-    collect_income_items as _collect_income_items, collect_tax_invoices as _collect_tax_invoices,
-    round_half_up_invoice as _round_half_up,
-)
+from helpers.legal_params import round_half_up as _round_half_up   # 原 receivables.round_half_up_invoice（同一算法）
+from core import registry as _registry
+
+# 收款／銷項發票資料屬 M05 應收應付（ROADMAP A8b 已收回模組），經 provider 取用；M05 不在 ⇒ 明說，不回空表
+RECEIVABLES_MISSING = "應收應付模組未安裝：收款與銷項發票資料不提供（現金口徑收入、銷項發票匯出需要它）"
+
+
+def _collect_income_items(d0, d1, department_id=None):
+    p = _registry.single_provider("receivables.income_items")
+    return [] if p is None else p(d0, d1, department_id)
+
+
+def _collect_tax_invoices(year=None, month=None):
+    p = _registry.single_provider("receivables.tax_invoices")
+    if p is None:
+        raise HTTPException(404, RECEIVABLES_MISSING)
+    return p(year, month)
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading, contact_line
 from helpers.recognition import (  # `AC2`：權責／現金口徑與待補登標註
@@ -2171,7 +2184,7 @@ tr.in-period{{background:#EFF6FF}}
 <div class="section-title" style="background:#111827">{data.get("expenseMonth","")} 當月收支明細</div>
 {('<p style="font-size:8.5pt;color:#1E3A8A;background:#EFF6FF;border:1px solid #BFDBFE;padding:6px 10px;margin:6px 0">' + esc(data.get("basisNote")) + '</p>') if data.get("basisNote") else ''}
 <h3 style="margin:8px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">當月收入明細</h3>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(month_income_items) + income_sum_row(month_income_items) + '</tbody></table>' if month_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無收款紀錄。</p>'}
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(month_income_items) + income_sum_row(month_income_items) + '</tbody></table>' if month_income_items else ('<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">' + (data.get("incomeNotice") or "當月尚無收款紀錄。") + '</p>')}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">當月支出明細</h3>
 {'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(month_expense_items) + '</tbody></table>' if month_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">當月尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
@@ -2199,7 +2212,7 @@ tr.in-period{{background:#EFF6FF}}
 </tr>
 </table>
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#15803D;border-bottom:1px solid #BBF7D0;padding-bottom:4px">今年度收入明細（共 {len(year_income_items)} 筆）</h3>
-{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無收款紀錄。</p>'}
+{'<table><thead>' + tbl_hdr("案件號","客戶","專案","業務員",*_inc_cols,"實收金額","手續費","實收淨額","發票號碼") + '</thead><tbody>' + income_rows_html(year_income_items) + income_sum_row(year_income_items) + '</tbody></table>' if year_income_items else ('<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">' + (data.get("incomeNotice") or "此年度尚無收款紀錄。") + '</p>')}
 <h3 style="margin:16px 0 8px;font-size:10pt;color:#7C3AED;border-bottom:1px solid #DDD6FE;padding-bottom:4px">今年度支出明細（共 {len(year_expense_items)} 筆）</h3>
 {'<table><thead>' + tbl_hdr("日期","類別","關聯案件","說明","金額","發票/收據附件") + '</thead><tbody>' + expense_rows_html(year_expense_items) + '</tbody></table>' if year_expense_items else '<p style="color:#6B7280;font-size:9pt;padding:8px 0;font-style:italic">此年度尚無支出明細資料。</p>'}
 <table style="margin-top:10px"><tbody>
@@ -2610,135 +2623,8 @@ def tax_export_excel(
     )
 
 
-# ── 銀行對帳單比對（承攬商匯款申請）───────────────────────────────────────────
-
-_BANK_DATE_ALIASES   = ["交易日期", "日期", "過帳日", "轉帳日期", "交易日", "date", "Date"]
-_BANK_AMOUNT_ALIASES = ["金額", "提出金額", "支出金額", "轉出金額", "付款金額", "提款金額",
-                         "amount", "Amount", "Debit", "withdrawal"]
-_BANK_DESC_ALIASES   = ["摘要", "備註", "說明", "對方戶名", "附言", "memo", "Description", "Memo"]
-
-
-def _pick_csv_header(fieldnames: list, aliases: list) -> Optional[str]:
-    """依常見銀行匯出欄位別名找出對應欄位——各家銀行 CSV 標頭不統一，這裡先精準比對，
-    找不到再退而求其次找含該關鍵字的欄位，仍找不到就回傳 None（呼叫端自行決定要不要擋）。"""
-    clean = [fn for fn in fieldnames if fn]
-    for a in aliases:
-        for fn in clean:
-            if fn.strip() == a:
-                return fn
-    for a in aliases:
-        for fn in clean:
-            if a in fn:
-                return fn
-    return None
-
-
-def _parse_bank_csv(raw: bytes) -> list:
-    """解析銀行對帳單 CSV。不同銀行匯出的編碼／欄位命名差異很大，這裡採寬鬆偵測：
-    依序嘗試常見編碼、依別名清單找日期/金額/摘要欄位，只有金額欄位是必要的。"""
-    text = None
-    for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
-        try:
-            text = raw.decode(enc)
-            break
-        except (UnicodeDecodeError, LookupError):
-            continue
-    if text is None:
-        raise HTTPException(400, "CSV 編碼無法辨識，請確認匯出檔案格式（支援 UTF-8 / Big5）")
-
-    reader = csv.DictReader(io.StringIO(text))
-    fieldnames = reader.fieldnames or []
-    date_col = _pick_csv_header(fieldnames, _BANK_DATE_ALIASES)
-    amt_col  = _pick_csv_header(fieldnames, _BANK_AMOUNT_ALIASES)
-    desc_col = _pick_csv_header(fieldnames, _BANK_DESC_ALIASES)
-    if not amt_col:
-        raise HTTPException(400, f"CSV 找不到可辨識的金額欄位，偵測到的欄位為：{'、'.join(fieldnames) or '（無）'}")
-
-    rows = []
-    for r in reader:
-        raw_amt = (r.get(amt_col) or "").replace(",", "").replace("NT$", "").strip()
-        if not raw_amt:
-            continue
-        try:
-            amt = abs(float(raw_amt))
-        except ValueError:
-            continue
-        if amt <= 0:
-            continue
-        rows.append({
-            "date":   (r.get(date_col) or "").strip() if date_col else "",
-            "amount": amt,
-            "desc":   (r.get(desc_col) or "").strip() if desc_col else "",
-        })
-    return rows
-
-
-@router.post("/api/reports/bank-reconcile")
-async def bank_reconcile(file: UploadFile = File(...), authorization: str = Header(None)):
-    """銀行對帳單比對：上傳 CSV，依金額比對目前「已核准未匯款」的承攬商匯款申請。
-
-    只做金額比對（同金額只配對一次，避免一筆申請被重複配對到多筆銀行紀錄），純供人工
-    複核用途——回傳配對建議，不會自動標記已匯款，實際標記仍走既有 paid-toggle 端點，
-    避免比對誤判（例如剛好同金額但其實是不同筆款項）被誤當正式入帳紀錄。"""
-    u = _require_user(authorization)
-    if u["role"] not in ("superadmin", "admin") and not user_has_module(u, "cashier"):
-        raise HTTPException(403, "僅管理員或出納可查閱")
-
-    raw = await file.read()
-    if len(raw) > 5 * 1024 * 1024:
-        raise HTTPException(400, "檔案過大（上限 5MB）")
-    bank_rows = _parse_bank_csv(raw)
-
-    conn = get_db()
-    voucher_rows = conn.execute("""
-        SELECT v.voucher_no, v.quote_no, v.snapshot_json, v.updated_at, q.customer_name
-        FROM contractor_payment_vouchers v
-        LEFT JOIN quotations q ON q.quote_no = v.quote_no
-        WHERE v.status='已核准' AND v.is_paid=0
-    """).fetchall()
-    conn.close()
-
-    vouchers = []
-    for r in voucher_rows:
-        snap = {}
-        try:
-            snap = json.loads(r["snapshot_json"] or "{}")
-        except Exception:
-            pass
-        vouchers.append({
-            "voucherNo":  r["voucher_no"],
-            "quoteNo":    r["quote_no"] or "",
-            "customer":   r["customer_name"] or "",
-            "vendorName": snap.get("vendorName") or "",
-            "amount":     round_half_up(float(snap.get("grandTotal") or 0)),
-        })
-
-    matched_voucher_nos = set()
-    bank_results = []
-    for br in bank_rows:
-        amt_r = round_half_up(br["amount"])
-        candidate = next(
-            (v for v in vouchers if round_half_up(v["amount"]) == amt_r and v["voucherNo"] not in matched_voucher_nos),
-            None,
-        )
-        if candidate:
-            matched_voucher_nos.add(candidate["voucherNo"])
-        bank_results.append({**br, "match": candidate})
-
-    unmatched_vouchers = [v for v in vouchers if v["voucherNo"] not in matched_voucher_nos]
-
-    _audit(_tok(authorization), "reports.bank_reconcile", "reports", "bank-reconcile",
-           f"銀行對帳單比對（上傳 {len(bank_rows)} 筆，配對成功 {len(matched_voucher_nos)} 筆）",
-           {"bankRowCount": len(bank_rows), "matchedCount": len(matched_voucher_nos)})
-    return {
-        "bankRows":           bank_results,
-        "matchedCount":       len(matched_voucher_nos),
-        "unmatchedBankCount": sum(1 for r in bank_results if not r["match"]),
-        "unmatchedVouchers":  unmatched_vouchers,
-        "note": "僅依金額比對，且同金額只配對一次，屬建議配對供人工複核；請核對案件號/"
-                "承攬商名稱後再手動標記已匯款，系統不會自動標記。",
-    }
-
+# ── 銀行對帳單比對 ──（2026-09-26 收回 M05 `modules/arap/api/cashier.py`，路徑 `/api/reports/bank-reconcile` 不變；
+#    ROADMAP M05：業務語意屬於出納，M08 搬遷時暫留本檔）
 
 # ── Customer transaction history ───────────────────────────────────────────────
 
@@ -3303,6 +3189,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
                 conn.close()
     else:
         _income = _collect_income_items
+    income_notice = "" if (basis == "accrual" or _registry.single_provider("receivables.income_items")) else RECEIVABLES_MISSING
     expenses_annual = _collect_expenses(year, department_id, basis)
     if month[:4] == str(year):
         month_slice = _month_expense_slice(expenses_annual, month)
@@ -3360,6 +3247,7 @@ def _build_income_expense_scopes(year: int, month: str, department_id: Optional[
         "expenseMonth":      month,
         "monthExpenseItems": month_slice["items"],
         "monthExpenseTotal": month_slice["total"],
+        "incomeNotice":      income_notice,      # M05 不在 ⇒ 現金口徑收入沒有資料來源（不是「這個月沒有收款」）
         "monthIncomeItems":  month_income,
         "monthIncomeTotal":  sum(i["amount"] for i in month_income),
         "monthIncomeNet":    sum(i["netAmount"] or 0 for i in month_income),

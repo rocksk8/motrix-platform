@@ -342,9 +342,11 @@
     "page:pages/cashier.html",
     "page:pages/payment-request-form.html",
     "page:pages/receivables.html",
-    "router:cashier",
-    "router:invoice_vouchers",
-    "router:payment_requests"
+    "mod:arap/__init__",
+    "mod:arap/api/cashier",
+    "mod:arap/api/invoice_vouchers",
+    "mod:arap/api/payment_requests",
+    "mod:arap/receivables"
    ],
    "tables": [
     "invoice_vouchers",
@@ -353,7 +355,8 @@
    "api_prefixes": [
     "/api/cashier",
     "/api/invoice-vouchers",
-    "/api/payment-requests"
+    "/api/payment-requests",
+    "/api/reports"
    ]
   },
   "M06": {

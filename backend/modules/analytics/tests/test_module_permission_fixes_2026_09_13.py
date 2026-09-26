@@ -31,18 +31,6 @@ def test_user_without_either_module_is_still_blocked(client, make_user):
     assert r.status_code == 403, f"沒有模組的人也進得去了：{r.status_code}"
 
 
-def test_bank_reconcile_still_requires_admin_or_cashier(client, make_user):
-    """對帳是「動作」不是報表查閱，維持 admin+／cashier，不跟著放寬。"""
-    u, p = make_user(username="r_rep_only", role="sales", modules=["dashboard", "reports"])
-    tok = _login(client, u, p)
-    # 這支吃 multipart 檔案上傳；不帶檔案會在 FastAPI 驗證階段就 422，
-    # 根本走不到權限檢查——那樣的 422 綠燈證明不了任何權限行為。
-    r = client.post("/api/reports/bank-reconcile",
-                    files={"file": ("t.csv", b"date,amount\n", "text/csv")},
-                    headers=_auth(tok))
-    assert r.status_code == 403, f"reports 模組不該打得開對帳：{r.status_code} {r.text}"
-
-
 def test_modules_without_backend_checks_now_block(client, make_user):
     """只有 `dashboard` 的帳號打不開裝置清單（其餘三支在 tests/test_module_permission_fixes_2026_09_13.py）。"""
     u, p = make_user(username="mod_none", role="viewer", modules=["dashboard"])

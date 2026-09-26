@@ -1,5 +1,9 @@
 # 營運分析 更新紀錄
 
+## 1.0.2 — 2026-09-26
+- M05 搬遷：`POST /api/reports/bank-reconcile` 收回 M05（`modules/arap/api/cashier.py`，路徑不變），本模組只留一行指路註解；它的 8 題隨之搬進 `modules/arap/tests`
+- 收款／銷項發票改取 M05 provider（`receivables.income_items`／`receivables.tax_invoices`）；M05 不在 ⇒ 現金口徑收入附 `incomeNotice`（PDF 空表說明同句）、稅務匯出 404 並明說——不是「這個月沒有收款」
+
 ## 1.0.1 — 2026-09-26
 - 只改 import 來源（行為不變）：`api/reports.py` 的稅額函式（quote_tax_type、tax_split、LEGACY_TAX_NOTE、invoice_amounts）改自 L1 `helpers.tax_calc` import（C 的 T：稅額純函式自 M01 下沉 L1）⇒ 本模組對 M01 `helpers.quotations` 少一條相依
 

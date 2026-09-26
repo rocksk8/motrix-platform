@@ -1,4 +1,7 @@
-"""外包工班 外包工班的串接點，**取用方這一側、外包工班 不在也要成立的題**（2026-09-26）：
+"""需要應收應付（M05）的題：刪掉 modules/arap 時隨模組消失（PLAYBOOK §B-11）。
+
+（2026-09-26 自 tests/platform/test_subcontract_connectors.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
+外包工班 外包工班的串接點，**取用方這一側、外包工班 不在也要成立的題**（2026-09-26）：
 IP-15 `dispatch.list_for_case`（M01 案件整包）、IP-14 `contractor_voucher.public`（M05 出納、M06 T100 匯出）
 拿掉提供者 ⇒ 照常回應並明說；M01／M05／M06 不再直接 import 外包工班。
 提供方的登記與正對照在 `modules/subcontract/tests/test_subcontract_providers.py`（隨模組搬走）。
@@ -60,29 +63,27 @@ def _items():
 
 # ── IP-15（外包工班 不在）─────────────────────────────────────────────────────────
 
-def test_case_bundle_without_m04(client, make_user, monkeypatch):
-    from routers import quotations as q
-    h = _hdr(client, make_user)
-    _seed()
-    _without(monkeypatch, "dispatch.list_for_case")
-    r = client.get("/api/quotations/%s/case-bundle" % QNO, headers=h)
-    assert r.status_code == 200
-    assert r.json()["parts"]["dispatches"] == {"ok": False, "status": 404, "detail": q.DISPATCHES_UNAVAILABLE}
-    assert r.json()["parts"]["updates"]["ok"] is True                     # 其他段照常
-
 
 # ── IP-14（外包工班 不在）─────────────────────────────────────────────────────────
 
+def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
+    from routers import accounting_export as ae
+    from modules.arap.api import cashier as ca
+    h = _hdr(client, make_user)
+    _seed()
+    _without(monkeypatch, "contractor_voucher.public")
+    r = client.get("/api/cashier/payable-queue", headers=h)
+    assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
+    hist = client.get("/api/cashier/execution-history?start=2026-09-01&end=2026-09-30", headers=h)
+    assert hist.status_code == 200 and hist.json()["outgoing"] == [] and hist.json()["contractorNotice"] == ca.CONTRACTOR_MISSING
+    prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)
+    assert prev.status_code == 200 and prev.json()["notice"] == ae.T100_CONTRACTOR_MISSING
+    x = client.get("/api/cashier/export?start=2026-09-01&end=2026-09-30", headers=h)
+    assert x.status_code == 200
+    import io
+    import openpyxl
+    ws = openpyxl.load_workbook(io.BytesIO(x.content))["已匯款明細"]
+    assert ws.cell(row=3, column=1).value == ca.CONTRACTOR_MISSING
+
 
 # ── 相依已切斷（M01／M05／M06 這一側）────────────────────────────────────────────
-
-@pytest.mark.parametrize("rel,pattern", [
-    ("routers/quotations.py", r"from (routers|modules\.subcontract)[\w.]* import .*(list_dispatches|vendor_contractors)"),
-    ("modules/arap/api/cashier.py", r"contractor_vouchers import|_voucher_public"),     # 2026-09-26 出納搬進 M05
-    ("routers/accounting_export.py", r"contractor_vouchers import|_voucher_public"),
-])
-def test_no_direct_imports_across(rel, pattern):
-    if not source_tree.module_installed(rel):
-        pytest.skip("%s 的模組不在這個安裝包（PLAYBOOK §B-11）" % rel)
-    text = (source_tree.BACKEND / rel).read_text(encoding="utf-8")
-    assert not re.search(pattern, text), "%s 仍直接引用：%s" % (rel, pattern)

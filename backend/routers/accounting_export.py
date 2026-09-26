@@ -74,7 +74,13 @@ from pydantic import BaseModel
 from db import get_db
 from core import registry as _registry
 from helpers import _require_user, _tok, _audit, _get_setting, _set_setting
-from helpers.receivables import collect_tax_invoices as _collect_tax_invoices  # §3 #11：M08 搬遷 ③ 下沉 L1（ROADMAP A8b）
+#: 收款事件（銷項）的資料屬 M05 應收應付（ROADMAP A8b 已收回模組）：經 provider 取用；M05 不在 ⇒ 沒有收款事件並明說
+T100_RECEIVABLES_MISSING = "應收應付模組未安裝：T100 匯出不含收款事件（銷項）"
+
+
+def _collect_tax_invoices(year=None, month=None):
+    p = _registry.single_provider("receivables.tax_invoices")
+    return [] if p is None else p(year, month)
 from helpers.xlsx_out import check_export_rate, set_row, xl_style
 from helpers.company_identity import company_heading
 from helpers.part_catalog import PART_CATEGORIES
@@ -513,8 +519,12 @@ def t100_export_preview(
     _validate_range(start, end)
     events = _collect_t100_events(start, end)
     return {
-        # IP-14 對方不在時：預覽明說少了承攬商付款（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
-        "notice": "" if _registry.single_provider("contractor_voucher.public") else T100_CONTRACTOR_MISSING,
+        # 對方不在時：預覽明說少了哪一類（匯出的 Excel 是 T100 匯入檔，不在裡面加說明列）
+        #   IP-14（M04）⇒ 承攬商付款；receivables.tax_invoices（M05）⇒ 收款事件。兩者都缺 ⇒ 兩句都列
+        "notice": "；".join(x for x in (
+            "" if _registry.single_provider("contractor_voucher.public") else T100_CONTRACTOR_MISSING,
+            "" if _registry.single_provider("receivables.tax_invoices") else T100_RECEIVABLES_MISSING,
+        ) if x),
         "count": len(events),
         "totalAmount": sum(e["amount"] for e in events),
         "events": [
