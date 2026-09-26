@@ -149,11 +149,13 @@ def _no_cap_env(monkeypatch):
     """跑這幾題的人自己可能正設著覆寫（全速期間）⇒ 先清掉，否則「預設」那題會量到環境。"""
     monkeypatch.delenv(MT.FULL_ENV, raising=False)
     monkeypatch.delenv(MT.PARTIAL_ENV, raising=False)
+    monkeypatch.delenv(MT.E2E_ENV, raising=False)
 
 
 def test_caps_default_when_env_unset(_no_cap_env):
     assert MT.full_max_workers() == MT.FULL_MAX_WORKERS == 4
     assert MT.partial_max_workers() == MT.PARTIAL_MAX_WORKERS == 2
+    assert MT.e2e_max_workers() == MT.E2E_MAX_WORKERS == 2
 
 
 def test_caps_follow_env(_no_cap_env, monkeypatch):
@@ -179,8 +181,27 @@ def test_run_full_uses_the_env_cap(_no_cap_env, monkeypatch):
     monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, "== 1 passed in 1.0s =="))
     monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
     MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=4, window="t"))
-    ns = [args[args.index("-n") + 1] for args in seen if "-n" in args]
-    assert ns and all(n == "3" for n in ns), seen
+    ns = {args[args.index("-m") + 1]: args[args.index("-n") + 1] for args in seen if "-n" in args}
+    assert ns.get("not e2e") == "3", seen          # e2e 段另有上限（下一題）
+
+
+def test_run_full_e2e_stage_has_its_own_cap(_no_cap_env, monkeypatch):
+    """e2e 段不跟全量上限走（記憶體）：全量 3、e2e 預設 2；設 MOTRIX_E2E_MAX_WORKERS=1 ⇒ e2e 段 1。
+    突變：e2e 段改回全量上限 ⇒ 紅。"""
+    import types
+    monkeypatch.setenv(MT.FULL_ENV, "3")
+    monkeypatch.setattr(MT, "tree_state", lambda repo=None: ("a" * 40, ""))
+    monkeypatch.setattr(MT, "write_last_full", lambda r, root=None: Path("x"))
+
+    def stages(e2e_env):
+        if e2e_env is not None:
+            monkeypatch.setenv(MT.E2E_ENV, e2e_env)
+        seen = []
+        monkeypatch.setattr(MT, "run_pytest", lambda roots, args, *a, **k: seen.append(list(args)) or (0, "== 1 passed in 1.0s =="))
+        MT.run_full([], types.SimpleNamespace(workers=4, e2e_workers=4, window="t"))
+        return {args[args.index("-m") + 1]: args[args.index("-n") + 1] for args in seen}
+    assert stages(None) == {"not e2e": "3", "e2e": "2"}
+    assert stages("1") == {"not e2e": "3", "e2e": "1"}
 
 
 def test_no_call_site_caps_with_the_bare_constant():
