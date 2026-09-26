@@ -1,5 +1,5 @@
 {
- "core_version": "1.37",
+ "core_version": "1.38",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -594,6 +594,11 @@
    "collect_income_items": "def(d0, d1, department_id=…)",
    "collect_tax_invoices": "def(year=…, month=…)",
    "round_half_up_invoice": "def(n)"
+  },
+  "helper:recognition_basis": {
+   "BASES": "const",
+   "BASIS_NOTES": "const",
+   "normalize_basis": "def(v)"
   },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
