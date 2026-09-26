@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.37 — 2026-09-26（B，C4 選單切換；暫用號，合回時 core_bump 依 origin 取號）〔core_bump：暫用 1.35 → 1.37〕
+> STAGE-C C4（主持裁示 A）：選單套用使用者角色的版面。`core.registry.CORE_VERSION` 1.34 → 1.35（只有新增）。
+- L1（新增）：`core.catalog.effective_layout_ops(conn, module_key, role)`——resolve（角色＞公司＞預設）＋逐筆 `check_layout`，`GET /api/layout/{module}` 與選單共用這一份
+- L1（新增）：`core.menu.apply_layout(groups, ops)`、`core.menu.sidebar_point_id(item)`——側欄點的 hide／show／move{index}；hide 只是顯示、不是權限
+- L1（相容擴充）：`GET /api/platform/menu` 多回 `layout`（已套使用者角色版面的選單＋applied／skipped／dropped／errors／sources）；`groups`／`denied` 維持宣告版
+
 ## 1.36 — 2026-09-26（C，M01-PLAN §3-2：兩支通用函式下沉 L1；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
 > 介面只有新增；舊位置保留同名別名（同一物件）。
 - L1（新增）：`helpers.dates.norm_at`、`helpers.tiered_approval.steps_to_tiers`（自 M01 `helpers/quotations.py` 的 `norm_at`、`_steps_to_tiers` 逐字搬入）

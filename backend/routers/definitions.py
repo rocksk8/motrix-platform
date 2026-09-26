@@ -291,28 +291,13 @@ def effective_layout(module_key: str, role: str = Query(None), authorization: st
     if not re.match(r"^[a-z][a-z0-9_]{0,39}$", module_key or "") or not registry.is_loaded(module_key):
         raise HTTPException(404, "模組未載入")
     who = role if role is not None else u["role"]
-    key = "module:%s" % module_key
-    error = None
     conn = get_db()
     try:
-        body, source = D.resolve(conn, "layout", key, who)
-    except Exception as e:                                   # noqa: BLE001 覆寫層出錯 ⇒ 程式預設
-        logging.getLogger(__name__).warning("讀版面定義失敗 %s（%s）⇒ 用程式預設：%s", key, who, e)
-        body, source, error = {"ops": []}, "default", "讀版面定義失敗，已改用程式預設"
+        eff = catalog.effective_layout_ops(conn, module_key, who)   # resolve＋check_layout 唯一一份（C4：選單共用）
     finally:
         conn.close()
-    ops = (body or {}).get("ops") if isinstance(body, dict) else None
-    kept, dropped = [], []
-    for i, op in enumerate(ops if isinstance(ops, list) else []):
-        probs = catalog.check_layout(module_key, [op])
-        if probs:
-            dropped.append({"index": i, "op": op, "message": probs[0]["message"]})
-        else:
-            kept.append(op)
-    if ops is not None and not isinstance(ops, list):
-        dropped.append({"index": None, "op": ops, "message": "ops 不是清單"})
-    return {"module": module_key, "role": who, "source": source, "ops": kept, "dropped": dropped,
-            "error": error, "points": catalog.layout_points(module_key)}
+    return {"module": module_key, "role": who, "source": eff["source"], "ops": eff["ops"], "dropped": eff["dropped"],
+            "error": eff["error"], "points": catalog.layout_points(module_key)}
 
 
 @router.post("/api/definitions/output_template/{key}/preview")
