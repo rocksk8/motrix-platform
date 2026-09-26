@@ -51,5 +51,10 @@
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| RT-M1 | | | |
-| RT-S1 | | | |
+| RT-M1 | 錯誤 ② 只對已安裝的群組報（`_installed_groups`：L1、未搬遷群組、`modules/<key>/module.json` 在）；補兩題反向控制 | wip/b-routes-2 3b38f6c6 | ✅ 11:55 D：拿掉 netplan（D 樹實刪、`ls backend/modules` 確認不在）⇒ **17 passed**（修正前紅 1）；模組全在 17 passed；突變「不看已安裝」「已安裝恆假」皆紅 ⇒ **關閉（3b38f6c6）**。小觀察：已搬遷群組若沒寫 `key` 會被當成永遠沒裝（② 不再報）；目前 4 個已搬遷群組都有 key，建議補一條「已搬遷群組必須有 key」 |
+| RT-S1 | 萬用只接受結尾 `/*`、分界＝`/`、`/*` 前至少第三層；新增錯誤 ⑤ | 3b38f6c6 | ✅ 11:55 D：突變「格式不檢查」「分界拿掉」「第三層限制拿掉」皆紅 ⇒ **關閉（3b38f6c6）** |
+
+## 6. 自查（主持提醒 MSYS 路徑轉換使 sparse 排除失效，11:55）
+
+D 沒有在 Git Bash 下自己建過 sparse 樹：所有 §B-11 反向控制都在 D 自己的稽核樹以刪資料夾進行，並在跑之前 `ls backend/modules` 確認；唯一用到 sparse 的是 `core_only_rc.py`（從 Python 呼叫 git，不經 MSYS 轉換），該次執行中 D 查過拋棄式樹的 `backend/modules` 只有 `__init__.py`（AUDIT-D-B-G1 §7）。⇒ 不受影響。
+
