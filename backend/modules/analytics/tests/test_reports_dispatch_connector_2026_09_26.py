@@ -5,7 +5,15 @@
   - 提供者在 ⇒ 數字與原本一致（既有 test_reports_logic_fixes 的兩題是正對照；這裡再驗一次等價）
   - 提供者不在（外包工班模組未安裝）⇒ `staleSettlementCount` 是 None ＋ 說明，不是 0（不可以把「無法檢查」說成「沒有過期」）
 """
+import pytest
+
+from core import source_tree
 from modules.analytics.tests.test_reports_logic_fixes_2026_08_28 import _insert_case, _insert_dispatch
+
+#: 「提供者在」的兩題需要外包工班（M04，IP-1 的提供者）：模組不在時提供者本來就不在，
+#: 那一側由 test_without_the_dispatch_provider_the_check_says_it_could_not_run 驗（PLAYBOOK §B-11）
+_NEEDS_M04 = pytest.mark.skipif(not source_tree.module_installed("modules/subcontract/"),
+                                reason="外包工班（M04）不在這個安裝包：dispatch.row 提供者本來就不在")
 
 def _stale_case():
     _insert_case("MQ-IP1-001", deal_tag="已結案", settlement={"status": "finalized", "summary": {
@@ -13,6 +21,7 @@ def _stale_case():
     _insert_dispatch("MQ-IP1-001", total_amount=45000)          # 含稅後 47250，跟快照 40000 對不上
 
 
+@_NEEDS_M04
 def test_totals_through_the_provider_match_the_old_algorithm(client, make_user):
     import db
     from modules.analytics.api.reports import _live_dispatch_totals_by_quote
@@ -36,6 +45,7 @@ def test_without_the_dispatch_provider_the_check_says_it_could_not_run(client, m
     assert "外包工班模組未安裝" in (s["staleSettlementNote"] or "")
 
 
+@_NEEDS_M04
 def test_with_the_provider_there_is_no_note(client, make_user):
     """正對照：提供者在 ⇒ 照常計數、沒有說明。"""
     from modules.analytics.api.reports import _collect
