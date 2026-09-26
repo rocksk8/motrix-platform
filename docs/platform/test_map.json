@@ -5045,6 +5045,7 @@
    "kind": "audit",
    "units": [
     "dir:backend/modules/",
+    "dir:backend/tests/platform/",
     "dir:docs/platform/",
     "file:docs/platform/INTEGRATION-POINTS.md",
     "plat:__init__",
@@ -5057,6 +5058,7 @@
     ],
     "path": [
      "backend/modules/",
+     "backend/tests/platform/",
      "docs/platform/",
      "docs/platform/INTEGRATION-POINTS.md"
     ]

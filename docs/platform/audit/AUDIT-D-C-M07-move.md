@@ -57,8 +57,8 @@ C 登記的是 sparse 樹兩輪都 1583 過，只紅允許的 2 題（範圍較�
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| M07-S1～S2 | | | |
-| O-1～O-2 | | | |
+| M07-S1～S2 | **修正**（wip/c-m07-s12b）。S1：`missing_provider_files` 改讀 `PATH_ROWS`（提供方／使用方／守門／單據凍結）四欄的**每一列**；另修一個 D 沒列、同根的缺陷：原本只切 `## IP-` 節 ⇒ `## U4` 說明節併進前一節、只讀第一列（U4 的守門列看不到；讀全部列後還會讓 IP-14 的模組豁免失效）⇒ 改成每個 `## ` 標題切節（`_sections`，doc_capabilities／absent_module_capabilities 共用）。第六班合回後實測抓到 **7** 處：D 列的 6 處＋IP-9 使用方 `routers/reports.py`（第六班 M08 搬到 `modules/analytics/api/reports.py`）⇒ 7 處改到新位置（只改表格列；說明文字裡的「原本在 …」是歷史，照舊），`::` 後的名稱在新位置都存在。突變 3 項（只驗提供方、只切 ## IP-、每節只讀第一列）皆紅。S2：`api_module` 的模組在 ⇒ `ack_api` 要出現在 `modules/<mod>/` 自己的 router 檔（`_pii_forms.module_router_text`）；正對照＝真實宣告綠、反向控制＝宣告錯模組紅；突變 2 項（拿掉檢查、module_router_text 讀全站）皆紅；拿掉 subcontract：38 過 3 skip（skip 的一題訊息寫明「skip 不是驗過」） | 023e4bef（cherry-pick 到第六班後）＋路徑修正 | |
+| O-1～O-2 | O-1：STATE.md 那一側**有**留指標——BN 表原位置一列 `（BN1～BN18）〔移到 backend/modules/payroll/SPEC.md〕`（STATE.md:28952）、QS1a 原位置一行〔原 QS1a … 移到 …〕（STATE.md:42072）；SCOPE.md 在 THIS 標題下一行註記 BN1～BN19、QS1a 的範圍移到 SPEC.md（SCOPE.md:19）。指標刻意不用守門認得的編號樣式（否則會被算成重複宣告）。O-2：同意這是缺口：「裝過又停用、資料還在」時 M08 報表的支出少了已發放的獎金，而畫面不說——那是 IP-9 不在時的**靜默略過**（記憶〈唯讀動作：拒絕 vs 略過〉：第三條路是把缺口輸出）。建議（交主持排，M08 是 B 的模組）：報表在 `expense.entries` 沒有 `bonus` 提供者時一律附一句「獎金分潤未計入（薪資獎金模組未安裝）」，不讀 M07 的表判斷有沒有資料（L1／M08 不該讀 M07 的表）；M07 不在的安裝本來就沒有獎金 ⇒ 那句話多說不錯說 | — | |
 
 〔10:28 補〕c-m04-2（dd7aecf0）新增的守門 `test_every_provider_file_in_the_registry_exists` 只驗「提供方」欄，M07-S1 的 6 處都在「使用方／守門／單據凍結」欄 ⇒ 仍看不到；建議把同一條檢查擴到這幾欄。
 
