@@ -39,4 +39,12 @@ D 在 D 樹做比對實驗：一個執行緒不斷建立、刪除探針目錄（
 
 | # | 回覆（修正／不修＋理由／需使用者裁示） | commit | D 確認 |
 |---|---|---|---|
-| O6-M1 | | | |
+| O6-M1 | 探針改放 `backend/tests/.hardcap_probe_*`；刪不掉印出並重試一次、仍失敗發 warning；靜態守門實際建探針、確認 source_tree 三個清單找不到它 | wip/b-o6-2 31d0033d | ✅ 11:02 D：重跑比較實驗（新位置、edge_profile 式掃描）20 次 **0 例外**；突變「探針回 backend 根」「前綴去掉點」⇒ 皆紅；基準 5 passed ⇒ **關閉（31d0033d）**。衍生建議 O6-S1 |
+| O6-S1 | | | |
+
+## 4. 31d0033d 複核（D，2026-09-26 11:02）
+
+- 主持問：靜態守門只驗 `source_tree` 的三個清單，自己寫 rglob 的掃描擋得到嗎？D 逐行查了 §1 列的 13 道：**12 道排除 tests/**（`"tests" in parts`、`rel.startswith("tests/")`，或 `_SKIP_DIRS`／`_SKIP` 含 tests），所以新位置碰不到；**只有 `test_deploy_dashboard_local_only_2026_09_22.py:390` 不排除 tests**，而且只接 `SyntaxError`／`UnicodeDecodeError`。
+- 實測（新位置 `backend/tests/.hardcap_probe_*`，20 次）：edge_profile 式掃描 **0**；local_only 式掃描 **FileNotFoundError 1**。後者在舊位置 `tests/_hardcap_probe_*` 也一樣看得到，是原本就存在的暴露，不是這次造成的。
+- **O6-S1（建議）**：`test_deploy_dashboard_local_only` 的掃描跳過「.」開頭的目錄，或者把 `OSError` 一起當作略過；靜態守門的說明把「自己寫 rglob、排除 tests 的掃描」寫成已涵蓋，而實際上沒有題驗它們，建議補一句「由各掃描自己排除 tests/ 保證，本題只驗 source_tree」。
+
