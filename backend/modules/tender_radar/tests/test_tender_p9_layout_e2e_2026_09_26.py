@@ -439,3 +439,66 @@ def test_a_failed_scope_load_keeps_the_editor_locked_and_says_so(live_server, ma
     assert e == {"err": "1", "busy": "1", "inert": True, "state": "error"}, e
     assert ed.get_by_test_id("ml-publish").is_disabled()
     assert "讀取「role:admin」的版面失敗" in ed.inner_text()
+
+
+
+@pytest.mark.e2e
+def test_a_publish_whose_response_is_lost_unlocks_and_says_the_result_is_unknown(live_server, make_user, no_tile_probe,
+                                                                                  e2e_browser):
+    """AUDIT-B-host-O7 S-3：發布的回應沒回來（斷線）⇒ 不可以卡在 busy；要說「結果不明」並解鎖。"""
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]").uncheck()
+    boss.route(lambda url: "/api/definitions/layout/" in url and "/publish" in url, lambda route: route.abort())
+    ed.get_by_test_id("ml-note").fill("斷線")
+    ed.get_by_test_id("ml-publish").click()
+    boss.wait_for_function(ED_STATE, arg="error")
+    assert "發布結果不明" in ed.inner_text()
+    assert not ed.get_by_test_id("ml-publish").is_disabled()        # 解鎖：可以再試
+
+
+@pytest.mark.e2e
+def test_scope_cannot_be_switched_while_an_action_is_running(live_server, make_user, no_tile_probe, e2e_browser):
+    """AUDIT-B-host-O7 O-2：發布進行中切範圍 ⇒ 後半段用新範圍、訊息標錯；進行中範圍下拉停用。"""
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    _item(ed, "ml-list-tenders", "location").locator("input[type=checkbox]").uncheck()
+    held = []
+    boss.route(lambda url: "/api/definitions/layout/" in url and "/publish" in url, lambda route: held.append(route))
+    ed.get_by_test_id("ml-note").fill("進行中")
+    ed.get_by_test_id("ml-publish").click()
+    while not held:
+        boss.wait_for_timeout(50)
+    assert ed.get_by_test_id("ml-scope").is_disabled()
+    held[0].continue_()
+    boss.wait_for_function(ED_STATE, arg="published", timeout=15000)
+    assert not ed.get_by_test_id("ml-scope").is_disabled()
+    assert "公司預設" in ed.inner_text()
+
+
+@pytest.mark.e2e
+def test_a_failed_scope_load_can_be_retried(live_server, make_user, no_tile_probe, e2e_browser):
+    """AUDIT-B-host-O7 O-3：選同一個範圍不會觸發 change ⇒ 載入失敗要有「重試」。"""
+    _seed()
+    _users(make_user)
+    boss, _ = _open(e2e_browser, live_server, "p9_boss")
+    ed = _editor(boss)
+    fail = {"on": True}
+
+    def handler(route):
+        if fail["on"]:
+            route.fulfill(status=500, body='{"detail":"x"}', content_type="application/json")
+        else:
+            route.continue_()
+    boss.route(lambda url: "/api/definitions/layout/" in url and "scope=role%3Aadmin" in url, handler)
+    ed.get_by_test_id("ml-scope").select_option("role:admin")
+    boss.wait_for_function("() => document.getElementById('ml-editor').dataset.loadError === '1'")
+    fail["on"] = False
+    ed.get_by_test_id("ml-retry").click()
+    boss.wait_for_function("() => { const e = document.getElementById('ml-editor');"
+                           " return e.dataset.busy === '0' && e.dataset.loadedScope === 'role:admin' && e.dataset.loadError === '0' }")
+    assert not ed.get_by_test_id("ml-retry").is_visible()
