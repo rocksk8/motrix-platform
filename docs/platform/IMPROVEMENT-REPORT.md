@@ -41,6 +41,7 @@
 | T 稅額純函式下沉 L1（C，wip/c-tax-calc a1d7ba4a）＋M01 下沉第二批（wip/c-m01-sink2-2 77b9a672） | D | `AUDIT-D-C-tax-sink2.md` | 稽核完成（2026-09-26 11:00）：必修 0；AST 比對 4 支逐字搬移、tax_split 只差 % 修正；突變 5/5 紅；觀察：c-tax-calc 改 routers/reports.py 的 import，與 b-m08-2 搬檔交會 |
 | 路由歸屬明列（B，wip/b-routes ce329534，合回前） | D | `AUDIT-D-B-routes.md` | 稽核完成（2026-09-26 11:45）：**必修 1**（RT-M1 真實樹守門在拿掉 netplan 時紅：M10 明列的路由對不到；不在允許清單）、建議 1（萬用 * 無分界）；四種錯誤突變 4/4 紅；五條路由歸屬正確 |
 | 三模組宣告 provides.probes（主持，wip/h-probes d56c5fc6） | D | `AUDIT-D-host-probes.md` | 稽核完成（2026-09-26 12:48）：必修 0；實跑前後比對全表，僅中介層操作軌跡變動；突變 3/3 紅 |
+| D7 probes（crm／subcontract／payroll）＋probe 無副作用守門（C，wip/c-probes b2ef6439） | D | `AUDIT-D-C-probes.md` | 稽核完成（2026-09-26 13:08）：必修 0、建議 2（允許分支窄度無題、外洩比對文字主題與反向控制各一份）；突變 5 項：3 紅、2 存活（即兩項建議）；另有時序驗證 3 項（預期不紅，確認超過 30 秒仍成立） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 
 ## 2. 已結案稽核的重點與學到的事
