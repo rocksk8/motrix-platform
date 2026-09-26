@@ -9,7 +9,6 @@
   "M04 router:contractor_vouchers -> M01 helper:quotations",
   "M04 router:vendor_contractors -> M01 helper:quotations",
   "M04 router:vendor_contractors -> M01 helper:recognition",
-  "M05 router:cashier -> M01 helper:quotations",
   "M05 router:cashier -> M04 router:contractor_vouchers",
   "M05 router:cashier -> M08 router:reports",
   "M05 router:invoice_vouchers -> M01 helper:quotations",
