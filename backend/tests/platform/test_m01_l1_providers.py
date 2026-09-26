@@ -25,7 +25,7 @@ def _h(client, make_user):
 
 
 def test_default_terms_come_from_m01_and_say_when_absent(client, make_user, monkeypatch):
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     from routers import system
     h = _h(client, make_user)
     ok = client.get("/api/settings/quote-terms-defaults", headers=h)
@@ -68,7 +68,7 @@ def test_won_month_map_goes_through_case_recognition(client, monkeypatch):
     import db
     if not source_tree.module_installed("modules/analytics/"):
         return
-    from helpers import quotations as q
+    from modules.case import quotations as q
     from modules.analytics.api import reports as rp
     monkeypatch.setattr(q, "quote_won_month_map", lambda conn: {"MQ-X": "2026-09"})
     conn = db.get_db()

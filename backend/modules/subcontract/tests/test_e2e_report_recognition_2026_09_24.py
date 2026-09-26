@@ -64,7 +64,7 @@ def test_case_page_stage_ratio_and_dispatch_invoice_date_land(live_server, make_
     _case("MQ-RBE-010")
     sid = _stage("MQ-RBE-010", "施工", done=True, done_at="2026-03-01")
     # 頁面讀 data_json 的階段鏡像：造資料要走正式那一支同步，不然頁面會自己補預設階段
-    from routers.quotations import _sync_stages_to_json
+    from modules.case.api.quotations import _sync_stages_to_json
     conn = _db()
     try:
         _sync_stages_to_json(conn, "MQ-RBE-010")

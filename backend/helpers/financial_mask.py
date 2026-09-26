@@ -22,9 +22,9 @@ QUOTE_MONEY_KEYS = ("discount", "freight", "indirectLogistics", "indirectInstall
 PAYMENT_MONEY_KEYS = ("amount", "pct", "actualAmount", "feeAmount", "feeNote", "invoicePretax", "invoiceTax")
 #: 叫料品項
 MATERIAL_ORDER_MONEY_KEYS = ("unitPrice", "totalPrice", "paidAmount", "totalAmount")
-#: 修改紀錄裡的金額欄位（routers/quotations.py::_TRACKED_QUOTE_FIELDS 的顯示名稱）
+#: 修改紀錄裡的金額欄位（modules/case/api/quotations.py::_TRACKED_QUOTE_FIELDS 的顯示名稱）
 HISTORY_MONEY_FIELDS = {"含稅總額", "未稅金額", "直接毛利率", "淨利率"}
-#: 需審核原因裡帶金額或毛利的（helpers/quote_terms.py::compute_approval_reasons）
+#: 需審核原因裡帶金額或毛利的（modules/case/quote_terms.py::compute_approval_reasons）
 _REASON_MONEY_MARKS = ("毛利", "NT$", "折讓")
 MASKED_REASON = "（涉及金額，無財務檢視權限）"
 

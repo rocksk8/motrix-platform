@@ -63,7 +63,7 @@ def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_provider
 def test_a_type_whose_owner_module_is_absent_is_not_applicable_not_missing():
     """稽核 D AP-M1：擁有模組不在 ⇒ 「不適用」並說明原因（列車 core-only／真刪不紅）；模組在而掃不到 ⇒ 仍報漏掉（正對照）。"""
     absent = check_approval_queue_coverage(doc_types=["invoice_voucher", "quotation"], provider_sources=[],
-                                           installed=lambda key: False)
+                                           installed=lambda key: key == "case")
     assert is_clean(absent) and "arap" in absent["not_applicable"]["invoice_voucher"]
     assert "quotation" not in absent["not_applicable"]
     present = check_approval_queue_coverage(doc_types=["invoice_voucher"], queue_source="", count_source="",

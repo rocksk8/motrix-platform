@@ -1,8 +1,8 @@
 """`case.recognition`（M01 提供；M01-PLAN §3-6）與 L1 `helpers/recognition_basis.py` 的契約。
 
-① 提供者：六個方法轉呼叫 `helpers.recognition` 的同名函式，參數原樣傳（簽章是契約）
-② M08 不再直接 import `helpers.recognition`（只經提供者；口徑標籤走 L1 recognition_basis）
-③ L1 recognition_basis：不讀表、不 import M01；`helpers.recognition` 的同名名稱是同一物件
+① 提供者：六個方法轉呼叫 `modules.case.recognition` 的同名函式，參數原樣傳（簽章是契約）
+② M08 不再直接 import `modules.case.recognition`（只經提供者；口徑標籤走 L1 recognition_basis）
+③ L1 recognition_basis：不讀表、不 import M01；`modules.case.recognition` 的同名名稱是同一物件
 ④ M01 不在（拿掉提供者）：營運報表 200——權責口徑收入空且 `incomeNotice` 明說；支出的 `unavailable` 列出案件類；
    待補登為空。正對照：提供者在時 `incomeNotice` 空、`unavailable` 不含案件類
 """
@@ -27,7 +27,7 @@ METHODS = {
 
 @pytest.mark.parametrize("name", sorted(METHODS))
 def test_provider_forwards_to_the_m01_function_with_the_same_arguments(name, monkeypatch):
-    from helpers import recognition as r
+    from modules.case import recognition as r
     seen = {}
 
     def fake(*a):
@@ -45,16 +45,17 @@ def test_m08_does_not_import_the_m01_recognition_module():
     if not src.is_file():
         pytest.skip("M08 不在這個安裝包")
     tree = ast.parse(src.read_text(encoding="utf-8"))
-    bad = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "helpers.recognition"]
+    bad = [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "modules.case.recognition"]
     bad += [n.lineno for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module == "helpers"
             and any(a.name == "recognition" for a in n.names)]
-    assert not bad, "M08 仍直接 import helpers.recognition（行 %s）⇒ 改經 case.recognition" % bad
+    assert not bad, "M08 仍直接 import modules.case.recognition（行 %s）⇒ 改經 case.recognition" % bad
 
 
 def test_recognition_basis_is_pure_l1_and_aliased():
     src = (BACKEND / "helpers" / "recognition_basis.py").read_text(encoding="utf-8")
     assert m01_imports(src) == [] and table_access(src) == []
-    from helpers import recognition, recognition_basis
+    from helpers import recognition_basis
+    from modules.case import recognition
     for n in ("BASES", "BASIS_NOTES", "normalize_basis"):
         assert getattr(recognition, n) is getattr(recognition_basis, n), n
 

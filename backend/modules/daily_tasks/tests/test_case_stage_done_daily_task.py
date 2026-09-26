@@ -8,7 +8,7 @@
 """
 import json
 
-from helpers.case_stage_tasks import sync_daily_task_for_case_stage
+from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
 # 夾具 _no_background_sync（autouse）與輔助函式沿用原檔：端點自己的背景同步關掉，測試明確同步呼叫
 from tests.test_case_stage_done_calendar_2026_09_11 import (  # noqa: F401
     _no_background_sync, _login, _auth, _make_case, _stage_row,

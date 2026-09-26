@@ -1,0 +1,166 @@
+{
+  "key": "case",
+  "name": "案件",
+  "version": "1.0.0",
+  "core": ">=1.0,<2.0",
+  "license_key": "case",
+  "permissions": [
+    "quotation",
+    "case_manage"
+  ],
+  "tables": [
+    "quotations",
+    "quote_seq",
+    "case_stages",
+    "case_stage_visits",
+    "case_updates",
+    "case_action_items",
+    "case_change_requests",
+    "case_extra_expenses",
+    "completion_notes"
+  ],
+  "tables_note": "表由凍結的 V9 migration 建立（CORE-SPEC §6）；本模組尚無自有 migration。其他模組讀這些表的地方見 M01-PLAN §2-B（讀取連接器另案）",
+  "data": {
+    "tables": [
+      {
+        "name": "quotations",
+        "class": "T1"
+      },
+      {
+        "name": "quote_seq",
+        "class": "T3"
+      },
+      {
+        "name": "case_stages",
+        "class": "T1"
+      },
+      {
+        "name": "case_stage_visits",
+        "class": "T1"
+      },
+      {
+        "name": "case_updates",
+        "class": "T1"
+      },
+      {
+        "name": "case_action_items",
+        "class": "T1"
+      },
+      {
+        "name": "case_change_requests",
+        "class": "T1"
+      },
+      {
+        "name": "case_extra_expenses",
+        "class": "T1"
+      },
+      {
+        "name": "completion_notes",
+        "class": "T1"
+      }
+    ],
+    "files": []
+  },
+  "customization": {
+    "schema": 1,
+    "fields": {},
+    "pages": [],
+    "outputs": []
+  },
+  "customization_note": "搬遷時沒有宣告可自訂點（CUSTOMIZATION-SPEC §5）；之後要開放欄位、頁面或輸出的自訂時在這裡加",
+  "provides": {
+    "api_prefixes": [
+      "/api/approval-history",
+      "/api/approval-queue",
+      "/api/case-batch",
+      "/api/case-changes",
+      "/api/completion-notes",
+      "/api/next-quote-no",
+      "/api/quotations",
+      "/api/sales-orders"
+    ],
+    "probes": [
+      "/api/quotations",
+      "/api/approval-queue",
+      "/api/approval-queue/count",
+      "/api/approval-history",
+      "/api/sales-orders"
+    ]
+  },
+  "pages": [
+    {
+      "path": "quotations.html",
+      "menu": {
+        "group": "business",
+        "label": "報價單",
+        "order": 40,
+        "perm": [
+          "quotation"
+        ],
+        "active": [
+          "quotations.html",
+          "quotation-form.html"
+        ],
+        "badge": "sb-mod-quotation"
+      }
+    },
+    {
+      "path": "quotation-form.html"
+    },
+    {
+      "path": "case-management.html",
+      "menu": {
+        "group": "case",
+        "label": "案件管理",
+        "order": 10,
+        "perm": [
+          "case_manage"
+        ],
+        "badge": "sb-mod-case"
+      }
+    },
+    {
+      "path": "case-stage-board.html",
+      "menu": {
+        "group": "case",
+        "label": "案件執行看板",
+        "order": 20,
+        "perm": [
+          "case_manage"
+        ]
+      }
+    },
+    {
+      "path": "approval-queue.html",
+      "menu": {
+        "group": "mywork",
+        "label": "簽核佇列",
+        "order": 30,
+        "perm": [
+          "quotation"
+        ],
+        "extra_badge": {
+          "id": "sb-approval-badge",
+          "color": "#DC2626"
+        }
+      }
+    },
+    {
+      "path": "approval-history.html",
+      "menu": {
+        "group": "mywork",
+        "label": "簽核歷史",
+        "order": 50,
+        "perm": [
+          "quotation"
+        ]
+      }
+    },
+    {
+      "path": "settlement.html"
+    },
+    {
+      "path": "completion-note-form.html"
+    }
+  ]
+}

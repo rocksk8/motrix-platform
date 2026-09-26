@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 helpers/quotations.py 下沉）。
+"""L1 寫入交易：寫鎖、區塊保證、「拿鎖之後讀過」的觀測（2026-09-25 自 modules/case/quotations.py 下沉）。
 
 [單位] plat:txn    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
 [公開介面] begin_write, lock_state, read_under_lock, safe_close, strict_db_guards, watch_reads, write_txn

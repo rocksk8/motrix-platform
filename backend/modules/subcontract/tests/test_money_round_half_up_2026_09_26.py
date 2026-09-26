@@ -6,7 +6,7 @@
 
 內建 `round()` 是銀行家捨入（.5 取偶數：round(1250.5) == 1250）；前端 `Math.round(a * b)` 在浮點乘積
 落在 x.4999… 時少 1 元、負數 -1.5 取 -1。共用函式：後端 L1 `helpers.legal_params.round_half_up`
-（`helpers.quotations.round_half_up` 轉呼叫它），前端 `static/legal-round.js` 的 `MotrixLegalRound.halfUp`。
+（`modules.case.quotations.round_half_up` 轉呼叫它），前端 `static/legal-round.js` 的 `MotrixLegalRound.halfUp`。
 
 每一處修改一題：挑會出現 .5 的金額，改之前會紅（註明舊值）；另有正對照（改前改後都一樣的值，
 證明題目本身沒有把「正常的金額」也算錯）。守門：tests/platform/test_legal_amount_rounding_guard.py。
@@ -30,7 +30,7 @@ FRONTEND = ROOT / "frontend"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 報價：收款期別金額（helpers/quotations.py::payment_item_amounts）
+# 報價：收款期別金額（modules/case/quotations.py::payment_item_amounts）
 # ══════════════════════════════════════════════════════════════════════════════
 
 

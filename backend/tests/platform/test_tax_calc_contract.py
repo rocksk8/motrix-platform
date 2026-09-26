@@ -1,8 +1,8 @@
 """L1 `helpers/tax_calc.py` 的契約（主持核准「T」，2026-09-26）：稅額純函式自 M01 下沉。
 
 ① 不讀表：沒有 `import db`／`get_db`、沒有 `.execute(`、沒有 SQL 字串
-② 不 import M01：helpers.quotations／recognition／quote_terms／case_deadlines／case_stage_tasks、routers.*、modules.*
-③ 別名：`helpers.quotations` 與 `helpers` 的同名名稱是 tax_calc 的同一個物件（不是複本——複本會各自演進）
+② 不 import M01：modules.case.quotations／recognition／quote_terms／case_deadlines／case_stage_tasks、routers.*、modules.*
+③ 別名：`modules.case.quotations` 與 `helpers` 的同名名稱是 tax_calc 的同一個物件（不是複本——複本會各自演進）
 ④ 行為：應稅 5% 四捨五入、零稅率／免稅 0、舊 1～4% 標 legacy、收款項金額首期吸收尾差、沖銷折未稅
 正對照：①② 的掃描器對一段刻意違規的原始碼要報得出來（不然「沒違規」可能只是掃描器壞了）。
 """
@@ -14,8 +14,8 @@ import pytest
 TAX_CALC = Path(__file__).resolve().parents[2] / "helpers" / "tax_calc.py"
 NAMES = ("TAX_TYPES", "TAX_TYPE_LABELS", "LEGAL_TAX_RATE", "LEGACY_TAX_NOTE",
          "quote_tax_type", "tax_split", "_invoice_amount", "invoice_amounts", "payment_item_amounts")
-M01_MODULES = ("helpers.quotations", "helpers.recognition", "helpers.quote_terms",
-               "helpers.case_deadlines", "helpers.case_stage_tasks")
+M01_MODULES = ("modules.case.quotations", "modules.case.recognition", "modules.case.quote_terms",
+               "modules.case.case_deadlines", "modules.case.case_stage_tasks")
 _SQL = ("SELECT ", "INSERT ", "UPDATE ", "DELETE ", "FROM ")
 
 
@@ -76,14 +76,15 @@ def test_scanners_positive_control():
     got = table_access(bad)
     assert "from db import" in got and "get_db" in got and ".execute" in got and any(g.startswith("SQL") for g in got), got
     assert table_access('def f():\n    """SELECT 只是說明文字"""\n    return 1\n') == []    # 反向控制：docstring 不算
-    assert m01_imports("from helpers.quotations import x\nfrom helpers import recognition\nimport routers.quotations\n") == \
-        ["helpers.quotations", "helpers.recognition", "routers.quotations"]
+    assert m01_imports("from modules.case.quotations import x\nfrom modules.case import recognition\nimport modules.case.api.quotations\n") == \
+        ["modules.case.quotations", "modules.case", "modules.case.api.quotations"]   # M01 ② 起在 modules/case
     assert m01_imports("from helpers.legal_params import round_half_up\n") == []
 
 
 @pytest.mark.parametrize("name", NAMES)
 def test_old_location_is_an_alias_of_the_l1_object(name):
-    from helpers import quotations, tax_calc
+    from helpers import tax_calc
+    from modules.case import quotations
     assert getattr(quotations, name) is getattr(tax_calc, name), name
 
 

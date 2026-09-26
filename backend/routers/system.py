@@ -1408,7 +1408,7 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
 
 # ── Quotation default payment terms ───────────────────────────────────────────
 
-# 2026-09-24（N13）：內容搬到 helpers/quote_terms.py::DEFAULT_TERMS（唯一來源）。
+# 2026-09-24（N13）：內容搬到 modules/case/quote_terms.py::DEFAULT_TERMS（唯一來源）。
 # 2026-09-26（M01-PLAN §3-8 CA-O4）：那是 M01 的檔 ⇒ 改經 M01 提供者 `case.default_terms`，L1 不 import M01。
 #: M01 不在時條款端點的說明（§B-4：說出原因，不回空白條款）
 QUOTE_TERMS_UNAVAILABLE = "案件模組未安裝：報價單預設條款不提供"
@@ -1833,7 +1833,7 @@ def _quote_terms_presets() -> dict:
     沒有任何地方會報錯。沒設定＝維持改動前的行為。
     📌 2026-09-24（N13，使用者裁示「預設條款搬到後端當唯一來源」）：那一份原本是
     前端 `quotation-form.html` 的常數，現在的唯一來源是
-    **`helpers/quote_terms.py::DEFAULT_TERMS`**，前端經 `GET /api/settings/quote-terms-defaults`
+    **`modules/case/quote_terms.py::DEFAULT_TERMS`**，前端經 `GET /api/settings/quote-terms-defaults`
     取得；送審時後端也用它重算「報價條件已修改」。
     """
     raw = _get_setting("quote_terms_presets", {}) or {}
@@ -1847,7 +1847,7 @@ def _quote_terms_presets() -> dict:
 
 @router.get("/api/settings/quote-terms-defaults")
 def get_quote_terms_defaults(authorization: str = Header(None)):
-    """系統內建的五欄預設條款（唯一來源 helpers/quote_terms.py，N13）。
+    """系統內建的五欄預設條款（唯一來源 modules/case/quote_terms.py，N13）。
     與條款組同級：公司對外條款，登入即可讀。付款條件的「目前預設」另見 /api/settings/payment-terms。"""
     _require_user(authorization)
     terms = _quote_default_terms()

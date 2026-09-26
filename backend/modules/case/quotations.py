@@ -453,36 +453,36 @@ _registry.provide("case.locations", "case", _CaseLocations)
 
 class _CaseRecognition:
     """`case.recognition`（M01 提供；M01-PLAN §3-6）：收入認列、支出歸月與待補登標註——資料在 M01（階段、叫料、額外支出、
-    報價），M08 營運報表經本提供者取用，不直接 import `helpers.recognition`。簽章與 `helpers.recognition` 同名函式相同。"""
+    報價），M08 營運報表經本提供者取用，不直接 import `modules.case.recognition`。簽章與 `modules.case.recognition` 同名函式相同。"""
 
     @staticmethod
     def accrual_income_items(conn, d0, d1, department_id=None):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.accrual_income_items(conn, d0, d1, department_id)
 
     @staticmethod
     def dispatch_entries(conn, basis):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.dispatch_entries(conn, basis)
 
     @staticmethod
     def material_entries(conn, basis, department_id=None):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.material_entries(conn, basis, department_id)
 
     @staticmethod
     def extra_entries(conn, basis):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.extra_entries(conn, basis)
 
     @staticmethod
     def recognition_flags(conn, year, department_id=None, money_ok=True):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.recognition_flags(conn, year, department_id, money_ok)
 
     @staticmethod
     def dispatch_unavailable(basis="accrual"):
-        from helpers import recognition as r
+        from modules.case import recognition as r
         return r.dispatch_unavailable(basis)
 
     @staticmethod
@@ -498,7 +498,7 @@ from helpers import case_attachments as _case_attachments  # noqa: E402,F401  �
 def _default_terms() -> dict:
     """`case.default_terms`（M01-PLAN §3-8 CA-O4）：報價單五欄預設條款（唯一來源 `helpers/quote_terms.DEFAULT_TERMS`）。
     L1 `routers/system` 的條款端點經本提供者取用，不 import M01。回傳複本。"""
-    from helpers.quote_terms import DEFAULT_TERMS
+    from modules.case.quote_terms import DEFAULT_TERMS
     return dict(DEFAULT_TERMS)
 
 

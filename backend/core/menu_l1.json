@@ -64,39 +64,6 @@
    ]
   },
   {
-   "group": "business",
-   "href": "quotations.html",
-   "label": "報價單",
-   "order": 40,
-   "perm": [
-    "quotation"
-   ],
-   "active": [
-    "quotations.html",
-    "quotation-form.html"
-   ],
-   "badge": "sb-mod-quotation"
-  },
-  {
-   "group": "case",
-   "href": "case-management.html",
-   "label": "案件管理",
-   "order": 10,
-   "perm": [
-    "case_manage"
-   ],
-   "badge": "sb-mod-case"
-  },
-  {
-   "group": "case",
-   "href": "case-stage-board.html",
-   "label": "案件執行看板",
-   "order": 20,
-   "perm": [
-    "case_manage"
-   ]
-  },
-  {
    "group": "supply",
    "href": "customers.html",
    "label": "客戶管理",
@@ -150,31 +117,9 @@
   },
   {
    "group": "mywork",
-   "href": "approval-queue.html",
-   "label": "簽核佇列",
-   "order": 30,
-   "perm": [
-    "quotation"
-   ],
-   "extra_badge": {
-    "id": "sb-approval-badge",
-    "color": "#DC2626"
-   }
-  },
-  {
-   "group": "mywork",
    "href": "approval-delegates.html",
    "label": "簽核代理人",
    "order": 40,
-   "perm": [
-    "quotation"
-   ]
-  },
-  {
-   "group": "mywork",
-   "href": "approval-history.html",
-   "label": "簽核歷史",
-   "order": 50,
    "perm": [
     "quotation"
    ]

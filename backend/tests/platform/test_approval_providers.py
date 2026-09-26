@@ -31,7 +31,7 @@ def _funcs(src, names):
 
 
 def test_m01_endpoints_do_not_touch_other_modules_tables():
-    src = (BACKEND / "routers" / "quotations.py").read_text(encoding="utf-8")
+    src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     found = _funcs(src, M01_FUNCS)
     assert set(found) == set(M01_FUNCS), sorted(found)
     bad = {f: [t for t in FOREIGN_TABLES if t in body] for f, body in found.items()}
@@ -249,7 +249,7 @@ def test_unreadable_chain_is_refused(client, iv_setup):
 
 def test_m01_fills_case_names_only_when_missing(client, monkeypatch):
     import db
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "

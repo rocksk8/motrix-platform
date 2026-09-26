@@ -27,9 +27,9 @@ from helpers import (
     _require_user, _tok, _audit, user_has_module,
 )
 # M01 自己的名稱：CA-O4 起 helpers 不再再匯出（`import helpers` 不載入 M01）
-from helpers.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
+from modules.case.quotations import SQL_DEAL_TAG, save_quotation_json  # noqa: E402
 from helpers.financial_mask import MATERIAL_ORDER_MONEY_KEYS, money_visible
-from helpers.recognition import normalize_date  # `AC2`
+from modules.case.recognition import normalize_date  # `AC2`
 
 router = APIRouter()
 
@@ -83,7 +83,7 @@ def update_material_orders(quote_no: str,
     try:
         # 1. 檢查報價單存在 + 讀出權威的 deal_tag（欄位優先，pre-v6 舊列回退
         #    data_json.dealTag——這正是 SQL_DEAL_TAG 存在的原因，勿改回裸欄位）
-        begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（helpers.quotations.begin_write）
+        begin_write(conn)   # lost update：讀 data_json 前先拿寫鎖（modules.case.quotations.begin_write）
         q = conn.execute(
             f"SELECT data_json, sales_person_id, sales_person, assigned_user_ids, "
             f"{SQL_DEAL_TAG} AS deal_tag FROM quotations WHERE quote_no=?",
@@ -142,7 +142,7 @@ def update_material_orders(quote_no: str,
         data["caseRecord"]["materialOrders"] = [mo.model_dump() for mo in body.materialOrders]
 
         # 7. 寫入 DB —— save_quotation_json() 只組 UPDATE、不 commit，呼叫端
-        #    必須自己 commit（比照 routers/quotations.py:1310 附近既有寫法）。
+        #    必須自己 commit（比照 modules/case/api/quotations.py:1310 附近既有寫法）。
         #    第 4 個位置參數是 status 不是 user_id，這裡刻意只傳三個參數，
         #    不要動到報價單本身的 status 欄位。
         save_quotation_json(conn, quote_no, data)

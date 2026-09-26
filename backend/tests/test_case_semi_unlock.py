@@ -1,6 +1,6 @@
 """已結案案件解鎖／半解鎖機制（2026-08-26）+ 完結案防呆機制（2026-08-25 提出）
 的 API 層整合測試。見 db.py::_m061_case_semi_unlock() 與
-routers/quotations.py::_gate_case_edit()/_case_close_block_reasons() docstring。"""
+modules/case/api/quotations.py::_gate_case_edit()/_case_close_block_reasons() docstring。"""
 import json
 
 

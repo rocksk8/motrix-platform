@@ -124,7 +124,7 @@ def test_member_check_by_username_ignores_same_display_name(client, make_user):
 
 
 def test_change_history_and_summary_show_display_not_dict():
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     assert q._fmt_change_value({"username": "a", "display": "王小美"}) == "王小美"
     flat = q._flatten_case_record({"roles": {"sales": {"username": "a", "display": "王小美"}}})
     assert "王小美" in flat.values(), flat

@@ -41,6 +41,6 @@ def test_extra_expense_approver_opens_queue_detail_and_sees_money(client, make_u
 
 
 def test_router_uses_the_helper_rule():
-    import routers.quotations as rq
-    from helpers.quotations import is_document_approver
+    import modules.case.api.quotations as rq
+    from modules.case.quotations import is_document_approver
     assert rq._is_case_approver is is_document_approver

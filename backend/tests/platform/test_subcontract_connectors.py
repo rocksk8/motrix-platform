@@ -63,7 +63,7 @@ def _items():
 # ── IP-15（外包工班 不在）─────────────────────────────────────────────────────────
 
 def test_case_bundle_without_m04(client, make_user, monkeypatch):
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     h = _hdr(client, make_user)
     _seed()
     _without(monkeypatch, "dispatch.list_for_case")
@@ -79,7 +79,7 @@ def test_case_bundle_without_m04(client, make_user, monkeypatch):
 # ── 相依已切斷（M01／M05／M06 這一側）────────────────────────────────────────────
 
 @pytest.mark.parametrize("rel,pattern", [
-    ("routers/quotations.py", r"from (routers|modules\.subcontract)[\w.]* import .*(list_dispatches|vendor_contractors)"),
+    ("modules/case/api/quotations.py", r"from (routers|modules\.subcontract)[\w.]* import .*(list_dispatches|vendor_contractors)"),
     ("modules/arap/api/cashier.py", r"contractor_vouchers import|_voucher_public"),     # 2026-09-26 出納搬進 M05
     ("routers/accounting_export.py", r"contractor_vouchers import|_voucher_public"),
 ])

@@ -24,7 +24,7 @@ import pytest
 # ── 單一算法 ─────────────────────────────────────────────────────────────────
 
 def test_taxable_tax_is_five_percent_of_sales_rounded_half_up():
-    from helpers.quotations import tax_split
+    from modules.case.quotations import tax_split
     assert tax_split(9810, "taxable") == (9810, 491)      # 490.5 ⇒ 491（四捨五入，不是銀行家捨入）
     assert tax_split(10000, "taxable") == (10000, 500)
     assert tax_split(1, "taxable") == (1, 0)
@@ -32,7 +32,7 @@ def test_taxable_tax_is_five_percent_of_sales_rounded_half_up():
 
 @pytest.mark.parametrize("tax_type", ["zero", "exempt"])
 def test_zero_rated_and_exempt_have_no_tax(tax_type):
-    from helpers.quotations import tax_split
+    from modules.case.quotations import tax_split
     assert tax_split(10000, tax_type) == (10000, 0)
 
 
@@ -46,7 +46,7 @@ def test_zero_rated_and_exempt_have_no_tax(tax_type):
     ({"taxRate": 0, "taxType": "bogus"}, "exempt"),         # 認不得的 taxType ⇒ 退回依稅率
 ], ids=["empty", "5", "0", "zero", "taxable", "legacy3", "bogus"])
 def test_quote_tax_type_reading_rule(data, want):
-    from helpers.quotations import quote_tax_type
+    from modules.case.quotations import quote_tax_type
     assert quote_tax_type(data) == want
 
 
@@ -92,7 +92,7 @@ def _paid(amount, inv="AB12345678"):
 ], ids=["none", "both", "both-empty", "pretax-only", "tax-only", "negative", "decimal", "mismatch"])
 def test_invoice_amounts_validation(item, ok):
     from fastapi import HTTPException
-    from helpers.quotations import validate_invoice_amounts
+    from modules.case.quotations import validate_invoice_amounts
     it = {"amount": 10500, "invoiceNo": "AB12345678"}
     it.update(item)
     if ok:
@@ -218,12 +218,12 @@ def test_saving_an_old_legacy_rate_quote_requires_a_legal_tax_type(client, make_
     ({"taxRate": 3}, "調整營業稅額為 3%（標準 5%）"),                  # 舊單：原文字不變
 ], ids=["zero", "exempt", "old-0", "legacy3"])
 def test_approval_reason_names_the_tax_type(data, want):
-    from helpers.quote_terms import compute_approval_reasons
+    from modules.case.quote_terms import compute_approval_reasons
     assert want in compute_approval_reasons(dict(data, items=[]), [], "")
 
 
 def test_taxable_quote_has_no_tax_reason():
-    from helpers.quote_terms import compute_approval_reasons
+    from modules.case.quote_terms import compute_approval_reasons
     rs = compute_approval_reasons({"taxRate": 5, "taxType": "taxable", "items": []}, [], "")
     assert not [r for r in rs if "稅" in r], rs
 

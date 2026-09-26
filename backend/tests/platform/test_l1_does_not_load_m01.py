@@ -28,7 +28,10 @@ print(json.dumps({"loaded": loaded, "failed": failed}))
 
 def _unit_to_module(u):
     kind, name = u.split(":", 1)
-    return {"core": name, "helper": "helpers." + name, "router": "routers." + name}.get(kind)
+    if kind == "mod":                                  # 已搬進 modules/ 的單位（M01 ② 之後：mod:case/api/quotations）
+        return "modules." + name.replace("/", ".").replace(".__init__", "")
+    # plat:＝backend/core/*.py（L0 平台核心；稽核 D 觀察：原本沒有探到）
+    return {"core": name, "helper": "helpers." + name, "router": "routers." + name, "plat": "core." + name}.get(kind)
 
 
 def _groups():
@@ -48,13 +51,25 @@ def _probe(mods, m01):
 
 def test_importing_every_l1_unit_loads_no_m01_unit(client):
     l1, m01 = _groups()
-    assert len(l1) > 40 and "helpers.quotations" in m01
+    assert len(l1) > 40 and "modules.case.quotations" in m01
     out = _probe([m for m in l1 if m not in m01], m01)
     assert not out["failed"], out["failed"]
     assert out["loaded"] == [], "L1 載入了 M01 的單位（CA-O4）：%s" % out["loaded"]
 
 
+def test_the_probe_covers_every_platform_core_unit(client):
+    """反向控制（稽核 D）：modules.json 的每個 plat: 單位都在探針清單裡、而且真的被 import（沒有 import 失敗）。
+    少了這題，plat: 對應漏掉時探針照樣綠——那時 core/ 就算 import 了 M01 也不會被抓到。"""
+    import json
+    d = json.loads((REPO / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))
+    plats = ["core." + u.split(":", 1)[1] for u in d["L1"]["units"] if u.startswith("plat:")]
+    l1, m01 = _groups()
+    assert plats and set(plats) <= set(l1), sorted(set(plats) - set(l1))
+    out = _probe(plats, m01)
+    assert not out["failed"] and out["loaded"] == [], out
+
+
 def test_rc_the_probe_reports_m01_when_it_is_imported(client):
     _l1, m01 = _groups()
-    out = _probe(["helpers.dates", "routers.quotations"], m01)
-    assert "helpers.quotations" in out["loaded"] and "routers.quotations" in out["loaded"], out
+    out = _probe(["helpers.dates", "modules.case.api.quotations"], m01)
+    assert "modules.case.quotations" in out["loaded"] and "modules.case.api.quotations" in out["loaded"], out

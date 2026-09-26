@@ -8,7 +8,7 @@
 """
 import sqlite3
 
-import routers.quotations as q
+import modules.case.api.quotations as q
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 
 

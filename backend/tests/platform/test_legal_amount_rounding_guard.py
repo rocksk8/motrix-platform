@@ -135,7 +135,7 @@ def test_legal_amounts_are_rounded_only_by_the_legal_params_service():
 # - 用到 MotrixLegalRound 的頁面（含載入 case-management-*.js 的頁面）必須載入 static/legal-round.js。
 # - 清單裡的檔不存在 ⇒ 紅（檔案搬進模組時要跟著改清單，不可以默默失去對象）。
 MONEY_PY_FILES = (
-    "modules/arap/api/invoice_vouchers.py", "modules/arap/api/payment_requests.py", "helpers/quotations.py",   # 2026-09-26 應收應付搬進模組
+    "modules/arap/api/invoice_vouchers.py", "modules/arap/api/payment_requests.py", "modules/case/quotations.py",   # 2026-09-26 應收應付搬進模組
     "modules/subcontract/api/contractor_vouchers.py", "modules/subcontract/api/vendor_contractors.py",   # 2026-09-26 外包工班搬進模組
 )
 MONEY_JS_FILES = (
