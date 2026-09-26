@@ -246,7 +246,7 @@
   1. 移除上一班的列車樹（先確認沒有行程在用）；從 origin/platform 建 `train/<MMDD-HHMM>`（時間用 date）於 `D:\\MOTRIX-PLATFORM-TRAIN<N>`。
   2. 依序 cherry-pick 各包自己的範圍（git cherry 排除已合回）；動 main.py／fixture 層的排車頭；各包自帶的產生檔重產與 core_bump 簿記一律略過。
   3. 列車上 core_bump 取號、IP 照 origin 已用號碼往後定號（引用處同步、歷史不改寫）、模組版號衝突往後排；重產 UNIT-INDEX／dep_graph／test_map 單獨一個 commit，三者 --check 一致。〔補充（B，18:31）：再以 `MOTRIX_TRAIN=1` 跑 `tests/platform/test_generated_maps.py tests/platform/test_unit_cards.py`，「是否最新」三題必須是 **passed，不可以是 skipped**（沒設旗標時它們會 skip ⇒ 過期沒人發現）；過渡期：各包自帶的產生檔改動照第 2 步略過〕
-  4. ~~全量：`MOTRIX_PYTEST_SLOTS=4 modtest.py --full --workers 4 --e2e-workers 2 --window TR<N>`；起跑前可用記憶體 ≥ 4 GB；全量期間不改列車樹；**兩段都讀到結果行才結束回合**（背景 until 迴圈盯 pid）。~~〔更正 2026-09-26 17:33，使用者表單「開發完成才跑全量」：第十班起**不跑全量**，改跑：①`modtest.py --base origin/platform`（本班所有包的差異選題，含改到頁面的 e2e，e2e -n 2）②`tests/platform` 全部（守門）③core-only 反向控制 ④本班有搬遷的模組做真刪驗證；**兩段都讀到結果行才結束回合**；在 RUN-PLAN §6 記「本班交互紅 N 題」。全量只在 D1～D6 完成、D7 之前跑一次〕
+  4. ~~全量：`MOTRIX_PYTEST_SLOTS=4 modtest.py --full --workers 4 --e2e-workers 2 --window TR<N>`；起跑前可用記憶體 ≥ 4 GB；全量期間不改列車樹；**兩段都讀到結果行才結束回合**（背景 until 迴圈盯 pid）。~~〔更正 2026-09-26 17:33，使用者表單「開發完成才跑全量」：第十班起**不跑全量**，改跑：①`modtest.py --base origin/platform`（本班所有包的差異選題，含改到頁面的 e2e，e2e -n 2）②`tests/platform` 全部（守門）〔補充（B，18:58，D 稽核 GF-M1）：①②合併成 **`modtest.py --train`**——自動設 MOTRIX_TRAIN=1、跑差異題＋tests/platform，「是否最新」三題被 skip 或收集不到就判紅（exit 1）；不要手動拆開跑〕③core-only 反向控制 ④本班有搬遷的模組做真刪驗證；**兩段都讀到結果行才結束回合**；在 RUN-PLAN §6 記「本班交互紅 N 題」。全量只在 D1～D6 完成、D7 之前跑一次〕
   5. core-only 反向控制（core_only_rc.py）：紅 ⊆ §B-11 允許 ∪ 已知紅清單；清單有新增要核對 Ruling-By: 8d。這班有模組搬遷 ⇒ 該模組真刪驗證（tests/platform＋提到該模組的檔、--continue-on-collection-errors）。
   6. 交會紅在列車上修；修不了的包連同相依包下車。全量 e2e 的偶發紅先在 origin 基底重跑，基底也紅才照常合回並記錄。
   7. 合回前核對每包的稽核在 origin 的 AUDIT 檔已關閉；沒關閉的下車。

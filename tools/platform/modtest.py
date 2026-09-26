@@ -707,6 +707,56 @@ def e2e_max_workers():
     return _env_cap(E2E_ENV, E2E_MAX_WORKERS)
 
 
+#: 列車上「是否最新」三題（只在 MOTRIX_TRAIN=1 跑；GENERATED-FILES-PROPOSAL）——--train 要它們存在而且沒被 skip
+TRAIN_GUARDS = (
+    "tests/platform/test_generated_maps.py::test_dep_graph_json_is_current",
+    "tests/platform/test_generated_maps.py::test_test_map_json_is_current",
+    "tests/platform/test_unit_cards.py::test_unit_index_is_current",
+)
+
+
+def train_judge(select_code, platform_code, platform_out, guards_collected):
+    """列車檢查的判定（純函式）⇒ (ok, reasons)。
+    - 差異題與 tests/platform 都要 exit 0（沒選到題＝None 視為通過）
+    - 三題要收集得到（改名／刪掉 ⇒ 紅），而且輸出裡不可以有「因 MOTRIX_TRAIN 而 skip」（-rs 的 SKIPPED 行）"""
+    reasons = []
+    if select_code not in (0, None):
+        reasons.append("差異題 exit=%s" % select_code)
+    if platform_code != 0:
+        reasons.append("tests/platform exit=%s" % platform_code)
+    missing = [g for g in TRAIN_GUARDS if g not in (guards_collected or set())]
+    if missing:
+        reasons.append("「是否最新」題收集不到：%s" % ", ".join(missing))
+    skipped = [ln.strip() for ln in (platform_out or "").splitlines()
+               if ln.startswith("SKIPPED") and "MOTRIX_TRAIN" in ln]
+    if skipped:
+        reasons.append("「是否最新」題被 skip（MOTRIX_TRAIN 沒生效）：%s" % " | ".join(skipped))
+    return (not reasons), reasons
+
+
+def run_train(picked, tmap, extra, a):
+    """列車專用（D 稽核 GF-M1；PLAYBOOK §G4 第 4 步）：設 MOTRIX_TRAIN=1 ⇒ ①差異題 ②tests/platform 全部（-rs），
+    三題 skip 或收集不到 ⇒ 紅。不跑全量（第十班起全量只在 D7 前跑一次）。"""
+    os.environ["MOTRIX_TRAIN"] = "1"
+    code1 = None
+    if picked:
+        _say("[train] ① 差異題 %d 檔" % len(picked))
+        code1, _ = run_pytest(picked, cap_workers(extra, partial_cap(picked, tmap)), a.window, full=False)
+    else:
+        _say("[train] ① 沒有受影響的測試")
+    _say("[train] ② tests/platform（MOTRIX_TRAIN=1）")
+    code2, out2 = run_pytest(["backend/tests/platform"], cap_workers(extra + ["-n", str(full_max_workers()), "-rs"],
+                                                                    full_max_workers()), a.window + "tp", full=False)
+    ccode, cout = run_pytest(list(TRAIN_GUARDS), [], a.window + "tg", full=False, collect_only=True)
+    collected = {g for g in TRAIN_GUARDS if g.split("tests/", 1)[-1] in cout or g in cout}
+    ok, reasons = train_judge(code1, code2, out2, collected)
+    if ok:
+        _say("[train] ✓ 差異題、tests/platform 綠；「是否最新」三題有跑（沒被 skip）")
+        return 0
+    _say("[train] ✗ " + "；".join(reasons))
+    return 1
+
+
 def partial_cap(picked, tmap):
     """差異題的 worker 上限：選到的題裡有 e2e ⇒ 取 partial 與 e2e 上限較小者（D 抽查 MT-O1：設 PARTIAL=4 時 e2e 會用 -n 4 跑）。
     e2e 的判定：test_map 的 kind＝e2e；test_map 沒有那一檔時退回看檔名（test_e2e_*）。"""
@@ -1061,6 +1111,8 @@ def main(argv=None):
     ap.add_argument("--onto", default="origin/platform", help="--rebase-check 的 rebase 目標（預設 origin/platform）")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--full", action="store_true", help="全量（非 e2e＋e2e 兩段）；結果寫主工作樹 tools/platform/full_results/<commit>.json（dirty 不寫）＋.last_full.json")
+    ap.add_argument("--train", action="store_true",
+                    help="列車專用：設 MOTRIX_TRAIN=1，跑差異題（預設 --base origin/platform）＋tests/platform；「是否最新」三題 skip 就判紅（PLAYBOOK §G4）")
     _full = full_max_workers()
     ap.add_argument("--workers", type=int, default=_full,
                     help="--full 非 e2e 段的 xdist worker 數（上限 %d，§C-13；%s 可覆寫）" % (_full, FULL_ENV))
@@ -1102,11 +1154,15 @@ def main(argv=None):
             return 0
         return run_full(extra, a)
 
+    if a.train and not (a.base or a.commit or a.changed_since or a.files):
+        a.base = "origin/platform"
     changed = changed_files(a)
     tmap = load_map(a.use_files)
     graph = load_graph(a.use_files)
     t0 = time.monotonic()
     picked, rep = select(changed, tmap, graph, None if a.transitive else iface_checker(a))
+    if a.train and not a.dry_run:
+        return run_train(picked, tmap, extra, a)
 
     n_items, tail, full_n, per = None, "", None, None
     if a.dry_run:

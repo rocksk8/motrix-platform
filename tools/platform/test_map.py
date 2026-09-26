@@ -518,6 +518,13 @@ def main(argv=None):
             print("test_map.json 與現況不一致，請重跑 tools/platform/test_map.py")
             return 1
         return 0
+    untracked = [p for p in subprocess.run(["git", "-C", str(REPO), "ls-files", "-z", "--others", "--exclude-standard"],
+                                          capture_output=True, check=True).stdout.decode("utf-8").split("\0") if p]
+    if untracked:
+        # 現場選題要看得到未追蹤的新檔（tracked_files 含它們），但**寫進提交的檔**不可以含——列車樹是乾淨的；
+        # 髒樹重產會把別人看不到的檔寫進 test_map（D 稽核 b-genfiles 觀察）
+        print("工作樹有未追蹤的檔，拒絕重產 test_map.json（先 git add 或移走）：%s" % ", ".join(untracked[:10]))
+        return 2
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(text, encoding="utf-8", newline="\n")
     s = data["summary"]
