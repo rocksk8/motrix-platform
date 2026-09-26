@@ -181,7 +181,31 @@ def test_busy_history_is_not_overwritten_as_empty(env, monkeypatch):
     assert len(_hist(env)) == 20, "既有 20 筆不可以被蓋掉"
     pending = (env / "history.pending.jsonl").read_text(encoding="utf-8").splitlines()
     assert [json.loads(l)["action"] for l in pending] == ["new"]
-    assert "被占用" in dd._recent_failure_warning()
+    assert dd.get_history()[0]["action"] == "new", "還沒併回之前，畫面也要看得到那一筆"
+    assert "上一次new" in dd._recent_failure_warning(), "那一筆是失敗 ⇒ 15 分鐘警告照常"
+
+
+def test_pending_is_merged_back_on_the_next_write_and_warning_returns_to_normal(env, monkeypatch):
+    """D 稽核 H-S2：pending 要有落點——主檔恢復後的下一次寫入把它依時間併回並刪檔；警告回到一般判斷。"""
+    dd._append_history("old", "j", True)
+    real = type(dd.HISTORY_PATH).read_text
+
+    def busy(self, *a, **k):
+        if self == dd.HISTORY_PATH:
+            raise PermissionError("locked")
+        return real(self, *a, **k)
+
+    with monkeypatch.context() as m:
+        m.setattr(type(dd.HISTORY_PATH), "read_text", busy)
+        m.setattr(dd.time, "sleep", lambda s: None)
+        dd._append_history("while-busy", "j", False)
+    assert (env / "history.pending.jsonl").exists()
+    for i in range(3):
+        dd._append_history("after%d" % i, "j", True)
+    assert not (env / "history.pending.jsonl").exists(), "併回之後 pending 要刪掉"
+    actions = [e["action"] for e in _hist(env)]
+    assert actions == ["after2", "after1", "after0", "while-busy", "old"], actions
+    assert dd._recent_failure_warning() == "", "最近一筆是成功 ⇒ 沒有警告（不會卡在「尚未併回」）"
 
 
 def test_corrupt_history_is_archived_before_starting_over(env):
