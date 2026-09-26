@@ -58,25 +58,25 @@
 
 ## 4. 複核：C 整疊 rebase 到第九班之後（c-m05b-3 … c-approval-3 6cdc0ed0；D 19:36）
 
-**① range-diff**（舊 \`c98e43d0..49dcb781\` ⇔ 新 \`f0587058..6cdc0ed0\`；排除產生檔、CHANGELOG、registry 版號、module.json、l1 snapshot 之後比對）：
+**① range-diff**（舊 `c98e43d0..49dcb781` ⇔ 新 `f0587058..6cdc0ed0`；排除產生檔、CHANGELOG、registry 版號、module.json、l1 snapshot 之後比對）：
 - T 的 4 個 commit 已在 platform，因此從疊裡消失。
 - 標「=」的 commit 內容完全相同；標「!」的差異全是 rebase 衝突的解法：
-  - 第九班把 inventory、shipping_notes 搬進 \`modules/supply\` ⇒ main.py 的 import、題目路徑、出貨單提供者改由 supply 的 ModuleSpec 宣告。
-  - T100 notice 併入第九班的 IP-20（\`_t100_notice()\` 多列一項 receivables）。
-  - 題目改成從 \`modules.arap.api\` import，並加上 M05 不在時 importorskip。
+  - 第九班把 inventory、shipping_notes 搬進 `modules/supply` ⇒ main.py 的 import、題目路徑、出貨單提供者改由 supply 的 ModuleSpec 宣告。
+  - T100 notice 併入第九班的 IP-20（`_t100_notice()` 多列一項 receivables）。
+  - 題目改成從 `modules.arap.api` import，並加上 M05 不在時 importorskip。
   - KNOWN_L1 說明更新。
 - 新增的 commit：
   - 3 個 rebase chore（core_bump 1.39～1.42、產生檔重產）。
-  - d1ba5b21：cashier 選單自 \`core/menu_l1.json\` 移進 arap module.json 的 \`pages[].menu\`，並把 A 的兩個淘汰別名登記進 deprecations.json（M5-M1 交會解掉）。
+  - d1ba5b21：cashier 選單自 `core/menu_l1.json` 移進 arap module.json 的 `pages[].menu`，並把 A 的兩個淘汰別名登記進 deprecations.json（M5-M1 交會解掉）。
   - 37c6aeda：AP-M1／AP-M2 的修正。
 - 沒有看到超出上述範圍的產品碼改動。
 
-**② AP-M1**：\`check_approval_queue_coverage\` 加 \`_OWNER_MODULE\`（contractor_voucher→subcontract、invoice_voucher／payment_request→arap、bonus→payroll、6cdc0ed0 補 shipping_note→supply），擁有模組的 module.json 不在 ⇒ 列「不適用」並說明。
+**② AP-M1**：`check_approval_queue_coverage` 加 `_OWNER_MODULE`（contractor_voucher→subcontract、invoice_voucher／payment_request→arap、bonus→payroll、6cdc0ed0 補 shipping_note→supply），擁有模組的 module.json 不在 ⇒ 列「不適用」並說明。
 - D2 實測（6cdc0ed0）：arap 在 ⇒ 21 過；**刪 arap ⇒ 16 過、5 skip**（開票申請題寫明 M05 不在），覆蓋檢查不再紅。
 - 突變 AP1b「不適用失效」⇒ 紅。⇒ **AP-M1 關閉（37c6aeda／6cdc0ed0）**。
 
-**AP-M2**：新題 \`test_case_sales_without_money_rights_gets_no_passbook\`：該案業務拿不到 passbook 也拿不到 dataUrl；簽核人拿得到。過濾改為「有 dataUrl 或 id==passbook」。
+**AP-M2**：新題 `test_case_sales_without_money_rights_gets_no_passbook`：該案業務拿不到 passbook 也拿不到 dataUrl；簽核人拿得到。過濾改為「有 dataUrl 或 id==passbook」。
 - 突變 AP2b「不遮存簿」⇒ 紅。⇒ **AP-M2 關閉（37c6aeda）**。
 - 觀察 **AP-O2**：突變 AP2c「只看 id、不看 dataUrl」存活。現有題的存簿 id 就是 passbook，所以「提供者改 id 仍擋得住」這層結構判斷沒有題驗；建議合成一個 id 不同、但帶 dataUrl 的檔案。
-- 觀察 **AP-O3**：\`test_unreadable_chain_is_refused\`（AP7）掛在 M05 的 iv_setup 上，M05 不在時 L1 \`DataJsonApproval\` 的 fail-closed 沒有題驗。
+- 觀察 **AP-O3**：`test_unreadable_chain_is_refused`（AP7）掛在 M05 的 iv_setup 上，M05 不在時 L1 `DataJsonApproval` 的 fail-closed 沒有題驗。
 
