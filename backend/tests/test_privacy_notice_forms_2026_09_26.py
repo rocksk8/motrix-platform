@@ -223,3 +223,18 @@ def test_completion_note_recipient_ack(client, make_user):
     assert r1.status_code == 200 and r1.json()["created"] is True, r1.text
     assert client.get(base, headers=h).json()["acks"] == {"陳經理": r1.json()["ack"]}
     assert _audit_count("completion.privacy_notice_ack", no) == 1
+
+
+@pytest.mark.parametrize("role", ["contact", "site"])
+def test_quotation_privacy_endpoints_refuse_non_members(client, make_user, role):
+    """稽核 D PN-S1（突變 PN8、PN9 原本存活）：不是這張案件的人，讀不到聯絡人與告知紀錄，也不能替它記一筆「已告知」。"""
+    no = "PN-Q-OUT-" + role
+    _insert_quote(no)
+    h = _hdr(client, make_user, username="pn_out_" + role, role="engineer")
+    base = f"/api/quotations/{no}/privacy-notice"
+    assert client.get(base + "?role=" + role, headers=h).status_code == 403
+    name = "林聯絡" if role == "contact" else "趙現場"
+    r = client.post(base + "/ack", json={"role": role, "subject": name}, headers=h)
+    assert r.status_code == 403, r.text
+    kind = "quote_contact" if role == "contact" else "case_site_contact"
+    assert pn.get_ack(kind, f"{no}:{name}") in (None, {}), "被擋下的請求不可以留下紀錄"

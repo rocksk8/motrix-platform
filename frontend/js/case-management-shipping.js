@@ -236,6 +236,17 @@ window.CM_PARTS.push(() => ({
           body: JSON.stringify(body)
         })
         if (!r.ok) { this.shippingMsg = (await r.json()).detail || '儲存失敗'; this.shippingSaving = false; return }
+        const saved = await r.json().catch(() => ({}))
+        const noteNo = this.editShippingNoteNo || saved.note_no
+        // 收件人的個資告知（稽核 D PN-M1）：勾了「已告知」的，存檔後以單號記錄；記錄失敗就留在視窗，讓區塊顯示原因
+        const waits = []
+        window.dispatchEvent(new CustomEvent('shipping-saved', { detail: { noteNo, waits } }))
+        if ((await Promise.all(waits)).some(ok => !ok)) {
+          this.editShippingNoteNo = noteNo          // 單據已存；之後再按儲存是更新同一張
+          this.shippingSaving = false
+          await this.loadShippingNotes(this.selected?.quote_no)
+          return
+        }
         this.showShippingModal = false
         await this.loadShippingNotes(this.selected?.quote_no)
       } catch (e) { this.shippingMsg = '網路錯誤：' + e.message }

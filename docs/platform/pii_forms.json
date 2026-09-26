@@ -1,12 +1,13 @@
 {
-  "_說明": "蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。鍵＝頁面檔名（頁面可能在 L1 或模組資料夾，位置一律問 core.source_tree.page_files()）。守門：backend/tests/platform/test_pii_forms_notice.py（掃描規則在 _pii_forms.py）。每一張有個資輸入欄位的頁面都要有剛好一種決定：notice（頁面有告知區塊＋伺服器紀錄端點）、covered_by（個資來自另一張有告知的主檔）、not_natural_person（法人資料）。後兩種要逐欄列 fields，頁面多一個個資欄位就轉紅、要重新決定；身分證號、生日這類強個資不可以用後兩種帶過。",
+  "_說明": "蒐集自然人個資的表單 ⇒ 個資蒐集告知區塊（CUSTOMIZATION-SPEC §9.3；MODULE-GUIDE §11）。鍵＝頁面檔名（頁面可能在 L1 或模組資料夾，位置一律問 core.source_tree.page_files()）。守門：backend/tests/platform/test_pii_forms_notice.py（掃描規則在 _pii_forms.py）。每一張有個資輸入欄位的頁面都要有剛好一種決定：notice（頁面有告知區塊＋伺服器紀錄端點）、covered_by（個資來自另一張有告知的主檔）、not_natural_person（法人資料）。每一種決定都要逐欄列 fields（notice 也是，稽核 D PN-M1）；一頁有兩種以上當事人時用 notices（清單，每一個對象各有 subject），一欄只能屬於一個對象；頁面多一個個資欄位就轉紅、要重新決定；身分證號、生日這類強個資不可以用後兩種帶過。",
   "forms": {
     "contractors.html": {
       "notice": {
         "purpose": "contractor",
         "ack_kind": "contractor:<id>",
         "ack_api": ["/api/contractors/{cid}/privacy-notice", "/api/contractors/{cid}/privacy-notice/ack"],
-        "api_module": "subcontract"
+        "api_module": "subcontract",
+        "fields": ["form.address", "form.bank_account_number", "form.email", "form.id_number", "form.phone"]
       },
       "since": "R3 2026-09-25"
     },
@@ -15,25 +16,48 @@
         "purpose": "contractor",
         "ack_kind": "勞報單 data_json.privacyNotice（存檔時送 privacyNoticeAcked）",
         "ack_api": ["/api/payslips", "/api/payslips/{slip_no}"],
-        "api_module": "payroll"
+        "api_module": "payroll",
+        "fields": ["q.bankAccountNumber", "q.contractorAddress", "q.contractorEmail", "q.contractorIdNumber", "q.contractorPhone"]
       },
       "since": "R3 2026-09-25"
     },
     "customers.html": {
-      "notice": {
-        "purpose": "contact",
-        "ack_kind": "customer_contact:<客戶id>:<聯絡人id>",
-        "ack_api": ["/api/customers/{cid}/privacy-notice", "/api/customers/{cid}/contacts/{ctid}/privacy-notice/ack"]
-      },
+      "notices": [
+        {
+          "subject": "customer_contact",
+          "purpose": "contact",
+          "ack_kind": "customer_contact:<客戶id>:<聯絡人id>",
+          "ack_api": ["/api/customers/{cid}/privacy-notice", "/api/customers/{cid}/contacts/{ctid}/privacy-notice/ack"],
+          "fields": ["ct.email", "ct.phone"]
+        },
+        {
+          "subject": "master",
+          "not_natural_person": true,
+          "fields": ["form.deliveryAddress", "form.email", "form.invoiceAddress", "form.phone"],
+          "reason": "客戶／供應商主檔＝往來的公司；聯絡人另有逐人告知（上面那一項）。日後出現個人客戶時改用「主檔也要告知」。",
+          "decided_by": "使用者表單 (a)「視為公司」2026-09-26（主持轉達，CORE-SPEC 使用者裁示表）"
+        }
+      ],
       "since": "2026-09-26"
     },
     "suppliers.html": {
-      "notice": {
-        "purpose": "contact",
-        "ack_kind": "supplier_contact:<供應商id>:<聯絡人id>",
-        "ack_api": ["/api/suppliers/{sid}/privacy-notice", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"],
-        "api_module": "supply"
-      },
+      "notices": [
+        {
+          "subject": "supplier_contact",
+          "purpose": "contact",
+          "ack_kind": "supplier_contact:<供應商id>:<聯絡人id>",
+          "ack_api": ["/api/suppliers/{sid}/privacy-notice", "/api/suppliers/{sid}/contacts/{ctid}/privacy-notice/ack"],
+          "api_module": "supply",
+          "fields": ["ct.email", "ct.phone"]
+        },
+        {
+          "subject": "master",
+          "not_natural_person": true,
+          "fields": ["form.address", "form.email", "form.phone"],
+          "reason": "客戶／供應商主檔＝往來的公司；聯絡人另有逐人告知（上面那一項）。日後出現個人客戶時改用「主檔也要告知」。",
+          "decided_by": "使用者表單 (a)「視為公司」2026-09-26（主持轉達，CORE-SPEC 使用者裁示表）"
+        }
+      ],
       "since": "2026-09-26"
     },
     "vendor-contractors.html": {
@@ -41,7 +65,8 @@
         "purpose": "contact",
         "ack_kind": "vendor_contractor:<id>",
         "ack_api": ["/api/vendor-contractors/{vid}/privacy-notice", "/api/vendor-contractors/{vid}/privacy-notice/ack"],
-        "api_module": "subcontract"
+        "api_module": "subcontract",
+        "fields": ["form.address", "form.bank_account_number", "form.contact_name", "form.email", "form.phone"]
       },
       "since": "2026-09-26"
     },
@@ -49,33 +74,57 @@
       "notice": {
         "purpose": "user",
         "ack_kind": "user:<id>",
-        "ack_api": ["/api/users/{user_id}/privacy-notice", "/api/users/{user_id}/privacy-notice/ack"]
+        "ack_api": ["/api/users/{user_id}/privacy-notice", "/api/users/{user_id}/privacy-notice/ack"],
+        "fields": ["form.email", "form.phone"]
       },
       "since": "2026-09-26"
     },
     "quotation-form.html": {
-      "notice": {
-        "purpose": "contact",
-        "ack_kind": "quote_contact:<報價單號>:<聯絡人姓名>",
-        "ack_api": ["/api/quotations/{quote_no}/privacy-notice", "/api/quotations/{quote_no}/privacy-notice/ack"]
-      },
+      "notices": [
+        {
+          "subject": "quote_contact",
+          "purpose": "contact",
+          "ack_kind": "quote_contact:<報價單號>:<聯絡人姓名>",
+          "ack_api": ["/api/quotations/{quote_no}/privacy-notice", "/api/quotations/{quote_no}/privacy-notice/ack"],
+          "fields": ["q.contactEmail", "q.contactName", "q.contactPhone", "q.deliveryAddress"]
+        },
+        {
+          "subject": "sales",
+          "covered_by": "users.html",
+          "fields": ["q.salesEmail", "q.salesPhone"],
+          "reason": "業務本人的 Email／電話由使用者帳號帶入、畫面上是靜態 readonly；告知在使用者帳號（users.html）。"
+        }
+      ],
       "since": "2026-09-26",
       "note": "聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）；業務的 Email／電話由使用者帳號（users.html）涵蓋。"
     },
     "case-management.html": {
-      "notice": {
-        "purpose": "contact",
-        "ack_kind": "case_site_contact:<報價單號>:<現場聯絡人姓名>",
-        "ack_api": ["/api/quotations/{quote_no}/privacy-notice", "/api/quotations/{quote_no}/privacy-notice/ack"]
-      },
+      "notices": [
+        {
+          "subject": "case_site_contact",
+          "purpose": "contact",
+          "ack_kind": "case_site_contact:<報價單號>:<現場聯絡人姓名>",
+          "ack_api": ["/api/quotations/{quote_no}/privacy-notice", "/api/quotations/{quote_no}/privacy-notice/ack"],
+          "fields": ["cr.caseRecord.contract.contactPerson", "cr.caseRecord.contract.contactPhone", "cr.caseRecord.contract.deliveryAddress"]
+        },
+        {
+          "subject": "shipping_recipient",
+          "purpose": "contact",
+          "ack_kind": "shipping_recipient:<出貨單號>:<收件人姓名>",
+          "ack_api": ["/api/shipping-notes/{note_no}/privacy-notice", "/api/shipping-notes/{note_no}/privacy-notice/ack"],
+          "api_module": "supply",
+          "fields": ["shippingForm.delivery_address", "shippingForm.recipient"]
+        }
+      ],
       "since": "2026-09-26",
-      "note": "合約現場聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）。"
+      "note": "合約現場聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）。出貨單的收件人與送貨地址是另一位當事人（稽核 D PN-M1；主持裁示：比照手動輸入的聯絡人，要告知），各有自己的區塊與紀錄。"
     },
     "completion-note-form.html": {
       "notice": {
         "purpose": "contact",
         "ack_kind": "completion_contact:<完工單號>:<驗收人姓名>",
-        "ack_api": ["/api/completion-notes/{note_no}/privacy-notice", "/api/completion-notes/{note_no}/privacy-notice/ack"]
+        "ack_api": ["/api/completion-notes/{note_no}/privacy-notice", "/api/completion-notes/{note_no}/privacy-notice/ack"],
+        "fields": ["form.contact_phone", "form.recipient", "form.site_address"]
       },
       "since": "2026-09-26",
       "note": "客戶驗收人／聯絡人可以手動輸入（主持 2026-09-26 裁示比照 network-plan）。"
@@ -85,7 +134,8 @@
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>",
         "ack_api": ["/api/network-plans/{plan_id}/privacy-notice", "/api/network-plans/{plan_id}/privacy-notice/ack"],
-        "api_module": "netplan"
+        "api_module": "netplan",
+        "fields": ["plan.contactName", "plan.contactPhone"]
       },
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：聯絡人是手動輸入，要有告知。"
@@ -95,7 +145,8 @@
         "purpose": "contact",
         "ack_kind": "network_plan_contact:<規劃書id>:<聯絡人姓名>（建立時記錄）",
         "ack_api": ["/api/network-plans/{plan_id}/privacy-notice/ack"],
-        "api_module": "netplan"
+        "api_module": "netplan",
+        "fields": ["createForm.contactName", "createForm.contactPhone"]
       },
       "since": "2026-09-26",
       "note": "主持 2026-09-26 裁示：建立視窗的聯絡人是手動輸入，要有告知。"
