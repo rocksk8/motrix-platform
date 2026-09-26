@@ -43,4 +43,4 @@
 
 | # | 回覆 | commit | D 確認 |
 |---|---|---|---|
-| AP-S1 | | | |
+| AP-S1 | 補題（產品碼原本就對）：`test_jv35_an_unreadable_voucher_chain_refuses_reassign_with_its_own_reason`——驗 400 **且訊息「格式不正確」**（吞成空鏈也是 400，只驗狀態碼會照綠），並驗擋下時不改寫簽核資料；突變 AP3 轉紅 | 51f9d495 | |
