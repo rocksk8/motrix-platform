@@ -5,7 +5,8 @@
 - 正對照①（不綁 L2）：暫存目錄裡一張有個資欄位、沒有決定的頁面 ⇒ 被抓到。
 - 正對照②（使用者 2026-09-26 指定）：承攬人員名冊（R3 已有告知）要被掃到，而且決定是 notice。
 - 反向控制：把所有決定都改成「非自然人」或「由別頁涵蓋」⇒ 轉紅；拿掉某一頁的告知區塊 ⇒ 轉紅；
-  豁免頁多一個個資欄位 ⇒ 轉紅；過期的決定 ⇒ 轉紅；可以手打的欄位用 covered_by ⇒ 轉紅。
+  豁免頁多一個個資欄位 ⇒ 轉紅；過期的決定 ⇒ 轉紅；可以手打的欄位用 covered_by ⇒ 轉紅；
+  `api_module` 的模組在 ⇒ 端點照驗（不在才免驗端點，PLAYBOOK §B-11）。
 """
 import copy
 import shutil
@@ -83,10 +84,36 @@ def test_reverse_control_removing_the_notice_card_turns_red(tmp_path, page):
 def test_reverse_control_missing_ack_endpoint_turns_red(tmp_path, page):
     d = _copies(tmp_path)
     reg = copy.deepcopy(pf.load_registry())
+    mod = reg["forms"][page]["notice"].get("api_module")
+    if mod is not None:
+        from core import source_tree
+        if not source_tree.module_installed("modules/%s/" % mod):
+            pytest.skip("端點的模組 %s 不在這個安裝包（PLAYBOOK §B-11；模組在時照驗，見 test_api_module_only_waives_…）" % mod)
     api = reg["forms"][page]["notice"]["ack_api"][-1]
     routers = pf.product_router_text().replace(f'"{api}"', '"/api/gone"')
     errs = pf.violations(reg, pages=_pages(d), router_text=routers)
     assert any(page in e and api in e for e in errs), errs
+
+
+def test_api_module_only_waives_the_endpoint_when_that_module_is_absent(tmp_path, monkeypatch):
+    """`api_module`：模組在 ⇒ 端點照常比對（不可以因為登記了模組就免驗）；模組不在 ⇒ 不比對端點，告知區塊照驗。"""
+    from core import source_tree
+    d = _copies(tmp_path)
+    reg = copy.deepcopy(pf.load_registry())
+    page = next(p for p, v in reg["forms"].items() if "notice" in v)
+    reg["forms"][page]["notice"]["api_module"] = "payroll"
+    apis = reg["forms"][page]["notice"]["ack_api"]
+    routers = pf.product_router_text()
+    for a in apis:
+        routers = routers.replace(f'"{a}"', '"/api/gone"')
+    monkeypatch.setattr(source_tree, "module_installed", lambda p: True)
+    assert any(page in e and apis[0] in e for e in pf.violations(reg, pages=_pages(d), router_text=routers))
+    monkeypatch.setattr(source_tree, "module_installed", lambda p: "modules/payroll/" not in str(p))
+    assert not [e for e in pf.violations(reg, pages=_pages(d), router_text=routers) if page in e]
+    f = d / page
+    f.write_text(f.read_text(encoding="utf-8").replace("data-privacy-card", "data-x"), encoding="utf-8")
+    assert any(page in e and "data-privacy-card" in e
+               for e in pf.violations(reg, pages=_pages(d), router_text=routers)), "模組不在時告知區塊仍要驗"
 
 
 def test_reverse_control_new_field_on_exempt_page_turns_red(tmp_path):

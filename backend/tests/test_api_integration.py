@@ -531,43 +531,6 @@ def test_dev_case_update_without_expected_updated_at_still_works(client, make_us
 
 # ── contractor-dispatches optimistic lock (#6 medium risk) ──────────────────
 
-def test_contractor_dispatch_update_conflict_returns_409(client, make_user):
-    username, password = make_user(role="admin")
-    token = _login(client, username, password)
-    _make_quotation("MQ-TEST-011")
-
-    r = client.post(
-        "/api/contractor-dispatches", headers=_auth(token),
-        json={
-            "quote_no": "MQ-TEST-011",
-            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 1000, "note": ""}],
-        },
-    )
-    assert r.status_code == 201, r.text
-    dispatch = r.json()
-    did = dispatch["id"]
-
-    r = client.put(
-        f"/api/contractor-dispatches/{did}", headers=_auth(token),
-        json={
-            "quote_no": "MQ-TEST-011",
-            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 2000, "note": ""}],
-            "expectedUpdatedAt": "2000-01-01T00:00:00.000000",
-        },
-    )
-    assert r.status_code == 409, r.text
-
-    r = client.put(
-        f"/api/contractor-dispatches/{did}", headers=_auth(token),
-        json={
-            "quote_no": "MQ-TEST-011",
-            "personnel_json": [{"id": 1, "name": "測試工班", "amount": 2000, "note": ""}],
-            # created_at == updated_at at creation time (both set to `now` in the INSERT)
-            "expectedUpdatedAt": dispatch["created_at"],
-        },
-    )
-    assert r.status_code == 200, r.text
-
 
 # ── quotation draft PUT optimistic lock (#6 medium risk) ─────────────────────
 

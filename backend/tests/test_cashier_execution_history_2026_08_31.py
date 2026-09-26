@@ -76,96 +76,11 @@ def _make_quotation_with_unreceived_item(quote_no, expected_receipt_date=""):
         conn.close()
 
 
-def test_execution_history_date_range_filters_outgoing_and_incoming(client, make_user):
-    username, password = make_user(username="hist_admin1", role="superadmin")
-    token = _login(client, username, password)
-
-    v_in_range = _make_approved_voucher(client, token, "MQ-HIST-001")
-    pay = client.post(
-        f"/api/contractor-vouchers/{v_in_range}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-08-15"},
-    )
-    assert pay.status_code == 200, pay.text
-
-    v_out_of_range = _make_approved_voucher(client, token, "MQ-HIST-002")
-    pay2 = client.post(
-        f"/api/contractor-vouchers/{v_out_of_range}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-01-05"},
-    )
-    assert pay2.status_code == 200, pay2.text
-
-    _make_quotation_with_unreceived_item("MQ-HIST-010")
-    mark = client.patch(
-        "/api/quotations/MQ-HIST-010/payment/0", headers=_auth(token),
-        json={"received": True, "receivedAt": "2026-08-20", "actualAmount": 30000, "feeAmount": 0},
-    )
-    assert mark.status_code == 200, mark.text
-
-    _make_quotation_with_unreceived_item("MQ-HIST-011")
-    mark2 = client.patch(
-        "/api/quotations/MQ-HIST-011/payment/0", headers=_auth(token),
-        json={"received": True, "receivedAt": "2026-02-01", "actualAmount": 30000, "feeAmount": 0},
-    )
-    assert mark2.status_code == 200, mark2.text
-
-    r = client.get("/api/cashier/execution-history?start=2026-08-01&end=2026-08-31", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    body = r.json()
-
-    outgoing_nos = [v["voucherNo"] for v in body["outgoing"]]
-    assert v_in_range in outgoing_nos
-    assert v_out_of_range not in outgoing_nos
-
-    incoming_quote_nos = [i["quoteNo"] for i in body["incoming"]]
-    assert "MQ-HIST-010" in incoming_quote_nos
-    assert "MQ-HIST-011" not in incoming_quote_nos
-
-    assert body["outgoingTotal"] == sum(v["grandTotal"] for v in body["outgoing"])
-    assert body["incomingTotal"] == sum(
-        (i["actualAmount"] if i["actualAmount"] is not None else i["amount"]) for i in body["incoming"]
-    )
-
-
 def test_execution_history_requires_view_access(client, make_user):
     viewer_username, viewer_password = make_user(role="viewer", modules=[])
     viewer_token = _login(client, viewer_username, viewer_password)
     r = client.get("/api/cashier/execution-history", headers=_auth(viewer_token))
     assert r.status_code == 403, r.text
-
-
-def test_export_excel_has_both_sheets_with_data(client, make_user):
-    username, password = make_user(username="hist_admin2", role="superadmin")
-    token = _login(client, username, password)
-
-    v = _make_approved_voucher(client, token, "MQ-HIST-020")
-    pay = client.post(
-        f"/api/contractor-vouchers/{v}/paid-toggle", headers=_auth(token),
-        json={"action": "pay", "paid_at": "2026-08-10"},
-    )
-    assert pay.status_code == 200, pay.text
-
-    _make_quotation_with_unreceived_item("MQ-HIST-021")
-    mark = client.patch(
-        "/api/quotations/MQ-HIST-021/payment/0", headers=_auth(token),
-        json={"received": True, "receivedAt": "2026-08-12", "actualAmount": 29800, "feeAmount": 200},
-    )
-    assert mark.status_code == 200, mark.text
-
-    r = client.get("/api/cashier/export?start=2026-08-01&end=2026-08-31", headers=_auth(token))
-    assert r.status_code == 200, r.text
-    assert "spreadsheetml" in r.headers["content-type"]
-
-    wb = openpyxl.load_workbook(io.BytesIO(r.content))
-    # 2026-09-25（CORE-SPEC 獎金分潤：送交出納）：最高管理者／出納多一張獎金發放明細（IP-8）
-    assert wb.sheetnames == ["已匯款明細", "已收款明細", "獎金發放明細"]
-
-    ws1 = wb["已匯款明細"]
-    voucher_nos_in_sheet = [row[0].value for row in ws1.iter_rows(min_row=3, max_col=1)]
-    assert v in voucher_nos_in_sheet
-
-    ws2 = wb["已收款明細"]
-    quote_nos_in_sheet = [row[0].value for row in ws2.iter_rows(min_row=3, max_col=1)]
-    assert "MQ-HIST-021" in quote_nos_in_sheet
 
 
 def test_export_requires_view_access(client, make_user):

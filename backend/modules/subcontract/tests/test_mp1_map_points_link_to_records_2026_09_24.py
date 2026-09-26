@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""`MP1` · 地圖點位連到單據（雙向）。
+"""需要外包工班（M04）的題：刪掉 modules/subcontract 時隨模組消失（PLAYBOOK §B-11，稽核 D M04-M1）。
+
+（2026-09-26 自 tests/test_mp1_map_points_link_to_records_2026_09_24.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
+`MP1` · 地圖點位連到單據（雙向）。
 
 權威原文：`HANDOFF-PENDING-2026-09-23.md`「🟢 MP 地圖優化」MP1：
 「回傳帶記錄 id；彈窗與表格可點開客戶／供應商／標案／出貨單；單據頁加『在地圖上看』
@@ -94,27 +97,6 @@ def _seed():
         conn.close()
 
 
-def test_mp1_every_own_point_carries_the_id_of_its_record(client, make_user, _geo):
-    ids = _seed()
-    hdr = _auth(client, make_user)
-    r = client.get("/api/map/points?sources=contractors,vendor_contractors,shipping_notes,"
-                   "customers,suppliers", headers=hdr)
-    assert r.status_code == 200, r.text
-    pts = r.json()["points"]
-    got = {}
-    for p in pts:
-        got.setdefault(p.get("sourceKey"), set()).add(p.get("recordId"))
-    print("MP1 實測：各來源點位的 recordId %r；應為 %r" % (got, ids))
-    for src, rid in ids.items():
-        assert got.get(src) == {rid}, "%s 的點位沒有帶回自己那一筆的 id：%r（應為 %r）" % (
-            src, got.get(src), rid)
-    cust = [p for p in pts if p.get("sourceKey") == "customers"]
-    assert len(cust) == 2, "客戶送貨＋發票兩個點（量尺）：%r" % cust
-    ship = [p for p in pts if p.get("sourceKey") == "shipping_notes"]
-    assert ship and ship[0].get("quoteNo") == "MQ-MP1-001", (
-        "出貨單要帶所屬案件的 quote_no（它沒有自己的頁）：%r" % ship)
-
-
 # ══════════════════════════════════════════════════════════════════════
 # 頁面（e2e）
 # ══════════════════════════════════════════════════════════════════════
@@ -157,40 +139,69 @@ def _open_map(page, live_server, query):
 
 
 @pytest.mark.e2e
-def test_mp1_map_focus_opens_that_point_with_a_link_to_its_record(live_server, make_user, _geo, e2e_browser):
+def test_mp1_record_links_follow_each_page_gate(live_server, make_user, _geo, e2e_browser):
     block_tiles, _login = _page_deps()
-    u, p = make_user(username="mp1_focus", role="superadmin")
+    """看不到那一頁的人不給連結（協力廠商頁限管理員；外包名冊頁要模組；標案雷達要 dev_crm）。"""
+    u, p = make_user(username="mp1_gate", role="superadmin")
     browser = e2e_browser
-    page = browser.new_page(viewport={"width": 1280, "height": 900})
+    page = browser.new_page()
     block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
     _login(page, live_server, u, p)
-    _open_map(page, live_server, "?focus=customers%3A7")
-    pops = page.locator(".leaflet-popup-content")
-    pops.first.wait_for(state="visible", timeout=5000)
-    text = pops.first.inner_text()
-    href = pops.first.locator("a.mp-rec").get_attribute("href")
-    rows = page.locator("a.mp-rec:visible").evaluate_all("els => els.map(e => e.getAttribute('href'))")
-    print("MP1 地圖實測：彈窗 %r／連結 %r／表格連結 %r" % (text[:40], href, rows))
-    assert "焦點客戶" in text, "?focus= 要打開**那一點**的彈窗，不是別的：%r" % text
-    assert href == "customers.html?id=7", href
-    assert "customers.html?id=8" in rows and "customers.html?id=7" in rows, rows
-    # 對照組：沒有 focus ⇒ 不自己開彈窗。
-    _open_map(page, live_server, "")
-    assert page.locator(".leaflet-popup-content").count() == 0
+    page.goto(live_server + "/pages/map.html")
+    page.wait_for_function("() => window.MotrixRecordLink", timeout=15000)
+    got = page.evaluate("""() => {
+        const L = window.MotrixRecordLink
+        const v = {sourceKey: 'vendor_contractors', recordId: 3}
+        const c = {sourceKey: 'contractors', recordId: 4}
+        const t = {sourceKey: 'tenders', caseNo: 'A/1'}
+        const s = {sourceKey: 'shipping_notes', recordId: 5, quoteNo: 'MQ-1'}
+        const user = {role: 'user', modules: ['procurement']}
+        const admin = {role: 'admin', modules: []}
+        return {
+          vUser: L.recordUrl(v, user), vAdmin: L.recordUrl(v, admin),
+          cUser: L.recordUrl(c, user), cMod: L.recordUrl(c, {role: 'user', modules: ['contractor_list']}),
+          tUser: L.recordUrl(t, user), tDev: L.recordUrl(t, {role: 'user', modules: ['dev_crm']}),
+          sUser: L.recordUrl(s, user), fk: L.focusKey(t),
+        }
+    }""")
+    print("MP1 權限對照：%r" % got)
+    assert got["vUser"] is None and got["vAdmin"] == "vendor-contractors.html?id=3", got
+    assert got["cUser"] is None and got["cMod"] == "contractors.html?id=4", got
+    assert got["tUser"] is None and got["tDev"] == "tender-radar.html?case=A%2F1", got
+    assert got["sUser"] == "case-management.html?q=MQ-1&tab=shipping", got
+    assert got["fk"] == "tenders:A/1", got
+
+
+@pytest.mark.e2e
+def test_mp1_source_pages_open_the_record_from_the_link_and_link_back(live_server, make_user, _geo, e2e_browser):
+    block_tiles, _login = _page_deps()
+    # `_geo`：標案雷達頁會畫自己的小地圖，後端會探測圖磚——換掉，不對外連線（NETGUARD）。
+    ids = _seed()
+    u, p = make_user(username="mp1_pages", role="superadmin")
+    cases = [
+        ("customers.html?id=%d" % ids["customers"], "MP1客戶", "customers%%3A%d" % ids["customers"]),
+        ("suppliers.html?id=%d" % ids["suppliers"], "MP1供應商", "suppliers%%3A%d" % ids["suppliers"]),
+        ("contractors.html?id=%d" % ids["contractors"], "MP1外包", "contractors%%3A%d" % ids["contractors"]),
+        ("vendor-contractors.html?id=%d" % ids["vendor_contractors"], "MP1承攬商",
+         "vendor_contractors%%3A%d" % ids["vendor_contractors"]),
+    ]
+    browser = e2e_browser
+    page = browser.new_page(viewport={"width": 1366, "height": 900})
+    block_tiles(page)   # 地圖圖磚不連外（conftest._browser_netguard）
+    _login(page, live_server, u, p)
+    for url, name, focus in cases:
+        page.goto(live_server + "/pages/" + url)
+        pane = page.locator(".detail-pane.open")
+        pane.wait_for(state="visible", timeout=15000)
+        _rendered(page)   # PERF #6：原本固定等 300ms
+        text = pane.inner_text()
+        href = pane.locator("a.mp1-onmap").get_attribute("href")
+        print("MP1 %s：明細 %r／在地圖上看 %r" % (url, text[:30], href))
+        assert name in text, "%s 要直接打開那一筆：%r" % (url, text[:80])
+        assert href == "map.html?focus=" + focus, (url, href)
     # 找不到 ⇒ 說出來。
-    _open_map(page, live_server, "?focus=customers%3A999")
-    miss = page.locator(".motrix-deeplink-miss")
-    miss.wait_for(state="visible", timeout=5000)
-    assert page.locator(".leaflet-popup-content").count() == 0
-
-
+    page.goto(live_server + "/pages/customers.html?id=99999")
+    page.locator(".motrix-deeplink-miss").wait_for(state="visible", timeout=15000)
+    assert page.locator(".detail-pane.open").count() == 0
     # 標案雷達那一段（`?case=` ⇒ 那一列被標示並有回地圖的連結）屬 M11：
     # modules/tender_radar/tests/test_tender_mp1_case_link_2026_09_24.py（2026-09-25 拆出）
-
-
-def test_mp1_the_shipping_note_links_to_its_point_on_the_map():
-    """出貨單列在案件頁的出貨分頁（沒有自己的頁）⇒「在地圖上看」寫在那裡，焦點鍵與地圖一致。"""
-    import pathlib
-    html = (pathlib.Path(__file__).resolve().parents[2] / "frontend" / "pages"
-            / "case-management.html").read_text(encoding="utf-8")
-    assert "encodeURIComponent('shipping_notes:' + n.id)" in html

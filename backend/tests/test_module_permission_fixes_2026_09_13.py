@@ -327,12 +327,20 @@ def test_case_action_items_not_readable_by_outsiders(client, make_user):
     assert r.status_code == 403
 
 
+def _case_document_bases():
+    """帶 quote_no 讀案件單據的端點；承攬商付款在外包工班（M04），模組不在時不列（PLAYBOOK §B-11）。"""
+    from core import source_tree
+    bases = ["/api/completion-notes", "/api/shipping-notes", "/api/invoice-vouchers", "/api/payment-requests"]
+    if source_tree.module_installed("modules/subcontract/"):
+        bases.append("/api/contractor-vouchers")
+    return bases
+
+
 def test_case_documents_not_listable_by_outsiders(client, make_user):
     """完工單／出貨單／開票／請款／承攬商付款：帶 quote_no 就是讀某張案件的單據。"""
     _make_case("MQ-SWEEP-002", sales_person="sw_owner")
     tok = _outsider(client, make_user, "sw_v2")
-    for base in ("/api/completion-notes", "/api/shipping-notes", "/api/invoice-vouchers",
-                 "/api/payment-requests", "/api/contractor-vouchers"):
+    for base in _case_document_bases():
         r = client.get(f"{base}?quote_no=MQ-SWEEP-002", headers=_auth(tok))
         assert r.status_code == 403, f"{base} 沒擋：{r.status_code}"
         # 不帶 quote_no 的跨案件總覽同樣要擋
@@ -344,8 +352,7 @@ def test_case_manager_can_still_list_case_documents(client, make_user):
     u, p = make_user(username="sw_cm", role="engineer", modules=["case_manage"])
     _make_case("MQ-SWEEP-003", sales_person="sw_owner")
     tok = _login(client, u, p)
-    for base in ("/api/completion-notes", "/api/shipping-notes", "/api/invoice-vouchers",
-                 "/api/payment-requests", "/api/contractor-vouchers"):
+    for base in _case_document_bases():
         assert client.get(f"{base}?quote_no=MQ-SWEEP-003",
                           headers=_auth(tok)).status_code == 200, base
 

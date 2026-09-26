@@ -5,7 +5,8 @@
       "notice": {
         "purpose": "contractor",
         "ack_kind": "contractor:<id>",
-        "ack_api": ["/api/contractors/{cid}/privacy-notice", "/api/contractors/{cid}/privacy-notice/ack"]
+        "ack_api": ["/api/contractors/{cid}/privacy-notice", "/api/contractors/{cid}/privacy-notice/ack"],
+        "api_module": "subcontract"
       },
       "since": "R3 2026-09-25"
     },
@@ -37,7 +38,8 @@
       "notice": {
         "purpose": "contact",
         "ack_kind": "vendor_contractor:<id>",
-        "ack_api": ["/api/vendor-contractors/{vid}/privacy-notice", "/api/vendor-contractors/{vid}/privacy-notice/ack"]
+        "ack_api": ["/api/vendor-contractors/{vid}/privacy-notice", "/api/vendor-contractors/{vid}/privacy-notice/ack"],
+        "api_module": "subcontract"
       },
       "since": "2026-09-26"
     },

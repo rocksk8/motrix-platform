@@ -267,6 +267,9 @@ def _record(live_server, make_user, e2e_browser):
 
 @pytest.mark.e2e
 def test_case_page_behaviour_matches_golden(live_server, make_user, e2e_browser):
+    from core import source_tree
+    if not source_tree.module_installed("modules/subcontract/"):
+        pytest.skip("黃金錄製含外包工班（M04）的派工分頁；模組不在這個安裝包時分頁列本來就不同（PLAYBOOK §B-11）")
     got = _record(live_server, make_user, e2e_browser=e2e_browser)
     if os.environ.get("GOLDEN_WRITE") == "1":
         GOLDEN.write_text(json.dumps(got, ensure_ascii=False, indent=1, sort_keys=True), encoding="utf-8")
