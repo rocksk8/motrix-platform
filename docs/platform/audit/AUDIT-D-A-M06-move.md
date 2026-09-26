@@ -90,3 +90,22 @@
 範圍改回 JV7 現行：IP-96 加用途 `voucher_link`，有傳票權限列全部、只回摘要欄位（不含地址）；權限判斷在 L1。範圍註明與 manifest 縮窄句撤回。
 題 `tests/platform/test_case_summary_purpose.py`（全部／沒有權限照可見性／不帶用途照可見性／未登錄用途拒絕／端到端）；突變 4/4 紅（拿掉權限判斷、放寬時回整列、未登錄用途默默照可見性、傳票不帶用途）。
 
+
+## 4. 複核：wip/a-m06-5 37e59697（疊 a-m06-4 5afa5f3c、b-ip15-cost；D 23:36）
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| **M06-M1** | D2 **再真刪一次** `modules/accounting`（同樣的 92 檔＋13 個 e2e 檔）：收集 2081、無錯；非 e2e 1980 過、56 skip、**只剩允許的 5 紅**；e2e **40 過、0 紅** | **關閉** |
+| **M06-M2** | EM10 改為每組一個基準 `_BASELINE_BY_GROUP`（accounting 4、analytics 8、arap 3…）；突變 N1「accounting 的一句『請至少選擇一個檔案。』改掉」⇒ **紅**（`test_em10_the_navigation_tone_message_count_does_not_drop`） | **關閉** |
+| **M06-S1** | 突變 G1b（起點耗盡的 `pytest.fail` 改成 skip）⇒ **紅**（`test_rc_candidate_check_and_exhausted_starts_really_fail`） | **關閉** |
+| **M06-S2** | 那一題已沒有 skip；「往上爬」的檢查一律執行，只有鄰居迴圈依 M06 | **關閉** |
+| a' 改走 `dispatch.cost_for_case` | 改動前後 `_dispatch_expense_entry` 用到的欄位：前＝`grandTotal, invoiceNo, items, personnel(name, amount), scope, vendorName, id`；後＝`amount, invoiceNo, items, personnelCount, personnelTotal, scope, vendorName, id`。scope 與 invoiceNo 本來就有用到，**沒有新增其他欄位**；外包人員從逐人姓名改成一行「外包人員 N 人」 | 成立 |
+| -5 用途範圍 | 突變 P1「未登錄用途照可見性（不拒絕）」、P2「不看模組一律 all」、P3「放寬時回完整列（含地址等）」⇒ 3/3 紅 | 成立 |
+
+**M06-M3（必修，新）　`purpose="voucher_link"` 沒有守門限制呼叫端（主持重點：這條路不能被非傳票端點借用）**
+- 放寬與否只看**使用者**有沒有 cashier／finance，不看**是誰在呼叫**。任何模組、任何端點都可以 `case_summary(conn, user, purpose="voucher_link")`；只要登入者有傳票權限，就拿到全部案件的單號、客戶名、案名。
+- `git grep`：目前只有 `modules/accounting/api/vouchers.py:688` 在用，所以現況沒有被借用；但也**沒有任何題**擋下一個借用者。
+- 影響有上限：能看到全部的人，本來就能在傳票頁看到（AT6-O1 界線）。但借用端點的輸出可能流到別處（匯出、通知、其他使用者看得到的畫面），這正是主持要求擋的。
+- 修法：比照 CS-M1 的 SYSTEM 掃描，靜態守門「只有 `modules/accounting/` 可以傳 `purpose="voucher_link"`」（含變數傳遞、`**kwargs` 等寫法的反向控制）。或者在 `case_summary_scope` 加執行期檢查呼叫端所在的模組（比照 CS-M1 的 frame 檢查）。
+
+- 觀察 **M06-O2**：`vouchers_by_case` 用 `_dispatch_costs(no, authorization)[0]`，丟掉了 403 的說明。能打這支的只有 cashier／finance，兩者都在成本檢視的放行名單內，所以現況不會發生。
