@@ -53,6 +53,7 @@
 | B 的 b-o5-s1 4e6d97d3（完整）＋b-modtest-env fb3c687f（MT-O1 複核）＋第八班列車改主持兩處（事後抽查） | D | `AUDIT-D-B-o5-s1.md`、`AUDIT-D-B-attr-modtestenv.md` §3、`AUDIT-D-host-train8.md` | 完成（2026-09-26 16:23）：o5-s1 必修 0（golden Referer 過濾未變寬：案件頁多一支 GET 紅、首頁的請求改動前也不在 golden 範圍、拿掉過濾 2/3 紅）；MT-O1 關閉；列車兩處通過，觀察 T8-O1（角色字串守門誤判 .get("roles")） |
 | 角色字串守門改 AST（主持，wip/h-roleguard d10fc8e9，抽查） | D | `AUDIT-D-host-train8.md` §T8-O1 | 抽查完成（2026-09-26 16:27）：T8-O1 關閉；突變 RG1 紅；新舊比較無真漏；觀察 RG-O1（SQL 字串內角色字面值新舊都不驗，9 檔） |
 | C 的 c-m01-s3-2 dbd07633 複核 CS-M1／CS-S1 | D | `AUDIT-D-C-m01-s3.md` | 複核（2026-09-26 16:30）：CS-S1 關閉；CS-M1 靜態通過、**執行期新題順序依賴（單跑 no such table）未關** |
+| case.recognition（C，wip/c-m01-rec-2 a56f33e4）＋CS-M1 關閉＋O5-S2（B，wip/b-o5-s2 c7940387） | D | `AUDIT-D-C-m01-rec.md`、`AUDIT-D-C-m01-s3.md`、`AUDIT-D-B-o5-s2.md` | 完成（2026-09-26 16:58）：rec 必修 0（突變 5/5 紅）；CS-M1 關閉（88192c07）；o5-s2 必修 0、建議 S2-S1（逾時報告印完整 URL 含 ?pt= 簽章與搜尋字，建議遮 query 值）、觀察 2（Playwright call log 本身印 Authorization） |
 | C 的 c-m05b-2 c5484962／c-ip14-paid 9623f1be 複核 | D | `AUDIT-D-C-M05-move.md`、`AUDIT-D-C-ip14-paid.md` | 複核完成（2026-09-26 15:58）：M5-M1／M2／S1、IP-M1 全部關閉；淘汰反掃與 a-approval-parse 交會（兩包合回後補登記） |
 | M08 營運分析搬進 modules/analytics（B，wip/b-m08 9930923f，合回前） | 獨立代理（稽核 ⑰） | `AUDIT-X-B-M08-move.md` | 稽核完成（2026-09-26 09:14 前）：**必修 4**（M-1 連線守門只包 db.get_db ⇒ 綁名 import 看不到，GCIS 豁免端點每次多開 5 條仍判 0；M-2 憑證守門只掃 routers/；M-3 product_drill 拿前綴當端點；M-4 首頁模組不在時顯示 0 與「沒有…」）、建議 6、觀察若干；§B-11 真刪被權限擋、改由 B 自己重做；B 已修（b-m08-2 f7463dfa），D 複核中 |
 

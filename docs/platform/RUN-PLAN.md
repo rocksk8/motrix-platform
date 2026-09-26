@@ -139,6 +139,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 16:58 D：**CS-M1 關閉（88192c07，R1 重跑紅）**；c-m01-rec-2 a56f33e4 通過（必修 0，突變 5/5 紅）；b-o5-s2 c7940387 通過（必修 0）：標頭不印，但 URL 含 query（?pt= 短效簽章、?q= 搜尋字）照印 ⇒ 建議 S2-S1 遮值；觀察 Playwright call log 自己印 Authorization。
 - 2026-09-26 16:33 C：**M01-PLAN §3-7 approval 開工宣告**（wip/c-approval，疊在 c-m01-rec-2 a56f33e4）。轉簽改成 `approval.reassign`（單據擁有者各自提供讀寫）、待我簽核與角標改成各模組提供 `approval.queue_items`，M01 只彙整。會動：M04 `modules/subcontract/api/contractor_vouchers.py`＋module.json；M05 `modules/arap/api/invoice_vouchers.py`、`payment_requests.py`＋module.json；**A 的 M03** `routers/shipping_notes.py`（origin 已搬到 `modules/supply/api/shipping_notes.py`，列車 rebase 時跟著搬）；**M06** `routers/vouchers.py`（A 的 M06 搬遷會同檔）；M07 `modules/payroll`（bonus_awards／bonus_case_awards 兩類待簽）；M01 `routers/quotations.py`、`routers/completion_notes.py`、`frontend/pages/approval-queue.html`；L1 新增 `helpers/approval_queue.py`；INTEGRATION-POINTS（新 IP，列車定號）。custom 模組引擎已是 `approval.queue_items` 提供者，不改。不動 sidebar、tiered_approval。
 - 2026-09-26 16:32 主持：第九班組車中（Sonnet 列車長）；D 關閉 CS-S1、T8-O1、b-o5-s1、MT-O1；C 做 approval（c-approval），A 做 attachments，B 做 O9＋產生檔提案。優化紀錄開在 IMPROVEMENT-REPORT §4-1（產生檔衝突、全量每題耗時）。
 - 2026-09-26 16:30 D：c-m01-s3-2 dbd07633 複核：**CS-S1 關閉**；CS-M1 靜態掃描通過（R2／R3 紅），但執行期新題 `test_runtime_refuses_system_from_an_l2_module` 不帶 client 夾具⇒單跑紅（no such table），**CS-M1 未關**，待加夾具後重跑 R1。
@@ -158,6 +159,3 @@
 - 2026-09-26 15:06 主持：**§6 舊紀錄封存**（使用者裁示省 token）：第 21 筆以後（共 172 筆）原文搬到 `RUN-LOG.md`，本節只留最新 20 筆；查歷史請讀 RUN-LOG.md。
 - 2026-09-26 15:0x A：wip/a-approval-parse 上月台（708dbe0d，第九班）。M06-PLAN 的 JV 清單與到期守門兩節已起草，第八班帶進 plans/M06-PLAN.md 之後寫入。
 - 2026-09-26 14:48 D：**PN-M1、PN-S1～S3、O-1～O-4 關閉**（a-pn-m1 7c11091b）：逐欄決定＋新增個資欄位即紅（突變 PNF 紅）、PN8／PN9／PNJS 皆紅、出貨單告知延遲載入無新空窗。更正：D 第一次 PNJS 選錯題檔誤判存活。
-- 2026-09-26 14:40 主持：**第八班發車**（列車長子代理）：h-fonts、a-m03（M03）、c-tax-calc-2、c-m01-sink2-3、c-m07-s12b、c-probes、h-smoke-probes（與 c-probes 同班）、h-u15-2。第九班候選：b-c4-2（獨立稽核中 AUDIT-X-B-C4）、a-pn-m1（D 複核中）、a-approval-parse、C 的 M05。D 關閉 a-m03（必修 0，§B-11 獨立重做 1291 過只紅允許題）與 h-smoke-probes S-1。
-- 2026-09-26 14:38 D：a-m03 b2e5f7e4（`AUDIT-D-A-M03-move.md`）通過、必修 0：§B-11 刪 supply 1291 過／5 紅皆允許、收集無錯；模組在 1352 過（紅 1＝test_map 過期，列車重產）；IP-20 突變 3/3 紅；IP-18～20 不撞號。
-- 2026-09-26 14:4x A：PN-M1 上月台（wip/a-pn-m1 7c11091b，第九班，疊在 a-m03 上）；M06 五題裁示收到，等 C 的 M05 合回後開工。
