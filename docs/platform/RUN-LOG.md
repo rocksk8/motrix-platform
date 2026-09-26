@@ -2,6 +2,8 @@
 
 > 2026-09-26 15:06 自 RUN-PLAN.md §6 原文搬出（不改寫）。之後每次封存都接在最上面。
 
+- 2026-09-26 22:33 D：b-scan-modules 64c3a9f6 **必修 SM-M1**：view_filter 的沙盒題直接呼叫 _undecided_pages(page_files())，真正那一題改回 L1 glob 照綠（B2 存活）。其餘成立：① bonus.py 正對照（B1 紅）、③ 送信歸類（B4 紅、沙盒新增未歸類紅、排除清單不能變綠）、alpine 模組頁（B3 紅）；建議 SM-S1 送信偵測 alias／getattr 漏抓。
+- 2026-09-26 22:09 D：b-ip15-cost afbb1b8d 通過、必修 0：白名單無人名（多回 notes／回姓名突變紅）、finance 可看（拿掉 finance 紅）、只新增（list_for_case 不變有題）、不註冊紅；93 過。注意：合回後 M06 的 a' 到期守門會紅（預期中）。
 - 2026-09-26 22:06 D：a-m06-2 25408f3f **必修 2**：M06-M1 D2 真刪 modules/accounting ⇒ 5 題非允許紅（case_cross_module_links 1、t100_unconfirm e2e 1、bonus_vouchers_page e2e 3；M06 在時皆過）；M06-M2 EM10 139→135 是移出計數範圍，掃描器 157 中 modules/ 22 條只有 tender_radar 有守門（accounting 4＋既有 11 條無人守）。通過項：題目 0 消失、搬題 29 本體只改路徑、M07 兩支兩邊實質、a' 到期守門紅、IP-22 兩側有題；建議：邊界「起點耗盡 fail」無題、bonus flag 往上爬檢查在 M06 不在時被一起 skip。
 - 2026-09-26 21:5x：**第十班列車合回**（train/0926-1940，platform）。乘客（依相依序）：C 疊（c-m05b-3 d1ba5b21 → c-m01-s3-3 a9aab6aa → c-m01-rec-3 5741ae99 → c-approval-3 6cdc0ed0）、c-ip14-paid 9623f1be、a-attachments-4 ad7c27a3（**a-attachments-5 3d12dc7b 的增量下車**：合回時 AUDIT-D-A-attachments 對 -5 仍未關閉，依主持裁示只帶 -4；-5／-6 留月台待下一班）、a-analytics-dispatch ef3b9f60、b-o9→b-e2e-deadline-2（79b89eef、78d372b9，動 conftest.py，排車頭）、b-o5-s2-2→b-o11-2（fd5af159、4bcde01b）、b-o10 cc550c64、b-modtest-durations 5cbcd9b9、h-roleguard d10fc8e9。不帶：b-genfiles（進行中）、c-m01-3（M01 本體 ①，未上車）、a-m06（進行中）。
 - 2026-09-26 18:12 D：c-approval-2 49dcb781 **必修 2**：AP-M1 `test_every_approval_doc_type_is_in_both_queue_endpoints` 在刪 arap 時紅（佇列 SQL 移入 arap 提供者後，覆蓋檢查依賴 L2 在不在；列車 core-only／真刪會紅）；AP-M2 拿掉存簿過濾 70 題照綠（F2）。轉簽權限未放寬（AP1 紅）、角標與清單同源（AP5 紅）、每案權限／金額遮蔽／data:image 皆有題。
