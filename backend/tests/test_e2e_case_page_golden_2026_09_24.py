@@ -144,6 +144,12 @@ class _Net:
         if "/api/" in r.url:
             self.inflight += 1
             self.last = time.time()
+            # 還在 index.html 上發出的請求（Referer 是 index）不屬於案件頁——照樣算進 inflight（settle 要等它），不記進清單。
+            # 〔O5-S1：字型換成替身後 index 的 load 提早 ⇒ 儀表板的請求晚於 _Net 掛上才發出，被記成案件頁的請求。
+            #   原本綠是因為真字型把 load 拖到儀表板請求都發完之後——時序碰巧，不是這裡有對〕
+            ref = (r.headers.get("referer") or "").split("?")[0].split("#")[0]
+            if ref.endswith("/index.html"):
+                return
             if not any(x in r.url for x in self._IGNORE):
                 self.calls[_norm_url(r.method, r.url)] += 1
 

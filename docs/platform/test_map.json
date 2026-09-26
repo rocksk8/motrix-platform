@@ -9677,12 +9677,16 @@
   "backend/tests/test_e2e_login_enter_submits_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_e2e_login.py",
     "page:index.html",
     "page:pages/login.html",
     "router:auth",
     "router:system"
    ],
    "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
     "api": [
      "backend/routers/auth.py",
      "backend/routers/system.py"
@@ -9692,7 +9696,6 @@
      "frontend/pages/login.html"
     ],
     "path": [
-     "frontend/index.html",
      "frontend/pages/login.html"
     ]
    }
@@ -9700,11 +9703,15 @@
   "backend/tests/test_e2e_login_page_2026_09_25.py": {
    "kind": "e2e",
    "units": [
+    "file:backend/tests/_e2e_login.py",
     "page:index.html",
     "page:pages/login.html",
     "router:auth"
    ],
    "evidence": {
+    "import": [
+     "backend/tests/_e2e_login.py"
+    ],
     "api": [
      "backend/routers/auth.py"
     ],
@@ -9713,7 +9720,6 @@
      "frontend/pages/login.html"
     ],
     "path": [
-     "frontend/index.html",
      "frontend/pages/login.html"
     ]
    }

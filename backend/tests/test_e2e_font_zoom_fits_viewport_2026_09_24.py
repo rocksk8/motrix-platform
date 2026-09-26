@@ -26,6 +26,9 @@ pytest.importorskip("playwright.sync_api")
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 W, H = 1366, 768
 ZOOMS = (0.85, 1.0, 1.15, 1.3)
 

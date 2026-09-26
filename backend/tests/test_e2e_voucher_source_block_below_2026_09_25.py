@@ -15,6 +15,9 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
 
+#: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
+pytestmark = pytest.mark.real_fonts
+
 QNO = "MQ-VCSRC-01"
 D = "Alpine.$data(document.querySelector('[x-data]'))"
 FILES = [("s1", "現場照片一.png", "2026-09-20T10:00:00"), ("s2", "現場照片二.png", "2026-09-21T11:30:00")]
