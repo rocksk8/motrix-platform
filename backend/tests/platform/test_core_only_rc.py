@@ -119,3 +119,35 @@ def test_known_red_list_only_shrinks_against_origin():
     added = [e for e in cur if e["test"] not in base]
     runplan = (REPO / "docs" / "platform" / "RUN-PLAN.md").read_text(encoding="utf-8")
     assert C.validate_known(added, runplan, REPO / "backend") == []
+
+
+@pytest.mark.parametrize("exit_code", [2, 3, 4])
+def test_judge_abnormal_pytest_exit_is_not_a_pass(exit_code):
+    """稽核 G-O3：中斷／內部錯誤／用法錯誤 ⇒ junit 可能只有部分結果 ⇒ 不算過（即使紅燈 ⊆ 允許）。"""
+    res = C.judge(set(C.ALLOWED), 500, exit_code, set())
+    assert not res["ok"] and any("異常結束" in r for r in res["reasons"]), res
+
+
+def test_judge_normal_exit_codes_still_pass():
+    assert C.judge(set(), 500, 0, set())["ok"] and C.judge(set(C.ALLOWED), 500, 1, set())["ok"]
+
+
+def test_queue_line_names_the_holder_and_the_wait():
+    """稽核 G-O4：conftest 的排隊訊息 ⇒ 「排隊中：等 <持鎖者>，已等 N 分」。"""
+    line = "[測試鎖] 全機名額已滿（pid=4711、C:\T\motrix-pytest-x-full、已跑 12 分鐘）—— 排隊中，最多再等 80 分鐘"
+    assert C.queue_line(line, 185) == "排隊中：等 pid=4711 C:\T\motrix-pytest-x-full，已等 3 分"
+    assert C.queue_line("collected 12 items", 185) is None
+
+
+def test_streaming_prints_a_heartbeat_when_silent(monkeypatch, capsys, tmp_path):
+    """沒有輸出超過心跳間隔 ⇒ 印「執行中：…沒有輸出」；子行程的輸出即時轉印；排隊訊息另印一行。"""
+    import sys as _sys
+    monkeypatch.setattr(C, "HEARTBEAT_SECONDS", 1)
+    code_src = ("import time\n"
+                "print('[測試鎖] 滿（pid=9、C:/x-full、已跑 1 分鐘）—— 排隊中，最多再等 9 分鐘', flush=True)\n"
+                "time.sleep(2.5)\nprint('done', flush=True)\n")
+    code, lines = C._run_streaming([_sys.executable, "-X", "utf8", "-c", code_src], tmp_path)
+    out = capsys.readouterr().out
+    assert code == 0 and lines[-1] == "done"
+    assert "排隊中：等 pid=9 C:/x-full，已等 0 分" in out, out
+    assert "執行中：" in out and "沒有輸出" in out, out

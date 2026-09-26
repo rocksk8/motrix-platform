@@ -60,8 +60,33 @@ def declared_public(source):
         bad = sorted(n for n in names if not n.startswith("_"))
         if bad:
             raise ValueError("%s 只列底線開頭的名稱（其餘本來就公開）：%s" % (DECL, bad))
+        ghost = sorted(names - _top_level_names(ast.parse(source)))
+        if ghost:   # 稽核 G-S2：打錯字、或函式改名忘了改宣告 ⇒ 原本被靜默忽略
+            raise ValueError("%s 宣告了檔案頂層沒有定義的名稱：%s" % (DECL, ghost))
         return names
     return set()
+
+
+def _top_level_names(tree):
+    """模組頂層定義的名稱（def／class／指派／import；含頂層 if／try／with 區塊裡的，不含函式與類別內部）。"""
+    out = set()
+
+    def visit(body):
+        for n in body:
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                out.add(n.name)
+            elif isinstance(n, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                for t in (n.targets if isinstance(n, ast.Assign) else [n.target]):
+                    out.update(x.id for x in ast.walk(t) if isinstance(x, ast.Name))
+            elif isinstance(n, (ast.Import, ast.ImportFrom)):
+                out.update((a.asname or a.name).split(".")[0] for a in n.names)
+            elif isinstance(n, (ast.If, ast.Try, ast.With, ast.For, ast.While)):
+                for field in ("body", "orelse", "finalbody"):
+                    visit(getattr(n, field, []) or [])
+                for h in getattr(n, "handlers", []) or []:
+                    visit(h.body)
+    visit(tree.body)
+    return out
 
 
 def l1_python_units(modules_json=MODULES_JSON):

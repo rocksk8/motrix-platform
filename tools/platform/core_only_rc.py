@@ -158,6 +158,9 @@ def judge(failed, total, pytest_exit, known, allowed=ALLOWED):
     reasons = []
     if pytest_exit == 5 or total == 0:
         reasons.append("一題都沒跑（exit %s、%d 題）" % (pytest_exit, total))
+    elif pytest_exit not in (0, 1):
+        # 稽核 G-O3：2 中斷、3 內部錯誤、4 用法錯誤——junit 可能只有部分結果，「紅燈 ⊆ 允許」不代表跑完了
+        reasons.append("pytest 異常結束（exit %s）：結果不完整" % pytest_exit)
     if res["unexpected"]:
         reasons.append("非預期紅 %d 題" % len(res["unexpected"]))
     if res["stale_known"]:
@@ -165,6 +168,55 @@ def judge(failed, total, pytest_exit, known, allowed=ALLOWED):
     res["ok"] = not reasons
     res["reasons"] = reasons
     return res
+
+
+#: 沒有任何輸出超過這麼久 ⇒ 印一行心跳（稽核 G-O4：排隊等測試鎖時外面分不出「排隊」還是「當掉」）
+HEARTBEAT_SECONDS = 60
+
+
+def queue_line(line, waited_seconds):
+    """conftest 的「[測試鎖] … 排隊中」那一行 ⇒ 「排隊中：等 <持鎖者>，已等 N 分」；不是那一行 ⇒ None。"""
+    import re
+    if "[測試鎖]" not in line or "排隊中" not in line:
+        return None
+    m = re.search(r"pid=(\S+?)、(.*?)、已跑", line)
+    holder = "pid=%s %s" % (m.group(1), m.group(2)) if m else line.strip()[:120]
+    return "排隊中：等 %s，已等 %d 分" % (holder, waited_seconds // 60)
+
+
+def _run_streaming(cmd, cwd):
+    """低優先權跑 pytest，輸出**即時**轉印（不再 capture 到結束才看得到），並：
+    - 看到測試鎖的排隊訊息 ⇒ 另印「排隊中：等 <持鎖者>，已等 N 分」
+    - 超過 HEARTBEAT_SECONDS 沒有任何輸出 ⇒ 印「執行中：已 N 分、M 秒沒有輸出」（長時間沒有輸出的動作要看得出活著）
+    ⇒ (exit code, 全部輸出行)。"""
+    import threading
+    import time
+    kw = {"creationflags": BELOW_NORMAL} if os.name == "nt" else {}
+    t0 = time.monotonic()
+    last = [t0]
+    lines = []
+    proc = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            encoding="utf-8", errors="replace", **kw)
+
+    def pump():
+        for raw in proc.stdout:
+            line = raw.rstrip("\n")
+            lines.append(line)
+            last[0] = time.monotonic()
+            print(line, flush=True)
+            q = queue_line(line, int(time.monotonic() - t0))
+            if q:
+                print(q, flush=True)
+    th = threading.Thread(target=pump, daemon=True)
+    th.start()
+    while proc.poll() is None:
+        time.sleep(1)
+        idle = time.monotonic() - last[0]
+        if idle >= HEARTBEAT_SECONDS:
+            print("執行中：已 %d 分、%d 秒沒有輸出" % ((time.monotonic() - t0) // 60, idle), flush=True)
+            last[0] = time.monotonic()
+    th.join(timeout=10)
+    return proc.returncode, lines
 
 
 def run(commit="HEAD", workers=2, keep=False, window="coreonly"):
@@ -188,17 +240,15 @@ def run(commit="HEAD", workers=2, keep=False, window="coreonly"):
         cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "tests/platform", "-q", "-p", "no:cacheprovider",
                "-n", str(workers), "--basetemp=%s" % basetemp, "--continue-on-collection-errors",
                "--junitxml=%s" % junit]
-        kw = {"creationflags": BELOW_NORMAL} if os.name == "nt" else {}
-        proc = subprocess.run(cmd, cwd=str(backend), capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", **kw)
-        out["pytest_exit"] = proc.returncode
-        out["summary"] = (proc.stdout.strip().splitlines() or [""])[-1]
+        code, lines = _run_streaming(cmd, backend)
+        out["pytest_exit"] = code
+        out["summary"] = (lines or [""])[-1]
         if not junit.is_file():
-            out.update(ok=False, error="pytest 沒有產生 junit（被中斷？）", tail=proc.stdout[-2000:] + proc.stderr[-1000:])
+            out.update(ok=False, error="pytest 沒有產生 junit（被中斷？）", tail="\n".join(lines[-40:]))
             return out
         failed = failed_ids(junit)
         out["failed"] = len(failed)
-        out.update(judge(failed, total_cases(junit), proc.returncode, load_known(tree / KNOWN_RED_REL)))
+        out.update(judge(failed, total_cases(junit), code, load_known(tree / KNOWN_RED_REL)))
         return out
     finally:
         _rmtree(basetemp)

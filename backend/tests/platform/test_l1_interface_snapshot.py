@@ -246,3 +246,19 @@ def test_rc_a_name_newly_visible_in_the_widened_scope_is_guarded_next_time():
     mutated = dict(snap, **{"helper:auth": dict(snap["helper:auth"], _require_user="def(authorization)")})
     a, c, r = G.diff(snap, mutated)
     assert any("_require_user" in x for x in c) and G.required_bump(a, c, r) == "major"
+
+
+@pytest.mark.parametrize("src,ok", [
+    ('__l1_public__ = ("_a",)\ndef _a(): pass\n', True),
+    ('__l1_public__ = ("_a",)\nfrom x import _a\n', True),
+    ('__l1_public__ = ("_a",)\ntry:\n    from x import _a\nexcept ImportError:\n    _a = None\n', True),
+    ('__l1_public__ = ("_ghost", "_a")\ndef _a(): pass\n', False),                # 稽核 G-S2：宣告了不存在的名稱
+    ('__l1_public__ = ("_a",)\ndef f():\n    _a = 1\n', False),                    # 只在函式內部 ⇒ 不是頂層定義
+])
+def test_rc_declared_names_must_exist_at_top_level(src, ok):
+    """G-S2：宣告的每個名稱都要在檔案頂層有定義；打錯字或改名忘了改宣告 ⇒ ValueError（原本靜默忽略）。"""
+    if ok:
+        assert G.declared_public(src)
+    else:
+        with pytest.raises(ValueError):
+            G.declared_public(src)
