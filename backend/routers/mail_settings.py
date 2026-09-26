@@ -81,6 +81,10 @@ def set_mail_recipients(key: str, body: dict = Body(...), authorization: str = H
             raise HTTPException(400, "找不到帳號：%s" % "、".join(missing))
     if mode == "custom" and not users and not roles:
         raise HTTPException(400, "指定收件人時，至少要選一個帳號或角色。")
+    new_override = {"mode": mode, "users": users if mode == "custom" else [], "roles": roles if mode == "custom" else []}
+    blocked = custom_override_blockers(key, new_override)
+    if blocked:
+        raise HTTPException(400, blocked[0])
     o = _overrides()
     if mode == "default":
         o.pop(key, None)
@@ -93,20 +97,32 @@ def set_mail_recipients(key: str, body: dict = Body(...), authorization: str = H
     return {"ok": True, "override": o.get(key) or {"mode": "default", "users": [], "roles": []}}
 
 
-def last_superadmin_blockers(conn, user_id, new_muted) -> list:
-    """U15（使用者 2026-09-26 表單）：超級管理員可以退訂系統技術類信件，但**不可以是最後一位收得到的超管**。
+def _has_email(v) -> bool:
+    """與寄信端 SQL `email IS NOT NULL AND email != ''` 同一個判準（D 稽核 O-1：不 strip，只有空白也算有）。"""
+    return v is not None and v != ""
 
-    回傳「這次退訂之後，就沒有任何啟用中、有 Email、未退訂的超級管理員收得到」的系統技術類型名稱（空＝放行）。
-    判準與寄信端一致（email_notify._users_emails：active=1、email 非空、notification_prefs.is_enabled）。
-    只看收件人仍是超管的類型（覆寫為 custom 的由指定名單負責，不在此擋）；本來就收不到的人（沒 Email、停用）退訂不擋。"""
+
+def last_superadmin_blockers(conn, user_id, new_muted=None, new_email=None, new_role=None) -> list:
+    """U15（使用者 2026-09-26 表單）：系統技術類信件**永遠至少一位超級管理員收得到**。
+
+    以「套用這個請求之後」的狀態判斷（D 稽核 M-1：原本只看退訂，同一支端點改 email 為空、改角色照樣讓最後一位消失）：
+    這位使用者套用 new_muted／new_email／new_role（None＝不變）之後，若某個系統技術類型從「有人收得到」變成
+    「沒有任何啟用中、有 Email、未退訂的超管收得到」⇒ 回傳該類型名稱（空＝放行）。
+    判準與寄信端一致（email_notify._users_emails）。覆寫為 custom 的類型由 set_mail_recipients 的檢查負責。"""
     import json
     from helpers.notification_prefs import is_enabled
     me = conn.execute("SELECT role, active, email, notification_muted FROM users WHERE id=?", (user_id,)).fetchone()
-    if me is None or me["role"] != "superadmin" or not me["active"] or not (me["email"] or "").strip():
+    if me is None:
         return []
+    before_ok = me["role"] == "superadmin" and bool(me["active"]) and _has_email(me["email"])
+    after_role = me["role"] if new_role is None else new_role
+    after_email = me["email"] if new_email is None else new_email
+    after_muted = me["notification_muted"] if new_muted is None else json.dumps(list(new_muted), ensure_ascii=False)
+    after_ok = after_role == "superadmin" and bool(me["active"]) and _has_email(after_email)
+    if not before_ok:
+        return []                         # 本來就收不到：這次不是「把最後一位拿掉」
     others = conn.execute("SELECT notification_muted FROM users WHERE active=1 AND role='superadmin' "
                           "AND email IS NOT NULL AND email != '' AND id != ?", (user_id,)).fetchall()
-    new_json = json.dumps(list(new_muted or []), ensure_ascii=False)
     o = _overrides()
     out = []
     for t in mt.all_types():
@@ -115,13 +131,25 @@ def last_superadmin_blockers(conn, user_id, new_muted) -> list:
         if (o.get(t.key) or {}).get("mode", "default") == "custom":
             continue
         if not is_enabled(me["notification_muted"], t.key):
-            continue                      # 本來就退訂了：這次不是「把最後一位拿掉」
-        if is_enabled(new_json, t.key):
-            continue                      # 這次沒有退訂這一類
+            continue                      # 本來就退訂了
+        if after_ok and is_enabled(after_muted, t.key):
+            continue                      # 套用之後自己仍收得到
         if any(is_enabled(r["notification_muted"], t.key) for r in others):
             continue
         out.append(t.name)
     return sorted(out)
+
+
+def custom_override_blockers(key, override) -> list:
+    """D 稽核 S-1：系統技術類型存成 custom 覆寫時，名單上至少要有一人收得到（啟用中、有 Email、未退訂），
+    否則系統信一樣沒人收。回傳問題說明（空＝放行）。"""
+    t = mt.get(key)
+    if t is None or t.category != "system" or override.get("mode") != "custom":
+        return []
+    from helpers import email_notify as en
+    if en._custom_emails(override, key):
+        return []
+    return ["「%s」是系統技術類信件，指定的帳號／角色裡沒有任何啟用中、設定了 Email、未退訂的人收得到" % t.name]
 
 
 def receivable(t, o, username, role):

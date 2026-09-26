@@ -1570,15 +1570,16 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         if unknown:
             conn.close()
             raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
-        # U15：系統技術類信件不可以讓最後一位收得到的超級管理員退訂（永遠至少一人收得到）
-        from routers.mail_settings import last_superadmin_blockers
-        blocked = last_superadmin_blockers(conn, user_id, body.notification_muted)
-        if blocked:
-            conn.close()
-            raise HTTPException(400, "這位是最後一位收得到下列系統技術類信件的超級管理員，不能退訂"
-                                     "（至少要有一位超管收得到）：%s" % "、".join(blocked))
         sets.append("notification_muted=?")
         params.append(json.dumps(body.notification_muted, ensure_ascii=False))
+    if body.notification_muted is not None or body.email is not None or body.role is not None:
+        # U15：系統技術類信件永遠至少一位超管收得到——以「套用這個請求之後」判斷：退訂、清空 Email、改角色都算（D 稽核 M-1）
+        from routers.mail_settings import last_superadmin_blockers
+        blocked = last_superadmin_blockers(conn, user_id, body.notification_muted, body.email, body.role)
+        if blocked:
+            conn.close()
+            raise HTTPException(400, "這樣改之後，下列系統技術類信件就沒有任何超級管理員收得到"
+                                     "（至少要有一位；最後一位不能退訂、清空 Email 或改成非超管）：%s" % "、".join(blocked))
     if body.department_id is not None:
         sets.append("department_id=?")
         params.append(body.department_id or None)   # 0 -> 未分類（清空 NULL）
