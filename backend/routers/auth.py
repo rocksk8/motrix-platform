@@ -1570,6 +1570,13 @@ def update_user(user_id: int, body: UserIn, authorization: str = Header(None)):
         if unknown:
             conn.close()
             raise HTTPException(400, "不認得的信件類型：%s" % "、".join(unknown))
+        # U15：系統技術類信件不可以讓最後一位收得到的超級管理員退訂（永遠至少一人收得到）
+        from routers.mail_settings import last_superadmin_blockers
+        blocked = last_superadmin_blockers(conn, user_id, body.notification_muted)
+        if blocked:
+            conn.close()
+            raise HTTPException(400, "這位是最後一位收得到下列系統技術類信件的超級管理員，不能退訂"
+                                     "（至少要有一位超管收得到）：%s" % "、".join(blocked))
         sets.append("notification_muted=?")
         params.append(json.dumps(body.notification_muted, ensure_ascii=False))
     if body.department_id is not None:
