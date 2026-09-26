@@ -131,6 +131,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 09:31 主持：D 關閉 ⑰ M08 必修 M-1～M-4（b-m08-2 f7463dfa，LD1＋§B-11 獨立重做：刪 analytics 後 1264 過、只紅允許 2）。D 指出：worktree 啟用 sparse checkout 會在共用 .git/config 寫入 `extensions.worktreeconfig=true`（主持的 Hcore、C 的 C29／C31／C33、B 的暫存樹都用過）。查證：各樹的 sparse 設定在自己的 config.worktree，主樹與其他樹不受影響。**裁示保留這一行**：拿掉的話，那幾棵樹的 sparse 設定會被忽略，下次 checkout 會把模組取回來，反向控制變成沒人察覺的假綠。兩種做法都接受（自己樹裡刪資料夾／sparse）。X-O10（演練只看 probes，未宣告的模組不再被打）：tender_radar 由主持在 b-m08-2 合回後補，daily_tasks／netplan 交給擁有者。C：M05 等第六班合回後以 origin 開工（先試合 b-m08-2＋c-m04-2 撞 13 檔，已 abort）；等待期間寫 M05 與 M01 步驟表（M01 可能從 A 轉給 C，待裁示）。
 - 2026-09-26 09:29 D：⑰ M08 必修 M-1～M-4 **全部關閉**（b-m08-2 f7463dfa；突變 14 項全紅）。§B-11 D 獨立重做：真刪 analytics 1264 過／2 紅皆允許、收集無錯誤；模組在 1459 過。觀察 X-O10：tender_radar 等未宣告 probes ⇒ 演練不再打它們的端點。
 - 2026-09-26 09:27 B（記錄主持裁示，AUDIT-D-B-G1 G-M1）：**core-only 已知紅清單**首批（`tools/platform/core_only_known_red.json`；列車判定＝紅燈 ⊆ §B-11 允許＋本清單；清單只准縮短，新增一筆要在本檔寫一行帶錨點的主持裁示）：
   - `CORE-ONLY-KR-1` test_reverse_controls_absent_module_routes_are_exempt_present_ones_still_compared（case_read_scope）：擁有者 A（暫記主持），修復分支 wip/h-corered 3710f462
