@@ -137,6 +137,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-26 11:38 D：⑰ M08 回覆 17 項複核（b-m08-s 943d0bfe）：16 項關閉、O-9 維持開著（暫緩只寫在回覆欄，未進 ROADMAP）；突變 6/6 紅；l2_import_baseline 差異逐條核對，無真實邊被 prune 洗掉。
 - 2026-09-26 11:22 主持：D7-CHECKLIST（D 起草，主持審過併入）。裁示：① 部署包同樣走 git archive ⇒ 驗「runtime 需要的沒被排掉」照清單 V3（逐檔）＋V4（source_tree 清單、啟動後 sys.modules、產品碼讀取的相對路徑）；② **正式 D7 的前置（擋 D7）**：final_drill 的 SMOKE 改成「L1 清單＋依 modules.lock 讀各模組 probes」，並補題——**主持做**（依賴 b-m08-3 的 probes 機制，第六班合回後）；probes 宣告：tender_radar、daily_tasks、netplan 由主持補（A 無回應），crm、subcontract、payroll 交 C；沒有宣告 probes 的模組不進正式 D7；③ E3（第 1 步記的是備份複本的雜湊）照清單警示。建包是使用者的動作（P5）。
 - 2026-09-26 11:19 D：**D7 前哨演練第 6 次：11 步全過、0 紅，總耗時約 103 秒**（第 5 次約 224 秒）。新版程式＝`git archive origin/platform` 003151f3（第五班之後、不是部署包）；來源＝V9 開發目錄（只讀，U3）；演練目錄 `D:\MOTRIX-FINAL-DRILL-D6`；低優先權；未跑 pytest、未搶測試鎖。各步：1 備份 2.2s／2 建目錄 3.8／3 取程式 2.0／4a 預檢 0.0／4b 備份＋試還原 8.9／4c 轉換 6.0／4d 新版啟動 17.5／5 冒煙 4.7（15 項全 200）／6a 完整回滾 23.5（邏輯內容＝原始庫、V9 ping 200）／6b 再轉換 23.6／6c 只回程式 10.6（V9 ping 200）。V9 開發目錄未被動到：四個庫的 mtime 皆早於演練開始、無 wal／shm；source-backup 雜湊＝記錄值。⚠ 清理：`D:\MOTRIX-FINAL-DRILL-D6`（164 MB，V9 開發資料的演練複本）刪除被 Claude Code 內建安全檢查擋下（磁碟根下一層目錄需人工核准），**留待使用者手動刪除**；final_drill.json 另存於 D 的 scratchpad。
 - 2026-09-26 11:16 主持：裁示 M06 步驟表四點（轉簽獨立成 approval.reassign 並併入 M01 §3-7；前綴歸屬不改網址，改成 modules.json 可明列個別路由、交 B 支援；inventory.paid_batches 核准；M05 先、M06 後）。

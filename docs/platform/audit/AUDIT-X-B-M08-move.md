@@ -170,23 +170,23 @@ B 報「66.8%→23.3%（3265→1141 題）」。前半逐字重現。後半差 8
 | M-2 | `_router_files()` 真實樹改走 `source_tree.router_files()`；合成樹正對照 | wip/b-m08-2 f7463dfa | ✅ 09:29 D：原稿 MX-CRED（`get_ar_aging` 加 `token: Query`）⇒ 紅；退回只掃 `routers/` ⇒ `test_scan_covers_module_routers`、`test_rc_a_module_route_with_a_query_token_is_caught` 紅 ⇒ **關閉** |
 | M-3 | `provides.probes` 由模組宣告；沒宣告列 `undeclared_probes` | wip/b-m08-2 f7463dfa | ✅ 09:29 D：probe 寫成前綴 ⇒ 2 紅（不是真路由、不回 200）；沒宣告不列 ⇒ 紅；退回用 api_prefixes ⇒ 紅 ⇒ **關閉**（見 §10 觀察 X-O10） |
 | M-4 | 兩格模組不在時顯示「—」＋明說；e2e 攔 `/api/dashboard/**` 全部 | wip/b-m08-2 f7463dfa | ✅ 09:29 D：將屆格、保固格各自退回顯示數字 ⇒ 各紅 ⇒ **關閉** |
-| S-1 | 採納：SMOKE 的模組 key 必須在 modules.json 登記（repo 層級登記表）；打錯的 key 標「未登記」而非「不在包內」，smoke_ok 判不過。突變 MX-SMOKE（analytcs）紅 2 題 | 02de3109 | |
-| S-2 | 不改碼（已處理）：wip/b-maps-2 的 `tests/platform/test_generated_maps.py::test_test_map_json_is_current`（test_map.json 必須等於現場重產）＋PLAYBOOK §G3「列車疊完重產三份產生檔」 | b-maps-2 c8c69c79 | |
-| S-3 | 採納：tests/platform 加 IP-9 `expense.entries` 形狀契約題 `test_expense_entries_contract_shape`（直接呼叫提供者、驗使用方讀的 5 個欄位與型別，不需營運分析）。突變（category 改鍵名）紅 | 71821d15 | |
-| S-4 | 部分採納（文件路線）：tables_note、README、INTEGRATION-POINTS IP-1 寫明「列出有效派工仍直讀 contractor_dispatches、vendor_contractors」並更正原本的「✅ 已處理」只涵蓋第二份算法。改碼不採納：需要 M04 公開「有效派工列表」提供者，已寫進 ROADMAP 待辦（擁有者 C） | 311a601c、943d0bfe | |
-| S-5 | 採納：modules/analytics/tests/test_module_wiring.py——逐一呼叫 MODULE.schedulers ⇒ schedule_monthly_report 被呼叫一次。突變（lambda 改直接放函式物件）紅 | 0f672400 | |
-| S-6 | 採納：ROADMAP M08 標已搬、兩條待辦（customization 盤點 B；M04 有效派工列表提供者 C）、SPEC 編號已結（本模組沒有專屬編號）；M11「剩地圖 provider（等 M08）」劃掉更正 | 943d0bfe | |
-| S-7 | 採納：L1 → L2 的 import 邊也只准變少（基線 l1_to_l2：pdf_gen／receivables／system 共 5 條，扣掉載入器 core:main → router:）；三題含合成反向控制。順帶修 --prune：原本在拿掉模組的樹上會刪掉真實的邊、且整份只寫 edges（會洗掉 l1_to_l2，實際跑到一次已還原）——改成與守門同一個判定、保留其他鍵，新題在 tmp 副本上驗 | c8397440 | |
-| S-8 | 採納：sales-orders.html 改歸 M01（module.json pages、sidebar MODULE_PAGES、modules.json 單位），模組 1.0.1 | 311a601c | |
-| O-1 | 採納：選單對等說明寫明依賴 MODULE_PAGES 的 key，與補位的 test_every_module_page_is_declared_in_sidebar | 4da21328 | |
-| O-2 | 採納：「沒裝」只認 modules.json 登記過的 key；沒登記（改名殘留）照報消失。突變（拿掉登記判斷）紅 | 4da21328 | |
-| O-3 | 採納：INTEGRATION-POINTS 題目路徑改 modules/analytics/tests/ | 311a601c | |
-| O-4 | 部分採納：permissions 補 finance、equipment、procurement（本模組頁面實際檢查、也是 pages[].menu 用的鍵）；cashier、case_manage 屬其他模組（M05、M01），不列為本模組的權限 | 311a601c | |
-| O-5 | 採納：dashboard.py 拿掉 urllib | 311a601c | |
-| O-6 | 採納：_patch_entries 搬到 modules/analytics/tests（只有它用、且 import 營運分析） | 60a31d9d | |
-| O-7 | 採納：check_endpoint_entrypoints 改用 source_tree.router_files()（含模組端點；227→269 組片段，孤兒仍是原本 7 組）；讀不到 source_tree 才退回只掃 routers/ 並印出說明 | 60a31d9d | |
-| O-8 | 已處理：rebase 到 427c8be9（b-m08-2）、再到 a6dc4be6（b-m08-3，改名推）；CORE 暫取 1.30，列車 core_bump 重定 | b-m08-3 7f7cda39 | |
-| O-9 | 暫緩（理由）：共用的種資料正被其他包同時改動——test_dispatch_connector 在 c-m04-2（M04 搬遷）、獎金發放種資料在 c-m07（M07 搬遷）；現在抽到 tests/_*.py 會與兩包文字衝突。第六、七班合回後由 B 抽出（共用 fixture 與種資料函式移到 tests/_dispatch_seed.py、tests/_bonus_payout_seed.py，平台題與模組題都從那裡取） | — | |
+| S-1 | 採納：SMOKE 的模組 key 必須在 modules.json 登記（repo 層級登記表）；打錯的 key 標「未登記」而非「不在包內」，smoke_ok 判不過。突變 MX-SMOKE（analytcs）紅 2 題 | 02de3109 || ✅ 11:38 D 突變 S1（未登記照略過）⇒ `test_rc_a_misspelled_smoke_key_is_not_a_legitimate_skip` 紅 ⇒ **關閉（943d0bfe）** |
+| S-2 | 不改碼（已處理）：wip/b-maps-2 的 `tests/platform/test_generated_maps.py::test_test_map_json_is_current`（test_map.json 必須等於現場重產）＋PLAYBOOK §G3「列車疊完重產三份產生檔」 | b-maps-2 c8c69c79 || ✅ 11:38 理由成立：b-maps-2 的 `test_test_map_json_is_current` 守住過期（D 已在 AUDIT-D-B-maps 驗過，c8c69c79）⇒ **關閉（c8c69c79）** |
+| S-3 | 採納：tests/platform 加 IP-9 `expense.entries` 形狀契約題 `test_expense_entries_contract_shape`（直接呼叫提供者、驗使用方讀的 5 個欄位與型別，不需營運分析）。突變（category 改鍵名）紅 | 71821d15 || ✅ 11:38 D 突變 S3（`category` 改鍵名）⇒ `test_expense_entries_contract_shape` 紅 ⇒ **關閉（943d0bfe）** |
+| S-4 | 部分採納（文件路線）：tables_note、README、INTEGRATION-POINTS IP-1 寫明「列出有效派工仍直讀 contractor_dispatches、vendor_contractors」並更正原本的「✅ 已處理」只涵蓋第二份算法。改碼不採納：需要 M04 公開「有效派工列表」提供者，已寫進 ROADMAP 待辦（擁有者 C） | 311a601c、943d0bfe || ✅ 11:38 理由成立：INTEGRATION-POINTS IP-1 已劃線更正「✅ 已處理只涵蓋第二份算法」，ROADMAP :80 有待辦並指定 C ⇒ 文件路線**關閉（943d0bfe）**；改碼隨 ROADMAP 待辦 |
+| S-5 | 採納：modules/analytics/tests/test_module_wiring.py——逐一呼叫 MODULE.schedulers ⇒ schedule_monthly_report 被呼叫一次。突變（lambda 改直接放函式物件）紅 | 0f672400 || ✅ 11:38 D 突變 S5（lambda 改直接放函式物件）⇒ `test_monthly_report_scheduler_is_wired_through_the_module_spec` 紅 ⇒ **關閉（943d0bfe）** |
+| S-6 | 採納：ROADMAP M08 標已搬、兩條待辦（customization 盤點 B；M04 有效派工列表提供者 C）、SPEC 編號已結（本模組沒有專屬編號）；M11「剩地圖 provider（等 M08）」劃掉更正 | 943d0bfe || ✅ 11:38 ROADMAP 已更新（M08 狀態、兩條待辦附負責人、M11 更正）⇒ **關閉（943d0bfe）** |
+| S-7 | 採納：L1 → L2 的 import 邊也只准變少（基線 l1_to_l2：pdf_gen／receivables／system 共 5 條，扣掉載入器 core:main → router:）；三題含合成反向控制。順帶修 --prune：原本在拿掉模組的樹上會刪掉真實的邊、且整份只寫 edges（會洗掉 l1_to_l2，實際跑到一次已還原）——改成與守門同一個判定、保留其他鍵，新題在 tmp 副本上驗 | c8397440 || ✅ 11:38 D 突變 P1（prune 退回比現有邊）、P2（prune 洗掉 l1_to_l2）⇒ `test_prune_keeps_other_keys_and_edges_of_modules_not_installed` 皆紅；另比對 `l2_import_baseline`：分支相對 origin 的差異只有 3 條 M08 改名（router: → mod:analytics/api/）與 2 條真實刪除（M05 cashier、M06 accounting_export → M08 reports：程式碼已不 import，對應應收下沉 L1），**沒有真實的邊被洗掉**；`l1_to_l2` 5 條 ⇒ **關閉（943d0bfe）** |
+| S-8 | 採納：sales-orders.html 改歸 M01（module.json pages、sidebar MODULE_PAGES、modules.json 單位），模組 1.0.1 | 311a601c || ✅ 11:38 `sales-orders.html` 已不在 analytics module.json ⇒ **關閉（943d0bfe）** |
+| O-1 | 採納：選單對等說明寫明依賴 MODULE_PAGES 的 key，與補位的 test_every_module_page_is_declared_in_sidebar | 4da21328 || ✅ 11:38 **關閉（943d0bfe）** |
+| O-2 | 採納：「沒裝」只認 modules.json 登記過的 key；沒登記（改名殘留）照報消失。突變（拿掉登記判斷）紅 | 4da21328 || ✅ 11:38 D 突變 O2（未登記也當沒裝）⇒ 2 紅 ⇒ **關閉（943d0bfe）** |
+| O-3 | 採納：INTEGRATION-POINTS 題目路徑改 modules/analytics/tests/ | 311a601c || ✅ 11:38 INTEGRATION-POINTS 路徑已改為 modules/analytics/tests/ ⇒ **關閉（943d0bfe）** |
+| O-4 | 部分採納：permissions 補 finance、equipment、procurement（本模組頁面實際檢查、也是 pages[].menu 用的鍵）；cashier、case_manage 屬其他模組（M05、M01），不列為本模組的權限 | 311a601c || ✅ 11:38 部分採納的理由成立：cashier、case_manage 屬 M05、M01；另查原稿列的 `financial_view` 定義在 L1 `helpers/auth`、`module_registry`（跨模組能力），不列入 M08 也正確（回覆沒提到，D 補記）⇒ **關閉（943d0bfe）** |
+| O-5 | 採納：dashboard.py 拿掉 urllib | 311a601c || ✅ 11:38 dashboard.py 已無 urllib ⇒ **關閉（943d0bfe）** |
+| O-6 | 採納：_patch_entries 搬到 modules/analytics/tests（只有它用、且 import 營運分析） | 60a31d9d || ✅ 11:38 `_patch_entries` 已移到 modules/analytics/tests ⇒ **關閉（943d0bfe）** |
+| O-7 | 採納：check_endpoint_entrypoints 改用 source_tree.router_files()（含模組端點；227→269 組片段，孤兒仍是原本 7 組）；讀不到 source_tree 才退回只掃 routers/ 並印出說明 | 60a31d9d || ✅ 11:38 `check_endpoint_entrypoints.py` 改用 `source_tree.router_files()` ⇒ **關閉（943d0bfe）** |
+| O-8 | 已處理：rebase 到 427c8be9（b-m08-2）、再到 a6dc4be6（b-m08-3，改名推）；CORE 暫取 1.30，列車 core_bump 重定 | b-m08-3 7f7cda39 || ✅ 11:38 已處理 ⇒ **關閉** |
+| O-9 | 暫緩（理由）：共用的種資料正被其他包同時改動——test_dispatch_connector 在 c-m04-2（M04 搬遷）、獎金發放種資料在 c-m07（M07 搬遷）；現在抽到 tests/_*.py 會與兩包文字衝突。第六、七班合回後由 B 抽出（共用 fixture 與種資料函式移到 tests/_dispatch_seed.py、tests/_bonus_payout_seed.py，平台題與模組題都從那裡取） | — || ⚠ 11:38 暫緩理由成立（與 c-m04、c-m07 的種資料文字衝突），**但這項暫緩只寫在本回覆欄，ROADMAP／RUN-PLAN 都沒有**（MEMORY〈要求寫在訊息裡等於沒下達〉）⇒ 維持開著，請寫進 ROADMAP 並附負責人（B）與時機（第六、七班合回後）再關 |
 
 （B 回覆 2026-09-26；分支 wip/b-m08-s（疊在 b-m08-3；第六班合回後 --onto rebase）。採納項目各附突變，見各列。）
 
@@ -195,4 +195,10 @@ B 報「66.8%→23.3%（3265→1141 題）」。前半逐字重現。後半差 8
 - **§B-11 獨立重做**：D 在自己的稽核樹 `rm -rf backend/modules/analytics`（D 的權限沒有擋；未改用 sparse checkout，因為在 worktree 啟用 sparse 會把 `extensions.worktreeConfig` 寫進共用的 `.git/config`），跑 tests/platform＋20 個提到營運分析的檔：**1264 passed、2 failed（皆 §B-11 允許）、3 skipped**；`--collect-only` 不加旗標 1269 題、exit 0（無收集錯誤）。模組在時同範圍＋`modules/analytics/tests`：**1459 passed**。與 B 登記的「1862 過 3 紅（允許 2＋已修 1）」一致（範圍不同：B 93 檔）。
 - 突變合計 14 項全紅：M-1 5（含 LD1）、M-2 2、M-3 3、M-4 2（另 D 在 b-g1 的 core-only 實跑）。
 - **X-O10（觀察）　tender_radar 的演練端點檢查在改版後消失**：舊版 product_drill 對 tender_radar 寫死 `/api/tender_radar/tenders`；新版只看 `provides.probes`，而目前只有 analytics 宣告 ⇒ tender_radar、daily_tasks、netplan 列在 `undeclared_probes`、不打端點（主持過渡裁示允許）。建議各模組補一行 probes（成本很低），否則演練對它們只驗頁面。
+
+## 11. D 複核 b-m08-s（2026-09-26 11:38，`943d0bfe`，疊在 b-m08-3）
+
+- 17 項中 16 項關閉、O-9 維持開著（暫緩理由成立，但沒有寫進 ROADMAP）。
+- D 突變 6 項全紅：P1、P2（prune）、O2、S1、S3、S5。
+- `l2_import_baseline` 對 origin 的差異已逐條核對：沒有真實的邊被 prune 洗掉（見 S-7 列）。
 
