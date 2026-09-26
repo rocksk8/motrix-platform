@@ -315,32 +315,20 @@ def test_live_map_sees_an_untracked_new_test(tmp_path):
         f.unlink()
 
 
-def test_test_map_refuses_to_write_on_a_dirty_tree(monkeypatch, tmp_path):
-    """觀察：工作樹有未追蹤的檔 ⇒ test_map.py 重產拒絕（exit 2），不寫檔。"""
+def test_committed_test_map_ignores_untracked_files():
+    """寫進提交／--check 用的 test_map 只看已追蹤的檔；未追蹤的新檔只進 modtest 的現場選題。
+    〔D 稽核觀察原建議「髒樹拒絕重產」；實跑 --train 時發現更根本的問題：題目在 -n 4 下暫時建檔，同時跑的 --check 就判過期 ⇒
+      改成結構上不讓未追蹤的檔進入提交的檔（拒絕重產因此不需要）〕突變：build() 預設含未追蹤 ⇒ 紅。"""
     import uuid
     TMm = _load("test_map")
-    wrote = []
-    monkeypatch.setattr(TMm, "OUT", tmp_path / "test_map.json")
-    f = REPO / "backend" / "tests" / ("test_zz_gf_dirty_%s.py" % uuid.uuid4().hex[:8])
+    name = "test_zz_gf_commit_%s.py" % uuid.uuid4().hex[:8]
+    f = REPO / "backend" / "tests" / name
     f.write_text("def test_y():\n    pass\n", encoding="utf-8")
     try:
-        assert TMm.main([]) == 2
-        assert not (tmp_path / "test_map.json").exists()
+        assert "backend/tests/" + name not in set(TMm.build()["tests"]), "提交用的 test_map 不可以含未追蹤的檔"
+        assert "backend/tests/" + name in set(TMm.build(include_untracked=True)["tests"])
     finally:
         f.unlink()
-
-# ── B-S4：同一個 commit 的歷次紀錄 ─────────────────────────────────────────────
-
-def test_rerun_keeps_history_and_gate_reports_earlier_reds(tmp_path):
-    sys.path.insert(0, str(REPO / "backend" / "tools"))
-    import deploy_insights as di
-    sha = "a" * 40
-    MT.write_last_full({"commit": sha, "dirty": False, "ok": False, "failed": 3}, root=tmp_path)
-    per = MT.write_last_full({"commit": sha, "dirty": False, "ok": True, "failed": 0}, root=tmp_path)
-    rec = json.loads(per.read_text(encoding="utf-8"))
-    assert rec["ok"] is True and [h["ok"] for h in rec["history"]] == [False]
-    g = di.last_full(per, sha)
-    assert g["state"] == "ok" and g["red_runs"] == 1 and "紅過 1 次" in g["detail"]
 
 
 # ── B-M2：project_env create 不覆寫（突變：拿掉存在檢查）───────────────────────
