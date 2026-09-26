@@ -165,6 +165,17 @@ def test_modtest_cap_follows_content_not_name(monkeypatch):
 # ── ④ 瀏覽器 fixture 一律經 new_context（主持採納 D 的射程限制）────────────────────────────
 
 _ENTRY = "new_context"
+#: 起 playwright 的入口函式（同步與非同步）〔稽核 D NC-S1：原本只認 sync_playwright 這個名字〕
+_STARTERS = ("sync_playwright", "async_playwright")
+
+
+def _starter_names(tree):
+    """本檔裡指向 _STARTERS 的名字：原名＋`from playwright… import sync_playwright as sp` 的別名（任何層級的 import）。"""
+    names = set(_STARTERS)
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("playwright"):
+            names.update(a.asname for a in n.names if a.name in _STARTERS and a.asname)
+    return names
 
 
 def _conftests():
@@ -173,12 +184,13 @@ def _conftests():
 
 
 def fixtures_starting_playwright(tree):
-    """⇒ 呼叫 `sync_playwright(...)`（直接，或經同檔 helper 遞移）的 fixture 名稱，`new_context` 除外。
+    """⇒ 呼叫 `sync_playwright(...)`／`async_playwright(...)`（含 import 別名；直接，或經同檔 helper 遞移）的 fixture 名稱，`new_context` 除外。
     helper 被 new_context 呼叫而同時被別的 fixture 呼叫 ⇒ 那個 fixture 也算（它自己起了一套）。"""
     funcs = {}
     for n in ast.walk(tree):
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
             funcs.setdefault(n.name, []).append(n)
+    starters = _starter_names(tree)
     starts, calls, fixtures = set(), {}, set()
     for name, defs in funcs.items():
         cs = set()
@@ -187,7 +199,7 @@ def fixtures_starting_playwright(tree):
             for x in ast.walk(body):
                 if isinstance(x, ast.Call):
                     fn = getattr(x.func, "id", None) or getattr(x.func, "attr", None)
-                    if fn == "sync_playwright":
+                    if fn in starters:
                         starts.add(name)
                     if isinstance(x.func, ast.Name):
                         cs.add(x.func.id)
@@ -236,4 +248,22 @@ def test_a_fixture_starting_its_own_playwright_is_caught():
         "@pytest.fixture\ndef good_call(new_context):\n    return lambda **kw: new_context(**kw).new_page()\n"
     )
     assert fixtures_starting_playwright(_ast.parse(src)) == ["direct", "via_attr", "via_helper"]
+
+
+def test_aliases_and_async_playwright_are_caught():
+    """反向控制（稽核 D NC-S1）：`from … import sync_playwright as sp`、`async_playwright`（含別名、async fixture）⇒ 列出；
+    別名來源不是 playwright 的不算（`from mylib import sync_playwright as launcher`）。"""
+    import ast as _ast
+    src = (
+        "import pytest\n"
+        "from playwright.sync_api import sync_playwright as sp\n"
+        "from playwright.async_api import async_playwright\n"
+        "from playwright.async_api import async_playwright as ap\n"
+        "from mylib import sync_playwright as launcher\n"
+        "@pytest.fixture\ndef via_alias():\n    with sp() as p:\n        yield p\n"
+        "@pytest.fixture\nasync def via_async():\n    async with async_playwright() as p:\n        yield p\n"
+        "@pytest.fixture\nasync def via_async_alias():\n    async with ap() as p:\n        yield p\n"
+        "@pytest.fixture\ndef not_playwright():\n    return launcher()\n"
+    )
+    assert fixtures_starting_playwright(_ast.parse(src)) == ["via_alias", "via_async", "via_async_alias"]
 
