@@ -161,14 +161,18 @@ _DOC_MOD = """# x
 """
 
 
-def _installed_name():
-    mods = source_tree.module_dirs()
-    assert mods, "沒有任何已安裝的模組 ⇒『模組在』那一題無對象"
-    return mods[0].name
+def _installed_name(monkeypatch, tmp_path, key="zz_here"):
+    """「模組在」的正對照不綁真實 L2（core-only 反向控制時一個模組都沒有，D 稽核 G-M1）：
+    source_tree.BACKEND 指到暫存樹，放一個合成模組（有 module.json），module_installed 照常判定。"""
+    d = tmp_path / "backend" / "modules" / key
+    d.mkdir(parents=True)
+    (d / "module.json").write_text('{"key": "%s"}' % key, encoding="utf-8")
+    monkeypatch.setattr(source_tree, "BACKEND", tmp_path / "backend")
+    return key
 
 
-def test_absent_module_green_present_module_still_red():
-    doc = _DOC_MOD.replace("{here}", _installed_name())
+def test_absent_module_green_present_module_still_red(monkeypatch, tmp_path):
+    doc = _DOC_MOD.replace("{here}", _installed_name(monkeypatch, tmp_path))
     absent = absent_module_capabilities(doc)
     assert absent == {"g.gone"}
     # 模組不在 ⇒ 沒有人提供也綠
