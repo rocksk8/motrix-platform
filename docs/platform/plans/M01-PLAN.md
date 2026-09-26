@@ -1,5 +1,6 @@
 # M01 案件（key `case`）搬遷步驟表（C，2026-09-26 草稿；未開分支，等主持裁示由誰做）
 
+> 2026-09-26 18:10（C）：本體搬遷的分段、搬移清單與路徑對照見 §5。
 > 量測：dep_scan `--check-modules` 於 origin/wip/b-m08-2 f7463dfa（含 /api/sales-orders 已歸 M01）。第六班合回後要重量一次。
 > ROADMAP：M01「最後搬，此時其他模組已不依賴它的內部實作」⇒ 本表的 §2（切相依）是**其他模組搬遷前就可以、也應該先做**的部分。
 
@@ -85,3 +86,66 @@
 - 最大風險：reports（M08）對 recognition 的相依是「計算邏輯」不是「資料」——拆 provider 時，回傳形狀就是契約，要有契約題（PLAYBOOK §C-11a 第 5 點）
 - ⚠ 反向控制範圍：「提到 M01 的測試檔」幾乎是全部 ⇒ 實務上＝全量；要跟主持確認用 core-only 工具＋全量兩輪，還是分批
 - 本表的 dep_scan 量測在 b-m08-2 上；第六班（c-m04-2、c-m07、c-case-access-3）合回後 2-A 的 M04、M07 列會變，開工前重量
+
+## 5. 本體搬遷（§3-8）的分段、搬移清單與路徑對照（C，2026-09-26 18:10；主持核准五段、死線 02:10）
+
+分支 `wip/c-m01`，疊在 c-approval-2。**② 開工前先把整疊 rebase 到第九班之後**：m05b-2 → m01-s3-2 → m01-rec-2 → approval-2 → m01（主持裁示），這樣只需要面對 C4 與 supply 一次。每段各自 commit、各自跑閘門。
+
+| 段 | 內容 | 驗收 |
+|---|---|---|
+| ① CA-O4 | L1 不 import M01。`norm_at` → `helpers/dates`、`summarize_payment_items` → `helpers/tax_calc`、`_steps_to_tiers` → `helpers/tiered_approval.steps_to_tiers`（逐字搬，M01 留別名）；`helpers/__init__` 撤掉 M01 的再匯出；`routers/system` 條款改用 `case.default_terms`；`pdf_gen` 版本紀錄改用 `case.doc_version`（pdf_gen 不再寫 quotations）；M08 成案月份改用 `case.recognition.won_month_map` | `test_l1_does_not_load_m01`：載入全部 L1（main 除外）後，M01 單位都不在 sys.modules，並附正對照；`test_m01_l1_providers`（M01 在與不在兩種情形） |
+| ② 搬檔 | 見下表；`main.py` 拿掉五支 router 的 include，改由載入器依 ModuleSpec 掛載；測試改路徑；只需要 M01 的題搬進 `modules/case/tests/` | 受影響題（選題）；`import main` 後 M01 由載入器載入；sparse 抽樣真刪 M01 |
+| ③ CA-O3 | 下表 12 個 import 時登記改成 `ModuleSpec.providers` 宣告；刪除所有 `_registry.provide(...)` | 模組載入失敗 ⇒ 登記不殘留（突變：改回 import 時登記 ⇒ 紅）；真刪 M01 後 `case.access` 不在登記表 |
+| ④ SO＋文件 | M01 不在 ⇒ 每日工作頁明說「需要案件模組」；module.json／README／CHANGELOG／SPEC；modules.json 的 M01 成員改成 `mod:case/...` | e2e 驗提示；突變拿掉判斷 ⇒ 紅 |
+| ⑤ ATT | A 的 `attachments.for_document`（a-attachments）尚未合回 ⇒ 本包登記為已知例外並附到期守門（L1 `helpers/case_attachments.py` 存在時即紅，要求改成 M01 的 ModuleSpec 宣告） | 到期守門的正對照與反向對照 |
+
+### 5-1 搬移清單（② ；舊路徑 → 新路徑）
+
+| 舊 | 新 | 備註 |
+|---|---|---|
+| `backend/routers/quotations.py` | `backend/modules/case/api/quotations.py` | 6.7k 行；前綴 /api/quotations、/api/sales-orders、/api/approval-queue、/api/approval-history、/api/case-batch、/api/case-changes、/api/next-quote-no |
+| `backend/routers/case_action_items.py` | `backend/modules/case/api/case_action_items.py` | |
+| `backend/routers/case_extra_expenses.py` | `backend/modules/case/api/case_extra_expenses.py` | |
+| `backend/routers/completion_notes.py` | `backend/modules/case/api/completion_notes.py` | /api/completion-notes |
+| `backend/routers/material_orders.py` | `backend/modules/case/api/material_orders.py` | |
+| `backend/helpers/quotations.py` | `backend/modules/case/quotations.py` | 提供者本體（case.access／summary／locations／recognition／default_terms／doc_version） |
+| `backend/helpers/quote_terms.py` | `backend/modules/case/quote_terms.py` | |
+| `backend/helpers/recognition.py` | `backend/modules/case/recognition.py` | 口徑標籤已在 L1 `recognition_basis` |
+| `backend/helpers/case_deadlines.py` | `backend/modules/case/case_deadlines.py` | daily.check 提供者 |
+| `backend/helpers/case_stage_tasks.py` | `backend/modules/case/case_stage_tasks.py` | 經 M12 provider 寫每日工作（既有） |
+| `backend/completion_pdf.py` | `backend/modules/case/completion_pdf.py` | |
+| 前端 8 頁、11 支 js | 不動（同 M04／M07：模組頁面還沒有服務路徑） | 選單項移進 `modules/case/module.json`（C4 之後） |
+
+import 對照（測試與模組內部一律改成新路徑，**不留 L1 相容殼**：留殼的話，M01 拿掉時 L1 會 import 失敗，或殼本身又把 M01 載進來）：
+
+| 舊 | 新 |
+|---|---|
+| `routers.quotations`／`from routers import quotations` | `modules.case.api.quotations` |
+| `routers.{case_action_items,case_extra_expenses,completion_notes,material_orders}` | `modules.case.api.<同名>` |
+| `helpers.quotations`／`from helpers import quotations` | `modules.case.quotations` |
+| `helpers.{quote_terms,recognition,case_deadlines,case_stage_tasks}` | `modules.case.<同名>` |
+| `completion_pdf` | `modules.case.completion_pdf` |
+| monkeypatch 字串 `"routers.quotations.X"` 等 | 同上替換（逐檔 grep 字串形式，不只看 import 敘述） |
+
+量測（c-approval-2 49dcb781）：測試檔提到 `routers.quotations` 38 檔、`helpers.quotations` 22、`helpers.recognition` 9、其餘 M01 單位合計 22（有重疊）。非測試端：`helpers/case_access.py` 只在註解提到 M01；③ 之後 L1 不 import M01（由 ① 的守門保證）。
+
+### 5-2 提供者宣告（③；現在全部是 import 時登記）
+
+| 能力 | 名稱 | 現在的位置 |
+|---|---|---|
+| `case.access`（IP-12） | case | helpers/quotations.py |
+| `case.summary`（IP-96 暫定） | case | helpers/quotations.py |
+| `case.locations`（IP-97 暫定） | case | helpers/quotations.py |
+| `case.recognition`（IP-95 暫定） | case | helpers/quotations.py |
+| `case.default_terms`（IP-91 暫定） | case | helpers/quotations.py |
+| `case.doc_version`（IP-92 暫定） | case | helpers/quotations.py |
+| `daily.check`（IP-11） | case_deadlines | helpers/case_deadlines.py |
+| `approval.reassign`（IP-94 暫定） | quotation、completion_note | routers/quotations.py |
+| `calendar.writeback`（IP-6） | quotation、case_stage | routers/quotations.py |
+| `quotation.append_items`（IP-17） | quotations | routers/quotations.py |
+| `attachments.for_document`（A） | （a-attachments 合回後） | L1 helpers/case_attachments.py ⇒ ⑤ |
+
+### 5-3 已知例外（使用者已接受：D7 時可以有少數已知例外，每一筆都要附到期守門）
+
+- ATT（⑤）：見上。
+- §2-B 的讀取者（L1 archive、search、item_reads、map_points、audit，以及 M07、M08 的報表直讀 quotations）不在本包範圍，照 §2-B 的三類登記；本包不新增任何讀取。
