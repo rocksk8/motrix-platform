@@ -781,18 +781,105 @@ def _batches_by_length(rel, budget=_ARGV_SAFE_CHARS):
     return out or [[]]
 
 
+#: 會讓選到的題「刻意不跑」的 pytest 參數：有它們時不做「每個選到的檔都要有結果」的檢查（印出來說明）
+_NARROWING_ARGS = ("-k", "-m", "--deselect", "--lf", "--last-failed", "--ff", "--sw", "--stepwise")
+
+
+def _junit_cases(path):
+    """junit xml ⇒ [(classname, name, outcome)]；outcome ∈ passed／failed／error／skipped。讀不到 ⇒ None（不是空）。"""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.parse(str(path)).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    out = []
+    for tc in root.iter("testcase"):
+        tags = {c.tag for c in tc}
+        outcome = ("failed" if "failure" in tags else "error" if "error" in tags
+                   else "skipped" if "skipped" in tags else "passed")
+        out.append((tc.get("classname") or "", tc.get("name") or "", outcome))
+    return out
+
+
+def _module_of(rel):
+    """`tests/test_x.py`、`modules/a/tests/test_y.py` ⇒ junit 的 classname 前綴（`tests.test_x`）。"""
+    return rel.replace("\\", "/")[:-3].replace("/", ".")
+
+
+def files_without_results(targets_rel, cases):
+    """選到的 .py 檔裡，junit 一筆結果都沒有的（收集錯誤、整檔沒跑、被別的原因吃掉）。
+    classname 等於模組或以「模組.」開頭（類別裡的題）；模組層級 skip／收集錯誤時 classname 空、name 是模組。"""
+    seen = set()
+    for cls, name, _o in cases:
+        seen.add(cls or name)
+    out = []
+    for r in targets_rel:
+        if not r.endswith(".py"):
+            continue
+        m = _module_of(r)
+        if not any(x == m or x.startswith(m + ".") for x in seen):
+            out.append(r)
+    return out
+
+
+def merge_batches(results, targets_rel, check_coverage=True):
+    """results：[{"code", "tail", "cases"}]（每批一筆）⇒ (exit code, 彙總摘要 dict, 要印的行)。
+    - 任一批非 0（5 以外）⇒ 紅；每批都要有摘要行，沒有 ⇒ 紅（那一批沒有結果）
+    - check_coverage：選到的 .py 檔在所有批的 junit 裡都要有結果，沒有 ⇒ 紅（〈守門要驗有沒有人做過決定〉）
+    第十班列車：兩批各印自己的摘要，列車長讀了最後一行（第 2 批 1993 過）而第 1 批的 2 紅沒人看到——exit 其實是 1。"""
+    total = {"passed": 0, "failed": 0, "errors": 0, "skipped": 0, "xfailed": 0}
+    lines, codes, no_summary, all_cases = [], [], [], []
+    for i, r in enumerate(results, 1):
+        codes.append(r["code"])
+        summ = parse_summary(r["tail"] or "")
+        if summ is None:
+            no_summary.append(i)
+        else:
+            for k in total:
+                total[k] += summ.get(k, 0)
+        cases = r.get("cases")
+        if cases is None:
+            lines.append("[modtest] 第 %d 批：讀不到 junit 結果" % i)
+            if check_coverage:
+                no_summary.append(i)
+            cases = []
+        all_cases += cases
+        red = ["%s::%s（%s）" % (c, n, o) for c, n, o in cases if o in ("failed", "error")]
+        lines.append("[modtest] 第 %d 批：exit %s；%s%s" % (
+            i, r["code"], summ if summ is not None else "沒有摘要行",
+            ("；紅 %d：%s" % (len(red), "、".join(red[:30]) + (" …" if len(red) > 30 else ""))) if red else ""))
+    missing = files_without_results(targets_rel, all_cases) if check_coverage else []
+    non_zero = [c for c in codes if c != 0]
+    non_five = [c for c in non_zero if c != 5]
+    final = non_five[0] if non_five else (5 if non_zero else 0)
+    if no_summary:
+        lines.append("[modtest] 🔴 第 %s 批沒有結果（沒有摘要行或 junit）⇒ 判紅" % "、".join(map(str, sorted(set(no_summary)))))
+        final = final if final not in (0, 5) else 1
+    if missing:
+        lines.append("[modtest] 🔴 選到而沒有任何結果的檔 %d：%s ⇒ 判紅" % (len(missing), "、".join(missing[:30])))
+        final = final if final not in (0, 5) else 1
+    return final, total, lines
+
+
 def run_pytest(targets, extra, window, full, collect_only=False):
     """在 backend/ 下跑 pytest；basetemp 專屬、結束必刪。回傳 (exit code, stdout)。
-    targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp，合併結果（tail 串接、
-    exit code 取「非 0 且非 5」優先，其餘皆 0／5 才回 5，都 0 才回 0）。"""
+    targets 太多檔會撞 Windows 命令列長度上限 ⇒ 依長度分批，逐批各自的 basetemp。
+    〔wip/b-modtest-batch：原本只把各批 tail 串接、exit code 合併 ⇒ 畫面最後一行是**最後一批**的摘要（第十班列車
+      讀到「1993 過 0 紅」，第 1 批的紅沒人看到）。現在每批另寫 junit，結束時印**總摘要**（pytest 摘要行格式，
+      parse_summary 讀到的是總數）與各批的紅；選到的檔沒有任何結果 ⇒ 紅（merge_batches）〕"""
     rel = [str(Path(t).relative_to("backend")) if t.startswith("backend/") else t for t in targets]
     batches = _batches_by_length(rel)
-    codes, tails = [], []
+    codes, tails, results = [], [], []
+    t_start = time.monotonic()
+    narrowing = [x for x in extra if x.split("=", 1)[0] in _NARROWING_ARGS]
     for batch in batches:
         bt = _new_basetemp(window, full)
+        junit = Path(str(bt) + "-junit.xml")
         cmd = [PYEXE or sys.executable, "-m", "pytest", *batch, "--basetemp=%s" % bt, "-p", "no:cacheprovider"]
         if collect_only:
             cmd += ["--collect-only", "-q"]
+        else:
+            cmd += ["--junitxml=%s" % junit]
         cmd += extra
         proc = None
         try:
@@ -814,6 +901,7 @@ def run_pytest(targets, extra, window, full, collect_only=False):
                     del tail[:200]
             codes.append(proc.wait())
             tails.append("".join(tail))
+            results.append({"code": codes[-1], "tail": tails[-1], "cases": _junit_cases(junit)})
         except KeyboardInterrupt:
             if proc is not None and hasattr(proc, "poll") and proc.poll() is None:
                 try:
@@ -824,15 +912,28 @@ def run_pytest(targets, extra, window, full, collect_only=False):
             raise
         finally:
             _remove_basetemp(bt)
+            if junit.exists():
+                try:
+                    junit.unlink()
+                except OSError:
+                    pass
+    if collect_only:
+        non_zero = [c for c in codes if c != 0]
+        non_five = [c for c in non_zero if c != 5]
+        return (non_five[0] if non_five else (5 if non_zero else 0)), "".join(tails)
     if len(batches) > 1:
         print("[modtest] 選題 %d 檔分 %d 批跑（命令列長度上限，PLAYBOOK §G3 列車實測）" % (len(rel), len(batches)))
-    non_zero = [c for c in codes if c != 0]
-    if not non_zero:
-        final = 0
-    else:
-        non_five = [c for c in non_zero if c != 5]
-        final = non_five[0] if non_five else 5
-    return final, "".join(tails)
+    if narrowing:
+        print("[modtest] 帶了 %s ⇒ 不檢查「每個選到的檔都有結果」" % " ".join(narrowing))
+    final, total, lines = merge_batches(results, rel, check_coverage=not narrowing)
+    for ln in lines:
+        print(ln)
+    # 最後一行＝總摘要（pytest 摘要行格式 ⇒ parse_summary 讀到總數；人看到的最後一行也是總數）
+    summary = "== %s in %.2fs（%d 批合計；exit %d）==" % (
+        ", ".join("%d %s" % (v, k) for k, v in total.items() if v or k in ("passed", "failed")), time.monotonic() - t_start,
+        len(batches), final)
+    print(summary)
+    return final, "".join(tails) + "\n".join(lines) + "\n" + summary + "\n"
 
 
 _COUNT_RE = re.compile(r"(\d+)\s+tests?\s+collected|collected\s+(\d+)\s+items?|^(\d+)\s+tests?\s+collected", re.M)
