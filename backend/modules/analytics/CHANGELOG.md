@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.1 — 2026-09-26
+- 只改 import 來源（行為不變）：`api/reports.py` 的稅額函式（quote_tax_type、tax_split、LEGACY_TAX_NOTE、invoice_amounts）改自 L1 `helpers.tax_calc` import（C 的 T：稅額純函式自 M01 下沉 L1）⇒ 本模組對 M01 `helpers.quotations` 少一條相依
+
 ## 1.0.0 — 2026-09-26
 - 模組化：自 `routers/dashboard.py`、`routers/reports.py` 搬入 `modules/analytics/api/`（PLAYBOOK §B，M08）
 - 切相依（搬檔前）：
