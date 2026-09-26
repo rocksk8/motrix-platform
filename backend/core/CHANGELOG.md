@@ -60,6 +60,7 @@
 - L1（相容擴充）：`GET /api/platform/menu` 的 `layout.groups` 併入使用者看得到的自訂模組，另回 `layout.custom`（key 清單）；讀自訂模組失敗 ⇒ 列在 `layout.errors`
 - L1（宣告）：`core/menu_l1.json` 系統組新增「模組建構器」（module-builder.html，superadmin；原由 custom-modules-nav.js 追加）
 - 前端：`sidebar.js` 改讀 `MOTRIX_MENU`（首屏同步、權限同步過濾），session 後套 `layout`；`<html data-menu-state>`＝declared／layout／layout-failed；序號丟舊回應；`window.MotrixMenu.refresh()`；寫死的選單清單與 `MODULE_PAGES` 表移除；`custom-modules-nav.js` 刪除
+
 ## 1.36 — 2026-09-26（C，M01-PLAN §3-2：兩支通用函式下沉 L1；疊在 T 之上）〔core_bump：暫用 1.99 → 1.36〕
 > 介面只有新增；舊位置保留同名別名（同一物件）。
 - L1（新增）：`helpers.dates.norm_at`、`helpers.tiered_approval.steps_to_tiers`（自 M01 `helpers/quotations.py` 的 `norm_at`、`_steps_to_tiers` 逐字搬入）

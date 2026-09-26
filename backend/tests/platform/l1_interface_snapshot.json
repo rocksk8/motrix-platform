@@ -1,5 +1,5 @@
 {
- "core_version": "1.40",
+ "core_version": "1.46",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -80,6 +80,7 @@
    "no_cache_static": "async def(request, call_next)",
    "root": "def()",
    "security_headers": "async def(request, call_next)",
+   "sidebar_js": "def()",
    "slow_request_log": "async def(request, call_next)"
   },
   "core:pdf_gen": {
@@ -132,6 +133,20 @@
    "status_label": "def(status)",
    "status_ok": "def(status)"
   },
+  "helper:approval_queue": {
+   "ACTIVE_STATUSES": "const",
+   "ApprovalUnreadable": "class",
+   "DataJsonApproval": "class",
+   "DataJsonApproval.__init__": "def(self, table, key)",
+   "DataJsonApproval.load": "def(self, conn, doc_no)",
+   "DataJsonApproval.save": "def(self, conn, doc, approval, now)",
+   "active_tiers": "def(appr)",
+   "base_item": "def(type_, doc_no, f, **fields)",
+   "current_tier_idx": "def(appr)",
+   "file_entries": "def(raw)",
+   "snapshot_doc_detail": "def(r)",
+   "tier_fields": "def(approval_json_raw)"
+  },
   "helper:audit": {
    "_audit": "def(token, action, target_type=…, target_id=…, target_label=…, detail=…)",
    "_filter_live_notifications": "def(conn, rows)",
@@ -165,6 +180,7 @@
   "helper:case_access": {
    "CASE_ACCESS": "const",
    "CASE_PRESENT": "const",
+   "SYSTEM": "const",
    "case_access_allowed": "def(conn, q, user, *, allow_approver=…, allow_module=…)",
    "case_documents_readable": "def(conn, quote_no, user)",
    "case_module_present": "def()",
@@ -239,7 +255,8 @@
    "sample_view": "def(body)",
    "transition": "def(conn, module_key, record_no, tkey, user, note=…)",
    "update_record": "def(conn, module_key, record_no, values, user)",
-   "validate_module": "def(body, key=…)"
+   "validate_module": "def(body, key=…)",
+   "visible_to": "def(mods, user)"
   },
   "helper:daily_checks": {
    "run_module_checks": "def(mode)",
@@ -593,9 +610,15 @@
    "validate_transition": "def(current, target)"
   },
   "helper:receivables": {
+   "RECEIVABLES_MISSING": "const",
    "collect_income_items": "def(d0, d1, department_id=…)",
    "collect_tax_invoices": "def(year=…, month=…)",
    "round_half_up_invoice": "def(n)"
+  },
+  "helper:recognition_basis": {
+   "BASES": "const",
+   "BASIS_NOTES": "const",
+   "normalize_basis": "def(v)"
   },
   "helper:row_access": {
    "ADMIN_ROLES": "const",
@@ -660,6 +683,7 @@
   "helper:tiered_approval": {
    "APPROVAL_DOC_TYPES": "const",
    "APPROVAL_DOC_TYPE_LABELS": "const",
+   "ApprovalChainUnreadable": "class",
    "DEFAULT_UNIFIED_DOC_TYPES": "const",
    "ORG_ROLE_LABELS": "const",
    "UnresolvedManagerError": "class",
@@ -673,6 +697,7 @@
    "current_tier_idx": "def(appr)",
    "first_pending_approver": "def(tier)",
    "org_chain_notice_usernames": "def(conn, tiers, requester_username)",
+   "parse_approval_json": "def(record, *, doc_label=…)",
    "plan_self_cascade": "def(tiers, ct_idx, username, conn=…)",
    "resolve_active_flow_setting": "def(doc_type)",
    "resolve_department_manager": "def(conn, department_id)",
@@ -708,6 +733,7 @@
    "EXPECTED_SECTIONS": "const",
    "build": "def()",
    "check_layout": "def(module_key, ops)",
+   "effective_layout_ops": "def(conn, module_key, role)",
    "endpoint_problems": "def(pts, endpoints)",
    "layout_points": "def(module_key=…)",
    "module_endpoints": "def(spec)",
@@ -775,12 +801,18 @@
    "start_schedulers": "def()"
   },
   "plat:menu": {
+   "CUSTOM_DEFAULT_GROUP": "const",
    "ITEM_KEYS": "const",
    "MENU_L1": "const",
+   "apply_layout": "def(groups, ops)",
    "build": "def(l1, mod_items, modules, superadmin)",
+   "check_l1_pages": "def(l1, module_pages)",
+   "declaration": "def(l1, mod_items)",
    "denied": "def(l1, mod_items, modules, superadmin)",
    "load_l1": "def(path=…)",
+   "merge_custom": "def(groups, customs)",
    "module_items": "def(manifests)",
+   "sidebar_point_id": "def(item)",
    "validate": "def(l1, mod_items=…)",
    "visible": "def(perm, modules, superadmin)"
   },
