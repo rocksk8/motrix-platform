@@ -70,6 +70,7 @@ def _lock_name():
 _LOCK_NAME = _lock_name()
 DEPLOY_PACKAGES_DIR = PROJECT_ROOT / "deploy_packages"
 HISTORY_PATH = TOOLS_DIR / "deploy_dashboard_history.json"
+HISTORY_PENDING_PATH = TOOLS_DIR / "deploy_dashboard_history.pending.jsonl"   # 主檔被占用時的暫存（H-S1）
 # 2026-09-08（複查後新增）：job 輸出原本只存記憶體，這個小工具本身重啟
 # （例如改完程式碼要重載）就整個消失——當晚實際發生過好幾次，每次重啟
 # 儀表板都得請使用者重新複製貼上先前的畫面內容才留得住紀錄。改成每個
@@ -705,9 +706,21 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
     # 第一版只鎖寫入端 ⇒ 儀表板輪詢時 300 次寫入掉 145 筆（D 稽核 2026-09-26）。行程外的人（防毒、手動開檔）擋住時短暫重試，
     # 仍不行就直接覆寫——鎖內沒有別的寫入者，直接寫不會交錯；寧可不原子也不掉筆。
     with _history_lock:
+        # 讀不到 ≠ 空清單（D 稽核 H-S1：讀檔丟一次 PermissionError ⇒ 原本把 200 筆蓋成 1 筆，而寫回後又讀得懂，警告也不會出現）：
+        # 被占用 ⇒ 重試後仍不行就把這一筆記到旁邊的 pending 檔、不碰主檔；讀不懂 ⇒ 先封存壞檔再開新檔。
         history = _read_history_locked()
+        if history is _UNREADABLE_BUSY:
+            with open(HISTORY_PENDING_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            return
         if history is None:
-            history = []
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            try:
+                os.replace(HISTORY_PATH, HISTORY_PATH.with_name(f"{HISTORY_PATH.name}.corrupt-{stamp}"))
+            except OSError:
+                pass
+            history = [{"time": entry["time"], "action": f"歷史紀錄讀不懂，已封存為 {HISTORY_PATH.name}.corrupt-{stamp}，從這一筆重新開始",
+                        "success": False, "logPath": ""}]
         history.insert(0, entry)
         text = json.dumps(history[:200], ensure_ascii=False, indent=2)
         tmp = HISTORY_PATH.with_name(f"{HISTORY_PATH.name}.{os.getpid()}.{threading.get_ident()}.tmp")
@@ -725,19 +738,35 @@ def _append_history(action: str, job_id: str, success: bool, log_path: str = "")
             pass
 
 
+_UNREADABLE_BUSY = object()     # 被別的行程占用、重試後仍讀不到（內容未知，不可以當成空的覆寫）
+
+
 def _read_history_locked():
-    """呼叫端必須持有 _history_lock。檔案不存在 ⇒ []；存在但讀不懂 ⇒ None（讓呼叫端分得出「沒有紀錄」與「讀不到」）。"""
+    """呼叫端必須持有 _history_lock。檔案不存在 ⇒ []；被占用讀不到 ⇒ _UNREADABLE_BUSY；讀得到但不是合法 JSON 清單 ⇒ None。"""
     if not HISTORY_PATH.exists():
         return []
+    for attempt in range(5):
+        try:
+            text = HISTORY_PATH.read_text(encoding="utf-8")
+            break
+        except PermissionError:
+            time.sleep(0.05 * (attempt + 1))
+        except FileNotFoundError:
+            return []
+    else:
+        return _UNREADABLE_BUSY
     try:
-        return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-    except Exception:
+        data = json.loads(text)
+    except ValueError:
         return None
+    return data if isinstance(data, list) else None
 
 
 def _read_history():
+    """讀取端用：讀不到（占用或壞檔）一律 None。"""
     with _history_lock:
-        return _read_history_locked()
+        h = _read_history_locked()
+    return None if h is _UNREADABLE_BUSY else h
 
 
 def _try_acquire_job_lock(job_id: str) -> bool:
@@ -756,6 +785,8 @@ def _recent_failure_warning() -> str:
     """檢查最近一筆部署/回滾歷史紀錄，如果是 15 分鐘內的失敗，回傳一段
     警告文字給前端的二次確認卡片顯示——2026-09-08 當晚實際發生連續三次
     盲目重試都沒先看清楚上一次到底發生什麼事，這裡至少在畫面上提醒一次。"""
+    if HISTORY_PENDING_PATH.exists():
+        return "⚠ 有部署歷史紀錄因檔案被占用而另存於 %s，尚未併回；請先看該檔與 deploy_logs 再決定是否執行。" % HISTORY_PENDING_PATH.name
     history = _read_history()
     if history is None:
         # 讀不到不等於「沒有失敗」：說出來，不靜默放行（唯讀動作的缺口要輸出）
