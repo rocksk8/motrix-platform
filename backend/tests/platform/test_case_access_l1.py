@@ -35,7 +35,10 @@ KNOWN_L1 = {
     "routers/item_reads.py": "r", "routers/search.py": "r", "routers/system.py": "r",
     # 第六班列車交會（c-case-access × b-m08-3，2026-09-26）：以下兩檔不是新增的讀取，是既有讀取換了歸屬——
     # receivables.py＝M08 routers/reports.py 的應收收集逐字下沉 L1（主持裁示 a，ROADMAP A8b 中繼，M05 搬遷時收回）；
-    # map_points.py＝地圖依 2026-09-21 使用者裁示歸 L1（b-m08-3 6838ade7 改 modules.json 歸屬）。待主持／D 確認；切斷後自本基線刪除。
+    # map_points.py＝地圖依 2026-09-21 使用者裁示歸 L1（b-m08-3 6838ade7 改 modules.json 歸屬）。
+    # 主持裁示（RUN-PLAN §6，2026-09-26）：接受為有到期條件的例外；D 稽核確認是歸屬改變（AUDIT-D-C-case-access §6）。
+    # 到期不靠人記：test_known_l1_baseline_is_not_stale——M05 收回後 receivables.py 不再是 L1 檔、
+    # map_points.py 改走 M01 的 case.summary 後不再讀 quotations ⇒ 這一題紅，提醒自本基線刪除（CA-S3）。
     "helpers/receivables.py": "r", "routers/map_points.py": "r",
 }
 OWNER = "helpers/case_access.py"
@@ -65,6 +68,37 @@ def access(src):
 def excess(found, known=KNOWN_L1, owner=OWNER):
     return sorted("%s：%s（基線 %s）" % (f, flags, known.get(f, "無")) for f, flags in found.items()
                   if f != owner and not set(flags) <= set(known.get(f, "")))
+
+
+def stale(found, files, known=KNOWN_L1):
+    """基線上的條目已經過期 ⇒ 問題清單：不再是 L1 檔、不再讀寫 quotations、或權限縮小（基線要跟著縮）。
+    讓「到期後自基線刪除」自己觸發（D 稽核 CA-S3：原本只寫在散文與別人的 scratchpad，到期後會安靜留著）。"""
+    out = []
+    for f, flags in known.items():
+        if f not in files:
+            out.append("%s：已不是 L1 檔（基線 %s）⇒ 自 KNOWN_L1 刪除" % (f, flags))
+        elif not found.get(f):
+            out.append("%s：已不讀寫 quotations（基線 %s）⇒ 自 KNOWN_L1 刪除" % (f, flags))
+        elif set(found[f]) < set(flags):
+            out.append("%s：只剩 %s（基線 %s）⇒ 縮小基線" % (f, found[f], flags))
+    return sorted(out)
+
+
+def test_stale_positive_and_reverse_controls():
+    known = {"helpers/a.py": "r", "helpers/b.py": "rw", "helpers/c.py": "r"}
+    files = ["helpers/a.py", "helpers/b.py"]
+    assert stale({"helpers/a.py": "r", "helpers/b.py": "rw", "helpers/c.py": "r"}, files + ["helpers/c.py"], known) == []
+    got = stale({"helpers/a.py": "", "helpers/b.py": "r"}, files, known)
+    assert got == ["helpers/a.py：已不讀寫 quotations（基線 r）⇒ 自 KNOWN_L1 刪除",
+                   "helpers/b.py：只剩 r（基線 rw）⇒ 縮小基線",
+                   "helpers/c.py：已不是 L1 檔（基線 r）⇒ 自 KNOWN_L1 刪除"], got
+
+
+def test_known_l1_baseline_is_not_stale():
+    files = _l1_files()
+    found = {f: a for f in files if (a := access((source_tree.BACKEND / f).read_text(encoding="utf-8")))}
+    bad = stale(found, files)
+    assert not bad, "KNOWN_L1 基線有過期條目（到期條件已觸發，請自基線刪除或縮小）：\n  " + "\n  ".join(bad)
 
 
 def test_same_rule_everywhere():

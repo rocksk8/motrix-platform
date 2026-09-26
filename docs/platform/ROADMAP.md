@@ -179,3 +179,5 @@
 - （2026-09-26 P8G 帶出）`modtest --list` 會直接執行測試，而不是只列出選題；應改為只列清單、不執行（B）。
 - （2026-09-26 D 稽核 CA-O3，M01 搬遷必做）`case.access`（已兼作 M01 在不在的訊號，`case.present` 已刪）要寫進 M01 的 ModuleSpec.providers，不可以在 import 時登記；否則模組載入失敗時登記會殘留，case_access 會誤判 M01 還在。
 - （2026-09-26 08:04 D 稽核 CA-O4，M01 搬遷必做，與 CA-O3 一起做）現在 `case.access`（IP-12；c-case-access-3 起也是 L1 判斷「M01 在不在」的訊號）在 `helpers/quotations.py` 匯入時登記，而 L1 的 `pdf_gen`、`routers/system` 也匯入這支檔 ⇒ 只改成 ModuleSpec 登記還不夠，**要一併切斷 L1 對 `helpers.quotations` 的匯入**，否則 M01 被拿掉時 L1 仍把它載入、登記仍在，「M01 不在 ⇒ 404」退回修正前。驗收：真刪 M01 後 `case.access` 不在登記表。
+- （2026-09-26 12:40 主持裁示，D 稽核 CA-S3）**test_case_access_l1 的 KNOWN_L1 基線有兩筆有到期條件的例外**，到期由 `test_known_l1_baseline_is_not_stale` 自動變紅，不靠人記：① `helpers/receivables.py`（M08 的應收收集逐字下沉 L1）——**M05 搬遷時收回模組**（A8b），收回後它不再是 L1 檔 ⇒ 自 KNOWN_L1 刪除；② `routers/map_points.py`（地圖歸 L1）——**M01 提供 `case.summary` 之後改走提供者**，不再直接讀 quotations ⇒ 自 KNOWN_L1 刪除。
+- （同上）**`case.summary` 定義**（M01 提供、L1 與其他模組取用）：輸入 quote_no（或清單）＋目前使用者 ⇒ 回案件摘要 `{quote_no, customer_name, project_name, status, sales_person_id}`，沒有權限或 M01 不在 ⇒ 不回該筆（呼叫端要能處理缺席，並明說）；只讀、不寫。號碼由列車定；正式契約在實作時寫進 INTEGRATION-POINTS。負責：C（M01-PLAN §3-4）。
