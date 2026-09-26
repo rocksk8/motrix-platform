@@ -78,7 +78,7 @@ _ITEMS = [{"id": 1, "type": "item", "description": "設備", "qty": 10, "unitPri
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _calc(scope, quote_total, quote_pretax, ratio=None, amount=None, items=None, data_items=None):
-    from routers.payment_requests import _calc_scope_amount, RequestItemIn
+    from modules.arap.api.payment_requests import _calc_scope_amount, RequestItemIn   # M05（2026-09-26）
     data = {"items": data_items or _ITEMS}
     remaining = {"items": [{"itemId": it["id"], "remainingQty": it["qty"]} for it in data["items"]]}
     items_in = [RequestItemIn(**x) for x in items] if items else None

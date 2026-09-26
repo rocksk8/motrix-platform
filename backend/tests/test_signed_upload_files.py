@@ -147,22 +147,3 @@ def test_shipping_note_signed_files_upload(client, make_user):
 
 
 # ── invoice_vouchers ────────────────────────────────────────────────────────
-
-def test_invoice_voucher_issued_files_upload(client, make_user):
-    username, password = make_user(role="superadmin")
-    token = _login(client, username, password)
-    _make_quotation("MQ-SIGN-020")
-    _make_invoice_voucher("IV-SIGN-001", "MQ-SIGN-020")
-
-    up = client.post(
-        "/api/invoice-vouchers/IV-SIGN-001/issued-files", headers=_auth(token),
-        files={"files": _png_file()},
-    )
-    assert up.status_code == 201, up.text
-    file_id = up.json()["files"][0]["id"]
-
-    detail = client.get("/api/invoice-vouchers/IV-SIGN-001", headers=_auth(token)).json()
-    assert len(detail["issuedFiles"]) == 1
-
-    d = client.delete(f"/api/invoice-vouchers/IV-SIGN-001/issued-files/{file_id}", headers=_auth(token))
-    assert d.status_code == 200, d.text

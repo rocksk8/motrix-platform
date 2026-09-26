@@ -19,6 +19,9 @@ window.CM_PARTS.push(() => ({
     // ── 開票申請憑據 ──
     invoiceVouchers: [],
     invoiceVouchersLoading: false,
+    // 2026-09-26 M05 搬遷：開票申請／請款單屬 M05 應收應付；M05 不在 ⇒ 兩支端點 404（路由不存在）⇒
+    // 明說並收起兩個申請按鈕（§B-4：少一個功能並告知，不是空清單＋點了跳 Not Found）
+    arapMissing: '',
     ivSortPref: { sortMode: '', sortDir: 'desc', customOrder: [] },
     ivPreviewModal: false,
     ivPreviewBlobUrl: '',
@@ -418,6 +421,7 @@ window.CM_PARTS.push(() => ({
         const body = r.ok ? await r.json() : null
         if (!live()) return
         if (r.ok) this.invoiceVouchers = body
+        else if (r.status === 404) this.arapMissing = '應收應付模組未安裝：開票申請與請款單不提供'
       } catch {}
       this.invoiceVouchersLoading = false
       this.$nextTick(() => this._initSubListSortable('iv'))
@@ -754,6 +758,7 @@ window.CM_PARTS.push(() => ({
         const body = r.ok ? await r.json() : null
         if (!live()) return
         if (r.ok) this.paymentRequests = body
+        else if (r.status === 404) this.arapMissing = '應收應付模組未安裝：開票申請與請款單不提供'
       } catch {}
       this.paymentRequestsLoading = false
       this.$nextTick(() => this._initSubListSortable('prList'))

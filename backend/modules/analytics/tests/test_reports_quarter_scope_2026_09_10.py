@@ -14,6 +14,11 @@
   ⑤ `_month_expense_slice()` 重構成 `_months_expense_slice()` 包裝後行為不變
 """
 import json
+import pytest
+
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
 
 
 def _login(client, username, password):
@@ -158,6 +163,7 @@ def test_receivables_quarter_identity_holds(client, make_user):
 
 # ── ② 季 == 該季三個月加總（收支） ───────────────────────────────────────────
 
+@_NEEDS_ARAP
 def test_expenses_quarter_income_equals_sum_of_its_months(client, make_user):
     """收支端點的季收入 == 該季三個月各自查詢的加總；季外的收款不得混入。
     收入是依 receivedAt（現金流口徑），與應收的 wonMonth 口徑不同，所以要分開驗。"""
@@ -331,6 +337,7 @@ def _seed_quarter_export_data(conn):
                    "received": True, "receivedAt": "2026-12-12T00:00:00"}])
 
 
+@_NEEDS_ARAP
 def test_excel_export_gains_quarter_sheet(client, make_user):
     """帶 quarter 的 Excel 匯出多一張「本季收支」工作表，內容是該季的收入；
     不帶 quarter 時完全沒有這張表（既有匯出結果零變化）。"""

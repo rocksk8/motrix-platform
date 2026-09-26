@@ -24,6 +24,10 @@ import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
 
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
+
 
 
 
@@ -78,6 +82,7 @@ def _wait_kpi(page, label_text, expected):
     )
 
 
+@_NEEDS_ARAP
 @pytest.mark.e2e
 def test_period_bar_drives_income_expense_block(live_server, make_user, e2e_browser):
     """核心回歸：period-bar 切到不同月份／不同季，「本期收支」的收入數字要跟著變。

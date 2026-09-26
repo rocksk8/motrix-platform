@@ -54,7 +54,7 @@ SMOKE = [
     ("報價單列表", "GET", "/api/quotations"), ("案件管理頁", "GET", "/pages/case-management.html"),
     ("傳票列表", "GET", "/api/vouchers"), ("傳票頁", "GET", "/pages/voucher.html"),
     ("獎金分潤項目", "GET", "/api/bonus/items", "payroll"), ("獎金分潤頁", "GET", "/pages/bonus.html"),
-    ("出納待付", "GET", "/api/cashier/payable-queue"), ("請款單列表", "GET", "/api/payment-requests"),
+    ("出納待付", "GET", "/api/cashier/payable-queue", "arap"), ("請款單列表", "GET", "/api/payment-requests", "arap"),
     ("營運報表", "GET", "/api/reports/financial", "analytics"), ("營運報表頁", "GET", "/pages/reports.html", "analytics"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),

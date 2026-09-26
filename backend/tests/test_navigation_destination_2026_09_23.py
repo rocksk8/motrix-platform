@@ -176,7 +176,9 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 141   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+_BASELINE_COUNT = 139   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+#: 〔2026-09-26 M05 搬遷：141 → 139。開票申請與請款單各 1 條「請至少選擇一項品項」隨 routers/ 搬進 modules/arap/api/；
+#:   同一個掃描器含 modules/ 的總數搬遷前後都是 157 ⇒ 沒有任何一句被刪，只是換了位置〕
 #: 〔2026-09-26 第六班列車：142 → 141。M04／M07／M08 同班搬進 modules/ 共 9 條（subcontract 2、payroll 4、analytics 3），
 #:   同一個掃描器含 modules/ 的總數 origin da6ab316 與列車都是 157 ⇒ 沒有任何一句被刪，只是換了位置；
 #:   modules/ 外由 150 降到 141。各包單獨時仍 ≥142，三包合起來才跨過基準〕

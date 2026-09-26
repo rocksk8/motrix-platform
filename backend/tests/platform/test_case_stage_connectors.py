@@ -252,9 +252,16 @@ def _doc_data(table, col, no):
     return json.loads(_q("SELECT data_json FROM %s WHERE %s=?" % (table, col), no)[0]["data_json"])
 
 
+def _arap_kind(kind):
+    from core import source_tree
+    if kind in ("invoice_voucher", "payment_request") and not source_tree.module_installed("modules/arap/"):
+        pytest.skip("%s 的回寫由應收應付（M05）提供，模組不在這個安裝包（PLAYBOOK §B-11）" % kind)
+
+
 @pytest.mark.parametrize("kind,table,col,push", _IP6_DOC_KINDS)
 def test_calendar_writeback_document_kinds_write_their_own_row(client, distinct_google, kind, table, col, push):
     """X 稽核 A-3：三支回寫原本沒有任何題目執行過。每一種都要把**這一次**建出來的 id 寫進**自己那一列**，其他欄位不動。"""
+    _arap_kind(kind)
     _doc(table, col, "IP6-%s-A" % kind)
     _doc(table, col, "IP6-%s-B" % kind)
     getattr(distinct_google, push)("IP6-%s-A" % kind)
@@ -266,6 +273,7 @@ def test_calendar_writeback_document_kinds_write_their_own_row(client, distinct_
 @pytest.mark.parametrize("kind,table,col,push", _IP6_DOC_KINDS)
 def test_calendar_writeback_document_kinds_do_not_overwrite_concurrent_edits(client, distinct_google, kind, table, col, push):
     """lost-update：建立事件（網路請求）期間別人改了單據 ⇒ 回寫只加 event id，不把舊的 data_json 蓋回去。"""
+    _arap_kind(kind)
     no = "IP6-%s-LU" % kind
     _doc(table, col, no)
 

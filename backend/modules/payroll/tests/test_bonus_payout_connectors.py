@@ -21,6 +21,10 @@ from modules.payroll.tests._bonus_insure import insure_all
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth, _set_flow, _delegate)
 
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
+
 YEAR_PARAMS_VERSION = {   # R1 的一版的形狀（helpers.legal_params，IP-7）——合成，不讀產品的預設值
     "version": "2026", "effectiveFrom": "2000-01-01",
     "resident": {"50": {"tax_rate": 0.05, "tax_threshold": 90501}},
@@ -154,6 +158,7 @@ def test_mail_body_has_no_amount(monkeypatch):
 
 # ── ② 出納頁（IP-8）─────────────────────────────────────────────────────────
 
+@_NEEDS_ARAP
 def test_cashier_queue_mark_paid_is_the_same_action_and_history(client, people, make_user):
     insure_all()
     from modules.payroll.tests.test_bonus_case_api_2026_09_24 import _login
@@ -199,6 +204,7 @@ def test_cashier_page_binds_bonus_mark_paid():
     assert 'data-testid="cashier-bonus-tab"' in html and "bonusQueue.notice" in html
 
 
+@_NEEDS_ARAP
 def test_reverse_without_payroll_cashier_still_works_and_says_so(client, people, monkeypatch):
     insure_all()
     _to_payout(client, people, "MQ-BP-C2")
@@ -399,6 +405,7 @@ def test_real_legal_params_default_version_is_usable(client, monkeypatch):
     assert why == "" and p["nhi_bonus_multiple"] >= 1 and rules["version"], (p, why)
 
 
+@_NEEDS_ARAP
 def test_reverse_without_accounting_still_computes_and_pays(client, people, monkeypatch):
     _with_legal(monkeypatch)
     _insure_all(client, people, bc_s1=20000)

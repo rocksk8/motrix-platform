@@ -1744,12 +1744,12 @@
                           style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--border-light);background:var(--surface);color:var(--text-secondary);cursor:pointer;font-family:LINE Seed TW_OTF, sans-serif;line-height:1.4;white-space:nowrap">
                     平衡尾款
                   </button>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
+                  <button x-show="['superadmin','admin'].includes(session.role) && !arapMissing"
                           @click="if (dirty) { MotrixUI.toast('款項明細有未儲存的修改，請先儲存後再申請請款單', {kind: 'error'}) } else { location.href = 'payment-request-form.html?quote_no=' + encodeURIComponent(selected.quote_no) }"
                           style="margin-left:auto;font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--tone-orange-border);background:var(--tone-orange-bg);color:var(--tone-orange-fg);cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
                     申請請款單
                   </button>
-                  <button x-show="['superadmin','admin'].includes(session.role)"
+                  <button x-show="['superadmin','admin'].includes(session.role) && !arapMissing"
                           @click="openInvoiceVoucherModal()"
                           style="font-size:11px;padding:3px 10px;border-radius:4px;border:1px solid var(--tone-violet-border);background:var(--tone-violet-bg);color:var(--tone-violet-fg);cursor:pointer;font-family:var(--font-zh);white-space:nowrap">
                     申請開立發票
@@ -1990,6 +1990,10 @@
                 </div>
 
                 <fieldset class="cm-ro" :disabled="caseReadOnly()" style="border:0;padding:0;margin:0;min-width:0"><!-- CM14b：出納唯讀 -->
+                <!-- M05 應收應付不在：開票申請與請款單整段不提供（明說，不是空清單） -->
+                <div x-show="arapMissing" data-testid="arap-missing"
+                     style="margin-top:18px;padding:10px 14px;border:1px solid #FCA5A5;border-radius:8px;background:#FEF2F2;font-size:12px;color:#991B1B;font-family:var(--font-zh)"
+                     x-text="arapMissing"></div>
                 <!-- 開票申請憑據列表 -->
                 <div x-show="invoiceVouchers.length > 0" style="margin-top:18px">
                   <div class="cm-section-title" style="margin-bottom:10px;display:flex;align-items:center;gap:8px">

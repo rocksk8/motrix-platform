@@ -9,6 +9,10 @@ import pytest
 
 from core import registry, source_tree
 
+#: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
+_NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
+                                 reason="需要應收應付（M05）：模組不在這個安裝包（PLAYBOOK §B-11）")
+
 QNO = "MQ-202609-S04"
 
 
@@ -105,6 +109,7 @@ def test_case_bundle_dispatches_part(client, make_user):
 
 # ── IP-14（本模組在）───────────────────────────────────────────────────────────
 
+@_NEEDS_ARAP
 def test_cashier_and_t100_with_m04(client, make_user):
     h = _hdr(client, make_user)
     _seed()
