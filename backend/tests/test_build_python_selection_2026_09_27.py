@@ -5,6 +5,7 @@ D7 建包挑到 PATH 第一支 hermes-agent 的 venv（別的工具的環境，i
 ② 合格＝import 得到＋滿足 requirements.txt＋requirements-dev.txt 的版本規格（backend/tools/check_py_deps.py，含 httpx2）。
 乾跑入口 `build_deploy_package.ps1 -WhichPython`：只挑直譯器、印 `WHICH_PYTHON=<路徑>`，不動 git、不打包。
 """
+import json
 import os
 import subprocess
 import sys
@@ -104,3 +105,37 @@ def test_dry_run_without_a_project_venv_falls_back_and_says_so():
     assert "專案 venv：沒有" in out, out[-1500:]
     proj = _project_venv()
     assert proj is None or Path(got) != Path(proj)
+
+
+# ── 稽核 D BP-M1：選中的直譯器要寫進安裝包（deploy_manifest.json 的 env.python），事後查得到 ──
+
+def _env_record(out):
+    line = next((l for l in out.splitlines() if l.startswith("WHICH_PYTHON_ENV=")), None)
+    assert line is not None, out[-1500:]
+    return json.loads(line.split("=", 1)[1])
+
+
+def _version_of(exe):
+    return subprocess.run([exe, "-c", "import sys; print(sys.version.split()[0])"], capture_output=True, text=True).stdout.strip()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="部署腳本只在 Windows 上跑")
+@pytest.mark.parametrize("venv,want_source", [("", "project"), (".venv-does-not-exist-xyz", "fallback")],
+                         ids=["project", "fallback"])
+def test_env_record_matches_what_was_actually_picked(venv, want_source):
+    """env.python＝{path, version, source}：path 就是挑中的那一支、version 是它自己回報的、source 與實際挑選一致。"""
+    if want_source == "project" and _project_venv() is None:
+        pytest.skip("這台沒有專案 venv")
+    got, out = _which({"MOTRIX_PROJECT_VENV": venv})
+    rec = _env_record(out)
+    assert set(rec) == {"path", "version", "source"}, rec
+    assert Path(rec["path"]) == Path(got) and rec["source"] == want_source, rec
+    assert rec["version"] and rec["version"] == _version_of(got), rec
+
+
+def test_manifest_and_history_record_the_same_env_python():
+    """deploy_manifest.json 與 build_history 的 env 都帶 python，而且是 Step 2.5 用同一支函式算出來的那一份（乾跑印的也是它）。"""
+    src = BUILD.read_text(encoding="utf-8-sig")
+    assert src.count("function Get-PythonEnvRecord") == 1
+    assert "$pyEnv = Get-PythonEnvRecord $sel" in src and "(Get-PythonEnvRecord $sel | ConvertTo-Json -Compress)" in src
+    assert src.count("python     = $pyEnv") == 2, "deploy_manifest.json 與 build_history.jsonl 的 env 都要有 python"

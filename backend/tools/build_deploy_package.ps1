@@ -182,6 +182,7 @@ function Select-MotrixPython {
     $prevIo = $env:PYTHONIOENCODING
     $env:PYTHONIOENCODING = "utf-8"
     $exe = $null
+    $exeVer = ""
     $report = @()
     foreach ($c in $candidates) {
         $ver = (& $c -c "import sys; print(sys.version.split()[0])" 2>$null)
@@ -201,11 +202,22 @@ function Select-MotrixPython {
             continue
         }
         Write-Host ("        [OK]   {0,-8} {1}" -f $ver, $c) -ForegroundColor Green
-        if (-not $exe) { $exe = $c }
+        if (-not $exe) { $exe = $c; $exeVer = "$ver".Trim() }
     }
     $env:PYTHONIOENCODING = $prevIo
     $ErrorActionPreference = $prevEAP
-    return @{ Exe = $exe; Report = $report; Candidates = $candidates; Project = $proj }
+    return @{ Exe = $exe; Version = $exeVer; Report = $report; Candidates = $candidates; Project = $proj }
+}
+
+# 選中的直譯器寫進 deploy_manifest.json／build_history 的 env.python（稽核 D BP-M1：只印在畫面上的話，
+# 事後看安裝包查不到「挑到別的 venv」——那正是這一段要防的事）。source：project＝主工作樹的專案 venv；fallback＝PATH 或其他後備。
+# -WhichPython 乾跑印同一份（WHICH_PYTHON_ENV=），題目靠它驗「manifest 記的就是實際挑的」。
+function Get-PythonEnvRecord($sel) {
+    return [ordered]@{
+        path    = $sel.Exe
+        version = $sel.Version
+        source  = $(if ($sel.Project -and $sel.Exe -eq $sel.Project) { "project" } else { "fallback" })
+    }
 }
 
 # --- 定位 repo 根目錄與專案子目錄 ---
@@ -231,6 +243,7 @@ if ($WhichPython) {
     $sel = Select-MotrixPython
     if (-not $sel.Exe) { Write-Host "WHICH_PYTHON="; exit 2 }
     Write-Host "WHICH_PYTHON=$($sel.Exe)"
+    Write-Host ("WHICH_PYTHON_ENV=" + (Get-PythonEnvRecord $sel | ConvertTo-Json -Compress))
     exit 0
 }
 
@@ -416,6 +429,7 @@ if ($candidates.Count -eq 0) {
     Fail "PATH 上找不到 python。請確認開發環境的 Python 可用後再重新執行。"
 }
 $pyExe = $sel.Exe
+$pyEnv = Get-PythonEnvRecord $sel
 $report = $sel.Report
 if (-not $pyExe) {
     Fail @"
@@ -988,6 +1002,7 @@ $manifest = [ordered]@{
         phys_cores = $physCores
         workers    = $workers
         priority   = "BelowNormal"
+        python     = $pyEnv
     }
 }
 $manifestPath = Join-Path $pkgDir "deploy_manifest.json"
@@ -1066,6 +1081,7 @@ try {
             phys_cores = $physCores
             workers    = $workers
             priority   = "BelowNormal"
+            python     = $pyEnv
         }
     } | ConvertTo-Json -Depth 6 -Compress)
     Add-Content -Path $histPath -Value $histLine -Encoding UTF8
