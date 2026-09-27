@@ -187,6 +187,56 @@
 - 2026-09-27 14:02 D：O13-2 ea93e37c **通過**（突變 2/2 紅；基底是 c7f02596，上車前 rebase 到 e67879f2、無交會）。O14 d75b1784 **必修 O14-M1**：n1 格沒斷言子行程真的起 xdist worker（拿掉 -n 1 仍 2 過）；看門狗突變紅；同型盤點：沒隔離鎖檔 0 檔，子行程期限≥外層上限 1 檔（test_shared_playwright_event_loop，O14-S2）；O14-S1 cap≤50 時期限不再小於外層。absent404-3 8d4cf4dd **必修 AB3-M1**：manifests 掃出空的 ⇒ 靜默略過（突變存活），略過要用獨立訊號（已搬遷的組資料夾存在就不准略過）。
 - 2026-09-27 13:53 D：c-approval-l1-2 81972141——AL-M1／S1／O1／O4 關閉（突變 8/8 紅，真刪 M01／M05 只剩允許 5）。**新必修** AL2-M1：M01 不在時 quote_no 空的單 superadmin 看得到、詳情 404；AL2-M2：case.summary 加 SQL_DEAL_TAG（內含 json_extract）⇒ 壞 JSON 報價單讓整個查詢 500（詳情實測；rebase a-m06-8 後傳票案件清單全壞）。主持前提：壞 JSON 不會被簽掉（approve 500）；c-queue-json 的跳過只能限解析不了的。更正 D 上一輪 ④（照 C 申報、未自驗）。§G5 更正第 2 列、補 13（列出⇔放行同一輸入）、14（繞過分支兩方向、用無一般權限的人）。
 - 2026-09-27 13:36 主持裁示〔第十二班 core-only 已知紅〕：第十二班把 M01、M06 帶進 modules/ 後，「11 個模組同時拿掉」第一次真正成立，core-only 反向控制多出 65 題非預期紅（列車長抽樣：daily_tasks、supply、crm、subcontract、tax_calc_contract 等既有題隱含「M01 一定在」；產品本身 11 模組全拿掉可正常啟動）。裁示：**第十二班以這 65 題登記 core_only_known_red.json 合回**（逐題附成因類別，Ruling-By: 8d），**到期＝第十三班**：第十三班帶 h-m01-6（M01 不在時逐題標記）＋c-approval-l1-2＋c-queue-json，列車長必須把清單縮到只剩仍紅的題，並逐題回報；第十三班合回後 core_only_known_red.json 必須為空，否則不得進入全量與 D7。e2e -n 3 試跑量測：最低可用記憶體 12.23 GB、偶發紅 1 題（inflight[n2]＝O14，B 已修 wip/b-o14）；暫不改預設，再收一班資料。
+  - 〔第十二班 core-only 已知紅〕列車長逐題成因分類（49 個裸函式名涵蓋 65 個題項，含 parametrize 變體；`tools/platform/core_only_known_red.json` 的 `ruling` 欄一律填本行上方裁示錨點）：
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**（頂層或函式內直接 `import modules.<key>...`，未檢查 `module_installed`）：`test_calendar_writeback_case_stage_slots_are_separate`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_document_kinds_do_not_overwrite_concurrent_edits`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_document_kinds_write_their_own_row`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_every_owner_registers_its_writeback`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_unknown_stage_slot_is_refused`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_with_owner_event_id_is_written_back`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_calendar_writeback_without_owner_event_is_created_but_nothing_is_written`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_case_bundle_without_m04`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_case_bundle_without_m06`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_daily_task_connector_without_m12_stage_still_saves_and_says_so`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_default_terms_come_from_m01_and_say_when_absent`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_m01_and_l1_no_longer_write_foreign_tables`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_m01_fills_case_names_only_when_missing`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_old_location_is_an_alias_of_the_l1_object`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_old_names_are_aliases_of_the_l1_objects`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_provider_forwards_to_the_m01_function_with_the_same_arguments`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_recognition_basis_is_pure_l1_and_aliased`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_same_rule_everywhere`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_scanner_sees_the_codebase`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_crm_the_quote_is_deleted_and_the_user_is_told`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m03_case_bundle_says_there_are_no_shipping_notes`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m03_device_serials_are_saved_but_not_synced_and_it_says_so`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m03_no_serial_change_means_no_notice`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m12_deleting_a_stage_with_a_task_says_so`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m12_uncheck_says_the_old_task_was_not_withdrawn`
+    - 〔第十二班 core-only 已知紅〕**MOD_IMPORT**：`test_without_m12_uncheck_with_no_task_says_nothing`
+    - 〔第十二班 core-only 已知紅〕**MOD_READTEXT**（直接 `read_text()` 讀已移除模組的原始碼檔案路徑，未檢查存在）：`test_m01_approval_queue_no_longer_imports_m06`
+    - 〔第十二班 core-only 已知紅〕**MOD_READTEXT**：`test_m01_does_not_import_m03_routers`
+    - 〔第十二班 core-only 已知紅〕**MOD_READTEXT**：`test_m01_endpoints_do_not_touch_other_modules_tables`
+    - 〔第十二班 core-only 已知紅〕**MOD_READTEXT**：`test_m01_no_longer_writes_stock_items`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**（`registry.single_provider()`／`providers()` 取回後未檢查 None／空，或預期清單寫死含已移除模組自己的登記名稱）：`test_case_deadlines_provider_is_registered`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_each_provider_refuses_a_reader_who_cannot_see_the_case`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_every_reassign_type_has_one_provider`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_ip12_summary_forwards_to_case_summary`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_l1_side_providers_refuse_to_swallow_broken_json`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_locations_address_rule_visibility_and_fingerprint`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_runtime_refuses_system_from_an_l2_module`
+    - 〔第十二班 core-only 已知紅〕**MOD_PROVIDER**：`test_summary_fields_visibility_and_filters`
+    - 〔第十二班 core-only 已知紅〕**SCAN_THRESHOLD**（靜態掃描斷言寫死數量門檻，11 模組全拿掉後低於門檻）：`test_no_writes_to_dev_cases_outside_crm`
+    - 〔第十二班 core-only 已知紅〕**EXAMPLE_PATH**（測試用其他模組如 tender_radar 的檔案路徑／表單頁當範例輸入，模組拿掉後不存在）：`test_every_pii_form_has_a_decision_and_it_still_holds`
+    - 〔第十二班 core-only 已知紅〕**EXAMPLE_PATH**：`test_modtest_cap_follows_content_not_name`
+    - 〔第十二班 core-only 已知紅〕**EXAMPLE_PATH**：`test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked`
+    - 〔第十二班 core-only 已知紅〕**RC_EXHAUSTED**（`test_module_boundaries.py` 跨組反向控制候選機制在 L2 完全不存在時 StopIteration／候選耗盡）：`test_rc_cross_edge_candidates_are_scanned`
+    - 〔第十二班 core-only 已知紅〕**RC_EXHAUSTED**：`test_rc_end_to_end_through_real_source`
+    - 〔第十二班 core-only 已知紅〕**RC_EXHAUSTED**：`test_rc_foreign_table_write_is_caught`
+    - 〔第十二班 core-only 已知紅〕**RC_EXHAUSTED**：`test_rc_new_cross_import_is_caught`
+    - 〔第十二班 core-only 已知紅〕**SPARSE_ARTIFACT**（`core_only_rc.py` 的 sparse-checkout 反向控制手法本身造成的假象，非功能性問題）：`test_branch_does_not_touch_generated_files`
+    - 〔第十二班 core-only 已知紅〕**NEEDS_REVIEW**（測試本身在驗「M01 不在」的行為卻仍然紅，根因需要個別複核）：`test_rc_the_probe_reports_m01_when_it_is_imported`
+    - 〔第十二班 core-only 已知紅〕**NEEDS_REVIEW**：`test_without_m01_access_is_404_even_though_the_table_and_row_exist`
 - 2026-09-27 13:02 D：h-m01-7 e67879f2 **M6-M1 關閉 ⇒ M5-M1 關閉**：真刪 M01 sparse 樹 inflight 20 過、0 略過（n2 實跑）；檔內 needs_m01／requires_module 殘留 0。M01 串（c-m01-5＋h-m01-6＋-7）必修全關。n2 負載逾時＝O14 交 B。
 - 2026-09-27 12:49 D：h-m01-6 196af8fb **M5-M1 關閉，條件 M6-M1**：M01 在時 212 檔逐檔通過數與基準相同；M01 不在時非 e2e 487 過、e2e 48 過、0 紅，略過的題全在清單上（10 檔標記失效重跑 96 紅／38 過，38 題都有照跑）。M6-M1：inflight[n2] 不需要 M01（不帶標記真刪樹 20/20 過），錯在 D 的清單（負載逾時），已在清單檔更正並保留原列。
 - 2026-09-27 12:26 D：c-approval-l1 3897f15b **必修 AL-M1**：selfViewBy 兩方向都無題——拿掉「是否本人」比對（外人 200 看到客戶／案名／成交標籤）或讓它失效，380 題皆綠；補外人 404、無案件權限申請人 200 兩題。其餘成立：路由 566 同、新舊行為逐格等價、①③④ 與轉簽權限突變紅、deal_tag 交會有題鎖、真刪 M01 只剩允許 5。建議 AL-S1 查無與看不到訊息不同（既有、可列舉並洩漏關聯單號）。觀察：M05 缺席 2 紅為基底既有；④ 壞 JSON 行為無題。待驗：真刪 M06。
