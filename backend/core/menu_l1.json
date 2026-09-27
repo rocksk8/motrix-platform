@@ -117,6 +117,19 @@
   },
   {
    "group": "mywork",
+   "href": "approval-queue.html",
+   "label": "簽核佇列",
+   "order": 30,
+   "perm": [
+    "quotation"
+   ],
+   "extra_badge": {
+    "id": "sb-approval-badge",
+    "color": "#DC2626"
+   }
+  },
+  {
+   "group": "mywork",
    "href": "approval-delegates.html",
    "label": "簽核代理人",
    "order": 40,

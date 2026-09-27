@@ -30,7 +30,7 @@ from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, approval_delegates, accounting_export, licensing, map_points, account_items, vouchers
+from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, approval_delegates, approval_queue, accounting_export, licensing, map_points, account_items, vouchers
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records
@@ -692,6 +692,7 @@ app.include_router(uploads.router)
 app.include_router(definitions.router)
 app.include_router(custom_records.router)
 app.include_router(approval_delegates.router)
+app.include_router(approval_queue.router)     # 待我簽核佇列（L1，2026-09-27 自 M01 搬入）
 app.include_router(accounting_export.router)
 app.include_router(licensing.router)
 # 地圖是**共用能力**，不是標案雷達的一部分（2026-09-21 使用者裁示）。

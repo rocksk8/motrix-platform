@@ -312,6 +312,7 @@
     "router:account_items",
     "router:accounting_export",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
@@ -1759,8 +1760,8 @@
    "kind": "js",
    "path": "frontend/static/notif.js",
    "routers_called": [
-    "mod:case/api/quotations",
     "mod:daily_tasks/api",
+    "router:approval_queue",
     "router:auth",
     "router:item_reads",
     "router:search",
@@ -3508,140 +3509,128 @@
      "path": "/api/quotations/{quote_no}/finance-summary"
     },
     {
-     "func": "get_approval_queue",
-     "line": 4407,
-     "method": "GET",
-     "path": "/api/approval-queue"
-    },
-    {
-     "func": "get_approval_queue_count",
-     "line": 4652,
-     "method": "GET",
-     "path": "/api/approval-queue/count"
-    },
-    {
      "func": "approve_quotation",
-     "line": 4739,
+     "line": 4546,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4852,
+     "line": 4659,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4937,
+     "line": 4744,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 5002,
+     "line": 4809,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 5138,
+     "line": 4945,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5220,
+     "line": 5027,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5251,
+     "line": 5058,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5282,
+     "line": 5089,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5323,
+     "line": 5130,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5381,
+     "line": 5188,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5446,
+     "line": 5253,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5487,
+     "line": 5294,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5523,
+     "line": 5330,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_queue_detail",
-     "line": 5850,
+     "line": 5657,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 6112,
+     "line": 5919,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     },
     {
      "func": "approval_history",
-     "line": 6227,
+     "line": 6034,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 6347,
+     "line": 6154,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 6414,
+     "line": 6221,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6568,
+     "line": 6375,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6582,
+     "line": 6389,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6613,
+     "line": 6420,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -6400,6 +6389,7 @@
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
+    "router:approval_queue",
     "router:auth",
     "router:uploads",
     "router:vouchers"
@@ -6413,6 +6403,7 @@
     "mod:payroll/api/bonus",
     "mod:subcontract/api/contractor_vouchers",
     "mod:supply/api/shipping_notes",
+    "router:approval_queue",
     "router:auth",
     "router:uploads",
     "router:vouchers"
@@ -8608,6 +8599,70 @@
    ],
    "tables_w_transitive": [
     "approval_delegates",
+    "audit_log",
+    "notifications",
+    "system_settings"
+   ]
+  },
+  "router:approval_queue": {
+   "api_prefixes": [
+    "/api/approval-queue"
+   ],
+   "dynamic_sql": false,
+   "helpers_transitive": [
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:module_registry",
+    "helper:row_access",
+    "helper:settings",
+    "helper:tiered_approval"
+   ],
+   "imports": [
+    "core:db",
+    "helper:approval_queue",
+    "helper:audit",
+    "helper:auth",
+    "helper:case_access",
+    "helper:tiered_approval",
+    "plat:registry",
+    "plat:txn"
+   ],
+   "kind": "router",
+   "path": "backend/routers/approval_queue.py",
+   "registered": true,
+   "routes": [
+    {
+     "func": "get_approval_queue",
+     "line": 112,
+     "method": "GET",
+     "path": "/api/approval-queue"
+    },
+    {
+     "func": "get_approval_queue_count",
+     "line": 151,
+     "method": "GET",
+     "path": "/api/approval-queue/count"
+    }
+   ],
+   "tables_ddl": [],
+   "tables_named": [],
+   "tables_r": [],
+   "tables_r_transitive": [
+    "approval_delegates",
+    "daily_tasks",
+    "departments",
+    "dev_cases",
+    "divisions",
+    "projects",
+    "quotations",
+    "sessions",
+    "shipping_notes",
+    "users"
+   ],
+   "tables_w": [],
+   "tables_w_transitive": [
     "audit_log",
     "notifications",
     "system_settings"

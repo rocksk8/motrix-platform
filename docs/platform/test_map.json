@@ -1492,7 +1492,7 @@
     "dir:backend/modules/arap/",
     "file:backend/tests/_requires.py",
     "mod:arap/api/payment_requests",
-    "mod:case/api/quotations",
+    "router:approval_queue",
     "router:system"
    ],
    "evidence": {
@@ -1502,7 +1502,7 @@
     ],
     "api": [
      "backend/modules/arap/api/payment_requests.py",
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/system.py"
     ],
     "module_dir": [
@@ -1712,14 +1712,13 @@
     "core:db",
     "dir:backend/modules/arap/",
     "dir:backend/modules/case/",
-    "dir:backend/modules/case/api/",
     "dir:backend/modules/subcontract/",
     "dir:backend/modules/supply/",
-    "mod:case/api/__init__",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:registry",
-    "plat:source_tree"
+    "plat:source_tree",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -1727,17 +1726,14 @@
      "backend/core/registry.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/modules/case/api/__init__.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
     ],
     "path": [
      "backend/modules/arap/",
-     "backend/modules/case/",
-     "backend/modules/case/api/",
-     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/",
      "backend/modules/supply/"
     ],
@@ -2666,9 +2662,9 @@
     "core:db",
     "dir:backend/modules/payroll/",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
     "mod:payroll/api/bonus",
-    "mod:payroll/tests/_bonus_insure"
+    "mod:payroll/tests/_bonus_insure",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -2677,8 +2673,8 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
-     "backend/modules/payroll/api/bonus.py"
+     "backend/modules/payroll/api/bonus.py",
+     "backend/routers/approval_queue.py"
     ],
     "module_dir": [
      "backend/modules/payroll/"
@@ -3901,10 +3897,10 @@
     "dir:backend/modules/subcontract/",
     "dir:frontend/pages/",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
     "mod:subcontract/api/contractors",
     "page:pages/approval-queue.html",
-    "page:pages/contractors.html"
+    "page:pages/contractors.html",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -3913,8 +3909,8 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
-     "backend/modules/subcontract/api/contractors.py"
+     "backend/modules/subcontract/api/contractors.py",
+     "backend/routers/approval_queue.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html",
@@ -4023,18 +4019,18 @@
    "units": [
     "dir:backend/modules/subcontract/",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
     "mod:subcontract/api/contractor_vouchers",
-    "mod:subcontract/api/vendor_contractors"
+    "mod:subcontract/api/vendor_contractors",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
      "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/modules/subcontract/api/vendor_contractors.py"
+     "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/approval_queue.py"
     ],
     "module_dir": [
      "backend/modules/subcontract/"
@@ -4447,6 +4443,7 @@
     "mod:supply/api/suppliers",
     "router:account_items",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
@@ -4483,6 +4480,7 @@
      "backend/modules/supply/api/suppliers.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
@@ -6458,6 +6456,7 @@
     "page:pages/bonus.html",
     "router:account_items",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
@@ -6493,6 +6492,7 @@
      "backend/modules/supply/api/suppliers.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
@@ -7994,8 +7994,8 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
-    "page:pages/approval-queue.html"
+    "page:pages/approval-queue.html",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8003,7 +8003,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ],
     "page": [
      "frontend/pages/approval-queue.html"
@@ -8035,7 +8035,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations"
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8043,7 +8043,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -8248,7 +8248,7 @@
    "units": [
     "core:db",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
+    "router:approval_queue",
     "router:system",
     "router:vouchers"
    ],
@@ -8258,7 +8258,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/system.py",
      "backend/routers/vouchers.py"
     ]
@@ -8819,7 +8819,8 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -8828,7 +8829,8 @@
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -9253,6 +9255,7 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:case/api/quotations",
+    "router:approval_queue",
     "router:system"
    ],
    "evidence": {
@@ -9262,6 +9265,7 @@
     ],
     "api": [
      "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/system.py"
     ]
    },
@@ -9601,8 +9605,8 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:case/api/completion_notes",
-    "mod:case/api/quotations",
-    "mod:case/completion_pdf"
+    "mod:case/completion_pdf",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -9612,7 +9616,7 @@
     ],
     "api": [
      "backend/modules/case/api/completion_notes.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -9715,13 +9719,13 @@
     "helper:formula",
     "helper:module_registry",
     "helper:tiered_approval",
-    "mod:case/api/quotations",
     "plat:__init__",
     "plat:definitions",
     "plat:events",
     "plat:migrations",
     "plat:registry",
     "plat:txn",
+    "router:approval_queue",
     "router:auth",
     "router:custom_records",
     "router:definitions",
@@ -9747,7 +9751,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py",
@@ -10499,13 +10503,13 @@
     "dir:backend/modules/arap/",
     "dir:backend/modules/subcontract/",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
     "mod:supply/api/shipping_notes",
     "page:index.html",
     "page:pages/case-management.html",
     "page:pages/login.html",
     "plat:__init__",
     "plat:source_tree",
+    "router:approval_queue",
     "router:auth",
     "router:custom_records",
     "router:item_reads",
@@ -10520,7 +10524,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/custom_records.py",
      "backend/routers/item_reads.py",
@@ -11511,10 +11515,10 @@
     "core:db",
     "file:backend/tests/_e2e_login.py",
     "file:backend/tests/_requires.py",
-    "mod:case/api/quotations",
     "page:pages/approval-queue.html",
     "page:pages/custom-records.html",
     "page:pages/module-builder.html",
+    "router:approval_queue",
     "router:custom_records",
     "router:definitions"
    ],
@@ -11525,7 +11529,7 @@
      "backend/tests/_requires.py"
     ],
     "api": [
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/custom_records.py",
      "backend/routers/definitions.py"
     ],
@@ -13806,6 +13810,7 @@
     "plat:source_tree",
     "router:account_items",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
@@ -13844,6 +13849,7 @@
      "backend/modules/supply/api/suppliers.py",
      "backend/routers/account_items.py",
      "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
@@ -14539,6 +14545,7 @@
     "mod:subcontract/api/contractors",
     "mod:subcontract/api/vendor_contractors",
     "page:pages/customers.html",
+    "router:approval_queue",
     "router:auth",
     "router:customers",
     "router:list_prefs",
@@ -14558,6 +14565,7 @@
      "backend/modules/crm/api.py",
      "backend/modules/subcontract/api/contractors.py",
      "backend/modules/subcontract/api/vendor_contractors.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/customers.py",
      "backend/routers/list_prefs.py",
@@ -14821,6 +14829,7 @@
     "router:account_items",
     "router:accounting_export",
     "router:approval_delegates",
+    "router:approval_queue",
     "router:auth",
     "router:company_lookup",
     "router:custom_records",
@@ -14875,6 +14884,7 @@
      "backend/routers/account_items.py",
      "backend/routers/accounting_export.py",
      "backend/routers/approval_delegates.py",
+     "backend/routers/approval_queue.py",
      "backend/routers/auth.py",
      "backend/routers/company_lookup.py",
      "backend/routers/custom_records.py",
@@ -15019,17 +15029,17 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:analytics/api/dashboard",
-    "mod:case/api/quotations"
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
      "backend/db.py",
-     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py",
      "backend/tests/_requires.py"
     ],
     "api": [
      "backend/modules/analytics/api/dashboard.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/routers/approval_queue.py"
     ]
    },
    "login_fixture": true
@@ -17035,7 +17045,8 @@
     "core:db",
     "file:backend/tests/_requires.py",
     "mod:case/api/case_extra_expenses",
-    "mod:case/api/quotations"
+    "mod:case/api/quotations",
+    "router:approval_queue"
    ],
    "evidence": {
     "import": [
@@ -17044,7 +17055,8 @@
     ],
     "api": [
      "backend/modules/case/api/case_extra_expenses.py",
-     "backend/modules/case/api/quotations.py"
+     "backend/modules/case/api/quotations.py",
+     "backend/routers/approval_queue.py"
     ]
    }
   },
