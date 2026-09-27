@@ -39,7 +39,12 @@ from datetime import datetime
 
 #: 正式機驗章用的公鑰（PEM）。U-4：私鑰放開發機本機檔＋使用者離線備份；公鑰由 `keygen` 印出後貼在這裡、隨版本出貨。
 #: 空的 ⇒ verify 一律拒絕（「尚未設定交付公鑰」），不會退回「不驗章」。
-DELIVERY_PUBKEY_PEM = b""
+# 2026-09-28 使用者授權主持產生（私鑰只在開發機 D:\MOTRIX-KEYS\delivery，另有本機備份；不上雲）。換金鑰＝換這個常數並隨版本出貨。
+DELIVERY_PUBKEY_PEM = (
+    b"-----BEGIN PUBLIC KEY-----\n"
+    b"MCowBQYDK2VwAyEAmq8vwzNR4dJwhycE4bPdw/ecx4tpspqXPAKWO81QUho=\n"
+    b"-----END PUBLIC KEY-----\n"
+)
 
 FORMAT = 1
 KEEP_DEFAULT = 3                     # U-5
