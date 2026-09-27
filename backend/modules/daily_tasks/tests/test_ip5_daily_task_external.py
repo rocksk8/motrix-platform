@@ -14,7 +14,7 @@ def _inline_bg(monkeypatch):
     """端點的背景同步改成當場執行（同 tests/platform/test_case_stage_connectors.py 的同名夾具）。
 
     搬檔時漏了這個 ⇒ 斷言與背景執行緒賽跑：單跑多半綠，前面先跑 netplan 測試就穩定紅（2026-09-26 M10 閘門）。"""
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: target(*args))
 
 

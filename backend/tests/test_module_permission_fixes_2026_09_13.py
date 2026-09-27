@@ -727,7 +727,7 @@ def test_semi_unlock_change_emails_superadmin(client, make_user, monkeypatch):
     """
     import db
     import helpers.email_notify as en
-    import routers.quotations as q
+    import modules.case.api.quotations as q
 
     monkeypatch.setattr(q, "spawn_bg_thread", lambda fn, args=(), **kw: fn(*args))
     sent = []

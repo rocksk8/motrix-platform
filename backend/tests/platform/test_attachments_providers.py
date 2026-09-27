@@ -70,7 +70,7 @@ def test_providers_cover_the_whitelist_without_overlap(client):
             assert st in va.SOURCE_TYPES, "%s 提供了白名單外的類型 %s" % (name, st)
             assert st not in seen, "%s 同時由 %s 與 %s 提供" % (st, seen[st], name)
             seen[st] = name
-    owner_path = {"case": "routers/quotations.py", "arap": "modules/arap/api/invoice_vouchers.py",
+    owner_path = {"case": "modules/case/api/quotations.py", "arap": "modules/arap/api/invoice_vouchers.py",
                   "subcontract": "modules/subcontract/api/vendor_contractors.py"}
     want = {st for st, (key, _l, _w) in va._SOURCE_OWNERS.items() if source_tree.module_installed(owner_path[key])}
     assert set(seen) == want, "在場的提供者沒有涵蓋該在的類型：少 %s" % sorted(want - set(seen))

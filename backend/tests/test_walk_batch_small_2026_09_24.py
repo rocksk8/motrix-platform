@@ -26,7 +26,7 @@ RPT = "Alpine.$data(document.querySelector('[x-data]'))"
     ("case_incomplete", "exec"),
 ])
 def test_flag_link_opens_the_tab_where_the_data_is_entered(kind, tab):
-    from helpers.recognition import FLAG_TABS, _flag_item
+    from modules.case.recognition import FLAG_TABS, _flag_item
     assert FLAG_TABS[kind] == tab
     it = _flag_item("MQ-X-1", "客", "案件", "d", 1, "2026-01-01", True, kind=kind)
     assert it["link"] == "case-management.html?q=MQ-X-1&tab=%s" % tab
@@ -34,7 +34,7 @@ def test_flag_link_opens_the_tab_where_the_data_is_entered(kind, tab):
 
 def test_every_flag_kind_has_a_tab_decision():
     """守門：新增旗標種類時必須決定它開哪個分頁（legacy_tax 是報價單層級，刻意不帶分頁）。"""
-    from helpers.recognition import FLAG_LABELS, FLAG_TABS
+    from modules.case.recognition import FLAG_LABELS, FLAG_TABS
     assert set(FLAG_TABS) == set(FLAG_LABELS), set(FLAG_LABELS) ^ set(FLAG_TABS)
     assert FLAG_TABS["legacy_tax"] is None
 
@@ -42,7 +42,7 @@ def test_every_flag_kind_has_a_tab_decision():
 def test_case_page_accepts_every_flag_tab_as_deep_link():
     from pathlib import Path
     import re
-    from helpers.recognition import FLAG_TABS
+    from modules.case.recognition import FLAG_TABS
     js = (Path(__file__).resolve().parents[2] / "frontend" / "js" / "case-management-core.js").read_text(encoding="utf-8")
     valid = re.search(r"var valid = \[([^\]]*)\]", js).group(1)
     for tab in {t for t in FLAG_TABS.values() if t}:

@@ -46,7 +46,7 @@ def _open(e2e_browser, live_server, user):
 
 @pytest.mark.e2e
 def test_shipping_tab_says_the_module_is_missing(live_server, make_user, e2e_browser, monkeypatch):
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     _without(monkeypatch, "shipping.list_for_case", "supply")
     u = make_user(username="nosup_e1", role="superadmin")
     _seed()
@@ -65,7 +65,7 @@ def test_shipping_tab_says_the_module_is_missing(live_server, make_user, e2e_bro
 
 @pytest.mark.e2e
 def test_saving_device_serials_says_stock_was_not_synced(live_server, make_user, e2e_browser, monkeypatch):
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     _without(monkeypatch, "stock.serial", "supply")
     u = make_user(username="nosup_e2", role="superadmin")
     _seed()

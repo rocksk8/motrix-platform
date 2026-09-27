@@ -2,7 +2,7 @@
 
 使用者：「我跟另一位是最高管理者，需要我簽核但簽核佇列未顯示」。
 
-`routers/quotations.py` 裡已經有兩則註解在講同一件事——
+`modules/case/api/quotations.py` 裡已經有兩則註解在講同一件事——
 「角標數字要跟佇列列表一致，漏掉就會變成『列得出來但 topbar 是 0』，
 **兩邊矛盾比兩邊都沒有更難查**」——但那是靠每次新增單據類型時人工記得補，
 而 `/api/approval-queue` 與 `/api/approval-queue/count` 是**兩段各自獨立的

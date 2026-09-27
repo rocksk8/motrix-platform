@@ -65,7 +65,7 @@ MINIMAL_INPUT = {
 
 
 #: builder 不在 pdf_gen 的（樣板已搬回擁有模組）：名稱 → 模組名
-BUILDER_HOME = {"_build_completion_html": "completion_pdf"}
+BUILDER_HOME = {"_build_completion_html": "modules.case.completion_pdf"}   # M01 ②
 
 
 def builder(name):

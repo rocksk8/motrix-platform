@@ -52,7 +52,7 @@ def _q(sql, *args):
 
 
 def test_without_m03_case_bundle_says_there_are_no_shipping_notes(client, make_user, monkeypatch):
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     _without(monkeypatch, "shipping.list_for_case", "supply")
     h = _login(client, make_user, "sup_bundle")
     _case("MQ-SUP-B1")
@@ -63,7 +63,7 @@ def test_without_m03_case_bundle_says_there_are_no_shipping_notes(client, make_u
 
 
 def test_without_m03_device_serials_are_saved_but_not_synced_and_it_says_so(client, make_user, monkeypatch):
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     _without(monkeypatch, "stock.serial", "supply")
     h = _login(client, make_user, "sup_stock")
     _case("MQ-SUP-S1")
@@ -113,11 +113,11 @@ def _sql_targets(rel):
 
 def test_m01_no_longer_writes_stock_items():
     """IP-19 之後 M01 不直寫 M03 的庫存表（table_write_exceptions 對應 debt 已刪）。正對照：同一個掃描抓得到 M01 自己的表。"""
-    got = _sql_targets("routers/quotations.py")
+    got = _sql_targets("modules/case/api/quotations.py")
     assert "quotations" in got and "case_stages" in got, got
     assert "stock_items" not in got
 
 
 def test_m01_does_not_import_m03_routers():
-    src = (BACKEND / "routers" / "quotations.py").read_text(encoding="utf-8")
+    src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
     assert not re.search(r"from routers\.(shipping_notes|inventory|suppliers)\b|import (shipping_notes|inventory|suppliers)\b", src)

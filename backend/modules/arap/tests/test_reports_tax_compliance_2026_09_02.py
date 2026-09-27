@@ -2,7 +2,7 @@
 
 （2026-09-26 自 tests/test_reports_tax_compliance_2026_09_02.py 拆出：這幾題需要本模組在，隨模組搬走。原檔的說明：）
 2026-09-02（公司內控＋台灣國稅局視角複查）發現並修復的 4 項：
-①發票號碼格式驗證＋重複偵測（helpers/quotations.py::validate_invoice_no()）
+①發票號碼格式驗證＋重複偵測（modules/case/quotations.py::validate_invoice_no()）
 ②稅務匯出不再讓「已核准稅額沖銷」回溯性地把已開立發票的稅額改成 0
 ③稅額計算改用四捨五入（ROUND_HALF_UP），不用 Python 內建的銀行家捨入
 ④營運報表/銷項發票清單/銀行對帳單匯出補上稽核記錄

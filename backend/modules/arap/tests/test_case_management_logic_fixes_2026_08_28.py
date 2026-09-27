@@ -7,7 +7,7 @@
 ②list_case_updates()（案件管理「動態」Tab）合併 5 種來源時，只有其中一種
   （audit_log）做了跨表時間格式正規化，dev_logs 用空白分隔格式，跟其餘多數
   來源的 'T' 分隔格式排序時永遠排在前面（不管實際時間點），已抽成共用的
-  helpers/quotations.py::norm_at() 套用到全部來源。
+  modules/case/quotations.py::norm_at() 套用到全部來源。
 """
 import json
 

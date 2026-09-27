@@ -1,6 +1,6 @@
 """專案管理併入案件管理（2026-08-26）整合測試。涵蓋新增的三塊能力：
 - case_action_items 代辦事項 CRUD + 工程主管/業務主管兩階段簽核
-  （routers/case_action_items.py，透過案件 sales_person_id → users.department_id
+  （modules/case/api/case_action_items.py，透過案件 sales_person_id → users.department_id
   → departments/divisions.manager_user_id 查主管，見該檔 _case_approver_ids()）
 - work_logs 照片上傳/刪除（routers/system.py 新增端點，沿用 projects.py 既有的
   GPS/浮水印處理管線）

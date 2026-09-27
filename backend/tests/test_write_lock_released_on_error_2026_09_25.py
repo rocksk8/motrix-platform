@@ -7,7 +7,7 @@
 """
 import pytest
 
-import routers.quotations as q
+import modules.case.api.quotations as q
 
 
 class _BoomAfterBegin:

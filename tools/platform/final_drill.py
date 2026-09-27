@@ -55,7 +55,6 @@ DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")
 #:   （沒宣告的模組不可以進正式 D7）；包裡有、key 沒登記 ⇒ 判不過（打錯字或改名）。
 SMOKE = [
     ("首頁", "GET", "/"), ("登入頁", "GET", "/pages/login.html"),
-    ("報價單列表", "GET", "/api/quotations"), ("案件管理頁", "GET", "/pages/case-management.html"),
     ("傳票列表", "GET", "/api/vouchers"), ("傳票頁", "GET", "/pages/voucher.html"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),

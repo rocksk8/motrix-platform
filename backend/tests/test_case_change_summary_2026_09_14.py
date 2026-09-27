@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-import routers.quotations as rq
+import modules.case.api.quotations as rq
 
 
 def _cr(**over):

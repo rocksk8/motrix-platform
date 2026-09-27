@@ -1,6 +1,6 @@
 """IP-13 `crm.quote_deleted` 取用方這一側（M01 刪報價單）：M02 不在時也要成立的題（M02 搬遷，2026-09-26）。
 
-原本 M01 `routers/quotations.py` 直寫 `dev_cases`（table_write_exceptions 的 debt）⇒ 改由 M02 提供。
+原本 M01 `modules/case/api/quotations.py` 直寫 `dev_cases`（table_write_exceptions 的 debt）⇒ 改由 M02 提供。
 ③ 反向控制：M02 不在 ⇒ 報價單照刪、案件不動、回應 notice 明說、記 WARNING
 ④ 產品碼除了 M02 與凍結 migration，沒有寫 dev_cases／dev_logs 的 SQL
 提供方的登記與正對照在 `modules/crm/tests/test_crm_quote_deleted_provider.py`（隨模組搬走）。
@@ -54,7 +54,7 @@ def test_without_crm_the_quote_is_deleted_and_the_user_is_told(client, make_user
     _seed()
     orig = registry.providers
     monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "crm.quote_deleted" else orig(cap))
-    from routers import quotations
+    from modules.case.api import quotations
     with caplog.at_level(logging.WARNING):
         r = client.delete("/api/quotations/%s" % QNO, headers=h)
     assert r.status_code == 200 and r.json() == {"ok": True, "notice": quotations.QUOTE_DELETED_CRM_ABSENT}

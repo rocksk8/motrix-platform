@@ -33,7 +33,7 @@ def _no_background_sync(monkeypatch):
     需要驗「端點有沒有真的呼叫這兩支」的那兩條測試會自己再蓋一次 monkeypatch
     換成記錄器（autouse fixture 先跑，測試內的 setattr 後跑，會蓋過這裡）。
     """
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     monkeypatch.setattr(q, "spawn_bg_thread", lambda target, args=(), **kw: None)
 
 
@@ -162,7 +162,7 @@ def test_uncheck_deletes_the_done_event(client, make_user, monkeypatch):
 
 def test_ticking_a_stage_triggers_both_syncs(client, make_user, monkeypatch):
     """端點真的有接上這兩支——helper 寫得再好，沒被呼叫就等於沒做。"""
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     username, password = make_user(username="stgboth", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-STGBOTH-001")
@@ -183,7 +183,7 @@ def test_ticking_a_stage_triggers_both_syncs(client, make_user, monkeypatch):
 
 def test_non_done_edits_do_not_spam_the_calendar(client, make_user, monkeypatch):
     """只改標題之類的不該重推事件——每推一次就是一封 Google API 請求。"""
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     username, password = make_user(username="stgnospam", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-STGNOSPAM-001")

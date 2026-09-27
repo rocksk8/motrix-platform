@@ -28,7 +28,7 @@ routers/system.py  _MODULE_ACTION_PREFIXES／_MODULE_EXCLUDE_ACTIONS（選單紅
 #: `project_manage`：
 #:   2026-09-13（模組權限稽核）：`project_manage` 補回目錄。它是「專案管理」
 #:   時代留下的 key，2026-08-26 專案管理併入案件管理時從這份目錄移除，
-#:   但 `routers/material_orders.py` 至今仍拿它擋「修改叫料」——結果是這個
+#:   但 `modules/case/api/material_orders.py` 至今仍拿它擋「修改叫料」——結果是這個
 #:   權限只剩 9 個舊帳號靠歷史殘值持有，**任何新建帳號都永遠拿不到、一改
 #:   叫料就 403，而且畫面上沒有任何地方勾得到**。key 維持原名不改（改名要
 #:   跑 migration，且那 9 個帳號會瞬間失去權限），只把標籤改成它今天實際

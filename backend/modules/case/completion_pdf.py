@@ -2,7 +2,7 @@
 """M01 案件：完工單 PDF 樣板（2026-09-25 自 pdf_gen.py 搬出，DEPENDENCY-MAP §3 #1）。
 
 pdf_gen（L1）只保留引擎與共用抬頭；完工單的版面與資料整形屬於案件模組，
-L1 不再 import routers.completion_notes。抬頭／頁尾經 `_pg.<name>` 晚綁定取用。
+L1 不再 import modules.case.api.completion_notes。抬頭／頁尾經 `_pg.<name>` 晚綁定取用。
 """
 import json
 import os
@@ -268,8 +268,8 @@ def _build_completion_html(n: dict) -> str:
 
 def _completion_note_dict(row) -> dict:
     """DB row → PDF 用的 dict。保固起訖在這裡算，PDF 與 API 走同一支
-    `routers/completion_notes.py::_warranty_range()`，不要在這裡再寫一份月份加法。"""
-    from routers.completion_notes import _warranty_range
+    `modules/case/api/completion_notes.py::_warranty_range()`，不要在這裡再寫一份月份加法。"""
+    from modules.case.api.completion_notes import _warranty_range
     n = dict(row)
     n["items"] = json.loads(n.pop("items_json", None) or "[]")
     n["noteNo"] = n.get("note_no", "")
@@ -291,7 +291,7 @@ def _completion_note_dict(row) -> dict:
     n["signedBy"] = n.get("signed_by", "")
     n["signedAt"] = n.get("signed_at", "")
     # 可自訂標題：使用者覆寫疊在預設值上，跟 API 走同一支 merged_labels()
-    from routers.completion_notes import merged_labels
+    from modules.case.api.completion_notes import merged_labels
     try:
         _dj = json.loads(n.get("data_json") or "{}") or {}
     except Exception:

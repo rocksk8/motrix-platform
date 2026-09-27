@@ -22,7 +22,9 @@ CALLERS = ["completion_notes.py", "contractor_vouchers.py", "invoice_vouchers.py
 CALLER_MODULES = {"contractor_vouchers.py": "modules/subcontract/api/contractor_vouchers.py",
                   "shipping_notes.py": "modules/supply/api/shipping_notes.py",
                   "invoice_vouchers.py": "modules/arap/api/invoice_vouchers.py",       # 2026-09-26 M05
-                  "payment_requests.py": "modules/arap/api/payment_requests.py"}
+                  "payment_requests.py": "modules/arap/api/payment_requests.py",
+                  "quotations.py": "modules/case/api/quotations.py",                    # 2026-09-26 M01 ②
+                  "completion_notes.py": "modules/case/api/completion_notes.py"}
 
 
 def _old_cascade_self_tiers(tiers, ct_idx, username, now, conn=None):
@@ -104,13 +106,15 @@ def test_a_delegated_cascade_records_on_behalf_of(client, make_user):
 def test_all_six_document_types_go_through_the_shared_helper():
     """六種單據的連簽都走同一個 helper（有人改回自己蓋章時這一題會抓到）。"""
     from core import source_tree
-    root = Path(__file__).resolve().parents[1] / "routers"
+    root = Path(__file__).resolve().parents[1] / "modules" / "case" / "api"   # M01 ②
     files = {p.name: p for p in source_tree.router_files()}      # 端點檔可能已搬進模組（外包工班：modules/subcontract/api/）
     for f in CALLERS:
         if f in CALLER_MODULES and not source_tree.module_installed(CALLER_MODULES[f]):
             continue
         src = files[f].read_text(encoding="utf-8")
         assert re.search(r"cascade_self_tiers\(", src), f
+    if not source_tree.module_installed("modules/case/api/case_extra_expenses.py"):
+        return
     xe = (root / "case_extra_expenses.py").read_text(encoding="utf-8")
     assert xe.count("cascade_self_tiers(") == 2 and "tier_completes_on_first" not in xe
 

@@ -4,7 +4,7 @@
 
 1. WebAuthn：`f8198e9` 讓四個端點在 RP ID 未設定時回 503，唯一的設定入口卻在
    另一個沒被部署的 commit 裡，結果後端上線了、卻沒有任何地方能填 RP ID。
-2. 叫料（`routers/material_orders.py`）：2026-09-10 修好四個缺陷、7 題 API 測試
+2. 叫料（`modules/case/api/material_orders.py`）：2026-09-10 修好四個缺陷、7 題 API 測試
    全綠，但整整一天沒有任何前端呼叫得到它，見 WEEKLY-AUDIT §E-1。
 
 兩次都不是「寫錯」，是「寫完忘了另一半」。純 API 測試對這種缺陷完全無感——

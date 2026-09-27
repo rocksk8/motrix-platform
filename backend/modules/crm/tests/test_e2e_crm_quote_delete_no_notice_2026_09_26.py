@@ -48,7 +48,7 @@ def _delete_and_read_toasts(live_server, make_user, new_page, login_as, name):
 
 @pytest.mark.e2e
 def test_no_notice_when_crm_is_present(live_server, make_user, new_page, login_as):
-    from routers import quotations
+    from modules.case.api import quotations
     toasts = _delete_and_read_toasts(live_server, make_user, new_page, login_as, "e2e_ip11_present")
     assert toasts == ["報價單已刪除"], toasts
     assert not any(quotations.QUOTE_DELETED_CRM_ABSENT in t for t in toasts)

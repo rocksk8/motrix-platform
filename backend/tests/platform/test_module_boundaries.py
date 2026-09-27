@@ -51,8 +51,9 @@ def _fmt(items):
 def test_scanner_sees_the_codebase(units):
     kinds = {u["kind"] for u in units.values()}
     assert {"router", "helper", "page", "table"} <= kinds
-    assert "helper:quotations" in units["router:quotations"]["imports"]
-    assert "quotations" in units["router:quotations"]["tables_w"]
+    # 正對照（M01 ② 起在 modules/case）：報價單 router import 報價單 helper、寫 quotations 表
+    assert "mod:case/quotations" in units["mod:case/api/quotations"]["imports"]
+    assert "quotations" in units["mod:case/api/quotations"]["tables_w"]
 
 
 # ── ① ─────────────────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ def test_write_exceptions_are_classified(exceptions):
 def _pick_new_cross_edge(units, groups, baseline):
     """找一對 L2 router（不同組），其間目前沒有邊。"""
     routers = sorted((groups.owner(n), n) for n, u in units.items()
-                     if u["kind"] == "router" and groups.owner(n) in groups.l2)
+                     if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2)   # M01 ② 之後 L2 幾乎都在 modules/
     base = set(baseline)
     for g1, r1 in routers:
         for g2, r2 in routers:
@@ -232,7 +233,7 @@ def test_rc_foreign_table_write_is_caught(units, groups, exceptions):
     tbl = next(t for t, gs in sorted(groups.table_groups.items()) if len(gs) == 1 and gs[0] in groups.l2)
     own = groups.table_owner(tbl)
     writer = next(n for n, u in sorted(units.items())
-                  if u["kind"] == "router" and groups.owner(n) in groups.l2 and groups.owner(n) != own)
+                  if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2 and groups.owner(n) != own)
     mut = copy.deepcopy(units)
     mut[writer]["tables_w"].append(tbl)
     before, _ = B.check_table_writes(units, groups, exceptions)
@@ -259,7 +260,7 @@ def test_rc_end_to_end_through_real_source(tmp_path, dep_scan, groups, baseline)
     """
     root = B.REPO
     sandbox = tmp_path / "repo"
-    for sub, pats in (("backend", ("*.py", "routers/*.py", "helpers/*.py")),
+    for sub, pats in (("backend", ("*.py", "routers/*.py", "helpers/*.py", "modules/**/*.py")),
                       ("frontend", ("**/*.html", "**/*.js"))):
         for pat in pats:
             for p in (root / sub).glob(pat):
@@ -272,8 +273,10 @@ def test_rc_end_to_end_through_real_source(tmp_path, dep_scan, groups, baseline)
     units0 = B.scan_units(dep_scan)
     g1, r1, g2, r2 = _pick_new_cross_edge(units0, groups, baseline)
     src_file = sandbox / units0[r1]["path"]
+    # r2 可能是 routers/ 的 router 或 modules/ 的單位（M01 ② 之後）⇒ 依它的實際路徑組 import
+    pkg, _, name = units0[r2]["path"][len("backend/"):-len(".py")].replace("/", ".").rpartition(".")
     src_file.write_text(src_file.read_text(encoding="utf-8-sig")
-                        + "\nfrom routers import %s as _zz_mutant  # noqa\n" % r2.split(":", 1)[1],
+                        + "\nfrom %s import %s as _zz_mutant  # noqa\n" % (pkg, name),
                         encoding="utf-8")
     (sandbox / "backend" / "routers" / "zz_mutant.py").write_text(
         "from fastapi import APIRouter\nrouter = APIRouter()\n", encoding="utf-8")

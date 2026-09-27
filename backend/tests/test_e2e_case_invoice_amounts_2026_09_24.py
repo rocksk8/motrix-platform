@@ -1,6 +1,6 @@
 """瀏覽器端對端：案件款項明細登錄「發票未稅／稅額」（AC1 使用者選 (a)）。
 
-後端規則（helpers/quotations.py::validate_invoice_amounts）：兩欄一起填或都不填；只填一欄 ⇒ 400；
+後端規則（modules/case/quotations.py::validate_invoice_amounts）：兩欄一起填或都不填；只填一欄 ⇒ 400；
 合計與該期金額不同 ⇒ 只提示不擋。沒有財務檢視權 ⇒ 比照 CM13 不渲染（後端本來就不回這兩鍵）。
 觀測點打在資料庫落地值。
 """

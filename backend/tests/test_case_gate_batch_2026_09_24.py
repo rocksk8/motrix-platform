@@ -131,7 +131,7 @@ def test_single_case_close_gates_matches_the_matrix(client, make_user):
 
 def test_matrix_query_count_does_not_grow_with_cases(client, make_user, monkeypatch):
     import sqlite3
-    import routers.quotations as rq
+    import modules.case.api.quotations as rq
     h = _login(client, *make_user(username="gb_count", role="admin"))
     import db
     now = "2026-01-01T00:00:00"

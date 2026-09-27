@@ -176,7 +176,9 @@ def _system_settings_pages():
 #:   舊單「舊的都是開發機測試用，直接作廢」）。移除它的 commit：
 #:   「feat(bonus §十一): 以案件為中心的獎金分潤頁面；出納可見範圍（C1）」。
 #:   以同一個掃描器比對 master（f57740b）與該分支，只少這一句。
-_BASELINE_COUNT = 138   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+_BASELINE_COUNT = 136   # 2026-09-25：只算 modules/ 以外（M11 的 6 條由 modules/tender_radar/tests/ 自己釘）
+#: 〔2026-09-26 M01 ②：138 → 136。M01 的 router 搬進 modules/case/api/，其中 2 條隨之移出掃描範圍；
+#:   同一個掃描器含 modules/ 的總數搬遷前後都是 157 ⇒ 沒有任何一句被刪，只是換了位置〕
 #: 〔2026-09-26 第十班列車：139 → 138。cashier.html／receivables.html／payment-request-form.html（arap，
 #:   實體不歸 modules/ 管，不在「排除 modules/」的判準內）改列進 `_MODULE_OWNED_FRONTEND_PAGES`
 #:   一起排除——這 3 頁裡剛好有 1 句導航語氣字串，換位置＝這一題的排除範圍換了，不是被刪；

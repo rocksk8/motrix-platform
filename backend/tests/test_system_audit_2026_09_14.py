@@ -701,7 +701,7 @@ _DELETE_OWNERSHIP_VERIFIED = {
     # 釋放自己的編輯鎖（edit_presence）
     ("system.py", "/api/edit-presence"),
     # 報價單刪除走**狀態**把關而不是角色——§5.1「僅草稿可刪；其他狀態回 403」
-    ("quotations.py", "/api/quotations/{quote_no}"),
+    ("modules/case/api/quotations.py", "/api/quotations/{quote_no}"),   # M01 ②：模組檔以相對路徑為名
 }
 
 

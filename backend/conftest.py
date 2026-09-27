@@ -19,7 +19,7 @@ import importlib
 import os as _bk19_os
 import sys
 
-# 資料庫結構守門（helpers.quotations._strict_db_guards）：產品預設只記 ERROR 照寫（不擋客戶存檔），
+# 資料庫結構守門（modules.case.quotations._strict_db_guards）：產品預設只記 ERROR 照寫（不擋客戶存檔），
 # 測試一律嚴格——漏網之魚在題目裡就紅。子行程（_subproc 起的 pytest／伺服器）也會繼承。
 _bk19_os.environ.setdefault("MOTRIX_STRICT_DB_GUARDS", "1")
 import tempfile as _bk19_tempfile
@@ -343,7 +343,7 @@ def _app(tmp_path_factory):
     #
     # 為什麼 per-test 不夠（2026-09-15 實測）：結案報表等 PDF 是
     # `spawn_bg_thread(_generate_case_closing_pdf, ...)` 在背景產生的
-    # （routers/quotations.py），Edge headless 渲染要好幾秒，寫檔時那一題早就結束、
+    # （modules/case/api/quotations.py），Edge headless 渲染要好幾秒，寫檔時那一題早就結束、
     # monkeypatch 也已經還原——於是那條執行緒讀到的又是專案裡的真實存檔路徑。
     # 症狀就是 `結案報表PDF/` 裡一直多出 `MQ-CLOSE-004_..._tester_N.pdf`。
     # 這裡用直接賦值（不是 monkeypatch）：整個 session 都不會被還原掉，晚到的

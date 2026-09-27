@@ -1,7 +1,7 @@
 """已結案變更申請核准會卡十幾秒（2026-09-15 使用者回報）。
 
 **根因是這個 codebase 已經記載過的同一個坑**（2026-09-10 `create_quotation`
-踩過，見 `routers/quotations.py` 該函式的註解）：
+踩過，見 `modules/case/api/quotations.py` 該函式的註解）：
 
     save_quotation_json(conn, ...)   # 只 execute、不 commit → conn 持有寫鎖
     _audit(...)                      # 用 get_db() 另開一條連線寫入 → 撞自己的鎖

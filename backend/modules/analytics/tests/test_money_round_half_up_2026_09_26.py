@@ -15,7 +15,7 @@ from core import source_tree as _source_tree
 
 # 稽核 ⑰ O-6：只有本模組的題用它，而它 import 營運分析 ⇒ 放在模組這一側（原本在 L1 測試檔，下一個人一呼叫就綁上 M08）
 def _patch_entries(monkeypatch, contractor=(), material=(), other=()):
-    from helpers import recognition as rp   # 2026-09-26：M08 經 case.recognition，提供者轉呼叫這裡的函式
+    from modules.case import recognition as rp   # 2026-09-26：M08 經 case.recognition，提供者轉呼叫這裡的函式
 
     def _mk(rows, **extra):
         return lambda *a, **k: [dict({"date": d, "quoteNo": "", "desc": "x", "amount": amt, "taxNote": "",

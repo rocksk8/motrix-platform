@@ -1,7 +1,7 @@
 """2026-09-23（T9）：派發回推報價單品項 —— 回 200 而資料庫沒寫入。
 
 `POST /api/contractor-dispatches/{did}/import-to-quote` 的兩個缺陷，
-與 `routers/material_orders.py` 2026-09-10 修過的①②**同一型**：
+與 `modules/case/api/material_orders.py` 2026-09-10 修過的①②**同一型**：
 
 ① `save_quotation_json()` 之後沒有 `conn.commit()` 就 `conn.close()`
    ⇒ UPDATE 被回滾，端點照樣回 `{"ok": True, "imported": N}`

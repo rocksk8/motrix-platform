@@ -97,7 +97,7 @@ def _flag_quotes(body, kind):
 # ══════════════════════════════════════════════════════════════════════
 
 def _rev(stages, pretax=10000):
-    from helpers.recognition import stage_revenue
+    from modules.case.recognition import stage_revenue
     return stage_revenue(pretax, stages)
 
 

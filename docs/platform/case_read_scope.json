@@ -44,19 +44,19 @@
    "scope": "own_rule"
   },
   {
-   "file": "routers/case_action_items.py",
+   "file": "modules/case/api/case_action_items.py",
    "path": "/api/quotations/{quote_no}/action-items",
    "handler": "list_case_action_items",
    "scope": "row_access"
   },
   {
-   "file": "routers/case_extra_expenses.py",
+   "file": "modules/case/api/case_extra_expenses.py",
    "path": "/api/quotations/{quote_no}/extra-expenses",
    "handler": "list_extra_expenses",
    "scope": "row_access"
   },
   {
-   "file": "routers/completion_notes.py",
+   "file": "modules/case/api/completion_notes.py",
    "path": "/api/completion-notes",
    "handler": "list_completion_notes",
    "scope": "row_access"
@@ -80,7 +80,7 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/material_orders.py",
+   "file": "modules/case/api/material_orders.py",
    "path": "/api/quotations/{quote_no}/material-orders",
    "handler": "get_material_orders",
    "scope": "row_access"
@@ -104,79 +104,79 @@
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}",
    "handler": "get_quotation",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/case-bundle",
    "handler": "case_bundle",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/privacy-notice",
    "handler": "get_quotation_privacy_acks",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/close-gates",
    "handler": "case_close_gates",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/closing-report-pdf",
    "handler": "download_case_closing_report_pdf",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/finance-summary",
    "handler": "get_finance_summary",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/pdf-download",
    "handler": "download_quotation_pdf",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/project-report-pdf",
    "handler": "download_project_execution_report_pdf",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/settlement",
    "handler": "get_settlement",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/stages",
    "handler": "list_case_stages_normalized",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/updates",
    "handler": "list_case_updates",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/versions",
    "handler": "list_quotation_versions",
    "scope": "row_access"
   },
   {
-   "file": "routers/quotations.py",
+   "file": "modules/case/api/quotations.py",
    "path": "/api/quotations/{quote_no}/versions/{seq}/download",
    "handler": "download_quotation_version",
    "scope": "row_access"

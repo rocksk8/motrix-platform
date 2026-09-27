@@ -43,6 +43,6 @@
    "remove_at_major": 2,
    "replacement": "helpers.tiered_approval.ApprovalChainUnreadable（同一個類別）"
   },
-  {"file": "helpers/quotations.py", "name": "_CaseAccess.summary", "since_core": "1.37", "remove_at_major": 2, "replacement": "registry.single_provider(\"case.summary\")（IP-96；M10 綁定案件改用後刪）"}
+  {"file": "modules/case/quotations.py", "name": "_CaseAccess.summary", "since_core": "1.37", "remove_at_major": 2, "replacement": "registry.single_provider(\"case.summary\")（IP-96；M10 綁定案件改用後刪）"}
  ]
 }

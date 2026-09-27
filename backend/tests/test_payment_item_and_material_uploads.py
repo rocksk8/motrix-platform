@@ -1,6 +1,6 @@
 """API-level integration tests for per-payment-item invoice uploads and
 per-material-item attachment uploads (both live inside quotations.data_json.
-caseRecord — see routers/quotations.py _load_payment_item()/_load_material_item()
+caseRecord — see modules/case/api/quotations.py _load_payment_item()/_load_material_item()
 and the /payment/{idx}/invoice-files, /materials/{idx}/files endpoints)."""
 import io
 import json

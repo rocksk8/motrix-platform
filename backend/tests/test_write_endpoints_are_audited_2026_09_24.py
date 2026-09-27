@@ -34,9 +34,9 @@ AUDIT_WRAPPERS = {
 #: 不寫稽核的寫入端點：(檔名, 方法, 路徑) → 原因。
 EXEMPT = {
     # ── 用 POST 的純查詢／試算（不改任何資料）────────────────────────────
-    ("quotations.py", "POST", "/api/quotations/case-activity"):
+    ("modules/case/api/quotations.py", "POST", "/api/quotations/case-activity"):
         "純查詢：回傳各案件最後動態時間，POST 只是為了帶一長串單號",
-    ("quotations.py", "POST", "/api/quotations/preview-html"):
+    ("modules/case/api/quotations.py", "POST", "/api/quotations/preview-html"):
         "純預覽：用表單內容組出 HTML 給預覽框，不存檔",
     ("modules/netplan/api.py", "POST", "/api/network-plans/{plan_id}/topology-preview"):
         "純預覽：依送來的參數畫拓樸圖，不存檔",

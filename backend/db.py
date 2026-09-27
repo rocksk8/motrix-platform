@@ -88,7 +88,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = _paths.DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
 # v58: 回填既有已成案/已結案報價單的 data_json.dealWonAt（2026-08-24）——首頁
 # 「本月銷售」原本依 quote_date 分組，但 quote_date 是報價單建立當下手動填的
 # 日期，常常跟業務員實際簽下這筆案子的月份對不上，導致當月營收看起來是 0。
-# routers/quotations.py::update_deal_tag() 之後轉為已成案時會即時寫入
+# modules/case/api/quotations.py::update_deal_tag() 之後轉為已成案時會即時寫入
 # dealWonAt，這支 migration 只負責把修正前就已成案/已結案的舊資料補上（用
 # updated_at 當最佳可得的成交時間代理值）。
 # v59: 修正 v58 backfill 的值（2026-08-24，同一天使用者實測就回報「銷售收入
@@ -116,7 +116,7 @@ DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR = _paths.DEMO_CASE_CLOSING_PDF_ARCHIVE_DIR
 # v81: edit_presence（同時編輯偵測），2026-09-13。
 # v82: case_updates.files_json / dev_logs.files_json（案件動態與業務開發記錄
 # 的附件，2026-09-14）——兩張表都是 TEXT NOT NULL DEFAULT '[]'，存
-# save_document_files() 回傳的清單。刪附件限 admin+，見 routers/quotations.py
+# save_document_files() 回傳的清單。刪附件限 admin+，見 modules/case/api/quotations.py
 # 與 routers/dev_crm.py 的 DELETE .../files/{file_id}。
 # v92: tenders.marked_at / tenders.marked_by（標註功能，2026-09-22 §21 補）
 #      —— 一個可為 NULL 的時間戳兼任旗標，判定一律 `marked_at IS NOT NULL`。
@@ -1558,7 +1558,7 @@ def _m045_contractor_payment_vouchers(conn):
 
 def _m046_invoice_vouchers(conn):
     """Create invoice_vouchers（開票申請憑據）：案件款項明細（quotations.data_json.
-    caseRecord.payment.items[]，本身不是獨立資料表，見 helpers/quotations.py
+    caseRecord.payment.items[]，本身不是獨立資料表，見 modules/case/quotations.py
     payment_item_amounts()）匯出給財務單位申請開立發票用的獨立單據。scope='single'
     對應單一 payment_idx；scope='all' 彙整整份收款排程，payment_idx 為 NULL。
 
@@ -1788,7 +1788,7 @@ def _m052_fix_stage_json_ids(conn):
 
     這個 migration 把 case_stages（含 case_stage_visits）目前的內容，重新鏡射回
     每個受影響 quote_no 的 data_json.caseRecord.stages——邏輯照搬
-    routers/quotations.py::_sync_stages_to_json()（db.py 不 import router 模組，
+    modules/case/api/quotations.py::_sync_stages_to_json()（db.py 不 import router 模組，
     手動照抄一份，保持邏輯一致）。只動 caseRecord.stages 這個欄位，caseRecord
     其他 key 與 quotations 其他欄位（含 updated_at）刻意維持原樣不動——這是
     後端資料一致性修正，不是使用者操作，不該讓任何人手上還開著的頁面因為
@@ -1966,7 +1966,7 @@ def _m061_case_semi_unlock(conn):
       （純顯示用，不做權限判斷）
 
     新表 case_change_requests：半解鎖期間每一筆待審核的變更/上傳請求，
-    action_type 對應 routers/quotations.py 裡新增的 8 個「暫存待審」端點
+    action_type 對應 modules/case/api/quotations.py 裡新增的 8 個「暫存待審」端點
     （case_record_update／payment_mark／payment_invoice_upload／
     payment_invoice_delete／material_file_upload／material_file_delete／
     material_invoice_upload／material_invoice_delete）。payload_json 存
@@ -3414,7 +3414,7 @@ def _m075_case_extra_expenses(conn):
     搬完之後**刻意保留** data_json 裡的原陣列不刪除：
 
       - 萬一新表出問題，原始資料還在，救得回來
-      - 但所有讀取端都已改讀新表（`helpers/quotations.py::case_extra_expenses()`），
+      - 但所有讀取端都已改讀新表（`modules/case/quotations.py::case_extra_expenses()`），
         原陣列從此是**唯讀的歷史備份，不再被任何程式碼寫入**
       - 清掉它是之後確認新流程穩定後的獨立動作，不在這支 migration 裡做
 

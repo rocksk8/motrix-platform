@@ -14,8 +14,8 @@ import threading
 
 import pytest
 
-import routers.material_orders as mo
-import routers.quotations as q
+import modules.case.api.material_orders as mo
+import modules.case.api.quotations as q
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 
 
@@ -146,7 +146,7 @@ def _c_deal_tag(client, h):
 
 
 def _saved_orders(client, h):
-    """先存一筆合法的叫料（routers/material_orders.py::MaterialOrder 的欄位）。"""
+    """先存一筆合法的叫料（modules/case/api/material_orders.py::MaterialOrder 的欄位）。"""
     mos = [{"itemId": "mo-probe", "itemName": "線材", "quantity": 10, "unit": "條", "unitPrice": 100,
             "totalPrice": 1000, "paidStatus": "pending", "paidAmount": 0, "paidDate": None}]
     r = client.patch(f"/api/quotations/{NO}/material-orders", headers=h, json={"materialOrders": mos})

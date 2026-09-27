@@ -123,6 +123,6 @@ def test_positive_control_the_scanner_sees_visible_text_and_strings():
     assert any("quotations.py" in str(p) for p, _, _ in _hits(lambda s: "無法結案" in s))
     assert any(p.name == "parts.html" for p, _, _ in _hits(lambda s: "備註" in s))
     # 反向：註解與 docstring 裡的字不算（case_action_items.py 的模組 docstring 寫著「案件代辦事項」）
-    doc = (ROOT / "backend" / "routers" / "case_action_items.py").read_text(encoding="utf-8").split('"""')[1]
+    doc = (ROOT / "backend" / "modules" / "case" / "api" / "case_action_items.py").read_text(encoding="utf-8").split('"""')[1]
     assert "代辦" in doc, "量尺：這支 docstring 應該還保留舊詞（歷史說明），否則這條反向對照量不到東西"
     assert not any(p.name == "case_action_items.py" and n == 1 for p, n, _ in _hits(lambda s: "代辦" in s))

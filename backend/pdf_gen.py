@@ -2218,7 +2218,7 @@ def _case_closing_report_data(quote_no: str) -> dict:
     """彙整結案報表所需的全部資料。財務數字（損益分析）一律直接讀
     data_json.settlement.summary 這份精算存檔當下寫入的快照，不在這裡重新計算——
     跟財務 Tab／營運報表共用同一份權威來源，避免三處顯示互相對不上（見
-    helpers/quotations.py 對 dispatchTotal 快照 vs 即時重算的既有說明）。"""
+    modules/case/quotations.py 對 dispatchTotal 快照 vs 即時重算的既有說明）。"""
     conn = get_db()
     row = conn.execute("""
         SELECT quote_no, customer_name, project_name, sales_person, quote_date,

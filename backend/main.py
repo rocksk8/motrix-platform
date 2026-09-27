@@ -30,7 +30,7 @@ from helpers import geo as geo_core
 from core import loader as module_loader, pages as module_pages, registry as module_registry
 # L1：GCIS 與 /api/now（M08 搬遷 ②）；註解不寫在 import 行尾（test_router_registration 以行解析 import，第六班列車全量抓到）
 from routers import company_lookup
-from routers import auth, quotations, customers, parts, system, module_versions, search, org_structure, list_prefs, case_action_items, uploads, approval_delegates, accounting_export, material_orders, case_extra_expenses, completion_notes, licensing, map_points, account_items, vouchers
+from routers import auth, customers, parts, system, module_versions, search, org_structure, list_prefs, uploads, approval_delegates, accounting_export, licensing, map_points, account_items, vouchers
 from routers import item_reads
 # CUSTOMIZATION-SPEC §3.5 定義文件庫；P8 自訂模組引擎（通用 API）
 from routers import definitions, custom_records
@@ -680,19 +680,14 @@ _sync_module_versions()
 # ── Routers ───────────────────────────────────────────────────────────────────
 
 app.include_router(auth.router)
-app.include_router(quotations.router)
-app.include_router(material_orders.router)
-app.include_router(case_extra_expenses.router)
 app.include_router(customers.router)
 app.include_router(parts.router)
 app.include_router(company_lookup.router)
 app.include_router(system.router)
 app.include_router(module_versions.router)
-app.include_router(completion_notes.router)
 app.include_router(search.router)
 app.include_router(org_structure.router)
 app.include_router(list_prefs.router)
-app.include_router(case_action_items.router)
 app.include_router(uploads.router)
 app.include_router(definitions.router)
 app.include_router(custom_records.router)

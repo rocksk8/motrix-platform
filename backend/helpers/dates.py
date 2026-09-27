@@ -48,7 +48,7 @@ def _warranty_expiry(warranty_start: str, warranty_months) -> tuple:
         return None, None
 
 
-# 2026-09-26 自 M01 helpers/recognition.py 下沉（M04 搬遷：外包工班、叫料、額外支出都要驗日期欄，`AC2`）
+# 2026-09-26 自 M01 modules/case/recognition.py 下沉（M04 搬遷：外包工班、叫料、額外支出都要驗日期欄，`AC2`）
 def normalize_date(v, label="日期"):
     """'' ＝未登錄；否則必須是 YYYY-MM-DD 的真實日期。回正規化後的字串。"""
     if v is None:

@@ -168,7 +168,7 @@ def _l1_files():
 def test_system_caller_is_used_only_by_l1():
     srcs = {source_tree.rel(p): p.read_text(encoding="utf-8") for p in source_tree.product_files() if p.suffix == ".py"}
     users = system_users(srcs)
-    allowed = _l1_files() | {"helpers/quotations.py", "helpers/case_access.py"}   # 定義處與 M01 自己（IP-12 轉呼叫）
+    allowed = _l1_files() | {"modules/case/quotations.py", "helpers/case_access.py"}   # 定義處與 M01 自己（IP-12 轉呼叫）
     assert users, "正對照：至少地圖（routers/map_points.py）在用 SYSTEM"
     assert "routers/map_points.py" in users
     bad = sorted(users - allowed)

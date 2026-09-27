@@ -44,7 +44,7 @@ def _delete_and_read_toasts(live_server, make_user, new_page, login_as, name):
 
 @pytest.mark.e2e
 def test_notice_is_shown_when_crm_is_absent(live_server, make_user, new_page, login_as, monkeypatch):
-    from routers import quotations
+    from modules.case.api import quotations
     orig = registry.providers
     monkeypatch.setattr(registry, "providers", lambda cap: {} if cap == "crm.quote_deleted" else orig(cap))
     toasts = _delete_and_read_toasts(live_server, make_user, new_page, login_as, "e2e_ip11_absent")
