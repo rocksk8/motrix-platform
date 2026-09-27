@@ -149,6 +149,15 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 03:47 主持：**開工第二輪**（使用者在線裁示 20 餘項，全部寫進 CORE-SPEC 裁示表 2026-09-28 各列；D 視窗 hichan-cd 開始稽核）。
+  - **裁示**：更新流程 U-1～U-8；AH-S7 複製失敗自動寫回；AB-S7／S8；出納欄位維持列出；favicon 排除；月備份告警文字＋條件解除自動清（寫稽核）；儲存位置由最高管理員設定（三個位置、設定頁建立按鈕、背景不自動建；MODULE-GUIDE §3.2 更正保留原句）；手動回滾預設只回程式；完整包依授權帶齊、授權有而包沒有就拒絕、未授權只停用不刪；簽章金鑰由主持產生（私鑰只在開發機兩處，reference 記憶有位置）。
+  - **H12 apply_update** ee434e2c：AH-S7、robocopy /R:3 /W:5（原本被占用的檔會卡數天）、鎖與結果檔（UPDATE-DELIVERY §9.2）、AH-S10／S11 trap、D 必修 DM1（覆寫資料庫前另存 pre_rollback）／DM2（以快照為準清理）與 DS1／3／4／5、DO1、DO3（授權比對）、plan_refused 分開。題 244 過；突變皆紅（ps1 突變排除版本雜湊題）。**演練兩輪**：第一輪 5 條路＋複製失敗；第二輪 PX 拒絕、P1、P4→回滾兩次套用前、資料庫回滾未確認擋下／確認後 pre_rollback、P3 自動回滾 pre_rollback 含新版表（證據 D:\MOTRIX-DRILLS\apply-run-0928\r2_*）。未解釋觀察：第二輪誘餌行程在 03:40 前後消失，apply／rollback 紀錄沒有停過它們，A 查證也不是它；交 D。
+  - **B41 請款** 1a544510：AB-S7／S8、D 必修 PM1（模組 migration 逐支 SAVEPOINT、例外撤回、不准自己 commit 守門＋第三方防線）、PS1／PO1／PO2；B 自承契約題更正（回傳值慣例：回 Cursor 的既有寫法會被判未完成，已補更正）。
+  - **A**：A38 更新交付（公鑰由主持寫入 be223e60、儀表板套用頁＋prod-status 44b2d8d8）、A41 寫入點守門擴大 cbcdff1d、A43 儲存位置設定 ddcb2025；進行中 MS-M1（A36）。
+  - **B**：B46 普查 41 題標記、B47 L1 覆蓋參數化 461ad3e7；進行中 RM-S1、建包依授權帶齊（B48）。
+  - **H13** dcfadc11：月備份告警文字、條件解除自動清＋稽核、MA-M1（依原因判斷）。
+  - **D 第一輪**：必修 5（DM1、DM2、PM1、MS-M1、MA-M1，前四已修待複核）、建議 12、觀察 17；BP-M1 關閉。D 第二輪複核進行中。
+  - **正式機**：2026-08 月備份補 .done（雲端），BACKUP_ALERT.txt 下一輪健康的每日備份會自動清。
 - 2026-09-28 01:30 主持：**開工第一輪**（使用者：「繼續做開發，驗證跟測試等我確認後再跑」；兩個視窗：A＝hichan-8a、B＝hichan-2c；驗證與演練都經使用者表單同意後才跑）。
   - **H12 apply_update** `wip/h-apply-platform` 7a38fde6（已推）：手動回滾補齊（只停本安裝、刪那次新增檔、tools／product、demo 庫、baseline、部署紀錄 AH-S2）、轉換寫 baseline、健檢 cp932、`migrate_like_startup.py`（乾跑與轉換照啟動規則載入模組；incomplete 為 None 或非空 ⇒ 失敗；舊包只跑 init_db）、RUNBOOK §8、CORE-SPEC §9b 註記。A 交叉稽核（AUDIT-A-H12-apply，A37 7fcbea8a）必修 AH-M1 大小寫改名誤刪／AH-M2 手動跑到舊腳本（$ApplyScriptVersion＋RUNBOOK 先複製 tools）／AH-M3 停服後失敗不重啟 ⇒ 已修並由 A 複核關閉。題：205 過；突變 9 個皆紅（其中 1 個第一次存活：題目比對到註解同一串字，已改比對程式行）。**演練（開發機假安裝，port 6781）四條路全過**：P2 壞 migration 乾跑擋下、程式檔 0 變動；P1 成功（刪 netplan 7 檔＋3 頁、legal-params 只列不刪、誘餌兩個都活、寫 baseline、快照無個資）；P3 健康失敗自動回滾（程式檔與狀態 0 差異）；手動回滾 P1 快照（0 差異；baseline 移除、部署紀錄回 c006a2a0）；鎖檔造成 delete_failed ⇒ 服務約 2 秒回來，再手動回滾 0 差異。證據 D:\MOTRIX-DRILLS\apply-run-0928（logs／state／prog 雜湊）。**待**：D 單獨完整稽核；B41 合回同班補模組路徑整合題；建議 AH-S7（copy_failed 改走自動回滾，避免半套用程式對正式庫跑 migration）、AH-O7（版本常數配題）、classify 把 `<db>.modules_disabled.json` 當程式檔（L0，照升版規則）。演練工具 drill_stop 會殺到自己（排除自己的修補無效，$self 為空），工具缺陷非產品。
   - **B42 建構器 -5** `wip/b-builder-dnd-5` d26a7b0c：新題 5 過、突變 2 紅、modtest 1411 過／1 紅（VR3：與 27b 同模組未出貨 ⇒ 主持合併成一筆 28a）。
