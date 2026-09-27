@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.15 — 2026-09-27（第十三班列車取號，原暫用 1.0.12；c-queue-json，主持指派）
+- 待簽佇列提供者：簽核 JSON 改用 L1 `helpers.approval_queue.approval_json_of` 在 Python 逐筆解析（原本 SQL `json_extract(data_json,'$.approval')` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ 這一類待簽全部靜默消失）；壞的那一筆跳過並記 ERROR（寫單號、不寫內容）
+
 ## 1.0.14 — 2026-09-27（第十三班列車取號，原暫用 1.0.13；稽核 D 建議，wip/b-drill-absent404-2）
 - `pages` 補 `contractor-voucher-approval-settings.html`（不帶 menu，不進側欄）：modules.json 把它歸 M04，原本沒列入 pages ⇒ 模組缺席時不會被移除、D7 前哨也不會驗它回 404。守門 `tests/platform/test_module_pages_match_units.py`
 

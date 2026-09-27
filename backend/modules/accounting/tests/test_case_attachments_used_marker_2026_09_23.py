@@ -44,6 +44,8 @@ import pathlib
 
 import pytest
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
+#: 候選憑證全是開票申請（invoice_voucher，M05）⇒ M05 不在時沒有候選可帶；不在時的行為見檔尾那一題（c-queue-json，稽核 D AL-O1 同類）
+_NEEDS_M05 = requires_module("arap", "候選憑證是開票申請（M05 的單據）；M05 不在時沒有候選可帶")
 
 QUOTE_NO_PREFIX = "MQ-JV18"
 
@@ -151,6 +153,7 @@ def _find(items, source_type, doc_no, file_id):
 # ① 核心：候選憑證被帶入過之後，回三個新欄位
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_a_candidate_brought_in_by_a_voucher_is_marked_used(client,
                                                                   make_user):
     """🔴🔴 **核心：憑證被帶入一次之後，`case_attachments()` 要回
@@ -193,6 +196,7 @@ def test_jv18_a_candidate_brought_in_by_a_voucher_is_marked_used(client,
         "頂層 `usedAt`（排序用）應該等於 `usedBy` 那一筆的時間。")
 
 
+@_NEEDS_M05
 def test_jv18_a_candidate_never_brought_in_is_not_used(client, make_user):
     """⚙️ **負對照：從沒被帶入過的候選憑證，`used` 要是 False、`usedBy` 要是空的。**
 
@@ -219,6 +223,7 @@ def test_jv18_a_candidate_never_brought_in_is_not_used(client, make_user):
 # ② `usedBy` 要列出**全部**帶入過的傳票，不是只有最近一張（§5／§7ⓓ）
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_used_by_more_than_one_voucher_lists_all_of_them(client,
                                                                make_user):
     """🔴🔴 **同一筆憑證被兩張傳票各帶入一次，`usedBy` 要列出兩張。**
@@ -255,6 +260,7 @@ def test_jv18_used_by_more_than_one_voucher_lists_all_of_them(client,
 # ③ 排序：已使用排最後，按 usedAt 新到舊（§6b／§7ⓐ）
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_used_items_sort_last_by_usedat_descending(client, make_user):
     """🔴🔴 **排序：已使用的排在未使用之後，且已使用的兩筆之間新到舊。**
 
@@ -306,6 +312,7 @@ def test_jv18_used_items_sort_last_by_usedat_descending(client, make_user):
 # ④ 已作廢的傳票用過的憑證，不算已使用（§3／§7ⓒ）
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_a_used_marker_disappears_after_the_voucher_is_voided(client,
                                                                     make_user):
     """🔴🔴 **傳票 A 帶入憑證 X 之後作廢，X 的「已計算」要消失。**
@@ -349,6 +356,7 @@ def test_jv18_a_used_marker_disappears_after_the_voucher_is_voided(client,
 # ⑤ 直接上傳（`source_*` 全空）不可以互相亮紅字（§2c 後果一／§7ⓕ）
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_direct_uploads_with_empty_source_do_not_cross_mark_as_used(
         client, make_user):
     """🔴 **系統裡有多筆「直接上傳」附件（`source_*` 全是空字串）時，
@@ -397,6 +405,7 @@ def test_jv18_direct_uploads_with_empty_source_do_not_cross_mark_as_used(
 # ⑥ 已計算的憑證仍然可以再被帶入（只標記不擋住，§6c／§7ⓔ）
 # ══════════════════════════════════════════════════════════════════════
 
+@_NEEDS_M05
 def test_jv18_an_already_used_candidate_can_still_be_brought_in_again(
         client, make_user):
     """🔴 **負對照：已計算的憑證再被帶入一次，後端不可以拒絕。**
@@ -430,3 +439,23 @@ def test_jv18_an_already_used_candidate_can_still_be_brought_in_again(
         "已計算的憑證再被帶入一次卻被拒絕（回 %s）：%s\n"
         % (r.status_code, r.text[:300])
         + "☠️ 使用者要的是備註不是擋住——擋住會把作廢重開那條合法路踩死。")
+
+
+def test_jv18_without_m05_bringing_in_an_invoice_voucher_says_why(client, make_user):
+    """M05 不在 ⇒ 帶入開票申請附件要回 400 並說出原因（不是 500、也不是靜默成功）。M05 在時這題不適用。"""
+    from core import source_tree
+    if source_tree.module_installed("modules/arap/"):
+        pytest.skip("M05 在：本題只驗 M05 不在時的行為（真刪 M05 的反向控制裡跑）")
+    import db
+    quote_no = QUOTE_NO_PREFIX + "-NOM05"
+    conn = db.get_db()
+    try:
+        _seed_case(conn, quote_no)
+        doc_no, file_id = _seed_invoice_voucher_candidate(conn, quote_no, "jv18_nom05")
+    finally:
+        conn.close()
+    _u, hdr = _hdr(client, make_user, "jv18_nom05")
+    vid = _create_voucher(client, hdr, "JV18 M05 不在")
+    r = client.post("/api/vouchers/%s/attachments" % vid, headers=hdr,
+                    json={"picks": [{"type": "invoice_voucher", "docNo": doc_no, "fileId": file_id}]})
+    assert r.status_code == 400 and "應收應付模組未安裝" in r.json()["detail"], r.text

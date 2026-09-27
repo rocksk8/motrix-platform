@@ -919,14 +919,17 @@ def queue_items(conn) -> list:
     """`approval.queue_items`：待審核／簽核中的請款單（`type`＝`payment_request`）。"""
     rows = conn.execute("""
         SELECT request_no, quote_no, amount, snapshot_json, created_at,
-               json_extract(data_json,'$.approval') as approval_json
+               data_json
         FROM payment_requests
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     out = []
     for r in rows:
-        f = _aq.tier_fields(r["approval_json"])
+        raw = _aq.approval_json_of(r["data_json"], "payment_request", r["request_no"])   # 壞一筆只跳過那一筆（c-queue-json）
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
         try:
             snap = json.loads(r["snapshot_json"] or "{}")
         except Exception:
@@ -943,6 +946,6 @@ def queue_items(conn) -> list:
 
 
 def queue_detail(conn, doc_no):
-    """`approval.detail`（payment_request）：簽核佇列詳情的單據內容；權限、案件抬頭、金額遮蔽在 M01。"""
+    """`approval.detail`（payment_request）：簽核佇列詳情的單據內容；權限、案件抬頭、金額遮蔽在 L1 `routers/approval_queue.py`（~~M01~~，2026-09-27 起）。"""
     r = conn.execute("SELECT * FROM payment_requests WHERE request_no=?", (doc_no,)).fetchone()
     return _aq.snapshot_doc_detail(r) if r else None

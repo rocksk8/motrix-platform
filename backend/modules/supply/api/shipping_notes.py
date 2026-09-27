@@ -829,14 +829,17 @@ def _queue_items(conn) -> list:
     """`approval.queue_items`：待審核／簽核中的出貨單（`type`＝`shipping_note`；`total` 放品項數）。"""
     rows = conn.execute("""
         SELECT note_no, quote_no, customer_name, project_name, items_json, ship_date, created_at,
-               json_extract(data_json,'$.approval') as approval_json
+               data_json
         FROM shipping_notes
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     out = []
     for r in rows:
-        f = _aq.tier_fields(r["approval_json"])
+        raw = _aq.approval_json_of(r["data_json"], "shipping_note", r["note_no"])   # 壞一筆只跳過那一筆（c-queue-json）
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
         try:
             item_count = len(json.loads(r["items_json"] or "[]"))
         except Exception:
