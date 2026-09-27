@@ -7,6 +7,7 @@
 
 - **必修 1、建議 1、觀察 4、待驗 1**（真刪 M06，第十二班後由 C 補）。
 - 複核 -2（81972141）：**AL-M1、AL-S1、AL-O1、AL-O4 關閉；新必修 AL2-M1、AL2-M2**（§3）；§1 的「④ 角標」一列有更正（§3-4）。
+- 複核 -3（315f2988，含 c-queue-json）：**AL2-M1、AL2-M2 關閉；新必修 QJ-M1**（§4）。
 
 ## 1. 實測
 
@@ -114,3 +115,35 @@
 ### 3-6 D 自己的過程問題
 
 - D 同時跑兩個 `mutate.py`（approval-l1-2 與 O13），兩者共用同一個 basetemp ⇒ B3 那一輪被清掉目錄，出現 191 個 errors。已在 approval 那組跑完後單獨重跑 B3 ⇒ 乾淨的紅。之後同一時間只跑一個 `mutate.py`。
+
+## 4. 複核（wip/c-approval-l1-3 315f2988，取代 -2，內含 c-queue-json）（D，2026-09-27 14:19）
+
+> 依 §G1 ⓪：先讀 diff 列疑點，只跑針對疑點的突變與探針。
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| AL2-M1（同一個函式、同一組輸入） | 佇列 `_detail_opens` 與詳情 `_guard_queue_detail` 都呼叫 `_access_step(案件單號, 簽核 JSON)`；報價單項目帶 `linkedQuoteNo`＝自己。D 探針（沒掛案件＋掛不存在案件的請款單，4 種身分）：**M01 不在：8 格全一致；M01 在：沒掛案件的一致**。突變 C1「沒掛案件不擋」⇒ 紅；C4「報價單不帶 linkedQuoteNo」⇒ 紅 | **關閉** |
+| AL2-M2（deal_tag 逐筆解析） | `case_summary` 改取 `deal_tag`＋`data_json`，`_deal_tag_of` 逐筆解析，壞的那筆 ""＋ERROR。突變 C3「不防壞」⇒ 紅（`test_summary_survives_one_malformed_data_json`） | **關閉** |
+| 只跳過解析不了的、沒有流程的照列 | `approval_json_of`：解析不了或 approval 不是 dict ⇒ None（跳過＋ERROR）；沒有 approval ⇒ `"{}"` 照列。突變 C2「沒有流程也跳過」⇒ 紅（NOFLOW 題） | 成立（data_json 那一類） |
+| c-queue-json 提供者 | 報價單／完工單（M01）、請款單、開票申請、承攬商匯款、出貨單：SQL 裡已沒有 `json_extract`（D 以 AST 掃 8 個 `approval.queue_items` 提供者） | 成立 |
+| L1 通用契約題 | 見 QJ-M1：只選「讀 data_json 的提供者」 | **不成立 ⇒ QJ-M1** |
+| 理由更正 | `approval_json_of` 與 M01 提供者的註解改成「列出了也簽不了（核准端點 JSONDecodeError ⇒ 500、狀態不變；D 實測）」，舊句保留刪除線 | 成立 |
+
+**QJ-M1（必修）　簽核 JSON 存在獨立欄位的提供者，壞 JSON 仍當成「沒有流程」照列**
+- 通用契約題 `test_queue_items_malformed_json` 以 `_reads_data_json(fn)`（原始碼含 "data_json"）挑提供者。簽核資料存在獨立欄位的不在其中：
+  - 傳票 `routers/vouchers.py::_queue_items`（`approval_json`）；
+  - 獎金 `modules/payroll/bonus_queue.py::queue_items`（`approval_json`）；
+  - M01 額外支出（`approval_json`／`change_approval_json`）。
+- 它們走 `helpers.approval_queue.tier_fields`：`json.loads` 失敗 ⇒ `appr = {}` ⇒ 沒有簽核層、沒有送審人 ⇒ 列給每一個 superadmin、計入角標。
+- D 探針：`approval_json='{broken'` 的待審額外支出 ⇒ 佇列列出（`tiers=[]`、`requestedBy=''`）、角標 1、核准 ⇒ `JSONDecodeError`。三個核准端點都是 fail-closed（傳票 400、獎金與額外支出 500），**不會被誤簽**，但這正是本包要消除的「列出了也簽不了」。C 回報「契約題對每個已註冊提供者驗」與實際不符。
+- 修法：`tier_fields`（或新增欄位版的 `approval_json_of`）解析不了 ⇒ None，呼叫端跳過＋ERROR；契約題改成挑「會讀簽核 JSON 的提供者」（不論欄位名），正對照的 EXPECTED 補 voucher、payroll、M01 額外支出。
+
+**AL3-S1（建議）　M01 在時，掛的案件已不存在（孤兒單）⇒ admin 列出、點開 404**
+- `_access_step` 回 CASE_RULE，佇列照列，詳情 `guard_case_access` 查無 ⇒ 404。舊版相同，但現在有「列出⇔放行」的裁示。
+- 佇列可在 CASE_RULE 時補一次「案件是否存在」的查詢，或把孤兒單歸 DENY。
+
+**AL3-S2（建議，未量測）　`case_summary` 為了補 deal_tag，每一列都撈整份 `data_json`**
+- voucher_link（a-m06-8 rebase 後）一次撈全部報價單，會把每張單的整包 data_json 讀進記憶體，而只需要在 `deal_tag` 欄為空時才用。
+- 可改成 `CASE WHEN COALESCE(deal_tag,'')='' THEN data_json END AS _dj`。
+
+- 待驗：真刪 M06（第十二班合回後由 C 補）。

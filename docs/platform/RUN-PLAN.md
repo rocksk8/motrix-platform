@@ -181,6 +181,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 14:19 D：c-approval-l1-3 315f2988——AL2-M1（同一個 _access_step；M01 在／不在探針一致）、AL2-M2（deal_tag 逐筆）關閉，突變 4/4 紅。**必修 QJ-M1**：通用契約題以原始碼含 data_json 挑提供者，傳票、獎金、M01 額外支出（approval_json 欄）走 tier_fields，壞 JSON ⇒ {} ⇒ 列給每個 superadmin、計角標，核准 500（D 實測額外支出）。建議：孤兒單列出卻 404；case_summary 全撈 data_json。
 - 2026-09-27 14:14 D：B 三包**通過**：b-o13-3 1c7f0a64 與 -2 內容相同（range-diff 全 =）；b-o14-2 f189103c O14-M1／S1／S2 關閉（拿掉 -n 1 ⇒ n1 紅；外層 -n 2 下 23 過）；b-drill-absent404-4 4b000529 AB3-M1 關閉（manifests 掃成空的 ⇒ 紅；真 core-only 明說略過）。
 - 2026-09-27 14:02 D：O13-2 ea93e37c **通過**（突變 2/2 紅；基底是 c7f02596，上車前 rebase 到 e67879f2、無交會）。O14 d75b1784 **必修 O14-M1**：n1 格沒斷言子行程真的起 xdist worker（拿掉 -n 1 仍 2 過）；看門狗突變紅；同型盤點：沒隔離鎖檔 0 檔，子行程期限≥外層上限 1 檔（test_shared_playwright_event_loop，O14-S2）；O14-S1 cap≤50 時期限不再小於外層。absent404-3 8d4cf4dd **必修 AB3-M1**：manifests 掃出空的 ⇒ 靜默略過（突變存活），略過要用獨立訊號（已搬遷的組資料夾存在就不准略過）。
 - 2026-09-27 13:53 D：c-approval-l1-2 81972141——AL-M1／S1／O1／O4 關閉（突變 8/8 紅，真刪 M01／M05 只剩允許 5）。**新必修** AL2-M1：M01 不在時 quote_no 空的單 superadmin 看得到、詳情 404；AL2-M2：case.summary 加 SQL_DEAL_TAG（內含 json_extract）⇒ 壞 JSON 報價單讓整個查詢 500（詳情實測；rebase a-m06-8 後傳票案件清單全壞）。主持前提：壞 JSON 不會被簽掉（approve 500）；c-queue-json 的跳過只能限解析不了的。更正 D 上一輪 ④（照 C 申報、未自驗）。§G5 更正第 2 列、補 13（列出⇔放行同一輸入）、14（繞過分支兩方向、用無一般權限的人）。
