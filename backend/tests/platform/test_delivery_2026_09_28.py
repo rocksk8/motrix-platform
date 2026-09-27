@@ -19,6 +19,22 @@ REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "backend" / "tools"))
 import delivery as D  # noqa: E402
 
+
+
+def _judge():
+    """(c) 的判定函式由部署儀表板提供（decide_outcome／parse_result_line）。儀表板不准被 import 陳述句引用（HC1c：
+    它的路由只能掛在自己那個有「只限本機」middleware 的 app；守門以檔名放行 test_deploy_dashboard*）。這裡只取兩個純函式、
+    不掛任何路由 ⇒ 依路徑載入（與 HC1c 題本身讀儀表板的方式相同）。整合面（儀表板真的傳它自己的函式）見
+    tests/platform/test_deploy_dashboard_delivery_2026_09_28.py。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_dd_for_judge", str(REPO / "backend" / "tools" / "deploy_dashboard.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return (mod.decide_outcome, mod.parse_result_line)
+
+
+JUDGE = _judge()
+
 COMMIT = "0123abcd" + "e" * 32
 PS1 = '# apply\r\n$ApplyScriptVersion = "2026-09-28a"\r\nWrite-Host "x"\r\n'
 
@@ -259,7 +275,7 @@ def test_apply_copies_the_package_tools_first_then_runs_and_reads_the_result_fil
     """正對照：驗證通過 ⇒ 先把包裡的 backend\tools 複製進安裝目錄（AH-M2），再呼叫 apply_update；結果讀 result.json。"""
     staged, v = _staged_ok(env)
     seen = []
-    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], seen=seen))
+    r = D.apply_staged(staged, str(env["install"]), v, JUDGE, run=_fake_run(env["install"], seen=seen))
     assert r["started"] and r["outcome"] == "succeeded" and r["problems"] == [], r
     assert seen[0]["tools_ps1"] == PS1.encode("utf-8"), "呼叫 apply_update 時，安裝目錄裡的腳本必須已經是包裡那一份"
     assert seen[0]["cmd"][-3:] == ["-PackagePath", os.path.join(staged, D.PAYLOAD), "-Yes"]
@@ -272,7 +288,7 @@ def test_rc_existing_lock_is_reported_not_removed_and_nothing_runs(env):
     lock = env["install"] / "backend" / ".apply.lock"
     lock.write_text(json.dumps({"pid": 999999, "script": "apply_update"}), encoding="utf-8")
     seen = []
-    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], seen=seen))
+    r = D.apply_staged(staged, str(env["install"]), v, JUDGE, run=_fake_run(env["install"], seen=seen))
     assert not r["started"] and r["outcome"] == "failed" and r["lock"]["pid"] == 999999
     assert lock.exists() and seen == [] and not (env["install"] / "backend" / "tools" / "apply_update.ps1").exists()
 
@@ -280,9 +296,9 @@ def test_rc_existing_lock_is_reported_not_removed_and_nothing_runs(env):
 def test_rc_unverified_package_is_refused(env):
     staged, v = _staged_ok(env)
     with pytest.raises(D.DeliveryError, match="驗證沒有通過"):
-        D.apply_staged(staged, str(env["install"]), dict(v, ok=False, problems=["簽章不符"]), run=_fake_run(env["install"]))
+        D.apply_staged(staged, str(env["install"]), dict(v, ok=False, problems=["簽章不符"]), JUDGE, run=_fake_run(env["install"]))
     with pytest.raises(D.DeliveryError, match="驗證沒有通過"):
-        D.apply_staged(staged, str(env["install"]), None, run=_fake_run(env["install"]))
+        D.apply_staged(staged, str(env["install"]), None, JUDGE, run=_fake_run(env["install"]))
 
 
 @pytest.mark.parametrize("kw, needle", [
@@ -291,14 +307,14 @@ def test_rc_unverified_package_is_refused(env):
 ])
 def test_rc_missing_or_disagreeing_result_file_is_failed(env, kw, needle):
     staged, v = _staged_ok(env)
-    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], **kw))
+    r = D.apply_staged(staged, str(env["install"]), v, JUDGE, run=_fake_run(env["install"], **kw))
     assert r["started"] and r["outcome"] == "failed" and any(needle in p for p in r["problems"]), r
 
 
 def test_failed_apply_is_failed_through_the_dashboard_rules(env):
     """判定用 deploy_dashboard.decide_outcome（fail-closed）：自動回滾成功也仍是 failed。"""
     staged, v = _staged_ok(env)
-    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], status="unhealthy_rolled_back",
+    r = D.apply_staged(staged, str(env["install"]), v, JUDGE, run=_fake_run(env["install"], status="unhealthy_rolled_back",
                                                                     rolled_back="restored", exit_code=1))
     assert r["outcome"] == "failed" and r["problems"] == [] and r["result"]["rolled_back"] == "restored"
 
