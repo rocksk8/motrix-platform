@@ -308,3 +308,10 @@
 | `tests/test_e2e_unread_marks_clear_on_click_2026_09_24.py` | 2 | 8 |
 | `tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py` | 2 | 2 |
 | `tests/test_e2e_voucher_source_block_below_2026_09_25.py` | 10 | 10 |
+
+## 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+> A 補記（2026-09-28 01:02）：D 以機器掃描後已逐筆人工確認關閉（d_scan_mustfix.README 假陽性四類）；這裡只把既有的關閉改寫成標準單行，commit 取自各自的複核段落。請 D 覆核。
+
+- ✅ M4-M1 關閉（a1e0a45b）——出處：AUDIT-D-C-m01-5 §1：e2e 改驗 DOM，SO1／SO2 突變紅
+- ✅ M4-M3 關閉（e67879f2）——出處：AUDIT-D-C-m01-5 §5 補記：依 §3（M5-M1）、§4（M6-M1）的驗證

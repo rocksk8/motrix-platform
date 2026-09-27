@@ -48,3 +48,9 @@
 - **CA3-O1**：`test_vr1`（版本紀錄落後最新 commit 的日期）在基底 6ddb817c 就紅，與本包無關。列車合回時要補版本紀錄。
 - **CA3-O2**：`docs/platform/plans/ATTACHMENTS-PLAN.md` 第 44、93 行仍寫 M01 提供者在 `helpers/case_attachments.py`；M01-PLAN ⑤ 的「已知例外＋到期守門」依 CHANGELOG 已不需要。兩處文件建議順手更新。
 - **CA3-O3（給 B／主持）**：modtest 差異題**不指定 `-n` 就是串行**（`partial_cap` 只會壓上限，不會補上 -n）。D 第一次沒帶 `-n` 跑，7 分鐘只跑到 8%，改 `-- -n 2` 後兩批合計 39 分鐘。選題 609 檔時，建議預設就帶上限值。
+
+## 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+> A 補記（2026-09-28 01:02）：D 以機器掃描後已逐筆人工確認關閉（d_scan_mustfix.README 假陽性四類）；這裡只把既有的關閉改寫成標準單行，commit 取自各自的複核段落。請 D 覆核。
+
+- ✅ CA3-M1 關閉（221adaa0）——出處：AUDIT-D-C-m01-4 §1「CA3-M1 複核」：netplan 題改用 _without
