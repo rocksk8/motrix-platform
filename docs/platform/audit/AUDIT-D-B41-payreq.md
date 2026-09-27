@@ -68,3 +68,21 @@ cd D:\MOTRIX-PLATFORM-D14m\backend
 D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe -m pytest tests/platform/test_module_migrations.py tests/platform/test_migration_incomplete.py tests/platform/test_module_startup.py -q -n 2 --basetemp=%TEMP%\motrix-pytest-d-b41
 # PM1 探針：core.migrations.register 兩個模組（前者丟例外），對 %TEMP% 的臨時庫 run_all，看例外、後者有沒有跑、incomplete
 ```
+
+## 6. 第二輪複核：wip/b-payreq 1a544510（範圍 88e7d1df...1a544510）（D，2026-09-28）
+
+> 四個題檔共 76 題通過；突變 7 個全紅（P1 模組例外往上丟、P2 不 ROLLBACK TO、P3 拿掉自己 commit 的防線、P4 主庫 None 改回 fail-open、P5b demo 庫 None 改回不算、P6 middleware 不查 demo 缺席、P7 core 也吞例外）。
+
+| 項目 | 結果 | 判定 |
+|---|---|---|
+| PM1 | core 以外逐支 SAVEPOINT；例外或回原因 ⇒ ROLLBACK TO、記進 incomplete、不往上丟；core 的例外照舊往上丟。migration 自己 commit 讓 RELEASE 失敗時，記成「違規」的未完成、不往上丟（B 以突變 PM1c 自己抓到並補上）。repo 內「不准自己 commit」有守門；case 0001 拿掉了 `conn.commit()`。`init_db` 在 `run_all` 之前沒有提早 return（讀碼），所以 PO1 的 fail-closed 在正常啟動不會誤觸 | 成立 |
+| PS1 | TestClient 驗 middleware 對 demo token 回 404＋原因，正式 token 照常（P6 紅） | 成立 |
+| PO1 | 主庫查不到紀錄 ⇒ 所有已載入模組下線；demo 庫查不到 ⇒ demo 模式全部明說缺席（P4、P5b 紅） | 成立 |
+| PO2 | 訊息改成「發票可由填寫人、管理員或出納補上傳」，EM1 凍結清單同步更新 | 成立 |
+| 契約題更正 | 回傳 Cursor 的 `lambda c: c.execute(...)` 從 1.58 起會被判成「寫錯＝未完成」。契約題已改成明確回 None，CHANGELOG 補了更正、原句保留。產品碼 grep：模組 migration 只有 case 0001（`up` 回 None），沒有 lambda 寫法 | 成立。影響只在 repo 外的第三方模組，而且看得見（ERROR、模組下線），不會靜默 |
+
+**D2-O2（觀察）**：PO1 改成 fail-closed 之後，只要 `PRAGMA database_list` 回的路徑與 main.py 傳入的路徑正規化後對不上，**所有模組都會下線**。後果比先前的 fail-open 大，但方向正確，訊息也帶著路徑。正式機的路徑是普通的本機路徑，目前沒有已知的誤觸情境；日後若支援 subst 磁碟、junction 或 UNC 路徑安裝，要先驗這一點。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ PM1 關閉（1a544510）——模組 migration 逐支 SAVEPOINT，例外與自己 commit 都記成未完成、不拖垮整台；core 照舊往上丟
