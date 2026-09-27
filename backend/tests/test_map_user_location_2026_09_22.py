@@ -43,6 +43,8 @@ import pytest
 
 from helpers import geo
 from tests._map_cache_warm import serve_from_fake
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 #: 兩組**明顯不同**的使用者座標（台北 / 高雄，直線約 300 公里）。
 #: 🔑 G8 用它們證明 `distanceFromUserKm` 真的隨座標改變 ——
@@ -184,6 +186,7 @@ def _pos(coords, accuracy=42):
 # G1 · 三個參數都給 ⇒ 兩個距離並列
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g1_both_distances_are_reported_side_by_side(
         client, make_user, geo_enabled, office, tenders):
     """🔴 G1：`lat`＋`lon`＋`accuracy` 都給 ⇒ **每一筆同時有兩個距離**，
@@ -300,6 +303,7 @@ def test_g5b_an_accuracy_of_zero_is_rejected_too(
 # G3 · 三個都不給
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g3_without_user_coordinates_the_user_distance_is_null_not_zero(
         client, make_user, geo_enabled, office, tenders):
     """🔴 G3：三個都不給 ⇒ `distanceFromUserKm` 是 **`null` 不是 `0`**。
@@ -334,6 +338,7 @@ def test_g3_without_user_coordinates_the_user_distance_is_null_not_zero(
 # G6 · 兩個錨點互相獨立
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g6_a_missing_office_does_not_break_the_user_distance(
         client, make_user, geo_enabled, no_office, tenders):
     """🔴 G6：辦公室地址沒填 ⇒ `distanceFromOfficeKm` 是 null、
@@ -365,6 +370,7 @@ def test_g6_a_missing_office_does_not_break_the_user_distance(
 # G7 · 地理查詢關著時
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
         client, make_user, office, tenders, monkeypatch):
     """🔴 G7：`geo_on()` 關著時，`geoEnabled` 是 false，
@@ -414,6 +420,7 @@ def test_g7_turning_geo_off_is_visibly_different_from_zero_kilometres(
 # G8 · 反向控制：距離要真的隨座標改變
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g8_the_user_distance_actually_follows_the_coordinates(
         client, make_user, geo_enabled, office, tenders):
     """🔴🔴 G8 反向控制：**`distanceFromUserKm` 必須真的隨 `lat`/`lon` 改變。**
@@ -449,6 +456,7 @@ def test_g8_the_user_distance_actually_follows_the_coordinates(
 # G9 · 隱私：使用者的位置不可以被存下來
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_g9_the_users_position_is_never_written_down(
         client, make_user, geo_enabled, office, tenders, caplog):
     """🔴🔴 G9：傳進來的 `lat`/`lon`/`accuracy` **不可以被寫進資料庫或 log**。
@@ -626,6 +634,7 @@ def test_g10b_even_one_of_them_in_the_query_string_is_refused(
     )
 
 
+@needs_tender_radar
 def test_g11_the_same_values_in_the_header_work_fine(
         client, make_user, geo_enabled, office, tenders):
     """🔴🔴 G11 反向控制：**同一組值放在標頭裡要正常運作。**

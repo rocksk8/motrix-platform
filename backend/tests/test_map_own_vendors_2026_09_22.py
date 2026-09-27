@@ -70,6 +70,8 @@ import pytest
 import routers.map_points as mp
 from helpers import geo
 from tests._map_cache_warm import serve_from_fake
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 #: 要一起畫在地圖上的四個資料集。
 #: 📌 `completion_notes` **不在這裡**（P16：0 筆，不為一張空表寫實作）。
@@ -256,6 +258,7 @@ def test_p12_each_own_source_can_be_asked_for_on_its_own(
     assert body["points"], f"`{name}` 一個點都沒有（測試資料塞了一筆查得到的地址）"
 
 
+@needs_tender_radar
 def test_p12b_asking_for_two_sources_keeps_them_apart(
         client, make_user, own_data):
     """🔴🔴 P12b：**同時要兩個來源時，每個點都要說得出自己是哪一個。**

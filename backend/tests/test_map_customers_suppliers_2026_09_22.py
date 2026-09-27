@@ -45,6 +45,8 @@ import pytest
 
 from helpers import geo
 from tests._map_cache_warm import serve_from_fake
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 #: 從路由 grep 出來的模組權限。**R7 明講不要猜。**
 SOURCE_MODULES = {
@@ -143,6 +145,7 @@ def tenders_without_location(client):
         conn.close()
 
 
+@needs_tender_radar
 def test_r1_a_tender_is_located_by_its_organisation_name(
         client, make_user, tenders_without_location):
     """🔴 R1：標案的定位依據是 **`org`**，`location` 只當退階。
@@ -162,6 +165,7 @@ def test_r1_a_tender_is_located_by_its_organisation_name(
     assert (got[0]["lat"], got[0]["lon"]) == ORG_COORD
 
 
+@needs_tender_radar
 def test_r2_a_tender_that_cannot_be_located_is_counted_not_dropped(
         client, make_user, tenders_without_location):
     """🔴🔴 R2 反向控制：機關名稱查不到的那一筆，
@@ -192,6 +196,7 @@ def test_r2_a_tender_that_cannot_be_located_is_counted_not_dropped(
     )
 
 
+@needs_tender_radar
 def test_r3_a_name_hit_and_a_city_centre_are_not_labelled_the_same(
         client, make_user, tenders_without_location):
     """🔴 R3：`precision` 要標得出「用名稱查到的」與「縣市中心」的差別。
