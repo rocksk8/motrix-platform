@@ -8,7 +8,7 @@
  "modules/arap/api/payment_requests.py": 1,
  "modules/arap/receivables.py": 7,
  "modules/case/api/material_orders.py": 1,
- "modules/case/api/quotations.py": 43,
+ "modules/case/api/quotations.py": 44,
  "modules/case/case_deadlines.py": 7,
  "modules/case/quotations.py": 5,
  "modules/case/recognition.py": 1,

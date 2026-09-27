@@ -8,17 +8,24 @@
 - 範圍：`core.source_tree.product_files()`（backend 根、core、routers、helpers、modules/*，不含 tests／tools）。
 - 算法（AST）：字串常數與 f-string 的常數片段裡 `json_extract(` 出現的次數（docstring 不算、`#` 註解 AST 看不到）；
   ＋引用「值裡含 json_extract 的模組層常數」的次數（例：`SQL_DEAL_TAG`——換個檔 import 它，不寫字面值也算）。
+- 比對（稽核 D T13-S1）：不分大小寫、函式名與括號之間允許空白（`JSON_EXTRACT (`）；別名常數（`SQL_Y = SQL_DEAL_TAG + "…"`、
+  `SQL_Z = SQL_Y`）以 AST 追到不動點，引用它們一樣算。
+- 射程（追不到的）：在函式裡動態組字串（`"json_" + "extract("`、`"%s(" % fn`）、`getattr` 取常數、從別的套件或設定檔讀進來的 SQL、
+  以及 `json_each`／`->>` 等其他 JSON 取值寫法（不在本守門範圍）。
 - 判準：每個檔的次數 ≤ 基線（json_extract_baseline.json）；基線沒有的檔出現 ⇒ 紅；降下來了 ⇒ 同一個 commit 重產基線
   （`python tests/platform/test_json_extract_ratchet.py --update`），不調的話之後加回去會照綠。模組不在（選配）⇒ 它的條目不比。
 """
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BASELINE = HERE / "json_extract_baseline.json"
 NEEDLE = "json_extract("
+#: 〔稽核 D T13-S1：~~只認小寫、緊接括號~~〕不分大小寫、允許空白
+PATTERN = re.compile(r"json_extract\s*\(", re.I)
 
 
 def _docstring_nodes(tree):
@@ -38,13 +45,33 @@ def _strings(tree):
             yield n.value
 
 
+def _names_in(node):
+    for x in ast.walk(node):
+        if isinstance(x, ast.Name):
+            yield x.id
+        elif isinstance(x, ast.Attribute):
+            yield x.attr
+
+
 def constant_names(trees):
-    """值裡含 json_extract 的模組層常數名（跨檔收集）。"""
+    """值裡含 json_extract 的模組層常數名（跨檔收集），並追別名到不動點：值裡引用了已知常數的模組層常數也算。"""
+    assigns = [n for tree in trees.values() for n in tree.body if isinstance(n, (ast.Assign, ast.AnnAssign)) and n.value is not None]
+
+    def targets(n):
+        ts = n.targets if isinstance(n, ast.Assign) else [n.target]
+        return {t.id for t in ts if isinstance(t, ast.Name)}
     names = set()
-    for tree in trees.values():
-        for n in tree.body:
-            if isinstance(n, ast.Assign) and any(NEEDLE in s for s in _strings(ast.Module(body=[n], type_ignores=[]))):
-                names.update(t.id for t in n.targets if isinstance(t, ast.Name))
+    for n in assigns:
+        if any(PATTERN.search(s) for s in _strings(ast.Module(body=[n], type_ignores=[]))):
+            names |= targets(n)
+    changed = True
+    while changed:                                   # 別名：SQL_Y = SQL_DEAL_TAG + "…"、SQL_Z = SQL_Y
+        changed = False
+        for n in assigns:
+            t = targets(n) - names
+            if t and set(_names_in(n.value)) & names:
+                names |= t
+                changed = True
     return names
 
 
@@ -54,7 +81,7 @@ def counts(sources):
     consts = constant_names(trees)
     out = {}
     for rel, tree in trees.items():
-        n = sum(s.count(NEEDLE) for s in _strings(tree))
+        n = sum(len(PATTERN.findall(s)) for s in _strings(tree))
         for node in ast.walk(tree):
             name = node.id if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) else (
                 node.attr if isinstance(node, ast.Attribute) else None)
@@ -110,6 +137,17 @@ def test_the_counter_sees_constants_and_skips_docstrings():
     }
     got = counts(src)
     assert got == {"helpers/a.py": 2, "modules/zz/b.py": 1, "modules/zz/d.py": 2}, got
+    # 稽核 D T13-S1：大寫、空白、別名常數（兩層）
+    alias = {
+        "helpers/a.py": src["helpers/a.py"],
+        "modules/zz/e.py": "def m(c):\n    return c.execute(\"SELECT JSON_EXTRACT (a,'$.x') FROM t\")\n",
+        "modules/zz/f.py": "from helpers.a import SQL_X\nSQL_Y = SQL_X + \" AS k\"\nSQL_Z = SQL_Y\n"
+                           "def n(c):\n    return c.execute('SELECT ' + SQL_Z)\n",
+    }
+    g2 = counts(alias)
+    assert g2.get("modules/zz/e.py") == 1, g2
+    # f.py：SQL_X（定義 SQL_Y 時引用）＋SQL_Y（定義 SQL_Z 時引用）＋SQL_Z（查詢時引用）＝3
+    assert g2.get("modules/zz/f.py") == 3, g2
     base = {"helpers/a.py": 2, "modules/zz/d.py": 2}
     msgs = problems(got, base)
     assert len(msgs) == 1 and msgs[0].startswith("modules/zz/b.py：新出現"), msgs      # 換檔引用常數 ⇒ 紅
