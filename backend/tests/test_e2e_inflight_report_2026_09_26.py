@@ -173,6 +173,10 @@ def test_next_e2e_still_gets_a_browser(live_server, new_page):
 
 
 def test_plain_one_after():
+    import os
+    out = os.environ.get("O14_WORKER_OUT")
+    if out:
+        open(out, "w", encoding="utf-8").write(os.environ.get("PYTEST_XDIST_WORKER", ""))
     assert True
 """
 
@@ -185,8 +189,14 @@ _CHILD_MARGIN = 20
 
 
 def _child_deadline():
+    # 〔稽核 D O14-S1：~~max(30, 上限 − 20)~~——上限 ≤ 30 時期限 ≥ 上限；改用共用的 child_pytest_deadline〕
+    from tests._subproc import child_pytest_deadline
+    return child_pytest_deadline(_CHILD_MARGIN)
+
+
+def _outer_cap():
     import conftest
-    return max(30.0, conftest._e2e_hard_cap_seconds() - _CHILD_MARGIN)
+    return float(conftest._e2e_hard_cap_seconds())
 
 
 def _probe_env(basetemp):
@@ -221,7 +231,7 @@ def _run_probe(tmp_name, xdist, basetemp):
             #   而且三題落在同一個 worker ⇒「卡住之後下一題 e2e 還拿得到瀏覽器」驗的是**同一個 worker 的恢復**
             #   （-n 2 時下一題可能分到另一個 worker，根本沒經過恢復）；-n 1 也不是「重的一輪」、不去搶全機測試鎖（根因見 _probe_env）
             cmd[6:6] = ["-n", "1"]
-        env = _probe_env(basetemp)
+        env = dict(_probe_env(basetemp), O14_WORKER_OUT=str(d / "worker.txt"))
         deadline = _child_deadline()
         t0 = time.monotonic()
         try:
@@ -231,9 +241,11 @@ def _run_probe(tmp_name, xdist, basetemp):
             tail = ((e.stdout or "") + (e.stderr or "")) if isinstance(e.stdout, str) else ""
             pytest.fail("子 pytest（%s）%.0f 秒內沒有結束（期限＝外層逐題上限 %.0f − %d）：看門狗沒有關瀏覽器，或機器負載太重。"
                         "\n子行程輸出尾段：\n%s" % ("xdist -n 1" if xdist else "單程序", deadline,
-                                                  deadline + _CHILD_MARGIN, _CHILD_MARGIN, tail[-1500:]))
+                                                  _outer_cap(), _outer_cap() - deadline, tail[-1500:]))
         print("[O14] 子 pytest %s 耗時 %.1f 秒（期限 %.0f）" % ("n1" if xdist else "n0", time.monotonic() - t0, deadline))
-        return r.returncode, r.stdout + r.stderr
+        wf = d / "worker.txt"
+        worker = wf.read_text(encoding="utf-8") if wf.is_file() else None
+        return r.returncode, r.stdout + r.stderr, worker
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -245,10 +257,12 @@ def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
     行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程超過期限（外層上限 − 20）⇒ 本題以 pytest.fail 說明 ⇒ 紅。
     〔O14：id ~~n2~~ ⇒ n1（子行程改 -n 1，理由見 _run_probe）〕"""
     import uuid
-    code, out = _run_probe("test_zz_td_probe_%s.py" % uuid.uuid4().hex[:8], xdist, tmp_path / "bt")
+    code, out, worker = _run_probe("test_zz_td_probe_%s.py" % uuid.uuid4().hex[:8], xdist, tmp_path / "bt")
     # teardown error 的那一題本體算 passed ⇒ 三題都 passed＋一個 error（實測 -n 0：3 passed, 1 error in 13s）
     assert "3 passed" in out and "1 error" in out, out[-1500:]
     assert "[e2e teardown]" in out and "td-hang" in out, out[-1500:]
+    # 稽核 D O14-M1：子行程真的在 xdist worker 裡跑（n1 ⇒ gw0；n0 ⇒ 不是 worker）——拿掉 -n 1 這一題要紅
+    assert worker == ("gw0" if xdist else ""), "子行程的 worker：%r（xdist=%s）\n%s" % (worker, xdist, out[-800:])
 
 
 
@@ -325,10 +339,12 @@ def test_soft_ceiling_follows_the_hard_cap(monkeypatch):
 def test_o14_child_deadline_stays_below_the_outer_hard_cap(monkeypatch):
     """O14：子行程期限一定小於外層逐題硬上限（原本 240 > 120 永遠輪不到）；上限改了就跟著改。"""
     import conftest
-    for cap in ("120", "90", "300"):
+    # 〔稽核 D O14-S1：小上限（50、30、20、8）也要小於外層〕
+    for cap in ("120", "90", "300", "50", "30", "20", "8"):
         monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", cap)
-        assert _child_deadline() < conftest._e2e_hard_cap_seconds()
-        assert _child_deadline() == max(30.0, float(cap) - _CHILD_MARGIN)
+        assert 0 < _child_deadline() < conftest._e2e_hard_cap_seconds(), cap
+    monkeypatch.setenv("MOTRIX_E2E_HARD_CAP", "120")
+    assert _child_deadline() == 100
 
 
 def test_o14_child_pytest_does_not_queue_on_the_machine_lock(tmp_path):
