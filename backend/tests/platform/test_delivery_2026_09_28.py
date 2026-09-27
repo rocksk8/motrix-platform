@@ -339,3 +339,25 @@ def test_prune_uses_write_back_results(env):
     D.write_back(str(env["root"]), names[0], {"status": "success"}, "succeeded")
     removed, _kept = D.prune(str(env["root"]), keep=3)
     assert removed == [names[0]]
+
+
+# ══ 交付資料夾讀「系統設定→儲存位置」（wip/a-storage-settings；helpers.storage_locations 是唯一解析處）══════════
+
+def test_cli_without_root_uses_the_configured_delivery_folder(env, capsys):
+    D.publish(str(_pkg(env["tmp"])), str(env["root"]), env["priv"], now=datetime(2026, 9, 28, 2, 0, 0))
+    assert D.main(["scan"], resolver=lambda: str(env["root"])) == 0
+    assert "20260928_020000_0123abcd_full" in capsys.readouterr().out
+
+
+def test_rc_unset_delivery_folder_is_refused_not_guessed(env, capsys):
+    """沒設定也沒有 --root ⇒ 拒絕（不掃磁碟、不自動建）；--root 明給時照用。"""
+    assert D.main(["scan"], resolver=lambda: "") == 1
+    assert "尚未設定更新交付資料夾" in capsys.readouterr().out
+    assert D.main(["scan", "--root", str(env["root"])], resolver=lambda: (_ for _ in ()).throw(AssertionError("不該讀設定"))) == 0
+
+
+def test_default_resolver_is_the_storage_locations_setting():
+    """讀碼：預設的解析就是 helpers.storage_locations.path("delivery_root")（不另寫判斷）。"""
+    import inspect
+    src = inspect.getsource(D._default_resolver)
+    assert 'storage_locations.path("delivery_root")' in src

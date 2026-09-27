@@ -527,7 +527,28 @@ def latest_prod_commit(root):
     return best[1] if best else None
 
 
-def main(argv=None):
+def _default_resolver():
+    """這台機器的「更新交付資料夾」設定（系統設定→儲存位置；helpers.storage_locations 是唯一解析處）。
+    跑的是**這支檔案所在的那一份安裝**（backend/tools 的上一層）的設定與主庫。"""
+    backend = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if backend not in sys.path:
+        sys.path.insert(0, backend)
+    try:
+        from helpers import storage_locations
+    except ImportError:
+        raise DeliveryError("這一版沒有「儲存位置」設定（helpers.storage_locations）：請用 --root 指定交付資料夾")
+    return storage_locations.path("delivery_root")
+
+
+def configured_root(resolver=None):
+    """交付資料夾：沒有用 --root 指定時讀設定。沒設定 ⇒ 拒絕（不猜、不掃磁碟、不自動建）。"""
+    root = (resolver or _default_resolver)()
+    if not root:
+        raise DeliveryError("尚未設定更新交付資料夾（系統設定→儲存位置），也沒有用 --root 指定")
+    return root
+
+
+def main(argv=None, resolver=None):
     try:
         sys.stdout.reconfigure(errors="backslashreplace")
     except Exception:
@@ -535,15 +556,18 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     k = sub.add_parser("keygen"); k.add_argument("--private-out", required=True)
-    p = sub.add_parser("publish"); p.add_argument("--pkg", required=True); p.add_argument("--root", required=True)
+    #: --root 省略 ⇒ 讀「系統設定→儲存位置」的更新交付資料夾（configured_root）
+    p = sub.add_parser("publish"); p.add_argument("--pkg", required=True); p.add_argument("--root")
     p.add_argument("--private-key", required=True); p.add_argument("--keep", type=int, default=KEEP_DEFAULT)
-    s = sub.add_parser("scan"); s.add_argument("--root", required=True)
-    st = sub.add_parser("stage"); st.add_argument("--root", required=True); st.add_argument("--name", required=True)
+    s = sub.add_parser("scan"); s.add_argument("--root")
+    st = sub.add_parser("stage"); st.add_argument("--root"); st.add_argument("--name", required=True)
     st.add_argument("--staging", required=True)
     v = sub.add_parser("verify"); v.add_argument("--staged", required=True); v.add_argument("--install-root", required=True)
     v.add_argument("--skip-verify-package", action="store_true")
     a = ap.parse_args(argv)
     try:
+        if a.cmd in ("publish", "scan", "stage") and not a.root:
+            a.root = configured_root(resolver)
         if a.cmd == "keygen":
             print(keygen(a.private_out).decode("ascii"))
             print("DELIVERY_KEYGEN_OK（私鑰：%s；公鑰貼進 backend/tools/delivery.py 的 DELIVERY_PUBKEY_PEM）" % a.private_out)
