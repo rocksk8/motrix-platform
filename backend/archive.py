@@ -601,6 +601,11 @@ def _clear_backup_alert_if_healthy() -> None:
     try:
         if os.path.exists(alert_path):
             reason = _alert_reason(alert_path)
+            # D 稽核 MA-M1：依告警**原因**判斷條件是否解除（使用者裁示「條件解除才清」）——
+            #   月備份類只在上個月 .done 在時才清；其他類照舊看雲端存檔是否正常（上面的 _archive_ok）。
+            #   否則每一輪會「清掉 → 隨後的月備份檢查重寫」，稽核一直記「已解除」而問題沒解除。
+            if reason.startswith(_PREV_MONTH_ALERT_PREFIX) and _previous_month_missing():
+                return
             os.remove(alert_path)
             logger.info("Cloud archive path OK — cleared BACKUP_ALERT.txt")
             # 2026-09-28 使用者裁示：條件解除自動清，清除本身寫一筆稽核（每日 .log 與稽核日誌不動）
@@ -2352,6 +2357,21 @@ def _export_table_json_set(conn, dest_dir_abs: str, s3_prefix: str, now: str) ->
     return summary
 
 
+#: 「上個月月備份沒有完成」告警的原因開頭（清除時依原因判斷條件是否解除，D 稽核 MA-M1）
+_PREV_MONTH_ALERT_PREFIX = "上個月（"
+
+
+def _previous_month_missing() -> bool:
+    """純判斷（不寫告警）：上個月的月備份缺 .done，而系統上個月確實在跑。"""
+    first = date.today().replace(day=1)
+    prev = (first - timedelta(days=1)).strftime('%Y-%m')
+    marker = os.path.join(_monthly_dir(), prev, '.done')
+    if _cloud_marker_exists(marker, f"月備份/{prev}/.done"):
+        return False
+    return os.path.isdir(_LOCAL_DB_BACKUP) and any(
+        n.startswith(prev + "-") for n in os.listdir(_LOCAL_DB_BACKUP))   # 全新安裝或上個月沒在跑：不是缺漏
+
+
 def _check_previous_month_backup() -> bool:
     """S-CC06：上個月的月備份若沒完成（而系統上個月確實在跑）⇒ ERROR 告警（同原因每日一封）。
 
@@ -2359,17 +2379,11 @@ def _check_previous_month_backup() -> bool:
     （例：拿上個月最後一份本機／個資每日快照手動放進 月備份/YYYY-MM/）。回傳是否告警。
     """
     try:
-        first = date.today().replace(day=1)
-        prev = (first - timedelta(days=1)).strftime('%Y-%m')
-        marker = os.path.join(_monthly_dir(), prev, '.done')
-        if _cloud_marker_exists(marker, f"月備份/{prev}/.done"):
+        if not _previous_month_missing():
             return False
-        ran_last_month = os.path.isdir(_LOCAL_DB_BACKUP) and any(
-            n.startswith(prev + "-") for n in os.listdir(_LOCAL_DB_BACKUP))
-        if not ran_last_month:
-            return False                      # 全新安裝或上個月根本沒在跑：不是缺漏
+        prev = (date.today().replace(day=1) - timedelta(days=1)).strftime('%Y-%m')
         _write_backup_alert(
-            "上個月（%s）的月備份沒有完成 —— 永久保留層缺這個月。請從上個月最後一份每日快照"
+            _PREV_MONTH_ALERT_PREFIX + "%s）的月備份沒有完成 —— 永久保留層缺這個月。請從上個月最後一份每日快照"
             "（本機 db_backups 或 系統存檔_個資／每日備份）手動補進 月備份/%s/，"
             "補好後在該資料夾放一個空的 .done 檔，告警才會解除（系統只認 .done）" % (prev, prev), level="ERROR")
         return True

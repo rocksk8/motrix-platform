@@ -488,3 +488,39 @@ def test_alert_cleared_when_healthy_writes_an_audit_with_the_reason(tmp_path, mo
     archive._clear_backup_alert_if_healthy()
     assert not alert.exists()
     assert audits == [("backup.alert_cleared", "BACKUP_ALERT.txt", {"reason": "上個月（2026-08）的月備份沒有完成"})]
+
+
+def test_mam1_monthly_alert_is_cleared_only_when_its_own_condition_is_resolved(tmp_path, monkeypatch):
+    """D 稽核 MA-M1：雲端正常、上個月 .done 還沒放 ⇒ 不清、不記「已解除」（同一天跑三輪也一樣）；
+    放上 .done ⇒ 清一次、稽核一筆。"""
+    import archive
+    backups = tmp_path / "db_backups"
+    (backups / _prev_month().isoformat()).mkdir(parents=True)
+    monkeypatch.setattr(archive, "_LOCAL_DB_BACKUP", str(backups))
+    monkeypatch.setattr(archive, "_monthly_dir", lambda: str(tmp_path / "月備份"))
+    monkeypatch.setattr(archive, "_ALERT_DIR", str(tmp_path / "alerts"))
+    monkeypatch.setattr(archive, "cloud_archive_enabled", lambda: True)
+    monkeypatch.setattr(archive, "_archive_ok", lambda: True)
+    audits = []
+    monkeypatch.setattr(archive, "_system_audit", lambda a, t="", d=None: audits.append(a))
+    alert = tmp_path / "alerts" / "BACKUP_ALERT.txt"
+
+    def write_alert(reason, level="WARN"):
+        alert.parent.mkdir(parents=True, exist_ok=True)
+        alert.write_text("[%s] x\n時間: t\n原因: %s\n" % (level, reason), encoding="utf-8")
+    monkeypatch.setattr(archive, "_write_backup_alert", write_alert)
+
+    for _ in range(3):                                   # 每日排程「今天 .done 已在」分支的順序：清 → 查上個月
+        archive._clear_backup_alert_if_healthy()
+        archive._check_previous_month_backup()
+    assert alert.exists() and audits == []
+    done = tmp_path / "月備份" / _prev_month().strftime("%Y-%m") / ".done"
+    done.parent.mkdir(parents=True, exist_ok=True)
+    done.write_text("")
+    archive._clear_backup_alert_if_healthy()
+    archive._check_previous_month_backup()
+    assert not alert.exists() and audits == ["backup.alert_cleared"]
+    # 反向控制：其他原因的告警照舊只看雲端（雲端正常就清）
+    write_alert("每日 JSON 匯出有 1 張表失敗")
+    archive._clear_backup_alert_if_healthy()
+    assert not alert.exists() and audits == ["backup.alert_cleared", "backup.alert_cleared"]
