@@ -132,3 +132,42 @@ D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe -m pytest tests/platform/test_app
 # 突變：逐項以唯一錨點取代（assert 次數＝1）→ 跑同兩檔（再加 --deselect ...::test_aho7_script_change_requires_a_version_decision 各跑一次）→ 寫回原內容
 # 探針 DM2／DO1：apply_plan.make_plan／cleanup_added 在 %TEMP% 合成兩次套用，見 §2 DM2
 ```
+
+## 7. 第二輪複核：wip/h-apply-platform ee434e2c（範圍 0a96c920...ee434e2c）（D，2026-09-28）
+
+> 題目 140 過（排除 test_aho7）；突變 16 個（一律 `--deselect test_aho7`），紅 11、存活 5。
+> 演練證據 D:\MOTRIX-DRILLS\apply-run-0928\r2_*，**跑在 1307ae09**（ee434e2c 之前）：ee434e2c 只把 plan_refused／plan_tool_missing 分開、另補 RUNBOOK，r2_run_PX.log 的 `plan_failed` 正是這一包要修的誤報。主持提到的 plan_tool_missing 路徑，r2_* 裡沒有找到對應的紀錄。
+
+| 項目 | 讀碼＋題目＋突變＋演練 | 判定 |
+|---|---|---|
+| DM1 | 自動回滾：停服後 `Backup-DatabasesOnline` 另存 pre_rollback，失敗就不覆寫主庫與 demo 庫（突變 R2 紅）。手動回滾：預設只回程式；`-IncludeDatabase` 還要加 `-ConfirmDatabaseOverwrite`，`-Yes` 不算數（R3 紅）；另存失敗 ⇒ 不動檔、重啟服務（R9 紅）。演練：RB_noconfirm 被擋；RB_db 的 pre_rollback 有標記；P3 的 pre_rollback 有新版建的表 | 成立 |
+| DM2 | `cleanup-snapshot`：刪「安裝目錄有、快照沒有」的可刪程式檔；快照裡沒有的頂層目錄略過；有上限，手動回滾先乾跑。R1 紅；演練：P4 之後回滾到 P1 之前，drillmod 與兩頁被清掉 | 成立 |
+| DS1 | trap 在 service=down，而且磁碟是 not_applied／applied 時重新啟動；restoring 不動 | 邏輯成立；**沒有題**（R4 存活），見 D2-S1 |
+| DS3 | M1、M2、M4、M8 紅；**M3、M9 存活**，見 D2-S2 | 部分成立 |
+| DS4 | 值域補齊，並有「狀態 ⊆ 值域」題 | 成立；R10（plan_refused 分支）存活，見 D2-S1 |
+| DS5 | 所有寫回都 `/XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json`，有題。快照這一側也排除，但沒有題（R5 存活）；真正的防線在寫回那一側，所以可以接受 | 成立 |
+| DO1 | `.apply.lock` 列進 STATE_FILES；`*.modules_disabled.json` 列進 STATE_SUFFIXES（R8 紅） | 成立 |
+| DO2 | 未改：只有 demo 庫的 migration 失敗，照樣擋下正式機更新。D 判斷**維持即可**：乾跑失敗代表新版 migration 有缺陷，在更新前擋下、修好再出包，比讓正式機帶著一個 demo 會壞的版本上線便宜；使用者裁示 AB-S7 講的是啟動時的上下線，不是更新閘門 | 結案（不修） |
+| DO3 | 使用者裁示：授權有、而包沒有 ⇒ plan_refused（R6 紅）；未授權 ⇒ 資料夾與頁面只停用不刪（R7 紅）。授權判定用新包的 helpers.licensing 讀正式機的金鑰，與啟動時同一支 | 成立 |
+
+**D2-S1（建議）　trap 重啟與 plan_refused 分流沒有題**：R4（trap 不重啟）與 R10（APPLY_PLAN_REFUSED 不分流）改了都綠。建議照 test_ahs11 的做法：把 trap 取出來，在 PowerShell 裡跑兩個方向——ProdState=applied、service=down ⇒ 呼叫 Start-InstallService；restoring ⇒ 不呼叫。再補一題「輸出含 APPLY_PLAN_REFUSED ⇒ 狀態是 plan_refused」。
+
+**D2-S2（建議）　DS3 結構題有兩處只驗「字串存在」**：
+- M3：題目驗的是 `Join-Path $rollbackDir "root_docs"`（變數指派那一行）在不在；把真正的 Copy-Item 那行拿掉照樣綠。改成驗 `Copy-Item $_.FullName -Destination $ProdRoot` 出現在函式本體裡
+- M9：題目驗的是 cleanup-snapshot 在寫回之前被呼叫；把 `$cleanFailed` 寫死成 `$false`（忽略清理失敗）照樣綠。補一條：`$cleanFailed` 的判定含 `APPLY_SNAPCLEAN_OK`，而且之後有 `if ($cleanFailed) { Fail … "restore_cleanup_failed" }`
+
+**D2-O1（觀察）　`cleanup-snapshot` 是第一個「依『不在』就刪」、而且範圍涵蓋整個 backend 的動作**：分類預設是 program ⇒ 日後有任何執行期寫檔落在 backend／frontend／tools／product，而且不在 DATA_DIRS 裡，回滾時就會被刪。這一輪查過既有的寫入點：export_archive 屬於 PDF_ARCHIVES、品牌圖在 uploads、停用清單快取屬於 STATE_SUFFIXES，都安全。建議加一道守門：`core.paths` 每個會寫入的常數，classify 都不可以是 program。
+
+**誘餌行程消失（主持要判斷要不要追）**：**不必再追產品碼**。
+- 產品碼：Stop-InstallService 在每一次 `Stop-Process` 之前都印「結束 … PID」（apply_update.ps1 的 Stop-InstallService 迴圈）。r2_* 八份紀錄都沒有 33208、14120 ⇒ 不是 apply／rollback 停的
+- 另有兩個會讓它們消失的演練工具機制：
+  - drill_stop.ps1 設計上就會殺 decoys.txt 列的 PID，以及命令列含演練路徑、或 `--port 6781/6782` 的行程；演練目錄在 03:42:38 收尾
+  - decoy1 是 `cmd.exe /c "<演練根>\other\backend\autostart.bat"`，這個檔現在不存在；如果演練時也不存在，cmd 會立刻結束
+- 建議：下一次演練在每一條路之後，立刻記錄誘餌是否還活著（`Get-Process -Id`），不要等收尾時才看
+
+**對正式機使用的判定**：H12 本身**通過**（DM1、DM2 關閉；自動回滾、兩種手動回滾、授權拒絕都有演練）。第十四班的包上正式機之前，還差一項：B41 合回後，在合併樹上補 **P2m**（模組 migration 失敗 ⇒ 乾跑擋下），也就是 DS2／AH-S6 的契約題與演練。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ DM1 關閉（ee434e2c）——回滾覆寫資料庫前另存 pre_rollback，失敗就不覆寫；手動回滾預設只回程式，覆寫要另加確認
+- ✅ DM2 關閉（ee434e2c）——回滾以快照為準清掉快照沒有的程式檔（cleanup-snapshot），回滾到較舊的快照也清得乾淨
