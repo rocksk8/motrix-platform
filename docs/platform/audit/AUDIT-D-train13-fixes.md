@@ -40,3 +40,15 @@
 - S1、S2 採納，同樣建包後處理：
   - S1：crm 正對照依 core-only 與否分兩個門檻；
   - S2：core_only_rc 只把 MOTRIX_TRAIN 傳給子行程，加明確的 `--train` 旗標。
+
+## 4. 複核 wip/h-d7-prep 136fc980（主持子代理；基底 e21b099a）（D，2026-09-27 20:17）
+
+| commit | 內容 | D 的驗證 | 結果 |
+|---|---|---|---|
+| e3cd474e | 11 份 `product/<key>-only.json` | 11 個 key ＝ modules.json 登記的 11 個模組（無漏、無多）；格式同 `core-only.json`。apply＋check 11 份 exit 0 是子代理自報，D 未重跑 | 成立 |
+| b22708bd | **T13R-M1**：傳票案件頁籤題在 M01 不在時改驗缺席行為 | 真刪 M01 的 sparse 樹：該題 **1 過（不是略過）**；把產品的 `CASES_UNAVAILABLE` 改成空字串 ⇒ **紅** | **T13R-M1 關閉** |
+| 8c4b42d7 | **S1**：crm 正對照依 `install_verdict`（modules.json＋`module.json` 是否存在，不看掃描）分兩級：完整 >100、其他 >50 | 突變「門檻一律 50」⇒ 紅（沙盒反向控制含「完整安裝只掃到 85 要紅」） | **S1 關閉** |
+| 136fc980 | **S2**：`child_env(train)`——只給子行程；沒帶 `--train` 連呼叫端環境裡的 `MOTRIX_TRAIN` 也拿掉；本行程 `os.environ` 不改；PLAYBOOK 列車長步驟改帶 `--train` | 突變「忽略 --train」⇒ 紅（3 題）；「永遠設」⇒ 紅（3 題）。全 repo 沒有其他呼叫端 | **S2 關閉** |
+
+- **觀察 D7P-O1**：`product_select` 不檢查模組之間的相依，但沒有任何模組的 module.json 宣告對其他模組的相依——這是架構要求（L2 之間 import 為 0，由 `test_module_boundaries` 把關），所以不會漏掉東西；單一模組包的正確性由執行期的「缺席時明說」與 D7 的缺席 404 驗。
+- **必修 0** ⇒ 可合回、跑全量、建包。
