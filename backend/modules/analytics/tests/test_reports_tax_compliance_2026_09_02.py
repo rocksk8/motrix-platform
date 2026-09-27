@@ -4,6 +4,8 @@ from tests.test_reports_tax_compliance_2026_09_02 import (  # noqa: E402,F401  �
     _auth,
     _login,
 )
+from tests._requires import requires_module  # noqa: E402
+needs_m05 = requires_module("arap", '本題需要 M05（應收應付）：開票申請附件／收款與銷項發票資料由它提供；M05 不在時產品明說未安裝，本題沒有對象（B 2026-09-28，M05 真刪抓到）')
 
 
 def test_ar_aging_still_uses_writeoff_adjusted_amount(client, make_user):
@@ -54,6 +56,7 @@ def test_excel_export_writes_audit_log(client, make_user):
     assert any(e["target_id"] == "financial" for e in items)
 
 
+@needs_m05
 def test_tax_export_writes_audit_log(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)

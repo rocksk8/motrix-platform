@@ -6,6 +6,8 @@
 ②`_build_income_expense_scopes()` 的 month 參數（YYYY-MM）沒有格式驗證，畸形值
 會讓 `int(month[5:7])`/`monthrange()` 拋未接住的例外，變成 500 而不是 400。"""
 import json
+from tests._requires import requires_module  # noqa: E402
+needs_m05 = requires_module("arap", '本題需要 M05（應收應付）：開票申請附件／收款與銷項發票資料由它提供；M05 不在時產品明說未安裝，本題沒有對象（B 2026-09-28，M05 真刪抓到）')
 
 
 def _login(client, username, password):
@@ -30,6 +32,7 @@ def test_month_expense_scope_rejects_malformed_month(client, make_user):
     assert r_ok.status_code == 200, r_ok.text
 
 
+@needs_m05
 def test_income_html_shows_zero_net_amount_not_actual_amount(client, make_user):
     """netAmount 合法為 0（手續費剛好等於實收金額）時，《當月收入明細》的
     「實收淨額」欄要顯示 NT$ 0，不是誤退回顯示實收金額。"""

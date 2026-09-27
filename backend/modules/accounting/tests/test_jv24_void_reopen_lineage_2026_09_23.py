@@ -43,6 +43,7 @@ B 沒有帶測試（協定：B 不寫測試，C 才寫）。B 自己的探針
 from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 #: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
 needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
+needs_m05 = requires_module("arap", '本題需要 M05（應收應付）：開票申請附件／收款與銷項發票資料由它提供；M05 不在時產品明說未安裝，本題沒有對象（B 2026-09-28，M05 真刪抓到）')
 import json
 
 import pytest
@@ -155,6 +156,7 @@ def _void_and_reopen(client, hdr, voucher_id, reason="JV24測試作廢重開"):
 # ══════════════════════════════════════════════════════════════════════
 
 @needs_m01
+@needs_m05
 def test_jv24_a_used_candidate_stays_used_after_void_and_reopen(
         client, make_user):
     """🔴🔴 **核心：傳票 A 帶入憑證 X → 作廢重開成 B → X 仍然
@@ -196,6 +198,7 @@ def test_jv24_a_used_candidate_stays_used_after_void_and_reopen(
 
 
 @needs_m01
+@needs_m05
 def test_jv24_negative_control_an_unrelated_direct_upload_is_unaffected(
         client, make_user):
     """⚙️ **正對照：作廢重開不會讓一個從沒被帶入過的候選憑證變成已使用。**
@@ -266,6 +269,7 @@ def test_jv24_negative_control_a_fresh_voucher_has_no_supersedes_no(
 # ══════════════════════════════════════════════════════════════════════
 
 @needs_m01
+@needs_m05
 def test_jv24_a_two_level_void_reopen_chain_stays_correct_at_both_levels(
         client, make_user):
     """🔴🔴 **鏈式兩層：A 作廢重開成 B，B 再作廢重開成 C——`used` 與
