@@ -253,7 +253,7 @@ def _run_probe(tmp_name, xdist, basetemp):
         shutil.rmtree(d, ignore_errors=True)
 
 
-@needs_m01
+#: O14：子行程改 -n 1（不再需要 M01；見 e67879f2 M6-M1，本題的紅是負載逾時不是 M01 缺席）
 @pytest.mark.e2e
 @pytest.mark.parametrize("xdist", [False, True], ids=["n0", "n1"])
 def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):

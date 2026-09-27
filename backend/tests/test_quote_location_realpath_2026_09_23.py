@@ -369,6 +369,10 @@ import _pdf_identity as I  # noqa: E402
 
 #: `QL7` 接縫層的 8 支。📌 `payslip` 是第 9 支，走 `QL8` 那條路。
 QL7_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
+#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
+#: `_build_completion_html`（完工單）要 M01；其餘單據的 builder 在 M01 不在時照常要過
+QL7_PARAMS = [pytest.param(b, marks=[needs_m01] if b == "_build_completion_html" else [])
+              for b in QL7_BUILDERS]
 
 
 @pytest.fixture
@@ -390,8 +394,7 @@ def identity(monkeypatch):
     return table
 
 
-@needs_m01
-@pytest.mark.parametrize("builder", QL7_BUILDERS)
+@pytest.mark.parametrize("builder", QL7_PARAMS)
 def test_ql7_every_document_takes_its_identity_from_the_location(
         builder, identity):
     """QL7（接縫層）：**8 種單據的抬頭都要從據點取值。**
