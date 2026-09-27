@@ -26,6 +26,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 AUDIT_DIR = REPO / "docs" / "platform" / "audit"
 REGISTER = REPO / "docs" / "platform" / "mustfix_open.json"
+#: 凍結的舊 ID 清單（D 稽核 MS-M1，2026-09-28）：只有這些 ID 的關閉可以沿用舊的寬鬆判準（散文、表格裡的「關閉」）；
+#: 清單以外（含之後宣告的）一律只認標準單行 CANON——一句「前提是 X 關閉」不會再把 X 從未關清單裡弄不見。
+LEGACY = REPO / "docs" / "platform" / "mustfix_legacy_closures.json"
 
 ID = r"[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*"
 DECL = [re.compile(r"\*\*(" + ID + r")\s*（必修"), re.compile(r"^\|\s*(" + ID + r")\s*\|.*必修")]
@@ -75,11 +78,26 @@ def canonical_closures(texts: dict) -> dict:
     return out
 
 
-def closure_hits(d: str, home: str, texts: dict, ndecl: Counter, canon=None) -> list:
-    """ID `d`（宣告於 `home`）的關閉紀錄出現在哪幾份檔。空 ⇒ 沒有關閉紀錄。"""
+def load_legacy(path=LEGACY) -> dict:
+    """{ID: 宣告它的檔名}：可以沿用舊寬鬆判準的凍結清單。檔不在或讀不懂 ⇒ 例外（不當成空清單：那會把 80 幾筆舊關閉全變成未關）。"""
+    with open(path, encoding="utf-8-sig") as f:
+        return dict(json.load(f)["ids"])
+
+
+def closure_hits(d: str, home: str, texts: dict, ndecl: Counter, canon=None, legacy=None) -> list:
+    """ID `d`（宣告於 `home`）的關閉紀錄出現在哪幾份檔。空 ⇒ 沒有關閉紀錄。
+    標準單行（CANON）一律算；舊的寬鬆判準只給凍結清單 `legacy` 裡的 ID（MS-M1）。"""
     canon = canonical_closures(texts) if canon is None else canon
     if d in canon:
         return [f for f, _sha in canon[d]]
+    if d not in (legacy or {}):
+        return []
+    return loose_hits(d, home, texts, ndecl)
+
+
+def loose_hits(d: str, home: str, texts: dict, ndecl: Counter) -> list:
+    """舊的寬鬆判準（D 原腳本）：提到 ID 的行，ID 之後 60 字內同一格有 ✅／關閉／已關、該行沒有否定字樣。
+    ⚠ 會把「前提是 X 關閉」這種散文也算成關閉（MS-M1）⇒ 只給凍結清單用。"""
     pat = re.compile(r"(?<![A-Za-z0-9-])" + re.escape(d) + r"(?![0-9a-z])")
     own_def = re.compile(r"\*\*" + re.escape(d) + r"(?![0-9a-z])")
     hits = []
@@ -97,12 +115,38 @@ def closure_hits(d: str, home: str, texts: dict, ndecl: Counter, canon=None) -> 
     return hits
 
 
-def open_items(texts: dict) -> list:
-    """⇒ [(檔名, ID)]：宣告了、沒有關閉紀錄的必修。"""
+def open_items(texts: dict, legacy=None) -> list:
+    """⇒ [(檔名, ID)]：宣告了、沒有關閉紀錄的必修。legacy 省略 ⇒ 讀凍結清單檔。"""
+    legacy = load_legacy() if legacy is None else legacy
     decl = declared(texts)
     ndecl = Counter(d for _f, d in decl)
     canon = canonical_closures(texts)
-    return [(f, d) for f, d in decl if not closure_hits(d, f, texts, ndecl, canon)]
+    return [(f, d) for f, d in decl if not closure_hits(d, f, texts, ndecl, canon, legacy)]
+
+
+def legacy_problems(texts: dict, path=LEGACY) -> list:
+    """凍結清單本身的檢查：筆數不可以超過凍結當下的數目；每一筆都要真的還在用舊判準
+    （宣告它的檔還宣告它、沒有標準單行、舊判準確實找得到關閉）——否則過期，要從清單拿掉（清單只准減少）。"""
+    with open(path, encoding="utf-8-sig") as f:
+        data = json.load(f)
+    ids, frozen = dict(data["ids"]), int(data["frozen_count"])
+    problems = []
+    if len(ids) > frozen:
+        problems.append("凍結清單 %d 筆，超過凍結當下的 %d 筆：新的必修只認標準單行「✅ <編號> 關閉（<commit>）」，不可以加進清單" % (len(ids), frozen))
+    decl = declared(texts)
+    ndecl = Counter(d for _f, d in decl)
+    canon = canonical_closures(texts)
+    homes = {}
+    for f, d in decl:
+        homes.setdefault(d, set()).add(f)
+    for d, f in sorted(ids.items()):
+        if f not in homes.get(d, set()):
+            problems.append("凍結清單的 %s 過期：%s 已經不宣告它 ⇒ 從清單拿掉" % (d, f))
+        elif d in canon:
+            problems.append("凍結清單的 %s 過期：已有標準單行 ⇒ 從清單拿掉" % d)
+        elif not loose_hits(d, f, texts, ndecl):
+            problems.append("凍結清單的 %s 找不到舊寫法的關閉 ⇒ 它其實沒關：寫標準單行或登記 mustfix_open.json，並從清單拿掉" % d)
+    return problems
 
 
 def load_register(path=REGISTER) -> dict:
@@ -138,13 +182,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--audit-dir", default=str(AUDIT_DIR))
     ap.add_argument("--register", default=str(REGISTER))
+    ap.add_argument("--legacy", default=str(LEGACY))
     a = ap.parse_args(argv)
     texts = load_texts(a.audit_dir)
-    decl, opened = declared(texts), open_items(texts)
+    decl, opened = declared(texts), open_items(texts, load_legacy(a.legacy))
     print("宣告的必修：%d｜沒有關閉紀錄：%d" % (len(decl), len(opened)))
     for f, d in opened:
         print("  %s %s" % (f, d))
-    problems = check(opened, load_register(a.register))
+    problems = check(opened, load_register(a.register)) + legacy_problems(texts, a.legacy)
     for p in problems:
         print("✗ " + p)
     print("✓ 與登記表一致" if not problems else "✗ %d 項" % len(problems))
