@@ -16,6 +16,8 @@ UPLOADS_ROOT 導到 tmp，`routers/uploads.py`（讀檔）那份沒導，讀回�
 端點回一張空檔案也會綠。
 """
 import pytest
+from tests._requires import requires_module  # noqa: E402
+needs_crm = requires_module("crm", '本題的資料由 CRM（業務開發記錄 /api/dev-cases）建立；CRM 不在時沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _png_bytes():
@@ -56,6 +58,7 @@ def dev_log_attachment(client, make_user):
     return token, r.json()["files"][0]
 
 
+@needs_crm
 def test_attachment_is_actually_readable_back(client, dev_log_attachment):
     """走完整條路：換 pt → 讀檔，回來的要是磁碟上那個檔本身。
 
@@ -81,6 +84,7 @@ def test_attachment_is_actually_readable_back(client, dev_log_attachment):
     assert r.content == on_disk, "讀回來的位元組跟磁碟上的實體檔不一致"
 
 
+@needs_crm
 def test_session_token_is_not_a_photo_token(client, dev_log_attachment):
     """pt 與 session token 是兩種東西——把 session token 當 pt 送必須被擋下。
 
@@ -93,6 +97,7 @@ def test_session_token_is_not_a_photo_token(client, dev_log_attachment):
     assert r.status_code == 403, r.text
 
 
+@needs_crm
 def test_attachment_needs_some_credential(client, dev_log_attachment):
     """沒 pt 也沒 Bearer → 401，附件不是公開連結。"""
     token, f = dev_log_attachment
