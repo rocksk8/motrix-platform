@@ -86,3 +86,16 @@ M4-M1 與 CA3-M1 的 commit 標題寫的是同分支上別的修正，但判準�
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ MA-M1 關閉（dcfadc11）——告警依原因判斷條件是否解除，月備份類只在上個月 .done 在時才清，不再每輪假記已解除
+
+## 6. 第二輪複核：a-mustfix-scan a170d560（D，2026-09-28）
+
+- 修正：凍結清單 `docs/platform/mustfix_legacy_closures.json`（63 筆，只准減少，有題：過期或變多都紅）以外的 ID，只認標準單行；正對照題 `test_ms_m1_a_prose_close_does_not_hide_a_new_must_fix`。凍結清單裡沒有 DM1、DM2、PM1、MA-M1、MS-M1（grep 只出現在說明文字）
+- 拋棄式合併樹（origin/platform＋wip/d-audit-train14 b3c75769＋a170d560）：
+  - 掃描宣告 100 筆、未關只剩 MS-M1。DM1、DM2、PM1、MA-M1 都認得標準單行
+  - 登記表拿掉那 4 筆之後，29 題全過
+  - 反向控制：在本檔末尾加一句「前提是 MS-M1 關閉」⇒ MS-M1 仍在未關清單（先前就是這種句子藏住 DM1、DM2）
+- 列車順序：**wip/d-audit-train14 要與 a-mustfix-scan 同班、排在它之前**（反過來的話，登記表的 5 筆在 platform 上找不到宣告，會判「登記過期」而紅）。合回時 `mustfix_open.json` 要移除 DM1、DM2、PM1、MA-M1、MS-M1（全部已關，登記表變成空的）
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ MS-M1 關閉（a170d560）——凍結清單以外的必修只認標準單行，散文中的「關閉」不再藏住新必修
