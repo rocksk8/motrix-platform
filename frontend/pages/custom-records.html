@@ -6,6 +6,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>自訂模組 — MOTRIX 專案管理系統</title>
+  <script>
+    /* 預覽模式（模組建構器的即時預覽，docs/platform/BUILDER-UX.md §3.3；A 為本掛鉤檔主）。
+     * 只有 ?preview=1 才開；開了之後本頁**不打任何 API**——同一個旗標 window.MOTRIX_PREVIEW：
+     *   ① 共用腳本（auth-guard／notif／sidebar）看到旗標就不執行；
+     *   ② 本頁的 api／post／put 看到旗標就拒絕；
+     *   ③ 最後一道：fetch／XMLHttpRequest／sendBeacon／WebSocket／EventSource 換成拒絕並記次（__motrixPreviewBlocked，正常情況是 0）。
+     * iframe 的 sandbox（allow-scripts allow-same-origin）擋不住同源頁自行解除 ⇒ 真正的防線是這個旗標。 */
+    (function () {
+      var on = false
+      try { on = new URLSearchParams(location.search).get('preview') === '1' } catch (e) {}
+      if (!on) return
+      window.MOTRIX_PREVIEW = true
+      window.__motrixPreviewBlocked = 0
+      function refuse() { window.__motrixPreviewBlocked++; throw new Error('預覽模式不打 API') }
+      function refuseAsync() { window.__motrixPreviewBlocked++; return Promise.reject(new Error('預覽模式不打 API')) }
+      try { Object.defineProperty(window, 'fetch', { value: refuseAsync, writable: false, configurable: false }) } catch (e) { window.fetch = refuseAsync }
+      try { XMLHttpRequest.prototype.open = refuse } catch (e) {}
+      try { if (navigator.sendBeacon) navigator.sendBeacon = function () { window.__motrixPreviewBlocked++; return false } } catch (e) {}
+      try { window.WebSocket = refuse; window.EventSource = refuse } catch (e) {}
+      document.documentElement.setAttribute('data-preview', '1')
+    })()
+  </script>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
@@ -77,6 +99,10 @@
       .cr-grid, .cr-kv { grid-template-columns: 1fr; }
       .cr-frame { height: 420px; }
     }
+    /* 預覽模式（BUILDER-UX §3.3）：建構器選中的欄位；外框用 token，不用色碼 */
+    .cr-f.is-preview-hl { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 6px; }
+    .cr-f .cr-ph { color: var(--text-secondary); font-size: 13px; padding: 8px 0; }
+    html[data-preview="1"] .cr-main { margin-left: 0; margin-top: 0; padding: 12px 16px 16px; }
   </style>
 </head>
 <body x-data="customRecordsPage()" x-init="init()" x-cloak>
@@ -193,6 +219,10 @@
                           </div>
                         </template>
                       </div>
+                    </template>
+                    <template x-if="preview && KNOWN_TYPES.indexOf(f.type) < 0">
+                      <!-- 預覽模式：建構器新增了本頁還不會畫的型別 ⇒ 佔位（不丟例外）；正式執行不走這一支 -->
+                      <div class="cr-ph" data-preview-placeholder>此型別尚無預覽</div>
                     </template>
                     <template x-if="f.type === 'formula'">
                       <div class="cr-ro" :id="'cr-in-' + f.key" data-formula
@@ -312,13 +342,17 @@
         records: [], listLoading: false, statusFilter: '',
         mode: 'list', record: null, recDef: null, formDef: {}, values: {}, fieldErr: {}, dropped: [],
         refOptions: {}, refState: {}, refQuery: {}, refErr: {}, _refSeq: {}, _refTimers: {}, note: '', busy: false, outputHtml: '', me: {}, _initDone: false, _defCache: {},
+        //: 預覽模式（BUILDER-UX §3.3）：同一個旗標擋住本頁所有 API 呼叫（讀與寫）
+        preview: !!window.MOTRIX_PREVIEW, previewHl: null,
+        KNOWN_TYPES: ['text', 'number', 'date', 'select', 'checkbox', 'ref', 'formula'],
 
         _hdr() {
           var s = {}
           try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
           return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
         },
-        async api(method, url) { return this._json(await fetch(url, { method: method, headers: this._hdr() })) },
+        _noApiInPreview() { if (this.preview) throw new Error('預覽模式不打 API') },
+        async api(method, url) { this._noApiInPreview(); return this._json(await fetch(url, { method: method, headers: this._hdr() })) },
         async _json(r) {
           var text = await r.text()
           var data = null
@@ -326,13 +360,14 @@
           return { ok: r.ok, status: r.status, data: data }
         },
         // 寫入一律走這兩支（method 寫死，送出點一眼看得到）
-        async post(url, body) { return this._json(await fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
-        async put(url, body) { return this._json(await fetch(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
+        async post(url, body) { this._noApiInPreview(); return this._json(await fetch(url, { method: 'POST', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
+        async put(url, body) { this._noApiInPreview(); return this._json(await fetch(url, { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body || {}) })) },
         base() { return '/api/custom/' + encodeURIComponent(this.key) },
 
         async init() {
           if (this._initDone) return
           this._initDone = true
+          if (this.preview) return this._initPreview()
           try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
           var q = new URLSearchParams(location.search)
           this.key = q.get('key') || ''
@@ -355,6 +390,53 @@
           if (no) await this.openRecord(no)
           else if (this.listDenied) this.errMsg = '您沒有這個模組的權限'
         },
+        // ── 預覽模式（BUILDER-UX §3.2／§3.3）：建構器 iframe 以 postMessage 傳草稿；只收同源、約定格式 ──
+        _initPreview() {
+          var self = this
+          this.loading = false
+          window.addEventListener('message', function (e) { self._onPreviewMessage(e) })
+          if (window.ResizeObserver) new ResizeObserver(function () { self._postHeight() }).observe(document.documentElement)
+          this._toParent({ kind: 'ready' })
+        },
+        _toParent(msg) {
+          if (window.parent === window) return
+          window.parent.postMessage(Object.assign({ type: 'motrix-preview', v: 1 }, msg), location.origin)
+        },
+        _postHeight() { this._toParent({ kind: 'height', px: document.documentElement.scrollHeight }) },
+        _onPreviewMessage(e) {
+          if (e.origin !== location.origin || e.source !== window.parent) return
+          var d = e.data
+          if (!d || typeof d !== 'object' || d.type !== 'motrix-preview' || d.v !== 1) return
+          if (d.kind === 'draft') this._showDraft(d.draft, d.mode)
+          else if (d.kind === 'highlight') this._applyHighlight(d.field == null ? null : String(d.field))
+        },
+        _showDraft(draft, mode) {
+          var def = (draft && typeof draft === 'object') ? draft : {}
+          var self = this
+          // 參照欄：預覽不打 API ⇒ 選項留白（狀態設好，loadRefOptions 就不會去抓）
+          var st = {}
+          ;(def.fields || []).forEach(function (f) { if (f && f.type === 'ref') st[f.key] = 'preview' })
+          this.refState = st; this.refOptions = {}
+          this.errMsg = ''; this.record = null; this.recDef = null; this.fieldErr = {}; this.dropped = []
+          if (mode === 'list') {
+            this.formDef = {}; this.def = def; this.records = []; this.mode = 'list'
+          } else {
+            this.def = null; this.formDef = def; this.values = this.blankValues(def); this.mode = 'new'
+          }
+          this.$nextTick(function () { self._applyHighlight(self.previewHl); self._postHeight() })
+        },
+        _applyHighlight(key) {
+          this.previewHl = key
+          document.querySelectorAll('.cr-f.is-preview-hl').forEach(function (el) { el.classList.remove('is-preview-hl') })
+          if (key === null || key === undefined) return
+          var el = document.querySelector('.cr-f[data-field="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]')
+          if (!el) return
+          el.classList.add('is-preview-hl')
+          // 只捲本頁，不呼叫 focus／scrollIntoView（後者會連建構器畫布一起捲、搶走輸入中的焦點）
+          var r = el.getBoundingClientRect()
+          if (r.top < 0 || r.bottom > window.innerHeight) window.scrollTo(0, window.scrollY + r.top - 16)
+        },
+
         detail(res) {
           var d = res.data
           if (d && typeof d === 'object') return d.detail || JSON.stringify(d)
@@ -478,6 +560,7 @@
           return out
         },
         async save() {
+          if (this.preview) return            // 預覽模式：存檔無效（api／post／put 也各自擋）
           if (this.busy) return
           this.busy = true; this.fieldErr = {}; this.errMsg = ''
           try {

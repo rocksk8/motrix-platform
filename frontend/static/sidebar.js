@@ -50,6 +50,7 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 ;(function () {
+  if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不畫側欄、不打 API（BUILDER-UX §3.3）
   // ── Session & path ──────────────────────────────────────────────────────────
   var raw  = localStorage.getItem('motrix_session')
   var s    = raw ? JSON.parse(raw) : {}

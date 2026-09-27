@@ -1,4 +1,5 @@
 ;(function () {
+  if (window.MOTRIX_PREVIEW) return   // 模組建構器的即時預覽：不打 API（BUILDER-UX §3.3）
   var _origFetch = window.fetch
   var _redirecting = false
   window.fetch = async function () {
