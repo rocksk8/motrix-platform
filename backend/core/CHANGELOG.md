@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.51 — 2026-09-27（A，IP-96 case.summary 的用途範圍；主持裁示對齊 AT6-O1／JV7；第十二班列車取號，原暫用 1.48）
+- L1（新增）：`helpers.case_access.case_summary_scope(user, purpose=None)`（用途 ⇒ "all"／"visible"；權限判斷在 L1）、`SUMMARY_PURPOSE_MODULES`（`voucher_link` ⇒ cashier／finance）、`SUMMARY_LINK_FIELDS`（放寬時只回的摘要欄位）
+
 ## 1.50 — 2026-09-27（C，c-case404：M01-O1 看不到＝不存在；疊在 M01 ②；第十二班列車取號，原暫用 1.45 → 1.49）
 > 介面只有新增。
 - L1（新增）：`helpers.case_access.case_not_found_message`、`deny_case`、`require_case`、`CASE_DENIAL_AUDIT`——案件逐案拒絕一律 404、訊息與查無相同；audit_log 記真正原因（`case.access_denied`，detail.reason＝denied／not_found；背景執行緒寫，避開呼叫端的寫鎖與 rollback）

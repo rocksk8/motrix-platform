@@ -54,7 +54,10 @@ def test_reports_income_notice_is_empty_when_m05_is_present(client, make_user):
 
 
 def test_t100_preview_without_m05(client, make_user, monkeypatch):
-    from routers import accounting_export as ae
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/api/accounting_export.py"):
+        pytest.skip("會計（M06）不在：沒有 T100 匯出")
+    from modules.accounting.api import accounting_export as ae
     h = _sa(client, make_user)
     _drop(monkeypatch, *CAPS)
     prev = client.get("/api/reports/t100-export/preview?start=2026-09-01&end=2026-09-30", headers=h)

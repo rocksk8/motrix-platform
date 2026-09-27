@@ -16,6 +16,7 @@ import pytest
 from modules.payroll.tests.test_bonus_case_api_2026_09_24 import (  # noqa: F401
     people, _seed_case, _create, _members_spec, _auth)
 from modules.payroll.tests._bonus_insure import insure_all  # noqa: E402
+from core import source_tree
 
 ACCOUNTS = "/api/bonus/cases/voucher-accounts"
 
@@ -65,6 +66,8 @@ def _to_payout(client, people, no, net=100000):
 # ── 進入待發放 ⇒ 轉帳傳票草稿 ─────────────────────────────────────────────────
 
 def test_payout_creates_an_accrual_draft_voucher(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     r = _to_payout(client, people, "MQ-AC3-001")
     assert r.status_code == 200 and r.json()["status"] == "待發放", r.text
     a = _award("MQ-AC3-001")
@@ -103,6 +106,8 @@ def test_a_middle_approval_tier_does_not_create_a_voucher(client, people):
 # ── 標記已發放 ⇒ 支出傳票草稿 ─────────────────────────────────────────────────
 
 def test_mark_paid_creates_a_payment_draft_with_a_withholding_line(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-AC3-010")
     r = client.post("/api/bonus/cases/MQ-AC3-010/mark-paid", headers=_auth(people["bc_cash"]))
@@ -119,6 +124,8 @@ def test_mark_paid_creates_a_payment_draft_with_a_withholding_line(client, peopl
 
 
 def test_cashier_chooses_the_bank_account(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     import db
     conn = db.get_db()
@@ -137,6 +144,8 @@ def test_cashier_chooses_the_bank_account(client, people):
 
 
 def test_a_bad_bank_account_is_refused_before_anything_changes(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     insure_all()   # U4：撥付前名單上每個人都要有投保金額（tests/_bonus_insure.py）
     _to_payout(client, people, "MQ-AC3-012")
     r = client.post("/api/bonus/cases/MQ-AC3-012/mark-paid", headers=_auth(people["bc_cash"]),
@@ -149,6 +158,8 @@ def test_a_bad_bank_account_is_refused_before_anything_changes(client, people):
 # ── 退回 ─────────────────────────────────────────────────────────────────────
 
 def test_return_voids_the_accrual_draft_if_not_yet_submitted(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-AC3-020")
     vid = _award("MQ-AC3-020")["accrual_voucher_id"]
     r = client.post("/api/bonus/cases/MQ-AC3-020/return", headers=_auth(people["bc_sa"]),
@@ -161,6 +172,8 @@ def test_return_voids_the_accrual_draft_if_not_yet_submitted(client, people):
 
 
 def test_return_leaves_a_submitted_voucher_alone_and_says_so(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-AC3-021")
     vid = _award("MQ-AC3-021")["accrual_voucher_id"]
     conn = _db()
@@ -186,6 +199,8 @@ def test_return_from_pending_approval_has_no_voucher_to_touch(client, people):
 
 
 def test_after_return_and_reapproval_a_fresh_accrual_is_made(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-AC3-023")
     first = _award("MQ-AC3-023")["accrual_voucher_id"]
     client.post("/api/bonus/cases/MQ-AC3-023/return", headers=_auth(people["bc_sa"]), json={"reason": "x"})
@@ -215,6 +230,8 @@ def test_settings_refuse_a_code_that_does_not_exist(client, people, code):
 
 
 def test_settings_refuse_a_disabled_code(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     conn = _db()
     try:
         conn.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
@@ -227,6 +244,8 @@ def test_settings_refuse_a_disabled_code(client, people):
 
 
 def test_the_configured_account_is_used(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     conn = _db()
     try:
         conn.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
@@ -241,6 +260,8 @@ def test_the_configured_account_is_used(client, people):
 
 
 def test_a_saved_account_later_disabled_means_no_voucher_and_a_notice(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     conn = _db()
     try:
         conn.execute("INSERT OR IGNORE INTO account_items (code, level, name, parent_code, source, is_active)"
@@ -264,6 +285,8 @@ def test_a_saved_account_later_disabled_means_no_voucher_and_a_notice(client, pe
 # ── 看得到連結（獎金頁提示用） ─────────────────────────────────────────────────
 
 def test_detail_lists_the_linked_vouchers(client, people):
+    if not source_tree.module_installed("modules/accounting/"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
     _to_payout(client, people, "MQ-AC3-040")
     d = client.get("/api/bonus/cases/MQ-AC3-040", headers=_auth(people["bc_sa"])).json()
     v = _voucher(_award("MQ-AC3-040")["accrual_voucher_id"])

@@ -20,13 +20,13 @@
 ## IP-1　`dispatch.row`：派工單列序列化（M04 → M01、M06）
 
 對應 DEPENDENCY-MAP §3 #7、#8、#9（ROADMAP A6）。原本 `helpers/recognition.py`（M01）、
-`routers/vouchers.py`（M06）直接 import `routers.vendor_contractors._dispatch_row`（M04 私有函式）；
+`modules/accounting/api/vouchers.py`（M06）直接 import `routers.vendor_contractors._dispatch_row`（M04 私有函式）；
 `routers/reports.py`（M08）import 了但沒有呼叫，已刪除。
 
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M04 外包工班：`modules/subcontract/api/vendor_contractors.py::_dispatch_row` |
-| 使用方 | M01 `modules/case/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）；M06 `routers/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工） |
+| 使用方 | M01 `modules/case/recognition.py::dispatch_entries`（應計派工成本，營運報表支出用）〔更正（2026-09-26 A，M06 a' 例外到期）：~~M06 `modules/accounting/api/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工）~~ 改走 IP-15 `dispatch.cost_for_case`〕 |
 | 形式 | provider，單一提供者（`core.registry`）。2026-09-26 M04 搬進 `modules/subcontract/`，改由 `ModuleSpec.providers` 宣告（模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("dispatch.row", "subcontract"): vendor_contractors._dispatch_row})`<br>取用：`fn = registry.single_provider("dispatch.row")`；`None` ⇒ 退化。兩個以上提供者 ⇒ `RuntimeError`（兩份實作在搶，不隨便挑） |
 | 回傳 | `fn(row: sqlite3.Row) -> dict`。`row` 是 `contractor_dispatches` 一列（可 JOIN `vendor_contractors.name AS vendor_name`）。使用方讀的欄位：`id`、`quoteNo`、`vendorName`、`scope`、`items`、`personnel`、`totalAmount`、`personnelTotal`、`grandTotal`（含稅承攬商費用＋外包人員）、`invoiceNo`、`acceptedAt` |
@@ -51,7 +51,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_draft`、`routers/accounting_export.py::validate_account_code` |
+| 提供方 | M06 會計：`modules/accounting/api/vouchers.py::_provide_voucher_draft`、`modules/accounting/api/accounting_export.py::validate_account_code` |
 | 使用方 | M07 `modules/payroll/bonus_vouchers.py`（進入待發放 ⇒ 轉帳草稿；標記已發放 ⇒ 支出草稿；科目設定頁的驗證）、`modules/payroll/api/bonus.py`（標記已發放時驗出納選的銀行科目） |
 | 形式 | provider，單一提供者（`core.registry`；M06 尚未搬進 `modules/`，以 `registry.provide()` 在匯入時登記） |
 | 語法 | 提供：`_registry.provide("voucher.draft", "accounting", _provide_voucher_draft)`、`_registry.provide("voucher.account_check", "accounting", validate_account_code)`<br>取用：`registry.single_provider("voucher.draft")(conn, voucher_date=…, summary=…, lines=[{account_code, summary, debit, credit}], created_by=…, now=…)`；`registry.single_provider("voucher.account_check")(conn, code)` |
@@ -73,7 +73,7 @@ grandTotal（直接讀 `contractor_dispatches`，沒有經過 `_dispatch_row`）
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M06 會計：`routers/accounting_export.py::_provide_accounting_settings` |
+| 提供方 | M06 會計：`modules/accounting/api/accounting_export.py::_provide_accounting_settings` |
 | 使用方 | M07 `modules/payroll/api/bonus.py::_payout_bank_choices`（待發放時給出納選付款銀行） |
 | 形式 | provider，單一提供者（同 IP-2） |
 | 語法 | 提供：`_registry.provide("accounting.settings", "accounting", _provide_accounting_settings)`<br>取用：`registry.single_provider("accounting.settings")()` |
@@ -91,7 +91,7 @@ M06 的 `vouchers_all`。
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | M06 會計：`routers/vouchers.py::_provide_voucher_void_draft`、`_provide_voucher_status` |
+| 提供方 | M06 會計：`modules/accounting/api/vouchers.py::_provide_voucher_void_draft`、`_provide_voucher_status` |
 | 使用方 | M07 `modules/payroll/bonus_vouchers.py`：`withdraw_accrual`（獎金退回 ⇒ 作廢未送審的轉帳草稿）、`linked_vouchers`（明細列出連結的傳票）、`create_accrual`（殘留草稿防護） |
 | 形式 | provider，單一提供者（同 IP-2） |
 | 語法 | 提供：`_registry.provide("voucher.void_draft", "accounting", _provide_voucher_void_draft)`、`_registry.provide("voucher.status", "accounting", _provide_voucher_status)`<br>取用：`registry.single_provider("voucher.void_draft")(conn, voucher_id, voided_by=…, now=…, reason=…)`；`registry.single_provider("voucher.status")(conn, voucher_id)` |
@@ -208,7 +208,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 對方不在時 | 整包照常回；`parts.dispatches`＝`{"ok": false, "status": 404, "detail": DISPATCHES_UNAVAILABLE}`（「外包工班模組未安裝：沒有承攬派工資料」），前端照「那一段回非 2xx」處理 |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | 提供方（隨模組搬走）`backend/modules/subcontract/tests/test_subcontract_providers.py`：登記、正對照；取用方（外包工班不在也成立）`backend/tests/platform/test_subcontract_connectors.py`：拿掉提供者 ⇒ 整包照回、那一段 404 說明、其他段照常。突變：整包不看提供者、不登記 ⇒ 紅 |
-| 追加：成本檢視（2026-09-26，B；主持派工） | `dispatch.cost_for_case`：提供方 `modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`；`fn(quote_no, authorization) -> list`；權限 finance／cashier／procurement／case_manage／contractor_list 任一（否則 403）；回 `[{id, quoteNo, vendorName, scope, invoiceNo, dispatchDate, invoiceDate, payableDate, amount(=grandTotal), totalWithTax, personnelTotal, personnelCount, items:[{description, amount}]}]`（scope、invoiceNo 主持裁示加入：會計資料、不是個資）——**不回外包人員姓名、personnel、其他派工細節**（notes、files、狀態、建立／驗收者）。使用方：M06 `vouchers._case_expense_sources`（JV21；第三層人員改顯示「外包人員 N 人」）。**對方不在時**（照 IP-14 的做法明說）：取用方拿到 None ⇒ 那一段不列，回應／畫面帶 `notice`「外包工班模組未安裝：傳票不含承攬商派工支出」，不可以靜默少列。契約版本 1；守門：`backend/modules/subcontract/tests/test_dispatch_cost_view.py`（登記、權限、白名單、任何層無姓名欄位、金額同 grandTotal、IP-15 既有回應不變） |
+| 追加：成本檢視（2026-09-26，B；主持派工） | 使用方：M06 `modules/accounting/api/vouchers.py::_case_expense_sources`（傳票摘要來源的承攬商派工）、`vouchers_by_case`（案件的傳票：派工那一段）。`dispatch.cost_for_case`：提供方 `modules/subcontract/api/vendor_contractors.py::dispatch_cost_for_case`；`fn(quote_no, authorization) -> list`；權限 finance／cashier／procurement／case_manage／contractor_list 任一（否則 403）；回 `[{id, quoteNo, vendorName, scope, invoiceNo, dispatchDate, invoiceDate, payableDate, amount(=grandTotal), totalWithTax, personnelTotal, personnelCount, items:[{description, amount}]}]`（scope、invoiceNo 主持裁示加入：會計資料、不是個資）——**不回外包人員姓名、personnel、其他派工細節**（notes、files、狀態、建立／驗收者）。使用方：M06 `vouchers._case_expense_sources`（JV21；第三層人員改顯示「外包人員 N 人」）。**對方不在時**（照 IP-14 的做法明說）：取用方拿到 None ⇒ 那一段不列，回應／畫面帶 `notice`「外包工班模組未安裝：傳票不含承攬商派工支出」，不可以靜默少列。契約版本 1；守門：`backend/modules/subcontract/tests/test_dispatch_cost_view.py`（登記、權限、白名單、任何層無姓名欄位、金額同 grandTotal、IP-15 既有回應不變） |
 
 ---
 
@@ -236,7 +236,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M04 外包工班：`modules/subcontract/api/contractor_vouchers.py::_voucher_public`、`modules/subcontract/api/contractor_vouchers.py::_paid_between`（`contractor_voucher.paid_between`，2026-09-26 加：區間內已付款的憑據，形狀同 public） |
-| 使用方 | M05 `modules/arap/api/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `routers/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
+| 使用方 | M05 `modules/arap/api/cashier.py`（待付款 `_payable_queue`、執行歷史 `_execution_history`）；M06 `modules/accounting/api/accounting_export.py::_collect_paid_contractor_vouchers`（T100 傳票匯出） |
 | 形式 | provider，單一提供者 |
 | 語法 | 提供：`ModuleSpec(providers={("contractor_voucher.public", "subcontract"): contractor_vouchers._voucher_public})`<br>取用：`pub = registry.single_provider("contractor_voucher.public")`；`None` ⇒ 退化。`pub(row, include_snapshot=False) -> dict` |
 | 回傳 | `row`＝`contractor_payment_vouchers` 一列；回 `voucherNo`、`quoteNo`、`vendorName`、`grandTotal`、`payableDate`、`isPaid`、`paidAt`、`paidBankAccountName／Code` 等（見函式） |
@@ -273,7 +273,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M05 應收應付：`modules/arap/receivables.py::collect_tax_invoices` |
-| 使用方 | M08 `modules/analytics/api/reports.py::tax_export_excel`（`/api/reports/tax-export`）；M06 `routers/accounting_export.py::_collect_t100_events`（收款事件）；L1 殼 `helpers/receivables.py::collect_tax_invoices`（淘汰中） |
+| 使用方 | M08 `modules/analytics/api/reports.py::tax_export_excel`（`/api/reports/tax-export`）；M06 `modules/accounting/api/accounting_export.py::_collect_t100_events`（收款事件）；L1 殼 `helpers/receivables.py::collect_tax_invoices`（淘汰中） |
 | 形式 | provider，單一提供者 |
 | 語法 | 提供：`ModuleSpec(providers={("receivables.tax_invoices", "arap"): receivables.collect_tax_invoices})`<br>取用：`p = registry.single_provider("receivables.tax_invoices")`；`p(year=None, month=None) -> list` |
 | 回傳 | 已填發票號碼的收款品項（quoteNo、invoiceNo、date、invoiceDate、未稅／稅額／含稅…） |
@@ -326,7 +326,7 @@ L1 → L2 方向的公開介面（不是 provider：L1 永遠在，L2 直接 imp
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `routers/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
+| 提供方 | L1 `helpers/custom_modules.py::queue_items`（簽核中的自訂模組單據）。**2026-09-26 起（M01-PLAN §3-7）各單據模組提供自己的待簽**：M04 `modules/subcontract/api/contractor_vouchers.py::queue_items`（`contractor_voucher`）、M05 `modules/arap/api/invoice_vouchers.py::queue_items`（`invoice_voucher`）與 `payment_requests.py::queue_items`（`payment_request`）、M03 `modules/supply/api/shipping_notes.py::_queue_items`（`shipping_note`）、M06 `modules/accounting/api/vouchers.py::_queue_items`（`voucher`）、M07 `modules/payroll/bonus_queue.py::queue_items`（`bonus_award`、`bonus_case_award`）。M01 自己的報價單、完工單、額外支出（含變更）、已結案變更仍在 M01 端點內 |
 | 使用方 | M01 `modules/case/api/quotations.py` 的 `GET /api/approval-queue`（列表）與 `GET /api/approval-queue/count`（角標），經 `_queue_provider_items(conn)`（兩支同一份來源） |
 | 形式 | provider，多個提供者（`core.registry.providers()`；以名稱排序依序取用） |
 | 語法 | 提供：`_registry.provide("approval.queue_items", "custom_modules", queue_items)`<br>取用：`for name, fn in sorted(registry.providers("approval.queue_items").items()): items.extend(fn(conn))` |
@@ -391,7 +391,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26 11:16，RUN-PLAN §5 D1 的 M06 ①）�
 
 | 欄位 | 內容 |
 |---|---|
-| 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`modules/case/api/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`routers/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
+| 提供方 | 提供者名稱＝單據類型（佇列的 `type`）：M01 `quotation`（`modules/case/api/quotations.py::_QuotationReassign`，寫回走 `save_quotation_json`）、`completion_note`；M04 `contractor_voucher`；M05 `invoice_voucher`、`payment_request`；M03 `shipping_note`；M06 `voucher`（`modules/accounting/api/vouchers.py::_VoucherReassign`，approval_json 是欄位、作廢不算、讀不出來 fail-closed）。data_json 類共用 L1 `helpers/approval_queue.DataJsonApproval(table, key)`（表名由擁有者傳入） |
 | 使用方 | M01 `POST /api/approval-queue/reassign`（權限、原因必填、換人規則、reassignLog、audit、通知都在 M01）；`GET /api/approval-queue` 回 `reassignTypes`（有提供者的類型），前端 `canReassign()` 據此顯示按鈕 |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.reassign")`，以類型名取一個） |
 | 語法 | 提供：`("approval.reassign", "<type>"): obj`（ModuleSpec）或 `_registry.provide("approval.reassign", "<type>", obj)`<br>`obj.load(conn, doc_no) -> {"docNo", "quoteNo", "status", "approval"} \| None`（簽核資料讀不出來 ⇒ raise `helpers.approval_queue.ApprovalUnreadable`）；`obj.save(conn, doc, approval, now)`（`doc` 為 `load` 的回傳值；在 M01 的寫鎖內呼叫、M01 commit） |
@@ -465,7 +465,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 提供方 | M01 案件：`modules/case/quotations.py::case_summary`（暫以 import 時登記，同 IP-12；M01 本體搬遷時改 `ModuleSpec.providers`，CA-O3） |
 | 使用方 | M01 自己的 IP-12 `summary` 轉呼叫（淘汰中）；其他使用方逐步改用（company_identity、google_calendar、bonus_pdf、vouchers，見 M01-PLAN §2-B 第 2 類） |
 | 形式 | provider，單一提供者 |
-| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]` |
+| 語法 | 取用：`s = registry.single_provider("case.summary")`；`None` ⇒ M01 不在。`s(conn, user, quote_nos=None) -> [ {quote_no, customer_name, project_name, status, sales_person_id} ]`〔2026-09-26 A 追加（只新增參數，契約版本不變）：`s(conn, user, quote_nos=None, purpose=None)`。`purpose="voucher_link"`（M06 傳票摘要從案件帶入，JV7）＋使用者有傳票權限（cashier／finance，或最高管理者）⇒ **全部案件、只回 `{quote_no, customer_name, project_name}`**（不回地址等個資與其他欄位）；沒有傳票權限 ⇒ 照可見性過濾。**權限判斷在 L1** `helpers.case_access.case_summary_scope`（呼叫端只說用途）；未登錄的用途 ⇒ ValueError。界線（AT6-O1，386cb0e1）：「看不到＝不存在」只保護沒有傳票權限的角色。守門 `backend/tests/platform/test_case_summary_purpose.py`〕 |
 | 回傳 | `quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到且存在的。可見性＝row_access `case`／scope="read"。`user=None` ⇒ TypeError；`helpers.case_access.SYSTEM` ⇒ 不過濾，**只准 L1 背景呼叫端**（守門） |
 | 對方不在時 | 呼叫端要能處理「沒有提供者」與「某筆不在回應裡」並明說（不是空白） |
 | 契約版本 | 1（2026-09-26） |
@@ -526,6 +526,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ---
 
+## IP-22　`voucher.by_case`：案件整包的傳票段（M06 → M01）
+
+對應 M06-PLAN §1-C #7、l2_import_baseline `M01 router:quotations -> M06 router:vouchers`（M06 搬遷前置，2026-09-26）。原本 M01 案件整包（`/api/quotations/{no}/case-bundle`）直接 import `routers.vouchers.vouchers_by_case`。寫法同 IP-15／IP-18。編號為暫定，由列車依合回順序定號。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M06 會計：`modules/accounting/api/vouchers.py::vouchers_by_case`（傳票 by-case 端點的函式；ModuleSpec.providers 宣告） |
+| 使用方 | M01 `routers/quotations.py::case_bundle` 的 `parts.vouchers` |
+| 形式 | provider，單一提供者（`core.registry`） |
+| 語法 | 取用：`fn = registry.single_provider("voucher.by_case")`；`None` ⇒ 退化。`fn(quote_no, authorization=…) -> {"vouchers": [...]}`（同一份授權，權限判斷與單獨打端點逐字相同） |
+| 回傳 | `{"vouchers": [{id, voucher_no, voucher_date, status, summary}]}`（作廢單不列）；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |
+| 對方不在時 | 整包照常回；`parts.vouchers`＝`{"ok": false, "status": 404, "detail": VOUCHERS_UNAVAILABLE}`（「會計傳票模組未安裝：沒有傳票資料」）。案件頁的傳票連結不列（M06 不在時產品沒有傳票，沒有列才是對的） |
+| 契約版本 | 1（2026-09-26） |
+| 守門 | `backend/tests/platform/test_accounting_connectors.py`（M06 不在的一側） |
+
+---
+
 ## IP-19　`stock.serial`：案件設備序號認領／釋放庫存（M03 → M01）
 
 對應 DEPENDENCY-MAP §4 `stock_items`（M01 `modules/case/api/quotations.py::_sync_device_stock` 直寫）、`table_write_exceptions` 的 debt（已刪）。M03 搬遷前置，2026-09-26。編號為暫定。
@@ -545,12 +562,12 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ## IP-20　`inventory.paid_batches`：期間內已付款的進貨批次（M03 → M06）
 
-主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `routers/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。
+主持裁示 2026-09-26 11:16（M06 步驟表 §1-B #2，C 提出）。原本 `modules/accounting/api/accounting_export.py::_collect_paid_stock_batches` 直讀 M03 的 `stock_batches`、`stock_items`（並 JOIN L1 `parts`）。編號為暫定，由列車定號。
 
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M03 採購・庫存・出貨：`modules/supply/api/inventory.py::paid_batches` |
-| 使用方 | M06 `routers/accounting_export.py::_collect_paid_stock_batches`（T100 付款傳票：借 料件設備成本／貸 銀行存款） |
+| 使用方 | M06 `modules/accounting/api/accounting_export.py::_collect_paid_stock_batches`（T100 付款傳票：借 料件設備成本／貸 銀行存款） |
 | 形式 | provider，單一提供者（`core.registry`；`ModuleSpec.providers` 宣告，模組未載入即不登記） |
 | 語法 | 提供：`ModuleSpec(providers={("inventory.paid_batches", "supply"): inventory.paid_batches})`<br>取用：`fn = registry.single_provider("inventory.paid_batches")`；`None` ⇒ 退化。`fn(start, end) -> list[dict]` |
 | 回傳 | 每批一列：`batch_no`、`part_no`、`supplier_name`、`invoice_no`、`paid_at`、`paid_bank_account_name`、`paid_bank_account_code`、`category`（料件分類，無則空字串）、`total_cost`（即時由 `stock_items.cost` 加總）；依 `paid_at` 排序。唯讀 |
@@ -562,15 +579,15 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 
 ## IP-21　`attachments.for_document`：單據的已上傳檔案（M01／M04／M05 → M06 傳票帶入附件）
 
-主持裁示 M06-b（RUN-PLAN §5 D1 段），步驟表 `docs/platform/plans/ATTACHMENTS-PLAN.md`。原本 M06 `helpers/voucher_attachments.py` 直讀九類來源的四張別組表（quotations、case_updates、case_extra_expenses、invoice_vouchers、contractor_dispatches）。編號為暫定，由列車定號。
+主持裁示 M06-b（RUN-PLAN §5 D1 段），步驟表 `docs/platform/plans/ATTACHMENTS-PLAN.md`。原本 M06 `modules/accounting/voucher_attachments.py` 直讀九類來源的四張別組表（quotations、case_updates、case_extra_expenses、invoice_vouchers、contractor_dispatches）。編號為暫定，由列車定號。
 
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M01 案件：`helpers/case_attachments.py::_CaseAttachments`（6 類；M01 未搬 ⇒ `registry.provide()`，M01 搬遷時改 ModuleSpec，同 CA-O3）；M04 外包工班：`modules/subcontract/attachments.py::_SubcontractAttachments`（2 類，ModuleSpec）；M05 應收應付：`modules/arap/api/invoice_vouchers.py::_InvoiceVoucherAttachments`（1 類；第十班列車 M05 搬遷之後路徑更新，登記仍是模組層 `registry.provide()`，未併入 ModuleSpec） |
-| 使用方 | M06 `helpers/voucher_attachments.py`（`source_files`、`case_attachments`、`resolve_picks`、`line_source_files`）；`routers/vouchers.py` 的 `line-source-files` 端點回 `unavailable` |
+| 使用方 | M06 `modules/accounting/voucher_attachments.py`（`source_files`、`case_attachments`、`resolve_picks`、`line_source_files`）；`modules/accounting/api/vouchers.py` 的 `line-source-files` 端點回 `unavailable` |
 | 形式 | provider，**多提供者、以模組 key 區分**；每個提供者宣告 `SOURCE_TYPES`（兩兩不重疊、聯集 ⊆ M06 白名單） |
 | 語法 | 提供：`registry.provide("attachments.for_document", "<key>", Obj)` 或 `ModuleSpec(providers={("attachments.for_document", "<key>"): Obj})`；`Obj.SOURCE_TYPES`、`Obj.doc_nos_for_case(conn, source_type, quote_no, user) -> list[str]`、`Obj.files(conn, source_type, doc_no, user) -> list[dict]`〔更正（稽核 D AT-M1，主持裁示 (b)，2026-09-26）：原契約沒有 `user`，提供者無從依原單據權限過濾 ⇒ 加上（未發版，契約版本仍為 1）〕 |
 | 回傳 | `files`：`save_document_files` 的 metadata 陣列；單據不存在 ⇒ `[]`；資料壞掉或編號不全 ⇒ raise L1 `helpers.uploads.AttachmentSourceError`（取用方原樣 400）；**使用者看不到原單據所屬案件 ⇒ raise `AttachmentNotVisible`**（判準 L1 `helpers.case_access.case_documents_readable`，同各單據清單；取用方：列清單不列、帶入／預覽 403）。〔更正（稽核 D AT-M1b，2026-09-26）：判準**不共用**——每一類用那張原單據**自己端點的同一支判斷函式**，附件的可見範圍不可以比原單據寬：extra_expense ⇒ `case_owner_readable`（額外支出各端點不放行 case_manage）、invoice_voucher ⇒ `routers/invoice_vouchers.py::_voucher_readable`（案件層＋金額層，含本單簽核人例外）、其餘 M01 類 ⇒ `case_documents_readable`〔再更正（稽核 D AT-M1c，2026-09-26）：存在報價單上的四類（quotation_signed／payment_item／material／material_invoice）⇒ `case_page_readable`（案件頁 `get_quotation` 同一支：放行 cashier、不放行 case_manage）；case_update 維持 `case_documents_readable`（案件動態端點）〕、M04 派工單 ⇒ `case_documents_readable`（比派工端點嚴，安全的方向，AT-O2）；`doc_nos_for_case` 可逐張過濾（讀不到的不列），整張案件讀不到時 raise `AttachmentNotVisible`〕〔再更正（主持裁示 2026-09-26：因權限沒列出要明說）：看不到（全部或部分）⇒ `raise AttachmentNotVisible(visible=[看得到的], hidden=沒列出的附件個數)`，不可以只回看得到的；取用方把個數加總進回應的 `hidden`（`[{category: "hidden:<type>", count, reason}]`，**只准這三個鍵**：不帶單號、檔名、路徑、金額——明說本身不可以外洩），傳票頁與 `unavailable` 並列顯示〕。唯讀、在呼叫端連線上 |
 | 對方不在時 | 那幾類不列；`line-source-files?source_type=case` 回 `unavailable=[{category, reason}]`，傳票頁已上傳檔案欄顯示「XX模組未安裝：……的附件沒有列出」；帶入或列該類檔案 ⇒ 400「XX模組未安裝，無法帶入……附件」。已帶入的附件不受影響（已複製進傳票） |
 | 契約版本 | 1（2026-09-26） |
-| 守門 | `backend/tests/platform/test_attachments_providers.py`（取用方只讀自己的表、覆蓋與不重疊、缺席明說、M01／M05 提供者壞 JSON）；`backend/modules/subcontract/tests/test_subcontract_attachments_provider.py`；e2e `backend/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py` |
+| 守門 | `backend/tests/platform/test_attachments_providers.py`（取用方只讀自己的表、覆蓋與不重疊、缺席明說、M01／M05 提供者壞 JSON）；`backend/modules/subcontract/tests/test_subcontract_attachments_provider.py`；e2e `backend/modules/accounting/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py` |

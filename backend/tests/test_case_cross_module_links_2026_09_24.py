@@ -59,34 +59,8 @@ def _voucher(client, hdr, source_type="", source_key=""):
 
 # ── API ──────────────────────────────────────────────────────────────────
 
-def test_vouchers_by_case_finds_case_and_expense_sources(client, make_user, seed_extra_expense):
-    hdr = _hdr(client, make_user, "xl_cash", modules=["cashier"])
-    _seed_case()
-    _seed_case(OTHER)
-    exp = seed_extra_expense(NO, total_cost=5000, category="運費", description="吊車",
-                             expense_date="2026-09-10")
-    other_exp = seed_extra_expense(OTHER, total_cost=100, category="其他", description="別案",
-                                   expense_date="2026-09-10")
-    v_case = _voucher(client, hdr, "case", NO)
-    v_exp = _voucher(client, hdr, "extra_expense", str(exp))
-    v_other = _voucher(client, hdr, "extra_expense", str(other_exp))
-    v_none = _voucher(client, hdr)
-    r = client.get(f"/api/vouchers/by-case/{NO}", headers=hdr)
-    assert r.status_code == 200, r.text
-    ids = [v["id"] for v in r.json()["vouchers"]]
-    assert set(ids) == {v_case, v_exp}, (ids, v_other, v_none)
-    assert all(v.get("voucher_no") for v in r.json()["vouchers"])
-
-
-def test_vouchers_by_case_needs_voucher_access(client, make_user):
-    _seed_case()
-    hdr = _hdr(client, make_user, "xl_nocash", role="admin", modules=["case_manage"])
-    r = client.get(f"/api/vouchers/by-case/{NO}", headers=hdr)
-    assert r.status_code == 403, r.text
-
 
 # ── 頁面 ─────────────────────────────────────────────────────────────────
-
 
 
 def _open(browser, base, user):
@@ -103,19 +77,24 @@ def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_use
     u = make_user(username="xl_e1", role="superadmin")
     hdr = _hdr(client, make_user, "xl_e1_api", modules=["cashier"])
     _seed_case()
-    vid = _voucher(client, hdr, "case", NO)
+    from core import source_tree
+    m06 = source_tree.module_installed("modules/accounting/")      # M06 不在（PLAYBOOK §B-11）⇒ 沒有傳票可開、也不該有傳票連結
+    vid = _voucher(client, hdr, "case", NO) if m06 else None
     browser = e2e_browser
     page = _open(browser, live_server, u)
     links = page.locator("[data-testid=case-links]")
-    links.locator("[data-testid=case-link-voucher]").first.wait_for(state="visible", timeout=10000)
+    first = "[data-testid=case-link-voucher]" if m06 else "[data-testid=case-link-map]"
+    links.locator(first).first.wait_for(state="visible", timeout=10000)
     assert links.locator("[data-testid=case-link-map]").get_attribute("href") \
         == "map.html?focus=" + "cases%3A" + NO
-    from core import source_tree
     if (source_tree.BACKEND / "modules" / "payroll" / "module.json").is_file():
         assert links.locator("[data-testid=case-link-bonus]").get_attribute("href") == f"bonus.html?q={NO}"
     else:                                   # M07 不在這個安裝包（PLAYBOOK §B-11）⇒ 獎金那一個連結不出現，其餘照常
         assert links.locator("[data-testid=case-link-bonus]").count() == 0
-    assert links.locator("[data-testid=case-link-voucher]").get_attribute("href") == f"voucher.html?id={vid}"
+    if m06:
+        assert links.locator("[data-testid=case-link-voucher]").get_attribute("href") == f"voucher.html?id={vid}"
+    else:                                   # 案件整包的傳票段 404（IP-22 VOUCHERS_UNAVAILABLE）⇒ 不列傳票連結，其餘照常
+        assert links.locator("[data-testid=case-link-voucher]").count() == 0
 
 
 @pytest.mark.e2e

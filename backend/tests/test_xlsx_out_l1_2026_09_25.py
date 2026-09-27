@@ -24,7 +24,7 @@ def _imports_from(rel, module):
             for a in n.names}
 
 
-@pytest.mark.parametrize("rel", ["routers/accounting_export.py", "modules/arap/api/cashier.py"])   # 出納 2026-09-26 搬進 M05
+@pytest.mark.parametrize("rel", ["modules/accounting/api/accounting_export.py", "modules/arap/api/cashier.py"])   # 出納 2026-09-26 搬進 M05
 def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel):
     from core import source_tree
     if not source_tree.module_installed(rel):
@@ -36,12 +36,15 @@ def test_accounting_and_cashier_no_longer_import_output_helpers_from_reports(rel
 
 
 def test_accounting_export_takes_part_categories_from_l1():
-    assert "PART_CATEGORIES" not in _imports_from("routers/accounting_export.py", "routers.parts")
-    assert "PART_CATEGORIES" in _imports_from("routers/accounting_export.py", "helpers.part_catalog")
+    from core import source_tree
+    if not source_tree.module_installed("modules/accounting/api/accounting_export.py"):
+        pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
+    assert "PART_CATEGORIES" not in _imports_from("modules/accounting/api/accounting_export.py", "routers.parts")
+    assert "PART_CATEGORIES" in _imports_from("modules/accounting/api/accounting_export.py", "helpers.part_catalog")
 
 
 def test_no_hardcoded_company_name_left():
-    for rel in ("modules/analytics/api/reports.py", "routers/accounting_export.py", "modules/netplan/export.py"):
+    for rel in ("modules/analytics/api/reports.py", "modules/accounting/api/accounting_export.py", "modules/netplan/export.py"):
         from core import source_tree
         if not source_tree.module_installed(rel):
             continue                                  # 模組未安裝（選配／反向控制）
@@ -82,15 +85,5 @@ def test_heading_uses_company_profile(client):
     _set_company("某某股份有限公司")
     assert company_heading("營運報表") == "某某股份有限公司 — 營運報表"
     assert company_heading("營運報表", sep=" ") == "某某股份有限公司 營運報表"
-
-
-def test_empty_company_prints_no_dangling_separator(client):
-    from helpers.company_identity import company_heading
-    from routers import accounting_export as ae
-    _set_company("")
-    assert company_heading("營運報表") == "營運報表"
-    xlsx = ae._build_t100_voucher_excel([], "2026-09-01", "2026-09-30", ae._t100_config(), "2026-09-25 12:00")
-    a1 = openpyxl.load_workbook(io.BytesIO(xlsx)).active["A1"].value
-    assert a1 == "T100 傳票批次匯出（2026-09-01 ~ 2026-09-30）"
 
 

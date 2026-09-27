@@ -55,11 +55,14 @@ DRILL_ADMIN = ("final_drill_admin", "Final-Drill-Pass-2026!")
 #:   （沒宣告的模組不可以進正式 D7）；包裡有、key 沒登記 ⇒ 判不過（打錯字或改名）。
 SMOKE = [
     ("首頁", "GET", "/"), ("登入頁", "GET", "/pages/login.html"),
-    ("傳票列表", "GET", "/api/vouchers"), ("傳票頁", "GET", "/pages/voucher.html"),
     ("模組管理", "GET", "/api/system/modules"), ("自訂模組清單", "GET", "/api/custom-modules"),
     ("版本", "GET", "/api/system/version"),
     ("定義文件庫", "GET", "/api/definitions/custom_module"),         # 第二批（P8 缺口 #5）已合回
 ]
+# 2026-09-26（A，M06 搬遷）：「傳票列表 /api/vouchers」「傳票頁 /pages/voucher.html」拿掉，改由 modules/accounting/module.json
+#   的 provides.probes＋pages 產生（本表不可以放已搬遷模組的路徑）。
+# 2026-09-27（C，M01 ②搬遷；第十二班列車）：「報價單列表 /api/quotations」「案件管理頁 /pages/case-management.html」
+#   同理拿掉，改由 modules/case/module.json 的 provides.probes＋pages 產生。
 # 〔更正 2026-09-26 主持〕原本的「出納待付 /api/cashier/payable-queue」拿掉：它在 M04 不在時依 IP-14 設計回 404
 # （附 CONTRACTOR_MISSING 說明），不是「一定 200」的共用項；M05 搬遷時由 M05 宣告自己的 probes。
 

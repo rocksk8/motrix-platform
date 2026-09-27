@@ -43,7 +43,8 @@ def test_an_unmapped_doc_type_is_reported():
 def test_a_mapped_type_missing_from_both_endpoints_is_reported():
     r = check_approval_queue_coverage(doc_types=["voucher"],
                                       queue_source="def f():\n    pass\n",
-                                      count_source="def g():\n    pass\n", provider_sources=[])
+                                      count_source="def g():\n    pass\n", provider_sources=[],
+                                      installed=lambda _k: True)   # 合成：量掃描器，不看安裝包
     assert r["missing_from_queue"] == ["voucher"] and r["missing_from_count"] == ["voucher"]
 
 
@@ -53,10 +54,10 @@ def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_provider
     prov = [("modules/x/api.py", 'def queue_items(conn):\n    conn.execute("SELECT 1 FROM vouchers_all")\n'
                                  '    return [{"type": "voucher"}]\n')]
     ok = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
-                                       count_source="items += _queue_provider_items(conn)")
+                                       count_source="items += _queue_provider_items(conn)", installed=lambda _k: True)
     assert is_clean(ok)
     no_agg = check_approval_queue_coverage(doc_types=["voucher"], queue_source="", provider_sources=prov,
-                                           count_source="def g():\n    pass\n")
+                                           count_source="def g():\n    pass\n", installed=lambda _k: True)
     assert no_agg["missing_from_queue"] == [] and no_agg["missing_from_count"] == ["voucher"]
 
 
@@ -75,7 +76,10 @@ def test_the_real_provider_scan_finds_the_owner_modules():
     """量尺：真的登記處掃得到各單據模組的提供者（掃不到 ⇒ 每一種都判成漏掉，或只靠 M01 源碼殘留才綠）。"""
     from check_approval_queue_coverage import _provider_sources
     labels = {lbl.replace("\\", "/") for lbl, src in _provider_sources() if src}
-    for f in ("routers/vouchers.py", "helpers/custom_modules.py"):
+    from core import source_tree
+    for f in ("modules/accounting/api/vouchers.py", "helpers/custom_modules.py"):   # 傳票 2026-09-26 隨 M06 搬進模組
+        if not source_tree.module_installed(f):
+            continue                                  # 模組不在（選配／反向控制）⇒ 它的提供者本來就不在
         assert f in labels, (f, sorted(labels))
 
 

@@ -8,7 +8,7 @@ pw = pytest.importorskip("playwright.sync_api")
 
 from tests._map_tiles import block_tiles  # noqa: E402
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: E402,F401  （fixture）
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402
+from tests._e2e_login import inject_login as _login  # noqa: E402
 
 
 @pytest.mark.e2e

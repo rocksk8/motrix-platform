@@ -68,7 +68,7 @@ def test_mp3_tender_points_carry_their_deadline_status(client, make_user, _geo, 
 
 pytest.importorskip("playwright.sync_api")
 
-from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
+from tests._e2e_login import inject_login as _login  # noqa: E402,F401
 
 _D = """Alpine.$data(document.querySelector('[x-data="mapPage()"]'))"""
 

@@ -1,0 +1,702 @@
+# -*- coding: utf-8 -*-
+"""`JV5` · 傳票 PDF 匯出（含附件合併）。`docs/windows/SPEC-JV5-PDF.md §7`。
+
+```
+GET /api/vouchers/{id}/pdf-download                      只有本體
+GET /api/vouchers/{id}/pdf-download?with_attachments=1   本體 ＋ 附件
+```
+
+# 🔴 `§5` 是這一份的核心：**附件的實體檔遺失時，匯出「不拒絕」**
+
+```
+JV3 帶入  **寫入** —— 建立「這張傳票有這份憑證」的主張
+          部分成功 => 留下一句謊 => **整批拒絕 400 是對的**
+JV5 匯出  **唯讀** —— 不改變任何主張，只把既有的印出來
+  ❌ 整批拒絕 => 一份法定要保存 5 年的憑證因為一個附件印不出來（商業會計法 §38）
+  ❌ 靜默略過 => 使用者拿到一份**看起來完整**的 PDF ⇒ **比印不出來更糟**
+  ✅ 把缺口印出來：最後加一頁列出未併入的附件
+```
+🔑 **一個唯讀動作拒絕執行，擋住的是使用者；靜默略過，騙的是使用者。**
+☠️ `§7④` 逐字：**它紅而其他全綠 ＝ 沒做到。**
+
+# ⚠️ ②③ 要**數頁數**，不要只驗「檔案非空」
+
+```
+總頁數 == 1 + 圖片附件數 + 各 PDF 附件的頁數合計
+```
+☠️ 合併失敗最可能的樣子是「**只有本體那一頁**」——
+   而它是一份**完全正常的 PDF**：非空、Content-Type 對、打得開。
+⇒ 只驗那三件一律會綠。
+
+# ⚠️ 逾時會變成「一份 0 byte 的 PDF」
+
+```
+helpers/startup.py  run_edge_pdf **吞掉逾時不丟例外**（docstring 逐字）
+⇒ 靠呼叫端緊接的「tmp_pdf 沒產出或 0 byte 就 raise」報錯
+⇒ B 若忘了抄那道檢查，**逾時 = 回一份 0 byte 的 PDF**
+```
+⇒ 所以 ① 一定要驗**位元組數 > 0**。
+"""
+import io
+import pathlib
+
+import pytest
+
+PDF = "/api/vouchers/%s/pdf-download"
+
+#: `§166`：走到端點才會出現的狀態碼。
+OK_CODES = (200, 400, 403)
+
+_LINES = [{"account_code": "1113", "debit": 1000, "credit": 0},
+          {"account_code": "4111", "debit": 0, "credit": 1000}]
+
+def _one_page_pdf():
+    """一份**真的讀得了**的單頁 PDF。
+
+    ## 🔴 我第一版是手寫的 bytes，而 `pypdf` 讀不了它（B 退回，我複跑確認）
+
+    ```
+    b"startxref" in 我那份  => **False**（沒有 xref 表）
+    pypdf.PdfReader(...)    => PdfReadError: **startxref not found**
+    ```
+    ☠️ 後果**不是**「測試紅」：那份附件會被判成**讀不了** ⇒ 走「未能併入」
+       那條路 ⇒ 頁數不增加 ⇒ **B 做對也不會綠**。
+    🔑 而它長得像一份 PDF：`%PDF-` 開頭、有 `/Type /Page`、我自己的
+       `_page_count()` 也數得到 1 頁 —— **只有真正的解析器分得出來**。
+    ⇒ 改成用 `pypdf` 產生。它是 `JV5` 的相依（`ff3328b` 已進 `requirements`）。
+
+    ⚠️ 而 `_page_count()` **仍然不用 pypdf** —— 那是**量結果**的尺，
+       不可以相依於受測物的相依；這裡是**造輸入**，用產品自己的函式庫才對。
+    🔑 兩者的差別：量錯了我會去看錯的地方；造錯了我會得到一個假的紅燈。
+    """
+    pypdf = pytest.importorskip(
+        "pypdf", reason="`JV5` 的相依（`requirements.txt`），造 PDF 附件要用它")
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=595, height=842)
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def _hdr(client, make_user, username, role="superadmin", modules=("cashier",)):
+    u, p = make_user(username=username, role=role, modules=list(modules))
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return u, {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _create(client, hdr):
+    r = client.post("/api/vouchers", headers=hdr,
+                    json={"summary": "匯出測試", "lines": _LINES})
+    assert r.status_code == 200, "建不起來：%s %s" % (r.status_code, r.text[:200])
+    return r.json()["id"]
+
+
+def _sign_off(client, hdr, vid):
+    """走完內建兩層（覆核＋主管），讓傳票進到「已核准」才匯得出來。
+
+    ## 🔴 2026-09-23：`JV11` 上線後，本檔多數題撞到這個閘門
+
+    本檔絕大多數題寫在 `JV11` 之前：那時「建立草稿就直接打匯出端點」是
+    合法的前置，而 `JV11` 正確地擋下了未簽核的匯出。**閘門沒有錯**，
+    是這幾題的前置沒有跟上（B 探針驗過：草稿匯出擋／簽核後匯出成功
+    且抬頭正確／作廢單匯出成功 —— 三種行為都對）。
+
+    ⚠️ **`test_jv5_a_posted_voucher_prints_the_account_name_it_froze`
+    不用這支** —— 那一題已經自己走完 submit/approve/approve/post，
+    而它紅在別的成因（見該題新增的說明），不是前置缺漏。
+    """
+    r = client.post("/api/vouchers/%s/submit" % vid, json={}, headers=hdr)
+    assert r.status_code == 200, "送審失敗：%s %s" % (r.status_code, r.text[:160])
+    for _ in range(2):
+        r = client.post("/api/vouchers/%s/approve" % vid, json={}, headers=hdr)
+        assert r.status_code == 200, "簽核失敗：%s %s" % (r.status_code, r.text[:160])
+
+
+def _reached(r, what):
+    if r.status_code in (404, 405, 422):
+        pytest.fail(
+            "`%s` 走不到（回 %s）。\n" % (what, r.status_code)
+            + "📌 `§166`：未實作端點在這個 repo 有三種臉 —— 404／405／**422**。\n"
+            + "⚠️ 路徑是 `§1` 定案的（沿用 `quotations`／`payslips`／"
+              "`invoice_vouchers` 六處同一個形狀），改了**退回給我**。")
+    assert r.status_code in OK_CODES, (
+        "`%s` 回 %s，不在 %s 裡：%s"
+        % (what, r.status_code, list(OK_CODES), r.content[:120]))
+    return r
+
+
+def _export(client, hdr, vid, with_attachments=False):
+    url = PDF % vid + ("?with_attachments=1" if with_attachments else "")
+    return _reached(client.get(url, headers=hdr), "GET " + PDF % "{id}")
+
+
+def _page_count(body):
+    """PDF 頁數。
+
+    ⚠️ 不用 `pypdf` —— **它是 `JV5` 的相依，而這一題不可以相依於受測物的相依**：
+       pypdf 沒裝的話這一題會 error，而那與「合併壞了」長得不一樣，
+       但兩者都會讓我去看錯的地方。
+    🔑 `/Type /Page` 的出現次數是 PDF 結構層的事實，數得出來。
+    """
+    import re
+    return len(re.findall(rb"/Type\s*/Page[^s]", body))
+
+
+def _pdf_text(body):
+    """PDF 上**印出來的文字**，經過 `NFKC` 正規化。
+
+    ## ☠️ 為什麼要正規化：Edge 把漢字寫成了**康熙部首**
+
+    B 實測，我複查：
+    ```
+    紙上抽出來  '不⾒的憑證.pdf'    U+2F92 **KANGXI RADICAL SEE**
+    我期望的    '不見的憑證.pdf'    U+898B CJK UNIFIED IDEOGRAPH-898B
+    視覺上一模一樣，**碼位不同** => 逐字比對是 False
+    ```
+    🔑 ⇒ 我會看到「檔名不在輸出裡」，**而它明明印在紙上** ——
+      然後去找一個不存在的產品缺陷。
+    📌 `NFKC` 正是**把康熙部首正規化回統一漢字**的那一步 ——
+      **不是為了寬鬆，是為了抵銷渲染器做的替換**。
+
+    ## ⚠️ 而這裡用 `pypdf`，與 `_page_count()` 不用它**方向相反，兩者都對**
+
+    ```
+    數頁數  **不要**用 pypdf —— 它是受測物的相依；`/Type /Page` 自己數得出來
+    抽文字  **只能**用 pypdf —— 自己寫一個 FlateDecode 解壓器才是真的危險
+    ```
+    🔑 判準不是「能不能用」，是「**量錯了會把我送去哪裡**」：
+      數頁數量錯 ⇒ 我去看合併邏輯（錯的地方）；抽文字**沒有第二條路**。
+    """
+    import unicodedata
+    pypdf = pytest.importorskip("pypdf", reason="抽 PDF 文字只能靠它")
+    reader = pypdf.PdfReader(io.BytesIO(body))
+    text = "\n".join((p.extract_text() or "") for p in reader.pages)
+    return unicodedata.normalize("NFKC", text)
+
+
+def _attach(client, hdr, vid, name, content):
+    r = client.post("/api/vouchers/%s/attachments" % vid, headers=hdr,
+                    files={"files": (name, io.BytesIO(content),
+                                     "application/pdf" if name.endswith(".pdf")
+                                     else "image/png")})
+    if r.status_code in (404, 405, 422):
+        pytest.fail("附件端點還不存在（回 %s）—— `JV3` 先。" % r.status_code)
+    assert r.status_code == 200, "附件上傳失敗：%s %s" % (r.status_code, r.text[:200])
+    return r
+
+
+def _uploads_root():
+    import helpers.uploads as up
+    base = getattr(up, "UPLOADS_ROOT", None)
+    assert base, "`helpers/uploads.py` 沒有 `UPLOADS_ROOT` —— **退回給我**。"
+    return pathlib.Path(str(base))
+
+
+def _rows(vid):
+    import db
+    conn = db.get_db()
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM voucher_attachments WHERE voucher_id = ?"
+            " ORDER BY id", (vid,))]
+    finally:
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ① 本體
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv5_exporting_the_body_gives_a_non_empty_pdf(client, make_user):
+    """🔴 **`§7①`：回 200、是 PDF、而且**位元組數 > 0**。**
+
+    ⚠️ 「位元組數 > 0」不是湊數的：
+    ```
+    helpers/startup.py  run_edge_pdf **吞掉逾時不丟例外**（docstring 逐字）
+    ⇒ 呼叫端若忘了抄「tmp_pdf 沒產出或 0 byte 就 raise」那道檢查，
+      **逾時 = 回一份 0 byte 的 PDF**
+    ```
+    ☠️ 那份 0 byte 的東西 Content-Type 是對的、狀態碼是 200 ——
+       **只有位元組數說得出它是壞的**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_body")
+    vid = _create(client, hdr)
+    _sign_off(client, hdr, vid)
+    r = _export(client, hdr, vid)
+
+    assert r.status_code == 200, "匯出失敗：%s %s" % (r.status_code, r.content[:160])
+    ctype = r.headers.get("content-type", "")
+    assert "application/pdf" in ctype, "Content-Type 是 %r" % ctype
+    assert len(r.content) > 0, (
+        "回了一份 **0 byte** 的 PDF ——\n"
+        + "☠️ 狀態碼 200、Content-Type 正確，**而裡面什麼都沒有**。\n"
+        + "🔑 多半是 Edge 逾時：`run_edge_pdf` 吞掉逾時不丟例外，\n"
+          "   要靠緊接的「沒產出或 0 byte 就 raise」那道檢查。")
+    assert r.content[:5] == b"%PDF-", (
+        "開頭不是 `%%PDF-`：%r —— 那不是一份 PDF。" % r.content[:16])
+    assert _page_count(r.content) >= 1, "數不到任何一頁。"
+
+
+def test_jv5_it_is_behind_the_voucher_modules(client, make_user):
+    """🔴 **`§7⑦`：沒有 `cashier`／`finance` 的人要被擋，不是回一份空檔。**
+
+    ⚠️ 角色用 `user` —— `superadmin` 會**直通**模組檢查
+       （`helpers/auth.py:174`，2026-09-14 使用者裁示）
+       ⇒ 拿它去驗這道閘，**它永遠不會紅**。
+    ⚙️ 配正對照：帶著 `cashier` 的一般員工要印得出來。
+    """
+    _u0, owner = _hdr(client, make_user, "jv5_owner")
+    vid = _create(client, owner)
+    _sign_off(client, owner, vid)
+
+    _u1, nomod = _hdr(client, make_user, "jv5_nomod", role="user", modules=())
+    r = client.get(PDF % vid, headers=nomod)
+    if r.status_code in (404, 405, 422):
+        pytest.fail("端點還不存在（回 %s）—— 這一格量不到權限。" % r.status_code)
+    assert r.status_code in (401, 403), (
+        "沒有模組的一般員工印得出傳票（回 %s）——\n" % r.status_code
+        + "☠️ 那是**全公司的會計憑證**。")
+
+    _u2, hasmod = _hdr(client, make_user, "jv5_hasmod", role="user",
+                       modules=("cashier",))
+    r2 = client.get(PDF % vid, headers=hasmod)
+    assert r2.status_code == 200, (
+        "帶著 `cashier` 的一般員工被擋掉了（回 %s）——\n" % r2.status_code
+        + "☠️ 那道閘擋過頭了，上面那一句就不算數。")
+
+
+def test_jv5_a_voided_voucher_can_still_be_printed(client, make_user):
+    """🔴 **`§7⑤`：已作廢的傳票也要印得出來。**
+
+    ```
+    vouchers      VIEW，`WHERE voided_at = ''`  <= **看不到作廢單**
+    vouchers_all  實表
+    ```
+    ☠️ 讀錯表的話：作廢單**印不出來** —— 而作廢單是稽核一定要看的東西
+       （《商業會計法》§38 憑證保存 5 年，作廢的那一張也在裡面）。
+    🔑 而症狀是 404「找不到這張傳票」，**它讀起來像資料被刪了**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_void")
+    vid = _create(client, hdr)
+    v = client.post("/api/vouchers/%s/void" % vid,
+                    json={"reason": "打錯了"}, headers=hdr)
+    assert v.status_code == 200, "作廢失敗：%s %s" % (v.status_code, v.text[:200])
+
+    r = _export(client, hdr, vid)
+    assert r.status_code == 200, (
+        "已作廢的傳票印不出來（回 %s）：%s\n" % (r.status_code, r.content[:160])
+        + "☠️ 多半是讀了 `vouchers` 那個 VIEW（`WHERE voided_at = ''`）\n"
+          "   而不是實表 `vouchers_all` ⇒ 症狀是 404，**讀起來像資料被刪了**。")
+    assert len(r.content) > 0 and r.content[:5] == b"%PDF-"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ② 合併：數頁數
+# ══════════════════════════════════════════════════════════════════════
+
+#: 最小的合法 1×1 PNG（用來當「圖片附件」）。
+_ONE_PX_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+    "890000000a49444154789c6360000002000100ffff03000006000557bfabd400"
+    "00000049454e44ae426082")
+
+#: 🔴 **一張圖印成幾頁，我不猜。**
+#:
+#: A-2 自己標的沒查：**Edge headless 對圖片 EXIF 旋轉／CSS page-break
+#: 的實際行為他沒實測過**；而規格建議「本體＋圖片同一份 HTML，
+#: 用 CSS page-break 分頁」⇒ **一張圖是不是剛好一頁，要看那個 CSS 怎麼寫**。
+#: ⇒ 這裡先留 `None`：下面那一題只釘**弱不變量**（有變多），
+#:   等 B 回報實際行為再把它收緊成 `== 圖片數`。
+#: ☠️ 現在寫死 `== 1` 的話，它可能紅在一個正確的實作上 ——
+#:   而那正是我今天已經攔過兩次的形狀（`§161` 的時間戳、`BN1` 的差 100 倍）。
+_IMAGE_PAGES_PER_FILE = None
+
+
+def test_jv5_merging_an_image_attachment_adds_pages(client, make_user):
+    """🔴 **`§7②`：圖片附件要真的進到輸出裡。**
+
+    ⚙️ 這一題現在只釘**弱不變量**：帶附件的頁數要**比不帶多**。
+    ```
+    強  總頁數 == 1 + 圖片數      <= **等 B 回報 Edge 的實際行為再收緊**
+    弱  帶附件 > 不帶附件         <= 今天釘這個
+    ```
+    ⚠️ 為什麼不直接寫 `== 1 + 圖片數`：
+    ```
+    規格建議「本體 ＋ 圖片同一份 HTML，用 CSS page-break 分頁」
+    而 A-2 自己標了 **Edge headless 對 page-break 的實際行為他沒實測過**
+    ⇒ 一張圖是不是剛好一頁，**沒有人知道**
+    ```
+    ☠️ 猜一個數字寫死的話，它可能**紅在一個正確的實作上** ——
+       而那是我今天已經攔過兩次的形狀（`§161` 的時間戳、`BN1` 的「差 100 倍」）。
+    🔑 弱不變量抓得到真正要抓的那件事：**合併根本沒發生**
+      （輸出只有本體那一頁，而它是一份完全正常的 PDF）。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_img")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "收據.png", _ONE_PX_PNG)
+    _sign_off(client, hdr, vid)
+
+    plain = _export(client, hdr, vid)
+    assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
+    merged = _export(client, hdr, vid, with_attachments=True)
+    assert merged.status_code == 200, (
+        "帶圖片附件匯出失敗：%s %s"
+        % (merged.status_code, merged.content[:160]))
+
+    a, b = _page_count(plain.content), _page_count(merged.content)
+    assert b > a, (
+        "帶圖片附件的輸出頁數 %d，沒有比只印本體的 %d 多 ——\n" % (b, a)
+        + "☠️ 圖片**沒有進到輸出裡**，而輸出是一份完全正常的 PDF。\n"
+        + "📌 規格的做法是「本體 ＋ 圖片同一份 HTML，CSS page-break」——\n"
+          "   ⇒ 圖片不需要 `pypdf`，而它也要真的被印出來。")
+
+    if _IMAGE_PAGES_PER_FILE is not None:
+        assert b - a == _IMAGE_PAGES_PER_FILE, (
+            "一張圖片讓頁數多了 %d，而期望是 %d。"
+            % (b - a, _IMAGE_PAGES_PER_FILE))
+
+
+def test_jv5_the_image_page_expectation_is_still_open():
+    """⚙️ **這一格是**待定**，而它要看得見。**
+
+    ```
+    _IMAGE_PAGES_PER_FILE = None   <= 一張圖印幾頁，**沒有人實測過**
+    ```
+    🔑 我刻意**不猜** —— 而「不猜」如果只寫在註解裡，下一個人不會看到它。
+    ⇒ 這一題是那個待辦的**載體**：它今天綠，而 `B` 回報實際行為之後，
+      把 `_IMAGE_PAGES_PER_FILE` 設好、把上一題的弱不變量收緊，
+      **然後刪掉這一題**。
+    ⚠️ 它不是 `skip` —— skip 會被略過而沒有人看到
+      （`GC6` 那個形狀：一個從來不跑的東西等於沒有）。
+    """
+    assert _IMAGE_PAGES_PER_FILE is None, (
+        "`_IMAGE_PAGES_PER_FILE` 已經被設成 %r ——\n" % (_IMAGE_PAGES_PER_FILE,)
+        + "✅ 那表示有人量到實際行為了，很好。\n"
+        + "🔑 **請把這一題刪掉** —— 它的工作（讓「待定」看得見）已經完成。\n"
+        + "⚠️ 不要把它改成 `assert _IMAGE_PAGES_PER_FILE == 1`：\n"
+          "   那一格屬於上一題，這一題只是一張便利貼。")
+
+
+def _encrypted_pdf():
+    """一份**加密**的單頁 PDF。"""
+    pypdf = pytest.importorskip("pypdf")
+    w = pypdf.PdfWriter()
+    w.add_blank_page(width=595, height=842)
+    w.encrypt("pw")
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def _zero_page_pdf():
+    """一份**零頁**的 PDF —— 四個步驟全部成功，而頁數沒有變。"""
+    pypdf = pytest.importorskip("pypdf")
+    w = pypdf.PdfWriter()
+    buf = io.BytesIO()
+    w.write(buf)
+    return buf.getvalue()
+
+
+def test_jv5_an_encrypted_attachment_does_not_blow_up_the_export(client,
+                                                                 make_user):
+    """🔴 **加密的 PDF 附件 ⇒ 匯出仍回 200，而它出現在「未能併入」那一頁。**
+
+    ## ☠️ 它抓的是「`try` 包得不夠寬」，而那是**最自然的寫法**
+
+    B 實測，我照收：
+    ```
+    壞檔（0 byte／純文字／PNG／截斷…）  PdfReader() **當下**就丟
+    **加密的 PDF**                    PdfReader() **成功**
+                                     `len(pages)`／`append()` 才丟
+                                     FileNotDecryptedError
+    ```
+    ⇒ **只包住讀檔那一行的 `try` 接不到它** ⇒ 整支匯出炸掉 ⇒ 500。
+    🔑 而附件是**使用者上傳的** —— 他可以傳一份有密碼的 PDF，
+      那不是攻擊，是一份**銀行寄來的對帳單**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_enc")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "有密碼的對帳單.pdf", _encrypted_pdf())
+    _sign_off(client, hdr, vid)
+
+    r = _export(client, hdr, vid, with_attachments=True)
+    assert r.status_code == 200, (
+        "加密的 PDF 附件讓匯出回 %s ——\n" % r.status_code
+        + "☠️ 多半是 `try` 只包住 `PdfReader()` 那一行，\n"
+          "   而加密的 PDF 是在 `len(pages)`／`append()` 才丟 "
+          "`FileNotDecryptedError`。\n"
+        + "📌 那不是攻擊 —— 使用者傳了一份**銀行寄來的對帳單**。")
+    printed = _pdf_text(r.content)
+    assert "有密碼的對帳單.pdf" in printed, (
+        "沒有炸，而那份附件也**沒有出現在「未能併入」那一頁** ——\n"
+        + "☠️ 那是**靜默略過**：使用者拿到一份看起來完整的 PDF。\n"
+        + "紙上是：\n  %s" % printed[:200])
+
+
+def test_jv5_a_zero_page_attachment_is_reported_not_silently_dropped(
+        client, make_user):
+    """🔴 **零頁的 PDF：四個步驟全部成功，而頁數沒有變。**
+
+    ```
+    PdfReader() OK ／ len(pages) == 0 ／ append() OK ／ write() OK
+    ⇒ **一個例外都不丟**
+    ```
+    ☠️ ⇒ 用「有沒有丟例外」去判「這一份有沒有併進去」的實作，
+       會把它算成**成功**，而紙上什麼都沒多。
+    🔑 這是 `§7②③`「要數頁數不要只驗非空」的**單一附件版**：
+      判一個附件有沒有真的進去，**只能數頁數，不能靠有沒有丟例外**。
+    ⚙️ 而它要出現在「未能併入」那一頁 —— 使用者傳了一份東西上來，
+      他有權知道它沒有被印出來。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_zero")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "空白的.pdf", _zero_page_pdf())
+    _sign_off(client, hdr, vid)
+
+    plain = _export(client, hdr, vid)
+    merged = _export(client, hdr, vid, with_attachments=True)
+    assert merged.status_code == 200, (
+        "零頁的 PDF 讓匯出回 %s：%s"
+        % (merged.status_code, merged.content[:160]))
+
+    printed = _pdf_text(merged.content)
+    assert "空白的.pdf" in printed, (
+        "零頁的附件被**靜默略過**了（頁數 %d -> %d，而紙上沒提到它）——\n"
+        % (_page_count(plain.content), _page_count(merged.content))
+        + "☠️ 它的四個步驟**全部成功** ⇒ 用「有沒有丟例外」去判的實作\n"
+          "   會把它算成成功，而紙上什麼都沒多。\n"
+        + "🔑 判一個附件有沒有真的進去，**只能數頁數**。\n"
+        + "紙上是：\n  %s" % printed[:200])
+
+
+def test_jv5_merging_a_pdf_attachment_adds_its_pages(client, make_user):
+    """🔴 **`§7③`：總頁數 == 1 ＋ 各 PDF 附件的頁數合計。**
+
+    ☠️ 合併失敗最可能的樣子是「**只有本體那一頁**」——
+       而那是一份**完全正常的 PDF**：非空、Content-Type 對、打得開。
+    ⇒ 只驗「非空」「是 PDF」一律會綠。
+    ⚙️ 觀測點：**與不帶附件那一次相比，頁數要變多**。
+       🔑 用相對比較而不是絕對值，因為本體是幾頁由版面決定，**不是我該釘的**。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_merge")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "憑證.pdf", _one_page_pdf())
+    _sign_off(client, hdr, vid)
+
+    plain = _export(client, hdr, vid)
+    assert plain.status_code == 200, "本體匯出就失敗了，先看那一題。"
+    merged = _export(client, hdr, vid, with_attachments=True)
+    assert merged.status_code == 200, (
+        "帶附件匯出失敗：%s %s" % (merged.status_code, merged.content[:160]))
+
+    a, b = _page_count(plain.content), _page_count(merged.content)
+    assert b > a, (
+        "帶附件的輸出頁數 %d，沒有比只印本體的 %d 多 ——\n" % (b, a)
+        + "☠️ 合併沒有發生，**而輸出是一份完全正常的 PDF**：\n"
+          "   非空、Content-Type 對、打得開。只驗那三件一律會綠。")
+    assert b >= a + 1, "PDF 附件是 1 頁，總頁數至少要多 1（%d -> %d）。" % (a, b)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ③ `§5` 的核心：實體檔遺失時**不要拒絕**
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv5_a_missing_attachment_file_does_not_block_the_export(client,
+                                                                 make_user):
+    """🔴🔴🔴 **`§7④`：附件的實體檔不見了 ⇒ 仍然回 200，而且把缺口說出來。**
+
+    ```
+    ❌ 整批拒絕 => 一份法定要保存 5 年的憑證，因為一個附件印不出來
+    ❌ 靜默略過 => 使用者拿到一份**看起來完整**的 PDF ⇒ **比印不出來更糟**
+    ✅ 把缺口印出來 ＋ **回應也要說**
+    ```
+    🔑 **一個唯讀動作拒絕執行，擋住的是使用者；靜默略過，騙的是使用者。**
+
+    ## ⚠️ 這裡與 `JV3` 的裁定**方向相反**，而兩個都對
+
+    ```
+    JV3 帶入（**寫入**）  部分成功 => 在 DB 裡留下一句謊 => **整批拒絕**
+    JV5 匯出（**唯讀**）  不改變任何主張            => **不要拒絕**
+    ```
+    ☠️ 照抄 `JV3` 的「整批拒絕」是最自然的錯誤 —— 它看起來一致、看起來嚴謹。
+
+    ⚙️ 三格分別擋不同的失敗：
+    ```
+    (a) 仍然回 200        擋「照抄 JV3 的整批拒絕」
+    (b) 紙上要有那個檔名  擋「靜默略過」
+    (c) **回應也要說**    擋「只印在紙上」—— 呼叫端分不出「完整」與「缺了東西」
+    ```
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_gone")
+    vid = _create(client, hdr)
+    _attach(client, hdr, vid, "不見的憑證.pdf", _one_page_pdf())
+    _attach(client, hdr, vid, "還在的憑證.pdf", _one_page_pdf())
+    _sign_off(client, hdr, vid)
+
+    rows = _rows(vid)
+    assert len(rows) == 2, "前置不對：附件有 %d 筆。" % len(rows)
+    victim = rows[0]
+    gone = _uploads_root() / str(victim["path"]).split("uploads/")[-1]
+    if not gone.is_file():
+        gone = pathlib.Path(str(victim["path"]))
+    assert gone.is_file(), "找不到附件的實體檔：%r" % victim.get("path")
+    gone.unlink()
+    assert not gone.exists(), "刪不掉那個檔 —— **前置失敗，不是產品的問題**。"
+
+    r = _export(client, hdr, vid, with_attachments=True)
+    assert r.status_code == 200, (
+        "附件的實體檔不見了，而匯出回 %s ——\n" % r.status_code
+        + "☠️ 那是照抄 `JV3` 的「整批拒絕」：它看起來一致、看起來嚴謹，\n"
+          "   **而匯出是唯讀的** —— 拒絕執行擋住的是使用者。\n"
+        + "📌 一份憑證法定要保存 5 年（商業會計法 §38），"
+          "不可以因為一個附件而印不出來。")
+
+    name = victim.get("filename") or ""
+    assert name, "附件那一列沒有 `filename`：%r" % victim
+    printed = _pdf_text(r.content)
+    assert name in printed, (
+        "輸出裡找不到那個缺檔的檔名 %r ——\n" % name
+        + "☠️ **靜默略過**：使用者拿到一份看起來完整的 PDF，\n"
+          "   而少了一張憑證 —— 那比印不出來更糟。\n"
+        + "紙上抽出來的文字（前 200 字）：\n  %s" % printed[:200])
+    assert "未能併入" in printed or "未併入" in printed, (
+        "檔名印出來了，而**沒有說它是「未能併入」的** ——\n"
+        + "☠️ 那一頁要讀得出「這幾份沒有進來」，不是只列一串檔名。")
+
+    said = any("未併入" in str(v) or "未能併入" in str(v)
+               or "missing" in str(k).lower()
+               for k, v in r.headers.items())
+    assert said, (
+        "紙上說了，**而回應沒說**。現有 header：%s\n" % sorted(r.headers)
+        + "☠️ 呼叫端（前端／自動化）分不出「完整」與「缺了東西」——\n"
+          "   而前端要靠它才能在畫面上提醒（`§7⑩`）。\n"
+        + "⚠️ 用 header 或改回 JSON 都可以，**用別的形狀退回給我**。\n"
+        + "📌 header 的值只能是 latin-1 ⇒ 中文檔名必須編碼；\n"
+          "   直接塞中文會讓整個回應在**送出那一刻**炸掉 ——\n"
+          "   而那會變成「匯出壞了」，比缺一個附件嚴重得多。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ④ 快照 vs 現值
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv5_a_posted_voucher_prints_the_account_name_it_froze(client,
+                                                               make_user):
+    """🔴 **`§7⑥`：已過帳印 snapshot，未過帳印現值。**
+
+    ⚙️ 觀測方式是 A-2 寫死的，因為這一題**很容易寫成同義反覆**：
+    ```
+    不改名字的話，snapshot 與現值**相同** => 那一題永遠綠
+    ⇒ 必須**過帳後改掉科目名稱**，再匯出，紙上要是**舊名字**
+    ```
+    ☠️ 取現值的後果：三年後印出一張舊傳票，上面的科目名稱是**今天的**
+       —— 而那張傳票當初簽的是另一個名字。
+
+    ## 🔴 用**自訂**科目，不可以用法定科目（我第一版踩到）
+
+    ```
+    account_items_statutory_no_update
+        BEFORE UPDATE ON account_items WHEN OLD.source = 'statutory'
+    ⇒ 改 `1113` 的 name 會撞 RAISE(ABORT)
+    ⇒ 這一題紅在**我的前置**，訊息指向資料層 —— 而受測物根本還沒被碰到
+    ```
+    📌 而 `account_items_referenced_code_no_update` 擋的是 **`code`**，
+       改 `name` 不受它管 ⇒ 自訂科目改名是合法的。
+    🔑 今天第二次同族：先前是拿 ⑤ TRIGGER 探針自己種的 `9901` 當法定科目用，
+       這次是反過來拿法定科目去改 —— **兩次都是我的前置撞到資料層的守門**。
+
+    ## 🔴🔴 2026-09-23：這一題現在紅，而**不是**前置缺漏 —— 是真缺陷
+
+    這一題本來就自己走完 `submit/approve/approve/post`（不需要補
+    `_sign_off`），而它今天仍然紅。**直接執行 `approval_done()` 驗證過**
+    （不是從原始碼推論）：
+
+    ```
+    post 之後  status = "已過帳"（_FROZEN_STATUS）、checked_by／manager_by 都有值
+    approval_done(voucher) -> (False, "…還差主管簽核…")
+    ```
+    ```
+    helpers/voucher.py:497-518
+      if voucher.get("voided_at"): return True, ""
+      if voucher.get("status") == "已核准": return True, ""   <= 只認這個狀態
+      ...（沒有任何分支認得 "已過帳"）
+    ```
+    ☠️ **一張已經過帳的傳票，今天匯不出來** —— 而過帳的傳票正是
+       《商業會計法》§38 五年保存最需要印出來的那一種，也是這一題
+       自己要驗的「已過帳印凍結科目名」的前提。`§7⑥` 這整個功能
+       透過真正的匯出端點**從未被走到過**：8 題裡只有這一題會撞到，
+       因為只有它讓傳票真的走完 `post`。
+    ⇒ **這一題保持原樣、不加 `_sign_off`、不放寬斷言** —— 它現在的紅
+       是真的，已回報 A／B，`approval_done()` 需要補上「已過帳」這個分支。
+    """
+    _u, hdr = _hdr(client, make_user, "jv5_snap")
+
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(
+            "INSERT INTO account_items (code, level, name, name_en,"
+            " parent_code, source, is_active) VALUES (?,?,?,?,?,'custom',1)",
+            ("9911", 4, "測試用自訂科目", "", None))
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = client.post("/api/vouchers", headers=hdr, json={
+        "summary": "快照測試",
+        "lines": [{"account_code": "9911", "debit": 1000, "credit": 0},
+                  {"account_code": "9911", "debit": 0, "credit": 1000}]})
+    assert r.status_code == 200, "建不起來：%s %s" % (r.status_code, r.text[:200])
+    vid = r.json()["id"]
+    for step in ("submit", "approve", "approve", "post"):
+        r = client.post("/api/vouchers/%s/%s" % (vid, step), json={},
+                        headers=hdr)
+        assert r.status_code == 200, (
+            "`%s` 失敗：%s %s" % (step, r.status_code, r.text[:160]))
+
+    conn = db.get_db()
+    try:
+        old = conn.execute(
+            "SELECT account_name_snapshot FROM voucher_lines"
+            " WHERE voucher_id = ? ORDER BY line_no", (vid,)).fetchone()
+        assert old is not None, "讀不到分錄。"
+        old_name = old["account_name_snapshot"]
+        assert old_name, (
+            "過帳了而 `account_name_snapshot` 是空的 ——\n"
+            + "☠️ 那表示凍結那一步沒有發生，這一題後面量不到東西。")
+        conn.execute(
+            "UPDATE account_items SET name = ? WHERE code = ?",
+            (old_name + "（改過的）", "9911"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    r = _export(client, hdr, vid)
+    assert r.status_code == 200, "匯出失敗：%s" % r.content[:160]
+    assert b"\xef\xbc\x88\xe6\x94\xb9\xe9\x81\x8e\xe7\x9a\x84\xef\xbc\x89" \
+        not in r.content, (
+        "已過帳的傳票印出了**改過之後**的科目名稱 ——\n"
+        + "☠️ 三年後印出一張舊傳票，上面的科目名稱是今天的，\n"
+          "   **而那張傳票當初簽的是另一個名字**。\n"
+        + "🔑 已過帳 ⇒ 取 `account_name_snapshot`，不是現值。")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ⑤ `AC1`：畫面那一半
+# ══════════════════════════════════════════════════════════════════════
+
+def test_jv5_the_page_has_both_export_actions(client, make_user):
+    """🔴 **`§7⑨`：傳票頁要有「匯出 PDF」與「匯出（含附件）」兩個動作。**
+
+    ⚠️ 判準是**會送出的那一個動作**（`AC1`），而匯出是 `GET`
+       ⇒ 這裡看的是「有沒有打到那支端點」，不是 `method: 'POST'`。
+    """
+    root = pathlib.Path(__file__).resolve().parents[4]
+    js = (root / "frontend" / "js" / "voucher.js").read_text(
+        encoding="utf-8", errors="replace")
+    assert "pdf-download" in js, (
+        "`voucher.js` 沒有任何地方打 `pdf-download` —— 匯出那條路還沒接。")
+    assert "with_attachments" in js, (
+        "`voucher.js` 有匯出，而**沒有「含附件」那一個** ——\n"
+        + "☠️ 兩個動作只接一個的話，使用者以為印出來的就是全部。")

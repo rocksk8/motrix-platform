@@ -14,13 +14,13 @@
    "scope": "module"
   },
   {
-   "file": "routers/vouchers.py",
+   "file": "modules/accounting/api/vouchers.py",
    "path": "/by-case/{quote_no}",
    "handler": "vouchers_by_case",
    "scope": "module"
   },
   {
-   "file": "routers/vouchers.py",
+   "file": "modules/accounting/api/vouchers.py",
    "path": "/summary-sources",
    "handler": "summary_sources",
    "scope": "module"

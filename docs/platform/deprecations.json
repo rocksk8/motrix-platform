@@ -30,14 +30,14 @@
    "replacement": "各使用方自己的「應收應付模組未安裝」說明"
   },
   {
-   "file": "helpers/voucher.py",
+   "file": "modules/accounting/voucher.py",
    "name": "parse_approval_json",
    "since_core": "1.38",
    "remove_at_major": 2,
    "replacement": "helpers.tiered_approval.parse_approval_json（A，主持裁示 M06-c）"
   },
   {
-   "file": "helpers/voucher.py",
+   "file": "modules/accounting/voucher.py",
    "name": "VoucherChainUnreadable",
    "since_core": "1.38",
    "remove_at_major": 2,
