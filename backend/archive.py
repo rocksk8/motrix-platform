@@ -2355,7 +2355,8 @@ def _check_previous_month_backup() -> bool:
             return False                      # 全新安裝或上個月根本沒在跑：不是缺漏
         _write_backup_alert(
             "上個月（%s）的月備份沒有完成 —— 永久保留層缺這個月。請從上個月最後一份每日快照"
-            "（本機 db_backups 或 系統存檔_個資／每日備份）手動補進 月備份/%s/" % (prev, prev), level="ERROR")
+            "（本機 db_backups 或 系統存檔_個資／每日備份）手動補進 月備份/%s/，"
+            "補好後在該資料夾放一個空的 .done 檔，告警才會解除（系統只認 .done）" % (prev, prev), level="ERROR")
         return True
     except Exception:
         logger.exception("_check_previous_month_backup failed")

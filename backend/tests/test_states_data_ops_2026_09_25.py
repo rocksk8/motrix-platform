@@ -298,6 +298,23 @@ def test_state_cc06_missing_previous_month_alerts(tmp_path, monkeypatch):
     monkeypatch.setattr(archive, "_write_backup_alert", lambda r, level="WARN": alerts.append((level, r)))
     assert archive._check_previous_month_backup() is True
     assert alerts[0][0] == "ERROR" and _prev_month().strftime("%Y-%m") in alerts[0][1]
+    assert ".done" in alerts[0][1], "告警要說補好後放 .done（2026-09-28 使用者裁示：2026-08 人工補建後告警持續）"
+
+
+def test_state_cc06_manual_backfill_without_done_still_alerts_until_done(tmp_path, monkeypatch):
+    """2026-08 實例：人工補建放了整庫與 JSON 卻沒放 .done ⇒ 每天告警；判準只認 .done（不猜資料夾內容夠不夠）。"""
+    import archive
+    backups = tmp_path / "db_backups"
+    (backups / _prev_month().isoformat()).mkdir(parents=True)
+    monkeypatch.setattr(archive, "_LOCAL_DB_BACKUP", str(backups))
+    monkeypatch.setattr(archive, "_monthly_dir", lambda: str(tmp_path / "月備份"))
+    monkeypatch.setattr(archive, "_write_backup_alert", lambda r, level="WARN": None)
+    month = tmp_path / "月備份" / _prev_month().strftime("%Y-%m")
+    month.mkdir(parents=True)
+    (month / "motrix_erp.db").write_bytes(b"x")
+    assert archive._check_previous_month_backup() is True
+    (month / ".done").write_text("")
+    assert archive._check_previous_month_backup() is False
 
 
 def test_state_cc06_done_previous_month_or_fresh_install_is_quiet(tmp_path, monkeypatch):
