@@ -109,3 +109,13 @@ def probe_pytest_args(probe_file):
     d = os.path.dirname(os.path.abspath(str(probe_file)))
     return ["-c", os.path.join(BACKEND_DIR, "pytest.ini"), "--rootdir", d, "--confcutdir", d, "-p", "conftest",
             os.path.abspath(str(probe_file))]
+
+
+def child_pytest_deadline(margin=20.0):
+    """題目裡起子 pytest 的期限：**一定小於**外層這一題的 e2e 逐題硬上限（conftest `_e2e_hard_cap_seconds`，預設 120）。
+    〔O14（主持登記）：原本寫死 240 秒——外層 120 秒先到 ⇒ 子行程的逾時永遠輪不到，紅成「外層逐題上限」看不出原因。
+      餘裕 = min(margin, 上限／4)：預設 120 ⇒ 100；上限很小時照樣留四分之一給外層自己的收尾，期限不會 ≥ 上限（稽核 D O14-S1）〕"""
+    import conftest
+    cap = float(conftest._e2e_hard_cap_seconds())
+    return cap - min(float(margin), cap / 4.0)
+

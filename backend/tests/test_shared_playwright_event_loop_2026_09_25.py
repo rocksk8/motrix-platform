@@ -13,7 +13,7 @@ import os
 
 import pytest
 
-from tests._subproc import run_python, utf8_env
+from tests._subproc import child_pytest_deadline, run_python, utf8_env
 
 pytest.importorskip("playwright.sync_api")
 
@@ -26,5 +26,6 @@ def test_asyncio_run_works_after_a_test_that_used_the_shared_browser(tmp_path):
     proc = run_python(["-m", "pytest", os.path.join("tests", "_probe_shared_pw_then_asyncio.py"), "-q",
                        "-p", "no:cacheprovider", "-p", "no:randomly", "-p", "no:xdist",
                        f"--basetemp={tmp_path / 'probe'}"],
-                      cwd=BACKEND, env=utf8_env(), timeout=240)
+                      cwd=BACKEND, env=utf8_env(), timeout=child_pytest_deadline())
+    # 〔稽核 D O14-S2：~~timeout=240~~ ≥ 外層 e2e 逐題上限 120 ⇒ 輪不到；改用共用期限（上限 − 20）〕
     assert "3 passed" in proc.stdout, "共用瀏覽器之後的 asyncio.run 失敗，或停掉後起不來：\n" + proc.stdout[-2000:]
