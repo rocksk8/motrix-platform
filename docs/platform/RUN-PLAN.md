@@ -171,6 +171,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 12:49 D：h-m01-6 196af8fb **M5-M1 關閉，條件 M6-M1**：M01 在時 212 檔逐檔通過數與基準相同；M01 不在時非 e2e 487 過、e2e 48 過、0 紅，略過的題全在清單上（10 檔標記失效重跑 96 紅／38 過，38 題都有照跑）。M6-M1：inflight[n2] 不需要 M01（不帶標記真刪樹 20/20 過），錯在 D 的清單（負載逾時），已在清單檔更正並保留原列。
 - 2026-09-27 12:26 D：c-approval-l1 3897f15b **必修 AL-M1**：selfViewBy 兩方向都無題——拿掉「是否本人」比對（外人 200 看到客戶／案名／成交標籤）或讓它失效，380 題皆綠；補外人 404、無案件權限申請人 200 兩題。其餘成立：路由 566 同、新舊行為逐格等價、①③④ 與轉簽權限突變紅、deal_tag 交會有題鎖、真刪 M01 只剩允許 5。建議 AL-S1 查無與看不到訊息不同（既有、可列舉並洩漏關聯單號）。觀察：M05 缺席 2 紅為基底既有；④ 壞 JSON 行為無題。待驗：真刪 M06。
 - 2026-09-27 11:40 D：b-drill-absent404-2 8b146db3 **通過**（AB-S1、AB-S2 關閉；1251 過；突變 3/3 紅）；b-m01-salesorders-page 491f0945 **通過**（27 過；新守門在 case 缺 sales-orders 時紅＝反向控制成立）。上車：c-m01-5＋absent404-2 同班 ⇒ salesorders-page 必須同班。
 - 2026-09-27 11:02 D：b-drill-absent404 58f844ac **通過**：豁免隨 modules.json mod: 單位自動失效（M01 合回即納入；忘改 modules.json ⇒ 歸屬守門 3 紅）；core-only sparse 樹 27 個 probes 全 404。建議：空宣告也判紅；modules.json page: 單位 ⊆ module.json pages（contractor-voucher-approval-settings、sales-orders 兩頁目前缺席時不移除也不驗）。
