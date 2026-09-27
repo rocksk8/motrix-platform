@@ -236,8 +236,8 @@ def test_rc_function_extractor_sees_a_one_character_drift():
 
 
 # ── 乾跑／轉換照啟動規則跑 migration（migrate_like_startup，2026-09-28）──
-# ⚠ 模組路徑（有 helpers/module_startup.py、模組 migration 未完成 ⇒ 失敗）的整合題
-#   等 B41（ModuleSpec.migrations＋module_startup）合回時在同一班補上：RUN-PLAN 月台列的合回條件。
+# 模組路徑（有 helpers/module_startup.py、模組 migration 未完成 ⇒ 失敗）的整合題在
+#   test_migrate_like_startup_modular_2026_09_28.py（B41 與本包同班合回，第十四班）。
 
 _MLS_SPEC = importlib.util.spec_from_file_location(
     "migrate_like_startup", Path(__file__).resolve().parents[2] / "tools" / "migrate_like_startup.py")
@@ -267,9 +267,10 @@ def test_dry_run_and_convert_both_go_through_migrate_like_startup():
     assert "if e.code == 0" in body and "if e.code == 0" in code
 
 
-def test_mls_without_module_startup_is_plain_init_db(tmp_path):
-    if mls.has_module_startup():
-        pytest.fail("這棵樹已有 helpers/module_startup.py：本題要換成模組路徑的整合題（見上方註解）")
+def test_mls_without_module_startup_is_plain_init_db(tmp_path, monkeypatch):
+    # 第十四班起樹上有 helpers/module_startup.py（B41）⇒ 原本的絆線（pytest.fail）拿掉；
+    # 以替身模擬「舊包沒有 module_startup」保留「舊包只跑真的 init_db」這條覆蓋，模組路徑由 modular 題檔負責。
+    monkeypatch.setattr(mls, "has_module_startup", lambda backend=None: False)
     p = str(tmp_path / "x.db")
     assert mls.run([p]) == []
     import sqlite3
