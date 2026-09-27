@@ -149,6 +149,18 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 00:16 主持：**停工交接**（使用者裁示「不再推送新的開發，只做紀錄跟銜接後續」；此前裁示下一版「一次出完」「先寫、驗證後補」）。各線已停，暫存已清、無殘留行程。下次開工從這裡接：
+  - **已推且 D 審過（必修 0）**：建構器 A `wip/a-builder-output` be26ee3a＋B `wip/b-builder-dnd-4` f84fb2df（9350a3df）；品牌 `wip/h-branding` ec48a245（fc5c47f4、4aa2c29c；conftest 有改＝車頭）。
+  - **已推、待 D**：A `wip/a-build-python-2` b86bc4c8（BP-M1 已修，待複核）、A `wip/a-prod-status-upgrade` b8858fee（與前者版本紀錄同屬「部署工具」，同班合成一筆）。
+  - **只在本機（未推）**：
+    - B 請款 D:\MOTRIX-PLATFORM-B41 `wip/b-payreq`（4cb409f9 主體＋54b17ebc WIP；含 IP-100、ModuleSpec.migrations〔L0，CORE 暫 1.58〕、case v1 migration；待驗證：突變、真刪 M05／M01、⓪ 自查、modtest 全選、8866、推＋登記）；
+    - A custom-records 網路失敗訊息 D:\MOTRIX-PLATFORM-A34 `wip/a-cr-network-errors` 9cd9cf23（待補 manifest、回歸、突變；與建構器 custom-records.html 衝突）；
+    - apply_update 日常更新安全修正 D:\MOTRIX-PLATFORM-H12 `wip/h-apply-platform` 8be852f8（程式 f0ff3dbd；7 項風險已修＋backend/tools/apply_plan.py＋9 題；**未做三條路演練、RUNBOOK 新章節、CORE-SPEC §9b 註記、⓪ 自查**；演練腳本 D:\MOTRIX-DRILLS\handoff\apply-drill\）。
+  - **未開工**：B 建構器 -5（notif 預覽旗標題、custom-records 禁 x-html 守門）；A final_drill 收 d7_extra（S-1，帶 D 審定兩條判準）；A 必修掃描守門（D 腳本與說明 D:\MOTRIX-DRILLS\handoff\d_scan_mustfix.py／.README.txt；目前 14 筆＝BP-M1 真未關＋13 筆假陽性四類）。
+  - **apply_update 另發現**：rollback_update.ps1 同缺口；正式機是轉換來的沒有 baseline（建議 upgrade.py convert 寫 baseline）；_healthcheck_ping.py 在 cp932 印中文會 UnicodeEncodeError；乾跑不載模組 migration。**下一次正式機更新前：apply_update 演練三條路通過＋D 單獨完整稽核，缺一不可**。
+  - 試用 8866：`wip/h-trial-next` 40b3d677（建構器＋品牌，只試用不上車），pid 46056。
+  - 待使用者回覆：更新流程簡化（雲端硬碟交付＋儀表板一鍵套用）要不要做。待清理清單見主持記憶與桌面計畫。
+  - 下次開工順序：各線把本機 WIP 做完、推、登記 → D 整批稽核（apply_update 單獨）→ 第十四班 → 全量 → 建包（PATH 先放 .venv312）→ apply_update 演練 → 使用者確認 → 正式機日常更新。
 - 2026-09-28 00:09 D：h-branding ec48a245 **BR-S1 關閉**：cp950 確實在 latin-1 之前被試到（cp950 反向控制檔要求抓到中文，latin-1 讀會比不到）；突變 3/3 紅。觀察：無 BOM 的 UTF-16 會被 utf-8 解碼成功而中文失準（罕見）。
 - 2026-09-28 00:06 D：a-build-python cc1fa03b **必修 BP-M1**：deploy_manifest 的 env 沒有 Python 路徑／版本／來源（只印在畫面上）。其餘成立：專案 venv 優先（突變 BP1 紅）、.venv312 不在時後備並提醒（有題）、8 過。
 - 2026-09-27 23:59 D：品牌 653662a1 **必修 0**。上傳安全（檔頭判斷、拒 SVG、formats=[fmt]、尺寸先擋、重新編碼只留像素、固定路徑、superadmin＋拒展示帳號＋audit）；本公司字串守門（次數一致、五種類別、frontend 不准例外）；全新安裝 admin＋install_info 先寫、既有安裝 jeff 不動、刪除／停用保護一對一改；安裝基準過濾；conftest 導 UPLOADS_ROOT。突變 6/6 紅、159 過。建議：掃描加 .vbs／.pyw。觀察：預設管理員降級從未受保護（既有）。
