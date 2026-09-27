@@ -228,3 +228,40 @@ def test_rc_function_extractor_sees_a_one_character_drift():
     fa = _ps_function(a, "Stop-InstallService")
     drifted = a.replace("$hops -lt 6", "$hops -lt 7", 1)
     assert fa and _ps_function(drifted, "Stop-InstallService") != fa
+
+
+# ── 乾跑／轉換照啟動規則跑 migration（migrate_like_startup，2026-09-28）──
+# ⚠ 模組路徑（有 helpers/module_startup.py、模組 migration 未完成 ⇒ 失敗）的整合題
+#   等 B41（ModuleSpec.migrations＋module_startup）合回時在同一班補上：RUN-PLAN 月台列的合回條件。
+
+_MLS_SPEC = importlib.util.spec_from_file_location(
+    "migrate_like_startup", Path(__file__).resolve().parents[2] / "tools" / "migrate_like_startup.py")
+mls = importlib.util.module_from_spec(_MLS_SPEC)
+_MLS_SPEC.loader.exec_module(mls)
+
+
+def test_mls_detects_module_startup_by_file(tmp_path):
+    assert not mls.has_module_startup(str(tmp_path))
+    _w(tmp_path, "helpers/module_startup.py", "")
+    assert mls.has_module_startup(str(tmp_path))
+
+
+def test_dry_run_and_convert_both_go_through_migrate_like_startup():
+    ps1 = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    assert r'backend\tools\migrate_like_startup.py' in ps1
+    assert "--license" in ps1
+    up = (Path(__file__).resolve().parents[3] / "tools" / "platform" / "upgrade.py").read_text(encoding="utf-8")
+    body = up.split("def run_migrations", 1)[1].split("\ndef ", 1)[0]
+    assert "migrate_like_startup.py" in body and "MIGRATE_OK" in body
+    # 反向控制：成功字樣只在工具 exit 0 時印（不可以無條件印）
+    assert "if e.code == 0" in body and "if e.code == 0" in ps1
+
+
+def test_mls_without_module_startup_is_plain_init_db(tmp_path):
+    if mls.has_module_startup():
+        pytest.fail("這棵樹已有 helpers/module_startup.py：本題要換成模組路徑的整合題（見上方註解）")
+    p = str(tmp_path / "x.db")
+    assert mls.run([p]) == []
+    import sqlite3
+    with sqlite3.connect(p) as c:
+        assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0] > 10

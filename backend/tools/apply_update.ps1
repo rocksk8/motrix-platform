@@ -434,8 +434,28 @@ if ((Test-Path $dbPath) -or (Test-Path $demoDbPath)) {
     if (Test-Path $demoDbBackupPath) { Copy-Item $demoDbBackupPath $dryRunDemoDb -Force; $dryRunTargets += $dryRunDemoDb }
     $dryRunList = ($dryRunTargets | ForEach-Object { "r'$_'" }) -join ", "
 
+    # 2026-09-28：新包有 backend\tools\migrate_like_startup.py ⇒ 用它（先照啟動規則載入模組，模組 migration 才會跑到；
+    #   未完成、模組載入失敗、停用清單讀不到都算乾跑失敗）。授權讀正式機的金鑰檔（只讀），與正式機啟動一致。
+    #   沒有這支的舊包 ⇒ 沒有模組 migration，照舊只跑 init_db。
+    $dryRunTool = Join-Path $PackagePath "backend\tools\migrate_like_startup.py"
     $dryRunPy = Join-Path $env:TEMP "motrix_dryrun_$timestamp.py"
-    @"
+    if (Test-Path $dryRunTool) {
+        $licenseArg = ""
+        $prodLicense = Join-Path $BackendDir "license.key"
+        if (Test-Path $prodLicense) { $licenseArg = ", '--license', r'$prodLicense'" }
+        $dbArgs = ($dryRunTargets | ForEach-Object { "'--db', r'$_'" }) -join ", "
+        @"
+import runpy, sys
+sys.argv = [r'$dryRunTool', $dbArgs$licenseArg]
+try:
+    runpy.run_path(r'$dryRunTool', run_name='__main__')
+except SystemExit as e:
+    if e.code == 0:
+        print('DRYRUN_OK')
+    sys.exit(e.code)
+"@ | Set-Content -Path $dryRunPy -Encoding UTF8
+    } else {
+        @"
 import sys
 sys.path.insert(0, r'$(Join-Path $PackagePath "backend")')
 import db
@@ -443,6 +463,7 @@ for p in ($dryRunList,):
     db.init_db(p)
 print('DRYRUN_OK')
 "@ | Set-Content -Path $dryRunPy -Encoding UTF8
+    }
 
     # 2026-09-08 修復（見上方 db 備份那段同款註解）：這裡尤其重要——這支
     # dry-run 腳本本來就是「預期它可能會真的丟例外」的檢查，沒有這層防護，
@@ -459,6 +480,7 @@ print('DRYRUN_OK')
     }
     Remove-Item $dryRunDb, $dryRunDemoDb, $dryRunPy -Force -ErrorAction SilentlyContinue
     Remove-Item "$dryRunDb-wal", "$dryRunDb-shm", "$dryRunDemoDb-wal", "$dryRunDemoDb-shm" -Force -ErrorAction SilentlyContinue
+    Remove-Item "$dryRunDb.modules_disabled.json", "$dryRunDemoDb.modules_disabled.json" -Force -ErrorAction SilentlyContinue
 
     # 🔴 2026-09-24（正式機套用乙時誤判）：`& python x 2>&1` 在 PS 5.1 下，只要 python 往 stderr
     #    印任何一行（例：db.py 的 logger.warning），輸出就是**陣列**（ErrorRecord ＋ 字串）。
