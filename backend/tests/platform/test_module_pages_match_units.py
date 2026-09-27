@@ -9,6 +9,8 @@ case 的 sales-orders）；反過來 module.json 列了、modules.json 沒歸 �
 import json
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[3]
 
 
@@ -37,7 +39,11 @@ def _real():
 def test_module_pages_match_the_page_units():
     groups, manifests = _real()
     checked = [g["key"] for g in groups.values() if g.get("key") in manifests]
-    assert len(checked) >= 3, "正對照：已搬遷的模組只找到 %s——量尺量不到東西" % checked
+    # ~~assert len(checked) >= 3~~〔更正（⓪ 自查 §G5 #7／#12）：core-only 反向控制時模組全拿掉 ⇒ 沒有可比的對象，
+    #   不是守門失效——明說略過；「量得到東西」由合成的反向控制題負責（不綁特定模組，MODULE-GUIDE §7）〕
+    if not manifests:
+        pytest.skip("沒有已安裝的 L2 模組（core-only）⇒ 沒有 module.json 可比對")
+    assert checked, "有 module.json 的模組 %s 在 modules.json 找不到對應的組（key 打錯？）" % sorted(manifests)
     bad = page_unit_mismatches(groups, manifests)
     assert not bad, ("modules.json 的 page: 單位與 module.json 的 pages 不一致（key、只在 modules.json、只在 module.json）：%s\n"
                      "⇒ 補進 module.json 的 pages（不進側欄就不帶 menu），或改 modules.json 的歸屬" % bad)
