@@ -168,6 +168,8 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 11:02 D：b-drill-absent404 58f844ac **通過**：豁免隨 modules.json mod: 單位自動失效（M01 合回即納入；忘改 modules.json ⇒ 歸屬守門 3 紅）；core-only sparse 樹 27 個 probes 全 404。建議：空宣告也判紅；modules.json page: 單位 ⊆ module.json pages（contractor-voucher-approval-settings、sales-orders 兩頁目前缺席時不移除也不驗）。
+- 2026-09-27 11:02 D：c-m01-5 a1e0a45b——M4-M1／M2 關閉（SO、網路規劃、請款、出納、報表突變 8/8 紅）；M4-M3：M01 不在時非 e2e 只剩允許 5＋基底 4、e2e 0 紅；**M01 在時 134 檔逐檔通過數與基準完全相同**（e2e 77/78 同，inflight[n2] 負載逾時、單獨重跑過）。**必修 M5-M1**：整檔標記藏 462 題＋10 檔 137 題（主持已接受，子代理修）。
 - 2026-09-27 10:50 D：b-probe-guard-s 04c0e912 **通過**：PT-S1、PT-S2 關閉；15 過、突變 4/4 紅（預設範圍改空、不含 modules、只含一個模組、utf8_env 不清）。
 - 2026-09-27 10:28 D：b-probe-tmp 4ecf73ea **通過**（必修 0）：61 過；subproc_helper 在 221adaa0 紅、本包綠（子 pytest 改 utf8_env）；真實受測樹殘檔 ⇒ rc 1 並列出（含 -n 2、modules/*/tests/.hid）。建議 PT-S1 預設監看範圍無題鎖（改空／不含 modules 皆存活）、PT-S2 MOTRIX_PROBE_LEAK_ROOTS 會傳給子孫行程。觀察：共用樹他人新增測試檔會判紅。
 - 2026-09-27 10:24 D：b-modtest-workers-3 01e73f10 **通過**：WK-M2 關閉；run_train 行為題與 PARTIAL=1 題關閉 -2 兩項觀察；67 過、突變 5/5 紅（舊寫法、關鍵字躲結構守門、補完丟掉、一律 E2E、未設當明設）。
