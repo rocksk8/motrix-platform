@@ -109,3 +109,21 @@ def test_stored_attachment_extension_matches_its_real_content(client, make_user)
     assert meta["path"].endswith(".png")
     on_disk = os.path.join(uploads_helper.UPLOADS_ROOT, meta["path"])
     assert Image.open(on_disk).format == "PNG", "副檔名 .png，內容卻不是 PNG"
+
+
+def test_stored_attachment_extension_matches_its_real_content_on_the_l1_save_path(tmp_path, monkeypatch):
+    """同上，但不經 CRM（B，2026-09-28）：直接走 CRM 底下那支 L1 存檔函式
+    `helpers.uploads.save_document_files(..., watermark_by=…)`（業務開發記錄與案件動態共用）。
+    ⇒ 沒有 CRM 的安裝包也驗得到「副檔名跟著真實內容」這條 L1 規則；上面那題保留標記、驗 CRM 的整合。"""
+    import asyncio
+    import os
+    from starlette.datastructures import UploadFile
+    import helpers.uploads as uploads_helper
+    root = tmp_path / "uploads"
+    root.mkdir()
+    monkeypatch.setattr(uploads_helper, "UPLOADS_ROOT", str(root))
+    f = UploadFile(file=io.BytesIO(_white_on_transparent_png()), filename="logo.png")
+    meta = asyncio.run(uploads_helper.save_document_files("dev_logs", "L1-FMT", [f], "tester", watermark_by="tester"))[0]
+    assert meta["path"].endswith(".png"), meta
+    on_disk = os.path.join(uploads_helper.UPLOADS_ROOT, meta["path"])
+    assert Image.open(on_disk).format == "PNG", "副檔名 .png，內容卻不是 PNG"
