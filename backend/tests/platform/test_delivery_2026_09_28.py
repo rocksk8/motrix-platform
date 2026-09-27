@@ -214,3 +214,116 @@ def test_ps1_digest_matches_the_h12_rule():
     """與 tests/platform/test_apply_plan 的 _ps1_digest 同規則：去 BOM、CRLF→LF。"""
     assert D.ps1_digest(b"\xef\xbb\xbfa\r\nb") == D.ps1_digest(b"a\nb") == hashlib.sha256(b"a\nb").hexdigest()
     assert D.ps1_digest(b"a\nb") != D.ps1_digest(b"a\nc")
+
+
+# ══ (c) 一鍵套用、(d) 結果寫回 ════════════════════════════════════════════════
+# apply_update.ps1 不真的跑：以 run＝假執行器模擬「它寫 result.json、印 ::RESULT::」（UPDATE-DELIVERY §9.2 的介面）。
+
+def _fake_run(install, status="success", rolled_back="applied", service="up", exit_code=0, write=True,
+              file_status=None, seen=None):
+    def run(cmd):
+        if seen is not None:
+            seen.append({"cmd": cmd, "tools_ps1": (install / "backend" / "tools" / "apply_update.ps1").read_bytes()})
+        if write:
+            logs = install / "backend" / "logs"
+            logs.mkdir(parents=True, exist_ok=True)
+            rec = {"protocol": 2, "status": file_status or status, "rolled_back": rolled_back, "service": service,
+                   "exit": exit_code, "script": "apply_update", "script_version": "2026-09-28a",
+                   "timestamp": "20260928_021500", "package": cmd[-2], "commit": COMMIT,
+                   "started_at": "2026-09-28 02:15:00", "finished_at": "2026-09-28 02:16:00"}
+            (logs / "apply_update_20260928_021500.result.json").write_text(json.dumps(rec), encoding="utf-8")
+        out = "::PROTOCOL:: v=2\n...\n::RESULT:: v=2 status=%s rolled_back=%s service=%s exit=%d\n" % (
+            status, rolled_back, service, exit_code)
+        return exit_code, out
+    return run
+
+
+def _staged_ok(env):
+    _name, staged = _publish_and_stage(env)
+    return staged, _verify(env, staged)
+
+
+def test_apply_copies_the_package_tools_first_then_runs_and_reads_the_result_file(env):
+    """正對照：驗證通過 ⇒ 先把包裡的 backend\tools 複製進安裝目錄（AH-M2），再呼叫 apply_update；結果讀 result.json。"""
+    staged, v = _staged_ok(env)
+    seen = []
+    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], seen=seen))
+    assert r["started"] and r["outcome"] == "succeeded" and r["problems"] == [], r
+    assert seen[0]["tools_ps1"] == PS1.encode("utf-8"), "呼叫 apply_update 時，安裝目錄裡的腳本必須已經是包裡那一份"
+    assert seen[0]["cmd"][-3:] == ["-PackagePath", os.path.join(staged, D.PAYLOAD), "-Yes"]
+    assert r["result"]["commit"] == COMMIT
+
+
+def test_rc_existing_lock_is_reported_not_removed_and_nothing_runs(env):
+    """反向控制：有鎖（正在跑或殘留）⇒ 不開始、不刪鎖、不呼叫 apply_update、不複製 tools。"""
+    staged, v = _staged_ok(env)
+    lock = env["install"] / "backend" / ".apply.lock"
+    lock.write_text(json.dumps({"pid": 999999, "script": "apply_update"}), encoding="utf-8")
+    seen = []
+    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], seen=seen))
+    assert not r["started"] and r["outcome"] == "failed" and r["lock"]["pid"] == 999999
+    assert lock.exists() and seen == [] and not (env["install"] / "backend" / "tools" / "apply_update.ps1").exists()
+
+
+def test_rc_unverified_package_is_refused(env):
+    staged, v = _staged_ok(env)
+    with pytest.raises(D.DeliveryError, match="驗證沒有通過"):
+        D.apply_staged(staged, str(env["install"]), dict(v, ok=False, problems=["簽章不符"]), run=_fake_run(env["install"]))
+    with pytest.raises(D.DeliveryError, match="驗證沒有通過"):
+        D.apply_staged(staged, str(env["install"]), None, run=_fake_run(env["install"]))
+
+
+@pytest.mark.parametrize("kw, needle", [
+    ({"write": False}, "找不到這一次的結果檔"),
+    ({"file_status": "rollback_ok"}, "不一致"),                  # 結果檔與 ::RESULT:: 不同源
+])
+def test_rc_missing_or_disagreeing_result_file_is_failed(env, kw, needle):
+    staged, v = _staged_ok(env)
+    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], **kw))
+    assert r["started"] and r["outcome"] == "failed" and any(needle in p for p in r["problems"]), r
+
+
+def test_failed_apply_is_failed_through_the_dashboard_rules(env):
+    """判定用 deploy_dashboard.decide_outcome（fail-closed）：自動回滾成功也仍是 failed。"""
+    staged, v = _staged_ok(env)
+    r = D.apply_staged(staged, str(env["install"]), v, run=_fake_run(env["install"], status="unhealthy_rolled_back",
+                                                                    rolled_back="restored", exit_code=1))
+    assert r["outcome"] == "failed" and r["problems"] == [] and r["result"]["rolled_back"] == "restored"
+
+
+def test_latest_result_skips_checkonly(env):
+    logs = env["install"] / "backend" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "apply_update_20260928_010000.result.json").write_text(json.dumps({"status": "success"}), encoding="utf-8")
+    (logs / "apply_update_20260928_020000.result.json").write_text(json.dumps({"status": "checkonly_ok"}), encoding="utf-8")
+    assert D.latest_result(str(env["install"]))["status"] == "success"
+
+
+def test_write_back_carries_only_result_fields_and_dev_reads_the_newest_success(env):
+    name, staged = _publish_and_stage(env)
+    res = {"protocol": 2, "status": "success", "rolled_back": "applied", "service": "up", "exit": 0,
+           "script": "apply_update", "script_version": "2026-09-28a", "timestamp": "20260928_021500",
+           "package": r"C:\staging\x", "commit": COMMIT, "started_at": "2026-09-28 02:15:00",
+           "finished_at": "2026-09-28 02:16:00", "log": "機密內容不可以寫回"}
+    path = D.write_back(str(env["root"]), name, res, "succeeded", host="PROD")
+    got = json.loads(Path(path).read_text(encoding="utf-8"))
+    assert "log" not in got and "package" not in got and got["outcome"] == "succeeded" and got["host"] == "PROD"
+    assert not list((env["root"] / "results").glob("*.tmp"))
+    older = "20260927_010000_0123abcd_full"
+    D.write_back(str(env["root"]), older, dict(res, commit="a" * 40, finished_at="2026-09-27 01:00:00"), "succeeded")
+    failed = "20260928_030000_0123abcd_full"
+    D.write_back(str(env["root"]), failed, dict(res, commit="b" * 40, finished_at="2026-09-28 03:00:00"), "failed")
+    assert D.latest_prod_commit(str(env["root"])) == {"commit": COMMIT, "finished_at": "2026-09-28 02:16:00", "name": name}
+    with pytest.raises(D.DeliveryError):
+        D.write_back(str(env["root"]), "../evil", res, "succeeded")
+    with pytest.raises(D.DeliveryError):
+        D.write_back(str(env["root"]), name, res, "maybe")
+
+
+def test_prune_uses_write_back_results(env):
+    """(a) 的清舊包與 (d) 的結果檔是同一個檔名規則：write_back 寫出的結果，prune 認得。"""
+    names = [D.publish(str(_pkg(env["tmp"] / ("p%d" % i))), str(env["root"]), env["priv"], keep=99,
+                       now=datetime(2026, 9, 28, 3, i, 0)) for i in range(4)]
+    D.write_back(str(env["root"]), names[0], {"status": "success"}, "succeeded")
+    removed, _kept = D.prune(str(env["root"]), keep=3)
+    assert removed == [names[0]]
