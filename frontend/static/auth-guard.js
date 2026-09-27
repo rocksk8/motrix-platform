@@ -10,6 +10,8 @@
  * 當作備援（例如使用者清掉 localStorage 又手動改網址進來的極端情況）。
  */
 (function () {
+  // 模組建構器的即時預覽（BUILDER-UX §3.3，custom-records.html?preview=1）：不驗證、不打 API、不轉登入頁
+  if (window.MOTRIX_PREVIEW) return;
   var raw = null;
   try { raw = localStorage.getItem('motrix_session'); } catch (e) {}
   var session = null;
