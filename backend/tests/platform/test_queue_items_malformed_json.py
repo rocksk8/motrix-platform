@@ -5,7 +5,8 @@ exception、那一類全部不列（比 500 更難發現：佇列照常開、只
 
 契約（對**每一個已註冊**、簽核鏈存在 data_json 的提供者，逐一驗；以後新增的提供者自動受保護）：
 - 它讀的每張有 `data_json`＋`status` 的表，各塞一筆好的、一筆壞的（`{not json`），狀態「待審核」
-- 呼叫提供者 ⇒ 不丟例外；好的那一筆照列；壞的那一筆不列；有一筆 ERROR log 寫出壞的那一筆的單號
+- 另塞一筆**能解析、沒有 approval**（`{"x": 1}`：合法的「沒有設定流程」）
+- 呼叫提供者 ⇒ 不丟例外；好的與沒有流程的照列；壞的那一筆不列（列出了也簽不了）；有一筆 ERROR log 寫出壞的那一筆的單號
 反向控制：同一個檢查套在一個用 `json_extract` 的合成提供者上 ⇒ 必須報錯（檢查本身不是空的）。
 正對照：實際掃到的提供者包含已安裝模組的那幾個（掃不到 ⇒ 這題永遠是空的綠）。
 """
@@ -17,7 +18,7 @@ import pytest
 
 from core import registry, source_tree
 
-GOOD, BAD = "AQJ-GOOD", "AQJ-BAD"
+GOOD, BAD, NOFLOW = "AQJ-GOOD", "AQJ-BAD", "AQJ-NOFLOW"
 #: 已知簽核鏈在 data_json 的提供者（名稱 → 擁有模組；None＝L1）。正對照用：少了就是掃描壞了
 EXPECTED = {"case": "case", "invoice_voucher": "arap", "payment_request": "arap",
             "subcontract": "subcontract", "shipping_note": "supply"}
@@ -71,6 +72,7 @@ def check_provider(conn, name, fn, caplog):
     for t in tables:
         _seed(conn, t, "%s-%s" % (GOOD, t), "{}")
         _seed(conn, t, "%s-%s" % (BAD, t), "{not json")
+        _seed(conn, t, "%s-%s" % (NOFLOW, t), '{"x": 1}')
     caplog.clear()
     try:
         items = fn(conn) or []
@@ -81,8 +83,10 @@ def check_provider(conn, name, fn, caplog):
     for t in tables:
         if "%s-%s" % (GOOD, t) not in got:
             out.append("%s：%s 好的那一筆沒有列出" % (name, t))
+        if "%s-%s" % (NOFLOW, t) not in got:
+            out.append("%s：%s 能解析、沒有流程的那一筆被跳過（它是合法的「沒有設定流程」）" % (name, t))
         if "%s-%s" % (BAD, t) in got:
-            out.append("%s：%s 壞的那一筆被列出（當成沒有簽核層＝任一 superadmin 可簽，是降級）" % (name, t))
+            out.append("%s：%s 壞的那一筆被列出（列出了也簽不了）" % (name, t))
         if not any(r.levelno >= logging.ERROR and ("%s-%s" % (BAD, t)) in r.getMessage() for r in caplog.records):
             out.append("%s：%s 壞的那一筆沒有 ERROR log（寫單號）" % (name, t))
     return out

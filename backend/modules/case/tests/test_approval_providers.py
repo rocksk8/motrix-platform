@@ -385,7 +385,9 @@ def test_completion_note_not_found_and_denied_same_message(client, make_user):
 def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client, make_user, caplog):
     """壞 JSON 的報價單：佇列 200、**這一筆跳過並記 ERROR（寫單號）**、角標不算它；同一個提供者的其他報價單照列
     （壞一筆不可以讓整類消失）。〔更正〕~~列出它（沒有簽核層 ⇒ 任一 superadmin 可簽）、角標對 superadmin 計 1~~：
-    那是降級（簽核鏈讀不出來變成任一 superadmin 可簽），c-queue-json 改成跳過（主持指派 2026-09-27）。"""
+    c-queue-json 改成跳過（主持指派 2026-09-27）。理由：列出了也簽不了（核准端點讀這張單的 JSON 會丟 JSONDecodeError ⇒ 500、狀態不變；D 實測）。
+    〔更正〕~~那是降級（簽核鏈讀不出來變成任一 superadmin 可簽）~~——D 實測核准端點 500、狀態不變，不是降級。
+    能解析、沒有簽核層的報價單（沒有設定流程）照列：見 MQ-AQP-NOFLOW。"""
     import logging
     import db
     caplog.set_level(logging.ERROR)
@@ -400,6 +402,8 @@ def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client,
                      "VALUES ('MQ-AQP-BAD','待審核','客','案','{not json','2026-09-27','2026-09-27')")
         conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
                      "VALUES ('MQ-AQP-OK','待審核','客','案',?,'2026-09-27','2026-09-27')", (json.dumps({"approval": ok_appr}),))
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
+                     "VALUES ('MQ-AQP-NOFLOW','待審核','客','案','{\"items\": []}','2026-09-27','2026-09-27')")
         conn.commit()
     finally:
         conn.close()
@@ -407,5 +411,6 @@ def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client,
     assert r.status_code == 200, r.text
     got = {it["quoteNo"]: it for g in r.json()["queue"] for it in g["items"]}
     assert "MQ-AQP-OK" in got and "MQ-AQP-BAD" not in got, sorted(got)
+    assert "MQ-AQP-NOFLOW" in got and got["MQ-AQP-NOFLOW"]["tiers"] == [], "能解析、沒有流程的單要照列"
     assert any(r.levelno >= logging.ERROR and "MQ-AQP-BAD" in r.getMessage() for r in caplog.records)
-    assert _count(client, sh) == before            # 壞的那張不列也不算；OK 那張不是我簽
+    assert _count(client, sh) == before + 1        # 壞的那張不列也不算；OK 那張不是我簽；沒有流程的那張 ⇒ 任一 superadmin

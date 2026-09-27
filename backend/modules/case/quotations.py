@@ -391,7 +391,9 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
     system = _caller_is_system(user)
     from helpers.case_access import SUMMARY_LINK_FIELDS, case_summary_scope
     wide = not system and case_summary_scope(user, purpose) == "all"
-    cols = "quote_no, customer_name, project_name, status, " + SQL_DEAL_TAG + " AS deal_tag, " + _CASE_VIS_COLS
+    # deal_tag 不用 SQL_DEAL_TAG（json_extract）：一張 data_json 壞掉 ⇒ 整個查詢丟例外（詳情 500、傳票案件清單整支壞；
+    # 稽核 D AL2-M2）⇒ 欄位與 data_json 分開取、在 Python 逐筆補
+    cols = "quote_no, customer_name, project_name, status, deal_tag, data_json AS _dj, " + _CASE_VIS_COLS
     if quote_nos is None:
         rows = conn.execute("SELECT %s FROM quotations ORDER BY id DESC" % cols).fetchall()
     else:
@@ -404,8 +406,20 @@ def case_summary(conn, user, quote_nos=None, *, purpose=None) -> list:
         return [{k: r[k] or "" for k in SUMMARY_LINK_FIELDS} for r in rows]
     return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
              "project_name": r["project_name"] or "", "status": r["status"] or "",
-             "deal_tag": r["deal_tag"] or "", "sales_person_id": r["sales_person_id"]}
+             "deal_tag": _deal_tag_of(r), "sales_person_id": r["sales_person_id"]}
             for r in rows if _visible(user, system, r)]
+
+
+def _deal_tag_of(r) -> str:
+    """同 `SQL_DEAL_TAG`（欄位優先，pre-v6 的列退回 data_json.dealTag），但逐筆解析：壞的那一筆 ⇒ ""＋ERROR（寫單號不寫內容）。"""
+    if r["deal_tag"]:
+        return r["deal_tag"]
+    try:
+        d = json.loads(r["_dj"] or "{}")
+    except (TypeError, ValueError):
+        _log.error("案件摘要：%s 的 data_json 讀不出來，成交標籤留空", r["quote_no"])
+        return ""
+    return (d.get("dealTag") or "") if isinstance(d, dict) else ""
 
 
 class _CaseLocations:
