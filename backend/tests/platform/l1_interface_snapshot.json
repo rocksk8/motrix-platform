@@ -575,7 +575,8 @@
    "register_key_source": "def(fn)"
   },
   "helper:module_startup": {
-   "fail_incomplete_modules": "def(db_paths)",
+   "demo_absent_reason": "def(path)",
+   "fail_incomplete_modules": "def(main_db_path, demo_db_path=…)",
    "load_modules_like_startup": "def(db_path=…)"
   },
   "helper:module_switches": {

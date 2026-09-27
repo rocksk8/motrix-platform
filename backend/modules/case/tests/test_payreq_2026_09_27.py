@@ -316,6 +316,49 @@ def test_cashier_who_can_see_the_case_may_add_invoice_after_approval(client, mak
     assert "extra_expense.invoice_after_approval" in _acts()
 
 
+def test_paid_date_only_after_approval_for_cashier_and_admin_alike(client, make_user, req):
+    """AB-S8（使用者裁示）：未核准（草稿）設付款日 ⇒ 409 並說明、資料不變——出納、admin 都一樣；核准後 ⇒ 200。"""
+    dates = BASE + "/%d/dates" % req["id"]
+    hc = _peer(client, make_user, req, "pr_cash3", cashier=True)
+    ha = _peer(client, make_user, req, "pr_boss3", role="admin")
+    for h in (hc, ha):
+        r = client.patch(dates, json={"paidDate": "2031-03-15"}, headers=h)
+        assert r.status_code == 409 and "還沒核准" in r.json()["detail"], r.text
+    assert _paid(req) == ""
+    _approve(client, req)
+    r = client.patch(dates, json={"paidDate": "2031-03-15"}, headers=hc)
+    assert r.status_code == 200, r.text
+    assert _paid(req) == "2031-03-15"
+
+
+def _demo_login(client):
+    """demo 帳號的密碼是隨機產生的 ⇒ 直接改成已知值（同 tests/test_upload_demo_isolation 的做法）。"""
+    import db
+    from helpers.auth import _hash_pw
+    conn = db.get_db()
+    try:
+        conn.execute("UPDATE users SET password_hash=? WHERE username='demo'", (_hash_pw("Demo-Pass-123"),))
+        conn.commit()
+    finally:
+        conn.close()
+    return _login(client, "demo", "Demo-Pass-123")
+
+
+def test_demo_mode_says_the_module_is_absent_while_real_users_are_unaffected(client, make_user, monkeypatch):
+    """AB-S7（使用者裁示）：只有示範庫的 migration 沒完成 ⇒ 正式請求照常 200；demo token ⇒ 404＋明說原因。
+    反向控制：示範缺席表清空 ⇒ demo 照常 200（證明 404 來自這張表，不是 demo 本來就打不到）。"""
+    from helpers import module_startup as ms
+    why = "示範資料的資料庫升級未完成（case v1），示範模式暫不提供這個模組：測試"
+    monkeypatch.setattr(ms, "_DEMO_ABSENT", {"case": why})
+    h = _login(client, *make_user(username="pr_real", role="admin"))
+    assert client.get("/api/quotations", headers=h).status_code == 200
+    hd = _demo_login(client)
+    r = client.get("/api/quotations", headers=hd)
+    assert r.status_code == 404 and r.json()["detail"] == why, r.text
+    monkeypatch.setattr(ms, "_DEMO_ABSENT", {})
+    assert client.get("/api/quotations", headers=hd).status_code == 200
+
+
 def test_second_cashier_gets_already_paid_and_does_not_overwrite(client, req):
     """稽核 A AB-S1：mark_paid 是帶條件的 UPDATE（付款日空白才寫）⇒ 後到的出納拿到「已被登錄」、不蓋掉前者的付款日。"""
     _approve(client, req)
