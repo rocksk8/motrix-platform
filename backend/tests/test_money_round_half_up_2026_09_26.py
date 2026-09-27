@@ -169,6 +169,7 @@ def _stock(part_no, cost, created, category="其他"):
         conn.close()
 
 
+@requires_module("accounting", "_voucher_line 是會計模組（M06）的內部函式（第十三班列車發現）")
 def test_accounting_voucher_line_rounds_half_up():
     """傳票匯出的借貸金額：10.5 ⇒ 11（舊：10）、12.5 ⇒ 13（舊：12）。accounting_export L251"""
     from modules.accounting.api.accounting_export import _voucher_line
