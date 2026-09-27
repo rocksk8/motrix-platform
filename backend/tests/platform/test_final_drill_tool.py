@@ -428,6 +428,7 @@ def test_availability_lists_only_installed_modules():
 
 @pytest.mark.parametrize("status, body, present", [
     (200, json.dumps(_av(aa="loaded", bb="absent")), {"aa"}),       # 第一版判準要的樣子（提到缺席的 bb）⇒ 其實是錯的
+    (200, json.dumps(_av(aa="loaded", bb="loaded")), {"aa"}),       # 多列一個不在包內的 key（即使標 loaded）⇒ 紅（突變 M2 存活後補）
     (200, json.dumps(_av(aa="loaded")), {"aa", "bb"}),              # 已安裝的 bb 沒列
     (200, json.dumps(_av(aa="loaded", bb="failed")), {"aa", "bb"}),  # 列了但沒載入
     (500, json.dumps(_av(aa="loaded")), {"aa"}),
