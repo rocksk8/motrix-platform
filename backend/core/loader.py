@@ -2,7 +2,7 @@
 """L0 模組載入器：掃 `modules/*/module.json`，相容且匯入成功的才登錄。
 
 [單位] plat:loader    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, core_compatible, load_all, mount_modules,
+[公開介面] ALL, DISABLED_REASON, MODULES_DIR, MODULES_PACKAGE, check_migrations, core_compatible, load_all, mount_modules,
     start_schedulers
 [不變式] 載入失敗一律「不載入＋記 ERROR＋記進 registry.failed()」，不讓伺服器起不來；版本範圍看不懂 ⇒ 不載入
 [契約題] tests/platform/test_core_loader.py
@@ -19,6 +19,7 @@ import re
 
 from core import registry
 from core import customization
+from core import migrations as _migrations
 
 logger = logging.getLogger("motrix.loader")
 
@@ -142,6 +143,9 @@ def load_all(modules_dir: str = None, package: str = None,
             spec = getattr(mod, "MODULE", None)
             if not isinstance(spec, registry.ModuleSpec) or spec.key != name:
                 raise ValueError("MODULE missing or key mismatch")
+            check_migrations(spec.migrations)       # 版號不對 ⇒ 這個模組不載入（不猜要跳過哪一支）
+            for v, fn in spec.migrations:           # 載入才登記（CORE-SPEC §6）：停用／未授權的模組走不到這裡
+                _migrations.register(name, v, fn)
         except Exception as e:  # 單一模組壞掉不可以拖垮整台
             registry.mark_failed(name, str(e))
             registry.set_state(name, registry.STATE_FAILED, str(e), manifest)
@@ -151,6 +155,18 @@ def load_all(modules_dir: str = None, package: str = None,
         registry.set_state(name, registry.STATE_LOADED, "", manifest, note=note)
         logger.info("模組 %s %s 已載入", name, manifest.get("version", "?"))
     return registry.loaded()
+
+
+def check_migrations(items) -> None:
+    """`ModuleSpec.migrations` 的形狀：`[(版號, 函式)]`，版號是 int、從 1 起連續、不重複。不合 ⇒ ValueError
+    （load_all 把該模組標成載入失敗、原因寫進狀態表；其他模組照常）。"""
+    versions = []
+    for it in items or []:
+        if not (isinstance(it, tuple) and len(it) == 2 and type(it[0]) is int and callable(it[1])):
+            raise ValueError("migrations 每一項必須是 (版號, 函式)：%r" % (it,))
+        versions.append(it[0])
+    if sorted(versions) != list(range(1, len(versions) + 1)):
+        raise ValueError("migrations 版號必須從 1 起連續、不重複：%s" % sorted(versions))
 
 
 def start_schedulers() -> int:

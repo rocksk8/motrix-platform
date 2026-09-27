@@ -1,5 +1,7 @@
 # 應收應付 更新紀錄
 
+## 1.0.8 — 2026-09-28（B 暫用，列車取號；wip/b-payreq：請款流程）
+- 出納「請款待付款」頁籤：`GET /api/cashier/pending-payables`（IP-100 多提供者合併）、`POST /api/cashier/pending-payables/{來源}/{key}/pay`（登錄付款經提供者寫回付款日；admin+／出納，finance 只能看）；M01 不在 ⇒ 200 available:false＋原因。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動
 ## 1.0.8 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
 - 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`cashier.html`、`payment-request-form.html`
 

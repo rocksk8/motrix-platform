@@ -591,3 +591,23 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 對方不在時 | 那幾類不列；`line-source-files?source_type=case` 回 `unavailable=[{category, reason}]`，傳票頁已上傳檔案欄顯示「XX模組未安裝：……的附件沒有列出」；帶入或列該類檔案 ⇒ 400「XX模組未安裝，無法帶入……附件」。已帶入的附件不受影響（已複製進傳票） |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/tests/platform/test_attachments_providers.py`（取用方只讀自己的表、覆蓋與不重疊、缺席明說、M01／M05 提供者壞 JSON）；`backend/modules/subcontract/tests/test_subcontract_attachments_provider.py`；e2e `backend/modules/accounting/tests/test_e2e_voucher_attachments_absent_source_2026_09_26.py` |
+
+---
+
+## IP-100　`payables.pending`：請款待付款（M01 → M05 出納；多提供者）
+
+對應 CORE-SPEC「請款流程（下一版）」（2026-09-27 使用者裁示）：核准而未付款的請款（案件額外支出）進出納待付款；出納登錄付款寫回付款日。
+以**額外引用疊加**：出納既有的兩個來源（IP-14 承攬商匯款、IP-8 獎金分潤）不動，另開一個名稱空間。
+
+| 欄位 | 內容 |
+|---|---|
+| 提供方 | M01 案件：`modules/case/payables.py::_Payables`（名稱 `case`；`ModuleSpec.providers`） |
+| 使用方 | M05 `modules/arap/api/cashier.py`：`GET /api/cashier/pending-payables`（出納頁「請款待付款」頁籤）、`POST /api/cashier/pending-payables/{名稱}/{key}/pay` |
+| 形式 | provider，**多提供者、以名稱區分**（`registry.providers("payables.pending")`；依名稱排序合併）。之後其他模組的請款可登記同一個名稱空間，出納不用改 |
+| 語法 | 提供：`ModuleSpec(providers={("payables.pending", "case"): _Payables})`<br>取用：`for name, p in sorted(registry.providers("payables.pending").items()): p.pending(conn)`；登錄：`registry.providers("payables.pending")[名稱].mark_paid(conn, key, "YYYY-MM-DD", user)`（呼叫端 commit） |
+| 回傳 | `pending(conn)` ⇒ `[{key, sourceLabel, quoteNo, customerName, projectName, title, amount, payee, requestedBy, expenseDate, approvedAt, invoiceDate, invoiceNo, invoiceFiles, files}]`（`key` 是字串；使用方另加 `source`＝名稱）；只列已核准、付款日空白。`mark_paid` ⇒ `{quoteNo, key, amount, paidDate}`；查無 ⇒ `LookupError`（404）、不是已核准或已登錄過 ⇒ `ValueError`（409） |
+| 對方不在時 | 沒有提供者 ⇒ `GET` 回 200 `{available:false, notice:"案件管理模組未安裝：出納頁不顯示請款（案件額外支出）待付款", items:[], canPay:false}`（明說，不回空清單裝沒事）；`POST …/pay` 404「對應的模組未安裝」。出納其他頁籤照常 |
+| 契約版本 | 1（2026-09-28） |
+| 守門 | `modules/arap/tests/test_cashier_pending_payables_2026_09_27.py`（列出／登錄後消失／權限／404／409／400；`test_without_the_case_module_cashier_says_so_and_other_queues_still_work`＝**反向控制**，真刪 M01 的安裝包裡同一題不必模擬）、`modules/case/tests/test_payreq_2026_09_27.py::test_provider_lists_approved_unpaid_and_mark_paid_writes_back`、整條 `tests/test_e2e_payreq_2026_09_27.py`。突變：提供者不過濾付款日／登錄不寫回／出納不讀提供者 ⇒ 轉紅 |
+
+出納通常看不到案件本身（案件擁有者規則不放行出納）⇒ 付款寫回**經提供者**，不走 M01 的 `PATCH …/dates`（那一支經案件守門，純出納會 404）。月支出現金口徑（IP-95 `extra_entries`）有付款日就用付款日、不再是暫用。

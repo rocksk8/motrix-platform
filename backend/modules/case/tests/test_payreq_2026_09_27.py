@@ -1,0 +1,184 @@
+# -*- coding: utf-8 -*-
+"""請款流程（CORE-SPEC「請款流程（下一版）」，2026-09-27 使用者裁示）：M01 這一側。
+
+- 發票類附件：核准後只有 kind=invoice 可以直接補上傳（稽核動作 extra_expense.invoice_after_approval）；其他類與刪除照舊上鎖；
+  舊附件沒有 kind（＝其他），不回填。
+- 發票號碼（case v1 migration 的 invoice_no）：選填、長度上限、已核准也可以補。
+- 請款頁的兩支查詢：挑案件（只列看得到的）、我的請款（只列自己的）。
+- IP-100 提供者：只列已核准且付款日空白；mark_paid 寫回付款日 ⇒ 消失。
+- 月支出：草稿與已駁回不計（權責、現金兩種口徑）；送審中照計（pending）；現金口徑有付款日就用付款日、不是暫用。
+本檔在 M05（出納）不在的安裝包裡照樣要過（請款不依賴出納）：不 import、不打任何 M05 的東西。
+"""
+import io
+import json
+
+import pytest
+
+from tests._requires import skip_module_unless
+
+skip_module_unless("case", "本檔全部是 M01 的額外支出／請款")
+
+from core import registry, source_tree  # noqa: E402
+
+NO = "MQ-PR-001"
+BASE = "/api/quotations/%s/extra-expenses" % NO
+
+
+def _q(sql, args=()):
+    import db
+    conn = db.get_db()
+    try:
+        return conn.execute(sql, args).fetchall()
+    finally:
+        conn.close()
+
+
+def _x(sql, args=()):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute(sql, args)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _login(client, u, p):
+    r = client.post("/api/auth/login", json={"username": u, "password": p})
+    assert r.status_code == 200, r.text
+    return {"Authorization": "Bearer " + r.json()["token"]}
+
+
+def _uid(username):
+    return _q("SELECT id FROM users WHERE username=?", (username,))[0]["id"]
+
+
+def _case(no=NO, assigned=()):
+    _x("INSERT INTO quotations (quote_no, status, customer_name, project_name, total, pretax, data_json, created_at, updated_at,"
+       " deal_tag, sales_person, assigned_user_ids) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+       (no, "已送出", "請款客", "請款專案", 100000, 95238, json.dumps({"dealTag": "已成案"}), "2026-01-01T00:00:00",
+        "2026-01-01T00:00:00", "已成案", "", json.dumps(list(assigned))))
+
+
+def _no_tiers():
+    _x("INSERT INTO system_settings (key, value_json, updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+       ("unified_approval_flow", json.dumps({"tiers": [], "includeSubmitterManagerTier": False}), "2026-01-01T00:00:00"))
+
+
+def _png():
+    return ("a.png", io.BytesIO(b"\x89PNG\r\n\x1a\n" + b"0" * 64), "image/png")
+
+
+@pytest.fixture
+def req(client, make_user):
+    """一位被指派到案件的工程師（非 admin）＋一筆已送審、自動核准的請款（沒有簽核層 ⇒ 送審即核准）。"""
+    u, p = make_user(username="pr_eng", role="sales")
+    _case(assigned=[_uid(u)])
+    _no_tiers()
+    h = _login(client, u, p)
+    r = client.post(BASE, json={"category": "差旅", "description": "北上安裝", "qty": 1, "unitCost": 3200, "expenseDate": "2031-03-05"},
+                    headers=h)
+    assert r.status_code in (200, 201), r.text
+    eid = r.json()["id"]
+    r = client.post(BASE + "/%d/files" % eid, files={"files": _png()}, headers=h)          # 沒帶 kind ⇒ other
+    assert r.status_code == 201, r.text
+    return {"h": h, "id": eid, "user": u}
+
+
+def _approve(client, req):
+    r = client.post(BASE + "/%d/submit" % req["id"], headers=req["h"])
+    assert r.status_code == 200 and r.json()["status"] == "已核准", r.text
+
+
+def test_after_approval_only_invoice_uploads_and_is_audited(client, req):
+    _approve(client, req)
+    r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, headers=req["h"])
+    assert r.status_code == 409 and "發票可以直接補上傳" in r.json()["detail"], r.text        # 其他類照舊上鎖
+    r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "invoice"}, headers=req["h"])
+    assert r.status_code == 201, r.text
+    files = json.loads(_q("SELECT files_json FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["files_json"])
+    assert [f.get("kind") for f in files] == ["other", "invoice"]
+    fid = files[1]["id"]
+    assert client.delete(BASE + "/%d/files/%s" % (req["id"], fid), headers=req["h"]).status_code == 409   # 刪除照舊上鎖
+    acts = [r["action"] for r in _q("SELECT action FROM audit_log WHERE target_id=? ORDER BY id", (NO,))]
+    assert "extra_expense.invoice_after_approval" in acts, acts
+
+
+def test_unknown_kind_rejected_and_legacy_files_without_kind_are_not_backfilled(client, req):
+    r = client.post(BASE + "/%d/files" % req["id"], files={"files": _png()}, data={"kind": "receipt"}, headers=req["h"])
+    assert r.status_code == 400
+    _x("UPDATE case_extra_expenses SET files_json=? WHERE id=?", (json.dumps([{"id": "old1", "filename": "舊.pdf"}]), req["id"]))
+    got = client.get(BASE, headers=req["h"]).json()
+    row = [e for e in got["items"] if e["id"] == req["id"]][0]
+    assert row["files"] == [{"id": "old1", "filename": "舊.pdf"}]                               # 沒有 kind ⇒ 原樣（畫面當其他）
+
+
+def test_invoice_no_is_optional_capped_and_can_be_added_after_approval(client, req):
+    assert "invoice_no" in {r[1] for r in _q("PRAGMA table_info(case_extra_expenses)")}      # case v1 migration 跑過
+    _approve(client, req)
+    r = client.patch(BASE + "/%d/dates" % req["id"], json={"invoiceNo": "X" * 41}, headers=req["h"])
+    assert r.status_code == 400
+    r = client.patch(BASE + "/%d/dates" % req["id"], json={"invoiceNo": " AB12345678 "}, headers=req["h"])
+    assert r.status_code == 200 and r.json()["invoiceNo"] == "AB12345678", r.text
+    assert _q("SELECT invoice_no FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["invoice_no"] == "AB12345678"
+
+
+def test_payreq_case_picker_and_mine_only_show_what_the_user_may_see(client, make_user, req):
+    _case("MQ-PR-HIDDEN")                                                                    # 沒指派 ⇒ 看不到
+    cases = client.get("/api/extra-expenses/cases?q=MQ-PR", headers=req["h"]).json()
+    assert [c["quoteNo"] for c in cases] == [NO], cases
+    mine = client.get("/api/extra-expenses/mine", headers=req["h"]).json()
+    assert [(e["id"], e["quoteNo"], e["customerName"]) for e in mine] == [(req["id"], NO, "請款客")]
+    u2, p2 = make_user(username="pr_other", role="sales")
+    assert client.get("/api/extra-expenses/mine", headers=_login(client, u2, p2)).json() == []
+
+
+def test_provider_lists_approved_unpaid_and_mark_paid_writes_back(client, req):
+    prov = registry.providers("payables.pending")["case"]
+    import db
+    conn = db.get_db()
+    try:
+        assert [i["key"] for i in prov.pending(conn) if i["quoteNo"] == NO] == []           # 已核准才列（現在是草稿）
+    finally:
+        conn.close()
+    _approve(client, req)
+    conn = db.get_db()
+    try:
+        items = [i for i in prov.pending(conn) if i["quoteNo"] == NO]
+        assert [(i["key"], i["amount"], i["customerName"]) for i in items] == [(str(req["id"]), 3200.0, "請款客")]
+        prov.mark_paid(conn, str(req["id"]), "2031-03-20", {"username": "cashier_x"})
+        conn.commit()
+        assert [i for i in prov.pending(conn) if i["quoteNo"] == NO] == []                  # 登錄付款 ⇒ 消失
+        with pytest.raises(ValueError):
+            prov.mark_paid(conn, str(req["id"]), "2031-03-21", {"username": "cashier_x"})    # 不重複登錄
+        with pytest.raises(LookupError):
+            prov.mark_paid(conn, "999999", "2031-03-21", {"username": "cashier_x"})
+    finally:
+        conn.close()
+    assert _q("SELECT paid_date FROM case_extra_expenses WHERE id=?", (req["id"],))[0]["paid_date"] == "2031-03-20"
+
+
+def _other(client, h, basis):
+    r = client.get("/api/reports/expenses-monthly?year=2031&basis=%s" % basis, headers=h)
+    assert r.status_code == 200, r.text
+    return [(d["date"], d["amount"], d.get("pending"), d.get("provisional")) for d in r.json()["expenses"]["details"]["other"]
+            if d["quoteNo"] == NO]
+
+
+def test_monthly_expenses_exclude_draft_and_rejected_in_both_bases_and_cash_uses_paid_date(client, make_user, seed_extra_expense):
+    if not source_tree.module_installed("modules/analytics/"):
+        pytest.skip("月支出報表（M08）不在這個安裝包")
+    _case()
+    for st, amt in (("草稿", 111), ("已駁回", 222), ("待審核", 333), ("簽核中", 444), ("已核准", 555)):
+        seed_extra_expense(NO, total_cost=amt, description=st, expense_date="2031-04-02", status=st)
+    au, ap = make_user(username="pr_admin", role="superadmin")
+    h = _login(client, au, ap)
+    for basis in ("accrual", "cash"):
+        got = sorted(a for _d, a, _p, _v in _other(client, h, basis))
+        assert got == [333, 444, 555], (basis, got)                                          # 草稿、已駁回不計
+    pend = {a: p for _d, a, p, _v in _other(client, h, "cash")}
+    assert pend == {333: True, 444: True, 555: False}                                        # 送審中照計、標待定
+    eid = _q("SELECT id FROM case_extra_expenses WHERE quote_no=? AND total_cost=555", (NO,))[0]["id"]
+    assert [(d, v) for d, a, _p, v in _other(client, h, "cash") if a == 555] == [("2031-04-02", True)]   # 未付款：憑證日、暫用
+    _x("UPDATE case_extra_expenses SET paid_date='2031-06-15' WHERE id=?", (eid,))
+    assert [(d, v) for d, a, _p, v in _other(client, h, "cash") if a == 555] == [("2031-06-15", False)]  # 付款日、不是暫用

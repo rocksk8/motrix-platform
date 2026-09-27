@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>新增請款 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    我的工作 → 新增請款（2026-09-27 使用者裁示請款流程；M01）。
+    請款＝案件額外支出，**不另建資料**：先挑案件，再填日期、金額、說明、附件，送審——全部打既有的
+    /api/quotations/{單號}/extra-expenses 各端點。核准後只有「發票」類附件可以直接補上傳（留稽核紀錄），
+    其他附件照 2026-09-11 裁示上鎖；已核准、未付款的會出現在出納的「請款待付款」（IP-100），出納登錄付款後這裡看得到付款日。
+  -->
+  <style>
+    .pr-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 28px 32px 60px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .pr-wrap { max-width: 980px; }
+    .pr-card { border: 1px solid var(--border-light); border-radius: 10px; padding: 16px 18px; background: var(--surface); margin-top: 14px; }
+    .pr-card h3 { font-size: 13px; font-weight: 700; margin: 0 0 10px; }
+    .pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 16px; }
+    .pr-f label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+    .pr-f input, .pr-f select, .pr-f textarea { width: 100%; box-sizing: border-box; padding: 7px 9px; border: 1px solid var(--border-light);
+      border-radius: 6px; font-size: 13px; font-family: inherit; background: var(--white); color: var(--text-primary); }
+    .pr-hint { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; line-height: 1.5; }
+    .pr-err { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--tone-danger-bg); border: 1px solid var(--tone-danger-border);
+      color: var(--tone-danger-fg); font-size: 13px; }
+    .pr-ok { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--tone-info-bg); border: 1px solid var(--tone-info-border);
+      color: var(--tone-info-fg); font-size: 13px; }
+    .pr-cases { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .pr-case { text-align: left; padding: 8px 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--white);
+      cursor: pointer; font-family: inherit; font-size: 13px; color: inherit; }
+    .pr-case.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+    .pr-case .no { font-family: var(--font-en, monospace); font-size: 12px; color: var(--text-secondary); margin-right: 8px; }
+    .pr-tabs { display: flex; gap: 6px; margin-top: 12px; }
+    .pr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .pr-table th, .pr-table td { padding: 7px 8px; border-bottom: 1px solid var(--border-light); text-align: left; vertical-align: top; }
+    .pr-table th { font-size: 11px; color: var(--text-secondary); font-weight: 600; }
+    .pr-st { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: var(--border-light); color: var(--text-secondary); }
+    @media (max-width: 767px) { .pr-main { margin-left: 0; padding: 16px 12px 48px; } .pr-table { display: block; overflow-x: auto; } }
+  </style>
+</head>
+<body x-data="paymentRequestPage()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+
+  <main class="pr-main">
+    <div class="pr-wrap">
+      <div class="page-header"><h1 class="page-title">請款</h1></div>
+      <p class="pr-hint">請款就是案件的額外支出：先挑案件，填日期、金額、說明並附上憑證，送審核准後由出納付款。發票可以先附，也可以核准後再補。</p>
+
+      <div class="pr-tabs">
+        <button class="btn btn-sm" :class="tab === 'new' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-new" @click="tab = 'new'">新增請款</button>
+        <button class="btn btn-sm" :class="tab === 'mine' ? 'btn-primary' : 'btn-secondary'" id="pr-tab-mine" @click="tab = 'mine'; loadMine()">我的請款</button>
+      </div>
+
+      <!-- 新增 -->
+      <section x-show="tab === 'new'" id="pr-new" :data-busy="busy ? '1' : '0'">
+        <div class="pr-card">
+          <h3>① 挑案件</h3>
+          <div class="pr-f">
+            <label for="pr-case-q">搜尋案件（單號、客戶或專案）</label>
+            <input id="pr-case-q" type="search" x-model="caseQ" @input="queueCaseSearch()" placeholder="例：MQ-2026 或客戶名稱">
+          </div>
+          <div class="pr-cases" id="pr-cases" :data-loaded="casesLoaded ? '1' : '0'">
+            <template x-for="c in cases" :key="c.quoteNo">
+              <button class="pr-case" :class="{ 'is-on': picked && picked.quoteNo === c.quoteNo }" :data-case-pick="c.quoteNo" @click="pickCase(c)">
+                <span class="no" x-text="c.quoteNo"></span><span x-text="(c.customerName || '') + (c.projectName ? '｜' + c.projectName : '')"></span>
+              </button>
+            </template>
+            <div class="pr-hint" x-show="casesLoaded && !cases.length">找不到看得到的案件（只列您是業務或被指派的案件）</div>
+          </div>
+        </div>
+
+        <div class="pr-card" x-show="picked" id="pr-form">
+          <h3 x-text="'② 請款內容　' + (picked ? picked.quoteNo + '　' + (picked.customerName || '') : '')"></h3>
+          <div class="pr-grid">
+            <div class="pr-f">
+              <label for="pr-category">類別</label>
+              <select id="pr-category" x-model="form.category">
+                <template x-for="c in categories" :key="c"><option :value="c" x-text="c" :selected="c === form.category"></option></template>
+              </select>
+            </div>
+            <div class="pr-f">
+              <label for="pr-date">日期</label>
+              <input id="pr-date" type="date" x-model="form.expenseDate">
+            </div>
+            <div class="pr-f">
+              <label for="pr-amount">金額（元）</label>
+              <input id="pr-amount" type="number" min="0" step="1" x-model.number="form.amount">
+            </div>
+            <div class="pr-f">
+              <label for="pr-payer">受款人（空白＝自己）</label>
+              <input id="pr-payer" x-model="form.payerName" placeholder="例：代墊的同事或廠商">
+            </div>
+          </div>
+          <div class="pr-f" style="margin-top:12px">
+            <label for="pr-desc">說明</label>
+            <input id="pr-desc" x-model="form.description" placeholder="例：北上安裝差旅（高鐵來回）">
+          </div>
+          <div class="pr-grid" style="margin-top:12px">
+            <div class="pr-f">
+              <label for="pr-files">附件（收據、照片…）</label>
+              <input id="pr-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.files = [...$event.target.files]">
+            </div>
+            <div class="pr-f">
+              <label for="pr-invoice-files">發票（可以核准後再補）</label>
+              <input id="pr-invoice-files" type="file" multiple accept=".jpg,.jpeg,.png,.pdf" @change="form.invoiceFiles = [...$event.target.files]">
+            </div>
+            <div class="pr-f">
+              <label for="pr-invoice-no">發票號碼（選填）</label>
+              <input id="pr-invoice-no" x-model="form.invoiceNo" maxlength="40" placeholder="例：AB12345678">
+            </div>
+          </div>
+          <div class="pr-err" id="pr-error" x-show="err" x-text="err"></div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="btn btn-secondary" id="pr-save-draft" :disabled="busy" @click="save(false)">存成草稿</button>
+            <button class="btn btn-primary" id="pr-submit" :disabled="busy" @click="save(true)">送審</button>
+          </div>
+        </div>
+        <div class="pr-ok" id="pr-result" x-show="result" :data-status="result ? result.status : ''" x-text="result ? result.text : ''"></div>
+      </section>
+
+      <!-- 我的請款 -->
+      <section x-show="tab === 'mine'" id="pr-mine" :data-loaded="mineLoaded ? '1' : '0'" :data-busy="busy ? '1' : '0'">
+        <div class="pr-card">
+          <div class="pr-hint" x-show="mineLoaded && !mine.length">還沒有請款</div>
+          <table class="pr-table" x-show="mine.length">
+            <thead><tr><th>案件</th><th>內容</th><th>金額</th><th>狀態</th><th>發票</th><th>付款日</th><th></th></tr></thead>
+            <tbody>
+              <template x-for="e in mine" :key="e.id">
+                <tr :data-payreq-row="e.id" :data-status="e.status">
+                  <td><span style="font-family:var(--font-en,monospace)" x-text="e.quoteNo"></span><div class="pr-hint" x-text="e.customerName"></div></td>
+                  <td x-text="(e.category || '') + '｜' + (e.description || '')"></td>
+                  <td x-text="'NT$ ' + Math.round(e.totalCost || 0).toLocaleString()"></td>
+                  <td><span class="pr-st" x-text="e.status"></span></td>
+                  <td>
+                    <div x-text="(e.invoiceNo || '—') + '（' + invoiceCount(e) + ' 檔）'" :data-invoice-count="invoiceCount(e)"></div>
+                  </td>
+                  <td :data-paid-date="e.paidDate" x-text="e.paidDate || '未付款'"></td>
+                  <td>
+                    <template x-if="e.status === '已核准'">
+                      <div :data-invoice-form="e.id">
+                        <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf" :data-invoice-upload="e.id" @change="invoiceDraft[e.id] = [...$event.target.files]" style="font-size:11px">
+                        <input :data-invoice-no="e.id" :value="e.invoiceNo" maxlength="40" placeholder="發票號碼" style="width:110px;font-size:12px"
+                               @input="invoiceNoDraft[e.id] = $event.target.value">
+                        <button class="btn btn-secondary btn-sm" :data-invoice-save="e.id" :disabled="busy" @click="addInvoice(e)">補發票</button>
+                      </div>
+                    </template>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+          <div class="pr-err" id="pr-mine-error" x-show="mineErr" x-text="mineErr"></div>
+          <div class="pr-ok" id="pr-mine-result" x-show="mineMsg" x-text="mineMsg"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="../static/notif.js"></script>
+  <script>
+    function paymentRequestPage() {
+      function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') }
+      function blank() { return { category: '其他', expenseDate: today(), amount: null, payerName: '', description: '', files: [], invoiceFiles: [], invoiceNo: '' } }
+      return {
+        session: JSON.parse(localStorage.getItem('motrix_session') || '{}'),
+        tab: 'new', busy: false, err: '', result: null,
+        caseQ: '', cases: [], casesLoaded: false, picked: null, categories: [], _caseTimer: null,
+        form: blank(),
+        mine: [], mineLoaded: false, mineErr: '', mineMsg: '', invoiceDraft: {}, invoiceNoDraft: {},
+
+        init() {
+          this.searchCases()
+          try { if (new URLSearchParams(location.search).get('tab') === 'mine') { this.tab = 'mine'; this.loadMine() } } catch (e) {}
+        },
+        _h(json) { var h = { Authorization: 'Bearer ' + (this.session.token || '') }; if (json) h['Content-Type'] = 'application/json'; return h },
+        async _json(r) { try { return await r.json() } catch (e) { return {} } },
+
+        queueCaseSearch() { clearTimeout(this._caseTimer); this._caseTimer = setTimeout(() => this.searchCases(), 250) },
+        async searchCases() {
+          var q = this.caseQ
+          var r = await fetch('/api/extra-expenses/cases?q=' + encodeURIComponent(q.trim()), { headers: this._h() })
+          if (q !== this.caseQ) return                                  // 已經又打了別的字：丟掉晚到的結果
+          this.cases = r.ok ? await r.json() : []
+          this.casesLoaded = true
+        },
+        async pickCase(c) {
+          this.picked = c; this.err = ''; this.result = null
+          var r = await fetch('/api/quotations/' + encodeURIComponent(c.quoteNo) + '/extra-expenses', { headers: this._h() })
+          var d = await this._json(r)
+          this.categories = r.ok ? (d.categories || []) : []
+          if (this.categories.length && this.categories.indexOf(this.form.category) < 0) this.form.category = this.categories[this.categories.length - 1]
+        },
+
+        async _upload(no, id, files, kind) {
+          if (!files || !files.length) return
+          var fd = new FormData()
+          files.forEach(function (f) { fd.append('files', f) })
+          fd.append('kind', kind)
+          var r = await fetch('/api/quotations/' + encodeURIComponent(no) + '/extra-expenses/' + id + '/files', { method: 'POST', headers: this._h(), body: fd })
+          if (!r.ok) throw new Error((await this._json(r)).detail || ('上傳失敗（HTTP ' + r.status + '）'))
+        },
+        async save(submit) {
+          this.err = ''; this.result = null
+          if (!this.picked) { this.err = '請先挑案件'; return }
+          if (!(this.form.description || '').trim()) { this.err = '請填說明'; return }
+          if (!(Number(this.form.amount) > 0)) { this.err = '請填金額'; return }
+          this.busy = true
+          var no = this.picked.quoteNo
+          var base = '/api/quotations/' + encodeURIComponent(no) + '/extra-expenses'
+          try {
+            var r = await fetch(base, { method: 'POST', headers: this._h(true), body: JSON.stringify({
+              category: this.form.category, description: this.form.description.trim(), qty: 1, unit: '', unitCost: Number(this.form.amount),
+              expenseDate: this.form.expenseDate, payerName: (this.form.payerName || '').trim() }) })
+            var d = await this._json(r)
+            if (!r.ok) throw new Error(d.detail || ('建立失敗（HTTP ' + r.status + '）'))
+            var id = d.id
+            await this._upload(no, id, this.form.files, 'other')
+            await this._upload(no, id, this.form.invoiceFiles, 'invoice')
+            if ((this.form.invoiceNo || '').trim()) {
+              var ri = await fetch(base + '/' + id + '/dates', { method: 'PATCH', headers: this._h(true), body: JSON.stringify({ invoiceNo: this.form.invoiceNo.trim() }) })
+              if (!ri.ok) throw new Error((await this._json(ri)).detail || '發票號碼儲存失敗')
+            }
+            var status = '草稿'
+            if (submit) {
+              var rs = await fetch(base + '/' + id + '/submit', { method: 'POST', headers: this._h() })
+              var ds = await this._json(rs)
+              if (!rs.ok) throw new Error('已存成草稿，但送審失敗：' + (ds.detail || ('HTTP ' + rs.status)))
+              status = ds.status || '待審核'
+            }
+            this.result = { status: status, id: id, text: (submit ? '已送審（' + status + '）' : '已存成草稿') + '：' + no + ' #' + id + '，可以在「我的請款」看進度' }
+            this.form = blank()
+            ;['pr-files', 'pr-invoice-files'].forEach(function (x) { var el = document.getElementById(x); if (el) el.value = '' })
+          } catch (e) { this.err = e.message }
+          finally { this.busy = false }
+        },
+
+        invoiceCount(e) { return (e.files || []).filter(function (f) { return f && f.kind === 'invoice' }).length },
+        async loadMine() {
+          var r = await fetch('/api/extra-expenses/mine', { headers: this._h() })
+          this.mine = r.ok ? await r.json() : []
+          this.mineErr = r.ok ? '' : ('讀取失敗（HTTP ' + r.status + '）')
+          this.mineLoaded = true
+        },
+        async addInvoice(e) {
+          this.mineErr = ''; this.mineMsg = ''
+          var files = this.invoiceDraft[e.id] || [], no = this.invoiceNoDraft[e.id]
+          if (!files.length && no === undefined) { this.mineErr = '請選發票檔或填發票號碼'; return }
+          this.busy = true
+          try {
+            await this._upload(e.quoteNo, e.id, files, 'invoice')
+            if (no !== undefined) {
+              var r = await fetch('/api/quotations/' + encodeURIComponent(e.quoteNo) + '/extra-expenses/' + e.id + '/dates',
+                                  { method: 'PATCH', headers: this._h(true), body: JSON.stringify({ invoiceNo: no.trim() }) })
+              if (!r.ok) throw new Error((await this._json(r)).detail || '發票號碼儲存失敗')
+            }
+            this.mineMsg = '已補上發票：' + e.quoteNo + ' #' + e.id
+            this.invoiceDraft[e.id] = []; delete this.invoiceNoDraft[e.id]
+            await this.loadMine()
+          } catch (x) { this.mineErr = x.message }
+          finally { this.busy = false }
+        },
+      }
+    }
+  </script>
+  <script src="../static/sidebar.js"></script>
+</body>
+</html>

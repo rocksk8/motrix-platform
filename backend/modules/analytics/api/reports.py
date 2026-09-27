@@ -3384,7 +3384,7 @@ def _collect_expenses(year: int, department_id: Optional[int] = None, basis: str
         })
 
     # ── 其他支出（額外支出逐筆）──────────────────────────────────────────────
-    # 2026-09-09 起「只要填了就算」、送審中照樣計入並標 pending——規則不變。
+    # 送審中照樣計入並標 pending；草稿與已駁回不計（2026-09-27 使用者裁示，篩選在 M01 recognition.extra_entries）。
     # `AC2`：歸月改由 helpers.recognition 決定（權責＝發票日→核准日→憑證日；現金＝付款日→憑證日）。
     for e in (rec.extra_entries(conn, basis) if rec is not None else []):
         mo = (e["date"] or "")[:7]

@@ -91,6 +91,11 @@ function cashierApp() {
     bonusQueue: { available: false, visible: false, notice: '', items: [], canMarkPaid: false },
     bonusPay: { show: false, quoteNo: '', detail: null, bank: '', saving: false, error: '' },
     bonusPayNotice: '',
+    // 請款待付款（IP-100）
+    payreqQueue: { available: false, notice: '', items: [], canPay: false },
+    payreqDates: {},
+    payreqBusy: false,
+    payreqNotice: '',
     cashierHistoryBonus: [],
     cashierHistoryBonusTotal: 0,
     cashierHistoryBonusVisible: false,
@@ -187,7 +192,7 @@ function cashierApp() {
       const today = new Date()
       this.cashierHistoryStart = this._localDateStr(new Date(today.getFullYear(), today.getMonth(), 1))
       this.cashierHistoryEnd = this._localDateStr(today)
-      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue()])
+      await Promise.all([this.loadPayable(), this.loadReceivable(), this.loadCashierHistory(), this.loadBonusQueue(), this.loadPayreqQueue()])
       this.cashierLoaded = true
     },
 
@@ -227,6 +232,37 @@ function cashierApp() {
         }
       } catch (e) { console.error(e) }
       this.cashierHistoryLoading = false
+    },
+
+    async loadPayreqQueue() {
+      try {
+        const r = await fetch('/api/cashier/pending-payables', { headers: { Authorization: 'Bearer ' + this._token() } })
+        if (r.ok) {
+          this.payreqQueue = await r.json()
+          const today = this._localDateStr(new Date())
+          const dates = {}
+          this.payreqQueue.items.forEach(it => { const k = it.source + ':' + it.key; dates[k] = this.payreqDates[k] || today })
+          this.payreqDates = dates
+        }
+      } catch (e) { console.error(e) }
+    },
+
+    // 登錄付款：POST /api/cashier/pending-payables/{來源}/{key}/pay（提供者寫回付款日）
+    async payPayreq(it) {
+      this.payreqBusy = true
+      this.payreqNotice = ''
+      try {
+        const k = it.source + ':' + it.key
+        const r = await fetch('/api/cashier/pending-payables/' + encodeURIComponent(it.source) + '/' + encodeURIComponent(it.key) + '/pay', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + this._token() },
+          body: JSON.stringify({ paidDate: this.payreqDates[k] || '' }),
+        })
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) { this.payreqNotice = d.detail || ('登錄付款失敗（HTTP ' + r.status + '）'); return }
+        this.payreqNotice = '已登錄付款：' + (it.quoteNo || '') + '　' + it.title + '　付款日 ' + d.paidDate
+        await this.loadPayreqQueue()
+      } catch (e) { this.payreqNotice = '登錄付款失敗：' + e.message }
+      finally { this.payreqBusy = false }
     },
 
     async loadBonusQueue() {

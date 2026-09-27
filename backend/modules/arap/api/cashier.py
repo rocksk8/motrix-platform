@@ -17,12 +17,13 @@ v2（2026-08-31 同日）：receivables.html（應收帳款）獨有的發票登
   這輪一開始定案的財務/出納分工原則。
 """
 import json
+import re
 from datetime import date
 
 import csv
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Body, Header, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 import io
 from urllib.parse import quote as _url_quote
@@ -65,6 +66,69 @@ def _bonus_payouts(user: dict):
     if p is None:
         return None, BONUS_MISSING
     return p, ""
+
+
+# ── 請款待付款（IP-100 payables.pending，多提供者；2026-09-27 使用者裁示請款流程）────────────
+#: 沒有任何提供者（M01 不在）時對使用者說的話——不回空清單裝沒事
+PAYABLES_MISSING = "案件管理模組未安裝：出納頁不顯示請款（案件額外支出）待付款"
+_PAID_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _can_pay(user: dict) -> bool:
+    """登錄付款：admin+ 或出納（與 paid-toggle 同一條；finance 只能看）。"""
+    return user.get("role") in ("superadmin", "admin") or user_has_module(user, "cashier")
+
+
+@router.get("/api/cashier/pending-payables")
+def get_pending_payables(authorization: str = Header(None)):
+    """已核准、未登錄付款日的請款（各提供者合併，依核准日）。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動。"""
+    user = _require_user(authorization)
+    _require_view_access(user)
+    provs = registry.providers("payables.pending")
+    if not provs:
+        return {"available": False, "notice": PAYABLES_MISSING, "items": [], "canPay": False}
+    conn = get_db()
+    try:
+        items = []
+        for name, p in sorted(provs.items()):
+            for it in p.pending(conn):
+                items.append(dict(it, source=name))
+    finally:
+        conn.close()
+    items.sort(key=lambda v: (v.get("approvedAt") or "", v["source"], v["key"]))
+    return {"available": True, "notice": "", "items": items, "canPay": _can_pay(user)}
+
+
+@router.post("/api/cashier/pending-payables/{source}/{key}/pay")
+def pay_pending_payable(source: str, key: str, body: dict = Body(default={}), authorization: str = Header(None)):
+    """登錄付款：寫回來源單據的付款日（經提供者，出納不直接碰別的模組的表）⇒ 從待付款消失。"""
+    user = _require_user(authorization)
+    if not _can_pay(user):
+        raise HTTPException(403, "只有管理員或出納可以登錄付款")
+    p = registry.providers("payables.pending").get(source)
+    if p is None:
+        raise HTTPException(404, "找不到請款來源「%s」（對應的模組未安裝）" % source)
+    paid = str((body or {}).get("paidDate") or date.today().isoformat()).strip()
+    if not _PAID_DATE_RE.match(paid):
+        raise HTTPException(400, "付款日格式必須是 YYYY-MM-DD")
+    try:
+        date.fromisoformat(paid)
+    except ValueError:
+        raise HTTPException(400, "付款日不是有效的日期")
+    conn = get_db()
+    try:
+        try:
+            res = p.mark_paid(conn, key, paid, user)
+        except LookupError as e:
+            raise HTTPException(404, str(e))
+        except ValueError as e:
+            raise HTTPException(409, str(e))
+        conn.commit()
+    finally:
+        conn.close()
+    _audit(_tok(authorization), "cashier.payable_paid", source, key,
+           "出納登錄請款付款：%s #%s（%s）付款日 %s" % (source, key, res.get("quoteNo") or "", paid))
+    return {"ok": True, **res}
 
 
 def _payable_queue(conn) -> list:

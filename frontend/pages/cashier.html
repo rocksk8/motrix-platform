@@ -314,6 +314,10 @@
               <button class="ctab" x-show="bonusQueue.visible" :class="{on: cashierSub==='bonus'}" @click="cashierSub='bonus'" data-testid="cashier-bonus-tab">
                 獎金待發放<span class="tab__cnt" x-text="bonusQueue.items.length"></span>
               </button>
+              <!-- 請款待付款（IP-100 payables.pending：案件額外支出已核准、未登錄付款日；2026-09-27 請款流程） -->
+              <button class="ctab" :class="{on: cashierSub==='payreq'}" @click="cashierSub='payreq'" data-testid="cashier-payreq-tab">
+                請款待付款<span class="tab__cnt" x-text="payreqQueue.items.length"></span>
+              </button>
               <button class="ctab" :class="{on: cashierSub==='history'}" @click="cashierSub='history'">執行歷史</button>
               <button class="ctab" :class="{on: cashierSub==='bank'}" @click="cashierSub='bank'">銀行對帳單比對</button>
               <!-- `FN3`：T100 匯出從報表頁搬進來，成為第 5 個子頁籤。
@@ -384,6 +388,47 @@
                             <button x-show="bonusQueue.canMarkPaid" class="action-btn pay" @click="openBonusPayModal(b)"
                                     :data-testid="'cashier-bonus-pay-' + b.quoteNo">標記已發放</button>
                             <span x-show="!bonusQueue.canMarkPaid" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
+                          </td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+
+            <!-- 請款待付款（IP-100）：登錄付款＝寫回來源單據的付款日（經提供者）⇒ 從這裡消失、月支出現金口徑用這一天 -->
+            <div x-show="cashierSub==='payreq'" data-testid="cashier-payreq">
+              <div class="alert-bar" x-show="payreqNotice" x-text="payreqNotice" data-testid="cashier-payreq-result"></div>
+              <div class="alert-bar" x-show="payreqQueue.notice" data-testid="cashier-payreq-notice"><span x-text="payreqQueue.notice"></span></div>
+              <template x-if="payreqQueue.available && payreqQueue.items.length===0">
+                <div class="panel" style="padding:18px;text-align:center;color:var(--text-dim)">目前沒有待付款的請款</div>
+              </template>
+              <template x-if="payreqQueue.items.length>0">
+                <div class="panel">
+                  <table class="data-table">
+                    <thead><tr>
+                      <th>案件號</th><th>客戶</th><th>請款內容</th><th>受款人</th>
+                      <th class="r">金額</th><th class="c">核准日</th><th class="c">發票</th><th class="c">付款日</th><th class="c">動作</th>
+                    </tr></thead>
+                    <tbody>
+                      <template x-for="it in payreqQueue.items" :key="it.source + ':' + it.key">
+                        <tr :data-testid="'cashier-payreq-row-' + it.source + '-' + it.key">
+                          <td class="mono" x-text="it.quoteNo"></td>
+                          <td x-text="it.customerName"></td>
+                          <td x-text="it.title"></td>
+                          <td x-text="it.payee"></td>
+                          <td class="r mono" x-text="fmt(it.amount)"></td>
+                          <td class="c mono" x-text="(it.approvedAt || '').slice(0, 10)"></td>
+                          <td class="c" x-text="(it.invoiceNo || '—') + (it.invoiceFiles ? '（' + it.invoiceFiles + ' 檔）' : '')"></td>
+                          <td class="c">
+                            <input type="date" class="field-input" style="width:140px" x-show="payreqQueue.canPay"
+                                   :data-testid="'cashier-payreq-date-' + it.source + '-' + it.key" x-model="payreqDates[it.source + ':' + it.key]">
+                          </td>
+                          <td class="c">
+                            <button x-show="payreqQueue.canPay" class="action-btn pay" @click="payPayreq(it)" :disabled="payreqBusy"
+                                    :data-testid="'cashier-payreq-pay-' + it.source + '-' + it.key">登錄付款</button>
+                            <span x-show="!payreqQueue.canPay" style="font-size:11px;color:var(--text-dim)">僅檢視</span>
                           </td>
                         </tr>
                       </template>
