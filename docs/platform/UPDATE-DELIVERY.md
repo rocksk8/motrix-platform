@@ -161,3 +161,30 @@
 - 單一模組小包（裁示 ⑤，P7b 帶 migrations 的模組）：另立設計。交付通道可以共用 §2 的發布／簽章／驗證。
 - 大改版的 D7 級演練（裁示 ⑥）：照 RUN-PLAN §3。
 - AH-S7（停服後失敗時啟動半套用程式）的處置：待 D＋使用者裁示，本設計照當時的 apply_update 行為呈現。
+
+## 9. 實作狀態與寫死的介面（2026-09-28 使用者裁示 U-1～U-8 全照推薦；U-1＝`我的雲端硬碟\MOTRIX-交付`，使用者自建）
+
+### 9.1 已實作：(a) 發布＋簽章、(b) 偵測／staging／驗證（`backend/tools/delivery.py`，題 `tests/platform/test_delivery_2026_09_28.py`）
+
+- 交付資料夾結構、包名、`delivery.json` 欄位、`package.sha256` 格式見 `delivery.py` 檔頭。包的內容放在 `packages\<包名>\payload\`，交付檔與包分開，不混進包裡。
+- **簽章涵蓋 `delivery.json`＋`package.sha256`**（`signed_bytes`）：只改畫面上顯示的 commit，也驗不過。
+- 公鑰 `DELIVERY_PUBKEY_PEM` 目前是空的 ⇒ 正式機一律拒絕，不退回「不驗章」。使用者執行 `python backend/tools/delivery.py keygen --private-out <開發機本機路徑>`：私鑰寫到那個檔，公鑰印出後貼進 `DELIVERY_PUBKEY_PEM`，隨版本出貨（U-4：私鑰另外做離線備份）。
+- 結構檢查用**正式機已安裝版本**的 `verify_package.py`。`--expect-db-version` 取自已安裝的 `db.py`（V9 基準凍結＝獨立訊號，不取自包本身）。
+- 腳本版本（AH-O7）：包裡 `$ApplyScriptVersion`＝`apply_update.version.json` 的 version，而且內容雜湊相符，才發布、才驗得過。
+- 保留份數（U-5＝3）：更舊的只刪「`results\` 已有結果」的包；正式機還沒回報的不刪。
+
+### 9.2 (e) apply_update／rollback_update 要補的兩個檔（**介面寫死**，H 照這裡接；改動要先改本節）
+
+**套用鎖** `<ROOT>\backend\.apply.lock`
+- 建立：腳本在身分守門之後、任何備份之前，以**排他建立**（`[IO.File]::Open(path, 'CreateNew')`）寫入。已存在 ⇒ 見下方「殘留鎖」。
+- 內容（UTF-8 JSON，無 BOM）：`{"pid": <int PowerShell 行程>, "script": "apply_update"|"rollback_update", "started_at": "YYYY-MM-DDTHH:MM:SS", "package": "<PackagePath 或 SnapshotTimestamp>", "host": "<COMPUTERNAME>"}`
+- 移除：腳本結束時一律移除（`try/finally`，含所有 `Fail` 出口）。
+- 殘留鎖：檔在，而 `pid` 的行程不存在（或存在、但不是 powershell）⇒ **不自動清**，出口 `apply_locked_stale`，訊息列出鎖的內容，由人確認後手動刪除。行程還在 ⇒ 出口 `apply_locked`。
+- 兩個新出口都是 `rolled_back=not_applied service=unknown`，要登記進 `deploy_dashboard._STATUS_FAILED`。
+
+**結果檔** `<ROOT>\backend\logs\<script>_<timestamp>.result.json`
+- `<script>`＝`apply_update` 或 `rollback_update`；`<timestamp>`＝腳本內的 `$timestamp`（`yyyyMMdd_HHmmss`，與快照目錄同名）。
+- 寫入時機：`Emit-Result` 印 `::RESULT::` 的同時寫；先寫 `.tmp` 再改名。stdout 那一行不變（判定仍以它為準）。
+- 內容（UTF-8 JSON，無 BOM）：`{"protocol": 2, "status": ..., "rolled_back": ..., "service": ..., "exit": <int>, "script": ..., "script_version": "<$ApplyScriptVersion>", "timestamp": "<yyyyMMdd_HHmmss>", "package": "<PackagePath 或空>", "commit": "<包的 commit 或空>", "started_at": ..., "finished_at": ...}`
+- 前五欄必須與同一次 stdout 最後一行的 `::RESULT::` 逐欄相同（守門比對兩者；不同 ⇒ 以 fail-closed 判失敗）。
+- 讀取：儀表板取檔名時間戳最大的那一份，當作「上一次套用的結果」（§5-6）。寫回雲端的 `results\<包名>.result.json` 由 (d) 從這個檔轉出，只帶這些欄位，不帶 log。
