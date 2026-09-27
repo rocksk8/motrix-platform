@@ -315,3 +315,25 @@ def test_ahm3_after_stop_failures_restart_the_service_first():
     for status in ("copy_failed_backend", "copy_failed_frontend", "copy_failed_root_dirs", "delete_failed"):
         lines = [l for l in code.splitlines() if '"%s"' % status in l]
         assert len(lines) == 1 and "Fail-AfterStop" in lines[0], (status, lines)
+
+
+def _ps1_digest(raw: bytes) -> str:
+    import hashlib
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    return hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+
+
+def test_aho7_script_change_requires_a_version_decision():
+    """AH-O7：改了 apply_update.ps1 卻沒更新 apply_update.version.json ⇒ 紅（逼人決定要不要升 $ApplyScriptVersion）。"""
+    import re
+    reg = json.loads((_TOOLS / "apply_update.version.json").read_text(encoding="utf-8"))
+    raw = (_TOOLS / "apply_update.ps1").read_bytes()
+    code = raw.decode("utf-8-sig")
+    m = re.search(r'^\$ApplyScriptVersion = "([^"]+)"', code, re.M)
+    assert m and m.group(1) == reg["version"], "登記的版本與腳本裡的 $ApplyScriptVersion 不同"
+    assert _ps1_digest(raw) == reg["sha256"], (
+        "apply_update.ps1 內容變了：行為有變 ⇒ 升 $ApplyScriptVersion；只改註解 ⇒ 版本不動。"
+        "兩種都要把 apply_update.version.json 的 sha256 更新成 %s" % _ps1_digest(raw))
+    # 反向控制：換行與 BOM 不影響（git 在 Windows 取出成 CRLF 也一樣），內容差一個字就不同
+    assert _ps1_digest(b"\xef\xbb\xbfa\r\nb") == _ps1_digest(b"a\nb") != _ps1_digest(b"a\nc")
