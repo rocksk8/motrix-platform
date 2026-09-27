@@ -99,3 +99,17 @@
   - 反向控制：staging 放一份位元組相同的 delivery.py、排在 sys.path 前面 ⇒ 被擋。證明比的是位置，不是內容
 - **D4-O1（觀察）**：overview、status、開發機的 prod-status 這三處仍然直接 `import delivery`，但只做顯示（讀鎖、讀結果、列包），不驗章、不套用。模組快取是同一個物件，之後的 `_trusted_delivery` 仍會依 `__file__` 攔下 ⇒ 可以接受
 - **US2 成立**（它是建議，沒有關閉紀錄的格式要求）
+
+## 7. 第十四班列車修正：wip/a-train14-fix 12fb2e27＋9c689477（父 76bf91e3）（D，2026-09-28）
+
+- 12fb2e27：apply_plan.py 把 `"frontend/pages"` 抽成 `PAGES_REL`，3 處改用它，字串值相同 ⇒ **行為不變**（讀碼逐處比對）；page_path 基線登記 2 筆
+- 9c689477：payment-request、storage-settings 兩頁的 favicon 改讀品牌端點（與其他頁一致，是建構器預覽唯一的 API 豁免）；test_module_rc_scope 的正對照題逐題標 requires_module accounting＋case。成立
+- 題：test_apply_plan＋test_module_rc_scope 54 過
+- **D5-S1（建議）　題目失去錨點**：題目裡 27 處字面值全部改成 `PG = ap.PAGES_REL`，整檔不再有 `"frontend/pages"` ⇒ 用程式自己的值驗程式自己
+  - 突變：把 `PAGES_REL` 改成 `"frontend/page"` ⇒ 54 題**全綠**
+  - 而正式機的安裝目錄仍是 `frontend/pages`：
+    - lock 的 removed_pages 會全部被判不合法 ⇒ 拒絕套用
+    - DO3 保護「未授權模組的頁面不刪」的 `protected_pages` 會對不到真實路徑 ⇒ baseline 來源會刪掉客戶付費模組的頁面
+  - 目前的值是對的，所以不擋上車
+  - 建議補一題：`ap.PAGES_REL == os.path.relpath(core.paths.FRONTEND_PAGES_DIR, core.paths.INSTALL_ROOT).replace("\\", "/")`——期望值取自獨立來源（core.paths），不是字面、也不是被測物本身
+- 必修 0
