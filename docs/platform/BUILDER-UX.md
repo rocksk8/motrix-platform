@@ -99,6 +99,7 @@
 - 不新增 `x-data`＋`x-init` 的頁（`PAGE_POPULATION` 不變）；`_initDone` 守衛保留。
 - 欄位型別、輸出區塊等**只**來自 catalog（既有守門），icon 對照缺漏 ⇒ 通用 icon，不是不顯示。
 - `custom-records.html` **不准** `x-html`（含 `x-bind:innerHTML`、`:innerHTML`）：這一頁畫的全是使用者自訂內容（標籤、說明、選項、紀錄值；預覽時是編到一半的草稿）⇒ 一律 `x-text`。守門 `test_custom_records_no_x_html_2026_09_28`（正對照：在真頁面植入三種寫法各一處要亮並指出行號；反向控制：字面相近的不算）。
+- JS 端的 HTML 寫入點（`document.write`、`.innerHTML =`、`.outerHTML =`、`insertAdjacentHTML`、`:srcdoc`）只准白名單上審過的那幾處（逐處：種類＋所在方法或元素 id，附理由；上限 5 筆；雙向——新的未登記紅、白名單過期也紅）。守門 `test_custom_records_no_js_html_sink_2026_09_28`（A，稽核 AB42-S1；目前兩筆：`openOutput` 的 document.write、`cr-output-frame` 的 sandbox srcdoc）。
 
 ## 5. 相容：保留的鉤子（既有 e2e 照過，不改題）
 
