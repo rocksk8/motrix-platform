@@ -132,13 +132,26 @@ def test_preview_form_matches_the_runtime_form(live_server, make_user, e2e_brows
     assert flat["day"]["control"] == "input:date" and flat["total"]["control"].endswith(":formula")
 
 
+#: 預覽「不打 API」的唯一豁免（主持 2026-09-28 裁示）：品牌包的 favicon——瀏覽器自己抓的公開唯讀圖示，不是資料 API
+FAVICON_EXEMPT = ("GET", "/api/system/branding/favicon")
+
+
+def counts_as_api(method, url):
+    """這個請求算不算「打 API」：路徑含 /api/，扣掉 FAVICON_EXEMPT（方法＋路徑都要完全相同；查詢字串不看）。"""
+    from urllib.parse import urlsplit
+    path = urlsplit(url).path
+    if "/api/" not in path:
+        return False
+    return (method.upper(), path) != FAVICON_EXEMPT
+
+
 @pytest.mark.e2e
 def test_preview_mode_makes_no_api_calls(live_server, make_user, e2e_browser):
     """②：預覽 iframe 發出的請求裡 /api/ 次數 0；後備攔截器也沒有被觸發（沒有任何程式碼試著打）；按存檔無效。
     同一個旗標：本頁的 api() 直接拒絕（不走到 fetch）；有人硬呼叫 fetch 也被攔下、記次、不出網路。"""
     page = _harness(e2e_browser, live_server)
     api_reqs = []
-    page.on("request", lambda r: api_reqs.append(r.url) if ("/api/" in r.url and r.frame.url and "preview=1" in r.frame.url) else None)
+    page.on("request", lambda r: api_reqs.append(r.url) if (counts_as_api(r.method, r.url) and r.frame.url and "preview=1" in r.frame.url) else None)
     fr = _render(page, _definition())
     fr.wait_for_function("() => document.querySelectorAll('#cr-form .cr-f').length === 8", timeout=15000)
     fr.locator("#cr-save").click()
@@ -163,11 +176,45 @@ def test_opening_preview_directly_leaks_nothing(live_server, e2e_browser):
     """②：直接開 custom-records.html?preview=1（沒有登入、不在 iframe 裡）⇒ 不轉登入頁、不打 API。"""
     page = e2e_browser.new_page()
     api_reqs = []
-    page.on("request", lambda r: api_reqs.append(r.url) if "/api/" in r.url else None)
+    page.on("request", lambda r: api_reqs.append(r.url) if counts_as_api(r.method, r.url) else None)
     page.goto(live_server + "/pages/custom-records.html?preview=1")
     page.wait_for_function("() => window.Alpine && Alpine.$data(document.body) && Alpine.$data(document.body).preview === true")
     page.wait_for_timeout(300)
     assert "custom-records.html" in page.url and api_reqs == [], (page.url, api_reqs)
+
+
+@pytest.mark.e2e
+def test_only_the_branding_favicon_is_exempt_from_the_no_api_rule(live_server, e2e_browser):
+    """正對照＋反向控制（主持 2026-09-28 裁示：favicon 語意衝突，TRAIN14-PREP §1-6）：
+    品牌包把頁面 favicon 改成 `GET /api/system/branding/favicon`——瀏覽器自己抓、不經 window.fetch，預覽的防線擋不到，
+    而它是公開唯讀的圖示，不是資料 API ⇒ 只豁免這一個。在同一頁用**非 fetch** 的方式載入：
+    ① favicon 端點 ⇒ 不算（豁免有效，沒有品牌包的樹上也驗得到）；② `/api/system/branding`（JSON）⇒ 算（豁免沒有放寬到別的 /api/）。"""
+    page = e2e_browser.new_page()
+    try:
+        api_reqs, seen = [], []
+        page.on("request", lambda r: (seen.append(r.url), api_reqs.append(r.url) if counts_as_api(r.method, r.url) else None))
+        page.goto(live_server + "/pages/custom-records.html?preview=1")
+        page.wait_for_function("() => window.Alpine && Alpine.$data(document.body) && Alpine.$data(document.body).preview === true")
+        page.evaluate("""() => { for (const u of ['/api/system/branding/favicon', '/api/system/branding']) {
+            const i = new Image(); i.src = u; document.body.appendChild(i) } }""")
+        page.wait_for_function("() => performance.getEntriesByType('resource').filter(e => e.name.includes('/api/system/branding')).length >= 2")
+        assert any(u.endswith("/api/system/branding/favicon") for u in seen), seen      # 請求真的有發出（觀測點量得到）
+        assert [u for u in api_reqs if u.endswith("/api/system/branding/favicon")] == [], api_reqs
+        assert any(u.endswith("/api/system/branding") for u in api_reqs), ("其他 /api/ 必須照算", api_reqs)
+    finally:
+        page.close()
+
+
+def test_counts_as_api_exempts_exactly_one_request():
+    """豁免只有「GET＋路徑恰好等於 /api/system/branding/favicon」（查詢字串不影響）；其餘 /api/ 一律算。"""
+    base = "http://127.0.0.1:1"
+    assert not counts_as_api("GET", base + "/api/system/branding/favicon")
+    assert not counts_as_api("GET", base + "/api/system/branding/favicon?v=3")
+    for method, path in (("GET", "/api/system/branding"), ("POST", "/api/system/branding/favicon"),
+                         ("GET", "/api/system/branding/favicon2"), ("GET", "/api/system/branding/favicon/x"),
+                         ("GET", "/api/auth/me"), ("GET", "/x/api/system/branding/favicon")):
+        assert counts_as_api(method, base + path), (method, path)
+    assert not counts_as_api("GET", base + "/pages/custom-records.html")
 
 
 @pytest.mark.e2e
