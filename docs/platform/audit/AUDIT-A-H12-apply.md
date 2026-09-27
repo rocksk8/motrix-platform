@@ -199,3 +199,19 @@
 - ✅ AH-M1 關閉（7a38fde6）——casefold 比對＋題 test_ahm1_case_only_rename_is_not_deleted
 - ✅ AH-M2 關閉（7a38fde6）——RUNBOOK §8 先複製 tools＋腳本版本比對 script_not_from_package
 - ✅ AH-M3 關閉（7a38fde6）——停服後失敗先重新啟動服務（Fail-AfterStop），殘餘風險列 AH-S7
+
+## 7. 複核：wip/h-apply-platform d2fc6395（1ba44ff3＋d2fc6395；A，2026-09-28 02:11；讀碼＋演練證據 D:\MOTRIX-DRILLSpply-run-0928un_P1copy.log、prog_*_P1copy.json）
+
+| 項目 | 讀碼／證據 | 判定 |
+|---|---|---|
+| AH-S7（使用者裁示） | `Fail-AfterStop` 的 `copy_failed_*` 分支：`Restore-ProgramAfterCopyFailure`（先設 `restoring` → `cleanup-added` → 寫回 backend／frontend／tools／product → 根目錄文件；任何一段 exit≥8 ⇒ 回 false）→ false 就 `Fail`、**不啟動**；true ⇒ 啟動＋20×2 秒健康檢查 ⇒ `restored`（service=up）或 `restored_unhealthy`。`delete_failed` 維持「先啟動、附手動回滾指令」。函式定義在第一個呼叫點之前（有題）。此時新程式沒有跑過、pip 在複製之後 ⇒ 資料庫確實沒被碰。演練：鎖住 P1 要覆寫的頁 ⇒ `copy_failed_frontend`（exit 11）⇒ 清掉 4 個新增檔、寫回、經排程重啟 ⇒ `::RESULT:: … status=copy_failed_frontend rolled_back=restored service=up`；程式檔清單前後 502 項 0 差異（多出的 `motrix_erp.db.modules_disabled.json` 是啟動時寫的停用清單快取，F4 可重建，不是程式檔） | 成立 |
+| robocopy `/R:3 /W:5` | 兩支腳本所有 robocopy 呼叫行都有（apply_update 12 行、rollback_update 3 行；讀碼逐行核對）；守門 `test_every_robocopy_has_a_retry_limit` 以「robocopy 呼叫行」掃描，並要求至少 3 行（量得到東西） | 成立（預設 100 萬次×30 秒 ⇒ 被占用的檔會讓套用卡住而不是失敗，這是真的缺口，修得對） |
+| restoring 守門題改動 | `first` 由 `_ROBO_TO_PROD` 錨定，而那個正規式要求字面 `"backend"/"frontend"`＋`$BackendDir/$FrontendDir` ⇒ 新函式裡經 `$pair` 間接的 robocopy **不是**錨點，`first` 仍是自動回滾那一段。改成取「寫回前最近的那一個 restoring」之後，檢查的仍是自動回滾那一段的 restoring，而且 `between` 檢查（中間不可以有別的指派）照舊。取第一個的話，會取到新函式裡那個，而它與自動回滾之間夾著其他指派 ⇒ between 必紅。⇒ **是跟著多一個還原點調整，沒有放寬**；新函式自己的順序由 `test_apply_plan` 的 AH-M3／AH-S7 題守（restoring < cleanup-added < robocopy） | 成立（觀察 AH-O8） |
+| 腳本版本 28c＋登記 | `$ApplyScriptVersion` 2026-09-28a → 28c，`apply_update.version.json` 的 version 與 sha256 同步（AH-O7 守門） | 成立 |
+
+**AH-S9（建議，新）　UPGRADE-RUNBOOK §8 沒有跟著 AH-S7 更新**：:213 仍寫「停服之後才失敗 ⇒ 先把服務重新啟動…磁碟上是套用到一半的程式」，狀態表 :253 把 `copy_failed_*` 與 `delete_failed` 寫成同一列「套用到一半；腳本已嘗試重新啟動服務 → 手動回滾」。現在 `copy_failed_*` 會自動寫回、`rolled_back` 是 `restored`／`restored_unhealthy`（或寫回失敗時 `restoring`、服務未啟動），處置也不同 ⇒ 建議合回前拆成兩列並改寫 :213。
+**AH-O8（觀察）**：`_ROBO_TO_PROD` 錨點認不得 `$pair` 間接寫法 ⇒ RP2 那組守門看不到新函式的寫回；目前由另一題補上。日後若再加一種寫回寫法，要記得兩邊都補。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ AH-S7 關閉（d2fc6395）——複製失敗自動寫回快照再啟動；演練 P1copy 程式檔 0 差異
