@@ -86,7 +86,31 @@
     .mb-probs a { cursor: pointer; color: var(--accent); text-decoration: underline; margin-left: 6px; }
     .mb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .mb-chip { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); margin: 3px 4px 0 0; background: var(--white); }
-    @media (max-width: 1100px) { .mb-fields { grid-template-columns: 150px 1fr; } .mb-props { grid-column: 1 / -1; } }
+    /* 縮圖導覽（BUILDER-UX §1：8 格；流程／簽核／通知三格都在第 4 步） */
+    .mb-nav { display: grid; grid-template-columns: repeat(8, minmax(84px, 1fr)); gap: 8px; margin-top: 16px; }
+    .mb-nav__i { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface, #fff); cursor: pointer; font-family: inherit; color: var(--text-secondary); text-align: left; }
+    .mb-nav__i.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text-main, inherit); }
+    .mb-nav__thumb { height: 46px; border-radius: 6px; background: var(--surface-muted); overflow: hidden; }
+    .mb-nav__thumb svg, .mb-nav__thumb iframe { width: 100%; height: 100%; border: 0; pointer-events: none; }
+    .mb-nav__l { font-size: 12px; display: flex; align-items: center; gap: 5px; }
+    .mb-nav__i[data-has-problems="1"]::after { content: ""; position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+    /* 工具列 icon＋文字 */
+    .mb-pal__i { display: flex; align-items: center; gap: 8px; }
+    .mb-pal__i svg { flex: none; width: 16px; height: 16px; color: var(--text-secondary); }
+    .mb-pal__i:focus-visible, .mb-fc:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* 畫布卡片：選中的就地展開 */
+    .mb-fc { flex-wrap: wrap; }
+    .mb-fc .h { cursor: grab; color: var(--text-dim); font-size: 13px; user-select: none; }
+    .mb-fc__ed { flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-light); cursor: default; }
+    .mb-fc__ed .mb-f { margin-bottom: 10px; }
+    .mb-fc__q { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-secondary); }
+    /* 右側即時預覽 */
+    .mb-pv { border: 1px solid var(--border); border-radius: 10px; padding: 10px; position: sticky; top: calc(var(--topbar-h) + 12px); }
+    .mb-pv__t { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
+    .mb-pv__host { min-height: 320px; }
+    .mb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    @media (max-width: 1100px) { .mb-fields { grid-template-columns: 150px 1fr; } .mb-props, .mb-pv { grid-column: 1 / -1; } .mb-nav { grid-template-columns: repeat(4, 1fr); } }
     @media (max-width: 767px) {
       .mb-main { margin-left: 0; padding: 16px 12px 48px; }
       .mb-fields, .mb-layout { grid-template-columns: 1fr; }
@@ -156,11 +180,15 @@
                   x-text="saveLabel()"></span>
           </div>
 
-          <nav class="mb-steps" aria-label="建構步驟">
-            <template x-for="s in STEPS" :key="s.n">
-              <button class="mb-step" :class="{ 'is-on': step === s.n }" :data-step="s.n" @click="goStep(s.n)">
-                <span x-text="s.n + ' ' + s.label"></span>
-                <span class="bdg" x-show="stepProblemCount(s.n)" x-text="stepProblemCount(s.n)"></span>
+          <nav class="mb-nav" aria-label="建構步驟" id="mb-nav">
+            <template x-for="(it, ni) in NAV" :key="it.id">
+              <button :class="[it.alias ? 'mb-nav__i' : 'mb-nav__i mb-step', navOn(it) ? 'is-on' : '']" :data-nav="it.id"
+                      :data-step="it.alias ? null : it.step" :data-step-alias="it.alias ? it.step : null"
+                      :data-has-problems="it.alias ? '0' : (stepProblemCount(it.step) ? '1' : '0')"
+                      :aria-current="navOn(it) ? 'step' : null" @click="goNav(it)">
+                <div class="mb-nav__thumb" :data-thumb="it.thumb" x-effect="drawThumb($el, it.thumb, thumbTick)"></div>
+                <span class="mb-nav__l"><span x-text="(ni + 1) + ' ' + it.label"></span>
+                  <span class="bdg" x-show="!it.alias && stepProblemCount(it.step)" x-text="stepProblemCount(it.step)"></span></span>
               </button>
             </template>
           </nav>
@@ -235,10 +263,12 @@
           <section x-show="step === 2" id="mb-step-2">
             <div class="mb-fields">
               <div class="mb-pal" id="mb-palette">
-                <div class="mb-pal__t">欄位型別（拖進表單，或點一下加到最後）</div>
+                <div class="mb-pal__t">欄位（拖進表單；或按 Enter／點一下加到最後）</div>
                 <template x-for="t in (catalog.fieldTypes || [])" :key="t">
-                  <button class="mb-pal__i" draggable="true" :data-palette-type="t"
-                          @dragstart="$event.dataTransfer.setData('text/plain', 'type:' + t)" @click="addField(t)" x-text="typeLabel(t)"></button>
+                  <button class="mb-pal__i" draggable="true" :data-palette-type="t" :aria-label="'加入欄位：' + typeLabel(t)"
+                          @dragstart="$event.dataTransfer.setData('text/plain', 'type:' + t)" @click="addField(t); announce('已加入 ' + typeLabel(t) + '，第 ' + def.fields.length + ' 個')">
+                    <span x-html="typeIcon(t)"></span><span x-text="typeLabel(t)"></span>
+                  </button>
                 </template>
               </div>
               <div class="mb-canvas" id="mb-canvas" :class="{ 'is-over': dragOver }"
@@ -246,121 +276,130 @@
                 <div class="mb-hint" x-show="!def.fields.length">把左邊的欄位型別拖到這裡</div>
                 <template x-for="(f, i) in def.fields" :key="i">
                   <div class="mb-fc" :class="{ 'is-sel': sel === i, 'is-bad': hasProblem('fields[' + i + ']') }" :data-field-index="i" :data-field-key="f.key"
-                       draggable="true" @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + i)"
-                       @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOnCanvas($event, i)" @click="sel = i">
+                       tabindex="0" role="listitem" :aria-label="(f.label || '（未命名）') + '，' + typeLabel(f.type) + '，第 ' + (i + 1) + ' 個'"
+                       @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOnCanvas($event, i)" @click="sel = i"
+                       @keydown.self.alt.up.prevent="moveFieldKb(i, -1)" @keydown.self.alt.down.prevent="moveFieldKb(i, 1)"
+                       @keydown.self.delete.prevent="removeFieldKb(i)" @keydown.self.enter.prevent="sel = i">
+                    <span class="h" draggable="true" title="拖曳排序（鍵盤：Alt＋↑／↓）" aria-hidden="true"
+                          @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + i)">⠿</span>
+                    <span x-html="typeIcon(f.type)"></span>
                     <span class="t" x-text="typeLabel(f.type)"></span>
                     <span class="grow"><span x-text="f.label || '（未命名）'"></span> <span class="k" x-text="f.key"></span>
                       <span class="mb-bad" x-show="f.required">必填</span></span>
+                    <label class="mb-fc__q" x-show="f.type !== 'formula' && sel !== i" @click.stop>
+                      <input type="checkbox" :data-quick-required="i" :checked="f.required === true" @change="f.required = $event.target.checked">必填</label>
                     <button class="mb-ib" title="上移" @click.stop="moveField(i, -1)">↑</button>
                     <button class="mb-ib" title="下移" @click.stop="moveField(i, 1)">↓</button>
                     <button class="mb-ib" title="刪除" :data-remove-field="i" @click.stop="removeField(i)">✕</button>
+                    <template x-if="sel === i && def.fields[sel]">
+                      <div class="mb-fc__ed" :data-props-for="sel" @click.stop>
+                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].key') }">
+                        <label for="mb-f-key">欄位代號（key）</label>
+                        <input id="mb-f-key" :value="def.fields[sel].key" @change="renameField(sel, $event.target.value.trim())">
+                        <div class="mb-hint">公式、版面與輸出用它引用這個欄位。</div>
+                      </div>
+                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].label') }">
+                        <label for="mb-f-label">顯示名稱</label>
+                        <input id="mb-f-label" x-model="def.fields[sel].label">
+                      </div>
+                      <div class="mb-f">
+                        <label>型別</label>
+                        <div class="mb-fx" x-text="typeLabel(def.fields[sel].type) + '（' + def.fields[sel].type + '）'"></div>
+                      </div>
+                      <template x-if="def.fields[sel].type !== 'formula'">
+                        <div class="mb-f">
+                          <label for="mb-f-required">必填</label>
+                          <!-- 布林下拉：寫死 value＋x-model.boolean（〈Alpine :value="false" 布林下拉〉） -->
+                          <select id="mb-f-required" x-model.boolean="def.fields[sel].required">
+                            <option value="false">否</option>
+                            <option value="true">是</option>
+                          </select>
+                        </div>
+                      </template>
+                      <template x-if="def.fields[sel].type === 'select'">
+                        <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].options') }">
+                          <label for="mb-f-options">選項（一行一個）</label>
+                          <textarea id="mb-f-options" rows="4" :value="(def.fields[sel].options || []).join('\n')"
+                                    @input="def.fields[sel].options = $event.target.value.split('\n').map(s => s.trim()).filter(s => s)"></textarea>
+                        </div>
+                      </template>
+                      <template x-if="['text','number','date','select','checkbox'].indexOf(def.fields[sel].type) >= 0">
+                        <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].default') }">
+                          <label for="mb-f-default">預設值</label>
+                          <template x-if="def.fields[sel].type === 'checkbox'">
+                            <select id="mb-f-default" :value="def.fields[sel].default === true ? 'true' : (def.fields[sel].default === false ? 'false' : '')"
+                                    @change="setDefault(sel, $event.target.value === '' ? null : $event.target.value === 'true')">
+                              <option value="">（無）</option><option value="true">是</option><option value="false">否</option>
+                            </select>
+                          </template>
+                          <template x-if="def.fields[sel].type === 'select'">
+                            <select id="mb-f-default" :value="def.fields[sel].default || ''" @change="setDefault(sel, $event.target.value || null)">
+                              <option value="">（無）</option>
+                              <template x-for="o in (def.fields[sel].options || [])" :key="o"><option :value="o" x-text="o" :selected="o === def.fields[sel].default"></option></template>
+                            </select>
+                          </template>
+                          <template x-if="['text','number','date'].indexOf(def.fields[sel].type) >= 0">
+                            <input id="mb-f-default" :type="def.fields[sel].type === 'text' ? 'text' : def.fields[sel].type" :step="def.fields[sel].type === 'number' ? 'any' : null"
+                                   :value="def.fields[sel].default === undefined || def.fields[sel].default === null ? '' : def.fields[sel].default"
+                                   @change="setDefault(sel, $event.target.value === '' ? null : (def.fields[sel].type === 'number' ? Number($event.target.value) : $event.target.value))">
+                          </template>
+                        </div>
+                      </template>
+                      <template x-if="def.fields[sel].type === 'formula'">
+                        <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].formula') || (fxProblems[sel] || []).length }">
+                          <label for="mb-f-formula">公式</label>
+                          <input id="mb-f-formula" x-model="def.fields[sel].formula" @input="queueFormulaCheck(sel)" placeholder="例：qty * unit_value" style="font-family:var(--font-en,monospace)">
+                          <div style="margin-top:4px">
+                            <template x-for="k in otherKeys(sel)" :key="'k' + k"><button class="mb-chipbtn" @click="insertFx(sel, k)" x-text="k"></button></template>
+                          </div>
+                          <div>
+                            <template x-for="fn in (catalog.formulaFunctions || [])" :key="'f' + fn"><button class="mb-chipbtn" @click="insertFx(sel, fn + '(')" x-text="fn + '()'"></button></template>
+                          </div>
+                          <div id="mb-f-formula-problems" :data-state="fxState[sel] || ''">
+                            <template x-for="(p, pi) in (fxProblems[sel] || [])" :key="pi">
+                              <div :data-pos="p.pos">
+                                <div class="mb-fx"><span x-text="def.fields[sel].formula"></span>
+  <span class="caret" x-text="' '.repeat(Math.max(0, p.pos)) + '^'"></span></div>
+                                <div class="mb-bad" x-text="'第 ' + (p.pos + 1) + ' 字：' + p.message"></div>
+                              </div>
+                            </template>
+                            <div class="mb-hint" x-show="fxState[sel] === 'ok'">公式檢查通過</div>
+                          </div>
+                          <div class="mb-hint">空值不等於 0；要當 0 請用 coalesce(欄位, 0)。</div>
+                        </div>
+                      </template>
+                      <template x-if="def.fields[sel].type === 'ref'">
+                        <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].target') }">
+                          <label for="mb-f-target">參照對象</label>
+                          <select id="mb-f-target" x-model="def.fields[sel].target">
+                            <option value="">（請選擇）</option>
+                            <template x-for="t in refTargetOptions()" :key="t.value"><option :value="t.value" x-text="t.label" :selected="t.value === def.fields[sel].target"></option></template>
+                          </select>
+                        </div>
+                      </template>
+                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].dataClass') }">
+                        <label for="mb-f-dataclass">資料分類</label>
+                        <select id="mb-f-dataclass" x-model="def.fields[sel].dataClass">
+                          <template x-for="c in (catalog.dataClasses || [])" :key="c"><option :value="c" x-text="c" :selected="c === def.fields[sel].dataClass"></option></template>
+                        </select>
+                        <div class="mb-hint">自訂模組目前只收 T1；個資（F2）分流接上前不提供。</div>
+                      </div>
+                      <template x-for="(p, pi) in problemsUnder('fields[' + sel + ']')" :key="pi">
+                        <div class="mb-bad" x-text="p.message"></div>
+                      </template>
+                                        </div>
+                    </template>
                   </div>
                 </template>
               </div>
-              <div class="mb-props" id="mb-props">
-                <template x-if="sel === null || !def.fields[sel]">
-                  <div class="mb-hint">點選中間的欄位來設定屬性</div>
-                </template>
-                <template x-if="sel !== null && def.fields[sel]">
-                  <div :data-props-for="sel">
-                    <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].key') }">
-                      <label for="mb-f-key">欄位代號（key）</label>
-                      <input id="mb-f-key" :value="def.fields[sel].key" @change="renameField(sel, $event.target.value.trim())">
-                      <div class="mb-hint">公式、版面與輸出用它引用這個欄位。</div>
-                    </div>
-                    <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].label') }">
-                      <label for="mb-f-label">顯示名稱</label>
-                      <input id="mb-f-label" x-model="def.fields[sel].label">
-                    </div>
-                    <div class="mb-f">
-                      <label>型別</label>
-                      <div class="mb-fx" x-text="typeLabel(def.fields[sel].type) + '（' + def.fields[sel].type + '）'"></div>
-                    </div>
-                    <template x-if="def.fields[sel].type !== 'formula'">
-                      <div class="mb-f">
-                        <label for="mb-f-required">必填</label>
-                        <!-- 布林下拉：寫死 value＋x-model.boolean（〈Alpine :value="false" 布林下拉〉） -->
-                        <select id="mb-f-required" x-model.boolean="def.fields[sel].required">
-                          <option value="false">否</option>
-                          <option value="true">是</option>
-                        </select>
-                      </div>
-                    </template>
-                    <template x-if="def.fields[sel].type === 'select'">
-                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].options') }">
-                        <label for="mb-f-options">選項（一行一個）</label>
-                        <textarea id="mb-f-options" rows="4" :value="(def.fields[sel].options || []).join('\n')"
-                                  @input="def.fields[sel].options = $event.target.value.split('\n').map(s => s.trim()).filter(s => s)"></textarea>
-                      </div>
-                    </template>
-                    <template x-if="['text','number','date','select','checkbox'].indexOf(def.fields[sel].type) >= 0">
-                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].default') }">
-                        <label for="mb-f-default">預設值</label>
-                        <template x-if="def.fields[sel].type === 'checkbox'">
-                          <select id="mb-f-default" :value="def.fields[sel].default === true ? 'true' : (def.fields[sel].default === false ? 'false' : '')"
-                                  @change="setDefault(sel, $event.target.value === '' ? null : $event.target.value === 'true')">
-                            <option value="">（無）</option><option value="true">是</option><option value="false">否</option>
-                          </select>
-                        </template>
-                        <template x-if="def.fields[sel].type === 'select'">
-                          <select id="mb-f-default" :value="def.fields[sel].default || ''" @change="setDefault(sel, $event.target.value || null)">
-                            <option value="">（無）</option>
-                            <template x-for="o in (def.fields[sel].options || [])" :key="o"><option :value="o" x-text="o" :selected="o === def.fields[sel].default"></option></template>
-                          </select>
-                        </template>
-                        <template x-if="['text','number','date'].indexOf(def.fields[sel].type) >= 0">
-                          <input id="mb-f-default" :type="def.fields[sel].type === 'text' ? 'text' : def.fields[sel].type" :step="def.fields[sel].type === 'number' ? 'any' : null"
-                                 :value="def.fields[sel].default === undefined || def.fields[sel].default === null ? '' : def.fields[sel].default"
-                                 @change="setDefault(sel, $event.target.value === '' ? null : (def.fields[sel].type === 'number' ? Number($event.target.value) : $event.target.value))">
-                        </template>
-                      </div>
-                    </template>
-                    <template x-if="def.fields[sel].type === 'formula'">
-                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].formula') || (fxProblems[sel] || []).length }">
-                        <label for="mb-f-formula">公式</label>
-                        <input id="mb-f-formula" x-model="def.fields[sel].formula" @input="queueFormulaCheck(sel)" placeholder="例：qty * unit_value" style="font-family:var(--font-en,monospace)">
-                        <div style="margin-top:4px">
-                          <template x-for="k in otherKeys(sel)" :key="'k' + k"><button class="mb-chipbtn" @click="insertFx(sel, k)" x-text="k"></button></template>
-                        </div>
-                        <div>
-                          <template x-for="fn in (catalog.formulaFunctions || [])" :key="'f' + fn"><button class="mb-chipbtn" @click="insertFx(sel, fn + '(')" x-text="fn + '()'"></button></template>
-                        </div>
-                        <div id="mb-f-formula-problems" :data-state="fxState[sel] || ''">
-                          <template x-for="(p, pi) in (fxProblems[sel] || [])" :key="pi">
-                            <div :data-pos="p.pos">
-                              <div class="mb-fx"><span x-text="def.fields[sel].formula"></span>
-<span class="caret" x-text="' '.repeat(Math.max(0, p.pos)) + '^'"></span></div>
-                              <div class="mb-bad" x-text="'第 ' + (p.pos + 1) + ' 字：' + p.message"></div>
-                            </div>
-                          </template>
-                          <div class="mb-hint" x-show="fxState[sel] === 'ok'">公式檢查通過</div>
-                        </div>
-                        <div class="mb-hint">空值不等於 0；要當 0 請用 coalesce(欄位, 0)。</div>
-                      </div>
-                    </template>
-                    <template x-if="def.fields[sel].type === 'ref'">
-                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].target') }">
-                        <label for="mb-f-target">參照對象</label>
-                        <select id="mb-f-target" x-model="def.fields[sel].target">
-                          <option value="">（請選擇）</option>
-                          <template x-for="t in refTargetOptions()" :key="t.value"><option :value="t.value" x-text="t.label" :selected="t.value === def.fields[sel].target"></option></template>
-                        </select>
-                      </div>
-                    </template>
-                    <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].dataClass') }">
-                      <label for="mb-f-dataclass">資料分類</label>
-                      <select id="mb-f-dataclass" x-model="def.fields[sel].dataClass">
-                        <template x-for="c in (catalog.dataClasses || [])" :key="c"><option :value="c" x-text="c" :selected="c === def.fields[sel].dataClass"></option></template>
-                      </select>
-                      <div class="mb-hint">自訂模組目前只收 T1；個資（F2）分流接上前不提供。</div>
-                    </div>
-                    <template x-for="(p, pi) in problemsUnder('fields[' + sel + ']')" :key="pi">
-                      <div class="mb-bad" x-text="p.message"></div>
-                    </template>
-                  </div>
-                </template>
+              <div class="mb-pv" id="mb-preview-pane">
+                <div class="mb-pv__t">即時預覽
+                  <select id="mb-preview-mode" x-model="previewMode" style="margin-left:auto;font-size:11px"><option value="form">表單</option><option value="list">列表</option></select></div>
+                <div class="mb-pv__host" id="mb-preview-host" x-effect="syncPreview(JSON.stringify(def), sel, previewMode, step)"></div>
+                <div class="mb-hint" id="mb-preview-missing" x-show="previewMissing">預覽元件尚未載入（form-preview.js）；欄位照樣可以編輯與儲存。</div>
               </div>
             </div>
+            <div class="mb-sr" aria-live="polite" id="mb-live" x-text="liveMsg"></div>
           </section>
 
           <!-- ③ 版面（編輯操作在 custom-layout.js，P9 排版器共用） -->
@@ -432,7 +471,7 @@
 
           <!-- ④ 流程 -->
           <section x-show="step === 4" id="mb-step-4">
-            <div class="mb-card">
+            <div class="mb-card" id="mb-sec-workflow">
               <div class="mb-row">
                 <h3 style="margin:0">狀態</h3>
                 <div class="mb-f" style="margin-left:auto;min-width:200px" :class="{ 'is-bad': hasProblem('workflow.initial') }">
@@ -443,7 +482,7 @@
                 </div>
               </div>
               <table class="mb-table" id="mb-states">
-                <thead><tr><th>代號</th><th>名稱</th><th>終點</th><th>進入時通知申請人</th><th>進入時通知</th><th>簽核</th><th></th></tr></thead>
+                <thead><tr><th>代號</th><th>名稱</th><th>終點</th><th id="mb-sec-notify">進入時通知申請人</th><th>進入時通知</th><th>簽核</th><th></th></tr></thead>
                 <tbody>
                   <template x-for="(s, si) in def.workflow.states" :key="si">
                     <tr :data-state-index="si" :data-state-key="s.key" :class="{ 'is-bad': hasProblemExact('workflow.states[' + si + ']') || hasProblem('workflow.states[' + si + '].key') || hasProblem('workflow.states[' + si + '].label') }">
@@ -484,6 +523,7 @@
               </div>
 
               <!-- 各簽核狀態的層 -->
+              <div id="mb-sec-approval" class="mb-hint" style="margin-top:12px;font-weight:700">簽核（在上表把狀態設成「分層簽核」後，各層在這裡設定）</div>
               <template x-for="(s, si) in def.workflow.states" :key="'ap' + si">
                 <template x-if="s.approval">
                   <div class="mb-sub" :data-approval-state="si">
@@ -890,12 +930,36 @@
                            date_label: '日期標籤', name_path: '簽名人', date_path: '日期', subtitle_path: '副標題', info: '資訊列',
                            name: '名稱', class: '樣式類別', page_break: '另起一頁', cells: '格', th: '欄名', colspan: '跨欄', tag: '標籤樣式', when: '條件' }
       var FORMAT_LABELS = { text: '文字', str: '原樣', money: '金額', date10: '日期' }
+      // 縮圖導覽（BUILDER-UX §1）：8 格；流程／簽核／通知三格都在第 4 步，點下去捲到對應區塊（既有 data-step 1～6 不變）
+      var NAV = [
+        { id: 'basic', label: '基本', step: 1, thumb: 'basic' },
+        { id: 'fields', label: '欄位', step: 2, thumb: 'fields' },
+        { id: 'layout', label: '版面', step: 3, thumb: 'layout' },
+        { id: 'workflow', label: '流程', step: 4, anchor: 'mb-sec-workflow', thumb: 'workflow' },
+        { id: 'approval', label: '簽核', step: 4, anchor: 'mb-sec-approval', thumb: 'approval', alias: true },
+        { id: 'notify', label: '通知', step: 4, anchor: 'mb-sec-notify', thumb: 'notify', alias: true },
+        { id: 'output', label: '輸出', step: 5, thumb: 'output' },
+        { id: 'publish', label: '發布', step: 6, thumb: 'publish' }
+      ]
+      // 欄位型別的 icon（inline SVG，不用圖示字型、不用 CDN）；catalog 多出沒對照的型別 ⇒ 通用 icon（仍可使用）
+      var _SVG = function (d) { return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">' + d + '</svg>' }
+      var TYPE_ICONS = {
+        text: _SVG('<path d="M3 4h10M8 4v9"/>'),
+        number: _SVG('<path d="M4 6h9M3 10h9M6.5 3 5 13M11 3 9.5 13"/>'),
+        date: _SVG('<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 7h11M5.5 2v3M10.5 2v3"/>'),
+        select: _SVG('<rect x="2.5" y="4" width="11" height="8" rx="1.5"/><path d="m9 7 1.5 1.5L12 7"/>'),
+        checkbox: _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="m5 8 2 2 4-4"/>'),
+        formula: _SVG('<path d="M9.5 2.5c-1.5 0-2 1-2.3 2.5L5.8 12c-.3 1.4-.9 1.8-2 1.8M5 6.5h5M10 9.5l3 3M13 9.5l-3 3"/>'),
+        ref: _SVG('<path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/>')
+      }
+      var TYPE_ICON_GENERIC = _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8h5"/>')
       var STEPS = [{ n: 1, label: '基本' }, { n: 2, label: '欄位' }, { n: 3, label: '版面' }, { n: 4, label: '流程' }, { n: 5, label: '輸出' }, { n: 6, label: '發布' }]
 
       function clone(x) { return JSON.parse(JSON.stringify(x)) }
 
       return {
-        L: window.MotrixCustomLayout, STEPS: STEPS, DEFAULT_GROUP: '自訂模組',
+        L: window.MotrixCustomLayout, STEPS: STEPS, NAV: NAV, DEFAULT_GROUP: '自訂模組',
+        navAnchor: '', thumbTick: 0, previewMode: 'form', previewMissing: false, liveMsg: '',
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, sel: null, dragOver: false,
@@ -924,6 +988,7 @@
         async init() {
           if (this._initDone) return
           this._initDone = true
+          this.loadPreviewLib()
           try { this.me = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) { this.me = {} }
           if (this.me.role !== 'superadmin') { this.errMsg = '模組建構器僅限超級管理員使用'; return }
           var cat = await this.api('GET', '/api/custom-modules/catalog')
@@ -1157,8 +1222,83 @@
           else { this.numExample = ''; this.numProblems = (r.data && r.data.problems) || [{ message: (r.data && r.data.detail) || '預覽失敗' }] }
         },
 
+        // ── 縮圖導覽／預覽（BUILDER-UX）──
+        navOn(it) { return this.step === it.step && (it.step !== 4 || (this.navAnchor || 'mb-sec-workflow') === it.anchor) },
+        async goNav(it) {
+          this.navAnchor = it.anchor || ''
+          if (this.step !== it.step) await this.goStep(it.step)
+          if (it.anchor) this.$nextTick(function () {
+            var el = document.getElementById(it.anchor)
+            if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' })
+          })
+        },
+        loadPreviewLib() {
+          if (window.MotrixFormPreview) return
+          var self = this
+          var sc = document.createElement('script')
+          sc.src = '../static/form-preview.js'
+          sc.onload = function () { self.previewMissing = !window.MotrixFormPreview; self._pv = null; self.thumbTick++; self.syncPreview(JSON.stringify(self.def), self.sel, self.previewMode, self.step) }
+          sc.onerror = function () { self.previewMissing = true }
+          document.head.appendChild(sc)
+        },
+        drawThumb(el, kind, _tick) {
+          // A 的 thumb() 畫；元件還沒載入 ⇒ 空白（不丟例外）
+          var P = window.MotrixFormPreview
+          if (!P || !P.thumb || !this.def) return
+          try { P.thumb(el, JSON.parse(JSON.stringify(this.def)), { step: kind }) } catch (e) { /* 縮圖失敗不擋編輯 */ }
+        },
+        syncPreview(json, sel, mode, step) {
+          // 草稿一變就更新右側預覽（節流 250ms）；只用 A 的 update()／setHighlight()——不重建 iframe、不搶畫布的焦點
+          if (step !== 2 || !this.def) return
+          var P = window.MotrixFormPreview
+          if (!P || !P.render) { if (P === undefined) return; this.previewMissing = true; return }
+          var host = document.getElementById('mb-preview-host')
+          if (!host) return
+          var key = sel !== null && this.def.fields[sel] ? this.def.fields[sel].key : null
+          clearTimeout(this._pvTimer)
+          this._pvTimer = setTimeout(() => {
+            try {
+              var draft = JSON.parse(json)
+              if (!this._pv || this._pvMode !== mode) {
+                if (this._pv && this._pv.destroy) this._pv.destroy()
+                this._pv = P.render(host, draft, { mode: mode, highlight: key }); this._pvMode = mode
+              } else {
+                this._pv.update(draft)
+                if (this._pv.setHighlight) this._pv.setHighlight(key)
+              }
+              this.thumbTick++
+            } catch (e) { this.previewMissing = true }
+          }, 250)
+        },
+        announce(msg) { this.liveMsg = ''; this.$nextTick(() => { this.liveMsg = msg }) },
+
         // ── ② 欄位 ──
         typeLabel(t) { return TYPE_LABELS[t] || t },
+        typeIcon(t) { return TYPE_ICONS[t] || TYPE_ICON_GENERIC },
+        moveFieldKb(i, dir) {
+          // 鍵盤替代（Alt＋↑／↓）：移動後焦點跟著卡片走、念出新位置
+          var j = i + dir
+          if (j < 0 || j >= this.def.fields.length) return
+          this.moveField(i, dir)
+          var f = this.def.fields[j]
+          this.announce((f.label || f.key) + ' 移到第 ' + (j + 1) + ' 個')
+          this.$nextTick(function () {
+            var el = document.querySelector('#mb-canvas .mb-fc[data-field-index="' + j + '"]')
+            if (el) el.focus()
+          })
+        },
+        async removeFieldKb(i) {
+          var f = this.def.fields[i]
+          var n = this.def.fields.length
+          await this.removeField(i)
+          if (this.def.fields.length === n) return          // 取消了
+          this.announce('已刪除 ' + (f.label || f.key))
+          var k = Math.min(i, this.def.fields.length - 1)
+          this.$nextTick(function () {
+            var el = k >= 0 ? document.querySelector('#mb-canvas .mb-fc[data-field-index="' + k + '"]') : document.getElementById('mb-palette')
+            if (el) el.focus()
+          })
+        },
         nextKey(t) {
           var base = t === 'formula' ? 'calc' : (t === 'ref' ? 'ref' : 'field')
           var keys = this.def.fields.map(function (f) { return f.key })
