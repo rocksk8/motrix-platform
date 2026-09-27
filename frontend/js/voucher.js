@@ -415,7 +415,13 @@ function voucherPage() {
     keepSummaryFocus() {
       const i = this.panelLine >= 0 ? this.panelLine : this.summaryTarget
       if (i == null || i < 0) return
+      // O13 ☠️ $nextTick 是 setTimeout，負載下會晚到：使用者點完支出項已經點進借方格開始打字，
+      //   晚到的這一步把焦點搶回摘要 ⇒ 數字打進摘要、借方留著自動帶入的金額（換成案件時再被清掉）。
+      //   ⇒ 只在焦點還停在按下去的那個東西上（或沒有焦點）時才搬；使用者已經移到別處就不動。
+      const from = document.activeElement
       this.$nextTick(() => {
+        const now = document.activeElement
+        if (now !== from && now && now !== document.body) return
         const t = document.querySelectorAll('textarea[x-model="l.summary"]')[i]
         if (t) t.focus({ preventScroll: true })
       })
