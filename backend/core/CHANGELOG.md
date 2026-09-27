@@ -2,6 +2,9 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.58 — 2026-09-28（主持暫用，列車取號；wip/a-storage-settings：D 稽核 SL-M1）
+- L1（新增，D 稽核 SL-M1）：`helpers.storage_locations.Unreadable`——讀不到設定（庫被鎖、損毀）≠ 沒設定：resolve 回 ""（source="unknown"）、不退回自動判斷、不快取；`configured()` 丟它，設定頁 API 回 503（不顯示空值，避免按儲存把真正的設定蓋掉）
+
 ## 1.57 — 2026-09-28（A 暫用，列車取號；wip/a-storage-settings：CORE-SPEC 裁示表「儲存位置可設定」）
 - L1（新增）：`helpers.storage_locations`——雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（`resolve`／`path`／`validate`／`create`／`status`／`configured`／`invalidate`）；有設定用設定（不存在回 ""、不退回自動判斷），留空照原本的自動判斷；本檔永不自動建立，只有 `create`（最高管理員在設定頁明確按）只建最後一層
 - L1（行為）：`archive._archive_base`／`_pii_archive_root` 改經它（留空時行為不變：掃磁碟機、個資＝根目錄旁）；自動判斷搬到 `archive._auto_archive_base`，只給 storage_locations 呼叫

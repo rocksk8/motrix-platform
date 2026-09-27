@@ -308,3 +308,40 @@ def test_reverse_control_comments_docstrings_and_owners_do_not_count():
            "backend/archive.py": "def _archive_base():\n    return _auto_archive_base()\n",
            "backend/helpers/storage_locations.py": "SETTING_KEY = 'storage_locations'\nPII = '系統存檔_個資'\n"}
     assert violations(src) == []
+
+
+# ── D 稽核 SL-M1：讀不到設定 ≠ 沒設定 ──
+
+def test_slm1_unreadable_settings_resolve_to_nothing_not_to_auto(client, tmp_path, monkeypatch):
+    import archive
+    from helpers import storage_locations as SL
+    auto = tmp_path / "auto"
+    auto.mkdir()
+    monkeypatch.setattr(archive, "_auto_archive_base", lambda: str(auto))
+    root, pii = tmp_path / "root", tmp_path / "pii"
+    root.mkdir()
+    pii.mkdir()
+    _set({"archive_root": str(root), "pii_root": str(pii)})
+    SL.invalidate()
+    real = SL._read_main_db
+    monkeypatch.setattr(SL, "_read_main_db", lambda: None)            # 庫被鎖／損毀
+    for k in SL.KINDS:
+        assert SL.resolve(k) == {"path": "", "source": "unknown"}, k  # 不是 auto 的 tmp/auto
+    assert all(v["source"] == "unknown" for v in SL.status().values())
+    with pytest.raises(SL.Unreadable):
+        SL.configured()
+    monkeypatch.setattr(SL, "_read_main_db", real)                     # 恢復 ⇒ 下一次就讀到（讀不到不快取）
+    assert SL.path("archive_root") == str(root) and SL.path("pii_root") == str(pii)
+
+
+def test_slm1_api_refuses_instead_of_showing_empty_values(client, make_user, monkeypatch):
+    from helpers import storage_locations as SL
+    h = _h(client, make_user(username="st_sa_slm1", role="superadmin"))
+    _set({"archive_root": "", "pii_root": "", "delivery_root": ""})
+    before = _stored()
+    SL.invalidate()
+    monkeypatch.setattr(SL, "_read_main_db", lambda: None)
+    assert client.get("/api/settings/storage-locations", headers=h).status_code == 503
+    r = client.put("/api/settings/storage-locations", headers=h,
+                   json={"archive_root": "", "pii_root": "", "delivery_root": ""})
+    assert r.status_code == 503 and _stored() == before

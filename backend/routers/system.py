@@ -1735,7 +1735,10 @@ class StorageCreateBody(BaseModel):
 def get_storage_locations(authorization: str = Header(None)):
     _require_user(authorization, require_superadmin=True)
     from helpers import storage_locations as SL
-    return {"values": SL.configured(), "status": SL.status(), "labels": SL.LABELS}
+    try:
+        return {"values": SL.configured(), "status": SL.status(), "labels": SL.LABELS}
+    except SL.Unreadable as e:
+        raise HTTPException(503, str(e))
 
 
 @router.put("/api/settings/storage-locations")
@@ -1746,7 +1749,10 @@ def set_storage_locations(body: StorageLocationsBody, authorization: str = Heade
     problems = SL.validate(values)
     if problems:
         raise HTTPException(400, {"message": "儲存位置沒有通過檢查，未儲存", "problems": problems})
-    before = SL.configured()
+    try:
+        before = SL.configured()
+    except SL.Unreadable as e:                           # 讀不到現在的設定就不寫（稽核無法記「從什麼改成什麼」）
+        raise HTTPException(503, str(e))
     SL.save(values)                                      # 一律寫主庫（demo 模式也不寫到 demo 庫）
     changed = {k: {"from": before.get(k, ""), "to": values[k]} for k in SL.KINDS if before.get(k, "") != values[k]}
     _audit(_tok(authorization), "settings.storage_locations.update", "settings", SL.SETTING_KEY,

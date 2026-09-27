@@ -1,5 +1,5 @@
 {
- "core_version": "1.57",
+ "core_version": "1.58",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -673,6 +673,7 @@
    "LABELS": "const",
    "PII_DIRNAME": "const",
    "SETTING_KEY": "const",
+   "Unreadable": "class",
    "configured": "def()",
    "create": "def(kind, target)",
    "invalidate": "def()",
