@@ -22,6 +22,7 @@ _SPEC = importlib.util.spec_from_file_location(
 ap = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(ap)
 ap._upgrade = _upgrade          # 測試用 repo 的 core.upgrade（正式機用新包裡那一份）
+PG = ap.PAGES_REL               # 安裝包裡的頁面目錄（相對路徑；不寫死，test_page_paths_centralized）
 
 DATA_FILES = [
     "backend/motrix_erp.db", "backend/motrix_erp_demo.db", "backend/export_archive/2026/x.pdf",
@@ -37,7 +38,7 @@ def _w(root, rel, text="x"):
     return p
 
 
-def _lock(kind="full_package", excluded=("b",), removed_pages=("frontend/pages/b.html",)):
+def _lock(kind="full_package", excluded=("b",), removed_pages=(PG + "/b.html",)):
     return json.dumps({"lock_version": 1, "kind": kind, "product": "t", "modules": {"a": {}},
                        "excluded": list(excluded), "removed_pages": list(removed_pages)})
 
@@ -46,7 +47,7 @@ def _lock(kind="full_package", excluded=("b",), removed_pages=("frontend/pages/b
 def env(tmp_path):
     pkg, root = tmp_path / "pkg", tmp_path / "root"
     for rel in ("backend/main.py", "backend/modules/a/module.json", "backend/modules/a/x.py",
-                "frontend/pages/keep.html", "frontend/pages/new-name.html", "tools/platform/upgrade.py",
+                PG + "/keep.html", PG + "/new-name.html", "tools/platform/upgrade.py",
                 "product/full.json", "backend/brand_new.py"):
         _w(pkg, rel, "new")
     _w(pkg, "backend/autostart.bat", "package default")
@@ -54,7 +55,7 @@ def env(tmp_path):
     _w(pkg, "deploy_manifest.json", json.dumps({"commit": "c2"}))
     for rel in ("backend/main.py", "backend/old.py", "backend/modules/a/module.json", "backend/modules/a/x.py",
                 "backend/modules/b/module.json", "backend/modules/b/y.py", "backend/modules/c/module.json",
-                "frontend/pages/keep.html", "frontend/pages/old-name.html", "frontend/pages/b.html",
+                PG + "/keep.html", PG + "/old-name.html", PG + "/b.html",
                 "tools/platform/upgrade.py", "tools/platform/old_tool.py", "backend/modules.lock.json"):
         _w(root, rel, "old")
     _w(root, "backend/modules/b/__pycache__/y.cpython-312.pyc")
@@ -62,7 +63,7 @@ def env(tmp_path):
     _w(root, "backend/modules/b/notes.db")                 # 模組資料夾裡的資料檔：不刪
     for rel in DATA_FILES:
         _w(root, rel, "data")
-    baseline = ["backend/main.py", "backend/old.py", "frontend/pages/old-name.html",
+    baseline = ["backend/main.py", "backend/old.py", PG + "/old-name.html",
                 "tools/platform/old_tool.py"] + DATA_FILES     # 惡意／錯誤 baseline：列了資料檔
     _w(root, ap.BASELINE_REL, json.dumps({"commit": "c1", "files": baseline}))
     # b（lock 排除）、c（孤兒）預設都當成「未授權」⇒ 只停用不刪（使用者裁示 DO3）；要驗授權有的情況，題目自己換
@@ -72,9 +73,9 @@ def env(tmp_path):
 
 
 EXPECTED_DELETE = {
-    "backend/old.py": "baseline", "frontend/pages/old-name.html": "baseline",
+    "backend/old.py": "baseline", PG + "/old-name.html": "baseline",
     "tools/platform/old_tool.py": "baseline",
-    "frontend/pages/b.html": "lock_removed_page",
+    PG + "/b.html": "lock_removed_page",
     # 2026-09-28 使用者裁示（DO3）：模組資料夾 b、c 不刪——未授權只停用；授權有而包沒有 ⇒ 拒絕套用
 }
 
@@ -83,11 +84,11 @@ def test_plan_and_execute_delete_exactly_the_old_program_files(env):
     root, pkg = env
     plan = ap.make_plan(root, pkg, 200)
     assert {d["rel"]: d["reason"] for d in plan["delete"]} == EXPECTED_DELETE
-    assert set(plan["added"]) == {"frontend/pages/new-name.html", "product/full.json", "backend/brand_new.py"}
+    assert set(plan["added"]) == {PG + "/new-name.html", "product/full.json", "backend/brand_new.py"}
     assert "backend/autostart.bat" not in plan["package_files"]
     removed, errors = ap.execute(root, pkg, plan)
     assert not errors and set(removed) == set(EXPECTED_DELETE)
-    for rel in DATA_FILES + ["backend/modules/b/notes.db", "backend/main.py", "frontend/pages/keep.html"]:
+    for rel in DATA_FILES + ["backend/modules/b/notes.db", "backend/main.py", PG + "/keep.html"]:
         assert os.path.isfile(os.path.join(root, rel)), rel
     assert plan["module_dirs"] == [] and {m["key"] for m in plan["kept_modules"]} == {"b", "c"}
     for rel in ("backend/modules/b/module.json", "backend/modules/b/y.py", "backend/modules/c/module.json"):
@@ -120,7 +121,7 @@ def test_without_baseline_only_lock_and_module_folders_are_deleted(env):
     assert plan["baseline_present"] is False
     got = {d["rel"] for d in plan["delete"]}
     assert got == {r for r, why in EXPECTED_DELETE.items() if why != "baseline"}
-    assert {"backend/old.py", "frontend/pages/old-name.html", "tools/platform/old_tool.py"} <= set(
+    assert {"backend/old.py", PG + "/old-name.html", "tools/platform/old_tool.py"} <= set(
         plan["no_baseline_candidates"])
     assert not set(DATA_FILES) & set(plan["no_baseline_candidates"])
     assert not [r for r in plan["no_baseline_candidates"] if r.startswith(("backend/modules/b/", "backend/modules/c/"))]
@@ -281,20 +282,20 @@ def test_mls_without_module_startup_is_plain_init_db(tmp_path, monkeypatch):
 def test_ahm1_case_only_rename_is_not_deleted(env):
     """AH-M1：baseline 有 Foo.html、新包改名 foo.html ⇒ Windows 上是同一個檔，不可以列刪除（否則刪掉剛寫入的新檔）。"""
     root, pkg = env
-    _w(pkg, "frontend/pages/foo-case.html", "new")
-    _w(root, "frontend/pages/Foo-Case.html", "old")
-    _w(root, "frontend/pages/gone-too.html", "old")
+    _w(pkg, PG + "/foo-case.html", "new")
+    _w(root, PG + "/Foo-Case.html", "old")
+    _w(root, PG + "/gone-too.html", "old")
     base = json.loads(Path(root, ap.BASELINE_REL).read_text(encoding="utf-8"))
-    base["files"] += ["frontend/pages/Foo-Case.html", "frontend/pages/gone-too.html"]
+    base["files"] += [PG + "/Foo-Case.html", PG + "/gone-too.html"]
     Path(root, ap.BASELINE_REL).write_text(json.dumps(base), encoding="utf-8")
     plan = ap.make_plan(root, pkg, 200)
     deleted = {d["rel"] for d in plan["delete"]}
-    assert "frontend/pages/Foo-Case.html" not in deleted
-    assert "frontend/pages/gone-too.html" in deleted          # 反向控制：真的沒了的照刪
-    plan["delete"].append({"rel": "frontend/pages/FOO-CASE.html", "reason": "baseline"})   # 計畫被塞了也不刪
+    assert PG + "/Foo-Case.html" not in deleted
+    assert PG + "/gone-too.html" in deleted          # 反向控制：真的沒了的照刪
+    plan["delete"].append({"rel": PG + "/FOO-CASE.html", "reason": "baseline"})   # 計畫被塞了也不刪
     ap.execute(root, pkg, plan)
-    assert Path(root, "frontend/pages/foo-case.html").exists() or Path(root, "frontend/pages/Foo-Case.html").exists()
-    assert not Path(root, "frontend/pages/gone-too.html").exists()
+    assert Path(root, PG + "/foo-case.html").exists() or Path(root, PG + "/Foo-Case.html").exists()
+    assert not Path(root, PG + "/gone-too.html").exists()
 
 
 def _ps_code(name):
@@ -479,9 +480,9 @@ def test_dm2_rollback_to_an_older_snapshot_removes_modules_added_later(tmp_path)
     for base in (root, snap):
         _w(base, "backend/main.py", "v1")
         _w(base, "backend/modules/a/module.json", "{}")
-        _w(base, "frontend/pages/a.html", "a")
+        _w(base, PG + "/a.html", "a")
     for rel in ("backend/modules/m1/module.json", "backend/modules/m1/x.py", "backend/modules/m2/module.json",
-                "frontend/pages/m2.html"):
+                PG + "/m2.html"):
         _w(root, rel, "later")
     for rel in DATA_FILES + ["backend/.apply.lock", "backend/motrix_erp.db.modules_disabled.json",
                              "backend/.deployed_files.json", "backend/.deployed_commit.json", "backend/license.key",
@@ -489,7 +490,7 @@ def test_dm2_rollback_to_an_older_snapshot_removes_modules_added_later(tmp_path)
         _w(root, rel, "keep")
     rels = ap.not_in_snapshot(str(root), str(snap), _upgrade)
     assert rels == ["backend/modules/m1/module.json", "backend/modules/m1/x.py", "backend/modules/m2/module.json",
-                    "frontend/pages/m2.html"], rels          # 快照沒有 tools/ ⇒ tools 整個略過；狀態／設定／資料不列
+                    PG + "/m2.html"], rels          # 快照沒有 tools/ ⇒ tools 整個略過；狀態／設定／資料不列
     _rels, removed, errors, over = ap.cleanup_not_in_snapshot(str(root), str(tmp_path), str(snap), 500)
     assert not errors and not over and sorted(removed) == rels
     assert not (root / "backend/modules/m1").exists() and not (root / "backend/modules/m2").exists()
@@ -623,7 +624,7 @@ def test_do3_pages_declared_by_a_kept_module_are_kept(env):
     Path(root, "backend/modules/b/module.json").write_text(json.dumps({"key": "b", "pages": ["b.html"]}),
                                                            encoding="utf-8")
     plan = ap.make_plan(root, pkg, 200)
-    assert "frontend/pages/b.html" not in {d["rel"] for d in plan["delete"]}
+    assert PG + "/b.html" not in {d["rel"] for d in plan["delete"]}
 
 
 def test_do3_real_license_check_with_the_gate_off_treats_everything_as_licensed(env):
