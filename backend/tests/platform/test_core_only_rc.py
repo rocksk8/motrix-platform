@@ -154,3 +154,62 @@ def test_streaming_prints_a_heartbeat_when_silent(monkeypatch, capsys, tmp_path)
     assert code == 0 and lines[-1] == "done"
     assert "排隊中：等 pid=9 C:/x-full，已等 0 分" in out, out
     assert "執行中：" in out and "沒有輸出" in out, out
+
+
+# ── S2（2026-09-27）：MOTRIX_TRAIN 只給子行程、只在明確 --train 時給 ─────────────────────────────
+def test_child_env_sets_the_train_flag_only_when_asked():
+    base = {"PATH": "x", "MOTRIX_TRAIN": "1"}
+    assert "MOTRIX_TRAIN" not in C.child_env(False, base), "沒帶 --train ⇒ 子行程環境不含 MOTRIX_TRAIN（呼叫者有也要拿掉）"
+    assert C.child_env(True, {"PATH": "x"})["MOTRIX_TRAIN"] == "1"
+    assert base == {"PATH": "x", "MOTRIX_TRAIN": "1"}, "不可以改到傳進來的環境"
+
+
+def _fake_run(monkeypatch, tmp_path, train):
+    """run() 走一趟：git／pytest 換成假的；回傳 (子行程拿到的 env, 跑完後本行程 os.environ 的 MOTRIX_TRAIN)。"""
+    import os
+    monkeypatch.setattr(C.tempfile, "gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr(C, "module_keys_at", lambda sha: ["m"])
+
+    def fake_git(*args, cwd=None):
+        if args[0] == "rev-parse":
+            return "abcd1234"
+        if args[:2] == ("worktree", "add"):
+            (Path(args[-2]) / "backend").mkdir(parents=True)
+            (Path(args[-2]) / "backend" / "main.py").write_text("", encoding="utf-8")
+        return ""
+    monkeypatch.setattr(C, "_git", fake_git)
+    seen = {}
+
+    def fake_stream(cmd, cwd, env=None):
+        seen["env"] = env
+        return 5, ["no tests ran"]
+    monkeypatch.setattr(C, "_run_streaming", fake_stream)
+    monkeypatch.delenv("MOTRIX_TRAIN", raising=False)
+    C.run("HEAD", keep=True, train=train)
+    return seen["env"], os.environ.get("MOTRIX_TRAIN")
+
+
+def test_run_passes_the_train_flag_to_the_child_only(monkeypatch, tmp_path):
+    env, own = _fake_run(monkeypatch, tmp_path / "a", train=False)
+    assert env is not None and "MOTRIX_TRAIN" not in env, "沒帶 --train：子行程不可以拿到 MOTRIX_TRAIN"
+    assert own is None, "本行程的 os.environ 不可以被改"
+    env, own = _fake_run(monkeypatch, tmp_path / "b", train=True)
+    assert env["MOTRIX_TRAIN"] == "1", "--train：子行程要拿到 MOTRIX_TRAIN=1"
+    assert own is None, "--train 也只給子行程，本行程的 os.environ 不改"
+
+
+def test_main_train_flag_reaches_run(monkeypatch):
+    got = []
+    monkeypatch.setattr(C, "run", lambda *a, **k: got.append(k.get("train")) or {"ok": True})
+    C.main(["--commit", "X"])
+    C.main(["--commit", "X", "--train"])
+    assert got == [False, True]
+
+
+def test_streaming_hands_the_env_to_the_child(tmp_path):
+    import sys as _sys
+    src = "import os; print('T=' + repr(os.environ.get('MOTRIX_TRAIN')), flush=True)"
+    _code, lines = C._run_streaming([_sys.executable, "-c", src], tmp_path, env=C.child_env(False, {**__import__("os").environ, "MOTRIX_TRAIN": "1"}))
+    assert lines[-1] == "T=None", lines
+    _code, lines = C._run_streaming([_sys.executable, "-c", src], tmp_path, env=C.child_env(True))
+    assert lines[-1] == "T='1'", lines

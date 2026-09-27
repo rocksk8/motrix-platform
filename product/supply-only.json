@@ -1,0 +1,5 @@
+{
+ "name": "supply-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 supply（採購・庫存・出貨）",
+ "modules": ["supply"]
+}

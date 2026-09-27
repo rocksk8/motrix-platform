@@ -109,38 +109,92 @@ def run_edge_pdf(cmd: list) -> None:
 
 # ── Startup routines ──────────────────────────────────────────────────────────
 
+#: 全新安裝時寫一次的安裝資訊（2026-09-27 H10，主持裁示）：`{"adminUsername", "baselineVersion", "installedAt"}`。
+#: 沒有這個鍵 ⇒ 既有安裝（包括本公司正式機、從 V9 升級上來的）：預設管理員是 `jeff`、版本紀錄全部顯示。
+INSTALL_INFO_KEY = "install_info"
+#: 全新安裝的預設管理員帳號。既有安裝的 `jeff` 不改名、不補值。
+FRESH_ADMIN_USERNAME = "admin"
+LEGACY_ADMIN_USERNAME = "jeff"
+
+
+def install_info() -> dict:
+    """全新安裝時寫下的安裝資訊；既有安裝 ⇒ `{}`。"""
+    value = _get_setting(INSTALL_INFO_KEY, None)
+    return value if isinstance(value, dict) else {}
+
+
+def builtin_admin_username() -> str:
+    """不可刪除、不可停用的預設管理員帳號：全新安裝 ⇒ 安裝時記下的（`admin`）；既有安裝 ⇒ `jeff`。"""
+    return str(install_info().get("adminUsername") or LEGACY_ADMIN_USERNAME)
+
+
+def install_baseline_version() -> str:
+    """全新安裝時的系統版本（manifest 最新一筆）；既有安裝 ⇒ `""`（版本紀錄照舊全部顯示）。"""
+    return str(install_info().get("baselineVersion") or "")
+
+
+def version_sort_key(version: str) -> tuple:
+    """`YYYY-MM-DD` ＋ 字母序號的排序鍵（T10；routers/auth 的最新版本與版本紀錄的安裝基準共用這一支）。
+
+    ⚠️ 不可以直接比字串：序號過了 `z` 是 `aa`，而字串比較下 `aa` < `z`。
+    ⇒ (日期, 序號長度, 序號)。認不得的格式排最前面（不會被當成最新）。
+    """
+    import re
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})([a-z]*)$", (version or "").strip())
+    if not m:
+        return ("", 0, "")
+    return (m.group(1), len(m.group(2)), m.group(2))
+
+
 def init_default_admin() -> None:
-    """Ensure the superadmin account exists; new installs get a random temp password."""
+    """確保預設管理員存在；新建的帳號用隨機臨時密碼（寫進初始憑證檔）。
+
+    2026-09-27 H10（主持裁示）：
+    - **全新安裝**（users 表是空的、也沒有安裝資訊）⇒ 建 `admin`，並先寫下安裝資訊（管理員帳號、安裝基準版本）；
+    - **既有安裝**（沒有安裝資訊、已有帳號，包括本公司正式機與 V9 升級）⇒ 照舊只認 `jeff`，已存在就完全不動；
+    - 有安裝資訊 ⇒ 認安裝資訊記下的那個帳號。
+    安裝資訊寫在建帳號**之前**：兩步之間中斷的話，下次啟動仍認得這是全新安裝（不會改建 `jeff`）。
+    """
     conn = get_db()
     try:
-        if not conn.execute("SELECT id FROM users WHERE username='jeff'").fetchone():
-            temp_pw = secrets.token_urlsafe(14)
-            conn.execute(
-                "INSERT INTO users "
-                "(username, password_hash, display_name, role, email, modules, active, "
-                "created_at, must_change_password) "
-                "VALUES ('jeff', ?, '黃玉龍', 'superadmin', 'jeff@miactw.com', ?, 1, ?, 1)",
-                (
-                    _hash_pw(temp_pw),
-                    json.dumps(_SUPERADMIN_MODULES),
-                    datetime.now().isoformat(),
-                ),
-            )
-            conn.commit()
-            path = _write_initial_credentials("jeff", temp_pw)
-            logger.warning(
-                "已建立預設 superadmin（jeff）。臨時密碼已寫入 %s — 請立即登入並修改密碼。", path
-            )
+        info = install_info()
+        fresh = False
+        if info.get("adminUsername"):
+            username = str(info["adminUsername"])
+        elif conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
+            username, fresh = FRESH_ADMIN_USERNAME, True
         else:
-            conn.execute(
-                "UPDATE users SET display_name='黃玉龍' WHERE username='jeff' "
-                "AND display_name IN ('Jeff 管理員','Jeff','jeff','jeff超級管理員','')"
-            )
-            conn.execute(
-                "UPDATE users SET email='jeff@miactw.com' WHERE username='jeff' "
-                "AND (email='' OR email IS NULL)"
-            )
-            conn.commit()
+            username = LEGACY_ADMIN_USERNAME
+        if conn.execute("SELECT id FROM users WHERE username=?", (username,)).fetchone():
+            return
+        if fresh:
+            versions = [str(e.get("version") or "") for e in _manifest_entries()]
+            baseline = max(versions, key=version_sort_key) if versions else ""
+            _set_setting("install_info", {"adminUsername": username, "baselineVersion": baseline,
+                                          "installedAt": datetime.now().isoformat(timespec="seconds")})
+        temp_pw = secrets.token_urlsafe(14)
+        conn.execute(
+            "INSERT INTO users "
+            "(username, password_hash, display_name, role, email, modules, active, "
+            "created_at, must_change_password) "
+            # 2026-09-27 H10：不寫入本公司人員的姓名與 email（產品會安裝在客戶端；
+            # 系統技術類信件寄給超級管理員，寫死的 email 會讓客戶的告警寄到我們這裡）。
+            "VALUES (?, ?, '系統管理員', 'superadmin', '', ?, 1, ?, 1)",
+            (
+                username,
+                _hash_pw(temp_pw),
+                json.dumps(_SUPERADMIN_MODULES),
+                datetime.now().isoformat(),
+            ),
+        )
+        conn.commit()
+        path = _write_initial_credentials(username, temp_pw)
+        logger.warning(
+            "已建立預設 superadmin（%s）。臨時密碼已寫入 %s — 請立即登入並修改密碼。", username, path
+        )
+        # 2026-09-27 H10：拿掉「已存在的 jeff 每次啟動補回姓名與 email」——那是本公司早期資料的修正，
+        # 我們自己的安裝早已套用（凍結的 db._m008 也做過一次）；留著的話，客戶把管理員 email 清空，
+        # 下一次啟動就會被改成本公司的 email。
     finally:
         conn.close()
 

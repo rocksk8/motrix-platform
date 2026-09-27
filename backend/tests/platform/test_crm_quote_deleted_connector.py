@@ -71,6 +71,36 @@ def test_without_crm_the_quote_is_deleted_and_the_user_is_told(client, make_user
     assert client.get("/api/quotations/%s" % QNO, headers=h).status_code == 404
 
 
+#: 正對照門檻（S1，2026-09-27）：~~一律 >50~~ ⇒ 依安裝狀態分兩個門檻。
+#: 完整安裝實量 152 ⇒ 恢復嚴格的 >100（只放寬成 50 的話，掃描漏掉一半的模組檔照綠）；
+#: 不是完整安裝（core-only 實量 85、單一模組產品介於兩者之間）⇒ >50。
+SCAN_MIN_FULL, SCAN_MIN_PARTIAL = 100, 50
+
+
+def install_verdict(backend=None, modules_json=None):
+    """獨立訊號（§G5 #15）：modules.json 登記的模組 key 逐一看 `backend/modules/<key>/module.json` 在不在
+    （與 module_installed 同一個「在」的判準：只剩 __pycache__ 的資料夾不算）。不看 product_files() 的掃描結果——
+    略過／放寬的條件不可以取自被檢查的東西本身。⇒ ("full"|"core-only"|"partial", 理由)。"""
+    import json
+    from pathlib import Path
+    backend = Path(backend or source_tree.BACKEND)
+    modules_json = Path(modules_json or backend.parent / "docs" / "platform" / "modules.json")
+    data = json.loads(modules_json.read_text(encoding="utf-8"))
+    keys = sorted(g.get("key") for g in data.get("modules", {}).values() if g.get("key"))
+    if not keys:
+        raise AssertionError("modules.json 沒有登記任何模組 key（設定本身有問題，不判定成 core-only）")
+    present = [k for k in keys if (backend / "modules" / k / "module.json").is_file()]
+    if len(present) == len(keys):
+        return "full", "modules.json 登記的 %d 個模組都在" % len(keys)
+    if not present:
+        return "core-only", "modules.json 登記的 %d 個模組全部不在" % len(keys)
+    return "partial", "在：%s；不在：%s" % ("、".join(present), "、".join(sorted(set(keys) - set(present))))
+
+
+def scan_minimum(verdict):
+    return SCAN_MIN_FULL if verdict == "full" else SCAN_MIN_PARTIAL
+
+
 def test_no_writes_to_dev_cases_outside_crm():
     from core import source_tree
     pat = re.compile(r"(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+dev_(cases|logs)\b", re.I)
@@ -81,6 +111,33 @@ def test_no_writes_to_dev_cases_outside_crm():
             continue
         scanned += 1
         hits += ["%s: %s" % (rel, m.group(0)) for m in pat.finditer(p.read_text(encoding="utf-8"))]
-    # 門檻不綁模組數（第十三班列車：>100 是有 L2 模組在時量的，core-only 全部模組拿掉後只剩 L1，實量 85）；
-    # 這題本身不需要任何模組，正對照只要「掃到有意義的量」，50 在 core-only（85）與一般（152）之間都安全
-    assert scanned > 50 and not hits, hits
+    # 門檻依安裝狀態（獨立訊號）：完整安裝 >100、其他 >50（第十三班列車：core-only 只剩 L1，實量 85）
+    verdict, why = install_verdict()
+    assert scanned > scan_minimum(verdict), "只掃到 %d 個產品檔（%s：%s，門檻 >%d）：掃描壞了？" % (
+        scanned, verdict, why, scan_minimum(verdict))
+    assert not hits, hits
+
+
+def test_rc_install_verdict_uses_module_folders_not_the_scan(tmp_path):
+    """反向控制（沙盒）：判定只看 modules.json 登記＋module.json 在不在——
+    全部在 ⇒ full（嚴格門檻：掃描壞掉只掃到 85 也要紅）；全部不在 ⇒ core-only；部分在 ⇒ partial；
+    只剩 __pycache__ 的資料夾不算在；modules.json 沒登記任何模組 ⇒ 不可以判成 core-only。"""
+    import json
+    mj = tmp_path / "docs" / "platform" / "modules.json"
+    mj.parent.mkdir(parents=True)
+    mj.write_text(json.dumps({"modules": {"A": {"key": "a"}, "B": {"key": "b"}}}), encoding="utf-8")
+    be = tmp_path / "backend"
+    (be / "modules").mkdir(parents=True)
+    assert install_verdict(be, mj)[0] == "core-only"
+    (be / "modules" / "a" / "__pycache__").mkdir(parents=True)
+    assert install_verdict(be, mj)[0] == "core-only", "只剩 __pycache__ 不算在"
+    (be / "modules" / "a" / "module.json").write_text("{}", encoding="utf-8")
+    assert install_verdict(be, mj)[0] == "partial"
+    (be / "modules" / "b").mkdir()
+    (be / "modules" / "b" / "module.json").write_text("{}", encoding="utf-8")
+    assert install_verdict(be, mj)[0] == "full"
+    assert not 85 > scan_minimum("full"), "完整安裝時只掃到 core-only 的量（85）要紅"
+    assert 85 > scan_minimum("core-only") and 85 > scan_minimum("partial")
+    mj.write_text(json.dumps({"modules": {}}), encoding="utf-8")
+    with pytest.raises(AssertionError):
+        install_verdict(be, mj)

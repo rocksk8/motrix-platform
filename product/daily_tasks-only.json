@@ -1,0 +1,5 @@
+{
+ "name": "daily_tasks-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 daily_tasks（每日任務）",
+ "modules": ["daily_tasks"]
+}

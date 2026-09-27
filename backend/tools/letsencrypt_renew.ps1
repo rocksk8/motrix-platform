@@ -33,7 +33,8 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Domain = "erp.miactw.com",
+    # 2026-09-27 H10：不預設任何公司的網域（產品會安裝在客戶端）；排程工作建立時會帶 -Domain
+    [string]$Domain = "",
     # 不管到期日，把目前這張憑證裝上去（第一次切換時用）
     [switch]$Force,
     # 建立每日排程工作後結束，不做其他事
@@ -58,6 +59,8 @@ function Log($msg, $color = $null) {
 }
 function Fail($msg) { Log "[失敗] $msg" Red; exit 1 }
 function Warn($msg) { Log "[警告] $msg" Yellow }
+
+if (-not $Domain) { Fail "請以 -Domain 指定本系統的網域（例：-Domain erp.example.com）" }
 function Ok($msg)   { Log "[OK] $msg" Green }
 
 # ── -InstallSchedule：建立排程後結束 ─────────────────────────────────────────

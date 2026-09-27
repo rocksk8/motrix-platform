@@ -1,5 +1,5 @@
 {
- "core_version": "1.57",
+ "core_version": "1.58",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -173,6 +173,24 @@
    "is_weak_password": "def(password)",
    "require_any_module": "def(user, keys, label)",
    "user_has_module": "def(user, key)"
+  },
+  "helper:branding": {
+   "ALLOWED_FORMATS": "const",
+   "AUDIT_ACTION": "const",
+   "BrandingRejected": "class",
+   "KINDS": "const",
+   "MAX_PIXELS": "const",
+   "MAX_SIDE": "const",
+   "MAX_UPLOAD_BYTES": "const",
+   "SETTING_KEY": "const",
+   "UPLOADS_ROOT": "const",
+   "asset_file": "def(kind)",
+   "asset_urls": "def()",
+   "asset_version": "def(kind)",
+   "detect_format": "def(data)",
+   "encode_upload": "def(kind, data)",
+   "reset_asset": "def(kind)",
+   "save_asset": "def(kind, data, by=…)"
   },
   "helper:build_info": {
    "build_info": "def()",
@@ -657,18 +675,25 @@
    "EDGE_PDF_MAX_CONCURRENCY": "const",
    "EDGE_PDF_SEMAPHORE": "const",
    "EDGE_PDF_TIMEOUT_SECONDS": "const",
+   "FRESH_ADMIN_USERNAME": "const",
+   "INSTALL_INFO_KEY": "const",
+   "LEGACY_ADMIN_USERNAME": "const",
    "_EDGE_CANDIDATES": "const",
    "_cleanup_sessions": "def()",
    "_get_edge_path": "def()",
    "_sync_module_versions": "def()",
+   "builtin_admin_username": "def()",
    "demo_account_on": "def()",
    "drift_between": "def(entries, db_keys)",
    "flag_weak_passwords": "def()",
    "init_default_admin": "def()",
    "init_demo_account": "def()",
    "init_unlock_passwords": "def()",
+   "install_baseline_version": "def()",
+   "install_info": "def()",
    "manifest_drift": "def()",
-   "run_edge_pdf": "def(cmd)"
+   "run_edge_pdf": "def(cmd)",
+   "version_sort_key": "def(version)"
   },
   "helper:system_checks": {
    "REMINDER_FAILURE_KEEP": "const",
@@ -959,6 +984,7 @@
    "DATA_DIRS": "const",
    "DB_FILES": "const",
    "EXTERNAL_SCAN_TIMEOUT": "const",
+   "INSTALL_ONCE_SETTINGS": "const",
    "MANIFEST_NAME": "const",
    "NEW_SETTINGS": "const",
    "PACKAGE_DEFAULT_CONFIG": "const",

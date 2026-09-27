@@ -2,7 +2,7 @@
 """V9 → 新版 升級轉換與回滾的核心（CORE-SPEC §9b）。L0 工具，不是業務模組。
 
 [單位] plat:upgrade    [層] L0    [穩定度] 契約（改介面照 PLAYBOOK §C-7 升版）
-[公開介面] CONFIG_DIRS, CONFIG_FILES, DATA_DIRS, DB_FILES, EXTERNAL_SCAN_TIMEOUT, MANIFEST_NAME, NEW_SETTINGS,
+[公開介面] CONFIG_DIRS, CONFIG_FILES, DATA_DIRS, DB_FILES, EXTERNAL_SCAN_TIMEOUT, INSTALL_ONCE_SETTINGS, MANIFEST_NAME, NEW_SETTINGS,
     PACKAGE_DEFAULT_CONFIG, POST_CONVERT_NAME, RUNTIME_STATE_SETTINGS, TOOL_LOG_NAMES, V9_BASELINE,
     V9_COMPANY_DEFAULTS, add_missing_settings, backup, changes_since_conversion, check_backup, classify,
     data_changes, external_pdf_dirs, external_summary, fill_company_profile_blanks, has_changes, integrity_ok,
@@ -747,6 +747,10 @@ def _fill_only_json_change(before: str, after: str, fill: dict) -> bool:
 #: 合成演練的庫是新建的、日期本來就是今天，所以一直沒看到。守門：tests/platform/test_core_upgrade.py 要求
 #: startup.py 裡每一個寫入的設定鍵都在這份清單（新增寫入點要有人決定它算不算執行期狀態）。
 RUNTIME_STATE_SETTINGS = frozenset({"security.last_weak_pw_scan", "security.last_unlock_pw_scan"})
+
+#: 啟動時只在**全新安裝**（users 表是空的、還沒有這個鍵）寫一次的設定（2026-09-27 H10）：升級既有資料時不會寫
+#: （既有安裝已經有帳號）⇒ 不是「改寫既有設定」；一旦寫了就不再改。守門同上（startup.py 寫入的鍵要有分類）。
+INSTALL_ONCE_SETTINGS = frozenset({"install_info"})
 
 
 def _date_moved_forward(old_json, new_json) -> bool:

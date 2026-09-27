@@ -156,7 +156,7 @@
     },
     "company-profile-settings.html": {
       "not_natural_person": true,
-      "fields": ["cfg.bank_account_number", "loc.address", "loc.bank_account_number", "loc.email", "loc.phone"],
+      "fields": ["cfg.bank_account_number", "cfg.email", "cfg.phone", "loc.address", "loc.bank_account_number", "loc.email", "loc.phone"],
       "reason": "公司本身與各據點的地址、電話、Email、匯款帳號，屬法人資料。",
       "decided_by": "主持確認 2026-09-26"
     }

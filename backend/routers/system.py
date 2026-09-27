@@ -882,6 +882,11 @@ class CompanyProfile(BaseModel):
     # 2026-09-26：其他蒐集個資的表單各自的告知文字（聯絡人／使用者帳號）；空白 ⇒ 該用途的範本
     privacy_notice_contact: str = ''
     privacy_notice_user: str = ''
+    # 2026-09-27 H10：公司層級的英文名稱、電話、email（company_identity 的第三層本來就讀這三個鍵，
+    # 只是這個模型沒有它們 ⇒ PUT 會被 Pydantic 靜默丟掉，設定頁改不到）。空白 ⇒ 電話／email 仍後備讀「聯絡方式」。
+    company_name_en: str = ''
+    phone: str = ''
+    email: str = ''
 
 
 # 🔴 **既有安裝讀得到新欄位，靠的是這裡，不是 `db.py` 的 seed。**
@@ -898,6 +903,15 @@ _COMPANY_PROFILE_DEFAULT = {
     "privacy_notice": "",       # R3 個資蒐集告知（空白＝用範本，helpers/privacy_notice.py）
     "privacy_notice_contact": "",   # 聯絡人用（客戶／供應商／承攬商），空白＝範本
     "privacy_notice_user": "",      # 使用者帳號用，空白＝範本
+    "company_name_en": "", "phone": "", "email": "",   # 2026-09-27 H10（品牌區塊一起編輯）
+}
+
+#: 設定頁編輯的鍵 ⇒ 同一欄在 company_profile 裡、解析順序排在它前面的別名（helpers.company_identity._PROFILE_ALIASES）。
+#: 別名已經存在（例：升級時回填的 `company_name`）⇒ 存檔時一起改成同一個值，否則設定頁改了、單據與登入頁照舊。
+_PROFILE_EDIT_SHADOWS = {
+    "name": ("companyName", "company_name"),
+    "company_name_en": ("companyNameEn",),
+    "tax_id": ("taxId",),
 }
 
 #: 據點可以自己帶的銀行欄位。**留空＝沿用主要據點。**
@@ -1395,6 +1409,11 @@ def set_company_profile(body: CompanyProfile, authorization: str = Header(None))
         sent["address"] = primary["address"] if primary else ""
         sent["office_lat"] = primary.get("lat") if primary else None
         sent["office_lon"] = primary.get("lon") if primary else None
+    for edited, shadows in _PROFILE_EDIT_SHADOWS.items():
+        if edited in sent:
+            for alias in shadows:
+                if alias in cur:
+                    sent[alias] = sent[edited]
     value = {**cur, **sent}
     _set_setting("company_profile", value)
     # 🔴 SA2：稽核要記**哪些欄位變了**，金錢／身分欄位連前後值（遮成末四碼）。
@@ -1539,7 +1558,7 @@ def _validate_webauthn_pair(rp_id: str, origin: str) -> None:
             400,
             f"RP ID 不能是 IP 位址（收到：{rp_id}）。WebAuthn 規格要求 RP ID 是可註冊的網域"
             f"後綴，瀏覽器會直接拒絕 IP。請先在內部 DNS 建一個指向這台主機的名稱"
-            f"（例如 erp.miactw.local），再用那個名稱設定。"
+            f"（例如 erp.example.local），再用那個名稱設定。"
         )
 
     parsed = _urlparse(origin)
@@ -2644,3 +2663,87 @@ def get_reminder_send_failures(authorization: str = Header(None)):
     # 最新的排前面 —— 使用者要看的是「現在還卡著什麼」。
     from helpers.system_checks import reminder_send_failures
     return {"items": list(reversed(reminder_send_failures()))}
+
+
+# ══ 品牌圖檔（2026-09-27 H10；使用者：「公司名稱、公司LOGO這些都要能在設定中上傳跟修改」）════════════════
+#
+# 驗證、存放、預設回退都在 L1 `helpers.branding`；這裡只接 HTTP、權限與 audit。
+# 讀取端點公開（登入頁還沒有 session；favicon 由瀏覽器直接抓），列在 main._PUBLIC_API_PATHS。
+# 快取：網址帶的 `?v=` 等於目前版本 ⇒ 一年 immutable；沒帶或不相符 ⇒ no-cache＋ETag（每次重新驗證，換圖後下一次載入就是新的）。
+
+@router.get("/api/system/branding/{kind}")
+def get_branding_asset(kind: str, v: str = None, if_none_match: str = Header(None)):
+    from fastapi.responses import FileResponse, Response
+    from helpers import branding
+    if kind not in branding.KINDS:
+        raise HTTPException(404, "查無此圖檔")
+    path, version = branding.asset_file(kind)
+    etag = '"%s"' % version
+    if v and v == version:
+        cache = "public, max-age=31536000, immutable"
+    else:
+        cache = "no-cache"
+    headers = {"Cache-Control": cache, "ETag": etag}
+    if if_none_match and etag in [t.strip() for t in if_none_match.split(",")]:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(path, media_type="image/png", headers=headers)
+
+
+def _branding_state_out() -> dict:
+    from helpers import branding
+    state = _get_setting(branding.SETTING_KEY, {}) or {}
+    urls = branding.asset_urls()
+    out = {}
+    for kind, spec in branding.KINDS.items():
+        entry = state.get(kind) if isinstance(state, dict) else None
+        custom = branding.asset_version(kind) is not None
+        out[kind] = {"label": spec["label"], "custom": custom, "url": urls[kind],
+                     "updatedAt": (entry or {}).get("updatedAt", "") if custom else "",
+                     "by": (entry or {}).get("by", "") if custom else ""}
+    return out
+
+
+def _branding_refuse_demo() -> None:
+    """展示帳號不可以改正式安裝的品牌（權限另由各端點的 `_require_user(..., require_superadmin=True)` 檢查）。"""
+    from db import is_demo_mode
+    if is_demo_mode():
+        raise HTTPException(403, "展示帳號不可以更換品牌圖檔")
+
+
+@router.get("/api/settings/branding")
+def get_branding_settings(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import branding
+    return {"assets": _branding_state_out(),
+            "limits": {"maxBytes": branding.MAX_UPLOAD_BYTES, "maxSide": branding.MAX_SIDE,
+                       "formats": list(branding.ALLOWED_FORMATS)}}
+
+
+@router.put("/api/settings/branding/{kind}")
+async def upload_branding_asset(kind: str, file: UploadFile = File(...), authorization: str = Header(None)):
+    user = _require_user(authorization, require_superadmin=True)   # 只有 superadmin（不接受持有 settings 模組）
+    _branding_refuse_demo()
+    from helpers import branding
+    if kind not in branding.KINDS:
+        raise HTTPException(404, "查無此圖檔種類")
+    data = await file.read(branding.MAX_UPLOAD_BYTES + 1)
+    try:
+        saved = branding.save_asset(kind, data, by=user.get("username", ""))
+    except branding.BrandingRejected as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
+           branding.KINDS[kind]["label"], {"kind": kind, "op": "upload", "v": saved["v"], "bytes": saved["bytes"]})
+    return {"ok": True, "kind": kind, "v": saved["v"], "assets": _branding_state_out()}
+
+
+@router.delete("/api/settings/branding/{kind}")
+def reset_branding_asset(kind: str, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    _branding_refuse_demo()
+    from helpers import branding
+    if kind not in branding.KINDS:
+        raise HTTPException(404, "查無此圖檔種類")
+    had = branding.reset_asset(kind)
+    _audit(_tok(authorization), branding.AUDIT_ACTION, "settings", "branding",
+           branding.KINDS[kind]["label"], {"kind": kind, "op": "reset", "hadCustom": had})
+    return {"ok": True, "kind": kind, "assets": _branding_state_out()}

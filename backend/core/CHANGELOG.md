@@ -2,6 +2,18 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.58 — 2026-09-27（試用整合分支 wip/h-trial-next：H10 品牌設定原暫用 1.57，排在建構器 1.57 之後；正式取號由列車做）
+- 新增 L1 `helpers/branding.py`：品牌圖檔（主 LOGO／深色底 LOGO／favicon）上傳驗證（檔頭判斷 PNG／JPEG／WebP、拒收 SVG、2 MB、單邊 4096）、重新編碼成 PNG 去 metadata、固定存放 `uploads/branding/<kind>.png`、沒上傳回 `frontend/static` 預設檔；版本＝內容 sha256 前 12 碼（設定鍵 `branding_assets`）
+- 新增端點（routers/system.py）：`GET /api/system/branding/{kind}`（公開；`?v=` 相符 ⇒ immutable，否則 no-cache＋ETag）、`GET /api/settings/branding`、`PUT`／`DELETE /api/settings/branding/{kind}`（只限 superadmin、展示帳號拒絕、audit `settings.branding.update`）
+- `GET /api/system/branding` 回應加 `assets`（三種圖檔帶版本的網址）；`CompanyProfile` 加 `company_name_en`／`phone`／`email`（company_identity 第三層本來就讀這三鍵，原本 PUT 會被靜默丟掉）；改 `name`／`company_name_en`／`tax_id` 時同步已存在的前序別名
+- 行為：全新安裝的預設管理員不再寫入本公司人員姓名與 email；拿掉「每次啟動補回 jeff 姓名與 email」
+- L1（新增，主持裁示）：`helpers.startup` 的 `install_info`／`builtin_admin_username`／`install_baseline_version`／`version_sort_key`（routers/auth 的版本排序改呼叫它）、`INSTALL_INFO_KEY`／`FRESH_ADMIN_USERNAME`／`LEGACY_ADMIN_USERNAME`；`core.upgrade.INSTALL_ONCE_SETTINGS`（全新安裝才寫一次的設定鍵分類）
+- 行為（主持裁示）：全新安裝（users 表是空的）預設管理員改為 `admin`，並寫下安裝資訊 `install_info`（管理員帳號、安裝基準版本）；既有安裝的 `jeff` 不改名、不補值。不可刪除／停用的預設管理員跟著安裝資訊走（`/api/users` 多 `builtinAdmin`，使用者管理頁照它判斷）
+- 行為（使用者表單裁示）：`/api/module-versions` 在全新安裝只列安裝基準版本之後的系統紀錄；既有安裝全部顯示；使用者自建的紀錄一律顯示；已出貨條目不改寫
+- 刪除一次性工具 `backend/tools/sync_pending_data_20260817.py`（無程式或題引用；內含本公司電話與 email）
+- 頁面：57 頁 favicon、上方列、登入頁 LOGO 與副標改讀設定；公司資料設定頁加「品牌與公司名稱」卡、電話／Email 欄；預設 favicon 由 4 MB 壓成 256×256
+- 守門：`tests/platform/test_no_our_company_literals.py`（產品碼不可以寫死本公司資料；例外逐筆登記次數與類別）；題 `tests/test_branding_2026_09_27.py`、e2e `tests/test_e2e_branding_2026_09_27.py`
+
 ## 1.57 — 2026-09-27（暫用，列車取號；a-builder-output＋b-builder-dnd-3 合併為同一個次版號：建構器輸出預覽，使用者 8866 試用回饋）
 - L1（新增）：`helpers.custom_modules.preview_output(body) -> (html, 未完成清單)`——編到一半的草稿照畫：未完成的欄位（沒有 key、公式空白／錯誤、選單沒有選項、型別不認得…）畫成「〈名稱〉尚未完成」；一律走正式匯出的 `render_view`；連一個欄位都畫不出來或版型結構錯 ⇒ `CustomModuleError`（422）
 - L1（行為）：`POST /api/custom-modules/{key}/output/preview` 改用它：半成品不再 500（原本欄位層問題沒擋 ⇒ KeyError）；未完成清單放回應標頭 `X-Motrix-Preview-Incomplete`（JSON）；最外層兜底任何例外 ⇒ 422＋記 log；編號規則未完成不再擋預覽（用樣本編號）

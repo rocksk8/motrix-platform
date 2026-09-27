@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>自訂模組 — MOTRIX 專案管理系統</title>
   <script>
     /* 預覽模式（模組建構器的即時預覽，docs/platform/BUILDER-UX.md §3.3；A 為本掛鉤檔主）。
@@ -473,7 +473,13 @@
           var seq = (this._refSeq[fk] || 0) + 1
           this._refSeq[fk] = seq
           if (!this.refState[fk]) this._setMap('refState', fk, 'loading')
-          var r = await this.api('GET', this.base() + '/ref-options/' + encodeURIComponent(fk) + '?q=' + encodeURIComponent(q || '') + '&limit=50')
+          // O15：請求在網路層失敗（fetch reject／讀本文失敗）也要落到終點狀態；否則這一欄永遠停在 loading、連「重試」都不出現
+          var r
+          try {
+            r = await this.api('GET', this.base() + '/ref-options/' + encodeURIComponent(fk) + '?q=' + encodeURIComponent(q || '') + '&limit=50')
+          } catch (e) {
+            r = { ok: false, status: 'network', data: null }
+          }
           if (this._refSeq[fk] !== seq) return
           if (r.ok) {
             this._setMap('refOptions', fk, Array.isArray(r.data) ? r.data : [])

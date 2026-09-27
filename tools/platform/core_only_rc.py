@@ -5,7 +5,9 @@
 PLAYBOOK §G3：每一班列車跑一次（對列車 HEAD）。
 
 用法（repo 根目錄）：
-  python tools/platform/core_only_rc.py [--commit <SHA>] [--workers 2] [--keep] [--window X]
+  python tools/platform/core_only_rc.py [--commit <SHA>] [--workers 2] [--keep] [--window X] [--train]
+  --train：列車長用（PLAYBOOK §G4 第 5 步）——只對 pytest 子行程設 MOTRIX_TRAIN=1；沒帶 ⇒ 子行程環境不含 MOTRIX_TRAIN
+           （就算呼叫者自己的環境有，也拿掉）。本行程自己的 os.environ 一律不改（S2，2026-09-27）。
 做法：
   1. `git worktree add --no-checkout --detach` 一棵拋棄式樹（%TEMP%\\motrix-coreonly-<sha>），不碰任何人的工作樹
   2. `git sparse-checkout set --no-cone '/*' '!/backend/modules/<key>/' …`（該 commit 裡每個有 module.json 的模組各一條），再 `git checkout`
@@ -189,7 +191,18 @@ def queue_line(line, waited_seconds):
     return "排隊中：等 %s，已等 %d 分" % (holder, waited_seconds // 60)
 
 
-def _run_streaming(cmd, cwd):
+def child_env(train, base=None):
+    """pytest 子行程的環境：base（預設 os.environ）的複本；train ⇒ MOTRIX_TRAIN=1，否則**拿掉** MOTRIX_TRAIN。
+    〔S2：原本無條件 `os.environ["MOTRIX_TRAIN"] = "1"`——改的是本行程自己的環境（同一行程後續的一切都被帶成列車模式），
+      而且不是列車也照設。改成只給子行程、只在明確 --train 時給〕"""
+    env = dict(os.environ if base is None else base)
+    env.pop("MOTRIX_TRAIN", None)
+    if train:
+        env["MOTRIX_TRAIN"] = "1"
+    return env
+
+
+def _run_streaming(cmd, cwd, env=None):
     """低優先權跑 pytest，輸出**即時**轉印（不再 capture 到結束才看得到），並：
     - 看到測試鎖的排隊訊息 ⇒ 另印「排隊中：等 <持鎖者>，已等 N 分」
     - 超過 HEARTBEAT_SECONDS 沒有任何輸出 ⇒ 印「執行中：已 N 分、M 秒沒有輸出」（長時間沒有輸出的動作要看得出活著）
@@ -201,7 +214,7 @@ def _run_streaming(cmd, cwd):
     last = [t0]
     lines = []
     proc = subprocess.Popen(cmd, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                            encoding="utf-8", errors="replace", **kw)
+                            encoding="utf-8", errors="replace", env=env, **kw)
 
     def pump():
         for raw in proc.stdout:
@@ -224,7 +237,7 @@ def _run_streaming(cmd, cwd):
     return proc.returncode, lines
 
 
-def run(commit="HEAD", workers=2, keep=False, window="coreonly"):
+def run(commit="HEAD", workers=2, keep=False, window="coreonly", train=False):
     sha = _git("rev-parse", "--short=8", commit)
     tree = Path(tempfile.gettempdir()) / ("motrix-coreonly-%s" % sha)
     basetemp = Path(tempfile.gettempdir()) / ("motrix-pytest-%s-%s" % (window, sha))
@@ -245,12 +258,11 @@ def run(commit="HEAD", workers=2, keep=False, window="coreonly"):
         cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "tests/platform", "-q", "-p", "no:cacheprovider",
                "-n", str(workers), "--basetemp=%s" % basetemp, "--continue-on-collection-errors",
                "--junitxml=%s" % junit]
-        # 第十三班列車發現的工具缺陷：core_only_rc 一律在列車 HEAD 上跑（PLAYBOOK §G3），
-        # 而列車本來就會改 UNIT-INDEX／dep_graph.json／test_map.json（合回前才重產提交）；
-        # 沒設 MOTRIX_TRAIN=1 的話 test_branch_does_not_touch_generated_files 會把這個正常差異
-        # 誤判成「分支改了產生檔」——那道守門本身是設計成看這個旗標的，不是本題的假設錯了。
-        os.environ["MOTRIX_TRAIN"] = "1"
-        code, lines = _run_streaming(cmd, backend)
+        # 第十三班列車發現的工具缺陷：列車 HEAD 本來就會改 UNIT-INDEX／dep_graph.json／test_map.json（合回前才重產提交）；
+        # 沒設 MOTRIX_TRAIN=1 的話 test_branch_does_not_touch_generated_files 會把這個正常差異誤判成「分支改了產生檔」。
+        # ~~os.environ["MOTRIX_TRAIN"] = "1"~~〔S2：只給子行程、只在列車長明確帶 --train 時給（PLAYBOOK §G4 第 5 步）〕
+        out["train"] = bool(train)
+        code, lines = _run_streaming(cmd, backend, env=child_env(train))
         out["pytest_exit"] = code
         out["summary"] = (lines or [""])[-1]
         if not junit.is_file():
@@ -276,8 +288,10 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=2)
     ap.add_argument("--keep", action="store_true")
     ap.add_argument("--window", default="coreonly")
+    ap.add_argument("--train", action="store_true",
+                    help="列車長用：pytest 子行程設 MOTRIX_TRAIN=1（沒帶 ⇒ 子行程環境不含 MOTRIX_TRAIN）")
     a = ap.parse_args(argv)
-    res = run(a.commit, a.workers, a.keep, a.window)
+    res = run(a.commit, a.workers, a.keep, a.window, train=a.train)
     for x in res.get("unexpected", []):
         print("  非預期紅：%s" % x)
     for x in res.get("stale_known", []):

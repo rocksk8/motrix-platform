@@ -291,10 +291,8 @@ def _version_sort_key(version: str) -> tuple:
     ⚠️ 不可以直接比字串：序號過了 `z` 是 `aa`，而字串比較下 `aa` < `z`。
     ⇒ (日期, 序號長度, 序號)。認不得的格式排最前面（不會被當成最新）。
     """
-    m = _VERSION_RE.match(version or "")
-    if not m:
-        return ("", 0, "")
-    return (m.group(1), len(m.group(2)), m.group(2))
+    from helpers.startup import version_sort_key          # H10：與版本紀錄的安裝基準共用同一支
+    return version_sort_key(version)
 
 
 @router.get("/api/system/version")
@@ -328,8 +326,11 @@ def system_branding(authorization: str = Header(None)):
     值取自公司資料設定（主要據點 ＞ company_profile），沒填就是空字串——前端照空的顯示，不補任何公司的名字。"""
     from helpers.company_identity import location_identity, short_name
     ident = location_identity()
+    from helpers.branding import asset_urls
     out = {"companyName": ident["company_name"], "companyNameEn": ident["company_name_en"],
-           "shortName": short_name(ident["company_name"])}
+           "shortName": short_name(ident["company_name"]),
+           # 2026-09-27 H10：三種品牌圖檔的網址（帶版本；沒上傳 ⇒ v=default，端點回預設靜態檔）
+           "assets": asset_urls()}
     if authorization:
         try:
             _require_user(authorization)
@@ -1480,9 +1481,12 @@ def list_users(authorization: str = Header(None)):
         ORDER BY u.id
     """).fetchall()
     conn.close()
+    from helpers.startup import builtin_admin_username
+    builtin = builtin_admin_username()
     result = []
     for r in rows:
         d = dict(r)
+        d["builtinAdmin"]       = d["username"] == builtin   # H10：不可刪除／停用的預設管理員（頁面照這個欄位）
         d["displayName"]        = d.pop("display_name")
         d["createdAt"]          = d.pop("created_at")
         d["modules"]             = json.loads(d["modules"] or "[]")
@@ -1639,7 +1643,8 @@ def delete_user(user_id: int, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, "使用者不存在")
-    if row["username"] == "jeff":
+    from helpers.startup import builtin_admin_username   # H10：全新安裝是 admin，既有安裝是 jeff
+    if row["username"] == builtin_admin_username():
         conn.close()
         raise HTTPException(400, "不可刪除超級管理員帳號")
     uname  = row["username"]
@@ -1673,7 +1678,8 @@ def toggle_user_active(user_id: int, authorization: str = Header(None)):
     if not row:
         conn.close()
         raise HTTPException(404, "使用者不存在")
-    if row["username"] == "jeff":
+    from helpers.startup import builtin_admin_username
+    if row["username"] == builtin_admin_username():
         conn.close()
         raise HTTPException(400, "不可停用超級管理員帳號")
     new_active = 0 if row["active"] else 1

@@ -895,4 +895,5 @@ def test_every_setting_written_at_startup_is_classified():
     src = (Path(__file__).resolve().parents[2] / "helpers" / "startup.py").read_text(encoding="utf-8")
     written = set(re.findall(r'_set_setting\(\s*"([^"]+)"', src))
     assert written, "掃不到任何寫入（正對照：至少有每日掃描的節流日期）"
-    assert written <= U.RUNTIME_STATE_SETTINGS, "啟動時寫入、卻沒有分類的設定鍵：%s" % sorted(written - U.RUNTIME_STATE_SETTINGS)
+    classified = U.RUNTIME_STATE_SETTINGS | U.INSTALL_ONCE_SETTINGS      # H10：全新安裝才寫一次的鍵另一類
+    assert written <= classified, "啟動時寫入、卻沒有分類的設定鍵：%s" % sorted(written - classified)
