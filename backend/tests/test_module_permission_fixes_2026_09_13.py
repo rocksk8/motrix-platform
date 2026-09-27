@@ -85,7 +85,7 @@ def test_outsider_cannot_read_settlement_of_someone_elses_case(client, make_user
 
     tok = _login(client, other_u, other_p)
     r = client.get("/api/quotations/MQ-IDOR-001/settlement", headers=_auth(tok))
-    assert r.status_code == 403, f"外人讀得到別人的精算：{r.status_code} {r.text}"
+    assert r.status_code == 404, f"外人讀得到別人的精算：{r.status_code} {r.text}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_outsider_cannot_overwrite_settlement_of_someone_elses_case(client, make_user):
@@ -98,7 +98,7 @@ def test_outsider_cannot_overwrite_settlement_of_someone_elses_case(client, make
     r = client.put("/api/quotations/MQ-IDOR-002/settlement",
                    json={"settlement": {"status": "draft", "cost": 999999}},
                    headers=_auth(tok))
-    assert r.status_code == 403, f"外人改得動別人的精算：{r.status_code} {r.text}"
+    assert r.status_code == 404, f"外人改得動別人的精算：{r.status_code} {r.text}"   # M01-O1：看不到＝不存在（同一個 404）
 
     # 觀測點刻意放在「成功才會被改到」的下游：資料本身沒被動到才算真的擋住
     import db
@@ -151,7 +151,7 @@ def test_outsider_cannot_read_finance_summary(client, make_user):
 
     tok = _login(client, other_u, other_p)
     r = client.get("/api/quotations/MQ-IDOR-004/finance-summary", headers=_auth(tok))
-    assert r.status_code == 403, f"外人看得到別人的應收應付：{r.status_code}"
+    assert r.status_code == 404, f"外人看得到別人的應收應付：{r.status_code}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
 # ── 2. reports 模組 ───────────────────────────────────────────────────────────
@@ -222,8 +222,8 @@ def test_case_execution_face_blocks_account_without_the_module(client, make_user
     u, p = make_user(username="ce_viewer", role="viewer", modules=["dashboard"])
     _make_case("MQ-CE-002", sales_person="someone_else")
     tok = _login(client, u, p)
-    assert client.get("/api/quotations/MQ-CE-002/stages", headers=_auth(tok)).status_code == 403
-    assert client.get("/api/quotations/MQ-CE-002/updates", headers=_auth(tok)).status_code == 403
+    assert client.get("/api/quotations/MQ-CE-002/stages", headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
+    assert client.get("/api/quotations/MQ-CE-002/updates", headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 # ── 6. 16 個「後端不讀」的模組現在真的會擋 ──────────────────────────────────
@@ -285,10 +285,10 @@ def test_case_action_items_not_readable_by_outsiders(client, make_user):
     _make_case("MQ-SWEEP-001", sales_person="sw_owner")
     tok = _outsider(client, make_user, "sw_v1")
     assert client.get("/api/quotations/MQ-SWEEP-001/action-items",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
     r = client.post("/api/quotations/MQ-SWEEP-001/action-items",
                     json={"text": "路人"}, headers=_auth(tok))
-    assert r.status_code == 403
+    assert r.status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def _case_document_bases():
@@ -311,7 +311,7 @@ def test_case_documents_not_listable_by_outsiders(client, make_user):
     tok = _outsider(client, make_user, "sw_v2")
     for base in _case_document_bases():
         r = client.get(f"{base}?quote_no=MQ-SWEEP-002", headers=_auth(tok))
-        assert r.status_code == 403, f"{base} 沒擋：{r.status_code}"
+        assert r.status_code == 404, f"{base} 沒擋：{r.status_code}"   # M01-O1：看不到＝不存在（同一個 404）
         # 不帶 quote_no 的跨案件總覽同樣要擋
         assert client.get(base, headers=_auth(tok)).status_code == 403, base
 
@@ -453,7 +453,7 @@ def test_anyone_can_unlock_but_every_change_needs_approval(client, make_user):
     r = client.post("/api/quotations/MQ-LOCK-001B/materials/0/files",
                     files={"files": ("x.jpg", bytes.fromhex("ffd8ffe0") + b"fake", "image/jpeg")},
                     headers=_auth(tok))
-    assert r.status_code == 403, f"未結案的案件不該讓外人上傳：{r.status_code}"
+    assert r.status_code == 404, f"未結案的案件不該讓外人上傳：{r.status_code}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_anyone_can_upload_to_a_semi_unlocked_case_but_it_queues(client, make_user):
@@ -532,7 +532,7 @@ def test_change_request_detail_is_not_enumerable(client, make_user):
         conn.close()
 
     tok = _outsider(client, make_user, "lock_out3")
-    assert client.get(f"/api/case-changes/{change_id}", headers=_auth(tok)).status_code == 403
+    assert client.get(f"/api/case-changes/{change_id}", headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
     # 提出申請的本人看得到自己送出的內容
     ru, rp = make_user(username="lock_owner", role="sales")

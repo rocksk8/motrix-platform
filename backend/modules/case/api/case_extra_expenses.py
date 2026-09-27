@@ -38,6 +38,7 @@ from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from db import get_db
+from helpers.case_access import deny_case, require_case   # M01-O1：逐案拒絕＝查無（同一個 404）
 from helpers import row_access
 from helpers.case_access import case_owner_readable   # AT-M1b：與附件提供者同一支
 from helpers.auth import user_has_module
@@ -157,10 +158,9 @@ def _guard_case(conn, quote_no: str, user: dict):
         (quote_no,)
     ).fetchone()
     if not q:
-        raise HTTPException(404, f"報價單 {quote_no} 不存在")
+        deny_case(None, quote_no, user, "not_found")
     if not case_owner_readable(conn, quote_no, user):
-        row_access.require("case", user, q)
-        raise HTTPException(403, "無權限存取這筆資料")
+        deny_case(None, quote_no, user, "denied")          # M01-O1：看不到＝不存在（同一個 404，audit 記真正原因）
 
 
 def _can_modify(row, user: dict) -> bool:

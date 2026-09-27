@@ -430,7 +430,7 @@ class _CaseLocations:
 class _CaseAccess:
     @staticmethod
     def guard(conn, quote_no, user, allow_module=None):
-        """同 guard_case_access：不存在 404、無權限 403（擋下時會關連線）；通過回單列。"""
+        """同 guard_case_access：不存在與無權限都是同一個 404（M01-O1；擋下時會關連線）；通過回單列。"""
         return guard_case_access(conn, quote_no, user, allow_module=allow_module)
 
     @staticmethod

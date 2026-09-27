@@ -111,7 +111,7 @@ def test_close_gates_is_not_visible_to_another_salesperson(client, make_user):
     # 正對照：自己名下的看得到（否則 404 可能只是端點不存在）
     assert client.get(f"/api/quotations/{NO}/close-gates", headers=owner).status_code == 200
     r = client.get(f"/api/quotations/{NO}/close-gates", headers=h)
-    assert r.status_code == 403, r.text
+    assert r.status_code == 404, r.text   # M01-O1：看不到＝不存在（同一個 404）
 
 
 # ── 頁面 ─────────────────────────────────────────────────────────────────

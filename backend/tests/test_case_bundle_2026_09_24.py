@@ -93,5 +93,5 @@ def test_no_access_to_the_case_means_no_bundle(client, make_user):
     u = make_user(username="bd_out", role="engineer", modules=["case_manage"])
     _seed()
     h = _login(client, *u)
-    assert client.get(f"/api/quotations/{NO}", headers=h).status_code == 403
-    assert client.get(f"/api/quotations/{NO}/case-bundle", headers=h).status_code == 403
+    assert client.get(f"/api/quotations/{NO}", headers=h).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
+    assert client.get(f"/api/quotations/{NO}/case-bundle", headers=h).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）

@@ -262,7 +262,7 @@ def test_extra_expense_attachments_are_not_wider_than_the_extra_expense_pages(cl
     _add_case_update_file("ATT-EE-1")          # 案件動態 case_manage 看得到 ⇒ 案件「部分看得到」
     probe = _hdr(client, make_user, "att_ee_probe", "sales", ["case_manage", "finance"])
     own = client.get("/api/quotations/ATT-EE-1/extra-expenses", headers=probe)
-    assert own.status_code == 403, ("前提：額外支出自己的端點擋這個人", own.status_code)
+    assert own.status_code == 404, ("前提：額外支出自己的端點擋這個人", own.status_code)
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-EE-1", headers=probe)
     assert got.status_code == 200, got.text[:200]
     assert [f for f in got.json()["files"] if f.get("type") == "extra_expense"] == [], got.json()["files"]
@@ -360,7 +360,7 @@ def test_quotation_attachments_are_not_wider_than_the_case_page(client, make_use
     _seed_case_with_file("ATT-QP-1")
     _add_case_update_file("ATT-QP-1")
     h = _hdr(client, make_user, "att_qp_cm", "engineer", ["case_manage", "finance"])
-    assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 403, "前提：案件頁擋 case_manage 非擁有者"
+    assert client.get("/api/quotations/ATT-QP-1", headers=h).status_code == 404, "前提：案件頁擋 case_manage 非擁有者"
     got = client.get("/api/vouchers/line-source-files?source_type=case&ref=ATT-QP-1", headers=h)
     assert got.status_code == 200 and [f for f in got.json()["files"] if f.get("type") == "quotation_signed"] == [], got.text
     assert _hidden(got).get("hidden:quotation_signed") == 1, got.json().get("hidden")

@@ -40,7 +40,7 @@ def test_case_network_plan_lookup_is_guarded(client, make_user):
     _make_case("MQ-SWEEP-005", sales_person="sw_owner")
     tok = _outsider(client, make_user, "sw_v5")
     assert client.get("/api/quotations/MQ-SWEEP-005/network-plan",
-                      headers=_auth(tok)).status_code == 403
+                      headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
 def test_netplan_export_uses_the_shared_edge_runner():
