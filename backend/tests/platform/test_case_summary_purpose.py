@@ -123,8 +123,15 @@ KNOWN_STAR_KWARGS_CAP = 6
 
 
 def star_cap_problems(known, cap=KNOWN_STAR_KWARGS_CAP):
+    """〔稽核 D M06-S4：~~total <= cap~~ ⇒ total == cap——只看「不超過」時，刪一筆不調低上限，之後再加一筆新的照綠
+      （上限形同沒降）。刪一筆必須同一個 commit 調低 KNOWN_STAR_KWARGS_CAP〕"""
     total = sum(known.values())
-    return [] if total <= cap else ["KNOWN_STAR_KWARGS 共 %d 處，超過上限 %d（只准變少；放行新的 ** 要主持裁示）" % (total, cap)]
+    if total > cap:
+        return ["KNOWN_STAR_KWARGS 共 %d 處，超過上限 %d（只准變少；放行新的 ** 要主持裁示）" % (total, cap)]
+    if total < cap:
+        return ["KNOWN_STAR_KWARGS 共 %d 處，少於上限 %d ⇒ 同時把 KNOWN_STAR_KWARGS_CAP 調成 %d"
+                "（不調的話，之後加一筆新的會照綠）" % (total, cap, total)]
+    return []
 
 
 def _star_kwargs(rel, tree):
@@ -269,5 +276,13 @@ def test_known_star_kwargs_total_is_capped():
     assert star_cap_problems(more) == [
         "KNOWN_STAR_KWARGS 共 %d 處，超過上限 %d（只准變少；放行新的 ** 要主持裁示）" % (KNOWN_STAR_KWARGS_CAP + 1, KNOWN_STAR_KWARGS_CAP)]
     fewer = dict(list(KNOWN_STAR_KWARGS.items())[1:])
-    assert star_cap_problems(fewer) == []
+    # ~~assert star_cap_problems(fewer) == []~~〔M06-S4：刪一筆不調上限 ⇒ 紅；同時調低 ⇒ 過〕
+    assert star_cap_problems(fewer) == [
+        "KNOWN_STAR_KWARGS 共 %d 處，少於上限 %d ⇒ 同時把 KNOWN_STAR_KWARGS_CAP 調成 %d（不調的話，之後加一筆新的會照綠）"
+        % (KNOWN_STAR_KWARGS_CAP - 1, KNOWN_STAR_KWARGS_CAP, KNOWN_STAR_KWARGS_CAP - 1)]
+    assert star_cap_problems(fewer, cap=KNOWN_STAR_KWARGS_CAP - 1) == []
+    # 刪一筆（不調上限）之後再加一筆新的：總數回到上限 ⇒ 這裡綠，但前一步已經紅過（上限必須先調低），review 看得到兩處同改
+    swapped = dict(fewer)
+    swapped[("modules/supply/api/x.py", "f")] = 1
+    assert star_cap_problems(swapped, cap=KNOWN_STAR_KWARGS_CAP - 1) != []
 
