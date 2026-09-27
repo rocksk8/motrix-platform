@@ -54,7 +54,8 @@ def approval_json_of(data_json, doc_type: str, doc_no) -> "str | None":
 
     `approval.queue_items` 提供者一律用這支，**不在 SQL 用 `json_extract(data_json,'$.approval')`**：一筆 malformed JSON
     會讓整個查詢丟例外 ⇒ 那個提供者整類待簽靜默消失（L1 只記一筆 exception），比 500 更難發現（c-queue-json，2026-09-27）。
-    呼叫端拿到 None ⇒ **跳過那一筆**：不可以當成「沒有簽核層」列出——那會變成「任一 superadmin 可簽」，是降級。
+    呼叫端拿到 None ⇒ **跳過那一筆**：列出了也簽不了（核准端點讀這張單的 JSON 會丟 JSONDecodeError ⇒ 500、狀態不變；D 實測）。〔更正〕~~不可以當成「沒有簽核層」列出——那會變成「任一 superadmin 可簽」，是降級~~。
+    ⚠ 只跳過「解析不了」的：能解析、但沒有 approval（或沒有簽核層）的單是合法的「沒有設定流程」，回 "{}"，**照列**。
     守門：tests/platform/test_queue_items_malformed_json.py（對每個已註冊的提供者）。"""
     try:
         d = json.loads(data_json or "{}")

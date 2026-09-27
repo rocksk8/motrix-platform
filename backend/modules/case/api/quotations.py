@@ -4362,7 +4362,8 @@ def approval_queue_items(conn) -> list:
     """).fetchall()
     for r in rows:
         # 簽核 JSON 在 Python 逐筆解析（L1 approval_json_of）：SQL json_extract 遇到一筆壞 JSON 會讓 M01 整類消失；
-        # 壞的那一筆跳過＋ERROR（不可以當成沒有簽核層列出：那會變成任一 superadmin 可簽）
+        # 壞的那一筆跳過＋ERROR：列出了也簽不了（核准端點讀這張單的 JSON 會丟 JSONDecodeError ⇒ 500、狀態不變；D 實測）（〔更正〕~~不可以當成沒有簽核層列出：那會變成任一 superadmin 可簽~~）；
+        # 能解析而沒有簽核層的是「沒有設定流程」，照列
         raw = _approval_json_of(r["data_json"], "quotation", r["quote_no"])
         if raw is None:
             continue
@@ -4384,6 +4385,8 @@ def approval_queue_items(conn) -> list:
             "currentTier":         f["currentTier"],
             "tierCount":           f["tierCount"],
             "currentApprovers":    f["currentApprovers"],
+            # 報價單本身就是案件：詳情的每案守門看這個單號（L1 `_detail_opens`：沒掛案件的單只列給簽核鏈上的人）
+            "linkedQuoteNo":       r["quote_no"],
         })
 
     ccr_rows = conn.execute("""

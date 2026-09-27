@@ -2,6 +2,10 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.53 — 2026-09-27（c-approval-l1-3：稽核 D AL2-M1＋主持更正；列車取號）〔core_bump：暫用 1.99 → 1.53〕
+- L1（行為）：佇列／角標的「點得開才列」判斷改成 `_detail_opens`（與詳情守門同一份）：沒掛案件（linkedQuoteNo 空）的單，每案守門一律查無 ⇒ 只列給簽核鏈上的人與送審人（M01 在不在都一樣）；沒有詳情提供者的類型照列
+- `approval_json_of` 說明：〔更正〕跳過壞 JSON 的理由是「列出了也簽不了」，~~不是降級~~；能解析、沒有 approval 的是合法的「沒有設定流程」，照列（契約題加一筆鎖住）
+
 ## 1.52 — 2026-09-27（c-queue-json：一筆壞 data_json 讓整類待簽消失；主持指派；列車取號）〔core_bump：暫用 1.99 → 1.52〕
 - L1（新增）：`helpers.approval_queue.approval_json_of(data_json, doc_type, doc_no)`——讀不出來 ⇒ None＋ERROR（寫單號），呼叫端跳過那一筆
 - 守門：`tests/platform/test_queue_items_malformed_json.py`（對每個已註冊、簽核鏈在 data_json 的 `approval.queue_items` 提供者塞一筆壞的：不丟例外、好的照列、壞的不列、有 ERROR；反向控制＝json_extract 合成提供者必紅）

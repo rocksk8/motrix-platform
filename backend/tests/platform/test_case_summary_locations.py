@@ -235,3 +235,31 @@ def test_map_without_m01_says_cases_are_unavailable(client, make_user, monkeypat
     src = [s for s in r.json()["sources"] if s["source"] == "cases"]
     assert src and src[0]["skipped"] == "module_absent" and src[0]["note"] == mp.CASES_MODULE_ABSENT
     assert not [pt for pt in r.json()["points"] if pt.get("sourceKey") == "cases"]
+
+
+def test_summary_survives_one_malformed_data_json(client, caplog):
+    """稽核 D AL2-M2：deal_tag 原本走 json_extract ⇒ 一張 data_json 壞掉整個查詢丟例外（佇列詳情 500、傳票案件清單整支壞）。
+    壞的那一筆 deal_tag 為空並記 ERROR（寫單號），其餘照回；deal_tag 欄空、data_json 有 dealTag 的舊資料照讀。"""
+    import logging
+    import db
+    from core import registry, source_tree
+    from helpers.case_access import SYSTEM
+    if not source_tree.module_installed("modules/case/"):
+        pytest.skip("M01 不在：沒有 case.summary")
+    caplog.set_level(logging.ERROR)
+    conn = db.get_db()
+    try:
+        for no, dj, tag in (("MQ-CSJ-BAD", "{not json", ""), ("MQ-CSJ-OLD", '{"dealTag": "已成案"}', ""),
+                            ("MQ-CSJ-OK", "{}", "已結案")):
+            conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, deal_tag, "
+                         "created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+                         (no, "成交", "客", "案", dj, tag, "2026-09-27", "2026-09-27"))
+        conn.commit()
+        got = {r["quote_no"]: r for r in registry.single_provider("case.summary")(
+            conn, SYSTEM, ["MQ-CSJ-BAD", "MQ-CSJ-OLD", "MQ-CSJ-OK"])}
+    finally:
+        conn.close()
+    assert set(got) == {"MQ-CSJ-BAD", "MQ-CSJ-OLD", "MQ-CSJ-OK"}, sorted(got)
+    assert (got["MQ-CSJ-BAD"]["deal_tag"], got["MQ-CSJ-OLD"]["deal_tag"], got["MQ-CSJ-OK"]["deal_tag"]) == ("", "已成案", "已結案")
+    assert any(r.levelno >= logging.ERROR and "MQ-CSJ-BAD" in r.getMessage() for r in caplog.records)
+    assert not any("not json" in r.getMessage() for r in caplog.records)      # 不寫內容

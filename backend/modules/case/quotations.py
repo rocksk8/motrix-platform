@@ -386,7 +386,9 @@ def case_summary(conn, user, quote_nos=None) -> list:
     sales_person_id, deal_tag}`（deal_tag：2026-09-27 加欄，L1 佇列詳情的案件抬頭）。`quote_nos` 省略 ⇒ 這個人看得到的全部；給清單 ⇒ 只回其中看得到、而且存在的（其餘不回，
     呼叫端要能處理缺席並明說）。只讀。可見性＝`row_access` 的 `case`／scope="read"（同案件列表、地圖）。"""
     system = _caller_is_system(user)
-    cols = "quote_no, customer_name, project_name, status, " + SQL_DEAL_TAG + " AS deal_tag, " + _CASE_VIS_COLS
+    # deal_tag 不用 SQL_DEAL_TAG（json_extract）：一張 data_json 壞掉 ⇒ 整個查詢丟例外（詳情 500、傳票案件清單整支壞；
+    # 稽核 D AL2-M2）⇒ 欄位與 data_json 分開取、在 Python 逐筆補
+    cols = "quote_no, customer_name, project_name, status, deal_tag, data_json AS _dj, " + _CASE_VIS_COLS
     if quote_nos is None:
         rows = conn.execute("SELECT %s FROM quotations ORDER BY id DESC" % cols).fetchall()
     else:
@@ -397,8 +399,20 @@ def case_summary(conn, user, quote_nos=None) -> list:
                             % (cols, ",".join("?" * len(qs))), qs).fetchall()
     return [{"quote_no": r["quote_no"], "customer_name": r["customer_name"] or "",
              "project_name": r["project_name"] or "", "status": r["status"] or "",
-             "deal_tag": r["deal_tag"] or "", "sales_person_id": r["sales_person_id"]}
+             "deal_tag": _deal_tag_of(r), "sales_person_id": r["sales_person_id"]}
             for r in rows if _visible(user, system, r)]
+
+
+def _deal_tag_of(r) -> str:
+    """同 `SQL_DEAL_TAG`（欄位優先，pre-v6 的列退回 data_json.dealTag），但逐筆解析：壞的那一筆 ⇒ ""＋ERROR（寫單號不寫內容）。"""
+    if r["deal_tag"]:
+        return r["deal_tag"]
+    try:
+        d = json.loads(r["_dj"] or "{}")
+    except (TypeError, ValueError):
+        _log.error("案件摘要：%s 的 data_json 讀不出來，成交標籤留空", r["quote_no"])
+        return ""
+    return (d.get("dealTag") or "") if isinstance(d, dict) else ""
 
 
 class _CaseLocations:
