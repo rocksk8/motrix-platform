@@ -15,7 +15,8 @@ REPO = Path(__file__).resolve().parents[3]
 ROOTS = ("backend", "frontend", "tools")
 #: 只掃這些副檔名（文字檔）；.md 是文件，不在產品碼範圍
 SUFFIXES = {".py", ".html", ".js", ".css", ".json", ".ps1", ".bat", ".cmd", ".txt", ".ini", ".cfg",
-            ".toml", ".yml", ".yaml", ".sql", ".xml", ".svg"}
+            ".toml", ".yml", ".yaml", ".sql", ".xml", ".svg",
+            ".vbs", ".pyw"}                 # 2026-09-28 稽核 D 建議（fc5c47f4）：兩者都是會出貨的文字檔
 #: 路徑中任何一段是這些名稱 ⇒ 不掃（測試、測試資料、第三方、產出物）
 EXCLUDED_PARTS = {"tests", "fixtures", "vendor", "node_modules", "__pycache__", "deploy_logs", "logs",
                   ".venv", ".venv312", "uploads", "backups"}
@@ -82,6 +83,20 @@ ALLOWED = {
 }
 
 
+def read_text_any(path: Path) -> str:
+    """讀文字檔，不因編碼而安靜略過：.vbs／.bat 常見 UTF-16（有 BOM）或系統碼頁（cp950）。
+    依序：UTF-16 BOM ⇒ utf-16；utf-8(-sig)；cp950；都不行 ⇒ latin-1（不會失敗，ASCII 樣式照樣比得到）。"""
+    raw = path.read_bytes()
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16", errors="replace")
+    for enc in ("utf-8-sig", "cp950"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("latin-1")
+
+
 def _scannable(rel_parts, suffix) -> bool:
     return suffix.lower() in SUFFIXES and not any(p in EXCLUDED_PARTS for p in rel_parts)
 
@@ -100,8 +115,8 @@ def scan(root: Path = REPO, roots=ROOTS) -> dict:
             if not _scannable(rel.parts[:-1], path.suffix) or path.name.startswith("conftest"):
                 continue
             try:
-                text = path.read_text(encoding="utf-8-sig")
-            except (UnicodeDecodeError, OSError):
+                text = read_text_any(path)
+            except OSError:
                 continue
             for name, rx in _COMPILED.items():
                 n = len(rx.findall(text))

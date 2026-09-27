@@ -88,6 +88,24 @@ def test_reverse_control_allowlist_cannot_become_a_blanket_exemption(tmp_path):
         ("backend/helpers/x.py", "公司名（允碩）"): (2, ok_cat, "r")}))
 
 
+def test_reverse_control_shipped_vbs_and_pyw_are_scanned_in_any_encoding(tmp_path):
+    """稽核 D 建議（fc5c47f4）：.vbs／.pyw 也會出貨 ⇒ 要掃；.vbs 常存成 UTF-16 或 cp950，不可以因為讀不懂就略過。"""
+    base = tmp_path / "backend"
+    base.mkdir()
+    (base / "a.vbs").write_text('MsgBox "允碩整合"\r\n', encoding="utf-8")
+    (base / "b.vbs").write_text('MsgBox "允碩整合"\r\n', encoding="utf-16")         # 有 BOM
+    (base / "c.vbs").write_bytes('MsgBox "允碩整合"\r\n'.encode("cp950"))
+    (base / "d.pyw").write_text('TEL = "04-3610-6566"\n', encoding="utf-8")
+    hits = L.scan(tmp_path)
+    assert hits == {
+        ("backend/a.vbs", "公司名（允碩）"): 1,
+        ("backend/b.vbs", "公司名（允碩）"): 1,
+        ("backend/c.vbs", "公司名（允碩）"): 1,
+        ("backend/d.pyw", "電話"): 1,
+    }, hits
+    assert all(p.startswith("寫死本公司資料") for p in L.problems(hits, allowed={}))
+
+
 def test_every_real_allowlist_entry_is_outside_frontend_and_has_a_known_category():
     for (rel, name), (count, category, reason) in L.ALLOWED.items():
         assert not rel.startswith("frontend/"), rel
