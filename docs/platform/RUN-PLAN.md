@@ -166,6 +166,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 10:21 主持：第十一班合回 9436bb3b（5 包；交互紅 6 題；本班差異題曾串行＝WK-M2，第 5 趟起改 `-- -n 2`；列車長開始測試到合回約 6 小時）。B：D7 前哨第 8 次 0 回歸（觀察：core-only 缺席模組 probes 未驗 404 ⇒ 派 B wip/b-drill-absent404）；b-probe-tmp（探針寫 tmp＋殘留守門；confcutdir 讓子 pytest 啟動 40 秒→0.35 秒）。C：M01 ④ 必修處置完成 c-m01-5（M4-M3 範圍 D 更正為非 e2e 134 檔＋e2e 78 檔，保留錯的 71 檔這句）。**使用者裁示待簽彙整本輪搬進 L1**（CORE-SPEC 裁示表），派 C。第十二班等車頭（b-modtest-workers-3、b-probe-tmp）D 稽核後發車。
 - 2026-09-27 03:4x：**第十一班列車合回**（train/0926-2154，基底 8151bdc6 → rebase 到 f714ead5，帶進的都是文件 0 程式重疊）。乘客（依序）：b-hardcap-dir 0eddad8d（車頭，動 conftest 硬上限目錄）、b-genfiles-3 d5b95676、b-o9-3 17c6adfe（同檔衝突 test_e2e_voucher_summary 取 o9-3 那側）、a-attachments-5 增量＋a-attachments-6 fda2f092（-5 只 cherry-pick 增量那顆 commit，-4 等效內容已隨第十班合回）、c-m01-3 b3b3b9aa（cherry-pick 只取 104cefe9＋b3b3b9aa 兩顆，排除已合回的 c-approval-3 以下整疊）。不帶：a-m06-2、c-m01-s2、b-ip15-cost、c-case404。
   - 取號：core_bump 現場手動核對（CHANGELOG 已合回段落以「內文相同」辨識，非標題）：CORE 1.47（a-attachments-5 增量）→1.48（c-m01-3 CA-O4）；subcontract 1.0.12；arap 1.0.5（本班補，見下）。
   - **本班交互紅 5 題**（皆非本班乘客程式本身缺陷，逐一列出根因與處置）：
