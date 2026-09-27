@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28e"
+$ApplyScriptVersion = "2026-09-28f"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -246,6 +246,25 @@ function Write-ResultFile($resStatus, $resCode) {
         Write-Host "[WARN] 結果檔寫入失敗：$($_.Exception.Message)"
     }
 }
+function Backup-DatabasesOnline([string]$destDir) {
+    # D 稽核 DM1：覆寫資料庫之前，把主庫與 demo 庫以 SQLite Online Backup 另存到 $destDir；任一個存在的庫失敗 ⇒ $false
+    try {
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        $py = Join-Path $env:TEMP ("motrix_pre_rollback_{0}.py" -f $script:RunStamp)
+        $code = "import os, sqlite3, sys`nfor s, d in zip(sys.argv[1::2], sys.argv[2::2]):`n    if not os.path.exists(s):`n        continue`n    a = sqlite3.connect(s)`n    b = sqlite3.connect(d)`n    try:`n        a.backup(b)`n    finally:`n        b.close()`n        a.close()`nprint('DB_BACKUP_OK')`n"
+        [System.IO.File]::WriteAllText($py, $code, (New-Object System.Text.UTF8Encoding($false)))
+        $pyArgs = @($py)
+        foreach ($n in @("motrix_erp.db", "motrix_erp_demo.db")) { $pyArgs += (Join-Path $BackendDir $n); $pyArgs += (Join-Path $destDir $n) }
+        $r = Invoke-Py $pyArgs
+        Remove-Item $py -Force -ErrorAction SilentlyContinue
+        if ($r.Exit -ne 0 -or $r.Text -notmatch "DB_BACKUP_OK") { Warn "  回滾前資料庫另存失敗：$($r.Text)"; return $false }
+        Ok "  回滾前的資料庫已另存：$destDir"
+        return $true
+    } catch {
+        Warn "  回滾前資料庫另存失敗：$($_.Exception.Message)"
+        return $false
+    }
+}
 # ── 逐字相同的區段到此為止 ──
 
 # 呼叫 python 並回 @{ Text; Exit }。
@@ -397,6 +416,10 @@ function Fail-AfterStop($msg, $status) {
 trap {
     Write-Host "`n[FAIL] 未預期的錯誤：$($_.Exception.Message)" -ForegroundColor Red
     Write-Host ($_.ScriptStackTrace | Out-String)
+    # D 稽核 DS1：是我們停掉服務、而磁碟不在還原到一半的狀態（沒動或新版已完整）⇒ 試著把服務拉回來；restoring 不動
+    if ($script:ServiceState -eq "down" -and @("not_applied", "applied") -contains $script:ProdState) {
+        try { Start-InstallService } catch { Write-Host "[WARN] 重新啟動服務失敗：$($_.Exception.Message)" }
+    }
     Emit-Result "unhandled_exception" 1
     exit 1
 }
@@ -673,7 +696,7 @@ Info "  建立程式碼回滾快照：$rollbackDir"
 #    ⇒ 與「還原到一半」**不可以共用一個 status**：前者重跑就好，後者要叫人。
 # 2026-09-28：/XD 補上資料目錄（export_archive＝勞報個資、_demo_*＝demo 資料、uploads／報價單PDF 等）——
 #   先前每次套用都把個資複製進 rollback_snapshots。回滾不需要它們：套用本來就不碰資料目錄。
-robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log | Out-Null
+robocopy $BackendDir (Join-Path $rollbackDir "backend") /E /R:3 /W:5 /XD db_backups rollback_snapshots logs uploads 報價單PDF export_archive backup_alerts _demo_* __pycache__ certs /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json server.log license.key autostart.bat .apply.lock | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（backend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_backend" }
 robocopy $FrontendDir (Join-Path $rollbackDir "frontend") /E /R:3 /W:5 | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "建立程式碼回滾快照失敗（frontend，exit code $LASTEXITCODE）——快照不完整就繼續套用的話，出事時沒有東西可以回滾。" "snapshot_failed_frontend" }
@@ -753,17 +776,17 @@ $script:ServiceState = "down"
 function Restore-ProgramAfterCopyFailure {
     $script:ProdState = "restoring"
     $ok = $true
-    $clean = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
+    $clean = Invoke-Py @($planTool, "cleanup-snapshot", "--root", $ProdRoot, "--pkg", $PackagePath, "--snapshot", $rollbackDir)
     Write-Host $clean.Text
-    if ($clean.Exit -ne 0 -or ($clean.Text -notmatch "APPLY_CLEANUP_OK")) { $ok = $false }
+    if ($clean.Exit -ne 0 -or ($clean.Text -notmatch "APPLY_SNAPCLEAN_OK")) { $ok = $false }
     foreach ($pair in @(@("backend", $BackendDir), @("frontend", $FrontendDir))) {
-        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 | Out-Null
+        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$($pair[0])，exit $LASTEXITCODE）"; $ok = $false }
     }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
         if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$d，exit $LASTEXITCODE）"; $ok = $false }
     }
     $rd = Join-Path $rollbackDir "root_docs"
@@ -1034,22 +1057,23 @@ if ($healthy -and -not $logErrors) {
 
     # 2026-09-28：先刪掉這次**新增**的程式檔（robocopy /E 寫回快照不會刪它們；
     # 新增的模組資料夾留著 ⇒ 舊版的載入器照樣載它）。被刪的舊檔由下面寫回快照還原。
-    $cleanRun = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
+    # D 稽核 DM2：以快照為準——安裝目錄有、快照沒有的程式檔一律刪（不只「這次的 added」）
+    $cleanRun = Invoke-Py @($planTool, "cleanup-snapshot", "--root", $ProdRoot, "--pkg", $PackagePath, "--snapshot", $rollbackDir)
     Write-Host $cleanRun.Text
-    $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_CLEANUP_OK"))
+    $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_SNAPCLEAN_OK"))
 
     # 🔴 還原寫回也要檢查（`RP2`）。
     # ☠️ 先前失敗**不中止**，直接流進下面的健康檢查 —— 而半還原的 backend
     #    也可能回得出 `/api/ping` ⇒ 報 `restored`＝「已還原且健康」，
     #    **而磁碟上是還原到一半的殘骸。**
-    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 | Out-Null
+    robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_backend" }
-    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 | Out-Null
+    robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_frontend" }
     foreach ($d in $RootProgramDirs) {
         $snap = Join-Path $rollbackDir $d
         if (-not (Test-Path $snap)) { continue }
-        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 | Out-Null
+        robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
         if ($LASTEXITCODE -ge 8) { Fail "自動回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "restore_copy_failed_root_dirs" }
     }
 
@@ -1069,7 +1093,11 @@ if ($healthy -and -not $logErrors) {
     # 狀態——多數 migration 只是加欄位/加表，舊程式碼還撐得住，但只要哪次改了
     # 不相容的變更就會出事。這裡把資料庫也還原回升級前的快照，才是真正回到
     # 升級前的狀態。
-    if (Test-Path $dbBackupPath) {
+    # D 稽核 DM1（使用者裁示）：覆寫資料庫之前先另存「回滾前」的主庫與 demo 庫；另存失敗就不覆寫
+    $dbSaved = Backup-DatabasesOnline (Join-Path $BackendDir "db_backups\pre_rollback_$timestamp")
+    if (-not $dbSaved) {
+        Warn "  回滾前的資料庫另存失敗 ⇒ 不覆寫資料庫（維持新版 schema；新版 migration 只新增，舊程式讀得了），需要人工確認。"
+    } elseif (Test-Path $dbBackupPath) {
         Copy-Item $dbBackupPath $dbPath -Force
         # 還原乾淨的主檔案後，殘留的 -wal/-shm（來自新版寫入）內容已經跟它對不上，
         # 必須一併清掉，否則下次連線時 SQLite 可能把過期的 WAL 內容重新套用回來，
@@ -1080,14 +1108,14 @@ if ($healthy -and -not $logErrors) {
         Warn "  找不到升級前 db 快照（$dbBackupPath），資料庫維持目前狀態，可能仍是新版 schema，需要人工檢查！"
     }
     # demo 庫同一套（2026-09-28）：新版啟動時也對它跑了 init_db。
-    if (Test-Path $demoDbBackupPath) {
+    if ($dbSaved -and (Test-Path $demoDbBackupPath)) {
         Copy-Item $demoDbBackupPath $demoDbPath -Force
         Remove-Item "$demoDbPath-wal", "$demoDbPath-shm" -Force -ErrorAction SilentlyContinue
         Ok "  demo 庫已還原至升級前快照：$demoDbBackupPath"
     }
 
     if ($cleanFailed) {
-        Fail "自動回滾：這次新增的程式檔沒有刪乾淨（見上方）——舊程式碼與資料庫已寫回，但新增的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。清單：$planPath" "restore_cleanup_failed"
+        Fail "自動回滾：快照裡沒有的程式檔沒有刪乾淨（見上方）——舊程式碼已寫回，但多出來的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。快照：$rollbackDir" "restore_cleanup_failed"
     }
     Start-InstallService
 

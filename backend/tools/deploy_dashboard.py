@@ -227,6 +227,14 @@ _STATUS_FAILED = frozenset({
     "rollback_plan_tool_missing",                               # 還沒動任何檔
     "rollback_locked", "rollback_locked_stale",                 # UPDATE-DELIVERY §9.2：另一個在跑／殘留鎖，還沒動任何檔
     "rollback_unhandled_exception",                             # AH-S11
+    # D 稽核 DM1／DM2（2026-09-28）：手動回滾的新出口；前四個都還沒動任何檔
+    "rollback_cleanup_too_large", "rollback_cleanup_plan_failed",
+    "rollback_db_not_confirmed", "rollback_db_user_cancelled",
+    "rollback_db_backup_failed",                                # 停服後另存失敗 ⇒ 沒動檔、服務已重新啟動
+    # D 稽核 DS4：既有出口，先前不在值域（fail-closed 判對，但查不到）
+    "snapshot_failed_backend", "snapshot_failed_frontend",
+    "restore_copy_failed_backend", "restore_copy_failed_frontend",
+    "rollback_copy_failed_backend", "rollback_copy_failed_frontend",
     "rollback_copy_failed_root_dirs", "rollback_cleanup_failed",  # 🔴 還原到一半
 })
 _STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
