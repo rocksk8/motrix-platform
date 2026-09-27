@@ -279,6 +279,14 @@ def test_mls_without_module_startup_is_plain_init_db(tmp_path, monkeypatch):
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0] > 10
 
 
+def test_pages_rel_matches_the_real_install_layout():
+    """D5-S1：本檔題目全用 PG＝ap.PAGES_REL ⇒ 常數被改錯（例 "frontend/page"）題目照樣綠，而正式機的 removed_pages
+    會全被拒、DO3 protected_pages 對不到真實路徑。期望值取自獨立來源 core.paths（不用字面、不用被測物）。"""
+    import os
+    from core import paths
+    assert ap.PAGES_REL == os.path.relpath(paths.FRONTEND_PAGES_DIR, paths.INSTALL_ROOT).replace("\\", "/")
+
+
 def test_ahm1_case_only_rename_is_not_deleted(env):
     """AH-M1：baseline 有 Foo.html、新包改名 foo.html ⇒ Windows 上是同一個檔，不可以列刪除（否則刪掉剛寫入的新檔）。"""
     root, pkg = env
