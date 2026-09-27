@@ -123,7 +123,19 @@ def test_rc_without_a_configured_public_key_nothing_passes(env):
     _name, staged = _publish_and_stage(env)
     r = D.verify_staged(staged, str(env["install"]), pubkey_pem=b"", run_verify_package=False)
     assert not r["ok"] and any("尚未設定交付公鑰" in p for p in r["problems"]), r["problems"]
-    assert D.DELIVERY_PUBKEY_PEM == b"", "公鑰由使用者產生後才貼（U-4）；題目不應該看到一把寫死的測試公鑰"
+
+
+def test_the_shipped_public_key_is_a_real_ed25519_key_and_rejects_other_signers(env):
+    """出貨的公鑰：是合法的 Ed25519 公鑰；用別把金鑰簽的包（這裡是測試金鑰）⇒ 預設公鑰驗章失敗。"""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    assert isinstance(serialization.load_pem_public_key(D.DELIVERY_PUBKEY_PEM), Ed25519PublicKey)
+    assert D.DELIVERY_PUBKEY_PEM != env["pub"]
+    _name, staged = _publish_and_stage(env)
+    r = D.verify_staged(staged, str(env["install"]), pubkey_pem=None, run_verify_package=False)
+    assert not r["ok"] and any("簽章不符" in p for p in r["problems"]), r["problems"]
+    ok = D.verify_staged(staged, str(env["install"]), pubkey_pem=env["pub"], run_verify_package=False)
+    assert not any("簽章" in p for p in ok["problems"]), ok["problems"]          # 正對照：對應的公鑰驗得過
 
 
 def test_signature_helpers_reject_garbage():
