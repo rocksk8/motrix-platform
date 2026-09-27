@@ -122,21 +122,51 @@ def test_jv36_the_preview_endpoint_is_scoped_and_guarded(client, make_user, seed
     assert r.status_code == 403, "非傳票權限讀到來源檔：%s" % r.status_code
 
 
+#: 路徑守門（voucher_attachments.abs_path）擋下時的原句——斷言要認得「是這一道擋的」，不是別的 400／404
+PATH_REFUSED = "附件路徑不合法。"
+
+
+@needs_m01
 def test_jv36_a_path_escaping_uploads_is_refused(client, make_user, seed_extra_expense):
     """⚙️ 誘餌要**真的存在**：在上傳根目錄**外面**放一個檔，路徑指過去——
-    指向一個不存在的檔的話，沒有擋也會 404，這一題就證明不了任何事。"""
+    指向一個不存在的檔的話，沒有擋也會 404，這一題就證明不了任何事。
+
+    〔更正 2026-09-28（A，稽核 AB43-O1）：原斷言「400 或 404 而且沒有機密內容」在 M01 不在的樹上也綠——
+     那裡 `source_files` 先回 400「…模組未安裝，無法帶入…附件。」，根本沒走到路徑守門（空轉的綠）。
+     ⇒ 斷言改成**路徑守門的原句**；這條 API 路徑只能經 M01 的來源走到守門 ⇒ 標 needs_m01。
+     M01 不在時由下一題直接驗 abs_path（不經提供者），守門本身兩棵樹都有題。〕"""
     from helpers.uploads import UPLOADS_ROOT
     _seed(seed_extra_expense)
     secret = os.path.join(os.path.dirname(os.path.realpath(UPLOADS_ROOT)), "jv36_secret.txt")
     with open(secret, "wb") as f:
         f.write(b"JV36-SECRET")
-    evil = seed_extra_expense(QUOTE, total_cost=1, description="路徑穿越",
-                              files=[{"id": "ev", "filename": "x.png", "path": "../jv36_secret.txt"}])
-    hdr = _hdr(client, make_user, "jv36_trav")
-    r = client.get(VOUCHERS + "/line-source-file", headers=hdr,
-                   params={"source_type": "extra_expense", "ref": str(evil), "file_id": "ev"})
-    assert r.status_code in (400, 404) and b"JV36-SECRET" not in r.content, (
-        "路徑穿越沒有擋：%s %s" % (r.status_code, r.content[:60]))
+    try:
+        evil = seed_extra_expense(QUOTE, total_cost=1, description="路徑穿越",
+                                  files=[{"id": "ev", "filename": "x.png", "path": "../jv36_secret.txt"}])
+        hdr = _hdr(client, make_user, "jv36_trav")
+        r = client.get(VOUCHERS + "/line-source-file", headers=hdr,
+                       params={"source_type": "extra_expense", "ref": str(evil), "file_id": "ev"})
+        assert b"JV36-SECRET" not in r.content, "路徑穿越沒有擋：%s %s" % (r.status_code, r.content[:60])
+        assert r.status_code == 400 and r.json().get("detail") == PATH_REFUSED, (
+            "擋下的不是路徑守門（可能是模組未安裝、查無檔案等別的原因 ⇒ 這一題沒驗到守門）：%s %s"
+            % (r.status_code, r.text[:200]))
+    finally:
+        os.remove(secret)
+
+
+def test_jv36_abs_path_refuses_escaping_the_uploads_root():
+    """AB43-O1：路徑守門本身不經任何提供者 ⇒ M01 在不在都跑（不標 needs_m01）。
+    正對照：根目錄內的相對路徑照常回絕對路徑（守門不是一律拒絕）。"""
+    from fastapi import HTTPException
+    from helpers.uploads import UPLOADS_ROOT
+    from modules.accounting.voucher_attachments import abs_path
+    root = os.path.realpath(UPLOADS_ROOT)
+    for evil in ("../jv36_secret.txt", "/../../etc/passwd", "a/../../x.png"):
+        with pytest.raises(HTTPException) as ei:
+            abs_path(evil)
+        assert ei.value.status_code == 400 and ei.value.detail == PATH_REFUSED, (evil, ei.value.detail)
+    ok = abs_path("jv36/exp1.png")
+    assert ok == os.path.join(root, "jv36", "exp1.png"), ok
 
 
 def test_jv36_lines_remember_their_source_and_bad_sources_are_refused(client, make_user,
