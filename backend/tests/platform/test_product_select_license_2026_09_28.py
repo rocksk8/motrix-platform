@@ -155,3 +155,15 @@ def test_cli_license_path_writes_the_fingerprint_and_both_flags_are_refused(tmp_
     bad = _write(tmp_path, "壞掉的授權", name="bad.key")
     pkg2, _ = _three(tmp_path / "c")
     assert PS.main(["apply", "--pkg", str(pkg2), "--license", str(bad)]) == 2
+
+
+def test_an_unverified_status_is_refused_even_if_it_carries_modules(tmp_path, monkeypatch):
+    """簽章這一道自己要擋：不依賴 licensing 內部「沒驗過章時 modules 一定是 None」——
+    就算驗章結果帶著模組清單，env 是 None（沒有任何一把公鑰驗過）⇒ 拒絕。"""
+    from helpers import licensing as L
+    monkeypatch.setattr(L, "verify_license", lambda blob=None: {
+        "valid": False, "reason": "bad_signature", "env": None, "customer": None, "modules": ["alpha"],
+        "expires": (TODAY + _dt.timedelta(days=30)).isoformat(), "days_left": 30, "kind": None})
+    pkg, _ = _three(tmp_path)
+    with pytest.raises(PS.SelectError, match="驗不過"):
+        _apply_by_license(pkg, _write(tmp_path, "anything"))
