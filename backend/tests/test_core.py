@@ -1,14 +1,13 @@
 """Unit tests for pure business-logic functions (no DB required)."""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import pytest
 
-from modules.case.quotations import _steps_to_tiers, payment_item_amounts
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 from helpers.auth import _hash_pw, _verify_pw, is_weak_password, MIN_PASSWORD_LEN
-from modules.case.api.quotations import _active_tiers, _current_tier_idx
 from routers.uploads import _resolve_upload_path, UPLOADS_ROOT
 import archive
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 # ── _parse_period ─────────────────────────────────────────────────────────────
@@ -38,17 +37,23 @@ def _make_case(quote_date="2026-03-01", total=100_000, pretax=None, received=50_
 # ── _steps_to_tiers ───────────────────────────────────────────────────────────
 
 class TestStepsToTiers:
+    @needs_m01
     def test_empty(self):
+        from modules.case.quotations import _steps_to_tiers
         assert _steps_to_tiers([]) == []
 
+    @needs_m01
     def test_single_step(self):
+        from modules.case.quotations import _steps_to_tiers
         steps = [{"userId": 1, "username": "alice", "displayName": "Alice"}]
         result = _steps_to_tiers(steps)
         assert len(result) == 1
         assert result[0]["order"] == 0
         assert result[0]["approvers"] == [{"userId": 1, "username": "alice", "displayName": "Alice"}]
 
+    @needs_m01
     def test_multiple_steps_order(self):
+        from modules.case.quotations import _steps_to_tiers
         steps = [
             {"userId": 1, "username": "alice", "displayName": "Alice"},
             {"userId": 2, "username": "bob",   "displayName": "Bob"},
@@ -58,17 +63,23 @@ class TestStepsToTiers:
         assert result[1]["order"] == 1
         assert result[1]["approvers"][0]["username"] == "bob"
 
+    @needs_m01
     def test_missing_display_name_falls_back_to_username(self):
+        from modules.case.quotations import _steps_to_tiers
         steps = [{"userId": 5, "username": "carol"}]
         result = _steps_to_tiers(steps)
         assert result[0]["approvers"][0]["displayName"] == "carol"
 
+    @needs_m01
     def test_missing_user_id_defaults_to_zero(self):
+        from modules.case.quotations import _steps_to_tiers
         steps = [{"username": "dave", "displayName": "Dave"}]
         result = _steps_to_tiers(steps)
         assert result[0]["approvers"][0]["userId"] == 0
 
+    @needs_m01
     def test_no_status_fields(self):
+        from modules.case.quotations import _steps_to_tiers
         steps = [{"userId": 1, "username": "eve", "displayName": "Eve", "status": "approved"}]
         result = _steps_to_tiers(steps)
         # _steps_to_tiers should NOT carry over status
@@ -78,14 +89,20 @@ class TestStepsToTiers:
 # ── _active_tiers ─────────────────────────────────────────────────────────────
 
 class TestActiveTiers:
+    @needs_m01
     def test_empty(self):
+        from modules.case.api.quotations import _active_tiers
         assert _active_tiers({}) == []
 
+    @needs_m01
     def test_modern_tiers_passthrough(self):
+        from modules.case.api.quotations import _active_tiers
         tiers = [{"order": 0, "approvers": [{"userId": 1, "username": "a", "status": "pending"}]}]
         assert _active_tiers({"tiers": tiers}) is tiers
 
+    @needs_m01
     def test_old_steps_backward_compat(self):
+        from modules.case.api.quotations import _active_tiers
         steps = [
             {"userId": 1, "username": "alice", "displayName": "Alice", "status": "approved", "approvedAt": "2026-01-01"},
             {"userId": 2, "username": "bob",   "displayName": "Bob",   "status": "pending",  "approvedAt": None},
@@ -96,12 +113,16 @@ class TestActiveTiers:
         assert result[0]["approvers"][0]["approvedAt"] == "2026-01-01"
         assert result[1]["approvers"][0]["status"] == "pending"
 
+    @needs_m01
     def test_old_steps_missing_status_defaults_pending(self):
+        from modules.case.api.quotations import _active_tiers
         steps = [{"userId": 1, "username": "alice", "displayName": "Alice"}]
         result = _active_tiers({"steps": steps})
         assert result[0]["approvers"][0]["status"] == "pending"
 
+    @needs_m01
     def test_prefers_tiers_over_steps(self):
+        from modules.case.api.quotations import _active_tiers
         tiers = [{"order": 0, "approvers": [{"userId": 1, "username": "a", "status": "pending"}]}]
         steps = [{"userId": 99, "username": "ignored"}]
         result = _active_tiers({"tiers": tiers, "steps": steps})
@@ -111,16 +132,24 @@ class TestActiveTiers:
 # ── _current_tier_idx ─────────────────────────────────────────────────────────
 
 class TestCurrentTierIdx:
+    @needs_m01
     def test_modern_current_tier(self):
+        from modules.case.api.quotations import _current_tier_idx
         assert _current_tier_idx({"currentTier": 2}) == 2
 
+    @needs_m01
     def test_legacy_current_step(self):
+        from modules.case.api.quotations import _current_tier_idx
         assert _current_tier_idx({"currentStep": 1}) == 1
 
+    @needs_m01
     def test_neither_defaults_zero(self):
+        from modules.case.api.quotations import _current_tier_idx
         assert _current_tier_idx({}) == 0
 
+    @needs_m01
     def test_modern_takes_precedence(self):
+        from modules.case.api.quotations import _current_tier_idx
         assert _current_tier_idx({"currentTier": 3, "currentStep": 0}) == 3
 
 
@@ -248,12 +277,16 @@ class TestMirrorUploads:
 # ── payment_item_amounts (regression for dashboard/reports vs edit-UI drift) ──
 
 class TestPaymentItemAmounts:
+    @needs_m01
     def test_empty_list(self):
+        from modules.case.quotations import payment_item_amounts
         assert payment_item_amounts(100_000, []) == []
 
+    @needs_m01
     def test_prefers_stored_amount_when_present(self):
         # Mirrors what case-management.js actually saves — the last item balances
         # the total, and every item ends up with an explicit `amount`.
+        from modules.case.quotations import payment_item_amounts
         items = [
             {"pct": 30, "amount": 30_000},
             {"pct": 30, "amount": 30_000},
@@ -261,10 +294,12 @@ class TestPaymentItemAmounts:
         ]
         assert payment_item_amounts(100_000, items) == [30_000, 30_000, 40_000]
 
+    @needs_m01
     def test_stored_amounts_sum_exactly_even_if_pct_rounds_oddly(self):
         # 1/3 + 1/3 + 1/3 of 100 can't split evenly by pct alone — but if the UI
         # already saved amounts that sum to the total, that must be respected
         # verbatim rather than recomputed from the (necessarily imprecise) pct.
+        from modules.case.quotations import payment_item_amounts
         items = [
             {"pct": 33.33, "amount": 33_333},
             {"pct": 33.33, "amount": 33_333},
@@ -274,17 +309,23 @@ class TestPaymentItemAmounts:
         assert amounts == [33_333, 33_333, 33_334]
         assert sum(amounts) == 100_000
 
+    @needs_m01
     def test_legacy_rows_without_amount_fall_back_to_pct_first_absorbs(self):
         # Pre-existing backend convention for rows saved before `amount` existed:
         # first item absorbs the rounding remainder from the rest.
+        from modules.case.quotations import payment_item_amounts
         items = [{"pct": 33.33}, {"pct": 33.33}, {"pct": 33.34}]
         amounts = payment_item_amounts(100_000, items)
         assert sum(amounts) == 100_000
         assert amounts[0] == 100_000 - amounts[1] - amounts[2]
 
+    @needs_m01
     def test_mixed_stored_and_legacy_items(self):
+        from modules.case.quotations import payment_item_amounts
         items = [{"pct": 50, "amount": 50_000}, {"pct": 50}]
         assert payment_item_amounts(100_000, items) == [50_000, 50_000]
 
+    @needs_m01
     def test_single_item_gets_full_total(self):
+        from modules.case.quotations import payment_item_amounts
         assert payment_item_amounts(100_000, [{"pct": 100}]) == [100_000]

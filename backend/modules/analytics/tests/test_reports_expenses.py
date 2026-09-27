@@ -1,11 +1,12 @@
 """營運報表「月支出金額及明細」（2026-08-26）API 層測試——
 routers/reports.py::_collect_expenses()/GET /api/reports/expenses-monthly。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pytest
 
 from core import source_tree as _source_tree
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
 #: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
@@ -95,6 +96,7 @@ def test_stock_purchase_bucketed_by_category(client, make_user):
     assert "× 2" in eq_detail["desc"]
 
 
+@needs_m01
 def test_settlement_extra_item_counted_as_other(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -127,6 +129,7 @@ def test_settlement_extra_item_counted_as_other(client, make_user):
     assert any(d["quoteNo"] == "MQ-EXP-002" and d["amount"] == 2500 for d in body["expenses"]["details"]["other"])
 
 
+@needs_m01
 @needs_subcontract
 def test_contractor_dispatch_counted(client, make_user):
     username, password = make_user(role="admin")

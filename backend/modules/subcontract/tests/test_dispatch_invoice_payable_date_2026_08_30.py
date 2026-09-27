@@ -3,9 +3,10 @@
 日期並上傳廠商發票，且產生匯款申請後，簽核佇列（/api/approval-queue）與
 申請單本身都要能看到這兩項，連同既有的匯款帳戶／存簿圖檔一起顯示——這兩項
 本來就已經寫入 snapshot_json，只是簽核佇列的查詢沒有把它們帶出來。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import io
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -122,6 +123,7 @@ def test_dispatch_invoice_file_upload_requires_admin(client, make_user):
     assert up.status_code == 403, up.text
 
 
+@needs_m01
 def test_voucher_snapshot_and_approval_queue_carry_payable_date_and_bank_info(client, make_user):
     """端到端：派發（含應付款日期＋廠商發票）→ 產生匯款申請 → 送出審核 →
     簽核佇列項目要能看到應付款日期／匯款帳戶／存簿圖檔／廠商發票。"""

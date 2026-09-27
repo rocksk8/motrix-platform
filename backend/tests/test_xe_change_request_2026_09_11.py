@@ -9,7 +9,7 @@
 人一按編輯，成本與報表數字當場就變了，簽核變成事後追認。所以下面每一個測試都在
 守同一條線：**核准之前，本體的金額與附件完全沒被動過**。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 

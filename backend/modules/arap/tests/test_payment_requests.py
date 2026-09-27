@@ -1,9 +1,10 @@
 """API-level integration tests for 請款單 (payment_requests) — mirrors the
 existing invoice_vouchers design (frozen snapshot + remaining-quota
 over-collection guard), see routers/payment_requests.py docstring."""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -55,6 +56,7 @@ def _make_quotation(quote_no, total=100000, pretax=95238, items=None):
         conn.close()
 
 
+@needs_m01
 def test_create_payment_request_by_amount(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -77,6 +79,7 @@ def test_create_payment_request_by_amount(client, make_user):
     assert body["terms"]["paymentTerms"] == "訂金 30%，尾款 70%"
 
 
+@needs_m01
 def test_create_payment_request_by_ratio_pct(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -112,6 +115,7 @@ def test_payment_request_blocks_overcollection(client, make_user):
     assert r2.status_code == 409, r2.text
 
 
+@needs_m01
 def test_payment_request_remaining_reflects_drafts(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -128,6 +132,7 @@ def test_payment_request_remaining_reflects_drafts(client, make_user):
     assert info["remainingAmount"] == 60000
 
 
+@needs_m01
 def test_payment_request_full_approval_cycle_no_tiers(client, make_user):
     # No-tier fallback requires a *different* superadmin to approve than the
     # requester (check_no_tier_self_approval) — the seeded 'demo' showcase
@@ -176,6 +181,7 @@ def test_payment_request_delete_only_allowed_in_draft(client, make_user):
     assert d.status_code == 409, d.text
 
 
+@needs_m01
 def test_payment_request_terms_editable_only_in_draft(client, make_user):
     # /terms（單獨改條款）端點已被整頁編輯介面用的統一 PUT /api/payment-requests/
     # {request_no} 取代（見 routers/payment_requests.py update_payment_request()），
@@ -213,6 +219,7 @@ def test_payment_request_terms_editable_only_in_draft(client, make_user):
     assert blocked.status_code == 409, blocked.text
 
 
+@needs_m01
 def test_payment_request_appears_in_unified_approval_queue(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)

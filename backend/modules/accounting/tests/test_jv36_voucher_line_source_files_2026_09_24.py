@@ -14,7 +14,9 @@ N12：選支出項時該行借貸都空白 ⇒ 金額帶入借方
   走 resolve_picks 白名單＋abs_path；_require_voucher_access（非傳票權限 403）
 ```
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import os
 
@@ -82,6 +84,7 @@ def _hdr(client, make_user, username, modules=("cashier",), role="superadmin"):
 # API：清單、預覽端點的範圍與權限
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_jv36_the_line_source_lists_only_that_sources_files(client, make_user, seed_extra_expense):
     e1, e2 = _seed(seed_extra_expense)
     hdr = _hdr(client, make_user, "jv36_list")
@@ -95,6 +98,7 @@ def test_jv36_the_line_source_lists_only_that_sources_files(client, make_user, s
     assert "回簽.png" in [f["filename"] for f in r.json()["files"]], r.json()
 
 
+@needs_m01
 def test_jv36_the_preview_endpoint_is_scoped_and_guarded(client, make_user, seed_extra_expense):
     e1, e2 = _seed(seed_extra_expense)
     hdr = _hdr(client, make_user, "jv36_prev")
@@ -165,7 +169,6 @@ def test_jv36_lines_remember_their_source_and_bad_sources_are_refused(client, ma
 
 pw = pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login as _login  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 _D = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -185,6 +188,7 @@ def _att_count(page):
     return page.evaluate("() => %s.attachments.length" % _D)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
@@ -315,6 +319,7 @@ def test_auto_amount_does_not_linger_after_switching_to_a_case_or_an_expense_wit
     assert line["source_type"] == "case" and line["debit"] == "4321", line
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv36_picking_a_case_lists_the_case_files_and_keeps_existing_amounts(
         live_server, client, make_user, seed_extra_expense, e2e_browser):

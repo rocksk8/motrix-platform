@@ -52,7 +52,7 @@ B 把快照放在 `data_json` 的哪個鍵，題目都不必跟著改。
 凍結流程**的單（例如直接用 SQL 種一筆 status='已送出' 而沒有走 PATCH），
 印出來仍然要有內容，不可以是空白。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import sys
 from pathlib import Path

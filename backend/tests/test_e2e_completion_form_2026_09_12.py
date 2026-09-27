@@ -7,7 +7,9 @@
 這一頁全靠 Alpine 綁定，寫錯不會有錯誤訊息、只會安靜地存不進去——本專案已經在同一個
 坑摔過好幾次，所以從瀏覽器一路按到底，最後回頭查資料庫確認值真的送到了。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import threading
 import time
@@ -19,7 +21,6 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 PAGE = "/pages/completion-note-form.html"
 
@@ -85,6 +86,7 @@ def test_init_runs_exactly_once(live_server, make_user, e2e_browser):
     assert len(hits) == 1, f"init() 應該只跑一次，實際打了 {len(hits)} 次案件 API"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_single_page_shows_everything_and_prefills_from_quotation(live_server, make_user, e2e_browser):
     """**沒有分頁**：所有區塊在同一頁同時看得到（使用者要求拿掉分頁）。
@@ -121,6 +123,7 @@ def test_single_page_shows_everything_and_prefills_from_quotation(live_server, m
     assert not errors, f"頁面有 JS 錯誤：{errors}"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_preset_and_custom_labels_round_trip(live_server, make_user, e2e_browser):
     """套用預設用語 → 儲存 → 值真的寫進 data_json.labels。
@@ -157,6 +160,7 @@ def test_preset_and_custom_labels_round_trip(live_server, make_user, e2e_browser
     assert json.loads(row["items_json"])[0]["description"] == "核心交換器建置"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_warranty_toggle_controls_whether_it_is_stored(live_server, make_user, e2e_browser):
     """保固勾掉＝月數存 0＝完工單上不顯示（比照報價單「留空就不印」）。"""

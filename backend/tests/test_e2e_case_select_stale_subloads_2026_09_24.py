@@ -5,7 +5,7 @@ selectCase() 在 await（建立預設階段等）之後還會繼續重設狀態�
 變成 A 的，使用者按儲存成員就寫進 B。
 觀測點：B 畫面上的資料，以及 B 在資料庫的成員名單（存檔後）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

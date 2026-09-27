@@ -7,14 +7,15 @@
 - 結案成功後留在案件頁（原本 800ms 後跳保固頁）
 沒有該頁權限的人不顯示連結。觀測點：API 回應、連結 href、頁面網址與資料庫 deal_tag。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import threading
 import time
 
 import pytest
 from tests._e2e_login import inject_login  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-XLINK-001"
 OTHER = "MQ-XLINK-OTHER"
@@ -74,6 +75,7 @@ def _open(browser, base, user):
     return page
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_user, e2e_browser):
     u = make_user(username="xl_e1", role="superadmin")
@@ -99,6 +101,7 @@ def test_case_page_links_to_map_bonus_and_vouchers(live_server, client, make_use
         assert links.locator("[data-testid=case-link-voucher]").count() == 0
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_page_hides_links_the_user_cannot_open(live_server, make_user, e2e_browser):
     u = make_user(username="xl_e2", role="admin", modules=["case_manage"])
@@ -110,6 +113,7 @@ def test_case_page_hides_links_the_user_cannot_open(live_server, make_user, e2e_
         assert page.locator(f"[data-testid=case-link-{k}]").count() == 0, k
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_after_closing_the_case_stays_on_the_case_page(live_server, make_user, e2e_browser):
     import db

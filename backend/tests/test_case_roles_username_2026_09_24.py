@@ -5,11 +5,12 @@
 保留原字串並列在「使用者管理」頁的清單（GET /api/system/case-roles-unmapped，superadmin）。
 讀取端一律吃兩種形狀（物件、未轉換的舊字串）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-ROLES-001"
 
@@ -106,6 +107,7 @@ def test_migration_does_not_touch_updated_at(client, make_user):
 
 # ── 讀取端吃兩種形狀 ────────────────────────────────────────────────────────
 
+@needs_m01
 def test_member_check_uses_username_after_rename(client, make_user):
     u = make_user(username="rl_exec", role="engineer")
     _set_display("rl_exec", "新名字")                 # 改名之後
@@ -115,6 +117,7 @@ def test_member_check_uses_username_after_rename(client, make_user):
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_member_check_by_username_ignores_same_display_name(client, make_user):
     """物件形狀以 username 比對：同名的另一個人不會因為顯示名稱相同被放行。"""
     make_user(username="rl_real", role="engineer"); _set_display("rl_real", "同名")
@@ -125,6 +128,7 @@ def test_member_check_by_username_ignores_same_display_name(client, make_user):
     assert r.status_code == 403, r.text
 
 
+@needs_m01
 def test_change_history_and_summary_show_display_not_dict():
     from modules.case.api import quotations as q
     assert q._fmt_change_value({"username": "a", "display": "王小美"}) == "王小美"

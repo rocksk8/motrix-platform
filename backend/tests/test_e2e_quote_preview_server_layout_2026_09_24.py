@@ -4,7 +4,7 @@
 - sandbox 只給 allow-scripts：pdf_gen 內建的 A4 縮放 script 要真的生效（長報價單）
 - 切換「對外／內部」會重取；開預覽不可以清掉離頁警告（那支是 POST）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

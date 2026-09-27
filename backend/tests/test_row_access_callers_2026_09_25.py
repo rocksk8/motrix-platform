@@ -4,16 +4,18 @@
 ② 行為變更（2026-09-25 主持裁示，使用者裁示「對齊列表」）：全域搜尋與首頁動態牆的案件可見性
    改成與案件列表同一套——被指派者（assigned_user_ids）與 cashier 現在也看得到；外人仍看不到。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import dataclasses
 import json
 
 from tests.test_row_access_2026_09_25 import CASE
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QNO = "MQ-RA-0925"
 
 
+@needs_m01
 def test_registered_rules_are_the_verified_ones():
     """案件那一份（業務開發那一份在 modules/crm/tests/test_crm_row_access_rule.py，隨模組搬走）。"""
     from modules.case.quotations import CASE_ACCESS
@@ -70,6 +72,7 @@ def test_global_search_matches_case_list_rule(client, make_user):
     assert got == {"owner": True, "asg": True, "cash": True, "outsider": False}
 
 
+@needs_m01
 def test_same_rule_as_case_list(client, make_user):
     """對照組：案件列表本身就是這個結果——搜尋與動態牆現在與它一致。"""
     h = _setup(client, make_user)

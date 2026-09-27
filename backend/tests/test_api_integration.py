@@ -4,9 +4,10 @@ coverage in test_core.py; this file targets the things that only exist at the
 HTTP/request layer: auth middleware, demo-account DB isolation, optimistic
 locking, login rate limiting, and the /api/uploads path-traversal guard.
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -211,6 +212,7 @@ def _make_quotation(quote_no, deal_tag="", status="草稿"):
         conn.close()
 
 
+@needs_m01
 def test_deal_tag_cannot_jump_straight_to_closed(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -223,6 +225,7 @@ def test_deal_tag_cannot_jump_straight_to_closed(client, make_user):
     assert r.status_code == 400, r.text
 
 
+@needs_m01
 def test_deal_tag_cannot_reach_closed_from_provided(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -235,6 +238,7 @@ def test_deal_tag_cannot_reach_closed_from_provided(client, make_user):
     assert r.status_code == 400, r.text
 
 
+@needs_m01
 def test_deal_tag_closed_allowed_from_won(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)
@@ -247,6 +251,7 @@ def test_deal_tag_closed_allowed_from_won(client, make_user):
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_put_quotation_cannot_smuggle_deal_tag_change(client, make_user):
     """PUT is the generic content-save endpoint for an editable (unlocked) quotation;
     it must not let a client-supplied dealTag/settlement.status bypass the state-machine
@@ -300,6 +305,7 @@ def test_put_quotation_cannot_smuggle_deal_tag_change(client, make_user):
 
 # ── quotation draft PUT optimistic lock (#6 medium risk) ─────────────────────
 
+@needs_m01
 def test_put_quotation_conflict_returns_409(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -319,6 +325,7 @@ def test_put_quotation_conflict_returns_409(client, make_user):
     assert r.status_code == 409, r.text
 
 
+@needs_m01
 def test_put_quotation_succeeds_with_correct_expected_updated_at(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -341,6 +348,7 @@ def test_put_quotation_succeeds_with_correct_expected_updated_at(client, make_us
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_put_quotation_without_expected_updated_at_still_works(client, make_user):
     """Optional lock — omitting it must not break existing callers (e.g. new-record saves)."""
     username, password = make_user(role="admin")

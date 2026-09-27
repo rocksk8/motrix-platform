@@ -8,7 +8,9 @@ P4 把案件頁 232 處 alert／confirm／prompt 換成 static/ui.js 的 MotrixU
    刪完工單），全部按取消：不得出現任何原生對話框，而且資料一筆都沒被刪。
 P4 A／B 兩包已於 2026-09-24 全部推上 master，xfail 已拿掉。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pathlib
 import re
@@ -17,7 +19,6 @@ import time
 
 import pytest
 from tests._e2e_login import inject_login  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGE = ROOT / "frontend" / "pages" / "case-management.html"
@@ -146,6 +147,7 @@ def _actions():
     return ACTIONS + ([("B 刪出貨單", "c.deleteShippingNote(c.shippingNotes[0])")] if _supply_installed() else [])
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_main_actions_use_no_native_dialogs(live_server, make_user, e2e_browser):
     from tests._ui_dialogs import DIALOG, forbid_native_dialogs

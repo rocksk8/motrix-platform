@@ -3,7 +3,7 @@
 2026-09-26 自 tests/platform/test_case_stage_connectors.py 移入本模組（拿掉 M12 時這兩題一起消失）；
 「M12 不在時勾選照常、明說原因」那一題留在 tests/platform（它驗的是 M01 的退化，M12 不在時也要綠）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 from core import registry

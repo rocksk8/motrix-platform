@@ -11,9 +11,10 @@
 3. 沒有財務檢視權的人看得到內容但**看不到金額**（規則與憑證流一致），
    而本單簽核人例外
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -75,6 +76,7 @@ def test_outsider_cannot_open_queue_detail(client, make_user):
     assert r.status_code == 404, f"外人看得到送審內容：{r.status_code} {r.text}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
+@needs_m01
 def test_document_approver_can_open_detail(client, make_user):
     """反向控制（這一題才是重點）：這張單的簽核人打得開——他既不是業務也沒被指派。
 
@@ -89,6 +91,7 @@ def test_document_approver_can_open_detail(client, make_user):
     assert r.json()["case"]["quoteNo"] == "MQ-AQZ-002"
 
 
+@needs_m01
 def test_case_member_can_open_detail(client, make_user):
     """具「案件管理」模組的人也打得開（與其他每案端點同一套規則）。"""
     _seed_case("MQ-AQZ-003", sales_person="someone_else")
@@ -99,6 +102,7 @@ def test_case_member_can_open_detail(client, make_user):
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_money_is_masked_without_financial_view(client, make_user):
     """沒有財務檢視權：內容看得到，金額看不到（規則與憑證流一致）。"""
     _seed_case("MQ-AQZ-004", sales_person="someone_else")
@@ -113,6 +117,7 @@ def test_money_is_masked_without_financial_view(client, make_user):
     assert labels["執行說明"] == "施工說明", labels
 
 
+@needs_m01
 def test_money_visible_for_approver_without_financial_view(client, make_user):
     """本單簽核人例外：看不到金額就沒辦法判斷該不該簽。"""
     _seed_case("MQ-AQZ-005", sales_person="someone_else")
@@ -124,6 +129,7 @@ def test_money_visible_for_approver_without_financial_view(client, make_user):
     assert d["items"][0]["amount"] == 5000, d["items"]
 
 
+@needs_m01
 def test_passbook_image_rejects_non_image_scheme(client, make_user):
     """存簿封面只收 `data:image/`——混進 javascript: 的話，簽核人點下去就是在本站
     原點執行腳本（自動安全掃描 finding #2，前後端都擋）。"""

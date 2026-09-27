@@ -7,9 +7,10 @@
 
 這裡釘住：不論 client 送什麼 `created_by`，落庫的一律是 session 的使用者。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -37,6 +38,7 @@ def _payload(created_by):
     }
 
 
+@needs_m01
 def test_created_by_comes_from_session_not_request_body(client, make_user):
     """核心：client 謊報 created_by 也沒用，落庫的是 session 使用者。"""
     import db
@@ -63,6 +65,7 @@ def test_created_by_comes_from_session_not_request_body(client, make_user):
     )
 
 
+@needs_m01
 def test_created_by_filled_even_when_client_omits_it(client, make_user):
     """client 完全不送 created_by 時也要有值（原本會存成 NULL）。"""
     import db

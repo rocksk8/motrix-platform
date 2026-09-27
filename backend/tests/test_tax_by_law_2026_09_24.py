@@ -15,16 +15,18 @@
 - 沒有 `taxType` 的舊報價：稅率 0 ⇒ 免稅（照原本的選項標籤），其餘 ⇒ 應稅；不做 migration。
 - 已開發票（開票申請已核准）⇒ 以那張單記載的稅額為準。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 # ── 單一算法 ─────────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_taxable_tax_is_five_percent_of_sales_rounded_half_up():
     from modules.case.quotations import tax_split
     assert tax_split(9810, "taxable") == (9810, 491)      # 490.5 ⇒ 491（四捨五入，不是銀行家捨入）
@@ -32,12 +34,14 @@ def test_taxable_tax_is_five_percent_of_sales_rounded_half_up():
     assert tax_split(1, "taxable") == (1, 0)
 
 
+@needs_m01
 @pytest.mark.parametrize("tax_type", ["zero", "exempt"])
 def test_zero_rated_and_exempt_have_no_tax(tax_type):
     from modules.case.quotations import tax_split
     assert tax_split(10000, tax_type) == (10000, 0)
 
 
+@needs_m01
 @pytest.mark.parametrize("data,want", [
     ({}, "taxable"),
     ({"taxRate": 5}, "taxable"),
@@ -82,6 +86,7 @@ def _paid(amount, inv="AB12345678"):
 # ── 已開發票：以發票記載的未稅／稅額為準（使用者選 (a)：收款登錄發票時加填）─────
 
 
+@needs_m01
 @pytest.mark.parametrize("item,ok", [
     ({}, True),
     ({"invoicePretax": 10000, "invoiceTax": 500}, True),
@@ -124,6 +129,7 @@ def _stored_item(no, idx=0):
     return d["caseRecord"]["payment"]["items"][idx]
 
 
+@needs_m01
 def test_marking_a_payment_with_only_one_invoice_amount_is_refused(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-MP", 10000, 10500, {"taxRate": 5}, [{"id": "p1", "amount": 10500}])
@@ -133,6 +139,7 @@ def test_marking_a_payment_with_only_one_invoice_amount_is_refused(client, make_
     assert "invoicePretax" not in _stored_item("MQ-MP")
 
 
+@needs_m01
 def test_marking_a_payment_with_both_invoice_amounts_is_stored(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-MP2", 10000, 10500, {"taxRate": 5}, [{"id": "p1", "amount": 10500}])
@@ -144,6 +151,7 @@ def test_marking_a_payment_with_both_invoice_amounts_is_stored(client, make_user
     assert (it["invoicePretax"], it["invoiceTax"]) == (10000, 500)
 
 
+@needs_m01
 def test_saving_the_case_record_with_only_one_invoice_amount_is_refused(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-CR", 10000, 10500, {"taxRate": 5}, [{"id": "p1", "amount": 10500}])
@@ -182,6 +190,7 @@ def _quote_body(no=None, **data):
     return b
 
 
+@needs_m01
 @pytest.mark.parametrize("data,ok", [
     ({"taxRate": 5, "taxType": "taxable"}, True),
     ({"taxRate": 0, "taxType": "zero"}, True),
@@ -200,6 +209,7 @@ def test_creating_a_quote_accepts_only_legal_tax_types(client, make_user, data, 
         assert r.status_code == 400
 
 
+@needs_m01
 def test_saving_an_old_legacy_rate_quote_requires_a_legal_tax_type(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-OLD3", 10000, 10300, {"taxRate": 3, "customerName": "客戶"}, [], status="草稿")
@@ -213,6 +223,7 @@ def test_saving_an_old_legacy_rate_quote_requires_a_legal_tax_type(client, make_
 
 # ── 需審核原因與 PDF 標籤：依稅別描述 ──────────────────────────────────────────
 
+@needs_m01
 @pytest.mark.parametrize("data,want", [
     ({"taxRate": 0, "taxType": "zero"}, "稅別為零稅率（非應稅 5%）"),
     ({"taxRate": 0, "taxType": "exempt"}, "稅別為免稅（非應稅 5%）"),
@@ -224,6 +235,7 @@ def test_approval_reason_names_the_tax_type(data, want):
     assert want in compute_approval_reasons(dict(data, items=[]), [], "")
 
 
+@needs_m01
 def test_taxable_quote_has_no_tax_reason():
     from modules.case.quote_terms import compute_approval_reasons
     rs = compute_approval_reasons({"taxRate": 5, "taxType": "taxable", "items": []}, [], "")

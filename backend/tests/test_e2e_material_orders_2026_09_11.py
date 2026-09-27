@@ -14,7 +14,7 @@
 需要 `playwright`（見 `test_e2e_playwright_2026_09_07.py` 檔頭說明），
 沒裝的環境整個檔案 skip。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

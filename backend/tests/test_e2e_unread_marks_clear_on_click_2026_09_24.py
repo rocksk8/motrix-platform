@@ -9,7 +9,9 @@
 把 `POST /api/reads` **攔住不放行**，在伺服器還沒收到之前量畫面：
 標記若是等回應才清，這時一定還在。放行之後再驗伺服器真的記下了。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import time
 from datetime import datetime
@@ -19,7 +21,6 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login as _login  # noqa: E402,F401
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _uid(username):
@@ -192,6 +193,7 @@ def test_menu_badge_clears_the_moment_the_item_is_clicked(live_server, make_user
     hold.release()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_switch_cancelled_keeps_the_unread_mark(live_server, make_user, e2e_browser):
     """案件管理：切換前會先存檔，存檔失敗時問要不要放棄；選「否」就留在原案件
@@ -268,6 +270,7 @@ class _LateUnread:
         self.held = []
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_management_late_unread_answer_does_not_undo_a_click(live_server, make_user, e2e_browser):
     make_user(username="bob", role="admin")

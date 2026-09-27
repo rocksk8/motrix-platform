@@ -4,7 +4,7 @@ selectCase() 取案件後直接 this.selected = data，沒有確認「這還是�
 ⇒ 連點 A、B，A 的回應較晚回來，畫面停在 A（使用者以為在看 B）。
 案件健康總覽的晚到題偶發紅燈即此成因。觀測點：selected.quote_no。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

@@ -9,7 +9,7 @@ sessionStorage 清掉，重新整理再也回不來。
 複製 → 存檔，斷言：存得起來、拿到合法單號、內容真的被複製過去。
 純後端測試攔不下來——後端收到什麼取決於前端造了什麼。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

@@ -4,7 +4,7 @@ loadCaseCounts() 原本回應非 2xx 或例外時 catch {} 靜默吞掉：caseCo
 一直空白，畫面沒有任何說明。改為顯示「件數載入失敗」＋「重試」。
 觀測點：畫面上的失敗訊息；重試成功後訊息消失、數字出現。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

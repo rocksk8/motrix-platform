@@ -9,7 +9,9 @@
    （營運報表那一處在 modules/analytics/tests/test_reports_dispatch_row_consumer.py；第六班列車交會 M04×M08）
    ——同一批資料、同一個呼叫，有提供者時派工那一類必須非空（否則「少了」是假的）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import sqlite3
 
@@ -17,7 +19,6 @@ import pytest
 
 from core import registry
 from core import source_tree
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QNO = "MQ-IP1-0925"
 YEAR = 2026
@@ -109,6 +110,7 @@ def _drop_dispatch_row(monkeypatch):
     monkeypatch.setattr(registry, "providers", lambda cap: {} if cap in gone else orig(cap))
 
 
+@needs_m01
 def test_consumers_degrade_when_provider_is_absent(client, make_user, monkeypatch):
     if not source_tree.module_installed("modules/accounting/"):
         pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")

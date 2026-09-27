@@ -6,9 +6,10 @@
 """
 
 
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 from core import registry
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QNO, OTHER = "MQ-IP11-0926", "MQ-IP11-OTHER"
 
@@ -51,6 +52,7 @@ def test_provider_is_registered(client):
     assert set(registry.providers("crm.quote_deleted")) == {"crm"}
 
 
+@needs_m01
 def test_deleting_a_quote_unlinks_only_its_dev_cases(client, make_user):
     h = _login(client, make_user)
     _seed()

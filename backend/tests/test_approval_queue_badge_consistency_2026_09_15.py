@@ -13,7 +13,7 @@
 （`approval-queue.html`），這裡照抄一份——**兩邊的規則本來就必須一樣**，
 不一樣就是 bug。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

@@ -6,17 +6,17 @@
    ⇒ 讀與寫之間若有收款的 PATCH commit，會被這份舊的整包蓋回去；負載越高空窗越大。
    ⚠️ 單跑幾乎碰不到（空窗只有幾毫秒）⇒ 這一題在空窗裡**確定地**插入一次 PATCH。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 
-import modules.case.api.quotations as q
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def test_a_payment_saved_while_stages_sync_is_not_overwritten(client, make_user, monkeypatch):
+    import modules.case.api.quotations as q
     u, pw = make_user(username="sync_race", role="superadmin")
     _seed(assigned=[])
     h = _login(client, u, pw)

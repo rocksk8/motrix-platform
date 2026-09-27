@@ -65,12 +65,13 @@ call site 現在還漏不漏」是另一道獨立的斷言（`②`／反向控�
 ❌ 不對 C 組（18 處）下任何驗收——規格明講「待查不是已判定安全」，
    〈不可以在驗收裡寫『C 組 = 0』〉：寫了會把它們推向「一起改掉」。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import ast
 import logging
 import pathlib
 import re
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 ROUTERS_DIR = ROOT / "backend" / "routers"
@@ -412,6 +413,7 @@ def test_em3_group_a_detail_must_not_reference_the_raw_exception():
           "函式庫版本這類我們沒有寫過的字直接送到使用者畫面上。")
 
 
+@needs_m01
 def test_em3_the_one_named_exception_still_raises_its_own_message():
     """⚙️🔴 **反向控制：`quotations.py::create_quotation` 那一處具名例外
     仍然要 `raise HTTPException(400, str(e))`，不可以被「順手」改掉。**
@@ -496,6 +498,7 @@ def _hdr(client, make_user, username):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
+@needs_m01
 def test_em3_pdf_failure_shows_a_trace_code_not_the_raw_exception(
         client, make_user, monkeypatch, caplog):
     """🔴🔴 **`§7③ⓐ`：PDF 產生失敗，畫面要顯示「PDF 產生失敗（代碼 XXXXXXXX）」，
@@ -534,6 +537,7 @@ def test_em3_pdf_failure_shows_a_trace_code_not_the_raw_exception(
     assert m, "`detail` 裡找不到 8 碼 hex 追蹤碼：%r" % detail
 
 
+@needs_m01
 def test_em3_the_trace_code_is_findable_in_the_log_with_the_full_exception_text(
         client, make_user, monkeypatch, caplog):
     """🔴🔴 **`§7③ⓑ`：拿畫面上的代碼去 log 搜得到，且那裡有例外全文。**
@@ -573,6 +577,7 @@ def test_em3_the_trace_code_is_findable_in_the_log_with_the_full_exception_text(
         % log_text[:500])
 
 
+@needs_m01
 def test_em3_two_consecutive_failures_get_different_trace_codes(
         client, make_user, monkeypatch):
     """🔴 **`§7③ⓒ`：連續觸發兩次失敗，要拿到兩個不同的代碼。**

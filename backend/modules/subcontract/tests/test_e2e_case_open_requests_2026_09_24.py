@@ -7,7 +7,7 @@
 清單排序偏好等小請求），財務、匯款憑據、今日工作改成點到分頁才載入、同一件只載一次。
 觀測點：瀏覽器實際送出的請求（page.on("request")），不是程式裡的計數。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import re
 

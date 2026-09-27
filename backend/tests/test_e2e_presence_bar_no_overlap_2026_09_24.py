@@ -6,7 +6,7 @@
 （全站用它讓出上方空間），隱藏時還原；提示條本身用顯示前的原值定位。
 觀測點：按鈕中心點的 elementFromPoint 必須是按鈕本身（或它的子元素）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

@@ -9,7 +9,9 @@
 證明題目本身沒有把「正常的金額」也算錯）。守門：tests/platform/test_legal_amount_rounding_guard.py。
 前端題用 node 載入頁面（或 case-management-*.js 分檔）的元件，直接呼叫方法；沒有 node ⇒ skip。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pathlib
 import shutil
@@ -17,7 +19,6 @@ import subprocess
 from datetime import datetime
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
@@ -27,6 +28,7 @@ FRONTEND = ROOT / "frontend"
 # 共用函式
 # ══════════════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_quotations_round_half_up_forwards_to_the_legal_params_service():
     from helpers import legal_params as lp
     from modules.case.quotations import round_half_up
@@ -39,6 +41,7 @@ def test_quotations_round_half_up_forwards_to_the_legal_params_service():
 # 報價：收款期別金額（modules/case/quotations.py::payment_item_amounts）
 # ══════════════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_payment_items_by_pct_round_half_up():
     """10,015 × 30% ＝ 3,004.5 ⇒ 3,005（舊：3,004；畫面 Math.round 一直是 3,005 ⇒ 前後端差 1 元）。"""
     from modules.case.quotations import payment_item_amounts
@@ -48,6 +51,7 @@ def test_payment_items_by_pct_round_half_up():
     assert payment_item_amounts(10000, [{"pct": 70}, {"pct": 30}]) == [7000, 3000]
 
 
+@needs_m01
 def test_tax_exempt_item_converts_to_pretax_half_up():
     """沖銷免稅期別：含稅 24 × 未稅 30／含稅 32 ＝ 22.5 ⇒ 23（舊：22）。L331"""
     from modules.case.quotations import payment_item_amounts
@@ -165,6 +169,16 @@ def _stock(part_no, cost, created, category="其他"):
         conn.close()
 
 
+def test_accounting_voucher_line_rounds_half_up():
+    """傳票匯出的借貸金額：10.5 ⇒ 11（舊：10）、12.5 ⇒ 13（舊：12）。accounting_export L251"""
+    from routers.accounting_export import _voucher_line
+    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 10.5, 12.5, "", "", "")
+    assert (ln["debit"], ln["credit"]) == (11, 13)
+    ln = _voucher_line("2026-01-01", "c", "s", "1101", "現金", 11.5, 0, "", "", "")      # 正對照
+    assert (ln["debit"], ln["credit"]) == (12, 0)
+
+
+@needs_m01
 def test_recognition_flag_amount_rounds_half_up():
     """待補登標註的金額：10.5 ⇒ 11（舊：10）。recognition L339"""
     from modules.case.recognition import _flag_item
@@ -172,6 +186,7 @@ def test_recognition_flag_amount_rounds_half_up():
     assert _flag_item("Q", "c", "d", "x", None, "2026-01-01", True, "extra_no_invoice")["amount"] is None
 
 
+@needs_m01
 def test_extra_expense_total_rounds_half_up_to_cents(client):
     """額外支出小計（元以下兩位）：1 × 0.145 ⇒ 0.15（舊：round(0.145, 2)＝0.14）。
     case_extra_expenses L172（_recalc）、L725（核准變更 _apply_change）"""

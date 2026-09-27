@@ -6,11 +6,10 @@
 2. **每日工作事項一定要有指派人**。空的那列只有 superadmin 看得到（`_user_filter_sql()`），等於做了一個使用者看不見的東西。
 3. **建立當下就要標成已完成**。否則隔天 `_check_overdue_and_notify()` 會對每個負責人寄一封「你逾期未完成」。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
-from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 # 夾具 _no_background_sync（autouse）與輔助函式沿用原檔：端點自己的背景同步關掉，測試明確同步呼叫
 from tests.test_case_stage_done_calendar_2026_09_11 import (  # noqa: F401
     _no_background_sync, _login, _auth, _make_case, _stage_row,
@@ -40,6 +39,7 @@ def _completions(task_id):
 
 def test_daily_task_created_with_case_name_and_stage(client, make_user):
     """月曆上那條橫條顯示的就是 daily_tasks.title，格式同樣是「案件名稱｜進度」。"""
+    from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
     username, password = make_user(username="stgdt1", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-STGDT-001", project_name="南投機房擴充")
@@ -65,6 +65,7 @@ def test_daily_task_always_has_an_assignee(client, make_user):
     `_user_filter_sql()` 對非 superadmin 只回「我是負責人或監督人」的任務，
     assigned_to 空的那列等於做了一個使用者看不見的東西。
     """
+    from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
     username, password = make_user(username="stgdt2", role="engineer")
     admin, admin_pw = make_user(username="stgdt2_adm", role="superadmin")
     atoken = _login(client, admin, admin_pw)
@@ -82,6 +83,7 @@ def test_daily_task_always_has_an_assignee(client, make_user):
 
 def test_daily_task_prefers_stage_assignees(client, make_user):
     """有階段負責人就用他們——那才是真正做這件事的人。"""
+    from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
     owner, owner_pw = make_user(username="stgdt3_own", role="engineer")
     admin, admin_pw = make_user(username="stgdt3_adm", role="superadmin")
     atoken = _login(client, admin, admin_pw)
@@ -105,6 +107,7 @@ def test_daily_task_is_marked_complete_so_no_overdue_mail(client, make_user):
     直接跑 `_check_overdue_and_notify()` 驗證——這比檢查 completions 表更接近
     使用者真正會遇到的事（信箱裡有沒有多一封）。
     """
+    from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
     from modules.daily_tasks import api as dt
     username, password = make_user(username="stgdt4", role="superadmin")
     token = _login(client, username, password)
@@ -143,6 +146,7 @@ def test_daily_task_is_marked_complete_so_no_overdue_mail(client, make_user):
 
 def test_uncheck_withdraws_the_daily_task(client, make_user):
     """取消勾選 → soft delete，月曆上那條橫條要消失。"""
+    from modules.case.case_stage_tasks import sync_daily_task_for_case_stage
     username, password = make_user(username="stgdt5", role="superadmin")
     token = _login(client, username, password)
     _make_case("MQ-STGDT-005")

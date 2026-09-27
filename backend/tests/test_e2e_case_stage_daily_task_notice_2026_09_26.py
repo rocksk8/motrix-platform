@@ -3,7 +3,7 @@
 API 早就回 `notice`，但 `updateStage` 只做 `Object.assign`、`removeStage` 不讀回應 ⇒ 使用者什麼都看不到。
 觀測點：畫面上的提示（`.mui-toast`）文字；點的是真正的勾選框與「×」，不是直接呼叫方法。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

@@ -3,7 +3,7 @@
 API 層見 test_case_money_mask_2026_09_24.py。這裡驗真的頁面：engineer 打開案件、改收款備註、
 按百分比欄位不存在、存檔後資料庫的金額不變。觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

@@ -3,7 +3,7 @@
 .aq-sort 只在簽核佇列頁定義過，案件頁從來沒有 ⇒ 矩陣排序、「多選」、常用篩選都是瀏覽器原生的灰框按鈕。
 觀測點：計算後的樣式——不是瀏覽器預設（灰底 rgb(240,240,240)、直角）；選中（.on）時底色與字色對比足夠。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

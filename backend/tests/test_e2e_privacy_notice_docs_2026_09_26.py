@@ -6,7 +6,9 @@
 - 畫面上改了聯絡人但還沒存檔：勾選 ⇒ 伺服器拒絕，區塊顯示原因，沒有紀錄。
 觀測點是伺服器端紀錄（`privacy_notice_acks`）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
@@ -14,7 +16,6 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from helpers import privacy_notice as pn  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = "Alpine.$data(document.querySelector('[x-data]'))"
 NO_PRINT = "window.print = function () { window.__printed = true }"
@@ -51,6 +52,7 @@ def _check_and_expect_ack(page, name, user, card_sel="[data-privacy-card]"):
     assert name in acked.inner_text() and user in acked.inner_text()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_quotation_contact_notice(live_server, make_user, new_page, login_as):
     u = make_user(username="pnd_q", role="superadmin")
@@ -63,6 +65,7 @@ def test_quotation_contact_notice(live_server, make_user, new_page, login_as):
     assert pn.get_ack("quote_contact", "PND-Q-001:林聯絡")["byUsername"] == "pnd_q"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_site_contact_notice(live_server, make_user, new_page, login_as):
     u = make_user(username="pnd_c", role="superadmin")
@@ -76,6 +79,7 @@ def test_case_site_contact_notice(live_server, make_user, new_page, login_as):
     assert pn.get_ack("case_site_contact", "PND-C-001:趙現場")["byUsername"] == "pnd_c"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_completion_note_recipient_notice(live_server, make_user, new_page, login_as, client):
     u = make_user(username="pnd_cn", role="superadmin")

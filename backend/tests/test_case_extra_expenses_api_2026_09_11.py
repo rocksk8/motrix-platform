@@ -4,9 +4,10 @@
 填寫人由後端帶入（不吃前端傳的值）、支出人可選可自由文字、送審走共用分層簽核、
 已結案照樣可以編、送審中的金額照樣算進成本。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -90,6 +91,7 @@ def _payload(**over):
 
 # ── 建立 ────────────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_create_fills_in_author_from_session_not_client(client, make_user):
     """填寫人一律由後端帶入。
 
@@ -112,6 +114,7 @@ def test_create_fills_in_author_from_session_not_client(client, make_user):
     assert items[0]["createdAt"] and items[0]["updatedAt"], "填寫日期與更動日期都要有"
 
 
+@needs_m01
 def test_total_cost_is_computed_server_side(client, make_user):
     """小計後端算，不吃前端傳的值。"""
     username, password = make_user(username="author2", role="admin")
@@ -124,6 +127,7 @@ def test_total_cost_is_computed_server_side(client, make_user):
     assert r.json()["totalCost"] == 750
 
 
+@needs_m01
 def test_payer_can_be_picked_or_free_text(client, make_user):
     """支出人「可選可自由文字」：從清單選時兩個欄位都有，自由文字時只有名字。"""
     username, password = make_user(username="author3", role="admin")
@@ -143,6 +147,7 @@ def test_payer_can_be_picked_or_free_text(client, make_user):
     assert freetext["payerUsername"] == "" and freetext["payerName"] == "王小明（外包）"
 
 
+@needs_m01
 def test_description_is_required(client, make_user):
     username, password = make_user(username="author4", role="admin")
     token = _login(client, username, password)
@@ -151,6 +156,7 @@ def test_description_is_required(client, make_user):
     assert r.status_code == 400 and "品項說明" in r.json()["detail"]
 
 
+@needs_m01
 def test_unknown_category_rejected(client, make_user):
     username, password = make_user(username="author5", role="admin")
     token = _login(client, username, password)
@@ -159,6 +165,7 @@ def test_unknown_category_rejected(client, make_user):
     assert r.status_code == 400 and "類別" in r.json()["detail"]
 
 
+@needs_m01
 def test_closed_case_can_still_be_edited(client, make_user):
     """使用者指定第 5 點：已結案也可以新增／編輯額外支出。"""
     username, password = make_user(username="author6", role="admin")
@@ -171,6 +178,7 @@ def test_closed_case_can_still_be_edited(client, make_user):
 
 # ── 編輯／刪除 ──────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_update_bumps_updated_at_and_updater(client, make_user):
     username, password = make_user(username="author7", role="admin")
     token = _login(client, username, password)
@@ -187,6 +195,7 @@ def test_update_bumps_updated_at_and_updater(client, make_user):
     assert it["updatedByName"] == username
 
 
+@needs_m01
 def test_other_user_cannot_edit_someone_elses_entry(client, make_user):
     """別人填的支出不該被隨手改掉——非 admin 只能改自己的。"""
     owner, owner_pw = make_user(username="owner_e", role="engineer")
@@ -200,6 +209,7 @@ def test_other_user_cannot_edit_someone_elses_entry(client, make_user):
     assert r.status_code == 403, r.text
 
 
+@needs_m01
 def test_admin_can_edit_others_entry(client, make_user):
     owner, owner_pw = make_user(username="owner_f", role="engineer")
     admin, admin_pw = make_user(username="admin_f", role="admin")
@@ -212,6 +222,7 @@ def test_admin_can_edit_others_entry(client, make_user):
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_approved_entry_cannot_be_edited_or_deleted(client, make_user, seed_extra_expense):
     """已核准的金額已經進了成本與報表，不該被單方面改掉或刪掉。"""
     username, password = make_user(username="author8", role="superadmin")
@@ -227,6 +238,7 @@ def test_approved_entry_cannot_be_edited_or_deleted(client, make_user, seed_extr
 
 # ── 送審 ────────────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_submit_without_any_tier_auto_approves(client, make_user):
     """沒有設定任何簽核層時直接視為核准。
 
@@ -245,6 +257,7 @@ def test_submit_without_any_tier_auto_approves(client, make_user):
     assert r.json()["autoApproved"] is True
 
 
+@needs_m01
 def test_pending_amount_still_counts_toward_total(client, make_user, seed_extra_expense):
     """送審中的金額**照樣算進總額**，但另外用 totalPending 標出來。
 
@@ -263,6 +276,7 @@ def test_pending_amount_still_counts_toward_total(client, make_user, seed_extra_
     assert body["pendingCount"] == 1
 
 
+@needs_m01
 def test_reject_returns_to_editable_state(client, make_user, seed_extra_expense):
     """駁回不是刪除——回到可編輯狀態，改完可以再送一次。"""
     username, password = make_user(username="author11", role="superadmin")
@@ -312,6 +326,7 @@ def test_unknown_quote_returns_404(client, make_user):
 
 # ── 統一簽核佇列 ────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_submitted_expense_appears_in_approval_queue(client, make_user, seed_extra_expense):
     """送審中的額外支出要出現在統一簽核佇列。
 
@@ -356,6 +371,7 @@ def test_submitted_expense_appears_in_approval_queue(client, make_user, seed_ext
     assert c.json()["count"] >= 1
 
 
+@needs_m01
 def test_draft_expense_not_in_queue(client, make_user, seed_extra_expense):
     """草稿不該出現在佇列——還沒送審的東西不是別人要簽的。"""
     approver, approver_pw = make_user(username="xq_appr2", role="superadmin")

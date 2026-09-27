@@ -3,7 +3,7 @@
 API 層見 test_cashier_reads_all_cases_2026_09_24.py。觀測點：收款備註存進資料庫；合約、角色欄位
 在畫面上是 disabled；成員出納則不受限。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

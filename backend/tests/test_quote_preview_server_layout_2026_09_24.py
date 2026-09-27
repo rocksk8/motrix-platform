@@ -9,11 +9,12 @@
 - 挑 4 處原報告的差異驗證：公司抬頭、項次編號、毛利率小數位、NT$ 前綴
 - 權限與 pdf-download 一致（這份 HTML 在 internal=true 時含成本，不能比它寬）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -99,6 +100,7 @@ def _preview(client, token, internal=False, quote_no=QUOTE_NO, data=None):
                              "internal": internal})
 
 
+@needs_m01
 @pytest.mark.parametrize("internal", [False, True])
 def test_preview_html_is_the_same_as_pdf_html(client, make_user, captured_pdf_html,
                                               custom_identity, internal):
@@ -116,6 +118,7 @@ def test_preview_html_is_the_same_as_pdf_html(client, make_user, captured_pdf_ht
     assert _strip_report(html) == captured_pdf_html[0], "預覽與 PDF 必須是同一份版面"
 
 
+@needs_m01
 def test_four_reported_differences_now_follow_the_server_layout(client, make_user, custom_identity):
     u, p = make_user(username="pv_sa2", role="superadmin")
     tok = _login(client, u, p)
@@ -132,6 +135,7 @@ def test_four_reported_differences_now_follow_the_server_layout(client, make_use
     assert "NT$ 12,345" in html and "NT$ 45,000" in html
 
 
+@needs_m01
 def test_preview_uses_unsaved_edits(client, make_user):
     """預覽要反映畫面上還沒存的修改，不是資料庫裡的版本。"""
     u, p = make_user(username="pv_sa3", role="superadmin")
@@ -145,6 +149,7 @@ def test_preview_uses_unsaved_edits(client, make_user):
 
 # ── 權限：與 pdf-download 一致 ─────────────────────────────────────────────
 
+@needs_m01
 @pytest.mark.parametrize("internal", [False, True])
 def test_permission_matches_pdf_download_for_existing_quote(client, make_user, captured_pdf_html, internal):
     owner, op = make_user(username="pv_owner", role="sales")
@@ -166,6 +171,7 @@ def test_permission_matches_pdf_download_for_existing_quote(client, make_user, c
         "不是這張單的人不可以看到預覽（內部版含成本）"
 
 
+@needs_m01
 def test_new_quote_requires_quotation_module(client, make_user):
     u1, p1 = make_user(username="pv_nomod", role="sales", modules=[])
     u2, p2 = make_user(username="pv_mod", role="sales", modules=["quotation"])

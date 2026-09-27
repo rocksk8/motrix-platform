@@ -3,10 +3,11 @@
 需要 M03（出貨單端點）⇒ 放在模組裡、沿用原檔名（PLAYBOOK §B-11）。規則同報價單／完工單的告知：
 只接受已存檔的收件人（不同 ⇒ 409）、鍵含姓名（換人要重新告知）、紀錄只蓋一次、寫稽核；讀與寫都照出貨單的案件權限。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 from helpers import privacy_notice as pn
 from tests.test_privacy_notice_forms_2026_09_26 import _audit_count, _hdr, _insert_quote
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _note(client, h, quote_no, recipient):
@@ -16,6 +17,7 @@ def _note(client, h, quote_no, recipient):
     return r.json()["note_no"]
 
 
+@needs_m01
 def test_shipping_recipient_ack_only_for_the_saved_recipient(client, make_user):
     h = _hdr(client, make_user, username="pn_ship_root")
     _insert_quote("PN-SH-001")
@@ -35,6 +37,7 @@ def test_shipping_recipient_ack_only_for_the_saved_recipient(client, make_user):
                        headers=h).status_code == 404
 
 
+@needs_m01
 def test_changing_the_recipient_needs_a_new_notice(client, make_user):
     h = _hdr(client, make_user, username="pn_ship_chg")
     _insert_quote("PN-SH-002")

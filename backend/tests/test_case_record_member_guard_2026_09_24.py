@@ -7,7 +7,7 @@ assigned_user_ids、caseRecord.roles 的 filler／sales／executor（存顯示�
 例外：已結案且半解鎖——非成員也可以送（每筆變更都排進 superadmin 審核）。
 已知限制：roles 以顯示名稱比對，同名帳號會互相放行。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

@@ -7,7 +7,7 @@
 
 觀測點刻意打在**資料列狀態**而不只是 HTTP 碼：擋下來之後單據必須仍在簽核中。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 from .test_case_extra_expenses_api_2026_09_11 import (  # noqa: F401  (fixtures reused)

@@ -67,7 +67,9 @@ pdf_gen.py:801   d = json.loads(row["data_json"] or "{}")
 📌 舊的 `GOLDEN` 快照因此**不再是驗收基準**，改當「這些字串不可以再
 出現」的歷史紀錄，見下面 `OLD_HARDCODED_IDENTITY` 的說明。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import sys
 from pathlib import Path
@@ -80,7 +82,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import _pdf_identity as I  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 🔴 2026-09-22 用**改版前**的 `pdf_gen.py` 取得，當時是 `QL6` 的驗收
 #: 基準（「留空 ⇒ 逐字相同」）。**2026-09-23 `WL7` 裁定翻面**：這組值本身
@@ -247,6 +248,7 @@ QL6_BUILDERS = tuple(b for b in I.BUILDERS if b != "_build_payslip_html")
 LAYOUT_SLOT_MARKERS = ('class="co-name"', 'class="co-sub"')
 
 
+@needs_m01
 @pytest.mark.parametrize("builder", QL6_BUILDERS)
 def test_ql6_a_blank_profile_prints_no_hardcoded_identity(
         builder, blank_profile):
@@ -267,6 +269,7 @@ def test_ql6_a_blank_profile_prints_no_hardcoded_identity(
     )
 
 
+@needs_m01
 @pytest.mark.parametrize("builder", QL6_BUILDERS)
 def test_ql6_a_blank_profile_keeps_the_layout_slots(builder, blank_profile):
     """🔴 `QL6`（新判準②）：留空 ⇒ **版面不塌**——`co-name`／`co-sub` 這些
@@ -285,6 +288,7 @@ def test_ql6_a_blank_profile_keeps_the_layout_slots(builder, blank_profile):
         )
 
 
+@needs_m01
 @pytest.mark.parametrize("builder", QL6_BUILDERS)
 def test_ql6_filled_identity_values_actually_appear(builder, identity):
     """⚙️ **正對照：填了值時，那些值真的印得出來。**
@@ -493,6 +497,7 @@ def test_ql3_no_quotation_is_left_without_a_location(client, make_user):
         + "。欄位要 NOT NULL 並有預設，或 migration 要把它們補成主要據點。")
 
 
+@needs_m01
 def test_ql4_a_new_quotation_defaults_to_the_primary_location(client, make_user):
     """QL4：新建報價單時據點預設為主要據點，**且可改**。
 

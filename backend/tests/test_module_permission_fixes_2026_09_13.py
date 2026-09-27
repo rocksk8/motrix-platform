@@ -17,9 +17,10 @@
 `project_manage` 那項是「目錄有沒有這個 key」的結構問題，由
 `test_module_keys_consistency_2026_09_13.py` 守著，不在這裡測。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -90,6 +91,7 @@ def test_outsider_cannot_read_settlement_of_someone_elses_case(client, make_user
     assert r.status_code == 404, f"外人讀得到別人的精算：{r.status_code} {r.text}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
+@needs_m01
 def test_outsider_cannot_overwrite_settlement_of_someone_elses_case(client, make_user):
     """寫入路徑同理——這是修正前唯一的寫入缺口：任何登入者可覆寫任何案件的精算。"""
     make_user(username="s_owner2", role="sales")
@@ -112,6 +114,7 @@ def test_outsider_cannot_overwrite_settlement_of_someone_elses_case(client, make
     assert json.loads(row["data_json"])["settlement"]["cost"] == 1000, "403 了但資料還是被改掉"
 
 
+@needs_m01
 def test_owner_and_assignee_and_admin_can_still_use_settlement(client, make_user):
     """三種本來就該能用的人不可以被擋下來：案件業務、被指派的協作者、admin。"""
     owner_u, owner_p = make_user(username="s_owner3", role="sales")
@@ -161,6 +164,7 @@ def test_outsider_cannot_read_finance_summary(client, make_user):
 
 # ── 4. financial_view 成為真的權限（使用者裁示：viewer／engineer 不該看到金額）──
 
+@needs_m01
 def test_engineer_without_financial_view_cannot_read_settlement(client, make_user):
     """工程師被指派到案件、碰得到執行面，但**看不到成本與毛利**。"""
     eng_u, eng_p = make_user(username="fv_eng", role="engineer",
@@ -185,6 +189,7 @@ def test_engineer_without_financial_view_cannot_read_settlement(client, make_use
     assert json.loads(row["data_json"])["settlement"]["cost"] == 1000
 
 
+@needs_m01
 def test_engineer_with_financial_view_can_read_settlement(client, make_user):
     """勾了「財務金額可視」就看得到——規則與前端 canSeeFinancial() 逐字相同。"""
     eng_u, eng_p = make_user(username="fv_eng2", role="engineer",
@@ -195,6 +200,7 @@ def test_engineer_with_financial_view_can_read_settlement(client, make_user):
                       headers=_auth(tok)).status_code == 200
 
 
+@needs_m01
 def test_sales_role_sees_financial_without_the_module(client, make_user):
     """sales 角色本來就在前端規則的白名單裡，不需要額外勾模組。"""
     u, p = make_user(username="fv_sales_role", role="sales", modules=["case_manage"])
@@ -206,6 +212,7 @@ def test_sales_role_sees_financial_without_the_module(client, make_user):
 
 # ── 5. 案件執行面：case_manage 模組可存取，沒有模組的擋下 ────────────────────
 
+@needs_m01
 def test_case_execution_face_allows_case_manage_module(client, make_user):
     """工程師不是業務、也沒被指派，但有 `case_manage` → 讀得到案件階段。
 
@@ -262,6 +269,7 @@ def test_cross_module_consumers_are_not_broken(client, make_user):
 
 # ── 7. /api/sales-orders ────────────────────────────────────────────────────
 
+@needs_m01
 def test_sales_orders_requires_finance_module_and_financial_view(client, make_user):
     u, p = make_user(username="so_viewer", role="viewer", modules=["dashboard"])
     tok = _login(client, u, p)
@@ -283,6 +291,7 @@ def _outsider(client, make_user, name):
     return _login(client, u, p)
 
 
+@needs_m01
 def test_case_action_items_not_readable_by_outsiders(client, make_user):
     _make_case("MQ-SWEEP-001", sales_person="sw_owner")
     tok = _outsider(client, make_user, "sw_v1")
@@ -307,6 +316,7 @@ def _case_document_bases():
     return bases
 
 
+@needs_m01
 def test_case_documents_not_listable_by_outsiders(client, make_user):
     """完工單／出貨單／開票／請款／承攬商付款：帶 quote_no 就是讀某張案件的單據。"""
     _make_case("MQ-SWEEP-002", sales_person="sw_owner")
@@ -318,6 +328,7 @@ def test_case_documents_not_listable_by_outsiders(client, make_user):
         assert client.get(base, headers=_auth(tok)).status_code == 403, base
 
 
+@needs_m01
 def test_case_manager_can_still_list_case_documents(client, make_user):
     """反向：具案件管理模組的人照常看得到（案件管理頁就是這樣載入這些單據的）。"""
     u, p = make_user(username="sw_cm", role="engineer", modules=["case_manage"])
@@ -377,6 +388,7 @@ def _mk_invoice_voucher(voucher_no, quote_no, approver=None, created_by="someone
         conn.close()
 
 
+@needs_m01
 def test_extra_expenses_visible_to_filer_even_without_financial_view(client, make_user):
     """額外支出：現場花錢的人看得到自己報的帳，看不到別人的。"""
     import db
@@ -428,6 +440,7 @@ def _close_case(quote_no):
         conn.close()
 
 
+@needs_m01
 def test_anyone_can_unlock_but_every_change_needs_approval(client, make_user):
     """解鎖是**刻意全開**的（2026-08-26 使用者裁示，2026-09-13 再次確認）：
     「誰都可以改動，但都需要審核」——把關點在審核，不在入口。
@@ -458,6 +471,7 @@ def test_anyone_can_unlock_but_every_change_needs_approval(client, make_user):
     assert r.status_code == 404, f"未結案的案件不該讓外人上傳：{r.status_code}"   # M01-O1：看不到＝不存在（同一個 404）
 
 
+@needs_m01
 def test_anyone_can_upload_to_a_semi_unlocked_case_but_it_queues(client, make_user):
     """「誰都可以改動，但都需要審核」的另一半：半解鎖期間外人也傳得了檔案，
     但東西不會直接生效，而是進待審核佇列等 superadmin 決定。
@@ -498,6 +512,7 @@ def test_anyone_can_upload_to_a_semi_unlocked_case_but_it_queues(client, make_us
     assert [r["status"] for r in rows] == ["pending"], "沒有排進審核佇列"
 
 
+@needs_m01
 def test_case_manager_can_unlock_and_upload_during_semi_unlock(client, make_user):
     """反向：具「案件管理」模組的工程師照樣解得開、也傳得了叫料附件。
 
@@ -514,6 +529,7 @@ def test_case_manager_can_unlock_and_upload_during_semi_unlock(client, make_user
                        headers=_auth(tok)).status_code == 200
 
 
+@needs_m01
 def test_change_request_detail_is_not_enumerable(client, make_user):
     """`change_id` 是小整數流水號，比 quote_no 更好猜，而內容是整包案件變更。"""
     import db
@@ -542,6 +558,7 @@ def test_change_request_detail_is_not_enumerable(client, make_user):
                       headers=_auth(_login(client, ru, rp))).status_code == 200
 
 
+@needs_m01
 def test_change_request_approval_still_superadmin_only(client, make_user):
     """審核維持僅 superadmin——這一輪的權限調整不該鬆動它。"""
     import db
@@ -568,6 +585,7 @@ def test_change_request_approval_still_superadmin_only(client, make_user):
 
 # ── 11. 完結案限最高管理者（2026-09-13 使用者裁示）──────────────────────────
 
+@needs_m01
 def test_only_superadmin_can_close_a_case(client, make_user):
     """admin 也不能按完結案——結案是全系統最不可逆的動作，而且原本就只有
     superadmin 能把它降級回來（按得下去的人比按得回來的人多，本來就不對稱）。
@@ -613,6 +631,7 @@ def test_only_superadmin_can_close_a_case(client, make_user):
     assert tag2 == "已結案", f"回了 200 但案件沒結成：{tag2}"
 
 
+@needs_m01
 def test_admin_can_still_set_other_deal_tags(client, make_user):
     """反向：這次只鎖「已結案」，admin 標記已成案／未成案不受影響。"""
     _make_case("MQ-CLOSE-002", sales_person="close_owner2")
@@ -653,6 +672,7 @@ def _seed_closeable_case(quote_no, settlement=None):
         conn.close()
 
 
+@needs_m01
 def test_close_blocked_when_settlement_not_finalized(client, make_user):
     """精算還在草稿就結案，等於把一張永遠算不完的帳鎖進已結案。"""
     _seed_closeable_case("MQ-CLOSE-010", settlement={"status": "draft", "cost": 1000})
@@ -663,6 +683,7 @@ def test_close_blocked_when_settlement_not_finalized(client, make_user):
     assert "精算" in r.text, r.text
 
 
+@needs_m01
 def test_close_allowed_when_settlement_finalized(client, make_user):
     """反向控制：精算完結就不再擋（否則上一題可能只是「什麼都擋」）。"""
     _seed_closeable_case("MQ-CLOSE-011", settlement={"status": "finalized", "cost": 1000})
@@ -672,6 +693,7 @@ def test_close_allowed_when_settlement_finalized(client, make_user):
     assert r.status_code == 200, r.text
 
 
+@needs_m01
 def test_close_blocked_when_completion_note_pending(client, make_user):
     """完工單是 DB v77（2026-09-12）才有的模組，原本的前置條件清單沒有它。"""
     import db
@@ -694,6 +716,7 @@ def test_close_blocked_when_completion_note_pending(client, make_user):
     assert "完工單" in r.text, r.text
 
 
+@needs_m01
 def test_close_blocked_when_extra_expense_pending(client, make_user):
     """送審中的額外支出＝還沒定案的成本，結案後才核准會讓成本事後改變。"""
     import db
@@ -720,6 +743,7 @@ def test_close_blocked_when_extra_expense_pending(client, make_user):
     assert "額外支出" in r.text, r.text
 
 
+@needs_m01
 def test_semi_unlock_change_emails_superadmin(client, make_user, monkeypatch):
     """半解鎖期間有人上傳／變更 → 除了排隊審核，還要寄信給最高管理者。
 

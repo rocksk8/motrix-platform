@@ -31,12 +31,13 @@
 ⚠️ 那是**協定上的動作**，不是這裡的斷言 —— 我驗不到「有沒有人宣告過」。
 ⇒ 它在覆蓋率守門的 `EXEMPT` 裡，理由欄寫的是「它是怎麼被驗的」。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import re
 from pathlib import Path
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 SIDEBAR = (Path(__file__).resolve().parent.parent.parent
            / "frontend" / "static" / "sidebar.js")
@@ -75,6 +76,7 @@ def _group_holding(items, label):
 # MN1 / MN4 · 搬過去，而且舊的那邊不可以還在
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 @pytest.mark.parametrize("label", MOVED)
 def test_mn1_the_three_items_live_in_the_work_group(sidebar, label):
     """🔴 MN1：三項要在「工作內容」那一組底下（名稱可能已改，見 `MN2`）。
@@ -102,6 +104,7 @@ def test_mn4_the_three_items_are_gone_from_the_sales_group(sidebar, label):
         f"「{label}」仍然出現在「業務」那一組裡 —— 搬家只做了一半。")
 
 
+@needs_m01
 def test_mn4_the_permission_condition_is_unchanged(sidebar):
     """🔴🔴 MN4 後半：**路由與權限完全沒變。**
 
@@ -120,6 +123,7 @@ def test_mn4_the_permission_condition_is_unchanged(sidebar):
             "而那個症狀離「選單重整」非常遠。")
 
 
+@needs_m01
 def test_mn4_the_routes_are_unchanged(sidebar):
     """🔴 MN4 後半：**三頁的路由沒變。**
 
@@ -256,6 +260,7 @@ def test_mn6_the_group_condition_is_the_union_of_its_items(sidebar):
         "整組看不到 —— 而那三項是他每天要用的。")
 
 
+@needs_m01
 def test_mn7_a_quote_only_role_can_still_see_the_three_items(sidebar):
     """🔴🔴 MN7 反向控制：**只有 `cQ` 的角色，那三項要在選單裡看得到。**
 

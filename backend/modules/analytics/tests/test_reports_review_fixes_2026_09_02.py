@@ -1,5 +1,7 @@
 """自 `tests/test_reports_review_fixes_2026_09_02.py` 拆出（M08 搬遷反向控制：這幾題需要營運分析模組，拿掉模組時一起消失）。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pytest
 from fastapi import HTTPException
@@ -9,7 +11,6 @@ from tests.test_reports_review_fixes_2026_09_02 import (  # noqa: E402,F401  含
     _login,
     _sync_extra_to_table,
 )
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def test_report_excel_export_neutralizes_malicious_customer_name(client, make_user):
@@ -44,6 +45,7 @@ def test_report_excel_export_neutralizes_malicious_customer_name(client, make_us
     assert found, "測試資料應該要出現在案件清單分頁裡"
 
 
+@needs_m01
 def test_other_expense_bucketed_by_expense_date_not_finalize_date(client, make_user):
     """精算 9 月才完結，但額外支出憑證日期是 3 月——月度加總跟明細都該算進 3 月。"""
     username, password = make_user(role="admin")

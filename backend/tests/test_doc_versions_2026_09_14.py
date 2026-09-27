@@ -9,12 +9,13 @@
   ③ **一般編輯沒有紀錄**——`editHistory` 原本只有解鎖編輯與精算存檔會寫，
      草稿階段改了幾次、誰改的、改了什麼，系統裡查不到。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import os
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, u, p):
@@ -75,12 +76,14 @@ def _get_data(quote_no):
 
 # ── ① 建立當下自動備存 ──────────────────────────────────────────────────────
 
+@needs_m01
 def test_create_triggers_original_snapshot(client, su, pdf_jobs):
     no = _create(client, su)
     events = [c["event"] for c in pdf_jobs if c["no"] == no]
     assert "建立" in events, "建立報價單時必須自動備存一份原始單據"
 
 
+@needs_m01
 def test_create_snapshot_records_the_actual_creator(client, su, pdf_jobs, make_user):
     """存檔要記真正的操作者（session），不是 client 送的 created_by——
     後者可以被任意冒名（2026-09-10 稽核已針對同一支端點修過建立者欄位）。"""
@@ -143,6 +146,7 @@ def test_archived_filename_includes_seconds(client, monkeypatch, tmp_path):
     assert len(os.listdir(day_dir)) == 3
 
 
+@needs_m01
 def test_record_doc_version_appends_index_to_data_json(client, tmp_path, monkeypatch):
     """索引寫進單據自己的 data_json，不是只寫 audit_log——audit_log 有 730 天
     保留期，兩年後索引會消失、檔案卻還在，等於有備存卻找不到。"""
@@ -178,6 +182,7 @@ def test_record_doc_version_appends_index_to_data_json(client, tmp_path, monkeyp
 
 # ── ③ 一般編輯留下編輯紀錄 ──────────────────────────────────────────────────
 
+@needs_m01
 def test_normal_edit_records_changed_fields(client, su, pdf_jobs):
     no = _create(client, su)
     data = _get_data(no)
@@ -197,6 +202,7 @@ def test_normal_edit_records_changed_fields(client, su, pdf_jobs):
     assert change["from"] == "京城凱悅" and change["to"] == "台北凱悅"
 
 
+@needs_m01
 def test_no_op_save_does_not_pollute_history(client, su, pdf_jobs):
     """autoSave 跟手動存檔共用同一支端點，每次都寫一筆會讓紀錄被無意義條目
     淹沒，真正的修改反而查不到。"""
@@ -210,6 +216,7 @@ def test_no_op_save_does_not_pollute_history(client, su, pdf_jobs):
     assert _get_data(no).get("editHistory", []) == []
 
 
+@needs_m01
 def test_untracked_field_change_is_still_recorded(client, su, pdf_jobs):
     """改到追蹤清單外的欄位不會被逐一列出（那等於把整份 data_json 抄進紀錄），
     但**也不可以被靜默忽略**——至少要留下「這個時間點有人動過」。"""
@@ -225,6 +232,7 @@ def test_untracked_field_change_is_still_recorded(client, su, pdf_jobs):
     assert history[0]["changes"][0]["field"] == "其他內容"
 
 
+@needs_m01
 def test_edit_history_records_who(client, su, pdf_jobs, make_user):
     no = _create(client, su)
     u, p = make_user(username="huang", role="superadmin")
@@ -241,6 +249,7 @@ def test_edit_history_records_who(client, su, pdf_jobs, make_user):
 
 # ── 查詢端點 ────────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_versions_endpoint_returns_both_timelines(client, su, pdf_jobs, tmp_path, monkeypatch):
     import pdf_gen
     import modules.case.api.quotations as rq
@@ -270,6 +279,7 @@ def test_versions_endpoint_returns_both_timelines(client, su, pdf_jobs, tmp_path
     assert body["history"][0]["type"] == "quote_update"
 
 
+@needs_m01
 def test_version_marked_unavailable_when_file_is_gone(client, su, pdf_jobs, tmp_path, monkeypatch):
     """PDF 存檔目錄是可設定的路徑，可能被搬走或清理。索引還在但檔案沒了要
     誠實標示，不能讓人點下去才發現。"""
@@ -290,6 +300,7 @@ def test_version_marked_unavailable_when_file_is_gone(client, su, pdf_jobs, tmp_
     assert r.json()["versions"][0]["available"] is False
 
 
+@needs_m01
 def test_download_returns_the_archived_file_not_a_fresh_render(client, su, pdf_jobs,
                                                                 tmp_path, monkeypatch):
     """這是整個功能的重點：要拿到的是**當時那一份**，不是用現在的內容重新產生。"""
@@ -316,12 +327,14 @@ def test_download_returns_the_archived_file_not_a_fresh_render(client, su, pdf_j
     assert r.headers["content-type"] == "application/pdf"
 
 
+@needs_m01
 def test_download_unknown_seq_is_404(client, su, pdf_jobs):
     no = _create(client, su)
     r = client.get(f"/api/quotations/{no}/versions/99/download", headers=su)
     assert r.status_code == 404
 
 
+@needs_m01
 def test_version_path_traversal_is_rejected(client, su, pdf_jobs, tmp_path, monkeypatch):
     """docVersions 的值是系統自己寫的，但會經過 data_json（備份、還原、人工
     修過的資料都可能經手）。照 routers/uploads.py `_resolve_upload_path()`

@@ -8,7 +8,9 @@
 
 裁示 F1～F3（hichan-0a 代裁，待使用者確認）。觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import threading
 import time
@@ -22,7 +24,6 @@ pytest.importorskip("playwright.sync_api")
 
 import uvicorn
 from tests._ports import free_safe_port
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NOTE_INPUT = 'input[placeholder="收款備註..."]'
 
@@ -77,6 +78,7 @@ def _wait_saved(page):
         " return e && e.textContent.includes('已儲存') }", timeout=15000)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_switching_case_right_after_typing_keeps_the_input(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_loss1", role="admin")
@@ -103,6 +105,7 @@ _FETCH_JS = """async ([url, method, body]) => {
 PRESENCE = "/api/edit-presence"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_dirty_flag_survives_presence_heartbeat(live_server, make_user, e2e_browser):
     """edit-presence.js 每 8～15 秒 POST 一次；sidebar.js 原本「任何成功請求就清掉」，
@@ -140,6 +143,7 @@ def test_other_pages_still_clear_flag_after_successful_save(live_server, make_us
     assert page.evaluate("() => window.motrixIsDirty") is False
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_loss3", role="admin")
@@ -165,6 +169,7 @@ def test_deleting_payment_item_asks_first(live_server, make_user, e2e_browser):
     assert [it["id"] for it in _items("MQ-E2ELOSS-D")] == [2]
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_other_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser):
     """階段、拜訪、材料、設備（單台／依物件）四類刪除：使用者按取消就不刪。
@@ -203,6 +208,7 @@ def test_other_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser)
     assert result["calls"] == [], "按取消不可以送出 DELETE"
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_remaining_deletes_are_gated_by_confirm(live_server, make_user, e2e_browser):
     """N11（使用者 2026-09-24 裁示「刪除確認全部都加」）：叫料品項、派工人員、派工品項、

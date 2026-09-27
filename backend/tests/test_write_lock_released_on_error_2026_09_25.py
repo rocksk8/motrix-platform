@@ -5,12 +5,9 @@
 探針：把模組裡的 get_db 換成代理連線，BEGIN IMMEDIATE 之後的**第一個** SQL 就丟例外
 （不必準備整套前置資料，只要通過拿鎖之前的驗證）。握著例外（traceback 還引用 frame）時，另一條連線 1 秒內要拿得到寫鎖。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
 import pytest
 
-import modules.case.api.quotations as q
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
+# modules.case 以模組路徑字串登記（同外包工班／應收應付）：M01 不在時本檔仍可收集，只略過那三個參數（稽核 D M5-M1）
 
 
 class _BoomAfterBegin:
@@ -51,9 +48,9 @@ CASES = {
                                {"quote_no": "MQ-X", "scope": "amount", "stage": "full", "amount": 100}),
     "payment_request_update": ("modules.arap.api.payment_requests", "put", "/api/payment-requests/PR-X", {"scope": "amount", "stage": "full", "amount": 100}),
     # lost update C 組新包進 write_txn 的三支（讀之前就拿鎖 ⇒ 拿鎖後出錯也要放）
-    "quotation_status": (q, "patch", "/api/quotations/MQ-X/status", {"status": "已送出"}),
-    "quotation_recall": (q, "post", "/api/quotations/MQ-X/recall", None),
-    "quotation_reject": (q, "post", "/api/quotations/MQ-X/reject", {"note": "x"}),
+    "quotation_status": ("modules.case.api.quotations", "patch", "/api/quotations/MQ-X/status", {"status": "已送出"}),
+    "quotation_recall": ("modules.case.api.quotations", "post", "/api/quotations/MQ-X/recall", None),
+    "quotation_reject": ("modules.case.api.quotations", "post", "/api/quotations/MQ-X/reject", {"note": "x"}),
 }
 
 

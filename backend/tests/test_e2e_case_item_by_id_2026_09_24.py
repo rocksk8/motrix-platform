@@ -3,7 +3,7 @@
 API 層見 test_case_item_by_id_2026_09_24.py。這裡驗頁面真的帶了 itemId、且新增未存的
 那一列在上傳前會先存檔（否則伺服器上沒有那一列）。觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

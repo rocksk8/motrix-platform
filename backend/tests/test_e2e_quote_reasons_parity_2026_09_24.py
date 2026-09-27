@@ -6,7 +6,9 @@
 - 新增報價單的五欄條款由 GET /api/settings/quote-terms-defaults 帶入（前端不再有自己那份）
 - 預設條款載入失敗 ⇒ 不判定條款、不擋送審（使用者裁示 R1）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import threading
 import time
@@ -18,7 +20,6 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 DATA_JS = "Alpine.$data(document.querySelector('[x-data]'))"
 
@@ -65,6 +66,7 @@ def _cases():
     ]
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_frontend_and_backend_reasons_are_identical(live_server, make_user, e2e_browser):
     from modules.case.quote_terms import DEFAULT_TERMS, compute_approval_reasons
@@ -86,6 +88,7 @@ def test_frontend_and_backend_reasons_are_identical(live_server, make_user, e2e_
         assert i != 0 or len(be) == 5, be   # 量尺：第 0 組要真的量到東西
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_new_quote_terms_come_from_backend(live_server, make_user, e2e_browser):
     from modules.case.quote_terms import DEFAULT_TERMS
@@ -123,6 +126,7 @@ def test_defaults_load_failure_does_not_judge_terms(live_server, make_user, e2e_
     assert not any("報價條件" in r for r in reasons), reasons
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_existing_quote_without_terms_keys_gets_defaults(live_server, make_user, e2e_browser):
     """N13 回歸：沒存過條款的舊報價單打開時要帶入預設條款（N13 之前 data() 預設值就是如此）；

@@ -22,12 +22,13 @@ FastAPI **先驗 body 才進函式** ⇒ **要測 403，body 必須是合法的*
 **而它證明的是「我的測試資料寫壞了」，不是「權限有被檢查」。**
 ⇒ 每一題都斷言**確切的狀態碼**。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import sys
 from pathlib import Path
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -226,6 +227,7 @@ def test_ye1_an_unauthenticated_caller_is_refused(client, method, path, body):
     )
 
 
+@needs_m01
 @pytest.mark.parametrize("method,path,body", HIGH_RISK,
                          ids=[f"{m} {p.split('/api/')[1][:34]}"
                               for m, p, _ in HIGH_RISK])

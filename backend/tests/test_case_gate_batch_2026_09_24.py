@@ -6,7 +6,7 @@
 - 查詢數：40 件的矩陣不超過固定上限（與件數無關）
 - 特性：一組涵蓋各種狀態的案件，五關輸出與重構前（master 舊實作）逐字相同（GOLDEN 由舊實作產出）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

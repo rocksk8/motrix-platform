@@ -2,11 +2,12 @@
 
 2026-09-26 自 `backend/tests/test_api_integration.py` 移入（PLAYBOOK §B-11：拿掉本模組時這些題跟著消失）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 from tests.test_api_integration import _auth, _login, _make_quotation
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _make_stock_item(part_no, serial_no, status="in_stock"):
@@ -23,6 +24,7 @@ def _make_stock_item(part_no, serial_no, status="in_stock"):
         conn.close()
 
 
+@needs_m01
 def test_device_install_flips_in_stock_serial_to_installed(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -44,6 +46,7 @@ def test_device_install_flips_in_stock_serial_to_installed(client, make_user):
     assert row["quote_no"] == "MQ-TEST-005"
 
 
+@needs_m01
 def test_device_install_reports_conflict_for_already_shipped_serial(client, make_user):
     """Regression: a serial that's already 'shipped' elsewhere must not be silently
     skipped as if it were untracked — the case-record save should surface the
@@ -70,6 +73,7 @@ def test_device_install_reports_conflict_for_already_shipped_serial(client, make
     assert row["status"] == "shipped", "conflicting serial must not be silently flipped to installed"
 
 
+@needs_m01
 def test_device_install_skips_untracked_serial_without_conflict(client, make_user):
     """A serial with no stock_items record at all is the common case (most devices
     aren't stock-tracked) — must stay a silent no-op, not a conflict."""

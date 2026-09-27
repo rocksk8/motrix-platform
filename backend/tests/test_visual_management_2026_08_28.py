@@ -1,9 +1,10 @@
 """2026-08-28 視覺化管理優化：部門篩選擴大到案件執行看板／月支出（承攬商/料件）、
 庫存水位燈號。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -71,6 +72,7 @@ def _insert_case_with_stage(quote_no, sales_username, total=100000):
 
 # ── 案件執行看板部門篩選 ────────────────────────────────────────────────────────
 
+@needs_m01
 def test_stage_board_filters_by_department(client, make_user):
     admin_user, admin_pw = make_user(role="admin")
     token = _login(client, admin_user, admin_pw)
@@ -85,6 +87,7 @@ def test_stage_board_filters_by_department(client, make_user):
     assert "MQ-BOARD-B01" not in quote_nos
 
 
+@needs_m01
 def test_stage_board_without_department_shows_all(client, make_user):
     admin_user, admin_pw = make_user(role="admin")
     token = _login(client, admin_user, admin_pw)

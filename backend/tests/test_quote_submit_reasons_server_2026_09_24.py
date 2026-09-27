@@ -9,7 +9,7 @@ R3 項次照移植（含區段標題的位置）。
 ⚠️ 已知且使用者接受的限制（R2）：只看 `margin` 欄位——margin 可以假造，
 搭配真實的低單價仍能隱瞞低毛利。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

@@ -20,11 +20,12 @@
 ⚠️ 斷言刻意挑「成功後才會被寫入的下游欄位」：簽核結果看 DB 裡的 status/
 currentTier/approvedAt，不是看自己送進去的 request body。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, u, p):
@@ -134,6 +135,7 @@ def test_department_manager_signs_own_tier_then_division_manager(client, make_us
 
 # ── ③ 身兼部門＋處主管：自己簽兩次，最高管理者只收知會 ──────────────────────
 
+@needs_m01
 def test_division_manager_self_signs_twice_and_superadmin_only_gets_notice(client, make_user):
     """使用者要的那件事本身：高晟耀自己簽兩次、最高管理者只做知會。"""
     from db import get_db
@@ -184,6 +186,7 @@ def test_division_manager_self_signs_twice_and_superadmin_only_gets_notice(clien
         "組織自簽層不可以被剔除，否則整關消失")
 
 
+@needs_m01
 def test_no_notice_when_someone_else_is_in_the_chain(client, make_user):
     """正向控制：鏈裡只要有別人，就不該發知會（否則上一題可以靠『一律發』變綠）。"""
     from db import get_db
@@ -215,6 +218,7 @@ def test_no_notice_when_someone_else_is_in_the_chain(client, make_user):
 
 # ── ④ 解鎖編輯後的重新簽核走組織流程 ───────────────────────────────────────
 
+@needs_m01
 def test_unlock_edit_rebuilds_org_chain_for_the_editor(client, make_user):
     """使用者回報的入口：superadmin 解鎖改版後，簽核層要照組織流程重建。"""
     from db import get_db
@@ -292,6 +296,7 @@ def _approval_of(quote_no):
         conn.close()
 
 
+@needs_m01
 def test_cascade_signs_consecutive_self_tiers_in_one_call(client, make_user):
     me, pw = make_user(username="oc_two_tiers", role="admin")
     headers = _login(client, me, pw)
@@ -311,6 +316,7 @@ def test_cascade_signs_consecutive_self_tiers_in_one_call(client, make_user):
     assert appr["currentTier"] == 2
 
 
+@needs_m01
 def test_without_cascade_flag_only_one_tier_is_signed(client, make_user):
     """正向控制：沒帶 cascade 就維持原本「一次一層」的行為，不會擅自替人多簽。"""
     me, pw = make_user(username="oc_two_tiers_b", role="admin")
@@ -329,6 +335,7 @@ def test_without_cascade_flag_only_one_tier_is_signed(client, make_user):
     assert appr["tiers"][1]["approvers"][0]["status"] != "approved"
 
 
+@needs_m01
 def test_cascade_stops_at_a_tier_that_needs_someone_else(client, make_user):
     """**安全邊界**：中間夾著別人的層時，cascade 只能停在他前面。
     跨過去就等於替別人簽核。"""
@@ -351,6 +358,7 @@ def test_cascade_stops_at_a_tier_that_needs_someone_else(client, make_user):
     assert appr["tiers"][2]["approvers"][0]["status"] != "approved"
 
 
+@needs_m01
 def test_cascade_does_not_skip_a_tier_with_a_second_pending_approver(client, make_user):
     """同層有兩位簽核人、其中一位不是我 → 那一層不算『簽下去就完成』，不併簽。"""
     me, pw = make_user(username="oc_casc_me2", role="admin")
@@ -369,6 +377,7 @@ def test_cascade_does_not_skip_a_tier_with_a_second_pending_approver(client, mak
     assert appr["tiers"][1]["approvers"][0]["status"] != "approved"
 
 
+@needs_m01
 def test_requester_can_sign_own_org_tier_end_to_end(client, make_user):
     """把①～⑤串起來：身兼兩職的人送審 → 一次確認簽完兩層 → 狀態變已送出。
     這條路在 2026-09-15 之前是走不通的（申請人會被 _exclude_requester() 剔掉）。"""

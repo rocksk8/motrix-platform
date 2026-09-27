@@ -18,12 +18,13 @@
 - 沒有 `taxType` 的舊報價：稅率 0 ⇒ 免稅（照原本的選項標籤），其餘 ⇒ 應稅；不做 migration。
 - 已開發票（開票申請已核准）⇒ 以那張單記載的稅額為準。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 # ── 單一算法 ─────────────────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ def _new_voucher(client, h, body):
     return r.json()
 
 
+@needs_m01
 def test_new_invoice_request_taxes_the_sales_amount_at_five_percent(client, make_user):
     """依品項：未稅 9,810 ⇒ 稅額 round_half_up(490.5)＝491、含稅 10,301。
     修正前用比例換算＋Python 內建 round（銀行家捨入）⇒ 10,300.5 捨成 10,300、稅額 490。"""
@@ -143,6 +145,7 @@ def test_new_invoice_request_taxes_the_sales_amount_at_five_percent(client, make
     assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (9810, 491, 10301)
 
 
+@needs_m01
 def test_new_invoice_request_on_an_exempt_quote_has_no_tax(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-V2", 20000, 20000, {"taxRate": 0}, [])
@@ -152,6 +155,7 @@ def test_new_invoice_request_on_an_exempt_quote_has_no_tax(client, make_user):
     assert (v["pretaxAmount"], v["taxAmount"], v["amount"]) == (5000, 0, 5000)
 
 
+@needs_m01
 def test_new_invoice_request_on_a_legacy_rate_quote_keeps_its_numbers_and_is_flagged(client, make_user):
     h = _hdr(client, make_user)
     _quote("MQ-V3", 10000, 10300, {"taxRate": 3}, [])

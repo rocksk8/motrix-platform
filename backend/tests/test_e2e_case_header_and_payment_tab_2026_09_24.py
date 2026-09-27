@@ -6,7 +6,7 @@
   財務分頁其餘區塊（應收應付總覽）仍只給有財務檢視權的人
 - 案件健康總覽「收款」關卡的「前往」指到財務分頁
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

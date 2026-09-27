@@ -7,7 +7,7 @@
 附件區縮圖點開同一視窗（只看不帶入）。鍵盤比照 MotrixUI：Esc 關、焦點鎖在視窗內。
 觀測點：實際位置（getBoundingClientRect）、DOM、attachments 落地筆數。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import os
 

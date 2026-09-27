@@ -8,14 +8,15 @@
 ④ 開票申請：零稅率／免稅報價要有依據——報價上有就帶入快照；沒有（舊單）就要申請時補填，否則 400。
 ⑤ 舊資料：沒有依據的舊開票申請照常讀得到（taxBasis=None）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime
 
 import pytest
 
 from helpers.legal_params import TAX_BASIS_OPTIONS, tax_basis_error, tax_basis_label
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _hdr(client, make_user, username="r2_root"):
@@ -86,6 +87,7 @@ def test_tax_basis_error(kind, basis, ok):
 
 # ── ① 報價 ──────────────────────────────────────────────────────────────────────
 
+@needs_m01
 def test_submitting_a_zero_rated_quote_without_basis_is_refused(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(taxRate=0, taxType="zero"), headers=h)
@@ -93,6 +95,7 @@ def test_submitting_a_zero_rated_quote_without_basis_is_refused(client, make_use
     assert "零稅率依據" in r.json()["detail"] and "§7" in r.json()["detail"]
 
 
+@needs_m01
 def test_submitting_with_a_basis_is_accepted_and_stored(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(taxRate=0, taxType="zero",
@@ -101,6 +104,7 @@ def test_submitting_with_a_basis_is_accepted_and_stored(client, make_user):
     assert _stored(r.json()["quote_no"])["taxBasis"] == {"code": "7-2", "note": "國外使用"}
 
 
+@needs_m01
 def test_exempt_under_article_8_requires_the_item_number(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(taxRate=0, taxType="exempt", taxBasis={"code": "8"}), headers=h)
@@ -121,12 +125,14 @@ def test_article_8_options_are_the_verbatim_items_with_source():
     assert tax_basis_label({"code": "8", "note": "第 3 款"}).startswith("營業稅法 §8 第一項（舊選項"), "舊資料要顯示得出來"
 
 
+@needs_m01
 def test_a_draft_can_be_saved_without_basis(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(status="草稿", taxRate=0, taxType="exempt"), headers=h)
     assert r.status_code == 201, r.text
 
 
+@needs_m01
 def test_an_old_exempt_quote_must_get_a_basis_when_submitted_again(client, make_user):
     """舊資料照常顯示與存草稿；再送出時才要求補依據。"""
     h = _hdr(client, make_user)
@@ -138,6 +144,7 @@ def test_an_old_exempt_quote_must_get_a_basis_when_submitted_again(client, make_
     assert r.status_code == 400 and "免稅依據" in r.json()["detail"], r.text
 
 
+@needs_m01
 def test_taxable_quote_drops_a_leftover_basis(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/quotations", json=_body(taxRate=5, taxType="taxable",

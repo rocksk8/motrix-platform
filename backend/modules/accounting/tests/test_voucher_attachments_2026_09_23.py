@@ -34,7 +34,9 @@ assert r.status_code != 404   ⇒ **擋不到**（405 != 404）
 📌 而 `DELETE`／`POST` 那幾題**在 B 接上端點之前一定要先確認它們是紅的**，
    且紅的原因不可以是 405。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import io
 import json
 import pathlib
@@ -42,7 +44,6 @@ import re
 
 import pytest
 from core import source_tree
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ATT = "/api/vouchers/%s/attachments"
 ATT_ONE = "/api/vouchers/%s/attachments/%s"
@@ -372,6 +373,7 @@ def _seed_quotation_with_file(quote_no="MQ-JV3-001", name="來源憑證.pdf"):
     return quote_no, file_id, real
 
 
+@needs_m01
 def test_jv3_bringing_in_copies_the_file_so_the_source_can_be_deleted(
         client, make_user):
     """🔴🔴 **`§8⑤` 核心：帶入是**複製**，刪掉來源之後傳票這邊仍讀得到。**
@@ -541,6 +543,7 @@ def _seed_json_source(source_type, quote_no):
     return "%s_0" % quote_no, fid, real, other
 
 
+@needs_m01
 @pytest.mark.parametrize("source_type", sorted(_JSON_SOURCES))
 def test_jv3_a_json_array_source_brings_in_the_right_key(client, make_user,
                                                          source_type):
@@ -580,6 +583,7 @@ def test_jv3_a_json_array_source_brings_in_the_right_key(client, make_user,
     assert _abs(rows[0].get("path")).is_file(), "複製出來的檔不存在。"
 
 
+@needs_m01
 def test_jv3_a_missing_source_file_aborts_the_whole_batch(client, make_user):
     """🔴 **來源的實體檔不見了 ⇒ 整批 400，`voucher_attachments` 零新增。**
 

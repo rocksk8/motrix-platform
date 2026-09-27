@@ -6,7 +6,7 @@
 - ✓ 只在**伺服器回成功之後**才出現（flashSaved 掛在成功分支）
 - label 的 for 指得到真的輸入框（點 label ⇒ 焦點落到那一格）
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

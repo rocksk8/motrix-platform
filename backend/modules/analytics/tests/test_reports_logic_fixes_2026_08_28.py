@@ -3,12 +3,13 @@
 ②已成案缺收款期別會靜默消失於金額類統計（casesWithoutPaymentItems）
 ③年度目標達成率（_compute_achievement）改用 wonMonth 而非直接 quoteDate，
   跟 monthly_trend() 已經修過的 quote_won_month_map() 邏輯一致。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pytest
 
 from core import source_tree as _source_tree
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：M08 精算快照過期檢查改走 IP-1 dispatch.row，外包工班不在時明說無法檢查）：
 #: 同時需要外包工班；外包工班不在時略過（那時精算過期數回 None、報表明說無法檢查，由 M08 搬遷 ⑤ 456130ce 的缺席題負責）。
@@ -132,6 +133,7 @@ def test_missing_payment_items_listed_and_excluded_from_money_totals(client, mak
 
 # ── ③年度目標達成率改用 wonMonth ────────────────────────────────────────────
 
+@needs_m01
 def test_achievement_includes_case_with_missing_quote_date_via_audit_fallback(client, make_user):
     from modules.analytics.api.reports import _collect, _compute_achievement
     _insert_case("MQ-WON-001", quote_date="", total=200000)
@@ -144,6 +146,7 @@ def test_achievement_includes_case_with_missing_quote_date_via_audit_fallback(cl
     assert ach["annual"]["revenue"]["actual"] == 200000  # 靠 audit_log fallback 才算得到
 
 
+@needs_m01
 def test_achievement_reattributes_future_dated_quote_via_audit_fallback(client, make_user):
     """quote_date 誤填成未來日期（例如業務員手誤）時，quote_won_month_map() 會
     退回用 audit_log 實際成案時間戳，不該把這筆案子的業績算進 quote_date 那個

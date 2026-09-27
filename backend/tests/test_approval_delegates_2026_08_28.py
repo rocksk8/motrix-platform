@@ -1,9 +1,10 @@
 """2026-08-28 企業管理優化：簽核代理人機制。CRUD 端點 + 核心整合測試（證明
 代理人真的能在報價單簽核流程裡代替委託人完成簽核，不是只有 CRUD 資料表能動）。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import date, timedelta
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -65,6 +66,7 @@ def _insert_delegate(delegator, delegate, start_date, end_date, active=1):
 
 # ── 核心整合：代理人真的能代替委託人完成簽核 ─────────────────────────────────
 
+@needs_m01
 def test_delegate_can_approve_on_behalf_of_delegator(client, make_user):
     corbin, corbin_pw = make_user(username="corbin", role="superadmin")
     standin, standin_pw = make_user(username="standin", role="admin")
@@ -86,6 +88,7 @@ def test_delegate_can_approve_on_behalf_of_delegator(client, make_user):
     assert r2.json()["status"] == "已送出"
 
 
+@needs_m01
 def test_delegate_outside_date_range_cannot_approve(client, make_user):
     corbin, corbin_pw = make_user(username="corbin2", role="superadmin")
     standin, standin_pw = make_user(username="standin2", role="admin")
@@ -98,6 +101,7 @@ def test_delegate_outside_date_range_cannot_approve(client, make_user):
     assert r.status_code == 403, r.text
 
 
+@needs_m01
 def test_inactive_delegate_cannot_approve(client, make_user):
     corbin, corbin_pw = make_user(username="corbin3", role="superadmin")
     standin, standin_pw = make_user(username="standin3", role="admin")
@@ -110,6 +114,7 @@ def test_inactive_delegate_cannot_approve(client, make_user):
     assert r.status_code == 403, r.text
 
 
+@needs_m01
 def test_delegate_can_reject_on_behalf_of_delegator(client, make_user):
     corbin, corbin_pw = make_user(username="corbin4", role="superadmin")
     standin, standin_pw = make_user(username="standin4", role="admin")

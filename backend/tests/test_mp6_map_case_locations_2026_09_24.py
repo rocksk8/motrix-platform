@@ -14,14 +14,15 @@
 ⚙️ 對照組：admin 看得到全部；沒有模組的人收到 `no_permission`（說出來，不是少一層點）；
    分配變了（assigned_user_ids）快取要失效。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
 
 from routers import map_points
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo  # noqa: F401
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 CASE_A = "MQ-MP6-001"      # 業務甲名下
 CASE_B = "MQ-MP6-002"      # 業務乙名下
@@ -34,6 +35,7 @@ def _rendered(page):
     """PERF #6：等 Alpine 把這次狀態變化畫完（nextTick）＋瀏覽器實際畫出兩個影格。"""
     page.evaluate("() => new Promise(r => Alpine.nextTick(() => requestAnimationFrame(() => requestAnimationFrame(r))))")
 
+@needs_m01
 def test_mp6_case_address_prefers_the_contract_address():
     from modules.case.quotations import case_delivery_address as _case_address   # 2026-09-26 規則搬到 M01（case.locations）
     both = json.dumps({"deliveryLocation": "台中市南屯區",
@@ -103,6 +105,7 @@ def people(client, make_user, _geo):
             "none": _login(client, *none), "a_id": a_id}
 
 
+@needs_m01
 def test_mp6_each_salesperson_sees_only_their_own_and_assigned_cases(client, people):
     got_a, body_a, _ = _cases(client, people["a"])
     got_b, _, _ = _cases(client, people["b"])
@@ -128,6 +131,7 @@ def test_mp6_the_response_cache_never_hands_one_salespersons_cases_to_another(cl
     assert cache_b == "miss" and CASE_A not in got_b and CASE_QUOTE_ONLY not in got_b, got_b
 
 
+@needs_m01
 def test_mp6_a_new_assignment_shows_up_without_waiting_for_the_cache(client, people):
     _cases(client, people["a"])
     import db
@@ -148,6 +152,7 @@ def test_mp6_without_the_module_it_says_so(client, people):
     assert got == [] and info["skipped"] == "no_permission", info
 
 
+@needs_m01
 def test_mp6_case_addresses_join_the_background_geocode_backlog(client, people):
     backlog = map_points._map_geocode_backlog()
     for addr in ("台中市西屯區", "台中市南屯區", "台中市梧棲區", "高雄市前鎮區"):

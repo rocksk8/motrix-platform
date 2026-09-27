@@ -3,7 +3,7 @@
 後端擋下之後，前端原本只顯示「儲存失敗」，使用者看不出是哪一期、為什麼。
 這支題釘住：畫面上看得到「已收款，不可刪除」，而且資料庫裡那一期還在。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

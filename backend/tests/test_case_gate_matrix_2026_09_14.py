@@ -14,7 +14,7 @@
 3. **canClose 必須跟實際按下去的結果一致**。矩陣說「可結案」而 API 回 400 的話，
    這個畫面就沒有存在的意義了。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
