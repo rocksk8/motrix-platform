@@ -100,6 +100,31 @@
 | G6 | 勞報單（F2）上雲：獨立、權限更窄的資料夾 | ⏳ C（A8 之後） |
 | G6b | 個資資料夾的寫入一律經 `archive._pii_ensure_dir`／`_pii_copy_file`（新增寫入路徑時不可以用 makedirs）——目前只有既有三條路徑的行為題（稽核 X-9b S-5） | ⏳ |
 | G7 | L1 直接讀 L2 模組的表（過渡期）時必須先看 `core.registry.is_loaded()`（MODULE-GUIDE §5 選配；STATES-PLATFORM P-DT-01）：掃描 L1 對 L2 表的讀取，對到沒有載入檢查的 ⇒ 紅 | ⏳ |
+| G8 | SQL 的 `json_extract(` 改成逐筆 Python 解析（**壞一筆會讓整個查詢丟例外**，那一整類資料一起消失——AL2-M2、c-queue-json）；新的不准再寫：棘輪守門 `tests/platform/test_json_extract_ratchet.py`（每檔只准變少、新檔出現就紅，含 `SQL_DEAL_TAG` 這類常數的引用）；既有使用處見下表，下一輪逐檔改 | ⏳ 守門 ✅ B（第十三班）；改寫待派 |
+
+
+**G8 既有使用處**（2026-09-27 第十二班合回後 9876b003，`python tests/platform/test_json_extract_ratchet.py --update --roadmap` 產生；共 18 檔、132 處；改完一檔就重產基線，次數只會往下）：
+
+| 檔 | 次數 |
+|---|---|
+| `modules/case/api/quotations.py` | 43 |
+| `modules/analytics/api/reports.py` | 27 |
+| `modules/analytics/api/dashboard.py` | 14 |
+| `db.py` | 9 |
+| `modules/arap/receivables.py` | 7 |
+| `modules/case/case_deadlines.py` | 7 |
+| `modules/payroll/api/bonus.py` | 6 |
+| `modules/case/quotations.py` | 5 |
+| `modules/arap/api/cashier.py` | 3 |
+| `pdf_gen.py` | 3 |
+| `helpers/system_checks.py` | 1 |
+| `modules/arap/api/invoice_vouchers.py` | 1 |
+| `modules/arap/api/payment_requests.py` | 1 |
+| `modules/case/api/material_orders.py` | 1 |
+| `modules/case/recognition.py` | 1 |
+| `modules/payroll/bonus_pdf.py` | 1 |
+| `modules/subcontract/api/contractor_vouchers.py` | 1 |
+| `modules/supply/api/shipping_notes.py` | 1 |
 
 ## 階段 S：系統狀態的處理（STATES 目錄）
 
