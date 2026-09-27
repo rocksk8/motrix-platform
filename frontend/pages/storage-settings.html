@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <title>儲存位置 — MOTRIX 專案管理系統</title>
+  <script src="../static/auth-guard.js"></script>
+  <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
+  <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <!--
+    儲存位置（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）：最高管理員設定雲端存檔根目錄、個資資料夾、更新交付資料夾。
+    - 留空＝照原本的自動判斷；解析一律在後端 helpers.storage_locations。
+    - 儲存前後端驗證（存在、可寫、個資與一般／交付不可互相包含）；不通過就不存，逐欄說明原因。
+    - 「建立」只建最後一層，由最高管理員明確按下；背景程式永不自動建立。建立後提醒到雲端硬碟確認共用權限。
+  -->
+  <style>
+    .st-main { margin-left: var(--sidebar-w); margin-top: var(--topbar-h); padding: 32px 36px;
+      min-height: calc(calc(100vh / var(--fz,1)) - var(--topbar-h)); background: var(--white); }
+    .st-card { max-width: 980px; margin-top: 16px; border: 1px solid var(--border); border-radius: 10px; padding: 6px 18px }
+    .st-row { padding: 14px 0; border-bottom: 1px solid var(--border-light) }
+    .st-row:last-child { border-bottom: none }
+    .st-label { font-weight: 600; font-size: 14px }
+    .st-sub { font-size: 12px; color: var(--text-secondary); margin-top: 3px; line-height: 1.6 }
+    .st-line { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center }
+    .st-in { flex: 1; min-width: 260px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+      font-size: 13px; font-family: inherit; background: var(--white); color: var(--text-main) }
+    .st-in.is-bad { border-color: var(--danger) }
+    .st-bad { color: var(--danger); font-size: 12.5px; margin-top: 6px }
+    .st-ok { color: var(--success); font-size: 12.5px; margin-top: 6px }
+    .st-now { font-size: 12px; color: var(--text-secondary); margin-top: 6px; word-break: break-all }
+    .st-note { max-width: 980px; margin-top: 16px; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-muted, var(--white)); font-size: 13px; line-height: 1.7 }
+    .st-actions { max-width: 980px; margin-top: 14px; display: flex; gap: 10px; align-items: center }
+    @media (max-width: 767px) { .st-main { margin-left: 0; padding: 20px 16px } }
+  </style>
+</head>
+<body x-data="storageSettingsPage()" x-init="init()" x-cloak>
+  <header id="app-topbar" class="topbar"></header>
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+  <aside class="sidebar" id="app-sidebar"></aside>
+  <main class="st-main">
+    <div class="pg">
+      <div class="pg__l">
+        <div class="pg__eyebrow">系統設定</div>
+        <h1 class="pg__t">儲存位置</h1>
+        <p class="pg__s">系統存檔、個資存檔與更新交付的位置。留空＝照自動判斷（雲端存檔根目錄：找「我的雲端硬碟\系統存檔」；個資資料夾：雲端存檔根目錄旁的「系統存檔_個資」；更新交付資料夾：不使用）。</p>
+      </div>
+    </div>
+
+    <div class="st-note">個資資料夾要與一般存檔分開、權限更窄；不可以放在雲端存檔根目錄或更新交付資料夾裡面（反過來也不行）。系統不會自動建立資料夾，只有在這一頁按「建立」才會建，而且只建最後一層。</div>
+
+    <div class="st-bad" x-show="errMsg" x-text="errMsg" data-testid="st-err"></div>
+
+    <div class="st-card">
+      <template x-for="k in kinds" :key="k">
+        <div class="st-row" :data-kind="k">
+          <div class="st-label" x-text="labels[k]"></div>
+          <div class="st-sub" x-text="hints[k]"></div>
+          <div class="st-line">
+            <input class="st-in" :class="{ 'is-bad': fieldErr[k] }" :id="'st-in-' + k" :data-testid="'st-in-' + k"
+                   x-model="edit[k]" placeholder="留空＝自動判斷" autocomplete="off">
+            <button type="button" class="btn btn-ghost btn-sm" :data-testid="'st-create-' + k"
+                    x-show="canCreate[k]" :disabled="busy" @click="createFolder(k)">建立這個資料夾</button>
+          </div>
+          <div class="st-sub" x-show="canCreate[k]">建立後，請到雲端硬碟確認這個資料夾的共用權限（新資料夾會繼承上一層的分享設定）。</div>
+          <div class="st-bad" x-show="fieldErr[k]" x-text="fieldErr[k]" :data-testid="'st-field-err-' + k"></div>
+          <div class="st-ok" x-show="createdMsg[k]" x-text="createdMsg[k]" :data-testid="'st-created-' + k"></div>
+          <div class="st-now" :data-testid="'st-now-' + k" x-text="nowText(k)"></div>
+        </div>
+      </template>
+    </div>
+
+    <div class="st-actions">
+      <button type="button" class="btn btn-primary" id="st-save" data-testid="st-save" :disabled="busy || !changed()" @click="save()">儲存</button>
+      <span class="st-ok" x-show="okMsg" x-text="okMsg" data-testid="st-ok"></span>
+    </div>
+  </main>
+  <script src="../static/notif.js"></script>
+  <script src="../static/sidebar.js"></script>
+  <script>
+    function storageSettingsPage() {
+      return {
+        kinds: ['archive_root', 'pii_root', 'delivery_root'],
+        labels: { archive_root: '雲端存檔根目錄', pii_root: '個資資料夾', delivery_root: '更新交付資料夾' },
+        hints: {
+          archive_root: '每日／週／月備份、PDF 與上傳檔鏡像的位置（例：G:\\我的雲端硬碟\\系統存檔）。',
+          pii_root: '勞報單等含個資文件與整庫備份的位置，權限要比一般存檔窄（例：G:\\我的雲端硬碟\\系統存檔_個資）。',
+          delivery_root: '開發機放更新包、正式機讀取的資料夾（例：G:\\我的雲端硬碟\\MOTRIX-交付）。',
+        },
+        edit: { archive_root: '', pii_root: '', delivery_root: '' },
+        saved: { archive_root: '', pii_root: '', delivery_root: '' },
+        status: {}, fieldErr: {}, canCreate: {}, createdMsg: {},
+        errMsg: '', okMsg: '', busy: false, _initDone: false,
+        _hdr() {
+          let s = {}
+          try { s = JSON.parse(localStorage.getItem('motrix_session') || '{}') } catch (e) {}
+          return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (s.token || '') }
+        },
+        changed() { return this.kinds.some(k => (this.edit[k] || '').trim() !== (this.saved[k] || '')) },
+        nowText(k) {
+          const st = this.status[k]
+          if (!st) return ''
+          const src = { setting: '依設定', auto: '自動判斷', unset: '未設定' }[st.source] || st.source
+          if (!st.path) return '目前：' + src + (k === 'delivery_root' ? '（不使用）' : '（找不到）')
+          return '目前：' + src + '　' + st.path + (st.exists ? '' : '（不存在）')
+        },
+        _apply(d) {
+          this.status = d.status || {}
+          const v = d.values || {}
+          this.kinds.forEach(k => { this.saved[k] = v[k] || ''; this.edit[k] = v[k] || '' })
+        },
+        async init() {
+          if (this._initDone) return
+          this._initDone = true
+          await this.load()
+        },
+        async load() {
+          try {
+            const r = await fetch('/api/settings/storage-locations', { headers: this._hdr() })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { this.errMsg = '讀取失敗：' + (d.detail || r.status); return }
+            this._apply(d)
+          } catch (e) { this.errMsg = '讀取失敗：網路連線失敗' }
+        },
+        async save() {
+          if (this.busy) return
+          this.busy = true; this.errMsg = ''; this.okMsg = ''; this.fieldErr = {}; this.canCreate = {}; this.createdMsg = {}
+          try {
+            const body = {}
+            this.kinds.forEach(k => { body[k] = (this.edit[k] || '').trim() })
+            const r = await fetch('/api/settings/storage-locations', { method: 'PUT', headers: this._hdr(), body: JSON.stringify(body) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) {
+              const det = d.detail
+              if (det && typeof det === 'object' && Array.isArray(det.problems)) {
+                const fe = {}, cc = {}
+                det.problems.forEach(p => {
+                  fe[p.kind] = fe[p.kind] ? fe[p.kind] + '；' + p.message : p.message
+                  if (p.message.indexOf('不存在') >= 0) cc[p.kind] = true
+                })
+                this.fieldErr = fe; this.canCreate = cc
+                this.errMsg = det.message || '沒有儲存'
+              } else {
+                this.errMsg = '儲存失敗：' + (typeof det === 'string' ? det : r.status)
+              }
+              return
+            }
+            this._apply(d)
+            this.okMsg = '已儲存'
+          } catch (e) { this.errMsg = '儲存失敗：網路連線失敗' }
+          finally { this.busy = false }
+        },
+        async createFolder(k) {
+          if (this.busy) return
+          this.busy = true; this.errMsg = ''
+          try {
+            const r = await fetch('/api/settings/storage-locations/create', { method: 'POST', headers: this._hdr(),
+              body: JSON.stringify({ kind: k, path: (this.edit[k] || '').trim() }) })
+            const d = await r.json().catch(() => ({}))
+            if (!r.ok) { this.fieldErr = Object.assign({}, this.fieldErr, { [k]: '建立失敗：' + (d.detail || r.status) }); return }
+            this.canCreate = Object.assign({}, this.canCreate, { [k]: false })
+            this.fieldErr = Object.assign({}, this.fieldErr, { [k]: '' })
+            this.createdMsg = Object.assign({}, this.createdMsg, { [k]: d.notice || '已建立' })
+          } catch (e) { this.fieldErr = Object.assign({}, this.fieldErr, { [k]: '建立失敗：網路連線失敗' }) }
+          finally { this.busy = false }
+        },
+      }
+    }
+  </script>
+</body>
+</html>

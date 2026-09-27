@@ -1732,6 +1732,65 @@ def set_google_quota_setting(body: GoogleQuotaBody,
     return {"ok": True, "status": geo.quota_status()}
 
 
+# ── 儲存位置（CORE-SPEC 裁示表「儲存位置可設定」，2026-09-28）────────────────────
+# 三個位置（雲端存檔根目錄、個資資料夾、更新交付資料夾）由最高管理員設定；留空＝照原本自動判斷。
+# 解析一律在 helpers.storage_locations（這裡只做讀寫與驗證）。本機上傳檔目錄不開放（改位置＝搬資料）。
+
+class StorageLocationsBody(BaseModel):
+    """三個鍵都要送（空字串＝自動）；多送或少送 ⇒ 422（寬鬆驗證會靜默丟掉欄位）。"""
+    model_config = {"extra": "forbid"}
+    archive_root: str
+    pii_root: str
+    delivery_root: str
+
+
+class StorageCreateBody(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: str
+    path: str
+
+
+@router.get("/api/settings/storage-locations")
+def get_storage_locations(authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import storage_locations as SL
+    return {"values": SL.configured(), "status": SL.status(), "labels": SL.LABELS}
+
+
+@router.put("/api/settings/storage-locations")
+def set_storage_locations(body: StorageLocationsBody, authorization: str = Header(None)):
+    _require_user(authorization, require_superadmin=True)
+    from helpers import storage_locations as SL
+    values = {k: getattr(body, k).strip() for k in SL.KINDS}
+    problems = SL.validate(values)
+    if problems:
+        raise HTTPException(400, {"message": "儲存位置沒有通過檢查，未儲存", "problems": problems})
+    before = SL.configured()
+    SL.save(values)                                      # 一律寫主庫（demo 模式也不寫到 demo 庫）
+    changed = {k: {"from": before.get(k, ""), "to": values[k]} for k in SL.KINDS if before.get(k, "") != values[k]}
+    _audit(_tok(authorization), "settings.storage_locations.update", "settings", SL.SETTING_KEY,
+           "儲存位置變更：" + ("；".join("%s %s → %s" % (SL.LABELS[k], v["from"] or "（自動）", v["to"] or "（自動）")
+                                     for k, v in changed.items()) or "（沒有變更）"))
+    return {"values": SL.configured(), "status": SL.status()}
+
+
+@router.post("/api/settings/storage-locations/create")
+def create_storage_location(body: StorageCreateBody, authorization: str = Header(None)):
+    """最高管理員明確建立資料夾（背景程式永不自動建）：只建最後一層。畫面同時提醒到雲端硬碟確認共用權限。"""
+    _require_user(authorization, require_superadmin=True)
+    from helpers import storage_locations as SL
+    if body.kind not in SL.KINDS:
+        raise HTTPException(400, "不認得的儲存位置：%s" % body.kind)
+    try:
+        made = SL.create(body.kind, body.path)
+    except (ValueError, OSError) as e:
+        raise HTTPException(400, str(e))
+    _audit(_tok(authorization), "settings.storage_locations.create", "settings", SL.SETTING_KEY,
+           "建立%s資料夾：%s（共用權限請到雲端硬碟確認）" % (SL.LABELS[body.kind], made))
+    return {"ok": True, "path": made,
+            "notice": "已建立。請到雲端硬碟確認這個資料夾的共用權限（新資料夾會繼承上一層的分享設定）。"}
+
+
 # ── Backup retention settings ─────────────────────────────────────────────────
 # 2026-09-01：本機/雲端備份保留天數原本寫死在 archive.py（見該檔 _BACKUP_RETENTION_
 # DEFAULT 註解），使用者要求可調整避免雲端空間被逐年累積的每日/週備份塞爆，改成
