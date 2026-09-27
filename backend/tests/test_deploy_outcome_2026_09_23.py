@@ -1887,7 +1887,10 @@ def test_rp2_rp3_restoring_is_set_before_the_first_restore_write(ps1):
         "而它們的語意**都與「正在還原」相反**。\n"
         "🔑 §53：`restoring` 與結束碼檢查**成對**落地。" % ps1.name)
 
-    ln_no, col = hits[0]
+    # 2026-09-28 AH-S7：apply_update 多了一個還原點（複製失敗時的 Restore-ProgramAfterCopyFailure，也先設 restoring）
+    # ⇒ 管「第一次寫回」的是它之前**最近**的那一個 restoring，不是檔案裡第一個。
+    before = [h for h in hits if h[0] <= first]
+    ln_no, col = before[-1] if before else hits[0]
     assert ln_no <= first, (
         "`%s`：`restoring` 設在 :%d，而第一次把快照寫回正式機在 :%d —— **順序反了**。\n"
         "🔑 危險值在動作之前設（與 `:420` 同一條紀律）。" % (ps1.name, ln_no, first + 1))
