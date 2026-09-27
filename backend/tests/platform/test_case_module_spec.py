@@ -24,6 +24,7 @@ EXPECTED = {
     ("approval.detail", "extra_expense"), ("approval.detail", "case_change"),
     ("calendar.writeback", "quotation"), ("calendar.writeback", "case_stage"),
     ("quotation.append_items", "quotations"), ("attachments.for_document", "case"),
+    ("payables.pending", "case"),          # IP-100 請款待付款（2026-09-27）
 }
 
 

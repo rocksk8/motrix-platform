@@ -202,6 +202,7 @@
     "mod:case/case_deadlines",
     "mod:case/attachments",
     "mod:case/case_stage_tasks",
+    "mod:case/payables",
     "mod:case/quotations",
     "mod:case/quote_terms",
     "mod:case/recognition",
@@ -220,6 +221,7 @@
     "page:pages/case-management.html",
     "page:pages/case-stage-board.html",
     "page:pages/completion-note-form.html",
+    "page:pages/payment-request.html",
     "page:pages/quotation-form.html",
     "page:pages/quotations.html",
     "page:pages/sales-orders.html",
@@ -247,6 +249,7 @@
     "/api/case-batch",
     "/api/case-changes",
     "/api/completion-notes",
+    "/api/extra-expenses",
     "/api/next-quote-no",
     "/api/quotations",
     "/api/sales-orders"
