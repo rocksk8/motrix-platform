@@ -501,7 +501,7 @@ tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_the_queue_modal_li
 tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport[\u6a19]
 tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport[\u7279]
 tests/test_e2e_font_zoom_fits_viewport_2026_09_24.py::test_fz_the_standard_size_layout_is_unchanged
-tests/test_e2e_inflight_report_2026_09_26.py::test_rc_teardown_hang_fails_only_that_test[n2]
+# ~~tests/test_e2e_inflight_report_2026_09_26.py::test_rc_teardown_hang_fails_only_that_test[n2]~~ 〔更正 2026-09-27 12:49 D：這一紅是真刪時高負載下 xdist 逾時，不是 M01 缺席；真刪樹低負載、不帶標記單獨跑 20/20 過 ⇒ 不應標 needs_m01（M6-M1）〕
 tests/test_e2e_material_orders_2026_09_11.py::test_material_orders_paid_status_rules_enforced_in_ui
 tests/test_e2e_material_orders_2026_09_11.py::test_material_orders_panel_round_trip
 tests/test_e2e_notice_banners_2026_09_25.py::test_banners_do_not_cover_the_case_header_buttons[1024]
