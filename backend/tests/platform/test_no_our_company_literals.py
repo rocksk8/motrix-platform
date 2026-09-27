@@ -47,7 +47,7 @@ def _tree(tmp_path, files):
 def test_reverse_control_synthetic_tree(tmp_path):
     root = _tree(tmp_path, {
         "backend/helpers/x.py": 'NAME = "允碩整合"\n',
-        "frontend/pages/p.html": "<div>Motrix SYNERGY Integration ERP</div>\n",
+        "frontend/static/p.html": "<div>Motrix SYNERGY Integration ERP</div>\n",
         "backend/modules/m/api.py": "TEL = '04-3610-6566'\n",
         "frontend/static/s.js": "img.src = up + 'static/logo.png'\n",
         "backend/tests/test_x.py": 'OURS = "60575481"\n',               # tests 不掃
@@ -59,7 +59,7 @@ def test_reverse_control_synthetic_tree(tmp_path):
     hits = L.scan(root)
     assert hits == {
         ("backend/helpers/x.py", "公司名（允碩）"): 1,
-        ("frontend/pages/p.html", "英文名（Synergy Integration）"): 1,
+        ("frontend/static/p.html", "英文名（Synergy Integration）"): 1,
         ("backend/modules/m/api.py", "電話"): 1,
         ("frontend/static/s.js", "直接引用預設圖檔"): 1,
     }, hits
@@ -69,17 +69,17 @@ def test_reverse_control_synthetic_tree(tmp_path):
 
 def test_reverse_control_allowlist_cannot_become_a_blanket_exemption(tmp_path):
     root = _tree(tmp_path, {"backend/helpers/x.py": 'A = "允碩"\nB = "允碩"\n',
-                            "frontend/pages/p.html": "允碩\n"})
+                            "frontend/static/p.html": "允碩\n"})
     hits = L.scan(root)
     ok_cat = next(iter(L.CATEGORIES))
     # 次數不符（登記 1、實際 2）
     assert any(p.startswith("次數不符") for p in L.problems(hits, {
         ("backend/helpers/x.py", "公司名（允碩）"): (1, ok_cat, "r"),
-        ("frontend/pages/p.html", "公司名（允碩）"): (1, ok_cat, "r")}))
+        ("frontend/static/p.html", "公司名（允碩）"): (1, ok_cat, "r")}))
     # 頁面不可以登記（即使次數對）
     assert any(p.startswith("頁面不可以登記") for p in L.problems(hits, {
         ("backend/helpers/x.py", "公司名（允碩）"): (2, ok_cat, "r"),
-        ("frontend/pages/p.html", "公司名（允碩）"): (1, ok_cat, "r")}))
+        ("frontend/static/p.html", "公司名（允碩）"): (1, ok_cat, "r")}))
     # 類別不在清單
     assert any(p.startswith("登記的類別不在清單裡") for p in L.problems(hits, {
         ("backend/helpers/x.py", "公司名（允碩）"): (2, "隨便寫的類別", "r")}))

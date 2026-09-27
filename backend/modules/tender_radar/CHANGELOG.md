@@ -1,5 +1,8 @@
 # 標案雷達 更新紀錄
 
+## 1.3.2 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`tender-radar.html`
+
 ## 1.3.1 — 2026-09-26
 - 宣告 `provides.probes`（D7 演練與產品演練打這幾支確認模組在；純讀、無副作用，D7-CHECKLIST §4）
 

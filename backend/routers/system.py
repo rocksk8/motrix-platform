@@ -2703,13 +2703,11 @@ def _branding_state_out() -> dict:
     return out
 
 
-def _branding_guard(authorization: str) -> dict:
-    """只有 superadmin（不接受「持有 settings 模組」）；展示帳號不可以改正式安裝的品牌。"""
-    user = _require_user(authorization, require_superadmin=True)
+def _branding_refuse_demo() -> None:
+    """展示帳號不可以改正式安裝的品牌（權限另由各端點的 `_require_user(..., require_superadmin=True)` 檢查）。"""
     from db import is_demo_mode
     if is_demo_mode():
         raise HTTPException(403, "展示帳號不可以更換品牌圖檔")
-    return user
 
 
 @router.get("/api/settings/branding")
@@ -2723,7 +2721,8 @@ def get_branding_settings(authorization: str = Header(None)):
 
 @router.put("/api/settings/branding/{kind}")
 async def upload_branding_asset(kind: str, file: UploadFile = File(...), authorization: str = Header(None)):
-    user = _branding_guard(authorization)
+    user = _require_user(authorization, require_superadmin=True)   # 只有 superadmin（不接受持有 settings 模組）
+    _branding_refuse_demo()
     from helpers import branding
     if kind not in branding.KINDS:
         raise HTTPException(404, "查無此圖檔種類")
@@ -2739,7 +2738,8 @@ async def upload_branding_asset(kind: str, file: UploadFile = File(...), authori
 
 @router.delete("/api/settings/branding/{kind}")
 def reset_branding_asset(kind: str, authorization: str = Header(None)):
-    _branding_guard(authorization)
+    _require_user(authorization, require_superadmin=True)
+    _branding_refuse_demo()
     from helpers import branding
     if kind not in branding.KINDS:
         raise HTTPException(404, "查無此圖檔種類")

@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.9 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`reports.html`、`devices.html`、`warranty.html`、`procurement.html`
+
 ## 1.0.8 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.6，列車取號）
 - 成案月份改取 M01 `case.recognition.won_month_map`（M01-PLAN §3-8 CA-O4：`helpers` 不再再匯出 M01 的 `quote_won_month_map`）；M01 不在 ⇒ {}。`norm_at`、`summarize_payment_items` 仍自 `helpers` 取用（已是 L1）
 

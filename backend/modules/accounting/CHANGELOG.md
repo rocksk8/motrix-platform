@@ -1,5 +1,8 @@
 # 會計 更新紀錄
 
+## 1.0.4 — 2026-09-27 23:02（暫用號；H10 品牌設定，主持派工）
+- 頁面的分頁圖示（favicon）改讀 `/api/system/branding/favicon`（L1 品牌設定，可在公司資料設定更換；沒上傳回預設圖）：`voucher.html`、`account-items.html`
+
 ## 1.0.3 — 2026-09-27（第十三班列車取號；c-approval-l1-4，稽核 D QJ-M1）
 - 待簽佇列提供者 `_queue_items`：傳票的簽核 JSON 改經 L1 `approval_raw_of` 逐筆解析（原本 `tier_fields` 直接吞 `approval_json`，壞的一筆解不出來就當成空字典 {}⇒ 列給每個 superadmin、角標多計 1，核准時才丟例外）；解析不了 ⇒ 跳過那一筆＋ERROR（寫單號不寫內容）
 

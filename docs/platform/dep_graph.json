@@ -11172,19 +11172,19 @@
     },
     {
      "func": "get_branding_settings",
-     "line": 2716,
+     "line": 2714,
      "method": "GET",
      "path": "/api/settings/branding"
     },
     {
      "func": "upload_branding_asset",
-     "line": 2725,
+     "line": 2723,
      "method": "PUT",
      "path": "/api/settings/branding/{kind}"
     },
     {
      "func": "reset_branding_asset",
-     "line": 2741,
+     "line": 2740,
      "method": "DELETE",
      "path": "/api/settings/branding/{kind}"
     }
