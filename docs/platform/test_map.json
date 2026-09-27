@@ -6874,8 +6874,8 @@
    "units": [
     "core:db",
     "dir:backend/modules/accounting/",
-    "file:backend/routers/__init__.py",
     "file:backend/tests/platform/test_case_stage_connectors.py",
+    "mod:case/api/__init__",
     "mod:case/api/quotations",
     "plat:__init__",
     "plat:source_tree"
@@ -6885,7 +6885,8 @@
      "backend/core/__init__.py",
      "backend/core/source_tree.py",
      "backend/db.py",
-     "backend/routers/__init__.py",
+     "backend/modules/case/api/__init__.py",
+     "backend/modules/case/api/quotations.py",
      "backend/tests/platform/test_case_stage_connectors.py"
     ],
     "api": [
