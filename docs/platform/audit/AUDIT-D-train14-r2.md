@@ -113,3 +113,5 @@
   - 目前的值是對的，所以不擋上車
   - 建議補一題：`ap.PAGES_REL == os.path.relpath(core.paths.FRONTEND_PAGES_DIR, core.paths.INSTALL_ROOT).replace("\\", "/")`——期望值取自獨立來源（core.paths），不是字面、也不是被測物本身
 - 必修 0
+
+- D5-S1 已處理（34e2cbef）：`test_pages_rel_matches_the_real_install_layout` 以 core.paths 為期望值。D 重跑突變「PAGES_REL 改成 \"frontend/page\"」⇒ 只有這一題紅、其餘 51 題綠；還原後 worktree 乾淨（D，2026-09-28）
