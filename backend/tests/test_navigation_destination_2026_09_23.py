@@ -207,9 +207,10 @@ _MODULE_OWNED_FRONTEND_PAGES = {"cashier.html", "receivables.html", "payment-req
 #:   基準（A 2026-09-26 在 wip/a-m06-4〔afbb1b8d 之上〕以本檔掃描器實量，總數 157 不變）：
 #:   模組外 120、accounting 4、analytics 8、arap 3、daily_tasks 3、netplan 1、payroll 6、subcontract 2、supply 2、tender_radar 8。
 #:   模組外由 138 變 120 不是刪訊息：各模組 pages[] 的頁面（報表、獎金、傳票…）改算進各自的組〕
-#: 〔第十二班列車，C：M01 ②（M01 搬進 modules/case/）加入本表——`_outside` 120 → 118（2 條隨 M01 的 router
-#:   移出「模組外」範圍，改算進 "case" 這一組；總數不變，只是換了位置。實測值待列車跑過掃描器覆核〕
-_BASELINE_BY_GROUP = {"_outside": 118, "accounting": 4, "analytics": 8, "arap": 3, "case": 2, "daily_tasks": 3,
+#: 〔第十二班列車，C：M01 ②（M01 搬進 modules/case/）加入本表——`_outside` 120 → 103（17 條隨 M01 的 router／
+#:   頁面移出「模組外」範圍，改算進 "case" 這一組；總數搬遷前後都是 157，沒有任何一句被刪，只是換了位置；
+#:   本檔掃描器實量核對，見 test_em10_the_navigation_tone_message_count_does_not_drop 執行結果）〕
+_BASELINE_BY_GROUP = {"_outside": 103, "accounting": 4, "analytics": 8, "arap": 3, "case": 17, "daily_tasks": 3,
                       "netplan": 1, "payroll": 6, "subcontract": 2, "supply": 2, "tender_radar": 8}
 
 

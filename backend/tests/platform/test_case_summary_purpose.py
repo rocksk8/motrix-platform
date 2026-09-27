@@ -115,7 +115,7 @@ PURPOSE_TABLE_OWNER = "helpers/case_access.py"
 KNOWN_STAR_KWARGS = {
     ("cloud_storage.py", "s3_list_prefixes"): 1, ("cloud_storage.py", "s3_delete_prefix"): 1,
     ("pdf_gen.py", "build_quote_preview_html"): 1, ("pdf_gen.py", "generate_pdf_bytes"): 1,
-    ("routers/quotations.py", "part"): 1, ("helpers/licensing.py", "_run"): 1,
+    ("modules/case/api/quotations.py", "part"): 1, ("helpers/licensing.py", "_run"): 1,
 }
 #: 上面那張表的總數上限（稽核 D M06-S3）：只准變少。往表裡加一筆來放行新的 ** ⇒ 超過上限 ⇒ 紅
 #: （放行新的要主持裁示，並同時調高這個數字——兩處一起改，review 看得到）
