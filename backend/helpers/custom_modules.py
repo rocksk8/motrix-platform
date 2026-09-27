@@ -407,7 +407,11 @@ def sample_values(body: dict) -> dict:
 
 def sample_view(body: dict) -> dict:
     """給輸出預覽與版型驗證用的樣本視圖（與 record_view 同形）。"""
-    vals = sample_values(body)
+    return _sample_view_of(body, sample_values(body))
+
+
+def _sample_view_of(body, vals):
+    """樣本視圖：給定欄位值，其餘（編號、狀態、建立者、時間）用固定的樣本。"""
     numbering = body.get("numbering") or {"prefix": "X"}
     try:
         no = format_number(numbering, date(2026, 9, 25), 1)
@@ -416,6 +420,80 @@ def sample_view(body: dict) -> dict:
     wf = body.get("workflow") or {}
     return _view(body, {"record_no": no, "status": wf.get("initial") or "", "created_by": "範例使用者",
                         "created_at": "2026-09-25T09:00:00", "approval": {}}, vals)
+
+
+_FIELD_PROBLEM_RE = re.compile(r"^fields\[(\d+)\]")
+
+
+def preview_output(body: dict) -> tuple:
+    """建構器即時預覽（BUILDER-UX §3.4）：編到一半的草稿也要畫得出來 ⇒ 回 `(html, 未完成清單)`。
+
+    - 輸出一律走正式匯出的 `render_view`（同一個 renderer、同一份版型）——不另寫預覽版。
+    - 未完成的欄位（沒有 key、公式空白或錯誤、選單沒有選項、型別不認得…）換成文字佔位「〈名稱〉尚未完成」照畫，
+      並列進未完成清單；編號規則未完成 ⇒ 用樣本編號照畫。
+    - 連一個完成的欄位都沒有 ⇒ CustomModuleError（422）；版型本身結構錯（未知積木／主題）同樣 422（版型編輯器要看到錯在哪）。
+    """
+    fields = body.get("fields") if isinstance(body.get("fields"), list) else []
+    probs = _validate_fields(fields)
+    by_idx = {}
+    for p in probs:
+        m = _FIELD_PROBLEM_RE.match(p["path"])
+        if m:
+            by_idx.setdefault(int(m.group(1)), p["message"])
+        elif p["path"] == "fields":                              # 公式互相引用成環 ⇒ 所有公式欄都算不出來
+            for i, f in enumerate(fields):
+                if isinstance(f, dict) and f.get("type") == "formula":
+                    by_idx.setdefault(i, p["message"])
+    shown, placeholders, used = [], {}, set()
+    for i, f in enumerate(fields):
+        label = str((f.get("label") if isinstance(f, dict) else "") or "").strip() or "第 %d 個欄位" % (i + 1)
+        k = f.get("key") if isinstance(f, dict) else None
+        ok_key = isinstance(k, str) and KEY_RE.match(k) and k not in used
+        if i in by_idx:
+            k = k if ok_key else "_incomplete_%d" % (i + 1)
+            placeholders[k] = (i, label, by_idx[i])
+            shown.append({"key": k, "label": label, "type": "text"})
+        else:
+            shown.append(f)
+        used.add(k)
+    if len(placeholders) == len(shown):
+        raise CustomModuleError("還沒有可以預覽的欄位" if not shown else "所有欄位都尚未完成",
+                                problems=[{"path": "fields[%d]" % i, "message": msg} for i, _l, msg in placeholders.values()] or
+                                [{"path": "fields", "message": "至少要有一個欄位"}], status=422)
+    wf = body.get("workflow") if isinstance(body.get("workflow"), dict) else {}
+    out = body.get("output")
+    if out is not None and not isinstance(out, dict):             # 輸出設定壞了 ⇒ 用通用版型照畫、列進清單
+        out = None
+    rb = dict(body, fields=shown, name=str(body.get("name") or ""), output=out,
+              numbering=body.get("numbering") if isinstance(body.get("numbering"), dict) else {"prefix": "X"},
+              workflow=dict(wf, states=[s for s in (wf.get("states") if isinstance(wf.get("states"), list) else []) if isinstance(s, dict)]))
+    vals = {}
+    for f in _input_fields(rb):
+        t = f.get("type")
+        vals[f["key"]] = (f.get("options") or ["選項"])[0] if t == "select" else _SAMPLES.get(t, "範例")
+    vals, errors = compute(rb, vals)
+    for e in errors:                                             # 語法對、用樣本算不出來（型別不合、除以 0…）
+        i = next(j for j, f in enumerate(shown) if f.get("key") == e["key"])
+        placeholders[e["key"]] = (i, shown[i].get("label") or e["key"], e["message"])
+    for k, (_i, label, _m) in placeholders.items():
+        vals[k] = "〈%s〉尚未完成" % label
+    incomplete = [{"path": "fields[%d]" % i, "field": k if not k.startswith("_incomplete_") else None, "label": label, "message": msg}
+                  for k, (i, label, msg) in sorted(placeholders.items(), key=lambda kv: kv[1][0])]
+    incomplete += [{"path": p["path"], "message": p["message"]} for p in _validate_numbering(body.get("numbering"))]
+    if body.get("output") is not None and out is None:
+        incomplete.append({"path": "output", "message": "輸出設定必須是物件：暫以通用版型顯示"})
+    view = _sample_view_of(rb, vals)
+    tpl = (rb.get("output") or {}).get("template") if isinstance(rb.get("output"), dict) else None
+    if tpl is not None:
+        from helpers import doc_template as dt
+        if not isinstance(tpl, dict):
+            raise CustomModuleError("輸出版型有問題", problems=[_p("output.template", "輸出版型必須是 JSON 物件")], status=422)
+        tp = dt.problems(tpl, view)
+        broken = [p for p in tp if p["path"].endswith(".type") or p["path"] == "theme"]
+        if broken:
+            raise CustomModuleError("輸出版型有問題", problems=[_p("output.template." + p["path"], p["message"]) for p in broken], status=422)
+        incomplete += [{"path": "output.template." + p["path"], "message": p["message"]} for p in tp]
+    return render_view(rb, view), incomplete
 
 
 def _view(body, rec, vals):
