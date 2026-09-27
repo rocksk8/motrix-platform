@@ -14,6 +14,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "tools" / "platform"))
 import module_rc_scope as S  # noqa: E402
+from tests._requires import requires_module  # noqa: E402
 
 #: M01 真刪（B41，2026-09-28）漏掉的 11 題：{檔: [題名]}
 MISSED_BY_M01_RC = {
@@ -35,6 +36,8 @@ MISSED_BY_M01_RC = {
 }
 
 
+@requires_module("accounting", "讀 modules/accounting/tests/ 裡那幾題的原始碼（M01 真刪漏選的對照題）；模組不在時沒有對象")
+@requires_module("case", "選題對象是 case（讀 case 的 module.json）；模組不在時工具的行為由本檔合成樹的反向控制覆蓋")
 def test_positive_control_the_eleven_tests_missed_by_the_m01_rc_are_selected():
     found, rows = S.select(REPO, "case")
     assert found
