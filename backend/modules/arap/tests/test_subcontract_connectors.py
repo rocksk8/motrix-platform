@@ -12,6 +12,9 @@ import re
 import pytest
 
 from core import registry, source_tree
+from tests._requires import requires_module
+
+needs_m04 = requires_module("subcontract", "正對照需要 M04（外包工班）在；缺席那一題不標（B 2026-09-28 真刪普查）")
 
 QNO = "MQ-202609-S04"
 
@@ -96,14 +99,30 @@ def test_cashier_and_t100_without_m04(client, make_user, monkeypatch):
 # ── 相依已切斷（M01／M05／M06 這一側）────────────────────────────────────────────
 
 
+_BANK_CSV = ("日期,金額\n2026-09-01,100\n").encode("utf-8")
+
+
+def _bank_reconcile(client, h):
+    return client.post("/api/reports/bank-reconcile", headers=h, files={"file": ("b.csv", _BANK_CSV, "text/csv")})
+
+
 def test_bank_reconcile_without_m04_says_why(client, make_user, monkeypatch):
     """銀行對帳（2026-09-26 自 M08 收回 M05）比對的是承攬商匯款申請 ⇒ M04 不在：404＋CONTRACTOR_MISSING（同待付款），
-    不回一份「全部未配對」的結果假裝比對過。正對照：M04 在 ⇒ 200。"""
+    不回一份「全部未配對」的結果假裝比對過。
+
+    〔拆題（B，2026-09-28，真刪普查）：原本同一題先驗「M04 在 ⇒ 200」再模擬拿掉——真的拿掉 M04 的樹上，
+    紅在前面那段正對照（產品回的正是期望的 404＋CONTRACTOR_MISSING），缺席這段反而沒驗到。
+    正對照搬到下一題並標 needs_m04；這一題不標：模組在時模擬拿掉、模組真的不在時直接驗，兩種都要過。
+    模擬時拿掉 M04 的全部能力（M04_CAPS，同本檔 _without 的說明），原本只拿掉 public〕"""
     from modules.arap.api import cashier as ca
     h = _hdr(client, make_user, "s04_bank")
-    csv = ("日期,金額\n2026-09-01,100\n").encode("utf-8")
-    ok = client.post("/api/reports/bank-reconcile", headers=h, files={"file": ("b.csv", csv, "text/csv")})
-    assert ok.status_code == 200, ok.text
-    _without(monkeypatch, "contractor_voucher.public")
-    r = client.post("/api/reports/bank-reconcile", headers=h, files={"file": ("b.csv", csv, "text/csv")})
-    assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING
+    _without(monkeypatch, *M04_CAPS)
+    r = _bank_reconcile(client, h)
+    assert r.status_code == 404 and r.json()["detail"] == ca.CONTRACTOR_MISSING, r.text
+
+
+@needs_m04
+def test_bank_reconcile_with_m04_answers_200(client, make_user):
+    """上一題的正對照：M04 在 ⇒ 200（證明上一題的 404 來自缺席，不是端點本來就打不到）。"""
+    r = _bank_reconcile(client, _hdr(client, make_user, "s04_bank_ok"))
+    assert r.status_code == 200, r.text
