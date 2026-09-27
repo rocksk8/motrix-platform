@@ -44,8 +44,17 @@ def _versions_table(tmp_path):
 def test_module_migrations_run_in_order_record_version_and_are_not_rerun(fresh_registry, tmp_path):
     m = fresh_registry
     ran = []
-    m.register("demo_mod", 1, lambda c: ran.append(1) or c.execute("CREATE TABLE IF NOT EXISTS demo_t (id INTEGER)"))
-    m.register("demo_mod", 2, lambda c: ran.append(2) or c.execute("ALTER TABLE demo_t ADD COLUMN note TEXT"))
+    # 〔更正（B，2026-09-28，CORE 1.58 回傳值慣例）：原本是 `lambda c: ran.append(1) or c.execute(...)`——回傳 Cursor。
+    #   1.58 起 migration 回 None＝完成、回原因字串＝未完成、回其他值＝寫錯（不記版號）⇒ 題裡的 migration 改成明確回 None〕
+    def v1(c):
+        ran.append(1)
+        c.execute("CREATE TABLE IF NOT EXISTS demo_t (id INTEGER)")
+
+    def v2(c):
+        ran.append(2)
+        c.execute("ALTER TABLE demo_t ADD COLUMN note TEXT")
+    m.register("demo_mod", 1, v1)
+    m.register("demo_mod", 2, v2)
     conn = _versions_table(tmp_path)
     assert m.run_all(conn) == {"demo_mod": (0, 2)}
     assert ran == [1, 2] and m.current_version(conn, "demo_mod") == 2
@@ -60,12 +69,18 @@ def test_module_migrations_failure_stops_at_the_previous_version_and_resumes(fre
         if state["fail"]:
             raise RuntimeError("第二支壞了")
         c.execute("CREATE TABLE IF NOT EXISTS demo_v2 (id INTEGER)")
-    m.register("demo_mod", 1, lambda c: c.execute("CREATE TABLE IF NOT EXISTS demo_v1 (id INTEGER)"))
+    def v1(c):
+        c.execute("CREATE TABLE IF NOT EXISTS demo_v1 (id INTEGER)")
+    m.register("demo_mod", 1, v1)
     m.register("demo_mod", 2, v2)
     conn = _versions_table(tmp_path)
-    with pytest.raises(RuntimeError):
-        m.run_all(conn)
+    # 〔更正（B，2026-09-28，稽核 D PM1）：原本 `with pytest.raises(RuntimeError): m.run_all(conn)`——模組 migration 的例外往上丟、
+    #   整台起不來。1.58 起 core 以外的模組丟例外＝這個模組未完成：不往上丟、記進 incomplete；core 的例外仍然往上丟
+    #   （tests/platform/test_migration_incomplete.py::test_core_migration_exceptions_still_propagate）〕
+    assert m.run_all(conn) == {"demo_mod": (0, 1)}
     assert m.current_version(conn, "demo_mod") == 1                     # 停在上一版，不假裝成功
+    v, why = m.incomplete(str(tmp_path / "m.db"))["demo_mod"]
+    assert v == 2 and why.startswith("例外：RuntimeError: 第二支壞了"), why
     state["fail"] = False
     assert m.run_all(conn) == {"demo_mod": (1, 2)}                      # 修好後從失敗那支接著跑
 
