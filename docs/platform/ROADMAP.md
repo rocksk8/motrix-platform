@@ -103,11 +103,11 @@
 | G8 | SQL 的 `json_extract(` 改成逐筆 Python 解析（**壞一筆會讓整個查詢丟例外**，那一整類資料一起消失——AL2-M2、c-queue-json）；新的不准再寫：棘輪守門 `tests/platform/test_json_extract_ratchet.py`（每檔只准變少、新檔出現就紅，含 `SQL_DEAL_TAG` 這類常數的引用）；既有使用處見下表，下一輪逐檔改 | ⏳ 守門 ✅ B（第十三班）；改寫待派 |
 
 
-**G8 既有使用處**（2026-09-27 第十二班合回後 9876b003，`python tests/platform/test_json_extract_ratchet.py --update --roadmap` 產生；共 18 檔、132 處；改完一檔就重產基線，次數只會往下）：
+**G8 既有使用處**（2026-09-27 第十二班合回後 9876b003，`python tests/platform/test_json_extract_ratchet.py --update --roadmap` 產生；共 18 檔、133 處；比對不分大小寫、允許空白、含別名常數的引用（稽核 D T13-S1，前一版 132 處）；改完一檔就重產基線，次數只會往下）：
 
 | 檔 | 次數 |
 |---|---|
-| `modules/case/api/quotations.py` | 43 |
+| `modules/case/api/quotations.py` | 44 |
 | `modules/analytics/api/reports.py` | 27 |
 | `modules/analytics/api/dashboard.py` | 14 |
 | `db.py` | 9 |
