@@ -13,6 +13,7 @@ needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫
 import pytest
 
 from helpers import privacy_notice as pn
+needs_netplan = requires_module("netplan", '本題打網路規劃（netplan）的端點；netplan 不在時沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _hdr(client, make_user, username="pn2_root", role="superadmin"):
@@ -195,6 +196,7 @@ def test_quotation_contact_ack_only_for_the_saved_contact(client, make_user, rol
                        headers=h).status_code == 404
 
 
+@needs_netplan
 def test_network_plan_contact_ack_follows_the_saved_contact(client, make_user):
     h = _hdr(client, make_user)
     r = client.post("/api/network-plans", json={"siteName": "告知案場", "contactName": "周窗口"}, headers=h)
