@@ -149,6 +149,15 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 01:30 主持：**開工第一輪**（使用者：「繼續做開發，驗證跟測試等我確認後再跑」；兩個視窗：A＝hichan-8a、B＝hichan-2c；驗證與演練都經使用者表單同意後才跑）。
+  - **H12 apply_update** `wip/h-apply-platform` 7a38fde6（已推）：手動回滾補齊（只停本安裝、刪那次新增檔、tools／product、demo 庫、baseline、部署紀錄 AH-S2）、轉換寫 baseline、健檢 cp932、`migrate_like_startup.py`（乾跑與轉換照啟動規則載入模組；incomplete 為 None 或非空 ⇒ 失敗；舊包只跑 init_db）、RUNBOOK §8、CORE-SPEC §9b 註記。A 交叉稽核（AUDIT-A-H12-apply，A37 7fcbea8a）必修 AH-M1 大小寫改名誤刪／AH-M2 手動跑到舊腳本（$ApplyScriptVersion＋RUNBOOK 先複製 tools）／AH-M3 停服後失敗不重啟 ⇒ 已修並由 A 複核關閉。題：205 過；突變 9 個皆紅（其中 1 個第一次存活：題目比對到註解同一串字，已改比對程式行）。**演練（開發機假安裝，port 6781）四條路全過**：P2 壞 migration 乾跑擋下、程式檔 0 變動；P1 成功（刪 netplan 7 檔＋3 頁、legal-params 只列不刪、誘餌兩個都活、寫 baseline、快照無個資）；P3 健康失敗自動回滾（程式檔與狀態 0 差異）；手動回滾 P1 快照（0 差異；baseline 移除、部署紀錄回 c006a2a0）；鎖檔造成 delete_failed ⇒ 服務約 2 秒回來，再手動回滾 0 差異。證據 D:\MOTRIX-DRILLS\apply-run-0928（logs／state／prog 雜湊）。**待**：D 單獨完整稽核；B41 合回同班補模組路徑整合題；建議 AH-S7（copy_failed 改走自動回滾，避免半套用程式對正式庫跑 migration）、AH-O7（版本常數配題）、classify 把 `<db>.modules_disabled.json` 當程式檔（L0，照升版規則）。演練工具 drill_stop 會殺到自己（排除自己的修補無效，$self 為空），工具缺陷非產品。
+  - **B42 建構器 -5** `wip/b-builder-dnd-5` d26a7b0c：新題 5 過、突變 2 紅、modtest 1411 過／1 紅（VR3：與 27b 同模組未出貨 ⇒ 主持合併成一筆 28a）。
+  - **B41 請款** `wip/b-payreq` 5d30ede6：裁示 a（出納補發票維持現狀、寫明）、b（migration 回傳原因字串＝未完成：不記版號、ERROR、incomplete(db_path)，L0 併 CORE 1.58）、c（挑案件先過濾可見再湊 30、LIKE 跳脫）；載入抽成 helpers/module_startup。驗證：直接題 168 過、e2e 6 過、突變 10/10 紅；真刪 M05 1519 過／M01 1905 過，允許紅各 2；另修 G4（case 1.0.12）、EM1 凍結訊息（使用者裁示②，**請 D 複核**）。⑥ modtest 交列車。M01 真刪發現 origin 既有缺口：accounting jv36 4 題缺 @needs_m01 ⇒ B `wip/b-jv36-needs-m01` 進行中。
+  - **A34** `wip/a-cr-network-errors` db9aeb51：新 e2e 6 過、回歸 22＋85 過；突變 N1～N3 由主持跑（A 視窗權限分類器擋下，使用者裁示由主持跑）：N3 第一次存活 ⇒ A 補題後 3/3 紅。與建構器 custom-records.html 衝突 3 hunk，解法見 A 回報（api／post／put 開頭保留 `this._noApiInPreview();`）。
+  - **A35** `wip/a-drill-d7extra` cd8aa5aa：單元 51 過、突變 5/5、core-only 51 過；實跑演練進行中。
+  - **A36** `wip/a-mustfix-scan` 2456a0cc：必修關閉紀錄守門（登記表雙向、上限 10）；22 過、突變 3/3、core-only 22 過。13 行標準寫法由 A 寫進 D 的稽核檔 ⇒ **請 D 看一次**。
+  - **正式機告警「上個月（2026-08）的月備份沒有完成」**（使用者回報：看得到檔案）：月備份/2026-08 是 9/22 人工補建（來源每日備份 08-29、quick_check ok），缺 `.done`；告警只認 `.done`，文字卻沒說要放 ⇒ 每天告警。使用者交辦後主持已在雲端 `月備份/2026-08/` 放空的 `.done`、補建說明加一行紀錄（可刪除撤回）。正式機的 BACKUP_ALERT.txt 未動（主持讀告警清除邏輯被權限分類器擋下，留給使用者）。提案：告警文字補「補完後放 .done」。
+  - 更正：主持本輪給視窗的訊息中有三個手寫時間（01:25／01:28／01:31）比實際晚約 20 分，以 date 為準。
 - 2026-09-28 00:18 主持：使用者回覆「更新流程簡化」＝要做（CORE-SPEC 裁示表「更新流程簡化（下一版）」），**停工中只記錄，下次開工排在 apply_update 安全修正之後**；待使用者指定雲端硬碟交付資料夾。使用者要求關閉試用環境：8866（pid 46056）已停、port 已釋放；D:\MOTRIX-DRILLS\trial-0927-1931 保留，列在待清理清單。
 - 2026-09-28 00:16 主持：**停工交接**（使用者裁示「不再推送新的開發，只做紀錄跟銜接後續」；此前裁示下一版「一次出完」「先寫、驗證後補」）。各線已停，暫存已清、無殘留行程。下次開工從這裡接：
   - **已推且 D 審過（必修 0）**：建構器 A `wip/a-builder-output` be26ee3a＋B `wip/b-builder-dnd-4` f84fb2df（9350a3df）；品牌 `wip/h-branding` ec48a245（fc5c47f4、4aa2c29c；conftest 有改＝車頭）。
