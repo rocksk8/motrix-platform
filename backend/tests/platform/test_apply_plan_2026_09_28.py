@@ -308,10 +308,22 @@ def test_ahm2_script_refuses_when_not_the_package_copy_before_touching_anything(
 
 
 def test_ahm3_after_stop_failures_restart_the_service_first():
-    """AH-M3：停服之後的 4 個失敗出口都經 Fail-AfterStop，而它先 Start-InstallService 再 Fail。"""
+    """AH-M3／AH-S7：停服之後的 4 個失敗出口都經 Fail-AfterStop。
+    複製失敗：先寫回快照（失敗就不啟動、直接 Fail）→ 啟動 → Fail；刪除失敗：先啟動 → Fail。"""
     code = _ps_code("apply_update.ps1")
     fn = _ps_function(code, "Fail-AfterStop")
-    assert fn and fn.index("Start-InstallService") < fn.index("Fail (")
+    assert fn
+    copy_branch, rest = fn.split('if ($status -like "copy_failed*") {', 1)[1].split("\n    }\n", 1)
+    r, st, fail_restore, last_fail = (copy_branch.index("Restore-ProgramAfterCopyFailure"),
+                                      copy_branch.index("Start-InstallService"),
+                                      copy_branch.index("Fail ("), copy_branch.rindex("Fail ("))
+    assert r < fail_restore < st < last_fail, "複製失敗：寫回快照 → （失敗就 Fail、不啟動）→ 啟動 → Fail"
+    assert rest.index("Start-InstallService") < rest.index("Fail ("), "刪除失敗：先啟動再 Fail"
+    restore = _ps_function(code, "Restore-ProgramAfterCopyFailure")
+    assert restore and restore.index('$script:ProdState = "restoring"') < restore.index("cleanup-added") \
+        < restore.index("robocopy"), "restoring 要在任何寫回之前設；先刪新增檔再寫回快照"
+    assert code.index("function Restore-ProgramAfterCopyFailure") < code.index('"copy_failed_backend"'), \
+        "函式要在第一個呼叫點之前定義（PowerShell 執行到才認得）"
     for status in ("copy_failed_backend", "copy_failed_frontend", "copy_failed_root_dirs", "delete_failed"):
         lines = [l for l in code.splitlines() if '"%s"' % status in l]
         assert len(lines) == 1 and "Fail-AfterStop" in lines[0], (status, lines)

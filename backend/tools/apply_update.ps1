@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28a"
+$ApplyScriptVersion = "2026-09-28b"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
@@ -285,11 +285,26 @@ function Start-InstallService {
     Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
 }
 
-# AH-M3（2026-09-28 A 稽核）：停服**之後**才發生的失敗出口——先把服務拉起來再結束。
-#   停服已連迴圈一起停 ⇒ 直接 exit 的話服務一直停著（修改前迴圈至少會自己把服務拉回來）。
-#   磁碟上是套用到一半的程式：重新啟動只是回到修改前的行為；要回到套用前請手動回滾（訊息附指令）。
-#   service 仍記 down（沒有觀察到它起來）。
+# AH-M3（2026-09-28 A 稽核）：停服**之後**才發生的失敗出口——不可以讓服務一直停著。
+#   複製失敗（copy_failed_*）⇒ AH-S7（使用者裁示）：先把程式寫回快照（Restore-ProgramAfterCopyFailure，
+#     定義在 Step 3 之前），再啟動＋健康檢查；此刻新程式沒跑過 ⇒ DB 沒被碰 ⇒ 完整回到套用前。
+#     寫回快照失敗 ⇒ 不啟動（不要用殘骸對正式庫跑 migration），人工處理。
+#   刪除失敗（delete_failed，新程式已完整）⇒ 重新啟動，訊息附手動回滾指令；service 仍記 down（沒觀察到它起來）。
 function Fail-AfterStop($msg, $status) {
+    if ($status -like "copy_failed*") {
+        Warn "  複製新程式失敗：把程式寫回套用前的快照（資料庫尚未被新程式碰過）..."
+        if (-not (Restore-ProgramAfterCopyFailure)) {
+            Fail ($msg + " 寫回快照也沒有完全成功：服務未啟動，需要人工處理；快照：$rollbackDir") $status
+        }
+        Start-InstallService
+        $back = $false
+        for ($i = 0; $i -lt 20; $i++) {
+            Start-Sleep -Seconds 2
+            if (Test-Ping -Url $PingUrl -TimeoutSec 5) { $back = $true; break }
+        }
+        if ($back) { $script:ServiceState = "up"; $script:ProdState = "restored" } else { $script:ProdState = "restored_unhealthy" }
+        Fail ($msg + " 已自動回到套用前的程式（資料庫未動）$(if ($back) { '，服務已恢復。' } else { '，但服務健康檢查沒有通過，需要人工確認。' })") $status
+    }
     Warn "  套用中途失敗：重新啟動服務（磁碟上是套用到一半的程式）。"
     try { Start-InstallService } catch { Warn "  重新啟動失敗：$($_.Exception.Message)" }
     Fail ($msg + " 服務已嘗試重新啟動。要回到套用前：powershell -ExecutionPolicy Bypass -File `"$BackendDir\tools\rollback_update.ps1`" -SnapshotTimestamp $timestamp") $status
@@ -642,6 +657,29 @@ Ok "  伺服器已停止；複製與依賴安裝完成後由本腳本重新啟�
 # ☠️ 少了這一行，`:358`（robocopy 中途失敗）會報 `service=unknown`，
 #    而實際上**是我們把它停掉的** —— 那個差別決定使用者要不要現在去開機。
 $script:ServiceState = "down"
+
+# AH-S7（2026-09-28 使用者裁示）：複製新程式失敗時由 Fail-AfterStop 呼叫。
+#   刪掉這次新增的檔 → 快照寫回 backend／frontend／tools／product／根目錄文件；回傳是否全部成功（不啟動服務）。
+function Restore-ProgramAfterCopyFailure {
+    $script:ProdState = "restoring"
+    $ok = $true
+    $clean = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
+    Write-Host $clean.Text
+    if ($clean.Exit -ne 0 -or ($clean.Text -notmatch "APPLY_CLEANUP_OK")) { $ok = $false }
+    foreach ($pair in @(@("backend", $BackendDir), @("frontend", $FrontendDir))) {
+        robocopy (Join-Path $rollbackDir $pair[0]) $pair[1] /E | Out-Null
+        if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$($pair[0])，exit $LASTEXITCODE）"; $ok = $false }
+    }
+    foreach ($d in $RootProgramDirs) {
+        $snap = Join-Path $rollbackDir $d
+        if (-not (Test-Path $snap)) { continue }
+        robocopy $snap (Join-Path $ProdRoot $d) /E | Out-Null
+        if ($LASTEXITCODE -ge 8) { Warn "  寫回快照失敗（$d，exit $LASTEXITCODE）"; $ok = $false }
+    }
+    $rd = Join-Path $rollbackDir "root_docs"
+    if (Test-Path $rd) { Get-ChildItem -Path $rd -File | ForEach-Object { Copy-Item $_.FullName -Destination $ProdRoot -Force } }
+    return $ok
+}
 
 # ============================================================
 # Step 3: 複製新程式碼（絕不 /MIR；刪除只依停服前印出的刪除計畫）
