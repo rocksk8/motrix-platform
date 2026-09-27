@@ -149,6 +149,13 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-28 06:00 主持：**第十四班出貨就緒，交使用者套用**（使用者睡前授權「自己處理，最後上傳到雲端，再告訴我步驟」）。
+  - 合回：origin/platform 9826d304 → **822286ed**（A 列車長；CORE 1.62、case 1.0.17；18 包＋B49 US2＋B48 依授權建包＋P2m 契約題；mustfix 登記表清空，D 未關必修 0；全量非 e2e 5552 過／e2e 537 過，唯一紅是列車本來就重產產生檔的那題）。
+  - 建包：D:\MOTRIX-DRILLS\t14-package\20260928_055420_822286ed（full；建包測試 5553＋537 過）。第一次建包紅 1 題＝主持把 .venv312 放 PATH 前面，使 test_build_python_selection 的退回題失去前提（環境造成）；a-build-python-2 合回後不需改 PATH，已更正交接記憶。
+  - 演練第三輪（c006a2a0 安裝＝正式機現況，照 RUNBOOK §8 先複製 tools）：P2M 模組 migration 失敗 ⇒ migration_dryrun_failed、0 變動（第一次 unhandled_exception＝主持改寫 manifest 沒帶 BOM，D6-S1）；FINAL ⇒ success、健檢第 1 次過、版本端點 2026-09-28f、server.log 無 ERROR、誘餌每步都活。證據 D:\MOTRIX-DRILLS\apply-run-0928\r3_*。
+  - 發布：`G:\我的雲端硬碟\MOTRIX-交付\packages\20260928_055639_822286ed_full`（簽章；540 檔；package.sha256 的 SHA256＝AEF49EF3…9867）；步驟 `MOTRIX-交付\更新步驟_20260928_822286ed.md`。**D 最終判定：可上正式機**（fddd4e0b）；條件：正式機 c006a2a0 沒有版本檢查 ⇒ 一定先複製包裡 backend\tools；正式機本機沒有「套用更新」頁（deploy_dashboard 不在包裡）。更正：主持的步驟初稿寫「之後就能在正式機儀表板一鍵套用」是錯的，已改。
+  - **下一輪待辦**（未排）：D6-S1 apply_update 讀 manifest 指定 UTF-8；D6-S2 apply_plan 保護未授權模組頁面時 module.json pages 是物件（本版授權閘門關、走不到）；D6-O1 正式機本機儀表板怎麼出貨（一鍵套用的前提）；A 線 10 項（US3、UO1 舊包重放是否擋退版需裁示、UO3、PS-O1 upgrade.py cp950、B48 版本紀錄、列車工具化 train_board、PLAYBOOK 列車段落補記、全量在 train/* 自動 MOTRIX_TRAIN、%Y-W%W 同型普查）；B 線 12 項（spec_coverage 平行競態只掃已追蹤檔、builder 靜態題錨定行首、G5 加兩列、依授權建包實建一次＋dev 簽章授權是否擋需裁示、MODULE-GUIDE 回傳值範例、乾跑也跑停用模組的 migration、rc_scope 守門與接線、_REGISTRY 殘留、挑案件效能等）；classify 把 `<db>.modules_disabled.json` 當程式（L0）。
+  - 視窗：A hichan-8a、B hichan-2c、D hichan-cd 解除凍結待命；worktree 清理交各線。
 - 2026-09-28 03:51 主持：更新交付資料夾已存在：開發機 `G:\我的雲端硬碟\MOTRIX-交付`（使用者建立，02:13；與「系統存檔_個資」分開；會同步到正式機的雲端）。A43 合回後在開發機設定頁「儲存位置」設為此路徑；正式機升到含此功能的版本後，由最高管理員在正式機設定頁設一次（正式機看到的磁碟代號可能不同）。
 - 2026-09-28 03:47 主持：**開工第二輪**（使用者在線裁示 20 餘項，全部寫進 CORE-SPEC 裁示表 2026-09-28 各列；D 視窗 hichan-cd 開始稽核）。
   - **裁示**：更新流程 U-1～U-8；AH-S7 複製失敗自動寫回；AB-S7／S8；出納欄位維持列出；favicon 排除；月備份告警文字＋條件解除自動清（寫稽核）；儲存位置由最高管理員設定（三個位置、設定頁建立按鈕、背景不自動建；MODULE-GUIDE §3.2 更正保留原句）；手動回滾預設只回程式；完整包依授權帶齊、授權有而包沒有就拒絕、未授權只停用不刪；簽章金鑰由主持產生（私鑰只在開發機兩處，reference 記憶有位置）。
