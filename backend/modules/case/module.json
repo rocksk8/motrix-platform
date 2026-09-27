@@ -74,6 +74,7 @@
       "/api/case-batch",
       "/api/case-changes",
       "/api/completion-notes",
+      "/api/extra-expenses",
       "/api/next-quote-no",
       "/api/quotations",
       "/api/sales-orders"
