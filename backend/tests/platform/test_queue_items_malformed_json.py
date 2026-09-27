@@ -80,6 +80,14 @@ def check_provider(conn, name, fn, caplog):
         return ["%s：一筆壞 data_json 讓整個提供者丟例外（%s: %s）⇒ 整類待簽消失" % (name, type(e).__name__, e)]
     got = {it.get("quoteNo") for it in items}
     out = []
+    # §G5 #13：佇列（linkedQuoteNo）與詳情（quoteNo）判斷權限用的案件單號必須是同一個
+    details = registry.providers("approval.detail")
+    for it in items:
+        if str(it.get("quoteNo", "")).startswith(GOOD) and it.get("type") in details:
+            d = details[it["type"]](conn, it["quoteNo"])
+            if not d or (d.get("quoteNo") or "") != (it.get("linkedQuoteNo") or ""):
+                out.append("%s：%s 項目 linkedQuoteNo=%r 而詳情 quoteNo=%r（佇列與詳情的權限輸入不一致）"
+                           % (name, it["quoteNo"], it.get("linkedQuoteNo"), (d or {}).get("quoteNo")))
     for t in tables:
         if "%s-%s" % (GOOD, t) not in got:
             out.append("%s：%s 好的那一筆沒有列出" % (name, t))

@@ -72,17 +72,29 @@ def _item_approval_raw(item: dict) -> str:
     return json.dumps({"tiers": item.get("tiers") or [], "requestedBy": item.get("requestedBy") or ""}, ensure_ascii=False)
 
 
+#: `_access_step` 的三種結果
+OPEN, DENY, CASE_RULE = "open", "deny", "case_rule"
+
+
+def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool) -> str:
+    """**佇列列出與詳情放行共用的唯一判斷**（§G5 #13：同一個函式、同一組輸入；稽核 D AL2-M1 的成因是兩邊各看各的欄位）。
+    輸入＝（這張單掛的案件單號、簽核 JSON）：佇列取項目的 `linkedQuoteNo`＋tiers／requestedBy，詳情取提供者的 `quoteNo`＋`approvalRaw`
+    ——兩者是同一件事，契約題 `test_queue_items_malformed_json` 逐一核對 `linkedQuoteNo == 詳情 quoteNo`。
+    - 簽核鏈上的人與送審人（`_on_chain`）⇒ OPEN
+    - M01 不在，或沒掛案件 ⇒ DENY（每案守門一定查無）
+    - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）"""
+    if _on_chain(conn, user, approval_raw):
+        return OPEN
+    if not (case_present and case_key):
+        return DENY
+    return CASE_RULE
+
+
 def _detail_opens(conn, user: dict, item: dict, case_present: bool, detail_types) -> bool:
-    """這個人點這一筆的詳情會不會被每案守門擋（佇列、角標共用；規則與 `_guard_queue_detail` 同一份）：
-    - 這一類沒有詳情提供者 ⇒ 不歸這裡管（詳情回 400「不支援」，佇列照列，同搬遷前）
-    - 簽核鏈上的人與送審人（`_on_chain`）⇒ 放行
-    - 其餘走每案守門：M01 不在 ⇒ 一律拒絕；**沒掛案件（linkedQuoteNo 空）⇒ 查無案件、一律拒絕**（稽核 D AL2-M1，M01 在也一樣）
-    - M01 在、有掛案件 ⇒ 交給每案守門（admin+／業務／協作者／案件管理）；佇列對非 admin 本來就只列簽核鏈上的人"""
+    """佇列這一筆要不要列：這一類沒有詳情提供者 ⇒ 不歸這裡管（詳情回 400，佇列照列）；否則 `_access_step` 不是 DENY。"""
     if item.get("type") not in detail_types:
         return True
-    if _on_chain(conn, user, _item_approval_raw(item)):
-        return True
-    return bool(case_present and item.get("linkedQuoteNo"))
+    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present) != DENY
 
 
 def _openable(conn, user: dict, items: list) -> list:
@@ -217,8 +229,11 @@ def _guard_queue_detail(conn, user: dict, quote_no: str, approval_raw=None) -> N
     2. 其餘走一般的每案規則 `guard_case_access()`（admin+／該案業務／協作者／案件管理模組、案件本身的簽核人）；
        看不到與查無同一個 404（c-case404，M01-O1）；M01 不在 ⇒ 404（`case_access` 的 fail-closed）
     """
-    if _on_chain(conn, user, approval_raw):
+    step = _access_step(conn, user, quote_no, approval_raw, case_module_present())
+    if step == OPEN:
         return
+    if step == DENY:
+        raise HTTPException(404, "denied")          # 呼叫端換成同一句「單據 {id} 不存在」並記 audit
     guard_case_access(conn, quote_no, user, allow_module="case_manage", allow_approver=True)
 
 
