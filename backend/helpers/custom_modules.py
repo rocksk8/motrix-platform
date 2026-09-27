@@ -853,7 +853,11 @@ def queue_items(conn) -> list:
         body = defs[key]
         if body is None or not _state(body, r["status"]).get("approval"):
             continue
-        appr = json.loads(r["approval_json"] or "{}")
+        from helpers.approval_queue import approval_raw_of
+        raw = approval_raw_of(r["approval_json"], "custom_record", r["record_no"])   # 壞一筆只跳過那一筆（QJ-M1）
+        if raw is None:
+            continue
+        appr = json.loads(raw)
         tiers, ct = appr.get("tiers") or [], appr.get("currentTier") or 0
         if ct >= len(tiers):
             continue

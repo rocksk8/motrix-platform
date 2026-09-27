@@ -90,6 +90,9 @@ def _seed_iv(no, approver, data_json=None):
             "currentTier": 0, "tiers": [{"approvers": [{"username": approver, "displayName": approver, "status": "pending"}]}]}
     conn = db.get_db()
     try:
+        # 掛的案件要真的存在：孤兒單（案件已不存在）只列給簽核鏈上的人（c-approval-l1-4，§G5 #13）
+        conn.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, "
+                     "updated_at) VALUES ('MQ-AQP-1','成交','客','案','{}','2026-09-26','2026-09-26')")
         conn.execute("INSERT INTO invoice_vouchers (voucher_no, quote_no, status, data_json, created_at, updated_at) "
                      "VALUES (?,?,?,?,?,?)",
                      (no, "MQ-AQP-1", "待審核", data_json if data_json is not None else json.dumps({"approval": appr}),

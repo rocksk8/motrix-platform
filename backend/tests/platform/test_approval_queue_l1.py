@@ -20,6 +20,9 @@ from core import registry
 DOC = "AQL1-X-1"
 QN = "MQ-AQL1-1"
 DOC_UNLINKED = "AQL1-X-2"      # 沒掛案件（quote_no 空；例：不掛案件的請款單）——稽核 D AL2-M1
+DOC_ORPHAN = "AQL1-X-3"        # 孤兒單：掛的案件已不存在（稽核 D 建議、主持採納）
+QN_GONE = "MQ-AQL1-GONE"
+_LINK = {DOC: QN, DOC_UNLINKED: "", DOC_ORPHAN: QN_GONE}
 
 
 def _login(client, u, p):
@@ -33,15 +36,14 @@ def _appr(approver):
 
 def _fake_item(approver, doc=DOC):
     from helpers.approval_queue import base_item, tier_fields
-    return base_item("aql1_doc", doc, tier_fields(json.dumps(_appr(approver))),
-                     linkedQuoteNo=QN if doc == DOC else "", total=5)
+    return base_item("aql1_doc", doc, tier_fields(json.dumps(_appr(approver))), linkedQuoteNo=_LINK[doc], total=5)
 
 
 def _fake_detail(approver):
     def detail(conn, doc_no):
-        if doc_no not in (DOC, DOC_UNLINKED):
+        if doc_no not in _LINK:
             return None
-        return {"quoteNo": QN if doc_no == DOC else "", "approvalRaw": json.dumps({"approval": _appr(approver)}), "title": "測試單 " + DOC,
+        return {"quoteNo": _LINK[doc_no], "approvalRaw": json.dumps({"approval": _appr(approver)}), "title": "測試單 " + DOC,
                 "fields": [{"label": "金額", "value": "5"}], "items": [], "files": []}
     return detail
 
@@ -57,7 +59,8 @@ def _patch(monkeypatch, approver, *, drop_case=True, drop_names=()):
                    if not (getattr(v, "__module__", "") or "").startswith("modules.case")}
         got = {k: v for k, v in got.items() if k not in drop_names}
         if cap == "approval.queue_items":
-            got["aql1_doc"] = lambda conn: [_fake_item(approver), _fake_item(approver, DOC_UNLINKED)]
+            got["aql1_doc"] = lambda conn: [_fake_item(approver), _fake_item(approver, DOC_UNLINKED),
+                                            _fake_item(approver, DOC_ORPHAN)]
         elif cap == "approval.detail":
             got["aql1_doc"] = _fake_detail(approver)
         return got
@@ -87,7 +90,7 @@ def test_case_absent_queue_lists_other_modules(client, users, monkeypatch):
     assert got[DOC]["customer"] == "" and got[DOC]["projectName"] == ""       # 沒有 case.summary ⇒ 空字串，不是例外
     assert not [n for n, it in got.items() if it["type"] in ("quotation", "case_change", "completion_note",
                                                               "extra_expense", "extra_expense_change")]
-    assert client.get("/api/approval-queue/count", headers=ah).json()["count"] == 2      # 掛案件與沒掛案件各一張，都輪到他
+    assert client.get("/api/approval-queue/count", headers=ah).json()["count"] == 3      # 掛案件、沒掛案件、孤兒各一張，都輪到他
 
 
 def test_case_absent_detail_approver_sees_non_approver_404(client, users, monkeypatch):
@@ -217,7 +220,7 @@ def test_listed_iff_detail_opens(client, users, monkeypatch, case_present):
     sh, ah, oh = users
     _patch(monkeypatch, "aql1_appr", drop_case=not case_present)
     grid = {}
-    for doc in (DOC, DOC_UNLINKED):
+    for doc in (DOC, DOC_UNLINKED, DOC_ORPHAN):
         for name, h in (("super", sh), ("approver", ah), ("other_admin", oh)):
             listed = doc in _items(client, h)
             code = client.get("/api/approval-queue/detail", params={"type": "aql1_doc", "id": doc}, headers=h).status_code
@@ -229,3 +232,5 @@ def test_listed_iff_detail_opens(client, users, monkeypatch, case_present):
     unlinked = {"super": False, "approver": True, "other_admin": False}
     assert {k[1]: v[0] for k, v in grid.items() if k[0] == DOC} == linked, grid
     assert {k[1]: v[0] for k, v in grid.items() if k[0] == DOC_UNLINKED} == unlinked, grid
+    # 孤兒單（掛的案件已不存在）：每案守門查無 ⇒ 同沒掛案件（M01 在時也一樣；§G5 #13）
+    assert {k[1]: v[0] for k, v in grid.items() if k[0] == DOC_ORPHAN} == unlinked, grid

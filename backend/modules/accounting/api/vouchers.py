@@ -1892,7 +1892,10 @@ def _queue_items(conn) -> list:
     """).fetchall()
     out = []
     for r in rows:
-        f = _aq.tier_fields(r["approval_json"])
+        raw = _aq.approval_raw_of(r["approval_json"], "voucher", r["voucher_no"])   # 壞一筆只跳過那一筆（QJ-M1）
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
         # 🔑 舊資料（AS3 之前送審的）approval_json 沒嵌 requestedBy ⇒ 退回 submitted_by／submitted_at 兩欄
         requested_by = f["requestedBy"] or r["submitted_by"] or ""
         out.append(_aq.base_item(

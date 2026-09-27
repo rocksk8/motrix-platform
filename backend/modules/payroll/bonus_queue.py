@@ -14,7 +14,10 @@ def queue_items(conn) -> list:
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall():
-        f = _aq.tier_fields(r["approval_json"])
+        raw = _aq.approval_raw_of(r["approval_json"], "bonus_award", r["id"])   # 壞一筆只跳過那一筆（QJ-M1）
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
         out.append(_aq.base_item(
             "bonus_award", "獎金-%s" % r["id"], f,
             customer="",
@@ -35,11 +38,11 @@ def queue_items(conn) -> list:
         WHERE status = '待審核'
         ORDER BY id DESC
     """).fetchall():
-        f = _aq.tier_fields(r["approval_json"])
-        try:
-            req = (json.loads(r["approval_json"] or "{}") or {}).get("requestedBy") or r["created_by"]
-        except (TypeError, ValueError):
-            req = r["created_by"]
+        raw = _aq.approval_raw_of(r["approval_json"], "bonus_case_award", r["quote_no"])
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
+        req = (json.loads(raw) or {}).get("requestedBy") or r["created_by"]
         out.append(_aq.base_item(
             "bonus_case_award", r["quote_no"], f,
             total=0,

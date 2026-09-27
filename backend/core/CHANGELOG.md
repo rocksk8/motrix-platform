@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
+- L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR
+- L1（行為）：M06 傳票（`modules/accounting/api/vouchers._queue_items`）、自訂模組引擎（`helpers/custom_modules.queue_items`，原本 `json.loads` 沒接 ⇒ 壞一筆整類消失）改用它（主持指派）
+- L1（行為）：`_access_step` 加「掛的案件已不存在（孤兒單）⇒ DENY」，佇列一次查完、詳情逐筆，同一個 `_case_names`（§G5 #13）
+- 守門：`tests/platform/test_queue_items_malformed_json.py` 改成對**每一個**已註冊提供者驗（不看原始碼特徵；正對照＝驗到的數等於註冊數），不論簽核 JSON 在 data_json 或獨立欄位；反向控制加「tier_fields 吞掉壞 JSON」的合成提供者
+
 ## 1.55 — 2026-09-27（第十三班列車取號，原暫用 1.53；c-approval-l1-3：稽核 D AL2-M1＋主持更正）
 - L1（行為）：佇列／角標的「點得開才列」判斷改成 `_detail_opens`（與詳情守門同一份）：沒掛案件（linkedQuoteNo 空）的單，每案守門一律查無 ⇒ 只列給簽核鏈上的人與送審人（M01 在不在都一樣）；沒有詳情提供者的類型照列
 - §G5 #13（稽核 D AL2-M1 成因）：佇列列出與詳情放行改呼叫同一個 `_access_step(案件單號, 簽核 JSON)`；契約題核對每個提供者的項目 `linkedQuoteNo` ＝ 詳情 `quoteNo`

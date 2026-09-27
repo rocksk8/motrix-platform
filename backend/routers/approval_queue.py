@@ -76,32 +76,37 @@ def _item_approval_raw(item: dict) -> str:
 OPEN, DENY, CASE_RULE = "open", "deny", "case_rule"
 
 
-def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool) -> str:
+def _access_step(conn, user: dict, case_key, approval_raw, case_present: bool, existing=None) -> str:
     """**佇列列出與詳情放行共用的唯一判斷**（§G5 #13：同一個函式、同一組輸入；稽核 D AL2-M1 的成因是兩邊各看各的欄位）。
     輸入＝（這張單掛的案件單號、簽核 JSON）：佇列取項目的 `linkedQuoteNo`＋tiers／requestedBy，詳情取提供者的 `quoteNo`＋`approvalRaw`
     ——兩者是同一件事，契約題 `test_queue_items_malformed_json` 逐一核對 `linkedQuoteNo == 詳情 quoteNo`。
     - 簽核鏈上的人與送審人（`_on_chain`）⇒ OPEN
-    - M01 不在，或沒掛案件 ⇒ DENY（每案守門一定查無）
+    - M01 不在，或沒掛案件，或**掛的案件已不存在**（孤兒單；稽核 D 建議、主持採納）⇒ DENY（每案守門一定查無）
+      `existing`：已知存在的案件單號集合（佇列一次查完）；None ⇒ 這裡查這一筆（詳情）——同一個 `_case_names`
     - 其餘 ⇒ CASE_RULE（交給 `guard_case_access`：admin+／業務／協作者／案件管理；佇列對非 admin 本來就只列簽核鏈上的人）"""
     if _on_chain(conn, user, approval_raw):
         return OPEN
     if not (case_present and case_key):
         return DENY
+    if case_key not in (existing if existing is not None else _case_names(conn, [case_key])):
+        return DENY
     return CASE_RULE
 
 
-def _detail_opens(conn, user: dict, item: dict, case_present: bool, detail_types) -> bool:
+def _detail_opens(conn, user: dict, item: dict, case_present: bool, detail_types, existing=None) -> bool:
     """佇列這一筆要不要列：這一類沒有詳情提供者 ⇒ 不歸這裡管（詳情回 400，佇列照列）；否則 `_access_step` 不是 DENY。"""
     if item.get("type") not in detail_types:
         return True
-    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present) != DENY
+    return _access_step(conn, user, item.get("linkedQuoteNo"), _item_approval_raw(item), case_present, existing) != DENY
 
 
 def _openable(conn, user: dict, items: list) -> list:
     """只留這個人點得開詳情的項目（主持裁示 2026-09-27：「佇列列出」⇔「詳情守門放行」）。"""
     case_present = case_module_present()
     detail_types = set(registry.providers("approval.detail"))
-    return [it for it in items if _detail_opens(conn, user, it, case_present, detail_types)]
+    existing = set(_case_names(conn, [it.get("linkedQuoteNo") for it in items
+                                      if it.get("type") in detail_types and it.get("linkedQuoteNo")])) if case_present else set()
+    return [it for it in items if _detail_opens(conn, user, it, case_present, detail_types, existing)]
 
 
 def _case_names(conn, quote_nos) -> dict:
