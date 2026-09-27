@@ -37,3 +37,9 @@
   - 突變 S1a「不認別名 import」、S1b「不認常數 getattr」⇒ 都紅。
   - ⇒ **關閉**。
 - 射程（B 已寫明）：`importlib.import_module("helpers.email_notify")` 這類動態 import 抓不到。
+
+## 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+> A 補記（2026-09-28 01:02）：D 以機器掃描後已逐筆人工確認關閉（d_scan_mustfix.README 假陽性四類）；這裡只把既有的關閉改寫成標準單行，commit 取自各自的複核段落。請 D 覆核。
+
+- ✅ SM-M1 關閉（06af0830）——出處：§3 複核：突變 B2b 紅
