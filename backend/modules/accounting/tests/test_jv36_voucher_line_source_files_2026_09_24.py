@@ -350,9 +350,13 @@ _SLOW_TICKS = """
 (function () {
   var real = window.setTimeout
   window.__slowTicks = false
+  window.__slowPending = 0                     // 被延後、還沒執行的回呼數（題目等它歸零＝延後的工作做完了）
   window.setTimeout = function (fn, ms) {
     var rest = Array.prototype.slice.call(arguments, 2)
-    if (window.__slowTicks && !ms) ms = 400
+    if (window.__slowTicks && !ms && typeof fn === 'function') {
+      window.__slowPending++
+      return real.call(window, function () { try { fn.apply(window, rest) } finally { window.__slowPending-- } }, 400)
+    }
     return real.apply(window, [fn, ms].concat(rest))
   }
 })()
@@ -383,15 +387,21 @@ def test_o13_late_focus_move_does_not_steal_the_field_the_user_moved_to(
     修法：焦點已經離開按下去的那個東西 ⇒ 不搬。突變：拿掉「焦點已移開就不搬」⇒ 本題紅（摘要變 4321、借方清空）。"""
     page = _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, "o13_steal")
     page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
-    page.locator("input[x-model='l.debit']").nth(1).click()          # 使用者馬上點進借方格
-    page.wait_for_function("() => new Promise(r => window.setTimeout.call(window, () => r(true), 450))")
+    debit = page.locator("input[x-model='l.debit']").nth(1)
+    debit.click()                                                      # 使用者馬上點進借方格
+    # 等終點：延後的回呼（含 keepSummaryFocus 的 $nextTick）都執行完，不等固定時間（⓪ 自查 §G5 #9）
+    page.wait_for_function("() => window.__slowPending === 0", timeout=10000)
     page.keyboard.press("Control+A")
     page.keyboard.type("4321")
     assert page.evaluate("() => document.activeElement.getAttribute('x-model')") == "l.debit"
     page.evaluate("() => { window.__slowTicks = false }")
     page.click('[data-testid="src-case"]:has-text("%s")' % QUOTE)
-    line = page.evaluate("() => %s.lines[1]" % _D)
-    assert line["source_type"] == "case" and line["debit"] == "4321", line
+    # 驗畫面（DOM）不驗 Alpine 模型：借方格的值、摘要格是案件摘要（4321 沒有被打進摘要）
+    summary = page.locator("textarea[x-model='l.summary']").nth(1)
+    page.wait_for_function("(q) => document.querySelectorAll('textarea[x-model=\"l.summary\"]')[1].value.includes(q)",
+                           arg=QUOTE, timeout=10000)
+    assert debit.input_value() == "4321", "借方被清掉或換掉了：%r（摘要：%r）" % (debit.input_value(), summary.input_value())
+    assert "4321" not in summary.input_value(), summary.input_value()
 
 
 @pytest.mark.e2e
@@ -400,6 +410,6 @@ def test_o13_focus_still_returns_to_the_summary_when_the_user_stays(
     """正對照：點完支出項沒有移開 ⇒ 晚到的 $nextTick 照樣把焦點送回那一行的摘要（2026-09-25 的行為不變）。"""
     page = _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, "o13_stay")
     page.click('[data-testid="summary-panel-expense"]:has-text("吊車運費")')
-    page.wait_for_function("() => document.activeElement && document.activeElement.getAttribute('x-model') === 'l.summary'",
-                           timeout=5000)
+    page.wait_for_function("() => window.__slowPending === 0", timeout=10000)     # 延後的回呼執行完（終點）
+    assert page.evaluate("() => document.activeElement && document.activeElement.getAttribute('x-model')") == "l.summary"
 
