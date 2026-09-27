@@ -181,6 +181,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 14:29 主持裁示〔第十二班模組真刪〕：core-only 第二趟 ok:true（65 題已知紅全命中、無清單外）。①accounting（M06）真刪乾淨，只 1 題新紅：test_spec_coverage::test_nothing_in_these_tables_points_at_nothing（規格覆蓋工具不認得「模組不在時其規格代號的實作題也不在」）⇒ **不擋本班**，交 B 修成模組感知（實作題在 modules/<key>/ 下、該模組未安裝 ⇒ 該代號免比，附正對照），第十三班上車。②case（M01）真刪 334 紅／60 檔：本班只帶 M01 ②（c-m01-s2），「M01 不在時逐題標記」是第十三班 c-m01-5＋h-m01-7 的範圍（完整範圍 D 已複核：M01 不在時非 e2e 487 過、e2e 48 過、0 紅）⇒ **第十二班的 M01 真刪不是合回條件，只記數字**；**第十三班合回條件＝M01 真刪（§B-11 完整範圍）只剩允許紅**。模組真刪不另設已知紅清單。NEEDS_REVIEW 2 題（test_case_access_l1::test_without_m01_access_is_404…、test_l1_does_not_load_m01::test_rc_the_probe_reports_m01…）也在第十三班清掉。
 - 2026-09-27 14:19 D：c-approval-l1-3 315f2988——AL2-M1（同一個 _access_step；M01 在／不在探針一致）、AL2-M2（deal_tag 逐筆）關閉，突變 4/4 紅。**必修 QJ-M1**：通用契約題以原始碼含 data_json 挑提供者，傳票、獎金、M01 額外支出（approval_json 欄）走 tier_fields，壞 JSON ⇒ {} ⇒ 列給每個 superadmin、計角標，核准 500（D 實測額外支出）。建議：孤兒單列出卻 404；case_summary 全撈 data_json。
 - 2026-09-27 14:14 D：B 三包**通過**：b-o13-3 1c7f0a64 與 -2 內容相同（range-diff 全 =）；b-o14-2 f189103c O14-M1／S1／S2 關閉（拿掉 -n 1 ⇒ n1 紅；外層 -n 2 下 23 過）；b-drill-absent404-4 4b000529 AB3-M1 關閉（manifests 掃成空的 ⇒ 紅；真 core-only 明說略過）。
 - 2026-09-27 14:02 D：O13-2 ea93e37c **通過**（突變 2/2 紅；基底是 c7f02596，上車前 rebase 到 e67879f2、無交會）。O14 d75b1784 **必修 O14-M1**：n1 格沒斷言子行程真的起 xdist worker（拿掉 -n 1 仍 2 過）；看門狗突變紅；同型盤點：沒隔離鎖檔 0 檔，子行程期限≥外層上限 1 檔（test_shared_playwright_event_loop，O14-S2）；O14-S1 cap≤50 時期限不再小於外層。absent404-3 8d4cf4dd **必修 AB3-M1**：manifests 掃出空的 ⇒ 靜默略過（突變存活），略過要用獨立訊號（已搬遷的組資料夾存在就不准略過）。
