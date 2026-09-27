@@ -53,6 +53,7 @@ A 查出 `build_deploy_package.ps1:303-307` 第 6 步跑 `pytest -m "not e2e"`�
 **守門偵測到自己的前提被違反，而不是安靜地給出錯的答案。**
 """
 import re
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -997,6 +998,54 @@ def _implemented_where():
     return where
 
 
+#: 編號 ⇒ 模組 key：實作它的題**全部**在 `modules/<key>/tests/`（主持裁示 34be096a：M06 真刪時 JV1～36、AC2 被判成鬼列）。
+#: 模組拿掉之後題目跟著不見、樹上看不出編號原本屬於誰 ⇒ 模組在的時候記下來（`python tests/test_spec_coverage_2026_09_21.py --update-owners`）；
+#: 模組都在時與現場計算不一致 ⇒ 紅（test_spec_owner_map_is_fresh）。
+SPEC_OWNERS = TESTS / "spec_impl_modules.json"
+
+
+def _module_of_test(path):
+    parts = Path(path).resolve().relative_to(REPO).parts
+    return parts[2] if len(parts) > 3 and parts[:2] == ("backend", "modules") and parts[3] == "tests" else None
+
+
+def _owner_map_now():
+    """現場算：編號 ⇒ 模組 key（實作檔全在同一個模組的 tests/ 底下才算；有 L1 題或跨模組 ⇒ 不列）。"""
+    where = defaultdict(set)
+    for path in _test_files():
+        src = path.read_text(encoding="utf-8")
+        nums = set()
+        for m in _IMPLEMENTED_HEAD.finditer(src):
+            nums.update(n.upper() for n in _IMPLEMENTED_ONE.findall(m.group(1)))
+        for num, fname in NAMED_ELSEWHERE.items():
+            if re.search(r"^def %s\b" % re.escape(fname), src, re.M):
+                nums.add(num.upper())
+        for n in nums:
+            where[n].add(_module_of_test(path))
+    return {n: next(iter(ks)) for n, ks in where.items() if len(ks) == 1 and None not in ks}
+
+
+def _owner_map():
+    import json
+    return json.loads(SPEC_OWNERS.read_text(encoding="utf-8")) if SPEC_OWNERS.is_file() else {}
+
+
+def _module_present(key):
+    return (MODULES_DIR / key / "module.json").is_file()
+
+
+def absent_module_numbers(owner_map, present=_module_present):
+    """實作題屬於未安裝模組的編號（免比）。"""
+    return {n for n, key in owner_map.items() if not present(key)}
+
+
+def ghost_rows(c_owned, known, miscredited, declared, implemented, exempt):
+    """四張表裡指向不存在之物的列 ⇒ (C_OWNED 鬼列, KNOWN 鬼列, MISCREDITED 鬼列)；exempt＝模組不在而免比的編號。"""
+    return (sorted(set(c_owned) - implemented - exempt),
+            sorted(set(known) - declared - implemented - exempt),
+            sorted(n for n in miscredited if n not in exempt and (n not in declared or n not in implemented)))
+
+
 def _implemented():
     """**已實作**的編號 —— 撞名的不算。
 
@@ -1167,20 +1216,19 @@ def test_nothing_in_these_tables_points_at_nothing():
     📌 〈計數器要有落點〉的同一族：**指不到落點的那一列，永遠不會出事。**
     """
     implemented = set(_implemented_where())
-    ghost_c_owned = sorted(set(C_OWNED) - implemented)
+    # 〔主持裁示 34be096a：模組感知——實作題全在未安裝模組的 tests/ ⇒ 該編號免比；模組在時照舊比〕
+    exempt = absent_module_numbers(_owner_map())
+    ghost_c_owned, ghost_known, ghost_mis = ghost_rows(C_OWNED, KNOWN, MISCREDITED, _declared(), implemented, exempt)
     assert not ghost_c_owned, (
         "`C_OWNED` 裡的這些編號，沒有任何測試用它命名：\n  "
         + "\n  ".join(f"{n}  （寫的理由：{C_OWNED[n]}）" for n in ghost_c_owned)
         + "\n⇒ 那一列指不到東西，刪掉它。"
     )
-    ghost_known = sorted(KNOWN - _declared() - implemented)
     assert not ghost_known, (
         f"`KNOWN` 裡的這些編號，規格與測試兩邊都找不到：{ghost_known}"
     )
     # `MISCREDITED` 的定義就是「規格有、測試也有，但那個測試是別的東西」
     # ⇒ 兩邊有任何一邊沒有，這一列就失去意義。
-    ghost_mis = sorted(n for n in MISCREDITED
-                       if n not in _declared() or n not in implemented)
     assert not ghost_mis, (
         "`MISCREDITED` 裡的這些編號，規格或測試其中一邊已經沒有了：\n  "
         + "\n  ".join(ghost_mis)
@@ -1565,3 +1613,37 @@ def test_gt1_every_this_number_is_declared_in_the_spec():
         + "☠️ 它們在既有兩道題裡**互相抵銷** —— 兩邊都空 ⇒ 兩邊都綠，\n"
           "   而打包關門讀的正是 `THIS`。\n"
         + "⇒ 要嘛把它宣告進規格（用守門認得的樣式），要嘛把它移出 `THIS`。")
+
+
+def test_spec_owner_map_is_fresh():
+    """編號 ⇒ 模組的對照表與現場計算一致（模組都在時才比；有模組不在就無從計算，照表走）。"""
+    rec = _owner_map()
+    if any(not _module_present(k) for k in set(rec.values())):
+        import pytest
+        pytest.skip("有模組不在（選配／真刪）⇒ 無法現場重算，照對照表免比")
+    now = _owner_map_now()
+    assert now, "正對照：一個都沒算出來——量尺量不到東西（modules/*/tests 應該有實作題）"
+    assert rec == now, ("spec_impl_modules.json 過期（重產：python tests/test_spec_coverage_2026_09_21.py --update-owners）：\n"
+                        "  多了 %s\n  少了 %s" % (sorted(set(rec) - set(now)), sorted(set(now) - set(rec))))
+
+
+def test_ghost_rows_are_module_aware():
+    """反向控制（合成）：模組在、實作題被刪 ⇒ 鬼列（紅）；模組不在 ⇒ 免比；L1 的編號永遠要比。"""
+    owners = {"JV1": "accounting", "AC2": "accounting", "SO3": "case"}
+    here = {"case"}
+    exempt = absent_module_numbers(owners, present=lambda k: k in here)
+    assert exempt == {"JV1", "AC2"}
+    # accounting 不在：JV1／AC2 沒有實作題 ⇒ 不算鬼列；SO3（case 在）沒有實作題 ⇒ 鬼列；L1 的 X9 ⇒ 鬼列
+    c, k, m = ghost_rows({"JV1": "r", "SO3": "r", "X9": "r"}, {"AC2"}, {"AC2"}, declared=set(), implemented=set(), exempt=exempt)
+    assert c == ["SO3", "X9"] and k == [] and m == [], (c, k, m)
+    # accounting 在（exempt 空）、JV1 的實作題被刪 ⇒ 鬼列
+    c, _k, _m = ghost_rows({"JV1": "r"}, set(), set(), declared=set(), implemented=set(), exempt=set())
+    assert c == ["JV1"]
+
+
+if __name__ == "__main__" and "--update-owners" in sys.argv:
+    import json
+    now = _owner_map_now()
+    SPEC_OWNERS.write_text(json.dumps(now, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8", newline="\n")
+    print("spec_impl_modules.json：%d 個編號" % len(now))
+
