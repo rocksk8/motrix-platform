@@ -89,3 +89,13 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ SL-M1 關閉（bb01c764）——讀不到儲存位置設定時三個位置回未知、不退回自動判斷、不快取，設定頁回 503 不寫
+
+## 6. 複核 US2：wip/b-delivery-us2 eb953b23（範圍 44b2d8d8...eb953b23）（D，2026-09-28）
+
+- 修正：`_trusted_delivery()` 比對已載入 delivery 模組的 `__file__` realpath（normcase）與 `<TOOLS_DIR>/delivery.py`；`TOOLS_DIR` 取自儀表板自己的 `__file__`。不同 ⇒ prepare、apply 回 409，背景套用記 failed。涵蓋所有會驗章或套用的入口
+- 題（三檔）41 過。突變：
+  - 拿掉比對 ⇒ 2 紅
+  - 把「載入的路徑」換成「期望的路徑」（自己比自己的假綠）⇒ 2 紅
+  - 反向控制：staging 放一份位元組相同的 delivery.py、排在 sys.path 前面 ⇒ 被擋。證明比的是位置，不是內容
+- **D4-O1（觀察）**：overview、status、開發機的 prod-status 這三處仍然直接 `import delivery`，但只做顯示（讀鎖、讀結果、列包），不驗章、不套用。模組快取是同一個物件，之後的 `_trusted_delivery` 仍會依 `__file__` 攔下 ⇒ 可以接受
+- **US2 成立**（它是建議，沒有關閉紀錄的格式要求）
