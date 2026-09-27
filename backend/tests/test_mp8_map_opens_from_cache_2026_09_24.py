@@ -62,6 +62,32 @@ def _seed_tender(case_no, org, location):
         conn.close()
 
 
+@pytest.fixture(params=[pytest.param("tenders", marks=needs_tender_radar), "suppliers"])
+def mp8_source(request):
+    """點的資料來源（B，2026-09-28）：快取行為是 L1 的——`tenders` 驗與標案雷達的整合（模組在才跑），
+    `suppliers` 是 L1 自己的資料來源，沒有標案雷達的安裝包也驗得到快取、權限、每次另算距離。"""
+    return request.param
+
+
+def _map_url(source):
+    return "/api/map/points?sources=%s,customers" % source
+
+
+def _seed(source, key, org, location):
+    """tenders：照原本（有 location 用 location，沒有就用機關名稱定位）；suppliers：名稱＝key、地址＝location 或 org。"""
+    if source == "tenders":
+        return _seed_tender(key, org, location)
+    import json
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                     (key, json.dumps({"address": location or org}, ensure_ascii=False)))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _hdr(client, make_user, username, role="superadmin", modules=None):
     u, p = make_user(username=username, role=role, modules=modules)
     r = client.post("/api/auth/login", json={"username": u, "password": p})
@@ -69,12 +95,11 @@ def _hdr(client, make_user, username, role="superadmin", modules=None):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
-@needs_tender_radar
-def test_mp8_opening_the_map_makes_no_external_geocode_call(client, make_user, monkeypatch):
-    _seed_tender("MP8-001", "MP8 測試機關", "台中市西屯區")
+def test_mp8_opening_the_map_makes_no_external_geocode_call(client, make_user, monkeypatch, mp8_source):
+    _seed(mp8_source, "MP8-001", "MP8 測試機關", "台中市西屯區")
     calls = _spy(monkeypatch)
     hdr = _hdr(client, make_user, "mp8_a")
-    r = client.get(MAP, headers=hdr)
+    r = client.get(_map_url(mp8_source), headers=hdr)
     assert r.status_code == 200, r.text[:200]
     body = r.json()
     print("MP8 實測：開地圖對外呼叫 %d 次；pendingGeocode=%s" % (len(calls), body.get("pendingGeocode")))
@@ -92,47 +117,44 @@ def test_mp8_the_same_person_opening_twice_hits_the_cache(client, make_user, mon
     assert a.json()["points"] == b.json()["points"]
 
 
-@needs_tender_radar
-def test_mp8_a_data_change_invalidates_the_cache(client, make_user, monkeypatch):
+def test_mp8_a_data_change_invalidates_the_cache(client, make_user, monkeypatch, mp8_source):
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
                                  source="nominatim", address="MP8 已定位機關"))
-    _seed_tender("MP8-003", "MP8 已定位機關", "")
+    _seed(mp8_source, "MP8-003", "MP8 已定位機關", "")
     hdr = _hdr(client, make_user, "mp8_c")
-    first = client.get(MAP, headers=hdr)
-    _seed_tender("MP8-004", "MP8 已定位機關", "")
-    second = client.get(MAP, headers=hdr)
-    names = sorted(p.get("caseNo") for p in second.json()["points"])
+    first = client.get(_map_url(mp8_source), headers=hdr)
+    _seed(mp8_source, "MP8-004", "MP8 已定位機關", "")
+    second = client.get(_map_url(mp8_source), headers=hdr)
+    names = sorted((p.get("caseNo") or p.get("name")) for p in second.json()["points"])
     assert second.headers.get("X-Map-Cache") == "miss", "資料變了還回快取"
     assert names == ["MP8-003", "MP8-004"], names
     assert len(first.json()["points"]) == 1
 
 
-@needs_tender_radar
-def test_mp8_the_cache_never_hands_one_users_points_to_another(client, make_user, monkeypatch):
+def test_mp8_the_cache_never_hands_one_users_points_to_another(client, make_user, monkeypatch, mp8_source):
     """權限算進鍵：看得到標案的人先開（進快取），看不到的人再開 ⇒ 不可以拿到標案點。"""
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
                                  source="nominatim", address="MP8 權限機關"))
-    _seed_tender("MP8-005", "MP8 權限機關", "")
+    _seed(mp8_source, "MP8-005", "MP8 權限機關", "")
     boss = _hdr(client, make_user, "mp8_boss")
-    assert len(client.get(MAP, headers=boss).json()["points"]) == 1
+    assert len(client.get(_map_url(mp8_source), headers=boss).json()["points"]) == 1
     clerk = _hdr(client, make_user, "mp8_clerk", role="admin", modules=["customers"])
-    r = client.get(MAP, headers=clerk)
-    tenders = [p for p in r.json()["points"] if p.get("sourceKey") == "tenders"]
-    skipped = [s for s in r.json()["sources"] if s["source"] == "tenders"]
+    r = client.get(_map_url(mp8_source), headers=clerk)
+    tenders = [p for p in r.json()["points"] if p.get("sourceKey") == mp8_source]
+    skipped = [s for s in r.json()["sources"] if s["source"] == mp8_source]
     print("MP8 實測：沒有標案權限的人 ⇒ 快取 %s、標案點 %d、skipped %r"
           % (r.headers.get("X-Map-Cache"), len(tenders), skipped and skipped[0].get("skipped")))
     assert tenders == [], "沒有標案權限的人從快取拿到了標案點：%r" % tenders
     assert skipped and skipped[0]["skipped"] == "no_permission"
 
 
-@needs_tender_radar
-def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_user, monkeypatch):
+def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_user, monkeypatch, mp8_source):
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
                                  source="nominatim", address="MP8 距離機關"))
-    _seed_tender("MP8-006", "MP8 距離機關", "")
+    _seed(mp8_source, "MP8-006", "MP8 距離機關", "")
     hdr = _hdr(client, make_user, "mp8_dist")
-    near = client.get(MAP, headers=dict(hdr, **{"X-Map-Position": "24.2,120.6,30"}))
-    far = client.get(MAP, headers=dict(hdr, **{"X-Map-Position": "25.03,121.56,30"}))
+    near = client.get(_map_url(mp8_source), headers=dict(hdr, **{"X-Map-Position": "24.2,120.6,30"}))
+    far = client.get(_map_url(mp8_source), headers=dict(hdr, **{"X-Map-Position": "25.03,121.56,30"}))
     d1 = near.json()["points"][0]["distanceFromUserKm"]
     d2 = far.json()["points"][0]["distanceFromUserKm"]
     print("MP8 實測：%s 距離 %s km／%s 距離 %s km" % (near.headers.get("X-Map-Cache"), d1,

@@ -136,19 +136,45 @@ def one_tender(client):
     return "BR-0001"
 
 
-def _map(client, hdr):
-    r = client.get(MAP_PATH, headers=hdr)
+@pytest.fixture(params=[pytest.param("tenders", marks=needs_tender_radar), "suppliers"])
+def one_point(request, client):
+    """一個在高雄的點（離梧棲近、離台北遠）。距離規則是 L1 的，資料來源有兩種（B，2026-09-28）：
+    `tenders`＝驗與標案雷達的整合（模組在才跑）；`suppliers`＝L1 自己的資料來源——
+    沒有標案雷達的安裝包也驗得到「最近據點／null 不是 0」這些 L1 行為。"""
+    import db
+    conn = db.get_db()
+    try:
+        if request.param == "tenders":
+            conn.execute("DELETE FROM tenders WHERE case_no LIKE 'BR-%'")
+            conn.execute("INSERT INTO tenders (case_no, name, org, location, fetched_at) VALUES (?,?,?,?,?)",
+                         ("BR-0001", "據點測試標案", "據點測試機關", "高雄市", "2026-09-22T00:00:00"))
+            key = ("caseNo", "BR-0001")
+        else:
+            conn.execute("DELETE FROM suppliers WHERE name=?", ("據點測試供應商",))
+            conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                         ("據點測試供應商", json.dumps({"address": "高雄市"}, ensure_ascii=False)))
+            key = ("name", "據點測試供應商")
+        conn.commit()
+    finally:
+        conn.close()
+    return {"source": request.param, "key": key}
+
+
+def _map(client, hdr, source="tenders"):
+    r = client.get("/api/map/points?sources=" + source, headers=hdr)
     assert r.status_code == 200, r.text
     return r.json()
 
 
-def _point(body, case_no="BR-0001"):
+def _point(body, want="BR-0001"):
+    """`want`：標案案號（字串），或 `one_point` 回的 dict（依它的欄位比對）。"""
+    field, value = want["key"] if isinstance(want, dict) else ("caseNo", want)
     for p in body["points"]:
-        if p.get("caseNo") == case_no:
+        if p.get(field) == value:
             return p
     raise AssertionError(
-        f"地圖上找不到 {case_no}，有的是："
-        f"{[p.get('caseNo') for p in body['points']]}"
+        f"地圖上找不到 {value}，有的是："
+        f"{[p.get(field) for p in body['points']]}"
     )
 
 
@@ -390,9 +416,8 @@ def test_br5_ids_are_assigned_and_never_reused(client, make_user):
 # BR6 / BR7 / BR8 / BR9 · 距離的語意
 # ══════════════════════════════════════════════════════════════════════
 
-@needs_tender_radar
 def test_br6_the_distance_is_to_the_nearest_location(
-        client, make_user, one_tender):
+        client, make_user, one_point):
     """🔴 BR6：距離是到**最近據點**的，而回應要說出是哪一個。
 
     📌 那筆標案在高雄 ⇒ 梧棲（約 130 km）比台北（約 290 km）近。
@@ -400,7 +425,7 @@ def test_br6_the_distance_is_to_the_nearest_location(
     hdr = _auth(client, make_user)
     _put(client, hdr, {"locations": [dict(TAIPEI), dict(WUQI)]})
 
-    p = _point(_map(client, hdr))
+    p = _point(_map(client, hdr, one_point["source"]), one_point)
     assert p.get("nearestLocationName") == WUQI["name"], (
         f"最近的應該是 `{WUQI['name']}`，實際 "
         f"{p.get('nearestLocationName')!r}\n"
@@ -409,9 +434,8 @@ def test_br6_the_distance_is_to_the_nearest_location(
     assert p.get("distanceFromOfficeKm") is not None, p
 
 
-@needs_tender_radar
 def test_br9_removing_the_nearest_location_changes_the_answer(
-        client, make_user, one_tender):
+        client, make_user, one_point):
     """🔴🔴 BR9 反向控制：**把最近的那個據點刪掉 ⇒ 距離要變、名稱變成另一個。**
 
     ☠️ 少了這一題，一個「**永遠回 `locations[0]`**」的實作會讓 BR6 綠 ——
@@ -420,11 +444,11 @@ def test_br9_removing_the_nearest_location_changes_the_answer(
     """
     hdr = _auth(client, make_user)
     _put(client, hdr, {"locations": [dict(TAIPEI), dict(WUQI)]})
-    before = _point(_map(client, hdr))
+    before = _point(_map(client, hdr, one_point["source"]), one_point)
     assert before.get("nearestLocationName") == WUQI["name"], "前提不成立（見 BR6）"
 
     _put(client, hdr, {"locations": [dict(TAIPEI)]})
-    after = _point(_map(client, hdr))
+    after = _point(_map(client, hdr, one_point["source"]), one_point)
 
     assert after.get("nearestLocationName") == TAIPEI["name"], (
         f"刪掉梧棲之後，最近的應該變成台北，實際 "
@@ -471,9 +495,8 @@ def test_br7_locations_that_cannot_be_located_are_visible(
     )
 
 
-@needs_tender_radar
 def test_br8_no_locatable_location_means_null_not_zero(
-        client, make_user, one_tender):
+        client, make_user, one_point):
     """🔴 BR8：**一個據點都定位不到 ⇒ 兩個欄位都要是 `null`，不是 `0`。**
 
     ☠️ 回 `0` 的話畫面顯示「離公司 0 km」，**看起來像「就在公司」** ——
@@ -497,7 +520,7 @@ def test_br8_no_locatable_location_means_null_not_zero(
         "下面的斷言證明不了任何事。"
     )
 
-    p = _point(_map(client, hdr))
+    p = _point(_map(client, hdr, one_point["source"]), one_point)
     assert p.get("distanceFromOfficeKm") is None, (
         f"一個據點都定位不到，而距離是 {p.get('distanceFromOfficeKm')!r}\n"
         "☠️ `0` 看起來像「就在公司」。"
@@ -507,9 +530,8 @@ def test_br8_no_locatable_location_means_null_not_zero(
     )
 
 
-@needs_tender_radar
 def test_br8b_one_location_behaves_exactly_like_before(
-        client, make_user, one_tender):
+        client, make_user, one_point):
     """🟢 BR8b 反向控制：**只有一個據點時，行為與改版前完全相同。**
 
     📌 那是 A 裁決能成立的前提（「向下相容」）——
@@ -519,7 +541,7 @@ def test_br8b_one_location_behaves_exactly_like_before(
     hdr = _auth(client, make_user)
     _put(client, hdr, {"locations": [dict(WUQI)]})
 
-    p = _point(_map(client, hdr))
+    p = _point(_map(client, hdr, one_point["source"]), one_point)
     assert p.get("distanceFromOfficeKm") is not None, (
         "只有一個據點而距離是 null —— 既有使用者的距離會全部消失"
     )

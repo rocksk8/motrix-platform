@@ -258,9 +258,13 @@ def test_p12_each_own_source_can_be_asked_for_on_its_own(
     assert body["points"], f"`{name}` 一個點都沒有（測試資料塞了一筆查得到的地址）"
 
 
-@needs_tender_radar
+@pytest.mark.parametrize("sources,expected", [
+    pytest.param("tenders,vendor_contractors", {"tenders", "vendor_contractors"}, marks=needs_tender_radar),
+    # L1 自己的兩個來源（B，2026-09-28）：dataset／source 分成兩個鍵是 L1 的規則，不必靠標案雷達或 M04
+    ("suppliers,customers", {"suppliers", "customers_delivery"}),
+])
 def test_p12b_asking_for_two_sources_keeps_them_apart(
-        client, make_user, own_data):
+        client, make_user, own_data, sources, expected):
     """🔴🔴 P12b：**同時要兩個來源時，每個點都要說得出自己是哪一個。**
 
     ☠️ 這一題是這一節的核心，而它現在紅的原因寫在檔頭：
@@ -272,7 +276,19 @@ def test_p12b_asking_for_two_sources_keeps_them_apart(
     而**兩個都是合法的值** ⇒ 沒有任何東西會報錯。
     """
     hdr = _auth(client, make_user, role="superadmin")
-    body = _points(client, hdr, "tenders,vendor_contractors")
+    if sources == "suppliers,customers":
+        import json
+        import db
+        conn = db.get_db()
+        try:
+            conn.execute("INSERT INTO suppliers (name, data_json) VALUES (?,?)",
+                         ("地圖測試供應商", json.dumps({"address": "台中市梧棲區"}, ensure_ascii=False)))
+            conn.execute("INSERT INTO customers (name, data_json) VALUES (?,?)",
+                         ("地圖測試客戶乙", json.dumps({"deliveryAddress": "台中市西屯區"}, ensure_ascii=False)))
+            conn.commit()
+        finally:
+            conn.close()
+    body = _points(client, hdr, sources)
 
     assert body["points"], (
         "一個點都沒有 —— 這一題的前提不成立。\n"
@@ -284,7 +300,7 @@ def test_p12b_asking_for_two_sources_keeps_them_apart(
         "有點沒有 `dataset` 這個鍵。\n"
         "⇒ 前端沒有辦法把標案與廠商分開上色，而使用者要的正是「看到其他商家」。"
     )
-    assert datasets >= {"tenders", "vendor_contractors"}, (
+    assert datasets >= expected, (
         f"兩個來源都要了，而回來的點只分屬 {sorted(datasets)}"
     )
 
