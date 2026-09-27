@@ -5,7 +5,7 @@ selectCase 的案件層級重設集中到各模組的 _reset_<模組>(phase, dat
 頁面資料物件上所有非函式的欄位必須相同（清單／工作階段等與案件無關的欄位除外）。
 漏重設的欄位會帶著 A 的值出現在差異裡。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

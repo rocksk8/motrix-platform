@@ -6,7 +6,7 @@
 `/api/cashier/export` 沿用 reports.py 既有 Excel 樣式 helper 產出兩個
 sheet（已匯款明細／已收款明細）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 

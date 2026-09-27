@@ -9,7 +9,7 @@
 - 關卡矩陣的格子可點，開案件並停在該關的分頁
 觀測點：API 回應、資料庫 deal_tag、頁面 activeTab。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import expect_toast, forbid_native_dialogs
 import json

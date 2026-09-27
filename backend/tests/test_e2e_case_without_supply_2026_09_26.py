@@ -5,7 +5,7 @@
 
 模擬「模組不在」：伺服器端拿掉兩個提供者；瀏覽器端把 /api/shipping-notes 一律回 404（模組不在時路由本來就沒有掛）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

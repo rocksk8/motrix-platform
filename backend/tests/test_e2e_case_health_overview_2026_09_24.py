@@ -5,7 +5,7 @@
 快速切換案件時，總覽必須是最後選的那一件（回應晚到不可蓋掉）。
 觀測點：頁面上總覽的文字與 activeTab。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

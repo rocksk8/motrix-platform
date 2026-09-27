@@ -9,10 +9,11 @@
    `last_active` 節流點累加（每 5 分鐘一次），沒有請求就不會累加
 3. **「在線」＝ 5 分鐘內有活動**，資料來源是 sessions.last_active，不另做心跳
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime, timedelta
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -477,6 +478,7 @@ def test_presence_release(client, make_user):
     assert client.post("/api/edit-presence", json=body, headers=_auth(b_tok)).json()["others"] == []
 
 
+@needs_m01
 def test_completion_note_rejects_stale_save(client, make_user):
     """完工單補上樂觀鎖：B 拿舊版本存檔要被擋下，而且**內容不能被蓋掉**。"""
     import db
@@ -511,6 +513,7 @@ def test_completion_note_rejects_stale_save(client, make_user):
     assert row["work_summary"] == "原始內容", "409 了但內容還是被蓋掉"
 
 
+@needs_m01
 def test_completion_note_saves_with_current_version(client, make_user):
     """反向控制：帶著正確版本就存得進去（否則上一題可能只是「什麼都存不了」）。"""
     import db

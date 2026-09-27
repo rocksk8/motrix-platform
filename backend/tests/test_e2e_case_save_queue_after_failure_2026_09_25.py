@@ -6,7 +6,7 @@
 🔑 在一次嘗試期間有新的存檔請求 ⇒ 不論那一次成敗，都用**最新狀態**再送一次；沒有新請求才停（不會無限重送）。
 觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

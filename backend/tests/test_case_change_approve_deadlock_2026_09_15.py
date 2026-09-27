@@ -15,7 +15,7 @@ SQLite 同時只允許一個 writer。`db.py::_connect()` 是 `connect(timeout=3
   ② 稽核紀錄有沒有真的寫進去（被吞掉的話就沒有）
 只驗回傳碼是看不出來的——這支端點在卡完之後仍然回 200。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import time
 

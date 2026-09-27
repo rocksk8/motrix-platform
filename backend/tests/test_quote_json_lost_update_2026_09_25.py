@@ -8,18 +8,17 @@
   修正後 ⇒ 探針卡在寫鎖上，端點 commit 之後才寫進去 ⇒ `_probe` 在、端點自己的修改也在（綠）
 ⚠️ 單跑幾乎碰不到（空窗只有幾毫秒）⇒ 這裡在空窗裡**確定地**插入一次寫入。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import io
 import json
 import threading
 
 import pytest
 
-import modules.case.api.material_orders as mo
-import modules.case.api.quotations as q
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 from tests.test_case_money_mask_2026_09_24 import NO, _db_data, _login, _seed
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _probe_write(quote_no):
@@ -38,6 +37,8 @@ def _probe_write(quote_no):
 @pytest.fixture()
 def gap_probe(monkeypatch):
     """被測端點每一次呼叫 save_quotation_json 之前（讀完、寫回前）插入一次探針寫入。"""
+    import modules.case.api.material_orders as mo
+    import modules.case.api.quotations as q
     state = {"fired": 0, "threads": [], "quote": NO}
     for mod in (q, mo):     # 外包派工匯入（vc）經 IP-17 由 M01 的 q.save_quotation_json 寫（2026-09-26 外包工班搬遷）
         original = mod.save_quotation_json
@@ -230,6 +231,7 @@ B_CASES = {"approve_quotation": _c_approve, "reject_final": _c_reject_final,
            "reassign_approval": _c_reassign, "case_change_approve": _c_case_change}
 
 
+@needs_m01
 @pytest.mark.parametrize("case", sorted(B_CASES))
 def test_b_approval_flows_do_not_overwrite_a_write_in_the_gap(client, make_user, gap_probe, case):
     u, pw = make_user(username="lub_" + case[:12], role="superadmin")
@@ -261,6 +263,7 @@ CASES = {
 }
 
 
+@needs_m01
 @pytest.mark.parametrize("case", sorted(CASES))
 def test_a_write_in_the_gap_is_not_overwritten(client, make_user, gap_probe, case):
     u, pw = make_user(username="lu_" + case[:14], role="superadmin")
@@ -299,8 +302,11 @@ def _lock_is_free():
         conn.close()
 
 
+@needs_m01
 @pytest.mark.parametrize("case", sorted(CASES) + ["B:" + k for k in sorted(B_CASES)])
 def test_an_error_after_taking_the_write_lock_releases_it(client, make_user, monkeypatch, case):
+    import modules.case.api.material_orders as mo
+    import modules.case.api.quotations as q
     u, pw = make_user(username="lk_" + case.replace(":", "")[:14], role="superadmin")
     make_user(username="lu_old", role="admin")
     make_user(username="lu_new", role="admin")

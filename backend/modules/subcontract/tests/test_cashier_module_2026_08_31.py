@@ -8,10 +8,11 @@
 權限：admin+ 或具備 cashier 模組（helpers.user_has_module()）——跟同一輪
 一併補上 cashier 判斷的 paid-toggle／mark_payment／bank-reconcile 一致。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 2026-09-26 M05 搬遷：下列題同時需要應收應付（出納／收款資料）
 _NEEDS_ARAP = pytest.mark.skipif(not __import__("core.source_tree", fromlist=["x"]).module_installed("modules/arap/"),
@@ -130,6 +131,7 @@ def test_payable_queue_only_approved_unpaid_sorted_by_payable_date(client, make_
     assert v_soon not in [v["voucherNo"] for v in r2.json()]
 
 
+@needs_m01
 @_NEEDS_ARAP
 def test_finance_module_can_view_but_not_execute(client, make_user):
     """v2：finance 模組使用者沿用 receivables.html 原本的查詢權限（可看
@@ -160,6 +162,7 @@ def test_finance_module_can_view_but_not_execute(client, make_user):
     assert mark.status_code == 403, mark.text
 
 
+@needs_m01
 def test_cashier_module_user_can_mark_paid_and_received(client, make_user):
     """cashier 模組使用者（非 admin+）能執行 paid-toggle／mark_payment，
     這兩支端點這一輪一併補上 cashier 模組判斷。"""

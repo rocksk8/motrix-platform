@@ -9,14 +9,13 @@
 根本不會被套用**。把它印在「核准後會套用的內容」底下是告訴審核者一件不會發生
 的事——所以摘要刻意不收 stages，這裡有一題釘住。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest
-
-import modules.case.api.quotations as rq
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
+
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 
 
 def _cr(**over):
@@ -43,6 +42,7 @@ def _cr(**over):
 # ── 攤平：只收審核時真的要看的欄位 ──────────────────────────────────────────
 
 def test_flatten_excludes_internal_fields():
+    import modules.case.api.quotations as rq
     flat = rq._flatten_case_record(_cr())
     joined = json.dumps(flat, ensure_ascii=False)
     for internal in ("writeOffStatus", "writeOffRequestedAt", "invoiceFiles", "path"):
@@ -52,12 +52,14 @@ def test_flatten_excludes_internal_fields():
 def test_flatten_excludes_stages():
     """核准時 stages 會被現有值覆蓋（approve_case_change 第一行），
     印出來等於告訴審核者一件不會發生的事。"""
+    import modules.case.api.quotations as rq
     flat = rq._flatten_case_record(_cr())
     joined = json.dumps(flat, ensure_ascii=False)
     assert "訂單確認" not in joined and "stages" not in joined
 
 
 def test_flatten_keeps_what_matters():
+    import modules.case.api.quotations as rq
     flat = rq._flatten_case_record(_cr())
     assert flat["角色·業務負責"] == "高晟耀"
     assert flat["合約·交貨地址"] == "台北市"
@@ -69,6 +71,7 @@ def test_flatten_keeps_what_matters():
 # ── 摘要：只列有變動的欄位 ──────────────────────────────────────────────────
 
 def test_case_record_update_lists_only_changed_fields():
+    import modules.case.api.quotations as rq
     old = _cr()
     new = _cr(roles={"filler": "黃玉龍", "sales": "蔡紋惠", "executor": "黃玉龍"})
     out = rq._summarize_case_change("case_record_update", {"case_record": new}, old, [])
@@ -79,6 +82,7 @@ def test_case_record_update_lists_only_changed_fields():
 
 
 def test_case_record_update_with_no_diff_says_so_instead_of_dumping_json():
+    import modules.case.api.quotations as rq
     same = _cr()
     out = rq._summarize_case_change("case_record_update", {"case_record": same}, same, [])
     joined = json.dumps(out, ensure_ascii=False)
@@ -88,6 +92,7 @@ def test_case_record_update_with_no_diff_says_so_instead_of_dumping_json():
 
 def test_stage_only_change_does_not_look_like_it_will_be_applied():
     """只有 stages 不同時，摘要不能顯示成「有東西要被套用」——那些不會被套用。"""
+    import modules.case.api.quotations as rq
     old = _cr()
     new = _cr(stages=[{"id": 41, "label": "訂單確認", "done": False}])
     out = rq._summarize_case_change("case_record_update", {"case_record": new}, old, [])
@@ -95,6 +100,7 @@ def test_stage_only_change_does_not_look_like_it_will_be_applied():
 
 
 def test_payment_amount_change_is_visible():
+    import modules.case.api.quotations as rq
     old = _cr()
     new = _cr(payment={"items": [dict(_cr()["payment"]["items"][0], amount=2000000)]})
     out = rq._summarize_case_change("case_record_update", {"case_record": new}, old, [])
@@ -105,6 +111,7 @@ def test_payment_amount_change_is_visible():
 # ── 其他變更類型 ────────────────────────────────────────────────────────────
 
 def test_payment_mark_shows_before_and_after_for_touched_fields_only():
+    import modules.case.api.quotations as rq
     cr = _cr(payment={"items": [{"type": "訂金款", "amount": 100, "received": False}]})
     out = rq._summarize_case_change(
         "payment_mark", {"idx": 0, "body": {"received": True, "receivedAt": "2026-09-14"}},
@@ -116,6 +123,7 @@ def test_payment_mark_shows_before_and_after_for_touched_fields_only():
 
 
 def test_upload_summarizes_files_not_paths():
+    import modules.case.api.quotations as rq
     out = rq._summarize_case_change(
         "material_file_upload", {"idx": 2}, _cr(),
         [{"id": "a", "filename": "出貨照片.jpg", "path": "x/y/a.jpg"}])
@@ -126,6 +134,7 @@ def test_upload_summarizes_files_not_paths():
 
 
 def test_delete_names_the_file_being_removed():
+    import modules.case.api.quotations as rq
     cr = _cr(materials=[{"files": [{"id": "f1", "filename": "估價單.pdf"}]}])
     out = rq._summarize_case_change(
         "material_file_delete", {"idx": 0, "file_id": "f1"}, cr, [])
@@ -135,6 +144,7 @@ def test_delete_names_the_file_being_removed():
 
 def test_unknown_action_type_does_not_dump_raw_payload():
     """新增變更類型忘了補摘要時，退路是「講清楚看不懂」，不是倒 raw JSON。"""
+    import modules.case.api.quotations as rq
     out = rq._summarize_case_change(
         "brand_new_action", {"secret": {"deep": "payload"}}, _cr(), [])
     joined = json.dumps(out, ensure_ascii=False)
@@ -187,6 +197,7 @@ def test_detail_endpoint_returns_summary_not_raw_payload(client, make_user):
 
 def test_enum_values_are_translated_not_raw():
     """摘要是給人看的，不該出現 `on_track` 這種內部代碼。"""
+    import modules.case.api.quotations as rq
     flat = rq._flatten_case_record(_cr(projectTimeline={"startDate": "", "endDate": "",
                                                         "status": "on_track"}))
     assert flat["專案期間·狀態"] == "進行中"
@@ -195,12 +206,14 @@ def test_enum_values_are_translated_not_raw():
 
 def test_unknown_enum_value_is_shown_as_is_not_guessed():
     """沒見過的值原樣顯示——硬翻一個中文會讓人以為系統認得它。"""
+    import modules.case.api.quotations as rq
     flat = rq._flatten_case_record(_cr(projectTimeline={"startDate": "", "endDate": "",
                                                         "status": "some_new_state"}))
     assert flat["專案期間·狀態"] == "some_new_state"
 
 
 def test_status_change_summary_shows_both_sides_translated():
+    import modules.case.api.quotations as rq
     old = _cr(projectTimeline={"startDate": "", "endDate": "", "status": "on_track"})
     new = _cr(projectTimeline={"startDate": "", "endDate": "", "status": "delayed"})
     out = rq._summarize_case_change("case_record_update", {"case_record": new}, old, [])

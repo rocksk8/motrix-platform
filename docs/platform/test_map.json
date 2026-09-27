@@ -109,14 +109,12 @@
    "kind": "unit",
    "units": [
     "dir:backend/modules/analytics/",
-    "file:backend/tests/_requires.py",
     "file:backend/tests/test_core.py",
     "mod:analytics/api/reports"
    ],
    "evidence": {
     "import": [
      "backend/modules/analytics/api/reports.py",
-     "backend/tests/_requires.py",
      "backend/tests/test_core.py"
     ],
     "module_dir": [
@@ -17001,7 +16999,6 @@
    "kind": "api",
    "units": [
     "core:db",
-    "file:backend/tests/_requires.py",
     "mod:arap/api/invoice_vouchers",
     "mod:arap/api/payment_requests",
     "mod:case/api/quotations",
@@ -17017,8 +17014,7 @@
      "backend/modules/arap/api/invoice_vouchers.py",
      "backend/modules/arap/api/payment_requests.py",
      "backend/modules/case/api/quotations.py",
-     "backend/modules/subcontract/api/contractor_vouchers.py",
-     "backend/tests/_requires.py"
+     "backend/modules/subcontract/api/contractor_vouchers.py"
     ],
     "api": [
      "backend/modules/arap/api/invoice_vouchers.py",

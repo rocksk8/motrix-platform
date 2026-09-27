@@ -4,7 +4,7 @@
 單價、成本；畫面顯示「—」。持有者（superadmin／admin／sales 或 financial_view 模組）照舊。
 最大風險在回寫：被遮蔽的欄位不可以被空值蓋掉（伺服器以資料庫現值補回）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

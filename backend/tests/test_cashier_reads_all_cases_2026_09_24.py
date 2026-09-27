@@ -5,7 +5,7 @@
 - 寫入面不變：CM14 已擋（只放行 payment 分段）；報價單、叫料等仍走擁有者檢查。
 - 沒有 cashier 的非成員：照舊看不到（403／清單沒有）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

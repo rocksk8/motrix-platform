@@ -7,9 +7,10 @@ coverage in test_core.py; this file targets the things that only exist at the
 HTTP/request layer: auth middleware, demo-account DB isolation, optimistic
 locking, login rate limiting, and the /api/uploads path-traversal guard.
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -201,6 +202,7 @@ def test_mark_converted_accepts_existing_quote_no(client, make_user):
     assert r.json()["status"] == "成案"
 
 
+@needs_m01
 def test_delete_quotation_clears_orphaned_dev_case_link(client, make_user):
     username, password = make_user(role="superadmin")
     token = _login(client, username, password)

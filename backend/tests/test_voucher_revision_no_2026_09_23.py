@@ -33,12 +33,13 @@ V-20260330-006   -> V-20260330-006-R1   -> V-20260330-006-R1-R1 -> …
 🔑 〈守門守的對象被搬走〉：只釘 `-R2` 這個字面值的話，
    **日後包一層間接就照樣全綠**。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import importlib
 import re
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 我釘的接縫。名字要改**退回給我**，不要自己改題。
 _SEAMS = (
@@ -149,6 +150,7 @@ def test_the_revision_numbering_is_not_borrowed_from_quotations():
         "**改報價單的單號格式會靜默改掉傳票的。**")
 
 
+@needs_m01
 def test_the_quotation_helper_really_does_have_this_defect():
     """⚙️ **正對照：證明我描述的那個缺陷是真的。**
 

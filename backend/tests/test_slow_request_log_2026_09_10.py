@@ -11,12 +11,13 @@ notification／audit 寫入。
 使用者只覺得「這次存檔特別久」，不會回報也沒有紀錄。這條 middleware 就是那道
 保險：超過門檻寫一行 log，不改變任何行為。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import logging
 import sqlite3
 import threading
 import time
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -29,6 +30,7 @@ def _auth(token):
     return {"Authorization": f"Bearer {token}"}
 
 
+@needs_m01
 def test_fast_request_is_not_logged(client, make_user, caplog):
     """一般速度的請求不該產生任何 SLOW REQUEST——這條 log 要是天天出現就沒有訊號價值。"""
     username, password = make_user(role="admin")
@@ -39,6 +41,7 @@ def test_fast_request_is_not_logged(client, make_user, caplog):
     assert "SLOW REQUEST" not in caplog.text
 
 
+@needs_m01
 def test_slow_request_is_logged(client, make_user, caplog, monkeypatch):
     """超過門檻的請求要留下一行含耗時、方法、路徑的紀錄。
     用把門檻調到 0 的方式觸發，不需要真的讓請求變慢（那會拖慢整個測試套件）。"""
@@ -66,6 +69,7 @@ def test_non_api_paths_are_not_logged(client, make_user, monkeypatch, caplog):
     assert "SLOW REQUEST" not in caplog.text
 
 
+@needs_m01
 def test_write_lock_contention_is_what_this_catches(client, make_user, caplog, monkeypatch):
     """端到端釘住這條 log 真正要抓的情境：另一條連線握著寫入鎖時，建立報價單的
     請求會被拖住（db.py 的 timeout=30 上限），而且會被記下來。

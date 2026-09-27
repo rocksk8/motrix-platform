@@ -8,7 +8,9 @@
 
 判斷邏輯仍在工具裡（單一來源），這支只負責「每次都跑」與正對照。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import os
 import sys
 
@@ -17,9 +19,9 @@ import pytest
 BE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BE, "tools"))
 from check_approval_queue_coverage import check_approval_queue_coverage, is_clean  # noqa: E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
+@needs_m01
 def test_every_approval_doc_type_is_in_both_queue_endpoints():
     r = check_approval_queue_coverage()
     assert is_clean(r), (
@@ -37,11 +39,13 @@ def test_the_check_reads_the_real_doc_type_list():
     assert "quotation" in APPROVAL_DOC_TYPES
 
 
+@needs_m01
 def test_an_unmapped_doc_type_is_reported():
     r = check_approval_queue_coverage(doc_types=["quotation", "__fake_type__"])
     assert r["missing_from_map"] == ["__fake_type__"]
 
 
+@needs_m01
 def test_a_mapped_type_missing_from_both_endpoints_is_reported():
     r = check_approval_queue_coverage(doc_types=["voucher"],
                                       queue_source="def f():\n    pass\n",
@@ -49,6 +53,7 @@ def test_a_mapped_type_missing_from_both_endpoints_is_reported():
     assert r["missing_from_queue"] == ["voucher"] and r["missing_from_count"] == ["voucher"]
 
 
+@needs_m01
 def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_providers():
     """M01-PLAN §3-7：型別由 `approval.queue_items` 提供者列出 ⇒ 佇列算涵蓋；count 端點沒呼叫 `_queue_provider_items(`
     ⇒ count 仍算漏掉（提供者的項目只有經彙整才進角標）。"""
@@ -62,6 +67,7 @@ def test_a_provider_type_counts_only_when_the_count_endpoint_aggregates_provider
     assert no_agg["missing_from_queue"] == [] and no_agg["missing_from_count"] == ["voucher"]
 
 
+@needs_m01
 def test_a_type_whose_owner_module_is_absent_is_not_applicable_not_missing():
     """稽核 D AP-M1：擁有模組不在 ⇒ 「不適用」並說明原因（列車 core-only／真刪不紅）；模組在而掃不到 ⇒ 仍報漏掉（正對照）。"""
     absent = check_approval_queue_coverage(doc_types=["invoice_voucher", "quotation"], provider_sources=[],
@@ -88,6 +94,7 @@ def test_a_covered_type_is_not_reported():
     assert is_clean(r)
 
 
+@needs_m01
 @pytest.mark.parametrize("doc_type", ["quotation", "voucher", "bonus"])
 def test_known_types_are_found_in_the_real_source(doc_type):
     """對真原始碼：掃描機制讀得到兩支函式（不是回空字串 ⇒ 每一種都判成漏掉）。"""

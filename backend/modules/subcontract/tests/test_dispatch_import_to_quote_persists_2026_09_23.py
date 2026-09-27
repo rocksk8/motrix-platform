@@ -11,7 +11,7 @@
 ⚠️ 所以兩題的觀測點都打在**資料庫本身**（`data_json.items` 與 `status` 欄），
    直接讀表、不透過剛剛寫入的那支 API —— 回應正是當初會騙人的那個東西。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

@@ -7,7 +7,7 @@ P3 起案件頁讀語意 token、深色模式退出全站反轉（直接吃深�
    之後改樣式要有意識地重錄（GOLDEN_WRITE=1）
 種子資料與 golden 行為題相同（多狀態案件，每個分頁都有內容）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import os
 import pathlib

@@ -12,7 +12,7 @@
 3. **刪除要把實體檔案也清掉**。uploads/ 會被 archive.py::_mirror_uploads()
    增量同步進雲端備份而且只增不減——留下孤兒檔案等於永久佔用備份空間。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import io
 import json
 import os

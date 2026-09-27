@@ -23,11 +23,12 @@ GET  /api/approval-queue          傳票要以 type="voucher" 出現，
 無關，兩種情況都要寫」。本檔分開驗「沒有設定簽核流程」與「有設定」
 兩種情況，避免只驗其中一種、讓另一種的假綠燈漏網。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 VOUCHERS = "/api/vouchers"
 QUEUE = "/api/approval-queue"
@@ -187,6 +188,7 @@ def test_as3_approve_reports_all_done_true_on_the_final_tier(
 # ③ 通用簽核佇列：傳票要以 type="voucher" 正確出現
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_as3_the_voucher_appears_in_the_shared_approval_queue(
         client, make_user):
     """🔴🔴 **送審後的傳票要出現在 `GET /api/approval-queue`，
@@ -204,6 +206,7 @@ def test_as3_the_voucher_appears_in_the_shared_approval_queue(
         "佇列項目裡的 `requestedBy` 是 %r，應該是 %r：%r" % (item.get("requestedBy"), u, item))
 
 
+@needs_m01
 def test_as3_a_draft_voucher_does_not_appear_in_the_queue(client, make_user):
     """⚙️ **負對照：還是草稿的傳票不該出現在簽核佇列裡。**
 

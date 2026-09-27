@@ -11,7 +11,7 @@ approve 只寫 approvedAt／approvedByDisplay、**從來不寫 status**，而且
 
 兩條路都驗：額外支出本身（approval_json）與變更申請（change_approval_json）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

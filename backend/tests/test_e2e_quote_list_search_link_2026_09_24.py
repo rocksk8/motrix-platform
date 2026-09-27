@@ -3,7 +3,9 @@
 - quotations.html 的搜尋把輸入轉小寫，卻拿去比對沒轉小寫的 quote_no ⇒ 打「mq-」找不到
 - quotation-form.html 的「案件管理」連結原本是 href="case-management.html" ⇒ 點過去要自己再找一次
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import threading
 import time
@@ -15,7 +17,6 @@ pytest.importorskip("playwright.sync_api")
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ports import free_safe_port
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO = "MQ-202609-072"
 DATA = "Alpine.$data(document.querySelector('[x-data]'))"
@@ -55,6 +56,7 @@ def _seed():
         conn.close()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_quote_no_search_is_case_insensitive(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_qsearch", role="superadmin")
@@ -70,6 +72,7 @@ def test_quote_no_search_is_case_insensitive(live_server, make_user, e2e_browser
         assert QUOTE_NO in nos, (term, nos)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_case_link_carries_quote_no(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_qlink", role="superadmin")
@@ -110,6 +113,7 @@ def _seed_draft():
         conn.close()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_list_filters_survive_returning_to_list(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_qfilter", role="superadmin")
@@ -146,6 +150,7 @@ def test_tab_and_status_labels_explain_themselves(live_server, make_user, e2e_br
     hint.wait_for(state="visible", timeout=20000)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_keyboard_insert_and_move_items(live_server, make_user, e2e_browser):
     username, password = make_user(username="e2e_qkeys", role="superadmin")

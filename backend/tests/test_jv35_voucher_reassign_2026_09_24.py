@@ -22,7 +22,7 @@ POST /api/approval-queue/reassign  type="voucher"、id=傳票號碼
 轉簽之後，原簽核人按核准 ⇒ 403
 ```
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

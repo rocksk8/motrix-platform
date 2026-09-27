@@ -6,7 +6,7 @@
 
 觀測點打在資料庫落地值，不打在頁面上寫死的文字。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

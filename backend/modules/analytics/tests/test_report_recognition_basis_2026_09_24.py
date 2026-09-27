@@ -1,5 +1,7 @@
 """自 `tests/test_report_recognition_basis_2026_09_24.py` 拆出（M08 搬遷反向控制：這幾題需要營運分析模組，拿掉模組時一起消失）。"""
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pytest
 from tests.test_report_recognition_basis_2026_09_24 import (  # noqa: E402,F401  含 fixture
@@ -19,7 +21,6 @@ from tests.test_report_recognition_basis_2026_09_24 import (  # noqa: E402,F401 
 )
 
 from core import source_tree as _source_tree
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：外包工班與營運分析兩邊都把它搬進自己的 tests/，只留這一份）：
 #: 同時需要外包工班；外包工班不在時略過——那時的行為（報表明說少了派工）由 test_reports_dispatch_row_consumer 負責。
@@ -28,6 +29,7 @@ needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("module
 
 
 
+@needs_m01
 def test_accrual_income_is_pretax_by_stage_month_and_cash_income_is_received(client, sa):
     data = {"caseRecord": {"payment": {"items": [
         {"id": 1, "type": "訂金", "amount": 10500, "received": True, "receivedAt": "2026-05-02",
@@ -50,6 +52,7 @@ def test_bad_basis_is_refused(client, sa):
     assert client.get(URL + "?year=2026&basis=foo", headers=sa).status_code == 400
 
 
+@needs_m01
 @needs_subcontract
 def test_dispatch_accrual_uses_invoice_month_and_pretax(client, sa):
     _case("MQ-RB-010")
@@ -59,6 +62,7 @@ def test_dispatch_accrual_uses_invoice_month_and_pretax(client, sa):
     assert _month(body, "2026-03", "contractor") == 0
 
 
+@needs_m01
 @needs_subcontract
 def test_dispatch_without_invoice_falls_back_and_is_flagged_until_entered(client, sa):
     _case("MQ-RB-011")
@@ -84,6 +88,7 @@ def test_dispatch_without_invoice_falls_back_and_is_flagged_until_entered(client
     assert _month(body, "2026-06", "contractor") == 10000
 
 
+@needs_m01
 def test_dispatch_cash_uses_paid_voucher_with_tax(client, sa):
     _case("MQ-RB-013")
     did = _dispatch("MQ-RB-013")
@@ -101,6 +106,7 @@ def test_dispatch_cash_uses_paid_voucher_with_tax(client, sa):
     assert _month(body, "2026-03", "contractor") == 0, "現金口徑不看派工日"
 
 
+@needs_m01
 def test_material_orders_are_counted_and_flag_clears_after_invoice(client, sa):
     _case("MQ-RB-020", data={"caseRecord": {"materialOrders": [_mo()]}})
     body = _report(client, sa)
@@ -114,6 +120,7 @@ def test_material_orders_are_counted_and_flag_clears_after_invoice(client, sa):
     assert _month(body, "2026-04", "material") == 1000 and _month(body, "2026-03", "material") == 0
 
 
+@needs_m01
 def test_extra_expense_invoice_and_paid_date_flags_clear_after_entry(client, sa, seed_extra_expense):
     _case("MQ-RB-030")
     eid = seed_extra_expense("MQ-RB-030", total_cost=800, description="吊車", expense_date="2026-03-02")
@@ -141,6 +148,7 @@ def test_extra_expense_invoice_and_paid_date_flags_clear_after_entry(client, sa,
     assert _month(_report(client, sa, basis="cash"), "2026-06", "other") == 800
 
 
+@needs_m01
 def test_stage_ratio_flags_follow_what_is_entered(client, sa):
     _case("MQ-RB-040")
     a = _stage("MQ-RB-040", "施工", done=True, done_at="2026-03-01", order=0)
@@ -162,6 +170,7 @@ def test_stage_ratio_flags_follow_what_is_entered(client, sa):
     assert "MQ-RB-040" not in _flag_quotes(body, "case_incomplete")
 
 
+@needs_m01
 def test_legacy_tax_rate_case_is_flagged_until_changed(client, sa):
     _case("MQ-RB-050", data={"taxRate": 3})
     assert "MQ-RB-050" in _flag_quotes(_report(client, sa), "legacy_tax")
@@ -175,6 +184,7 @@ def test_legacy_tax_rate_case_is_flagged_until_changed(client, sa):
     assert "MQ-RB-050" not in _flag_quotes(_report(client, sa), "legacy_tax")
 
 
+@needs_m01
 @needs_subcontract
 def test_flag_amounts_are_hidden_without_financial_view(client, make_user):
     _case("MQ-RB-060")
@@ -190,6 +200,7 @@ def test_flag_amounts_are_hidden_without_financial_view(client, make_user):
     assert mine[0]["amount"] == 10000
 
 
+@needs_m01
 @needs_subcontract
 def test_every_flag_kind_has_a_label_and_a_link(client, sa):
     _case("MQ-RB-070")
@@ -201,6 +212,7 @@ def test_every_flag_kind_has_a_label_and_a_link(client, sa):
     assert it["link"] == "case-management.html?q=MQ-RB-070&tab=dispatch"   # 2026-09-24 使用者裁：開對應分頁
 
 
+@needs_m01
 @pytest.mark.parametrize("basis,label", [("accrual", "認列金額（未稅）"), ("cash", "應收金額（含稅）")])
 def test_exports_label_tax_basis_and_carry_the_note(client, sa, basis, label):
     import io
@@ -223,6 +235,7 @@ def test_exports_label_tax_basis_and_carry_the_note(client, sa, basis, label):
     assert BASIS_NOTES[basis] in html
 
 
+@needs_m01
 def test_material_invoice_date_can_be_entered_on_a_closed_case_without_touching_money(client, sa):
     _case("MQ-RB-022", deal="已結案", data={"caseRecord": {"materialOrders": [_mo()]}})
     assert client.patch("/api/quotations/MQ-RB-022/material-orders", headers=sa,
@@ -236,6 +249,7 @@ def test_material_invoice_date_can_be_entered_on_a_closed_case_without_touching_
     assert "MQ-RB-022" not in _flag_quotes(_report(client, sa), "material_no_invoice")
 
 
+@needs_m01
 @needs_subcontract
 def test_dashboard_expenses_equal_the_report_accrual_numbers(client, sa, seed_extra_expense):
     from datetime import date

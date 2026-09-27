@@ -4,14 +4,13 @@
 違規時：預設記 ERROR＋堆疊並照寫（產品會賣給客戶自架，不可以用安裝路徑猜正式機而擋住客戶存檔）；
 設了 MOTRIX_STRICT_DB_GUARDS=1 才 raise（conftest 在測試啟動時設）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-skip_module_unless("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')   # 本檔在模組層就 import M01（或 import 會略過的題檔）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import logging
 
 import pytest
 
-import modules.case.quotations as hq
+# modules.case 的 import 移進用到它的函式（稽核 D M5-M1：M01 不在時本檔仍可收集，只略過需要 M01 的題）
 from core import txn  # 寫鎖 2026-09-25 下沉 L1
 from tests.test_case_money_mask_2026_09_24 import NO, _seed
 pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
@@ -27,6 +26,7 @@ def _read(conn):
 
 
 def test_outside_any_transaction_is_refused(client, strict):
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     conn = db.get_db()
@@ -40,6 +40,7 @@ def test_outside_any_transaction_is_refused(client, strict):
 
 def test_a_transaction_opened_implicitly_by_another_write_is_refused(client, strict):
     """交易外讀 → 寫了別的表（交易被隱式開啟）→ 整包寫回：in_transaction 為 True 也不可以放行。"""
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     conn = db.get_db()
@@ -54,6 +55,7 @@ def test_a_transaction_opened_implicitly_by_another_write_is_refused(client, str
 
 
 def test_reading_before_begin_write_without_rereading_is_refused(client, strict):
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     conn = db.get_db()
@@ -67,6 +69,7 @@ def test_reading_before_begin_write_without_rereading_is_refused(client, strict)
 
 
 def test_read_under_the_write_lock_is_allowed(client):
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     conn = db.get_db()
@@ -87,6 +90,7 @@ def test_read_under_the_write_lock_is_allowed(client):
 
 def test_without_the_strict_flag_it_logs_an_error_and_still_writes(client, monkeypatch, caplog):
     """預設（未設旗標，例如客戶自架的任何安裝路徑）：記 ERROR＋堆疊，資料照寫。"""
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     monkeypatch.delenv("MOTRIX_STRICT_DB_GUARDS", raising=False)
@@ -110,6 +114,7 @@ def test_without_the_strict_flag_it_logs_an_error_and_still_writes(client, monke
 
 
 def test_with_the_strict_flag_it_raises(client, strict):
+    import modules.case.quotations as hq
     import db
     _seed(assigned=[])
     conn = db.get_db()

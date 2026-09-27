@@ -20,9 +20,10 @@
 `project_manage` 那項是「目錄有沒有這個 key」的結構問題，由
 `test_module_keys_consistency_2026_09_13.py` 守著，不在這裡測。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -166,6 +167,7 @@ def test_voucher_detail_is_not_readable_by_outsiders(client, make_user):
                       headers=_auth(tok)).status_code == 404   # M01-O1：看不到＝不存在（同一個 404）
 
 
+@needs_m01
 def test_voucher_list_hides_amounts_from_non_financial_users(client, make_user):
     """沒有財務可視權的人，清單只剩「自己要簽的那幾張」，不是整支 403。
 

@@ -5,7 +5,7 @@
 - 按「儲存」成功 ⇒ 明顯的成功提示（role=status）；自動存檔不跳提示（避免每 1.5 秒閃一次）
 觀測點：畫面上的橫幅／提示。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

@@ -4,7 +4,7 @@
 - 勾「已告知收件人」再存檔 ⇒ 伺服器記錄的是**存檔後**那一位；重新打開顯示已告知
 觀測點：伺服器的紀錄（API）與區塊上的 data-privacy-missing／data-privacy-acked。點的是真正的欄位、勾選框與儲存鈕。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import pytest
 
 pytest.importorskip("playwright.sync_api")

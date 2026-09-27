@@ -5,7 +5,7 @@ CU3 的紅色橫幅看的是 saveStatus==='error'。兩條路會在問題還在�
 - W-3：存檔失敗後只要一打字（setDirty）⇒ saveStatus 變 'dirty' ⇒ 橫幅消失，要等自動存檔再失敗才回來
 觀測點：畫面上的 [data-testid=save-banner]。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

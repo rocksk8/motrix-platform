@@ -20,7 +20,9 @@ V3.1 → V3.2）。最下面的**靜態守門**釘住「前端沒有裸的 Nvh�
 
 「標」（1.0）字級下，現有版面尺寸不變：彈窗高＝0.9×視窗高、側邊清單（詳情抽屜）高＝視窗高。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import pytest
 
 pytest.importorskip("playwright.sync_api")
@@ -29,7 +31,6 @@ from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa
 
 #: O5-S1：本檔量版面／字級（getBoundingClientRect 等）⇒ 要真字型，不吃 conftest 的字型替身
 pytestmark = pytest.mark.real_fonts
-pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]), requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')]
 
 W, H = 1366, 768
 ZOOMS = (0.85, 1.0, 1.15, 1.3)
@@ -128,6 +129,7 @@ def _menu_bottoms(page):
     return out
 
 
+@needs_m01
 @pytest.mark.e2e
 @pytest.mark.parametrize("zoom", ZOOMS, ids=["小", "標", "大", "特"])
 def test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport(live_server, make_user, zoom, e2e_browser):
@@ -152,6 +154,7 @@ def test_fz_the_queue_modal_list_and_menus_stay_inside_the_viewport(live_server,
         browser.close()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_fz_the_standard_size_layout_is_unchanged(live_server, make_user, e2e_browser):
     """對照組：「標」字級下，彈窗高＝0.9×視窗高、側邊清單（詳情抽屜）高＝視窗高（修法前後都一樣）。"""
@@ -170,6 +173,7 @@ def test_fz_the_standard_size_layout_is_unchanged(live_server, make_user, e2e_br
         browser.close()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_fz_switching_to_the_largest_size_on_the_page_also_fits(live_server, make_user, e2e_browser):
     """按字級按鈕（`motrixSetZoom`）當場切到「特」——不是重新載入——彈窗一樣要在畫面內。

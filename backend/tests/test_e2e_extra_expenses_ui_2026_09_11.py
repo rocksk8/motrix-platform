@@ -9,7 +9,7 @@
 
 需要 `playwright`（見 `test_e2e_playwright_2026_09_07.py` 檔頭說明）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from tests._e2e_login import inject_login  # noqa: E402
 from tests._ui_dialogs import answer_confirm, forbid_native_dialogs
 import json

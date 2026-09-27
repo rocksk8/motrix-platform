@@ -4,13 +4,14 @@
 範本是 D4 驗收的「測試用設備借用單」：欄位含公式與參照、兩層簽核（第二層有條件）、事件通知、輸出。
 **不改任何程式碼**：全部透過定義（資料）完成。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import copy
 import json
 from datetime import date
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 KEY = "equipment_loan"
 
@@ -454,6 +455,7 @@ def _queue(client, h):
     return [it for g in client.get("/api/approval-queue", headers=h).json()["queue"] for it in g["items"]]
 
 
+@needs_m01
 def test_custom_module_records_show_up_in_the_approval_queue(loan):
     client, h = loan
     rec = _new(client, h)
@@ -470,6 +472,7 @@ def test_custom_module_records_show_up_in_the_approval_queue(loan):
     assert client.get("/api/approval-queue/count", headers=h["mgr"]).json()["count"] == before
 
 
+@needs_m01
 def test_custom_module_queue_provider_failure_does_not_break_the_queue(loan, monkeypatch):
     """反向控制：提供者丟例外 ⇒ 佇列與角標照常 200，只少自訂模組那一類。"""
     client, h = loan

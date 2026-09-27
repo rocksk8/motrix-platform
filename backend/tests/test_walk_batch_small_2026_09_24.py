@@ -5,19 +5,21 @@
 - 4.3：待補登連結改直接開對應分頁（使用者裁）：開「那筆資料實際登錄的分頁」。
 - 7-SL：業務預設開地圖模組（使用者裁；只影響新建帳號與角色樣板）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import pytest
 
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_e2e_material_orders_2026_09_11 import _login  # noqa: F401,E402
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 RPT = "Alpine.$data(document.querySelector('[x-data]'))"
 
 
 # ── 4.3 待補登連結 ───────────────────────────────────────────────────────────
 
+@needs_m01
 @pytest.mark.parametrize("kind,tab", [
     ("dispatch_no_invoice", "dispatch"),     # 廠商發票登在承攬商分頁（setDispatchInvoiceDate）
     ("material_no_invoice", "fin"),          # 叫料在財務分頁
@@ -34,6 +36,7 @@ def test_flag_link_opens_the_tab_where_the_data_is_entered(kind, tab):
     assert it["link"] == "case-management.html?q=MQ-X-1&tab=%s" % tab
 
 
+@needs_m01
 def test_every_flag_kind_has_a_tab_decision():
     """守門：新增旗標種類時必須決定它開哪個分頁（legacy_tax 是報價單層級，刻意不帶分頁）。"""
     from modules.case.recognition import FLAG_LABELS, FLAG_TABS
@@ -41,6 +44,7 @@ def test_every_flag_kind_has_a_tab_decision():
     assert FLAG_TABS["legacy_tax"] is None
 
 
+@needs_m01
 def test_case_page_accepts_every_flag_tab_as_deep_link():
     from pathlib import Path
     import re

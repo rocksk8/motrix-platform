@@ -8,7 +8,7 @@
 標註          每一種：有狀況 ⇒ 出現；補登後 ⇒ 消失
 ```
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

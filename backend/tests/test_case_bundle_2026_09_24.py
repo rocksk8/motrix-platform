@@ -3,11 +3,12 @@
 每一段都是直接呼叫既有端點函式 ⇒ 內容與權限必須與分開打逐字相同。這裡用「分開打一次、合併打一次、
 比對」驗，不重寫預期值（預期值寫死的話，端點改了兩邊一起錯也看不出來）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-BUNDLE-001"
 PARTS = {
@@ -62,6 +63,7 @@ def _separately(client, h):
     return out
 
 
+@needs_m01
 @pytest.mark.parametrize("role,modules", [("admin", None), ("sales", None),
                                           ("engineer", ["case_manage"]), ("engineer", ["case_manage", "cashier"])])
 def test_every_part_equals_the_separate_endpoint(client, make_user, role, modules):
@@ -83,6 +85,7 @@ def test_every_part_equals_the_separate_endpoint(client, make_user, role, module
     assert set(body["parts"]) == set(PARTS)
 
 
+@needs_m01
 def test_updates_part_has_the_seeded_comment(client, make_user):
     """量尺：上面那題若每段都是空的也會綠——這裡確認真的帶到了資料。"""
     u = make_user(username="bd_probe", role="admin")

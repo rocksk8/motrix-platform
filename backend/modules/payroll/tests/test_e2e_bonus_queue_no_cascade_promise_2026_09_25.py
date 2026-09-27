@@ -5,7 +5,7 @@
 但 approve_case_bonus 不處理 cascade ⇒ 實際只簽了一層，第二層還要再簽一次。
 hichan-0a 裁：最小修——佇列對獎金分潤不預告（前端與後端行為一致），不改獎金簽核本身。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

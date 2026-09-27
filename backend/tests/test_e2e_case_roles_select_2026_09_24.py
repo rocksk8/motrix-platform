@@ -5,7 +5,9 @@
 - 已存的物件 ⇒ 選單選中那個帳號
 觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
@@ -15,7 +17,6 @@ pytest.importorskip("playwright.sync_api")
 from tests.test_e2e_case_concurrent_edit_2026_09_24 import (  # noqa: F401  (live_server 是 fixture)
     DATA_JS, _login,
 )
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-ROLESEL-001"
 SALES_SELECT = ".cm-fgrid--people select >> nth=1"
@@ -65,6 +66,7 @@ def _save(page):
     return page.evaluate(f"async () => {{ const c = {DATA_JS}; await c.saveCaseRecord(); return c.saveMsg }}")
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_picking_a_person_stores_username_and_legacy_value_is_shown(live_server, make_user, e2e_browser):
     adm = make_user(username="rs_admin", role="admin")
@@ -79,6 +81,7 @@ def test_picking_a_person_stores_username_and_legacy_value_is_shown(live_server,
     assert _roles()["sales"] == {"username": "rs_amy", "display": "rs_amy"}
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_stored_object_selects_that_account(live_server, make_user, e2e_browser):
     adm = make_user(username="rs_admin2", role="admin")

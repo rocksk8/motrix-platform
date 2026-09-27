@@ -2,7 +2,7 @@
 
 拿掉本模組 ⇒ 本檔一起消失；tests/platform 那一份只驗 L1 recognition 與 M06 傳票兩個使用方。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 from core import registry
 from core import source_tree
 from tests.platform.test_dispatch_connector import QNO, YEAR, _sa, _seed

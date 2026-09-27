@@ -7,11 +7,12 @@
    存在設定鍵 `privacy_notice_acks`；已記錄的不能被覆蓋（告知文字改版後再記一次也不變），並寫稽核。
 ③ 沒有紀錄不擋存檔。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import pytest
 
 from helpers import privacy_notice as pn
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _hdr(client, make_user, username="pn2_root", role="superadmin"):
@@ -170,6 +171,7 @@ def _insert_quote(quote_no, contact="林聯絡", site="趙現場"):
         conn.close()
 
 
+@needs_m01
 @pytest.mark.parametrize("role,kind,name", [("contact", "quote_contact", "林聯絡"), ("site", "case_site_contact", "趙現場")])
 def test_quotation_contact_ack_only_for_the_saved_contact(client, make_user, role, kind, name):
     h = _hdr(client, make_user)
@@ -213,6 +215,7 @@ def test_network_plan_contact_ack_follows_the_saved_contact(client, make_user):
     assert _audit_count("network_plan.privacy_notice_ack", plan_no) == 2
 
 
+@needs_m01
 def test_completion_note_recipient_ack(client, make_user):
     h = _hdr(client, make_user)
     _insert_quote("PN-CN-001")
@@ -227,6 +230,7 @@ def test_completion_note_recipient_ack(client, make_user):
     assert _audit_count("completion.privacy_notice_ack", no) == 1
 
 
+@needs_m01
 @pytest.mark.parametrize("role", ["contact", "site"])
 def test_quotation_privacy_endpoints_refuse_non_members(client, make_user, role):
     """稽核 D PN-S1（突變 PN8、PN9 原本存活）：不是這張案件的人，讀不到聯絡人與告知紀錄，也不能替它記一筆「已告知」。"""

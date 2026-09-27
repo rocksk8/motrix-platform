@@ -4,7 +4,7 @@
 卡片標出缺哪一種單據；「只看有新動態」對全部案件（不只已載入的第一頁）。
 觀測點：清單卡片、按鈕文字、未讀列文字。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

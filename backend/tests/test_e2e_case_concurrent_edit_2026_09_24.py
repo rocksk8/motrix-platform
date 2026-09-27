@@ -11,7 +11,7 @@ HANDOFF「🟢 CM」CM1（hichan-0a 已讀碼確認）：case-management.js 存�
 - 自己在頁面上傳附件後再改同一分頁 ⇒ 不會被自己擋下，附件保留
 觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

@@ -38,12 +38,13 @@ contractor_invoice   -> contractor_dispatches.id -> invoice_files_json  ┘同�
 `SELECT id/voucher_no FROM <表> WHERE quote_no = ?` 就涵蓋全部九類
 ⇒ **不需要新的選取介面**。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pathlib
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 QUOTE_NO = "MQ-SP1-001"
 
@@ -172,6 +173,7 @@ def _listed(seeded_ignored=None):
 # ① 四類都要看得到
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 @pytest.mark.parametrize("source_type", [
     t if t not in SAME_DOC_NO else pytest.param(t, marks=_NEEDS_M04) for t in NOT_CASE_SCOPED])
 def test_sp1_a_case_scoped_list_includes_the_four_missing_types(
@@ -227,6 +229,7 @@ def test_sp1_the_list_covers_every_declared_source_type(seeded):
 # ② 核心：兩類共用同一個 docNo
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 @_NEEDS_M04
 def test_sp1_two_types_that_share_a_doc_no_both_show_up(seeded):
     """🔴🔴 **同一個 `docNo` 的兩類要**各自出現**，不是併成一列。**
@@ -270,6 +273,7 @@ def test_sp1_two_types_that_share_a_doc_no_both_show_up(seeded):
           "   **筆數對而內容是另一種單據的附件**（`§193` 的同族）。")
 
 
+@needs_m01
 @_NEEDS_M04
 def test_sp1_deduping_by_doc_no_alone_would_lose_one(seeded):
     """⚙️ **反向控制：證明「只用 `docNo` 去重」真的會少一組。**

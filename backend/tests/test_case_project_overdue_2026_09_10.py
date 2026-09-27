@@ -7,7 +7,7 @@
      一個超期兩年的案件自己就會累積約 104 列 system_settings。這個專案已經
      為同一種模式付過代價（module_versions 曾長到 626,725 列 / 270MB）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import date, timedelta
 

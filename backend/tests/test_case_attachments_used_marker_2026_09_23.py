@@ -38,7 +38,7 @@ out.append({
 （`{"picks": [...]}`）——那是唯一真的會產生 `source_*` 三元組的路徑，
 自己塞的話等於在驗證我自己造的資料格式對不對，不是驗證真實流程。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import pathlib
 

@@ -6,7 +6,7 @@
 - 階段條可鍵盤操作：每一段可 Tab 到、Enter／空白鍵展開，並有可讀的標籤
 觀測點：計算後的顏色、畫面文字、展開狀態。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

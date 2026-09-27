@@ -5,11 +5,12 @@ closing-report-pdf（結案報表：成本、毛利、收款）與 pdf-download?
 或 cashier 模組）或本單簽核人（使用者：「簽核人可以」）。對外版 pdf-download 不在範圍內。
 斷言只看「是不是被權限擋下（403）」——PDF 產生本身在測試環境可能因字型等原因回 5xx，與權限無關。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 NO = "MQ-PDFG-001"
 
@@ -53,6 +54,7 @@ INTERNAL = f"/api/quotations/{NO}/pdf-download?internal=true"
 EXTERNAL = f"/api/quotations/{NO}/pdf-download"
 
 
+@needs_m01
 @pytest.mark.parametrize("url", [CLOSING, INTERNAL])
 def test_member_without_money_view_is_403(client, make_user, url):
     u = make_user(username="pg_eng", role="engineer")

@@ -4,7 +4,7 @@
 上方摘要數字是全部案件（不是已載入的那一頁）；深連結 ?q= 指向第一頁以外的案件也打得開。
 觀測點：清單卡片數、摘要數字、selected。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

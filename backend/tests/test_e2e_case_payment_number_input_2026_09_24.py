@@ -4,7 +4,7 @@
 實收金額／手續費是 x-model.number：同樣貼不進千分位。改成文字框，規則與報價單 parseNumInput() 相同；
 無法辨識 ⇒ 標紅、數值不更新、不存檔。觀測點打在資料庫落地值。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import time
 

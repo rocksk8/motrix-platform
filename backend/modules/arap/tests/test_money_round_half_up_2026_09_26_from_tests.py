@@ -12,7 +12,9 @@
 證明題目本身沒有把「正常的金額」也算錯）。守門：tests/platform/test_legal_amount_rounding_guard.py。
 前端題用 node 載入頁面（或 case-management-*.js 分檔）的元件，直接呼叫方法；沒有 node ⇒ skip。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 import pathlib
 import shutil
@@ -20,7 +22,6 @@ import subprocess
 from datetime import datetime
 
 import pytest
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 FRONTEND = ROOT / "frontend"
@@ -75,6 +76,7 @@ def _voucher(client, h, body):
 _ITEMS = [{"id": 1, "type": "item", "description": "設備", "qty": 10, "unitPrice": 1000, "amount": 10000}]
 
 
+@needs_m01
 def test_invoice_by_amount_converts_to_pretax_half_up(client, make_user):
     """應稅報價 未稅 10,004／含稅 10,504（稅 500.2⇒500）：申請 1,313 ⇒ 未稅 1,313×10,004／10,504＝1,250.5
     ⇒ 1,251（舊：1,250）⇒ 稅額 round_half_up(62.55)＝63、含稅 1,314（舊：1,250／63／1,313）。L336"""
@@ -85,6 +87,7 @@ def test_invoice_by_amount_converts_to_pretax_half_up(client, make_user):
     assert _voucher(client, h, {"quote_no": "MQ-VAT-A1", "scope": "amount", "amount": 1050}) == (1000, 50, 1050)
 
 
+@needs_m01
 def test_invoice_by_items_on_a_legacy_quote_grosses_up_half_up(client, make_user):
     """舊 3% 報價（未稅 10,000／含稅 10,300）依品項：未稅 150 ⇒ 含稅 154.5 ⇒ 155（舊：154）。L369"""
     h = _hdr(client, make_user)
@@ -95,6 +98,7 @@ def test_invoice_by_items_on_a_legacy_quote_grosses_up_half_up(client, make_user
                                 "items": [{"itemId": 1, "qty": 1, "amount": 100}]}) == (100, 3, 103)   # 正對照
 
 
+@needs_m01
 def test_invoice_snapshot_pretax_and_tax_round_half_up(client, make_user):
     """舊 3% 報價依品項 未稅 82.5：含稅 round_half_up(84.975)＝85；快照未稅 82.5⇒83（舊：82）、
     稅額 85−82.5＝2.5⇒3（舊：2）。L406、L407"""
@@ -148,6 +152,7 @@ def _pr_body(scope, **kw):
     return dict({"scope": scope, "stage": "deposit"}, **kw)
 
 
+@needs_m01
 def test_payment_request_snapshot_rounds_half_up_on_create_and_update(client, make_user):
     """快照的未稅／稅額（L428／L429 建立、L531／L532 更新）。
     - 依金額 34.5（含稅 3,200／未稅 3,000）：未稅 round_half_up(32.34375)＝32、稅額 2.5 ⇒ 3（舊：2）

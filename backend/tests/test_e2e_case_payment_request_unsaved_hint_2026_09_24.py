@@ -3,7 +3,7 @@
 原本 HTML 內嵌 alert('款項明細有未儲存的修改…')；改成 MotrixUI.toast(…, {kind:'error'})，
 其餘行為不變（不跳頁）。觀測點：沒有瀏覽器原生對話框、畫面上出現提示、網址沒變。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 import threading
 import time

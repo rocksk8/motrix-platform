@@ -12,7 +12,7 @@
 前端那一處已修（不再造假號），但「後端才是單號的權威」要在這裡守住——
 不管哪個 client、哪個版本送什麼過來，格式不對就由後端自己派號。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 
 import pytest

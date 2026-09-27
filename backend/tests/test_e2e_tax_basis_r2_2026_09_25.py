@@ -4,7 +4,7 @@
 - 報價頁：選零稅率 ⇒ 出現依據下拉與說明；沒選依據就送審 ⇒ 擋下並說明；選了依據 ⇒ 送審成功、依據存進報價。
 - 案件頁「申請開立發票」：免稅舊報價沒有依據 ⇒ 對話框要求補填；沒填 ⇒ 擋下；填了 ⇒ 開票申請快照帶依據。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
 

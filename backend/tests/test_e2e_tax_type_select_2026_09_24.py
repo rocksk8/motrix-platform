@@ -3,7 +3,9 @@
 
 使用者（2026-09-24）逐字：「算了會計稅率1~4%取消，直接依法規進行，用現金折讓就好」。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import datetime
 
@@ -12,7 +14,6 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests.test_voucher_preview_export_feedback_2026_09_23 import _login  # noqa: E402,F401
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _ready(page):
@@ -72,6 +73,7 @@ def test_a_new_quote_offers_only_the_three_legal_tax_types(live_server, make_use
     assert page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).tot.tax") == 50
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_an_old_legacy_rate_quote_is_shown_as_disabled_and_must_be_changed_before_saving(
         live_server, make_user, e2e_browser):

@@ -11,7 +11,7 @@ R2 零稅率、免稅必填依據（營業稅法 §7、§8；CUSTOMIZATION-SPEC 
 ④ 開票申請：零稅率／免稅報價要有依據——報價上有就帶入快照；沒有（舊單）就要申請時補填，否則 400。
 ⑤ 舊資料：沒有依據的舊開票申請照常讀得到（taxBasis=None）。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
 import json
 from datetime import datetime
 

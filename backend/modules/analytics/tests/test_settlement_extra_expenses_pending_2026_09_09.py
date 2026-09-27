@@ -10,10 +10,11 @@
 dashboard.py 還在用精算完結時間），現在統一走
 `helpers.settlement_extra_expenses()`，這裡一併把兩邊釘在一起測。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
 from datetime import date
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 
@@ -74,6 +75,7 @@ def _month_other_total(client, token, year, month):
     return row["other"], body["expenses"]["details"]["other"]
 
 
+@needs_m01
 def test_draft_settlement_extra_counts_toward_monthly_expenses(client, make_user):
     """精算還是草稿，只要額外支出填了憑證日期在當月，就要算進當月「其他支出」。"""
     username, password = make_user(role="superadmin")
@@ -98,6 +100,7 @@ def test_draft_settlement_extra_counts_toward_monthly_expenses(client, make_user
     assert "AB12345678" in row["desc"], "單號要帶進明細，會計才對得回實體憑證"
 
 
+@needs_m01
 def test_finalized_settlement_extra_still_counts_and_not_pending(client, make_user):
     """已完結的照舊要算，且 pending=False（既有行為不可回歸）。"""
     username, password = make_user(role="superadmin")
@@ -117,6 +120,7 @@ def test_finalized_settlement_extra_still_counts_and_not_pending(client, make_us
     assert row["pending"] is False
 
 
+@needs_m01
 def test_draft_extra_without_expense_date_falls_back_to_save_time(client, make_user):
     """草稿、沒填憑證日期：退回「最後一次精算存檔時間」歸月——對應使用者說的
     「當月有填寫就要彙整進去」。三種日期都沒有才會被略過（無從判斷月份）。"""
@@ -149,6 +153,7 @@ def test_extra_with_no_date_at_all_is_skipped(client, make_user):
     assert not any("來源不明" in d["desc"] for d in details)
 
 
+@needs_m01
 def test_dashboard_monthly_matches_reports_for_draft_extra(client, make_user):
     """首頁支出趨勢（/api/dashboard/expenses-monthly）跟營運報表月支出，對同一筆
     草稿額外支出要算出同一個數字
@@ -175,6 +180,7 @@ def test_dashboard_monthly_matches_reports_for_draft_extra(client, make_user):
         f"首頁與營運報表的當月其他支出必須一致：dashboard={dash_row['other']} reports={reports_total}"
 
 
+@needs_m01
 def test_unapproved_extra_counts_but_is_flagged_pending(client, make_user, seed_extra_expense):
     """送審中的額外支出**照樣算進當月支出**，但要標 pending（2026-09-11 使用者指定的規則）。
 

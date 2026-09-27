@@ -28,7 +28,9 @@ A 在派工訊息裡寫「`QL5`–`QL15` 是硬條件（使用者原話**「把�
 📌 那是 `reminder_stage()` 付過的學費：**我釘的接縫寫得好好的、
 題目全綠，而產品碼零呼叫者。**
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import re
 import sys
 from pathlib import Path
@@ -42,7 +44,6 @@ from test_quote_location_2026_09_22 import (  # noqa: E402,F401
     BRANCH, PRIMARY, _need, _set_locations, _superadmin, blank_profile,
     identity,
 )
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _frontend(*parts):
@@ -158,6 +159,7 @@ def test_ql9_the_payment_request_bank_fields_come_from_its_location(identity):
 # QL10 · 讀即時值，而代價要變成可追查
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_ql10_printing_records_which_location_and_which_values(
         client, make_user):
     """🔴🔴 QL10：**讀即時值不做快照**，而**稽核要記「這次用了哪一組值」**。
@@ -208,6 +210,7 @@ def test_ql10_printing_records_which_location_and_which_values(
 # QL11 / QL12 · 被引用的據點不可以刪，而改名不算刪
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_ql11_a_referenced_location_cannot_be_removed(client, make_user):
     """🔴🔴 QL11：**被引用的據點刪除要被擋下來**，訊息要帶數字。
 
@@ -252,6 +255,7 @@ def test_ql12_an_unreferenced_location_can_be_removed(client, make_user):
         f"沒有任何單據引用分公司，而它刪不掉（{r.status_code}）：{r.text[:200]}")
 
 
+@needs_m01
 def test_ql12_renaming_a_location_is_not_a_deletion(client, make_user):
     """🔴🔴 QL12（A 2026-09-22 補的邊界）：**改名不算刪除。**
 

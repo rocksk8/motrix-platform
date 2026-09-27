@@ -10,9 +10,10 @@ commit（`2b8e7ad`）拉回開發機，沒有補上專屬測試檔——`backend
 
 各端點對應的實際程式碼位置與 docstring 見 `backend/modules/case/api/quotations.py` 2042-2316 行。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _login(client, username, password):
@@ -61,6 +62,7 @@ def _stage_api(quote_no):
     return f"/api/quotations/{quote_no}/stages"
 
 
+@needs_m01
 def test_create_list_and_default_fields(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -86,6 +88,7 @@ def test_create_list_and_default_fields(client, make_user):
     assert [s["sortOrder"] for s in items] == [0, 1]
 
 
+@needs_m01
 def test_update_stage_partial_fields_and_404(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -112,6 +115,7 @@ def test_update_stage_partial_fields_and_404(client, make_user):
     assert r3.status_code == 404, r3.text
 
 
+@needs_m01
 def test_delete_stage_cleans_up_dependents(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -135,6 +139,7 @@ def test_delete_stage_cleans_up_dependents(client, make_user):
     assert r3.status_code == 404, r3.text
 
 
+@needs_m01
 def test_reorder_ignores_unknown_ids(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -151,6 +156,7 @@ def test_reorder_ignores_unknown_ids(client, make_user):
     assert [s["label"] for s in items] == ["C", "A", "B"]
 
 
+@needs_m01
 def test_assignees_add_remove_and_idempotent(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -183,6 +189,7 @@ def test_assignees_add_remove_and_idempotent(client, make_user):
     assert r6.status_code == 400, r6.text  # 缺 username
 
 
+@needs_m01
 def test_depends_on_toggle_candidate_missing_and_cycle_prevention(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -206,6 +213,7 @@ def test_depends_on_toggle_candidate_missing_and_cycle_prevention(client, make_u
     assert r4.json()["dependsOn"] == []  # 再次呼叫是 toggle，移除依賴
 
 
+@needs_m01
 def test_visits_crud_and_scoped_404(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -240,6 +248,7 @@ def test_visits_crud_and_scoped_404(client, make_user):
     assert client.get(_stage_api("MQ-STG-001"), headers=_auth(token)).json()["items"][0]["visits"] == []
 
 
+@needs_m01
 def test_stage_scoped_to_quote_no_prevents_cross_case_access(client, make_user):
     """`_get_stage_row()` 用 (id, quote_no) 一起查，避免猜 id 就能跨案件竄改別的
     報價單階段——建立兩張案件，用案件 B 的 quote_no 去操作案件 A 的 stage id 應該 404。"""
@@ -255,6 +264,7 @@ def test_stage_scoped_to_quote_no_prevents_cross_case_access(client, make_user):
     assert r2.status_code == 404, r2.text
 
 
+@needs_m01
 def test_sync_to_json_bridge_reflects_mutations(client, make_user):
     """驗證 Phase 3a 的 `_sync_stages_to_json()` 橋樑：透過 granular 端點的變更，
     立刻反映在 `GET /api/quotations/{no}` 回傳的 `data.caseRecord.stages`（
@@ -284,6 +294,7 @@ def test_stage_endpoints_require_auth(client):
     assert r2.status_code in (401, 403), r2.text
 
 
+@needs_m01
 def test_closed_case_blocks_stage_mutations(client, make_user):
     """`_deny_if_case_locked_unsupported()` 對這批端點一律 403，跟是否半解鎖無關
     ——`test_case_semi_unlock.py` 只驗證過新增（POST）這一支，這裡補齊更新／刪除／

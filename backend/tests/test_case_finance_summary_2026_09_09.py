@@ -9,9 +9,10 @@ GET /api/quotations/{quote_no}/finance-summary 把原本散在四個地方、從
 應收、或精算額外支出被算進應付，都會讓同一筆錢被重複計算，是這個功能最容易
 出錯的地方。
 """
-from tests._requires import requires_module, skip_module_unless  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
+#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
-pytestmark = requires_module("case", '本檔的題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _sync_extra_to_table(conn, quote_no):
@@ -96,6 +97,7 @@ def _make_voucher(client, token, quote_no, voucher_no, amount, status="已核准
         conn.close()
 
 
+@needs_m01
 def test_receivable_totals_match_payment_items(client, make_user):
     """應收/已收/未收/手續費/實收淨額，語意要跟前端 case-management.js 的
     receivedTotal()/feeTotal()/netReceivedTotal()/outstandingTotal() 一致。"""
@@ -126,6 +128,7 @@ def test_receivable_totals_match_payment_items(client, make_user):
     assert recv["items"][2]["received"] is False
 
 
+@needs_m01
 def test_related_documents_listed_but_not_summed_into_receivable(client, make_user):
     """開票申請／請款單只是唯讀清單：它們跟收款排程的期別不是一對一對應，
     併進應收會讓同一筆錢被算兩次。"""
@@ -167,6 +170,7 @@ def test_related_documents_listed_but_not_summed_into_receivable(client, make_us
     assert docs["paymentRequests"][0]["stage"] == "全額"
 
 
+@needs_m01
 def test_empty_case_returns_zeros_not_error(client, make_user):
     """完全沒有款項/派發/單據的新案件不該報錯，全部回 0 就好。"""
     username, password = make_user(role="superadmin")
