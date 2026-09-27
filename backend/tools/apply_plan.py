@@ -2,7 +2,8 @@
 """apply_update.ps1 的「刪除／新增」計畫：platform 安裝套 platform 包的日常更新（UPGRADE-RUNBOOK §8）。
 
 [單位] tool:apply_plan    [層] 部署工具（正式機由 apply_update.ps1 呼叫，跑的是**新包裡**這一份）
-[公開介面] package_files, deletable, make_plan, execute, cleanup_added, verify_snapshot, write_baseline
+[公開介面] package_files, deletable, make_plan, execute, cleanup_added, not_in_snapshot, cleanup_not_in_snapshot,
+    verify_snapshot, write_baseline
 [不變式] 只刪程式目錄（backend 程式、frontend、tools、product）裡 classify==program 的檔；資料／DB／設定／
     uploads／PDF 一律不碰；刪除上限超過 ⇒ 不動任何檔（exit 3）；每一個要刪的檔在快照裡都要找得到
 [契約題] tests/platform/test_apply_plan_2026_09_28.py
@@ -24,6 +25,9 @@
   execute         --root R --pkg P --plan plan.json
   cleanup-added   --root R --pkg P --plan plan.json        （自動回滾：刪掉這次新增的程式檔）
   baseline        --root R --plan plan.json                 （成功後寫 backend/.deployed_files.json）
+  cleanup-snapshot --root R --pkg P --snapshot S [--dry-run] [--max N]
+                  （回滾：安裝目錄有、快照沒有的程式檔一律刪——D 稽核 DM2：回滾到較舊的快照時，
+                   之後幾次套用新增的模組只靠「那一次的 added」刪不乾淨；快照裡沒有的頂層目錄整個略過）
 """
 import argparse
 import json
@@ -37,7 +41,10 @@ from datetime import datetime
 PROGRAM_SCOPES = ("backend/", "frontend/", "tools/", "product/")
 #: 部署工具自己的狀態檔：不列進包清單、不刪
 BASELINE_REL = "backend/.deployed_files.json"
-STATE_FILES = (BASELINE_REL,)
+#: .apply.lock（UPDATE-DELIVERY §9.2；D 稽核 DO1）：套用中一定存在，不可被列進候選、被快照寫回或被刪
+STATE_FILES = (BASELINE_REL, "backend/.apply.lock")
+#: 執行期狀態檔（檔名結尾）：停用清單快取 `<主庫>.modules_disabled.json`（core.paths.modules_disabled_cache）
+STATE_SUFFIXES = (".modules_disabled.json",)
 LOCK_REL = "backend/modules.lock.json"
 _KEY_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -70,7 +77,7 @@ def _in_scope(rel):
 
 def deletable(rel, u):
     """只有程式目錄裡、分類為 program、不是設定預設檔、不是工具狀態檔的才准刪。"""
-    return (_in_scope(rel) and rel not in STATE_FILES
+    return (_in_scope(rel) and rel not in STATE_FILES and not rel.endswith(STATE_SUFFIXES)
             and rel not in u.PACKAGE_DEFAULT_CONFIG and u.classify(rel) == "program")
 
 
@@ -272,6 +279,30 @@ def cleanup_added(root, pkg, plan):
     return removed, errors
 
 
+def not_in_snapshot(root, snapshot, u):
+    """安裝目錄有、快照沒有的可刪程式檔（排序）。快照裡沒有的頂層程式目錄（舊快照沒有 tools／product）整個略過。"""
+    out = []
+    for top in PROGRAM_SCOPES:
+        top = top.rstrip("/")
+        if not os.path.isdir(os.path.join(snapshot, top)) or not os.path.isdir(os.path.join(root, top)):
+            continue
+        for rel in _files_under(root, top, u):
+            if deletable(rel, u) and not os.path.isfile(os.path.join(snapshot, rel)):
+                out.append(rel)
+    return sorted(out)
+
+
+def cleanup_not_in_snapshot(root, pkg, snapshot, max_files=500, dry_run=False):
+    """回 (清單, removed, errors, over_limit)。超過上限或 dry_run ⇒ 不刪。"""
+    u = load_classifier(pkg)
+    rels = not_in_snapshot(root, snapshot, u)
+    if dry_run or len(rels) > max_files:
+        return rels, [], [], len(rels) > max_files
+    removed, errors = _remove_listed(root, rels, u)
+    _prune(root, {r.rsplit("/", 1)[0] for r in removed}, _STOP_AT)
+    return rels, removed, errors, False
+
+
 def verify_snapshot(plan, snapshot):
     """每一個要刪的檔在快照裡都要有（回滾靠它還原）。回缺的清單。"""
     return [d["rel"] for d in plan["delete"] if not os.path.isfile(os.path.join(snapshot, d["rel"]))]
@@ -294,7 +325,8 @@ def main(argv=None):
     except Exception:
         pass
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=("plan", "verify-snapshot", "execute", "cleanup-added", "baseline"))
+    ap.add_argument("cmd", choices=("plan", "verify-snapshot", "execute", "cleanup-added", "baseline",
+                                    "cleanup-snapshot"))
     ap.add_argument("--root")
     ap.add_argument("--pkg")
     ap.add_argument("--out")
@@ -302,8 +334,23 @@ def main(argv=None):
     ap.add_argument("--snapshot")
     ap.add_argument("--log")
     ap.add_argument("--max", type=int, default=200)
+    ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(argv)
     try:
+        if a.cmd == "cleanup-snapshot":
+            limit = a.max if a.max != 200 else 500
+            rels, removed, errors, over = cleanup_not_in_snapshot(a.root, a.pkg, a.snapshot, limit, a.dry_run)
+            for r in (removed if not (a.dry_run or over) else rels):
+                print("  %s %s" % ("removed" if not (a.dry_run or over) else "would-remove", r))
+            for e in errors:
+                print("  ERROR %s" % e)
+            if over:
+                print("APPLY_SNAPCLEAN_OVER_LIMIT %d > %d" % (len(rels), limit))
+                return 3
+            if errors:
+                return 2
+            print("APPLY_SNAPCLEAN_%s %d" % ("PLAN" if a.dry_run else "OK", len(rels) if a.dry_run else len(removed)))
+            return 0
         if a.cmd == "plan":
             plan = make_plan(a.root, a.pkg, a.max)
             with open(a.out, "w", encoding="utf-8") as f:

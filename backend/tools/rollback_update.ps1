@@ -18,7 +18,12 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$SnapshotTimestamp,
 
-    [switch]$Yes
+    [switch]$Yes,
+
+    # 2026-09-28 使用者裁示（D 稽核 DM1）：預設「只回程式、資料庫保留」。要連資料庫一起換回快照，
+    # 須同時給 -IncludeDatabase 與 -ConfirmDatabaseOverwrite（-Yes 不算數）；覆寫前一律先另存回滾前的資料庫。
+    [switch]$IncludeDatabase,
+    [switch]$ConfirmDatabaseOverwrite
 )
 
 $ErrorActionPreference = "Stop"
@@ -192,6 +197,25 @@ function Write-ResultFile($resStatus, $resCode) {
         Write-Host "[WARN] 結果檔寫入失敗：$($_.Exception.Message)"
     }
 }
+function Backup-DatabasesOnline([string]$destDir) {
+    # D 稽核 DM1：覆寫資料庫之前，把主庫與 demo 庫以 SQLite Online Backup 另存到 $destDir；任一個存在的庫失敗 ⇒ $false
+    try {
+        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        $py = Join-Path $env:TEMP ("motrix_pre_rollback_{0}.py" -f $script:RunStamp)
+        $code = "import os, sqlite3, sys`nfor s, d in zip(sys.argv[1::2], sys.argv[2::2]):`n    if not os.path.exists(s):`n        continue`n    a = sqlite3.connect(s)`n    b = sqlite3.connect(d)`n    try:`n        a.backup(b)`n    finally:`n        b.close()`n        a.close()`nprint('DB_BACKUP_OK')`n"
+        [System.IO.File]::WriteAllText($py, $code, (New-Object System.Text.UTF8Encoding($false)))
+        $pyArgs = @($py)
+        foreach ($n in @("motrix_erp.db", "motrix_erp_demo.db")) { $pyArgs += (Join-Path $BackendDir $n); $pyArgs += (Join-Path $destDir $n) }
+        $r = Invoke-Py $pyArgs
+        Remove-Item $py -Force -ErrorAction SilentlyContinue
+        if ($r.Exit -ne 0 -or $r.Text -notmatch "DB_BACKUP_OK") { Warn "  回滾前資料庫另存失敗：$($r.Text)"; return $false }
+        Ok "  回滾前的資料庫已另存：$destDir"
+        return $true
+    } catch {
+        Warn "  回滾前資料庫另存失敗：$($_.Exception.Message)"
+        return $false
+    }
+}
 # ── 逐字相同的區段到此為止 ──
 
 # ── 以下三個函式與 apply_update.ps1 **逐字相同**（2026-09-28）──────────────────
@@ -302,6 +326,10 @@ function Start-InstallService {
 trap {
     Write-Host "`n[FAIL] 未預期的錯誤：$($_.Exception.Message)" -ForegroundColor Red
     Write-Host ($_.ScriptStackTrace | Out-String)
+    # D 稽核 DS1：是我們停掉服務、而磁碟不在還原到一半的狀態（沒動或新版已完整）⇒ 試著把服務拉回來；restoring 不動
+    if ($script:ServiceState -eq "down" -and @("not_applied", "applied") -contains $script:ProdState) {
+        try { Start-InstallService } catch { Write-Host "[WARN] 重新啟動服務失敗：$($_.Exception.Message)" }
+    }
     Emit-Result "rollback_unhandled_exception" 1
     exit 1
 }
@@ -342,24 +370,33 @@ $baselinePath = Join-Path $BackendDir ".deployed_files.json"
 if (-not (Test-Path $rollbackDir)) {
     Fail "找不到程式碼快照：$rollbackDir" "rollback_snapshot_missing"
 }
-if (-not (Test-Path $dbBackupPath)) {
+if ($IncludeDatabase -and -not (Test-Path $dbBackupPath)) {
     Fail "找不到 db 快照：$dbBackupPath" "rollback_db_snapshot_missing"
 }
-$hasPlan = Test-Path $planPath
-if ($hasPlan -and -not (Test-Path $planTool)) {
-    Fail "快照裡有 apply_plan.json，但這台機器沒有 $planTool，無法刪掉那次新增的程式檔，未做任何回滾動作。" "rollback_plan_tool_missing"
+if (-not (Test-Path $planTool)) {
+    Fail "這台機器沒有 $planTool，無法算出「安裝目錄有、快照沒有」的程式檔，未做任何回滾動作。" "rollback_plan_tool_missing"
 }
+# D 稽核 DM2：以快照為準——安裝目錄有、快照沒有的程式檔一律刪（回滾到較舊的快照時，之後幾次套用新增的模組也要清掉）。
+# 先乾跑算清單；超過上限就什麼都不動。--pkg 指安裝目錄：分類用**現在裝著的** core.upgrade。
+$cleanPlan = Invoke-Py @($planTool, "cleanup-snapshot", "--root", $ProdRoot, "--pkg", $ProdRoot, "--snapshot", $rollbackDir, "--dry-run")
+Write-Host $cleanPlan.Text
+if ($cleanPlan.Exit -eq 3) { Fail "快照裡沒有的程式檔超過上限（清單見上方）：請人工確認是不是選錯快照，未做任何回滾動作。" "rollback_cleanup_too_large" }
+if ($cleanPlan.Exit -ne 0 -or ($cleanPlan.Text -notmatch "APPLY_SNAPCLEAN_PLAN")) { Fail "無法算出要清掉的程式檔（見上方），未做任何回滾動作。" "rollback_cleanup_plan_failed" }
 Info "[1/2] 快照驗證通過："
 Info "  程式碼快照：$rollbackDir"
-Info "  db 快照：$dbBackupPath"
-if (Test-Path $demoDbBackupPath) { Info "  demo 庫快照：$demoDbBackupPath" }
-if ($hasPlan) {
-    $planObj = Get-Content $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    Info "  那次套用新增的程式檔：$(@($planObj.added).Count) 個（回滾時刪除；清單在 $planPath）"
+if ($IncludeDatabase) {
+    Info "  模式：程式＋資料庫（資料庫換回 $dbBackupPath；覆寫前先另存回滾前的資料庫）"
+    if (Test-Path $demoDbBackupPath) { Info "  demo 庫快照：$demoDbBackupPath" }
 } else {
-    Warn "  快照裡沒有 apply_plan.json（2026-09-28 之前的 apply_update 建的快照）：那次套用新增的程式檔不會被刪除，回滾後請人工核對 backend\modules 與 frontend\pages。"
+    Info "  模式：只回程式，資料庫保留（預設）"
 }
 
+if ($IncludeDatabase -and -not $ConfirmDatabaseOverwrite) {
+    if ($Yes) { Fail "要連資料庫一起回滾，必須另外加 -ConfirmDatabaseOverwrite（-Yes 不算數），未做任何回滾動作。" "rollback_db_not_confirmed" }
+    Write-Host ""
+    $dbAnswer = Read-Host "資料庫會換回 $SnapshotTimestamp 的快照，套用後寫入的資料會不見（回滾前的資料庫會另存）。確定請輸入 DB"
+    if ($dbAnswer -ne "DB") { Fail "使用者取消（沒有輸入 DB），未做任何回滾動作。" "rollback_db_user_cancelled" }
+}
 if (-not $Yes) {
     Write-Host ""
     $answer = Read-Host "確認要把正式機回滾到 $SnapshotTimestamp 這個快照嗎？(y/N)"
@@ -377,36 +414,40 @@ Info "`n[2/2] 開始回滾..."
 # 從停服那一刻起，`service=down`、磁碟即將被覆寫。
 # ☠️ 之後才設的話，還原到一半失敗會報出一個**比實際安全**的狀態。
 $script:ServiceState = "down"
-# 🔴 **危險值在動作之前設**。
-# ⚠️ 這裡是 `restoring` 不是 `applied_no_restore`：後者的語意含
-#    「**沒有還原**」，而這支腳本正在還原 —— 方向相反。
-$script:ProdState = "restoring"
 
 # 先停服務再動檔案（含 db）——避免正在跑的伺服器跟覆寫的檔案打架。
 # 2026-09-28：連 autostart 迴圈一起停（先前只停聽 port 的行程，迴圈 5 秒後用還原到一半的程式碼把它拉起來）。
 $null = Stop-InstallService
 Start-Sleep -Seconds 2
 
-# 先刪那次套用新增的程式檔（被那次套用刪掉的舊檔由下面寫回快照還原）。
-# --pkg 指安裝目錄：分類要用**現在裝著的** core.upgrade（＝那次套用的新版，也是寫這份計畫的那一版）。
-$cleanFailed = $false
-if ($hasPlan) {
-    $cleanRun = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $ProdRoot, "--plan", $planPath)
-    Write-Host $cleanRun.Text
-    $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_CLEANUP_OK"))
+# D 稽核 DM1：要覆寫資料庫 ⇒ 先另存回滾前的主庫與 demo 庫（停服之後做，內容才完整）；失敗 ⇒ 什麼都不動、把服務拉回來
+if ($IncludeDatabase) {
+    if (-not (Backup-DatabasesOnline (Join-Path $BackendDir "db_backups\pre_rollback_$($script:RunStamp)"))) {
+        Start-InstallService
+        Fail "回滾前的資料庫另存失敗：沒有動任何檔案，服務已重新啟動。" "rollback_db_backup_failed"
+    }
 }
+
+# 🔴 **危險值在動作之前設**。
+# ⚠️ 這裡是 `restoring` 不是 `applied_no_restore`：後者的語意含
+#    「**沒有還原**」，而這支腳本正在還原 —— 方向相反。
+$script:ProdState = "restoring"
+
+$cleanRun = Invoke-Py @($planTool, "cleanup-snapshot", "--root", $ProdRoot, "--pkg", $ProdRoot, "--snapshot", $rollbackDir)
+Write-Host $cleanRun.Text
+$cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_SNAPCLEAN_OK"))
 
 # 🔴 還原寫回要檢查結束碼（`RP3`）—— 與 `apply_update.ps1` 的自動回滾同一件事。
 # ☠️ 失敗不中止 ⇒ 流進下面的健康檢查 ⇒ 碰巧過了就報「已還原」，
 #    **而磁碟上是還原到一半的殘骸。**
-robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 | Out-Null
+robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_backend" }
-robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 | Out-Null
+robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_frontend" }
 foreach ($d in $RootProgramDirs) {
     $snap = Join-Path $rollbackDir $d
     if (-not (Test-Path $snap)) { continue }
-    robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 | Out-Null
+    robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 /XD certs /XF license.key autostart.bat .apply.lock heartbeat_config.json .deployed_commit.json | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_root_dirs" }
 }
 # 程式檔清單（.deployed_files.json）要跟著程式回到快照那一版：快照裡有 ⇒ 上面已寫回；
@@ -424,17 +465,21 @@ if (Test-Path $rootDocDir) {
     Ok "  根目錄文件已還原。"
 }
 
-Copy-Item $dbBackupPath $dbPath -Force
-# 還原乾淨的主檔案後，殘留的 -wal/-shm（來自回滾前那個版本寫入）內容已經跟它
-# 對不上，必須一併清掉，否則下次連線時 SQLite 可能把過期的 WAL 內容重新套用
-# 回來，等於沒回滾乾淨。
-Remove-Item "$dbPath-wal", "$dbPath-shm" -Force -ErrorAction SilentlyContinue
-Ok "  資料庫已還原：$dbBackupPath"
-# demo 庫同一套（2026-09-28）：新版啟動時也對它跑了 init_db。
-if (Test-Path $demoDbBackupPath) {
-    Copy-Item $demoDbBackupPath $demoDbPath -Force
-    Remove-Item "$demoDbPath-wal", "$demoDbPath-shm" -Force -ErrorAction SilentlyContinue
-    Ok "  demo 庫已還原：$demoDbBackupPath"
+if ($IncludeDatabase) {
+    Copy-Item $dbBackupPath $dbPath -Force
+    # 還原乾淨的主檔案後，殘留的 -wal/-shm（來自回滾前那個版本寫入）內容已經跟它
+    # 對不上，必須一併清掉，否則下次連線時 SQLite 可能把過期的 WAL 內容重新套用
+    # 回來，等於沒回滾乾淨。
+    Remove-Item "$dbPath-wal", "$dbPath-shm" -Force -ErrorAction SilentlyContinue
+    Ok "  資料庫已還原：$dbBackupPath（回滾前的資料庫另存在 db_backups\pre_rollback_$($script:RunStamp)）"
+    # demo 庫同一套（2026-09-28）：新版啟動時也對它跑了 init_db。
+    if (Test-Path $demoDbBackupPath) {
+        Copy-Item $demoDbBackupPath $demoDbPath -Force
+        Remove-Item "$demoDbPath-wal", "$demoDbPath-shm" -Force -ErrorAction SilentlyContinue
+        Ok "  demo 庫已還原：$demoDbBackupPath"
+    }
+} else {
+    Info "  資料庫保留不動（只回程式；新版 migration 只新增欄位與表，舊版讀得了）。"
 }
 
 # AH-S2：部署紀錄回到快照當時（apply_update 2026-09-28 起把套用前的那份存在快照裡）
@@ -447,7 +492,7 @@ if (Test-Path $deployedBefore) {
 }
 
 if ($cleanFailed) {
-    Fail "回滾：那次套用新增的程式檔沒有刪乾淨（見上方）——舊程式碼與資料庫已寫回，但新增的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。清單：$planPath" "rollback_cleanup_failed"
+    Fail "回滾：快照裡沒有的程式檔沒有刪乾淨（見上方）——舊程式碼已寫回，但多出來的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。快照：$rollbackDir" "rollback_cleanup_failed"
 }
 Start-InstallService
 

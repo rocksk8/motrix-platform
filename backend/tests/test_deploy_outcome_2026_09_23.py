@@ -912,6 +912,11 @@ _ROLLBACK_EXITS = [
     ("rollback_locked",                "not_applied",      "unknown", 1, "failed"),
     ("rollback_locked_stale",          "not_applied",      "unknown", 1, "failed"),
     ("rollback_unhandled_exception",   "restoring",        "down",    1, "failed"),
+    ("rollback_cleanup_too_large",     "not_applied",      "unknown", 1, "failed"),
+    ("rollback_cleanup_plan_failed",   "not_applied",      "unknown", 1, "failed"),
+    ("rollback_db_not_confirmed",      "not_applied",      "unknown", 1, "failed"),
+    ("rollback_db_user_cancelled",     "not_applied",      "unknown", 1, "failed"),
+    ("rollback_db_backup_failed",      "not_applied",      "down",    1, "failed"),
     ("rollback_copy_failed_root_dirs", "restoring",        "down",    1, "failed"),
     ("rollback_cleanup_failed",        "restoring",        "down",    1, "failed"),
 ]

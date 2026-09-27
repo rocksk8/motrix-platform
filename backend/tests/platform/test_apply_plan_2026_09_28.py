@@ -10,6 +10,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -321,8 +322,8 @@ def test_ahm3_after_stop_failures_restart_the_service_first():
     assert r < fail_restore < st < last_fail, "複製失敗：寫回快照 → （失敗就 Fail、不啟動）→ 啟動 → Fail"
     assert rest.index("Start-InstallService") < rest.index("Fail ("), "刪除失敗：先啟動再 Fail"
     restore = _ps_function(code, "Restore-ProgramAfterCopyFailure")
-    assert restore and restore.index('$script:ProdState = "restoring"') < restore.index("cleanup-added") \
-        < restore.index("robocopy"), "restoring 要在任何寫回之前設；先刪新增檔再寫回快照"
+    assert restore and restore.index('$script:ProdState = "restoring"') < restore.index('"cleanup-snapshot"') \
+        < restore.index("robocopy"), "restoring 要在任何寫回之前設；先刪快照沒有的檔再寫回快照"
     assert code.index("function Restore-ProgramAfterCopyFailure") < code.index('"copy_failed_backend"'), \
         "函式要在第一個呼叫點之前定義（PowerShell 執行到才認得）"
     for status in ("copy_failed_backend", "copy_failed_frontend", "copy_failed_root_dirs", "delete_failed"):
@@ -463,3 +464,124 @@ def test_ahs10_snapshot_dir_and_result_file_share_the_timestamp():
     code = _ps_code("apply_update.ps1")
     assert "$timestamp = $script:RunStamp" in code
     assert code.index('$script:RunStamp = Get-Date') < code.index("$timestamp = $script:RunStamp")
+
+
+
+# ── D 稽核 DM2：回滾以快照為準清掉「安裝目錄有、快照沒有」的程式檔 ──
+
+def test_dm2_rollback_to_an_older_snapshot_removes_modules_added_later(tmp_path):
+    """T1 快照之後，兩次套用各新增一個模組（m1、m2）；回滾到 T1 ⇒ 兩個都要清掉（只靠 T2 的 added 清不到 m1）。"""
+    root, snap = tmp_path / "root", tmp_path / "snap"
+    for base in (root, snap):
+        _w(base, "backend/main.py", "v1")
+        _w(base, "backend/modules/a/module.json", "{}")
+        _w(base, "frontend/pages/a.html", "a")
+    for rel in ("backend/modules/m1/module.json", "backend/modules/m1/x.py", "backend/modules/m2/module.json",
+                "frontend/pages/m2.html"):
+        _w(root, rel, "later")
+    for rel in DATA_FILES + ["backend/.apply.lock", "backend/motrix_erp.db.modules_disabled.json",
+                             "backend/.deployed_files.json", "backend/.deployed_commit.json", "backend/license.key",
+                             "backend/certs/cert.pem", "tools/platform/only_in_root.py"]:
+        _w(root, rel, "keep")
+    rels = ap.not_in_snapshot(str(root), str(snap), _upgrade)
+    assert rels == ["backend/modules/m1/module.json", "backend/modules/m1/x.py", "backend/modules/m2/module.json",
+                    "frontend/pages/m2.html"], rels          # 快照沒有 tools/ ⇒ tools 整個略過；狀態／設定／資料不列
+    _rels, removed, errors, over = ap.cleanup_not_in_snapshot(str(root), str(tmp_path), str(snap), 500)
+    assert not errors and not over and sorted(removed) == rels
+    assert not (root / "backend/modules/m1").exists() and not (root / "backend/modules/m2").exists()
+    for rel in DATA_FILES + ["backend/.apply.lock", "backend/license.key", "tools/platform/only_in_root.py"]:
+        assert (root / rel).exists(), rel
+
+
+def test_dm2_over_the_limit_touches_nothing(tmp_path):
+    root, snap = tmp_path / "root", tmp_path / "snap"
+    _w(snap, "backend/main.py")
+    for k in range(5):
+        _w(root, "backend/extra_%d.py" % k)
+    rels, removed, errors, over = ap.cleanup_not_in_snapshot(str(root), str(tmp_path), str(snap), 3)
+    assert over and removed == [] and len(rels) == 5 and all((root / r).exists() for r in rels)
+
+
+def test_do1_lock_and_state_cache_are_never_deletable():
+    for rel in ("backend/.apply.lock", "backend/motrix_erp.db.modules_disabled.json", "backend/.deployed_files.json"):
+        assert not ap.deletable(rel, _upgrade), rel
+    assert ap.deletable("backend/main.py", _upgrade)                 # 正對照
+
+
+# ── D 稽核 DM1：覆寫資料庫之前另存回滾前的資料庫；手動回滾預設只回程式 ──
+
+def test_dm1_auto_rollback_saves_the_database_before_overwriting_it():
+    code = _ps_code("apply_update.ps1")
+    i_save = code.index('Backup-DatabasesOnline (Join-Path $BackendDir "db_backups\\pre_rollback_$timestamp")')
+    i_main = code.index("Copy-Item $dbBackupPath $dbPath -Force")
+    i_demo = code.index("Copy-Item $demoDbBackupPath $demoDbPath -Force")
+    assert i_save < i_main and i_save < i_demo
+    seg = code[i_save:i_demo]
+    assert "if (-not $dbSaved)" in seg and "elseif (Test-Path $dbBackupPath)" in seg, "另存失敗就不覆寫主庫"
+    assert "if ($dbSaved -and (Test-Path $demoDbBackupPath))" in code, "另存失敗就不覆寫 demo 庫"
+
+
+def test_dm1_manual_rollback_keeps_the_database_by_default():
+    code = _ps_code("rollback_update.ps1")
+    assert "[switch]$IncludeDatabase" in code and "[switch]$ConfirmDatabaseOverwrite" in code
+    i_copy = code.index("Copy-Item $dbBackupPath $dbPath -Force")
+    assert code.rfind("if ($IncludeDatabase) {", 0, i_copy) != -1, "資料庫覆寫只在 -IncludeDatabase 分支裡"
+    i_save = code.index('Backup-DatabasesOnline (Join-Path $BackendDir "db_backups\\pre_rollback_$($script:RunStamp)")')
+    assert i_save < code.index('$script:ProdState = "restoring"') < i_copy, "先另存（失敗就不動）→ 才進入還原"
+    assert 'if ($Yes) { Fail "要連資料庫一起回滾，必須另外加 -ConfirmDatabaseOverwrite' in code, "-Yes 不算數"
+
+
+# ── D 稽核 DS3：過去只靠演練、沒有題守的行為（突變 M1～M4、M8、M9 曾存活）──
+
+def test_ds3_behaviours_that_only_drills_used_to_cover():
+    a = _ps_code("apply_update.ps1")
+    r = _ps_code("rollback_update.ps1")
+    restore = _ps_function(a, "Restore-ProgramAfterCopyFailure")
+    assert 'Join-Path $rollbackDir "root_docs"' in restore, "M3：複製失敗寫回時要還原根目錄文件"
+    assert "Copy-Item $demoDbBackupPath $demoDbPath -Force" in a, "M4：自動回滾要還原 demo 庫"
+    assert a.index('Join-Path $rollbackDir "deployed_commit.before.json"') < a.index('[2/6]'), \
+        "M8：套用前（停服前）把部署紀錄存進快照"
+    auto = a[a.index('$script:ProdState = "restoring"', a.index("觸發自動回滾")):]
+    assert auto.index('"cleanup-snapshot"') < auto.index('robocopy (Join-Path $rollbackDir "backend")'), \
+        "M9：自動回滾先清快照沒有的檔再寫回"
+    assert 'Copy-Item $deployedBefore (Join-Path $BackendDir ".deployed_commit.json") -Force' in r, \
+        "M1：手動回滾還原部署紀錄"
+    assert re.search(r'if \(-not \(Test-Path \(Join-Path \$rollbackDir "backend\\\.deployed_files\.json"\)\) '
+                     r'-and \(Test-Path \$baselinePath\)\) \{\s*Remove-Item \$baselinePath', r), \
+        "M2：快照沒有 baseline ⇒ 移除新版 baseline"
+
+
+# ── D 稽核 DS5：寫回快照不動授權、憑證、autostart、鎖、部署紀錄 ──
+
+@pytest.mark.parametrize("name", ("apply_update.ps1", "rollback_update.ps1"))
+def test_ds5_restores_never_write_back_config_files(name):
+    code = _ps_code(name)
+    # 寫回＝來源是快照（(Join-Path $rollbackDir …) 或 $snap）；建快照（目的地是快照）不算
+    writes = [l for l in code.splitlines() if re.search(r"robocopy\s+(\(Join-Path \$rollbackDir|\$snap\s)", l)]
+    assert writes, "量法壞了：沒抓到任何寫回"
+    for l in writes:
+        for token in ("/XD certs", "license.key", "autostart.bat", ".apply.lock", ".deployed_commit.json"):
+            assert token in l, (token, l.strip())
+
+
+# ── D 稽核 DS4：兩支腳本的所有狀態值都在儀表板值域裡 ──
+
+def _ps_statuses(name):
+    src = (_TOOLS / name).read_text(encoding="utf-8-sig")
+    return set(re.findall(r'(?:Fail(?:-AfterStop)?\s+.*?|Emit-Result\s+)"([a-z_]+)"', src))
+
+
+def test_ds4_every_script_status_is_in_the_dashboard_domain():
+    import ast
+    tree = ast.parse((_TOOLS / "deploy_dashboard.py").read_text(encoding="utf-8"))
+    domain = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", "") in ("_STATUS_SUCCEEDED", "_STATUS_FAILED")
+                                                for t in node.targets):
+            domain |= {c.value for c in ast.walk(node.value) if isinstance(c, ast.Constant) and isinstance(c.value, str)}
+    assert {"success", "unhandled_exception", "rollback_ok"} <= domain, "量法壞了：值域沒讀到"
+    for name in ("apply_update.ps1", "rollback_update.ps1"):
+        st = _ps_statuses(name)
+        assert len(st) >= 10, "量法壞了"
+        assert not (st - domain), (name, sorted(st - domain))
+    assert "made_up_status" not in domain                           # 反向控制
