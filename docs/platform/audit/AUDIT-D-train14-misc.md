@@ -74,3 +74,15 @@
   - CA3-M1（221adaa0）：AUDIT-D-C-m01-4 §1「CA3-M1 複核」審的 head
 
 M4-M1 與 CA3-M1 的 commit 標題寫的是同分支上別的修正，但判準是「關閉當時複核的分支 head」，所以成立。**13 行全部成立**。
+
+## 5. 第二輪複核：h-monthly-alert-text dcfadc11（D，2026-09-28）
+
+- MA-M1：清除時先看告警原因。「上個月（」開頭的告警，只在 `_previous_month_missing()` 為 False（上個月 `.done` 在，或上個月系統根本沒在跑）時才清；其他類照舊看雲端。`_check_previous_month_backup` 改呼叫同一支判定，語意不變（讀碼逐行比對）
+- 探針（同第一輪的做法，拋棄式 worktree）：
+  - 條件未解除，連跑三輪 ⇒ 告警在、`backup.alert_cleared` 0 筆
+  - 補上 `.done` 之後再跑三輪 ⇒ 告警清掉、`backup.alert_cleared` 1 筆
+- 題：test_states_data_ops＋test_monthly_backup＋test_backup_stale_alert 共 40 過
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ MA-M1 關閉（dcfadc11）——告警依原因判斷條件是否解除，月備份類只在上個月 .done 在時才清，不再每輪假記已解除
