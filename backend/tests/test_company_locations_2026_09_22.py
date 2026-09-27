@@ -59,6 +59,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from helpers import geo  # noqa: E402
 from tests._map_cache_warm import serve_from_fake  # noqa: E402
 from helpers.settings import _get_setting, _set_setting  # noqa: E402
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 PROFILE_PATH = "/api/settings/company-profile"
 MAP_PATH = "/api/map/points?sources=tenders"
@@ -388,6 +390,7 @@ def test_br5_ids_are_assigned_and_never_reused(client, make_user):
 # BR6 / BR7 / BR8 / BR9 · 距離的語意
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_br6_the_distance_is_to_the_nearest_location(
         client, make_user, one_tender):
     """🔴 BR6：距離是到**最近據點**的，而回應要說出是哪一個。
@@ -406,6 +409,7 @@ def test_br6_the_distance_is_to_the_nearest_location(
     assert p.get("distanceFromOfficeKm") is not None, p
 
 
+@needs_tender_radar
 def test_br9_removing_the_nearest_location_changes_the_answer(
         client, make_user, one_tender):
     """🔴🔴 BR9 反向控制：**把最近的那個據點刪掉 ⇒ 距離要變、名稱變成另一個。**
@@ -467,6 +471,7 @@ def test_br7_locations_that_cannot_be_located_are_visible(
     )
 
 
+@needs_tender_radar
 def test_br8_no_locatable_location_means_null_not_zero(
         client, make_user, one_tender):
     """🔴 BR8：**一個據點都定位不到 ⇒ 兩個欄位都要是 `null`，不是 `0`。**
@@ -502,6 +507,7 @@ def test_br8_no_locatable_location_means_null_not_zero(
     )
 
 
+@needs_tender_radar
 def test_br8b_one_location_behaves_exactly_like_before(
         client, make_user, one_tender):
     """🟢 BR8b 反向控制：**只有一個據點時，行為與改版前完全相同。**

@@ -19,6 +19,8 @@ import pytest
 
 from routers import map_points
 from tests.test_mp1_map_points_link_to_records_2026_09_24 import _geo, _auth  # noqa: F401
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 TODAY = datetime.date(2026, 9, 24)
 
@@ -41,6 +43,7 @@ def test_mp3_deadline_status_boundaries(deadline, want):
     assert map_points._deadline_status(deadline, TODAY) == want
 
 
+@needs_tender_radar
 def test_mp3_tender_points_carry_their_deadline_status(client, make_user, _geo, monkeypatch):
     monkeypatch.setattr(map_points, "_today", lambda: TODAY)
     import db

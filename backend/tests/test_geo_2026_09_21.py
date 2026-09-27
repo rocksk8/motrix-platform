@@ -40,6 +40,8 @@ import json
 import pytest
 
 from helpers.settings import _get_setting, _set_setting
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 try:
     from helpers import geo
@@ -523,6 +525,7 @@ def test_m3_empty_office_address_is_reported_not_silently_skipped(client, make_u
     )
 
 
+@needs_tender_radar
 def test_m6_tenders_without_location_are_counted_not_dropped(client, make_user):
     """🔴🔴 M6：`location` 是 NULL 的標案 —— **不在地圖上，但要被數出來**。
 
@@ -644,6 +647,7 @@ def test_m4_geocode_result_is_cached(client, make_user, monkeypatch):
     )
 
 
+@needs_tender_radar
 def test_m5_one_failure_does_not_empty_the_whole_map(client, make_user, monkeypatch):
     """🔴 M5：**一筆 geocode 失敗 → 其他筆照常顯示。**
 

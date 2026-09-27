@@ -16,6 +16,8 @@
 import pytest
 
 from helpers import geo
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 MAP = "/api/map/points?sources=tenders,customers"
 
@@ -67,6 +69,7 @@ def _hdr(client, make_user, username, role="superadmin", modules=None):
     return {"Authorization": "Bearer " + r.json()["token"]}
 
 
+@needs_tender_radar
 def test_mp8_opening_the_map_makes_no_external_geocode_call(client, make_user, monkeypatch):
     _seed_tender("MP8-001", "MP8 測試機關", "台中市西屯區")
     calls = _spy(monkeypatch)
@@ -89,6 +92,7 @@ def test_mp8_the_same_person_opening_twice_hits_the_cache(client, make_user, mon
     assert a.json()["points"] == b.json()["points"]
 
 
+@needs_tender_radar
 def test_mp8_a_data_change_invalidates_the_cache(client, make_user, monkeypatch):
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
                                  source="nominatim", address="MP8 已定位機關"))
@@ -103,6 +107,7 @@ def test_mp8_a_data_change_invalidates_the_cache(client, make_user, monkeypatch)
     assert len(first.json()["points"]) == 1
 
 
+@needs_tender_radar
 def test_mp8_the_cache_never_hands_one_users_points_to_another(client, make_user, monkeypatch):
     """權限算進鍵：看得到標案的人先開（進快取），看不到的人再開 ⇒ 不可以拿到標案點。"""
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
@@ -120,6 +125,7 @@ def test_mp8_the_cache_never_hands_one_users_points_to_another(client, make_user
     assert skipped and skipped[0]["skipped"] == "no_permission"
 
 
+@needs_tender_radar
 def test_mp8_the_user_distance_is_computed_per_request_not_cached(client, make_user, monkeypatch):
     geo._cache_put(geo.GeoResult(coord=(24.2, 120.6), precision="street",
                                  source="nominatim", address="MP8 距離機關"))

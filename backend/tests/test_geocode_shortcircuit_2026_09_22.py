@@ -42,6 +42,8 @@ GC8  一個打不到的據點地址，每次有人開地圖就對 Google 發一�
 而兩者的處置相反（一個要記住，一個要重試）。
 """
 import pytest
+from tests._requires import requires_module  # noqa: E402
+needs_tender_radar = requires_module("tender_radar", '本題驗地圖上的標案點，標案資料由標案雷達（tender_radar）提供；它不在時沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _geo():
@@ -301,6 +303,7 @@ def test_gc10_fixing_a_typo_in_the_address_retries_immediately(client, monkeypat
 # GC2 / GC6 · 兩條「寫下來」的，而它們不是測試
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_tender_radar
 def test_gc6_the_asymmetry_is_visible_in_the_response(client, make_user,
                                                       monkeypatch):
     """🔴 GC6：**不對稱本身是產品問題，而它要看得見。**
