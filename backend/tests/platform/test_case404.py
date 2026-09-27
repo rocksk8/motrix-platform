@@ -113,6 +113,13 @@ OWNER = "helpers/case_access.py"
 CASE_JUDGEMENTS = {"case_access_allowed", "case_page_readable", "case_owner_readable", "case_documents_readable"}
 
 
+def _is_case_judgement(call):
+    name = getattr(call.func, "id", getattr(call.func, "attr", None))
+    if name in CASE_JUDGEMENTS:
+        return True
+    return name == "visible" and bool(call.args) and isinstance(call.args[0], ast.Constant) and call.args[0].value == "case"
+
+
 def per_case_403(files_src):
     """{相對路徑: 原始碼} ⇒ [(路徑, 行, 寫法)]：案件判定路徑（helpers/case_access.py）之外對逐案拒絕回 403 的地方。"""
     out = []
@@ -131,9 +138,9 @@ def per_case_403(files_src):
                and isinstance(n.args[1], ast.Attribute) and n.args[1].attr == "deny_message":
                 out.append((rel, n.lineno, "HTTPException(403, deny_message)"))
             # if not <L1 案件判定>(...): … raise HTTPException(403, …)
+            # 〔稽核 D CR-S1：另認 `if not row_access.visible("case", …)`（第一個參數是字面 "case"；別的實體不算）〕
             if isinstance(n, ast.If) and isinstance(n.test, ast.UnaryOp) and isinstance(n.test.op, ast.Not) \
-               and isinstance(n.test.operand, ast.Call) \
-               and getattr(n.test.operand.func, "id", getattr(n.test.operand.func, "attr", None)) in CASE_JUDGEMENTS:
+               and isinstance(n.test.operand, ast.Call) and _is_case_judgement(n.test.operand):
                 for m in ast.walk(ast.Module(body=n.body, type_ignores=[])):
                     if isinstance(m, ast.Call) and getattr(m.func, "id", None) == "HTTPException" and m.args \
                        and isinstance(m.args[0], ast.Constant) and m.args[0].value == 403:
@@ -157,6 +164,12 @@ def test_rc_the_scanner_catches_each_form():
                            "def f(c, q, u):\n    if not case_access_allowed(c, q, u):\n        raise HTTPException(403, 'x')\n",
         "modules/zz/d.py": "from fastapi import HTTPException\nfrom helpers import case_access\n"
                            "def f(c, q, u):\n    if not case_access.case_page_readable(c, q, u):\n        raise HTTPException(403, 'x')\n",
+        # 稽核 D CR-S1：visible('case', …) 判定後回 403
+        "modules/zz/e.py": "from fastapi import HTTPException\nfrom helpers import row_access\n"
+                           "def f(u, r):\n    if not row_access.visible('case', u, r):\n        raise HTTPException(403, 'x')\n",
+        # 反向：別的實體的 visible ⇒ 不算
+        "modules/zz/ok2.py": "from fastapi import HTTPException\nfrom helpers import row_access\n"
+                             "def f(u, r):\n    if not row_access.visible('voucher', u, r):\n        raise HTTPException(403, 'x')\n",
         # 反向：模組權限的 403、其他實體的 require、案件判定本檔
         "modules/zz/ok.py": "from fastapi import HTTPException\nfrom helpers import row_access\n"
                             "def f(u, r):\n    row_access.require('voucher', u, r)\n    raise HTTPException(403, '需要出納模組')\n",
@@ -164,4 +177,5 @@ def test_rc_the_scanner_catches_each_form():
     }
     got = {(r, w) for r, _l, w in per_case_403(srcs)}
     assert got == {("modules/zz/a.py", 'row_access.require("case")'), ("modules/zz/b.py", "HTTPException(403, deny_message)"),
-                   ("modules/zz/c.py", "case_access_allowed → 403"), ("modules/zz/d.py", "case_access_allowed → 403")}, got
+                   ("modules/zz/c.py", "case_access_allowed → 403"), ("modules/zz/d.py", "case_access_allowed → 403"),
+                   ("modules/zz/e.py", "case_access_allowed → 403")}, got
