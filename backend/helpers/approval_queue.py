@@ -17,6 +17,9 @@
 本檔不讀任何模組的表：表名由擁有者傳進 `DataJsonApproval`。
 """
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 #: 「還在簽」的單據狀態（各單據表共用的兩個字）
@@ -44,6 +47,23 @@ def active_tiers(appr: dict) -> list:
         }
         for i, s in enumerate(steps)
     ]
+
+
+def approval_json_of(data_json, doc_type: str, doc_no) -> "str | None":
+    """`<table>.data_json` ⇒ 其中 `approval` 的 JSON 字串（沒有 approval ⇒ "{}"）；讀不出來 ⇒ None，並記 ERROR（寫單號、不寫內容）。
+
+    `approval.queue_items` 提供者一律用這支，**不在 SQL 用 `json_extract(data_json,'$.approval')`**：一筆 malformed JSON
+    會讓整個查詢丟例外 ⇒ 那個提供者整類待簽靜默消失（L1 只記一筆 exception），比 500 更難發現（c-queue-json，2026-09-27）。
+    呼叫端拿到 None ⇒ **跳過那一筆**：不可以當成「沒有簽核層」列出——那會變成「任一 superadmin 可簽」，是降級。
+    守門：tests/platform/test_queue_items_malformed_json.py（對每個已註冊的提供者）。"""
+    try:
+        d = json.loads(data_json or "{}")
+    except (TypeError, ValueError):
+        d = None
+    if not isinstance(d, dict) or not isinstance(d.get("approval") or {}, dict):
+        logger.error("待簽核佇列：%s %s 的 data_json 讀不出來，這一筆不列", doc_type, doc_no)
+        return None
+    return json.dumps(d.get("approval") or {}, ensure_ascii=False)
 
 
 def current_tier_idx(appr: dict) -> int:

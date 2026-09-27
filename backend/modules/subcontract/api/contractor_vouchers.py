@@ -832,14 +832,17 @@ def queue_items(conn) -> list:
     """`approval.queue_items`：待審核／簽核中的承攬商匯款申請（`type`＝`contractor_voucher`）。"""
     rows = conn.execute("""
         SELECT voucher_no, quote_no, snapshot_json, created_at,
-               json_extract(data_json,'$.approval') as approval_json
+               data_json
         FROM contractor_payment_vouchers
         WHERE status IN ('待審核','簽核中')
         ORDER BY id DESC
     """).fetchall()
     out = []
     for r in rows:
-        f = _aq.tier_fields(r["approval_json"])
+        raw = _aq.approval_json_of(r["data_json"], "contractor_voucher", r["voucher_no"])   # 壞一筆只跳過那一筆（c-queue-json）
+        if raw is None:
+            continue
+        f = _aq.tier_fields(raw)
         try:
             snap = json.loads(r["snapshot_json"] or "{}")
         except Exception:

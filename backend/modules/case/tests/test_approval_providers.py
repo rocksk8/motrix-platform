@@ -380,10 +380,13 @@ def test_completion_note_not_found_and_denied_same_message(client, make_user):
 
 # ── ⑨ 簽核 JSON 壞掉的報價單（稽核 D AL-O4：舊版整支佇列 500）────────────────────
 
-def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client, make_user):
-    """壞 JSON 的報價單：佇列 200 並列出它（沒有簽核層 ⇒ 任一 superadmin 可簽）、角標對 superadmin 計 1；
-    同一個提供者的其他報價單照列（壞一筆不可以讓整類消失）。"""
+def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client, make_user, caplog):
+    """壞 JSON 的報價單：佇列 200、**這一筆跳過並記 ERROR（寫單號）**、角標不算它；同一個提供者的其他報價單照列
+    （壞一筆不可以讓整類消失）。〔更正〕~~列出它（沒有簽核層 ⇒ 任一 superadmin 可簽）、角標對 superadmin 計 1~~：
+    那是降級（簽核鏈讀不出來變成任一 superadmin 可簽），c-queue-json 改成跳過（主持指派 2026-09-27）。"""
+    import logging
     import db
+    caplog.set_level(logging.ERROR)
     su, sp = make_user("aqp_bad_super", "Conn-Pass-123", role="superadmin")[:2]
     sh = _login(client, su, sp)
     before = _count(client, sh)
@@ -401,6 +404,6 @@ def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client,
     r = client.get("/api/approval-queue", headers=sh)
     assert r.status_code == 200, r.text
     got = {it["quoteNo"]: it for g in r.json()["queue"] for it in g["items"]}
-    assert "MQ-AQP-BAD" in got and "MQ-AQP-OK" in got, sorted(got)
-    assert got["MQ-AQP-BAD"]["tiers"] == [] and got["MQ-AQP-BAD"]["requestedBy"] == ""
-    assert _count(client, sh) == before + 1        # 壞的那張：沒有簽核層、不是自己送的 ⇒ 計 1；OK 那張不是我簽
+    assert "MQ-AQP-OK" in got and "MQ-AQP-BAD" not in got, sorted(got)
+    assert any(r.levelno >= logging.ERROR and "MQ-AQP-BAD" in r.getMessage() for r in caplog.records)
+    assert _count(client, sh) == before            # 壞的那張不列也不算；OK 那張不是我簽

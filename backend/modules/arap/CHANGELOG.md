@@ -1,5 +1,9 @@
 # 應收應付 更新紀錄
 
+## 1.0.6 — 2026-09-27（c-queue-json，主持指派；列車取號）
+- 待簽佇列提供者：簽核 JSON 改用 L1 `helpers.approval_queue.approval_json_of` 在 Python 逐筆解析（原本 SQL `json_extract(data_json,'$.approval')` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ 這一類待簽全部靜默消失）；壞的那一筆跳過並記 ERROR（寫單號、不寫內容）
+- `queue_detail` docstring：權限、抬頭、遮蔽在 L1（稽核 D AL-O2）
+
 ## 1.0.5 — 2026-09-27（C，M01-PLAN §5 ④；列車取號）
 - 頁面（稽核 D M4-M2，M01-PLAN §5 ④）：案件模組（M01）不在 ⇒ 請款單「帶入案件資料」與出納「收款／發票登錄」明說原因（判斷＝M01 路由不存在：404＋Not Found；看不到的案件的 404 不算）；e2e `tests/test_e2e_pages_without_case_module_2026_09_27.py`（各含正對照）
 

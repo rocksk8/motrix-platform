@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.52 — 2026-09-27（c-queue-json：一筆壞 data_json 讓整類待簽消失；主持指派；列車取號）〔core_bump：暫用 1.99 → 1.52〕
+- L1（新增）：`helpers.approval_queue.approval_json_of(data_json, doc_type, doc_no)`——讀不出來 ⇒ None＋ERROR（寫單號），呼叫端跳過那一筆
+- 守門：`tests/platform/test_queue_items_malformed_json.py`（對每個已註冊、簽核鏈在 data_json 的 `approval.queue_items` 提供者塞一筆壞的：不丟例外、好的照列、壞的不列、有 ERROR；反向控制＝json_extract 合成提供者必紅）
+- 提供者改用它：M01、M03 shipping_note、M04 contractor_voucher、M05 invoice_voucher／payment_request
+
 ## 1.51 — 2026-09-27（c-approval-l1-2：稽核 D AL-M1／AL-S1／AL-O3／AL-O4；列車取號）〔core_bump：暫用 1.99 → 1.51〕
 - L1（新增）：`routers.approval_queue.detail_not_found_message`、`DETAIL_DENIAL_AUDIT`（`approval.detail_denied`）
 - L1（行為）：詳情的「查無」（提供者回 None 或自己丟 404）與「看不到」（每案守門拒絕）一律 404「單據 {id} 不存在」，不帶關聯案件單號；audit 記真正原因（not_found／denied）

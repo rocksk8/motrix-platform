@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.12 — 2026-09-27（c-queue-json，主持指派；列車取號）
+- 待簽佇列提供者：簽核 JSON 改用 L1 `helpers.approval_queue.approval_json_of` 在 Python 逐筆解析（原本 SQL `json_extract(data_json,'$.approval')` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ 這一類待簽全部靜默消失）；壞的那一筆跳過並記 ERROR（寫單號、不寫內容）
+
 ## 1.0.11 — 2026-09-26（第十班列車取號，原暫用 1.0.7）
 - 附件來源提供者加權限（稽核 D AT-M1，主持裁示 (b)）：`files`／`doc_nos_for_case` 多帶 `user`，看不到派工單所屬案件的人 ⇒ `AttachmentNotVisible`（同派工單清單的讀取規則）
 
