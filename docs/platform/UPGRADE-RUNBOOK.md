@@ -211,7 +211,11 @@ robocopy <解開的完整包>\backend\tools <ROOT>\backend\tools /E
 powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_update.ps1 -PackagePath <解開的完整包>
 ```
 - 2026-09-28 起的腳本開頭會比對自己與包裡那份的版本（`$ApplyScriptVersion`），不同就拒絕（`script_not_from_package`，正式機未被觸碰）。⚠ 正式機現在那份（c006a2a0）沒有這個檢查，**這一次一定要先做第 1 步**（稽核 AH-M2）。
-- 停服之後才失敗（`copy_failed_*`、`delete_failed`）⇒ 腳本先把服務重新啟動再結束，訊息附手動回滾指令；磁碟上是套用到一半的程式（稽核 AH-M3）。
+- 複製新程式失敗（`copy_failed_*`）⇒ 腳本自動把程式寫回套用前的快照再啟動（此時資料庫還沒被新程式碰過 ⇒ 完整回到套用前；稽核 AH-S7、使用者裁示）。寫回也失敗 ⇒ 服務不啟動，人工處理。
+- 刪除舊檔失敗（`delete_failed`，新程式已完整）⇒ 先重新啟動服務再結束，訊息附手動回滾指令（稽核 AH-M3）。
+- robocopy 一律 `/R:3 /W:5`：檔案被占用時約 15 秒就判定失敗，不會卡住。
+- 同一時間只准一個套用或回滾：`backend\.apply.lock`。另一個正在跑 ⇒ `apply_locked`；殘留鎖（持有的行程已不在）⇒ `apply_locked_stale`，**不自動清**——確認沒有套用或回滾在跑之後手動刪除再重跑。
+- 每一次執行都寫結果檔 `backend\logs\apply_update_<時間>.result.json`（回滾是 `rollback_update_<時間>.result.json`），內容與畫面最後一行 `::RESULT::` 相同，儀表板重開後也讀得到。
 
 **它做什麼（依序）**：
 1. 版本比對、健康檢查記錄。
@@ -251,7 +255,12 @@ powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\rollback_update.ps
 | `script_not_from_package` | 未被觸碰 | 先把包裡的 `backend\tools` 複製進安裝目錄再執行 |
 | `plan_refused`／`plan_failed`／`delete_plan_too_large` | 未被觸碰 | 看計畫檔；上限不夠就確認後加大重跑 |
 | `snapshot_failed_root_dirs`／`snapshot_missing_deleted` | 未被觸碰 | 查磁碟空間與權限後重跑 |
-| `copy_failed_*`／`delete_failed` | 🔴 套用到一半；腳本已嘗試重新啟動服務 | 用訊息裡的指令手動回滾 |
+| `copy_failed_*`，rolled_back=`restored` | 已自動回到套用前、服務正常 | 查複製失敗的原因（被占用的檔、磁碟）後重跑 |
+| `copy_failed_*`，rolled_back=`restored_unhealthy` | 已回到套用前的程式，但健康檢查沒過 | 看 server.log；必要時手動回滾 |
+| `copy_failed_*`，rolled_back=`restoring` | 🔴 寫回快照沒有完全成功，服務未啟動 | 人工處理；快照在訊息裡 |
+| `delete_failed` | 🔴 新程式已完整、舊檔可能殘留；腳本已重新啟動服務 | 用訊息裡的指令手動回滾，或人工刪除殘留檔 |
+| `apply_locked`／`rollback_locked` | 未被觸碰（另一個套用或回滾正在跑） | 等它結束 |
+| `apply_locked_stale`／`rollback_locked_stale` | 未被觸碰（殘留鎖） | 確認沒有在跑之後刪 `backend\.apply.lock` 再重跑 |
 | `restore_copy_failed_root_dirs`／`restore_cleanup_failed` | 🔴 自動回滾做到一半 | 人工處理；計畫檔在快照目錄 |
 | `rollback_plan_tool_missing` | 手動回滾未開始 | 從新包補 `backend\tools\apply_plan.py` 後重跑 |
 | `rollback_copy_failed_root_dirs`／`rollback_cleanup_failed` | 🔴 手動回滾做到一半，服務未啟動 | 人工處理 |

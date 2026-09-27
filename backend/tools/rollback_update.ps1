@@ -105,9 +105,20 @@ $script:ProdState = "not_applied"
 #   up / down / unknown
 $script:ServiceState = "unknown"
 
+# 結果檔與鎖（UPDATE-DELIVERY §9.2）
+$script:LockHeld = $false
+$script:RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$script:StartedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$script:ResultScript = "rollback_update"
+$script:ResultScriptVersion = $null
+$script:ResultPackage = $SnapshotTimestamp
+$script:ResultCommit = $null
+
 function Emit-Result($status, $code) {
     Write-Host ("::RESULT:: v=2 status=$status rolled_back=$($script:ProdState)" +
                 " service=$($script:ServiceState) exit=$code")
+    Write-ResultFile $status $code
+    Exit-InstallLock
 }
 
 # ⚠️ `$status` 預設 `unknown` ⇒ 日後新增一條 `Fail` 而忘了給狀態，
@@ -121,6 +132,67 @@ function Fail($msg, $status = "unknown") {
 function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
+
+# ── 以下三個函式在 apply_update.ps1 與 rollback_update.ps1 **逐字相同**（UPDATE-DELIVERY §9.2，2026-09-28）──
+# 鎖：<ROOT>\backend\.apply.lock，CreateNew 排他建立；內容 {pid, script, started_at, package, host}。
+#   已存在 ⇒ 持有者行程還在（powershell）回 "locked"，否則回 "stale"——殘留鎖**不自動清**，由人確認後刪。
+#   釋放在 Emit-Result（每一條出口都經過它）；沒拿到鎖的那一次不會刪別人的鎖。
+# 結果檔：<ROOT>\backend\logs\<script>_<yyyyMMdd_HHmmss>.result.json，先 .tmp 再改名；前五欄與 ::RESULT:: 同源。
+function Enter-InstallLock([string]$scriptName, [string]$pkg) {
+    $lockPath = Join-Path $BackendDir ".apply.lock"
+    try {
+        $fs = [System.IO.File]::Open($lockPath, 'CreateNew', 'Write', 'None')
+    } catch {
+        $holder = $null
+        try { $holder = Get-Content $lockPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $holder = $null }
+        $alive = $false
+        if ($holder -and $holder.pid) {
+            $hp = Get-Process -Id ([int]$holder.pid) -ErrorAction SilentlyContinue
+            $alive = [bool]($hp -and $hp.ProcessName -match '^(powershell|pwsh)$')
+        }
+        $who = if ($holder) { "PID $($holder.pid)（$($holder.script)，$($holder.started_at)，$($holder.package)）" } else { "內容讀不到" }
+        Warn "  鎖檔 $lockPath 已存在：$who"
+        if ($alive) { return "locked" }
+        return "stale"
+    }
+    try {
+        $info = [ordered]@{ pid = $PID; script = $scriptName; started_at = (Get-Date -Format "yyyy-MM-dd HH:mm:ss"); package = $pkg; host = $env:COMPUTERNAME }
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes(($info | ConvertTo-Json -Compress))
+        $fs.Write($bytes, 0, $bytes.Length)
+    } finally {
+        $fs.Close()
+    }
+    $script:LockHeld = $true
+    return $null
+}
+
+function Exit-InstallLock {
+    if ($script:LockHeld) {
+        Remove-Item (Join-Path $BackendDir ".apply.lock") -Force -ErrorAction SilentlyContinue
+        $script:LockHeld = $false
+    }
+}
+
+function Write-ResultFile($resStatus, $resCode) {
+    try {
+        if (-not (Test-Path $BackendDir)) { return }
+        $logsDir = Join-Path $BackendDir "logs"
+        if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null }
+        $resPath = Join-Path $logsDir ("{0}_{1}.result.json" -f $script:ResultScript, $script:RunStamp)
+        $res = [ordered]@{
+            protocol = 2; status = $resStatus; rolled_back = $script:ProdState; service = $script:ServiceState; exit = $resCode
+            script = $script:ResultScript; script_version = $script:ResultScriptVersion; timestamp = $script:RunStamp
+            package = $script:ResultPackage; commit = $script:ResultCommit
+            started_at = $script:StartedAt; finished_at = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        }
+        $tmpPath = "$resPath.tmp"
+        [System.IO.File]::WriteAllText($tmpPath, ($res | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -Path $tmpPath -Destination $resPath -Force
+    } catch {
+        Write-Host "[WARN] 結果檔寫入失敗：$($_.Exception.Message)"
+    }
+}
+# ── 逐字相同的區段到此為止 ──
 
 # ── 以下三個函式與 apply_update.ps1 **逐字相同**（2026-09-28）──────────────────
 # 不抽成共用檔：dashboard 的 rollback 分支不預先複製 tools（見下方握手行註解），
@@ -238,6 +310,11 @@ if ($scriptRoot -ne $ProdRoot) {
     Fail "偵測到執行路徑為 '$scriptRoot'，不是正式機路徑 '$ProdRoot'。本腳本只允許在正式機執行，中止。" "rollback_not_prod_machine"
 }
 Info "身分確認：正式機（$ProdRoot）`n"
+
+# 同一時間只准一個套用／回滾（UPDATE-DELIVERY §9.2）
+$lockState = Enter-InstallLock "rollback_update" $SnapshotTimestamp
+if ($lockState -eq "locked") { Fail "另一個套用或回滾正在執行（見上方鎖檔內容），這一次未做任何動作。" "rollback_locked" }
+if ($lockState -eq "stale") { Fail "有殘留的鎖檔（持有的行程已不在）：確認沒有套用或回滾在跑之後，手動刪除 $BackendDir\.apply.lock 再重跑。未做任何回滾動作。" "rollback_locked_stale" }
 
 # ============================================================
 # Step 1: 驗證這個時間戳的快照真的存在

@@ -1,5 +1,5 @@
 {
  "_說明": "apply_update.ps1 的內容雜湊（去 BOM、CRLF→LF）與 $ApplyScriptVersion 的對應。改了腳本就要決定：行為有變 ⇒ 升 $ApplyScriptVersion；只改註解／排版 ⇒ 版本不動。兩種都要更新這裡的 sha256（AH-O7）。",
- "version": "2026-09-28c",
- "sha256": "30020f277fd27172661010184ab5382405e700037881e7b55180c6ac67130a39"
+ "version": "2026-09-28d",
+ "sha256": "c532aa25393a81ce33b4d127ac65450ca92d0aa6cf93c0926904248c5dd774a7"
 }

@@ -201,7 +201,8 @@ def test_convert_writes_the_apply_baseline_from_the_new_source(env, tmp_path):
 # 先前 Test-Ping 就是兩份各自維護而漂移（2026-09-08）。
 
 _TOOLS = Path(__file__).resolve().parents[2] / "tools"
-_SYNCED_FUNCS = ("Invoke-Py", "Stop-InstallService", "Start-InstallService")
+_SYNCED_FUNCS = ("Invoke-Py", "Stop-InstallService", "Start-InstallService",
+                 "Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile")
 
 
 def _ps_function(text, name):
@@ -360,3 +361,77 @@ def test_every_robocopy_has_a_retry_limit(name):
     assert len(calls) >= 3, "robocopy 一行都沒抓到 ⇒ 量法壞了"
     bad = [l.strip() for l in calls if not (re.search(r"/R:\d+\b", l) and re.search(r"/W:\d+\b", l))]
     assert not bad, bad
+
+
+
+# ── UPDATE-DELIVERY §9.2 (e)：鎖與結果檔——在真的 PowerShell 裡跑那三個函式 ──
+
+def _run_ps(tmp_path, body):
+    import subprocess
+    a = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    funcs = "\n\n".join(_ps_function(a, n) for n in ("Enter-InstallLock", "Exit-InstallLock", "Write-ResultFile", "Emit-Result"))
+    backend = tmp_path / "backend"
+    backend.mkdir(exist_ok=True)
+    script = ("$ErrorActionPreference = 'Stop'\n"
+              "function Warn($m) { Write-Host \"[WARN] $m\" }\n"
+              "$BackendDir = '%s'\n" % str(backend)
+              + "$script:LockHeld = $false\n$script:RunStamp = '20260928_000000'\n$script:StartedAt = 's'\n"
+              "$script:ResultScript = 'apply_update'\n$script:ResultScriptVersion = 'v'\n$script:ResultPackage = 'P'\n"
+              "$script:ResultCommit = 'c'\n$script:ProdState = 'not_applied'\n$script:ServiceState = 'unknown'\n"
+              + funcs + "\n" + body)
+    ps = tmp_path / "t.ps1"
+    ps.write_text(script, encoding="utf-8-sig")
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ps)],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    return r, backend
+
+
+def test_lock_second_holder_gets_locked_and_release_on_emit(tmp_path):
+    r, backend = _run_ps(tmp_path, (
+        "$a = Enter-InstallLock 'apply_update' 'P'\n"
+        "Write-Host \"first=[$a] held=$script:LockHeld exists=$(Test-Path (Join-Path $BackendDir '.apply.lock'))\"\n"
+        "$script:LockHeld = $false\n"                            # 模擬第二個執行：沒有鎖
+        "$b = Enter-InstallLock 'rollback_update' 'S'\n"
+        "Write-Host \"second=[$b]\"\n"
+        "Exit-InstallLock\n"                                       # 沒拿到鎖的那一次不可以刪別人的鎖
+        "Write-Host \"after_foreign_exit=$(Test-Path (Join-Path $BackendDir '.apply.lock'))\"\n"
+        "$script:LockHeld = $true\n"
+        "Emit-Result 'success' 0\n"
+        "Write-Host \"after_emit=$(Test-Path (Join-Path $BackendDir '.apply.lock'))\"\n"))
+    out = r.stdout
+    assert "first=[] held=True exists=True" in out, out + r.stderr
+    assert "second=[locked]" in out, out           # 持有者是活著的 powershell
+    assert "after_foreign_exit=True" in out, out
+    assert "after_emit=False" in out, out
+
+
+def test_lock_left_by_a_dead_process_is_stale_and_not_removed(tmp_path):
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (backend / ".apply.lock").write_text(json.dumps({"pid": 999999, "script": "apply_update"}), encoding="utf-8")
+    r, _ = _run_ps(tmp_path, "$a = Enter-InstallLock 'apply_update' 'P'\nWrite-Host \"state=[$a]\"\nExit-InstallLock\n")
+    assert "state=[stale]" in r.stdout, r.stdout + r.stderr
+    assert (backend / ".apply.lock").exists(), "殘留鎖不自動清"
+
+
+def test_result_file_first_five_fields_equal_the_result_line(tmp_path):
+    r, backend = _run_ps(tmp_path, "$script:ProdState = 'restored'\n$script:ServiceState = 'up'\nEmit-Result 'copy_failed_frontend' 1\n")
+    line = [l for l in r.stdout.splitlines() if l.startswith("::RESULT::")]
+    assert len(line) == 1, r.stdout + r.stderr
+    kv = dict(p.split("=", 1) for p in line[0].split()[1:])
+    files = list((backend / "logs").glob("apply_update_20260928_000000.result.json"))
+    assert len(files) == 1 and not list((backend / "logs").glob("*.tmp"))
+    res = json.loads(files[0].read_text(encoding="utf-8"))
+    assert res["protocol"] == 2 and str(res["protocol"]) == kv["v"]
+    assert (res["status"], res["rolled_back"], res["service"], str(res["exit"])) == \
+        (kv["status"], kv["rolled_back"], kv["service"], kv["exit"])
+    assert res["script"] == "apply_update" and res["package"] == "P" and res["commit"] == "c"
+
+
+def test_lock_is_taken_before_anything_is_touched():
+    """鎖在套用前檢查（[1/6]）之前；回滾的鎖在快照驗證之前。"""
+    a = _ps_code("apply_update.ps1")
+    assert a.index('Enter-InstallLock "apply_update"') < a.index("[1/6]")
+    assert a.index('Enter-InstallLock "apply_update"') > a.index('"script_not_from_package"')
+    r = _ps_code("rollback_update.ps1")
+    assert r.index('Enter-InstallLock "rollback_update"') < r.index("[1/2]")

@@ -63,7 +63,7 @@ $ErrorActionPreference = "Stop"
 # AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
 #   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
 #   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
-$ApplyScriptVersion = "2026-09-28c"
+$ApplyScriptVersion = "2026-09-28d"
 # robocopy 一律 /R:3 /W:5（2026-09-28）：預設 /R:1000000 /W:30 ⇒ 被占用的檔會讓套用卡住數天而不是失敗，
 #   複製失敗的出口（AH-S7 自動寫回快照）永遠走不到。
 
@@ -158,10 +158,21 @@ $script:ProdState = "not_applied"
 #    **而那一件決定使用者要不要現在衝去開機。**
 $script:ServiceState = "unknown"
 
+# 結果檔與鎖（UPDATE-DELIVERY §9.2）
+$script:LockHeld = $false
+$script:RunStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$script:StartedAt = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$script:ResultScript = "apply_update"
+$script:ResultScriptVersion = $ApplyScriptVersion
+$script:ResultPackage = $PackagePath
+$script:ResultCommit = $null
+
 function Emit-Result($status, $code) {
     # 一行、無前後空白、大小寫固定、欄位順序固定（B.md §九 定版）。
     Write-Host ("::RESULT:: v=2 status=$status rolled_back=$($script:ProdState)" +
                 " service=$($script:ServiceState) exit=$code")
+    Write-ResultFile $status $code
+    Exit-InstallLock
 }
 
 # ⚠️ `$status` 預設 `unknown` 是刻意的：日後有人新增一條 `Fail` 而忘了給狀態，
@@ -175,6 +186,67 @@ function Fail($msg, $status = "unknown") {
 function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
+
+# ── 以下三個函式在 apply_update.ps1 與 rollback_update.ps1 **逐字相同**（UPDATE-DELIVERY §9.2，2026-09-28）──
+# 鎖：<ROOT>\backend\.apply.lock，CreateNew 排他建立；內容 {pid, script, started_at, package, host}。
+#   已存在 ⇒ 持有者行程還在（powershell）回 "locked"，否則回 "stale"——殘留鎖**不自動清**，由人確認後刪。
+#   釋放在 Emit-Result（每一條出口都經過它）；沒拿到鎖的那一次不會刪別人的鎖。
+# 結果檔：<ROOT>\backend\logs\<script>_<yyyyMMdd_HHmmss>.result.json，先 .tmp 再改名；前五欄與 ::RESULT:: 同源。
+function Enter-InstallLock([string]$scriptName, [string]$pkg) {
+    $lockPath = Join-Path $BackendDir ".apply.lock"
+    try {
+        $fs = [System.IO.File]::Open($lockPath, 'CreateNew', 'Write', 'None')
+    } catch {
+        $holder = $null
+        try { $holder = Get-Content $lockPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $holder = $null }
+        $alive = $false
+        if ($holder -and $holder.pid) {
+            $hp = Get-Process -Id ([int]$holder.pid) -ErrorAction SilentlyContinue
+            $alive = [bool]($hp -and $hp.ProcessName -match '^(powershell|pwsh)$')
+        }
+        $who = if ($holder) { "PID $($holder.pid)（$($holder.script)，$($holder.started_at)，$($holder.package)）" } else { "內容讀不到" }
+        Warn "  鎖檔 $lockPath 已存在：$who"
+        if ($alive) { return "locked" }
+        return "stale"
+    }
+    try {
+        $info = [ordered]@{ pid = $PID; script = $scriptName; started_at = (Get-Date -Format "yyyy-MM-dd HH:mm:ss"); package = $pkg; host = $env:COMPUTERNAME }
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes(($info | ConvertTo-Json -Compress))
+        $fs.Write($bytes, 0, $bytes.Length)
+    } finally {
+        $fs.Close()
+    }
+    $script:LockHeld = $true
+    return $null
+}
+
+function Exit-InstallLock {
+    if ($script:LockHeld) {
+        Remove-Item (Join-Path $BackendDir ".apply.lock") -Force -ErrorAction SilentlyContinue
+        $script:LockHeld = $false
+    }
+}
+
+function Write-ResultFile($resStatus, $resCode) {
+    try {
+        if (-not (Test-Path $BackendDir)) { return }
+        $logsDir = Join-Path $BackendDir "logs"
+        if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Force -Path $logsDir | Out-Null }
+        $resPath = Join-Path $logsDir ("{0}_{1}.result.json" -f $script:ResultScript, $script:RunStamp)
+        $res = [ordered]@{
+            protocol = 2; status = $resStatus; rolled_back = $script:ProdState; service = $script:ServiceState; exit = $resCode
+            script = $script:ResultScript; script_version = $script:ResultScriptVersion; timestamp = $script:RunStamp
+            package = $script:ResultPackage; commit = $script:ResultCommit
+            started_at = $script:StartedAt; finished_at = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        }
+        $tmpPath = "$resPath.tmp"
+        [System.IO.File]::WriteAllText($tmpPath, ($res | ConvertTo-Json -Compress), (New-Object System.Text.UTF8Encoding($false)))
+        Move-Item -Path $tmpPath -Destination $resPath -Force
+    } catch {
+        Write-Host "[WARN] 結果檔寫入失敗：$($_.Exception.Message)"
+    }
+}
+# ── 逐字相同的區段到此為止 ──
 
 # 呼叫 python 並回 @{ Text; Exit }。
 # ⚠️ PS 5.1：原生執行檔往 stderr 印任何東西，在 $ErrorActionPreference = "Stop" 底下會被包成
@@ -369,6 +441,12 @@ if ($pkgVer -ne $ApplyScriptVersion) {
         "請先把部署包的 backend\tools\* 複製到 $BackendDir\tools\，再執行（UPGRADE-RUNBOOK §8；儀表板會自動做這一步）。正式機尚未被觸碰。"
     Fail $verMsg "script_not_from_package"
 }
+$script:ResultCommit = $manifest.commit
+
+# 同一時間只准一個套用／回滾（UPDATE-DELIVERY §9.2）：在任何備份、停服之前拿鎖
+$lockState = Enter-InstallLock "apply_update" $PackagePath
+if ($lockState -eq "locked") { Fail "另一個套用或回滾正在執行（見上方鎖檔內容），這一次未做任何動作。" "apply_locked" }
+if ($lockState -eq "stale") { Fail "有殘留的鎖檔（持有的行程已不在）：確認沒有套用或回滾在跑之後，手動刪除 $BackendDir\.apply.lock 再重跑。正式機尚未被觸碰。" "apply_locked_stale" }
 
 # ============================================================
 # Step 1: 套用前檢查
