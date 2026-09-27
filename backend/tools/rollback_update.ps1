@@ -313,14 +313,14 @@ if ($hasPlan) {
 # 🔴 還原寫回要檢查結束碼（`RP3`）—— 與 `apply_update.ps1` 的自動回滾同一件事。
 # ☠️ 失敗不中止 ⇒ 流進下面的健康檢查 ⇒ 碰巧過了就報「已還原」，
 #    **而磁碟上是還原到一半的殘骸。**
-robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
+robocopy (Join-Path $rollbackDir "backend") $BackendDir /E /R:3 /W:5 | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_backend" }
-robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
+robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E /R:3 /W:5 | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_frontend" }
 foreach ($d in $RootProgramDirs) {
     $snap = Join-Path $rollbackDir $d
     if (-not (Test-Path $snap)) { continue }
-    robocopy $snap (Join-Path $ProdRoot $d) /E | Out-Null
+    robocopy $snap (Join-Path $ProdRoot $d) /E /R:3 /W:5 | Out-Null
     if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_root_dirs" }
 }
 # 程式檔清單（.deployed_files.json）要跟著程式回到快照那一版：快照裡有 ⇒ 上面已寫回；
