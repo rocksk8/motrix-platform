@@ -38,11 +38,20 @@ def _auth(token):
     return {"Authorization": "Bearer " + token}
 
 
-@pytest.fixture()
-def dev_log_attachment(client, make_user):
-    """建一則帶附件的業務開發記錄，回傳 (token, 附件 metadata)。"""
+@pytest.fixture(params=[pytest.param("crm", marks=needs_crm), "l1"])
+def dev_log_attachment(request, client, make_user):
+    """建一個附件，回傳 (token, 附件 metadata)。讀檔端（/api/photo-token、/api/uploads）是 L1，附件從哪裡來有兩種
+    （B，2026-09-28，稽核 D RM-S1）：`crm`＝經業務開發記錄上傳（驗與 CRM 的整合，CRM 在才跑）；
+    `l1`＝直接走 CRM 底下那支 L1 存檔函式 helpers.uploads.save_document_files（沒有 CRM 的安裝包也驗得到讀檔）。"""
     u, p = make_user(username="att_serve", role="superadmin")
     token = _login(client, u, p)
+    if request.param == "l1":
+        import asyncio
+        import io
+        from starlette.datastructures import UploadFile
+        from helpers.uploads import save_document_files
+        f = UploadFile(file=io.BytesIO(_png_bytes()), filename="site.png")
+        return token, asyncio.run(save_document_files("dev_logs", "L1-SERVE", [f], u, watermark_by=u))[0]
 
     import db
     conn = db.get_db()
@@ -58,7 +67,6 @@ def dev_log_attachment(client, make_user):
     return token, r.json()["files"][0]
 
 
-@needs_crm
 def test_attachment_is_actually_readable_back(client, dev_log_attachment):
     """走完整條路：換 pt → 讀檔，回來的要是磁碟上那個檔本身。
 
@@ -84,7 +92,6 @@ def test_attachment_is_actually_readable_back(client, dev_log_attachment):
     assert r.content == on_disk, "讀回來的位元組跟磁碟上的實體檔不一致"
 
 
-@needs_crm
 def test_session_token_is_not_a_photo_token(client, dev_log_attachment):
     """pt 與 session token 是兩種東西——把 session token 當 pt 送必須被擋下。
 
@@ -97,7 +104,6 @@ def test_session_token_is_not_a_photo_token(client, dev_log_attachment):
     assert r.status_code == 403, r.text
 
 
-@needs_crm
 def test_attachment_needs_some_credential(client, dev_log_attachment):
     """沒 pt 也沒 Bearer → 401，附件不是公開連結。"""
     token, f = dev_log_attachment
