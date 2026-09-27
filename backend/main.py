@@ -456,6 +456,11 @@ async def auth_middleware(request: Request, call_next):
                 "code": "must_change_password",
             },
         )
+    # AB-S7（使用者裁示）：只有 demo 庫的 migration 沒完成的模組，demo 模式明說缺席（正式使用者照常）
+    if token.startswith(DEMO_TOKEN_PREFIX):
+        _demo_why = _module_startup.demo_absent_reason(path)
+        if _demo_why:
+            return JSONResponse(status_code=404, content={"detail": _demo_why})
     response = await call_next(request)
     # 操作軌跡（2026-09-14）：記在**回應之後**才拿得到狀態碼——被擋下來的操作
     # （403/404）跟成功的一樣重要，甚至更重要。
@@ -570,7 +575,7 @@ if _db_for_guard.DB_PATH == _paths.DB_PATH:
 init_db()
 init_db(DEMO_DB_PATH)
 # 模組 migration 沒完成（回原因）的模組：改記 failed、路由不掛（稽核 A AB-S3；要在 mount_modules 之前）
-_module_startup.fail_incomplete_modules([_db_for_guard.DB_PATH, DEMO_DB_PATH])
+_module_startup.fail_incomplete_modules(_db_for_guard.DB_PATH, DEMO_DB_PATH)   # 主庫決定上下線（AB-S7）
 # S-CD02：部分損毀的主庫照常啟動（init_db 不會發現）⇒ 啟動時做一次 quick_check，
 # 不通過 ⇒ ERROR 告警（寄信、BACKUP_ALERT、audit；升級預檢會因告警而擋）。不擋啟動：營運不中斷。
 def _startup_integrity_check():

@@ -29,6 +29,8 @@ def iso(monkeypatch):
     registry._reset()
     monkeypatch.setattr(migrations, "_REGISTRY", {})
     monkeypatch.setattr(migrations, "_INCOMPLETE", {})
+    from helpers import module_startup as _ms
+    monkeypatch.setattr(_ms, "_DEMO_ABSENT", {})
     monkeypatch.setattr(lic, "LICENSE_GATE_ENABLED", False)
     yield
     registry.restore(snap)
@@ -145,37 +147,103 @@ def test_main_fails_incomplete_modules_after_init_db_and_before_mounting():
                 lines.setdefault(name, []).append(node.lineno)
     assert len(lines.get("fail_incomplete_modules", [])) == 1, lines
     assert max(lines["init_db"]) < lines["fail_incomplete_modules"][0] < min(lines["mount_modules"]), lines
+    call = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Call)
+                and getattr(n.func, "attr", None) == "fail_incomplete_modules")
+    assert len(call.args) == 2, "主庫、demo 庫分開傳（AB-S7：主庫決定上下線）：%s" % ast.unparse(call)
 
 
-def test_incomplete_module_is_unloaded_with_the_migration_reason(tmp_path, monkeypatch, iso):
+def test_main_answers_demo_requests_for_demo_absent_modules_after_the_session_check():
+    """AB-S7：auth middleware 在 session 驗過之後（沒登入的照舊 401）、call_next 之前，demo token 才問 demo_absent_reason。"""
+    src = (BACKEND / "main.py").read_text(encoding="utf-8")
+    fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.AsyncFunctionDef) and n.name == "auth_middleware")
+    body = ast.unparse(fn)
+    assert "demo_absent_reason(path)" in body and "DEMO_TOKEN_PREFIX" in body
+    assert body.index("FROM sessions s JOIN users u") < body.index("demo_absent_reason(path)") < body.index("call_next(request)\n    _record_request_trail")
+
+
+_V1_NEEDS_READY = ("from core.registry import ModuleSpec\n"
+                   "def v1(conn):\n"
+                   "    if %s and not conn.execute(\"SELECT 1 FROM sqlite_master WHERE name='zz_ready'\").fetchone():\n"
+                   "        return 'zz 表還沒建好'\n"
+                   "MODULE = ModuleSpec(key=%r, migrations=[(1, v1)])\n")
+
+
+def _inc_setup(tmp_path, monkeypatch, main_ready, demo_ready):
+    """zz_ok（migration 永遠完成）＋zz_wait（庫裡沒有 zz_ready 表就回原因）；主庫、demo 庫各跑一次 run_all。"""
     import db
     from helpers import module_startup
     pkg = tmp_path / "zzstart_inc"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("", encoding="utf-8")
-    for n, ret in (("zz_ok", "None"), ("zz_wait", "'zz 表還沒建好'")):
+    for n, gate in (("zz_ok", "False"), ("zz_wait", "True")):
         d = pkg / n
         d.mkdir()
-        (d / "module.json").write_text(json.dumps({"key": n, "name": n, "version": "0.0.1", "core": ">=1.0,<2.0"}),
+        (d / "module.json").write_text(json.dumps({"key": n, "name": n, "version": "0.0.1", "core": ">=1.0,<2.0",
+                                                   "provides": {"api_prefixes": ["/api/" + n.replace("_", "-")]}}),
                                        encoding="utf-8")
-        (d / "__init__.py").write_text("from core.registry import ModuleSpec\n"
-                                       "def v1(conn):\n    return %s\n"
-                                       "MODULE = ModuleSpec(key=%r, migrations=[(1, v1)])\n" % (ret, n), encoding="utf-8")
+        (d / "__init__.py").write_text(_V1_NEEDS_READY % (gate, n), encoding="utf-8")
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(loader, "MODULES_DIR", str(pkg))
     monkeypatch.setattr(loader, "MODULES_PACKAGE", "zzstart_inc")
-    path = _db_disabling(tmp_path / "m.db", [])
+    paths = {}
+    for name, ready in (("main", main_ready), ("demo", demo_ready)):
+        paths[name] = _db_disabling(tmp_path / (name + ".db"), [])
+        conn = sqlite3.connect(paths[name])
+        try:
+            db._ensure_module_schema_versions(conn)
+            if ready:
+                conn.execute("CREATE TABLE zz_ready (id INTEGER)")
+                conn.commit()
+        finally:
+            conn.close()
     registry._reset()
-    module_startup.load_modules_like_startup(path)
-    conn = sqlite3.connect(path)
-    try:
-        db._ensure_module_schema_versions(conn)
-        migrations.run_all(conn)
-    finally:
-        conn.close()
-    out = module_startup.fail_incomplete_modules([path, str(tmp_path / "never.db")])    # 沒跑過的庫 ⇒ None ⇒ 不算
-    assert list(out) == ["zz_wait"] and "zz 表還沒建好" in out["zz_wait"], out
-    assert [m.key for m in registry.loaded()] == ["zz_ok"], "未完成的模組要移出已載入清單（路由不掛、提供者不在）"
+    module_startup.load_modules_like_startup(paths["main"])
+    for name in ("main", "demo"):
+        conn = sqlite3.connect(paths[name])
+        try:
+            migrations.run_all(conn)
+        finally:
+            conn.close()
+    return module_startup, paths
+
+
+def _loaded_keys():
+    return [m.key for m in registry.loaded()]
+
+
+def test_main_db_incomplete_takes_the_module_offline_with_the_migration_reason(tmp_path, monkeypatch, iso):
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=False, demo_ready=True)
+    out = ms.fail_incomplete_modules(paths["main"], paths["demo"])
+    assert list(out["offline"]) == ["zz_wait"] and "zz 表還沒建好" in out["offline"]["zz_wait"] and out["demo_absent"] == {}
+    assert _loaded_keys() == ["zz_ok"], "主庫未完成的模組要移出已載入清單（路由不掛、提供者不在）"
     st = {s["key"]: s for s in registry.module_states()}
     assert st["zz_wait"]["state"] == "failed" and "zz 表還沒建好" in st["zz_wait"]["reason"]
     assert st["zz_ok"]["state"] == "loaded"
+
+
+def test_only_demo_db_incomplete_keeps_the_module_online_and_says_so_in_demo_mode(tmp_path, monkeypatch, iso):
+    """AB-S7：主庫完成、demo 未完成 ⇒ 不下線（正式使用者照常）；demo 模式打到它的 API 前綴 ⇒ 原因；別的前綴、相近的字 ⇒ None。"""
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=True, demo_ready=False)
+    out = ms.fail_incomplete_modules(paths["main"], paths["demo"])
+    assert out["offline"] == {} and list(out["demo_absent"]) == ["zz_wait"], out
+    assert _loaded_keys() == ["zz_ok", "zz_wait"]
+    why = ms.demo_absent_reason("/api/zz-wait/items")
+    assert why and "示範" in why and "zz 表還沒建好" in why
+    assert ms.demo_absent_reason("/api/zz-wait") == why
+    assert ms.demo_absent_reason("/api/zz-ok/items") is None
+    assert ms.demo_absent_reason("/api/zz-waitlist") is None
+
+
+def test_both_incomplete_goes_offline_and_nothing_is_left_for_demo(tmp_path, monkeypatch, iso):
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=False, demo_ready=False)
+    out = ms.fail_incomplete_modules(paths["main"], paths["demo"])
+    assert list(out["offline"]) == ["zz_wait"] and out["demo_absent"] == {}
+    assert _loaded_keys() == ["zz_ok"] and ms.demo_absent_reason("/api/zz-wait/items") is None
+
+
+def test_reverse_control_both_complete_changes_nothing_and_never_run_db_is_not_counted(tmp_path, monkeypatch, iso):
+    ms, paths = _inc_setup(tmp_path, monkeypatch, main_ready=True, demo_ready=True)
+    out = ms.fail_incomplete_modules(paths["main"], str(tmp_path / "never.db"))
+    assert out == {"offline": {}, "demo_absent": {}}
+    assert _loaded_keys() == ["zz_ok", "zz_wait"] and ms.demo_absent_reason("/api/zz-wait/items") is None
+

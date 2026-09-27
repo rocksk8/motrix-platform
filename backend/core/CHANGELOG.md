@@ -10,7 +10,7 @@
 - L0（行為新增，2026-09-28 使用者裁示「該補就補」）：migration 函式**回傳值慣例**——回 `None`＝完成、記版號；回非空字串＝未完成（原因）⇒ 不記版號、記 ERROR、該模組後面的版號這次不跑、其他模組照跑、`run_all` 不丟例外（服務照常起來），下次再試；回其他值＝寫錯、同樣不記。既有 migration 都回 None ⇒ 行為不變。守門 `tests/platform/test_migration_incomplete.py`
 - L0（新增）：`core.migrations.incomplete(db_path) -> dict[str, tuple[int, str]] | None`——本行程最近一次對該庫 `run_all` 沒完成的 `{模組: (版號, 原因)}`；空 dict＝全部完成；None＝沒對該庫跑過（不是通過）。依庫分開記（主庫、demo 庫互不覆蓋）。apply_update 乾跑以「非空或 None」判失敗（H12 接）
 - L1（新增，2026-09-28 主持派工）：`helpers.module_startup.load_modules_like_startup(db_path=None)`——main.py 啟動時「讀停用清單＋load_all(授權、停用、原因)」原段搬出，main.py 改呼叫它（行為不變）。只做 `init_db` 的工具（apply_update 乾跑 migration、`upgrade.py run_migrations`）要先呼叫它、並帶**被試跑的那個庫**，模組 migration 才會登記、停用清單才不會讀到正式庫；呼叫端由 H12 接。守門 `tests/platform/test_module_startup.py`
-- L1（新增，2026-09-28 稽核 A AB-S3）：`helpers.module_startup.fail_incomplete_modules(db_paths)`——main.py 在 `init_db`（主庫、demo 庫）之後、`mount_modules` 之前呼叫：`core.migrations.incomplete` 列到的已載入模組經 `registry.unload` 改記 failed（原因＝migration 回的那句），路由不掛、提供者不在，交給缺席明說；`incomplete` 為 None 的庫不算。不動 L0
+- L1（新增，2026-09-28 稽核 A AB-S3；AB-S7 使用者裁示改為主庫決定）：`helpers.module_startup.fail_incomplete_modules(main_db_path, demo_db_path=None) -> {"offline": {...}, "demo_absent": {...}}`——main.py 在 `init_db`（主庫、demo 庫）之後、`mount_modules` 之前呼叫：**主庫** `incomplete` 列到的已載入模組經 `registry.unload` 改記 failed（原因＝migration 回的那句），路由不掛、提供者不在；**只有 demo 庫**未完成 ⇒ 不下線、ERROR，demo 模式打到該模組 API 前綴時 auth middleware 回 404＋原因（`demo_absent_reason(path)`）。`incomplete` 為 None 的庫不算。不動 L0
 
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR

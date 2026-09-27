@@ -382,6 +382,7 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
     本人設或清付款日 ＝ 繞過出納或讓已付的請款重回待付款 ⇒ `paidDate` 只有出納或 admin+ 能設；
     已有付款日的**清除或改日期**只限 admin+，並寫專用稽核動作 `extra_expense.paid_date_override`。
     發票日期、發票號碼照舊（本人可登）。
+    付款日只准在已核准之後設定（AB-S8，使用者 2026-09-28 裁示；出納、admin 都一樣）⇒ 未核准 409 並說明。
     """
     user = _require_user(authorization)
     body = body or {}
@@ -409,6 +410,8 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         if "paid_date" in changes:
             if not (is_admin or user_has_module(user, "cashier")):
                 raise HTTPException(403, "付款日只有出納或管理員可以登錄（請款人登錄會繞過出納待付款）")
+            if changes["paid_date"] and row["status"] != "已核准":    # AB-S8（使用者裁示）：出納、admin 都一樣
+                raise HTTPException(409, "這筆請款還沒核准（目前「%s」），不能登錄付款日；核准後再登錄" % row["status"])
             if old_paid and changes["paid_date"] != old_paid:
                 if not is_admin:
                     raise HTTPException(403, "這筆已登錄付款日 %s，清除或更改只限管理員" % old_paid)
