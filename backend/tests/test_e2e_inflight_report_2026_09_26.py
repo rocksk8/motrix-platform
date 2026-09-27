@@ -4,9 +4,6 @@
 - 報告：逾時的失敗 ⇒ 加一段；不是逾時的失敗、通過的題 ⇒ 不加
 突變：拿掉 `rep.sections.append(...)` ⇒ 報告題紅；拿掉 `E2E_CONTEXT_HOOKS.append(_inflight_hook)` ⇒ 記帳題紅（見 commit）。
 """
-from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D M4-M3）
-#: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
-needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import types
 
 import pytest
@@ -199,10 +196,10 @@ def _run_probe(tmp_name, xdist, basetemp):
         f.unlink()
 
 
-#: 稽核 D M5-M1：只標需要 M01 的參數（其餘參數在 M01 不在時照常要過）
+#: 稽核 D M5-M1／M6-M1：兩個參數都不需要 M01（n2 當初列進清單是負載逾時，不是 M01 缺席；真刪樹單跑 20/20 過）
 @pytest.mark.e2e
 @pytest.mark.parametrize("xdist", [pytest.param(False, id="n0"),
-                                   pytest.param(True, id="n2", marks=[needs_m01])])
+                                   pytest.param(True, id="n2")])
 def test_rc_teardown_hang_fails_only_that_test(xdist, tmp_path):
     """子行程跑三題：第一題 teardown 卡住 ⇒ 那一題另記一個 error（訊息含原因），三題本體都 passed（第二題是 e2e，要新瀏覽器），
     行程正常結束（有摘要行）。突變：看門狗不關瀏覽器 ⇒ 子行程卡到 240 秒逾時（TimeoutExpired）⇒ 紅。"""
