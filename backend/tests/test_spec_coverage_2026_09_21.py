@@ -903,6 +903,10 @@ C_OWNED = {
     # 突變說明裡，與 AUDIT-D-B-o9-2.md §3「複核」逐字對應，不改字，登記在這裡。
     "O92":  "RUN-PLAN／稽核檔的觀察追蹤序號（b-o9-3 深連結序號題），不是 SPEC 驗收條件；"
             "與 docs/platform/audit/AUDIT-D-B-o9-2.md §3 逐字對應，不改字",
+    # 第十三班列車發現：`O14` 同樣是 RUN-PLAN／稽核檔的觀察追蹤序號（b-o14-2：子行程 xdist
+    # worker 期限與測試鎖），不是 SPEC 驗收條件；題名與稽核紀錄逐字對應，不改字，登記在這裡。
+    "O14":  "RUN-PLAN／稽核檔的觀察追蹤序號（b-o14-2 子行程期限與測試鎖），不是 SPEC 驗收條件；"
+            "test_e2e_inflight_report_2026_09_26.py 逐字對應，不改字",
 }
 
 

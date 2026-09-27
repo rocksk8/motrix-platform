@@ -9,3 +9,10 @@
 反向控制（拿掉本模組跑 test_spec_coverage）若抓到題全在本模組的編號，再移進本檔（比照 M07 的 BN、M04 的 EM12）。
 
 行為的依據是本模組的測試與串接點（`docs/platform/INTEGRATION-POINTS.md`）。
+
+## 登記
+
+```
+C_OWNED M01 第十三班列車：題名 test_m01_*（本模組的自我代稱，例如「驗 M01 自己不再直寫別的模組表」），不是 CORE-SPEC 條件編號；test_approval_providers.py、tests/platform/test_approval_parse_l1.py、test_case_stage_connectors.py、test_supply_connectors.py
+```
+

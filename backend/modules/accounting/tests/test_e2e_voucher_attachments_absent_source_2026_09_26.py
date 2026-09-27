@@ -48,7 +48,7 @@ def test_sources_hidden_by_permission_are_named_in_the_files_column(live_server,
     from core import registry
     from helpers.uploads import AttachmentNotVisible
     key = ("attachments.for_document", "case")
-    real = registry._LEGACY_PROVIDERS[key]
+    real = registry.providers("attachments.for_document")["case"]
 
     class _HidesUpdates:
         SOURCE_TYPES = real.SOURCE_TYPES
@@ -62,7 +62,16 @@ def test_sources_hidden_by_permission_are_named_in_the_files_column(live_server,
 
         files = staticmethod(real.files)
 
-    monkeypatch.setitem(registry._LEGACY_PROVIDERS, key, _HidesUpdates)
+    # 替換一個提供者：未搬遷模組在 _LEGACY_PROVIDERS，已搬進 modules/ 的在已載入模組的 ModuleSpec.providers（同 _without 的查法）
+    if key in registry._LEGACY_PROVIDERS:
+        monkeypatch.setitem(registry._LEGACY_PROVIDERS, key, _HidesUpdates)
+    else:
+        for lm in registry.loaded():
+            if key in lm.spec.providers:
+                monkeypatch.setitem(lm.spec.providers, key, _HidesUpdates)
+                break
+        else:
+            raise AssertionError("提供者 %r 不在 _LEGACY_PROVIDERS 也不在任何已載入模組的 ModuleSpec.providers" % (key,))
     u = make_user(username="att_hid_e2e", role="superadmin")
     vid = _seed(client, u)
     page = _open(e2e_browser, live_server, u, vid)

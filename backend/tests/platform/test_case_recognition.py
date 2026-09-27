@@ -33,7 +33,9 @@ METHODS = {
 
 @needs_case('驗 M01 的 case.recognition 提供者轉呼叫 M01 自己的 recognition 函式')
 @pytest.mark.parametrize("name", sorted(METHODS))
-def test_provider_forwards_to_the_m01_function_with_the_same_arguments(name, monkeypatch):
+def test_provider_forwards_to_the_m01_function_with_the_same_arguments(name, monkeypatch, client):
+    # 第十三班列車發現：CA-O3 之後提供者只在 loader 掛載時登記（不再是 import 時的副作用）；
+    # 這題本身不打 HTTP，但要 `client`（觸發 `_app`）先把 loader 跑過，否則 single_provider 讀到 None。
     from modules.case import recognition as r
     seen = {}
 

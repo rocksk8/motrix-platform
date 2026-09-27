@@ -105,6 +105,7 @@ NAMED_ELSEWHERE JV21 test_jv7_it_offers_exactly_the_three_declared_tabs
 NAMED_ELSEWHERE AI1 test_ca1_disabling_a_custom_code_makes_it_unusable
 AMBIGUOUS_ACK EM5 題檔撞名（test_em5_reload_flag 在 tests/、test_em5_voucher_chain_unreadable 在本模組）；本模組不在時只剩 1 檔、不再撞名
 EXEMPT JV14 目視：使用者 2026-09-23 確認紙本長摘要印得出來；pypdf 抽不到是抽取工具限制（test_voucher_summary_length_2026_09_23.py:18／:103）
+C_OWNED O13 第十三班列車：題名 test_o13_*（傳票帶入來源後的焦點搬移競態，PLAYBOOK O 系列操作性發現，不是 CORE-SPEC 條件編號；test_jv36_voucher_line_source_files_2026_09_24.py）
 ```
 
 > 📌 `## 登記` 的理由原文在覆蓋率守門原位置的註解（2026-09-26 移出前）：
