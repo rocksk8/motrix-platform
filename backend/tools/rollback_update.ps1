@@ -351,6 +351,15 @@ if (Test-Path $demoDbBackupPath) {
     Ok "  demo 庫已還原：$demoDbBackupPath"
 }
 
+# AH-S2：部署紀錄回到快照當時（apply_update 2026-09-28 起把套用前的那份存在快照裡）
+$deployedBefore = Join-Path $rollbackDir "deployed_commit.before.json"
+if (Test-Path $deployedBefore) {
+    Copy-Item $deployedBefore (Join-Path $BackendDir ".deployed_commit.json") -Force
+    Ok "  部署紀錄（.deployed_commit.json）已還原為快照當時的版本。"
+} else {
+    Warn "  快照裡沒有套用前的部署紀錄：backend\.deployed_commit.json 仍是回滾前的版本，prod-status 會顯示錯的 commit，重套同一版要加 -Force。"
+}
+
 if ($cleanFailed) {
     Fail "回滾：那次套用新增的程式檔沒有刪乾淨（見上方）——舊程式碼與資料庫已寫回，但新增的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。清單：$planPath" "rollback_cleanup_failed"
 }

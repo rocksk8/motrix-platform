@@ -270,3 +270,48 @@ def test_mls_without_module_startup_is_plain_init_db(tmp_path):
     import sqlite3
     with sqlite3.connect(p) as c:
         assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0] > 10
+
+
+def test_ahm1_case_only_rename_is_not_deleted(env):
+    """AH-M1：baseline 有 Foo.html、新包改名 foo.html ⇒ Windows 上是同一個檔，不可以列刪除（否則刪掉剛寫入的新檔）。"""
+    root, pkg = env
+    _w(pkg, "frontend/pages/foo-case.html", "new")
+    _w(root, "frontend/pages/Foo-Case.html", "old")
+    _w(root, "frontend/pages/gone-too.html", "old")
+    base = json.loads(Path(root, ap.BASELINE_REL).read_text(encoding="utf-8"))
+    base["files"] += ["frontend/pages/Foo-Case.html", "frontend/pages/gone-too.html"]
+    Path(root, ap.BASELINE_REL).write_text(json.dumps(base), encoding="utf-8")
+    plan = ap.make_plan(root, pkg, 200)
+    deleted = {d["rel"] for d in plan["delete"]}
+    assert "frontend/pages/Foo-Case.html" not in deleted
+    assert "frontend/pages/gone-too.html" in deleted          # 反向控制：真的沒了的照刪
+    plan["delete"].append({"rel": "frontend/pages/FOO-CASE.html", "reason": "baseline"})   # 計畫被塞了也不刪
+    ap.execute(root, pkg, plan)
+    assert Path(root, "frontend/pages/foo-case.html").exists() or Path(root, "frontend/pages/Foo-Case.html").exists()
+    assert not Path(root, "frontend/pages/gone-too.html").exists()
+
+
+def _ps_code(name):
+    src = (_TOOLS / name).read_text(encoding="utf-8-sig")
+    return "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
+
+
+def test_ahm2_script_refuses_when_not_the_package_copy_before_touching_anything():
+    """AH-M2：跑到的腳本與包裡那份版本不同 ⇒ 在任何備份／停服之前就拒絕。"""
+    code = _ps_code("apply_update.ps1")
+    import re
+    m = re.search(r'^\$ApplyScriptVersion = "([^"]+)"', code, re.M)
+    assert m, "腳本沒有 $ApplyScriptVersion"
+    check = code.index('Fail $verMsg "script_not_from_package"')
+    assert check < code.index("[1/6]"), "版本比對要在套用前檢查（[1/6]）之前"
+    assert re.search(r'if \(\$pkgVer -ne \$ApplyScriptVersion\)', code)
+
+
+def test_ahm3_after_stop_failures_restart_the_service_first():
+    """AH-M3：停服之後的 4 個失敗出口都經 Fail-AfterStop，而它先 Start-InstallService 再 Fail。"""
+    code = _ps_code("apply_update.ps1")
+    fn = _ps_function(code, "Fail-AfterStop")
+    assert fn and fn.index("Start-InstallService") < fn.index("Fail (")
+    for status in ("copy_failed_backend", "copy_failed_frontend", "copy_failed_root_dirs", "delete_failed"):
+        lines = [l for l in code.splitlines() if '"%s"' % status in l]
+        assert len(lines) == 1 and "Fail-AfterStop" in lines[0], (status, lines)

@@ -60,6 +60,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# AH-M2（2026-09-28 A 稽核）：這支腳本的版本。開頭與部署包裡那一份比對，不同就拒絕——
+#   手動執行時跑到安裝目錄裡的**舊**腳本（沒有先把包裡的 backend\tools 複製過來）會讓整套日常更新規則都不生效。
+#   改這支腳本的行為時要改這個值。用常數不用雜湊：演練副本會改路徑與 port，雜湊必然不同。
+$ApplyScriptVersion = "2026-09-28a"
+
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
 $Port = 666
 $AutostartTaskName = "MOTRIX ERP Server Autostart"
@@ -280,6 +285,16 @@ function Start-InstallService {
     Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
 }
 
+# AH-M3（2026-09-28 A 稽核）：停服**之後**才發生的失敗出口——先把服務拉起來再結束。
+#   停服已連迴圈一起停 ⇒ 直接 exit 的話服務一直停著（修改前迴圈至少會自己把服務拉回來）。
+#   磁碟上是套用到一半的程式：重新啟動只是回到修改前的行為；要回到套用前請手動回滾（訊息附指令）。
+#   service 仍記 down（沒有觀察到它起來）。
+function Fail-AfterStop($msg, $status) {
+    Warn "  套用中途失敗：重新啟動服務（磁碟上是套用到一半的程式）。"
+    try { Start-InstallService } catch { Warn "  重新啟動失敗：$($_.Exception.Message)" }
+    Fail ($msg + " 服務已嘗試重新啟動。要回到套用前：powershell -ExecutionPolicy Bypass -File `"$BackendDir\tools\rollback_update.ps1`" -SnapshotTimestamp $timestamp") $status
+}
+
 # 🔑 **握手行**：它說的是「**正在跑的這一份腳本**看得懂 v2 協定」。
 # ⚠️ 對 `apply_update.ps1` 而言它是**多餘的保險**——`_dashboard_remote.ps1:98-104`
 #    會在呼叫之前先把套件裡的 `backend\tools\*` 覆蓋過去，所以跑的一定是新版。
@@ -328,6 +343,15 @@ if (-not (Test-Path $manifestPath)) {
     Fail "部署包內找不到 deploy_manifest.json（$PackagePath），不是合法的部署包。" "package_invalid"
 }
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+
+$pkgScript = Join-Path $PackagePath "backend\tools\apply_update.ps1"
+$pkgVerLine = if (Test-Path $pkgScript) { Select-String -Path $pkgScript -Pattern '^\$ApplyScriptVersion = "([^"]+)"' | Select-Object -First 1 } else { $null }
+$pkgVer = if ($pkgVerLine) { $pkgVerLine.Matches[0].Groups[1].Value } else { "(沒有)" }
+if ($pkgVer -ne $ApplyScriptVersion) {
+    $verMsg = "正在執行的 apply_update.ps1（版本 $ApplyScriptVersion）與部署包裡的（版本 $pkgVer）不同。" +
+        "請先把部署包的 backend\tools\* 複製到 $BackendDir\tools\，再執行（UPGRADE-RUNBOOK §8；儀表板會自動做這一步）。正式機尚未被觸碰。"
+    Fail $verMsg "script_not_from_package"
+}
 
 # ============================================================
 # Step 1: 套用前檢查
@@ -556,6 +580,9 @@ foreach ($d in $RootProgramDirs) {
 }
 # 計畫跟著快照走（回滾時用它刪掉這次新增的檔）；每一個要刪的檔在快照裡都要找得到，否則回滾還原不了它。
 $planPath = Join-Path $rollbackDir "apply_plan.json"
+# AH-S2（2026-09-28）：套用前的部署紀錄存進快照；手動回滾時還原（否則 prod-status 報錯 commit、重套同版被 duplicate_version 擋）
+$deployedBefore = Join-Path $BackendDir ".deployed_commit.json"
+if (Test-Path $deployedBefore) { Copy-Item $deployedBefore (Join-Path $rollbackDir "deployed_commit.before.json") -Force }
 Move-Item $planTmp $planPath -Force
 $snapCheck = Invoke-Py @($planTool, "verify-snapshot", "--plan", $planPath, "--snapshot", $rollbackDir)
 if ($snapCheck.Exit -ne 0 -or ($snapCheck.Text -notmatch "APPLY_SNAPSHOT_OK")) {
@@ -636,16 +663,16 @@ $script:ProdState = "applied_no_restore"
 $rc1 = robocopy (Join-Path $PackagePath "backend") $BackendDir /E `
     /XD db_backups rollback_snapshots uploads logs 報價單PDF export_archive backup_alerts _demo_* `
     /XF motrix_erp.db motrix_erp.db-wal motrix_erp.db-shm motrix_erp_demo.db motrix_erp_demo.db-wal motrix_erp_demo.db-shm heartbeat_config.json .deployed_commit.json .deployed_files.json server.log autostart.bat
-if ($LASTEXITCODE -ge 8) { Fail "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
+if ($LASTEXITCODE -ge 8) { Fail-AfterStop "robocopy backend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_backend" }
 
 $rc2 = robocopy (Join-Path $PackagePath "frontend") $FrontendDir /E
-if ($LASTEXITCODE -ge 8) { Fail "robocopy frontend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_frontend" }
+if ($LASTEXITCODE -ge 8) { Fail-AfterStop "robocopy frontend/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_frontend" }
 
 foreach ($d in $RootProgramDirs) {
     $src = Join-Path $PackagePath $d
     if (-not (Test-Path $src)) { continue }
     robocopy $src (Join-Path $ProdRoot $d) /E /XD __pycache__ | Out-Null
-    if ($LASTEXITCODE -ge 8) { Fail "robocopy $d/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_root_dirs" }
+    if ($LASTEXITCODE -ge 8) { Fail-AfterStop "robocopy $d/ 失敗（exit code $LASTEXITCODE）。" "copy_failed_root_dirs" }
 }
 
 # autostart.bat：機器上有 ⇒ 保留；沒有 ⇒ 從包補上；兩邊不同 ⇒ 提示人比對（與 core/upgrade.py sync_package_default_config 同規則）
@@ -664,7 +691,7 @@ if (Test-Path $pkgAutostart) {
 $delRun = Invoke-Py @($planTool, "execute", "--root", $ProdRoot, "--pkg", $PackagePath, "--plan", $planPath)
 Write-Host $delRun.Text
 if ($delRun.Exit -ne 0 -or ($delRun.Text -notmatch "APPLY_DELETE_OK")) {
-    Fail "依刪除計畫刪除舊程式檔失敗（見上方）——新程式碼已複製、舊檔可能殘留，需要人工處理；快照：$rollbackDir" "delete_failed"
+    Fail-AfterStop "依刪除計畫刪除舊程式檔失敗（見上方）——新程式碼已複製、舊檔可能殘留，需要人工處理；快照：$rollbackDir。" "delete_failed"
 }
 
 # 兩個 robocopy 都過了 ⇒ 新程式碼**完整**在正式機磁碟上。
