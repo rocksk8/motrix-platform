@@ -3509,115 +3509,115 @@
     },
     {
      "func": "approve_quotation",
-     "line": 4546,
+     "line": 4557,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/approve"
     },
     {
      "func": "reject_quotation",
-     "line": 4659,
+     "line": 4670,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject"
     },
     {
      "func": "reject_final_quotation",
-     "line": 4744,
+     "line": 4755,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/reject-final"
     },
     {
      "func": "list_case_updates",
-     "line": 4809,
+     "line": 4820,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "post_case_update",
-     "line": 4945,
+     "line": 4956,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/updates"
     },
     {
      "func": "delete_case_update",
-     "line": 5027,
+     "line": 5038,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}"
     },
     {
      "func": "delete_case_update_file",
-     "line": 5058,
+     "line": 5069,
      "method": "DELETE",
      "path": "/api/quotations/{quote_no}/updates/{uid}/files/{file_id}"
     },
     {
      "func": "preview_quotation_html",
-     "line": 5089,
+     "line": 5100,
      "method": "POST",
      "path": "/api/quotations/preview-html"
     },
     {
      "func": "download_quotation_pdf",
-     "line": 5130,
+     "line": 5141,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/pdf-download"
     },
     {
      "func": "list_quotation_versions",
-     "line": 5188,
+     "line": 5199,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions"
     },
     {
      "func": "download_quotation_version",
-     "line": 5253,
+     "line": 5264,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/versions/{seq}/download"
     },
     {
      "func": "download_case_closing_report_pdf",
-     "line": 5294,
+     "line": 5305,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/closing-report-pdf"
     },
     {
      "func": "download_project_execution_report_pdf",
-     "line": 5330,
+     "line": 5341,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/project-report-pdf"
     },
     {
      "func": "approval_history",
-     "line": 5798,
+     "line": 5809,
      "method": "GET",
      "path": "/api/approval-history"
     },
     {
      "func": "case_batch_assign",
-     "line": 5918,
+     "line": 5929,
      "method": "POST",
      "path": "/api/case-batch/assign"
     },
     {
      "func": "case_batch_export",
-     "line": 5985,
+     "line": 5996,
      "method": "POST",
      "path": "/api/case-batch/export"
     },
     {
      "func": "get_quotation_privacy_acks",
-     "line": 6139,
+     "line": 6150,
      "method": "GET",
      "path": "/api/quotations/{quote_no}/privacy-notice"
     },
     {
      "func": "ack_quotation_privacy_notice",
-     "line": 6153,
+     "line": 6164,
      "method": "POST",
      "path": "/api/quotations/{quote_no}/privacy-notice/ack"
     },
     {
      "func": "list_sales_orders",
-     "line": 6184,
+     "line": 6195,
      "method": "GET",
      "path": "/api/sales-orders"
     }
@@ -8622,25 +8622,25 @@
    "routes": [
     {
      "func": "get_approval_queue",
-     "line": 112,
+     "line": 132,
      "method": "GET",
      "path": "/api/approval-queue"
     },
     {
      "func": "get_approval_queue_count",
-     "line": 151,
+     "line": 171,
      "method": "GET",
      "path": "/api/approval-queue/count"
     },
     {
      "func": "approval_queue_detail",
-     "line": 222,
+     "line": 272,
      "method": "GET",
      "path": "/api/approval-queue/detail"
     },
     {
      "func": "reassign_approval",
-     "line": 275,
+     "line": 336,
      "method": "POST",
      "path": "/api/approval-queue/reassign"
     }
@@ -8662,7 +8662,9 @@
     "shipping_notes",
     "users"
    ],
-   "tables_w": [],
+   "tables_w": [
+    "audit_log"
+   ],
    "tables_w_transitive": [
     "audit_log",
     "notifications",
@@ -11109,6 +11111,7 @@
     "helper:geo",
     "helper:startup",
     "mod:crm/api",
+    "router:approval_queue",
     "router:auth"
    ]
   },

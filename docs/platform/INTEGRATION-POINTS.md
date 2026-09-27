@@ -378,7 +378,7 @@ M01-PLAN §3-7（主持裁示 2026-09-26：c-approval-2，排在 M01 本體之�
 | 使用方 | L1 `routers/approval_queue.py` 的 `GET /api/approval-queue/detail?type=&id=`：一律取提供者，再由 L1 做每案權限（`_guard_queue_detail`：本單簽核人，否則 `guard_case_access`；看不到＝查無同一個 404）、案件抬頭（`_case_header`，經 `case.summary`；M01 不在 ⇒ 只有單號）、金額遮蔽（`_can_see_queue_money`／`_mask_money`）。~~M01 端點；M01 自己的四種在端點內~~（主持裁示 2026-09-27，c-approval-l1） |
 | 形式 | provider，多個提供者（`core.registry.providers("approval.detail")`，以類型名取一個） |
 | 語法 | `fn(conn, doc_no) -> {"quoteNo", "approvalRaw", "title"（可省）, "fields", "items", "files", "changes"（可省）, "selfViewBy"（可省）} \| None`；找不到也可以自己丟 404（M01 保留原訊息）。`selfViewBy`＝申請人本人免每案守門（只有 M01 `case_change`：單層任一 superadmin，沒有簽核鏈可比對）。欄位只准加（2026-09-27 加 changes、selfViewBy） |
-| 對方不在時 | 沒有該類型的提供者 ⇒ 400「不支援的類型（或該單據的模組未安裝）」；提供者回 None ⇒ 404「單據不存在」 |
+| 對方不在時 | 沒有該類型的提供者 ⇒ 400「不支援的類型（或該單據的模組未安裝）」；提供者回 None（或自己丟 404）與每案守門拒絕 ⇒ 同一個 404「單據 {id} 不存在」（~~提供者回 None ⇒ 404「單據不存在」~~；2026-09-27 稽核 D AL-S1：不帶關聯案件單號，audit `approval.detail_denied` 記真正原因）。`selfViewBy` 只准 M01 `case_change` 宣告（它繞過每案守門） |
 | 契約版本 | 1（2026-09-26） |
 | 守門 | `backend/modules/case/tests/test_approval_providers.py`（M01 詳情端點不直讀其他模組的表、每種類型一個提供者、正對照 200＋拿掉 ⇒ 400）；既有 `test_approval_queue_detail_2026_09_14.py`、`test_approval_queue_detail_authz_2026_09_14.py` 行為不變 |
 

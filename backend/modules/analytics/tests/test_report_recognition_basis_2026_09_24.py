@@ -41,8 +41,13 @@ def test_accrual_income_is_pretax_by_stage_month_and_cash_income_is_received(cli
     assert got == [("MQ-RB-001", "施工", 6000)]
     cash = _report(client, sa, basis="cash", month="2026-05")
     assert cash["incomeTaxLabel"] == "含稅"
-    assert [(i["quoteNo"], i["amount"]) for i in cash["monthIncomeItems"] if i["quoteNo"] == "MQ-RB-001"] == [
-        ("MQ-RB-001", 10500)]
+    got_cash = [(i["quoteNo"], i["amount"]) for i in cash["monthIncomeItems"] if i["quoteNo"] == "MQ-RB-001"]
+    if _source_tree.module_installed("modules/arap/"):
+        assert got_cash == [("MQ-RB-001", 10500)] and cash["incomeNotice"] == ""
+    else:
+        # 現金口徑的收款來自 M05（receivables.income_items）；不在 ⇒ 沒有項目，而且要明說（不是「這個月沒有收款」）
+        from modules.analytics.api.reports import RECEIVABLES_MISSING
+        assert got_cash == [] and cash["incomeNotice"] == RECEIVABLES_MISSING
     assert "權責" in body["basisNote"] and "舊版" in body["basisNote"]
 
 

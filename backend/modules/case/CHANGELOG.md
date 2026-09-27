@@ -1,5 +1,9 @@
 # 案件 更新紀錄
 
+## 1.0.6 — 2026-09-27（c-approval-l1-2；列車取號）
+- 佇列提供者：報價單、完工單的簽核 JSON 改在 Python 逐筆解析（原本 SQL `json_extract` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ M01 的待簽全部消失；舊版是整支佇列 500）
+- 題：已結案變更 selfViewBy 兩方向（沒有案件權限的申請人 200、外人 404 同查無）、完工單查無＝看不到、壞 JSON 報價單照列且不影響其他（稽核 D AL-M1／AL-S1／AL-O4）
+
 ## 1.0.5 — 2026-09-27（c-approval-l1 里程碑 2；列車取號）
 - 詳情與轉簽端點也搬 L1：M01 改為 `approval.detail` 提供者 `detail_quotation`／`detail_completion_note`／`detail_extra_expense`／`detail_case_change`（找不到的 404 訊息同前；已結案變更給 `selfViewBy`＝申請人本人照看）；`_case_header`、`_guard_queue_detail`、金額遮蔽移至 L1
 - `case.summary` 加欄 `deal_tag`（L1 詳情抬頭；既有欄位不變）

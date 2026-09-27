@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.51 — 2026-09-27（c-approval-l1-2：稽核 D AL-M1／AL-S1／AL-O3／AL-O4；列車取號）〔core_bump：暫用 1.99 → 1.51〕
+- L1（新增）：`routers.approval_queue.detail_not_found_message`、`DETAIL_DENIAL_AUDIT`（`approval.detail_denied`）
+- L1（行為）：詳情的「查無」（提供者回 None 或自己丟 404）與「看不到」（每案守門拒絕）一律 404「單據 {id} 不存在」，不帶關聯案件單號；audit 記真正原因（not_found／denied）
+- L1（行為）：佇列列出 ⇔ 詳情守門放行——M01 不在時，掛在案件上的單只列給簽核鏈上的人與送審人（`_on_chain`，佇列、角標、詳情共用）
+- 題：selfViewBy 兩方向、查無＝看不到、逐格一致性、壞 JSON 的報價單
+
 ## 1.50 — 2026-09-27（c-approval-l1，主持裁示；列車取號）〔core_bump：暫用 1.99 → 1.50〕
 - 新增 L1 `routers/approval_queue.py`：「待我簽核」佇列、角標、詳情、轉簽（`/api/approval-queue`、`/count`、`/detail`、`/reassign`）自 M01 搬入，路徑不變、前端不改；單據一律經 `approval.queue_items`／`approval.detail`／`approval.reassign` 供應（M01 只是提供者之一），案件資料經 `case.summary`
 - 頁面 `approval-queue.html`、選單項「簽核佇列」（`core/menu_l1.json`）、前綴 `/api/approval-queue` 歸回 L1

@@ -303,3 +303,104 @@ def test_m01_quotation_reaches_the_l1_queue_through_its_provider(client, make_us
     r = client.get("/api/approval-queue/detail", params={"type": "quotation", "id": "MQ-AQP-L1"}, headers=ah)
     assert r.status_code == 200, r.text
     assert r.json()["case"] == {"quoteNo": "MQ-AQP-L1", "customerName": "甲客戶", "projectName": "乙專案", "dealTag": ""}
+
+
+# ── ⑧ 已結案變更的 selfViewBy（稽核 D AL-M1）與查無／看不到同一句（AL-S1）──────────
+#
+# 兩個人都**沒有案件權限**（非 admin、沒有 case_manage、不是業務也不是協作者）才分得出來：
+# 有權限的人不靠 selfViewBy 也看得到，拿掉它的突變就不會紅。
+
+def _no_case_user(make_user, name):
+    return make_user(name, "Conn-Pass-123", role="sales", modules=["quotation"])[:2]
+
+
+def _seed_ccr(requested_by):
+    import db
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, sales_person, data_json, "
+                     "created_at, updated_at, assigned_user_ids) VALUES ('MQ-AQP-CCR','成交','丙客戶','丁專案','別人','{}',"
+                     "'2026-09-27','2026-09-27','[]')")
+        cur = conn.execute("INSERT INTO case_change_requests (quote_no, action_type, summary, requested_by, requested_by_display, "
+                           "requested_at) VALUES ('MQ-AQP-CCR','case_record_update','改備註',?,?,'2026-09-27T10:00:00')",
+                           (requested_by, requested_by))
+        conn.commit()
+        return str(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def test_case_change_detail_requester_without_case_access_sees_it(client, make_user):
+    """申請人本人（沒有案件權限）看得到自己的已結案變更。突變「selfViewBy 不生效」⇒ 404 ⇒ 紅。"""
+    ru, rp = _no_case_user(make_user, "aqp_ccr_req")
+    cid = _seed_ccr(ru)
+    r = client.get("/api/approval-queue/detail", params={"type": "case_change", "id": cid}, headers=_login(client, ru, rp))
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "已結案案件變更 #" + cid
+
+
+def test_case_change_detail_outsider_gets_the_not_found_404(client, make_user):
+    """外人（同樣沒有案件權限）打別人的已結案變更 ⇒ 404，與查無同一句、不帶案件單號。
+    突變「不比對是不是本人」⇒ 200 ⇒ 紅。"""
+    from routers.approval_queue import detail_not_found_message
+    ru, _rp = _no_case_user(make_user, "aqp_ccr_req2")
+    ou, op = _no_case_user(make_user, "aqp_ccr_out")
+    cid = _seed_ccr(ru)
+    oh = _login(client, ou, op)
+    r = client.get("/api/approval-queue/detail", params={"type": "case_change", "id": cid}, headers=oh)
+    assert r.status_code == 404 and r.json() == {"detail": detail_not_found_message(cid)}, r.text
+    assert "MQ-AQP-CCR" not in r.text and "丙客戶" not in r.text
+    missing = client.get("/api/approval-queue/detail", params={"type": "case_change", "id": "999999"}, headers=oh)
+    assert missing.status_code == 404 and missing.json() == {"detail": detail_not_found_message("999999")}
+
+
+def test_completion_note_not_found_and_denied_same_message(client, make_user):
+    """M01 自己的查無訊息（「完工單不存在」）與看不到（原本回「報價單 MQ-X 不存在」，洩漏掛在哪一案）⇒ 同一句。"""
+    import db
+    from routers.approval_queue import detail_not_found_message
+    ou, op = _no_case_user(make_user, "aqp_cn_out")
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT OR IGNORE INTO quotations (quote_no, status, customer_name, project_name, sales_person, data_json, "
+                     "created_at, updated_at, assigned_user_ids) VALUES ('MQ-AQP-CN','成交','客','案','別人','{}',"
+                     "'2026-09-27','2026-09-27','[]')")
+        conn.execute("INSERT INTO completion_notes (note_no, quote_no, status, data_json, items_json, created_at, updated_at) "
+                     "VALUES ('CN-AQP-1','MQ-AQP-CN','待審核','{}','[]','2026-09-27','2026-09-27')")
+        conn.commit()
+    finally:
+        conn.close()
+    oh = _login(client, ou, op)
+    denied = client.get("/api/approval-queue/detail", params={"type": "completion_note", "id": "CN-AQP-1"}, headers=oh)
+    missing = client.get("/api/approval-queue/detail", params={"type": "completion_note", "id": "CN-AQP-NOPE"}, headers=oh)
+    assert denied.status_code == missing.status_code == 404
+    assert denied.json() == {"detail": detail_not_found_message("CN-AQP-1")}, denied.text
+    assert missing.json() == {"detail": detail_not_found_message("CN-AQP-NOPE")}, missing.text
+    assert "MQ-AQP-CN" not in denied.text
+
+
+# ── ⑨ 簽核 JSON 壞掉的報價單（稽核 D AL-O4：舊版整支佇列 500）────────────────────
+
+def test_quotation_with_malformed_approval_json_does_not_break_the_queue(client, make_user):
+    """壞 JSON 的報價單：佇列 200 並列出它（沒有簽核層 ⇒ 任一 superadmin 可簽）、角標對 superadmin 計 1；
+    同一個提供者的其他報價單照列（壞一筆不可以讓整類消失）。"""
+    import db
+    su, sp = make_user("aqp_bad_super", "Conn-Pass-123", role="superadmin")[:2]
+    sh = _login(client, su, sp)
+    before = _count(client, sh)
+    ok_appr = {"requestedBy": "aqp_bad_sales", "requestedAt": "2026-09-27T09:00:00", "currentTier": 0,
+               "tiers": [{"approvers": [{"username": "someone", "displayName": "someone", "status": "pending"}]}]}
+    conn = db.get_db()
+    try:
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
+                     "VALUES ('MQ-AQP-BAD','待審核','客','案','{not json','2026-09-27','2026-09-27')")
+        conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
+                     "VALUES ('MQ-AQP-OK','待審核','客','案',?,'2026-09-27','2026-09-27')", (json.dumps({"approval": ok_appr}),))
+        conn.commit()
+    finally:
+        conn.close()
+    r = client.get("/api/approval-queue", headers=sh)
+    assert r.status_code == 200, r.text
+    got = {it["quoteNo"]: it for g in r.json()["queue"] for it in g["items"]}
+    assert "MQ-AQP-BAD" in got and "MQ-AQP-OK" in got, sorted(got)
+    assert got["MQ-AQP-BAD"]["tiers"] == [] and got["MQ-AQP-BAD"]["requestedBy"] == ""
+    assert _count(client, sh) == before + 1        # 壞的那張：沒有簽核層、不是自己送的 ⇒ 計 1；OK 那張不是我簽

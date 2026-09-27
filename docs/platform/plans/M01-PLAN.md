@@ -178,3 +178,4 @@ A 發現：案件端點對「看不到」回 403、對「不存在」回 404 ⇒
 | 反向控制 | sparse 真刪 M01、真刪 M05（arap；主持裁示：M06 還在 routers/ 無法真刪）⇒ 待簽頁 200。**真刪 M06 待第十二班（a-m06-8）合回、rebase 後補，交 D 前完成** |
 | 突變 | 拿掉 ModuleSpec 的 `("approval.queue_items", "case")` ⇒ ⑦ 紅 |
 | 稽核 | 權限類 ⇒ D 完整稽核 |
+| 第二版 `wip/c-approval-l1-2`（稽核 D AUDIT-D-C-approval-l1，主持指派） | AL-M1：selfViewBy 兩方向補題（沒有案件權限的申請人 200、外人 404）＋突變；AL-S1：詳情查無＝看不到同一句「單據 {id} 不存在」、不帶案件單號、audit 記原因；AL-O3：佇列列出 ⇔ 詳情放行（M01 不在時只列給簽核鏈上的人與送審人，`_on_chain` 共用）＋逐格一致性題；AL-O4：壞 JSON 報價單補題時抓到 M01 提供者 `json_extract` 會讓整類消失 ⇒ 改 Python 逐筆解析；AL-O1：真刪 M05 的 2 紅（案件憑證清單 invoice_voucher 格標需要 M05；營運報表現金口徑改驗 M05 不在時明說） |
