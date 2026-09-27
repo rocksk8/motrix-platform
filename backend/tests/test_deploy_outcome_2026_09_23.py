@@ -893,6 +893,10 @@ _ROLLBACK_EXITS = [
     ("rollback_user_cancelled",      "not_applied",        "unknown", 1, "failed"),
     ("rollback_ok",                  "restored",           "up",      0, "succeeded"),
     ("rollback_failed",              "restored_unhealthy", "down",    1, "failed"),
+    # 2026-09-28：日常更新（platform 套 platform）的手動回滾新增的 3 條出口
+    ("rollback_plan_tool_missing",     "not_applied",      "unknown", 1, "failed"),
+    ("rollback_copy_failed_root_dirs", "restoring",        "down",    1, "failed"),
+    ("rollback_cleanup_failed",        "restoring",        "down",    1, "failed"),
 ]
 
 
