@@ -168,4 +168,14 @@ def test_live_preview_shows_a_new_field(live_server, make_user, new_context):
     key = _keys()[0]
     frame = page.frame_locator("#mb-preview-host iframe")
     frame.locator('[data-field="%s"]' % key).wait_for(state="attached", timeout=15000)
+    # 選中卡片 ⇒ 預覽裡那個欄位被框起（A 的 setHighlight ⇒ .is-preview-hl）；換一張 ⇒ 框跟著換
+    page.click('#mb-palette [data-palette-type="number"]')
+    _saved(page)
+    k2 = _keys()[1]
+    frame.locator('[data-field="%s"]' % k2).wait_for(state="attached", timeout=15000)
+    page.click('.mb-fc[data-field-index="0"]')
+    frame.locator('.is-preview-hl[data-field="%s"]' % key).wait_for(state="attached", timeout=15000)
+    page.click('.mb-fc[data-field-index="1"]')
+    frame.locator('.is-preview-hl[data-field="%s"]' % k2).wait_for(state="attached", timeout=15000)
+    assert frame.locator(".is-preview-hl").count() == 1
     assert not errors, errors
