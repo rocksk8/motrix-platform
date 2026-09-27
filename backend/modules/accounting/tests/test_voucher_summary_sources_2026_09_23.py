@@ -46,6 +46,8 @@ import re
 
 import pytest
 from core import source_tree
+from tests._requires import requires_module  # noqa: E402
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 #: `§160` 定案的路徑。⚠️ 改了 **退回給我**。
 ENDPOINT = "/api/vouchers/summary-sources"
@@ -269,6 +271,7 @@ def test_jv7_it_is_behind_the_voucher_modules(client, make_user):
 # ② 帶入的字串：`§164` 寫死一組格式
 # ══════════════════════════════════════════════════════════════════════
 
+@needs_m01
 def test_jv7_a_case_source_carries_a_string_ready_to_paste(client, make_user):
     """🔴 **案件那一筆要直接帶得出一個字串**，不是丟一包欄位給前端自己拼。
 
@@ -307,6 +310,7 @@ def test_jv7_a_case_source_carries_a_string_ready_to_paste(client, make_user):
     assert "MQ-202608-009" in s, "帶入字串裡沒有報價單號：%r" % s
 
 
+@needs_m01
 def test_jv7_a_missing_piece_is_omitted_not_padded(client, make_user):
     """🔴 **取不到的那一段要省略，不是留一個洞。**（`§164` 逐字）
 

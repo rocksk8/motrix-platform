@@ -20,6 +20,8 @@ import pytest
 
 from modules.accounting.tests.test_jv36_voucher_line_source_files_2026_09_24 import (  # noqa: F401
     _seed, _hdr, _LINES, VOUCHERS, QUOTE)
+from tests._requires import requires_module  # noqa: E402
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 def _lines(source_type, key):
@@ -155,6 +157,7 @@ from tests._e2e_login import inject_login as _login  # noqa: E402,F401
 from modules.accounting.tests.test_jv36_voucher_line_source_files_2026_09_24 import _open_with_case, _D  # noqa: E402
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_the_panel_marks_a_taken_expense_and_refuses_to_bring_it_in(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
