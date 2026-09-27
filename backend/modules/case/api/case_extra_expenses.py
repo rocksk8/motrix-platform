@@ -34,7 +34,7 @@ import json
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Body, File, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from db import get_db
@@ -62,6 +62,10 @@ router = APIRouter()
 
 # 可編輯／可刪除的狀態。送審中或已核准的不給改——改了簽核就失去意義
 EDITABLE_STATUSES = ("草稿", "已駁回")
+#: 請款流程（2026-09-27）：發票號碼長度上限；附件分類（沒有 kind 的舊附件一律視為 other，不回填猜測）
+INVOICE_NO_MAX = 40
+FILE_KINDS = ("invoice", "other")
+_DATE_KEYS = {"invoice_date": "invoiceDate", "paid_date": "paidDate", "invoice_no": "invoiceNo"}
 
 CATEGORIES = ["工時", "材料", "差旅", "運費", "安裝", "外包", "其他"]
 
@@ -106,6 +110,8 @@ def _row_to_dict(r) -> dict:
         # `AC2`：廠商發票日期／付款日（''＝未登錄）；權責口徑依發票日、現金口徑依付款日
         "invoiceDate": _col(r, "invoice_date", "") or "",
         "paidDate":    _col(r, "paid_date", "") or "",
+        # 請款流程（2026-09-27，case v1）：發票號碼（選填）；附件每筆的 kind：invoice＝發票、其他（含舊資料沒有 kind 的）＝other
+        "invoiceNo":   _col(r, "invoice_no", "") or "",
         "files":       files,
         "createdBy":       r["created_by"],
         "createdByName":   r["created_by_name"],
@@ -303,6 +309,55 @@ def update_extra_expense(quote_no: str, exp_id: int, body: ExtraExpenseIn = Body
         conn.close()
 
 
+# ── 請款頁（我的工作 → 新增請款；2026-09-27 使用者裁示）─────────────────────────────
+# 不另建資料：請款＝案件額外支出。這兩支只是給請款頁「挑案件」與「我的請款」用的查詢，
+# 可見範圍與額外支出各端點同一支 `case_owner_readable`（看不到的案件不列、也填不了）。
+
+@router.get("/api/extra-expenses/cases")
+def payreq_cases(q: str = Query(""), authorization: str = Header(None)):
+    """挑案件：看得到（可以填額外支出）的案件，依單號／客戶／專案搜尋，最多 30 筆。"""
+    user = _require_user(authorization)
+    kw = "%" + (q or "").strip() + "%"
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT quote_no, customer_name, project_name FROM quotations"
+            " WHERE quote_no LIKE ? OR customer_name LIKE ? OR project_name LIKE ?"
+            " ORDER BY updated_at DESC LIMIT 500", (kw, kw, kw)).fetchall()
+        out = []
+        for r in rows:
+            if case_owner_readable(conn, r["quote_no"], user):
+                out.append({"quoteNo": r["quote_no"], "customerName": r["customer_name"] or "",
+                            "projectName": r["project_name"] or ""})
+                if len(out) >= 30:
+                    break
+        return out
+    finally:
+        conn.close()
+
+
+@router.get("/api/extra-expenses/mine")
+def payreq_mine(authorization: str = Header(None)):
+    """我的請款：自己填的額外支出（最新 100 筆），帶案件名稱；案件已看不到的不列。"""
+    user = _require_user(authorization)
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT e.*, q.customer_name AS _cust, q.project_name AS _proj FROM case_extra_expenses e"
+            " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
+            " WHERE e.created_by = ? ORDER BY e.id DESC LIMIT 100", (user["username"],)).fetchall()
+        out = []
+        for r in rows:
+            if not case_owner_readable(conn, r["quote_no"], user):
+                continue
+            d = _row_to_dict(r)
+            d.update({"quoteNo": r["quote_no"], "customerName": r["_cust"] or "", "projectName": r["_proj"] or ""})
+            out.append(d)
+        return out
+    finally:
+        conn.close()
+
+
 @router.patch("/api/quotations/{quote_no}/extra-expenses/{exp_id}/dates")
 def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
                             authorization: str = Header(None)):
@@ -319,8 +374,13 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         changes["invoice_date"] = normalize_date(body.get("invoiceDate"), "發票日期")
     if "paidDate" in body:
         changes["paid_date"] = normalize_date(body.get("paidDate"), "付款日")
+    if "invoiceNo" in body:                                      # 請款流程：發票號碼（選填；已核准也可以補）
+        inv_no = str(body.get("invoiceNo") or "").strip()
+        if len(inv_no) > INVOICE_NO_MAX:
+            raise HTTPException(400, "發票號碼最長 %d 字" % INVOICE_NO_MAX)
+        changes["invoice_no"] = inv_no
     if not changes:
-        raise HTTPException(400, "沒有要登錄的日期")
+        raise HTTPException(400, "沒有要登錄的日期或發票號碼")
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
@@ -335,12 +395,12 @@ def set_extra_expense_dates(quote_no: str, exp_id: int, body: dict = Body(...),
         conn.commit()
     finally:
         conn.close()
-    label = {"invoice_date": "發票日期", "paid_date": "付款日"}
+    label = {"invoice_date": "發票日期", "paid_date": "付款日", "invoice_no": "發票號碼"}
     _audit(_tok(authorization), "extra_expense.dates", "quotation", quote_no,
            "%s 額外支出 #%s 登錄%s" % (quote_no, exp_id, "、".join(
                "%s %s" % (label[k], v or "（清除）") for k, v in changes.items())))
     return {"ok": True, "updatedAt": now,
-            **{("invoiceDate" if k == "invoice_date" else "paidDate"): v for k, v in changes.items()}}
+            **{_DATE_KEYS[k]: v for k, v in changes.items()}}
 
 
 @router.delete("/api/quotations/{quote_no}/extra-expenses/{exp_id}")
@@ -593,28 +653,38 @@ def _files_of(row) -> list:
         return []
 
 
-def _guard_files_editable(row):
+def _guard_files_editable(row, kind=None):
     """附件是否還能動。已核准就一律擋，訊息要明確指向變更申請這條路——
-    只回一句「不可修改」的話，使用者只會以為系統壞了。"""
-    if row["status"] == "已核准":
+    只回一句「不可修改」的話，使用者只會以為系統壞了。
+    例外（2026-09-27 使用者裁示請款流程）：已核准後**只有「發票」類可以直接補上傳**（留稽核紀錄）；刪除與其他類照舊上鎖。"""
+    if row["status"] == "已核准" and kind != "invoice":
         raise HTTPException(
-            409, "這筆額外支出已核准，附件已上鎖。要補憑證請按「編輯」提出變更申請，"
+            409, "這筆額外支出已核准，附件已上鎖（發票可以直接補上傳）。要補其他憑證請按「編輯」提出變更申請，"
                  "新附件會在簽核通過後一併生效")
 
 
 @router.post("/api/quotations/{quote_no}/extra-expenses/{exp_id}/files", status_code=201)
 async def upload_extra_expense_files(quote_no: str, exp_id: int,
                                      files: List[UploadFile] = File(...),
+                                     kind: str = Form("other"),
                                      authorization: str = Header(None)):
     user = _require_user(authorization)
+    kind = (kind or "other").strip()
+    if kind not in FILE_KINDS:
+        raise HTTPException(400, "附件分類只能是 invoice（發票）或 other（其他）")
     conn = get_db()
     try:
         _guard_case(conn, quote_no, user)
         row = _load(conn, quote_no, exp_id)
-        _guard_files_editable(row)
+        _guard_files_editable(row, kind)
+        after_approval = row["status"] == "已核准"
+        if after_approval and not (_can_modify(row, user) or user_has_module(user, "cashier")):
+            raise HTTPException(403, "核准後補發票限填寫人本人、管理員或出納")
         new_files = await save_document_files(
             "case_extra_expense", f"{quote_no}_{exp_id}", files,
             user.get("display_name") or user["username"])
+        for f in new_files:
+            f["kind"] = kind
         merged = _files_of(row) + new_files
         conn.execute(
             "UPDATE case_extra_expenses SET files_json=?, updated_at=?, updated_by_name=? "
@@ -626,8 +696,13 @@ async def upload_extra_expense_files(quote_no: str, exp_id: int,
         conn.commit()
     finally:
         conn.close()
-    _audit(_tok(authorization), "extra_expense.upload_files", "quotation", quote_no,
-           f"{quote_no} 額外支出 #{exp_id} 上傳 {len(new_files)} 個附件")
+    if after_approval:                                   # 核准後補發票：另一個稽核動作，查得到是誰、何時補的
+        _audit(_tok(authorization), "extra_expense.invoice_after_approval", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 核准後補上傳發票 {len(new_files)} 個："
+               + "、".join(str(f.get("filename") or f.get("id") or "") for f in new_files))
+    else:
+        _audit(_tok(authorization), "extra_expense.upload_files", "quotation", quote_no,
+               f"{quote_no} 額外支出 #{exp_id} 上傳 {len(new_files)} 個附件（{'發票' if kind == 'invoice' else '其他'}）")
     return {"ok": True, "added": len(new_files), "files": new_files}
 
 

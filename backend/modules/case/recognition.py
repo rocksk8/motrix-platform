@@ -259,14 +259,22 @@ def material_entries(conn, basis, department_id=None):
     return out
 
 
+#: 月支出計入的額外支出狀態（2026-09-27 使用者裁示請款流程）：送審中（待審核／簽核中，標 pending＝待定）與已核准；
+#: 草稿與已駁回**不計**（原本「只要填了就算」）。權責與現金兩種口徑都走 extra_entries ⇒ 同一處決定。
+COUNTED_EXTRA_STATUSES = ("待審核", "簽核中", "已核准")
+
+
 def extra_entries(conn, basis):
-    """額外支出 → 逐筆。沿用既有規則：金額 0 不列；送審中照樣計入（pending 標示）。"""
+    """額外支出 → 逐筆。金額 0 不列；只計 COUNTED_EXTRA_STATUSES（送審中照樣計入、pending 標示；草稿與已駁回不計）。
+    現金口徑：有付款日（出納登錄付款，IP-100）⇒ 用付款日、不是暫用；沒有 ⇒ 憑證日、暫用。"""
     out = []
     for r in conn.execute(
             "SELECT e.id, e.quote_no, e.category, e.description, e.total_cost, e.expense_date,"
             " e.created_at, e.doc_no, e.files_json, e.status, e.approval_json, e.invoice_date,"
             " e.paid_date, q.customer_name FROM case_extra_expenses e"
-            " LEFT JOIN quotations q ON q.quote_no = e.quote_no ORDER BY e.id"):
+            " LEFT JOIN quotations q ON q.quote_no = e.quote_no"
+            " WHERE e.status IN (%s) ORDER BY e.id" % ",".join("?" * len(COUNTED_EXTRA_STATUSES)),
+            COUNTED_EXTRA_STATUSES):
         cost = float(r["total_cost"] or 0)
         if not cost:
             continue

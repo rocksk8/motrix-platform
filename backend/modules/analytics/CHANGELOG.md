@@ -1,5 +1,8 @@
 # 營運分析 更新紀錄
 
+## 1.0.9 — 2026-09-28（B 暫用，列車取號；wip/b-payreq：請款流程）
+- 月支出「其他支出」的註解更新：草稿與已駁回不計（篩選在 M01 `recognition.extra_entries`，2026-09-27 使用者裁示）；程式行為不在本模組變
+
 ## 1.0.8 — 2026-09-26（C；第九班之後 rebase 重編，原暫用 1.0.6，列車取號）
 - 成案月份改取 M01 `case.recognition.won_month_map`（M01-PLAN §3-8 CA-O4：`helpers` 不再再匯出 M01 的 `quote_won_month_map`）；M01 不在 ⇒ {}。`norm_at`、`summarize_payment_items` 仍自 `helpers` 取用（已是 L1）
 

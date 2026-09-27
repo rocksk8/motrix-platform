@@ -1,5 +1,8 @@
 # 應收應付 更新紀錄
 
+## 1.0.8 — 2026-09-28（B 暫用，列車取號；wip/b-payreq：請款流程）
+- 出納「請款待付款」頁籤：`GET /api/cashier/pending-payables`（IP-100 多提供者合併）、`POST /api/cashier/pending-payables/{來源}/{key}/pay`（登錄付款經提供者寫回付款日；admin+／出納，finance 只能看）；M01 不在 ⇒ 200 available:false＋原因。既有 payable-queue（IP-14）與 bonus-queue（IP-8）不動
+
 ## 1.0.7 — 2026-09-27（第十三班列車取號，原暫用 1.0.6；c-queue-json，主持指派）
 - 待簽佇列提供者：簽核 JSON 改用 L1 `helpers.approval_queue.approval_json_of` 在 Python 逐筆解析（原本 SQL `json_extract(data_json,'$.approval')` 遇到一筆 malformed JSON ⇒ 整個查詢丟例外 ⇒ 這一類待簽全部靜默消失）；壞的那一筆跳過並記 ERROR（寫單號、不寫內容）
 - `queue_detail` docstring：權限、抬頭、遮蔽在 L1（稽核 D AL-O2）

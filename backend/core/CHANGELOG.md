@@ -2,6 +2,12 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.58 — 2026-09-27（B 暫用，列車取號；wip/b-payreq：請款流程，主持裁示模組 migration 順勢補上）
+- L0（新增）：`ModuleSpec.migrations: [(版號, 函式)]`——模組自己的 migration；`core.loader.load_all` 在模組**載入時**交給 `core.migrations.register`（停用／未授權／不在包內 ⇒ 不登記、不建表不加欄；再啟用時 `run_all` 從 `module_schema_versions` 記的版本往後補跑）
+- L0（新增）：`core.loader.check_migrations(items)`——版號不是從 1 起連續或重複、項目不是 (int, 函式) ⇒ ValueError，該模組載入失敗（原因進狀態表）
+- 守門：`tests/platform/test_module_migrations.py`（載入才登記、停用→啟用只跑一次、版號擋、modules/*/migrations 不准 import 會演進的程式碼）
+- ⚠ 單模組更新包（`tools/platform/module_update.py`，P7b）仍拒收帶 `migrations/` 的包：帶 migration 的模組只能整包出貨（RUN-PLAN 待辦）
+
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR
 - L1（行為）：M06 傳票（`modules/accounting/api/vouchers._queue_items`）、自訂模組引擎（`helpers/custom_modules.queue_items`，原本 `json.loads` 沒接 ⇒ 壞一筆整類消失）改用它（主持指派）

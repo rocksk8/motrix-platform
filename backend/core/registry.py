@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple
 
 #: 共用核心的契約版本；模組以 module.json 的 `core` 範圍宣告相容性。
-CORE_VERSION = "1.56"
+CORE_VERSION = "1.58"
 
 
 @dataclass
@@ -40,6 +40,11 @@ class ModuleSpec:
     startup_notices: List[Callable[[], Optional[str]]] = field(default_factory=list)
     runtime_switches: List[RuntimeSwitch] = field(default_factory=list)
     providers: Dict[Tuple[str, str], Callable] = field(default_factory=dict)
+    #: 模組自己的 migration（CORE-SPEC §6；2026-09-27 請款流程起）：`[(版號, 函式)]`，版號從 1 起連續、不重複。
+    #: 用串列不用 dict：dict 字面值的重複鍵會被靜默蓋掉，版號重複就擋不到。
+    #: 載入器在模組**載入時**才交給 `core.migrations.register` ⇒ 停用／未授權／不在包內的模組不登記、不建表不加欄；
+    #: 再啟用時 `run_all` 從 `module_schema_versions` 記的版本往後補跑（不重跑）。
+    migrations: List[Tuple[int, Callable]] = field(default_factory=list)
 
 
 @dataclass
