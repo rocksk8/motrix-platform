@@ -215,3 +215,29 @@
 ### 關閉紀錄（標準格式，PLAYBOOK §E-6）
 
 - ✅ AH-S7 關閉（d2fc6395）——複製失敗自動寫回快照再啟動；演練 P1copy 程式檔 0 差異
+
+## 8. 複核：wip/h-apply-platform 240d3bbc（(e) 鎖與結果檔＋AH-S9；A，2026-09-28 02:16；讀碼）
+
+| 項目 | 讀碼結果 | 判定 |
+|---|---|---|
+| 鎖的時機 | apply_update：`Enter-InstallLock`（:447）在身分守門（:405）、參數與包存在（:425／:428）、腳本版本比對（:442）之後，重複版檢查（:464）、`$timestamp`（:481）與任何 DB 備份之前 ⇒ 「在任何備份、停服之前拿鎖」成立。rollback_update：:315 在身分守門（:310）之後、快照存在檢查（:334）與 `restoring`（:374）之前。排他建立用 `CreateNew`；拿到鎖後才寫內容 | 成立 |
+| 殘留鎖不自動清 | 已存在 ⇒ 讀內容；pid 的行程還在而且是 powershell／pwsh ⇒ `locked`，否則 `stale`；兩者都走 `Fail`，沒有任何刪除。`Exit-InstallLock` 只在 `LockHeld` 為真時刪 ⇒ 沒拿到鎖的那一次不會刪別人的鎖。PID 被其他 powershell 重用 ⇒ 判成 locked（保守方向） | 成立 |
+| 結果檔與 ::RESULT:: 同源 | `Emit-Result` 在同一個函式裡先 `Write-Host ::RESULT::`、再 `Write-ResultFile $status $code`，兩者讀同一組 `$status／$code／$script:ProdState／$script:ServiceState`；所有 `Fail` 都經過 `Emit-Result`。先寫 `.tmp` 再 `Move-Item`；寫失敗只警告、不改變結果 | 成立 |
+| AH-S9 | RUNBOOK §8 :213-217 分開描述 copy_failed／delete_failed、鎖與結果檔；狀態表 :257-262 依 `rolled_back` 拆成三列，加上 locked／stale 兩列 | 成立 |
+| 兩支腳本的三個函式逐字相同 | 註明逐字相同，有題比對 | 成立 |
+
+**AH-S10（建議，新）　結果檔的 `timestamp` 與快照目錄不同名**
+- §9.2 寫死「`<timestamp>`＝腳本內的 `$timestamp`（與快照目錄同名）」
+- 實作用的是另外取的 `$script:RunStamp`（:163，腳本開頭），快照用 :481 的 `$timestamp`，中間隔著包的檢查、鎖、重複版檢查 ⇒ 兩者可能差幾秒
+- 後果：儀表板無法用結果檔直接找到「這一次的快照」（手動回滾按鈕要帶的時間戳）
+- 建議：`$timestamp = $script:RunStamp`（腳本開頭就定），一行即可；補一題「結果檔名的時間戳＝快照目錄名」
+- `delivery.find_result` 不依賴兩者相同（依檔案時間取這一次的結果），所以不擋 (c)
+
+**AH-S11（建議，新）　沒有經過 `Fail` 的例外會留下鎖、沒有結果檔**
+- 腳本是 `$ErrorActionPreference = "Stop"`，而且沒有 `trap`：任何沒被接住的例外 ⇒ 不經過 `Emit-Result` ⇒ 鎖不釋放、沒有結果行也沒有結果檔
+- 下一次執行會判成 `*_locked_stale`，要人刪鎖。方向是保守的（寧可擋住），但沒有任何紀錄說明上一次發生了什麼
+- 建議：頂層加 `trap { Write-Host "[FAIL] 未預期的錯誤：$_"; Emit-Result "unhandled_exception" 1; exit 1 }`（新值要登記 `_STATUS_FAILED`，rolled_back 如實反映當時的 ProdState）
+
+**AH-O9（觀察）**：`-CheckOnly` 也經過 `Emit-Result` ⇒ 也會寫 `apply_update_<時間>.result.json`（status `checkonly_*`）。`delivery.latest_result` 已略過它，其他讀結果檔的程式也要注意這一點。
+
+- ✅ AH-S9 關閉（240d3bbc）——RUNBOOK §8 依 rolled_back 拆列，並補上鎖與結果檔的說明
