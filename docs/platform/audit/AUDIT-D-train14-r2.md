@@ -71,3 +71,21 @@
   - plan_refused 排在 plan_failed 之前
   - M3 改驗 Copy-Item、M9 改驗 cleanup 失敗的判定與 Fail
   - D2-O1：執行期寫入位置的 classify 不可以是 program
+
+## 5. 複核 SL-M1：wip/a-storage-settings bb01c764（範圍 ddcb2025...bb01c764）（D，2026-09-28）
+
+- 修正內容：
+  - 讀不到 ⇒ `_read_main_db` 回 None；「庫檔不存在」與「還沒有 system_settings 表」仍算沒設定；設定值不是 dict 也算讀不到
+  - `_load` 不快取未知
+  - `resolve` 三個位置都回 `{"path": "", "source": "unknown"}`，不退回自動判斷
+  - `configured()` 丟 Unreadable；GET、PUT 回 503，PUT 在寫入之前就停
+  - `status` 標 unknown
+- 題 23 過。突變：
+  - 讀不到仍快取成空 ⇒ 2 紅
+  - **只把 `sqlite3.OperationalError`（庫被鎖）那一支改回 `{}` ⇒ 存活**：題目模擬讀不到用的是一般例外，沒有走到「庫被鎖」那一支，而那正是 SL-M1 的主要觸發情境
+- 探針（拋棄式 worktree，臨時庫）：讓 `sqlite3.connect` 丟 `OperationalError("database is locked")` ⇒ 三個位置都回 unknown、空路徑；恢復之後的下一次讀取回到 `source=setting` ⇒ **程式碼行為正確**
+- **D3-S1（建議）**：補一題以 `OperationalError("database is locked")` 模擬被鎖（與探針同一種做法），把主要情境釘住；反向控制：`no such table` ⇒ 仍算沒設定
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ SL-M1 關閉（bb01c764）——讀不到儲存位置設定時三個位置回未知、不退回自動判斷、不快取，設定頁回 503 不寫
