@@ -464,7 +464,27 @@
              customOrder: (columns || []).map(function (c) { return (c.visible || c.core ? '' : '-') + c.field }) }
   }
 
+  // 公式的可讀式子（使用者 2026-09-27：「帶入公式需要註解或是說明這公式是甚麼」）：欄位代號換成顯示名稱、
+  // * ／ ⇒ × ÷、比較符號換成數學符號；字串常值原樣。建構器卡片與執行期表單（＝建構器預覽）共用這一支。
+  // 例：{key:'amount', label:'金額', formula:'qty * unit_price'} ⇒「金額 ＝ 數量 × 單價」。不是公式欄位或公式空白 ⇒ ''。
+  var _FX_OPS = { '*': ' × ', '/': ' ÷ ', '!=': ' ≠ ', '<=': ' ≤ ', '>=': ' ≥ ', '==': ' ＝ ', '<': ' ＜ ', '>': ' ＞ ' }
+  function formulaReadable(def, f) {
+    if (!f || f.type !== 'formula') return ''
+    var src = String(f.formula == null ? '' : f.formula).trim()
+    if (!src) return ''
+    var labels = {}
+    fieldsOf(def).forEach(function (x) { if (x && x.key) labels[x.key] = x.label || x.key })
+    // 字串常值整段當一個記號吃掉（不在 labels／_FX_OPS ⇒ 原樣），裡面的字不會被當成欄位代號
+    var body = src.replace(/"[^"]*"|'[^']*'|[A-Za-z_][A-Za-z0-9_]*|!=|<=|>=|==|[*\/<>]/g, function (tok) {
+      if (Object.prototype.hasOwnProperty.call(_FX_OPS, tok)) return _FX_OPS[tok]
+      return Object.prototype.hasOwnProperty.call(labels, tok) ? labels[tok] : tok
+    })
+    body = body.replace(/\s*([+\-])\s*/g, ' $1 ').replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/\s+,/g, ',').trim()
+    return (f.label || f.key) + ' ＝ ' + body
+  }
+
   window.MotrixCustomLayout = {
+    formulaReadable: formulaReadable,
     // P9 內建模組版面
     pageModel: pageModel,
     findPoint: findPoint,

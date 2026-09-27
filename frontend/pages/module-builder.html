@@ -104,6 +104,9 @@
     .mb-fc .h { cursor: grab; color: var(--text-dim); font-size: 13px; user-select: none; }
     .mb-fc__ed { flex-basis: 100%; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-light); cursor: default; }
     .mb-fc__ed .mb-f { margin-bottom: 10px; }
+    .mb-fc__fx { display: block; font-size: 11.5px; color: var(--text-secondary); margin-top: 2px; }
+    .mb-fc__fx[data-fx-state="bad"] { color: var(--danger); }
+    .mb-fc__help { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: pre-wrap; }
     .mb-fc__q { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-secondary); }
     /* 右側即時預覽 */
     .mb-pv { border: 1px solid var(--border); border-radius: 10px; padding: 10px; position: sticky; top: calc(var(--topbar-h) + 12px); }
@@ -285,7 +288,10 @@
                     <span x-html="typeIcon(f.type)"></span>
                     <span class="t" x-text="typeLabel(f.type)"></span>
                     <span class="grow"><span x-text="f.label || '（未命名）'"></span> <span class="k" x-text="f.key"></span>
-                      <span class="mb-bad" x-show="f.required">必填</span></span>
+                      <span class="mb-bad" x-show="f.required">必填</span>
+                      <span class="mb-fc__fx" x-show="f.type === 'formula'" :data-fx-readable="f.key"
+                            :data-fx-state="(fxProblems[i] || []).length ? 'bad' : 'ok'" x-text="fxReadableLine(i)"></span>
+                      <span class="mb-fc__help" x-show="f.help" :data-field-help="f.key" x-text="f.help"></span></span>
                     <label class="mb-fc__q" x-show="f.type !== 'formula' && sel !== i" @click.stop>
                       <input type="checkbox" :data-quick-required="i" :checked="f.required === true" @change="f.required = $event.target.checked">必填</label>
                     <button class="mb-ib" title="上移" @click.stop="moveField(i, -1)">↑</button>
@@ -305,6 +311,11 @@
                       <div class="mb-f">
                         <label>型別</label>
                         <div class="mb-fx" x-text="typeLabel(def.fields[sel].type) + '（' + def.fields[sel].type + '）'"></div>
+                      </div>
+                      <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].help') }">
+                        <label for="mb-f-help">說明（選填，顯示在表單欄位下方）</label>
+                        <textarea id="mb-f-help" rows="2" maxlength="300" :value="def.fields[sel].help || ''"
+                                  @input="setHelp(sel, $event.target.value)" :placeholder="def.fields[sel].type === 'formula' ? '例：含稅金額，依數量與單價計算' : '例：填寫設備的財產編號'"></textarea>
                       </div>
                       <template x-if="def.fields[sel].type !== 'formula'">
                         <div class="mb-f">
@@ -1275,6 +1286,21 @@
         // ── ② 欄位 ──
         typeLabel(t) { return TYPE_LABELS[t] || t },
         typeIcon(t) { return TYPE_ICONS[t] || TYPE_ICON_GENERIC },
+        setHelp(i, v) {
+          // 選填：清空就拿掉這個鍵（沒填的定義與舊版一樣）
+          var f = this.def.fields[i]
+          if (!f) return
+          if (String(v).trim() === '') { delete f.help; this.def.fields = this.def.fields.slice() } else f.help = v
+        },
+        fxReadableLine(i) {
+          // 使用者 2026-09-27：公式要看得懂——可讀式子；有錯就用人話說明（沿用公式檢查的結果）
+          var f = this.def.fields[i]
+          if (!f || f.type !== 'formula') return ''
+          var probs = this.fxProblems[i] || []
+          if (probs.length) return '公式有誤：第 ' + (probs[0].pos + 1) + ' 個字附近——' + probs[0].message
+          if (!String(f.formula || '').trim()) return '（還沒寫公式）'
+          return this.L.formulaReadable(this.def, f)
+        },
         moveFieldKb(i, dir) {
           // 鍵盤替代（Alt＋↑／↓）：移動後焦點跟著卡片走、念出新位置
           var j = i + dir
