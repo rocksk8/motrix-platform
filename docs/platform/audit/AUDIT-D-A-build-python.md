@@ -22,3 +22,11 @@
 **BP-M1（必修）　deploy_manifest 沒有記錄建包用的 Python**
 - 這次要修的問題就是「建包挑到別的工具的 venv 而沒人發現」。只印在建包畫面上，事後打開安裝包看不到當初用哪一支，正是 manifest 那段註解說的「答案要在產物裡，不在誰的記憶裡」。
 - 修法：`env` 加 `python = {path, version, source: "project"|"fallback"}`（source 依 `$sel.Project` 與 `$pyExe` 是否相同），並補一題斷言 manifest 有這幾欄、而且 `source` 與實際挑選一致。
+
+## 複核：wip/a-build-python-2 b86bc4c8（D，2026-09-28）
+
+- BP-M1：`Get-PythonEnvRecord`（build_deploy_package.ps1:215）＝{path, version, source}，`deploy_manifest.json` 與 `build_history.jsonl` 的 env 都帶 `python = $pyEnv`（:1005／:1084），由 Step 2.5 同一個 `$sel` 算出；題 `test_env_record_matches_what_was_actually_picked`（path＝挑中的、version＝它自己回報的、source 與實際挑選一致，project／fallback 兩向）。拋棄式 worktree 跑 11 過。
+
+### 關閉紀錄（標準格式，PLAYBOOK §E-6）
+
+- ✅ BP-M1 關閉（b86bc4c8）——deploy_manifest／build_history 的 env.python 記錄挑中的直譯器路徑、版本、來源
