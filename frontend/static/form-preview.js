@@ -5,6 +5,8 @@
  *    預覽模式的防線在執行頁（同一個旗標擋住所有 API，§3.3）；本檔的 iframe sandbox 只是第二道。
  * ② 縮圖：流程／簽核／通知／輸出四步用純函式從草稿畫 inline SVG（MotrixFormPreview.svg.*，可單獨測）；
  *    欄位／版面兩步用縮小的預覽 iframe。
+ * ③ 輸出（mode:'output'，§3.4）：草稿送只讀預覽端點，後端用正式匯出同一個 renderer 畫 HTML（本檔不畫輸出）；
+ *    放進不跑腳本的 sandbox iframe；未完成的欄位由後端畫成佔位，清單顯示成提示。
  *
  * 約定（BUILDER-UX §3.2）：
  *   父 → 子 {type:'motrix-preview', v:1, kind:'draft', draft, mode}、{…, kind:'highlight', field}
@@ -22,9 +24,10 @@
     try { return JSON.parse(JSON.stringify(x === undefined ? {} : x)) } catch (e) { return {} }
   }
 
-  /** 表單或列表預覽 ⇒ {update(draft), setHighlight(key), destroy(), iframe} */
+  /** 表單／列表／輸出預覽 ⇒ {update(draft), setHighlight(key), destroy(), iframe}。輸出要帶 opts.key（模組 key）。 */
   function render(el, draft, opts) {
     opts = opts || {}
+    if (opts.mode === 'output') return renderOutput(el, draft, opts)
     var mode = opts.mode === 'list' ? 'list' : 'form'
     var iframe = document.createElement('iframe')
     iframe.className = 'fp-frame'
@@ -72,6 +75,100 @@
         alive = false
         window.removeEventListener('message', onMessage)
         if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+      },
+    }
+  }
+
+  // ── 輸出預覽（BUILDER-UX §3.4）──────────────────────────────────────────
+  var INCOMPLETE_HEADER = 'X-Motrix-Preview-Incomplete'
+  function token() {
+    try { return JSON.parse(localStorage.getItem('motrix_session') || '{}').token || '' } catch (e) { return '' }
+  }
+
+  /** 輸出：草稿送到只讀的預覽端點（後端用正式匯出同一個 renderer 畫），回來的 HTML 放進不跑腳本的 sandbox iframe。
+   *  同一時間只有一個請求，途中來的草稿只留最後一份，回來後再送；update 不重建 iframe、不 focus。
+   *  未完成的欄位由後端畫成佔位，清單在回應標頭 ⇒ 顯示成提示；422（畫不出來）保留上一次的畫面並說明原因。 */
+  function renderOutput(el, draft, opts) {
+    var box = document.createElement('div')
+    box.className = 'fp-output'
+    var note = document.createElement('div')
+    note.className = 'fp-output__note'
+    note.setAttribute('role', 'status')
+    note.setAttribute('aria-live', 'polite')
+    note.style.cssText = 'font-size:.85em;opacity:.85;margin:0 0 .5em'
+    note.hidden = true
+    var iframe = document.createElement('iframe')
+    iframe.className = 'fp-frame fp-frame--output'
+    iframe.setAttribute('title', '輸出預覽')
+    iframe.setAttribute('sandbox', 'allow-same-origin')                  // 不給 scripts（輸出是靜態 HTML）；同源只為了量高度
+    iframe.setAttribute('tabindex', '-1')
+    iframe.style.width = '100%'
+    iframe.style.border = '0'
+    iframe.addEventListener('load', function () {
+      try { iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px' } catch (e) { /* 量不到就用預設高度 */ }
+    })
+    box.appendChild(note)
+    box.appendChild(iframe)
+    el.appendChild(box)
+    var url = '/api/custom-modules/' + encodeURIComponent(opts.key || 'preview') + '/output/preview'
+    var pending = clone(draft), busy = false, alive = true, ctrl = null
+
+    function say(title, items) {
+      note.textContent = ''
+      if (!title) { note.hidden = true; return }
+      var t = document.createElement('div')
+      t.textContent = title
+      note.appendChild(t)
+      if (items.length) {
+        var ul = document.createElement('ul')
+        items.forEach(function (it) {
+          var li = document.createElement('li')
+          li.textContent = (it.label ? '〈' + it.label + '〉' : '') + (it.message || '')
+          if (it.field) li.setAttribute('data-field', it.field)
+          ul.appendChild(li)
+        })
+        note.appendChild(ul)
+      }
+      note.hidden = false
+    }
+    function incomplete(r) {
+      try { var x = JSON.parse(r.headers.get(INCOMPLETE_HEADER) || '[]'); return Array.isArray(x) ? x : [] } catch (e) { return [] }
+    }
+    function pump() {
+      if (!alive || busy || pending === null) return
+      var body = pending
+      pending = null
+      busy = true
+      ctrl = typeof AbortController === 'function' ? new AbortController() : null
+      fetch(url, { method: 'POST', signal: ctrl ? ctrl.signal : undefined, body: JSON.stringify({ body: body }),
+                   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() } })
+        .then(function (r) {
+          if (r.ok) {
+            var inc = incomplete(r)
+            return r.text().then(function (html) {
+              if (!alive) return
+              iframe.srcdoc = html
+              say(inc.length ? '有 ' + inc.length + ' 項尚未完成（輸出裡以佔位顯示）' : '', inc)
+            })
+          }
+          return r.json().catch(function () { return null }).then(function (d) {
+            if (!alive) return
+            say((d && d.detail) || ('輸出預覽失敗（' + r.status + '）'), (d && Array.isArray(d.problems)) ? d.problems : [])
+          })
+        })
+        .catch(function (e) { if (alive && !(e && e.name === 'AbortError')) say('輸出預覽連線失敗', []) })
+        .then(function () { busy = false; ctrl = null; pump() })
+    }
+    pump()
+    return {
+      iframe: iframe,
+      update: function (next) { pending = clone(next); pump() },
+      setHighlight: function () {},                                      // 輸出由版型決定位置，不框選欄位
+      destroy: function () {
+        alive = false
+        pending = null
+        if (ctrl) ctrl.abort()
+        if (box.parentNode) box.parentNode.removeChild(box)
       },
     }
   }
