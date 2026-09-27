@@ -556,6 +556,9 @@
    "refuse_unknown_new_keys": "def(new_modules, existing_modules=…)",
    "register_key_source": "def(fn)"
   },
+  "helper:module_startup": {
+   "load_modules_like_startup": "def(db_path=…)"
+  },
   "helper:module_switches": {
    "DisabledList": "class",
    "DisabledList.all_disabled": "field",

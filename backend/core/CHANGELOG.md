@@ -7,6 +7,7 @@
 - L0（新增）：`core.loader.check_migrations(items)`——版號不是從 1 起連續或重複、項目不是 (int, 函式) ⇒ ValueError，該模組載入失敗（原因進狀態表）
 - 守門：`tests/platform/test_module_migrations.py`（載入才登記、停用→啟用只跑一次、版號擋、modules/*/migrations 不准 import 會演進的程式碼）
 - ⚠ 單模組更新包（`tools/platform/module_update.py`，P7b）仍拒收帶 `migrations/` 的包：帶 migration 的模組只能整包出貨（RUN-PLAN 待辦）
+- L1（新增，2026-09-28 主持派工）：`helpers.module_startup.load_modules_like_startup(db_path=None)`——main.py 啟動時「讀停用清單＋load_all(授權、停用、原因)」原段搬出，main.py 改呼叫它（行為不變）。只做 `init_db` 的工具（apply_update 乾跑 migration、`upgrade.py run_migrations`）要先呼叫它、並帶**被試跑的那個庫**，模組 migration 才會登記、停用清單才不會讀到正式庫；呼叫端由 H12 接。守門 `tests/platform/test_module_startup.py`
 
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR

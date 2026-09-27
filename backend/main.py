@@ -49,12 +49,9 @@ logger = logging.getLogger(__name__)
 # 啟動時讀一次 ⇒ 改了要重啟才生效）。兩者都不 import 該模組，資料不動。
 # STATES-PLATFORM P-SW-05：停用清單讀不到（主庫被鎖、損毀）時不可以當成「沒有停用」——
 # 沿用上次成功讀到的快取；沒有快取 ⇒ 所有模組暫不載入（寧可少開，不可多開），管理頁與狀態端點標示。
-from helpers import module_switches as _module_switches
-_disabled = _module_switches.read_disabled_list()
-module_registry.set_disabled_list(_disabled.source, _disabled.message)
-module_loader.load_all(license_check=license_core.module_license_check,
-                       disabled=module_loader.ALL if _disabled.all_disabled else _disabled.keys,
-                       disabled_reason=_module_switches.UNREADABLE_REASON if _disabled.all_disabled else None)
+# 這一段在 helpers/module_startup.py（乾跑 migration、V9→新版轉換也要先載模組，模組 migration 才會登記；CORE 1.58）。
+from helpers import module_startup as _module_startup
+_module_startup.load_modules_like_startup()
 
 from core import paths as _paths
 FRONTEND_DIR = _paths.FRONTEND_DIR

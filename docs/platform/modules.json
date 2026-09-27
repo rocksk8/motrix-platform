@@ -36,6 +36,7 @@
    "helper:licensing",
    "helper:mail_types",
    "helper:module_registry",
+   "helper:module_startup",
    "helper:module_switches",
    "helper:notification_prefs",
    "helper:part_catalog",

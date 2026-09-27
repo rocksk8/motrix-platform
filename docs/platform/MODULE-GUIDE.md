@@ -114,6 +114,7 @@
 - V9 的 migration v1～v116 是凍結的基準，**不可以修改**。
 - 模組自己的新表用模組自己的 migration，放在 `modules/<key>/migrations/NNNN_<desc>.py`，版本記在 `module_schema_versions` 表。
   〔補 2026-09-28 00:05（請款流程，主持裁示）：登記方式＝`ModuleSpec(migrations=[(1, up), (2, …)])`（用串列，不用 dict——重複的鍵會被靜默蓋掉），loader 在模組**載入時**才交給 `core.migrations.register` ⇒ 停用／未授權的模組不跑；再啟用時從記錄的版本往後補跑。版號必須從 1 起連續、不重複，否則該模組載入失敗。migration 檔**不准 import** `modules`／`helpers`／`core`／`db` 等會演進的程式碼（SQL 寫在檔裡），守門 `tests/platform/test_module_migrations.py`。⚠ 帶 `migrations/` 的模組目前不能用單模組更新包出貨（P7b）〕
+  〔補 2026-09-28 00:49（主持派工）：因為「載入才登記」，**只做 `db.init_db(p)` 的工具**（apply_update 乾跑 migration、`tools/platform/upgrade.py run_migrations`）必須先呼叫 `helpers.module_startup.load_modules_like_startup(db_path=<被試跑的那個庫>)`（與 main.py 啟動同一段），否則模組 migration **靜默不跑**；停用清單讀帶進來的那個庫，不讀正式庫。main.py 端守門 `tests/platform/test_module_startup.py`；⚠ 未守門：兩支工具的呼叫端（H12 在本分支合回後接上）〕
 - migration 只准新增，不准改動或刪除欄位（這樣才能回退到 V9 的程式）。
 - V9 維護期間若新增 migration，必須用同一個版號、同樣的內容追進新版。
 - 凍結的歷史 migration 不可以呼叫會繼續演進的程式碼。

@@ -39,7 +39,7 @@ import helpers.module_switches as _ms       # noqa: E402
 _loader.MODULES_DIR = PKG_DIR
 _loader.MODULES_PACKAGE = PKG
 
-# main 讀的是 read_disabled_list()（P-SW-05）；在 import main 之前換掉它的來源。
+# main 讀的是 read_disabled_list()（P-SW-05；經 helpers/module_startup，以模組屬性呼叫）；在 import main 之前換掉它的來源。
 if GATE in ("disabled", "both"):
     _ms.read_disabled_list = lambda db_path=None: _ms.DisabledList(frozenset({KEY}), False, _ms.SOURCE_DB)
 if GATE == "unreadable":
