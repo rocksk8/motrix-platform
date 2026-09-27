@@ -59,20 +59,25 @@ class _Payables:
 
     @staticmethod
     def mark_paid(conn, key, paid_date, user) -> dict:
-        """寫回付款日。查無 ⇒ LookupError；不是已核准或已登錄過 ⇒ ValueError（呼叫端各自轉 404／409）。不 commit（呼叫端）。"""
+        """寫回付款日。查無 ⇒ LookupError；不是已核准或已登錄過 ⇒ ValueError（呼叫端各自轉 404／409）。不 commit（呼叫端）。
+
+        原子（稽核 A AB-S1）：先用帶條件的 UPDATE（已核准、付款日空白）寫，`rowcount==0` 才回頭讀原因——
+        兩位出納同時按「登錄付款」，後到的那位拿到「已被登錄」，不會蓋掉前者的付款日。"""
         try:
             exp_id = int(key)
         except (TypeError, ValueError):
             raise LookupError("找不到這筆請款")
+        cur = conn.execute(
+            "UPDATE case_extra_expenses SET paid_date=?, updated_at=?, updated_by_name=?"
+            " WHERE id=? AND status='已核准' AND COALESCE(paid_date, '')=''",
+            (paid_date, datetime.now().isoformat(timespec="seconds"),
+             user.get("display_name") or user.get("username") or "", exp_id))
         r = conn.execute("SELECT id, quote_no, status, paid_date, total_cost FROM case_extra_expenses WHERE id=?",
                          (exp_id,)).fetchone()
-        if not r:
-            raise LookupError("找不到這筆請款")
-        if r["status"] != "已核准":
-            raise ValueError("這筆請款還沒核准，不能登錄付款")
-        if (r["paid_date"] or "") != "":
-            raise ValueError("這筆請款已登錄付款日 %s" % r["paid_date"])
-        conn.execute("UPDATE case_extra_expenses SET paid_date=?, updated_at=?, updated_by_name=? WHERE id=?",
-                     (paid_date, datetime.now().isoformat(timespec="seconds"),
-                      user.get("display_name") or user.get("username") or "", exp_id))
+        if cur.rowcount == 0:
+            if not r:
+                raise LookupError("找不到這筆請款")
+            if r["status"] != "已核准":
+                raise ValueError("這筆請款還沒核准，不能登錄付款")
+            raise ValueError("這筆請款已被登錄付款日 %s（可能是另一位出納剛登錄）" % (r["paid_date"] or ""))
         return {"quoteNo": r["quote_no"], "key": str(exp_id), "amount": float(r["total_cost"] or 0), "paidDate": paid_date}

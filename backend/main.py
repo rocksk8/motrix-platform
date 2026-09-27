@@ -571,6 +571,8 @@ if _db_for_guard.DB_PATH == _paths.DB_PATH:
     _paths.require_db(_db_for_guard.DB_PATH)
 init_db()
 init_db(DEMO_DB_PATH)
+# 模組 migration 沒完成（回原因）的模組：改記 failed、路由不掛（稽核 A AB-S3；要在 mount_modules 之前）
+_module_startup.fail_incomplete_modules([_db_for_guard.DB_PATH, DEMO_DB_PATH])
 # S-CD02：部分損毀的主庫照常啟動（init_db 不會發現）⇒ 啟動時做一次 quick_check，
 # 不通過 ⇒ ERROR 告警（寄信、BACKUP_ALERT、audit；升級預檢會因告警而擋）。不擋啟動：營運不中斷。
 def _startup_integrity_check():
