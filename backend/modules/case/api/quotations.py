@@ -4342,95 +4342,18 @@ def get_finance_summary(quote_no: str, authorization: str = Header(None)):
 # 附件實體檔案的分類也從 "quotation_settlement_extra" 改成 "case_extra_expense"。
 
 
-# ── Approval queue ────────────────────────────────────────────────────────────
+# ── 「待我簽核」佇列：M01 的單據（IP-10 `approval.queue_items` 提供者）──────────────
+#
+# 2026-09-27 主持裁示：佇列／角標／詳情／轉簽端點搬進 L1 `routers/approval_queue.py`（路徑不變）。M01 只是提供者之一：
+# 報價單、已結案變更（case_change）、額外支出、完工單、額外支出變更。項目形狀見 `helpers/approval_queue.py::base_item`。
+# 權限過濾（誰看得到哪一筆）與角標計數都在 L1，這裡只列「待審核／簽核中」的單。
 
-def _queue_visible_to(user: dict, item: dict, delegated_for) -> bool:
-    """這一筆待簽核文件該不該讓這個人看到（2026-09-15 使用者要求）。
+def approval_queue_items(conn) -> list:
+    """`approval.queue_items`（M01）：報價單、已結案案件變更、案件額外支出、完工單、額外支出變更。
 
-    「簽核佇列除了管理員以上都只能看到自己的簽核佇列卡在哪邊」。所以非 admin 的
-    可見範圍是兩種，其餘一律看不到：
-
-    1. **自己送審的**——他要知道自己的單子卡在哪一關、卡在誰身上
-    2. **簽核鏈裡有自己的**（含代理他人時的被代理人）——比對的是**所有層**而不是
-       只有當前層：只比當前層的話，下一關才輪到的人看不到即將輪到自己的單，
-       已經簽過的人也看不到後面卡住了，兩種都會讓人誤以為「沒我的事」
-
-    為什麼過濾放在這裡、而且只有一份：這支端點一路長到 8 種單據類型，每種各寫一
-    段 WHERE 條件的話，下一次新增類型時漏掉的那一種就是全開的——而「漏了會外洩」
-    的規則必須是預設安全。集中成一條規則、套在組裝好的 items 上，新類型自動被蓋到。
-
-    `tiers` 為空的類型（case_change 是「任一 superadmin 皆可審核」的單層設計）對
-    非 admin 只會落在第 1 條，這是對的：他不可能是它的簽核人。
-    """
-    if (user.get("role") or "") in ("superadmin", "admin"):
-        return True
-    mine = {user.get("username") or ""} | set(delegated_for or [])
-    if item.get("requestedBy") in mine:
-        return True
-    for tier in item.get("tiers") or []:
-        for ap in (tier.get("approvers") or []):
-            if (ap.get("username") or "") in mine:
-                return True
-    return False
-
-
-def _queue_provider_items(conn) -> list:
-    """IP-10 `approval.queue_items`：各單據模組提供自己的待簽項目（M01-PLAN §3-7）。提供者壞掉只少那一類（記 exception）；
-    模組不在 ⇒ 那一類不列。項目沒給 `customer`／`projectName` 而有 `linkedQuoteNo` ⇒ 這裡補案件的客戶與名稱
-    （案件表是 M01 的，單據模組不讀）。"""
-    from core import registry as _reg
-    out = []
-    for name, fn in sorted(_reg.providers("approval.queue_items").items()):
-        try:
-            out.extend(fn(conn) or [])
-        except Exception:                                    # noqa: BLE001
-            logger.exception("待簽核佇列：提供者 %s 失敗（這一類不列出）", name)
-    need = sorted({it["linkedQuoteNo"] for it in out
-                   if it.get("linkedQuoteNo") and ("customer" not in it or "projectName" not in it)})
-    names = {}
-    for i in range(0, len(need), 500):
-        chunk = need[i:i + 500]
-        for r in conn.execute("SELECT quote_no, customer_name, project_name FROM quotations WHERE quote_no IN (%s)"
-                              % ",".join("?" * len(chunk)), chunk).fetchall():
-            names[r["quote_no"]] = r
-    for it in out:
-        q = names.get(it.get("linkedQuoteNo"))
-        it.setdefault("customer", (q["customer_name"] if q else "") or "")
-        it.setdefault("projectName", (q["project_name"] if q else "") or "")
-    return out
-
-
-def _reassign_types() -> list:
-    """可以轉簽的單據類型＝有 `approval.reassign` 提供者的（模組不在 ⇒ 不給轉簽，前端不顯示按鈕）。"""
-    from core import registry as _reg
-    return sorted(_reg.providers("approval.reassign"))
-
-
-@router.get("/api/approval-queue")
-def get_approval_queue(authorization: str = Header(None)):
-    """2026-08-21 起合併三種待簽核文件類型：報價單、承攬商匯款申請、開票申請
-    憑據；2026-08-24 補上出貨單（§5.8 的舊功能，統一佇列蓋上去時漏掉）與請款單
-    （新增單據類型，M05）。2026-09-26 起其他模組的單據由各模組提供（IP-10，M01-PLAN §3-7）。刻意
-    沿用報價單既有的欄位名稱（quoteNo/customer/projectName/total/quoteDate/
-    salesPerson）承載各類型的資料，讓既有前端列表渲染邏輯幾乎不用改，只多一個
-    `type` 欄位供前端分流動作按鈕與連結（見 approval-queue.html）。承攬商匯款
-    申請／開票申請憑據／出貨單都沒有「拒絕結案」這種永久終止端點（只有報價單
-    有），前端會依 type 隱藏該按鈕。2026-08-26 補上 type='case_change'（已結案
-    案件半解鎖期間的變更/上傳待審核，見 case_change_requests 表）——這類項目不是
-    真正的多層 tiers 簽核，是單層「任一 superadmin 皆可審核」，approve/reject
-    走獨立端點 POST /api/case-changes/{id}/approve|reject，不是既有的
-    quotation 簽核端點，前端需依 type 分流。
-
-    2026-08-28：額外回傳 myDelegatedFor（目前使用者正在代理誰的簽核權限，見
-    approval_delegates 表／active_delegators_for()）——check_approve_permission()
-    後端早就支援代理人真的能完成簽核動作，但這個佇列列表／canApprove() 前端
-    判斷原本只比對 currentApprovers 的 username 是否等於自己，代理人登入後完全
-    看不到任何項目被標成「輪到我」、核准/退回按鈕也不會出現，等於代理人設定了
-    也沒用（除非剛好知道確切單號直接開頁面）。前端 canApprove()/myPendingCount
-    要一併比對這份清單。"""
-    user = _require_user(authorization)
-    conn = get_db()
-    my_delegated_for = sorted(active_delegators_for(conn, user["username"]))
+    沿革：2026-08-21 合併報價單與憑據類型；2026-08-26 補 case_change（已結案案件半解鎖期間的變更／上傳待審核，
+    單層「任一 superadmin 皆可審核」，approve/reject 走 POST /api/case-changes/{id}/approve|reject）；
+    2026-09-11 額外支出與其變更申請；2026-09-12 完工單。其他模組的單據 2026-09-26 起由各模組提供。"""
     items = []
 
     rows = conn.execute("""
@@ -4461,19 +4384,15 @@ def get_approval_queue(authorization: str = Header(None)):
             "currentApprovers":    f["currentApprovers"],
         })
 
-    # 承攬商匯款申請（M04）、開票申請／請款單（M05）、出貨單（M03）、會計傳票（M06）、獎金分潤（M07）：
-    # 2026-09-26 起由各模組提供（IP-10 `approval.queue_items`，M01-PLAN §3-7），見下方 `_queue_provider_items`。
-
     ccr_rows = conn.execute("""
-        SELECT id, quote_no, action_type, summary, requested_by, requested_by_display, requested_at
-        FROM case_change_requests
-        WHERE status='pending'
-        ORDER BY id DESC
+        SELECT c.id, c.quote_no, c.action_type, c.summary, c.requested_by, c.requested_by_display, c.requested_at,
+               q.customer_name
+        FROM case_change_requests c
+        LEFT JOIN quotations q ON q.quote_no = c.quote_no
+        WHERE c.status='pending'
+        ORDER BY c.id DESC
     """).fetchall()
     for r in ccr_rows:
-        cust = conn.execute(
-            "SELECT customer_name, project_name FROM quotations WHERE quote_no=?", (r["quote_no"],)
-        ).fetchone()
         items.append({
             # 刻意留空 tiers（跟既有「無 tiers 設定時任一 superadmin 皆可簽核」
             # 的 fallback 語意共用同一套前端 canApprove() 判斷——不是真正的多層
@@ -4481,7 +4400,7 @@ def get_approval_queue(authorization: str = Header(None)):
             # 不需要另外構造「這層有 N 個 approvers 但誰簽都算數」的新語意。
             "type":                "case_change",
             "quoteNo":             f"{r['quote_no']}-CCR{r['id']}",
-            "customer":            (cust["customer_name"] if cust else "") or "",
+            "customer":            r["customer_name"] or "",
             "projectName":         r["summary"] or "",
             "total":               0,
             "quoteDate":           (r["requested_at"] or "")[:10],
@@ -4622,120 +4541,8 @@ def get_approval_queue(authorization: str = Header(None)):
             "pendingFileCount":    len(chg.get("addFiles") or []),
         })
 
-    # IP-10 `approval.queue_items`：其他模組提供自己的待簽核項目（單據模組、自訂模組引擎），
-    # 形狀同上、`type` 各自不同。提供者壞掉只少那一類，佇列照常（記 exception）。
-    items.extend(_queue_provider_items(conn))
-    conn.close()
+    return items
 
-    # 權限過濾（2026-09-15）：管理員以上看全部，其他人只看自己送審的與簽核鏈裡
-    # 有自己的。過濾在分組**之前**——分組之後才過濾會留下空的群組，畫面上會出現
-    # 「某某人 0 件」這種列。
-    items = [it for it in items if _queue_visible_to(user, it, my_delegated_for)]
-
-    groups: dict = defaultdict(list)
-    for item in items:
-        groups[item["requestedBy"]].append(item)
-
-    queue = []
-    for username, group_items in groups.items():
-        group_items.sort(key=lambda x: x["requestedAt"])
-        queue.append({
-            "requestedBy":        username,
-            "requestedByDisplay": group_items[0]["requestedByDisplay"] if group_items else username,
-            "count":              len(group_items),
-            "items":              group_items,
-        })
-    queue.sort(key=lambda g: g["items"][0]["requestedAt"] if g["items"] else "")
-
-    return {"queue": queue, "total": len(items), "myDelegatedFor": my_delegated_for,
-            "reassignTypes": _reassign_types()}
-
-
-@router.get("/api/approval-queue/count")
-def get_approval_queue_count(authorization: str = Header(None)):
-    """輕量端點：回傳目前輪到當前用戶簽核的項目數量（報價單＋承攬商匯款申請＋
-    開票申請憑據＋出貨單，2026-08-21 起合併前三者、2026-08-24 補上出貨單）。
-    每一頁 topbar 都會呼叫這支（static/notif.js），刻意維持跟原本一樣的輕量
-    寫法（只挑 approval_json 一欄），不要拖累全站每頁的載入速度。
-
-    2026-08-28：一併算進「我目前代理誰」（見 get_approval_queue() 同一則
-    2026-08-28 說明），否則代理人這段期間看到的側邊欄角標數字仍然是 0，
-    跟佇列頁面本身修好後的狀態矛盾。"""
-    u = _require_user(authorization)
-    my_username = u["username"]
-    conn = get_db()
-    my_delegated_for = active_delegators_for(conn, my_username)
-    my_usernames = {my_username} | my_delegated_for
-    approval_jsons = [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM quotations WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 完工單（2026-09-12）：角標數字要跟佇列列表一致，漏掉就會變成「列得出來但
-    # topbar 是 0」——兩邊矛盾比兩邊都沒有更難查
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT json_extract(data_json,'$.approval') FROM completion_notes WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 案件額外支出（2026-09-11）：這張表的簽核狀態存在獨立欄位 approval_json，
-    # 不是 data_json 裡的 $.approval，所以直接取欄位；下面那段逐筆比對當層
-    # approver 的邏輯完全共用，不必另外寫一份。
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT approval_json FROM case_extra_expenses WHERE status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # 額外支出變更申請（2026-09-11，DB v76）：另一欄、另一輪簽核，角標要一起算，
-    # 否則佇列頁列得出來但 topbar 數字是 0（兩邊矛盾比兩邊都沒有更難查）
-    approval_jsons += [r[0] for r in conn.execute(
-        "SELECT change_approval_json FROM case_extra_expenses "
-        "WHERE change_status IN ('待審核','簽核中')"
-    ).fetchall()]
-    # IP-10：其他模組提供的待簽核項目（承攬商匯款申請、開票申請、請款單、出貨單、傳票、獎金分潤、自訂模組單據；
-    # M01-PLAN §3-7）——與佇列列表同一份來源，角標才對得起來
-    approval_jsons += [json.dumps({"tiers": it["tiers"], "currentTier": it["currentTier"],
-                                   "requestedBy": it["requestedBy"]}, ensure_ascii=False)
-                       for it in _queue_provider_items(conn)]
-    # 已結案案件半解鎖變更（2026-08-26）：單層審核，任一 superadmin 皆算「輪到我」，
-    # 不像其他文件類型需要比對 tiers 當層 approver username，直接另外加總。
-    ccr_count = 0
-    if u["role"] == "superadmin":
-        # 2026-09-15 修正：原本是 `WHERE status='pending'` 全部算進來，**沒有排除
-        # 自己送的**。自己送的自己簽不掉（`check_no_tier_self_approval()` 會擋，
-        # 佇列頁的 `canApprove()` 也回 false），所以那會變成一個**永遠清不掉的
-        # 紅點**——使用者看到角標有數字、點進佇列卻沒有待我簽核的項目。
-        ccr_count = conn.execute(
-            "SELECT COUNT(*) c FROM case_change_requests "
-            "WHERE status='pending' AND COALESCE(requested_by,'') != ?",
-            (my_username,)
-        ).fetchone()["c"]
-    conn.close()
-    count = ccr_count
-    is_sa = u["role"] == "superadmin"
-    for approval_json in approval_jsons:
-        try:
-            appr    = json.loads(approval_json or "{}")
-            tiers   = _active_tiers(appr)
-            ct_idx  = _current_tier_idx(appr)
-            if tiers:
-                if ct_idx < len(tiers):
-                    approvers = tiers[ct_idx].get("approvers") or []
-                    if any(a.get("username") in my_usernames and a.get("status") != "approved"
-                           for a in approvers):
-                        count += 1
-            elif is_sa and (appr.get("requestedBy") or "") != my_username:
-                # 2026-09-15 修正：**沒有簽核層設定**的單據原本被整批跳過
-                # （原碼是 `if tiers and ct_idx < len(tiers)`）。
-                # 沒有 tiers 時的規則是「任一 superadmin 皆可簽核」——
-                # `approve_quotation()` 的 no-tier 分支就是這樣走的
-                # （`detail_status = "超級管理員簽核"`），佇列頁的 `canApprove()`
-                # 也是這樣判（`// No tiers: superadmin, not self`）。
-                # 漏掉的結果是**佇列列得出來、topbar 卻是 0**，正是使用者回報的
-                # 「需要我簽核但簽核佇列未顯示」。
-                #
-                # ⚠️ 這裡刻意跟前端 `canApprove()` 一致：自己送的一律不算。
-                # 後端 `check_no_tier_self_approval()` 另有「唯一在職 superadmin
-                # 可自簽」的逃生條款，但前端不會給按鈕，角標跟著後端算反而會
-                # 製造一個按不下去的紅點。
-                count += 1
-        except Exception:
-            pass
-    return {"count": count}
 
 
 @router.post("/api/quotations/{quote_no}/approve")

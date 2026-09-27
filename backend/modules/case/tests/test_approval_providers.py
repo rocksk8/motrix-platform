@@ -20,8 +20,9 @@ BACKEND = Path(__file__).resolve().parents[3]   # M01 ④：隨模組搬進 modu
 #: 別的模組的單據表（2026-09-26 前 M01 的三支端點逐表直寫的那些）
 FOREIGN_TABLES = ("contractor_payment_vouchers", "invoice_vouchers", "payment_requests", "shipping_notes",
                   "vouchers_all", "voucher_lines", "bonus_awards", "bonus_case_awards")
-M01_FUNCS = ("get_approval_queue", "get_approval_queue_count", "reassign_approval", "_queue_provider_items",
-             "approval_queue_detail")
+#: 佇列彙整（L1 routers/approval_queue.py，2026-09-27 自 M01 搬入）與 M01 自己的提供者
+L1_FUNCS = ("get_approval_queue", "get_approval_queue_count", "_queue_provider_items")
+M01_FUNCS = ("reassign_approval", "approval_queue_detail", "approval_queue_items")
 
 
 def _funcs(src, names):
@@ -31,9 +32,12 @@ def _funcs(src, names):
 
 
 def test_case_endpoints_do_not_touch_other_modules_tables():
-    src = (BACKEND / "modules" / "case" / "api" / "quotations.py").read_text(encoding="utf-8")
-    found = _funcs(src, M01_FUNCS)
-    assert set(found) == set(M01_FUNCS), sorted(found)
+    found = {}
+    for rel, names in ((("routers", "approval_queue.py"), L1_FUNCS),
+                       (("modules", "case", "api", "quotations.py"), M01_FUNCS)):
+        got = _funcs(BACKEND.joinpath(*rel).read_text(encoding="utf-8"), names)
+        assert set(got) == set(names), (rel, sorted(got))
+        found.update(got)
     bad = {f: [t for t in FOREIGN_TABLES if t in body] for f, body in found.items()}
     bad = {f: ts for f, ts in bad.items() if ts}
     assert not bad, "M01 佇列／角標／轉簽仍直接碰其他模組的單據表 ⇒ 改由擁有模組提供（M01-PLAN §3-7）：%s" % bad
@@ -251,7 +255,7 @@ def test_unreadable_chain_is_refused(client, iv_setup):
 
 def test_case_names_are_filled_only_when_missing(client, monkeypatch):
     import db
-    from modules.case.api import quotations as q
+    import routers.approval_queue as q          # 彙整在 L1；名稱經 case.summary（M01 提供）
     conn = db.get_db()
     try:
         conn.execute("INSERT INTO quotations (quote_no, status, customer_name, project_name, data_json, created_at, updated_at) "
@@ -260,8 +264,9 @@ def test_case_names_are_filled_only_when_missing(client, monkeypatch):
         items = [{"type": "t1", "linkedQuoteNo": "MQ-AQP-9"},
                  {"type": "t2", "linkedQuoteNo": "MQ-AQP-9", "customer": "", "projectName": "自己的"},
                  {"type": "t3", "linkedQuoteNo": "MQ-NONE"}]
+        real = registry.providers
         monkeypatch.setattr(registry, "providers",
-                            lambda cap: {"x": lambda c: [dict(i) for i in items]} if cap == "approval.queue_items" else {})
+                            lambda cap: {"x": lambda c: [dict(i) for i in items]} if cap == "approval.queue_items" else real(cap))
         got = {it["type"]: it for it in q._queue_provider_items(conn)}
     finally:
         conn.close()

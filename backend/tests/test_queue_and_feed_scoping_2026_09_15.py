@@ -164,7 +164,7 @@ def test_queue_filter_covers_every_document_type():
     那一種就是全開的。這題釘的是「過濾發生在分組之前、而且只有一處」。
     """
     import inspect
-    import modules.case.api.quotations as q
+    import routers.approval_queue as q          # 佇列端點在 L1（2026-09-27 自 M01 搬入）
 
     src = inspect.getsource(q.get_approval_queue)
     assert src.count("_queue_visible_to(") == 1, "過濾應該只有一處（套在 items 上）"

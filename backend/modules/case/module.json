@@ -1,7 +1,7 @@
 {
   "key": "case",
   "name": "案件",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "core": ">=1.0,<2.0",
   "license_key": "case",
   "permissions": [
@@ -71,7 +71,6 @@
   "provides": {
     "api_prefixes": [
       "/api/approval-history",
-      "/api/approval-queue",
       "/api/case-batch",
       "/api/case-changes",
       "/api/completion-notes",
@@ -81,8 +80,6 @@
     ],
     "probes": [
       "/api/quotations",
-      "/api/approval-queue",
-      "/api/approval-queue/count",
       "/api/approval-history",
       "/api/sales-orders"
     ]
@@ -128,21 +125,6 @@
         "perm": [
           "case_manage"
         ]
-      }
-    },
-    {
-      "path": "approval-queue.html",
-      "menu": {
-        "group": "mywork",
-        "label": "簽核佇列",
-        "order": 30,
-        "perm": [
-          "quotation"
-        ],
-        "extra_badge": {
-          "id": "sb-approval-badge",
-          "color": "#DC2626"
-        }
       }
     },
     {

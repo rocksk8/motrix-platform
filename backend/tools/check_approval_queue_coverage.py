@@ -30,7 +30,7 @@
 
 或當函式庫用：`check_approval_queue_coverage(doc_types=[...])`——`doc_types`／
 `queue_source`／`count_source` 留空時分別讀真正的 `APPROVAL_DOC_TYPES`／
-`modules/case/api/quotations.py` 的兩支端點原始碼，測試可以三個都自己傳，不必
+`routers/approval_queue.py` 的兩支端點原始碼（L1；2026-09-27 自 M01 搬入），測試可以三個都自己傳，不必
 monkeypatch 任何模組屬性。
 """
 import ast
@@ -49,7 +49,8 @@ def say(text):
 
 _TOOLS_DIR     = os.path.dirname(os.path.abspath(__file__))
 _BACKEND_DIR   = os.path.dirname(_TOOLS_DIR)
-_QUOTATIONS_PY = os.path.join(_BACKEND_DIR, "modules", "case", "api", "quotations.py")   # M01 ②
+# 佇列端點在 L1（2026-09-27 主持裁示：自 M01 搬入；M01 只是 `approval.queue_items` 提供者之一）
+_QUEUE_PY      = os.path.join(_BACKEND_DIR, "routers", "approval_queue.py")
 
 #: doc_type（`APPROVAL_DOC_TYPES` 用的鍵）-> (佇列 `type` 欄位的字面值,
 #: count 端點 SQL 裡的資料表名)。兩者不是同一組字串
@@ -116,7 +117,8 @@ def _provider_sources(backend_dir=None):
 
     靜態找兩種登記寫法（不 import 任何模組）：
     - `registry.provide("approval.queue_items", "<名>", fn)` ⇒ 同檔的 `def fn`
-    - ModuleSpec 的 `providers={("approval.queue_items", "<名>"): mod.fn}` ⇒ 同一個模組套件裡 `mod.py`（或 `api/mod.py`）的 `def fn`
+    - ModuleSpec 的 `providers={("approval.queue_items", "<名>"): mod.fn}` ⇒ 同一個模組套件裡 `mod.py`（或 `api/mod.py`）的 `def fn`；
+      `mod` 是 import 別名（`from modules.case.api import quotations as _api_quotations`）⇒ 照 import 解回檔案
     回傳 [(標籤, 原始碼), …]。"""
     backend_dir = backend_dir or _BACKEND_DIR
     files = {}
@@ -147,8 +149,13 @@ def _provider_sources(backend_dir=None):
                        and k.elts[0].value == "approval.queue_items" \
                        and isinstance(v, ast.Attribute) and isinstance(v.value, ast.Name):
                         pkg = os.path.dirname(path)
-                        for cand in (os.path.join(pkg, v.value.id + ".py"),
-                                     os.path.join(pkg, "api", v.value.id + ".py")):
+                        cands = [os.path.join(pkg, v.value.id + ".py"), os.path.join(pkg, "api", v.value.id + ".py")]
+                        for imp in ast.walk(ast.parse(src)):
+                            if isinstance(imp, ast.ImportFrom) and imp.module and imp.level == 0:
+                                for a in imp.names:
+                                    if (a.asname or a.name) == v.value.id:
+                                        cands.insert(0, os.path.join(backend_dir, *imp.module.split("."), a.name + ".py"))
+                        for cand in cands:
                             if cand in files:
                                 out.append((os.path.relpath(cand, backend_dir), _def_in(cand, v.attr)))
     return out
@@ -182,7 +189,7 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
     if doc_types is None:
         doc_types = _default_doc_types()
     if queue_source is None or count_source is None:
-        with io.open(_QUOTATIONS_PY, encoding="utf-8") as f:
+        with io.open(_QUEUE_PY, encoding="utf-8") as f:
             src = f.read()
         if queue_source is None:
             queue_source = _func_body_text(src, "get_approval_queue")
@@ -192,10 +199,7 @@ def check_approval_queue_coverage(doc_types=None, queue_source=None,
     missing_from_map, missing_from_queue, missing_from_count = [], [], []
     for dt in doc_types:
         owner = _OWNER_MODULE.get(dt)
-        if not installed("case"):
-            # 兩支佇列端點本身屬 M01：案件模組不在 ⇒ 每一種都不適用（沒有佇列可以漏）
-            not_applicable[dt] = "案件模組 case 不在這個安裝包（簽核佇列端點不存在）"
-            continue
+        # 佇列端點在 L1（2026-09-27）：案件模組不在只讓 M01 自己的單據不適用（下一條），其他模組的單照常要涵蓋
         if owner and not installed(owner):
             not_applicable[dt] = "擁有模組 %s 不在這個安裝包（它的單據不存在）" % owner
             continue
