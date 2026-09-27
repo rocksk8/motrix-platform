@@ -220,15 +220,20 @@ def _build_equipment_loan(page, base):
     page.select_option("#mb-f-target", "users")
     _wait_saved(page)
 
-    # ③ 版面：一個分組放設備與數量；列表多顯示借用人
-    _step(page, 3)
+    # 版面：一個區塊放設備與數量；列表多顯示借用人
+    # 〔改題 2026-09-27 第二輪：使用者把「欄位」「版面」合成一步（畫布就是表單）⇒ 不再切到第 3 步用下拉指派，
+    #   改成在同一個畫布「＋ 區塊」→ 改名 → 把兩個欄位拖進去；列表欄位在右側列表預覽下方勾。存下的 ui 與原題相同（_assert_definition_v1）〕
+    _step(page, 2)
     page.click("#mb-add-group")
-    page.locator('[data-group-index="0"] input').fill("借用資訊")
-    page.locator('[data-group-index="0"] input').press("Tab")
-    page.select_option('[data-assign-field="item"]', "0")
-    page.wait_for_selector('[data-group-index="0"] [data-group-field="item"]')
-    page.select_option('[data-assign-field="qty"]', "0")
-    page.wait_for_selector('[data-group-index="0"] [data-group-field="qty"]')
+    page.fill('[data-group-title="0"]', "借用資訊")
+    page.press('[data-group-title="0"]', "Tab")
+    page.drag_and_drop('.mb-fc[data-field-key="item"] .mb-fc__bar .h', '.mb-sec[data-section-group="0"] .mb-sec__h .h')
+    page.wait_for_selector('.mb-sec[data-section-group="0"] .mb-fc[data-field-key="item"]')
+    page.locator('.mb-fc[data-field-key="item"]').press("Escape")          # 收合屬性面板（Esc），數量回到區塊附近
+    page.wait_for_selector('.mb-fc[data-field-key="item"] .mb-fc__ed', state="detached")
+    page.locator('.mb-sec[data-section-group="0"] .mb-sec__h').evaluate("e => e.scrollIntoView({ block: 'center' })")   # 標題列別被固定頂列蓋住
+    page.drag_and_drop('.mb-fc[data-field-key="qty"] .mb-fc__bar .h', '.mb-sec[data-section-group="0"] .mb-sec__h .h')
+    page.wait_for_selector('.mb-sec[data-section-group="0"] .mb-fc[data-field-key="qty"]')
     page.click('[data-list-column="borrower"]')
     _wait_saved(page)
 

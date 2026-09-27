@@ -464,6 +464,70 @@
              customOrder: (columns || []).map(function (c) { return (c.visible || c.core ? '' : '-') + c.field }) }
   }
 
+  // ── 建構器畫布（使用者 2026-09-27 第二輪：「預覽都在同一個頁面，直接放入」——畫布就是表單本身）──
+
+  /** 畫布的區塊：每個分組一塊（**含空的**，才放得進欄位），最後一塊是沒分組的欄位（gi＝-1；有分組時標題「其他」）。
+   *  items：[{key, f, index（在 def.fields 的位置）, pos（區塊內第幾個）}]。
+   *  非空的區塊與 formSections(def)（執行頁的表單）逐項相同——一致性有題。 */
+  function editorSections(def) {
+    var all = (def && Array.isArray(def.fields)) ? def.fields : []
+    var at = {}
+    all.forEach(function (f, i) { if (f && f.key && at[f.key] === undefined) at[f.key] = i })
+    var groups = ((uiOf(def).form || {}).groups) || []
+    var used = {}
+    var out = groups.map(function (g, gi) {
+      var ks = (g.fields || []).filter(function (k) { return at[k] !== undefined && !used[k] })
+      ks.forEach(function (k) { used[k] = true })
+      return { gi: gi, title: g.title || '', items: ks.map(function (k, p) { return { key: k, f: all[at[k]], index: at[k], pos: p } }) }
+    })
+    var rest = []
+    all.forEach(function (f, i) { if (f && f.key && !used[f.key]) rest.push({ key: f.key, f: f, index: i, pos: rest.length }) })
+    out.push({ gi: -1, title: groups.length ? '其他' : '', items: rest })
+    return out
+  }
+
+  /** 畫布由上而下的欄位順序（分組依序、組內依序，最後是沒分組的；沒有 key 的欄位留在最後）。 */
+  function sectionOrder(def) {
+    var all = (def && Array.isArray(def.fields)) ? def.fields : []
+    var seen = {}
+    var out = []
+    editorSections(def).forEach(function (s) { s.items.forEach(function (it) { if (!seen[it.index]) { seen[it.index] = true; out.push(it.f) } }) })
+    all.forEach(function (f, i) { if (!seen[i]) out.push(f) })
+    return out
+  }
+
+  /** 把欄位 key 放到區塊 gi（-1＝沒分組）的第 index 個（以拿掉它之後算；null 或超出 ⇒ 最後）。
+   *  回傳 {fields, ui}：ui 是新的版面；fields 依畫布順序重排（沒分組的欄位，順序就是 fields 的順序）。 */
+  function placeField(def, key, gi, index) {
+    var ui = cloneUi(def)
+    ui.form.groups.forEach(function (g) { g.fields = (g.fields || []).filter(function (k) { return k !== key }) })
+    var all = (def && Array.isArray(def.fields)) ? def.fields : []
+    var secs = editorSections({ fields: all, ui: ui })
+    var target = secs.filter(function (x) { return x.gi === gi })[0] || secs[secs.length - 1]
+    var keys = target.items.map(function (x) { return x.key }).filter(function (k) { return k !== key })
+    var at = (index === null || index === undefined || index > keys.length) ? keys.length : Math.max(0, index)
+    keys.splice(at, 0, key)
+    if (target.gi >= 0) ui.form.groups[target.gi].fields = keys
+    var byKey = {}
+    all.forEach(function (f) { if (f && f.key && !byKey[f.key]) byKey[f.key] = f })
+    var fields = []
+    secs.forEach(function (x) {
+      (x === target ? keys : x.items.map(function (y) { return y.key }).filter(function (k) { return k !== key }))
+        .forEach(function (k) { if (byKey[k]) fields.push(byKey[k]) })
+    })
+    all.forEach(function (f) { if (fields.indexOf(f) < 0) fields.push(f) })
+    return { fields: fields, ui: ui }
+  }
+
+  /** 分組 from 移到 to 的位置（拖曳區塊）。 */
+  function moveGroupTo(def, from, to) {
+    var ui = cloneUi(def)
+    var gs = ui.form.groups
+    if (!gs[from] || !gs[to] || from === to) return ui
+    gs.splice(to, 0, gs.splice(from, 1)[0])
+    return ui
+  }
+
   // 公式的可讀式子（使用者 2026-09-27：「帶入公式需要註解或是說明這公式是甚麼」）：欄位代號換成顯示名稱、
   // * ／ ⇒ × ÷、比較符號換成數學符號；字串常值原樣。建構器卡片與執行期表單（＝建構器預覽）共用這一支。
   // 例：{key:'amount', label:'金額', formula:'qty * unit_price'} ⇒「金額 ＝ 數量 × 單價」。不是公式欄位或公式空白 ⇒ ''。
@@ -484,6 +548,10 @@
   }
 
   window.MotrixCustomLayout = {
+    editorSections: editorSections,
+    sectionOrder: sectionOrder,
+    placeField: placeField,
+    moveGroupTo: moveGroupTo,
     formulaReadable: formulaReadable,
     // P9 內建模組版面
     pageModel: pageModel,

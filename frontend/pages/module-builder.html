@@ -9,15 +9,18 @@
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
   <link rel="stylesheet" href="../css/style.css?v=20260805g">
+  <link rel="stylesheet" href="../css/custom-form.css">
   <!--
     自訂模組建構器（CUSTOMIZATION-SPEC §8.1、§3.7；P8 前端）。僅超級管理員。
-    6 步：① 基本 ② 欄位 ③ 版面 ④ 流程 ⑤ 輸出 ⑥ 發布。
+    步驟：① 基本 ② 表單 ④ 流程 ⑤ 輸出 ⑥ 發布（2026-09-27 使用者第二輪：原本的 ② 欄位＋③ 版面合成 ② 表單——畫布就是表單本身，
+    欄位直接拖進區塊；步驟編號 4～6 不變）。
     - 定義存在定義文件庫（kind＝custom_module）：每次修改自動存成草稿（PUT …/draft），發布前看差異，發布後可還原任一版。
     - 🔴 只從能力目錄（GET /api/custom-modules/catalog）挑：欄位型別、公式函式、參照對象、日期格式、資料分類、輸出積木
       與其參數規格（outputBlockSpecs／outputBlockItemSpecs ⇒ ⑤ 的參數表單）、主題、欄位格式、輸出格式、簽核人來源（④）。
       目錄沒有提供的東西，畫面上不出現；前端不留後備清單。
     - 首頁列出全部模組（GET /api/definitions/custom_module，含只有草稿的），可刪草稿（二次確認）。
-    - 版面（③）存在定義的 `ui` 鍵（引擎不讀），規則與編輯操作在 custom-layout.js（執行頁共用；P9 排版器抽離）。
+    - 版面（區塊與順序，② 表單）存在定義的 `ui` 鍵（引擎不讀），規則與編輯操作在 custom-layout.js（執行頁共用；P9 排版器抽離）；
+      畫布欄位的外觀用執行頁同一套 class（css/custom-form.css）。
     - 伺服器回的問題（problems[{path}]）依 path 標回對應的步驟與欄位。
   -->
   <style>
@@ -48,7 +51,7 @@
     .mb-save { font-size: 12px; color: var(--text-secondary); margin-left: auto; }
     .mb-save[data-state="error"] { color: var(--danger); }
     /* ② 欄位：三欄 */
-    .mb-fields { display: grid; grid-template-columns: 170px 1fr 320px; gap: 14px; margin-top: 14px; align-items: start; }
+    .mb-fields { display: grid; grid-template-columns: 170px 1fr 360px; gap: 14px; margin-top: 14px; align-items: start; }
     .mb-pal { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: var(--surface-muted, #FAFAF8); }
     .mb-pal__t { font-size: 11px; color: var(--text-secondary); font-weight: 700; margin-bottom: 6px; }
     .mb-pal__i { display: block; width: 100%; text-align: left; padding: 7px 9px; margin-bottom: 5px; border: 1px solid var(--border);
@@ -86,8 +89,8 @@
     .mb-probs a { cursor: pointer; color: var(--accent); text-decoration: underline; margin-left: 6px; }
     .mb-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .mb-chip { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); margin: 3px 4px 0 0; background: var(--white); }
-    /* 縮圖導覽（BUILDER-UX §1：8 格；流程／簽核／通知三格都在第 4 步） */
-    .mb-nav { display: grid; grid-template-columns: repeat(8, minmax(84px, 1fr)); gap: 8px; margin-top: 16px; }
+    /* 縮圖導覽（BUILDER-UX §1：7 格；流程／簽核／通知三格都在第 4 步） */
+    .mb-nav { display: grid; grid-template-columns: repeat(7, minmax(84px, 1fr)); gap: 8px; margin-top: 16px; }
     .mb-nav__i { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 6px; border-radius: 10px;
       border: 1px solid var(--border); background: var(--surface, #fff); cursor: pointer; font-family: inherit; color: var(--text-secondary); text-align: left; }
     .mb-nav__i.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); color: var(--text-main, inherit); }
@@ -108,10 +111,27 @@
     .mb-fc__fx[data-fx-state="bad"] { color: var(--danger); }
     .mb-fc__help { display: block; font-size: 11px; color: var(--text-dim); margin-top: 2px; white-space: pre-wrap; }
     .mb-fc__q { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--text-secondary); }
+    /* ② 表單：畫布就是表單（.cr-* 來自 css/custom-form.css，與執行頁同一套）；建構器只加外框與工具列 */
+    .mb-canvas .cr-sec { margin-top: 10px; padding: 8px; border: 1px dashed transparent; border-radius: 8px; }
+    .mb-canvas .cr-sec:hover, .mb-canvas .cr-sec[data-empty="1"] { border-color: var(--border-light); }
+    .mb-sec__h { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+    .mb-sec__h .h { cursor: grab; color: var(--text-dim); user-select: none; }
+    .mb-sec__h .mb-in { font-weight: 700; font-size: 12px; }
+    .mb-sec__drop { grid-column: 1 / -1; padding: 10px; text-align: center; }
+    .mb-canvas .mb-fc { display: block; margin: 0; padding: 8px 10px; }
+    .mb-canvas .mb-fc.is-sel { grid-column: 1 / -1; }
+    .mb-fc__bar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .mb-fc__bar .grow { flex: 1; }
+    .mb-fc__bar svg { width: 14px; height: 14px; color: var(--text-secondary); }
+    .cr-f .mb-fc__q { display: inline-flex; margin: 0; }
+    .cr-f .mb-fc__q input { width: auto; padding: 0; }
+    .mb-fc__mock { pointer-events: none; }
     /* 右側即時預覽 */
     .mb-pv { border: 1px solid var(--border); border-radius: 10px; padding: 10px; position: sticky; top: calc(var(--topbar-h) + 12px); }
     .mb-pv__t { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
-    .mb-pv__host { min-height: 320px; }
+    .mb-pv__host { min-height: 240px; }
+    .mb-pv__list { margin-top: 10px; }
+    .mb-pv__list summary { cursor: pointer; }
     .mb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     @media (max-width: 1100px) { .mb-fields { grid-template-columns: 150px 1fr; } .mb-props, .mb-pv { grid-column: 1 / -1; } .mb-nav { grid-template-columns: repeat(4, 1fr); } }
     @media (max-width: 767px) {
@@ -262,43 +282,75 @@
             </div>
           </section>
 
-          <!-- ② 欄位 -->
+          <!-- ② 表單（使用者 2026-09-27 第二輪：「預覽都在同一個頁面，直接放入」）：欄位與版面合成一步，中間的畫布就是表單本身——
+               從工具列拖進某個區塊的某個位置；區塊可以新增、改名、拖曳排序；點欄位就地改屬性。
+               欄位外觀沿用執行頁同一套 class 與標記（css/custom-form.css），畫布與執行頁一致有題。右側同時顯示輸出與列表預覽。 -->
           <section x-show="step === 2" id="mb-step-2">
             <div class="mb-fields">
               <div class="mb-pal" id="mb-palette">
-                <div class="mb-pal__t">欄位（拖進表單；或按 Enter／點一下加到最後）</div>
+                <div class="mb-pal__t">欄位（拖進表單的區塊；或按 Enter／點一下加到目前的區塊）</div>
                 <template x-for="t in (catalog.fieldTypes || [])" :key="t">
                   <button class="mb-pal__i" draggable="true" :data-palette-type="t" :aria-label="'加入欄位：' + typeLabel(t)"
-                          @dragstart="$event.dataTransfer.setData('text/plain', 'type:' + t)" @click="addField(t); announce('已加入 ' + typeLabel(t) + '，第 ' + def.fields.length + ' 個')">
+                          @dragstart="$event.dataTransfer.setData('text/plain', 'type:' + t)" @click="addFieldHere(t)">
                     <span x-html="typeIcon(t)"></span><span x-text="typeLabel(t)"></span>
                   </button>
                 </template>
               </div>
               <div class="mb-canvas" id="mb-canvas" :class="{ 'is-over': dragOver }"
-                   @dragover.prevent="dragOver = true" @dragleave="dragOver = false" @drop.prevent="dropOnCanvas($event, def.fields.length)">
+                   @dragover.prevent="dragOver = true" @dragleave.self="dragOver = false" @drop.prevent="dropOn($event, -1, null)">
                 <div class="mb-hint" x-show="!def.fields.length">把左邊的欄位型別拖到這裡</div>
-                <template x-for="(f, i) in def.fields" :key="i">
-                  <div class="mb-fc" :class="{ 'is-sel': sel === i, 'is-bad': hasProblem('fields[' + i + ']') }" :data-field-index="i" :data-field-key="f.key"
-                       tabindex="0" role="listitem" :aria-label="(f.label || '（未命名）') + '，' + typeLabel(f.type) + '，第 ' + (i + 1) + ' 個'"
-                       @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOnCanvas($event, i)" @click="sel = i"
-                       @keydown.self.alt.up.prevent="moveFieldKb(i, -1)" @keydown.self.alt.down.prevent="moveFieldKb(i, 1)"
-                       @keydown.self.delete.prevent="removeFieldKb(i)" @keydown.self.enter.prevent="sel = i">
-                    <span class="h" draggable="true" title="拖曳排序（鍵盤：Alt＋↑／↓）" aria-hidden="true"
-                          @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + i)">⠿</span>
-                    <span x-html="typeIcon(f.type)"></span>
-                    <span class="t" x-text="typeLabel(f.type)"></span>
-                    <span class="grow"><span x-text="f.label || '（未命名）'"></span> <span class="k" x-text="f.key"></span>
-                      <span class="mb-bad" x-show="f.required">必填</span>
-                      <span class="mb-fc__fx" x-show="f.type === 'formula'" :data-fx-readable="f.key"
-                            :data-fx-state="(fxProblems[i] || []).length ? 'bad' : 'ok'" x-text="fxReadableLine(i)"></span>
-                      <span class="mb-fc__help" x-show="f.help" :data-field-help="f.key" x-text="f.help"></span></span>
-                    <label class="mb-fc__q" x-show="f.type !== 'formula' && sel !== i" @click.stop>
-                      <input type="checkbox" :data-quick-required="i" :checked="f.required === true" @change="f.required = $event.target.checked">必填</label>
-                    <button class="mb-ib" title="上移" @click.stop="moveField(i, -1)">↑</button>
-                    <button class="mb-ib" title="下移" @click.stop="moveField(i, 1)">↓</button>
-                    <button class="mb-ib" title="刪除" :data-remove-field="i" @click.stop="removeField(i)">✕</button>
-                    <template x-if="sel === i && def.fields[sel]">
-                      <div class="mb-fc__ed" :data-props-for="sel" @click.stop>
+                <template x-for="(sec, si) in L.editorSections(def)" :key="'g' + sec.gi">
+                  <div class="cr-sec mb-sec" :data-section-group="sec.gi" :data-group-index="sec.gi >= 0 ? sec.gi : null"
+                       :data-empty="sec.items.length ? '0' : '1'" role="list" :aria-label="sec.title || (sec.gi >= 0 ? '未命名區塊' : '表單')"
+                       @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOn($event, sec.gi, null)">
+                    <template x-if="sec.gi >= 0">
+                      <div class="mb-sec__h">
+                        <span class="h" draggable="true" title="拖曳調整區塊順序（鍵盤：↑／↓ 按鈕）" aria-hidden="true"
+                              @dragstart="$event.dataTransfer.setData('text/plain', 'group:' + sec.gi)">⠿</span>
+                        <input class="mb-in" :data-group-title="sec.gi" :value="sec.title" placeholder="區塊標題（例：借用資訊）" aria-label="區塊標題"
+                               @change="def.ui = L.renameGroup(def, sec.gi, $event.target.value)">
+                        <button class="mb-ib" aria-label="區塊上移" @click="moveGroupBy(sec.gi, -1)">↑</button>
+                        <button class="mb-ib" aria-label="區塊下移" @click="moveGroupBy(sec.gi, 1)">↓</button>
+                        <button class="mb-ib" aria-label="刪除區塊" :data-remove-group="sec.gi" @click="removeGroupAt(sec.gi)">✕</button>
+                      </div>
+                    </template>
+                    <div class="cr-sec__t" x-show="sec.gi < 0 && sec.title" x-text="sec.title"></div>
+                    <div class="cr-grid">
+                      <template x-for="it in sec.items" :key="it.key + ':' + it.index">
+                        <div class="cr-f mb-fc" :class="{ 'is-sel': sel === it.index, 'is-bad': hasProblem('fields[' + it.index + ']') }"
+                             :data-field-index="it.index" :data-field-key="it.key" tabindex="0" role="listitem"
+                             :aria-label="(it.f.label || '（未命名）') + '，' + typeLabel(it.f.type) + '，' + (sec.title ? '「' + sec.title + '」' : '') + '第 ' + (it.pos + 1) + ' 個'"
+                             @dragover.prevent.stop="dragOver = true" @drop.prevent.stop="dropOn($event, sec.gi, it.key)" @click="sel = it.index"
+                             @keydown.self.alt.up.prevent="moveFieldKb(it.index, -1)" @keydown.self.alt.down.prevent="moveFieldKb(it.index, 1)"
+                             @keydown.self.delete.prevent="removeFieldKb(it.index)" @keydown.self.enter.prevent="sel = it.index"
+                             @keydown.escape="if (sel === it.index) { sel = null; $el.focus() }">
+                          <div class="mb-fc__bar">
+                            <span class="h" draggable="true" title="拖曳（鍵盤：Alt＋↑／↓；到區塊邊界會移到相鄰區塊）" aria-hidden="true"
+                                  @dragstart="$event.dataTransfer.setData('text/plain', 'field:' + it.key)">⠿</span>
+                            <span x-html="typeIcon(it.f.type)"></span>
+                            <span class="t" x-text="typeLabel(it.f.type)"></span>
+                            <span class="k" x-text="it.key"></span>
+                            <span class="mb-bad" x-show="!it.f.label" style="margin:0">未命名</span>
+                            <span class="grow"></span>
+                            <label class="mb-fc__q" x-show="it.f.type !== 'formula' && sel !== it.index" @click.stop>
+                              <input type="checkbox" :data-quick-required="it.index" :checked="it.f.required === true" @change="it.f.required = $event.target.checked">必填</label>
+                            <button class="mb-ib" title="上移" @click.stop="moveField(it.index, -1)">↑</button>
+                            <button class="mb-ib" title="下移" @click.stop="moveField(it.index, 1)">↓</button>
+                            <button class="mb-ib" title="刪除" :data-remove-field="it.index" @click.stop="removeField(it.index)">✕</button>
+                          </div>
+                          <!-- 以下與執行頁 custom-records 的欄位標記相同（label＋必填星號、輸入框、可讀式子、說明） -->
+                          <label><span x-text="it.f.label || it.f.key"></span><span class="req" x-show="it.f.required">*</span></label>
+                          <div class="mb-fc__mock" aria-hidden="true">
+                            <div class="cr-ro" x-show="it.f.type === 'formula'">（儲存後由系統計算）</div>
+                            <select disabled tabindex="-1" x-show="['select', 'checkbox', 'ref'].indexOf(it.f.type) >= 0"><option>（未選）</option></select>
+                            <input disabled tabindex="-1" x-show="['select', 'checkbox', 'ref', 'formula'].indexOf(it.f.type) < 0"
+                                   :type="it.f.type === 'number' || it.f.type === 'date' ? it.f.type : 'text'">
+                          </div>
+                          <div class="cr-fx" x-show="it.f.type === 'formula'" :data-fx-readable="it.key"
+                               :data-fx-state="(fxProblems[it.index] || []).length ? 'bad' : 'ok'" x-text="fxReadableLine(it.index)"></div>
+                          <div class="cr-help" x-show="it.f.help" :data-field-help="it.key" x-text="it.f.help"></div>
+                          <template x-if="sel === it.index && def.fields[sel]">
+                            <div class="mb-fc__ed" :data-props-for="sel" @click.stop>
                       <div class="mb-f" :class="{ 'is-bad': hasProblem('fields[' + sel + '].key') }">
                         <label for="mb-f-key">欄位代號（key）</label>
                         <input id="mb-f-key" :value="def.fields[sel].key" @change="renameField(sel, $event.target.value.trim())">
@@ -398,86 +450,40 @@
                       <template x-for="(p, pi) in problemsUnder('fields[' + sel + ']')" :key="pi">
                         <div class="mb-bad" x-text="p.message"></div>
                       </template>
-                                        </div>
-                    </template>
+                            </div>
+                          </template>
+                        </div>
+                      </template>
+                      <div class="mb-sec__drop mb-hint" x-show="!sec.items.length">把欄位拖到這個區塊</div>
+                    </div>
                   </div>
                 </template>
+                <div class="mb-row" style="margin-top:10px">
+                  <button class="btn btn-ghost btn-sm" id="mb-add-group" @click="addGroupAt()">＋ 區塊</button>
+                </div>
               </div>
               <div class="mb-pv" id="mb-preview-pane">
-                <div class="mb-pv__t">即時預覽
-                  <select id="mb-preview-mode" x-model="previewMode" style="margin-left:auto;font-size:11px"><option value="form">表單</option><option value="list">列表</option></select></div>
-                <div class="mb-pv__host" id="mb-preview-host" x-effect="syncPreview(JSON.stringify(def), sel, previewMode, step)"></div>
+                <div class="mb-pv__t">輸出預覽（拖入、修改時跟著更新）</div>
+                <div class="mb-pv__host" id="mb-output-host" x-effect="syncPreviews(JSON.stringify(def), sel, step)"></div>
+                <details class="mb-pv__list" id="mb-list-pv" open>
+                  <summary class="mb-pv__t">列表預覽與列表欄位</summary>
+                  <div id="mb-list-host"></div>
+                  <div class="mb-hint" style="margin-top:6px">列表顯示的欄位：</div>
+                  <template x-for="c in L.availableColumns(def)" :key="c.key">
+                    <label class="mb-chip"><input type="checkbox" :data-list-column="c.key" :checked="listColumnKeys().indexOf(c.key) >= 0"
+                           @change="def.ui = L.toggleColumn(def, c.key)"> <span x-text="c.label"></span></label>
+                  </template>
+                  <div class="mb-hint" style="margin-top:6px">順序：</div>
+                  <template x-for="(c, ci) in L.listColumns(def)" :key="c.key">
+                    <span class="mb-chip"><span x-text="c.label"></span>
+                      <button class="mb-ib" aria-label="往前" @click="def.ui = L.moveColumn(def, ci, -1)">←</button>
+                      <button class="mb-ib" aria-label="往後" @click="def.ui = L.moveColumn(def, ci, 1)">→</button></span>
+                  </template>
+                </details>
                 <div class="mb-hint" id="mb-preview-missing" x-show="previewMissing">預覽元件尚未載入（form-preview.js）；欄位照樣可以編輯與儲存。</div>
               </div>
             </div>
             <div class="mb-sr" aria-live="polite" id="mb-live" x-text="liveMsg"></div>
-          </section>
-
-          <!-- ③ 版面（編輯操作在 custom-layout.js，P9 排版器共用） -->
-          <section x-show="step === 3" id="mb-step-3">
-            <div class="mb-layout">
-              <div class="mb-card">
-                <h3>表單分組與順序</h3>
-                <template x-for="(g, gi) in layoutGroups()" :key="gi">
-                  <div class="mb-tier" :data-group-index="gi">
-                    <div class="mb-row">
-                      <input class="mb-in" style="flex:1" :value="g.title" placeholder="分組標題" @change="def.ui = L.renameGroup(def, gi, $event.target.value)">
-                      <button class="mb-ib" @click="def.ui = L.moveGroup(def, gi, -1)">↑</button>
-                      <button class="mb-ib" @click="def.ui = L.moveGroup(def, gi, 1)">↓</button>
-                      <button class="mb-ib" @click="def.ui = L.removeGroup(def, gi)">✕</button>
-                    </div>
-                    <div>
-                      <template x-for="(k, ki) in (g.fields || [])" :key="k">
-                        <span class="mb-chip" :data-group-field="k"><span x-text="fieldLabel(k)"></span>
-                          <button class="mb-ib" @click="def.ui = L.moveFieldInGroup(def, gi, ki, -1)">←</button>
-                          <button class="mb-ib" @click="def.ui = L.moveFieldInGroup(def, gi, ki, 1)">→</button>
-                          <button class="mb-ib" @click="def.ui = L.assignField(def, k, -1)">✕</button></span>
-                      </template>
-                    </div>
-                  </div>
-                </template>
-                <div class="mb-row" style="margin-top:8px">
-                  <button class="btn btn-ghost btn-sm" id="mb-add-group" @click="def.ui = L.addGroup(def, '')">＋ 分組</button>
-                </div>
-                <div style="margin-top:10px" x-show="L.ungroupedFields(def).length">
-                  <div class="mb-hint">未分組的欄位（顯示在最後）：</div>
-                  <template x-for="k in L.ungroupedFields(def)" :key="k">
-                    <span class="mb-chip"><span x-text="fieldLabel(k)"></span>
-                      <select class="mb-in mb-in-s" :data-assign-field="k" @change="if ($event.target.value !== '') def.ui = L.assignField(def, k, Number($event.target.value))">
-                        <option value="">放進…</option>
-                        <template x-for="(g, gi) in layoutGroups()" :key="gi"><option :value="gi" x-text="g.title || ('第 ' + (gi + 1) + ' 組')"></option></template>
-                      </select></span>
-                  </template>
-                </div>
-              </div>
-              <div class="mb-card">
-                <h3>列表顯示的欄位</h3>
-                <template x-for="c in L.availableColumns(def)" :key="c.key">
-                  <label class="mb-chip"><input type="checkbox" :data-list-column="c.key" :checked="listColumnKeys().indexOf(c.key) >= 0"
-                         @change="def.ui = L.toggleColumn(def, c.key)"> <span x-text="c.label"></span></label>
-                </template>
-                <div class="mb-hint" style="margin-top:10px">順序：</div>
-                <template x-for="(c, ci) in L.listColumns(def)" :key="c.key">
-                  <span class="mb-chip"><span x-text="c.label"></span>
-                    <button class="mb-ib" @click="def.ui = L.moveColumn(def, ci, -1)">←</button>
-                    <button class="mb-ib" @click="def.ui = L.moveColumn(def, ci, 1)">→</button></span>
-                </template>
-              </div>
-            </div>
-            <div class="mb-card">
-              <h3>表單預覽</h3>
-              <template x-for="(sec, si) in L.formSections(def)" :key="si">
-                <div style="margin-bottom:10px">
-                  <div class="mb-hint" style="font-weight:700" x-text="sec.title"></div>
-                  <div class="mb-grid">
-                    <template x-for="f in sec.fields" :key="f.key">
-                      <div class="mb-f"><label x-text="(f.label || f.key) + (f.required ? ' *' : '')"></label>
-                        <div class="mb-fx" x-text="f.type === 'formula' ? '＝ ' + (f.formula || '') : typeLabel(f.type)"></div></div>
-                    </template>
-                  </div>
-                </div>
-              </template>
-            </div>
           </section>
 
           <!-- ④ 流程 -->
@@ -941,11 +947,11 @@
                            date_label: '日期標籤', name_path: '簽名人', date_path: '日期', subtitle_path: '副標題', info: '資訊列',
                            name: '名稱', class: '樣式類別', page_break: '另起一頁', cells: '格', th: '欄名', colspan: '跨欄', tag: '標籤樣式', when: '條件' }
       var FORMAT_LABELS = { text: '文字', str: '原樣', money: '金額', date10: '日期' }
-      // 縮圖導覽（BUILDER-UX §1）：8 格；流程／簽核／通知三格都在第 4 步，點下去捲到對應區塊（既有 data-step 1～6 不變）
+      // 縮圖導覽（BUILDER-UX §1）：7 格（使用者 2026-09-27 第二輪：欄位＋版面合成「表單」）；流程／簽核／通知三格都在第 4 步，
+      // 點下去捲到對應區塊（data-step 1、2、4、5、6 不變，沒有 3）
       var NAV = [
         { id: 'basic', label: '基本', step: 1, thumb: 'basic' },
-        { id: 'fields', label: '欄位', step: 2, thumb: 'fields' },
-        { id: 'layout', label: '版面', step: 3, thumb: 'layout' },
+        { id: 'form', label: '表單', step: 2, thumb: 'fields' },
         { id: 'workflow', label: '流程', step: 4, anchor: 'mb-sec-workflow', thumb: 'workflow' },
         { id: 'approval', label: '簽核', step: 4, anchor: 'mb-sec-approval', thumb: 'approval', alias: true },
         { id: 'notify', label: '通知', step: 4, anchor: 'mb-sec-notify', thumb: 'notify', alias: true },
@@ -964,13 +970,13 @@
         ref: _SVG('<path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/>')
       }
       var TYPE_ICON_GENERIC = _SVG('<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M5.5 8h5"/>')
-      var STEPS = [{ n: 1, label: '基本' }, { n: 2, label: '欄位' }, { n: 3, label: '版面' }, { n: 4, label: '流程' }, { n: 5, label: '輸出' }, { n: 6, label: '發布' }]
+      var STEPS = [{ n: 1, label: '基本' }, { n: 2, label: '表單' }, { n: 4, label: '流程' }, { n: 5, label: '輸出' }, { n: 6, label: '發布' }]
 
       function clone(x) { return JSON.parse(JSON.stringify(x)) }
 
       return {
         L: window.MotrixCustomLayout, STEPS: STEPS, NAV: NAV, DEFAULT_GROUP: '自訂模組',
-        navAnchor: '', thumbTick: 0, previewMode: 'form', previewMissing: false, liveMsg: '',
+        navAnchor: '', thumbTick: 0, previewMissing: false, liveMsg: '',
         ready: false, errMsg: '', me: {}, catalog: {}, users: [], orgTree: [], published: [], menuGroups: ['自訂模組'],
         keyInput: '', keyErr: '', key: '', def: null, latestVersion: 0, versions: [],
         step: 1, sel: null, dragOver: false,
@@ -1089,6 +1095,7 @@
           this.latestVersion = r.data.latest ? r.data.latest.version : 0
           this.versions = r.data.versions || []
           var body = r.data.draft ? r.data.draft.body : (r.data.latest ? r.data.latest.body : this.blankDef(k))
+          this.destroyPreviews()
           this.def = this.normalize(clone(body))
           this.sel = null; this.step = 1
           this.draftProblems = []; this.publishProblems = []; this.fxProblems = {}; this.whenProblems = {}
@@ -1099,6 +1106,7 @@
         },
         async closeModule() {
           var pending = this.dirty ? this.saveDraft() : null
+          this.destroyPreviews()
           this.def = null; this.key = ''; this.keyInput = ''
           try { history.replaceState(null, '', location.pathname) } catch (e) {}
           this.defsLoaded = false
@@ -1181,7 +1189,7 @@
         stepOf(path) {
           path = String(path || '')
           if (/^fields/.test(path)) return 2
-          if (/^ui/.test(path)) return 3
+          if (/^ui/.test(path)) return 2                    // 版面與欄位同一步（② 表單）
           if (/^workflow/.test(path)) return 4
           if (/^output/.test(path)) return 5
           return 1
@@ -1248,7 +1256,7 @@
           var self = this
           var sc = document.createElement('script')
           sc.src = '../static/form-preview.js'
-          sc.onload = function () { self.previewMissing = !window.MotrixFormPreview; self._pv = null; self.thumbTick++; self.syncPreview(JSON.stringify(self.def), self.sel, self.previewMode, self.step) }
+          sc.onload = function () { self.previewMissing = !window.MotrixFormPreview; self.destroyPreviews(); self.thumbTick++; self.syncPreviews(JSON.stringify(self.def), self.sel, self.step) }
           sc.onerror = function () { self.previewMissing = true }
           document.head.appendChild(sc)
         },
@@ -1258,28 +1266,31 @@
           if (!P || !P.thumb || !this.def) return
           try { P.thumb(el, JSON.parse(JSON.stringify(this.def)), { step: kind }) } catch (e) { /* 縮圖失敗不擋編輯 */ }
         },
-        syncPreview(json, sel, mode, step) {
-          // 草稿一變就更新右側預覽（節流 250ms）；只用 A 的 update()／setHighlight()——不重建 iframe、不搶畫布的焦點
+        syncPreviews(json, sel, step) {
+          // 草稿一變就同時更新右側的輸出預覽與列表預覽（A 的 render：mode 'output'／'list'，同頁兩個實例各自更新；節流 250ms）；
+          // 只用 update()／setHighlight()——不重建 iframe、不搶畫布的焦點。表單不另外預覽：畫布就是表單
           if (step !== 2 || !this.def) return
           var P = window.MotrixFormPreview
           if (!P || !P.render) { if (P === undefined) return; this.previewMissing = true; return }
-          var host = document.getElementById('mb-preview-host')
-          if (!host) return
-          var key = sel !== null && this.def.fields[sel] ? this.def.fields[sel].key : null
-          clearTimeout(this._pvTimer)
-          this._pvTimer = setTimeout(() => {
+          var oh = document.getElementById('mb-output-host'), lh = document.getElementById('mb-list-host')
+          if (!oh || !lh) return
+          var hl = sel !== null && this.def.fields[sel] ? this.def.fields[sel].key : null
+          clearTimeout(this._pvsTimer)
+          this._pvsTimer = setTimeout(() => {
             try {
               var draft = JSON.parse(json)
-              if (!this._pv || this._pvMode !== mode) {
-                if (this._pv && this._pv.destroy) this._pv.destroy()
-                this._pv = P.render(host, draft, { mode: mode, highlight: key }); this._pvMode = mode
-              } else {
-                this._pv.update(draft)
-                if (this._pv.setHighlight) this._pv.setHighlight(key)
-              }
+              if (!this._pvOut) this._pvOut = P.render(oh, draft, { mode: 'output', key: this.key })
+              else this._pvOut.update(draft)
+              if (!this._pvList) this._pvList = P.render(lh, draft, { mode: 'list', highlight: hl })
+              else { this._pvList.update(draft); if (this._pvList.setHighlight) this._pvList.setHighlight(hl) }
               this.thumbTick++
             } catch (e) { this.previewMissing = true }
           }, 250)
+        },
+        destroyPreviews() {
+          clearTimeout(this._pvsTimer)
+          ;[this._pvOut, this._pvList].forEach(function (p) { try { if (p && p.destroy) p.destroy() } catch (e) {} })
+          this._pvOut = null; this._pvList = null
         },
         announce(msg) { this.liveMsg = ''; this.$nextTick(() => { this.liveMsg = msg }) },
 
@@ -1302,12 +1313,12 @@
           return this.L.formulaReadable(this.def, f)
         },
         moveFieldKb(i, dir) {
-          // 鍵盤替代（Alt＋↑／↓）：移動後焦點跟著卡片走、念出新位置
-          var j = i + dir
-          if (j < 0 || j >= this.def.fields.length) return
-          this.moveField(i, dir)
-          var f = this.def.fields[j]
-          this.announce((f.label || f.key) + ' 移到第 ' + (j + 1) + ' 個')
+          // 鍵盤替代（Alt＋↑／↓）：同一區塊內移一格，到邊界移到相鄰區塊；焦點跟著卡片走、念出新位置
+          var f = this.def.fields[i]
+          if (!f) return
+          var j = this.moveField(i, dir)
+          if (j < 0) return
+          this.announce((f.label || f.key) + ' 移到' + this.posText(this.sectionOf(f.key)))
           this.$nextTick(function () {
             var el = document.querySelector('#mb-canvas .mb-fc[data-field-index="' + j + '"]')
             if (el) el.focus()
@@ -1330,37 +1341,107 @@
           var keys = this.def.fields.map(function (f) { return f.key })
           for (var i = 1; ; i++) { if (keys.indexOf(base + '_' + i) < 0) return base + '_' + i }
         },
-        addField(t, at) {
-          if ((this.catalog.fieldTypes || []).indexOf(t) < 0) return
+        addField(t, gi, index) {
+          // 新欄位放進區塊 gi（-1＝沒分組）的第 index 個（null ⇒ 最後）；回傳它在 def.fields 的位置
+          if ((this.catalog.fieldTypes || []).indexOf(t) < 0) return -1
           var f = { key: this.nextKey(t), label: '', type: t, dataClass: (this.catalog.dataClasses || ['T1'])[0] }
           if (t !== 'formula') f.required = false
           if (t === 'formula') f.formula = ''
           if (t === 'ref') f.target = ''
           if (t === 'select') f.options = []
-          var i = (at === undefined || at === null) ? this.def.fields.length : at
-          this.def.fields.splice(i, 0, f)
-          this.sel = i
+          this.def.fields.push(f)
+          return this.applyPlacement(f.key, gi === undefined ? -1 : gi, index)
         },
-        dropOnCanvas(ev, at) {
+        addFieldHere(t) {
+          // 點一下／Enter：加到目前選中欄位所在的區塊的最後（沒選 ⇒ 沒分組的最後）
+          var j = this.addField(t, this.currentGroup(), null)
+          if (j < 0) return
+          this.announce('已加入 ' + this.typeLabel(t) + '，' + this.posText(this.sectionOf(this.def.fields[j].key)))
+        },
+        // ── ② 表單：區塊與位置（規則在 custom-layout.js：editorSections／placeField／sectionOrder）──
+        applyPlacement(key, gi, index) {
+          var r = this.L.placeField(this.def, key, gi, index)
+          this.def.ui = r.ui
+          this.def.fields = r.fields
+          this.sel = this.fieldIndex(key)
+          this.fxProblems = {}; this.checkAllFormulas()
+          return this.sel
+        },
+        fieldIndex(key) { return this.def.fields.findIndex(function (f) { return f.key === key }) },
+        sectionOf(key) {
+          var secs = this.L.editorSections(this.def)
+          for (var si = 0; si < secs.length; si++) {
+            var p = secs[si].items.findIndex(function (x) { return x.key === key })
+            if (p >= 0) return { si: si, gi: secs[si].gi, pos: p, secs: secs }
+          }
+          return null
+        },
+        posText(s) {
+          if (!s) return ''
+          var t = s.secs[s.si].title
+          return (t ? '「' + t + '」' : '') + '第 ' + (s.pos + 1) + ' 個'
+        },
+        currentGroup() {
+          var f = this.sel !== null ? this.def.fields[this.sel] : null
+          var s = f ? this.sectionOf(f.key) : null
+          return s ? s.gi : -1
+        },
+        dropOn(ev, gi, beforeKey) {
+          // 拖放：type:<型別>＝新欄位；field:<key>＝搬欄位；group:<gi>＝搬區塊。放在卡片上 ⇒ 插在那張之前；放在區塊空白處 ⇒ 區塊最後
           this.dragOver = false
           var d = ev.dataTransfer ? ev.dataTransfer.getData('text/plain') : ''
-          if (d.indexOf('type:') === 0) return this.addField(d.slice(5), at)
-          if (d.indexOf('field:') === 0) {
+          if (d.indexOf('group:') === 0) {
             var from = Number(d.slice(6))
-            if (isNaN(from) || from === at) return
-            var f = this.def.fields.splice(from, 1)[0]
-            var to = from < at ? at - 1 : at
-            this.def.fields.splice(Math.min(to, this.def.fields.length), 0, f)
-            this.sel = Math.min(to, this.def.fields.length - 1)
-            this.fxProblems = {}; this.checkAllFormulas()
+            if (isNaN(from) || gi < 0 || from === gi) return
+            this.def.ui = this.L.moveGroupTo(this.def, from, gi)
+            this.syncFieldOrder()
+            return
           }
+          var moving = d.indexOf('field:') === 0 ? d.slice(6) : null
+          var idx = null
+          if (beforeKey) {
+            if (moving === beforeKey) return
+            var s = this.sectionOf(beforeKey)
+            idx = s ? s.secs[s.si].items.map(function (x) { return x.key }).filter(function (k) { return k !== moving }).indexOf(beforeKey) : null
+          }
+          if (d.indexOf('type:') === 0) { this.addField(d.slice(5), gi, idx); return }
+          if (moving && this.fieldIndex(moving) >= 0) this.applyPlacement(moving, gi, idx)
         },
         moveField(i, dir) {
-          var j = i + dir
-          if (j < 0 || j >= this.def.fields.length) return
-          this.def.fields = this.L.move(this.def.fields, i, dir)
-          this.sel = j
-          this.fxProblems = {}; this.checkAllFormulas()
+          // 同一區塊內移一格；到區塊邊界 ⇒ 移到相鄰區塊（往上＝上一塊的最後，往下＝下一塊的最前）。回傳新位置（不能移 ⇒ -1）
+          var f = this.def.fields[i]
+          var s = f ? this.sectionOf(f.key) : null
+          if (!s) return -1
+          var sec = s.secs[s.si], p = s.pos + dir
+          if (p >= 0 && p < sec.items.length) return this.applyPlacement(f.key, sec.gi, p)
+          var nb = s.secs[s.si + dir]
+          if (!nb) return -1
+          return this.applyPlacement(f.key, nb.gi, dir < 0 ? nb.items.length : 0)
+        },
+        syncFieldOrder() {
+          // 區塊重排／刪除之後，def.fields 跟著畫布順序（沒分組的欄位順序＝fields 順序）
+          var selKey = this.sel !== null && this.def.fields[this.sel] ? this.def.fields[this.sel].key : null
+          var fields = this.L.sectionOrder(this.def)
+          var k = function (f) { return f && f.key }
+          if (fields.map(k).join('|') !== this.def.fields.map(k).join('|')) { this.def.fields = fields; this.fxProblems = {}; this.checkAllFormulas() }
+          if (selKey) this.sel = this.fieldIndex(selKey)
+        },
+        addGroupAt() {
+          this.def.ui = this.L.addGroup(this.def, '')
+          var n = this.layoutGroups().length
+          this.announce('已新增區塊，第 ' + n + ' 個')
+          this.$nextTick(function () { var el = document.querySelector('[data-group-title="' + (n - 1) + '"]'); if (el) el.focus() })
+        },
+        moveGroupBy(gi, dir) { this.def.ui = this.L.moveGroup(this.def, gi, dir); this.syncFieldOrder() },
+        async removeGroupAt(gi) {
+          var g = this.layoutGroups()[gi]
+          if (!g) return
+          if ((g.fields || []).length && window.MotrixUI) {
+            var ok = await window.MotrixUI.confirm('刪除區塊「' + (g.title || '未命名') + '」？裡面的欄位會移到「其他」。', { danger: true, okText: '刪除' })
+            if (!ok) return
+          }
+          this.def.ui = this.L.removeGroup(this.def, gi)
+          this.syncFieldOrder()
         },
         async removeField(i) {
           var f = this.def.fields[i]
