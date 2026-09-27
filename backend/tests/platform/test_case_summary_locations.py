@@ -1,6 +1,6 @@
 """`case.summary`／`case.locations`（M01 提供；M01-PLAN §3-4，主持裁示 2026-09-26 四點）的契約。
 
-① summary：欄位恰好 {quote_no, customer_name, project_name, status, sales_person_id}；可見性＝row_access `case`／read
+① summary：欄位恰好 {quote_no, customer_name, project_name, status, deal_tag, sales_person_id}（deal_tag 2026-09-27 加欄）；可見性＝row_access `case`／read
    （本人、被分配、admin+、cashier）；不給 quote_nos ⇒ 看得到的全部；給清單 ⇒ 只回其中看得到且存在的
 ② locations：交貨地點（合約交貨地址優先，其次報價的交貨地點）；可見性同上；fingerprint 隨地點／可見性欄位變
 ③ 身分：`user=None` ⇒ TypeError（不猜）；`helpers.case_access.SYSTEM` ⇒ 不過濾——**只准 L1 背景呼叫端**：
@@ -66,7 +66,7 @@ def test_summary_fields_visibility_and_filters(client, make_user):
     try:
         got_a = summary(conn, a)
         assert {r["quote_no"] for r in got_a} == {"MQ-CS-A", "MQ-CS-AS"}               # 本人＋被分配
-        assert set(got_a[0]) == {"quote_no", "customer_name", "project_name", "status", "sales_person_id"}
+        assert set(got_a[0]) == {"quote_no", "customer_name", "project_name", "status", "deal_tag", "sales_person_id"}
         assert [r for r in got_a if r["quote_no"] == "MQ-CS-A"][0]["customer_name"] == "甲客"
         assert {r["quote_no"] for r in summary(conn, adm)} >= {"MQ-CS-A", "MQ-CS-B", "MQ-CS-AS"}
         assert [r["quote_no"] for r in summary(conn, a, ["MQ-CS-B", "MQ-CS-A", "MQ-NOPE"])] == ["MQ-CS-A"]  # 看不到、不存在 ⇒ 不回
