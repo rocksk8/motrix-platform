@@ -168,6 +168,7 @@
 
 ## 6. 進度紀錄（最新在上）
 
+- 2026-09-27 10:50 D：b-probe-guard-s 04c0e912 **通過**：PT-S1、PT-S2 關閉；15 過、突變 4/4 紅（預設範圍改空、不含 modules、只含一個模組、utf8_env 不清）。
 - 2026-09-27 10:28 D：b-probe-tmp 4ecf73ea **通過**（必修 0）：61 過；subproc_helper 在 221adaa0 紅、本包綠（子 pytest 改 utf8_env）；真實受測樹殘檔 ⇒ rc 1 並列出（含 -n 2、modules/*/tests/.hid）。建議 PT-S1 預設監看範圍無題鎖（改空／不含 modules 皆存活）、PT-S2 MOTRIX_PROBE_LEAK_ROOTS 會傳給子孫行程。觀察：共用樹他人新增測試檔會判紅。
 - 2026-09-27 10:24 D：b-modtest-workers-3 01e73f10 **通過**：WK-M2 關閉；run_train 行為題與 PARTIAL=1 題關閉 -2 兩項觀察；67 過、突變 5/5 紅（舊寫法、關鍵字躲結構守門、補完丟掉、一律 E2E、未設當明設）。
 - 2026-09-27 10:21 主持：第十一班合回 9436bb3b（5 包；交互紅 6 題；本班差異題曾串行＝WK-M2，第 5 趟起改 `-- -n 2`；列車長開始測試到合回約 6 小時）。B：D7 前哨第 8 次 0 回歸（觀察：core-only 缺席模組 probes 未驗 404 ⇒ 派 B wip/b-drill-absent404）；b-probe-tmp（探針寫 tmp＋殘留守門；confcutdir 讓子 pytest 啟動 40 秒→0.35 秒）。C：M01 ④ 必修處置完成 c-m01-5（M4-M3 範圍 D 更正為非 e2e 134 檔＋e2e 78 檔，保留錯的 71 檔這句）。**使用者裁示待簽彙整本輪搬進 L1**（CORE-SPEC 裁示表），派 C。第十二班等車頭（b-modtest-workers-3、b-probe-tmp）D 稽核後發車。

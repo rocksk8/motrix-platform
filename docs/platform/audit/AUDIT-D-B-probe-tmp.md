@@ -9,6 +9,7 @@
 ## 0. 結論
 
 - **通過。必修 0、建議 2、觀察 1**。
+- 複核 b-probe-guard-s 04c0e912：**PT-S1、PT-S2 關閉**（§3）。
 
 ## 1. 實測
 
@@ -34,3 +35,13 @@
 
 **觀察**
 - **PT-O1**：共用工作樹裡，一輪期間別的視窗新增的測試檔也會把這一輪判紅（訊息有寫明）。列車在自己的工作樹不受影響；主工作樹上的全量（30 分鐘以上）若被這樣判紅，重跑成本高。
+
+## 3. 複核（wip/b-probe-guard-s 04c0e912）（D，2026-09-27 10:50）
+
+| 項目 | D 的驗證 | 結果 |
+|---|---|---|
+| 相關題 | test_probe_leak_guard＋test_subproc_helper：15 過 | 成立 |
+| PT-S1：預設監看範圍有題鎖住 | 新題 `test_default_watch_roots_are_tests_and_every_module_tests`（不設環境變數，範圍含 backend/tests 與每一個實際存在的 modules/*/tests）。突變 PS1「預設改空」、PS2「不含 modules」、PS3「只含一個模組」⇒ 3/3 紅 | **PT-S1 關閉** |
+| PT-S2：utf8_env 清掉覆寫 | `MOTRIX_PROBE_LEAK_ROOTS` 加進清除清單，明傳時照給。突變 PS4「不清」⇒ 紅 | **PT-S2 關閉** |
+
+- 原建議的「設了覆寫時印一行提示」沒有做；子行程已清掉，只剩外層手動設定這一種情形，列觀察即可。
