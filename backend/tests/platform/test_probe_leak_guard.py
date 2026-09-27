@@ -5,6 +5,8 @@ conftest 的 pytest_probe_leak_sessionstart／pytest_probe_leak_sessionfinish（
 這裡用子 pytest（探針在 tmp、經 probe_pytest_args 吃 backend/conftest.py）做反向控制與正對照；監看範圍以
 MOTRIX_PROBE_LEAK_ROOTS 指到 tmp 裡的假 tests 目錄，不碰真的受測樹。
 """
+import pytest
+
 from tests._subproc import BACKEND_DIR, probe_pytest_args, run_python
 
 _LEAKS = """
@@ -51,6 +53,22 @@ def test_a_clean_run_stays_green(tmp_path):
     assert r.returncode == 0 and "多出" not in out, out[-1500:]
 
 
+def _core_only_verdict(backend):
+    """獨立訊號（同 AB3-M1／T13-M1 手法，§G5 #15；第十三班列車）：modules.json 登記的每個模組 key，
+    資料夾一個都不在 ⇒ core-only。直接讀 modules.json，不看 `backend/modules/*/tests` 掃描結果本身。"""
+    import json
+    from pathlib import Path
+    manifest = Path(backend).parent / "docs" / "platform" / "modules.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    keys = sorted(g.get("key") for g in data.get("modules", {}).values() if g.get("key"))
+    if not keys:
+        return False, "modules.json 沒有登記任何模組 key（不是 core-only，設定本身有問題）"
+    present = [k for k in keys if (Path(backend) / "modules" / k).is_dir()]
+    if present:
+        return False, ""
+    return True, "modules.json 登記的 %d 個模組（%s）資料夾全部不在" % (len(keys), "、".join(keys))
+
+
 def test_default_watch_roots_are_tests_and_every_module_tests(monkeypatch):
     """稽核 D PT-S1：沒有覆寫時，監看範圍＝backend/tests ＋ 每一個 modules/<key>/tests（有的都要在）。
     改成空、或不含 modules ⇒ 紅。"""
@@ -61,7 +79,11 @@ def test_default_watch_roots_are_tests_and_every_module_tests(monkeypatch):
     backend = Path(BACKEND_DIR).resolve()
     assert backend / "tests" in roots, roots
     module_tests = {d.resolve() for d in (backend / "modules").glob("*/tests") if d.is_dir()}
-    assert module_tests, "正對照：repo 裡至少要有一個 modules/<key>/tests"
+    if not module_tests:
+        is_core_only, reason = _core_only_verdict(backend)
+        if is_core_only:
+            pytest.skip("core-only（%s）：沒有 modules/*/tests 可以比對" % reason)
+        pytest.fail("repo 裡沒有任何 modules/<key>/tests，而且不是 core-only（%s）：掃描壞了？" % reason)
     assert module_tests <= roots, "漏看的模組測試目錄：%s" % sorted(map(str, module_tests - roots))
 
 

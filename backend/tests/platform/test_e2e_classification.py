@@ -148,18 +148,35 @@ def test_classification_ignores_the_file_name(tmp_path):
         assert TM.file_is_e2e(p) is want, (name, want)
 
 
-def test_modtest_cap_follows_content_not_name(monkeypatch):
-    """modtest 的 worker 上限：test_map 沒有那一檔時看內容（同 file_is_e2e），不看檔名。"""
+def test_modtest_cap_follows_content_not_name(monkeypatch, tmp_path):
+    """modtest 的 worker 上限：test_map 沒有那一檔時看內容（同 file_is_e2e），不看檔名。
+    〔第十三班列車：原本各舉一個真實模組檔／L1 檔當例子，core-only 拿掉全部 L2 模組後那個模組檔不存在
+    ⇒ 這題本身不需要任何模組，改用合成檔（檔名刻意與內容相反）：不再依賴任何模組是否安裝〕"""
     spec = importlib.util.spec_from_file_location("_modtest_e2ecls", REPO / "tools" / "platform" / "modtest.py")
     MT = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(MT)
     for k in (MT.PARTIAL_ENV, MT.E2E_ENV):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv(MT.PARTIAL_ENV, "4")
-    p9 = "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py"
-    hard = "backend/tests/test_e2e_hard_cap_2026_09_25.py"
-    assert MT.partial_cap([p9], {"tests": {}}) == MT.e2e_max_workers()
-    assert MT.partial_cap([hard], {"tests": {}}) == 4
+    # 檔名刻意誤導：看起來像 e2e 的其實不是，看起來不像的其實是——證明判準真的看內容
+    looks_e2e_but_isnt = tmp_path / "test_e2e_named_but_plain.py"
+    looks_e2e_but_isnt.write_text("def test_plain():\n    assert True\n", encoding="utf-8")
+    looks_plain_but_is_e2e = tmp_path / "test_plain_named_but_e2e.py"
+    looks_plain_but_is_e2e.write_text("import pytest\n\n\n@pytest.mark.e2e\ndef test_real():\n    assert True\n",
+                                      encoding="utf-8")
+    rel_e2e = str(looks_plain_but_is_e2e.relative_to(REPO)) if _under(looks_plain_but_is_e2e, REPO) else None
+    rel_plain = str(looks_e2e_but_isnt.relative_to(REPO)) if _under(looks_e2e_but_isnt, REPO) else None
+    # tmp_path 未必落在 REPO 底下（REPO 相對路徑組不出來時，直接餵絕對路徑亦可，file_is_e2e 只需要路徑存在）
+    assert MT.partial_cap([rel_e2e or str(looks_plain_but_is_e2e)], {"tests": {}}) == MT.e2e_max_workers()
+    assert MT.partial_cap([rel_plain or str(looks_e2e_but_isnt)], {"tests": {}}) == 4
+
+
+def _under(p, root):
+    try:
+        p.relative_to(root)
+        return True
+    except ValueError:
+        return False
 
 
 # ── ④ 瀏覽器 fixture 一律經 new_context（主持採納 D 的射程限制）────────────────────────────

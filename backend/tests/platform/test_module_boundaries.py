@@ -191,6 +191,21 @@ def _cross_edge_candidates(units, groups):
     return starts, ends
 
 
+def core_only_verdict():
+    """獨立訊號（同 AB3-M1／T13-M1 手法，§G5 #15；第十三班列車）：modules.json 登記的每個模組 key，
+    資料夾 backend/modules/<key> 一個都不在 ⇒ core-only。直接讀 modules.json 原始資料，
+    不經 units／dep_scan／_cross_edge_candidates 的掃描結果——略過條件不可以取自被檢查的東西本身。
+    ⇒ (is_core_only, 理由)。"""
+    data = json.loads(B.MODULES_JSON.read_text(encoding="utf-8"))
+    keys = sorted(g.get("key") for g in data.get("modules", {}).values() if g.get("key"))
+    if not keys:
+        return False, "modules.json 沒有登記任何模組 key（不是 core-only，設定本身有問題）"
+    present = [k for k in keys if (B.REPO / "backend" / "modules" / k).is_dir()]
+    if present:
+        return False, ""
+    return True, "modules.json 登記的 %d 個模組（%s）資料夾全部不在" % (len(keys), "、".join(keys))
+
+
 def _candidate_problems(starts, ends):
     """候選來源的正對照判定 ⇒ 問題清單（空＝候選夠用）。
     〔第十二班列車：起點改成與終點同一種取法（router＋mod）之後，「終點候選沒有起點以外的組」原本的
@@ -209,6 +224,9 @@ def _candidate_problems(starts, ends):
 
 def test_rc_cross_edge_candidates_are_scanned(units, groups):
     """正對照：候選來源（routers/ 的 L2 router、modules/ 的模組單位）都掃得到——掃不到時反向控制會失去意義。"""
+    is_core_only, reason = core_only_verdict()
+    if is_core_only:
+        pytest.skip("core-only（%s）：沒有 L2 可以掃描候選" % reason)
     bad = _candidate_problems(*_cross_edge_candidates(units, groups))
     assert not bad, bad
 
@@ -238,6 +256,11 @@ def _pick_new_cross_edge(units, groups, baseline):
     starts, ends = _cross_edge_candidates(units, groups)
     if not starts:
         # 理論上的耗盡（L2 一個單位都沒有）⇒ 紅，不可以 skip：反向控制 skip＝守門沒被驗證而閘門照綠（B／主持 2026-09-26）。
+        # 〔第十三班列車：core-only（modules.json 登記的模組全部真的不在）現在是合法的產品設定，
+        #  「理論上耗盡」不再只是理論——用獨立訊號分辨兩種耗盡，不是把 fail 改成永遠 skip〕
+        is_core_only, reason = core_only_verdict()
+        if is_core_only:
+            pytest.skip("core-only（%s）：反向控制沒有可用的起點候選" % reason)
         pytest.fail("沒有可用的起點候選，反向控制無法成立（L2 底下沒有任何 router／mod 單位）")
     base = set(baseline)
     for g1, r1 in starts:
@@ -298,6 +321,9 @@ def test_rc_stale_modules_entry_is_caught(units):
 
 
 def test_rc_foreign_table_write_is_caught(units, groups, exceptions):
+    is_core_only, reason = core_only_verdict()
+    if is_core_only:
+        pytest.skip("core-only（%s）：沒有 L2 表可以配對突變" % reason)
     tbl = next(t for t, gs in sorted(groups.table_groups.items()) if len(gs) == 1 and gs[0] in groups.l2)
     own = groups.table_owner(tbl)
     writer = next(n for n, u in sorted(units.items())

@@ -81,4 +81,6 @@ def test_no_writes_to_dev_cases_outside_crm():
             continue
         scanned += 1
         hits += ["%s: %s" % (rel, m.group(0)) for m in pat.finditer(p.read_text(encoding="utf-8"))]
-    assert scanned > 100 and not hits, hits
+    # 門檻不綁模組數（第十三班列車：>100 是有 L2 模組在時量的，core-only 全部模組拿掉後只剩 L1，實量 85）；
+    # 這題本身不需要任何模組，正對照只要「掃到有意義的量」，50 在 core-only（85）與一般（152）之間都安全
+    assert scanned > 50 and not hits, hits

@@ -245,6 +245,11 @@ def run(commit="HEAD", workers=2, keep=False, window="coreonly"):
         cmd = [sys.executable, "-X", "utf8", "-m", "pytest", "tests/platform", "-q", "-p", "no:cacheprovider",
                "-n", str(workers), "--basetemp=%s" % basetemp, "--continue-on-collection-errors",
                "--junitxml=%s" % junit]
+        # 第十三班列車發現的工具缺陷：core_only_rc 一律在列車 HEAD 上跑（PLAYBOOK §G3），
+        # 而列車本來就會改 UNIT-INDEX／dep_graph.json／test_map.json（合回前才重產提交）；
+        # 沒設 MOTRIX_TRAIN=1 的話 test_branch_does_not_touch_generated_files 會把這個正常差異
+        # 誤判成「分支改了產生檔」——那道守門本身是設計成看這個旗標的，不是本題的假設錯了。
+        os.environ["MOTRIX_TRAIN"] = "1"
         code, lines = _run_streaming(cmd, backend)
         out["pytest_exit"] = code
         out["summary"] = (lines or [""])[-1]

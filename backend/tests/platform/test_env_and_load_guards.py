@@ -218,18 +218,22 @@ def test_no_call_site_caps_with_the_bare_constant():
     assert "partial_pytest_args(extra, picked, tmap)" in src
 
 
-def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatch):
-    """D 抽查 MT-O1：差異題選到 e2e ⇒ 上限取 e2e 的（記憶體）；沒選到 ⇒ 照 partial。突變：partial_cap 不看 e2e ⇒ 紅。"""
+def test_partial_cap_uses_the_e2e_cap_when_e2e_is_picked(_no_cap_env, monkeypatch, tmp_path):
+    """D 抽查 MT-O1：差異題選到 e2e ⇒ 上限取 e2e 的（記憶體）；沒選到 ⇒ 照 partial。突變：partial_cap 不看 e2e ⇒ 紅。
+    〔第十三班列車：p9／hard 原本各舉一個真實模組檔／L1 檔，core-only 拿掉全部 L2 模組後模組檔不存在
+    ⇒ 這兩個例子本身不需要任何模組，改用合成檔（檔名刻意與內容相反），不再依賴任何模組是否安裝〕"""
     monkeypatch.setenv(MT.PARTIAL_ENV, "4")
     tmap = {"tests": {"backend/tests/test_a.py": {"kind": "api"}, "backend/tests/test_b.py": {"kind": "e2e"}}}
     assert MT.partial_cap(["backend/tests/test_a.py"], tmap) == 4
     assert MT.partial_cap(["backend/tests/test_a.py", "backend/tests/test_b.py"], tmap) == 2
     # ~~assert MT.partial_cap(["backend/tests/test_e2e_new_2026.py"], tmap) == 2, "test_map 還沒有那一檔 ⇒ 看檔名"~~
     # 〔更正 wip/b-modtest-batch（主持派工）：不看檔名，看檔案內容（test_map.file_is_e2e）——36 個 e2e 檔不叫 test_e2e_*〕
-    p9 = "backend/modules/tender_radar/tests/test_tender_p9_layout_e2e_2026_09_26.py"   # e2e（marker），檔名不是 test_e2e_*
-    assert MT.partial_cap([p9], tmap) == 2, "test_map 還沒有那一檔 ⇒ 看內容（marker／瀏覽器夾具）"
-    hard = "backend/tests/test_e2e_hard_cap_2026_09_25.py"                             # 檔名像 e2e，內容不是
-    assert MT.partial_cap([hard], tmap) == 4, "檔名 test_e2e_* 不算數"
+    p9 = tmp_path / "test_plain_named_but_e2e.py"          # e2e（marker），檔名不是 test_e2e_*
+    p9.write_text("import pytest\n\n\n@pytest.mark.e2e\ndef test_real():\n    assert True\n", encoding="utf-8")
+    assert MT.partial_cap([str(p9)], tmap) == 2, "test_map 還沒有那一檔 ⇒ 看內容（marker／瀏覽器夾具）"
+    hard = tmp_path / "test_e2e_named_but_plain.py"        # 檔名像 e2e，內容不是
+    hard.write_text("def test_plain():\n    assert True\n", encoding="utf-8")
+    assert MT.partial_cap([str(hard)], tmap) == 4, "檔名 test_e2e_* 不算數"
     monkeypatch.setenv(MT.E2E_ENV, "1")
     assert MT.partial_cap(["backend/tests/test_b.py"], tmap) == 1
 
