@@ -8048,6 +8048,7 @@
     "file:backend/tests/_requires.py",
     "helper:custom_modules",
     "helper:tiered_approval",
+    "mod:case/api/quotations",
     "router:vouchers"
    ],
    "evidence": {
@@ -8057,6 +8058,7 @@
     ],
     "path": [
      "backend/helpers/custom_modules.py",
+     "backend/modules/case/api/quotations.py",
      "backend/routers/vouchers.py"
     ]
    }
