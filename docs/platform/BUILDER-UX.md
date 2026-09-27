@@ -1,6 +1,6 @@
 # 模組建構器：拖曳式、縮圖化（BUILDER-UX）
 
-> 2026-09-27 B 起草（主持派工，使用者裁示）。範圍：`frontend/pages/module-builder.html`（B）＋`frontend/static/form-preview.js`（A）＋`custom-records.html` 的預覽掛鉤（A，主持裁示 A 為該掛鉤檔主）。**下一版上**；D7 與這次換版照現行版本走。
+> 2026-09-27 B 起草（主持派工，使用者裁示）；主持核准 61d41921（縮圖 8 格方案），補防線主次與焦點驗收兩點。範圍：`frontend/pages/module-builder.html`（B）＋`frontend/static/form-preview.js`（A）＋`custom-records.html` 的預覽掛鉤（A，主持裁示 A 為該掛鉤檔主）。**下一版上**；D7 與這次換版照現行版本走。
 > 使用者原話：「在構築的時候就即時預覽，欄位階段就已經有預覽，用拖曳拉 icon 跟文字的頁面直接進去製作表單，流程讓使用者更為簡易」。
 
 ## 0. 現況（盤點，e21b099a）
@@ -80,6 +80,8 @@
 3. 預覽模式只由建構器的 iframe 開啟：iframe 加 `sandbox="allow-scripts allow-same-origin"`（**不給** forms、**不給** top-navigation）；直接開 `?preview=1` 也不會有資料外流（本來就不打 API）。
 4. 非預覽模式的行為完全不變：既有 custom-records 的題全過。
 
+⚠️ **防線的主次**（主持 2026-09-27）：sandbox 同時給 `allow-scripts` 與 `allow-same-origin` 時，被框的頁可以自行解除 sandbox——這裡框的是我們自己的頁，**真正的防線是第 2 條（預覽模式在程式層面不打 API）**，sandbox 只是第二道，不可以被當成主要防線。
+
 ## 4. 限制
 
 - 後端 schema 盡量不動；要動只准新增（CORE 次版號）。本設計**不需要**動後端。
@@ -103,6 +105,7 @@
    - 就地改標籤、必填 ⇒ 草稿 DB 的 `fields[i].label／required`（布林）正確；
    - 即時預覽：加一個欄位 ⇒ 預覽 iframe 內 `[data-field=<key>]` 出現；選中卡片 ⇒ 預覽裡該欄位被框起；
    - 縮圖導覽：8 格都在；流程／簽核／通知三格捲到第 4 步的對應區塊；有問題的步驟有紅點（`data-has-problems`）。
+   - **預覽更新不搶焦點、不蓋掉輸入中的值**（主持 2026-09-27；〈先渲染再非同步載入＝競態〉）：在畫布卡片的標籤欄連續打字（中間預覽會重畫），最後焦點仍在該欄、值完整（驗 DOM 與草稿 DB）；A 的 `update()` 不 focus iframe、不重建 iframe、ready 前只留最後一份 draft。
 3. 預覽模式（A）：攔截所有 fetch，預覽模式下呼叫次數 **0**；存檔按鈕無效；非同源或格式不對的訊息被忽略；改執行期模板 ⇒ 預覽跟著變；iframe 帶 sandbox 且沒有 forms／top-navigation。
 4. 無 CDN、無新函式庫；`frontend/static/form-preview.js` 與改過的頁都在 repo 內；⓪ 自查 §G5 全項未中（#3 色碼用 token、#9 e2e 驗 DOM 與 DB、等終點）。
 
