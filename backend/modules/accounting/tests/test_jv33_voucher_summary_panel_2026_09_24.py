@@ -23,6 +23,8 @@ import pytest
 pytest.importorskip("playwright.sync_api")
 
 from tests._e2e_login import inject_login as _login  # noqa: E402,F401
+from tests._requires import requires_module  # noqa: E402  M01 不在時跳過（B 2026-09-28，反向控制抓到）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 from modules.accounting.tests.test_jv28_voucher_attachment_preview_2026_09_24 import (  # noqa: E402
     _png_bytes, _upload, _open_page)
 
@@ -93,6 +95,7 @@ def _summary2(page):
     return page.evaluate("() => Alpine.$data(document.querySelector('[x-data]')).lines[1].summary")
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv33_focusing_a_summary_shows_files_and_expenses_together(
         live_server, make_user, seed_extra_expense, e2e_browser):
@@ -108,6 +111,7 @@ def test_jv33_focusing_a_summary_shows_files_and_expenses_together(
     assert files_vis and exp_vis, "兩區沒有同時出現（附件 %s／支出項 %s）" % (files_vis, exp_vis)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv33_clicking_a_source_overwrites_the_summary_instead_of_appending(
         live_server, make_user, seed_extra_expense, e2e_browser):
@@ -140,6 +144,7 @@ def test_jv33_clicking_a_source_overwrites_the_summary_instead_of_appending(
         "再點案件應該**覆蓋**成案件名稱，不是接續：%r" % second)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv33_the_thumbnail_previews_without_touching_the_summary(
         live_server, make_user, seed_extra_expense, e2e_browser):
@@ -156,6 +161,7 @@ def test_jv33_the_thumbnail_previews_without_touching_the_summary(
     assert _summary2(page) == "", "點縮圖不應該動摘要：%r" % _summary2(page)
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv33_the_expense_section_says_loading_while_sources_are_in_flight(
         live_server, make_user, seed_extra_expense, e2e_browser):
