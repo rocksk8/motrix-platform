@@ -27,6 +27,7 @@ V9 基準（db._MIGRATIONS，v1~v116）凍結不動；
 """
 import logging
 import os
+import sqlite3
 from datetime import datetime
 
 _REGISTRY = {}          # module -> {version: fn}
@@ -77,11 +78,17 @@ def run_all(conn) -> dict:
                     res = per[v](conn)
                 except Exception as exc:        # noqa: BLE001 — 任何例外都只算這一個模組未完成
                     res = "例外：%s: %s" % (type(exc).__name__, exc)
-                if res is None:
-                    conn.execute("RELEASE motrix_module_migration")
-                else:
-                    conn.execute("ROLLBACK TO motrix_module_migration")
-                    conn.execute("RELEASE motrix_module_migration")
+                try:
+                    if res is None:
+                        conn.execute("RELEASE motrix_module_migration")
+                    else:
+                        conn.execute("ROLLBACK TO motrix_module_migration")
+                        conn.execute("RELEASE motrix_module_migration")
+                except sqlite3.OperationalError as exc:
+                    # savepoint 不在了＝這支 migration 自己結束了交易（commit／executescript）：寫進去的撤不回，
+                    # 但不可以因此讓整台起不來；不記版號、記未完成（repo 內的由守門擋，這裡擋第三方）
+                    res = ("違規：migration 自己結束了交易（commit／executescript），寫入無法撤回、版號不前進"
+                           "（%s）；原本的結果：%s" % (exc, "完成" if res is None else res))
             if res is not None:
                 why = res.strip() if isinstance(res, str) and res.strip() else (
                     "migration 回傳值只能是 None（完成）或原因字串（未完成），收到 %r" % (res,))

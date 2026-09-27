@@ -168,3 +168,24 @@ def test_core_migration_exceptions_still_propagate(tmp_path, iso):
             migrations.run_all(conn)
     finally:
         conn.close()
+
+
+def test_a_migration_that_commits_itself_is_incomplete_not_a_crash(tmp_path, iso):
+    """repo 外（第三方）的模組 migration 自己 commit ⇒ savepoint 不在了：不可以因此讓 run_all 往上丟、整台起不來；
+    記成未完成（說明撤不回）、版號不前進、別的模組照跑。repo 內的由 test_module_migrations 的「不准 commit」守門擋。"""
+    ran = []
+
+    def commits(conn):
+        conn.execute("CREATE TABLE IF NOT EXISTS zz_committed (id INTEGER)")
+        conn.commit()
+
+    migrations.register("aaa_commit", 1, commits)
+    migrations.register("zzz_ok", 1, lambda conn: ran.append("zzz"))
+    conn = _db(tmp_path / "commit.db")
+    try:
+        migrations.run_all(conn)                                          # 不丟
+        assert migrations.current_version(conn, "aaa_commit") == 0 and ran == ["zzz"]
+        v, why = migrations.incomplete(str(tmp_path / "commit.db"))["aaa_commit"]
+        assert v == 1 and "自己結束了交易" in why, why
+    finally:
+        conn.close()
