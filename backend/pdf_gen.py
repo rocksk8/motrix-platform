@@ -579,7 +579,7 @@ def _identity_foot(ident: dict) -> str:
     """頁尾那一行（完整版：英文名 ＋ 中文名 ｜ email ｜ Tel ｜ 統編）。"""
     return "  %s %s ｜ %s ｜ Tel: %s ｜ 統一編號: %s\n" % (
         ident.get("company_name_en", ""),
-        # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是「允碩整合集創」，
+        # ⚠️ 頁尾用的是**不含「股份有限公司」的短名**。改版前寫死的是本公司名稱的短名，
         # 🔑 而那是 `company_name` 去掉尾綴 —— 這裡只去掉既有那幾種尾綴，
         #    使用者自己填的名字原樣印出去，不要替他猜。
         _short_name(ident.get("company_name", "")),

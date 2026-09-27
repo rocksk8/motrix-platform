@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <script>(function(){try{if(localStorage.getItem('motrix_theme')==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}})()</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="../static/favicon.png">
+  <link rel="icon" type="image/png" href="/api/system/branding/favicon">
   <title>公司資料設定 — MOTRIX 專案管理系統</title>
   <script src="../static/auth-guard.js"></script>
   <script defer src="../static/vendor/alpine-3.17.1.min.js"></script>
@@ -109,26 +109,103 @@
 
     <template x-if="isSuperadmin">
       <div>
+        <!-- 品牌（2026-09-27 H10；使用者：「公司名稱、公司LOGO這些都要能在設定中上傳跟修改」）
+             公司名稱存在 company_profile（與下方各卡同一支 save()）；三種圖檔各自上傳、立即生效。
+             只收 PNG／JPG／WebP，伺服器以檔案內容判斷格式並重新編碼（去掉拍攝資訊等 metadata）。 -->
+        <div class="ns-card" data-brand-card>
+          <div class="ns-card-head">
+            <div class="ns-card-head-title">品牌與公司名稱</div>
+          </div>
+          <div class="ns-card-body">
+            <div class="ns-desc">
+              登入頁、上方列、瀏覽器分頁圖示、單據抬頭與匯出報表都讀這裡的設定。
+              據點另外填了抬頭時，該據點的單據以據點的值為準。
+            </div>
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>公司名稱（中文）</label>
+                <input type="text" x-model="cfg.name" placeholder="例：範例科技股份有限公司">
+              </div>
+              <div class="ns-field">
+                <label>公司名稱（英文）</label>
+                <input type="text" x-model="cfg.company_name_en" placeholder="例：Example Technology Co., Ltd.">
+              </div>
+            </div>
+            <div class="ns-actions">
+              <button class="btn btn-primary" @click="save()" :disabled="saving">
+                <span x-show="!saving">儲存設定（公司名稱、基本資料與收款帳戶）</span>
+                <span x-show="saving">儲存中…</span>
+              </button>
+            </div>
+            <div x-show="msg" x-text="msg" data-brand-save-msg
+                 :style="isError ? 'color:var(--danger)' : 'color:var(--success)'"
+                 style="font-size:13px;margin-top:8px;font-weight:600"></div>
+
+            <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:18px">
+              <template x-for="kind in brandKinds" :key="kind">
+                <div :data-brand-slot="kind"
+                     style="flex:1 1 220px;border:1px solid var(--border-light);border-radius:var(--radius);padding:12px">
+                  <div style="font-size:13px;font-weight:600;margin-bottom:8px"
+                       x-text="(brand[kind] && brand[kind].label) || kind"></div>
+                  <div :style="'height:72px;display:flex;align-items:center;justify-content:center;border-radius:6px;margin-bottom:8px;'
+                               + 'background:' + (kind === 'logo-dark' ? 'var(--black)' : 'var(--surface-muted)')">
+                    <img :src="brand[kind] && brand[kind].url" :data-brand-preview="kind" alt=""
+                         style="max-height:56px;max-width:90%;object-fit:contain">
+                  </div>
+                  <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px"
+                       x-text="brand[kind] && brand[kind].custom
+                               ? ('已上傳（' + (brand[kind].updatedAt || '').replace('T', ' ') + (brand[kind].by ? '，' + brand[kind].by : '') + '）')
+                               : '使用系統預設'"></div>
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <label class="btn btn-ghost btn-sm">
+                      <span x-text="brandBusy === kind ? '處理中…' : '上傳／更換'"></span>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" style="display:none"
+                             :data-brand-input="kind" :disabled="brandBusy === kind"
+                             @change="uploadBrand(kind, $event)">
+                    </label>
+                    <button type="button" class="btn btn-ghost btn-sm" :data-brand-reset="kind"
+                            x-show="brand[kind] && brand[kind].custom" :disabled="brandBusy === kind"
+                            @click="resetBrand(kind)">恢復預設</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:8px">
+              接受 PNG、JPG、WebP，單檔 2 MB 以內、單邊 4096 像素以內；不接受 SVG。
+              深色底 LOGO 用在上方列（黑底），建議白色或淺色字；網站圖示會自動轉成 256×256。
+            </div>
+            <div x-show="brandMsg" x-text="brandMsg" data-brand-msg
+                 :style="brandIsError ? 'color:var(--danger)' : 'color:var(--success)'"
+                 style="font-size:13px;margin-top:10px;font-weight:600"></div>
+          </div>
+        </div>
+
         <!-- 基本資料 -->
         <div class="ns-card">
           <div class="ns-card-head">
             <div class="ns-card-head-title">公司基本資料</div>
           </div>
           <div class="ns-card-body">
-            <div class="ns-row full">
-              <div class="ns-field">
-                <label>公司名稱</label>
-                <input type="text" x-model="cfg.name" placeholder="允碩整合集創股份有限公司">
-              </div>
-            </div>
+            <!-- 公司名稱（中／英）在上方「品牌與公司名稱」卡（H10） -->
             <div class="ns-row">
               <div class="ns-field">
                 <label>統一編號</label>
-                <input type="text" x-model="cfg.tax_id" placeholder="60575481">
+                <input type="text" x-model="cfg.tax_id" placeholder="例：12345678">
               </div>
               <div class="ns-field">
-                <label>聯絡方式</label>
-                <input type="text" x-model="cfg.contact_info" placeholder="Tel: 04-3610-6566｜info@miactw.com">
+                <label>聯絡方式（顯示用）</label>
+                <input type="text" x-model="cfg.contact_info" placeholder="例：Tel: 02-1234-5678｜service@example.com">
+              </div>
+            </div>
+            <!-- H10：電話、email 單獨一欄（單據抬頭與報表讀這兩欄；留空 ⇒ 從上面的「聯絡方式」拆） -->
+            <div class="ns-row">
+              <div class="ns-field">
+                <label>電話</label>
+                <input type="text" x-model="cfg.phone" placeholder="例：02-1234-5678">
+              </div>
+              <div class="ns-field">
+                <label>Email</label>
+                <input type="text" x-model="cfg.email" placeholder="例：service@example.com">
               </div>
             </div>
             <!-- ── 據點（分公司）──────────────────────────────────────
@@ -164,7 +241,7 @@
                       <input type="text" style="flex:1 1 150px" x-model="loc.name"
                              placeholder="名稱，例：總公司／台北分公司">
                       <input type="text" style="flex:2 1 260px" x-model="loc.address"
-                             placeholder="地址，例：台中市梧棲區八德路一段66號">
+                             placeholder="地址，例：台北市信義區市府路1號">
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
                       <!-- 📌 第一筆的兩個輸入框沿用 `office_lat`／`office_lon` 這兩個
@@ -175,12 +252,12 @@
                              :name="i === 0 ? 'office_lat' : ('loc_lat_' + i)"
                              x-model="loc.latText" @input="splitPastedCoord(loc)"
                              @paste="$nextTick(() => splitPastedCoord(loc))"
-                             placeholder="緯度（選填），例 24.2549239">
+                             placeholder="緯度（選填），例 25.0375">
                       <input type="text" style="flex:1 1 160px"
                              :id="i === 0 ? 'office_lon' : ('loc_lon_' + i)"
                              :name="i === 0 ? 'office_lon' : ('loc_lon_' + i)"
                              x-model="loc.lonText"
-                             placeholder="經度（選填），例 120.5316259">
+                             placeholder="經度（選填），例 121.5637">
                       <button type="button" class="btn btn-ghost btn-sm"
                               x-show="loc.latText || loc.lonText"
                               @click="loc.latText = ''; loc.lonText = ''">清除座標</button>
@@ -248,7 +325,7 @@
                 <button type="button" class="btn btn-ghost btn-sm" @click="addLocation()">＋ 新增據點</button>
 
                 <!-- ⚠️ 「貼一串」要能自動拆兩欄（沿用 UA5b）：
-                     使用者從 Google 地圖複製出來的是 `24.2549239, 120.5316259` **一串**，
+                     使用者從 Google 地圖複製出來的是 `25.0375, 121.5637` **一串**，
                      逼他手動拆的話，最可能的錯誤是**兩個數字貼反**，
                      ☠️ 而 `(120.53, 24.25)` 是一個**合法**座標（阿拉伯海上）——
                      🔑 一個會通過所有驗證的錯誤，比一個被擋下來的錯誤貴得多。 -->
@@ -332,7 +409,7 @@
             <div class="ns-row">
               <div class="ns-field">
                 <label>戶名</label>
-                <input type="text" x-model="cfg.bank_account_name" placeholder="允碩整合集創股份有限公司">
+                <input type="text" x-model="cfg.bank_account_name" placeholder="例：範例科技股份有限公司">
               </div>
               <div class="ns-field">
                 <label>帳號</label>
@@ -821,6 +898,7 @@
         session: {},
         cfg: {
           name: '', tax_id: '', contact_info: '', address: '',
+          company_name_en: '', phone: '', email: '',
           bank_name: '', bank_branch: '', bank_account_name: '', bank_account_number: '',
           privacy_notice: '', privacy_notice_contact: '', privacy_notice_user: '',
         },
@@ -883,6 +961,9 @@
         cloud: { backend: 'local_drive', s3: { bucket: '', endpoint_url: '', region: 'us-east-1', prefix: 'motrix-erp-backups/' } },
         cloudSaving: false, cloudSaved: false, cloudMsg: '', cloudIsError: false,
         pii: { state: '', path: '', reason: '' },
+        // H10 品牌圖檔：狀態來自 GET /api/settings/branding；上傳／恢復預設後以回應的 assets 整批換掉
+        brandKinds: ['logo', 'logo-dark', 'favicon'],
+        brand: {}, brandBusy: '', brandMsg: '', brandIsError: false,
 
         get isSuperadmin() { return this.session.role === 'superadmin' },
 
@@ -915,6 +996,7 @@
             this.keyCleared = false
           }
           if (this.isSuperadmin) {
+            await this.loadBranding()
             await this.loadWebauthnConfig()
             await this._loadSysSettings()
           }
@@ -926,6 +1008,65 @@
         // 所以 _loadSysSettings() 用 allSettled 而不是 all。
         _authJson() {
           return { Authorization: 'Bearer ' + this.session.token, 'Content-Type': 'application/json' }
+        },
+
+        async loadBranding() {
+          try {
+            const r = await fetch('/api/settings/branding', { headers: { Authorization: 'Bearer ' + this.session.token } })
+            if (r.ok) this.brand = (await r.json()).assets || {}
+          } catch (_e) { /* 讀不到 ⇒ 卡片顯示空的預覽，上傳仍可用 */ }
+        },
+
+        _brandDone(ok, text, assets) {
+          this.brandIsError = !ok
+          this.brandMsg = text
+          if (assets) {
+            this.brand = assets
+            // 本頁的上方列與分頁圖示立即換成新版本；其他頁下一次載入就是新的（不帶版本的網址每次重新驗證）
+            const top = document.querySelector('img[data-brand-logo="logo-dark"]')
+            if (top && assets['logo-dark']) top.src = assets['logo-dark'].url
+            const icon = document.querySelector('link[rel="icon"]')
+            if (icon && assets.favicon) icon.href = assets.favicon.url
+          }
+          setTimeout(() => { this.brandMsg = '' }, 6000)
+        },
+
+        async uploadBrand(kind, ev) {
+          const input = ev.target
+          const file = input.files && input.files[0]
+          if (!file) return
+          this.brandBusy = kind
+          try {
+            const fd = new FormData()
+            fd.append('file', file)
+            const r = await fetch('/api/settings/branding/' + encodeURIComponent(kind), {
+              method: 'PUT', headers: { Authorization: 'Bearer ' + this.session.token }, body: fd })
+            const d = await r.json().catch(() => ({}))
+            if (r.ok) this._brandDone(true, '已更換：' + ((this.brand[kind] && this.brand[kind].label) || kind), d.assets)
+            else this._brandDone(false, d.detail || '上傳失敗', null)
+          } catch (e) {
+            this._brandDone(false, '連線異常：' + e.message, null)
+          } finally {
+            this.brandBusy = ''
+            input.value = ''
+          }
+        },
+
+        async resetBrand(kind) {
+          const label = (this.brand[kind] && this.brand[kind].label) || kind
+          if (!confirm('要把「' + label + '」恢復成系統預設嗎？')) return
+          this.brandBusy = kind
+          try {
+            const r = await fetch('/api/settings/branding/' + encodeURIComponent(kind), {
+              method: 'DELETE', headers: { Authorization: 'Bearer ' + this.session.token } })
+            const d = await r.json().catch(() => ({}))
+            if (r.ok) this._brandDone(true, '已恢復預設：' + label, d.assets)
+            else this._brandDone(false, d.detail || '恢復預設失敗', null)
+          } catch (e) {
+            this._brandDone(false, '連線異常：' + e.message, null)
+          } finally {
+            this.brandBusy = ''
+          }
         },
 
         async _loadSysSettings() {
@@ -1217,7 +1358,7 @@
           this.locations.splice(i - 1, 0, row)
         },
 
-        // 貼上 `24.2549239, 120.5316259` 這種一串時自動拆成兩欄。
+        // 貼上 `25.0375, 121.5637` 這種一串時自動拆成兩欄。
         // ⚠️ 只在「那一格裡有兩個數字」時才動經度欄 ——
         // 使用者正在手打緯度時不可以去改另一格。
         splitPastedCoord(loc) {

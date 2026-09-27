@@ -417,7 +417,8 @@ if (typeof module !== 'undefined' && module.exports) {
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;"><path d="M4 6h16M4 12h16M4 18h16"/></svg>'
       + '</button>'
       + '<a href="' + up + 'index.html" class="topbar__logo">'
-      + '<img src="' + up + 'static/logo.png" alt="MOTRIX" style="height:26px"'
+      // 2026-09-27 H10：品牌圖檔可在「公司資料設定」更換；上方列是深色底 ⇒ 用深色底 LOGO（沒上傳 ⇒ 端點回預設檔）
+      + '<img src="/api/system/branding/logo-dark" alt="回首頁" data-brand-logo="logo-dark" style="height:26px"'
       + ' onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{textContent:\'MOTRIX\',style:\'color:#F5F4F0;font-family:LINE Seed TW_OTF, sans-serif;font-weight:700;font-size:15px;letter-spacing:.08em\'}))">'
       + '</a>'
       + '<div class="topbar__divider"></div>'

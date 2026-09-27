@@ -83,7 +83,7 @@ def _resolve_cors_origins(env_value: str = None) -> list:
 
     ⚠️ 這是安全邊界，不是一般設定：`MOTRIX_CORS_ORIGINS` 一旦設了就**完全取代**
     預設清單（不是附加），設錯會讓正式機的前端打不到自己的 API。設定格式範例：
-        MOTRIX_CORS_ORIGINS=https://erp.miactw.com:666,https://172.16.10.177:666
+        MOTRIX_CORS_ORIGINS=https://erp.example.com:666,https://192.168.1.10:666
 
     註：目前 `motrix.internal`（正式機 2026-09-11 起的正式網址）**不在預設清單裡**。
     今天沒事是因為前端跟 API 由同一個 FastAPI 服務提供、屬同源請求，CORS 根本不會
@@ -128,6 +128,8 @@ _PUBLIC_API_PATHS = {
     "/api/ping", "/api/system/version",
     # 2026-09-26 A8d：登入頁的公司名稱（統編只在帶有效登入時回，見 routers/auth.py::system_branding）
     "/api/system/branding",
+    # 2026-09-27 H10：品牌圖檔（登入頁 LOGO、favicon 由瀏覽器直接抓，沒有 header）；內容本來就是公開頁面上的圖
+    "/api/system/branding/logo", "/api/system/branding/logo-dark", "/api/system/branding/favicon",
     # 2026-09-08：手機掃 QR 核准登入——手機打開確認頁面時完全沒有任何 session，
     # 這三個端點本身各自用 challenge_token／密碼做驗證，見 routers/auth.py。
     "/api/auth/login/qr-info", "/api/auth/login/qr-approve", "/api/auth/login/qr-status",

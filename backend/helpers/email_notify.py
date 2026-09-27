@@ -1706,7 +1706,7 @@ def notify_cert_expiry(
             "<br>2. <code>backend\\logs\\letsencrypt_renew.log</code> 的錯誤訊息"
             "<br>3. Cloudflare API Token 是否已失效或被撤銷"
             "<br>手動補救：以系統管理員執行 "
-            "<code>backend\\tools\\letsencrypt_renew.ps1 -Force</code>"
+            "<code>backend\\tools\\letsencrypt_renew.ps1 -Domain 本系統網址 -Force</code>"
         )
     else:
         howto = (
