@@ -131,3 +131,10 @@
 | C-O1～O4 | O1 修正：還原回應帶 `draftPending`，規格 §3.5 同步（突變 1 項紅）；O2 不在本批：P4 送審凍結要等第一個接 `custom_fields.clean` 的內建模組，屆時附「定義改版後舊單仍用舊版」一題（ROADMAP P4 已標未做）；O3 已由使用者裁示 U14：草稿只有建立者與超級管理員可以修改、送出（後端 403，讀單回 `canEdit`，前端依此隱藏按鈕；突變 2 項紅）；O4 規格 §3.7 已寫明空值／出錯的處理 | wip/c-audit-d d132336f（疊在第二批 bec40ee5 之上）→ rebase 後 wip/c-audit-d-2 bf80789f |✅ 2026-09-26 04:18 接受（O2 維持 ROADMAP 追蹤；O3 依使用者裁示 U14） |
 
 > D 確認的依據（2026-09-26 04:18）：在 `wip/c-audit-d` d132336f 上跑 `test_custom_modules_engine`＋`test_definitions_store`（基準綠），D 的原探針 6 項重跑，D 突變 CX1～CX5 全紅。⚠ 修正還在分支上（第二批＋c-audit-d），合回 origin 後本檔的關閉才在 platform 上生效；C-M4 仍開著。
+
+## 複核 C-M4（D，2026-09-27 23:42；主持指派，修正 commit 429d27d1，已在 origin）
+
+- 修正：公式 `round` 接 L1 `helpers.legal_params.round_half_up`（不另寫一份）；補題 `test_formula_round_is_half_up`（2.5⇒3、3.5⇒4、-2.5⇒-3、738.5⇒739、`round(1.005, 2)`⇒1.01、`round(10 / 3, 2)`⇒3.33、`round(1234, -2)`⇒1200）。
+- D 在 origin/platform 重跑原探針（`helpers.formula.evaluate`）：`round(2.5)`＝3、`round(3.5)`＝4、`round(-2.5)`＝-3、`round(738.5)`＝739、`round(1.005, 2)`＝1.01、`round(10 / 3, 2)`＝3.33。
+- D 突變 CM4「改回內建 `round`」⇒ **7 紅**。
+- ⇒ ✅ **C-M4 關閉（429d27d1）**。本檔 D6 必修 C-M1～C-M5 全部關閉。

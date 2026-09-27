@@ -206,3 +206,15 @@
 | Z-4 | 觀察：通用 L2 邊界守門（AST，含 G1 看得見底線 API）已涵蓋屬性存取與跨行 import；`test_no_one_imports_the_private_function_anymore` 留作快速字面檢查，不再加強 | wip/a-ip-fix | |
 | Z-5 | 使用者裁示「維持現狀並寫進規格」（CORE-SPEC）。MODULE-GUIDE §1.1 寫明三類（row_access／module／own_rule）並逐一列出子資料路徑；機器可讀清單 `docs/platform/case_read_scope.json`（30 條：23／4／3）；守門 `test_case_read_scope.py`：新增讀取路徑未歸類、清單有而程式碼沒有、標 row_access 卻沒呼叫逐案守門、未知類別 ⇒ 皆紅（突變 3 種皆紅） | wip/a-read-scope | |
 | Z-6 | （環境，不需 A 回覆） | | |
+
+## 7. D 代為複核（2026-09-27 23:42；主持指派——本檔原為 X 的稽核，「X 確認」欄一直空著）
+
+> 依據是 origin/platform 上的現況（修正已隨 66982bbf 合回）。每一項都用 D 自己的突變驗，不採用回覆欄的自述。
+
+| # | D 的驗證 | 結果 |
+|---|---|---|
+| X-1 | 突變「`modules/case/recognition.py::dispatch_unavailable` 一律回 `[]`（派工缺席不說）」⇒ **紅**（`modules/analytics/tests/test_reports_dispatch_row_consumer.py::test_absence_is_said_in_report_flags`） | ✅ **X-1 關閉** |
+| X-2 | 突變「在產品碼加一個沒登記的 `registry.provide("zz.unregistered_cap", …)`」⇒ **2 紅**（`tests/platform/test_integration_points_registered.py`） | ✅ **X-2 關閉** |
+| X-3 | 突變「dev_crm 列表不過濾（`modules/crm/api.py` 的 `visible` 列表套用點）」⇒ **紅**；「單筆讀取不擋」⇒ **紅**（`modules/crm/tests/test_dev_case_row_access_2026_09_25.py::test_outsider_cannot_see_dev_case_anywhere`） | ✅ **X-3 關閉** |
+
+- 本檔必修 X-1～X-3 全部關閉。
