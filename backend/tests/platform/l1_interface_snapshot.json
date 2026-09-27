@@ -1,5 +1,5 @@
 {
- "core_version": "1.57",
+ "core_version": "1.58",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -836,6 +836,7 @@
    "DISABLED_REASON": "const",
    "MODULES_DIR": "const",
    "MODULES_PACKAGE": "const",
+   "check_migrations": "def(items)",
    "core_compatible": "def(spec, core_version=…)",
    "load_all": "def(modules_dir=…, package=…, license_check=…, disabled=…, disabled_reason=…)",
    "mount_modules": "def(app)",
@@ -932,6 +933,7 @@
    "LoadedModule.spec": "field",
    "ModuleSpec": "class",
    "ModuleSpec.key": "field",
+   "ModuleSpec.migrations": "field=…",
    "ModuleSpec.providers": "field=…",
    "ModuleSpec.routers": "field=…",
    "ModuleSpec.runtime_switches": "field=…",
