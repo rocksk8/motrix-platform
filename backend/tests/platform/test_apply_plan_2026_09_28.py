@@ -171,3 +171,60 @@ def test_baseline_written_is_the_package_file_list(env):
     ap.write_baseline(root, plan)
     data = json.loads(Path(root, ap.BASELINE_REL).read_text(encoding="utf-8"))
     assert data["commit"] == "c2" and data["files"] == plan["package_files"]
+
+
+# ── 轉換寫 baseline（2026-09-28）：V9→新版轉換後的第一次日常更新就有刪除依據 ──
+
+def _load_platform_upgrade():
+    spec = importlib.util.spec_from_file_location(
+        "platform_upgrade_tool", Path(__file__).resolve().parents[3] / "tools" / "platform" / "upgrade.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_convert_writes_the_apply_baseline_from_the_new_source(env, tmp_path):
+    _root, pkg = env
+    fresh = tmp_path / "converted"
+    (fresh / "backend").mkdir(parents=True)
+    rel = _load_platform_upgrade().write_apply_baseline(str(fresh), pkg)
+    assert rel == ap.BASELINE_REL
+    data = json.loads((fresh / rel).read_text(encoding="utf-8"))
+    assert data["commit"] == "c2"
+    assert data["files"] == ap.package_files(pkg, _upgrade)
+    assert "backend/autostart.bat" not in data["files"]          # 設定預設檔不進清單（不會被當舊程式刪）
+    assert "backend/modules/a/x.py" in data["files"]             # 正對照：程式檔在
+
+
+# ── apply_update.ps1 與 rollback_update.ps1 的停服／啟動函式必須逐字相同 ──
+# 兩支各留一份（rollback 那支不能依賴共用檔，理由見 rollback_update.ps1 的註解）；
+# 先前 Test-Ping 就是兩份各自維護而漂移（2026-09-08）。
+
+_TOOLS = Path(__file__).resolve().parents[2] / "tools"
+_SYNCED_FUNCS = ("Invoke-Py", "Stop-InstallService", "Start-InstallService")
+
+
+def _ps_function(text, name):
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("function %s" % name):
+            for j in range(i + 1, len(lines)):
+                if lines[j] == "}":
+                    return "\n".join(lines[i:j + 1])
+    return None
+
+
+@pytest.mark.parametrize("name", _SYNCED_FUNCS)
+def test_rollback_script_carries_the_same_service_functions(name):
+    a = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    r = (_TOOLS / "rollback_update.ps1").read_text(encoding="utf-8-sig")
+    fa, fr = _ps_function(a, name), _ps_function(r, name)
+    assert fa is not None and fr is not None, "%s 在其中一支找不到（改名要兩邊一起改）" % name
+    assert fa == fr, "%s：apply_update.ps1 與 rollback_update.ps1 不同步" % name
+
+
+def test_rc_function_extractor_sees_a_one_character_drift():
+    a = (_TOOLS / "apply_update.ps1").read_text(encoding="utf-8-sig")
+    fa = _ps_function(a, "Stop-InstallService")
+    drifted = a.replace("$hops -lt 6", "$hops -lt 7", 1)
+    assert fa and _ps_function(drifted, "Stop-InstallService") != fa

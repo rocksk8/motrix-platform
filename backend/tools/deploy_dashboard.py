@@ -220,6 +220,9 @@ _STATUS_FAILED = frozenset({
     "rollback_not_prod_machine", "rollback_snapshot_missing",
     "rollback_db_snapshot_missing", "rollback_user_cancelled",
     "rollback_failed",
+    # 2026-09-28 手動回滾補上日常更新的缺口（刪新增檔、tools／product、demo 庫）
+    "rollback_plan_tool_missing",                               # 還沒動任何檔
+    "rollback_copy_failed_root_dirs", "rollback_cleanup_failed",  # 🔴 還原到一半
 })
 _STATUS_ALL = _STATUS_SUCCEEDED | _STATUS_FAILED
 

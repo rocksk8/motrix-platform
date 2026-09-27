@@ -144,8 +144,28 @@ def convert(root: str, backup_dir: str, new_source: str) -> dict:
     rep["company_profile"] = U.fill_company_profile_blanks(os.path.join(root, U.DB_FILES[0]))
     U.record_post_conversion(root, backup_dir)
     rep["deployed_marker"] = U.write_deployed_marker(root, new_source)   # prod-status／deployed-version 回新版 commit
+    rep["apply_baseline"] = write_apply_baseline(root, new_source)
     _write_log(backup_dir, "conversion_log.json", rep)
     return rep
+
+
+def write_apply_baseline(root: str, new_source: str) -> str:
+    """轉換後寫 apply_update 的 baseline（`backend/.deployed_files.json`）；回相對安裝根目錄的路徑。
+
+    沒有 baseline 時，第一次日常更新對「包裡已刪掉的程式檔」只能列出、不能刪（apply_plan 的
+    no_baseline_candidates）。轉換剛把程式檔整批換成 `new_source` ⇒ 此刻的程式檔清單就是它，當基準寫下。
+    清單與 apply_plan.package_files 同一支判定；兩種回滾把程式檔換回 V9 時一併移除（classify＝program）。
+    """
+    sys.path.insert(0, str(REPO / "backend" / "tools"))
+    import apply_plan as AP  # noqa: E402
+    AP._upgrade = U
+    manifest = os.path.join(new_source, "deploy_manifest.json")
+    commit = None
+    if os.path.isfile(manifest):
+        with open(manifest, encoding="utf-8-sig") as f:
+            commit = json.load(f).get("commit")
+    path = AP.write_baseline(root, {"commit": commit, "package_files": AP.package_files(new_source, U)})
+    return os.path.relpath(path, root).replace("\\", "/")
 
 
 def cmd_convert(a):

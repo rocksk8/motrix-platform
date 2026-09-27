@@ -196,6 +196,63 @@ python <NEW>\tools\platform\upgrade.py verify --root <ROOT> --backup-dir <BK> --
 - 個資資料夾不存在的期間：月備份不寫 `.done`，所以一般的月 JSON 每天都會重新匯出並覆蓋，內容會變成「當月最後一次的資料」；每天一封告警（有上限）。這是設計（資料夾建好後的下一次每日備份就會補齊並標記完成），不是故障（稽核 X-9b O-5）。
 - 個資資料夾在寫入途中消失（雲端同步、刪除、改名）⇒ 程式不會把它建回來（只准在資料夾**底下**建子資料夾），那一輪的個資備份不寫，並發出「個資資料夾在寫入途中消失」告警（稽核 X-9b S-5）。
 
+## 8. 新版之後的日常更新（apply_update，platform 套 platform）
+
+> 2026-09-28 新增。⚠ **三條路演練（成功／自動回滾／手動回滾）通過、並經 D 單獨稽核之前，不可以對正式機使用。**
+> 本章講「已經是新版的安裝，再套一個新版的完整包」。V9→新版的轉換走 §0～§7。
+
+**跟轉換的差別**：不做完整備份與資料比對；只做 DB 快照＋程式快照，健康檢查失敗自動回滾。
+
+**執行**（在正式機；部署儀表板的「部署」按鈕走同一支腳本）：
+```
+powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\apply_update.ps1 -PackagePath <解開的完整包>
+```
+
+**它做什麼（依序）**：
+1. 版本比對、健康檢查記錄。
+2. DB 快照：主庫與 demo 庫（Online Backup API）→ `backend\db_backups\pre_update_<時間>\`。
+3. Migration 乾跑：在快照複本上跑新版 `init_db`（主庫＋demo 庫）；失敗 ⇒ 中止，正式機未被觸碰。
+4. **刪除計畫**（`backend\tools\apply_plan.py`，跑新包裡那一份）：列出要刪的舊程式檔，寫進 `backend\logs\apply_update_<時間>.plan.txt`。依據：
+   - `backend\.deployed_files.json`（上一次成功套用的程式檔清單）有、新包沒有的檔；
+   - 新包 `modules.lock.json` 的 `excluded` 模組資料夾、`removed_pages` 頁面；
+   - 安裝目錄有 `module.json`、新包沒有的模組資料夾（孤兒模組，載入器會載它）。
+   - 資料、DB、設定、uploads、PDF、`autostart.bat` 一律不列（與轉換共用 `core.upgrade.classify`）。
+   - 超過 `-MaxDeleteFiles`（預設 200）⇒ 什麼都不動就中止；讀過清單確認後，用更大的值重跑。
+5. 程式快照：backend（排除資料目錄與個資）、frontend、`tools`、`product`、根目錄文件 → `backend\rollback_snapshots\<時間>\`；刪除計畫存成快照裡的 `apply_plan.json`。每個要刪的檔在快照裡都要找得到，否則中止。
+6. 停服：只停**這個安裝**的 autostart 迴圈與它的行程樹（不殺同機其他 uvicorn）。
+7. 複製新程式（`autostart.bat` 保留機器上的版本；沒有才從包補）→ 依計畫刪除 → `pip install -r requirements.txt`。
+8. 透過排程工作「MOTRIX ERP Server Autostart」重新啟動迴圈 → 健康檢查。
+9. 成功 ⇒ 寫 `.deployed_commit.json` 與 `.deployed_files.json`。失敗 ⇒ 自動回滾（下方）。
+
+**沒有 `.deployed_files.json` 的時候**（2026-09-27 轉換的正式機就是：當時的轉換工具還不寫它）：
+第一次日常更新只依 lock 與孤兒模組刪除，其餘「安裝目錄有、新包沒有」的程式檔**只列出不刪**（計畫裡的 `no_baseline_candidates`）。成功後寫下清單，下一次起就有依據。列出的檔請人工看過；確定是舊版殘留的，可以手動刪除。
+2026-09-28 起 `upgrade.py convert` 轉換完成時就寫這份清單（`conversion_log.json` 的 `apply_baseline`）。
+
+**自動回滾**（健康檢查失敗）：停服（含迴圈）→ 刪掉這次**新增**的程式檔 → 快照寫回（backend、frontend、tools、product、根目錄文件）→ 主庫與 demo 庫還原 → 重新啟動 → 再健康檢查。
+
+**手動回滾**（套用成功、之後才發現問題）：
+```
+powershell -ExecutionPolicy Bypass -File <ROOT>\backend\tools\rollback_update.ps1 -SnapshotTimestamp <時間>
+```
+- 步驟與自動回滾相同。快照裡沒有 `apply_plan.json`（2026-09-28 之前的快照）⇒ 新增的檔不會刪，腳本會警告，回滾後請人工核對 `backend\modules` 與 `frontend\pages`。
+- 快照當時沒有 `.deployed_files.json` ⇒ 回滾後刪掉現在那份（回到「沒有清單」，下一次只列不刪）。
+- ⚠ 會丟掉套用後寫入的資料（DB 整個換回快照）。
+
+**出口狀態**（部署儀表板判定用；全部判為失敗）：
+
+| 狀態 | 正式機現況 | 處置 |
+|---|---|---|
+| `plan_refused`／`plan_failed`／`delete_plan_too_large` | 未被觸碰 | 看計畫檔；上限不夠就確認後加大重跑 |
+| `snapshot_failed_root_dirs`／`snapshot_missing_deleted` | 未被觸碰 | 查磁碟空間與權限後重跑 |
+| `copy_failed_root_dirs`／`delete_failed` | 🔴 套用到一半、服務已停 | 用快照手動回滾 |
+| `restore_copy_failed_root_dirs`／`restore_cleanup_failed` | 🔴 自動回滾做到一半 | 人工處理；計畫檔在快照目錄 |
+| `rollback_plan_tool_missing` | 手動回滾未開始 | 從新包補 `backend\tools\apply_plan.py` 後重跑 |
+| `rollback_copy_failed_root_dirs`／`rollback_cleanup_failed` | 🔴 手動回滾做到一半，服務未啟動 | 人工處理 |
+
+**已知限制**：
+- 帶 `ModuleSpec.migrations` 的模組（請款 B41 起）：乾跑與轉換要先照啟動時的規則載入模組，模組 migration 才會跑到。B41 合回時一起接上；接上之前乾跑不涵蓋模組 migration。
+- 只套完整包（`kind=full_package`）；單一模組包拒絕。
+
 ## 附：開發機演練（不碰正式機）
 
 ```

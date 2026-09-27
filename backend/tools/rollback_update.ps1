@@ -24,8 +24,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProdRoot = "C:\Users\Motrix\Desktop\V9.0"
+$Port = 666
+$AutostartTaskName = "MOTRIX ERP Server Autostart"
 $BackendDir = Join-Path $ProdRoot "backend"
 $FrontendDir = Join-Path $ProdRoot "frontend"
+# 根目錄的程式目錄（2026-09-28，與 apply_update.ps1 同一份）：快照裡有就還原
+$RootProgramDirs = @("tools", "product")
 
 # 跟 apply_update.ps1 同一套健康檢查手法。
 #
@@ -39,9 +43,9 @@ $FrontendDir = Join-Path $ProdRoot "frontend"
 # MOTRIX-ERP-QUICK.md §12 同日條目。
 $UsesHttps = Test-Path (Join-Path $BackendDir "certs\cert.pem")
 if ($UsesHttps) {
-    $PingUrl = "https://127.0.0.1:666/api/ping"
+    $PingUrl = "https://127.0.0.1:$Port/api/ping"
 } else {
-    $PingUrl = "http://127.0.0.1:666/api/ping"
+    $PingUrl = "http://127.0.0.1:$Port/api/ping"
 }
 
 function Test-Ping {
@@ -118,6 +122,106 @@ function Info($msg)  { Write-Host $msg }
 function Warn($msg)  { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Ok($msg)    { Write-Host "[OK] $msg" -ForegroundColor Green }
 
+# ── 以下三個函式與 apply_update.ps1 **逐字相同**（2026-09-28）──────────────────
+# 不抽成共用檔：dashboard 的 rollback 分支不預先複製 tools（見下方握手行註解），
+# 共用檔版本對不上時兩支會一起壞。改一邊就要改另一邊；
+# tests/platform/test_apply_plan_2026_09_28.py 比對兩份函式本體。
+function Invoke-Py([string[]]$PyArgs) {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $out = & python @PyArgs 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    return @{ Text = ($out | Out-String); Exit = $code }
+}
+
+function Stop-InstallService {
+    $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+    $byPid = @{}
+    foreach ($p in $all) { $byPid[[int]$p.ProcessId] = $p }
+    $batFull = (Join-Path $BackendDir "autostart.bat").ToLowerInvariant()
+    $loops = New-Object System.Collections.Generic.List[int]
+    foreach ($p in $all) {
+        if ($p.Name -eq "cmd.exe" -and $p.CommandLine -and $p.CommandLine.ToLowerInvariant().Contains($batFull)) {
+            $loops.Add([int]$p.ProcessId)
+        }
+    }
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        ForEach-Object { [int]$_.OwningProcess } | Sort-Object -Unique)
+    foreach ($lp in $listeners) {
+        $cur = $byPid[$lp]
+        $hops = 0
+        while ($cur -and $hops -lt 6) {
+            $parent = $byPid[[int]$cur.ParentProcessId]
+            if (-not $parent) { break }
+            if ($parent.Name -eq "cmd.exe" -and $parent.CommandLine -match 'autostart\.bat') {
+                if (-not $loops.Contains([int]$parent.ProcessId)) { $loops.Add([int]$parent.ProcessId) }
+                break
+            }
+            if ($parent.Name -notmatch '^(python|pythonw|uvicorn)(\.exe)?$') { break }
+            $cur = $parent
+            $hops++
+        }
+    }
+    $targets = New-Object System.Collections.Generic.List[int]
+    function Add-Tree([int]$rootPid) {
+        if (-not $targets.Contains($rootPid)) { $targets.Add($rootPid) }
+        foreach ($c in $all) {
+            if ([int]$c.ParentProcessId -eq $rootPid -and [int]$c.ProcessId -ne $rootPid -and -not $targets.Contains([int]$c.ProcessId)) {
+                Add-Tree ([int]$c.ProcessId)
+            }
+        }
+    }
+    foreach ($l in $loops) { Add-Tree $l }
+    foreach ($lp in $listeners) {
+        $proc = $byPid[$lp]
+        if ($proc -and $proc.Name -match '^(python|pythonw|uvicorn)(\.exe)?$') { Add-Tree $lp }
+        elseif ($proc) { Warn "  port $Port 由 $($proc.Name)（PID $lp）佔用，不是 python —— 不停它，請人工確認。" }
+    }
+    $portRe = '--port[= ]+' + $Port + '\b'
+    foreach ($p in $all) {
+        if ($p.CommandLine -and $p.CommandLine -match 'uvicorn' -and $p.CommandLine -match 'main:app' -and $p.CommandLine -match $portRe) {
+            Add-Tree ([int]$p.ProcessId)
+        }
+    }
+    foreach ($p in $all) {
+        if ($p.CommandLine -and $p.CommandLine -match 'spawn_main.*parent_pid=(\d+)' -and $targets.Contains([int]$Matches[1])) {
+            Add-Tree ([int]$p.ProcessId)
+        }
+    }
+    if ($loops.Count -eq 0) { Info "  沒有找到這個安裝的 autostart 迴圈（cmd.exe … autostart.bat）。" }
+    foreach ($t in $targets) {
+        $p = $byPid[$t]
+        $kind = if ($loops.Contains($t)) { "autostart 迴圈" } else { "服務行程" }
+        $cmdShown = if ($p -and $p.CommandLine) { $p.CommandLine } else { "" }
+        if ($cmdShown.Length -gt 160) { $cmdShown = $cmdShown.Substring(0, 160) + "…" }
+        Info "  結束 $kind PID $t（$(if ($p) { $p.Name })）：$cmdShown"
+        Stop-Process -Id $t -Force -ErrorAction SilentlyContinue
+    }
+    return $targets.Count
+}
+
+function Start-InstallService {
+    $task = Get-ScheduledTask -TaskName $AutostartTaskName -ErrorAction SilentlyContinue
+    if ($task -and $task.State -ne "Disabled") {
+        Start-ScheduledTask -TaskName $AutostartTaskName
+        Ok "  已透過排程工作「$AutostartTaskName」重新啟動 autostart 迴圈。"
+        return
+    }
+    $bat = Join-Path $BackendDir "autostart.bat"
+    if (-not (Test-Path $bat)) {
+        Warn "  找不到 $bat，無法啟動服務（健康檢查會失敗並觸發回滾）。"
+        return
+    }
+    Start-Process -FilePath (Join-Path $env:WINDIR "System32\cmd.exe") -ArgumentList "/c `"$bat`"" `
+        -WorkingDirectory $BackendDir -WindowStyle Hidden
+    Warn "  排程工作「$AutostartTaskName」不存在或已停用：改由本腳本直接啟動 autostart.bat。遠端工作階段結束時它可能跟著結束，事後請確認排程工作。"
+}
+# ── 逐字相同的區段到此為止 ──────────────────────────────────────────────
+
 # 🔴 **握手行 —— 對這支腳本它是必要條件不是加分**（理由見上方）。
 # dashboard 收到它才啟用 fail-closed；收不到就退回結束碼判定，
 # 並在畫面上明著標「本次以舊版協定判定」。
@@ -141,6 +245,13 @@ Info "身分確認：正式機（$ProdRoot）`n"
 $rollbackDir  = Join-Path $BackendDir "rollback_snapshots\$SnapshotTimestamp"
 $dbBackupPath = Join-Path $BackendDir "db_backups\pre_update_$SnapshotTimestamp\motrix_erp.db"
 $dbPath       = Join-Path $BackendDir "motrix_erp.db"
+$demoDbBackupPath = Join-Path $BackendDir "db_backups\pre_update_$SnapshotTimestamp\motrix_erp_demo.db"
+$demoDbPath       = Join-Path $BackendDir "motrix_erp_demo.db"
+# 2026-09-28：apply_update 把刪除計畫存在快照裡（apply_plan.json）；它的 added＝那次套用**新增**的程式檔。
+# robocopy /E 寫回快照不會刪它們 ⇒ 新增的模組資料夾留著，舊版的載入器照樣載它。
+$planPath     = Join-Path $rollbackDir "apply_plan.json"
+$planTool     = Join-Path $PSScriptRoot "apply_plan.py"
+$baselinePath = Join-Path $BackendDir ".deployed_files.json"
 
 if (-not (Test-Path $rollbackDir)) {
     Fail "找不到程式碼快照：$rollbackDir" "rollback_snapshot_missing"
@@ -148,9 +259,20 @@ if (-not (Test-Path $rollbackDir)) {
 if (-not (Test-Path $dbBackupPath)) {
     Fail "找不到 db 快照：$dbBackupPath" "rollback_db_snapshot_missing"
 }
+$hasPlan = Test-Path $planPath
+if ($hasPlan -and -not (Test-Path $planTool)) {
+    Fail "快照裡有 apply_plan.json，但這台機器沒有 $planTool，無法刪掉那次新增的程式檔，未做任何回滾動作。" "rollback_plan_tool_missing"
+}
 Info "[1/2] 快照驗證通過："
 Info "  程式碼快照：$rollbackDir"
 Info "  db 快照：$dbBackupPath"
+if (Test-Path $demoDbBackupPath) { Info "  demo 庫快照：$demoDbBackupPath" }
+if ($hasPlan) {
+    $planObj = Get-Content $planPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    Info "  那次套用新增的程式檔：$(@($planObj.added).Count) 個（回滾時刪除；清單在 $planPath）"
+} else {
+    Warn "  快照裡沒有 apply_plan.json（2026-09-28 之前的 apply_update 建的快照）：那次套用新增的程式檔不會被刪除，回滾後請人工核對 backend\modules 與 frontend\pages。"
+}
 
 if (-not $Yes) {
     Write-Host ""
@@ -175,9 +297,18 @@ $script:ServiceState = "down"
 $script:ProdState = "restoring"
 
 # 先停服務再動檔案（含 db）——避免正在跑的伺服器跟覆寫的檔案打架。
-$conn = Get-NetTCPConnection -LocalPort 666 -State Listen -ErrorAction SilentlyContinue
-if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+# 2026-09-28：連 autostart 迴圈一起停（先前只停聽 port 的行程，迴圈 5 秒後用還原到一半的程式碼把它拉起來）。
+$null = Stop-InstallService
 Start-Sleep -Seconds 2
+
+# 先刪那次套用新增的程式檔（被那次套用刪掉的舊檔由下面寫回快照還原）。
+# --pkg 指安裝目錄：分類要用**現在裝著的** core.upgrade（＝那次套用的新版，也是寫這份計畫的那一版）。
+$cleanFailed = $false
+if ($hasPlan) {
+    $cleanRun = Invoke-Py @($planTool, "cleanup-added", "--root", $ProdRoot, "--pkg", $ProdRoot, "--plan", $planPath)
+    Write-Host $cleanRun.Text
+    $cleanFailed = ($cleanRun.Exit -ne 0 -or ($cleanRun.Text -notmatch "APPLY_CLEANUP_OK"))
+}
 
 # 🔴 還原寫回要檢查結束碼（`RP3`）—— 與 `apply_update.ps1` 的自動回滾同一件事。
 # ☠️ 失敗不中止 ⇒ 流進下面的健康檢查 ⇒ 碰巧過了就報「已還原」，
@@ -186,6 +317,18 @@ robocopy (Join-Path $rollbackDir "backend") $BackendDir /E | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（backend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_backend" }
 robocopy (Join-Path $rollbackDir "frontend") $FrontendDir /E | Out-Null
 if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（frontend，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_frontend" }
+foreach ($d in $RootProgramDirs) {
+    $snap = Join-Path $rollbackDir $d
+    if (-not (Test-Path $snap)) { continue }
+    robocopy $snap (Join-Path $ProdRoot $d) /E | Out-Null
+    if ($LASTEXITCODE -ge 8) { Fail "回滾寫回正式機失敗（$d，exit code $LASTEXITCODE）——正式機現在是還原到一半的狀態，需要人工處理。" "rollback_copy_failed_root_dirs" }
+}
+# 程式檔清單（.deployed_files.json）要跟著程式回到快照那一版：快照裡有 ⇒ 上面已寫回；
+# 快照裡沒有（轉換後第一次套用前的快照）⇒ 刪掉現在這份，否則下一次套用會拿**新版**的清單當舊版算刪除。
+if (-not (Test-Path (Join-Path $rollbackDir "backend\.deployed_files.json")) -and (Test-Path $baselinePath)) {
+    Remove-Item $baselinePath -Force
+    Info "  快照當時沒有程式檔清單 ⇒ 已移除現在的 backend\.deployed_files.json（下一次套用會以「沒有清單」處理）。"
+}
 
 $rootDocDir = Join-Path $rollbackDir "root_docs"
 if (Test-Path $rootDocDir) {
@@ -201,6 +344,17 @@ Copy-Item $dbBackupPath $dbPath -Force
 # 回來，等於沒回滾乾淨。
 Remove-Item "$dbPath-wal", "$dbPath-shm" -Force -ErrorAction SilentlyContinue
 Ok "  資料庫已還原：$dbBackupPath"
+# demo 庫同一套（2026-09-28）：新版啟動時也對它跑了 init_db。
+if (Test-Path $demoDbBackupPath) {
+    Copy-Item $demoDbBackupPath $demoDbPath -Force
+    Remove-Item "$demoDbPath-wal", "$demoDbPath-shm" -Force -ErrorAction SilentlyContinue
+    Ok "  demo 庫已還原：$demoDbBackupPath"
+}
+
+if ($cleanFailed) {
+    Fail "回滾：那次套用新增的程式檔沒有刪乾淨（見上方）——舊程式碼與資料庫已寫回，但新增的檔（可能含新模組資料夾）還在，服務未重新啟動，需要人工處理。清單：$planPath" "rollback_cleanup_failed"
+}
+Start-InstallService
 
 $healthy = $false
 $hcStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -224,12 +378,12 @@ if ($healthy) {
     Write-Host "  回滾動作已執行，但健康檢查仍異常，需要人工介入！" -ForegroundColor Red
     Write-Host "======================================" -ForegroundColor Red
     # 跟 apply_update.ps1 一致：健康檢查失敗可能是服務真的中斷，也可能又是
-    # 健康檢查機制本身的偽陰性，直接印出 port 666 監聽狀態協助判斷。
+    # 健康檢查機制本身的偽陰性，直接印出 port 監聽狀態協助判斷。
     Write-Host ""
-    Write-Host "  port 666 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
-    $conns = Get-NetTCPConnection -LocalPort 666 -ErrorAction SilentlyContinue
+    Write-Host "  port $Port 目前監聽狀態（協助判斷是否為服務真的中斷）：" -ForegroundColor Yellow
+    $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
     if (-not $conns) {
-        Write-Host "    （完全沒有任何連線/監聽在 port 666 上——服務可能真的沒起來）" -ForegroundColor Yellow
+        Write-Host "    （完全沒有任何連線/監聽在 port $Port 上——服務可能真的沒起來）" -ForegroundColor Yellow
     } else {
         foreach ($c in $conns) {
             $procName = try { (Get-Process -Id $c.OwningProcess -ErrorAction Stop).ProcessName } catch { "(process 已不存在)" }

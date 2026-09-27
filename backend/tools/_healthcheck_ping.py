@@ -24,6 +24,12 @@ import urllib.request
 
 
 def main() -> int:
+    # 2026-09-28：失敗原因常含系統語系的中文（WinError 訊息）；主控台／管線是 cp932 等編碼時 print
+    # 會 UnicodeEncodeError，原因反而印不出來 ⇒ 編不出的字元改成跳脫序列
+    try:
+        sys.stdout.reconfigure(errors="backslashreplace")
+    except Exception:
+        pass
     if len(sys.argv) < 3:
         print("usage: _healthcheck_ping.py <url> <timeout_seconds>", file=sys.stderr)
         return 1

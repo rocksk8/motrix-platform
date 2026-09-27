@@ -123,6 +123,12 @@ modules/<key>/
   - 更正：完整回滾的 DB 以「**邏輯內容相同**」驗收：sqlite 逐表比對（schema＋各表全部欄位的內容雜湊），對象是**備份時的原檔**，不是剛從備份複製回來的那一份。
   - 原因：Online Backup API 產生的副本，SQLite 標頭的計數欄位（offset 24-27 file change counter、92-95 version-valid-for）與原檔不同，位元組只會等於備份副本，比對副本等於比對它自己。
   - 程式、設定檔仍比位元組雜湊。
+- **轉換之後的日常更新（2026-09-28 主持）**：已是新版的安裝，再套新版完整包，走 `backend/tools/apply_update.ps1`＋`apply_plan.py`（UPGRADE-RUNBOOK §8）。
+  - 舊版有、新版沒有的程式檔要刪（載入器看資料夾不看 lock，只加不刪會讓移除的模組照樣被載入）。刪除依據：上次成功套用寫下的 `backend/.deployed_files.json`、lock 的 excluded／removed_pages、孤兒模組資料夾；上限預設 200，超過就不動。
+  - 分類與轉換共用 `core.upgrade.classify`：資料、DB、設定、`autostart.bat` 永不刪。
+  - `upgrade.py convert` 完成時寫 `.deployed_files.json`；兩種回滾把它跟程式檔一起換回。
+  - 自動回滾與手動回滾（`rollback_update.ps1`）同一套：刪這次新增的檔、寫回快照（含 tools、product）、主庫與 demo 庫還原；停服只停本安裝的 autostart 迴圈與行程樹。
+  - **對正式機使用的前提**：三條路演練（成功／自動回滾／手動回滾）通過＋D 單獨完整稽核。
 
 ## 9c. 模組選配：匯出前選擇、裝好後啟停（2026-09-25 使用者交辦）
 
