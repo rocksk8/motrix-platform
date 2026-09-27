@@ -2,6 +2,15 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.62 — 2026-09-28（主持暫用，列車取號；wip/a-storage-settings：D 稽核 SL-M1）〔core_bump：暫用 1.58 → 1.62〕
+- L1（新增，D 稽核 SL-M1）：`helpers.storage_locations.Unreadable`——讀不到設定（庫被鎖、損毀）≠ 沒設定：resolve 回 ""（source="unknown"）、不退回自動判斷、不快取；`configured()` 丟它，設定頁 API 回 503（不顯示空值，避免按儲存把真正的設定蓋掉）
+
+## 1.61 — 2026-09-28（A 暫用，列車取號；wip/a-storage-settings：CORE-SPEC 裁示表「儲存位置可設定」）〔core_bump：暫用 1.57 → 1.61〕
+- L1（新增）：`helpers.storage_locations`——雲端存檔根目錄、個資資料夾、更新交付資料夾的**唯一**解析處（`resolve`／`path`／`validate`／`create`／`status`／`configured`／`invalidate`）；有設定用設定（不存在回 ""、不退回自動判斷），留空照原本的自動判斷；本檔永不自動建立，只有 `create`（最高管理員在設定頁明確按）只建最後一層
+- L1（行為）：`archive._archive_base`／`_pii_archive_root` 改經它（留空時行為不變：掃磁碟機、個資＝根目錄旁）；自動判斷搬到 `archive._auto_archive_base`，只給 storage_locations 呼叫
+- L1（新增）：`GET／PUT /api/settings/storage-locations`、`POST /api/settings/storage-locations/create`（最高管理員；儲存驗證存在、可寫、個資與一般／交付不可互相包含；變更與建立寫稽核）；頁面 `storage-settings.html`（系統設定→儲存位置）
+- 守門：`tests/platform/test_storage_locations_2026_09_28.py`（讀這三個位置只經解析函式：掃描＋正對照＋反向控制）
+
 ## 1.60 — 2026-09-27（暫用，列車取號；a-builder-output＋b-builder-dnd-3 合併為同一個次版號：建構器輸出預覽，使用者 8866 試用回饋）〔core_bump：暫用 1.57 → 1.60〕
 - L1（新增）：`helpers.custom_modules.preview_output(body) -> (html, 未完成清單)`——編到一半的草稿照畫：未完成的欄位（沒有 key、公式空白／錯誤、選單沒有選項、型別不認得…）畫成「〈名稱〉尚未完成」；一律走正式匯出的 `render_view`；連一個欄位都畫不出來或版型結構錯 ⇒ `CustomModuleError`（422）
 - L1（行為）：`POST /api/custom-modules/{key}/output/preview` 改用它：半成品不再 500（原本欄位層問題沒擋 ⇒ KeyError）；未完成清單放回應標頭 `X-Motrix-Preview-Incomplete`（JSON）；最外層兜底任何例外 ⇒ 422＋記 log；編號規則未完成不再擋預覽（用樣本編號）
