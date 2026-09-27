@@ -39,7 +39,10 @@ param(
     [switch]$ForceTests,
     # 產品設定檔（CORE-SPEC §9c①）：repo 根目錄 product/<名稱>.json 列出要包的 L2 模組；
     # 沒選到的 backend/modules/<key>/（連同它宣告的頁面）不進包，包內寫 backend/modules.lock.json。
-    [string]$Product = "full"
+    [string]$Product = "full",
+    # 乾跑：只挑測試用的 Python 直譯器（Step 2.5 同一段邏輯），印出 `WHICH_PYTHON=<路徑>` 就結束——
+    # 不看 git 狀態、不跑測試、不打包（2026-09-27，建包挑到 hermes-agent venv 之後補的驗證入口）。
+    [switch]$WhichPython
 )
 
 $ErrorActionPreference = "Stop"
@@ -138,6 +141,73 @@ function Release-TestExclusive {
     Remove-Item Env:\MOTRIX_PYTEST_EXCLUSIVE, Env:\MOTRIX_PYTEST_EXCLUSIVE_OWNER -ErrorAction SilentlyContinue
 }
 
+# --- 挑測試用的 Python（Step 2.5 與 -WhichPython 共用）---
+# 2026-09-27 改（IMPROVEMENT-REPORT §6 第 3 項）：原本「PATH 上第一支 import 得到依賴的」——這台機器 PATH 第一支是
+# hermes-agent 的 venv（別的工具的環境，starlette 1.0.1／多裝 httpx），它也 import 得到 ⇒ D7 建包就挑到它。改成：
+#   ① 專案 venv 優先：主工作樹的 .venv312（MOTRIX_PROJECT_VENV 可指定別的受測版本；同 tools/platform/project_env.py）；
+#   ② 合格＝import 得到 ＋ 滿足 requirements.txt＋requirements-dev.txt 的**版本規格**（backend/tools/check_py_deps.py，
+#      含 httpx2——starlette 1.x 的 TestClient 要它）。
+function Get-ProjectVenvPython {
+    $prev = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+    $common = (& git -C $projectRoot rev-parse --path-format=absolute --git-common-dir 2>$null)
+    $ErrorActionPreference = $prev
+    $root = if ($common) { Split-Path -Parent (($common | Select-Object -First 1) -replace '/', '\') } else { $projectRoot }
+    $dir = if ($env:MOTRIX_PROJECT_VENV) { $env:MOTRIX_PROJECT_VENV } else { '.venv312' }
+    $p = Join-Path (Join-Path $root $dir) 'Scripts\python.exe'
+    if (Test-Path $p) { return $p }
+    return $null
+}
+
+function Select-MotrixPython {
+    $depCheck = "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn, cryptography, httpx2"
+    $specCheck = Join-Path $projectRoot "backend\tools\check_py_deps.py"
+    $proj = Get-ProjectVenvPython
+    $candidates = @()
+    if ($proj) { $candidates += $proj }
+    $candidates += @(Get-Command python -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+    $candidates += @(Get-Command python3 -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+    # 專案內或常見的 venv 位置（PATH 上沒有時的後備）
+    foreach ($v in @("$projectRoot\venv\Scripts\python.exe",
+                     "$projectRoot\.venv\Scripts\python.exe",
+                     "$projectRoot\backend\venv\Scripts\python.exe")) {
+        if (Test-Path $v) { $candidates += $v }
+    }
+    $candidates = @($candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)
+    Write-Host "`n[環境] 找到 $($candidates.Count) 支 Python，逐一檢查依賴與版本規格（專案 venv：$(if ($proj) { $proj } else { '沒有' })）..."
+    # ⚠️ PS 5.1 原生執行檔 stderr 地雷（本專案第 5 次，前四次是 pip install／tar／db備份／mkcert）：$ErrorActionPreference = "Stop"
+    # 之下，原生執行檔往 stderr 輸出又用 2>&1 收進來 ⇒ 被 promote 成終止型 NativeCommandError——即使那正是我們**預期**會發生的事
+    # （這裡就是要靠 ImportError 判斷缺套件）⇒ 先切成 Continue。
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $prevIo = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = "utf-8"
+    $exe = $null
+    $report = @()
+    foreach ($c in $candidates) {
+        $ver = (& $c -c "import sys; print(sys.version.split()[0])" 2>$null)
+        $out = (& $c -c $depCheck 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            $missing = ($out | Select-String -Pattern "No module named '([^']+)'" |
+                        ForEach-Object { $_.Matches[0].Groups[1].Value }) -join ", "
+            if (-not $missing) { $missing = "無法執行" }
+            Write-Host ("        [缺]   {0,-8} {1}  ← 缺 {2}" -f $ver, $c, $missing)
+            $report += "  $c  (缺 $missing)"
+            continue
+        }
+        $spec = @(& $c $specCheck 2>&1 | ForEach-Object { "$_" })
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host ("        [版本] {0,-8} {1}  ← 不符 requirements：{2}" -f $ver, $c, (($spec | Select-Object -First 3) -join "；"))
+            $report += "  $c  (版本不符：$(($spec | Select-Object -First 3) -join '；'))"
+            continue
+        }
+        Write-Host ("        [OK]   {0,-8} {1}" -f $ver, $c) -ForegroundColor Green
+        if (-not $exe) { $exe = $c }
+    }
+    $env:PYTHONIOENCODING = $prevIo
+    $ErrorActionPreference = $prevEAP
+    return @{ Exe = $exe; Report = $report; Candidates = $candidates; Project = $proj }
+}
+
 # --- 定位 repo 根目錄與專案子目錄 ---
 $repoRoot = (git rev-parse --show-toplevel 2>$null)
 if (-not $repoRoot) {
@@ -156,6 +226,13 @@ if (-not $projectRoot.StartsWith($repoRoot, [System.StringComparison]::OrdinalIg
 $relPath = $projectRoot.Substring($repoRoot.Length).TrimStart('\') -replace '\\', '/'
 
 Set-Location $repoRoot
+
+if ($WhichPython) {
+    $sel = Select-MotrixPython
+    if (-not $sel.Exe) { Write-Host "WHICH_PYTHON="; exit 2 }
+    Write-Host "WHICH_PYTHON=$($sel.Exe)"
+    exit 0
+}
 
 Write-Host "======================================"
 Write-Host "  MOTRIX ERP - Build Deploy Package"
@@ -332,57 +409,27 @@ Write-Host "[OK] 版本紀錄共 $($vmEntries.Count) 筆，最新一筆 $vmNewes
 # 改成：把候選逐一試過去，挑第一支「依賴齊全」的來用；全都不合格才 Fail，
 # 而且列出每一支各缺什麼。仍然印出實際選中的路徑（守門的原意是可追溯，
 # 不是為了擋人）。
-$depCheck = "import multipart, fastapi, uvicorn, pydantic, aiofiles, pyotp, qrcode, boto3, openpyxl, PIL, webauthn, cryptography"
-
-$candidates = @()
-$candidates += @(Get-Command python -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
-$candidates += @(Get-Command python3 -All -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
-# 專案內或常見的 venv 位置（PATH 上沒有時的後備）
-foreach ($v in @("$projectRoot\venv\Scripts\python.exe",
-                 "$projectRoot\.venv\Scripts\python.exe",
-                 "$projectRoot\backend\venv\Scripts\python.exe")) {
-    if (Test-Path $v) { $candidates += $v }
-}
-$candidates = @($candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique)
-
+# 2026-09-27 再修：專案 venv 優先、合格要滿足 requirements 的版本規格——見檔頭 Select-MotrixPython。
+$sel = Select-MotrixPython
+$candidates = $sel.Candidates
 if ($candidates.Count -eq 0) {
     Fail "PATH 上找不到 python。請確認開發環境的 Python 可用後再重新執行。"
 }
-
-Write-Host "`n[環境] 找到 $($candidates.Count) 支 Python，逐一檢查依賴..."
-# ⚠️ PS 5.1 原生執行檔 stderr 地雷（本專案第 5 次，前四次是 pip install／tar／
-# db備份／mkcert）：$ErrorActionPreference = "Stop" 之下，只要原生執行檔往
-# stderr 輸出任何東西、又用 2>&1 收進來，PowerShell 就會把它 promote 成終止型
-# NativeCommandError——即使那正是我們**預期**會發生的事（這裡就是要靠 ImportError
-# 判斷缺套件）。這個迴圈本來就會故意跑出 traceback，所以必須先切成 Continue。
-$prevEAP = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
-$pyExe = $null
-$report = @()
-foreach ($c in $candidates) {
-    $ver = (& $c -c "import sys; print(sys.version.split()[0])" 2>$null)
-    $out = (& $c -c $depCheck 2>&1)
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host ("        [OK]   {0,-8} {1}" -f $ver, $c) -ForegroundColor Green
-        if (-not $pyExe) { $pyExe = $c }
-    } else {
-        $missing = ($out | Select-String -Pattern "No module named '([^']+)'" |
-                    ForEach-Object { $_.Matches[0].Groups[1].Value }) -join ", "
-        if (-not $missing) { $missing = "無法執行" }
-        Write-Host ("        [缺]   {0,-8} {1}  ← 缺 {2}" -f $ver, $c, $missing)
-        $report += "  $c  (缺 $missing)"
-    }
-}
-
-$ErrorActionPreference = $prevEAP
-
+$pyExe = $sel.Exe
+$report = $sel.Report
 if (-not $pyExe) {
     Fail @"
-所有找到的 Python 都缺少 backend/requirements.txt 列出的套件：
+所有找到的 Python 都缺少套件或版本不符 backend/requirements.txt＋requirements-dev.txt：
 $($report -join "`n")
-請對其中一支安裝依賴後重試，例如：
-  & "$($candidates[0])" -m pip install -r "$projectRoot\backend\requirements.txt"
+請用專案環境（tools/platform/project_env.py create），或對其中一支安裝依賴後重試，例如：
+  & "$($candidates[0])" -m pip install -r "$projectRoot\backend\requirements.txt" -r "$projectRoot\backend\requirements-dev.txt"
 "@
+}
+if ($sel.Project -and $pyExe -ne $sel.Project) {
+    Write-Host "[注意] 專案 venv $($sel.Project) 不合格，改用 $pyExe（見上面的 [缺]／[版本]）" -ForegroundColor Yellow
+} elseif (-not $sel.Project) {
+    # requirements 只寫下限 ⇒ 別的工具的 venv（例：hermes-agent）也可能合格；能跑，但不是正式機會裝的那一組
+    Write-Host "[注意] 沒有專案 venv，改用 PATH 上的 $pyExe——可能是別的工具的環境；建議先 python tools/platform/project_env.py create" -ForegroundColor Yellow
 }
 
 Write-Host "[環境] 測試將使用：$pyExe" -ForegroundColor Green
