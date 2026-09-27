@@ -6,6 +6,7 @@
 正對照：拿掉標準關閉寫法之後，2026-09-28 D 人工確認過的那 14 筆（BP-M1＋13 筆寫法不一）必須全部亮起。
 反向控制：合成的稽核檔——沒關、否定字樣、跨檔、四類寫法、登記表的每一種錯法。
 """
+import json
 import sys
 from collections import Counter
 from pathlib import Path
@@ -47,15 +48,27 @@ def test_known_open_items_light_up_without_the_canonical_lines():
 
 # ── 合成的稽核檔：判準 ─────────────────────────────────────────────────────────
 
-def _open(texts):
-    return {d for _f, d in M.open_items(texts)}
+def _open(texts, legacy=()):
+    """合成稽核檔的未關清單。legacy：可以沿用舊寬鬆判準的 ID（凍結清單）；預設空＝只認標準單行（MS-M1 之後的新 ID）。"""
+    return {d for _f, d in M.open_items(texts, {d: "A.md" for d in legacy})}
 
 
 def test_rc_declared_without_closure_is_open():
+    """舊寬鬆判準只給凍結清單裡的 ID：清單裡 ⇒ 散文「**關閉**」算；不在清單 ⇒ 不算（MS-M1）。"""
     texts = {"A.md": ["**X-M1（必修）　某事不成立", "修法：……"]}
-    assert _open(texts) == {"X-M1"}
+    assert _open(texts, legacy={"X-M1"}) == {"X-M1"}
     texts["A.md"].append("- X-M1 複核：突變紅 ⇒ **關閉**")
-    assert _open(texts) == set()
+    assert _open(texts, legacy={"X-M1"}) == set()
+    assert _open(texts) == {"X-M1"}, "不在凍結清單的新 ID：散文的「關閉」不算"
+
+
+def test_ms_m1_a_prose_close_does_not_hide_a_new_must_fix():
+    """D MS-M1 的原句當反向控制：「前提是 DM1、DM2 關閉」不可以讓兩條新必修從未關清單消失；標準單行才算。"""
+    texts = {"AUDIT-D-H12-apply.md": ["**DM1（必修）　兩種回滾都直接覆寫 DB", "**DM2（必修）　回滾到非最新的快照",
+                                      "- 結論：可以用於正式機，前提是 DM1、DM2 關閉。"]}
+    assert _open(texts) == {"DM1", "DM2"}
+    texts["AUDIT-D-H12-apply.md"].append("- ✅ DM1 關閉（abc1234）——出處：複核")
+    assert _open(texts) == {"DM2"}
 
 
 def test_rc_a_negated_line_does_not_close():
@@ -143,9 +156,12 @@ def test_cli_exit_code_follows_the_check(tmp_path, capsys):
     (audit / "AUDIT-X.md").write_text("**X-M1（必修）　x\n", encoding="utf-8")
     reg = tmp_path / "reg.json"
     reg.write_text('{"open": {"X-M1": {"audit": "AUDIT-X.md", "owner": "A", "fix": "f", "state": "s"}}}', encoding="utf-8")
-    assert M.main(["--audit-dir", str(audit), "--register", str(reg)]) == 0
+    legacy = tmp_path / "legacy.json"
+    legacy.write_text('{"frozen_count": 0, "ids": {}}', encoding="utf-8")
+    args = ["--audit-dir", str(audit), "--register", str(reg), "--legacy", str(legacy)]
+    assert M.main(args) == 0
     (audit / "AUDIT-Y.md").write_text("**Y-M1（必修）　y\n", encoding="utf-8")
-    assert M.main(["--audit-dir", str(audit), "--register", str(reg)]) == 1
+    assert M.main(args) == 1
     assert "Y-M1" in capsys.readouterr().out
 
 
@@ -153,3 +169,41 @@ def test_declaration_forms_follow_d():
     """宣告的三種寫法（D 的判準）：粗體（必修、表格列、必修段落內的粗體行；沒有數字的字不算 ID。"""
     texts = {"A.md": ["**P-M1（必修）　a", "| T-2 | 說明 | 必修 |", "### 必修", "**S-1　c", "**B　不是編號", "## 其他", "**Q-1　不在段落內"]}
     assert Counter(d for _f, d in M.declared(texts)) == Counter({"P-M1": 1, "T-2": 1, "S-1": 1})
+
+
+# ── 凍結清單（MS-M1）─────────────────────────────────────────────────────────
+
+def test_real_legacy_list_is_current():
+    """真實稽核檔：凍結清單每一筆都還在用舊判準（沒有標準單行、宣告它的檔還在、舊判準找得到關閉），筆數不超過凍結當下。"""
+    problems = M.legacy_problems(M.load_texts())
+    assert not problems, "\n".join(problems)
+
+
+def _legacy_file(tmp_path, ids, frozen):
+    p = tmp_path / "legacy.json"
+    p.write_text(json.dumps({"frozen_count": frozen, "ids": ids}, ensure_ascii=False), encoding="utf-8")
+    return str(p)
+
+
+def test_legacy_list_accepts_a_real_prose_closure(tmp_path):
+    texts = {"A.md": ["**X-M1（必修）　x", "- X-M1 複核：突變紅 ⇒ **關閉**"]}
+    assert M.legacy_problems(texts, _legacy_file(tmp_path, {"X-M1": "A.md"}, 1)) == []
+
+
+@pytest.mark.parametrize("case", ["grown", "canonical_now", "not_declared", "not_closed"])
+def test_rc_legacy_list_goes_stale_or_grows(tmp_path, case):
+    """反向控制：清單只准減少、每一筆都要真的還需要它。"""
+    texts = {"A.md": ["**X-M1（必修）　x", "- X-M1 複核：突變紅 ⇒ **關閉**", "**Y-M1（必修）　y"]}
+    ids, frozen, needle = {"X-M1": "A.md"}, 1, "過期"
+    if case == "grown":
+        texts["A.md"].append("- Y-M1 ⇒ **關閉**")
+        ids, needle = {"X-M1": "A.md", "Y-M1": "A.md"}, "超過凍結"
+    elif case == "canonical_now":
+        texts["A.md"].append("- ✅ X-M1 關閉（abc1234）")
+    elif case == "not_declared":
+        ids = {"X-M1": "B.md"}
+    else:
+        ids, needle = {"Y-M1": "A.md"}, "其實沒關"
+    got = M.legacy_problems(texts, _legacy_file(tmp_path, ids, frozen))
+    assert any(needle in p for p in got), got
+

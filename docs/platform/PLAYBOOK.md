@@ -163,7 +163,7 @@
 3. 產出 `docs/platform/audit/AUDIT-<稽核者>-<對象>.md`。發現的問題要附 `檔案:行號`，還要附重現的指令。
 4. 被稽核的人逐項回覆（修正、不修並說明理由，或需要使用者裁示），**不可以自己把發現關掉**：由原稽核者確認修正之後才算關閉。
 5. 主持人彙整成 `IMPROVEMENT-REPORT.md` 交給使用者。必修項全部關閉之後，階段 3 才算完成。
-6. **必修的關閉一律寫成單行 `✅ <編號> 關閉（<commit>）`**，寫在宣告它的那份稽核檔（2026-09-28，D 建議；A 做成守門）。還沒關的必修登記在 `docs/platform/mustfix_open.json`（audit／owner／fix／state，上限 10 筆），關閉時由稽核者同一個 commit 移除。守門 `tests/platform/test_mustfix_closure_scan.py`（工具 `tools/platform/mustfix_scan.py`）：稽核檔的未關必修與登記表必須完全相同——沒關又沒登記＝被忘了，登記了卻已關＝登記過期。散文式的關閉（寫在別的檔、改號延續、表格粗體、寫成「成立／通過」）判準認不得，**不放寬判準**，補一行標準寫法。
+6. **必修的關閉一律寫成單行 `✅ <編號> 關閉（<commit>）`**，寫在宣告它的那份稽核檔（2026-09-28，D 建議；A 做成守門）。還沒關的必修登記在 `docs/platform/mustfix_open.json`（audit／owner／fix／state，上限 10 筆），關閉時由稽核者同一個 commit 移除。守門 `tests/platform/test_mustfix_closure_scan.py`（工具 `tools/platform/mustfix_scan.py`）：稽核檔的未關必修與登記表必須完全相同——沒關又沒登記＝被忘了，登記了卻已關＝登記過期。散文式的關閉（寫在別的檔、改號延續、表格粗體、寫成「成立／通過」）判準認不得，**不放寬判準**，補一行標準寫法。〔補充 2026-09-28（D 稽核 MS-M1）：舊的寬鬆判準會把散文裡的「關閉」（例：「前提是 DM1、DM2 關閉」）當成關閉紀錄 ⇒ 改成只有凍結清單 `docs/platform/mustfix_legacy_closures.json`（63 筆，當天以前宣告、D 已人工確認）裡的 ID 可以沿用舊判準；**其他 ID 一律只認標準單行**。清單只准減少（筆數超過凍結當下、或某一筆已不需要 ⇒ 守門紅）〕
 
 ---
 

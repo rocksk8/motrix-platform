@@ -1,6 +1,40 @@
 {
  "_說明": "登記中的未關必修（tools/platform/mustfix_scan.py、PLAYBOOK §E-6）：稽核檔宣告了、還沒有關閉紀錄、而且有人在修的。必須與掃描結果完全相同；稽核者寫下「✅ <編號> 關閉（<commit>）」之後從這裡移除。上限 10 筆。",
  "open": {
-  "BP-M1": {"audit": "AUDIT-D-A-build-python.md", "owner": "A", "fix": "wip/a-build-python-2 b86bc4c8", "state": "已修，待 D 複核", "since": "2026-09-28"}
+  "DM1": {
+   "audit": "AUDIT-D-H12-apply.md",
+   "owner": "H",
+   "fix": "wip/h-apply-platform",
+   "state": "修正中",
+   "since": "2026-09-28"
+  },
+  "DM2": {
+   "audit": "AUDIT-D-H12-apply.md",
+   "owner": "H",
+   "fix": "wip/h-apply-platform",
+   "state": "修正中",
+   "since": "2026-09-28"
+  },
+  "PM1": {
+   "audit": "AUDIT-D-B41-payreq.md",
+   "owner": "B",
+   "fix": "wip/b-payreq",
+   "state": "修正中",
+   "since": "2026-09-28"
+  },
+  "MA-M1": {
+   "audit": "AUDIT-D-train14-misc.md",
+   "owner": "H",
+   "fix": "wip/h-monthly-alert-text",
+   "state": "修正中",
+   "since": "2026-09-28"
+  },
+  "MS-M1": {
+   "audit": "AUDIT-D-train14-misc.md",
+   "owner": "A",
+   "fix": "wip/a-mustfix-scan",
+   "state": "已修（本分支），待 D 複核",
+   "since": "2026-09-28"
+  }
  }
 }
