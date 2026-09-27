@@ -1,0 +1,5 @@
+{
+ "name": "subcontract-only",
+ "description": "L0／L1 共用核心＋單一 L2 模組 subcontract（外包工班）",
+ "modules": ["subcontract"]
+}
