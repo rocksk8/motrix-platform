@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """D7 演練工具（tools/platform/final_drill.py）的安全前提：來源只讀、路徑守門、複製範圍。"""
+import json
 import os
 import re
 import sqlite3
@@ -302,3 +303,43 @@ def test_migrated_keys_follow_modules_json_mod_units():
     got = FD.migrated_module_keys()
     assert got == want and got, got
     assert got < FD.registered_module_keys() or got == FD.registered_module_keys()
+
+
+# ── 缺席模組實際打 probes／頁面驗 404（主持裁示；D7-CHECKLIST §3）──────────────────────────
+
+def _decl(root, key, probes=(), pages=()):
+    d = root / key
+    d.mkdir(parents=True)
+    (d / "module.json").write_text(json.dumps({"key": key, "provides": {"probes": list(probes)},
+                                               "pages": [{"path": p} for p in pages]}), encoding="utf-8")
+
+
+def test_absent_modules_are_probed_expecting_404(tmp_path):
+    """包裡只有 aa；bb 已搬遷而缺席 ⇒ bb 在來源樹宣告的 probes 與頁面每一項期望 404；cc 尚未搬遷 ⇒ 不在這裡；
+    dd 已搬遷缺席、來源樹沒有宣告 ⇒ 期望狀態碼 None（smoke 判不過）。"""
+    pkg = tmp_path / "pkg" / "backend"
+    _decl(pkg / "modules", "aa", probes=["/api/aa/x"])
+    src = tmp_path / "src"
+    _decl(src, "aa", probes=["/api/aa/x"])
+    _decl(src, "bb", probes=["/api/bb/list", "/api/bb/one"], pages=["bb.html"])
+    plan = FD.absent_probe_plan(str(pkg), source_modules=str(src),
+                                registered={"aa", "bb", "cc", "dd"}, migrated={"aa", "bb", "dd"})
+    rows = {(path, expect) for _n, _m, path, expect in plan}
+    assert rows == {("/api/bb/list", 404), ("/api/bb/one", 404), ("/pages/bb.html", 404), ("modules/dd", None)}, rows
+
+
+def test_a_non_404_from_an_absent_module_turns_the_smoke_red():
+    """反向控制：缺席模組的 probe 回 200（模組其實沒被拿掉，或 L1 替它接住了）⇒ smoke_ok 判不過；回 404 ⇒ 過。"""
+    base = [{"name": "首頁", "path": "/", "status": 200, "ok": True}]
+    good = {"checks": base + [{"name": "缺席 bb", "path": "/api/bb/list", "status": 404, "expect": 404, "ok": True}]}
+    bad = {"checks": base + [{"name": "缺席 bb", "path": "/api/bb/list", "status": 200, "expect": 404, "ok": False}]}
+    assert FD.smoke_ok(good) is True
+    assert FD.smoke_ok(bad) is False
+
+
+def test_smoke_runs_the_absent_plan():
+    """smoke() 真的會跑 absent_probe_plan，而且以 expect 判 ok（不是寫死 200）——讀碼守門，行為由 D7 前哨實跑驗。"""
+    import inspect
+    src = inspect.getsource(FD.smoke)
+    assert "absent_probe_plan(" in src and '"ok": code == expect' in src
+
