@@ -2,6 +2,7 @@
 
 > 主持彙整；原始發現、證據與回覆以 `audit/` 各檔為準。必修全部關閉，D6 才算完成。
 > 最後更新：2026-09-26 09:14
+> 最終狀態補記：2026-09-27 23:21（§5 最終狀態、§6 待辦；主持子代理依 RUN-PLAN、RUN-LOG、audit/、FINAL-DRILL-REPORT 原文整理）
 
 ## 1. 稽核覆蓋
 
@@ -149,4 +150,48 @@
 | 2026-09-26 18:32 | **Sonnet 列車長（第九班，第一次）** | 完成 7 包、合回成功、交會紅在車上修掉；但①全量跑到一半就結束回合一次（與第四班 Opus 同一個毛病，要主持叫醒）；②用了別的工具的 Python（hermes-agent venv）啟動 modtest（pytest 仍由 modtest 改用 .venv312，結果不受影響）；③把 C4 新功能的 e2e 紅判成偶發（主持退回，B 查明是題目靠時間差）| 維持 Sonnet（能完成、成本低）；列車長清單加三條：啟動一律用 `D:\MOTRIX-PLATFORM\.venv312\Scripts\python.exe`；等待用背景 until 迴圈、回合內等到結果行；**本班新功能的紅不可以判偶發**，一律交作者查 |
 | 2026-09-26 23:32 | **第十班假綠：分批執行只讀最後一批** | 列車長在車上為 WinError 206 加「依長度自動分批」，644 檔分 2 批；最後一行摘要是第 2 批（1993 過 0 紅），modtest_stats 記 exit=1 沒人讀；第 1 批 3 紅（cm12 兩題、arap connectors 一題）上了 origin，A 在 M06 驗證時才發現。與〈背景 exit code 是包裝的〉同型：**列車長在車上改了自己的量測工具**，而驗證沿用舊的讀法 | 第十一班改看 exit code＋逐批讀；PLAYBOOK §G4 清單第 11 條；B 修 modtest 彙總各批、選到沒結果＝紅（wip/b-modtest-batch，第十二班車頭）；列車長不可以在車上改量測工具而不改判讀方式——改了要回報主持 |
 | 2026-09-27 10:26 | **子 pytest 跑 tmp 裡的探針：啟動 ~40 秒 ⇒ 0.35 秒（`--confcutdir`）** | 探針搬出 tests/（wip/b-probe-tmp）後，子 pytest 以 `-c backend/pytest.ini --rootdir <探針目錄> -p conftest` 跑，cProfile：collection 從磁碟根 `C:\` 起逐層建 Dir 節點、列舉每一層祖先目錄（此機 %TEMP% 9 萬多項；nt.stat 38 萬次、27 秒）；只設 `--rootdir` 不夠（cwd 換到探針目錄也不夠）。加 `--confcutdir <探針目錄>` ⇒ 0.35 秒；backend/conftest.py 由 `-p conftest` 載入不受影響 | 已做：`tests/_subproc.probe_pytest_args` 一律帶；四支受影響檔 -n 2 由 7 分鐘 ⇒ 51 秒。延伸：任何「子 pytest 跑 tmp 裡的檔」的題都應經這個函式（現況只有這三支）；%TEMP% 盤點由主持處理（B 不動別人的）|
+
+## 5. 最終狀態（2026-09-27，D1～D7）
+
+結論：D1～D7 完成；full 包可上正式機（D 必修 0）；正式機升級由使用者執行中（RUN-PLAN §6 2026-09-27 23:14）。
+
+| # | 結果 | 證據 |
+|---|---|---|
+| D1 | 11 個業務模組全在 `modules/<key>/`（accounting、analytics、arap、case、crm、daily_tasks、netplan、payroll、subcontract、supply、tender_radar）；core-only 已知紅清單為空 | 第十三班合回 1d2e28b7／紀錄 e21b099a；`tools/platform/core_only_known_red.json`＝`[]`（4da91189）；M01、M06 真刪只剩 §B-11 允許紅（RUN-PLAN §6 2026-09-27 19:28）；D 觀察「L2 互不 import」（同日 20:17） |
+| D1b | 只改 M12 自己的檔：選題 85.6%→16.4%；閉包後 legal_params ≤17.8%、email_notify 中位數 20.6%、auth 31.6%；db 整份列為已知例外 | RUN-LOG 2026-09-26 03:49、04:12；RUN-PLAN §2 D1b 主持補充 |
+| D2 | 模組啟停與授權欄位、選配打包；13 份包（full、core-only、11 份單一模組）逐一演練通過；授權機制本輪不做（使用者裁示） | c45d6227（9c）；AUDIT-X-9c 結案（RUN-LOG 01:54）；FINAL-DRILL-REPORT §2～§3；CORE-SPEC 裁示表「本輪範圍」 |
+| D3 | P1＋P3、P2、P4／P5、P6、P7 工具皆合回並經稽核 | P6 8d19378c；P4／P5 23b04b74；P1＋P3 第二班 10b30038（AUDIT-D-P1P3-catalog 結案）；P2 15417e15；P7 module_update.py（ROADMAP P7：工具 ✅、儀表板串接 ⏳） |
+| D4 | P8 建構器從零建立自訂單據→送審→核准→PDF 的 e2e；P9 拖曳排版器 | 22141596（D4 驗收 e2e）；b17924ef（P9）；AUDIT-D-P8-frontend、AUDIT-B-host-O7 |
+| D5 | STATES 高：C 五項（S-CD02、S-CC07、S-CC06、S-CN03、S-CU10）✅；主持四項（S-CU01、S-CU06、S-CP01、S-CP02）經 AUDIT-C-host-dashboard 結案；STATES-PLATFORM 高 2 項由 A2 處理 | ROADMAP 階段 S；IMPROVEMENT §1 第 1 列；98d43855 |
+| D6 | 82 份稽核檔（D 72 份）；本報告。⚠ 兩項必修的修正已合回、但稽核檔沒有稽核者的關閉紀錄：C-M4（修正 429d27d1 隨第四班合回，AUDIT-D-C-P4P5P8 回覆表仍標 ⏳）、IP1-4 的 X-1～X-3（A 修正 66982bbf 已合回，AUDIT-X-IP1-4 §6「X 確認」欄空白）——見 §6 第 21 項 | `audit/`；§1；RUN-PLAN §6 2026-09-27 20:17「D1～D6 完成」 |
+| D7 | 全量（e21b099a）5626 過／61 略過／3 xfail／0 紅、25 分 28 秒；13 份包（c006a2a0）演練 13/13 通過；V9 來源逐行未動；D 審定必修 0 | RUN-PLAN §6 20:17、23:14；FINAL-DRILL-REPORT §2～§7；AUDIT-D-D7-drill（2b8afa60） |
+| D8 | BENCHMARK.md；法規必要項 R1～R3、營業稅四捨五入統一 | 50af9d35；609cd5b8；x-vat-round（RUN-LOG 04:10）；AUDIT-D-R1-R3-legal 結案（RUN-LOG 04:30） |
+
+§1 表中停在中途的列，結案出處：IP1-4（A 修正合回 66982bbf，RUN-LOG 00:37；稽核者確認欄空白，見 §6 第 21 項）；C-B-guards、C-host-D3D5（稽核檔結論表 ✅）；R1-R3（RUN-LOG 04:30）；B-env-guards（RUN-LOG 03:58）；P1P3（RUN-LOG 04:37）；P4P5P8（C-M1／M2／M3／M5 關閉，RUN-LOG 04:18；C-M4 修正 429d27d1 隨第四班合回，稽核檔無關閉紀錄）；C-D7-drill（RUN-LOG 04:39）；M08（RUN-LOG 09:29）；attachments（AT-M1c 關閉，2026-09-26 19:06）；m01-ca3、case404（RUN-PLAN §6 2026-09-27 01:40）；approval-l1（QJ-M1 關閉，15:06）。
+
+## 6. 待辦（下一輪）
+
+| # | 項目 | 出處 |
+|---|---|---|
+| 1 | final_drill 收進 d7_extra 的「缺席明說」HTTP 驗證（S-1）；收進時帶上兩條正確判準：availability＝lock 模組清單、IP-98 依口徑分開驗 | FINAL-DRILL-REPORT §5 S-1；AUDIT-D-D7-drill §4 |
+| 2 | 寫入類與連外的缺席行為以 HTTP 驗（S-2：IP-3／4／5／13／17／19／21／97）；需要可丟棄的庫與攔截連外；只影響單一模組包與 core-only | FINAL-DRILL-REPORT §5 S-2；AUDIT-D-D7-drill §4 |
+| 3 | 建包腳本挑 Python 的缺陷：會挑到 hermes-agent venv；改成 .venv312 優先或驗 requirements-dev 版本 | RUN-PLAN §6 2026-09-27 23:14 |
+| 4 | custom-records 同頁其他動作（儲存、列表、轉換、核准）網路失敗時沒有錯誤訊息 | AUDIT-D-H-o15；RUN-PLAN §6 22:07 |
+| 5 | case_summary 效能：voucher_link 一次撈全部報價單的整包 data_json | AUDIT-D-C-approval-l1 §4（建議）；RUN-PLAN §6 23:14 |
+| 6 | json_extract 改逐筆 Python 解析：18 檔 133 處（G8）；棘輪追不到 import 別名（G8b＝T13-S1b） | ROADMAP G8、G8b；AUDIT-D-B-t13-guards §3 |
+| 7 | 授權機制（發放／驗證授權碼、到期、綁機器） | CORE-SPEC 裁示表「本輪範圍」①（使用者：本輪不做） |
+| 8 | D1b：階段 B 把表與 migration 搬進模組後，重量 db 的選題比例，不再是例外的部分移出例外 | RUN-PLAN §2 D1b 主持補充（2026-09-26 04:12） |
+| 9 | 未結案的偶發失敗 O2、O5、O8、O11、O12；另有兩題判為負載偶發而未登記編號（第十二班 1 題、第十三班 `test_module_selection.py::…[unreadable]`），依 §G1「偶發一律當真問題查」補登 | RUN-PLAN §5「未結案的偶發失敗」；§6 2026-09-26 23:32、2026-09-27 14:33、19:28 |
+| 10 | e2e 平行數預設是否改 3：第十二、十三班試跑（最低可用記憶體 12.23 GB／10.9 GB），尚未裁示 | CORE-SPEC 裁示表「e2e 平行數試跑」；RUN-PLAN §6 2026-09-27 13:36、19:28 |
+| 11 | P7 模組更新包的儀表板串接；P7b 模組自有 migration 的套用與回滾 | ROADMAP P7、P7b |
+| 12 | 階段 G 未守門：G1b、G3b、G5、G6、G6b、G7 | ROADMAP 階段 G |
+| 13 | L1 薄殼 `helpers/receivables.py` 與 IP-12 `_CaseAccess.summary` 已登記淘汰，下一個主版號刪除 | RUN-PLAN §5 主持裁示 2026-09-26 13:58；deprecations.json |
+| 14 | 觀察未處置：RG-O1（SQL 字串內角色字面值 9 檔無人驗）；R-S1（rebasecheck）、AUDIT-X-B-M08 O-9 標開著 | AUDIT-D-host-train8；RUN-LOG 2026-09-26 13:42 |
+| 15 | 建包入口檢查警告 7 組路由在前端找不到呼叫點 | FINAL-DRILL-REPORT §5 O-3 |
+| 16 | 新的 origin（10b76841 起）不在 D7 結論範圍；下次出包要重跑演練 | FINAL-DRILL-REPORT §5 O-4 |
+| 17 | ROADMAP 階段 S 四列（S-CU01、S-CU06、S-CP01、S-CP02）仍標 🔄，與 AUDIT-C-host-dashboard 結案不一致，要更新標記 | ROADMAP 階段 S；§1 第 1 列 |
+| 18 | 待使用者：U19 字型授權檔；U16 舊個資代理 clone 手動刪除；`D:\MOTRIX-FINAL-DRILL`、`D:\MOTRIX-FINAL-DRILL-D6` 手動刪除；全速模式回到 §C-13 原值 | RUN-PLAN §4 U16、U19；FINAL-DRILL-REPORT §6；RUN-LOG 2026-09-26 11:19；CORE-SPEC 裁示表「測試負載上限」 |
+| 19 | K1 顯示名稱為空的帳號看得到業務欄也為空的舊案件（另開題） | CORE-SPEC「已知問題」K1 |
+| 20 | 下一版進行中：模組建構器（A 輸出預覽 be26ee3a、B 同頁拖放）、品牌設定 | RUN-PLAN §5 月台；§6 23:14 |
+| 21 | 補兩項必修的稽核者關閉紀錄：C-M4（對 429d27d1 重跑 2.5／-2.5／1.005 題與突變）、X-1～X-3（AUDIT-X-IP1-4 §6「X 確認」欄）；補齊前 D6「必修全部關閉」在紀錄上不成立 | AUDIT-D-C-P4P5P8 §回覆表 C-M4 列；AUDIT-X-IP1-4-row-access §6；RUN-LOG 2026-09-26 00:40（A：待 X 確認） |
 
