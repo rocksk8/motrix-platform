@@ -1,5 +1,8 @@
 # 案件 更新紀錄
 
+## 1.0.2 — 2026-09-27（第十二班列車，隨 M06 會計搬遷帶入）
+- `modules/case/api/quotations.py::case_bundle` 的 `parts.vouchers` 改經 IP-22 `voucher.by_case`（M06 提供）取用，不再直接 import `routers.vouchers`／`modules.accounting.api.vouchers`；M06 不在時該段回 404 並明說（`VOUCHERS_UNAVAILABLE`）
+
 ## 1.0.1 — 2026-09-26（c-case404，M01-O1；列車取號）
 - 看不到＝不存在：`_guard_case` 與 13 處單筆讀寫改走 L1 `helpers.case_access` 的 `deny_case`／`require_case`——逐案被拒與查無案件同一個 404（訊息逐字相同），audit 另記真正原因；`_is_case_member` 改用布林 `row_access.visible`（不丟例外、不記 audit）
 

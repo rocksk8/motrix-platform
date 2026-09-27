@@ -533,7 +533,7 @@ M01-PLAN §3-4（主持裁示 2026-09-26 四點）。取代「各自讀 quotatio
 | 欄位 | 內容 |
 |---|---|
 | 提供方 | M06 會計：`modules/accounting/api/vouchers.py::vouchers_by_case`（傳票 by-case 端點的函式；ModuleSpec.providers 宣告） |
-| 使用方 | M01 `routers/quotations.py::case_bundle` 的 `parts.vouchers` |
+| 使用方 | M01 `modules/case/api/quotations.py::case_bundle` 的 `parts.vouchers` |
 | 形式 | provider，單一提供者（`core.registry`） |
 | 語法 | 取用：`fn = registry.single_provider("voucher.by_case")`；`None` ⇒ 退化。`fn(quote_no, authorization=…) -> {"vouchers": [...]}`（同一份授權，權限判斷與單獨打端點逐字相同） |
 | 回傳 | `{"vouchers": [{id, voucher_no, voucher_date, status, summary}]}`（作廢單不列）；權限不足 ⇒ `HTTPException(403)`，整包那一段照舊回 `{"ok": false, "status": 403}` |

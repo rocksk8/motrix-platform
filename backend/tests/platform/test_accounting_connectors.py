@@ -25,7 +25,7 @@ def _seed():
 
 def test_case_bundle_without_m06(client, make_user, monkeypatch):
     """IP-22：傳票段 404 並說出原因；其他段照常。"""
-    from routers import quotations as q
+    from modules.case.api import quotations as q
     h = _hdr(client, make_user)
     _seed()
     _without(monkeypatch, "voucher.by_case", "accounting")

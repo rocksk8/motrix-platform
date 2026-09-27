@@ -86,17 +86,25 @@ def test_l1_to_l2_baseline_has_no_vanished_edges(units, groups, l1_baseline):
 
 
 def test_rc_a_new_l1_to_l2_import_is_caught(units, groups, l1_baseline):
-    """反向控制（合成）：一支 L1 helper 多 import 一個 L2 單位 ⇒ 報新增；載入器 core:main → router: 不算。"""
+    """反向控制（合成）：一支 L1 helper 多 import 一個 L2 單位 ⇒ 報新增；載入器 core:main → router: 不算。
+    〔第十二班列車：11 個業務模組的 router 已全部搬進 modules/（`mod:`），modules.json 裡已無任何 L2
+    router: 單位——這個 exemption 規則本身「隨模組搬遷自然消失」（_boundaries.py 的註解原話），真實
+    資料已經無法重建這個情境。用一份 modules.json 的合成副本（比照 test_rc_double_owned_page_is_caught
+    的手法）另外掛一個假的 router: 單位到某個 L2 群組，只為了不讓 exemption 規則本身變成死碼沒有題守〕"""
     l2_unit = next(n for n in sorted(units) if groups.owner(n) in groups.l2)
     l1_unit = next(n for n in sorted(units) if groups.owner(n) == "L1" and n != "core:main")
     fake = dict(units)
     fake[l1_unit] = dict(units[l1_unit], imports=list(units[l1_unit].get("imports", [])) + [l2_unit])
     new, _ = B.check_l1_to_l2_baseline(fake, groups, l1_baseline)
     assert new == ["L1 %s -> %s %s" % (l1_unit, groups.owner(l2_unit), l2_unit)], new
-    router = next(n for n in sorted(units) if n.startswith("router:") and groups.owner(n) in groups.l2)
+    data = json.loads(B.MODULES_JSON.read_text(encoding="utf-8"))
+    some_l2 = sorted(data["modules"])[0]
+    data["modules"][some_l2]["units"].append("router:zz_l1l2_synth")
+    synth_groups = B.Groups(data)
     fake2 = dict(units)
-    fake2["core:main"] = dict(units.get("core:main", {}), imports=list(units.get("core:main", {}).get("imports", [])) + [router])
-    assert B.check_l1_to_l2_baseline(fake2, groups, l1_baseline)[0] == []
+    fake2["core:main"] = dict(units.get("core:main", {}),
+                              imports=list(units.get("core:main", {}).get("imports", [])) + ["router:zz_l1l2_synth"])
+    assert B.check_l1_to_l2_baseline(fake2, synth_groups, l1_baseline)[0] == []
 
 
 def test_edges_of_modules_not_installed_are_not_vanished(units, groups, baseline):
@@ -168,22 +176,30 @@ def test_write_exceptions_are_classified(exceptions):
 # ══════════════════════════════════════════════════════════════════════════
 
 def _cross_edge_candidates(units, groups):
-    """反向控制配對的候選：起點＝routers/ 底下的 L2 router；終點＝L2 的 router 或模組單位（mod）。"""
+    """反向控制配對的候選：起點與終點皆＝L2 的 router 或模組單位（mod）。
+    〔第十二班列車，主持裁示：M01、M06 都搬進 modules/ 之後 routers/ 底下已無 L2 router，
+    起點原本限定 kind=="router" 的假設不再成立（a-m06-8 已預告「屆時起點改用模組單位」）；
+    比照終點也納入 mod: 單位，_pick_new_cross_edge／test_rc_end_to_end_through_real_source
+    本來就用 units0[r1]["path"] 泛用取路徑，不需要另外改〕"""
     starts = sorted((groups.owner(n), n) for n, u in units.items()
-                    if u["kind"] == "router" and groups.owner(n) in groups.l2)
+                    if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2)
     ends = sorted((groups.owner(n), n) for n, u in units.items()
                   if u["kind"] in ("router", "mod") and groups.owner(n) in groups.l2)
     return starts, ends
 
 
 def _candidate_problems(starts, ends):
-    """候選來源的正對照判定 ⇒ 問題清單（空＝候選夠用）。"""
+    """候選來源的正對照判定 ⇒ 問題清單（空＝候選夠用）。
+    〔第十二班列車：起點改成與終點同一種取法（router＋mod）之後，「終點候選沒有起點以外的組」原本的
+    集合差寫法（{ends}-{starts}）在 starts==ends 時恆為空、會誤判；改成直接檢查「起點與終點之間有沒有
+    任何一組 g1 != g2 的組合」——這才是 _pick_new_cross_edge 實際需要的條件，起點或終點任一邊是空的
+    交給前兩條各自的訊息負責，這裡不重複判〕"""
     out = []
     if not starts:
         out.append("掃不到任何 L2 router（起點候選）")
     if not any(n.startswith("mod:") for _g, n in ends):
         out.append("掃不到任何 L2 模組單位（終點候選）")
-    if not ({g for g, _n in ends} - {g for g, _n in starts}):
+    if starts and ends and not any(g1 != g2 for g1, _r1 in starts for g2, _r2 in ends):
         out.append("終點候選沒有起點以外的組 ⇒ 配不出跨組的邊")
     return out
 
@@ -195,7 +211,8 @@ def test_rc_cross_edge_candidates_are_scanned(units, groups):
 
 
 def test_rc_candidate_check_and_exhausted_starts_really_fail(units, groups, baseline, monkeypatch):
-    """稽核 D M06-S1：「起點耗盡要 fail」要有題走到——現在 routers/ 還有 M01 的 router，真實資料走不到那條分支。
+    """稽核 D M06-S1：「起點耗盡要 fail」要有題走到——monkeypatch 出空的起點集合（真實資料現在起點含 mod: 單位，
+    只要還有任一個 L2 模組在，這條分支幾乎走不到，所以仍要用 monkeypatch 逼出這個分支）。
     ① 正對照的判定對空的起點要報問題（不可以放行）；② 起點耗盡時 `_pick_new_cross_edge` 丟的是 **fail**，不是 skip
     （skip 不會被 pytest.raises(Failed) 接住、題目會變成略過而不是紅 ⇒ 用 BaseException 接住再比類型）。"""
     assert _candidate_problems([], [("M02", "mod:crm/__init__")]) == ["掃不到任何 L2 router（起點候選）"]
@@ -213,13 +230,12 @@ def test_rc_candidate_check_and_exhausted_starts_really_fail(units, groups, base
 
 
 def _pick_new_cross_edge(units, groups, baseline):
-    """找一對 L2 單位（不同組），其間目前沒有邊：起點是 routers/ 底下的 router（端到端題要在它的原始碼加一行），
-    終點可以是 router 或已搬進 modules/ 的單位（2026-09-26 A：M06 搬遷後 routers/ 只剩 M01，不同組的 router 對已經不存在）。"""
+    """找一對 L2 單位（不同組），其間目前沒有邊：起點與終點都可以是 routers/ 底下的 router 或已搬進 modules/
+    的單位（第十二班列車：M01、M06 都搬進 modules/ 之後 routers/ 底下已無 L2 router，起點比照終點納入 mod:）。"""
     starts, ends = _cross_edge_candidates(units, groups)
     if not starts:
-        # routers/ 底下已經沒有 L2 router（M01、M06 都搬進 modules/ 之後）⇒ 紅，不可以 skip：
-        # 反向控制 skip＝守門沒被驗證而閘門照綠（B／主持 2026-09-26）。屆時起點改用模組單位、端到端題改寫模組檔。
-        pytest.fail("沒有可用的起點候選，反向控制無法成立（routers/ 底下沒有 L2 router）")
+        # 理論上的耗盡（L2 一個單位都沒有）⇒ 紅，不可以 skip：反向控制 skip＝守門沒被驗證而閘門照綠（B／主持 2026-09-26）。
+        pytest.fail("沒有可用的起點候選，反向控制無法成立（L2 底下沒有任何 router／mod 單位）")
     base = set(baseline)
     for g1, r1 in starts:
         for g2, r2 in ends:
