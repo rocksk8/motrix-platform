@@ -13,6 +13,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._requires import requires_module  # noqa: E402  M01 不在時跳過（B 2026-09-28，反向控制抓到）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 
 
 QNO = "MQ-VCSPLIT-01"
@@ -58,6 +60,7 @@ def _open(browser, base, u, vid, width, height, zoom=None):
     return page
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_picking_a_case_keeps_the_focus_on_that_lines_summary(live_server, make_user, e2e_browser, client):
     u = make_user(username="split_focus", role="superadmin")

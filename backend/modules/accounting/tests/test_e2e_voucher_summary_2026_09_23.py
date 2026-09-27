@@ -45,6 +45,8 @@ pytest.importorskip("playwright.sync_api")
 
 import uvicorn
 from tests._e2e_login import inject_login  # noqa: E402
+from tests._requires import requires_module  # noqa: E402  M01 不在時跳過（B 2026-09-28，反向控制抓到）
+needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 from tests._ports import free_safe_port
 
 #: ⚠️ 我單方面宣告的掛鉤。改名**退回給我**。
@@ -207,6 +209,7 @@ def _open_editor(page):
     _need(page, HOOKS["summary"], "分錄行的摘要欄")
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user, e2e_browser):
     """🔴 **改過的摘要，切頁籤回來不可以被蓋回去。**（`§164` 的不變量）
@@ -280,6 +283,7 @@ def test_jv7_an_edited_summary_survives_a_tab_switch(live_server, make_user, e2e
         + "🔑 `§164`：帶入是**起點不是終點**。")
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_jv7_an_edited_summary_survives_a_reload(live_server, make_user, e2e_browser):
     """🔴 **改過的摘要，存檔後重新整理不可以被蓋回去。**

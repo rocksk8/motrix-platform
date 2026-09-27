@@ -241,6 +241,7 @@ def test_jv36_picking_an_expense_lists_its_files_and_ticking_brings_one_in(
     assert _att_count(page) == 1
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_second_expense_on_the_same_line_brings_its_own_amount(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
@@ -281,6 +282,7 @@ def test_second_expense_on_the_same_line_brings_its_own_amount(
     assert int(ln["debit"]) == 4321 and "_autoDebit" not in ln
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_auto_amount_does_not_linger_after_switching_to_a_case_or_an_expense_without_amount(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
@@ -379,6 +381,7 @@ def _slow_page(live_server, client, make_user, seed_extra_expense, e2e_browser, 
     return page
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_o13_late_focus_move_does_not_steal_the_field_the_user_moved_to(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
@@ -404,6 +407,7 @@ def test_o13_late_focus_move_does_not_steal_the_field_the_user_moved_to(
     assert "4321" not in summary.input_value(), summary.input_value()
 
 
+@needs_m01
 @pytest.mark.e2e
 def test_o13_focus_still_returns_to_the_summary_when_the_user_stays(
         live_server, client, make_user, seed_extra_expense, e2e_browser):
