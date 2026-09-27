@@ -106,6 +106,22 @@ def _files_under(root, rel_dir, u):
     return out
 
 
+#: 測試注入點：(manifest) -> (ok, reason)。None ⇒ 用新包的 helpers.licensing 讀安裝目錄的授權金鑰（與正式機啟動同一支判定）
+_license_check = None
+
+
+def _license_check_for(root, pkg):
+    load_classifier(pkg)                                        # 新包的 backend 已在 sys.path
+    try:
+        from helpers import licensing as L
+    except Exception as e:                                      # 算不出來就不動（不猜）
+        raise Refuse("讀不到授權判定（helpers.licensing：%s），不處理模組資料夾" % e)
+    L.LICENSE_PATH = os.path.join(root, "backend", "license.key")
+    gate = L.LICENSE_GATE_ENABLED
+    status = L.verify_license() if gate else {}
+    return lambda manifest: L.module_licensed(manifest, status, gate)
+
+
 def make_plan(root, pkg, max_files):
     u = load_classifier(pkg)
     root, pkg = os.path.abspath(root), os.path.abspath(pkg)
@@ -123,12 +139,56 @@ def make_plan(root, pkg, max_files):
 
     delete = {}
     kept_non_program = []
-    module_dirs = []
+    module_dirs = []          # 2026-09-28 起一律空：完整包套用不刪模組資料夾（使用者裁示，CORE-SPEC「完整包與客戶加購模組」）
+
+    # ── 模組：安裝目錄有、新包沒有 ⇒ 依授權決定（D 稽核 DO3／A 稽核 AH-S1；使用者裁示 2026-09-28）──
+    #   授權有 ⇒ 拒絕套用（完整包要依授權帶齊；絕不靜默刪掉客戶付費的模組）；授權閘門關閉視為全部有授權
+    #   授權沒有（到期／未授權）⇒ 只停用不刪：資料夾與它的頁面都保留（載入器依授權不載入，續約立刻恢復）
+    #   ⇒ 這些模組的檔案不會經任何刪除來源（baseline、lock、候選）被刪
+    pkg_mods = _module_dirs(os.path.join(pkg, "backend"))
+    inst_mods = _module_dirs(os.path.join(root, "backend"))
+    targets = {}
+    if lock is not None:
+        for key in lock.get("excluded") or []:
+            if not _KEY_RE.match(str(key)):
+                raise Refuse("modules.lock.json excluded 有不合法的模組名：%r" % key)
+            if key in inst_mods and key not in pkg_mods:
+                targets[key] = "lock_excluded"
+    for key in inst_mods:
+        if key not in pkg_mods and key not in targets:
+            targets[key] = "orphan_module"
+    refuse, kept_modules, protected, protected_pages = [], [], [], set()
+    if targets:
+        check = _license_check or _license_check_for(root, pkg)
+        for key, why in sorted(targets.items()):
+            try:
+                manifest = _read_json(os.path.join(inst_mods[key], "module.json"))
+            except Exception:
+                manifest = {}
+            if not isinstance(manifest, dict):
+                manifest = {}
+            manifest.setdefault("key", key)
+            ok, reason = check(manifest)
+            if ok:
+                refuse.append("%s（%s）" % (key, reason or "授權有"))
+            else:
+                kept_modules.append({"key": key, "why": why, "license": reason})
+            protected.append("backend/modules/%s/" % key)
+            for page in manifest.get("pages") or []:
+                protected_pages.add("frontend/pages/" + str(page).replace("\\", "/").split("/")[-1])
+    if refuse:
+        raise Refuse("以下模組安裝目錄有、授權有，而新包沒有 ⇒ 拒絕套用（完整包要依客戶授權帶齊模組）：%s"
+                     % "、".join(refuse))
+
+    def guarded(rel):
+        return rel.startswith(tuple(protected)) or rel in protected_pages
 
     def add(rel, reason):
         if rel in new_set or _fold(rel) in new_fold or rel in delete:
             return
         if not os.path.isfile(os.path.join(root, rel)):
+            return
+        if guarded(rel):
             return
         if deletable(rel, u):
             delete[rel] = reason
@@ -141,22 +201,6 @@ def make_plan(root, pkg, max_files):
                 add(rel, "baseline")
 
     if lock is not None:
-        pkg_mods = _module_dirs(os.path.join(pkg, "backend"))
-        inst_mods = _module_dirs(os.path.join(root, "backend"))
-        targets = {}
-        for key in lock.get("excluded") or []:
-            if not _KEY_RE.match(str(key)):
-                raise Refuse("modules.lock.json excluded 有不合法的模組名：%r" % key)
-            if os.path.isdir(os.path.join(root, "backend", "modules", key)) and key not in pkg_mods:
-                targets[key] = "lock_excluded"
-        for key in inst_mods:
-            if key not in pkg_mods and key not in targets:
-                targets[key] = "orphan_module"
-        for key, reason in sorted(targets.items()):
-            rel_dir = "backend/modules/" + key
-            module_dirs.append(rel_dir)
-            for rel in _files_under(root, rel_dir, u):
-                add(rel, reason)
         for page in lock.get("removed_pages") or []:
             page = str(page).replace("\\", "/")
             if not page.startswith("frontend/pages/") or ".." in page.split("/"):
@@ -166,7 +210,8 @@ def make_plan(root, pkg, max_files):
     candidates = []
     if baseline is None:
         for rel, _ in u.walk(root):
-            if _in_scope(rel) and _fold(rel) not in new_fold and rel not in delete and deletable(rel, u):
+            if _in_scope(rel) and _fold(rel) not in new_fold and rel not in delete and deletable(rel, u) \
+                    and not guarded(rel):
                 candidates.append(rel)
 
     added = [rel for rel in new if not os.path.isfile(os.path.join(root, rel))]
@@ -182,6 +227,7 @@ def make_plan(root, pkg, max_files):
         "over_limit": len(delete) > max_files,
         "delete": [{"rel": r, "reason": delete[r]} for r in sorted(delete)],
         "module_dirs": sorted(module_dirs),
+        "kept_modules": kept_modules,
         "kept_non_program": sorted(set(kept_non_program)),
         "no_baseline_candidates": sorted(candidates),
         "added": added,
@@ -196,6 +242,8 @@ def plan_text(plan):
              "DELETE %d 檔（上限 %d）：" % (len(plan["delete"]), plan["max"])]
     lines += ["  - [%s] %s" % (d["reason"], d["rel"]) for d in plan["delete"]]
     lines.append("模組資料夾（整個移除）：%s" % (", ".join(plan["module_dirs"]) or "無"))
+    for m in plan.get("kept_modules") or []:
+        lines.append("  保留（未授權，只停用不刪）：%s（%s；%s）" % (m["key"], m["why"], m["license"]))
     if plan["kept_non_program"]:
         lines.append("保留（不是程式檔，不刪）%d 檔：" % len(plan["kept_non_program"]))
         lines += ["  = %s" % r for r in plan["kept_non_program"]]

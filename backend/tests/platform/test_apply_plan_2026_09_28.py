@@ -65,14 +65,17 @@ def env(tmp_path):
     baseline = ["backend/main.py", "backend/old.py", "frontend/pages/old-name.html",
                 "tools/platform/old_tool.py"] + DATA_FILES     # 惡意／錯誤 baseline：列了資料檔
     _w(root, ap.BASELINE_REL, json.dumps({"commit": "c1", "files": baseline}))
-    return str(root), str(pkg)
+    # b（lock 排除）、c（孤兒）預設都當成「未授權」⇒ 只停用不刪（使用者裁示 DO3）；要驗授權有的情況，題目自己換
+    ap._license_check = lambda manifest: (False, "未授權（測試）")
+    yield str(root), str(pkg)
+    ap._license_check = None
 
 
 EXPECTED_DELETE = {
     "backend/old.py": "baseline", "frontend/pages/old-name.html": "baseline",
     "tools/platform/old_tool.py": "baseline",
-    "backend/modules/b/module.json": "lock_excluded", "backend/modules/b/y.py": "lock_excluded",
-    "backend/modules/c/module.json": "orphan_module", "frontend/pages/b.html": "lock_removed_page",
+    "frontend/pages/b.html": "lock_removed_page",
+    # 2026-09-28 使用者裁示（DO3）：模組資料夾 b、c 不刪——未授權只停用；授權有而包沒有 ⇒ 拒絕套用
 }
 
 
@@ -80,16 +83,15 @@ def test_plan_and_execute_delete_exactly_the_old_program_files(env):
     root, pkg = env
     plan = ap.make_plan(root, pkg, 200)
     assert {d["rel"]: d["reason"] for d in plan["delete"]} == EXPECTED_DELETE
-    assert "backend/modules/b/notes.db" in plan["kept_non_program"]
     assert set(plan["added"]) == {"frontend/pages/new-name.html", "product/full.json", "backend/brand_new.py"}
     assert "backend/autostart.bat" not in plan["package_files"]
     removed, errors = ap.execute(root, pkg, plan)
     assert not errors and set(removed) == set(EXPECTED_DELETE)
     for rel in DATA_FILES + ["backend/modules/b/notes.db", "backend/main.py", "frontend/pages/keep.html"]:
         assert os.path.isfile(os.path.join(root, rel)), rel
-    assert not os.path.exists(os.path.join(root, "backend/modules/c"))            # 只剩 __pycache__ ⇒ 整個移除
-    assert not os.path.exists(os.path.join(root, "backend/modules/b/__pycache__"))
-    assert not os.path.isfile(os.path.join(root, "backend/modules/b/module.json"))  # 載入器不會再載 b
+    assert plan["module_dirs"] == [] and {m["key"] for m in plan["kept_modules"]} == {"b", "c"}
+    for rel in ("backend/modules/b/module.json", "backend/modules/b/y.py", "backend/modules/c/module.json"):
+        assert os.path.isfile(os.path.join(root, rel)), rel                   # 未授權：只停用不刪
 
 
 def test_data_config_and_state_paths_are_never_deletable():
@@ -121,6 +123,7 @@ def test_without_baseline_only_lock_and_module_folders_are_deleted(env):
     assert {"backend/old.py", "frontend/pages/old-name.html", "tools/platform/old_tool.py"} <= set(
         plan["no_baseline_candidates"])
     assert not set(DATA_FILES) & set(plan["no_baseline_candidates"])
+    assert not [r for r in plan["no_baseline_candidates"] if r.startswith(("backend/modules/b/", "backend/modules/c/"))]
 
 
 def test_cleanup_added_removes_only_what_this_apply_added(env):
@@ -585,3 +588,43 @@ def test_ds4_every_script_status_is_in_the_dashboard_domain():
         assert len(st) >= 10, "量法壞了"
         assert not (st - domain), (name, sorted(st - domain))
     assert "made_up_status" not in domain                           # 反向控制
+
+
+# ── DO3／AH-S1（使用者裁示 2026-09-28）：完整包套用不刪模組資料夾；授權有而包沒有 ⇒ 拒絕 ──
+
+def test_do3_a_licensed_module_missing_from_the_package_refuses_the_whole_apply(env):
+    root, pkg = env
+    ap._license_check = lambda m: (m.get("key") == "b", "授權有" if m.get("key") == "b" else "未授權")
+    with pytest.raises(ap.Refuse) as e:
+        ap.make_plan(root, pkg, 200)
+    assert "b" in str(e.value) and "拒絕套用" in str(e.value)
+    assert os.path.isfile(os.path.join(root, "backend/modules/b/y.py"))
+
+
+def test_do3_kept_module_files_listed_in_the_baseline_are_not_deleted_either(env):
+    """baseline 也是一條刪除來源：舊版包帶過 c 的檔、新包沒有 ⇒ 仍不可以經 baseline 刪掉未授權而保留的模組。"""
+    root, pkg = env
+    base = json.loads(Path(root, ap.BASELINE_REL).read_text(encoding="utf-8"))
+    base["files"] += ["backend/modules/c/module.json", "backend/modules/b/y.py"]
+    Path(root, ap.BASELINE_REL).write_text(json.dumps(base), encoding="utf-8")
+    plan = ap.make_plan(root, pkg, 200)
+    assert not [d for d in plan["delete"] if d["rel"].startswith(("backend/modules/b/", "backend/modules/c/"))]
+
+
+def test_do3_pages_declared_by_a_kept_module_are_kept(env):
+    root, pkg = env
+    Path(root, "backend/modules/b/module.json").write_text(json.dumps({"key": "b", "pages": ["b.html"]}),
+                                                           encoding="utf-8")
+    plan = ap.make_plan(root, pkg, 200)
+    assert "frontend/pages/b.html" not in {d["rel"] for d in plan["delete"]}
+
+
+def test_do3_real_license_check_with_the_gate_off_treats_everything_as_licensed(env):
+    """正對照（不注入）：授權閘門關閉 ⇒ 全部視為有授權 ⇒ 包少了安裝目錄的模組就拒絕。"""
+    root, pkg = env
+    ap._license_check = None
+    from helpers import licensing
+    assert licensing.LICENSE_GATE_ENABLED is False, "這一題的前提改了：授權閘門已開，請改寫成讀測試金鑰"
+    with pytest.raises(ap.Refuse):
+        ap.make_plan(root, pkg, 200)
+
