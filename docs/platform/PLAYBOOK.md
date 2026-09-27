@@ -245,6 +245,7 @@
 - **為什麼**：每條線各自跑全量（45～60 分鐘，全機只有 2 個名額），6～8 包要排 3～4 小時，大半是重複跑同一批題。
 - **做法**：
   1. 各線做完，只跑 §G1 ②合回閘門（差異題＋tests/platform＋改到的頁面 e2e），綠了就在 RUN-PLAN §5 的「列車月台」登記：分支名、HEAD、差異題結果、有沒有動到 fixture 層。**不要自己跑全量。**
+     〔補充 2026-09-27 13:52 使用者：「在登記列車前先檢查代碼」〕登記前必須做完 §G1 ⓪ 自查（讀整包 `git diff origin/platform...HEAD`，對照 §G5 逐項查）；月台列多一欄「⓪ 自查：中 N 項、已修／未中」，**沒有這一欄的列不上車**（列車長退回）。
   2. 主持大約每 60 分鐘發一班：從 origin/platform 開 `train/<時間>`，依登記順序一包一包 rebase 上去。rebase 有衝突的那一包退回月台，下一班再上；CORE 版號與版本紀錄由主持在列車上用 core_bump 與 VR3 統一處理。
   3. 列車只跑**一次**全量（-n 4、低優先權，佔 1 個名額）。
   4. 全綠：列車 fast-forward 推上 platform，每一包的作者在 §6 補記一筆。
@@ -267,6 +268,7 @@
 - **巡視**：每小時一次（:13）；沒有任何變化時不 commit、不回報，下一次有變化的 commit 補一行。
 - **列車長清單**（派工只寫「第 N 班、乘客（分支＋SHA＋稽核狀態＋同班／相依條件）、例外」，其餘照這張清單；列車長子代理用 model: sonnet，稽核維持 Opus）：
   1. 移除上一班的列車樹（先確認沒有行程在用）；從 origin/platform 建 `train/<MMDD-HHMM>`（時間用 date）於 `D:\\MOTRIX-PLATFORM-TRAIN<N>`。
+  1b. （2026-09-27 13:52 補，使用者「在登記列車前先檢查代碼」）**上車前讀碼**：逐包讀 `git diff origin/platform...<HEAD>`，確認月台列有「⓪ 自查」欄，再對照 §G5 快速掃一次（特別是第 4、5、11 項這類交會才會出現的）；中了就退回作者或在車上先修，**不要等 --train 跑出來才知道**。回報寫「上車前讀碼：退回 N 包／車上先修 N 項」。
   2. 依序 cherry-pick 各包自己的範圍（git cherry 排除已合回）；動 main.py／fixture 層的排車頭；各包自帶的產生檔重產與 core_bump 簿記一律略過。
   3. 列車上 core_bump 取號、IP 照 origin 已用號碼往後定號（引用處同步、歷史不改寫）、模組版號衝突往後排；重產 UNIT-INDEX／dep_graph／test_map 單獨一個 commit，三者 --check 一致。〔補充（B，18:31）：再以 `MOTRIX_TRAIN=1` 跑 `tests/platform/test_generated_maps.py tests/platform/test_unit_cards.py`，「是否最新」三題必須是 **passed，不可以是 skipped**（沒設旗標時它們會 skip ⇒ 過期沒人發現）；過渡期：各包自帶的產生檔改動照第 2 步略過〕
   4. ~~全量：`MOTRIX_PYTEST_SLOTS=4 modtest.py --full --workers 4 --e2e-workers 2 --window TR<N>`；起跑前可用記憶體 ≥ 4 GB；全量期間不改列車樹；**兩段都讀到結果行才結束回合**（背景 until 迴圈盯 pid）。~~〔更正 2026-09-26 17:33，使用者表單「開發完成才跑全量」：第十班起**不跑全量**，改跑：①`modtest.py --base origin/platform`（本班所有包的差異選題，含改到頁面的 e2e，e2e -n 2）②`tests/platform` 全部（守門）〔補充（B，18:58，D 稽核 GF-M1）：①②合併成 **`modtest.py --train`**——自動設 MOTRIX_TRAIN=1、跑差異題＋tests/platform，「是否最新」三題被 skip 或收集不到就判紅（exit 1）；不要手動拆開跑〕③core-only 反向控制 ④本班有搬遷的模組做真刪驗證；**兩段都讀到結果行才結束回合**；在 RUN-PLAN §6 記「本班交互紅 N 題」。全量只在 D1～D6 完成、D7 之前跑一次〕
