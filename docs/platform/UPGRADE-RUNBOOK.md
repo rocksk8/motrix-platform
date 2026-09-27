@@ -35,7 +35,13 @@ foreach ($t in $Tasks) {
 }
 Get-ScheduledTask -TaskName $Tasks | Select-Object TaskName, State      # 三個都要是 Disabled
 
-# ② 停掉仍在聽 port 的 python 行程（只停 python 系列）
+# ①b 結束 autostart.bat 的重啟迴圈（2026-09-27 正式機升級實際踩到：這個 cmd.exe 從 9/22 起一直在跑，
+#     停用排程不會結束它，uvicorn 被停掉 5 秒後又被拉起來 ⇒ 預檢報「V9 服務仍在執行」）。
+#     先列出命令列確認，再結束；只結束命令列含 autostart.bat 的 cmd.exe。
+Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" | Where-Object { $_.CommandLine -match 'autostart\.bat' } |
+    ForEach-Object { Write-Host "結束 autostart 迴圈 PID $($_.ProcessId)：$($_.CommandLine)"; Stop-Process -Id $_.ProcessId -Force }
+
+# ② 停掉仍在聽 port 的 python 行程（只停 python 系列；uvicorn.exe 也算）
 $c = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 foreach ($p in ($c.OwningProcess | Sort-Object -Unique)) {
     $proc = Get-Process -Id $p -ErrorAction SilentlyContinue
