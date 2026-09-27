@@ -1,5 +1,5 @@
 {
- "core_version": "1.56",
+ "core_version": "1.57",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -999,7 +999,8 @@
    "verify_conversion": "def(root, manifest, warnings=…)",
    "verify_external": "def(manifest, warnings=…)",
    "verify_rollback": "def(root, manifest, mode, info=…)",
-   "walk": "def(root)"
+   "walk": "def(root)",
+   "write_deployed_marker": "def(root, new_source, now=…)"
   }
  },
  "scope_history": [

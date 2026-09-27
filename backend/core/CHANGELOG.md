@@ -2,6 +2,11 @@
 
 > 底層穩定契約（MODULE-GUIDE §2）：同一主版號內只准新增。版本＝`core.registry.CORE_VERSION`。
 
+## 1.57 — 2026-09-27（暫用，列車取號；a-prod-status-upgrade：IMPROVEMENT-REPORT §6「prod-status 認不得新升級工具」）
+- L0（新增）：`core.upgrade.write_deployed_marker(root, new_source, now=None)`——轉換完成寫 `backend/.deployed_commit.json`（格式同 apply_update.ps1：commit、commit_short、branch、applied_at、built_at），來源 deploy_manifest.json → backend/.build_commit，都沒有就不寫並回原因
+- L0（行為）：`verify_conversion` 的「設定檔不可改寫」不含部署標記；`rollback` 兩種模式都把部署標記還原成備份的那一份（V9 沒有 ⇒ 刪掉），`verify_rollback` 兩種模式都比對它
+- `tools/platform/upgrade.py convert` 呼叫它、記進 conversion_log.json、沒寫時印警告 ⇒ 轉換後 `/api/system/deployed-version` 與部署儀表板 prod-status 回新版 commit
+
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR
 - L1（行為）：M06 傳票（`modules/accounting/api/vouchers._queue_items`）、自訂模組引擎（`helpers/custom_modules.queue_items`，原本 `json.loads` 沒接 ⇒ 壞一筆整類消失）改用它（主持指派）

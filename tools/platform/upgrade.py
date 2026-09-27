@@ -143,6 +143,7 @@ def convert(root: str, backup_dir: str, new_source: str) -> dict:
     rep["settings_added"] = U.add_missing_settings(os.path.join(root, U.DB_FILES[0]))
     rep["company_profile"] = U.fill_company_profile_blanks(os.path.join(root, U.DB_FILES[0]))
     U.record_post_conversion(root, backup_dir)
+    rep["deployed_marker"] = U.write_deployed_marker(root, new_source)   # prod-status／deployed-version 回新版 commit
     _write_log(backup_dir, "conversion_log.json", rep)
     return rep
 
@@ -153,6 +154,11 @@ def cmd_convert(a):
     differs = rep["package_default_config"]["kept_differs_from_package"]
     if differs:
         print("⚠ 以下設定檔保留了這台機器的版本，與新版包不同——請人工比對新版有沒有要加的內容：%s" % differs)
+    mk = rep["deployed_marker"]
+    if not mk["written"]:
+        print("⚠ 沒有寫部署標記（%s）：部署儀表板與 /api/system/deployed-version 會繼續顯示轉換前的版本" % mk["reason"])
+    else:
+        print("部署標記：%s（來源 %s）" % (mk["commit_short"], mk["source"]))
     gone = rep["replace_program"]["removed_without_replacement"]
     if gone:
         print("ℹ 以下檔案新版沒有，已從安裝目錄移除（備份裡還有）：%d 個，清單在 conversion_log.json" % len(gone))

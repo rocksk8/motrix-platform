@@ -122,6 +122,7 @@ python <NEW>\tools\platform\upgrade.py convert --root <ROOT> --backup-dir <BK> -
 
 - 沒有通過驗證的備份就拒絕執行；**動手前再重驗一次**（manifest 是這個安裝目錄的、逐檔雜湊、試還原），不過就不動任何檔案（稽核 X-9b S-1）。
 - 刪掉 V9 程式檔、換上新版程式檔；資料、DB、設定一律不動。
+- 最後寫部署標記 `backend\.deployed_commit.json`（與 apply_update.ps1 同格式；來源＝新版包的 `deploy_manifest.json`，沒有就用 `backend\.build_commit`）⇒ 部署儀表板的正式機狀態與 `/api/system/deployed-version` 回新版 commit。兩者都沒有時不寫，並印「⚠ 沒有寫部署標記」——這時儀表板會繼續顯示轉換前的版本。兩種回滾都會把標記還原成轉換前那一份。
 - `backend\autostart.bat`：**保留這台機器的版本**，不被新版包覆蓋；機器上沒有才從新版包補上。兩邊內容不同時，工具印出「⚠ 以下設定檔保留了這台機器的版本…」，請人工比對新版有沒有要加的內容（`conversion_log.json` 的 `package_default_config`）。
 - 被刪掉、而新版沒有同路徑檔的檔（例如人放在安裝目錄的備註、臨時腳本）列在 `conversion_log.json` 的 `replace_program.removed_without_replacement`；它們只留在備份裡（稽核 X-9b S-7）。
 - 用新版的 `init_db` 補跑基準 migration 到 v116，並建 `module_schema_versions`。
