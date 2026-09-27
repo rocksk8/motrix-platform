@@ -7,6 +7,11 @@
 
 用法（build_deploy_package.ps1 在解出快照之後呼叫；也可單獨跑）：
   python tools/platform/product_select.py apply --pkg <部署包目錄> --product full
+  python tools/platform/product_select.py apply --pkg <部署包目錄> --license <客戶的 license.key>
+       ↑ 依授權建包（CORE-SPEC「完整包與客戶加購模組」使用者裁示①，每位客戶一個包）：驗章後以授權的 modules 決定產品
+         （"*"＝全部）；授權的代號對應模組 module.json 的 license_key（沒寫 ⇒ 資料夾名），與載入器的授權判斷同一套。
+         簽章驗不過／格式錯／非永久授權已到期／列了包裡沒有的代號 ⇒ 拒絕建包（不猜）。建包機不是客戶的機器，
+         machine_mismatch 照收（簽章已驗過，模組清單可信）。lock 記 `license: {sha256, env}`——授權檔的指紋，不是內容。
   python tools/platform/product_select.py check --pkg <部署包目錄>        ← verify_package 用同一套判定
 
 apply：沒選到的 `backend/modules/<key>/` 整個資料夾刪掉，連同它 module.json 宣告的前端頁面
@@ -116,7 +121,59 @@ def core_version(backend):
     return m.group(1) if m else None
 
 
-def apply(pkg, prod):
+def license_fingerprint(raw: bytes) -> str:
+    """授權檔的指紋（檔案位元組的 SHA-256）。記在包裡用來追「這個包依哪一份授權建的」，不含授權內容。"""
+    return hashlib.sha256(raw).hexdigest()
+
+
+def product_from_license(license_path, available):
+    """授權檔 ⇒ (產品 dict, 授權資訊 {sha256, env})。任何一項不成立 ⇒ SelectError（不猜）。
+
+    - 驗章用 backend/helpers/licensing.verify_license（與正式機載入器同一支）；
+    - 簽章沒驗過（missing／malformed／bad_signature：env 是 None）⇒ 拒絕；
+    - machine_mismatch 照收：建包機不是客戶的機器，而簽章已驗過 ⇒ 模組清單可信；
+    - 已到期（看 days_left，不看 reason：machine_mismatch 會蓋過 expired）⇒ 永久授權照收（過的是維護期），其餘拒絕；
+    - modules 不是字串清單 ⇒ 拒絕；"*" 不可以和個別代號並列；
+    - 代號對應 module.json 的 license_key（沒寫 ⇒ 資料夾名）；列了包裡沒有的代號 ⇒ 拒絕。"""
+    p = Path(license_path)
+    if not p.is_file():
+        raise SelectError("找不到授權檔：%s" % license_path)
+    raw = p.read_bytes()
+    backend_dir = str(REPO / "backend")
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+    from helpers import licensing as L
+    st = L.verify_license(raw)
+    reason = st.get("reason")
+    if st.get("env") is None:
+        raise SelectError("授權檔驗不過（%s）⇒ 不建包" % reason)
+    # 到期要自己看 days_left：verify_license 先比機器、後比到期，而建包機一定是 machine_mismatch
+    # ⇒ reason 永遠不會是 expired（只看 reason 的話，過期的年費授權會被放行——第一版就是這樣，題抓到的）
+    if (st.get("days_left") is None or st["days_left"] < 0) and st.get("kind") != L.LICENSE_KIND_PERPETUAL:
+        raise SelectError("授權已到期（%s）且不是永久授權 ⇒ 不建包" % st.get("expires"))
+    if reason not in ("ok", "machine_mismatch", "expired"):
+        raise SelectError("授權狀態 %r 看不懂 ⇒ 不建包" % reason)
+    mods = st.get("modules")
+    if not isinstance(mods, list) or not all(isinstance(m, str) for m in mods):
+        raise SelectError("授權的 modules 必須是字串清單，收到 %r ⇒ 不建包" % (mods,))
+    if "*" in mods:
+        if len(set(mods)) != 1:
+            raise SelectError("授權的 modules 用了 \"*\" 又列了個別代號：%s ⇒ 不猜" % mods)
+        keep = ["*"]
+    else:
+        by_license = {}
+        for k, d in available.items():
+            by_license.setdefault(_manifest(d).get("license_key") or k, []).append(k)
+        unknown = sorted(set(mods) - set(by_license))
+        if unknown:
+            raise SelectError("授權列了包裡沒有的模組代號：%s（包裡有：%s）⇒ 不建包" % (unknown, sorted(by_license)))
+        keep = sorted({k for m in mods for k in by_license[m]})
+    fp = license_fingerprint(raw)
+    prod = {"name": "license-" + fp[:12], "description": "依授權建包（sha256 %s）" % fp, "modules": keep}
+    return prod, {"sha256": fp, "env": st.get("env")}
+
+
+def apply(pkg, prod, license_info=None):
     backend = Path(pkg) / "backend"
     available = module_dirs(backend)
     keep, drop = resolve(prod, available)
@@ -137,6 +194,8 @@ def apply(pkg, prod):
         "excluded": drop,
         "removed_pages": removed_pages,
     }
+    if license_info is not None:
+        lock["license"] = dict(license_info)          # 指紋與簽章環境，不含授權內容
     (backend / LOCK_NAME).write_text(json.dumps(lock, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return lock
 
@@ -236,13 +295,20 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     a1 = sub.add_parser("apply")
     a1.add_argument("--pkg", required=True)
-    a1.add_argument("--product", required=True)
+    src = a1.add_mutually_exclusive_group(required=True)
+    src.add_argument("--product")
+    src.add_argument("--license", help="依客戶授權檔建包（每位客戶一個包）")
     a2 = sub.add_parser("check")
     a2.add_argument("--pkg", required=True)
     a = ap.parse_args(argv)
     try:
         if a.cmd == "apply":
-            lock = apply(a.pkg, load_product(a.product))
+            if a.license:
+                prod, info = product_from_license(a.license, module_dirs(Path(a.pkg) / "backend"))
+                lock = apply(a.pkg, prod, info)
+                print("[選配] 依授權建包：授權指紋 %s（%s）" % (info["sha256"], info["env"]))
+            else:
+                lock = apply(a.pkg, load_product(a.product))
             print("[選配] 產品 %s：包含 %s；排除 %s；移除頁面 %s"
                   % (lock["product"], sorted(lock["modules"]) or "（無 L2）", lock["excluded"] or "無",
                      lock["removed_pages"] or "無"))

@@ -42,7 +42,11 @@ param(
     [string]$Product = "full",
     # 乾跑：只挑測試用的 Python 直譯器（Step 2.5 同一段邏輯），印出 `WHICH_PYTHON=<路徑>` 就結束——
     # 不看 git 狀態、不跑測試、不打包（2026-09-27，建包挑到 hermes-agent venv 之後補的驗證入口）。
-    [switch]$WhichPython
+    [switch]$WhichPython,
+    # 依客戶授權建包（CORE-SPEC「完整包與客戶加購模組」使用者裁示①，2026-09-28）：給了就以授權檔的 modules 決定包的內容
+    # （驗章；"*"＝全部；驗不過或格式錯 ⇒ 建包中止），-Product 不用；包內 modules.lock.json 與 deploy_manifest.json
+    # 記授權檔的指紋（SHA-256），不記內容。沒給 ⇒ 照舊用 -Product。
+    [string]$License = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -931,9 +935,17 @@ Write-Host "      .build_commit: $commitShort"
 
 # --- 產品選配（CORE-SPEC §9c①）：沒選到的模組整個資料夾不進包，寫 modules.lock.json ---
 $productSelect = Join-Path $projectRoot "tools\platform\product_select.py"
-& $pyExe $productSelect apply --pkg $pkgDir --product $Product
-if ($LASTEXITCODE -ne 0) {
-    Fail "產品選配失敗（-Product $Product，exit code $LASTEXITCODE），部署包未完成，已中止。"
+if ($License) {
+    if (-not (Test-Path -LiteralPath $License)) { Fail "找不到授權檔：$License，部署包未完成，已中止。" }
+    & $pyExe $productSelect apply --pkg $pkgDir --license $License
+    if ($LASTEXITCODE -ne 0) {
+        Fail "依授權選配失敗（-License $License，exit code $LASTEXITCODE），部署包未完成，已中止。"
+    }
+} else {
+    & $pyExe $productSelect apply --pkg $pkgDir --product $Product
+    if ($LASTEXITCODE -ne 0) {
+        Fail "產品選配失敗（-Product $Product，exit code $LASTEXITCODE），部署包未完成，已中止。"
+    }
 }
 
 # --- Step 5.6: 精簡 backend/version_manifest.json（PK1 → T12）---
@@ -1004,6 +1016,14 @@ $manifest = [ordered]@{
         priority   = "BelowNormal"
         python     = $pyEnv
     }
+}
+if ($License) {
+    # 依授權建包：產品名稱與授權指紋取自選配寫下的 modules.lock.json（同一份判定，不在這裡重算）
+    $lockObj = Get-Content -Path (Join-Path $pkgDir "backend\modules.lock.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (-not $lockObj.license -or -not $lockObj.license.sha256) { Fail "依授權建包，而 modules.lock.json 沒有授權指紋，已中止。" }
+    $manifest["product"] = $lockObj.product
+    $manifest["license_sha256"] = $lockObj.license.sha256
+    $manifest["license_env"] = $lockObj.license.env
 }
 $manifestPath = Join-Path $pkgDir "deploy_manifest.json"
 $manifest | ConvertTo-Json -Depth 6 | Set-Content -Path $manifestPath -Encoding UTF8
