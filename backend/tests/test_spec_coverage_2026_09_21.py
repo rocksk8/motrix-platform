@@ -1034,6 +1034,34 @@ def _module_present(key):
     return (MODULES_DIR / key / "module.json").is_file()
 
 
+def _registered_modules():
+    """modules.json 的組：{key: 是否已搬遷（有 mod: 單位）}——與被檢查的對照表無關的獨立訊號（稽核 D T13-M1）。"""
+    import json
+    groups = json.loads((REPO / "docs" / "platform" / "modules.json").read_text(encoding="utf-8"))["modules"]
+    return {g["key"]: any(str(u).startswith("mod:") for u in g.get("units") or []) for g in groups.values() if g.get("key")}
+
+
+def owner_map_verdict(rec, registered, present, now_fn):
+    """對照表新鮮度的判定 ⇒ ("fail", 訊息)／("skip", 理由)／("ok", None)。真實題與反向控制共用。
+    ① 表裡的模組 key 必須是 modules.json 登記過的（打錯或捏造的 key ⇒ 紅；否則那些編號會被當成「模組不在」而永遠免比）
+    ② 部分模組不在時**不略過**：只比已安裝模組的那部分（表裡屬於已安裝模組的列 ＝ 現場計算）
+    ③ 只有 modules.json 已搬遷的模組**一個都沒裝**（core-only）才略過——看 modules.json 與資料夾，不看表本身（稽核 D T13-M1，同 AB3-M1）"""
+    unknown = sorted(set(rec.values()) - set(registered))
+    if unknown:
+        return "fail", "spec_impl_modules.json 裡有 modules.json 沒登記的模組 key：%s" % unknown
+    installed = sorted(k for k, migrated in registered.items() if migrated and present(k))
+    if not installed:
+        return "skip", "modules.json 已搬遷的模組一個都沒安裝（core-only）⇒ 沒有可重算的對象"
+    now = now_fn()
+    if not now:
+        return "fail", "正對照：已安裝模組 %s 卻一個編號都沒算出來——量尺量不到東西" % installed
+    rec = {n: k for n, k in rec.items() if present(k)}
+    if rec != now:
+        return "fail", ("spec_impl_modules.json 過期（重產：python tests/test_spec_coverage_2026_09_21.py --update-owners）：\n"
+                        "  多了 %s\n  少了 %s" % (sorted(set(rec) - set(now)), sorted(set(now) - set(rec))))
+    return "ok", None
+
+
 def absent_module_numbers(owner_map, present=_module_present):
     """實作題屬於未安裝模組的編號（免比）。"""
     return {n for n, key in owner_map.items() if not present(key)}
@@ -1617,14 +1645,13 @@ def test_gt1_every_this_number_is_declared_in_the_spec():
 
 def test_spec_owner_map_is_fresh():
     """編號 ⇒ 模組的對照表與現場計算一致（模組都在時才比；有模組不在就無從計算，照表走）。"""
-    rec = _owner_map()
-    if any(not _module_present(k) for k in set(rec.values())):
+    # ~~if any(not _module_present(k) for k in set(rec.values())): skip~~〔稽核 D T13-M1：略過條件取自被檢查的表本身——
+    #   表裡留一個不存在的 key 就整題略過、之後怎麼漂都不紅（同 AB3-M1）⇒ 改走 owner_map_verdict（獨立訊號）〕
+    verdict, msg = owner_map_verdict(_owner_map(), _registered_modules(), _module_present, _owner_map_now)
+    if verdict == "skip":
         import pytest
-        pytest.skip("有模組不在（選配／真刪）⇒ 無法現場重算，照對照表免比")
-    now = _owner_map_now()
-    assert now, "正對照：一個都沒算出來——量尺量不到東西（modules/*/tests 應該有實作題）"
-    assert rec == now, ("spec_impl_modules.json 過期（重產：python tests/test_spec_coverage_2026_09_21.py --update-owners）：\n"
-                        "  多了 %s\n  少了 %s" % (sorted(set(rec) - set(now)), sorted(set(now) - set(rec))))
+        pytest.skip(msg)
+    assert verdict == "ok", msg
 
 
 def test_ghost_rows_are_module_aware():
@@ -1639,6 +1666,27 @@ def test_ghost_rows_are_module_aware():
     # accounting 在（exempt 空）、JV1 的實作題被刪 ⇒ 鬼列
     c, _k, _m = ghost_rows({"JV1": "r"}, set(), set(), declared=set(), implemented=set(), exempt=set())
     assert c == ["JV1"]
+
+
+
+def test_owner_map_verdict_uses_an_independent_signal():
+    """反向控制（稽核 D T13-M1）：表裡加一個不存在的 key ⇒ 紅（不是略過）；modules.json 已搬遷的模組沒裝 ⇒ 略過；
+    都在而表漂了 ⇒ 紅；都在且一致 ⇒ ok；尚未搬遷的組不影響略過。"""
+    reg = {"accounting": True, "case": True, "crm": False}
+    now = {"JV1": "accounting", "SO1": "case"}
+    everyone = lambda k: True                                           # noqa: E731
+    v, msg = owner_map_verdict(dict(now, X1="nosuchmodule"), reg, everyone, lambda: now)
+    assert v == "fail" and "nosuchmodule" in msg, (v, msg)
+    v, msg = owner_map_verdict(dict(now, X1="nosuchmodule"), reg, lambda k: k != "accounting", lambda: now)
+    assert v == "fail", "不存在的 key 在模組缺席時也要紅（不可以被略過蓋掉）"
+    no_acc = lambda k: k != "accounting"                                # noqa: E731
+    only_case = {"SO1": "case"}                                         # accounting 不在時現場只算得出 case 的
+    assert owner_map_verdict(now, reg, no_acc, lambda: only_case) == ("ok", None), "部分模組不在 ⇒ 只比已安裝的"
+    v, _ = owner_map_verdict({"JV1": "accounting"}, reg, no_acc, lambda: only_case)
+    assert v == "fail", "accounting 不在也不可以略過：case 那部分漂了（表裡少了 SO1）要紅"
+    assert owner_map_verdict(now, reg, lambda k: False, lambda: {})[0] == "skip"       # core-only
+    assert owner_map_verdict({"JV1": "accounting"}, reg, everyone, lambda: now)[0] == "fail"
+    assert owner_map_verdict(now, reg, lambda k: k != "crm", lambda: now) == ("ok", None)
 
 
 if __name__ == "__main__" and "--update-owners" in sys.argv:
