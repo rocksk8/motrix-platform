@@ -119,15 +119,17 @@ def test_in_place_label_and_required_land_in_the_draft(live_server, make_user, n
 
 
 @pytest.mark.e2e
-def test_nav_has_eight_thumbnails_and_the_three_workflow_ones_scroll_within_step_4(live_server, make_user, new_context):
-    """縮圖導覽 8 格；`.mb-step[data-step="4"]` 只有一個（既有 e2e 的選擇器不多抓）；簽核／通知兩格 ⇒ 第 4 步、捲到對應區塊；
+def test_nav_has_seven_thumbnails_and_the_three_workflow_ones_scroll_within_step_4(live_server, make_user, new_context):
+    """〔改題 2026-09-27 第二輪：使用者把「欄位」「版面」合成「表單」一步 ⇒ 8 格變 7 格、沒有第 3 步〕
+    縮圖導覽 7 格；`.mb-step[data-step="4"]` 只有一個（既有 e2e 的選擇器不多抓）；簽核／通知兩格 ⇒ 第 4 步、捲到對應區塊；
     有問題的步驟縮圖帶 data-has-problems=1（參照欄沒選對象）。"""
     page, errors = _open(new_context, live_server, make_user, "dnd_nav")
-    assert page.locator("#mb-nav [data-nav]").count() == 8
+    assert page.locator("#mb-nav [data-nav]").count() == 7
+    assert page.locator('#mb-nav [data-step="3"]').count() == 0 and page.locator("#mb-step-3").count() == 0
     assert page.locator('.mb-step[data-step="4"]').count() == 1
     assert page.locator('#mb-nav [data-step="4"]').count() == 1, "簽核／通知兩格不可以帶 data-step（用 data-step-alias）"
     assert page.locator('#mb-nav [data-step-alias="4"]').count() == 2
-    assert page.locator("#mb-nav [data-nav] .mb-nav__thumb").count() == 8
+    assert page.locator("#mb-nav [data-nav] .mb-nav__thumb").count() == 7
     for nav, anchor in (("approval", "mb-sec-approval"), ("notify", "mb-sec-notify")):
         page.click('#mb-nav [data-nav="%s"]' % nav)
         page.wait_for_selector("#mb-step-4", state="visible")
@@ -160,24 +162,27 @@ def test_typing_a_label_keeps_focus_and_the_full_value(live_server, make_user, n
 
 @pytest.mark.e2e
 @pytest.mark.skipif(not PREVIEW_JS.is_file(), reason="A 的 frontend/static/form-preview.js 還沒合進來（BUILDER-UX §7：A 先推、B 接上）")
-def test_live_preview_shows_a_new_field(live_server, make_user, new_context):
-    """即時預覽＝執行頁本身（iframe custom-records.html?preview=1）：加一個欄位 ⇒ 預覽裡出現 [data-field=<key>]。"""
+def test_output_and_list_previews_follow_the_canvas_on_the_same_screen(live_server, make_user, new_context):
+    """〔改題 2026-09-27 第二輪：原題驗右側「表單」iframe 預覽與框選；使用者要「預覽都在同一個頁面」——
+    畫布本身就是表單，右側改成同時顯示輸出預覽（A 的 mode:'output'）與列表預覽（mode:'list'），不用頁籤切換〕
+    加欄位、改名稱 ⇒ 兩個預覽都跟著變；兩個 iframe 同時在畫面上；改名稱時焦點不離開輸入框。"""
     page, errors = _open(new_context, live_server, make_user, "dnd_pv")
+    assert page.locator("#mb-preview-mode").count() == 0, "不再有預覽切換"
     page.click('#mb-palette [data-palette-type="text"]')
+    page.wait_for_selector("#mb-f-label")
+    page.locator("#mb-f-label").click()
+    page.keyboard.type("設備名稱甲", delay=40)
     _saved(page)
-    key = _keys()[0]
-    frame = page.frame_locator("#mb-preview-host iframe")
-    frame.locator('[data-field="%s"]' % key).wait_for(state="attached", timeout=15000)
-    # 選中卡片 ⇒ 預覽裡那個欄位被框起（A 的 setHighlight ⇒ .is-preview-hl）；換一張 ⇒ 框跟著換
-    page.click('#mb-palette [data-palette-type="number"]')
-    _saved(page)
-    k2 = _keys()[1]
-    frame.locator('[data-field="%s"]' % k2).wait_for(state="attached", timeout=15000)
-    page.click('.mb-fc[data-field-index="0"]')
-    frame.locator('.is-preview-hl[data-field="%s"]' % key).wait_for(state="attached", timeout=15000)
-    page.click('.mb-fc[data-field-index="1"]')
-    frame.locator('.is-preview-hl[data-field="%s"]' % k2).wait_for(state="attached", timeout=15000)
-    assert frame.locator(".is-preview-hl").count() == 1
+    out = page.frame_locator("#mb-output-host iframe")
+    lst = page.frame_locator("#mb-list-host iframe")
+    out.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
+    lst.locator("body:has-text('設備名稱甲')").wait_for(state="attached", timeout=15000)
+    assert page.locator("#mb-output-host iframe").is_visible() and page.locator("#mb-list-host iframe").is_visible()
+    assert page.evaluate("() => document.activeElement && document.activeElement.id") == "mb-f-label"
+    page.fill("#mb-f-label", "設備名稱乙")
+    out.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
+    lst.locator("body:has-text('設備名稱乙')").wait_for(state="attached", timeout=15000)
+    assert page.locator("#mb-output-host iframe").count() == 1 and page.locator("#mb-list-host iframe").count() == 1   # 不重建
     assert not errors, errors
 
 
@@ -243,10 +248,7 @@ def test_formula_card_shows_readable_formula_or_plain_error_and_help_lands_in_dr
     f2 = _draft()["fields"][2]
     assert f2["help"] == "含稅金額，依數量與單價計算" and f2["formula"] == "%s * %s" % (k0, k1), f2
     assert "help" not in _draft()["fields"][0]                   # 沒填 ⇒ 不帶鍵（只新增）
-    if PREVIEW_JS.is_file():
-        frame = page.frame_locator("#mb-preview-host iframe")
-        frame.locator('[data-field-help="%s"]:has-text("含稅金額，依數量與單價計算")' % k2).wait_for(state="visible", timeout=15000)
-        assert frame.locator('[data-fx-readable="%s"]' % k2).inner_text().strip() == "金額 ＝ 數量 × 單價"
+    # 〔改題 2026-09-27 第二輪：右側不再有表單 iframe；執行頁顯示說明與可讀式子改由畫布一致性題（test_e2e_builder_form_canvas）驗〕
     page.fill("#mb-f-help", "")
     _saved(page)
     assert "help" not in _draft()["fields"][2]                   # 清空 ⇒ 拿掉鍵

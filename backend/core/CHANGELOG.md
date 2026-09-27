@@ -7,6 +7,7 @@
 - L1（行為）：`POST /api/custom-modules/{key}/output/preview` 改用它：半成品不再 500（原本欄位層問題沒擋 ⇒ KeyError）；未完成清單放回應標頭 `X-Motrix-Preview-Incomplete`（JSON）；最外層兜底任何例外 ⇒ 422＋記 log；編號規則未完成不再擋預覽（用樣本編號）
 - 前端：`static/form-preview.js` 加 `render(el, draft, {mode:'output', key})`
 - L1（新增）：自訂模組欄位選填 `help`（文字、最長 `custom_modules.HELP_MAX`＝300 字）；其他型別或過長 ⇒ `fields[i].help` 問題。沒填的定義照舊（只新增）
+- 前端（新增，wip/b-builder-dnd-4：使用者第二輪「同頁直接放」）：`static/custom-layout.js` 加 `editorSections`／`placeField`／`sectionOrder`／`moveGroupTo`（建構器畫布＝表單）；表單欄位外觀抽成 `css/custom-form.css`（執行頁與建構器共用）。後端與草稿 JSON 不動
 
 ## 1.56 — 2026-09-27（第十三班列車取號，原暫用 1.54；c-approval-l1-4：稽核 D QJ-M1＋孤兒單）
 - L1（新增）：`helpers.approval_queue.approval_raw_of(approval_json, doc_type, doc_no)`——欄位版 `approval_json_of`：解析不了 ⇒ None＋ERROR
