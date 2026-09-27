@@ -1,5 +1,5 @@
 {
- "core_version": "1.56",
+ "core_version": "1.57",
  "interface": {
   "core:archive": {
    "PRUNE_KEEP_NEWEST": "const",
@@ -235,6 +235,7 @@
    "DATE_FORMATS": "const",
    "EVENT_TRANSITIONED": "const",
    "FIELD_TYPES": "const",
+   "HELP_MAX": "const",
    "KEY_RE": "const",
    "PREFIX_RE": "const",
    "STATE_KEY_RE": "const",
