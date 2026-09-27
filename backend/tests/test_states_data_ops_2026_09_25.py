@@ -470,3 +470,21 @@ def test_state_cu10_preflight_blocks_corrupt_db(tmp_path):
     _corrupt_tail(os.path.join(root, "backend", "motrix_erp.db"))
     r = U.preflight(root, v9_port_open=False)
     assert not r["ok"] and any("quick_check" in p for p in r["problems"]), r["problems"]
+
+
+def test_alert_cleared_when_healthy_writes_an_audit_with_the_reason(tmp_path, monkeypatch):
+    """2026-09-28 使用者裁示：條件解除自動清 BACKUP_ALERT.txt，清除本身寫一筆稽核（帶原因）。"""
+    import archive
+    monkeypatch.setattr(archive, "_ALERT_DIR", str(tmp_path))
+    monkeypatch.setattr(archive, "cloud_archive_enabled", lambda: True)
+    audits = []
+    monkeypatch.setattr(archive, "_system_audit", lambda a, t="", d=None: audits.append((a, t, d)))
+    alert = tmp_path / "BACKUP_ALERT.txt"
+    alert.write_text("[ERROR] MOTRIX ERP 備份警示\n時間: x\n原因: 上個月（2026-08）的月備份沒有完成\n", encoding="utf-8")
+    monkeypatch.setattr(archive, "_archive_ok", lambda: False)             # 反向控制：條件未解除
+    archive._clear_backup_alert_if_healthy()
+    assert alert.exists() and audits == []
+    monkeypatch.setattr(archive, "_archive_ok", lambda: True)
+    archive._clear_backup_alert_if_healthy()
+    assert not alert.exists()
+    assert audits == [("backup.alert_cleared", "BACKUP_ALERT.txt", {"reason": "上個月（2026-08）的月備份沒有完成"})]

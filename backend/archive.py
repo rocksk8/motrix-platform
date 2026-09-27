@@ -600,10 +600,25 @@ def _clear_backup_alert_if_healthy() -> None:
     alert_path = os.path.join(_ALERT_DIR, "BACKUP_ALERT.txt")
     try:
         if os.path.exists(alert_path):
+            reason = _alert_reason(alert_path)
             os.remove(alert_path)
             logger.info("Cloud archive path OK — cleared BACKUP_ALERT.txt")
+            # 2026-09-28 使用者裁示：條件解除自動清，清除本身寫一筆稽核（每日 .log 與稽核日誌不動）
+            _system_audit("backup.alert_cleared", "BACKUP_ALERT.txt", {"reason": reason})
     except Exception:
         logger.exception("failed to clear backup alert")
+
+
+def _alert_reason(alert_path: str) -> str:
+    """BACKUP_ALERT.txt 的「原因:」那一行（讀不到回空字串）。"""
+    try:
+        with open(alert_path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("原因:"):
+                    return line[len("原因:"):].strip()[:300]
+    except Exception:
+        pass
+    return ""
 
 
 def _ensure_archive_dirs():
