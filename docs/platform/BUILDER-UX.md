@@ -82,6 +82,14 @@
 
 ⚠️ **防線的主次**（主持 2026-09-27）：sandbox 同時給 `allow-scripts` 與 `allow-same-origin` 時，被框的頁可以自行解除 sandbox——這裡框的是我們自己的頁，**真正的防線是第 2 條（預覽模式在程式層面不打 API）**，sandbox 只是第二道，不可以被當成主要防線。
 
+### 3.4 輸出預覽（A，使用者 8866 試用回饋；wip/a-builder-output）
+
+- `MotrixFormPreview.render(el, draft, {mode:'output', key})` ⇒ 同一組 `{update, setHighlight, destroy}`（`setHighlight` 在輸出是 no-op）。可與 `list` 實例同頁並存、各自更新。
+- 內容來自既有的只讀端點 `POST /api/custom-modules/{key}/output/preview`（僅超級管理員；不寫庫、不存檔），後端用**正式匯出同一個 renderer**（`render_view`）與同一份版型畫 HTML——預覽沒有自己的一份。
+- 邊拖邊看：編到一半的草稿照畫。未完成的欄位（沒有 key、公式空白／錯誤、選單沒有選項、型別不認得…）在輸出裡是「〈名稱〉尚未完成」，清單在回應標頭 `X-Motrix-Preview-Incomplete`，元件顯示在 `.fp-output__note`（`li[data-field]`）。只有連一個欄位都畫不出來、或版型結構錯（未知積木／主題）才 422；422 時保留上一次的畫面並說明原因。任何半成品都不會 500（兜底 422，log／回應不帶草稿內容與 stack）。
+- 請求：同一時間一個，途中的草稿只留最後一份；`update` 不重建 iframe、不搶焦點。
+- iframe `sandbox="allow-same-origin"`（**不給** scripts）。⚠️ **已知取捨**：正式輸出內建「內容超過 A4 一頁就縮放」的小腳本，在預覽裡不執行 ⇒ **內容超過一頁時，預覽不縮放**（正式輸出／PDF 會縮），其餘相同。理由：同時給 scripts 與 same-origin 等於可以自行解除 sandbox。
+
 ## 4. 限制
 
 - 後端 schema 盡量不動；要動只准新增（CORE 次版號）。本設計**不需要**動後端。
