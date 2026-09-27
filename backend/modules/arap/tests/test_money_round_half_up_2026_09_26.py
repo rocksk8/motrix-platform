@@ -16,6 +16,8 @@ from tests.test_money_round_half_up_2026_09_26 import (  # noqa: E402,F401  含 
 )
 
 from core import source_tree as _source_tree
+from tests._requires import requires_module  # noqa: E402
+needs_m04 = requires_module("subcontract", '本題需要 M04（外包工班）的承攬商匯款資料；M04 不在時產品明說未安裝，本題沒有對象（B 2026-09-28 真刪普查）')
 
 #: 跨 M04×M08 的題（2026-09-26 第六班列車交會：M08 精算快照過期檢查改走 IP-1 dispatch.row，外包工班不在時明說無法檢查）：
 #: 同時需要外包工班；外包工班不在時略過（那時精算過期數回 None、報表明說無法檢查，由 M08 搬遷 ⑤ 456130ce 的缺席題負責）。
@@ -23,6 +25,7 @@ needs_subcontract = pytest.mark.skipif(not _source_tree.module_installed("module
                                        reason="需要外包工班模組（M04）")
 
 
+@needs_m04
 def test_bank_reconcile_matches_amounts_rounded_half_up(client, make_user):
     """匯款申請含稅 10,500.5 ↔ 銀行 10,501；匯款申請 20,001 ↔ 銀行 20,000.5 ⇒ 兩筆都配對
     （舊：10,500.5⇒10,500、20,000.5⇒20,000，都配不上）。reports L2825（申請金額）、L2830（銀行金額）"""

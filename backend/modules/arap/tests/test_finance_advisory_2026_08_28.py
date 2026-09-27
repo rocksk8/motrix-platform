@@ -10,6 +10,8 @@ import io
 import json
 
 import openpyxl
+from tests._requires import requires_module  # noqa: E402
+needs_m04 = requires_module("subcontract", '本題需要 M04（外包工班）的承攬商匯款資料；M04 不在時產品明說未安裝，本題沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _login(client, username, password):
@@ -86,6 +88,7 @@ def _csv_bytes(text):
     return io.BytesIO(text.encode("utf-8-sig"))
 
 
+@needs_m04
 def test_bank_reconcile_matches_by_amount(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -105,6 +108,7 @@ def test_bank_reconcile_matches_by_amount(client, make_user):
     assert body["unmatchedVouchers"] == []
 
 
+@needs_m04
 def test_bank_reconcile_reports_unmatched_on_both_sides(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -124,6 +128,7 @@ def test_bank_reconcile_reports_unmatched_on_both_sides(client, make_user):
     assert body["unmatchedVouchers"][0]["voucherNo"] == "PV-BANK-002"
 
 
+@needs_m04
 def test_bank_reconcile_same_amount_only_matches_once(client, make_user):
     """兩筆待匯款申請金額剛好相同時，一筆銀行紀錄只能配對其中一筆，
     不能讓同一筆申請被重複配對（見 bank_reconcile() docstring）。"""
@@ -144,6 +149,7 @@ def test_bank_reconcile_same_amount_only_matches_once(client, make_user):
     assert len(body["unmatchedVouchers"]) == 1
 
 
+@needs_m04
 def test_bank_reconcile_missing_amount_column_returns_400(client, make_user):
     username, password = make_user(role="admin")
     token = _login(client, username, password)
@@ -168,6 +174,7 @@ def test_bank_reconcile_requires_admin(client, make_user):
     assert r.status_code == 403
 
 
+@needs_m04
 def test_bank_reconcile_allows_cashier_module_2026_08_31(client, make_user):
     """2026-08-31（財務/出納權限分工）：銀行對帳單比對搬進出納模組，非
     admin+ 但具備 cashier 模組的使用者也要能存取（不需要完整管理員權限）。"""

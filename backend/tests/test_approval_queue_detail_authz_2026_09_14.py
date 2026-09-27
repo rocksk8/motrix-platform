@@ -15,6 +15,7 @@ from tests._requires import requires_module  # noqa: E402  M01 ④(c)（稽核 D
 #: 只標真的需要 M01 的題；其餘的題在 M01 不在時照常要過（稽核 D M5-M1，清單＝M01 真刪時實際紅的題）
 needs_m01 = requires_module("case", '本題打 M01（案件）的端點或讀寫 M01 的資料（報價單／案件）；M01 不在時沒有對象（稽核 D M4-M3）')
 import json
+needs_m04 = requires_module("subcontract", '本題需要 M04（外包工班）的承攬商匯款資料；M04 不在時產品明說未安裝，本題沒有對象（B 2026-09-28 真刪普查）')
 
 
 def _login(client, username, password):
@@ -130,6 +131,7 @@ def test_money_visible_for_approver_without_financial_view(client, make_user):
     assert d["items"][0]["amount"] == 5000, d["items"]
 
 
+@needs_m04
 @needs_m01
 def test_passbook_image_rejects_non_image_scheme(client, make_user):
     """存簿封面只收 `data:image/`——混進 javascript: 的話，簽核人點下去就是在本站
