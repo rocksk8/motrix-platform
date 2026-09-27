@@ -66,6 +66,7 @@ def _seed_completion_note(note_no, quote_no, approver=None):
         conn.close()
 
 
+@needs_m01
 def test_outsider_cannot_open_queue_detail(client, make_user):
     """單號可預測（CN-YYYYMM-NNN），外人不該撈得到內容。"""
     _seed_case("MQ-AQZ-001", sales_person="aqz_owner")

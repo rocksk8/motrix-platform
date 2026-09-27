@@ -453,6 +453,7 @@ def _no_identifiers(resp, *secrets):
     assert not leaked, ("「明說」本身不可以外洩", leaked, text)
 
 
+@needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
 def test_nothing_hidden_means_hidden_is_empty(client, make_user):
     """正對照：看得到全部原單據的人（案件業務）⇒ hidden 是空清單（不是每次都亮的警告）。"""
     if not source_tree.module_installed("modules/accounting/"):
@@ -464,6 +465,7 @@ def test_nothing_hidden_means_hidden_is_empty(client, make_user):
     assert _hidden(got) == {}
 
 
+@needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
 def test_hidden_notice_carries_no_identifier_of_the_unseen_document(client, make_user):
     """反向控制：看不到的單據帶著一眼認得出來的單號、檔名、路徑、金額 ⇒ hidden 只剩類別與個數，這些字串一個都不出現；
     正對照：同一個回應的 files（看得到的那些）照常帶檔名，證明掃描的字串確實存在於資料裡。"""
@@ -512,6 +514,7 @@ def _add_case_update_file(quote_no):
         conn.close()
 
 
+@needs_case('source_type=case 需要 M01 的 attachments.for_document 提供者')
 def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_user):
     """D 必修 AT5-M1：同一案件兩張開票申請，使用者（看不到金額）只是其中一張的簽核人 ⇒
     那一張照常列出，另一張算進 hidden（把看得到的那幾張也丟掉要紅）。"""
@@ -543,6 +546,7 @@ def test_partially_visible_invoice_vouchers_list_the_visible_one(client, make_us
     _no_identifiers(got, "IV-AP-OTHER", "other.pdf")
 
 
+@needs_case('打 /api/quotations/{q}（M01 端點）＋ source_type=case 的 attachments.for_document 提供者')
 def test_a_wholly_unseen_case_answers_like_a_missing_one(client, make_user):
     """主持裁示（D 的觀察）：整個案件都看不到 ⇒ 照「不存在」回（404，逐字相同），不回「N 個附件看不到」
     （否則可以探知案件編號是否存在）；summary-sources 的說明也逐字相同。反向控制：同一個人對看得到一部分的案件照常 200＋hidden。"""

@@ -92,6 +92,8 @@ def test_the_voucher_case_tab_lists_every_case_for_voucher_users(client, make_us
     """端到端：傳票摘要來源的「案件」頁籤，finance 看得到別人的案件（JV7 照現行），而且沒有範圍縮窄的註明。"""
     if not source_tree.module_installed("modules/accounting/"):
         pytest.skip("會計（M06）不在這個安裝包（PLAYBOOK §B-11）")
+    if not source_tree.module_installed("modules/case/"):
+        pytest.skip("案件（M01）不在：「案件」頁籤沒有 case.summary 提供者（第十三班列車發現）")
     _seed("CSP-OTHER-4")
     u, p = make_user(username="csp_fin4", role="engineer", modules=["finance"])
     h = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": u, "password": p}).json()["token"]}

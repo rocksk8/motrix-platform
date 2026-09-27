@@ -2,7 +2,10 @@
 
 合成：拿掉提供者（`_without`）；真正拿掉模組的反向控制見 PLAYBOOK §B-11。
 """
+from tests._requires import requires_module  # noqa: E402  第十三班列車：case-bundle 是 M01 的端點，M01 不在時本檔沒有對象
 from tests.platform.test_case_stage_connectors import _without
+
+pytestmark = requires_module("case", "本檔打 GET /api/quotations/{q}/case-bundle，該端點屬 M01（案件）；M01 不在時沒有對象")
 
 QNO = "MQ-ACC-CONN-1"
 
