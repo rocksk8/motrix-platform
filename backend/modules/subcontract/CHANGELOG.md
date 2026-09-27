@@ -1,5 +1,8 @@
 # 外包工班 更新紀錄
 
+## 1.0.13 — 2026-09-27（稽核 D 建議，wip/b-drill-absent404-2；列車取號）
+- `pages` 補 `contractor-voucher-approval-settings.html`（不帶 menu，不進側欄）：modules.json 把它歸 M04，原本沒列入 pages ⇒ 模組缺席時不會被移除、D7 前哨也不會驗它回 404。守門 `tests/platform/test_module_pages_match_units.py`
+
 ## 1.0.12 — 2026-09-26（第十一班列車取號，原暫用 1.0.8）
 - 附件來源看不到時說出沒列出幾個附件（`AttachmentNotVisible(hidden=N)`，只有數字；主持裁示：因權限沒列出要明說，不可以帶出單號與內容）
 

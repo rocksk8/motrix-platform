@@ -343,3 +343,16 @@ def test_smoke_runs_the_absent_plan():
     src = inspect.getsource(FD.smoke)
     assert "absent_probe_plan(" in src and '"ok": code == expect' in src
 
+
+def test_an_absent_module_with_an_empty_declaration_is_red(tmp_path):
+    """稽核 D 建議：module.json 在、probes 與 pages 都空 ⇒ 缺席時沒有東西可驗 ⇒ 期望狀態碼 None（smoke 判不過）；
+    只有頁面、沒有 probes ⇒ 照驗頁面（不算空）。"""
+    pkg = tmp_path / "pkg" / "backend"
+    (pkg / "modules").mkdir(parents=True)
+    src = tmp_path / "src"
+    _decl(src, "ee")
+    _decl(src, "ff", pages=["ff.html"])
+    plan = FD.absent_probe_plan(str(pkg), source_modules=str(src), registered={"ee", "ff"}, migrated={"ee", "ff"})
+    rows = {(path, expect) for _n, _m, path, expect in plan}
+    assert rows == {("modules/ee", None), ("/pages/ff.html", 404)}, rows
+
